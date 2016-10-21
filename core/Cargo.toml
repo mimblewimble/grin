@@ -1,0 +1,13 @@
+[package]
+name = "grin_core"
+version = "0.1.0"
+authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
+
+[dependencies]
+byteorder = "^0.5"
+rust-crypto = "^0.2"
+rand = "^0.3"
+time = "^0.1"
+tiny-keccak = "1.1"
+
+secp256k1zkp = { path = "../secp256k1zkp" }

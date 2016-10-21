@@ -1,0 +1,8 @@
+[package]
+name = "grin"
+version = "0.1.0"
+authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
+
+[dependencies]
+grin_core = { path = "../core" }
+grin_store = { path = "../store" }
