@@ -2,7 +2,7 @@
 //! verification to avoid DoS attacks and difficulty for block verifiers to
 //! build new blocks. In addition, mining new blocks should also be as
 //! difficult on high end custom-made hardware (ASICs) as on commodity hardware
-//! or smartphones. For this reason we use Cuckoo Cycles (see the cuckoo
+//! or smartphones. For this reason we use Cuckoo Cycle (see the cuckoo
 //! module for more information).
 //!
 //! Note that this miner implementation is here mostly for tests and
@@ -25,7 +25,7 @@ const SIZESHIFT: u32 = 28;
 
 /// Default Cuckoo Cycle easiness, high enough to have good likeliness to find
 /// a solution.
-const EASINESS: u32 = 70;
+const EASINESS: u32 = 50;
 
 /// Max target hash, lowest difficulty
 pub const MAX_TARGET: [u32; PROOFSIZE] =

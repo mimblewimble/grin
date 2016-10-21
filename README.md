@@ -31,8 +31,11 @@ We believe in pull requests, data and scientific research. We do not believe in 
 ## Credits
 
 Tom Elvis Jedusor for the first formulation of MimbleWimble.
+
 Andrew Poelstra for his related work and improvements.
-John Tromp for the Cuckoo Cycles proof of work.
+
+John Tromp for the Cuckoo Cycle proof of work.
+
 J.K. Rowling for making it despite extraordinary adversity.
 
 ## License
