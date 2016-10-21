@@ -10,7 +10,7 @@ Grin is still an infant, much is left to be done and contributions are welcome. 
   * Chain logic and related validation.
   * Efficient miner (as a distinct project).
   * User-friendly wallet (as a distinct project).
-  * Figure out if the rangeproofs can be eliminated under some cicrumstances while keeping security guarantes.
+  * Figure out if the rangeproofs can be eliminated under some cicrumstances while keeping security guarantees.
   * Website, logo design and all the cool stuff.
 
 Don't worry, we'll get there, with your help.
