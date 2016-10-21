@@ -20,7 +20,7 @@ Find an area you can help with and do it. Open source is about collaboration and
 
 Additional tests are rewarded with an immense amount of positive karma. So is documentation.
 
-Find us on Gitter: https://gitter.im/grin_community
+Find us on Gitter: https://gitter.im/grin_community/Lobby
 
 ## Philosophy
 
