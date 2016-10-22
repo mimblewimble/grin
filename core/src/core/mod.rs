@@ -32,8 +32,13 @@ use secp::pedersen::*;
 
 use tiny_keccak::Keccak;
 
+/// The block subsidy amount
 pub const REWARD: u64 = 1_000_000_000;
+
+/// Block interval, in seconds
 pub const BLOCK_TIME_SEC: u8 = 15;
+
+/// Cuckoo-cycle proof size (cycle length)
 pub const PROOFSIZE: usize = 42;
 
 /// A hash to uniquely (or close enough) identify one of the main blockchain
