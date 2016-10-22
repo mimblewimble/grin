@@ -27,7 +27,8 @@ mod cuckoo;
 
 use time;
 
-use core::{Block, BlockHeader, Hashed, Hash, Proof, PROOFSIZE};
+use core::{Block, BlockHeader, Proof, PROOFSIZE};
+use core::hash::{Hash, Hashed};
 use pow::cuckoo::{Cuckoo, Miner, Error};
 
 use ser;
@@ -175,7 +176,8 @@ fn pow_size(b: &Block, target: Proof, sizeshift: u32) -> Result<(Proof, u64), Er
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::{BlockHeader, Hash, Proof};
+	use core::{BlockHeader, Proof};
+	use core::hash::Hash;
 	use std::time::Instant;
 	use genesis;
 

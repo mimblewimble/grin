@@ -19,7 +19,7 @@
 use time;
 
 use std::io::{Write, Read};
-use core;
+use core::{self, hash};
 use ser::*;
 
 use secp::Signature;
@@ -43,7 +43,7 @@ impl_slice_bytes!(Signature);
 impl_slice_bytes!(Commitment);
 impl_slice_bytes!(Vec<u8>);
 
-impl AsFixedBytes for core::Hash {
+impl AsFixedBytes for hash::Hash {
 	fn as_fixed_bytes(&self) -> &[u8] {
 		self.to_slice()
 	}
@@ -124,7 +124,7 @@ impl Writeable for core::Block {
 impl Readable<core::Input> for core::Input {
 	fn read(reader: &mut Reader) -> Result<core::Input, Error> {
 		reader.read_fixed_bytes(32)
-			.map(|h| core::Input::BareInput { output: core::Hash::from_vec(h) })
+			.map(|h| core::Input::BareInput { output: hash::Hash::from_vec(h) })
 	}
 }
 
@@ -210,14 +210,14 @@ impl Readable<core::Block> for core::Block {
 		Ok(core::Block {
 			header: core::BlockHeader {
 				height: height,
-				previous: core::Hash::from_vec(previous),
+				previous: hash::Hash::from_vec(previous),
 				timestamp: time::at_utc(time::Timespec {
 					sec: timestamp,
 					nsec: 0,
 				}),
 				td: td,
-				utxo_merkle: core::Hash::from_vec(utxo_merkle),
-				tx_merkle: core::Hash::from_vec(tx_merkle),
+				utxo_merkle: hash::Hash::from_vec(utxo_merkle),
+				tx_merkle: hash::Hash::from_vec(tx_merkle),
 				total_fees: total_fees,
 				pow: core::Proof(pow),
 				nonce: nonce,
@@ -237,6 +237,7 @@ mod test {
 	use secp::*;
 	use secp::key::*;
 	use core::*;
+	use core::hash::ZERO_HASH;
 	use rand::Rng;
 	use rand::os::OsRng;
 

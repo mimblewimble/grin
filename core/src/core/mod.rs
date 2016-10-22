@@ -14,9 +14,12 @@
 
 //! Core types
 
+pub mod hash;
 #[allow(dead_code)]
 #[macro_use]
 mod ser;
+
+use self::hash::{Hash, Hashed, ZERO_HASH};
 use ser::{Writeable, Writer, Error, ser_vec};
 
 use time;
@@ -40,60 +43,6 @@ pub const BLOCK_TIME_SEC: u8 = 15;
 
 /// Cuckoo-cycle proof size (cycle length)
 pub const PROOFSIZE: usize = 42;
-
-/// A hash to uniquely (or close enough) identify one of the main blockchain
-/// constructs. Used pervasively for blocks, transactions and ouputs.
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
-pub struct Hash(pub [u8; 32]);
-
-impl fmt::Display for Hash {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		for i in self.0[..].iter().cloned() {
-			try!(write!(f, "{:02x}", i));
-		}
-		Ok(())
-	}
-}
-
-impl Hash {
-	/// Creates a new hash from a vector
-	pub fn from_vec(v: Vec<u8>) -> Hash {
-		let mut a = [0; 32];
-		for i in 0..a.len() {
-			a[i] = v[i];
-		}
-		Hash(a)
-	}
-	/// Converts the hash to a byte vector
-	pub fn to_vec(&self) -> Vec<u8> {
-		self.0.to_vec()
-	}
-	/// Converts the hash to a byte slice
-	pub fn to_slice(&self) -> &[u8] {
-		&self.0
-	}
-}
-
-pub const ZERO_HASH: Hash = Hash([0; 32]);
-
-/// A trait for types that get their hash (double SHA256) from their byte
-/// serialzation.
-pub trait Hashed {
-	fn hash(&self) -> Hash {
-		let data = self.bytes();
-		Hash(sha3(data))
-	}
-
-	fn bytes(&self) -> Vec<u8>;
-}
-
-fn sha3(data: Vec<u8>) -> [u8; 32] {
-	let mut sha3 = Keccak::new_sha3_256();
-	let mut buf = [0; 32];
-	sha3.update(&data);
-	sha3.finalize(&mut buf);
-	buf
-}
 
 /// Implemented by types that hold inputs and outputs including Pedersen
 /// commitments. Handles the collection of the commitments as well as their
@@ -755,7 +704,7 @@ impl MerkleRow {
 	}
 	fn root(&self) -> Hash {
 		if self.0.len() == 0 {
-			Hash(sha3(vec![]))
+			vec![].hash()
 		} else if self.0.len() == 1 {
 			self.0[0].hash()
 		} else {
@@ -767,6 +716,7 @@ impl MerkleRow {
 #[cfg(test)]
 mod test {
 	use super::*;
+	use super::hash::{Hash, Hashed, ZERO_HASH};
 	use secp;
 	use secp::Secp256k1;
 	use secp::key::SecretKey;
