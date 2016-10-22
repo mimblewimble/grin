@@ -56,8 +56,7 @@ mod test {
 	use super::*;
 
 	/// Some test vectors hoisted from the Java implementation (adjusted from
-	/// the
-	/// fact that the Java impl uses a long, aka a signed 64 bits number).
+	/// the fact that the Java impl uses a long, aka a signed 64 bits number).
 	#[test]
 	fn hash_some() {
 		assert_eq!(siphash24([1, 2, 3, 4], 10), 928382149599306901);
