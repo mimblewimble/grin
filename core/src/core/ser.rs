@@ -26,7 +26,7 @@ use secp::Signature;
 use secp::key::SecretKey;
 use secp::pedersen::{Commitment, RangeProof};
 
-const MAX_IN_OUT_LEN: u64 = 50000;
+pub const MAX_IN_OUT_LEN: u64 = 50000;
 
 macro_rules! impl_slice_bytes {
   ($byteable: ty) => {
@@ -97,28 +97,6 @@ impl Writeable for core::TxProof {
 	}
 }
 
-/// Implementation of Writeable for a block, defines how to write the full
-/// block as binary.
-impl Writeable for core::Block {
-	fn write(&self, writer: &mut Writer) -> Option<Error> {
-		try_m!(self.header.write(writer));
-
-		try_m!(writer.write_u64(self.inputs.len() as u64));
-		try_m!(writer.write_u64(self.outputs.len() as u64));
-		try_m!(writer.write_u64(self.proofs.len() as u64));
-		for inp in &self.inputs {
-			try_m!(inp.write(writer));
-		}
-		for out in &self.outputs {
-			try_m!(out.write(writer));
-		}
-		for proof in &self.proofs {
-			try_m!(proof.write(writer));
-		}
-		None
-	}
-}
-
 /// Implementation of Readable for a transaction Input, defines how to read
 /// an Input from a binary stream.
 impl Readable<core::Input> for core::Input {
@@ -179,56 +157,6 @@ impl Readable<core::TxProof> for core::TxProof {
 	}
 }
 
-/// Implementation of Readable for a block, defines how to read a full block
-/// from a binary stream.
-impl Readable<core::Block> for core::Block {
-	fn read(reader: &mut Reader) -> Result<core::Block, Error> {
-		let height = try!(reader.read_u64());
-		let previous = try!(reader.read_fixed_bytes(32));
-		let timestamp = try!(reader.read_i64());
-		let utxo_merkle = try!(reader.read_fixed_bytes(32));
-		let tx_merkle = try!(reader.read_fixed_bytes(32));
-		let total_fees = try!(reader.read_u64());
-		let nonce = try!(reader.read_u64());
-		// cuckoo cycle of 42 nodes
-		let mut pow = [0; core::PROOFSIZE];
-		for n in 0..core::PROOFSIZE {
-			pow[n] = try!(reader.read_u32());
-		}
-		let td = try!(reader.read_u64());
-
-		let input_len = try!(reader.read_u64());
-		let output_len = try!(reader.read_u64());
-		let proof_len = try!(reader.read_u64());
-		if input_len > MAX_IN_OUT_LEN || output_len > MAX_IN_OUT_LEN || proof_len > MAX_IN_OUT_LEN {
-			return Err(Error::TooLargeReadErr("Too many inputs, outputs or proofs.".to_string()));
-		}
-
-		let inputs = try!((0..input_len).map(|_| core::Input::read(reader)).collect());
-		let outputs = try!((0..output_len).map(|_| core::Output::read(reader)).collect());
-		let proofs = try!((0..proof_len).map(|_| core::TxProof::read(reader)).collect());
-		Ok(core::Block {
-			header: core::BlockHeader {
-				height: height,
-				previous: hash::Hash::from_vec(previous),
-				timestamp: time::at_utc(time::Timespec {
-					sec: timestamp,
-					nsec: 0,
-				}),
-				td: td,
-				utxo_merkle: hash::Hash::from_vec(utxo_merkle),
-				tx_merkle: hash::Hash::from_vec(tx_merkle),
-				total_fees: total_fees,
-				pow: core::Proof(pow),
-				nonce: nonce,
-			},
-			inputs: inputs,
-			outputs: outputs,
-			proofs: proofs,
-			..Default::default()
-		})
-	}
-}
 
 #[cfg(test)]
 mod test {
