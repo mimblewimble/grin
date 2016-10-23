@@ -22,5 +22,5 @@ pub mod types;
 // Re-export the base interface
 
 pub use types::ChainStore;
-pub use chain::Options;
-pub use chain::process_block;
+pub use pipe::Options;
+pub use pipe::process_block;
