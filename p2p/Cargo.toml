@@ -1,0 +1,12 @@
+[package]
+name = "grin_p2p"
+version = "0.1.0"
+authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
+
+[dependencies]
+bitflags = "^0.7.0"
+byteorder = "^0.5"
+mioco = "^0.8"
+time = "^0.1"
+
+grin_core = { path = "../core" }
