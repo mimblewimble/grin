@@ -170,3 +170,31 @@ impl<'a> Writer for BinWriter<'a> {
 		self.sink.write_all(bs).err().map(Error::IOErr)
 	}
 }
+
+macro_rules! impl_slice_bytes {
+  ($byteable: ty) => {
+    impl AsFixedBytes for $byteable {
+      fn as_fixed_bytes(&self) -> &[u8] {
+        &self[..]
+      }
+    }
+  }
+}
+
+impl_slice_bytes!(::secp::key::SecretKey);
+impl_slice_bytes!(::secp::Signature);
+impl_slice_bytes!(::secp::pedersen::Commitment);
+impl_slice_bytes!(Vec<u8>);
+
+impl AsFixedBytes for ::core::hash::Hash {
+	fn as_fixed_bytes(&self) -> &[u8] {
+		self.to_slice()
+	}
+}
+
+impl AsFixedBytes for ::secp::pedersen::RangeProof {
+	fn as_fixed_bytes(&self) -> &[u8] {
+		&self.bytes()
+	}
+}
+

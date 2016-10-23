@@ -19,7 +19,6 @@ pub mod hash;
 pub mod transaction;
 #[allow(dead_code)]
 #[macro_use]
-mod ser;
 
 pub use self::block::{Block, BlockHeader};
 pub use self::transaction::{Transaction, Input, Output, TxProof};
