@@ -80,4 +80,3 @@ impl Hashed for [u8] {
 		self.to_owned()
 	}
 }
-

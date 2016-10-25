@@ -72,7 +72,8 @@ macro_rules! try_m {
   }
 }
 
-/// Eliminate some of the boilerplate of deserialization (package ser) by passing just the list of reader function.
+/// Eliminate some of the boilerplate of deserialization (package ser) by
+/// passing just the list of reader function.
 /// Example before:
 ///   let foo = try!(reader.read_u64());
 ///   let bar = try!(reader.read_u32());
@@ -85,3 +86,9 @@ macro_rules! ser_multiread {
   }
 }
 
+#[macro_export]
+macro_rules! ser_multiwrite {
+  ($wrtr:ident, $([ $write_call:ident, $val:expr ]),* ) => {
+    $( try_m!($wrtr.$write_call($val)) );*
+  }
+}

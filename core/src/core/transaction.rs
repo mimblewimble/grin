@@ -47,7 +47,7 @@ impl Writeable for TxProof {
 
 impl Readable<TxProof> for TxProof {
 	fn read(reader: &mut Reader) -> Result<TxProof, ser::Error> {
-    let (remainder, sig) = ser_multiread!(reader, read_33_bytes, read_vec);
+		let (remainder, sig) = ser_multiread!(reader, read_33_bytes, read_vec);
 		Ok(TxProof {
 			remainder: Commitment::from_vec(remainder),
 			sig: sig,
@@ -69,10 +69,11 @@ pub struct Transaction {
 /// write the transaction as binary.
 impl Writeable for Transaction {
 	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
-		try_m!(writer.write_u64(self.fee));
-		try_m!(writer.write_vec(&mut self.zerosig.clone()));
-		try_m!(writer.write_u64(self.inputs.len() as u64));
-		try_m!(writer.write_u64(self.outputs.len() as u64));
+		ser_multiwrite!(writer,
+		                [write_u64, self.fee],
+		                [write_vec, &mut self.zerosig.clone()],
+		                [write_u64, self.inputs.len() as u64],
+		                [write_u64, self.outputs.len() as u64]);
 		for inp in &self.inputs {
 			try_m!(inp.write(writer));
 		}
@@ -87,8 +88,8 @@ impl Writeable for Transaction {
 /// transaction from a binary stream.
 impl Readable<Transaction> for Transaction {
 	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
-    let (fee, zerosig, input_len, output_len) =
-      ser_multiread!(reader, read_u64, read_vec, read_u64, read_u64);
+		let (fee, zerosig, input_len, output_len) =
+			ser_multiread!(reader, read_u64, read_vec, read_u64, read_u64);
 
 		// in case a facetious miner sends us more than what we can allocate
 		if input_len > MAX_IN_OUT_LEN || output_len > MAX_IN_OUT_LEN {
@@ -311,7 +312,7 @@ impl Writeable for Output {
 /// an Output from a binary stream.
 impl Readable<Output> for Output {
 	fn read(reader: &mut Reader) -> Result<Output, ser::Error> {
-    let (commit, proof) = ser_multiread!(reader, read_33_bytes, read_vec);
+		let (commit, proof) = ser_multiread!(reader, read_33_bytes, read_vec);
 		Ok(Output::BlindOutput {
 			commit: Commitment::from_vec(commit),
 			proof: RangeProof::from_vec(proof),
@@ -545,5 +546,3 @@ mod test {
 		}
 	}
 }
-
-

@@ -61,12 +61,13 @@ impl Default for BlockHeader {
 // core. Readable is in the ser package.
 impl Writeable for BlockHeader {
 	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
-		try_m!(writer.write_u64(self.height));
-		try_m!(writer.write_fixed_bytes(&self.previous));
-		try_m!(writer.write_i64(self.timestamp.to_timespec().sec));
-		try_m!(writer.write_fixed_bytes(&self.utxo_merkle));
-		try_m!(writer.write_fixed_bytes(&self.tx_merkle));
-		try_m!(writer.write_u64(self.total_fees));
+		ser_multiwrite!(writer,
+		                [write_u64, self.height],
+		                [write_fixed_bytes, &self.previous],
+		                [write_i64, self.timestamp.to_timespec().sec],
+		                [write_fixed_bytes, &self.utxo_merkle],
+		                [write_fixed_bytes, &self.tx_merkle],
+		                [write_u64, self.total_fees]);
 		// make sure to not introduce any variable length data before the nonce to
 		// avoid complicating PoW
 		try_m!(writer.write_u64(self.nonce));
@@ -103,9 +104,10 @@ impl Writeable for Block {
 	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
 		try_m!(self.header.write(writer));
 
-		try_m!(writer.write_u64(self.inputs.len() as u64));
-		try_m!(writer.write_u64(self.outputs.len() as u64));
-		try_m!(writer.write_u64(self.proofs.len() as u64));
+		ser_multiwrite!(writer,
+		                [write_u64, self.inputs.len() as u64],
+		                [write_u64, self.outputs.len() as u64],
+		                [write_u64, self.proofs.len() as u64]);
 		for inp in &self.inputs {
 			try_m!(inp.write(writer));
 		}
@@ -123,8 +125,15 @@ impl Writeable for Block {
 /// from a binary stream.
 impl Readable<Block> for Block {
 	fn read(reader: &mut Reader) -> Result<Block, ser::Error> {
-    let (height, previous, timestamp, utxo_merkle, tx_merkle, total_fees, nonce) =
-      ser_multiread!(reader, read_u64, read_32_bytes, read_i64, read_32_bytes, read_32_bytes, read_u64, read_u64);
+		let (height, previous, timestamp, utxo_merkle, tx_merkle, total_fees, nonce) =
+			ser_multiread!(reader,
+			               read_u64,
+			               read_32_bytes,
+			               read_i64,
+			               read_32_bytes,
+			               read_32_bytes,
+			               read_u64,
+			               read_u64);
 
 		// cuckoo cycle of 42 nodes
 		let mut pow = [0; PROOFSIZE];
@@ -132,11 +141,12 @@ impl Readable<Block> for Block {
 			pow[n] = try!(reader.read_u32());
 		}
 
-    let (td, input_len, output_len, proof_len) =
-      ser_multiread!(reader, read_u64, read_u64, read_u64, read_u64);
+		let (td, input_len, output_len, proof_len) =
+			ser_multiread!(reader, read_u64, read_u64, read_u64, read_u64);
 
 		if input_len > MAX_IN_OUT_LEN || output_len > MAX_IN_OUT_LEN || proof_len > MAX_IN_OUT_LEN {
-			return Err(ser::Error::TooLargeReadErr("Too many inputs, outputs or proofs.".to_string()));
+			return Err(ser::Error::TooLargeReadErr("Too many inputs, outputs or proofs."
+				.to_string()));
 		}
 
 		let inputs = try!((0..input_len).map(|_| Input::read(reader)).collect());
@@ -373,7 +383,7 @@ impl Block {
 #[cfg(test)]
 mod test {
 	use super::*;
-        use core::{Input, Output, Transaction};
+	use core::{Input, Output, Transaction};
 	use core::hash::{Hash, Hashed};
 	use core::test::{tx1i1o, tx2i1o};
 
@@ -463,4 +473,3 @@ mod test {
 		assert_eq!(b3.outputs.len(), 4);
 	}
 }
-
