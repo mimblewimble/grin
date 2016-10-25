@@ -12,20 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Networking code to connect to other peers and exchange block, transactions,
-//! etc.
+use types::*;
+use core::ser;
 
-#![deny(non_upper_case_globals)]
-#![deny(non_camel_case_types)]
-#![deny(non_snake_case)]
-#![deny(unused_mut)]
-#![warn(missing_docs)]
+pub struct ProtocolV1 {
+	comm: &mut Comm,
+}
 
-#[macro_use]
-extern crate bitflags;
-extern crate mioco;
+impl Protocol for ProtocolV1 {
+	fn new(p: &mut Comm) -> Protocol {
+		Protocol { comm: p }
+	}
+	fn handle(&self, server: &Server) {
+		loop {
+			let header = ser::deserialize::<MsgHeader>();
+			if !header.acceptable() {
+				continue;
+			}
+		}
+	}
+}
 
-mod msg;
-mod server;
-mod peer;
-mod protocol;
+impl ProtocolV1 {
+	fn close(err_code: u32, explanation: &'static str) {
+		serialize(self.peer,
+		          &Err {
+			          code: err_code,
+			          message: explanation,
+		          });
+		self.comm.close();
+	}
+}

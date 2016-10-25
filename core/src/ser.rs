@@ -33,6 +33,8 @@ pub enum Error {
 		expected: Vec<u8>,
 		received: Vec<u8>,
 	},
+  /// Data wasn't in a consumable format
+  CorruptedData,
 	/// When asked to read too much data
 	TooLargeReadErr(String),
 }
