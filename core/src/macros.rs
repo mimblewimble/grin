@@ -71,3 +71,17 @@ macro_rules! try_m {
 		}
   }
 }
+
+/// Eliminate some of the boilerplate of deserialization (package ser) by passing just the list of reader function.
+/// Example before:
+///   let foo = try!(reader.read_u64());
+///   let bar = try!(reader.read_u32());
+/// Example after:
+///   let (foo, bar) = ser_multiread!(reader, read_u64, read_u32);
+#[macro_export]
+macro_rules! ser_multiread {
+  ($rdr:ident, $($read_call:ident),*) => {
+    ( $(try!($rdr.$read_call())),* )
+  }
+}
+

@@ -28,6 +28,11 @@ use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
 pub enum Error {
 	/// Wraps an io error produced when reading or writing
 	IOErr(io::Error),
+  /// Expected a given value that wasn't found
+  UnexpectedData{
+    expected: Vec<u8>,
+    received: Vec<u8>,
+  },
 	/// When asked to read too much data
 	TooLargeReadErr(String),
 }
@@ -42,6 +47,8 @@ pub trait AsFixedBytes {
 /// Implementations defined how different numbers and binary structures are
 /// written to an underlying stream or container (depending on implementation).
 pub trait Writer {
+	/// Writes a u8 as bytes
+  fn write_u8(&mut self, n: u8) -> Option<Error>;
 	/// Writes a u32 as bytes
 	fn write_u32(&mut self, n: u32) -> Option<Error>;
 	/// Writes a u64 as bytes
@@ -59,6 +66,8 @@ pub trait Writer {
 /// Implementations defined how different numbers and binary structures are
 /// read from an underlying stream or container (depending on implementation).
 pub trait Reader {
+	/// Read a u8 from the underlying Read
+	fn read_u8(&mut self) -> Result<u8, Error>;
 	/// Read a u32 from the underlying Read
 	fn read_u32(&mut self) -> Result<u32, Error>;
 	/// Read a u64 from the underlying Read
@@ -69,6 +78,12 @@ pub trait Reader {
 	fn read_vec(&mut self) -> Result<Vec<u8>, Error>;
 	/// Read a fixed number of bytes from the underlying reader.
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error>;
+  /// Convenience function to read 32 fixed bytes
+  fn read_32_bytes(&mut self) -> Result<Vec<u8>, Error>;
+  /// Convenience function to read 33 fixed bytes
+  fn read_33_bytes(&mut self) -> Result<Vec<u8>, Error>;
+  /// Consumes a byte from the reader, producing an error if it doesn't have the expected value
+  fn expect_u8(&mut self, val: u8) -> Result<u8, Error>;
 }
 
 /// Trait that every type that can be serialized as binary must implement.
@@ -116,6 +131,9 @@ struct BinReader<'a> {
 /// Utility wrapper for an underlying byte Reader. Defines higher level methods
 /// to read numbers, byte vectors, hashes, etc.
 impl<'a> Reader for BinReader<'a> {
+	fn read_u8(&mut self) -> Result<u8, Error> {
+		self.source.read_u8().map_err(Error::IOErr)
+	}
 	fn read_u32(&mut self) -> Result<u32, Error> {
 		self.source.read_u32::<BigEndian>().map_err(Error::IOErr)
 	}
@@ -138,6 +156,16 @@ impl<'a> Reader for BinReader<'a> {
 		let mut buf = vec![0; length];
 		self.source.read_exact(&mut buf).map(move |_| buf).map_err(Error::IOErr)
 	}
+	fn read_32_bytes(&mut self) -> Result<Vec<u8>, Error> {
+    self.read_fixed_bytes(32)
+  }
+	fn read_33_bytes(&mut self) -> Result<Vec<u8>, Error> {
+    self.read_fixed_bytes(33)
+  }
+  fn expect_u8(&mut self, val: u8) -> Result<u8, Error> {
+    let b = try!(self.read_u8());
+    if b == val { Ok(b) } else { Err(Error::UnexpectedData{expected: vec![val], received: vec![b]}) }
+  }
 }
 
 /// Utility wrapper for an underlying byte Writer. Defines higher level methods
@@ -147,6 +175,9 @@ struct BinWriter<'a> {
 }
 
 impl<'a> Writer for BinWriter<'a> {
+	fn write_u8(&mut self, n: u8) -> Option<Error> {
+		self.sink.write_u8(n).err().map(Error::IOErr)
+	}
 	fn write_u32(&mut self, n: u32) -> Option<Error> {
 		self.sink.write_u32::<BigEndian>(n).err().map(Error::IOErr)
 	}

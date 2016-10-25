@@ -123,23 +123,18 @@ impl Writeable for Block {
 /// from a binary stream.
 impl Readable<Block> for Block {
 	fn read(reader: &mut Reader) -> Result<Block, ser::Error> {
-		let height = try!(reader.read_u64());
-		let previous = try!(reader.read_fixed_bytes(32));
-		let timestamp = try!(reader.read_i64());
-		let utxo_merkle = try!(reader.read_fixed_bytes(32));
-		let tx_merkle = try!(reader.read_fixed_bytes(32));
-		let total_fees = try!(reader.read_u64());
-		let nonce = try!(reader.read_u64());
+    let (height, previous, timestamp, utxo_merkle, tx_merkle, total_fees, nonce) =
+      ser_multiread!(reader, read_u64, read_32_bytes, read_i64, read_32_bytes, read_32_bytes, read_u64, read_u64);
+
 		// cuckoo cycle of 42 nodes
 		let mut pow = [0; PROOFSIZE];
 		for n in 0..PROOFSIZE {
 			pow[n] = try!(reader.read_u32());
 		}
-		let td = try!(reader.read_u64());
 
-		let input_len = try!(reader.read_u64());
-		let output_len = try!(reader.read_u64());
-		let proof_len = try!(reader.read_u64());
+    let (td, input_len, output_len, proof_len) =
+      ser_multiread!(reader, read_u64, read_u64, read_u64, read_u64);
+
 		if input_len > MAX_IN_OUT_LEN || output_len > MAX_IN_OUT_LEN || proof_len > MAX_IN_OUT_LEN {
 			return Err(ser::Error::TooLargeReadErr("Too many inputs, outputs or proofs.".to_string()));
 		}
@@ -147,6 +142,7 @@ impl Readable<Block> for Block {
 		let inputs = try!((0..input_len).map(|_| Input::read(reader)).collect());
 		let outputs = try!((0..output_len).map(|_| Output::read(reader)).collect());
 		let proofs = try!((0..proof_len).map(|_| TxProof::read(reader)).collect());
+
 		Ok(Block {
 			header: BlockHeader {
 				height: height,

@@ -47,8 +47,7 @@ impl Writeable for TxProof {
 
 impl Readable<TxProof> for TxProof {
 	fn read(reader: &mut Reader) -> Result<TxProof, ser::Error> {
-		let remainder = try!(reader.read_fixed_bytes(33));
-		let sig = try!(reader.read_vec());
+    let (remainder, sig) = ser_multiread!(reader, read_33_bytes, read_vec);
 		Ok(TxProof {
 			remainder: Commitment::from_vec(remainder),
 			sig: sig,
@@ -88,10 +87,8 @@ impl Writeable for Transaction {
 /// transaction from a binary stream.
 impl Readable<Transaction> for Transaction {
 	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
-		let fee = try!(reader.read_u64());
-		let zerosig = try!(reader.read_vec());
-		let input_len = try!(reader.read_u64());
-		let output_len = try!(reader.read_u64());
+    let (fee, zerosig, input_len, output_len) =
+      ser_multiread!(reader, read_u64, read_vec, read_u64, read_u64);
 
 		// in case a facetious miner sends us more than what we can allocate
 		if input_len > MAX_IN_OUT_LEN || output_len > MAX_IN_OUT_LEN {
@@ -314,8 +311,7 @@ impl Writeable for Output {
 /// an Output from a binary stream.
 impl Readable<Output> for Output {
 	fn read(reader: &mut Reader) -> Result<Output, ser::Error> {
-		let commit = try!(reader.read_fixed_bytes(33));
-		let proof = try!(reader.read_vec());
+    let (commit, proof) = ser_multiread!(reader, read_33_bytes, read_vec);
 		Ok(Output::BlindOutput {
 			commit: Commitment::from_vec(commit),
 			proof: RangeProof::from_vec(proof),
