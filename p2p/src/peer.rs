@@ -13,13 +13,12 @@
 // limitations under the License.
 
 use std::net::SocketAddr;
-use std::io::{self, Read, Write, BufReader};
+use std::io::{self, Read, Write};
 
-use mioco::tcp::{TcpListener, TcpStream, Shutdown};
-use time::Duration;
+use mioco::tcp::{TcpStream, Shutdown};
 
-use core::ser::{serialize, deserialize, Error};
 use handshake::Handshake;
+use core::ser::Error;
 use msg::*;
 use types::*;
 
@@ -27,7 +26,6 @@ use types::*;
 /// low-level network communication and tracks peer information.
 pub struct PeerConn {
 	conn: TcpStream,
-	reader: BufReader<TcpStream>,
 	pub capabilities: Capabilities,
 	pub user_agent: String,
 }
@@ -36,7 +34,7 @@ pub struct PeerConn {
 /// Allows the peer to track how much is received.
 impl Read for PeerConn {
 	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-		self.reader.read(buf)
+		self.conn.read(buf)
 	}
 }
 
@@ -66,7 +64,6 @@ impl PeerConn {
 
 		PeerConn {
 			conn: conn,
-			reader: BufReader::new(conn),
 			capabilities: UNKNOWN,
 			user_agent: "".to_string(),
 		}

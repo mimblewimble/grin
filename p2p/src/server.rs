@@ -21,9 +21,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use mioco;
-use mioco::tcp::{TcpListener, TcpStream, Shutdown};
+use mioco::tcp::TcpListener;
 
-use core::ser::{serialize, deserialize};
 use handshake::Handshake;
 use peer::PeerConn;
 use types::*;
@@ -54,7 +53,7 @@ impl Server {
 				let hs = Arc::new(Handshake::new());
 
 				loop {
-					let mut conn = try!(listener.accept());
+					let conn = try!(listener.accept());
           let hs_child = hs.clone();
 
 					mioco::spawn(move || -> io::Result<()> {

@@ -28,7 +28,7 @@ const MAGIC: [u8; 2] = [0x1e, 0xc5];
 
 /// Codes for each error that can be produced reading a message.
 pub enum ErrCodes {
-	UNSUPPORTED_VERSION = 100,
+	UnsupportedVersion = 100,
 }
 
 bitflags! {
@@ -50,7 +50,7 @@ pub enum Type {
 	PING,
 	PONG,
 	/// Never used over the network but to detect unrecognized types.
-	MAX_MSG_TYPE,
+	MaxMsgType,
 }
 
 /// Header of any protocol message, used to identify incoming messages.
@@ -61,7 +61,7 @@ pub struct MsgHeader {
 
 impl MsgHeader {
 	pub fn acceptable(&self) -> bool {
-		(self.msg_type as u8) < (Type::MAX_MSG_TYPE as u8)
+		(self.msg_type as u8) < (Type::MaxMsgType as u8)
 	}
 }
 
@@ -80,7 +80,7 @@ impl Readable<MsgHeader> for MsgHeader {
 		try!(reader.expect_u8(MAGIC[0]));
 		try!(reader.expect_u8(MAGIC[1]));
 		let t = try!(reader.read_u8());
-    if t < (Type::MAX_MSG_TYPE as u8) {
+    if t < (Type::MaxMsgType as u8) {
       return Err(ser::Error::CorruptedData);
     }
 		Ok(MsgHeader {
