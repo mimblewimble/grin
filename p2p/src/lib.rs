@@ -23,9 +23,17 @@
 
 #[macro_use]
 extern crate bitflags;
+#[macro_use]
+extern crate grin_core as core;
+#[macro_use]
+extern crate log;
 extern crate mioco;
+extern crate rand;
+extern crate time;
 
+mod types;
 mod msg;
+mod handshake;
+mod protocol;
 mod server;
 mod peer;
-mod protocol;

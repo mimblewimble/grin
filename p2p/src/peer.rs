@@ -12,117 +12,83 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use str::net::SocketAddr;
-use std::str::FromStr;
-use std::io::{Read, Write};
-
-use time::Duration;
+use std::net::SocketAddr;
+use std::io::{self, Read, Write, BufReader};
 
 use mioco::tcp::{TcpListener, TcpStream, Shutdown};
-use core::ser::{serialize, deserialize};
+use time::Duration;
 
-const PROTOCOL_VERSION: u32 = 1;
-const USER_AGENT: &'static str = "MW/Grin 0.1";
+use core::ser::{serialize, deserialize, Error};
+use handshake::Handshake;
+use msg::*;
+use types::*;
 
 /// The local representation of a remotely connected peer. Handles most
 /// low-level network communication and tracks peer information.
-struct Peer {
+pub struct PeerConn {
 	conn: TcpStream,
-	reader: BufReader,
-	capabilities: Capabilities,
-	user_agent: String,
+	reader: BufReader<TcpStream>,
+	pub capabilities: Capabilities,
+	pub user_agent: String,
 }
 
 /// Make the Peer a Reader for convenient access to the underlying connection.
 /// Allows the peer to track how much is received.
-impl Read for Peer {
-	fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+impl Read for PeerConn {
+	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
 		self.reader.read(buf)
 	}
 }
 
 /// Make the Peer a Writer for convenient access to the underlying connection.
 /// Allows the peer to track how much is sent.
-impl Write for Peer {
-	fn write(&mut self, buf: &[u8]) -> Result<usize> {
-		self.conf.write(buf)
+impl Write for PeerConn {
+	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+		self.conn.write(buf)
 	}
+  fn flush(&mut self) -> io::Result<()> {
+    self.conn.flush()
+  }
 }
 
-impl Close for Peer {
-	fn close() {
+impl Close for PeerConn {
+	fn close(&self) {
 		self.conn.shutdown(Shutdown::Both);
 	}
 }
 
-impl Peer {
+impl PeerConn {
 	/// Create a new local peer instance connected to a remote peer with the
 	/// provided TcpStream.
-	fn new(conn: TcpStream) -> Peer {
+	pub fn new(conn: TcpStream) -> PeerConn {
 		// don't wait on read for more than 2 seconds by default
-		conn.set_read_timeout(Some(Duration::seconds(2)));
+		conn.set_keepalive(Some(2));
 
-		Peer {
+		PeerConn {
 			conn: conn,
 			reader: BufReader::new(conn),
 			capabilities: UNKNOWN,
-			user_agent: "",
+			user_agent: "".to_string(),
 		}
 	}
 
-	/// Handles connecting to a new remote peer, starting the version handshake.
-	fn connect(&mut self) -> Result<Protocol, Error> {
-		serialize(self.peer,
-		          &Hand {
-			          version: PROTOCOL_VERSION,
-			          capabilities: FULL_SYNC,
-			          sender_addr: listen_addr(),
-			          receiver_addr: self.peer.peer_addr(),
-			          user_agent: USER_AGENT,
-		          });
-		let shake = deserialize(self.peer);
-		if shake.version != 1 {
-			self.close(ErrCodes::UNSUPPORTED_VERSION,
-			           format!("Unsupported version: {}, ours: {})",
-			                   shake.version,
-			                   PROTOCOL_VERSION));
-			return;
-		}
-		self.capabilities = shake.capabilities;
-		self.user_agent = shake.user_agent;
-
-		// when more than one protocol version is supported, choosing should go here
-		ProtocolV1::new(&self);
+	pub fn connect(&mut self, hs: &Handshake, na: &NetAdapter) -> Option<Error> {
+		let mut proto = try_to_o!(hs.connect(self));
+		proto.handle(na)
 	}
 
-	/// Handles receiving a connection from a new remote peer that started the
-	/// version handshake.
-	fn handshake(&mut self) -> Result<Protocol, Error> {
-		let hand = deserialize(self.peer);
-		if hand.version != 1 {
-			self.close(ErrCodes::UNSUPPORTED_VERSION,
-			           format!("Unsupported version: {}, ours: {})",
-			                   hand.version,
-			                   PROTOCOL_VERSION));
-			return;
-		}
-
-		self.peer.capabilities = hand.capabilities;
-		self.peer.user_agent = hand.user_agent;
-
-		serialize(self.peer,
-		          &Shake {
-			          version: PROTOCOL_VERSION,
-			          capabilities: FULL_SYNC,
-			          user_agent: USER_AGENT,
-		          });
-		self.accept_loop();
-
-		// when more than one protocol version is supported, choosing should go here
-		ProtocolV1::new(&self);
+	pub fn handshake(&mut self, hs: &Handshake, na: &NetAdapter) -> Option<Error> {
+		let mut proto = try_to_o!(hs.handshake(self));
+		proto.handle(na)
 	}
+}
 
+impl PeerInfo for PeerConn {
 	fn peer_addr(&self) -> SocketAddr {
-		self.conn.peer_addr()
+		self.conn.peer_addr().unwrap()
+	}
+	fn local_addr(&self) -> SocketAddr {
+    // TODO likely not exactly what we want (private vs public IP)
+		self.conn.local_addr().unwrap()
 	}
 }

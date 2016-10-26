@@ -41,9 +41,9 @@ impl Lineage {
 /// Serialization for lineage, necessary to serialize fork tips.
 impl ser::Writeable for Lineage {
 	fn write(&self, writer: &mut ser::Writer) -> Option<ser::Error> {
-		try_m!(writer.write_u32(self.0.len() as u32));
+		try_o!(writer.write_u32(self.0.len() as u32));
 		for num in &self.0 {
-			try_m!(writer.write_u32(*num));
+			try_o!(writer.write_u32(*num));
 		}
 		None
 	}
@@ -100,9 +100,9 @@ impl Tip {
 /// Serialization of a tip, required to save to datastore.
 impl ser::Writeable for Tip {
 	fn write(&self, writer: &mut ser::Writer) -> Option<ser::Error> {
-		try_m!(writer.write_u64(self.height));
-		try_m!(writer.write_fixed_bytes(&self.last_block_h));
-		try_m!(writer.write_fixed_bytes(&self.prev_block_h));
+		try_o!(writer.write_u64(self.height));
+		try_o!(writer.write_fixed_bytes(&self.last_block_h));
+		try_o!(writer.write_fixed_bytes(&self.prev_block_h));
 		self.lineage.write(writer)
 	}
 }

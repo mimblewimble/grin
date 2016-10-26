@@ -51,7 +51,7 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn save_head(&self, t: &Tip) -> Option<Error> {
-		try_m!(self.save_tip(t));
+		try_o!(self.save_tip(t));
 		self.db.put_ser(&vec![HEAD_PREFIX], t).map(&to_store_err)
 	}
 

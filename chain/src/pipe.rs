@@ -66,11 +66,11 @@ pub fn process_block(b: &Block, store: &ChainStore, opts: Options) -> Option<Err
 		tip: None,
 	};
 
-	try_m!(validate_header(&b, &mut ctx));
-	try_m!(set_tip(&b.header, &mut ctx));
-	try_m!(validate_block(b, &mut ctx));
-	try_m!(add_block(b, &mut ctx));
-	try_m!(update_tips(&mut ctx));
+	try_o!(validate_header(&b, &mut ctx));
+	try_o!(set_tip(&b.header, &mut ctx));
+	try_o!(validate_block(b, &mut ctx));
+	try_o!(add_block(b, &mut ctx));
+	try_o!(update_tips(&mut ctx));
 	None
 }
 
@@ -118,7 +118,7 @@ fn set_tip(h: &BlockHeader, ctx: &mut BlockContext) -> Option<Error> {
 fn validate_block(b: &Block, ctx: &mut BlockContext) -> Option<Error> {
 	// TODO check tx merkle tree
 	let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-	try_m!(b.verify(&curve).err().map(&Error::InvalidBlockProof));
+	try_o!(b.verify(&curve).err().map(&Error::InvalidBlockProof));
 	None
 }
 

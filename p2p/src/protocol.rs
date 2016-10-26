@@ -12,20 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use types::*;
 use core::ser;
+use msg::*;
+use types::*;
+use peer::PeerConn;
 
-pub struct ProtocolV1 {
-	comm: &mut Comm,
+pub struct ProtocolV1<'a> {
+	peer: &'a mut PeerConn,
 }
 
-impl Protocol for ProtocolV1 {
-	fn new(p: &mut Comm) -> Protocol {
-		Protocol { comm: p }
-	}
-	fn handle(&self, server: &Server) {
+impl<'a> Protocol for ProtocolV1<'a> {
+	fn handle(&mut self, server: &NetAdapter) -> Option<ser::Error> {
 		loop {
-			let header = ser::deserialize::<MsgHeader>();
+			let header = try_to_o!(ser::deserialize::<MsgHeader>(self.peer));
 			if !header.acceptable() {
 				continue;
 			}
@@ -33,13 +32,17 @@ impl Protocol for ProtocolV1 {
 	}
 }
 
-impl ProtocolV1 {
-	fn close(err_code: u32, explanation: &'static str) {
-		serialize(self.peer,
-		          &Err {
+impl<'a> ProtocolV1<'a> {
+  pub fn new(p: &mut PeerConn) -> ProtocolV1 {
+    ProtocolV1{peer: p}
+  }
+
+	fn close(&mut self, err_code: u32, explanation: &'static str) {
+		ser::serialize(self.peer,
+		          &PeerError {
 			          code: err_code,
-			          message: explanation,
+			          message: explanation.to_string(),
 		          });
-		self.comm.close();
+		self.peer.close();
 	}
 }

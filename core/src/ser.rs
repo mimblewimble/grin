@@ -51,6 +51,8 @@ pub trait AsFixedBytes {
 pub trait Writer {
 	/// Writes a u8 as bytes
 	fn write_u8(&mut self, n: u8) -> Option<Error>;
+	/// Writes a u16 as bytes
+	fn write_u16(&mut self, n: u16) -> Option<Error>;
 	/// Writes a u32 as bytes
 	fn write_u32(&mut self, n: u32) -> Option<Error>;
 	/// Writes a u64 as bytes
@@ -70,6 +72,8 @@ pub trait Writer {
 pub trait Reader {
 	/// Read a u8 from the underlying Read
 	fn read_u8(&mut self) -> Result<u8, Error>;
+	/// Read a u16 from the underlying Read
+	fn read_u16(&mut self) -> Result<u16, Error>;
 	/// Read a u32 from the underlying Read
 	fn read_u32(&mut self) -> Result<u32, Error>;
 	/// Read a u64 from the underlying Read
@@ -137,6 +141,9 @@ impl<'a> Reader for BinReader<'a> {
 	fn read_u8(&mut self) -> Result<u8, Error> {
 		self.source.read_u8().map_err(Error::IOErr)
 	}
+	fn read_u16(&mut self) -> Result<u16, Error> {
+		self.source.read_u16::<BigEndian>().map_err(Error::IOErr)
+	}
 	fn read_u32(&mut self) -> Result<u32, Error> {
 		self.source.read_u32::<BigEndian>().map_err(Error::IOErr)
 	}
@@ -188,6 +195,9 @@ impl<'a> Writer for BinWriter<'a> {
 	fn write_u8(&mut self, n: u8) -> Option<Error> {
 		self.sink.write_u8(n).err().map(Error::IOErr)
 	}
+	fn write_u16(&mut self, n: u16) -> Option<Error> {
+		self.sink.write_u16::<BigEndian>(n).err().map(Error::IOErr)
+	}
 	fn write_u32(&mut self, n: u32) -> Option<Error> {
 		self.sink.write_u32::<BigEndian>(n).err().map(Error::IOErr)
 	}
@@ -202,7 +212,7 @@ impl<'a> Writer for BinWriter<'a> {
 
 
 	fn write_vec(&mut self, vec: &mut Vec<u8>) -> Option<Error> {
-		try_m!(self.write_u64(vec.len() as u64));
+		try_o!(self.write_u64(vec.len() as u64));
 		self.sink.write_all(vec).err().map(Error::IOErr)
 	}
 

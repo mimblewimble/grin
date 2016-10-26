@@ -15,10 +15,18 @@
 //! Grin server implementation, accepts incoming connections and connects to
 //! other peers in the network.
 
+use std::io;
+use std::net::SocketAddr;
+use std::str::FromStr;
+use std::sync::Arc;
+
+use mioco;
 use mioco::tcp::{TcpListener, TcpStream, Shutdown};
 
 use core::ser::{serialize, deserialize};
-use msg::*;
+use handshake::Handshake;
+use peer::PeerConn;
+use types::*;
 
 const DEFAULT_LISTEN_ADDR: &'static str = "127.0.0.1:555";
 
@@ -26,6 +34,9 @@ const DEFAULT_LISTEN_ADDR: &'static str = "127.0.0.1:555";
 fn listen_addr() -> SocketAddr {
 	FromStr::from_str(DEFAULT_LISTEN_ADDR).unwrap()
 }
+
+struct DummyAdapter {}
+impl NetAdapter for DummyAdapter {}
 
 pub struct Server {
 }
@@ -35,18 +46,28 @@ impl Server {
 	/// connections and starts the bootstrapping process to find peers.
 	pub fn new() -> Server {
 		mioco::start(|| -> io::Result<()> {
+				// TODO SSL
 				let addr = "127.0.0.1:3414".parse().unwrap();
 				let listener = try!(TcpListener::bind(&addr));
 				info!("P2P server started on {}", addr);
 
+				let hs = Arc::new(Handshake::new());
+
 				loop {
 					let mut conn = try!(listener.accept());
+          let hs_child = hs.clone();
+
 					mioco::spawn(move || -> io::Result<()> {
-						Peer::new(conn).handshake();
+						let ret = PeerConn::new(conn).handshake(&hs_child, &DummyAdapter {});
+            if let Some(err) = ret {
+              error!("{:?}", err);
+            }
+            Ok(())
 					});
 				}
 			})
 			.unwrap()
 			.unwrap();
+    Server{}
 	}
 }

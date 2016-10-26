@@ -13,21 +13,30 @@
 // limitations under the License.
 
 use std::io::{Read, Write};
+use std::net::SocketAddr;
+use core::ser::Error;
 
 /// Trait for pre-emptively and forcefully closing an underlying resource.
-trait Close {
-  fn close();
+pub trait Close {
+	fn close(&self);
 }
 
-/// Main trait we expect a peer to implement to be usable by a Protocol.
-trait Comm : Read + Write + Close;
-
-/// A given communication protocol agreed upon between 2 peers (usually ourselves and a remove) after handshake.
-trait Protocol {
-  /// Instantiate providing a reader and writer allowing to communicate to the other peer.
-  fn new(p: &mut Comm);
-
-  /// Starts handling protocol communication, the peer(s) is expected to be known already, usually passed during construction.
-  fn handle(&self, server: &Server);
+/// General information about a connected peer that's useful to other modules.
+pub trait PeerInfo {
+  /// Address of the remote peer
+	fn peer_addr(&self) -> SocketAddr;
+  /// Our address, communicated to other peers
+	fn local_addr(&self) -> SocketAddr;
 }
 
+/// A given communication protocol agreed upon between 2 peers (usually
+/// ourselves and a remove) after handshake.
+pub trait Protocol {
+	/// Starts handling protocol communication, the peer(s) is expected to be
+	/// known already, usually passed during construction.
+	fn handle(&mut self, na: &NetAdapter) -> Option<Error>;
+}
+
+/// Bridge between the networking layer and the rest of the system. Handles the
+/// forwarding or querying of blocks and transactions among other things.
+pub trait NetAdapter {}

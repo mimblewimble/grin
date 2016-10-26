@@ -72,15 +72,15 @@ struct PowHeader {
 /// to make incrementing from the serialized form trivial.
 impl Writeable for PowHeader {
 	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
-		try_m!(writer.write_u64(self.nonce));
-		try_m!(writer.write_u64(self.height));
-		try_m!(writer.write_fixed_bytes(&self.previous));
-		try_m!(writer.write_i64(self.timestamp.to_timespec().sec));
-		try_m!(writer.write_fixed_bytes(&self.utxo_merkle));
-		try_m!(writer.write_fixed_bytes(&self.tx_merkle));
-		try_m!(writer.write_u64(self.total_fees));
-		try_m!(writer.write_u64(self.n_in));
-		try_m!(writer.write_u64(self.n_out));
+		try_o!(writer.write_u64(self.nonce));
+		try_o!(writer.write_u64(self.height));
+		try_o!(writer.write_fixed_bytes(&self.previous));
+		try_o!(writer.write_i64(self.timestamp.to_timespec().sec));
+		try_o!(writer.write_fixed_bytes(&self.utxo_merkle));
+		try_o!(writer.write_fixed_bytes(&self.tx_merkle));
+		try_o!(writer.write_u64(self.total_fees));
+		try_o!(writer.write_u64(self.n_in));
+		try_o!(writer.write_u64(self.n_out));
 		writer.write_u64(self.n_proofs)
 	}
 }

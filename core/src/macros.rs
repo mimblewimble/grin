@@ -17,6 +17,7 @@
 
 /// Eliminates some of the verbosity in having iter and collect
 /// around every map call.
+#[macro_export]
 macro_rules! map_vec {
   ($thing:expr, $mapfn:expr ) => {
     $thing.iter()
@@ -27,7 +28,8 @@ macro_rules! map_vec {
 
 /// Same as map_vec when the map closure returns Results. Makes sure the
 /// results are "pushed up" and wraps with a try.
-macro_rules! try_map_vec {
+#[macro_export]
+macro_rules! try_oap_vec {
   ($thing:expr, $mapfn:expr ) => {
     try!($thing.iter()
       .map($mapfn)
@@ -59,17 +61,28 @@ macro_rules! tee {
   }
 }
 
-/// Simple equivalent of try! but for a Maybe<Error>. Motivated mostly by the
+/// Simple equivalent of try! but for an Option<Error>. Motivated mostly by the
 /// io package and our serialization as an alternative to silly Result<(),
 /// Error>.
 #[macro_export]
-macro_rules! try_m {
+macro_rules! try_o {
   ($trying:expr) => {
 		let tried = $trying;
 		if let Some(_) = tried {
 			return tried;
 		}
   }
+}
+
+#[macro_export]
+macro_rules! try_to_o {
+  ($trying:expr) => {{
+    let tried = $trying;
+    if let Err(e) = tried {
+      return Some(e);
+    }
+    tried.unwrap()
+  }}
 }
 
 /// Eliminate some of the boilerplate of deserialization (package ser) by
@@ -86,9 +99,16 @@ macro_rules! ser_multiread {
   }
 }
 
+/// Eliminate some of the boilerplate of serialization (package ser) by
+/// passing directly pairs of writer function and data to write.
+/// Example before:
+///   try!(reader.write_u64(42));
+///   try!(reader.write_u32(100));
+/// Example after:
+///   ser_multiwrite!(writer, [write_u64, 42], [write_u32, 100]);
 #[macro_export]
 macro_rules! ser_multiwrite {
   ($wrtr:ident, $([ $write_call:ident, $val:expr ]),* ) => {
-    $( try_m!($wrtr.$write_call($val)) );*
+    $( try_o!($wrtr.$write_call($val)) );*
   }
 }

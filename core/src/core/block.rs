@@ -70,10 +70,10 @@ impl Writeable for BlockHeader {
 		                [write_u64, self.total_fees]);
 		// make sure to not introduce any variable length data before the nonce to
 		// avoid complicating PoW
-		try_m!(writer.write_u64(self.nonce));
+		try_o!(writer.write_u64(self.nonce));
 		// cuckoo cycle of 42 nodes
 		for n in 0..42 {
-			try_m!(writer.write_u32(self.pow.0[n]));
+			try_o!(writer.write_u32(self.pow.0[n]));
 		}
 		writer.write_u64(self.td)
 	}
@@ -102,20 +102,20 @@ pub struct Block {
 /// block as binary.
 impl Writeable for Block {
 	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
-		try_m!(self.header.write(writer));
+		try_o!(self.header.write(writer));
 
 		ser_multiwrite!(writer,
 		                [write_u64, self.inputs.len() as u64],
 		                [write_u64, self.outputs.len() as u64],
 		                [write_u64, self.proofs.len() as u64]);
 		for inp in &self.inputs {
-			try_m!(inp.write(writer));
+			try_o!(inp.write(writer));
 		}
 		for out in &self.outputs {
-			try_m!(out.write(writer));
+			try_o!(out.write(writer));
 		}
 		for proof in &self.proofs {
-			try_m!(proof.write(writer));
+			try_o!(proof.write(writer));
 		}
 		None
 	}
@@ -218,7 +218,7 @@ impl Block {
 		// repeated iterations, revisit if a problem
 
 		// validate each transaction and gather their proofs
-		let mut proofs = try_map_vec!(txs, |tx| tx.verify_sig(&secp));
+		let mut proofs = try_oap_vec!(txs, |tx| tx.verify_sig(&secp));
 		proofs.push(reward_proof);
 
 		// build vectors with all inputs and all outputs, ordering them by hash

@@ -24,7 +24,7 @@
 extern crate bitflags;
 extern crate byteorder;
 
-#[macro_use(try_m)]
+#[macro_use(try_o)]
 extern crate grin_core as core;
 extern crate grin_store;
 extern crate secp256k1zkp as secp;
