@@ -33,16 +33,16 @@ impl<'a> Protocol for ProtocolV1<'a> {
 }
 
 impl<'a> ProtocolV1<'a> {
-  pub fn new(p: &mut PeerConn) -> ProtocolV1 {
-    ProtocolV1{peer: p}
-  }
+	pub fn new(p: &mut PeerConn) -> ProtocolV1 {
+		ProtocolV1 { peer: p }
+	}
 
 	fn close(&mut self, err_code: u32, explanation: &'static str) {
 		ser::serialize(self.peer,
-		          &PeerError {
-			          code: err_code,
-			          message: explanation.to_string(),
-		          });
+		               &PeerError {
+			               code: err_code,
+			               message: explanation.to_string(),
+		               });
 		self.peer.close();
 	}
 }

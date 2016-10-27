@@ -23,9 +23,9 @@ pub trait Close {
 
 /// General information about a connected peer that's useful to other modules.
 pub trait PeerInfo {
-  /// Address of the remote peer
+	/// Address of the remote peer
 	fn peer_addr(&self) -> SocketAddr;
-  /// Our address, communicated to other peers
+	/// Our address, communicated to other peers
 	fn local_addr(&self) -> SocketAddr;
 }
 

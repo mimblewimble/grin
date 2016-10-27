@@ -21,13 +21,14 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use mioco;
-use mioco::tcp::TcpListener;
+use mioco::tcp::{TcpListener, TcpStream};
 
+use core::ser::Error;
 use handshake::Handshake;
 use peer::PeerConn;
 use types::*;
 
-const DEFAULT_LISTEN_ADDR: &'static str = "127.0.0.1:555";
+pub const DEFAULT_LISTEN_ADDR: &'static str = "127.0.0.1:3414";
 
 // replace with some config lookup or something
 fn listen_addr() -> SocketAddr {
@@ -43,30 +44,41 @@ pub struct Server {
 impl Server {
 	/// Creates a new p2p server. Opens a TCP port to allow incoming
 	/// connections and starts the bootstrapping process to find peers.
-	pub fn new() -> Server {
-		mioco::start(|| -> io::Result<()> {
-				// TODO SSL
-				let addr = "127.0.0.1:3414".parse().unwrap();
-				let listener = try!(TcpListener::bind(&addr));
-				info!("P2P server started on {}", addr);
+	pub fn start() -> Result<Server, Error> {
+		// TODO TLS
+		mioco::spawn(move || -> io::Result<()> {
+			let addr = DEFAULT_LISTEN_ADDR.parse().unwrap();
+			let listener = try!(TcpListener::bind(&addr));
+			warn!("P2P server started on {}", addr);
 
-				let hs = Arc::new(Handshake::new());
+			let hs = Arc::new(Handshake::new());
 
-				loop {
-					let conn = try!(listener.accept());
-          let hs_child = hs.clone();
+			loop {
+				let conn = try!(listener.accept());
+				let hs_child = hs.clone();
 
-					mioco::spawn(move || -> io::Result<()> {
-						let ret = PeerConn::new(conn).handshake(&hs_child, &DummyAdapter {});
-            if let Some(err) = ret {
-              error!("{:?}", err);
-            }
-            Ok(())
-					});
-				}
-			})
-			.unwrap()
-			.unwrap();
-    Server{}
+				mioco::spawn(move || -> io::Result<()> {
+					let ret = PeerConn::new(conn).handshake(&hs_child, &DummyAdapter {});
+					if let Some(err) = ret {
+						error!("{:?}", err);
+					}
+					Ok(())
+				});
+			}
+			Ok(())
+		});
+		Ok(Server {})
+	}
+
+	/// Simulates an unrelated client connecting to our server. Mostly used for
+	/// tests.
+	pub fn connect_as_client(addr: SocketAddr) -> Option<Error> {
+		let tcp_client = TcpStream::connect(&addr).unwrap();
+		let mut peer = PeerConn::new(tcp_client);
+    let hs = Handshake::new();
+		if let Err(e) = hs.connect(&mut peer) {
+			return Some(e);
+		}
+		None
 	}
 }

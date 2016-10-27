@@ -12,3 +12,6 @@ mioco = "^0.8"
 time = "^0.1"
 
 grin_core = { path = "../core" }
+
+[dev-dependencies]
+env_logger = "^0.3"

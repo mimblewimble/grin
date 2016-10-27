@@ -80,20 +80,20 @@ impl Readable<MsgHeader> for MsgHeader {
 		try!(reader.expect_u8(MAGIC[0]));
 		try!(reader.expect_u8(MAGIC[1]));
 		let t = try!(reader.read_u8());
-    if t < (Type::MaxMsgType as u8) {
-      return Err(ser::Error::CorruptedData);
-    }
+		if t < (Type::MaxMsgType as u8) {
+			return Err(ser::Error::CorruptedData);
+		}
 		Ok(MsgHeader {
 			magic: MAGIC,
 			msg_type: match t {
-        // TODO this is rather ugly, think of a better way
-        0 => Type::ERROR,
-        1 => Type::HAND,
-        2 => Type::SHAKE,
-        3 => Type::PING,
-        4 => Type::PONG,
-        _ => panic!(),
-      },
+				// TODO this is rather ugly, think of a better way
+				0 => Type::ERROR,
+				1 => Type::HAND,
+				2 => Type::SHAKE,
+				3 => Type::PING,
+				4 => Type::PONG,
+				_ => panic!(),
+			},
 		})
 	}
 }
@@ -120,7 +120,7 @@ impl Writeable for Hand {
 		ser_multiwrite!(writer,
 		                [write_u32, self.version],
 		                [write_u32, self.capabilities.bits()],
-                    [write_u64, self.nonce]);
+		                [write_u64, self.nonce]);
 		self.sender_addr.write(writer);
 		self.receiver_addr.write(writer);
 		writer.write_vec(&mut self.user_agent.clone().into_bytes())
@@ -133,12 +133,12 @@ impl Readable<Hand> for Hand {
 		let sender_addr = try!(SockAddr::read(reader));
 		let receiver_addr = try!(SockAddr::read(reader));
 		let ua = try!(reader.read_vec());
-    let user_agent = try!(String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData));
-    let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData));
+		let user_agent = try!(String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData));
+		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData));
 		Ok(Hand {
 			version: version,
 			capabilities: capabilities,
-      nonce: nonce,
+			nonce: nonce,
 			sender_addr: sender_addr,
 			receiver_addr: receiver_addr,
 			user_agent: user_agent,
@@ -171,7 +171,7 @@ impl Readable<Shake> for Shake {
 	fn read(reader: &mut Reader) -> Result<Shake, ser::Error> {
 		let (version, capab, ua) = ser_multiread!(reader, read_u32, read_u32, read_vec);
 		let user_agent = try!(String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData));
-    let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData));
+		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData));
 		Ok(Shake {
 			version: version,
 			capabilities: capabilities,
@@ -209,7 +209,9 @@ impl Readable<PeerError> for PeerError {
 	}
 }
 
-/// Only necessary so we can implement Readable and Writeable. Rust disallows implementing traits when both types are outside of this crate (which is the case for SocketAddr and Readable/Writeable).
+/// Only necessary so we can implement Readable and Writeable. Rust disallows
+/// implementing traits when both types are outside of this crate (which is the
+/// case for SocketAddr and Readable/Writeable).
 pub struct SockAddr(pub SocketAddr);
 
 impl Writeable for SockAddr {
@@ -239,11 +241,25 @@ impl Readable<SockAddr> for SockAddr {
 		if v4_or_v6 == 0 {
 			let ip = try!(reader.read_fixed_bytes(4));
 			let port = try!(reader.read_u16());
-			Ok(SockAddr(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]), port))))
+			Ok(SockAddr(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(ip[0],
+			                                                           ip[1],
+			                                                           ip[2],
+			                                                           ip[3]),
+			                                             port))))
 		} else {
 			let ip = try_oap_vec!([0..8], |_| reader.read_u16());
 			let port = try!(reader.read_u16());
-			Ok(SockAddr(SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::new(ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7]), port, 0, 0))))
+			Ok(SockAddr(SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::new(ip[0],
+			                                                           ip[1],
+			                                                           ip[2],
+			                                                           ip[3],
+			                                                           ip[4],
+			                                                           ip[5],
+			                                                           ip[6],
+			                                                           ip[7]),
+			                                             port,
+			                                             0,
+			                                             0))))
 		}
 	}
 }

@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::net::SocketAddr;
+use std::fmt;
 use std::io::{self, Read, Write};
+use std::net::SocketAddr;
 
 use mioco::tcp::{TcpStream, Shutdown};
 
@@ -30,6 +31,13 @@ pub struct PeerConn {
 	pub user_agent: String,
 }
 
+impl fmt::Display for PeerConn {
+	// This trait requires `fmt` with this exact signature.
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{} {}", self.peer_addr(), self.user_agent)
+	}
+}
+
 /// Make the Peer a Reader for convenient access to the underlying connection.
 /// Allows the peer to track how much is received.
 impl Read for PeerConn {
@@ -44,9 +52,9 @@ impl Write for PeerConn {
 	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
 		self.conn.write(buf)
 	}
-  fn flush(&mut self) -> io::Result<()> {
-    self.conn.flush()
-  }
+	fn flush(&mut self) -> io::Result<()> {
+		self.conn.flush()
+	}
 }
 
 impl Close for PeerConn {
@@ -85,7 +93,7 @@ impl PeerInfo for PeerConn {
 		self.conn.peer_addr().unwrap()
 	}
 	fn local_addr(&self) -> SocketAddr {
-    // TODO likely not exactly what we want (private vs public IP)
+		// TODO likely not exactly what we want (private vs public IP)
 		self.conn.local_addr().unwrap()
 	}
 }
