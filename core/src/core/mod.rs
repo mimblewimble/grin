@@ -163,13 +163,13 @@ impl Hashed for HPair {
 	}
 }
 /// An iterator over hashes in a vector that pairs them to build a row in a
-/// Merkle tree. If the vector has an odd number of hashes, duplicates the last.
+/// Merkle tree. If the vector has an odd number of hashes, it appends a zero hash
 struct HPairIter(Vec<Hash>);
 impl Iterator for HPairIter {
 	type Item = HPair;
 
 	fn next(&mut self) -> Option<HPair> {
-		self.0.pop().map(|first| HPair(first, self.0.pop().unwrap_or(first)))
+		self.0.pop().map(|first| HPair(first, self.0.pop().unwrap_or(ZERO_HASH)))
 	}
 }
 /// A row in a Merkle tree. Can be built from a vector of hashes. Calculates
