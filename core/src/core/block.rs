@@ -218,7 +218,7 @@ impl Block {
 		// repeated iterations, revisit if a problem
 
 		// validate each transaction and gather their proofs
-		let mut proofs = try_oap_vec!(txs, |tx| tx.verify_sig(&secp));
+		let mut proofs = try_map_vec!(txs, |tx| tx.verify_sig(&secp));
 		proofs.push(reward_proof);
 
 		// build vectors with all inputs and all outputs, ordering them by hash

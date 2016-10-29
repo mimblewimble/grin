@@ -16,17 +16,23 @@ use std::io::{Read, Write};
 use std::net::SocketAddr;
 use core::ser::Error;
 
-/// Trait for pre-emptively and forcefully closing an underlying resource.
-pub trait Close {
-	fn close(&self);
+bitflags! {
+  /// Options for block validation
+  pub flags Capabilities: u32 {
+    /// We don't know (yet) what the peer can do.
+    const UNKNOWN = 0b00000000,
+    /// Runs with the easier version of the Proof of Work, mostly to make testing easier.
+    const FULL_SYNC = 0b00000001,
+  }
 }
 
 /// General information about a connected peer that's useful to other modules.
-pub trait PeerInfo {
-	/// Address of the remote peer
-	fn peer_addr(&self) -> SocketAddr;
-	/// Our address, communicated to other peers
-	fn local_addr(&self) -> SocketAddr;
+#[derive(Debug)]
+pub struct PeerInfo {
+	pub capabilities: Capabilities,
+	pub user_agent: String,
+  pub version: u32,
+  pub addr: SocketAddr,
 }
 
 /// A given communication protocol agreed upon between 2 peers (usually
@@ -34,7 +40,7 @@ pub trait PeerInfo {
 pub trait Protocol {
 	/// Starts handling protocol communication, the peer(s) is expected to be
 	/// known already, usually passed during construction.
-	fn handle(&mut self, na: &NetAdapter) -> Option<Error>;
+	fn handle(&self, na: &NetAdapter) -> Option<Error>;
 }
 
 /// Bridge between the networking layer and the rest of the system. Handles the

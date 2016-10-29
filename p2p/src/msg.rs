@@ -18,6 +18,8 @@ use std::net::*;
 
 use core::ser::{self, Writeable, Readable, Writer, Reader, Error};
 
+use types::*;
+
 /// Current latest version of the protocol
 pub const PROTOCOL_VERSION: u32 = 1;
 /// Grin's user agent with current version (TODO externalize)
@@ -31,16 +33,6 @@ pub enum ErrCodes {
 	UnsupportedVersion = 100,
 }
 
-bitflags! {
-  /// Options for block validation
-  pub flags Capabilities: u32 {
-    /// We don't know (yet) what the peer can do.
-    const UNKNOWN = 0b00000000,
-    /// Runs with the easier version of the Proof of Work, mostly to make testing easier.
-    const FULL_SYNC = 0b00000001,
-  }
-}
-
 /// Types of messages
 #[derive(Clone, Copy)]
 pub enum Type {
@@ -49,6 +41,8 @@ pub enum Type {
 	SHAKE,
 	PING,
 	PONG,
+	GETPEERADDRS,
+	PEERADDRS,
 	/// Never used over the network but to detect unrecognized types.
 	MaxMsgType,
 }
@@ -92,6 +86,8 @@ impl Readable<MsgHeader> for MsgHeader {
 				2 => Type::SHAKE,
 				3 => Type::PING,
 				4 => Type::PONG,
+				5 => Type::GETPEERADDRS,
+				6 => Type::PEERADDRS,
 				_ => panic!(),
 			},
 		})
@@ -180,6 +176,54 @@ impl Readable<Shake> for Shake {
 	}
 }
 
+/// Ask for other peers addresses, required for network discovery.
+pub struct GetPeerAddrs {
+	/// Filters on the capabilities we'd like the peers to have
+	pub capabilities: Capabilities,
+}
+
+impl Writeable for GetPeerAddrs {
+	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
+		writer.write_u32(self.capabilities.bits())
+	}
+}
+
+impl Readable<GetPeerAddrs> for GetPeerAddrs {
+	fn read(reader: &mut Reader) -> Result<GetPeerAddrs, ser::Error> {
+		let capab = try!(reader.read_u32());
+		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData));
+		Ok(GetPeerAddrs { capabilities: capabilities })
+	}
+}
+
+/// Peer addresses we know of that are fresh enough, in response to
+/// GetPeerAddrs.
+pub struct PeerAddrs {
+	pub peers: Vec<SockAddr>,
+}
+
+impl Writeable for PeerAddrs {
+	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
+		try_o!(writer.write_u32(self.peers.len() as u32));
+		for p in &self.peers {
+			p.write(writer);
+		}
+		None
+	}
+}
+
+impl Readable<PeerAddrs> for PeerAddrs {
+	fn read(reader: &mut Reader) -> Result<PeerAddrs, ser::Error> {
+		let peer_count = try!(reader.read_u32());
+		if peer_count > 1000 {
+			return Err(ser::Error::TooLargeReadErr(format!("Too many peers provided: {}",
+			                                               peer_count)));
+		}
+		let peers = try_map_vec!([0..peer_count], |_| SockAddr::read(reader));
+		Ok(PeerAddrs { peers: peers })
+	}
+}
+
 /// We found some issue in the communication, sending an error back, usually
 /// followed by closing the connection.
 pub struct PeerError {
@@ -247,7 +291,7 @@ impl Readable<SockAddr> for SockAddr {
 			                                                           ip[3]),
 			                                             port))))
 		} else {
-			let ip = try_oap_vec!([0..8], |_| reader.read_u16());
+			let ip = try_map_vec!([0..8], |_| reader.read_u16());
 			let port = try!(reader.read_u16());
 			Ok(SockAddr(SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::new(ip[0],
 			                                                           ip[1],

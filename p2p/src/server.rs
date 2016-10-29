@@ -15,17 +15,18 @@
 //! Grin server implementation, accepts incoming connections and connects to
 //! other peers in the network.
 
+use std::cell::RefCell;
 use std::io;
 use std::net::SocketAddr;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use mioco;
 use mioco::tcp::{TcpListener, TcpStream};
 
 use core::ser::Error;
 use handshake::Handshake;
-use peer::PeerConn;
+use peer::Peer;
 use types::*;
 
 pub const DEFAULT_LISTEN_ADDR: &'static str = "127.0.0.1:3414";
@@ -38,14 +39,20 @@ fn listen_addr() -> SocketAddr {
 struct DummyAdapter {}
 impl NetAdapter for DummyAdapter {}
 
+/// P2P server implementation, handling bootstrapping to find and connect to
+/// peers, receiving connections from other peers and keep track of all of them.
 pub struct Server {
+  peers: RwLock<Vec<Arc<Peer>>>,
 }
 
+// TODO TLS
 impl Server {
+  pub fn new() -> Server {
+    Server{peers: RwLock::new(Vec::new())}
+  }
 	/// Creates a new p2p server. Opens a TCP port to allow incoming
 	/// connections and starts the bootstrapping process to find peers.
-	pub fn start() -> Result<Server, Error> {
-		// TODO TLS
+	pub fn start(&'static self) -> Result<(), Error> {
 		mioco::spawn(move || -> io::Result<()> {
 			let addr = DEFAULT_LISTEN_ADDR.parse().unwrap();
 			let listener = try!(TcpListener::bind(&addr));
@@ -55,11 +62,16 @@ impl Server {
 
 			loop {
 				let conn = try!(listener.accept());
-				let hs_child = hs.clone();
+				let hs = hs.clone();
 
 				mioco::spawn(move || -> io::Result<()> {
-					let ret = PeerConn::new(conn).handshake(&hs_child, &DummyAdapter {});
-					if let Some(err) = ret {
+          let peer = try!(Peer::connect(conn, &hs).map_err(|_| io::Error::last_os_error()));
+          let wpeer = Arc::new(peer);
+          {
+            let mut peers = self.peers.write().unwrap();
+            peers.push(wpeer.clone());
+          }
+          if let Some(err) = wpeer.run(&DummyAdapter{}) {
 						error!("{:?}", err);
 					}
 					Ok(())
@@ -67,18 +79,13 @@ impl Server {
 			}
 			Ok(())
 		});
-		Ok(Server {})
+		Ok(())
 	}
 
 	/// Simulates an unrelated client connecting to our server. Mostly used for
 	/// tests.
-	pub fn connect_as_client(addr: SocketAddr) -> Option<Error> {
+	pub fn connect_as_client(addr: SocketAddr) -> Result<Peer, Error> {
 		let tcp_client = TcpStream::connect(&addr).unwrap();
-		let mut peer = PeerConn::new(tcp_client);
-    let hs = Handshake::new();
-		if let Err(e) = hs.connect(&mut peer) {
-			return Some(e);
-		}
-		None
+		Peer::accept(tcp_client, &Handshake::new())
 	}
 }

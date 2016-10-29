@@ -29,7 +29,7 @@ macro_rules! map_vec {
 /// Same as map_vec when the map closure returns Results. Makes sure the
 /// results are "pushed up" and wraps with a try.
 #[macro_export]
-macro_rules! try_oap_vec {
+macro_rules! try_map_vec {
   ($thing:expr, $mapfn:expr ) => {
     try!($thing.iter()
       .map($mapfn)

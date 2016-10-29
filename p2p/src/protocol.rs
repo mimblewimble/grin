@@ -12,37 +12,56 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::cell::RefCell;
+use std::ops::DerefMut;
+use std::rc::Rc;
+
+use mioco;
+use mioco::sync::mpsc::sync_channel;
+use mioco::tcp::{TcpStream, Shutdown};
+
 use core::ser;
+use handshake::Handshake;
 use msg::*;
 use types::*;
-use peer::PeerConn;
 
-pub struct ProtocolV1<'a> {
-	peer: &'a mut PeerConn,
+pub struct ProtocolV1 {
+	conn: RefCell<TcpStream>,
 }
 
-impl<'a> Protocol for ProtocolV1<'a> {
-	fn handle(&mut self, server: &NetAdapter) -> Option<ser::Error> {
+impl Protocol for ProtocolV1 {
+	fn handle(&self, server: &NetAdapter) -> Option<ser::Error> {
+    // setup a channel so we can switch between reads and writes
+    let (send, recv) = sync_channel(10);
+
+    let mut conn = self.conn.borrow_mut();
 		loop {
-			let header = try_to_o!(ser::deserialize::<MsgHeader>(self.peer));
-			if !header.acceptable() {
-				continue;
-			}
+      select!(
+        r:conn => {
+          let header = try_to_o!(ser::deserialize::<MsgHeader>(conn.deref_mut()));
+          if !header.acceptable() {
+            continue;
+          }
+        },
+        r:recv => {
+          ser::serialize(conn.deref_mut(), recv.recv().unwrap());
+        }
+      );
 		}
 	}
 }
 
-impl<'a> ProtocolV1<'a> {
-	pub fn new(p: &mut PeerConn) -> ProtocolV1 {
-		ProtocolV1 { peer: p }
+impl ProtocolV1 {
+	pub fn new(conn: TcpStream) -> ProtocolV1 {
+		ProtocolV1 { conn: RefCell::new(conn) }
 	}
 
-	fn close(&mut self, err_code: u32, explanation: &'static str) {
-		ser::serialize(self.peer,
-		               &PeerError {
-			               code: err_code,
-			               message: explanation.to_string(),
-		               });
-		self.peer.close();
-	}
+	// fn close(&mut self, err_code: u32, explanation: &'static str) {
+	// 	ser::serialize(self.conn,
+	// 	               &PeerError {
+	// 		               code: err_code,
+	// 		               message: explanation.to_string(),
+	// 	               });
+	// 	self.conn.shutdown(Shutdown::Both);
+	// }
 }

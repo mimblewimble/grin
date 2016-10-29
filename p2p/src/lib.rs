@@ -27,6 +27,7 @@ extern crate bitflags;
 extern crate grin_core as core;
 #[macro_use]
 extern crate log;
+#[macro_use]
 extern crate mioco;
 extern crate rand;
 extern crate time;
