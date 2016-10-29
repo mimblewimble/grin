@@ -10,6 +10,8 @@ log = "^0.3"
 rand = "^0.3"
 mioco = "^0.8"
 time = "^0.1"
+enum_primitive = "^0.1.0"
+num = "^0.1.36"
 
 grin_core = { path = "../core" }
 
