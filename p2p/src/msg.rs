@@ -47,11 +47,11 @@ bitflags! {
 enum_from_primitive! {
 #[derive(Clone, Copy)]
 pub enum Type {
-	ERROR = 0,
-	HAND = 1,
-	SHAKE = 2,
-	PING = 3,
-	PONG = 4,
+	ERROR,
+	HAND,
+	SHAKE,
+	PING,
+	PONG,
 }
 }
 
