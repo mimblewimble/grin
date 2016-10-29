@@ -16,6 +16,8 @@
 
 use std::net::*;
 
+use num::FromPrimitive;
+
 use core::ser::{self, Writeable, Readable, Writer, Reader, Error};
 
 /// Current latest version of the protocol
@@ -42,6 +44,7 @@ bitflags! {
 }
 
 /// Types of messages
+enum_from_primitive! {
 #[derive(Clone, Copy)]
 pub enum Type {
 	ERROR,
@@ -49,8 +52,7 @@ pub enum Type {
 	SHAKE,
 	PING,
 	PONG,
-	/// Never used over the network but to detect unrecognized types.
-	MaxMsgType,
+}
 }
 
 /// Header of any protocol message, used to identify incoming messages.
@@ -61,7 +63,7 @@ pub struct MsgHeader {
 
 impl MsgHeader {
 	pub fn acceptable(&self) -> bool {
-		(self.msg_type as u8) < (Type::MaxMsgType as u8)
+		Type::from_u8(self.msg_type as u8).is_some()
 	}
 }
 
@@ -80,21 +82,10 @@ impl Readable<MsgHeader> for MsgHeader {
 		try!(reader.expect_u8(MAGIC[0]));
 		try!(reader.expect_u8(MAGIC[1]));
 		let t = try!(reader.read_u8());
-		if t < (Type::MaxMsgType as u8) {
-			return Err(ser::Error::CorruptedData);
+		match Type::from_u8(t)  {
+			Some(ty) => Ok(MsgHeader {magic: MAGIC, msg_type: ty}),
+			None => Err(ser::Error::CorruptedData)
 		}
-		Ok(MsgHeader {
-			magic: MAGIC,
-			msg_type: match t {
-				// TODO this is rather ugly, think of a better way
-				0 => Type::ERROR,
-				1 => Type::HAND,
-				2 => Type::SHAKE,
-				3 => Type::PING,
-				4 => Type::PONG,
-				_ => panic!(),
-			},
-		})
 	}
 }
 
