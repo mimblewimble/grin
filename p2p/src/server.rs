@@ -18,6 +18,7 @@
 use std::cell::RefCell;
 use std::io;
 use std::net::SocketAddr;
+use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
@@ -52,7 +53,7 @@ impl Server {
   }
 	/// Creates a new p2p server. Opens a TCP port to allow incoming
 	/// connections and starts the bootstrapping process to find peers.
-	pub fn start(&'static self) -> Result<(), Error> {
+	pub fn start(& self) -> Result<(), Error> {
 		mioco::spawn(move || -> io::Result<()> {
 			let addr = DEFAULT_LISTEN_ADDR.parse().unwrap();
 			let listener = try!(TcpListener::bind(&addr));
@@ -67,10 +68,10 @@ impl Server {
 				mioco::spawn(move || -> io::Result<()> {
           let peer = try!(Peer::connect(conn, &hs).map_err(|_| io::Error::last_os_error()));
           let wpeer = Arc::new(peer);
-          {
-            let mut peers = self.peers.write().unwrap();
-            peers.push(wpeer.clone());
-          }
+          // {
+          //   let mut peers = self.peers.write().unwrap();
+          //   peers.push(wpeer.clone());
+          // }
           if let Some(err) = wpeer.run(&DummyAdapter{}) {
 						error!("{:?}", err);
 					}
@@ -81,6 +82,13 @@ impl Server {
 		});
 		Ok(())
 	}
+
+  pub fn stop(&self) {
+    let peers = self.peers.write().unwrap();
+    for p in peers.deref() {
+      p.stop();
+    }
+  }
 
 	/// Simulates an unrelated client connecting to our server. Mostly used for
 	/// tests.

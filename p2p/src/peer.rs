@@ -48,4 +48,8 @@ impl Peer {
   pub fn run(&self, na: &NetAdapter) -> Option<Error> {
     self.proto.handle(na)
   }
+
+  pub fn stop(&self) {
+    self.proto.as_ref().close()
+  }
 }

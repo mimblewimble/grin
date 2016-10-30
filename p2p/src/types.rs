@@ -41,6 +41,8 @@ pub trait Protocol {
 	/// Starts handling protocol communication, the peer(s) is expected to be
 	/// known already, usually passed during construction.
 	fn handle(&self, na: &NetAdapter) -> Option<Error>;
+
+  fn close(&self);
 }
 
 /// Bridge between the networking layer and the rest of the system. Handles the

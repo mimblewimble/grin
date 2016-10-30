@@ -17,7 +17,7 @@ use std::ops::DerefMut;
 use std::rc::Rc;
 
 use mioco;
-use mioco::sync::mpsc::sync_channel;
+use mioco::sync::mpsc::{sync_channel, SyncSender};
 use mioco::tcp::{TcpStream, Shutdown};
 
 use core::ser;
@@ -27,12 +27,19 @@ use types::*;
 
 pub struct ProtocolV1 {
 	conn: RefCell<TcpStream>,
+  //msg_send: Option<SyncSender<ser::Writeable>>,
+  stop_send: RefCell<Option<SyncSender<u8>>>,
 }
 
 impl Protocol for ProtocolV1 {
 	fn handle(&self, server: &NetAdapter) -> Option<ser::Error> {
-    // setup a channel so we can switch between reads and writes
-    let (send, recv) = sync_channel(10);
+    // setup channels so we can switch between reads, writes and close
+    let (msg_send, msg_recv) = sync_channel(10);
+    let (stop_send, stop_recv) = sync_channel(1);
+
+    //self.msg_send = Some(msg_send);
+    let mut stop_mut = self.stop_send.borrow_mut();
+    *stop_mut = Some(stop_send);
 
     let mut conn = self.conn.borrow_mut();
 		loop {
@@ -43,25 +50,26 @@ impl Protocol for ProtocolV1 {
             continue;
           }
         },
-        r:recv => {
-          ser::serialize(conn.deref_mut(), recv.recv().unwrap());
+        r:msg_recv => {
+          ser::serialize(conn.deref_mut(), msg_recv.recv().unwrap());
+        },
+        r:stop_recv => {
+          stop_recv.recv();
+		      conn.shutdown(Shutdown::Both);
+          return None;;
         }
       );
 		}
 	}
+
+  fn close(&self) {
+    let stop_send = self.stop_send.borrow();
+    stop_send.as_ref().unwrap().send(0);
+  }
 }
 
 impl ProtocolV1 {
 	pub fn new(conn: TcpStream) -> ProtocolV1 {
-		ProtocolV1 { conn: RefCell::new(conn) }
+		ProtocolV1 { conn: RefCell::new(conn), /* msg_send: None, */ stop_send: RefCell::new(None) }
 	}
-
-	// fn close(&mut self, err_code: u32, explanation: &'static str) {
-	// 	ser::serialize(self.conn,
-	// 	               &PeerError {
-	// 		               code: err_code,
-	// 		               message: explanation.to_string(),
-	// 	               });
-	// 	self.conn.shutdown(Shutdown::Both);
-	// }
 }
