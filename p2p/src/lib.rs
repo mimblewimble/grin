@@ -24,6 +24,8 @@
 #[macro_use]
 extern crate bitflags;
 #[macro_use]
+extern crate enum_primitive;
+#[macro_use]
 extern crate grin_core as core;
 #[macro_use]
 extern crate log;
@@ -31,6 +33,7 @@ extern crate log;
 extern crate mioco;
 extern crate rand;
 extern crate time;
+extern crate num;
 
 mod types;
 mod msg;
