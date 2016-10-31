@@ -36,13 +36,13 @@ pub enum ErrCodes {
 /// Types of messages
 #[derive(Clone, Copy)]
 pub enum Type {
-	ERROR,
-	HAND,
-	SHAKE,
-	PING,
-	PONG,
-	GETPEERADDRS,
-	PEERADDRS,
+	Error,
+	Hand,
+	Shake,
+	Ping,
+	Pong,
+	GetPeerAddrs,
+	PeerAddrs,
 	/// Never used over the network but to detect unrecognized types.
 	MaxMsgType,
 }
@@ -50,10 +50,17 @@ pub enum Type {
 /// Header of any protocol message, used to identify incoming messages.
 pub struct MsgHeader {
 	magic: [u8; 2],
-	msg_type: Type,
+	pub msg_type: Type,
 }
 
 impl MsgHeader {
+	pub fn new(msg_type: Type) -> MsgHeader {
+		MsgHeader {
+			magic: MAGIC,
+			msg_type: msg_type,
+		}
+	}
+
 	pub fn acceptable(&self) -> bool {
 		(self.msg_type as u8) < (Type::MaxMsgType as u8)
 	}
@@ -74,20 +81,20 @@ impl Readable<MsgHeader> for MsgHeader {
 		try!(reader.expect_u8(MAGIC[0]));
 		try!(reader.expect_u8(MAGIC[1]));
 		let t = try!(reader.read_u8());
-		if t < (Type::MaxMsgType as u8) {
+		if t >= (Type::MaxMsgType as u8) {
 			return Err(ser::Error::CorruptedData);
 		}
 		Ok(MsgHeader {
 			magic: MAGIC,
 			msg_type: match t {
 				// TODO this is rather ugly, think of a better way
-				0 => Type::ERROR,
-				1 => Type::HAND,
-				2 => Type::SHAKE,
-				3 => Type::PING,
-				4 => Type::PONG,
-				5 => Type::GETPEERADDRS,
-				6 => Type::PEERADDRS,
+				0 => Type::Error,
+				1 => Type::Hand,
+				2 => Type::Shake,
+				3 => Type::Ping,
+				4 => Type::Pong,
+				5 => Type::GetPeerAddrs,
+				6 => Type::PeerAddrs,
 				_ => panic!(),
 			},
 		})

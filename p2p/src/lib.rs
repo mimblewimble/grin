@@ -39,5 +39,5 @@ mod protocol;
 mod server;
 mod peer;
 
-pub use server::Server;
+pub use server::{Server, DummyAdapter};
 pub use server::DEFAULT_LISTEN_ADDR;

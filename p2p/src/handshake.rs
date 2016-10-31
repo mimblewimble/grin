@@ -79,12 +79,12 @@ impl Handshake {
 			});
 		}
 
-    let peer_info = PeerInfo{
-		  capabilities: shake.capabilities,
-		  user_agent: shake.user_agent,
-      addr: receiver_addr,
-      version: shake.version,
-    };
+		let peer_info = PeerInfo {
+			capabilities: shake.capabilities,
+			user_agent: shake.user_agent,
+			addr: receiver_addr,
+			version: shake.version,
+		};
 
 		info!("Connected to peer {:?}", peer_info);
 		// when more than one protocol version is supported, choosing should go here
@@ -94,54 +94,54 @@ impl Handshake {
 	/// Handles receiving a connection from a new remote peer that started the
 	/// version handshake.
 	pub fn handshake(&self, mut conn: TcpStream) -> Result<(Box<Protocol>, PeerInfo), Error> {
- 		// deserialize first part of handshake sent to us and do version negotiation
- 		let hand = try!(deserialize::<Hand>(&mut conn));
- 		if hand.version != 1 {
- 			self.close(&mut conn,
- 			           ErrCodes::UnsupportedVersion as u32,
- 			           format!("Unsupported version: {}, ours: {})",
- 			                   hand.version,
- 			                   PROTOCOL_VERSION));
- 			return Err(Error::UnexpectedData {
- 				expected: vec![PROTOCOL_VERSION as u8],
- 				received: vec![hand.version as u8],
- 			});
- 		}
- 		{
- 			// check the nonce to see if we could be trying to connect to ourselves
- 			let nonces = self.nonces.read().unwrap();
- 			if nonces.contains(&hand.nonce) {
- 				return Err(Error::UnexpectedData {
- 					expected: vec![],
- 					received: vec![],
- 				});
- 			}
- 		}
- 
- 		// all good, keep peer info
-    let peer_info = PeerInfo{
-		  capabilities: hand.capabilities,
-		  user_agent: hand.user_agent,
-      addr: conn.peer_addr().unwrap(),
-      version: hand.version,
-    };
+		// deserialize first part of handshake sent to us and do version negotiation
+		let hand = try!(deserialize::<Hand>(&mut conn));
+		if hand.version != 1 {
+			self.close(&mut conn,
+			           ErrCodes::UnsupportedVersion as u32,
+			           format!("Unsupported version: {}, ours: {})",
+			                   hand.version,
+			                   PROTOCOL_VERSION));
+			return Err(Error::UnexpectedData {
+				expected: vec![PROTOCOL_VERSION as u8],
+				received: vec![hand.version as u8],
+			});
+		}
+		{
+			// check the nonce to see if we could be trying to connect to ourselves
+			let nonces = self.nonces.read().unwrap();
+			if nonces.contains(&hand.nonce) {
+				return Err(Error::UnexpectedData {
+					expected: vec![],
+					received: vec![],
+				});
+			}
+		}
 
- 		// send our reply with our info
- 		let opt_err = serialize(&mut conn,
- 		                        &Shake {
- 			                        version: PROTOCOL_VERSION,
- 			                        capabilities: FULL_SYNC,
- 			                        user_agent: USER_AGENT.to_string(),
- 		                        });
- 		match opt_err {
- 			Some(err) => return Err(err),
- 			None => {}
- 		}
- 
- 		info!("Received connection from peer {:?}", peer_info);
- 		// when more than one protocol version is supported, choosing should go here
+		// all good, keep peer info
+		let peer_info = PeerInfo {
+			capabilities: hand.capabilities,
+			user_agent: hand.user_agent,
+			addr: conn.peer_addr().unwrap(),
+			version: hand.version,
+		};
+
+		// send our reply with our info
+		let opt_err = serialize(&mut conn,
+		                        &Shake {
+			                        version: PROTOCOL_VERSION,
+			                        capabilities: FULL_SYNC,
+			                        user_agent: USER_AGENT.to_string(),
+		                        });
+		match opt_err {
+			Some(err) => return Err(err),
+			None => {}
+		}
+
+		info!("Received connection from peer {:?}", peer_info);
+		// when more than one protocol version is supported, choosing should go here
 		Ok((Box::new(ProtocolV1::new(conn)), peer_info))
- 	}
+	}
 
 	/// Generate a new random nonce and store it in our ring buffer
 	fn next_nonce(&self) -> u64 {

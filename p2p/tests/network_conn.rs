@@ -17,7 +17,7 @@ extern crate mioco;
 extern crate env_logger;
 
 use std::io;
-use std::thread;
+use std::sync::Arc;
 use std::time;
 
 #[test]
@@ -25,16 +25,30 @@ fn peer_handshake() {
   env_logger::init().unwrap();
 
   mioco::start(|| -> io::Result<()> {
-    let server = p2p::Server::new();
-    server.start();
+    let server = Arc::new(p2p::Server::new());
+    let in_server = server.clone();
+		mioco::spawn(move || -> io::Result<()> {
+      try!(in_server.start());
+			Ok(())
+		});
 
     // given server a little time to start
     mioco::sleep(time::Duration::from_millis(200));
 
     let addr =  p2p::DEFAULT_LISTEN_ADDR.parse().unwrap();
-    try!(p2p::Server::connect_as_client(addr).map_err(|_| io::Error::last_os_error()));
+    let peer = try!(p2p::Server::connect_as_client(addr).map_err(|_| io::Error::last_os_error()));
+    let peer = Arc::new(peer);
+    let in_peer = peer.clone();
+		mioco::spawn(move || -> io::Result<()> {
+      in_peer.run(&p2p::DummyAdapter{});
+      Ok(())
+    });
+    mioco::sleep(time::Duration::from_millis(100));
+    peer.send_ping();
+    mioco::sleep(time::Duration::from_millis(100));
+    assert!(peer.sent_bytes() > 0);
 
     server.stop();
-    mioco::shutdown();
+    Ok(())
   }).unwrap().unwrap();
 }

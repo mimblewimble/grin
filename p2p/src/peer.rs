@@ -16,40 +16,46 @@ use mioco::tcp::TcpStream;
 
 use core::ser::Error;
 use handshake::Handshake;
-use msg::*;
 use types::*;
 
 pub struct Peer {
-  info: PeerInfo,
-  proto: Box<Protocol>,
+	info: PeerInfo,
+	proto: Box<Protocol>,
 }
 
 unsafe impl Sync for Peer {}
 unsafe impl Send for Peer {}
 
 impl Peer {
-
 	pub fn connect(conn: TcpStream, hs: &Handshake) -> Result<Peer, Error> {
 		let (proto, info) = try!(hs.connect(conn));
-    Ok(Peer{
-      info: info,
-      proto: proto,
-    })
-  }
+		Ok(Peer {
+			info: info,
+			proto: proto,
+		})
+	}
 
 	pub fn accept(conn: TcpStream, hs: &Handshake) -> Result<Peer, Error> {
 		let (proto, info) = try!(hs.handshake(conn));
-    Ok(Peer{
-      info: info,
-      proto: proto,
-    })
-  }
+		Ok(Peer {
+			info: info,
+			proto: proto,
+		})
+	}
 
-  pub fn run(&self, na: &NetAdapter) -> Option<Error> {
-    self.proto.handle(na)
-  }
+	pub fn run(&self, na: &NetAdapter) -> Option<Error> {
+		self.proto.handle(na)
+	}
 
-  pub fn stop(&self) {
-    self.proto.as_ref().close()
-  }
+	pub fn send_ping(&self) -> Option<Error> {
+		self.proto.send_ping()
+	}
+
+	pub fn sent_bytes(&self) -> u64 {
+		self.proto.sent_bytes()
+	}
+
+	pub fn stop(&self) {
+		self.proto.as_ref().close()
+	}
 }

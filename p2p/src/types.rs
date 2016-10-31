@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::io::{Read, Write};
 use std::net::SocketAddr;
 use core::ser::Error;
 
@@ -31,18 +30,28 @@ bitflags! {
 pub struct PeerInfo {
 	pub capabilities: Capabilities,
 	pub user_agent: String,
-  pub version: u32,
-  pub addr: SocketAddr,
+	pub version: u32,
+	pub addr: SocketAddr,
 }
 
 /// A given communication protocol agreed upon between 2 peers (usually
-/// ourselves and a remove) after handshake.
+/// ourselves and a remote) after handshake. This trait is necessary to allow
+/// protocol negotiation as it gets upgraded to multiple versions.
 pub trait Protocol {
-	/// Starts handling protocol communication, the peer(s) is expected to be
-	/// known already, usually passed during construction.
+	/// Starts handling protocol communication, the connection) is expected to
+	/// be  known already, usually passed during construction. Will typically
+	/// block so needs to be called withing a coroutine. Should also be called
+	/// only once.
 	fn handle(&self, na: &NetAdapter) -> Option<Error>;
 
-  fn close(&self);
+	/// Sends a ping message to the remote peer.
+	fn send_ping(&self) -> Option<Error>;
+
+	/// How many bytes have been sent to the remote peer.
+	fn sent_bytes(&self) -> u64;
+
+	/// Close the connection to the remote peer.
+	fn close(&self);
 }
 
 /// Bridge between the networking layer and the rest of the system. Handles the
