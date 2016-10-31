@@ -41,7 +41,7 @@ pub struct TxProof {
 impl Writeable for TxProof {
 	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		try!(writer.write_fixed_bytes(&self.remainder));
-		writer.write_vec(&mut self.sig.clone())
+		writer.write_bytes(&self.sig)
 	}
 }
 
@@ -71,7 +71,7 @@ impl Writeable for Transaction {
 	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u64, self.fee],
-		                [write_vec, &mut self.zerosig.clone()],
+		                [write_bytes, &self.zerosig],
 		                [write_u64, self.inputs.len() as u64],
 		                [write_u64, self.outputs.len() as u64]);
 		for inp in &self.inputs {
@@ -304,7 +304,7 @@ pub enum Output {
 impl Writeable for Output {
 	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		try!(writer.write_fixed_bytes(&self.commitment().unwrap()));
-		writer.write_vec(&mut self.proof().unwrap().bytes().to_vec())
+		writer.write_bytes(&mut self.proof().unwrap().bytes())
 	}
 }
 

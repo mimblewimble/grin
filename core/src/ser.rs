@@ -96,7 +96,7 @@ pub trait Writer {
 	fn write_i64(&mut self, n: i64) -> Result<(), Error>;
 	/// Writes a variable length `Vec`, the length of the `Vec` is encoded as a
 	/// prefix.
-	fn write_vec(&mut self, vec: &mut Vec<u8>) -> Result<(), Error>;
+	fn write_bytes(&mut self, data: &[u8]) -> Result<(), Error>;
 	/// Writes a fixed number of bytes from something that can turn itself into
 	/// a `&[u8]`. The reader is expected to know the actual length on read.
 	fn write_fixed_bytes(&mut self, b32: &AsFixedBytes) -> Result<(), Error>;
@@ -249,9 +249,9 @@ impl<'a> Writer for BinWriter<'a> {
 	}
 
 
-	fn write_vec(&mut self, vec: &mut Vec<u8>) -> Result<(), Error> {
-		try!(self.write_u64(vec.len() as u64));
-		try!(self.sink.write_all(vec));
+	fn write_bytes(&mut self, data: &[u8]) -> Result<(), Error> {
+		try!(self.write_u64(data.len() as u64));
+		try!(self.sink.write_all(data));
 		Ok(())
 	}
 
