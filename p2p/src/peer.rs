@@ -51,8 +51,8 @@ impl Peer {
 		self.proto.send_ping()
 	}
 
-	pub fn sent_bytes(&self) -> u64 {
-		self.proto.sent_bytes()
+	pub fn transmitted_bytes(&self) -> (u64, u64) {
+		self.proto.transmitted_bytes()
 	}
 
 	pub fn stop(&self) {

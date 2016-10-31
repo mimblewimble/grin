@@ -39,6 +39,21 @@ pub struct ProtocolV1 {
 	// Used both to count the amount of data sent and lock writing to the conn. We can't wrap conn with
 	// the lock as we're always listening to receive.
 	sent_bytes: Mutex<u64>,
+  // Bytes we've received.
+	received_bytes: Mutex<u64>,
+}
+
+impl ProtocolV1 {
+  /// Creates a new protocol v1
+	pub fn new(conn: TcpStream) -> ProtocolV1 {
+		ProtocolV1 {
+			conn: RefCell::new(conn),
+			msg_send: RefCell::new(None),
+			stop_send: RefCell::new(None),
+			sent_bytes: Mutex::new(0),
+			received_bytes: Mutex::new(0),
+		}
+	}
 }
 
 impl Protocol for ProtocolV1 {
@@ -60,18 +75,19 @@ impl Protocol for ProtocolV1 {
 
 		let mut conn = self.conn.borrow_mut();
 		loop {
-			// main select loop, switches between listening, sending or stopping
+      // main select loop, switches between listening, sending or stopping
 			select!(
         r:conn => {
-			// deser the header ot get the message type
+          // deser the header ot get the message type
           let header = try_to_o!(ser::deserialize::<MsgHeader>(conn.deref_mut()));
           if !header.acceptable() {
             continue;
           }
-			// check the message and hopefully do what's expected
+          let recv = header.serialized_len();
+          // check the message and hopefully do what's expected
           match header.msg_type {
             Type::Ping => {
-			// respond with pong
+			        // respond with pong
               let data = try_to_o!(ser::ser_vec(&MsgHeader::new(Type::Pong)));
               let mut sent_bytes = self.sent_bytes.lock().unwrap();
               *sent_bytes += data.len() as u64;
@@ -80,16 +96,18 @@ impl Protocol for ProtocolV1 {
             Type::Pong => {},
             _ => error!("uncaught unknown"),
           }
+          let mut received = self.received_bytes.lock().unwrap();
+          *received += recv;
         },
         r:msg_recv => {
-			// relay a message originated from the rest of the local system
+          // relay a message originated from the rest of the local system
           let data = &msg_recv.recv().unwrap()[..];
           let mut sent_bytes = self.sent_bytes.lock().unwrap();
           *sent_bytes += data.len() as u64;
           try_to_o!(conn.deref_mut().write_all(data).map_err(&ser::Error::IOErr));
         },
         r:stop_recv => {
-			// shuts the connection don and end the loop
+          // shuts the connection don and end the loop
           stop_recv.recv();
 		      conn.shutdown(Shutdown::Both);
           return None;
@@ -107,23 +125,14 @@ impl Protocol for ProtocolV1 {
 		None
 	}
 
-	fn sent_bytes(&self) -> u64 {
-		*self.sent_bytes.lock().unwrap().deref()
+	fn transmitted_bytes(&self) -> (u64, u64) {
+		let sent = *self.sent_bytes.lock().unwrap().deref();
+		let received = *self.received_bytes.lock().unwrap().deref();
+    (sent, received)
 	}
 
 	fn close(&self) {
 		let stop_send = self.stop_send.borrow();
 		stop_send.as_ref().unwrap().send(0);
-	}
-}
-
-impl ProtocolV1 {
-	pub fn new(conn: TcpStream) -> ProtocolV1 {
-		ProtocolV1 {
-			conn: RefCell::new(conn),
-			msg_send: RefCell::new(None),
-			stop_send: RefCell::new(None),
-			sent_bytes: Mutex::new(0),
-		}
 	}
 }

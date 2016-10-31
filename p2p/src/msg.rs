@@ -66,6 +66,9 @@ impl MsgHeader {
 	pub fn acceptable(&self) -> bool {
 		Type::from_u8(self.msg_type as u8).is_some()
 	}
+
+  /// Serialized length of the header in bytes
+  pub fn serialized_len(&self) -> u64 { 3 }
 }
 
 impl Writeable for MsgHeader {

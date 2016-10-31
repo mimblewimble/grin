@@ -53,7 +53,7 @@ unsafe impl Send for Server {}
 
 // TODO TLS
 impl Server {
-	/// Creates a new idle p2p server with no peers
+  /// Creates a new idle p2p server with no peers
 	pub fn new() -> Server {
 		Server {
 			peers: RwLock::new(Vec::new()),
@@ -85,6 +85,7 @@ impl Server {
           {
             let mut peers = self.peers.write().unwrap();
             peers.push(wpeer.clone());
+            println!("len {}", peers.len())
           }
 
           mioco::spawn(move || -> io::Result<()> {
@@ -102,7 +103,7 @@ impl Server {
 		}
 	}
 
-	/// Stops the server. Disconnect from all peers at the same time.
+  /// Stops the server. Disconnect from all peers at the same time.
 	pub fn stop(&self) {
 		let peers = self.peers.write().unwrap();
 		for p in peers.deref() {
@@ -118,4 +119,8 @@ impl Server {
 		let tcp_client = TcpStream::connect(&addr).unwrap();
 		Peer::accept(tcp_client, &Handshake::new())
 	}
+
+  pub fn peers_count(&self) -> u32 {
+    self.peers.read().unwrap().len() as u32
+  }
 }

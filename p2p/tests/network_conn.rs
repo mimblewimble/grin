@@ -25,28 +25,38 @@ fn peer_handshake() {
   env_logger::init().unwrap();
 
   mioco::start(|| -> io::Result<()> {
+    // start a server in its own coroutine
     let server = Arc::new(p2p::Server::new());
     let in_server = server.clone();
 		mioco::spawn(move || -> io::Result<()> {
-      try!(in_server.start());
+      try!(in_server.start().map_err(|_| io::Error::last_os_error()));
 			Ok(())
 		});
 
-    // given server a little time to start
-    mioco::sleep(time::Duration::from_millis(200));
+    // giving server a little time to start
+    mioco::sleep(time::Duration::from_millis(50));
 
+    // connect a client peer to the server
     let addr =  p2p::DEFAULT_LISTEN_ADDR.parse().unwrap();
     let peer = try!(p2p::Server::connect_as_client(addr).map_err(|_| io::Error::last_os_error()));
+    mioco::sleep(time::Duration::from_millis(50));
+    assert_eq!(server.peers_count(), 1);
+
+    // spawn our client peer to its own coroutine so it can poll for replies
     let peer = Arc::new(peer);
     let in_peer = peer.clone();
 		mioco::spawn(move || -> io::Result<()> {
       in_peer.run(&p2p::DummyAdapter{});
       Ok(())
     });
-    mioco::sleep(time::Duration::from_millis(100));
+    mioco::sleep(time::Duration::from_millis(50));
+
+    // send a ping and check we got ponged
     peer.send_ping();
-    mioco::sleep(time::Duration::from_millis(100));
-    assert!(peer.sent_bytes() > 0);
+    mioco::sleep(time::Duration::from_millis(50));
+    let (sent, recv) = peer.transmitted_bytes();
+    assert!(sent > 0);
+    assert!(recv > 0);
 
     server.stop();
     Ok(())

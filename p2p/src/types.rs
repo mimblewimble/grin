@@ -47,8 +47,8 @@ pub trait Protocol {
 	/// Sends a ping message to the remote peer.
 	fn send_ping(&self) -> Option<Error>;
 
-	/// How many bytes have been sent to the remote peer.
-	fn sent_bytes(&self) -> u64;
+	/// How many bytes have been sent/received to/from the remote peer.
+  fn transmitted_bytes(&self) -> (u64, u64);
 
 	/// Close the connection to the remote peer.
 	fn close(&self);
