@@ -60,7 +60,7 @@ impl Default for BlockHeader {
 // Only Writeable implementation is required for hashing, which is part of
 // core. Readable is in the ser package.
 impl Writeable for BlockHeader {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u64, self.height],
 		                [write_fixed_bytes, &self.previous],
@@ -70,10 +70,10 @@ impl Writeable for BlockHeader {
 		                [write_u64, self.total_fees]);
 		// make sure to not introduce any variable length data before the nonce to
 		// avoid complicating PoW
-		try_o!(writer.write_u64(self.nonce));
+		try!(writer.write_u64(self.nonce));
 		// cuckoo cycle of 42 nodes
 		for n in 0..42 {
-			try_o!(writer.write_u32(self.pow.0[n]));
+			try!(writer.write_u32(self.pow.0[n]));
 		}
 		writer.write_u64(self.td)
 	}
@@ -101,23 +101,23 @@ pub struct Block {
 /// Implementation of Writeable for a block, defines how to write the full
 /// block as binary.
 impl Writeable for Block {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
-		try_o!(self.header.write(writer));
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+		try!(self.header.write(writer));
 
 		ser_multiwrite!(writer,
 		                [write_u64, self.inputs.len() as u64],
 		                [write_u64, self.outputs.len() as u64],
 		                [write_u64, self.proofs.len() as u64]);
 		for inp in &self.inputs {
-			try_o!(inp.write(writer));
+			try!(inp.write(writer));
 		}
 		for out in &self.outputs {
-			try_o!(out.write(writer));
+			try!(out.write(writer));
 		}
 		for proof in &self.proofs {
-			try_o!(proof.write(writer));
+			try!(proof.write(writer));
 		}
-		None
+		Ok(())
 	}
 }
 

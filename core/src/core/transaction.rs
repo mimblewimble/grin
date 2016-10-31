@@ -39,8 +39,8 @@ pub struct TxProof {
 }
 
 impl Writeable for TxProof {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
-		try_o!(writer.write_fixed_bytes(&self.remainder));
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+		try!(writer.write_fixed_bytes(&self.remainder));
 		writer.write_vec(&mut self.sig.clone())
 	}
 }
@@ -68,19 +68,19 @@ pub struct Transaction {
 /// Implementation of Writeable for a fully blinded transaction, defines how to
 /// write the transaction as binary.
 impl Writeable for Transaction {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u64, self.fee],
 		                [write_vec, &mut self.zerosig.clone()],
 		                [write_u64, self.inputs.len() as u64],
 		                [write_u64, self.outputs.len() as u64]);
 		for inp in &self.inputs {
-			try_o!(inp.write(writer));
+			try!(inp.write(writer));
 		}
 		for out in &self.outputs {
-			try_o!(out.write(writer));
+			try!(out.write(writer));
 		}
-		None
+		Ok(())
 	}
 }
 
@@ -235,7 +235,7 @@ pub enum Input {
 /// Implementation of Writeable for a transaction Input, defines how to write
 /// an Input as binary.
 impl Writeable for Input {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		writer.write_fixed_bytes(&self.output_hash())
 	}
 }
@@ -302,8 +302,8 @@ pub enum Output {
 /// Implementation of Writeable for a transaction Output, defines how to write
 /// an Output as binary.
 impl Writeable for Output {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
-		try_o!(writer.write_fixed_bytes(&self.commitment().unwrap()));
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+		try!(writer.write_fixed_bytes(&self.commitment().unwrap()));
 		writer.write_vec(&mut self.proof().unwrap().bytes().to_vec())
 	}
 }
@@ -407,9 +407,7 @@ mod test {
 		let tx = tx2i1o(secp, &mut rng);
 		let btx = tx.blind(&secp).unwrap();
 		let mut vec = Vec::new();
-		if let Some(e) = serialize(&mut vec, &btx) {
-			panic!(e);
-		}
+		serialize(&mut vec, &btx).expect("serialized failed");
 		assert!(vec.len() > 5320);
 		assert!(vec.len() < 5340);
 	}
@@ -422,9 +420,7 @@ mod test {
 		let tx = tx2i1o(secp, &mut rng);
 		let mut btx = tx.blind(&secp).unwrap();
 		let mut vec = Vec::new();
-		if let Some(e) = serialize(&mut vec, &btx) {
-			panic!(e);
-		}
+		serialize(&mut vec, &btx).expect("serialization failed");
 		// let mut dtx = Transaction::read(&mut BinReader { source: &mut &vec[..]
 		// }).unwrap();
 		let mut dtx: Transaction = deserialize(&mut &vec[..]).unwrap();
@@ -444,11 +440,11 @@ mod test {
 		let mut btx = tx.blind(&secp).unwrap();
 
 		let mut vec = Vec::new();
-		assert!(serialize(&mut vec, &btx).is_none());
+		assert!(serialize(&mut vec, &btx).is_ok());
 		let mut dtx: Transaction = deserialize(&mut &vec[..]).unwrap();
 
 		let mut vec2 = Vec::new();
-		assert!(serialize(&mut vec2, &btx).is_none());
+		assert!(serialize(&mut vec2, &btx).is_ok());
 		let mut dtx2: Transaction = deserialize(&mut &vec2[..]).unwrap();
 
 		assert_eq!(btx.hash(), dtx.hash());
