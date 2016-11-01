@@ -26,7 +26,7 @@ use core::transaction::merkle_inputs_outputs;
 use core::{PROOFSIZE, REWARD};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::transaction::MAX_IN_OUT_LEN;
-use ser::{self, Readable, Reader, Writeable, Writer, ser_vec};
+use ser::{self, Readable, Reader, Writeable, Writer};
 
 /// Block header, fairly standard compared to other blockchains.
 pub struct BlockHeader {
@@ -76,13 +76,6 @@ impl Writeable for BlockHeader {
 			try!(writer.write_u32(self.pow.0[n]));
 		}
 		writer.write_u64(self.td)
-	}
-}
-
-impl Hashed for BlockHeader {
-	fn bytes(&self) -> Vec<u8> {
-		// no serialization errors are applicable in this specific case
-		ser_vec(self).unwrap()
 	}
 }
 

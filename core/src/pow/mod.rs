@@ -85,13 +85,6 @@ impl Writeable for PowHeader {
 	}
 }
 
-impl Hashed for PowHeader {
-	fn bytes(&self) -> Vec<u8> {
-		// no serialization errors are applicable in this specific case
-		ser_vec(self).unwrap()
-	}
-}
-
 impl PowHeader {
 	fn from_block(b: &Block) -> PowHeader {
 		let ref h = b.header;

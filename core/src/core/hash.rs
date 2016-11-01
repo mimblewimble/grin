@@ -17,9 +17,11 @@
 //! Primary hash function used in the protocol
 //!
 
+use byteorder::{ByteOrder, WriteBytesExt, BigEndian};
 use std::fmt;
-
 use tiny_keccak::Keccak;
+
+use ser::{self, AsFixedBytes};
 
 /// A hash to uniquely (or close enough) identify one of the main blockchain
 /// constructs. Used pervasively for blocks, transactions and ouputs.
@@ -56,27 +58,58 @@ impl Hash {
 
 pub const ZERO_HASH: Hash = Hash([0; 32]);
 
-/// A trait for types that get their hash (double SHA256) from their byte
-/// serialzation.
-pub trait Hashed {
-	fn hash(&self) -> Hash {
-		let data = self.bytes();
-		Hash(sha3(data))
-	}
-
-	fn bytes(&self) -> Vec<u8>;
+/// Serializer that outputs a hash of the serialized object
+pub struct HashWriter {
+	state: Keccak
 }
 
-fn sha3(data: Vec<u8>) -> [u8; 32] {
-	let mut sha3 = Keccak::new_sha3_256();
-	let mut buf = [0; 32];
-	sha3.update(&data);
-	sha3.finalize(&mut buf);
-	buf
+impl HashWriter {
+	fn finalize(self, output: &mut [u8]) {
+		self.state.finalize(output);
+	}
+}
+
+impl Default for HashWriter {
+	fn default() -> HashWriter {
+		HashWriter {
+			state: Keccak::new_sha3_256()
+		}
+	}
+}
+
+impl ser::Writer for HashWriter {
+	fn serialization_mode(&self) -> ser::SerializationMode {
+		ser::SerializationMode::Hash
+	}
+
+	fn write_fixed_bytes(&mut self, b32: &AsFixedBytes) -> Result<(), ser::Error> {
+		self.state.update(b32.as_fixed_bytes());
+		Ok(())
+	}
+}
+
+/// A trait for types that have a canonical hash
+pub trait Hashed {
+       fn hash(&self) -> Hash;
+}
+
+impl<W: ser::Writeable> Hashed for W {
+	fn hash(&self) -> Hash {
+		let mut hasher = HashWriter::default();
+		ser::Writeable::write(self, &mut hasher).unwrap();
+		let mut ret = [0; 32];
+		hasher.finalize(&mut ret);
+		Hash(ret)
+	}
 }
 
 impl Hashed for [u8] {
-	fn bytes(&self) -> Vec<u8> {
-		self.to_owned()
+	fn hash(&self) -> Hash {
+		let mut hasher = HashWriter::default();
+		let mut ret = [0; 32];
+		ser::Writer::write_bytes(&mut hasher, &self).unwrap();
+		hasher.finalize(&mut ret);
+		Hash(ret)
 	}
 }
+

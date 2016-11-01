@@ -16,7 +16,7 @@
 
 use core::Committed;
 use core::MerkleRow;
-use core::hash::{Hashed, Hash};
+use core::hash::{Hash, Hashed};
 use ser::{self, Reader, Writer, Readable, Writeable};
 
 use secp::{self, Secp256k1, Message, Signature};
@@ -283,13 +283,6 @@ impl Input {
 	}
 }
 
-/// The hash of an input is the hash of the output hash it references.
-impl Hashed for Input {
-	fn bytes(&self) -> Vec<u8> {
-		self.output_hash().to_vec()
-	}
-}
-
 #[derive(Debug, Copy, Clone)]
 pub enum Output {
 	BlindOutput {
@@ -303,8 +296,12 @@ pub enum Output {
 /// an Output as binary.
 impl Writeable for Output {
 	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+		// The hash of an output is only the hash of its commitment.
 		try!(writer.write_fixed_bytes(&self.commitment().unwrap()));
-		writer.write_bytes(&self.proof().unwrap().bytes())
+		if writer.serialization_mode() == ser::SerializationMode::Full {
+			try!(writer.write_bytes(&self.proof().unwrap().bytes()))
+		}
+		Ok(())
 	}
 }
 
@@ -363,17 +360,6 @@ impl Output {
 	}
 }
 
-/// The hash of an output is the hash of its commitment.
-impl Hashed for Output {
-	fn bytes(&self) -> Vec<u8> {
-		if let &Output::BlindOutput { commit, .. } = self {
-			return commit.bytes().to_vec();
-		} else {
-			panic!("cannot hash an overt output");
-		}
-	}
-}
-
 /// Utility function to calculate the Merkle root of vectors of inputs and
 /// outputs.
 pub fn merkle_inputs_outputs(inputs: &Vec<Input>, outputs: &Vec<Output>) -> Hash {
@@ -418,12 +404,12 @@ mod test {
 		let ref secp = new_secp();
 
 		let tx = tx2i1o(secp, &mut rng);
-		let mut btx = tx.blind(&secp).unwrap();
+		let btx = tx.blind(&secp).unwrap();
 		let mut vec = Vec::new();
 		serialize(&mut vec, &btx).expect("serialization failed");
 		// let mut dtx = Transaction::read(&mut BinReader { source: &mut &vec[..]
 		// }).unwrap();
-		let mut dtx: Transaction = deserialize(&mut &vec[..]).unwrap();
+		let dtx: Transaction = deserialize(&mut &vec[..]).unwrap();
 		assert_eq!(dtx.fee, 1);
 		assert_eq!(dtx.inputs.len(), 2);
 		assert_eq!(dtx.outputs.len(), 1);
@@ -437,15 +423,15 @@ mod test {
 		let ref secp = new_secp();
 
 		let tx = tx2i1o(secp, &mut rng);
-		let mut btx = tx.blind(&secp).unwrap();
+		let btx = tx.blind(&secp).unwrap();
 
 		let mut vec = Vec::new();
 		assert!(serialize(&mut vec, &btx).is_ok());
-		let mut dtx: Transaction = deserialize(&mut &vec[..]).unwrap();
+		let dtx: Transaction = deserialize(&mut &vec[..]).unwrap();
 
 		let mut vec2 = Vec::new();
 		assert!(serialize(&mut vec2, &btx).is_ok());
-		let mut dtx2: Transaction = deserialize(&mut &vec2[..]).unwrap();
+		let dtx2: Transaction = deserialize(&mut &vec2[..]).unwrap();
 
 		assert_eq!(btx.hash(), dtx.hash());
 		assert_eq!(dtx.hash(), dtx2.hash());
@@ -532,10 +518,10 @@ mod test {
 		let mut rng = OsRng::new().unwrap();
 
 		let tx1 = tx2i1o(secp, &mut rng);
-		let mut btx1 = tx1.blind(&secp).unwrap();
+		let btx1 = tx1.blind(&secp).unwrap();
 
 		let tx2 = tx1i1o(secp, &mut rng);
-		let mut btx2 = tx2.blind(&secp).unwrap();
+		let btx2 = tx2.blind(&secp).unwrap();
 
 		if btx1.hash() == btx2.hash() {
 			panic!("diff txs have same hash")

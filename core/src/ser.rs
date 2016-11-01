@@ -81,9 +81,24 @@ pub trait AsFixedBytes {
 	fn as_fixed_bytes(&self) -> &[u8];
 }
 
+
+/// Signal to a serializable object how much of its data should be serialized
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum SerializationMode {
+	/// Serialize everything sufficiently to fully reconstruct the object
+	Full,
+	/// Serialize the data that defines the object
+	Hash,
+	/// Serialize everything that a signer of the object should know
+	SigHash
+}
+
 /// Implementations defined how different numbers and binary structures are
 /// written to an underlying stream or container (depending on implementation).
 pub trait Writer {
+	/// The mode this serializer is writing in
+	fn serialization_mode(&self) -> SerializationMode;
+
 	/// Writes a u8 as bytes
 	fn write_u8(&mut self, n: u8) -> Result<(), Error> {
 		self.write_fixed_bytes(&[n])
@@ -252,6 +267,10 @@ struct BinWriter<'a> {
 }
 
 impl<'a> Writer for BinWriter<'a> {
+	fn serialization_mode(&self) -> SerializationMode {
+		SerializationMode::Full
+	}
+
 	fn write_fixed_bytes(&mut self, fixed: &AsFixedBytes) -> Result<(), Error> {
 		let bs = fixed.as_fixed_bytes();
 		try!(self.sink.write_all(bs));

@@ -154,12 +154,12 @@ impl Proof {
 /// Two hashes that will get hashed together in a Merkle tree to build the next
 /// level up.
 struct HPair(Hash, Hash);
-impl Hashed for HPair {
-	fn bytes(&self) -> Vec<u8> {
-		let mut data = Vec::with_capacity(64);
-		data.extend_from_slice(self.0.to_slice());
-		data.extend_from_slice(self.1.to_slice());
-		return data;
+
+impl Writeable for HPair {
+	fn write(&self, writer: &mut Writer) -> Result<(), Error> {
+		try!(writer.write_bytes(&self.0.to_slice()));
+		try!(writer.write_bytes(&self.1.to_slice()));
+		Ok(())
 	}
 }
 /// An iterator over hashes in a vector that pairs them to build a row in a
