@@ -304,7 +304,7 @@ pub enum Output {
 impl Writeable for Output {
 	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		try!(writer.write_fixed_bytes(&self.commitment().unwrap()));
-		writer.write_bytes(&mut self.proof().unwrap().bytes())
+		writer.write_bytes(&self.proof().unwrap().bytes())
 	}
 }
 
