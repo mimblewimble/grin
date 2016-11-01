@@ -18,24 +18,17 @@ pub mod block;
 pub mod hash;
 pub mod transaction;
 #[allow(dead_code)]
-#[macro_use]
 
 pub use self::block::{Block, BlockHeader};
 pub use self::transaction::{Transaction, Input, Output, TxProof};
 use self::hash::{Hash, Hashed, ZERO_HASH};
-use ser::{Writeable, Writer, Error, ser_vec};
-
-use time;
+use ser::{Writeable, Writer, Error};
 
 use std::fmt;
 use std::cmp::Ordering;
 
-use secp;
-use secp::{Secp256k1, Signature, Message};
-use secp::key::SecretKey;
+use secp::{self, Secp256k1};
 use secp::pedersen::*;
-
-use tiny_keccak::Keccak;
 
 /// The block subsidy amount
 pub const REWARD: u64 = 1_000_000_000;
@@ -154,12 +147,12 @@ impl Proof {
 /// Two hashes that will get hashed together in a Merkle tree to build the next
 /// level up.
 struct HPair(Hash, Hash);
-impl Hashed for HPair {
-	fn bytes(&self) -> Vec<u8> {
-		let mut data = Vec::with_capacity(64);
-		data.extend_from_slice(self.0.to_slice());
-		data.extend_from_slice(self.1.to_slice());
-		return data;
+
+impl Writeable for HPair {
+	fn write(&self, writer: &mut Writer) -> Result<(), Error> {
+		try!(writer.write_bytes(&self.0.to_slice()));
+		try!(writer.write_bytes(&self.1.to_slice()));
+		Ok(())
 	}
 }
 /// An iterator over hashes in a vector that pairs them to build a row in a
@@ -198,7 +191,7 @@ impl MerkleRow {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use super::hash::{Hash, Hashed, ZERO_HASH};
+	use core::hash::ZERO_HASH;
 	use secp;
 	use secp::Secp256k1;
 	use secp::key::SecretKey;

@@ -16,7 +16,7 @@
 
 use core::Committed;
 use core::MerkleRow;
-use core::hash::{Hashed, Hash};
+use core::hash::{Hash, Hashed};
 use ser::{self, Reader, Writer, Readable, Writeable};
 
 use secp::{self, Secp256k1, Message, Signature};
@@ -39,9 +39,9 @@ pub struct TxProof {
 }
 
 impl Writeable for TxProof {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
-		try_o!(writer.write_fixed_bytes(&self.remainder));
-		writer.write_vec(&mut self.sig.clone())
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+		try!(writer.write_fixed_bytes(&self.remainder));
+		writer.write_bytes(&self.sig)
 	}
 }
 
@@ -68,19 +68,19 @@ pub struct Transaction {
 /// Implementation of Writeable for a fully blinded transaction, defines how to
 /// write the transaction as binary.
 impl Writeable for Transaction {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u64, self.fee],
-		                [write_vec, &mut self.zerosig.clone()],
+		                [write_bytes, &self.zerosig],
 		                [write_u64, self.inputs.len() as u64],
 		                [write_u64, self.outputs.len() as u64]);
 		for inp in &self.inputs {
-			try_o!(inp.write(writer));
+			try!(inp.write(writer));
 		}
 		for out in &self.outputs {
-			try_o!(out.write(writer));
+			try!(out.write(writer));
 		}
-		None
+		Ok(())
 	}
 }
 
@@ -235,7 +235,7 @@ pub enum Input {
 /// Implementation of Writeable for a transaction Input, defines how to write
 /// an Input as binary.
 impl Writeable for Input {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		writer.write_fixed_bytes(&self.output_hash())
 	}
 }
@@ -283,13 +283,6 @@ impl Input {
 	}
 }
 
-/// The hash of an input is the hash of the output hash it references.
-impl Hashed for Input {
-	fn bytes(&self) -> Vec<u8> {
-		self.output_hash().to_vec()
-	}
-}
-
 #[derive(Debug, Copy, Clone)]
 pub enum Output {
 	BlindOutput {
@@ -302,9 +295,13 @@ pub enum Output {
 /// Implementation of Writeable for a transaction Output, defines how to write
 /// an Output as binary.
 impl Writeable for Output {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
-		try_o!(writer.write_fixed_bytes(&self.commitment().unwrap()));
-		writer.write_vec(&mut self.proof().unwrap().bytes().to_vec())
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+		// The hash of an output is only the hash of its commitment.
+		try!(writer.write_fixed_bytes(&self.commitment().unwrap()));
+		if writer.serialization_mode() == ser::SerializationMode::Full {
+			try!(writer.write_bytes(&self.proof().unwrap().bytes()))
+		}
+		Ok(())
 	}
 }
 
@@ -363,17 +360,6 @@ impl Output {
 	}
 }
 
-/// The hash of an output is the hash of its commitment.
-impl Hashed for Output {
-	fn bytes(&self) -> Vec<u8> {
-		if let &Output::BlindOutput { commit, .. } = self {
-			return commit.bytes().to_vec();
-		} else {
-			panic!("cannot hash an overt output");
-		}
-	}
-}
-
 /// Utility function to calculate the Merkle root of vectors of inputs and
 /// outputs.
 pub fn merkle_inputs_outputs(inputs: &Vec<Input>, outputs: &Vec<Output>) -> Hash {
@@ -392,7 +378,6 @@ mod test {
 
 	use secp::{self, Secp256k1};
 	use secp::key::SecretKey;
-	use rand::Rng;
 	use rand::os::OsRng;
 
 	fn new_secp() -> Secp256k1 {
@@ -407,9 +392,7 @@ mod test {
 		let tx = tx2i1o(secp, &mut rng);
 		let btx = tx.blind(&secp).unwrap();
 		let mut vec = Vec::new();
-		if let Some(e) = serialize(&mut vec, &btx) {
-			panic!(e);
-		}
+		serialize(&mut vec, &btx).expect("serialized failed");
 		assert!(vec.len() > 5320);
 		assert!(vec.len() < 5340);
 	}
@@ -420,14 +403,12 @@ mod test {
 		let ref secp = new_secp();
 
 		let tx = tx2i1o(secp, &mut rng);
-		let mut btx = tx.blind(&secp).unwrap();
+		let btx = tx.blind(&secp).unwrap();
 		let mut vec = Vec::new();
-		if let Some(e) = serialize(&mut vec, &btx) {
-			panic!(e);
-		}
+		serialize(&mut vec, &btx).expect("serialization failed");
 		// let mut dtx = Transaction::read(&mut BinReader { source: &mut &vec[..]
 		// }).unwrap();
-		let mut dtx: Transaction = deserialize(&mut &vec[..]).unwrap();
+		let dtx: Transaction = deserialize(&mut &vec[..]).unwrap();
 		assert_eq!(dtx.fee, 1);
 		assert_eq!(dtx.inputs.len(), 2);
 		assert_eq!(dtx.outputs.len(), 1);
@@ -441,15 +422,15 @@ mod test {
 		let ref secp = new_secp();
 
 		let tx = tx2i1o(secp, &mut rng);
-		let mut btx = tx.blind(&secp).unwrap();
+		let btx = tx.blind(&secp).unwrap();
 
 		let mut vec = Vec::new();
-		assert!(serialize(&mut vec, &btx).is_none());
-		let mut dtx: Transaction = deserialize(&mut &vec[..]).unwrap();
+		assert!(serialize(&mut vec, &btx).is_ok());
+		let dtx: Transaction = deserialize(&mut &vec[..]).unwrap();
 
 		let mut vec2 = Vec::new();
-		assert!(serialize(&mut vec2, &btx).is_none());
-		let mut dtx2: Transaction = deserialize(&mut &vec2[..]).unwrap();
+		assert!(serialize(&mut vec2, &btx).is_ok());
+		let dtx2: Transaction = deserialize(&mut &vec2[..]).unwrap();
 
 		assert_eq!(btx.hash(), dtx.hash());
 		assert_eq!(dtx.hash(), dtx2.hash());
@@ -536,10 +517,10 @@ mod test {
 		let mut rng = OsRng::new().unwrap();
 
 		let tx1 = tx2i1o(secp, &mut rng);
-		let mut btx1 = tx1.blind(&secp).unwrap();
+		let btx1 = tx1.blind(&secp).unwrap();
 
 		let tx2 = tx1i1o(secp, &mut rng);
-		let mut btx2 = tx2.blind(&secp).unwrap();
+		let btx2 = tx2.blind(&secp).unwrap();
 
 		if btx1.hash() == btx2.hash() {
 			panic!("diff txs have same hash")

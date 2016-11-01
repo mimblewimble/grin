@@ -27,12 +27,12 @@ mod cuckoo;
 
 use time;
 
-use core::{Block, BlockHeader, Proof, PROOFSIZE};
+use core::{Block, Proof, PROOFSIZE};
 use core::hash::{Hash, Hashed};
 use pow::cuckoo::{Cuckoo, Miner, Error};
 
 use ser;
-use ser::{Writeable, Writer, ser_vec};
+use ser::{Writeable, Writer};
 
 /// Default Cuckoo Cycle size shift used is 28. We may decide to increase it.
 /// when difficuty increases.
@@ -71,24 +71,17 @@ struct PowHeader {
 /// the data that gets hashed for PoW calculation. The nonce is written first
 /// to make incrementing from the serialized form trivial.
 impl Writeable for PowHeader {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
-		try_o!(writer.write_u64(self.nonce));
-		try_o!(writer.write_u64(self.height));
-		try_o!(writer.write_fixed_bytes(&self.previous));
-		try_o!(writer.write_i64(self.timestamp.to_timespec().sec));
-		try_o!(writer.write_fixed_bytes(&self.utxo_merkle));
-		try_o!(writer.write_fixed_bytes(&self.tx_merkle));
-		try_o!(writer.write_u64(self.total_fees));
-		try_o!(writer.write_u64(self.n_in));
-		try_o!(writer.write_u64(self.n_out));
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+		try!(writer.write_u64(self.nonce));
+		try!(writer.write_u64(self.height));
+		try!(writer.write_fixed_bytes(&self.previous));
+		try!(writer.write_i64(self.timestamp.to_timespec().sec));
+		try!(writer.write_fixed_bytes(&self.utxo_merkle));
+		try!(writer.write_fixed_bytes(&self.tx_merkle));
+		try!(writer.write_u64(self.total_fees));
+		try!(writer.write_u64(self.n_in));
+		try!(writer.write_u64(self.n_out));
 		writer.write_u64(self.n_proofs)
-	}
-}
-
-impl Hashed for PowHeader {
-	fn bytes(&self) -> Vec<u8> {
-		// no serialization errors are applicable in this specific case
-		ser_vec(self).unwrap()
 	}
 }
 
@@ -176,9 +169,7 @@ fn pow_size(b: &Block, target: Proof, sizeshift: u32) -> Result<(Proof, u64), Er
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::{BlockHeader, Proof};
-	use core::hash::Hash;
-	use std::time::Instant;
+	use core::Proof;
 	use genesis;
 
 	#[test]

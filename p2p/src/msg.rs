@@ -18,7 +18,7 @@ use std::net::*;
 
 use num::FromPrimitive;
 
-use core::ser::{self, Writeable, Readable, Writer, Reader, Error};
+use core::ser::{self, Writeable, Readable, Writer, Reader};
 
 use types::*;
 
@@ -72,12 +72,12 @@ impl MsgHeader {
 }
 
 impl Writeable for MsgHeader {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u8, self.magic[0]],
 		                [write_u8, self.magic[1]],
 		                [write_u8, self.msg_type as u8]);
-		None
+		Ok(())
 	}
 }
 
@@ -111,14 +111,14 @@ pub struct Hand {
 }
 
 impl Writeable for Hand {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u32, self.version],
 		                [write_u32, self.capabilities.bits()],
 		                [write_u64, self.nonce]);
 		self.sender_addr.write(writer);
 		self.receiver_addr.write(writer);
-		writer.write_vec(&mut self.user_agent.clone().into_bytes())
+		writer.write_bytes(self.user_agent.as_bytes())
 	}
 }
 
@@ -153,12 +153,12 @@ pub struct Shake {
 }
 
 impl Writeable for Shake {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u32, self.version],
 		                [write_u32, self.capabilities.bits()],
-		                [write_vec, &mut self.user_agent.as_bytes().to_vec()]);
-		None
+		                [write_bytes, self.user_agent.as_bytes()]);
+		Ok(())
 	}
 }
 
@@ -233,11 +233,11 @@ pub struct PeerError {
 }
 
 impl Writeable for PeerError {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u32, self.code],
-		                [write_vec, &mut self.message.clone().into_bytes()]);
-		None
+		                [write_bytes, self.message.as_bytes()]);
+		Ok(())
 	}
 }
 
@@ -258,7 +258,7 @@ impl Readable<PeerError> for PeerError {
 pub struct SockAddr(pub SocketAddr);
 
 impl Writeable for SockAddr {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		match self.0 {
 			SocketAddr::V4(sav4) => {
 				ser_multiwrite!(writer,
@@ -267,14 +267,14 @@ impl Writeable for SockAddr {
 				                [write_u16, sav4.port()]);
 			}
 			SocketAddr::V6(sav6) => {
-				try_o!(writer.write_u8(1));
+				try!(writer.write_u8(1));
 				for seg in &sav6.ip().segments() {
-					try_o!(writer.write_u16(*seg));
+					try!(writer.write_u16(*seg));
 				}
-				try_o!(writer.write_u16(sav6.port()));
+				try!(writer.write_u16(sav6.port()));
 			}
 		}
-		None
+		Ok(())
 	}
 }
 

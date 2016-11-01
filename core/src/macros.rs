@@ -61,19 +61,6 @@ macro_rules! tee {
   }
 }
 
-/// Simple equivalent of try! but for an Option<Error>. Motivated mostly by the
-/// io package and our serialization as an alternative to silly Result<(),
-/// Error>.
-#[macro_export]
-macro_rules! try_o {
-  ($trying:expr) => {
-		let tried = $trying;
-		if let Some(_) = tried {
-			return tried;
-		}
-  }
-}
-
 #[macro_export]
 macro_rules! try_to_o {
   ($trying:expr) => {{
@@ -109,6 +96,6 @@ macro_rules! ser_multiread {
 #[macro_export]
 macro_rules! ser_multiwrite {
   ($wrtr:ident, $([ $write_call:ident, $val:expr ]),* ) => {
-    $( try_o!($wrtr.$write_call($val)) );*
+    $( try!($wrtr.$write_call($val)) );*
   }
 }
