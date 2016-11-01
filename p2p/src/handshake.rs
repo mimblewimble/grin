@@ -51,19 +51,15 @@ impl Handshake {
 		// send the first part of the handshake
 		let sender_addr = conn.local_addr().unwrap();
 		let receiver_addr = conn.peer_addr().unwrap();
-		let opt_err = serialize(&mut conn,
-		                        &Hand {
-			                        version: PROTOCOL_VERSION,
-			                        capabilities: FULL_SYNC,
-			                        nonce: nonce,
-			                        sender_addr: SockAddr(sender_addr),
-			                        receiver_addr: SockAddr(receiver_addr),
-			                        user_agent: USER_AGENT.to_string(),
-		                        });
-		match opt_err {
-			Some(err) => return Err(err),
-			None => {}
-		}
+		try!(serialize(&mut conn,
+		               &Hand {
+			               version: PROTOCOL_VERSION,
+			               capabilities: FULL_SYNC,
+			               nonce: nonce,
+			               sender_addr: SockAddr(sender_addr),
+			               receiver_addr: SockAddr(receiver_addr),
+			               user_agent: USER_AGENT.to_string(),
+		               }));
 
 		// deserialize the handshake response and do version negotiation
 		let shake = try!(deserialize::<Shake>(&mut conn));
@@ -127,16 +123,12 @@ impl Handshake {
 		};
 
 		// send our reply with our info
-		let opt_err = serialize(&mut conn,
-		                        &Shake {
-			                        version: PROTOCOL_VERSION,
-			                        capabilities: FULL_SYNC,
-			                        user_agent: USER_AGENT.to_string(),
-		                        });
-		match opt_err {
-			Some(err) => return Err(err),
-			None => {}
-		}
+		try!(serialize(&mut conn,
+		               &Shake {
+			               version: PROTOCOL_VERSION,
+			               capabilities: FULL_SYNC,
+			               user_agent: USER_AGENT.to_string(),
+		               }));
 
 		info!("Received connection from peer {:?}", peer_info);
 		// when more than one protocol version is supported, choosing should go here
