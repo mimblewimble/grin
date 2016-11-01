@@ -378,7 +378,6 @@ mod test {
 
 	use secp::{self, Secp256k1};
 	use secp::key::SecretKey;
-	use rand::Rng;
 	use rand::os::OsRng;
 
 	fn new_secp() -> Secp256k1 {

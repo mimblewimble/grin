@@ -17,7 +17,7 @@
 //! Primary hash function used in the protocol
 //!
 
-use byteorder::{ByteOrder, WriteBytesExt, BigEndian};
+use byteorder::{ByteOrder, BigEndian};
 use std::fmt;
 use tiny_keccak::Keccak;
 

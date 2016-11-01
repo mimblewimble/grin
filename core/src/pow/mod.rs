@@ -27,12 +27,12 @@ mod cuckoo;
 
 use time;
 
-use core::{Block, BlockHeader, Proof, PROOFSIZE};
+use core::{Block, Proof, PROOFSIZE};
 use core::hash::{Hash, Hashed};
 use pow::cuckoo::{Cuckoo, Miner, Error};
 
 use ser;
-use ser::{Writeable, Writer, ser_vec};
+use ser::{Writeable, Writer};
 
 /// Default Cuckoo Cycle size shift used is 28. We may decide to increase it.
 /// when difficuty increases.
@@ -169,9 +169,7 @@ fn pow_size(b: &Block, target: Proof, sizeshift: u32) -> Result<(Proof, u64), Er
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::{BlockHeader, Proof};
-	use core::hash::Hash;
-	use std::time::Instant;
+	use core::Proof;
 	use genesis;
 
 	#[test]

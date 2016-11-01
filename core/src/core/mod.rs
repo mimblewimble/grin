@@ -18,24 +18,17 @@ pub mod block;
 pub mod hash;
 pub mod transaction;
 #[allow(dead_code)]
-#[macro_use]
 
 pub use self::block::{Block, BlockHeader};
 pub use self::transaction::{Transaction, Input, Output, TxProof};
 use self::hash::{Hash, Hashed, ZERO_HASH};
-use ser::{Writeable, Writer, Error, ser_vec};
-
-use time;
+use ser::{Writeable, Writer, Error};
 
 use std::fmt;
 use std::cmp::Ordering;
 
-use secp;
-use secp::{Secp256k1, Signature, Message};
-use secp::key::SecretKey;
+use secp::{self, Secp256k1};
 use secp::pedersen::*;
-
-use tiny_keccak::Keccak;
 
 /// The block subsidy amount
 pub const REWARD: u64 = 1_000_000_000;
@@ -198,7 +191,7 @@ impl MerkleRow {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use super::hash::{Hash, Hashed, ZERO_HASH};
+	use core::hash::ZERO_HASH;
 	use secp;
 	use secp::Secp256k1;
 	use secp::key::SecretKey;

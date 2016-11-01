@@ -19,7 +19,6 @@
 
 use std::collections::HashSet;
 use std::cmp;
-use std::fmt;
 
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
