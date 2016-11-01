@@ -26,11 +26,14 @@ use mioco;
 use mioco::sync::mpsc::{sync_channel, SyncSender};
 use mioco::tcp::{TcpListener, TcpStream};
 
+use core::core;
 use core::ser::Error;
 use handshake::Handshake;
 use peer::Peer;
 use types::*;
 
+/// Default address for peer-to-peer connections, placeholder until better
+/// configuration is in place.
 pub const DEFAULT_LISTEN_ADDR: &'static str = "127.0.0.1:3414";
 
 // replace with some config lookup or something
@@ -53,7 +56,7 @@ unsafe impl Send for Server {}
 
 // TODO TLS
 impl Server {
-  /// Creates a new idle p2p server with no peers
+	/// Creates a new idle p2p server with no peers
 	pub fn new() -> Server {
 		Server {
 			peers: RwLock::new(Vec::new()),
@@ -89,7 +92,7 @@ impl Server {
           }
 
           mioco::spawn(move || -> io::Result<()> {
-            if let Some(err) = wpeer.run(&DummyAdapter{}) {
+            if let Err(err) = wpeer.run(&DummyAdapter{}) {
               error!("{:?}", err);
             }
             Ok(())
@@ -103,7 +106,29 @@ impl Server {
 		}
 	}
 
-  /// Stops the server. Disconnect from all peers at the same time.
+	/// Asks all the peers to relay the provided block. A peer may choose to
+	/// ignore the relay request if it has knowledge that the remote peer
+	/// already knows the block.
+	pub fn relay_block(&self, b: &core::Block) -> Result<(), Error> {
+		let peers = self.peers.write().unwrap();
+		for p in peers.deref() {
+			try!(p.send_block(b));
+		}
+		Ok(())
+	}
+
+	/// Asks all the peers to relay the provided transaction. A peer may choose
+	/// to ignore the relay request if it has knowledge that the remote peer
+	/// already knows the transaction.
+	pub fn relay_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
+		let peers = self.peers.write().unwrap();
+		for p in peers.deref() {
+			try!(p.send_transaction(tx));
+		}
+		Ok(())
+	}
+
+	/// Stops the server. Disconnect from all peers at the same time.
 	pub fn stop(&self) {
 		let peers = self.peers.write().unwrap();
 		for p in peers.deref() {
@@ -120,7 +145,7 @@ impl Server {
 		Peer::accept(tcp_client, &Handshake::new())
 	}
 
-  pub fn peers_count(&self) -> u32 {
-    self.peers.read().unwrap().len() as u32
-  }
+	pub fn peers_count(&self) -> u32 {
+		self.peers.read().unwrap().len() as u32
+	}
 }

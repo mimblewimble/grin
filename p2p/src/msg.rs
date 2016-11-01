@@ -37,16 +37,18 @@ pub enum ErrCodes {
 
 /// Types of messages
 enum_from_primitive! {
-#[derive(Clone, Copy)]
-pub enum Type {
-	Error,
-	Hand,
-	Shake,
-	Ping,
-	Pong,
-	GetPeerAddrs,
-	PeerAddrs,
-}
+  #[derive(Clone, Copy)]
+  pub enum Type {
+    Error,
+    Hand,
+    Shake,
+    Ping,
+    Pong,
+    GetPeerAddrs,
+    PeerAddrs,
+    Block,
+    Transaction,
+  }
 }
 
 /// Header of any protocol message, used to identify incoming messages.
@@ -67,8 +69,10 @@ impl MsgHeader {
 		Type::from_u8(self.msg_type as u8).is_some()
 	}
 
-  /// Serialized length of the header in bytes
-  pub fn serialized_len(&self) -> u64 { 3 }
+	/// Serialized length of the header in bytes
+	pub fn serialized_len(&self) -> u64 {
+		3
+	}
 }
 
 impl Writeable for MsgHeader {
@@ -86,9 +90,14 @@ impl Readable<MsgHeader> for MsgHeader {
 		try!(reader.expect_u8(MAGIC[0]));
 		try!(reader.expect_u8(MAGIC[1]));
 		let t = try!(reader.read_u8());
-		match Type::from_u8(t)  {
-			Some(ty) => Ok(MsgHeader {magic: MAGIC, msg_type: ty}),
-			None => Err(ser::Error::CorruptedData)
+		match Type::from_u8(t) {
+			Some(ty) => {
+				Ok(MsgHeader {
+					magic: MAGIC,
+					msg_type: ty,
+				})
+			}
+			None => Err(ser::Error::CorruptedData),
 		}
 	}
 }
@@ -118,7 +127,7 @@ impl Writeable for Hand {
 		                [write_u64, self.nonce]);
 		self.sender_addr.write(writer);
 		self.receiver_addr.write(writer);
-		writer.write_bytes(self.user_agent.as_bytes())
+		writer.write_bytes(&self.user_agent)
 	}
 }
 
@@ -157,7 +166,7 @@ impl Writeable for Shake {
 		ser_multiwrite!(writer,
 		                [write_u32, self.version],
 		                [write_u32, self.capabilities.bits()],
-		                [write_bytes, self.user_agent.as_bytes()]);
+		                [write_bytes, &self.user_agent]);
 		Ok(())
 	}
 }
@@ -182,7 +191,7 @@ pub struct GetPeerAddrs {
 }
 
 impl Writeable for GetPeerAddrs {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		writer.write_u32(self.capabilities.bits())
 	}
 }
@@ -202,12 +211,12 @@ pub struct PeerAddrs {
 }
 
 impl Writeable for PeerAddrs {
-	fn write(&self, writer: &mut Writer) -> Option<ser::Error> {
-		try_o!(writer.write_u32(self.peers.len() as u32));
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+		try!(writer.write_u32(self.peers.len() as u32));
 		for p in &self.peers {
 			p.write(writer);
 		}
-		None
+		Ok(())
 	}
 }
 
@@ -234,9 +243,7 @@ pub struct PeerError {
 
 impl Writeable for PeerError {
 	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
-		ser_multiwrite!(writer,
-		                [write_u32, self.code],
-		                [write_bytes, self.message.as_bytes()]);
+		ser_multiwrite!(writer, [write_u32, self.code], [write_bytes, &self.message]);
 		Ok(())
 	}
 }

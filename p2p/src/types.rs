@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::net::SocketAddr;
+use core::core;
 use core::ser::Error;
 
 bitflags! {
@@ -42,13 +43,19 @@ pub trait Protocol {
 	/// be  known already, usually passed during construction. Will typically
 	/// block so needs to be called withing a coroutine. Should also be called
 	/// only once.
-	fn handle(&self, na: &NetAdapter) -> Option<Error>;
+	fn handle(&self, na: &NetAdapter) -> Result<(), Error>;
 
 	/// Sends a ping message to the remote peer.
-	fn send_ping(&self) -> Option<Error>;
+	fn send_ping(&self) -> Result<(), Error>;
+
+	/// Relays a block to the remote peer.
+	fn send_block(&self, b: &core::Block) -> Result<(), Error>;
+
+	/// Relays a transaction to the remote peer.
+	fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error>;
 
 	/// How many bytes have been sent/received to/from the remote peer.
-  fn transmitted_bytes(&self) -> (u64, u64);
+	fn transmitted_bytes(&self) -> (u64, u64);
 
 	/// Close the connection to the remote peer.
 	fn close(&self);

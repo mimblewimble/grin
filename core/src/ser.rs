@@ -303,6 +303,12 @@ impl<'a> AsFixedBytes for &'a [u8] {
 	}
 }
 
+impl<'a> AsFixedBytes for String {
+	fn as_fixed_bytes(&self) -> &[u8] {
+		self.as_bytes()
+	}
+}
+
 impl AsFixedBytes for ::core::hash::Hash {
 	fn as_fixed_bytes(&self) -> &[u8] {
 		self.to_slice()

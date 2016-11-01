@@ -14,6 +14,7 @@
 
 use mioco::tcp::TcpStream;
 
+use core::core;
 use core::ser::Error;
 use handshake::Handshake;
 use types::*;
@@ -43,12 +44,22 @@ impl Peer {
 		})
 	}
 
-	pub fn run(&self, na: &NetAdapter) -> Option<Error> {
+	pub fn run(&self, na: &NetAdapter) -> Result<(), Error> {
 		self.proto.handle(na)
 	}
 
-	pub fn send_ping(&self) -> Option<Error> {
+	pub fn send_ping(&self) -> Result<(), Error> {
 		self.proto.send_ping()
+	}
+
+	pub fn send_block(&self, b: &core::Block) -> Result<(), Error> {
+		// TODO don't send if we already got the block from peer
+		self.proto.send_block(b)
+	}
+
+	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
+		// TODO don't relay if we already got the tx from peer
+		self.proto.send_transaction(tx)
 	}
 
 	pub fn transmitted_bytes(&self) -> (u64, u64) {
