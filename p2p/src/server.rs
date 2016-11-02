@@ -42,7 +42,10 @@ fn listen_addr() -> SocketAddr {
 }
 
 pub struct DummyAdapter {}
-impl NetAdapter for DummyAdapter {}
+impl NetAdapter for DummyAdapter {
+	fn transaction_received(&self, tx: core::Transaction) {}
+	fn block_received(&self, b: core::Block) {}
+}
 
 /// P2P server implementation, handling bootstrapping to find and connect to
 /// peers, receiving connections from other peers and keep track of all of them.

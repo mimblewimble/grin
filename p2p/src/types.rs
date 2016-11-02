@@ -63,4 +63,10 @@ pub trait Protocol {
 
 /// Bridge between the networking layer and the rest of the system. Handles the
 /// forwarding or querying of blocks and transactions among other things.
-pub trait NetAdapter {}
+pub trait NetAdapter {
+	/// A transaction has been received from one of our peers
+	fn transaction_received(&self, tx: core::Transaction);
+
+	/// A block has been received from one of our peers
+	fn block_received(&self, b: core::Block);
+}
