@@ -12,53 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate grin_core as core;
 extern crate grin_p2p as p2p;
 extern crate mioco;
 extern crate env_logger;
 
+mod common;
+
 use std::io;
-use std::sync::Arc;
 use std::time;
 
+use core::core::*;
+use p2p::Peer;
+use common::*;
+
+// Starts a server and connects a client peer to it to check handshake, followed by a ping/pong exchange to make sure the connection is live.
 #[test]
 fn peer_handshake() {
   env_logger::init().unwrap();
 
-  mioco::start(|| -> io::Result<()> {
-    // start a server in its own coroutine
-    let server = Arc::new(p2p::Server::new());
-    let in_server = server.clone();
-		mioco::spawn(move || -> io::Result<()> {
-      try!(in_server.start().map_err(|_| io::Error::last_os_error()));
-			Ok(())
-		});
-
-    // giving server a little time to start
-    mioco::sleep(time::Duration::from_millis(50));
-
+  with_server(|server| -> io::Result<()> {
     // connect a client peer to the server
-    let addr =  p2p::DEFAULT_LISTEN_ADDR.parse().unwrap();
-    let peer = try!(p2p::Server::connect_as_client(addr).map_err(|_| io::Error::last_os_error()));
-    mioco::sleep(time::Duration::from_millis(50));
-    assert_eq!(server.peers_count(), 1);
+    let peer = try!(connect_peer());
 
-    // spawn our client peer to its own coroutine so it can poll for replies
-    let peer = Arc::new(peer);
-    let in_peer = peer.clone();
-		mioco::spawn(move || -> io::Result<()> {
-      in_peer.run(&p2p::DummyAdapter{});
-      Ok(())
-    });
-    mioco::sleep(time::Duration::from_millis(50));
+    // check server peer count
+    let pc = server.peers_count();
+    assert_eq!(pc, 1);
 
-    // send a ping and check we got ponged
+    // send a ping and check we got ponged (received data back)
     peer.send_ping();
     mioco::sleep(time::Duration::from_millis(50));
     let (sent, recv) = peer.transmitted_bytes();
     assert!(sent > 0);
     assert!(recv > 0);
 
-    server.stop();
+    peer.stop();
     Ok(())
-  }).unwrap().unwrap();
+  });
 }

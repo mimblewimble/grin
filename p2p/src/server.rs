@@ -15,6 +15,7 @@
 //! Grin server implementation, accepts incoming connections and connects to
 //! other peers in the network.
 
+use rand::{self, Rng};
 use std::cell::RefCell;
 use std::io;
 use std::net::SocketAddr;
@@ -91,7 +92,6 @@ impl Server {
           {
             let mut peers = self.peers.write().unwrap();
             peers.push(wpeer.clone());
-            println!("len {}", peers.len())
           }
 
           mioco::spawn(move || -> io::Result<()> {
@@ -131,6 +131,18 @@ impl Server {
 		Ok(())
 	}
 
+	/// Number of peers this server is connected to.
+	pub fn peers_count(&self) -> u32 {
+		self.peers.read().unwrap().len() as u32
+	}
+
+	/// Gets a random peer from our set of connected peers.
+	pub fn get_any_peer(&self) -> Arc<Peer> {
+		let mut rng = rand::thread_rng();
+		let peers = self.peers.read().unwrap();
+		peers[rng.gen_range(0, peers.len())].clone()
+	}
+
 	/// Stops the server. Disconnect from all peers at the same time.
 	pub fn stop(&self) {
 		let peers = self.peers.write().unwrap();
@@ -139,16 +151,5 @@ impl Server {
 		}
 		let stop_send = self.stop_send.borrow();
 		stop_send.as_ref().unwrap().send(0);
-	}
-
-	/// Simulates an unrelated client connecting to our server. Mostly used for
-	/// tests.
-	pub fn connect_as_client(addr: SocketAddr) -> Result<Peer, Error> {
-		let tcp_client = TcpStream::connect(&addr).unwrap();
-		Peer::accept(tcp_client, &Handshake::new())
-	}
-
-	pub fn peers_count(&self) -> u32 {
-		self.peers.read().unwrap().len() as u32
 	}
 }

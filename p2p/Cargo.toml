@@ -17,3 +17,4 @@ grin_core = { path = "../core" }
 
 [dev-dependencies]
 env_logger = "^0.3"
+secp256k1zkp = { path = "../secp256k1zkp" }

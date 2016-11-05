@@ -36,11 +36,11 @@ extern crate num;
 
 mod types;
 mod msg;
-mod handshake;
+pub mod handshake;
 mod rw;
 mod protocol;
 mod server;
 mod peer;
 
-pub use server::{Server, DummyAdapter};
-pub use server::DEFAULT_LISTEN_ADDR;
+pub use server::{Server, DummyAdapter, DEFAULT_LISTEN_ADDR};
+pub use peer::Peer;

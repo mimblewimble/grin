@@ -66,7 +66,7 @@ impl ProtocolV1 {
 			stop_send: RefCell::new(None),
 			sent_bytes: Mutex::new(0),
 			received_bytes: Mutex::new(0),
-      error_count: Mutex::new(0),
+			error_count: Mutex::new(0),
 		}
 	}
 }
@@ -79,14 +79,14 @@ impl Protocol for ProtocolV1 {
 	/// within a coroutine.
 	fn handle(&self, adapter: &NetAdapter) -> Result<(), ser::Error> {
 		// setup channels so we can switch between reads, writes and close
-    let (msg_recv, stop_recv) = self.setup_channels();
+		let (msg_recv, stop_recv) = self.setup_channels();
 
 		let mut conn = self.conn.borrow_mut();
 		loop {
 			// main select loop, switches between listening, sending or stopping
 			select!(
         r:conn => {
-          let res = self.read_msg(&mut conn, adapter);
+          let res = self.process_msg(&mut conn, adapter);
           if let Err(_) = res {
             let mut cnt = self.error_count.lock().unwrap();
             *cnt += 1;
@@ -133,8 +133,8 @@ impl Protocol for ProtocolV1 {
 
 	/// Bytes sent and received by this peer to the remote peer.
 	fn transmitted_bytes(&self) -> (u64, u64) {
-    let sent = *self.sent_bytes.lock().unwrap().deref();
-    let received = *self.received_bytes.lock().unwrap().deref();
+		let sent = *self.sent_bytes.lock().unwrap().deref();
+		let received = *self.received_bytes.lock().unwrap().deref();
 		(sent, received)
 	}
 
@@ -146,41 +146,46 @@ impl Protocol for ProtocolV1 {
 }
 
 impl ProtocolV1 {
-  fn read_msg(&self, mut conn: &mut TcpStream, adapter: &NetAdapter) -> Result<(), ser::Error> {
-    // deser the header to get the message type
-    let header = try!(ser::deserialize::<MsgHeader>(conn.deref_mut()));
-    if !header.acceptable() {
-      return Err(ser::Error::CorruptedData);
-    }
+	/// Reads a message from the peer tcp stream and process it, usually simply
+	/// forwarding to the adapter.
+	fn process_msg(&self,
+	               mut conn: &mut TcpStream,
+	               adapter: &NetAdapter)
+	               -> Result<(), ser::Error> {
+		// deser the header to get the message type
+		let header = try!(ser::deserialize::<MsgHeader>(conn.deref_mut()));
+		if !header.acceptable() {
+			return Err(ser::Error::CorruptedData);
+		}
 
-    // wrap our connection with limited byte-counting readers
-    let mut limit_conn = rw::LimitedRead::new(conn.deref_mut(), MAX_DATA_BYTES);
-    let mut read_conn = rw::CountingRead::new(&mut limit_conn);
+		// wrap our connection with limited byte-counting readers
+		let mut limit_conn = rw::LimitedRead::new(conn.deref_mut(), MAX_DATA_BYTES);
+		let mut read_conn = rw::CountingRead::new(&mut limit_conn);
 
-    // check the message type and hopefully do what's expected with it
-    match header.msg_type {
-      Type::Ping => {
-        // respond with pong
-        try!(self.send_pong());
-      },
-      Type::Pong => {},
-      Type::Transaction => {
-        let tx = try!(ser::deserialize(&mut read_conn));
-        adapter.transaction_received(tx);
-      },
-      Type::Block => {
-        let b = try!(ser::deserialize(&mut read_conn));
-        adapter.block_received(b);
-      }
-      _ => error!("uncaught unknown"),
-    }
+		// check the message type and hopefully do what's expected with it
+		match header.msg_type {
+			Type::Ping => {
+				// respond with pong
+				try!(self.send_pong());
+			}
+			Type::Pong => {}
+			Type::Transaction => {
+				let tx = try!(ser::deserialize(&mut read_conn));
+				adapter.transaction_received(tx);
+			}
+			Type::Block => {
+				let b = try!(ser::deserialize(&mut read_conn));
+				adapter.block_received(b);
+			}
+			_ => error!("uncaught unknown"),
+		}
 
-    // update total of bytes sent
-    let mut sent_bytes = self.sent_bytes.lock().unwrap();
-    *sent_bytes += header.serialized_len() + (read_conn.bytes_read() as u64);
+		// update total of bytes sent
+		let mut received_bytes = self.received_bytes.lock().unwrap();
+		*received_bytes += header.serialized_len() + (read_conn.bytes_read() as u64);
 
-    Ok(())
-  }
+		Ok(())
+	}
 
 	/// Helper function to avoid boilerplate, builds a header followed by the
 	/// Writeable body and send the whole thing.
@@ -194,6 +199,7 @@ impl ProtocolV1 {
 		Ok(())
 	}
 
+	/// Sends a pong message (usually in reply to ping)
 	fn send_pong(&self) -> Result<(), ser::Error> {
 		let data = try!(ser::ser_vec(&MsgHeader::new(Type::Pong)));
 		let msg_send = self.msg_send.borrow();
@@ -201,8 +207,8 @@ impl ProtocolV1 {
 		Ok(())
 	}
 
-  /// Setup internal communication channels to select over
-  fn setup_channels(&self) -> (Receiver<Vec<u8>>, Receiver<u8>) {
+	/// Setup internal communication channels to select over
+	fn setup_channels(&self) -> (Receiver<Vec<u8>>, Receiver<u8>) {
 		let (msg_send, msg_recv) = sync_channel(10);
 		let (stop_send, stop_recv) = sync_channel(1);
 		{
@@ -211,6 +217,6 @@ impl ProtocolV1 {
 			let mut stop_mut = self.stop_send.borrow_mut();
 			*stop_mut = Some(stop_send);
 		}
-    (msg_recv, stop_recv)
-  }
+		(msg_recv, stop_recv)
+	}
 }

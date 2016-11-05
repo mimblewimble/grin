@@ -35,4 +35,3 @@ pub mod core;
 pub mod genesis;
 pub mod pow;
 pub mod ser;
-// mod chain;
