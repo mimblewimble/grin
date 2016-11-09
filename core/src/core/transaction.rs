@@ -29,15 +29,21 @@ use ser::{self, Reader, Writer, Readable, Writeable};
 /// and be deserializable.
 pub const MAX_IN_OUT_LEN: u64 = 50000;
 
-/// A proof that a transaction sums to zero. Includes both the transaction's Pedersen commitment and the signature, that guarantees that the commitments amount to zero. The signature signs the fee, which is retained for signature validation.
+/// A proof that a transaction sums to zero. Includes both the transaction's
+/// Pedersen commitment and the signature, that guarantees that the commitments
+/// amount to zero. The signature signs the fee, which is retained for
+/// signature validation.
 #[derive(Debug, Clone)]
 pub struct TxProof {
-  /// Remainder of the sum of all transaction commitments. If the transaction is well formed, amounts components should sum to zero and the remainder is hence a valid public key.
+	/// Remainder of the sum of all transaction commitments. If the transaction
+	/// is well formed, amounts components should sum to zero and the remainder
+	/// is hence a valid public key.
 	pub remainder: Commitment,
-  /// The signature proving the remainder is a valid public key, which signs the transaction fee.
+	/// The signature proving the remainder is a valid public key, which signs
+	/// the transaction fee.
 	pub sig: Vec<u8>,
-  /// Fee originally included in the transaction this proof is for.
-  pub fee: u64,
+	/// Fee originally included in the transaction this proof is for.
+	pub fee: u64,
 }
 
 impl Writeable for TxProof {
@@ -54,19 +60,21 @@ impl Readable<TxProof> for TxProof {
 		Ok(TxProof {
 			remainder: Commitment::from_vec(remainder),
 			sig: sig,
-      fee: fee,
+			fee: fee,
 		})
 	}
 }
 
 impl TxProof {
-  /// Verify the transaction proof validity. Entails handling the commitment as a public key and checking the signature verifies with the fee as message.
+	/// Verify the transaction proof validity. Entails handling the commitment
+	/// as a public key and checking the signature verifies with the fee as
+	/// message.
 	pub fn verify(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
 		let msg = try!(Message::from_slice(&u64_to_32bytes(self.fee)));
-    let pubk = try!(self.remainder.to_pubkey(secp));
-    let sig = try!(Signature::from_der(secp, &self.sig));
-    secp.verify(&msg, &sig, &pubk)
-  }
+		let pubk = try!(self.remainder.to_pubkey(secp));
+		let sig = try!(Signature::from_der(secp, &self.sig));
+		secp.verify(&msg, &sig, &pubk)
+	}
 }
 
 /// A transaction
@@ -229,7 +237,7 @@ impl Transaction {
 		Ok(TxProof {
 			remainder: rsum,
 			sig: self.zerosig.clone(),
-      fee: self.fee,
+			fee: self.fee,
 		})
 	}
 }
@@ -384,9 +392,9 @@ pub fn merkle_inputs_outputs(inputs: &Vec<Input>, outputs: &Vec<Output>) -> Hash
 }
 
 fn u64_to_32bytes(n: u64) -> [u8; 32] {
-  let mut bytes = [0; 32];
-  BigEndian::write_u64(&mut bytes[24..32], n);
-  bytes
+	let mut bytes = [0; 32];
+	BigEndian::write_u64(&mut bytes[24..32], n);
+	bytes
 }
 
 #[cfg(test)]

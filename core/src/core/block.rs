@@ -365,7 +365,7 @@ impl Block {
 		let proof = TxProof {
 			remainder: remainder,
 			sig: sig.serialize_der(&secp),
-      fee: 0,
+			fee: 0,
 		};
 		Ok((output, proof))
 	}
