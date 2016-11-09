@@ -340,11 +340,8 @@ impl Block {
 		}
 
 		// verify all signatures with the commitment as pk
-		let msg = try!(Message::from_slice(&[0; 32]));
 		for proof in &self.proofs {
-			let pubk = try!(proof.remainder.to_pubkey(secp));
-			let sig = try!(Signature::from_der(secp, &proof.sig));
-			try!(secp.verify(&msg, &sig, &pubk));
+			try!(proof.verify(secp));
 		}
 		Ok(())
 	}
@@ -368,6 +365,7 @@ impl Block {
 		let proof = TxProof {
 			remainder: remainder,
 			sig: sig.serialize_der(&secp),
+      fee: 0,
 		};
 		Ok((output, proof))
 	}

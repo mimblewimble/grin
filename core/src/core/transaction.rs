@@ -17,42 +17,56 @@
 use core::Committed;
 use core::MerkleRow;
 use core::hash::{Hash, Hashed};
-use ser::{self, Reader, Writer, Readable, Writeable};
 
+use byteorder::{ByteOrder, BigEndian};
 use secp::{self, Secp256k1, Message, Signature};
 use secp::key::SecretKey;
 use secp::pedersen::{RangeProof, Commitment};
+
+use ser::{self, Reader, Writer, Readable, Writeable};
 
 /// The maximum number of inputs or outputs a transaction may have
 /// and be deserializable.
 pub const MAX_IN_OUT_LEN: u64 = 50000;
 
-/// A proof that a transaction did not create (or remove) funds. Includes both
-/// the transaction's Pedersen commitment and the signature that guarantees
-/// that the commitment amounts to zero.
+/// A proof that a transaction sums to zero. Includes both the transaction's Pedersen commitment and the signature, that guarantees that the commitments amount to zero. The signature signs the fee, which is retained for signature validation.
 #[derive(Debug, Clone)]
 pub struct TxProof {
-	/// temporarily public
+  /// Remainder of the sum of all transaction commitments. If the transaction is well formed, amounts components should sum to zero and the remainder is hence a valid public key.
 	pub remainder: Commitment,
-	/// temporarily public
+  /// The signature proving the remainder is a valid public key, which signs the transaction fee.
 	pub sig: Vec<u8>,
+  /// Fee originally included in the transaction this proof is for.
+  pub fee: u64,
 }
 
 impl Writeable for TxProof {
 	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		try!(writer.write_fixed_bytes(&self.remainder));
-		writer.write_bytes(&self.sig)
+		try!(writer.write_bytes(&self.sig));
+		writer.write_u64(self.fee)
 	}
 }
 
 impl Readable<TxProof> for TxProof {
 	fn read(reader: &mut Reader) -> Result<TxProof, ser::Error> {
-		let (remainder, sig) = ser_multiread!(reader, read_33_bytes, read_vec);
+		let (remainder, sig, fee) = ser_multiread!(reader, read_33_bytes, read_vec, read_u64);
 		Ok(TxProof {
 			remainder: Commitment::from_vec(remainder),
 			sig: sig,
+      fee: fee,
 		})
 	}
+}
+
+impl TxProof {
+  /// Verify the transaction proof validity. Entails handling the commitment as a public key and checking the signature verifies with the fee as message.
+	pub fn verify(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
+		let msg = try!(Message::from_slice(&u64_to_32bytes(self.fee)));
+    let pubk = try!(self.remainder.to_pubkey(secp));
+    let sig = try!(Signature::from_der(secp, &self.sig));
+    secp.verify(&msg, &sig, &pubk)
+  }
 }
 
 /// A transaction
@@ -175,7 +189,7 @@ impl Transaction {
 
 		// and sign with the remainder so the signature can be checked to match with
 		// the k.G commitment leftover, that should also be the pubkey
-		let msg = try!(Message::from_slice(&[0; 32]));
+		let msg = try!(Message::from_slice(&u64_to_32bytes(self.fee)));
 		let sig = try!(secp.sign(&msg, &remainder));
 
 		Ok(Transaction {
@@ -208,13 +222,14 @@ impl Transaction {
 		// pretend the sum is a public key (which it is, being of the form r.G) and
 		// verify the transaction sig with it
 		let pubk = try!(rsum.to_pubkey(secp));
-		let msg = try!(Message::from_slice(&[0; 32]));
+		let msg = try!(Message::from_slice(&u64_to_32bytes(self.fee)));
 		let sig = try!(Signature::from_der(secp, &self.zerosig));
 		try!(secp.verify(&msg, &sig, &pubk));
 
 		Ok(TxProof {
 			remainder: rsum,
 			sig: self.zerosig.clone(),
+      fee: self.fee,
 		})
 	}
 }
@@ -366,6 +381,12 @@ pub fn merkle_inputs_outputs(inputs: &Vec<Input>, outputs: &Vec<Output>) -> Hash
 	let mut all_hs = map_vec!(inputs, |inp| inp.hash());
 	all_hs.append(&mut map_vec!(outputs, |out| out.hash()));
 	MerkleRow::new(all_hs).root()
+}
+
+fn u64_to_32bytes(n: u64) -> [u8; 32] {
+  let mut bytes = [0; 32];
+  BigEndian::write_u64(&mut bytes[24..32], n);
+  bytes
 }
 
 #[cfg(test)]
