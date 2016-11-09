@@ -27,27 +27,13 @@ mod cuckoo;
 
 use time;
 
-use core::{Block, Proof, PROOFSIZE};
+use consensus::{SIZESHIFT, EASINESS};
+use core::{Block, Proof};
 use core::hash::{Hash, Hashed};
 use pow::cuckoo::{Cuckoo, Miner, Error};
 
 use ser;
 use ser::{Writeable, Writer};
-
-/// Default Cuckoo Cycle size shift used is 28. We may decide to increase it.
-/// when difficuty increases.
-const SIZESHIFT: u32 = 28;
-
-/// Default Cuckoo Cycle easiness, high enough to have good likeliness to find
-/// a solution.
-const EASINESS: u32 = 50;
-
-/// Max target hash, lowest difficulty
-pub const MAX_TARGET: [u32; PROOFSIZE] =
-	[0xfff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff,
-	 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff,
-	 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff,
-	 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff];
 
 /// Subset of a block header that goes into hashing for proof of work.
 /// Basically the whole thing minus the PoW solution itself and the total
@@ -169,6 +155,7 @@ fn pow_size(b: &Block, target: Proof, sizeshift: u32) -> Result<(Proof, u64), Er
 #[cfg(test)]
 mod test {
 	use super::*;
+	use consensus::MAX_TARGET;
 	use core::Proof;
 	use genesis;
 

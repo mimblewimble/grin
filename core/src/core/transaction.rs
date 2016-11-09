@@ -14,18 +14,15 @@
 
 //! Transactions
 
-use core::Committed;
-use core::MerkleRow;
-use core::hash::{Hash, Hashed};
-use ser::{self, Reader, Writer, Readable, Writeable};
-
 use secp::{self, Secp256k1, Message, Signature};
 use secp::key::SecretKey;
 use secp::pedersen::{RangeProof, Commitment};
 
-/// The maximum number of inputs or outputs a transaction may have
-/// and be deserializable.
-pub const MAX_IN_OUT_LEN: u64 = 50000;
+use consensus::MAX_IN_OUT_LEN;
+use core::Committed;
+use core::MerkleRow;
+use core::hash::{Hash, Hashed};
+use ser::{self, Reader, Writer, Readable, Writeable};
 
 /// A proof that a transaction did not create (or remove) funds. Includes both
 /// the transaction's Pedersen commitment and the signature that guarantees

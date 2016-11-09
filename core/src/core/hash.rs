@@ -60,7 +60,7 @@ pub const ZERO_HASH: Hash = Hash([0; 32]);
 
 /// Serializer that outputs a hash of the serialized object
 pub struct HashWriter {
-	state: Keccak
+	state: Keccak,
 }
 
 impl HashWriter {
@@ -71,9 +71,7 @@ impl HashWriter {
 
 impl Default for HashWriter {
 	fn default() -> HashWriter {
-		HashWriter {
-			state: Keccak::new_sha3_256()
-		}
+		HashWriter { state: Keccak::new_sha3_256() }
 	}
 }
 
@@ -90,7 +88,7 @@ impl ser::Writer for HashWriter {
 
 /// A trait for types that have a canonical hash
 pub trait Hashed {
-       fn hash(&self) -> Hash;
+	fn hash(&self) -> Hash;
 }
 
 impl<W: ser::Writeable> Hashed for W {
@@ -112,4 +110,3 @@ impl Hashed for [u8] {
 		Hash(ret)
 	}
 }
-
