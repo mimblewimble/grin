@@ -36,7 +36,6 @@ pub struct BlockHeader {
 	pub td: u64, // total difficulty up to this block
 	pub utxo_merkle: Hash,
 	pub tx_merkle: Hash,
-	pub total_fees: u64,
 	pub nonce: u64,
 	pub pow: Proof,
 }
@@ -50,7 +49,6 @@ impl Default for BlockHeader {
 			td: 0,
 			utxo_merkle: ZERO_HASH,
 			tx_merkle: ZERO_HASH,
-			total_fees: 0,
 			nonce: 0,
 			pow: Proof::zero(),
 		}
@@ -66,8 +64,7 @@ impl Writeable for BlockHeader {
 		                [write_fixed_bytes, &self.previous],
 		                [write_i64, self.timestamp.to_timespec().sec],
 		                [write_fixed_bytes, &self.utxo_merkle],
-		                [write_fixed_bytes, &self.tx_merkle],
-		                [write_u64, self.total_fees]);
+		                [write_fixed_bytes, &self.tx_merkle]);
 		// make sure to not introduce any variable length data before the nonce to
 		// avoid complicating PoW
 		try!(writer.write_u64(self.nonce));
@@ -118,14 +115,12 @@ impl Writeable for Block {
 /// from a binary stream.
 impl Readable<Block> for Block {
 	fn read(reader: &mut Reader) -> Result<Block, ser::Error> {
-		let (height, previous, timestamp, utxo_merkle, tx_merkle, total_fees, nonce) =
-			ser_multiread!(reader,
+		let (height, previous, timestamp, utxo_merkle, tx_merkle, nonce) = ser_multiread!(reader,
 			               read_u64,
 			               read_32_bytes,
 			               read_i64,
 			               read_32_bytes,
 			               read_32_bytes,
-			               read_u64,
 			               read_u64);
 
 		// cuckoo cycle of 42 nodes
@@ -157,7 +152,6 @@ impl Readable<Block> for Block {
 				td: td,
 				utxo_merkle: Hash::from_vec(utxo_merkle),
 				tx_merkle: Hash::from_vec(tx_merkle),
-				total_fees: total_fees,
 				pow: Proof(pow),
 				nonce: nonce,
 			},
@@ -179,7 +173,7 @@ impl Committed for Block {
 		&self.outputs
 	}
 	fn overage(&self) -> i64 {
-		(REWARD as i64) - (self.header.total_fees as i64)
+		(REWARD as i64) - (self.total_fees() as i64)
 	}
 }
 
@@ -235,12 +229,10 @@ impl Block {
 		outputs.sort_by_key(|out| out.hash());
 
 		// calculate the overall Merkle tree and fees
-		let fees = txs.iter().map(|tx| tx.fee).sum();
 
 		Ok(Block {
 				header: BlockHeader {
 					height: prev.height + 1,
-					total_fees: fees,
 					timestamp: time::now(),
 					..Default::default()
 				},
@@ -253,6 +245,10 @@ impl Block {
 
 	pub fn hash(&self) -> Hash {
 		self.header.hash()
+	}
+
+	pub fn total_fees(&self) -> u64 {
+		self.proofs.iter().map(|p| p.fee).sum()
 	}
 
 	/// Matches any output with a potential spending input, eliminating them
@@ -312,11 +308,7 @@ impl Block {
 
 		Block {
 				// compact will fix the merkle tree
-				header: BlockHeader {
-					total_fees: self.header.total_fees + other.header.total_fees,
-					pow: self.header.pow.clone(),
-					..self.header
-				},
+				header: BlockHeader { pow: self.header.pow.clone(), ..self.header },
 				inputs: all_inputs,
 				outputs: all_outputs,
 				proofs: all_proofs,

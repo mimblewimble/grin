@@ -31,7 +31,7 @@ pub fn genesis() -> core::Block {
 	core::Block {
 		header: core::BlockHeader {
 			height: 0,
-			previous: core::hash::ZERO_HASH,
+			previous: core::hash::Hash([0xff; 32]),
 			timestamp: time::Tm {
 				tm_year: 1997,
 				tm_mon: 7,
@@ -41,7 +41,6 @@ pub fn genesis() -> core::Block {
 			td: 0,
 			utxo_merkle: core::hash::Hash::from_vec(empty_h.to_vec()),
 			tx_merkle: core::hash::Hash::from_vec(empty_h.to_vec()),
-			total_fees: 0,
 			nonce: 0,
 			pow: core::Proof::zero(), // TODO get actual PoW solution
 		},

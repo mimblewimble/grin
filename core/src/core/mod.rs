@@ -156,8 +156,10 @@ impl Writeable for HPair {
 	}
 }
 /// An iterator over hashes in a vector that pairs them to build a row in a
-/// Merkle tree. If the vector has an odd number of hashes, it appends a zero hash
-/// See https://bitcointalk.org/index.php?topic=102395.0 CVE-2012-2459 (block merkle calculation exploit)
+/// Merkle tree. If the vector has an odd number of hashes, it appends a zero
+/// hash
+/// See https://bitcointalk.org/index.php?topic=102395.0 CVE-2012-2459 (block
+/// merkle calculation exploit)
 /// for the argument against duplication of last hash
 struct HPairIter(Vec<Hash>);
 impl Iterator for HPairIter {

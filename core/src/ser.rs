@@ -49,9 +49,11 @@ impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match *self {
 			Error::IOErr(ref e) => write!(f, "{}", e),
-			Error::UnexpectedData { expected: ref e, received: ref r } => write!(f, "expected {:?}, got {:?}", e, r),
+			Error::UnexpectedData { expected: ref e, received: ref r } => {
+				write!(f, "expected {:?}, got {:?}", e, r)
+			}
 			Error::CorruptedData => f.write_str("corrupted data"),
-			Error::TooLargeReadErr(ref s) => f.write_str(&s)
+			Error::TooLargeReadErr(ref s) => f.write_str(&s),
 		}
 	}
 }
@@ -60,7 +62,7 @@ impl error::Error for Error {
 	fn cause(&self) -> Option<&error::Error> {
 		match *self {
 			Error::IOErr(ref e) => Some(e),
-			_ => None
+			_ => None,
 		}
 	}
 
@@ -69,7 +71,7 @@ impl error::Error for Error {
 			Error::IOErr(ref e) => error::Error::description(e),
 			Error::UnexpectedData { expected: _, received: _ } => "unexpected data",
 			Error::CorruptedData => "corrupted data",
-			Error::TooLargeReadErr(ref s) => s
+			Error::TooLargeReadErr(ref s) => s,
 		}
 	}
 }
@@ -90,7 +92,7 @@ pub enum SerializationMode {
 	/// Serialize the data that defines the object
 	Hash,
 	/// Serialize everything that a signer of the object should know
-	SigHash
+	SigHash,
 }
 
 /// Implementations defined how different numbers and binary structures are
