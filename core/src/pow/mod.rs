@@ -47,7 +47,6 @@ struct PowHeader {
 	pub timestamp: time::Tm,
 	pub utxo_merkle: Hash,
 	pub tx_merkle: Hash,
-	pub total_fees: u64,
 	pub n_in: u64,
 	pub n_out: u64,
 	pub n_proofs: u64,
@@ -64,7 +63,6 @@ impl Writeable for PowHeader {
 		try!(writer.write_i64(self.timestamp.to_timespec().sec));
 		try!(writer.write_fixed_bytes(&self.utxo_merkle));
 		try!(writer.write_fixed_bytes(&self.tx_merkle));
-		try!(writer.write_u64(self.total_fees));
 		try!(writer.write_u64(self.n_in));
 		try!(writer.write_u64(self.n_out));
 		writer.write_u64(self.n_proofs)
@@ -81,7 +79,6 @@ impl PowHeader {
 			timestamp: h.timestamp,
 			utxo_merkle: h.utxo_merkle,
 			tx_merkle: h.tx_merkle,
-			total_fees: h.total_fees,
 			n_in: b.inputs.len() as u64,
 			n_out: b.outputs.len() as u64,
 			n_proofs: b.proofs.len() as u64,
