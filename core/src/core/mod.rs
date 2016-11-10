@@ -19,25 +19,17 @@ pub mod hash;
 pub mod transaction;
 #[allow(dead_code)]
 
-pub use self::block::{Block, BlockHeader};
-pub use self::transaction::{Transaction, Input, Output, TxProof};
-use self::hash::{Hash, Hashed, ZERO_HASH};
-use ser::{Writeable, Writer, Error};
-
 use std::fmt;
 use std::cmp::Ordering;
 
 use secp::{self, Secp256k1};
 use secp::pedersen::*;
 
-/// The block subsidy amount
-pub const REWARD: u64 = 1_000_000_000;
-
-/// Block interval, in seconds
-pub const BLOCK_TIME_SEC: u8 = 15;
-
-/// Cuckoo-cycle proof size (cycle length)
-pub const PROOFSIZE: usize = 42;
+use consensus::PROOFSIZE;
+pub use self::block::{Block, BlockHeader};
+pub use self::transaction::{Transaction, Input, Output, TxProof};
+use self::hash::{Hash, Hashed, ZERO_HASH};
+use ser::{Writeable, Writer, Error};
 
 /// Implemented by types that hold inputs and outputs including Pedersen
 /// commitments. Handles the collection of the commitments as well as their

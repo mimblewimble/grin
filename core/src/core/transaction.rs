@@ -14,20 +14,16 @@
 
 //! Transactions
 
-use core::Committed;
-use core::MerkleRow;
-use core::hash::{Hash, Hashed};
-
 use byteorder::{ByteOrder, BigEndian};
 use secp::{self, Secp256k1, Message, Signature};
 use secp::key::SecretKey;
 use secp::pedersen::{RangeProof, Commitment};
 
+use consensus::MAX_IN_OUT_LEN;
+use core::Committed;
+use core::MerkleRow;
+use core::hash::{Hash, Hashed};
 use ser::{self, Reader, Writer, Readable, Writeable};
-
-/// The maximum number of inputs or outputs a transaction may have
-/// and be deserializable.
-pub const MAX_IN_OUT_LEN: u64 = 50000;
 
 /// A proof that a transaction sums to zero. Includes both the transaction's
 /// Pedersen commitment and the signature, that guarantees that the commitments

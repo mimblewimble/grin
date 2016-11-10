@@ -31,6 +31,7 @@ extern crate tiny_keccak;
 #[macro_use]
 pub mod macros;
 
+pub mod consensus;
 pub mod core;
 pub mod genesis;
 pub mod pow;

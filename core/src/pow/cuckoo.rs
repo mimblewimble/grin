@@ -23,7 +23,8 @@ use std::cmp;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 
-use core::{Proof, PROOFSIZE};
+use consensus::PROOFSIZE;
+use core::Proof;
 use pow::siphash::siphash24;
 
 const MAXPATHLEN: usize = 8192;

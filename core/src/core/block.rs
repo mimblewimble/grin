@@ -23,9 +23,8 @@ use std::collections::HashSet;
 use core::Committed;
 use core::{Input, Output, Proof, TxProof, Transaction};
 use core::transaction::merkle_inputs_outputs;
-use core::{PROOFSIZE, REWARD};
+use consensus::{PROOFSIZE, REWARD, MAX_IN_OUT_LEN};
 use core::hash::{Hash, Hashed, ZERO_HASH};
-use core::transaction::MAX_IN_OUT_LEN;
 use ser::{self, Readable, Reader, Writeable, Writer};
 
 /// Block header, fairly standard compared to other blockchains.
