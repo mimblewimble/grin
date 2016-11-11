@@ -22,7 +22,7 @@ Additional tests are rewarded with an immense amount of positive karma. So is do
 
 Find us:
 
-* IRC: Freenode #MimbleWimble
+* IRC: [#MimbleWimble](https://webchat.freenode.net/?channels=#MimbleWimble) on Freenode
 * Mailing list: TBD
 
 
