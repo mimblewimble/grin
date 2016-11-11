@@ -22,19 +22,29 @@
 /// The block subsidy amount
 pub const REWARD: u64 = 1_000_000_000;
 
-/// Block interval, in seconds
-pub const BLOCK_TIME_SEC: u8 = 15;
+/// Block interval, in seconds, the network will tune its difficulty for. Note
+/// that contrarily to bitcoin, we may reduce this value in the future as
+/// networks improve and block propagation is optimized (adjusting the reward
+/// accordingly).
+pub const BLOCK_TIME_SEC: u8 = 30;
 
 /// Cuckoo-cycle proof size (cycle length)
 pub const PROOFSIZE: usize = 42;
 
-/// Default Cuckoo Cycle size shift used is 28. We may decide to increase it.
-/// when difficuty increases.
+/// Default Cuckoo Cycle size shift used is 28. We may decide to increase it
+/// when hashrate increases. May also start lower.
 pub const SIZESHIFT: u32 = 28;
 
 /// Default Cuckoo Cycle easiness, high enough to have good likeliness to find
 /// a solution.
 pub const EASINESS: u32 = 50;
+
+/// Default number of blocks in the past when cross-block cut-through will start
+/// happening. Needs to be long enough to not overlap with a long reorg. Rational
+/// behind the value is the longest bitcoin fork was about 30 blocks, so 5h. We
+/// add an order of magnitude to be safe and round to 48h of blocks to make it
+/// easier to reason about.
+pub const CUT_THROUGH_HORIZON: u32 = 48 * 3600 / (BLOCK_TIME_SEC as u32);
 
 /// Max target hash, lowest difficulty
 pub const MAX_TARGET: [u32; PROOFSIZE] =
