@@ -17,21 +17,15 @@
 use time;
 
 use core;
-
-use tiny_keccak::Keccak;
+use core::hash::Hashed;
 
 // Genesis block definition. It has no rewards, no inputs, no outputs, no
 // fees and a height of zero.
 pub fn genesis() -> core::Block {
-	let mut sha3 = Keccak::new_sha3_256();
-	let mut empty_h = [0; 32];
-	sha3.update(&[]);
-	sha3.finalize(&mut empty_h);
-
 	core::Block {
 		header: core::BlockHeader {
 			height: 0,
-			previous: core::hash::Hash([0xff; 32]),
+			previous: core::hash::Hash([0xffu8; 32]),
 			timestamp: time::Tm {
 				tm_year: 1997,
 				tm_mon: 7,
@@ -39,8 +33,8 @@ pub fn genesis() -> core::Block {
 				..time::empty_tm()
 			},
 			td: 0,
-			utxo_merkle: core::hash::Hash::from_vec(empty_h.to_vec()),
-			tx_merkle: core::hash::Hash::from_vec(empty_h.to_vec()),
+			utxo_merkle: [0u8; 32].hash(),
+			tx_merkle: [0u8; 32].hash(),
 			nonce: 0,
 			pow: core::Proof::zero(), // TODO get actual PoW solution
 		},
