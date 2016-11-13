@@ -333,7 +333,7 @@ impl Block {
 	fn reward_output(skey: secp::key::SecretKey,
 	                 secp: &Secp256k1)
 	                 -> Result<(Output, TxProof), secp::Error> {
-		let msg = try!(secp::Message::from_slice(&[0; 32]));
+		let msg = try!(secp::Message::from_slice(&[0u8; secp::constants::MESSAGE_SIZE]));
 		let sig = try!(secp.sign(&msg, &skey));
 		let output = Output::OvertOutput {
 				value: REWARD,
