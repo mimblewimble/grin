@@ -111,16 +111,7 @@ impl Clone for POW {
 impl POW {
 	/// Builds a proof with all bytes zeroed out
 	pub fn zero() -> POW {
-		POW([0; POWSIZE])
-	}
-	/// Builds a proof from a vector of exactly PROOFSIZE
-	pub fn from_vec(v: Vec<u32>) -> POW {
-		assert!(v.len() == POWSIZE);
-		let mut p = [0; POWSIZE];
-		for (n, elem) in v.iter().enumerate() {
-			p[n] = *elem;
-		}
-		POW(p)
+		POW([0u32; POWSIZE])
 	}
 	/// Converts the proof to a vector of u64s
 	pub fn to_u64s(&self) -> Vec<u64> {
