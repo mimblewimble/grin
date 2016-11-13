@@ -116,10 +116,10 @@ impl Readable<Block> for Block {
 	fn read(reader: &mut Reader) -> Result<Block, ser::Error> {
 		let (height, previous, timestamp, utxo_merkle, tx_merkle, nonce) = ser_multiread!(reader,
 			               read_u64,
-			               read_32_bytes,
+			               read_hash,
 			               read_i64,
-			               read_32_bytes,
-			               read_32_bytes,
+			               read_hash,
+			               read_hash,
 			               read_u64);
 
 		// cuckoo cycle of 42 nodes
@@ -143,14 +143,14 @@ impl Readable<Block> for Block {
 		Ok(Block {
 			header: BlockHeader {
 				height: height,
-				previous: Hash::from_vec(previous),
+				previous: previous,
 				timestamp: time::at_utc(time::Timespec {
 					sec: timestamp,
 					nsec: 0,
 				}),
 				td: td,
-				utxo_merkle: Hash::from_vec(utxo_merkle),
-				tx_merkle: Hash::from_vec(tx_merkle),
+				utxo_merkle: utxo_merkle,
+				tx_merkle: tx_merkle,
 				pow: Proof(pow),
 				nonce: nonce,
 			},
