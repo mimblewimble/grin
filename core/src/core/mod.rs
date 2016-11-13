@@ -111,9 +111,9 @@ impl Clone for Proof {
 impl Proof {
 	/// Builds a proof with all bytes zeroed out
 	pub fn zero() -> Proof {
-		Proof([0; 42])
+		Proof([0; PROOFSIZE])
 	}
-	/// Builds a proof from a vector of exactly PROOFSIZE (42) u32.
+	/// Builds a proof from a vector of exactly PROOFSIZE
 	pub fn from_vec(v: Vec<u32>) -> Proof {
 		assert!(v.len() == PROOFSIZE);
 		let mut p = [0; PROOFSIZE];
