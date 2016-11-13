@@ -36,7 +36,7 @@ pub fn genesis() -> core::Block {
 			utxo_merkle: [0u8; 32].hash(),
 			tx_merkle: [0u8; 32].hash(),
 			nonce: 0,
-			pow: core::Proof::zero(), // TODO get actual PoW solution
+			pow: core::POW::zero(), // TODO get actual PoW solution
 		},
 		inputs: vec![],
 		outputs: vec![],

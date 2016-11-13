@@ -28,7 +28,7 @@ mod cuckoo;
 use time;
 
 use consensus::{SIZESHIFT, EASINESS};
-use core::{Block, Proof};
+use core::{Block, POW};
 use core::hash::{Hash, Hashed};
 use pow::cuckoo::{Cuckoo, Miner, Error};
 
@@ -87,17 +87,17 @@ impl PowHeader {
 }
 
 /// Validates the proof of work of a given header.
-pub fn verify(b: &Block, target: Proof) -> bool {
+pub fn verify(b: &Block, target: POW) -> bool {
 	verify_size(b, target, SIZESHIFT)
 }
 
 /// Same as default verify function but uses the much easier Cuckoo20 (mostly
 /// for tests).
-pub fn verify20(b: &Block, target: Proof) -> bool {
+pub fn verify20(b: &Block, target: POW) -> bool {
 	verify_size(b, target, 20)
 }
 
-pub fn verify_size(b: &Block, target: Proof, sizeshift: u32) -> bool {
+pub fn verify_size(b: &Block, target: POW, sizeshift: u32) -> bool {
 	let hash = PowHeader::from_block(b).hash();
 	// make sure the hash is smaller than our target before going into more
 	// expensive validation
@@ -110,17 +110,17 @@ pub fn verify_size(b: &Block, target: Proof, sizeshift: u32) -> bool {
 /// Runs a naive single-threaded proof of work computation over the provided
 /// block, until the required difficulty target is reached. May take a
 /// while for a low target...
-pub fn pow(b: &Block, target: Proof) -> Result<(Proof, u64), Error> {
+pub fn pow(b: &Block, target: POW) -> Result<(POW, u64), Error> {
 	pow_size(b, target, SIZESHIFT)
 }
 
 /// Same as default pow function but uses the much easier Cuckoo20 (mostly for
 /// tests).
-pub fn pow20(b: &Block, target: Proof) -> Result<(Proof, u64), Error> {
+pub fn pow20(b: &Block, target: POW) -> Result<(POW, u64), Error> {
 	pow_size(b, target, 20)
 }
 
-fn pow_size(b: &Block, target: Proof, sizeshift: u32) -> Result<(Proof, u64), Error> {
+fn pow_size(b: &Block, target: POW, sizeshift: u32) -> Result<(POW, u64), Error> {
 	let mut pow_header = PowHeader::from_block(b);
 	let start_nonce = pow_header.nonce;
 
@@ -153,17 +153,17 @@ fn pow_size(b: &Block, target: Proof, sizeshift: u32) -> Result<(Proof, u64), Er
 mod test {
 	use super::*;
 	use consensus::MAX_TARGET;
-	use core::Proof;
+	use core::POW;
 	use genesis;
 
 	#[test]
 	fn genesis_pow() {
 		let mut b = genesis::genesis();
-		let (proof, nonce) = pow20(&b, Proof(MAX_TARGET)).unwrap();
+		let (proof, nonce) = pow20(&b, POW(MAX_TARGET)).unwrap();
 		assert!(nonce > 0);
-		assert!(proof < Proof(MAX_TARGET));
+		assert!(proof < POW(MAX_TARGET));
 		b.header.pow = proof;
 		b.header.nonce = nonce;
-		assert!(verify20(&b, Proof(MAX_TARGET)));
+		assert!(verify20(&b, POW(MAX_TARGET)));
 	}
 }

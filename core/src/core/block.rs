@@ -21,7 +21,7 @@ use secp::key::SecretKey;
 use std::collections::HashSet;
 
 use core::Committed;
-use core::{Input, Output, Proof, TxProof, Transaction};
+use core::{Input, Output, POW, TxProof, Transaction};
 use core::transaction::merkle_inputs_outputs;
 use consensus::{REWARD, MAX_IN_OUT_LEN};
 use core::hash::{Hash, Hashed, ZERO_HASH};
@@ -36,7 +36,7 @@ pub struct BlockHeader {
 	pub utxo_merkle: Hash,
 	pub tx_merkle: Hash,
 	pub nonce: u64,
-	pub pow: Proof,
+	pub pow: POW,
 }
 
 impl Default for BlockHeader {
@@ -49,7 +49,7 @@ impl Default for BlockHeader {
 			utxo_merkle: ZERO_HASH,
 			tx_merkle: ZERO_HASH,
 			nonce: 0,
-			pow: Proof::zero(),
+			pow: POW::zero(),
 		}
 	}
 }

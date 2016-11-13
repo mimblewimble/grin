@@ -25,7 +25,7 @@ use std::cmp::Ordering;
 use secp::{self, Secp256k1};
 use secp::pedersen::*;
 
-use consensus::PROOFSIZE;
+use consensus::POWSIZE;
 pub use self::block::{Block, BlockHeader};
 pub use self::transaction::{Transaction, Input, Output, TxProof};
 use self::hash::{Hash, Hashed, ZERO_HASH};
@@ -77,54 +77,54 @@ pub trait Committed {
 
 /// Proof of work
 #[derive(Copy)]
-pub struct Proof(pub [u32; PROOFSIZE]);
+pub struct POW(pub [u32; POWSIZE]);
 
-impl fmt::Debug for Proof {
+impl fmt::Debug for POW {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		try!(write!(f, "Cuckoo("));
 		for (i, val) in self.0[..].iter().enumerate() {
 			try!(write!(f, "{:x}", val));
-			if i < PROOFSIZE - 1 {
+			if i < POWSIZE - 1 {
 				write!(f, " ");
 			}
 		}
 		write!(f, ")")
 	}
 }
-impl PartialOrd for Proof {
-	fn partial_cmp(&self, other: &Proof) -> Option<Ordering> {
+impl PartialOrd for POW {
+	fn partial_cmp(&self, other: &POW) -> Option<Ordering> {
 		self.0.partial_cmp(&other.0)
 	}
 }
-impl PartialEq for Proof {
-	fn eq(&self, other: &Proof) -> bool {
+impl PartialEq for POW {
+	fn eq(&self, other: &POW) -> bool {
 		self.0[..] == other.0[..]
 	}
 }
-impl Eq for Proof {}
-impl Clone for Proof {
-	fn clone(&self) -> Proof {
+impl Eq for POW {}
+impl Clone for POW {
+	fn clone(&self) -> POW {
 		*self
 	}
 }
 
-impl Proof {
+impl POW {
 	/// Builds a proof with all bytes zeroed out
-	pub fn zero() -> Proof {
-		Proof([0; PROOFSIZE])
+	pub fn zero() -> POW {
+		POW([0; POWSIZE])
 	}
 	/// Builds a proof from a vector of exactly PROOFSIZE
-	pub fn from_vec(v: Vec<u32>) -> Proof {
-		assert!(v.len() == PROOFSIZE);
-		let mut p = [0; PROOFSIZE];
+	pub fn from_vec(v: Vec<u32>) -> POW {
+		assert!(v.len() == POWSIZE);
+		let mut p = [0; POWSIZE];
 		for (n, elem) in v.iter().enumerate() {
 			p[n] = *elem;
 		}
-		Proof(p)
+		POW(p)
 	}
 	/// Converts the proof to a vector of u64s
 	pub fn to_u64s(&self) -> Vec<u64> {
-		let mut nonces = Vec::with_capacity(PROOFSIZE);
+		let mut nonces = Vec::with_capacity(POWSIZE);
 		for n in self.0.iter() {
 			nonces.push(*n as u64);
 		}
