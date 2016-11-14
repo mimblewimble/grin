@@ -16,7 +16,7 @@
 //! the whole network are complex and hard to completely isolate. Some can be
 //! simple parameters (like block reward), others complex algorithms (like
 //! Merkle sum trees or reorg rules). However, as long as they're simple
-//! emough, consensus-relevant constants and short functions should be kept
+//! enough, consensus-relevant constants and short functions should be kept
 //! here.
 
 /// The block subsidy amount
