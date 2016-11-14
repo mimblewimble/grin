@@ -16,6 +16,7 @@
 
 pub mod block;
 pub mod hash;
+pub mod target;
 pub mod transaction;
 #[allow(dead_code)]
 
