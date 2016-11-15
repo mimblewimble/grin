@@ -1,4 +1,4 @@
-// Copyright 2016 The Developers
+// Copyright 2016 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,13 +17,17 @@
 
 use byteorder::{ByteOrder, BigEndian};
 use std::fmt;
-use std::ops::{Shl, Shr, Index, IndexMut};
+use std::ops::{Add, Sub, Shl, Shr, Index, IndexMut};
 use tiny_keccak::Keccak;
 
 use ser::{self, Reader, Writer, Writeable, Readable};
 
+/// A Bitcoin-style target, implemented as a 32 bytes positive big number that
+/// can be compared against a proof of work. Serializes in a compact format
+/// composed of a one-byte exponent and a 4 bytes mantissa. Hence a target will
+/// only ever have a u32 worth of significant numbers.
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord)]
-pub struct Target([u8; 32]);
+pub struct Target(pub [u8; 32]);
 
 impl fmt::Display for Target {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -96,7 +100,7 @@ impl IndexMut<usize> for Target {
 }
 
 /// Implements shift left to break the target down into an exponent and a
-/// mantissa
+/// mantissa and provide simple multiplication by a power of 2.
 impl Shl<usize> for Target {
 	type Output = Target;
 
@@ -122,6 +126,7 @@ impl Shl<usize> for Target {
 }
 
 /// Implements shift right to build a target from an exponent and a mantissa
+/// and provide simple division by a power of 2.
 impl Shr<usize> for Target {
 	type Output = Target;
 
@@ -146,6 +151,63 @@ impl Shr<usize> for Target {
 	}
 }
 
+/// Implement addition between targets. Overflow is truncated.
+impl Add for Target {
+	type Output = Target;
+
+	fn add(self, other: Target) -> Target {
+		let mut sum = [0; 32];
+		let mut carry = 0;
+		for i in (0..32).rev() {
+			let (sum_i, carry_i) = add_with_carryover(self[i], other[i], carry);
+			sum[i] = sum_i;
+			carry = carry_i;
+		}
+		Target(sum)
+	}
+}
+
+fn add_with_carryover(a: u8, b: u8, carry: u8) -> (u8, u8) {
+	let mut new_carry = 0;
+	let (a_carry, over) = a.overflowing_add(carry);
+	if over {
+		new_carry += 1;
+	}
+	let (sum, over) = a_carry.overflowing_add(b);
+	if over {
+		new_carry += 1;
+	}
+	(sum, new_carry)
+}
+
+/// Implement subtractions between targets. Underflow is truncated.
+impl Sub for Target {
+	type Output = Target;
+
+	fn sub(self, other: Target) -> Target {
+		let mut diff = [0; 32];
+		let mut carry = 0;
+		for i in (0..32).rev() {
+			let (diff_i, carry_i) = sub_with_carryover(self[i], other[i], carry);
+			diff[i] = diff_i;
+			carry = carry_i;
+		}
+		Target(diff)
+	}
+}
+
+fn sub_with_carryover(a: u8, b: u8, carry: u8) -> (u8, u8) {
+	let mut new_carry = 0;
+	let (a_carry, under) = a.overflowing_sub(carry);
+	if under {
+		new_carry += 1;
+	}
+	let (diff, under) = a_carry.overflowing_sub(b);
+	if under {
+		new_carry += 1;
+	}
+	(diff, new_carry)
+}
 
 #[cfg(test)]
 mod test {
@@ -181,6 +243,11 @@ mod test {
 	}
 
 	#[test]
+	fn shift_truncate() {
+		assert_eq!((Target::join(0, 0xffff).unwrap() >> 8) << 8, Target::join(0, 0xff00).unwrap());
+	}
+
+	#[test]
 	fn split_fit() {
 		let t = Target::join(10 * 8, ::std::u32::MAX).unwrap();
 		let (exp, mant) = t.split();
@@ -196,5 +263,34 @@ mod test {
 		let (exp, mant) = t.split();
 		assert_eq!(exp, 220);
 		assert_eq!(mant, 10 << 28);
+	}
+
+	#[test]
+	fn addition() {
+		assert_eq!(Target::join(0, 10).unwrap() + Target::join(0, 20).unwrap(),
+      Target::join(0, 30).unwrap());
+		// single overflow
+		assert_eq!(Target::join(0, 250).unwrap() + Target::join(0, 250).unwrap(),
+      Target::join(0, 500).unwrap());
+		// multiple overflows
+		assert_eq!(Target::join(0, 300).unwrap() + Target::join(0, 300).unwrap(),
+      Target::join(0, 600).unwrap());
+		assert_eq!(Target::join(10, 300).unwrap() + Target::join(10, 300).unwrap(),
+      Target::join(10, 600).unwrap());
+		// cascading overflows
+		assert_eq!(Target::join(8, 0xffff).unwrap() + Target::join(8, 0xffff).unwrap(),
+      Target::join(8, 0x1fffe).unwrap());
+	}
+
+	#[test]
+	fn subtraction() {
+		assert_eq!(Target::join(0, 40).unwrap() - Target::join(0, 10).unwrap(),
+      Target::join(0, 30).unwrap());
+		assert_eq!(Target::join(0, 300).unwrap() - Target::join(0, 100).unwrap(),
+      Target::join(0, 200).unwrap());
+		assert_eq!(Target::join(0, 0xffff).unwrap() - Target::join(0, 0xffff).unwrap(),
+      Target::join(0, 0).unwrap());
+		assert_eq!(Target::join(0, 0xffff).unwrap() - Target::join(0, 0xff01).unwrap(),
+      Target::join(0, 0xfe).unwrap());
 	}
 }
