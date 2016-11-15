@@ -23,19 +23,28 @@ use std::collections::HashSet;
 use core::Committed;
 use core::{Input, Output, Proof, TxProof, Transaction};
 use core::transaction::merkle_inputs_outputs;
-use consensus::{PROOFSIZE, REWARD, MAX_IN_OUT_LEN};
+use consensus::{PROOFSIZE, REWARD, DEFAULT_SIZESHIFT, MAX_IN_OUT_LEN, MAX_TARGET};
 use core::hash::{Hash, Hashed, ZERO_HASH};
+use core::target::Target;
 use ser::{self, Readable, Reader, Writeable, Writer};
 
 /// Block header, fairly standard compared to other blockchains.
 pub struct BlockHeader {
+	/// Height of this block since the genesis block (height 0)
 	pub height: u64,
+	/// Hash of the block previous to this in the chain.
 	pub previous: Hash,
+	/// Timestamp at which the block was built.
 	pub timestamp: time::Tm,
-	pub td: u64, // total difficulty up to this block
+	/// Length of the cuckoo cycle used to mine this block.
+	pub cuckoo_len: u8,
+	/// Difficulty used to mine the block.
+	pub target: Target,
 	pub utxo_merkle: Hash,
 	pub tx_merkle: Hash,
+	/// Nonce increment used to mine this block.
 	pub nonce: u64,
+	/// Proof of work data.
 	pub pow: Proof,
 }
 
@@ -45,7 +54,8 @@ impl Default for BlockHeader {
 			height: 0,
 			previous: ZERO_HASH,
 			timestamp: time::at_utc(time::Timespec { sec: 0, nsec: 0 }),
-			td: 0,
+			cuckoo_len: 20, // only for tests
+			target: MAX_TARGET,
 			utxo_merkle: ZERO_HASH,
 			tx_merkle: ZERO_HASH,
 			nonce: 0,
@@ -62,6 +72,9 @@ impl Writeable for BlockHeader {
 		                [write_u64, self.height],
 		                [write_fixed_bytes, &self.previous],
 		                [write_i64, self.timestamp.to_timespec().sec],
+		                [write_u8, self.cuckoo_len]);
+		try!(self.target.write(writer));
+		ser_multiwrite!(writer,
 		                [write_fixed_bytes, &self.utxo_merkle],
 		                [write_fixed_bytes, &self.tx_merkle]);
 		// make sure to not introduce any variable length data before the nonce to
@@ -71,7 +84,7 @@ impl Writeable for BlockHeader {
 		for n in 0..42 {
 			try!(writer.write_u32(self.pow.0[n]));
 		}
-		writer.write_u64(self.td)
+		Ok(())
 	}
 }
 
@@ -114,13 +127,11 @@ impl Writeable for Block {
 /// from a binary stream.
 impl Readable<Block> for Block {
 	fn read(reader: &mut Reader) -> Result<Block, ser::Error> {
-		let (height, previous, timestamp, utxo_merkle, tx_merkle, nonce) = ser_multiread!(reader,
-			               read_u64,
-			               read_32_bytes,
-			               read_i64,
-			               read_32_bytes,
-			               read_32_bytes,
-			               read_u64);
+		let (height, previous, timestamp, cuckoo_len) =
+			ser_multiread!(reader, read_u64, read_32_bytes, read_i64, read_u8);
+		let target = try!(Target::read(reader));
+		let (utxo_merkle, tx_merkle, nonce) =
+			ser_multiread!(reader, read_32_bytes, read_32_bytes, read_u64);
 
 		// cuckoo cycle of 42 nodes
 		let mut pow = [0; PROOFSIZE];
@@ -148,7 +159,8 @@ impl Readable<Block> for Block {
 					sec: timestamp,
 					nsec: 0,
 				}),
-				td: td,
+				cuckoo_len: cuckoo_len,
+				target: target,
 				utxo_merkle: Hash::from_vec(utxo_merkle),
 				tx_merkle: Hash::from_vec(tx_merkle),
 				pow: Proof(pow),

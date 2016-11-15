@@ -29,7 +29,7 @@ use secp::pedersen::*;
 use consensus::PROOFSIZE;
 pub use self::block::{Block, BlockHeader};
 pub use self::transaction::{Transaction, Input, Output, TxProof};
-use self::hash::{Hash, Hashed, ZERO_HASH};
+use self::hash::{Hash, Hashed, HashWriter, ZERO_HASH};
 use ser::{Writeable, Writer, Error};
 
 /// Implemented by types that hold inputs and outputs including Pedersen
@@ -109,11 +109,24 @@ impl Clone for Proof {
 	}
 }
 
+impl Hashed for Proof {
+	fn hash(&self) -> Hash {
+		let mut hasher = HashWriter::default();
+		let mut ret = [0; 32];
+		for p in self.0.iter() {
+			hasher.write_u32(*p).unwrap();
+		}
+		hasher.finalize(&mut ret);
+		Hash(ret)
+	}
+}
+
 impl Proof {
 	/// Builds a proof with all bytes zeroed out
 	pub fn zero() -> Proof {
 		Proof([0; 42])
 	}
+
 	/// Builds a proof from a vector of exactly PROOFSIZE (42) u32.
 	pub fn from_vec(v: Vec<u32>) -> Proof {
 		assert!(v.len() == PROOFSIZE);
@@ -123,6 +136,7 @@ impl Proof {
 		}
 		Proof(p)
 	}
+
 	/// Converts the proof to a vector of u64s
 	pub fn to_u64s(&self) -> Vec<u64> {
 		let mut nonces = Vec::with_capacity(PROOFSIZE);
@@ -131,9 +145,16 @@ impl Proof {
 		}
 		nonces
 	}
+
 	/// Converts the proof to a vector of u32s
 	pub fn to_u32s(&self) -> Vec<u32> {
 		self.0.to_vec()
+	}
+
+	/// Converts the proof to a proof-of-work Target so they can be compared.
+	/// Hashes the Cuckoo Proof data.
+	pub fn to_target(self) -> target::Target {
+		target::Target(self.hash().0)
 	}
 }
 

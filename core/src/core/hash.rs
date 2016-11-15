@@ -23,6 +23,8 @@ use tiny_keccak::Keccak;
 
 use ser::{self, AsFixedBytes};
 
+pub const ZERO_HASH: Hash = Hash([0; 32]);
+
 /// A hash to uniquely (or close enough) identify one of the main blockchain
 /// constructs. Used pervasively for blocks, transactions and ouputs.
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -56,15 +58,13 @@ impl Hash {
 	}
 }
 
-pub const ZERO_HASH: Hash = Hash([0; 32]);
-
 /// Serializer that outputs a hash of the serialized object
 pub struct HashWriter {
 	state: Keccak,
 }
 
 impl HashWriter {
-	fn finalize(self, output: &mut [u8]) {
+	pub fn finalize(self, output: &mut [u8]) {
 		self.state.finalize(output);
 	}
 }

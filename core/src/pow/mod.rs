@@ -27,9 +27,10 @@ mod cuckoo;
 
 use time;
 
-use consensus::{SIZESHIFT, EASINESS};
+use consensus::EASINESS;
 use core::{Block, Proof};
 use core::hash::{Hash, Hashed};
+use core::target::Target;
 use pow::cuckoo::{Cuckoo, Miner, Error};
 
 use ser;
@@ -87,21 +88,21 @@ impl PowHeader {
 }
 
 /// Validates the proof of work of a given header.
-pub fn verify(b: &Block, target: Proof) -> bool {
-	verify_size(b, target, SIZESHIFT)
+pub fn verify(b: &Block, target: Target) -> bool {
+	verify_size(b, target, b.header.cuckoo_len as u32)
 }
 
 /// Same as default verify function but uses the much easier Cuckoo20 (mostly
 /// for tests).
-pub fn verify20(b: &Block, target: Proof) -> bool {
+pub fn verify20(b: &Block, target: Target) -> bool {
 	verify_size(b, target, 20)
 }
 
-pub fn verify_size(b: &Block, target: Proof, sizeshift: u32) -> bool {
+pub fn verify_size(b: &Block, target: Target, sizeshift: u32) -> bool {
 	let hash = PowHeader::from_block(b).hash();
 	// make sure the hash is smaller than our target before going into more
 	// expensive validation
-	if target < b.header.pow {
+	if target < b.header.pow.to_target() {
 		return false;
 	}
 	Cuckoo::new(hash.to_slice(), sizeshift).verify(b.header.pow, EASINESS as u64)
@@ -110,17 +111,17 @@ pub fn verify_size(b: &Block, target: Proof, sizeshift: u32) -> bool {
 /// Runs a naive single-threaded proof of work computation over the provided
 /// block, until the required difficulty target is reached. May take a
 /// while for a low target...
-pub fn pow(b: &Block, target: Proof) -> Result<(Proof, u64), Error> {
-	pow_size(b, target, SIZESHIFT)
+pub fn pow(b: &Block, target: Target) -> Result<(Proof, u64), Error> {
+	pow_size(b, target, b.header.cuckoo_len as u32)
 }
 
 /// Same as default pow function but uses the much easier Cuckoo20 (mostly for
 /// tests).
-pub fn pow20(b: &Block, target: Proof) -> Result<(Proof, u64), Error> {
+pub fn pow20(b: &Block, target: Target) -> Result<(Proof, u64), Error> {
 	pow_size(b, target, 20)
 }
 
-fn pow_size(b: &Block, target: Proof, sizeshift: u32) -> Result<(Proof, u64), Error> {
+fn pow_size(b: &Block, target: Target, sizeshift: u32) -> Result<(Proof, u64), Error> {
 	let mut pow_header = PowHeader::from_block(b);
 	let start_nonce = pow_header.nonce;
 
@@ -133,7 +134,7 @@ fn pow_size(b: &Block, target: Proof, sizeshift: u32) -> Result<(Proof, u64), Er
 		// if we found a cycle (not guaranteed) and the proof is lower that the target,
 		// we're all good
 		if let Ok(proof) = Miner::new(pow_hash.to_slice(), EASINESS, sizeshift).mine() {
-			if proof <= target {
+			if proof.to_target() <= target {
 				return Ok((proof, pow_header.nonce));
 			}
 		}
@@ -159,11 +160,11 @@ mod test {
 	#[test]
 	fn genesis_pow() {
 		let mut b = genesis::genesis();
-		let (proof, nonce) = pow20(&b, Proof(MAX_TARGET)).unwrap();
+		let (proof, nonce) = pow20(&b, MAX_TARGET).unwrap();
 		assert!(nonce > 0);
-		assert!(proof < Proof(MAX_TARGET));
+		assert!(proof.to_target() < MAX_TARGET);
 		b.header.pow = proof;
 		b.header.nonce = nonce;
-		assert!(verify20(&b, Proof(MAX_TARGET)));
+		assert!(verify20(&b, MAX_TARGET));
 	}
 }

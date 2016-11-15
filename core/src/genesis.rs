@@ -17,6 +17,7 @@
 use time;
 
 use core;
+use consensus::{DEFAULT_SIZESHIFT, MAX_TARGET};
 
 use tiny_keccak::Keccak;
 
@@ -38,7 +39,8 @@ pub fn genesis() -> core::Block {
 				tm_mday: 4,
 				..time::empty_tm()
 			},
-			td: 0,
+			cuckoo_len: DEFAULT_SIZESHIFT,
+			target: MAX_TARGET,
 			utxo_merkle: core::hash::Hash::from_vec(empty_h.to_vec()),
 			tx_merkle: core::hash::Hash::from_vec(empty_h.to_vec()),
 			nonce: 0,

@@ -244,14 +244,15 @@ mod test {
 
 	#[test]
 	fn shift_truncate() {
-		assert_eq!((Target::join(0, 0xffff).unwrap() >> 8) << 8, Target::join(0, 0xff00).unwrap());
+		assert_eq!((Target::join(0, 0xffff).unwrap() >> 8) << 8,
+		           Target::join(0, 0xff00).unwrap());
 	}
 
 	#[test]
 	fn split_fit() {
 		let t = Target::join(10 * 8, ::std::u32::MAX).unwrap();
 		let (exp, mant) = t.split();
-		assert_eq!(exp, 10*8);
+		assert_eq!(exp, 10 * 8);
 		assert_eq!(mant, ::std::u32::MAX);
 	}
 
@@ -268,29 +269,29 @@ mod test {
 	#[test]
 	fn addition() {
 		assert_eq!(Target::join(0, 10).unwrap() + Target::join(0, 20).unwrap(),
-      Target::join(0, 30).unwrap());
+		           Target::join(0, 30).unwrap());
 		// single overflow
 		assert_eq!(Target::join(0, 250).unwrap() + Target::join(0, 250).unwrap(),
-      Target::join(0, 500).unwrap());
+		           Target::join(0, 500).unwrap());
 		// multiple overflows
 		assert_eq!(Target::join(0, 300).unwrap() + Target::join(0, 300).unwrap(),
-      Target::join(0, 600).unwrap());
+		           Target::join(0, 600).unwrap());
 		assert_eq!(Target::join(10, 300).unwrap() + Target::join(10, 300).unwrap(),
-      Target::join(10, 600).unwrap());
+		           Target::join(10, 600).unwrap());
 		// cascading overflows
 		assert_eq!(Target::join(8, 0xffff).unwrap() + Target::join(8, 0xffff).unwrap(),
-      Target::join(8, 0x1fffe).unwrap());
+		           Target::join(8, 0x1fffe).unwrap());
 	}
 
 	#[test]
 	fn subtraction() {
 		assert_eq!(Target::join(0, 40).unwrap() - Target::join(0, 10).unwrap(),
-      Target::join(0, 30).unwrap());
+		           Target::join(0, 30).unwrap());
 		assert_eq!(Target::join(0, 300).unwrap() - Target::join(0, 100).unwrap(),
-      Target::join(0, 200).unwrap());
+		           Target::join(0, 200).unwrap());
 		assert_eq!(Target::join(0, 0xffff).unwrap() - Target::join(0, 0xffff).unwrap(),
-      Target::join(0, 0).unwrap());
+		           Target::join(0, 0).unwrap());
 		assert_eq!(Target::join(0, 0xffff).unwrap() - Target::join(0, 0xff01).unwrap(),
-      Target::join(0, 0xfe).unwrap());
+		           Target::join(0, 0xfe).unwrap());
 	}
 }
