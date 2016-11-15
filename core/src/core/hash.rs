@@ -38,14 +38,6 @@ impl fmt::Display for Hash {
 }
 
 impl Hash {
-	/// Creates a new hash from a vector
-	pub fn from_vec(v: Vec<u8>) -> Hash {
-		let mut a = [0; 32];
-		for i in 0..a.len() {
-			a[i] = v[i];
-		}
-		Hash(a)
-	}
 	/// Converts the hash to a byte vector
 	pub fn to_vec(&self) -> Vec<u8> {
 		self.0.to_vec()
@@ -56,7 +48,7 @@ impl Hash {
 	}
 }
 
-pub const ZERO_HASH: Hash = Hash([0; 32]);
+pub const ZERO_HASH: Hash = Hash([0u8; 32]);
 
 /// Serializer that outputs a hash of the serialized object
 pub struct HashWriter {
@@ -95,7 +87,7 @@ impl<W: ser::Writeable> Hashed for W {
 	fn hash(&self) -> Hash {
 		let mut hasher = HashWriter::default();
 		ser::Writeable::write(self, &mut hasher).unwrap();
-		let mut ret = [0; 32];
+		let mut ret = [0u8; 32];
 		hasher.finalize(&mut ret);
 		Hash(ret)
 	}
@@ -104,7 +96,7 @@ impl<W: ser::Writeable> Hashed for W {
 impl Hashed for [u8] {
 	fn hash(&self) -> Hash {
 		let mut hasher = HashWriter::default();
-		let mut ret = [0; 32];
+		let mut ret = [0u8; 32];
 		ser::Writer::write_bytes(&mut hasher, &self).unwrap();
 		hasher.finalize(&mut ret);
 		Hash(ret)

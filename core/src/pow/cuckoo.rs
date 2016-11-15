@@ -23,8 +23,8 @@ use std::cmp;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 
-use consensus::PROOFSIZE;
-use core::Proof;
+use consensus::POWSIZE;
+use core::POW;
 use pow::siphash::siphash24;
 
 const MAXPATHLEN: usize = 8192;
@@ -93,12 +93,12 @@ impl Cuckoo {
 	/// Assuming increasing nonces all smaller than easiness, verifies the
 	/// nonces form a cycle in a Cuckoo graph. Each nonce generates an edge, we
 	/// build the nodes on both side of that edge and count the connections.
-	pub fn verify(&self, proof: Proof, ease: u64) -> bool {
+	pub fn verify(&self, proof: POW, ease: u64) -> bool {
 		let easiness = ease * (self.size as u64) / 100;
 		let nonces = proof.to_u64s();
-		let mut us = [0; PROOFSIZE];
-		let mut vs = [0; PROOFSIZE];
-		for n in 0..PROOFSIZE {
+		let mut us = [0; POWSIZE];
+		let mut vs = [0; POWSIZE];
+		for n in 0..POWSIZE {
 			if nonces[n] >= easiness || (n != 0 && nonces[n] <= nonces[n - 1]) {
 				return false;
 			}
@@ -106,10 +106,10 @@ impl Cuckoo {
 			vs[n] = self.new_node(nonces[n], 1);
 		}
 		let mut i = 0;
-		let mut count = PROOFSIZE;
+		let mut count = POWSIZE;
 		loop {
 			let mut j = i;
-			for k in 0..PROOFSIZE {
+			for k in 0..POWSIZE {
 				// find unique other j with same vs[j]
 				if k != i && vs[k] == vs[i] {
 					if j != i {
@@ -122,7 +122,7 @@ impl Cuckoo {
 				return false;
 			}
 			i = j;
-			for k in 0..PROOFSIZE {
+			for k in 0..POWSIZE {
 				// find unique other i with same us[i]
 				if k != j && us[k] == us[j] {
 					if i != j {
@@ -156,7 +156,7 @@ pub struct Miner {
 /// What type of cycle we have found?
 enum CycleSol {
 	/// A cycle of the right length is a valid proof.
-	ValidProof([u32; PROOFSIZE]),
+	ValidProof([u32; POWSIZE]),
 	/// A cycle of the wrong length is great, but not a proof.
 	InvalidCycle(usize),
 	/// No cycles have been found.
@@ -176,7 +176,7 @@ impl Miner {
 		}
 	}
 
-	pub fn mine(&mut self) -> Result<Proof, Error> {
+	pub fn mine(&mut self) -> Result<POW, Error> {
 		let mut us = [0; MAXPATHLEN];
 		let mut vs = [0; MAXPATHLEN];
 		for nonce in 0..self.easiness {
@@ -192,7 +192,7 @@ impl Miner {
 
 			let sol = self.find_sol(nu, &us, nv, &vs);
 			match sol {
-				CycleSol::ValidProof(res) => return Ok(Proof(res)),
+				CycleSol::ValidProof(res) => return Ok(POW(res)),
 				CycleSol::InvalidCycle(_) => continue,
 				CycleSol::NoCycle => {
 					self.update_graph(nu, &us, nv, &vs);
@@ -243,7 +243,7 @@ impl Miner {
 				nu += 1;
 				nv += 1;
 			}
-			if nu + nv + 1 == PROOFSIZE {
+			if nu + nv + 1 == POWSIZE {
 				self.solution(&us, nu as u32, &vs, nv as u32)
 			} else {
 				CycleSol::InvalidCycle(nu + nv + 1)
@@ -276,7 +276,7 @@ impl Miner {
 			});
 		}
 		let mut n = 0;
-		let mut sol = [0; PROOFSIZE];
+		let mut sol = [0; POWSIZE];
 		for nonce in 0..self.easiness {
 			let edge = self.cuckoo.new_edge(nonce);
 			if cycle.contains(&edge) {
@@ -285,7 +285,7 @@ impl Miner {
 				cycle.remove(&edge);
 			}
 		}
-		return if n == PROOFSIZE {
+		return if n == POWSIZE {
 			CycleSol::ValidProof(sol)
 		} else {
 			CycleSol::NoCycle
@@ -304,28 +304,28 @@ fn u8_to_u64(p: [u8; 32], i: usize) -> u64 {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::Proof;
+	use core::POW;
 
-	static V1: Proof = Proof([0xe13, 0x410c, 0x7974, 0x8317, 0xb016, 0xb992, 0xe3c8, 0x1038a,
+	static V1: POW = POW([0xe13, 0x410c, 0x7974, 0x8317, 0xb016, 0xb992, 0xe3c8, 0x1038a,
 	                          0x116f0, 0x15ed2, 0x165a2, 0x17793, 0x17dd1, 0x1f885, 0x20932,
 	                          0x20936, 0x2171b, 0x28968, 0x2b184, 0x30b8e, 0x31d28, 0x35782,
 	                          0x381ea, 0x38321, 0x3b414, 0x3e14b, 0x43615, 0x49a51, 0x4a319,
 	                          0x58271, 0x5dbb9, 0x5dbcf, 0x62db4, 0x653d2, 0x655f6, 0x66382,
 	                          0x7057d, 0x765b0, 0x79c7c, 0x83167, 0x86e7b, 0x8a5f4]);
-	static V2: Proof = Proof([0x33b8, 0x3fd9, 0x8f2b, 0xba0d, 0x11e2d, 0x1d51d, 0x2786e, 0x29625,
+	static V2: POW = POW([0x33b8, 0x3fd9, 0x8f2b, 0xba0d, 0x11e2d, 0x1d51d, 0x2786e, 0x29625,
 	                          0x2a862, 0x2a972, 0x2e6d7, 0x319df, 0x37ce7, 0x3f771, 0x4373b,
 	                          0x439b7, 0x48626, 0x49c7d, 0x4a6f1, 0x4a808, 0x4e518, 0x519e3,
 	                          0x526bb, 0x54988, 0x564e9, 0x58a6c, 0x5a4dd, 0x63fa2, 0x68ad1,
 	                          0x69e52, 0x6bf53, 0x70841, 0x76343, 0x763a4, 0x79681, 0x7d006,
 	                          0x7d633, 0x7eebe, 0x7fe7c, 0x811fa, 0x863c1, 0x8b149]);
-	static V3: Proof = Proof([0x24ae, 0x5180, 0x9f3d, 0xd379, 0x102c9, 0x15787, 0x16df4, 0x19509,
+	static V3: POW = POW([0x24ae, 0x5180, 0x9f3d, 0xd379, 0x102c9, 0x15787, 0x16df4, 0x19509,
 	                          0x19a78, 0x235a0, 0x24210, 0x24410, 0x2567f, 0x282c3, 0x2d986,
 	                          0x2efde, 0x319d7, 0x334d7, 0x336dd, 0x34296, 0x35809, 0x3ad40,
 	                          0x46d81, 0x48c92, 0x4b374, 0x4c353, 0x4fe4c, 0x50e4f, 0x53202,
 	                          0x5d167, 0x6527c, 0x6a8b5, 0x6c70d, 0x76d90, 0x794f4, 0x7c411,
 	                          0x7c5d4, 0x7f59f, 0x7fead, 0x872d8, 0x875b4, 0x95c6b]);
 	// cuckoo28 at 50% edges of letter 'u'
-	static V4: Proof = Proof([0x1abd16, 0x7bb47e, 0x860253, 0xfad0b2, 0x121aa4d, 0x150a10b,
+	static V4: POW = POW([0x1abd16, 0x7bb47e, 0x860253, 0xfad0b2, 0x121aa4d, 0x150a10b,
 	                          0x20605cb, 0x20ae7e3, 0x235a9be, 0x2640f4a, 0x2724c36, 0x2a6d38c,
 	                          0x2c50b28, 0x30850f2, 0x309668a, 0x30c85bd, 0x345f42c, 0x3901676,
 	                          0x432838f, 0x472158a, 0x4d04e9d, 0x4d6a987, 0x4f577bf, 0x4fbc49c,
@@ -363,8 +363,8 @@ mod test {
 	#[test]
 	fn validate_fail() {
 		// edge checks
-		assert!(!Cuckoo::new(&[49], 20).verify(Proof([0; 42]), 75));
-		assert!(!Cuckoo::new(&[49], 20).verify(Proof([0xffff; 42]), 75));
+		assert!(!Cuckoo::new(&[49], 20).verify(POW([0; 42]), 75));
+		assert!(!Cuckoo::new(&[49], 20).verify(POW([0xffff; 42]), 75));
 		// wrong data for proof
 		assert!(!Cuckoo::new(&[50], 20).verify(V1.clone(), 75));
 		assert!(!Cuckoo::new(&[117], 20).verify(V4.clone(), 50));

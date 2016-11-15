@@ -21,9 +21,9 @@ use secp::key::SecretKey;
 use std::collections::HashSet;
 
 use core::Committed;
-use core::{Input, Output, Proof, TxProof, Transaction};
+use core::{Input, Output, POW, TxProof, Transaction};
 use core::transaction::merkle_inputs_outputs;
-use consensus::{PROOFSIZE, REWARD, MAX_IN_OUT_LEN};
+use consensus::{REWARD, MAX_IN_OUT_LEN};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use ser::{self, Readable, Reader, Writeable, Writer};
 
@@ -36,7 +36,7 @@ pub struct BlockHeader {
 	pub utxo_merkle: Hash,
 	pub tx_merkle: Hash,
 	pub nonce: u64,
-	pub pow: Proof,
+	pub pow: POW,
 }
 
 impl Default for BlockHeader {
@@ -49,7 +49,7 @@ impl Default for BlockHeader {
 			utxo_merkle: ZERO_HASH,
 			tx_merkle: ZERO_HASH,
 			nonce: 0,
-			pow: Proof::zero(),
+			pow: POW::zero(),
 		}
 	}
 }
@@ -67,10 +67,7 @@ impl Writeable for BlockHeader {
 		// make sure to not introduce any variable length data before the nonce to
 		// avoid complicating PoW
 		try!(writer.write_u64(self.nonce));
-		// cuckoo cycle of 42 nodes
-		for n in 0..42 {
-			try!(writer.write_u32(self.pow.0[n]));
-		}
+		try!(writer.write_pow(self.pow));
 		writer.write_u64(self.td)
 	}
 }
@@ -114,19 +111,14 @@ impl Writeable for Block {
 /// from a binary stream.
 impl Readable<Block> for Block {
 	fn read(reader: &mut Reader) -> Result<Block, ser::Error> {
-		let (height, previous, timestamp, utxo_merkle, tx_merkle, nonce) = ser_multiread!(reader,
+		let (height, previous, timestamp, utxo_merkle, tx_merkle, nonce, pow) = ser_multiread!(reader,
 			               read_u64,
-			               read_32_bytes,
+			               read_hash,
 			               read_i64,
-			               read_32_bytes,
-			               read_32_bytes,
-			               read_u64);
-
-		// cuckoo cycle of 42 nodes
-		let mut pow = [0; PROOFSIZE];
-		for n in 0..PROOFSIZE {
-			pow[n] = try!(reader.read_u32());
-		}
+			               read_hash,
+			               read_hash,
+			               read_u64,
+			               read_pow);
 
 		let (td, input_len, output_len, proof_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64, read_u64);
@@ -143,15 +135,15 @@ impl Readable<Block> for Block {
 		Ok(Block {
 			header: BlockHeader {
 				height: height,
-				previous: Hash::from_vec(previous),
+				previous: previous,
 				timestamp: time::at_utc(time::Timespec {
 					sec: timestamp,
 					nsec: 0,
 				}),
 				td: td,
-				utxo_merkle: Hash::from_vec(utxo_merkle),
-				tx_merkle: Hash::from_vec(tx_merkle),
-				pow: Proof(pow),
+				utxo_merkle: utxo_merkle,
+				tx_merkle: tx_merkle,
+				pow: pow,
 				nonce: nonce,
 			},
 			inputs: inputs,
@@ -341,7 +333,7 @@ impl Block {
 	fn reward_output(skey: secp::key::SecretKey,
 	                 secp: &Secp256k1)
 	                 -> Result<(Output, TxProof), secp::Error> {
-		let msg = try!(secp::Message::from_slice(&[0; 32]));
+		let msg = try!(secp::Message::from_slice(&[0u8; secp::constants::MESSAGE_SIZE]));
 		let sig = try!(secp.sign(&msg, &skey));
 		let output = Output::OvertOutput {
 				value: REWARD,

@@ -29,7 +29,7 @@ pub const REWARD: u64 = 1_000_000_000;
 pub const BLOCK_TIME_SEC: u8 = 30;
 
 /// Cuckoo-cycle proof size (cycle length)
-pub const PROOFSIZE: usize = 42;
+pub const POWSIZE: usize = 42;
 
 /// Default Cuckoo Cycle size shift used is 28. We may decide to increase it
 /// when hashrate increases. May also start lower.
@@ -47,7 +47,7 @@ pub const EASINESS: u32 = 50;
 pub const CUT_THROUGH_HORIZON: u32 = 48 * 3600 / (BLOCK_TIME_SEC as u32);
 
 /// Max target hash, lowest difficulty
-pub const MAX_TARGET: [u32; PROOFSIZE] =
+pub const MAX_TARGET: [u32; POWSIZE] =
 	[0xfff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff,
 	 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff,
 	 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff,

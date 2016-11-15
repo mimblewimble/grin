@@ -22,6 +22,9 @@
 use std::{error, fmt};
 use std::io::{self, Write, Read};
 use byteorder::{ByteOrder, ReadBytesExt, BigEndian};
+use core::hash::Hash;
+use core::POW;
+use consensus::POWSIZE;
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]
@@ -108,28 +111,28 @@ pub trait Writer {
 
 	/// Writes a u16 as bytes
 	fn write_u16(&mut self, n: u16) -> Result<(), Error> {
-		let mut bytes = [0; 2];
+		let mut bytes = [0u8; 2];
 		BigEndian::write_u16(&mut bytes, n);
 		self.write_fixed_bytes(&bytes)
 	}
 
 	/// Writes a u32 as bytes
 	fn write_u32(&mut self, n: u32) -> Result<(), Error> {
-		let mut bytes = [0; 4];
+		let mut bytes = [0u8; 4];
 		BigEndian::write_u32(&mut bytes, n);
 		self.write_fixed_bytes(&bytes)
 	}
 
 	/// Writes a u64 as bytes
 	fn write_u64(&mut self, n: u64) -> Result<(), Error> {
-		let mut bytes = [0; 8];
+		let mut bytes = [0u8; 8];
 		BigEndian::write_u64(&mut bytes, n);
 		self.write_fixed_bytes(&bytes)
 	}
 
 	/// Writes a i64 as bytes
 	fn write_i64(&mut self, n: i64) -> Result<(), Error> {
-		let mut bytes = [0; 8];
+		let mut bytes = [0u8; 8];
 		BigEndian::write_i64(&mut bytes, n);
 		self.write_fixed_bytes(&bytes)
 	}
@@ -144,6 +147,14 @@ pub trait Writer {
 	/// Writes a fixed number of bytes from something that can turn itself into
 	/// a `&[u8]`. The reader is expected to know the actual length on read.
 	fn write_fixed_bytes(&mut self, fixed: &AsFixedBytes) -> Result<(), Error>;
+
+	/// Writes a POW
+	fn write_pow(&mut self, pow: POW) -> Result<(), Error> {
+		for n in 0..POWSIZE {
+			try!(self.write_u32(pow.0[n]));
+		}
+		Ok(())
+	}
 }
 
 /// Implementations defined how different numbers and binary structures are
@@ -163,8 +174,10 @@ pub trait Reader {
 	fn read_vec(&mut self) -> Result<Vec<u8>, Error>;
 	/// Read a fixed number of bytes from the underlying reader.
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error>;
-	/// Convenience function to read 32 fixed bytes
-	fn read_32_bytes(&mut self) -> Result<Vec<u8>, Error>;
+	/// Convenience function to read a hash
+	fn read_hash(&mut self) -> Result<Hash, Error>;
+	/// Convinience function to read a POW
+	fn read_pow(&mut self) -> Result<POW, Error>;
 	/// Convenience function to read 33 fixed bytes
 	fn read_33_bytes(&mut self) -> Result<Vec<u8>, Error>;
 	/// Consumes a byte from the reader, producing an error if it doesn't have
@@ -243,8 +256,20 @@ impl<'a> Reader for BinReader<'a> {
 		let mut buf = vec![0; length];
 		self.source.read_exact(&mut buf).map(move |_| buf).map_err(Error::IOErr)
 	}
-	fn read_32_bytes(&mut self) -> Result<Vec<u8>, Error> {
-		self.read_fixed_bytes(32)
+	fn read_hash(&mut self) -> Result<Hash, Error> {
+		let v = try!(self.read_fixed_bytes(32));
+		let mut a = [0u8; 32];
+		for i in 0..a.len() {
+			a[i] = v[i];
+		}
+		Ok(Hash(a))
+	}
+	fn read_pow(&mut self) -> Result<POW, Error> {
+		let mut pow = [0u32; POWSIZE];
+		for n in 0..POWSIZE {
+			pow[n] = try!(self.read_u32());
+		}
+		Ok(POW(pow))
 	}
 	fn read_33_bytes(&mut self) -> Result<Vec<u8>, Error> {
 		self.read_fixed_bytes(33)
