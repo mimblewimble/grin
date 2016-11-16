@@ -88,21 +88,21 @@ impl PowHeader {
 }
 
 /// Validates the proof of work of a given header.
-pub fn verify(b: &Block, target: Target) -> bool {
-	verify_size(b, target, b.header.cuckoo_len as u32)
+pub fn verify(b: &Block) -> bool {
+	verify_size(b, b.header.cuckoo_len as u32)
 }
 
 /// Same as default verify function but uses the much easier Cuckoo20 (mostly
 /// for tests).
-pub fn verify20(b: &Block, target: Target) -> bool {
-	verify_size(b, target, 20)
+pub fn verify20(b: &Block) -> bool {
+	verify_size(b, 20)
 }
 
-pub fn verify_size(b: &Block, target: Target, sizeshift: u32) -> bool {
+pub fn verify_size(b: &Block, sizeshift: u32) -> bool {
 	let hash = PowHeader::from_block(b).hash();
 	// make sure the hash is smaller than our target before going into more
 	// expensive validation
-	if target < b.header.pow.to_target() {
+	if b.header.target < b.header.pow.to_target() {
 		return false;
 	}
 	Cuckoo::new(hash.to_slice(), sizeshift).verify(b.header.pow, EASINESS as u64)
@@ -165,6 +165,6 @@ mod test {
 		assert!(proof.to_target() < MAX_TARGET);
 		b.header.pow = proof;
 		b.header.nonce = nonce;
-		assert!(verify20(&b, MAX_TARGET));
+		assert!(verify20(&b));
 	}
 }
