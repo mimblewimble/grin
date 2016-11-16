@@ -14,7 +14,8 @@
 
 //! Base types that the block chain pipeline requires.
 
-use core::core::{Hash, Block};
+use core::core::hash::Hash;
+use core::core::Block;
 use core::ser;
 
 /// The lineage of a fork, defined as a series of numbers. Each new branch gets
@@ -40,12 +41,12 @@ impl Lineage {
 
 /// Serialization for lineage, necessary to serialize fork tips.
 impl ser::Writeable for Lineage {
-	fn write(&self, writer: &mut ser::Writer) -> Option<ser::Error> {
-		try_o!(writer.write_u32(self.0.len() as u32));
+	fn write(&self, writer: &mut ser::Writer) -> Result<(), ser::Error> {
+		try!(writer.write_u32(self.0.len() as u32));
 		for num in &self.0 {
-			try_o!(writer.write_u32(*num));
+			try!(writer.write_u32(*num));
 		}
-		None
+		Ok(())
 	}
 }
 /// Deserialization for lineage, necessary to deserialize fork tips.
@@ -99,10 +100,10 @@ impl Tip {
 
 /// Serialization of a tip, required to save to datastore.
 impl ser::Writeable for Tip {
-	fn write(&self, writer: &mut ser::Writer) -> Option<ser::Error> {
-		try_o!(writer.write_u64(self.height));
-		try_o!(writer.write_fixed_bytes(&self.last_block_h));
-		try_o!(writer.write_fixed_bytes(&self.prev_block_h));
+	fn write(&self, writer: &mut ser::Writer) -> Result<(), ser::Error> {
+		try!(writer.write_u64(self.height));
+		try!(writer.write_fixed_bytes(&self.last_block_h));
+		try!(writer.write_fixed_bytes(&self.prev_block_h));
 		self.lineage.write(writer)
 	}
 }
@@ -137,11 +138,11 @@ pub trait ChainStore {
 	fn head(&self) -> Result<Tip, Error>;
 
 	/// Save the provided block in store
-	fn save_block(&self, b: &Block) -> Option<Error>;
+	fn save_block(&self, b: &Block) -> Result<(), Error>;
 
 	/// Save the provided tip as the current head of our chain
-	fn save_head(&self, t: &Tip) -> Option<Error>;
+	fn save_head(&self, t: &Tip) -> Result<(), Error>;
 
 	/// Save the provided tip without setting it as head
-	fn save_tip(&self, t: &Tip) -> Option<Error>;
+	fn save_tip(&self, t: &Tip) -> Result<(), Error>;
 }

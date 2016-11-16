@@ -16,7 +16,9 @@
 
 use secp;
 
-use core::core::{Hash, BlockHeader, Block, Proof};
+use core::consensus;
+use core::core::hash::Hash;
+use core::core::{BlockHeader, Block, Proof};
 use core::pow;
 use types;
 use types::{Tip, ChainStore};
@@ -51,14 +53,11 @@ pub enum Error {
 	StoreErr(types::Error),
 }
 
-pub fn process_block(b: &Block, store: &ChainStore, opts: Options) -> Option<Error> {
+pub fn process_block(b: &Block, store: &ChainStore, opts: Options) -> Result<(), Error> {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
-	let head = match store.head() {
-		Ok(head) => head,
-		Err(err) => return Some(Error::StoreErr(err)),
-	};
+  let head = try!(store.head().map_err(&Error::StoreErr));
 	let mut ctx = BlockContext {
 		opts: opts,
 		store: store,
@@ -66,12 +65,12 @@ pub fn process_block(b: &Block, store: &ChainStore, opts: Options) -> Option<Err
 		tip: None,
 	};
 
-	try_o!(validate_header(&b, &mut ctx));
-	try_o!(set_tip(&b.header, &mut ctx));
-	try_o!(validate_block(b, &mut ctx));
-	try_o!(add_block(b, &mut ctx));
-	try_o!(update_tips(&mut ctx));
-	None
+	try!(validate_header(&b, &mut ctx));
+	try!(set_tip(&b.header, &mut ctx));
+	try!(validate_block(b, &mut ctx));
+	try!(add_block(b, &mut ctx));
+	try!(update_tips(&mut ctx));
+	Ok(())
 }
 
 // block processing pipeline
@@ -87,46 +86,45 @@ pub fn process_block(b: &Block, store: &ChainStore, opts: Options) -> Option<Err
 /// to make it as cheap as possible. The different validations are also
 /// arranged by order of cost to have as little DoS surface as possible.
 /// TODO actually require only the block header (with length information)
-fn validate_header(b: &Block, ctx: &mut BlockContext) -> Option<Error> {
+fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	let header = &b.header;
-	println!("{} {}", header.height, ctx.head.height);
 	if header.height > ctx.head.height + 1 {
 		// TODO actually handle orphans and add them to a size-limited set
-		return Some(Error::Unfit("orphan".to_string()));
+		return Err(Error::Unfit("orphan".to_string()));
 	}
 	// TODO check time wrt to chain time, refuse older than 100 blocks or too far
 	// in future
 
 	// TODO maintain current difficulty
-	let diff_target = Proof(pow::MAX_TARGET);
+	let diff_target = consensus::MAX_TARGET;
 
 	if ctx.opts.intersects(EASY_POW) {
 		if !pow::verify20(b, diff_target) {
-			return Some(Error::InvalidPow);
+			return Err(Error::InvalidPow);
 		}
 	} else if !pow::verify(b, diff_target) {
-		return Some(Error::InvalidPow);
+		return Err(Error::InvalidPow);
 	}
-	None
+	Ok(())
 }
 
-fn set_tip(h: &BlockHeader, ctx: &mut BlockContext) -> Option<Error> {
+fn set_tip(h: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	ctx.tip = Some(ctx.head.clone());
-	None
+	Ok(())
 }
 
-fn validate_block(b: &Block, ctx: &mut BlockContext) -> Option<Error> {
+fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	// TODO check tx merkle tree
 	let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-	try_o!(b.verify(&curve).err().map(&Error::InvalidBlockProof));
-	None
+	try!(b.verify(&curve).map_err(&Error::InvalidBlockProof));
+	Ok(())
 }
 
-fn add_block(b: &Block, ctx: &mut BlockContext) -> Option<Error> {
+fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	ctx.tip = ctx.tip.as_ref().map(|t| t.append(b.hash()));
-	ctx.store.save_block(b).map(&Error::StoreErr)
+	ctx.store.save_block(b).map_err(&Error::StoreErr)
 }
 
-fn update_tips(ctx: &mut BlockContext) -> Option<Error> {
-	ctx.store.save_head(ctx.tip.as_ref().unwrap()).map(&Error::StoreErr)
+fn update_tips(ctx: &mut BlockContext) -> Result<(), Error> {
+	ctx.store.save_head(ctx.tip.as_ref().unwrap()).map_err(&Error::StoreErr)
 }

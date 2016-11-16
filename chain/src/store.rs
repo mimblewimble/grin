@@ -46,20 +46,20 @@ impl ChainStore for ChainKVStore {
 		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]))
 	}
 
-	fn save_block(&self, b: &Block) -> Option<Error> {
-		self.db.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b).map(&to_store_err)
+	fn save_block(&self, b: &Block) -> Result<(), Error> {
+		self.db.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b).map_err(&to_store_err)
 	}
 
-	fn save_head(&self, t: &Tip) -> Option<Error> {
-		try_o!(self.save_tip(t));
-		self.db.put_ser(&vec![HEAD_PREFIX], t).map(&to_store_err)
+	fn save_head(&self, t: &Tip) -> Result<(), Error> {
+		try!(self.save_tip(t));
+		self.db.put_ser(&vec![HEAD_PREFIX], t).map_err(&to_store_err)
 	}
 
-	fn save_tip(&self, t: &Tip) -> Option<Error> {
+	fn save_tip(&self, t: &Tip) -> Result<(), Error> {
 		let last_branch = t.lineage.last_branch();
 		let mut k = vec![TIP_PREFIX, SEP];
 		k.write_u32::<BigEndian>(last_branch);
-		self.db.put_ser(&mut k, t).map(&to_store_err)
+		self.db.put_ser(&mut k, t).map_err(&to_store_err)
 	}
 }
 

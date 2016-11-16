@@ -63,18 +63,18 @@ impl Store {
 	}
 
 	/// Writes a single key/value pair to the db
-	pub fn put(&self, key: &[u8], value: Vec<u8>) -> Option<Error> {
+	pub fn put(&self, key: &[u8], value: Vec<u8>) -> Result<(), Error> {
 		let db = self.rdb.write().unwrap();
-		db.put(key, &value[..]).err().map(Error::RocksDbErr)
+		db.put(key, &value[..]).map_err(Error::RocksDbErr)
 	}
 
 	/// Writes a single key and its `Writeable` value to the db. Encapsulates
 	/// serialization.
-	pub fn put_ser(&self, key: &[u8], value: &ser::Writeable) -> Option<Error> {
+	pub fn put_ser(&self, key: &[u8], value: &ser::Writeable) -> Result<(), Error> {
 		let ser_value = ser::ser_vec(value);
 		match ser_value {
 			Ok(data) => self.put(key, data),
-			Err(err) => Some(Error::SerErr(err)),
+			Err(err) => Err(Error::SerErr(err)),
 		}
 	}
 
@@ -98,8 +98,8 @@ impl Store {
 	}
 
 	/// Deletes a key/value pair from the db
-	pub fn delete(&self, key: &[u8]) -> Option<Error> {
+	pub fn delete(&self, key: &[u8]) -> Result<(), Error> {
 		let db = self.rdb.write().unwrap();
-		db.delete(key).err().map(Error::RocksDbErr)
+		db.delete(key).map_err(Error::RocksDbErr)
 	}
 }

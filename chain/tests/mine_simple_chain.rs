@@ -22,6 +22,7 @@ use rand::os::OsRng;
 use grin_chain::types::*;
 use grin_core::pow;
 use grin_core::core;
+use grin_core::consensus;
 
 #[test]
 fn mine_empty_chain() {
@@ -31,11 +32,11 @@ fn mine_empty_chain() {
 
   // save a genesis block
   let gen = grin_core::genesis::genesis(); 
-  assert!(store.save_block(&gen).is_none());
+  store.save_block(&gen).unwrap();
 
   // setup a new head tip
   let tip = Tip::new(gen.hash());
-  assert!(store.save_head(&tip).is_none());
+  store.save_head(&tip).unwrap();
 
   // mine and add a few blocks
   let mut prev = gen;
@@ -46,13 +47,10 @@ fn mine_empty_chain() {
     let mut b = core::Block::new(prev.header, vec![], reward_key).unwrap();
     println!("=> {} {:?}", b.header.height, b.verify(&curve));
 
-    let (proof, nonce) = pow::pow20(&b, core::Proof(pow::MAX_TARGET)).unwrap();
+    let (proof, nonce) = pow::pow20(&b, consensus::MAX_TARGET).unwrap();
     b.header.pow = proof;
     b.header.nonce = nonce;
-    if let Some(e) = grin_chain::pipe::process_block(&b, &store, grin_chain::pipe::EASY_POW) {
-      println!("err: {:?}", e);
-      panic!();
-    }
+    grin_chain::pipe::process_block(&b, &store, grin_chain::pipe::EASY_POW).unwrap();
 
     // checking our new head
     let head = store.head().unwrap();
