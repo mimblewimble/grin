@@ -15,7 +15,7 @@
 //! Base types that the block chain pipeline requires.
 
 use core::core::hash::Hash;
-use core::core::Block;
+use core::core::{Block, BlockHeader};
 use core::ser;
 
 /// The lineage of a fork, defined as a series of numbers. Each new branch gets
@@ -136,6 +136,9 @@ pub enum Error {
 pub trait ChainStore {
 	/// Get the tip that's also the head of the chain
 	fn head(&self) -> Result<Tip, Error>;
+
+	/// Gets a block header by hash
+	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error>;
 
 	/// Save the provided block in store
 	fn save_block(&self, b: &Block) -> Result<(), Error>;

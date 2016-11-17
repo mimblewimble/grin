@@ -45,11 +45,15 @@ pub struct BlockContext<'a> {
 pub enum Error {
 	/// The block doesn't fit anywhere in our chain
 	Unfit(String),
+	/// Target is too high either compared to ours or the block PoW hash
+	TargetTooHigh,
 	/// The proof of work is invalid
 	InvalidPow,
 	/// The block doesn't sum correctly or a tx signature is invalid
 	InvalidBlockProof(secp::Error),
-	/// Internal issue when trying to save the block
+	/// Block time is too old
+	InvalidBlockTime,
+	/// Internal issue when trying to save or load data from store
 	StoreErr(types::Error),
 }
 
@@ -57,7 +61,7 @@ pub fn process_block(b: &Block, store: &ChainStore, opts: Options) -> Result<(),
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
-  let head = try!(store.head().map_err(&Error::StoreErr));
+	let head = try!(store.head().map_err(&Error::StoreErr));
 	let mut ctx = BlockContext {
 		opts: opts,
 		store: store,
@@ -92,19 +96,30 @@ fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 		// TODO actually handle orphans and add them to a size-limited set
 		return Err(Error::Unfit("orphan".to_string()));
 	}
-	// TODO check time wrt to chain time, refuse older than 100 blocks or too far
-	// in future
+	// TODO check time wrt to chain time, refuse too far in future
 
-	// TODO maintain current difficulty
-	let diff_target = consensus::MAX_TARGET;
+	let prev = try!(ctx.store.get_block_header(&header.previous).map_err(&Error::StoreErr));
+
+	if header.timestamp <= prev.timestamp {
+		return Err(Error::InvalidBlockTime);
+	}
+
+	let (diff_target, cuckoo_sz) = consensus::next_target(header.timestamp.to_timespec().sec,
+	                                                      prev.timestamp.to_timespec().sec,
+	                                                      prev.target,
+	                                                      prev.cuckoo_len);
+	if header.target > diff_target {
+		return Err(Error::TargetTooHigh);
+	}
 
 	if ctx.opts.intersects(EASY_POW) {
-		if !pow::verify20(b, diff_target) {
+		if !pow::verify20(b) {
 			return Err(Error::InvalidPow);
 		}
-	} else if !pow::verify(b, diff_target) {
+	} else if !pow::verify_size(b, cuckoo_sz as u32) {
 		return Err(Error::InvalidPow);
 	}
+
 	Ok(())
 }
 

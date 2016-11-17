@@ -87,10 +87,16 @@ impl Store {
 	/// Gets a `Readable` value from the db, provided its key. Encapsulates
 	/// serialization.
 	pub fn get_ser<T: ser::Readable<T>>(&self, key: &[u8]) -> Result<Option<T>, Error> {
+    self.get_ser_limited(key, 0)
+	}
+
+	/// Gets a `Readable` value from the db, provided its key, allowing to extract only partial data. The underlying Readable size must align accordingly. Encapsulates serialization.
+	pub fn get_ser_limited<T: ser::Readable<T>>(&self, key: &[u8], len: usize) -> Result<Option<T>, Error> {
 		let data = try!(self.get(key));
 		match data {
 			Some(val) => {
-				let r = try!(ser::deserialize(&mut &val[..]).map_err(Error::SerErr));
+        let mut lval = if len > 0 { &val[..len] } else { &val[..] };
+				let r = try!(ser::deserialize(&mut lval).map_err(Error::SerErr));
 				Ok(Some(r))
 			}
 			None => Ok(None),

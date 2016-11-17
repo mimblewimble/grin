@@ -17,14 +17,16 @@
 use byteorder::{WriteBytesExt, BigEndian};
 
 use types::*;
-use core::core::Block;
+use core::core::hash::Hash;
+use core::core::{Block, BlockHeader};
 use grin_store;
 
 const STORE_PATH: &'static str = ".grin/chain";
 
 const SEP: u8 = ':' as u8;
 
-const BLOCK_PREFIX: u8 = 'B' as u8;
+const BLOCK_HEADER_PREFIX: u8 = 'h' as u8;
+const BLOCK_PREFIX: u8 = 'b' as u8;
 const TIP_PREFIX: u8 = 'T' as u8;
 const HEAD_PREFIX: u8 = 'H' as u8;
 
@@ -47,7 +49,17 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn save_block(&self, b: &Block) -> Result<(), Error> {
-		self.db.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b).map_err(&to_store_err)
+		try!(self.db
+			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)
+			.map_err(&to_store_err));
+		self.db
+			.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..],
+			         &b.header)
+			.map_err(&to_store_err)
+	}
+
+	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
+		option_to_not_found(self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())))
 	}
 
 	fn save_head(&self, t: &Tip) -> Result<(), Error> {
