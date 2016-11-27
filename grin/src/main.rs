@@ -38,7 +38,7 @@ use store::Store;
 use core::genesis::genesis;
 
 fn main() {
-  env_logger::init().unwrap();
+	env_logger::init().unwrap();
 
 	let gen = genesis();
 	let db = Store::open("./store").unwrap();
