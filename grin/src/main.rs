@@ -21,13 +21,25 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
+#[macro_use]
+extern crate log;
+extern crate env_logger;
+extern crate rand;
+extern crate time;
+
+extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_store as store;
+extern crate secp256k1zkp as secp;
+
+mod miner;
 
 use store::Store;
 use core::genesis::genesis;
 
 fn main() {
+  env_logger::init().unwrap();
+
 	let gen = genesis();
 	let db = Store::open("./store").unwrap();
 	let mut key = "block:".to_string().into_bytes();

@@ -48,6 +48,11 @@ impl ChainStore for ChainKVStore {
 		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]))
 	}
 
+  fn head_header(&self) -> Result<BlockHeader, Error> {
+		let head: Tip = try!(option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX])));
+    self.get_block_header(&head.last_block_h)
+  }
+
 	fn save_block(&self, b: &Block) -> Result<(), Error> {
 		try!(self.db
 			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)

@@ -131,11 +131,20 @@ pub enum Error {
 	StorageErr(String),
 }
 
+#[derive(Debug, Clone)]
+pub struct State {
+  pub head: Tip,
+  pub forks: Vec<Tip>,
+}
+
 /// Trait the chain pipeline requires an implementor for in order to process
 /// blocks.
 pub trait ChainStore {
 	/// Get the tip that's also the head of the chain
 	fn head(&self) -> Result<Tip, Error>;
+
+  /// Block header for the chain head
+  fn head_header(&self) -> Result<BlockHeader, Error>;
 
 	/// Gets a block header by hash
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error>;
@@ -149,3 +158,4 @@ pub trait ChainStore {
 	/// Save the provided tip without setting it as head
 	fn save_tip(&self, t: &Tip) -> Result<(), Error>;
 }
+

@@ -15,6 +15,7 @@
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
 use secp;
+use time;
 
 use core::consensus;
 use core::core::hash::Hash;
@@ -27,8 +28,9 @@ use store;
 bitflags! {
   /// Options for block validation
   pub flags Options: u32 {
+    const NONE = 0b00000001,
     /// Runs with the easier version of the Proof of Work, mostly to make testing easier.
-    const EASY_POW = 0b00000001,
+    const EASY_POW = 0b00000010,
   }
 }
 
@@ -89,20 +91,25 @@ pub fn process_block(b: &Block, store: &ChainStore, opts: Options) -> Result<(),
 /// First level of black validation that only needs to act on the block header
 /// to make it as cheap as possible. The different validations are also
 /// arranged by order of cost to have as little DoS surface as possible.
-/// TODO actually require only the block header (with length information)
+/// TODO require only the block header (with length information)
 fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	let header = &b.header;
 	if header.height > ctx.head.height + 1 {
 		// TODO actually handle orphans and add them to a size-limited set
 		return Err(Error::Unfit("orphan".to_string()));
 	}
-	// TODO check time wrt to chain time, refuse too far in future
 
 	let prev = try!(ctx.store.get_block_header(&header.previous).map_err(&Error::StoreErr));
 
 	if header.timestamp <= prev.timestamp {
+    // prevent time warp attacks and some timestamp manipulations by forcing strict time progression
 		return Err(Error::InvalidBlockTime);
 	}
+  if header.timestamp > time::now() + time::Duration::seconds(12*(consensus::BLOCK_TIME_SEC as i64)) {
+    // refuse blocks too far in future, constant of 12 comes from bitcoin (2h worth of blocks)
+    // TODO add warning in p2p code if local time is too different from peers
+		return Err(Error::InvalidBlockTime);
+  }
 
 	let (diff_target, cuckoo_sz) = consensus::next_target(header.timestamp.to_timespec().sec,
 	                                                      prev.timestamp.to_timespec().sec,

@@ -23,6 +23,7 @@
 #[macro_use]
 extern crate bitflags;
 extern crate byteorder;
+extern crate time;
 
 extern crate grin_core as core;
 extern crate grin_store;
@@ -34,6 +35,5 @@ pub mod types;
 
 // Re-export the base interface
 
-pub use types::ChainStore;
-pub use pipe::Options;
-pub use pipe::process_block;
+pub use types::{ChainStore, State, Tip};
+pub use pipe::{NONE, process_block};

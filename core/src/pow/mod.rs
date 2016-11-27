@@ -23,7 +23,7 @@
 //! reference. It's not optimized for speed.
 
 mod siphash;
-mod cuckoo;
+pub mod cuckoo;
 
 use time;
 
@@ -41,7 +41,7 @@ use ser::{Writeable, Writer};
 /// difficulty (yet unknown). We also add the count of every variable length
 /// elements in a header to make lying on those much harder.
 #[derive(Debug)]
-struct PowHeader {
+pub struct PowHeader {
 	pub nonce: u64,
 	pub height: u64,
 	pub previous: Hash,
@@ -71,7 +71,7 @@ impl Writeable for PowHeader {
 }
 
 impl PowHeader {
-	fn from_block(b: &Block) -> PowHeader {
+	pub fn from_block(b: &Block) -> PowHeader {
 		let ref h = b.header;
 		PowHeader {
 			nonce: h.nonce,
