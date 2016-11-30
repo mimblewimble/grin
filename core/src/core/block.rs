@@ -402,7 +402,7 @@ mod test {
 	fn new_block(txs: Vec<&mut Transaction>, secp: &Secp256k1) -> Block {
 		let mut rng = OsRng::new().unwrap();
 		let skey = SecretKey::new(secp, &mut rng);
-		Block::new(BlockHeader::default(), txs, skey).unwrap()
+		Block::new(&BlockHeader::default(), txs, skey).unwrap()
 	}
 
 	// utility producing a transaction that spends the above

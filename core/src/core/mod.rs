@@ -247,7 +247,7 @@ mod test {
 		let ref secp = new_secp();
 		let skey = SecretKey::new(secp, &mut rng);
 
-		let b = Block::new(BlockHeader::default(), vec![], skey).unwrap();
+		let b = Block::new(&BlockHeader::default(), vec![], skey).unwrap();
 		b.compact().verify(&secp).unwrap();
 	}
 
@@ -261,7 +261,7 @@ mod test {
 		let mut btx1 = tx1.blind(&secp).unwrap();
 		btx1.verify_sig(&secp).unwrap();
 
-		let b = Block::new(BlockHeader::default(), vec![&mut btx1], skey).unwrap();
+		let b = Block::new(&BlockHeader::default(), vec![&mut btx1], skey).unwrap();
 		b.compact().verify(&secp).unwrap();
 	}
 
@@ -279,7 +279,7 @@ mod test {
 		let mut btx2 = tx2.blind(&secp).unwrap();
 		btx2.verify_sig(&secp).unwrap();
 
-		let b = Block::new(BlockHeader::default(), vec![&mut btx1, &mut btx2], skey).unwrap();
+		let b = Block::new(&BlockHeader::default(), vec![&mut btx1, &mut btx2], skey).unwrap();
 		b.verify(&secp).unwrap();
 	}
 
