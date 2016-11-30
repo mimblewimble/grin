@@ -59,7 +59,7 @@ pub fn next_target(ts: i64, prev_ts: i64, prev_target: Target, prev_cuckoo_sz: u
 	// increase the cuckoo size when the target gets lower than the soft min as
 	// long as we're not at the max size already; target gets 2x to compensate for
 	// increased next_target
-	let soft_min = SOFT_MIN_TARGET >> (((prev_cuckoo_sz - DEFAULT_SIZESHIFT) * 8) as usize);
+	let soft_min = SOFT_MIN_TARGET >> (((prev_cuckoo_sz - cmp::min(DEFAULT_SIZESHIFT, prev_cuckoo_sz)) * 8) as usize);
 	let (ptarget, clen) = if prev_target < soft_min && prev_cuckoo_sz < MAX_SIZESHIFT {
 		(prev_target << 1, prev_cuckoo_sz + 1)
 	} else {
@@ -83,21 +83,21 @@ pub fn next_target(ts: i64, prev_ts: i64, prev_target: Target, prev_cuckoo_sz: u
 	if new_target > MAX_TARGET {
 		(MAX_TARGET, clen)
 	} else {
-		(new_target, clen)
+		(new_target.truncate(), clen)
 	}
 }
 
 /// Max target hash, lowest next_target
-pub const MAX_TARGET: Target = Target([0xf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-                                       0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-                                       0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-                                       0xff, 0xff, 0xff, 0xff]);
+pub const MAX_TARGET: Target = Target([0xf, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0, 0,
+                                       0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                       0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                       0, 0, 0, 0]);
 
 /// Target limit under which we start increasing the size shift on Cuckoo cycle.
-pub const SOFT_MIN_TARGET: Target = Target([0, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-                                            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-                                            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-                                            0xff, 0xff, 0xff, 0xff]);
+pub const SOFT_MIN_TARGET: Target = Target([0, 0, 0xf, 0xff, 0xff, 0xff, 0, 0, 0, 0,
+                                       0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                       0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                       0, 0, 0, 0]);
 
 /// Default number of blocks in the past when cross-block cut-through will start
 /// happening. Needs to be long enough to not overlap with a long reorg.

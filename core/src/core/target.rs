@@ -57,7 +57,7 @@ impl Target {
 	/// Takes a u32 mantissa, bringing it to the provided exponent to build a
 	/// new target.
 	fn join(exp: u8, mantissa: u32) -> Result<Target, ser::Error> {
-		if exp > 192 {
+		if exp > 255 {
 			return Err(ser::Error::CorruptedData);
 		}
 		let mut t = [0; 32];
@@ -84,6 +84,12 @@ impl Target {
 		res += (mantissa[28] as u32) << 24;
 		(exp, res)
 	}
+
+  /// Truncates the target to its maximum precision.
+  pub fn truncate(&self) -> Target {
+    let (e, m) = self.split();
+    Target::join(e, m).unwrap()
+  }
 }
 
 impl Index<usize> for Target {
