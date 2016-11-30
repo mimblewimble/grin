@@ -43,13 +43,18 @@ fn mine_empty_chain() {
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
 
-  for n in 1..6 {
-    let mut b = core::Block::new(prev.header, vec![], reward_key).unwrap();
-    println!("=> {} {:?}", b.header.height, b.verify(&curve));
+  for n in 1..4 {
+    let mut b = core::Block::new(&prev.header, vec![], reward_key).unwrap();
 
-    let (proof, nonce) = pow::pow_size(&b, consensus::MAX_TARGET, 15).unwrap();
+    let (diff_target, _) = consensus::next_target(b.header.timestamp.to_timespec().sec,
+                                                      prev.header.timestamp.to_timespec().sec,
+                                                      prev.header.target,
+                                                      prev.header.cuckoo_len);
+
+    let (proof, nonce) = pow::pow_size(&b, diff_target, 15).unwrap();
     b.header.pow = proof;
     b.header.nonce = nonce;
+    b.header.target = diff_target;
     grin_chain::pipe::process_block(&b, &store, grin_chain::pipe::EASY_POW).unwrap();
 
     // checking our new head
