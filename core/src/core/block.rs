@@ -101,21 +101,21 @@ impl Readable<BlockHeader> for BlockHeader {
 		for n in 0..PROOFSIZE {
 			pow[n] = try!(reader.read_u32());
 		}
-    Ok(BlockHeader {
-      height: height,
-      previous: Hash::from_vec(previous),
-      timestamp: time::at_utc(time::Timespec {
-        sec: timestamp,
-        nsec: 0,
-      }),
-      cuckoo_len: cuckoo_len,
-      target: target,
-      utxo_merkle: Hash::from_vec(utxo_merkle),
-      tx_merkle: Hash::from_vec(tx_merkle),
-      pow: Proof(pow),
-      nonce: nonce,
-    })
-  }
+		Ok(BlockHeader {
+			height: height,
+			previous: Hash::from_vec(previous),
+			timestamp: time::at_utc(time::Timespec {
+				sec: timestamp,
+				nsec: 0,
+			}),
+			cuckoo_len: cuckoo_len,
+			target: target,
+			utxo_merkle: Hash::from_vec(utxo_merkle),
+			tx_merkle: Hash::from_vec(tx_merkle),
+			pow: Proof(pow),
+			nonce: nonce,
+		})
+	}
 }
 
 /// A block as expressed in the MimbleWimble protocol. The reward is
@@ -157,14 +157,14 @@ impl Writeable for Block {
 /// from a binary stream.
 impl Readable<Block> for Block {
 	fn read(reader: &mut Reader) -> Result<Block, ser::Error> {
-    let header = try!(BlockHeader::read(reader));
+		let header = try!(BlockHeader::read(reader));
 
 		let (input_len, output_len, proof_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
 		if input_len > MAX_IN_OUT_LEN || output_len > MAX_IN_OUT_LEN || proof_len > MAX_IN_OUT_LEN {
-			return Err(ser::Error::TooLargeReadErr(
-          "Too many inputs, outputs or proofs.".to_string()));
+			return Err(ser::Error::TooLargeReadErr("Too many inputs, outputs or proofs."
+				.to_string()));
 		}
 
 		let inputs = try!((0..input_len).map(|_| Input::read(reader)).collect());
@@ -252,6 +252,7 @@ impl Block {
 				header: BlockHeader {
 					height: prev.height + 1,
 					timestamp: time::now(),
+					previous: prev.hash(),
 					..Default::default()
 				},
 				inputs: inputs,
