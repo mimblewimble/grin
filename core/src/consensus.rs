@@ -125,20 +125,20 @@ mod test {
 
 		// lower next_target if gap too short, even negative
 		assert_eq!(next_target(50, 0, MAX_TARGET, 26).0,
-		           MAX_TARGET - (MAX_TARGET >> 10));
+		           (MAX_TARGET - (MAX_TARGET >> 10)).truncate());
 		assert_eq!(next_target(40, 0, MAX_TARGET, 26).0,
-		           MAX_TARGET - ((MAX_TARGET >> 10) << 1));
+		           (MAX_TARGET - ((MAX_TARGET >> 10) << 1)).truncate());
 		assert_eq!(next_target(0, 20, MAX_TARGET, 26).0,
-		           MAX_TARGET - ((MAX_TARGET >> 10) << 2));
+		           (MAX_TARGET - ((MAX_TARGET >> 10) << 2)).truncate());
 
 		// raise next_target if gap too wide
 		let lower_target = MAX_TARGET >> 8;
 		assert_eq!(next_target(70, 0, lower_target, 26).0,
-		           lower_target + (lower_target >> 10));
+		           (lower_target + (lower_target >> 10)).truncate());
 		assert_eq!(next_target(80, 0, lower_target, 26).0,
-		           lower_target + ((lower_target >> 10) << 1));
+		           (lower_target + ((lower_target >> 10) << 1)).truncate());
 		assert_eq!(next_target(200, 0, lower_target, 26).0,
-		           lower_target + ((lower_target >> 10) << 2));
+		           (lower_target + ((lower_target >> 10) << 2)).truncate());
 
 		// close enough, no adjustment
 		assert_eq!(next_target(65, 0, lower_target, 26).0, lower_target);
