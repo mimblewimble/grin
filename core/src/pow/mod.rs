@@ -121,7 +121,7 @@ pub fn pow20(b: &Block, target: Target) -> Result<(Proof, u64), Error> {
 	pow_size(b, target, 20)
 }
 
-fn pow_size(b: &Block, target: Target, sizeshift: u32) -> Result<(Proof, u64), Error> {
+pub fn pow_size(b: &Block, target: Target, sizeshift: u32) -> Result<(Proof, u64), Error> {
 	let mut pow_header = PowHeader::from_block(b);
 	let start_nonce = pow_header.nonce;
 
