@@ -203,7 +203,6 @@ impl Secp256k1 {
                                                neg.as_ptr(),
                                                neg.len() as i32)
         };
-        println!("-> {}", err);
         if err == 1 {
             Ok(ret)
         } else {
