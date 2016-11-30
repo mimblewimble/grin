@@ -29,18 +29,18 @@ use chain;
 use secp;
 
 pub struct Miner {
-	chain_state: Arc<Mutex<chain::State>>,
+	chain_head: Arc<Mutex<chain::Tip>>,
 	chain_store: Arc<Mutex<chain::ChainStore>>,
 }
 
 impl Miner {
 	/// Creates a new Miner. Needs references to the chain state and its
 	/// storage.
-	pub fn new(chain_state: Arc<Mutex<chain::State>>,
+	pub fn new(chain_head: Arc<Mutex<chain::Tip>>,
 	           chain_store: Arc<Mutex<chain::ChainStore>>)
 	           -> Miner {
 		Miner {
-			chain_state: chain_state,
+			chain_head: chain_head,
 			chain_store: chain_store,
 		}
 	}
@@ -48,13 +48,14 @@ impl Miner {
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
 	pub fn run_loop(&self) {
+    info!("Starting miner loop.");
 		loop {
 			// get the latest chain state and build a block on top of it
 			let head: core::BlockHeader;
 			let mut latest_hash: Hash;
 			{
 				head = self.chain_store.lock().unwrap().head_header().unwrap();
-				latest_hash = self.chain_state.lock().unwrap().head.last_block_h;
+				latest_hash = self.chain_head.lock().unwrap().last_block_h;
 			}
 			let b = self.build_block(&head);
 			let mut pow_header = pow::PowHeader::from_block(&b);
@@ -63,6 +64,7 @@ impl Miner {
 			// transactions) and as long as the head hasn't changed
 			let deadline = time::get_time().sec + 2;
 			let mut sol = None;
+      debug!("Mining at Cuckoo{} for at most 2 secs.", b.header.cuckoo_len);
 			while head.hash() == latest_hash && time::get_time().sec < deadline {
 				let pow_hash = pow_header.hash();
 				let mut miner = cuckoo::Miner::new(pow_hash.to_slice(),
@@ -76,18 +78,21 @@ impl Miner {
 				}
 				pow_header.nonce += 1;
 				{
-					latest_hash = self.chain_state.lock().unwrap().head.last_block_h;
+					latest_hash = self.chain_head.lock().unwrap().last_block_h;
 				}
 			}
 
 			// if we found a solution, push our block out
 			if let Some(proof) = sol {
+        info!("Found valid proof of work, adding block {}.", b.hash());
 				if let Err(e) = chain::process_block(&b,
 				                                     self.chain_store.lock().unwrap().deref(),
 				                                     chain::NONE) {
 					error!("Error validating mined block: {:?}", e);
 				}
-			}
+			} else {
+        debug!("No solution found, continuing...")
+      }
 		}
 	}
 

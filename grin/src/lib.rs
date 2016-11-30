@@ -24,26 +24,17 @@
 #[macro_use]
 extern crate log;
 extern crate env_logger;
+extern crate mioco;
 extern crate rand;
 extern crate time;
 
 extern crate grin_chain as chain;
 extern crate grin_core as core;
+extern crate grin_p2p as p2p;
 extern crate grin_store as store;
 extern crate secp256k1zkp as secp;
 
 mod miner;
+mod server;
 
-use store::Store;
-use core::genesis::genesis;
-
-fn main() {
-	env_logger::init().unwrap();
-
-	let gen = genesis();
-	let db = Store::open("./store").unwrap();
-	let mut key = "block:".to_string().into_bytes();
-	let mut hash_vec = gen.hash().to_vec();
-	key.append(&mut hash_vec);
-	db.put_ser(&key[..], &gen);
-}
+pub use server::{Server, ServerConfig};
