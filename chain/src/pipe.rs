@@ -102,14 +102,17 @@ fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	let prev = try!(ctx.store.get_block_header(&header.previous).map_err(&Error::StoreErr));
 
 	if header.timestamp <= prev.timestamp {
-    // prevent time warp attacks and some timestamp manipulations by forcing strict time progression
+		// prevent time warp attacks and some timestamp manipulations by forcing strict
+		// time progression
 		return Err(Error::InvalidBlockTime);
 	}
-  if header.timestamp > time::now() + time::Duration::seconds(12*(consensus::BLOCK_TIME_SEC as i64)) {
-    // refuse blocks too far in future, constant of 12 comes from bitcoin (2h worth of blocks)
-    // TODO add warning in p2p code if local time is too different from peers
+	if header.timestamp >
+	   time::now() + time::Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64)) {
+		// refuse blocks too far in future, constant of 12 comes from bitcoin (2h worth
+		// of blocks)
+		// TODO add warning in p2p code if local time is too different from peers
 		return Err(Error::InvalidBlockTime);
-  }
+	}
 
 	let (diff_target, cuckoo_sz) = consensus::next_target(header.timestamp.to_timespec().sec,
 	                                                      prev.timestamp.to_timespec().sec,
@@ -120,7 +123,7 @@ fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	}
 
 	if ctx.opts.intersects(EASY_POW) {
-		if !pow::verify20(b) {
+		if !pow::verify_size(b, 15) {
 			return Err(Error::InvalidPow);
 		}
 	} else if !pow::verify_size(b, cuckoo_sz as u32) {

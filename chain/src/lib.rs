@@ -35,5 +35,5 @@ pub mod types;
 
 // Re-export the base interface
 
-pub use types::{ChainStore, State, Tip};
+pub use types::{ChainStore, Tip};
 pub use pipe::{NONE, process_block};

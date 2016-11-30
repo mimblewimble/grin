@@ -28,7 +28,7 @@ use grin_core::consensus;
 fn mine_empty_chain() {
   let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	let mut rng = OsRng::new().unwrap();
-	let store = grin_chain::store::ChainKVStore::new().unwrap();
+	let store = grin_chain::store::ChainKVStore::new(".grin".to_string()).unwrap();
 
   // save a genesis block
   let gen = grin_core::genesis::genesis(); 
@@ -47,7 +47,7 @@ fn mine_empty_chain() {
     let mut b = core::Block::new(prev.header, vec![], reward_key).unwrap();
     println!("=> {} {:?}", b.header.height, b.verify(&curve));
 
-    let (proof, nonce) = pow::pow20(&b, consensus::MAX_TARGET).unwrap();
+    let (proof, nonce) = pow::pow_size(&b, consensus::MAX_TARGET, 15).unwrap();
     b.header.pow = proof;
     b.header.nonce = nonce;
     grin_chain::pipe::process_block(&b, &store, grin_chain::pipe::EASY_POW).unwrap();

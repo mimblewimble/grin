@@ -21,7 +21,7 @@ use core::core::hash::Hash;
 use core::core::{Block, BlockHeader};
 use grin_store;
 
-const STORE_PATH: &'static str = ".grin/chain";
+const STORE_SUBPATH: &'static str = "chain";
 
 const SEP: u8 = ':' as u8;
 
@@ -37,8 +37,9 @@ pub struct ChainKVStore {
 }
 
 impl ChainKVStore {
-	pub fn new() -> Result<ChainKVStore, Error> {
-		let db = try!(grin_store::Store::open(STORE_PATH).map_err(to_store_err));
+	pub fn new(root_path: String) -> Result<ChainKVStore, Error> {
+		let db = try!(grin_store::Store::open(format!("{}/{}", root_path, STORE_SUBPATH).as_str())
+			.map_err(to_store_err));
 		Ok(ChainKVStore { db: db })
 	}
 }
@@ -48,10 +49,10 @@ impl ChainStore for ChainKVStore {
 		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]))
 	}
 
-  fn head_header(&self) -> Result<BlockHeader, Error> {
+	fn head_header(&self) -> Result<BlockHeader, Error> {
 		let head: Tip = try!(option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX])));
-    self.get_block_header(&head.last_block_h)
-  }
+		self.get_block_header(&head.last_block_h)
+	}
 
 	fn save_block(&self, b: &Block) -> Result<(), Error> {
 		try!(self.db
