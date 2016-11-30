@@ -18,7 +18,7 @@
 use rand::{self, Rng};
 use std::cell::RefCell;
 use std::io;
-use std::net::SocketAddr;
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
@@ -33,15 +33,6 @@ use handshake::Handshake;
 use peer::Peer;
 use types::*;
 
-/// Default address for peer-to-peer connections, placeholder until better
-/// configuration is in place.
-pub const DEFAULT_LISTEN_ADDR: &'static str = "127.0.0.1:3414";
-
-// replace with some config lookup or something
-fn listen_addr() -> SocketAddr {
-	FromStr::from_str(DEFAULT_LISTEN_ADDR).unwrap()
-}
-
 pub struct DummyAdapter {}
 impl NetAdapter for DummyAdapter {
 	fn transaction_received(&self, tx: core::Transaction) {}
@@ -51,6 +42,7 @@ impl NetAdapter for DummyAdapter {
 /// P2P server implementation, handling bootstrapping to find and connect to
 /// peers, receiving connections from other peers and keep track of all of them.
 pub struct Server {
+	config: P2PConfig,
 	peers: RwLock<Vec<Arc<Peer>>>,
 	stop_send: RefCell<Option<SyncSender<u8>>>,
 }
@@ -61,8 +53,9 @@ unsafe impl Send for Server {}
 // TODO TLS
 impl Server {
 	/// Creates a new idle p2p server with no peers
-	pub fn new() -> Server {
+	pub fn new(config: P2PConfig) -> Server {
 		Server {
+			config: config,
 			peers: RwLock::new(Vec::new()),
 			stop_send: RefCell::new(None),
 		}
@@ -70,7 +63,7 @@ impl Server {
 	/// Starts the p2p server. Opens a TCP port to allow incoming
 	/// connections and starts the bootstrapping process to find peers.
 	pub fn start(&self) -> Result<(), Error> {
-		let addr = DEFAULT_LISTEN_ADDR.parse().unwrap();
+		let addr = SocketAddr::new(self.config.host, self.config.port);
 		let listener = try!(TcpListener::bind(&addr).map_err(&Error::IOErr));
 		warn!("P2P server started on {}", addr);
 
@@ -87,7 +80,7 @@ impl Server {
           let conn = try!(listener.accept().map_err(&Error::IOErr));
           let hs = hs.clone();
 
-          let peer = try!(Peer::connect(conn, &hs));
+          let peer = try!(Peer::accept(conn, &hs));
           let wpeer = Arc::new(peer);
           {
             let mut peers = self.peers.write().unwrap();
@@ -107,6 +100,24 @@ impl Server {
         }
       );
 		}
+	}
+
+	pub fn connect_peer<A: ToSocketAddrs>(&self, addr: A) -> Result<(), Error> {
+		for sock_addr in addr.to_socket_addrs().unwrap() {
+			info!("Connecting to peer {}", sock_addr);
+			let tcp_client = TcpStream::connect(&sock_addr).unwrap();
+			let peer = try!(Peer::connect(tcp_client, &Handshake::new())
+				.map_err(|_| io::Error::last_os_error()));
+
+			let peer = Arc::new(peer);
+			let in_peer = peer.clone();
+			mioco::spawn(move || -> io::Result<()> {
+				in_peer.run(&DummyAdapter {});
+				Ok(())
+			});
+			self.peers.write().unwrap().push(peer);
+		}
+		Ok(())
 	}
 
 	/// Asks all the peers to relay the provided block. A peer may choose to

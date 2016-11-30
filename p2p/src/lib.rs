@@ -42,5 +42,6 @@ mod protocol;
 mod server;
 mod peer;
 
-pub use server::{Server, DummyAdapter, DEFAULT_LISTEN_ADDR};
+pub use server::{Server, DummyAdapter};
 pub use peer::Peer;
+pub use types::P2PConfig;

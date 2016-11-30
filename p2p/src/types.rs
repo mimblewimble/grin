@@ -12,9 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::net::SocketAddr;
+use std::net::{SocketAddr, IpAddr};
 use core::core;
 use core::ser::Error;
+
+/// Configuration for the peer-to-peer server.
+#[derive(Debug, Clone, Copy)]
+pub struct P2PConfig {
+	pub host: IpAddr,
+	pub port: u16,
+}
+
+/// Default address for peer-to-peer connections.
+impl Default for P2PConfig {
+	fn default() -> P2PConfig {
+		let ipaddr = "127.0.0.1".parse().unwrap();
+		P2PConfig {
+			host: ipaddr,
+			port: 3414,
+		}
+	}
+}
 
 bitflags! {
   /// Options for block validation
