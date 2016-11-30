@@ -80,7 +80,7 @@ impl Writeable for BlockHeader {
 		// avoid complicating PoW
 		try!(writer.write_u64(self.nonce));
 		// cuckoo cycle of 42 nodes
-		for n in 0..42 {
+		for n in 0..PROOFSIZE {
 			try!(writer.write_u32(self.pow.0[n]));
 		}
 		Ok(())
@@ -211,7 +211,7 @@ impl Block {
 	/// Builds a new block from the header of the previous block, a vector of
 	/// transactions and the private key that will receive the reward. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
-	pub fn new(prev: BlockHeader,
+	pub fn new(prev: &BlockHeader,
 	           txs: Vec<&mut Transaction>,
 	           reward_key: SecretKey)
 	           -> Result<Block, secp::Error> {
