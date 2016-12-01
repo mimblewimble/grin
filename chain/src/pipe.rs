@@ -108,8 +108,7 @@ fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	}
 	if header.timestamp >
 	   time::now() + time::Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64)) {
-		// refuse blocks too far in future, constant of 12 comes from bitcoin (2h worth
-		// of blocks)
+		// refuse blocks more than 12 blocks intervals in future (as in bitcoin)
 		// TODO add warning in p2p code if local time is too different from peers
 		return Err(Error::InvalidBlockTime);
 	}
