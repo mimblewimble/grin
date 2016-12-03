@@ -26,7 +26,9 @@ use core::hash::Hash;
 use core::Proof;
 use consensus::PROOFSIZE;
 use secp::pedersen::Commitment;
+use secp::pedersen::RangeProof;
 use secp::constants::PEDERSEN_COMMITMENT_SIZE;
+use secp::constants::MAX_PROOF_SIZE;
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]
@@ -179,8 +181,10 @@ pub trait Reader {
 	fn read_hash(&mut self) -> Result<Hash, Error>;
 	/// Convenience function to read proof
 	fn read_proof(&mut self) -> Result<Proof, Error>;
-	/// Convenience function to read 33 fixed bytes
+	/// Convenience function to read commitment
 	fn read_commitment(&mut self) -> Result<Commitment, Error>;
+	/// Convenience function to read range proof
+	fn read_rangeproof(&mut self) -> Result<RangeProof, Error>;
 	/// Consumes a byte from the reader, producing an error if it doesn't have
 	/// the expected value
 	fn expect_u8(&mut self, val: u8) -> Result<u8, Error>;
@@ -280,6 +284,18 @@ impl<'a> Reader for BinReader<'a> {
 		}
 		Ok(Commitment(c))
 	}
+	fn read_rangeproof(&mut self) -> Result<RangeProof, Error> {
+		let p = try!(self.read_vec());
+		let mut a = [0; MAX_PROOF_SIZE];
+		for i in 0..p.len() {
+			a[i] = p[i];
+		}
+		Ok(RangeProof {
+			proof: a,
+			plen: p.len(),
+		})
+	}
+
 	fn expect_u8(&mut self, val: u8) -> Result<u8, Error> {
 		let b = try!(self.read_u8());
 		if b == val {

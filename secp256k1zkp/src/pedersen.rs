@@ -75,17 +75,6 @@ impl Clone for RangeProof {
 }
 
 impl RangeProof {
-    /// Builds a range proof from a binary vector. Will panic if the vector is longer than the max proof size.
-    pub fn from_vec(p: Vec<u8>) -> RangeProof {
-        let mut a = [0; constants::MAX_PROOF_SIZE];
-        for i in 0..p.len() {
-            a[i] = p[i];
-        }
-        RangeProof {
-            proof: a,
-            plen: p.len(),
-        }
-    }
     pub fn bytes(&self) -> &[u8] {
         &self.proof[..self.plen as usize]
     }

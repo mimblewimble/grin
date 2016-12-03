@@ -328,10 +328,10 @@ impl Writeable for Output {
 /// an Output from a binary stream.
 impl Readable<Output> for Output {
 	fn read(reader: &mut Reader) -> Result<Output, ser::Error> {
-		let (commit, proof) = ser_multiread!(reader, read_commitment, read_vec);
+		let (commit, proof) = ser_multiread!(reader, read_commitment, read_rangeproof);
 		Ok(Output::BlindOutput {
 			commit: commit,
-			proof: RangeProof::from_vec(proof),
+			proof: proof,
 		})
 	}
 }
