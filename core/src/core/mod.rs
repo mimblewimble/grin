@@ -124,17 +124,7 @@ impl Hashed for Proof {
 impl Proof {
 	/// Builds a proof with all bytes zeroed out
 	pub fn zero() -> Proof {
-		Proof([0; 42])
-	}
-
-	/// Builds a proof from a vector of exactly PROOFSIZE (42) u32.
-	pub fn from_vec(v: Vec<u32>) -> Proof {
-		assert!(v.len() == PROOFSIZE);
-		let mut p = [0; PROOFSIZE];
-		for (n, elem) in v.iter().enumerate() {
-			p[n] = *elem;
-		}
-		Proof(p)
+		Proof([0; PROOFSIZE])
 	}
 
 	/// Converts the proof to a vector of u64s

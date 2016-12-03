@@ -23,6 +23,8 @@ use std::{error, fmt};
 use std::io::{self, Write, Read};
 use byteorder::{ByteOrder, ReadBytesExt, BigEndian};
 use core::hash::Hash;
+use core::Proof;
+use consensus::PROOFSIZE;
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]
@@ -145,6 +147,13 @@ pub trait Writer {
 	/// Writes a fixed number of bytes from something that can turn itself into
 	/// a `&[u8]`. The reader is expected to know the actual length on read.
 	fn write_fixed_bytes(&mut self, fixed: &AsFixedBytes) -> Result<(), Error>;
+
+	fn write_proof(&mut self, pow: Proof) -> Result<(), Error> {
+		for n in 0..PROOFSIZE {
+			try!(self.write_u32(pow.0[n]));
+		}
+		Ok(())
+	}
 }
 
 /// Implementations defined how different numbers and binary structures are
@@ -164,8 +173,10 @@ pub trait Reader {
 	fn read_vec(&mut self) -> Result<Vec<u8>, Error>;
 	/// Read a fixed number of bytes from the underlying reader.
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error>;
-	/// Convenience function to read 32 fixed bytes
+	/// Convenience function to read hash
 	fn read_hash(&mut self) -> Result<Hash, Error>;
+	/// Convenience function to read proof
+	fn read_proof(&mut self) -> Result<Proof, Error>;
 	/// Convenience function to read 33 fixed bytes
 	fn read_33_bytes(&mut self) -> Result<Vec<u8>, Error>;
 	/// Consumes a byte from the reader, producing an error if it doesn't have
@@ -251,6 +262,13 @@ impl<'a> Reader for BinReader<'a> {
 			a[i] = v[i];
 		}
 		Ok(Hash(a))
+	}
+	fn read_proof(&mut self) -> Result<Proof, Error> {
+		let mut pow = [0u32; PROOFSIZE];
+		for n in 0..PROOFSIZE {
+			pow[n] = try!(self.read_u32());
+		}
+		Ok(Proof(pow))
 	}
 	fn read_33_bytes(&mut self) -> Result<Vec<u8>, Error> {
 		self.read_fixed_bytes(33)

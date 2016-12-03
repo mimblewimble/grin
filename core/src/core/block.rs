@@ -23,7 +23,7 @@ use std::collections::HashSet;
 use core::Committed;
 use core::{Input, Output, Proof, TxProof, Transaction};
 use core::transaction::merkle_inputs_outputs;
-use consensus::{PROOFSIZE, REWARD, DEFAULT_SIZESHIFT, MAX_IN_OUT_LEN, MAX_TARGET};
+use consensus::{REWARD, DEFAULT_SIZESHIFT, MAX_IN_OUT_LEN, MAX_TARGET};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Target;
 use ser::{self, Readable, Reader, Writeable, Writer};
@@ -79,11 +79,8 @@ impl Writeable for BlockHeader {
 		// make sure to not introduce any variable length data before the nonce to
 		// avoid complicating PoW
 		try!(writer.write_u64(self.nonce));
-		// cuckoo cycle of 42 nodes
-		for n in 0..PROOFSIZE {
-			try!(writer.write_u32(self.pow.0[n]));
-		}
-		Ok(())
+		// proof
+		writer.write_proof(self.pow)
 	}
 }
 
@@ -93,14 +90,9 @@ impl Readable<BlockHeader> for BlockHeader {
 		let (height, previous, timestamp, cuckoo_len) =
 			ser_multiread!(reader, read_u64, read_hash, read_i64, read_u8);
 		let target = try!(Target::read(reader));
-		let (utxo_merkle, tx_merkle, nonce) =
-			ser_multiread!(reader, read_hash, read_hash, read_u64);
+		let (utxo_merkle, tx_merkle, nonce, pow) =
+			ser_multiread!(reader, read_hash, read_hash, read_u64, read_proof);
 
-		// cuckoo cycle of 42 nodes
-		let mut pow = [0; PROOFSIZE];
-		for n in 0..PROOFSIZE {
-			pow[n] = try!(reader.read_u32());
-		}
 		Ok(BlockHeader {
 			height: height,
 			previous: previous,
@@ -112,7 +104,7 @@ impl Readable<BlockHeader> for BlockHeader {
 			target: target,
 			utxo_merkle: utxo_merkle,
 			tx_merkle: tx_merkle,
-			pow: Proof(pow),
+			pow: pow,
 			nonce: nonce,
 		})
 	}
