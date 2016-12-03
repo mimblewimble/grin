@@ -52,9 +52,9 @@ impl Writeable for TxProof {
 
 impl Readable<TxProof> for TxProof {
 	fn read(reader: &mut Reader) -> Result<TxProof, ser::Error> {
-		let (remainder, sig, fee) = ser_multiread!(reader, read_33_bytes, read_vec, read_u64);
+		let (remainder, sig, fee) = ser_multiread!(reader, read_commitment, read_vec, read_u64);
 		Ok(TxProof {
-			remainder: Commitment::from_vec(remainder),
+			remainder: remainder,
 			sig: sig,
 			fee: fee,
 		})
@@ -328,9 +328,9 @@ impl Writeable for Output {
 /// an Output from a binary stream.
 impl Readable<Output> for Output {
 	fn read(reader: &mut Reader) -> Result<Output, ser::Error> {
-		let (commit, proof) = ser_multiread!(reader, read_33_bytes, read_vec);
+		let (commit, proof) = ser_multiread!(reader, read_commitment, read_vec);
 		Ok(Output::BlindOutput {
-			commit: Commitment::from_vec(commit),
+			commit: commit,
 			proof: RangeProof::from_vec(proof),
 		})
 	}

@@ -25,6 +25,8 @@ use byteorder::{ByteOrder, ReadBytesExt, BigEndian};
 use core::hash::Hash;
 use core::Proof;
 use consensus::PROOFSIZE;
+use secp::pedersen::Commitment;
+use secp::constants::PEDERSEN_COMMITMENT_SIZE;
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]
@@ -178,7 +180,7 @@ pub trait Reader {
 	/// Convenience function to read proof
 	fn read_proof(&mut self) -> Result<Proof, Error>;
 	/// Convenience function to read 33 fixed bytes
-	fn read_33_bytes(&mut self) -> Result<Vec<u8>, Error>;
+	fn read_commitment(&mut self) -> Result<Commitment, Error>;
 	/// Consumes a byte from the reader, producing an error if it doesn't have
 	/// the expected value
 	fn expect_u8(&mut self, val: u8) -> Result<u8, Error>;
@@ -257,7 +259,7 @@ impl<'a> Reader for BinReader<'a> {
 	}
 	fn read_hash(&mut self) -> Result<Hash, Error> {
 		let v = try!(self.read_fixed_bytes(32));
-		let mut a = [0u8; 32];
+		let mut a = [0; 32];
 		for i in 0..a.len() {
 			a[i] = v[i];
 		}
@@ -270,8 +272,13 @@ impl<'a> Reader for BinReader<'a> {
 		}
 		Ok(Proof(pow))
 	}
-	fn read_33_bytes(&mut self) -> Result<Vec<u8>, Error> {
-		self.read_fixed_bytes(33)
+	fn read_commitment(&mut self) -> Result<Commitment, Error> {
+		let a = try!(self.read_fixed_bytes(PEDERSEN_COMMITMENT_SIZE));
+		let mut c = [0; PEDERSEN_COMMITMENT_SIZE];
+		for i in 0..PEDERSEN_COMMITMENT_SIZE {
+			c[i] = a[i];
+		}
+		Ok(Commitment(c))
 	}
 	fn expect_u8(&mut self, val: u8) -> Result<u8, Error> {
 		let b = try!(self.read_u8());
