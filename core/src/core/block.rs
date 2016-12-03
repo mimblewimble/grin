@@ -91,10 +91,10 @@ impl Writeable for BlockHeader {
 impl Readable<BlockHeader> for BlockHeader {
 	fn read(reader: &mut Reader) -> Result<BlockHeader, ser::Error> {
 		let (height, previous, timestamp, cuckoo_len) =
-			ser_multiread!(reader, read_u64, read_32_bytes, read_i64, read_u8);
+			ser_multiread!(reader, read_u64, read_hash, read_i64, read_u8);
 		let target = try!(Target::read(reader));
 		let (utxo_merkle, tx_merkle, nonce) =
-			ser_multiread!(reader, read_32_bytes, read_32_bytes, read_u64);
+			ser_multiread!(reader, read_hash, read_hash, read_u64);
 
 		// cuckoo cycle of 42 nodes
 		let mut pow = [0; PROOFSIZE];
@@ -103,15 +103,15 @@ impl Readable<BlockHeader> for BlockHeader {
 		}
 		Ok(BlockHeader {
 			height: height,
-			previous: Hash::from_vec(previous),
+			previous: previous,
 			timestamp: time::at_utc(time::Timespec {
 				sec: timestamp,
 				nsec: 0,
 			}),
 			cuckoo_len: cuckoo_len,
 			target: target,
-			utxo_merkle: Hash::from_vec(utxo_merkle),
-			tx_merkle: Hash::from_vec(tx_merkle),
+			utxo_merkle: utxo_merkle,
+			tx_merkle: tx_merkle,
 			pow: Proof(pow),
 			nonce: nonce,
 		})

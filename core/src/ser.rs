@@ -22,6 +22,7 @@
 use std::{error, fmt};
 use std::io::{self, Write, Read};
 use byteorder::{ByteOrder, ReadBytesExt, BigEndian};
+use core::hash::Hash;
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]
@@ -164,7 +165,7 @@ pub trait Reader {
 	/// Read a fixed number of bytes from the underlying reader.
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error>;
 	/// Convenience function to read 32 fixed bytes
-	fn read_32_bytes(&mut self) -> Result<Vec<u8>, Error>;
+	fn read_hash(&mut self) -> Result<Hash, Error>;
 	/// Convenience function to read 33 fixed bytes
 	fn read_33_bytes(&mut self) -> Result<Vec<u8>, Error>;
 	/// Consumes a byte from the reader, producing an error if it doesn't have
@@ -243,8 +244,13 @@ impl<'a> Reader for BinReader<'a> {
 		let mut buf = vec![0; length];
 		self.source.read_exact(&mut buf).map(move |_| buf).map_err(Error::IOErr)
 	}
-	fn read_32_bytes(&mut self) -> Result<Vec<u8>, Error> {
-		self.read_fixed_bytes(32)
+	fn read_hash(&mut self) -> Result<Hash, Error> {
+		let v = try!(self.read_fixed_bytes(32));
+		let mut a = [0u8; 32];
+		for i in 0..a.len() {
+			a[i] = v[i];
+		}
+		Ok(Hash(a))
 	}
 	fn read_33_bytes(&mut self) -> Result<Vec<u8>, Error> {
 		self.read_fixed_bytes(33)

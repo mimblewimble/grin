@@ -263,8 +263,8 @@ impl Writeable for Input {
 /// an Input from a binary stream.
 impl Readable<Input> for Input {
 	fn read(reader: &mut Reader) -> Result<Input, ser::Error> {
-		reader.read_fixed_bytes(32)
-			.map(|h| Input::BareInput { output: Hash::from_vec(h) })
+		reader.read_hash()
+			.map(|h| Input::BareInput { output: h })
 	}
 }
 

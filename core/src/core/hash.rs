@@ -40,14 +40,6 @@ impl fmt::Display for Hash {
 }
 
 impl Hash {
-	/// Creates a new hash from a vector
-	pub fn from_vec(v: Vec<u8>) -> Hash {
-		let mut a = [0; 32];
-		for i in 0..a.len() {
-			a[i] = v[i];
-		}
-		Hash(a)
-	}
 	/// Converts the hash to a byte vector
 	pub fn to_vec(&self) -> Vec<u8> {
 		self.0.to_vec()
