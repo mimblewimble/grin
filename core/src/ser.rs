@@ -19,7 +19,7 @@
 //! To use it simply implement `Writeable` or `Readable` and then use the
 //! `serialize` or `deserialize` functions on them as appropriate.
 
-use std::{error, fmt};
+use std::{error, fmt, cmp};
 use std::io::{self, Write, Read};
 use byteorder::{ByteOrder, ReadBytesExt, BigEndian};
 use core::hash::Hash;
@@ -175,6 +175,8 @@ pub trait Reader {
 	fn read_i64(&mut self) -> Result<i64, Error>;
 	/// first before the data bytes.
 	fn read_vec(&mut self) -> Result<Vec<u8>, Error>;
+	/// first before the data bytes limited to max bytes.
+	fn read_limited_vec(&mut self, max: usize) -> Result<Vec<u8>, Error>;
 	/// Read a fixed number of bytes from the underlying reader.
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error>;
 	/// Convenience function to read hash
@@ -253,6 +255,11 @@ impl<'a> Reader for BinReader<'a> {
 		let len = try!(self.read_u64());
 		self.read_fixed_bytes(len as usize)
 	}
+	/// Read limited variable size vector from the underlying Read. Expects a usize
+	fn read_limited_vec(&mut self, max: usize) -> Result<Vec<u8>, Error> {
+		let len = cmp::min(max, try!(self.read_u64()) as usize);
+		self.read_fixed_bytes(len as usize)
+	}
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error> {
 		// not reading more than 100k in a single read
 		if length > 100000 {
@@ -285,7 +292,7 @@ impl<'a> Reader for BinReader<'a> {
 		Ok(Commitment(c))
 	}
 	fn read_rangeproof(&mut self) -> Result<RangeProof, Error> {
-		let p = try!(self.read_vec());
+		let p = try!(self.read_limited_vec(MAX_PROOF_SIZE));
 		let mut a = [0; MAX_PROOF_SIZE];
 		for i in 0..p.len() {
 			a[i] = p[i];
