@@ -23,7 +23,7 @@ use std::collections::HashSet;
 use core::Committed;
 use core::{Input, Output, Proof, TxProof, Transaction};
 use core::transaction::merkle_inputs_outputs;
-use consensus::{PROOFSIZE, REWARD, DEFAULT_SIZESHIFT, MAX_IN_OUT_LEN, MAX_TARGET};
+use consensus::{PROOFSIZE, REWARD, DEFAULT_SIZESHIFT, MAX_TARGET};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Target;
 use ser::{self, Readable, Reader, Writeable, Writer};
@@ -161,11 +161,6 @@ impl Readable<Block> for Block {
 
 		let (input_len, output_len, proof_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
-
-		if input_len > MAX_IN_OUT_LEN || output_len > MAX_IN_OUT_LEN || proof_len > MAX_IN_OUT_LEN {
-			return Err(ser::Error::TooLargeReadErr("Too many inputs, outputs or proofs."
-				.to_string()));
-		}
 
 		let inputs = try!((0..input_len).map(|_| Input::read(reader)).collect());
 		let outputs = try!((0..output_len).map(|_| Output::read(reader)).collect());
