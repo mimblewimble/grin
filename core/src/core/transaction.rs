@@ -19,7 +19,6 @@ use secp::{self, Secp256k1, Message, Signature};
 use secp::key::SecretKey;
 use secp::pedersen::{RangeProof, Commitment};
 
-use consensus::MAX_IN_OUT_LEN;
 use core::Committed;
 use core::MerkleRow;
 use core::hash::{Hash, Hashed};
@@ -108,11 +107,6 @@ impl Readable<Transaction> for Transaction {
 	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
 		let (fee, zerosig, input_len, output_len) =
 			ser_multiread!(reader, read_u64, read_vec, read_u64, read_u64);
-
-		// in case a facetious miner sends us more than what we can allocate
-		if input_len > MAX_IN_OUT_LEN || output_len > MAX_IN_OUT_LEN {
-			return Err(ser::Error::TooLargeReadErr("Too many inputs or outputs.".to_string()));
-		}
 
 		let inputs = try!((0..input_len).map(|_| Input::read(reader)).collect());
 		let outputs = try!((0..output_len).map(|_| Output::read(reader)).collect());

@@ -107,9 +107,8 @@ pub const SOFT_MIN_TARGET: Target = Target([0, 0, 0xf, 0xff, 0xff, 0xff, 0, 0, 0
 /// easier to reason about.
 pub const CUT_THROUGH_HORIZON: u32 = 48 * 3600 / (BLOCK_TIME_SEC as u32);
 
-/// The maximum number of inputs or outputs a transaction may have
-/// and be deserializable. Only for DoS protection.
-pub const MAX_IN_OUT_LEN: u64 = 50000;
+/// The maximum size we're willing to accept for any message. Enforced by the peer-to-peer networking layer only for DoS protection.
+pub const MAX_MSG_LEN: u64 = 20_000_000;
 
 #[cfg(test)]
 mod test {

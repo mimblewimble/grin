@@ -22,8 +22,8 @@ Additional tests are rewarded with an immense amount of positive karma. So is do
 
 Find us:
 
-* IRC: [#MimbleWimble](https://webchat.freenode.net/?channels=#MimbleWimble) on Freenode
-* Mailing list: TBD
+* IRC: [#MimbleWimble](https://webchat.freenode.net/?channels=#MimbleWimble) on Freenode.
+* Mailing list: join the [~MimbleWimble team](https://launchpad.net/~mimblewimble) and subscribe on Launchpad.
 
 
 ## Philosophy
