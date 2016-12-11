@@ -20,8 +20,8 @@ use std::sync::{Mutex, Arc};
 use futures;
 use futures::{Stream, Future};
 use futures::stream;
-use futures::sync::mpsc::UnboundedSender;
-use tokio_core::io::{Io, write_all, read_exact, read_to_end};
+use futures::sync::mpsc::{UnboundedSender, UnboundedReceiver};
+use tokio_core::io::{Io, WriteHalf, ReadHalf, write_all, read_exact, read_to_end};
 use tokio_core::net::TcpStream;
 
 use core::core;
@@ -67,6 +67,54 @@ impl Protocol for ProtocolV1 {
 			*out_mut = Some(tx.clone());
 		}
 
+		// setup the reading future, getting messages from the peer and processing them
+		let read_msg = self.read_msg(tx, reader).map(|_| ());
+
+		// setting the writing future, getting messages from our system and sending
+		// them out
+		let write_msg = self.write_msg(rx, writer).map(|_| ());
+
+		// select between our different futures and return them
+		Box::new(read_msg.select(write_msg).map(|_| ()).map_err(|(e, _)| e))
+	}
+
+	/// Bytes sent and received by this peer to the remote peer.
+	fn transmitted_bytes(&self) -> (u64, u64) {
+		let sent = *self.sent_bytes.lock().unwrap();
+		let recv = *self.received_bytes.lock().unwrap();
+		(sent, recv)
+	}
+
+	/// Sends a ping message to the remote peer. Will panic if handle has never
+	/// been called on this protocol.
+	fn send_ping(&self) -> Result<(), ser::Error> {
+		self.send_msg(Type::Ping, &Empty {})
+	}
+
+	/// Serializes and sends a block to our remote peer
+	fn send_block(&self, b: &core::Block) -> Result<(), ser::Error> {
+		self.send_msg(Type::Block, b)
+	}
+
+	/// Serializes and sends a transaction to our remote peer
+	fn send_transaction(&self, tx: &core::Transaction) -> Result<(), ser::Error> {
+		self.send_msg(Type::Transaction, tx)
+	}
+
+	/// Close the connection to the remote peer
+	fn close(&self) {
+		// TODO some kind of shutdown signal
+	}
+}
+
+impl ProtocolV1 {
+	/// Prepares the future reading from the peer connection, parsing each
+	/// message and forwarding them appropriately based on their type
+	fn read_msg(&self,
+	            tx: UnboundedSender<Vec<u8>>,
+	            reader: ReadHalf<TcpStream>)
+	            -> Box<Future<Item = ReadHalf<TcpStream>, Error = ser::Error>> {
+
 		// infinite iterator stream so we repeat the message reading logic until the
 		// peer is stopped
 		let iter = stream::iter(iter::repeat(()).map(Ok::<(), ser::Error>));
@@ -75,18 +123,19 @@ impl Protocol for ProtocolV1 {
 		let recv_bytes = self.received_bytes.clone();
 		let read_msg = iter.fold(reader, move |reader, _| {
 			let mut tx_inner = tx.clone();
-      let recv_bytes = recv_bytes.clone();
+			let recv_bytes = recv_bytes.clone();
+
+			// first read the message header
 			read_exact(reader, vec![0u8; HEADER_LEN as usize])
 				.map_err(|e| ser::Error::IOErr(e))
 				.and_then(move |(reader, buf)| {
-					// first read the message header
 					let header = try!(ser::deserialize::<MsgHeader>(&mut &buf[..]));
 					Ok((reader, header))
 				})
 				.map(move |(reader, header)| {
-          // add the count of bytes sent
-          let mut recv_bytes = recv_bytes.lock().unwrap();
-          *recv_bytes += header.serialized_len() + header.msg_len;
+					// add the count of bytes sent
+					let mut recv_bytes = recv_bytes.lock().unwrap();
+					*recv_bytes += header.serialized_len() + header.msg_len;
 
 					// and handle the different message types
 					match header.msg_type {
@@ -104,9 +153,16 @@ impl Protocol for ProtocolV1 {
 					reader
 				})
 		});
+		Box::new(read_msg)
+	}
 
-		// setting the writing future, getting messages from our system and sending
-		// them out
+	/// Prepares the future that gets message data produced by our system and
+	/// sends it to the peer connection
+	fn write_msg(&self,
+	             rx: UnboundedReceiver<Vec<u8>>,
+	             writer: WriteHalf<TcpStream>)
+	             -> Box<Future<Item = WriteHalf<TcpStream>, Error = ser::Error>> {
+
 		let sent_bytes = self.sent_bytes.clone();
 		let send_data = rx.map(move |data| {
         // add the count of bytes sent
@@ -117,43 +173,23 @@ impl Protocol for ProtocolV1 {
       // write the data and make sure the future returns the right types
 			.fold(writer,
 			      |writer, data| write_all(writer, data).map_err(|_| ()).map(|(writer, buf)| writer))
-			.map(|_| ())
 			.map_err(|_| ser::Error::CorruptedData);
-
-		// select between our different futures and return them
-		Box::new(read_msg.map(|_| ()).select(send_data).map(|_| ()).map_err(|(e, _)| e))
+		Box::new(send_data)
 	}
 
-	/// Bytes sent and received by this peer to the remote peer.
-  fn transmitted_bytes(&self) -> (u64, u64) {
-		let sent = *self.sent_bytes.lock().unwrap();
-		let recv = *self.received_bytes.lock().unwrap();
-    (sent, recv)
-  }
+	/// Utility function to send any Writeable. Handles adding the header and
+	/// serialization.
+	fn send_msg(&self, t: Type, body: &ser::Writeable) -> Result<(), ser::Error> {
+		let mut body_data = vec![];
+		try!(ser::serialize(&mut body_data, body));
+		let mut data = vec![];
+		try!(ser::serialize(&mut data, &MsgHeader::new(t, body_data.len() as u64)));
+		data.append(&mut body_data);
 
-	/// Sends a ping message to the remote peer. Will panic if handle has never
-	/// been called on this protocol.
-	fn send_ping(&self) -> Result<(), ser::Error> {
-		let data = try!(ser::ser_vec(&MsgHeader::new(Type::Ping, 0)));
 		let mut msg_send = self.outbound_chan.borrow_mut();
 		if let Err(e) = msg_send.deref_mut().as_mut().unwrap().send(data) {
 			warn!("Couldn't send message to remote peer: {}", e);
 		}
 		Ok(())
-	}
-
-	/// Serializes and sends a block to our remote peer
-	fn send_block(&self, b: &core::Block) -> Result<(), ser::Error> {
-		unimplemented!();
-	}
-
-	/// Serializes and sends a transaction to our remote peer
-	fn send_transaction(&self, tx: &core::Transaction) -> Result<(), ser::Error> {
-		unimplemented!();
-	}
-
-	/// Close the connection to the remote peer
-	fn close(&self) {
-		// TODO some kind of shutdown signal
 	}
 }

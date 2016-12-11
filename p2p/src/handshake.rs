@@ -50,6 +50,7 @@ impl Handshake {
 	pub fn connect(&self,
 	               conn: TcpStream)
 	               -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
+		// prepare the first part of the hanshake
 		let nonce = self.next_nonce();
 		let hand = Hand {
 			version: PROTOCOL_VERSION,
@@ -59,10 +60,10 @@ impl Handshake {
 			receiver_addr: SockAddr(conn.peer_addr().unwrap()),
 			user_agent: USER_AGENT.to_string(),
 		};
+
+		// write and read the handshake response
 		Box::new(write_msg(conn, hand, Type::Hand)
-			.and_then(|conn| {
-				read_msg::<Shake>(conn)
-			})
+			.and_then(|conn| read_msg::<Shake>(conn))
 			.and_then(|(conn, shake)| {
 				if shake.version != 1 {
 					Err(Error::UnexpectedData {

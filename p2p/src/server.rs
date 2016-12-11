@@ -23,6 +23,7 @@ use std::time::Duration;
 
 use futures;
 use futures::{Future, Stream};
+use futures::future::IntoFuture;
 use tokio_core::net::{TcpListener, TcpStream};
 use tokio_core::reactor;
 
@@ -74,24 +75,12 @@ impl Server {
 		let hp = h.clone();
 		let peers = socket.incoming().map_err(|e| Error::IOErr(e)).map(move |(conn, addr)| {
 			let peers = peers.clone();
+
 			// accept the peer and add it to the server map
-			let peer_accept = Peer::accept(conn, &hs.clone()).map(move |(conn, peer)| {
-				let apeer = Arc::new(peer);
-				let mut peers = peers.write().unwrap();
-				peers.push(apeer.clone());
-				Ok((conn, apeer))
-			});
+			let peer_accept = add_to_peers(peers, Peer::accept(conn, &hs.clone()));
 
 			// wire in a future to timeout the accept after 5 secs
-			let timeout = reactor::Timeout::new(Duration::new(5, 0), &hp).unwrap();
-			let timed_peer = peer_accept.select(timeout.map(Err).map_err(|e| Error::IOErr(e)))
-				.then(|res| {
-					match res {
-						Ok((Ok((conn, p)), _timeout)) => Ok((conn, p)),
-						Ok((_, _accept)) => Err(Error::TooLargeReadErr),
-						Err((e, _other)) => Err(e),
-					}
-				});
+			let timed_peer = with_timeout(Box::new(peer_accept), &hp);
 
 			// run the main peer protocol
 			timed_peer.and_then(|(conn, peer)| peer.clone().run(conn, &DummyAdapter {}))
@@ -124,6 +113,7 @@ impl Server {
 		}))
 	}
 
+	/// Asks the server to connect to a new peer.
 	pub fn connect_peer(&self,
 	                    addr: SocketAddr,
 	                    h: reactor::Handle)
@@ -132,12 +122,11 @@ impl Server {
 		let peers = self.peers.clone();
 		let request = socket.and_then(move |socket| {
 				let peers = peers.clone();
-				Peer::connect(socket, &Handshake::new()).map(move |(conn, peer)| {
-					let apeer = Arc::new(peer);
-					let mut peers = peers.write().unwrap();
-					peers.push(apeer.clone());
-					(conn, apeer)
-				})
+
+				// connect to the peer and add it to the server map, wiring it a timeout for
+				// the handhake
+				let peer_connect = add_to_peers(peers, Peer::connect(socket, &Handshake::new()));
+				with_timeout(Box::new(peer_connect), &h)
 			})
 			.and_then(|(socket, peer)| peer.run(socket, &DummyAdapter {}));
 		Box::new(request)
@@ -151,4 +140,35 @@ impl Server {
 		}
 		self.stop.into_inner().unwrap().complete(());
 	}
+}
+
+// Adds the peer built by the provided future in the peers map
+fn add_to_peers<A>(peers: Arc<RwLock<Vec<Arc<Peer>>>>,
+                   peer_fut: A)
+                   -> Box<Future<Item = Result<(TcpStream, Arc<Peer>), ()>, Error = Error>>
+	where A: IntoFuture<Item = (TcpStream, Peer), Error = Error> + 'static
+{
+	let peer_add = peer_fut.into_future().map(move |(conn, peer)| {
+		let apeer = Arc::new(peer);
+		let mut peers = peers.write().unwrap();
+		peers.push(apeer.clone());
+		Ok((conn, apeer))
+	});
+	Box::new(peer_add)
+}
+
+// Adds a timeout to a future
+fn with_timeout<T: 'static>(fut: Box<Future<Item = Result<T, ()>, Error = Error>>,
+                            h: &reactor::Handle)
+                            -> Box<Future<Item = T, Error = Error>> {
+	let timeout = reactor::Timeout::new(Duration::new(5, 0), h).unwrap();
+	let timed = fut.select(timeout.map(Err).map_err(|e| Error::IOErr(e)))
+		.then(|res| {
+			match res {
+				Ok((Ok(inner), _timeout)) => Ok(inner),
+				Ok((_, _accept)) => Err(Error::TooLargeReadErr),
+				Err((e, _other)) => Err(e),
+			}
+		});
+	Box::new(timed)
 }

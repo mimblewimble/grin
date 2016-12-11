@@ -100,10 +100,12 @@ pub fn write_msg<T>(conn: TcpStream,
 		let mut body_buf = vec![];
 		ser::serialize(&mut body_buf, &msg);
 
-		// build and send the header using the body size
+		// build and serialize the header using the body size
 		let mut header_buf = vec![];
 		let blen = body_buf.len() as u64;
 		ser::serialize(&mut header_buf, &MsgHeader::new(msg_type, blen));
+
+		// send the whole thing
 		write_all(conn, header_buf)
 			.and_then(|(conn, _)| write_all(conn, body_buf))
 			.map(|(conn, _)| conn)
