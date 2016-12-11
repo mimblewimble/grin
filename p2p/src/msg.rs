@@ -14,11 +14,15 @@
 
 //! Message types that transit over the network and related serialization code.
 
-use std::net::*;
-
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr};
 use num::FromPrimitive;
 
+use futures::future::{Future, ok};
+use tokio_core::net::TcpStream;
+use tokio_core::io::{write_all, read_exact};
+
 use core::ser::{self, Writeable, Readable, Writer, Reader};
+use core::consensus::MAX_MSG_LEN;
 
 use types::*;
 
@@ -29,6 +33,9 @@ pub const USER_AGENT: &'static str = "MW/Grin 0.1";
 
 /// Magic number expected in the header of every message
 const MAGIC: [u8; 2] = [0x1e, 0xc5];
+
+/// Size in bytes of a message header
+pub const HEADER_LEN: u64 = 11;
 
 /// Codes for each error that can be produced reading a message.
 pub enum ErrCodes {
@@ -51,27 +58,79 @@ enum_from_primitive! {
   }
 }
 
+/// Future combinator to read any message where the body is a Readable. Reads
+/// the  header first, handles its validation and then reads the Readable body,
+/// allocating buffers of the right size.
+pub fn read_msg<T>(conn: TcpStream) -> Box<Future<Item = (TcpStream, T), Error = ser::Error>>
+	where T: Readable<T> + 'static
+{
+	let read_header = read_exact(conn, vec![0u8; HEADER_LEN as usize])
+		.map_err(|e| ser::Error::IOErr(e))
+		.and_then(|(reader, buf)| {
+			let header = try!(ser::deserialize::<MsgHeader>(&mut &buf[..]));
+			if header.msg_len > MAX_MSG_LEN {
+				// TODO add additional restrictions on a per-message-type basis to avoid 20MB
+				// pings
+				return Err(ser::Error::TooLargeReadErr);
+			}
+			Ok((reader, header))
+		});
+
+	let read_msg = read_header.and_then(|(reader, header)| {
+			read_exact(reader, vec![0u8; header.msg_len as usize]).map_err(|e| ser::Error::IOErr(e))
+		})
+		.and_then(|(reader, buf)| {
+			let body = try!(ser::deserialize(&mut &buf[..]));
+			Ok((reader, body))
+		});
+	Box::new(read_msg)
+}
+
+/// Future combinator to write a full message from a Writeable payload.
+/// Serializes the payload first and then sends the message header and that
+/// payload.
+pub fn write_msg<T>(conn: TcpStream,
+                    msg: T,
+                    msg_type: Type)
+                    -> Box<Future<Item = TcpStream, Error = ser::Error>>
+	where T: Writeable + 'static
+{
+	let write_msg = ok((conn)).and_then(move |conn| {
+		// prepare the body first so we know its serialized length
+		let mut body_buf = vec![];
+		ser::serialize(&mut body_buf, &msg);
+
+		// build and send the header using the body size
+		let mut header_buf = vec![];
+		let blen = body_buf.len() as u64;
+		ser::serialize(&mut header_buf, &MsgHeader::new(msg_type, blen));
+		write_all(conn, header_buf)
+			.and_then(|(conn, _)| write_all(conn, body_buf))
+			.map(|(conn, _)| conn)
+			.map_err(|e| ser::Error::IOErr(e))
+	});
+	Box::new(write_msg)
+}
+
 /// Header of any protocol message, used to identify incoming messages.
 pub struct MsgHeader {
 	magic: [u8; 2],
 	pub msg_type: Type,
+	pub msg_len: u64,
 }
 
 impl MsgHeader {
-	pub fn new(msg_type: Type) -> MsgHeader {
+	pub fn new(msg_type: Type, len: u64) -> MsgHeader {
 		MsgHeader {
 			magic: MAGIC,
 			msg_type: msg_type,
+			msg_len: len,
 		}
-	}
-
-	pub fn acceptable(&self) -> bool {
-		Type::from_u8(self.msg_type as u8).is_some()
 	}
 
 	/// Serialized length of the header in bytes
 	pub fn serialized_len(&self) -> u64 {
-		3
+		HEADER_LEN
 	}
 }
 
@@ -80,7 +139,8 @@ impl Writeable for MsgHeader {
 		ser_multiwrite!(writer,
 		                [write_u8, self.magic[0]],
 		                [write_u8, self.magic[1]],
-		                [write_u8, self.msg_type as u8]);
+		                [write_u8, self.msg_type as u8],
+		                [write_u64, self.msg_len]);
 		Ok(())
 	}
 }
@@ -89,12 +149,13 @@ impl Readable<MsgHeader> for MsgHeader {
 	fn read(reader: &mut Reader) -> Result<MsgHeader, ser::Error> {
 		try!(reader.expect_u8(MAGIC[0]));
 		try!(reader.expect_u8(MAGIC[1]));
-		let t = try!(reader.read_u8());
+		let (t, len) = ser_multiread!(reader, read_u8, read_u64);
 		match Type::from_u8(t) {
 			Some(ty) => {
 				Ok(MsgHeader {
 					magic: MAGIC,
 					msg_type: ty,
+					msg_len: len,
 				})
 			}
 			None => Err(ser::Error::CorruptedData),
@@ -224,8 +285,7 @@ impl Readable<PeerAddrs> for PeerAddrs {
 	fn read(reader: &mut Reader) -> Result<PeerAddrs, ser::Error> {
 		let peer_count = try!(reader.read_u32());
 		if peer_count > 1000 {
-			return Err(ser::Error::TooLargeReadErr(format!("Too many peers provided: {}",
-			                                               peer_count)));
+			return Err(ser::Error::TooLargeReadErr);
 		}
 		let peers = try_map_vec!([0..peer_count], |_| SockAddr::read(reader));
 		Ok(PeerAddrs { peers: peers })
@@ -311,5 +371,21 @@ impl Readable<SockAddr> for SockAddr {
 			                                             0,
 			                                             0))))
 		}
+	}
+}
+
+/// Placeholder for messages like Ping and Pong that don't send anything but
+/// the header.
+pub struct Empty {}
+
+impl Writeable for Empty {
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+		Ok(())
+	}
+}
+
+impl Readable<Empty> for Empty {
+	fn read(reader: &mut Reader) -> Result<Empty, ser::Error> {
+		Ok(Empty {})
 	}
 }

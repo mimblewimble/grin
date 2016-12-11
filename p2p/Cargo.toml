@@ -1,14 +1,15 @@
 [package]
-name = "grin_p2p"
+name = "grin_p2p_fut"
 version = "0.1.0"
 authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
 
 [dependencies]
 bitflags = "^0.7.0"
 byteorder = "^0.5"
+futures = "^0.1.6"
 log = "^0.3"
 rand = "^0.3"
-mioco = "^0.8"
+tokio-core="^0.1.1"
 time = "^0.1"
 enum_primitive = "^0.1.0"
 num = "^0.1.36"

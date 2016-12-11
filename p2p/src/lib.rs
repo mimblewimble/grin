@@ -28,19 +28,19 @@ extern crate enum_primitive;
 extern crate grin_core as core;
 #[macro_use]
 extern crate log;
+extern crate futures;
 #[macro_use]
-extern crate mioco;
+extern crate tokio_core;
 extern crate rand;
 extern crate time;
 extern crate num;
 
-mod types;
-mod msg;
 pub mod handshake;
-mod rw;
+mod msg;
+mod peer;
 mod protocol;
 mod server;
-mod peer;
+mod types;
 
 pub use server::{Server, DummyAdapter};
 pub use peer::Peer;

@@ -13,6 +13,10 @@
 // limitations under the License.
 
 use std::net::{SocketAddr, IpAddr};
+
+use futures::Future;
+use tokio_core::net::TcpStream;
+
 use core::core;
 use core::ser::Error;
 
@@ -29,7 +33,7 @@ impl Default for P2PConfig {
 		let ipaddr = "127.0.0.1".parse().unwrap();
 		P2PConfig {
 			host: ipaddr,
-			port: 3414,
+			port: 13414,
 		}
 	}
 }
@@ -61,7 +65,7 @@ pub trait Protocol {
 	/// be  known already, usually passed during construction. Will typically
 	/// block so needs to be called withing a coroutine. Should also be called
 	/// only once.
-	fn handle(&self, na: &NetAdapter) -> Result<(), Error>;
+	fn handle(&self, conn: TcpStream, na: &NetAdapter) -> Box<Future<Item = (), Error = Error>>;
 
 	/// Sends a ping message to the remote peer.
 	fn send_ping(&self) -> Result<(), Error>;

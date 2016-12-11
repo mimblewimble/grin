@@ -13,40 +13,58 @@
 // limitations under the License.
 
 extern crate grin_core as core;
-extern crate grin_p2p as p2p;
-extern crate mioco;
+extern crate grin_p2p_fut as p2p;
 extern crate env_logger;
+extern crate futures;
+extern crate tokio_core;
 
-mod common;
-
-use std::io;
+use std::net::SocketAddr;
 use std::time;
 
-use core::core::*;
+use futures::future::Future;
+use tokio_core::net::TcpStream;
+use tokio_core::reactor::{self, Core};
+
+use core::ser;
 use p2p::Peer;
-use common::*;
 
 // Starts a server and connects a client peer to it to check handshake, followed by a ping/pong exchange to make sure the connection is live.
 #[test]
 fn peer_handshake() {
   env_logger::init().unwrap();
 
-  with_server(|server| -> io::Result<()> {
-    // connect a client peer to the server
-    let peer = try!(connect_peer());
+  let mut evtlp = Core::new().unwrap();
+  let handle = evtlp.handle();
+  let p2p_conf = p2p::P2PConfig::default();
+  let server = p2p::Server::new(p2p_conf);
+  let run_server = server.start(handle.clone());
 
-    // check server peer count
-    let pc = server.peers_count();
-    assert_eq!(pc, 1);
+  let phandle = handle.clone();
+  let rhandle = handle.clone();
+  let timeout = reactor::Timeout::new(time::Duration::new(1, 0), &handle).unwrap();
+  let timeout_send = reactor::Timeout::new(time::Duration::new(2, 0), &handle).unwrap();
+  handle.spawn(timeout.map_err(|e| ser::Error::IOErr(e)).and_then(move |_| {
+    let p2p_conf = p2p::P2PConfig::default();
+    let addr = SocketAddr::new(p2p_conf.host, p2p_conf.port);
+    let socket = TcpStream::connect(&addr, &phandle).map_err(|e| ser::Error::IOErr(e));
+    socket.and_then(move |socket| {
+      Peer::connect(socket, &p2p::handshake::Handshake::new())
+		}).and_then(move |(socket, peer)| {
+      rhandle.spawn(peer.run(socket, &p2p::DummyAdapter {}).map_err(|e| {
+        panic!("Client run failed: {}", e);
+      }));
+      peer.send_ping().unwrap();
+      timeout_send.map_err(|e| ser::Error::IOErr(e)).map(|_| peer)
+		}).and_then(|peer| {
+      let (sent, recv) = peer.transmitted_bytes();
+      assert!(sent > 0);
+      assert!(recv > 0);
+      Ok(())
+    }).and_then(|_| {server.stop(); Ok(())})
+  }).map_err(|e| {
+    panic!("Client connection failed: {}", e);
+  }));
 
-    // send a ping and check we got ponged (received data back)
-    peer.send_ping();
-    mioco::sleep(time::Duration::from_millis(50));
-    let (sent, recv) = peer.transmitted_bytes();
-    assert!(sent > 0);
-    assert!(recv > 0);
+  evtlp.run(run_server).unwrap();
 
-    peer.stop();
-    Ok(())
-  });
 }

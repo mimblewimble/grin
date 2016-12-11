@@ -15,17 +15,16 @@
 //! Grin server implementation, accepts incoming connections and connects to
 //! other peers in the network.
 
-use rand::{self, Rng};
 use std::cell::RefCell;
-use std::io;
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::net::SocketAddr;
 use std::ops::Deref;
-use std::str::FromStr;
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
-use mioco;
-use mioco::sync::mpsc::{sync_channel, SyncSender};
-use mioco::tcp::{TcpListener, TcpStream};
+use futures;
+use futures::{Future, Stream};
+use tokio_core::net::{TcpListener, TcpStream};
+use tokio_core::reactor;
 
 use core::core;
 use core::ser::Error;
@@ -43,8 +42,8 @@ impl NetAdapter for DummyAdapter {
 /// peers, receiving connections from other peers and keep track of all of them.
 pub struct Server {
 	config: P2PConfig,
-	peers: RwLock<Vec<Arc<Peer>>>,
-	stop_send: RefCell<Option<SyncSender<u8>>>,
+	peers: Arc<RwLock<Vec<Arc<Peer>>>>,
+	stop: RefCell<Option<futures::sync::oneshot::Sender<()>>>,
 }
 
 unsafe impl Sync for Server {}
@@ -56,111 +55,100 @@ impl Server {
 	pub fn new(config: P2PConfig) -> Server {
 		Server {
 			config: config,
-			peers: RwLock::new(Vec::new()),
-			stop_send: RefCell::new(None),
+			peers: Arc::new(RwLock::new(Vec::new())),
+			stop: RefCell::new(None),
 		}
 	}
+
 	/// Starts the p2p server. Opens a TCP port to allow incoming
 	/// connections and starts the bootstrapping process to find peers.
-	pub fn start(&self) -> Result<(), Error> {
+	pub fn start(&self, h: reactor::Handle) -> Box<Future<Item = (), Error = Error>> {
 		let addr = SocketAddr::new(self.config.host, self.config.port);
-		let listener = try!(TcpListener::bind(&addr).map_err(&Error::IOErr));
+		let socket = TcpListener::bind(&addr, &h.clone()).unwrap();
 		warn!("P2P server started on {}", addr);
 
 		let hs = Arc::new(Handshake::new());
-		let (stop_send, stop_recv) = sync_channel(1);
-		{
-			let mut stop_mut = self.stop_send.borrow_mut();
-			*stop_mut = Some(stop_send);
-		}
+		let peers = self.peers.clone();
 
-		loop {
-			select!(
-        r:listener => {
-          let conn = try!(listener.accept().map_err(&Error::IOErr));
-          let hs = hs.clone();
-
-          let peer = try!(Peer::accept(conn, &hs));
-          let wpeer = Arc::new(peer);
-          {
-            let mut peers = self.peers.write().unwrap();
-            peers.push(wpeer.clone());
-          }
-
-          mioco::spawn(move || -> io::Result<()> {
-            if let Err(err) = wpeer.run(&DummyAdapter{}) {
-              error!("{:?}", err);
-            }
-            Ok(())
-          });
-        },
-        r:stop_recv => {
-          stop_recv.recv();
-          return Ok(());
-        }
-      );
-		}
-	}
-
-	pub fn connect_peer<A: ToSocketAddrs>(&self, addr: A) -> Result<(), Error> {
-		for sock_addr in addr.to_socket_addrs().unwrap() {
-			info!("Connecting to peer {}", sock_addr);
-			let tcp_client = TcpStream::connect(&sock_addr).unwrap();
-			let peer = try!(Peer::connect(tcp_client, &Handshake::new())
-				.map_err(|_| io::Error::last_os_error()));
-
-			let peer = Arc::new(peer);
-			let in_peer = peer.clone();
-			mioco::spawn(move || -> io::Result<()> {
-				in_peer.run(&DummyAdapter {});
-				Ok(())
+		// main peer acceptance future handling handshake
+		let hp = h.clone();
+		let peers = socket.incoming().map_err(|e| Error::IOErr(e)).map(move |(conn, addr)| {
+			let peers = peers.clone();
+			// accept the peer and add it to the server map
+			let peer_accept = Peer::accept(conn, &hs.clone()).map(move |(conn, peer)| {
+				let apeer = Arc::new(peer);
+				let mut peers = peers.write().unwrap();
+				peers.push(apeer.clone());
+				Ok((conn, apeer))
 			});
-			self.peers.write().unwrap().push(peer);
+
+			// wire in a future to timeout the accept after 5 secs
+			let timeout = reactor::Timeout::new(Duration::new(5, 0), &hp).unwrap();
+			let timed_peer = peer_accept.select(timeout.map(Err).map_err(|e| Error::IOErr(e)))
+				.then(|res| {
+					match res {
+						Ok((Ok((conn, p)), _timeout)) => Ok((conn, p)),
+						Ok((_, _accept)) => Err(Error::TooLargeReadErr),
+						Err((e, _other)) => Err(e),
+					}
+				});
+
+			// run the main peer protocol
+			timed_peer.and_then(|(conn, peer)| peer.clone().run(conn, &DummyAdapter {}))
+		});
+
+		// spawn each peer future to its own task
+		let hs = h.clone();
+		let server = peers.for_each(move |peer| {
+			hs.spawn(peer.then(|res| {
+				match res {
+					Err(e) => info!("Client error: {}", e),
+					_ => {}
+				}
+				futures::finished(())
+			}));
+			Ok(())
+		});
+
+		// setup the stopping oneshot on the server and join it with the peer future
+		let (stop, stop_rx) = futures::sync::oneshot::channel();
+		{
+			let mut stop_mut = self.stop.borrow_mut();
+			*stop_mut = Some(stop);
 		}
-		Ok(())
+		Box::new(server.select(stop_rx.map_err(|_| Error::CorruptedData)).then(|res| {
+			match res {
+				Ok((_, _)) => Ok(()),
+				Err((e, _)) => Err(e),
+			}
+		}))
 	}
 
-	/// Asks all the peers to relay the provided block. A peer may choose to
-	/// ignore the relay request if it has knowledge that the remote peer
-	/// already knows the block.
-	pub fn relay_block(&self, b: &core::Block) -> Result<(), Error> {
-		let peers = self.peers.write().unwrap();
-		for p in peers.deref() {
-			try!(p.send_block(b));
-		}
-		Ok(())
-	}
-
-	/// Asks all the peers to relay the provided transaction. A peer may choose
-	/// to ignore the relay request if it has knowledge that the remote peer
-	/// already knows the transaction.
-	pub fn relay_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
-		let peers = self.peers.write().unwrap();
-		for p in peers.deref() {
-			try!(p.send_transaction(tx));
-		}
-		Ok(())
-	}
-
-	/// Number of peers this server is connected to.
-	pub fn peers_count(&self) -> u32 {
-		self.peers.read().unwrap().len() as u32
-	}
-
-	/// Gets a random peer from our set of connected peers.
-	pub fn get_any_peer(&self) -> Arc<Peer> {
-		let mut rng = rand::thread_rng();
-		let peers = self.peers.read().unwrap();
-		peers[rng.gen_range(0, peers.len())].clone()
+	pub fn connect_peer(&self,
+	                    addr: SocketAddr,
+	                    h: reactor::Handle)
+	                    -> Box<Future<Item = (), Error = Error>> {
+		let socket = TcpStream::connect(&addr, &h).map_err(|e| Error::IOErr(e));
+		let peers = self.peers.clone();
+		let request = socket.and_then(move |socket| {
+				let peers = peers.clone();
+				Peer::connect(socket, &Handshake::new()).map(move |(conn, peer)| {
+					let apeer = Arc::new(peer);
+					let mut peers = peers.write().unwrap();
+					peers.push(apeer.clone());
+					(conn, apeer)
+				})
+			})
+			.and_then(|(socket, peer)| peer.run(socket, &DummyAdapter {}));
+		Box::new(request)
 	}
 
 	/// Stops the server. Disconnect from all peers at the same time.
-	pub fn stop(&self) {
+	pub fn stop(self) {
 		let peers = self.peers.write().unwrap();
 		for p in peers.deref() {
 			p.stop();
 		}
-		let stop_send = self.stop_send.borrow();
-		stop_send.as_ref().unwrap().send(0);
+		self.stop.into_inner().unwrap().complete(());
 	}
 }

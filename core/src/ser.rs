@@ -36,7 +36,7 @@ pub enum Error {
 	/// Data wasn't in a consumable format
 	CorruptedData,
 	/// When asked to read too much data
-	TooLargeReadErr(String),
+	TooLargeReadErr,
 }
 
 impl From<io::Error> for Error {
@@ -53,7 +53,7 @@ impl fmt::Display for Error {
 				write!(f, "expected {:?}, got {:?}", e, r)
 			}
 			Error::CorruptedData => f.write_str("corrupted data"),
-			Error::TooLargeReadErr(ref s) => f.write_str(&s),
+			Error::TooLargeReadErr => f.write_str("too large read"),
 		}
 	}
 }
@@ -71,7 +71,7 @@ impl error::Error for Error {
 			Error::IOErr(ref e) => error::Error::description(e),
 			Error::UnexpectedData { expected: _, received: _ } => "unexpected data",
 			Error::CorruptedData => "corrupted data",
-			Error::TooLargeReadErr(ref s) => s,
+			Error::TooLargeReadErr => "too large read",
 		}
 	}
 }
@@ -238,7 +238,7 @@ impl<'a> Reader for BinReader<'a> {
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error> {
 		// not reading more than 100k in a single read
 		if length > 100000 {
-			return Err(Error::TooLargeReadErr(format!("fixed bytes length too large: {}", length)));
+			return Err(Error::TooLargeReadErr);
 		}
 		let mut buf = vec![0; length];
 		self.source.read_exact(&mut buf).map(move |_| buf).map_err(Error::IOErr)
