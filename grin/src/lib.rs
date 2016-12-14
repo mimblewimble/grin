@@ -24,9 +24,10 @@
 #[macro_use]
 extern crate log;
 extern crate env_logger;
-extern crate mioco;
+extern crate futures;
 extern crate rand;
 extern crate time;
+extern crate tokio_core;
 
 extern crate grin_chain as chain;
 extern crate grin_core as core;

@@ -34,7 +34,7 @@ pub fn genesis() -> core::Block {
 			height: 0,
 			previous: core::hash::Hash([0xff; 32]),
 			timestamp: time::Tm {
-				tm_year: 1997-1900,
+				tm_year: 1997 - 1900,
 				tm_mon: 7,
 				tm_mday: 4,
 				..time::empty_tm()

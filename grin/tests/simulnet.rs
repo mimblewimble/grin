@@ -16,20 +16,20 @@ extern crate grin_grin as grin;
 extern crate grin_core as core;
 extern crate grin_p2p as p2p;
 extern crate grin_chain as chain;
-extern crate mioco;
 extern crate env_logger;
 
 use std::io;
+use std::thread;
 use std::time;
 
 #[test]
 fn simulate_servers() {
   env_logger::init().unwrap();
 
-  mioco::start(move || -> io::Result<()> {
-    // instantiates 5 servers on different ports
-    let mut servers = vec![];
-    for n in 0..5 {
+  // instantiates 5 servers on different ports
+  let mut servers = vec![];
+  for n in 0..5 {
+    thread::spawn(move || {
       let s = grin::Server::start(
           grin::ServerConfig{
             db_root: format!("target/grin-{}", n),
@@ -37,21 +37,19 @@ fn simulate_servers() {
             p2p_config: p2p::P2PConfig{port: 10000+n, ..p2p::P2PConfig::default()}
           }).unwrap();
       servers.push(s);
-    }
+    });
+  }
 
-    mioco::sleep(time::Duration::from_millis(100));
+  thread::sleep(time::Duration::from_millis(100));
 
-    // everyone connects to everyone else
-    for n in 0..5 {
-      for m in 0..5 {
-        if m == n { continue }
-        let addr = format!("{}:{}", "127.0.0.1", 10000+m);
-        servers[n].connect_peer(addr.as_str()).unwrap();
-        mioco::sleep(time::Duration::from_millis(100));
-        println!("c {}", m);
-      }
+  // everyone connects to everyone else
+  for n in 0..5 {
+    for m in 0..5 {
+      if m == n { continue }
+      let addr = format!("{}:{}", "127.0.0.1", 10000+m);
+      servers[n].connect_peer(addr.parse().unwrap()).unwrap();
+      println!("c {}", m);
     }
-    Ok(())
-  });
+  }
 
 }
