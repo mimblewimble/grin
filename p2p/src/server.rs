@@ -117,9 +117,9 @@ impl Server {
 	pub fn connect_peer(&self,
 	                    addr: SocketAddr,
 	                    h: reactor::Handle)
-	                    -> Box<Future<Item = (), Error = Error>> {
-		let socket = TcpStream::connect(&addr, &h).map_err(|e| Error::IOErr(e));
+	                    -> Box<Future<Item = (), Error = ()>> {
 		let peers = self.peers.clone();
+		let socket = TcpStream::connect(&addr, &h).map_err(|e| Error::IOErr(e));
 		let request = socket.and_then(move |socket| {
 				let peers = peers.clone();
 
@@ -128,8 +128,13 @@ impl Server {
 				let peer_connect = add_to_peers(peers, Peer::connect(socket, &Handshake::new()));
 				with_timeout(Box::new(peer_connect), &h)
 			})
-			.and_then(|(socket, peer)| peer.run(socket, &DummyAdapter {}));
+			.and_then(|(socket, peer)| peer.run(socket, &DummyAdapter {}))
+			.map_err(|_| ());
 		Box::new(request)
+	}
+
+	pub fn peers_count(&self) -> u32 {
+		self.peers.read().unwrap().len() as u32
 	}
 
 	/// Stops the server. Disconnect from all peers at the same time.

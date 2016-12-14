@@ -1,5 +1,5 @@
 [package]
-name = "grin_p2p_fut"
+name = "grin_p2p"
 version = "0.1.0"
 authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
 

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 extern crate grin_core as core;
-extern crate grin_p2p_fut as p2p;
+extern crate grin_p2p as p2p;
 extern crate env_logger;
 extern crate futures;
 extern crate tokio_core;
@@ -60,7 +60,11 @@ fn peer_handshake() {
       assert!(sent > 0);
       assert!(recv > 0);
       Ok(())
-    }).and_then(|_| {server.stop(); Ok(())})
+    }).and_then(|_| {
+      assert!(server.peers_count() > 0);
+      server.stop();
+      Ok(())
+    })
   }).map_err(|e| {
     panic!("Client connection failed: {}", e);
   }));
