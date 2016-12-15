@@ -119,7 +119,7 @@ impl Readable<BlockHeader> for BlockHeader {
 }
 
 /// A block as expressed in the MimbleWimble protocol. The reward is
-/// non-explicit, assumed to be deductible from block height (similar to
+/// non-explicit, assumed to be deducible from block height (similar to
 /// bitcoin's schedule) and expressed as a global transaction fee (added v.H),
 /// additive to the total of fees ever collected.
 pub struct Block {

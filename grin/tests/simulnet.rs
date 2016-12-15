@@ -16,31 +16,36 @@ extern crate grin_grin as grin;
 extern crate grin_core as core;
 extern crate grin_p2p as p2p;
 extern crate grin_chain as chain;
+
 extern crate env_logger;
+extern crate futures;
+extern crate tokio_core;
 
 use std::io;
 use std::thread;
 use std::time;
 
+use futures::Future;
+use tokio_core::reactor;
+
 #[test]
 fn simulate_servers() {
   env_logger::init().unwrap();
 
+  let mut evtlp = reactor::Core::new().unwrap();
+  let handle = evtlp.handle();
+
   // instantiates 5 servers on different ports
   let mut servers = vec![];
   for n in 0..5 {
-    thread::spawn(move || {
-      let s = grin::Server::start(
+      let s = grin::ServerFut::start(
           grin::ServerConfig{
             db_root: format!("target/grin-{}", n),
             cuckoo_size: 18,
             p2p_config: p2p::P2PConfig{port: 10000+n, ..p2p::P2PConfig::default()}
-          }).unwrap();
+          }, &handle).unwrap();
       servers.push(s);
-    });
   }
-
-  thread::sleep(time::Duration::from_millis(100));
 
   // everyone connects to everyone else
   for n in 0..5 {
@@ -52,4 +57,6 @@ fn simulate_servers() {
     }
   }
 
+  let timeout = reactor::Timeout::new(time::Duration::new(1, 0), &handle.clone()).unwrap();
+  evtlp.run(timeout);
 }

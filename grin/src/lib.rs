@@ -38,4 +38,4 @@ extern crate secp256k1zkp as secp;
 mod miner;
 mod server;
 
-pub use server::{Server, ServerConfig};
+pub use server::{Server, ServerFut, ServerConfig};
