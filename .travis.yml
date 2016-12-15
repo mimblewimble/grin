@@ -1,0 +1,13 @@
+language: rust
+rust:
+  -stable
+
+env:
+  - TEST_DIR=core
+  - TEST_DIR=p2p
+  - TEST_DIR=chain
+  - TEST_DIR=grin
+  global:
+    RUST_BACKTRACE="1"
+
+script: cd $TEST_DIR && cargo test --verbose
