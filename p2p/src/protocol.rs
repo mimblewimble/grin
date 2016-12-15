@@ -21,7 +21,7 @@ use futures;
 use futures::{Stream, Future};
 use futures::stream;
 use futures::sync::mpsc::{UnboundedSender, UnboundedReceiver};
-use tokio_core::io::{Io, WriteHalf, ReadHalf, write_all, read_exact, read_to_end};
+use tokio_core::io::{Io, WriteHalf, ReadHalf, write_all, read_exact};
 use tokio_core::net::TcpStream;
 
 use core::core;
@@ -56,7 +56,7 @@ impl ProtocolV1 {
 impl Protocol for ProtocolV1 {
 	fn handle(&self,
 	          conn: TcpStream,
-	          adapter: &NetAdapter)
+	          adapter: Arc<NetAdapter>)
 	          -> Box<Future<Item = (), Error = ser::Error>> {
 		let (reader, writer) = conn.split();
 
@@ -68,7 +68,7 @@ impl Protocol for ProtocolV1 {
 		}
 
 		// setup the reading future, getting messages from the peer and processing them
-		let read_msg = self.read_msg(tx, reader).map(|_| ());
+		let read_msg = self.read_msg(tx, reader, adapter).map(|_| ());
 
 		// setting the writing future, getting messages from our system and sending
 		// them out
@@ -111,8 +111,9 @@ impl ProtocolV1 {
 	/// Prepares the future reading from the peer connection, parsing each
 	/// message and forwarding them appropriately based on their type
 	fn read_msg(&self,
-	            tx: UnboundedSender<Vec<u8>>,
-	            reader: ReadHalf<TcpStream>)
+	            sender: UnboundedSender<Vec<u8>>,
+	            reader: ReadHalf<TcpStream>,
+	            adapter: Arc<NetAdapter>)
 	            -> Box<Future<Item = ReadHalf<TcpStream>, Error = ser::Error>> {
 
 		// infinite iterator stream so we repeat the message reading logic until the
@@ -122,8 +123,9 @@ impl ProtocolV1 {
 		// setup the reading future, getting messages from the peer and processing them
 		let recv_bytes = self.received_bytes.clone();
 		let read_msg = iter.fold(reader, move |reader, _| {
-			let mut tx_inner = tx.clone();
+			let mut sender_inner = sender.clone();
 			let recv_bytes = recv_bytes.clone();
+      let adapter = adapter.clone();
 
 			// first read the message header
 			read_exact(reader, vec![0u8; HEADER_LEN as usize])
@@ -132,24 +134,20 @@ impl ProtocolV1 {
 					let header = try!(ser::deserialize::<MsgHeader>(&mut &buf[..]));
 					Ok((reader, header))
 				})
-				.map(move |(reader, header)| {
-					// add the count of bytes sent
+				.and_then(move |(reader, header)| {
+          // now that we have a size, proceed with the body
+          read_exact(reader, vec![0u8; header.msg_len as usize]).map(|(reader, buf)| { (reader, header, buf) }).map_err(|e| ser::Error::IOErr(e))
+				})
+				.map(move |(reader, header, buf)| {
+					// add the count of bytes received
 					let mut recv_bytes = recv_bytes.lock().unwrap();
 					*recv_bytes += header.serialized_len() + header.msg_len;
 
 					// and handle the different message types
-					match header.msg_type {
-						Type::Ping => {
-							let data = ser::ser_vec(&MsgHeader::new(Type::Pong, 0)).unwrap();
-							if let Err(e) = tx_inner.send(data) {
-								warn!("Couldn't send pong to remote peer: {}", e);
-							}
-						}
-						Type::Pong => {}
-						_ => {
-							error!("unknown message type {:?}", header.msg_type);
-						}
-					};
+          if let Err(e) = handle_payload(adapter, &header, buf, &mut sender_inner) {
+            debug!("Invalid {:?} message: {}", header.msg_type, e);
+          }
+
 					reader
 				})
 		});
@@ -192,4 +190,26 @@ impl ProtocolV1 {
 		}
 		Ok(())
 	}
+}
+
+fn handle_payload(adapter: Arc<NetAdapter>, header: &MsgHeader, buf: Vec<u8>, sender: &mut UnboundedSender<Vec<u8>>) -> Result<(), ser::Error> {
+  match header.msg_type {
+    Type::Ping => {
+      let data = try!(ser::ser_vec(&MsgHeader::new(Type::Pong, 0)));
+      sender.send(data);
+    }
+    Type::Pong => {}
+    Type::Transaction => {
+      let tx = try!(ser::deserialize::<core::Transaction>(&mut &buf[..]));
+      adapter.transaction_received(tx);
+    }
+    Type::Block => {
+      let b = try!(ser::deserialize::<core::Block>(&mut &buf[..]));
+      adapter.block_received(b);
+    }
+    _ => {
+      debug!("unknown message type {:?}", header.msg_type);
+    }
+  };
+  Ok(())
 }

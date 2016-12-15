@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::sync::Arc;
+
 use futures::Future;
 use tokio_core::net::TcpStream;
 
@@ -55,7 +57,7 @@ impl Peer {
 		Box::new(hs_peer)
 	}
 
-	pub fn run(&self, conn: TcpStream, na: &NetAdapter) -> Box<Future<Item = (), Error = Error>> {
+	pub fn run(&self, conn: TcpStream, na: Arc<NetAdapter>) -> Box<Future<Item = (), Error = Error>> {
 		self.proto.handle(conn, na)
 	}
 

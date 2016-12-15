@@ -33,6 +33,7 @@ use handshake::Handshake;
 use peer::Peer;
 use types::*;
 
+/// A no-op network adapter used for testing.
 pub struct DummyAdapter {}
 impl NetAdapter for DummyAdapter {
 	fn transaction_received(&self, tx: core::Transaction) {}
@@ -83,7 +84,7 @@ impl Server {
 			let timed_peer = with_timeout(Box::new(peer_accept), &hp);
 
 			// run the main peer protocol
-			timed_peer.and_then(|(conn, peer)| peer.clone().run(conn, &DummyAdapter {}))
+			timed_peer.and_then(|(conn, peer)| peer.clone().run(conn, Arc::new(DummyAdapter {})))
 		});
 
 		// spawn each peer future to its own task
@@ -128,7 +129,7 @@ impl Server {
 				let peer_connect = add_to_peers(peers, Peer::connect(socket, &Handshake::new()));
 				with_timeout(Box::new(peer_connect), &h)
 			})
-			.and_then(|(socket, peer)| peer.run(socket, &DummyAdapter {}));
+			.and_then(|(socket, peer)| peer.run(socket, Arc::new(DummyAdapter {})));
 		Box::new(request)
 	}
 

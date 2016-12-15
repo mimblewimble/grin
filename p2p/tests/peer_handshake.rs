@@ -19,6 +19,7 @@ extern crate futures;
 extern crate tokio_core;
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time;
 
 use futures::future::Future;
@@ -50,7 +51,7 @@ fn peer_handshake() {
     socket.and_then(move |socket| {
       Peer::connect(socket, &p2p::handshake::Handshake::new())
 		}).and_then(move |(socket, peer)| {
-      rhandle.spawn(peer.run(socket, &p2p::DummyAdapter {}).map_err(|e| {
+      rhandle.spawn(peer.run(socket, Arc::new(p2p::DummyAdapter {})).map_err(|e| {
         panic!("Client run failed: {}", e);
       }));
       peer.send_ping().unwrap();

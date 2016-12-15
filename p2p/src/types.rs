@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::net::{SocketAddr, IpAddr};
+use std::sync::Arc;
 
 use futures::Future;
 use tokio_core::net::TcpStream;
@@ -65,7 +66,7 @@ pub trait Protocol {
 	/// be  known already, usually passed during construction. Will typically
 	/// block so needs to be called withing a coroutine. Should also be called
 	/// only once.
-	fn handle(&self, conn: TcpStream, na: &NetAdapter) -> Box<Future<Item = (), Error = Error>>;
+	fn handle(&self, conn: TcpStream, na: Arc<NetAdapter>) -> Box<Future<Item = (), Error = Error>>;
 
 	/// Sends a ping message to the remote peer.
 	fn send_ping(&self) -> Result<(), Error>;
@@ -86,7 +87,7 @@ pub trait Protocol {
 /// Bridge between the networking layer and the rest of the system. Handles the
 /// forwarding or querying of blocks and transactions among other things.
 pub trait NetAdapter {
-	/// A transaction has been received from one of our peers
+	/// A valid transaction has been received from one of our peers
 	fn transaction_received(&self, tx: core::Transaction);
 
 	/// A block has been received from one of our peers
