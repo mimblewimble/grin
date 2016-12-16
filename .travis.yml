@@ -1,12 +1,20 @@
 language: rust
+dist: trusty
+sudo: true
 rust:
   - stable
+  - beta
+
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - g++-5
 
 env:
   global:
     - RUST_BACKTRACE="1"
-    - CXX="g++-4.8"
-    - CC="gcc-4.8"
   matrix:
     - TEST_DIR=core
     - TEST_DIR=p2p
