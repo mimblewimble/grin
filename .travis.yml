@@ -1,6 +1,6 @@
 language: rust
 dist: trusty
-sudo: true
+sudo: false
 rust:
   - stable
   - beta
