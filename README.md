@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/ignopeverell/grin.svg?branch=master)](https://travis-ci.org/ignopeverell/grin) [![Gitter chat](https://badges.gitter.im/grin_community/Lobby.png)](https://gitter.im/grin_community/Lobby)
+
 # Grin
 
 Grin is an in-progress implementation of the MimbleWimble protocol. Many characteristics are still undefined but the following constitutes a first set of choices:
