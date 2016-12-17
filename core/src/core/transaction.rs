@@ -324,7 +324,7 @@ impl Writeable for Output {
 impl Readable<Output> for Output {
 	fn read(reader: &mut Reader) -> Result<Output, ser::Error> {
 		let commit = try!(Commitment::read(reader));
-		let proof = try!(reader.read_rangeproof());
+		let proof = try!(RangeProof::read(reader));
 		Ok(Output::BlindOutput {
 			commit: commit,
 			proof: proof,

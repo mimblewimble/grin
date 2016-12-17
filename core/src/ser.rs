@@ -169,8 +169,6 @@ pub trait Reader {
 	fn read_limited_vec(&mut self, max: usize) -> Result<Vec<u8>, Error>;
 	/// Read a fixed number of bytes from the underlying reader.
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error>;
-	/// Convenience function to read range proof
-	fn read_rangeproof(&mut self) -> Result<RangeProof, Error>;
 	/// Consumes a byte from the reader, producing an error if it doesn't have
 	/// the expected value
 	fn expect_u8(&mut self, val: u8) -> Result<u8, Error>;
@@ -252,17 +250,6 @@ impl<'a> Reader for BinReader<'a> {
 		let mut buf = vec![0; length];
 		self.source.read_exact(&mut buf).map(move |_| buf).map_err(Error::IOErr)
 	}
-	fn read_rangeproof(&mut self) -> Result<RangeProof, Error> {
-		let p = try!(self.read_limited_vec(MAX_PROOF_SIZE));
-		let mut a = [0; MAX_PROOF_SIZE];
-		for i in 0..p.len() {
-			a[i] = p[i];
-		}
-		Ok(RangeProof {
-			proof: a,
-			plen: p.len(),
-		})
-	}
 
 	fn expect_u8(&mut self, val: u8) -> Result<u8, Error> {
 		let b = try!(self.read_u8());
@@ -289,6 +276,19 @@ impl Readable<Commitment> for Commitment {
 	}
 }
 
+impl Readable<RangeProof> for RangeProof {
+	fn read(reader: &mut Reader) -> Result<RangeProof, Error> {
+		let p = try!(reader.read_limited_vec(MAX_PROOF_SIZE));
+		let mut a = [0; MAX_PROOF_SIZE];
+		for i in 0..p.len() {
+			a[i] = p[i];
+		}
+		Ok(RangeProof {
+			proof: a,
+			plen: p.len(),
+		})
+	}
+}
 
 /// Utility wrapper for an underlying byte Writer. Defines higher level methods
 /// to write numbers, byte vectors, hashes, etc.
