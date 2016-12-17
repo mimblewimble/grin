@@ -169,8 +169,6 @@ pub trait Reader {
 	fn read_limited_vec(&mut self, max: usize) -> Result<Vec<u8>, Error>;
 	/// Read a fixed number of bytes from the underlying reader.
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error>;
-	/// Convenience function to read commitment
-	fn read_commitment(&mut self) -> Result<Commitment, Error>;
 	/// Convenience function to read range proof
 	fn read_rangeproof(&mut self) -> Result<RangeProof, Error>;
 	/// Consumes a byte from the reader, producing an error if it doesn't have
@@ -254,14 +252,6 @@ impl<'a> Reader for BinReader<'a> {
 		let mut buf = vec![0; length];
 		self.source.read_exact(&mut buf).map(move |_| buf).map_err(Error::IOErr)
 	}
-	fn read_commitment(&mut self) -> Result<Commitment, Error> {
-		let a = try!(self.read_fixed_bytes(PEDERSEN_COMMITMENT_SIZE));
-		let mut c = [0; PEDERSEN_COMMITMENT_SIZE];
-		for i in 0..PEDERSEN_COMMITMENT_SIZE {
-			c[i] = a[i];
-		}
-		Ok(Commitment(c))
-	}
 	fn read_rangeproof(&mut self) -> Result<RangeProof, Error> {
 		let p = try!(self.read_limited_vec(MAX_PROOF_SIZE));
 		let mut a = [0; MAX_PROOF_SIZE];
@@ -286,6 +276,19 @@ impl<'a> Reader for BinReader<'a> {
 		}
 	}
 }
+
+
+impl Readable<Commitment> for Commitment {
+	fn read(reader: &mut Reader) -> Result<Commitment, Error> {
+		let a = try!(reader.read_fixed_bytes(PEDERSEN_COMMITMENT_SIZE));
+		let mut c = [0; PEDERSEN_COMMITMENT_SIZE];
+		for i in 0..PEDERSEN_COMMITMENT_SIZE {
+			c[i] = a[i];
+		}
+		Ok(Commitment(c))
+	}
+}
+
 
 /// Utility wrapper for an underlying byte Writer. Defines higher level methods
 /// to write numbers, byte vectors, hashes, etc.
