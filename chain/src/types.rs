@@ -111,8 +111,8 @@ impl ser::Writeable for Tip {
 impl ser::Readable<Tip> for Tip {
 	fn read(reader: &mut ser::Reader) -> Result<Tip, ser::Error> {
 		let height = try!(reader.read_u64());
-		let last = try!(reader.read_hash());
-		let prev = try!(reader.read_hash());
+		let last = try!(Hash::read(reader));
+		let prev = try!(Hash::read(reader));
 		let line = try!(Lineage::read(reader));
 		Ok(Tip {
 			height: height,

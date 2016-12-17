@@ -257,7 +257,7 @@ impl Writeable for Input {
 /// an Input from a binary stream.
 impl Readable<Input> for Input {
 	fn read(reader: &mut Reader) -> Result<Input, ser::Error> {
-		reader.read_hash()
+		Hash::read(reader)
 			.map(|h| Input::BareInput { output: h })
 	}
 }

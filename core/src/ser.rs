@@ -22,7 +22,6 @@
 use std::{error, fmt, cmp};
 use std::io::{self, Write, Read};
 use byteorder::{ByteOrder, ReadBytesExt, BigEndian};
-use core::hash::Hash;
 use core::Proof;
 use consensus::PROOFSIZE;
 use secp::pedersen::Commitment;
@@ -179,8 +178,6 @@ pub trait Reader {
 	fn read_limited_vec(&mut self, max: usize) -> Result<Vec<u8>, Error>;
 	/// Read a fixed number of bytes from the underlying reader.
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error>;
-	/// Convenience function to read hash
-	fn read_hash(&mut self) -> Result<Hash, Error>;
 	/// Convenience function to read proof
 	fn read_proof(&mut self) -> Result<Proof, Error>;
 	/// Convenience function to read commitment
@@ -267,14 +264,6 @@ impl<'a> Reader for BinReader<'a> {
 		}
 		let mut buf = vec![0; length];
 		self.source.read_exact(&mut buf).map(move |_| buf).map_err(Error::IOErr)
-	}
-	fn read_hash(&mut self) -> Result<Hash, Error> {
-		let v = try!(self.read_fixed_bytes(32));
-		let mut a = [0; 32];
-		for i in 0..a.len() {
-			a[i] = v[i];
-		}
-		Ok(Hash(a))
 	}
 	fn read_proof(&mut self) -> Result<Proof, Error> {
 		let mut pow = [0u32; PROOFSIZE];

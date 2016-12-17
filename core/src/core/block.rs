@@ -87,11 +87,13 @@ impl Writeable for BlockHeader {
 /// Deserialization of a block header
 impl Readable<BlockHeader> for BlockHeader {
 	fn read(reader: &mut Reader) -> Result<BlockHeader, ser::Error> {
-		let (height, previous, timestamp, cuckoo_len) =
-			ser_multiread!(reader, read_u64, read_hash, read_i64, read_u8);
+		let height = try!(reader.read_u64());
+		let previous = try!(Hash::read(reader));
+		let (timestamp, cuckoo_len) = ser_multiread!(reader, read_i64, read_u8);
 		let target = try!(Target::read(reader));
-		let (utxo_merkle, tx_merkle, nonce, pow) =
-			ser_multiread!(reader, read_hash, read_hash, read_u64, read_proof);
+		let utxo_merkle = try!(Hash::read(reader));
+		let tx_merkle = try!(Hash::read(reader));
+		let (nonce, pow) = ser_multiread!(reader, read_u64, read_proof);
 
 		Ok(BlockHeader {
 			height: height,
