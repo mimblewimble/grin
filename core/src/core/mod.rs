@@ -30,7 +30,7 @@ use consensus::PROOFSIZE;
 pub use self::block::{Block, BlockHeader};
 pub use self::transaction::{Transaction, Input, Output, TxProof};
 use self::hash::{Hash, Hashed, HashWriter, ZERO_HASH};
-use ser::{Writeable, Writer, Error};
+use ser::{Writeable, Writer, Reader, Error};
 
 /// Implemented by types that hold inputs and outputs including Pedersen
 /// commitments. Handles the collection of the commitments as well as their
@@ -145,6 +145,23 @@ impl Proof {
 	/// Hashes the Cuckoo Proof data.
 	pub fn to_target(self) -> target::Target {
 		target::Target(self.hash().0)
+	}
+	
+	/// read a proof from a stream
+	pub fn read(reader: &mut Reader) -> Result<Proof, Error> {
+		let mut pow = [0u32; PROOFSIZE];
+		for n in 0..PROOFSIZE {
+			pow[n] = try!(reader.read_u32());
+		}
+		Ok(Proof(pow))
+	}
+
+	/// write a proof to a stream
+	pub fn write (self, writer: &mut Writer) -> Result<(), Error> {
+		for n in 0..PROOFSIZE {
+			try!(writer.write_u32(self.0[n]));
+		}
+		Ok(())
 	}
 }
 

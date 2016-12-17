@@ -22,8 +22,6 @@
 use std::{error, fmt, cmp};
 use std::io::{self, Write, Read};
 use byteorder::{ByteOrder, ReadBytesExt, BigEndian};
-use core::Proof;
-use consensus::PROOFSIZE;
 use secp::pedersen::Commitment;
 use secp::pedersen::RangeProof;
 use secp::constants::PEDERSEN_COMMITMENT_SIZE;
@@ -150,13 +148,6 @@ pub trait Writer {
 	/// Writes a fixed number of bytes from something that can turn itself into
 	/// a `&[u8]`. The reader is expected to know the actual length on read.
 	fn write_fixed_bytes(&mut self, fixed: &AsFixedBytes) -> Result<(), Error>;
-
-	fn write_proof(&mut self, pow: Proof) -> Result<(), Error> {
-		for n in 0..PROOFSIZE {
-			try!(self.write_u32(pow.0[n]));
-		}
-		Ok(())
-	}
 }
 
 /// Implementations defined how different numbers and binary structures are
@@ -178,8 +169,6 @@ pub trait Reader {
 	fn read_limited_vec(&mut self, max: usize) -> Result<Vec<u8>, Error>;
 	/// Read a fixed number of bytes from the underlying reader.
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error>;
-	/// Convenience function to read proof
-	fn read_proof(&mut self) -> Result<Proof, Error>;
 	/// Convenience function to read commitment
 	fn read_commitment(&mut self) -> Result<Commitment, Error>;
 	/// Convenience function to read range proof
@@ -264,13 +253,6 @@ impl<'a> Reader for BinReader<'a> {
 		}
 		let mut buf = vec![0; length];
 		self.source.read_exact(&mut buf).map(move |_| buf).map_err(Error::IOErr)
-	}
-	fn read_proof(&mut self) -> Result<Proof, Error> {
-		let mut pow = [0u32; PROOFSIZE];
-		for n in 0..PROOFSIZE {
-			pow[n] = try!(self.read_u32());
-		}
-		Ok(Proof(pow))
 	}
 	fn read_commitment(&mut self) -> Result<Commitment, Error> {
 		let a = try!(self.read_fixed_bytes(PEDERSEN_COMMITMENT_SIZE));

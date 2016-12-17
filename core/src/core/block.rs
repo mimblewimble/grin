@@ -80,7 +80,7 @@ impl Writeable for BlockHeader {
 		// avoid complicating PoW
 		try!(writer.write_u64(self.nonce));
 		// proof
-		writer.write_proof(self.pow)
+		self.pow.write(writer)
 	}
 }
 
@@ -93,7 +93,8 @@ impl Readable<BlockHeader> for BlockHeader {
 		let target = try!(Target::read(reader));
 		let utxo_merkle = try!(Hash::read(reader));
 		let tx_merkle = try!(Hash::read(reader));
-		let (nonce, pow) = ser_multiread!(reader, read_u64, read_proof);
+		let nonce = try!(reader.read_u64());
+		let pow = try!(Proof::read(reader));
 
 		Ok(BlockHeader {
 			height: height,
