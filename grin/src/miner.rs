@@ -48,7 +48,7 @@ impl Miner {
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
 	pub fn run_loop(&self) {
-    info!("Starting miner loop.");
+		info!("Starting miner loop.");
 		loop {
 			// get the latest chain state and build a block on top of it
 			let head: core::BlockHeader;
@@ -64,7 +64,8 @@ impl Miner {
 			// transactions) and as long as the head hasn't changed
 			let deadline = time::get_time().sec + 2;
 			let mut sol = None;
-      debug!("Mining at Cuckoo{} for at most 2 secs.", b.header.cuckoo_len);
+			debug!("Mining at Cuckoo{} for at most 2 secs.",
+			       b.header.cuckoo_len);
 			while head.hash() == latest_hash && time::get_time().sec < deadline {
 				let pow_hash = pow_header.hash();
 				let mut miner = cuckoo::Miner::new(pow_hash.to_slice(),
@@ -84,15 +85,15 @@ impl Miner {
 
 			// if we found a solution, push our block out
 			if let Some(proof) = sol {
-        info!("Found valid proof of work, adding block {}.", b.hash());
+				info!("Found valid proof of work, adding block {}.", b.hash());
 				if let Err(e) = chain::process_block(&b,
 				                                     self.chain_store.lock().unwrap().deref(),
 				                                     chain::NONE) {
 					error!("Error validating mined block: {:?}", e);
 				}
 			} else {
-        debug!("No solution found, continuing...")
-      }
+				debug!("No solution found, continuing...")
+			}
 		}
 	}
 

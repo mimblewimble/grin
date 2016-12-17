@@ -85,11 +85,11 @@ impl Target {
 		(exp, res)
 	}
 
-  /// Truncates the target to its maximum precision.
-  pub fn truncate(&self) -> Target {
-    let (e, m) = self.split();
-    Target::join(e, m).unwrap()
-  }
+	/// Truncates the target to its maximum precision.
+	pub fn truncate(&self) -> Target {
+		let (e, m) = self.split();
+		Target::join(e, m).unwrap()
+	}
 }
 
 impl Index<usize> for Target {

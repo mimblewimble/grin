@@ -1,0 +1,24 @@
+language: rust
+dist: trusty
+sudo: true
+rust:
+  - stable
+  - beta
+
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - g++-5
+
+env:
+  global:
+    - RUST_BACKTRACE="1"
+  matrix:
+    - TEST_DIR=core
+    - TEST_DIR=p2p
+    - TEST_DIR=chain
+    - TEST_DIR=grin
+
+script: cd $TEST_DIR && cargo test --verbose
