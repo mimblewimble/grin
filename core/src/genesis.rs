@@ -18,17 +18,11 @@ use time;
 
 use core;
 use consensus::{DEFAULT_SIZESHIFT, MAX_TARGET};
-
-use tiny_keccak::Keccak;
+use core::hash::Hashed;
 
 // Genesis block definition. It has no rewards, no inputs, no outputs, no
 // fees and a height of zero.
 pub fn genesis() -> core::Block {
-	let mut sha3 = Keccak::new_sha3_256();
-	let mut empty_h = [0; 32];
-	sha3.update(&[]);
-	sha3.finalize(&mut empty_h);
-
 	core::Block {
 		header: core::BlockHeader {
 			height: 0,
@@ -41,8 +35,8 @@ pub fn genesis() -> core::Block {
 			},
 			cuckoo_len: DEFAULT_SIZESHIFT,
 			target: MAX_TARGET,
-			utxo_merkle: core::hash::Hash::from_vec(empty_h.to_vec()),
-			tx_merkle: core::hash::Hash::from_vec(empty_h.to_vec()),
+			utxo_merkle:  [].hash(),
+			tx_merkle:  [].hash(),
 			nonce: 0,
 			pow: core::Proof::zero(), // TODO get actual PoW solution
 		},

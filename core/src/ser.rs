@@ -19,9 +19,13 @@
 //! To use it simply implement `Writeable` or `Readable` and then use the
 //! `serialize` or `deserialize` functions on them as appropriate.
 
-use std::{error, fmt};
+use std::{error, fmt, cmp};
 use std::io::{self, Write, Read};
 use byteorder::{ByteOrder, ReadBytesExt, BigEndian};
+use secp::pedersen::Commitment;
+use secp::pedersen::RangeProof;
+use secp::constants::PEDERSEN_COMMITMENT_SIZE;
+use secp::constants::MAX_PROOF_SIZE;
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]
@@ -161,12 +165,10 @@ pub trait Reader {
 	fn read_i64(&mut self) -> Result<i64, Error>;
 	/// first before the data bytes.
 	fn read_vec(&mut self) -> Result<Vec<u8>, Error>;
+	/// first before the data bytes limited to max bytes.
+	fn read_limited_vec(&mut self, max: usize) -> Result<Vec<u8>, Error>;
 	/// Read a fixed number of bytes from the underlying reader.
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error>;
-	/// Convenience function to read 32 fixed bytes
-	fn read_32_bytes(&mut self) -> Result<Vec<u8>, Error>;
-	/// Convenience function to read 33 fixed bytes
-	fn read_33_bytes(&mut self) -> Result<Vec<u8>, Error>;
 	/// Consumes a byte from the reader, producing an error if it doesn't have
 	/// the expected value
 	fn expect_u8(&mut self, val: u8) -> Result<u8, Error>;
@@ -235,6 +237,11 @@ impl<'a> Reader for BinReader<'a> {
 		let len = try!(self.read_u64());
 		self.read_fixed_bytes(len as usize)
 	}
+	/// Read limited variable size vector from the underlying Read. Expects a usize
+	fn read_limited_vec(&mut self, max: usize) -> Result<Vec<u8>, Error> {
+		let len = cmp::min(max, try!(self.read_u64()) as usize);
+		self.read_fixed_bytes(len as usize)
+	}
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error> {
 		// not reading more than 100k in a single read
 		if length > 100000 {
@@ -243,12 +250,7 @@ impl<'a> Reader for BinReader<'a> {
 		let mut buf = vec![0; length];
 		self.source.read_exact(&mut buf).map(move |_| buf).map_err(Error::IOErr)
 	}
-	fn read_32_bytes(&mut self) -> Result<Vec<u8>, Error> {
-		self.read_fixed_bytes(32)
-	}
-	fn read_33_bytes(&mut self) -> Result<Vec<u8>, Error> {
-		self.read_fixed_bytes(33)
-	}
+
 	fn expect_u8(&mut self, val: u8) -> Result<u8, Error> {
 		let b = try!(self.read_u8());
 		if b == val {
@@ -259,6 +261,32 @@ impl<'a> Reader for BinReader<'a> {
 				received: vec![b],
 			})
 		}
+	}
+}
+
+
+impl Readable<Commitment> for Commitment {
+	fn read(reader: &mut Reader) -> Result<Commitment, Error> {
+		let a = try!(reader.read_fixed_bytes(PEDERSEN_COMMITMENT_SIZE));
+		let mut c = [0; PEDERSEN_COMMITMENT_SIZE];
+		for i in 0..PEDERSEN_COMMITMENT_SIZE {
+			c[i] = a[i];
+		}
+		Ok(Commitment(c))
+	}
+}
+
+impl Readable<RangeProof> for RangeProof {
+	fn read(reader: &mut Reader) -> Result<RangeProof, Error> {
+		let p = try!(reader.read_limited_vec(MAX_PROOF_SIZE));
+		let mut a = [0; MAX_PROOF_SIZE];
+		for i in 0..p.len() {
+			a[i] = p[i];
+		}
+		Ok(RangeProof {
+			proof: a,
+			plen: p.len(),
+		})
 	}
 }
 

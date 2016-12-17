@@ -21,7 +21,7 @@ use byteorder::{ByteOrder, BigEndian};
 use std::fmt;
 use tiny_keccak::Keccak;
 
-use ser::{self, AsFixedBytes};
+use ser::{self, AsFixedBytes, Reader, Readable, Error};
 
 pub const ZERO_HASH: Hash = Hash([0; 32]);
 
@@ -40,14 +40,6 @@ impl fmt::Display for Hash {
 }
 
 impl Hash {
-	/// Creates a new hash from a vector
-	pub fn from_vec(v: Vec<u8>) -> Hash {
-		let mut a = [0; 32];
-		for i in 0..a.len() {
-			a[i] = v[i];
-		}
-		Hash(a)
-	}
 	/// Converts the hash to a byte vector
 	pub fn to_vec(&self) -> Vec<u8> {
 		self.0.to_vec()
@@ -55,6 +47,18 @@ impl Hash {
 	/// Converts the hash to a byte slice
 	pub fn to_slice(&self) -> &[u8] {
 		&self.0
+	}
+}
+
+
+impl Readable<Hash> for Hash {
+	fn read(reader: &mut Reader) -> Result<Hash, ser::Error> {
+		let v = try!(reader.read_fixed_bytes(32));
+		let mut a = [0; 32];
+		for i in 0..a.len() {
+			a[i] = v[i];
+		}
+		Ok(Hash(a))
 	}
 }
 
@@ -105,7 +109,7 @@ impl Hashed for [u8] {
 	fn hash(&self) -> Hash {
 		let mut hasher = HashWriter::default();
 		let mut ret = [0; 32];
-		ser::Writer::write_bytes(&mut hasher, &self).unwrap();
+		ser::Writer::write_fixed_bytes(&mut hasher, &self).unwrap();
 		hasher.finalize(&mut ret);
 		Hash(ret)
 	}

@@ -28,7 +28,7 @@ use key::{SecretKey, PublicKey};
 use rand::{Rng, OsRng};
 
 /// A Pedersen commitment
-pub struct Commitment([u8; constants::PEDERSEN_COMMITMENT_SIZE]);
+pub struct Commitment(pub [u8; constants::PEDERSEN_COMMITMENT_SIZE]);
 impl_array_newtype!(Commitment, u8, constants::PEDERSEN_COMMITMENT_SIZE);
 impl_pretty_debug!(Commitment);
 
@@ -36,14 +36,6 @@ impl Commitment {
     /// Uninitialized commitment, use with caution
     unsafe fn blank() -> Commitment {
         mem::uninitialized()
-    }
-    /// Builds a commitment from a binary vector. Will panic if the vector is too short.
-    pub fn from_vec(c: Vec<u8>) -> Commitment {
-        let mut a = [0; constants::PEDERSEN_COMMITMENT_SIZE];
-        for i in 0..a.len() {
-            a[i] = c[i];
-        }
-        Commitment(a)
     }
     /// Converts a commitment to a public key
     pub fn to_pubkey(&self, secp: &Secp256k1) -> Result<key::PublicKey, Error> {
@@ -83,17 +75,6 @@ impl Clone for RangeProof {
 }
 
 impl RangeProof {
-    /// Builds a range proof from a binary vector. Will panic if the vector is longer than the max proof size.
-    pub fn from_vec(p: Vec<u8>) -> RangeProof {
-        let mut a = [0; constants::MAX_PROOF_SIZE];
-        for i in 0..p.len() {
-            a[i] = p[i];
-        }
-        RangeProof {
-            proof: a,
-            plen: p.len(),
-        }
-    }
     pub fn bytes(&self) -> &[u8] {
         &self.proof[..self.plen as usize]
     }

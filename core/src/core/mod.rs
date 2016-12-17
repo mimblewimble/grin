@@ -30,7 +30,7 @@ use consensus::PROOFSIZE;
 pub use self::block::{Block, BlockHeader};
 pub use self::transaction::{Transaction, Input, Output, TxProof};
 use self::hash::{Hash, Hashed, HashWriter, ZERO_HASH};
-use ser::{Writeable, Writer, Error};
+use ser::{Writeable, Writer, Reader, Readable, Error};
 
 /// Implemented by types that hold inputs and outputs including Pedersen
 /// commitments. Handles the collection of the commitments as well as their
@@ -109,32 +109,10 @@ impl Clone for Proof {
 	}
 }
 
-impl Hashed for Proof {
-	fn hash(&self) -> Hash {
-		let mut hasher = HashWriter::default();
-		let mut ret = [0; 32];
-		for p in self.0.iter() {
-			hasher.write_u32(*p).unwrap();
-		}
-		hasher.finalize(&mut ret);
-		Hash(ret)
-	}
-}
-
 impl Proof {
 	/// Builds a proof with all bytes zeroed out
 	pub fn zero() -> Proof {
-		Proof([0; 42])
-	}
-
-	/// Builds a proof from a vector of exactly PROOFSIZE (42) u32.
-	pub fn from_vec(v: Vec<u32>) -> Proof {
-		assert!(v.len() == PROOFSIZE);
-		let mut p = [0; PROOFSIZE];
-		for (n, elem) in v.iter().enumerate() {
-			p[n] = *elem;
-		}
-		Proof(p)
+		Proof([0; PROOFSIZE])
 	}
 
 	/// Converts the proof to a vector of u64s
@@ -155,6 +133,25 @@ impl Proof {
 	/// Hashes the Cuckoo Proof data.
 	pub fn to_target(self) -> target::Target {
 		target::Target(self.hash().0)
+	}
+}
+
+impl Readable<Proof> for Proof {
+	fn read(reader: &mut Reader) -> Result<Proof, Error> {
+		let mut pow = [0u32; PROOFSIZE];
+		for n in 0..PROOFSIZE {
+			pow[n] = try!(reader.read_u32());
+		}
+		Ok(Proof(pow))
+	}
+}
+
+impl Writeable for Proof {
+	fn write(&self, writer: &mut Writer) -> Result<(), Error> {
+		for n in 0..PROOFSIZE {
+			try!(writer.write_u32(self.0[n]));
+		}
+		Ok(())
 	}
 }
 

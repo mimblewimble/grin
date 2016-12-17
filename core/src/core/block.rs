@@ -23,7 +23,7 @@ use std::collections::HashSet;
 use core::Committed;
 use core::{Input, Output, Proof, TxProof, Transaction};
 use core::transaction::merkle_inputs_outputs;
-use consensus::{PROOFSIZE, REWARD, DEFAULT_SIZESHIFT, MAX_TARGET};
+use consensus::{REWARD, DEFAULT_SIZESHIFT, MAX_TARGET};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Target;
 use ser::{self, Readable, Reader, Writeable, Writer};
@@ -79,40 +79,35 @@ impl Writeable for BlockHeader {
 		// make sure to not introduce any variable length data before the nonce to
 		// avoid complicating PoW
 		try!(writer.write_u64(self.nonce));
-		// cuckoo cycle of 42 nodes
-		for n in 0..PROOFSIZE {
-			try!(writer.write_u32(self.pow.0[n]));
-		}
-		Ok(())
+		// proof
+		self.pow.write(writer)
 	}
 }
 
 /// Deserialization of a block header
 impl Readable<BlockHeader> for BlockHeader {
 	fn read(reader: &mut Reader) -> Result<BlockHeader, ser::Error> {
-		let (height, previous, timestamp, cuckoo_len) =
-			ser_multiread!(reader, read_u64, read_32_bytes, read_i64, read_u8);
+		let height = try!(reader.read_u64());
+		let previous = try!(Hash::read(reader));
+		let (timestamp, cuckoo_len) = ser_multiread!(reader, read_i64, read_u8);
 		let target = try!(Target::read(reader));
-		let (utxo_merkle, tx_merkle, nonce) =
-			ser_multiread!(reader, read_32_bytes, read_32_bytes, read_u64);
+		let utxo_merkle = try!(Hash::read(reader));
+		let tx_merkle = try!(Hash::read(reader));
+		let nonce = try!(reader.read_u64());
+		let pow = try!(Proof::read(reader));
 
-		// cuckoo cycle of 42 nodes
-		let mut pow = [0; PROOFSIZE];
-		for n in 0..PROOFSIZE {
-			pow[n] = try!(reader.read_u32());
-		}
 		Ok(BlockHeader {
 			height: height,
-			previous: Hash::from_vec(previous),
+			previous: previous,
 			timestamp: time::at_utc(time::Timespec {
 				sec: timestamp,
 				nsec: 0,
 			}),
 			cuckoo_len: cuckoo_len,
 			target: target,
-			utxo_merkle: Hash::from_vec(utxo_merkle),
-			tx_merkle: Hash::from_vec(tx_merkle),
-			pow: Proof(pow),
+			utxo_merkle: utxo_merkle,
+			tx_merkle: tx_merkle,
+			pow: pow,
 			nonce: nonce,
 		})
 	}
@@ -356,7 +351,7 @@ impl Block {
 	fn reward_output(skey: secp::key::SecretKey,
 	                 secp: &Secp256k1)
 	                 -> Result<(Output, TxProof), secp::Error> {
-		let msg = try!(secp::Message::from_slice(&[0; 32]));
+		let msg = try!(secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE]));
 		let sig = try!(secp.sign(&msg, &skey));
 		let output = Output::OvertOutput {
 				value: REWARD,
