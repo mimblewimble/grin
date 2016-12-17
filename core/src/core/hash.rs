@@ -21,7 +21,7 @@ use byteorder::{ByteOrder, BigEndian};
 use std::fmt;
 use tiny_keccak::Keccak;
 
-use ser::{self, AsFixedBytes, Reader, Error};
+use ser::{self, AsFixedBytes, Reader, Readable, Error};
 
 pub const ZERO_HASH: Hash = Hash([0; 32]);
 
@@ -48,7 +48,11 @@ impl Hash {
 	pub fn to_slice(&self) -> &[u8] {
 		&self.0
 	}
-	pub fn read(reader: &mut Reader) -> Result<Hash, Error> {
+}
+
+
+impl Readable<Hash> for Hash {
+	fn read(reader: &mut Reader) -> Result<Hash, ser::Error> {
 		let v = try!(reader.read_fixed_bytes(32));
 		let mut a = [0; 32];
 		for i in 0..a.len() {
