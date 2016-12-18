@@ -66,7 +66,10 @@ pub trait Protocol {
 	/// be  known already, usually passed during construction. Will typically
 	/// block so needs to be called withing a coroutine. Should also be called
 	/// only once.
-	fn handle(&self, conn: TcpStream, na: Arc<NetAdapter>) -> Box<Future<Item = (), Error = Error>>;
+	fn handle(&self,
+	          conn: TcpStream,
+	          na: Arc<NetAdapter>)
+	          -> Box<Future<Item = (), Error = Error>>;
 
 	/// Sends a ping message to the remote peer.
 	fn send_ping(&self) -> Result<(), Error>;

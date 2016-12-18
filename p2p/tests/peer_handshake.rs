@@ -37,7 +37,8 @@ fn peer_handshake() {
   let mut evtlp = Core::new().unwrap();
   let handle = evtlp.handle();
   let p2p_conf = p2p::P2PConfig::default();
-  let server = p2p::Server::new(p2p_conf);
+  let net_adapter = Arc::new(p2p::DummyAdapter{});
+  let server = p2p::Server::new(p2p_conf, net_adapter.clone());
   let run_server = server.start(handle.clone());
 
   let phandle = handle.clone();
@@ -51,7 +52,7 @@ fn peer_handshake() {
     socket.and_then(move |socket| {
       Peer::connect(socket, &p2p::handshake::Handshake::new())
 		}).and_then(move |(socket, peer)| {
-      rhandle.spawn(peer.run(socket, Arc::new(p2p::DummyAdapter {})).map_err(|e| {
+      rhandle.spawn(peer.run(socket, net_adapter.clone()).map_err(|e| {
         panic!("Client run failed: {}", e);
       }));
       peer.send_ping().unwrap();

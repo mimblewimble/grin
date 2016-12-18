@@ -57,7 +57,10 @@ impl Peer {
 		Box::new(hs_peer)
 	}
 
-	pub fn run(&self, conn: TcpStream, na: Arc<NetAdapter>) -> Box<Future<Item = (), Error = Error>> {
+	pub fn run(&self,
+	           conn: TcpStream,
+	           na: Arc<NetAdapter>)
+	           -> Box<Future<Item = (), Error = Error>> {
 		self.proto.handle(conn, na)
 	}
 

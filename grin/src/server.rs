@@ -23,6 +23,7 @@ use std::thread;
 use futures::Future;
 use tokio_core::reactor;
 
+use adapters::NetToChainAdapter;
 use chain;
 use chain::ChainStore;
 use core;
@@ -72,7 +73,7 @@ pub struct Server {
 	/// the reference copy of the current chain state
 	chain_head: Arc<Mutex<chain::Tip>>,
 	/// data store access
-	chain_store: Arc<Mutex<chain::ChainStore>>,
+	chain_store: Arc<chain::ChainStore>,
 }
 
 impl Server {
@@ -82,7 +83,8 @@ impl Server {
 
 		let mut evtlp = reactor::Core::new().unwrap();
 		let handle = evtlp.handle();
-		let server = Arc::new(p2p::Server::new(config.p2p_config));
+		let net_adapter = Arc::new(NetToChainAdapter::new(chain_store.clone()));
+		let server = Arc::new(p2p::Server::new(config.p2p_config, net_adapter));
 		evtlp.run(server.start(handle.clone())).unwrap();
 
 		warn!("Grin server started.");
@@ -91,7 +93,7 @@ impl Server {
 			evt_handle: handle.clone(),
 			p2p: server,
 			chain_head: Arc::new(Mutex::new(head)),
-			chain_store: Arc::new(Mutex::new(chain_store)),
+			chain_store: chain_store,
 		})
 	}
 
@@ -121,7 +123,7 @@ pub struct ServerFut {
 	/// the reference copy of the current chain state
 	chain_head: Arc<Mutex<chain::Tip>>,
 	/// data store access
-	chain_store: Arc<Mutex<chain::ChainStore>>,
+	chain_store: Arc<chain::ChainStore>,
 }
 
 impl ServerFut {
@@ -129,7 +131,8 @@ impl ServerFut {
 	pub fn start(config: ServerConfig, evt_handle: &reactor::Handle) -> Result<Server, Error> {
 		let (chain_store, head) = try!(store_head(&config));
 
-		let server = Arc::new(p2p::Server::new(config.p2p_config));
+		let net_adapter = Arc::new(NetToChainAdapter::new(chain_store.clone()));
+		let server = Arc::new(p2p::Server::new(config.p2p_config, net_adapter));
 		evt_handle.spawn(server.start(evt_handle.clone()).map_err(|_| ()));
 
 		warn!("Grin server started.");
@@ -138,7 +141,7 @@ impl ServerFut {
 			evt_handle: evt_handle.clone(),
 			p2p: server,
 			chain_head: Arc::new(Mutex::new(head)),
-			chain_store: Arc::new(Mutex::new(chain_store)),
+			chain_store: chain_store,
 		})
 	}
 
@@ -160,7 +163,8 @@ impl ServerFut {
 
 // Helper function to create the chain storage and check if it already has a
 // genesis block
-fn store_head(config: &ServerConfig) -> Result<(chain::store::ChainKVStore, chain::Tip), Error> {
+fn store_head(config: &ServerConfig)
+              -> Result<(Arc<chain::store::ChainKVStore>, chain::Tip), Error> {
 	let chain_store = try!(chain::store::ChainKVStore::new(config.db_root.clone())
 		.map_err(&Error::StoreErr));
 
@@ -178,5 +182,5 @@ fn store_head(config: &ServerConfig) -> Result<(chain::store::ChainKVStore, chai
 		}
 		Err(e) => return Err(Error::StoreErr(e)),
 	};
-	Ok((chain_store, head))
+	Ok((Arc::new(chain_store), head))
 }

@@ -45,6 +45,7 @@ impl NetAdapter for DummyAdapter {
 pub struct Server {
 	config: P2PConfig,
 	peers: Arc<RwLock<Vec<Arc<Peer>>>>,
+	adapter: Arc<NetAdapter>,
 	stop: RefCell<Option<futures::sync::oneshot::Sender<()>>>,
 }
 
@@ -54,10 +55,11 @@ unsafe impl Send for Server {}
 // TODO TLS
 impl Server {
 	/// Creates a new idle p2p server with no peers
-	pub fn new(config: P2PConfig) -> Server {
+	pub fn new(config: P2PConfig, adapter: Arc<NetAdapter>) -> Server {
 		Server {
 			config: config,
 			peers: Arc::new(RwLock::new(Vec::new())),
+			adapter: adapter,
 			stop: RefCell::new(None),
 		}
 	}
@@ -71,10 +73,12 @@ impl Server {
 
 		let hs = Arc::new(Handshake::new());
 		let peers = self.peers.clone();
+		let adapter = self.adapter.clone();
 
 		// main peer acceptance future handling handshake
 		let hp = h.clone();
 		let peers = socket.incoming().map_err(|e| Error::IOErr(e)).map(move |(conn, addr)| {
+			let adapter = adapter.clone();
 			let peers = peers.clone();
 
 			// accept the peer and add it to the server map
@@ -84,7 +88,7 @@ impl Server {
 			let timed_peer = with_timeout(Box::new(peer_accept), &hp);
 
 			// run the main peer protocol
-			timed_peer.and_then(|(conn, peer)| peer.clone().run(conn, Arc::new(DummyAdapter {})))
+			timed_peer.and_then(move |(conn, peer)| peer.clone().run(conn, adapter))
 		});
 
 		// spawn each peer future to its own task
@@ -120,6 +124,8 @@ impl Server {
 	                    h: reactor::Handle)
 	                    -> Box<Future<Item = (), Error = Error>> {
 		let peers = self.peers.clone();
+		let adapter = self.adapter.clone();
+
 		let socket = TcpStream::connect(&addr, &h).map_err(|e| Error::IOErr(e));
 		let request = socket.and_then(move |socket| {
 				let peers = peers.clone();
@@ -129,7 +135,7 @@ impl Server {
 				let peer_connect = add_to_peers(peers, Peer::connect(socket, &Handshake::new()));
 				with_timeout(Box::new(peer_connect), &h)
 			})
-			.and_then(|(socket, peer)| peer.run(socket, Arc::new(DummyAdapter {})));
+			.and_then(move |(socket, peer)| peer.run(socket, adapter));
 		Box::new(request)
 	}
 

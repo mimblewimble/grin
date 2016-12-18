@@ -30,15 +30,13 @@ use secp;
 
 pub struct Miner {
 	chain_head: Arc<Mutex<chain::Tip>>,
-	chain_store: Arc<Mutex<chain::ChainStore>>,
+	chain_store: Arc<chain::ChainStore>,
 }
 
 impl Miner {
 	/// Creates a new Miner. Needs references to the chain state and its
 	/// storage.
-	pub fn new(chain_head: Arc<Mutex<chain::Tip>>,
-	           chain_store: Arc<Mutex<chain::ChainStore>>)
-	           -> Miner {
+	pub fn new(chain_head: Arc<Mutex<chain::Tip>>, chain_store: Arc<chain::ChainStore>) -> Miner {
 		Miner {
 			chain_head: chain_head,
 			chain_store: chain_store,
@@ -54,7 +52,7 @@ impl Miner {
 			let head: core::BlockHeader;
 			let mut latest_hash: Hash;
 			{
-				head = self.chain_store.lock().unwrap().head_header().unwrap();
+				head = self.chain_store.head_header().unwrap();
 				latest_hash = self.chain_head.lock().unwrap().last_block_h;
 			}
 			let b = self.build_block(&head);
@@ -86,9 +84,7 @@ impl Miner {
 			// if we found a solution, push our block out
 			if let Some(proof) = sol {
 				info!("Found valid proof of work, adding block {}.", b.hash());
-				if let Err(e) = chain::process_block(&b,
-				                                     self.chain_store.lock().unwrap().deref(),
-				                                     chain::NONE) {
+				if let Err(e) = chain::process_block(&b, self.chain_store.clone(), chain::NONE) {
 					error!("Error validating mined block: {:?}", e);
 				}
 			} else {

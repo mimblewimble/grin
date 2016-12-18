@@ -14,6 +14,8 @@
 
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
+use std::sync::{Arc, Mutex};
+
 use secp;
 use time;
 
@@ -36,9 +38,9 @@ bitflags! {
 
 /// Contextual information required to process a new block and either reject or
 /// accept it.
-pub struct BlockContext<'a> {
+pub struct BlockContext {
 	opts: Options,
-	store: &'a ChainStore,
+	store: Arc<ChainStore>,
 	head: Tip,
 	tip: Option<Tip>,
 }
@@ -59,7 +61,7 @@ pub enum Error {
 	StoreErr(types::Error),
 }
 
-pub fn process_block(b: &Block, store: &ChainStore, opts: Options) -> Result<(), Error> {
+pub fn process_block(b: &Block, store: Arc<ChainStore>, opts: Options) -> Result<(), Error> {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 

@@ -17,6 +17,7 @@ extern crate grin_chain;
 extern crate rand;
 extern crate secp256k1zkp as secp;
 
+use std::sync::Arc;
 use rand::os::OsRng;
 
 use grin_chain::types::*;
@@ -26,7 +27,6 @@ use grin_core::consensus;
 
 #[test]
 fn mine_empty_chain() {
-  let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	let mut rng = OsRng::new().unwrap();
 	let store = grin_chain::store::ChainKVStore::new(".grin".to_string()).unwrap();
 
@@ -42,6 +42,7 @@ fn mine_empty_chain() {
   let mut prev = gen;
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
+  let arc_store = Arc::new(store);
 
   for n in 1..4 {
     let mut b = core::Block::new(&prev.header, vec![], reward_key).unwrap();
@@ -55,10 +56,10 @@ fn mine_empty_chain() {
     b.header.pow = proof;
     b.header.nonce = nonce;
     b.header.target = diff_target;
-    grin_chain::pipe::process_block(&b, &store, grin_chain::pipe::EASY_POW).unwrap();
+    grin_chain::pipe::process_block(&b, arc_store.clone(), grin_chain::pipe::EASY_POW).unwrap();
 
     // checking our new head
-    let head = store.head().unwrap();
+    let head = arc_store.clone().head().unwrap();
     assert_eq!(head.height, n);
     assert_eq!(head.last_block_h, b.hash());
 

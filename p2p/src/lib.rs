@@ -44,4 +44,4 @@ mod types;
 
 pub use server::{Server, DummyAdapter};
 pub use peer::Peer;
-pub use types::P2PConfig;
+pub use types::{P2PConfig, NetAdapter};

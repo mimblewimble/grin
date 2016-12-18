@@ -133,7 +133,7 @@ pub enum Error {
 
 /// Trait the chain pipeline requires an implementor for in order to process
 /// blocks.
-pub trait ChainStore: Send {
+pub trait ChainStore: Send + Sync {
 	/// Get the tip that's also the head of the chain
 	fn head(&self) -> Result<Tip, Error>;
 
