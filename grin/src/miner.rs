@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex};
 use std::ops::Deref;
 use time;
 
+use adapters::ChainToNetAdapter;
 use core::consensus;
 use core::core;
 use core::core::hash::{Hash, Hashed};
@@ -31,15 +32,21 @@ use secp;
 pub struct Miner {
 	chain_head: Arc<Mutex<chain::Tip>>,
 	chain_store: Arc<chain::ChainStore>,
+	/// chain adapter to net
+	chain_adapter: Arc<ChainToNetAdapter>,
 }
 
 impl Miner {
 	/// Creates a new Miner. Needs references to the chain state and its
 	/// storage.
-	pub fn new(chain_head: Arc<Mutex<chain::Tip>>, chain_store: Arc<chain::ChainStore>) -> Miner {
+	pub fn new(chain_head: Arc<Mutex<chain::Tip>>,
+	           chain_store: Arc<chain::ChainStore>,
+	           chain_adapter: Arc<ChainToNetAdapter>)
+	           -> Miner {
 		Miner {
 			chain_head: chain_head,
 			chain_store: chain_store,
+			chain_adapter: chain_adapter,
 		}
 	}
 
@@ -55,15 +62,17 @@ impl Miner {
 				head = self.chain_store.head_header().unwrap();
 				latest_hash = self.chain_head.lock().unwrap().last_block_h;
 			}
-			let b = self.build_block(&head);
+			let mut b = self.build_block(&head);
 			let mut pow_header = pow::PowHeader::from_block(&b);
 
 			// look for a pow for at most 2 sec on the same block (to give a chance to new
 			// transactions) and as long as the head hasn't changed
 			let deadline = time::get_time().sec + 2;
 			let mut sol = None;
-			debug!("Mining at Cuckoo{} for at most 2 secs.",
-			       b.header.cuckoo_len);
+			debug!("Mining at Cuckoo{} for at most 2 secs on block {}.",
+			       b.header.cuckoo_len,
+			       latest_hash);
+			let mut iter_count = 0;
 			while head.hash() == latest_hash && time::get_time().sec < deadline {
 				let pow_hash = pow_header.hash();
 				let mut miner = cuckoo::Miner::new(pow_hash.to_slice(),
@@ -79,16 +88,28 @@ impl Miner {
 				{
 					latest_hash = self.chain_head.lock().unwrap().last_block_h;
 				}
+				iter_count += 1;
 			}
 
 			// if we found a solution, push our block out
 			if let Some(proof) = sol {
 				info!("Found valid proof of work, adding block {}.", b.hash());
-				if let Err(e) = chain::process_block(&b, self.chain_store.clone(), chain::NONE) {
+				b.header.pow = proof;
+				b.header.nonce = pow_header.nonce;
+				let res = chain::process_block(&b,
+				                               self.chain_store.clone(),
+				                               self.chain_adapter.clone(),
+				                               chain::NONE);
+				if let Err(e) = res {
 					error!("Error validating mined block: {:?}", e);
+				} else if let Ok(Some(tip)) = res {
+					let chain_head = self.chain_head.clone();
+					let mut head = chain_head.lock().unwrap();
+					*head = tip;
 				}
 			} else {
-				debug!("No solution found, continuing...")
+				debug!("No solution found after {} iterations, continuing...",
+				       iter_count)
 			}
 		}
 	}
@@ -110,19 +131,11 @@ impl Miner {
 		let skey = secp::key::SecretKey::new(&secp_inst, &mut rng);
 
 		// TODO populate inputs and outputs from pool transactions
-		core::Block {
-			header: core::BlockHeader {
-				height: head.height + 1,
-				previous: head.hash(),
-				timestamp: time::at(time::Timespec::new(now_sec, 0)),
-				cuckoo_len: cuckoo_len,
-				target: target,
-				nonce: rng.gen(),
-				..Default::default()
-			},
-			inputs: vec![],
-			outputs: vec![],
-			proofs: vec![],
-		}
+		let mut b = core::Block::new(head, vec![], skey).unwrap();
+		b.header.nonce = rng.gen();
+		b.header.target = target;
+		b.header.cuckoo_len = cuckoo_len;
+		b.header.timestamp = time::at(time::Timespec::new(now_sec, 0));
+		b
 	}
 }
