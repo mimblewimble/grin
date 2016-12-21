@@ -23,7 +23,7 @@ use std::thread;
 use futures::Future;
 use tokio_core::reactor;
 
-use adapters::NetToChainAdapter;
+use adapters::{NetToChainAdapter, ChainToNetAdapter};
 use chain;
 use chain::ChainStore;
 use core;
@@ -74,26 +74,37 @@ pub struct Server {
 	chain_head: Arc<Mutex<chain::Tip>>,
 	/// data store access
 	chain_store: Arc<chain::ChainStore>,
+	/// chain adapter to net, required for miner and anything that submits
+	/// blocks
+	chain_adapter: Arc<ChainToNetAdapter>,
 }
 
 impl Server {
 	/// Instantiates and starts a new server.
 	pub fn start(config: ServerConfig) -> Result<Server, Error> {
 		let (chain_store, head) = try!(store_head(&config));
+		let shared_head = Arc::new(Mutex::new(head));
+
+		let chain_adapter = Arc::new(ChainToNetAdapter::new());
+		let net_adapter = Arc::new(NetToChainAdapter::new(shared_head.clone(),
+		                                                  chain_store.clone(),
+		                                                  chain_adapter.clone()));
+		let server = Arc::new(p2p::Server::new(config.p2p_config, net_adapter));
+		chain_adapter.init(server.clone());
 
 		let mut evtlp = reactor::Core::new().unwrap();
 		let handle = evtlp.handle();
-		let net_adapter = Arc::new(NetToChainAdapter::new(chain_store.clone()));
-		let server = Arc::new(p2p::Server::new(config.p2p_config, net_adapter));
 		evtlp.run(server.start(handle.clone())).unwrap();
+
 
 		warn!("Grin server started.");
 		Ok(Server {
 			config: config,
 			evt_handle: handle.clone(),
 			p2p: server,
-			chain_head: Arc::new(Mutex::new(head)),
+			chain_head: shared_head,
 			chain_store: chain_store,
+			chain_adapter: chain_adapter,
 		})
 	}
 
@@ -107,7 +118,9 @@ impl Server {
 	/// Start mining for blocks on a separate thread. Relies on a toy miner,
 	/// mostly for testing.
 	pub fn start_miner(&self) {
-		let miner = miner::Miner::new(self.chain_head.clone(), self.chain_store.clone());
+		let miner = miner::Miner::new(self.chain_head.clone(),
+		                              self.chain_store.clone(),
+		                              self.chain_adapter.clone());
 		thread::spawn(move || {
 			miner.run_loop();
 		});
@@ -124,15 +137,24 @@ pub struct ServerFut {
 	chain_head: Arc<Mutex<chain::Tip>>,
 	/// data store access
 	chain_store: Arc<chain::ChainStore>,
+	/// chain adapter to net, required for miner and anything that submits
+	/// blocks
+	chain_adapter: Arc<ChainToNetAdapter>,
 }
 
 impl ServerFut {
 	/// Instantiates and starts a new server.
 	pub fn start(config: ServerConfig, evt_handle: &reactor::Handle) -> Result<Server, Error> {
 		let (chain_store, head) = try!(store_head(&config));
+		let shared_head = Arc::new(Mutex::new(head));
 
-		let net_adapter = Arc::new(NetToChainAdapter::new(chain_store.clone()));
+		let chain_adapter = Arc::new(ChainToNetAdapter::new());
+		let net_adapter = Arc::new(NetToChainAdapter::new(shared_head.clone(),
+		                                                  chain_store.clone(),
+		                                                  chain_adapter.clone()));
 		let server = Arc::new(p2p::Server::new(config.p2p_config, net_adapter));
+		chain_adapter.init(server.clone());
+
 		evt_handle.spawn(server.start(evt_handle.clone()).map_err(|_| ()));
 
 		warn!("Grin server started.");
@@ -140,8 +162,9 @@ impl ServerFut {
 			config: config,
 			evt_handle: evt_handle.clone(),
 			p2p: server,
-			chain_head: Arc::new(Mutex::new(head)),
+			chain_head: shared_head,
 			chain_store: chain_store,
+			chain_adapter: chain_adapter,
 		})
 	}
 
@@ -154,7 +177,9 @@ impl ServerFut {
 	/// Start mining for blocks on a separate thread. Relies on a toy miner,
 	/// mostly for testing.
 	pub fn start_miner(&self) {
-		let miner = miner::Miner::new(self.chain_head.clone(), self.chain_store.clone());
+		let miner = miner::Miner::new(self.chain_head.clone(),
+		                              self.chain_store.clone(),
+		                              self.chain_adapter.clone());
 		thread::spawn(move || {
 			miner.run_loop();
 		});
@@ -172,12 +197,14 @@ fn store_head(config: &ServerConfig)
 	let head = match chain_store.head() {
 		Ok(tip) => tip,
 		Err(chain::types::Error::NotFoundErr) => {
+			debug!("No genesis block found, creating and saving one.");
 			let mut gen = core::genesis::genesis();
 			if config.cuckoo_size > 0 {
 				gen.header.cuckoo_len = config.cuckoo_size;
 			}
+			try!(chain_store.save_block(&gen).map_err(&Error::StoreErr));
 			let tip = chain::types::Tip::new(gen.hash());
-			try!(chain_store.save_tip(&tip).map_err(&Error::StoreErr));
+			try!(chain_store.save_head(&tip).map_err(&Error::StoreErr));
 			tip
 		}
 		Err(e) => return Err(Error::StoreErr(e)),

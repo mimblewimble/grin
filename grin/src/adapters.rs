@@ -14,12 +14,19 @@
 
 use std::sync::{Arc, Mutex};
 
-use chain;
+use chain::{self, ChainAdapter};
 use core::core;
-use p2p::NetAdapter;
+use p2p::{NetAdapter, Server};
+use util::OneTime;
 
+/// Implementation of the NetAdapter for the blockchain. Gets notified when new
+/// blocks and transactions are received and forwards to the chain and pool
+/// implementations.
 pub struct NetToChainAdapter {
+	/// the reference copy of the current chain state
+	chain_head: Arc<Mutex<chain::Tip>>,
 	chain_store: Arc<chain::ChainStore>,
+	chain_adapter: Arc<ChainToNetAdapter>,
 }
 
 impl NetAdapter for NetToChainAdapter {
@@ -27,16 +34,56 @@ impl NetAdapter for NetToChainAdapter {
 		unimplemented!();
 	}
 	fn block_received(&self, b: core::Block) {
-		// if let Err(e) = chain::process_block(&b, self.chain_store,
-		// chain::pipe::NONE) {
-		//   debug!("Block {} refused by chain: {}", b.hash(), e);
-		// }
-		unimplemented!();
+		// TODO delegate to a separate thread to avoid holding up the caller
+		debug!("Received block {} from network, going to process.",
+		       b.hash());
+		// pushing the new block through the chain pipeline
+		let store = self.chain_store.clone();
+		let chain_adapter = self.chain_adapter.clone();
+		let res = chain::process_block(&b, store, chain_adapter, chain::NONE);
+
+		// log errors and update the shared head reference on success
+		if let Err(e) = res {
+			debug!("Block {} refused by chain: {:?}", b.hash(), e);
+		} else if let Ok(Some(tip)) = res {
+			let chain_head = self.chain_head.clone();
+			let mut head = chain_head.lock().unwrap();
+			*head = tip;
+		}
 	}
 }
 
 impl NetToChainAdapter {
-	pub fn new(chain_store: Arc<chain::ChainStore>) -> NetToChainAdapter {
-		NetToChainAdapter { chain_store: chain_store }
+	pub fn new(chain_head: Arc<Mutex<chain::Tip>>,
+	           chain_store: Arc<chain::ChainStore>,
+	           chain_adapter: Arc<ChainToNetAdapter>)
+	           -> NetToChainAdapter {
+		NetToChainAdapter {
+			chain_head: chain_head,
+			chain_store: chain_store,
+			chain_adapter: chain_adapter,
+		}
+	}
+}
+
+/// Implementation of the ChainAdapter for the network. Gets notified when the
+/// blockchain accepted a new block and forwards it to the network for
+/// broadcast.
+pub struct ChainToNetAdapter {
+	p2p: OneTime<Arc<Server>>,
+}
+
+impl ChainAdapter for ChainToNetAdapter {
+	fn block_accepted(&self, b: &core::Block) {
+		self.p2p.borrow().broadcast_block(b);
+	}
+}
+
+impl ChainToNetAdapter {
+	pub fn new() -> ChainToNetAdapter {
+		ChainToNetAdapter { p2p: OneTime::new() }
+	}
+	pub fn init(&self, p2p: Arc<Server>) {
+		self.p2p.init(p2p);
 	}
 }

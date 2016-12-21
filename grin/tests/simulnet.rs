@@ -41,7 +41,7 @@ fn simulate_servers() {
       let s = grin::ServerFut::start(
           grin::ServerConfig{
             db_root: format!("target/grin-{}", n),
-            cuckoo_size: 18,
+            cuckoo_size: 12,
             p2p_config: p2p::P2PConfig{port: 10000+n, ..p2p::P2PConfig::default()}
           }, &handle).unwrap();
       servers.push(s);
@@ -53,10 +53,12 @@ fn simulate_servers() {
       if m == n { continue }
       let addr = format!("{}:{}", "127.0.0.1", 10000+m);
       servers[n].connect_peer(addr.parse().unwrap()).unwrap();
-      println!("c {}", m);
     }
   }
 
-  let timeout = reactor::Timeout::new(time::Duration::new(1, 0), &handle.clone()).unwrap();
+  // start mining
+  servers[0].start_miner();
+
+  let timeout = reactor::Timeout::new(time::Duration::new(10, 0), &handle.clone()).unwrap();
   evtlp.run(timeout);
 }
