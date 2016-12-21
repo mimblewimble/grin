@@ -237,7 +237,8 @@ impl<'a> Reader for BinReader<'a> {
 		let len = try!(self.read_u64());
 		self.read_fixed_bytes(len as usize)
 	}
-	/// Read limited variable size vector from the underlying Read. Expects a usize
+	/// Read limited variable size vector from the underlying Read. Expects a
+	/// usize
 	fn read_limited_vec(&mut self, max: usize) -> Result<Vec<u8>, Error> {
 		let len = cmp::min(max, try!(self.read_u64()) as usize);
 		self.read_fixed_bytes(len as usize)

@@ -35,8 +35,8 @@ pub fn genesis() -> core::Block {
 			},
 			cuckoo_len: DEFAULT_SIZESHIFT,
 			target: MAX_TARGET,
-			utxo_merkle:  [].hash(),
-			tx_merkle:  [].hash(),
+			utxo_merkle: [].hash(),
+			tx_merkle: [].hash(),
 			nonce: 0,
 			pow: core::Proof::zero(), // TODO get actual PoW solution
 		},

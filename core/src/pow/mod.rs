@@ -92,20 +92,14 @@ pub fn verify(b: &Block) -> bool {
 	verify_size(b, b.header.cuckoo_len as u32)
 }
 
-/// Same as default verify function but uses the much easier Cuckoo20 (mostly
-/// for tests).
-pub fn verify20(b: &Block) -> bool {
-	verify_size(b, 20)
-}
-
-pub fn verify_size(b: &Block, sizeshift: u32) -> bool {
+pub fn verify_size(b: &Block, cuckoo_sz: u32) -> bool {
 	let hash = PowHeader::from_block(b).hash();
 	// make sure the hash is smaller than our target before going into more
 	// expensive validation
 	if b.header.target < b.header.pow.to_target() {
 		return false;
 	}
-	Cuckoo::new(hash.to_slice(), sizeshift).verify(b.header.pow, EASINESS as u64)
+	Cuckoo::new(hash.to_slice(), cuckoo_sz).verify(b.header.pow, EASINESS as u64)
 }
 
 /// Runs a naive single-threaded proof of work computation over the provided
@@ -165,6 +159,7 @@ mod test {
 		assert!(proof.to_target() < MAX_TARGET);
 		b.header.pow = proof;
 		b.header.nonce = nonce;
-		assert!(verify20(&b));
+		b.header.cuckoo_len = 20;
+		assert!(verify(&b));
 	}
 }

@@ -51,7 +51,7 @@ impl Writeable for TxProof {
 
 impl Readable<TxProof> for TxProof {
 	fn read(reader: &mut Reader) -> Result<TxProof, ser::Error> {
-		let remainder = try!(Commitment::read (reader));
+		let remainder = try!(Commitment::read(reader));
 		let (sig, fee) = ser_multiread!(reader, read_vec, read_u64);
 		Ok(TxProof {
 			remainder: remainder,
@@ -258,8 +258,7 @@ impl Writeable for Input {
 /// an Input from a binary stream.
 impl Readable<Input> for Input {
 	fn read(reader: &mut Reader) -> Result<Input, ser::Error> {
-		Hash::read(reader)
-			.map(|h| Input::BareInput { output: h })
+		Hash::read(reader).map(|h| Input::BareInput { output: h })
 	}
 }
 
