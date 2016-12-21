@@ -36,9 +36,6 @@ pub struct ChainKVStore {
 	db: grin_store::Store,
 }
 
-unsafe impl Sync for ChainKVStore {}
-unsafe impl Send for ChainKVStore {}
-
 impl ChainKVStore {
 	pub fn new(root_path: String) -> Result<ChainKVStore, Error> {
 		let db = try!(grin_store::Store::open(format!("{}/{}", root_path, STORE_SUBPATH).as_str())

@@ -43,6 +43,7 @@ fn mine_empty_chain() {
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
   let arc_store = Arc::new(store);
+  let adapter = Arc::new(NoopAdapter{});
 
   for n in 1..4 {
     let mut b = core::Block::new(&prev.header, vec![], reward_key).unwrap();
@@ -56,7 +57,7 @@ fn mine_empty_chain() {
     b.header.pow = proof;
     b.header.nonce = nonce;
     b.header.target = diff_target;
-    grin_chain::pipe::process_block(&b, arc_store.clone(), grin_chain::pipe::EASY_POW).unwrap();
+    grin_chain::pipe::process_block(&b, arc_store.clone(), adapter.clone(), grin_chain::pipe::EASY_POW).unwrap();
 
     // checking our new head
     let head = arc_store.clone().head().unwrap();

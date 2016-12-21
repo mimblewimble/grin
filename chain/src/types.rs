@@ -152,3 +152,17 @@ pub trait ChainStore: Send + Sync {
 	/// Save the provided tip without setting it as head
 	fn save_tip(&self, t: &Tip) -> Result<(), Error>;
 }
+
+/// Bridge between the chain pipeline and the rest of the system. Handles
+/// downstream processing of valid blocks by the rest of the system, most
+/// importantly the broadcasting of blocks to our peers.
+pub trait ChainAdapter {
+	/// The blockchain pipeline has accepted this block as valid and added
+	/// it to our chain.
+	fn block_accepted(&self, b: &Block);
+}
+
+pub struct NoopAdapter { }
+impl ChainAdapter for NoopAdapter {
+	fn block_accepted(&self, b: &Block) {}
+}

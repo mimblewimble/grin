@@ -24,7 +24,7 @@ use core::core::hash::Hash;
 use core::core::{BlockHeader, Block, Proof};
 use core::pow;
 use types;
-use types::{Tip, ChainStore};
+use types::{Tip, ChainStore, ChainAdapter, NoopAdapter};
 use store;
 
 bitflags! {
@@ -41,6 +41,7 @@ bitflags! {
 pub struct BlockContext {
 	opts: Options,
 	store: Arc<ChainStore>,
+	adapter: Arc<ChainAdapter>,
 	head: Tip,
 	tip: Option<Tip>,
 }
@@ -51,6 +52,8 @@ pub enum Error {
 	Unfit(String),
 	/// Target is too high either compared to ours or the block PoW hash
 	TargetTooHigh,
+	/// Size of the Cuckoo graph in block header doesn't match PoW requirements
+	WrongCuckooSize,
 	/// The proof of work is invalid
 	InvalidPow,
 	/// The block doesn't sum correctly or a tx signature is invalid
@@ -61,34 +64,53 @@ pub enum Error {
 	StoreErr(types::Error),
 }
 
-pub fn process_block(b: &Block, store: Arc<ChainStore>, opts: Options) -> Result<(), Error> {
+/// Runs the block processing pipeline, including validation and finding a
+/// place for the new block in the chain. Returns the new
+/// chain head if updated.
+pub fn process_block(b: &Block,
+                     store: Arc<ChainStore>,
+                     adapter: Arc<ChainAdapter>,
+                     opts: Options)
+                     -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
 	let head = try!(store.head().map_err(&Error::StoreErr));
+
 	let mut ctx = BlockContext {
 		opts: opts,
 		store: store,
+		adapter: adapter,
 		head: head,
 		tip: None,
 	};
 
+	info!("Starting validation pipeline for block {} at {}.",
+	      b.hash(),
+	      b.header.height);
+	try!(check_known(b.hash(), &mut ctx));
 	try!(validate_header(&b, &mut ctx));
 	try!(set_tip(&b.header, &mut ctx));
 	try!(validate_block(b, &mut ctx));
+	info!("Block at {} with hash {} is valid, going to save and append.",
+	      b.header.height,
+	      b.hash());
 	try!(add_block(b, &mut ctx));
+	// TODO a global lock should be set before that step or even earlier
 	try!(update_tips(&mut ctx));
-	Ok(())
+
+	// TODO make sure we always return the head, and not a fork that just got longer
+	Ok(ctx.tip)
 }
 
-// block processing pipeline
-// 1. is the header valid (time, PoW, etc.)
-// 2. is it the next head, a new fork, or extension of a fork (not a too old
-// fork tho)
-// 3. ok fine, is all of it valid (txs, merkle, utxo merkle, etc.)
-// 4. add the sucker to the head/fork
-// 5. did we increase a fork difficulty over the head?
-// 6. ok fine, swap them up (can be tricky, think addresses invalidation)
+/// Quick in-memory check to fast-reject any block we've already handled
+/// recently. Keeps duplicates from the network in check.
+fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
+	if bh == ctx.head.last_block_h || bh == ctx.head.prev_block_h {
+		return Err(Error::Unfit("already known".to_string()));
+	}
+	Ok(())
+}
 
 /// First level of black validation that only needs to act on the block header
 /// to make it as cheap as possible. The different validations are also
@@ -115,6 +137,7 @@ fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 		return Err(Error::InvalidBlockTime);
 	}
 
+	// verify the proof of work and related parameters
 	let (diff_target, cuckoo_sz) = consensus::next_target(header.timestamp.to_timespec().sec,
 	                                                      prev.timestamp.to_timespec().sec,
 	                                                      prev.target,
@@ -122,12 +145,15 @@ fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	if header.target > diff_target {
 		return Err(Error::TargetTooHigh);
 	}
+	if header.cuckoo_len != cuckoo_sz && !ctx.opts.intersects(EASY_POW) {
+		return Err(Error::WrongCuckooSize);
+	}
 
 	if ctx.opts.intersects(EASY_POW) {
 		if !pow::verify_size(b, 15) {
 			return Err(Error::InvalidPow);
 		}
-	} else if !pow::verify_size(b, cuckoo_sz as u32) {
+	} else if !pow::verify(b) {
 		return Err(Error::InvalidPow);
 	}
 
@@ -135,6 +161,11 @@ fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 }
 
 fn set_tip(h: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+	// TODO actually support more than one branch
+	if h.previous != ctx.head.last_block_h {
+		return Err(Error::Unfit("Just don't know where to put it right now".to_string()));
+	}
+	// TODO validate block header height
 	ctx.tip = Some(ctx.head.clone());
 	Ok(())
 }
@@ -147,10 +178,17 @@ fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 }
 
 fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
+	// save the block and appends it to the selected tip
 	ctx.tip = ctx.tip.as_ref().map(|t| t.append(b.hash()));
-	ctx.store.save_block(b).map_err(&Error::StoreErr)
+	ctx.store.save_block(b).map_err(&Error::StoreErr);
+
+	// broadcast the block
+	let adapter = ctx.adapter.clone();
+	adapter.block_accepted(b);
+	Ok(())
 }
 
 fn update_tips(ctx: &mut BlockContext) -> Result<(), Error> {
-	ctx.store.save_head(ctx.tip.as_ref().unwrap()).map_err(&Error::StoreErr)
+	let tip = ctx.tip.as_ref().unwrap();
+	ctx.store.save_head(tip).map_err(&Error::StoreErr)
 }
