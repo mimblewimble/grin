@@ -72,6 +72,13 @@ impl Peer {
 		self.proto.send_ping()
 	}
 
+	/// Sends the provided block to the remote peer. The request may be dropped
+	/// if the remote peer is known to already have the block.
+	pub fn send_block(&self, b: &core::Block) -> Result<(), Error> {
+		// TODO do not send if the peer sent us the block in the first place
+		self.proto.send_block(b)
+	}
+
 	pub fn stop(&self) {
 		self.proto.close();
 	}

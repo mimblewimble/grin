@@ -139,6 +139,18 @@ impl Server {
 		Box::new(request)
 	}
 
+	/// Broadcasts the provided block to all our peers. A peer implementation
+	/// may drop the broadcast request if it knows the remote peer already has
+	/// the block.
+	pub fn broadcast_block(&self, b: &core::Block) {
+		let peers = self.peers.write().unwrap();
+		for p in peers.deref() {
+			if let Err(e) = p.send_block(b) {
+				debug!("Error sending block to peer: {}", e);
+			}
+		}
+	}
+
 	pub fn peers_count(&self) -> u32 {
 		self.peers.read().unwrap().len() as u32
 	}
