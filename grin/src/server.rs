@@ -108,43 +108,8 @@ impl Server {
 		})
 	}
 
-	/// Asks the server to connect to a peer at the provided network address.
-	pub fn connect_peer(&self, addr: SocketAddr) -> Result<(), Error> {
-		let handle = self.evt_handle.clone();
-		handle.spawn(self.p2p.connect_peer(addr, handle.clone()).map_err(|_| ()));
-		Ok(())
-	}
-
-	/// Start mining for blocks on a separate thread. Relies on a toy miner,
-	/// mostly for testing.
-	pub fn start_miner(&self) {
-		let miner = miner::Miner::new(self.chain_head.clone(),
-		                              self.chain_store.clone(),
-		                              self.chain_adapter.clone());
-		thread::spawn(move || {
-			miner.run_loop();
-		});
-	}
-}
-
-/// Implementation of the server that doesn't take control of the event loop
-/// and returns futures instead.
-pub struct ServerFut {
-	config: ServerConfig,
-	/// handle to our network server
-	p2p: Arc<p2p::Server>,
-	/// the reference copy of the current chain state
-	chain_head: Arc<Mutex<chain::Tip>>,
-	/// data store access
-	chain_store: Arc<chain::ChainStore>,
-	/// chain adapter to net, required for miner and anything that submits
-	/// blocks
-	chain_adapter: Arc<ChainToNetAdapter>,
-}
-
-impl ServerFut {
-	/// Instantiates and starts a new server.
-	pub fn start(config: ServerConfig, evt_handle: &reactor::Handle) -> Result<Server, Error> {
+	/// Instantiates a new server associated with the provided future reactor.
+	pub fn future(config: ServerConfig, evt_handle: &reactor::Handle) -> Result<Server, Error> {
 		let (chain_store, head) = try!(store_head(&config));
 		let shared_head = Arc::new(Mutex::new(head));
 
@@ -169,7 +134,8 @@ impl ServerFut {
 	}
 
 	/// Asks the server to connect to a peer at the provided network address.
-	pub fn connect_peer(&self, addr: SocketAddr, handle: &reactor::Handle) -> Result<(), Error> {
+	pub fn connect_peer(&self, addr: SocketAddr) -> Result<(), Error> {
+		let handle = self.evt_handle.clone();
 		handle.spawn(self.p2p.connect_peer(addr, handle.clone()).map_err(|_| ()));
 		Ok(())
 	}
@@ -183,6 +149,12 @@ impl ServerFut {
 		thread::spawn(move || {
 			miner.run_loop();
 		});
+	}
+
+	pub fn head(&self) -> chain::Tip {
+		let head = self.chain_head.clone();
+		let h = head.lock().unwrap();
+		h.clone()
 	}
 }
 

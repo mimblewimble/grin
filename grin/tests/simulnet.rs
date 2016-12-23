@@ -25,7 +25,8 @@ use std::io;
 use std::thread;
 use std::time;
 
-use futures::Future;
+use futures::{Future, Poll, Async};
+use futures::task::park;
 use tokio_core::reactor;
 
 #[test]
@@ -38,7 +39,7 @@ fn simulate_servers() {
   // instantiates 5 servers on different ports
   let mut servers = vec![];
   for n in 0..5 {
-      let s = grin::ServerFut::start(
+      let s = grin::Server::future(
           grin::ServerConfig{
             db_root: format!("target/grin-{}", n),
             cuckoo_size: 12,
@@ -58,7 +59,42 @@ fn simulate_servers() {
 
   // start mining
   servers[0].start_miner();
+  let original_height = servers[0].head().height;
 
-  let timeout = reactor::Timeout::new(time::Duration::new(10, 0), &handle.clone()).unwrap();
-  evtlp.run(timeout);
+  // monitor for a change of head on a different server and check we 
+  evtlp.run(change(&servers[4]).and_then(|tip| {
+    assert!(tip.height == original_height+1);
+    Ok(())
+  }));
+}
+
+// Builds the change future, monitoring for a change of head on the provided server
+fn change<'a>(s: &'a grin::Server) -> HeadChange<'a> {
+  let start_head = s.head();
+  HeadChange {
+    server: s,
+    original: start_head,
+  }
+}
+
+/// Future that monitors when a server has had its head updated.
+struct HeadChange<'a> {
+  server: &'a grin::Server,
+  original:  chain::Tip,
+}
+
+impl<'a> Future for HeadChange<'a> {
+  type Item = chain::Tip;
+  type Error = ();
+
+  fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    let new_head = self.server.head();
+    if new_head.last_block_h != self.original.last_block_h {
+      Ok(Async::Ready(new_head))
+    } else {
+      // egregious polling, asking the task to schedule us every iteration
+      park().unpark();
+      Ok(Async::NotReady)
+    }
+  }
 }

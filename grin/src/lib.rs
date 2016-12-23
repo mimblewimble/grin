@@ -40,4 +40,4 @@ mod adapters;
 mod miner;
 mod server;
 
-pub use server::{Server, ServerFut, ServerConfig};
+pub use server::{Server, ServerConfig};
