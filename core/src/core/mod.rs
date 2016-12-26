@@ -131,8 +131,8 @@ impl Proof {
 
 	/// Converts the proof to a proof-of-work Target so they can be compared.
 	/// Hashes the Cuckoo Proof data.
-	pub fn to_target(self) -> target::Target {
-		target::Target(self.hash().0)
+	pub fn to_difficulty(self) -> target::Difficulty {
+		target::Difficulty::from_hash(&self.hash())
 	}
 }
 

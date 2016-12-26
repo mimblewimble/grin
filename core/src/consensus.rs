@@ -21,7 +21,9 @@
 
 use std::cmp;
 
-use core::target::Target;
+use bigint::{BigInt, Sign, BigUint};
+
+use core::target::Difficulty;
 
 /// The block subsidy amount
 pub const REWARD: u64 = 1_000_000_000;
@@ -55,46 +57,41 @@ pub const EASINESS: u32 = 50;
 /// remove 1/1024th of the target for each 10 seconds of deviation from the 30
 /// seconds block time. Increases Cuckoo size shift by one when next_target
 /// reaches soft max.
-pub fn next_target(ts: i64, prev_ts: i64, prev_target: Target, prev_cuckoo_sz: u8) -> (Target, u8) {
+pub fn next_target(ts: i64,
+                   prev_ts: i64,
+                   prev_diff: Difficulty,
+                   prev_cuckoo_sz: u8)
+                   -> (Difficulty, u8) {
+	let one = BigInt::new(Sign::Plus, vec![1]);
+	let two = BigInt::new(Sign::Plus, vec![2]);
+	let ten = BigInt::new(Sign::Plus, vec![10]);
+
 	// increase the cuckoo size when the target gets lower than the soft min as
 	// long as we're not at the max size already; target gets 2x to compensate for
 	// increased next_target
-	let soft_min = SOFT_MIN_TARGET >>
-	               (((prev_cuckoo_sz - cmp::min(DEFAULT_SIZESHIFT, prev_cuckoo_sz)) * 8) as usize);
-	let (ptarget, clen) = if prev_target < soft_min && prev_cuckoo_sz < MAX_SIZESHIFT {
-		(prev_target << 1, prev_cuckoo_sz + 1)
+	let soft_min = one.clone() <<
+	               (((prev_cuckoo_sz - cmp::min(DEFAULT_SIZESHIFT, prev_cuckoo_sz)) *
+	                 8 + 16) as usize);
+	let prev_diff = BigInt::from_biguint(Sign::Plus, prev_diff.num);
+	let (pdiff, clen) = if prev_diff > soft_min && prev_cuckoo_sz < MAX_SIZESHIFT {
+		(prev_diff / two, prev_cuckoo_sz + 1)
 	} else {
-		(prev_target, prev_cuckoo_sz)
+		(prev_diff, prev_cuckoo_sz)
 	};
 
-	// target is increased/decreased by multiples of 1/1024th of itself
-	let incdec = ptarget >> 10;
-	// signed deviation from desired value divided by ten and bounded in [-3, 3]
-	let delta = cmp::max(cmp::min((ts - prev_ts - (BLOCK_TIME_SEC as i64)) / 10, 3),
-	                     -3);
-	// increase or decrease the target based on the sign of delta by a shift of
-	// |delta|-1; keep as-is for delta of zero
-	let new_target = match delta {
-		1...3 => ptarget + (incdec << ((delta - 1) as usize)),
-		-3...-1 => ptarget - (incdec << ((-delta - 1) as usize)),
-		_ => ptarget,
-	};
+	// signed deviation from desired value divided by ten and bounded in [-6, 6]
+	let delta = cmp::max(cmp::min((ts - prev_ts - (BLOCK_TIME_SEC as i64)), 60), -60);
+	let delta_bigi = BigInt::new(if delta >= 0 { Sign::Plus } else { Sign::Minus },
+	                             vec![delta.abs() as u32]);
+	let new_diff = pdiff.clone() - ((pdiff >> 10) + one.clone()) * delta_bigi / ten;
 
-	// cannot exceed the maximum target
-	if new_target > MAX_TARGET {
-		(MAX_TARGET, clen)
+	// cannot be lower than one
+	if new_diff < one {
+		(Difficulty::one(), clen)
 	} else {
-		(new_target.truncate(), clen)
+		(Difficulty { num: new_diff.to_biguint().unwrap() }, clen)
 	}
 }
-
-/// Max target hash, lowest next_target
-pub const MAX_TARGET: Target = Target([0xf, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-
-/// Target limit under which we start increasing the size shift on Cuckoo cycle.
-pub const SOFT_MIN_TARGET: Target = Target([0, 0, 0xf, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 
 /// Default number of blocks in the past when cross-block cut-through will start
 /// happening. Needs to be long enough to not overlap with a long reorg.
@@ -110,52 +107,46 @@ pub const MAX_MSG_LEN: u64 = 20_000_000;
 
 #[cfg(test)]
 mod test {
+	use core::target::Difficulty;
+
 	use super::*;
 
 	#[test]
 	/// Checks different next_target adjustments and difficulty boundaries
 	fn next_target_adjustment() {
 		// can't do lower than min
-		assert_eq!(next_target(60, 0, MAX_TARGET, 26), (MAX_TARGET, 26));
-		assert_eq!(next_target(90, 30, MAX_TARGET, 26), (MAX_TARGET, 26));
-		assert_eq!(next_target(60, 0, MAX_TARGET, 26), (MAX_TARGET, 26));
+		assert_eq!(next_target(60, 0, Difficulty::one(), 26),
+		           (Difficulty::one(), 26));
+		assert_eq!(next_target(90, 30, Difficulty::one(), 26),
+		           (Difficulty::one(), 26));
+		assert_eq!(next_target(60, 0, Difficulty::one(), 26),
+		           (Difficulty::one(), 26));
 
-		// lower next_target if gap too short, even negative
-		assert_eq!(next_target(50, 0, MAX_TARGET, 26).0,
-		           (MAX_TARGET - (MAX_TARGET >> 10)).truncate());
-		assert_eq!(next_target(40, 0, MAX_TARGET, 26).0,
-		           (MAX_TARGET - ((MAX_TARGET >> 10) << 1)).truncate());
-		assert_eq!(next_target(0, 20, MAX_TARGET, 26).0,
-		           (MAX_TARGET - ((MAX_TARGET >> 10) << 2)).truncate());
+		// lower next_target if gap too short
+		assert_eq!(next_target(30, 0, Difficulty::one(), 26).0,
+		           Difficulty::from_num(4));
+		assert_eq!(next_target(50, 0, Difficulty::one(), 26).0,
+		           Difficulty::from_num(2));
+		assert_eq!(next_target(40, 0, Difficulty::from_num(1024 * 8), 26).0,
+		           Difficulty::from_num(1024 * 8 + 18));
 
-		// raise next_target if gap too wide
-		let lower_target = MAX_TARGET >> 8;
-		assert_eq!(next_target(70, 0, lower_target, 26).0,
-		           (lower_target + (lower_target >> 10)).truncate());
-		assert_eq!(next_target(80, 0, lower_target, 26).0,
-		           (lower_target + ((lower_target >> 10) << 1)).truncate());
-		assert_eq!(next_target(200, 0, lower_target, 26).0,
-		           (lower_target + ((lower_target >> 10) << 2)).truncate());
+		// lower difficulty if gap too wide
+		assert_eq!(next_target(70, 0, Difficulty::from_num(10), 26).0,
+		           Difficulty::from_num(9));
+		assert_eq!(next_target(90, 0, Difficulty::from_num(1024 * 8), 26).0,
+		           Difficulty::from_num(1024 * 8 - 9 * 3));
 
-		// close enough, no adjustment
-		assert_eq!(next_target(65, 0, lower_target, 26).0, lower_target);
-		assert_eq!(next_target(55, 0, lower_target, 26).0, lower_target);
+		// identical, no adjustment
+		assert_eq!(next_target(60, 0, Difficulty::from_num(1024 * 8), 26).0,
+		           Difficulty::from_num(1024 * 8));
 
 		// increase cuckoo size if next_target goes above soft max, target is doubled,
 		// up to 29
-		assert_eq!(next_target(60, 0, SOFT_MIN_TARGET >> 1, 25),
-		           ((SOFT_MIN_TARGET >> 1) << 1, 26));
-		assert_eq!(next_target(60, 0, SOFT_MIN_TARGET >> 9, 26),
-		           ((SOFT_MIN_TARGET >> 9) << 1, 27));
-		assert_eq!(next_target(60, 0, SOFT_MIN_TARGET >> 17, 27),
-		           ((SOFT_MIN_TARGET >> 17) << 1, 28));
-		assert_eq!(next_target(60, 0, SOFT_MIN_TARGET >> 25, 28),
-		           ((SOFT_MIN_TARGET >> 25) << 1, 29));
-		assert_eq!(next_target(60, 0, SOFT_MIN_TARGET >> 33, 29),
-		           (SOFT_MIN_TARGET >> 33, 29));
-
-		// should only increase on the according previous size
-		assert_eq!(next_target(60, 0, SOFT_MIN_TARGET >> 1, 26),
-		           (SOFT_MIN_TARGET >> 1, 26));
+		assert_eq!(next_target(60, 0, Difficulty::from_num(1 << 16), 25),
+		           (Difficulty::from_num(1 << 16), 25));
+		assert_eq!(next_target(60, 0, Difficulty::from_num((1 << 16) + 1), 25),
+		           (Difficulty::from_num(1 << 15), 26));
+		assert_eq!(next_target(60, 0, Difficulty::from_num((1 << 24) + 1), 26),
+		           (Difficulty::from_num(1 << 23), 27));
 	}
 }

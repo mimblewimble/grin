@@ -30,7 +30,7 @@ use time;
 use consensus::EASINESS;
 use core::{Block, Proof};
 use core::hash::{Hash, Hashed};
-use core::target::Target;
+use core::target::Difficulty;
 use pow::cuckoo::{Cuckoo, Miner, Error};
 
 use ser;
@@ -94,9 +94,9 @@ pub fn verify(b: &Block) -> bool {
 
 pub fn verify_size(b: &Block, cuckoo_sz: u32) -> bool {
 	let hash = PowHeader::from_block(b).hash();
-	// make sure the hash is smaller than our target before going into more
-	// expensive validation
-	if b.header.target < b.header.pow.to_target() {
+	// make sure the pow hash shows a difficulty at least as large as the target
+	// difficulty
+	if b.header.difficulty > b.header.pow.to_difficulty() {
 		return false;
 	}
 	Cuckoo::new(hash.to_slice(), cuckoo_sz).verify(b.header.pow, EASINESS as u64)
@@ -105,17 +105,17 @@ pub fn verify_size(b: &Block, cuckoo_sz: u32) -> bool {
 /// Runs a naive single-threaded proof of work computation over the provided
 /// block, until the required difficulty target is reached. May take a
 /// while for a low target...
-pub fn pow(b: &Block, target: Target) -> Result<(Proof, u64), Error> {
-	pow_size(b, target, b.header.cuckoo_len as u32)
+pub fn pow(b: &Block, diff: Difficulty) -> Result<(Proof, u64), Error> {
+	pow_size(b, diff, b.header.cuckoo_len as u32)
 }
 
 /// Same as default pow function but uses the much easier Cuckoo20 (mostly for
 /// tests).
-pub fn pow20(b: &Block, target: Target) -> Result<(Proof, u64), Error> {
-	pow_size(b, target, 20)
+pub fn pow20(b: &Block, diff: Difficulty) -> Result<(Proof, u64), Error> {
+	pow_size(b, diff, 20)
 }
 
-pub fn pow_size(b: &Block, target: Target, sizeshift: u32) -> Result<(Proof, u64), Error> {
+pub fn pow_size(b: &Block, diff: Difficulty, sizeshift: u32) -> Result<(Proof, u64), Error> {
 	let mut pow_header = PowHeader::from_block(b);
 	let start_nonce = pow_header.nonce;
 
@@ -125,10 +125,10 @@ pub fn pow_size(b: &Block, target: Target, sizeshift: u32) -> Result<(Proof, u64
 		// is not meant as a fast miner implementation
 		let pow_hash = pow_header.hash();
 
-		// if we found a cycle (not guaranteed) and the proof is lower that the target,
-		// we're all good
+		// if we found a cycle (not guaranteed) and the proof hash is higher that the
+		// diff, we're all good
 		if let Ok(proof) = Miner::new(pow_hash.to_slice(), EASINESS, sizeshift).mine() {
-			if proof.to_target() <= target {
+			if proof.to_difficulty() >= diff {
 				return Ok((proof, pow_header.nonce));
 			}
 		}
@@ -147,16 +147,16 @@ pub fn pow_size(b: &Block, target: Target, sizeshift: u32) -> Result<(Proof, u64
 #[cfg(test)]
 mod test {
 	use super::*;
-	use consensus::MAX_TARGET;
 	use core::Proof;
+	use core::target::Difficulty;
 	use genesis;
 
 	#[test]
 	fn genesis_pow() {
 		let mut b = genesis::genesis();
-		let (proof, nonce) = pow20(&b, MAX_TARGET).unwrap();
+		let (proof, nonce) = pow20(&b, Difficulty::one()).unwrap();
 		assert!(nonce > 0);
-		assert!(proof.to_target() < MAX_TARGET);
+		assert!(proof.to_difficulty() >= Difficulty::one());
 		b.header.pow = proof;
 		b.header.nonce = nonce;
 		b.header.cuckoo_len = 20;

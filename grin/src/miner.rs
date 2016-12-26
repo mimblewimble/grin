@@ -17,13 +17,13 @@
 
 use rand::{self, Rng};
 use std::sync::{Arc, Mutex};
-use std::ops::Deref;
 use time;
 
 use adapters::ChainToNetAdapter;
 use core::consensus;
 use core::core;
 use core::core::hash::{Hash, Hashed};
+use core::core::target::Difficulty;
 use core::pow;
 use core::pow::cuckoo;
 use chain;
@@ -79,7 +79,7 @@ impl Miner {
 				                                   consensus::EASINESS,
 				                                   b.header.cuckoo_len as u32);
 				if let Ok(proof) = miner.mine() {
-					if proof.to_target() <= b.header.target {
+					if proof.to_difficulty() >= b.header.difficulty {
 						sol = Some(proof);
 						break;
 					}
@@ -122,8 +122,8 @@ impl Miner {
 		if now_sec == head_sec {
 			now_sec += 1;
 		}
-		let (target, cuckoo_len) =
-			consensus::next_target(now_sec, head_sec, head.target, head.cuckoo_len);
+		let (difficulty, cuckoo_len) =
+			consensus::next_target(now_sec, head_sec, head.difficulty.clone(), head.cuckoo_len);
 
 		let mut rng = rand::OsRng::new().unwrap();
 		let secp_inst = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
@@ -133,8 +133,8 @@ impl Miner {
 		// TODO populate inputs and outputs from pool transactions
 		let mut b = core::Block::new(head, vec![], skey).unwrap();
 		b.header.nonce = rng.gen();
-		b.header.target = target;
 		b.header.cuckoo_len = cuckoo_len;
+		b.header.difficulty = difficulty;
 		b.header.timestamp = time::at(time::Timespec::new(now_sec, 0));
 		b
 	}

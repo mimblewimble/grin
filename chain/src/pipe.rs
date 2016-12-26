@@ -20,7 +20,8 @@ use secp;
 use time;
 
 use core::consensus;
-use core::core::hash::Hash;
+use core::core::hash::{Hash, Hashed};
+use core::core::target::Difficulty;
 use core::core::{BlockHeader, Block, Proof};
 use core::pow;
 use types;
@@ -50,8 +51,10 @@ pub struct BlockContext {
 pub enum Error {
 	/// The block doesn't fit anywhere in our chain
 	Unfit(String),
-	/// Target is too high either compared to ours or the block PoW hash
-	TargetTooHigh,
+	/// Difficulty is too low either compared to ours or the block PoW hash
+	DifficultyTooLow,
+	/// Addition of difficulties on all previous block is wrong
+	WrongTotalDifficulty,
 	/// Size of the Cuckoo graph in block header doesn't match PoW requirements
 	WrongCuckooSize,
 	/// The proof of work is invalid
@@ -137,20 +140,25 @@ fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 		return Err(Error::InvalidBlockTime);
 	}
 
+	if b.header.total_difficulty !=
+	   prev.total_difficulty.clone() + Difficulty::from_hash(&prev.hash()) {
+		return Err(Error::WrongTotalDifficulty);
+	}
+
 	// verify the proof of work and related parameters
-	let (diff_target, cuckoo_sz) = consensus::next_target(header.timestamp.to_timespec().sec,
-	                                                      prev.timestamp.to_timespec().sec,
-	                                                      prev.target,
-	                                                      prev.cuckoo_len);
-	if header.target > diff_target {
-		return Err(Error::TargetTooHigh);
+	let (difficulty, cuckoo_sz) = consensus::next_target(header.timestamp.to_timespec().sec,
+	                                                     prev.timestamp.to_timespec().sec,
+	                                                     prev.difficulty,
+	                                                     prev.cuckoo_len);
+	if header.difficulty < difficulty {
+		return Err(Error::DifficultyTooLow);
 	}
 	if header.cuckoo_len != cuckoo_sz && !ctx.opts.intersects(EASY_POW) {
 		return Err(Error::WrongCuckooSize);
 	}
 
 	if ctx.opts.intersects(EASY_POW) {
-		if !pow::verify_size(b, 15) {
+		if !pow::verify_size(b, 16) {
 			return Err(Error::InvalidPow);
 		}
 	} else if !pow::verify(b) {

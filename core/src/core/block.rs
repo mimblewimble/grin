@@ -23,9 +23,9 @@ use std::collections::HashSet;
 use core::Committed;
 use core::{Input, Output, Proof, TxProof, Transaction};
 use core::transaction::merkle_inputs_outputs;
-use consensus::{REWARD, DEFAULT_SIZESHIFT, MAX_TARGET};
+use consensus::{REWARD, DEFAULT_SIZESHIFT};
 use core::hash::{Hash, Hashed, ZERO_HASH};
-use core::target::Target;
+use core::target::Difficulty;
 use ser::{self, Readable, Reader, Writeable, Writer};
 
 /// Block header, fairly standard compared to other blockchains.
@@ -38,14 +38,16 @@ pub struct BlockHeader {
 	pub timestamp: time::Tm,
 	/// Length of the cuckoo cycle used to mine this block.
 	pub cuckoo_len: u8,
-	/// Difficulty used to mine the block.
-	pub target: Target,
 	pub utxo_merkle: Hash,
 	pub tx_merkle: Hash,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
 	/// Proof of work data.
 	pub pow: Proof,
+	/// Difficulty used to mine the block.
+	pub difficulty: Difficulty,
+	/// Total accumulated difficulty since genesis block
+	pub total_difficulty: Difficulty,
 }
 
 impl Default for BlockHeader {
@@ -55,7 +57,8 @@ impl Default for BlockHeader {
 			previous: ZERO_HASH,
 			timestamp: time::at_utc(time::Timespec { sec: 0, nsec: 0 }),
 			cuckoo_len: 20, // only for tests
-			target: MAX_TARGET,
+			difficulty: Difficulty::one(),
+			total_difficulty: Difficulty::one(),
 			utxo_merkle: ZERO_HASH,
 			tx_merkle: ZERO_HASH,
 			nonce: 0,
@@ -72,7 +75,6 @@ impl Writeable for BlockHeader {
 		                [write_fixed_bytes, &self.previous],
 		                [write_i64, self.timestamp.to_timespec().sec],
 		                [write_u8, self.cuckoo_len]);
-		try!(self.target.write(writer));
 		ser_multiwrite!(writer,
 		                [write_fixed_bytes, &self.utxo_merkle],
 		                [write_fixed_bytes, &self.tx_merkle]);
@@ -80,7 +82,10 @@ impl Writeable for BlockHeader {
 		// avoid complicating PoW
 		try!(writer.write_u64(self.nonce));
 		// proof
-		self.pow.write(writer)
+		try!(self.pow.write(writer));
+		// block and total difficulty
+		try!(self.difficulty.write(writer));
+		self.total_difficulty.write(writer)
 	}
 }
 
@@ -90,11 +95,12 @@ impl Readable<BlockHeader> for BlockHeader {
 		let height = try!(reader.read_u64());
 		let previous = try!(Hash::read(reader));
 		let (timestamp, cuckoo_len) = ser_multiread!(reader, read_i64, read_u8);
-		let target = try!(Target::read(reader));
 		let utxo_merkle = try!(Hash::read(reader));
 		let tx_merkle = try!(Hash::read(reader));
 		let nonce = try!(reader.read_u64());
 		let pow = try!(Proof::read(reader));
+		let difficulty = try!(Difficulty::read(reader));
+		let total_difficulty = try!(Difficulty::read(reader));
 
 		Ok(BlockHeader {
 			height: height,
@@ -104,11 +110,12 @@ impl Readable<BlockHeader> for BlockHeader {
 				nsec: 0,
 			}),
 			cuckoo_len: cuckoo_len,
-			target: target,
 			utxo_merkle: utxo_merkle,
 			tx_merkle: tx_merkle,
 			pow: pow,
 			nonce: nonce,
+			difficulty: difficulty,
+			total_difficulty: total_difficulty,
 		})
 	}
 }
@@ -243,6 +250,9 @@ impl Block {
 					height: prev.height + 1,
 					timestamp: time::now(),
 					previous: prev.hash(),
+					total_difficulty: Difficulty::from_hash(&prev.hash()) +
+					                  prev.total_difficulty.clone(),
+					cuckoo_len: prev.cuckoo_len,
 					..Default::default()
 				},
 				inputs: inputs,
@@ -292,6 +302,8 @@ impl Block {
 			header: BlockHeader {
 				tx_merkle: tx_merkle,
 				pow: self.header.pow.clone(),
+				difficulty: self.header.difficulty.clone(),
+				total_difficulty: self.header.total_difficulty.clone(),
 				..self.header
 			},
 			inputs: new_inputs,
@@ -317,7 +329,12 @@ impl Block {
 
 		Block {
 				// compact will fix the merkle tree
-				header: BlockHeader { pow: self.header.pow.clone(), ..self.header },
+				header: BlockHeader {
+					pow: self.header.pow.clone(),
+					difficulty: self.header.difficulty.clone(),
+					total_difficulty: self.header.total_difficulty.clone(),
+					..self.header
+				},
 				inputs: all_inputs,
 				outputs: all_outputs,
 				proofs: all_proofs,

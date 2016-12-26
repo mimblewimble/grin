@@ -5,6 +5,7 @@ authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
 
 [dependencies]
 byteorder = "^0.5"
+num-bigint = "^0.1.35"
 rust-crypto = "^0.2"
 rand = "^0.3"
 time = "^0.1"

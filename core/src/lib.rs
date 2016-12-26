@@ -23,6 +23,7 @@
 
 extern crate byteorder;
 extern crate crypto;
+extern crate num_bigint as bigint;
 extern crate rand;
 extern crate secp256k1zkp as secp;
 extern crate time;

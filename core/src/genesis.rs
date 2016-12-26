@@ -17,8 +17,9 @@
 use time;
 
 use core;
-use consensus::{DEFAULT_SIZESHIFT, MAX_TARGET};
+use consensus::DEFAULT_SIZESHIFT;
 use core::hash::Hashed;
+use core::target::Difficulty;
 
 // Genesis block definition. It has no rewards, no inputs, no outputs, no
 // fees and a height of zero.
@@ -34,7 +35,8 @@ pub fn genesis() -> core::Block {
 				..time::empty_tm()
 			},
 			cuckoo_len: DEFAULT_SIZESHIFT,
-			target: MAX_TARGET,
+			difficulty: Difficulty::one(),
+			total_difficulty: Difficulty::one(),
 			utxo_merkle: [].hash(),
 			tx_merkle: [].hash(),
 			nonce: 0,
