@@ -68,11 +68,11 @@ With this information it can verify:
 Once the validation done, the peer can download and validate the blocks content
 from the horizon up to the head.
 
-While this algorithm still works for very low values of Z (or in the extreme case
+While this algorithm still works for very low values of `Z` (or in the extreme case
 where `Z=1`), low values may be problematic due to the normal forking activity that
 can occur on any blockchain. To prevent those problems and to increase the amount
-of locally validated work, we recommend values of H of at least a few days worth of
-blocks, up to a few weeks.
+of locally validated work, we recommend values of `Z` of at least a few days worth
+of blocks, up to a few weeks.
 
 ### What could go wrong?
 
@@ -117,14 +117,14 @@ capabilities (a bitmask of features a peer exposes) on connection.
 
 ### Several nodes continuously give fake horizon blocks
 
-If a peer can't reach consensus on the header at H, it gradually moves back. In the
+If a peer can't reach consensus on the header at h, it gradually moves back. In the
 degenerate case, rogue peers could force all new peers to always become full nodes
 (move back until genesis) by systematically preventing consensus and feeding fake
 headers.
 
 While this is a valid issue, several mitigation strategies exist:
 
-* Peers must still provide valid block headers at horizon `H`. This includes the
+* Peers must still provide valid block headers at horizon `Z`. This includes the
 proof of work.
 * A group of block headers around the horizon could be asked to increase the cost
 of the attack.
