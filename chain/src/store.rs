@@ -27,7 +27,6 @@ const SEP: u8 = ':' as u8;
 
 const BLOCK_HEADER_PREFIX: u8 = 'h' as u8;
 const BLOCK_PREFIX: u8 = 'b' as u8;
-const TIP_PREFIX: u8 = 'T' as u8;
 const HEAD_PREFIX: u8 = 'H' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
@@ -69,15 +68,7 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn save_head(&self, t: &Tip) -> Result<(), Error> {
-		try!(self.save_tip(t));
 		self.db.put_ser(&vec![HEAD_PREFIX], t).map_err(&to_store_err)
-	}
-
-	fn save_tip(&self, t: &Tip) -> Result<(), Error> {
-		let last_branch = t.lineage.last_branch();
-		let mut k = vec![TIP_PREFIX, SEP];
-		k.write_u32::<BigEndian>(last_branch);
-		self.db.put_ser(&mut k, t).map_err(&to_store_err)
 	}
 }
 

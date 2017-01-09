@@ -78,14 +78,14 @@ impl Writeable for BlockHeader {
 		                [write_fixed_bytes, &self.utxo_merkle],
 		                [write_fixed_bytes, &self.tx_merkle]);
 
-    try!(writer.write_u64(self.nonce));
+		try!(writer.write_u64(self.nonce));
 		try!(self.difficulty.write(writer));
 		try!(self.total_difficulty.write(writer));
 
-    if writer.serialization_mode() != ser::SerializationMode::Hash {
-      try!(self.pow.write(writer));
-    }
-    Ok(())
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			try!(self.pow.write(writer));
+		}
+		Ok(())
 	}
 }
 
@@ -97,9 +97,9 @@ impl Readable<BlockHeader> for BlockHeader {
 		let (timestamp, cuckoo_len) = ser_multiread!(reader, read_i64, read_u8);
 		let utxo_merkle = try!(Hash::read(reader));
 		let tx_merkle = try!(Hash::read(reader));
+		let nonce = try!(reader.read_u64());
 		let difficulty = try!(Difficulty::read(reader));
 		let total_difficulty = try!(Difficulty::read(reader));
-		let nonce = try!(reader.read_u64());
 		let pow = try!(Proof::read(reader));
 
 		Ok(BlockHeader {
@@ -139,22 +139,22 @@ impl Writeable for Block {
 	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		try!(self.header.write(writer));
 
-    if writer.serialization_mode() != ser::SerializationMode::Hash {
-      ser_multiwrite!(writer,
-                      [write_u64, self.inputs.len() as u64],
-                      [write_u64, self.outputs.len() as u64],
-                      [write_u64, self.proofs.len() as u64]);
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			ser_multiwrite!(writer,
+			                [write_u64, self.inputs.len() as u64],
+			                [write_u64, self.outputs.len() as u64],
+			                [write_u64, self.proofs.len() as u64]);
 
-      for inp in &self.inputs {
-        try!(inp.write(writer));
-      }
-      for out in &self.outputs {
-        try!(out.write(writer));
-      }
-      for proof in &self.proofs {
-        try!(proof.write(writer));
-      }
-    }
+			for inp in &self.inputs {
+				try!(inp.write(writer));
+			}
+			for out in &self.outputs {
+				try!(out.write(writer));
+			}
+			for proof in &self.proofs {
+				try!(proof.write(writer));
+			}
+		}
 		Ok(())
 	}
 }
@@ -254,8 +254,7 @@ impl Block {
 					height: prev.height + 1,
 					timestamp: time::now(),
 					previous: prev.hash(),
-					total_difficulty: Difficulty::from_hash(&prev.hash()) +
-					                  prev.total_difficulty.clone(),
+					total_difficulty: prev.pow.to_difficulty() + prev.total_difficulty.clone(),
 					cuckoo_len: prev.cuckoo_len,
 					..Default::default()
 				},

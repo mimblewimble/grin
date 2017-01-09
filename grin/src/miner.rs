@@ -63,7 +63,6 @@ impl Miner {
 				latest_hash = self.chain_head.lock().unwrap().last_block_h;
 			}
 			let mut b = self.build_block(&head);
-			let mut pow_header = pow::PowHeader::from_block(&b);
 
 			// look for a pow for at most 2 sec on the same block (to give a chance to new
 			// transactions) and as long as the head hasn't changed
@@ -74,7 +73,7 @@ impl Miner {
 			       latest_hash);
 			let mut iter_count = 0;
 			while head.hash() == latest_hash && time::get_time().sec < deadline {
-				let pow_hash = pow_header.hash();
+				let pow_hash = b.hash();
 				let mut miner = cuckoo::Miner::new(pow_hash.to_slice(),
 				                                   consensus::EASINESS,
 				                                   b.header.cuckoo_len as u32);
@@ -84,7 +83,7 @@ impl Miner {
 						break;
 					}
 				}
-				pow_header.nonce += 1;
+				b.header.nonce += 1;
 				{
 					latest_hash = self.chain_head.lock().unwrap().last_block_h;
 				}
@@ -95,7 +94,6 @@ impl Miner {
 			if let Some(proof) = sol {
 				info!("Found valid proof of work, adding block {}.", b.hash());
 				b.header.pow = proof;
-				b.header.nonce = pow_header.nonce;
 				let res = chain::process_block(&b,
 				                               self.chain_store.clone(),
 				                               self.chain_adapter.clone(),

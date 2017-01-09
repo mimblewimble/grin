@@ -54,7 +54,7 @@ pub fn verify_size(b: &Block, cuckoo_sz: u32) -> bool {
 /// block, until the required difficulty target is reached. May take a
 /// while for a low target...
 pub fn pow(b: &mut Block, diff: Difficulty) -> Result<(), Error> {
-  let cuckoo_len = b.header.cuckoo_len as u32;
+	let cuckoo_len = b.header.cuckoo_len as u32;
 	pow_size(b, diff, cuckoo_len)
 }
 
@@ -77,7 +77,7 @@ pub fn pow_size(b: &mut Block, diff: Difficulty, sizeshift: u32) -> Result<(), E
 		// diff, we're all good
 		if let Ok(proof) = Miner::new(pow_hash.to_slice(), EASINESS, sizeshift).mine() {
 			if proof.to_difficulty() >= diff {
-        b.header.pow = proof;
+				b.header.pow = proof;
 				return Ok(());
 			}
 		}
@@ -88,7 +88,7 @@ pub fn pow_size(b: &mut Block, diff: Difficulty, sizeshift: u32) -> Result<(), E
 		// and if we're back where we started, update the time (changes the hash as
 		// well)
 		if b.header.nonce == start_nonce {
-		  b.header.timestamp = time::at_utc(time::Timespec { sec: 0, nsec: 0 });
+			b.header.timestamp = time::at_utc(time::Timespec { sec: 0, nsec: 0 });
 		}
 	}
 }
@@ -103,7 +103,7 @@ mod test {
 	#[test]
 	fn genesis_pow() {
 		let mut b = genesis::genesis();
-    b.header.nonce = 310;
+		b.header.nonce = 310;
 		pow20(&mut b, Difficulty::one()).unwrap();
 		assert!(b.header.nonce != 310);
 		assert!(b.header.pow.to_difficulty() >= Difficulty::one());

@@ -14,56 +14,15 @@
 
 //! Base types that the block chain pipeline requires.
 
-use core::core::hash::Hash;
 use core::core::{Block, BlockHeader};
+use core::core::hash::Hash;
+use core::core::target::Difficulty;
 use core::ser;
 
-/// The lineage of a fork, defined as a series of numbers. Each new branch gets
-/// a new number that gets added to a fork's ancestry to form a new fork.
-/// Example:
-///   head [1] -> fork1 [1, 2]
-///               fork2 [1, 3]
-#[derive(Debug, Clone)]
-pub struct Lineage(Vec<u32>);
-
-impl Lineage {
-	/// New lineage initialized just with branch 0
-	pub fn new() -> Lineage {
-		Lineage(vec![0])
-	}
-	/// The last branch that was added to the lineage. Also the only branch
-	/// that's
-	/// unique to this lineage.
-	pub fn last_branch(&self) -> u32 {
-		*self.0.last().unwrap()
-	}
-}
-
-/// Serialization for lineage, necessary to serialize fork tips.
-impl ser::Writeable for Lineage {
-	fn write(&self, writer: &mut ser::Writer) -> Result<(), ser::Error> {
-		try!(writer.write_u32(self.0.len() as u32));
-		for num in &self.0 {
-			try!(writer.write_u32(*num));
-		}
-		Ok(())
-	}
-}
-/// Deserialization for lineage, necessary to deserialize fork tips.
-impl ser::Readable<Lineage> for Lineage {
-	fn read(reader: &mut ser::Reader) -> Result<Lineage, ser::Error> {
-		let len = try!(reader.read_u32());
-		let mut branches = Vec::with_capacity(len as usize);
-		for _ in 0..len {
-			branches.push(try!(reader.read_u32()));
-		}
-		Ok(Lineage(branches))
-	}
-}
-
 /// The tip of a fork. A handle to the fork ancestry from its leaf in the
-/// blockchain tree. References both the lineage of the fork as well as its max
-/// height and its latest and previous blocks for convenience.
+/// blockchain tree. References the max height and the latest and previous
+/// blocks
+/// for convenience and the total difficulty.
 #[derive(Debug, Clone)]
 pub struct Tip {
 	/// Height of the tip (max height of the fork)
@@ -72,8 +31,8 @@ pub struct Tip {
 	pub last_block_h: Hash,
 	/// Block previous to last
 	pub prev_block_h: Hash,
-	/// Lineage in branch numbers of the fork
-	pub lineage: Lineage,
+	/// Total difficulty accumulated on that fork
+	pub total_difficulty: Difficulty,
 }
 
 impl Tip {
@@ -83,17 +42,17 @@ impl Tip {
 			height: 0,
 			last_block_h: gbh,
 			prev_block_h: gbh,
-			lineage: Lineage::new(),
+			total_difficulty: Difficulty::one(),
 		}
 	}
 
-	/// Append a new block hash to this tip, returning a new updated tip.
-	pub fn append(&self, bh: Hash) -> Tip {
+	/// Append a new block to this tip, returning a new updated tip.
+	pub fn from_block(b: &Block) -> Tip {
 		Tip {
-			height: self.height + 1,
-			last_block_h: bh,
-			prev_block_h: self.last_block_h,
-			lineage: self.lineage.clone(),
+			height: b.header.height,
+			last_block_h: b.hash(),
+			prev_block_h: b.header.previous,
+			total_difficulty: b.header.total_difficulty.clone() + Difficulty::from_hash(&b.hash()),
 		}
 	}
 }
@@ -104,7 +63,7 @@ impl ser::Writeable for Tip {
 		try!(writer.write_u64(self.height));
 		try!(writer.write_fixed_bytes(&self.last_block_h));
 		try!(writer.write_fixed_bytes(&self.prev_block_h));
-		self.lineage.write(writer)
+		self.total_difficulty.write(writer)
 	}
 }
 
@@ -113,12 +72,12 @@ impl ser::Readable<Tip> for Tip {
 		let height = try!(reader.read_u64());
 		let last = try!(Hash::read(reader));
 		let prev = try!(Hash::read(reader));
-		let line = try!(Lineage::read(reader));
+		let diff = try!(Difficulty::read(reader));
 		Ok(Tip {
 			height: height,
 			last_block_h: last,
 			prev_block_h: prev,
-			lineage: line,
+			total_difficulty: diff,
 		})
 	}
 }
@@ -148,9 +107,6 @@ pub trait ChainStore: Send + Sync {
 
 	/// Save the provided tip as the current head of our chain
 	fn save_head(&self, t: &Tip) -> Result<(), Error>;
-
-	/// Save the provided tip without setting it as head
-	fn save_tip(&self, t: &Tip) -> Result<(), Error>;
 }
 
 /// Bridge between the chain pipeline and the rest of the system. Handles

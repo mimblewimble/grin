@@ -44,7 +44,6 @@ pub struct BlockContext {
 	store: Arc<ChainStore>,
 	adapter: Arc<ChainAdapter>,
 	head: Tip,
-	tip: Option<Tip>,
 }
 
 #[derive(Debug)]
@@ -63,6 +62,8 @@ pub enum Error {
 	InvalidBlockProof(secp::Error),
 	/// Block time is too old
 	InvalidBlockTime,
+	/// Block height is invalid (not previous + 1)
+	InvalidBlockHeight,
 	/// Internal issue when trying to save or load data from store
 	StoreErr(types::Error),
 }
@@ -85,7 +86,6 @@ pub fn process_block(b: &Block,
 		store: store,
 		adapter: adapter,
 		head: head,
-		tip: None,
 	};
 
 	info!("Starting validation pipeline for block {} at {}.",
@@ -93,22 +93,19 @@ pub fn process_block(b: &Block,
 	      b.header.height);
 	try!(check_known(b.hash(), &mut ctx));
 	try!(validate_header(&b, &mut ctx));
-	try!(set_tip(&b.header, &mut ctx));
 	try!(validate_block(b, &mut ctx));
 	info!("Block at {} with hash {} is valid, going to save and append.",
 	      b.header.height,
 	      b.hash());
 	try!(add_block(b, &mut ctx));
 	// TODO a global lock should be set before that step or even earlier
-	try!(update_tips(&mut ctx));
-
-	// TODO make sure we always return the head, and not a fork that just got longer
-	Ok(ctx.tip)
+	update_head(b, &mut ctx)
 }
 
 /// Quick in-memory check to fast-reject any block we've already handled
 /// recently. Keeps duplicates from the network in check.
 fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
+	// TODO ring buffer of the last few blocks that came through here
 	if bh == ctx.head.last_block_h || bh == ctx.head.prev_block_h {
 		return Err(Error::Unfit("already known".to_string()));
 	}
@@ -128,6 +125,9 @@ fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 
 	let prev = try!(ctx.store.get_block_header(&header.previous).map_err(&Error::StoreErr));
 
+	if header.height != prev.height + 1 {
+		return Err(Error::InvalidBlockHeight);
+	}
 	if header.timestamp <= prev.timestamp {
 		// prevent time warp attacks and some timestamp manipulations by forcing strict
 		// time progression
@@ -140,8 +140,7 @@ fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 		return Err(Error::InvalidBlockTime);
 	}
 
-	if b.header.total_difficulty !=
-	   prev.total_difficulty.clone() + Difficulty::from_hash(&prev.hash()) {
+	if header.total_difficulty != prev.total_difficulty.clone() + prev.pow.to_difficulty() {
 		return Err(Error::WrongTotalDifficulty);
 	}
 
@@ -168,26 +167,17 @@ fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	Ok(())
 }
 
-fn set_tip(h: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	// TODO actually support more than one branch
-	if h.previous != ctx.head.last_block_h {
-		return Err(Error::Unfit("Just don't know where to put it right now".to_string()));
-	}
-	// TODO validate block header height
-	ctx.tip = Some(ctx.head.clone());
-	Ok(())
-}
-
+/// Fully validate the block content.
 fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	// TODO check tx merkle tree
 	let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	try!(b.verify(&curve).map_err(&Error::InvalidBlockProof));
+	// TODO check every input exists
 	Ok(())
 }
 
+/// Officially adds the block to our chain.
 fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
-	// save the block and appends it to the selected tip
-	ctx.tip = ctx.tip.as_ref().map(|t| t.append(b.hash()));
 	ctx.store.save_block(b).map_err(&Error::StoreErr);
 
 	// broadcast the block
@@ -196,7 +186,18 @@ fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	Ok(())
 }
 
-fn update_tips(ctx: &mut BlockContext) -> Result<(), Error> {
-	let tip = ctx.tip.as_ref().unwrap();
-	ctx.store.save_head(tip).map_err(&Error::StoreErr)
+/// Directly updates the head if we've just appended a new block to it or handle
+/// the situation where we've just added enough work to have a fork with more
+/// work than the head.
+fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
+	// if we made a fork with more work than the head (which should also be true
+	// when extending the head), update it
+	let tip = Tip::from_block(b);
+	if tip.total_difficulty > ctx.head.total_difficulty {
+		try!(ctx.store.save_head(&tip).map_err(&Error::StoreErr));
+		ctx.head = tip.clone();
+		Ok(Some(tip))
+	} else {
+		Ok(None)
+	}
 }
