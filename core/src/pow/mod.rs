@@ -36,110 +36,59 @@ use pow::cuckoo::{Cuckoo, Miner, Error};
 use ser;
 use ser::{Writeable, Writer};
 
-/// Subset of a block header that goes into hashing for proof of work.
-/// Basically the whole thing minus the PoW solution itself and the total
-/// difficulty (yet unknown). We also add the count of every variable length
-/// elements in a header to make lying on those much harder.
-#[derive(Debug)]
-pub struct PowHeader {
-	pub nonce: u64,
-	pub height: u64,
-	pub previous: Hash,
-	pub timestamp: time::Tm,
-	pub utxo_merkle: Hash,
-	pub tx_merkle: Hash,
-	pub n_in: u64,
-	pub n_out: u64,
-	pub n_proofs: u64,
-}
-
-/// The binary definition of a PoW header is material for consensus as that's
-/// the data that gets hashed for PoW calculation. The nonce is written first
-/// to make incrementing from the serialized form trivial.
-impl Writeable for PowHeader {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
-		try!(writer.write_u64(self.nonce));
-		try!(writer.write_u64(self.height));
-		try!(writer.write_fixed_bytes(&self.previous));
-		try!(writer.write_i64(self.timestamp.to_timespec().sec));
-		try!(writer.write_fixed_bytes(&self.utxo_merkle));
-		try!(writer.write_fixed_bytes(&self.tx_merkle));
-		try!(writer.write_u64(self.n_in));
-		try!(writer.write_u64(self.n_out));
-		writer.write_u64(self.n_proofs)
-	}
-}
-
-impl PowHeader {
-	pub fn from_block(b: &Block) -> PowHeader {
-		let ref h = b.header;
-		PowHeader {
-			nonce: h.nonce,
-			height: h.height,
-			previous: h.previous,
-			timestamp: h.timestamp,
-			utxo_merkle: h.utxo_merkle,
-			tx_merkle: h.tx_merkle,
-			n_in: b.inputs.len() as u64,
-			n_out: b.outputs.len() as u64,
-			n_proofs: b.proofs.len() as u64,
-		}
-	}
-}
-
 /// Validates the proof of work of a given header.
 pub fn verify(b: &Block) -> bool {
 	verify_size(b, b.header.cuckoo_len as u32)
 }
 
 pub fn verify_size(b: &Block, cuckoo_sz: u32) -> bool {
-	let hash = PowHeader::from_block(b).hash();
 	// make sure the pow hash shows a difficulty at least as large as the target
 	// difficulty
 	if b.header.difficulty > b.header.pow.to_difficulty() {
 		return false;
 	}
-	Cuckoo::new(hash.to_slice(), cuckoo_sz).verify(b.header.pow, EASINESS as u64)
+	Cuckoo::new(b.hash().to_slice(), cuckoo_sz).verify(b.header.pow, EASINESS as u64)
 }
 
 /// Runs a naive single-threaded proof of work computation over the provided
 /// block, until the required difficulty target is reached. May take a
 /// while for a low target...
-pub fn pow(b: &Block, diff: Difficulty) -> Result<(Proof, u64), Error> {
-	pow_size(b, diff, b.header.cuckoo_len as u32)
+pub fn pow(b: &mut Block, diff: Difficulty) -> Result<(), Error> {
+  let cuckoo_len = b.header.cuckoo_len as u32;
+	pow_size(b, diff, cuckoo_len)
 }
 
 /// Same as default pow function but uses the much easier Cuckoo20 (mostly for
 /// tests).
-pub fn pow20(b: &Block, diff: Difficulty) -> Result<(Proof, u64), Error> {
+pub fn pow20(b: &mut Block, diff: Difficulty) -> Result<(), Error> {
 	pow_size(b, diff, 20)
 }
 
-pub fn pow_size(b: &Block, diff: Difficulty, sizeshift: u32) -> Result<(Proof, u64), Error> {
-	let mut pow_header = PowHeader::from_block(b);
-	let start_nonce = pow_header.nonce;
+pub fn pow_size(b: &mut Block, diff: Difficulty, sizeshift: u32) -> Result<(), Error> {
+	let start_nonce = b.header.nonce;
 
 	// try to find a cuckoo cycle on that header hash
 	loop {
 		// can be trivially optimized by avoiding re-serialization every time but this
 		// is not meant as a fast miner implementation
-		let pow_hash = pow_header.hash();
+		let pow_hash = b.hash();
 
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good
 		if let Ok(proof) = Miner::new(pow_hash.to_slice(), EASINESS, sizeshift).mine() {
 			if proof.to_difficulty() >= diff {
-				return Ok((proof, pow_header.nonce));
+        b.header.pow = proof;
+				return Ok(());
 			}
 		}
 
 		// otherwise increment the nonce
-		pow_header.nonce += 1;
+		b.header.nonce += 1;
 
 		// and if we're back where we started, update the time (changes the hash as
 		// well)
-		if pow_header.nonce == start_nonce {
-			pow_header.timestamp = time::at_utc(time::Timespec { sec: 0, nsec: 0 });
+		if b.header.nonce == start_nonce {
+		  b.header.timestamp = time::at_utc(time::Timespec { sec: 0, nsec: 0 });
 		}
 	}
 }
@@ -154,12 +103,10 @@ mod test {
 	#[test]
 	fn genesis_pow() {
 		let mut b = genesis::genesis();
-		let (proof, nonce) = pow20(&b, Difficulty::one()).unwrap();
-		assert!(nonce > 0);
-		assert!(proof.to_difficulty() >= Difficulty::one());
-		b.header.pow = proof;
-		b.header.nonce = nonce;
-		b.header.cuckoo_len = 20;
-		assert!(verify(&b));
+    b.header.nonce = 310;
+		pow20(&mut b, Difficulty::one()).unwrap();
+		assert!(b.header.nonce != 310);
+		assert!(b.header.pow.to_difficulty() >= Difficulty::one());
+		assert!(verify_size(&b, 20));
 	}
 }
