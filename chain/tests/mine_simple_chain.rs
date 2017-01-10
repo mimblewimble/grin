@@ -32,7 +32,7 @@ use grin_core::consensus;
 
 #[test]
 fn mine_empty_chain() {
-  env_logger::init().unwrap();
+  env_logger::init();
 	let mut rng = OsRng::new().unwrap();
 	let store = grin_chain::store::ChainKVStore::new(".grin".to_string()).unwrap();
 
@@ -82,7 +82,7 @@ fn mine_empty_chain() {
 
 #[test]
 fn mine_forks() {
-  env_logger::init().unwrap();
+  env_logger::init();
 	let mut rng = OsRng::new().unwrap();
 	let store = grin_chain::store::ChainKVStore::new(".grin2".to_string()).unwrap();
 
