@@ -32,8 +32,8 @@ bitflags! {
   /// Options for block validation
   pub flags Options: u32 {
     const NONE = 0b00000001,
-    /// Runs with the easier version of the Proof of Work, mostly to make testing easier.
-    const EASY_POW = 0b00000010,
+    /// Runs without checking the Proof of Work, mostly to make testing easier.
+    const SKIP_POW = 0b00000010,
   }
 }
 
@@ -140,28 +140,26 @@ fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 		return Err(Error::InvalidBlockTime);
 	}
 
-	if header.total_difficulty != prev.total_difficulty.clone() + prev.pow.to_difficulty() {
-		return Err(Error::WrongTotalDifficulty);
-	}
+	if !ctx.opts.intersects(SKIP_POW) {
+		// verify the proof of work and related parameters
 
-	// verify the proof of work and related parameters
-	let (difficulty, cuckoo_sz) = consensus::next_target(header.timestamp.to_timespec().sec,
-	                                                     prev.timestamp.to_timespec().sec,
-	                                                     prev.difficulty,
-	                                                     prev.cuckoo_len);
-	if header.difficulty < difficulty {
-		return Err(Error::DifficultyTooLow);
-	}
-	if header.cuckoo_len != cuckoo_sz && !ctx.opts.intersects(EASY_POW) {
-		return Err(Error::WrongCuckooSize);
-	}
+		if header.total_difficulty != prev.total_difficulty.clone() + prev.pow.to_difficulty() {
+			return Err(Error::WrongTotalDifficulty);
+		}
 
-	if ctx.opts.intersects(EASY_POW) {
-		if !pow::verify_size(b, 16) {
+		let (difficulty, cuckoo_sz) = consensus::next_target(header.timestamp.to_timespec().sec,
+		                                                     prev.timestamp.to_timespec().sec,
+		                                                     prev.difficulty,
+		                                                     prev.cuckoo_len);
+		if header.difficulty < difficulty {
+			return Err(Error::DifficultyTooLow);
+		}
+		if header.cuckoo_len != cuckoo_sz {
+			return Err(Error::WrongCuckooSize);
+		}
+		if !pow::verify(b) {
 			return Err(Error::InvalidPow);
 		}
-	} else if !pow::verify(b) {
-		return Err(Error::InvalidPow);
 	}
 
 	Ok(())
@@ -196,6 +194,7 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 	if tip.total_difficulty > ctx.head.total_difficulty {
 		try!(ctx.store.save_head(&tip).map_err(&Error::StoreErr));
 		ctx.head = tip.clone();
+		info!("Updated head to {} at {}.", b.hash(), b.header.height);
 		Ok(Some(tip))
 	} else {
 		Ok(None)

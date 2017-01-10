@@ -14,4 +14,5 @@ grin_store = { path = "../store" }
 secp256k1zkp = { path = "../secp256k1zkp" }
 
 [dev-dependencies]
+env_logger="^0.3.5"
 rand = "^0.3"
