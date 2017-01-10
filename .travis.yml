@@ -3,7 +3,6 @@ dist: trusty
 sudo: true
 rust:
   - stable
-  - beta
 
 addons:
   apt:
