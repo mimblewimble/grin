@@ -77,7 +77,8 @@ fn change<'a>(s: &'a grin::Server) -> HeadChange<'a> {
   }
 }
 
-/// Future that monitors when a server has had its head updated.
+/// Future that monitors when a server has had its head updated. Current
+/// implementation isn't optimized, only use for tests.
 struct HeadChange<'a> {
   server: &'a grin::Server,
   original:  chain::Tip,

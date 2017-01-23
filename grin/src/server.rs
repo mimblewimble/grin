@@ -96,7 +96,6 @@ impl Server {
 		let handle = evtlp.handle();
 		evtlp.run(server.start(handle.clone())).unwrap();
 
-
 		warn!("Grin server started.");
 		Ok(Server {
 			config: config,
@@ -173,6 +172,8 @@ fn store_head(config: &ServerConfig)
 			let mut gen = core::genesis::genesis();
 			if config.cuckoo_size > 0 {
 				gen.header.cuckoo_len = config.cuckoo_size;
+				let diff = gen.header.difficulty.clone();
+				core::pow::pow(&mut gen, diff).unwrap();
 			}
 			try!(chain_store.save_block(&gen).map_err(&Error::StoreErr));
 			let tip = chain::types::Tip::new(gen.hash());

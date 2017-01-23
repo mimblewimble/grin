@@ -52,7 +52,7 @@ impl Tip {
 			height: b.header.height,
 			last_block_h: b.hash(),
 			prev_block_h: b.header.previous,
-			total_difficulty: b.header.total_difficulty.clone() + Difficulty::from_hash(&b.hash()),
+			total_difficulty: b.header.total_difficulty.clone(),
 		}
 	}
 }
