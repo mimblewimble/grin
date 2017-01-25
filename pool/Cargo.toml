@@ -1,0 +1,10 @@
+[package]
+name = "grin_pool"
+version = "0.1.0"
+authors = ["Grin Authors <mimblewimble@lists.launchpad.net>"]
+
+[dependencies]
+grin_core = { path = "../core" }
+grin_store = { path = "../store" }
+grin_p2p = { path = "../p2p" }
+time = "^0.1"
