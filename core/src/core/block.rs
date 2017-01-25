@@ -350,6 +350,7 @@ impl Block {
 	pub fn verify(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
 		// sum all inputs and outs commitments
 		let io_sum = try!(self.sum_commitments(secp));
+
 		// sum all proofs commitments
 		let proof_commits = map_vec!(self.proofs, |proof| proof.remainder);
 		let proof_sum = try!(secp.commit_sum(proof_commits, vec![]));
@@ -364,6 +365,14 @@ impl Block {
 		for proof in &self.proofs {
 			try!(proof.verify(secp));
 		}
+
+		// verify the transaction Merkle root
+		let tx_merkle = merkle_inputs_outputs(&self.inputs, &self.outputs);
+		if tx_merkle != self.header.tx_merkle {
+			// TODO more specific error
+			return Err(secp::Error::IncorrectCommitSum);
+		}
+
 		Ok(())
 	}
 

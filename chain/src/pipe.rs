@@ -167,7 +167,6 @@ fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 
 /// Fully validate the block content.
 fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
-	// TODO check tx merkle tree
 	let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	try!(b.verify(&curve).map_err(&Error::InvalidBlockProof));
 	// TODO check every input exists
