@@ -26,31 +26,6 @@ use time;
 use core::core;
 
 
-/// An entry in the transaction pool.
-/// Embeds the transaction itself, as well as a few pool-related accounting
-/// fields.
-/// Each entry has some information about its parent and its descendants. 
-pub struct PoolEntry {
-	pub tx_hash: core::hash::Hash,
-	pub descendants: Vec<Arc<RefCell<PoolEntry>>>, 
-    pub parents: Vec<Parent>,
-
-	size_estimate: u64,
-    pub receive_ts: time::Tm,
-}
-
-impl PoolEntry {
-    fn is_orphaned(&self) -> bool {
-        for i in self.parents {
-            match i {
-                Parent::Unknown | Parent::OrphanTransaction{..} => return true,
-                _ => continue,
-            }
-        }
-        false
-    }
-}
-
 /// Rough first pass: the trait representing where we heard about a tx from.
 pub trait TxSource {
     /// Human-readable name used for logging and errors.
@@ -59,6 +34,7 @@ pub trait TxSource {
     fn identifier(&self) -> &str;
 }
 
+/*
 /// This enum describes the parent for a given input of a transaction.
 #[derive(Clone)]
 enum Parent {
@@ -72,21 +48,65 @@ enum PoolError {
     Invalid,
     Orphan,
 }
+*/
 
 
 /// The pool itself.
 /// The transactions HashMap holds ownership of all transactions in the pool,
 /// keyed by their transaction hash.
-/// The primary data structure holding pool entries is the list of roots,
-/// defined as pool entries with exclusively BlockTransactions as parents.
-/// In this first pass, orphans are in the same output map as regular txs.
 struct TransactionPool {
     pub transactions: HashMap<core::hash::Hash, Box<core::transaction::Transaction>>,
 
-    roots : RwLock<Vec<Arc<RefCell<PoolEntry>>>>,
-    orphan_roots : RwLock<Vec<Arc<RefCell<PoolEntry>>>>,
-    by_output : RwLock<HashMap<core::hash::Hash, Weak<RefCell<PoolEntry>>>>,
+    pub pool : RwLock<Pool>,
+    pub orphans: RwLock<Orphans>,
 }
+
+/// Pool contains the elements of the graph that are connected, in full, to
+/// the blockchain.
+/// Reservations of outputs by orphan transactions (not fully connected) are
+/// not respected.
+struct Pool {
+    graph : DirectedGraph,
+
+    // available_outputs are unspent outputs of the current pool set, 
+    // maintained as edges with empty destinations.
+    available_outputs: Vec<Edge>,
+}
+
+impl Pool {
+    fn search_for_output(&self, h: core::hash::Hash) -> bool {
+        for available_out in self.available_outputs.iter() {
+            if available_out.Output == h {
+                return true
+            }
+        }
+        false
+    }
+
+}
+
+/// Orphans contains the elements of the transaction graph that have not been
+/// connected in full to the blockchain. 
+struct Orphans {
+    graph : DirectedGraph,
+
+    // available_outputs are unspent outputs of the current orphan set, 
+    // maintained as edges with empty destinations.
+    available_outputs: Vec<Edge>,
+
+    // missing_outputs are spending references (inputs) with missing 
+    // corresponding outputs, maintained as edges with empty sources.
+    missing_outputs: Vec<Edge>,
+
+    // pool_connections are bidirectional edges which connect to the pool
+    // graph. They should map one-to-one to pool graph available_outputs. 
+    // pool_connections should not be viewed authoritatively, they are 
+    // merely informational until the transaction is officially connected to
+    // the pool.
+    pool_connections: Vec<Edge>,
+}
+
+
 
 impl TransactionPool {
     pub fn add_to_memory_pool(&self, source: TxSource, tx: core::transaction::Transaction) -> Result<(), PoolError> {
@@ -104,11 +124,7 @@ impl TransactionPool {
             // First, check the confirmed UTXO state.
             
             // Next, check against pool state.
-            let i_parent = match output_map.get(&input.output_hash()) {
-                None => Parent::Unknown,
-                Some(p) => parent_from_weak_ref(input.output_hash(), p),
-            };
-            parents[i] = i_parent;
+            
         }
         Ok(())
     }
