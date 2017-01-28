@@ -61,7 +61,8 @@ fn simulate_servers() {
   servers[0].start_miner();
   let original_height = servers[0].head().height;
 
-  // monitor for a change of head on a different server and check we 
+  // monitor for a change of head on a different server and check whether
+  // chain height has changed
   evtlp.run(change(&servers[4]).and_then(|tip| {
     assert!(tip.height == original_height+1);
     Ok(())
