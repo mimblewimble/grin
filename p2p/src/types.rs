@@ -90,7 +90,7 @@ pub trait Protocol {
 /// Bridge between the networking layer and the rest of the system. Handles the
 /// forwarding or querying of blocks and transactions from the network among
 /// other things.
-pub trait NetAdapter {
+pub trait NetAdapter: Sync + Send {
 	/// A valid transaction has been received from one of our peers
 	fn transaction_received(&self, tx: core::Transaction);
 

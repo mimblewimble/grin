@@ -151,6 +151,7 @@ impl Server {
 		}
 	}
 
+	/// Number of peers we're currently connected to.
 	pub fn peers_count(&self) -> u32 {
 		self.peers.read().unwrap().len() as u32
 	}

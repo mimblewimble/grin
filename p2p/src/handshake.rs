@@ -16,13 +16,11 @@ use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 
 use futures::Future;
-use futures::future::ok;
 use rand::Rng;
 use rand::os::OsRng;
 use tokio_core::net::TcpStream;
-use tokio_core::io::{write_all, read_exact, read_to_end};
 
-use core::ser::{serialize, deserialize, Error};
+use core::ser::Error;
 use msg::*;
 use types::*;
 use protocol::ProtocolV1;

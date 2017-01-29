@@ -31,6 +31,7 @@ unsafe impl Sync for Peer {}
 unsafe impl Send for Peer {}
 
 impl Peer {
+	/// Initiates the handshake with another peer.
 	pub fn connect(conn: TcpStream,
 	               hs: &Handshake)
 	               -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
@@ -44,6 +45,7 @@ impl Peer {
 		Box::new(connect_peer)
 	}
 
+	/// Accept a handshake initiated by another peer.
 	pub fn accept(conn: TcpStream,
 	              hs: &Handshake)
 	              -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
@@ -57,6 +59,8 @@ impl Peer {
 		Box::new(hs_peer)
 	}
 
+	/// Main peer loop listening for messages and forwarding to the rest of the
+	/// system.
 	pub fn run(&self,
 	           conn: TcpStream,
 	           na: Arc<NetAdapter>)
@@ -64,6 +68,7 @@ impl Peer {
 		self.proto.handle(conn, na)
 	}
 
+	/// Bytes sent and received by this peer to the remote peer.
 	pub fn transmitted_bytes(&self) -> (u64, u64) {
 		self.proto.transmitted_bytes()
 	}
