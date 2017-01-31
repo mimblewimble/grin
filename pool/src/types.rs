@@ -21,6 +21,8 @@ use std::sync::Weak;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
+pub use graph;
+
 use time;
 
 use core::core;
@@ -44,11 +46,13 @@ enum Parent {
     OrphanTransaction{hash: core::hash::Hash, tx_ref: Weak<RefCell<PoolEntry>>},
 }
 
+*/
 enum PoolError {
     Invalid,
-    Orphan,
+    Orphan{missing_hash: core::hash::Hash},
+    AlreadySpent{other_tx: core::hash::Hash},
 }
-*/
+
 
 
 /// The pool itself.
@@ -66,21 +70,44 @@ struct TransactionPool {
 /// Reservations of outputs by orphan transactions (not fully connected) are
 /// not respected.
 struct Pool {
-    graph : DirectedGraph,
+    graph : graph::DirectedGraph,
 
     // available_outputs are unspent outputs of the current pool set, 
-    // maintained as edges with empty destinations.
-    available_outputs: Vec<Edge>,
+    // maintained as edges with empty destinations, keyed by the 
+    // output's hash.
+    available_outputs: HashMap<core::hash::Hash, graph::Edge>,
 }
 
 impl Pool {
     fn search_for_output(&self, h: core::hash::Hash) -> bool {
-        for available_out in self.available_outputs.iter() {
-            if available_out.Output == h {
-                return true
+        self.available_outputs.contains_key(h)
+    }
+
+    // This happens either under a lock or an exclusive borrowed mutable ref,
+    // so no risk of a race causing double-allocation or deallocation.
+    fn connect_transaction(&mut self, tx: core::transaction::Transaction) -> Result<(), PoolError> {
+        // The expectation is a cheap and parallelizable call to 
+        // search_for_output or a similar non-authoritative check will gate
+        // calls to connect_transaction, which can be a bit more expensive.
+        
+        // The first issue is to identify and reserve all unspent outputs that
+        // this transaction will consume.
+
+        // We want to do this in one iter but with rollback capability if a
+        // needed output is already spent, so this vector holds the outputs
+        // we remove from the available map. 
+        let removed_outputs = Vec::new();
+        for input in tx.inputs.iter() {
+            match self.available_outputs.remove(input.output_hash()) {
+                Some(x) => removed_outputs.push(x),
+                None => {
+                    for replace_out in removed_outputs.iter() {
+                        self.available_outputs.insert(replace_out.Output, replace_out);
+                    }
+                    return Err(PoolError::Orphan{missing_hash: input.output_hash()})
+                },
             }
         }
-        false
     }
 
 }
@@ -88,22 +115,22 @@ impl Pool {
 /// Orphans contains the elements of the transaction graph that have not been
 /// connected in full to the blockchain. 
 struct Orphans {
-    graph : DirectedGraph,
+    graph : graph::DirectedGraph,
 
     // available_outputs are unspent outputs of the current orphan set, 
     // maintained as edges with empty destinations.
-    available_outputs: Vec<Edge>,
+    available_outputs: Vec<graph::Edge>,
 
     // missing_outputs are spending references (inputs) with missing 
     // corresponding outputs, maintained as edges with empty sources.
-    missing_outputs: Vec<Edge>,
+    missing_outputs: Vec<graph::Edge>,
 
     // pool_connections are bidirectional edges which connect to the pool
     // graph. They should map one-to-one to pool graph available_outputs. 
     // pool_connections should not be viewed authoritatively, they are 
     // merely informational until the transaction is officially connected to
     // the pool.
-    pool_connections: Vec<Edge>,
+    pool_connections: Vec<graph::Edge>,
 }
 
 
@@ -130,7 +157,7 @@ impl TransactionPool {
     }
 }
 
-fn parent_from_weak_ref(h: core::hash::Hash, p: &Weak<RefCell<PoolEntry>>) -> Parent {
+fn parent_from_weak_ref(h: core::hash::Hash, p: &Weak<RefCell<graph::PoolEntry>>) -> Parent {
     p.upgrade().and_then(|x| parent_from_tx_ref(h, x)).unwrap_or(Parent::Unknown)
 }
 

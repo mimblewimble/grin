@@ -21,6 +21,7 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
+pub mod graph;
 pub mod types;
 
 extern crate grin_core as core;
