@@ -28,12 +28,12 @@ use time;
 use core::core;
 
 
-/// Rough first pass: the trait representing where we heard about a tx from.
-pub trait TxSource {
+/// Rough first pass: the data representing where we heard about a tx from.
+pub struct TxSource {
     /// Human-readable name used for logging and errors.
-    fn debug_name(&self) -> &str;
+    pub debug_name: String,
     /// Unique identifier used to distinguish this peer from others.
-    fn identifier(&self) -> &str;
+    pub identifier: String,
 }
 
 /*
@@ -79,7 +79,7 @@ struct Pool {
 }
 
 impl Pool {
-    fn search_for_output(&self, h: core::hash::Hash) -> bool {
+    fn search_for_output(&self, h: & core::hash::Hash) -> bool {
         self.available_outputs.contains_key(h)
     }
 
@@ -96,18 +96,19 @@ impl Pool {
         // We want to do this in one iter but with rollback capability if a
         // needed output is already spent, so this vector holds the outputs
         // we remove from the available map. 
-        let removed_outputs = Vec::new();
+        let mut removed_outputs = Vec::new();
         for input in tx.inputs.iter() {
-            match self.available_outputs.remove(input.output_hash()) {
+            match self.available_outputs.remove(&input.output_hash()) {
                 Some(x) => removed_outputs.push(x),
                 None => {
-                    for replace_out in removed_outputs.iter() {
-                        self.available_outputs.insert(replace_out.Output, replace_out);
+                    for replace_out in removed_outputs.drain(..) {
+                        self.available_outputs.insert(replace_out.output, replace_out);
                     }
                     return Err(PoolError::Orphan{missing_hash: input.output_hash()})
                 },
             }
         }
+        Ok(())
     }
 
 }
@@ -141,29 +142,14 @@ impl TransactionPool {
         //tx.verify_sig;
 
         // Find the parent transactions
-        // Using unwrap here: the only possible error is a poisonError, which
-        // we don't have a good recovery for.
-        // If this becomes an issue, we can rebuild the map from the graph
-        // representations.
-        let output_map = self.by_output.read().unwrap();
-        let parents = vec![Parent::Unknown; tx.inputs.len()]; 
-        for (i, input) in tx.inputs.iter().enumerate() {
-            // First, check the confirmed UTXO state.
-            
-            // Next, check against pool state.
-            
-        }
+        // First, from the blockchain
+        //
+        // Next, from the pool
+        
+        // Now if it looks OK, take the lock and connect
+        // TODO: Handle the poison case
+        self.pool.write().unwrap().connect_transaction(tx);
         Ok(())
     }
 }
 
-fn parent_from_weak_ref(h: core::hash::Hash, p: &Weak<RefCell<graph::PoolEntry>>) -> Parent {
-    p.upgrade().and_then(|x| parent_from_tx_ref(h, x)).unwrap_or(Parent::Unknown)
-}
-
-fn parent_from_tx_ref(h: core::hash::Hash, tx_ref: Arc<RefCell<PoolEntry>>) -> Parent {
-    if tx_ref.borrow().is_orphaned() {
-        return Parent::OrphanTransaction{hash: h, tx_ref: tx_ref.downgrade()};
-    }
-    Parent::PoolTransaction{hash: h, tx_ref: tx_ref}
-}

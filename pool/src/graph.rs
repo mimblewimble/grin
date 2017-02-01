@@ -42,12 +42,12 @@ pub struct PoolEntry {
 /// unpopulated
 pub struct Edge {
     // Source and Destination are the vertex id's, the transaction hash.
-    Source: core::hash::Hash,
-    Destination: core::hash::Hash,
+    pub source: core::hash::Hash,
+    pub destination: core::hash::Hash,
 
     // Output is the output hash which this input/output pairing corresponds
     // to.
-    Output: core::hash::Hash,
+    pub output: core::hash::Hash,
 }
 
 /// The generic graph container. Both graphs, the pool and orphans, embed this
