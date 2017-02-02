@@ -44,7 +44,7 @@ pub enum ErrCodes {
 
 /// Types of messages
 enum_from_primitive! {
-  #[derive(Debug, Clone, Copy)]
+  #[derive(Debug, Clone, Copy, PartialEq)]
   pub enum Type {
     Error,
     Hand,
