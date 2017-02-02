@@ -46,6 +46,7 @@ impl Handshake {
 
 	/// Handles connecting to a new remote peer, starting the version handshake.
 	pub fn connect(&self,
+	               height: u64,
 	               conn: TcpStream)
 	               -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
 		// prepare the first part of the hanshake
@@ -54,6 +55,7 @@ impl Handshake {
 			version: PROTOCOL_VERSION,
 			capabilities: FULL_SYNC,
 			nonce: nonce,
+			height: height,
 			sender_addr: SockAddr(conn.local_addr().unwrap()),
 			receiver_addr: SockAddr(conn.peer_addr().unwrap()),
 			user_agent: USER_AGENT.to_string(),
@@ -74,6 +76,7 @@ impl Handshake {
 						user_agent: shake.user_agent,
 						addr: conn.peer_addr().unwrap(),
 						version: shake.version,
+						height: shake.height,
 					};
 
 					info!("Connected to peer {:?}", peer_info);
@@ -86,6 +89,7 @@ impl Handshake {
 	/// Handles receiving a connection from a new remote peer that started the
 	/// version handshake.
 	pub fn handshake(&self,
+	                 height: u64,
 	                 conn: TcpStream)
 	                 -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
 		let nonces = self.nonces.clone();
@@ -113,11 +117,13 @@ impl Handshake {
 					user_agent: hand.user_agent,
 					addr: conn.peer_addr().unwrap(),
 					version: hand.version,
+					height: hand.height,
 				};
 				// send our reply with our info
 				let shake = Shake {
 					version: PROTOCOL_VERSION,
 					capabilities: FULL_SYNC,
+					height: height,
 					user_agent: USER_AGENT.to_string(),
 				};
 				Ok((conn, shake, peer_info))

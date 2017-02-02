@@ -272,7 +272,7 @@ impl TimeoutConnection {
 			underlying: conn,
 			expected_responses: expects,
 		};
-		(me, Box::new(fut.join(timer).map(|_| ())))
+		(me, Box::new(fut.select(timer).map(|_| ()).map_err(|(e1, e2)| e1)))
 	}
 
 	/// Sends a request and registers a timer on the provided message type and

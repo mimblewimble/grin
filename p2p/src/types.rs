@@ -56,6 +56,7 @@ pub struct PeerInfo {
 	pub user_agent: String,
 	pub version: u32,
 	pub addr: SocketAddr,
+  pub height: u64,
 }
 
 /// A given communication protocol agreed upon between 2 peers (usually
@@ -91,6 +92,9 @@ pub trait Protocol {
 /// forwarding or querying of blocks and transactions from the network among
 /// other things.
 pub trait NetAdapter: Sync + Send {
+  /// Current height of our chain.
+  fn height(&self) -> u64;
+
 	/// A valid transaction has been received from one of our peers
 	fn transaction_received(&self, tx: core::Transaction);
 

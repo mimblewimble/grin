@@ -117,11 +117,14 @@ pub fn write_msg<T>(conn: TcpStream,
 /// Header of any protocol message, used to identify incoming messages.
 pub struct MsgHeader {
 	magic: [u8; 2],
+	/// Type of the message.
 	pub msg_type: Type,
+	/// Tota length of the message in bytes.
 	pub msg_len: u64,
 }
 
 impl MsgHeader {
+	/// Creates a new message header.
 	pub fn new(msg_type: Type, len: u64) -> MsgHeader {
 		MsgHeader {
 			magic: MAGIC,
@@ -174,6 +177,8 @@ pub struct Hand {
 	pub capabilities: Capabilities,
 	/// randomly generated for each handshake, helps detect self
 	pub nonce: u64,
+	/// current height of the sender, used to check whether sync may be needed
+	pub height: u64,
 	/// network address of the sender
 	pub sender_addr: SockAddr,
 	/// network address of the receiver
@@ -187,7 +192,8 @@ impl Writeable for Hand {
 		ser_multiwrite!(writer,
 		                [write_u32, self.version],
 		                [write_u32, self.capabilities.bits()],
-		                [write_u64, self.nonce]);
+		                [write_u64, self.nonce],
+		                [write_u64, self.height]);
 		self.sender_addr.write(writer);
 		self.receiver_addr.write(writer);
 		writer.write_bytes(&self.user_agent)
@@ -196,7 +202,7 @@ impl Writeable for Hand {
 
 impl Readable<Hand> for Hand {
 	fn read(reader: &mut Reader) -> Result<Hand, ser::Error> {
-		let (version, capab, nonce) = ser_multiread!(reader, read_u32, read_u32, read_u64);
+		let (version, capab, nonce, height) = ser_multiread!(reader, read_u32, read_u32, read_u64, read_u64);
 		let sender_addr = try!(SockAddr::read(reader));
 		let receiver_addr = try!(SockAddr::read(reader));
 		let ua = try!(reader.read_vec());
@@ -206,6 +212,7 @@ impl Readable<Hand> for Hand {
 			version: version,
 			capabilities: capabilities,
 			nonce: nonce,
+      height: height,
 			sender_addr: sender_addr,
 			receiver_addr: receiver_addr,
 			user_agent: user_agent,
@@ -220,6 +227,8 @@ pub struct Shake {
 	pub version: u32,
 	/// sender capabilities
 	pub capabilities: Capabilities,
+	/// current height of the sender, used to check whether sync may be needed
+	pub height: u64,
 	/// name of version of the software
 	pub user_agent: String,
 }
@@ -229,6 +238,7 @@ impl Writeable for Shake {
 		ser_multiwrite!(writer,
 		                [write_u32, self.version],
 		                [write_u32, self.capabilities.bits()],
+		                [write_u64, self.height],
 		                [write_bytes, &self.user_agent]);
 		Ok(())
 	}
@@ -236,12 +246,13 @@ impl Writeable for Shake {
 
 impl Readable<Shake> for Shake {
 	fn read(reader: &mut Reader) -> Result<Shake, ser::Error> {
-		let (version, capab, ua) = ser_multiread!(reader, read_u32, read_u32, read_vec);
+		let (version, capab, height, ua) = ser_multiread!(reader, read_u32, read_u32, read_u64, read_vec);
 		let user_agent = try!(String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData));
 		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData));
 		Ok(Shake {
 			version: version,
 			capabilities: capabilities,
+      height: height,
 			user_agent: user_agent,
 		})
 	}

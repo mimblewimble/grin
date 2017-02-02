@@ -36,6 +36,7 @@ use types::*;
 /// A no-op network adapter used for testing.
 pub struct DummyAdapter {}
 impl NetAdapter for DummyAdapter {
+  fn height(&self) -> u64 { 0 }
 	fn transaction_received(&self, tx: core::Transaction) {}
 	fn block_received(&self, b: core::Block) {}
 }
@@ -79,10 +80,11 @@ impl Server {
 		let hp = h.clone();
 		let peers = socket.incoming().map_err(|e| Error::IOErr(e)).map(move |(conn, addr)| {
 			let adapter = adapter.clone();
+      let height = adapter.height();
 			let peers = peers.clone();
 
 			// accept the peer and add it to the server map
-			let peer_accept = add_to_peers(peers, Peer::accept(conn, &hs.clone()));
+			let peer_accept = add_to_peers(peers, Peer::accept(conn, height, &hs.clone()));
 
 			// wire in a future to timeout the accept after 5 secs
 			let timed_peer = with_timeout(Box::new(peer_accept), &hp);
@@ -124,18 +126,20 @@ impl Server {
 	                    h: reactor::Handle)
 	                    -> Box<Future<Item = (), Error = Error>> {
 		let peers = self.peers.clone();
-		let adapter = self.adapter.clone();
+		let adapter1 = self.adapter.clone();
+		let adapter2 = self.adapter.clone();
 
 		let socket = TcpStream::connect(&addr, &h).map_err(|e| Error::IOErr(e));
 		let request = socket.and_then(move |socket| {
 				let peers = peers.clone();
+        let height = adapter1.height();
 
 				// connect to the peer and add it to the server map, wiring it a timeout for
 				// the handhake
-				let peer_connect = add_to_peers(peers, Peer::connect(socket, &Handshake::new()));
+				let peer_connect = add_to_peers(peers, Peer::connect(socket, height, &Handshake::new()));
 				with_timeout(Box::new(peer_connect), &h)
 			})
-			.and_then(move |(socket, peer)| peer.run(socket, adapter));
+			.and_then(move |(socket, peer)| peer.run(socket, adapter2));
 		Box::new(request)
 	}
 

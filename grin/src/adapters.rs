@@ -30,6 +30,9 @@ pub struct NetToChainAdapter {
 }
 
 impl NetAdapter for NetToChainAdapter {
+	fn height(&self) -> u64 {
+		self.chain_head.lock().unwrap().height
+	}
 	fn transaction_received(&self, tx: core::Transaction) {
 		unimplemented!();
 	}

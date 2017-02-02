@@ -33,9 +33,10 @@ unsafe impl Send for Peer {}
 impl Peer {
 	/// Initiates the handshake with another peer.
 	pub fn connect(conn: TcpStream,
+	               height: u64,
 	               hs: &Handshake)
 	               -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
-		let connect_peer = hs.connect(conn).and_then(|(conn, proto, info)| {
+		let connect_peer = hs.connect(height, conn).and_then(|(conn, proto, info)| {
 			Ok((conn,
 			    Peer {
 				info: info,
@@ -47,9 +48,10 @@ impl Peer {
 
 	/// Accept a handshake initiated by another peer.
 	pub fn accept(conn: TcpStream,
+	              height: u64,
 	              hs: &Handshake)
 	              -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
-		let hs_peer = hs.handshake(conn).and_then(|(conn, proto, info)| {
+		let hs_peer = hs.handshake(height, conn).and_then(|(conn, proto, info)| {
 			Ok((conn,
 			    Peer {
 				info: info,
@@ -65,6 +67,7 @@ impl Peer {
 	           conn: TcpStream,
 	           na: Arc<NetAdapter>)
 	           -> Box<Future<Item = (), Error = Error>> {
+
 		self.proto.handle(conn, na)
 	}
 

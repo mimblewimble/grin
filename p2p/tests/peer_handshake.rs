@@ -50,7 +50,7 @@ fn peer_handshake() {
     let addr = SocketAddr::new(p2p_conf.host, p2p_conf.port);
     let socket = TcpStream::connect(&addr, &phandle).map_err(|e| ser::Error::IOErr(e));
     socket.and_then(move |socket| {
-      Peer::connect(socket, &p2p::handshake::Handshake::new())
+      Peer::connect(socket, 0, &p2p::handshake::Handshake::new())
 		}).and_then(move |(socket, peer)| {
       rhandle.spawn(peer.run(socket, net_adapter.clone()).map_err(|e| {
         panic!("Client run failed: {}", e);
