@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
 
 [dependencies]
-rocksdb = { git = "https://github.com/ethcore/rust-rocksdb" }
+rocksdb = "^0.6.0"
 tiny-keccak = "1.1"
 
 grin_core = { path = "../core" }
