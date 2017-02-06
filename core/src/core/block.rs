@@ -125,7 +125,6 @@ impl Readable<BlockHeader> for BlockHeader {
 /// bitcoin's schedule) and expressed as a global transaction fee (added v.H),
 /// additive to the total of fees ever collected.
 pub struct Block {
-	// hash_mem: Hash,
 	pub header: BlockHeader,
 	pub inputs: Vec<Input>,
 	pub outputs: Vec<Output>,

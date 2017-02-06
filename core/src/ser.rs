@@ -327,6 +327,7 @@ impl_slice_bytes!([u8; 1]);
 impl_slice_bytes!([u8; 2]);
 impl_slice_bytes!([u8; 4]);
 impl_slice_bytes!([u8; 8]);
+impl_slice_bytes!([u8; 32]);
 
 impl<'a> AsFixedBytes for &'a [u8] {
 	fn as_fixed_bytes(&self) -> &[u8] {
