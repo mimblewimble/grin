@@ -14,6 +14,7 @@
 
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
+use std::convert::From;
 use std::sync::{Arc, Mutex};
 
 use secp;
@@ -24,6 +25,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::{BlockHeader, Block, Proof};
 use core::pow;
+use core::ser;
 use types;
 use types::{Tip, ChainStore, ChainAdapter, NoopAdapter};
 use store;
@@ -34,6 +36,8 @@ bitflags! {
     const NONE = 0b00000001,
     /// Runs without checking the Proof of Work, mostly to make testing easier.
     const SKIP_POW = 0b00000010,
+    /// Adds block while in syncing mode.
+    const SYNC = 0b00000100,
   }
 }
 
@@ -66,6 +70,18 @@ pub enum Error {
 	InvalidBlockHeight,
 	/// Internal issue when trying to save or load data from store
 	StoreErr(types::Error),
+	SerErr(ser::Error),
+}
+
+impl From<types::Error> for Error {
+	fn from(e: types::Error) -> Error {
+		Error::StoreErr(e)
+	}
+}
+impl From<ser::Error> for Error {
+	fn from(e: ser::Error) -> Error {
+		Error::SerErr(e)
+	}
 }
 
 /// Runs the block processing pipeline, including validation and finding a
@@ -79,7 +95,7 @@ pub fn process_block(b: &Block,
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
-	let head = try!(store.head().map_err(&Error::StoreErr));
+	let head = store.head().map_err(&Error::StoreErr)?;
 
 	let mut ctx = BlockContext {
 		opts: opts,
@@ -92,7 +108,11 @@ pub fn process_block(b: &Block,
 	      b.hash(),
 	      b.header.height);
 	try!(check_known(b.hash(), &mut ctx));
-	try!(validate_header(&b, &mut ctx));
+
+	if !ctx.opts.intersects(SYNC) {
+		// in sync mode, the header has already been validated
+		try!(validate_header(&b.header, &mut ctx));
+	}
 	try!(validate_block(b, &mut ctx));
 	info!("Block at {} with hash {} is valid, going to save and append.",
 	      b.header.height,
@@ -100,6 +120,31 @@ pub fn process_block(b: &Block,
 	try!(add_block(b, &mut ctx));
 	// TODO a global lock should be set before that step or even earlier
 	update_head(b, &mut ctx)
+}
+
+pub fn process_block_header(bh: &BlockHeader,
+                            store: Arc<ChainStore>,
+                            adapter: Arc<ChainAdapter>,
+                            opts: Options)
+                            -> Result<Option<Tip>, Error> {
+
+	let head = store.get_header_head().map_err(&Error::StoreErr)?;
+
+	let mut ctx = BlockContext {
+		opts: opts,
+		store: store,
+		adapter: adapter,
+		head: head,
+	};
+
+	info!("Starting validation pipeline for block header {} at {}.",
+	      bh.hash(),
+	      bh.height);
+	try!(check_known(bh.hash(), &mut ctx));
+	try!(validate_header(&bh, &mut ctx));
+	try!(add_block_header(bh, &mut ctx));
+	// TODO a global lock should be set before that step or even earlier
+	update_header_head(bh, &mut ctx)
 }
 
 /// Quick in-memory check to fast-reject any block we've already handled
@@ -116,8 +161,7 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 /// to make it as cheap as possible. The different validations are also
 /// arranged by order of cost to have as little DoS surface as possible.
 /// TODO require only the block header (with length information)
-fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
-	let header = &b.header;
+fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	if header.height > ctx.head.height + 1 {
 		// TODO actually handle orphans and add them to a size-limited set
 		return Err(Error::Unfit("orphan".to_string()));
@@ -157,7 +201,7 @@ fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 		if header.cuckoo_len != cuckoo_sz {
 			return Err(Error::WrongCuckooSize);
 		}
-		if !pow::verify(b) {
+		if !pow::verify(header) {
 			return Err(Error::InvalidPow);
 		}
 	}
@@ -169,7 +213,10 @@ fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	try!(b.verify(&curve).map_err(&Error::InvalidBlockProof));
-	// TODO check every input exists
+
+	if !ctx.opts.intersects(SYNC) {
+		// TODO check every input exists as a UTXO using the UXTO index
+	}
 	Ok(())
 }
 
@@ -183,17 +230,46 @@ fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	Ok(())
 }
 
+/// Officially adds the block header to our header chain.
+fn add_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+	ctx.store.save_block_header(bh).map_err(&Error::StoreErr);
+
+	Ok(())
+}
+
 /// Directly updates the head if we've just appended a new block to it or handle
 /// the situation where we've just added enough work to have a fork with more
 /// work than the head.
 fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
 	// if we made a fork with more work than the head (which should also be true
 	// when extending the head), update it
-	let tip = Tip::from_block(b);
+	let tip = Tip::from_block(&b.header);
 	if tip.total_difficulty > ctx.head.total_difficulty {
-		try!(ctx.store.save_head(&tip).map_err(&Error::StoreErr));
+		ctx.store.setup_height(&b.header).map_err(&Error::StoreErr)?;
+		ctx.store.save_head(&tip).map_err(&Error::StoreErr)?;
+
 		ctx.head = tip.clone();
 		info!("Updated head to {} at {}.", b.hash(), b.header.height);
+		Ok(Some(tip))
+	} else {
+		Ok(None)
+	}
+}
+
+/// Directly updates the head if we've just appended a new block to it or handle
+/// the situation where we've just added enough work to have a fork with more
+/// work than the head.
+fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
+	// if we made a fork with more work than the head (which should also be true
+	// when extending the head), update it
+	let tip = Tip::from_block(bh);
+	if tip.total_difficulty > ctx.head.total_difficulty {
+		ctx.store.save_header_head(&tip).map_err(&Error::StoreErr)?;
+
+		ctx.head = tip.clone();
+		info!("Updated block header head to {} at {}.",
+		      bh.hash(),
+		      bh.height);
 		Ok(Some(tip))
 	} else {
 		Ok(None)

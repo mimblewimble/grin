@@ -15,7 +15,7 @@
 //! Base types that the block chain pipeline requires.
 
 use core::core::{Block, BlockHeader};
-use core::core::hash::Hash;
+use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::ser;
 
@@ -47,12 +47,12 @@ impl Tip {
 	}
 
 	/// Append a new block to this tip, returning a new updated tip.
-	pub fn from_block(b: &Block) -> Tip {
+	pub fn from_block(bh: &BlockHeader) -> Tip {
 		Tip {
-			height: b.header.height,
-			last_block_h: b.hash(),
-			prev_block_h: b.header.previous,
-			total_difficulty: b.header.total_difficulty.clone(),
+			height: bh.height,
+			last_block_h: bh.hash(),
+			prev_block_h: bh.previous,
+			total_difficulty: bh.total_difficulty.clone(),
 		}
 	}
 }
@@ -99,14 +99,35 @@ pub trait ChainStore: Send + Sync {
 	/// Block header for the chain head
 	fn head_header(&self) -> Result<BlockHeader, Error>;
 
+	/// Save the provided tip as the current head of our chain
+	fn save_head(&self, t: &Tip) -> Result<(), Error>;
+
+	/// Gets a block header by hash
+	fn get_block(&self, h: &Hash) -> Result<Block, Error>;
+
 	/// Gets a block header by hash
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error>;
 
 	/// Save the provided block in store
 	fn save_block(&self, b: &Block) -> Result<(), Error>;
 
-	/// Save the provided tip as the current head of our chain
-	fn save_head(&self, t: &Tip) -> Result<(), Error>;
+	/// Save the provided block header in store
+	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), Error>;
+
+	/// Get the tip of the header chain
+	fn get_header_head(&self) -> Result<Tip, Error>;
+
+	/// Save the provided tip as the current head of the block header chain
+	fn save_header_head(&self, t: &Tip) -> Result<(), Error>;
+
+	/// Gets the block header at the provided height
+	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error>;
+
+	/// Saves the provided block header at the corresponding height. Also check
+	/// the consistency of the height chain in store by assuring previous
+	/// headers
+	/// are also at their respective heights.
+	fn setup_height(&self, bh: &BlockHeader) -> Result<(), Error>;
 }
 
 /// Bridge between the chain pipeline and the rest of the system. Handles

@@ -40,7 +40,7 @@ fn mine_empty_chain() {
 	let mut gen = grin_core::genesis::genesis();
 	gen.header.cuckoo_len = 16;
 	let diff = gen.header.difficulty.clone();
-	pow::pow(&mut gen, diff).unwrap();
+	pow::pow(&mut gen.header, diff).unwrap();
 	store.save_block(&gen).unwrap();
 
 	// setup a new head tip
@@ -64,7 +64,7 @@ fn mine_empty_chain() {
 		                                             prev.header.cuckoo_len);
 		b.header.difficulty = difficulty.clone();
 
-		pow::pow(&mut b, difficulty).unwrap();
+		pow::pow(&mut b.header, difficulty).unwrap();
 		grin_chain::pipe::process_block(&b,
 		                                arc_store.clone(),
 		                                adapter.clone(),
@@ -93,6 +93,7 @@ fn mine_forks() {
 	// setup a new head tip
 	let tip = Tip::new(gen.hash());
 	store.save_head(&tip).unwrap();
+  println!("WRITTEN HEAD");
 
 	// mine and add a few blocks
 	let mut prev = gen;

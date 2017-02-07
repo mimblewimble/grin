@@ -17,7 +17,7 @@
 use byteorder::{WriteBytesExt, BigEndian};
 
 use types::*;
-use core::core::hash::Hash;
+use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader};
 use grin_store;
 
@@ -28,6 +28,8 @@ const SEP: u8 = ':' as u8;
 const BLOCK_HEADER_PREFIX: u8 = 'h' as u8;
 const BLOCK_PREFIX: u8 = 'b' as u8;
 const HEAD_PREFIX: u8 = 'H' as u8;
+const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
+const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
 /// store.
@@ -53,22 +55,78 @@ impl ChainStore for ChainKVStore {
 		self.get_block_header(&head.last_block_h)
 	}
 
-	fn save_block(&self, b: &Block) -> Result<(), Error> {
-		try!(self.db
-			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)
-			.map_err(&to_store_err));
+	fn save_head(&self, t: &Tip) -> Result<(), Error> {
 		self.db
-			.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..],
-			         &b.header)
+			.batch()
+			.put_ser(&vec![HEAD_PREFIX], t)?
+			.put_ser(&vec![HEADER_HEAD_PREFIX], t)?
+			.write()
 			.map_err(&to_store_err)
+	}
+
+	fn get_header_head(&self) -> Result<Tip, Error> {
+		option_to_not_found(self.db.get_ser(&vec![HEADER_HEAD_PREFIX]))
+	}
+
+	fn save_header_head(&self, t: &Tip) -> Result<(), Error> {
+		self.db.put_ser(&vec![HEADER_HEAD_PREFIX], t).map_err(&to_store_err)
+	}
+
+	fn get_block(&self, h: &Hash) -> Result<Block, Error> {
+		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, &mut h.to_vec())))
 	}
 
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())))
 	}
 
-	fn save_head(&self, t: &Tip) -> Result<(), Error> {
-		self.db.put_ser(&vec![HEAD_PREFIX], t).map_err(&to_store_err)
+	fn save_block(&self, b: &Block) -> Result<(), Error> {
+		self.db
+			.batch()
+			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?
+			.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..],
+			         &b.header)?
+			.write()
+			.map_err(&to_store_err)
+	}
+
+	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), Error> {
+		self.db
+			.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut bh.hash().to_vec())[..],
+			         bh)
+			.map_err(&to_store_err)
+	}
+
+	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
+		option_to_not_found(self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)))
+	}
+
+	fn setup_height(&self, bh: &BlockHeader) -> Result<(), Error> {
+		self.db.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height), bh).map_err(&to_store_err)?;
+
+		let mut prev_h = bh.previous;
+		let mut prev_height = bh.height - 1;
+		while prev_height > 0 {
+			let prev = self.get_header_by_height(prev_height)?;
+			if prev.hash() != prev_h {
+				let real_prev = self.get_block_header(&prev_h)?;
+				self.db
+					.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, real_prev.height),
+					         &real_prev)
+					.map_err(&to_store_err)?;
+				prev_h = real_prev.previous;
+				prev_height = real_prev.height - 1;
+			} else {
+				break;
+			}
+		}
+		Ok(())
+	}
+}
+
+impl From<grin_store::Error> for Error {
+	fn from(e: grin_store::Error) -> Error {
+		Error::StorageErr(e.to_string())
 	}
 }
 
@@ -76,6 +134,14 @@ fn to_key(prefix: u8, val: &mut Vec<u8>) -> &mut Vec<u8> {
 	val.insert(0, SEP);
 	val.insert(0, prefix);
 	val
+}
+
+fn u64_to_key<'a>(prefix: u8, val: u64) -> Vec<u8> {
+	let mut u64_vec = vec![];
+	u64_vec.write_u64::<BigEndian>(val).unwrap();
+	u64_vec.insert(0, SEP);
+	u64_vec.insert(0, prefix);
+	u64_vec
 }
 
 fn to_store_err(e: grin_store::Error) -> Error {
