@@ -28,7 +28,7 @@ pub mod cuckoo;
 use time;
 
 use consensus::EASINESS;
-use core::{Block, Proof};
+use core::{BlockHeader, Proof};
 use core::hash::{Hash, Hashed};
 use core::target::Difficulty;
 use pow::cuckoo::{Cuckoo, Miner, Error};
@@ -37,58 +37,58 @@ use ser;
 use ser::{Writeable, Writer};
 
 /// Validates the proof of work of a given header.
-pub fn verify(b: &Block) -> bool {
-	verify_size(b, b.header.cuckoo_len as u32)
+pub fn verify(bh: &BlockHeader) -> bool {
+	verify_size(bh, bh.cuckoo_len as u32)
 }
 
-pub fn verify_size(b: &Block, cuckoo_sz: u32) -> bool {
+pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
 	// make sure the pow hash shows a difficulty at least as large as the target
 	// difficulty
-	if b.header.difficulty > b.header.pow.to_difficulty() {
+	if bh.difficulty > bh.pow.to_difficulty() {
 		return false;
 	}
-	Cuckoo::new(b.hash().to_slice(), cuckoo_sz).verify(b.header.pow, EASINESS as u64)
+	Cuckoo::new(bh.hash().to_slice(), cuckoo_sz).verify(bh.pow, EASINESS as u64)
 }
 
 /// Runs a naive single-threaded proof of work computation over the provided
 /// block, until the required difficulty target is reached. May take a
 /// while for a low target...
-pub fn pow(b: &mut Block, diff: Difficulty) -> Result<(), Error> {
-	let cuckoo_len = b.header.cuckoo_len as u32;
-	pow_size(b, diff, cuckoo_len)
+pub fn pow(bh: &mut BlockHeader, diff: Difficulty) -> Result<(), Error> {
+	let cuckoo_len = bh.cuckoo_len as u32;
+	pow_size(bh, diff, cuckoo_len)
 }
 
 /// Same as default pow function but uses the much easier Cuckoo20 (mostly for
 /// tests).
-pub fn pow20(b: &mut Block, diff: Difficulty) -> Result<(), Error> {
-	pow_size(b, diff, 20)
+pub fn pow20(bh: &mut BlockHeader, diff: Difficulty) -> Result<(), Error> {
+	pow_size(bh, diff, 20)
 }
 
-pub fn pow_size(b: &mut Block, diff: Difficulty, sizeshift: u32) -> Result<(), Error> {
-	let start_nonce = b.header.nonce;
+pub fn pow_size(bh: &mut BlockHeader, diff: Difficulty, sizeshift: u32) -> Result<(), Error> {
+	let start_nonce = bh.nonce;
 
 	// try to find a cuckoo cycle on that header hash
 	loop {
 		// can be trivially optimized by avoiding re-serialization every time but this
 		// is not meant as a fast miner implementation
-		let pow_hash = b.hash();
+		let pow_hash = bh.hash();
 
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good
 		if let Ok(proof) = Miner::new(pow_hash.to_slice(), EASINESS, sizeshift).mine() {
 			if proof.to_difficulty() >= diff {
-				b.header.pow = proof;
+				bh.pow = proof;
 				return Ok(());
 			}
 		}
 
 		// otherwise increment the nonce
-		b.header.nonce += 1;
+		bh.nonce += 1;
 
 		// and if we're back where we started, update the time (changes the hash as
 		// well)
-		if b.header.nonce == start_nonce {
-			b.header.timestamp = time::at_utc(time::Timespec { sec: 0, nsec: 0 });
+		if bh.nonce == start_nonce {
+			bh.timestamp = time::at_utc(time::Timespec { sec: 0, nsec: 0 });
 		}
 	}
 }
@@ -104,9 +104,9 @@ mod test {
 	fn genesis_pow() {
 		let mut b = genesis::genesis();
 		b.header.nonce = 310;
-		pow20(&mut b, Difficulty::one()).unwrap();
+		pow20(&mut b.header, Difficulty::one()).unwrap();
 		assert!(b.header.nonce != 310);
 		assert!(b.header.pow.to_difficulty() >= Difficulty::one());
-		assert!(verify_size(&b, 20));
+		assert!(verify_size(&b.header, 20));
 	}
 }
