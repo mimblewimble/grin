@@ -30,8 +30,8 @@ use futures::task::park;
 use tokio_core::reactor;
 
 #[test]
-fn simulate_servers() {
-  env_logger::init().unwrap();
+fn simulate_block_propagation() {
+  env_logger::init();
 
   let mut evtlp = reactor::Core::new().unwrap();
   let handle = evtlp.handle();
@@ -41,7 +41,7 @@ fn simulate_servers() {
   for n in 0..5 {
       let s = grin::Server::future(
           grin::ServerConfig{
-            db_root: format!("target/grin-{}", n),
+            db_root: format!("target/grin-prop-{}", n),
             cuckoo_size: 12,
             p2p_config: p2p::P2PConfig{port: 10000+n, ..p2p::P2PConfig::default()}
           }, &handle).unwrap();
@@ -67,6 +67,37 @@ fn simulate_servers() {
     assert!(tip.height == original_height+1);
     Ok(())
   }));
+}
+
+#[test]
+fn simulate_full_sync() {
+  env_logger::init();
+
+  let mut evtlp = reactor::Core::new().unwrap();
+  let handle = evtlp.handle();
+
+  // instantiates 2 servers on different ports
+  let mut servers = vec![];
+  for n in 0..2 {
+      let s = grin::Server::future(
+          grin::ServerConfig{
+            db_root: format!("target/grin-sync-{}", n),
+            cuckoo_size: 12,
+            p2p_config: p2p::P2PConfig{port: 11000+n, ..p2p::P2PConfig::default()}
+          }, &handle).unwrap();
+      servers.push(s);
+  }
+
+  // mine a few blocks on server 1
+  servers[0].start_miner();
+  thread::sleep(time::Duration::from_secs(15));
+
+  // connect 1 and 2
+  let addr = format!("{}:{}", "127.0.0.1", 11001);
+  servers[0].connect_peer(addr.parse().unwrap()).unwrap();
+
+  // 2 should get blocks
+  evtlp.run(change(&servers[1]));
 }
 
 // Builds the change future, monitoring for a change of head on the provided server

@@ -24,10 +24,13 @@ use std::time::Duration;
 use futures;
 use futures::{Future, Stream};
 use futures::future::IntoFuture;
+use rand::{self, Rng};
 use tokio_core::net::{TcpListener, TcpStream};
 use tokio_core::reactor;
 
 use core::core;
+use core::core::hash::Hash;
+use core::core::target::Difficulty;
 use core::ser::Error;
 use handshake::Handshake;
 use peer::Peer;
@@ -36,9 +39,18 @@ use types::*;
 /// A no-op network adapter used for testing.
 pub struct DummyAdapter {}
 impl NetAdapter for DummyAdapter {
-  fn height(&self) -> u64 { 0 }
+	fn total_difficulty(&self) -> Difficulty {
+		Difficulty::one()
+	}
 	fn transaction_received(&self, tx: core::Transaction) {}
 	fn block_received(&self, b: core::Block) {}
+	fn headers_received(&self, bh: Vec<core::BlockHeader>) {}
+	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
+		vec![]
+	}
+	fn get_block(&self, h: Hash) -> Option<core::Block> {
+		None
+	}
 }
 
 /// P2P server implementation, handling bootstrapping to find and connect to
@@ -80,11 +92,11 @@ impl Server {
 		let hp = h.clone();
 		let peers = socket.incoming().map_err(|e| Error::IOErr(e)).map(move |(conn, addr)| {
 			let adapter = adapter.clone();
-      let height = adapter.height();
+			let total_diff = adapter.total_difficulty();
 			let peers = peers.clone();
 
 			// accept the peer and add it to the server map
-			let peer_accept = add_to_peers(peers, Peer::accept(conn, height, &hs.clone()));
+			let peer_accept = add_to_peers(peers, Peer::accept(conn, total_diff, &hs.clone()));
 
 			// wire in a future to timeout the accept after 5 secs
 			let timed_peer = with_timeout(Box::new(peer_accept), &hp);
@@ -132,15 +144,43 @@ impl Server {
 		let socket = TcpStream::connect(&addr, &h).map_err(|e| Error::IOErr(e));
 		let request = socket.and_then(move |socket| {
 				let peers = peers.clone();
-        let height = adapter1.height();
+				let total_diff = adapter1.total_difficulty();
 
 				// connect to the peer and add it to the server map, wiring it a timeout for
 				// the handhake
-				let peer_connect = add_to_peers(peers, Peer::connect(socket, height, &Handshake::new()));
+				let peer_connect =
+					add_to_peers(peers, Peer::connect(socket, total_diff, &Handshake::new()));
 				with_timeout(Box::new(peer_connect), &h)
 			})
 			.and_then(move |(socket, peer)| peer.run(socket, adapter2));
 		Box::new(request)
+	}
+
+	/// Returns the peer with the most worked branch, showing the highest total
+	/// difficulty.
+	pub fn most_work_peer(&self) -> Option<Arc<Peer>> {
+		let peers = self.peers.read().unwrap();
+		if peers.len() == 0 {
+			return None;
+		}
+		let mut res = peers[0].clone();
+		for p in peers.deref() {
+			if res.info.total_difficulty < p.info.total_difficulty {
+				res = (*p).clone();
+			}
+		}
+		Some(res)
+	}
+
+	/// Returns a random peer we're connected to.
+	pub fn random_peer(&self) -> Option<Arc<Peer>> {
+		let peers = self.peers.read().unwrap();
+		if peers.len() == 0 {
+			None
+		} else {
+			let idx = rand::thread_rng().gen_range(0, peers.len());
+			Some(peers[idx].clone())
+		}
 	}
 
 	/// Broadcasts the provided block to all our peers. A peer implementation
@@ -156,7 +196,7 @@ impl Server {
 	}
 
 	/// Number of peers we're currently connected to.
-	pub fn peers_count(&self) -> u32 {
+	pub fn peer_count(&self) -> u32 {
 		self.peers.read().unwrap().len() as u32
 	}
 

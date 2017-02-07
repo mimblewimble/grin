@@ -21,8 +21,11 @@ use futures::future::{Future, ok};
 use tokio_core::net::TcpStream;
 use tokio_core::io::{write_all, read_exact};
 
-use core::ser::{self, Writeable, Readable, Writer, Reader};
 use core::consensus::MAX_MSG_LEN;
+use core::core::BlockHeader;
+use core::core::hash::Hash;
+use core::core::target::Difficulty;
+use core::ser::{self, Writeable, Readable, Writer, Reader};
 
 use types::*;
 
@@ -53,6 +56,9 @@ enum_from_primitive! {
     Pong,
     GetPeerAddrs,
     PeerAddrs,
+    GetHeaders,
+    Headers,
+    GetBlock,
     Block,
     Transaction,
   }
@@ -177,8 +183,10 @@ pub struct Hand {
 	pub capabilities: Capabilities,
 	/// randomly generated for each handshake, helps detect self
 	pub nonce: u64,
-	/// current height of the sender, used to check whether sync may be needed
-	pub height: u64,
+	/// total difficulty accumulated by the sender, used to check whether sync
+	/// may
+	/// be needed
+	pub total_difficulty: Difficulty,
 	/// network address of the sender
 	pub sender_addr: SockAddr,
 	/// network address of the receiver
@@ -192,8 +200,8 @@ impl Writeable for Hand {
 		ser_multiwrite!(writer,
 		                [write_u32, self.version],
 		                [write_u32, self.capabilities.bits()],
-		                [write_u64, self.nonce],
-		                [write_u64, self.height]);
+		                [write_u64, self.nonce]);
+		self.total_difficulty.write(writer);
 		self.sender_addr.write(writer);
 		self.receiver_addr.write(writer);
 		writer.write_bytes(&self.user_agent)
@@ -202,7 +210,8 @@ impl Writeable for Hand {
 
 impl Readable<Hand> for Hand {
 	fn read(reader: &mut Reader) -> Result<Hand, ser::Error> {
-		let (version, capab, nonce, height) = ser_multiread!(reader, read_u32, read_u32, read_u64, read_u64);
+		let (version, capab, nonce) = ser_multiread!(reader, read_u32, read_u32, read_u64);
+		let total_diff = try!(Difficulty::read(reader));
 		let sender_addr = try!(SockAddr::read(reader));
 		let receiver_addr = try!(SockAddr::read(reader));
 		let ua = try!(reader.read_vec());
@@ -212,7 +221,7 @@ impl Readable<Hand> for Hand {
 			version: version,
 			capabilities: capabilities,
 			nonce: nonce,
-      height: height,
+			total_difficulty: total_diff,
 			sender_addr: sender_addr,
 			receiver_addr: receiver_addr,
 			user_agent: user_agent,
@@ -227,8 +236,10 @@ pub struct Shake {
 	pub version: u32,
 	/// sender capabilities
 	pub capabilities: Capabilities,
-	/// current height of the sender, used to check whether sync may be needed
-	pub height: u64,
+	/// total difficulty accumulated by the sender, used to check whether sync
+	/// may
+	/// be needed
+	pub total_difficulty: Difficulty,
 	/// name of version of the software
 	pub user_agent: String,
 }
@@ -237,22 +248,24 @@ impl Writeable for Shake {
 	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u32, self.version],
-		                [write_u32, self.capabilities.bits()],
-		                [write_u64, self.height],
-		                [write_bytes, &self.user_agent]);
+		                [write_u32, self.capabilities.bits()]);
+		self.total_difficulty.write(writer);
+		writer.write_bytes(&self.user_agent);
 		Ok(())
 	}
 }
 
 impl Readable<Shake> for Shake {
 	fn read(reader: &mut Reader) -> Result<Shake, ser::Error> {
-		let (version, capab, height, ua) = ser_multiread!(reader, read_u32, read_u32, read_u64, read_vec);
+		let (version, capab) = ser_multiread!(reader, read_u32, read_u32);
+		let total_diff = try!(Difficulty::read(reader));
+		let ua = try!(reader.read_vec());
 		let user_agent = try!(String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData));
 		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData));
 		Ok(Shake {
 			version: version,
 			capabilities: capabilities,
-      height: height,
+			total_difficulty: total_diff,
 			user_agent: user_agent,
 		})
 	}
@@ -384,6 +397,58 @@ impl Readable<SockAddr> for SockAddr {
 			                                             0,
 			                                             0))))
 		}
+	}
+}
+
+/// Serializable wrapper for the block locator.
+pub struct Locator {
+	pub hashes: Vec<Hash>,
+}
+
+impl Writeable for Locator {
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+		writer.write_u8(self.hashes.len() as u8)?;
+		for h in &self.hashes {
+			h.write(writer)?
+		}
+		Ok(())
+	}
+}
+
+impl Readable<Locator> for Locator {
+	fn read(reader: &mut Reader) -> Result<Locator, ser::Error> {
+		let len = reader.read_u8()?;
+		let mut hashes = Vec::with_capacity(len as usize);
+		for _ in 0..len {
+			hashes.push(Hash::read(reader)?);
+		}
+		Ok(Locator { hashes: hashes })
+	}
+}
+
+/// Serializable wrapper for a list of block headers.
+pub struct Headers {
+	pub headers: Vec<BlockHeader>,
+}
+
+impl Writeable for Headers {
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+		writer.write_u16(self.headers.len() as u16)?;
+		for h in &self.headers {
+			h.write(writer)?
+		}
+		Ok(())
+	}
+}
+
+impl Readable<Headers> for Headers {
+	fn read(reader: &mut Reader) -> Result<Headers, ser::Error> {
+		let len = reader.read_u16()?;
+		let mut headers = Vec::with_capacity(len as usize);
+		for _ in 0..len {
+			headers.push(BlockHeader::read(reader)?);
+		}
+		Ok(Headers { headers: headers })
 	}
 }
 

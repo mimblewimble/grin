@@ -81,6 +81,14 @@ impl Protocol for ProtocolV1 {
 		self.send_msg(Type::Transaction, tx)
 	}
 
+	fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), ser::Error> {
+		self.send_request(Type::GetHeaders, &Locator { hashes: locator }, None)
+	}
+
+	fn send_block_request(&self, h: Hash) -> Result<(), ser::Error> {
+		self.send_request(Type::GetBlock, &h, Some((Type::Block, h)))
+	}
+
 	/// Close the connection to the remote peer
 	fn close(&self) {
 		// TODO some kind of shutdown signal
@@ -97,15 +105,7 @@ impl ProtocolV1 {
 	                body: &ser::Writeable,
 	                expect_resp: Option<(Type, Hash)>)
 	                -> Result<(), ser::Error> {
-		let sent = self.send_msg(t, body);
-
-		if let Err(e) = sent {
-			warn!("Couldn't send message to remote peer: {}", e);
-		} else if let Some(exp) = expect_resp {
-			let mut expects = self.expected_responses.lock().unwrap();
-			expects.push(exp);
-		}
-		Ok(())
+		self.conn.borrow().send_request(t, body, expect_resp)
 	}
 }
 
@@ -116,21 +116,57 @@ fn handle_payload(adapter: &NetAdapter,
                   -> Result<Option<Hash>, ser::Error> {
 	match header.msg_type {
 		Type::Ping => {
-			let data = try!(ser::ser_vec(&MsgHeader::new(Type::Pong, 0)));
+			let data = ser::ser_vec(&MsgHeader::new(Type::Pong, 0))?;
 			sender.send(data);
 			Ok(None)
 		}
 		Type::Pong => Ok(None),
 		Type::Transaction => {
-			let tx = try!(ser::deserialize::<core::Transaction>(&mut &buf[..]));
+			let tx = ser::deserialize::<core::Transaction>(&mut &buf[..])?;
 			adapter.transaction_received(tx);
 			Ok(None)
 		}
+		Type::GetBlock => {
+			let h = ser::deserialize::<Hash>(&mut &buf[..])?;
+			let bo = adapter.get_block(h);
+			if let Some(b) = bo {
+				// serialize and send the block over
+				let mut body_data = vec![];
+				try!(ser::serialize(&mut body_data, &b));
+				let mut data = vec![];
+				try!(ser::serialize(&mut data,
+				                    &MsgHeader::new(Type::Block, body_data.len() as u64)));
+				data.append(&mut body_data);
+				sender.send(data);
+			}
+			Ok(None)
+		}
 		Type::Block => {
-			let b = try!(ser::deserialize::<core::Block>(&mut &buf[..]));
+			let b = ser::deserialize::<core::Block>(&mut &buf[..])?;
 			let bh = b.hash();
 			adapter.block_received(b);
 			Ok(Some(bh))
+		}
+		Type::GetHeaders => {
+			// load headers from the locator
+			let loc = ser::deserialize::<Locator>(&mut &buf[..])?;
+			let headers = adapter.locate_headers(loc.hashes);
+
+			// serialize and send all the headers over
+			let mut body_data = vec![];
+			try!(ser::serialize(&mut body_data, &Headers { headers: headers }));
+			let mut data = vec![];
+			try!(ser::serialize(&mut data,
+			                    &MsgHeader::new(Type::Headers, body_data.len() as u64)));
+			data.append(&mut body_data);
+			sender.send(data);
+
+			Ok(None)
+		}
+		Type::Headers => {
+			let headers = ser::deserialize::<Headers>(&mut &buf[..])?;
+			adapter.headers_received(headers.headers);
+			Ok(None)
 		}
 		_ => {
 			debug!("unknown message type {:?}", header.msg_type);

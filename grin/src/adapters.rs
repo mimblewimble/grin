@@ -12,12 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::ops::Deref;
 use std::sync::{Arc, Mutex};
+use std::thread;
 
 use chain::{self, ChainAdapter};
 use core::core;
-use p2p::{NetAdapter, Server};
+use core::core::hash::{Hash, Hashed};
+use core::core::target::Difficulty;
+use p2p::{self, NetAdapter, Server};
 use util::OneTime;
+use sync;
 
 /// Implementation of the NetAdapter for the blockchain. Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
@@ -27,23 +32,32 @@ pub struct NetToChainAdapter {
 	chain_head: Arc<Mutex<chain::Tip>>,
 	chain_store: Arc<chain::ChainStore>,
 	chain_adapter: Arc<ChainToNetAdapter>,
+
+	syncer: OneTime<Arc<sync::Syncer>>,
 }
 
 impl NetAdapter for NetToChainAdapter {
-	fn height(&self) -> u64 {
-		self.chain_head.lock().unwrap().height
+	fn total_difficulty(&self) -> Difficulty {
+		self.chain_head.lock().unwrap().clone().total_difficulty
 	}
+
 	fn transaction_received(&self, tx: core::Transaction) {
 		unimplemented!();
 	}
+
 	fn block_received(&self, b: core::Block) {
-		// TODO delegate to a separate thread to avoid holding up the caller
 		debug!("Received block {} from network, going to process.",
 		       b.hash());
+
 		// pushing the new block through the chain pipeline
 		let store = self.chain_store.clone();
 		let chain_adapter = self.chain_adapter.clone();
-		let res = chain::process_block(&b, store, chain_adapter, chain::NONE);
+		let opts = if self.syncer.borrow().syncing() {
+			chain::SYNC
+		} else {
+			chain::NONE
+		};
+		let res = chain::process_block(&b, store, chain_adapter, opts);
 
 		// log errors and update the shared head reference on success
 		if let Err(e) = res {
@@ -52,6 +66,94 @@ impl NetAdapter for NetToChainAdapter {
 			let chain_head = self.chain_head.clone();
 			let mut head = chain_head.lock().unwrap();
 			*head = tip;
+		}
+
+		if self.syncer.borrow().syncing() {
+			self.syncer.borrow().block_received(b.hash());
+		}
+	}
+
+	fn headers_received(&self, bhs: Vec<core::BlockHeader>) {
+		let opts = if self.syncer.borrow().syncing() {
+			chain::SYNC
+		} else {
+			chain::NONE
+		};
+
+		// try to add each header to our header chain
+		let mut added_hs = vec![];
+		for bh in bhs {
+			let store = self.chain_store.clone();
+			let chain_adapter = self.chain_adapter.clone();
+
+			let res = chain::process_block_header(&bh, store, chain_adapter, opts);
+			match res {
+				Ok(_) => {
+					added_hs.push(bh.hash());
+				}
+				Err(chain::Error::Unfit(_)) => {
+					info!("Received unfit block header {} at {}.",
+					      bh.hash(),
+					      bh.height);
+				}
+				Err(chain::Error::StoreErr(e)) => {
+					error!("Store error processing block header {}: {:?}", bh.hash(), e);
+					return;
+				}
+				Err(e) => {
+					info!("Invalid block header {}: {:?}.", bh.hash(), e);
+					// TODO penalize peer somehow
+				}
+			}
+		}
+		info!("Added {} headers to the header chain.", added_hs.len());
+
+		if self.syncer.borrow().syncing() {
+			self.syncer.borrow().headers_received(added_hs);
+		}
+	}
+
+	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
+		if locator.len() == 0 {
+			return vec![];
+		}
+
+		// go through the locator vector and check if we know any of these headers
+		let known = self.chain_store.get_block_header(&locator[0]);
+		let header = match known {
+			Ok(header) => header,
+			Err(chain::types::Error::NotFoundErr) => {
+				return self.locate_headers(locator[1..].to_vec());
+			}
+			Err(e) => {
+				error!("Could not build header locator: {:?}", e);
+				return vec![];
+			}
+		};
+
+		// looks like we know one, getting as many following headers as allowed
+		let hh = header.height;
+		let mut headers = vec![];
+		for h in (hh + 1)..(hh + (p2p::MAX_BLOCK_HEADERS as u64)) {
+			let header = self.chain_store.get_header_by_height(h);
+			match header {
+				Ok(head) => headers.push(head),
+				Err(chain::types::Error::NotFoundErr) => break,
+				Err(e) => {
+					error!("Could not build header locator: {:?}", e);
+					return vec![];
+				}
+			}
+		}
+		headers
+	}
+
+	fn get_block(&self, h: Hash) -> Option<core::Block> {
+		let store = self.chain_store.clone();
+		let b = store.get_block(&h);
+		match b {
+			Ok(b) => Some(b),
+			_ => None,
 		}
 	}
 }
@@ -65,7 +167,16 @@ impl NetToChainAdapter {
 			chain_head: chain_head,
 			chain_store: chain_store,
 			chain_adapter: chain_adapter,
+			syncer: OneTime::new(),
 		}
+	}
+
+	pub fn start_sync(&self, sync: sync::Syncer) {
+		let arc_sync = Arc::new(sync);
+		self.syncer.init(arc_sync.clone());
+		thread::Builder::new().name("syncer".to_string()).spawn(move || {
+			arc_sync.run();
+		});
 	}
 }
 

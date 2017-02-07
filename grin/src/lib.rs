@@ -39,5 +39,6 @@ extern crate secp256k1zkp as secp;
 mod adapters;
 mod miner;
 mod server;
+mod sync;
 
 pub use server::{Server, ServerConfig};

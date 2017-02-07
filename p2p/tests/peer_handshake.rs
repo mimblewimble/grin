@@ -27,6 +27,7 @@ use tokio_core::net::TcpStream;
 use tokio_core::reactor::{self, Core};
 
 use core::ser;
+use core::core::target::Difficulty;
 use p2p::Peer;
 
 // Starts a server and connects a client peer to it to check handshake, followed by a ping/pong exchange to make sure the connection is live.
@@ -50,7 +51,7 @@ fn peer_handshake() {
     let addr = SocketAddr::new(p2p_conf.host, p2p_conf.port);
     let socket = TcpStream::connect(&addr, &phandle).map_err(|e| ser::Error::IOErr(e));
     socket.and_then(move |socket| {
-      Peer::connect(socket, 0, &p2p::handshake::Handshake::new())
+      Peer::connect(socket, Difficulty::one(), &p2p::handshake::Handshake::new())
 		}).and_then(move |(socket, peer)| {
       rhandle.spawn(peer.run(socket, net_adapter.clone()).map_err(|e| {
         panic!("Client run failed: {}", e);
@@ -63,7 +64,7 @@ fn peer_handshake() {
       assert!(recv > 0);
       Ok(())
     }).and_then(|_| {
-      assert!(server.peers_count() > 0);
+      assert!(server.peer_count() > 0);
       server.stop();
       Ok(())
     })

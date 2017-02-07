@@ -18,12 +18,14 @@ use futures::Future;
 use tokio_core::net::TcpStream;
 
 use core::core;
+use core::core::hash::Hash;
+use core::core::target::Difficulty;
 use core::ser::Error;
 use handshake::Handshake;
 use types::*;
 
 pub struct Peer {
-	info: PeerInfo,
+	pub info: PeerInfo,
 	proto: Box<Protocol>,
 }
 
@@ -33,10 +35,10 @@ unsafe impl Send for Peer {}
 impl Peer {
 	/// Initiates the handshake with another peer.
 	pub fn connect(conn: TcpStream,
-	               height: u64,
+	               total_difficulty: Difficulty,
 	               hs: &Handshake)
 	               -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
-		let connect_peer = hs.connect(height, conn).and_then(|(conn, proto, info)| {
+		let connect_peer = hs.connect(total_difficulty, conn).and_then(|(conn, proto, info)| {
 			Ok((conn,
 			    Peer {
 				info: info,
@@ -48,10 +50,10 @@ impl Peer {
 
 	/// Accept a handshake initiated by another peer.
 	pub fn accept(conn: TcpStream,
-	              height: u64,
+	              total_difficulty: Difficulty,
 	              hs: &Handshake)
 	              -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
-		let hs_peer = hs.handshake(height, conn).and_then(|(conn, proto, info)| {
+		let hs_peer = hs.handshake(total_difficulty, conn).and_then(|(conn, proto, info)| {
 			Ok((conn,
 			    Peer {
 				info: info,
@@ -68,7 +70,11 @@ impl Peer {
 	           na: Arc<NetAdapter>)
 	           -> Box<Future<Item = (), Error = Error>> {
 
-		self.proto.handle(conn, na)
+		let addr = self.info.addr;
+		Box::new(self.proto.handle(conn, na).and_then(move |_| {
+			info!("Client {} disconnected.", addr);
+			Ok(())
+		}))
 	}
 
 	/// Bytes sent and received by this peer to the remote peer.
@@ -85,6 +91,15 @@ impl Peer {
 	pub fn send_block(&self, b: &core::Block) -> Result<(), Error> {
 		// TODO do not send if the peer sent us the block in the first place
 		self.proto.send_block(b)
+	}
+
+	pub fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error> {
+		self.proto.send_header_request(locator)
+	}
+
+	pub fn send_block_request(&self, h: Hash) -> Result<(), Error> {
+		debug!("Requesting block {} from peer {}.", h, self.info.addr);
+		self.proto.send_block_request(h)
 	}
 
 	pub fn stop(&self) {

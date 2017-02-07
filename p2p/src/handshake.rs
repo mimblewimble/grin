@@ -21,6 +21,7 @@ use rand::os::OsRng;
 use tokio_core::net::TcpStream;
 
 use core::ser::Error;
+use core::core::target::Difficulty;
 use msg::*;
 use types::*;
 use protocol::ProtocolV1;
@@ -46,7 +47,7 @@ impl Handshake {
 
 	/// Handles connecting to a new remote peer, starting the version handshake.
 	pub fn connect(&self,
-	               height: u64,
+	               total_difficulty: Difficulty,
 	               conn: TcpStream)
 	               -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
 		// prepare the first part of the hanshake
@@ -55,7 +56,7 @@ impl Handshake {
 			version: PROTOCOL_VERSION,
 			capabilities: FULL_SYNC,
 			nonce: nonce,
-			height: height,
+			total_difficulty: total_difficulty,
 			sender_addr: SockAddr(conn.local_addr().unwrap()),
 			receiver_addr: SockAddr(conn.peer_addr().unwrap()),
 			user_agent: USER_AGENT.to_string(),
@@ -76,7 +77,7 @@ impl Handshake {
 						user_agent: shake.user_agent,
 						addr: conn.peer_addr().unwrap(),
 						version: shake.version,
-						height: shake.height,
+						total_difficulty: shake.total_difficulty,
 					};
 
 					info!("Connected to peer {:?}", peer_info);
@@ -89,7 +90,7 @@ impl Handshake {
 	/// Handles receiving a connection from a new remote peer that started the
 	/// version handshake.
 	pub fn handshake(&self,
-	                 height: u64,
+	                 total_difficulty: Difficulty,
 	                 conn: TcpStream)
 	                 -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
 		let nonces = self.nonces.clone();
@@ -117,13 +118,13 @@ impl Handshake {
 					user_agent: hand.user_agent,
 					addr: conn.peer_addr().unwrap(),
 					version: hand.version,
-					height: hand.height,
+					total_difficulty: hand.total_difficulty,
 				};
 				// send our reply with our info
 				let shake = Shake {
 					version: PROTOCOL_VERSION,
 					capabilities: FULL_SYNC,
-					height: height,
+					total_difficulty: total_difficulty,
 					user_agent: USER_AGENT.to_string(),
 				};
 				Ok((conn, shake, peer_info))

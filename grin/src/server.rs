@@ -29,6 +29,7 @@ use chain::ChainStore;
 use core;
 use miner;
 use p2p;
+use sync;
 
 /// Errors than can be reported by a server implementation, mostly wraps
 /// underlying components errors.
@@ -89,8 +90,11 @@ impl Server {
 		let net_adapter = Arc::new(NetToChainAdapter::new(shared_head.clone(),
 		                                                  chain_store.clone(),
 		                                                  chain_adapter.clone()));
-		let server = Arc::new(p2p::Server::new(config.p2p_config, net_adapter));
+		let server = Arc::new(p2p::Server::new(config.p2p_config, net_adapter.clone()));
 		chain_adapter.init(server.clone());
+
+		let sync = sync::Syncer::new(chain_store.clone(), server.clone());
+		net_adapter.start_sync(sync);
 
 		let mut evtlp = reactor::Core::new().unwrap();
 		let handle = evtlp.handle();
@@ -116,8 +120,11 @@ impl Server {
 		let net_adapter = Arc::new(NetToChainAdapter::new(shared_head.clone(),
 		                                                  chain_store.clone(),
 		                                                  chain_adapter.clone()));
-		let server = Arc::new(p2p::Server::new(config.p2p_config, net_adapter));
+		let server = Arc::new(p2p::Server::new(config.p2p_config, net_adapter.clone()));
 		chain_adapter.init(server.clone());
+
+		let sync = sync::Syncer::new(chain_store.clone(), server.clone());
+		net_adapter.start_sync(sync);
 
 		evt_handle.spawn(server.start(evt_handle.clone()).map_err(|_| ()));
 
@@ -173,7 +180,7 @@ fn store_head(config: &ServerConfig)
 			if config.cuckoo_size > 0 {
 				gen.header.cuckoo_len = config.cuckoo_size;
 				let diff = gen.header.difficulty.clone();
-				core::pow::pow(&mut gen, diff).unwrap();
+				core::pow::pow(&mut gen.header, diff).unwrap();
 			}
 			try!(chain_store.save_block(&gen).map_err(&Error::StoreErr));
 			let tip = chain::types::Tip::new(gen.hash());

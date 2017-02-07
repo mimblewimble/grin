@@ -23,8 +23,6 @@ use adapters::ChainToNetAdapter;
 use core::consensus;
 use core::core;
 use core::core::hash::{Hash, Hashed};
-use core::core::target::Difficulty;
-use core::pow;
 use core::pow::cuckoo;
 use chain;
 use secp;

@@ -19,7 +19,18 @@ use futures::Future;
 use tokio_core::net::TcpStream;
 
 use core::core;
+use core::core::hash::Hash;
+use core::core::target::Difficulty;
 use core::ser::Error;
+
+/// Maximum number of hashes in a block header locator request
+pub const MAX_LOCATORS: u32 = 10;
+
+/// Maximum number of block headers a peer should ever send
+pub const MAX_BLOCK_HEADERS: u32 = 512;
+
+/// Maximum number of block bodies a peer should ever ask for and send
+pub const MAX_BLOCK_BODIES: u32 = 16;
 
 /// Configuration for the peer-to-peer server.
 #[derive(Debug, Clone, Copy)]
@@ -56,7 +67,7 @@ pub struct PeerInfo {
 	pub user_agent: String,
 	pub version: u32,
 	pub addr: SocketAddr,
-  pub height: u64,
+	pub total_difficulty: Difficulty,
 }
 
 /// A given communication protocol agreed upon between 2 peers (usually
@@ -81,6 +92,12 @@ pub trait Protocol {
 	/// Relays a transaction to the remote peer.
 	fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error>;
 
+	/// Sends a request for block headers based on the provided block locator.
+	fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error>;
+
+	/// Sends a request for a block from its hash.
+	fn send_block_request(&self, h: Hash) -> Result<(), Error>;
+
 	/// How many bytes have been sent/received to/from the remote peer.
 	fn transmitted_bytes(&self) -> (u64, u64);
 
@@ -92,12 +109,25 @@ pub trait Protocol {
 /// forwarding or querying of blocks and transactions from the network among
 /// other things.
 pub trait NetAdapter: Sync + Send {
-  /// Current height of our chain.
-  fn height(&self) -> u64;
+	/// Current height of our chain.
+	fn total_difficulty(&self) -> Difficulty;
 
 	/// A valid transaction has been received from one of our peers
 	fn transaction_received(&self, tx: core::Transaction);
 
 	/// A block has been received from one of our peers
 	fn block_received(&self, b: core::Block);
+
+	/// A set of block header has been received, typically in response to a
+	/// block
+	/// header request.
+	fn headers_received(&self, bh: Vec<core::BlockHeader>);
+
+	/// Finds a list of block headers based on the provided locator. Tries to
+	/// identify the common chain and gets the headers that follow it
+	/// immediately.
+	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader>;
+
+	/// Gets a full block by its hash.
+	fn get_block(&self, h: Hash) -> Option<core::Block>;
 }
