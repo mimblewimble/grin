@@ -38,7 +38,7 @@ fn mine_empty_chain() {
 
 	// save a genesis block
 	let mut gen = grin_core::genesis::genesis();
-	gen.header.cuckoo_len = 16;
+	gen.header.cuckoo_len = 12;
 	let diff = gen.header.difficulty.clone();
 	pow::pow(&mut gen.header, diff).unwrap();
 	store.save_block(&gen).unwrap();
@@ -88,12 +88,14 @@ fn mine_forks() {
 
 	// save a genesis block
 	let mut gen = grin_core::genesis::genesis();
+	gen.header.cuckoo_len = 12;
+	let diff = gen.header.difficulty.clone();
+	pow::pow(&mut gen.header, diff).unwrap();
 	store.save_block(&gen).unwrap();
 
 	// setup a new head tip
 	let tip = Tip::new(gen.hash());
 	store.save_head(&tip).unwrap();
-  println!("WRITTEN HEAD");
 
 	// mine and add a few blocks
 	let mut prev = gen;
