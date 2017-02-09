@@ -20,30 +20,38 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
+extern crate byteorder;
 extern crate grin_core as core;
 extern crate rocksdb;
+
+const SEP: u8 = ':' as u8;
 
 use std::fmt;
 use std::sync::RwLock;
 
-use core::ser;
-
+use byteorder::{WriteBytesExt, BigEndian};
 use rocksdb::{DB, WriteBatch, DBCompactionStyle};
+
+use core::ser;
 
 /// Main error type for this crate.
 #[derive(Debug)]
 pub enum Error {
+	/// Couldn't find what we were looking for
+	NotFoundErr,
 	/// Wraps an error originating from RocksDB (which unfortunately returns
 	/// string errors).
-	RocksDbErr(rocksdb::Error),
+	RocksDbErr(String),
 	/// Wraps a serialization error for Writeable or Readable
 	SerErr(ser::Error),
 }
 
+
 impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
-			&Error::RocksDbErr(ref e) => write!(f, "RocksDb Error: {}", e.to_string()),
+      &Error::NotFoundErr => write!(f, "Not Found"),
+			&Error::RocksDbErr(ref s) => write!(f, "RocksDb Error: {}", s),
 			&Error::SerErr(ref e) => write!(f, "Serialization Error: {}", e.to_string()),
 		}
 	}
@@ -51,7 +59,7 @@ impl fmt::Display for Error {
 
 impl From<rocksdb::Error> for Error {
 	fn from(e: rocksdb::Error) -> Error {
-		Error::RocksDbErr(e)
+		Error::RocksDbErr(e.to_string())
 	}
 }
 
@@ -78,7 +86,7 @@ impl Store {
 	/// Writes a single key/value pair to the db
 	pub fn put(&self, key: &[u8], value: Vec<u8>) -> Result<(), Error> {
 		let db = self.rdb.write().unwrap();
-		db.put(key, &value[..]).map_err(Error::RocksDbErr)
+		db.put(key, &value[..]).map_err(&From::from)
 	}
 
 	/// Writes a single key and its `Writeable` value to the db. Encapsulates
@@ -94,7 +102,7 @@ impl Store {
 	/// Gets a value from the db, provided its key
 	pub fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
 		let db = self.rdb.read().unwrap();
-		db.get(key).map(|r| r.map(|o| o.to_vec())).map_err(Error::RocksDbErr)
+		db.get(key).map(|r| r.map(|o| o.to_vec())).map_err(From::from)
 	}
 
 	/// Gets a `Readable` value from the db, provided its key. Encapsulates
@@ -124,7 +132,7 @@ impl Store {
 	/// Deletes a key/value pair from the db
 	pub fn delete(&self, key: &[u8]) -> Result<(), Error> {
 		let db = self.rdb.write().unwrap();
-		db.delete(key).map_err(Error::RocksDbErr)
+		db.delete(key).map_err(From::from)
 	}
 
 	/// Builds a new batch to be used with this store.
@@ -137,7 +145,7 @@ impl Store {
 
 	fn write(&self, batch: WriteBatch) -> Result<(), Error> {
 		let db = self.rdb.write().unwrap();
-		db.write(batch).map_err(Error::RocksDbErr)
+		db.write(batch).map_err(From::from)
 	}
 }
 
@@ -164,5 +172,30 @@ impl<'a> Batch<'a> {
 	/// Writes the batch to RocksDb.
 	pub fn write(self) -> Result<(), Error> {
 		self.store.write(self.batch)
+	}
+}
+
+/// Build a db key from a prefix and a byte vector identifier.
+pub fn to_key(prefix: u8, id: &mut Vec<u8>) -> &mut Vec<u8> {
+	id.insert(0, SEP);
+	id.insert(0, prefix);
+	id
+}
+
+/// Build a db key from a prefix and a numeric identifier.
+pub fn u64_to_key<'a>(prefix: u8, val: u64) -> Vec<u8> {
+	let mut u64_vec = vec![];
+	u64_vec.write_u64::<BigEndian>(val).unwrap();
+	u64_vec.insert(0, SEP);
+	u64_vec.insert(0, prefix);
+	u64_vec
+}
+
+/// unwraps the inner option by converting the none case to a not found error
+pub fn option_to_not_found<T>(res: Result<Option<T>, Error>) -> Result<T, Error> {
+	match res {
+		Ok(None) => Err(Error::NotFoundErr),
+		Ok(Some(o)) => Ok(o),
+		Err(e) => Err(e),
 	}
 }

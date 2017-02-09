@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
 
 [dependencies]
+byteorder = "^0.5"
 rocksdb = "^0.6.0"
 tiny-keccak = "1.1"
 

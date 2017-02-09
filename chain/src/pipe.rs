@@ -26,6 +26,7 @@ use core::core::target::Difficulty;
 use core::core::{BlockHeader, Block, Proof};
 use core::pow;
 use core::ser;
+use grin_store;
 use types;
 use types::{Tip, ChainStore, ChainAdapter, NoopAdapter};
 use store;
@@ -69,12 +70,12 @@ pub enum Error {
 	/// Block height is invalid (not previous + 1)
 	InvalidBlockHeight,
 	/// Internal issue when trying to save or load data from store
-	StoreErr(types::Error),
+	StoreErr(grin_store::Error),
 	SerErr(ser::Error),
 }
 
-impl From<types::Error> for Error {
-	fn from(e: types::Error) -> Error {
+impl From<grin_store::Error> for Error {
+	fn from(e: grin_store::Error) -> Error {
 		Error::StoreErr(e)
 	}
 }
@@ -222,7 +223,7 @@ fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 
 /// Officially adds the block to our chain.
 fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
-	ctx.store.save_block(b).map_err(&Error::StoreErr);
+	ctx.store.save_block(b).map_err(&Error::StoreErr)?;
 
 	// broadcast the block
 	let adapter = ctx.adapter.clone();
@@ -232,9 +233,7 @@ fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 
 /// Officially adds the block header to our header chain.
 fn add_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	ctx.store.save_block_header(bh).map_err(&Error::StoreErr);
-
-	Ok(())
+	ctx.store.save_block_header(bh).map_err(&Error::StoreErr)
 }
 
 /// Directly updates the head if we've just appended a new block to it or handle
