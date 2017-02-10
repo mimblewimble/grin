@@ -27,10 +27,12 @@ extern crate rocksdb;
 const SEP: u8 = ':' as u8;
 
 use std::fmt;
+use std::iter::Iterator;
+use std::marker::PhantomData;
 use std::sync::RwLock;
 
 use byteorder::{WriteBytesExt, BigEndian};
-use rocksdb::{DB, WriteBatch, DBCompactionStyle};
+use rocksdb::{DB, WriteBatch, DBCompactionStyle, DBIterator, IteratorMode, Direction};
 
 use core::ser;
 
@@ -46,11 +48,10 @@ pub enum Error {
 	SerErr(ser::Error),
 }
 
-
 impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
-      &Error::NotFoundErr => write!(f, "Not Found"),
+			&Error::NotFoundErr => write!(f, "Not Found"),
 			&Error::RocksDbErr(ref s) => write!(f, "RocksDb Error: {}", s),
 			&Error::SerErr(ref e) => write!(f, "Serialization Error: {}", e.to_string()),
 		}
@@ -135,6 +136,17 @@ impl Store {
 		db.delete(key).map_err(From::from)
 	}
 
+	/// Produces an iterator of `Readable` types moving forward from the
+	/// provided
+	/// key.
+	pub fn iter<T: ser::Readable<T>>(&self, from: &[u8]) -> SerIterator<T> {
+		let db = self.rdb.read().unwrap();
+		SerIterator {
+			iter: db.iterator(IteratorMode::From(from, Direction::Forward)),
+			_marker: PhantomData,
+		}
+	}
+
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Batch {
 		Batch {
@@ -172,6 +184,29 @@ impl<'a> Batch<'a> {
 	/// Writes the batch to RocksDb.
 	pub fn write(self) -> Result<(), Error> {
 		self.store.write(self.batch)
+	}
+}
+
+/// An iterator thad produces Readable instances back. Wraps the lower level
+/// DBIterator and deserializes the returned values.
+pub struct SerIterator<T>
+	where T: ser::Readable<T>
+{
+	iter: DBIterator,
+	_marker: PhantomData<T>,
+}
+
+impl<T> Iterator for SerIterator<T>
+    where T: ser::Readable<T>
+{
+	type Item = T;
+
+	fn next(&mut self) -> Option<T> {
+		let next = self.iter.next();
+		next.and_then(|r| {
+			let (_, v) = r;
+			ser::deserialize(&mut &v[..]).ok()
+		})
 	}
 }
 
