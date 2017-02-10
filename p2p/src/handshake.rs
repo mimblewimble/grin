@@ -54,7 +54,7 @@ impl Handshake {
 		let nonce = self.next_nonce();
 		let hand = Hand {
 			version: PROTOCOL_VERSION,
-			capabilities: FULL_SYNC,
+			capabilities: FULL_HIST,
 			nonce: nonce,
 			total_difficulty: total_difficulty,
 			sender_addr: SockAddr(conn.local_addr().unwrap()),
@@ -123,7 +123,7 @@ impl Handshake {
 				// send our reply with our info
 				let shake = Shake {
 					version: PROTOCOL_VERSION,
-					capabilities: FULL_SYNC,
+					capabilities: FULL_HIST,
 					total_difficulty: total_difficulty,
 					user_agent: USER_AGENT.to_string(),
 				};

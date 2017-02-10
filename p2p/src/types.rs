@@ -55,8 +55,11 @@ bitflags! {
   pub flags Capabilities: u32 {
     /// We don't know (yet) what the peer can do.
     const UNKNOWN = 0b00000000,
-    /// Runs with the easier version of the Proof of Work, mostly to make testing easier.
-    const FULL_SYNC = 0b00000001,
+    /// Full archival node, has the whole history without any pruning.
+    const FULL_HIST = 0b00000001,
+    /// Can provide block headers and the UTXO set for some recent-enough
+    /// height.
+    const UTXO_HIST = 0b00000010,
   }
 }
 

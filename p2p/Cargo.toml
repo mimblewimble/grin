@@ -17,6 +17,7 @@ enum_primitive = "^0.1.0"
 num = "^0.1.36"
 
 grin_core = { path = "../core" }
+grin_store = { path = "../store" }
 grin_util = { path = "../util" }
 
 [dev-dependencies]

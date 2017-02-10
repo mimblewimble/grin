@@ -26,6 +26,7 @@ extern crate bitflags;
 extern crate enum_primitive;
 #[macro_use]
 extern crate grin_core as core;
+extern crate grin_store;
 extern crate grin_util as util;
 #[macro_use]
 extern crate log;
@@ -43,6 +44,7 @@ mod msg;
 mod peer;
 mod protocol;
 mod server;
+pub mod store;
 mod types;
 
 pub use server::{Server, DummyAdapter};

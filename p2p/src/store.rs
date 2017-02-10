@@ -40,7 +40,7 @@ pub struct Peer {
 	pub addr: SocketAddr,
 	pub capabilities: Capabilities,
 	pub user_agent: String,
-  pub flags: State 
+	pub flags: State,
 }
 
 impl Writeable for Peer {
@@ -49,9 +49,9 @@ impl Writeable for Peer {
 		ser_multiwrite!(writer,
 		                [write_u32, self.capabilities.bits()],
 		                [write_bytes, &self.user_agent],
-                    [write_u8, self.flags as u8]);
-    Ok(())
-  }
+		                [write_u8, self.flags as u8]);
+		Ok(())
+	}
 }
 
 impl Readable<Peer> for Peer {
@@ -60,18 +60,18 @@ impl Readable<Peer> for Peer {
 		let (capab, ua, fl) = ser_multiread!(reader, read_u32, read_vec, read_u8);
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
-    match State::from_u8(fl) {
-      Some(flags) => {
-        Ok(Peer {
-          addr: addr.0,
-          capabilities: capabilities,
-          user_agent: user_agent,
-          flags: flags,
-        })
-      }
+		match State::from_u8(fl) {
+			Some(flags) => {
+				Ok(Peer {
+					addr: addr.0,
+					capabilities: capabilities,
+					user_agent: user_agent,
+					flags: flags,
+				})
+			}
 			None => Err(ser::Error::CorruptedData),
-    }
-  }
+		}
+	}
 }
 
 pub struct PeerStore {
@@ -82,27 +82,29 @@ impl PeerStore {
 	pub fn new(root_path: String) -> Result<PeerStore, Error> {
 		let db = grin_store::Store::open(format!("{}/{}", root_path, STORE_SUBPATH).as_str())?;
 		Ok(PeerStore { db: db })
-  }
+	}
 
-  pub fn save_peer(&self, p: &Peer) -> Result<(), Error> {
-		self.db.put_ser(&to_key(PEER_PREFIX, &mut format!("{}", p.addr).into_bytes())[..], p)
-  }
+	pub fn save_peer(&self, p: &Peer) -> Result<(), Error> {
+		self.db.put_ser(&to_key(PEER_PREFIX, &mut format!("{}", p.addr).into_bytes())[..],
+		                p)
+	}
 
-  pub fn delete_peer(&self, peer_addr: SocketAddr) -> Result<(), Error> {
+	pub fn delete_peer(&self, peer_addr: SocketAddr) -> Result<(), Error> {
 		self.db.delete(&to_key(PEER_PREFIX, &mut format!("{}", peer_addr).into_bytes())[..])
-  }
+	}
 
-  pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<Peer> {
-    let peers_iter = self.db.iter::<Peer>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()));
-    let mut peers = Vec::with_capacity(count);
-    for p in peers_iter {
-      if p.flags == state && p.capabilities.contains(cap) {
-        peers.push(p);
-      }
-      if peers.len() >= count {
-        break;
-      }
-    }
-    peers
-  }
+	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<Peer> {
+		let peers_iter = self.db
+			.iter::<Peer>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()));
+		let mut peers = Vec::with_capacity(count);
+		for p in peers_iter {
+			if p.flags == state && p.capabilities.contains(cap) {
+				peers.push(p);
+			}
+			if peers.len() >= count {
+				break;
+			}
+		}
+		peers
+	}
 }
