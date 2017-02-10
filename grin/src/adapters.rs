@@ -22,6 +22,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use p2p::{self, NetAdapter, Server};
 use util::OneTime;
+use store;
 use sync;
 
 /// Implementation of the NetAdapter for the blockchain. Gets notified when new
@@ -122,7 +123,7 @@ impl NetAdapter for NetToChainAdapter {
 		let known = self.chain_store.get_block_header(&locator[0]);
 		let header = match known {
 			Ok(header) => header,
-			Err(chain::types::Error::NotFoundErr) => {
+			Err(store::Error::NotFoundErr) => {
 				return self.locate_headers(locator[1..].to_vec());
 			}
 			Err(e) => {
@@ -138,7 +139,7 @@ impl NetAdapter for NetToChainAdapter {
 			let header = self.chain_store.get_header_by_height(h);
 			match header {
 				Ok(head) => headers.push(head),
-				Err(chain::types::Error::NotFoundErr) => break,
+				Err(store::Error::NotFoundErr) => break,
 				Err(e) => {
 					error!("Could not build header locator: {:?}", e);
 					return vec![];

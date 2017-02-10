@@ -29,6 +29,7 @@ use chain::ChainStore;
 use core;
 use miner;
 use p2p;
+use store;
 use sync;
 
 /// Errors than can be reported by a server implementation, mostly wraps
@@ -40,7 +41,7 @@ pub enum Error {
 	/// Peer connection error
 	PeerErr(core::ser::Error),
 	/// Data store error
-	StoreErr(chain::types::Error),
+	StoreErr(store::Error),
 }
 
 /// Full server configuration, aggregating configurations required for the
@@ -174,7 +175,7 @@ fn store_head(config: &ServerConfig)
 	// check if we have a head in store, otherwise the genesis block is it
 	let head = match chain_store.head() {
 		Ok(tip) => tip,
-		Err(chain::types::Error::NotFoundErr) => {
+		Err(store::Error::NotFoundErr) => {
 			debug!("No genesis block found, creating and saving one.");
 			let mut gen = core::genesis::genesis();
 			if config.cuckoo_size > 0 {
