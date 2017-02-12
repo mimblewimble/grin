@@ -327,6 +327,12 @@ impl_int!(u32, write_u32, read_u32);
 impl_int!(u64, write_u64, read_u64);
 impl_int!(i64, write_i64, read_i64);
 
+impl<'a, A: Writeable> Writeable for &'a A {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(*self, writer)
+	}
+}
+
 impl<A: Writeable, B: Writeable> Writeable for (A, B) {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		try!(Writeable::write(&self.0, writer));
@@ -348,11 +354,35 @@ impl<A: Writeable, B: Writeable, C: Writeable> Writeable for (A, B, C) {
 	}
 }
 
+impl<A: Writeable, B: Writeable, C: Writeable, D: Writeable> Writeable for (A, B, C, D) {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		try!(Writeable::write(&self.0, writer));
+		try!(Writeable::write(&self.1, writer));
+		try!(Writeable::write(&self.2, writer));
+		Writeable::write(&self.3, writer)
+	}
+}
+
 impl<A: Readable, B: Readable, C: Readable> Readable for (A, B, C) {
 	fn read(reader: &mut Reader) -> Result<(A, B, C), Error> {
 		Ok((try!(Readable::read(reader)),
 		    try!(Readable::read(reader)),
 		    try!(Readable::read(reader))))
+	}
+}
+
+impl<A: Readable, B: Readable, C: Readable, D: Readable> Readable for (A, B, C, D) {
+	fn read(reader: &mut Reader) -> Result<(A, B, C, D), Error> {
+		Ok((try!(Readable::read(reader)),
+		    try!(Readable::read(reader)),
+		    try!(Readable::read(reader)),
+		    try!(Readable::read(reader))))
+	}
+}
+
+impl Writeable for [u8; 4] {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_bytes(self)
 	}
 }
 
