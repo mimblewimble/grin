@@ -54,7 +54,7 @@ impl Difficulty {
 	/// provided hash.
 	pub fn from_hash(h: &Hash) -> Difficulty {
 		let max_target = BigUint::from_bytes_be(&MAX_TARGET);
-		let h_num = BigUint::from_bytes_be(h.to_slice());
+		let h_num = BigUint::from_bytes_be(&h[..]);
 		Difficulty { num: max_target / h_num }
 	}
 }

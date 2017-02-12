@@ -304,6 +304,7 @@ impl<'a> Writer for BinWriter<'a> {
 /// Useful marker trait on types that can be sized byte slices 
 pub trait AsFixedBytes: Sized + AsRef<[u8]> {}
 
+impl<'a> AsFixedBytes for &'a [u8] {}
 impl AsFixedBytes for Vec<u8> {}
 impl AsFixedBytes for [u8; 1] {}
 impl AsFixedBytes for [u8; 2] {}

@@ -18,7 +18,7 @@
 //!
 
 use byteorder::{ByteOrder, BigEndian};
-use std::fmt;
+use std::{fmt, ops};
 use tiny_keccak::Keccak;
 use std::convert::AsRef;
 
@@ -45,10 +45,46 @@ impl Hash {
 	pub fn to_vec(&self) -> Vec<u8> {
 		self.0.to_vec()
 	}
-	/// Converts the hash to a byte slice
-	pub fn to_slice(&self) -> &[u8] {
-		&self.0
-	}
+}
+
+impl ops::Index<usize> for Hash {
+    type Output = u8;
+
+    fn index(&self, idx: usize) -> &u8 {
+        &self.0[idx]
+    }
+}
+
+impl ops::Index<ops::Range<usize>> for Hash {
+    type Output = [u8];
+
+    fn index(&self, idx: ops::Range<usize>) -> &[u8] {
+        &self.0[idx]
+    }
+}
+
+impl ops::Index<ops::RangeTo<usize>> for Hash {
+    type Output = [u8];
+
+    fn index(&self, idx: ops::RangeTo<usize>) -> &[u8] {
+        &self.0[idx]
+    }
+}
+
+impl ops::Index<ops::RangeFrom<usize>> for Hash {
+    type Output = [u8];
+
+    fn index(&self, idx: ops::RangeFrom<usize>) -> &[u8] {
+        &self.0[idx]
+    }
+}
+
+impl ops::Index<ops::RangeFull> for Hash {
+    type Output = [u8];
+
+    fn index(&self, idx: ops::RangeFull) -> &[u8] {
+        &self.0[idx]
+    }
 }
 
 impl AsRef<[u8]> for Hash {
@@ -80,9 +116,17 @@ pub struct HashWriter {
 }
 
 impl HashWriter {
+    /// Consume the `HashWriter`, outputting its current hash into a 32-byte array
 	pub fn finalize(self, output: &mut [u8]) {
 		self.state.finalize(output);
 	}
+
+    /// Consume the `HashWriter`, outputting a `Hash` corresponding to its current state
+    pub fn into_hash(self) -> Hash {
+        let mut new_hash = ZERO_HASH;
+		self.state.finalize(&mut new_hash.0[..]);
+        new_hash
+    }
 }
 
 impl Default for HashWriter {

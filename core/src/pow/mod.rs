@@ -47,7 +47,7 @@ pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
 	if bh.difficulty > bh.pow.to_difficulty() {
 		return false;
 	}
-	Cuckoo::new(bh.hash().to_slice(), cuckoo_sz).verify(bh.pow, EASINESS as u64)
+	Cuckoo::new(&bh.hash()[..], cuckoo_sz).verify(bh.pow, EASINESS as u64)
 }
 
 /// Runs a naive single-threaded proof of work computation over the provided
@@ -75,7 +75,7 @@ pub fn pow_size(bh: &mut BlockHeader, diff: Difficulty, sizeshift: u32) -> Resul
 
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good
-		if let Ok(proof) = Miner::new(pow_hash.to_slice(), EASINESS, sizeshift).mine() {
+		if let Ok(proof) = Miner::new(&pow_hash[..], EASINESS, sizeshift).mine() {
 			if proof.to_difficulty() >= diff {
 				bh.pow = proof;
 				return Ok(());
