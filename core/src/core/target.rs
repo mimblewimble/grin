@@ -74,7 +74,7 @@ impl Writeable for Difficulty {
 	}
 }
 
-impl Readable<Difficulty> for Difficulty {
+impl Readable for Difficulty {
 	fn read(reader: &mut Reader) -> Result<Difficulty, ser::Error> {
 		let dlen = try!(reader.read_u8());
 		let data = try!(reader.read_fixed_bytes(dlen as usize));

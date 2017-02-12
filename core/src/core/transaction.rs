@@ -62,7 +62,7 @@ impl Writeable for TxKernel {
 	}
 }
 
-impl Readable<TxKernel> for TxKernel {
+impl Readable for TxKernel {
 	fn read(reader: &mut Reader) -> Result<TxKernel, ser::Error> {
 		Ok(TxKernel {
 			features:
@@ -121,7 +121,7 @@ impl Writeable for Transaction {
 
 /// Implementation of Readable for a transaction, defines how to read a full
 /// transaction from a binary stream.
-impl Readable<Transaction> for Transaction {
+impl Readable for Transaction {
 	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
 		let (fee, excess_sig, input_len, output_len) =
 			ser_multiread!(reader, read_u64, read_vec, read_u64, read_u64);
@@ -258,7 +258,7 @@ impl Writeable for Input {
 
 /// Implementation of Readable for a transaction Input, defines how to read
 /// an Input from a binary stream.
-impl Readable<Input> for Input {
+impl Readable for Input {
 	fn read(reader: &mut Reader) -> Result<Input, ser::Error> {
 		Ok(Input(Commitment::read(reader)?))
 	}
@@ -307,7 +307,7 @@ impl Writeable for Output {
 
 /// Implementation of Readable for a transaction Output, defines how to read
 /// an Output from a binary stream.
-impl Readable<Output> for Output {
+impl Readable for Output {
 	fn read(reader: &mut Reader) -> Result<Output, ser::Error> {
 		Ok(Output {
 			features:

@@ -93,7 +93,7 @@ impl AsRef<[u8]> for Hash {
     }
 }
 
-impl Readable<Hash> for Hash {
+impl Readable for Hash {
 	fn read(reader: &mut Reader) -> Result<Hash, ser::Error> {
 		let v = try!(reader.read_fixed_bytes(32));
 		let mut a = [0; 32];

@@ -102,7 +102,7 @@ impl Writeable for BlockHeader {
 }
 
 /// Deserialization of a block header
-impl Readable<BlockHeader> for BlockHeader {
+impl Readable for BlockHeader {
 	fn read(reader: &mut Reader) -> Result<BlockHeader, ser::Error> {
 		let height = try!(reader.read_u64());
 		let previous = try!(Hash::read(reader));
@@ -173,7 +173,7 @@ impl Writeable for Block {
 
 /// Implementation of Readable for a block, defines how to read a full block
 /// from a binary stream.
-impl Readable<Block> for Block {
+impl Readable for Block {
 	fn read(reader: &mut Reader) -> Result<Block, ser::Error> {
 		let header = try!(BlockHeader::read(reader));
 

@@ -138,7 +138,7 @@ impl Proof {
 	}
 }
 
-impl Readable<Proof> for Proof {
+impl Readable for Proof {
 	fn read(reader: &mut Reader) -> Result<Proof, Error> {
 		let mut pow = [0u32; PROOFSIZE];
 		for n in 0..PROOFSIZE {

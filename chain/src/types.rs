@@ -68,7 +68,7 @@ impl ser::Writeable for Tip {
 	}
 }
 
-impl ser::Readable<Tip> for Tip {
+impl ser::Readable for Tip {
 	fn read(reader: &mut ser::Reader) -> Result<Tip, ser::Error> {
 		let height = try!(reader.read_u64());
 		let last = try!(Hash::read(reader));
