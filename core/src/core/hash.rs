@@ -17,13 +17,13 @@
 //! Primary hash function used in the protocol
 //!
 
-use byteorder::{ByteOrder, BigEndian};
 use std::{fmt, ops};
 use tiny_keccak::Keccak;
 use std::convert::AsRef;
 
 use ser::{self, Reader, Readable, Writer, Writeable, Error, AsFixedBytes};
 
+/// A hash consisting of all zeroes, used as a sentinel. No known preimage.
 pub const ZERO_HASH: Hash = Hash([0; 32]);
 
 /// A hash to uniquely (or close enough) identify one of the main blockchain
@@ -154,6 +154,7 @@ impl ser::Writer for HashWriter {
 
 /// A trait for types that have a canonical hash
 pub trait Hashed {
+    /// Obtain the hash of the object
 	fn hash(&self) -> Hash;
 }
 

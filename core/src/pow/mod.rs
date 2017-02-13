@@ -28,19 +28,18 @@ pub mod cuckoo;
 use time;
 
 use consensus::EASINESS;
-use core::{BlockHeader, Proof};
-use core::hash::{Hash, Hashed};
+use core::BlockHeader;
+use core::hash::Hashed;
 use core::target::Difficulty;
 use pow::cuckoo::{Cuckoo, Miner, Error};
-
-use ser;
-use ser::{Writeable, Writer};
 
 /// Validates the proof of work of a given header.
 pub fn verify(bh: &BlockHeader) -> bool {
 	verify_size(bh, bh.cuckoo_len as u32)
 }
 
+/// Validates the proof of work of a given header, and that the proof of work
+/// satisfies the requirements of the header.
 pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
 	// make sure the pow hash shows a difficulty at least as large as the target
 	// difficulty
@@ -64,6 +63,7 @@ pub fn pow20(bh: &mut BlockHeader, diff: Difficulty) -> Result<(), Error> {
 	pow_size(bh, diff, 20)
 }
 
+/// Actual pow function, takes an arbitrary pow size as input
 pub fn pow_size(bh: &mut BlockHeader, diff: Difficulty, sizeshift: u32) -> Result<(), Error> {
 	let start_nonce = bh.nonce;
 
@@ -96,7 +96,6 @@ pub fn pow_size(bh: &mut BlockHeader, diff: Difficulty, sizeshift: u32) -> Resul
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::Proof;
 	use core::target::Difficulty;
 	use genesis;
 

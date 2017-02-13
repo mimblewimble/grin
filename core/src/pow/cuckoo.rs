@@ -29,10 +29,13 @@ use pow::siphash::siphash24;
 
 const MAXPATHLEN: usize = 8192;
 
+/// A cuckoo-cycle related error
 #[derive(Debug)]
 pub enum Error {
-	PathError,
-	NoSolutionError,
+    /// Unable to find a short enough path
+	Path,
+    /// Unable to find a solution
+	NoSolution,
 }
 
 /// An edge in the Cuckoo graph, simply references two u64 nodes.
@@ -42,6 +45,7 @@ struct Edge {
 	v: u64,
 }
 
+/// Cuckoo cycle context
 pub struct Cuckoo {
 	mask: u64,
 	size: u64,
@@ -164,6 +168,7 @@ enum CycleSol {
 }
 
 impl Miner {
+    /// Creates a new miner
 	pub fn new(header: &[u8], ease: u32, sizeshift: u32) -> Miner {
 		let cuckoo = Cuckoo::new(header, sizeshift);
 		let size = 1 << sizeshift;
@@ -176,6 +181,7 @@ impl Miner {
 		}
 	}
 
+    /// Searches for a solution
 	pub fn mine(&mut self) -> Result<Proof, Error> {
 		let mut us = [0; MAXPATHLEN];
 		let mut vs = [0; MAXPATHLEN];
@@ -199,7 +205,7 @@ impl Miner {
 				}
 			}
 		}
-		Err(Error::NoSolutionError)
+		Err(Error::NoSolution)
 	}
 
 	fn path(&self, mut u: u32, us: &mut [u32]) -> Result<u32, Error> {
@@ -210,7 +216,7 @@ impl Miner {
 				while nu != 0 && us[(nu - 1) as usize] != u {
 					nu -= 1;
 				}
-				return Err(Error::PathError);
+				return Err(Error::Path);
 			}
 			us[nu as usize] = u;
 			u = self.graph[u as usize];

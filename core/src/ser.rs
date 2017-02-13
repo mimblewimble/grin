@@ -34,7 +34,9 @@ pub enum Error {
 	IOErr(io::Error),
 	/// Expected a given value that wasn't found
 	UnexpectedData {
+        /// What we wanted
 		expected: Vec<u8>,
+        /// What we got
 		received: Vec<u8>,
 	},
 	/// Data wasn't in a consumable format
