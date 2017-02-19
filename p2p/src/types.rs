@@ -32,6 +32,9 @@ pub const MAX_BLOCK_HEADERS: u32 = 512;
 /// Maximum number of block bodies a peer should ever ask for and send
 pub const MAX_BLOCK_BODIES: u32 = 16;
 
+/// Maximum number of peer addresses a peer should ever send
+pub const MAX_PEER_ADDRS: u32 = 256;
+
 /// Configuration for the peer-to-peer server.
 #[derive(Debug, Clone, Copy)]
 pub struct P2PConfig {
@@ -60,6 +63,10 @@ bitflags! {
     /// Can provide block headers and the UTXO set for some recent-enough
     /// height.
     const UTXO_HIST = 0b00000010,
+    /// Can provide a list of healthy peers
+    const PEER_LIST = 0b00000100,
+
+    const FULL_NODE = FULL_HIST.bits | UTXO_HIST.bits | PEER_LIST.bits,
   }
 }
 
@@ -101,6 +108,9 @@ pub trait Protocol {
 	/// Sends a request for a block from its hash.
 	fn send_block_request(&self, h: Hash) -> Result<(), Error>;
 
+	/// Sends a request for some peer addresses.
+	fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error>;
+
 	/// How many bytes have been sent/received to/from the remote peer.
 	fn transmitted_bytes(&self) -> (u64, u64);
 
@@ -133,4 +143,14 @@ pub trait NetAdapter: Sync + Send {
 
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
+
+	/// Find good peers we know with the provided capability and return their
+	/// addresses.
+	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr>;
+
+	/// A list of peers has been received from one of our peers.
+	fn peer_addrs_received(&self, Vec<SocketAddr>);
+
+	/// Network successfully connected to a peer.
+	fn peer_connected(&self, &PeerInfo);
 }

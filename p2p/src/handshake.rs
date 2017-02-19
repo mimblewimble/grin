@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::collections::VecDeque;
+use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
 use futures::Future;
@@ -47,17 +48,19 @@ impl Handshake {
 
 	/// Handles connecting to a new remote peer, starting the version handshake.
 	pub fn connect(&self,
+	               capab: Capabilities,
 	               total_difficulty: Difficulty,
+	               self_addr: SocketAddr,
 	               conn: TcpStream)
 	               -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
 		// prepare the first part of the hanshake
 		let nonce = self.next_nonce();
 		let hand = Hand {
 			version: PROTOCOL_VERSION,
-			capabilities: FULL_HIST,
+			capabilities: capab,
 			nonce: nonce,
 			total_difficulty: total_difficulty,
-			sender_addr: SockAddr(conn.local_addr().unwrap()),
+			sender_addr: SockAddr(self_addr),
 			receiver_addr: SockAddr(conn.peer_addr().unwrap()),
 			user_agent: USER_AGENT.to_string(),
 		};
@@ -90,6 +93,7 @@ impl Handshake {
 	/// Handles receiving a connection from a new remote peer that started the
 	/// version handshake.
 	pub fn handshake(&self,
+	                 capab: Capabilities,
 	                 total_difficulty: Difficulty,
 	                 conn: TcpStream)
 	                 -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
@@ -116,20 +120,21 @@ impl Handshake {
 				let peer_info = PeerInfo {
 					capabilities: hand.capabilities,
 					user_agent: hand.user_agent,
-					addr: conn.peer_addr().unwrap(),
+					addr: hand.sender_addr.0,
 					version: hand.version,
 					total_difficulty: hand.total_difficulty,
 				};
 				// send our reply with our info
 				let shake = Shake {
 					version: PROTOCOL_VERSION,
-					capabilities: FULL_HIST,
+					capabilities: capab,
 					total_difficulty: total_difficulty,
 					user_agent: USER_AGENT.to_string(),
 				};
 				Ok((conn, shake, peer_info))
 			})
 			.and_then(|(conn, shake, peer_info)| {
+				debug!("Success handshake with {}.", peer_info.addr);
 				write_msg(conn, shake, Type::Shake)
 				  // when more than one protocol version is supported, choosing should go here
 					.map(|conn| (conn, ProtocolV1::new(), peer_info))

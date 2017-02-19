@@ -68,7 +68,7 @@ impl Protocol for ProtocolV1 {
 	/// Sends a ping message to the remote peer. Will panic if handle has never
 	/// been called on this protocol.
 	fn send_ping(&self) -> Result<(), ser::Error> {
-		self.send_request(Type::Ping, &Empty {}, None)
+		self.send_request(Type::Ping, Type::Pong, &Empty {}, None)
 	}
 
 	/// Serializes and sends a block to our remote peer
@@ -82,11 +82,21 @@ impl Protocol for ProtocolV1 {
 	}
 
 	fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), ser::Error> {
-		self.send_request(Type::GetHeaders, &Locator { hashes: locator }, None)
+		self.send_request(Type::GetHeaders,
+		                  Type::Headers,
+		                  &Locator { hashes: locator },
+		                  None)
 	}
 
 	fn send_block_request(&self, h: Hash) -> Result<(), ser::Error> {
-		self.send_request(Type::GetBlock, &h, Some((Type::Block, h)))
+		self.send_request(Type::GetBlock, Type::Block, &h, Some(h))
+	}
+
+	fn send_peer_request(&self, capab: Capabilities) -> Result<(), ser::Error> {
+		self.send_request(Type::GetPeerAddrs,
+		                  Type::PeerAddrs,
+		                  &GetPeerAddrs { capabilities: capab },
+		                  None)
 	}
 
 	/// Close the connection to the remote peer
@@ -102,10 +112,11 @@ impl ProtocolV1 {
 
 	fn send_request(&self,
 	                t: Type,
+	                rt: Type,
 	                body: &ser::Writeable,
-	                expect_resp: Option<(Type, Hash)>)
+	                expect_resp: Option<Hash>)
 	                -> Result<(), ser::Error> {
-		self.conn.borrow().send_request(t, body, expect_resp)
+		self.conn.borrow().send_request(t, rt, body, expect_resp)
 	}
 }
 
@@ -166,6 +177,29 @@ fn handle_payload(adapter: &NetAdapter,
 		Type::Headers => {
 			let headers = ser::deserialize::<Headers>(&mut &buf[..])?;
 			adapter.headers_received(headers.headers);
+			Ok(None)
+		}
+		Type::GetPeerAddrs => {
+			let get_peers = ser::deserialize::<GetPeerAddrs>(&mut &buf[..])?;
+			let peer_addrs = adapter.find_peer_addrs(get_peers.capabilities);
+
+			// serialize and send all the headers over
+			let mut body_data = vec![];
+			try!(ser::serialize(&mut body_data,
+			                    &PeerAddrs {
+				                    peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
+			                    }));
+			let mut data = vec![];
+			try!(ser::serialize(&mut data,
+			                    &MsgHeader::new(Type::PeerAddrs, body_data.len() as u64)));
+			data.append(&mut body_data);
+			sender.send(data);
+
+			Ok(None)
+		}
+		Type::PeerAddrs => {
+			let peer_addrs = ser::deserialize::<PeerAddrs>(&mut &buf[..])?;
+			adapter.peer_addrs_received(peer_addrs.peers.iter().map(|pa| pa.0).collect());
 			Ok(None)
 		}
 		_ => {

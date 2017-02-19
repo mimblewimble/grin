@@ -36,14 +36,14 @@ enum_from_primitive! {
   }
 }
 
-pub struct Peer {
+pub struct PeerData {
 	pub addr: SocketAddr,
 	pub capabilities: Capabilities,
 	pub user_agent: String,
 	pub flags: State,
 }
 
-impl Writeable for Peer {
+impl Writeable for PeerData {
 	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		SockAddr(self.addr).write(writer)?;
 		ser_multiwrite!(writer,
@@ -54,15 +54,15 @@ impl Writeable for Peer {
 	}
 }
 
-impl Readable<Peer> for Peer {
-	fn read(reader: &mut Reader) -> Result<Peer, ser::Error> {
+impl Readable<PeerData> for PeerData {
+	fn read(reader: &mut Reader) -> Result<PeerData, ser::Error> {
 		let addr = SockAddr::read(reader)?;
 		let (capab, ua, fl) = ser_multiread!(reader, read_u32, read_vec, read_u8);
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
 		match State::from_u8(fl) {
 			Some(flags) => {
-				Ok(Peer {
+				Ok(PeerData {
 					addr: addr.0,
 					capabilities: capabilities,
 					user_agent: user_agent,
@@ -84,18 +84,22 @@ impl PeerStore {
 		Ok(PeerStore { db: db })
 	}
 
-	pub fn save_peer(&self, p: &Peer) -> Result<(), Error> {
+	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
 		self.db.put_ser(&to_key(PEER_PREFIX, &mut format!("{}", p.addr).into_bytes())[..],
 		                p)
+	}
+
+	pub fn exists_peer(&self, peer_addr: SocketAddr) -> Result<bool, Error> {
+		self.db.exists(&to_key(PEER_PREFIX, &mut format!("{}", peer_addr).into_bytes())[..])
 	}
 
 	pub fn delete_peer(&self, peer_addr: SocketAddr) -> Result<(), Error> {
 		self.db.delete(&to_key(PEER_PREFIX, &mut format!("{}", peer_addr).into_bytes())[..])
 	}
 
-	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<Peer> {
+	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
 		let peers_iter = self.db
-			.iter::<Peer>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()));
+			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()));
 		let mut peers = Vec::with_capacity(count);
 		for p in peers_iter {
 			if p.flags == state && p.capabilities.contains(cap) {

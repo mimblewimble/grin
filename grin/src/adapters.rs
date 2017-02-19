@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::net::SocketAddr;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -20,7 +21,7 @@ use chain::{self, ChainAdapter};
 use core::core;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use p2p::{self, NetAdapter, Server};
+use p2p::{self, NetAdapter, Server, PeerStore, PeerData, Capabilities, State};
 use util::OneTime;
 use store;
 use sync;
@@ -33,6 +34,7 @@ pub struct NetToChainAdapter {
 	chain_head: Arc<Mutex<chain::Tip>>,
 	chain_store: Arc<chain::ChainStore>,
 	chain_adapter: Arc<ChainToNetAdapter>,
+	peer_store: Arc<PeerStore>,
 
 	syncer: OneTime<Arc<sync::Syncer>>,
 }
@@ -149,6 +151,7 @@ impl NetAdapter for NetToChainAdapter {
 		headers
 	}
 
+	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		let store = self.chain_store.clone();
 		let b = store.get_block(&h);
@@ -157,17 +160,62 @@ impl NetAdapter for NetToChainAdapter {
 			_ => None,
 		}
 	}
+
+	/// Find good peers we know with the provided capability and return their
+	/// addresses.
+	fn find_peer_addrs(&self, capab: p2p::Capabilities) -> Vec<SocketAddr> {
+		let peers = self.peer_store.find_peers(State::Healthy, capab, p2p::MAX_PEER_ADDRS as usize);
+		debug!("Got {} peer addrs to send.", peers.len());
+		map_vec!(peers, |p| p.addr)
+	}
+
+	/// A list of peers has been received from one of our peers.
+	fn peer_addrs_received(&self, peer_addrs: Vec<SocketAddr>) {
+		debug!("Received {} peer addrs, saving.", peer_addrs.len());
+		for pa in peer_addrs {
+			if let Ok(e) = self.peer_store.exists_peer(pa) {
+				if e {
+					continue;
+				}
+			}
+			let peer = PeerData {
+				addr: pa,
+				capabilities: p2p::UNKNOWN,
+				user_agent: "".to_string(),
+				flags: State::Healthy,
+			};
+			if let Err(e) = self.peer_store.save_peer(&peer) {
+				error!("Could not save received peer address: {:?}", e);
+			}
+		}
+	}
+
+	/// Network successfully connected to a peer.
+	fn peer_connected(&self, pi: &p2p::PeerInfo) {
+		debug!("Saving newly connected peer {}.", pi.addr);
+		let peer = PeerData {
+			addr: pi.addr,
+			capabilities: pi.capabilities,
+			user_agent: pi.user_agent.clone(),
+			flags: State::Healthy,
+		};
+		if let Err(e) = self.peer_store.save_peer(&peer) {
+			error!("Could not save connected peer: {:?}", e);
+		}
+	}
 }
 
 impl NetToChainAdapter {
 	pub fn new(chain_head: Arc<Mutex<chain::Tip>>,
 	           chain_store: Arc<chain::ChainStore>,
-	           chain_adapter: Arc<ChainToNetAdapter>)
+	           chain_adapter: Arc<ChainToNetAdapter>,
+	           peer_store: Arc<PeerStore>)
 	           -> NetToChainAdapter {
 		NetToChainAdapter {
 			chain_head: chain_head,
 			chain_store: chain_store,
 			chain_adapter: chain_adapter,
+			peer_store: peer_store,
 			syncer: OneTime::new(),
 		}
 	}

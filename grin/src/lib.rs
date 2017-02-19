@@ -25,11 +25,15 @@
 extern crate log;
 extern crate env_logger;
 extern crate futures;
+extern crate futures_cpupool as cpupool;
+extern crate hyper;
 extern crate rand;
 extern crate time;
 extern crate tokio_core;
+extern crate tokio_timer;
 
 extern crate grin_chain as chain;
+#[macro_use]
 extern crate grin_core as core;
 extern crate grin_p2p as p2p;
 extern crate grin_store as store;
@@ -39,6 +43,7 @@ extern crate secp256k1zkp as secp;
 mod adapters;
 mod miner;
 mod server;
+mod seed;
 mod sync;
 
-pub use server::{Server, ServerConfig};
+pub use server::{Server, ServerConfig, Seeding};

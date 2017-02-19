@@ -223,7 +223,7 @@ impl Connection {
 pub struct TimeoutConnection {
 	underlying: Connection,
 
-	expected_responses: Arc<Mutex<Vec<(Type, Hash, Option<bool>, Instant)>>>,
+	expected_responses: Arc<Mutex<Vec<(Type, Option<Hash>, Instant)>>>,
 }
 
 impl TimeoutConnection {
@@ -244,15 +244,13 @@ impl TimeoutConnection {
 			let recv_h = try!(handler.handle(sender, header, data));
 
 			let mut expects = exp.lock().unwrap();
-			println!("EXP1 {}", expects.len());
 			let filtered = expects.iter()
-				.filter(|&&(typ, h, _, _)| {
-					msg_type != typ || recv_h.is_some() && recv_h.unwrap() != h
+				.filter(|&&(typ, h, _): &&(Type, Option<Hash>, Instant)| {
+					msg_type != typ || h.is_some() && recv_h != h
 				})
 				.map(|&x| x)
 				.collect::<Vec<_>>();
 			*expects = filtered;
-			println!("EXP2 {}", expects.len());
 
 			Ok(recv_h)
 		});
@@ -263,7 +261,7 @@ impl TimeoutConnection {
 			.interval(Duration::new(2, 0))
 			.fold((), move |_, _| {
 				let exp = exp.lock().unwrap();
-				for &(_, _, _, t) in exp.deref() {
+				for &(_, _, t) in exp.deref() {
 					if Instant::now() - t > Duration::new(2, 0) {
 						return Err(TimerError::TooLong);
 					}
@@ -283,17 +281,14 @@ impl TimeoutConnection {
 	/// optionally the hash of the sent data.
 	pub fn send_request(&self,
 	                    t: Type,
+	                    rt: Type,
 	                    body: &ser::Writeable,
-	                    expect_h: Option<(Type, Hash)>)
+	                    expect_h: Option<(Hash)>)
 	                    -> Result<(), ser::Error> {
 		let sent = try!(self.underlying.send_msg(t, body));
 
 		let mut expects = self.expected_responses.lock().unwrap();
-		if let Some((rt, h)) = expect_h {
-			expects.push((rt, h, None, Instant::now()));
-		} else {
-			expects.push((t, ZERO_HASH, None, Instant::now()));
-		}
+		expects.push((rt, expect_h, Instant::now()));
 		Ok(())
 	}
 

@@ -311,10 +311,16 @@ impl Writeable for PeerAddrs {
 impl Readable<PeerAddrs> for PeerAddrs {
 	fn read(reader: &mut Reader) -> Result<PeerAddrs, ser::Error> {
 		let peer_count = try!(reader.read_u32());
-		if peer_count > 1000 {
+		if peer_count > MAX_PEER_ADDRS {
 			return Err(ser::Error::TooLargeReadErr);
+		} else if peer_count == 0 {
+			return Ok(PeerAddrs { peers: vec![] });
 		}
-		let peers = try_map_vec!([0..peer_count], |_| SockAddr::read(reader));
+		// let peers = try_map_vec!([0..peer_count], |_| SockAddr::read(reader));
+		let mut peers = Vec::with_capacity(peer_count as usize);
+		for _ in 0..peer_count {
+			peers.push(SockAddr::read(reader)?);
+		}
 		Ok(PeerAddrs { peers: peers })
 	}
 }

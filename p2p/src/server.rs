@@ -23,7 +23,7 @@ use std::time::Duration;
 
 use futures;
 use futures::{Future, Stream};
-use futures::future::IntoFuture;
+use futures::future::{self, IntoFuture};
 use rand::{self, Rng};
 use tokio_core::net::{TcpListener, TcpStream};
 use tokio_core::reactor;
@@ -51,12 +51,18 @@ impl NetAdapter for DummyAdapter {
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		None
 	}
+	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr> {
+		vec![]
+	}
+	fn peer_addrs_received(&self, peer_addrs: Vec<SocketAddr>) {}
+	fn peer_connected(&self, pi: &PeerInfo) {}
 }
 
 /// P2P server implementation, handling bootstrapping to find and connect to
 /// peers, receiving connections from other peers and keep track of all of them.
 pub struct Server {
 	config: P2PConfig,
+	capabilities: Capabilities,
 	peers: Arc<RwLock<Vec<Arc<Peer>>>>,
 	adapter: Arc<NetAdapter>,
 	stop: RefCell<Option<futures::sync::oneshot::Sender<()>>>,
@@ -68,9 +74,10 @@ unsafe impl Send for Server {}
 // TODO TLS
 impl Server {
 	/// Creates a new idle p2p server with no peers
-	pub fn new(config: P2PConfig, adapter: Arc<NetAdapter>) -> Server {
+	pub fn new(capab: Capabilities, config: P2PConfig, adapter: Arc<NetAdapter>) -> Server {
 		Server {
 			config: config,
+			capabilities: capab,
 			peers: Arc::new(RwLock::new(Vec::new())),
 			adapter: adapter,
 			stop: RefCell::new(None),
@@ -87,6 +94,7 @@ impl Server {
 		let hs = Arc::new(Handshake::new());
 		let peers = self.peers.clone();
 		let adapter = self.adapter.clone();
+		let capab = self.capabilities.clone();
 
 		// main peer acceptance future handling handshake
 		let hp = h.clone();
@@ -96,7 +104,9 @@ impl Server {
 			let peers = peers.clone();
 
 			// accept the peer and add it to the server map
-			let peer_accept = add_to_peers(peers, Peer::accept(conn, total_diff, &hs.clone()));
+			let peer_accept = add_to_peers(peers,
+			                               adapter.clone(),
+			                               Peer::accept(conn, capab, total_diff, &hs.clone()));
 
 			// wire in a future to timeout the accept after 5 secs
 			let timed_peer = with_timeout(Box::new(peer_accept), &hp);
@@ -136,23 +146,49 @@ impl Server {
 	pub fn connect_peer(&self,
 	                    addr: SocketAddr,
 	                    h: reactor::Handle)
-	                    -> Box<Future<Item = (), Error = Error>> {
+	                    -> Box<Future<Item = Option<Arc<Peer>>, Error = Error>> {
+		for p in self.peers.read().unwrap().deref() {
+			// if we're already connected to the addr, just return the peer
+			if p.info.addr == addr {
+				return Box::new(future::ok(Some((*p).clone())));
+			}
+		}
+		// asked to connect to ourselves
+		if addr.ip() == self.config.host && addr.port() == self.config.port {
+			return Box::new(future::ok(None));
+		}
 		let peers = self.peers.clone();
 		let adapter1 = self.adapter.clone();
 		let adapter2 = self.adapter.clone();
+		let capab = self.capabilities.clone();
+		let self_addr = SocketAddr::new(self.config.host, self.config.port);
+
+		debug!("{} connecting to {}", self_addr, addr);
 
 		let socket = TcpStream::connect(&addr, &h).map_err(|e| Error::IOErr(e));
+		let h2 = h.clone();
 		let request = socket.and_then(move |socket| {
 				let peers = peers.clone();
-				let total_diff = adapter1.total_difficulty();
+				let total_diff = adapter1.clone().total_difficulty();
 
 				// connect to the peer and add it to the server map, wiring it a timeout for
 				// the handhake
-				let peer_connect =
-					add_to_peers(peers, Peer::connect(socket, total_diff, &Handshake::new()));
+				let peer_connect = add_to_peers(peers,
+				                                adapter1,
+				                                Peer::connect(socket,
+				                                              capab,
+				                                              total_diff,
+				                                              self_addr,
+				                                              &Handshake::new()));
 				with_timeout(Box::new(peer_connect), &h)
 			})
-			.and_then(move |(socket, peer)| peer.run(socket, adapter2));
+			.and_then(move |(socket, peer)| {
+				h2.spawn(peer.run(socket, adapter2).map_err(|e| {
+					error!("Peer error: {:?}", e);
+					()
+				}));
+				Ok(Some(peer))
+			});
 		Box::new(request)
 	}
 
@@ -212,11 +248,13 @@ impl Server {
 
 // Adds the peer built by the provided future in the peers map
 fn add_to_peers<A>(peers: Arc<RwLock<Vec<Arc<Peer>>>>,
+                   adapter: Arc<NetAdapter>,
                    peer_fut: A)
                    -> Box<Future<Item = Result<(TcpStream, Arc<Peer>), ()>, Error = Error>>
 	where A: IntoFuture<Item = (TcpStream, Peer), Error = Error> + 'static
 {
 	let peer_add = peer_fut.into_future().map(move |(conn, peer)| {
+		adapter.peer_connected(&peer.info);
 		let apeer = Arc::new(peer);
 		let mut peers = peers.write().unwrap();
 		peers.push(apeer.clone());

@@ -20,7 +20,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use futures::Future;
+use futures::{future, Future};
 use tokio_core::reactor;
 
 use adapters::{NetToChainAdapter, ChainToNetAdapter};
@@ -29,6 +29,7 @@ use chain::ChainStore;
 use core;
 use miner;
 use p2p;
+use seed;
 use store;
 use sync;
 
@@ -44,14 +45,39 @@ pub enum Error {
 	StoreErr(store::Error),
 }
 
+impl From<store::Error> for Error {
+	fn from(e: store::Error) -> Error {
+		Error::StoreErr(e)
+	}
+}
+
+/// Type of seeding the server will use to find other peers on the network.
+#[derive(Debug, Clone)]
+pub enum Seeding {
+	/// No seeding, mostly for tests that programmatically connect
+	None,
+	/// A list of seed addresses provided to the server
+	List(Vec<String>),
+	/// Automatically download a gist with a list of server addresses
+	Gist,
+}
+
 /// Full server configuration, aggregating configurations required for the
 /// different components.
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
 	/// Directory under which the rocksdb stores will be created
 	pub db_root: String,
+
 	/// Allows overriding the default cuckoo cycle size
 	pub cuckoo_size: u8,
+
+	/// Capabilities expose by this node, also conditions which other peers this
+	/// node will have an affinity toward when connection.
+	pub capabilities: p2p::Capabilities,
+
+	pub seeding_type: Seeding,
+
 	/// Configuration for the peer-to-peer server
 	pub p2p_config: p2p::P2PConfig,
 }
@@ -61,6 +87,8 @@ impl Default for ServerConfig {
 		ServerConfig {
 			db_root: ".grin".to_string(),
 			cuckoo_size: 0,
+			capabilities: p2p::FULL_NODE,
+			seeding_type: Seeding::None,
 			p2p_config: p2p::P2PConfig::default(),
 		}
 	}
@@ -68,7 +96,7 @@ impl Default for ServerConfig {
 
 /// Grin server holding internal structures.
 pub struct Server {
-	config: ServerConfig,
+	pub config: ServerConfig,
 	evt_handle: reactor::Handle,
 	/// handle to our network server
 	p2p: Arc<p2p::Server>,
@@ -84,32 +112,10 @@ pub struct Server {
 impl Server {
 	/// Instantiates and starts a new server.
 	pub fn start(config: ServerConfig) -> Result<Server, Error> {
-		let (chain_store, head) = try!(store_head(&config));
-		let shared_head = Arc::new(Mutex::new(head));
-
-		let chain_adapter = Arc::new(ChainToNetAdapter::new());
-		let net_adapter = Arc::new(NetToChainAdapter::new(shared_head.clone(),
-		                                                  chain_store.clone(),
-		                                                  chain_adapter.clone()));
-		let server = Arc::new(p2p::Server::new(config.p2p_config, net_adapter.clone()));
-		chain_adapter.init(server.clone());
-
-		let sync = sync::Syncer::new(chain_store.clone(), server.clone());
-		net_adapter.start_sync(sync);
-
 		let mut evtlp = reactor::Core::new().unwrap();
-		let handle = evtlp.handle();
-		evtlp.run(server.start(handle.clone())).unwrap();
-
-		warn!("Grin server started.");
-		Ok(Server {
-			config: config,
-			evt_handle: handle.clone(),
-			p2p: server,
-			chain_head: shared_head,
-			chain_store: chain_store,
-			chain_adapter: chain_adapter,
-		})
+		let serv = Server::future(config, &evtlp.handle());
+		evtlp.run(future::ok::<(), ()>(())).unwrap();
+		serv
 	}
 
 	/// Instantiates a new server associated with the provided future reactor.
@@ -117,12 +123,27 @@ impl Server {
 		let (chain_store, head) = try!(store_head(&config));
 		let shared_head = Arc::new(Mutex::new(head));
 
+		let peer_store = Arc::new(p2p::PeerStore::new(config.db_root.clone())?);
+
 		let chain_adapter = Arc::new(ChainToNetAdapter::new());
 		let net_adapter = Arc::new(NetToChainAdapter::new(shared_head.clone(),
 		                                                  chain_store.clone(),
-		                                                  chain_adapter.clone()));
-		let server = Arc::new(p2p::Server::new(config.p2p_config, net_adapter.clone()));
+		                                                  chain_adapter.clone(),
+		                                                  peer_store.clone()));
+		let server =
+			Arc::new(p2p::Server::new(config.capabilities, config.p2p_config, net_adapter.clone()));
 		chain_adapter.init(server.clone());
+
+		let seed = seed::Seeder::new(config.capabilities, peer_store.clone(), server.clone());
+		match config.seeding_type.clone() {
+			Seeding::None => {}
+			Seeding::List(seeds) => {
+				seed.connect_and_monitor(evt_handle.clone(), seed::predefined_seeds(seeds));
+			}
+			Seeding::Gist => {
+				seed.connect_and_monitor(evt_handle.clone(), seed::gist_seeds(evt_handle.clone()));
+			}
+		}
 
 		let sync = sync::Syncer::new(chain_store.clone(), server.clone());
 		net_adapter.start_sync(sync);
@@ -143,8 +164,12 @@ impl Server {
 	/// Asks the server to connect to a peer at the provided network address.
 	pub fn connect_peer(&self, addr: SocketAddr) -> Result<(), Error> {
 		let handle = self.evt_handle.clone();
-		handle.spawn(self.p2p.connect_peer(addr, handle.clone()).map_err(|_| ()));
+		handle.spawn(self.p2p.connect_peer(addr, handle.clone()).map(|_| ()).map_err(|_| ()));
 		Ok(())
+	}
+
+	pub fn peer_count(&self) -> u32 {
+		self.p2p.peer_count()
 	}
 
 	/// Start mining for blocks on a separate thread. Relies on a toy miner,

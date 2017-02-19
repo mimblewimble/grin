@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use futures::Future;
@@ -35,31 +36,36 @@ unsafe impl Send for Peer {}
 impl Peer {
 	/// Initiates the handshake with another peer.
 	pub fn connect(conn: TcpStream,
+	               capab: Capabilities,
 	               total_difficulty: Difficulty,
+	               self_addr: SocketAddr,
 	               hs: &Handshake)
 	               -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
-		let connect_peer = hs.connect(total_difficulty, conn).and_then(|(conn, proto, info)| {
-			Ok((conn,
-			    Peer {
-				info: info,
-				proto: Box::new(proto),
-			}))
-		});
+		let connect_peer = hs.connect(capab, total_difficulty, self_addr, conn)
+			.and_then(|(conn, proto, info)| {
+				Ok((conn,
+				    Peer {
+					info: info,
+					proto: Box::new(proto),
+				}))
+			});
 		Box::new(connect_peer)
 	}
 
 	/// Accept a handshake initiated by another peer.
 	pub fn accept(conn: TcpStream,
+	              capab: Capabilities,
 	              total_difficulty: Difficulty,
 	              hs: &Handshake)
 	              -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
-		let hs_peer = hs.handshake(total_difficulty, conn).and_then(|(conn, proto, info)| {
-			Ok((conn,
-			    Peer {
-				info: info,
-				proto: Box::new(proto),
-			}))
-		});
+		let hs_peer = hs.handshake(capab, total_difficulty, conn)
+			.and_then(|(conn, proto, info)| {
+				Ok((conn,
+				    Peer {
+					info: info,
+					proto: Box::new(proto),
+				}))
+			});
 		Box::new(hs_peer)
 	}
 
@@ -100,6 +106,11 @@ impl Peer {
 	pub fn send_block_request(&self, h: Hash) -> Result<(), Error> {
 		debug!("Requesting block {} from peer {}.", h, self.info.addr);
 		self.proto.send_block_request(h)
+	}
+
+	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
+		debug!("Asking {} for more peers.", self.info.addr);
+		self.proto.send_peer_request(capab)
 	}
 
 	pub fn stop(&self) {

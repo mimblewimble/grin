@@ -44,9 +44,11 @@ mod msg;
 mod peer;
 mod protocol;
 mod server;
-pub mod store;
+mod store;
 mod types;
 
 pub use server::{Server, DummyAdapter};
 pub use peer::Peer;
-pub use types::{P2PConfig, NetAdapter, MAX_LOCATORS, MAX_BLOCK_HEADERS};
+pub use types::{P2PConfig, NetAdapter, MAX_LOCATORS, MAX_BLOCK_HEADERS, MAX_PEER_ADDRS,
+                Capabilities, UNKNOWN, FULL_NODE, FULL_HIST, PeerInfo};
+pub use store::{PeerStore, PeerData, State};

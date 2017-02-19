@@ -130,6 +130,12 @@ impl Store {
 		}
 	}
 
+	/// Whether the provided key exists
+	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
+		let db = self.rdb.read().unwrap();
+		db.get(key).map(|r| r.is_some()).map_err(From::from)
+	}
+
 	/// Deletes a key/value pair from the db
 	pub fn delete(&self, key: &[u8]) -> Result<(), Error> {
 		let db = self.rdb.write().unwrap();
