@@ -126,7 +126,7 @@ fn simulate_seeding() {
             db_root: format!("target/grin-seed-{}", n),
             cuckoo_size: 12,
             p2p_config: p2p::P2PConfig{port: 12000+n, ..p2p::P2PConfig::default()},
-            seeding_type: grin::Seeding::List(vec!["127.0.0.1:10000".to_string()]),
+            seeding_type: grin::Seeding::List(vec!["127.0.0.1:12000".to_string()]),
             ..Default::default()
           }, &handle).unwrap();
       servers.push(s);
