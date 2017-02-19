@@ -39,8 +39,9 @@ fn peer_handshake() {
   let handle = evtlp.handle();
   let p2p_conf = p2p::P2PConfig::default();
   let net_adapter = Arc::new(p2p::DummyAdapter{});
-  let server = p2p::Server::new(p2p_conf, net_adapter.clone());
+  let server = p2p::Server::new(p2p::UNKNOWN, p2p_conf, net_adapter.clone());
   let run_server = server.start(handle.clone());
+  let my_addr = "127.0.0.1:5000".parse().unwrap();
 
   let phandle = handle.clone();
   let rhandle = handle.clone();
@@ -51,7 +52,7 @@ fn peer_handshake() {
     let addr = SocketAddr::new(p2p_conf.host, p2p_conf.port);
     let socket = TcpStream::connect(&addr, &phandle).map_err(|e| ser::Error::IOErr(e));
     socket.and_then(move |socket| {
-      Peer::connect(socket, Difficulty::one(), &p2p::handshake::Handshake::new())
+      Peer::connect(socket, p2p::UNKNOWN, Difficulty::one(), my_addr, &p2p::handshake::Handshake::new())
 		}).and_then(move |(socket, peer)| {
       rhandle.spawn(peer.run(socket, net_adapter.clone()).map_err(|e| {
         panic!("Client run failed: {}", e);
