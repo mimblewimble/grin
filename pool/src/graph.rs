@@ -37,17 +37,51 @@ pub struct PoolEntry {
     pub receive_ts: time::Tm,
 }
 
+impl PoolEntry {
+    pub fn new(tx: &core::transaction::Transaction) -> PoolEntry {
+        PoolEntry{
+            tx_hash: tx.hash(),
+            size_estimate : estimate_transaction_size(tx),
+            receive_ts: time::now()} 
+    }
+}
+
+fn estimate_transaction_size(tx: &core::transaction::Transaction) -> u64 {
+    0
+}
+
 /// An edge connecting graph vertices.
 /// For various use cases, one of either the source or destination may be
 /// unpopulated
 pub struct Edge {
     // Source and Destination are the vertex id's, the transaction hash.
-    pub source: core::hash::Hash,
-    pub destination: core::hash::Hash,
+    source: Option<core::hash::Hash>,
+    destination: Option<core::hash::Hash>,
 
     // Output is the output hash which this input/output pairing corresponds
     // to.
-    pub output: core::hash::Hash,
+    output: core::hash::Hash,
+}
+
+impl Edge{
+    pub fn new(source: Option<core::hash::Hash>, destination: Option<core::hash::Hash>, output_hash: core::hash::Hash) -> Edge {
+        Edge{source: source, destination: destination, output: output_hash}
+    }
+
+    pub fn with_source(&self, src: core::hash::Hash) -> Edge {
+        Edge{source: Some(src), destination: self.destination, output: self.output}
+    }
+
+    pub fn with_destination(&self, dst: core::hash::Hash) -> Edge {
+        Edge{source: self.source, destination: Some(dst), output: self.output}
+    }
+
+    pub fn output_hash(&self) -> core::hash::Hash {
+        self.output
+    }
+    pub fn destination_hash(&self) -> Option<core::hash::Hash> {
+        self.destination
+    }
 }
 
 /// The generic graph container. Both graphs, the pool and orphans, embed this

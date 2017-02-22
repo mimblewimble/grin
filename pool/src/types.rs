@@ -50,7 +50,7 @@ enum Parent {
 enum PoolError {
     Invalid,
     Orphan{missing_hash: core::hash::Hash},
-    AlreadySpent{other_tx: core::hash::Hash},
+    DuplicateOutput{other_tx: core::hash::Hash},
 }
 
 
@@ -85,30 +85,86 @@ impl Pool {
 
     // This happens either under a lock or an exclusive borrowed mutable ref,
     // so no risk of a race causing double-allocation or deallocation.
-    fn connect_transaction(&mut self, tx: core::transaction::Transaction) -> Result<(), PoolError> {
+    fn connect_transaction(&mut self, tx: &core::transaction::Transaction) -> Result<(), PoolError> {
         // The expectation is a cheap and parallelizable call to 
         // search_for_output or a similar non-authoritative check will gate
         // calls to connect_transaction, which can be a bit more expensive.
         
-        // The first issue is to identify and reserve all unspent outputs that
-        // this transaction will consume.
-
-        // We want to do this in one iter but with rollback capability if a
-        // needed output is already spent, so this vector holds the outputs
-        // we remove from the available map. 
-        let mut removed_outputs = Vec::new();
+        // The first issue is to identify all unspent outputs that
+        // this transaction will consume and make sure they exist in the set.
         for input in tx.inputs.iter() {
-            match self.available_outputs.remove(&input.output_hash()) {
-                Some(x) => removed_outputs.push(x),
-                None => {
-                    for replace_out in removed_outputs.drain(..) {
-                        self.available_outputs.insert(replace_out.output, replace_out);
-                    }
-                    return Err(PoolError::Orphan{missing_hash: input.output_hash()})
-                },
+            //TODO: Check the blockchain data source
+            if !self.available_outputs.contains_key(&input.output_hash()) {
+                return Err(PoolError::Orphan{
+                    missing_hash: input.output_hash()})
             }
         }
+
+        // Next we examine the outputs this transaction creates and ensure
+        // that they do not already exist.
+        for output in tx.outputs.iter() {
+            //TODO: Check the blockchain data source
+            // An interesting note: if the blockchain creates an UTXO that's
+            // a duplicate of this, its not always an issue.
+            // If that output is spent by another transaction it is possible
+            // for that transaction and this one to coexist. However, it does
+            // impose some nontrivial ordering constraints: the transaction
+            // spending the duplicate blockchain UTXO MUST be confirmed before
+            // this one. In the interest of simplicity in this first pass we
+            // will reject transactions which have unspents that are duplicates
+            // of the ones in the blockchain.
+            if self.available_outputs.contains_key(&output.hash()) {
+                return Err(PoolError::DuplicateOutput{
+                    other_tx: self.available_outputs.get(&output.output_hash()).unwrap().destination_hash()})
+            }
+            // TODO: Do we need to investigate for duplicate spents?
+            // I believe the answer is no: Edges are tightly bound to tx
+            // hashes for source and destination, so we should be able
+            // to resolve these unambigously.
+            // However, reusing outputs does lead to a number of really 
+            // unpleasant situations, including potential replay attacks.
+            // It probably makes sense to discourage this as much as 
+            // possible.
+        }
+
+        // At this point we know we're spending all known unspents and not
+        // creating any duplicate unspents.
+        let pool_entry = graph::PoolEntry::new(&tx);
+        // Adding the transaction to the vertices list
+        self.graph.vertices.push(pool_entry);
+
+        let tx_hash = tx.hash();
+
+        // Adding the consumed inputs to the edges list
+        for new_edge in tx.inputs.iter()
+            .map(|x| self.available_outputs.remove(&x.output_hash()))
+            .unwrap()
+            .map(|x| x.with_destination(tx_hash)) {
+
+                self.graph.edges.push(new_edge);
+        }
+
+        // Adding the new unspents to the unspent map
+        for unspent_output in tx.outputs.iter()
+            .map(|x| graph::Edge::new(tx_hash, None, x.hash())) {
+
+            self.available_outputs.insert(unspent_output.output_hash(),
+                unspent_output);
+        }
+
         Ok(())
+    }
+
+    fn rollback_transaction(&mut self, removed_outputs: Vec<graph::Edge>, 
+        added_outputs: Option<Vec<graph::Edge>>) {
+
+        for replace_out in removed_outputs.drain(..) {
+            self.available_outputs.insert(replace_out.output, replace_out);
+        }
+
+        for remove_out in added_outputs.unwrap_or(Vec::new()).drain(..) {
+            self.available_outputs.remove(remove_out.output)
+        }
     }
 
 }
@@ -148,7 +204,11 @@ impl TransactionPool {
         
         // Now if it looks OK, take the lock and connect
         // TODO: Handle the poison case
-        self.pool.write().unwrap().connect_transaction(tx);
+        match self.pool.write().unwrap().connect_transaction(tx) {
+            Ok(_) => return Ok(()),
+            Err(e) => Err(e),
+        }
+            
         Ok(())
     }
 }
