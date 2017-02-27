@@ -45,5 +45,6 @@ mod miner;
 mod server;
 mod seed;
 mod sync;
+mod types;
 
 pub use server::{Server, ServerConfig, Seeding};

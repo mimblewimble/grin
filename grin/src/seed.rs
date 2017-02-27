@@ -54,14 +54,14 @@ impl Seeder {
 	}
 
 	pub fn connect_and_monitor(&self,
-	               h: reactor::Handle,
-	               seed_list: Box<Future<Item = Vec<SocketAddr>, Error = String>>) {
+	                           h: reactor::Handle,
+	                           seed_list: Box<Future<Item = Vec<SocketAddr>, Error = String>>) {
 		// open a channel with a listener that connects every peer address sent below
 		// max peer count
 		let (tx, rx) = futures::sync::mpsc::unbounded();
 		h.spawn(self.listen_for_addrs(h.clone(), rx));
 
-    // check seeds and start monitoring connections
+		// check seeds and start monitoring connections
 		let seeder = self.connect_to_seeds(tx.clone(), seed_list)
 			.join(self.monitor_peers(tx.clone()));
 
@@ -97,8 +97,8 @@ impl Seeder {
 		Box::new(mon_loop)
 	}
 
-  // Check if we have any pre-existing peer in db. If so, start with those,
-  // otherwise use the seeds provided.
+	// Check if we have any pre-existing peer in db. If so, start with those,
+	// otherwise use the seeds provided.
 	fn connect_to_seeds(&self,
 	                    tx: mpsc::UnboundedSender<SocketAddr>,
 	                    seed_list: Box<Future<Item = Vec<SocketAddr>, Error = String>>)

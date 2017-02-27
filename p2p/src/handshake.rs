@@ -21,8 +21,8 @@ use rand::Rng;
 use rand::os::OsRng;
 use tokio_core::net::TcpStream;
 
-use core::ser::Error;
 use core::core::target::Difficulty;
+use core::ser;
 use msg::*;
 use types::*;
 use protocol::ProtocolV1;
@@ -70,10 +70,10 @@ impl Handshake {
 			.and_then(|conn| read_msg::<Shake>(conn))
 			.and_then(|(conn, shake)| {
 				if shake.version != 1 {
-					Err(Error::UnexpectedData {
+					Err(Error::Serialization(ser::Error::UnexpectedData {
 						expected: vec![PROTOCOL_VERSION as u8],
 						received: vec![shake.version as u8],
-					})
+					}))
 				} else {
 					let peer_info = PeerInfo {
 						capabilities: shake.capabilities,
@@ -101,19 +101,19 @@ impl Handshake {
 		Box::new(read_msg::<Hand>(conn)
 			.and_then(move |(conn, hand)| {
 				if hand.version != 1 {
-					return Err(Error::UnexpectedData {
+					return Err(Error::Serialization(ser::Error::UnexpectedData {
 						expected: vec![PROTOCOL_VERSION as u8],
 						received: vec![hand.version as u8],
-					});
+					}));
 				}
 				{
 					// check the nonce to see if we could be trying to connect to ourselves
 					let nonces = nonces.read().unwrap();
 					if nonces.contains(&hand.nonce) {
-						return Err(Error::UnexpectedData {
+						return Err(Error::Serialization(ser::Error::UnexpectedData {
 							expected: vec![],
 							received: vec![],
-						});
+						}));
 					}
 				}
 				// all good, keep peer info

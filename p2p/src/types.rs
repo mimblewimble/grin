@@ -12,16 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::convert::From;
+use std::io;
 use std::net::{SocketAddr, IpAddr};
 use std::sync::Arc;
 
 use futures::Future;
 use tokio_core::net::TcpStream;
+use tokio_timer::TimerError;
 
 use core::core;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
-use core::ser::Error;
+use core::ser;
 
 /// Maximum number of hashes in a block header locator request
 pub const MAX_LOCATORS: u32 = 10;
@@ -34,6 +37,30 @@ pub const MAX_BLOCK_BODIES: u32 = 16;
 
 /// Maximum number of peer addresses a peer should ever send
 pub const MAX_PEER_ADDRS: u32 = 256;
+
+#[derive(Debug)]
+pub enum Error {
+	Serialization(ser::Error),
+	Connection(io::Error),
+	ConnectionClose,
+	Timeout,
+}
+
+impl From<ser::Error> for Error {
+	fn from(e: ser::Error) -> Error {
+		Error::Serialization(e)
+	}
+}
+impl From<io::Error> for Error {
+	fn from(e: io::Error) -> Error {
+		Error::Connection(e)
+	}
+}
+impl From<TimerError> for Error {
+	fn from(e: TimerError) -> Error {
+		Error::Timeout
+	}
+}
 
 /// Configuration for the peer-to-peer server.
 #[derive(Debug, Clone, Copy)]

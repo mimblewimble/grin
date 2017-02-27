@@ -31,7 +31,6 @@ use tokio_core::reactor;
 use core::core;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
-use core::ser::Error;
 use handshake::Handshake;
 use peer::Peer;
 use types::*;
@@ -98,18 +97,17 @@ impl Server {
 
 		// main peer acceptance future handling handshake
 		let hp = h.clone();
-		let peers = socket.incoming().map_err(|e| Error::IOErr(e)).map(move |(conn, addr)| {
+		let peers = socket.incoming().map_err(From::from).map(move |(conn, addr)| {
 			let adapter = adapter.clone();
 			let total_diff = adapter.total_difficulty();
 			let peers = peers.clone();
 
 			// accept the peer and add it to the server map
-			let peer_accept = add_to_peers(peers,
-			                               adapter.clone(),
-			                               Peer::accept(conn, capab, total_diff, &hs.clone()));
+			let accept = Peer::accept(conn, capab, total_diff, &hs.clone());
+			let added = add_to_peers(peers, adapter.clone(), accept);
 
 			// wire in a future to timeout the accept after 5 secs
-			let timed_peer = with_timeout(Box::new(peer_accept), &hp);
+			let timed_peer = with_timeout(Box::new(added), &hp);
 
 			// run the main peer protocol
 			timed_peer.and_then(move |(conn, peer)| peer.clone().run(conn, adapter))
@@ -120,7 +118,7 @@ impl Server {
 		let server = peers.for_each(move |peer| {
 			hs.spawn(peer.then(|res| {
 				match res {
-					Err(e) => info!("Client error: {}", e),
+					Err(e) => info!("Client error: {:?}", e),
 					_ => {}
 				}
 				futures::finished(())
@@ -134,7 +132,7 @@ impl Server {
 			let mut stop_mut = self.stop.borrow_mut();
 			*stop_mut = Some(stop);
 		}
-		Box::new(server.select(stop_rx.map_err(|_| Error::CorruptedData)).then(|res| {
+		Box::new(server.select(stop_rx.map_err(|_| Error::ConnectionClose)).then(|res| {
 			match res {
 				Ok((_, _)) => Ok(()),
 				Err((e, _)) => Err(e),
@@ -165,7 +163,7 @@ impl Server {
 
 		debug!("{} connecting to {}", self_addr, addr);
 
-		let socket = TcpStream::connect(&addr, &h).map_err(|e| Error::IOErr(e));
+		let socket = TcpStream::connect(&addr, &h).map_err(|e| Error::Connection(e));
 		let h2 = h.clone();
 		let request = socket.and_then(move |socket| {
 				let peers = peers.clone();
@@ -173,14 +171,10 @@ impl Server {
 
 				// connect to the peer and add it to the server map, wiring it a timeout for
 				// the handhake
-				let peer_connect = add_to_peers(peers,
-				                                adapter1,
-				                                Peer::connect(socket,
-				                                              capab,
-				                                              total_diff,
-				                                              self_addr,
-				                                              &Handshake::new()));
-				with_timeout(Box::new(peer_connect), &h)
+				let connect =
+					Peer::connect(socket, capab, total_diff, self_addr, &Handshake::new());
+				let added = add_to_peers(peers, adapter1, connect);
+				with_timeout(Box::new(added), &h)
 			})
 			.and_then(move |(socket, peer)| {
 				h2.spawn(peer.run(socket, adapter2).map_err(|e| {
@@ -226,7 +220,7 @@ impl Server {
 		let peers = self.peers.write().unwrap();
 		for p in peers.deref() {
 			if let Err(e) = p.send_block(b) {
-				debug!("Error sending block to peer: {}", e);
+				debug!("Error sending block to peer: {:?}", e);
 			}
 		}
 	}
@@ -268,11 +262,11 @@ fn with_timeout<T: 'static>(fut: Box<Future<Item = Result<T, ()>, Error = Error>
                             h: &reactor::Handle)
                             -> Box<Future<Item = T, Error = Error>> {
 	let timeout = reactor::Timeout::new(Duration::new(5, 0), h).unwrap();
-	let timed = fut.select(timeout.map(Err).map_err(|e| Error::IOErr(e)))
+	let timed = fut.select(timeout.map(Err).from_err())
 		.then(|res| {
 			match res {
 				Ok((Ok(inner), _timeout)) => Ok(inner),
-				Ok((_, _accept)) => Err(Error::TooLargeReadErr),
+				Ok((_, _accept)) => Err(Error::Timeout),
 				Err((e, _other)) => Err(e),
 			}
 		});

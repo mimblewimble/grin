@@ -48,7 +48,7 @@ impl Protocol for ProtocolV1 {
 	fn handle(&self,
 	          conn: TcpStream,
 	          adapter: Arc<NetAdapter>)
-	          -> Box<Future<Item = (), Error = ser::Error>> {
+	          -> Box<Future<Item = (), Error = Error>> {
 
 		let (conn, listener) = TimeoutConnection::listen(conn, move |sender, header, data| {
 			let adapt = adapter.as_ref();
@@ -67,32 +67,32 @@ impl Protocol for ProtocolV1 {
 
 	/// Sends a ping message to the remote peer. Will panic if handle has never
 	/// been called on this protocol.
-	fn send_ping(&self) -> Result<(), ser::Error> {
+	fn send_ping(&self) -> Result<(), Error> {
 		self.send_request(Type::Ping, Type::Pong, &Empty {}, None)
 	}
 
 	/// Serializes and sends a block to our remote peer
-	fn send_block(&self, b: &core::Block) -> Result<(), ser::Error> {
+	fn send_block(&self, b: &core::Block) -> Result<(), Error> {
 		self.send_msg(Type::Block, b)
 	}
 
 	/// Serializes and sends a transaction to our remote peer
-	fn send_transaction(&self, tx: &core::Transaction) -> Result<(), ser::Error> {
+	fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		self.send_msg(Type::Transaction, tx)
 	}
 
-	fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), ser::Error> {
+	fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error> {
 		self.send_request(Type::GetHeaders,
 		                  Type::Headers,
 		                  &Locator { hashes: locator },
 		                  None)
 	}
 
-	fn send_block_request(&self, h: Hash) -> Result<(), ser::Error> {
+	fn send_block_request(&self, h: Hash) -> Result<(), Error> {
 		self.send_request(Type::GetBlock, Type::Block, &h, Some(h))
 	}
 
-	fn send_peer_request(&self, capab: Capabilities) -> Result<(), ser::Error> {
+	fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
 		self.send_request(Type::GetPeerAddrs,
 		                  Type::PeerAddrs,
 		                  &GetPeerAddrs { capabilities: capab },
@@ -106,7 +106,7 @@ impl Protocol for ProtocolV1 {
 }
 
 impl ProtocolV1 {
-	fn send_msg(&self, t: Type, body: &ser::Writeable) -> Result<(), ser::Error> {
+	fn send_msg(&self, t: Type, body: &ser::Writeable) -> Result<(), Error> {
 		self.conn.borrow().send_msg(t, body)
 	}
 
@@ -115,7 +115,7 @@ impl ProtocolV1 {
 	                rt: Type,
 	                body: &ser::Writeable,
 	                expect_resp: Option<Hash>)
-	                -> Result<(), ser::Error> {
+	                -> Result<(), Error> {
 		self.conn.borrow().send_request(t, rt, body, expect_resp)
 	}
 }

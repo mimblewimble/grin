@@ -32,6 +32,7 @@ use tokio_timer::{Timer, TimerError};
 use core::core::hash::{Hash, ZERO_HASH};
 use core::ser;
 use msg::*;
+use types::Error;
 
 /// Handler to provide to the connection, will be called back anytime a message
 /// is received. The provided sender can be use to immediately send back
@@ -86,7 +87,7 @@ impl Connection {
 	/// itself.
 	pub fn listen<F>(conn: TcpStream,
 	                 handler: F)
-	                 -> (Connection, Box<Future<Item = (), Error = ser::Error>>)
+	                 -> (Connection, Box<Future<Item = (), Error = Error>>)
 		where F: Handler + 'static
 	{
 
@@ -97,7 +98,7 @@ impl Connection {
 
 		// same for closing the connection
 		let (close_tx, close_rx) = futures::sync::mpsc::channel(1);
-		let close_conn = close_rx.for_each(|_| Ok(())).map_err(|_| ser::Error::CorruptedData);
+		let close_conn = close_rx.for_each(|_| Ok(())).map_err(|_| Error::ConnectionClose);
 
 		let me = Connection {
 			outbound_chan: tx.clone(),
@@ -128,10 +129,12 @@ impl Connection {
 	fn write_msg(&self,
 	             rx: UnboundedReceiver<Vec<u8>>,
 	             writer: WriteHalf<TcpStream>)
-	             -> Box<Future<Item = WriteHalf<TcpStream>, Error = ser::Error>> {
+	             -> Box<Future<Item = WriteHalf<TcpStream>, Error = Error>> {
 
 		let sent_bytes = self.sent_bytes.clone();
-		let send_data = rx.map(move |data| {
+		let send_data = rx
+			.map_err(|_| Error::ConnectionClose)
+      .map(move |data| {
         // add the count of bytes sent
 				let mut sent_bytes = sent_bytes.lock().unwrap();
 				*sent_bytes += data.len() as u64;
@@ -139,8 +142,7 @@ impl Connection {
 			})
       // write the data and make sure the future returns the right types
 			.fold(writer,
-			      |writer, data| write_all(writer, data).map_err(|_| ()).map(|(writer, buf)| writer))
-			.map_err(|_| ser::Error::CorruptedData);
+			      |writer, data| write_all(writer, data).map_err(|e| Error::Connection(e)).map(|(writer, buf)| writer));
 		Box::new(send_data)
 	}
 
@@ -150,13 +152,13 @@ impl Connection {
 	               sender: UnboundedSender<Vec<u8>>,
 	               reader: ReadHalf<TcpStream>,
 	               handler: F)
-	               -> Box<Future<Item = ReadHalf<TcpStream>, Error = ser::Error>>
+	               -> Box<Future<Item = ReadHalf<TcpStream>, Error = Error>>
 		where F: Handler + 'static
 	{
 
 		// infinite iterator stream so we repeat the message reading logic until the
 		// peer is stopped
-		let iter = stream::iter(iter::repeat(()).map(Ok::<(), ser::Error>));
+		let iter = stream::iter(iter::repeat(()).map(Ok::<(), Error>));
 
 		// setup the reading future, getting messages from the peer and processing them
 		let recv_bytes = self.received_bytes.clone();
@@ -169,7 +171,7 @@ impl Connection {
 
 			// first read the message header
 			read_exact(reader, vec![0u8; HEADER_LEN as usize])
-				.map_err(|e| ser::Error::IOErr(e))
+				.from_err()
 				.and_then(move |(reader, buf)| {
 					let header = try!(ser::deserialize::<MsgHeader>(&mut &buf[..]));
 					Ok((reader, header))
@@ -178,9 +180,9 @@ impl Connection {
 					// now that we have a size, proceed with the body
 					read_exact(reader, vec![0u8; header.msg_len as usize])
 						.map(|(reader, buf)| (reader, header, buf))
-						.map_err(|e| ser::Error::IOErr(e))
+						.from_err()
 				})
-				.map(move |(reader, header, buf)| {
+				.and_then(move |(reader, header, buf)| {
 					// add the count of bytes received
 					let mut recv_bytes = recv_bytes.lock().unwrap();
 					*recv_bytes += header.serialized_len() + header.msg_len;
@@ -189,9 +191,10 @@ impl Connection {
 					let msg_type = header.msg_type;
 					if let Err(e) = handler.handle(sender_inner.clone(), header, buf) {
 						debug!("Invalid {:?} message: {}", msg_type, e);
+						return Err(Error::Serialization(e));
 					}
 
-					reader
+					Ok(reader)
 				})
 		});
 		Box::new(read_msg)
@@ -199,7 +202,7 @@ impl Connection {
 
 	/// Utility function to send any Writeable. Handles adding the header and
 	/// serialization.
-	pub fn send_msg(&self, t: Type, body: &ser::Writeable) -> Result<(), ser::Error> {
+	pub fn send_msg(&self, t: Type, body: &ser::Writeable) -> Result<(), Error> {
 
 		let mut body_data = vec![];
 		try!(ser::serialize(&mut body_data, body));
@@ -207,7 +210,7 @@ impl Connection {
 		try!(ser::serialize(&mut data, &MsgHeader::new(t, body_data.len() as u64)));
 		data.append(&mut body_data);
 
-		self.outbound_chan.send(data).map_err(|_| ser::Error::CorruptedData)
+		self.outbound_chan.send(data).map_err(|_| Error::ConnectionClose)
 	}
 
 	/// Bytes sent and received by this peer to the remote peer.
@@ -230,7 +233,7 @@ impl TimeoutConnection {
 	/// Same as Connection
 	pub fn listen<F>(conn: TcpStream,
 	                 handler: F)
-	                 -> (TimeoutConnection, Box<Future<Item = (), Error = ser::Error>>)
+	                 -> (TimeoutConnection, Box<Future<Item = (), Error = Error>>)
 		where F: Handler + 'static
 	{
 
@@ -268,7 +271,7 @@ impl TimeoutConnection {
 				}
 				Ok(())
 			})
-			.map_err(|_| ser::Error::CorruptedData);
+			.from_err();
 
 		let me = TimeoutConnection {
 			underlying: conn,
@@ -284,7 +287,7 @@ impl TimeoutConnection {
 	                    rt: Type,
 	                    body: &ser::Writeable,
 	                    expect_h: Option<(Hash)>)
-	                    -> Result<(), ser::Error> {
+	                    -> Result<(), Error> {
 		let sent = try!(self.underlying.send_msg(t, body));
 
 		let mut expects = self.expected_responses.lock().unwrap();
@@ -293,7 +296,7 @@ impl TimeoutConnection {
 	}
 
 	/// Same as Connection
-	pub fn send_msg(&self, t: Type, body: &ser::Writeable) -> Result<(), ser::Error> {
+	pub fn send_msg(&self, t: Type, body: &ser::Writeable) -> Result<(), Error> {
 		self.underlying.send_msg(t, body)
 	}
 

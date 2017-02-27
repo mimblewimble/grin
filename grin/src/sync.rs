@@ -28,6 +28,7 @@ use std::time::{Instant, Duration};
 use core::core::hash::{Hash, Hashed};
 use chain;
 use p2p;
+use types::Error;
 
 pub struct Syncer {
 	chain_store: Arc<chain::ChainStore>,
@@ -57,7 +58,7 @@ impl Syncer {
 
 	/// Checks the local chain state, comparing it with our peers and triggers
 	/// syncing if required.
-	pub fn run(&self) -> Result<(), chain::Error> {
+	pub fn run(&self) -> Result<(), Error> {
 		debug!("Starting syncer.");
 		let start = Instant::now();
 		loop {
@@ -114,7 +115,7 @@ impl Syncer {
 	/// Checks the gap between the header chain and the full block chain and
 	/// initializes the blocks_to_download structure with the missing full
 	/// blocks
-	fn init_download(&self) -> Result<(), chain::Error> {
+	fn init_download(&self) -> Result<(), Error> {
 		// compare the header's head to the full one to see what we're missing
 		let header_head = self.chain_store.get_header_head()?;
 		let full_head = self.chain_store.head()?;
@@ -167,7 +168,7 @@ impl Syncer {
 	}
 
 	/// Request some block headers from a peer to advance us
-	fn request_headers(&self) -> Result<(), chain::Error> {
+	fn request_headers(&self) -> Result<(), Error> {
 		{
 			let mut last_header_req = self.last_header_req.lock().unwrap();
 			*last_header_req = Instant::now();
@@ -201,7 +202,7 @@ impl Syncer {
 
 	/// Builds a vector of block hashes that should help the remote peer sending
 	/// us the right block headers.
-	fn get_locator(&self, tip: &chain::Tip) -> Result<Vec<Hash>, chain::Error> {
+	fn get_locator(&self, tip: &chain::Tip) -> Result<Vec<Hash>, Error> {
 		// Prepare the heights we want as the latests height minus increasing powers
 		// of 2 up to max.
 		let mut heights = vec![tip.height];

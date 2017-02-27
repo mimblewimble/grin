@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{RwLock, Arc};
 
 use futures::Future;
 use tokio_core::net::TcpStream;
@@ -21,13 +21,19 @@ use tokio_core::net::TcpStream;
 use core::core;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
-use core::ser::Error;
 use handshake::Handshake;
 use types::*;
+
+enum State {
+	Connected,
+	Disconnected,
+	Banned,
+}
 
 pub struct Peer {
 	pub info: PeerInfo,
 	proto: Box<Protocol>,
+	state: Arc<RwLock<State>>,
 }
 
 unsafe impl Sync for Peer {}
@@ -47,6 +53,7 @@ impl Peer {
 				    Peer {
 					info: info,
 					proto: Box::new(proto),
+					state: Arc::new(RwLock::new(State::Connected)),
 				}))
 			});
 		Box::new(connect_peer)
@@ -64,6 +71,7 @@ impl Peer {
 				    Peer {
 					info: info,
 					proto: Box::new(proto),
+					state: Arc::new(RwLock::new(State::Connected)),
 				}))
 			});
 		Box::new(hs_peer)
@@ -77,9 +85,26 @@ impl Peer {
 	           -> Box<Future<Item = (), Error = Error>> {
 
 		let addr = self.info.addr;
-		Box::new(self.proto.handle(conn, na).and_then(move |_| {
-			info!("Client {} disconnected.", addr);
-			Ok(())
+		let state = self.state.clone();
+		Box::new(self.proto.handle(conn, na).then(move |res| {
+			let mut state = state.write().unwrap();
+			match res {
+				Ok(res) => {
+					*state = State::Disconnected;
+					info!("Client {} disconnected.", addr);
+					Ok(())
+				}
+				Err(Error::Serialization(e)) => {
+					*state = State::Banned;
+					info!("Client {} corrupted, ban.", addr);
+					Err(Error::Serialization(e))
+				}
+				Err(_) => {
+					*state = State::Disconnected;
+					info!("Client {} connection lost.", addr);
+					Ok(())
+				}
+			}
 		}))
 	}
 

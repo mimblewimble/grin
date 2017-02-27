@@ -68,23 +68,23 @@ enum_from_primitive! {
 /// Future combinator to read any message where the body is a Readable. Reads
 /// the  header first, handles its validation and then reads the Readable body,
 /// allocating buffers of the right size.
-pub fn read_msg<T>(conn: TcpStream) -> Box<Future<Item = (TcpStream, T), Error = ser::Error>>
+pub fn read_msg<T>(conn: TcpStream) -> Box<Future<Item = (TcpStream, T), Error = Error>>
 	where T: Readable<T> + 'static
 {
 	let read_header = read_exact(conn, vec![0u8; HEADER_LEN as usize])
-		.map_err(|e| ser::Error::IOErr(e))
+		.from_err()
 		.and_then(|(reader, buf)| {
 			let header = try!(ser::deserialize::<MsgHeader>(&mut &buf[..]));
 			if header.msg_len > MAX_MSG_LEN {
 				// TODO add additional restrictions on a per-message-type basis to avoid 20MB
 				// pings
-				return Err(ser::Error::TooLargeReadErr);
+				return Err(Error::Serialization(ser::Error::TooLargeReadErr));
 			}
 			Ok((reader, header))
 		});
 
 	let read_msg = read_header.and_then(|(reader, header)| {
-			read_exact(reader, vec![0u8; header.msg_len as usize]).map_err(|e| ser::Error::IOErr(e))
+			read_exact(reader, vec![0u8; header.msg_len as usize]).from_err()
 		})
 		.and_then(|(reader, buf)| {
 			let body = try!(ser::deserialize(&mut &buf[..]));
@@ -99,7 +99,7 @@ pub fn read_msg<T>(conn: TcpStream) -> Box<Future<Item = (TcpStream, T), Error =
 pub fn write_msg<T>(conn: TcpStream,
                     msg: T,
                     msg_type: Type)
-                    -> Box<Future<Item = TcpStream, Error = ser::Error>>
+                    -> Box<Future<Item = TcpStream, Error = Error>>
 	where T: Writeable + 'static
 {
 	let write_msg = ok((conn)).and_then(move |conn| {
@@ -116,7 +116,7 @@ pub fn write_msg<T>(conn: TcpStream,
 		write_all(conn, header_buf)
 			.and_then(|(conn, _)| write_all(conn, body_buf))
 			.map(|(conn, _)| conn)
-			.map_err(|e| ser::Error::IOErr(e))
+			.from_err()
 	});
 	Box::new(write_msg)
 }
