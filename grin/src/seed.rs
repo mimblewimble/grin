@@ -79,6 +79,18 @@ impl Seeder {
 		let mon_loop = Timer::default()
 			.interval(time::Duration::from_secs(10))
 			.for_each(move |_| {
+
+				// maintenance step first, clean up p2p server peers and mark bans
+				// if needed
+				let disconnected = p2p_server.clean_peers();
+				for p in disconnected {
+					if p.is_banned() {
+						debug!("Marking peer {} as banned.", p.info.addr);
+						peer_store.update_state(p.info.addr, p2p::State::Banned);
+					}
+				}
+
+				// we don't have enough peers, getting more from db
 				if p2p_server.peer_count() < PEER_PREFERRED_COUNT {
 					let mut peers = peer_store.find_peers(p2p::State::Healthy,
 					                                      p2p::UNKNOWN,
@@ -91,7 +103,6 @@ impl Seeder {
 					}
 				}
 				Ok(())
-				// TODO clean disconnected server peers
 			})
 			.map_err(|e| e.to_string());
 		Box::new(mon_loop)

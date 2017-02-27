@@ -141,8 +141,9 @@ impl Connection {
 				data
 			})
       // write the data and make sure the future returns the right types
-			.fold(writer,
-			      |writer, data| write_all(writer, data).map_err(|e| Error::Connection(e)).map(|(writer, buf)| writer));
+			.fold(writer, |writer, data| {
+        write_all(writer, data).map_err(|e| Error::Connection(e)).map(|(writer, buf)| writer)
+      });
 		Box::new(send_data)
 	}
 

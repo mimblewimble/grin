@@ -217,10 +217,12 @@ impl<T> Iterator for SerIterator<T>
 }
 
 /// Build a db key from a prefix and a byte vector identifier.
-pub fn to_key(prefix: u8, id: &mut Vec<u8>) -> &mut Vec<u8> {
-	id.insert(0, SEP);
-	id.insert(0, prefix);
-	id
+pub fn to_key(prefix: u8, k: &mut Vec<u8>) -> Vec<u8> {
+	let mut res = Vec::with_capacity(k.len() + 2);
+	res.push(prefix);
+	res.push(SEP);
+	res.append(k);
+	res
 }
 
 /// Build a db key from a prefix and a numeric identifier.

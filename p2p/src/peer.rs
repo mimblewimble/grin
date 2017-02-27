@@ -24,6 +24,7 @@ use core::core::target::Difficulty;
 use handshake::Handshake;
 use types::*;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum State {
 	Connected,
 	Disconnected,
@@ -87,6 +88,7 @@ impl Peer {
 		let addr = self.info.addr;
 		let state = self.state.clone();
 		Box::new(self.proto.handle(conn, na).then(move |res| {
+			// handle disconnection, standard disconnections aren't considered an error
 			let mut state = state.write().unwrap();
 			match res {
 				Ok(res) => {
@@ -106,6 +108,18 @@ impl Peer {
 				}
 			}
 		}))
+	}
+
+	/// Whether this peer is still connected.
+	pub fn is_connected(&self) -> bool {
+		let state = self.state.read().unwrap();
+		*state == State::Connected
+	}
+
+	/// Whether this peer has been banned.
+	pub fn is_banned(&self) -> bool {
+		let state = self.state.read().unwrap();
+		*state == State::Banned
 	}
 
 	/// Bytes sent and received by this peer to the remote peer.

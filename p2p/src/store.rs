@@ -18,7 +18,7 @@ use std::net::SocketAddr;
 use num::FromPrimitive;
 
 use core::ser::{self, Readable, Writeable, Reader, Writer};
-use grin_store::{self, Error, to_key};
+use grin_store::{self, Error, to_key, option_to_not_found};
 use msg::SockAddr;
 use types::Capabilities;
 
@@ -36,10 +36,16 @@ enum_from_primitive! {
   }
 }
 
+/// Data stored for any given peer we've encountered.
 pub struct PeerData {
+	/// Network address of the peer.
 	pub addr: SocketAddr,
+	/// What capabilities the peer advertises. Unknown until a successful
+	/// connection.
 	pub capabilities: Capabilities,
+	/// The peer user agent.
 	pub user_agent: String,
+	/// State the peer has been detected with.
 	pub flags: State,
 }
 
@@ -74,11 +80,13 @@ impl Readable<PeerData> for PeerData {
 	}
 }
 
+/// Storage facility for peer data.
 pub struct PeerStore {
 	db: grin_store::Store,
 }
 
 impl PeerStore {
+	/// Instantiates a new peer store under the provided root path.
 	pub fn new(root_path: String) -> Result<PeerStore, Error> {
 		let db = grin_store::Store::open(format!("{}/{}", root_path, STORE_SUBPATH).as_str())?;
 		Ok(PeerStore { db: db })
@@ -87,6 +95,10 @@ impl PeerStore {
 	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
 		self.db.put_ser(&to_key(PEER_PREFIX, &mut format!("{}", p.addr).into_bytes())[..],
 		                p)
+	}
+
+	fn get_peer(&self, peer_addr: SocketAddr) -> Result<PeerData, Error> {
+		option_to_not_found(self.db.get_ser(&peer_key(peer_addr)[..]))
 	}
 
 	pub fn exists_peer(&self, peer_addr: SocketAddr) -> Result<bool, Error> {
@@ -111,4 +123,16 @@ impl PeerStore {
 		}
 		peers
 	}
+
+	/// Convenience method to load a peer data, update its status and save it
+	/// back.
+	pub fn update_state(&self, peer_addr: SocketAddr, new_state: State) -> Result<(), Error> {
+		let mut peer = self.get_peer(peer_addr)?;
+		peer.flags = new_state;
+		self.save_peer(&peer)
+	}
+}
+
+fn peer_key(peer_addr: SocketAddr) -> Vec<u8> {
+	to_key(PEER_PREFIX, &mut format!("{}", peer_addr).into_bytes())
 }

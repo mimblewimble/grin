@@ -186,6 +186,24 @@ impl Server {
 		Box::new(request)
 	}
 
+	/// Have the server iterate over its peer list and prune all peers we have
+	/// lost connection to or have been deemed problematic. The removed peers
+	/// are returned.
+	pub fn clean_peers(&self) -> Vec<Arc<Peer>> {
+		let mut peers = self.peers.write().unwrap();
+
+		let (keep, rm) = peers.iter().fold((vec![], vec![]), |mut acc, ref p| {
+			if p.clone().is_connected() {
+				acc.0.push((*p).clone());
+			} else {
+				acc.1.push((*p).clone());
+			}
+			acc
+		});
+		*peers = keep;
+		rm
+	}
+
 	/// Returns the peer with the most worked branch, showing the highest total
 	/// difficulty.
 	pub fn most_work_peer(&self) -> Option<Arc<Peer>> {
@@ -195,7 +213,7 @@ impl Server {
 		}
 		let mut res = peers[0].clone();
 		for p in peers.deref() {
-			if res.info.total_difficulty < p.info.total_difficulty {
+			if p.is_connected() && res.info.total_difficulty < p.info.total_difficulty {
 				res = (*p).clone();
 			}
 		}
@@ -219,8 +237,10 @@ impl Server {
 	pub fn broadcast_block(&self, b: &core::Block) {
 		let peers = self.peers.write().unwrap();
 		for p in peers.deref() {
-			if let Err(e) = p.send_block(b) {
-				debug!("Error sending block to peer: {:?}", e);
+			if p.is_connected() {
+				if let Err(e) = p.send_block(b) {
+					debug!("Error sending block to peer: {:?}", e);
+				}
 			}
 		}
 	}
