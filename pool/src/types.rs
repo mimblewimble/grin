@@ -79,21 +79,29 @@ struct Pool {
 }
 
 impl Pool {
-    fn search_for_output(&self, h: & core::hash::Hash) -> bool {
+    fn has_available_output(&self, h: core::hash::Hash) -> bool {
         self.available_outputs.contains_key(h)
+    }
+
+    /// Given an output hash, return the transaction hash generating the 
+    /// available (unspent) output, if one exists
+    fn search_for_output(&self, h: core::hash::Hash) -> Option<core::hash::Hash> {
+        match self.available_outputs.get(h) {
+            Some(e) => e.source_hash(),
+            None => None
+        }
     }
 
     // This happens either under a lock or an exclusive borrowed mutable ref,
     // so no risk of a race causing double-allocation or deallocation.
     fn connect_transaction(&mut self, tx: &core::transaction::Transaction) -> Result<(), PoolError> {
         // The expectation is a cheap and parallelizable call to 
-        // search_for_output or a similar non-authoritative check will gate
+        // has_available_output or a similar non-authoritative check will gate
         // calls to connect_transaction, which can be a bit more expensive.
         
         // The first issue is to identify all unspent outputs that
         // this transaction will consume and make sure they exist in the set.
         // The orphan process needs knowledge of both the missing and found
-        // 
         for input in tx.inputs.iter() {
             //TODO: Check the blockchain data source
             if !self.available_outputs.contains_key(&input.output_hash()) {
@@ -214,9 +222,24 @@ impl TransactionPool {
     /// The orphan set contains a fundamentally lesser set of guarantees than
     /// the pool.
     pub fn handle_orphan(&self, source: TxSource, tx: core::transaction::Transaction) -> Result<(),PoolError> {
-        // Taking the pool RLock explicitly to control lifetime
+        // Taking the pool RLock and orphans WLock explicitly to control
+        // lifetime
         let poolRef = self.pool.read().unwrap()
-        self.orphans.write().unwrap().connect_transaction(tx)
+        let orphanRef = self.orphans.write().unwrap()
+
+        // For each input, determine which of the 4 possible states it is in:
+        // 1. Confirmed parent
+        // 2. Pool parent
+        // 3. Orphan parent
+        // 4. Missing reference
+        let mut new_pool_connections = Vec<graph::Edge>;
+        let mut new_orphan_connections = Vec<graph::Edge>;
+
+        for input in tx.inputs.Iter() {
+            // TODO: Check blockchain data source
+            
+            //k
+        }
     }
 }
 

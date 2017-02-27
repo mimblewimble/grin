@@ -82,6 +82,9 @@ impl Edge{
     pub fn destination_hash(&self) -> Option<core::hash::Hash> {
         self.destination
     }
+    pub fn source_hash(&self) -> Option<core::hash::Hash> {
+        self.source
+    }
 }
 
 /// The generic graph container. Both graphs, the pool and orphans, embed this
