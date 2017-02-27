@@ -49,7 +49,7 @@ enum Parent {
 */
 enum PoolError {
     Invalid,
-    Orphan{missing_hash: core::hash::Hash},
+    Orphan{missing_hashes: Vec<core::hash::Hash>, pool_hashes: Vec<core::hash::Hash>},
     DuplicateOutput{other_tx: core::hash::Hash},
 }
 
@@ -92,6 +92,8 @@ impl Pool {
         
         // The first issue is to identify all unspent outputs that
         // this transaction will consume and make sure they exist in the set.
+        // The orphan process needs knowledge of both the missing and found
+        // 
         for input in tx.inputs.iter() {
             //TODO: Check the blockchain data source
             if !self.available_outputs.contains_key(&input.output_hash()) {
@@ -155,18 +157,6 @@ impl Pool {
         Ok(())
     }
 
-    fn rollback_transaction(&mut self, removed_outputs: Vec<graph::Edge>, 
-        added_outputs: Option<Vec<graph::Edge>>) {
-
-        for replace_out in removed_outputs.drain(..) {
-            self.available_outputs.insert(replace_out.output, replace_out);
-        }
-
-        for remove_out in added_outputs.unwrap_or(Vec::new()).drain(..) {
-            self.available_outputs.remove(remove_out.output)
-        }
-    }
-
 }
 
 /// Orphans contains the elements of the transaction graph that have not been
@@ -190,26 +180,43 @@ struct Orphans {
     pool_connections: Vec<graph::Edge>,
 }
 
+impl Orphans {
+    /// Connect a transaction to the orphan graph.
+}
+
 
 
 impl TransactionPool {
+    /// Add a transation to the memory pool, deferring to the orphans pool
+    /// if necessary.
     pub fn add_to_memory_pool(&self, source: TxSource, tx: core::transaction::Transaction) -> Result<(), PoolError> {
         // Placeholder: validation
         //tx.verify_sig;
 
-        // Find the parent transactions
         // First, from the blockchain
         //
         // Next, from the pool
         
         // Now if it looks OK, take the lock and connect
-        // TODO: Handle the poison case
-        match self.pool.write().unwrap().connect_transaction(tx) {
-            Ok(_) => return Ok(()),
-            Err(e) => Err(e),
-        }
-            
-        Ok(())
+        // Pool Wlock scope is this line only
+        let result = self.pool.write().unwrap().connect_transaction(tx)
+        
+        match result {
+            Ok(()) => self.check_orphan(tx),
+            Err(oe: PoolError::orphan) => self.handle_orphan(tx),
+            Err(e) => e }
+    }
+
+    /// Handle an orphan: Attach the orphan to the orphan graph and
+    /// all relevant data sets.
+    /// Takes a pool read lock and an orphan write lock, which ensures
+    /// a internally consistent view of both data structures while adding.
+    /// The orphan set contains a fundamentally lesser set of guarantees than
+    /// the pool.
+    pub fn handle_orphan(&self, source: TxSource, tx: core::transaction::Transaction) -> Result<(),PoolError> {
+        // Taking the pool RLock explicitly to control lifetime
+        let poolRef = self.pool.read().unwrap()
+        self.orphans.write().unwrap().connect_transaction(tx)
     }
 }
 
