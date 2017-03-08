@@ -14,21 +14,18 @@
 
 //! Implements storage primitives required by the chain
 
-use byteorder::{WriteBytesExt, BigEndian};
-
 use types::*;
-use core::core::hash::Hash;
+use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader};
-use grin_store;
+use grin_store::{self, Error, to_key, u64_to_key, option_to_not_found};
 
 const STORE_SUBPATH: &'static str = "chain";
 
-const SEP: u8 = ':' as u8;
-
 const BLOCK_HEADER_PREFIX: u8 = 'h' as u8;
 const BLOCK_PREFIX: u8 = 'b' as u8;
-const TIP_PREFIX: u8 = 'T' as u8;
 const HEAD_PREFIX: u8 = 'H' as u8;
+const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
+const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
 /// store.
@@ -38,8 +35,7 @@ pub struct ChainKVStore {
 
 impl ChainKVStore {
 	pub fn new(root_path: String) -> Result<ChainKVStore, Error> {
-		let db = try!(grin_store::Store::open(format!("{}/{}", root_path, STORE_SUBPATH).as_str())
-			.map_err(to_store_err));
+		let db = grin_store::Store::open(format!("{}/{}", root_path, STORE_SUBPATH).as_str())?;
 		Ok(ChainKVStore { db: db })
 	}
 }
@@ -54,48 +50,66 @@ impl ChainStore for ChainKVStore {
 		self.get_block_header(&head.last_block_h)
 	}
 
-	fn save_block(&self, b: &Block) -> Result<(), Error> {
-		try!(self.db
-			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)
-			.map_err(&to_store_err));
+	fn save_head(&self, t: &Tip) -> Result<(), Error> {
 		self.db
-			.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..],
-			         &b.header)
-			.map_err(&to_store_err)
+			.batch()
+			.put_ser(&vec![HEAD_PREFIX], t)?
+			.put_ser(&vec![HEADER_HEAD_PREFIX], t)?
+			.write()
+	}
+
+	fn get_header_head(&self) -> Result<Tip, Error> {
+		option_to_not_found(self.db.get_ser(&vec![HEADER_HEAD_PREFIX]))
+	}
+
+	fn save_header_head(&self, t: &Tip) -> Result<(), Error> {
+		self.db.put_ser(&vec![HEADER_HEAD_PREFIX], t)
+	}
+
+	fn get_block(&self, h: &Hash) -> Result<Block, Error> {
+		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, &mut h.to_vec())))
 	}
 
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())))
 	}
 
-	fn save_head(&self, t: &Tip) -> Result<(), Error> {
-		try!(self.save_tip(t));
-		self.db.put_ser(&vec![HEAD_PREFIX], t).map_err(&to_store_err)
+	fn save_block(&self, b: &Block) -> Result<(), Error> {
+		self.db
+			.batch()
+			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?
+			.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..],
+			         &b.header)?
+			.write()
 	}
 
-	fn save_tip(&self, t: &Tip) -> Result<(), Error> {
-		let last_branch = t.lineage.last_branch();
-		let mut k = vec![TIP_PREFIX, SEP];
-		k.write_u32::<BigEndian>(last_branch);
-		self.db.put_ser(&mut k, t).map_err(&to_store_err)
+	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), Error> {
+		self.db.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut bh.hash().to_vec())[..],
+		                bh)
 	}
-}
 
-fn to_key(prefix: u8, val: &mut Vec<u8>) -> &mut Vec<u8> {
-	val.insert(0, SEP);
-	val.insert(0, prefix);
-	val
-}
+	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
+		option_to_not_found(self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)))
+	}
 
-fn to_store_err(e: grin_store::Error) -> Error {
-	Error::StorageErr(format!("{:?}", e))
-}
+	fn setup_height(&self, bh: &BlockHeader) -> Result<(), Error> {
+		self.db.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height), bh)?;
 
-/// unwraps the inner option by converting the none case to a not found error
-fn option_to_not_found<T>(res: Result<Option<T>, grin_store::Error>) -> Result<T, Error> {
-	match res {
-		Ok(None) => Err(Error::NotFoundErr),
-		Ok(Some(o)) => Ok(o),
-		Err(e) => Err(to_store_err(e)),
+		let mut prev_h = bh.previous;
+		let mut prev_height = bh.height - 1;
+		while prev_height > 0 {
+			let prev = self.get_header_by_height(prev_height)?;
+			if prev.hash() != prev_h {
+				let real_prev = self.get_block_header(&prev_h)?;
+				self.db
+					.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, real_prev.height),
+					         &real_prev);
+				prev_h = real_prev.previous;
+				prev_height = real_prev.height - 1;
+			} else {
+				break;
+			}
+		}
+		Ok(())
 	}
 }

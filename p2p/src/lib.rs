@@ -26,22 +26,29 @@ extern crate bitflags;
 extern crate enum_primitive;
 #[macro_use]
 extern crate grin_core as core;
+extern crate grin_store;
+extern crate grin_util as util;
 #[macro_use]
 extern crate log;
 extern crate futures;
 #[macro_use]
 extern crate tokio_core;
+extern crate tokio_timer;
 extern crate rand;
 extern crate time;
 extern crate num;
 
+mod conn;
 pub mod handshake;
 mod msg;
 mod peer;
 mod protocol;
 mod server;
+mod store;
 mod types;
 
 pub use server::{Server, DummyAdapter};
 pub use peer::Peer;
-pub use types::{P2PConfig, NetAdapter};
+pub use types::{P2PConfig, NetAdapter, MAX_LOCATORS, MAX_BLOCK_HEADERS, MAX_PEER_ADDRS,
+                Capabilities, UNKNOWN, FULL_NODE, FULL_HIST, PeerInfo, Error};
+pub use store::{PeerStore, PeerData, State};

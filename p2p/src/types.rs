@@ -12,14 +12,55 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::convert::From;
+use std::io;
 use std::net::{SocketAddr, IpAddr};
 use std::sync::Arc;
 
 use futures::Future;
 use tokio_core::net::TcpStream;
+use tokio_timer::TimerError;
 
 use core::core;
-use core::ser::Error;
+use core::core::hash::Hash;
+use core::core::target::Difficulty;
+use core::ser;
+
+/// Maximum number of hashes in a block header locator request
+pub const MAX_LOCATORS: u32 = 10;
+
+/// Maximum number of block headers a peer should ever send
+pub const MAX_BLOCK_HEADERS: u32 = 512;
+
+/// Maximum number of block bodies a peer should ever ask for and send
+pub const MAX_BLOCK_BODIES: u32 = 16;
+
+/// Maximum number of peer addresses a peer should ever send
+pub const MAX_PEER_ADDRS: u32 = 256;
+
+#[derive(Debug)]
+pub enum Error {
+	Serialization(ser::Error),
+	Connection(io::Error),
+	ConnectionClose,
+	Timeout,
+}
+
+impl From<ser::Error> for Error {
+	fn from(e: ser::Error) -> Error {
+		Error::Serialization(e)
+	}
+}
+impl From<io::Error> for Error {
+	fn from(e: io::Error) -> Error {
+		Error::Connection(e)
+	}
+}
+impl From<TimerError> for Error {
+	fn from(e: TimerError) -> Error {
+		Error::Timeout
+	}
+}
 
 /// Configuration for the peer-to-peer server.
 #[derive(Debug, Clone, Copy)]
@@ -44,8 +85,15 @@ bitflags! {
   pub flags Capabilities: u32 {
     /// We don't know (yet) what the peer can do.
     const UNKNOWN = 0b00000000,
-    /// Runs with the easier version of the Proof of Work, mostly to make testing easier.
-    const FULL_SYNC = 0b00000001,
+    /// Full archival node, has the whole history without any pruning.
+    const FULL_HIST = 0b00000001,
+    /// Can provide block headers and the UTXO set for some recent-enough
+    /// height.
+    const UTXO_HIST = 0b00000010,
+    /// Can provide a list of healthy peers
+    const PEER_LIST = 0b00000100,
+
+    const FULL_NODE = FULL_HIST.bits | UTXO_HIST.bits | PEER_LIST.bits,
   }
 }
 
@@ -56,6 +104,7 @@ pub struct PeerInfo {
 	pub user_agent: String,
 	pub version: u32,
 	pub addr: SocketAddr,
+	pub total_difficulty: Difficulty,
 }
 
 /// A given communication protocol agreed upon between 2 peers (usually
@@ -80,6 +129,15 @@ pub trait Protocol {
 	/// Relays a transaction to the remote peer.
 	fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error>;
 
+	/// Sends a request for block headers based on the provided block locator.
+	fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error>;
+
+	/// Sends a request for a block from its hash.
+	fn send_block_request(&self, h: Hash) -> Result<(), Error>;
+
+	/// Sends a request for some peer addresses.
+	fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error>;
+
 	/// How many bytes have been sent/received to/from the remote peer.
 	fn transmitted_bytes(&self) -> (u64, u64);
 
@@ -90,10 +148,36 @@ pub trait Protocol {
 /// Bridge between the networking layer and the rest of the system. Handles the
 /// forwarding or querying of blocks and transactions from the network among
 /// other things.
-pub trait NetAdapter {
+pub trait NetAdapter: Sync + Send {
+	/// Current height of our chain.
+	fn total_difficulty(&self) -> Difficulty;
+
 	/// A valid transaction has been received from one of our peers
 	fn transaction_received(&self, tx: core::Transaction);
 
 	/// A block has been received from one of our peers
 	fn block_received(&self, b: core::Block);
+
+	/// A set of block header has been received, typically in response to a
+	/// block
+	/// header request.
+	fn headers_received(&self, bh: Vec<core::BlockHeader>);
+
+	/// Finds a list of block headers based on the provided locator. Tries to
+	/// identify the common chain and gets the headers that follow it
+	/// immediately.
+	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader>;
+
+	/// Gets a full block by its hash.
+	fn get_block(&self, h: Hash) -> Option<core::Block>;
+
+	/// Find good peers we know with the provided capability and return their
+	/// addresses.
+	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr>;
+
+	/// A list of peers has been received from one of our peers.
+	fn peer_addrs_received(&self, Vec<SocketAddr>);
+
+	/// Network successfully connected to a peer.
+	fn peer_connected(&self, &PeerInfo);
 }

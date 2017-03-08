@@ -21,13 +21,17 @@ use futures::future::{Future, ok};
 use tokio_core::net::TcpStream;
 use tokio_core::io::{write_all, read_exact};
 
-use core::ser::{self, Writeable, Readable, Writer, Reader};
 use core::consensus::MAX_MSG_LEN;
+use core::core::BlockHeader;
+use core::core::hash::Hash;
+use core::core::target::Difficulty;
+use core::ser::{self, Writeable, Readable, Writer, Reader};
 
 use types::*;
 
 /// Current latest version of the protocol
 pub const PROTOCOL_VERSION: u32 = 1;
+
 /// Grin's user agent with current version (TODO externalize)
 pub const USER_AGENT: &'static str = "MW/Grin 0.1";
 
@@ -44,7 +48,7 @@ pub enum ErrCodes {
 
 /// Types of messages
 enum_from_primitive! {
-  #[derive(Debug, Clone, Copy)]
+  #[derive(Debug, Clone, Copy, PartialEq)]
   pub enum Type {
     Error,
     Hand,
@@ -53,6 +57,9 @@ enum_from_primitive! {
     Pong,
     GetPeerAddrs,
     PeerAddrs,
+    GetHeaders,
+    Headers,
+    GetBlock,
     Block,
     Transaction,
   }
@@ -61,23 +68,23 @@ enum_from_primitive! {
 /// Future combinator to read any message where the body is a Readable. Reads
 /// the  header first, handles its validation and then reads the Readable body,
 /// allocating buffers of the right size.
-pub fn read_msg<T>(conn: TcpStream) -> Box<Future<Item = (TcpStream, T), Error = ser::Error>>
+pub fn read_msg<T>(conn: TcpStream) -> Box<Future<Item = (TcpStream, T), Error = Error>>
 	where T: Readable<T> + 'static
 {
 	let read_header = read_exact(conn, vec![0u8; HEADER_LEN as usize])
-		.map_err(|e| ser::Error::IOErr(e))
+		.from_err()
 		.and_then(|(reader, buf)| {
 			let header = try!(ser::deserialize::<MsgHeader>(&mut &buf[..]));
 			if header.msg_len > MAX_MSG_LEN {
 				// TODO add additional restrictions on a per-message-type basis to avoid 20MB
 				// pings
-				return Err(ser::Error::TooLargeReadErr);
+				return Err(Error::Serialization(ser::Error::TooLargeReadErr));
 			}
 			Ok((reader, header))
 		});
 
 	let read_msg = read_header.and_then(|(reader, header)| {
-			read_exact(reader, vec![0u8; header.msg_len as usize]).map_err(|e| ser::Error::IOErr(e))
+			read_exact(reader, vec![0u8; header.msg_len as usize]).from_err()
 		})
 		.and_then(|(reader, buf)| {
 			let body = try!(ser::deserialize(&mut &buf[..]));
@@ -92,7 +99,7 @@ pub fn read_msg<T>(conn: TcpStream) -> Box<Future<Item = (TcpStream, T), Error =
 pub fn write_msg<T>(conn: TcpStream,
                     msg: T,
                     msg_type: Type)
-                    -> Box<Future<Item = TcpStream, Error = ser::Error>>
+                    -> Box<Future<Item = TcpStream, Error = Error>>
 	where T: Writeable + 'static
 {
 	let write_msg = ok((conn)).and_then(move |conn| {
@@ -109,7 +116,7 @@ pub fn write_msg<T>(conn: TcpStream,
 		write_all(conn, header_buf)
 			.and_then(|(conn, _)| write_all(conn, body_buf))
 			.map(|(conn, _)| conn)
-			.map_err(|e| ser::Error::IOErr(e))
+			.from_err()
 	});
 	Box::new(write_msg)
 }
@@ -117,11 +124,14 @@ pub fn write_msg<T>(conn: TcpStream,
 /// Header of any protocol message, used to identify incoming messages.
 pub struct MsgHeader {
 	magic: [u8; 2],
+	/// Type of the message.
 	pub msg_type: Type,
+	/// Tota length of the message in bytes.
 	pub msg_len: u64,
 }
 
 impl MsgHeader {
+	/// Creates a new message header.
 	pub fn new(msg_type: Type, len: u64) -> MsgHeader {
 		MsgHeader {
 			magic: MAGIC,
@@ -174,6 +184,10 @@ pub struct Hand {
 	pub capabilities: Capabilities,
 	/// randomly generated for each handshake, helps detect self
 	pub nonce: u64,
+	/// total difficulty accumulated by the sender, used to check whether sync
+	/// may
+	/// be needed
+	pub total_difficulty: Difficulty,
 	/// network address of the sender
 	pub sender_addr: SockAddr,
 	/// network address of the receiver
@@ -188,6 +202,7 @@ impl Writeable for Hand {
 		                [write_u32, self.version],
 		                [write_u32, self.capabilities.bits()],
 		                [write_u64, self.nonce]);
+		self.total_difficulty.write(writer);
 		self.sender_addr.write(writer);
 		self.receiver_addr.write(writer);
 		writer.write_bytes(&self.user_agent)
@@ -197,6 +212,7 @@ impl Writeable for Hand {
 impl Readable<Hand> for Hand {
 	fn read(reader: &mut Reader) -> Result<Hand, ser::Error> {
 		let (version, capab, nonce) = ser_multiread!(reader, read_u32, read_u32, read_u64);
+		let total_diff = try!(Difficulty::read(reader));
 		let sender_addr = try!(SockAddr::read(reader));
 		let receiver_addr = try!(SockAddr::read(reader));
 		let ua = try!(reader.read_vec());
@@ -206,6 +222,7 @@ impl Readable<Hand> for Hand {
 			version: version,
 			capabilities: capabilities,
 			nonce: nonce,
+			total_difficulty: total_diff,
 			sender_addr: sender_addr,
 			receiver_addr: receiver_addr,
 			user_agent: user_agent,
@@ -220,6 +237,10 @@ pub struct Shake {
 	pub version: u32,
 	/// sender capabilities
 	pub capabilities: Capabilities,
+	/// total difficulty accumulated by the sender, used to check whether sync
+	/// may
+	/// be needed
+	pub total_difficulty: Difficulty,
 	/// name of version of the software
 	pub user_agent: String,
 }
@@ -228,20 +249,24 @@ impl Writeable for Shake {
 	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u32, self.version],
-		                [write_u32, self.capabilities.bits()],
-		                [write_bytes, &self.user_agent]);
+		                [write_u32, self.capabilities.bits()]);
+		self.total_difficulty.write(writer);
+		writer.write_bytes(&self.user_agent);
 		Ok(())
 	}
 }
 
 impl Readable<Shake> for Shake {
 	fn read(reader: &mut Reader) -> Result<Shake, ser::Error> {
-		let (version, capab, ua) = ser_multiread!(reader, read_u32, read_u32, read_vec);
+		let (version, capab) = ser_multiread!(reader, read_u32, read_u32);
+		let total_diff = try!(Difficulty::read(reader));
+		let ua = try!(reader.read_vec());
 		let user_agent = try!(String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData));
 		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData));
 		Ok(Shake {
 			version: version,
 			capabilities: capabilities,
+			total_difficulty: total_diff,
 			user_agent: user_agent,
 		})
 	}
@@ -286,10 +311,16 @@ impl Writeable for PeerAddrs {
 impl Readable<PeerAddrs> for PeerAddrs {
 	fn read(reader: &mut Reader) -> Result<PeerAddrs, ser::Error> {
 		let peer_count = try!(reader.read_u32());
-		if peer_count > 1000 {
+		if peer_count > MAX_PEER_ADDRS {
 			return Err(ser::Error::TooLargeReadErr);
+		} else if peer_count == 0 {
+			return Ok(PeerAddrs { peers: vec![] });
 		}
-		let peers = try_map_vec!([0..peer_count], |_| SockAddr::read(reader));
+		// let peers = try_map_vec!([0..peer_count], |_| SockAddr::read(reader));
+		let mut peers = Vec::with_capacity(peer_count as usize);
+		for _ in 0..peer_count {
+			peers.push(SockAddr::read(reader)?);
+		}
 		Ok(PeerAddrs { peers: peers })
 	}
 }
@@ -373,6 +404,58 @@ impl Readable<SockAddr> for SockAddr {
 			                                             0,
 			                                             0))))
 		}
+	}
+}
+
+/// Serializable wrapper for the block locator.
+pub struct Locator {
+	pub hashes: Vec<Hash>,
+}
+
+impl Writeable for Locator {
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+		writer.write_u8(self.hashes.len() as u8)?;
+		for h in &self.hashes {
+			h.write(writer)?
+		}
+		Ok(())
+	}
+}
+
+impl Readable<Locator> for Locator {
+	fn read(reader: &mut Reader) -> Result<Locator, ser::Error> {
+		let len = reader.read_u8()?;
+		let mut hashes = Vec::with_capacity(len as usize);
+		for _ in 0..len {
+			hashes.push(Hash::read(reader)?);
+		}
+		Ok(Locator { hashes: hashes })
+	}
+}
+
+/// Serializable wrapper for a list of block headers.
+pub struct Headers {
+	pub headers: Vec<BlockHeader>,
+}
+
+impl Writeable for Headers {
+	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+		writer.write_u16(self.headers.len() as u16)?;
+		for h in &self.headers {
+			h.write(writer)?
+		}
+		Ok(())
+	}
+}
+
+impl Readable<Headers> for Headers {
+	fn read(reader: &mut Reader) -> Result<Headers, ser::Error> {
+		let len = reader.read_u16()?;
+		let mut headers = Vec::with_capacity(len as usize);
+		for _ in 0..len {
+			headers.push(BlockHeader::read(reader)?);
+		}
+		Ok(Headers { headers: headers })
 	}
 }
 

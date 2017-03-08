@@ -12,33 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The block chain itself, validates and accepts new blocks, handles reorgs.
+extern crate grin_chain as chain;
 
-#![deny(non_upper_case_globals)]
-#![deny(non_camel_case_types)]
-#![deny(non_snake_case)]
-#![deny(unused_mut)]
-#![warn(missing_docs)]
-
-#[macro_use]
-extern crate bitflags;
-extern crate byteorder;
 #[macro_use]
 extern crate log;
+extern crate iron;
+extern crate router;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate time;
+extern crate serde_json;
 
-extern crate grin_core as core;
-extern crate grin_store;
-extern crate secp256k1zkp as secp;
+mod endpoints;
+mod rest;
 
-pub mod pipe;
-pub mod store;
-pub mod types;
-
-// Re-export the base interface
-
-pub use types::{ChainStore, Tip, ChainAdapter};
-pub use pipe::{SYNC, NONE, process_block, process_block_header, Error};
+pub use endpoints::start_rest_apis;

@@ -20,18 +20,23 @@ extern crate grin_chain as chain;
 extern crate env_logger;
 extern crate futures;
 extern crate tokio_core;
+extern crate tokio_timer;
 
 use std::io;
 use std::thread;
 use std::time;
+use std::default::Default;
 
 use futures::{Future, Poll, Async};
 use futures::task::park;
 use tokio_core::reactor;
+use tokio_timer::Timer;
 
+/// Create a network of 5 servers and mine a block, verifying that the block
+/// gets propagated to all.
 #[test]
-fn simulate_servers() {
-  env_logger::init().unwrap();
+fn simulate_block_propagation() {
+  env_logger::init();
 
   let mut evtlp = reactor::Core::new().unwrap();
   let handle = evtlp.handle();
@@ -41,9 +46,10 @@ fn simulate_servers() {
   for n in 0..5 {
       let s = grin::Server::future(
           grin::ServerConfig{
-            db_root: format!("target/grin-{}", n),
+            db_root: format!("target/grin-prop-{}", n),
             cuckoo_size: 12,
-            p2p_config: p2p::P2PConfig{port: 10000+n, ..p2p::P2PConfig::default()}
+            p2p_config: p2p::P2PConfig{port: 10000+n, ..p2p::P2PConfig::default()},
+            ..Default::default()
           }, &handle).unwrap();
       servers.push(s);
   }
@@ -61,9 +67,77 @@ fn simulate_servers() {
   servers[0].start_miner();
   let original_height = servers[0].head().height;
 
-  // monitor for a change of head on a different server and check we 
+  // monitor for a change of head on a different server and check whether
+  // chain height has changed
   evtlp.run(change(&servers[4]).and_then(|tip| {
     assert!(tip.height == original_height+1);
+    Ok(())
+  }));
+}
+
+/// Creates 2 different disconnected servers, mine a few blocks on one, connect
+/// them and check that the 2nd gets all the blocks
+#[test]
+fn simulate_full_sync() {
+  env_logger::init();
+
+  let mut evtlp = reactor::Core::new().unwrap();
+  let handle = evtlp.handle();
+
+  // instantiates 2 servers on different ports
+  let mut servers = vec![];
+  for n in 0..2 {
+      let s = grin::Server::future(
+          grin::ServerConfig{
+            db_root: format!("target/grin-sync-{}", n),
+            cuckoo_size: 12,
+            p2p_config: p2p::P2PConfig{port: 11000+n, ..p2p::P2PConfig::default()},
+            ..Default::default()
+          }, &handle).unwrap();
+      servers.push(s);
+  }
+
+  // mine a few blocks on server 1
+  servers[0].start_miner();
+  thread::sleep(time::Duration::from_secs(15));
+
+  // connect 1 and 2
+  let addr = format!("{}:{}", "127.0.0.1", 11001);
+  servers[0].connect_peer(addr.parse().unwrap()).unwrap();
+
+  // 2 should get blocks
+  evtlp.run(change(&servers[1]));
+}
+
+/// Creates 5 servers, one being a seed and check that through peer address
+/// messages they all end up connected.
+#[test]
+fn simulate_seeding() {
+  env_logger::init();
+
+  let mut evtlp = reactor::Core::new().unwrap();
+  let handle = evtlp.handle();
+
+  // instantiates 5 servers on different ports, with 0 as a seed
+  let mut servers = vec![];
+  for n in 0..5 {
+      let s = grin::Server::future(
+          grin::ServerConfig{
+            db_root: format!("target/grin-seed-{}", n),
+            cuckoo_size: 12,
+            p2p_config: p2p::P2PConfig{port: 12000+n, ..p2p::P2PConfig::default()},
+            seeding_type: grin::Seeding::List(vec!["127.0.0.1:12000".to_string()]),
+            ..Default::default()
+          }, &handle).unwrap();
+      servers.push(s);
+  }
+
+  // wait a bit and check all servers are now connected
+  evtlp.run(Timer::default().sleep(time::Duration::from_secs(30)).and_then(|_| {
+    for s in servers {
+      // occasionally 2 peers will connect to each other at the same time
+      assert!(s.peer_count() >= 4);
+    }
     Ok(())
   }));
 }
@@ -77,7 +151,8 @@ fn change<'a>(s: &'a grin::Server) -> HeadChange<'a> {
   }
 }
 
-/// Future that monitors when a server has had its head updated.
+/// Future that monitors when a server has had its head updated. Current
+/// implementation isn't optimized, only use for tests.
 struct HeadChange<'a> {
   server: &'a grin::Server,
   original:  chain::Tip,

@@ -74,18 +74,18 @@ impl Writeable for BlockHeader {
 		                [write_u64, self.height],
 		                [write_fixed_bytes, &self.previous],
 		                [write_i64, self.timestamp.to_timespec().sec],
-		                [write_u8, self.cuckoo_len]);
-		ser_multiwrite!(writer,
+		                [write_u8, self.cuckoo_len],
 		                [write_fixed_bytes, &self.utxo_merkle],
 		                [write_fixed_bytes, &self.tx_merkle]);
-		// make sure to not introduce any variable length data before the nonce to
-		// avoid complicating PoW
+
 		try!(writer.write_u64(self.nonce));
-		// proof
-		try!(self.pow.write(writer));
-		// block and total difficulty
 		try!(self.difficulty.write(writer));
-		self.total_difficulty.write(writer)
+		try!(self.total_difficulty.write(writer));
+
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			try!(self.pow.write(writer));
+		}
+		Ok(())
 	}
 }
 
@@ -98,9 +98,9 @@ impl Readable<BlockHeader> for BlockHeader {
 		let utxo_merkle = try!(Hash::read(reader));
 		let tx_merkle = try!(Hash::read(reader));
 		let nonce = try!(reader.read_u64());
-		let pow = try!(Proof::read(reader));
 		let difficulty = try!(Difficulty::read(reader));
 		let total_difficulty = try!(Difficulty::read(reader));
+		let pow = try!(Proof::read(reader));
 
 		Ok(BlockHeader {
 			height: height,
@@ -125,31 +125,34 @@ impl Readable<BlockHeader> for BlockHeader {
 /// bitcoin's schedule) and expressed as a global transaction fee (added v.H),
 /// additive to the total of fees ever collected.
 pub struct Block {
-	// hash_mem: Hash,
 	pub header: BlockHeader,
 	pub inputs: Vec<Input>,
 	pub outputs: Vec<Output>,
 	pub proofs: Vec<TxProof>,
 }
 
-/// Implementation of Writeable for a block, defines how to write the full
-/// block as binary.
+/// Implementation of Writeable for a block, defines how to write the block to a
+/// binary writer. Differentiates between writing the block for the purpose of
+/// full serialization and the one of just extracting a hash.
 impl Writeable for Block {
 	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
 		try!(self.header.write(writer));
 
-		ser_multiwrite!(writer,
-		                [write_u64, self.inputs.len() as u64],
-		                [write_u64, self.outputs.len() as u64],
-		                [write_u64, self.proofs.len() as u64]);
-		for inp in &self.inputs {
-			try!(inp.write(writer));
-		}
-		for out in &self.outputs {
-			try!(out.write(writer));
-		}
-		for proof in &self.proofs {
-			try!(proof.write(writer));
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			ser_multiwrite!(writer,
+			                [write_u64, self.inputs.len() as u64],
+			                [write_u64, self.outputs.len() as u64],
+			                [write_u64, self.proofs.len() as u64]);
+
+			for inp in &self.inputs {
+				try!(inp.write(writer));
+			}
+			for out in &self.outputs {
+				try!(out.write(writer));
+			}
+			for proof in &self.proofs {
+				try!(proof.write(writer));
+			}
 		}
 		Ok(())
 	}
@@ -250,8 +253,7 @@ impl Block {
 					height: prev.height + 1,
 					timestamp: time::now(),
 					previous: prev.hash(),
-					total_difficulty: Difficulty::from_hash(&prev.hash()) +
-					                  prev.total_difficulty.clone(),
+					total_difficulty: prev.pow.to_difficulty() + prev.total_difficulty.clone(),
 					cuckoo_len: prev.cuckoo_len,
 					..Default::default()
 				},
@@ -347,6 +349,7 @@ impl Block {
 	pub fn verify(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
 		// sum all inputs and outs commitments
 		let io_sum = try!(self.sum_commitments(secp));
+
 		// sum all proofs commitments
 		let proof_commits = map_vec!(self.proofs, |proof| proof.remainder);
 		let proof_sum = try!(secp.commit_sum(proof_commits, vec![]));
@@ -361,6 +364,14 @@ impl Block {
 		for proof in &self.proofs {
 			try!(proof.verify(secp));
 		}
+
+		// verify the transaction Merkle root
+		let tx_merkle = merkle_inputs_outputs(&self.inputs, &self.outputs);
+		if tx_merkle != self.header.tx_merkle {
+			// TODO more specific error
+			return Err(secp::Error::IncorrectCommitSum);
+		}
+
 		Ok(())
 	}
 

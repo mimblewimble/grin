@@ -13,16 +13,16 @@
 // limitations under the License.
 
 use std::collections::VecDeque;
+use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
 use futures::Future;
-use futures::future::ok;
 use rand::Rng;
 use rand::os::OsRng;
 use tokio_core::net::TcpStream;
-use tokio_core::io::{write_all, read_exact, read_to_end};
 
-use core::ser::{serialize, deserialize, Error};
+use core::core::target::Difficulty;
+use core::ser;
 use msg::*;
 use types::*;
 use protocol::ProtocolV1;
@@ -48,15 +48,19 @@ impl Handshake {
 
 	/// Handles connecting to a new remote peer, starting the version handshake.
 	pub fn connect(&self,
+	               capab: Capabilities,
+	               total_difficulty: Difficulty,
+	               self_addr: SocketAddr,
 	               conn: TcpStream)
 	               -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
 		// prepare the first part of the hanshake
 		let nonce = self.next_nonce();
 		let hand = Hand {
 			version: PROTOCOL_VERSION,
-			capabilities: FULL_SYNC,
+			capabilities: capab,
 			nonce: nonce,
-			sender_addr: SockAddr(conn.local_addr().unwrap()),
+			total_difficulty: total_difficulty,
+			sender_addr: SockAddr(self_addr),
 			receiver_addr: SockAddr(conn.peer_addr().unwrap()),
 			user_agent: USER_AGENT.to_string(),
 		};
@@ -66,16 +70,17 @@ impl Handshake {
 			.and_then(|conn| read_msg::<Shake>(conn))
 			.and_then(|(conn, shake)| {
 				if shake.version != 1 {
-					Err(Error::UnexpectedData {
+					Err(Error::Serialization(ser::Error::UnexpectedData {
 						expected: vec![PROTOCOL_VERSION as u8],
 						received: vec![shake.version as u8],
-					})
+					}))
 				} else {
 					let peer_info = PeerInfo {
 						capabilities: shake.capabilities,
 						user_agent: shake.user_agent,
 						addr: conn.peer_addr().unwrap(),
 						version: shake.version,
+						total_difficulty: shake.total_difficulty,
 					};
 
 					info!("Connected to peer {:?}", peer_info);
@@ -88,43 +93,48 @@ impl Handshake {
 	/// Handles receiving a connection from a new remote peer that started the
 	/// version handshake.
 	pub fn handshake(&self,
+	                 capab: Capabilities,
+	                 total_difficulty: Difficulty,
 	                 conn: TcpStream)
 	                 -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
 		let nonces = self.nonces.clone();
 		Box::new(read_msg::<Hand>(conn)
 			.and_then(move |(conn, hand)| {
 				if hand.version != 1 {
-					return Err(Error::UnexpectedData {
+					return Err(Error::Serialization(ser::Error::UnexpectedData {
 						expected: vec![PROTOCOL_VERSION as u8],
 						received: vec![hand.version as u8],
-					});
+					}));
 				}
 				{
 					// check the nonce to see if we could be trying to connect to ourselves
 					let nonces = nonces.read().unwrap();
 					if nonces.contains(&hand.nonce) {
-						return Err(Error::UnexpectedData {
+						return Err(Error::Serialization(ser::Error::UnexpectedData {
 							expected: vec![],
 							received: vec![],
-						});
+						}));
 					}
 				}
 				// all good, keep peer info
 				let peer_info = PeerInfo {
 					capabilities: hand.capabilities,
 					user_agent: hand.user_agent,
-					addr: conn.peer_addr().unwrap(),
+					addr: hand.sender_addr.0,
 					version: hand.version,
+					total_difficulty: hand.total_difficulty,
 				};
 				// send our reply with our info
 				let shake = Shake {
 					version: PROTOCOL_VERSION,
-					capabilities: FULL_SYNC,
+					capabilities: capab,
+					total_difficulty: total_difficulty,
 					user_agent: USER_AGENT.to_string(),
 				};
 				Ok((conn, shake, peer_info))
 			})
 			.and_then(|(conn, shake, peer_info)| {
+				debug!("Success handshake with {}.", peer_info.addr);
 				write_msg(conn, shake, Type::Shake)
 				  // when more than one protocol version is supported, choosing should go here
 					.map(|conn| (conn, ProtocolV1::new(), peer_info))

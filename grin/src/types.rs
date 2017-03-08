@@ -12,31 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Implementation of the MimbleWimble paper.
-//! https://download.wpsoftware.net/bitcoin/wizardry/mimblewimble.txt
+use std::convert::From;
 
-#![deny(non_upper_case_globals)]
-#![deny(non_camel_case_types)]
-#![deny(non_snake_case)]
-#![deny(unused_mut)]
-#![warn(missing_docs)]
+use chain;
+use p2p;
+use store;
 
-extern crate byteorder;
-extern crate crypto;
-extern crate num_bigint as bigint;
-extern crate rand;
-extern crate secp256k1zkp as secp;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-extern crate time;
-extern crate tiny_keccak;
+pub enum Error {
+	Store(store::Error),
+	Chain(chain::Error),
+	P2P(p2p::Error),
+}
 
-#[macro_use]
-pub mod macros;
+impl From<chain::Error> for Error {
+	fn from(e: chain::Error) -> Error {
+		Error::Chain(e)
+	}
+}
 
-pub mod consensus;
-pub mod core;
-pub mod genesis;
-pub mod pow;
-pub mod ser;
+impl From<p2p::Error> for Error {
+	fn from(e: p2p::Error) -> Error {
+		Error::P2P(e)
+	}
+}
+
+impl From<store::Error> for Error {
+	fn from(e: store::Error) -> Error {
+		Error::Store(e)
+	}
+}

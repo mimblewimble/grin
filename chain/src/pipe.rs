@@ -14,6 +14,7 @@
 
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
+use std::convert::From;
 use std::sync::{Arc, Mutex};
 
 use secp;
@@ -24,6 +25,8 @@ use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::{BlockHeader, Block, Proof};
 use core::pow;
+use core::ser;
+use grin_store;
 use types;
 use types::{Tip, ChainStore, ChainAdapter, NoopAdapter};
 use store;
@@ -32,8 +35,10 @@ bitflags! {
   /// Options for block validation
   pub flags Options: u32 {
     const NONE = 0b00000001,
-    /// Runs with the easier version of the Proof of Work, mostly to make testing easier.
-    const EASY_POW = 0b00000010,
+    /// Runs without checking the Proof of Work, mostly to make testing easier.
+    const SKIP_POW = 0b00000010,
+    /// Adds block while in syncing mode.
+    const SYNC = 0b00000100,
   }
 }
 
@@ -44,7 +49,6 @@ pub struct BlockContext {
 	store: Arc<ChainStore>,
 	adapter: Arc<ChainAdapter>,
 	head: Tip,
-	tip: Option<Tip>,
 }
 
 #[derive(Debug)]
@@ -63,8 +67,22 @@ pub enum Error {
 	InvalidBlockProof(secp::Error),
 	/// Block time is too old
 	InvalidBlockTime,
+	/// Block height is invalid (not previous + 1)
+	InvalidBlockHeight,
 	/// Internal issue when trying to save or load data from store
-	StoreErr(types::Error),
+	StoreErr(grin_store::Error),
+	SerErr(ser::Error),
+}
+
+impl From<grin_store::Error> for Error {
+	fn from(e: grin_store::Error) -> Error {
+		Error::StoreErr(e)
+	}
+}
+impl From<ser::Error> for Error {
+	fn from(e: ser::Error) -> Error {
+		Error::SerErr(e)
+	}
 }
 
 /// Runs the block processing pipeline, including validation and finding a
@@ -78,37 +96,62 @@ pub fn process_block(b: &Block,
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
-	let head = try!(store.head().map_err(&Error::StoreErr));
+	let head = store.head().map_err(&Error::StoreErr)?;
 
 	let mut ctx = BlockContext {
 		opts: opts,
 		store: store,
 		adapter: adapter,
 		head: head,
-		tip: None,
 	};
 
 	info!("Starting validation pipeline for block {} at {}.",
 	      b.hash(),
 	      b.header.height);
 	try!(check_known(b.hash(), &mut ctx));
-	try!(validate_header(&b, &mut ctx));
-	try!(set_tip(&b.header, &mut ctx));
+
+	if !ctx.opts.intersects(SYNC) {
+		// in sync mode, the header has already been validated
+		try!(validate_header(&b.header, &mut ctx));
+	}
 	try!(validate_block(b, &mut ctx));
 	info!("Block at {} with hash {} is valid, going to save and append.",
 	      b.header.height,
 	      b.hash());
 	try!(add_block(b, &mut ctx));
 	// TODO a global lock should be set before that step or even earlier
-	try!(update_tips(&mut ctx));
+	update_head(b, &mut ctx)
+}
 
-	// TODO make sure we always return the head, and not a fork that just got longer
-	Ok(ctx.tip)
+pub fn process_block_header(bh: &BlockHeader,
+                            store: Arc<ChainStore>,
+                            adapter: Arc<ChainAdapter>,
+                            opts: Options)
+                            -> Result<Option<Tip>, Error> {
+
+	let head = store.get_header_head().map_err(&Error::StoreErr)?;
+
+	let mut ctx = BlockContext {
+		opts: opts,
+		store: store,
+		adapter: adapter,
+		head: head,
+	};
+
+	info!("Starting validation pipeline for block header {} at {}.",
+	      bh.hash(),
+	      bh.height);
+	try!(check_known(bh.hash(), &mut ctx));
+	try!(validate_header(&bh, &mut ctx));
+	try!(add_block_header(bh, &mut ctx));
+	// TODO a global lock should be set before that step or even earlier
+	update_header_head(bh, &mut ctx)
 }
 
 /// Quick in-memory check to fast-reject any block we've already handled
 /// recently. Keeps duplicates from the network in check.
 fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
+	// TODO ring buffer of the last few blocks that came through here
 	if bh == ctx.head.last_block_h || bh == ctx.head.prev_block_h {
 		return Err(Error::Unfit("already known".to_string()));
 	}
@@ -119,8 +162,7 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 /// to make it as cheap as possible. The different validations are also
 /// arranged by order of cost to have as little DoS surface as possible.
 /// TODO require only the block header (with length information)
-fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
-	let header = &b.header;
+fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	if header.height > ctx.head.height + 1 {
 		// TODO actually handle orphans and add them to a size-limited set
 		return Err(Error::Unfit("orphan".to_string()));
@@ -128,6 +170,9 @@ fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 
 	let prev = try!(ctx.store.get_block_header(&header.previous).map_err(&Error::StoreErr));
 
+	if header.height != prev.height + 1 {
+		return Err(Error::InvalidBlockHeight);
+	}
 	if header.timestamp <= prev.timestamp {
 		// prevent time warp attacks and some timestamp manipulations by forcing strict
 		// time progression
@@ -140,55 +185,45 @@ fn validate_header(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 		return Err(Error::InvalidBlockTime);
 	}
 
-	if b.header.total_difficulty !=
-	   prev.total_difficulty.clone() + Difficulty::from_hash(&prev.hash()) {
-		return Err(Error::WrongTotalDifficulty);
-	}
+	if !ctx.opts.intersects(SKIP_POW) {
+		// verify the proof of work and related parameters
 
-	// verify the proof of work and related parameters
-	let (difficulty, cuckoo_sz) = consensus::next_target(header.timestamp.to_timespec().sec,
-	                                                     prev.timestamp.to_timespec().sec,
-	                                                     prev.difficulty,
-	                                                     prev.cuckoo_len);
-	if header.difficulty < difficulty {
-		return Err(Error::DifficultyTooLow);
-	}
-	if header.cuckoo_len != cuckoo_sz && !ctx.opts.intersects(EASY_POW) {
-		return Err(Error::WrongCuckooSize);
-	}
+		if header.total_difficulty != prev.total_difficulty.clone() + prev.pow.to_difficulty() {
+			return Err(Error::WrongTotalDifficulty);
+		}
 
-	if ctx.opts.intersects(EASY_POW) {
-		if !pow::verify_size(b, 16) {
+		let (difficulty, cuckoo_sz) = consensus::next_target(header.timestamp.to_timespec().sec,
+		                                                     prev.timestamp.to_timespec().sec,
+		                                                     prev.difficulty,
+		                                                     prev.cuckoo_len);
+		if header.difficulty < difficulty {
+			return Err(Error::DifficultyTooLow);
+		}
+		if header.cuckoo_len != cuckoo_sz {
+			return Err(Error::WrongCuckooSize);
+		}
+		if !pow::verify(header) {
 			return Err(Error::InvalidPow);
 		}
-	} else if !pow::verify(b) {
-		return Err(Error::InvalidPow);
 	}
 
 	Ok(())
 }
 
-fn set_tip(h: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	// TODO actually support more than one branch
-	if h.previous != ctx.head.last_block_h {
-		return Err(Error::Unfit("Just don't know where to put it right now".to_string()));
-	}
-	// TODO validate block header height
-	ctx.tip = Some(ctx.head.clone());
-	Ok(())
-}
-
+/// Fully validate the block content.
 fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
-	// TODO check tx merkle tree
 	let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	try!(b.verify(&curve).map_err(&Error::InvalidBlockProof));
+
+	if !ctx.opts.intersects(SYNC) {
+		// TODO check every input exists as a UTXO using the UXTO index
+	}
 	Ok(())
 }
 
+/// Officially adds the block to our chain.
 fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
-	// save the block and appends it to the selected tip
-	ctx.tip = ctx.tip.as_ref().map(|t| t.append(b.hash()));
-	ctx.store.save_block(b).map_err(&Error::StoreErr);
+	ctx.store.save_block(b).map_err(&Error::StoreErr)?;
 
 	// broadcast the block
 	let adapter = ctx.adapter.clone();
@@ -196,7 +231,46 @@ fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	Ok(())
 }
 
-fn update_tips(ctx: &mut BlockContext) -> Result<(), Error> {
-	let tip = ctx.tip.as_ref().unwrap();
-	ctx.store.save_head(tip).map_err(&Error::StoreErr)
+/// Officially adds the block header to our header chain.
+fn add_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+	ctx.store.save_block_header(bh).map_err(&Error::StoreErr)
+}
+
+/// Directly updates the head if we've just appended a new block to it or handle
+/// the situation where we've just added enough work to have a fork with more
+/// work than the head.
+fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
+	// if we made a fork with more work than the head (which should also be true
+	// when extending the head), update it
+	let tip = Tip::from_block(&b.header);
+	if tip.total_difficulty > ctx.head.total_difficulty {
+		ctx.store.setup_height(&b.header).map_err(&Error::StoreErr)?;
+		ctx.store.save_head(&tip).map_err(&Error::StoreErr)?;
+
+		ctx.head = tip.clone();
+		info!("Updated head to {} at {}.", b.hash(), b.header.height);
+		Ok(Some(tip))
+	} else {
+		Ok(None)
+	}
+}
+
+/// Directly updates the head if we've just appended a new block to it or handle
+/// the situation where we've just added enough work to have a fork with more
+/// work than the head.
+fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
+	// if we made a fork with more work than the head (which should also be true
+	// when extending the head), update it
+	let tip = Tip::from_block(bh);
+	if tip.total_difficulty > ctx.head.total_difficulty {
+		ctx.store.save_header_head(&tip).map_err(&Error::StoreErr)?;
+
+		ctx.head = tip.clone();
+		info!("Updated block header head to {} at {}.",
+		      bh.hash(),
+		      bh.height);
+		Ok(Some(tip))
+	} else {
+		Ok(None)
+	}
 }
