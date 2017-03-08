@@ -30,7 +30,8 @@ use core::core;
 pub struct PoolEntry {
     // Core data
     // Unique identifier of this pool entry and the corresponding transaction
-    pub tx_hash: core::hash::Hash,
+    // (kernel hash?)
+    pub kernel_hash: core::hash::Hash,
 
     // Metadata 
     size_estimate: u64,
@@ -54,7 +55,8 @@ fn estimate_transaction_size(tx: &core::transaction::Transaction) -> u64 {
 /// For various use cases, one of either the source or destination may be
 /// unpopulated
 pub struct Edge {
-    // Source and Destination are the vertex id's, the transaction hash.
+    // Source and Destination are the vertex id's, the transaction (kernel)
+    // hash.
     source: Option<core::hash::Hash>,
     destination: Option<core::hash::Hash>,
 
@@ -90,7 +92,7 @@ impl Edge{
 /// The generic graph container. Both graphs, the pool and orphans, embed this
 /// structure and add additional capability on top of it.
 pub struct DirectedGraph {
-    edges: Vec<Edge>,
+    edges: HashMap<core::hash::Hash, Edge>,
     vertices: Vec<PoolEntry>,
 
     // A small optimization: keeping roots (vertices with in-degree 0) in a 
