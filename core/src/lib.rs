@@ -26,6 +26,9 @@ extern crate crypto;
 extern crate num_bigint as bigint;
 extern crate rand;
 extern crate secp256k1zkp as secp;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 extern crate time;
 extern crate tiny_keccak;
 

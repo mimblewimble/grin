@@ -17,9 +17,12 @@
 //! the related difficulty, defined as the maximum target divided by the hash.
 
 use byteorder::{ByteOrder, BigEndian};
+use std::fmt;
+use std::error::Error;
 use std::ops::Add;
 
 use bigint::BigUint;
+use serde::{Serialize, Serializer, Deserialize, Deserializer, de};
 
 use core::hash::Hash;
 use ser::{self, Reader, Writer, Writeable, Readable};
@@ -76,5 +79,40 @@ impl Readable<Difficulty> for Difficulty {
 		let dlen = try!(reader.read_u8());
 		let data = try!(reader.read_fixed_bytes(dlen as usize));
 		Ok(Difficulty { num: BigUint::from_bytes_be(&data[..]) })
+	}
+}
+
+impl Serialize for Difficulty {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+		where S: Serializer
+	{
+		serializer.serialize_str(self.num.to_str_radix(10).as_str())
+	}
+}
+
+impl Deserialize for Difficulty {
+	fn deserialize<D>(deserializer: D) -> Result<Difficulty, D::Error>
+		where D: Deserializer
+	{
+		deserializer.deserialize_i32(DiffVisitor)
+	}
+}
+
+struct DiffVisitor;
+
+impl de::Visitor for DiffVisitor {
+	type Value = Difficulty;
+
+	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+		formatter.write_str("a difficulty")
+	}
+
+	fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+		where E: de::Error
+	{
+		let bigui = BigUint::parse_bytes(s.as_bytes(), 10).ok_or_else(|| {
+        de::Error::invalid_value(de::Unexpected::Str(s), &"a value number")
+      })?;
+		Ok(Difficulty { num: bigui })
 	}
 }

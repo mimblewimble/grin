@@ -27,7 +27,7 @@ pub const ZERO_HASH: Hash = Hash([0; 32]);
 
 /// A hash to uniquely (or close enough) identify one of the main blockchain
 /// constructs. Used pervasively for blocks, transactions and ouputs.
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash, Serialize, Deserialize)]
 pub struct Hash(pub [u8; 32]);
 
 impl fmt::Display for Hash {

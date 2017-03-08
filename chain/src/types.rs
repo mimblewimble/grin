@@ -24,7 +24,7 @@ use core::ser;
 /// blockchain tree. References the max height and the latest and previous
 /// blocks
 /// for convenience and the total difficulty.
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Tip {
 	/// Height of the tip (max height of the fork)
 	pub height: u64,

@@ -13,8 +13,7 @@
 // limitations under the License.
 
 //! Provides a connection wrapper that handles the lower level tasks in sending
-//! or
-//! receiving data from the TCP socket, as well as dealing with timeouts.
+//! or receiving data from the TCP socket, as well as dealing with timeouts.
 
 use std::iter;
 use std::ops::Deref;

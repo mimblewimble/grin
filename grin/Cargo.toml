@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
 
 [dependencies]
+grin_api = { path = "../api" }
 grin_chain = { path = "../chain" }
 grin_core = { path = "../core" }
 grin_store = { path = "../store" }

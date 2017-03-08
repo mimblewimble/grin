@@ -84,8 +84,8 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), Error> {
-		self.db.put_ser(
-      &to_key(BLOCK_HEADER_PREFIX, &mut bh.hash().to_vec())[..], bh)
+		self.db.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut bh.hash().to_vec())[..],
+		                bh)
 	}
 
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {

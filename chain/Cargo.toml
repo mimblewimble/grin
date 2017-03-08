@@ -7,6 +7,8 @@ authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
 bitflags = "^0.7.0"
 byteorder = "^0.5"
 log = "^0.3"
+serde = "~0.9.10"
+serde_derive = "~0.9.10"
 time = "^0.1"
 
 grin_core = { path = "../core" }

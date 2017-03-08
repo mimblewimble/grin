@@ -24,6 +24,7 @@ use futures::{future, Future};
 use tokio_core::reactor;
 
 use adapters::{NetToChainAdapter, ChainToNetAdapter};
+use api;
 use chain;
 use chain::ChainStore;
 use core;
@@ -69,6 +70,9 @@ pub struct ServerConfig {
 	/// Directory under which the rocksdb stores will be created
 	pub db_root: String,
 
+	/// Network address for the Rest API HTTP server.
+	pub api_http_addr: String,
+
 	/// Allows overriding the default cuckoo cycle size
 	pub cuckoo_size: u8,
 
@@ -86,6 +90,7 @@ impl Default for ServerConfig {
 	fn default() -> ServerConfig {
 		ServerConfig {
 			db_root: ".grin".to_string(),
+			api_http_addr: "127.0.0.1:13415".to_string(),
 			cuckoo_size: 0,
 			capabilities: p2p::FULL_NODE,
 			seeding_type: Seeding::None,
@@ -149,6 +154,8 @@ impl Server {
 		net_adapter.start_sync(sync);
 
 		evt_handle.spawn(server.start(evt_handle.clone()).map_err(|_| ()));
+
+		api::start_rest_apis(config.api_http_addr.clone(), chain_store.clone());
 
 		warn!("Grin server started.");
 		Ok(Server {

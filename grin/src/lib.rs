@@ -32,6 +32,7 @@ extern crate time;
 extern crate tokio_core;
 extern crate tokio_timer;
 
+extern crate grin_api as api;
 extern crate grin_chain as chain;
 #[macro_use]
 extern crate grin_core as core;
