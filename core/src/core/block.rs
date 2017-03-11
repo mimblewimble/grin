@@ -448,14 +448,14 @@ mod test {
 		let ref secp = new_secp();
 
 		let tx1 = tx2i1o(secp, &mut rng);
-		let mut btx1 = tx1.blind(&secp).unwrap();
+		let mut btx1 = tx1.blind(&secp, None).unwrap();
 
 		let tx2 = tx1i1o(secp, &mut rng);
-		let mut btx2 = tx2.blind(&secp).unwrap();
+		let mut btx2 = tx2.blind(&secp, None).unwrap();
 
 		// spending tx2
 		let spending = txspend1i1o(secp, &mut rng, tx2.outputs[0], btx2.outputs[0].hash());
-		let mut btx3 = spending.blind(&secp).unwrap();
+		let mut btx3 = spending.blind(&secp, None).unwrap();
 		let b = new_block(vec![&mut btx1, &mut btx2, &mut btx3], secp);
 
 		// block should have been automatically compacted (including reward output) and
@@ -473,14 +473,14 @@ mod test {
 		let ref secp = new_secp();
 
 		let tx1 = tx2i1o(secp, &mut rng);
-		let mut btx1 = tx1.blind(&secp).unwrap();
+		let mut btx1 = tx1.blind(&secp, None).unwrap();
 
 		let tx2 = tx1i1o(secp, &mut rng);
-		let mut btx2 = tx2.blind(&secp).unwrap();
+		let mut btx2 = tx2.blind(&secp, None).unwrap();
 
 		// spending tx2
 		let spending = txspend1i1o(secp, &mut rng, tx2.outputs[0], btx2.outputs[0].hash());
-		let mut btx3 = spending.blind(&secp).unwrap();
+		let mut btx3 = spending.blind(&secp, None).unwrap();
 
 		let b1 = new_block(vec![&mut btx1, &mut btx2], secp);
 		b1.verify(&secp).unwrap();

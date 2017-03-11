@@ -235,7 +235,7 @@ mod test {
 		                               }],
 		                          9);
 		// blinding should fail as signing with a zero r*G shouldn't work
-		tx.blind(&secp).unwrap();
+		tx.blind(&secp, None).unwrap();
 	}
 
 	#[test]
@@ -255,7 +255,7 @@ mod test {
 		let skey = SecretKey::new(secp, &mut rng);
 
 		let tx1 = tx2i1o(secp, &mut rng);
-		let mut btx1 = tx1.blind(&secp).unwrap();
+		let mut btx1 = tx1.blind(&secp, None).unwrap();
 		btx1.verify_sig(&secp).unwrap();
 
 		let b = Block::new(&BlockHeader::default(), vec![&mut btx1], skey).unwrap();
@@ -269,11 +269,11 @@ mod test {
 		let skey = SecretKey::new(secp, &mut rng);
 
 		let tx1 = tx2i1o(secp, &mut rng);
-		let mut btx1 = tx1.blind(&secp).unwrap();
+		let mut btx1 = tx1.blind(&secp, None).unwrap();
 		btx1.verify_sig(&secp).unwrap();
 
 		let tx2 = tx1i1o(secp, &mut rng);
-		let mut btx2 = tx2.blind(&secp).unwrap();
+		let mut btx2 = tx2.blind(&secp, None).unwrap();
 		btx2.verify_sig(&secp).unwrap();
 
 		let b = Block::new(&BlockHeader::default(), vec![&mut btx1, &mut btx2], skey).unwrap();

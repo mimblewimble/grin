@@ -165,6 +165,20 @@ impl Transaction {
 		}
 	}
 
+	/// Builds a new transaction with the provided outputs added. Existing
+	/// outputs, if any, are kept intact.
+	pub fn with_outputs(&self, outputs: &mut Vec<Output>) -> Transaction {
+		let mut new_outs = self.outputs.clone();
+		new_outs.append(outputs);
+		Transaction {
+			hash_mem: None,
+			fee: self.fee,
+			zerosig: vec![],
+			inputs: self.inputs.clone(),
+			outputs: new_outs,
+		}
+	}
+
 	/// The hash of a transaction is the Merkle tree of its inputs and outputs
 	/// hashes. None of the rest is required.
 	fn hash(&mut self) -> Hash {
@@ -178,9 +192,15 @@ impl Transaction {
 	/// algorithm: calculates the commitments for each inputs and outputs
 	/// using the values and blinding factors, takes the blinding factors
 	/// remainder and uses it for an empty signature.
-	pub fn blind(&self, secp: &Secp256k1) -> Result<Transaction, secp::Error> {
+	/// An excess value can optionally be provided to account for cases when the
+	/// transaction has already been partially blinded (when a recipient
+	/// receives a partially built transaction).
+	pub fn blind(&self,
+	             secp: &Secp256k1,
+	             excess: Option<SecretKey>)
+	             -> Result<Transaction, secp::Error> {
 		// we compute the sum of blinding factors to get the k remainder
-		let remainder = try!(self.blind_sum(secp));
+		let remainder = try!(self.blind_sum(secp, excess));
 
 		// next, blind the inputs and outputs if they haven't been yet
 		let blind_inputs = map_vec!(self.inputs, |inp| inp.blind(secp));
@@ -200,11 +220,20 @@ impl Transaction {
 		})
 	}
 
-	/// Compute the sum of blinding factors on all overt inputs and outputs
-	/// of the transaction to get the k remainder.
-	pub fn blind_sum(&self, secp: &Secp256k1) -> Result<SecretKey, secp::Error> {
-		let inputs_blinding_fact = filter_map_vec!(self.inputs, |inp| inp.blinding_factor());
+	/// Compute the sum of blinding factors on all overt inputs and outputs of
+	/// the transaction to get the k remainder.
+	/// An excess value can optionally be provided to account for cases when the
+	/// transaction has already been partially blinded (when a recipient
+	/// receives a partially built transaction).
+	pub fn blind_sum(&self,
+	                 secp: &Secp256k1,
+	                 excess: Option<SecretKey>)
+	                 -> Result<SecretKey, secp::Error> {
+		let mut inputs_blinding_fact = filter_map_vec!(self.inputs, |inp| inp.blinding_factor());
 		let outputs_blinding_fact = filter_map_vec!(self.outputs, |out| out.blinding_factor());
+		if let Some(exc) = excess {
+			inputs_blinding_fact.push(exc);
+		}
 
 		secp.blind_sum(inputs_blinding_fact, outputs_blinding_fact)
 	}
@@ -230,6 +259,16 @@ impl Transaction {
 			sig: self.zerosig.clone(),
 			fee: self.fee,
 		})
+	}
+
+	/// Validates all relevant parts of a fully built transaction. Checks the
+	/// excess value against the signature as well as range proofs for each
+	/// output.
+	pub fn validate(&self, secp: &Secp256k1) -> Result<TxProof, secp::Error> {
+		for out in &self.outputs {
+			out.verify_proof(secp)?;
+		}
+		self.verify_sig(secp)
 	}
 }
 
@@ -410,7 +449,7 @@ mod test {
 		let ref secp = new_secp();
 
 		let tx = tx2i1o(secp, &mut rng);
-		let btx = tx.blind(&secp).unwrap();
+		let btx = tx.blind(&secp, None).unwrap();
 		let mut vec = Vec::new();
 		serialize(&mut vec, &btx).expect("serialized failed");
 		assert!(vec.len() > 5320);
@@ -423,7 +462,7 @@ mod test {
 		let ref secp = new_secp();
 
 		let tx = tx2i1o(secp, &mut rng);
-		let btx = tx.blind(&secp).unwrap();
+		let btx = tx.blind(&secp, None).unwrap();
 		let mut vec = Vec::new();
 		serialize(&mut vec, &btx).expect("serialization failed");
 		// let mut dtx = Transaction::read(&mut BinReader { source: &mut &vec[..]
@@ -442,7 +481,7 @@ mod test {
 		let ref secp = new_secp();
 
 		let tx = tx2i1o(secp, &mut rng);
-		let btx = tx.blind(&secp).unwrap();
+		let btx = tx.blind(&secp, None).unwrap();
 
 		let mut vec = Vec::new();
 		assert!(serialize(&mut vec, &btx).is_ok());
@@ -520,7 +559,7 @@ mod test {
 		let mut rng = OsRng::new().unwrap();
 
 		let tx = tx2i1o(secp, &mut rng);
-		let btx = tx.blind(&secp).unwrap();
+		let btx = tx.blind(&secp, None).unwrap();
 		btx.verify_sig(&secp).unwrap(); // unwrap will panic if invalid
 
 		// checks that the range proof on our blind output is sufficiently hiding
@@ -537,13 +576,66 @@ mod test {
 		let mut rng = OsRng::new().unwrap();
 
 		let tx1 = tx2i1o(secp, &mut rng);
-		let btx1 = tx1.blind(&secp).unwrap();
+		let btx1 = tx1.blind(&secp, None).unwrap();
 
 		let tx2 = tx1i1o(secp, &mut rng);
-		let btx2 = tx2.blind(&secp).unwrap();
+		let btx2 = tx2.blind(&secp, None).unwrap();
 
 		if btx1.hash() == btx2.hash() {
 			panic!("diff txs have same hash")
 		}
+	}
+
+	/// Simulate the standard exchange between 2 parties when creating a basic
+	/// 2 inputs, 2 outputs transaction.
+	#[test]
+	fn tx_build_exchange() {
+		let ref secp = new_secp();
+		let mut rng = OsRng::new().unwrap();
+		let outh = ZERO_HASH;
+
+		let tx_alice: Transaction;
+		let blind_sum: SecretKey;
+
+		{
+			// Alice gets 2 of her outputs to send 5 coins to Bob, they become
+			// inputs in the new transaction
+			let inputs = vec![Input::OvertInput {
+				                  // should match hash, value and blinding factor of output 1
+				                  output: outh,
+				                  value: 4,
+				                  blindkey: SecretKey::new(secp, &mut rng),
+			                  },
+			                  Input::OvertInput {
+				                  // should match hash, value and blinding factor of output 2
+				                  output: outh,
+				                  value: 3,
+				                  blindkey: SecretKey::new(secp, &mut rng),
+			                  }];
+
+			// Alice also builds her change (we assume fees of 1 coin, so 1 coin change
+			// left)
+			let kc = SecretKey::new(secp, &mut rng);
+			let change = Output::OvertOutput {
+				value: 1,
+				blindkey: kc,
+			};
+
+			// All of this gets into a resulting transaction, which we also use to get
+			// the sum of blinding factors, before we obscure the transaction itself.
+			let tx_open = Transaction::new(inputs, vec![change], 1);
+			blind_sum = tx_open.blind_sum(&secp, None).unwrap();
+			tx_alice = tx_open.blind(&secp, None).unwrap();
+		}
+
+		// From now on, Bob only has the obscured transaction and the sum of
+		// blinding factors. He adds his output, finalizes the transaction so it's
+		// ready for broadcast.
+		let tx_full = tx_alice.with_outputs(&mut vec![Output::OvertOutput {
+			                                              value: 5,
+			                                              blindkey: SecretKey::new(secp, &mut rng),
+		                                              }]);
+		let tx_final = tx_full.blind(&secp, Some(blind_sum)).unwrap();
+		tx_final.validate(&secp).unwrap();
 	}
 }
