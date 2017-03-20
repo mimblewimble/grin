@@ -402,101 +402,80 @@ impl Block {
 	}
 }
 
-// #[cfg(test)]
-// mod test {
-// 	use super::*;
-// 	use core::{Input, Output, Transaction};
-// 	use core::hash::{Hash, Hashed};
-// 	use core::test::{tx1i1o, tx2i1o};
-//
-// 	use secp::{self, Secp256k1};
-// 	use secp::key::SecretKey;
-// 	use rand::Rng;
-// 	use rand::os::OsRng;
-//
-// 	fn new_secp() -> Secp256k1 {
-// 		secp::Secp256k1::with_caps(secp::ContextFlag::Commit)
-// 	}
-//
-// // utility to create a block without worrying about the key or previous
-// header
-// 	fn new_block(txs: Vec<&mut Transaction>, secp: &Secp256k1) -> Block {
-// 		let mut rng = OsRng::new().unwrap();
-// 		let skey = SecretKey::new(secp, &mut rng);
-// 		Block::new(&BlockHeader::default(), txs, skey).unwrap()
-// 	}
-//
-// 	// utility producing a transaction that spends the above
-// fn txspend1i1o<R: Rng>(secp: &Secp256k1, rng: &mut R, oout: Output, outh:
-// Hash) -> Transaction {
-// 		if let Output::OvertOutput { blindkey, value } = oout {
-// 			Transaction::new(vec![Input::OvertInput {
-// 				                      output: outh,
-// 				                      value: value,
-// 				                      blindkey: blindkey,
-// 			                      }],
-// 			                 vec![Output::OvertOutput {
-// 				                      value: 3,
-// 				                      blindkey: SecretKey::new(secp, rng),
-// 			                      }],
-// 			                 1)
-// 		} else {
-// 			panic!();
-// 		}
-// 	}
-//
-// 	#[test]
-// 	// builds a block with a tx spending another and check if merging occurred
-// 	fn compactable_block() {
-// 		let mut rng = OsRng::new().unwrap();
-// 		let ref secp = new_secp();
-//
-// 		let tx1 = tx2i1o(secp, &mut rng);
-// 		let mut btx1 = tx1.blind(&secp, None).unwrap();
-//
-// 		let tx2 = tx1i1o(secp, &mut rng);
-// 		let mut btx2 = tx2.blind(&secp, None).unwrap();
-//
-// 		// spending tx2
-// let spending = txspend1i1o(secp, &mut rng, tx2.outputs[0],
-// btx2.outputs[0].hash());
-// 		let mut btx3 = spending.blind(&secp, None).unwrap();
-// 		let b = new_block(vec![&mut btx1, &mut btx2, &mut btx3], secp);
-//
-// // block should have been automatically compacted (including reward
-// output) and
-// 		// should still be valid
-// 		b.verify(&secp).unwrap();
-// 		assert_eq!(b.inputs.len(), 3);
-// 		assert_eq!(b.outputs.len(), 3);
-// 	}
-//
-// 	#[test]
-// 	// builds 2 different blocks with a tx spending another and check if merging
-// 	// occurs
-// 	fn mergeable_blocks() {
-// 		let mut rng = OsRng::new().unwrap();
-// 		let ref secp = new_secp();
-//
-// 		let tx1 = tx2i1o(secp, &mut rng);
-// 		let mut btx1 = tx1.blind(&secp, None).unwrap();
-//
-// 		let tx2 = tx1i1o(secp, &mut rng);
-// 		let mut btx2 = tx2.blind(&secp, None).unwrap();
-//
-// 		// spending tx2
-// let spending = txspend1i1o(secp, &mut rng, tx2.outputs[0],
-// btx2.outputs[0].hash());
-// 		let mut btx3 = spending.blind(&secp, None).unwrap();
-//
-// 		let b1 = new_block(vec![&mut btx1, &mut btx2], secp);
-// 		b1.verify(&secp).unwrap();
-// 		let b2 = new_block(vec![&mut btx3], secp);
-// 		b2.verify(&secp).unwrap();
-//
-// 		// block should have been automatically compacted and should still be valid
-// 		let b3 = b1.merge(b2);
-// 		assert_eq!(b3.inputs.len(), 3);
-// 		assert_eq!(b3.outputs.len(), 4);
-// 	}
-// }
+ #[cfg(test)]
+ mod test {
+ 	use super::*;
+ 	use core::{Input, Output, Transaction};
+	use core::build::{self, input, output, input_rand, output_rand, with_fee};
+ 	use core::hash::{Hash, Hashed};
+ 	use core::test::{tx1i1o, tx2i1o};
+
+ 	use secp::{self, Secp256k1};
+ 	use secp::key::SecretKey;
+ 	use rand::Rng;
+ 	use rand::os::OsRng;
+
+ 	fn new_secp() -> Secp256k1 {
+ 		secp::Secp256k1::with_caps(secp::ContextFlag::Commit)
+ 	}
+
+ // utility to create a block without worrying about the key or previous
+ //header
+ 	fn new_block(txs: Vec<&mut Transaction>, secp: &Secp256k1) -> Block {
+ 		let mut rng = OsRng::new().unwrap();
+ 		let skey = SecretKey::new(secp, &mut rng);
+ 		Block::new(&BlockHeader::default(), txs, skey).unwrap()
+ 	}
+
+ 	// utility producing a transaction that spends an output with the provided
+  // value and blinding key
+ fn txspend1i1o(v: u64, b: SecretKey) -> Transaction {
+   build::transaction(vec![input(v, b), output_rand(3), with_fee(1)]).map(|(tx, _)| tx).unwrap()
+ 	}
+
+ 	#[test]
+ 	// builds a block with a tx spending another and check if merging occurred
+ 	fn compactable_block() {
+ 		let mut rng = OsRng::new().unwrap();
+ 		let ref secp = new_secp();
+
+ 		let mut btx1 = tx2i1o();
+		let skey = SecretKey::new(secp, &mut rng);
+		let (mut btx2, _) = build::transaction(vec![input_rand(5), output(4, skey), with_fee(1)]).unwrap();
+
+ 		// spending tx2
+    let mut btx3 = txspend1i1o(4, skey);
+ 		let b = new_block(vec![&mut btx1, &mut btx2, &mut btx3], secp);
+
+    // block should have been automatically compacted (including reward
+    // output) and should still be valid
+ 		b.verify(&secp).unwrap();
+ 		assert_eq!(b.inputs.len(), 3);
+ 		assert_eq!(b.outputs.len(), 3);
+ 	}
+
+ 	#[test]
+ 	// builds 2 different blocks with a tx spending another and check if merging
+ 	// occurs
+ 	fn mergeable_blocks() {
+ 		let mut rng = OsRng::new().unwrap();
+ 		let ref secp = new_secp();
+
+ 		let mut btx1 = tx2i1o();
+		let skey = SecretKey::new(secp, &mut rng);
+		let (mut btx2, _) = build::transaction(vec![input_rand(5), output(4, skey), with_fee(1)]).unwrap();
+
+ 		// spending tx2
+    let mut btx3 = txspend1i1o(4, skey);
+
+ 		let b1 = new_block(vec![&mut btx1, &mut btx2], secp);
+ 		b1.verify(&secp).unwrap();
+ 		let b2 = new_block(vec![&mut btx3], secp);
+ 		b2.verify(&secp).unwrap();
+
+ 		// block should have been automatically compacted and should still be valid
+ 		let b3 = b1.merge(b2);
+ 		assert_eq!(b3.inputs.len(), 3);
+ 		assert_eq!(b3.outputs.len(), 4);
+ 	}
+}
