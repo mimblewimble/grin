@@ -15,6 +15,7 @@
 //! Core types
 
 pub mod block;
+pub mod build;
 pub mod hash;
 pub mod target;
 pub mod transaction;
@@ -28,7 +29,7 @@ use secp::pedersen::*;
 
 use consensus::PROOFSIZE;
 pub use self::block::{Block, BlockHeader};
-pub use self::transaction::{Transaction, Input, Output, TxProof};
+pub use self::transaction::{Transaction, Input, Output, TxKernel};
 use self::hash::{Hash, Hashed, HashWriter, ZERO_HASH};
 use ser::{Writeable, Writer, Reader, Readable, Error};
 
@@ -45,8 +46,8 @@ pub trait Committed {
 		}
 
 		// then gather the commitments
-		let mut input_commits = filter_map_vec!(self.inputs_committed(), |inp| inp.commitment());
-		let mut output_commits = filter_map_vec!(self.outputs_committed(), |out| out.commitment());
+		let mut input_commits = map_vec!(self.inputs_committed(), |inp| inp.commitment());
+		let mut output_commits = map_vec!(self.outputs_committed(), |out| out.commitment());
 
 		// add the overage as input commitment if positive, as an output commitment if
 		// negative
@@ -208,8 +209,11 @@ mod test {
 	use secp;
 	use secp::Secp256k1;
 	use secp::key::SecretKey;
+	use ser;
 	use rand::Rng;
 	use rand::os::OsRng;
+	use core::build::{self, input, output, input_rand, output_rand, with_fee, initial_tx,
+	                  with_excess};
 
 	fn new_secp() -> Secp256k1 {
 		secp::Secp256k1::with_caps(secp::ContextFlag::Commit)
@@ -222,20 +226,115 @@ mod test {
 		let ref secp = new_secp();
 		let mut rng = OsRng::new().unwrap();
 
-		let skey = SecretKey::new(secp, &mut rng);
-		let outh = ZERO_HASH;
-		let tx = Transaction::new(vec![Input::OvertInput {
-			                               output: outh,
-			                               value: 10,
-			                               blindkey: skey,
-		                               }],
-		                          vec![Output::OvertOutput {
-			                               value: 1,
-			                               blindkey: skey,
-		                               }],
-		                          9);
 		// blinding should fail as signing with a zero r*G shouldn't work
-		tx.blind(&secp, None).unwrap();
+		let skey = SecretKey::new(secp, &mut rng);
+		build::transaction(vec![input(10, skey), output(1, skey), with_fee(9)]).unwrap();
+	}
+
+	#[test]
+	fn simple_tx_ser() {
+		let tx = tx2i1o();
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &tx).expect("serialized failed");
+		assert!(vec.len() > 5320);
+		assert!(vec.len() < 5340);
+	}
+
+	#[test]
+	fn simple_tx_ser_deser() {
+		let tx = tx2i1o();
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &tx).expect("serialization failed");
+		let dtx: Transaction = ser::deserialize(&mut &vec[..]).unwrap();
+		assert_eq!(dtx.fee, 1);
+		assert_eq!(dtx.inputs.len(), 2);
+		assert_eq!(dtx.outputs.len(), 1);
+		assert_eq!(tx.hash(), dtx.hash());
+	}
+
+	#[test]
+	fn tx_double_ser_deser() {
+		// checks serializing doesn't mess up the tx and produces consistent results
+		let btx = tx2i1o();
+
+		let mut vec = Vec::new();
+		assert!(ser::serialize(&mut vec, &btx).is_ok());
+		let dtx: Transaction = ser::deserialize(&mut &vec[..]).unwrap();
+
+		let mut vec2 = Vec::new();
+		assert!(ser::serialize(&mut vec2, &btx).is_ok());
+		let dtx2: Transaction = ser::deserialize(&mut &vec2[..]).unwrap();
+
+		assert_eq!(btx.hash(), dtx.hash());
+		assert_eq!(dtx.hash(), dtx2.hash());
+	}
+
+	#[test]
+	fn hash_output() {
+		let (tx, _) =
+			build::transaction(vec![input_rand(75), output_rand(42), output_rand(32), with_fee(1)])
+				.unwrap();
+		let h = tx.outputs[0].hash();
+		assert!(h != ZERO_HASH);
+		let h2 = tx.outputs[1].hash();
+		assert!(h != h2);
+	}
+
+	#[test]
+	fn blind_tx() {
+		let ref secp = new_secp();
+
+		let btx = tx2i1o();
+		btx.verify_sig(&secp).unwrap(); // unwrap will panic if invalid
+
+		// checks that the range proof on our blind output is sufficiently hiding
+		let Output { proof, .. } = btx.outputs[0];
+		let info = secp.range_proof_info(proof);
+		assert!(info.min == 0);
+		assert!(info.max == u64::max_value());
+	}
+
+	#[test]
+	fn tx_hash_diff() {
+		let btx1 = tx2i1o();
+		let btx2 = tx1i1o();
+
+		if btx1.hash() == btx2.hash() {
+			panic!("diff txs have same hash")
+		}
+	}
+
+	/// Simulate the standard exchange between 2 parties when creating a basic
+	/// 2 inputs, 2 outputs transaction.
+	#[test]
+	fn tx_build_exchange() {
+		let ref secp = new_secp();
+		let outh = ZERO_HASH;
+
+		let tx_alice: Transaction;
+		let blind_sum: SecretKey;
+
+		{
+			// Alice gets 2 of her pre-existing outputs to send 5 coins to Bob, they
+			// become inputs in the new transaction
+			let (in1, in2) = (input_rand(4), input_rand(3));
+
+			// Alice builds her transaction, with change, which also produces the sum
+			// of blinding factors before they're obscured.
+			let (tx, sum) = build::transaction(vec![in1, in2, output_rand(1), with_fee(1)])
+				.unwrap();
+			tx_alice = tx;
+			blind_sum = sum;
+		}
+
+		// From now on, Bob only has the obscured transaction and the sum of
+		// blinding factors. He adds his output, finalizes the transaction so it's
+		// ready for broadcast.
+		let (tx_final, _) =
+			build::transaction(vec![initial_tx(tx_alice), with_excess(blind_sum), output_rand(5)])
+				.unwrap();
+
+		tx_final.validate(&secp).unwrap();
 	}
 
 	#[test]
@@ -254,11 +353,10 @@ mod test {
 		let ref secp = new_secp();
 		let skey = SecretKey::new(secp, &mut rng);
 
-		let tx1 = tx2i1o(secp, &mut rng);
-		let mut btx1 = tx1.blind(&secp, None).unwrap();
-		btx1.verify_sig(&secp).unwrap();
+		let mut tx1 = tx2i1o();
+		tx1.verify_sig(&secp).unwrap();
 
-		let b = Block::new(&BlockHeader::default(), vec![&mut btx1], skey).unwrap();
+		let b = Block::new(&BlockHeader::default(), vec![&mut tx1], skey).unwrap();
 		b.compact().verify(&secp).unwrap();
 	}
 
@@ -268,50 +366,27 @@ mod test {
 		let ref secp = new_secp();
 		let skey = SecretKey::new(secp, &mut rng);
 
-		let tx1 = tx2i1o(secp, &mut rng);
-		let mut btx1 = tx1.blind(&secp, None).unwrap();
-		btx1.verify_sig(&secp).unwrap();
+		let mut tx1 = tx2i1o();
+		tx1.verify_sig(&secp).unwrap();
 
-		let tx2 = tx1i1o(secp, &mut rng);
-		let mut btx2 = tx2.blind(&secp, None).unwrap();
-		btx2.verify_sig(&secp).unwrap();
+		let mut tx2 = tx1i1o();
+		tx2.verify_sig(&secp).unwrap();
 
-		let b = Block::new(&BlockHeader::default(), vec![&mut btx1, &mut btx2], skey).unwrap();
+		let b = Block::new(&BlockHeader::default(), vec![&mut tx1, &mut tx2], skey).unwrap();
 		b.verify(&secp).unwrap();
 	}
 
 	// utility producing a transaction with 2 inputs and a single outputs
-	pub fn tx2i1o<R: Rng>(secp: &Secp256k1, rng: &mut R) -> Transaction {
-		let outh = ZERO_HASH;
-		Transaction::new(vec![Input::OvertInput {
-			                      output: outh,
-			                      value: 10,
-			                      blindkey: SecretKey::new(secp, rng),
-		                      },
-		                      Input::OvertInput {
-			                      output: outh,
-			                      value: 11,
-			                      blindkey: SecretKey::new(secp, rng),
-		                      }],
-		                 vec![Output::OvertOutput {
-			                      value: 20,
-			                      blindkey: SecretKey::new(secp, rng),
-		                      }],
-		                 1)
+	pub fn tx2i1o() -> Transaction {
+		build::transaction(vec![input_rand(10), input_rand(11), output_rand(20), with_fee(1)])
+			.map(|(tx, _)| tx)
+			.unwrap()
 	}
 
 	// utility producing a transaction with a single input and output
-	pub fn tx1i1o<R: Rng>(secp: &Secp256k1, rng: &mut R) -> Transaction {
-		let outh = ZERO_HASH;
-		Transaction::new(vec![Input::OvertInput {
-			                      output: outh,
-			                      value: 5,
-			                      blindkey: SecretKey::new(secp, rng),
-		                      }],
-		                 vec![Output::OvertOutput {
-			                      value: 4,
-			                      blindkey: SecretKey::new(secp, rng),
-		                      }],
-		                 1)
+	pub fn tx1i1o() -> Transaction {
+		build::transaction(vec![input_rand(5), output_rand(4), with_fee(1)])
+			.map(|(tx, _)| tx)
+			.unwrap()
 	}
 }

@@ -116,6 +116,15 @@ macro_rules! impl_array_newtype {
             }
         }
 
+        impl ::std::hash::Hash for $thing {
+          fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
+            state.write(&self.0)
+            // for n in 0..self.len() {
+            //   state.write_u8(self.0[n]);
+            // }
+          }
+        }
+
         impl ::serialize::Decodable for $thing {
             fn decode<D: ::serialize::Decoder>(d: &mut D) -> Result<$thing, D::Error> {
                 use serialize::Decodable;

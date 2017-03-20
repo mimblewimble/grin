@@ -44,6 +44,6 @@ pub fn genesis() -> core::Block {
 		},
 		inputs: vec![],
 		outputs: vec![],
-		proofs: vec![],
+		kernels: vec![],
 	}
 }

@@ -72,12 +72,6 @@ impl PublicKey {
     }
 }
 
-impl hash::Hash for PublicKey {
-    fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        state.write(&self.0)
-    }
-}
-
 /// Library-internal representation of a Secp256k1 signature
 #[repr(C)]
 pub struct Signature([c_uchar; 64]);
