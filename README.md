@@ -12,6 +12,8 @@ Grin is an in-progress implementation of the MimbleWimble protocol. Many charact
   * Transaction fees are based on the number of UTXO created/destroyed and total transaction size.
   * Smooth curve for difficulty adjustments.
 
+To learn more, read our [introduction to MimbleWimble and Grin](doc/intro.md).
+
 ## Status
 
 Grin is still an infant, much is left to be done and contributions are welcome (see below). Our [status file](TODO.md) may help.
