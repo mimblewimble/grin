@@ -213,7 +213,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 /// Fully validate the block content.
 fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-	try!(b.verify(&curve).map_err(&Error::InvalidBlockProof));
+	try!(b.validate(&curve).map_err(&Error::InvalidBlockProof));
 
 	if !ctx.opts.intersects(SYNC) {
 		// TODO check every input exists as a UTXO using the UXTO index

@@ -13,7 +13,7 @@ cryptocurrency deployment.
 The main goal and characteristics of the Grin project are:
 
 * Privacy by default. This enables complete fungibility without precluding
-	the possibility to ability to selectively disclose information as needed.
+	the ability to selectively disclose information as needed.
 * Scales with the number of users and not the number of transactions, with very
   large space savings compared to other blockchains.
 * Strong and proven cryptography. MimbleWimble only relies on Elliptic Curve

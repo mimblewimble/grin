@@ -28,8 +28,9 @@ use secp::{self, Secp256k1};
 use secp::pedersen::*;
 
 use consensus::PROOFSIZE;
-pub use self::block::{Block, BlockHeader};
-pub use self::transaction::{Transaction, Input, Output, TxKernel};
+pub use self::block::{Block, BlockHeader, DEFAULT_BLOCK};
+pub use self::transaction::{Transaction, Input, Output, TxKernel, COINBASE_KERNEL,
+                            COINBASE_OUTPUT, DEFAULT_OUTPUT};
 use self::hash::{Hash, Hashed, HashWriter, ZERO_HASH};
 use ser::{Writeable, Writer, Reader, Readable, Error};
 
@@ -344,7 +345,7 @@ mod test {
 		let skey = SecretKey::new(secp, &mut rng);
 
 		let b = Block::new(&BlockHeader::default(), vec![], skey).unwrap();
-		b.compact().verify(&secp).unwrap();
+		b.compact().validate(&secp).unwrap();
 	}
 
 	#[test]
@@ -357,7 +358,7 @@ mod test {
 		tx1.verify_sig(&secp).unwrap();
 
 		let b = Block::new(&BlockHeader::default(), vec![&mut tx1], skey).unwrap();
-		b.compact().verify(&secp).unwrap();
+		b.compact().validate(&secp).unwrap();
 	}
 
 	#[test]
@@ -373,7 +374,7 @@ mod test {
 		tx2.verify_sig(&secp).unwrap();
 
 		let b = Block::new(&BlockHeader::default(), vec![&mut tx1, &mut tx2], skey).unwrap();
-		b.verify(&secp).unwrap();
+		b.validate(&secp).unwrap();
 	}
 
 	// utility producing a transaction with 2 inputs and a single outputs

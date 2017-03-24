@@ -31,7 +31,7 @@ use secp::key::SecretKey;
 use secp::pedersen::*;
 use rand::os::OsRng;
 
-use core::{Transaction, Input, Output};
+use core::{Transaction, Input, Output, DEFAULT_OUTPUT};
 
 /// Context information available to transaction combinators.
 pub struct Context {
@@ -113,6 +113,7 @@ pub fn output(value: u64, blinding: SecretKey) -> Box<Append> {
 		let commit = build.secp.commit(value, blinding).unwrap();
 		let rproof = build.secp.range_proof(0, value, blinding, commit);
 		(tx.with_output(Output {
+			features: DEFAULT_OUTPUT,
 			commit: commit,
 			proof: rproof,
 		}),
@@ -129,6 +130,7 @@ pub fn output_rand(value: u64) -> Box<Append> {
 		let commit = build.secp.commit(value, blinding).unwrap();
 		let rproof = build.secp.range_proof(0, value, blinding, commit);
 		(tx.with_output(Output {
+			features: DEFAULT_OUTPUT,
 			commit: commit,
 			proof: rproof,
 		}),

@@ -24,12 +24,22 @@ use core::MerkleRow;
 use core::hash::{Hash, Hashed};
 use ser::{self, Reader, Writer, Readable, Writeable};
 
+bitflags! {
+  /// Options for a kernel's structure or use
+  pub flags KernelFeatures: u8 {
+    const DEFAULT_KERNEL = 0b00000000,
+    const COINBASE_KERNEL = 0b00000001,
+  }
+}
+
 /// A proof that a transaction sums to zero. Includes both the transaction's
 /// Pedersen commitment and the signature, that guarantees that the commitments
 /// amount to zero. The signature signs the fee, which is retained for
 /// signature validation.
 #[derive(Debug, Clone)]
 pub struct TxKernel {
+	/// Options for a kernel's structure or use
+	pub features: KernelFeatures,
 	/// Remainder of the sum of all transaction commitments. If the transaction
 	/// is well formed, amounts components should sum to zero and the excess
 	/// is hence a valid public key.
@@ -43,20 +53,23 @@ pub struct TxKernel {
 
 impl Writeable for TxKernel {
 	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
-		try!(writer.write_fixed_bytes(&self.excess));
-		try!(writer.write_bytes(&self.excess_sig));
-		writer.write_u64(self.fee)
+		ser_multiwrite!(writer,
+                    [write_u8, self.features.bits()],
+                    [write_fixed_bytes, &self.excess],
+                    [write_bytes, &self.excess_sig],
+                    [write_u64, self.fee]);
+		Ok(())
 	}
 }
 
 impl Readable<TxKernel> for TxKernel {
 	fn read(reader: &mut Reader) -> Result<TxKernel, ser::Error> {
-		let excess = try!(Commitment::read(reader));
-		let (sig, fee) = ser_multiread!(reader, read_vec, read_u64);
 		Ok(TxKernel {
-			excess: excess,
-			excess_sig: sig,
-			fee: fee,
+			features:
+				KernelFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?,
+			excess: Commitment::read(reader)?,
+			excess_sig: reader.read_vec()?,
+			fee: reader.read_u64()?,
 		})
 	}
 }
@@ -212,6 +225,7 @@ impl Transaction {
 		try!(secp.verify(&msg, &sig, &pubk));
 
 		Ok(TxKernel {
+			features: DEFAULT_KERNEL,
 			excess: rsum,
 			excess_sig: self.excess_sig.clone(),
 			fee: self.fee,
@@ -258,6 +272,14 @@ impl Input {
 	}
 }
 
+bitflags! {
+  /// Options for block validation
+  pub flags OutputFeatures: u8 {
+    const DEFAULT_OUTPUT = 0b00000000,
+    const COINBASE_OUTPUT = 0b00000001,
+  }
+}
+
 /// Output for a transaction, defining the new ownership of coins that are being
 /// transferred. The commitment is a blinded value for the output while the
 /// range
@@ -265,6 +287,7 @@ impl Input {
 /// and the ownership of the private key.
 #[derive(Debug, Copy, Clone)]
 pub struct Output {
+	pub features: OutputFeatures,
 	pub commit: Commitment,
 	pub proof: RangeProof,
 }
@@ -273,10 +296,10 @@ pub struct Output {
 /// an Output as binary.
 impl Writeable for Output {
 	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
-		// The hash of an output is only the hash of its commitment.
-		try!(writer.write_fixed_bytes(&self.commit));
+		ser_multiwrite!(writer, [write_u8, self.features.bits()], [write_fixed_bytes, &self.commit]);
+		// The hash of an output doesn't include the range proof
 		if writer.serialization_mode() == ser::SerializationMode::Full {
-			try!(writer.write_bytes(&self.proof.bytes()))
+			writer.write_bytes(&self.proof.bytes())?
 		}
 		Ok(())
 	}
@@ -286,11 +309,11 @@ impl Writeable for Output {
 /// an Output from a binary stream.
 impl Readable<Output> for Output {
 	fn read(reader: &mut Reader) -> Result<Output, ser::Error> {
-		let commit = try!(Commitment::read(reader));
-		let proof = try!(RangeProof::read(reader));
 		Ok(Output {
-			commit: commit,
-			proof: proof,
+			features:
+				OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?,
+			commit: Commitment::read(reader)?,
+			proof: RangeProof::read(reader)?,
 		})
 	}
 }

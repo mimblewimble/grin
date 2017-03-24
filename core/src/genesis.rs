@@ -39,6 +39,7 @@ pub fn genesis() -> core::Block {
 			total_difficulty: Difficulty::one(),
 			utxo_merkle: [].hash(),
 			tx_merkle: [].hash(),
+			features: core::DEFAULT_BLOCK,
 			nonce: 0,
 			pow: core::Proof::zero(), // TODO get actual PoW solution
 		},
