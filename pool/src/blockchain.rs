@@ -12,6 +12,7 @@ use core::core::block;
 use core::core::transaction;
 
 use std::collections::HashMap;
+use std::clone::Clone;
 
 /// A DummyUtxoSet for mocking up the chain 
 pub struct DummyUtxoSet {
@@ -32,9 +33,14 @@ impl DummyUtxoSet {
         self.outputs.get(output_ref)
     }
 
-    // more or less only for testing: add an output to the map
+    // only for testing: add an output to the map
     pub fn add_output(&mut self, output: transaction::Output) {
-        self.outputs.insert(&output.hash());
+        self.outputs.insert(&output.hash(), output);
+    }
+    // like above, but doesn't modify in-place so no mut ref needed
+    pub fn with_output(&self, output: transaction::Output) -> DummyUtxoSet {
+        DummyUtxoSet{outputs: self.outputs.clone().insert(&output.hash(),
+            output)}
     }
 }
 
@@ -46,7 +52,7 @@ pub struct DummyChain {
 
 impl DummyChain {
     pub fn get_best_utxo_set(&self) -> &DummyUtxoSet {
-        self.utxo
+        &self.utxo
     }
     pub fn update_utxo_set(&mut self, new_utxo: DummyUtxoSet) {
         self.utxo = new_utxo;
