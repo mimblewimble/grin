@@ -21,6 +21,8 @@ use std::sync::Weak;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
+use secp::pedersen::Commitment;
+
 use time;
 
 use core::core;
@@ -30,8 +32,7 @@ use core::core;
 pub struct PoolEntry {
     // Core data
     // Unique identifier of this pool entry and the corresponding transaction
-    // (kernel hash?)
-    pub kernel_hash: core::hash::Hash,
+    pub transaction_hash: core::hash::Hash,
 
     // Metadata 
     size_estimate: u64,
@@ -41,7 +42,7 @@ pub struct PoolEntry {
 impl PoolEntry {
     pub fn new(tx: &core::transaction::Transaction) -> PoolEntry {
         PoolEntry{
-            tx_hash: tx.hash(),
+            transaction_hash: transaction_identifier(tx),
             size_estimate : estimate_transaction_size(tx),
             receive_ts: time::now()} 
     }
@@ -62,12 +63,12 @@ pub struct Edge {
 
     // Output is the output hash which this input/output pairing corresponds
     // to.
-    output: core::hash::Hash,
+    output: Commitment,
 }
 
 impl Edge{
-    pub fn new(source: Option<core::hash::Hash>, destination: Option<core::hash::Hash>, output_hash: core::hash::Hash) -> Edge {
-        Edge{source: source, destination: destination, output: output_hash}
+    pub fn new(source: Option<core::hash::Hash>, destination: Option<core::hash::Hash>, output: &core::transaction::Output) -> Edge {
+        Edge{source: source, destination: destination, output: output.commitment()}
     }
 
     pub fn with_source(&self, src: core::hash::Hash) -> Edge {
@@ -78,7 +79,7 @@ impl Edge{
         Edge{source: self.source, destination: Some(dst), output: self.output}
     }
 
-    pub fn output_hash(&self) -> core::hash::Hash {
+    pub fn output_commitment(&self) -> Commitment {
         self.output
     }
     pub fn destination_hash(&self) -> Option<core::hash::Hash> {
@@ -92,11 +93,25 @@ impl Edge{
 /// The generic graph container. Both graphs, the pool and orphans, embed this
 /// structure and add additional capability on top of it.
 pub struct DirectedGraph {
-    edges: HashMap<core::hash::Hash, Edge>,
+    edges: HashMap<Commitment, Edge>,
     vertices: Vec<PoolEntry>,
 
     // A small optimization: keeping roots (vertices with in-degree 0) in a 
     // separate list makes topological sort a bit faster. (This is true for
     // Kahn's, not sure about other implementations)
     roots: Vec<PoolEntry>,
+}
+
+impl DirectedGraph {
+    pub fn get_edge_by_commitment(&self, output_commitment: Commitment) -> Option<&Edge> {
+        self.edges.get(output_commitment)
+    }
+}
+
+/// The transaction identifier is not yet finalized. As implemented in
+/// grin/core, it is the merkle root of a transaction; however this is not yet
+/// exposed.
+/// This method is a placeholder until a reasonable identifier is decided on.
+pub fn transaction_identifier(tx: &core::transaction::Transaction) -> core::hash::Hash {
+    unimplemented!();
 }
