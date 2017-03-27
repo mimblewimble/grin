@@ -21,6 +21,8 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
+#[macro_use]
+extern crate bitflags;
 extern crate byteorder;
 extern crate crypto;
 extern crate num_bigint as bigint;

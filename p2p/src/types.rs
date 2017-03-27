@@ -81,7 +81,7 @@ impl Default for P2PConfig {
 }
 
 bitflags! {
-  /// Options for block validation
+  /// Options for what type of interaction a peer supports
   pub flags Capabilities: u32 {
     /// We don't know (yet) what the peer can do.
     const UNKNOWN = 0b00000000,

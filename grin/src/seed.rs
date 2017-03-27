@@ -16,7 +16,7 @@ use rand::{thread_rng, Rng};
 use std::cmp::min;
 use std::net::SocketAddr;
 use std::ops::Deref;
-use std::str;
+use std::str::{self, FromStr};
 use std::sync::Arc;
 use std::thread;
 use std::time;
@@ -173,7 +173,7 @@ impl Seeder {
 /// Extract the list of seeds from a pre-defined gist. Easy method until we
 /// have a set of DNS names we can rely on.
 pub fn gist_seeds(h: reactor::Handle) -> Box<Future<Item = Vec<SocketAddr>, Error = String>> {
-	let url = hyper::Url::parse(&GIST_SEEDS_URL).unwrap();
+	let url = hyper::Uri::from_str(&GIST_SEEDS_URL).unwrap();
 	let seeds = future::ok(()).and_then(move |_| {
 		let client = hyper::Client::new(&h);
 

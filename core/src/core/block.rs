@@ -21,12 +21,19 @@ use secp::key::SecretKey;
 use std::collections::HashSet;
 
 use core::Committed;
-use core::{Input, Output, Proof, TxProof, Transaction};
+use core::{Input, Output, Proof, TxKernel, Transaction, COINBASE_KERNEL, COINBASE_OUTPUT};
 use core::transaction::merkle_inputs_outputs;
 use consensus::{REWARD, DEFAULT_SIZESHIFT};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use ser::{self, Readable, Reader, Writeable, Writer};
+
+bitflags! {
+  /// Options for block validation
+  pub flags BlockFeatures: u8 {
+    const DEFAULT_BLOCK = 0b00000000,
+  }
+}
 
 /// Block header, fairly standard compared to other blockchains.
 pub struct BlockHeader {
@@ -39,7 +46,10 @@ pub struct BlockHeader {
 	/// Length of the cuckoo cycle used to mine this block.
 	pub cuckoo_len: u8,
 	pub utxo_merkle: Hash,
+	/// Merkle tree of hashes for all inputs, outputs and kernels in the block
 	pub tx_merkle: Hash,
+	/// Features specific to this block, allowing possible future extensions
+	pub features: BlockFeatures,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
 	/// Proof of work data.
@@ -61,6 +71,7 @@ impl Default for BlockHeader {
 			total_difficulty: Difficulty::one(),
 			utxo_merkle: ZERO_HASH,
 			tx_merkle: ZERO_HASH,
+			features: DEFAULT_BLOCK,
 			nonce: 0,
 			pow: Proof::zero(),
 		}
@@ -76,7 +87,8 @@ impl Writeable for BlockHeader {
 		                [write_i64, self.timestamp.to_timespec().sec],
 		                [write_u8, self.cuckoo_len],
 		                [write_fixed_bytes, &self.utxo_merkle],
-		                [write_fixed_bytes, &self.tx_merkle]);
+		                [write_fixed_bytes, &self.tx_merkle],
+                    [write_u8, self.features.bits()]);
 
 		try!(writer.write_u64(self.nonce));
 		try!(self.difficulty.write(writer));
@@ -97,7 +109,7 @@ impl Readable<BlockHeader> for BlockHeader {
 		let (timestamp, cuckoo_len) = ser_multiread!(reader, read_i64, read_u8);
 		let utxo_merkle = try!(Hash::read(reader));
 		let tx_merkle = try!(Hash::read(reader));
-		let nonce = try!(reader.read_u64());
+		let (features, nonce) = ser_multiread!(reader, read_u8, read_u64);
 		let difficulty = try!(Difficulty::read(reader));
 		let total_difficulty = try!(Difficulty::read(reader));
 		let pow = try!(Proof::read(reader));
@@ -112,6 +124,7 @@ impl Readable<BlockHeader> for BlockHeader {
 			cuckoo_len: cuckoo_len,
 			utxo_merkle: utxo_merkle,
 			tx_merkle: tx_merkle,
+			features: BlockFeatures::from_bits(features).ok_or(ser::Error::CorruptedData)?,
 			pow: pow,
 			nonce: nonce,
 			difficulty: difficulty,
@@ -128,7 +141,7 @@ pub struct Block {
 	pub header: BlockHeader,
 	pub inputs: Vec<Input>,
 	pub outputs: Vec<Output>,
-	pub proofs: Vec<TxProof>,
+	pub kernels: Vec<TxKernel>,
 }
 
 /// Implementation of Writeable for a block, defines how to write the block to a
@@ -142,7 +155,7 @@ impl Writeable for Block {
 			ser_multiwrite!(writer,
 			                [write_u64, self.inputs.len() as u64],
 			                [write_u64, self.outputs.len() as u64],
-			                [write_u64, self.proofs.len() as u64]);
+			                [write_u64, self.kernels.len() as u64]);
 
 			for inp in &self.inputs {
 				try!(inp.write(writer));
@@ -150,7 +163,7 @@ impl Writeable for Block {
 			for out in &self.outputs {
 				try!(out.write(writer));
 			}
-			for proof in &self.proofs {
+			for proof in &self.kernels {
 				try!(proof.write(writer));
 			}
 		}
@@ -169,13 +182,13 @@ impl Readable<Block> for Block {
 
 		let inputs = try!((0..input_len).map(|_| Input::read(reader)).collect());
 		let outputs = try!((0..output_len).map(|_| Output::read(reader)).collect());
-		let proofs = try!((0..proof_len).map(|_| TxProof::read(reader)).collect());
+		let kernels = try!((0..proof_len).map(|_| TxKernel::read(reader)).collect());
 
 		Ok(Block {
 			header: header,
 			inputs: inputs,
 			outputs: outputs,
-			proofs: proofs,
+			kernels: kernels,
 			..Default::default()
 		})
 	}
@@ -202,7 +215,7 @@ impl Default for Block {
 			header: Default::default(),
 			inputs: vec![],
 			outputs: vec![],
-			proofs: vec![],
+			kernels: vec![],
 		}
 	}
 }
@@ -222,9 +235,9 @@ impl Block {
 		// note: the following reads easily but may not be the most efficient due to
 		// repeated iterations, revisit if a problem
 
-		// validate each transaction and gather their proofs
-		let mut proofs = try_map_vec!(txs, |tx| tx.verify_sig(&secp));
-		proofs.push(reward_proof);
+		// validate each transaction and gather their kernels
+		let mut kernels = try_map_vec!(txs, |tx| tx.verify_sig(&secp));
+		kernels.push(reward_proof);
 
 		// build vectors with all inputs and all outputs, ordering them by hash
 		// needs to be a fold so we don't end up with a vector of vectors and we
@@ -259,7 +272,7 @@ impl Block {
 				},
 				inputs: inputs,
 				outputs: outputs,
-				proofs: proofs,
+				kernels: kernels,
 			}
 			.compact())
 	}
@@ -269,7 +282,7 @@ impl Block {
 	}
 
 	pub fn total_fees(&self) -> u64 {
-		self.proofs.iter().map(|p| p.fee).sum()
+		self.kernels.iter().map(|p| p.fee).sum()
 	}
 
 	/// Matches any output with a potential spending input, eliminating them
@@ -279,22 +292,22 @@ impl Block {
 		// the chosen ones
 		let mut new_inputs = vec![];
 
-		// build a set of all output hashes
+		// build a set of all output commitments
 		let mut out_set = HashSet::new();
 		for out in &self.outputs {
-			out_set.insert(out.hash());
+			out_set.insert(out.commitment());
 		}
 		// removes from the set any hash referenced by an input, keeps the inputs that
 		// don't have a match
 		for inp in &self.inputs {
-			if !out_set.remove(&inp.output_hash()) {
+			if !out_set.remove(&inp.commitment()) {
 				new_inputs.push(*inp);
 			}
 		}
 		// we got ourselves a keep list in that set
 		let new_outputs = self.outputs
 			.iter()
-			.filter(|out| out_set.contains(&(out.hash())))
+			.filter(|out| out_set.contains(&(out.commitment())))
 			.map(|&out| out)
 			.collect::<Vec<Output>>();
 
@@ -310,11 +323,11 @@ impl Block {
 			},
 			inputs: new_inputs,
 			outputs: new_outputs,
-			proofs: self.proofs.clone(),
+			kernels: self.kernels.clone(),
 		}
 	}
 
-	// Merges the 2 blocks, essentially appending the inputs, outputs and proofs.
+	// Merges the 2 blocks, essentially appending the inputs, outputs and kernels.
 	// Also performs a compaction on the result.
 	pub fn merge(&self, other: Block) -> Block {
 		let mut all_inputs = self.inputs.clone();
@@ -323,8 +336,8 @@ impl Block {
 		let mut all_outputs = self.outputs.clone();
 		all_outputs.append(&mut other.outputs.clone());
 
-		let mut all_proofs = self.proofs.clone();
-		all_proofs.append(&mut other.proofs.clone());
+		let mut all_kernels = self.kernels.clone();
+		all_kernels.append(&mut other.kernels.clone());
 
 		all_inputs.sort_by_key(|inp| inp.hash());
 		all_outputs.sort_by_key(|out| out.hash());
@@ -339,20 +352,37 @@ impl Block {
 				},
 				inputs: all_inputs,
 				outputs: all_outputs,
-				proofs: all_proofs,
+				kernels: all_kernels,
 			}
 			.compact()
 	}
 
-	/// Checks the block is valid by verifying the overall commitments sums and
-	/// proofs.
-	pub fn verify(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
-		// sum all inputs and outs commitments
-		let io_sum = try!(self.sum_commitments(secp));
+	/// Validates all the elements in a block that can be checked without
+	/// additional
+	/// data. Includes commitment sums and kernels, Merkle trees, reward, etc.
+	pub fn validate(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
+		self.verify_coinbase(secp)?;
+		self.verify_kernels(secp)?;
 
-		// sum all proofs commitments
-		let proof_commits = map_vec!(self.proofs, |proof| proof.remainder);
-		let proof_sum = try!(secp.commit_sum(proof_commits, vec![]));
+		// verify the transaction Merkle root
+		let tx_merkle = merkle_inputs_outputs(&self.inputs, &self.outputs);
+		if tx_merkle != self.header.tx_merkle {
+			// TODO more specific error
+			return Err(secp::Error::IncorrectCommitSum);
+		}
+		Ok(())
+	}
+
+	/// Validate the sum of input/output commitments match the sum in kernels
+	/// and
+	/// that all kernel signatures are valid.
+	pub fn verify_kernels(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
+		// sum all inputs and outs commitments
+		let io_sum = self.sum_commitments(secp)?;
+
+		// sum all kernels commitments
+		let proof_commits = map_vec!(self.kernels, |proof| proof.excess);
+		let proof_sum = secp.commit_sum(proof_commits, vec![])?;
 
 		// both should be the same
 		if proof_sum != io_sum {
@@ -361,39 +391,63 @@ impl Block {
 		}
 
 		// verify all signatures with the commitment as pk
-		for proof in &self.proofs {
-			try!(proof.verify(secp));
+		for proof in &self.kernels {
+			proof.verify(secp)?;
 		}
-
-		// verify the transaction Merkle root
-		let tx_merkle = merkle_inputs_outputs(&self.inputs, &self.outputs);
-		if tx_merkle != self.header.tx_merkle {
-			// TODO more specific error
-			return Err(secp::Error::IncorrectCommitSum);
-		}
-
 		Ok(())
+	}
+
+	// Validate the coinbase outputs generated by miners. Entails 2 main checks:
+	//
+	// * That the sum of all coinbase-marked outputs equal the supply.
+	// * That the sum of blinding factors for all coinbase-marked outputs match
+	//   the coinbase-marked kernels.
+	fn verify_coinbase(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
+		let cb_outs = self.outputs
+			.iter()
+			.filter(|out| out.features.intersects(COINBASE_OUTPUT))
+			.map(|o| o.clone())
+			.collect::<Vec<_>>();
+		let cb_kerns = self.kernels
+			.iter()
+			.filter(|k| k.features.intersects(COINBASE_KERNEL))
+			.map(|k| k.clone())
+			.collect::<Vec<_>>();
+
+		// verifying the kernels on a block composed of just the coinbase outputs
+		// and kernels checks all we need
+		Block {
+				header: BlockHeader::default(),
+				inputs: vec![],
+				outputs: cb_outs,
+				kernels: cb_kerns,
+			}
+			.verify_kernels(secp)
 	}
 
 	// Builds the blinded output and related signature proof for the block reward.
 	fn reward_output(skey: secp::key::SecretKey,
 	                 secp: &Secp256k1)
-	                 -> Result<(Output, TxProof), secp::Error> {
+	                 -> Result<(Output, TxKernel), secp::Error> {
 		let msg = try!(secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE]));
 		let sig = try!(secp.sign(&msg, &skey));
-		let output = Output::OvertOutput {
-				value: REWARD,
-				blindkey: skey,
-			}
-			.blind(&secp);
+		let commit = secp.commit(REWARD, skey).unwrap();
+		let rproof = secp.range_proof(0, REWARD, skey, commit);
+
+		let output = Output {
+			features: COINBASE_OUTPUT,
+			commit: commit,
+			proof: rproof,
+		};
 
 		let over_commit = try!(secp.commit_value(REWARD as u64));
-		let out_commit = output.commitment().unwrap();
-		let remainder = try!(secp.commit_sum(vec![over_commit], vec![out_commit]));
+		let out_commit = output.commitment();
+		let excess = try!(secp.commit_sum(vec![over_commit], vec![out_commit]));
 
-		let proof = TxProof {
-			remainder: remainder,
-			sig: sig.serialize_der(&secp),
+		let proof = TxKernel {
+			features: COINBASE_KERNEL,
+			excess: excess,
+			excess_sig: sig.serialize_der(&secp),
 			fee: 0,
 		};
 		Ok((output, proof))
@@ -404,6 +458,7 @@ impl Block {
 mod test {
 	use super::*;
 	use core::{Input, Output, Transaction};
+	use core::build::{self, input, output, input_rand, output_rand, with_fee};
 	use core::hash::{Hash, Hashed};
 	use core::test::{tx1i1o, tx2i1o};
 
@@ -416,29 +471,20 @@ mod test {
 		secp::Secp256k1::with_caps(secp::ContextFlag::Commit)
 	}
 
-	// utility to create a block without worrying about the key or previous header
+	// utility to create a block without worrying about the key or previous
+	// header
 	fn new_block(txs: Vec<&mut Transaction>, secp: &Secp256k1) -> Block {
 		let mut rng = OsRng::new().unwrap();
 		let skey = SecretKey::new(secp, &mut rng);
 		Block::new(&BlockHeader::default(), txs, skey).unwrap()
 	}
 
-	// utility producing a transaction that spends the above
-	fn txspend1i1o<R: Rng>(secp: &Secp256k1, rng: &mut R, oout: Output, outh: Hash) -> Transaction {
-		if let Output::OvertOutput { blindkey, value } = oout {
-			Transaction::new(vec![Input::OvertInput {
-				                      output: outh,
-				                      value: value,
-				                      blindkey: blindkey,
-			                      }],
-			                 vec![Output::OvertOutput {
-				                      value: 3,
-				                      blindkey: SecretKey::new(secp, rng),
-			                      }],
-			                 1)
-		} else {
-			panic!();
-		}
+	// utility producing a transaction that spends an output with the provided
+	// value and blinding key
+	fn txspend1i1o(v: u64, b: SecretKey) -> Transaction {
+		build::transaction(vec![input(v, b), output_rand(3), with_fee(1)])
+			.map(|(tx, _)| tx)
+			.unwrap()
 	}
 
 	#[test]
@@ -447,20 +493,18 @@ mod test {
 		let mut rng = OsRng::new().unwrap();
 		let ref secp = new_secp();
 
-		let tx1 = tx2i1o(secp, &mut rng);
-		let mut btx1 = tx1.blind(&secp).unwrap();
-
-		let tx2 = tx1i1o(secp, &mut rng);
-		let mut btx2 = tx2.blind(&secp).unwrap();
+		let mut btx1 = tx2i1o();
+		let skey = SecretKey::new(secp, &mut rng);
+		let (mut btx2, _) = build::transaction(vec![input_rand(5), output(4, skey), with_fee(1)])
+			.unwrap();
 
 		// spending tx2
-		let spending = txspend1i1o(secp, &mut rng, tx2.outputs[0], btx2.outputs[0].hash());
-		let mut btx3 = spending.blind(&secp).unwrap();
+		let mut btx3 = txspend1i1o(4, skey);
 		let b = new_block(vec![&mut btx1, &mut btx2, &mut btx3], secp);
 
-		// block should have been automatically compacted (including reward output) and
-		// should still be valid
-		b.verify(&secp).unwrap();
+		// block should have been automatically compacted (including reward
+		// output) and should still be valid
+		b.validate(&secp).unwrap();
 		assert_eq!(b.inputs.len(), 3);
 		assert_eq!(b.outputs.len(), 3);
 	}
@@ -472,20 +516,18 @@ mod test {
 		let mut rng = OsRng::new().unwrap();
 		let ref secp = new_secp();
 
-		let tx1 = tx2i1o(secp, &mut rng);
-		let mut btx1 = tx1.blind(&secp).unwrap();
-
-		let tx2 = tx1i1o(secp, &mut rng);
-		let mut btx2 = tx2.blind(&secp).unwrap();
+		let mut btx1 = tx2i1o();
+		let skey = SecretKey::new(secp, &mut rng);
+		let (mut btx2, _) = build::transaction(vec![input_rand(5), output(4, skey), with_fee(1)])
+			.unwrap();
 
 		// spending tx2
-		let spending = txspend1i1o(secp, &mut rng, tx2.outputs[0], btx2.outputs[0].hash());
-		let mut btx3 = spending.blind(&secp).unwrap();
+		let mut btx3 = txspend1i1o(4, skey);
 
 		let b1 = new_block(vec![&mut btx1, &mut btx2], secp);
-		b1.verify(&secp).unwrap();
+		b1.validate(&secp).unwrap();
 		let b2 = new_block(vec![&mut btx3], secp);
-		b2.verify(&secp).unwrap();
+		b2.validate(&secp).unwrap();
 
 		// block should have been automatically compacted and should still be valid
 		let b3 = b1.merge(b2);
