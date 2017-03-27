@@ -67,8 +67,8 @@ pub struct Edge {
 }
 
 impl Edge{
-    pub fn new(source: Option<core::hash::Hash>, destination: Option<core::hash::Hash>, output: &core::transaction::Output) -> Edge {
-        Edge{source: source, destination: destination, output: output.commitment()}
+    pub fn new(source: Option<core::hash::Hash>, destination: Option<core::hash::Hash>, output: Commitment) -> Edge {
+        Edge{source: source, destination: destination, output: output}
     }
 
     pub fn with_source(&self, src: core::hash::Hash) -> Edge {
@@ -104,7 +104,7 @@ pub struct DirectedGraph {
 
 impl DirectedGraph {
     pub fn get_edge_by_commitment(&self, output_commitment: Commitment) -> Option<&Edge> {
-        self.edges.get(output_commitment)
+        self.edges.get(&output_commitment)
     }
 }
 

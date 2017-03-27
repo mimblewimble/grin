@@ -21,6 +21,8 @@ use std::sync::Weak;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
+use secp::pedersen::Commitment;
+
 pub use graph;
 
 use time;
@@ -161,7 +163,7 @@ impl TransactionPool {
         // The current best unspent set is: 
         //   Pool unspent + (blockchain unspent - pool->blockchain spent)
         // Pool unspents are unconditional so we check those first
-        self.available_outputs.get(output_commitment).map(|x| (true, x)).or_
+        match self.available_outputs.get(output_commitment).map(|x| (true, x)).or_else{
             Some(x) => (true, x),
             None => self.o
         }
@@ -286,12 +288,13 @@ impl TransactionPool {
             self.orphans.graph.vertices.push(pool_entry);
             Ok(())
         }
+        
     }
 
     /// Resolve orphans to a given transaction: fish out any transactions
     /// whose unresolved links have been satisfied by the addition of the
     /// input transaction.
     pub fn resolve_orphans(&self, tx: core::transaction::Transaction) -> Result<(),PoolError> {
-        unimplemented!();
+        unimplemented!()
     }
 }
