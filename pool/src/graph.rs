@@ -103,8 +103,19 @@ pub struct DirectedGraph {
 }
 
 impl DirectedGraph {
-    pub fn get_edge_by_commitment(&self, output_commitment: Commitment) -> Option<&Edge> {
-        self.edges.get(&output_commitment)
+    pub fn get_edge_by_commitment(&self, output_commitment: &Commitment) -> Option<&Edge> {
+        self.edges.get(output_commitment)
+    }
+
+    pub fn add_entry(&mut self, vertex: PoolEntry, mut edges: Vec<Edge>) {
+        if edges.len() == 0 {
+            self.roots.push(vertex);
+        } else {
+            self.vertices.push(vertex);
+            for edge in edges.drain(..) {
+                self.edges.insert(edge.output_commitment(), edge);
+            }
+        }
     }
 }
 

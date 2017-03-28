@@ -24,6 +24,8 @@ use std::collections::HashMap;
 use secp::pedersen::Commitment;
 
 pub use graph;
+// temporary blockchain dummy impls
+use blockchain::DummyChain;
 
 use time;
 
@@ -38,20 +40,21 @@ pub struct TxSource {
     pub identifier: String,
 }
 
-/*
 /// This enum describes the parent for a given input of a transaction.
 #[derive(Clone)]
 enum Parent {
     Unknown,
-    BlockTransaction{hash: core::hash::Hash},
-    PoolTransaction{hash: core::hash::Hash, tx_ref: Weak<RefCell<PoolEntry>>},
-    OrphanTransaction{hash: core::hash::Hash, tx_ref: Weak<RefCell<PoolEntry>>},
+    BlockTransaction,
+    PoolTransaction{tx_ref: core::hash::Hash},
+    AlreadySpent{other_tx: core::hash::Hash},
 }
 
-*/
+
 enum PoolError {
     Invalid,
-    DuplicateOutput{other_tx: core::hash::Hash, output: Commitment},
+    AlreadyInPool,
+    DuplicateOutput{other_tx: Option<core::hash::Hash>, in_chain: bool,
+        output: Commitment},
     DoubleSpend{other_tx: core::hash::Hash, spent_output: Commitment},
 }
 
@@ -60,11 +63,15 @@ enum PoolError {
 /// The pool itself.
 /// The transactions HashMap holds ownership of all transactions in the pool,
 /// keyed by their transaction hash.
-struct TransactionPool {
+struct TransactionPool<'a> {
     pub transactions: HashMap<core::hash::Hash, Box<core::transaction::Transaction>>,
 
     pub pool : Pool,
     pub orphans: Orphans,
+
+    // blockchain is a DummyChain, for now, which mimics what the future
+    // chain will offer to the pool
+    blockchain: &'a DummyChain,
 }
 
 /// Pool contains the elements of the graph that are connected, in full, to
@@ -97,9 +104,7 @@ impl Pool {
 
     /// Given an output, return the transaction hash generating the 
     /// available (unspent) output commitment, if one exists.
-    /// TODO: Once we have stability in the blockchain UTXO set, that should
-    /// go here.
-    fn search_for_output(&self, c: &Commitment) -> Option<core::hash::Hash> {
+    fn search_for_available_output(&self, c: &Commitment) -> Option<core::hash::Hash> {
         match self.available_outputs.get(c) {
             Some(e) => e.source_hash(),
             None => None
@@ -111,7 +116,7 @@ impl Pool {
     /// Returns the transaction (kernel) hash corresponding to the conflicting
     /// transaction
     fn check_double_spend(&self, o: &core::transaction::Output) -> Option<core::hash::Hash> {
-        self.graph.get_edge_by_id(o.commitment()).or(self.consumed_blockchain_outputs.get(o.commitment())).map(|x| x.output_commitment())
+        self.graph.get_edge_by_commitment(&o.commitment()).or(self.consumed_blockchain_outputs.get(&o.commitment())).map(|x| x.destination_hash().unwrap())
     }
 
 }
@@ -144,29 +149,49 @@ impl Orphans {
     /// Returns the transaction hash corresponding to the conflicting
     /// transaction.
     fn check_double_spend(&self, o: core::transaction::Output) -> Option<core::hash::Hash> {
-        self.graph.get_edge_by_id(o.commitment()).or(self.pool_connections.get(o.commitment())).map(|x| x.output_commitment())
+        self.graph.get_edge_by_commitment(&o.commitment()).or(self.pool_connections.get(&o.commitment())).map(|x| x.destination_hash().unwrap())
     }
 }
 
 
 
-impl TransactionPool {
-    /// Searches for an output, designated by its hash, from the current best
-    /// UTXO view, presented by taking the best blockchain UTXO set (as
+impl<'a> TransactionPool<'a> {
+    /// Searches for an output, designated by its commitment, from the current 
+    /// best UTXO view, presented by taking the best blockchain UTXO set (as
     /// determined by the blockchain component) and rectifying pool spent and
     /// unspents.
-    /// Returns a bool determining if the output was found, and an Option 
-    /// containing the transaction (kernel) hash of the transaction 
-    /// generating the output, if the transaction is in the pool. (Once in the
-    /// blockchain, transaction association is irreversibly lost.)
-    pub fn search_for_best_output(&self, output_commitment: Commitment) -> (bool, Option<core::hash::Hash>) {
+    /// Detects double spends and unknown references from the pool and 
+    /// blockchain only; any conflicts with entries in the orphans set must
+    /// be accounted for separately, if relevant.
+    pub fn search_for_best_output(&self, output_commitment: &Commitment) -> Parent {
         // The current best unspent set is: 
         //   Pool unspent + (blockchain unspent - pool->blockchain spent)
         // Pool unspents are unconditional so we check those first
-        match self.available_outputs.get(output_commitment).map(|x| (true, x)).or_else{
-            Some(x) => (true, x),
-            None => self.o
-        }
+        self.pool.search_for_available_output(output_commitment).
+            map(|x| Parent::PoolTransaction{tx_ref: x}).
+            or(self.search_blockchain_unspents(output_commitment)).
+            or(self.search_pool_spents(output_commitment)).
+            unwrap_or(Parent::Unknown)
+    }
+
+    // search_blockchain_unspents searches the current view of the blockchain
+    // unspent set, represented by blockchain unspents - pool spents, for an
+    // output designated by output_commitment.
+    fn search_blockchain_unspents(&self, output_commitment: &Commitment) -> Option<Parent> {
+        self.blockchain.get_best_utxo_set().get_output(output_commitment).
+            map(|o| match self.pool.consumed_blockchain_outputs.get(output_commitment) {
+                Some(x) => Parent::AlreadySpent{other_tx: x.destination_hash().unwrap()},
+                None => Parent::BlockTransaction,
+            })
+    }
+
+    // search_pool_spents is the second half of pool input detection, after the
+    // available_outputs have been checked. This returns either a
+    // Parent::AlreadySpent or None.
+    fn search_pool_spents(&self, output_commitment: &Commitment) -> Option<Parent> {
+        self.pool.graph.get_edge_by_commitment(output_commitment).
+            map(|x| Parent::AlreadySpent{other_tx: x.destination_hash().unwrap()})
+
     }
 
     /// Add a transation to the memory pool, deferring to the orphans pool
@@ -174,20 +199,37 @@ impl TransactionPool {
     /// Happens under an exclusive mutable reference gated by the write portion
     /// of a RWLock.
     pub fn add_to_memory_pool(&mut self, source: TxSource, tx: core::transaction::Transaction) -> Result<(), PoolError> {
-        // The first issue is to identify all unspent outputs that
+        // The first check invovles ensuring that an identical transaction is 
+        // not already in the pool's transaction set.
+        // A non-authoritative similar check should be performed under the 
+        // pool's read lock before we get to this point, which would catch 99% 
+        // of duplicate cases. The race condition is caught here.
+        // TODO: When the transaction identifier is finalized, the assumptions
+        // here may change depending on the exact coverage of the identifier.
+        // The current tx.hash() method, for example, does not cover changes
+        // to fees or other elements of the signature preimage.
+        let tx_hash = graph::transaction_identifier(&tx);
+        if self.transactions.contains_key(&tx_hash) {
+            return Err(PoolError::AlreadyInPool)
+        }
+        
+
+        // The next issue is to identify all unspent outputs that
         // this transaction will consume and make sure they exist in the set.
         let mut pool_refs: Vec<graph::Edge> = Vec::new();
         let mut orphan_refs: Vec<graph::Edge> = Vec::new();
         let mut blockchain_refs: Vec<graph::Edge> = Vec::new();
 
-        let tx_hash = tx.hash();
 
         for input in tx.inputs.iter() {
-            //TODO: Check the blockchain data source alongside the pool
-            match self.pool.search_for_output(&input.commitment()) {
-                Some(x) => pool_refs.push(x.with_destination(tx_hash)),
-                None => orphan_refs.push(
-                    graph::Edge::new(None, Some(tx_hash), input.commitment())),
+            let base = graph::Edge::new(None, Some(tx_hash), 
+                input.commitment());
+
+            match self.search_for_best_output(&input.commitment()) {
+                Parent::PoolTransaction{tx_ref: x} => pool_refs.push(base.with_source(x)),
+                Parent::BlockTransaction => blockchain_refs.push(base),
+                Parent::Unknown => orphan_refs.push(base),
+                Parent::AlreadySpent{other_tx: x} => return Err(PoolError::DoubleSpend{other_tx: x, spent_output: input.commitment()}),
             }
         }
 
@@ -200,43 +242,70 @@ impl TransactionPool {
         // with strict ordering. In the future, if desirable, this could
         // be node policy config or more intelligent.
         for output in tx.outputs.iter() {
-            //TODO: Check the blockchain data source
-
-            // Check for generation of duplicate unspent outputs
-            if self.pool.available_outputs.contains_key(&output.commitment()) {
+            // Checking against current blockchain unspent outputs
+            // We want outputs even if they're spent by pool txs, so we ignore
+            // consumed_blockchain_outputs
+            if self.blockchain.get_best_utxo_set().get_output(&output.commitment()).is_some() {
                 return Err(PoolError::DuplicateOutput{
-                    other_tx: self.pool.available_outputs.get(
-                      &output.commitment()).unwrap().source_hash(),
-                    output: &output.commitment()})
+                    other_tx: None,
+                    in_chain: true,
+                    output: output.commitment()})
+            }
+
+
+            // Check for generation of duplicate unspent outputs in the pool
+            match self.pool.available_outputs.get(&output.commitment()) {
+                Some(x) => {
+                    return Err(PoolError::DuplicateOutput{
+                    other_tx: x.source_hash(),
+                    in_chain: false,
+                    output: output.commitment()})
+                    },
+                None => {},
             }
 
             // Checking the spent references for duplicate outputs.
-            if self.pool.graph.edges.contains_key(&output.commitment()) {
+            match self.pool.graph.get_edge_by_commitment(&output.commitment()) {
+                Some(x) => {
                 return Err(PoolError::DuplicateOutput{
-                    other_tx: self.pool.graph.edges
-                        .get(&output.commitment()).unwrap().source_hash(),
-                    output: &output.commitment()})
+                    other_tx: x.source_hash(),
+                    in_chain: false,
+                    output: output.commitment()})
+                }
+                None => {},
 
             }
 
             // If the transaction might go into orphans, perform the same 
             // checks as above but against the orphan set instead.
             if is_orphan {
-                if self.orphans.available_outputs.contains_key(&output.commitment()){
+                // Checking against new unspents orphans generate
+                match self.orphans.available_outputs.get(&output.commitment()){
+                    Some(x) => {
                     return Err(PoolError::DuplicateOutput{
-                        other_tx: self.orphans.available_outputs.get(
-                            &output.commitment()).unwrap().source_hash(),
-                        output: &output.commitment()})
+                        other_tx: x.source_hash(),
+                        in_chain: false,
+                        output: output.commitment()})
+                    },
+                    None => {},
                 }
 
-                if self.orphans.graph.edges.contains_key(&output.output_hash()) {
+                // Checking against spent refs within the orphans graph
+                match self.orphans.graph.get_edge_by_commitment(&output.commitment()){
+                    Some(x) => {
                     return Err(PoolError::DuplicateOutput{
-                        other_tx: self.orphans.graph.edges.get(
-                            &output.commitment()).unwrap().source_hash(),
-                        output: &output.commitment()})
+                        other_tx: x.source_hash(),
+                        in_chain: false,
+                        output: output.commitment()})
+                    },
+                    None => {},
                 }
+
+                // No need to check pool connections since those are covered
+                // by pool unspents.
             }
         }
+
         // Assertion: we have exactly as many resolved spending references as
         // inputs to the transaction.
         assert_eq!(tx.inputs.len(), 
@@ -251,41 +320,64 @@ impl TransactionPool {
             // maps one-to-one with an unspent (available) output, and each
             // output is unique. No further checks are necessary.
 
-            // Adding the transaction to the vertices list
-            self.pool.graph.vertices.push(pool_entry);
-
-            // Adding the consumed inputs to the edges list
+            // Removing consumed available_outputs
             for new_edge in pool_refs.iter() {
-                self.pool.available_outputs.remove(new_edge.output_commitment());
-                self.pool.graph.edges.insert(new_edge.output_commitment(),
-                    new_edge);
+                self.pool.available_outputs.remove(&new_edge.output_commitment());
             }
+
+            // Accounting for consumed blockchain outputs
+            for new_blockchain_edge in blockchain_refs.drain(..) {
+                self.pool.consumed_blockchain_outputs.insert(
+                    new_blockchain_edge.output_commitment(),
+                    new_blockchain_edge);
+            }
+
+            // Adding the transaction to the vertices list along with internal
+            // pool edges
+            self.pool.graph.add_entry(pool_entry, pool_refs);
 
             // Adding the new unspents to the unspent map
             for unspent_output in tx.outputs.iter()
-                .map(|x| graph::Edge::new(tx_hash, None, x.hash())) {
+                .map(|x| graph::Edge::new(Some(tx_hash), None, x.commitment())) {
 
-                self.available_outputs.insert(unspent_output.output_commitment(),
+                self.pool.available_outputs.insert(unspent_output.output_commitment(),
                     unspent_output);
             }
 
-            self.resolve_orphans(tx)
+            self.resolve_orphans(&tx);
+            self.transactions.insert(tx_hash, Box::new(tx));
+            Ok(())
+
         } else {
-            // is_orphan is a bit of a misnomer: We don't know for sure that
-            // the transaction is an orphan yet. What we do know is that it's
-            // not an acceptable pool transaction, because one or more of its
-            // input references does not resolve to the pool's unspent output
-            // set.
-            
-            // We have one remaining failure condition, which is the double
-            // spend case.
-            // We know that all inputs spending unclaimed unspents in the 
-            // pool are accounted for. The remainder, contained
-            // within the orphan_refs vector, need to be checked.
-            for orphan_ref in orphan_refs.iter() {
+            // At this point, we're pretty sure the transaction is an orphan,
+            // but we have to explicitly check for double spends against the
+            // orphans set; we do not check this as part of the connectivity
+            // checking above.
+            // First, any references resolved to the pool need to be compared
+            // against active orphan pool_connections.
+            for pool_ref in pool_refs.iter() {
+                match self.orphans.pool_connections.get(&pool_ref.output_commitment()){
+                    Some(x) => return Err(PoolError::DoubleSpend{other_tx: x.destination_hash().unwrap(), spent_output: x.output_commitment()}),
+                    None => {},
+                }
             }
-            
-            self.orphans.graph.vertices.push(pool_entry);
+
+            // Next, we have to consider the possibility of double spends
+            // within the orphans set.
+            for orphan_ref in orphan_refs.iter() {
+                // If the input is in orphans available_outputs, everything is
+                // good.
+                if !self.orphans.available_outputs.contains_key(&orphan_ref.output_commitment()) {
+                    // Otherwise, we have consider the possibility of a
+                    // double-spend inside the orphans set.
+                }
+                
+            }
+
+            // Add pool_refs
+          
+            // Add orphan_refs
+            self.orphans.graph.add_entry(pool_entry, orphan_refs);
             Ok(())
         }
         
@@ -294,7 +386,7 @@ impl TransactionPool {
     /// Resolve orphans to a given transaction: fish out any transactions
     /// whose unresolved links have been satisfied by the addition of the
     /// input transaction.
-    pub fn resolve_orphans(&self, tx: core::transaction::Transaction) -> Result<(),PoolError> {
+    pub fn resolve_orphans(&self, tx: &core::transaction::Transaction) -> Result<(),PoolError> {
         unimplemented!()
     }
 }

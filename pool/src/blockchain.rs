@@ -14,9 +14,11 @@ use core::core::transaction;
 use std::collections::HashMap;
 use std::clone::Clone;
 
+use secp::pedersen::Commitment;
+
 /// A DummyUtxoSet for mocking up the chain 
 pub struct DummyUtxoSet {
-    outputs : HashMap<hash::Hash, transaction::Output>
+    outputs : HashMap<Commitment, transaction::Output>
 }
 
 impl DummyUtxoSet {
@@ -24,23 +26,24 @@ impl DummyUtxoSet {
         hash::ZERO_HASH
     }
     pub fn apply(&self, b: block::Block) -> DummyUtxoSet {
-        DummyUtxoSet{}
+        DummyUtxoSet{outputs: HashMap::new()}
     }
     pub fn rewind(&self, b: block::Block) -> DummyUtxoSet {
-        DummyUtxoSet{}
+        DummyUtxoSet{outputs: HashMap::new()}
     }
-    pub fn get_output(&self, output_ref: &hash::Hash) -> Option<&transaction::Output> {
+    pub fn get_output(&self, output_ref: &Commitment) -> Option<&transaction::Output> {
         self.outputs.get(output_ref)
     }
 
     // only for testing: add an output to the map
     pub fn add_output(&mut self, output: transaction::Output) {
-        self.outputs.insert(&output.hash(), output);
+        self.outputs.insert(output.commitment(), output);
     }
     // like above, but doesn't modify in-place so no mut ref needed
     pub fn with_output(&self, output: transaction::Output) -> DummyUtxoSet {
-        DummyUtxoSet{outputs: self.outputs.clone().insert(&output.hash(),
-            output)}
+        let mut new_map = self.outputs.clone();
+        new_map.insert(output.commitment(), output);
+        DummyUtxoSet{outputs: new_map}
     }
 }
 
