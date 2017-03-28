@@ -56,6 +56,8 @@ enum PoolError {
     DuplicateOutput{other_tx: Option<core::hash::Hash>, in_chain: bool,
         output: Commitment},
     DoubleSpend{other_tx: core::hash::Hash, spent_output: Commitment},
+    // An orphan successfully added to the orphans set
+    OrphanTransaction,
 }
 
 
@@ -202,8 +204,8 @@ impl<'a> TransactionPool<'a> {
         // The first check invovles ensuring that an identical transaction is 
         // not already in the pool's transaction set.
         // A non-authoritative similar check should be performed under the 
-        // pool's read lock before we get to this point, which would catch 99% 
-        // of duplicate cases. The race condition is caught here.
+        // pool's read lock before we get to this point, which would catch the 
+        // majority of duplicate cases. The race condition is caught here.
         // TODO: When the transaction identifier is finalized, the assumptions
         // here may change depending on the exact coverage of the identifier.
         // The current tx.hash() method, for example, does not cover changes
@@ -344,7 +346,7 @@ impl<'a> TransactionPool<'a> {
                     unspent_output);
             }
 
-            self.resolve_orphans(&tx);
+            self.reconcile_orphans(&tx);
             self.transactions.insert(tx_hash, Box::new(tx));
             Ok(())
 
@@ -355,8 +357,11 @@ impl<'a> TransactionPool<'a> {
             // checking above.
             // First, any references resolved to the pool need to be compared
             // against active orphan pool_connections.
+            // Note that pool_connections here also does double duty to 
+            // account for blockchain connections.
             for pool_ref in pool_refs.iter() {
                 match self.orphans.pool_connections.get(&pool_ref.output_commitment()){
+                    // Should the below err be subtyped to orphans somehow? 
                     Some(x) => return Err(PoolError::DoubleSpend{other_tx: x.destination_hash().unwrap(), spent_output: x.output_commitment()}),
                     None => {},
                 }
@@ -364,29 +369,72 @@ impl<'a> TransactionPool<'a> {
 
             // Next, we have to consider the possibility of double spends
             // within the orphans set.
-            for orphan_ref in orphan_refs.iter() {
+            // We also have to distinguish now between missing and internal
+            // references.
+            let mut missing_refs: HashMap<usize, ()> = HashMap::new();
+            for (i, orphan_ref) in orphan_refs.iter().enumerate() {
                 // If the input is in orphans available_outputs, everything is
                 // good.
                 if !self.orphans.available_outputs.contains_key(&orphan_ref.output_commitment()) {
-                    // Otherwise, we have consider the possibility of a
-                    // double-spend inside the orphans set.
+
+                    // Otherwise, we have to check for spends within the orphan
+                    // set (pool and blockchain connections are already 
+                    // resolved), and duplicate missing_outputs
+                    match self.orphans.graph.get_edge_by_commitment(&orphan_ref.output_commitment()) {
+                        Some(x) => return Err(PoolError::DoubleSpend{
+                            other_tx: x.destination_hash().unwrap(),
+                            spent_output: x.output_commitment()}),
+                        None => {
+                            // The reference does not resolve to anything.
+                            // Make sure this missing_output has not already
+                            // been claimed, then add this entry to 
+                            // missing_refs
+                            match self.orphans.missing_outputs.get(&orphan_ref.output_commitment()) {
+                                Some(x) => return Err(PoolError::DoubleSpend{
+                                    other_tx: x.destination_hash().unwrap(),
+                                    spent_output: x.output_commitment()}),
+                                None => missing_refs.insert(i, ()),
+                            };
+                        },
+                    }
                 }
-                
             }
 
+            // We have passed all failure modes.
             // Add pool_refs
-          
-            // Add orphan_refs
-            self.orphans.graph.add_entry(pool_entry, orphan_refs);
-            Ok(())
+            for pool_ref in pool_refs.drain(..).chain(blockchain_refs.drain(..)) {
+                self.orphans.pool_connections.insert(
+                    pool_ref.output_commitment(), pool_ref);
+            }
+
+            // if missing_refs is the same length as orphan_refs, we have
+            // no orphan-orphan links for this transaction and it is a 
+            // root transaction of the orphans set
+            self.orphans.graph.add_vertex_only(pool_entry,
+                missing_refs.len() == orphan_refs.len());
+
+            for (i, orphan_ref) in orphan_refs.drain(..).enumerate() {
+                if missing_refs.contains_key(&i) {
+                    self.orphans.missing_outputs.insert(
+                        orphan_ref.output_commitment(),
+                        orphan_ref);
+                } else {
+                    self.orphans.graph.add_edge_only(orphan_ref);
+                }
+            }
+
+            Err(PoolError::OrphanTransaction)
         }
         
     }
 
-    /// Resolve orphans to a given transaction: fish out any transactions
-    /// whose unresolved links have been satisfied by the addition of the
-    /// input transaction.
-    pub fn resolve_orphans(&self, tx: &core::transaction::Transaction) -> Result<(),PoolError> {
+    /// The primary goal of the reconcile_orphans method is to eliminate any 
+    /// orphans who conflict with the recently accepted pool transaction.
+    /// TODO: How do we handle fishing orphans out that look like they could
+    /// be freed? Current thought it to do so under a different lock domain
+    /// so that we don't have the potential for long recursion under the write
+    /// lock.
+    pub fn reconcile_orphans(&self, tx: &core::transaction::Transaction) -> Result<(),PoolError> {
         unimplemented!()
     }
 }

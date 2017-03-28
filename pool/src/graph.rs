@@ -107,6 +107,10 @@ impl DirectedGraph {
         self.edges.get(output_commitment)
     }
 
+    // add_entry is the all-in-one append method, which considers the vertex
+    // destination (roots or vertices) and inserts the edges.
+    // After calling add_entry, edges will be drained and can no longer be
+    // used.
     pub fn add_entry(&mut self, vertex: PoolEntry, mut edges: Vec<Edge>) {
         if edges.len() == 0 {
             self.roots.push(vertex);
@@ -116,6 +120,20 @@ impl DirectedGraph {
                 self.edges.insert(edge.output_commitment(), edge);
             }
         }
+    }
+
+    // add_vertex_only adds a vertex, meant to be complemented by add_edge_only
+    // in cases where delivering a vector of edges is not feasible or efficient
+    pub fn add_vertex_only(&mut self, vertex: PoolEntry, is_root: bool) {
+        if is_root {
+            self.roots.push(vertex);
+        } else {
+            self.vertices.push(vertex);
+        }
+    }
+
+    pub fn add_edge_only(&mut self, edge: Edge) {
+        self.edges.insert(edge.output_commitment(), edge);
     }
 }
 
