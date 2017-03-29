@@ -80,7 +80,7 @@ impl Default for BlockHeader {
 
 /// Serialization of a block header
 impl Writeable for BlockHeader {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u64, self.height],
 		                [write_fixed_bytes, &self.previous],
@@ -148,7 +148,7 @@ pub struct Block {
 /// binary writer. Differentiates between writing the block for the purpose of
 /// full serialization and the one of just extracting a hash.
 impl Writeable for Block {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		try!(self.header.write(writer));
 
 		if writer.serialization_mode() != ser::SerializationMode::Hash {

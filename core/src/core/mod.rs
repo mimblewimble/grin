@@ -149,7 +149,7 @@ impl Readable<Proof> for Proof {
 }
 
 impl Writeable for Proof {
-	fn write(&self, writer: &mut Writer) -> Result<(), Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		for n in 0..PROOFSIZE {
 			try!(writer.write_u32(self.0[n]));
 		}
@@ -162,7 +162,7 @@ impl Writeable for Proof {
 struct HPair(Hash, Hash);
 
 impl Writeable for HPair {
-	fn write(&self, writer: &mut Writer) -> Result<(), Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		try!(writer.write_bytes(&self.0.to_slice()));
 		try!(writer.write_bytes(&self.1.to_slice()));
 		Ok(())

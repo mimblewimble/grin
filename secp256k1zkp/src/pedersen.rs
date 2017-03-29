@@ -16,6 +16,7 @@
 //! # Pedersen commitments and related range proofs
 
 use std::mem;
+use std::convert;
 
 use ContextFlag;
 use Error;
@@ -32,6 +33,7 @@ pub struct Commitment(pub [u8; constants::PEDERSEN_COMMITMENT_SIZE]);
 impl_array_newtype!(Commitment, u8, constants::PEDERSEN_COMMITMENT_SIZE);
 impl_pretty_debug!(Commitment);
 
+
 impl Commitment {
     /// Uninitialized commitment, use with caution
     unsafe fn blank() -> Commitment {
@@ -44,6 +46,12 @@ impl Commitment {
     /// Underlying data
     pub fn bytes(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl convert::AsRef<[u8]> for Commitment {
+    fn as_ref(&self) -> &[u8] {
+        &self.0[..]
     }
 }
 
@@ -71,6 +79,12 @@ impl Clone for RangeProof {
                 plen: self.plen,
             }
         }
+    }
+}
+
+impl convert::AsRef<[u8]> for RangeProof {
+    fn as_ref(&self) -> &[u8] {
+        &self.proof[..self.plen as usize]
     }
 }
 

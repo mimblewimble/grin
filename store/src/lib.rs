@@ -92,7 +92,7 @@ impl Store {
 
 	/// Writes a single key and its `Writeable` value to the db. Encapsulates
 	/// serialization.
-	pub fn put_ser(&self, key: &[u8], value: &ser::Writeable) -> Result<(), Error> {
+	pub fn put_ser<W: ser::Writeable>(&self, key: &[u8], value: &W) -> Result<(), Error> {
 		let ser_value = ser::ser_vec(value);
 		match ser_value {
 			Ok(data) => self.put(key, data),
@@ -176,7 +176,7 @@ pub struct Batch<'a> {
 impl<'a> Batch<'a> {
 	/// Writes a single key and its `Writeable` value to the batch. The write
 	/// function must be called to "commit" the batch to storage.
-	pub fn put_ser(mut self, key: &[u8], value: &ser::Writeable) -> Result<Batch<'a>, Error> {
+	pub fn put_ser<W: ser::Writeable>(mut self, key: &[u8], value: &W) -> Result<Batch<'a>, Error> {
 		let ser_value = ser::ser_vec(value);
 		match ser_value {
 			Ok(data) => {

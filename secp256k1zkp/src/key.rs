@@ -17,6 +17,7 @@
 
 use std::intrinsics::copy_nonoverlapping;
 use std::marker;
+use std::convert;
 use arrayvec::ArrayVec;
 use rand::Rng;
 use serialize::{Decoder, Decodable, Encoder, Encodable};
@@ -31,6 +32,12 @@ use ffi;
 pub struct SecretKey([u8; constants::SECRET_KEY_SIZE]);
 impl_array_newtype!(SecretKey, u8, constants::SECRET_KEY_SIZE);
 impl_pretty_debug!(SecretKey);
+
+impl convert::AsRef<[u8]> for SecretKey {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
 
 /// The number 1 encoded as a secret key
 /// Deprecated; `static` is not what I want; use `ONE_KEY` instead

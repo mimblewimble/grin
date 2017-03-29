@@ -60,7 +60,7 @@ impl Tip {
 
 /// Serialization of a tip, required to save to datastore.
 impl ser::Writeable for Tip {
-	fn write(&self, writer: &mut ser::Writer) -> Result<(), ser::Error> {
+	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		try!(writer.write_u64(self.height));
 		try!(writer.write_fixed_bytes(&self.last_block_h));
 		try!(writer.write_fixed_bytes(&self.prev_block_h));
