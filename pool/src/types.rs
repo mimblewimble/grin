@@ -29,7 +29,9 @@ use blockchain::DummyChain;
 
 use time;
 
-use core::core;
+use core::core::transaction;
+use core::core::block;
+use core::core::hash;
 
 
 /// Rough first pass: the data representing where we heard about a tx from.
@@ -45,17 +47,17 @@ pub struct TxSource {
 enum Parent {
     Unknown,
     BlockTransaction,
-    PoolTransaction{tx_ref: core::hash::Hash},
-    AlreadySpent{other_tx: core::hash::Hash},
+    PoolTransaction{tx_ref: hash::Hash},
+    AlreadySpent{other_tx: hash::Hash},
 }
 
 
 enum PoolError {
     Invalid,
     AlreadyInPool,
-    DuplicateOutput{other_tx: Option<core::hash::Hash>, in_chain: bool,
+    DuplicateOutput{other_tx: Option<hash::Hash>, in_chain: bool,
         output: Commitment},
-    DoubleSpend{other_tx: core::hash::Hash, spent_output: Commitment},
+    DoubleSpend{other_tx: hash::Hash, spent_output: Commitment},
     // An orphan successfully added to the orphans set
     OrphanTransaction,
 }
@@ -66,7 +68,7 @@ enum PoolError {
 /// The transactions HashMap holds ownership of all transactions in the pool,
 /// keyed by their transaction hash.
 struct TransactionPool<'a> {
-    pub transactions: HashMap<core::hash::Hash, Box<core::transaction::Transaction>>,
+    pub transactions: HashMap<hash::Hash, Box<transaction::Transaction>>,
 
     pub pool : Pool,
     pub orphans: Orphans,
@@ -106,7 +108,7 @@ impl Pool {
 
     /// Given an output, return the transaction hash generating the 
     /// available (unspent) output commitment, if one exists.
-    fn search_for_available_output(&self, c: &Commitment) -> Option<core::hash::Hash> {
+    fn search_for_available_output(&self, c: &Commitment) -> Option<hash::Hash> {
         match self.available_outputs.get(c) {
             Some(e) => e.source_hash(),
             None => None
@@ -117,9 +119,9 @@ impl Pool {
     /// already exists in the pool.
     /// Returns the transaction (kernel) hash corresponding to the conflicting
     /// transaction
-    fn check_double_spend(&self, o: &core::transaction::Output) -> Option<core::hash::Hash> {
+    fn check_double_spend(&self, o: &transaction::Output) -> Option<hash::Hash> {
         self.graph.get_edge_by_commitment(&o.commitment()).or(self.consumed_blockchain_outputs.get(&o.commitment())).map(|x| x.destination_hash().unwrap())
-    }
+    k}
 
 }
 
@@ -150,7 +152,7 @@ impl Orphans {
     /// to the pool as well as links internal to orphan transactions.
     /// Returns the transaction hash corresponding to the conflicting
     /// transaction.
-    fn check_double_spend(&self, o: core::transaction::Output) -> Option<core::hash::Hash> {
+    fn check_double_spend(&self, o: transaction::Output) -> Option<hash::Hash> {
         self.graph.get_edge_by_commitment(&o.commitment()).or(self.pool_connections.get(&o.commitment())).map(|x| x.destination_hash().unwrap())
     }
 }
@@ -196,11 +198,14 @@ impl<'a> TransactionPool<'a> {
 
     }
 
-    /// Add a transation to the memory pool, deferring to the orphans pool
-    /// if necessary.
+    /// Attempts to add a transaction to the pool.
+    ///
+    /// Adds a transation to the memory pool, deferring to the orphans pool
+    /// if necessary, and performing any connection-related validity checks.
     /// Happens under an exclusive mutable reference gated by the write portion
     /// of a RWLock.
-    pub fn add_to_memory_pool(&mut self, source: TxSource, tx: core::transaction::Transaction) -> Result<(), PoolError> {
+    ///
+    pub fn add_to_memory_pool(&mut self, source: TxSource, tx: transaction::Transaction) -> Result<(), PoolError> {
         // The first check invovles ensuring that an identical transaction is 
         // not already in the pool's transaction set.
         // A non-authoritative similar check should be performed under the 
@@ -223,7 +228,7 @@ impl<'a> TransactionPool<'a> {
         let mut blockchain_refs: Vec<graph::Edge> = Vec::new();
 
 
-        for input in tx.inputs.iter() {
+        for input in &tx.inputs {
             let base = graph::Edge::new(None, Some(tx_hash), 
                 input.commitment());
 
@@ -243,7 +248,7 @@ impl<'a> TransactionPool<'a> {
         // accepted, even though it is possible for them to be mined
         // with strict ordering. In the future, if desirable, this could
         // be node policy config or more intelligent.
-        for output in tx.outputs.iter() {
+        for output in &tx.outputs {
             // Checking against current blockchain unspent outputs
             // We want outputs even if they're spent by pool txs, so we ignore
             // consumed_blockchain_outputs
@@ -323,7 +328,7 @@ impl<'a> TransactionPool<'a> {
             // output is unique. No further checks are necessary.
 
             // Removing consumed available_outputs
-            for new_edge in pool_refs.iter() {
+            for new_edge in &pool_refs {
                 self.pool.available_outputs.remove(&new_edge.output_commitment());
             }
 
@@ -359,7 +364,7 @@ impl<'a> TransactionPool<'a> {
             // against active orphan pool_connections.
             // Note that pool_connections here also does double duty to 
             // account for blockchain connections.
-            for pool_ref in pool_refs.iter() {
+            for pool_ref in &pool_refs {
                 match self.orphans.pool_connections.get(&pool_ref.output_commitment()){
                     // Should the below err be subtyped to orphans somehow? 
                     Some(x) => return Err(PoolError::DoubleSpend{other_tx: x.destination_hash().unwrap(), spent_output: x.output_commitment()}),
@@ -434,7 +439,71 @@ impl<'a> TransactionPool<'a> {
     /// be freed? Current thought it to do so under a different lock domain
     /// so that we don't have the potential for long recursion under the write
     /// lock.
-    pub fn reconcile_orphans(&self, tx: &core::transaction::Transaction) -> Result<(),PoolError> {
+    pub fn reconcile_orphans(&self, tx: &transaction::Transaction) -> Result<(),PoolError> {
         unimplemented!()
+    }
+
+
+    /// Updates the pool with the details of a new block.
+    ///
+    /// Along with add_to_memory_pool, reconcile_block is the other major entry
+    /// point for the transaction pool. This method reconciles the records in
+    /// the transaction pool with the updated view presented by the incoming
+    /// block. This involves removing any transactions which appear to conflict
+    /// with inputs and outputs consumed in the block, and invalidating any
+    /// descendents or parents of the removed transaction, where relevant.
+    ///
+    /// Returns a list of transactions which have been evicted from the pool
+    /// due to the recent block. Because transaction association information is
+    /// irreversibly lost in the blockchain, we must keep track of these 
+    /// evicted transactions elsewhere so that we can make a best effort at
+    /// returning them to the pool in the event of a reorg that invalidates 
+    /// this block.
+    pub fn reconcile_block(&mut self, block: &block::Block) -> Result<Vec<transaction::Transaction>, PoolError> {
+        // Prepare the new blockchain-only UTXO view for this process
+        let updated_blockchain_utxo =
+            self.blockchain().get_best_utxo_set().apply(block);
+
+        // If this pool has been kept in sync correctly, serializing all
+        // updates, then the inputs must consume only members of the blockchain
+        // utxo set.
+        // If the block has been resolved properly and reduced fully to its
+        // canonical form, no inputs may consume outputs generated by previous
+        // transactions in the block; they would be cut-through. TODO: If this
+        // is not consensus enforced, then logic must be added here to account
+        // for that.
+        // Based on this, we operate under the following algorithm:
+        // For each input, we examine the pool transaction, if any, that
+        // consumes the same blockchain output.
+        // If one exists, we invalidate the transaction and then examine its
+        // children. Recursively, we invalidate each child until a child is
+        // fully satisfied by outputs in the updated utxo view (after 
+        // reconciliation of the block), or there are no more children.
+        let conflicting_edges = inputs.iter().
+            filter_map(|x| 
+               self.pool.consumed_blockchain_outputs.get(&x.comitment())).
+            collect();
+        
+        for edge in &conflicting_edges {
+            self.remove_transaction(updated_blockchain_utxo,
+                edge.destination_hash().unwrap())
+                
+        }
+    }
+
+    fn remove_transaction(&mut self, updated_utxo: &DummyUtxoSet, tx_hash: hash::Hash) {
+        // Drop from transaction storage
+        let removed_tx = self.transactions.remove(tx_hash).unwrap();
+
+        // Drop all incoming edges
+        for input in &removed_tx.inputs {
+            if self.pool.consumed_blockchain_outputs.remove(&input.commitment()).is_none() {
+                assert!(self.pool.edges.graph.
+                    remove_edge_by_commitment(&input.commitment()).is_some());
+            }
+        }
+
+        // Drop the vertex
+        assert!(self.pool.graph.remove_vertex(tx_hash).is_some());
     }
 }

@@ -107,6 +107,22 @@ impl DirectedGraph {
         self.edges.get(output_commitment)
     }
 
+    pub fn remove_edge_by_commitment(&mut self, output_commitment: &Commitment) -> Option<Edge> {
+        self.edges.remove(output_commitment)
+    }
+
+    pub fn remove_vertex(&mut self, tx_hash: core::hash::Hash) -> Option<PoolEntry> {
+        match self.roots.iter().position(|x| x.transaction_hash == tx_hash) {
+            Some(i) => Some(self.roots.swap_remove(i)),
+            None => {
+                match self.vertices.iter().position(|x| x.transaction_hash == tx_hash) {
+                    Some(i) => Some(self.vertices.swap_remove(i)),
+                    None => None,
+                }
+            }
+        }
+    }
+
     // add_entry is the all-in-one append method, which considers the vertex
     // destination (roots or vertices) and inserts the edges.
     // After calling add_entry, edges will be drained and can no longer be
