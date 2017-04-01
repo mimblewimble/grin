@@ -42,6 +42,12 @@ macro_rules! impl_array_newtype {
             pub fn is_empty(&self) -> bool { false }
         }
 
+        impl AsRef<[u8]> for $thing {
+            fn as_ref(&self) -> &[u8] {
+                self.0.as_ref()
+            }
+        }
+
         impl PartialEq for $thing {
             #[inline]
             fn eq(&self, other: &$thing) -> bool {

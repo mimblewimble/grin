@@ -49,12 +49,6 @@ impl Commitment {
     }
 }
 
-impl convert::AsRef<[u8]> for Commitment {
-    fn as_ref(&self) -> &[u8] {
-        &self.0[..]
-    }
-}
-
 /// A range proof. Typically much larger in memory that the above (~5k).
 #[derive(Copy)]
 pub struct RangeProof {
@@ -82,7 +76,7 @@ impl Clone for RangeProof {
     }
 }
 
-impl convert::AsRef<[u8]> for RangeProof {
+impl AsRef<[u8]> for RangeProof {
     fn as_ref(&self) -> &[u8] {
         &self.proof[..self.plen as usize]
     }
