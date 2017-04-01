@@ -132,14 +132,14 @@ pub trait Writer {
 
 	/// Writes a variable number of bytes. The length is encoded as a 64-bit
 	/// prefix.
-	fn write_bytes<T: Sized + AsRef<[u8]>>(&mut self, bytes: &T) -> Result<(), Error> {
+	fn write_bytes<T: AsFixedBytes>(&mut self, bytes: &T) -> Result<(), Error> {
 		try!(self.write_u64(bytes.as_ref().len() as u64));
 		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a fixed number of bytes from something that can turn itself into
 	/// a `&[u8]`. The reader is expected to know the actual length on read.
-	fn write_fixed_bytes<T: Sized + AsRef<[u8]>>(&mut self, fixed: &T) -> Result<(), Error>;
+	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, fixed: &T) -> Result<(), Error>;
 }
 
 /// Implementations defined how different numbers and binary structures are
@@ -294,9 +294,25 @@ impl<'a> Writer for BinWriter<'a> {
 		SerializationMode::Full
 	}
 
-	fn write_fixed_bytes<T: Sized + AsRef<[u8]>>(&mut self, fixed: &T) -> Result<(), Error> {
+	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, fixed: &T) -> Result<(), Error> {
 		let bs = fixed.as_ref();
 		try!(self.sink.write_all(bs));
 		Ok(())
 	}
 }
+
+/// Useful marker trait on types that can be sized byte slices 
+pub trait AsFixedBytes: Sized + AsRef<[u8]> {}
+
+impl AsFixedBytes for Vec<u8> {}
+impl AsFixedBytes for [u8; 1] {}
+impl AsFixedBytes for [u8; 2] {}
+impl AsFixedBytes for [u8; 4] {}
+impl AsFixedBytes for [u8; 8] {}
+impl AsFixedBytes for [u8; 32] {}
+impl AsFixedBytes for String {}
+impl AsFixedBytes for ::core::hash::Hash {}
+impl AsFixedBytes for ::secp::pedersen::RangeProof {}
+impl AsFixedBytes for ::secp::key::SecretKey {}
+impl AsFixedBytes for ::secp::Signature {}
+impl AsFixedBytes for ::secp::pedersen::Commitment {}

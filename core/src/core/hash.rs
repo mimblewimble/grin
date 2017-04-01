@@ -22,7 +22,7 @@ use std::fmt;
 use tiny_keccak::Keccak;
 use std::convert::AsRef;
 
-use ser::{self, Reader, Readable, Writer, Writeable, Error};
+use ser::{self, Reader, Readable, Writer, Writeable, Error, AsFixedBytes};
 
 pub const ZERO_HASH: Hash = Hash([0; 32]);
 
@@ -96,7 +96,7 @@ impl ser::Writer for HashWriter {
 		ser::SerializationMode::Hash
 	}
 
-	fn write_fixed_bytes<T: Sized + AsRef<[u8]>>(&mut self, b32: &T) -> Result<(), ser::Error> {
+	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, b32: &T) -> Result<(), ser::Error> {
 		self.state.update(b32.as_ref());
 		Ok(())
 	}
