@@ -299,7 +299,7 @@ impl Writeable for Output {
 		ser_multiwrite!(writer, [write_u8, self.features.bits()], [write_fixed_bytes, &self.commit]);
 		// The hash of an output doesn't include the range proof
 		if writer.serialization_mode() == ser::SerializationMode::Full {
-			writer.write_bytes(&self.proof.bytes())?
+			writer.write_bytes(&self.proof)?
 		}
 		Ok(())
 	}

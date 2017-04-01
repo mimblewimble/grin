@@ -163,8 +163,8 @@ struct HPair(Hash, Hash);
 
 impl Writeable for HPair {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		try!(writer.write_bytes(&self.0.to_slice()));
-		try!(writer.write_bytes(&self.1.to_slice()));
+		try!(writer.write_bytes(&self.0));
+		try!(writer.write_bytes(&self.1));
 		Ok(())
 	}
 }

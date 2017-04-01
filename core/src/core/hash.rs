@@ -121,7 +121,7 @@ impl Hashed for [u8] {
 	fn hash(&self) -> Hash {
 		let mut hasher = HashWriter::default();
 		let mut ret = [0; 32];
-		ser::Writer::write_fixed_bytes(&mut hasher, &self).unwrap();
+		ser::Writer::write_fixed_bytes(&mut hasher, &self.to_owned()).unwrap();
 		hasher.finalize(&mut ret);
 		Hash(ret)
 	}
