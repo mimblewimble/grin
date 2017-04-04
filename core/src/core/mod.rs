@@ -194,7 +194,7 @@ impl MerkleRow {
 	}
 	fn root(&self) -> Hash {
 		if self.0.len() == 0 {
-			vec![].hash()
+			[].hash()
 		} else if self.0.len() == 1 {
 			self.0[0].hash()
 		} else {

@@ -110,11 +110,11 @@ impl<W: ser::Writeable> Hashed for W {
 	}
 }
 
-impl Hashed for [u8] {
+// Convenience for when we need to hash of an empty array.
+impl Hashed for [u8; 0] {
 	fn hash(&self) -> Hash {
-		let mut hasher = HashWriter::default();
+		let hasher = HashWriter::default();
 		let mut ret = [0; 32];
-		ser::Writer::write_fixed_bytes(&mut hasher, &self).unwrap();
 		hasher.finalize(&mut ret);
 		Hash(ret)
 	}
