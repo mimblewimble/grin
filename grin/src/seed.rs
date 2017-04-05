@@ -181,7 +181,7 @@ pub fn gist_seeds(h: reactor::Handle) -> Box<Future<Item = Vec<SocketAddr>, Erro
 		client.get(url)
 			.map_err(|e| e.to_string())
 			.and_then(|res| {
-				if *res.status() != hyper::Ok {
+				if res.status() != hyper::Ok {
 					return Err(format!("Gist request failed: {}", res.status()));
 				}
 				Ok(res)
