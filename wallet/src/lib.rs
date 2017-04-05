@@ -6,7 +6,7 @@ extern crate byteorder;
 
 use std::{error, fmt};
 
-pub mod extkey;
+pub mod extendedkey;
 pub mod constants;
 
 /// An ExtKey error
