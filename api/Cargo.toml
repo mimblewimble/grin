@@ -2,6 +2,7 @@
 name = "grin_api"
 version = "0.1.0"
 authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
+workspace = ".."
 
 [dependencies]
 grin_chain = { path = "../chain" }

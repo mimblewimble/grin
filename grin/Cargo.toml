@@ -2,6 +2,7 @@
 name = "grin_grin"
 version = "0.1.0"
 authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
+workspace = ".."
 
 [dependencies]
 grin_api = { path = "../api" }
