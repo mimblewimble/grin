@@ -24,13 +24,11 @@ use crypto::digest::Digest;
 use Error::{InvalidSeedSize, InvalidSliceSize, InvalidExtendedKey};
 use byteorder::{ByteOrder, BigEndian};
 
-/// An extended private key. (Extended public keys can't exist
-/// in mimblewimble as the public key signing a transaction depends
-/// on the amount received)
+/// An extended private key.
 /// An ExtendedKey is a secret key which can be used to derive new 
 /// secret keys to blind the commitment of a transaction output. 
-/// A secret key should have an amount assigned to it, but when
-/// the key is derived, the amount is not known and must be
+/// To be usable, a secret key should have an amount assigned to it, 
+/// but when the key is derived, the amount is not known and must be
 /// given.
 
 #[derive(Debug, Clone)]
