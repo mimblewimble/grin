@@ -20,8 +20,9 @@
 use byteorder::{ByteOrder, BigEndian};
 use std::fmt;
 use tiny_keccak::Keccak;
+use std::convert::AsRef;
 
-use ser::{self, AsFixedBytes, Reader, Readable, Writer, Writeable, Error};
+use ser::{self, Reader, Readable, Writer, Writeable, Error, AsFixedBytes};
 
 pub const ZERO_HASH: Hash = Hash([0; 32]);
 
@@ -50,6 +51,12 @@ impl Hash {
 	}
 }
 
+impl AsRef<[u8]> for Hash {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 impl Readable<Hash> for Hash {
 	fn read(reader: &mut Reader) -> Result<Hash, ser::Error> {
 		let v = try!(reader.read_fixed_bytes(32));
@@ -62,7 +69,7 @@ impl Readable<Hash> for Hash {
 }
 
 impl Writeable for Hash {
-	fn write(&self, writer: &mut Writer) -> Result<(), Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_fixed_bytes(&self.0)
 	}
 }
@@ -89,8 +96,8 @@ impl ser::Writer for HashWriter {
 		ser::SerializationMode::Hash
 	}
 
-	fn write_fixed_bytes(&mut self, b32: &AsFixedBytes) -> Result<(), ser::Error> {
-		self.state.update(b32.as_fixed_bytes());
+	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, b32: &T) -> Result<(), ser::Error> {
+		self.state.update(b32.as_ref());
 		Ok(())
 	}
 }

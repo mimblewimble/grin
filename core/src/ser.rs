@@ -80,14 +80,6 @@ impl error::Error for Error {
 	}
 }
 
-/// Useful trait to implement on types that can be translated to byte slices
-/// directly. Allows the use of `write_fixed_bytes` on them.
-pub trait AsFixedBytes {
-	/// The slice representation of self
-	fn as_fixed_bytes(&self) -> &[u8];
-}
-
-
 /// Signal to a serializable object how much of its data should be serialized
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum SerializationMode {
@@ -140,14 +132,14 @@ pub trait Writer {
 
 	/// Writes a variable number of bytes. The length is encoded as a 64-bit
 	/// prefix.
-	fn write_bytes(&mut self, bytes: &AsFixedBytes) -> Result<(), Error> {
-		try!(self.write_u64(bytes.as_fixed_bytes().len() as u64));
+	fn write_bytes<T: AsFixedBytes>(&mut self, bytes: &T) -> Result<(), Error> {
+		try!(self.write_u64(bytes.as_ref().len() as u64));
 		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a fixed number of bytes from something that can turn itself into
 	/// a `&[u8]`. The reader is expected to know the actual length on read.
-	fn write_fixed_bytes(&mut self, fixed: &AsFixedBytes) -> Result<(), Error>;
+	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, fixed: &T) -> Result<(), Error>;
 }
 
 /// Implementations defined how different numbers and binary structures are
@@ -179,7 +171,7 @@ pub trait Reader {
 /// underlying Write implementation.
 pub trait Writeable {
 	/// Write the data held by this Writeable to the provided writer
-	fn write(&self, writer: &mut Writer) -> Result<(), Error>;
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error>;
 }
 
 /// Trait that every type that can be deserialized from binary must implement.
@@ -197,14 +189,14 @@ pub fn deserialize<T: Readable<T>>(mut source: &mut Read) -> Result<T, Error> {
 }
 
 /// Serializes a Writeable into any std::io::Write implementation.
-pub fn serialize(mut sink: &mut Write, thing: &Writeable) -> Result<(), Error> {
+pub fn serialize<W: Writeable>(mut sink: &mut Write, thing: &W) -> Result<(), Error> {
 	let mut writer = BinWriter { sink: sink };
 	thing.write(&mut writer)
 }
 
 /// Utility function to serialize a writeable directly in memory using a
 /// Vec<u8>.
-pub fn ser_vec(thing: &Writeable) -> Result<Vec<u8>, Error> {
+pub fn ser_vec<W: Writeable>(thing: &W) -> Result<Vec<u8>, Error> {
 	let mut vec = Vec::new();
 	try!(serialize(&mut vec, thing));
 	Ok(vec)
@@ -302,53 +294,25 @@ impl<'a> Writer for BinWriter<'a> {
 		SerializationMode::Full
 	}
 
-	fn write_fixed_bytes(&mut self, fixed: &AsFixedBytes) -> Result<(), Error> {
-		let bs = fixed.as_fixed_bytes();
+	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, fixed: &T) -> Result<(), Error> {
+		let bs = fixed.as_ref();
 		try!(self.sink.write_all(bs));
 		Ok(())
 	}
 }
 
-macro_rules! impl_slice_bytes {
-  ($byteable: ty) => {
-    impl AsFixedBytes for $byteable {
-      fn as_fixed_bytes(&self) -> &[u8] {
-        &self[..]
-      }
-    }
-  }
-}
+/// Useful marker trait on types that can be sized byte slices 
+pub trait AsFixedBytes: Sized + AsRef<[u8]> {}
 
-impl_slice_bytes!(::secp::key::SecretKey);
-impl_slice_bytes!(::secp::Signature);
-impl_slice_bytes!(::secp::pedersen::Commitment);
-impl_slice_bytes!(Vec<u8>);
-impl_slice_bytes!([u8; 1]);
-impl_slice_bytes!([u8; 2]);
-impl_slice_bytes!([u8; 4]);
-impl_slice_bytes!([u8; 8]);
-impl_slice_bytes!([u8; 32]);
-
-impl<'a> AsFixedBytes for &'a [u8] {
-	fn as_fixed_bytes(&self) -> &[u8] {
-		*self
-	}
-}
-
-impl<'a> AsFixedBytes for String {
-	fn as_fixed_bytes(&self) -> &[u8] {
-		self.as_bytes()
-	}
-}
-
-impl AsFixedBytes for ::core::hash::Hash {
-	fn as_fixed_bytes(&self) -> &[u8] {
-		self.to_slice()
-	}
-}
-
-impl AsFixedBytes for ::secp::pedersen::RangeProof {
-	fn as_fixed_bytes(&self) -> &[u8] {
-		&self.bytes()
-	}
-}
+impl AsFixedBytes for Vec<u8> {}
+impl AsFixedBytes for [u8; 1] {}
+impl AsFixedBytes for [u8; 2] {}
+impl AsFixedBytes for [u8; 4] {}
+impl AsFixedBytes for [u8; 8] {}
+impl AsFixedBytes for [u8; 32] {}
+impl AsFixedBytes for String {}
+impl AsFixedBytes for ::core::hash::Hash {}
+impl AsFixedBytes for ::secp::pedersen::RangeProof {}
+impl AsFixedBytes for ::secp::key::SecretKey {}
+impl AsFixedBytes for ::secp::Signature {}
+impl AsFixedBytes for ::secp::pedersen::Commitment {}

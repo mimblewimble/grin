@@ -52,7 +52,7 @@ pub struct TxKernel {
 }
 
 impl Writeable for TxKernel {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
                     [write_u8, self.features.bits()],
                     [write_fixed_bytes, &self.excess],
@@ -103,7 +103,7 @@ pub struct Transaction {
 /// Implementation of Writeable for a fully blinded transaction, defines how to
 /// write the transaction as binary.
 impl Writeable for Transaction {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u64, self.fee],
 		                [write_bytes, &self.excess_sig],
@@ -251,7 +251,7 @@ pub struct Input(pub Commitment);
 /// Implementation of Writeable for a transaction Input, defines how to write
 /// an Input as binary.
 impl Writeable for Input {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_fixed_bytes(&self.0)
 	}
 }
@@ -295,11 +295,11 @@ pub struct Output {
 /// Implementation of Writeable for a transaction Output, defines how to write
 /// an Output as binary.
 impl Writeable for Output {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer, [write_u8, self.features.bits()], [write_fixed_bytes, &self.commit]);
 		// The hash of an output doesn't include the range proof
 		if writer.serialization_mode() == ser::SerializationMode::Full {
-			writer.write_bytes(&self.proof.bytes())?
+			writer.write_bytes(&self.proof)?
 		}
 		Ok(())
 	}

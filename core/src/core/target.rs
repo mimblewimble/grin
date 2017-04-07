@@ -67,7 +67,7 @@ impl Add<Difficulty> for Difficulty {
 }
 
 impl Writeable for Difficulty {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		let data = self.num.to_bytes_be();
 		try!(writer.write_u8(data.len() as u8));
 		writer.write_fixed_bytes(&data)

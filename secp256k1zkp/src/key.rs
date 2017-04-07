@@ -32,6 +32,7 @@ pub struct SecretKey([u8; constants::SECRET_KEY_SIZE]);
 impl_array_newtype!(SecretKey, u8, constants::SECRET_KEY_SIZE);
 impl_pretty_debug!(SecretKey);
 
+
 /// The number 1 encoded as a secret key
 /// Deprecated; `static` is not what I want; use `ONE_KEY` instead
 pub static ONE: SecretKey = SecretKey([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,

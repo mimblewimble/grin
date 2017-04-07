@@ -147,7 +147,7 @@ impl MsgHeader {
 }
 
 impl Writeable for MsgHeader {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u8, self.magic[0]],
 		                [write_u8, self.magic[1]],
@@ -197,7 +197,7 @@ pub struct Hand {
 }
 
 impl Writeable for Hand {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u32, self.version],
 		                [write_u32, self.capabilities.bits()],
@@ -246,7 +246,7 @@ pub struct Shake {
 }
 
 impl Writeable for Shake {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u32, self.version],
 		                [write_u32, self.capabilities.bits()]);
@@ -279,7 +279,7 @@ pub struct GetPeerAddrs {
 }
 
 impl Writeable for GetPeerAddrs {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u32(self.capabilities.bits())
 	}
 }
@@ -299,7 +299,7 @@ pub struct PeerAddrs {
 }
 
 impl Writeable for PeerAddrs {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		try!(writer.write_u32(self.peers.len() as u32));
 		for p in &self.peers {
 			p.write(writer);
@@ -335,7 +335,7 @@ pub struct PeerError {
 }
 
 impl Writeable for PeerError {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer, [write_u32, self.code], [write_bytes, &self.message]);
 		Ok(())
 	}
@@ -358,7 +358,7 @@ impl Readable<PeerError> for PeerError {
 pub struct SockAddr(pub SocketAddr);
 
 impl Writeable for SockAddr {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		match self.0 {
 			SocketAddr::V4(sav4) => {
 				ser_multiwrite!(writer,
@@ -413,7 +413,7 @@ pub struct Locator {
 }
 
 impl Writeable for Locator {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.hashes.len() as u8)?;
 		for h in &self.hashes {
 			h.write(writer)?
@@ -439,7 +439,7 @@ pub struct Headers {
 }
 
 impl Writeable for Headers {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u16(self.headers.len() as u16)?;
 		for h in &self.headers {
 			h.write(writer)?
@@ -464,7 +464,7 @@ impl Readable<Headers> for Headers {
 pub struct Empty {}
 
 impl Writeable for Empty {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		Ok(())
 	}
 }
