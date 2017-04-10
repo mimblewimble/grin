@@ -108,14 +108,14 @@ impl Store {
 
 	/// Gets a `Readable` value from the db, provided its key. Encapsulates
 	/// serialization.
-	pub fn get_ser<T: ser::Readable<T>>(&self, key: &[u8]) -> Result<Option<T>, Error> {
+	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
 		self.get_ser_limited(key, 0)
 	}
 
 	/// Gets a `Readable` value from the db, provided its key, allowing to
 	/// extract only partial data. The underlying Readable size must align
 	/// accordingly. Encapsulates serialization.
-	pub fn get_ser_limited<T: ser::Readable<T>>(&self,
+	pub fn get_ser_limited<T: ser::Readable>(&self,
 	                                            key: &[u8],
 	                                            len: usize)
 	                                            -> Result<Option<T>, Error> {
@@ -145,7 +145,7 @@ impl Store {
 	/// Produces an iterator of `Readable` types moving forward from the
 	/// provided
 	/// key.
-	pub fn iter<T: ser::Readable<T>>(&self, from: &[u8]) -> SerIterator<T> {
+	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> SerIterator<T> {
 		let db = self.rdb.read().unwrap();
 		SerIterator {
 			iter: db.iterator(IteratorMode::From(from, Direction::Forward)),
@@ -196,14 +196,14 @@ impl<'a> Batch<'a> {
 /// An iterator thad produces Readable instances back. Wraps the lower level
 /// DBIterator and deserializes the returned values.
 pub struct SerIterator<T>
-	where T: ser::Readable<T>
+	where T: ser::Readable
 {
 	iter: DBIterator,
 	_marker: PhantomData<T>,
 }
 
 impl<T> Iterator for SerIterator<T>
-    where T: ser::Readable<T>
+    where T: ser::Readable
 {
 	type Item = T;
 

@@ -28,7 +28,6 @@
 use byteorder::{ByteOrder, BigEndian};
 use secp::{self, Secp256k1};
 use secp::key::SecretKey;
-use secp::pedersen::*;
 use rand::os::OsRng;
 
 use core::{Transaction, Input, Output, DEFAULT_OUTPUT};
@@ -140,19 +139,19 @@ pub fn output_rand(value: u64) -> Box<Append> {
 
 /// Sets the fee on the transaction being built.
 pub fn with_fee(fee: u64) -> Box<Append> {
-	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) { (tx.with_fee(fee), sum) })
+	Box::new(move |_build, (tx, sum)| -> (Transaction, BlindSum) { (tx.with_fee(fee), sum) })
 }
 
 /// Sets a known excess value on the transaction being built. Usually used in
 /// combination with the initial_tx function when a new transaction is built
 /// by adding to a pre-existing one.
 pub fn with_excess(excess: SecretKey) -> Box<Append> {
-	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) { (tx, sum.add(excess)) })
+	Box::new(move |_build, (tx, sum)| -> (Transaction, BlindSum) { (tx, sum.add(excess)) })
 }
 
 /// Sets an initial transaction to add to when building a new transaction.
 pub fn initial_tx(tx: Transaction) -> Box<Append> {
-	Box::new(move |build, (_, sum)| -> (Transaction, BlindSum) { (tx.clone(), sum) })
+	Box::new(move |_build, (_, sum)| -> (Transaction, BlindSum) { (tx.clone(), sum) })
 }
 
 /// Builds a new transaction by combining all the combinators provided in a

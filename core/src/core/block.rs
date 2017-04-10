@@ -15,24 +15,24 @@
 //! Blocks and blockheaders
 
 use time;
-use secp;
-use secp::{Secp256k1, Signature, Message};
+use secp::{self, Secp256k1};
 use secp::key::SecretKey;
 use std::collections::HashSet;
 
 use core::Committed;
 use core::{Input, Output, Proof, TxKernel, Transaction, COINBASE_KERNEL, COINBASE_OUTPUT};
 use core::transaction::merkle_inputs_outputs;
-use consensus::{REWARD, DEFAULT_SIZESHIFT};
+use consensus::REWARD;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use ser::{self, Readable, Reader, Writeable, Writer};
 
 bitflags! {
-  /// Options for block validation
-  pub flags BlockFeatures: u8 {
-    const DEFAULT_BLOCK = 0b00000000,
-  }
+    /// Options for block validation
+    pub flags BlockFeatures: u8 {
+        /// No flags
+        const DEFAULT_BLOCK = 0b00000000,
+    }
 }
 
 /// Block header, fairly standard compared to other blockchains.
@@ -45,6 +45,7 @@ pub struct BlockHeader {
 	pub timestamp: time::Tm,
 	/// Length of the cuckoo cycle used to mine this block.
 	pub cuckoo_len: u8,
+    /// Merkle root of the UTXO set
 	pub utxo_merkle: Hash,
 	/// Merkle tree of hashes for all inputs, outputs and kernels in the block
 	pub tx_merkle: Hash,
@@ -102,7 +103,7 @@ impl Writeable for BlockHeader {
 }
 
 /// Deserialization of a block header
-impl Readable<BlockHeader> for BlockHeader {
+impl Readable for BlockHeader {
 	fn read(reader: &mut Reader) -> Result<BlockHeader, ser::Error> {
 		let height = try!(reader.read_u64());
 		let previous = try!(Hash::read(reader));
@@ -138,9 +139,13 @@ impl Readable<BlockHeader> for BlockHeader {
 /// bitcoin's schedule) and expressed as a global transaction fee (added v.H),
 /// additive to the total of fees ever collected.
 pub struct Block {
+    /// The header with metadata and commitments to the rest of the data
 	pub header: BlockHeader,
+    /// List of transaction inputs
 	pub inputs: Vec<Input>,
+    /// List of transaction outputs
 	pub outputs: Vec<Output>,
+    /// List of transaction kernels and associated proofs
 	pub kernels: Vec<TxKernel>,
 }
 
@@ -173,7 +178,7 @@ impl Writeable for Block {
 
 /// Implementation of Readable for a block, defines how to read a full block
 /// from a binary stream.
-impl Readable<Block> for Block {
+impl Readable for Block {
 	fn read(reader: &mut Reader) -> Result<Block, ser::Error> {
 		let header = try!(BlockHeader::read(reader));
 
@@ -277,10 +282,12 @@ impl Block {
 			.compact())
 	}
 
+    /// Blockhash, computed using only the header
 	pub fn hash(&self) -> Hash {
 		self.header.hash()
 	}
 
+    /// Sum of all fees (inputs less outputs) in the block
 	pub fn total_fees(&self) -> u64 {
 		self.kernels.iter().map(|p| p.fee).sum()
 	}
@@ -327,8 +334,8 @@ impl Block {
 		}
 	}
 
-	// Merges the 2 blocks, essentially appending the inputs, outputs and kernels.
-	// Also performs a compaction on the result.
+	/// Merges the 2 blocks, essentially appending the inputs, outputs and kernels.
+	/// Also performs a compaction on the result.
 	pub fn merge(&self, other: Block) -> Block {
 		let mut all_inputs = self.inputs.clone();
 		all_inputs.append(&mut other.inputs.clone());
@@ -457,14 +464,12 @@ impl Block {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::{Input, Output, Transaction};
+	use core::Transaction;
 	use core::build::{self, input, output, input_rand, output_rand, with_fee};
-	use core::hash::{Hash, Hashed};
-	use core::test::{tx1i1o, tx2i1o};
+	use core::test::tx2i1o;
 
 	use secp::{self, Secp256k1};
 	use secp::key::SecretKey;
-	use rand::Rng;
 	use rand::os::OsRng;
 
 	fn new_secp() -> Secp256k1 {

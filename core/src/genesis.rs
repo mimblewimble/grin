@@ -21,8 +21,8 @@ use consensus::DEFAULT_SIZESHIFT;
 use core::hash::Hashed;
 use core::target::Difficulty;
 
-// Genesis block definition. It has no rewards, no inputs, no outputs, no
-// fees and a height of zero.
+/// Genesis block definition. It has no rewards, no inputs, no outputs, no
+/// fees and a height of zero.
 pub fn genesis() -> core::Block {
 	core::Block {
 		header: core::BlockHeader {

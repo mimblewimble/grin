@@ -31,7 +31,7 @@ use consensus::PROOFSIZE;
 pub use self::block::{Block, BlockHeader, DEFAULT_BLOCK};
 pub use self::transaction::{Transaction, Input, Output, TxKernel, COINBASE_KERNEL,
                             COINBASE_OUTPUT, DEFAULT_OUTPUT};
-use self::hash::{Hash, Hashed, HashWriter, ZERO_HASH};
+use self::hash::{Hash, Hashed, ZERO_HASH};
 use ser::{Writeable, Writer, Reader, Readable, Error};
 
 /// Implemented by types that hold inputs and outputs including Pedersen
@@ -88,7 +88,7 @@ impl fmt::Debug for Proof {
 		for (i, val) in self.0[..].iter().enumerate() {
 			try!(write!(f, "{:x}", val));
 			if i < PROOFSIZE - 1 {
-				write!(f, " ");
+				try!(write!(f, " "));
 			}
 		}
 		write!(f, ")")
@@ -138,7 +138,7 @@ impl Proof {
 	}
 }
 
-impl Readable<Proof> for Proof {
+impl Readable for Proof {
 	fn read(reader: &mut Reader) -> Result<Proof, Error> {
 		let mut pow = [0u32; PROOFSIZE];
 		for n in 0..PROOFSIZE {
@@ -211,7 +211,6 @@ mod test {
 	use secp::Secp256k1;
 	use secp::key::SecretKey;
 	use ser;
-	use rand::Rng;
 	use rand::os::OsRng;
 	use core::build::{self, input, output, input_rand, output_rand, with_fee, initial_tx,
 	                  with_excess};
@@ -310,7 +309,6 @@ mod test {
 	#[test]
 	fn tx_build_exchange() {
 		let ref secp = new_secp();
-		let outh = ZERO_HASH;
 
 		let tx_alice: Transaction;
 		let blind_sum: SecretKey;

@@ -16,9 +16,7 @@
 //! and
 //! the related difficulty, defined as the maximum target divided by the hash.
 
-use byteorder::{ByteOrder, BigEndian};
 use std::fmt;
-use std::error::Error;
 use std::ops::Add;
 
 use bigint::BigUint;
@@ -35,7 +33,7 @@ pub const MAX_TARGET: [u8; 32] = [0xf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 /// The difficulty is defined as the maximum target divided by the block hash.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Difficulty {
-	pub num: BigUint,
+	num: BigUint
 }
 
 impl Difficulty {
@@ -46,17 +44,28 @@ impl Difficulty {
 		Difficulty { num: BigUint::new(vec![1]) }
 	}
 
+    /// Convert a `u32` into a `Difficulty`
 	pub fn from_num(num: u32) -> Difficulty {
 		Difficulty { num: BigUint::new(vec![num]) }
 	}
+
+    /// Convert a `BigUint` into a `Difficulty`
+    pub fn from_biguint(num: BigUint) -> Difficulty {
+        Difficulty { num: num }
+    }
 
 	/// Computes the difficulty from a hash. Divides the maximum target by the
 	/// provided hash.
 	pub fn from_hash(h: &Hash) -> Difficulty {
 		let max_target = BigUint::from_bytes_be(&MAX_TARGET);
-		let h_num = BigUint::from_bytes_be(h.to_slice());
+		let h_num = BigUint::from_bytes_be(&h[..]);
 		Difficulty { num: max_target / h_num }
 	}
+
+    /// Converts the difficulty into a bignum
+    pub fn into_biguint(self) -> BigUint {
+        self.num
+    }
 }
 
 impl Add<Difficulty> for Difficulty {
@@ -74,7 +83,7 @@ impl Writeable for Difficulty {
 	}
 }
 
-impl Readable<Difficulty> for Difficulty {
+impl Readable for Difficulty {
 	fn read(reader: &mut Reader) -> Result<Difficulty, ser::Error> {
 		let dlen = try!(reader.read_u8());
 		let data = try!(reader.read_fixed_bytes(dlen as usize));

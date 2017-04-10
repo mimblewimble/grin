@@ -60,7 +60,7 @@ impl Writeable for PeerData {
 	}
 }
 
-impl Readable<PeerData> for PeerData {
+impl Readable for PeerData {
 	fn read(reader: &mut Reader) -> Result<PeerData, ser::Error> {
 		let addr = SockAddr::read(reader)?;
 		let (capab, ua, fl) = ser_multiread!(reader, read_u32, read_vec, read_u8);

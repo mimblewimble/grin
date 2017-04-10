@@ -72,7 +72,7 @@ impl Miner {
 			let mut iter_count = 0;
 			while head.hash() == latest_hash && time::get_time().sec < deadline {
 				let pow_hash = b.hash();
-				let mut miner = cuckoo::Miner::new(pow_hash.to_slice(),
+				let mut miner = cuckoo::Miner::new(&pow_hash[..],
 				                                   consensus::EASINESS,
 				                                   b.header.cuckoo_len as u32);
 				if let Ok(proof) = miner.mine() {

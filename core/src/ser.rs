@@ -34,7 +34,9 @@ pub enum Error {
 	IOErr(io::Error),
 	/// Expected a given value that wasn't found
 	UnexpectedData {
+        /// What we wanted
 		expected: Vec<u8>,
+        /// What we got
 		received: Vec<u8>,
 	},
 	/// Data wasn't in a consumable format
@@ -177,13 +179,13 @@ pub trait Writeable {
 /// Trait that every type that can be deserialized from binary must implement.
 /// Reads directly to a Reader, a utility type thinly wrapping an
 /// underlying Read implementation.
-pub trait Readable<T> {
+pub trait Readable where Self: Sized {
 	/// Reads the data necessary to this Readable from the provided reader
-	fn read(reader: &mut Reader) -> Result<T, Error>;
+	fn read(reader: &mut Reader) -> Result<Self, Error>;
 }
 
 /// Deserializes a Readeable from any std::io::Read implementation.
-pub fn deserialize<T: Readable<T>>(mut source: &mut Read) -> Result<T, Error> {
+pub fn deserialize<T: Readable>(mut source: &mut Read) -> Result<T, Error> {
 	let mut reader = BinReader { source: source };
 	T::read(&mut reader)
 }
@@ -258,7 +260,7 @@ impl<'a> Reader for BinReader<'a> {
 }
 
 
-impl Readable<Commitment> for Commitment {
+impl Readable for Commitment {
 	fn read(reader: &mut Reader) -> Result<Commitment, Error> {
 		let a = try!(reader.read_fixed_bytes(PEDERSEN_COMMITMENT_SIZE));
 		let mut c = [0; PEDERSEN_COMMITMENT_SIZE];
@@ -269,7 +271,7 @@ impl Readable<Commitment> for Commitment {
 	}
 }
 
-impl Readable<RangeProof> for RangeProof {
+impl Readable for RangeProof {
 	fn read(reader: &mut Reader) -> Result<RangeProof, Error> {
 		let p = try!(reader.read_limited_vec(MAX_PROOF_SIZE));
 		let mut a = [0; MAX_PROOF_SIZE];
@@ -301,9 +303,62 @@ impl<'a> Writer for BinWriter<'a> {
 	}
 }
 
+macro_rules! impl_int {
+    ($int: ty, $w_fn: ident, $r_fn: ident) => {
+        impl Writeable for $int {
+            fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+                writer.$w_fn(*self)
+            }
+        }
+
+        impl Readable for $int {
+            fn read(reader: &mut Reader) -> Result<$int, Error> {
+                reader.$r_fn()
+            }
+        }
+    }
+}
+
+impl_int!(u8, write_u8, read_u8);
+impl_int!(u16, write_u16, read_u16);
+impl_int!(u32, write_u32, read_u32);
+impl_int!(u64, write_u64, read_u64);
+impl_int!(i64, write_i64, read_i64);
+
+impl<A: Writeable, B: Writeable> Writeable for (A, B) {
+    fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+        try!(Writeable::write(&self.0, writer));
+        Writeable::write(&self.1, writer)
+    }
+}
+
+impl<A: Readable, B: Readable> Readable for (A, B) {
+    fn read(reader: &mut Reader) -> Result<(A, B), Error> {
+        Ok((try!(Readable::read(reader)),
+            try!(Readable::read(reader))))
+    }
+}
+
+impl<A: Writeable, B: Writeable, C: Writeable> Writeable for (A, B, C) {
+    fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+        try!(Writeable::write(&self.0, writer));
+        try!(Writeable::write(&self.1, writer));
+        Writeable::write(&self.2, writer)
+    }
+}
+
+impl<A: Readable, B: Readable, C: Readable> Readable for (A, B, C) {
+    fn read(reader: &mut Reader) -> Result<(A, B, C), Error> {
+        Ok((try!(Readable::read(reader)),
+            try!(Readable::read(reader)),
+            try!(Readable::read(reader))))
+    }
+}
+
 /// Useful marker trait on types that can be sized byte slices 
 pub trait AsFixedBytes: Sized + AsRef<[u8]> {}
 
+impl<'a> AsFixedBytes for &'a [u8] {}
 impl AsFixedBytes for Vec<u8> {}
 impl AsFixedBytes for [u8; 1] {}
 impl AsFixedBytes for [u8; 2] {}
