@@ -50,12 +50,12 @@ pub trait Committed {
 		let mut input_commits = map_vec!(self.inputs_committed(), |inp| inp.commitment());
 		let mut output_commits = map_vec!(self.outputs_committed(), |out| out.commitment());
 
-		// add the overage as input commitment if positive, as an output commitment if
+		// add the overage as output commitment if positive, as an input commitment if
 		// negative
 		let overage = self.overage();
 		if overage != 0 {
 			let over_commit = secp.commit_value(overage.abs() as u64).unwrap();
-			if overage > 0 {
+			if overage < 0 {
 				input_commits.push(over_commit);
 			} else {
 				output_commits.push(over_commit);
@@ -63,7 +63,7 @@ pub trait Committed {
 		}
 
 		// sum all that stuff
-		secp.commit_sum(input_commits, output_commits)
+		secp.commit_sum(output_commits, input_commits)
 	}
 
 	/// Vector of committed inputs to verify

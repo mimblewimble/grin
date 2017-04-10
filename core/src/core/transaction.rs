@@ -149,7 +149,7 @@ impl Committed for Transaction {
 		&self.outputs
 	}
 	fn overage(&self) -> i64 {
-		-(self.fee as i64)
+		(self.fee as i64)
 	}
 }
 
@@ -209,14 +209,14 @@ impl Transaction {
 	/// of the sum of r.G should be left. And r.G is the definition of a
 	/// public key generated using r as a private key.
 	pub fn verify_sig(&self, secp: &Secp256k1) -> Result<TxKernel, secp::Error> {
-		let rsum = try!(self.sum_commitments(secp));
+		let rsum = self.sum_commitments(secp)?;
 
 		// pretend the sum is a public key (which it is, being of the form r.G) and
 		// verify the transaction sig with it
-		let pubk = try!(rsum.to_pubkey(secp));
-		let msg = try!(Message::from_slice(&u64_to_32bytes(self.fee)));
-		let sig = try!(Signature::from_der(secp, &self.excess_sig));
-		try!(secp.verify(&msg, &sig, &pubk));
+		let pubk = rsum.to_pubkey(secp)?;
+		let msg = Message::from_slice(&u64_to_32bytes(self.fee))?;
+		let sig = Signature::from_der(secp, &self.excess_sig)?;
+		secp.verify(&msg, &sig, &pubk)?;
 
 		Ok(TxKernel {
 			features: DEFAULT_KERNEL,

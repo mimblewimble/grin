@@ -31,6 +31,7 @@ use secp::key::SecretKey;
 use rand::os::OsRng;
 
 use core::{Transaction, Input, Output, DEFAULT_OUTPUT};
+use core::Committed;
 
 /// Context information available to transaction combinators.
 pub struct Context {
@@ -90,7 +91,7 @@ type Append = for<'a> Fn(&'a mut Context, (Transaction, BlindSum)) -> (Transacti
 pub fn input(value: u64, blinding: SecretKey) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
 		let commit = build.secp.commit(value, blinding).unwrap();
-		(tx.with_input(Input(commit)), sum.add(blinding))
+		(tx.with_input(Input(commit)), sum.sub(blinding))
 	})
 }
 
@@ -101,7 +102,7 @@ pub fn input_rand(value: u64) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
 		let blinding = SecretKey::new(&build.secp, &mut build.rng);
 		let commit = build.secp.commit(value, blinding).unwrap();
-		(tx.with_input(Input(commit)), sum.add(blinding))
+		(tx.with_input(Input(commit)), sum.sub(blinding))
 	})
 }
 
@@ -116,7 +117,7 @@ pub fn output(value: u64, blinding: SecretKey) -> Box<Append> {
 			commit: commit,
 			proof: rproof,
 		}),
-		 sum.sub(blinding))
+		 sum.add(blinding))
 	})
 }
 
@@ -133,7 +134,7 @@ pub fn output_rand(value: u64) -> Box<Append> {
 			commit: commit,
 			proof: rproof,
 		}),
-		 sum.sub(blinding))
+		 sum.add(blinding))
 	})
 }
 
@@ -173,8 +174,9 @@ pub fn transaction(elems: Vec<Box<Append>>) -> Result<(Transaction, SecretKey), 
 	                                      |acc, elem| elem(&mut ctx, acc));
 
 	let blind_sum = sum.sum(&ctx.secp)?;
-	let msg = try!(secp::Message::from_slice(&u64_to_32bytes(tx.fee)));
-	let sig = try!(ctx.secp.sign(&msg, &blind_sum));
+	let pubkey = secp::key::PublicKey::from_secret_key(&ctx.secp, &blind_sum)?;
+	let msg = secp::Message::from_slice(&u64_to_32bytes(tx.fee))?;
+	let sig = ctx.secp.sign(&msg, &blind_sum)?;
 	tx.excess_sig = sig.serialize_der(&ctx.secp);
 
 	Ok((tx, blind_sum))

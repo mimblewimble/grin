@@ -209,7 +209,7 @@ impl Committed for Block {
 		&self.outputs
 	}
 	fn overage(&self) -> i64 {
-		(REWARD as i64) - (self.total_fees() as i64)
+		(self.total_fees() as i64) - (REWARD as i64)
 	}
 }
 
@@ -449,7 +449,7 @@ impl Block {
 
 		let over_commit = try!(secp.commit_value(REWARD as u64));
 		let out_commit = output.commitment();
-		let excess = try!(secp.commit_sum(vec![over_commit], vec![out_commit]));
+		let excess = try!(secp.commit_sum(vec![out_commit], vec![over_commit]));
 
 		let proof = TxKernel {
 			features: COINBASE_KERNEL,
