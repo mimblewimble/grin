@@ -71,12 +71,12 @@ impl Edge{
         Edge{source: source, destination: destination, output: output}
     }
 
-    pub fn with_source(&self, src: core::hash::Hash) -> Edge {
-        Edge{source: Some(src), destination: self.destination, output: self.output}
+    pub fn with_source(&self, src: Option<core::hash::Hash>) -> Edge {
+        Edge{source: src, destination: self.destination, output: self.output}
     }
 
-    pub fn with_destination(&self, dst: core::hash::Hash) -> Edge {
-        Edge{source: self.source, destination: Some(dst), output: self.output}
+    pub fn with_destination(&self, dst: Option<core::hash::Hash>) -> Edge {
+        Edge{source: self.source, destination: dst, output: self.output}
     }
 
     pub fn output_commitment(&self) -> Commitment {
