@@ -25,7 +25,7 @@ use secp::pedersen::Commitment;
 
 pub use graph;
 // temporary blockchain dummy impls
-use blockchain::DummyChain;
+use blockchain::{DummyChain, DummyUtxoSet};
 
 use time;
 
@@ -121,7 +121,7 @@ impl Pool {
     /// transaction
     fn check_double_spend(&self, o: &transaction::Output) -> Option<hash::Hash> {
         self.graph.get_edge_by_commitment(&o.commitment()).or(self.consumed_blockchain_outputs.get(&o.commitment())).map(|x| x.destination_hash().unwrap())
-    k}
+    }
 
 }
 
@@ -233,7 +233,7 @@ impl<'a> TransactionPool<'a> {
                 input.commitment());
 
             match self.search_for_best_output(&input.commitment()) {
-                Parent::PoolTransaction{tx_ref: x} => pool_refs.push(base.with_source(x)),
+                Parent::PoolTransaction{tx_ref: x} => pool_refs.push(base.with_source(Some(x))),
                 Parent::BlockTransaction => blockchain_refs.push(base),
                 Parent::Unknown => orphan_refs.push(base),
                 Parent::AlreadySpent{other_tx: x} => return Err(PoolError::DoubleSpend{other_tx: x, spent_output: input.commitment()}),
@@ -459,10 +459,10 @@ impl<'a> TransactionPool<'a> {
     /// evicted transactions elsewhere so that we can make a best effort at
     /// returning them to the pool in the event of a reorg that invalidates 
     /// this block.
-    pub fn reconcile_block(&mut self, block: &block::Block) -> Result<Vec<transaction::Transaction>, PoolError> {
+    pub fn reconcile_block(&mut self, block: &block::Block) -> Result<Vec<Box<transaction::Transaction>>, PoolError> {
         // Prepare the new blockchain-only UTXO view for this process
         let updated_blockchain_utxo =
-            self.blockchain().get_best_utxo_set().apply(block);
+            self.blockchain.get_best_utxo_set().apply(block);
 
         // If this pool has been kept in sync correctly, serializing all
         // updates, then the inputs must consume only members of the blockchain
@@ -493,32 +493,33 @@ impl<'a> TransactionPool<'a> {
         //
         // After the pool has been successfully processed, an orphans
         // reconciliation job is triggered.
-        let conflicting_edges = block.inputs.iter().
-            filter_map(|x| 
-               self.pool.consumed_blockchain_outputs.get(&x.comitment())).
-            collect();
+        let mut marked_transactions: HashMap<hash::Hash, ()> = HashMap::new();
+        {
+            let mut conflicting_edges: Vec<&graph::Edge> = block.inputs.iter().
+                filter_map(|x| 
+                   self.pool.consumed_blockchain_outputs.get(&x.commitment())).
+                collect();
 
-        conflicting_edges.append(block.outputs.iter().
-            filter_map(|x| self.pool.get_edge_by_commitment(&x.commitment()).
-            or_else(|x| self.pool.available_outputs.get(&x.commitment()))).
-            collect());
+            let mut conflicting_outputs: Vec<&graph::Edge> = block.outputs.iter().
+                filter_map(|x: &transaction::Output| 
+                    self.pool.graph.get_edge_by_commitment(&x.commitment()).
+                    or_else(|| self.pool.available_outputs.get(&x.commitment()))).
+                collect();
 
-        let marked_transactions: HashMap<hash::Hash, ()> = HashMap::new();
+            conflicting_edges.append(&mut conflicting_outputs);
 
-        for edge in &conflicting_edges {
-            self.mark_transaction(updated_blockchain_utxo,
-                edge.destination_hash().unwrap(), &mut marked_transactions);
+
+            for edge in &conflicting_edges {
+                self.mark_transaction(&updated_blockchain_utxo,
+                    &edge, &mut marked_transactions);
+            }
         }
-
-        let freed_outputs = self.sweep_transactions(marked_transactions,
-            updated_blockchain_utxo);
-
-        for output_edge in &freed_outputs {
-            self.pool.available_outputs.insert(&output_edge.output_commitment(),
-                output_edge.with_destination(None));
-        }
+        let freed_txs = self.sweep_transactions(marked_transactions,
+            &updated_blockchain_utxo);
 
         self.reconcile_orphans();
+
+        Ok(freed_txs)
     }
 
     /// The mark portion of our mark-and-sweep pool cleanup.
@@ -532,20 +533,19 @@ impl<'a> TransactionPool<'a> {
     /// Marked transactions are added to the mutable marked_txs HashMap which
     /// is supplied by the calling function.
     fn mark_transaction(&self, updated_utxo: &DummyUtxoSet,
-        conflicting_commitment: &Commitment, 
-        &mut marked_txs: HashMap<hash::Hash, ()>) {
+        conflicting_edge: &graph::Edge, 
+        marked_txs: &mut HashMap<hash::Hash, ()>) {
 
-        marked_txs.insert(conflicting_commitment.destination_hash().unwrap(),
+        marked_txs.insert(conflicting_edge.destination_hash().unwrap(),
             ());
 
-        let tx_ref = self.transactions.get(conflicting_commitment.destination_hash());
+        let tx_ref = self.transactions.get(&conflicting_edge.destination_hash().unwrap());
 
-        for output in &tx_ref.outputs {
+        for output in &tx_ref.unwrap().outputs {
             match self.pool.graph.get_edge_by_commitment(&output.commitment()) {
                 Some(x) => {
                     if updated_utxo.get_output(&x.output_commitment()).is_none() {
-                        self.mark_transaction(updated_utxo, &x.output_commitment(),
-                            marked_txs);
+                        self.mark_transaction(updated_utxo, &x, marked_txs);
                     }
                 },
                 None => {},
@@ -566,10 +566,12 @@ impl<'a> TransactionPool<'a> {
     /// Additional bookkeeping in the mark step could optimize that away.
     fn sweep_transactions(&mut self,
         marked_transactions: HashMap<hash::Hash, ()>,
-        updated_utxo: &DummyUtxoSet) {
+        updated_utxo: &DummyUtxoSet)->Vec<Box<transaction::Transaction>> {
+
+        let mut removed_txs = Vec::new();
 
         for tx_hash in marked_transactions.keys() {
-            let removed_tx = self.transactions.remove(tx_hash);
+            let removed_tx = self.transactions.remove(tx_hash).unwrap();
 
             // Input edge conditions:
             // 1. If the input edge is a blockchain connection, remove it.
@@ -584,16 +586,18 @@ impl<'a> TransactionPool<'a> {
             // remove the edge from blockchain_connections, which should be
             // safe.
             for input in &removed_tx.inputs {
-                match self.pool.edges.remove_edge_by_commitment(&input.commitment()) {
+                match self.pool.graph.remove_edge_by_commitment(&input.commitment()) {
                     Some(x) => {
-                        if !marked_transations.contains_key(x.source_hash().unwrap()) {
+                        if !marked_transactions.contains_key(&x.source_hash().unwrap()) {
                             self.pool.available_outputs.insert(
-                                &x.output_commitment(), 
+                                x.output_commitment(), 
                                 x.with_destination(None));
                         }
                     },
-                    None => self.pool.blockchain_connections.remove(
-                        &input.commitment()),
+                    None => {
+                        self.pool.consumed_blockchain_outputs.remove(
+                            &input.commitment());
+                    },
                 };
             }
 
@@ -606,103 +610,23 @@ impl<'a> TransactionPool<'a> {
             // As above, some outputs may be missing from condition 2 if the 
             // spending transaction was visited first. 
             for output in &removed_tx.outputs {
-                match self.pool.edges.remove_edge_by_commitment(&output.commitment()) {
+                match self.pool.graph.remove_edge_by_commitment(&output.commitment()) {
                     Some(x) => {
-                        if !marked_transactions.contains_key(&output.commitment()) {
-                            self.pool.blockchain_connections.insert(
-                                &x.output_commitment(),
+                        if !marked_transactions.contains_key(&x.destination_hash().unwrap()) {
+                            self.pool.consumed_blockchain_outputs.insert(
+                                x.output_commitment(),
                                 x.with_source(None));
                         }
                     },
-                    None => self.pool.available_outputs.remove(&output.commitment()),
+                    None => {
+                        self.pool.available_outputs.remove(&output.commitment());
+                    },
                 };
             }
+
+            removed_txs.push(removed_tx);
         }
+        removed_txs
     }
 
-    /// Removes a target transaction, returning a set of newly orphaned edges.
-    ///
-    /// An internal method to handle some of the bookkeeping involved with
-    /// removing a transaction from the graph. The target transaction is
-    /// dropped from on-heap storage. The incoming edge which prompted the
-    /// transaction removal is identified.
-    ///
-    /// Due to our no duplicate output rule, we do not have to worry about the
-    /// possiblity that invalidating a transaction will open up an output for a
-    /// descendent to use. No descendent could have been accepted that would
-    /// have consumed an output that was previously consumed.
-    ///
-    /// Any incoming edges that are part of the pool (instead of blockchain
-    /// edges) are returned, except the target_edge.
-    ///
-    /// This method takes ownership of the pointer to the transaction stored on
-    /// the heap. Upon exit, this information is lost forever, freeing the
-    /// associated memory.
-    /// TODO: A mechanism for recently evicted transactions, or similar
-    /// roll-back capability, for reverting to this state to prepare handling a
-    /// reorg.
-    ///
-    /// # Panics
-    ///
-    /// This method panics if an output for this transaction is not found upon
-    /// attempting to remove it.
-    fn remove_transaction(&mut self, updated_utxo: &DummyUtxoSet, tx_hash: hash::Hash, target_edge: Commitment) -> Vec<Edge>{
-        // Drop from transaction storage, taking ownership of the transaction.
-        let removed_tx = self.transactions.remove(tx_hash).unwrap();
-
-        // Drop all incoming edges
-        let mut dropped_edges = Vec::new();
-        for input in &removed_tx.inputs {
-            if self.pool.consumed_blockchain_outputs.remove(&input.commitment()).is_none() {
-                match self.pool.edges.graph.
-                    remove_edge_by_commitment(&input.commitment()) {
-                        Some(i) if i.output_commitment() == target_edge => {},
-                        Some(i) => dropped_edges.push(i),
-                        None => {}, 
-                    };
-            }
-        }
-
-        // Drop the vertex
-        assert!(self.pool.graph.remove_vertex(tx_hash).is_some());
-
-        // Now consider the children.
-        // Each removed output for this transaction will correspond with
-        // exactly one of the following:
-        //      - an unspent output 
-        //      - an unspent output claimed by orphans
-        //      - a spent output
-        // in the last case, if the newly vacated input is not fulfilled by the
-        // new blockchain UTXO set, the child must be invalidated as well.
-        for output in &removed_tx.outputs {
-            match self.pool.remove_edge_by_commitment(&output.commitment()) {
-                Some(x) => self.check_and_remove_descendent(updated_utxo, x),
-                None => {
-                    match self.pool.available_outputs.remove(&output.commitment()) {
-                        Some(x) => self.remove_available_output(updated_utxo, output.commitment()),
-                        None => panic!("Expected edge or available output when removing tx!"),
-                    };
-                },
-            };
-        }
-    }
-
-    /// check_and_remove_descendent is the internal method responsible for 
-    /// checking a descendent that is the endpoint of a removed edge. This
-    /// descendent must be removed and invalidated if it is not satisfied by
-    /// the updated utxo set.
-    fn check_and_remove_descendent(&mut self, updated_utxo: &DummyUtxoSet, removed_edge: graph::Edge) {
-        if updated_utxo.get_output(&x.output_commitment()).is_some() {
-            // descendents missing edge has been rooted in the blockchain
-            self.pool.consumed_blockchain_outputs.insert(&x.output_commitment(),
-                x.with_source(None));
-
-            // If the node is now fully rooted in the blockchain, move it to
-            // the roots set.
-        } else {
-            // descendents edge is now missing. Invalidate the child
-            self.remove_transaction(updated_utxo, x.destination_hash().unwrap(),
-                x.output_commitment());
-        }
-    }
 }

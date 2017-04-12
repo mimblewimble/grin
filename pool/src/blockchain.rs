@@ -25,10 +25,10 @@ impl DummyUtxoSet {
     pub fn root(&self) -> hash::Hash {
         hash::ZERO_HASH
     }
-    pub fn apply(&self, b: block::Block) -> DummyUtxoSet {
+    pub fn apply(&self, b: &block::Block) -> DummyUtxoSet {
         DummyUtxoSet{outputs: HashMap::new()}
     }
-    pub fn rewind(&self, b: block::Block) -> DummyUtxoSet {
+    pub fn rewind(&self, b: &block::Block) -> DummyUtxoSet {
         DummyUtxoSet{outputs: HashMap::new()}
     }
     pub fn get_output(&self, output_ref: &Commitment) -> Option<&transaction::Output> {
