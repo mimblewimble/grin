@@ -16,7 +16,7 @@
 //! Generic sum-merkle tree. See `doc/merkle.md` for design and motivation for
 //! this structure. Most trees in Grin are stored and transmitted as either
 //! (a) only a root, or (b) the entire unpruned tree. For these it is sufficient
-//! to have a root-calculating function, for which the `TODO` function should
+//! to have a root-calculating function, for which the `compute_root` function should
 //! be used.
 //!
 //! The output set structure has much stronger requirements, as it is updated
@@ -205,6 +205,50 @@ impl<T, S> SumTree<T, S>
         self.index.insert(elem, index);
     }
 
+    fn replace_recurse(node: &mut Node<T, S>, index: usize, new_elem: T, new_sum: S) {
+        assert!(index < (1 << node.depth));
+
+        if node.depth == 0 {
+            node.hash = (0u8, &new_sum, Hashed::hash(&new_elem)).hash();
+            node.sum = new_sum;
+            node.data = NodeData::Leaf(new_elem);
+        } else {
+            match node.data {
+                NodeData::Internal { ref mut lchild, ref mut rchild } => {
+                    let bit = index & (1 << (node.depth - 1));
+                    if bit > 0 {
+                        SumTree::replace_recurse(rchild, index - bit, new_elem, new_sum);
+                    } else {
+                        SumTree::replace_recurse(lchild, index, new_elem, new_sum);
+                    }
+                    node.sum = lchild.sum.clone() + rchild.sum.clone();
+                    node.hash = (node.depth, &node.sum, lchild.hash, rchild.hash).hash();
+                }
+                // Pruned data would not have been in the index
+                NodeData::Pruned => unreachable!(),
+                NodeData::Leaf(_) => unreachable!()
+            }
+        }
+    }
+
+    /// Replaces an element in the tree. Returns true if the element existed
+    /// and was replaced.
+    pub fn replace(&mut self, elem: &T, new_elem: T, new_sum: S) -> bool {
+        let root = match self.root {
+            Some(ref mut node) => node,
+            None => { return false; }
+        };
+
+        match self.index.remove(elem) {
+            None => false,
+            Some(index) => {
+                SumTree::replace_recurse(root, index, new_elem.clone(), new_sum);
+                self.index.insert(new_elem, index);
+                true
+            }
+        }
+    }
+
     /// Determine whether an element exists in the tree
     pub fn contains(&self, elem: &T) -> bool {
         self.index.contains_key(&elem)
@@ -262,11 +306,10 @@ impl<T, S> SumTree<T, S>
     // TODO push_many to allow bulk updates
 }
 
-// TODO clean this up
 /// This is used to as a scratch space during root calculation so that we can
 /// keep everything on the stack in a fixed-size array. It reflects a maximum
 /// tree capacity of 2^48, which is not practically reachable.
-const MAX_MMR_HEIGHT: usize = 10; // TODO 48
+const MAX_MMR_HEIGHT: usize = 48;
 
 /// This algorithm is based on Peter Todd's in
 /// https://github.com/opentimestamps/opentimestamps-server/blob/master/python-opentimestamps/opentimestamps/core/timestamp.py#L324
@@ -387,10 +430,10 @@ mod test {
             }
         };
 
-        let elems = [(*b"ABC0", 10u16), (*b"ABC1", 25u16),
-                     (*b"ABC2", 15u16), (*b"ABC3", 11u16),
-                     (*b"ABC4", 19u16), (*b"ABC5", 13u16),
-                     (*b"ABC6", 30u16), (*b"ABC7", 10000u16)];
+        let mut elems = [(*b"ABC0", 10u16), (*b"ABC1", 25u16),
+                         (*b"ABC2", 15u16), (*b"ABC3", 11u16),
+                         (*b"ABC4", 19u16), (*b"ABC5", 13u16),
+                         (*b"ABC6", 30u16), (*b"ABC7", 10000u16)];
 
         assert_eq!(tree.root_sum(), None);
         assert_eq!(tree.root_sum(), compute_root(elems[0..0].iter()));
@@ -495,12 +538,30 @@ mod test {
         assert_eq!(tree.unpruned_len(), 8);
         prune!(prune, tree, elems[7]);
 
-        let mut rng = thread_rng();
+        // If we weren't pruning, try changing some elements
+        if !prune {
+            for i in 0..8 {
+                elems[i].1 += i as u16;
+                tree.replace(&elems[i].0, elems[i].0, elems[i].1);
+            }
+            let expected = node!(node!(node!(leaf!(elems[0]),
+                                             leaf!(elems[1])),
+                                       node!(leaf!(elems[2]),
+                                             leaf!(elems[3]))),
+                                 node!(node!(leaf!(elems[4]),
+                                             leaf!(elems[5])),
+                                       node!(leaf!(elems[6]),
+                                             leaf!(elems[7])))
+                                ).hash();
+            assert_eq!(tree.root_sum(), Some((expected, 10151)));
+            assert_eq!(tree.root_sum(), compute_root(elems[0..8].iter()));
+            assert_eq!(tree.unpruned_len(), 8);
+        }
 
+        let mut rng = thread_rng();
         // If we weren't pruning as we went, try pruning everything now
         // and make sure nothing breaks.
         if !prune {
-            let mut elems = elems;
             rng.shuffle(&mut elems);
             let mut expected_count = 8;
             let expected_root_sum = tree.root_sum();
@@ -517,13 +578,15 @@ mod test {
         // by `compute_root`.
         let mut big_elems: Vec<(u32, u64)> = vec![];
         let mut big_tree = SumTree::new();
-        for _ in 0..20 {
+        for i in 0..1000 {
             let new_elem = rng.gen();
             let new_sum_small: u8 = rng.gen();  // make a smaller number to prevent overflow when adding
             let new_sum = new_sum_small as u64;
             big_elems.push((new_elem, new_sum));
             big_tree.push(new_elem, new_sum);
-            assert_eq!(big_tree.root_sum(), compute_root(big_elems.iter()));
+            if i % 25 == 0 {
+                assert_eq!(big_tree.root_sum(), compute_root(big_elems.iter()));
+            }
         }
     }
 
