@@ -25,17 +25,9 @@
 //!
 
 use core::hash::{Hash, Hashed};
-use ser::Writeable;
+use ser::{self, Readable, Reader, Writeable, Writer};
 use std::collections::HashMap;
 use std::{self, mem, ops};
-
-/// Generic container to hold prunable data
-#[derive(Debug, Clone)]
-struct MaybePruned<T, S> {
-    data: Option<T>,
-    hash: Hash,
-    sum: S
-}
 
 #[derive(Debug, Clone)]
 enum NodeData<T, S> {
@@ -304,6 +296,156 @@ impl<T, S> SumTree<T, S>
     }
 
     // TODO push_many to allow bulk updates
+}
+
+// A SumTree is encoded as follows: an empty tree is the single byte 0x00.
+// An nonempty tree is encoded recursively by encoding its root node. Each
+// node is encoded as follows:
+//   flag: two bits, 01 for partial, 10 for full, 11 for pruned
+//         00 is reserved so that the 0 byte can uniquely specify an empty tree
+//  depth: six bits, zero indicates a leaf
+//   hash: 32 bytes
+//    sum: <length of sum encoding>
+//
+// For a leaf, this is followed by an encoding of the element. For an
+// internal node, the left child is encoded followed by the right child.
+// For a pruned internal node, it is followed by nothing.
+//
+impl<T, S> Writeable for SumTree<T, S>
+    where T: std::hash::Hash + Eq + Writeable,
+          S: Writeable
+{
+    fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+        match self.root {
+            None => writer.write_u8(0),
+            Some(ref node) => node.write(writer)
+        }
+    }
+}
+
+impl<T, S> Writeable for Node<T, S>
+    where T: Writeable,
+          S: Writeable
+{
+    fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+        assert!(self.depth < 64);
+
+        // Compute depth byte: 0x80 means full, 0xc0 means unpruned
+        let mut depth = 0;
+        if self.full == SubtreeFull::Yes {
+            depth |= 0x80;
+        }
+        if let NodeData::Pruned = self.data {
+        } else {
+            depth |= 0xc0;
+        }
+        depth |= self.depth;
+        // Encode node
+        try!(writer.write_u8(depth));
+        try!(self.hash.write(writer));
+        try!(self.sum.write(writer));
+        match self.data {
+            NodeData::Pruned => { Ok(()) },
+            NodeData::Leaf(ref data) => { data.write(writer) },
+            NodeData::Internal { ref lchild, ref rchild } => {
+                try!(lchild.write(writer));
+                rchild.write(writer)
+            },
+        }
+    }
+}
+
+fn node_read_recurse<T, S>(reader: &mut Reader, index: &mut HashMap<T, usize>, tree_index: &mut usize) -> Result<Node<T, S>, ser::Error>
+    where T: std::hash::Hash + Eq + Readable + Clone,
+          S: Readable
+{
+    // Read depth byte
+    let depth = try!(reader.read_u8());
+    let full = if depth & 0x80 == 0x80 { SubtreeFull::Yes } else { SubtreeFull::No };
+    let pruned = depth & 0xc0 != 0xc0;
+    let depth = depth & 0x3f;
+
+    // Sanity-check for zero byte
+    if pruned && full == SubtreeFull::No {
+        return Err(ser::Error::CorruptedData);
+    }
+
+    // Read remainder of node
+    let hash = try!(Readable::read(reader));
+    let sum = try!(Readable::read(reader));
+    let data = match (depth, pruned) {
+        (_, true) => {
+            *tree_index += 1 << depth as usize;
+            NodeData::Pruned
+        }
+        (0, _) => {
+            let elem: T = try!(Readable::read(reader));
+            index.insert(elem.clone(), *tree_index);
+            *tree_index += 1;
+            NodeData::Leaf(elem)
+        }
+        (_, _) => NodeData::Internal {
+            lchild: Box::new(try!(node_read_recurse(reader, index, tree_index))),
+            rchild: Box::new(try!(node_read_recurse(reader, index, tree_index)))
+        }
+    };
+
+    Ok(Node {
+        full: full,
+        data: data,
+        hash: hash,
+        sum: sum,
+        depth: depth
+    })
+}
+
+impl<T, S> Readable for SumTree<T, S>
+    where T: Readable + std::hash::Hash + Eq + Clone,
+          S: Readable
+{
+    fn read(reader: &mut Reader) -> Result<SumTree<T, S>, ser::Error> {
+        // Read depth byte of root node
+        let depth = try!(reader.read_u8());
+        let full = if depth & 0x80 == 0x80 { SubtreeFull::Yes } else { SubtreeFull::No };
+        let pruned = depth & 0xc0 != 0xc0;
+        let depth = depth & 0x3f;
+
+        // Special-case the zero byte
+        if pruned && full == SubtreeFull::No {
+            return Ok(SumTree {
+                index: HashMap::new(),
+                root: None
+            });
+        }
+
+        // Otherwise continue reading it
+        let mut index = HashMap::new();
+
+        let hash = try!(Readable::read(reader));
+        let sum = try!(Readable::read(reader));
+        let data = match (depth, pruned) {
+            (_, true) => NodeData::Pruned,
+            (0, _) => NodeData::Leaf(try!(Readable::read(reader))),
+            (_, _) => {
+                let mut tree_index = 0;
+                NodeData::Internal {
+                    lchild: Box::new(try!(node_read_recurse(reader, &mut index, &mut tree_index))),
+                    rchild: Box::new(try!(node_read_recurse(reader, &mut index, &mut tree_index)))
+                }
+            }
+        };
+
+        Ok(SumTree {
+            index: index,
+            root: Some(Node {
+                full: full,
+                data: data,
+                hash: hash,
+                sum: sum,
+                depth: depth
+            })
+        })
+    }
 }
 
 /// This is used to as a scratch space during root calculation so that we can
@@ -585,7 +727,9 @@ mod test {
             big_elems.push((new_elem, new_sum));
             big_tree.push(new_elem, new_sum);
             if i % 25 == 0 {
+                // Verify root
                 assert_eq!(big_tree.root_sum(), compute_root(big_elems.iter()));
+                // Do serialization roundtrip
             }
         }
     }
