@@ -262,8 +262,98 @@ impl<T, S> SumTree<T, S>
     // TODO push_many to allow bulk updates
 }
 
+// TODO clean this up
+/// This is used to as a scratch space during root calculation so that we can
+/// keep everything on the stack in a fixed-size array. It reflects a maximum
+/// tree capacity of 2^48, which is not practically reachable.
+const MAX_MMR_HEIGHT: usize = 10; // TODO 48
+
+/// This algorithm is based on Peter Todd's in
+/// https://github.com/opentimestamps/opentimestamps-server/blob/master/python-opentimestamps/opentimestamps/core/timestamp.py#L324
+///
+fn compute_peaks<S, I>(iter: I, peaks: &mut [Option<(u8, Hash, S)>])
+    where S: Writeable + ops::Add<Output=S> + Clone,
+          I: Iterator<Item=(u8, Hash, S)>
+{
+    for peak in peaks.iter_mut() {
+        *peak = None;
+    }
+    for (mut new_depth, mut new_hash, mut new_sum) in iter {
+        let mut index = 0;
+        while let Some((old_depth, old_hash, old_sum)) = peaks[index].take() {
+            // Erase current peak (done by `take()` above), then combine
+            // it with the new addition, to be inserted one higher
+            index += 1;
+            new_depth = old_depth + 1;
+            new_sum = old_sum.clone() + new_sum.clone();
+            new_hash = (new_depth, &new_sum, old_hash, new_hash).hash();
+        }
+        peaks[index] = Some((new_depth, new_hash, new_sum));
+    }
+}
+
+/// Directly compute the Merkle root of a sum-tree whose contents are given
+/// explicitly in the passed iterator.
+pub fn compute_root<'a, T, S, I>(iter: I) -> Option<(Hash, S)>
+    where T: 'a + Writeable,
+          S: 'a + Writeable + ops::Add<Output=S> + Clone + ::std::fmt::Debug,
+          I: Iterator<Item=&'a (T, S)>
+{
+    let mut peaks = vec![None; MAX_MMR_HEIGHT];
+    compute_peaks(iter.map(|&(ref elem, ref sum)| (0, (0u8, sum, Hashed::hash(elem)).hash(), sum.clone())), &mut peaks);
+
+    let mut ret = None;
+    for peak in peaks {
+        ret = match (peak, ret) {
+            (None, x) => x,
+            (Some((_, hash, sum)), None) => Some((hash, sum)),
+            (Some((depth, lhash, lsum)), Some((rhash, rsum))) => {
+                let sum = lsum + rsum;
+                let hash = (depth + 1, &sum, lhash, rhash).hash();
+                Some((hash, sum))
+            }
+        };
+    }
+    ret
+}
+
+// a couple functions that help debugging
+#[allow(dead_code)]
+fn print_node<T, S>(node: &Node<T, S>, tab_level: usize)
+    where T: Writeable + Eq + std::hash::Hash,
+          S: Writeable + ::std::fmt::Debug
+{
+    for _ in 0..tab_level {
+        print!("    ");
+    }
+    print!("[{:03}] {} {:?}", node.depth, node.hash, node.sum);
+    match node.data {
+        NodeData::Pruned => println!(" X"),
+        NodeData::Leaf(_) => println!(" L"),
+        NodeData::Internal { ref lchild, ref rchild } => {
+            println!(":");
+            print_node(lchild, tab_level + 1);
+            print_node(rchild, tab_level + 1);
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn print_tree<T, S>(tree: &SumTree<T, S>)
+    where T: Writeable + Eq + std::hash::Hash,
+          S: Writeable + ::std::fmt::Debug
+{
+    match tree.root {
+        None => println!("[empty tree]"),
+        Some(ref node) => {
+            print_node(node, 0);
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
+    use rand::{thread_rng, Rng};
     use core::hash::Hashed;
     use super::*;
 
@@ -271,8 +361,8 @@ mod test {
         let mut tree = SumTree::new();
 
         macro_rules! leaf {
-            ($data: expr, $sum: expr) => ({
-                (0u8, $sum, $data.hash())
+            ($data_sum: expr) => ({
+                (0u8, $data_sum.1, $data_sum.0.hash())
             })
         };
 
@@ -286,10 +376,10 @@ mod test {
             ($prune: expr, $tree: expr, $elem: expr) => {
                 if $prune {
                     assert_eq!($tree.len(), 1);
-                    $tree.prune($elem);
+                    $tree.prune(&$elem.0);
                     assert_eq!($tree.len(), 0);
                     // double-pruning shouldn't hurt anything
-                    $tree.prune($elem);
+                    $tree.prune(&$elem.0);
                     assert_eq!($tree.len(), 0);
                 } else {
                     assert_eq!($tree.len(), $tree.unpruned_len());
@@ -297,107 +387,120 @@ mod test {
             }
         };
 
+        let elems = [(*b"ABC0", 10u16), (*b"ABC1", 25u16),
+                     (*b"ABC2", 15u16), (*b"ABC3", 11u16),
+                     (*b"ABC4", 19u16), (*b"ABC5", 13u16),
+                     (*b"ABC6", 30u16), (*b"ABC7", 10000u16)];
+
         assert_eq!(tree.root_sum(), None);
+        assert_eq!(tree.root_sum(), compute_root(elems[0..0].iter()));
         assert_eq!(tree.len(), 0);
-        tree.push(*b"ABC0", 10u16);
+        tree.push(elems[0].0, elems[0].1);
 
         // One element
-        let expected = leaf!(b"ABC0", 10u16).hash();
+        let expected = leaf!(elems[0]).hash();
         assert_eq!(tree.root_sum(), Some((expected, 10)));
+        assert_eq!(tree.root_sum(), compute_root(elems[0..1].iter()));
         assert_eq!(tree.unpruned_len(), 1);
-        prune!(prune, tree, b"ABC0");
+        prune!(prune, tree, elems[0]);
 
         // Two elements
-        tree.push(*b"ABC1", 25);
-        let expected = node!(leaf!(b"ABC0", 10u16),
-                             leaf!(b"ABC1", 25u16)
+        tree.push(elems[1].0, elems[1].1);
+        let expected = node!(leaf!(elems[0]),
+                             leaf!(elems[1])
                             ).hash();
         assert_eq!(tree.root_sum(), Some((expected, 35)));
+        assert_eq!(tree.root_sum(), compute_root(elems[0..2].iter()));
         assert_eq!(tree.unpruned_len(), 2);
-        prune!(prune, tree, b"ABC1");
+        prune!(prune, tree, elems[1]);
 
         // Three elements
-        tree.push(*b"ABC2", 15);
-        let expected = node!(node!(leaf!(b"ABC0", 10u16),
-                                   leaf!(b"ABC1", 25u16)),
-                             leaf!(b"ABC2", 15u16)
+        tree.push(elems[2].0, elems[2].1);
+        let expected = node!(node!(leaf!(elems[0]),
+                                   leaf!(elems[1])),
+                             leaf!(elems[2])
                             ).hash();
         assert_eq!(tree.root_sum(), Some((expected, 50)));
+        assert_eq!(tree.root_sum(), compute_root(elems[0..3].iter()));
         assert_eq!(tree.unpruned_len(), 3);
-        prune!(prune, tree, b"ABC2");
+        prune!(prune, tree, elems[2]);
 
         // Four elements
-        tree.push(*b"ABC3", 11);
-        let expected = node!(node!(leaf!(b"ABC0", 10u16),
-                                   leaf!(b"ABC1", 25u16)),
-                             node!(leaf!(b"ABC2", 15u16),
-                                   leaf!(b"ABC3", 11u16))
+        tree.push(elems[3].0, elems[3].1);
+        let expected = node!(node!(leaf!(elems[0]),
+                                   leaf!(elems[1])),
+                             node!(leaf!(elems[2]),
+                                   leaf!(elems[3]))
                             ).hash();
         assert_eq!(tree.root_sum(), Some((expected, 61)));
+        assert_eq!(tree.root_sum(), compute_root(elems[0..4].iter()));
         assert_eq!(tree.unpruned_len(), 4);
-        prune!(prune, tree, b"ABC3");
+        prune!(prune, tree, elems[3]);
 
         // Five elements
-        tree.push(*b"ABC4", 19);
-        let expected = node!(node!(node!(leaf!(b"ABC0", 10u16),
-                                         leaf!(b"ABC1", 25u16)),
-                                   node!(leaf!(b"ABC2", 15u16),
-                                         leaf!(b"ABC3", 11u16))),
-                             leaf!(b"ABC4", 19u16)
+        tree.push(elems[4].0, elems[4].1);
+        let expected = node!(node!(node!(leaf!(elems[0]),
+                                         leaf!(elems[1])),
+                                   node!(leaf!(elems[2]),
+                                         leaf!(elems[3]))),
+                             leaf!(elems[4])
                             ).hash();
         assert_eq!(tree.root_sum(), Some((expected, 80)));
+        assert_eq!(tree.root_sum(), compute_root(elems[0..5].iter()));
         assert_eq!(tree.unpruned_len(), 5);
-        prune!(prune, tree, b"ABC4");
+        prune!(prune, tree, elems[4]);
 
         // Six elements
-        tree.push(*b"ABC5", 13);
-        let expected = node!(node!(node!(leaf!(b"ABC0", 10u16),
-                                         leaf!(b"ABC1", 25u16)),
-                                   node!(leaf!(b"ABC2", 15u16),
-                                         leaf!(b"ABC3", 11u16))),
-                             node!(leaf!(b"ABC4", 19u16),
-                                   leaf!(b"ABC5", 13u16))
+        tree.push(elems[5].0, elems[5].1);
+        let expected = node!(node!(node!(leaf!(elems[0]),
+                                         leaf!(elems[1])),
+                                   node!(leaf!(elems[2]),
+                                         leaf!(elems[3]))),
+                             node!(leaf!(elems[4]),
+                                   leaf!(elems[5]))
                             ).hash();
         assert_eq!(tree.root_sum(), Some((expected, 93)));
+        assert_eq!(tree.root_sum(), compute_root(elems[0..6].iter()));
         assert_eq!(tree.unpruned_len(), 6);
-        prune!(prune, tree, b"ABC5");
+        prune!(prune, tree, elems[5]);
 
         // Seven elements
-        tree.push(*b"ABC6", 30);
-        let expected = node!(node!(node!(leaf!(b"ABC0", 10u16),
-                                         leaf!(b"ABC1", 25u16)),
-                                   node!(leaf!(b"ABC2", 15u16),
-                                         leaf!(b"ABC3", 11u16))),
-                             node!(node!(leaf!(b"ABC4", 19u16),
-                                         leaf!(b"ABC5", 13u16)),
-                                   leaf!(b"ABC6", 30u16))
+        tree.push(elems[6].0, elems[6].1);
+        let expected = node!(node!(node!(leaf!(elems[0]),
+                                         leaf!(elems[1])),
+                                   node!(leaf!(elems[2]),
+                                         leaf!(elems[3]))),
+                             node!(node!(leaf!(elems[4]),
+                                         leaf!(elems[5])),
+                                   leaf!(elems[6]))
                             ).hash();
         assert_eq!(tree.root_sum(), Some((expected, 123)));
+        assert_eq!(tree.root_sum(), compute_root(elems[0..7].iter()));
         assert_eq!(tree.unpruned_len(), 7);
-        prune!(prune, tree, b"ABC6");
+        prune!(prune, tree, elems[6]);
 
         // Eight elements
-        tree.push(*b"ABC7", 10000);
-        let expected = node!(node!(node!(leaf!(b"ABC0", 10u16),
-                                         leaf!(b"ABC1", 25u16)),
-                                   node!(leaf!(b"ABC2", 15u16),
-                                         leaf!(b"ABC3", 11u16))),
-                             node!(node!(leaf!(b"ABC4", 19u16),
-                                         leaf!(b"ABC5", 13u16)),
-                                   node!(leaf!(b"ABC6", 30u16),
-                                         leaf!(b"ABC7", 10000u16)))
+        tree.push(elems[7].0, elems[7].1);
+        let expected = node!(node!(node!(leaf!(elems[0]),
+                                         leaf!(elems[1])),
+                                   node!(leaf!(elems[2]),
+                                         leaf!(elems[3]))),
+                             node!(node!(leaf!(elems[4]),
+                                         leaf!(elems[5])),
+                                   node!(leaf!(elems[6]),
+                                         leaf!(elems[7])))
                             ).hash();
         assert_eq!(tree.root_sum(), Some((expected, 10123)));
+        assert_eq!(tree.root_sum(), compute_root(elems[0..8].iter()));
         assert_eq!(tree.unpruned_len(), 8);
-        prune!(prune, tree, b"ABC7");
+        prune!(prune, tree, elems[7]);
+
+        let mut rng = thread_rng();
 
         // If we weren't pruning as we went, try pruning everything now
         // and make sure nothing breaks.
         if !prune {
-            use rand::{thread_rng, Rng};
-            let mut rng = thread_rng();
-            let mut elems = [b"ABC0", b"ABC1", b"ABC2", b"ABC3",
-                             b"ABC4", b"ABC5", b"ABC6", b"ABC7"];
+            let mut elems = elems;
             rng.shuffle(&mut elems);
             let mut expected_count = 8;
             let expected_root_sum = tree.root_sum();
@@ -405,9 +508,22 @@ mod test {
                 assert_eq!(tree.root_sum(), expected_root_sum);
                 assert_eq!(tree.len(), expected_count);
                 assert_eq!(tree.unpruned_len(), 8);
-                tree.prune(elem);
+                tree.prune(&elem.0);
                 expected_count -= 1;
             }
+        }
+
+        // Build a large random tree and check its root against that computed
+        // by `compute_root`.
+        let mut big_elems: Vec<(u32, u64)> = vec![];
+        let mut big_tree = SumTree::new();
+        for _ in 0..20 {
+            let new_elem = rng.gen();
+            let new_sum_small: u8 = rng.gen();  // make a smaller number to prevent overflow when adding
+            let new_sum = new_sum_small as u64;
+            big_elems.push((new_elem, new_sum));
+            big_tree.push(new_elem, new_sum);
+            assert_eq!(big_tree.root_sum(), compute_root(big_elems.iter()));
         }
     }
 

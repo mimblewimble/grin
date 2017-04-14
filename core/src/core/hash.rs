@@ -34,7 +34,7 @@ pub struct Hash(pub [u8; 32]);
 
 impl fmt::Debug for Hash {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		for i in self.0[..].iter().cloned() {
+		for i in self.0[..4].iter().cloned() {
 			try!(write!(f, "{:02x}", i));
 		}
 		Ok(())
