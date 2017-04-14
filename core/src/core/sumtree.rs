@@ -77,13 +77,13 @@ impl<T, S: Clone> Node<T, S> {
 #[derive(Debug, Clone)]
 pub struct SumTree<T: std::hash::Hash + Eq, S> {
     /// Index mapping data to its index in the tree
-    index: HashMap<T, usize>,
+    index: HashMap<Hash, usize>,
     /// Tree contents
     root: Option<Node<T, S>>
 }
 
 impl<T, S> SumTree<T, S>
-    where T: Writeable + std::hash::Hash + Eq + Clone,
+    where T: Writeable + std::hash::Hash + Eq,
           S: ops::Add<Output=S> + std::hash::Hash + Clone + Writeable + Eq
 {
     /// Create a new empty tree
@@ -161,19 +161,20 @@ impl<T, S> SumTree<T, S>
     /// Add an element to the tree
     pub fn push(&mut self, elem: T, sum: S) {
         // Compute element hash
-        let elem_hash = (0u8, &sum, Hashed::hash(&elem)).hash();
+        let index_hash = Hashed::hash(&elem);
+        let elem_hash = (0u8, &sum, index_hash).hash();
 
         // Special-case the first element
         if self.root.is_none() {
             self.root = Some(Node {
                 full: true,
-                data: NodeData::Leaf(elem.clone()),
+                data: NodeData::Leaf(elem),
                 hash: elem_hash,
                 sum: sum,
                 depth: 0
             });
             // TODO panic on double-insert? find a different index?
-            self.index.insert(elem, 0);
+            self.index.insert(index_hash, 0);
             return;
         }
 
@@ -184,7 +185,7 @@ impl<T, S> SumTree<T, S>
         // Insert into tree, compute new root
         let new_node = Node {
             full: true,
-            data: NodeData::Leaf(elem.clone()),
+            data: NodeData::Leaf(elem),
             hash: elem_hash,
             sum: sum,
             depth: 0
@@ -194,7 +195,7 @@ impl<T, S> SumTree<T, S>
         let index = old_root.n_children();
         self.root = Some(SumTree::insert_right_of(old_root, new_node));
         // TODO panic on double-insert? find a different index?
-        self.index.insert(elem, index);
+        self.index.insert(index_hash, index);
     }
 
     fn replace_recurse(node: &mut Node<T, S>, index: usize, new_elem: T, new_sum: S) {
@@ -226,16 +227,19 @@ impl<T, S> SumTree<T, S>
     /// Replaces an element in the tree. Returns true if the element existed
     /// and was replaced.
     pub fn replace(&mut self, elem: &T, new_elem: T, new_sum: S) -> bool {
+        let index_hash = Hashed::hash(elem);
+
         let root = match self.root {
             Some(ref mut node) => node,
             None => { return false; }
         };
 
-        match self.index.remove(elem) {
+        match self.index.remove(&index_hash) {
             None => false,
             Some(index) => {
-                SumTree::replace_recurse(root, index, new_elem.clone(), new_sum);
-                self.index.insert(new_elem, index);
+                let new_index_hash = Hashed::hash(&new_elem);
+                SumTree::replace_recurse(root, index, new_elem, new_sum);
+                self.index.insert(new_index_hash, index);
                 true
             }
         }
@@ -243,7 +247,8 @@ impl<T, S> SumTree<T, S>
 
     /// Determine whether an element exists in the tree
     pub fn contains(&self, elem: &T) -> bool {
-        self.index.contains_key(&elem)
+        let index_hash = Hashed::hash(elem);
+        self.index.contains_key(&index_hash)
     }
 
     fn prune_recurse(node: &mut Node<T, S>, index: usize) {
@@ -281,12 +286,14 @@ impl<T, S> SumTree<T, S>
     /// Removes an element from storage, not affecting the tree
     /// Returns true if the element was actually in the tree
     pub fn prune(&mut self, elem: &T) -> bool {
+        let index_hash = Hashed::hash(elem);
+
         let root = match self.root {
             Some(ref mut node) => node,
             None => { return false; }
         };
 
-        match self.index.remove(elem) {
+        match self.index.remove(&index_hash) {
             None => false,
             Some(index) => {
                 SumTree::prune_recurse(root, index);
@@ -332,7 +339,7 @@ impl<T, S> Writeable for Node<T, S>
 
         // Compute depth byte: 0x80 means full, 0xc0 means unpruned
         let mut depth = 0;
-        if self.full == SubtreeFull::Yes {
+        if self.full {
             depth |= 0x80;
         }
         if let NodeData::Pruned = self.data {
@@ -355,18 +362,18 @@ impl<T, S> Writeable for Node<T, S>
     }
 }
 
-fn node_read_recurse<T, S>(reader: &mut Reader, index: &mut HashMap<T, usize>, tree_index: &mut usize) -> Result<Node<T, S>, ser::Error>
-    where T: std::hash::Hash + Eq + Readable + Clone,
+fn node_read_recurse<T, S>(reader: &mut Reader, index: &mut HashMap<Hash, usize>, tree_index: &mut usize) -> Result<Node<T, S>, ser::Error>
+    where T: std::hash::Hash + Eq + Hashed + Readable,
           S: Readable
 {
     // Read depth byte
     let depth = try!(reader.read_u8());
-    let full = if depth & 0x80 == 0x80 { SubtreeFull::Yes } else { SubtreeFull::No };
+    let full = depth & 0x80 == 0x80;
     let pruned = depth & 0xc0 != 0xc0;
     let depth = depth & 0x3f;
 
     // Sanity-check for zero byte
-    if pruned && full == SubtreeFull::No {
+    if pruned && !full {
         return Err(ser::Error::CorruptedData);
     }
 
@@ -380,7 +387,7 @@ fn node_read_recurse<T, S>(reader: &mut Reader, index: &mut HashMap<T, usize>, t
         }
         (0, _) => {
             let elem: T = try!(Readable::read(reader));
-            index.insert(elem.clone(), *tree_index);
+            index.insert(Hashed::hash(&elem), *tree_index);
             *tree_index += 1;
             NodeData::Leaf(elem)
         }
@@ -400,18 +407,18 @@ fn node_read_recurse<T, S>(reader: &mut Reader, index: &mut HashMap<T, usize>, t
 }
 
 impl<T, S> Readable for SumTree<T, S>
-    where T: Readable + std::hash::Hash + Eq + Clone,
+    where T: Hashed + Readable + std::hash::Hash + Eq,
           S: Readable
 {
     fn read(reader: &mut Reader) -> Result<SumTree<T, S>, ser::Error> {
         // Read depth byte of root node
         let depth = try!(reader.read_u8());
-        let full = if depth & 0x80 == 0x80 { SubtreeFull::Yes } else { SubtreeFull::No };
+        let full = depth & 0x80 == 0x80;
         let pruned = depth & 0xc0 != 0xc0;
         let depth = depth & 0x3f;
 
         // Special-case the zero byte
-        if pruned && full == SubtreeFull::No {
+        if pruned && !full {
             return Ok(SumTree {
                 index: HashMap::new(),
                 root: None
@@ -481,7 +488,7 @@ fn compute_peaks<S, I>(iter: I, peaks: &mut [Option<(u8, Hash, S)>])
 /// explicitly in the passed iterator.
 pub fn compute_root<'a, T, S, I>(iter: I) -> Option<(Hash, S)>
     where T: 'a + Writeable,
-          S: 'a + Writeable + ops::Add<Output=S> + Clone + ::std::fmt::Debug,
+          S: 'a + Writeable + ops::Add<Output=S> + Clone,
           I: Iterator<Item=&'a (T, S)>
 {
     let mut peaks = vec![None; MAX_MMR_HEIGHT];
