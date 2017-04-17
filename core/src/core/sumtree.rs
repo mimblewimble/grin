@@ -158,11 +158,16 @@ impl<T, S> SumTree<T, S>
         }
     }
 
-    /// Add an element to the tree
-    pub fn push(&mut self, elem: T, sum: S) {
+    /// Add an element to the tree. Returns true if the element was added,
+    /// false if it already existed in the tree.
+    pub fn push(&mut self, elem: T, sum: S) -> bool {
         // Compute element hash
         let index_hash = Hashed::hash(&elem);
         let elem_hash = (0u8, &sum, index_hash).hash();
+
+        if self.index.contains_key(&index_hash) {
+            return false;
+        }
 
         // Special-case the first element
         if self.root.is_none() {
@@ -173,9 +178,8 @@ impl<T, S> SumTree<T, S>
                 sum: sum,
                 depth: 0
             });
-            // TODO panic on double-insert? find a different index?
             self.index.insert(index_hash, 0);
-            return;
+            return true;
         }
 
         // Next, move the old root out of the structure so that we are allowed to
@@ -194,8 +198,8 @@ impl<T, S> SumTree<T, S>
         // Put new root in place and record insertion
         let index = old_root.n_children();
         self.root = Some(SumTree::insert_right_of(old_root, new_node));
-        // TODO panic on double-insert? find a different index?
         self.index.insert(index_hash, index);
+        true
     }
 
     fn replace_recurse(node: &mut Node<T, S>, index: usize, new_elem: T, new_sum: S) {
@@ -549,7 +553,7 @@ mod test {
     use core::hash::Hashed;
     use super::*;
 
-    fn sumtree_create(prune: bool) {
+    fn sumtree_create_(prune: bool) {
         let mut tree = SumTree::new();
 
         macro_rules! leaf {
@@ -742,9 +746,26 @@ mod test {
     }
 
     #[test]
-    fn sumtree_test() {
-        sumtree_create(false);
-        sumtree_create(true);
+    fn sumtree_create() {
+        sumtree_create_(false);
+        sumtree_create_(true);
+    }
+
+    #[test]
+    fn sumtree_double_add() {
+        let mut tree = SumTree::new();
+        // Cannot prune a nonexistant element
+        assert!(!tree.prune(b"ABC0"));
+        // Can add
+        assert!(tree.push(*b"ABC0", 10u8));
+        // Cannot double-add
+        assert!(!tree.push(*b"ABC0", 10u8));
+        assert!(!tree.push(*b"ABC0", 5u8));  // even changing the sum will not help
+        // Can prune but not double-prune
+        assert!(tree.prune(b"ABC0"));
+        assert!(!tree.prune(b"ABC0"));
+        // Can re-add
+        assert!(tree.push(*b"ABC0", 10u8));
     }
 }
 
