@@ -25,6 +25,8 @@ pub mod graph;
 pub mod types;
 pub mod blockchain;
 
+extern crate time;
+extern crate rand;
+
 extern crate grin_core as core;
 extern crate secp256k1zkp as secp;
-extern crate time;

@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Base types for the transaction pool implementation.
+//! The primary module containing the implementations of the transaction pool
+//! and its top-level members.
 
 use std::vec::Vec;
 use std::sync::Arc;

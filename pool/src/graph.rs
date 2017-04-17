@@ -22,6 +22,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use secp::pedersen::Commitment;
+use secp::{Secp256k1, ContextFlag};
+use secp::key;
 
 use time;
 
@@ -103,6 +105,14 @@ pub struct DirectedGraph {
 }
 
 impl DirectedGraph {
+    pub fn empty() -> DirectedGraph {
+        DirectedGraph{
+            edges: HashMap::new(),
+            vertices: Vec::new(),
+            roots: Vec::new(),
+        }
+    }
+
     pub fn get_edge_by_commitment(&self, output_commitment: &Commitment) -> Option<&Edge> {
         self.edges.get(output_commitment)
     }
@@ -123,10 +133,15 @@ impl DirectedGraph {
         }
     }
 
-    // add_entry is the all-in-one append method, which considers the vertex
-    // destination (roots or vertices) and inserts the edges.
-    // After calling add_entry, edges will be drained and can no longer be
-    // used.
+    /// Adds a vertex and a set of incoming edges to the graph.
+    ///
+    /// The PoolEntry at vertex is added to the graph; depending on the
+    /// number of incoming edges, the vertex is eithe radded to the vertices
+    /// or to the roots.
+    ///
+    /// Outgoing edges must not be included in edges; this method is designed
+    /// for adding vertices one at a time and only accepts incoming edges as
+    /// internal edges.
     pub fn add_entry(&mut self, vertex: PoolEntry, mut edges: Vec<Edge>) {
         if edges.len() == 0 {
             self.roots.push(vertex);
@@ -158,5 +173,46 @@ impl DirectedGraph {
 /// exposed.
 /// This method is a placeholder until a reasonable identifier is decided on.
 pub fn transaction_identifier(tx: &core::transaction::Transaction) -> core::hash::Hash {
-    unimplemented!();
+    core::hash::ZERO_HASH
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand;
+
+    #[test]
+    fn test_add_entry() {
+        let ec = Secp256k1::with_caps(ContextFlag::Commit);
+
+        let output_commit = ec.commit_value(70).unwrap();
+        let inputs = vec![core::transaction::Input(ec.commit_value(50).unwrap()),
+                core::transaction::Input(ec.commit_value(25).unwrap())];
+        let outputs = vec![core::transaction::Output{
+                features: core::transaction::DEFAULT_OUTPUT,
+                commit: output_commit,
+                proof: ec.range_proof(0, 100, key::ONE, output_commit)}];
+        let test_transaction = core::transaction::Transaction::new(inputs,
+            outputs, 5);
+
+        let test_pool_entry = PoolEntry::new(&test_transaction);
+
+        let incoming_edge_1 = Edge::new(Some(random_hash()),
+            Some(core::hash::ZERO_HASH), output_commit);
+
+
+        let mut test_graph = DirectedGraph::empty();
+
+        test_graph.add_entry(test_pool_entry, vec![incoming_edge_1]);
+
+        assert_eq!(test_graph.vertices.len(), 1);
+        assert_eq!(test_graph.roots.len(), 0);
+        assert_eq!(test_graph.edges.len(), 1);
+    }
+
+    fn random_hash() -> core::hash::Hash {
+        let hash_bytes: [u8;32]= rand::random();
+        core::hash::Hash(hash_bytes)
+    }
+
 }
