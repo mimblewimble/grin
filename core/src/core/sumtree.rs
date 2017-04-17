@@ -304,10 +304,11 @@ impl<T> SumTree<T>
         }
     }
 
-    /// Determine whether an element exists in the tree
-    pub fn contains(&self, elem: &T) -> bool {
+    /// Determine whether an element exists in the tree.
+    /// If so, return its index
+    pub fn contains(&self, elem: &T) -> Option<usize> {
         let index_hash = Hashed::hash(elem);
-        self.index.contains_key(&index_hash)
+        self.index.get(&index_hash).map(|x| *x)
     }
 
     fn prune_recurse(node: &mut Node<T>, index: usize) {
@@ -686,7 +687,9 @@ mod test {
         assert_eq!(tree.root_sum(), None);
         assert_eq!(tree.root_sum(), compute_root(elems[0..0].iter()));
         assert_eq!(tree.len(), 0);
-        tree.push(elems[0]);
+        assert_eq!(tree.contains(&elems[0]), None);
+        assert!(tree.push(elems[0]));
+        assert_eq!(tree.contains(&elems[0]), Some(0));
 
         // One element
         let expected = leaf!(elems[0]).hash();
@@ -696,7 +699,9 @@ mod test {
         prune!(prune, tree, elems[0]);
 
         // Two elements
-        tree.push(elems[1]);
+        assert_eq!(tree.contains(&elems[1]), None);
+        assert!(tree.push(elems[1]));
+        assert_eq!(tree.contains(&elems[1]), Some(1));
         let expected = node!(leaf!(elems[0]),
                              leaf!(elems[1])
                             ).hash();
@@ -706,7 +711,9 @@ mod test {
         prune!(prune, tree, elems[1]);
 
         // Three elements
-        tree.push(elems[2]);
+        assert_eq!(tree.contains(&elems[2]), None);
+        assert!(tree.push(elems[2]));
+        assert_eq!(tree.contains(&elems[2]), Some(2));
         let expected = node!(node!(leaf!(elems[0]),
                                    leaf!(elems[1])),
                              leaf!(elems[2])
@@ -717,7 +724,9 @@ mod test {
         prune!(prune, tree, elems[2]);
 
         // Four elements
-        tree.push(elems[3]);
+        assert_eq!(tree.contains(&elems[3]), None);
+        assert!(tree.push(elems[3]));
+        assert_eq!(tree.contains(&elems[3]), Some(3));
         let expected = node!(node!(leaf!(elems[0]),
                                    leaf!(elems[1])),
                              node!(leaf!(elems[2]),
@@ -729,7 +738,9 @@ mod test {
         prune!(prune, tree, elems[3]);
 
         // Five elements
-        tree.push(elems[4]);
+        assert_eq!(tree.contains(&elems[4]), None);
+        assert!(tree.push(elems[4]));
+        assert_eq!(tree.contains(&elems[4]), Some(4));
         let expected = node!(node!(node!(leaf!(elems[0]),
                                          leaf!(elems[1])),
                                    node!(leaf!(elems[2]),
@@ -742,7 +753,9 @@ mod test {
         prune!(prune, tree, elems[4]);
 
         // Six elements
-        tree.push(elems[5]);
+        assert_eq!(tree.contains(&elems[5]), None);
+        assert!(tree.push(elems[5]));
+        assert_eq!(tree.contains(&elems[5]), Some(5));
         let expected = node!(node!(node!(leaf!(elems[0]),
                                          leaf!(elems[1])),
                                    node!(leaf!(elems[2]),
@@ -756,7 +769,9 @@ mod test {
         prune!(prune, tree, elems[5]);
 
         // Seven elements
-        tree.push(elems[6]);
+        assert_eq!(tree.contains(&elems[6]), None);
+        assert!(tree.push(elems[6]));
+        assert_eq!(tree.contains(&elems[6]), Some(6));
         let expected = node!(node!(node!(leaf!(elems[0]),
                                          leaf!(elems[1])),
                                    node!(leaf!(elems[2]),
@@ -771,7 +786,9 @@ mod test {
         prune!(prune, tree, elems[6]);
 
         // Eight elements
-        tree.push(elems[7]);
+        assert_eq!(tree.contains(&elems[7]), None);
+        assert!(tree.push(elems[7]));
+        assert_eq!(tree.contains(&elems[7]), Some(7));
         let expected = node!(node!(node!(leaf!(elems[0]),
                                          leaf!(elems[1])),
                                    node!(leaf!(elems[2]),
@@ -790,8 +807,12 @@ mod test {
         if !prune {
             for i in 0..8 {
                 let old_elem = elems[i];
-                elems[i].0[2] += i as u32;
-               assert!(tree.replace(&old_elem, elems[i]));
+                elems[i].0[2] += 1 + i as u32;
+                assert_eq!(tree.contains(&old_elem), Some(i));
+                assert_eq!(tree.contains(&elems[i]), None);
+                assert!(tree.replace(&old_elem, elems[i]));
+                assert_eq!(tree.contains(&elems[i]), Some(i));
+                assert_eq!(tree.contains(&old_elem), None);
             }
             let expected = node!(node!(node!(leaf!(elems[0]),
                                              leaf!(elems[1])),
@@ -802,7 +823,7 @@ mod test {
                                        node!(leaf!(elems[6]),
                                              leaf!(elems[7])))
                                 ).hash();
-            assert_eq!(tree.root_sum(), Some((expected, 28 * 0x11 + 0x1000)));
+            assert_eq!(tree.root_sum(), Some((expected, 28 + 36 * 0x10 + 0x1000)));
             assert_eq!(tree.root_sum(), compute_root(elems[0..8].iter()));
             assert_eq!(tree.unpruned_len(), 8);
         }
