@@ -258,7 +258,7 @@ mod test {
 			vec![Method::Get]
 		}
 
-		fn get(&self, name: String) -> Result<Animal> {
+		fn get(&self, name: String) -> ApiResult<Animal> {
 			Ok(Animal {
 				name: name,
 				legs: 4,

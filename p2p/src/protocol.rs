@@ -106,14 +106,14 @@ impl Protocol for ProtocolV1 {
 }
 
 impl ProtocolV1 {
-	fn send_msg(&self, t: Type, body: &ser::Writeable) -> Result<(), Error> {
+	fn send_msg<W: ser::Writeable>(&self, t: Type, body: &W) -> Result<(), Error> {
 		self.conn.borrow().send_msg(t, body)
 	}
 
-	fn send_request(&self,
+	fn send_request<W: ser::Writeable>(&self,
 	                t: Type,
 	                rt: Type,
-	                body: &ser::Writeable,
+	                body: &W,
 	                expect_resp: Option<Hash>)
 	                -> Result<(), Error> {
 		self.conn.borrow().send_request(t, rt, body, expect_resp)

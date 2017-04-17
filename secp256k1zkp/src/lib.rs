@@ -69,6 +69,12 @@ pub struct RecoveryId(i32);
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct Signature(ffi::Signature);
 
+impl std::convert::AsRef<[u8]> for Signature {
+    fn as_ref(&self) -> &[u8] {
+        &self.0.as_ref()
+    }
+}
+
 /// An ECDSA signature with a recovery ID for pubkey recovery
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct RecoverableSignature(ffi::RecoverableSignature);

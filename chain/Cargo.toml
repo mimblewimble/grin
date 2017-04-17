@@ -2,6 +2,7 @@
 name = "grin_chain"
 version = "0.1.0"
 authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
+workspace = ".."
 
 [dependencies]
 bitflags = "^0.7.0"

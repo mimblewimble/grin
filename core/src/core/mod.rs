@@ -31,7 +31,7 @@ use consensus::PROOFSIZE;
 pub use self::block::{Block, BlockHeader, DEFAULT_BLOCK};
 pub use self::transaction::{Transaction, Input, Output, TxKernel, COINBASE_KERNEL,
                             COINBASE_OUTPUT, DEFAULT_OUTPUT};
-use self::hash::{Hash, Hashed, HashWriter, ZERO_HASH};
+use self::hash::{Hash, Hashed, ZERO_HASH};
 use ser::{Writeable, Writer, Reader, Readable, Error};
 
 /// Implemented by types that hold inputs and outputs including Pedersen
@@ -50,12 +50,12 @@ pub trait Committed {
 		let mut input_commits = map_vec!(self.inputs_committed(), |inp| inp.commitment());
 		let mut output_commits = map_vec!(self.outputs_committed(), |out| out.commitment());
 
-		// add the overage as input commitment if positive, as an output commitment if
+		// add the overage as output commitment if positive, as an input commitment if
 		// negative
 		let overage = self.overage();
 		if overage != 0 {
 			let over_commit = secp.commit_value(overage.abs() as u64).unwrap();
-			if overage > 0 {
+			if overage < 0 {
 				input_commits.push(over_commit);
 			} else {
 				output_commits.push(over_commit);
@@ -63,7 +63,7 @@ pub trait Committed {
 		}
 
 		// sum all that stuff
-		secp.commit_sum(input_commits, output_commits)
+		secp.commit_sum(output_commits, input_commits)
 	}
 
 	/// Vector of committed inputs to verify
@@ -88,7 +88,7 @@ impl fmt::Debug for Proof {
 		for (i, val) in self.0[..].iter().enumerate() {
 			try!(write!(f, "{:x}", val));
 			if i < PROOFSIZE - 1 {
-				write!(f, " ");
+				try!(write!(f, " "));
 			}
 		}
 		write!(f, ")")
@@ -138,7 +138,7 @@ impl Proof {
 	}
 }
 
-impl Readable<Proof> for Proof {
+impl Readable for Proof {
 	fn read(reader: &mut Reader) -> Result<Proof, Error> {
 		let mut pow = [0u32; PROOFSIZE];
 		for n in 0..PROOFSIZE {
@@ -149,7 +149,7 @@ impl Readable<Proof> for Proof {
 }
 
 impl Writeable for Proof {
-	fn write(&self, writer: &mut Writer) -> Result<(), Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		for n in 0..PROOFSIZE {
 			try!(writer.write_u32(self.0[n]));
 		}
@@ -162,9 +162,9 @@ impl Writeable for Proof {
 struct HPair(Hash, Hash);
 
 impl Writeable for HPair {
-	fn write(&self, writer: &mut Writer) -> Result<(), Error> {
-		try!(writer.write_bytes(&self.0.to_slice()));
-		try!(writer.write_bytes(&self.1.to_slice()));
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		try!(writer.write_bytes(&self.0));
+		try!(writer.write_bytes(&self.1));
 		Ok(())
 	}
 }
@@ -194,7 +194,7 @@ impl MerkleRow {
 	}
 	fn root(&self) -> Hash {
 		if self.0.len() == 0 {
-			vec![].hash()
+			[].hash()
 		} else if self.0.len() == 1 {
 			self.0[0].hash()
 		} else {
@@ -211,7 +211,6 @@ mod test {
 	use secp::Secp256k1;
 	use secp::key::SecretKey;
 	use ser;
-	use rand::Rng;
 	use rand::os::OsRng;
 	use core::build::{self, input, output, input_rand, output_rand, with_fee, initial_tx,
 	                  with_excess};
@@ -310,7 +309,6 @@ mod test {
 	#[test]
 	fn tx_build_exchange() {
 		let ref secp = new_secp();
-		let outh = ZERO_HASH;
 
 		let tx_alice: Transaction;
 		let blind_sum: SecretKey;

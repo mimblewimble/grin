@@ -69,7 +69,7 @@ enum_from_primitive! {
 /// the  header first, handles its validation and then reads the Readable body,
 /// allocating buffers of the right size.
 pub fn read_msg<T>(conn: TcpStream) -> Box<Future<Item = (TcpStream, T), Error = Error>>
-	where T: Readable<T> + 'static
+	where T: Readable + 'static
 {
 	let read_header = read_exact(conn, vec![0u8; HEADER_LEN as usize])
 		.from_err()
@@ -147,7 +147,7 @@ impl MsgHeader {
 }
 
 impl Writeable for MsgHeader {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u8, self.magic[0]],
 		                [write_u8, self.magic[1]],
@@ -157,7 +157,7 @@ impl Writeable for MsgHeader {
 	}
 }
 
-impl Readable<MsgHeader> for MsgHeader {
+impl Readable for MsgHeader {
 	fn read(reader: &mut Reader) -> Result<MsgHeader, ser::Error> {
 		try!(reader.expect_u8(MAGIC[0]));
 		try!(reader.expect_u8(MAGIC[1]));
@@ -197,7 +197,7 @@ pub struct Hand {
 }
 
 impl Writeable for Hand {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u32, self.version],
 		                [write_u32, self.capabilities.bits()],
@@ -209,7 +209,7 @@ impl Writeable for Hand {
 	}
 }
 
-impl Readable<Hand> for Hand {
+impl Readable for Hand {
 	fn read(reader: &mut Reader) -> Result<Hand, ser::Error> {
 		let (version, capab, nonce) = ser_multiread!(reader, read_u32, read_u32, read_u64);
 		let total_diff = try!(Difficulty::read(reader));
@@ -246,7 +246,7 @@ pub struct Shake {
 }
 
 impl Writeable for Shake {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u32, self.version],
 		                [write_u32, self.capabilities.bits()]);
@@ -256,7 +256,7 @@ impl Writeable for Shake {
 	}
 }
 
-impl Readable<Shake> for Shake {
+impl Readable for Shake {
 	fn read(reader: &mut Reader) -> Result<Shake, ser::Error> {
 		let (version, capab) = ser_multiread!(reader, read_u32, read_u32);
 		let total_diff = try!(Difficulty::read(reader));
@@ -279,12 +279,12 @@ pub struct GetPeerAddrs {
 }
 
 impl Writeable for GetPeerAddrs {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u32(self.capabilities.bits())
 	}
 }
 
-impl Readable<GetPeerAddrs> for GetPeerAddrs {
+impl Readable for GetPeerAddrs {
 	fn read(reader: &mut Reader) -> Result<GetPeerAddrs, ser::Error> {
 		let capab = try!(reader.read_u32());
 		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData));
@@ -299,7 +299,7 @@ pub struct PeerAddrs {
 }
 
 impl Writeable for PeerAddrs {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		try!(writer.write_u32(self.peers.len() as u32));
 		for p in &self.peers {
 			p.write(writer);
@@ -308,7 +308,7 @@ impl Writeable for PeerAddrs {
 	}
 }
 
-impl Readable<PeerAddrs> for PeerAddrs {
+impl Readable for PeerAddrs {
 	fn read(reader: &mut Reader) -> Result<PeerAddrs, ser::Error> {
 		let peer_count = try!(reader.read_u32());
 		if peer_count > MAX_PEER_ADDRS {
@@ -335,13 +335,13 @@ pub struct PeerError {
 }
 
 impl Writeable for PeerError {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer, [write_u32, self.code], [write_bytes, &self.message]);
 		Ok(())
 	}
 }
 
-impl Readable<PeerError> for PeerError {
+impl Readable for PeerError {
 	fn read(reader: &mut Reader) -> Result<PeerError, ser::Error> {
 		let (code, msg) = ser_multiread!(reader, read_u32, read_vec);
 		let message = try!(String::from_utf8(msg).map_err(|_| ser::Error::CorruptedData));
@@ -358,7 +358,7 @@ impl Readable<PeerError> for PeerError {
 pub struct SockAddr(pub SocketAddr);
 
 impl Writeable for SockAddr {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		match self.0 {
 			SocketAddr::V4(sav4) => {
 				ser_multiwrite!(writer,
@@ -378,7 +378,7 @@ impl Writeable for SockAddr {
 	}
 }
 
-impl Readable<SockAddr> for SockAddr {
+impl Readable for SockAddr {
 	fn read(reader: &mut Reader) -> Result<SockAddr, ser::Error> {
 		let v4_or_v6 = try!(reader.read_u8());
 		if v4_or_v6 == 0 {
@@ -413,7 +413,7 @@ pub struct Locator {
 }
 
 impl Writeable for Locator {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.hashes.len() as u8)?;
 		for h in &self.hashes {
 			h.write(writer)?
@@ -422,7 +422,7 @@ impl Writeable for Locator {
 	}
 }
 
-impl Readable<Locator> for Locator {
+impl Readable for Locator {
 	fn read(reader: &mut Reader) -> Result<Locator, ser::Error> {
 		let len = reader.read_u8()?;
 		let mut hashes = Vec::with_capacity(len as usize);
@@ -439,7 +439,7 @@ pub struct Headers {
 }
 
 impl Writeable for Headers {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u16(self.headers.len() as u16)?;
 		for h in &self.headers {
 			h.write(writer)?
@@ -448,7 +448,7 @@ impl Writeable for Headers {
 	}
 }
 
-impl Readable<Headers> for Headers {
+impl Readable for Headers {
 	fn read(reader: &mut Reader) -> Result<Headers, ser::Error> {
 		let len = reader.read_u16()?;
 		let mut headers = Vec::with_capacity(len as usize);
@@ -464,12 +464,12 @@ impl Readable<Headers> for Headers {
 pub struct Empty {}
 
 impl Writeable for Empty {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		Ok(())
 	}
 }
 
-impl Readable<Empty> for Empty {
+impl Readable for Empty {
 	fn read(reader: &mut Reader) -> Result<Empty, ser::Error> {
 		Ok(Empty {})
 	}

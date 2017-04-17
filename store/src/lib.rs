@@ -92,7 +92,7 @@ impl Store {
 
 	/// Writes a single key and its `Writeable` value to the db. Encapsulates
 	/// serialization.
-	pub fn put_ser(&self, key: &[u8], value: &ser::Writeable) -> Result<(), Error> {
+	pub fn put_ser<W: ser::Writeable>(&self, key: &[u8], value: &W) -> Result<(), Error> {
 		let ser_value = ser::ser_vec(value);
 		match ser_value {
 			Ok(data) => self.put(key, data),
@@ -108,14 +108,14 @@ impl Store {
 
 	/// Gets a `Readable` value from the db, provided its key. Encapsulates
 	/// serialization.
-	pub fn get_ser<T: ser::Readable<T>>(&self, key: &[u8]) -> Result<Option<T>, Error> {
+	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
 		self.get_ser_limited(key, 0)
 	}
 
 	/// Gets a `Readable` value from the db, provided its key, allowing to
 	/// extract only partial data. The underlying Readable size must align
 	/// accordingly. Encapsulates serialization.
-	pub fn get_ser_limited<T: ser::Readable<T>>(&self,
+	pub fn get_ser_limited<T: ser::Readable>(&self,
 	                                            key: &[u8],
 	                                            len: usize)
 	                                            -> Result<Option<T>, Error> {
@@ -145,7 +145,7 @@ impl Store {
 	/// Produces an iterator of `Readable` types moving forward from the
 	/// provided
 	/// key.
-	pub fn iter<T: ser::Readable<T>>(&self, from: &[u8]) -> SerIterator<T> {
+	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> SerIterator<T> {
 		let db = self.rdb.read().unwrap();
 		SerIterator {
 			iter: db.iterator(IteratorMode::From(from, Direction::Forward)),
@@ -176,7 +176,7 @@ pub struct Batch<'a> {
 impl<'a> Batch<'a> {
 	/// Writes a single key and its `Writeable` value to the batch. The write
 	/// function must be called to "commit" the batch to storage.
-	pub fn put_ser(mut self, key: &[u8], value: &ser::Writeable) -> Result<Batch<'a>, Error> {
+	pub fn put_ser<W: ser::Writeable>(mut self, key: &[u8], value: &W) -> Result<Batch<'a>, Error> {
 		let ser_value = ser::ser_vec(value);
 		match ser_value {
 			Ok(data) => {
@@ -196,14 +196,14 @@ impl<'a> Batch<'a> {
 /// An iterator thad produces Readable instances back. Wraps the lower level
 /// DBIterator and deserializes the returned values.
 pub struct SerIterator<T>
-	where T: ser::Readable<T>
+	where T: ser::Readable
 {
 	iter: DBIterator,
 	_marker: PhantomData<T>,
 }
 
 impl<T> Iterator for SerIterator<T>
-    where T: ser::Readable<T>
+    where T: ser::Readable
 {
 	type Item = T;
 

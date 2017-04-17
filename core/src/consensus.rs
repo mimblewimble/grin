@@ -21,7 +21,7 @@
 
 use std::cmp;
 
-use bigint::{BigInt, Sign, BigUint};
+use bigint::{BigInt, Sign};
 
 use core::target::Difficulty;
 
@@ -72,7 +72,7 @@ pub fn next_target(ts: i64,
 	let soft_min = one.clone() <<
 	               (((prev_cuckoo_sz - cmp::min(DEFAULT_SIZESHIFT, prev_cuckoo_sz)) *
 	                 8 + 16) as usize);
-	let prev_diff = BigInt::from_biguint(Sign::Plus, prev_diff.num);
+	let prev_diff = BigInt::from_biguint(Sign::Plus, prev_diff.into_biguint());
 	let (pdiff, clen) = if prev_diff > soft_min && prev_cuckoo_sz < MAX_SIZESHIFT {
 		(prev_diff / two, prev_cuckoo_sz + 1)
 	} else {
@@ -89,7 +89,7 @@ pub fn next_target(ts: i64,
 	if new_diff < one {
 		(Difficulty::one(), clen)
 	} else {
-		(Difficulty { num: new_diff.to_biguint().unwrap() }, clen)
+		(Difficulty::from_biguint(new_diff.to_biguint().unwrap()), clen)
 	}
 }
 

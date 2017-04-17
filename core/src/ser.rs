@@ -34,7 +34,9 @@ pub enum Error {
 	IOErr(io::Error),
 	/// Expected a given value that wasn't found
 	UnexpectedData {
+        /// What we wanted
 		expected: Vec<u8>,
+        /// What we got
 		received: Vec<u8>,
 	},
 	/// Data wasn't in a consumable format
@@ -79,14 +81,6 @@ impl error::Error for Error {
 		}
 	}
 }
-
-/// Useful trait to implement on types that can be translated to byte slices
-/// directly. Allows the use of `write_fixed_bytes` on them.
-pub trait AsFixedBytes {
-	/// The slice representation of self
-	fn as_fixed_bytes(&self) -> &[u8];
-}
-
 
 /// Signal to a serializable object how much of its data should be serialized
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -140,14 +134,14 @@ pub trait Writer {
 
 	/// Writes a variable number of bytes. The length is encoded as a 64-bit
 	/// prefix.
-	fn write_bytes(&mut self, bytes: &AsFixedBytes) -> Result<(), Error> {
-		try!(self.write_u64(bytes.as_fixed_bytes().len() as u64));
+	fn write_bytes<T: AsFixedBytes>(&mut self, bytes: &T) -> Result<(), Error> {
+		try!(self.write_u64(bytes.as_ref().len() as u64));
 		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a fixed number of bytes from something that can turn itself into
 	/// a `&[u8]`. The reader is expected to know the actual length on read.
-	fn write_fixed_bytes(&mut self, fixed: &AsFixedBytes) -> Result<(), Error>;
+	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, fixed: &T) -> Result<(), Error>;
 }
 
 /// Implementations defined how different numbers and binary structures are
@@ -179,32 +173,32 @@ pub trait Reader {
 /// underlying Write implementation.
 pub trait Writeable {
 	/// Write the data held by this Writeable to the provided writer
-	fn write(&self, writer: &mut Writer) -> Result<(), Error>;
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error>;
 }
 
 /// Trait that every type that can be deserialized from binary must implement.
 /// Reads directly to a Reader, a utility type thinly wrapping an
 /// underlying Read implementation.
-pub trait Readable<T> {
+pub trait Readable where Self: Sized {
 	/// Reads the data necessary to this Readable from the provided reader
-	fn read(reader: &mut Reader) -> Result<T, Error>;
+	fn read(reader: &mut Reader) -> Result<Self, Error>;
 }
 
 /// Deserializes a Readeable from any std::io::Read implementation.
-pub fn deserialize<T: Readable<T>>(mut source: &mut Read) -> Result<T, Error> {
+pub fn deserialize<T: Readable>(mut source: &mut Read) -> Result<T, Error> {
 	let mut reader = BinReader { source: source };
 	T::read(&mut reader)
 }
 
 /// Serializes a Writeable into any std::io::Write implementation.
-pub fn serialize(mut sink: &mut Write, thing: &Writeable) -> Result<(), Error> {
+pub fn serialize<W: Writeable>(mut sink: &mut Write, thing: &W) -> Result<(), Error> {
 	let mut writer = BinWriter { sink: sink };
 	thing.write(&mut writer)
 }
 
 /// Utility function to serialize a writeable directly in memory using a
 /// Vec<u8>.
-pub fn ser_vec(thing: &Writeable) -> Result<Vec<u8>, Error> {
+pub fn ser_vec<W: Writeable>(thing: &W) -> Result<Vec<u8>, Error> {
 	let mut vec = Vec::new();
 	try!(serialize(&mut vec, thing));
 	Ok(vec)
@@ -266,7 +260,7 @@ impl<'a> Reader for BinReader<'a> {
 }
 
 
-impl Readable<Commitment> for Commitment {
+impl Readable for Commitment {
 	fn read(reader: &mut Reader) -> Result<Commitment, Error> {
 		let a = try!(reader.read_fixed_bytes(PEDERSEN_COMMITMENT_SIZE));
 		let mut c = [0; PEDERSEN_COMMITMENT_SIZE];
@@ -277,7 +271,7 @@ impl Readable<Commitment> for Commitment {
 	}
 }
 
-impl Readable<RangeProof> for RangeProof {
+impl Readable for RangeProof {
 	fn read(reader: &mut Reader) -> Result<RangeProof, Error> {
 		let p = try!(reader.read_limited_vec(MAX_PROOF_SIZE));
 		let mut a = [0; MAX_PROOF_SIZE];
@@ -302,53 +296,78 @@ impl<'a> Writer for BinWriter<'a> {
 		SerializationMode::Full
 	}
 
-	fn write_fixed_bytes(&mut self, fixed: &AsFixedBytes) -> Result<(), Error> {
-		let bs = fixed.as_fixed_bytes();
+	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, fixed: &T) -> Result<(), Error> {
+		let bs = fixed.as_ref();
 		try!(self.sink.write_all(bs));
 		Ok(())
 	}
 }
 
-macro_rules! impl_slice_bytes {
-  ($byteable: ty) => {
-    impl AsFixedBytes for $byteable {
-      fn as_fixed_bytes(&self) -> &[u8] {
-        &self[..]
-      }
+macro_rules! impl_int {
+    ($int: ty, $w_fn: ident, $r_fn: ident) => {
+        impl Writeable for $int {
+            fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+                writer.$w_fn(*self)
+            }
+        }
+
+        impl Readable for $int {
+            fn read(reader: &mut Reader) -> Result<$int, Error> {
+                reader.$r_fn()
+            }
+        }
     }
-  }
 }
 
-impl_slice_bytes!(::secp::key::SecretKey);
-impl_slice_bytes!(::secp::Signature);
-impl_slice_bytes!(::secp::pedersen::Commitment);
-impl_slice_bytes!(Vec<u8>);
-impl_slice_bytes!([u8; 1]);
-impl_slice_bytes!([u8; 2]);
-impl_slice_bytes!([u8; 4]);
-impl_slice_bytes!([u8; 8]);
-impl_slice_bytes!([u8; 32]);
+impl_int!(u8, write_u8, read_u8);
+impl_int!(u16, write_u16, read_u16);
+impl_int!(u32, write_u32, read_u32);
+impl_int!(u64, write_u64, read_u64);
+impl_int!(i64, write_i64, read_i64);
 
-impl<'a> AsFixedBytes for &'a [u8] {
-	fn as_fixed_bytes(&self) -> &[u8] {
-		*self
-	}
+impl<A: Writeable, B: Writeable> Writeable for (A, B) {
+    fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+        try!(Writeable::write(&self.0, writer));
+        Writeable::write(&self.1, writer)
+    }
 }
 
-impl<'a> AsFixedBytes for String {
-	fn as_fixed_bytes(&self) -> &[u8] {
-		self.as_bytes()
-	}
+impl<A: Readable, B: Readable> Readable for (A, B) {
+    fn read(reader: &mut Reader) -> Result<(A, B), Error> {
+        Ok((try!(Readable::read(reader)),
+            try!(Readable::read(reader))))
+    }
 }
 
-impl AsFixedBytes for ::core::hash::Hash {
-	fn as_fixed_bytes(&self) -> &[u8] {
-		self.to_slice()
-	}
+impl<A: Writeable, B: Writeable, C: Writeable> Writeable for (A, B, C) {
+    fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+        try!(Writeable::write(&self.0, writer));
+        try!(Writeable::write(&self.1, writer));
+        Writeable::write(&self.2, writer)
+    }
 }
 
-impl AsFixedBytes for ::secp::pedersen::RangeProof {
-	fn as_fixed_bytes(&self) -> &[u8] {
-		&self.bytes()
-	}
+impl<A: Readable, B: Readable, C: Readable> Readable for (A, B, C) {
+    fn read(reader: &mut Reader) -> Result<(A, B, C), Error> {
+        Ok((try!(Readable::read(reader)),
+            try!(Readable::read(reader)),
+            try!(Readable::read(reader))))
+    }
 }
+
+/// Useful marker trait on types that can be sized byte slices 
+pub trait AsFixedBytes: Sized + AsRef<[u8]> {}
+
+impl<'a> AsFixedBytes for &'a [u8] {}
+impl AsFixedBytes for Vec<u8> {}
+impl AsFixedBytes for [u8; 1] {}
+impl AsFixedBytes for [u8; 2] {}
+impl AsFixedBytes for [u8; 4] {}
+impl AsFixedBytes for [u8; 8] {}
+impl AsFixedBytes for [u8; 32] {}
+impl AsFixedBytes for String {}
+impl AsFixedBytes for ::core::hash::Hash {}
+impl AsFixedBytes for ::secp::pedersen::RangeProof {}
+impl AsFixedBytes for ::secp::key::SecretKey {}
+impl AsFixedBytes for ::secp::Signature {}
+impl AsFixedBytes for ::secp::pedersen::Commitment {}

@@ -50,7 +50,7 @@ pub struct PeerData {
 }
 
 impl Writeable for PeerData {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		SockAddr(self.addr).write(writer)?;
 		ser_multiwrite!(writer,
 		                [write_u32, self.capabilities.bits()],
@@ -60,7 +60,7 @@ impl Writeable for PeerData {
 	}
 }
 
-impl Readable<PeerData> for PeerData {
+impl Readable for PeerData {
 	fn read(reader: &mut Reader) -> Result<PeerData, ser::Error> {
 		let addr = SockAddr::read(reader)?;
 		let (capab, ua, fl) = ser_multiread!(reader, read_u32, read_vec, read_u8);

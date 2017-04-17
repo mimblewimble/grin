@@ -14,6 +14,9 @@
 #ifdef USE_ECMULT_STATIC_PRECOMPUTATION
 #include "ecmult_static_context.h"
 #endif
+
+#include <string.h>
+
 static void secp256k1_ecmult_gen_context_init(secp256k1_ecmult_gen_context *ctx) {
     ctx->prec = NULL;
 }

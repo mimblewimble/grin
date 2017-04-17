@@ -16,7 +16,6 @@
 
 use byteorder::{ByteOrder, BigEndian};
 use secp::{self, Secp256k1, Message, Signature};
-use secp::key::SecretKey;
 use secp::pedersen::{RangeProof, Commitment};
 
 use core::Committed;
@@ -25,11 +24,13 @@ use core::hash::{Hash, Hashed};
 use ser::{self, Reader, Writer, Readable, Writeable};
 
 bitflags! {
-  /// Options for a kernel's structure or use
-  pub flags KernelFeatures: u8 {
-    const DEFAULT_KERNEL = 0b00000000,
-    const COINBASE_KERNEL = 0b00000001,
-  }
+    /// Options for a kernel's structure or use
+    pub flags KernelFeatures: u8 {
+        /// No flags
+        const DEFAULT_KERNEL = 0b00000000,
+        /// TODO what is this for?
+        const COINBASE_KERNEL = 0b00000001,
+    }
 }
 
 /// A proof that a transaction sums to zero. Includes both the transaction's
@@ -52,7 +53,7 @@ pub struct TxKernel {
 }
 
 impl Writeable for TxKernel {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
                     [write_u8, self.features.bits()],
                     [write_fixed_bytes, &self.excess],
@@ -62,7 +63,7 @@ impl Writeable for TxKernel {
 	}
 }
 
-impl Readable<TxKernel> for TxKernel {
+impl Readable for TxKernel {
 	fn read(reader: &mut Reader) -> Result<TxKernel, ser::Error> {
 		Ok(TxKernel {
 			features:
@@ -103,7 +104,7 @@ pub struct Transaction {
 /// Implementation of Writeable for a fully blinded transaction, defines how to
 /// write the transaction as binary.
 impl Writeable for Transaction {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
 		                [write_u64, self.fee],
 		                [write_bytes, &self.excess_sig],
@@ -121,7 +122,7 @@ impl Writeable for Transaction {
 
 /// Implementation of Readable for a transaction, defines how to read a full
 /// transaction from a binary stream.
-impl Readable<Transaction> for Transaction {
+impl Readable for Transaction {
 	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
 		let (fee, excess_sig, input_len, output_len) =
 			ser_multiread!(reader, read_u64, read_vec, read_u64, read_u64);
@@ -148,7 +149,7 @@ impl Committed for Transaction {
 		&self.outputs
 	}
 	fn overage(&self) -> i64 {
-		-(self.fee as i64)
+		(self.fee as i64)
 	}
 }
 
@@ -201,13 +202,6 @@ impl Transaction {
 		Transaction { fee: fee, ..self }
 	}
 
-
-	/// The hash of a transaction is the Merkle tree of its inputs and outputs
-	/// hashes. None of the rest is required.
-	fn hash(&mut self) -> Hash {
-		merkle_inputs_outputs(&self.inputs, &self.outputs)
-	}
-
 	/// The verification for a MimbleWimble transaction involves getting the
 	/// excess of summing all commitments and using it as a public key
 	/// to verify the embedded signature. The rational is that if the values
@@ -215,14 +209,14 @@ impl Transaction {
 	/// of the sum of r.G should be left. And r.G is the definition of a
 	/// public key generated using r as a private key.
 	pub fn verify_sig(&self, secp: &Secp256k1) -> Result<TxKernel, secp::Error> {
-		let rsum = try!(self.sum_commitments(secp));
+		let rsum = self.sum_commitments(secp)?;
 
 		// pretend the sum is a public key (which it is, being of the form r.G) and
 		// verify the transaction sig with it
-		let pubk = try!(rsum.to_pubkey(secp));
-		let msg = try!(Message::from_slice(&u64_to_32bytes(self.fee)));
-		let sig = try!(Signature::from_der(secp, &self.excess_sig));
-		try!(secp.verify(&msg, &sig, &pubk));
+		let pubk = rsum.to_pubkey(secp)?;
+		let msg = Message::from_slice(&u64_to_32bytes(self.fee))?;
+		let sig = Signature::from_der(secp, &self.excess_sig)?;
+		secp.verify(&msg, &sig, &pubk)?;
 
 		Ok(TxKernel {
 			features: DEFAULT_KERNEL,
@@ -251,14 +245,14 @@ pub struct Input(pub Commitment);
 /// Implementation of Writeable for a transaction Input, defines how to write
 /// an Input as binary.
 impl Writeable for Input {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_fixed_bytes(&self.0)
 	}
 }
 
 /// Implementation of Readable for a transaction Input, defines how to read
 /// an Input from a binary stream.
-impl Readable<Input> for Input {
+impl Readable for Input {
 	fn read(reader: &mut Reader) -> Result<Input, ser::Error> {
 		Ok(Input(Commitment::read(reader)?))
 	}
@@ -267,17 +261,20 @@ impl Readable<Input> for Input {
 /// The input for a transaction, which spends a pre-existing output. The input
 /// commitment is a reproduction of the commitment of the output it's spending.
 impl Input {
+    /// Extracts the referenced commitment from a transaction output
 	pub fn commitment(&self) -> Commitment {
 		self.0
 	}
 }
 
 bitflags! {
-  /// Options for block validation
-  pub flags OutputFeatures: u8 {
-    const DEFAULT_OUTPUT = 0b00000000,
-    const COINBASE_OUTPUT = 0b00000001,
-  }
+    /// Options for block validation
+    pub flags OutputFeatures: u8 {
+        /// No flags
+        const DEFAULT_OUTPUT = 0b00000000,
+        /// Output is a coinbase output, has fixed amount and must not be spent until maturity
+        const COINBASE_OUTPUT = 0b00000001,
+    }
 }
 
 /// Output for a transaction, defining the new ownership of coins that are being
@@ -287,19 +284,22 @@ bitflags! {
 /// and the ownership of the private key.
 #[derive(Debug, Copy, Clone)]
 pub struct Output {
+	/// Options for an output's structure or use
 	pub features: OutputFeatures,
+    /// The homomorphic commitment representing the output's amount
 	pub commit: Commitment,
+    /// A proof that the commitment is in the right range
 	pub proof: RangeProof,
 }
 
 /// Implementation of Writeable for a transaction Output, defines how to write
 /// an Output as binary.
 impl Writeable for Output {
-	fn write(&self, writer: &mut Writer) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer, [write_u8, self.features.bits()], [write_fixed_bytes, &self.commit]);
 		// The hash of an output doesn't include the range proof
 		if writer.serialization_mode() == ser::SerializationMode::Full {
-			writer.write_bytes(&self.proof.bytes())?
+			writer.write_bytes(&self.proof)?
 		}
 		Ok(())
 	}
@@ -307,7 +307,7 @@ impl Writeable for Output {
 
 /// Implementation of Readable for a transaction Output, defines how to read
 /// an Output from a binary stream.
-impl Readable<Output> for Output {
+impl Readable for Output {
 	fn read(reader: &mut Reader) -> Result<Output, ser::Error> {
 		Ok(Output {
 			features:
