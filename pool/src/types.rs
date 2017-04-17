@@ -437,7 +437,7 @@ impl<'a> TransactionPool<'a> {
     /// The primary goal of the reconcile_orphans method is to eliminate any 
     /// orphans who conflict with the recently accepted pool transaction.
     /// TODO: How do we handle fishing orphans out that look like they could
-    /// be freed? Current thought it to do so under a different lock domain
+    /// be freed? Current thought is to do so under a different lock domain
     /// so that we don't have the potential for long recursion under the write
     /// lock.
     pub fn reconcile_orphans(&self)-> Result<(),PoolError> {
@@ -630,4 +630,84 @@ impl<'a> TransactionPool<'a> {
         removed_txs
     }
 
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use secp::{Secp256k1, ContextFlag};
+    use secp::key;
+
+    #[test]
+    fn test_basic_pool_add() {
+        let dummy_chain = DummyChain::new();
+
+        // To mirror how this construction is intended to be used, the pool
+        // is placed inside a RWMutex.
+        let pool = RwLock::new(test_setup(&dummy_chain));
+        
+        // Take the write lock and add a pool entry
+        {
+            let write_pool = pool.write().unwrap();
+
+            
+       }
+    }
+
+    fn test_setup<'a>(dummy_chain: &'a DummyChain) -> TransactionPool<'a> {
+        TransactionPool{
+            transactions: HashMap::new(),
+            pool: Pool{
+                graph: graph::DirectedGraph::empty(),
+                available_outputs: HashMap::new(),
+                consumed_blockchain_outputs: HashMap::new(),
+            },
+            orphans: Orphans{
+                graph: graph::DirectedGraph::empty(),
+                available_outputs: HashMap::new(),
+                missing_outputs: HashMap::new(),
+                pool_connections: HashMap::new(),
+            },
+            blockchain: &dummy_chain,
+        }
+    }
+
+    /// Cobble together a test transaction for testing the transaction pool.
+    ///
+    /// Connectivity here is the most important element.
+    /// Every transaction is given a blinding key of 0, so that the values make
+    /// up the entire commitment.
+    ///
+    /// Fees are the remainder between input and output values, so the numbers
+    /// should make sense.
+    ///
+    /// Note that the range proof is just [0, output_value*2] so ensure that
+    /// output_value is not greater than max range proof range / 2.
+    fn test_transaction(input_values: Vec<u64>, output_values: Vec<u64>) -> transaction::Transaction {
+        let fees: i64 = input_values.iter().sum::<u64>() as i64 - output_values.iter().sum::<u64>() as i64;
+        assert!(fees >= 0);
+
+        let ec = Secp256k1::with_caps(ContextFlag::Commit);
+
+        let mut outputs: Vec<transaction::Output> = Vec::new();
+        let mut inputs: Vec<transaction::Input> = Vec::new();
+
+        for input_value in input_values {
+            inputs.push(
+                transaction::Input(ec.commit_value(input_value).unwrap()));
+        }
+
+        for output_value in output_values {
+            let output_commitment = ec.commit_value(output_value).unwrap();
+            outputs.push(
+                transaction::Output{
+                    features: transaction::DEFAULT_OUTPUT,
+                    commit: output_commitment,
+                    proof: ec.range_proof(0, output_value*2, key::ZERO_KEY,
+                        output_commitment)});
+        }
+
+        transaction::Transaction::new(inputs, outputs, fees as u64)
+    }
+         
 }

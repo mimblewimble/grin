@@ -54,6 +54,11 @@ pub struct DummyChain {
 }
 
 impl DummyChain {
+    pub fn new() -> DummyChain {
+        DummyChain{
+            utxo: DummyUtxoSet{
+                outputs: HashMap::new()}}
+    }
     pub fn get_best_utxo_set(&self) -> &DummyUtxoSet {
         &self.utxo
     }
