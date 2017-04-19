@@ -23,6 +23,8 @@
 extern crate byteorder;
 extern crate grin_core as core;
 extern crate rocksdb;
+extern crate tokio_io;
+extern crate bytes;
 
 const SEP: u8 = ':' as u8;
 
@@ -35,6 +37,8 @@ use byteorder::{WriteBytesExt, BigEndian};
 use rocksdb::{DB, WriteBatch, DBCompactionStyle, DBIterator, IteratorMode, Direction};
 
 use core::ser;
+
+mod encoding;
 
 /// Main error type for this crate.
 #[derive(Debug)]

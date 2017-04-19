@@ -5,6 +5,8 @@ authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
 workspace = ".."
 
 [dependencies]
+tokio-io = "0.1.1"
+bytes = "0.4.2"
 byteorder = "^0.5"
 rocksdb = "^0.6.0"
 tiny-keccak = "1.1"
