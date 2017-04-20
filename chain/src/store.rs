@@ -14,9 +14,11 @@
 
 //! Implements storage primitives required by the chain
 
+use secp::pedersen::Commitment;
+
 use types::*;
 use core::core::hash::{Hash, Hashed};
-use core::core::{Block, BlockHeader};
+use core::core::{Block, BlockHeader, Output};
 use grin_store::{self, Error, to_key, u64_to_key, option_to_not_found};
 
 const STORE_SUBPATH: &'static str = "chain";
@@ -26,6 +28,8 @@ const BLOCK_PREFIX: u8 = 'b' as u8;
 const HEAD_PREFIX: u8 = 'H' as u8;
 const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
+const OUTPUT_PREFIX: u8 = 'O' as u8;
+const OUTPUT_COMMIT_PREFIX: u8 = 'o' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
 /// store.
@@ -75,12 +79,20 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn save_block(&self, b: &Block) -> Result<(), Error> {
-		self.db
+		// saving the block and its header
+		let mut batch = self.db
 			.batch()
 			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?
 			.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..],
-			         &b.header)?
-			.write()
+			         &b.header)?;
+
+		// saving the full output under its hash, as well as a commitment to hash index
+		for out in &b.outputs {
+			batch = batch.put_ser(&to_key(OUTPUT_PREFIX, &mut out.hash().to_vec())[..], out)?
+				.put_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut out.commit.as_ref().to_vec())[..],
+				         &out.hash())?;
+		}
+		batch.write()
 	}
 
 	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), Error> {
@@ -90,6 +102,15 @@ impl ChainStore for ChainKVStore {
 
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		option_to_not_found(self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)))
+	}
+
+	fn get_output(&self, h: &Hash) -> Result<Output, Error> {
+		option_to_not_found(self.db.get_ser(&to_key(OUTPUT_PREFIX, &mut h.to_vec())))
+	}
+
+	fn has_output_commit(&self, commit: &Commitment) -> Result<Hash, Error> {
+		option_to_not_found(self.db
+			.get_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut commit.as_ref().to_vec())))
 	}
 
 	fn setup_height(&self, bh: &BlockHeader) -> Result<(), Error> {
