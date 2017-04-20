@@ -25,6 +25,7 @@ extern crate grin_core as core;
 extern crate rocksdb;
 extern crate tokio_io;
 extern crate bytes;
+extern crate secp256k1zkp as secp;
 
 const SEP: u8 = ':' as u8;
 
@@ -39,6 +40,7 @@ use rocksdb::{DB, WriteBatch, DBCompactionStyle, DBIterator, IteratorMode, Direc
 use core::ser;
 
 mod encoding;
+use encoding::*;
 
 /// Main error type for this crate.
 #[derive(Debug)]
