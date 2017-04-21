@@ -35,7 +35,14 @@ use core::core::block;
 use core::core::hash;
 
 
-/// Rough first pass: the data representing where we heard about a tx from.
+/// Placeholder: the data representing where we heard about a tx from.
+///
+/// Used to make decisions based on transaction acceptance priority from 
+/// various sources. For example, a node may want to bypass pool size
+/// restrictions when accepting a transaction from a local wallet.
+///
+/// Most likely this will evolve to contain some sort of network identifier, 
+/// once we get a better sense of what transaction building might look like.
 pub struct TxSource {
     /// Human-readable name used for logging and errors.
     pub debug_name: String,
@@ -52,7 +59,7 @@ enum Parent {
     AlreadySpent{other_tx: hash::Hash},
 }
 
-
+#[derive(Debug)]
 enum PoolError {
     Invalid,
     AlreadyInPool,
@@ -441,7 +448,7 @@ impl<'a> TransactionPool<'a> {
     /// so that we don't have the potential for long recursion under the write
     /// lock.
     pub fn reconcile_orphans(&self)-> Result<(),PoolError> {
-        unimplemented!()
+        Ok(())
     }
 
 
@@ -639,19 +646,185 @@ mod tests {
     use secp::key;
 
     #[test]
+    /// The most basic possible test; add a single transaction to the pool.
     fn test_basic_pool_add() {
-        let dummy_chain = DummyChain::new();
+        let mut dummy_chain = DummyChain::new();
 
+        let parent_transaction = test_transaction(vec![5,6,7],vec![11,4]);
+        // We want this transaction to be rooted in the blockchain.
+        let new_utxo = DummyUtxoSet::empty().
+            with_output(test_output(5)).
+            with_output(test_output(6)).
+            with_output(test_output(7));
+
+        // Prepare a second transaction, connected to the first.
+        let child_transaction = test_transaction(vec![11,4], vec![12]);
+
+        dummy_chain.update_utxo_set(new_utxo);
+         
         // To mirror how this construction is intended to be used, the pool
-        // is placed inside a RWMutex.
+        // is placed inside a RwLock.
         let pool = RwLock::new(test_setup(&dummy_chain));
-        
+
         // Take the write lock and add a pool entry
+        {
+            let mut write_pool = pool.write().unwrap();
+
+            // First, add the transaction rooted in the blockchain
+            let result = write_pool.add_to_memory_pool(test_source(),
+                parent_transaction);
+            if result.is_err() {
+                panic!("got an error adding parent tx: {:?}",
+                   result.err().unwrap());
+            }
+
+            // Now, add the transaction connected as a child to the first
+            let child_result = write_pool.add_to_memory_pool(test_source(),
+                child_transaction);
+
+            if child_result.is_err() {
+                panic!("got an error adding child tx: {:?}",
+                   child_result.err().unwrap());
+            }
+       }
+    }
+
+    #[test]
+    /// Testing various expected error conditions
+    pub fn test_pool_add_error() {
+        let mut dummy_chain = DummyChain::new();
+
+        let new_utxo = DummyUtxoSet::empty().
+            with_output(test_output(5)).
+            with_output(test_output(6)).
+            with_output(test_output(7));
+
+        dummy_chain.update_utxo_set(new_utxo);
+
+        let pool = RwLock::new(test_setup(&dummy_chain));
+        {
+            let mut write_pool = pool.write().unwrap();
+
+            // First expected failure: duplicate output
+            let duplicate_tx = test_transaction(vec![5,6], vec![7]);
+
+            match write_pool.add_to_memory_pool(test_source(),
+                duplicate_tx) {
+                Ok(_) => panic!("Got OK from add_to_memory_pool when dup was expected"),
+                Err(x) =>{ match x {
+                    PoolError::DuplicateOutput{other_tx, in_chain, output} => {
+                        if other_tx.is_some() || !in_chain || output != test_output(7).commitment() {
+                            panic!("Unexpected parameter in DuplicateOutput: {:?}", x);
+                        }
+
+                    },
+                    _ => panic!("Unexpected error when adding duplicate output transaction: {:?}", x),
+                };},
+            };
+
+            // To test DoubleSpend and AlreadyInPool conditions, we need to add
+            // a valid transaction.
+            let valid_transaction = test_transaction(vec![5,6], vec![8]);
+
+            match write_pool.add_to_memory_pool(test_source(),
+                valid_transaction) {
+                Ok(_) => {},
+                Err(x) => panic!("Unexpected error while adding a valid transaction: {:?}", x),
+            };
+
+            // Now, test a DoubleSpend by consuming the same blockchain unspent
+            // as valid_transaction:
+            let double_spend_transaction = test_transaction(vec![6], vec![2]);
+
+            match write_pool.add_to_memory_pool(test_source(),
+                double_spend_transaction) {
+                Ok(_) => panic!("Expected error when adding double spend, got Ok"),
+                Err(x) => {
+                    match x {
+                        PoolError::DoubleSpend{other_tx, spent_output} => {
+                            if spent_output != test_output(6).commitment() {
+                                panic!("Unexpected parameter in DoubleSpend: {:?}", x);
+                            }
+                        },
+                        _ => panic!("Unexpected error when adding double spend transaction: {:?}", x),
+                    };
+                },
+            };
+
+            // TODO: We cannot yet test AlreadyInPool as tx hashes are 
+            // not deterministic and the hash itself is private to the graph
+        }
+    }
+
+    #[test]
+    /// Testing an expected orphan
+    fn test_add_orphan() {
+    }
+    
+    #[test]
+    /// Testing block reconciliation
+    fn test_block_reconciliation() {
+        let mut dummy_chain = DummyChain::new();
+
+        let new_utxo = DummyUtxoSet::empty().
+            with_output(test_output(10)).
+            with_output(test_output(20)).
+            with_output(test_output(30));
+
+        dummy_chain.update_utxo_set(new_utxo);
+
+        let pool = RwLock::new(test_setup(&dummy_chain));
+
+        // Preparation: We will introduce a three root pool transactions.
+        // 1. A transaction that should be invalidated because it is exactly 
+        //  contained in the block.
+        // 2. A transaction that should be invalidated because the input is
+        //  consumed in the block, although it is not exactly consumed.
+        // 3. A transaction that should remain after block reconciliation.
+        let block_transaction = test_transaction(vec![10], vec![8]);
+        let conflict_transaction = test_transaction(vec![20], vec![12,7]);
+        let valid_transaction = test_transaction(vec![30], vec![14,15]);
+
+        // We will also introduce a few children:
+        // 4. A transaction that descends from transaction 1, that is in 
+        //  turn exactly contained in the block.
+        let block_child = test_transaction(vec![8], vec![4,3]);
+        // 5. A transaction that descends from transaction 4, that is not
+        //  contained in the block at all and should be valid after
+        //  reconciliation.
+        let pool_child = test_transaction(vec![4], vec![1]);
+        // 6. A transaction that descends from transaction 2 that does not
+        //  conflict with anything in the block in any way, but should be
+        //  invalidated (orphaned).
+        let conflict_child = test_transaction(vec![12], vec![11]);
+        // 7. A transaction that descends from transaction 2 that should be
+        //  valid due to its inputs being satisfied by the block.
+        let conflict_valid_child = test_transaction(vec![7], vec![5]);
+        // 8. A transaction that descends from transaction 3 that should be
+        //  invalidated due to an output conflict.
+        let valid_child_conflict = test_transaction(vec![14], vec![9]);
+        // 9. A transaction that descends from transaction 3 that should remain
+        //  valid after reconciliation.
+        let valid_child_valid = test_transaction(vec![15], vec![13]);
+        // 10. A transaction that descends from both transaction 6 and
+        //  transaction 9
+        let mixed_child = test_transaction(vec![11,13], vec![2]);
+
+
+        // Now we prepare the block that will cause the above condition.
+        // It must consume the output consumed by invalidated_transaction only.
+
         {
             let write_pool = pool.write().unwrap();
 
-            
-       }
+            assert!(write_pool.add_to_memory_pool(test_source(),
+                invalidated_transaction).is_ok());
+
+            assert!(write_pool.add_to_memory_pool(test_source(),
+                other_transaction).is_ok());
+
+        }
+
     }
 
     fn test_setup<'a>(dummy_chain: &'a DummyChain) -> TransactionPool<'a> {
@@ -698,16 +871,32 @@ mod tests {
         }
 
         for output_value in output_values {
-            let output_commitment = ec.commit_value(output_value).unwrap();
-            outputs.push(
-                transaction::Output{
-                    features: transaction::DEFAULT_OUTPUT,
-                    commit: output_commitment,
-                    proof: ec.range_proof(0, output_value*2, key::ZERO_KEY,
-                        output_commitment)});
+            outputs.push(test_output(output_value));
         }
 
         transaction::Transaction::new(inputs, outputs, fees as u64)
     }
-         
+
+    /// Generate an output defined by our test scheme
+    ///
+    /// Tests generate outputs with 0 binding key and a range proof with min=0
+    /// and max=2*output_value. This method allows outputs to be built in 
+    /// separate places identically.
+    fn test_output(value: u64) -> transaction::Output {
+        let ec = Secp256k1::with_caps(ContextFlag::Commit);
+        let output_commitment = ec.commit_value(value).unwrap();
+        transaction::Output{
+            features: transaction::DEFAULT_OUTPUT,
+            commit: output_commitment,
+            proof: ec.range_proof(0, value*2, key::ZERO_KEY,
+                output_commitment)}
+    }
+
+    /// A generic TxSource representing a test
+    fn test_source() -> TxSource{
+        TxSource{
+            debug_name: "test".to_string(),
+            identifier: "127.0.0.1".to_string(),
+        }
+    }
 }

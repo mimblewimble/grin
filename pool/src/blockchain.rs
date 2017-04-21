@@ -22,6 +22,9 @@ pub struct DummyUtxoSet {
 }
 
 impl DummyUtxoSet {
+    pub fn empty() -> DummyUtxoSet{
+        DummyUtxoSet{outputs: HashMap::new()}
+    }
     pub fn root(&self) -> hash::Hash {
         hash::ZERO_HASH
     }

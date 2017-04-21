@@ -26,6 +26,7 @@ use secp::{Secp256k1, ContextFlag};
 use secp::key;
 
 use time;
+use rand;
 
 use core::core;
 
@@ -136,7 +137,7 @@ impl DirectedGraph {
     /// Adds a vertex and a set of incoming edges to the graph.
     ///
     /// The PoolEntry at vertex is added to the graph; depending on the
-    /// number of incoming edges, the vertex is eithe radded to the vertices
+    /// number of incoming edges, the vertex is either added to the vertices
     /// or to the roots.
     ///
     /// Outgoing edges must not be included in edges; this method is designed
@@ -173,13 +174,12 @@ impl DirectedGraph {
 /// exposed.
 /// This method is a placeholder until a reasonable identifier is decided on.
 pub fn transaction_identifier(tx: &core::transaction::Transaction) -> core::hash::Hash {
-    core::hash::ZERO_HASH
+    random_hash()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand;
 
     #[test]
     fn test_add_entry() {
@@ -210,9 +210,11 @@ mod tests {
         assert_eq!(test_graph.edges.len(), 1);
     }
 
-    fn random_hash() -> core::hash::Hash {
-        let hash_bytes: [u8;32]= rand::random();
-        core::hash::Hash(hash_bytes)
-    }
 
+}
+
+/// For testing/debugging: a random tx hash
+fn random_hash() -> core::hash::Hash {
+    let hash_bytes: [u8;32]= rand::random();
+    core::hash::Hash(hash_bytes)
 }
