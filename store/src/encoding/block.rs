@@ -1,9 +1,10 @@
 
 use std::io;
+use std::io::{Read};
 use std::marker::PhantomData;
 
 use tokio_io::*;
-use bytes::{Bytes, BytesMut, BufMut};
+use bytes::{Bytes, BytesMut, BufMut, Buf, IntoBuf};
 
 use core::core::{Input, Output, Proof, Transaction, TxKernel, Block, BlockHeader};
 use core::core::transaction::OutputFeatures;
@@ -46,15 +47,10 @@ impl BlockEncode for Input {
 
 impl BlockDecode for Input {
 	fn block_decode(src: Bytes) -> io::Result<Self> {
-		if let Some(s) = src.get(0..PEDERSEN_COMMITMENT_SIZE) {
-			let mut c = [0; PEDERSEN_COMMITMENT_SIZE];
-			for i in 0..PEDERSEN_COMMITMENT_SIZE {
-				c[i] = s[i];
-			}
-			Ok(Input(Commitment(c)))
-		} else {
-			Err(io::Error::from(io::ErrorKind::InvalidData))
-		}
+		let mut reader = src.into_buf().reader();
+		let mut c = [0; PEDERSEN_COMMITMENT_SIZE];
+		reader.read_exact(&mut c)?;
+		Ok(Input(Commitment(c)))
 	}
 }
 
@@ -68,27 +64,35 @@ impl BlockEncode for Output {
 
 impl BlockDecode for Output {
 	fn block_decode(src: Bytes) -> io::Result<Self> {
-		let (feature_data, remaining) = src.split_at(0);
-		let (commit_data, proof_data) = remaining.split_at(PEDERSEN_COMMITMENT_SIZE);
-		if proof_data.len() == 0 {
-			return Err(io::Error::from(io::ErrorKind::InvalidData));
-		}
-		let mut c = [0; PEDERSEN_COMMITMENT_SIZE];
-		for i in 0..PEDERSEN_COMMITMENT_SIZE {
-			c[i] = commit_data[i];
-		}
+		let mut buf = src.into_buf();
+		let feature_data = buf.get_u8();
 
-		let mut p = [0; 5134];
-		for i in 0..proof_data.len() {
-			p[i] = proof_data[i];
-		}
+		let mut reader = buf.reader();
+
+		let mut commit_data = [0; PEDERSEN_COMMITMENT_SIZE];
+		reader.read_exact(&mut commit_data)?;
+
+		let mut proof_data = [0; 5134];
+		reader.read_exact(&mut proof_data)?;
+
 		Ok(Output {
-		       features: OutputFeatures::from_bits(feature_data[0]).unwrap(),
-		       commit: Commitment(c),
+		       features: OutputFeatures::from_bits(feature_data).unwrap(),
+		       commit: Commitment(commit_data),
 		       proof: RangeProof {
-		           proof: p,
+		           proof: proof_data,
 		           plen: proof_data.len(),
 		       },
 		   })
 	}
+}
+
+#[test]
+fn should_encode_and_decode_input() {
+	let input = Input(Commitment([1; PEDERSEN_COMMITMENT_SIZE]));
+
+	let mut buf = BytesMut::with_capacity(PEDERSEN_COMMITMENT_SIZE);
+	input.block_encode(&mut buf);
+
+	assert_eq!([1; PEDERSEN_COMMITMENT_SIZE].as_ref(), buf);
+	assert_eq!(input.commitment(), Input::block_decode(buf.freeze()).unwrap().commitment());
 }
