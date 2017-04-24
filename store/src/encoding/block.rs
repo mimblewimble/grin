@@ -7,7 +7,14 @@ use tokio_io::*;
 use bytes::{Bytes, BytesMut, BufMut, Buf, IntoBuf};
 
 use core::core::{Input, Output, Proof, Transaction, TxKernel, Block, BlockHeader};
+use core::core::hash::Hash;
+use core::core::target::Difficulty;
+
 use core::core::transaction::OutputFeatures;
+use core::consensus::PROOFSIZE;
+
+use chain::types::{PeerData, Tip};
+
 use secp::pedersen::{RangeProof, Commitment};
 use secp::constants::PEDERSEN_COMMITMENT_SIZE;
 

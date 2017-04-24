@@ -11,5 +11,6 @@ byteorder = "^0.5"
 rocksdb = "^0.6.0"
 tiny-keccak = "1.1"
 
+grin_chain = { path = "../chain" }
 grin_core = { path = "../core" }
-secp256k1zkp = { path = "../secp256k1zkp"}
+secp256k1zkp = { path = "../secp256k1zkp" }
