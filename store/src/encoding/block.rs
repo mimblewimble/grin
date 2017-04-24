@@ -175,7 +175,7 @@ impl BlockDecode for RangeProof {
 }
 
 #[test]
-fn should_have_codec_roundtrip() { unimplemented!() }
+fn should_have_block_codec_roundtrip() { unimplemented!() }
 
 #[test]
 fn should_encode_and_decode_block() { unimplemented!() }
