@@ -1,6 +1,6 @@
 
 use std::io;
-use std::io::{Read};
+use std::io::Read;
 use std::marker::PhantomData;
 
 use tokio_io::*;
@@ -76,13 +76,13 @@ impl BlockDecode for Output {
 		reader.read_exact(&mut proof_data)?;
 
 		Ok(Output {
-		       features: OutputFeatures::from_bits(feature_data).unwrap(),
-		       commit: Commitment(commit_data),
-		       proof: RangeProof {
-		           proof: proof_data,
-		           plen: proof_data.len(),
-		       },
-		   })
+			features: OutputFeatures::from_bits(feature_data).unwrap(),
+			commit: Commitment(commit_data),
+			proof: RangeProof {
+				proof: proof_data,
+				plen: proof_data.len(),
+			},
+		})
 	}
 }
 
@@ -94,5 +94,28 @@ fn should_encode_and_decode_input() {
 	input.block_encode(&mut buf);
 
 	assert_eq!([1; PEDERSEN_COMMITMENT_SIZE].as_ref(), buf);
-	assert_eq!(input.commitment(), Input::block_decode(buf.freeze()).unwrap().commitment());
+	assert_eq!(input.commitment(),
+	           Input::block_decode(buf.freeze()).unwrap().commitment());
+}
+
+#[test]
+fn should_encode_and_decode_output() {
+	let output = Output {
+		features: OutputFeatures::empty(),
+		commit: Commitment([1; PEDERSEN_COMMITMENT_SIZE]),
+		proof: RangeProof {
+			proof: [1; 5134],
+			plen: 5134,
+		},
+	};
+
+	let mut buf = BytesMut::with_capacity(6000);
+	output.block_encode(&mut buf);
+
+	let d_output = Output::block_decode(buf.freeze()).unwrap();
+
+	assert_eq!(output.features, output.features);
+	assert_eq!(output.proof().as_ref(), d_output.proof().as_ref());
+	assert_eq!(output.commitment(), d_output.commitment());
+
 }
