@@ -22,7 +22,6 @@
 
 extern crate byteorder;
 extern crate grin_core as core;
-extern crate grin_chain as chain;
 extern crate rocksdb;
 extern crate tokio_io;
 extern crate bytes;

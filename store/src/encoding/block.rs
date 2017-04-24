@@ -9,11 +9,8 @@ use bytes::{Bytes, BytesMut, BufMut, Buf, IntoBuf};
 use core::core::{Input, Output, Proof, Transaction, TxKernel, Block, BlockHeader};
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
-
-use core::core::transaction::OutputFeatures;
+use core::core::transaction::{OutputFeatures, KernelFeatures};
 use core::consensus::PROOFSIZE;
-
-use chain::types::{PeerData, Tip};
 
 use secp::pedersen::{RangeProof, Commitment};
 use secp::constants::PEDERSEN_COMMITMENT_SIZE;
@@ -26,7 +23,7 @@ impl<T: BlockEncode + BlockDecode> codec::Encoder for BlockCodec<T> {
 	type Item = T;
 	type Error = io::Error;
 	fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-		Ok(())
+		unimplemented!()
 	}
 }
 
@@ -34,7 +31,7 @@ impl<T: BlockEncode + BlockDecode> codec::Decoder for BlockCodec<T> {
 	type Item = T;
 	type Error = io::Error;
 	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-		Ok(None)
+		unimplemented!()
 	}
 }
 
@@ -44,6 +41,30 @@ pub trait BlockEncode: Sized {
 
 pub trait BlockDecode: Sized {
 	fn block_decode(src: Bytes) -> io::Result<Self>;
+}
+
+impl BlockEncode for Block {
+	fn block_encode(&self, dst: &mut BytesMut) {
+		unimplemented!()
+	}
+}
+
+impl BlockDecode for Block {
+	fn block_decode(src: Bytes) -> io::Result<Self> {
+		unimplemented!()
+	}
+}
+
+impl BlockEncode for BlockHeader {
+	fn block_encode(&self, dst: &mut BytesMut) {
+		unimplemented!()
+	}
+}
+
+impl BlockDecode for BlockHeader {
+	fn block_decode(src: Bytes) -> io::Result<Self> {
+		unimplemented!()
+	}
 }
 
 impl BlockEncode for Input {
@@ -93,6 +114,76 @@ impl BlockDecode for Output {
 	}
 }
 
+impl BlockEncode for TxKernel {
+	fn block_encode(&self, dst: &mut BytesMut) {
+		unimplemented!()
+	}
+}
+
+impl BlockDecode for TxKernel {
+	fn block_decode(src: Bytes) -> io::Result<Self> {
+		unimplemented!()
+	}
+}
+
+impl BlockEncode for Difficulty {
+	fn block_encode(&self, dst: &mut BytesMut) {
+		unimplemented!()
+	}
+}
+
+impl BlockDecode for Difficulty {
+	fn block_decode(src: Bytes) -> io::Result<Self> {
+		unimplemented!()
+	}
+}
+
+impl BlockEncode for Hash {
+	fn block_encode(&self, dst: &mut BytesMut) {
+		unimplemented!()
+	}
+}
+
+impl BlockDecode for Hash {
+	fn block_decode(src: Bytes) -> io::Result<Self> {
+		unimplemented!()
+	}
+}
+
+impl BlockEncode for Proof {
+	fn block_encode(&self, dst: &mut BytesMut) {
+		unimplemented!()
+	}
+}
+
+impl BlockDecode for Proof {
+	fn block_decode(src: Bytes) -> io::Result<Self> {
+		unimplemented!()
+	}
+}
+
+impl BlockEncode for RangeProof {
+	fn block_encode(&self, dst: &mut BytesMut) {
+		unimplemented!()
+	}
+}
+
+impl BlockDecode for RangeProof {
+	fn block_decode(src: Bytes) -> io::Result<Self> {
+		unimplemented!()
+	}
+}
+
+#[test]
+fn should_have_codec_roundtrip() { unimplemented!() }
+
+#[test]
+fn should_encode_and_decode_block() { unimplemented!() }
+
+#[test]
+fn should_encode_and_decode_blockheader() { unimplemented!() }
+
+
 #[test]
 fn should_encode_and_decode_input() {
 	let input = Input(Commitment([1; PEDERSEN_COMMITMENT_SIZE]));
@@ -121,8 +212,43 @@ fn should_encode_and_decode_output() {
 
 	let d_output = Output::block_decode(buf.freeze()).unwrap();
 
-	assert_eq!(output.features, output.features);
+	assert_eq!(output.features, d_output.features);
 	assert_eq!(output.proof().as_ref(), d_output.proof().as_ref());
 	assert_eq!(output.commitment(), d_output.commitment());
 
 }
+
+#[test]
+fn should_encode_and_decode_txkernel() {
+
+	let kernel = TxKernel {
+		features: KernelFeatures::empty(),
+		excess: Commitment([1; PEDERSEN_COMMITMENT_SIZE]),
+		excess_sig: vec![1; 10],
+		fee: 100,
+	};
+
+	let mut buf = BytesMut::with_capacity(6000);
+	kernel.block_encode(&mut buf);
+
+	let d_kernel = TxKernel::block_decode(buf.freeze()).unwrap();
+
+	assert_eq!(kernel.features, d_kernel.features);
+	assert_eq!(kernel.excess, d_kernel.excess);
+	assert_eq!(kernel.excess_sig, d_kernel.excess_sig);
+	assert_eq!(kernel.fee, d_kernel.fee);
+}
+
+#[test]
+fn should_encode_and_decode_difficulty() { unimplemented!() }
+
+#[test]
+fn should_encode_and_decode_hash() { unimplemented!() }
+
+#[test]
+fn should_encode_and_decode_proof() { unimplemented!() }
+
+#[test]
+fn should_encode_and_decode_rangeproof() { unimplemented!() }
+
+
