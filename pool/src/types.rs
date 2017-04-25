@@ -35,6 +35,7 @@ use core::core::block;
 use core::core::hash;
 
 
+
 /// Placeholder: the data representing where we heard about a tx from.
 ///
 /// Used to make decisions based on transaction acceptance priority from 
@@ -503,23 +504,26 @@ impl<'a> TransactionPool<'a> {
         // reconciliation job is triggered.
         let mut marked_transactions: HashMap<hash::Hash, ()> = HashMap::new();
         {
-            let mut conflicting_edges: Vec<&graph::Edge> = block.inputs.iter().
+            let mut conflicting_txs: Vec<hash::Hash> = block.inputs.iter().
                 filter_map(|x| 
                    self.pool.consumed_blockchain_outputs.get(&x.commitment())).
+                map(|x| x.destination_hash().unwrap()).
                 collect();
 
-            let mut conflicting_outputs: Vec<&graph::Edge> = block.outputs.iter().
+            let mut conflicting_outputs: Vec<hash::Hash> = block.outputs.iter().
                 filter_map(|x: &transaction::Output| 
                     self.pool.graph.get_edge_by_commitment(&x.commitment()).
                     or_else(|| self.pool.available_outputs.get(&x.commitment()))).
+                map(|x| x.source_hash().unwrap()).
                 collect();
 
-            conflicting_edges.append(&mut conflicting_outputs);
+            conflicting_txs.append(&mut conflicting_outputs);
 
+            println!("Conflicting txs: {:?}", conflicting_txs);
 
-            for edge in &conflicting_edges {
+            for txh in conflicting_txs {
                 self.mark_transaction(&updated_blockchain_utxo,
-                    &edge, &mut marked_transactions);
+                    txh, &mut marked_transactions);
             }
         }
         let freed_txs = self.sweep_transactions(marked_transactions,
@@ -541,19 +545,19 @@ impl<'a> TransactionPool<'a> {
     /// Marked transactions are added to the mutable marked_txs HashMap which
     /// is supplied by the calling function.
     fn mark_transaction(&self, updated_utxo: &DummyUtxoSet,
-        conflicting_edge: &graph::Edge, 
+        conflicting_tx: hash::Hash, 
         marked_txs: &mut HashMap<hash::Hash, ()>) {
 
-        marked_txs.insert(conflicting_edge.destination_hash().unwrap(),
-            ());
+        marked_txs.insert(conflicting_tx, ());
 
-        let tx_ref = self.transactions.get(&conflicting_edge.destination_hash().unwrap());
+        let tx_ref = self.transactions.get(&conflicting_tx);
 
         for output in &tx_ref.unwrap().outputs {
             match self.pool.graph.get_edge_by_commitment(&output.commitment()) {
                 Some(x) => {
                     if updated_utxo.get_output(&x.output_commitment()).is_none() {
-                        self.mark_transaction(updated_utxo, &x, marked_txs);
+                        self.mark_transaction(updated_utxo, 
+                            x.destination_hash().unwrap(), marked_txs);
                     }
                 },
                 None => {},
@@ -642,8 +646,9 @@ impl<'a> TransactionPool<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use secp::{Secp256k1, ContextFlag};
+    use secp::{Secp256k1, ContextFlag, constants};
     use secp::key;
+    use core::core::build;
 
     #[test]
     /// The most basic possible test; add a single transaction to the pool.
@@ -769,7 +774,8 @@ mod tests {
         let new_utxo = DummyUtxoSet::empty().
             with_output(test_output(10)).
             with_output(test_output(20)).
-            with_output(test_output(30));
+            with_output(test_output(30)).
+            with_output(test_output(40));
 
         dummy_chain.update_utxo_set(new_utxo);
 
@@ -810,21 +816,47 @@ mod tests {
         //  transaction 9
         let mixed_child = test_transaction(vec![11,13], vec![2]);
 
+        // Add transactions. 
+        // Note: There are some ordering constraints that must be followed here
+        // until orphans is 100% implemented. Once the orphans process has 
+        // stabilized, we can mix these up to exercise that path a bit.
+        let mut txs_to_add = vec![block_transaction, conflict_transaction,
+            valid_transaction, block_child, pool_child, conflict_child,
+            conflict_valid_child, valid_child_conflict, valid_child_valid,
+            mixed_child];
 
-        // Now we prepare the block that will cause the above condition.
-        // It must consume the output consumed by invalidated_transaction only.
-
+        // First we add the above transactions to the pool; all should be
+        // accepted.
         {
-            let write_pool = pool.write().unwrap();
+            let mut write_pool = pool.write().unwrap();
 
-            assert!(write_pool.add_to_memory_pool(test_source(),
-                invalidated_transaction).is_ok());
-
-            assert!(write_pool.add_to_memory_pool(test_source(),
-                other_transaction).is_ok());
-
+            for tx in txs_to_add.drain(..) {
+                assert!(write_pool.add_to_memory_pool(test_source(),
+                    tx).is_ok());
+            }
         }
+        // Now we prepare the block that will cause the above condition.
+        // First, the transactions we want in the block:
+        // - Copy of 1
+        let mut block_tx_1 = test_transaction(vec![10], vec![8]);
+        // - Conflict w/ 2, satisfies 7
+        let mut block_tx_2 = test_transaction(vec![20], vec![7]);
+        // - Copy of 4
+        let mut block_tx_3 = test_transaction(vec![8], vec![4,3]);
+        // - Output conflict w/ 8
+        let mut block_tx_4 = test_transaction(vec![40], vec![9]);
+        let block_transactions = vec![&mut block_tx_1, &mut block_tx_2,
+            &mut block_tx_3, &mut block_tx_4];
 
+        let block = block::Block::new(&block::BlockHeader::default(),
+            block_transactions, key::ONE_KEY).unwrap();
+
+        // Block reconciliation
+        {
+            let mut write_pool = pool.write().unwrap();
+
+            let evicted_transactions = write_pool.reconcile_block(&block);
+        }
     }
 
     fn test_setup<'a>(dummy_chain: &'a DummyChain) -> TransactionPool<'a> {
@@ -860,21 +892,21 @@ mod tests {
         let fees: i64 = input_values.iter().sum::<u64>() as i64 - output_values.iter().sum::<u64>() as i64;
         assert!(fees >= 0);
 
-        let ec = Secp256k1::with_caps(ContextFlag::Commit);
-
-        let mut outputs: Vec<transaction::Output> = Vec::new();
-        let mut inputs: Vec<transaction::Input> = Vec::new();
+        let mut tx_elements = Vec::new();
 
         for input_value in input_values {
-            inputs.push(
-                transaction::Input(ec.commit_value(input_value).unwrap()));
+            tx_elements.push(build::input(input_value, test_key(input_value)));
         }
 
         for output_value in output_values {
-            outputs.push(test_output(output_value));
+            tx_elements.push(build::output(output_value, test_key(output_value)));
         }
+        tx_elements.push(build::with_fee(fees as u64));
 
-        transaction::Transaction::new(inputs, outputs, fees as u64)
+        println!("Fee was {}", fees as u64);
+
+        let (tx, _) = build::transaction(tx_elements).unwrap();
+        tx
     }
 
     /// Generate an output defined by our test scheme
@@ -884,12 +916,34 @@ mod tests {
     /// separate places identically.
     fn test_output(value: u64) -> transaction::Output {
         let ec = Secp256k1::with_caps(ContextFlag::Commit);
-        let output_commitment = ec.commit_value(value).unwrap();
+        let output_key = test_key(value);
+        let output_commitment = ec.commit(value, output_key).unwrap();
         transaction::Output{
             features: transaction::DEFAULT_OUTPUT,
             commit: output_commitment,
-            proof: ec.range_proof(0, value*2, key::ZERO_KEY,
-                output_commitment)}
+            proof: ec.range_proof(0, value, output_key, output_commitment)}
+    }
+
+    /// Makes a SecretKey from a single u64
+    fn test_key(value: u64) -> key::SecretKey {
+        let ec = Secp256k1::with_caps(ContextFlag::Commit);
+        // SecretKey takes a SECRET_KEY_SIZE slice of u8.
+        assert!(constants::SECRET_KEY_SIZE > 8);
+
+        // (SECRET_KEY_SIZE - 8) zeros, followed by value as a big-endian byte
+        // sequence
+        let mut key_slice = vec![0;constants::SECRET_KEY_SIZE - 8];
+
+        key_slice.push((value >> 56) as u8);
+        key_slice.push((value >> 48) as u8);
+        key_slice.push((value >> 40) as u8);
+        key_slice.push((value >> 32) as u8);
+        key_slice.push((value >> 24) as u8);
+        key_slice.push((value >> 16) as u8);
+        key_slice.push((value >> 8) as u8);
+        key_slice.push(value as u8);
+
+        key::SecretKey::from_slice(&ec, &key_slice).unwrap()
     }
 
     /// A generic TxSource representing a test

@@ -28,6 +28,8 @@ use secp::key;
 use time;
 use rand;
 
+use std::fmt;
+
 use core::core;
 
 /// An entry in the transaction pool.
@@ -90,6 +92,13 @@ impl Edge{
     }
     pub fn source_hash(&self) -> Option<core::hash::Hash> {
         self.source
+    }
+}
+
+impl fmt::Debug for Edge {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Edge {{source: {:?}, destination: {:?}, commitment: {:?}}}",
+            self.source, self.destination, self.output)
     }
 }
 
