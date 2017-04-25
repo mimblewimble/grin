@@ -40,7 +40,7 @@ trait BlockEncode: Sized {
 
 /// Convenience Trait
 trait BlockDecode: Sized {
-	fn block_decode(src: Bytes) -> Result<Option<Self>, io::Error>;
+	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error>;
 }
 
 impl BlockEncode for Block {
@@ -50,7 +50,7 @@ impl BlockEncode for Block {
 }
 
 impl BlockDecode for Block {
-	fn block_decode(src: Bytes) -> Result<Option<Self>, io::Error> {
+	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
 		unimplemented!()
 	}
 }
@@ -62,7 +62,7 @@ impl BlockEncode for BlockHeader {
 }
 
 impl BlockDecode for BlockHeader {
-	fn block_decode(src: Bytes) -> Result<Option<Self>, io::Error> {
+	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
 		unimplemented!()
 	}
 }
@@ -74,14 +74,13 @@ impl BlockEncode for Input {
 }
 
 impl BlockDecode for Input {
-	fn block_decode(src: Bytes) -> Result<Option<Self>, io::Error> {
-		let mut buf = src.into_buf();
-		let mut c = [0; PEDERSEN_COMMITMENT_SIZE];
-		
-		if buf.remaining() < PEDERSEN_COMMITMENT_SIZE {
+	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
+		if src.len() < PEDERSEN_COMMITMENT_SIZE {
 			return Ok(None)
 		}
 
+		let mut buf = src.split_to(PEDERSEN_COMMITMENT_SIZE).into_buf();
+		let mut c = [0; PEDERSEN_COMMITMENT_SIZE];
 		buf.copy_to_slice(&mut c);
 
 		Ok(Some(Input(Commitment(c))))
@@ -98,21 +97,20 @@ impl BlockEncode for Output {
 }
 
 impl BlockDecode for Output {
-	fn block_decode(src: Bytes) -> Result<Option<Self>, io::Error> {
-		let mut buf = src.into_buf();
+	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
+
+		let output_size = PEDERSEN_COMMITMENT_SIZE + 5134 + 1;
+		if src.len() < output_size {
+			return Ok(None);
+		}
+
+		let mut buf = src.split_to(output_size).into_buf();
 		let feature_data = buf.get_u8();
 
 		let mut commit_data = [0; PEDERSEN_COMMITMENT_SIZE];
-		if buf.remaining() < PEDERSEN_COMMITMENT_SIZE {
-			return Ok(None);
-		}
 		buf.copy_to_slice(&mut commit_data);
 
 		let mut proof_data = [0; 5134];
-		if buf.remaining() < 5134 {
-			return Ok(None)
-		}
-
 		buf.copy_to_slice(&mut proof_data);
 
 		Ok(Some(Output {
@@ -133,7 +131,7 @@ impl BlockEncode for TxKernel {
 }
 
 impl BlockDecode for TxKernel {
-	fn block_decode(src: Bytes) -> Result<Option<Self>, io::Error> {
+	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
 		unimplemented!()
 	}
 }
@@ -145,7 +143,7 @@ impl BlockEncode for Difficulty {
 }
 
 impl BlockDecode for Difficulty {
-	fn block_decode(src: Bytes) -> Result<Option<Self>, io::Error> {
+	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
 		unimplemented!()
 	}
 }
@@ -157,7 +155,7 @@ impl BlockEncode for Hash {
 }
 
 impl BlockDecode for Hash {
-	fn block_decode(src: Bytes) -> Result<Option<Self>, io::Error> {
+	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
 		unimplemented!()
 	}
 }
@@ -169,7 +167,7 @@ impl BlockEncode for Proof {
 }
 
 impl BlockDecode for Proof {
-	fn block_decode(src: Bytes) -> Result<Option<Self>, io::Error> {
+	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
 		unimplemented!()
 	}
 }
@@ -181,7 +179,7 @@ impl BlockEncode for RangeProof {
 }
 
 impl BlockDecode for RangeProof {
-	fn block_decode(src: Bytes) -> Result<Option<Self>, io::Error> {
+	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
 		unimplemented!()
 	}
 }
@@ -220,7 +218,7 @@ fn should_encode_and_decode_block() {
 	let mut buf = BytesMut::with_capacity(10000);
 	block.block_encode(&mut buf);
 
-	let d_block = Block::block_decode(buf.freeze()).unwrap().unwrap();
+	let d_block = Block::block_decode(&mut buf).unwrap().unwrap();
 
 	assert_eq!(block.header.height, d_block.header.height);
 	assert_eq!(block.header.previous, d_block.header.previous);
@@ -254,7 +252,7 @@ fn should_encode_and_decode_blockheader() {
 	let mut buf = BytesMut::with_capacity(10000);
 	block_header.block_encode(&mut buf);
 
-	let d_block_header = BlockHeader::block_decode(buf.freeze()).unwrap().unwrap();
+	let d_block_header = BlockHeader::block_decode(&mut buf).unwrap().unwrap();
 
 	assert_eq!(block_header.height, d_block_header.height);
 	assert_eq!(block_header.previous, d_block_header.previous);
@@ -280,7 +278,7 @@ fn should_encode_and_decode_input() {
 
 	assert_eq!([1; PEDERSEN_COMMITMENT_SIZE].as_ref(), buf);
 	assert_eq!(input.commitment(),
-	           Input::block_decode(buf.freeze()).unwrap().unwrap().commitment());
+	           Input::block_decode(&mut buf).unwrap().unwrap().commitment());
 }
 
 #[test]
@@ -297,7 +295,7 @@ fn should_encode_and_decode_output() {
 	let mut buf = BytesMut::with_capacity(6000);
 	output.block_encode(&mut buf);
 
-	let d_output = Output::block_decode(buf.freeze()).unwrap().unwrap();
+	let d_output = Output::block_decode(&mut buf).unwrap().unwrap();
 
 	assert_eq!(output.features, d_output.features);
 	assert_eq!(output.proof().as_ref(), d_output.proof().as_ref());
@@ -318,7 +316,7 @@ fn should_encode_and_decode_txkernel() {
 	let mut buf = BytesMut::with_capacity(6000);
 	kernel.block_encode(&mut buf);
 
-	let d_kernel = TxKernel::block_decode(buf.freeze()).unwrap().unwrap();
+	let d_kernel = TxKernel::block_decode(&mut buf).unwrap().unwrap();
 
 	assert_eq!(kernel.features, d_kernel.features);
 	assert_eq!(kernel.excess, d_kernel.excess);
@@ -334,7 +332,7 @@ fn should_encode_and_decode_difficulty() {
 	let mut buf = BytesMut::with_capacity(10);
 	difficulty.block_encode(&mut buf);
 
-	let d_difficulty = Difficulty::block_decode(buf.freeze()).unwrap().unwrap();
+	let d_difficulty = Difficulty::block_decode(&mut buf).unwrap().unwrap();
 
 	assert_eq!(difficulty, d_difficulty);
 }
@@ -347,7 +345,7 @@ fn should_encode_and_decode_hash() {
 	let mut buf = BytesMut::with_capacity(32);
 	hash.block_encode(&mut buf);
 
-	let d_hash = Hash::block_decode(buf.freeze()).unwrap().unwrap();
+	let d_hash = Hash::block_decode(&mut buf).unwrap().unwrap();
 
 	assert_eq!(hash, d_hash);
 }
@@ -360,7 +358,7 @@ fn should_encode_and_decode_proof() {
 	let mut buf = BytesMut::with_capacity(32);
 	proof.block_encode(&mut buf);
 
-	let d_proof = Proof::block_decode(buf.freeze()).unwrap().unwrap();
+	let d_proof = Proof::block_decode(&mut buf).unwrap().unwrap();
 
 	assert_eq!(proof, d_proof);
 }
@@ -375,7 +373,7 @@ fn should_encode_and_decode_rangeproof() {
 	let mut buf = BytesMut::with_capacity(32);
 	range_proof.block_encode(&mut buf);
 
-	let d_range_proof = RangeProof::block_decode(buf.freeze()).unwrap().unwrap();
+	let d_range_proof = RangeProof::block_decode(&mut buf).unwrap().unwrap();
 
 	assert_eq!(range_proof.proof.as_ref(), d_range_proof.proof.as_ref());
 }
