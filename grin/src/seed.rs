@@ -32,7 +32,7 @@ use p2p;
 
 const PEER_MAX_COUNT: u32 = 25;
 const PEER_PREFERRED_COUNT: u32 = 8;
-const GIST_SEEDS_URL: &'static str = "";
+const SEEDS_URL: &'static str = "http://www.mimwim.org/seeds.txt";
 
 pub struct Seeder {
 	peer_store: Arc<p2p::PeerStore>,
@@ -65,7 +65,10 @@ impl Seeder {
 		let seeder = self.connect_to_seeds(tx.clone(), seed_list)
 			.join(self.monitor_peers(tx.clone()));
 
-		h.spawn(seeder.map(|_| ()).map_err(|_| ()));
+		h.spawn(seeder.map(|_| ()).map_err(|e| {
+			error!("Seeding or peer monitoring error: {}", e);
+			()
+		}));
 	}
 
 	fn monitor_peers(&self,
@@ -121,9 +124,10 @@ impl Seeder {
 		let thread_pool = cpupool::CpuPool::new(1);
 		let seeder = thread_pool.spawn_fn(move || {
 				// check if we have some peers in db
-				Ok(peer_store.find_peers(p2p::State::Healthy,
-				                         p2p::FULL_HIST,
-				                         (2 * PEER_MAX_COUNT) as usize))
+				let peers = peer_store.find_peers(p2p::State::Healthy,
+				                                  p2p::FULL_HIST,
+				                                  (2 * PEER_MAX_COUNT) as usize);
+				Ok(peers)
 			})
 			.and_then(|mut peers| {
 				// if so, get their addresses, otherwise use our seeds
@@ -140,6 +144,9 @@ impl Seeder {
 				for addr in &peer_addrs[0..sz] {
 					debug!("Connecting to seed: {}.", addr);
 					tx.send(*addr).unwrap();
+				}
+				if peer_addrs.len() == 0 {
+					warn!("No seeds were retrieved.");
 				}
 				Ok(())
 			});
@@ -170,10 +177,10 @@ impl Seeder {
 	}
 }
 
-/// Extract the list of seeds from a pre-defined gist. Easy method until we
-/// have a set of DNS names we can rely on.
-pub fn gist_seeds(h: reactor::Handle) -> Box<Future<Item = Vec<SocketAddr>, Error = String>> {
-	let url = hyper::Uri::from_str(&GIST_SEEDS_URL).unwrap();
+/// Extract the list of seeds from a pre-defined text file available through
+/// http. Easy method until we have a set of DNS names we can rely on.
+pub fn web_seeds(h: reactor::Handle) -> Box<Future<Item = Vec<SocketAddr>, Error = String>> {
+	let url = hyper::Uri::from_str(&SEEDS_URL).unwrap();
 	let seeds = future::ok(()).and_then(move |_| {
 		let client = hyper::Client::new(&h);
 
@@ -187,7 +194,6 @@ pub fn gist_seeds(h: reactor::Handle) -> Box<Future<Item = Vec<SocketAddr>, Erro
 				Ok(res)
 			})
 			.and_then(|res| {
-
 				// collect all chunks and split around whitespace to get a list of SocketAddr
 				res.body().collect().map_err(|e| e.to_string()).and_then(|chunks| {
 					let res = chunks.iter().fold("".to_string(), |acc, ref chunk| {
