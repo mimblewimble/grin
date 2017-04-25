@@ -187,13 +187,88 @@ impl BlockDecode for RangeProof {
 }
 
 #[test]
-fn should_have_block_codec_roundtrip() { unimplemented!() }
+fn should_have_block_codec_roundtrip() {}
 
 #[test]
-fn should_encode_and_decode_block() { unimplemented!() }
+fn should_encode_and_decode_block() {
+
+	let input = Input(Commitment([1; PEDERSEN_COMMITMENT_SIZE]));
+
+	let output = Output {
+		features: OutputFeatures::empty(),
+		commit: Commitment([1; PEDERSEN_COMMITMENT_SIZE]),
+		proof: RangeProof {
+			proof: [1; 5134],
+			plen: 5134,
+		},
+	};
+
+	let kernel = TxKernel {
+		features: KernelFeatures::empty(),
+		excess: Commitment([1; PEDERSEN_COMMITMENT_SIZE]),
+		excess_sig: vec![1; 10],
+		fee: 100,
+	};
+
+	let block = Block {
+		header: BlockHeader::default(),
+		inputs: vec![input],
+		outputs: vec![output],
+		kernels: vec![kernel],
+	};
+
+	let mut buf = BytesMut::with_capacity(10000);
+	block.block_encode(&mut buf);
+
+	let d_block = Block::block_decode(buf.freeze()).unwrap().unwrap();
+
+	assert_eq!(block.header.height, d_block.header.height);
+	assert_eq!(block.header.previous, d_block.header.previous);
+	assert_eq!(block.header.timestamp, d_block.header.timestamp);
+	assert_eq!(block.header.cuckoo_len, d_block.header.cuckoo_len);
+	assert_eq!(block.header.utxo_merkle, d_block.header.utxo_merkle);
+	assert_eq!(block.header.tx_merkle, d_block.header.tx_merkle);
+	assert_eq!(block.header.features, d_block.header.features);
+	assert_eq!(block.header.nonce, d_block.header.nonce);
+	assert_eq!(block.header.pow, d_block.header.pow);
+	assert_eq!(block.header.difficulty, d_block.header.difficulty);
+	assert_eq!(block.header.total_difficulty, d_block.header.total_difficulty);
+
+	assert_eq!(block.inputs[0].commitment(), d_block.inputs[0].commitment());
+
+	assert_eq!(block.outputs[0].features, d_block.outputs[0].features);
+	assert_eq!(block.outputs[0].proof().as_ref(), d_block.outputs[0].proof().as_ref());
+	assert_eq!(block.outputs[0].commitment(), d_block.outputs[0].commitment());
+
+	assert_eq!(block.kernels[0].features, d_block.kernels[0].features);
+	assert_eq!(block.kernels[0].excess, d_block.kernels[0].excess);
+	assert_eq!(block.kernels[0].excess_sig, d_block.kernels[0].excess_sig);
+	assert_eq!(block.kernels[0].fee, d_block.kernels[0].fee);
+}
 
 #[test]
-fn should_encode_and_decode_blockheader() { unimplemented!() }
+fn should_encode_and_decode_blockheader() {
+
+	let block_header = BlockHeader::default();
+
+	let mut buf = BytesMut::with_capacity(10000);
+	block_header.block_encode(&mut buf);
+
+	let d_block_header = BlockHeader::block_decode(buf.freeze()).unwrap().unwrap();
+
+	assert_eq!(block_header.height, d_block_header.height);
+	assert_eq!(block_header.previous, d_block_header.previous);
+	assert_eq!(block_header.timestamp, d_block_header.timestamp);
+	assert_eq!(block_header.cuckoo_len, d_block_header.cuckoo_len);
+	assert_eq!(block_header.utxo_merkle, d_block_header.utxo_merkle);
+	assert_eq!(block_header.tx_merkle, d_block_header.tx_merkle);
+	assert_eq!(block_header.features, d_block_header.features);
+	assert_eq!(block_header.nonce, d_block_header.nonce);
+	assert_eq!(block_header.pow, d_block_header.pow);
+	assert_eq!(block_header.difficulty, d_block_header.difficulty);
+	assert_eq!(block_header.total_difficulty, d_block_header.total_difficulty);
+
+}
 
 
 #[test]
@@ -252,15 +327,57 @@ fn should_encode_and_decode_txkernel() {
 }
 
 #[test]
-fn should_encode_and_decode_difficulty() { unimplemented!() }
+fn should_encode_and_decode_difficulty() {
+
+	let difficulty = Difficulty::from_num(1000);
+
+	let mut buf = BytesMut::with_capacity(10);
+	difficulty.block_encode(&mut buf);
+
+	let d_difficulty = Difficulty::block_decode(buf.freeze()).unwrap().unwrap();
+
+	assert_eq!(difficulty, d_difficulty);
+}
 
 #[test]
-fn should_encode_and_decode_hash() { unimplemented!() }
+fn should_encode_and_decode_hash() {
+
+	let hash = Hash([1u8; 32]);
+
+	let mut buf = BytesMut::with_capacity(32);
+	hash.block_encode(&mut buf);
+
+	let d_hash = Hash::block_decode(buf.freeze()).unwrap().unwrap();
+
+	assert_eq!(hash, d_hash);
+}
 
 #[test]
-fn should_encode_and_decode_proof() { unimplemented!() }
+fn should_encode_and_decode_proof() {
+
+	let proof = Proof::zero();
+
+	let mut buf = BytesMut::with_capacity(32);
+	proof.block_encode(&mut buf);
+
+	let d_proof = Proof::block_decode(buf.freeze()).unwrap().unwrap();
+
+	assert_eq!(proof, d_proof);
+}
 
 #[test]
-fn should_encode_and_decode_rangeproof() { unimplemented!() }
+fn should_encode_and_decode_rangeproof() {
+	let range_proof = RangeProof {
+		proof : [1; 5134],
+		plen: 5134
+	};
+
+	let mut buf = BytesMut::with_capacity(32);
+	range_proof.block_encode(&mut buf);
+
+	let d_range_proof = RangeProof::block_decode(buf.freeze()).unwrap().unwrap();
+
+	assert_eq!(range_proof.proof.as_ref(), d_range_proof.proof.as_ref());
+}
 
 
