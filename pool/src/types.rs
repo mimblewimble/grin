@@ -21,6 +21,7 @@ use std::sync::RwLock;
 use std::sync::Weak;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt;
 
 use secp::pedersen::Commitment;
 
@@ -58,6 +59,19 @@ enum Parent {
     BlockTransaction,
     PoolTransaction{tx_ref: hash::Hash},
     AlreadySpent{other_tx: hash::Hash},
+}
+
+impl fmt::Debug for Parent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &Parent::Unknown => write!(f, "Parent: Unknown"),
+            &Parent::BlockTransaction => write!(f, "Parent: Block Transaction"),
+            &Parent::PoolTransaction{tx_ref: x} => write!(f,
+                "Parent: Pool Transaction ({:?})", x),
+            &Parent::AlreadySpent{other_tx: x} => write!(f,
+                "Parent: Already Spent By {:?}", x),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -661,7 +675,8 @@ mod tests {
         let new_utxo = DummyUtxoSet::empty().
             with_output(test_output(5)).
             with_output(test_output(6)).
-            with_output(test_output(7));
+            with_output(test_output(7)).
+            with_output(test_output(8));
 
         // Prepare a second transaction, connected to the first.
         let child_transaction = test_transaction(vec![11,4], vec![12]);
@@ -692,7 +707,40 @@ mod tests {
                 panic!("got an error adding child tx: {:?}",
                    child_result.err().unwrap());
             }
+
        }
+
+       // Now take the read lock and use a few exposed methods to check
+       // consistency
+        {
+            let read_pool = pool.read().unwrap();
+
+            // TODO: Macro-ize this
+            match read_pool.search_for_best_output(&test_output(12).commitment()) {
+                Parent::PoolTransaction{tx_ref: _} => {},
+                x => panic!("Unexpected parent for expected pool unspent, got {:?}", x),
+            };
+
+            match read_pool.search_for_best_output(&test_output(11).commitment()) {
+                Parent::AlreadySpent{other_tx: _} => {},
+                x => panic!("Unexpected parent for expected pool spent, got {:?}", x),
+            };
+
+            match read_pool.search_for_best_output(&test_output(5).commitment()) {
+                Parent::AlreadySpent{other_tx: _} => {},
+                x => panic!("Unexpected parent for expected blockchain spent, got {:?}", x),
+            };
+
+            match read_pool.search_for_best_output(&test_output(8).commitment()) {
+                Parent::BlockTransaction => {},
+                x => panic!("Unexpected parent for expected blockchain unspent, got {:?}", x),
+            };
+
+            match read_pool.search_for_best_output(&test_output(20).commitment()) {
+                Parent::Unknown => {},
+                x => panic!("Unexpected parent for expected unknown, got {:?}", x),
+            };
+        }
     }
 
     #[test]
