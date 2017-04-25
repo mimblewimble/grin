@@ -5,3 +5,11 @@ authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
 
 [workspace]
 members = ["api", "chain", "core", "grin", "p2p", "store", "util"]
+
+[dependencies]
+grin_grin = { path = "./grin" }
+
+env_logger="^0.3.5"
+log = "^0.3"
+serde = "~0.9.10"
+serde_json = "~0.9.9"
