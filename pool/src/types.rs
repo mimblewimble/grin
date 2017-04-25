@@ -415,7 +415,7 @@ impl<'a> TransactionPool<'a> {
             }
 
             // We have passed all failure modes.
-            // Add pool_refs
+            // Add pool_refs and blockchain_refs
             for pool_ref in pool_refs.drain(..).chain(blockchain_refs.drain(..)) {
                 self.orphans.pool_connections.insert(
                     pool_ref.output_commitment(), pool_ref);
@@ -536,11 +536,11 @@ impl<'a> TransactionPool<'a> {
 
     /// The mark portion of our mark-and-sweep pool cleanup.
     ///
-    /// The transaction designated as the recipient of the conflicting_edge is
-    /// immediately marked. Each output of this transaction is then examined;
-    /// if a transaction in the pool spends this output and the output is not
-    /// replaced by an identical output included in the updated UTXO set, the
-    /// child is marked as well and the process continues recursively.
+    /// The transaction designated by conflicting_tx is immediately marked.
+    /// Each output of this transaction is then examined; if a transaction in 
+    /// the pool spends this output and the output is not replaced by an 
+    /// identical output included in the updated UTXO set, the child is marked 
+    /// as well and the process continues recursively.
     ///
     /// Marked transactions are added to the mutable marked_txs HashMap which
     /// is supplied by the calling function.
@@ -861,6 +861,9 @@ mod tests {
             assert!(evicted_transactions.is_ok());
 
             assert_eq!(evicted_transactions.unwrap().len(), 6);
+
+            // TODO: Txids are not yet deterministic. When they are, we should
+            // check the specific transactions that were evicted.
         }
     }
 
@@ -885,14 +888,11 @@ mod tests {
     /// Cobble together a test transaction for testing the transaction pool.
     ///
     /// Connectivity here is the most important element.
-    /// Every transaction is given a blinding key of 0, so that the values make
-    /// up the entire commitment.
+    /// Every output is given a blinding key equal to its value, so that the 
+    /// entire commitment can be derived deterministically from just the value.
     ///
     /// Fees are the remainder between input and output values, so the numbers
     /// should make sense.
-    ///
-    /// Note that the range proof is just [0, output_value*2] so ensure that
-    /// output_value is not greater than max range proof range / 2.
     fn test_transaction(input_values: Vec<u64>, output_values: Vec<u64>) -> transaction::Transaction {
         let fees: i64 = input_values.iter().sum::<u64>() as i64 - output_values.iter().sum::<u64>() as i64;
         assert!(fees >= 0);
@@ -914,11 +914,7 @@ mod tests {
         tx
     }
 
-    /// Generate an output defined by our test scheme
-    ///
-    /// Tests generate outputs with 0 binding key and a range proof with min=0
-    /// and max=2*output_value. This method allows outputs to be built in 
-    /// separate places identically.
+    /// Deterministically generate an output defined by our test scheme
     fn test_output(value: u64) -> transaction::Output {
         let ec = Secp256k1::with_caps(ContextFlag::Commit);
         let output_key = test_key(value);
