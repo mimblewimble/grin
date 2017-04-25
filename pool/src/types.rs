@@ -580,6 +580,7 @@ impl<'a> TransactionPool<'a> {
         marked_transactions: HashMap<hash::Hash, ()>,
         updated_utxo: &DummyUtxoSet)->Vec<Box<transaction::Transaction>> {
 
+        println!("marked_txs: {:?}", marked_transactions);
         let mut removed_txs = Vec::new();
 
         for tx_hash in marked_transactions.keys() {
@@ -856,6 +857,10 @@ mod tests {
             let mut write_pool = pool.write().unwrap();
 
             let evicted_transactions = write_pool.reconcile_block(&block);
+
+            assert!(evicted_transactions.is_ok());
+
+            assert_eq!(evicted_transactions.unwrap().len(), 6);
         }
     }
 
