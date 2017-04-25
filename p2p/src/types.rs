@@ -63,7 +63,7 @@ impl From<TimerError> for Error {
 }
 
 /// Configuration for the peer-to-peer server.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct P2PConfig {
 	pub host: IpAddr,
 	pub port: u16,
@@ -82,6 +82,7 @@ impl Default for P2PConfig {
 
 bitflags! {
   /// Options for what type of interaction a peer supports
+  #[derive(Serialize, Deserialize)]
   pub flags Capabilities: u32 {
     /// We don't know (yet) what the peer can do.
     const UNKNOWN = 0b00000000,
