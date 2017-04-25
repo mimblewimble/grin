@@ -29,7 +29,14 @@ impl DummyUtxoSet {
         hash::ZERO_HASH
     }
     pub fn apply(&self, b: &block::Block) -> DummyUtxoSet {
-        DummyUtxoSet{outputs: HashMap::new()}
+        let mut new_hashmap = self.outputs.clone();
+        for input in &b.inputs {
+            new_hashmap.remove(&input.commitment());
+        }
+        for output in &b.outputs {
+            new_hashmap.insert(output.commitment(), output.clone());
+        }
+        DummyUtxoSet{outputs: new_hashmap}
     }
     pub fn rewind(&self, b: &block::Block) -> DummyUtxoSet {
         DummyUtxoSet{outputs: HashMap::new()}
