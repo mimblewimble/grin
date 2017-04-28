@@ -16,6 +16,8 @@ use std::clone::Clone;
 
 use secp::pedersen::Commitment;
 
+use std::sync::RwLock;
+
 /// A DummyUtxoSet for mocking up the chain 
 pub struct DummyUtxoSet {
     outputs : HashMap<Commitment, transaction::Output>
@@ -38,11 +40,23 @@ impl DummyUtxoSet {
         }
         DummyUtxoSet{outputs: new_hashmap}
     }
+    pub fn with_block(&mut self, b: &block::Block) {
+        for input in &b.inputs {
+            self.outputs.remove(&input.commitment());
+        }
+        for output in &b.outputs {
+            self.outputs.insert(output.commitment(), output.clone());
+        }
+    }
     pub fn rewind(&self, b: &block::Block) -> DummyUtxoSet {
         DummyUtxoSet{outputs: HashMap::new()}
     }
     pub fn get_output(&self, output_ref: &Commitment) -> Option<&transaction::Output> {
         self.outputs.get(output_ref)
+    }
+
+    fn clone(&self) -> DummyUtxoSet {
+        DummyUtxoSet{outputs: self.outputs.clone()}
     }
 
     // only for testing: add an output to the map
@@ -59,20 +73,31 @@ impl DummyUtxoSet {
 
 /// A DummyChain is the mocked chain for playing with what methods we would
 /// need
-pub struct DummyChain {
-    utxo: DummyUtxoSet
+pub struct DummyChainImpl {
+    utxo: RwLock<DummyUtxoSet>
 }
 
-impl DummyChain {
-    pub fn new() -> DummyChain {
-        DummyChain{
-            utxo: DummyUtxoSet{
-                outputs: HashMap::new()}}
+impl DummyChainImpl {
+    pub fn new() -> DummyChainImpl {
+        DummyChainImpl{
+            utxo: RwLock::new(DummyUtxoSet{outputs: HashMap::new()})}
     }
-    pub fn get_best_utxo_set(&self) -> &DummyUtxoSet {
-        &self.utxo
+}
+
+impl DummyChain for DummyChainImpl {
+    fn get_best_utxo_set(&self) -> DummyUtxoSet {
+        self.utxo.read().unwrap().clone()
     }
-    pub fn update_utxo_set(&mut self, new_utxo: DummyUtxoSet) {
-        self.utxo = new_utxo;
+    fn update_utxo_set(&mut self, new_utxo: DummyUtxoSet) {
+        self.utxo = RwLock::new(new_utxo);
     }
+    fn apply_block(&self, b: &block::Block) {
+        self.utxo.write().unwrap().with_block(b);
+    }
+}
+
+pub trait DummyChain {
+    fn get_best_utxo_set(&self) -> DummyUtxoSet;
+    fn update_utxo_set(&mut self, new_utxo: DummyUtxoSet);
+    fn apply_block(&self, b: &block::Block);
 }

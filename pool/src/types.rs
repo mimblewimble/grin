@@ -27,7 +27,7 @@ use secp::pedersen::Commitment;
 
 pub use graph;
 // temporary blockchain dummy impls
-use blockchain::{DummyChain, DummyUtxoSet};
+use blockchain::{DummyChain, DummyChainImpl, DummyUtxoSet};
 
 use time;
 
@@ -90,7 +90,7 @@ enum PoolError {
 /// The pool itself.
 /// The transactions HashMap holds ownership of all transactions in the pool,
 /// keyed by their transaction hash.
-struct TransactionPool<'a> {
+struct TransactionPool {
     pub transactions: HashMap<hash::Hash, Box<transaction::Transaction>>,
 
     pub pool : Pool,
@@ -98,7 +98,7 @@ struct TransactionPool<'a> {
 
     // blockchain is a DummyChain, for now, which mimics what the future
     // chain will offer to the pool
-    blockchain: &'a DummyChain,
+    blockchain: Arc<Box<DummyChain>>,
 }
 
 /// Pool contains the elements of the graph that are connected, in full, to
@@ -182,7 +182,7 @@ impl Orphans {
 
 
 
-impl<'a> TransactionPool<'a> {
+impl TransactionPool {
     /// Searches for an output, designated by its commitment, from the current 
     /// best UTXO view, presented by taking the best blockchain UTXO set (as
     /// determined by the blockchain component) and rectifying pool spent and
@@ -484,8 +484,7 @@ impl<'a> TransactionPool<'a> {
     /// this block.
     pub fn reconcile_block(&mut self, block: &block::Block) -> Result<Vec<Box<transaction::Transaction>>, PoolError> {
         // Prepare the new blockchain-only UTXO view for this process
-        let updated_blockchain_utxo =
-            self.blockchain.get_best_utxo_set().apply(block);
+        let updated_blockchain_utxo = self.blockchain.get_best_utxo_set();
 
         // If this pool has been kept in sync correctly, serializing all
         // updates, then the inputs must consume only members of the blockchain
@@ -666,9 +665,9 @@ mod tests {
     use core::core::build;
 
     #[test]
-    /// The most basic possible test; add a single transaction to the pool.
+    /// A basic test; add a pair of transactions to the pool.
     fn test_basic_pool_add() {
-        let mut dummy_chain = DummyChain::new();
+        let mut dummy_chain = DummyChainImpl::new();
 
         let parent_transaction = test_transaction(vec![5,6,7],vec![11,4]);
         // We want this transaction to be rooted in the blockchain.
@@ -685,7 +684,7 @@ mod tests {
          
         // To mirror how this construction is intended to be used, the pool
         // is placed inside a RwLock.
-        let pool = RwLock::new(test_setup(&dummy_chain));
+        let pool = RwLock::new(test_setup(&Arc::new(Box::new(dummy_chain))));
 
         // Take the write lock and add a pool entry
         {
@@ -746,7 +745,7 @@ mod tests {
     #[test]
     /// Testing various expected error conditions
     pub fn test_pool_add_error() {
-        let mut dummy_chain = DummyChain::new();
+        let mut dummy_chain = DummyChainImpl::new();
 
         let new_utxo = DummyUtxoSet::empty().
             with_output(test_output(5)).
@@ -755,7 +754,7 @@ mod tests {
 
         dummy_chain.update_utxo_set(new_utxo);
 
-        let pool = RwLock::new(test_setup(&dummy_chain));
+        let pool = RwLock::new(test_setup(&Arc::new(Box::new(dummy_chain))));
         {
             let mut write_pool = pool.write().unwrap();
 
@@ -818,7 +817,7 @@ mod tests {
     #[test]
     /// Testing block reconciliation
     fn test_block_reconciliation() {
-        let mut dummy_chain = DummyChain::new();
+        let mut dummy_chain = DummyChainImpl::new();
 
         let new_utxo = DummyUtxoSet::empty().
             with_output(test_output(10)).
@@ -828,7 +827,9 @@ mod tests {
 
         dummy_chain.update_utxo_set(new_utxo);
 
-        let pool = RwLock::new(test_setup(&dummy_chain));
+        let chain_ref = Arc::new(Box::new(dummy_chain) as Box<DummyChain>);
+
+        let pool = RwLock::new(test_setup(&chain_ref));
 
         // Preparation: We will introduce a three root pool transactions.
         // 1. A transaction that should be invalidated because it is exactly 
@@ -900,6 +901,8 @@ mod tests {
         let block = block::Block::new(&block::BlockHeader::default(),
             block_transactions, key::ONE_KEY).unwrap();
 
+        chain_ref.apply_block(&block);
+
         // Block reconciliation
         {
             let mut write_pool = pool.write().unwrap();
@@ -913,9 +916,24 @@ mod tests {
             // TODO: Txids are not yet deterministic. When they are, we should
             // check the specific transactions that were evicted.
         }
+
+
+        // Using the pool's methods to validate a few end conditions.
+        {
+            let read_pool = pool.read().unwrap();
+
+            // We should have available blockchain outputs at 9 and 3
+            match read_pool.search_for_best_output(&test_output(9).commitment()) {
+                Parent::BlockTransaction => {},
+                x => panic!("Unexpected parent for expected unknown, got {:?}", x),
+            };
+            
+        }
+
+
     }
 
-    fn test_setup<'a>(dummy_chain: &'a DummyChain) -> TransactionPool<'a> {
+    fn test_setup(dummy_chain: &Arc<Box<DummyChain>>) -> TransactionPool {
         TransactionPool{
             transactions: HashMap::new(),
             pool: Pool{
@@ -929,7 +947,7 @@ mod tests {
                 missing_outputs: HashMap::new(),
                 pool_connections: HashMap::new(),
             },
-            blockchain: &dummy_chain,
+            blockchain: dummy_chain.clone(),
         }
     }
 
