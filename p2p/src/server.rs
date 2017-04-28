@@ -145,16 +145,16 @@ impl Server {
 	                    addr: SocketAddr,
 	                    h: reactor::Handle)
 	                    -> Box<Future<Item = Option<Arc<Peer>>, Error = Error>> {
-		for p in self.peers.read().unwrap().deref() {
+		if let Some(p) = self.get_peer(addr) {
 			// if we're already connected to the addr, just return the peer
-			if p.info.addr == addr {
-				return Box::new(future::ok(Some((*p).clone())));
-			}
+			return Box::new(future::ok(Some(p)));
 		}
-		// asked to connect to ourselves
-		if addr.ip() == self.config.host && addr.port() == self.config.port {
+		if self.is_self(addr) {
+			// asked to connect to ourselves
 			return Box::new(future::ok(None));
 		}
+
+		// cloneapalooza
 		let peers = self.peers.clone();
 		let adapter1 = self.adapter.clone();
 		let adapter2 = self.adapter.clone();
@@ -184,6 +184,27 @@ impl Server {
 				Ok(Some(peer))
 			});
 		Box::new(request)
+	}
+
+	/// Check if the server already knows this peer (is already connected). In
+	/// addition we consider to know ourselves.
+	pub fn is_known(&self, addr: SocketAddr) -> bool {
+		self.get_peer(addr).is_some() || self.is_self(addr)
+	}
+
+	/// Whether the provided address is ourselves.
+	pub fn is_self(&self, addr: SocketAddr) -> bool {
+		addr.ip() == self.config.host && addr.port() == self.config.port
+	}
+
+	/// Get a peer we're connected to by address.
+	pub fn get_peer(&self, addr: SocketAddr) -> Option<Arc<Peer>> {
+		for p in self.peers.read().unwrap().deref() {
+			if p.info.addr == addr {
+				return Some((*p).clone());
+			}
+		}
+		None
 	}
 
 	/// Have the server iterate over its peer list and prune all peers we have

@@ -37,6 +37,7 @@ enum_from_primitive! {
 }
 
 /// Data stored for any given peer we've encountered.
+#[derive(Debug)]
 pub struct PeerData {
 	/// Network address of the peer.
 	pub addr: SocketAddr,

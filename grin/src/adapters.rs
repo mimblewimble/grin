@@ -94,10 +94,11 @@ impl NetAdapter for NetToChainAdapter {
 				Ok(_) => {
 					added_hs.push(bh.hash());
 				}
-				Err(chain::Error::Unfit(_)) => {
-					info!("Received unfit block header {} at {}.",
+				Err(chain::Error::Unfit(s)) => {
+					info!("Received unfit block header {} at {}: {}.",
 					      bh.hash(),
-					      bh.height);
+					      bh.height,
+					      s);
 				}
 				Err(chain::Error::StoreErr(e)) => {
 					error!("Store error processing block header {}: {:?}", bh.hash(), e);

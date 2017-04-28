@@ -98,16 +98,20 @@ impl Seeder {
 					let mut peers = peer_store.find_peers(p2p::State::Healthy,
 					                                      p2p::UNKNOWN,
 					                                      (2 * PEER_MAX_COUNT) as usize);
-					debug!("Got {} more peers from db, trying to connect.", peers.len());
-					thread_rng().shuffle(&mut peers[..]);
-					let sz = min(PEER_PREFERRED_COUNT as usize, peers.len());
-					for p in &peers[0..sz] {
-						tx.send(p.addr).unwrap();
+					peers.retain(|p| !p2p_server.is_known(p.addr));
+					if peers.len() > 0 {
+						debug!("Got {} more peers from db, trying to connect.", peers.len());
+						thread_rng().shuffle(&mut peers[..]);
+						let sz = min(PEER_PREFERRED_COUNT as usize, peers.len());
+						for p in &peers[0..sz] {
+							tx.send(p.addr).unwrap();
+						}
 					}
 				}
 				Ok(())
 			})
 			.map_err(|e| e.to_string());
+
 		Box::new(mon_loop)
 	}
 
@@ -223,15 +227,17 @@ fn connect_and_req(capab: p2p::Capabilities,
                    addr: SocketAddr)
                    -> Box<Future<Item = (), Error = ()>> {
 	let fut = p2p.connect_peer(addr, h)
-		.and_then(move |p| {
-			if let Some(p) = p {
-				p.send_peer_request(capab);
+		.then(move |p| {
+			match p {
+				Ok(Some(p)) => {
+					p.send_peer_request(capab);
+				}
+				Err(e) => {
+					error!("Peer request error: {:?}", e);
+				}
+				_ => {}
 			}
 			Ok(())
-		})
-		.map_err(|e| {
-			error!("Peer request error {:?}", e);
-			()
 		});
 	Box::new(fut)
 }

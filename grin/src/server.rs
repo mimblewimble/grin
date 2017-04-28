@@ -30,6 +30,7 @@ use api;
 use chain;
 use chain::ChainStore;
 use core;
+use core::core::hash::Hashed;
 use miner;
 use p2p;
 use seed;
@@ -174,5 +175,14 @@ fn store_head(config: &ServerConfig)
 		}
 		Err(e) => return Err(Error::Store(e)),
 	};
+
+	let head = chain_store.head()?;
+	let head_header = chain_store.head_header()?;
+	info!("Starting server with head {} at {} and header head {} at {}",
+	      head.last_block_h,
+	      head.height,
+	      head_header.hash(),
+	      head_header.height);
+
 	Ok((Arc::new(chain_store), head))
 }

@@ -66,7 +66,7 @@ impl Syncer {
 			if pc > 3 {
 				break;
 			}
-			if pc > 0 && (Instant::now() - start > Duration::from_secs(15)) {
+			if pc > 0 && (Instant::now() - start > Duration::from_secs(10)) {
 				break;
 			}
 			thread::sleep(Duration::from_millis(200));
@@ -178,7 +178,10 @@ impl Syncer {
 		let peer = self.p2p.most_work_peer();
 		let locator = self.get_locator(&tip)?;
 		if let Some(p) = peer {
-			debug!("Asking peer {} for more block headers.", p.info.addr);
+			debug!("Asking peer {} for more block headers starting from {} at {}.",
+			       p.info.addr,
+			       tip.last_block_h,
+			       tip.height);
 			p.send_header_request(locator)?;
 		} else {
 			warn!("Could not get most worked peer to request headers.");
