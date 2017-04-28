@@ -664,6 +664,19 @@ mod tests {
     use secp::key;
     use core::core::build;
 
+
+    macro_rules! expect_output_parent {
+        ($pool:expr, $expected:pat, $( $output:expr ),+ ) => {
+            $(
+                match $pool.search_for_best_output(&test_output($output).commitment()) {
+                    $expected => {},
+                    x => panic!("Unexpected result from output search for {:?}, got {:?}", $output,  x),
+                };
+            )*
+        }
+    }
+
+
     #[test]
     /// A basic test; add a pair of transactions to the pool.
     fn test_basic_pool_add() {
@@ -714,31 +727,15 @@ mod tests {
         {
             let read_pool = pool.read().unwrap();
 
-            // TODO: Macro-ize this
-            match read_pool.search_for_best_output(&test_output(12).commitment()) {
-                Parent::PoolTransaction{tx_ref: _} => {},
-                x => panic!("Unexpected parent for expected pool unspent, got {:?}", x),
-            };
+            expect_output_parent!(read_pool,
+                Parent::PoolTransaction{tx_ref: _}, 12);
+            expect_output_parent!(read_pool, 
+                Parent::AlreadySpent{other_tx: _}, 11, 5);
+            expect_output_parent!(read_pool,
+                Parent::BlockTransaction, 8);
+            expect_output_parent!(read_pool,
+                Parent::Unknown, 20);
 
-            match read_pool.search_for_best_output(&test_output(11).commitment()) {
-                Parent::AlreadySpent{other_tx: _} => {},
-                x => panic!("Unexpected parent for expected pool spent, got {:?}", x),
-            };
-
-            match read_pool.search_for_best_output(&test_output(5).commitment()) {
-                Parent::AlreadySpent{other_tx: _} => {},
-                x => panic!("Unexpected parent for expected blockchain spent, got {:?}", x),
-            };
-
-            match read_pool.search_for_best_output(&test_output(8).commitment()) {
-                Parent::BlockTransaction => {},
-                x => panic!("Unexpected parent for expected blockchain unspent, got {:?}", x),
-            };
-
-            match read_pool.search_for_best_output(&test_output(20).commitment()) {
-                Parent::Unknown => {},
-                x => panic!("Unexpected parent for expected unknown, got {:?}", x),
-            };
         }
     }
 
@@ -923,11 +920,25 @@ mod tests {
             let read_pool = pool.read().unwrap();
 
             // We should have available blockchain outputs at 9 and 3
-            match read_pool.search_for_best_output(&test_output(9).commitment()) {
-                Parent::BlockTransaction => {},
-                x => panic!("Unexpected parent for expected unknown, got {:?}", x),
-            };
-            
+            expect_output_parent!(read_pool, Parent::BlockTransaction, 9, 3); 
+
+           // We should have spent blockchain outputs at 4 and 7
+            expect_output_parent!(read_pool,
+                Parent::AlreadySpent{other_tx: _}, 4, 7); 
+           
+           // We should have spent pool references at 15
+            expect_output_parent!(read_pool,  
+                Parent::AlreadySpent{other_tx: _}, 15); 
+
+           // We should have unspent pool references at 1, 13, 14 
+            expect_output_parent!(read_pool,  
+                Parent::PoolTransaction{tx_ref: _}, 1, 13, 14); 
+
+            // References internal to the block should be unknown
+            expect_output_parent!(read_pool, Parent::Unknown, 8); 
+
+            // Evicted transactions should have unknown outputs
+            expect_output_parent!(read_pool, Parent::Unknown, 2, 11); 
         }
 
 
