@@ -62,6 +62,10 @@ impl ChainStore for ChainKVStore {
 			.write()
 	}
 
+	fn save_body_head(&self, t: &Tip) -> Result<(), Error> {
+		self.db.put_ser(&vec![HEAD_PREFIX], t)
+	}
+
 	fn get_header_head(&self) -> Result<Tip, Error> {
 		option_to_not_found(self.db.get_ser(&vec![HEADER_HEAD_PREFIX]))
 	}
@@ -76,6 +80,10 @@ impl ChainStore for ChainKVStore {
 
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())))
+	}
+
+	fn check_block_exists(&self, h: &Hash) -> Result<bool, Error> {
+		self.db.exists(&to_key(BLOCK_PREFIX, &mut h.to_vec()))
 	}
 
 	fn save_block(&self, b: &Block) -> Result<(), Error> {

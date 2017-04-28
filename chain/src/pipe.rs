@@ -115,9 +115,9 @@ pub fn process_block(b: &Block,
 		try!(validate_header(&b.header, &mut ctx));
 	}
 	try!(validate_block(b, &mut ctx));
-	info!("Block at {} with hash {} is valid, going to save and append.",
-	      b.header.height,
-	      b.hash());
+	debug!("Block at {} with hash {} is valid, going to save and append.",
+	       b.header.height,
+	       b.hash());
 	try!(add_block(b, &mut ctx));
 	// TODO a global lock should be set before that step or even earlier
 	update_head(b, &mut ctx)
@@ -154,6 +154,13 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 	// TODO ring buffer of the last few blocks that came through here
 	if bh == ctx.head.last_block_h || bh == ctx.head.prev_block_h {
 		return Err(Error::Unfit("already known".to_string()));
+	}
+	if let Ok(b) = ctx.store.get_block(&bh) {
+		// there is a window where a block can be saved but the chain head not
+		// updated yet, we plug that window here by re-accepting the block
+		if b.header.total_difficulty <= ctx.head.total_difficulty {
+			return Err(Error::Unfit("already in store".to_string()));
+		}
 	}
 	Ok(())
 }
@@ -212,12 +219,18 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 
 /// Fully validate the block content.
 fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
+	if b.header.height > ctx.head.height + 1 {
+		// check orphan again, an orphan coming out of order from sync will have
+		// bypassed header checks
+		// TODO actually handle orphans and add them to a size-limited set
+		return Err(Error::Unfit("orphan".to_string()));
+	}
+
 	let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	try!(b.validate(&curve).map_err(&Error::InvalidBlockProof));
 
-	if !ctx.opts.intersects(SYNC) {
-		// TODO check every input exists as a UTXO using the UXTO index
-	}
+	// TODO check every input exists as a UTXO using the UTXO index
+
 	Ok(())
 }
 
@@ -225,9 +238,11 @@ fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	ctx.store.save_block(b).map_err(&Error::StoreErr)?;
 
-	// broadcast the block
-	let adapter = ctx.adapter.clone();
-	adapter.block_accepted(b);
+	if !ctx.opts.intersects(SYNC) {
+		// broadcast the block
+		let adapter = ctx.adapter.clone();
+		adapter.block_accepted(b);
+	}
 	Ok(())
 }
 
@@ -244,8 +259,17 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 	// when extending the head), update it
 	let tip = Tip::from_block(&b.header);
 	if tip.total_difficulty > ctx.head.total_difficulty {
+
+		// update the block height index
 		ctx.store.setup_height(&b.header).map_err(&Error::StoreErr)?;
-		ctx.store.save_head(&tip).map_err(&Error::StoreErr)?;
+
+		// in sync mode, only update the "body chain", otherwise update both the
+		// "header chain" and "body chain"
+		if ctx.opts.intersects(SYNC) {
+			ctx.store.save_body_head(&tip).map_err(&Error::StoreErr)?;
+		} else {
+			ctx.store.save_head(&tip).map_err(&Error::StoreErr)?;
+		}
 
 		ctx.head = tip.clone();
 		info!("Updated head to {} at {}.", b.hash(), b.header.height);

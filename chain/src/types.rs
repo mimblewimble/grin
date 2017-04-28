@@ -97,11 +97,18 @@ pub trait ChainStore: Send + Sync {
 	/// Save the provided tip as the current head of our chain
 	fn save_head(&self, t: &Tip) -> Result<(), Error>;
 
+	/// Save the provided tip as the current head of the body chain, leaving the
+	/// header chain alone.
+	fn save_body_head(&self, t: &Tip) -> Result<(), Error>;
+
 	/// Gets a block header by hash
 	fn get_block(&self, h: &Hash) -> Result<Block, Error>;
 
 	/// Gets a block header by hash
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error>;
+
+	/// Checks whether a block has been been processed and saved
+	fn check_block_exists(&self, h: &Hash) -> Result<bool, Error>;
 
 	/// Save the provided block in store
 	fn save_block(&self, b: &Block) -> Result<(), Error>;
