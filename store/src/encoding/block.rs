@@ -4,7 +4,7 @@ use std::io::Read;
 use std::marker::PhantomData;
 
 use tokio_io::*;
-use bytes::{Bytes, BytesMut, BufMut, Buf, IntoBuf};
+use bytes::{Bytes, BytesMut, BigEndian, BufMut, Buf, IntoBuf};
 
 use core::core::{Input, Output, Proof, Transaction, TxKernel, Block, BlockHeader};
 use core::core::hash::Hash;
@@ -116,25 +116,78 @@ impl BlockDecode for Output {
 		buf.copy_to_slice(&mut proof_data);
 
 		Ok(Some(Output {
-			features: OutputFeatures::from_bits(feature_data).unwrap(),
-			commit: Commitment(commit_data),
-			proof: RangeProof {
-				proof: proof_data,
-				plen: proof_data.len(),
-			},
-		}))
+		            features: OutputFeatures::from_bits(feature_data).unwrap(),
+		            commit: Commitment(commit_data),
+		            proof: RangeProof {
+		                proof: proof_data,
+		                plen: proof_data.len(),
+		            },
+		        }))
 	}
 }
 
 impl BlockEncode for TxKernel {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
-		unimplemented!()
+		dst.reserve(1);
+		dst.put_u8(self.features.bits());
+
+		dst.reserve(PEDERSEN_COMMITMENT_SIZE);
+		dst.put_slice(self.excess.0.as_ref());
+
+		dst.reserve(self.excess_sig.len() + 4);
+		dst.put_u64::<BigEndian>(self.excess_sig.len() as u64);
+		dst.put_slice(self.excess_sig.as_ref());
+
+		dst.reserve(4);
+		dst.put_u64::<BigEndian>(self.fee);
+
+		Ok(())
 	}
 }
 
 impl BlockDecode for TxKernel {
 	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
-		unimplemented!()
+		if src.len() < 1 + PEDERSEN_COMMITMENT_SIZE {
+			return Ok(None);
+		}
+
+		let mut buf = src.split_to(1 + PEDERSEN_COMMITMENT_SIZE).into_buf();
+
+		let features = KernelFeatures::from_bits(buf.get_u8())
+			.ok_or(io::Error::new(io::ErrorKind::InvalidData, "Invalid TxKernel Feature"))?;
+
+		let mut commit_data = [0; PEDERSEN_COMMITMENT_SIZE];
+		buf.copy_to_slice(&mut commit_data);
+		let commitment = Commitment(commit_data);
+
+		if src.len() < 8 {
+			return Ok(None);
+		}
+
+
+		let mut buf = src.split_to(8).into_buf();
+		let excess_sig_len = buf.get_u64::<BigEndian>() as usize;
+
+		if src.len() < excess_sig_len {
+			return Ok(None);
+		}
+
+		let buf = src.split_to(excess_sig_len).into_buf();
+		let excess_sig = buf.collect();
+
+		if src.len() < 8 {
+			return Ok(None);
+		}
+
+		let mut buf = src.split_to(8).into_buf();
+		let fee = buf.get_u64::<BigEndian>();
+
+		Ok(Some(TxKernel {
+			features: features,
+			excess: commitment,
+			excess_sig: excess_sig,
+			fee: fee,
+		}))
 	}
 }
 
@@ -284,7 +337,10 @@ fn should_encode_and_decode_input() {
 
 	assert_eq!([1; PEDERSEN_COMMITMENT_SIZE].as_ref(), buf);
 	assert_eq!(input.commitment(),
-	           Input::block_decode(&mut buf).unwrap().unwrap().commitment());
+	           Input::block_decode(&mut buf)
+	               .unwrap()
+	               .unwrap()
+	               .commitment());
 }
 
 #[test]
