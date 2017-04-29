@@ -169,9 +169,8 @@ impl TransactionPool {
                     },
                     None => {},
                 }
-
                 // No need to check pool connections since those are covered
-                // by pool unspents.
+                // by pool unspents and blockchain connections.
             }
         }
 
@@ -183,36 +182,17 @@ impl TransactionPool {
         // At this point we know if we're spending all known unspents and not
         // creating any duplicate unspents.
         let pool_entry = graph::PoolEntry::new(&tx);
+        let new_unspents = tx.outputs.iter().
+            map(|x| graph::Edge::new(Some(tx_hash), None, x.commitment())).
+            collect();
 
         if !is_orphan {
             // In the non-orphan (pool) case, we've ensured that every input
             // maps one-to-one with an unspent (available) output, and each
             // output is unique. No further checks are necessary.
-
-            // Removing consumed available_outputs
-            for new_edge in &pool_refs {
-                self.pool.available_outputs.remove(&new_edge.output_commitment());
-            }
-
-            // Accounting for consumed blockchain outputs
-            for new_blockchain_edge in blockchain_refs.drain(..) {
-                self.pool.consumed_blockchain_outputs.insert(
-                    new_blockchain_edge.output_commitment(),
-                    new_blockchain_edge);
-            }
-
-            // Adding the transaction to the vertices list along with internal
-            // pool edges
-            self.pool.graph.add_entry(pool_entry, pool_refs);
-
-            // Adding the new unspents to the unspent map
-            for unspent_output in tx.outputs.iter()
-                .map(|x| graph::Edge::new(Some(tx_hash), None, x.commitment())) {
-
-                self.pool.available_outputs.insert(unspent_output.output_commitment(),
-                    unspent_output);
-            }
-
+            self.pool.add_pool_transaction(pool_entry, blockchain_refs,
+                pool_refs, new_unspents);
+            
             self.reconcile_orphans();
             self.transactions.insert(tx_hash, Box::new(tx));
             Ok(())

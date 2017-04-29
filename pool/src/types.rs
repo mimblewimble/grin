@@ -133,10 +133,33 @@ impl Pool {
         self.consumed_blockchain_outputs.get(c)
     }
 
-    pub fn get_internal_spent(&self, c: &Commitment) -> Option<&graph::Edge> {
-        self.graph.get_edge_by_commitment(c)
-    }
+    pub fn add_pool_transaction(&mut self, pool_entry: graph::PoolEntry,
+        blockchain_refs: Vec<graph::Edge>, pool_refs: Vec<graph::Edge>,
+        new_unspents: Vec<graph::Edge>) {
 
+        // Removing consumed available_outputs
+        for new_edge in &pool_refs {
+            // All of these should correspond to an existing unspent
+            assert!(self.available_outputs.remove(&new_edge.output_commitment()).is_some());
+        }
+
+        // Accounting for consumed blockchain outputs
+        for new_blockchain_edge in blockchain_refs.drain(..) {
+            self.consumed_blockchain_outputs.insert(
+                new_blockchain_edge.output_commitment(),
+                new_blockchain_edge);
+        }
+
+        // Adding the transaction to the vertices list along with internal
+        // pool edges
+        self.graph.add_entry(pool_entry, pool_refs);
+
+        // Adding the new unspents to the unspent map
+        for unspent_output in new_unspents.drain(..) {
+            self.available_outputs.insert(
+                unspent_output.output_commitment(), unspent_output);
+        }
+    }
 }
 
 impl TransactionGraphContainer for Pool { 
@@ -205,4 +228,10 @@ pub trait TransactionGraphContainer {
             or(self.get_graph().get_edge_by_commitment(c)).
             map(|x| x.source_hash().unwrap())
     }
+
+    /// Search for a spent reference internal to the graph
+    fn get_internal_spent(&self, c: &Commitment) -> Option<&graph::Edge> {
+        self.get_graph().get_edge_by_commitment(c)
+    }
+
 }
