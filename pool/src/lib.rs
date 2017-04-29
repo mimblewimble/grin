@@ -24,6 +24,7 @@
 pub mod graph;
 pub mod types;
 pub mod blockchain;
+pub mod pool;
 
 extern crate time;
 extern crate rand;
