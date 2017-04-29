@@ -69,6 +69,7 @@ impl BlockDecode for BlockHeader {
 
 impl BlockEncode for Input {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
+		dst.reserve(PEDERSEN_COMMITMENT_SIZE);
 		Ok(dst.put_slice((self.0).0.as_ref()))
 	}
 }
@@ -76,7 +77,7 @@ impl BlockEncode for Input {
 impl BlockDecode for Input {
 	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
 		if src.len() < PEDERSEN_COMMITMENT_SIZE {
-			return Ok(None)
+			return Ok(None);
 		}
 
 		let mut buf = src.split_to(PEDERSEN_COMMITMENT_SIZE).into_buf();
@@ -89,6 +90,7 @@ impl BlockDecode for Input {
 
 impl BlockEncode for Output {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
+		dst.reserve(PEDERSEN_COMMITMENT_SIZE + 5134 + 1);
 		dst.put_u8(self.features.bits());
 		dst.put_slice(self.commit.as_ref());
 		dst.put_slice(self.proof.as_ref());
@@ -215,7 +217,7 @@ fn should_encode_and_decode_block() {
 		kernels: vec![kernel],
 	};
 
-	let mut buf = BytesMut::with_capacity(10000);
+	let mut buf = BytesMut::with_capacity(0);
 	block.block_encode(&mut buf);
 
 	let d_block = Block::block_decode(&mut buf).unwrap().unwrap();
@@ -230,13 +232,16 @@ fn should_encode_and_decode_block() {
 	assert_eq!(block.header.nonce, d_block.header.nonce);
 	assert_eq!(block.header.pow, d_block.header.pow);
 	assert_eq!(block.header.difficulty, d_block.header.difficulty);
-	assert_eq!(block.header.total_difficulty, d_block.header.total_difficulty);
+	assert_eq!(block.header.total_difficulty,
+	           d_block.header.total_difficulty);
 
 	assert_eq!(block.inputs[0].commitment(), d_block.inputs[0].commitment());
 
 	assert_eq!(block.outputs[0].features, d_block.outputs[0].features);
-	assert_eq!(block.outputs[0].proof().as_ref(), d_block.outputs[0].proof().as_ref());
-	assert_eq!(block.outputs[0].commitment(), d_block.outputs[0].commitment());
+	assert_eq!(block.outputs[0].proof().as_ref(),
+	           d_block.outputs[0].proof().as_ref());
+	assert_eq!(block.outputs[0].commitment(),
+	           d_block.outputs[0].commitment());
 
 	assert_eq!(block.kernels[0].features, d_block.kernels[0].features);
 	assert_eq!(block.kernels[0].excess, d_block.kernels[0].excess);
@@ -249,7 +254,7 @@ fn should_encode_and_decode_blockheader() {
 
 	let block_header = BlockHeader::default();
 
-	let mut buf = BytesMut::with_capacity(10000);
+	let mut buf = BytesMut::with_capacity(0);
 	block_header.block_encode(&mut buf);
 
 	let d_block_header = BlockHeader::block_decode(&mut buf).unwrap().unwrap();
@@ -264,7 +269,8 @@ fn should_encode_and_decode_blockheader() {
 	assert_eq!(block_header.nonce, d_block_header.nonce);
 	assert_eq!(block_header.pow, d_block_header.pow);
 	assert_eq!(block_header.difficulty, d_block_header.difficulty);
-	assert_eq!(block_header.total_difficulty, d_block_header.total_difficulty);
+	assert_eq!(block_header.total_difficulty,
+	           d_block_header.total_difficulty);
 
 }
 
@@ -273,7 +279,7 @@ fn should_encode_and_decode_blockheader() {
 fn should_encode_and_decode_input() {
 	let input = Input(Commitment([1; PEDERSEN_COMMITMENT_SIZE]));
 
-	let mut buf = BytesMut::with_capacity(PEDERSEN_COMMITMENT_SIZE);
+	let mut buf = BytesMut::with_capacity(0);
 	input.block_encode(&mut buf);
 
 	assert_eq!([1; PEDERSEN_COMMITMENT_SIZE].as_ref(), buf);
@@ -292,7 +298,7 @@ fn should_encode_and_decode_output() {
 		},
 	};
 
-	let mut buf = BytesMut::with_capacity(6000);
+	let mut buf = BytesMut::with_capacity(0);
 	output.block_encode(&mut buf);
 
 	let d_output = Output::block_decode(&mut buf).unwrap().unwrap();
@@ -313,7 +319,7 @@ fn should_encode_and_decode_txkernel() {
 		fee: 100,
 	};
 
-	let mut buf = BytesMut::with_capacity(6000);
+	let mut buf = BytesMut::with_capacity(0);
 	kernel.block_encode(&mut buf);
 
 	let d_kernel = TxKernel::block_decode(&mut buf).unwrap().unwrap();
@@ -329,7 +335,7 @@ fn should_encode_and_decode_difficulty() {
 
 	let difficulty = Difficulty::from_num(1000);
 
-	let mut buf = BytesMut::with_capacity(10);
+	let mut buf = BytesMut::with_capacity(0);
 	difficulty.block_encode(&mut buf);
 
 	let d_difficulty = Difficulty::block_decode(&mut buf).unwrap().unwrap();
@@ -342,7 +348,7 @@ fn should_encode_and_decode_hash() {
 
 	let hash = Hash([1u8; 32]);
 
-	let mut buf = BytesMut::with_capacity(32);
+	let mut buf = BytesMut::with_capacity(0);
 	hash.block_encode(&mut buf);
 
 	let d_hash = Hash::block_decode(&mut buf).unwrap().unwrap();
@@ -355,7 +361,7 @@ fn should_encode_and_decode_proof() {
 
 	let proof = Proof::zero();
 
-	let mut buf = BytesMut::with_capacity(32);
+	let mut buf = BytesMut::with_capacity(0);
 	proof.block_encode(&mut buf);
 
 	let d_proof = Proof::block_decode(&mut buf).unwrap().unwrap();
@@ -366,16 +372,14 @@ fn should_encode_and_decode_proof() {
 #[test]
 fn should_encode_and_decode_rangeproof() {
 	let range_proof = RangeProof {
-		proof : [1; 5134],
-		plen: 5134
+		proof: [1; 5134],
+		plen: 5134,
 	};
 
-	let mut buf = BytesMut::with_capacity(32);
+	let mut buf = BytesMut::with_capacity(0);
 	range_proof.block_encode(&mut buf);
 
 	let d_range_proof = RangeProof::block_decode(&mut buf).unwrap().unwrap();
 
 	assert_eq!(range_proof.proof.as_ref(), d_range_proof.proof.as_ref());
 }
-
-
