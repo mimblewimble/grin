@@ -57,13 +57,74 @@ trait BlockDecode: Sized {
 
 impl BlockEncode for Block {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
-		unimplemented!()
+		// Put Header
+		self.header.block_encode(dst)?;
+
+		// Put Lengths of Inputs, Outputs and Kernels in 3 u64's
+		dst.reserve(24);
+		dst.put_u64::<BigEndian>(self.inputs.len() as u64);
+		dst.put_u64::<BigEndian>(self.outputs.len() as u64);
+		dst.put_u64::<BigEndian>(self.kernels.len() as u64);
+
+		// Put Inputs
+		for inp in &self.inputs {
+			inp.block_encode(dst)?;
+		}
+
+		// Put Outputs
+		for outp in &self.outputs {
+			outp.block_encode(dst)?;
+		}
+
+		// Put TxKernels
+		for proof in &self.kernels {
+			proof.block_encode(dst)?;
+		}
+
+		Ok(())
+
 	}
 }
 
 impl BlockDecode for Block {
 	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
-		unimplemented!()
+		// Get Header
+		let header = try_opt_dec!(BlockHeader::block_decode(src)?);
+
+		// Get Lengths of Inputs, Outputs and Kernels from 3 u64's
+		if src.len() < 24 {
+			return Ok(None);
+		}
+		let mut buf = src.split_to(24).into_buf();
+		let inputs_len = buf.get_u64::<BigEndian>() as usize;
+		let outputs_len = buf.get_u64::<BigEndian>() as usize;
+		let kernels_len = buf.get_u64::<BigEndian>() as usize;
+
+		// Get Inputs
+		let mut inputs = Vec::with_capacity(inputs_len);
+		for _ in 0..inputs_len {
+			inputs.push(try_opt_dec!(Input::block_decode(src)?));
+		}
+
+		// Get Outputs
+		let mut outputs = Vec::with_capacity(outputs_len);
+		for _ in 0..outputs_len {
+			outputs.push(try_opt_dec!(Output::block_decode(src)?));
+		}
+
+		// Get Kernels
+		let mut kernels = Vec::with_capacity(kernels_len);
+		for _ in 0..kernels_len {
+			kernels.push(try_opt_dec!(TxKernel::block_decode(src)?));
+		}
+
+		Ok(Some(Block {
+			header: header,
+			inputs: inputs,
+			outputs: outputs,
+			kernels: kernels,
+		}))
+
 	}
 }
 
