@@ -245,13 +245,25 @@ impl BlockDecode for Hash {
 
 impl BlockEncode for Proof {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
-		unimplemented!()
+		dst.reserve(4 * PROOFSIZE);
+		for n in 0..PROOFSIZE {
+			dst.put_u32::<BigEndian>(self.0[n]);
+		}
+		Ok(())
 	}
 }
 
 impl BlockDecode for Proof {
 	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
-		unimplemented!()
+		if src.len() < 4 * PROOFSIZE {
+			return Ok(None);
+		}
+		let mut buf = src.split_to(4 * PROOFSIZE).into_buf();
+		let mut proof_data = [0u32; PROOFSIZE];
+		for n in 0..PROOFSIZE {
+			proof_data[n] = buf.get_u32::<BigEndian>();
+		}
+		Ok(Some(Proof(proof_data)))
 	}
 }
 
