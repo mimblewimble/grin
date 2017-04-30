@@ -19,13 +19,14 @@ use core::consensus::PROOFSIZE;
 use secp::pedersen::{RangeProof, Commitment};
 use secp::constants::PEDERSEN_COMMITMENT_SIZE;
 
+#[derive(Debug, Clone)]
 pub struct BlockCodec;
 
 impl codec::Encoder for BlockCodec {
 	type Item = Block;
 	type Error = io::Error;
 	fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-		unimplemented!()
+		Block::block_encode(&item, dst)
 	}
 }
 
@@ -33,7 +34,7 @@ impl codec::Decoder for BlockCodec {
 	type Item = Block;
 	type Error = io::Error;
 	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-		unimplemented!()
+		Block::block_decode(src)
 	}
 }
 
@@ -449,7 +450,68 @@ impl BlockDecode for Proof {
 }
 
 #[test]
-fn should_have_block_codec_roundtrip() {}
+fn should_have_block_codec_roundtrip() {
+	use tokio_io::codec::{Encoder, Decoder};
+
+	let input = Input(Commitment([1; PEDERSEN_COMMITMENT_SIZE]));
+
+	let output = Output {
+		features: OutputFeatures::empty(),
+		commit: Commitment([1; PEDERSEN_COMMITMENT_SIZE]),
+		proof: RangeProof {
+			proof: [1; 5134],
+			plen: 5134,
+		},
+	};
+
+	let kernel = TxKernel {
+		features: KernelFeatures::empty(),
+		excess: Commitment([1; PEDERSEN_COMMITMENT_SIZE]),
+		excess_sig: vec![1; 10],
+		fee: 100,
+	};
+
+	let block = Block {
+		header: BlockHeader::default(),
+		inputs: vec![input],
+		outputs: vec![output],
+		kernels: vec![kernel],
+	};
+
+	let mut buf = BytesMut::with_capacity(0);
+	let mut codec = BlockCodec {};
+	codec.encode(block.clone(), &mut buf).expect("Error During Block Encoding");
+
+	let d_block =
+		codec.decode(&mut buf).expect("Error During Block Decoding").expect("Unfinished Block");
+
+	assert_eq!(block.header.height, d_block.header.height);
+	assert_eq!(block.header.previous, d_block.header.previous);
+	assert_eq!(block.header.timestamp, d_block.header.timestamp);
+	assert_eq!(block.header.cuckoo_len, d_block.header.cuckoo_len);
+	assert_eq!(block.header.utxo_merkle, d_block.header.utxo_merkle);
+	assert_eq!(block.header.tx_merkle, d_block.header.tx_merkle);
+	assert_eq!(block.header.features, d_block.header.features);
+	assert_eq!(block.header.nonce, d_block.header.nonce);
+	assert_eq!(block.header.pow, d_block.header.pow);
+	assert_eq!(block.header.difficulty, d_block.header.difficulty);
+	assert_eq!(block.header.total_difficulty,
+	           d_block.header.total_difficulty);
+
+	assert_eq!(block.inputs[0].commitment(), d_block.inputs[0].commitment());
+
+	assert_eq!(block.outputs[0].features, d_block.outputs[0].features);
+	assert_eq!(block.outputs[0].proof().as_ref(),
+	           d_block.outputs[0].proof().as_ref());
+	assert_eq!(block.outputs[0].commitment(),
+	           d_block.outputs[0].commitment());
+
+	assert_eq!(block.kernels[0].features, d_block.kernels[0].features);
+	assert_eq!(block.kernels[0].excess, d_block.kernels[0].excess);
+	assert_eq!(block.kernels[0].excess_sig, d_block.kernels[0].excess_sig);
+	assert_eq!(block.kernels[0].fee, d_block.kernels[0].fee);
+
+}
 
 #[test]
 fn should_encode_and_decode_block() {
