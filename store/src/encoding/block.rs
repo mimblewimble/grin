@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 
 use tokio_io::*;
 use bytes::{Bytes, BytesMut, BigEndian, BufMut, Buf, IntoBuf};
+use num_bigint::BigUint;
 
 use core::core::{Input, Output, Proof, Transaction, TxKernel, Block, BlockHeader};
 use core::core::hash::Hash;
@@ -116,13 +117,13 @@ impl BlockDecode for Output {
 		buf.copy_to_slice(&mut proof_data);
 
 		Ok(Some(Output {
-		            features: OutputFeatures::from_bits(feature_data).unwrap(),
-		            commit: Commitment(commit_data),
-		            proof: RangeProof {
-		                proof: proof_data,
-		                plen: proof_data.len(),
-		            },
-		        }))
+			features: OutputFeatures::from_bits(feature_data).unwrap(),
+			commit: Commitment(commit_data),
+			proof: RangeProof {
+				proof: proof_data,
+				plen: proof_data.len(),
+			},
+		}))
 	}
 }
 
@@ -193,13 +194,30 @@ impl BlockDecode for TxKernel {
 
 impl BlockEncode for Difficulty {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
-		unimplemented!()
+		let data = self.clone().into_biguint().to_bytes_be();
+		dst.reserve(1 + data.len());
+		dst.put_u8(data.len() as u8);
+		dst.put_slice(&data);
+		Ok(())
 	}
 }
 
 impl BlockDecode for Difficulty {
 	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
-		unimplemented!()
+		if src.len() < 1 {
+			return Ok(None);
+		}
+		let mut buf = src.split_to(1).into_buf();
+		let dlen = buf.get_u8() as usize;
+
+		if src.len() < dlen {
+			return Ok(None);
+		}
+
+		let buf = src.split_to(dlen).into_buf();
+		let data = Buf::bytes(&buf);
+
+		Ok(Some(Difficulty::from_biguint(BigUint::from_bytes_be(data))))
 	}
 }
 
@@ -338,9 +356,9 @@ fn should_encode_and_decode_input() {
 	assert_eq!([1; PEDERSEN_COMMITMENT_SIZE].as_ref(), buf);
 	assert_eq!(input.commitment(),
 	           Input::block_decode(&mut buf)
-	               .unwrap()
-	               .unwrap()
-	               .commitment());
+		           .unwrap()
+		           .unwrap()
+		           .commitment());
 }
 
 #[test]

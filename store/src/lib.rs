@@ -26,6 +26,8 @@ extern crate rocksdb;
 extern crate tokio_io;
 extern crate bytes;
 extern crate secp256k1zkp as secp;
+extern crate num_bigint;
+ 
 const SEP: u8 = ':' as u8;
 
 use std::fmt;
