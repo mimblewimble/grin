@@ -14,6 +14,14 @@ use core::consensus::PROOFSIZE;
 use secp::pedersen::{RangeProof, Commitment};
 use secp::constants::PEDERSEN_COMMITMENT_SIZE;
 
+// Convenience Macro for Option Handling in Decoding
+macro_rules! try_opt_dec {
+	($e: expr) => (match $e {
+		Some(val) => val,
+		None => return Ok(None),
+	});
+}
+
 pub struct TxCodec;
 
 impl codec::Encoder for TxCodec {
@@ -30,14 +38,6 @@ impl codec::Decoder for TxCodec {
 	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
 		unimplemented!()
 	}
-}
-
-// Convenience Macro for Option Handling in Decoding
-macro_rules! try_opt_dec {
-	($e: expr) => (match $e {
-		Some(val) => val,
-		None => return Ok(None),
-	});
 }
 
 /// Internal Convenience Trait
