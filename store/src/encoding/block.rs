@@ -106,12 +106,12 @@ impl codec::Decoder for BlockCodec {
 	}
 }
 
-/// Convenience Trait
+/// Internal Convenience Trait
 trait BlockEncode: Sized {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error>;
 }
 
-/// Convenience Trait
+/// Internal Convenience Trait
 trait BlockDecode: Sized {
 	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error>;
 }
