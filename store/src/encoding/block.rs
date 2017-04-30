@@ -71,7 +71,8 @@ impl BlockDecode for BlockHeader {
 impl BlockEncode for Input {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
 		dst.reserve(PEDERSEN_COMMITMENT_SIZE);
-		Ok(dst.put_slice((self.0).0.as_ref()))
+		dst.put_slice((self.0).0.as_ref());
+		Ok(())
 	}
 }
 
