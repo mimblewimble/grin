@@ -267,18 +267,6 @@ impl BlockDecode for Proof {
 	}
 }
 
-impl BlockEncode for RangeProof {
-	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
-		unimplemented!()
-	}
-}
-
-impl BlockDecode for RangeProof {
-	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
-		unimplemented!()
-	}
-}
-
 #[test]
 fn should_have_block_codec_roundtrip() {}
 
@@ -463,19 +451,4 @@ fn should_encode_and_decode_proof() {
 	let d_proof = Proof::block_decode(&mut buf).unwrap().unwrap();
 
 	assert_eq!(proof, d_proof);
-}
-
-#[test]
-fn should_encode_and_decode_rangeproof() {
-	let range_proof = RangeProof {
-		proof: [1; 5134],
-		plen: 5134,
-	};
-
-	let mut buf = BytesMut::with_capacity(0);
-	range_proof.block_encode(&mut buf);
-
-	let d_range_proof = RangeProof::block_decode(&mut buf).unwrap().unwrap();
-
-	assert_eq!(range_proof.proof.as_ref(), d_range_proof.proof.as_ref());
 }
