@@ -223,13 +223,23 @@ impl BlockDecode for Difficulty {
 
 impl BlockEncode for Hash {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
-		unimplemented!()
+		dst.reserve(32);
+		dst.put_slice(self.as_ref());
+		Ok(())
 	}
 }
 
 impl BlockDecode for Hash {
 	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
-		unimplemented!()
+		if src.len() < 32 {
+			return Ok(None);
+		}
+
+		let mut buf = src.split_to(32).into_buf();
+		let mut hash_data = [0; 32];
+		buf.copy_to_slice(&mut hash_data);
+
+		Ok(Some(Hash(hash_data)))
 	}
 }
 
