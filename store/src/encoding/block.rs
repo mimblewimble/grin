@@ -6,11 +6,14 @@ use std::marker::PhantomData;
 use tokio_io::*;
 use bytes::{Bytes, BytesMut, BigEndian, BufMut, Buf, IntoBuf};
 use num_bigint::BigUint;
+use time::{Timespec, Tm};
+use time;
 
 use core::core::{Input, Output, Proof, Transaction, TxKernel, Block, BlockHeader};
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
 use core::core::transaction::{OutputFeatures, KernelFeatures};
+use core::core::block::BlockFeatures;
 use core::consensus::PROOFSIZE;
 
 use secp::pedersen::{RangeProof, Commitment};
@@ -32,6 +35,14 @@ impl codec::Decoder for BlockCodec {
 	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
 		unimplemented!()
 	}
+}
+
+// Convenience Macro for Option Handling in Decoding
+macro_rules! try_opt_dec {
+	($e: expr) => (match $e {
+		Some(val) => val,
+		None => return Ok(None),
+	});
 }
 
 /// Convenience Trait
@@ -58,13 +69,121 @@ impl BlockDecode for Block {
 
 impl BlockEncode for BlockHeader {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
-		unimplemented!()
+		// Put Height
+		dst.reserve(8);
+		dst.put_u64::<BigEndian>(self.height);
+
+		// Put Previous Hash
+		self.previous.block_encode(dst)?;
+
+		// Put Timestamp
+		dst.reserve(8);
+		dst.put_i64::<BigEndian>(self.timestamp.to_timespec().sec);
+
+		// Put Cuckoo Len
+		dst.reserve(1);
+		dst.put_u8(self.cuckoo_len);
+
+		// Put UTXO Merkle Hash
+		self.utxo_merkle.block_encode(dst)?;
+
+		// Put Merkle Tree Hashes
+		self.tx_merkle.block_encode(dst)?;
+
+		// Put Features
+		dst.reserve(1);
+		dst.put_u8(self.features.bits());
+
+		// Put Nonce
+		dst.reserve(8);
+		dst.put_u64::<BigEndian>(self.nonce);
+
+		// Put Proof of Work Data
+		self.pow.block_encode(dst)?;
+
+		// Put Difficulty
+		self.difficulty.block_encode(dst)?;
+
+		// Put Total Difficulty
+		self.total_difficulty.block_encode(dst)?;
+
+		Ok(())
+
 	}
 }
 
 impl BlockDecode for BlockHeader {
 	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
-		unimplemented!()
+		// Get Height
+		if src.len() < 8 {
+			return Ok(None);
+		}
+		let mut buf = src.split_to(8).into_buf();
+		let height = buf.get_u64::<BigEndian>();
+
+		// Get Previous Hash
+		let previous = try_opt_dec!(Hash::block_decode(src)?);
+
+		// Get Timestamp
+		if src.len() < 8 {
+			return Ok(None);
+		}
+		let mut buf = src.split_to(8).into_buf();
+		let timestamp = time::at_utc(Timespec {
+			sec: buf.get_i64::<BigEndian>(),
+			nsec: 0,
+		});
+
+		// Get Cuckoo Len
+		if src.len() < 1 {
+			return Ok(None);
+		}
+		let mut buf = src.split_to(1).into_buf();
+		let cuckoo_len = buf.get_u8();
+
+		// Get UTXO Merkle Hash
+		let utxo_merkle = try_opt_dec!(Hash::block_decode(src)?);
+
+		// Get Merkle Tree Hashes
+		let tx_merkle = try_opt_dec!(Hash::block_decode(src)?);
+
+		// Get Features
+		if src.len() < 1 {
+			return Ok(None);
+		}
+		let mut buf = src.split_to(1).into_buf();
+		let features = BlockFeatures::from_bits(buf.get_u8())
+			.ok_or(io::Error::new(io::ErrorKind::InvalidData, "Invalid BlockHeader Feature"))?;
+
+		// Get Nonce
+		if src.len() < 8 {
+			return Ok(None);
+		}
+		let mut buf = src.split_to(8).into_buf();
+		let nonce = buf.get_u64::<BigEndian>();
+
+		// Get Proof of Work Data
+		let pow = try_opt_dec!(Proof::block_decode(src)?);
+
+		// Get Difficulty
+		let difficulty = try_opt_dec!(Difficulty::block_decode(src)?);
+
+		// Get Total Difficulty
+		let total_difficulty = try_opt_dec!(Difficulty::block_decode(src)?);
+
+		Ok(Some(BlockHeader {
+			height: height,
+			previous: previous,
+			timestamp: timestamp,
+			cuckoo_len: cuckoo_len,
+			utxo_merkle: utxo_merkle,
+			tx_merkle: tx_merkle,
+			features: features,
+			nonce: nonce,
+			pow: pow,
+			difficulty: difficulty,
+			total_difficulty: total_difficulty,
+		}))
 	}
 }
 

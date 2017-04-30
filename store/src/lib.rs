@@ -27,7 +27,8 @@ extern crate tokio_io;
 extern crate bytes;
 extern crate secp256k1zkp as secp;
 extern crate num_bigint;
- 
+extern crate time;
+
 const SEP: u8 = ':' as u8;
 
 use std::fmt;
