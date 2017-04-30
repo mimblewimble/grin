@@ -21,7 +21,7 @@ macro_rules! try_opt_dec {
 		None => return Ok(None),
 	});
 }
-
+#[derive(Debug, Clone)]
 pub struct TxCodec;
 
 impl codec::Encoder for TxCodec {
