@@ -24,5 +24,12 @@ impl codec::Decoder for TxCodec {
 	}
 }
 
-#[test]
-fn should_have_tx_codec_roundtrip() { unimplemented!() }
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn should_have_tx_codec_roundtrip() {
+		unimplemented!()
+	}
+}
