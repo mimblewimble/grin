@@ -41,8 +41,8 @@ use rocksdb::{DB, WriteBatch, DBCompactionStyle, DBIterator, IteratorMode, Direc
 
 use core::ser;
 
-mod encoding;
-use encoding::*;
+mod codec;
+use codec::*;
 
 /// Main error type for this crate.
 #[derive(Debug)]
