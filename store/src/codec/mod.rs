@@ -15,6 +15,6 @@
 pub mod block;
 pub mod tx;
 
-pub use block::BlockCodec;
-pub use tx::TxCodec;
+pub use self::block::BlockCodec;
+pub use self::tx::TxCodec;
 
