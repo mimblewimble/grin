@@ -194,7 +194,7 @@ for any x and y, only if `y = 0` is `x*G + y*H` a valid public key on _G_.
 So all the protocol needs to verify is that (`Y - Xi`) is a valid public key on _G_ and that
 the transaction author knows the private key (28 in our transaction with Carol). The
 simplest way to do so is to require an ECDSA signature built with the excess value (28),
-when then validates that:
+which then validates that:
 
 * The author of the transaction knows the excess value (which is also the
   private key for the output)
