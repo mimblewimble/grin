@@ -116,6 +116,10 @@ impl TransactionPool {
             let base = graph::Edge::new(None, Some(tx_hash),
                 input.commitment());
 
+            // Note that search_for_best_output does not examine orphans, by
+            // design. If an incoming transaction consumes pool outputs already
+            // spent by the orphans set, this does not preclude its inclusion
+            // into the pool.
             match self.search_for_best_output(&input.commitment()) {
                 Parent::PoolTransaction{tx_ref: x} => pool_refs.push(base.with_source(Some(x))),
                 Parent::BlockTransaction => blockchain_refs.push(base),
@@ -206,7 +210,7 @@ impl TransactionPool {
             // against active orphan pool_connections.
             // Note that pool_connections here also does double duty to 
             // account for blockchain connections.
-            for pool_ref in &pool_refs {
+            for pool_ref in pool_refs.iter().chain(blockchain_refs.iter()) {
                 match self.orphans.pool_connections.get(&pool_ref.output_commitment()){
                     // Should the below err be subtyped to orphans somehow? 
                     Some(x) => return Err(PoolError::DoubleSpend{other_tx: x.destination_hash().unwrap(), spent_output: x.output_commitment()}),
@@ -219,55 +223,41 @@ impl TransactionPool {
             // We also have to distinguish now between missing and internal
             // references.
             let mut missing_refs: HashMap<usize, ()> = HashMap::new();
-            for (i, orphan_ref) in orphan_refs.iter().enumerate() {
-                // If the input is in orphans available_outputs, everything is
-                // good.
-                if !self.orphans.available_outputs.contains_key(&orphan_ref.output_commitment()) {
+            for (i, orphan_ref) in orphan_refs.iter_mut().enumerate() {
+                orphan_commitment = &orphan_ref.output_commitment();
+                match self.orphans.has_available_output(&orphan_commitment) {
+                    // If the edge is an available output of orphans,
+                    // update the prepared edge
+                    Some(x) => *orphan_ref = x.with_destination(tx_hash),
+                    // If the edge is not an available output, it is either
+                    // already consumed or it belongs in missing_refs.
+                    None => {
 
-                    // Otherwise, we have to check for spends within the orphan
-                    // set (pool and blockchain connections are already 
-                    // resolved), and duplicate missing_outputs
-                    match self.orphans.graph.get_edge_by_commitment(&orphan_ref.output_commitment()) {
-                        Some(x) => return Err(PoolError::DoubleSpend{
-                            other_tx: x.destination_hash().unwrap(),
-                            spent_output: x.output_commitment()}),
-                        None => {
-                            // The reference does not resolve to anything.
-                            // Make sure this missing_output has not already
-                            // been claimed, then add this entry to 
-                            // missing_refs
-                            match self.orphans.missing_outputs.get(&orphan_ref.output_commitment()) {
-                                Some(x) => return Err(PoolError::DoubleSpend{
-                                    other_tx: x.destination_hash().unwrap(),
-                                    spent_output: x.output_commitment()}),
-                                None => missing_refs.insert(i, ()),
-                            };
-                        },
-                    }
-                }
+                        match self.orphans.get_internal_spent(&orphan_commitment) {
+                            Some(x) => return Err(PoolError::DoubleSpend{
+                                other_tx: x.destination_hash().unwrap(),
+                                spent_output: x.output_commitment()}),
+                            None => {
+                                // The reference does not resolve to anything.
+                                // Make sure this missing_output has not already
+                                // been claimed, then add this entry to 
+                                // missing_refs
+                                match self.orphans.get_unknown_output(&orphan_commitment) {
+                                    Some(x) => return Err(PoolError::DoubleSpend{
+                                        other_tx: x.destination_hash().unwrap(),
+                                        spent_output: x.output_commitment()}),
+                                    None => missing_refs.insert(i, ()),
+                                };
+                            },
+                        }
+                    },
+                };
             }
+
             // We have passed all failure modes.
-            // Add pool_refs and blockchain_refs
-            for pool_ref in pool_refs.drain(..).chain(blockchain_refs.drain(..)) {
-                self.orphans.pool_connections.insert(
-                    pool_ref.output_commitment(), pool_ref);
-            }
-
-            // if missing_refs is the same length as orphan_refs, we have
-            // no orphan-orphan links for this transaction and it is a 
-            // root transaction of the orphans set
-            self.orphans.graph.add_vertex_only(pool_entry,
-                missing_refs.len() == orphan_refs.len());
-
-            for (i, orphan_ref) in orphan_refs.drain(..).enumerate() {
-                if missing_refs.contains_key(&i) {
-                    self.orphans.missing_outputs.insert(
-                        orphan_ref.output_commitment(),
-                        orphan_ref);
-                } else {
-                    self.orphans.graph.add_edge_only(orphan_ref);
-                }
-            }
+            self.orphans.add_orphan_transaction(pool_entry,
+                pool_refs.append(blockchain_refs), orphan_refs,
+                missing_refs, new_unspents);
 
             Err(PoolError::OrphanTransaction)
         }

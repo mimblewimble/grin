@@ -163,11 +163,14 @@ impl Pool {
 }
 
 impl TransactionGraphContainer for Pool { 
-    fn get_graph(&self) -> &graph::DirectedGraph {
-        &self.graph
+    fn get_available_output(&self, output: &Commitment) -> Option<graph::Edge> {
+        self.available_outputs.get(output)
     }
-    fn get_available_outputs(&self) -> &HashMap<Commitment, graph::Edge> {
-        &self.available_outputs
+    fn get_external_spent_output(&self, output: &Commitment) -> Option<graph::Edge> {
+        self.blockchain_connections.get(output)
+    }
+    fn get_internal_spent_output(&self, output: &Commitment) -> Option<graph::Edge> {
+        self.graph.get_edge_by_commitment(output)
     }
 }
 
@@ -202,36 +205,113 @@ impl Orphans {
         self.graph.get_edge_by_commitment(&o.commitment()).or(self.pool_connections.get(&o.commitment())).map(|x| x.destination_hash().unwrap())
     }
 
+    pub fn get_unknown_output(&self, output: &Commitment) -> Option<graph::Edge> {
+        self.missing_outputs.get(output)
+    }
+
+    /// Add an orphan transaction to the orphans set.
+    ///
+    /// This method adds a given transaction (represented by the PoolEntry at
+    /// orphan_entry) to the orphans set.
+    ///
+    /// This method has no failure modes. All checks should be passed before
+    /// entry.
+    ///
+    /// Expects a HashMap at is_missing describing the indices of orphan_refs
+    /// which correspond to missing (vs orphan-to-orphan) links.
+    pub fn add_orphan_transaction(&mut self, orphan_entry: graph::PoolEntry,
+        pool_refs: Vec<graph::Edge>, orphan_refs: Vec<graph::Edge>,
+        is_missing: HashMap<usize, ()>, new_unspents: Vec<graph::Edge>) {
+
+        // Removing consumed available_outputs
+        for (i, new_edge) in orphan_refs.drain(..).enumerate() {
+            if is_missing.contains_key(&i) {
+                self.missing_outputs.insert(new_edge.output_commitment(),
+                    new_edge);
+            } else {
+                assert!(self.available_outputs.remove(new_edge.output_commitment()).is_some());
+                self.graph.add_edge_only(new_edge);
+            }
+        }
+
+        // Accounting for consumed blockchain and pool outputs
+        for external_edge in pool_refs.drain(..) {
+            self.pool_connections.insert(
+                external_edge.output_commitment(), external_edge);
+        }
+
+        // if missing_refs is the same length as orphan_refs, we have
+        // no orphan-orphan links for this transaction and it is a
+        // root transaction of the orphans set
+        self.graph.add_vertex_only(orphan_entry,
+            missing_refs.len() == orphan_refs.len());
+
+
+        // Adding the new unspents to the unspent map
+        for unspent_output in new_unspents.drain(..) {
+            self.available_outputs.insert(
+                unspent_output.output_commitment(), unspent_output);
+        }
+    }
 }
 
 impl TransactionGraphContainer for Orphans {
-    fn get_graph(&self) -> &graph::DirectedGraph {
-        &self.graph
+    fn get_available_output(&self, output: &Commitment) -> Option<graph::Edge> {
+        self.available_outputs.get(output)
     }
-    fn get_available_outputs(&self) -> &HashMap<Commitment, graph::Edge> {
-        &self.available_outputs
+    fn get_external_spent_output(&self, output: &Commitment) -> Option<graph::Edge> {
+        self.pool_connections.get(output)
+    }
+    fn get_internal_spent_output(&self, output: &Commitment) -> Option<graph::Edge> {
+        self.graph.get_edge_by_commitment(output)
     }
 }
 
-/// Trait for types that combine a graph with available_outputs
+/// Trait for types that embed a graph and connect to external state.
+///
+/// The types implementing this trait consist of a graph with nodes and edges
+/// representing transactions and outputs, respectively. Outputs fall into one
+/// of three categories:
+/// 1) External spent: An output sourced externally consumed by a transaction
+///     in this graph,
+/// 2) Internal spent: An output produced by a transaction in this graph and
+///     consumed by another transaction in this graph,
+/// 3) [External] Unspent: An output produced by a transaction in this graph
+///     that is not yet spent.
+/// 
+/// There is no concept of an external "spent by" reference (output produced by
+/// a transaction in the graph spent by a transaction in another source), as 
+/// these references are expected to be maintained by descendent graph. Outputs
+/// follow a heirarchy (Blockchain -> Pool -> Orphans) where each descendent 
+/// exists at a lower priority than their parent. An output consumed by a 
+/// child graph is marked as unspent in the parent graph and an external spent
+/// in the child. This ensures that no descendent set must modify state in a 
+/// set of higher priority.
 pub trait TransactionGraphContainer {
-    fn get_graph(&self) -> &graph::DirectedGraph;
-    fn get_available_outputs(&self) -> &HashMap<Commitment, graph::Edge>;
+    /// Accessor for internal spents
+    fn get_internal_spent_output(&self, output: &Commitment) -> Option<graph::Edge>;
+    /// Accessor for external unspents
+    fn get_available_output(&self, output: &Commitment) -> Option<graph::Edge>;
+    /// Accessor for external spents
+    fn get_external_spent_output(&self, output: &Commitment) -> Option<graph::Edge>;
 
+    /// Checks if the available_output set has the output at the given
+    /// commitment
     fn has_available_output(&self, c: &Commitment) -> bool {
-        self.get_available_outputs().contains_key(c)
+        self.get_available_output(c).is_some()
     }
+
     /// Checks if the pool has anything by this output already, between 
     /// available outputs and internal ones.
     fn find_output(&self, c: &Commitment) -> Option<hash::Hash> {
-        self.get_available_outputs().get(c).
-            or(self.get_graph().get_edge_by_commitment(c)).
+        self.get_available_output(c).
+            or(self.get_internal_spent_output(c)).
             map(|x| x.source_hash().unwrap())
     }
 
     /// Search for a spent reference internal to the graph
     fn get_internal_spent(&self, c: &Commitment) -> Option<&graph::Edge> {
-        self.get_graph().get_edge_by_commitment(c)
+        self.get_internal_spent_output(c)
     }
 
 }
