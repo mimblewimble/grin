@@ -21,6 +21,7 @@ use std::sync::RwLock;
 use std::sync::Weak;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::iter::Iterator;
 use std::fmt;
 
 use secp::pedersen::Commitment;
@@ -107,6 +108,14 @@ pub struct Pool {
 }
 
 impl Pool {
+    pub fn empty() -> Pool {
+        Pool{
+            graph: graph::DirectedGraph::empty(),
+            available_outputs: HashMap::new(),
+            consumed_blockchain_outputs: HashMap::new(),
+        }
+    }
+
     pub fn has_available_output(&self, c: &Commitment) -> bool {
         self.available_outputs.contains_key(c)
     }
@@ -134,8 +143,8 @@ impl Pool {
     }
 
     pub fn add_pool_transaction(&mut self, pool_entry: graph::PoolEntry,
-        blockchain_refs: Vec<graph::Edge>, pool_refs: Vec<graph::Edge>,
-        new_unspents: Vec<graph::Edge>) {
+        mut blockchain_refs: Vec<graph::Edge>, pool_refs: Vec<graph::Edge>,
+        mut new_unspents: Vec<graph::Edge>) {
 
         // Removing consumed available_outputs
         for new_edge in &pool_refs {
@@ -160,16 +169,53 @@ impl Pool {
                 unspent_output.output_commitment(), unspent_output);
         }
     }
+
+    pub fn remove_pool_transaction(&mut self, tx: &transaction::Transaction,
+        marked_txs: &HashMap<hash::Hash, ()>) {
+
+        self.graph.remove_vertex(graph::transaction_identifier(tx));
+
+        for input in tx.inputs.iter().map(|x| x.commitment()) {
+            match self.graph.remove_edge_by_commitment(&input) {
+                Some(x) => {
+                    if !marked_txs.contains_key(&x.source_hash().unwrap()) {
+                        self.available_outputs.insert(x.output_commitment(),
+                            x.with_destination(None));
+                    }
+                },
+                None => {
+                    self.consumed_blockchain_outputs.remove(&input);
+                },
+            };
+        }
+
+        for output in tx.outputs.iter().map(|x| x.commitment()) {
+            match self.graph.remove_edge_by_commitment(&output) {
+                Some(x) => {
+                    if !marked_txs.contains_key(
+                        &x.destination_hash().unwrap()) {
+
+                        self.consumed_blockchain_outputs.insert(
+                            x.output_commitment(),
+                            x.with_source(None));
+                    }
+                },
+                None => {
+                    self.available_outputs.remove(&output);
+                }
+            };
+        }
+    }
 }
 
 impl TransactionGraphContainer for Pool { 
-    fn get_available_output(&self, output: &Commitment) -> Option<graph::Edge> {
+    fn get_available_output(&self, output: &Commitment) -> Option<&graph::Edge> {
         self.available_outputs.get(output)
     }
-    fn get_external_spent_output(&self, output: &Commitment) -> Option<graph::Edge> {
-        self.blockchain_connections.get(output)
+    fn get_external_spent_output(&self, output: &Commitment) -> Option<&graph::Edge> {
+        self.consumed_blockchain_outputs.get(output)
     }
-    fn get_internal_spent_output(&self, output: &Commitment) -> Option<graph::Edge> {
+    fn get_internal_spent_output(&self, output: &Commitment) -> Option<&graph::Edge> {
         self.graph.get_edge_by_commitment(output)
     }
 }
@@ -196,6 +242,15 @@ pub struct Orphans {
 }
 
 impl Orphans {
+    pub fn empty() -> Orphans {
+        Orphans{
+            graph: graph::DirectedGraph::empty(),
+            available_outputs : HashMap::new(),
+            missing_outputs: HashMap::new(),
+            pool_connections: HashMap::new(),
+        }
+    }
+
     /// Checks for a double spent output, given the hash of the output, 
     /// ONLY in the data maintained by the orphans set. This includes links
     /// to the pool as well as links internal to orphan transactions.
@@ -205,7 +260,7 @@ impl Orphans {
         self.graph.get_edge_by_commitment(&o.commitment()).or(self.pool_connections.get(&o.commitment())).map(|x| x.destination_hash().unwrap())
     }
 
-    pub fn get_unknown_output(&self, output: &Commitment) -> Option<graph::Edge> {
+    pub fn get_unknown_output(&self, output: &Commitment) -> Option<&graph::Edge> {
         self.missing_outputs.get(output)
     }
 
@@ -220,8 +275,8 @@ impl Orphans {
     /// Expects a HashMap at is_missing describing the indices of orphan_refs
     /// which correspond to missing (vs orphan-to-orphan) links.
     pub fn add_orphan_transaction(&mut self, orphan_entry: graph::PoolEntry,
-        pool_refs: Vec<graph::Edge>, orphan_refs: Vec<graph::Edge>,
-        is_missing: HashMap<usize, ()>, new_unspents: Vec<graph::Edge>) {
+        mut pool_refs: Vec<graph::Edge>, mut orphan_refs: Vec<graph::Edge>,
+        is_missing: HashMap<usize, ()>, mut new_unspents: Vec<graph::Edge>) {
 
         // Removing consumed available_outputs
         for (i, new_edge) in orphan_refs.drain(..).enumerate() {
@@ -229,7 +284,7 @@ impl Orphans {
                 self.missing_outputs.insert(new_edge.output_commitment(),
                     new_edge);
             } else {
-                assert!(self.available_outputs.remove(new_edge.output_commitment()).is_some());
+                assert!(self.available_outputs.remove(&new_edge.output_commitment()).is_some());
                 self.graph.add_edge_only(new_edge);
             }
         }
@@ -244,7 +299,7 @@ impl Orphans {
         // no orphan-orphan links for this transaction and it is a
         // root transaction of the orphans set
         self.graph.add_vertex_only(orphan_entry,
-            missing_refs.len() == orphan_refs.len());
+            is_missing.len() == orphan_refs.len());
 
 
         // Adding the new unspents to the unspent map
@@ -256,13 +311,13 @@ impl Orphans {
 }
 
 impl TransactionGraphContainer for Orphans {
-    fn get_available_output(&self, output: &Commitment) -> Option<graph::Edge> {
+    fn get_available_output(&self, output: &Commitment) -> Option<&graph::Edge> {
         self.available_outputs.get(output)
     }
-    fn get_external_spent_output(&self, output: &Commitment) -> Option<graph::Edge> {
+    fn get_external_spent_output(&self, output: &Commitment) -> Option<&graph::Edge> {
         self.pool_connections.get(output)
     }
-    fn get_internal_spent_output(&self, output: &Commitment) -> Option<graph::Edge> {
+    fn get_internal_spent_output(&self, output: &Commitment) -> Option<&graph::Edge> {
         self.graph.get_edge_by_commitment(output)
     }
 }
@@ -289,11 +344,11 @@ impl TransactionGraphContainer for Orphans {
 /// set of higher priority.
 pub trait TransactionGraphContainer {
     /// Accessor for internal spents
-    fn get_internal_spent_output(&self, output: &Commitment) -> Option<graph::Edge>;
+    fn get_internal_spent_output(&self, output: &Commitment) -> Option<&graph::Edge>;
     /// Accessor for external unspents
-    fn get_available_output(&self, output: &Commitment) -> Option<graph::Edge>;
+    fn get_available_output(&self, output: &Commitment) -> Option<&graph::Edge>;
     /// Accessor for external spents
-    fn get_external_spent_output(&self, output: &Commitment) -> Option<graph::Edge>;
+    fn get_external_spent_output(&self, output: &Commitment) -> Option<&graph::Edge>;
 
     /// Checks if the available_output set has the output at the given
     /// commitment

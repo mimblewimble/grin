@@ -211,7 +211,7 @@ impl TransactionPool {
             // Note that pool_connections here also does double duty to 
             // account for blockchain connections.
             for pool_ref in pool_refs.iter().chain(blockchain_refs.iter()) {
-                match self.orphans.pool_connections.get(&pool_ref.output_commitment()){
+                match self.orphans.get_external_spent_output(&pool_ref.output_commitment()){
                     // Should the below err be subtyped to orphans somehow? 
                     Some(x) => return Err(PoolError::DoubleSpend{other_tx: x.destination_hash().unwrap(), spent_output: x.output_commitment()}),
                     None => {},
@@ -224,11 +224,11 @@ impl TransactionPool {
             // references.
             let mut missing_refs: HashMap<usize, ()> = HashMap::new();
             for (i, orphan_ref) in orphan_refs.iter_mut().enumerate() {
-                orphan_commitment = &orphan_ref.output_commitment();
-                match self.orphans.has_available_output(&orphan_commitment) {
+                let orphan_commitment = &orphan_ref.output_commitment();
+                match self.orphans.get_available_output(&orphan_commitment) {
                     // If the edge is an available output of orphans,
                     // update the prepared edge
-                    Some(x) => *orphan_ref = x.with_destination(tx_hash),
+                    Some(x) => *orphan_ref = x.with_destination(Some(tx_hash)),
                     // If the edge is not an available output, it is either
                     // already consumed or it belongs in missing_refs.
                     None => {
@@ -255,9 +255,9 @@ impl TransactionPool {
             }
 
             // We have passed all failure modes.
+            pool_refs.append(&mut blockchain_refs);
             self.orphans.add_orphan_transaction(pool_entry,
-                pool_refs.append(blockchain_refs), orphan_refs,
-                missing_refs, new_unspents);
+                pool_refs, orphan_refs, missing_refs, new_unspents);
 
             Err(PoolError::OrphanTransaction)
         }
@@ -326,14 +326,14 @@ impl TransactionPool {
         {
             let mut conflicting_txs: Vec<hash::Hash> = block.inputs.iter().
                 filter_map(|x|
-                   self.pool.consumed_blockchain_outputs.get(&x.commitment())).
+                   self.pool.get_external_spent_output(&x.commitment())).
                 map(|x| x.destination_hash().unwrap()).
                 collect();
 
             let mut conflicting_outputs: Vec<hash::Hash> = block.outputs.iter().
                 filter_map(|x: &transaction::Output|
-                    self.pool.graph.get_edge_by_commitment(&x.commitment()).
-                    or_else(|| self.pool.available_outputs.get(&x.commitment()))).
+                    self.pool.get_internal_spent_output(&x.commitment()).
+                    or(self.pool.get_available_output(&x.commitment()))).
                 map(|x| x.source_hash().unwrap()).
                 collect();
 
@@ -373,7 +373,7 @@ impl TransactionPool {
         let tx_ref = self.transactions.get(&conflicting_tx);
 
         for output in &tx_ref.unwrap().outputs {
-            match self.pool.graph.get_edge_by_commitment(&output.commitment()) {
+            match self.pool.get_internal_spent_output(&output.commitment()) {
                 Some(x) => {
                     if updated_utxo.get_output(&x.output_commitment()).is_none() {
                         self.mark_transaction(updated_utxo,
@@ -405,56 +405,8 @@ impl TransactionPool {
         for tx_hash in marked_transactions.keys() {
             let removed_tx = self.transactions.remove(tx_hash).unwrap();
 
-            // Input edge conditions:
-            // 1. If the input edge is a blockchain connection, remove it.
-            // 2. If the input edge connects to a deleted transaction,
-            //      remove it.
-            // 3. If the input edge connects to a non-deleted transaction,
-            //      add the edge to the unspent set.
-            //
-            // Note that some of the edges in condition 2 may have been
-            // removed by output edge removal if that transaction was 
-            // visited first. As written, that will result in an attempt to
-            // remove the edge from blockchain_connections, which should be
-            // safe.
-            for input in &removed_tx.inputs {
-                match self.pool.graph.remove_edge_by_commitment(&input.commitment()) {
-                    Some(x) => {
-                        if !marked_transactions.contains_key(&x.source_hash().unwrap()) {
-                            self.pool.available_outputs.insert(
-                                x.output_commitment(),
-                                x.with_destination(None));
-                        }
-                    },
-                    None => {
-                        self.pool.consumed_blockchain_outputs.remove(
-                            &input.commitment());
-                    },
-                };
-            }
-
-            // Output edge conditions: 
-            // 1. If the output edge is an available_output, remove it.
-            // 2. If the output edge leads to a deleted transaction, remove it.
-            // 3. If the output edge leads to a non-deleted transaction, 
-            //   replace it with a new blockchain_connection.
-            //
-            // As above, some outputs may be missing from condition 2 if the 
-            // spending transaction was visited first. 
-            for output in &removed_tx.outputs {
-                match self.pool.graph.remove_edge_by_commitment(&output.commitment()) {
-                    Some(x) => {
-                        if !marked_transactions.contains_key(&x.destination_hash().unwrap()) {
-                            self.pool.consumed_blockchain_outputs.insert(
-                                x.output_commitment(),
-                                x.with_source(None));
-                        }
-                    },
-                    None => {
-                        self.pool.available_outputs.remove(&output.commitment());
-                    },
-                };
-            }
+            self.pool.remove_pool_transaction(&removed_tx,
+                &marked_transactions);
 
             removed_txs.push(removed_tx);
         }
@@ -751,17 +703,8 @@ mod tests {
     fn test_setup(dummy_chain: &Arc<Box<DummyChain>>) -> TransactionPool {
         TransactionPool{
             transactions: HashMap::new(),
-            pool: Pool{
-                graph: graph::DirectedGraph::empty(),
-                available_outputs: HashMap::new(),
-                consumed_blockchain_outputs: HashMap::new(),
-            },
-            orphans: Orphans{
-                graph: graph::DirectedGraph::empty(),
-                available_outputs: HashMap::new(),
-                missing_outputs: HashMap::new(),
-                pool_connections: HashMap::new(),
-            },
+            pool: Pool::empty(),
+            orphans: Orphans::empty(),
             blockchain: dummy_chain.clone(),
         }
     }
