@@ -119,6 +119,9 @@ impl codec::Decoder for BlockCodec {
 	}
 }
 
+#[derive(Debug, Clone)]
+struct BlockHashCodec;
+
 /// Internal Convenience Trait
 trait BlockEncode: Sized {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error>;
@@ -161,14 +164,14 @@ impl BlockEncode for BlockHeader {
 		dst.reserve(8);
 		dst.put_u64::<BigEndian>(self.nonce);
 
-		// Put Proof of Work Data
-		self.pow.block_encode(dst)?;
-
 		// Put Difficulty
 		self.difficulty.block_encode(dst)?;
 
 		// Put Total Difficulty
 		self.total_difficulty.block_encode(dst)?;
+
+		// Put Proof of Work Data
+		self.pow.block_encode(dst)?;
 
 		Ok(())
 
@@ -225,14 +228,14 @@ impl BlockDecode for BlockHeader {
 		let mut buf = src.split_to(8).into_buf();
 		let nonce = buf.get_u64::<BigEndian>();
 
-		// Get Proof of Work Data
-		let pow = try_opt_dec!(Proof::block_decode(src)?);
-
 		// Get Difficulty
 		let difficulty = try_opt_dec!(Difficulty::block_decode(src)?);
 
 		// Get Total Difficulty
 		let total_difficulty = try_opt_dec!(Difficulty::block_decode(src)?);
+
+		// Get Proof of Work Data
+		let pow = try_opt_dec!(Proof::block_decode(src)?);
 
 		Ok(Some(BlockHeader {
 			height: height,
