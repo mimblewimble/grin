@@ -181,6 +181,11 @@ impl DirectedGraph {
     pub fn len_vertices(&self) -> usize {
         self.vertices.len() + self.roots.len()
     }
+   
+    /// Number of root vertices only
+    pub fn len_roots(&self) -> usize {
+        self.roots.len()
+    }
 
     /// Number of edges
     pub fn len_edges(&self) -> usize {

@@ -209,6 +209,9 @@ impl Pool {
 }
 
 impl TransactionGraphContainer for Pool { 
+    fn get_graph(&self) -> &graph::DirectedGraph {
+        &self.graph
+    }
     fn get_available_output(&self, output: &Commitment) -> Option<&graph::Edge> {
         self.available_outputs.get(output)
     }
@@ -311,6 +314,9 @@ impl Orphans {
 }
 
 impl TransactionGraphContainer for Orphans {
+    fn get_graph(&self) -> &graph::DirectedGraph {
+        &self.graph
+    }
     fn get_available_output(&self, output: &Commitment) -> Option<&graph::Edge> {
         self.available_outputs.get(output)
     }
@@ -343,6 +349,8 @@ impl TransactionGraphContainer for Orphans {
 /// in the child. This ensures that no descendent set must modify state in a 
 /// set of higher priority.
 pub trait TransactionGraphContainer {
+    /// Accessor for graph object
+    fn get_graph(&self) -> &graph::DirectedGraph;
     /// Accessor for internal spents
     fn get_internal_spent_output(&self, output: &Commitment) -> Option<&graph::Edge>;
     /// Accessor for external unspents
@@ -367,6 +375,18 @@ pub trait TransactionGraphContainer {
     /// Search for a spent reference internal to the graph
     fn get_internal_spent(&self, c: &Commitment) -> Option<&graph::Edge> {
         self.get_internal_spent_output(c)
+    }
+
+    fn num_root_transactions(&self) -> usize {
+        self.get_graph().len_roots()
+    }
+
+    fn num_transactions(&self) -> usize {
+        self.get_graph().len_vertices()
+    }
+
+    fn num_output_edges(&self) -> usize {
+        self.get_graph().len_edges()
     }
 
 }
