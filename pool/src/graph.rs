@@ -176,14 +176,24 @@ impl DirectedGraph {
     pub fn add_edge_only(&mut self, edge: Edge) {
         self.edges.insert(edge.output_commitment(), edge);
     }
+
+    /// Number of vertices (root + internal)
+    pub fn len_vertices(&self) -> usize {
+        self.vertices.len() + self.roots.len()
+    }
+
+    /// Number of edges
+    pub fn len_edges(&self) -> usize {
+        self.edges.len()
+    }
 }
 
-/// The transaction identifier is not yet finalized. As implemented in
-/// grin/core, it is the merkle root of a transaction; however this is not yet
-/// exposed.
-/// This method is a placeholder until a reasonable identifier is decided on.
+/// Using transaction merkle_inputs_outputs to calculate a deterministic hash;
+/// this hashing mechanism has some ambiguity issues especially around range
+/// proofs and any extra data the kernel may cover, but it is used initially
+/// for testing purposes.
 pub fn transaction_identifier(tx: &core::transaction::Transaction) -> core::hash::Hash {
-    random_hash()
+    core::transaction::merkle_inputs_outputs(&tx.inputs, &tx.outputs)
 }
 
 #[cfg(test)]
