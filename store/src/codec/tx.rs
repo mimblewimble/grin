@@ -15,14 +15,10 @@
 use std::io;
 
 use tokio_io::*;
-use bytes::{Bytes, BytesMut, BigEndian, BufMut, Buf, IntoBuf};
+use bytes::{BytesMut, BigEndian, BufMut, Buf, IntoBuf};
 
-use core::core::{Input, Output, Proof, Transaction, TxKernel, Block, BlockHeader};
-use core::core::hash::Hash;
-use core::core::target::Difficulty;
-use core::core::transaction::{OutputFeatures, KernelFeatures};
-use core::core::block::BlockFeatures;
-use core::consensus::PROOFSIZE;
+use core::core::{Input, Output, Transaction};
+use core::core::transaction::OutputFeatures;
 
 use secp::pedersen::{RangeProof, Commitment};
 use secp::constants::PEDERSEN_COMMITMENT_SIZE;

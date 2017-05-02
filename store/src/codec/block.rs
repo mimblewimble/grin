@@ -13,13 +13,11 @@
 // limitations under the License.
 
 use std::io;
-use std::io::Read;
-use std::marker::PhantomData;
 
 use tokio_io::*;
-use bytes::{Bytes, BytesMut, BigEndian, BufMut, Buf, IntoBuf};
+use bytes::{BytesMut, BigEndian, BufMut, Buf, IntoBuf};
 use num_bigint::BigUint;
-use time::{Timespec, Tm};
+use time::Timespec;
 use time;
 
 use core::core::{Input, Output, Proof, TxKernel, Block, BlockHeader};
