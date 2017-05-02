@@ -574,6 +574,21 @@ mod tests {
                 },
             };
 
+            let already_in_pool = test_transaction(vec![5,6], vec![8]);
+
+            match write_pool.add_to_memory_pool(test_source(),
+                already_in_pool) {
+                Ok(_) => panic!("Expected error when adding already in pool, got Ok"),
+                Err(x) => {
+                    match x {
+                        PoolError::AlreadyInPool => {},
+                        _ => panic!("Unexpected error when adding already in pool tx: {:?}",
+                            x),
+                    };
+                }
+
+            };
+
             assert_eq!(write_pool.total_size(), 1);
 
             // TODO: We cannot yet test AlreadyInPool as tx hashes are 
