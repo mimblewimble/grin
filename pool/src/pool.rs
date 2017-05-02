@@ -82,6 +82,19 @@ impl TransactionPool {
 
     }
 
+    /// Get the number of transactions in the pool
+    pub fn pool_size(&self) -> usize {
+        self.pool.num_transactions()
+    }
+
+    pub fn orphans_size(&self) -> usize {
+        self.orphans.num_transactions()
+    }
+
+    pub fn total_size(&self) -> usize {
+        self.pool.num_transactions() + self.orphans.num_transactions()
+    }
+
     /// Attempts to add a transaction to the pool.
     ///
     /// Adds a transation to the memory pool, deferring to the orphans pool
@@ -460,6 +473,7 @@ mod tests {
         // Take the write lock and add a pool entry
         {
             let mut write_pool = pool.write().unwrap();
+            assert_eq!(write_pool.total_size(), 0);
 
             // First, add the transaction rooted in the blockchain
             let result = write_pool.add_to_memory_pool(test_source(),
@@ -484,6 +498,7 @@ mod tests {
        // consistency
         {
             let read_pool = pool.read().unwrap();
+            assert_eq!(read_pool.total_size(), 2);
 
             expect_output_parent!(read_pool,
                 Parent::PoolTransaction{tx_ref: _}, 12);
@@ -511,6 +526,7 @@ mod tests {
         let pool = RwLock::new(test_setup(&Arc::new(Box::new(dummy_chain))));
         {
             let mut write_pool = pool.write().unwrap();
+            assert_eq!(write_pool.total_size(), 0);
 
             // First expected failure: duplicate output
             let duplicate_tx = test_transaction(vec![5,6], vec![7]);
@@ -557,6 +573,8 @@ mod tests {
                     };
                 },
             };
+
+            assert_eq!(write_pool.total_size(), 1);
 
             // TODO: We cannot yet test AlreadyInPool as tx hashes are 
             // not deterministic and the hash itself is private to the graph
@@ -629,15 +647,20 @@ mod tests {
             conflict_valid_child, valid_child_conflict, valid_child_valid,
             mixed_child];
 
+        let expected_pool_size = txs_to_add.len();
+
         // First we add the above transactions to the pool; all should be
         // accepted.
         {
             let mut write_pool = pool.write().unwrap();
+            assert_eq!(write_pool.total_size(), 0);
 
             for tx in txs_to_add.drain(..) {
                 assert!(write_pool.add_to_memory_pool(test_source(),
                     tx).is_ok());
             }
+
+            assert_eq!(write_pool.total_size(), expected_pool_size);
         }
         // Now we prepare the block that will cause the above condition.
         // First, the transactions we want in the block:
@@ -675,6 +698,8 @@ mod tests {
         // Using the pool's methods to validate a few end conditions.
         {
             let read_pool = pool.read().unwrap();
+
+            assert_eq!(read_pool.total_size(), 4);
 
             // We should have available blockchain outputs at 9 and 3
             expect_output_parent!(read_pool, Parent::BlockTransaction, 9, 3);
