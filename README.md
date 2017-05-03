@@ -29,6 +29,10 @@ Find us:
 * Chat: [Gitter](https://gitter.im/grin_community/Lobby).
 * Mailing list: join the [~MimbleWimble team](https://launchpad.net/~mimblewimble) and subscribe on Launchpad.
 
+## Getting Started
+
+See the [build docs](doc/build.md).
+
 
 ## Philosophy
 
