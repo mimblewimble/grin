@@ -124,46 +124,8 @@ impl codec::Encoder for BlockHasher {
 	type Item = Block;
 	type Error = io::Error;
 	fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-
-		// Only Encode Header
-		let header = item.header;
-
-		// Put Height
-		dst.reserve(8);
-		dst.put_u64::<BigEndian>(header.height);
-
-		// Put Previous Hash
-		header.previous.block_encode(dst)?;
-
-		// Put Timestamp
-		dst.reserve(8);
-		dst.put_i64::<BigEndian>(header.timestamp.to_timespec().sec);
-
-		// Put Cuckoo Len
-		dst.reserve(1);
-		dst.put_u8(header.cuckoo_len);
-
-		// Put UTXO Merkle Hash
-		header.utxo_merkle.block_encode(dst)?;
-
-		// Put Merkle Tree Hashes
-		header.tx_merkle.block_encode(dst)?;
-
-		// Put Features
-		dst.reserve(1);
-		dst.put_u8(header.features.bits());
-
-		// Put Nonce
-		dst.reserve(8);
-		dst.put_u64::<BigEndian>(header.nonce);
-
-		// Put Difficulty
-		header.difficulty.block_encode(dst)?;
-
-		// Put Total Difficulty
-		header.total_difficulty.block_encode(dst)?;
-
-		Ok(())
+		// Only encode header
+		partial_block_encode(&item.header, dst)
 	}
 }
 
@@ -177,50 +139,53 @@ trait BlockDecode: Sized {
 	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error>;
 }
 
-
 impl BlockEncode for BlockHeader {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
-		// Put Height
-		dst.reserve(8);
-		dst.put_u64::<BigEndian>(self.height);
-
-		// Put Previous Hash
-		self.previous.block_encode(dst)?;
-
-		// Put Timestamp
-		dst.reserve(8);
-		dst.put_i64::<BigEndian>(self.timestamp.to_timespec().sec);
-
-		// Put Cuckoo Len
-		dst.reserve(1);
-		dst.put_u8(self.cuckoo_len);
-
-		// Put UTXO Merkle Hash
-		self.utxo_merkle.block_encode(dst)?;
-
-		// Put Merkle Tree Hashes
-		self.tx_merkle.block_encode(dst)?;
-
-		// Put Features
-		dst.reserve(1);
-		dst.put_u8(self.features.bits());
-
-		// Put Nonce
-		dst.reserve(8);
-		dst.put_u64::<BigEndian>(self.nonce);
-
-		// Put Difficulty
-		self.difficulty.block_encode(dst)?;
-
-		// Put Total Difficulty
-		self.total_difficulty.block_encode(dst)?;
+		partial_block_encode(self, dst)?;
 
 		// Put Proof of Work Data
 		self.pow.block_encode(dst)?;
-
 		Ok(())
-
 	}
+}
+
+fn partial_block_encode(header: &BlockHeader, dst: &mut BytesMut) -> Result<(), io::Error> {
+	// Put Height
+	dst.reserve(8);
+	dst.put_u64::<BigEndian>(header.height);
+
+	// Put Previous Hash
+	header.previous.block_encode(dst)?;
+
+	// Put Timestamp
+	dst.reserve(8);
+	dst.put_i64::<BigEndian>(header.timestamp.to_timespec().sec);
+
+	// Put Cuckoo Len
+	dst.reserve(1);
+	dst.put_u8(header.cuckoo_len);
+
+	// Put UTXO Merkle Hash
+	header.utxo_merkle.block_encode(dst)?;
+
+	// Put Merkle Tree Hashes
+	header.tx_merkle.block_encode(dst)?;
+
+	// Put Features
+	dst.reserve(1);
+	dst.put_u8(header.features.bits());
+
+	// Put Nonce
+	dst.reserve(8);
+	dst.put_u64::<BigEndian>(header.nonce);
+
+	// Put Difficulty
+	header.difficulty.block_encode(dst)?;
+
+	// Put Total Difficulty
+	header.total_difficulty.block_encode(dst)?;
+
+	Ok(())
 }
 
 impl BlockDecode for BlockHeader {
