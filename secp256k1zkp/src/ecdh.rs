@@ -15,7 +15,6 @@
 //! # ECDH
 //! Support for shared secret computations
 //!
-
 use std::ops;
 
 use super::Secp256k1;

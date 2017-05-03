@@ -36,6 +36,7 @@ bitflags! {
 }
 
 /// Block header, fairly standard compared to other blockchains.
+#[derive(Clone, Debug)]
 pub struct BlockHeader {
 	/// Height of this block since the genesis block (height 0)
 	pub height: u64,
@@ -138,6 +139,7 @@ impl Readable for BlockHeader {
 /// non-explicit, assumed to be deducible from block height (similar to
 /// bitcoin's schedule) and expressed as a global transaction fee (added v.H),
 /// additive to the total of fees ever collected.
+#[derive(Clone, Debug)]
 pub struct Block {
     /// The header with metadata and commitments to the rest of the data
 	pub header: BlockHeader,
