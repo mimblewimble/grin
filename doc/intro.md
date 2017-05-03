@@ -118,8 +118,8 @@ Where:
 Neither _v_ nor _r_ can be deduced, leveraging the fundamental properties of Elliptic
 Curve Cryptography. `r*G + v*H` is called a _Pedersen Commitment_.
 
-As a an example, let's assume we want to build a transaction with one input and two
-outputs. We have (ignoring fees):
+As a an example, let's assume we want to build a transaction with two inputs and one
+output. We have (ignoring fees):
 
 * vi1 and vi2 as input values.
 * vo3 as output value.
@@ -194,7 +194,7 @@ for any x and y, only if `y = 0` is `x*G + y*H` a valid public key on _G_.
 So all the protocol needs to verify is that (`Y - Xi`) is a valid public key on _G_ and that
 the transaction author knows the private key (28 in our transaction with Carol). The
 simplest way to do so is to require an ECDSA signature built with the excess value (28),
-when then validates that:
+which then validates that:
 
 * The author of the transaction knows the excess value (which is also the
   private key for the output)

@@ -14,8 +14,10 @@
 
 //! Base types that the block chain pipeline requires.
 
+use secp::pedersen::Commitment;
+
 use grin_store::Error;
-use core::core::{Block, BlockHeader};
+use core::core::{Block, BlockHeader, Output};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::ser;
@@ -95,11 +97,18 @@ pub trait ChainStore: Send + Sync {
 	/// Save the provided tip as the current head of our chain
 	fn save_head(&self, t: &Tip) -> Result<(), Error>;
 
+	/// Save the provided tip as the current head of the body chain, leaving the
+	/// header chain alone.
+	fn save_body_head(&self, t: &Tip) -> Result<(), Error>;
+
 	/// Gets a block header by hash
 	fn get_block(&self, h: &Hash) -> Result<Block, Error>;
 
 	/// Gets a block header by hash
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error>;
+
+	/// Checks whether a block has been been processed and saved
+	fn check_block_exists(&self, h: &Hash) -> Result<bool, Error>;
 
 	/// Save the provided block in store
 	fn save_block(&self, b: &Block) -> Result<(), Error>;
@@ -115,6 +124,12 @@ pub trait ChainStore: Send + Sync {
 
 	/// Gets the block header at the provided height
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error>;
+
+	/// Gets an output by its hash
+	fn get_output(&self, h: &Hash) -> Result<Output, Error>;
+
+	/// Checks whether an output commitment exists and returns the output hash
+	fn has_output_commit(&self, commit: &Commitment) -> Result<Hash, Error>;
 
 	/// Saves the provided block header at the corresponding height. Also check
 	/// the consistency of the height chain in store by assuring previous

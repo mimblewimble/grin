@@ -425,7 +425,6 @@ impl TransactionPool {
         }
         removed_txs
     }
-
 }
 
 #[cfg(test)]

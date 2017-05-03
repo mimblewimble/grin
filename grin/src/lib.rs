@@ -28,6 +28,9 @@ extern crate futures;
 extern crate futures_cpupool as cpupool;
 extern crate hyper;
 extern crate rand;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 extern crate time;
 extern crate tokio_core;
 extern crate tokio_timer;
@@ -48,4 +51,5 @@ mod seed;
 mod sync;
 mod types;
 
-pub use server::{Server, ServerConfig, Seeding};
+pub use server::Server;
+pub use types::{ServerConfig, Seeding};

@@ -111,11 +111,11 @@ impl ProtocolV1 {
 	}
 
 	fn send_request<W: ser::Writeable>(&self,
-	                t: Type,
-	                rt: Type,
-	                body: &W,
-	                expect_resp: Option<Hash>)
-	                -> Result<(), Error> {
+	                                   t: Type,
+	                                   rt: Type,
+	                                   body: &W,
+	                                   expect_resp: Option<Hash>)
+	                                   -> Result<(), Error> {
 		self.conn.borrow().send_request(t, rt, body, expect_resp)
 	}
 }

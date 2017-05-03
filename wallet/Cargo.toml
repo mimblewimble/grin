@@ -1,0 +1,12 @@
+[package]
+name = "grin_wallet"
+version = "0.1.0"
+authors = ["Laurent Meunier <laurent.meunier95@gmail.com>"]
+
+[dependencies]
+
+secp256k1zkp = { path = "../secp256k1zkp" }
+rust-crypto = "^0.2"
+rand = "^0.3"
+byteorder = "1"
+rustc-serialize = "0.3.23"

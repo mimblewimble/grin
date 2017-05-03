@@ -202,7 +202,7 @@ impl Connection {
 
 	/// Utility function to send any Writeable. Handles adding the header and
 	/// serialization.
-	pub fn send_msg<W: ser::Writeable> (&self, t: Type, body: &W) -> Result<(), Error> {
+	pub fn send_msg<W: ser::Writeable>(&self, t: Type, body: &W) -> Result<(), Error> {
 
 		let mut body_data = vec![];
 		try!(ser::serialize(&mut body_data, body));
@@ -283,11 +283,11 @@ impl TimeoutConnection {
 	/// Sends a request and registers a timer on the provided message type and
 	/// optionally the hash of the sent data.
 	pub fn send_request<W: ser::Writeable>(&self,
-	                    t: Type,
-	                    rt: Type,
-	                    body: &W,
-	                    expect_h: Option<(Hash)>)
-	                    -> Result<(), Error> {
+	                                       t: Type,
+	                                       rt: Type,
+	                                       body: &W,
+	                                       expect_h: Option<(Hash)>)
+	                                       -> Result<(), Error> {
 		let sent = try!(self.underlying.send_msg(t, body));
 
 		let mut expects = self.expected_responses.lock().unwrap();
