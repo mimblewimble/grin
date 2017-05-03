@@ -55,8 +55,8 @@ impl TransactionPool {
         // The current best unspent set is: 
         //   Pool unspent + (blockchain unspent - pool->blockchain spent)
         // Pool unspents are unconditional so we check those first
-        self.pool.search_for_available_output(output_commitment).
-            map(|x| Parent::PoolTransaction{tx_ref: x}).
+        self.pool.get_available_output(output_commitment).
+            map(|x| Parent::PoolTransaction{tx_ref: x.source_hash().unwrap()}).
             or(self.search_blockchain_unspents(output_commitment)).
             or(self.search_pool_spents(output_commitment)).
             unwrap_or(Parent::Unknown)
@@ -425,6 +425,13 @@ impl TransactionPool {
         }
         removed_txs
     }
+
+    /// Fetch mineable transactions.
+    ///
+    /// Select a set of mineable transactions for block building.
+    pub fn prepare_mineable_transactions(&self, num_to_fetch: u32) -> Vec<transaction::Transaction> {
+        unimplemented!()
+    }
 }
 
 #[cfg(test)]
@@ -589,9 +596,6 @@ mod tests {
             };
 
             assert_eq!(write_pool.total_size(), 1);
-
-            // TODO: We cannot yet test AlreadyInPool as tx hashes are 
-            // not deterministic and the hash itself is private to the graph
         }
     }
 

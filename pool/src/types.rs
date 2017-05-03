@@ -116,19 +116,6 @@ impl Pool {
         }
     }
 
-    pub fn has_available_output(&self, c: &Commitment) -> bool {
-        self.available_outputs.contains_key(c)
-    }
-
-    /// Given an output, return the transaction hash generating the 
-    /// available (unspent) output commitment, if one exists.
-    pub fn search_for_available_output(&self, c: &Commitment) -> Option<hash::Hash> {
-        match self.available_outputs.get(c) {
-            Some(e) => e.source_hash(),
-            None => None
-        }
-    }
-
     /// Given an output, check if a spending reference (input -> output)
     /// already exists in the pool.
     /// Returns the transaction (kernel) hash corresponding to the conflicting
