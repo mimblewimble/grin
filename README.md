@@ -16,7 +16,7 @@ To learn more, read our [introduction to MimbleWimble and Grin](doc/intro.md).
 
 ## Status
 
-Grin is still an infant, much is left to be done and contributions are welcome (see below). Our [status file](TODO.md) may help.
+Grin is still an infant, much is left to be done and contributions are welcome (see below). Check our [mailing list archives](https://lists.launchpad.net/mimblewimble/) for the latest status.
 
 ## Contributing
 
@@ -31,8 +31,9 @@ Find us:
 
 ## Getting Started
 
-See the [build docs](doc/build.md).
+To learn more about the technology, read our [introduction](doc/intro.md).
 
+To build and try out Grin, see the [build docs](doc/build.md).
 
 ## Philosophy
 
