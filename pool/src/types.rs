@@ -193,6 +193,13 @@ impl Pool {
             };
         }
     }
+
+    /// Simplest possible implementation: just return the roots
+    pub fn get_mineable_transactions(&self, num_to_fetch: u32) -> Vec<hash::Hash> {
+        let mut roots = self.graph.get_roots();
+        roots.truncate(num_to_fetch as usize);
+        roots
+    }
 }
 
 impl TransactionGraphContainer for Pool { 

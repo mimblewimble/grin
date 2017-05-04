@@ -429,8 +429,9 @@ impl TransactionPool {
     /// Fetch mineable transactions.
     ///
     /// Select a set of mineable transactions for block building.
-    pub fn prepare_mineable_transactions(&self, num_to_fetch: u32) -> Vec<transaction::Transaction> {
-        unimplemented!()
+    pub fn prepare_mineable_transactions(&self, num_to_fetch: u32) -> Vec<Box<transaction::Transaction>>{
+        self.pool.get_mineable_transactions(num_to_fetch).iter().
+            map(|x| self.transactions.get(x).unwrap().clone()).collect()
     }
 }
 

@@ -191,6 +191,11 @@ impl DirectedGraph {
     pub fn len_edges(&self) -> usize {
         self.edges.len()
     }
+
+    /// Get the current list of roots
+    pub fn get_roots(&self) -> Vec<core::hash::Hash> {
+        self.roots.iter().map(|x| x.transaction_hash).collect()
+    }
 }
 
 /// Using transaction merkle_inputs_outputs to calculate a deterministic hash;
