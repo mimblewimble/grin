@@ -37,6 +37,7 @@ use std::marker::PhantomData;
 use std::sync::RwLock;
 use tokio_io::codec::{Encoder,Decoder};
 use bytes::BytesMut;
+use bytes::buf::{FromBuf, IntoBuf};
 
 use byteorder::{WriteBytesExt, BigEndian};
 use rocksdb::{DB, WriteBatch, DBCompactionStyle, DBIterator, IteratorMode, Direction};
@@ -56,6 +57,8 @@ pub enum Error {
 	RocksDbErr(String),
 	/// Wraps a serialization error for Writeable or Readable
 	SerErr(ser::Error),
+	/// Wraps an Io Error
+	Io(std::io::Error),
 }
 
 impl fmt::Display for Error {
@@ -64,6 +67,7 @@ impl fmt::Display for Error {
 			&Error::NotFoundErr => write!(f, "Not Found"),
 			&Error::RocksDbErr(ref s) => write!(f, "RocksDb Error: {}", s),
 			&Error::SerErr(ref e) => write!(f, "Serialization Error: {}", e.to_string()),
+			&Error::Io(ref e) => write!(f, "Codec Error: {}", e)
 		}
 	}
 }
@@ -71,6 +75,12 @@ impl fmt::Display for Error {
 impl From<rocksdb::Error> for Error {
 	fn from(e: rocksdb::Error) -> Error {
 		Error::RocksDbErr(e.to_string())
+	}
+}
+
+impl From<std::io::Error> for Error {
+	fn from(e: std::io::Error) -> Error {
+		Error::Io(e)
 	}
 }
 
@@ -110,12 +120,26 @@ impl Store {
 		}
 	}
 
-	pub fn put_enc<E: Encoder>(&self, encoder: &E, key: &[u8], value: &E::Item) -> Result<(), E::Error> {	
-		unimplemented!()
+	/// Writes a single key and a value using a given encoder.
+	pub fn put_enc<E: Encoder>(&self, encoder: &mut E, key: &[u8], value: E::Item) -> Result<(), Error> 
+		where Error: From<E::Error> {
+
+		let mut data = BytesMut::with_capacity(0);
+		encoder.encode(value, &mut data)?;
+		self.put(key, data.to_vec())
 	}
 
-	pub fn get_dec<D: Decoder>(&self, decoder: &D, key: &[u8]) -> Result<Option<D::Item>, D::Error> {	
-		unimplemented!()
+	/// Gets a value from the db, provided its key and corresponding decoder
+	pub fn get_dec<D: Decoder>(&self, decoder: &mut D, key: &[u8]) -> Result<Option<D::Item>, Error> 
+		where Error: From<D::Error> {	
+			
+		let data = self.get(key)?;
+		if let Some(buf) = data {
+			let mut buf = BytesMut::from_buf(buf);
+			decoder.decode(&mut buf).map_err(&From::from)
+		} else {
+			Ok(None)
+		}
 	}
 
 	/// Gets a value from the db, provided its key
