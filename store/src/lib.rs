@@ -35,6 +35,8 @@ use std::fmt;
 use std::iter::Iterator;
 use std::marker::PhantomData;
 use std::sync::RwLock;
+use tokio_io::codec::{Encoder,Decoder};
+use bytes::BytesMut;
 
 use byteorder::{WriteBytesExt, BigEndian};
 use rocksdb::{DB, WriteBatch, DBCompactionStyle, DBIterator, IteratorMode, Direction};
@@ -106,6 +108,14 @@ impl Store {
 			Ok(data) => self.put(key, data),
 			Err(err) => Err(Error::SerErr(err)),
 		}
+	}
+
+	pub fn put_enc<E: Encoder>(&self, encoder: &E, key: &[u8], value: &E::Item) -> Result<(), E::Error> {	
+		unimplemented!()
+	}
+
+	pub fn get_dec<D: Decoder>(&self, decoder: &D, key: &[u8]) -> Result<Option<D::Item>, D::Error> {	
+		unimplemented!()
 	}
 
 	/// Gets a value from the db, provided its key
