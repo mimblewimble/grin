@@ -77,14 +77,17 @@ impl codec::Decoder for BlockCodec {
 	type Item = Block;
 	type Error = io::Error;
 	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+		// Create Temporary Buffer
+		let ref mut temp = src.clone();
+		
 		// Get Header
-		let header = try_opt_dec!(BlockHeader::block_decode(src)?);
+		let header = try_opt_dec!(BlockHeader::block_decode(temp)?);
 
 		// Get Lengths of Inputs, Outputs and Kernels from 3 u64's
-		if src.len() < 24 {
+		if temp.len() < 24 {
 			return Ok(None);
 		}
-		let mut buf = src.split_to(24).into_buf();
+		let mut buf = temp.split_to(24).into_buf();
 		let inputs_len = buf.get_u64::<BigEndian>() as usize;
 		let outputs_len = buf.get_u64::<BigEndian>() as usize;
 		let kernels_len = buf.get_u64::<BigEndian>() as usize;
@@ -92,21 +95,25 @@ impl codec::Decoder for BlockCodec {
 		// Get Inputs
 		let mut inputs = Vec::with_capacity(inputs_len);
 		for _ in 0..inputs_len {
-			inputs.push(try_opt_dec!(Input::block_decode(src)?));
+			inputs.push(try_opt_dec!(Input::block_decode(temp)?));
 		}
 
 		// Get Outputs
 		let mut outputs = Vec::with_capacity(outputs_len);
 		for _ in 0..outputs_len {
-			outputs.push(try_opt_dec!(Output::block_decode(src)?));
+			outputs.push(try_opt_dec!(Output::block_decode(temp)?));
 		}
 
 		// Get Kernels
 		let mut kernels = Vec::with_capacity(kernels_len);
 		for _ in 0..kernels_len {
-			kernels.push(try_opt_dec!(TxKernel::block_decode(src)?));
+			kernels.push(try_opt_dec!(TxKernel::block_decode(temp)?));
 		}
 
+		// If succesfull truncate src by bytes read from temp;
+		let diff = src.len() - temp.len();
+		src.split_to(diff);
+		
 		Ok(Some(Block {
 			header: header,
 			inputs: inputs,
