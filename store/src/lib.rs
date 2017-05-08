@@ -44,7 +44,7 @@ use rocksdb::{DB, WriteBatch, DBCompactionStyle, DBIterator, IteratorMode, Direc
 
 use core::ser;
 
-mod codec;
+pub mod codec;
 use codec::{BlockCodec, BlockHasher, TxCodec};
 
 /// Main error type for this crate.

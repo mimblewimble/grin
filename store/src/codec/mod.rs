@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Codecs for Blocks and Transactions
+
 pub mod block;
 pub mod tx;
 
-pub use self::block::{BlockCodec, BlockHasher};
+pub use self::block::{BlockCodec, BlockHasher, BlockHeaderCodec};
 pub use self::tx::TxCodec;
 
