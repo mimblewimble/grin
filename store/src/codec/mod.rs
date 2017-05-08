@@ -17,6 +17,6 @@
 pub mod block;
 pub mod tx;
 
-pub use self::block::{BlockCodec, BlockHasher, BlockHeaderCodec};
+pub use self::block::{BlockCodec, BlockHasher };
 pub use self::tx::TxCodec;
 

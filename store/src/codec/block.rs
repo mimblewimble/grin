@@ -19,6 +19,7 @@ use bytes::{BytesMut, BigEndian, BufMut, Buf, IntoBuf};
 use num_bigint::BigUint;
 use time::Timespec;
 use time;
+use std::marker::PhantomData;
 
 use core::core::{Input, Output, Proof, TxKernel, Block, BlockHeader};
 use core::core::hash::Hash;
@@ -38,34 +39,60 @@ macro_rules! try_opt_dec {
 	});
 }
 
-#[derive(Debug, Clone)]
-pub struct BlockCodec;
+#[derive(Debug, Clone, Default)]
+pub struct BlockCodec<T: BlockDecode + BlockEncode> {
+	phantom: PhantomData<T>
+}
 
-impl codec::Encoder for BlockCodec {
-	type Item = Block;
+impl <T> codec::Encoder for BlockCodec<T> where T: BlockDecode + BlockEncode {
+	type Item = T;
 	type Error = io::Error;
 	fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+		T::block_encode(&item, dst)
+	}
+}
+
+impl <T> codec::Decoder for BlockCodec<T> where T: BlockDecode + BlockEncode {
+	type Item = T;
+	type Error = io::Error;
+	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+		// Create Temporary Buffer
+		let ref mut temp = src.clone();
+		let res = try_opt_dec!(T::block_decode(temp)?);
+
+		// If succesfull truncate src by bytes read from src;
+		let diff = src.len() - temp.len();
+		src.split_to(diff);
+
+		// Return Item
+		Ok(Some(res))
+	}
+}
+
+
+impl BlockEncode for Block {
+	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
 		// Put Header
-		BlockHeaderCodec.encode(item.header, dst)?;
+		self.header.block_encode(dst)?;
 
 		// Put Lengths of Inputs, Outputs and Kernels in 3 u64's
 		dst.reserve(24);
-		dst.put_u64::<BigEndian>(item.inputs.len() as u64);
-		dst.put_u64::<BigEndian>(item.outputs.len() as u64);
-		dst.put_u64::<BigEndian>(item.kernels.len() as u64);
+		dst.put_u64::<BigEndian>(self.inputs.len() as u64);
+		dst.put_u64::<BigEndian>(self.outputs.len() as u64);
+		dst.put_u64::<BigEndian>(self.kernels.len() as u64);
 
 		// Put Inputs
-		for inp in &item.inputs {
+		for inp in &self.inputs {
 			inp.block_encode(dst)?;
 		}
 
 		// Put Outputs
-		for outp in &item.outputs {
+		for outp in &self.outputs {
 			outp.block_encode(dst)?;
 		}
 
 		// Put TxKernels
-		for proof in &item.kernels {
+		for proof in &self.kernels {
 			proof.block_encode(dst)?;
 		}
 
@@ -73,21 +100,17 @@ impl codec::Encoder for BlockCodec {
 	}
 }
 
-impl codec::Decoder for BlockCodec {
-	type Item = Block;
-	type Error = io::Error;
-	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-		// Create Temporary Buffer
-		let ref mut temp = src.clone();
-		
+impl BlockDecode for Block {
+	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
+
 		// Get Header
-		let header = try_opt_dec!(BlockHeaderCodec.decode(temp)?);
+		let header = try_opt_dec!(BlockHeader::block_decode(src)?);
 
 		// Get Lengths of Inputs, Outputs and Kernels from 3 u64's
-		if temp.len() < 24 {
+		if src.len() < 24 {
 			return Ok(None);
 		}
-		let mut buf = temp.split_to(24).into_buf();
+		let mut buf = src.split_to(24).into_buf();
 		let inputs_len = buf.get_u64::<BigEndian>() as usize;
 		let outputs_len = buf.get_u64::<BigEndian>() as usize;
 		let kernels_len = buf.get_u64::<BigEndian>() as usize;
@@ -95,24 +118,20 @@ impl codec::Decoder for BlockCodec {
 		// Get Inputs
 		let mut inputs = Vec::with_capacity(inputs_len);
 		for _ in 0..inputs_len {
-			inputs.push(try_opt_dec!(Input::block_decode(temp)?));
+			inputs.push(try_opt_dec!(Input::block_decode(src)?));
 		}
 
 		// Get Outputs
 		let mut outputs = Vec::with_capacity(outputs_len);
 		for _ in 0..outputs_len {
-			outputs.push(try_opt_dec!(Output::block_decode(temp)?));
+			outputs.push(try_opt_dec!(Output::block_decode(src)?));
 		}
 
 		// Get Kernels
 		let mut kernels = Vec::with_capacity(kernels_len);
 		for _ in 0..kernels_len {
-			kernels.push(try_opt_dec!(TxKernel::block_decode(temp)?));
+			kernels.push(try_opt_dec!(TxKernel::block_decode(src)?));
 		}
-
-		// If succesfull truncate src by bytes read from temp;
-		let diff = src.len() - temp.len();
-		src.split_to(diff);
 		
 		Ok(Some(Block {
 			header: header,
@@ -136,17 +155,12 @@ impl codec::Encoder for BlockHasher {
 	}
 }
 
-#[derive(Debug, Clone)]
-pub struct BlockHeaderCodec;
-
-impl codec::Encoder for BlockHeaderCodec {
-	type Item = BlockHeader;
-	type Error = io::Error;
-	fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-		partial_block_encode(&item, dst)?;
+impl BlockEncode for BlockHeader {
+	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
+		partial_block_encode(self, dst)?;
 
 		// Put Proof of Work Data
-		item.pow.block_encode(dst)?;
+		self.pow.block_encode(dst)?;
 		Ok(())
 	}
 }
@@ -190,73 +204,64 @@ fn partial_block_encode(header: &BlockHeader, dst: &mut BytesMut) -> Result<(), 
 	Ok(())
 }
 
-impl codec::Decoder for BlockHeaderCodec {
-	type Item = BlockHeader;
-	type Error = io::Error;
-	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-		// Create Temporary Buffer
-		let ref mut temp = src.clone();
-
+impl BlockDecode for BlockHeader {
+	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
 		// Get Height
-		if temp.len() < 8 {
+		if src.len() < 8 {
 			return Ok(None);
 		}
-		let mut buf = temp.split_to(8).into_buf();
+		let mut buf = src.split_to(8).into_buf();
 		let height = buf.get_u64::<BigEndian>();
 
 		// Get Previous Hash
-		let previous = try_opt_dec!(Hash::block_decode(temp)?);
+		let previous = try_opt_dec!(Hash::block_decode(src)?);
 
 		// Get Timestamp
-		if temp.len() < 8 {
+		if src.len() < 8 {
 			return Ok(None);
 		}
-		let mut buf = temp.split_to(8).into_buf();
+		let mut buf = src.split_to(8).into_buf();
 		let timestamp = time::at_utc(Timespec {
 			sec: buf.get_i64::<BigEndian>(),
 			nsec: 0,
 		});
 
 		// Get Cuckoo Len
-		if temp.len() < 1 {
+		if src.len() < 1 {
 			return Ok(None);
 		}
-		let mut buf = temp.split_to(1).into_buf();
+		let mut buf = src.split_to(1).into_buf();
 		let cuckoo_len = buf.get_u8();
 
 		// Get UTXO Merkle Hash
-		let utxo_merkle = try_opt_dec!(Hash::block_decode(temp)?);
+		let utxo_merkle = try_opt_dec!(Hash::block_decode(src)?);
 
 		// Get Merkle Tree Hashes
-		let tx_merkle = try_opt_dec!(Hash::block_decode(temp)?);
+		let tx_merkle = try_opt_dec!(Hash::block_decode(src)?);
 
 		// Get Features
-		if temp.len() < 1 {
+		if src.len() < 1 {
 			return Ok(None);
 		}
-		let mut buf = temp.split_to(1).into_buf();
+		let mut buf = src.split_to(1).into_buf();
 		let features = BlockFeatures::from_bits(buf.get_u8())
 			.ok_or(io::Error::new(io::ErrorKind::InvalidData, "Invalid BlockHeader Feature"))?;
 
 		// Get Nonce
-		if temp.len() < 8 {
+		if src.len() < 8 {
 			return Ok(None);
 		}
-		let mut buf = temp.split_to(8).into_buf();
+		let mut buf = src.split_to(8).into_buf();
 		let nonce = buf.get_u64::<BigEndian>();
 
 		// Get Difficulty
-		let difficulty = try_opt_dec!(Difficulty::block_decode(temp)?);
+		let difficulty = try_opt_dec!(Difficulty::block_decode(src)?);
 
 		// Get Total Difficulty
-		let total_difficulty = try_opt_dec!(Difficulty::block_decode(temp)?);
+		let total_difficulty = try_opt_dec!(Difficulty::block_decode(src)?);
 
 		// Get Proof of Work Data
-		let pow = try_opt_dec!(Proof::block_decode(temp)?);
-
-		// If succesfull truncate src by bytes read from temp;
-		let diff = src.len() - temp.len();
-		src.split_to(diff);
+		let pow = try_opt_dec!(Proof::block_decode(src)?);
 
 		Ok(Some(BlockHeader {
 			height: height,
@@ -275,12 +280,12 @@ impl codec::Decoder for BlockHeaderCodec {
 }
 
 /// Internal Convenience Trait
-trait BlockEncode: Sized {
+pub trait BlockEncode: Sized {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error>;
 }
 
 /// Internal Convenience Trait
-trait BlockDecode: Sized {
+pub trait BlockDecode: Sized {
 	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error>;
 }
 
@@ -518,7 +523,7 @@ mod tests {
 		};
 
 		let mut buf = BytesMut::with_capacity(0);
-		let mut codec = BlockCodec {};
+		let mut codec = BlockCodec::default();
 		codec.encode(block.clone(), &mut buf).expect("Error During Block Encoding");
 
 		let d_block =
@@ -559,7 +564,7 @@ mod tests {
 	fn should_have_block_header_codec_roundtrip() {
 		use tokio_io::codec::{Encoder, Decoder};
 
-		let mut codec = BlockHeaderCodec;
+		let mut codec = BlockCodec::default();
 		let block_header = BlockHeader::default();
 
 		let mut buf = BytesMut::with_capacity(0);
