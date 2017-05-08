@@ -509,6 +509,9 @@ mod tests {
 
 		let d_block =
 			codec.decode(&mut buf).expect("Error During Block Decoding").expect("Unfinished Block");
+		
+		// Check if all bytes are read
+		assert_eq!(buf.len(), 0);
 
 		assert_eq!(block.header.height, d_block.header.height);
 		assert_eq!(block.header.previous, d_block.header.previous);
