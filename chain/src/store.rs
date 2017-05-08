@@ -17,6 +17,7 @@
 use secp::pedersen::Commitment;
 
 use types::*;
+use codec::ChainCodec;
 use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader, Output};
 use grin_store::{self, Error, to_key, u64_to_key, option_to_not_found};
