@@ -229,6 +229,14 @@ impl<'a> Batch<'a> {
 		}
 	}
 
+	/// Using a given encoder, Writes a single key and a value to the batch.
+	pub fn put_enc<E: Encoder>(mut self, encoder: &mut E, key: &[u8], value: E::Item) -> Result<Batch<'a>, Error> where Error: From<E::Error> {
+		let mut data = BytesMut::with_capacity(0);
+		encoder.encode(value, &mut data)?;
+		self.batch.put(key, &data)?;
+		Ok(self)
+	}
+
 	/// Writes the batch to RocksDb.
 	pub fn write(self) -> Result<(), Error> {
 		self.store.write(self.batch)
