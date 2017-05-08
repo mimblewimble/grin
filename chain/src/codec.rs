@@ -61,22 +61,30 @@ impl codec::Decoder for ChainCodec {
 	type Item = Tip;
 	type Error = io::Error;
 	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+
+		// Create Temporary Buffer
+		let ref mut temp = src.clone();
+		
 		// Get Height
-		if src.len() < 8 {
+		if temp.len() < 8 {
 			return Ok(None);
 		}
-		let mut buf = src.split_to(8).into_buf();
+		let mut buf = temp.split_to(8).into_buf();
 		let height = buf.get_u64::<BigEndian>();
 
 		// Get Last Block Hash
-		let last_block_h = try_opt_dec!(Hash::chain_decode(src)?);
+		let last_block_h = try_opt_dec!(Hash::chain_decode(temp)?);
 
 		// Get Previous Block Hash
-		let prev_block_h = try_opt_dec!(Hash::chain_decode(src)?);
+		let prev_block_h = try_opt_dec!(Hash::chain_decode(temp)?);
 
 		// Get Difficulty
-		let total_difficulty = try_opt_dec!(Difficulty::chain_decode(src)?);
+		let total_difficulty = try_opt_dec!(Difficulty::chain_decode(temp)?);
 
+		// If succesfull truncate src by bytes read from temp;
+		let diff = src.len() - temp.len();
+		src.split_to(diff);
+		
 		Ok(Some(Tip {
 			height: height,
 			last_block_h: last_block_h,
@@ -164,7 +172,10 @@ mod tests {
 
 		let d_tip =
 			codec.decode(&mut buf).expect("Error During Tip Decoding").expect("Unfinished Tip");
-
+		
+		// Check if all bytes are read
+		assert_eq!(buf.len(), 0);
+		
 		assert_eq!(tip.height, d_tip.height);
 		assert_eq!(tip.last_block_h, d_tip.last_block_h);
 		assert_eq!(tip.prev_block_h, d_tip.prev_block_h);
