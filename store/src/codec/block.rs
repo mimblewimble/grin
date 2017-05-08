@@ -39,9 +39,15 @@ macro_rules! try_opt_dec {
 	});
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct BlockCodec<T: BlockDecode + BlockEncode> {
 	phantom: PhantomData<T>
+}
+
+impl <T> Default for BlockCodec<T> where T: BlockDecode + BlockEncode {
+	fn default() -> Self {
+		BlockCodec { phantom: PhantomData }
+	}
 }
 
 impl <T> codec::Encoder for BlockCodec<T> where T: BlockDecode + BlockEncode {
