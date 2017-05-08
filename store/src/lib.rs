@@ -136,7 +136,7 @@ impl Store {
 		let data = self.get(key)?;
 		if let Some(buf) = data {
 			let mut buf = BytesMut::from_buf(buf);
-			decoder.decode(&mut buf).map_err(&From::from)
+			decoder.decode(&mut buf).map_err(From::from)
 		} else {
 			Ok(None)
 		}
