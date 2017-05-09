@@ -49,7 +49,7 @@ impl ChainKVStore {
 
 impl ChainStore for ChainKVStore {
 	fn head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&[HEAD_PREFIX]))
+		option_to_not_found(self.db.get_dec(&mut ChainCodec, &[HEAD_PREFIX]))
 	}
 
 	fn head_header(&self) -> Result<BlockHeader, Error> {
