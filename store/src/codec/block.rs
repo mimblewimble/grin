@@ -41,16 +41,20 @@ macro_rules! try_opt_dec {
 
 #[derive(Debug, Clone)]
 pub struct BlockCodec<T: BlockDecode + BlockEncode> {
-	phantom: PhantomData<T>
+	phantom: PhantomData<T>,
 }
 
-impl <T> Default for BlockCodec<T> where T: BlockDecode + BlockEncode {
+impl<T> Default for BlockCodec<T>
+    where T: BlockDecode + BlockEncode
+{
 	fn default() -> Self {
 		BlockCodec { phantom: PhantomData }
 	}
 }
 
-impl <T> codec::Encoder for BlockCodec<T> where T: BlockDecode + BlockEncode {
+impl<T> codec::Encoder for BlockCodec<T>
+    where T: BlockDecode + BlockEncode
+{
 	type Item = T;
 	type Error = io::Error;
 	fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
@@ -58,7 +62,9 @@ impl <T> codec::Encoder for BlockCodec<T> where T: BlockDecode + BlockEncode {
 	}
 }
 
-impl <T> codec::Decoder for BlockCodec<T> where T: BlockDecode + BlockEncode {
+impl<T> codec::Decoder for BlockCodec<T>
+    where T: BlockDecode + BlockEncode
+{
 	type Item = T;
 	type Error = io::Error;
 	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -138,7 +144,7 @@ impl BlockDecode for Block {
 		for _ in 0..kernels_len {
 			kernels.push(try_opt_dec!(TxKernel::block_decode(src)?));
 		}
-		
+
 		Ok(Some(Block {
 			header: header,
 			inputs: inputs,
@@ -534,7 +540,7 @@ mod tests {
 
 		let d_block =
 			codec.decode(&mut buf).expect("Error During Block Decoding").expect("Unfinished Block");
-		
+
 		// Check if all bytes are read
 		assert_eq!(buf.len(), 0);
 

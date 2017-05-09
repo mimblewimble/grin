@@ -36,7 +36,7 @@ const OUTPUT_COMMIT_PREFIX: u8 = 'o' as u8;
 /// An implementation of the ChainStore trait backed by a simple key-value
 /// store.
 pub struct ChainKVStore {
-	db: grin_store::Store
+	db: grin_store::Store,
 }
 
 impl ChainKVStore {
@@ -78,11 +78,13 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_block(&self, h: &Hash) -> Result<Block, Error> {
-		option_to_not_found(self.db.get_dec(&mut BlockCodec::default(), &to_key(BLOCK_PREFIX, &mut h.to_vec())))
+		option_to_not_found(self.db.get_dec(&mut BlockCodec::default(),
+		                                    &to_key(BLOCK_PREFIX, &mut h.to_vec())))
 	}
 
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		option_to_not_found(self.db.get_dec(&mut BlockCodec::default(), &to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())))
+		option_to_not_found(self.db.get_dec(&mut BlockCodec::default(),
+		                                    &to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())))
 	}
 
 	fn check_block_exists(&self, h: &Hash) -> Result<bool, Error> {
@@ -93,39 +95,52 @@ impl ChainStore for ChainKVStore {
 		// saving the block and its header
 		let mut batch = self.db
 			.batch()
-			.put_enc(&mut BlockCodec::default(), &to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b.clone())?
-			.put_enc(&mut BlockCodec::default(), &to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..],
+			.put_enc(&mut BlockCodec::default(),
+			         &to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..],
+			         b.clone())?
+			.put_enc(&mut BlockCodec::default(),
+			         &to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..],
 			         b.header.clone())?;
 
 		// saving the full output under its hash, as well as a commitment to hash index
 		for out in &b.outputs {
-			batch = batch.put_enc(&mut BlockCodec::default(), &to_key(OUTPUT_PREFIX, &mut out.hash().to_vec())[..], out.clone())?
-				.put_enc(&mut BlockCodec::default(), &to_key(OUTPUT_COMMIT_PREFIX, &mut out.commit.as_ref().to_vec())[..],
+			batch = batch.put_enc(&mut BlockCodec::default(),
+				         &to_key(OUTPUT_PREFIX, &mut out.hash().to_vec())[..],
+				         out.clone())?
+				.put_enc(&mut BlockCodec::default(),
+				         &to_key(OUTPUT_COMMIT_PREFIX, &mut out.commit.as_ref().to_vec())[..],
 				         out.hash().clone())?;
 		}
 		batch.write()
 	}
 
 	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), Error> {
-		self.db.put_enc(&mut BlockCodec::default(), &to_key(BLOCK_HEADER_PREFIX, &mut bh.hash().to_vec())[..],
+		self.db.put_enc(&mut BlockCodec::default(),
+		                &to_key(BLOCK_HEADER_PREFIX, &mut bh.hash().to_vec())[..],
 		                bh.clone())
 	}
 
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
-		option_to_not_found(self.db.get_dec(&mut BlockCodec::default(), &u64_to_key(HEADER_HEIGHT_PREFIX, height)))
+		option_to_not_found(self.db.get_dec(&mut BlockCodec::default(),
+		                                    &u64_to_key(HEADER_HEIGHT_PREFIX, height)))
 	}
 
 	fn get_output(&self, h: &Hash) -> Result<Output, Error> {
-		option_to_not_found(self.db.get_dec(&mut BlockCodec::default(), &to_key(OUTPUT_PREFIX, &mut h.to_vec())))
+		option_to_not_found(self.db.get_dec(&mut BlockCodec::default(),
+		                                    &to_key(OUTPUT_PREFIX, &mut h.to_vec())))
 	}
 
 	fn has_output_commit(&self, commit: &Commitment) -> Result<Hash, Error> {
 		option_to_not_found(self.db
-			.get_dec(&mut BlockCodec::default(), &to_key(OUTPUT_COMMIT_PREFIX, &mut commit.as_ref().to_vec())))
+			.get_dec(&mut BlockCodec::default(),
+			         &to_key(OUTPUT_COMMIT_PREFIX, &mut commit.as_ref().to_vec())))
 	}
 
 	fn setup_height(&self, bh: &BlockHeader) -> Result<(), Error> {
-		self.db.put_enc(&mut BlockCodec::default(), &u64_to_key(HEADER_HEIGHT_PREFIX, bh.height), bh.clone())?;
+		self.db
+			.put_enc(&mut BlockCodec::default(),
+			         &u64_to_key(HEADER_HEIGHT_PREFIX, bh.height),
+			         bh.clone())?;
 
 		let mut prev_h = bh.previous;
 		let mut prev_height = bh.height - 1;
@@ -134,8 +149,9 @@ impl ChainStore for ChainKVStore {
 			if prev.hash() != prev_h {
 				let real_prev = self.get_block_header(&prev_h)?;
 				self.db
-					.put_enc(&mut BlockCodec::default(), &u64_to_key(HEADER_HEIGHT_PREFIX, real_prev.height),
-					         real_prev.clone());
+					.put_enc(&mut BlockCodec::default(),
+					         &u64_to_key(HEADER_HEIGHT_PREFIX, real_prev.height),
+					         real_prev.clone())?;
 				prev_h = real_prev.previous;
 				prev_height = real_prev.height - 1;
 			} else {
