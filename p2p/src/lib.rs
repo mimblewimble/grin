@@ -34,6 +34,8 @@ extern crate futures;
 #[macro_use]
 extern crate tokio_core;
 extern crate tokio_timer;
+extern crate tokio_io;
+extern crate bytes;
 extern crate rand;
 extern crate serde;
 #[macro_use]
@@ -49,6 +51,7 @@ mod protocol;
 mod server;
 mod store;
 mod types;
+mod msg_codec;
 
 pub use server::{Server, DummyAdapter};
 pub use peer::Peer;
