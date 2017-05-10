@@ -39,6 +39,16 @@ macro_rules! try_opt_dec {
 	});
 }
 
+/// Internal Convenience Trait
+pub trait BlockEncode: Sized {
+	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error>;
+}
+
+/// Internal Convenience Trait
+pub trait BlockDecode: Sized {
+	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error>;
+}
+
 #[derive(Debug, Clone)]
 pub struct BlockCodec<T: BlockDecode + BlockEncode> {
 	phantom: PhantomData<T>,
@@ -289,16 +299,6 @@ impl BlockDecode for BlockHeader {
 			total_difficulty: total_difficulty,
 		}))
 	}
-}
-
-/// Internal Convenience Trait
-pub trait BlockEncode: Sized {
-	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error>;
-}
-
-/// Internal Convenience Trait
-pub trait BlockDecode: Sized {
-	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error>;
 }
 
 impl BlockEncode for Input {
