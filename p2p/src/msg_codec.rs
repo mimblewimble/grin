@@ -20,8 +20,13 @@ use tokio_io::*;
 use bytes::{BytesMut, BigEndian, BufMut, Buf, IntoBuf};
 use tokio_io::codec::{Encoder, Decoder};
 
-use msg::{MsgHeader, Hand, Shake, GetPeerAddrs, PeerAddrs, PeerError, SockAddr, Locator, Headers,
-          Empty};
+use core::core::{Block, BlockHeader, Transaction};
+use core::core::hash::Hash;
+
+use grin_store::codec::{BlockCodec, TxCodec};
+
+use msg::*;
+use msg::MsgHeader;
 
 // Convenience Macro for Option Handling in Decoding
 macro_rules! try_opt_dec {
@@ -32,15 +37,18 @@ macro_rules! try_opt_dec {
 }
 
 enum Message {
+	Error(PeerError),
 	Hand(Hand),
 	Shake(Shake),
+	Ping,
+	Pong,
 	GetPeerAddrs(GetPeerAddrs),
 	PeerAddrs(PeerAddrs),
-	PeerError(PeerError),
-	SockAddr(SockAddr),
-	Locator(Locator),
+	GetHeaders(Locator),
 	Headers(Headers),
-	Empty(Empty),
+	GetBlock(Hash),
+	Block(Block),
+	Transaction(Transaction),
 }
 
 /// Codec for Decoding and Encoding a `MsgHeader`
@@ -61,4 +69,14 @@ impl codec::Decoder for MsgCodec {
 	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
 		unimplemented!()
 	}
+}
+
+// Internal Convenience Trait
+trait MsgEncode: Sized {
+	fn msg_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error>;
+}
+
+/// Internal Convenience Trait
+trait MsgDecode: Sized {
+	fn msg_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error>;
 }
