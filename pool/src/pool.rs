@@ -723,15 +723,15 @@ mod tests {
             // We should have available blockchain outputs at 9 and 3
             expect_output_parent!(read_pool, Parent::BlockTransaction, 9, 3);
 
-           // We should have spent blockchain outputs at 4 and 7
+            // We should have spent blockchain outputs at 4 and 7
             expect_output_parent!(read_pool,
                 Parent::AlreadySpent{other_tx: _}, 4, 7);
 
-           // We should have spent pool references at 15
+            // We should have spent pool references at 15
             expect_output_parent!(read_pool,
                 Parent::AlreadySpent{other_tx: _}, 15);
 
-           // We should have unspent pool references at 1, 13, 14 
+            // We should have unspent pool references at 1, 13, 14 
             expect_output_parent!(read_pool,
                 Parent::PoolTransaction{tx_ref: _}, 1, 13, 14);
 
@@ -744,6 +744,82 @@ mod tests {
 
 
     }
+    #[test]
+    /// Test transaction selection and block building.
+    fn test_block_building() {
+        // Add a handful of transactions
+        let mut dummy_chain = DummyChainImpl::new();
+
+        let new_utxo = DummyUtxoSet::empty().
+            with_output(test_output(10)).
+            with_output(test_output(20)).
+            with_output(test_output(30)).
+            with_output(test_output(40));
+
+        dummy_chain.update_utxo_set(new_utxo);
+
+        let chain_ref = Arc::new(Box::new(dummy_chain) as Box<DummyChain>);
+
+        let pool = RwLock::new(test_setup(&chain_ref));
+
+        let root_tx_1 = test_transaction(vec![10,20], vec![25]);
+        let root_tx_2 = test_transaction(vec![30], vec![28]);
+        let root_tx_3 = test_transaction(vec![40], vec![38]);
+
+        let child_tx_1 = test_transaction(vec![25],vec![23]);
+        let child_tx_2 = test_transaction(vec![38],vec![32]);
+
+        {
+            let mut write_pool = pool.write().unwrap();
+            assert_eq!(write_pool.total_size(), 0);
+
+            assert!(write_pool.add_to_memory_pool(test_source(),
+                root_tx_1).is_ok());
+            assert!(write_pool.add_to_memory_pool(test_source(),
+                root_tx_2).is_ok());
+            assert!(write_pool.add_to_memory_pool(test_source(),
+                root_tx_3).is_ok());
+            assert!(write_pool.add_to_memory_pool(test_source(),
+                child_tx_1).is_ok());
+            assert!(write_pool.add_to_memory_pool(test_source(),
+                child_tx_2).is_ok());
+
+            assert_eq!(write_pool.total_size(), 5);
+        }
+
+        // Request blocks
+        let block: block::Block;
+        let mut txs: Vec<Box<transaction::Transaction>>;
+        {
+            let read_pool = pool.read().unwrap();
+            txs = read_pool.prepare_mineable_transactions(3);
+            assert_eq!(txs.len(), 3);
+            // TODO: This is ugly, either make block::new take owned
+            // txs instead of mut refs, or change 
+            // prepare_mineable_transactions to return mut refs
+            let mut block_txs: Vec<transaction::Transaction> = txs.drain(..).map(|x| *x).collect();
+            let tx_refs = block_txs.iter_mut().collect();
+            block = block::Block::new(&block::BlockHeader::default(),
+                tx_refs, key::ONE_KEY).unwrap();
+        }
+
+        chain_ref.apply_block(&block);
+        // Reconcile block
+        {
+            let mut write_pool = pool.write().unwrap();
+
+            let evicted_transactions = write_pool.reconcile_block(&block);
+
+            assert!(evicted_transactions.is_ok());
+
+            assert_eq!(evicted_transactions.unwrap().len(), 3);
+            assert_eq!(write_pool.total_size(), 2);
+        }
+
+    
+    }
+
+
     fn test_setup(dummy_chain: &Arc<Box<DummyChain>>) -> TransactionPool {
         TransactionPool{
             transactions: HashMap::new(),
