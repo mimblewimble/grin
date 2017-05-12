@@ -36,7 +36,7 @@ pub const PROTOCOL_VERSION: u32 = 1;
 pub const USER_AGENT: &'static str = "MW/Grin 0.1";
 
 /// Magic number expected in the header of every message
-const MAGIC: [u8; 2] = [0x1e, 0xc5];
+pub const MAGIC: [u8; 2] = [0x1e, 0xc5];
 
 /// Size in bytes of a message header
 pub const HEADER_LEN: u64 = 11;
@@ -123,7 +123,7 @@ pub fn write_msg<T>(conn: TcpStream,
 
 /// Header of any protocol message, used to identify incoming messages.
 pub struct MsgHeader {
-	magic: [u8; 2],
+	pub magic: [u8; 2],
 	/// Type of the message.
 	pub msg_type: Type,
 	/// Tota length of the message in bytes.
@@ -177,6 +177,7 @@ impl Readable for MsgHeader {
 
 /// First part of a handshake, sender advertises its version and
 /// characteristics.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Hand {
 	/// protocol version of the sender
 	pub version: u32,
@@ -232,6 +233,7 @@ impl Readable for Hand {
 
 /// Second part of a handshake, receiver of the first part replies with its own
 /// version and characteristics.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Shake {
 	/// sender version
 	pub version: u32,
@@ -273,6 +275,7 @@ impl Readable for Shake {
 }
 
 /// Ask for other peers addresses, required for network discovery.
+#[derive(Clone, Debug, PartialEq)]
 pub struct GetPeerAddrs {
 	/// Filters on the capabilities we'd like the peers to have
 	pub capabilities: Capabilities,
@@ -294,6 +297,7 @@ impl Readable for GetPeerAddrs {
 
 /// Peer addresses we know of that are fresh enough, in response to
 /// GetPeerAddrs.
+#[derive(Clone, Debug, PartialEq)]
 pub struct PeerAddrs {
 	pub peers: Vec<SockAddr>,
 }
@@ -327,6 +331,7 @@ impl Readable for PeerAddrs {
 
 /// We found some issue in the communication, sending an error back, usually
 /// followed by closing the connection.
+#[derive(Clone, Debug, PartialEq)]
 pub struct PeerError {
 	/// error code
 	pub code: u32,
@@ -355,6 +360,7 @@ impl Readable for PeerError {
 /// Only necessary so we can implement Readable and Writeable. Rust disallows
 /// implementing traits when both types are outside of this crate (which is the
 /// case for SocketAddr and Readable/Writeable).
+#[derive(Clone, Debug, PartialEq)]
 pub struct SockAddr(pub SocketAddr);
 
 impl Writeable for SockAddr {
@@ -408,6 +414,7 @@ impl Readable for SockAddr {
 }
 
 /// Serializable wrapper for the block locator.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Locator {
 	pub hashes: Vec<Hash>,
 }
@@ -434,6 +441,7 @@ impl Readable for Locator {
 }
 
 /// Serializable wrapper for a list of block headers.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Headers {
 	pub headers: Vec<BlockHeader>,
 }
