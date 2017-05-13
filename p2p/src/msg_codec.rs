@@ -81,6 +81,10 @@ impl codec::Encoder for MsgCodec {
 				hand.msg_encode(&mut msg_dst)?;
 				MsgHeader::new(Type::Hand, msg_dst.len() as u64)
 			}
+			Message::Shake(shake) => {
+				shake.msg_encode(&mut msg_dst)?;
+				MsgHeader::new(Type::Shake, msg_dst.len() as u64)
+			}
 
 			_ => unimplemented!(),	
 		};
@@ -117,6 +121,7 @@ impl codec::Decoder for MsgCodec {
 			return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid Header"));
 		}
 
+		// Ensure Valid Message Type
 		let msg_type = match Type::from_u8(buf.get_u8()) {
 			Some(t) => t,
 			None => {
@@ -124,17 +129,23 @@ impl codec::Decoder for MsgCodec {
 			}
 		};
 
+		// Ensure sufficient data
 		let msg_len = buf.get_u64::<BigEndian>() as usize;
 		if src.len() < msg_len {
 			return Ok(None);
 		}
 
+		// Attempt message body decode
 		let decoded_msg = match msg_type {
 			Type::Ping => Message::Ping,
 			Type::Pong => Message::Pong,
 			Type::Hand => {
 				let hand = try_opt_dec!(Hand::msg_decode(src)?);
 				Message::Hand(hand)
+			},
+			Type::Shake => {
+				let shake = try_opt_dec!(Shake::msg_decode(src)?);
+				Message::Shake(shake)
 			},
 			_ => unimplemented!(),
 		};
@@ -143,19 +154,19 @@ impl codec::Decoder for MsgCodec {
 	}
 }
 
-// Internal Convenience Trait
+// Internal Convenience Traits
 trait MsgEncode: Sized {
 	fn msg_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error>;
 }
 
-/// Internal Convenience Trait
+// Internal Convenience Trait
 trait MsgDecode: Sized {
 	fn msg_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error>;
 }
 
 impl MsgEncode for Hand {
 	fn msg_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
-		// Reserve for version, capabilities, nonce
+		// Reserve for version(4), capabilities(4), nonce(8)
 		dst.reserve(16);
 		// Put Protocol Version
 		dst.put_u32::<BigEndian>(self.version);
@@ -224,6 +235,81 @@ impl MsgDecode for Hand {
 			total_difficulty: total_difficulty,
 			sender_addr: SockAddr(sender_addr),
 			receiver_addr: SockAddr(receiver_addr),
+			user_agent: user_agent
+		}))
+
+	}
+}
+
+// #[derive(Clone, Debug, PartialEq)]
+// pub struct Shake {
+// 	/// sender version
+// 	pub version: u32,
+// 	/// sender capabilities
+// 	pub capabilities: Capabilities,
+// 	/// total difficulty accumulated by the sender, used to check whether sync
+// 	/// may
+// 	/// be needed
+// 	pub total_difficulty: Difficulty,
+// 	/// name of version of the software
+// 	pub user_agent: String,
+// }
+
+impl MsgEncode for Shake {
+	fn msg_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
+		// Reserve for version(4), capabilities(4)
+		dst.reserve(8);
+		// Put Protocol Version
+		dst.put_u32::<BigEndian>(self.version);
+		// Put Capabilities
+		dst.put_u32::<BigEndian>(self.capabilities.bits());
+
+		// Put Difficulty with BlockCodec
+		BlockCodec::default().encode(self.total_difficulty.clone(), dst)?;
+
+		// Reserve for user agent string Size of String
+		let str_bytes = self.user_agent.as_bytes();
+		dst.reserve(str_bytes.len() + 1);
+
+		// Put user agent string
+		dst.put_u8(str_bytes.len() as u8);
+		dst.put_slice(str_bytes);
+
+		Ok(())
+	}
+}
+
+impl MsgDecode for Shake {
+	fn msg_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
+		// TODO: Check for Full Hand Size Upfront
+		if src.len() < 8 {
+			return Ok(None);
+		}
+		// Get Protocol Version, Capabilities, Nonce 
+		let mut buf = src.split_to(8).into_buf();
+		let version = buf.get_u32::<BigEndian>();
+		let capabilities = Capabilities::from_bits(buf.get_u32::<BigEndian>()).unwrap_or(UNKNOWN);
+
+		// Get Total Difficulty
+		let total_difficulty = try_opt_dec!(BlockCodec::default().decode(src)?);
+		
+		// Get Software Version
+		// TODO: Decide on Hand#user_agent size
+		if src.len() < 1 {
+			return Ok(None);
+		}
+		let mut buf = src.split_to(1).into_buf();
+		let str_len = buf.get_u8() as usize;
+		if src.len() < str_len {
+			return Ok(None);
+		}
+		let buf = src.split_to(str_len).into_buf();
+		let user_agent = String::from_utf8(buf.collect()).map_err(|_|  io::Error::new(io::ErrorKind::InvalidData, "Invalid Hand Software Version"))?;
+
+		Ok(Some(Shake {
+			version: version,
+			capabilities: capabilities,
+			total_difficulty: total_difficulty,
 			user_agent: user_agent
 		}))
 
@@ -398,7 +484,7 @@ mod tests {
 		let result = codec
 			.decode(&mut buf)
 			.expect("Expected no Errors to decode shake message")
-			.unwrap();
+			.expect("Expected full shake message.");
 
 		assert_eq!(shake, result);
 	}
