@@ -85,7 +85,10 @@ impl codec::Encoder for MsgCodec {
 				shake.msg_encode(&mut msg_dst)?;
 				MsgHeader::new(Type::Shake, msg_dst.len() as u64)
 			}
-
+			Message::GetPeerAddrs(get_peer_addrs) => {
+				get_peer_addrs.msg_encode(&mut msg_dst)?;
+				MsgHeader::new(Type::GetPeerAddrs, msg_dst.len() as u64)
+			}
 			_ => unimplemented!(),	
 		};
 
@@ -142,11 +145,15 @@ impl codec::Decoder for MsgCodec {
 			Type::Hand => {
 				let hand = try_opt_dec!(Hand::msg_decode(src)?);
 				Message::Hand(hand)
-			},
+			}
 			Type::Shake => {
 				let shake = try_opt_dec!(Shake::msg_decode(src)?);
 				Message::Shake(shake)
-			},
+			}
+			Type::GetPeerAddrs => {
+				let get_peer_addrs = try_opt_dec!(GetPeerAddrs::msg_decode(src)?);
+				Message::GetPeerAddrs(get_peer_addrs)
+			}
 			_ => unimplemented!(),
 		};
 
@@ -176,7 +183,8 @@ impl MsgEncode for Hand {
 		dst.put_u64::<BigEndian>(self.nonce);
 
 		// Put Difficulty with BlockCodec
-		BlockCodec::default().encode(self.total_difficulty.clone(), dst)?;
+		BlockCodec::default()
+			.encode(self.total_difficulty.clone(), dst)?;
 
 		// Put Sender Address
 		self.sender_addr.0.msg_encode(dst)?;
@@ -201,7 +209,7 @@ impl MsgDecode for Hand {
 		if src.len() < 16 {
 			return Ok(None);
 		}
-		// Get Protocol Version, Capabilities, Nonce 
+		// Get Protocol Version, Capabilities, Nonce
 		let mut buf = src.split_to(16).into_buf();
 		let version = buf.get_u32::<BigEndian>();
 		let capabilities = Capabilities::from_bits(buf.get_u32::<BigEndian>()).unwrap_or(UNKNOWN);
@@ -214,7 +222,7 @@ impl MsgDecode for Hand {
 		let sender_addr = try_opt_dec!(SocketAddr::msg_decode(src)?);
 		let receiver_addr = try_opt_dec!(SocketAddr::msg_decode(src)?);
 
-		
+
 		// Get Software Version
 		// TODO: Decide on Hand#user_agent size
 		if src.len() < 1 {
@@ -226,34 +234,23 @@ impl MsgDecode for Hand {
 			return Ok(None);
 		}
 		let buf = src.split_to(str_len).into_buf();
-		let user_agent = String::from_utf8(buf.collect()).map_err(|_|  io::Error::new(io::ErrorKind::InvalidData, "Invalid Hand Software Version"))?;
+		let user_agent = String::from_utf8(buf.collect())
+			.map_err(|_| {
+				         io::Error::new(io::ErrorKind::InvalidData, "Invalid Hand Software Version")
+				        })?;
 
 		Ok(Some(Hand {
-			version: version,
-			capabilities: capabilities,
-			nonce: nonce,
-			total_difficulty: total_difficulty,
-			sender_addr: SockAddr(sender_addr),
-			receiver_addr: SockAddr(receiver_addr),
-			user_agent: user_agent
-		}))
+		            version: version,
+		            capabilities: capabilities,
+		            nonce: nonce,
+		            total_difficulty: total_difficulty,
+		            sender_addr: SockAddr(sender_addr),
+		            receiver_addr: SockAddr(receiver_addr),
+		            user_agent: user_agent,
+		        }))
 
 	}
 }
-
-// #[derive(Clone, Debug, PartialEq)]
-// pub struct Shake {
-// 	/// sender version
-// 	pub version: u32,
-// 	/// sender capabilities
-// 	pub capabilities: Capabilities,
-// 	/// total difficulty accumulated by the sender, used to check whether sync
-// 	/// may
-// 	/// be needed
-// 	pub total_difficulty: Difficulty,
-// 	/// name of version of the software
-// 	pub user_agent: String,
-// }
 
 impl MsgEncode for Shake {
 	fn msg_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
@@ -265,7 +262,8 @@ impl MsgEncode for Shake {
 		dst.put_u32::<BigEndian>(self.capabilities.bits());
 
 		// Put Difficulty with BlockCodec
-		BlockCodec::default().encode(self.total_difficulty.clone(), dst)?;
+		BlockCodec::default()
+			.encode(self.total_difficulty.clone(), dst)?;
 
 		// Reserve for user agent string Size of String
 		let str_bytes = self.user_agent.as_bytes();
@@ -285,14 +283,14 @@ impl MsgDecode for Shake {
 		if src.len() < 8 {
 			return Ok(None);
 		}
-		// Get Protocol Version, Capabilities, Nonce 
+		// Get Protocol Version, Capabilities, Nonce
 		let mut buf = src.split_to(8).into_buf();
 		let version = buf.get_u32::<BigEndian>();
 		let capabilities = Capabilities::from_bits(buf.get_u32::<BigEndian>()).unwrap_or(UNKNOWN);
 
 		// Get Total Difficulty
 		let total_difficulty = try_opt_dec!(BlockCodec::default().decode(src)?);
-		
+
 		// Get Software Version
 		// TODO: Decide on Hand#user_agent size
 		if src.len() < 1 {
@@ -304,15 +302,43 @@ impl MsgDecode for Shake {
 			return Ok(None);
 		}
 		let buf = src.split_to(str_len).into_buf();
-		let user_agent = String::from_utf8(buf.collect()).map_err(|_|  io::Error::new(io::ErrorKind::InvalidData, "Invalid Hand Software Version"))?;
+		let user_agent = String::from_utf8(buf.collect())
+			.map_err(|_| {
+				         io::Error::new(io::ErrorKind::InvalidData, "Invalid Hand Software Version")
+				        })?;
 
 		Ok(Some(Shake {
-			version: version,
-			capabilities: capabilities,
-			total_difficulty: total_difficulty,
-			user_agent: user_agent
-		}))
+		            version: version,
+		            capabilities: capabilities,
+		            total_difficulty: total_difficulty,
+		            user_agent: user_agent,
+		        }))
 
+	}
+}
+
+// pub struct GetPeerAddrs {
+// 	/// Filters on the capabilities we'd like the peers to have
+// 	pub capabilities: Capabilities,
+// }
+
+impl MsgEncode for GetPeerAddrs {
+	fn msg_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
+		// Reserve for and put Capabilities
+		dst.reserve(4);
+		dst.put_u32::<BigEndian>(self.capabilities.bits());
+		Ok(())
+	}
+}
+
+impl MsgDecode for GetPeerAddrs {
+	fn msg_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
+		if src.len() < 4 {
+			return Ok(None);
+		}
+		let mut buf = src.split_to(4).into_buf();
+		let capabilities = Capabilities::from_bits(buf.get_u32::<BigEndian>()).unwrap_or(UNKNOWN);
+		Ok(Some(GetPeerAddrs { capabilities: capabilities }))
 	}
 }
 
@@ -389,9 +415,12 @@ impl MsgDecode for SocketAddr {
 				                                             ip[4],
 				                                             ip[5],
 				                                             ip[6],
-				                                             ip[7]), port, 0, 0);
-															
-				Ok(Some(SocketAddr::V6(socket)))				
+				                                             ip[7]),
+				                               port,
+				                               0,
+				                               0);
+
+				Ok(Some(SocketAddr::V6(socket)))
 			}
 			_ => Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid Socket Marker")),
 		}
