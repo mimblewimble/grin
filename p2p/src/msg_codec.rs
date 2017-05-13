@@ -15,6 +15,7 @@
 //! Implementation of the p2p message encoding and decoding.
 
 use std::io;
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr, IpAddr};
 
 use tokio_io::*;
 use bytes::{BytesMut, BigEndian, BufMut, Buf, IntoBuf};
@@ -23,13 +24,15 @@ use enum_primitive::FromPrimitive;
 
 use core::core::{Block, BlockHeader, Transaction};
 use core::core::hash::Hash;
+use core::core::target::Difficulty;
+use types::*;
 
 use grin_store::codec::{BlockCodec, TxCodec};
 
 use msg::*;
 use msg::MsgHeader;
 
-const MSG_HEADER_SIZE:usize = 11;
+const MSG_HEADER_SIZE: usize = 11;
 
 // Convenience Macro for Option Handling in Decoding
 macro_rules! try_opt_dec {
@@ -68,14 +71,9 @@ impl codec::Encoder for MsgCodec {
 		let msg_dst = BytesMut::with_capacity(0);
 
 		let header = match item {
-			Message::Pong => {
-
-				MsgHeader::new(Type::Pong, 0)
-			},
-			Message::Ping => {
-				MsgHeader::new(Type::Ping, 0)
-			},
-			_ => unimplemented!()
+			Message::Pong => MsgHeader::new(Type::Pong, 0),
+			Message::Ping => MsgHeader::new(Type::Ping, 0),
+			_ => unimplemented!(),
 		};
 
 		dst.put_slice(&header.magic);
@@ -101,9 +99,9 @@ impl codec::Decoder for MsgCodec {
 			return Ok(None);
 		}
 		let mut buf = src.split_to(MSG_HEADER_SIZE).into_buf();
-		
+
 		// Get Magic
-		let mut some_magic = [0;2];
+		let mut some_magic = [0; 2];
 		buf.copy_to_slice(&mut some_magic);
 
 		// If Magic is invalid return error.
@@ -113,10 +111,10 @@ impl codec::Decoder for MsgCodec {
 
 		let msg_type = match Type::from_u8(buf.get_u8()) {
 			Some(t) => t,
-			None => { 
+			None => {
 				return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid Message Type"));
-			},
-		}; 
+			}
+		};
 
 		let msg_len = buf.get_u64::<BigEndian>() as usize;
 		if src.len() < msg_len {
@@ -127,7 +125,7 @@ impl codec::Decoder for MsgCodec {
 		let decoded_msg = match msg_type {
 			Type::Ping => Message::Ping,
 			Type::Pong => Message::Pong,
-			_ => unimplemented!()
+			_ => unimplemented!(),
 		};
 
 		Ok(Some(decoded_msg))
@@ -161,19 +159,97 @@ mod tests {
 		let ping = Message::Ping;
 		let mut buf = BytesMut::with_capacity(0);
 
-		codec.encode(ping.clone(), &mut buf).expect("Expected to encode ping");
-		let result = codec.decode(&mut buf).expect("Expected no Errors to decode ping").unwrap();
+		codec
+			.encode(ping.clone(), &mut buf)
+			.expect("Expected to encode ping");
+		let result = codec
+			.decode(&mut buf)
+			.expect("Expected no Errors to decode ping")
+			.unwrap();
 		assert_eq!(ping, result);
 	}
 
 	#[test]
-	fn should_decode_encode_pong() {
+	fn should_encode_decode_pong() {
 		let mut codec = MsgCodec;
 		let pong = Message::Pong;
 		let mut buf = BytesMut::with_capacity(0);
 
-		codec.encode(pong.clone(), &mut buf).expect("Expected to encode pong");
-		let result = codec.decode(&mut buf).expect("Expected no Errors to decode pong").unwrap();
+		codec
+			.encode(pong.clone(), &mut buf)
+			.expect("Expected to encode pong");
+		let result = codec
+			.decode(&mut buf)
+			.expect("Expected no Errors to decode pong")
+			.unwrap();
 		assert_eq!(pong, result);
 	}
+
+	#[test]
+	fn should_encode_decode_hand() {
+		let mut codec = MsgCodec;
+		let sample_socket_addr = SockAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+		                                                  8080));
+		let hand = Message::Hand(Hand {
+		                             version: 0,
+		                             capabilities: UNKNOWN,
+		                             nonce: 0,
+		                             total_difficulty: Difficulty::one(),
+		                             sender_addr: sample_socket_addr.clone(),
+		                             receiver_addr: sample_socket_addr.clone(),
+		                             user_agent: "test".to_string(),
+		                         });
+
+		let mut buf = BytesMut::with_capacity(0);
+
+		codec
+			.encode(hand.clone(), &mut buf)
+			.expect("Expected to encode hand");
+		let result = codec
+			.decode(&mut buf)
+			.expect("Expected no Errors to decode hand")
+			.unwrap();
+		assert_eq!(hand, result);
+	}
+
+	#[test]
+	fn should_encode_decode_shake() {
+		unimplemented!();
+	}
+
+	#[test]
+	fn should_encode_decode_get_peer_addrs() {
+		unimplemented!();
+	}
+	#[test]
+	fn should_encode_decode_peer_addrs() {
+		unimplemented!();
+	}
+	#[test]
+	fn should_encode_decode_get_headers() {
+		unimplemented!();
+	}
+	#[test]
+	fn should_encode_decode_headers() {
+		unimplemented!();
+	}
+	#[test]
+	fn should_encode_decode_get_block() {
+		unimplemented!();
+	}
+	#[test]
+	fn should_encode_decode_block() {
+		unimplemented!();
+	}
+
+	#[test]
+	fn should_encode_decode_transaction() {
+		unimplemented!();
+	}
+
+	#[test]
+	fn should_encode_decode_error() {
+		unimplemented!();
+	}
+
 }
