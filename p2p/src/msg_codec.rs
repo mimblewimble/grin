@@ -22,10 +22,14 @@ use bytes::{BytesMut, BigEndian, BufMut, Buf, IntoBuf};
 use tokio_io::codec::{Encoder, Decoder};
 use enum_primitive::FromPrimitive;
 
-use core::core::{Block, BlockHeader, Transaction};
+use core::core::{Block, BlockHeader,Input, Output, Transaction, TxKernel};
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
+use core::core::transaction::{OutputFeatures, KernelFeatures};
 use types::*;
+
+use secp::pedersen::{RangeProof, Commitment};
+use secp::constants::PEDERSEN_COMMITMENT_SIZE;
 
 use grin_store::codec::{BlockCodec, TxCodec};
 
@@ -161,10 +165,10 @@ mod tests {
 
 		codec
 			.encode(ping.clone(), &mut buf)
-			.expect("Expected to encode ping");
+			.expect("Expected to encode ping message");
 		let result = codec
 			.decode(&mut buf)
-			.expect("Expected no Errors to decode ping")
+			.expect("Expected no Errors to decode ping message")
 			.unwrap();
 		assert_eq!(ping, result);
 	}
@@ -177,10 +181,10 @@ mod tests {
 
 		codec
 			.encode(pong.clone(), &mut buf)
-			.expect("Expected to encode pong");
+			.expect("Expected to encode pong message");
 		let result = codec
 			.decode(&mut buf)
-			.expect("Expected no Errors to decode pong")
+			.expect("Expected no Errors to decode pong message")
 			.unwrap();
 		assert_eq!(pong, result);
 	}
@@ -204,52 +208,246 @@ mod tests {
 
 		codec
 			.encode(hand.clone(), &mut buf)
-			.expect("Expected to encode hand");
+			.expect("Expected to encode hand message");
+
 		let result = codec
 			.decode(&mut buf)
-			.expect("Expected no Errors to decode hand")
+			.expect("Expected no Errors to decode hand message")
 			.unwrap();
+
 		assert_eq!(hand, result);
 	}
 
 	#[test]
 	fn should_encode_decode_shake() {
-		unimplemented!();
+		let mut codec = MsgCodec;
+		let shake = Message::Shake(Shake {
+		                               version: 0,
+		                               capabilities: UNKNOWN,
+		                               total_difficulty: Difficulty::one(),
+		                               user_agent: "test".to_string(),
+		                           });
+
+		let mut buf = BytesMut::with_capacity(0);
+
+		codec
+			.encode(shake.clone(), &mut buf)
+			.expect("Expected to encode shake message");
+
+		let result = codec
+			.decode(&mut buf)
+			.expect("Expected no Errors to decode shake message")
+			.unwrap();
+
+		assert_eq!(shake, result);
 	}
 
 	#[test]
 	fn should_encode_decode_get_peer_addrs() {
-		unimplemented!();
+		let mut codec = MsgCodec;
+		let get_peer_addrs = Message::GetPeerAddrs(GetPeerAddrs { capabilities: UNKNOWN });
+
+		let mut buf = BytesMut::with_capacity(0);
+
+		codec
+			.encode(get_peer_addrs.clone(), &mut buf)
+			.expect("Expected to encode get peer addrs message");
+
+		let result = codec
+			.decode(&mut buf)
+			.expect("Expected no Errors to decode get peer addrs message")
+			.unwrap();
+
+		assert_eq!(get_peer_addrs, result);
 	}
+
 	#[test]
 	fn should_encode_decode_peer_addrs() {
-		unimplemented!();
+		let mut codec = MsgCodec;
+		let sample_socket_addr = SockAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+		                                                  8000));
+
+		let peer_addrs = Message::PeerAddrs(PeerAddrs { peers: vec![sample_socket_addr] });
+
+		let mut buf = BytesMut::with_capacity(0);
+
+		codec
+			.encode(peer_addrs.clone(), &mut buf)
+			.expect("Expected to encode peer addrs message");
+
+		let result = codec
+			.decode(&mut buf)
+			.expect("Expected no Errors to decode peer addrs message")
+			.unwrap();
+
+		assert_eq!(peer_addrs, result);
 	}
-	#[test]
-	fn should_encode_decode_get_headers() {
-		unimplemented!();
-	}
+
 	#[test]
 	fn should_encode_decode_headers() {
-		unimplemented!();
+		let mut codec = MsgCodec;
+		let sample_socket_addr = SockAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+		                                                  8000));
+
+		let headers = Message::Headers(Headers { 
+			headers: vec![BlockHeader::default()] 
+		});
+
+		let mut buf = BytesMut::with_capacity(0);
+
+		codec
+			.encode(headers.clone(), &mut buf)
+			.expect("Expected to encode headers message");
+
+		let result = codec
+			.decode(&mut buf)
+			.expect("Expected no Errors to decode headers message")
+			.unwrap();
+
+		assert_eq!(headers, result);
 	}
+
+	#[test]
+	fn should_encode_decode_get_headers() {
+		let mut codec = MsgCodec;
+		let sample_socket_addr = SockAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+		                                                  8000));
+
+		let get_headers = Message::GetHeaders(Locator { 
+			hashes: vec![Hash([1; 32])],
+		});
+
+		let mut buf = BytesMut::with_capacity(0);
+
+		codec
+			.encode(get_headers.clone(), &mut buf)
+			.expect("Expected to encode get headers msg");
+
+		let result = codec
+			.decode(&mut buf)
+			.expect("Expected no Errors to decode get headers msg")
+			.unwrap();
+
+		assert_eq!(get_headers, result);
+	}
+
 	#[test]
 	fn should_encode_decode_get_block() {
-		unimplemented!();
+		let mut codec = MsgCodec;
+
+		let get_block = Message::GetBlock(Hash([1; 32]));
+
+		let mut buf = BytesMut::with_capacity(0);
+
+		codec
+			.encode(get_block.clone(), &mut buf)
+			.expect("Expected to encode hand");
+
+		let result = codec
+			.decode(&mut buf)
+			.expect("Expected no Errors to decode hand")
+			.unwrap();
+
+		assert_eq!(get_block, result);
 	}
+
 	#[test]
 	fn should_encode_decode_block() {
-		unimplemented!();
+		let mut codec = MsgCodec;
+
+		let input = Input(Commitment([1; PEDERSEN_COMMITMENT_SIZE]));
+		let output = Output {
+			features: OutputFeatures::empty(),
+			commit: Commitment([1; PEDERSEN_COMMITMENT_SIZE]),
+			proof: RangeProof {
+				proof: [1; 5134],
+				plen: 5134,
+			},
+		};
+
+		let kernel = TxKernel {
+			features: KernelFeatures::empty(),
+			excess: Commitment([1; PEDERSEN_COMMITMENT_SIZE]),
+			excess_sig: vec![1; 10],
+			fee: 100,
+		};
+
+		let new_block = Block {
+			header: BlockHeader::default(),
+			inputs: vec![input],
+			outputs: vec![output],
+			kernels: vec![kernel],
+		};
+
+		let block = Message::Block(new_block);
+		let mut buf = BytesMut::with_capacity(0);
+
+		codec
+			.encode(block.clone(), &mut buf)
+			.expect("Expected to encode");
+
+		let result = codec
+			.decode(&mut buf)
+			.expect("Expected no Errors to decode")
+			.unwrap();
+
+		assert_eq!(block, result);
 	}
 
 	#[test]
 	fn should_encode_decode_transaction() {
-		unimplemented!();
+		let mut codec = MsgCodec;
+		let input = Input(Commitment([1; PEDERSEN_COMMITMENT_SIZE]));
+		let output = Output {
+			features: OutputFeatures::empty(),
+			commit: Commitment([1; PEDERSEN_COMMITMENT_SIZE]),
+			proof: RangeProof {
+				proof: [1; 5134],
+				plen: 5134,
+			},
+		};
+
+		let transaction = Message::Transaction( Transaction {
+				inputs: vec![input],
+				outputs: vec![output],
+				fee: 1 as u64,
+				excess_sig: vec![0; 10],
+		});
+
+		let mut buf = BytesMut::with_capacity(0);
+
+		codec
+			.encode(transaction.clone(), &mut buf)
+			.expect("Expected to encode transaction message");
+
+		let result = codec
+			.decode(&mut buf)
+			.expect("Expected no Errors to decode transaction message")
+			.unwrap();
+
+		assert_eq!(transaction, result);
 	}
 
 	#[test]
 	fn should_encode_decode_error() {
-		unimplemented!();
-	}
+		let mut codec = MsgCodec;
 
+		let error = Message::Error(PeerError {
+			code: 0,
+			message: "Uhoh".to_owned(),
+		});
+
+		let mut buf = BytesMut::with_capacity(0);
+
+		codec
+			.encode(error.clone(), &mut buf)
+			.expect("Expected to encode error message");
+
+		let result = codec
+			.decode(&mut buf)
+			.expect("Expected no Errors to decode error message")
+			.unwrap();
+
+		assert_eq!(error, result);
+	}
 }

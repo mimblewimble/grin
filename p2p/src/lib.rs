@@ -42,6 +42,8 @@ extern crate serde;
 extern crate serde_derive;
 extern crate time;
 extern crate num;
+extern crate secp256k1zkp as secp;
+
 
 mod conn;
 pub mod handshake;
