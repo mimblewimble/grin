@@ -31,7 +31,7 @@ macro_rules! try_opt_dec {
 	});
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TxCodec;
 
 impl codec::Encoder for TxCodec {

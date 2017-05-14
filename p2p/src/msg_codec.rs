@@ -48,7 +48,7 @@ macro_rules! try_opt_dec {
 
 #[derive(Clone, Debug, PartialEq)]
 enum Message {
-	Error(PeerError),
+	PeerError(PeerError),
 	Hand(Hand),
 	Shake(Shake),
 	Ping,
@@ -96,6 +96,29 @@ impl codec::Encoder for MsgCodec {
 			Message::Headers(headers) => {
 				headers.msg_encode(&mut msg_dst)?;
 				MsgHeader::new(Type::Headers, msg_dst.len() as u64)
+			}
+			Message::GetHeaders(locator) => {
+				locator.msg_encode(&mut msg_dst)?;
+				MsgHeader::new(Type::GetHeaders, msg_dst.len() as u64)
+			}
+			Message::Block(block) => {
+				let mut codec = BlockCodec::default();
+				codec.encode(block, &mut msg_dst)?;
+				MsgHeader::new(Type::Block, msg_dst.len() as u64)
+			}
+			Message::GetBlock(hash) => {
+				let mut codec = BlockCodec::default();
+				codec.encode(hash, &mut msg_dst)?;
+				MsgHeader::new(Type::GetBlock, msg_dst.len() as u64)
+			}
+			Message::Transaction(tx) => {
+				let mut codec = TxCodec::default();
+				codec.encode(tx, &mut msg_dst)?;
+				MsgHeader::new(Type::Transaction, msg_dst.len() as u64)
+			}
+			Message::PeerError(err) => {
+				err.msg_encode(&mut msg_dst)?;
+				MsgHeader::new(Type::Error, msg_dst.len() as u64)
 			}
 			_ => unimplemented!(),	
 		};
@@ -169,6 +192,29 @@ impl codec::Decoder for MsgCodec {
 			Type::Headers => {
 				let headers = try_opt_dec!(Headers::msg_decode(src)?);
 				Message::Headers(headers)
+			}
+			Type::GetHeaders => {
+				let locator = try_opt_dec!(Locator::msg_decode(src)?);
+				Message::GetHeaders(locator)
+			}
+			Type::Block => {
+				let mut codec = BlockCodec::default();
+				let block = try_opt_dec!(codec.decode(src)?); 
+				Message::Block(block)
+			}
+			Type::GetBlock => {
+				let mut codec = BlockCodec::default();
+				let hash = try_opt_dec!(codec.decode(src)?); 
+				Message::GetBlock(hash)
+			}
+			Type::Transaction => {
+				let mut codec = TxCodec::default();
+				let transaction = try_opt_dec!(codec.decode(src)?); 
+				Message::Transaction(transaction)
+			}
+			Type::Error => {
+				let err = try_opt_dec!(PeerError::msg_decode(src)?);
+				Message::PeerError(err)
 			}
 			_ => unimplemented!(),
 		};
@@ -366,6 +412,9 @@ impl MsgEncode for PeerAddrs {
 
 impl MsgDecode for PeerAddrs {
 	fn msg_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
+		if src.len() < 4 {
+			return Ok(None);
+		}
 		let mut buf = src.split_to(4).into_buf();
 		let peer_count = buf.get_u32::<BigEndian>();
 		// Check peer count is valid, return error or empty if applicable
@@ -416,6 +465,82 @@ impl MsgDecode for Headers {
 			headers.push(block);
 		}
 		Ok(Some(Headers { headers: headers }))
+	}
+}
+
+impl MsgEncode for Locator {
+	fn msg_encode(&self, dst: &mut BytesMut) -> Result< (), io::Error > {
+		dst.reserve(1);
+		let len = self.hashes.len() as u8;
+		dst.put_u8(len);
+
+		let mut block_codec = BlockCodec::default();
+		for h in &self.hashes {
+			block_codec.encode(h.clone(), dst)?;
+		}
+		Ok(())
+	}
+}
+
+impl MsgDecode for Locator {
+	fn msg_decode(src: &mut BytesMut) -> Result< Option<Self>, io::Error > {
+		if src.len() < 1 {
+			return Ok(None);
+		}
+		let mut buf = src.split_to(1).into_buf();
+		let len = buf.get_u8();
+
+		let mut hashes = Vec::with_capacity(len as usize);
+		let mut block_codec = BlockCodec::default();
+		for _ in 0..len {
+			let hash = try_opt_dec!(block_codec.decode(src)?);
+			hashes.push(hash);
+		}
+
+		Ok(Some(Locator { hashes: hashes }))
+	}
+}
+
+impl MsgEncode for PeerError {
+	fn msg_encode(&self, dst: &mut BytesMut) -> Result< (), io::Error > {
+		dst.reserve(4);
+		dst.put_u32::<BigEndian>(self.code);
+		
+		let bytes = self.message.as_bytes();
+		dst.reserve(1 + bytes.len());
+		dst.put_u8(bytes.len() as u8);
+		dst.put_slice(bytes);
+		Ok(())
+	}
+}
+
+
+impl MsgDecode for PeerError {
+	fn msg_decode(src: &mut BytesMut) -> Result< Option<Self>, io::Error > {
+		// Reserve for code(4) and msg length(1)
+		if src.len() < 5 {
+			return Ok(None);
+		}
+		let mut buf = src.split_to(5).into_buf();
+		let code = buf.get_u32::<BigEndian>();
+		
+		let str_len = buf.get_u8() as usize;
+
+		if src.len() < str_len {
+			return Ok(None);
+		}
+
+		let buf = src.split_to(str_len).into_buf();
+
+		let message = String::from_utf8(buf.collect())
+			.map_err(|_| {
+				         io::Error::new(io::ErrorKind::InvalidData, "Invalid Error Message Field")
+				        })?;
+
+		Ok(Some( PeerError {
+			code: code,
+			message: message
+		}))
 	}
 }
 
@@ -781,7 +906,7 @@ mod tests {
 	fn should_encode_decode_error() {
 		let mut codec = MsgCodec;
 
-		let error = Message::Error(PeerError {
+		let error = Message::PeerError(PeerError {
 		                               code: 0,
 		                               message: "Uhoh".to_owned(),
 		                           });
