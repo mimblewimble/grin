@@ -93,6 +93,10 @@ impl codec::Encoder for MsgCodec {
 				peer_addrs.msg_encode(&mut msg_dst)?;
 				MsgHeader::new(Type::PeerAddrs, msg_dst.len() as u64)
 			}
+			Message::Headers(headers) => {
+				headers.msg_encode(&mut msg_dst)?;
+				MsgHeader::new(Type::Headers, msg_dst.len() as u64)
+			}
 			_ => unimplemented!(),	
 		};
 
@@ -161,6 +165,10 @@ impl codec::Decoder for MsgCodec {
 			Type::PeerAddrs => {
 				let peer_addrs = try_opt_dec!(PeerAddrs::msg_decode(src)?);
 				Message::PeerAddrs(peer_addrs)
+			}
+			Type::Headers => {
+				let headers = try_opt_dec!(Headers::msg_decode(src)?);
+				Message::Headers(headers)
 			}
 			_ => unimplemented!(),
 		};
@@ -325,11 +333,6 @@ impl MsgDecode for Shake {
 	}
 }
 
-// pub struct GetPeerAddrs {
-// 	/// Filters on the capabilities we'd like the peers to have
-// 	pub capabilities: Capabilities,
-// }
-
 impl MsgEncode for GetPeerAddrs {
 	fn msg_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
 		// Reserve for and put Capabilities
@@ -382,6 +385,40 @@ impl MsgDecode for PeerAddrs {
 		Ok(Some(PeerAddrs { peers: peers }))
 	}
 }
+
+impl MsgEncode for Headers {
+	fn msg_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
+		dst.reserve(2);
+		dst.put_u16::<BigEndian>(self.headers.len() as u16);
+		let mut block_codec = BlockCodec::default();
+		for h in &self.headers {
+			block_codec.encode(h.clone(), dst)?;
+		}
+
+		Ok(())
+	}
+}
+
+impl MsgDecode for Headers {
+	fn msg_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
+		if src.len() < 2 {
+			return Ok(None);
+		}
+		// Get Headers Length
+		let mut buf = src.split_to(2).into_buf();
+		let len = buf.get_u16::<BigEndian>();
+
+		// Collect Headers
+		let mut headers = Vec::with_capacity(len as usize);
+		let mut block_codec = BlockCodec::default();
+		for _ in 0..len {
+			let block = try_opt_dec!(block_codec.decode(src)?);
+			headers.push(block);
+		}
+		Ok(Some(Headers { headers: headers }))
+	}
+}
+
 
 const SOCKET_ADDR_MARKER_V4: u8 = 0;
 const SOCKET_ADDR_MARKER_V6: u8 = 1;
@@ -594,7 +631,7 @@ mod tests {
 		let result = codec
 			.decode(&mut buf)
 			.expect("Expected no Errors to decode peer addrs message")
-			.expect("Expected no Errors to decode peer addrs message");
+			.expect("Expected full peer addrs message");
 
 		assert_eq!(peer_addrs, result);
 	}
@@ -616,7 +653,7 @@ mod tests {
 		let result = codec
 			.decode(&mut buf)
 			.expect("Expected no Errors to decode headers message")
-			.unwrap();
+			.expect("Expected full headers message");
 
 		assert_eq!(headers, result);
 	}
