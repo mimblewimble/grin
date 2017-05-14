@@ -89,6 +89,10 @@ impl codec::Encoder for MsgCodec {
 				get_peer_addrs.msg_encode(&mut msg_dst)?;
 				MsgHeader::new(Type::GetPeerAddrs, msg_dst.len() as u64)
 			}
+			Message::PeerAddrs(peer_addrs) => {
+				peer_addrs.msg_encode(&mut msg_dst)?;
+				MsgHeader::new(Type::PeerAddrs, msg_dst.len() as u64)
+			}
 			_ => unimplemented!(),	
 		};
 
@@ -153,6 +157,10 @@ impl codec::Decoder for MsgCodec {
 			Type::GetPeerAddrs => {
 				let get_peer_addrs = try_opt_dec!(GetPeerAddrs::msg_decode(src)?);
 				Message::GetPeerAddrs(get_peer_addrs)
+			}
+			Type::PeerAddrs => {
+				let peer_addrs = try_opt_dec!(PeerAddrs::msg_decode(src)?);
+				Message::PeerAddrs(peer_addrs)
 			}
 			_ => unimplemented!(),
 		};
@@ -339,6 +347,39 @@ impl MsgDecode for GetPeerAddrs {
 		let mut buf = src.split_to(4).into_buf();
 		let capabilities = Capabilities::from_bits(buf.get_u32::<BigEndian>()).unwrap_or(UNKNOWN);
 		Ok(Some(GetPeerAddrs { capabilities: capabilities }))
+	}
+}
+
+impl MsgEncode for PeerAddrs {
+	fn msg_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
+		dst.reserve(4);
+		dst.put_u32::<BigEndian>(self.peers.len() as u32);
+		for p in &self.peers {
+			p.0.msg_encode(dst)?;
+		}
+		Ok(())
+	}
+}
+
+impl MsgDecode for PeerAddrs {
+	fn msg_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
+		let mut buf = src.split_to(4).into_buf();
+		let peer_count = buf.get_u32::<BigEndian>();
+		// Check peer count is valid, return error or empty if applicable
+		if peer_count > MAX_PEER_ADDRS {
+			return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid Peer Count"));
+		} else if peer_count == 0 {
+			return Ok(Some(PeerAddrs { peers: vec![] }));
+		}
+
+		let mut peers = Vec::with_capacity(peer_count as usize);
+		for _ in 0..peer_count {
+			let p = SocketAddr::msg_decode(src)?;
+			// XXX: Do not need SockAddr wrapper??
+			peers.push(SockAddr(p.unwrap()));
+		}
+
+		Ok(Some(PeerAddrs { peers: peers }))
 	}
 }
 
@@ -532,7 +573,7 @@ mod tests {
 		let result = codec
 			.decode(&mut buf)
 			.expect("Expected no Errors to decode get peer addrs message")
-			.unwrap();
+			.expect("Expected full get peer addrs message.");
 
 		assert_eq!(get_peer_addrs, result);
 	}
@@ -542,7 +583,6 @@ mod tests {
 		let mut codec = MsgCodec;
 		let sample_socket_addr = SockAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
 		                                                  8000));
-
 		let peer_addrs = Message::PeerAddrs(PeerAddrs { peers: vec![sample_socket_addr] });
 
 		let mut buf = BytesMut::with_capacity(0);
@@ -554,7 +594,7 @@ mod tests {
 		let result = codec
 			.decode(&mut buf)
 			.expect("Expected no Errors to decode peer addrs message")
-			.unwrap();
+			.expect("Expected no Errors to decode peer addrs message");
 
 		assert_eq!(peer_addrs, result);
 	}
