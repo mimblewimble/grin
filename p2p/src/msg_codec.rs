@@ -37,6 +37,9 @@ use msg::*;
 use msg::MsgHeader;
 
 const MSG_HEADER_SIZE: usize = 11;
+const SOCKET_ADDR_MARKER_V4: u8 = 0;
+const SOCKET_ADDR_MARKER_V6: u8 = 1;
+
 
 // Convenience Macro for Option Handling in Decoding
 macro_rules! try_opt_dec {
@@ -140,11 +143,12 @@ impl codec::Decoder for MsgCodec {
 	type Item = Message;
 	type Error = io::Error;
 	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+		let ref mut temp_src = src.clone();
 		// Decode Header
-		if src.len() < MSG_HEADER_SIZE {
+		if temp_src.len() < MSG_HEADER_SIZE {
 			return Ok(None);
 		}
-		let mut buf = src.split_to(MSG_HEADER_SIZE).into_buf();
+		let mut buf = temp_src.split_to(MSG_HEADER_SIZE).into_buf();
 
 		// Get Magic
 		let mut some_magic = [0; 2];
@@ -165,7 +169,7 @@ impl codec::Decoder for MsgCodec {
 
 		// Ensure sufficient data
 		let msg_len = buf.get_u64::<BigEndian>() as usize;
-		if src.len() < msg_len {
+		if temp_src.len() < msg_len {
 			return Ok(None);
 		}
 
@@ -174,50 +178,53 @@ impl codec::Decoder for MsgCodec {
 			Type::Ping => Message::Ping,
 			Type::Pong => Message::Pong,
 			Type::Hand => {
-				let hand = try_opt_dec!(Hand::msg_decode(src)?);
+				let hand = try_opt_dec!(Hand::msg_decode(temp_src)?);
 				Message::Hand(hand)
 			}
 			Type::Shake => {
-				let shake = try_opt_dec!(Shake::msg_decode(src)?);
+				let shake = try_opt_dec!(Shake::msg_decode(temp_src)?);
 				Message::Shake(shake)
 			}
 			Type::GetPeerAddrs => {
-				let get_peer_addrs = try_opt_dec!(GetPeerAddrs::msg_decode(src)?);
+				let get_peer_addrs = try_opt_dec!(GetPeerAddrs::msg_decode(temp_src)?);
 				Message::GetPeerAddrs(get_peer_addrs)
 			}
 			Type::PeerAddrs => {
-				let peer_addrs = try_opt_dec!(PeerAddrs::msg_decode(src)?);
+				let peer_addrs = try_opt_dec!(PeerAddrs::msg_decode(temp_src)?);
 				Message::PeerAddrs(peer_addrs)
 			}
 			Type::Headers => {
-				let headers = try_opt_dec!(Headers::msg_decode(src)?);
+				let headers = try_opt_dec!(Headers::msg_decode(temp_src)?);
 				Message::Headers(headers)
 			}
 			Type::GetHeaders => {
-				let locator = try_opt_dec!(Locator::msg_decode(src)?);
+				let locator = try_opt_dec!(Locator::msg_decode(temp_src)?);
 				Message::GetHeaders(locator)
 			}
 			Type::Block => {
 				let mut codec = BlockCodec::default();
-				let block = try_opt_dec!(codec.decode(src)?); 
+				let block = try_opt_dec!(codec.decode(temp_src)?); 
 				Message::Block(block)
 			}
 			Type::GetBlock => {
 				let mut codec = BlockCodec::default();
-				let hash = try_opt_dec!(codec.decode(src)?); 
+				let hash = try_opt_dec!(codec.decode(temp_src)?); 
 				Message::GetBlock(hash)
 			}
 			Type::Transaction => {
 				let mut codec = TxCodec::default();
-				let transaction = try_opt_dec!(codec.decode(src)?); 
+				let transaction = try_opt_dec!(codec.decode(temp_src)?); 
 				Message::Transaction(transaction)
 			}
 			Type::Error => {
-				let err = try_opt_dec!(PeerError::msg_decode(src)?);
+				let err = try_opt_dec!(PeerError::msg_decode(temp_src)?);
 				Message::PeerError(err)
 			}
-			_ => unimplemented!(),
 		};
+
+		// If succesfull truncate src by bytes read from src;
+		let diff = src.len() - temp_src.len();
+		src.split_to(diff);
 
 		Ok(Some(decoded_msg))
 	}
@@ -544,10 +551,6 @@ impl MsgDecode for PeerError {
 	}
 }
 
-
-const SOCKET_ADDR_MARKER_V4: u8 = 0;
-const SOCKET_ADDR_MARKER_V6: u8 = 1;
-
 impl MsgEncode for SocketAddr {
 	fn msg_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
 		match *self {
@@ -636,8 +639,35 @@ impl MsgDecode for SocketAddr {
 mod tests {
 	use super::*;
 
+	fn check_unmodified_buf_on_incomplete_frame(codec: &mut MsgCodec, buf: &BytesMut){
+		let incomplete_buf = buf.clone().split_to( buf.len() / 2 );
+		let mut mutated_buf = incomplete_buf.clone();
+		codec.decode(&mut mutated_buf);
+		assert_eq!(mutated_buf, incomplete_buf);
+	}
+
 	#[test]
 	fn should_encode_decode_ping() {
+		let mut codec = MsgCodec;
+		let ping = Message::Ping;
+		let mut buf = BytesMut::with_capacity(0);
+
+		codec
+			.encode(ping.clone(), &mut buf)
+			.expect("Expected to encode ping message");
+
+		check_unmodified_buf_on_incomplete_frame(&mut codec, &buf);
+
+		let result = codec
+			.decode(&mut buf)
+			.expect("Expected no Errors to decode ping message")
+			.unwrap();
+
+
+		assert_eq!(ping, result);
+	}
+	
+	fn should_handle_incomplete_without_modifying_src_ping() {
 		let mut codec = MsgCodec;
 		let ping = Message::Ping;
 		let mut buf = BytesMut::with_capacity(0);
@@ -651,6 +681,7 @@ mod tests {
 			.unwrap();
 		assert_eq!(ping, result);
 	}
+	
 
 	#[test]
 	fn should_encode_decode_pong() {
@@ -688,6 +719,8 @@ mod tests {
 		codec
 			.encode(hand.clone(), &mut buf)
 			.expect("Expected to encode hand message");
+
+		check_unmodified_buf_on_incomplete_frame(&mut codec, &buf);
 
 		let result = codec
 			.decode(&mut buf)

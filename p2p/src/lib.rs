@@ -54,6 +54,7 @@ mod server;
 mod store;
 mod types;
 mod msg_codec;
+mod peer_codec;
 
 pub use server::{Server, DummyAdapter};
 pub use peer::Peer;
