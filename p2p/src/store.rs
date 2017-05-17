@@ -22,8 +22,10 @@ use grin_store::{self, Error, to_key, option_to_not_found};
 use msg::SockAddr;
 use types::Capabilities;
 
-const STORE_SUBPATH: &'static str = "peers";
+use tokio_io::codec::{Encoder, Decoder};
+use peer_codec::PeerCodec;
 
+const STORE_SUBPATH: &'static str = "peers";
 const PEER_PREFIX: u8 = 'p' as u8;
 
 /// Types of messages
@@ -94,25 +96,30 @@ impl PeerStore {
 	}
 
 	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
-		self.db.put_ser(&to_key(PEER_PREFIX, &mut format!("{}", p.addr).into_bytes())[..],
-		                p)
+		let key = to_key(PEER_PREFIX, &mut format!("{}", p.addr).into_bytes());
+		self.db.put_enc(&mut PeerCodec, &key, p.clone())
 	}
 
 	fn get_peer(&self, peer_addr: SocketAddr) -> Result<PeerData, Error> {
-		option_to_not_found(self.db.get_ser(&peer_key(peer_addr)[..]))
+		let key = peer_key(peer_addr);
+		option_to_not_found(self.db.get_dec(&mut PeerCodec, &key))
 	}
 
 	pub fn exists_peer(&self, peer_addr: SocketAddr) -> Result<bool, Error> {
-		self.db.exists(&to_key(PEER_PREFIX, &mut format!("{}", peer_addr).into_bytes())[..])
+		let key = peer_key(peer_addr);
+		self.db.exists(&key)
 	}
 
 	pub fn delete_peer(&self, peer_addr: SocketAddr) -> Result<(), Error> {
-		self.db.delete(&to_key(PEER_PREFIX, &mut format!("{}", peer_addr).into_bytes())[..])
+		let key = peer_key(peer_addr);
+		self.db.delete(&key)
 	}
 
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
-		let peers_iter = self.db
-			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()));
+		
+		let key = to_key(PEER_PREFIX, &mut "".to_string().into_bytes());
+		let peers_iter = self.db.iter::<PeerData>(&key);
+		
 		let mut peers = Vec::with_capacity(count);
 		for p in peers_iter {
 			if p.flags == state && p.capabilities.contains(cap) {
