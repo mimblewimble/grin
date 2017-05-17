@@ -150,45 +150,7 @@ impl TransactionPool {
         // with strict ordering. In the future, if desirable, this could
         // be node policy config or more intelligent.
         for output in &tx.outputs {
-            // Checking against current blockchain unspent outputs
-            // We want outputs even if they're spent by pool txs, so we ignore
-            // consumed_blockchain_outputs
-            if self.blockchain.get_best_utxo_set().get_output(&output.commitment()).is_some() {
-                return Err(PoolError::DuplicateOutput{
-                    other_tx: None,
-                    in_chain: true,
-                    output: output.commitment()})
-            }
-
-
-            // Check for existence of this output in the pool
-            match self.pool.find_output(&output.commitment()) {
-                Some(x) => {
-                    return Err(PoolError::DuplicateOutput{
-                    other_tx: Some(x),
-                    in_chain: false,
-                    output: output.commitment()})
-                    },
-                None => {},
-            }
-
-
-            // If the transaction might go into orphans, perform the same 
-            // checks as above but against the orphan set instead.
-            if is_orphan {
-                // Checking against orphan outputs
-                match self.orphans.find_output(&output.commitment()){
-                    Some(x) => {
-                    return Err(PoolError::DuplicateOutput{
-                        other_tx: Some(x),
-                        in_chain: false,
-                        output: output.commitment()})
-                    },
-                    None => {},
-                }
-                // No need to check pool connections since those are covered
-                // by pool unspents and blockchain connections.
-            }
+            self.check_duplicate_outputs(output, is_orphan)?
         }
 
         // Assertion: we have exactly as many resolved spending references as
@@ -276,6 +238,55 @@ impl TransactionPool {
         }
 
     }
+
+    /// Check the output for a conflict with an existing output.
+    ///
+    /// Checks the output (by commitment) against outputs in the blockchain
+    /// or in the pool. If the transaction is destined for orphans, the 
+    /// orphans set is checked as well. 
+    fn check_duplicate_outputs(&self, output : &transaction::Output, is_orphan: bool) -> Result<(), PoolError> {
+        // Checking against current blockchain unspent outputs
+        // We want outputs even if they're spent by pool txs, so we ignore
+        // consumed_blockchain_outputs
+        if self.blockchain.get_best_utxo_set().get_output(&output.commitment()).is_some() {
+            return Err(PoolError::DuplicateOutput{
+                other_tx: None,
+                in_chain: true,
+                output: output.commitment()})
+        }
+
+
+        // Check for existence of this output in the pool
+        match self.pool.find_output(&output.commitment()) {
+            Some(x) => {
+                return Err(PoolError::DuplicateOutput{
+                other_tx: Some(x),
+                in_chain: false,
+                output: output.commitment()})
+                },
+            None => {},
+        };
+
+
+        // If the transaction might go into orphans, perform the same 
+        // checks as above but against the orphan set instead.
+        if is_orphan {
+            // Checking against orphan outputs
+            match self.orphans.find_output(&output.commitment()){
+                Some(x) => {
+                return Err(PoolError::DuplicateOutput{
+                    other_tx: Some(x),
+                    in_chain: false,
+                    output: output.commitment()})
+                },
+                None => {},
+            };
+            // No need to check pool connections since those are covered
+            // by pool unspents and blockchain connections.
+        }
+        Ok(())
+    }
+
 
     /// The primary goal of the reconcile_orphans method is to eliminate any 
     /// orphans who conflict with the recently accepted pool transaction.
