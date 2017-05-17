@@ -195,6 +195,16 @@ impl Store {
 		}
 	}
 
+	/// Produces an iterator of items decoded by a decoder moving forward from the provided key.
+	pub fn iter_dec<D: Decoder>(&self, codec: D, from: &[u8]) -> DecIterator<D> {
+		let db = self.rdb.read().unwrap();
+		DecIterator {
+			iter: db.iterator(IteratorMode::From(from, Direction::Forward)),
+			codec: codec
+		}
+	}
+	
+
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Batch {
 		Batch {
@@ -265,6 +275,27 @@ impl<T> Iterator for SerIterator<T>
 		})
 	}
 }
+
+/// An iterator that produces items from a `DBIterator` instance with a given `Decoder`.
+/// Iterates and decodes returned values
+pub struct DecIterator<D> where D: Decoder {
+	iter: DBIterator,
+	codec: D
+}
+
+impl <D> Iterator for DecIterator<D> where D: Decoder {
+	type Item = D::Item;
+	fn next(&mut self) -> Option<Self::Item> {
+		let next = self.iter.next();
+		next.and_then(|(_, v)| {
+			self.codec.decode(&mut BytesMut::from(v.as_ref())).ok()
+		}).unwrap_or(None)
+	}
+}
+
+
+
+
 
 /// Build a db key from a prefix and a byte vector identifier.
 pub fn to_key(prefix: u8, k: &mut Vec<u8>) -> Vec<u8> {
