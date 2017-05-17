@@ -640,17 +640,6 @@ impl MsgDecode for SocketAddr {
 mod tests {
 	use super::*;
 
-	fn check_unmodified_buf_on_incomplete_frame(codec: &mut MsgCodec, buf: &BytesMut){
-		// Unexpectedly passing
-		for i in 1..(buf.len() - 1) {
-        	let incomplete_buf = buf.clone().split_to(i);
-			let mut mutated_buf = incomplete_buf.clone();
-			let decoded = codec.decode(&mut mutated_buf);
-			assert_eq!(decoded.unwrap(), None);
-			assert_eq!(mutated_buf, incomplete_buf);
-    	}
-	}
-
 	#[test]
 	fn should_encode_decode_ping() {
 		let mut codec = MsgCodec;
@@ -660,8 +649,6 @@ mod tests {
 		codec
 			.encode(ping.clone(), &mut buf)
 			.expect("Expected to encode ping message");
-
-		check_unmodified_buf_on_incomplete_frame(&mut codec, &buf);
 
 		let result = codec
 			.decode(&mut buf)
@@ -680,9 +667,7 @@ mod tests {
 		codec
 			.encode(ping.clone(), &mut buf)
 			.expect("Expected to encode ping message");
-		
-		check_unmodified_buf_on_incomplete_frame(&mut codec, &buf);
-		
+				
 		let result = codec
 			.decode(&mut buf)
 			.expect("Expected no Errors to decode ping message")
@@ -700,8 +685,6 @@ mod tests {
 		codec
 			.encode(pong.clone(), &mut buf)
 			.expect("Expected to encode pong message");
-
-		check_unmodified_buf_on_incomplete_frame(&mut codec, &buf);
 		
 		let result = codec
 			.decode(&mut buf)
@@ -731,8 +714,6 @@ mod tests {
 			.encode(hand.clone(), &mut buf)
 			.expect("Expected to encode hand message");
 
-		check_unmodified_buf_on_incomplete_frame(&mut codec, &buf);
-
 		let result = codec
 			.decode(&mut buf)
 			.expect("Expected no Errors to decode hand message")
@@ -757,8 +738,6 @@ mod tests {
 			.encode(shake.clone(), &mut buf)
 			.expect("Expected to encode shake message");
 
-		check_unmodified_buf_on_incomplete_frame(&mut codec, &buf);
-
 		let result = codec
 			.decode(&mut buf)
 			.expect("Expected no Errors to decode shake message")
@@ -777,8 +756,6 @@ mod tests {
 		codec
 			.encode(get_peer_addrs.clone(), &mut buf)
 			.expect("Expected to encode get peer addrs message");
-
-		check_unmodified_buf_on_incomplete_frame(&mut codec, &buf);
 
 		let result = codec
 			.decode(&mut buf)
@@ -800,8 +777,6 @@ mod tests {
 		codec
 			.encode(peer_addrs.clone(), &mut buf)
 			.expect("Expected to encode peer addrs message");
-
-		check_unmodified_buf_on_incomplete_frame(&mut codec, &buf);
 
 		let result = codec
 			.decode(&mut buf)
@@ -825,8 +800,6 @@ mod tests {
 			.encode(headers.clone(), &mut buf)
 			.expect("Expected to encode headers message");
 
-		check_unmodified_buf_on_incomplete_frame(&mut codec, &buf);
-
 		let result = codec
 			.decode(&mut buf)
 			.expect("Expected no Errors to decode headers message")
@@ -849,8 +822,6 @@ mod tests {
 			.encode(get_headers.clone(), &mut buf)
 			.expect("Expected to encode get headers msg");
 
-		check_unmodified_buf_on_incomplete_frame(&mut codec, &buf);
-
 		let result = codec
 			.decode(&mut buf)
 			.expect("Expected no Errors to decode get headers msg")
@@ -870,8 +841,6 @@ mod tests {
 		codec
 			.encode(get_block.clone(), &mut buf)
 			.expect("Expected to encode hand");
-
-		check_unmodified_buf_on_incomplete_frame(&mut codec, &buf);
 
 		let result = codec
 			.decode(&mut buf)
@@ -916,8 +885,6 @@ mod tests {
 			.encode(block.clone(), &mut buf)
 			.expect("Expected to encode");
 
-		check_unmodified_buf_on_incomplete_frame(&mut codec, &buf);
-
 		let result = codec
 			.decode(&mut buf)
 			.expect("Expected no Errors to decode")
@@ -952,8 +919,6 @@ mod tests {
 			.encode(transaction.clone(), &mut buf)
 			.expect("Expected to encode transaction message");
 
-		check_unmodified_buf_on_incomplete_frame(&mut codec, &buf);
-
 		let result = codec
 			.decode(&mut buf)
 			.expect("Expected no Errors to decode transaction message")
@@ -976,8 +941,6 @@ mod tests {
 		codec
 			.encode(error.clone(), &mut buf)
 			.expect("Expected to encode error message");
-
-		check_unmodified_buf_on_incomplete_frame(&mut codec, &buf);
 		
 		let result = codec
 			.decode(&mut buf)
