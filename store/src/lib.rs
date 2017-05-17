@@ -110,16 +110,6 @@ impl Store {
 		db.put(key, &value[..]).map_err(&From::from)
 	}
 
-	/// Writes a single key and its `Writeable` value to the db. Encapsulates
-	/// serialization.
-	pub fn put_ser<W: ser::Writeable>(&self, key: &[u8], value: &W) -> Result<(), Error> {
-		let ser_value = ser::ser_vec(value);
-		match ser_value {
-			Ok(data) => self.put(key, data),
-			Err(err) => Err(Error::SerErr(err)),
-		}
-	}
-
 	/// Writes a single key and a value using a given encoder.
 	pub fn put_enc<E: Encoder>(&self, encoder: &mut E, key: &[u8], value: E::Item) -> Result<(), Error> 
 		where Error: From<E::Error> {
@@ -148,30 +138,6 @@ impl Store {
 		db.get(key).map(|r| r.map(|o| o.to_vec())).map_err(From::from)
 	}
 
-	/// Gets a `Readable` value from the db, provided its key. Encapsulates
-	/// serialization.
-	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
-		self.get_ser_limited(key, 0)
-	}
-
-	/// Gets a `Readable` value from the db, provided its key, allowing to
-	/// extract only partial data. The underlying Readable size must align
-	/// accordingly. Encapsulates serialization.
-	pub fn get_ser_limited<T: ser::Readable>(&self,
-	                                            key: &[u8],
-	                                            len: usize)
-	                                            -> Result<Option<T>, Error> {
-		let data = try!(self.get(key));
-		match data {
-			Some(val) => {
-				let mut lval = if len > 0 { &val[..len] } else { &val[..] };
-				let r = try!(ser::deserialize(&mut lval).map_err(Error::SerErr));
-				Ok(Some(r))
-			}
-			None => Ok(None),
-		}
-	}
-
 	/// Whether the provided key exists
 	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
 		let db = self.rdb.read().unwrap();
@@ -184,17 +150,6 @@ impl Store {
 		db.delete(key).map_err(From::from)
 	}
 
-	/// Produces an iterator of `Readable` types moving forward from the
-	/// provided
-	/// key.
-	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> SerIterator<T> {
-		let db = self.rdb.read().unwrap();
-		SerIterator {
-			iter: db.iterator(IteratorMode::From(from, Direction::Forward)),
-			_marker: PhantomData,
-		}
-	}
-
 	/// Produces an iterator of items decoded by a decoder moving forward from the provided key.
 	pub fn iter_dec<D: Decoder>(&self, codec: D, from: &[u8]) -> DecIterator<D> {
 		let db = self.rdb.read().unwrap();
@@ -204,7 +159,6 @@ impl Store {
 		}
 	}
 	
-
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Batch {
 		Batch {
@@ -226,18 +180,6 @@ pub struct Batch<'a> {
 }
 
 impl<'a> Batch<'a> {
-	/// Writes a single key and its `Writeable` value to the batch. The write
-	/// function must be called to "commit" the batch to storage.
-	pub fn put_ser<W: ser::Writeable>(mut self, key: &[u8], value: &W) -> Result<Batch<'a>, Error> {
-		let ser_value = ser::ser_vec(value);
-		match ser_value {
-			Ok(data) => {
-				self.batch.put(key, &data[..])?;
-				Ok(self)
-			}
-			Err(err) => Err(Error::SerErr(err)),
-		}
-	}
 
 	/// Using a given encoder, Writes a single key and a value to the batch.
 	pub fn put_enc<E: Encoder>(mut self, encoder: &mut E, key: &[u8], value: E::Item) -> Result<Batch<'a>, Error> where Error: From<E::Error> {
@@ -250,29 +192,6 @@ impl<'a> Batch<'a> {
 	/// Writes the batch to RocksDb.
 	pub fn write(self) -> Result<(), Error> {
 		self.store.write(self.batch)
-	}
-}
-
-/// An iterator thad produces Readable instances back. Wraps the lower level
-/// DBIterator and deserializes the returned values.
-pub struct SerIterator<T>
-	where T: ser::Readable
-{
-	iter: DBIterator,
-	_marker: PhantomData<T>,
-}
-
-impl<T> Iterator for SerIterator<T>
-    where T: ser::Readable
-{
-	type Item = T;
-
-	fn next(&mut self) -> Option<T> {
-		let next = self.iter.next();
-		next.and_then(|r| {
-			let (_, v) = r;
-			ser::deserialize(&mut &v[..]).ok()
-		})
 	}
 }
 
@@ -292,9 +211,6 @@ impl <D> Iterator for DecIterator<D> where D: Decoder {
 		}).unwrap_or(None)
 	}
 }
-
-
-
 
 
 /// Build a db key from a prefix and a byte vector identifier.
