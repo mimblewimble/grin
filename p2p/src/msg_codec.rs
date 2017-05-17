@@ -142,7 +142,9 @@ impl codec::Decoder for MsgCodec {
 	type Item = Message;
 	type Error = io::Error;
 	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+		// Create Temporary Buffer
 		let ref mut temp_src = src.clone();
+		
 		// Decode Header
 		if temp_src.len() < MSG_HEADER_SIZE {
 			return Ok(None);

@@ -56,7 +56,7 @@ impl codec::Encoder for PeerCodec {
 		dst.put_u8(str_bytes.len() as u8);
 		dst.put_slice(str_bytes);
 
-		// but flags
+		// Put flags
 		dst.reserve(1);
 		dst.put_u8(item.flags as u8);
 
@@ -69,7 +69,9 @@ impl codec::Decoder for PeerCodec {
 	type Error = io::Error;
 
 	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+		// Create Temporary Buffer
 		let ref mut temp_src = src.clone();
+		
 		// Get socket address
 		let addr = try_opt_dec!(SocketAddr::msg_decode(temp_src)?);
 
