@@ -19,6 +19,8 @@ use futures::Future;
 use futures::stream;
 use futures::sync::mpsc::UnboundedSender;
 use tokio_core::net::TcpStream;
+use tokio_io::codec::*;
+use bytes::{BytesMut, BufMut};
 
 use core::core;
 use core::core::hash::Hash;
@@ -27,6 +29,18 @@ use conn::TimeoutConnection;
 use msg::*;
 use types::*;
 use util::OneTime;
+
+use grin_store::codec::block::BlockCodec;
+use grin_store::codec::tx::TxCodec;
+use msg_codec::{MsgDecode, MsgEncode};
+
+// Convenience Macro for Option Handling in Decoding
+macro_rules! try_opt_dec {
+	($e: expr) => (match $e {
+		Some(val) => val,
+		None => return Ok(None),
+	});
+}
 
 pub struct ProtocolV1 {
 	conn: OneTime<TimeoutConnection>,
@@ -133,43 +147,43 @@ fn handle_payload(adapter: &NetAdapter,
 		}
 		Type::Pong => Ok(None),
 		Type::Transaction => {
-			let tx = ser::deserialize::<core::Transaction>(&mut &buf[..])?;
+			let tx = try_opt_dec!(TxCodec::default().decode(&mut BytesMut::from(buf))?);
 			adapter.transaction_received(tx);
 			Ok(None)
 		}
 		Type::GetBlock => {
-			let h = ser::deserialize::<Hash>(&mut &buf[..])?;
+			let h = try_opt_dec!(BlockCodec::default().decode(&mut BytesMut::from(buf))?);
 			let bo = adapter.get_block(h);
 			if let Some(b) = bo {
 				// serialize and send the block over
-				let mut body_data = vec![];
-				try!(ser::serialize(&mut body_data, &b));
+				let mut body_data = BytesMut::with_capacity(0);
+				BlockCodec::default().encode(b, &mut body_data)?;
 				let mut data = vec![];
 				try!(ser::serialize(&mut data,
 				                    &MsgHeader::new(Type::Block, body_data.len() as u64)));
-				data.append(&mut body_data);
+				data.append(&mut body_data.to_vec());
 				sender.send(data);
 			}
 			Ok(None)
 		}
 		Type::Block => {
-			let b = ser::deserialize::<core::Block>(&mut &buf[..])?;
+			let b: core::Block = try_opt_dec!(BlockCodec::default().decode(&mut BytesMut::from(buf))?);
 			let bh = b.hash();
 			adapter.block_received(b);
 			Ok(Some(bh))
 		}
 		Type::GetHeaders => {
 			// load headers from the locator
-			let loc = ser::deserialize::<Locator>(&mut &buf[..])?;
+			let loc: Locator = try_opt_dec!(MsgDecode::msg_decode(&mut BytesMut::from(buf))?);
 			let headers = adapter.locate_headers(loc.hashes);
 
 			// serialize and send all the headers over
-			let mut body_data = vec![];
-			try!(ser::serialize(&mut body_data, &Headers { headers: headers }));
+			let mut body_data = BytesMut::with_capacity(0);
+			Headers { headers: headers }.msg_encode( &mut body_data)?;
 			let mut data = vec![];
 			try!(ser::serialize(&mut data,
 			                    &MsgHeader::new(Type::Headers, body_data.len() as u64)));
-			data.append(&mut body_data);
+			data.append(&mut body_data.to_vec());
 			sender.send(data);
 
 			Ok(None)
@@ -180,25 +194,24 @@ fn handle_payload(adapter: &NetAdapter,
 			Ok(None)
 		}
 		Type::GetPeerAddrs => {
-			let get_peers = ser::deserialize::<GetPeerAddrs>(&mut &buf[..])?;
+			let get_peers: GetPeerAddrs = try_opt_dec!(MsgDecode::msg_decode(&mut BytesMut::from(buf))?);
 			let peer_addrs = adapter.find_peer_addrs(get_peers.capabilities);
 
 			// serialize and send all the headers over
-			let mut body_data = vec![];
-			try!(ser::serialize(&mut body_data,
-			                    &PeerAddrs {
-				                    peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
-			                    }));
+			let mut body_data = BytesMut::with_capacity(0);
+			let en_peer_addr = PeerAddrs {peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect()};
+			en_peer_addr.msg_encode( &mut body_data)?;
+
 			let mut data = vec![];
 			try!(ser::serialize(&mut data,
 			                    &MsgHeader::new(Type::PeerAddrs, body_data.len() as u64)));
-			data.append(&mut body_data);
+			data.append(&mut body_data.to_vec());
 			sender.send(data);
 
 			Ok(None)
 		}
 		Type::PeerAddrs => {
-			let peer_addrs = ser::deserialize::<PeerAddrs>(&mut &buf[..])?;
+			let peer_addrs: PeerAddrs = try_opt_dec!(MsgDecode::msg_decode(&mut BytesMut::from(buf))?);
 			adapter.peer_addrs_received(peer_addrs.peers.iter().map(|pa| pa.0).collect());
 			Ok(None)
 		}
