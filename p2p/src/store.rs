@@ -52,37 +52,6 @@ pub struct PeerData {
 	pub flags: State,
 }
 
-impl Writeable for PeerData {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		SockAddr(self.addr).write(writer)?;
-		ser_multiwrite!(writer,
-		                [write_u32, self.capabilities.bits()],
-		                [write_bytes, &self.user_agent],
-		                [write_u8, self.flags as u8]);
-		Ok(())
-	}
-}
-
-impl Readable for PeerData {
-	fn read(reader: &mut Reader) -> Result<PeerData, ser::Error> {
-		let addr = SockAddr::read(reader)?;
-		let (capab, ua, fl) = ser_multiread!(reader, read_u32, read_vec, read_u8);
-		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
-		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
-		match State::from_u8(fl) {
-			Some(flags) => {
-				Ok(PeerData {
-					addr: addr.0,
-					capabilities: capabilities,
-					user_agent: user_agent,
-					flags: flags,
-				})
-			}
-			None => Err(ser::Error::CorruptedData),
-		}
-	}
-}
-
 /// Storage facility for peer data.
 pub struct PeerStore {
 	db: grin_store::Store,
@@ -118,7 +87,7 @@ impl PeerStore {
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
 		
 		let key = to_key(PEER_PREFIX, &mut "".to_string().into_bytes());
-		let peers_iter = self.db.iter::<PeerData>(&key);
+		let peers_iter = self.db.iter_dec(PeerCodec::default(), &key);
 		
 		let mut peers = Vec::with_capacity(count);
 		for p in peers_iter {
