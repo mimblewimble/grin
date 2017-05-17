@@ -197,37 +197,7 @@ impl TransactionPool {
             // within the orphans set.
             // We also have to distinguish now between missing and internal
             // references.
-            let mut missing_refs: HashMap<usize, ()> = HashMap::new();
-            for (i, orphan_ref) in orphan_refs.iter_mut().enumerate() {
-                let orphan_commitment = &orphan_ref.output_commitment();
-                match self.orphans.get_available_output(&orphan_commitment) {
-                    // If the edge is an available output of orphans,
-                    // update the prepared edge
-                    Some(x) => *orphan_ref = x.with_destination(Some(tx_hash)),
-                    // If the edge is not an available output, it is either
-                    // already consumed or it belongs in missing_refs.
-                    None => {
-
-                        match self.orphans.get_internal_spent(&orphan_commitment) {
-                            Some(x) => return Err(PoolError::DoubleSpend{
-                                other_tx: x.destination_hash().unwrap(),
-                                spent_output: x.output_commitment()}),
-                            None => {
-                                // The reference does not resolve to anything.
-                                // Make sure this missing_output has not already
-                                // been claimed, then add this entry to 
-                                // missing_refs
-                                match self.orphans.get_unknown_output(&orphan_commitment) {
-                                    Some(x) => return Err(PoolError::DoubleSpend{
-                                        other_tx: x.destination_hash().unwrap(),
-                                        spent_output: x.output_commitment()}),
-                                    None => missing_refs.insert(i, ()),
-                                };
-                            },
-                        }
-                    },
-                };
-            }
+            let missing_refs = self.resolve_orphan_refs(tx_hash, &mut orphan_refs)?;
 
             // We have passed all failure modes.
             pool_refs.append(&mut blockchain_refs);
@@ -287,6 +257,48 @@ impl TransactionPool {
         Ok(())
     }
 
+    /// Distinguish between missing, unspent, and spent orphan refs.
+    ///
+    /// Takes the set of orphans_refs produced during transaction connectivity
+    /// validation, which do not point at valid unspents in the blockchain or
+    /// pool. These references point at either a missing (orphaned) commitment,
+    /// an unspent output of the orphans set, or a spent output either within
+    /// the orphans set or externally from orphans to the pool or blockchain.
+    /// The last case results in a failure condition and transaction acceptance
+    /// is aborted.
+    fn resolve_orphan_refs(&self, tx_hash: hash::Hash, orphan_refs: &mut Vec<graph::Edge>) -> Result<HashMap<usize, ()>, PoolError> {
+        let mut missing_refs: HashMap<usize, ()> = HashMap::new();
+        for (i, orphan_ref) in orphan_refs.iter_mut().enumerate() {
+            let orphan_commitment = &orphan_ref.output_commitment();
+            match self.orphans.get_available_output(&orphan_commitment) {
+                // If the edge is an available output of orphans,
+                // update the prepared edge
+                Some(x) => *orphan_ref = x.with_destination(Some(tx_hash)),
+                // If the edge is not an available output, it is either
+                // already consumed or it belongs in missing_refs.
+                None => {
+                    match self.orphans.get_internal_spent(&orphan_commitment) {
+                        Some(x) => return Err(PoolError::DoubleSpend{
+                            other_tx: x.destination_hash().unwrap(),
+                            spent_output: x.output_commitment()}),
+                        None => {
+                            // The reference does not resolve to anything.
+                            // Make sure this missing_output has not already
+                            // been claimed, then add this entry to 
+                            // missing_refs
+                            match self.orphans.get_unknown_output(&orphan_commitment) {
+                                Some(x) => return Err(PoolError::DoubleSpend{
+                                    other_tx: x.destination_hash().unwrap(),
+                                    spent_output: x.output_commitment()}),
+                                None => missing_refs.insert(i, ()),
+                            };
+                        },
+                    };
+                },
+            };
+        }
+        Ok(missing_refs)
+    }
 
     /// The primary goal of the reconcile_orphans method is to eliminate any 
     /// orphans who conflict with the recently accepted pool transaction.
