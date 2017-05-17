@@ -122,16 +122,16 @@ impl codec::Encoder for MsgCodec {
 				err.msg_encode(&mut msg_dst)?;
 				MsgHeader::new(Type::Error, msg_dst.len() as u64)
 			}
-			_ => unimplemented!(),	
 		};
 
+		// Put MsgHeader
 		dst.put_slice(&header.magic);
 		dst.put_u8(header.msg_type as u8);
 		dst.put_u64::<BigEndian>(header.msg_len);
 
+		// Put Body
 		dst.reserve(msg_dst.len());
 		dst.put_slice(&msg_dst);
-		// dst.reserve()
 
 		Ok(())
 
