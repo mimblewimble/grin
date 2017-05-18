@@ -55,7 +55,6 @@ pub struct BlockCodec<T: BlockDecode + BlockEncode> {
 	phantom: PhantomData<T>,
 }
 
-
 impl<T> Default for BlockCodec<T>
     where T: BlockDecode + BlockEncode
 {

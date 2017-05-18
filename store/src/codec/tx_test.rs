@@ -58,10 +58,7 @@ fn should_have_tx_codec_roundtrip() {
 		.expect("Error During Transaction Decoding")
 		.expect("Unfinished Transaction");
 
-	assert_eq!(tx.inputs[0].commitment(), d_tx.inputs[0].commitment());
-	assert_eq!(tx.outputs[0].features, d_tx.outputs[0].features);
-	assert_eq!(tx.fee, d_tx.fee);
-	assert_eq!(tx.excess_sig, d_tx.excess_sig);
+    assert_eq!(tx, d_tx);
 }
 
 #[test]
@@ -80,10 +77,7 @@ fn should_encode_and_decode_output() {
 
 	let d_output = Output::tx_decode(&mut buf).unwrap().unwrap();
 
-	assert_eq!(output.features, d_output.features);
-	assert_eq!(output.proof().as_ref(), d_output.proof().as_ref());
-	assert_eq!(output.commitment(), d_output.commitment());
-
+    assert_eq!(output, d_output);
 }
 
 #[test]
@@ -93,10 +87,7 @@ fn should_encode_and_decode_input() {
 	let mut buf = BytesMut::with_capacity(0);
 	input.tx_encode(&mut buf);
 
-	assert_eq!([1; PEDERSEN_COMMITMENT_SIZE].as_ref(), buf);
-	assert_eq!(input.commitment(),
-	           Input::tx_decode(&mut buf)
-	               .unwrap()
-	               .unwrap()
-	               .commitment());
+    let d_input = Input::tx_decode(&mut buf).unwrap().unwrap();
+
+    assert_eq!(input, d_input);
 }

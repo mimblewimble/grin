@@ -75,32 +75,7 @@ fn should_have_block_codec_roundtrip() {
 
 	// Check if all bytes are read
 	assert_eq!(buf.len(), 0);
-
-	assert_eq!(block.header.height, d_block.header.height);
-	assert_eq!(block.header.previous, d_block.header.previous);
-	assert_eq!(block.header.timestamp, d_block.header.timestamp);
-	assert_eq!(block.header.cuckoo_len, d_block.header.cuckoo_len);
-	assert_eq!(block.header.utxo_merkle, d_block.header.utxo_merkle);
-	assert_eq!(block.header.tx_merkle, d_block.header.tx_merkle);
-	assert_eq!(block.header.features, d_block.header.features);
-	assert_eq!(block.header.nonce, d_block.header.nonce);
-	assert_eq!(block.header.pow, d_block.header.pow);
-	assert_eq!(block.header.difficulty, d_block.header.difficulty);
-	assert_eq!(block.header.total_difficulty,
-	           d_block.header.total_difficulty);
-
-	assert_eq!(block.inputs[0].commitment(), d_block.inputs[0].commitment());
-
-	assert_eq!(block.outputs[0].features, d_block.outputs[0].features);
-	assert_eq!(block.outputs[0].proof().as_ref(),
-	           d_block.outputs[0].proof().as_ref());
-	assert_eq!(block.outputs[0].commitment(),
-	           d_block.outputs[0].commitment());
-
-	assert_eq!(block.kernels[0].features, d_block.kernels[0].features);
-	assert_eq!(block.kernels[0].excess, d_block.kernels[0].excess);
-	assert_eq!(block.kernels[0].excess_sig, d_block.kernels[0].excess_sig);
-	assert_eq!(block.kernels[0].fee, d_block.kernels[0].fee);
+    assert_eq!(block, d_block);
 
 }
 
@@ -116,18 +91,7 @@ fn should_have_block_header_codec_roundtrip() {
 
 	let d_block_header = codec.decode(&mut buf).unwrap().unwrap();
 
-	assert_eq!(block_header.height, d_block_header.height);
-	assert_eq!(block_header.previous, d_block_header.previous);
-	assert_eq!(block_header.timestamp, d_block_header.timestamp);
-	assert_eq!(block_header.cuckoo_len, d_block_header.cuckoo_len);
-	assert_eq!(block_header.utxo_merkle, d_block_header.utxo_merkle);
-	assert_eq!(block_header.tx_merkle, d_block_header.tx_merkle);
-	assert_eq!(block_header.features, d_block_header.features);
-	assert_eq!(block_header.nonce, d_block_header.nonce);
-	assert_eq!(block_header.pow, d_block_header.pow);
-	assert_eq!(block_header.difficulty, d_block_header.difficulty);
-	assert_eq!(block_header.total_difficulty,
-	           d_block_header.total_difficulty);
+    assert_eq!(block_header, d_block_header);
 
 }
 
@@ -139,12 +103,9 @@ fn should_encode_and_decode_input() {
 	let mut buf = BytesMut::with_capacity(0);
 	input.block_encode(&mut buf);
 
-	assert_eq!([1; PEDERSEN_COMMITMENT_SIZE].as_ref(), buf);
-	assert_eq!(input.commitment(),
-	           Input::block_decode(&mut buf)
-	               .unwrap()
-	               .unwrap()
-	               .commitment());
+    let d_input = Input::block_decode(&mut buf).unwrap().unwrap();
+
+    assert_eq!(input,d_input)
 }
 
 #[test]
@@ -163,10 +124,7 @@ fn should_encode_and_decode_output() {
 
 	let d_output = Output::block_decode(&mut buf).unwrap().unwrap();
 
-	assert_eq!(output.features, d_output.features);
-	assert_eq!(output.proof().as_ref(), d_output.proof().as_ref());
-	assert_eq!(output.commitment(), d_output.commitment());
-
+    assert_eq!(output, d_output);
 }
 
 #[test]
@@ -184,10 +142,7 @@ fn should_encode_and_decode_txkernel() {
 
 	let d_kernel = TxKernel::block_decode(&mut buf).unwrap().unwrap();
 
-	assert_eq!(kernel.features, d_kernel.features);
-	assert_eq!(kernel.excess, d_kernel.excess);
-	assert_eq!(kernel.excess_sig, d_kernel.excess_sig);
-	assert_eq!(kernel.fee, d_kernel.fee);
+    assert_eq!(kernel, d_kernel);
 }
 
 #[test]
