@@ -17,6 +17,10 @@
 pub mod block;
 pub mod tx;
 
+#[cfg(test)]
+mod block_test;
+#[cfg(test)]
+mod tx_test;
+
 pub use self::block::{BlockCodec, BlockHasher };
 pub use self::tx::TxCodec;
-
