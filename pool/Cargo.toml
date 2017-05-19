@@ -1,0 +1,15 @@
+[package]
+name = "grin_pool"
+version = "0.1.0"
+authors = ["Grin Authors <mimblewimble@lists.launchpad.net>"]
+
+[dependencies]
+grin_core = { path = "../core" }
+grin_store = { path = "../store" }
+grin_p2p = { path = "../p2p" }
+secp256k1zkp = { path = "../secp256k1zkp" }
+time = "^0.1"
+rand = "0.3"
+log = "0.3"
+
+[dev-dependencies]

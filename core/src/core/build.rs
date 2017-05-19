@@ -192,13 +192,21 @@ fn u64_to_32bytes(n: u64) -> [u8; 32] {
 mod test {
 	use super::*;
 
-	use secp::{self, Secp256k1};
+	use secp::{self, key, Secp256k1};
 
 	#[test]
 	fn blind_simple_tx() {
 		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let (tx, _) =
 			transaction(vec![input_rand(10), input_rand(11), output_rand(20), with_fee(1)])
+				.unwrap();
+		tx.verify_sig(&secp).unwrap();
+	}
+	#[test]
+	fn blind_simpler_tx() {
+		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
+		let (tx, _) =
+			transaction(vec![input_rand(6), output(2, key::ONE_KEY), with_fee(4)])
 				.unwrap();
 		tx.verify_sig(&secp).unwrap();
 	}
