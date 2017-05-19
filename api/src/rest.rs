@@ -22,7 +22,6 @@ use std::error::Error;
 use std::fmt::{self, Display, Debug, Formatter};
 use std::io::Read;
 use std::net::ToSocketAddrs;
-use std::ops::Index;
 use std::string::ToString;
 use std::str::FromStr;
 
@@ -68,6 +67,28 @@ impl From<ApiError> for IronError {
 	}
 }
 
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub enum Operation {
+	Create,
+	Delete,
+	Update,
+	Get,
+	Custom(String),
+}
+
+impl Operation {
+	fn to_method(&self) -> Method {
+		match *self {
+			Operation::Create => Method::Post,
+			Operation::Delete => Method::Delete,
+			Operation::Update => Method::Put,
+			Operation::Get => Method::Get,
+			Operation::Custom(_) => Method::Post,
+		}
+	}
+}
+
 pub type ApiResult<T> = ::std::result::Result<T, ApiError>;
 
 /// Trait to implement to expose a service as a RESTful HTTP endpoint. Each
@@ -90,7 +111,7 @@ pub trait ApiEndpoint: Clone + Send + Sync + 'static {
 	type ID: ToString + FromStr;
 	type T: Serialize + Deserialize;
 
-	fn methods(&self) -> Vec<Method>;
+	fn operations(&self) -> Vec<Operation>;
 
 	#[allow(unused_variables)]
 	fn create(&self, o: Self::T) -> ApiResult<Self::ID> {
@@ -109,6 +130,14 @@ pub trait ApiEndpoint: Clone + Send + Sync + 'static {
 
 	#[allow(unused_variables)]
 	fn get(&self, id: Self::ID) -> ApiResult<Self::T> {
+		unimplemented!()
+	}
+
+	#[allow(unused_variables)]
+	fn operation<IN, OUT>(&self, op: String, input: IN) -> ApiResult<OUT>
+		where IN: Serialize + Deserialize,
+		      OUT: Serialize + Deserialize
+	{
 		unimplemented!()
 	}
 }
@@ -194,31 +223,32 @@ impl ApiServer {
 		// declare a route for each method actually implemented by the endpoint
 		let route_postfix = &subpath[1..];
 		let root = self.root.clone() + &subpath;
-		for m in endpoint.methods() {
-			let full_path = match m {
-				Method::Get => root.clone() + "/:id",
-				Method::Put => root.clone() + "/:id",
-				Method::Delete => root.clone() + "/:id",
-				Method::Post => root.clone(),
-				_ => panic!(format!("Unsupported method: {}.", m)),
+		for op in endpoint.operations() {
+			let full_path = match op.clone() {
+				Operation::Get => root.clone() + "/:id",
+				Operation::Update => root.clone() + "/:id",
+				Operation::Delete => root.clone() + "/:id",
+				Operation::Create => root.clone(),
+				Operation::Custom(op_s) => format!("{}/:{}", root.clone(), op_s),
 			};
-			self.router.route(m.clone(),
+			self.router.route(op.to_method(),
 			                  full_path,
 			                  ApiWrapper(endpoint.clone()),
-			                  m.to_string() + "_" + route_postfix);
+			                  format!("{:?}_{}", op, route_postfix));
 		}
 
 		// support for the HTTP Options method by differentiating what's on the
 		// root resource vs the id resource
-		let (root_opts, sub_opts) = endpoint.methods().iter().fold((vec![], vec![]),
-		                                                           |mut acc, m| {
-			if *m == Method::Post {
-				acc.0.push(m.clone());
-			} else {
-				acc.1.push(m.clone());
-			}
-			acc
-		});
+		let (root_opts, sub_opts) =
+			endpoint.operations().iter().fold((vec![], vec![]), |mut acc, op| {
+				let m = op.to_method();
+				if m == Method::Post {
+					acc.0.push(m);
+				} else {
+					acc.1.push(m);
+				}
+				acc
+			});
 		self.router.options(root.clone(),
 		                    move |_: &mut Request| {
 			                    Ok(Response::with((status::Ok,

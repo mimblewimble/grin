@@ -21,11 +21,8 @@
 //   }
 // }
 
-use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::thread;
-
-use iron::method::Method;
 
 use chain::{self, Tip};
 use rest::*;
@@ -42,8 +39,8 @@ impl ApiEndpoint for ChainApi {
 	type ID = String;
 	type T = Tip;
 
-	fn methods(&self) -> Vec<Method> {
-		vec![Method::Get]
+	fn operations(&self) -> Vec<Operation> {
+		vec![Operation::Get]
 	}
 
 	fn get(&self, id: String) -> ApiResult<Tip> {
