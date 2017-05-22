@@ -5,6 +5,8 @@ authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
 workspace = ".."
 
 [dependencies]
+tokio-io = "0.1.1"
+bytes = "0.4.2"
 bitflags = "^0.7.0"
 byteorder = "^0.5"
 futures = "^0.1.9"
@@ -15,6 +17,7 @@ serde = "~0.9.10"
 serde_derive = "~0.9.10"
 tokio-core="^0.1.1"
 tokio-timer="^0.1.0"
+
 time = "^0.1"
 enum_primitive = "^0.1.0"
 num = "^0.1.36"
@@ -22,7 +25,7 @@ num = "^0.1.36"
 grin_core = { path = "../core" }
 grin_store = { path = "../store" }
 grin_util = { path = "../util" }
+secp256k1zkp = { path = "../secp256k1zkp" }
 
 [dev-dependencies]
 env_logger = "^0.3"
-secp256k1zkp = { path = "../secp256k1zkp" }

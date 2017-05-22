@@ -20,7 +20,6 @@ use grin_store::Error;
 use core::core::{Block, BlockHeader, Output};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use core::ser;
 
 /// The tip of a fork. A handle to the fork ancestry from its leaf in the
 /// blockchain tree. References the max height and the latest and previous
@@ -57,31 +56,6 @@ impl Tip {
 			prev_block_h: bh.previous,
 			total_difficulty: bh.total_difficulty.clone(),
 		}
-	}
-}
-
-/// Serialization of a tip, required to save to datastore.
-impl ser::Writeable for Tip {
-	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		try!(writer.write_u64(self.height));
-		try!(writer.write_fixed_bytes(&self.last_block_h));
-		try!(writer.write_fixed_bytes(&self.prev_block_h));
-		self.total_difficulty.write(writer)
-	}
-}
-
-impl ser::Readable for Tip {
-	fn read(reader: &mut ser::Reader) -> Result<Tip, ser::Error> {
-		let height = try!(reader.read_u64());
-		let last = try!(Hash::read(reader));
-		let prev = try!(Hash::read(reader));
-		let diff = try!(Difficulty::read(reader));
-		Ok(Tip {
-			height: height,
-			last_block_h: last,
-			prev_block_h: prev,
-			total_difficulty: diff,
-		})
 	}
 }
 

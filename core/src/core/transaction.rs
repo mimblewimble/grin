@@ -37,7 +37,7 @@ bitflags! {
 /// Pedersen commitment and the signature, that guarantees that the commitments
 /// amount to zero. The signature signs the fee, which is retained for
 /// signature validation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TxKernel {
 	/// Options for a kernel's structure or use
 	pub features: KernelFeatures,
@@ -88,7 +88,7 @@ impl TxKernel {
 }
 
 /// A transaction
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Transaction {
 	/// Set of inputs spent by the transaction.
 	pub inputs: Vec<Input>,
@@ -239,7 +239,7 @@ impl Transaction {
 
 /// A transaction input, mostly a reference to an output being spent by the
 /// transaction.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Input(pub Commitment);
 
 /// Implementation of Writeable for a transaction Input, defines how to write
@@ -282,7 +282,7 @@ bitflags! {
 /// range
 /// proof guarantees the commitment includes a positive value without overflow
 /// and the ownership of the private key.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Output {
 	/// Options for an output's structure or use
 	pub features: OutputFeatures,

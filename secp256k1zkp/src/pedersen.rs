@@ -53,6 +53,12 @@ pub struct RangeProof {
     pub plen: usize,
 }
 
+impl PartialEq for RangeProof {
+    fn eq(&self, other: &Self) -> bool {
+        self.proof.as_ref() == other.proof.as_ref()
+    }
+}
+
 impl Clone for RangeProof {
     #[inline]
     fn clone(&self) -> RangeProof {
