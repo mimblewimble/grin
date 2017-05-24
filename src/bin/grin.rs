@@ -21,8 +21,12 @@ extern crate log;
 extern crate env_logger;
 extern crate serde;
 extern crate serde_json;
+extern crate tiny_keccak;
 
+extern crate grin_api as api;
 extern crate grin_grin as grin;
+extern crate grin_wallet as wallet;
+extern crate secp256k1zkp as secp;
 
 const GRIN_HOME: &'static str = ".grin";
 
@@ -31,9 +35,12 @@ use std::thread;
 use std::io::Read;
 use std::fs::File;
 use std::time::Duration;
+use tiny_keccak::Keccak;
 
 use clap::{Arg, App, SubCommand, ArgMatches};
 use daemonize::Daemonize;
+
+use secp::Secp256k1;
 
 fn main() {
 	env_logger::init().unwrap();
@@ -79,6 +86,17 @@ fn main() {
                 .about("Communicates with the Grin server")
                 .subcommand(SubCommand::with_name("status")
                             .about("current status of the Grin chain")))
+
+    // specification of the wallet commands and options
+    .subcommand(SubCommand::with_name("wallet")
+                .about("Wallet software for Grin")
+                .arg(Arg::with_name("pass")
+                     .short("p")
+                     .long("pass")
+                     .help("Wallet passphrase used to generate the private key seed")
+                     .takes_value(true))
+                .subcommand(SubCommand::with_name("receive")
+                            .about("Run the wallet in receiving mode")))
     .get_matches();
 
   match args.subcommand() {
@@ -97,7 +115,17 @@ fn main() {
       }
     }
 
-    _ => panic!("Unknown command, use 'grin help' for a list of all commands"),
+    // client commands and options
+    ("wallet", Some(wallet_args)) => {
+      match wallet_args.subcommand() {
+        ("receive", _) => {
+          wallet_command(wallet_args);
+        },
+        _ => panic!("Unknown client command, use 'grin help client' for details"),
+      }
+    }
+
+    _ => println!("Unknown command, use 'grin help' for a list of all commands"),
   }
 }
 
@@ -146,6 +174,31 @@ fn server_command(server_args: &ArgMatches) {
       println!("TODO, just 'kill $pid' for now.")
     }
     _ => panic!("Unknown server command, use 'grin help server' for details"),
+  }
+}
+
+fn wallet_command(wallet_args: &ArgMatches) {
+  let hd_seed = wallet_args.value_of("pass").expect("Wallet passphrase required.");
+
+  // TODO do something closer to BIP39, eazy solution right now
+  let mut sha3 = Keccak::new_sha3_256();
+  sha3.update(hd_seed.as_bytes());
+  let mut seed = [0; 32];
+  sha3.finalize(&mut seed);
+
+	let s = Secp256k1::new();
+  let key = wallet::ExtendedKey::from_seed(&s, &seed[..]).expect("Error deriving extended key from seed.");
+
+  match wallet_args.subcommand() {
+    ("receive", _) => {
+      info!("Starting the Grin wallet receiving daemon...");
+      let mut apis = api::ApiServer::new("/v1".to_string());
+      apis.register_endpoint("/receive_coinbase".to_string(), wallet::WalletReceiver { key:  key });
+      apis.start("127.0.0.1:13416").unwrap_or_else(|e| {
+        error!("Failed to start Grin wallet receiver: {}.", e);
+      });
+    }
+    _ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
   }
 }
 

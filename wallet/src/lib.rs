@@ -1,41 +1,38 @@
+// Copyright 2016 The Grin Developers
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-extern crate secp256k1zkp as secp;
-extern crate crypto;
-extern crate rand;
+//! Library module for the main wallet functionalities provided by Grin.
+
 extern crate byteorder;
+extern crate crypto;
+#[macro_use]
+extern crate log;
+extern crate rand;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_json;
 
-use std::{error, fmt};
+extern crate grin_api as api;
+extern crate grin_core as core;
+extern crate grin_util as util;
+extern crate secp256k1zkp as secp;
 
-pub mod extendedkey;
-pub mod constants;
+mod extkey;
+mod receiver;
+mod sender;
+mod types;
 
-/// An ExtKey error
-#[derive(Copy, PartialEq, Eq, Clone, Debug)]
-pub enum Error {
-    /// The size of the seed is invalid
-    InvalidSeedSize,
-    InvalidSliceSize,
-    InvalidExtendedKey,
-}
-
-// Passthrough Debug to Display, since errors should be user-visible
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.write_str(error::Error::description(self))
-    }
-}
-
-impl error::Error for Error {
-    fn cause(&self) -> Option<&error::Error> {
-        None
-    }
-
-    fn description(&self) -> &str {
-        match *self {
-            Error::InvalidSeedSize => "wallet: seed isn't of size 128, 256 or 512",
-            //TODO change when ser. ext. size is fixed
-            Error::InvalidSliceSize => "wallet: serialized extended key must be of size 73",
-            Error::InvalidExtendedKey => "wallet: the given serialized extended key is invalid",
-        }
-    }
-}
+pub use extkey::ExtendedKey;
+pub use receiver::WalletReceiver;

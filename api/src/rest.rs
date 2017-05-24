@@ -110,6 +110,8 @@ pub type ApiResult<T> = ::std::result::Result<T, ApiError>;
 pub trait ApiEndpoint: Clone + Send + Sync + 'static {
 	type ID: ToString + FromStr;
 	type T: Serialize + Deserialize;
+	type OP_IN: Serialize + Deserialize;
+	type OP_OUT: Serialize + Deserialize;
 
 	fn operations(&self) -> Vec<Operation>;
 
@@ -134,10 +136,7 @@ pub trait ApiEndpoint: Clone + Send + Sync + 'static {
 	}
 
 	#[allow(unused_variables)]
-	fn operation<IN, OUT>(&self, op: String, input: IN) -> ApiResult<OUT>
-		where IN: Serialize + Deserialize,
-		      OUT: Serialize + Deserialize
-	{
+	fn operation(&self, op: String, input: Self::OP_IN) -> ApiResult<Self::OP_OUT> {
 		unimplemented!()
 	}
 }
@@ -178,6 +177,24 @@ impl<E> Handler for ApiWrapper<E>
 			}
 			_ => Ok(Response::with(status::MethodNotAllowed)),
 		}
+	}
+}
+
+struct OpWrapper<E> {
+	operation: String,
+	endpoint: E,
+}
+
+impl<E> Handler for OpWrapper<E>
+    where E: ApiEndpoint
+{
+	fn handle(&self, req: &mut Request) -> IronResult<Response> {
+		let t: E::OP_IN = serde_json::from_reader(req.body.by_ref())
+      .map_err(|e| IronError::new(e, status::BadRequest))?;
+		let res = self.endpoint.operation(self.operation.clone(), t)?;
+		let res_json = serde_json::to_string(&res)
+      .map_err(|e| IronError::new(e, status::InternalServerError))?;
+		Ok(Response::with((status::Ok, res_json)))
 	}
 }
 
@@ -224,17 +241,31 @@ impl ApiServer {
 		let route_postfix = &subpath[1..];
 		let root = self.root.clone() + &subpath;
 		for op in endpoint.operations() {
-			let full_path = match op.clone() {
-				Operation::Get => root.clone() + "/:id",
-				Operation::Update => root.clone() + "/:id",
-				Operation::Delete => root.clone() + "/:id",
-				Operation::Create => root.clone(),
-				Operation::Custom(op_s) => format!("{}/:{}", root.clone(), op_s),
-			};
-			self.router.route(op.to_method(),
-			                  full_path,
-			                  ApiWrapper(endpoint.clone()),
-			                  format!("{:?}_{}", op, route_postfix));
+			let route_name = format!("{:?}_{}", op, route_postfix);
+
+			// special case of custom operations
+			if let Operation::Custom(op_s) = op.clone() {
+				let wrapper = OpWrapper {
+					operation: op_s.clone(),
+					endpoint: endpoint.clone(),
+				};
+				let full_path = format!("{}", root.clone());
+				self.router.route(op.to_method(), full_path.clone(), wrapper, route_name);
+        info!("POST {}", full_path);
+			} else {
+
+				// regular REST operations
+				let full_path = match op.clone() {
+					Operation::Get => root.clone() + "/:id",
+					Operation::Update => root.clone() + "/:id",
+					Operation::Delete => root.clone() + "/:id",
+					Operation::Create => root.clone(),
+					_ => panic!("unreachable"),
+				};
+				let wrapper = ApiWrapper(endpoint.clone());
+				self.router.route(op.to_method(), full_path.clone(), wrapper, route_name);
+        info!("{} {}", op.to_method(), full_path);
+			}
 		}
 
 		// support for the HTTP Options method by differentiating what's on the

@@ -25,3 +25,4 @@ mod endpoints;
 mod rest;
 
 pub use endpoints::start_rest_apis;
+pub use rest::*;

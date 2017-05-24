@@ -19,6 +19,9 @@ use std::cell::{RefCell, Ref};
 #[allow(unused_imports)]
 use std::ops::Deref;
 
+mod hex;
+pub use hex::*;
+
 // Encapsulation of a RefCell<Option<T>> for one-time initialization after
 // construction. This implementation will purposefully fail hard if not used
 // properly, for example if it's not initialized before being first used

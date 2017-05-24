@@ -4,10 +4,13 @@ version = "0.1.0"
 authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
 
 [workspace]
-members = ["api", "chain", "core", "grin", "p2p", "store", "util", "pool"]
+members = ["api", "chain", "core", "grin", "p2p", "store", "util", "pool", "wallet"]
 
 [dependencies]
+grin_api = { path = "./api" }
 grin_grin = { path = "./grin" }
+grin_wallet = { path = "./wallet" }
+secp256k1zkp = { path = "./secp256k1zkp" }
 
 clap = "^2.23.3"
 daemonize = "^0.2.3"
@@ -15,3 +18,4 @@ env_logger="^0.3.5"
 log = "^0.3"
 serde = "~0.9.10"
 serde_json = "~0.9.9"
+tiny-keccak = "1.1"

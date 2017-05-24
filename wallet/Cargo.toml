@@ -1,12 +1,19 @@
 [package]
 name = "grin_wallet"
 version = "0.1.0"
-authors = ["Laurent Meunier <laurent.meunier95@gmail.com>"]
+authors = ["Ignotus Peverell <igno_peverell@protonmail.com>", "Laurent Meunier <laurent.meunier95@gmail.com>"]
 
 [dependencies]
 
-secp256k1zkp = { path = "../secp256k1zkp" }
-rust-crypto = "^0.2"
-rand = "^0.3"
 byteorder = "1"
-rustc-serialize = "0.3.23"
+log = "^0.3"
+rand = "^0.3"
+rust-crypto = "^0.2"
+serde = "~0.9.10"
+serde_derive = "~0.9.10"
+serde_json = "~0.9.8"
+
+grin_api = { path = "../api" }
+grin_core = { path = "../core" }
+grin_util = { path = "../util" }
+secp256k1zkp = { path = "../secp256k1zkp" }

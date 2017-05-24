@@ -38,6 +38,8 @@ pub struct ChainApi {
 impl ApiEndpoint for ChainApi {
 	type ID = String;
 	type T = Tip;
+  type OP_IN = ();
+  type OP_OUT = ();
 
 	fn operations(&self) -> Vec<Operation> {
 		vec![Operation::Get]
