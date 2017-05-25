@@ -16,17 +16,17 @@ use std::io;
 
 use tokio_io::*;
 use bytes::{BytesMut, BigEndian, BufMut, Buf, IntoBuf};
-use num_bigint::BigUint;
+use bigint::BigUint;
 use time::Timespec;
 use time;
 use std::marker::PhantomData;
 
-use core::core::{Input, Output, Proof, TxKernel, Block, BlockHeader};
-use core::core::hash::Hash;
-use core::core::target::Difficulty;
-use core::core::transaction::{OutputFeatures, KernelFeatures};
-use core::core::block::BlockFeatures;
-use core::consensus::PROOFSIZE;
+use core::{Input, Output, Proof, TxKernel, Block, BlockHeader};
+use core::hash::Hash;
+use core::target::Difficulty;
+use core::transaction::{OutputFeatures, KernelFeatures};
+use core::block::BlockFeatures;
+use consensus::PROOFSIZE;
 
 use secp::pedersen::{RangeProof, Commitment};
 use secp::constants::PEDERSEN_COMMITMENT_SIZE;

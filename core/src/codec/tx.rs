@@ -17,8 +17,8 @@ use std::io;
 use tokio_io::*;
 use bytes::{BytesMut, BigEndian, BufMut, Buf, IntoBuf};
 
-use core::core::{Input, Output, Transaction};
-use core::core::transaction::OutputFeatures;
+use core::{Input, Output, Transaction};
+use core::transaction::OutputFeatures;
 
 use secp::pedersen::{RangeProof, Commitment};
 use secp::constants::PEDERSEN_COMMITMENT_SIZE;

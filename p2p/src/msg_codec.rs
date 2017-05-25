@@ -26,12 +26,12 @@ use core::core::{Block, BlockHeader, Input, Output, Transaction, TxKernel};
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
 use core::core::transaction::{OutputFeatures, KernelFeatures};
+use core::codec::{BlockCodec, TxCodec};
 use types::*;
 
 use secp::pedersen::{RangeProof, Commitment};
 use secp::constants::PEDERSEN_COMMITMENT_SIZE;
 
-use grin_store::codec::{BlockCodec, TxCodec};
 
 use msg::*;
 use msg::MsgHeader;
