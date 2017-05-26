@@ -55,7 +55,7 @@ use secp::key::SecretKey;
 
 use core::core::{Block, Transaction, TxKernel, Output, build};
 use core::ser;
-use api::*;
+use api::{self, ApiEndpoint, Operation, ApiResult};
 use extkey::{self, ExtendedKey};
 use types::*;
 use util;
@@ -93,22 +93,22 @@ impl ApiEndpoint for WalletReceiver {
 	fn operation(&self, op: String, input: CbAmount) -> ApiResult<CbData> {
     debug!("Operation {} with amount {}", op, input.amount);
     if input.amount == 0 {
-      return Err(ApiError::Argument(format!("Zero amount not allowed.")))
+      return Err(api::Error::Argument(format!("Zero amount not allowed.")))
     }
     match op.as_str() {
       "receive_coinbase" => {
         let (out, kern) = receive_coinbase(&self.key, input.amount).
-          map_err(|e| ApiError::Internal(format!("Error building coinbase: {:?}", e)))?;
+          map_err(|e| api::Error::Internal(format!("Error building coinbase: {:?}", e)))?;
         let out_bin = ser::ser_vec(&out).
-          map_err(|e| ApiError::Internal(format!("Error serializing output: {:?}", e)))?;
+          map_err(|e| api::Error::Internal(format!("Error serializing output: {:?}", e)))?;
         let kern_bin = ser::ser_vec(&kern).
-          map_err(|e| ApiError::Internal(format!("Error serializing kernel: {:?}", e)))?;
+          map_err(|e| api::Error::Internal(format!("Error serializing kernel: {:?}", e)))?;
         Ok(CbData {
           output: util::to_hex(out_bin),
           kernel: util::to_hex(kern_bin),
         })
       },
-      _ => Err(ApiError::Argument(format!("Unknown operation: {}", op))),
+      _ => Err(api::Error::Argument(format!("Unknown operation: {}", op))),
     }
   }
 }
@@ -130,6 +130,8 @@ fn receive_coinbase(ext_key: &ExtendedKey, amount: u64) -> Result<(Output, TxKer
 		status: OutputStatus::Unconfirmed,
 	});
 	wallet_data.write()?;
+
+  info!("Using child {} for a new coinbase output.", coinbase_key.n_child);
 
 	Block::reward_output(ext_key.key, &secp).map_err(&From::from)
 }

@@ -141,7 +141,7 @@ fn server_command(server_args: &ArgMatches) {
     server_config.p2p_config.port = port.parse().unwrap();
   }
   if server_args.is_present("mine") {
-    server_config.enable_mining = true;
+    server_config.mining_config.enable_mining = true;
   }
   if let Some(seeds) = server_args.values_of("seed") {
     server_config.seeding_type = grin::Seeding::List(seeds.map(|s| s.to_string()).collect());
@@ -218,7 +218,6 @@ fn default_config() -> grin::ServerConfig {
 	grin::ServerConfig {
 		cuckoo_size: 12,
 		seeding_type: grin::Seeding::WebStatic,
-		enable_mining: false,
 		..Default::default()
 	}
 }

@@ -20,14 +20,19 @@ use std::sync::{Arc, Mutex};
 use time;
 
 use adapters::ChainToNetAdapter;
+use api;
 use core::consensus;
 use core::core;
 use core::core::hash::{Hash, Hashed};
 use core::pow::cuckoo;
+use core::ser;
 use chain;
 use secp;
+use types::{MinerConfig, Error};
+use util;
 
 pub struct Miner {
+	config: MinerConfig,
 	chain_head: Arc<Mutex<chain::Tip>>,
 	chain_store: Arc<chain::ChainStore>,
 	/// chain adapter to net
@@ -37,11 +42,13 @@ pub struct Miner {
 impl Miner {
 	/// Creates a new Miner. Needs references to the chain state and its
 	/// storage.
-	pub fn new(chain_head: Arc<Mutex<chain::Tip>>,
+	pub fn new(config: MinerConfig,
+	           chain_head: Arc<Mutex<chain::Tip>>,
 	           chain_store: Arc<chain::ChainStore>,
 	           chain_adapter: Arc<ChainToNetAdapter>)
 	           -> Miner {
 		Miner {
+			config: config,
 			chain_head: chain_head,
 			chain_store: chain_store,
 			chain_adapter: chain_adapter,
@@ -52,6 +59,7 @@ impl Miner {
 	/// chain anytime required and looking for PoW solution.
 	pub fn run_loop(&self) {
 		info!("Starting miner loop.");
+    let mut coinbase = self.get_coinbase();
 		loop {
 			// get the latest chain state and build a block on top of it
 			let head: core::BlockHeader;
@@ -60,7 +68,7 @@ impl Miner {
 				head = self.chain_store.head_header().unwrap();
 				latest_hash = self.chain_head.lock().unwrap().last_block_h;
 			}
-			let mut b = self.build_block(&head);
+			let mut b = self.build_block(&head, coinbase.clone());
 
 			// look for a pow for at most 2 sec on the same block (to give a chance to new
 			// transactions) and as long as the head hasn't changed
@@ -101,6 +109,7 @@ impl Miner {
 				} else if let Ok(Some(tip)) = res {
 					let chain_head = self.chain_head.clone();
 					let mut head = chain_head.lock().unwrap();
+          coinbase = self.get_coinbase();
 					*head = tip;
 				}
 			} else {
@@ -112,7 +121,7 @@ impl Miner {
 
 	/// Builds a new block with the chain head as previous and eligible
 	/// transactions from the pool.
-	fn build_block(&self, head: &core::BlockHeader) -> core::Block {
+	fn build_block(&self, head: &core::BlockHeader, coinbase: (core::Output, core::TxKernel)) -> core::Block {
 		let mut now_sec = time::get_time().sec;
 		let head_sec = head.timestamp.to_timespec().sec;
 		if now_sec == head_sec {
@@ -121,17 +130,45 @@ impl Miner {
 		let (difficulty, cuckoo_len) =
 			consensus::next_target(now_sec, head_sec, head.difficulty.clone(), head.cuckoo_len);
 
-		let mut rng = rand::OsRng::new().unwrap();
-		let secp_inst = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-		// TODO get a new key from the user's wallet or something
-		let skey = secp::key::SecretKey::new(&secp_inst, &mut rng);
-
 		// TODO populate inputs and outputs from pool transactions
-		let mut b = core::Block::new(head, vec![], skey).unwrap();
+    let (output, kernel) = coinbase;
+		let mut b = core::Block::with_reward(head, vec![], output, kernel).unwrap();
+
+		let mut rng = rand::OsRng::new().unwrap();
 		b.header.nonce = rng.gen();
 		b.header.cuckoo_len = cuckoo_len;
 		b.header.difficulty = difficulty;
 		b.header.timestamp = time::at(time::Timespec::new(now_sec, 0));
 		b
 	}
+
+	fn get_coinbase(&self) -> (core::Output, core::TxKernel) {
+		if self.config.burn_reward {
+		  let mut rng = rand::OsRng::new().unwrap();
+			let secp_inst = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
+			let skey = secp::key::SecretKey::new(&secp_inst, &mut rng);
+      core::Block::reward_output(skey, &secp_inst).unwrap()
+    } else {
+      let url = format!("{}/v1/receive_coinbase", self.config.wallet_receiver_url.as_str());
+      let res: CbData = api::client::post(url.as_str(), &CbAmount { amount: consensus::REWARD })
+				.expect("Wallet receiver unreachable, could not claim reward. Is it running?");
+      let out_bin = util::from_hex(res.output).unwrap();
+      let kern_bin = util::from_hex(res.kernel).unwrap();
+      let output = ser::deserialize(&mut &out_bin[..]).unwrap();
+      let kernel = ser::deserialize(&mut &kern_bin[..]).unwrap();
+
+      (output, kernel)
+    }
+	}
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct CbAmount {
+	amount: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct CbData {
+	output: String,
+	kernel: String,
 }

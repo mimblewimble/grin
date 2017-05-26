@@ -228,6 +228,7 @@ impl Default for Block {
 }
 
 impl Block {
+
 	/// Builds a new block from the header of the previous block, a vector of
 	/// transactions and the private key that will receive the reward. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
@@ -239,12 +240,24 @@ impl Block {
 		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let (reward_out, reward_proof) = try!(Block::reward_output(reward_key, &secp));
 
+    Block::with_reward(prev, txs, reward_out, reward_proof)
+	}
+
+	/// Builds a new block ready to mine from the header of the previous block,
+  /// a vector of transactions and the reward information. Checks
+	/// that all transactions are valid and calculates the Merkle tree.
+	pub fn with_reward(prev: &BlockHeader,
+	           txs: Vec<&mut Transaction>,
+	           reward_out: Output,
+             reward_kern: TxKernel)
+	           -> Result<Block, secp::Error> {
 		// note: the following reads easily but may not be the most efficient due to
 		// repeated iterations, revisit if a problem
+		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
 
 		// validate each transaction and gather their kernels
 		let mut kernels = try_map_vec!(txs, |tx| tx.verify_sig(&secp));
-		kernels.push(reward_proof);
+		kernels.push(reward_kern);
 
 		// build vectors with all inputs and all outputs, ordering them by hash
 		// needs to be a fold so we don't end up with a vector of vectors and we
@@ -282,7 +295,8 @@ impl Block {
 				kernels: kernels,
 			}
 			.compact())
-	}
+  }
+
 
     /// Blockhash, computed using only the header
 	pub fn hash(&self) -> Hash {

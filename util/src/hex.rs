@@ -24,7 +24,7 @@ use std::num;
 pub fn to_hex(bytes: Vec<u8>) -> String {
   let mut s = String::new();
   for byte in bytes {
-    write!(&mut s, "{:X}", byte).expect("Unable to write");
+    write!(&mut s, "{:02X}", byte).expect("Unable to write");
   }
   s
 }
@@ -36,7 +36,7 @@ pub fn from_hex(hex_str: String) -> Result<Vec<u8>, num::ParseIntError> {
   } else {
     hex_str.clone()
   };
-  split_n(&hex_str.trim()[..], 2).iter()
+  split_n(&hex_trim.trim()[..], 2).iter()
     .map(|b| u8::from_str_radix(b, 16))
     .collect::<Result<Vec<u8>, _>>()
 }

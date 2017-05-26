@@ -14,6 +14,7 @@
 
 use std::convert::From;
 
+use api;
 use chain;
 use p2p;
 use store;
@@ -27,6 +28,8 @@ pub enum Error {
 	Chain(chain::Error),
 	/// Error originating from the peer-to-peer network.
 	P2P(p2p::Error),
+	/// Error originating from HTTP API calls
+	API(api::Error),
 }
 
 impl From<chain::Error> for Error {
@@ -44,6 +47,12 @@ impl From<p2p::Error> for Error {
 impl From<store::Error> for Error {
 	fn from(e: store::Error) -> Error {
 		Error::Store(e)
+	}
+}
+
+impl From<api::Error> for Error {
+	fn from(e: api::Error) -> Error {
+		Error::API(e)
 	}
 }
 
@@ -81,8 +90,22 @@ pub struct ServerConfig {
 	/// Configuration for the peer-to-peer server
 	pub p2p_config: p2p::P2PConfig,
 
-	/// Whethere to start the miner with the server
+	/// Configuration for the mining daemon
+	pub mining_config: MinerConfig,
+}
+
+/// Mining configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MinerConfig {
+	/// Whether to start the miner with the server
 	pub enable_mining: bool,
+
+	/// Base address to the HTTP wallet receiver
+	pub wallet_receiver_url: String,
+
+	/// Attributes the reward to a random private key instead of contacting the
+	/// wallet receiver. Mostly used for tests.
+	pub burn_reward: bool,
 }
 
 impl Default for ServerConfig {
@@ -94,7 +117,17 @@ impl Default for ServerConfig {
 			capabilities: p2p::FULL_NODE,
 			seeding_type: Seeding::None,
 			p2p_config: p2p::P2PConfig::default(),
+			mining_config: MinerConfig::default(),
+		}
+	}
+}
+
+impl Default for MinerConfig {
+	fn default() -> MinerConfig {
+		MinerConfig {
 			enable_mining: false,
+			wallet_receiver_url: "http://localhost:13416".to_string(),
+			burn_reward: false,
 		}
 	}
 }

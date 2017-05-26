@@ -152,7 +152,6 @@ impl WalletData {
 	pub fn next_child(&self, fingerprint: [u8; 4]) -> u32 {
 		let mut max_n = 0;
 		for out in &self.outputs {
-      println!("{:?} {:?}", out.fingerprint, fingerprint);
 			if max_n < out.n_child && out.fingerprint == fingerprint {
 				max_n = out.n_child;
 			}

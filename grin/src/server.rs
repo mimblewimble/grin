@@ -57,10 +57,10 @@ impl Server {
 	/// Instantiates and starts a new server.
 	pub fn start(config: ServerConfig) -> Result<Server, Error> {
 		let mut evtlp = reactor::Core::new().unwrap();
-		let enable_mining = config.enable_mining;
+		let mining_config = config.mining_config.clone();
 		let serv = Server::future(config, &evtlp.handle())?;
-		if enable_mining {
-			serv.start_miner();
+		if mining_config.enable_mining {
+			serv.start_miner(mining_config);
 		}
 
 		let forever = Timer::default()
@@ -133,8 +133,9 @@ impl Server {
 
 	/// Start mining for blocks on a separate thread. Relies on a toy miner,
 	/// mostly for testing.
-	pub fn start_miner(&self) {
-		let miner = miner::Miner::new(self.chain_head.clone(),
+	pub fn start_miner(&self, config: MinerConfig) {
+		let miner = miner::Miner::new(config,
+		                              self.chain_head.clone(),
 		                              self.chain_store.clone(),
 		                              self.chain_adapter.clone());
 		thread::spawn(move || {
