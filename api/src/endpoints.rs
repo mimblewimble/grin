@@ -38,15 +38,15 @@ pub struct ChainApi {
 impl ApiEndpoint for ChainApi {
 	type ID = String;
 	type T = Tip;
-  type OP_IN = ();
-  type OP_OUT = ();
+	type OP_IN = ();
+	type OP_OUT = ();
 
 	fn operations(&self) -> Vec<Operation> {
 		vec![Operation::Get]
 	}
 
 	fn get(&self, id: String) -> ApiResult<Tip> {
-		self.chain_store.head().map_err(|e| ApiError::Internal(e.to_string()))
+		self.chain_store.head().map_err(|e| Error::Internal(e.to_string()))
 	}
 }
 

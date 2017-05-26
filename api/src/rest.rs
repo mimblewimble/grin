@@ -18,7 +18,7 @@
 //! To use it, just have your service(s) implement the ApiEndpoint trait and
 //! register them on a ApiServer.
 
-use std::error::Error;
+use std::error;
 use std::fmt::{self, Display, Debug, Formatter};
 use std::io::Read;
 use std::net::ToSocketAddrs;
@@ -35,34 +35,34 @@ use serde_json;
 
 /// Errors that can be returned by an ApiEndpoint implementation.
 #[derive(Debug)]
-pub enum ApiError {
+pub enum Error {
 	Internal(String),
 	Argument(String),
 }
 
-impl Display for ApiError {
+impl Display for Error {
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result {
 		match *self {
-			ApiError::Argument(ref s) => write!(f, "Bad arguments: {}", s),
-			ApiError::Internal(ref s) => write!(f, "Internal error: {}", s),
+			Error::Argument(ref s) => write!(f, "Bad arguments: {}", s),
+			Error::Internal(ref s) => write!(f, "Internal error: {}", s),
 		}
 	}
 }
 
-impl Error for ApiError {
+impl error::Error for Error {
 	fn description(&self) -> &str {
 		match *self {
-			ApiError::Argument(_) => "Bad arguments.",
-			ApiError::Internal(_) => "Internal error.",
+			Error::Argument(_) => "Bad arguments.",
+			Error::Internal(_) => "Internal error.",
 		}
 	}
 }
 
-impl From<ApiError> for IronError {
-	fn from(e: ApiError) -> IronError {
+impl From<Error> for IronError {
+	fn from(e: Error) -> IronError {
 		match e {
-			ApiError::Argument(_) => IronError::new(e, status::Status::BadRequest),
-			ApiError::Internal(_) => IronError::new(e, status::Status::InternalServerError),
+			Error::Argument(_) => IronError::new(e, status::Status::BadRequest),
+			Error::Internal(_) => IronError::new(e, status::Status::InternalServerError),
 		}
 	}
 }
@@ -89,7 +89,7 @@ impl Operation {
 	}
 }
 
-pub type ApiResult<T> = ::std::result::Result<T, ApiError>;
+pub type ApiResult<T> = ::std::result::Result<T, Error>;
 
 /// Trait to implement to expose a service as a RESTful HTTP endpoint. Each
 /// method corresponds to a specific relative URL and HTTP method following
@@ -147,7 +147,7 @@ struct ApiWrapper<E>(E);
 
 impl<E> Handler for ApiWrapper<E>
 	where E: ApiEndpoint,
-	      <<E as ApiEndpoint>::ID as FromStr>::Err: Debug + Send + Error
+	      <<E as ApiEndpoint>::ID as FromStr>::Err: Debug + Send + error::Error
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		match req.method {
@@ -200,7 +200,7 @@ impl<E> Handler for OpWrapper<E>
 
 fn extract_param<ID>(req: &mut Request, param: &'static str) -> IronResult<ID>
 	where ID: ToString + FromStr,
-	      <ID as FromStr>::Err: Debug + Send + Error + 'static
+	      <ID as FromStr>::Err: Debug + Send + error::Error + 'static
 {
 
 	let id = req.extensions.get::<Router>().unwrap().find(param).unwrap_or("");
@@ -232,7 +232,7 @@ impl ApiServer {
 	/// endpoint.
 	pub fn register_endpoint<E>(&mut self, subpath: String, endpoint: E)
 		where E: ApiEndpoint,
-		      <<E as ApiEndpoint>::ID as FromStr>::Err: Debug + Send + Error
+		      <<E as ApiEndpoint>::ID as FromStr>::Err: Debug + Send + error::Error
 	{
 
 		assert_eq!(subpath.chars().nth(0).unwrap(), '/');
@@ -251,7 +251,7 @@ impl ApiServer {
 				};
 				let full_path = format!("{}", root.clone());
 				self.router.route(op.to_method(), full_path.clone(), wrapper, route_name);
-        info!("POST {}", full_path);
+				info!("POST {}", full_path);
 			} else {
 
 				// regular REST operations
@@ -264,7 +264,7 @@ impl ApiServer {
 				};
 				let wrapper = ApiWrapper(endpoint.clone());
 				self.router.route(op.to_method(), full_path.clone(), wrapper, route_name);
-        info!("{} {}", op.to_method(), full_path);
+				info!("{} {}", op.to_method(), full_path);
 			}
 		}
 
