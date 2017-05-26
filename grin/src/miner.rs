@@ -74,9 +74,10 @@ impl Miner {
 			// transactions) and as long as the head hasn't changed
 			let deadline = time::get_time().sec + 2;
 			let mut sol = None;
-			debug!("Mining at Cuckoo{} for at most 2 secs on block {}.",
+			debug!("Mining at Cuckoo{} for at most 2 secs on block {} at difficulty {}.",
 			       b.header.cuckoo_len,
-			       latest_hash);
+			       latest_hash,
+             b.header.difficulty);
 			let mut iter_count = 0;
 			while head.hash() == latest_hash && time::get_time().sec < deadline {
 				let pow_hash = b.hash();

@@ -68,6 +68,12 @@ impl Difficulty {
     }
 }
 
+impl fmt::Display for Difficulty {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "{}", self.num)
+  }
+}
+
 impl Add<Difficulty> for Difficulty {
 	type Output = Difficulty;
 	fn add(self, other: Difficulty) -> Difficulty {
