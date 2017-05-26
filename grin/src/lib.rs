@@ -52,4 +52,4 @@ mod sync;
 mod types;
 
 pub use server::Server;
-pub use types::{ServerConfig, Seeding};
+pub use types::{ServerConfig, MinerConfig, Seeding};

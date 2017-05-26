@@ -41,6 +41,12 @@ fn simulate_block_propagation() {
   let mut evtlp = reactor::Core::new().unwrap();
   let handle = evtlp.handle();
 
+  let miner_config = grin::MinerConfig{
+    enable_mining: true,
+    burn_reward: true,
+    ..Default::default()
+  };
+
   // instantiates 5 servers on different ports
   let mut servers = vec![];
   for n in 0..5 {
@@ -64,7 +70,7 @@ fn simulate_block_propagation() {
   }
 
   // start mining
-  servers[0].start_miner();
+  servers[0].start_miner(miner_config);
   let original_height = servers[0].head().height;
 
   // monitor for a change of head on a different server and check whether
@@ -84,6 +90,12 @@ fn simulate_full_sync() {
   let mut evtlp = reactor::Core::new().unwrap();
   let handle = evtlp.handle();
 
+  let miner_config = grin::MinerConfig{
+    enable_mining: true,
+    burn_reward: true,
+    ..Default::default()
+  };
+
   // instantiates 2 servers on different ports
   let mut servers = vec![];
   for n in 0..2 {
@@ -98,7 +110,7 @@ fn simulate_full_sync() {
   }
 
   // mine a few blocks on server 1
-  servers[0].start_miner();
+  servers[0].start_miner(miner_config);
   thread::sleep(time::Duration::from_secs(15));
 
   // connect 1 and 2
