@@ -201,6 +201,34 @@ impl <A: HashEncode, B: HashEncode> Hashed for (A, B) {
 	}
 }
 
+impl <A: HashEncode, B: HashEncode, C: HashEncode> Hashed for (A, B, C) {
+	fn hash(&self) -> Hash {
+		let mut codec_a = A::HashEncoder::default();
+		let mut codec_b = B::HashEncoder::default();
+		let mut codec_c = C::HashEncoder::default();
+		
+		let mut hasher = HashWriter::default();
+
+		let mut bytes_a = BytesMut::with_capacity(0);
+		let mut bytes_b = BytesMut::with_capacity(0);
+		let mut bytes_c = BytesMut::with_capacity(0);
+
+		let mut ret = [0; 32];
+
+		codec_a.encode(self.0.clone(), &mut bytes_a);
+		codec_b.encode(self.1.clone(), &mut bytes_b);
+		codec_c.encode(self.2.clone(), &mut bytes_c);
+		
+		hasher.state.update(bytes_a.as_ref());
+		hasher.state.update(bytes_b.as_ref());
+		hasher.state.update(bytes_c.as_ref());		
+
+		hasher.finalize(&mut ret);
+
+		Hash(ret)
+	}
+}
+
 // impl Hashed for u8 {}
 // impl Hashed for u16 {}
 // impl Hashed for u32 {}
