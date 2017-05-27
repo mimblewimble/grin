@@ -20,7 +20,10 @@
 use std::{fmt, ops};
 use tiny_keccak::Keccak;
 use std::convert::AsRef;
+use tokio_io::codec::Encoder;
 
+use codec::{HashEncode, block, tx};
+use bytes::{BytesMut};
 use ser::{self, Reader, Readable, Writer, Writeable, Error, AsFixedBytes};
 
 /// A hash consisting of all zeroes, used as a sentinel. No known preimage.
@@ -158,15 +161,51 @@ pub trait Hashed {
 	fn hash(&self) -> Hash;
 }
 
-impl<W: ser::Writeable> Hashed for W {
+impl <T: HashEncode + Clone> Hashed for T {
 	fn hash(&self) -> Hash {
+		let mut codec = T::HashEncoder::default();
 		let mut hasher = HashWriter::default();
-		ser::Writeable::write(self, &mut hasher).unwrap();
+
+		let mut bytes = BytesMut::with_capacity(0);
 		let mut ret = [0; 32];
+
+		codec.encode(self.clone(), &mut bytes);
+		hasher.state.update(bytes.as_ref());
 		hasher.finalize(&mut ret);
+
 		Hash(ret)
 	}
 }
+
+impl <A: HashEncode, B: HashEncode> Hashed for (A, B) {
+	fn hash(&self) -> Hash {
+		let mut codec_a = A::HashEncoder::default();
+		let mut codec_b = B::HashEncoder::default();
+		
+		let mut hasher = HashWriter::default();
+
+		let mut bytes_a = BytesMut::with_capacity(0);
+		let mut bytes_b = BytesMut::with_capacity(0);
+		
+		let mut ret = [0; 32];
+
+		codec_a.encode(self.0.clone(), &mut bytes_a);
+		codec_b.encode(self.1.clone(), &mut bytes_b);
+		
+		hasher.state.update(bytes_a.as_ref());
+		hasher.state.update(bytes_b.as_ref());
+
+		hasher.finalize(&mut ret);
+
+		Hash(ret)
+	}
+}
+
+// impl Hashed for u8 {}
+// impl Hashed for u16 {}
+// impl Hashed for u32 {}
+// impl Hashed for u64 {}
+// impl Hashed for i64 {}
 
 // Convenience for when we need to hash of an empty array.
 impl Hashed for [u8; 0] {

@@ -31,6 +31,8 @@ use consensus::PROOFSIZE;
 use secp::pedersen::{RangeProof, Commitment};
 use secp::constants::PEDERSEN_COMMITMENT_SIZE;
 
+use super::HashEncode;
+
 // Convenience Macro for Option Handling in Decoding
 macro_rules! try_opt_dec {
 	($e: expr) => (match $e {
@@ -92,6 +94,9 @@ impl<T> codec::Decoder for BlockCodec<T>
 	}
 }
 
+impl HashEncode for Block {
+	type HashEncoder = BlockHasher;	
+}
 
 impl BlockEncode for Block {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
@@ -166,7 +171,7 @@ impl BlockDecode for Block {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BlockHasher;
 
 impl codec::Encoder for BlockHasher {
@@ -225,6 +230,10 @@ fn partial_block_encode(header: &BlockHeader, dst: &mut BytesMut) -> Result<(), 
 	header.total_difficulty.block_encode(dst)?;
 
 	Ok(())
+}
+
+impl HashEncode for BlockHeader {
+	type HashEncoder = BlockCodec<Self>;	
 }
 
 impl BlockDecode for BlockHeader {
@@ -302,6 +311,10 @@ impl BlockDecode for BlockHeader {
 	}
 }
 
+impl HashEncode for Input {
+	type HashEncoder = BlockCodec<Self>;	
+}
+
 impl BlockEncode for Input {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
 		dst.reserve(PEDERSEN_COMMITMENT_SIZE);
@@ -322,6 +335,10 @@ impl BlockDecode for Input {
 
 		Ok(Some(Input(Commitment(c))))
 	}
+}
+
+impl HashEncode for Output {
+	type HashEncoder = BlockCodec<Self>;	
 }
 
 impl BlockEncode for Output {
@@ -360,6 +377,10 @@ impl BlockDecode for Output {
 			},
 		}))
 	}
+}
+
+impl HashEncode for TxKernel {
+	type HashEncoder = BlockCodec<Self>;	
 }
 
 impl BlockEncode for TxKernel {
@@ -427,6 +448,10 @@ impl BlockDecode for TxKernel {
 	}
 }
 
+impl HashEncode for Difficulty {
+	type HashEncoder = BlockCodec<Self>;	
+}
+
 impl BlockEncode for Difficulty {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
 		let data = self.clone().into_biguint().to_bytes_be();
@@ -456,6 +481,10 @@ impl BlockDecode for Difficulty {
 	}
 }
 
+impl HashEncode for Hash {
+	type HashEncoder = BlockCodec<Self>;	
+}
+
 impl BlockEncode for Hash {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
 		dst.reserve(32);
@@ -476,6 +505,10 @@ impl BlockDecode for Hash {
 
 		Ok(Some(Hash(hash_data)))
 	}
+}
+
+impl HashEncode for Proof {
+	type HashEncoder = BlockCodec<Self>;	
 }
 
 impl BlockEncode for Proof {

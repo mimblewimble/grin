@@ -17,6 +17,8 @@ use std::io;
 use tokio_io::*;
 use bytes::{BytesMut, BigEndian, BufMut, Buf, IntoBuf};
 
+use super::HashEncode;
+
 use core::{Input, Output, Transaction};
 use codec::block::{BlockEncode, BlockDecode};
 
@@ -31,6 +33,10 @@ macro_rules! try_opt_dec {
 /// Decodes and encodes `Transaction`s
 #[derive(Debug, Clone, Default)]
 pub struct TxCodec;
+
+impl HashEncode for Transaction {
+	type HashEncoder = TxCodec;
+}
 
 impl codec::Encoder for TxCodec {
 	type Item = Transaction;
