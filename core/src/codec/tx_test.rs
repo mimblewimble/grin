@@ -60,34 +60,3 @@ fn should_have_tx_codec_roundtrip() {
 
     assert_eq!(tx, d_tx);
 }
-
-#[test]
-fn should_encode_and_decode_output() {
-	let output = Output {
-		features: OutputFeatures::empty(),
-		commit: Commitment([1; PEDERSEN_COMMITMENT_SIZE]),
-		proof: RangeProof {
-			proof: [1; 5134],
-			plen: 5134,
-		},
-	};
-
-	let mut buf = BytesMut::with_capacity(0);
-	output.tx_encode(&mut buf);
-
-	let d_output = Output::tx_decode(&mut buf).unwrap().unwrap();
-
-    assert_eq!(output, d_output);
-}
-
-#[test]
-fn should_encode_and_decode_input() {
-	let input = Input(Commitment([1; PEDERSEN_COMMITMENT_SIZE]));
-
-	let mut buf = BytesMut::with_capacity(0);
-	input.tx_encode(&mut buf);
-
-    let d_input = Input::tx_decode(&mut buf).unwrap().unwrap();
-
-    assert_eq!(input, d_input);
-}

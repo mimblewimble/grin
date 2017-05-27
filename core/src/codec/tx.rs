@@ -18,10 +18,7 @@ use tokio_io::*;
 use bytes::{BytesMut, BigEndian, BufMut, Buf, IntoBuf};
 
 use core::{Input, Output, Transaction};
-use core::transaction::OutputFeatures;
-
-use secp::pedersen::{RangeProof, Commitment};
-use secp::constants::PEDERSEN_COMMITMENT_SIZE;
+use codec::block::{BlockEncode, BlockDecode};
 
 // Convenience Macro for Option Handling in Decoding
 macro_rules! try_opt_dec {
@@ -55,12 +52,12 @@ impl codec::Encoder for TxCodec {
 
 		// Put Inputs
 		for inp in &item.inputs {
-			inp.tx_encode(dst)?;
+			inp.block_encode(dst)?;
 		}
 
 		// Put Outputs
 		for out in &item.outputs {
-			out.tx_encode(dst)?;
+			out.block_encode(dst)?;
 		}
 
 		Ok(())
@@ -71,46 +68,53 @@ impl codec::Decoder for TxCodec {
 	type Item = Transaction;
 	type Error = io::Error;
 	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+		// Create Temporary Buffer
+		let ref mut temp = src.clone();
+
 		// Get Fee
-		if src.len() < 8 {
+		if temp.len() < 8 {
 			return Ok(None);
 		}
-		let mut buf = src.split_to(8).into_buf();
+		let mut buf = temp.split_to(8).into_buf();
 		let fee = buf.get_u64::<BigEndian>();
 
 		// Get Excess Sig Length
-		if src.len() < 8 {
+		if temp.len() < 8 {
 			return Ok(None);
 		}
-		let mut buf = src.split_to(8).into_buf();
+		let mut buf = temp.split_to(8).into_buf();
 		let excess_sig_len = buf.get_u64::<BigEndian>() as usize;
 
 		// Get Excess Sig
-		if src.len() < excess_sig_len {
+		if temp.len() < excess_sig_len {
 			return Ok(None);
 		}
-		let buf = src.split_to(excess_sig_len).into_buf();
+		let buf = temp.split_to(excess_sig_len).into_buf();
 		let excess_sig = buf.collect();
 
 		// Get Inputs and Outputs Lengths from 2 u64's
-		if src.len() < 16 {
+		if temp.len() < 16 {
 			return Ok(None);
 		}
-		let mut buf = src.split_to(16).into_buf();
+		let mut buf = temp.split_to(16).into_buf();
 		let inputs_len = buf.get_u64::<BigEndian>() as usize;
 		let outputs_len = buf.get_u64::<BigEndian>() as usize;
 
 		// Get Inputs
 		let mut inputs = Vec::with_capacity(inputs_len);
 		for _ in 0..inputs_len {
-			inputs.push(try_opt_dec!(Input::tx_decode(src)?));
+			inputs.push(try_opt_dec!(Input::block_decode(temp)?));
 		}
 
 		// Get Outputs
 		let mut outputs = Vec::with_capacity(outputs_len);
 		for _ in 0..outputs_len {
-			outputs.push(try_opt_dec!(Output::tx_decode(src)?));
+			outputs.push(try_opt_dec!(Output::block_decode(temp)?));
 		}
+
+		// If succesfull truncate src by bytes read from src;
+		let diff = src.len() - temp.len();
+		src.split_to(diff);
 
 		Ok(Some(Transaction {
 			fee: fee,
@@ -118,74 +122,5 @@ impl codec::Decoder for TxCodec {
 			inputs: inputs,
 			outputs: outputs,
 		}))
-	}
-}
-
-/// Internal Convenience Trait
-pub trait TxEncode: Sized {
-	fn tx_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error>;
-}
-
-/// Internal Convenience Trait
-pub trait TxDecode: Sized {
-	fn tx_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error>;
-}
-
-impl TxEncode for Output {
-	fn tx_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
-		dst.reserve(PEDERSEN_COMMITMENT_SIZE + 5134 + 1);
-		dst.put_u8(self.features.bits());
-		dst.put_slice(self.commit.as_ref());
-		dst.put_slice(self.proof.as_ref());
-		Ok(())
-	}
-}
-
-impl TxDecode for Output {
-	fn tx_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
-		let output_size = PEDERSEN_COMMITMENT_SIZE + 5134 + 1;
-		if src.len() < output_size {
-			return Ok(None);
-		}
-
-		let mut buf = src.split_to(output_size).into_buf();
-		let feature_data = buf.get_u8();
-
-		let mut commit_data = [0; PEDERSEN_COMMITMENT_SIZE];
-		buf.copy_to_slice(&mut commit_data);
-
-		let mut proof_data = [0; 5134];
-		buf.copy_to_slice(&mut proof_data);
-
-		Ok(Some(Output {
-			features: OutputFeatures::from_bits(feature_data).unwrap(),
-			commit: Commitment(commit_data),
-			proof: RangeProof {
-				proof: proof_data,
-				plen: proof_data.len(),
-			},
-		}))
-	}
-}
-
-impl TxEncode for Input {
-	fn tx_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
-		dst.reserve(PEDERSEN_COMMITMENT_SIZE);
-		dst.put_slice((self.0).0.as_ref());
-		Ok(())
-	}
-}
-
-impl TxDecode for Input {
-	fn tx_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
-		if src.len() < PEDERSEN_COMMITMENT_SIZE {
-			return Ok(None);
-		}
-
-		let mut buf = src.split_to(PEDERSEN_COMMITMENT_SIZE).into_buf();
-		let mut c = [0; PEDERSEN_COMMITMENT_SIZE];
-		buf.copy_to_slice(&mut c);
-
-		Ok(Some(Input(Commitment(c))))
 	}
 }
