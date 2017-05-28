@@ -94,10 +94,6 @@ impl<T> codec::Decoder for BlockCodec<T>
 	}
 }
 
-impl HashEncode for Block {
-	type HashEncoder = BlockHasher;	
-}
-
 impl BlockEncode for Block {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
 		// Put Header
@@ -174,12 +170,32 @@ impl BlockDecode for Block {
 #[derive(Debug, Clone, Default)]
 pub struct BlockHasher;
 
+impl HashEncode for Block {
+	type HashEncoder = BlockHasher;	
+}
+
 impl codec::Encoder for BlockHasher {
 	type Item = Block;
 	type Error = io::Error;
 	fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
 		// Only encode header
 		partial_block_encode(&item.header, dst)
+	}
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct BlockHeaderHasher;
+
+impl HashEncode for BlockHeader {
+	type HashEncoder = BlockHeaderHasher;
+}
+
+impl codec::Encoder for BlockHeaderHasher {
+	type Item = BlockHeader;
+	type Error = io::Error;
+	fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+		// Only encode header without pow
+		partial_block_encode(&item, dst)
 	}
 }
 
@@ -230,10 +246,6 @@ fn partial_block_encode(header: &BlockHeader, dst: &mut BytesMut) -> Result<(), 
 	header.total_difficulty.block_encode(dst)?;
 
 	Ok(())
-}
-
-impl HashEncode for BlockHeader {
-	type HashEncoder = BlockCodec<Self>;	
 }
 
 impl BlockDecode for BlockHeader {

@@ -23,7 +23,7 @@ use std::convert::AsRef;
 use tokio_io::codec::Encoder;
 
 use codec::{HashEncode, block, tx};
-use bytes::{BytesMut};
+use bytes::BytesMut;
 use ser::{self, Reader, Readable, Writer, Writeable, Error, AsFixedBytes};
 
 /// A hash consisting of all zeroes, used as a sentinel. No known preimage.
@@ -57,49 +57,49 @@ impl Hash {
 }
 
 impl ops::Index<usize> for Hash {
-    type Output = u8;
+	type Output = u8;
 
-    fn index(&self, idx: usize) -> &u8 {
-        &self.0[idx]
-    }
+	fn index(&self, idx: usize) -> &u8 {
+		&self.0[idx]
+	}
 }
 
 impl ops::Index<ops::Range<usize>> for Hash {
-    type Output = [u8];
+	type Output = [u8];
 
-    fn index(&self, idx: ops::Range<usize>) -> &[u8] {
-        &self.0[idx]
-    }
+	fn index(&self, idx: ops::Range<usize>) -> &[u8] {
+		&self.0[idx]
+	}
 }
 
 impl ops::Index<ops::RangeTo<usize>> for Hash {
-    type Output = [u8];
+	type Output = [u8];
 
-    fn index(&self, idx: ops::RangeTo<usize>) -> &[u8] {
-        &self.0[idx]
-    }
+	fn index(&self, idx: ops::RangeTo<usize>) -> &[u8] {
+		&self.0[idx]
+	}
 }
 
 impl ops::Index<ops::RangeFrom<usize>> for Hash {
-    type Output = [u8];
+	type Output = [u8];
 
-    fn index(&self, idx: ops::RangeFrom<usize>) -> &[u8] {
-        &self.0[idx]
-    }
+	fn index(&self, idx: ops::RangeFrom<usize>) -> &[u8] {
+		&self.0[idx]
+	}
 }
 
 impl ops::Index<ops::RangeFull> for Hash {
-    type Output = [u8];
+	type Output = [u8];
 
-    fn index(&self, idx: ops::RangeFull) -> &[u8] {
-        &self.0[idx]
-    }
+	fn index(&self, idx: ops::RangeFull) -> &[u8] {
+		&self.0[idx]
+	}
 }
 
 impl AsRef<[u8]> for Hash {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
+	fn as_ref(&self) -> &[u8] {
+		&self.0
+	}
 }
 
 impl Readable for Hash {
@@ -113,29 +113,25 @@ impl Readable for Hash {
 	}
 }
 
-impl Writeable for Hash {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_fixed_bytes(&self.0)
-	}
-}
-
 /// Serializer that outputs a hash of the serialized object
 pub struct HashWriter {
 	state: Keccak,
 }
 
 impl HashWriter {
-    /// Consume the `HashWriter`, outputting its current hash into a 32-byte array
+	/// Consume the `HashWriter`, outputting its current hash into a 32-byte
+	/// array
 	pub fn finalize(self, output: &mut [u8]) {
 		self.state.finalize(output);
 	}
 
-    /// Consume the `HashWriter`, outputting a `Hash` corresponding to its current state
-    pub fn into_hash(self) -> Hash {
-        let mut new_hash = ZERO_HASH;
+	/// Consume the `HashWriter`, outputting a `Hash` corresponding to its
+	/// current state
+	pub fn into_hash(self) -> Hash {
+		let mut new_hash = ZERO_HASH;
 		self.state.finalize(&mut new_hash.0[..]);
-        new_hash
-    }
+		new_hash
+	}
 }
 
 impl Default for HashWriter {
@@ -144,24 +140,24 @@ impl Default for HashWriter {
 	}
 }
 
-impl ser::Writer for HashWriter {
-	fn serialization_mode(&self) -> ser::SerializationMode {
-		ser::SerializationMode::Hash
-	}
-
-	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, b32: &T) -> Result<(), ser::Error> {
-		self.state.update(b32.as_ref());
-		Ok(())
-	}
-}
-
 /// A trait for types that have a canonical hash
 pub trait Hashed {
-    /// Obtain the hash of the object
+	/// Obtain the hash of the object
 	fn hash(&self) -> Hash;
 }
 
-impl <T: HashEncode + Clone> Hashed for T {
+// impl<T: Writeable> Hashed for T {
+// 	fn hash(&self) -> Hash {
+// 		let mut hasher = HashWriter::default();
+// 		ser::Writeable::write(self, &mut hasher).unwrap();
+// 		let mut ret = [0; 32];
+// 		hasher.finalize(&mut ret);
+
+// 		Hash(ret)
+// 	}
+// }
+
+impl<T: HashEncode + Clone> Hashed for T {
 	fn hash(&self) -> Hash {
 		let mut codec = T::HashEncoder::default();
 		let mut hasher = HashWriter::default();
@@ -177,23 +173,21 @@ impl <T: HashEncode + Clone> Hashed for T {
 	}
 }
 
-impl <A: HashEncode, B: HashEncode> Hashed for (A, B) {
+impl<A: HashEncode, B: HashEncode> Hashed for (A, B) {
 	fn hash(&self) -> Hash {
 		let mut codec_a = A::HashEncoder::default();
 		let mut codec_b = B::HashEncoder::default();
-		
+
 		let mut hasher = HashWriter::default();
 
-		let mut bytes_a = BytesMut::with_capacity(0);
-		let mut bytes_b = BytesMut::with_capacity(0);
-		
+		let mut bytes = BytesMut::with_capacity(0);
+
 		let mut ret = [0; 32];
 
-		codec_a.encode(self.0.clone(), &mut bytes_a);
-		codec_b.encode(self.1.clone(), &mut bytes_b);
-		
-		hasher.state.update(bytes_a.as_ref());
-		hasher.state.update(bytes_b.as_ref());
+		codec_a.encode(self.0.clone(), &mut bytes);
+		codec_b.encode(self.1.clone(), &mut bytes);
+
+		hasher.state.update(bytes.as_ref());
 
 		hasher.finalize(&mut ret);
 
@@ -201,28 +195,23 @@ impl <A: HashEncode, B: HashEncode> Hashed for (A, B) {
 	}
 }
 
-impl <A: HashEncode, B: HashEncode, C: HashEncode> Hashed for (A, B, C) {
+impl<A: HashEncode, B: HashEncode, C: HashEncode> Hashed for (A, B, C) {
 	fn hash(&self) -> Hash {
 		let mut codec_a = A::HashEncoder::default();
 		let mut codec_b = B::HashEncoder::default();
 		let mut codec_c = C::HashEncoder::default();
-		
+
 		let mut hasher = HashWriter::default();
 
-		let mut bytes_a = BytesMut::with_capacity(0);
-		let mut bytes_b = BytesMut::with_capacity(0);
-		let mut bytes_c = BytesMut::with_capacity(0);
+		let mut bytes = BytesMut::with_capacity(0);
 
 		let mut ret = [0; 32];
 
-		codec_a.encode(self.0.clone(), &mut bytes_a);
-		codec_b.encode(self.1.clone(), &mut bytes_b);
-		codec_c.encode(self.2.clone(), &mut bytes_c);
-		
-		hasher.state.update(bytes_a.as_ref());
-		hasher.state.update(bytes_b.as_ref());
-		hasher.state.update(bytes_c.as_ref());		
+		codec_a.encode(self.0.clone(), &mut bytes);
+		codec_b.encode(self.1.clone(), &mut bytes);
+		codec_c.encode(self.2.clone(), &mut bytes);
 
+		hasher.state.update(bytes.as_ref());
 		hasher.finalize(&mut ret);
 
 		Hash(ret)
