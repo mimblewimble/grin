@@ -21,6 +21,8 @@ use bytes::{BytesMut, BigEndian, BufMut, Buf, IntoBuf};
 use num_bigint::BigUint;
 
 use types::Tip;
+use core::codec::block::{BlockEncode, BlockDecode};
+use core::codec::HashEncode;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
 
@@ -36,6 +38,10 @@ macro_rules! try_opt_dec {
 #[derive(Debug, Clone, Default)]
 pub struct ChainCodec;
 
+impl HashEncode for Tip {
+	type HashEncoder = ChainCodec;
+}
+
 impl codec::Encoder for ChainCodec {
 	type Item = Tip;
 	type Error = io::Error;
@@ -45,13 +51,13 @@ impl codec::Encoder for ChainCodec {
 		dst.put_u64::<BigEndian>(item.height);
 
 		// Put Last Block Hash
-		item.last_block_h.chain_encode(dst)?;
+		item.last_block_h.block_encode(dst)?;
 
 		// Put Previous Block Hash
-		item.prev_block_h.chain_encode(dst)?;
+		item.prev_block_h.block_encode(dst)?;
 
 		// Put Difficulty
-		item.total_difficulty.chain_encode(dst)?;
+		item.total_difficulty.block_encode(dst)?;
 
 		Ok(())
 	}
@@ -73,13 +79,13 @@ impl codec::Decoder for ChainCodec {
 		let height = buf.get_u64::<BigEndian>();
 
 		// Get Last Block Hash
-		let last_block_h = try_opt_dec!(Hash::chain_decode(temp)?);
+		let last_block_h = try_opt_dec!(Hash::block_decode(temp)?);
 
 		// Get Previous Block Hash
-		let prev_block_h = try_opt_dec!(Hash::chain_decode(temp)?);
+		let prev_block_h = try_opt_dec!(Hash::block_decode(temp)?);
 
 		// Get Difficulty
-		let total_difficulty = try_opt_dec!(Difficulty::chain_decode(temp)?);
+		let total_difficulty = try_opt_dec!(Difficulty::block_decode(temp)?);
 
 		// If succesfull truncate src by bytes read from temp;
 		let diff = src.len() - temp.len();
@@ -91,67 +97,6 @@ impl codec::Decoder for ChainCodec {
 			prev_block_h: prev_block_h,
 			total_difficulty: total_difficulty,
 		}))
-	}
-}
-
-/// Internal Convenience Trait
-trait ChainEncode: Sized {
-	fn chain_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error>;
-}
-
-/// Internal Convenience Trait
-trait ChainDecode: Sized {
-	fn chain_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error>;
-}
-
-impl ChainEncode for Difficulty {
-	fn chain_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
-		let data = self.clone().into_biguint().to_bytes_be();
-		dst.reserve(1 + data.len());
-		dst.put_u8(data.len() as u8);
-		dst.put_slice(&data);
-		Ok(())
-	}
-}
-
-impl ChainDecode for Difficulty {
-	fn chain_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
-		if src.len() < 1 {
-			return Ok(None);
-		}
-		let mut buf = src.split_to(1).into_buf();
-		let dlen = buf.get_u8() as usize;
-
-		if src.len() < dlen {
-			return Ok(None);
-		}
-
-		let buf = src.split_to(dlen).into_buf();
-		let data = Buf::bytes(&buf);
-
-		Ok(Some(Difficulty::from_biguint(BigUint::from_bytes_be(data))))
-	}
-}
-
-impl ChainEncode for Hash {
-	fn chain_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
-		dst.reserve(32);
-		dst.put_slice(self.as_ref());
-		Ok(())
-	}
-}
-
-impl ChainDecode for Hash {
-	fn chain_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
-		if src.len() < 32 {
-			return Ok(None);
-		}
-
-		let mut buf = src.split_to(32).into_buf();
-		let mut hash_data = [0; 32];
-		buf.copy_to_slice(&mut hash_data);
-
-		Ok(Some(Hash(hash_data)))
 	}
 }
 

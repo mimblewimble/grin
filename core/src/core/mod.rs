@@ -160,14 +160,19 @@ impl Writeable for Proof {
 /// Two hashes that will get hashed together in a Merkle tree to build the next
 /// level up.
 struct HPair(Hash, Hash);
-
-impl Writeable for HPair {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		try!(writer.write_bytes(&self.0));
-		try!(writer.write_bytes(&self.1));
-		Ok(())
+// impl Writeable for HPair {
+// 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+// 		try!(writer.write_bytes(&self.0));
+// 		try!(writer.write_bytes(&self.1));
+// 		Ok(())
+// 	}
+// }
+impl Hashed for HPair {
+	fn hash(&self) -> Hash {
+		(self.0, self.1).hash()
 	}
 }
+
 /// An iterator over hashes in a vector that pairs them to build a row in a
 /// Merkle tree. If the vector has an odd number of hashes, it appends a zero
 /// hash

@@ -16,20 +16,22 @@ use std::io;
 
 use tokio_io::*;
 use bytes::{BytesMut, BigEndian, BufMut, Buf, IntoBuf};
-use num_bigint::BigUint;
+use bigint::BigUint;
 use time::Timespec;
 use time;
 use std::marker::PhantomData;
 
-use core::core::{Input, Output, Proof, TxKernel, Block, BlockHeader};
-use core::core::hash::Hash;
-use core::core::target::Difficulty;
-use core::core::transaction::{OutputFeatures, KernelFeatures};
-use core::core::block::BlockFeatures;
-use core::consensus::PROOFSIZE;
+use core::{Input, Output, Proof, TxKernel, Block, BlockHeader};
+use core::hash::Hash;
+use core::target::Difficulty;
+use core::transaction::{OutputFeatures, KernelFeatures};
+use core::block::BlockFeatures;
+use consensus::PROOFSIZE;
 
 use secp::pedersen::{RangeProof, Commitment};
 use secp::constants::PEDERSEN_COMMITMENT_SIZE;
+
+use super::HashEncode;
 
 // Convenience Macro for Option Handling in Decoding
 macro_rules! try_opt_dec {
@@ -91,7 +93,6 @@ impl<T> codec::Decoder for BlockCodec<T>
 		Ok(Some(res))
 	}
 }
-
 
 impl BlockEncode for Block {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
@@ -166,8 +167,12 @@ impl BlockDecode for Block {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BlockHasher;
+
+impl HashEncode for Block {
+	type HashEncoder = BlockHasher;	
+}
 
 impl codec::Encoder for BlockHasher {
 	type Item = Block;
@@ -175,6 +180,22 @@ impl codec::Encoder for BlockHasher {
 	fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
 		// Only encode header
 		partial_block_encode(&item.header, dst)
+	}
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct BlockHeaderHasher;
+
+impl HashEncode for BlockHeader {
+	type HashEncoder = BlockHeaderHasher;
+}
+
+impl codec::Encoder for BlockHeaderHasher {
+	type Item = BlockHeader;
+	type Error = io::Error;
+	fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+		// Only encode header without pow
+		partial_block_encode(&item, dst)
 	}
 }
 
@@ -302,6 +323,10 @@ impl BlockDecode for BlockHeader {
 	}
 }
 
+impl HashEncode for Input {
+	type HashEncoder = BlockCodec<Self>;	
+}
+
 impl BlockEncode for Input {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
 		dst.reserve(PEDERSEN_COMMITMENT_SIZE);
@@ -322,6 +347,10 @@ impl BlockDecode for Input {
 
 		Ok(Some(Input(Commitment(c))))
 	}
+}
+
+impl HashEncode for Output {
+	type HashEncoder = BlockCodec<Self>;	
 }
 
 impl BlockEncode for Output {
@@ -360,6 +389,10 @@ impl BlockDecode for Output {
 			},
 		}))
 	}
+}
+
+impl HashEncode for TxKernel {
+	type HashEncoder = BlockCodec<Self>;	
 }
 
 impl BlockEncode for TxKernel {
@@ -427,6 +460,10 @@ impl BlockDecode for TxKernel {
 	}
 }
 
+impl HashEncode for Difficulty {
+	type HashEncoder = BlockCodec<Self>;	
+}
+
 impl BlockEncode for Difficulty {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
 		let data = self.clone().into_biguint().to_bytes_be();
@@ -456,6 +493,10 @@ impl BlockDecode for Difficulty {
 	}
 }
 
+impl HashEncode for Hash {
+	type HashEncoder = BlockCodec<Self>;	
+}
+
 impl BlockEncode for Hash {
 	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
 		dst.reserve(32);
@@ -476,6 +517,10 @@ impl BlockDecode for Hash {
 
 		Ok(Some(Hash(hash_data)))
 	}
+}
+
+impl HashEncode for Proof {
+	type HashEncoder = BlockCodec<Self>;	
 }
 
 impl BlockEncode for Proof {

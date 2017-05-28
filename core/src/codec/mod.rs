@@ -14,8 +14,14 @@
 
 //! Codecs for Blocks and Transactions
 
+use tokio_io::codec::Encoder;
+
 pub mod block;
 pub mod tx;
+
+pub trait HashEncode: Sized + Clone {
+	type HashEncoder: Encoder<Item = Self> + Default;
+}
 
 #[cfg(test)]
 mod block_test;

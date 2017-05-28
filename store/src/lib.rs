@@ -44,9 +44,6 @@ use rocksdb::{DB, WriteBatch, DBCompactionStyle, DBIterator, IteratorMode, Direc
 
 use core::ser;
 
-pub mod codec;
-use codec::{BlockCodec, BlockHasher, TxCodec};
-
 /// Main error type for this crate.
 #[derive(Debug)]
 pub enum Error {

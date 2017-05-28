@@ -33,6 +33,8 @@ extern crate serde;
 extern crate serde_derive;
 extern crate time;
 extern crate tiny_keccak;
+extern crate tokio_io;
+extern crate bytes;
 
 #[macro_use]
 pub mod macros;
@@ -42,3 +44,5 @@ pub mod core;
 pub mod genesis;
 pub mod pow;
 pub mod ser;
+pub mod codec;
+
