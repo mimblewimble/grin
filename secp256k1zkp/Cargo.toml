@@ -29,6 +29,5 @@ clippy = {version = "0.0", optional = true}
 rand = "0.3"
 libc = "0.1"
 rustc-serialize = "0.3"
-serde = "0.6"
-serde_json = "0.6"
-
+serde = "~1.0.8"
+serde_json = "~1.0.2"

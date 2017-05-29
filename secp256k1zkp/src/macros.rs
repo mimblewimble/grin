@@ -20,25 +20,25 @@ macro_rules! impl_array_newtype {
 
         impl $thing {
             #[inline]
-            /// Converts the object to a raw pointer for FFI interfacing
+/// Converts the object to a raw pointer for FFI interfacing
             pub fn as_ptr(&self) -> *const $ty {
                 let &$thing(ref dat) = self;
                 dat.as_ptr()
             }
 
             #[inline]
-            /// Converts the object to a mutable raw pointer for FFI interfacing
+/// Converts the object to a mutable raw pointer for FFI interfacing
             pub fn as_mut_ptr(&mut self) -> *mut $ty {
                 let &mut $thing(ref mut dat) = self;
                 dat.as_mut_ptr()
             }
 
             #[inline]
-            /// Returns the length of the object as an array
+/// Returns the length of the object as an array
             pub fn len(&self) -> usize { $len }
 
             #[inline]
-            /// Returns whether the object as an array is empty
+/// Returns whether the object as an array is empty
             pub fn is_empty(&self) -> bool { false }
         }
 
@@ -125,9 +125,9 @@ macro_rules! impl_array_newtype {
         impl ::std::hash::Hash for $thing {
           fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
             state.write(&self.0)
-            // for n in 0..self.len() {
-            //   state.write_u8(self.0[n]);
-            // }
+// for n in 0..self.len() {
+//   state.write_u8(self.0[n]);
+// }
           }
         }
 
@@ -159,45 +159,48 @@ macro_rules! impl_array_newtype {
             }
         }
 
-        impl ::serde::Deserialize for $thing {
-            fn deserialize<D>(d: &mut D) -> Result<$thing, D::Error>
-                where D: ::serde::Deserializer
+        impl<'de> ::serde::Deserialize<'de> for $thing {
+            fn deserialize<D>(d: D) -> Result<$thing, D::Error>
+                where D: ::serde::Deserializer<'de>
             {
                 // We have to define the Visitor struct inside the function
                 // to make it local ... all we really need is that it's
                 // local to the macro, but this works too :)
-                struct Visitor {
-                    marker: ::std::marker::PhantomData<$thing>,
-                }
-                impl ::serde::de::Visitor for Visitor {
+                struct Visitor;
+
+                impl<'di> ::serde::de::Visitor<'di> for Visitor {
                     type Value = $thing;
 
+                    fn expecting(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                      formatter.write_str("an array of bytes")
+                    }
+
                     #[inline]
-                    fn visit_seq<V>(&mut self, mut v: V) -> Result<$thing, V::Error>
-                        where V: ::serde::de::SeqVisitor
+                    fn visit_seq<V>(self, mut v: V) -> Result<$thing, V::Error>
+                        where V: ::serde::de::SeqAccess<'di>
                     {
                         unsafe {
                             use std::mem;
                             let mut ret: [$ty; $len] = mem::uninitialized();
                             for i in 0..$len {
-                                ret[i] = match try!(v.visit()) {
+                                ret[i] = match try!(v.next_element()) {
                                     Some(c) => c,
-                                    None => return Err(::serde::de::Error::end_of_stream())
+                                    None => return Err(::serde::de::Error::invalid_length(i, &self))
                                 };
                             }
-                            try!(v.end());
                             Ok($thing(ret))
                         }
                     }
                 }
 
                 // Begin actual function
-                d.visit(Visitor { marker: ::std::marker::PhantomData })
+                // d.visit(Visitor { marker: ::std::marker::PhantomData })
+                d.deserialize_seq(Visitor)
             }
         }
 
         impl ::serde::Serialize for $thing {
-            fn serialize<S>(&self, s: &mut S) -> Result<(), S::Error>
+            fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
                 where S: ::serde::Serializer
             {
                 (&self.0[..]).serialize(s)
