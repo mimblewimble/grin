@@ -29,6 +29,7 @@ extern crate grin_core as core;
 extern crate grin_util as util;
 extern crate secp256k1zkp as secp;
 
+mod checker;
 mod extkey;
 mod receiver;
 mod sender;
@@ -36,3 +37,4 @@ mod types;
 
 pub use extkey::ExtendedKey;
 pub use receiver::WalletReceiver;
+pub use sender::issue_send_tx;

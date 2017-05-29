@@ -17,6 +17,7 @@
 //! Primary hash function used in the protocol
 //!
 
+use std::cmp::min;
 use std::{fmt, ops};
 use tiny_keccak::Keccak;
 use std::convert::AsRef;
@@ -47,6 +48,16 @@ impl fmt::Display for Hash {
 }
 
 impl Hash {
+  /// Builds a Hash from a byte vector. If the vector is too short, it will be
+  /// completed by zeroes. If it's too long, it will be truncated.
+  pub fn from_vec(v: Vec<u8>) -> Hash {
+    let mut h = [0; 32];
+    for i in 0..min(v.len(), 32) {
+      h[i] = v[i];
+    }
+    Hash(h)
+  }
+
 	/// Converts the hash to a byte vector
 	pub fn to_vec(&self) -> Vec<u8> {
 		self.0.to_vec()

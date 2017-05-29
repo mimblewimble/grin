@@ -5,11 +5,14 @@ authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
 workspace = ".."
 
 [dependencies]
+grin_core = { path = "../core" }
 grin_chain = { path = "../chain" }
+grin_util = { path = "../util" }
+secp256k1zkp = { path = "../secp256k1zkp" }
 
 hyper = "~0.10.6"
 iron = "~0.5.1"
 log = "~0.3"
 router = "~0.5.1"
-serde = "~0.9.10"
-serde_json = "~0.9.8"
+serde = "~1.0.8"
+serde_json = "~1.0.2"

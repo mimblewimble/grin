@@ -16,13 +16,15 @@ use std::convert::From;
 use secp::{self, Secp256k1};
 use secp::key::SecretKey;
 
+use checker;
 use core::core::{Transaction, build};
 use extkey::ExtendedKey;
 use types::*;
 
-fn issue_send_tx(hd_seed: &[u8], amount: u64, dest: String) -> Result<(), Error> {
+pub fn issue_send_tx(ext_key: &ExtendedKey, amount: u64, dest: String) -> Result<(), Error> {
+  checker::refresh_outputs(&WalletConfig::default(), ext_key);
 
-	let (tx, blind_sum) = build_send_tx(hd_seed, amount)?;
+	let (tx, blind_sum) = build_send_tx(ext_key, amount)?;
 	let json_tx = partial_tx_to_json(amount, blind_sum, tx);
 	if dest == "stdout" {
 		println!("{}", dest);
@@ -36,10 +38,9 @@ fn issue_send_tx(hd_seed: &[u8], amount: u64, dest: String) -> Result<(), Error>
 /// Builds a transaction to send to someone from the HD seed associated with the
 /// wallet and the amount to send. Handles reading through the wallet data file,
 /// selecting outputs to spend and building the change.
-fn build_send_tx(hd_seed: &[u8], amount: u64) -> Result<(Transaction, SecretKey), Error> {
+fn build_send_tx(ext_key: &ExtendedKey, amount: u64) -> Result<(Transaction, SecretKey), Error> {
 	// first, rebuild the private key from the seed
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-	let ext_key = ExtendedKey::from_seed(&secp, hd_seed).map_err(|e| Error::Key(e))?;
 
 	// second, check from our local wallet data for outputs to spend
 	let mut wallet_data = WalletData::read()?;

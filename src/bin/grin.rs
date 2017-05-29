@@ -96,14 +96,24 @@ fn main() {
                      .help("Wallet passphrase used to generate the private key seed")
                      .takes_value(true))
                 .subcommand(SubCommand::with_name("receive")
-                            .about("Run the wallet in receiving mode")))
+                            .about("Run the wallet in receiving mode"))
+                .subcommand(SubCommand::with_name("send")
+                            .about("Builds a transaction to send someone some coins. By default, the transaction will just be printed to stdout. If a destination is provided, the command will attempt to contact the receiver at that address and send the transaction directly.")
+                            .arg(Arg::with_name("amount")
+                                 .help("Amount to send in the smallest denomination")
+                                 .index(1))
+                            .arg(Arg::with_name("dest")
+                                 .help("Send the transaction to the provided server")
+                                 .short("d")
+                                 .long("dest")
+                                 .takes_value(true))))
     .get_matches();
 
   match args.subcommand() {
     // server commands and options
     ("server", Some(server_args)) => {
       server_command(server_args);
-    },
+    }
 
     // client commands and options
     ("client", Some(client_args)) => {
@@ -117,12 +127,7 @@ fn main() {
 
     // client commands and options
     ("wallet", Some(wallet_args)) => {
-      match wallet_args.subcommand() {
-        ("receive", _) => {
-          wallet_command(wallet_args);
-        },
-        _ => panic!("Unknown client command, use 'grin help client' for details"),
-      }
+      wallet_command(wallet_args);
     }
 
     _ => println!("Unknown command, use 'grin help' for a list of all commands"),
@@ -197,6 +202,14 @@ fn wallet_command(wallet_args: &ArgMatches) {
       apis.start("127.0.0.1:13416").unwrap_or_else(|e| {
         error!("Failed to start Grin wallet receiver: {}.", e);
       });
+    }
+    ("send", Some(send_args)) => {
+      let amount = send_args.value_of("amount").expect("Amount to send required").parse().expect("Could not parse amount as a whole number.");
+      let mut dest = "stdout";
+      if let Some(d) = send_args.value_of("dest") {
+        dest = d;
+      }
+      wallet::issue_send_tx(&key, amount, dest.to_string()).unwrap();
     }
     _ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
   }

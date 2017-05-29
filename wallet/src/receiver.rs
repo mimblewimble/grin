@@ -63,54 +63,60 @@ use util;
 /// Amount in request to build a coinbase output.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CbAmount {
-  amount: u64,
+	amount: u64,
 }
 
 /// Response to build a coinbase output.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CbData {
-  output: String,
-  kernel: String,
+	output: String,
+	kernel: String,
 }
 
 /// Component used to receive coins, implements all the receiving end of the
 /// wallet REST API as well as some of the command-line operations.
 #[derive(Clone)]
 pub struct WalletReceiver {
-  pub key: ExtendedKey,
+	pub key: ExtendedKey,
 }
 
 impl ApiEndpoint for WalletReceiver {
 	type ID = String;
 	type T = String;
-  type OP_IN = CbAmount;
-  type OP_OUT = CbData;
+	type OP_IN = CbAmount;
+	type OP_OUT = CbData;
 
 	fn operations(&self) -> Vec<Operation> {
 		vec![Operation::Custom("receive_coinbase".to_string())]
 	}
 
 	fn operation(&self, op: String, input: CbAmount) -> ApiResult<CbData> {
-    debug!("Operation {} with amount {}", op, input.amount);
-    if input.amount == 0 {
-      return Err(api::Error::Argument(format!("Zero amount not allowed.")))
-    }
-    match op.as_str() {
-      "receive_coinbase" => {
-        let (out, kern) = receive_coinbase(&self.key, input.amount).
-          map_err(|e| api::Error::Internal(format!("Error building coinbase: {:?}", e)))?;
-        let out_bin = ser::ser_vec(&out).
-          map_err(|e| api::Error::Internal(format!("Error serializing output: {:?}", e)))?;
-        let kern_bin = ser::ser_vec(&kern).
-          map_err(|e| api::Error::Internal(format!("Error serializing kernel: {:?}", e)))?;
-        Ok(CbData {
-          output: util::to_hex(out_bin),
-          kernel: util::to_hex(kern_bin),
-        })
-      },
-      _ => Err(api::Error::Argument(format!("Unknown operation: {}", op))),
-    }
-  }
+		debug!("Operation {} with amount {}", op, input.amount);
+		if input.amount == 0 {
+			return Err(api::Error::Argument(format!("Zero amount not allowed.")));
+		}
+		match op.as_str() {
+			"receive_coinbase" => {
+				let (out, kern) =
+					receive_coinbase(&self.key, input.amount).map_err(|e| {
+							api::Error::Internal(format!("Error building coinbase: {:?}", e))
+						})?;
+				let out_bin =
+					ser::ser_vec(&out).map_err(|e| {
+							api::Error::Internal(format!("Error serializing output: {:?}", e))
+						})?;
+				let kern_bin =
+					ser::ser_vec(&kern).map_err(|e| {
+							api::Error::Internal(format!("Error serializing kernel: {:?}", e))
+						})?;
+				Ok(CbData {
+					output: util::to_hex(out_bin),
+					kernel: util::to_hex(kern_bin),
+				})
+			}
+			_ => Err(api::Error::Argument(format!("Unknown operation: {}", op))),
+		}
+	}
 }
 
 /// Build a coinbase output and the corresponding kernel
@@ -131,7 +137,8 @@ fn receive_coinbase(ext_key: &ExtendedKey, amount: u64) -> Result<(Output, TxKer
 	});
 	wallet_data.write()?;
 
-  info!("Using child {} for a new coinbase output.", coinbase_key.n_child);
+	info!("Using child {} for a new coinbase output.",
+	      coinbase_key.n_child);
 
 	Block::reward_output(ext_key.key, &secp).map_err(&From::from)
 }

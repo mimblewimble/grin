@@ -99,8 +99,8 @@ pub trait ChainStore: Send + Sync {
 	/// Gets the block header at the provided height
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error>;
 
-	/// Gets an output by its hash
-	fn get_output(&self, h: &Hash) -> Result<Output, Error>;
+	/// Gets an output by its commitment
+	fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, Error>;
 
 	/// Checks whether an output commitment exists and returns the output hash
 	fn has_output_commit(&self, commit: &Commitment) -> Result<Hash, Error>;

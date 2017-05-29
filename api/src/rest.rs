@@ -31,6 +31,7 @@ use iron::modifiers::Header;
 use iron::middleware::Handler;
 use router::Router;
 use serde::{Serialize, Deserialize};
+use serde::de::DeserializeOwned;
 use serde_json;
 
 /// Errors that can be returned by an ApiEndpoint implementation.
@@ -109,9 +110,9 @@ pub type ApiResult<T> = ::std::result::Result<T, Error>;
 /// create and accepted by all other methods must have a string representation.
 pub trait ApiEndpoint: Clone + Send + Sync + 'static {
 	type ID: ToString + FromStr;
-	type T: Serialize + Deserialize;
-	type OP_IN: Serialize + Deserialize;
-	type OP_OUT: Serialize + Deserialize;
+	type T: Serialize + DeserializeOwned;
+	type OP_IN: Serialize + DeserializeOwned;
+	type OP_OUT: Serialize + DeserializeOwned;
 
 	fn operations(&self) -> Vec<Operation>;
 
@@ -251,7 +252,7 @@ impl ApiServer {
 				};
 				let full_path = format!("{}", root.clone());
 				self.router.route(op.to_method(), full_path.clone(), wrapper, route_name);
-				info!("POST {}", full_path);
+				info!("route: POST {}", full_path);
 			} else {
 
 				// regular REST operations
@@ -264,7 +265,7 @@ impl ApiServer {
 				};
 				let wrapper = ApiWrapper(endpoint.clone());
 				self.router.route(op.to_method(), full_path.clone(), wrapper, route_name);
-				info!("{} {}", op.to_method(), full_path);
+				info!("route: {} {}", op.to_method(), full_path);
 			}
 		}
 

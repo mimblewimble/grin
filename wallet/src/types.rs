@@ -51,6 +51,17 @@ impl From<extkey::Error> for Error {
 	}
 }
 
+#[derive(Debug, Clone)]
+pub struct WalletConfig {
+	pub api_http_addr: String,
+}
+
+impl Default for WalletConfig {
+	fn default() -> WalletConfig {
+		WalletConfig { api_http_addr: "http://127.0.0.1:13415".to_string() }
+	}
+}
+
 /// Status of an output that's being tracked by the wallet. Can either be
 /// unconfirmed, spent, unspent, or locked (when it's been used to generate
 /// a transaction but we don't have confirmation that the transaction was
@@ -79,7 +90,7 @@ pub struct OutputData {
 }
 
 impl OutputData {
-  /// Lock a given output to avoid conflicting use
+	/// Lock a given output to avoid conflicting use
 	pub fn lock(&mut self) {
 		self.status = OutputStatus::Locked;
 	}
@@ -92,32 +103,32 @@ impl OutputData {
 ///
 /// TODO optimization so everything isn't O(n) or even O(n^2)
 /// TODO account for fees
+/// TODO write locks so files don't get overwritten
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WalletData {
-	outputs: Vec<OutputData>,
+	pub outputs: Vec<OutputData>,
 }
 
 impl WalletData {
+	/// Read the wallet data or created a brand new one if it doesn't exist yet
+	pub fn read_or_create() -> Result<WalletData, Error> {
+		if Path::new(DAT_FILE).exists() {
+			WalletData::read()
+		} else {
+			// just create a new instance, it will get written afterward
+			Ok(WalletData { outputs: vec![] })
+		}
+	}
 
-  /// Read the wallet data or created a brand new one if it doesn't exist yet
-  pub fn read_or_create() -> Result<WalletData, Error> {
-    if Path::new(DAT_FILE).exists() {
-      WalletData::read()
-    } else {
-      // just create a new instance, it will get written afterward
-      Ok(WalletData { outputs: vec![] })
-    }
-  }
-
-  /// Read the wallet data from disk.
+	/// Read the wallet data from disk.
 	pub fn read() -> Result<WalletData, Error> {
-		let mut data_file = File::open(DAT_FILE)
+		let data_file = File::open(DAT_FILE)
       .map_err(|e| Error::WalletData(format!("Could not open {}: {}", DAT_FILE, e)))?;
 		serde_json::from_reader(data_file)
 			.map_err(|e| Error::WalletData(format!("Error reading {}: {}", DAT_FILE, e)))
 	}
 
-  /// Write the wallet data to disk.
+	/// Write the wallet data to disk.
 	pub fn write(&self) -> Result<(), Error> {
 		let mut data_file = File::create(DAT_FILE)
       .map_err(|e| Error::WalletData(format!("Could not create {}: {}", DAT_FILE, e)))?;
@@ -127,13 +138,14 @@ impl WalletData {
 			.map_err(|e| Error::WalletData(format!("Error writing {}: {}", DAT_FILE, e)))
 	}
 
-  /// Append a new output information to the wallet data.
+	/// Append a new output information to the wallet data.
 	pub fn append_output(&mut self, out: OutputData) {
 		self.outputs.push(out);
 	}
 
-  /// Select a subset of unspent outputs to spend in a transaction transferring
-  /// the provided amount.
+	/// Select a subset of unspent outputs to spend in a transaction
+	/// transferring
+	/// the provided amount.
 	pub fn select(&self, fingerprint: [u8; 4], amount: u64) -> (Vec<OutputData>, i64) {
 		let mut to_spend = vec![];
 		let mut input_total = 0;
@@ -148,7 +160,7 @@ impl WalletData {
 		(to_spend, (input_total as i64) - (amount as i64))
 	}
 
-  /// Next child index when we want to create a new output.
+	/// Next child index when we want to create a new output.
 	pub fn next_child(&self, fingerprint: [u8; 4]) -> u32 {
 		let mut max_n = 0;
 		for out in &self.outputs {

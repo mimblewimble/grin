@@ -30,7 +30,6 @@ const BLOCK_PREFIX: u8 = 'b' as u8;
 const HEAD_PREFIX: u8 = 'H' as u8;
 const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
-const OUTPUT_PREFIX: u8 = 'O' as u8;
 const OUTPUT_COMMIT_PREFIX: u8 = 'o' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
@@ -104,11 +103,10 @@ impl ChainStore for ChainKVStore {
 
 		// saving the full output under its hash, as well as a commitment to hash index
 		for out in &b.outputs {
+      let mut out_bytes = out.commit.as_ref().to_vec();
+      println!("OUTSAVE: {:?}", out_bytes);
 			batch = batch.put_enc(&mut BlockCodec::default(),
-				         &to_key(OUTPUT_PREFIX, &mut out.hash().to_vec())[..],
-				         out.clone())?
-				.put_enc(&mut BlockCodec::default(),
-				         &to_key(OUTPUT_COMMIT_PREFIX, &mut out.commit.as_ref().to_vec())[..],
+				         &to_key(OUTPUT_COMMIT_PREFIX, &mut out_bytes)[..],
 				         out.hash().clone())?;
 		}
 		batch.write()
@@ -125,9 +123,9 @@ impl ChainStore for ChainKVStore {
 		                                    &u64_to_key(HEADER_HEIGHT_PREFIX, height)))
 	}
 
-	fn get_output(&self, h: &Hash) -> Result<Output, Error> {
+	fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, Error> {
 		option_to_not_found(self.db.get_dec(&mut BlockCodec::default(),
-		                                    &to_key(OUTPUT_PREFIX, &mut h.to_vec())))
+		                                    &to_key(OUTPUT_COMMIT_PREFIX, &mut commit.as_ref().to_vec())))
 	}
 
 	fn has_output_commit(&self, commit: &Commitment) -> Result<Hash, Error> {

@@ -269,6 +269,7 @@ impl Input {
 
 bitflags! {
     /// Options for block validation
+    #[derive(Serialize, Deserialize)]
     pub flags OutputFeatures: u8 {
         /// No flags
         const DEFAULT_OUTPUT = 0b00000000,
@@ -279,10 +280,9 @@ bitflags! {
 
 /// Output for a transaction, defining the new ownership of coins that are being
 /// transferred. The commitment is a blinded value for the output while the
-/// range
-/// proof guarantees the commitment includes a positive value without overflow
-/// and the ownership of the private key.
-#[derive(Debug, Copy, Clone, PartialEq)]
+/// range proof guarantees the commitment includes a positive value without
+/// overflow and the ownership of the private key.
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Output {
 	/// Options for an output's structure or use
 	pub features: OutputFeatures,

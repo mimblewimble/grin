@@ -63,7 +63,6 @@ impl error::Error for Error {
 /// To be usable, a secret key should have an amount assigned to it,
 /// but when the key is derived, the amount is not known and must be
 /// given.
-
 #[derive(Debug, Clone)]
 pub struct ExtendedKey {
 	/// Depth of the extended key
@@ -79,7 +78,6 @@ pub struct ExtendedKey {
 }
 
 impl ExtendedKey {
-
 	/// Creates a new extended key from a serialized one
 	pub fn from_slice(secp: &Secp256k1, slice: &[u8]) -> Result<ExtendedKey, Error> {
 		// TODO change when ser. ext. size is fixed
@@ -134,9 +132,9 @@ impl ExtendedKey {
 		let mut fingerprint: [u8; 4] = [0; 4];
 		let identifier = ext_key.identifier();
 		(&mut fingerprint).clone_from_slice(&identifier[0..4]);
-    ext_key.fingerprint = fingerprint;
+		ext_key.fingerprint = fingerprint;
 
-    Ok(ext_key)
+		Ok(ext_key)
 	}
 
 	/// Return the identifier of the key, which is the

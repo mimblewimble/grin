@@ -105,9 +105,9 @@ impl Serialize for Difficulty {
 	}
 }
 
-impl Deserialize for Difficulty {
+impl<'de> Deserialize<'de> for Difficulty {
 	fn deserialize<D>(deserializer: D) -> Result<Difficulty, D::Error>
-		where D: Deserializer
+		where D: Deserializer<'de>
 	{
 		deserializer.deserialize_i32(DiffVisitor)
 	}
@@ -115,7 +115,7 @@ impl Deserialize for Difficulty {
 
 struct DiffVisitor;
 
-impl de::Visitor for DiffVisitor {
+impl<'de> de::Visitor<'de> for DiffVisitor {
 	type Value = Difficulty;
 
 	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

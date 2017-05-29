@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate grin_core as core;
 extern crate grin_chain as chain;
+extern crate grin_util as util;
+extern crate secp256k1zkp as secp;
 
 extern crate hyper;
 #[macro_use]
