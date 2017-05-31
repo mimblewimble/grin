@@ -33,7 +33,7 @@ pub const MAX_TARGET: [u8; 32] = [0xf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 /// The difficulty is defined as the maximum target divided by the block hash.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Difficulty {
-	num: BigUint
+	num: BigUint,
 }
 
 impl Difficulty {
@@ -44,15 +44,15 @@ impl Difficulty {
 		Difficulty { num: BigUint::new(vec![1]) }
 	}
 
-    /// Convert a `u32` into a `Difficulty`
+	/// Convert a `u32` into a `Difficulty`
 	pub fn from_num(num: u32) -> Difficulty {
 		Difficulty { num: BigUint::new(vec![num]) }
 	}
 
-    /// Convert a `BigUint` into a `Difficulty`
-    pub fn from_biguint(num: BigUint) -> Difficulty {
-        Difficulty { num: num }
-    }
+	/// Convert a `BigUint` into a `Difficulty`
+	pub fn from_biguint(num: BigUint) -> Difficulty {
+		Difficulty { num: num }
+	}
 
 	/// Computes the difficulty from a hash. Divides the maximum target by the
 	/// provided hash.
@@ -62,16 +62,16 @@ impl Difficulty {
 		Difficulty { num: max_target / h_num }
 	}
 
-    /// Converts the difficulty into a bignum
-    pub fn into_biguint(self) -> BigUint {
-        self.num
-    }
+	/// Converts the difficulty into a bignum
+	pub fn into_biguint(self) -> BigUint {
+		self.num
+	}
 }
 
 impl fmt::Display for Difficulty {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "{}", self.num)
-  }
+		write!(f, "{}", self.num)
+	}
 }
 
 impl Add<Difficulty> for Difficulty {

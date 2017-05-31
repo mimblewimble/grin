@@ -45,7 +45,7 @@ use secp::Secp256k1;
 fn main() {
 	env_logger::init().unwrap();
 
-  let args = App::new("Grin")
+	let args = App::new("Grin")
     .version("0.1")
     .author("The Grin Team")
     .about("Lightweight implementation of the MimbleWimble protocol.")
@@ -109,110 +109,114 @@ fn main() {
                                  .takes_value(true))))
     .get_matches();
 
-  match args.subcommand() {
-    // server commands and options
-    ("server", Some(server_args)) => {
-      server_command(server_args);
-    }
+	match args.subcommand() {
+		// server commands and options
+		("server", Some(server_args)) => {
+			server_command(server_args);
+		}
 
-    // client commands and options
-    ("client", Some(client_args)) => {
-      match client_args.subcommand() {
-        ("status", _) => {
-          println!("status info...");
-        },
-        _ => panic!("Unknown client command, use 'grin help client' for details"),
-      }
-    }
+		// client commands and options
+		("client", Some(client_args)) => {
+			match client_args.subcommand() {
+				("status", _) => {
+					println!("status info...");
+				}
+				_ => panic!("Unknown client command, use 'grin help client' for details"),
+			}
+		}
 
-    // client commands and options
-    ("wallet", Some(wallet_args)) => {
-      wallet_command(wallet_args);
-    }
+		// client commands and options
+		("wallet", Some(wallet_args)) => {
+			wallet_command(wallet_args);
+		}
 
-    _ => println!("Unknown command, use 'grin help' for a list of all commands"),
-  }
+		_ => println!("Unknown command, use 'grin help' for a list of all commands"),
+	}
 }
 
 /// Handles the server part of the command line, mostly running, starting and
-/// stopping the Grin blockchain server. Processes all the command line arguments
+/// stopping the Grin blockchain server. Processes all the command line
+/// arguments
 /// to build a proper configuration and runs Grin with that configuration.
 fn server_command(server_args: &ArgMatches) {
-  info!("Starting the Grin server...");
+	info!("Starting the Grin server...");
 
-  // configuration wrangling
-  let mut server_config = read_config();
-  if let Some(port) = server_args.value_of("port") {
-    server_config.p2p_config.port = port.parse().unwrap();
-  }
-  if server_args.is_present("mine") {
-    server_config.mining_config.enable_mining = true;
-  }
-  if let Some(seeds) = server_args.values_of("seed") {
-    server_config.seeding_type = grin::Seeding::List(seeds.map(|s| s.to_string()).collect());
-  }
+	// configuration wrangling
+	let mut server_config = read_config();
+	if let Some(port) = server_args.value_of("port") {
+		server_config.p2p_config.port = port.parse().unwrap();
+	}
+	if server_args.is_present("mine") {
+		server_config.mining_config.enable_mining = true;
+	}
+	if let Some(seeds) = server_args.values_of("seed") {
+		server_config.seeding_type = grin::Seeding::List(seeds.map(|s| s.to_string()).collect());
+	}
 
-  // start the server in the different run modes (interactive or daemon)
-  match server_args.subcommand() {
-    ("run", _) => {
-      grin::Server::start(server_config).unwrap();
-      loop {
-        thread::sleep(Duration::from_secs(60));
-      }
-    },
-    ("start", _) => {
-      let daemonize = Daemonize::new()
-        .pid_file("/tmp/grin.pid")
-        .chown_pid_file(true)
-        .privileged_action(move || {
-          grin::Server::start(server_config.clone()).unwrap();
-          loop {
-            thread::sleep(Duration::from_secs(60));
-          }
-        });
-      match daemonize.start() {
-        Ok(_) => info!("Grin server succesfully started."),
-        Err(e) => error!("Error starting: {}", e),
-      }
-    }
-    ("stop", _) => {
-      println!("TODO, just 'kill $pid' for now.")
-    }
-    _ => panic!("Unknown server command, use 'grin help server' for details"),
-  }
+	// start the server in the different run modes (interactive or daemon)
+	match server_args.subcommand() {
+		("run", _) => {
+			grin::Server::start(server_config).unwrap();
+			loop {
+				thread::sleep(Duration::from_secs(60));
+			}
+		}
+		("start", _) => {
+			let daemonize = Daemonize::new()
+				.pid_file("/tmp/grin.pid")
+				.chown_pid_file(true)
+				.privileged_action(move || {
+					grin::Server::start(server_config.clone()).unwrap();
+					loop {
+						thread::sleep(Duration::from_secs(60));
+					}
+				});
+			match daemonize.start() {
+				Ok(_) => info!("Grin server succesfully started."),
+				Err(e) => error!("Error starting: {}", e),
+			}
+		}
+		("stop", _) => println!("TODO, just 'kill $pid' for now."),
+		_ => panic!("Unknown server command, use 'grin help server' for details"),
+	}
 }
 
 fn wallet_command(wallet_args: &ArgMatches) {
-  let hd_seed = wallet_args.value_of("pass").expect("Wallet passphrase required.");
+	let hd_seed = wallet_args.value_of("pass").expect("Wallet passphrase required.");
 
-  // TODO do something closer to BIP39, eazy solution right now
-  let mut sha3 = Keccak::new_sha3_256();
-  sha3.update(hd_seed.as_bytes());
-  let mut seed = [0; 32];
-  sha3.finalize(&mut seed);
+	// TODO do something closer to BIP39, eazy solution right now
+	let mut sha3 = Keccak::new_sha3_256();
+	sha3.update(hd_seed.as_bytes());
+	let mut seed = [0; 32];
+	sha3.finalize(&mut seed);
 
 	let s = Secp256k1::new();
-  let key = wallet::ExtendedKey::from_seed(&s, &seed[..]).expect("Error deriving extended key from seed.");
+	let key = wallet::ExtendedKey::from_seed(&s, &seed[..])
+		.expect("Error deriving extended key from seed.");
 
-  match wallet_args.subcommand() {
-    ("receive", _) => {
-      info!("Starting the Grin wallet receiving daemon...");
-      let mut apis = api::ApiServer::new("/v1".to_string());
-      apis.register_endpoint("/receive_coinbase".to_string(), wallet::WalletReceiver { key:  key });
-      apis.start("127.0.0.1:13416").unwrap_or_else(|e| {
-        error!("Failed to start Grin wallet receiver: {}.", e);
-      });
-    }
-    ("send", Some(send_args)) => {
-      let amount = send_args.value_of("amount").expect("Amount to send required").parse().expect("Could not parse amount as a whole number.");
-      let mut dest = "stdout";
-      if let Some(d) = send_args.value_of("dest") {
-        dest = d;
-      }
-      wallet::issue_send_tx(&key, amount, dest.to_string()).unwrap();
-    }
-    _ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
-  }
+	match wallet_args.subcommand() {
+		("receive", _) => {
+			info!("Starting the Grin wallet receiving daemon...");
+			let mut apis = api::ApiServer::new("/v1".to_string());
+			apis.register_endpoint("/receive_coinbase".to_string(),
+			                       wallet::WalletReceiver { key: key });
+			apis.start("127.0.0.1:13416").unwrap_or_else(|e| {
+				error!("Failed to start Grin wallet receiver: {}.", e);
+			});
+		}
+		("send", Some(send_args)) => {
+			let amount = send_args.value_of("amount")
+				.expect("Amount to send required")
+				.parse()
+				.expect("Could not parse amount as a whole number.");
+			let mut dest = "stdout";
+			if let Some(d) = send_args.value_of("dest") {
+				dest = d;
+			}
+			wallet::issue_send_tx(&key, amount, dest.to_string()).unwrap();
+		}
+		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
+	}
 }
 
 fn read_config() -> grin::ServerConfig {

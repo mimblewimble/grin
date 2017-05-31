@@ -205,9 +205,8 @@ mod test {
 	#[test]
 	fn blind_simpler_tx() {
 		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
-		let (tx, _) =
-			transaction(vec![input_rand(6), output(2, key::ONE_KEY), with_fee(4)])
-				.unwrap();
+		let (tx, _) = transaction(vec![input_rand(6), output(2, key::ONE_KEY), with_fee(4)])
+			.unwrap();
 		tx.verify_sig(&secp).unwrap();
 	}
 }

@@ -72,9 +72,11 @@ impl ApiEndpoint for OutputApi {
 	}
 
 	fn get(&self, id: String) -> ApiResult<Output> {
-    debug!("GET output {}", id);
-    let c = util::from_hex(id.clone()).map_err(|e| Error::Argument(format!("Not a valid commitment: {}", id)))?;
-		self.chain_store.get_output_by_commit(&Commitment::from_vec(c)).map_err(|e| Error::Internal(e.to_string()))
+		debug!("GET output {}", id);
+		let c = util::from_hex(id.clone()).map_err(|e| Error::Argument(format!("Not a valid commitment: {}", id)))?;
+		self.chain_store
+			.get_output_by_commit(&Commitment::from_vec(c))
+			.map_err(|e| Error::Internal(e.to_string()))
 	}
 }
 
@@ -84,8 +86,10 @@ pub fn start_rest_apis(addr: String, chain_store: Arc<chain::ChainStore>) {
 
 	thread::spawn(move || {
 		let mut apis = ApiServer::new("/v1".to_string());
-		apis.register_endpoint("/chain".to_string(), ChainApi { chain_store: chain_store.clone() });
-		apis.register_endpoint("/chain/output".to_string(), OutputApi { chain_store: chain_store.clone() });
+		apis.register_endpoint("/chain".to_string(),
+		                       ChainApi { chain_store: chain_store.clone() });
+		apis.register_endpoint("/chain/output".to_string(),
+		                       OutputApi { chain_store: chain_store.clone() });
 		apis.start(&addr[..]).unwrap_or_else(|e| {
 			error!("Failed to start API HTTP server: {}.", e);
 		});

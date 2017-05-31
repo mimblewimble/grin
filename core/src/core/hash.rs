@@ -48,15 +48,15 @@ impl fmt::Display for Hash {
 }
 
 impl Hash {
-  /// Builds a Hash from a byte vector. If the vector is too short, it will be
-  /// completed by zeroes. If it's too long, it will be truncated.
-  pub fn from_vec(v: Vec<u8>) -> Hash {
-    let mut h = [0; 32];
-    for i in 0..min(v.len(), 32) {
-      h[i] = v[i];
-    }
-    Hash(h)
-  }
+	/// Builds a Hash from a byte vector. If the vector is too short, it will be
+	/// completed by zeroes. If it's too long, it will be truncated.
+	pub fn from_vec(v: Vec<u8>) -> Hash {
+		let mut h = [0; 32];
+		for i in 0..min(v.len(), 32) {
+			h[i] = v[i];
+		}
+		Hash(h)
+	}
 
 	/// Converts the hash to a byte vector
 	pub fn to_vec(&self) -> Vec<u8> {
@@ -65,49 +65,49 @@ impl Hash {
 }
 
 impl ops::Index<usize> for Hash {
-    type Output = u8;
+	type Output = u8;
 
-    fn index(&self, idx: usize) -> &u8 {
-        &self.0[idx]
-    }
+	fn index(&self, idx: usize) -> &u8 {
+		&self.0[idx]
+	}
 }
 
 impl ops::Index<ops::Range<usize>> for Hash {
-    type Output = [u8];
+	type Output = [u8];
 
-    fn index(&self, idx: ops::Range<usize>) -> &[u8] {
-        &self.0[idx]
-    }
+	fn index(&self, idx: ops::Range<usize>) -> &[u8] {
+		&self.0[idx]
+	}
 }
 
 impl ops::Index<ops::RangeTo<usize>> for Hash {
-    type Output = [u8];
+	type Output = [u8];
 
-    fn index(&self, idx: ops::RangeTo<usize>) -> &[u8] {
-        &self.0[idx]
-    }
+	fn index(&self, idx: ops::RangeTo<usize>) -> &[u8] {
+		&self.0[idx]
+	}
 }
 
 impl ops::Index<ops::RangeFrom<usize>> for Hash {
-    type Output = [u8];
+	type Output = [u8];
 
-    fn index(&self, idx: ops::RangeFrom<usize>) -> &[u8] {
-        &self.0[idx]
-    }
+	fn index(&self, idx: ops::RangeFrom<usize>) -> &[u8] {
+		&self.0[idx]
+	}
 }
 
 impl ops::Index<ops::RangeFull> for Hash {
-    type Output = [u8];
+	type Output = [u8];
 
-    fn index(&self, idx: ops::RangeFull) -> &[u8] {
-        &self.0[idx]
-    }
+	fn index(&self, idx: ops::RangeFull) -> &[u8] {
+		&self.0[idx]
+	}
 }
 
 impl AsRef<[u8]> for Hash {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
+	fn as_ref(&self) -> &[u8] {
+		&self.0
+	}
 }
 
 impl Readable for Hash {
@@ -133,17 +133,19 @@ pub struct HashWriter {
 }
 
 impl HashWriter {
-    /// Consume the `HashWriter`, outputting its current hash into a 32-byte array
+	/// Consume the `HashWriter`, outputting its current hash into a 32-byte
+	/// array
 	pub fn finalize(self, output: &mut [u8]) {
 		self.state.finalize(output);
 	}
 
-    /// Consume the `HashWriter`, outputting a `Hash` corresponding to its current state
-    pub fn into_hash(self) -> Hash {
-        let mut new_hash = ZERO_HASH;
+	/// Consume the `HashWriter`, outputting a `Hash` corresponding to its
+	/// current state
+	pub fn into_hash(self) -> Hash {
+		let mut new_hash = ZERO_HASH;
 		self.state.finalize(&mut new_hash.0[..]);
-        new_hash
-    }
+		new_hash
+	}
 }
 
 impl Default for HashWriter {
@@ -165,7 +167,7 @@ impl ser::Writer for HashWriter {
 
 /// A trait for types that have a canonical hash
 pub trait Hashed {
-    /// Obtain the hash of the object
+	/// Obtain the hash of the object
 	fn hash(&self) -> Hash;
 }
 

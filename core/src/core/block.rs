@@ -46,7 +46,7 @@ pub struct BlockHeader {
 	pub timestamp: time::Tm,
 	/// Length of the cuckoo cycle used to mine this block.
 	pub cuckoo_len: u8,
-    /// Merkle root of the UTXO set
+	/// Merkle root of the UTXO set
 	pub utxo_merkle: Hash,
 	/// Merkle tree of hashes for all inputs, outputs and kernels in the block
 	pub tx_merkle: Hash,
@@ -90,7 +90,7 @@ impl Writeable for BlockHeader {
 		                [write_u8, self.cuckoo_len],
 		                [write_fixed_bytes, &self.utxo_merkle],
 		                [write_fixed_bytes, &self.tx_merkle],
-                    [write_u8, self.features.bits()]);
+		                [write_u8, self.features.bits()]);
 
 		try!(writer.write_u64(self.nonce));
 		try!(self.difficulty.write(writer));
@@ -141,13 +141,13 @@ impl Readable for BlockHeader {
 /// additive to the total of fees ever collected.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Block {
-    /// The header with metadata and commitments to the rest of the data
+	/// The header with metadata and commitments to the rest of the data
 	pub header: BlockHeader,
-    /// List of transaction inputs
+	/// List of transaction inputs
 	pub inputs: Vec<Input>,
-    /// List of transaction outputs
+	/// List of transaction outputs
 	pub outputs: Vec<Output>,
-    /// List of transaction kernels and associated proofs
+	/// List of transaction kernels and associated proofs
 	pub kernels: Vec<TxKernel>,
 }
 
@@ -228,7 +228,6 @@ impl Default for Block {
 }
 
 impl Block {
-
 	/// Builds a new block from the header of the previous block, a vector of
 	/// transactions and the private key that will receive the reward. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
@@ -240,17 +239,17 @@ impl Block {
 		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let (reward_out, reward_proof) = try!(Block::reward_output(reward_key, &secp));
 
-    Block::with_reward(prev, txs, reward_out, reward_proof)
+		Block::with_reward(prev, txs, reward_out, reward_proof)
 	}
 
 	/// Builds a new block ready to mine from the header of the previous block,
-  /// a vector of transactions and the reward information. Checks
+	/// a vector of transactions and the reward information. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
 	pub fn with_reward(prev: &BlockHeader,
-	           txs: Vec<&mut Transaction>,
-	           reward_out: Output,
-             reward_kern: TxKernel)
-	           -> Result<Block, secp::Error> {
+	                   txs: Vec<&mut Transaction>,
+	                   reward_out: Output,
+	                   reward_kern: TxKernel)
+	                   -> Result<Block, secp::Error> {
 		// note: the following reads easily but may not be the most efficient due to
 		// repeated iterations, revisit if a problem
 		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
@@ -295,15 +294,15 @@ impl Block {
 				kernels: kernels,
 			}
 			.compact())
-  }
+	}
 
 
-    /// Blockhash, computed using only the header
+	/// Blockhash, computed using only the header
 	pub fn hash(&self) -> Hash {
 		self.header.hash()
 	}
 
-    /// Sum of all fees (inputs less outputs) in the block
+	/// Sum of all fees (inputs less outputs) in the block
 	pub fn total_fees(&self) -> u64 {
 		self.kernels.iter().map(|p| p.fee).sum()
 	}
@@ -350,7 +349,8 @@ impl Block {
 		}
 	}
 
-	/// Merges the 2 blocks, essentially appending the inputs, outputs and kernels.
+	/// Merges the 2 blocks, essentially appending the inputs, outputs and
+	/// kernels.
 	/// Also performs a compaction on the result.
 	pub fn merge(&self, other: Block) -> Block {
 		let mut all_inputs = self.inputs.clone();
@@ -448,10 +448,11 @@ impl Block {
 			.verify_kernels(secp)
 	}
 
-	/// Builds the blinded output and related signature proof for the block reward.
+	/// Builds the blinded output and related signature proof for the block
+	/// reward.
 	pub fn reward_output(skey: secp::key::SecretKey,
-                       secp: &Secp256k1)
-                       -> Result<(Output, TxKernel), secp::Error> {
+	                     secp: &Secp256k1)
+	                     -> Result<(Output, TxKernel), secp::Error> {
 		let msg = try!(secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE]));
 		let sig = try!(secp.sign(&msg, &skey));
 		let commit = secp.commit(REWARD, skey).unwrap();

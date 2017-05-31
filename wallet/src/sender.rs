@@ -22,7 +22,7 @@ use extkey::ExtendedKey;
 use types::*;
 
 pub fn issue_send_tx(ext_key: &ExtendedKey, amount: u64, dest: String) -> Result<(), Error> {
-  checker::refresh_outputs(&WalletConfig::default(), ext_key);
+	checker::refresh_outputs(&WalletConfig::default(), ext_key);
 
 	let (tx, blind_sum) = build_send_tx(ext_key, amount)?;
 	let json_tx = partial_tx_to_json(amount, blind_sum, tx);

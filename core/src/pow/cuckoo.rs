@@ -32,9 +32,9 @@ const MAXPATHLEN: usize = 8192;
 /// A cuckoo-cycle related error
 #[derive(Debug)]
 pub enum Error {
-    /// Unable to find a short enough path
+	/// Unable to find a short enough path
 	Path,
-    /// Unable to find a solution
+	/// Unable to find a solution
 	NoSolution,
 }
 
@@ -168,7 +168,7 @@ enum CycleSol {
 }
 
 impl Miner {
-    /// Creates a new miner
+	/// Creates a new miner
 	pub fn new(header: &[u8], ease: u32, sizeshift: u32) -> Miner {
 		let cuckoo = Cuckoo::new(header, sizeshift);
 		let size = 1 << sizeshift;
@@ -181,7 +181,7 @@ impl Miner {
 		}
 	}
 
-    /// Searches for a solution
+	/// Searches for a solution
 	pub fn mine(&mut self) -> Result<Proof, Error> {
 		let mut us = [0; MAXPATHLEN];
 		let mut vs = [0; MAXPATHLEN];

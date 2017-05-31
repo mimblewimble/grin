@@ -55,10 +55,10 @@ pub struct TxKernel {
 impl Writeable for TxKernel {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(writer,
-                    [write_u8, self.features.bits()],
-                    [write_fixed_bytes, &self.excess],
-                    [write_bytes, &self.excess_sig],
-                    [write_u64, self.fee]);
+		                [write_u8, self.features.bits()],
+		                [write_fixed_bytes, &self.excess],
+		                [write_bytes, &self.excess_sig],
+		                [write_u64, self.fee]);
 		Ok(())
 	}
 }
@@ -261,7 +261,7 @@ impl Readable for Input {
 /// The input for a transaction, which spends a pre-existing output. The input
 /// commitment is a reproduction of the commitment of the output it's spending.
 impl Input {
-    /// Extracts the referenced commitment from a transaction output
+	/// Extracts the referenced commitment from a transaction output
 	pub fn commitment(&self) -> Commitment {
 		self.0
 	}
@@ -286,9 +286,9 @@ bitflags! {
 pub struct Output {
 	/// Options for an output's structure or use
 	pub features: OutputFeatures,
-    /// The homomorphic commitment representing the output's amount
+	/// The homomorphic commitment representing the output's amount
 	pub commit: Commitment,
-    /// A proof that the commitment is in the right range
+	/// A proof that the commitment is in the right range
 	pub proof: RangeProof,
 }
 
@@ -296,7 +296,9 @@ pub struct Output {
 /// an Output as binary.
 impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(writer, [write_u8, self.features.bits()], [write_fixed_bytes, &self.commit]);
+		ser_multiwrite!(writer,
+		                [write_u8, self.features.bits()],
+		                [write_fixed_bytes, &self.commit]);
 		// The hash of an output doesn't include the range proof
 		if writer.serialization_mode() == ser::SerializationMode::Full {
 			writer.write_bytes(&self.proof)?

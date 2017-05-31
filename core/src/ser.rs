@@ -34,9 +34,9 @@ pub enum Error {
 	IOErr(io::Error),
 	/// Expected a given value that wasn't found
 	UnexpectedData {
-        /// What we wanted
+		/// What we wanted
 		expected: Vec<u8>,
-        /// What we got
+		/// What we got
 		received: Vec<u8>,
 	},
 	/// Data wasn't in a consumable format
@@ -179,7 +179,9 @@ pub trait Writeable {
 /// Trait that every type that can be deserialized from binary must implement.
 /// Reads directly to a Reader, a utility type thinly wrapping an
 /// underlying Read implementation.
-pub trait Readable where Self: Sized {
+pub trait Readable
+	where Self: Sized
+{
 	/// Reads the data necessary to this Readable from the provided reader
 	fn read(reader: &mut Reader) -> Result<Self, Error>;
 }
@@ -326,36 +328,35 @@ impl_int!(u64, write_u64, read_u64);
 impl_int!(i64, write_i64, read_i64);
 
 impl<A: Writeable, B: Writeable> Writeable for (A, B) {
-    fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-        try!(Writeable::write(&self.0, writer));
-        Writeable::write(&self.1, writer)
-    }
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		try!(Writeable::write(&self.0, writer));
+		Writeable::write(&self.1, writer)
+	}
 }
 
 impl<A: Readable, B: Readable> Readable for (A, B) {
-    fn read(reader: &mut Reader) -> Result<(A, B), Error> {
-        Ok((try!(Readable::read(reader)),
-            try!(Readable::read(reader))))
-    }
+	fn read(reader: &mut Reader) -> Result<(A, B), Error> {
+		Ok((try!(Readable::read(reader)), try!(Readable::read(reader))))
+	}
 }
 
 impl<A: Writeable, B: Writeable, C: Writeable> Writeable for (A, B, C) {
-    fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-        try!(Writeable::write(&self.0, writer));
-        try!(Writeable::write(&self.1, writer));
-        Writeable::write(&self.2, writer)
-    }
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		try!(Writeable::write(&self.0, writer));
+		try!(Writeable::write(&self.1, writer));
+		Writeable::write(&self.2, writer)
+	}
 }
 
 impl<A: Readable, B: Readable, C: Readable> Readable for (A, B, C) {
-    fn read(reader: &mut Reader) -> Result<(A, B, C), Error> {
-        Ok((try!(Readable::read(reader)),
-            try!(Readable::read(reader)),
-            try!(Readable::read(reader))))
-    }
+	fn read(reader: &mut Reader) -> Result<(A, B, C), Error> {
+		Ok((try!(Readable::read(reader)),
+		    try!(Readable::read(reader)),
+		    try!(Readable::read(reader))))
+	}
 }
 
-/// Useful marker trait on types that can be sized byte slices 
+/// Useful marker trait on types that can be sized byte slices
 pub trait AsFixedBytes: Sized + AsRef<[u8]> {}
 
 impl<'a> AsFixedBytes for &'a [u8] {}
