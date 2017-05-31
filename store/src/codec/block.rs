@@ -19,7 +19,6 @@ use bytes::{BytesMut, BigEndian, BufMut, Buf, IntoBuf};
 use num_bigint::BigUint;
 use time::Timespec;
 use time;
-use std::marker::PhantomData;
 
 use core::core::{Input, Output, Proof, TxKernel, Block, BlockHeader};
 use core::core::hash::Hash;
@@ -39,83 +38,34 @@ macro_rules! try_opt_dec {
 	});
 }
 
-/// Internal Convenience Trait
-pub trait BlockEncode: Sized {
-	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error>;
-}
-
-/// Internal Convenience Trait
-pub trait BlockDecode: Sized {
-	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error>;
-}
-
-/// Decodes and encodes `Block`s and their subtypes
 #[derive(Debug, Clone)]
-pub struct BlockCodec<T: BlockDecode + BlockEncode> {
-	phantom: PhantomData<T>,
-}
+pub struct BlockCodec;
 
-impl<T> Default for BlockCodec<T>
-    where T: BlockDecode + BlockEncode
-{
-	fn default() -> Self {
-		BlockCodec { phantom: PhantomData }
-	}
-}
-
-impl<T> codec::Encoder for BlockCodec<T>
-    where T: BlockDecode + BlockEncode
-{
-	type Item = T;
+impl codec::Encoder for BlockCodec {
+	type Item = Block;
 	type Error = io::Error;
 	fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-		T::block_encode(&item, dst)
-	}
-}
-
-impl<T> codec::Decoder for BlockCodec<T>
-    where T: BlockDecode + BlockEncode
-{
-	type Item = T;
-	type Error = io::Error;
-	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-		// Create Temporary Buffer
-		let ref mut temp = src.clone();
-		let res = try_opt_dec!(T::block_decode(temp)?);
-
-		// If succesfull truncate src by bytes read from src;
-		let diff = src.len() - temp.len();
-		src.split_to(diff);
-
-		// Return Item
-		Ok(Some(res))
-	}
-}
-
-
-impl BlockEncode for Block {
-	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error> {
 		// Put Header
-		self.header.block_encode(dst)?;
+		item.header.block_encode(dst)?;
 
 		// Put Lengths of Inputs, Outputs and Kernels in 3 u64's
 		dst.reserve(24);
-		dst.put_u64::<BigEndian>(self.inputs.len() as u64);
-		dst.put_u64::<BigEndian>(self.outputs.len() as u64);
-		dst.put_u64::<BigEndian>(self.kernels.len() as u64);
+		dst.put_u64::<BigEndian>(item.inputs.len() as u64);
+		dst.put_u64::<BigEndian>(item.outputs.len() as u64);
+		dst.put_u64::<BigEndian>(item.kernels.len() as u64);
 
 		// Put Inputs
-		for inp in &self.inputs {
+		for inp in &item.inputs {
 			inp.block_encode(dst)?;
 		}
 
 		// Put Outputs
-		for outp in &self.outputs {
+		for outp in &item.outputs {
 			outp.block_encode(dst)?;
 		}
 
 		// Put TxKernels
-		for proof in &self.kernels {
+		for proof in &item.kernels {
 			proof.block_encode(dst)?;
 		}
 
@@ -123,9 +73,10 @@ impl BlockEncode for Block {
 	}
 }
 
-impl BlockDecode for Block {
-	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error> {
-
+impl codec::Decoder for BlockCodec {
+	type Item = Block;
+	type Error = io::Error;
+	fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
 		// Get Header
 		let header = try_opt_dec!(BlockHeader::block_decode(src)?);
 
@@ -176,6 +127,16 @@ impl codec::Encoder for BlockHasher {
 		// Only encode header
 		partial_block_encode(&item.header, dst)
 	}
+}
+
+/// Internal Convenience Trait
+trait BlockEncode: Sized {
+	fn block_encode(&self, dst: &mut BytesMut) -> Result<(), io::Error>;
+}
+
+/// Internal Convenience Trait
+trait BlockDecode: Sized {
+	fn block_decode(src: &mut BytesMut) -> Result<Option<Self>, io::Error>;
 }
 
 impl BlockEncode for BlockHeader {
@@ -499,5 +460,197 @@ impl BlockDecode for Proof {
 			proof_data[n] = buf.get_u32::<BigEndian>();
 		}
 		Ok(Some(Proof(proof_data)))
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn should_have_block_codec_roundtrip() {
+		use tokio_io::codec::{Encoder, Decoder};
+
+		let input = Input(Commitment([1; PEDERSEN_COMMITMENT_SIZE]));
+
+		let output = Output {
+			features: OutputFeatures::empty(),
+			commit: Commitment([1; PEDERSEN_COMMITMENT_SIZE]),
+			proof: RangeProof {
+				proof: [1; 5134],
+				plen: 5134,
+			},
+		};
+
+		let kernel = TxKernel {
+			features: KernelFeatures::empty(),
+			excess: Commitment([1; PEDERSEN_COMMITMENT_SIZE]),
+			excess_sig: vec![1; 10],
+			fee: 100,
+		};
+
+		let block = Block {
+			header: BlockHeader::default(),
+			inputs: vec![input],
+			outputs: vec![output],
+			kernels: vec![kernel],
+		};
+
+		let mut buf = BytesMut::with_capacity(0);
+		let mut codec = BlockCodec {};
+		codec.encode(block.clone(), &mut buf).expect("Error During Block Encoding");
+
+		let d_block =
+			codec.decode(&mut buf).expect("Error During Block Decoding").expect("Unfinished Block");
+
+		assert_eq!(block.header.height, d_block.header.height);
+		assert_eq!(block.header.previous, d_block.header.previous);
+		assert_eq!(block.header.timestamp, d_block.header.timestamp);
+		assert_eq!(block.header.cuckoo_len, d_block.header.cuckoo_len);
+		assert_eq!(block.header.utxo_merkle, d_block.header.utxo_merkle);
+		assert_eq!(block.header.tx_merkle, d_block.header.tx_merkle);
+		assert_eq!(block.header.features, d_block.header.features);
+		assert_eq!(block.header.nonce, d_block.header.nonce);
+		assert_eq!(block.header.pow, d_block.header.pow);
+		assert_eq!(block.header.difficulty, d_block.header.difficulty);
+		assert_eq!(block.header.total_difficulty,
+		           d_block.header.total_difficulty);
+
+		assert_eq!(block.inputs[0].commitment(), d_block.inputs[0].commitment());
+
+		assert_eq!(block.outputs[0].features, d_block.outputs[0].features);
+		assert_eq!(block.outputs[0].proof().as_ref(),
+		           d_block.outputs[0].proof().as_ref());
+		assert_eq!(block.outputs[0].commitment(),
+		           d_block.outputs[0].commitment());
+
+		assert_eq!(block.kernels[0].features, d_block.kernels[0].features);
+		assert_eq!(block.kernels[0].excess, d_block.kernels[0].excess);
+		assert_eq!(block.kernels[0].excess_sig, d_block.kernels[0].excess_sig);
+		assert_eq!(block.kernels[0].fee, d_block.kernels[0].fee);
+
+	}
+
+	#[test]
+	fn should_encode_and_decode_blockheader() {
+
+		let block_header = BlockHeader::default();
+
+		let mut buf = BytesMut::with_capacity(0);
+		block_header.block_encode(&mut buf);
+
+		let d_block_header = BlockHeader::block_decode(&mut buf).unwrap().unwrap();
+
+		assert_eq!(block_header.height, d_block_header.height);
+		assert_eq!(block_header.previous, d_block_header.previous);
+		assert_eq!(block_header.timestamp, d_block_header.timestamp);
+		assert_eq!(block_header.cuckoo_len, d_block_header.cuckoo_len);
+		assert_eq!(block_header.utxo_merkle, d_block_header.utxo_merkle);
+		assert_eq!(block_header.tx_merkle, d_block_header.tx_merkle);
+		assert_eq!(block_header.features, d_block_header.features);
+		assert_eq!(block_header.nonce, d_block_header.nonce);
+		assert_eq!(block_header.pow, d_block_header.pow);
+		assert_eq!(block_header.difficulty, d_block_header.difficulty);
+		assert_eq!(block_header.total_difficulty,
+		           d_block_header.total_difficulty);
+
+	}
+
+
+	#[test]
+	fn should_encode_and_decode_input() {
+		let input = Input(Commitment([1; PEDERSEN_COMMITMENT_SIZE]));
+
+		let mut buf = BytesMut::with_capacity(0);
+		input.block_encode(&mut buf);
+
+		assert_eq!([1; PEDERSEN_COMMITMENT_SIZE].as_ref(), buf);
+		assert_eq!(input.commitment(),
+		           Input::block_decode(&mut buf)
+			           .unwrap()
+			           .unwrap()
+			           .commitment());
+	}
+
+	#[test]
+	fn should_encode_and_decode_output() {
+		let output = Output {
+			features: OutputFeatures::empty(),
+			commit: Commitment([1; PEDERSEN_COMMITMENT_SIZE]),
+			proof: RangeProof {
+				proof: [1; 5134],
+				plen: 5134,
+			},
+		};
+
+		let mut buf = BytesMut::with_capacity(0);
+		output.block_encode(&mut buf);
+
+		let d_output = Output::block_decode(&mut buf).unwrap().unwrap();
+
+		assert_eq!(output.features, d_output.features);
+		assert_eq!(output.proof().as_ref(), d_output.proof().as_ref());
+		assert_eq!(output.commitment(), d_output.commitment());
+
+	}
+
+	#[test]
+	fn should_encode_and_decode_txkernel() {
+
+		let kernel = TxKernel {
+			features: KernelFeatures::empty(),
+			excess: Commitment([1; PEDERSEN_COMMITMENT_SIZE]),
+			excess_sig: vec![1; 10],
+			fee: 100,
+		};
+
+		let mut buf = BytesMut::with_capacity(0);
+		kernel.block_encode(&mut buf);
+
+		let d_kernel = TxKernel::block_decode(&mut buf).unwrap().unwrap();
+
+		assert_eq!(kernel.features, d_kernel.features);
+		assert_eq!(kernel.excess, d_kernel.excess);
+		assert_eq!(kernel.excess_sig, d_kernel.excess_sig);
+		assert_eq!(kernel.fee, d_kernel.fee);
+	}
+
+	#[test]
+	fn should_encode_and_decode_difficulty() {
+
+		let difficulty = Difficulty::from_num(1000);
+
+		let mut buf = BytesMut::with_capacity(0);
+		difficulty.block_encode(&mut buf);
+
+		let d_difficulty = Difficulty::block_decode(&mut buf).unwrap().unwrap();
+
+		assert_eq!(difficulty, d_difficulty);
+	}
+
+	#[test]
+	fn should_encode_and_decode_hash() {
+
+		let hash = Hash([1u8; 32]);
+
+		let mut buf = BytesMut::with_capacity(0);
+		hash.block_encode(&mut buf);
+
+		let d_hash = Hash::block_decode(&mut buf).unwrap().unwrap();
+
+		assert_eq!(hash, d_hash);
+	}
+
+	#[test]
+	fn should_encode_and_decode_proof() {
+
+		let proof = Proof::zero();
+
+		let mut buf = BytesMut::with_capacity(0);
+		proof.block_encode(&mut buf);
+
+		let d_proof = Proof::block_decode(&mut buf).unwrap().unwrap();
+
+		assert_eq!(proof, d_proof);
 	}
 }

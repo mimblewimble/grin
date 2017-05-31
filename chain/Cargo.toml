@@ -11,9 +11,6 @@ log = "^0.3"
 serde = "~1.0.8"
 serde_derive = "~1.0.8"
 time = "^0.1"
-tokio-io = "0.1.1"
-bytes = "0.4.2"
-num-bigint = "^0.1.35"
 
 grin_core = { path = "../core" }
 grin_store = { path = "../store" }

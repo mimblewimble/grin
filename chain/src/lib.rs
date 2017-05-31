@@ -29,9 +29,6 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate time;
-extern crate tokio_io;
-extern crate bytes;
-extern crate num_bigint;
 
 extern crate grin_core as core;
 extern crate grin_store;
@@ -40,7 +37,6 @@ extern crate secp256k1zkp as secp;
 pub mod pipe;
 pub mod store;
 pub mod types;
-pub mod codec;
 
 // Re-export the base interface
 

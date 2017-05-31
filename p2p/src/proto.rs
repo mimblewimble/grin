@@ -44,8 +44,7 @@ impl Codec for GrinCodec {
   fn encode(&mut self, msg: Self::In, mut buf: &mut Vec<u8>) -> io::Result<()> {
     match msg {
       Frame::Message{id, message, ..} => {
-        ser::serialize(&mut buf, &message)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Encoding error: {:?}", e)))?;
+        ser::serialize(&mut buf, &message).map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Encoding error: {:?}", e)))?;
       },
       Frame::Body{id, chunk} => {
         if let Some(chunk) = chunk {

@@ -35,16 +35,13 @@ use std::fmt;
 use std::iter::Iterator;
 use std::marker::PhantomData;
 use std::sync::RwLock;
-use tokio_io::codec::{Encoder,Decoder};
-use bytes::BytesMut;
-use bytes::buf::{FromBuf, IntoBuf};
 
 use byteorder::{WriteBytesExt, BigEndian};
 use rocksdb::{DB, WriteBatch, DBCompactionStyle, DBIterator, IteratorMode, Direction};
 
 use core::ser;
 
-pub mod codec;
+mod codec;
 use codec::{BlockCodec, BlockHasher, TxCodec};
 
 /// Main error type for this crate.
@@ -57,8 +54,6 @@ pub enum Error {
 	RocksDbErr(String),
 	/// Wraps a serialization error for Writeable or Readable
 	SerErr(ser::Error),
-	/// Wraps an Io Error
-	Io(std::io::Error),
 }
 
 impl fmt::Display for Error {
@@ -67,7 +62,6 @@ impl fmt::Display for Error {
 			&Error::NotFoundErr => write!(f, "Not Found"),
 			&Error::RocksDbErr(ref s) => write!(f, "RocksDb Error: {}", s),
 			&Error::SerErr(ref e) => write!(f, "Serialization Error: {}", e.to_string()),
-			&Error::Io(ref e) => write!(f, "Codec Error: {}", e)
 		}
 	}
 }
@@ -75,12 +69,6 @@ impl fmt::Display for Error {
 impl From<rocksdb::Error> for Error {
 	fn from(e: rocksdb::Error) -> Error {
 		Error::RocksDbErr(e.to_string())
-	}
-}
-
-impl From<std::io::Error> for Error {
-	fn from(e: std::io::Error) -> Error {
-		Error::Io(e)
 	}
 }
 
@@ -110,25 +98,13 @@ impl Store {
 		db.put(key, &value[..]).map_err(&From::from)
 	}
 
-	/// Writes a single key and a value using a given encoder.
-	pub fn put_enc<E: Encoder>(&self, encoder: &mut E, key: &[u8], value: E::Item) -> Result<(), Error> 
-		where Error: From<E::Error> {
-
-		let mut data = BytesMut::with_capacity(0);
-		encoder.encode(value, &mut data)?;
-		self.put(key, data.to_vec())
-	}
-
-	/// Gets a value from the db, provided its key and corresponding decoder
-	pub fn get_dec<D: Decoder>(&self, decoder: &mut D, key: &[u8]) -> Result<Option<D::Item>, Error> 
-		where Error: From<D::Error> {	
-			
-		let data = self.get(key)?;
-		if let Some(buf) = data {
-			let mut buf = BytesMut::from_buf(buf);
-			decoder.decode(&mut buf).map_err(From::from)
-		} else {
-			Ok(None)
+	/// Writes a single key and its `Writeable` value to the db. Encapsulates
+	/// serialization.
+	pub fn put_ser<W: ser::Writeable>(&self, key: &[u8], value: &W) -> Result<(), Error> {
+		let ser_value = ser::ser_vec(value);
+		match ser_value {
+			Ok(data) => self.put(key, data),
+			Err(err) => Err(Error::SerErr(err)),
 		}
 	}
 
@@ -136,6 +112,30 @@ impl Store {
 	pub fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
 		let db = self.rdb.read().unwrap();
 		db.get(key).map(|r| r.map(|o| o.to_vec())).map_err(From::from)
+	}
+
+	/// Gets a `Readable` value from the db, provided its key. Encapsulates
+	/// serialization.
+	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
+		self.get_ser_limited(key, 0)
+	}
+
+	/// Gets a `Readable` value from the db, provided its key, allowing to
+	/// extract only partial data. The underlying Readable size must align
+	/// accordingly. Encapsulates serialization.
+	pub fn get_ser_limited<T: ser::Readable>(&self,
+	                                            key: &[u8],
+	                                            len: usize)
+	                                            -> Result<Option<T>, Error> {
+		let data = try!(self.get(key));
+		match data {
+			Some(val) => {
+				let mut lval = if len > 0 { &val[..len] } else { &val[..] };
+				let r = try!(ser::deserialize(&mut lval).map_err(Error::SerErr));
+				Ok(Some(r))
+			}
+			None => Ok(None),
+		}
 	}
 
 	/// Whether the provided key exists
@@ -150,15 +150,17 @@ impl Store {
 		db.delete(key).map_err(From::from)
 	}
 
-	/// Produces an iterator of items decoded by a decoder moving forward from the provided key.
-	pub fn iter_dec<D: Decoder>(&self, codec: D, from: &[u8]) -> DecIterator<D> {
+	/// Produces an iterator of `Readable` types moving forward from the
+	/// provided
+	/// key.
+	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> SerIterator<T> {
 		let db = self.rdb.read().unwrap();
-		DecIterator {
+		SerIterator {
 			iter: db.iterator(IteratorMode::From(from, Direction::Forward)),
-			codec: codec
+			_marker: PhantomData,
 		}
 	}
-	
+
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Batch {
 		Batch {
@@ -180,13 +182,17 @@ pub struct Batch<'a> {
 }
 
 impl<'a> Batch<'a> {
-
-	/// Using a given encoder, Writes a single key and a value to the batch.
-	pub fn put_enc<E: Encoder>(mut self, encoder: &mut E, key: &[u8], value: E::Item) -> Result<Batch<'a>, Error> where Error: From<E::Error> {
-		let mut data = BytesMut::with_capacity(0);
-		encoder.encode(value, &mut data)?;
-		self.batch.put(key, &data)?;
-		Ok(self)
+	/// Writes a single key and its `Writeable` value to the batch. The write
+	/// function must be called to "commit" the batch to storage.
+	pub fn put_ser<W: ser::Writeable>(mut self, key: &[u8], value: &W) -> Result<Batch<'a>, Error> {
+		let ser_value = ser::ser_vec(value);
+		match ser_value {
+			Ok(data) => {
+				self.batch.put(key, &data[..])?;
+				Ok(self)
+			}
+			Err(err) => Err(Error::SerErr(err)),
+		}
 	}
 
 	/// Writes the batch to RocksDb.
@@ -195,23 +201,28 @@ impl<'a> Batch<'a> {
 	}
 }
 
-/// An iterator that produces items from a `DBIterator` instance with a given `Decoder`.
-/// Iterates and decodes returned values
-pub struct DecIterator<D> where D: Decoder {
+/// An iterator thad produces Readable instances back. Wraps the lower level
+/// DBIterator and deserializes the returned values.
+pub struct SerIterator<T>
+	where T: ser::Readable
+{
 	iter: DBIterator,
-	codec: D
+	_marker: PhantomData<T>,
 }
 
-impl <D> Iterator for DecIterator<D> where D: Decoder {
-	type Item = D::Item;
-	fn next(&mut self) -> Option<Self::Item> {
+impl<T> Iterator for SerIterator<T>
+    where T: ser::Readable
+{
+	type Item = T;
+
+	fn next(&mut self) -> Option<T> {
 		let next = self.iter.next();
-		next.and_then(|(_, v)| {
-			self.codec.decode(&mut BytesMut::from(v.as_ref())).ok()
-		}).unwrap_or(None)
+		next.and_then(|r| {
+			let (_, v) = r;
+			ser::deserialize(&mut &v[..]).ok()
+		})
 	}
 }
-
 
 /// Build a db key from a prefix and a byte vector identifier.
 pub fn to_key(prefix: u8, k: &mut Vec<u8>) -> Vec<u8> {
