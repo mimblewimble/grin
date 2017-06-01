@@ -97,9 +97,8 @@ impl ChainStore for ChainKVStore {
 		for out in &b.outputs {
 			let mut out_bytes = out.commit.as_ref().to_vec();
 			println!("OUTSAVE: {:?}", out_bytes);
-			batch = batch.put_enc(&mut BlockCodec::default(),
-				         &to_key(OUTPUT_COMMIT_PREFIX, &mut out_bytes)[..],
-				         out.hash().clone())?;
+			batch = batch.put_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut out_bytes)[..],
+				         &out.hash())?;
 		}
 		batch.write()
 	}
@@ -114,8 +113,7 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, Error> {
-		option_to_not_found(self.db.get_dec(&mut BlockCodec::default(),
-		                                    &to_key(OUTPUT_COMMIT_PREFIX,
+		option_to_not_found(self.db.get_ser(&to_key(OUTPUT_COMMIT_PREFIX,
 		                                            &mut commit.as_ref().to_vec())))
 	}
 
