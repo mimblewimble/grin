@@ -96,9 +96,7 @@ impl ChainStore for ChainKVStore {
 		// saving the full output under its hash, as well as a commitment to hash index
 		for out in &b.outputs {
 			let mut out_bytes = out.commit.as_ref().to_vec();
-			println!("OUTSAVE: {:?}", out_bytes);
-			batch = batch.put_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut out_bytes)[..],
-				         &out.hash())?;
+			batch = batch.put_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut out_bytes)[..], out)?;
 		}
 		batch.write()
 	}
@@ -113,8 +111,8 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(OUTPUT_COMMIT_PREFIX,
-		                                            &mut commit.as_ref().to_vec())))
+		option_to_not_found(self.db
+			.get_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut commit.as_ref().to_vec())))
 	}
 
 	fn has_output_commit(&self, commit: &Commitment) -> Result<Hash, Error> {

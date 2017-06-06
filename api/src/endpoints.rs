@@ -74,9 +74,10 @@ impl ApiEndpoint for OutputApi {
 	fn get(&self, id: String) -> ApiResult<Output> {
 		debug!("GET output {}", id);
 		let c = util::from_hex(id.clone()).map_err(|e| Error::Argument(format!("Not a valid commitment: {}", id)))?;
-		self.chain_store
+		let out = self.chain_store
 			.get_output_by_commit(&Commitment::from_vec(c))
-			.map_err(|e| Error::Internal(e.to_string()))
+			.map_err(|e| Error::Internal(e.to_string()));
+		out
 	}
 }
 

@@ -28,7 +28,6 @@ use rest::Error;
 pub fn get<'a, T>(url: &'a str) -> Result<T, Error>
 	where for<'de> T: Deserialize<'de>
 {
-	println!("get {}", url);
 	let client = hyper::Client::new();
 	let res = check_error(client.get(url).send())?;
 	serde_json::from_reader(res)

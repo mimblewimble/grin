@@ -140,5 +140,5 @@ fn receive_coinbase(ext_key: &ExtendedKey, amount: u64) -> Result<(Output, TxKer
 	info!("Using child {} for a new coinbase output.",
 	      coinbase_key.n_child);
 
-	Block::reward_output(ext_key.key, &secp).map_err(&From::from)
+	Block::reward_output(coinbase_key.key, &secp).map_err(&From::from);
 }

@@ -27,7 +27,7 @@ pub fn issue_send_tx(ext_key: &ExtendedKey, amount: u64, dest: String) -> Result
 	let (tx, blind_sum) = build_send_tx(ext_key, amount)?;
 	let json_tx = partial_tx_to_json(amount, blind_sum, tx);
 	if dest == "stdout" {
-		println!("{}", dest);
+		println!("{}", json_tx);
 	} else if &dest[..4] == "http" {
 		// TODO
 		unimplemented!();

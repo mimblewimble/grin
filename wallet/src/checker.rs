@@ -24,14 +24,14 @@ use util;
 use extkey::ExtendedKey;
 use types::{WalletConfig, OutputStatus, WalletData};
 
+/// Goes through the list of outputs that haven't been spent yet and check
+/// with a node whether their status has changed.
 pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) {
-	println!("REFRESH");
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	let mut wallet_data = WalletData::read_or_create().expect("Could not open wallet data.");
 
 	let mut changed = 0;
 	for out in &mut wallet_data.outputs {
-		println!("check out {}", out.n_child);
 		if out.status != OutputStatus::Spent {
 			let key = ext_key.derive(&secp, out.n_child).unwrap();
 			let commitment = secp.commit(out.value, key.key).unwrap();
@@ -39,7 +39,6 @@ pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) {
 			// TODO check the pool for unconfirmed
 			let out_res = get_output_by_commitment(config, commitment);
 			if out_res.is_ok() {
-				println!("ok");
 				out.status = OutputStatus::Unspent;
 				changed += 1;
 			}
@@ -50,6 +49,8 @@ pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) {
 	}
 }
 
+// queries a reachable node for a given output, checking whether it's been
+// confirmed
 fn get_output_by_commitment(config: &WalletConfig,
                             commit: pedersen::Commitment)
                             -> Result<Output, api::Error> {
