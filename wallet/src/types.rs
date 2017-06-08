@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::convert::From;
 use std::fs::File;
 use std::io::Write;
+use std::num;
 use std::path::Path;
-use std::convert::From;
 
-use serde::{Serialize, Deserialize};
 use serde_json;
 
-use secp::{self, Secp256k1};
+use secp;
 use secp::key::SecretKey;
 
 use core::core::Transaction;
@@ -37,6 +37,8 @@ pub enum Error {
 	Crypto(secp::Error),
 	Key(extkey::Error),
 	WalletData(String),
+	/// An error in the format of the JSON structures exchanged by the wallet
+	Format(String),
 }
 
 impl From<secp::Error> for Error {
@@ -48,6 +50,18 @@ impl From<secp::Error> for Error {
 impl From<extkey::Error> for Error {
 	fn from(e: extkey::Error) -> Error {
 		Error::Key(e)
+	}
+}
+
+impl From<serde_json::Error> for Error {
+	fn from(e: serde_json::Error) -> Error {
+		Error::Format(e.to_string())
+	}
+}
+
+impl From<num::ParseIntError> for Error {
+	fn from(e: num::ParseIntError) -> Error {
+		Error::Format("Invalid hex".to_string())
 	}
 }
 
@@ -190,4 +204,21 @@ pub fn partial_tx_to_json(receive_amount: u64, blind_sum: SecretKey, tx: Transac
 		tx: util::to_hex(ser::ser_vec(&tx).unwrap()),
 	};
 	serde_json::to_string_pretty(&partial_tx).unwrap()
+}
+
+/// Reads a partial transaction encoded as JSON into the amount, sum of blinding
+/// factors and the transaction itself.
+pub fn partial_tx_from_json(json_str: &str) -> Result<(u64, SecretKey, Transaction), Error> {
+	let partial_tx: JSONPartialTx = serde_json::from_str(json_str)?;
+
+	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
+	let blind_bin = util::from_hex(partial_tx.blind_sum)?;
+	let blinding = SecretKey::from_slice(&secp, &blind_bin[..])?;
+	let tx_bin = util::from_hex(partial_tx.tx)?;
+	let tx =
+		ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
+				Error::Format("Could not deserialize transaction, invalid format.".to_string())
+			})?;
+
+	Ok((partial_tx.amount, blinding, tx))
 }

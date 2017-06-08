@@ -21,6 +21,10 @@ use core::core::{Transaction, build};
 use extkey::ExtendedKey;
 use types::*;
 
+/// Issue a new transaction to the provided sender by spending some of our
+/// wallet
+/// UTXOs. The destination can be "stdout" (for command line) or a URL to the
+/// recipients wallet receiver (to be implemented).
 pub fn issue_send_tx(ext_key: &ExtendedKey, amount: u64, dest: String) -> Result<(), Error> {
 	checker::refresh_outputs(&WalletConfig::default(), ext_key);
 
@@ -44,7 +48,7 @@ fn build_send_tx(ext_key: &ExtendedKey, amount: u64) -> Result<(Transaction, Sec
 
 	// second, check from our local wallet data for outputs to spend
 	let mut wallet_data = WalletData::read()?;
-	let (mut coins, change) = wallet_data.select(ext_key.fingerprint, amount);
+	let (coins, change) = wallet_data.select(ext_key.fingerprint, amount);
 	if change < 0 {
 		return Err(Error::NotEnoughFunds((-change) as u64));
 	}

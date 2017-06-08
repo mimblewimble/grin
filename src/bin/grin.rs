@@ -96,7 +96,12 @@ fn main() {
                      .help("Wallet passphrase used to generate the private key seed")
                      .takes_value(true))
                 .subcommand(SubCommand::with_name("receive")
-                            .about("Run the wallet in receiving mode"))
+                            .about("Run the wallet in receiving mode. If an input file is provided, will process it, otherwise runs in server mode waiting for send requests.")
+                            .arg(Arg::with_name("input")
+                                 .help("Partial transaction to receive, expects as a JSON file.")
+                                 .short("i")
+                                 .long("input")
+                                 .takes_value(true)))
                 .subcommand(SubCommand::with_name("send")
                             .about("Builds a transaction to send someone some coins. By default, the transaction will just be printed to stdout. If a destination is provided, the command will attempt to contact the receiver at that address and send the transaction directly.")
                             .arg(Arg::with_name("amount")
@@ -195,14 +200,21 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		.expect("Error deriving extended key from seed.");
 
 	match wallet_args.subcommand() {
-		("receive", _) => {
-			info!("Starting the Grin wallet receiving daemon...");
-			let mut apis = api::ApiServer::new("/v1".to_string());
-			apis.register_endpoint("/receive_coinbase".to_string(),
-			                       wallet::WalletReceiver { key: key });
-			apis.start("127.0.0.1:13416").unwrap_or_else(|e| {
-				error!("Failed to start Grin wallet receiver: {}.", e);
-			});
+		("receive", Some(receive_args)) => {
+			if let Some(f) = receive_args.value_of("input") {
+				let mut file = File::open(f).expect("Unable to open transaction file.");
+				let mut contents = String::new();
+				file.read_to_string(&mut contents).expect("Unable to read transaction file.");
+				wallet::receive_json_tx(&key, contents.as_str()).unwrap();
+			} else {
+				info!("Starting the Grin wallet receiving daemon...");
+				let mut apis = api::ApiServer::new("/v1".to_string());
+				apis.register_endpoint("/receive_coinbase".to_string(),
+				                       wallet::WalletReceiver { key: key });
+				apis.start("127.0.0.1:13416").unwrap_or_else(|e| {
+					error!("Failed to start Grin wallet receiver: {}.", e);
+				});
+			}
 		}
 		("send", Some(send_args)) => {
 			let amount = send_args.value_of("amount")

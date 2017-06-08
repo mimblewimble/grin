@@ -60,6 +60,17 @@ use extkey::{self, ExtendedKey};
 use types::*;
 use util;
 
+/// Receive an already well formed JSON transaction issuance and finalize the
+/// transaction, adding our receiving output, to broadcast to the rest of the
+/// network.
+pub fn receive_json_tx(ext_key: &ExtendedKey, partial_tx_str: &str) -> Result<(), Error> {
+	let (amount, blinding, partial_tx) = partial_tx_from_json(partial_tx_str)?;
+	let final_tx = receive_transaction(ext_key, amount, blinding, partial_tx)?;
+	// TODO send to a node to broadcast
+	println!("TX OK!");
+	Ok(())
+}
+
 /// Amount in request to build a coinbase output.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CbAmount {
@@ -140,5 +151,37 @@ fn receive_coinbase(ext_key: &ExtendedKey, amount: u64) -> Result<(Output, TxKer
 	info!("Using child {} for a new coinbase output.",
 	      coinbase_key.n_child);
 
-	Block::reward_output(coinbase_key.key, &secp).map_err(&From::from);
+	Block::reward_output(coinbase_key.key, &secp).map_err(&From::from)
+}
+
+/// Builds a full transaction from the partial one sent to us for transfer
+fn receive_transaction(ext_key: &ExtendedKey,
+                       amount: u64,
+                       blinding: SecretKey,
+                       partial: Transaction)
+                       -> Result<Transaction, Error> {
+
+	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
+
+	// derive a new private for the receiving output
+	let mut wallet_data = WalletData::read_or_create()?;
+	let next_child = wallet_data.next_child(ext_key.fingerprint);
+	let out_key = ext_key.derive(&secp, next_child).map_err(|e| Error::Key(e))?;
+
+	let (tx_final, _) = build::transaction(vec![build::initial_tx(partial),
+	                                            build::with_excess(blinding),
+	                                            build::output(amount, out_key.key)])?;
+
+	// track the new output and return the finalized transaction to broadcast
+	wallet_data.append_output(OutputData {
+		fingerprint: out_key.fingerprint,
+		n_child: out_key.n_child,
+		value: amount,
+		status: OutputStatus::Unconfirmed,
+	});
+	wallet_data.write()?;
+
+	info!("Using child {} for a new coinbase output.", out_key.n_child);
+
+	Ok(tx_final)
 }
