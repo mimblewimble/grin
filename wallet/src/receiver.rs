@@ -60,14 +60,23 @@ use extkey::{self, ExtendedKey};
 use types::*;
 use util;
 
+/// Dummy wrapper for the hex-encoded serialized transaction.
+#[derive(Serialize, Deserialize)]
+struct TxWrapper {
+	tx_hex: String,
+}
+
 /// Receive an already well formed JSON transaction issuance and finalize the
 /// transaction, adding our receiving output, to broadcast to the rest of the
 /// network.
 pub fn receive_json_tx(ext_key: &ExtendedKey, partial_tx_str: &str) -> Result<(), Error> {
 	let (amount, blinding, partial_tx) = partial_tx_from_json(partial_tx_str)?;
 	let final_tx = receive_transaction(ext_key, amount, blinding, partial_tx)?;
-	// TODO send to a node to broadcast
-	println!("TX OK!");
+	let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
+
+	let config = WalletConfig::default();
+	let url = format!("{}/v1/receive_coinbase", config.api_http_addr.as_str());
+	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })?;
 	Ok(())
 }
 

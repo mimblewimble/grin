@@ -23,6 +23,7 @@ use serde_json;
 use secp;
 use secp::key::SecretKey;
 
+use api;
 use core::core::Transaction;
 use core::ser;
 use extkey;
@@ -39,6 +40,8 @@ pub enum Error {
 	WalletData(String),
 	/// An error in the format of the JSON structures exchanged by the wallet
 	Format(String),
+	/// Error when contacting a node through its API
+	Node(api::Error),
 }
 
 impl From<secp::Error> for Error {
@@ -62,6 +65,12 @@ impl From<serde_json::Error> for Error {
 impl From<num::ParseIntError> for Error {
 	fn from(e: num::ParseIntError) -> Error {
 		Error::Format("Invalid hex".to_string())
+	}
+}
+
+impl From<api::Error> for Error {
+	fn from(e: api::Error) -> Error {
+		Error::Node(e)
 	}
 }
 

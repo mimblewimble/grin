@@ -24,8 +24,9 @@
 use std::sync::Arc;
 use std::thread;
 
-use core::core::Output;
+use core::core::{Transaction, Output};
 use core::core::hash::Hash;
+use core::ser;
 use chain::{self, Tip};
 use rest::*;
 use secp::pedersen::Commitment;
@@ -81,6 +82,42 @@ impl ApiEndpoint for OutputApi {
 	}
 }
 
+/// ApiEndpoint implementation for the transaction pool, to check its status
+/// and size as well as push new transactions.
+#[derive(Clone)]
+pub struct PoolApi {
+}
+
+impl ApiEndpoint for PoolApi {
+	type ID = String;
+	type T = ();
+	type OP_IN = TxWrapper;
+	type OP_OUT = ();
+
+	fn operations(&self) -> Vec<Operation> {
+		vec![Operation::Custom("push".to_string())]
+	}
+
+	fn operation(&self, op: String, input: TxWrapper) -> ApiResult<()> {
+		let tx_bin = util::from_hex(input.tx_hex)
+      .map_err(|e| Error::Argument(format!("Invalid hex in transaction wrapper.")))?;
+
+		let tx: Transaction = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
+				Error::Argument("Could not deserialize transaction, invalid format.".to_string())
+			})?;
+
+		println!("Fake push of transaction:");
+		println!("{:?}", tx);
+		Ok(())
+	}
+}
+
+/// Dummy wrapper for the hex-encoded serialized transaction.
+#[derive(Serialize, Deserialize)]
+struct TxWrapper {
+	tx_hex: String,
+}
+
 /// Start all server REST APIs. Just register all of them on a ApiServer
 /// instance and runs the corresponding HTTP server.
 pub fn start_rest_apis(addr: String, chain_store: Arc<chain::ChainStore>) {
@@ -91,6 +128,8 @@ pub fn start_rest_apis(addr: String, chain_store: Arc<chain::ChainStore>) {
 		                       ChainApi { chain_store: chain_store.clone() });
 		apis.register_endpoint("/chain/output".to_string(),
 		                       OutputApi { chain_store: chain_store.clone() });
+		apis.register_endpoint("/pool".to_string(), PoolApi {});
+
 		apis.start(&addr[..]).unwrap_or_else(|e| {
 			error!("Failed to start API HTTP server: {}.", e);
 		});
