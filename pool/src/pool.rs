@@ -66,7 +66,7 @@ impl TransactionPool {
     // unspent set, represented by blockchain unspents - pool spents, for an
     // output designated by output_commitment.
     fn search_blockchain_unspents(&self, output_commitment: &Commitment) -> Option<Parent> {
-        self.blockchain.get_best_utxo_set().get_output(output_commitment).
+        self.blockchain.get_unspent(output_commitment).
             map(|o| match self.pool.get_blockchain_spent(output_commitment) {
                 Some(x) => Parent::AlreadySpent{other_tx: x.destination_hash().unwrap()},
                 None => Parent::BlockTransaction,
@@ -218,7 +218,7 @@ impl TransactionPool {
         // Checking against current blockchain unspent outputs
         // We want outputs even if they're spent by pool txs, so we ignore
         // consumed_blockchain_outputs
-        if self.blockchain.get_best_utxo_set().get_output(&output.commitment()).is_some() {
+        if self.blockchain.get_unspent(&output.commitment()).is_some() {
             return Err(PoolError::DuplicateOutput{
                 other_tx: None,
                 in_chain: true,
@@ -326,9 +326,6 @@ impl TransactionPool {
     /// returning them to the pool in the event of a reorg that invalidates 
     /// this block.
     pub fn reconcile_block(&mut self, block: &block::Block) -> Result<Vec<Box<transaction::Transaction>>, PoolError> {
-        // Prepare the new blockchain-only UTXO view for this process
-        let updated_blockchain_utxo = self.blockchain.get_best_utxo_set();
-
         // If this pool has been kept in sync correctly, serializing all
         // updates, then the inputs must consume only members of the blockchain
         // utxo set.
@@ -378,12 +375,10 @@ impl TransactionPool {
             println!("Conflicting txs: {:?}", conflicting_txs);
 
             for txh in conflicting_txs {
-                self.mark_transaction(&updated_blockchain_utxo,
-                    txh, &mut marked_transactions);
+                self.mark_transaction(txh, &mut marked_transactions);
             }
         }
-        let freed_txs = self.sweep_transactions(marked_transactions,
-            &updated_blockchain_utxo);
+        let freed_txs = self.sweep_transactions(marked_transactions);
 
         self.reconcile_orphans();
 
@@ -400,8 +395,7 @@ impl TransactionPool {
     ///
     /// Marked transactions are added to the mutable marked_txs HashMap which
     /// is supplied by the calling function.
-    fn mark_transaction(&self, updated_utxo: &DummyUtxoSet,
-        conflicting_tx: hash::Hash,
+    fn mark_transaction(&self, conflicting_tx: hash::Hash,
         marked_txs: &mut HashMap<hash::Hash, ()>) {
 
         marked_txs.insert(conflicting_tx, ());
@@ -411,9 +405,8 @@ impl TransactionPool {
         for output in &tx_ref.unwrap().outputs {
             match self.pool.get_internal_spent_output(&output.commitment()) {
                 Some(x) => {
-                    if updated_utxo.get_output(&x.output_commitment()).is_none() {
-                        self.mark_transaction(updated_utxo,
-                            x.destination_hash().unwrap(), marked_txs);
+                    if self.blockchain.get_unspent(&x.output_commitment()).is_none() {
+                        self.mark_transaction(x.destination_hash().unwrap(), marked_txs);
                     }
                 },
                 None => {},
@@ -432,8 +425,8 @@ impl TransactionPool {
     /// TODO: There's some iteration overlap between this and the mark step.
     /// Additional bookkeeping in the mark step could optimize that away.
     fn sweep_transactions(&mut self,
-        marked_transactions: HashMap<hash::Hash, ()>,
-        updated_utxo: &DummyUtxoSet)->Vec<Box<transaction::Transaction>> {
+        marked_transactions: HashMap<hash::Hash, ()>,)
+        ->Vec<Box<transaction::Transaction>> {
 
         println!("marked_txs: {:?}", marked_transactions);
         let mut removed_txs = Vec::new();
