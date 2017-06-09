@@ -67,6 +67,10 @@ impl From<TimerError> for Error {
 pub struct P2PConfig {
 	pub host: IpAddr,
 	pub port: u16,
+	/// Maximum Bytes Per Second on receiving
+	pub max_receive_rate: u64,
+	/// Maximum Bytes per second on sending	
+	pub max_send_rate: u64,
 }
 
 /// Default address for peer-to-peer connections.
@@ -76,6 +80,8 @@ impl Default for P2PConfig {
 		P2PConfig {
 			host: ipaddr,
 			port: 13414,
+			max_receive_rate: 1_000_000,
+			max_send_rate: 1_000_000
 		}
 	}
 }
