@@ -34,8 +34,6 @@ use core::core::transaction;
 use core::core::block;
 use core::core::hash;
 
-
-
 /// Placeholder: the data representing where we heard about a tx from.
 ///
 /// Used to make decisions based on transaction acceptance priority from 
@@ -82,6 +80,15 @@ pub enum PoolError {
     DoubleSpend{other_tx: hash::Hash, spent_output: Commitment},
     // An orphan successfully added to the orphans set
     OrphanTransaction,
+}
+
+/// Interface that the pool requires from a blockchain implementation.
+pub trait BlockChain {
+  /// Get an unspent output by its commitment. Will return None if the output
+  /// is spent or if it doesn't exist. The blockchain is expected to produce
+  /// a result with its current view of the most worked chain, ignoring
+  /// orphans, etc.
+  fn get_unspent(&self, output_ref: &Commitment) -> Option<transaction::Output>;
 }
 
 /// Pool contains the elements of the graph that are connected, in full, to

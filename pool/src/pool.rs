@@ -14,7 +14,7 @@
 
 //! Top-level Pool type, methods, and tests
 
-use types::{Pool, Orphans, Parent, PoolError, TxSource, TransactionGraphContainer};
+use types::{Pool, BlockChain, Orphans, Parent, PoolError, TxSource, TransactionGraphContainer};
 pub use graph;
 
 use core::core::transaction;
@@ -31,7 +31,7 @@ use std::collections::HashMap;
 /// The pool itself.
 /// The transactions HashMap holds ownership of all transactions in the pool,
 /// keyed by their transaction hash.
-struct TransactionPool {
+pub struct TransactionPool<T> {
     pub transactions: HashMap<hash::Hash, Box<transaction::Transaction>>,
 
     pub pool : Pool,
@@ -39,11 +39,19 @@ struct TransactionPool {
 
     // blockchain is a DummyChain, for now, which mimics what the future
     // chain will offer to the pool
-    blockchain: Arc<Box<DummyChain>>,
+    blockchain: Arc<T>,
 }
 
+impl<T> TransactionPool<T> where T: BlockChain {
+    fn new(chain: Arc<T>) -> TransactionPool<T> {
+        TransactionPool{
+            transactions: HashMap::new(),
+            pool: Pool::empty(),
+            orphans: Orphans::empty(),
+            blockchain: chain,
+        }
+    }
 
-impl TransactionPool {
     /// Searches for an output, designated by its commitment, from the current 
     /// best UTXO view, presented by taking the best blockchain UTXO set (as
     /// determined by the blockchain component) and rectifying pool spent and
@@ -491,7 +499,7 @@ mod tests {
 
         // To mirror how this construction is intended to be used, the pool
         // is placed inside a RwLock.
-        let pool = RwLock::new(test_setup(&Arc::new(Box::new(dummy_chain))));
+        let pool = RwLock::new(test_setup(&Arc::new(dummy_chain)));
 
         // Take the write lock and add a pool entry
         {
@@ -546,7 +554,7 @@ mod tests {
 
         dummy_chain.update_utxo_set(new_utxo);
 
-        let pool = RwLock::new(test_setup(&Arc::new(Box::new(dummy_chain))));
+        let pool = RwLock::new(test_setup(&Arc::new(dummy_chain)));
         {
             let mut write_pool = pool.write().unwrap();
             assert_eq!(write_pool.total_size(), 0);
@@ -634,7 +642,7 @@ mod tests {
 
         dummy_chain.update_utxo_set(new_utxo);
 
-        let chain_ref = Arc::new(Box::new(dummy_chain) as Box<DummyChain>);
+        let chain_ref = Arc::new(dummy_chain);
 
         let pool = RwLock::new(test_setup(&chain_ref));
 
@@ -774,7 +782,7 @@ mod tests {
 
         dummy_chain.update_utxo_set(new_utxo);
 
-        let chain_ref = Arc::new(Box::new(dummy_chain) as Box<DummyChain>);
+        let chain_ref = Arc::new(dummy_chain);
 
         let pool = RwLock::new(test_setup(&chain_ref));
 
@@ -836,7 +844,7 @@ mod tests {
     }
 
 
-    fn test_setup(dummy_chain: &Arc<Box<DummyChain>>) -> TransactionPool {
+    fn test_setup(dummy_chain: &Arc<DummyChainImpl>) -> TransactionPool<DummyChainImpl> {
         TransactionPool{
             transactions: HashMap::new(),
             pool: Pool::empty(),

@@ -18,6 +18,8 @@ use secp::pedersen::Commitment;
 
 use std::sync::RwLock;
 
+use types::BlockChain;
+
 /// A DummyUtxoSet for mocking up the chain 
 pub struct DummyUtxoSet {
     outputs : HashMap<Commitment, transaction::Output>
@@ -84,10 +86,13 @@ impl DummyChainImpl {
     }
 }
 
-impl DummyChain for DummyChainImpl {
+impl BlockChain for DummyChainImpl {
     fn get_unspent(&self, commitment: &Commitment) -> Option<transaction::Output> {
         self.utxo.read().unwrap().get_output(commitment).cloned()
     }
+}
+
+impl DummyChain for DummyChainImpl {
     fn update_utxo_set(&mut self, new_utxo: DummyUtxoSet) {
         self.utxo = RwLock::new(new_utxo);
     }
@@ -96,8 +101,7 @@ impl DummyChain for DummyChainImpl {
     }
 }
 
-pub trait DummyChain {
-    fn get_unspent(&self, commitment: &Commitment) -> Option<transaction::Output>;
+pub trait DummyChain: BlockChain {
     fn update_utxo_set(&mut self, new_utxo: DummyUtxoSet);
     fn apply_block(&self, b: &block::Block);
 }

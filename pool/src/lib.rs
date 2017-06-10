@@ -22,9 +22,9 @@
 #![warn(missing_docs)]
 
 pub mod graph;
-pub mod types;
-pub mod blockchain;
-pub mod pool;
+mod types;
+mod blockchain;
+mod pool;
 
 extern crate time;
 extern crate rand;
@@ -33,3 +33,6 @@ extern crate log;
 
 extern crate grin_core as core;
 extern crate secp256k1zkp as secp;
+
+pub use pool::TransactionPool;
+pub use types::{BlockChain, PoolError};
