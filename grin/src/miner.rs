@@ -16,10 +16,10 @@
 //! block and mine the block to produce a valid header with its proof-of-work.
 
 use rand::{self, Rng};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use time;
 
-use adapters::ChainToNetAdapter;
+use adapters::{ChainToPoolAndNetAdapter, PoolToChainAdapter};
 use api;
 use core::consensus;
 use core::core;
@@ -28,15 +28,20 @@ use core::pow::cuckoo;
 use core::ser;
 use chain;
 use secp;
+use pool;
 use types::{MinerConfig, Error};
 use util;
+
+// Max number of transactions this miner will assemble in a block
+const MAX_TX: u32 = 5000;
 
 pub struct Miner {
 	config: MinerConfig,
 	chain_head: Arc<Mutex<chain::Tip>>,
 	chain_store: Arc<chain::ChainStore>,
 	/// chain adapter to net
-	chain_adapter: Arc<ChainToNetAdapter>,
+	chain_adapter: Arc<ChainToPoolAndNetAdapter>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 }
 
 impl Miner {
@@ -45,13 +50,15 @@ impl Miner {
 	pub fn new(config: MinerConfig,
 	           chain_head: Arc<Mutex<chain::Tip>>,
 	           chain_store: Arc<chain::ChainStore>,
-	           chain_adapter: Arc<ChainToNetAdapter>)
+	           chain_adapter: Arc<ChainToPoolAndNetAdapter>,
+	           tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>)
 	           -> Miner {
 		Miner {
 			config: config,
 			chain_head: chain_head,
 			chain_store: chain_store,
 			chain_adapter: chain_adapter,
+			tx_pool: tx_pool,
 		}
 	}
 
@@ -59,7 +66,7 @@ impl Miner {
 	/// chain anytime required and looking for PoW solution.
 	pub fn run_loop(&self) {
 		info!("Starting miner loop.");
-    let mut coinbase = self.get_coinbase();
+		let mut coinbase = self.get_coinbase();
 		loop {
 			// get the latest chain state and build a block on top of it
 			let head: core::BlockHeader;
@@ -77,7 +84,7 @@ impl Miner {
 			debug!("Mining at Cuckoo{} for at most 2 secs on block {} at difficulty {}.",
 			       b.header.cuckoo_len,
 			       latest_hash,
-             b.header.difficulty);
+			       b.header.difficulty);
 			let mut iter_count = 0;
 			while head.hash() == latest_hash && time::get_time().sec < deadline {
 				let pow_hash = b.hash();
@@ -110,7 +117,7 @@ impl Miner {
 				} else if let Ok(Some(tip)) = res {
 					let chain_head = self.chain_head.clone();
 					let mut head = chain_head.lock().unwrap();
-          coinbase = self.get_coinbase();
+					coinbase = self.get_coinbase();
 					*head = tip;
 				}
 			} else {
@@ -122,7 +129,10 @@ impl Miner {
 
 	/// Builds a new block with the chain head as previous and eligible
 	/// transactions from the pool.
-	fn build_block(&self, head: &core::BlockHeader, coinbase: (core::Output, core::TxKernel)) -> core::Block {
+	fn build_block(&self,
+	               head: &core::BlockHeader,
+	               coinbase: (core::Output, core::TxKernel))
+	               -> core::Block {
 		let mut now_sec = time::get_time().sec;
 		let head_sec = head.timestamp.to_timespec().sec;
 		if now_sec == head_sec {
@@ -131,9 +141,10 @@ impl Miner {
 		let (difficulty, cuckoo_len) =
 			consensus::next_target(now_sec, head_sec, head.difficulty.clone(), head.cuckoo_len);
 
-		// TODO populate inputs and outputs from pool transactions
-    let (output, kernel) = coinbase;
-		let mut b = core::Block::with_reward(head, vec![], output, kernel).unwrap();
+		let txs_box = self.tx_pool.read().unwrap().prepare_mineable_transactions(MAX_TX);
+		let txs = txs_box.iter().map(|tx| tx.as_ref()).collect();
+		let (output, kernel) = coinbase;
+		let mut b = core::Block::with_reward(head, txs, output, kernel).unwrap();
 
 		let mut rng = rand::OsRng::new().unwrap();
 		b.header.nonce = rng.gen();
@@ -145,21 +156,23 @@ impl Miner {
 
 	fn get_coinbase(&self) -> (core::Output, core::TxKernel) {
 		if self.config.burn_reward {
-		  let mut rng = rand::OsRng::new().unwrap();
+			let mut rng = rand::OsRng::new().unwrap();
 			let secp_inst = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 			let skey = secp::key::SecretKey::new(&secp_inst, &mut rng);
-      core::Block::reward_output(skey, &secp_inst).unwrap()
-    } else {
-      let url = format!("{}/v1/receive_coinbase", self.config.wallet_receiver_url.as_str());
-      let res: CbData = api::client::post(url.as_str(), &CbAmount { amount: consensus::REWARD })
+			core::Block::reward_output(skey, &secp_inst).unwrap()
+		} else {
+			let url = format!("{}/v1/receive_coinbase",
+			                  self.config.wallet_receiver_url.as_str());
+			let res: CbData = api::client::post(url.as_str(),
+			                                    &CbAmount { amount: consensus::REWARD })
 				.expect("Wallet receiver unreachable, could not claim reward. Is it running?");
-      let out_bin = util::from_hex(res.output).unwrap();
-      let kern_bin = util::from_hex(res.kernel).unwrap();
-      let output = ser::deserialize(&mut &out_bin[..]).unwrap();
-      let kernel = ser::deserialize(&mut &kern_bin[..]).unwrap();
+			let out_bin = util::from_hex(res.output).unwrap();
+			let kern_bin = util::from_hex(res.kernel).unwrap();
+			let output = ser::deserialize(&mut &out_bin[..]).unwrap();
+			let kernel = ser::deserialize(&mut &kern_bin[..]).unwrap();
 
-      (output, kernel)
-    }
+			(output, kernel)
+		}
 	}
 }
 

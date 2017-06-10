@@ -17,7 +17,6 @@
 
 use api;
 use core::core::{Output, DEFAULT_OUTPUT, COINBASE_OUTPUT};
-use core::core::hash::Hashed;
 use secp::{self, pedersen};
 use util;
 

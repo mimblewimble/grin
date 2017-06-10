@@ -17,7 +17,7 @@
 //! as a facade.
 
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time;
 
@@ -25,7 +25,7 @@ use futures::{future, Future, Stream};
 use tokio_core::reactor;
 use tokio_timer::Timer;
 
-use adapters::{NetToChainAdapter, ChainToNetAdapter};
+use adapters::*;
 use api;
 use chain;
 use chain::ChainStore;
@@ -33,6 +33,7 @@ use core;
 use core::core::hash::Hashed;
 use miner;
 use p2p;
+use pool;
 use seed;
 use store;
 use sync;
@@ -50,7 +51,9 @@ pub struct Server {
 	chain_store: Arc<chain::ChainStore>,
 	/// chain adapter to net, required for miner and anything that submits
 	/// blocks
-	chain_adapter: Arc<ChainToNetAdapter>,
+	chain_adapter: Arc<ChainToPoolAndNetAdapter>,
+	/// in-memory transaction pool
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 }
 
 impl Server {
@@ -82,10 +85,15 @@ impl Server {
 
 		let peer_store = Arc::new(p2p::PeerStore::new(config.db_root.clone())?);
 
-		let chain_adapter = Arc::new(ChainToNetAdapter::new());
+		let pool_adapter = Arc::new(PoolToChainAdapter::new(shared_head.clone(),
+		                                                    chain_store.clone()));
+		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(pool_adapter)));
+
+		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));
 		let net_adapter = Arc::new(NetToChainAdapter::new(shared_head.clone(),
 		                                                  chain_store.clone(),
 		                                                  chain_adapter.clone(),
+		                                                  tx_pool.clone(),
 		                                                  peer_store.clone()));
 		let server =
 			Arc::new(p2p::Server::new(config.capabilities, config.p2p_config, net_adapter.clone()));
@@ -107,7 +115,9 @@ impl Server {
 
 		evt_handle.spawn(server.start(evt_handle.clone()).map_err(|_| ()));
 
-		api::start_rest_apis(config.api_http_addr.clone(), chain_store.clone());
+		api::start_rest_apis(config.api_http_addr.clone(),
+		                     chain_store.clone(),
+		                     tx_pool.clone());
 
 		warn!("Grin server started.");
 		Ok(Server {
@@ -117,6 +127,7 @@ impl Server {
 			chain_head: shared_head,
 			chain_store: chain_store,
 			chain_adapter: chain_adapter,
+			tx_pool: tx_pool,
 		})
 	}
 
@@ -137,7 +148,8 @@ impl Server {
 		let miner = miner::Miner::new(config,
 		                              self.chain_head.clone(),
 		                              self.chain_store.clone(),
-		                              self.chain_adapter.clone());
+		                              self.chain_adapter.clone(),
+		                              self.tx_pool.clone());
 		thread::spawn(move || {
 			miner.run_loop();
 		});

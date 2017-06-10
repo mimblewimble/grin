@@ -14,14 +14,16 @@
 
 use std::net::SocketAddr;
 use std::ops::Deref;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
 use chain::{self, ChainAdapter};
-use core::core;
+use core::core::{self, Output};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use p2p::{self, NetAdapter, Server, PeerStore, PeerData, Capabilities, State};
+use pool;
+use secp::pedersen::Commitment;
 use util::OneTime;
 use store;
 use sync;
@@ -33,8 +35,9 @@ pub struct NetToChainAdapter {
 	/// the reference copy of the current chain state
 	chain_head: Arc<Mutex<chain::Tip>>,
 	chain_store: Arc<chain::ChainStore>,
-	chain_adapter: Arc<ChainToNetAdapter>,
+	chain_adapter: Arc<ChainToPoolAndNetAdapter>,
 	peer_store: Arc<PeerStore>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 
 	syncer: OneTime<Arc<sync::Syncer>>,
 }
@@ -45,7 +48,13 @@ impl NetAdapter for NetToChainAdapter {
 	}
 
 	fn transaction_received(&self, tx: core::Transaction) {
-		unimplemented!();
+		let source = pool::TxSource {
+			debug_name: "p2p".to_string(),
+			identifier: "?.?.?.?".to_string(),
+		};
+		if let Err(e) = self.tx_pool.write().unwrap().add_to_memory_pool(source, tx) {
+			error!("Transaction rejected: {:?}", e);
+		}
 	}
 
 	fn block_received(&self, b: core::Block) {
@@ -209,7 +218,8 @@ impl NetAdapter for NetToChainAdapter {
 impl NetToChainAdapter {
 	pub fn new(chain_head: Arc<Mutex<chain::Tip>>,
 	           chain_store: Arc<chain::ChainStore>,
-	           chain_adapter: Arc<ChainToNetAdapter>,
+	           chain_adapter: Arc<ChainToPoolAndNetAdapter>,
+	           tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	           peer_store: Arc<PeerStore>)
 	           -> NetToChainAdapter {
 		NetToChainAdapter {
@@ -217,6 +227,7 @@ impl NetToChainAdapter {
 			chain_store: chain_store,
 			chain_adapter: chain_adapter,
 			peer_store: peer_store,
+			tx_pool: tx_pool,
 			syncer: OneTime::new(),
 		}
 	}
@@ -231,23 +242,97 @@ impl NetToChainAdapter {
 }
 
 /// Implementation of the ChainAdapter for the network. Gets notified when the
-/// blockchain accepted a new block and forwards it to the network for
-/// broadcast.
-pub struct ChainToNetAdapter {
+/// blockchain accepted a new block, asking the pool to update its state and
+/// the network to broadcast the block
+pub struct ChainToPoolAndNetAdapter {
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	p2p: OneTime<Arc<Server>>,
 }
 
-impl ChainAdapter for ChainToNetAdapter {
+impl ChainAdapter for ChainToPoolAndNetAdapter {
 	fn block_accepted(&self, b: &core::Block) {
+		{
+			if let Err(e) = self.tx_pool.write().unwrap().reconcile_block(b) {
+				error!("Pool could not update itself at block {}: {:?}",
+				       b.hash(),
+				       e);
+			}
+		}
 		self.p2p.borrow().broadcast_block(b);
 	}
 }
 
-impl ChainToNetAdapter {
-	pub fn new() -> ChainToNetAdapter {
-		ChainToNetAdapter { p2p: OneTime::new() }
+impl ChainToPoolAndNetAdapter {
+	pub fn new(tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>)
+	           -> ChainToPoolAndNetAdapter {
+		ChainToPoolAndNetAdapter {
+			tx_pool: tx_pool,
+			p2p: OneTime::new(),
+		}
 	}
 	pub fn init(&self, p2p: Arc<Server>) {
 		self.p2p.init(p2p);
+	}
+}
+
+/// Implements the view of the blockchain required by the TransactionPool to
+/// operate. This is mostly getting information on unspent outputs in a
+/// manner consistent with the chain state.
+#[derive(Clone)]
+pub struct PoolToChainAdapter {
+	chain_head: Arc<Mutex<chain::Tip>>,
+	chain_store: Arc<chain::ChainStore>,
+}
+
+macro_rules! none_err {
+  ($trying:expr) => {{
+    let tried = $trying;
+    if let Err(_) = tried {
+      return None;
+    }
+    tried.unwrap()
+  }}
+}
+
+impl PoolToChainAdapter {
+	/// Create a new pool adapter
+	pub fn new(chain_head: Arc<Mutex<chain::Tip>>,
+	           chain_store: Arc<chain::ChainStore>)
+	           -> PoolToChainAdapter {
+		PoolToChainAdapter {
+			chain_head: chain_head,
+			chain_store: chain_store,
+		}
+	}
+}
+
+impl pool::BlockChain for PoolToChainAdapter {
+	fn get_unspent(&self, output_ref: &Commitment) -> Option<Output> {
+		// TODO use an actual UTXO tree
+		// in the meantime doing it the *very* expensive way:
+		//   1. check the output exists
+		//   2. run the chain back from the head to check it hasn't been spent
+		if let Ok(out) = self.chain_store.get_output_by_commit(output_ref) {
+			let mut block_h: Hash;
+			{
+				let chain_head = self.chain_head.clone();
+				let head = chain_head.lock().unwrap();
+				block_h = head.last_block_h;
+			}
+			loop {
+				let b = none_err!(self.chain_store.get_block(&block_h));
+				for input in b.inputs {
+					if input.commitment() == *output_ref {
+						return None;
+					}
+				}
+				if b.header.height == 1 {
+					return Some(out);
+				} else {
+					block_h = b.header.previous;
+				}
+			}
+		}
+		None
 	}
 }

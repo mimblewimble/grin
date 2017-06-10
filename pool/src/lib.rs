@@ -35,4 +35,4 @@ extern crate grin_core as core;
 extern crate secp256k1zkp as secp;
 
 pub use pool::TransactionPool;
-pub use types::{BlockChain, PoolError};
+pub use types::{BlockChain, TxSource, PoolError};

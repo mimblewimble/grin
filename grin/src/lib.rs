@@ -40,6 +40,7 @@ extern crate grin_chain as chain;
 #[macro_use]
 extern crate grin_core as core;
 extern crate grin_p2p as p2p;
+extern crate grin_pool as pool;
 extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate secp256k1zkp as secp;

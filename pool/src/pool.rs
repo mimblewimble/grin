@@ -43,7 +43,7 @@ pub struct TransactionPool<T> {
 }
 
 impl<T> TransactionPool<T> where T: BlockChain {
-    fn new(chain: Arc<T>) -> TransactionPool<T> {
+    pub fn new(chain: Arc<T>) -> TransactionPool<T> {
         TransactionPool{
             transactions: HashMap::new(),
             pool: Pool::empty(),
@@ -380,8 +380,6 @@ impl<T> TransactionPool<T> where T: BlockChain {
 
             conflicting_txs.append(&mut conflicting_outputs);
 
-            println!("Conflicting txs: {:?}", conflicting_txs);
-
             for txh in conflicting_txs {
                 self.mark_transaction(txh, &mut marked_transactions);
             }
@@ -436,7 +434,6 @@ impl<T> TransactionPool<T> where T: BlockChain {
         marked_transactions: HashMap<hash::Hash, ()>,)
         ->Vec<Box<transaction::Transaction>> {
 
-        println!("marked_txs: {:?}", marked_transactions);
         let mut removed_txs = Vec::new();
 
         for tx_hash in marked_transactions.keys() {
@@ -875,8 +872,6 @@ mod tests {
             tx_elements.push(build::output(output_value, test_key(output_value)));
         }
         tx_elements.push(build::with_fee(fees as u64));
-
-        println!("Fee was {}", fees as u64);
 
         let (tx, _) = build::transaction(tx_elements).unwrap();
         tx

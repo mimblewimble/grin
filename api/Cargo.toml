@@ -7,6 +7,7 @@ workspace = ".."
 [dependencies]
 grin_core = { path = "../core" }
 grin_chain = { path = "../chain" }
+grin_pool = { path = "../pool" }
 grin_util = { path = "../util" }
 secp256k1zkp = { path = "../secp256k1zkp" }
 

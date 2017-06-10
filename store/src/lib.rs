@@ -116,9 +116,9 @@ impl Store {
 	/// extract only partial data. The underlying Readable size must align
 	/// accordingly. Encapsulates serialization.
 	pub fn get_ser_limited<T: ser::Readable>(&self,
-	                                            key: &[u8],
-	                                            len: usize)
-	                                            -> Result<Option<T>, Error> {
+	                                         key: &[u8],
+	                                         len: usize)
+	                                         -> Result<Option<T>, Error> {
 		let data = try!(self.get(key));
 		match data {
 			Some(val) => {
@@ -185,6 +185,11 @@ impl<'a> Batch<'a> {
 			}
 			Err(err) => Err(Error::SerErr(err)),
 		}
+	}
+
+	pub fn delete(mut self, key: &[u8]) -> Result<Batch<'a>, Error> {
+		self.batch.delete(key)?;
+		Ok(self)
 	}
 
 	/// Writes the batch to RocksDb.

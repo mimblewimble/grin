@@ -230,7 +230,7 @@ impl Block {
 	/// transactions and the private key that will receive the reward. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
 	pub fn new(prev: &BlockHeader,
-	           txs: Vec<&mut Transaction>,
+	           txs: Vec<&Transaction>,
 	           reward_key: SecretKey)
 	           -> Result<Block, secp::Error> {
 
@@ -244,7 +244,7 @@ impl Block {
 	/// a vector of transactions and the reward information. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
 	pub fn with_reward(prev: &BlockHeader,
-	                   txs: Vec<&mut Transaction>,
+	                   txs: Vec<&Transaction>,
 	                   reward_out: Output,
 	                   reward_kern: TxKernel)
 	                   -> Result<Block, secp::Error> {
@@ -493,7 +493,7 @@ mod test {
 
 	// utility to create a block without worrying about the key or previous
 	// header
-	fn new_block(txs: Vec<&mut Transaction>, secp: &Secp256k1) -> Block {
+	fn new_block(txs: Vec<&Transaction>, secp: &Secp256k1) -> Block {
 		let mut rng = OsRng::new().unwrap();
 		let skey = SecretKey::new(secp, &mut rng);
 		Block::new(&BlockHeader::default(), txs, skey).unwrap()

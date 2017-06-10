@@ -21,13 +21,14 @@
 //   }
 // }
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::thread;
 
 use core::core::{Transaction, Output};
 use core::core::hash::Hash;
 use core::ser;
 use chain::{self, Tip};
+use pool;
 use rest::*;
 use secp::pedersen::Commitment;
 use util;
@@ -85,17 +86,36 @@ impl ApiEndpoint for OutputApi {
 /// ApiEndpoint implementation for the transaction pool, to check its status
 /// and size as well as push new transactions.
 #[derive(Clone)]
-pub struct PoolApi {
+pub struct PoolApi<T> {
+	tx_pool: Arc<RwLock<pool::TransactionPool<T>>>,
 }
 
-impl ApiEndpoint for PoolApi {
+#[derive(Serialize, Deserialize)]
+struct PoolInfo {
+	pool_size: usize,
+	orphans_size: usize,
+	total_size: usize,
+}
+
+impl<T> ApiEndpoint for PoolApi<T>
+    where T: pool::BlockChain + Clone + Send + Sync + 'static
+{
 	type ID = String;
-	type T = ();
+	type T = PoolInfo;
 	type OP_IN = TxWrapper;
 	type OP_OUT = ();
 
 	fn operations(&self) -> Vec<Operation> {
-		vec![Operation::Custom("push".to_string())]
+		vec![Operation::Get, Operation::Custom("push".to_string())]
+	}
+
+	fn get(&self, id: String) -> ApiResult<PoolInfo> {
+		let pool = self.tx_pool.read().unwrap();
+		Ok(PoolInfo {
+			pool_size: pool.pool_size(),
+			orphans_size: pool.orphans_size(),
+			total_size: pool.total_size(),
+		})
 	}
 
 	fn operation(&self, op: String, input: TxWrapper) -> ApiResult<()> {
@@ -106,8 +126,15 @@ impl ApiEndpoint for PoolApi {
 				Error::Argument("Could not deserialize transaction, invalid format.".to_string())
 			})?;
 
-		println!("Fake push of transaction:");
-		println!("{:?}", tx);
+		let source = pool::TxSource {
+			debug_name: "push-api".to_string(),
+			identifier: "?.?.?.?".to_string(),
+		};
+		self.tx_pool
+			.write()
+			.unwrap()
+			.add_to_memory_pool(source, tx)
+			.map_err(|e| Error::Internal(format!("Addition to transaction pool failed: {:?}", e)))?;
 		Ok(())
 	}
 }
@@ -120,7 +147,11 @@ struct TxWrapper {
 
 /// Start all server REST APIs. Just register all of them on a ApiServer
 /// instance and runs the corresponding HTTP server.
-pub fn start_rest_apis(addr: String, chain_store: Arc<chain::ChainStore>) {
+pub fn start_rest_apis<T>(addr: String,
+                          chain_store: Arc<chain::ChainStore>,
+                          tx_pool: Arc<RwLock<pool::TransactionPool<T>>>)
+	where T: pool::BlockChain + Clone + Send + Sync + 'static
+{
 
 	thread::spawn(move || {
 		let mut apis = ApiServer::new("/v1".to_string());
@@ -128,7 +159,7 @@ pub fn start_rest_apis(addr: String, chain_store: Arc<chain::ChainStore>) {
 		                       ChainApi { chain_store: chain_store.clone() });
 		apis.register_endpoint("/chain/output".to_string(),
 		                       OutputApi { chain_store: chain_store.clone() });
-		apis.register_endpoint("/pool".to_string(), PoolApi {});
+		apis.register_endpoint("/pool".to_string(), PoolApi { tx_pool: tx_pool });
 
 		apis.start(&addr[..]).unwrap_or_else(|e| {
 			error!("Failed to start API HTTP server: {}.", e);
