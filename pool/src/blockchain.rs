@@ -85,8 +85,8 @@ impl DummyChainImpl {
 }
 
 impl DummyChain for DummyChainImpl {
-    fn get_best_utxo_set(&self) -> DummyUtxoSet {
-        self.utxo.read().unwrap().clone()
+    fn get_unspent(&self, commitment: &Commitment) -> Option<transaction::Output> {
+        self.utxo.read().unwrap().get_output(commitment).cloned()
     }
     fn update_utxo_set(&mut self, new_utxo: DummyUtxoSet) {
         self.utxo = RwLock::new(new_utxo);
@@ -97,7 +97,7 @@ impl DummyChain for DummyChainImpl {
 }
 
 pub trait DummyChain {
-    fn get_best_utxo_set(&self) -> DummyUtxoSet;
+    fn get_unspent(&self, commitment: &Commitment) -> Option<transaction::Output>;
     fn update_utxo_set(&mut self, new_utxo: DummyUtxoSet);
     fn apply_block(&self, b: &block::Block);
 }
