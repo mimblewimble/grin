@@ -178,6 +178,9 @@ impl WalletData {
 			if out.status == OutputStatus::Unspent && out.fingerprint == fingerprint {
 				to_spend.push(out.clone());
 				input_total += out.value;
+				if input_total >= amount {
+					break;
+				}
 			}
 		}
 		(to_spend, (input_total as i64) - (amount as i64))

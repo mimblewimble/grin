@@ -23,6 +23,7 @@ use core::core::hash;
 // Temporary blockchain dummy impls
 use blockchain::{DummyChain, DummyChainImpl, DummyUtxoSet};
 
+use secp;
 use secp::pedersen::Commitment;
 
 use std::sync::{Arc, RwLock, Weak};
@@ -109,8 +110,12 @@ impl<T> TransactionPool<T> where T: BlockChain {
     /// if necessary, and performing any connection-related validity checks.
     /// Happens under an exclusive mutable reference gated by the write portion
     /// of a RWLock.
-    ///
     pub fn add_to_memory_pool(&mut self, source: TxSource, tx: transaction::Transaction) -> Result<(), PoolError> {
+        // Making sure the transaction is valid before anything else.
+        let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
+        tx.validate(&secp).map_err(|_| PoolError::Invalid)?;
+        
+
         // The first check invovles ensuring that an identical transaction is 
         // not already in the pool's transaction set.
         // A non-authoritative similar check should be performed under the 
@@ -131,7 +136,6 @@ impl<T> TransactionPool<T> where T: BlockChain {
         let mut pool_refs: Vec<graph::Edge> = Vec::new();
         let mut orphan_refs: Vec<graph::Edge> = Vec::new();
         let mut blockchain_refs: Vec<graph::Edge> = Vec::new();
-
 
         for input in &tx.inputs {
             let base = graph::Edge::new(None, Some(tx_hash),

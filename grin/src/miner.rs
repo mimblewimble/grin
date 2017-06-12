@@ -145,6 +145,13 @@ impl Miner {
 		let txs = txs_box.iter().map(|tx| tx.as_ref()).collect();
 		let (output, kernel) = coinbase;
 		let mut b = core::Block::with_reward(head, txs, output, kernel).unwrap();
+		debug!("Built new block with {} inputs and {} outputs",
+		       b.inputs.len(),
+		       b.outputs.len());
+
+		// making sure we're not spending time mining a useless block
+		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
+		b.validate(&secp).expect("Built an invalid block!");
 
 		let mut rng = rand::OsRng::new().unwrap();
 		b.header.nonce = rng.gen();
@@ -161,7 +168,7 @@ impl Miner {
 			let skey = secp::key::SecretKey::new(&secp_inst, &mut rng);
 			core::Block::reward_output(skey, &secp_inst).unwrap()
 		} else {
-			let url = format!("{}/v1/receive_coinbase",
+			let url = format!("{}/v1/receive/coinbase",
 			                  self.config.wallet_receiver_url.as_str());
 			let res: CbData = api::client::post(url.as_str(),
 			                                    &CbAmount { amount: consensus::REWARD })

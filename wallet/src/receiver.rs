@@ -75,7 +75,7 @@ pub fn receive_json_tx(ext_key: &ExtendedKey, partial_tx_str: &str) -> Result<()
 	let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
 
 	let config = WalletConfig::default();
-	let url = format!("{}/v1/receive_coinbase", config.api_http_addr.as_str());
+	let url = format!("{}/v1/pool/push", config.api_http_addr.as_str());
 	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })?;
 	Ok(())
 }
@@ -107,7 +107,7 @@ impl ApiEndpoint for WalletReceiver {
 	type OP_OUT = CbData;
 
 	fn operations(&self) -> Vec<Operation> {
-		vec![Operation::Custom("receive_coinbase".to_string())]
+		vec![Operation::Custom("coinbase".to_string())]
 	}
 
 	fn operation(&self, op: String, input: CbAmount) -> ApiResult<CbData> {
@@ -116,7 +116,7 @@ impl ApiEndpoint for WalletReceiver {
 			return Err(api::Error::Argument(format!("Zero amount not allowed.")));
 		}
 		match op.as_str() {
-			"receive_coinbase" => {
+			"coinbase" => {
 				let (out, kern) =
 					receive_coinbase(&self.key, input.amount).map_err(|e| {
 							api::Error::Internal(format!("Error building coinbase: {:?}", e))
@@ -157,8 +157,8 @@ fn receive_coinbase(ext_key: &ExtendedKey, amount: u64) -> Result<(Output, TxKer
 	});
 	wallet_data.write()?;
 
-	info!("Using child {} for a new coinbase output.",
-	      coinbase_key.n_child);
+	debug!("Using child {} for a new coinbase output.",
+	       coinbase_key.n_child);
 
 	Block::reward_output(coinbase_key.key, &secp).map_err(&From::from)
 }
@@ -181,6 +181,10 @@ fn receive_transaction(ext_key: &ExtendedKey,
 	                                            build::with_excess(blinding),
 	                                            build::output(amount, out_key.key)])?;
 
+	// make sure the resulting transaction is valid (could have been lied to
+	// on excess)
+	tx_final.validate(&secp)?;
+
 	// track the new output and return the finalized transaction to broadcast
 	wallet_data.append_output(OutputData {
 		fingerprint: out_key.fingerprint,
@@ -190,7 +194,8 @@ fn receive_transaction(ext_key: &ExtendedKey,
 	});
 	wallet_data.write()?;
 
-	info!("Using child {} for a new coinbase output.", out_key.n_child);
+	debug!("Using child {} for a new transaction output.",
+	       out_key.n_child);
 
 	Ok(tx_final)
 }

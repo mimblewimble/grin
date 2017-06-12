@@ -209,8 +209,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 			} else {
 				info!("Starting the Grin wallet receiving daemon...");
 				let mut apis = api::ApiServer::new("/v1".to_string());
-				apis.register_endpoint("/receive_coinbase".to_string(),
-				                       wallet::WalletReceiver { key: key });
+				apis.register_endpoint("/receive".to_string(), wallet::WalletReceiver { key: key });
 				apis.start("127.0.0.1:13416").unwrap_or_else(|e| {
 					error!("Failed to start Grin wallet receiver: {}.", e);
 				});

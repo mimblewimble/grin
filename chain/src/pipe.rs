@@ -105,9 +105,11 @@ pub fn process_block(b: &Block,
 		head: head,
 	};
 
-	info!("Starting validation pipeline for block {} at {}.",
+	info!("Starting validation pipeline for block {} at {} with {} inputs and {} outputs.",
 	      b.hash(),
-	      b.header.height);
+	      b.header.height,
+	      b.inputs.len(),
+	      b.outputs.len());
 	try!(check_known(b.hash(), &mut ctx));
 
 	if !ctx.opts.intersects(SYNC) {

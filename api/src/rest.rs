@@ -34,11 +34,14 @@ use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
 use serde_json;
 
+use store;
+
 /// Errors that can be returned by an ApiEndpoint implementation.
 #[derive(Debug)]
 pub enum Error {
 	Internal(String),
 	Argument(String),
+	NotFound,
 }
 
 impl Display for Error {
@@ -46,6 +49,7 @@ impl Display for Error {
 		match *self {
 			Error::Argument(ref s) => write!(f, "Bad arguments: {}", s),
 			Error::Internal(ref s) => write!(f, "Internal error: {}", s),
+			Error::NotFound => write!(f, "Not found."),
 		}
 	}
 }
@@ -55,6 +59,7 @@ impl error::Error for Error {
 		match *self {
 			Error::Argument(_) => "Bad arguments.",
 			Error::Internal(_) => "Internal error.",
+			Error::NotFound => "Not found.",
 		}
 	}
 }
@@ -64,6 +69,16 @@ impl From<Error> for IronError {
 		match e {
 			Error::Argument(_) => IronError::new(e, status::Status::BadRequest),
 			Error::Internal(_) => IronError::new(e, status::Status::InternalServerError),
+			Error::NotFound => IronError::new(e, status::Status::NotFound),
+		}
+	}
+}
+
+impl From<store::Error> for Error {
+	fn from(e: store::Error) -> Error {
+		match e {
+			store::Error::NotFoundErr => Error::NotFound,
+			_ => Error::Internal(e.to_string()),
 		}
 	}
 }
@@ -250,7 +265,7 @@ impl ApiServer {
 					operation: op_s.clone(),
 					endpoint: endpoint.clone(),
 				};
-				let full_path = format!("{}", root.clone());
+				let full_path = format!("{}/{}", root.clone(), op_s.clone());
 				self.router.route(op.to_method(), full_path.clone(), wrapper, route_name);
 				info!("route: POST {}", full_path);
 			} else {

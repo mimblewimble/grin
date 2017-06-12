@@ -16,7 +16,7 @@
 
 use hyper;
 use hyper::client::Response;
-use hyper::status::StatusClass;
+use hyper::status::{StatusClass, StatusCode};
 use serde::{Serialize, Deserialize};
 use serde_json;
 
@@ -59,7 +59,13 @@ fn check_error(res: hyper::Result<Response>) -> Result<Response, Error> {
 	match response.status.class() {
 		StatusClass::Success => Ok(response),
 		StatusClass::ServerError => Err(Error::Internal(format!("Server error."))),
-		StatusClass::ClientError => Err(Error::Argument(format!("Argument error"))),
+		StatusClass::ClientError => {
+			if response.status == StatusCode::NotFound {
+				Err(Error::NotFound)
+			} else {
+				Err(Error::Argument(format!("Argument error")))
+			}
+		}
 		_ => Err(Error::Internal(format!("Unrecognized error."))),
 	}
 }

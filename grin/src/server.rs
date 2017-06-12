@@ -117,6 +117,7 @@ impl Server {
 
 		api::start_rest_apis(config.api_http_addr.clone(),
 		                     chain_store.clone(),
+		                     shared_head.clone(),
 		                     tx_pool.clone());
 
 		warn!("Grin server started.");

@@ -21,7 +21,7 @@
 //   }
 // }
 
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
 use core::core::{Transaction, Output};
@@ -61,6 +61,7 @@ impl ApiEndpoint for ChainApi {
 pub struct OutputApi {
 	/// data store access
 	chain_store: Arc<chain::ChainStore>,
+	chain_head: Arc<Mutex<chain::Tip>>,
 }
 
 impl ApiEndpoint for OutputApi {
@@ -76,10 +77,34 @@ impl ApiEndpoint for OutputApi {
 	fn get(&self, id: String) -> ApiResult<Output> {
 		debug!("GET output {}", id);
 		let c = util::from_hex(id.clone()).map_err(|e| Error::Argument(format!("Not a valid commitment: {}", id)))?;
-		let out = self.chain_store
-			.get_output_by_commit(&Commitment::from_vec(c))
-			.map_err(|e| Error::Internal(e.to_string()));
-		out
+		let commitment = Commitment::from_vec(c);
+
+		// TODO use an actual UTXO tree
+		// in the meantime doing it the *very* expensive way:
+		//   1. check the output exists
+		//   2. run the chain back from the head to check it hasn't been spent
+		if let Ok(out) = self.chain_store.get_output_by_commit(&commitment) {
+			let mut block_h: Hash;
+			{
+				let chain_head = self.chain_head.clone();
+				let head = chain_head.lock().unwrap();
+				block_h = head.last_block_h;
+			}
+			loop {
+				let b = self.chain_store.get_block(&block_h)?;
+				for input in b.inputs {
+					if input.commitment() == commitment {
+						return Err(Error::NotFound);
+					}
+				}
+				if b.header.height == 1 {
+					return Ok(out);
+				} else {
+					block_h = b.header.previous;
+				}
+			}
+		}
+		Err(Error::NotFound)
 	}
 }
 
@@ -130,6 +155,9 @@ impl<T> ApiEndpoint for PoolApi<T>
 			debug_name: "push-api".to_string(),
 			identifier: "?.?.?.?".to_string(),
 		};
+		debug!("Pushing transaction with {} inputs and {} outputs to pool.",
+		       tx.inputs.len(),
+		       tx.outputs.len());
 		self.tx_pool
 			.write()
 			.unwrap()
@@ -149,6 +177,7 @@ struct TxWrapper {
 /// instance and runs the corresponding HTTP server.
 pub fn start_rest_apis<T>(addr: String,
                           chain_store: Arc<chain::ChainStore>,
+                          chain_head: Arc<Mutex<chain::Tip>>,
                           tx_pool: Arc<RwLock<pool::TransactionPool<T>>>)
 	where T: pool::BlockChain + Clone + Send + Sync + 'static
 {
@@ -157,8 +186,11 @@ pub fn start_rest_apis<T>(addr: String,
 		let mut apis = ApiServer::new("/v1".to_string());
 		apis.register_endpoint("/chain".to_string(),
 		                       ChainApi { chain_store: chain_store.clone() });
-		apis.register_endpoint("/chain/output".to_string(),
-		                       OutputApi { chain_store: chain_store.clone() });
+		apis.register_endpoint("/chain/utxo".to_string(),
+		                       OutputApi {
+			                       chain_store: chain_store.clone(),
+			                       chain_head: chain_head.clone(),
+		                       });
 		apis.register_endpoint("/pool".to_string(), PoolApi { tx_pool: tx_pool });
 
 		apis.start(&addr[..]).unwrap_or_else(|e| {

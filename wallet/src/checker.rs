@@ -36,10 +36,17 @@ pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) {
 			let commitment = secp.commit(out.value, key.key).unwrap();
 
 			// TODO check the pool for unconfirmed
+
 			let out_res = get_output_by_commitment(config, commitment);
 			if out_res.is_ok() {
 				out.status = OutputStatus::Unspent;
 				changed += 1;
+			} else if out.status == OutputStatus::Unspent {
+				// a UTXO we can't find anymore has been spent
+				if let Err(api::Error::NotFound) = out_res {
+					out.status = OutputStatus::Spent;
+					changed += 1;
+				}
 			}
 		}
 	}
@@ -53,7 +60,7 @@ pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) {
 fn get_output_by_commitment(config: &WalletConfig,
                             commit: pedersen::Commitment)
                             -> Result<Output, api::Error> {
-	let url = format!("{}/v1/chain/output/{}",
+	let url = format!("{}/v1/chain/utxo/{}",
 	                  config.api_http_addr,
 	                  util::to_hex(commit.as_ref().to_vec()));
 	api::client::get::<Output>(url.as_str())
