@@ -305,3 +305,12 @@ impl TimeoutConnection {
 		self.underlying.transmitted_bytes()
 	}
 }
+
+// /// Connection Wrapper that handles rate limiting
+// ///
+// /// store a count and the time of the last request, and when a
+// /// new request comes in you use recalculate the stored count
+// /// as: new_count = old_count + (current_time - last_request_time) * fill_rate
+// pub struct ThrottledConnection {
+// 	underlying: TimeoutConnection,
+// }
