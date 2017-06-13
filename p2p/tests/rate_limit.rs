@@ -39,10 +39,7 @@ fn test_receive_and_send_rate() {
 	let mut evtlp = Core::new().unwrap();
 	let handle = evtlp.handle();
 
-    // Set a max of 8 bytes per second for recieving and sending
-	let mut p2p_conf = p2p::P2PConfig::default();
-    p2p_conf.max_send_rate = 8;
-    p2p_conf.max_receive_rate = 8;
+	let p2p_conf = p2p::P2PConfig::default();
 
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
 	let server = p2p::Server::new(p2p::UNKNOWN, p2p_conf, net_adapter.clone());
