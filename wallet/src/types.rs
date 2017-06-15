@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::convert::From;
-use std::fs::File;
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::num;
 use std::path::Path;
@@ -30,6 +30,7 @@ use extkey;
 use util;
 
 const DAT_FILE: &'static str = "wallet.dat";
+const LOCK_FILE: &'static str = "wallet.lock";
 
 /// Wallet errors, mostly wrappers around underlying crypto or I/O errors.
 #[derive(Debug)]
@@ -133,8 +134,38 @@ pub struct WalletData {
 }
 
 impl WalletData {
+	/// Allows the reading and writing of the wallet data within a file lock.
+	/// Just provide a closure taking a mutable WalletData. The lock should
+  /// be held for as short a period as possible to avoid contention.
+	/// Note that due to the impossibility to do an actual file lock easily
+	/// across operating systems, this just creates a lock file with a "should
+  /// not exist" option.
+	pub fn with_wallet<T, F>(f: F) -> Result<T, Error>
+		where F: FnOnce(&mut WalletData) -> T
+	{
+		// create the lock files, if it already exists, will produce an error
+    OpenOptions::new().write(true).create_new(true).open(LOCK_FILE).map_err(|e| {
+				Error::WalletData(format!("Could not create wallet lock file. Either \
+            some other process is using the wallet or there's a write access \
+            issue."))
+    })?;
+
+		// do what needs to be done
+		let mut wdat = WalletData::read_or_create()?;
+		let res = f(&mut wdat);
+		wdat.write()?;
+
+		// delete the lock file
+		fs::remove_file(LOCK_FILE).map_err(|e| {
+				Error::WalletData(format!("Could not remove wallet lock file. Maybe insufficient \
+				                           rights?"))
+			})?;
+
+		Ok(res)
+	}
+
 	/// Read the wallet data or created a brand new one if it doesn't exist yet
-	pub fn read_or_create() -> Result<WalletData, Error> {
+	fn read_or_create() -> Result<WalletData, Error> {
 		if Path::new(DAT_FILE).exists() {
 			WalletData::read()
 		} else {
@@ -144,7 +175,7 @@ impl WalletData {
 	}
 
 	/// Read the wallet data from disk.
-	pub fn read() -> Result<WalletData, Error> {
+	fn read() -> Result<WalletData, Error> {
 		let data_file = File::open(DAT_FILE)
       .map_err(|e| Error::WalletData(format!("Could not open {}: {}", DAT_FILE, e)))?;
 		serde_json::from_reader(data_file)
@@ -152,7 +183,7 @@ impl WalletData {
 	}
 
 	/// Write the wallet data to disk.
-	pub fn write(&self) -> Result<(), Error> {
+	fn write(&self) -> Result<(), Error> {
 		let mut data_file = File::create(DAT_FILE)
       .map_err(|e| Error::WalletData(format!("Could not create {}: {}", DAT_FILE, e)))?;
 		let res_json = serde_json::to_vec_pretty(self)

@@ -46,38 +46,41 @@ fn build_send_tx(ext_key: &ExtendedKey, amount: u64) -> Result<(Transaction, Sec
 	// first, rebuild the private key from the seed
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 
-	// second, check from our local wallet data for outputs to spend
-	let mut wallet_data = WalletData::read()?;
-	let (coins, change) = wallet_data.select(ext_key.fingerprint, amount);
-	if change < 0 {
-		return Err(Error::NotEnoughFunds((-change) as u64));
-	}
+	// operate within a lock on wallet data
+	WalletData::with_wallet(|wallet_data| {
 
-	// TODO add fees, which is likely going to make this iterative
+		// second, check from our local wallet data for outputs to spend
+		let (coins, change) = wallet_data.select(ext_key.fingerprint, amount);
+		if change < 0 {
+			return Err(Error::NotEnoughFunds((-change) as u64));
+		}
 
-	// third, build inputs using the appropriate key
-	let mut parts = vec![];
-	for coin in &coins {
-		let in_key = ext_key.derive(&secp, coin.n_child).map_err(|e| Error::Key(e))?;
-		parts.push(build::input(coin.value, in_key.key));
-	}
+		// TODO add fees, which is likely going to make this iterative
 
-	// fourth, derive a new private for change and build the change output
-	let next_child = wallet_data.next_child(ext_key.fingerprint);
-	let change_key = ext_key.derive(&secp, next_child).map_err(|e| Error::Key(e))?;
-	parts.push(build::output(change as u64, change_key.key));
+		// third, build inputs using the appropriate key
+		let mut parts = vec![];
+		for coin in &coins {
+			let in_key = ext_key.derive(&secp, coin.n_child).map_err(|e| Error::Key(e))?;
+			parts.push(build::input(coin.value, in_key.key));
+		}
 
-	// we got that far, time to start tracking the new output, finalize tx
-	// and lock the outputs used
-	wallet_data.append_output(OutputData {
-		fingerprint: change_key.fingerprint,
-		n_child: change_key.n_child,
-		value: change as u64,
-		status: OutputStatus::Unconfirmed,
-	});
-	for mut coin in coins {
-		coin.lock();
-	}
-	wallet_data.write()?;
-	build::transaction(parts).map_err(&From::from)
+		// fourth, derive a new private for change and build the change output
+		let next_child = wallet_data.next_child(ext_key.fingerprint);
+		let change_key = ext_key.derive(&secp, next_child).map_err(|e| Error::Key(e))?;
+		parts.push(build::output(change as u64, change_key.key));
+
+		// we got that far, time to start tracking the new output, finalize tx
+		// and lock the outputs used
+		wallet_data.append_output(OutputData {
+			fingerprint: change_key.fingerprint,
+			n_child: change_key.n_child,
+			value: change as u64,
+			status: OutputStatus::Unconfirmed,
+		});
+		for mut coin in coins {
+			coin.lock();
+		}
+
+		build::transaction(parts).map_err(&From::from)
+	})?
 }

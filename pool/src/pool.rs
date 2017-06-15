@@ -114,7 +114,6 @@ impl<T> TransactionPool<T> where T: BlockChain {
         // Making sure the transaction is valid before anything else.
         let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
         tx.validate(&secp).map_err(|_| PoolError::Invalid)?;
-        
 
         // The first check invovles ensuring that an identical transaction is 
         // not already in the pool's transaction set.

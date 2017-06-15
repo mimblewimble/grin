@@ -143,24 +143,25 @@ impl ApiEndpoint for WalletReceiver {
 fn receive_coinbase(ext_key: &ExtendedKey, amount: u64) -> Result<(Output, TxKernel), Error> {
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 
-	// derive a new private for the reward
-	let mut wallet_data = WalletData::read_or_create()?;
-	let next_child = wallet_data.next_child(ext_key.fingerprint);
-	let coinbase_key = ext_key.derive(&secp, next_child).map_err(|e| Error::Key(e))?;
+	// operate within a lock on wallet data
+	WalletData::with_wallet(|wallet_data| {
 
-	// track the new output and return the stuff needed for reward
-	wallet_data.append_output(OutputData {
-		fingerprint: coinbase_key.fingerprint,
-		n_child: coinbase_key.n_child,
-		value: amount,
-		status: OutputStatus::Unconfirmed,
-	});
-	wallet_data.write()?;
+		// derive a new private for the reward
+		let next_child = wallet_data.next_child(ext_key.fingerprint);
+		let coinbase_key = ext_key.derive(&secp, next_child).map_err(|e| Error::Key(e))?;
 
-	debug!("Using child {} for a new coinbase output.",
-	       coinbase_key.n_child);
+		// track the new output and return the stuff needed for reward
+		wallet_data.append_output(OutputData {
+			fingerprint: coinbase_key.fingerprint,
+			n_child: coinbase_key.n_child,
+			value: amount,
+			status: OutputStatus::Unconfirmed,
+		});
+		debug!("Using child {} for a new coinbase output.",
+		       coinbase_key.n_child);
 
-	Block::reward_output(coinbase_key.key, &secp).map_err(&From::from)
+		Block::reward_output(coinbase_key.key, &secp).map_err(&From::from)
+	})?
 }
 
 /// Builds a full transaction from the partial one sent to us for transfer
@@ -172,30 +173,31 @@ fn receive_transaction(ext_key: &ExtendedKey,
 
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 
-	// derive a new private for the receiving output
-	let mut wallet_data = WalletData::read_or_create()?;
-	let next_child = wallet_data.next_child(ext_key.fingerprint);
-	let out_key = ext_key.derive(&secp, next_child).map_err(|e| Error::Key(e))?;
+	// operate within a lock on wallet data
+	WalletData::with_wallet(|wallet_data| {
 
-	let (tx_final, _) = build::transaction(vec![build::initial_tx(partial),
-	                                            build::with_excess(blinding),
-	                                            build::output(amount, out_key.key)])?;
+		let next_child = wallet_data.next_child(ext_key.fingerprint);
+		let out_key = ext_key.derive(&secp, next_child).map_err(|e| Error::Key(e))?;
 
-	// make sure the resulting transaction is valid (could have been lied to
-	// on excess)
-	tx_final.validate(&secp)?;
+		let (tx_final, _) = build::transaction(vec![build::initial_tx(partial),
+		                                            build::with_excess(blinding),
+		                                            build::output(amount, out_key.key)])?;
 
-	// track the new output and return the finalized transaction to broadcast
-	wallet_data.append_output(OutputData {
-		fingerprint: out_key.fingerprint,
-		n_child: out_key.n_child,
-		value: amount,
-		status: OutputStatus::Unconfirmed,
-	});
-	wallet_data.write()?;
+		// make sure the resulting transaction is valid (could have been lied to
+		// on excess)
+		tx_final.validate(&secp)?;
 
-	debug!("Using child {} for a new transaction output.",
-	       out_key.n_child);
+		// track the new output and return the finalized transaction to broadcast
+		wallet_data.append_output(OutputData {
+			fingerprint: out_key.fingerprint,
+			n_child: out_key.n_child,
+			value: amount,
+			status: OutputStatus::Unconfirmed,
+		});
 
-	Ok(tx_final)
+		debug!("Using child {} for a new transaction output.",
+		       out_key.n_child);
+
+		Ok(tx_final)
+	})?
 }

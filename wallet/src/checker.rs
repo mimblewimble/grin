@@ -16,7 +16,7 @@
 //! the wallet storage and update them.
 
 use api;
-use core::core::{Output, DEFAULT_OUTPUT, COINBASE_OUTPUT};
+use core::core::Output;
 use secp::{self, pedersen};
 use util;
 
@@ -27,32 +27,34 @@ use types::{WalletConfig, OutputStatus, WalletData};
 /// with a node whether their status has changed.
 pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) {
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-	let mut wallet_data = WalletData::read_or_create().expect("Could not open wallet data.");
 
-	let mut changed = 0;
-	for out in &mut wallet_data.outputs {
-		if out.status != OutputStatus::Spent {
-			let key = ext_key.derive(&secp, out.n_child).unwrap();
-			let commitment = secp.commit(out.value, key.key).unwrap();
+	// operate within a lock on wallet data
+	WalletData::with_wallet(|wallet_data| {
 
-			// TODO check the pool for unconfirmed
+		// check each output that's not spent
+		for out in &mut wallet_data.outputs {
+			if out.status != OutputStatus::Spent {
 
-			let out_res = get_output_by_commitment(config, commitment);
-			if out_res.is_ok() {
-				out.status = OutputStatus::Unspent;
-				changed += 1;
-			} else if out.status == OutputStatus::Unspent {
-				// a UTXO we can't find anymore has been spent
-				if let Err(api::Error::NotFound) = out_res {
-					out.status = OutputStatus::Spent;
-					changed += 1;
+				// figure out the commitment
+				let key = ext_key.derive(&secp, out.n_child).unwrap();
+				let commitment = secp.commit(out.value, key.key).unwrap();
+
+				// TODO check the pool for unconfirmed
+
+				let out_res = get_output_by_commitment(config, commitment);
+				if out_res.is_ok() {
+					// output is known, it's a new utxo
+					out.status = OutputStatus::Unspent;
+
+				} else if out.status == OutputStatus::Unspent {
+					// a UTXO we can't find anymore has been spent
+					if let Err(api::Error::NotFound) = out_res {
+						out.status = OutputStatus::Spent;
+					}
 				}
 			}
 		}
-	}
-	if changed > 0 {
-		wallet_data.write().unwrap();
-	}
+	});
 }
 
 // queries a reachable node for a given output, checking whether it's been
