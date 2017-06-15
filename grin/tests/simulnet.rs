@@ -32,6 +32,145 @@ use futures::task::park;
 use tokio_core::reactor;
 use tokio_timer::Timer;
 
+/// Errors that can be returned by an ApiEndpoint implementation.
+#[derive(Debug)]
+pub enum Error {
+	Internal(String),
+	Argument(String),
+	NotFound,
+}
+
+/// A top-level container to hold everything that might be running
+/// on a server, i.e. server, wallet in send or recieve mode
+
+struct LocalServerContainer {
+    pub server : grin::Server,
+
+    pub enable_mining: bool,
+    pub enable_wallet: bool,
+}
+
+impl LocalServerContainer {
+    pub fn new(api_addr:String, server_port: u16, event_loop: &reactor::Core) -> Result<LocalServerContainer, Error> {
+      let mut s = grin::Server::future(
+            grin::ServerConfig{
+                api_http_addr: api_addr,
+                db_root: format!("target/test_servers/server-{}/grin-prop", server_port),
+                cuckoo_size: 12,
+                p2p_config: p2p::P2PConfig{port: server_port, ..p2p::P2PConfig::default()},
+                ..Default::default()
+            }, &event_loop.handle()).unwrap();
+       Ok((LocalServerContainer {
+           server: s,
+           enable_mining: false,
+           enable_wallet: false,
+       }))
+    }
+}
+
+struct LocalServerContainerPool {
+    event_loop: reactor::Core,
+
+    base_http_addr: String, 
+    base_port_server: u16,
+    base_port_api: u16,
+    server_containers: Vec<LocalServerContainer>,    
+}
+
+impl LocalServerContainerPool {
+    pub fn new() -> Result<LocalServerContainerPool, Error> {
+      let servers = Vec::new();
+      let mut evtlp = reactor::Core::new().unwrap();
+
+      Ok((LocalServerContainerPool{
+        event_loop: evtlp, 
+        base_http_addr : String::from("0.0.0.0"),
+        base_port_server: 10000,
+        base_port_api: 20000,
+        server_containers: servers,
+      }))
+    }
+
+    pub fn create_server(&mut self, enable_mining:bool) {
+
+        let server_port = self.base_port_server+self.server_containers.len() as u16;
+        let api_port = self.base_port_api+self.server_containers.len() as u16;
+
+        let api_addr = format!("{}:{}", self.base_http_addr, api_port);
+
+        let mut server_container = LocalServerContainer::new(api_addr, server_port, &self.event_loop).unwrap();
+            
+        server_container.enable_mining = enable_mining;
+        
+        self.server_containers.push(server_container);
+    }
+
+    /// Connects every server to each other as peers
+    /// 
+
+    pub fn connect_all_peers(&self){
+        /// just pull out all currently active servers, build a list,
+        /// and feed into all servers
+
+        let mut server_addresses:Vec<String> = Vec::new();      
+        for s in &self.server_containers {
+            let server_address = format!("{}:{}", 
+                                     s.server.config.p2p_config.host, 
+                                     s.server.config.p2p_config.port);
+            server_addresses.push(server_address);
+        }
+
+        for a in server_addresses {
+           for s in &self.server_containers {
+              if format!("{}", s.server.config.p2p_config.host) != a {
+                  s.server.connect_peer(a.parse().unwrap()).unwrap();       
+              } 
+           }
+        }
+    }
+
+    /// Starts all servers, with or without mining
+
+    fn start_all_servers(&mut self) {
+        for s in &self.server_containers {
+            if s.enable_mining == true {
+               let mut miner_config = grin::MinerConfig{
+                  enable_mining: true,
+                  burn_reward: true,
+                  ..Default::default()
+                };
+                println!("Starting Miner on port {}", s.server.config.p2p_config.port);
+                s.server.start_miner(miner_config);        
+            }
+        }
+        self.event_loop.run(Timer::default().sleep(time::Duration::from_secs(30)).and_then(|_| {
+          //for s in self.servers {  
+            // occasionally 2 peers will connect to each other at the same time
+            //assert!(s.peer_count() >= 4);
+          //}
+          Ok(())
+        }));
+    }
+}
+
+#[test]
+fn simulate_much_mining(){
+    println!("I'm here.");
+    let num_servers=5;
+    
+    let mut server_pool = LocalServerContainerPool::new().unwrap();
+    for n in 0..num_servers {
+        server_pool.create_server(false);
+    }
+
+    server_pool.connect_all_peers();
+    server_pool.start_all_servers();
+  
+    panic!("ouch");
+}
+
+
+
 /// Create a network of 5 servers and mine a block, verifying that the block
 /// gets propagated to all.
 #[test]
@@ -52,6 +191,7 @@ fn simulate_block_propagation() {
   for n in 0..5 {
       let s = grin::Server::future(
           grin::ServerConfig{
+            api_http_addr: format!("127.0.0.1:{}", 20000+n),
             db_root: format!("target/grin-prop-{}", n),
             cuckoo_size: 12,
             p2p_config: p2p::P2PConfig{port: 10000+n, ..p2p::P2PConfig::default()},
