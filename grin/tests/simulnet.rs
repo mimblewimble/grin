@@ -152,9 +152,9 @@ impl LocalServerContainerPool {
       Ok((LocalServerContainerPool{
         event_loop: evtlp, 
         base_http_addr : String::from("0.0.0.0"),
-        base_port_server: 10000,
-        base_port_api: 20000,
-        base_port_wallet: 30000,
+        base_port_server: 15000,
+        base_port_api: 16000,
+        base_port_wallet: 17000,
         server_containers: servers,
       }))
     }
