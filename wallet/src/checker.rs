@@ -29,7 +29,7 @@ pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) {
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 
 	// operate within a lock on wallet data
-	WalletData::with_wallet(|wallet_data| {
+	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
 		// check each output that's not spent
 		for out in &mut wallet_data.outputs {
