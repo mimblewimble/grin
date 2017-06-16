@@ -168,7 +168,6 @@ impl Miner {
 			let skey = secp::key::SecretKey::new(&secp_inst, &mut rng);
 			core::Block::reward_output(skey, &secp_inst).unwrap()
 		} else {
-			println!("wallet receiver url: {}", self.config.wallet_receiver_url.as_str());
 			let url = format!("{}/v1/receive/coinbase",
 			                  self.config.wallet_receiver_url.as_str());
 			let res: CbData = api::client::post(url.as_str(),
