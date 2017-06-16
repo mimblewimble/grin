@@ -42,6 +42,8 @@ use daemonize::Daemonize;
 
 use secp::Secp256k1;
 
+use wallet::WalletConfig;
+
 fn main() {
 	env_logger::init().unwrap();
 
@@ -199,17 +201,24 @@ fn wallet_command(wallet_args: &ArgMatches) {
 	let key = wallet::ExtendedKey::from_seed(&s, &seed[..])
 		.expect("Error deriving extended key from seed.");
 
+	//TODO: Derive data directory and receiving port for wallet from command line?
+	let wallet_config = WalletConfig::default();
+
 	match wallet_args.subcommand() {
+		
 		("receive", Some(receive_args)) => {
 			if let Some(f) = receive_args.value_of("input") {
 				let mut file = File::open(f).expect("Unable to open transaction file.");
 				let mut contents = String::new();
 				file.read_to_string(&mut contents).expect("Unable to read transaction file.");
-				wallet::receive_json_tx(&key, contents.as_str()).unwrap();
+				wallet::receive_json_tx(&wallet_config, &key, contents.as_str()).unwrap();
 			} else {
 				info!("Starting the Grin wallet receiving daemon...");
 				let mut apis = api::ApiServer::new("/v1".to_string());
-				apis.register_endpoint("/receive".to_string(), wallet::WalletReceiver { key: key });
+				apis.register_endpoint("/receive".to_string(), wallet::WalletReceiver { 
+					key: key,
+					config: wallet_config
+				});
 				apis.start("127.0.0.1:13416").unwrap_or_else(|e| {
 					error!("Failed to start Grin wallet receiver: {}.", e);
 				});
@@ -224,7 +233,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 			if let Some(d) = send_args.value_of("dest") {
 				dest = d;
 			}
-			wallet::issue_send_tx(&key, amount, dest.to_string()).unwrap();
+			wallet::issue_send_tx(&wallet_config, &key, amount, dest.to_string()).unwrap();
 		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}
