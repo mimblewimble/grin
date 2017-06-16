@@ -69,12 +69,13 @@ struct TxWrapper {
 /// Receive an already well formed JSON transaction issuance and finalize the
 /// transaction, adding our receiving output, to broadcast to the rest of the
 /// network.
-pub fn receive_json_tx(ext_key: &ExtendedKey, partial_tx_str: &str) -> Result<(), Error> {
+pub fn receive_json_tx(config: &WalletConfig, ext_key: &ExtendedKey, partial_tx_str: &str) -> Result<(), Error> {
+	
 	let (amount, blinding, partial_tx) = partial_tx_from_json(partial_tx_str)?;
-	let final_tx = receive_transaction(ext_key, amount, blinding, partial_tx)?;
+	let final_tx = receive_transaction(&config, ext_key, amount, blinding, partial_tx)?;
 	let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
 
-	let config = WalletConfig::default();
+	
 	let url = format!("{}/v1/pool/push", config.api_http_addr.as_str());
 	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })?;
 	Ok(())
@@ -98,6 +99,7 @@ pub struct CbData {
 #[derive(Clone)]
 pub struct WalletReceiver {
 	pub key: ExtendedKey,
+	pub config: WalletConfig,
 }
 
 impl ApiEndpoint for WalletReceiver {
@@ -118,7 +120,7 @@ impl ApiEndpoint for WalletReceiver {
 		match op.as_str() {
 			"coinbase" => {
 				let (out, kern) =
-					receive_coinbase(&self.key, input.amount).map_err(|e| {
+					receive_coinbase(&self.config, &self.key, input.amount).map_err(|e| {
 							api::Error::Internal(format!("Error building coinbase: {:?}", e))
 						})?;
 				let out_bin =
@@ -140,11 +142,11 @@ impl ApiEndpoint for WalletReceiver {
 }
 
 /// Build a coinbase output and the corresponding kernel
-fn receive_coinbase(ext_key: &ExtendedKey, amount: u64) -> Result<(Output, TxKernel), Error> {
+fn receive_coinbase(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64) -> Result<(Output, TxKernel), Error> {
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 
 	// operate within a lock on wallet data
-	WalletData::with_wallet(|wallet_data| {
+	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
 		// derive a new private for the reward
 		let next_child = wallet_data.next_child(ext_key.fingerprint);
@@ -165,7 +167,8 @@ fn receive_coinbase(ext_key: &ExtendedKey, amount: u64) -> Result<(Output, TxKer
 }
 
 /// Builds a full transaction from the partial one sent to us for transfer
-fn receive_transaction(ext_key: &ExtendedKey,
+fn receive_transaction(config: &WalletConfig,
+					   ext_key: &ExtendedKey,
                        amount: u64,
                        blinding: SecretKey,
                        partial: Transaction)
@@ -174,7 +177,7 @@ fn receive_transaction(ext_key: &ExtendedKey,
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 
 	// operate within a lock on wallet data
-	WalletData::with_wallet(|wallet_data| {
+	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
 		let next_child = wallet_data.next_child(ext_key.fingerprint);
 		let out_key = ext_key.derive(&secp, next_child).map_err(|e| Error::Key(e))?;

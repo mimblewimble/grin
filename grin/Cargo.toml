@@ -12,6 +12,7 @@ grin_store = { path = "../store" }
 grin_p2p = { path = "../p2p" }
 grin_pool = { path = "../pool" }
 grin_util = { path = "../util" }
+grin_wallet = { path = "../wallet" }
 secp256k1zkp = { path = "../secp256k1zkp" }
 
 env_logger="^0.3.5"
@@ -25,3 +26,4 @@ serde_derive = "~1.0.8"
 tokio-core="^0.1.1"
 tokio-timer="^0.1.0"
 rand = "^0.3"
+tiny-keccak = "1.1"

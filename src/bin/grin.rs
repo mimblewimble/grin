@@ -42,6 +42,8 @@ use daemonize::Daemonize;
 
 use secp::Secp256k1;
 
+use wallet::WalletConfig;
+
 fn main() {
 	env_logger::init().unwrap();
 
@@ -68,6 +70,11 @@ fn main() {
                      .short("m")
                      .long("mine")
                      .help("Starts the debugging mining loop"))
+				.arg(Arg::with_name("wallet_url")
+                     .short("w")
+                     .long("wallet_url")
+                     .help("A listening wallet receiver to which mining rewards will be sent")
+					 .takes_value(true))
                 .arg(Arg::with_name("config")
                      .short("c")
                      .long("config")
@@ -95,6 +102,16 @@ fn main() {
                      .long("pass")
                      .help("Wallet passphrase used to generate the private key seed")
                      .takes_value(true))
+				.arg(Arg::with_name("dir")
+                     .short("d")
+                     .long("dir")
+                     .help("Directory in which to store wallet files (defaults to current directory)")
+                     .takes_value(true))
+				.arg(Arg::with_name("port")
+                     .short("r")
+                     .long("port")
+                     .help("Port on which to run the wallet receiver when in receiver mode")
+                     .takes_value(true))	 	 
                 .subcommand(SubCommand::with_name("receive")
                             .about("Run the wallet in receiving mode. If an input file is provided, will process it, otherwise runs in server mode waiting for send requests.")
                             .arg(Arg::with_name("input")
@@ -154,6 +171,10 @@ fn server_command(server_args: &ArgMatches) {
 	if server_args.is_present("mine") {
 		server_config.mining_config.enable_mining = true;
 	}
+	if let Some(wallet_url) = server_args.value_of("wallet_url") {
+		server_config.mining_config.wallet_receiver_url = wallet_url.to_string();
+	}
+
 	if let Some(seeds) = server_args.values_of("seed") {
 		server_config.seeding_type = grin::Seeding::List(seeds.map(|s| s.to_string()).collect());
 	}
@@ -199,18 +220,35 @@ fn wallet_command(wallet_args: &ArgMatches) {
 	let key = wallet::ExtendedKey::from_seed(&s, &seed[..])
 		.expect("Error deriving extended key from seed.");
 
+	let default_ip = "127.0.0.1";
+	let mut addr = format!("{}:13416", default_ip);
+
+	let mut wallet_config = WalletConfig::default();
+	if let Some(port) = wallet_args.value_of("port") {
+		addr = format!("{}:{}", default_ip, port);
+		wallet_config.api_http_addr = format!("http://{}", addr).to_string();
+	}
+
+	if let Some(dir) = wallet_args.value_of("dir") {
+		wallet_config.data_file_dir = dir.to_string().clone();
+	}
+	
 	match wallet_args.subcommand() {
+		
 		("receive", Some(receive_args)) => {
 			if let Some(f) = receive_args.value_of("input") {
 				let mut file = File::open(f).expect("Unable to open transaction file.");
 				let mut contents = String::new();
 				file.read_to_string(&mut contents).expect("Unable to read transaction file.");
-				wallet::receive_json_tx(&key, contents.as_str()).unwrap();
+				wallet::receive_json_tx(&wallet_config, &key, contents.as_str()).unwrap();
 			} else {
-				info!("Starting the Grin wallet receiving daemon...");
+				info!("Starting the Grin wallet receiving daemon at {}...", wallet_config.api_http_addr);
 				let mut apis = api::ApiServer::new("/v1".to_string());
-				apis.register_endpoint("/receive".to_string(), wallet::WalletReceiver { key: key });
-				apis.start("127.0.0.1:13416").unwrap_or_else(|e| {
+				apis.register_endpoint("/receive".to_string(), wallet::WalletReceiver { 
+					key: key,
+					config: wallet_config
+				});
+				apis.start(addr).unwrap_or_else(|e| {
 					error!("Failed to start Grin wallet receiver: {}.", e);
 				});
 			}
@@ -224,7 +262,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 			if let Some(d) = send_args.value_of("dest") {
 				dest = d;
 			}
-			wallet::issue_send_tx(&key, amount, dest.to_string()).unwrap();
+			wallet::issue_send_tx(&wallet_config, &key, amount, dest.to_string()).unwrap();
 		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}

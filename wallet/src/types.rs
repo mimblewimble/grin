@@ -17,6 +17,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::num;
 use std::path::Path;
+use std::path::MAIN_SEPARATOR;
 
 use serde_json;
 
@@ -78,11 +79,15 @@ impl From<api::Error> for Error {
 #[derive(Debug, Clone)]
 pub struct WalletConfig {
 	pub api_http_addr: String,
+	pub data_file_dir: String,
 }
 
 impl Default for WalletConfig {
 	fn default() -> WalletConfig {
-		WalletConfig { api_http_addr: "http://127.0.0.1:13415".to_string() }
+		WalletConfig { 
+			api_http_addr: "http://127.0.0.1:13415".to_string(),
+			data_file_dir: ".".to_string(),
+		}
 	}
 }
 
@@ -140,23 +145,31 @@ impl WalletData {
 	/// Note that due to the impossibility to do an actual file lock easily
 	/// across operating systems, this just creates a lock file with a "should
   /// not exist" option.
-	pub fn with_wallet<T, F>(f: F) -> Result<T, Error>
+	pub fn with_wallet<T, F>(data_file_dir:&str, f: F) -> Result<T, Error>
 		where F: FnOnce(&mut WalletData) -> T
 	{
+		//create directory if it doesn't exist
+		fs::create_dir_all(data_file_dir).unwrap_or_else(|why| {
+        	info!("! {:?}", why.kind());
+    	});
+		
+		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
+		let lock_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, LOCK_FILE);
+
 		// create the lock files, if it already exists, will produce an error
-    OpenOptions::new().write(true).create_new(true).open(LOCK_FILE).map_err(|e| {
+    	OpenOptions::new().write(true).create_new(true).open(lock_file_path).map_err(|e| {
 				Error::WalletData(format!("Could not create wallet lock file. Either \
             some other process is using the wallet or there's a write access \
             issue."))
-    })?;
+    	})?;
 
 		// do what needs to be done
-		let mut wdat = WalletData::read_or_create()?;
+		let mut wdat = WalletData::read_or_create(data_file_path)?;
 		let res = f(&mut wdat);
-		wdat.write()?;
+		wdat.write(data_file_path)?;
 
 		// delete the lock file
-		fs::remove_file(LOCK_FILE).map_err(|e| {
+		fs::remove_file(lock_file_path).map_err(|e| {
 				Error::WalletData(format!("Could not remove wallet lock file. Maybe insufficient \
 				                           rights?"))
 			})?;
@@ -165,9 +178,9 @@ impl WalletData {
 	}
 
 	/// Read the wallet data or created a brand new one if it doesn't exist yet
-	fn read_or_create() -> Result<WalletData, Error> {
-		if Path::new(DAT_FILE).exists() {
-			WalletData::read()
+	fn read_or_create(data_file_path:&str) -> Result<WalletData, Error> {
+		if Path::new(data_file_path).exists() {
+			WalletData::read(data_file_path)
 		} else {
 			// just create a new instance, it will get written afterward
 			Ok(WalletData { outputs: vec![] })
@@ -175,21 +188,21 @@ impl WalletData {
 	}
 
 	/// Read the wallet data from disk.
-	fn read() -> Result<WalletData, Error> {
-		let data_file = File::open(DAT_FILE)
-      .map_err(|e| Error::WalletData(format!("Could not open {}: {}", DAT_FILE, e)))?;
+	fn read(data_file_path:&str) -> Result<WalletData, Error> {
+		let data_file = File::open(data_file_path)
+      .map_err(|e| Error::WalletData(format!("Could not open {}: {}", data_file_path, e)))?;
 		serde_json::from_reader(data_file)
-			.map_err(|e| Error::WalletData(format!("Error reading {}: {}", DAT_FILE, e)))
+			.map_err(|e| Error::WalletData(format!("Error reading {}: {}", data_file_path, e)))
 	}
 
 	/// Write the wallet data to disk.
-	fn write(&self) -> Result<(), Error> {
-		let mut data_file = File::create(DAT_FILE)
-      .map_err(|e| Error::WalletData(format!("Could not create {}: {}", DAT_FILE, e)))?;
+	fn write(&self, data_file_path:&str) -> Result<(), Error> {
+		let mut data_file = File::create(data_file_path)
+      .map_err(|e| Error::WalletData(format!("Could not create {}: {}", data_file_path, e)))?;
 		let res_json = serde_json::to_vec_pretty(self)
       .map_err(|_| Error::WalletData(format!("Error serializing wallet data.")))?;
 		data_file.write_all(res_json.as_slice())
-			.map_err(|e| Error::WalletData(format!("Error writing {}: {}", DAT_FILE, e)))
+			.map_err(|e| Error::WalletData(format!("Error writing {}: {}", data_file_path, e)))
 	}
 
 	/// Append a new output information to the wallet data.

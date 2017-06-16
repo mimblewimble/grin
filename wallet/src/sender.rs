@@ -25,10 +25,10 @@ use types::*;
 /// wallet
 /// UTXOs. The destination can be "stdout" (for command line) or a URL to the
 /// recipients wallet receiver (to be implemented).
-pub fn issue_send_tx(ext_key: &ExtendedKey, amount: u64, dest: String) -> Result<(), Error> {
+pub fn issue_send_tx(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64, dest: String) -> Result<(), Error> {
 	checker::refresh_outputs(&WalletConfig::default(), ext_key);
 
-	let (tx, blind_sum) = build_send_tx(ext_key, amount)?;
+	let (tx, blind_sum) = build_send_tx(config, ext_key, amount)?;
 	let json_tx = partial_tx_to_json(amount, blind_sum, tx);
 	if dest == "stdout" {
 		println!("{}", json_tx);
@@ -42,12 +42,12 @@ pub fn issue_send_tx(ext_key: &ExtendedKey, amount: u64, dest: String) -> Result
 /// Builds a transaction to send to someone from the HD seed associated with the
 /// wallet and the amount to send. Handles reading through the wallet data file,
 /// selecting outputs to spend and building the change.
-fn build_send_tx(ext_key: &ExtendedKey, amount: u64) -> Result<(Transaction, SecretKey), Error> {
+fn build_send_tx(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64) -> Result<(Transaction, SecretKey), Error> {
 	// first, rebuild the private key from the seed
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 
 	// operate within a lock on wallet data
-	WalletData::with_wallet(|wallet_data| {
+	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
 		// second, check from our local wallet data for outputs to spend
 		let (coins, change) = wallet_data.select(ext_key.fingerprint, amount);

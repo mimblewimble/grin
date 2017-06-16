@@ -24,11 +24,13 @@ use std::io::Read;
 use std::net::ToSocketAddrs;
 use std::string::ToString;
 use std::str::FromStr;
+use std::mem;
 
-use iron::{Iron, Request, Response, IronResult, IronError, status, headers};
+use iron::{Iron, Request, Response, IronResult, IronError, status, headers, Listening};
 use iron::method::Method;
 use iron::modifiers::Header;
 use iron::middleware::Handler;
+use iron::error::HttpResult;
 use router::Router;
 use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
@@ -227,6 +229,8 @@ fn extract_param<ID>(req: &mut Request, param: &'static str) -> IronResult<ID>
 pub struct ApiServer {
 	root: String,
 	router: Router,
+	server_listener: Option<Listening>,
+
 }
 
 impl ApiServer {
@@ -236,12 +240,24 @@ impl ApiServer {
 		ApiServer {
 			root: root,
 			router: Router::new(),
+			server_listener: None,
 		}
 	}
 
 	/// Starts the ApiServer at the provided address.
-	pub fn start<A: ToSocketAddrs>(self, addr: A) -> Result<(), String> {
-		Iron::new(self.router).http(addr).map(|_| ()).map_err(|e| e.to_string())
+	pub fn start<A: ToSocketAddrs>(&mut self, addr: A) -> Result<(), String> {
+		//replace this value to satisfy borrow checker
+		let r = mem::replace(&mut self.router, Router::new());
+		let result = Iron::new(r).http(addr);
+		let return_value = result.as_ref().map(|_| ()).map_err(|e| e.to_string());
+		self.server_listener = Some(result.unwrap());
+		return_value
+	}
+
+	/// Stops the API server
+	pub fn stop(&mut self){
+		let r = mem::replace(&mut self.server_listener, None);
+		r.unwrap().close().unwrap();
 	}
 
 	/// Register a new API endpoint, providing a relative URL for the new
