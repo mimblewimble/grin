@@ -148,6 +148,11 @@ impl WalletData {
 	pub fn with_wallet<T, F>(data_file_dir:&str, f: F) -> Result<T, Error>
 		where F: FnOnce(&mut WalletData) -> T
 	{
+		//create directory if it doesn't exist
+		fs::create_dir_all(data_file_dir).unwrap_or_else(|why| {
+        	info!("! {:?}", why.kind());
+    	});
+		
 		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
 		let lock_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, LOCK_FILE);
 

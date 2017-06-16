@@ -44,7 +44,7 @@ use tiny_keccak::Keccak;
 use wallet::WalletConfig;
 
 
-/// Errors that can be returned by an ApiEndpoint implementation.
+/// Errors that can be returned by LocalServerContainer
 #[derive(Debug)]
 pub enum Error {
 	Internal(String),
@@ -202,10 +202,11 @@ impl LocalServerContainerPool {
         }
     }
 
-    /// Starts all servers, with or without mining
+    ///Starts all servers, with or without mining
+    ///TODO: This should accept a closure so tests can determine what 
+    ///to do when the run is finished
 
     pub fn start_all_servers(&mut self) {
-        
         
         for s in &mut self.server_containers {
             let mut wallet_url = String::from("http://localhost:13416");
@@ -255,8 +256,11 @@ impl LocalServerContainerPool {
 
 }
 
+/// Just exercises the structures above, creates 5 servers, all starting wallets,
+/// mining and connecting to each other in their own directories
+
 #[test]
-fn simulate_much_mining(){
+fn simulate_parallel_miners(){
     env_logger::init();
     let num_servers=5;
     
@@ -267,12 +271,7 @@ fn simulate_much_mining(){
 
     server_pool.connect_all_peers();
     server_pool.start_all_servers();
-
-    panic!("marp");
-  
 }
-
-
 
 /// Create a network of 5 servers and mine a block, verifying that the block
 /// gets propagated to all.
