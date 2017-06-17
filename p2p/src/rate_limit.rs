@@ -36,6 +36,7 @@ use msg::*;
 
 
 /// A Rate Limited Reader
+#[derive(Debug)]
 pub struct ThrottledReader<R: AsyncRead> {
 	reader: R,
 	/// Max Bytes per second
@@ -116,6 +117,7 @@ impl<R: AsyncRead> AsyncRead for ThrottledReader<R> {
 }
 
 /// A Rate Limited Writer
+#[derive(Debug)]
 pub struct ThrottledWriter<W: AsyncWrite> {
 	writer: W,
 	/// Max Bytes per second
