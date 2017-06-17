@@ -33,6 +33,8 @@ extern crate log;
 extern crate futures;
 #[macro_use]
 extern crate tokio_core;
+extern crate tokio_io;
+extern crate bytes;
 extern crate tokio_timer;
 extern crate rand;
 extern crate serde;
@@ -43,6 +45,7 @@ extern crate num;
 
 mod conn;
 pub mod handshake;
+mod rate_limit;
 mod msg;
 mod peer;
 mod protocol;

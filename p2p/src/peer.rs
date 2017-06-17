@@ -52,10 +52,10 @@ impl Peer {
 			.and_then(|(conn, proto, info)| {
 				Ok((conn,
 				    Peer {
-					info: info,
-					proto: Box::new(proto),
-					state: Arc::new(RwLock::new(State::Connected)),
-				}))
+					    info: info,
+					    proto: Box::new(proto),
+					    state: Arc::new(RwLock::new(State::Connected)),
+				    }))
 			});
 		Box::new(connect_peer)
 	}
@@ -70,10 +70,10 @@ impl Peer {
 			.and_then(|(conn, proto, info)| {
 				Ok((conn,
 				    Peer {
-					info: info,
-					proto: Box::new(proto),
-					state: Arc::new(RwLock::new(State::Connected)),
-				}))
+					    info: info,
+					    proto: Box::new(proto),
+					    state: Arc::new(RwLock::new(State::Connected)),
+				    }))
 			});
 		Box::new(hs_peer)
 	}

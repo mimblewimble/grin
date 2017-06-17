@@ -132,11 +132,9 @@ impl Server {
 			let mut stop_mut = self.stop.borrow_mut();
 			*stop_mut = Some(stop);
 		}
-		Box::new(server.select(stop_rx.map_err(|_| Error::ConnectionClose)).then(|res| {
-			match res {
-				Ok((_, _)) => Ok(()),
-				Err((e, _)) => Err(e),
-			}
+		Box::new(server.select(stop_rx.map_err(|_| Error::ConnectionClose)).then(|res| match res {
+			Ok((_, _)) => Ok(()),
+			Err((e, _)) => Err(e),
 		}))
 	}
 
@@ -304,12 +302,10 @@ fn with_timeout<T: 'static>(fut: Box<Future<Item = Result<T, ()>, Error = Error>
                             -> Box<Future<Item = T, Error = Error>> {
 	let timeout = reactor::Timeout::new(Duration::new(5, 0), h).unwrap();
 	let timed = fut.select(timeout.map(Err).from_err())
-		.then(|res| {
-			match res {
-				Ok((Ok(inner), _timeout)) => Ok(inner),
-				Ok((_, _accept)) => Err(Error::Timeout),
-				Err((e, _other)) => Err(e),
-			}
+		.then(|res| match res {
+			Ok((Ok(inner), _timeout)) => Ok(inner),
+			Ok((_, _accept)) => Err(Error::Timeout),
+			Err((e, _other)) => Err(e),
 		});
 	Box::new(timed)
 }
