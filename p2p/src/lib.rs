@@ -43,6 +43,7 @@ extern crate num;
 
 mod conn;
 pub mod handshake;
+mod rate_limit;
 mod msg;
 mod peer;
 mod protocol;
