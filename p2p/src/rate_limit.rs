@@ -14,26 +14,12 @@
 
 //! Provides wrappers for throttling readers and writers
 
-use std::iter;
-use std::ops::Deref;
-use std::sync::{Mutex, Arc};
 use std::time::{Instant, Duration};
-use std::mem;
 use std::io;
 
-use futures;
 use futures::*;
-use futures::sync::mpsc::{Sender, UnboundedSender, UnboundedReceiver};
-use tokio_core::io::{Io, WriteHalf, ReadHalf, write_all, read_exact};
-use tokio_core::net::TcpStream;
-use tokio_timer::{Timer, TimerError};
 use tokio_io::*;
 use bytes::{Buf, BytesMut, BufMut};
-
-use core::core::hash::{Hash, ZERO_HASH};
-use core::ser;
-use msg::*;
-
 
 /// A Rate Limited Reader
 #[derive(Debug)]
