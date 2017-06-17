@@ -75,7 +75,7 @@ impl Default for P2PConfig {
 		let ipaddr = "127.0.0.1".parse().unwrap();
 		P2PConfig {
 			host: ipaddr,
-			port: 13414
+			port: 13414,
 		}
 	}
 }
