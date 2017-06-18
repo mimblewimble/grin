@@ -103,7 +103,8 @@ values are. However, there are a finite number of usable values and one could tr
 one of them to guess the value of your transaction. In addition, knowing v1 (from
 a previous transaction for example) and the resulting `v1*H` reveals all outputs with
 value v1 across the blockchain. For these reasons, we introduce a second ECC curve
-_G_ and a private key _r_ used as a *blinding factor*.
+_G_ (practically G is just another generator point on the same curve group as H) and
+a private key _r_ used as a *blinding factor*.
 
 An input or output value in a transaction can then be expressed as:
 
