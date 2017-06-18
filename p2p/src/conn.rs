@@ -24,14 +24,16 @@ use futures;
 use futures::{Stream, Future};
 use futures::stream;
 use futures::sync::mpsc::{Sender, UnboundedSender, UnboundedReceiver};
-use tokio_core::io::{Io, WriteHalf, ReadHalf, write_all, read_exact};
+use tokio_core::io::{WriteHalf, ReadHalf, write_all, read_exact};
 use tokio_core::net::TcpStream;
 use tokio_timer::{Timer, TimerError};
+use tokio_io::*;
 
 use core::core::hash::{Hash, ZERO_HASH};
 use core::ser;
 use msg::*;
 use types::Error;
+use rate_limit::*;
 
 /// Handler to provide to the connection, will be called back anytime a message
 /// is received. The provided sender can be use to immediately send back
@@ -92,6 +94,11 @@ impl Connection {
 
 		let (reader, writer) = conn.split();
 
+		// Set Max Read to 12 Mb/s
+		let reader = ThrottledReader::new(reader, 12_000_000);
+		// Set Max Write to 12 Mb/s
+		let writer = ThrottledWriter::new(writer, 12_000_000);
+
 		// prepare the channel that will transmit data to the connection writer
 		let (tx, rx) = futures::sync::mpsc::unbounded();
 
@@ -125,10 +132,12 @@ impl Connection {
 
 	/// Prepares the future that gets message data produced by our system and
 	/// sends it to the peer connection
-	fn write_msg(&self,
-	             rx: UnboundedReceiver<Vec<u8>>,
-	             writer: WriteHalf<TcpStream>)
-	             -> Box<Future<Item = WriteHalf<TcpStream>, Error = Error>> {
+	fn write_msg<W>(&self,
+	                rx: UnboundedReceiver<Vec<u8>>,
+	                writer: W)
+	                -> Box<Future<Item = W, Error = Error>>
+		where W: AsyncWrite + 'static
+	{
 
 		let sent_bytes = self.sent_bytes.clone();
 		let send_data = rx
@@ -148,12 +157,13 @@ impl Connection {
 
 	/// Prepares the future reading from the peer connection, parsing each
 	/// message and forwarding them appropriately based on their type
-	fn read_msg<F>(&self,
-	               sender: UnboundedSender<Vec<u8>>,
-	               reader: ReadHalf<TcpStream>,
-	               handler: F)
-	               -> Box<Future<Item = ReadHalf<TcpStream>, Error = Error>>
-		where F: Handler + 'static
+	fn read_msg<F, R>(&self,
+	                  sender: UnboundedSender<Vec<u8>>,
+	                  reader: R,
+	                  handler: F)
+	                  -> Box<Future<Item = R, Error = Error>>
+		where F: Handler + 'static,
+		      R: AsyncRead + 'static
 	{
 
 		// infinite iterator stream so we repeat the message reading logic until the
