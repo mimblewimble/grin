@@ -6,7 +6,8 @@ workspace = ".."
 
 [dependencies]
 byteorder = "^0.5"
-rocksdb = "^0.6.0"
+#rocksdb = "^0.6.0"
+rocksdb = { path = "../../rust-rocksdb" }
 tiny-keccak = "1.1"
 
 grin_core = { path = "../core" }

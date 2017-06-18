@@ -21,6 +21,8 @@ use core::core::{Transaction, build};
 use extkey::ExtendedKey;
 use types::*;
 
+use api;
+
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
 /// UTXOs. The destination can be "stdout" (for command line) or a URL to the
@@ -34,7 +36,11 @@ pub fn issue_send_tx(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64, 
 		println!("{}", json_tx);
 	} else if &dest[..4] == "http" {
 		// TODO
-		unimplemented!();
+		println!("UNIMPLEMENTED");
+		let url = format!("{}/v1/receive",
+			dest.as_str());
+		/*let res:Result<OUT, Error> = api::client::post(url.as_str(),
+			&json_tx);*/
 	}
 	Ok(())
 }

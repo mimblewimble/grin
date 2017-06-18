@@ -262,6 +262,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 			if let Some(d) = send_args.value_of("dest") {
 				dest = d;
 			}
+			println!("{}", dest.to_string());
 			wallet::issue_send_tx(&wallet_config, &key, amount, dest.to_string()).unwrap();
 		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
