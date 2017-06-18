@@ -17,7 +17,7 @@
 //! the related difficulty, defined as the maximum target divided by the hash.
 
 use std::fmt;
-use std::ops::Add;
+use std::ops::{Add, Mul, Div};
 
 use bigint::BigUint;
 use serde::{Serialize, Serializer, Deserialize, Deserializer, de};
@@ -37,9 +37,14 @@ pub struct Difficulty {
 }
 
 impl Difficulty {
+	/// Difficulty of zero, which is practically invalid (not target can be
+	/// calculated from it) but very useful as a start for additions.
+	pub fn zero() -> Difficulty {
+		Difficulty { num: BigUint::new(vec![0]) }
+	}
+
 	/// Difficulty of one, which is the minumum difficulty (when the hash
-	/// equals the
-	/// max target)
+	/// equals the max target)
 	pub fn one() -> Difficulty {
 		Difficulty { num: BigUint::new(vec![1]) }
 	}
@@ -78,6 +83,20 @@ impl Add<Difficulty> for Difficulty {
 	type Output = Difficulty;
 	fn add(self, other: Difficulty) -> Difficulty {
 		Difficulty { num: self.num + other.num }
+	}
+}
+
+impl Mul<Difficulty> for Difficulty {
+	type Output = Difficulty;
+	fn mul(self, other: Difficulty) -> Difficulty {
+		Difficulty { num: self.num * other.num }
+	}
+}
+
+impl Div<Difficulty> for Difficulty {
+	type Output = Difficulty;
+	fn div(self, other: Difficulty) -> Difficulty {
+		Difficulty { num: self.num / other.num }
 	}
 }
 
