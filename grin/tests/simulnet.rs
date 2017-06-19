@@ -41,6 +41,7 @@ use secp::Secp256k1;
 use secp::key::SecretKey;
 use tiny_keccak::Keccak;
 
+use core::consensus;
 use wallet::WalletConfig;
 
 
@@ -75,7 +76,6 @@ impl LocalServerContainer {
             grin::ServerConfig{
                 api_http_addr: api_addr,
                 db_root: format!("{}/grin-prop", working_dir),
-                cuckoo_size: 12,
                 p2p_config: p2p::P2PConfig{port: server_port, ..p2p::P2PConfig::default()},
                 ..Default::default()
             }, &event_loop.handle()).unwrap();
@@ -223,6 +223,7 @@ impl LocalServerContainerPool {
                   enable_mining: true,
                   burn_reward: true,
                   wallet_receiver_url : format!("http://{}", wallet_url),
+                  cuckoo_size: consensus::TEST_SIZESHIFT as u32,
                   ..Default::default()
             };
             if s.enable_wallet == true {
@@ -285,6 +286,7 @@ fn simulate_block_propagation() {
   let miner_config = grin::MinerConfig{
     enable_mining: true,
     burn_reward: true,
+    cuckoo_size: consensus::TEST_SIZESHIFT as u32,
     ..Default::default()
   };
 
@@ -295,7 +297,6 @@ fn simulate_block_propagation() {
           grin::ServerConfig{
             api_http_addr: format!("127.0.0.1:{}", 20000+n),
             db_root: format!("target/grin-prop-{}", n),
-            cuckoo_size: 12,
             p2p_config: p2p::P2PConfig{port: 10000+n, ..p2p::P2PConfig::default()},
             ..Default::default()
           }, &handle).unwrap();
@@ -335,6 +336,7 @@ fn simulate_full_sync() {
   let miner_config = grin::MinerConfig{
     enable_mining: true,
     burn_reward: true,
+    cuckoo_size: consensus::TEST_SIZESHIFT as u32,
     ..Default::default()
   };
 
@@ -344,7 +346,6 @@ fn simulate_full_sync() {
       let s = grin::Server::future(
           grin::ServerConfig{
             db_root: format!("target/grin-sync-{}", n),
-            cuckoo_size: 12,
             p2p_config: p2p::P2PConfig{port: 11000+n, ..p2p::P2PConfig::default()},
             ..Default::default()
           }, &handle).unwrap();
@@ -378,7 +379,6 @@ fn simulate_seeding() {
       let s = grin::Server::future(
           grin::ServerConfig{
             db_root: format!("target/grin-seed-{}", n),
-            cuckoo_size: 12,
             p2p_config: p2p::P2PConfig{port: 12000+n, ..p2p::P2PConfig::default()},
             seeding_type: grin::Seeding::List(vec!["127.0.0.1:12000".to_string()]),
             ..Default::default()

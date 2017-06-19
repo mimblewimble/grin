@@ -29,7 +29,7 @@ use adapters::*;
 use api;
 use chain;
 use chain::ChainStore;
-use core;
+use core::{self, consensus};
 use core::core::hash::Hashed;
 use miner;
 use p2p;
@@ -58,8 +58,10 @@ pub struct Server {
 
 impl Server {
 	/// Instantiates and starts a new server.
-	pub fn start(config: ServerConfig) -> Result<Server, Error> {
+	pub fn start(mut config: ServerConfig) -> Result<Server, Error> {
+		check_config(&mut config);
 		let mut evtlp = reactor::Core::new().unwrap();
+
 		let mining_config = config.mining_config.clone();
 		let serv = Server::future(config, &evtlp.handle())?;
 		if mining_config.enable_mining {
@@ -79,7 +81,9 @@ impl Server {
 	}
 
 	/// Instantiates a new server associated with the provided future reactor.
-	pub fn future(config: ServerConfig, evt_handle: &reactor::Handle) -> Result<Server, Error> {
+	pub fn future(mut config: ServerConfig, evt_handle: &reactor::Handle) -> Result<Server, Error> {
+		check_config(&mut config);
+
 		let (chain_store, head) = try!(store_head(&config));
 		let shared_head = Arc::new(Mutex::new(head));
 
@@ -90,7 +94,8 @@ impl Server {
 		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(pool_adapter)));
 
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));
-		let net_adapter = Arc::new(NetToChainAdapter::new(shared_head.clone(),
+		let net_adapter = Arc::new(NetToChainAdapter::new(config.test_mode,
+		                                                  shared_head.clone(),
 		                                                  chain_store.clone(),
 		                                                  chain_adapter.clone(),
 		                                                  tx_pool.clone(),
@@ -176,14 +181,14 @@ fn store_head(config: &ServerConfig)
 		Err(store::Error::NotFoundErr) => {
 			info!("No genesis block found, creating and saving one.");
 			let mut gen = core::genesis::genesis();
-			if config.cuckoo_size > 0 {
-				gen.header.cuckoo_len = config.cuckoo_size;
-				let diff = gen.header.difficulty.clone();
-				core::pow::pow(&mut gen.header, diff).unwrap();
-			}
-			try!(chain_store.save_block(&gen).map_err(&Error::Store));
+			let diff = gen.header.difficulty.clone();
+			core::pow::pow_size(&mut gen.header,
+			                    diff,
+			                    config.mining_config.cuckoo_size as u32)
+				.unwrap();
+			chain_store.save_block(&gen).map_err(&Error::Store)?;
 			let tip = chain::types::Tip::new(gen.hash());
-			try!(chain_store.save_head(&tip).map_err(&Error::Store));
+			chain_store.save_head(&tip).map_err(&Error::Store)?;
 			info!("Saved genesis block with hash {}", gen.hash());
 			tip
 		}
@@ -199,4 +204,13 @@ fn store_head(config: &ServerConfig)
 	      head_header.height);
 
 	Ok((Arc::new(chain_store), head))
+}
+
+fn check_config(config: &mut ServerConfig) {
+	// applying test/normal config
+	config.mining_config.cuckoo_size = if config.test_mode {
+		consensus::TEST_SIZESHIFT as u32
+	} else {
+		consensus::DEFAULT_SIZESHIFT as u32
+	};
 }

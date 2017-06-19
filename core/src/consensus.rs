@@ -20,6 +20,7 @@
 //! here.
 
 use std::cmp;
+use std::fmt;
 
 use bigint::{BigInt, Sign};
 
@@ -37,17 +38,11 @@ pub const BLOCK_TIME_SEC: i64 = 60;
 /// Cuckoo-cycle proof size (cycle length)
 pub const PROOFSIZE: usize = 42;
 
-/// Origin Cuckoo Cycle size shift used by the genesis block.
-pub const DEFAULT_SIZESHIFT: u8 = 25;
+/// Default Cuckoo Cycle size shift used for mining and validating.
+pub const DEFAULT_SIZESHIFT: u8 = 30;
 
-/// Maximum Cuckoo Cycle size shift we'll ever use. We adopt a schedule that
-/// progressively increases the size as the target becomes lower.
-///   Start => 25
-///   MAX_TARGET >> 12 => 26
-///   MAX_TARGET >> 20 => 27
-///   MAX_TARGET >> 28 => 28
-///   MAX_TARGET >> 36 => 29
-pub const MAX_SIZESHIFT: u8 = 29;
+/// Lower Cuckoo size shift for tests and testnet
+pub const TEST_SIZESHIFT: u8 = 12;
 
 /// Default Cuckoo Cycle easiness, high enough to have good likeliness to find
 /// a solution.
@@ -75,11 +70,28 @@ pub const UPPER_TIME_BOUND: i64 = BLOCK_TIME_WINDOW * 4 / 3;
 
 pub const LOWER_TIME_BOUND: i64 = BLOCK_TIME_WINDOW * 5 / 6;
 
+/// Error when computing the next difficulty adjustment.
 #[derive(Debug, Clone)]
-pub struct TargetError {
-	err: String,
+pub struct TargetError(pub String);
+
+impl fmt::Display for TargetError {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "Error computing new difficulty: {}", self.0)
+	}
 }
-pub fn next_target2<T>(cursor: T) -> Result<Difficulty, TargetError>
+
+/// Computes the proof-of-work difficulty that the next block should comply
+/// with. Takes an iterator over past blocks, from latest (highest height) to
+/// oldest (lowest height). The iterator produces pairs of timestamp and
+/// difficulty for each block.
+///
+/// The difficulty calculation is based on both Digishield and GravityWave
+/// family of difficulty computation, coming to something very close to Zcash.
+/// The refence difficulty is an average of the difficulty over a window of
+/// 23 blocks. The corresponding timespan is calculated by using the
+/// difference between the median timestamps at the beginning and the end
+/// of the window.
+pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
 	where T: IntoIterator<Item = Result<(i64, Difficulty), TargetError>>
 {
 
@@ -139,46 +151,6 @@ pub fn next_target2<T>(cursor: T) -> Result<Difficulty, TargetError>
 	// Final ratio calculation
 	Ok(diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW as u32) /
 	   Difficulty::from_num(adj_ts as u32))
-}
-
-/// Difficulty adjustment somewhat inspired by Ethereum's. Tuned to add or
-/// remove 1/1024th of the target for each 10 seconds of deviation from the 30
-/// seconds block time. Increases Cuckoo size shift by one when next_target
-/// reaches soft max.
-pub fn next_target(ts: i64,
-                   prev_ts: i64,
-                   prev_diff: Difficulty,
-                   prev_cuckoo_sz: u8)
-                   -> (Difficulty, u8) {
-	let one = BigInt::new(Sign::Plus, vec![1]);
-	let two = BigInt::new(Sign::Plus, vec![2]);
-	let ten = BigInt::new(Sign::Plus, vec![10]);
-
-	// increase the cuckoo size when the target gets lower than the soft min as
-	// long as we're not at the max size already; target gets 2x to compensate for
-	// increased next_target
-	let soft_min = one.clone() <<
-	               (((prev_cuckoo_sz - cmp::min(DEFAULT_SIZESHIFT, prev_cuckoo_sz)) *
-	                 8 + 16) as usize);
-	let prev_diff = BigInt::from_biguint(Sign::Plus, prev_diff.into_biguint());
-	let (pdiff, clen) = if prev_diff > soft_min && prev_cuckoo_sz < MAX_SIZESHIFT {
-		(prev_diff / two, prev_cuckoo_sz + 1)
-	} else {
-		(prev_diff, prev_cuckoo_sz)
-	};
-
-	// signed deviation from desired value divided by ten and bounded in [-6, 6]
-	let delta = cmp::max(cmp::min((ts - prev_ts - (BLOCK_TIME_SEC as i64)), 60), -60);
-	let delta_bigi = BigInt::new(if delta >= 0 { Sign::Plus } else { Sign::Minus },
-	                             vec![delta.abs() as u32]);
-	let new_diff = pdiff.clone() - ((pdiff >> 10) + one.clone()) * delta_bigi / ten;
-
-	// cannot be lower than one
-	if new_diff < one {
-		(Difficulty::one(), clen)
-	} else {
-		(Difficulty::from_biguint(new_diff.to_biguint().unwrap()), clen)
-	}
 }
 
 #[cfg(test)]

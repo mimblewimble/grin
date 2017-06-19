@@ -282,7 +282,7 @@ fn read_config() -> grin::ServerConfig {
 
 fn default_config() -> grin::ServerConfig {
 	grin::ServerConfig {
-		cuckoo_size: 12,
+    test_mode: true,
 		seeding_type: grin::Seeding::WebStatic,
 		..Default::default()
 	}

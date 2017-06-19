@@ -33,11 +33,6 @@ use core::hash::Hashed;
 use core::target::Difficulty;
 use pow::cuckoo::{Cuckoo, Miner, Error};
 
-/// Validates the proof of work of a given header.
-pub fn verify(bh: &BlockHeader) -> bool {
-	verify_size(bh, bh.cuckoo_len as u32)
-}
-
 /// Validates the proof of work of a given header, and that the proof of work
 /// satisfies the requirements of the header.
 pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
@@ -49,21 +44,15 @@ pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
 	Cuckoo::new(&bh.hash()[..], cuckoo_sz).verify(bh.pow, EASINESS as u64)
 }
 
-/// Runs a naive single-threaded proof of work computation over the provided
-/// block, until the required difficulty target is reached. May take a
-/// while for a low target...
-pub fn pow(bh: &mut BlockHeader, diff: Difficulty) -> Result<(), Error> {
-	let cuckoo_len = bh.cuckoo_len as u32;
-	pow_size(bh, diff, cuckoo_len)
-}
-
-/// Same as default pow function but uses the much easier Cuckoo20 (mostly for
+/// Uses the much easier Cuckoo20 (mostly for
 /// tests).
 pub fn pow20(bh: &mut BlockHeader, diff: Difficulty) -> Result<(), Error> {
 	pow_size(bh, diff, 20)
 }
 
-/// Actual pow function, takes an arbitrary pow size as input
+/// Runs a naive single-threaded proof of work computation over the provided
+/// block, until the required difficulty target is reached. May take a
+/// while for a low target...
 pub fn pow_size(bh: &mut BlockHeader, diff: Difficulty, sizeshift: u32) -> Result<(), Error> {
 	let start_nonce = bh.nonce;
 

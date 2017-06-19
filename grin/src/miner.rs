@@ -82,15 +82,14 @@ impl Miner {
 			let deadline = time::get_time().sec + 2;
 			let mut sol = None;
 			debug!("Mining at Cuckoo{} for at most 2 secs on block {} at difficulty {}.",
-			       b.header.cuckoo_len,
+			       self.config.cuckoo_size,
 			       latest_hash,
 			       b.header.difficulty);
 			let mut iter_count = 0;
 			while head.hash() == latest_hash && time::get_time().sec < deadline {
 				let pow_hash = b.hash();
-				let mut miner = cuckoo::Miner::new(&pow_hash[..],
-				                                   consensus::EASINESS,
-				                                   b.header.cuckoo_len as u32);
+				let mut miner =
+					cuckoo::Miner::new(&pow_hash[..], consensus::EASINESS, self.config.cuckoo_size);
 				if let Ok(proof) = miner.mine() {
 					if proof.to_difficulty() >= b.header.difficulty {
 						sol = Some(proof);
@@ -108,10 +107,15 @@ impl Miner {
 			if let Some(proof) = sol {
 				info!("Found valid proof of work, adding block {}.", b.hash());
 				b.header.pow = proof;
+				let opts = if self.config.cuckoo_size < consensus::DEFAULT_SIZESHIFT as u32 {
+					chain::EASY_POW
+				} else {
+					chain::NONE
+				};
 				let res = chain::process_block(&b,
 				                               self.chain_store.clone(),
 				                               self.chain_adapter.clone(),
-				                               chain::NONE);
+				                               opts);
 				if let Err(e) = res {
 					error!("Error validating mined block: {:?}", e);
 				} else if let Ok(Some(tip)) = res {
@@ -138,8 +142,9 @@ impl Miner {
 		if now_sec == head_sec {
 			now_sec += 1;
 		}
-		let (difficulty, cuckoo_len) =
-			consensus::next_target(now_sec, head_sec, head.difficulty.clone(), head.cuckoo_len);
+
+		let diff_iter = chain::store::DifficultyIter::from(head.hash(), self.chain_store.clone());
+		let difficulty = consensus::next_difficulty(diff_iter).unwrap();
 
 		let txs_box = self.tx_pool.read().unwrap().prepare_mineable_transactions(MAX_TX);
 		let txs = txs_box.iter().map(|tx| tx.as_ref()).collect();
@@ -155,7 +160,6 @@ impl Miner {
 
 		let mut rng = rand::OsRng::new().unwrap();
 		b.header.nonce = rng.gen();
-		b.header.cuckoo_len = cuckoo_len;
 		b.header.difficulty = difficulty;
 		b.header.timestamp = time::at(time::Timespec::new(now_sec, 0));
 		b

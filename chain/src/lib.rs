@@ -41,4 +41,4 @@ pub mod types;
 // Re-export the base interface
 
 pub use types::{ChainStore, Tip, ChainAdapter};
-pub use pipe::{SYNC, NONE, process_block, process_block_header, Error};
+pub use pipe::{SYNC, NONE, EASY_POW, process_block, process_block_header, Options, Error};
