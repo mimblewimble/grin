@@ -115,6 +115,8 @@ impl Server {
 
 		evt_handle.spawn(server.start(evt_handle.clone()).map_err(|_| ()));
 
+		info!("Starting rest apis at: {}", &config.api_http_addr);
+
 		api::start_rest_apis(config.api_http_addr.clone(),
 		                     chain_store.clone(),
 		                     shared_head.clone(),

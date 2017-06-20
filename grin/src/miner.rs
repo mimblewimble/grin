@@ -31,6 +31,7 @@ use secp;
 use pool;
 use types::{MinerConfig, Error};
 use util;
+use wallet::{CbAmount, WalletReceiveRequest, CbData};
 
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
@@ -170,8 +171,9 @@ impl Miner {
 		} else {
 			let url = format!("{}/v1/receive/coinbase",
 			                  self.config.wallet_receiver_url.as_str());
+			let request = WalletReceiveRequest::Coinbase(CbAmount{amount: consensus::REWARD});
 			let res: CbData = api::client::post(url.as_str(),
-			                                    &CbAmount { amount: consensus::REWARD })
+			                                    &request)
 				.expect("Wallet receiver unreachable, could not claim reward. Is it running?");
 			let out_bin = util::from_hex(res.output).unwrap();
 			let kern_bin = util::from_hex(res.kernel).unwrap();
@@ -181,15 +183,4 @@ impl Miner {
 			(output, kernel)
 		}
 	}
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct CbAmount {
-	amount: u64,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct CbData {
-	output: String,
-	kernel: String,
 }

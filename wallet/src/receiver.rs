@@ -75,23 +75,9 @@ pub fn receive_json_tx(config: &WalletConfig, ext_key: &ExtendedKey, partial_tx_
 	let final_tx = receive_transaction(&config, ext_key, amount, blinding, partial_tx)?;
 	let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
 
-	
-	let url = format!("{}/v1/pool/push", config.api_http_addr.as_str());
+	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
 	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })?;
 	Ok(())
-}
-
-/// Amount in request to build a coinbase output.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CbAmount {
-	amount: u64,
-}
-
-/// Response to build a coinbase output.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CbData {
-	output: String,
-	kernel: String,
 }
 
 /// Component used to receive coins, implements all the receiving end of the
@@ -105,36 +91,61 @@ pub struct WalletReceiver {
 impl ApiEndpoint for WalletReceiver {
 	type ID = String;
 	type T = String;
-	type OP_IN = CbAmount;
+	type OP_IN = WalletReceiveRequest;
 	type OP_OUT = CbData;
 
 	fn operations(&self) -> Vec<Operation> {
-		vec![Operation::Custom("coinbase".to_string())]
+		vec![
+			Operation::Custom("coinbase".to_string()),
+			Operation::Custom("receive_json_tx".to_string())
+		]
 	}
 
-	fn operation(&self, op: String, input: CbAmount) -> ApiResult<CbData> {
-		debug!("Operation {} with amount {}", op, input.amount);
-		if input.amount == 0 {
-			return Err(api::Error::Argument(format!("Zero amount not allowed.")));
-		}
+	fn operation(&self, op: String, input: WalletReceiveRequest) -> ApiResult<CbData> {
 		match op.as_str() {
 			"coinbase" => {
-				let (out, kern) =
-					receive_coinbase(&self.config, &self.key, input.amount).map_err(|e| {
-							api::Error::Internal(format!("Error building coinbase: {:?}", e))
-						})?;
-				let out_bin =
-					ser::ser_vec(&out).map_err(|e| {
-							api::Error::Internal(format!("Error serializing output: {:?}", e))
-						})?;
-				let kern_bin =
-					ser::ser_vec(&kern).map_err(|e| {
-							api::Error::Internal(format!("Error serializing kernel: {:?}", e))
-						})?;
-				Ok(CbData {
-					output: util::to_hex(out_bin),
-					kernel: util::to_hex(kern_bin),
-				})
+				match input {
+					WalletReceiveRequest::Coinbase(cb_amount) => {
+						debug!("Operation {} with amount {}", op, cb_amount.amount);
+						if cb_amount.amount == 0 {
+							return Err(api::Error::Argument(format!("Zero amount not allowed.")));
+						}
+						let (out, kern) =
+							receive_coinbase(&self.config, &self.key, cb_amount.amount).map_err(|e| {
+									api::Error::Internal(format!("Error building coinbase: {:?}", e))
+								})?;
+						let out_bin =
+							ser::ser_vec(&out).map_err(|e| {
+									api::Error::Internal(format!("Error serializing output: {:?}", e))
+								})?;
+						let kern_bin =
+							ser::ser_vec(&kern).map_err(|e| {
+									api::Error::Internal(format!("Error serializing kernel: {:?}", e))
+								})?;
+						Ok(CbData {
+							output: util::to_hex(out_bin),
+							kernel: util::to_hex(kern_bin),
+						})
+					}
+					_ => Err(api::Error::Argument(format!("Incorrect request data: {}", op))),
+				}
+			}
+			"receive_json_tx" => {
+				match input {
+					WalletReceiveRequest::PartialTransaction(partial_tx_str) => {
+						debug!("Operation {} with transaction {}", op, &partial_tx_str);
+						receive_json_tx(&self.config, &self.key, &partial_tx_str).map_err(|e| {
+									api::Error::Internal(format!("Error processing partial transaction: {:?}", e))
+								});
+						
+						//TODO: Return emptiness for now, should be a proper enum return type
+						Ok(CbData {
+							output: String::from(""),
+							kernel: String::from(""),
+						})
+					}
+					_ => Err(api::Error::Argument(format!("Incorrect request data: {}", op))),
+				}
 			}
 			_ => Err(api::Error::Argument(format!("Unknown operation: {}", op))),
 		}
