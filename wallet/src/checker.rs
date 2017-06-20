@@ -43,12 +43,10 @@ pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) {
 				let out_res = get_output_by_commitment(config, commitment);
 		
 				if out_res.is_ok() {
-					debug!("output is known");
 					// output is known, it's a new utxo
 					out.status = OutputStatus::Unspent;
 
 				} else if out.status == OutputStatus::Unspent {
-					debug!("output is spent");
 					// a UTXO we can't find anymore has been spent
 					if let Err(api::Error::NotFound) = out_res {
 						out.status = OutputStatus::Spent;
