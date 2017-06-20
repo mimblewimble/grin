@@ -185,15 +185,15 @@ mod test {
 	#[test]
 	fn next_target_adjustment() {
 		// not enough data
-		assert_eq!(next_target2(vec![]).unwrap(), Difficulty::one());
-		assert_eq!(next_target2(vec![Ok((60, Difficulty::one()))]).unwrap(),
+		assert_eq!(next_difficulty(vec![]).unwrap(), Difficulty::one());
+		assert_eq!(next_difficulty(vec![Ok((60, Difficulty::one()))]).unwrap(),
 		           Difficulty::one());
-		assert_eq!(next_target2(repeat(60, 10, DIFFICULTY_ADJUST_WINDOW)).unwrap(),
+		assert_eq!(next_difficulty(repeat(60, 10, DIFFICULTY_ADJUST_WINDOW)).unwrap(),
 		           Difficulty::one());
 
 		// just enough data, right interval, should stay constant
 		let just_enough = DIFFICULTY_ADJUST_WINDOW + MEDIAN_TIME_WINDOW;
-		assert_eq!(next_target2(repeat(60, 1000, just_enough)).unwrap(),
+		assert_eq!(next_difficulty(repeat(60, 1000, just_enough)).unwrap(),
 		           Difficulty::from_num(1000));
 
 		// checking averaging works, window length is odd so need to compensate a little
@@ -201,30 +201,30 @@ mod test {
 		let mut s1 = repeat(60, 500, sec);
 		let mut s2 = repeat_offs((sec * 60) as i64, 60, 1545, DIFFICULTY_ADJUST_WINDOW / 2);
 		s2.append(&mut s1);
-		assert_eq!(next_target2(s2).unwrap(), Difficulty::from_num(999));
+		assert_eq!(next_difficulty(s2).unwrap(), Difficulty::from_num(999));
 
 		// too slow, diff goes down
-		assert_eq!(next_target2(repeat(90, 1000, just_enough)).unwrap(),
+		assert_eq!(next_difficulty(repeat(90, 1000, just_enough)).unwrap(),
 		           Difficulty::from_num(889));
-		assert_eq!(next_target2(repeat(120, 1000, just_enough)).unwrap(),
+		assert_eq!(next_difficulty(repeat(120, 1000, just_enough)).unwrap(),
 		           Difficulty::from_num(800));
 
 		// too fast, diff goes up
-		assert_eq!(next_target2(repeat(55, 1000, just_enough)).unwrap(),
+		assert_eq!(next_difficulty(repeat(55, 1000, just_enough)).unwrap(),
 		           Difficulty::from_num(1021));
-		assert_eq!(next_target2(repeat(45, 1000, just_enough)).unwrap(),
+		assert_eq!(next_difficulty(repeat(45, 1000, just_enough)).unwrap(),
 		           Difficulty::from_num(1067));
 
 		// hitting lower time bound, should always get the same result below
-		assert_eq!(next_target2(repeat(20, 1000, just_enough)).unwrap(),
+		assert_eq!(next_difficulty(repeat(20, 1000, just_enough)).unwrap(),
 		           Difficulty::from_num(1200));
-		assert_eq!(next_target2(repeat(10, 1000, just_enough)).unwrap(),
+		assert_eq!(next_difficulty(repeat(10, 1000, just_enough)).unwrap(),
 		           Difficulty::from_num(1200));
 
 		// hitting higher time bound, should always get the same result above
-		assert_eq!(next_target2(repeat(160, 1000, just_enough)).unwrap(),
+		assert_eq!(next_difficulty(repeat(160, 1000, just_enough)).unwrap(),
 		           Difficulty::from_num(750));
-		assert_eq!(next_target2(repeat(200, 1000, just_enough)).unwrap(),
+		assert_eq!(next_difficulty(repeat(200, 1000, just_enough)).unwrap(),
 		           Difficulty::from_num(750));
 	}
 

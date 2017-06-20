@@ -92,9 +92,9 @@ mod test {
 	fn genesis_pow() {
 		let mut b = genesis::genesis();
 		b.header.nonce = 310;
-		pow20(&mut b.header, Difficulty::one()).unwrap();
+		pow_size(&mut b.header, Difficulty::one(), 12).unwrap();
 		assert!(b.header.nonce != 310);
 		assert!(b.header.pow.to_difficulty() >= Difficulty::one());
-		assert!(verify_size(&b.header, 20));
+		assert!(verify_size(&b.header, 12));
 	}
 }

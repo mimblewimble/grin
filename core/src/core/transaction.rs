@@ -28,7 +28,7 @@ bitflags! {
     pub flags KernelFeatures: u8 {
         /// No flags
         const DEFAULT_KERNEL = 0b00000000,
-        /// TODO what is this for?
+        /// Kernel matching a coinbase output
         const COINBASE_KERNEL = 0b00000001,
     }
 }
