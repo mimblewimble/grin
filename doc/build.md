@@ -50,7 +50,7 @@ First, we run a wallet server to recieve rewards on port 15000 (we'll log in deb
 
     node1$ RUST_LOG=grin=debug grin wallet -p "password" -r 15000 receive
 
-Then we start node 1 mining with its P2P server bound to port 10000 and its api server at 10001. We also providing our wallet address where we'll recieve mining rewards. In another terminal:
+Then we start node 1 mining with its P2P server bound to port 10000 and its api server at 10001. We also provide our wallet address where we'll recieve mining rewards. In another terminal:
 
     node1$ RUST_LOG=grin=debug grin server -m -p 10000 -a 10001 -w "http://127.0.0.1:15000" run
 
