@@ -31,21 +31,60 @@ mod framework;
 use std::thread;
 use std::time;
 use std::default::Default;
+use std::cell::RefCell;
 
 use futures::{Future, Poll, Async};
 use futures::task::park;
 use tokio_core::reactor;
 use tokio_timer::Timer;
 
-use framework::{LocalServerContainerPool};
+use framework::{LocalServerContainer, LocalServerContainerConfig};
 
-/// Just exercises the structures above, creates 5 servers, all starting wallets,
-/// mining and connecting to each other in their own directories
+/// Just a test function for testing the local server framework,
+/// commented out for now so as not to impede CI testing
 
-#[test]
-fn simulate_parallel_miners(){
+//#[test]
+fn framework_scratch(){
     env_logger::init();
-    let num_servers=5;
+
+    //Create a server running a wallet:
+    let mut server_config = LocalServerContainerConfig::default();
+    server_config.name=String::from("node1-wallet");
+    server_config.p2p_server_port=10005;
+
+    let mut wallet_server = RefCell::new(LocalServerContainer::new(server_config).unwrap());
+
+    let f = || {
+      println!("wallet returned!");
+    };
+
+    //wallet_server.borrow_mut().run_wallet(f);
+    
+    //Create a server pool
+    /*let mut server_config = LocalServerContainerConfig::default();
+    server_config.name=String::from("node1");
+    server_config.p2p_server_port=10000;
+    server_config.api_server_port=10001;
+    server_config.burn_mining_rewards=false;
+    server_config.start_miner=true;
+    server_config.coinbase_wallet_address=String::from("http://127.0.0.1:10005");
+
+    //RefCell so we can borrow again within the closure below
+    let mut server1 = RefCell::new(LocalServerContainer::new(server_config).unwrap());
+    
+    server1.borrow_mut().start_wallet();
+
+    //Wait a bit
+    thread::sleep(time::Duration::from_millis(500));
+
+    let return_fn = || {
+        panic!("Halt");
+    };
+
+    //Now run the server
+    server1.borrow_mut().run_server(5, return_fn);*/
+
+    /*let num_servers=5;
     
     let mut server_pool = LocalServerContainerPool::new().unwrap();
     for n in 0..num_servers {
@@ -61,7 +100,7 @@ fn simulate_parallel_miners(){
     
     server_pool.run_all_servers(evaluate);
 
-    panic!("Halt");
+    panic!("Halt");*/
 
     
 }
