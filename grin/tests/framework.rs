@@ -25,15 +25,22 @@ extern crate env_logger;
 extern crate futures;
 extern crate tokio_core;
 extern crate tokio_timer;
+extern crate futures_cpupool;
+
 
 use std::thread;
 use std::time;
 use std::default::Default;
 use std::mem;
+use std::fs;
+use std::sync::{Arc, Mutex, RwLock};
 
 use futures::{Future};
+use futures::future::join_all;
 use futures::task::park;
 use tokio_core::reactor;
+use tokio_core::reactor::Remote;
+use tokio_core::reactor::Handle;
 use tokio_timer::Timer;
 
 use secp::Secp256k1;
@@ -41,6 +48,13 @@ use tiny_keccak::Keccak;
 
 use wallet::WalletConfig;
 
+
+/// Just removes all results from previous runs
+
+pub fn clean_all_output(){
+    let target_dir = format!("target/test_servers");
+    fs::remove_dir_all(target_dir);
+}
 
 /// Errors that can be returned by LocalServerContainer
 #[derive(Debug)]
@@ -53,6 +67,7 @@ pub enum Error {
 /// All-in-one server configuration struct, for convenience
 /// 
 
+#[derive(Clone)]
 pub struct LocalServerContainerConfig {
     
     //user friendly name for the server, also denotes what dir
@@ -68,8 +83,15 @@ pub struct LocalServerContainerConfig {
     //Port the API server is running on
     pub api_server_port: u16,
 
+    //Port the wallet server is running on
+    pub wallet_port: u16,
+
     //Whether we're going to mine
     pub start_miner: bool,
+
+    //Whether we're going to run a wallet as well,
+    //can use same server instance as a validating node for convenience
+    pub start_wallet: bool,
 
     //Whether to burn mining rewards
     pub burn_mining_rewards: bool,
@@ -80,6 +102,8 @@ pub struct LocalServerContainerConfig {
     //When running a wallet, the address to check inputs and send
     //finalised transactions to, 
     pub wallet_validating_node_url:String,
+
+
 }
 
 /// Default server config
@@ -90,10 +114,12 @@ impl Default for LocalServerContainerConfig {
 			base_addr: String::from("127.0.0.1"),
             p2p_server_port: 13414,
             api_server_port: 13415,
+            wallet_port: 13416,
             start_miner: false,
+            start_wallet: false,
             burn_mining_rewards: false,
-            coinbase_wallet_address: String::from("http://127.0.0.1:13001"),
-            wallet_validating_node_url: String::from("http://127.0.0.1:13415"),
+            coinbase_wallet_address: String::from(""),
+            wallet_validating_node_url: String::from(""),
 		}
 	}
 }
@@ -108,11 +134,11 @@ pub struct LocalServerContainer {
     config: LocalServerContainerConfig,
 
     //keep our own event loop, so each server can be
-    //spun up/down at different times 
-    event_loop: Option<reactor::Core>,
+    //spun up/down at different times
+    //event_loop: Option<Ref<reactor::Core>>,
 
     //The grin server instance
-    pub p2p_server: Option<grin::Server>,
+    //pub p2p_server: Option<Ref<grin::Server>>,
 
     //The API server instance
     api_server: Option<api::ApiServer>,
@@ -123,7 +149,8 @@ pub struct LocalServerContainer {
     //Whether the server is mining
     pub server_is_mining: bool,
 
-    //Whether the server is running a wallet
+    //Whether the server is also running a wallet
+    //Not used if running wallet without server
     pub wallet_is_running: bool,
     
     //base directory for the server instance
@@ -140,8 +167,8 @@ impl LocalServerContainer {
         let working_dir = format!("target/test_servers/{}", config.name);
         Ok((LocalServerContainer {
             config:config,
-            event_loop: None,
-            p2p_server: None,
+            //event_loop: None,
+            //p2p_server: None,
             api_server: None,
             server_is_running: false,
             server_is_mining: false,
@@ -150,10 +177,9 @@ impl LocalServerContainer {
        }))
     }
 
-    pub fn run_server<F>(&mut self, 
-                         duration_in_seconds: u64,
-                         f:F) where 
-    F: Fn() {
+    pub fn run_server(&mut self,
+                         duration_in_seconds: u64) -> grin::Server
+    {
 
         let mut event_loop = reactor::Core::new().unwrap();
 
@@ -168,7 +194,12 @@ impl LocalServerContainer {
                 ..Default::default()
             }, &event_loop.handle()).unwrap();
 
-            
+
+        if self.config.start_wallet == true{
+            self.run_wallet(duration_in_seconds+5);
+            //give half a second to start before continuing
+            thread::sleep(time::Duration::from_millis(500));
+        }
 
         let mut miner_config = grin::MinerConfig {
             enable_mining: self.config.start_miner,
@@ -179,30 +210,30 @@ impl LocalServerContainer {
 
         if self.config.start_miner == true {
             println!("starting Miner on port {}", self.config.p2p_server_port);
-            s.start_miner(miner_config);        
+            s.start_miner(miner_config);
         }
-        
-        event_loop.run(Timer::default().sleep(time::Duration::from_secs(duration_in_seconds)).and_then(|_| {
-            if self.wallet_is_running {
-                self.stop_wallet();
-            }
-            f();
-            Ok(())
-        }));
 
-        self.p2p_server = Some(s);
-        self.event_loop = Some(event_loop);
+        let timeout = Timer::default().sleep(time::Duration::from_secs(duration_in_seconds));
+
+        event_loop.run(timeout);
+
+        if self.wallet_is_running{
+            self.stop_wallet();
+        }
+
+        //return a remote handle to the result of the run, so it can be accessed from the main
+        //running thread
+        s
 
     }
         
     /// Starts a wallet daemon to receive and returns the
     /// listening server url
     
-    pub fn run_wallet<F>(&mut self, f:F) where 
-    F: Fn() {
-      
+    pub fn run_wallet(&mut self, duration_in_seconds: u64) {
+
         //URL on which to start the wallet listener (i.e. api server)
-      	let url = format!("{}:{}", self.config.base_addr, self.config.api_server_port);
+      	let url = format!("{}:{}", self.config.base_addr, self.config.wallet_port);
                 
         //Just use the name of the server for a seed for now
         let seed = format!("{}", self.config.name);
@@ -216,7 +247,7 @@ impl LocalServerContainer {
 	    let key = wallet::ExtendedKey::from_seed(&s, &seed[..])
 		         .expect("Error deriving extended key from seed.");
         
-        println!("Starting the Grin wallet receiving daemon on {} ", self.config.api_server_port );
+        println!("Starting the Grin wallet receiving daemon on {} ", self.config.wallet_port );
 
         let mut wallet_config = WalletConfig::default();
         
@@ -235,11 +266,9 @@ impl LocalServerContainer {
 		    println!("Failed to start Grin wallet receiver: {}.", e);
 		});
 
-        self.api_server=Some(api_server);
-
+        self.api_server = Some(api_server);
         self.wallet_is_running = true;
 
-        //let time_out=tokio_core::reactor::TimeOut::new()
     }
     
     /// Stops the running wallet server
@@ -251,133 +280,178 @@ impl LocalServerContainer {
     
 }
 
-/*pub struct LocalServerContainerPool {
-    
+/// Configuration values for container pool
+
+pub struct LocalServerContainerPoolConfig {
+    //Base name to append to all the servers in this pool
+    pub base_name: String,
+
     //Base http address for all of the servers in this pool
-    base_http_addr: String, 
+    pub base_http_addr: String,
 
     //Base port server for all of the servers in this pool
     //Increment the number by 1 for each new server
-    base_port_p2p: u16,
+    pub base_p2p_port: u16,
 
     //Base api port for all of the servers in this pool
     //Increment this number by 1 for each new server
-    base_port_api: u16,
-    
-    //All of the servers
-    pub server_containers: Vec<LocalServerContainer>,    
+    pub base_api_port: u16,
+
+    //Base wallet port for this server
+    //
+    pub base_wallet_port: u16,
+
+    //How long the servers in the pool are going to run
+    pub run_length_in_seconds: u64,
+
+
+}
+
+/// Default server config
+///
+impl Default for LocalServerContainerPoolConfig {
+    fn default() -> LocalServerContainerPoolConfig {
+        LocalServerContainerPoolConfig {
+            base_name: String::from("test_pool"),
+            base_http_addr: String::from("127.0.0.1"),
+            base_p2p_port: 10000,
+            base_api_port: 11000,
+            base_wallet_port: 12000,
+            run_length_in_seconds: 30,
+        }
+    }
+}
+
+/// A convenience pool for running many servers simultaneously
+/// without necessarily having to configure each one manually
+
+pub struct LocalServerContainerPool {
+    //configuration
+    pub config: LocalServerContainerPoolConfig,
+
+    //keep ahold of all the created servers thread-safely
+    pub server_containers: Vec<Arc<grin::Server>>,
+
+    //Keep track of what the last ports a server was opened on
+    next_p2p_port: u16,
+
+    next_api_port: u16,
+
+    next_wallet_port: u16,
+
+    //A cpu pool, as we're going to try to keep each server within it's
+    //own thread on a CPU core
+    pool: futures_cpupool::CpuPool,
+
+    //keep track of futures to run in one go as we add servers
+    server_futures: Vec<futures_cpupool::CpuFuture<(), ()>>,
+
+    //keep track of peers that are (will be) running
+    peer_list: Vec<String>,
 }
 
 impl LocalServerContainerPool {
 
-    pub fn new(base_http_addr:String, base_port_server: u16, base_port_api: u16)->Result<LocalServerContainerPool, Error>{
-        LocalServerContainerPool{
-            base_http_addr: base_http_addr,
-            base_port_p2p: base_port_p2p,
-            base_port_api: base_port_api,
+    pub fn new(config: LocalServerContainerPoolConfig)->LocalServerContainerPool{
+        (LocalServerContainerPool{
+            next_api_port: config.base_api_port,
+            next_p2p_port: config.base_p2p_port,
+            next_wallet_port: config.base_wallet_port,
+            config: config,
             server_containers: Vec::new(),
+            pool: futures_cpupool::Builder::new().create(),
+            server_futures: Vec::new(),
+            peer_list: Vec::new(),
+
+        })
+    }
+
+    /// adds a single server on the next available port
+    /// overriding passed-in values as necessary
+    ///
+
+    pub fn create_server(&mut self, mut server_config:LocalServerContainerConfig)
+    {
+
+        //If we're calling it this way, need to override these
+        server_config.p2p_server_port=self.next_p2p_port;
+        server_config.api_server_port=self.next_api_port;
+        server_config.wallet_port=self.next_wallet_port;
+
+        server_config.name=String::from(format!("{}/{}-{}",
+                                                self.config.base_name,
+                                                self.config.base_name,
+                                                server_config.p2p_server_port));
+
+
+        //Use self as coinbase wallet
+        if server_config.coinbase_wallet_address.len()==0 {
+            server_config.coinbase_wallet_address=String::from(format!("http://{}:{}",
+                    server_config.base_addr,
+                    server_config.wallet_port));
         }
 
+        self.next_p2p_port+=1;
+        self.next_api_port+=1;
+        self.next_wallet_port+=1;
+
+        let server_address = format!("{}:{}",
+                                     server_config.base_addr,
+                                     server_config.p2p_server_port);
+
+        self.peer_list.push(server_address);
+
+        let mut server = LocalServerContainer::new(server_config).unwrap();
+        //self.server_containers.push(server_arc);
+
+        //Create a future that runs the server for however many seconds
+        //collect them all and run them in the run_all_servers
+        let run_time = self.config.run_length_in_seconds;
+
+        let future=self.pool.spawn_fn(move || {
+            let result_server=server.run_server(run_time);
+
+            println!("peer count: {}", result_server.peer_count());
+
+            //STUMBLING BLOCK HERE
+            //There doesn't appear to be any way to collect the grin::Servers from these
+            //separate spawned threads as the struct contains a reactor::Handle, which under
+            //no circumstances is allowed to share any data across threads
+
+            /*self.server_containers.push(Arc::new(result_server));
+            self.result_server_handles.push(result_handle);*/
+
+            let result: Result<_, ()> = Ok(());
+            result
+        });
+
+        self.server_futures.push(future);
+
     }
-    
-    pub fn create_server(&mut self, enable_mining:bool, enable_wallet:bool ) {
 
-        let server_port = self.base_port_server+self.server_containers.len() as u16;
-        let api_port = self.base_port_api+self.server_containers.len() as u16;
-        
-        let api_addr = format!("{}:{}", self.base_http_addr, api_port);
+    /// adds n servers, ready to run
+    ///
+    ///
 
-        let mut server_container = LocalServerContainer::new(api_addr, server_port, &self.event_loop).unwrap();
-            
-        server_container.enable_mining = enable_mining;
-        server_container.enable_wallet = enable_wallet;
-
-        //if we want to start a wallet, use this port
-        server_container.wallet_port = self.base_port_wallet+self.server_containers.len() as u16;
-        
-        self.server_containers.push(server_container);
+    pub fn create_servers(&mut self, number: u16){
+        for n in 0..number {
+            //self.create_server();
+        }
     }
 
-    /// Connects every server to each other as peers
-    /// 
+
+    /// runs all servers, calling the closure when all servers
+    /// have reported that they're done
+    ///
+
+    pub fn run_all_servers(self){
+        join_all(self.server_futures).wait();
+    }
 
     pub fn connect_all_peers(&self){
-        /// just pull out all currently active servers, build a list,
-        /// and feed into all servers
 
-        let mut server_addresses:Vec<String> = Vec::new();      
-        for s in &self.server_containers {
-            let server_address = format!("{}:{}", 
-                                     s.server.config.p2p_config.host, 
-                                     s.server.config.p2p_config.port);
-            server_addresses.push(server_address);
-        }
+        //s.server.connect_peer(a.parse().unwrap()).unwrap();
 
-        for a in server_addresses {
-           for s in &self.server_containers {
-              if format!("{}", s.server.config.p2p_config.host) != a {
-                  s.server.connect_peer(a.parse().unwrap()).unwrap();       
-              } 
-           }
-        }
     }
 
-    ///Starts all servers, with or without mining
-    ///TODO: This should accept a closure so tests can determine what 
-    ///to do when the run is finished
-
-    pub fn run_all_servers<F>(&mut self, f:F) where 
-        F: Fn() {
-            for s in &mut self.server_containers {
-                let mut wallet_url = String::from("http://localhost:13416");
-                if s.enable_wallet == true {
-                wallet_url=s.start_wallet();
-                //Instead of making all sorts of changes to the api server
-                //to support futures, just going to pause this thread for 
-                //half a second for the wallet to start
-                //before continuing
-
-                thread::sleep(time::Duration::from_millis(500));
-                }
-                let mut miner_config = grin::MinerConfig{
-                    enable_mining: true,
-                    burn_reward: true,
-                    wallet_receiver_url : format!("http://{}", wallet_url),
-                    ..Default::default()
-                };
-                if s.enable_wallet == true {
-                    miner_config.burn_reward = false;
-                }
-                if s.enable_mining == true {
-                    println!("starting Miner on port {}", s.server.config.p2p_config.port);
-                    s.server.start_miner(miner_config);        
-                }
-                
-            }
-
-            //borrow copy to allow access in closure
-            let mut server_containers = mem::replace(&mut self.server_containers, Vec::new());
-            //let &mut server_containers = self.server_containers;
-
-            self.event_loop.run(Timer::default().sleep(time::Duration::from_secs(30)).and_then(|_| {
-                //Stop any assocated wallet servers
-                for s in &mut server_containers {
-                    if s.wallet_is_running {
-                        s.stop_wallet();
-                    }
-                }
-                f();
-                Ok(())
-
-            }));
-            //}));
-            //}
-            //for s in &mut self.server_containers {  
-                // occasionally 2 peers will connect to each other at the same time
-                //assert!(s.peer_count() >= 4);
-            //}
-            //Ok(())
-            //});
-        
-        }
-}*/
+}

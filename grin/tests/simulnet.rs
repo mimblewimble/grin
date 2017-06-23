@@ -26,6 +26,8 @@ extern crate futures;
 extern crate tokio_core;
 extern crate tokio_timer;
 
+use std::sync::{Arc, Mutex, RwLock};
+
 mod framework;
 
 use std::thread;
@@ -38,71 +40,60 @@ use futures::task::park;
 use tokio_core::reactor;
 use tokio_timer::Timer;
 
-use framework::{LocalServerContainer, LocalServerContainerConfig};
+use framework::{LocalServerContainer, LocalServerContainerConfig,
+                LocalServerContainerPoolConfig, LocalServerContainerPool};
 
-/// Just a test function for testing the local server framework,
-/// commented out for now so as not to impede CI testing
+/// Testing the frameworks by starting a fresh server, creating a genesis
+/// Block and mining into a wallet for a bit
 
-//#[test]
-fn framework_scratch(){
+#[test]
+fn basic_genesis_mine(){
     env_logger::init();
 
-    //Create a server running a wallet:
-    let mut server_config = LocalServerContainerConfig::default();
-    server_config.name=String::from("node1-wallet");
-    server_config.p2p_server_port=10005;
+    framework::clean_all_output();
 
-    let mut wallet_server = RefCell::new(LocalServerContainer::new(server_config).unwrap());
-
-    let f = || {
-      println!("wallet returned!");
-    };
-
-    //wallet_server.borrow_mut().run_wallet(f);
-    
     //Create a server pool
-    /*let mut server_config = LocalServerContainerConfig::default();
-    server_config.name=String::from("node1");
-    server_config.p2p_server_port=10000;
-    server_config.api_server_port=10001;
-    server_config.burn_mining_rewards=false;
+    let mut pool_config = LocalServerContainerPoolConfig::default();
+    pool_config.base_name = format!("my_pool");
+    pool_config.run_length_in_seconds = 30;
+
+    let mut pool = LocalServerContainerPool::new(pool_config);
+
+    //Create a server to add into the pool
+    let mut server_config = LocalServerContainerConfig::default();
     server_config.start_miner=true;
-    server_config.coinbase_wallet_address=String::from("http://127.0.0.1:10005");
+    server_config.start_wallet=true;
 
-    //RefCell so we can borrow again within the closure below
-    let mut server1 = RefCell::new(LocalServerContainer::new(server_config).unwrap());
-    
-    server1.borrow_mut().start_wallet();
+    pool.create_server(server_config);
 
-    //Wait a bit
-    thread::sleep(time::Duration::from_millis(500));
+    pool.run_all_servers();
 
-    let return_fn = || {
-        panic!("Halt");
-    };
+}
 
-    //Now run the server
-    server1.borrow_mut().run_server(5, return_fn);*/
+#[test]
+fn framework_scratch (){
 
-    /*let num_servers=5;
-    
-    let mut server_pool = LocalServerContainerPool::new().unwrap();
-    for n in 0..num_servers {
-        server_pool.create_server(true, true);
+    framework::clean_all_output();
+
+    //Create a server pool
+    let mut pool_config = LocalServerContainerPoolConfig::default();
+    pool_config.base_name = format!("my_pool");
+    pool_config.run_length_in_seconds = 5;
+
+    let mut pool = LocalServerContainerPool::new(pool_config);
+
+    //Create a server to add into the pool
+    let mut server_config = LocalServerContainerConfig::default();
+    server_config.start_miner=true;
+    server_config.start_wallet=true;
+
+    for i in 0..5 {
+        pool.create_server(server_config.clone());
     }
 
-    server_pool.connect_all_peers();
-    
-    let evaluate = || { 
-        println!("Done running the things.");
-        //println!("{}", &server_pool.server_containers.len());
-    };
-    
-    server_pool.run_all_servers(evaluate);
+    pool.run_all_servers();
 
-    panic!("Halt");*/
 
-    
 }
 
 /// Create a network of 5 servers and mine a block, verifying that the block
