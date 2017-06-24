@@ -34,6 +34,7 @@ use std::thread;
 use std::time;
 use std::default::Default;
 use std::cell::RefCell;
+use std::ops::Deref;
 
 use futures::{Future, Poll, Async};
 use futures::task::park;
@@ -55,7 +56,7 @@ fn basic_genesis_mine(){
     //Create a server pool
     let mut pool_config = LocalServerContainerPoolConfig::default();
     pool_config.base_name = format!("my_pool");
-    pool_config.run_length_in_seconds = 30;
+    pool_config.run_length_in_seconds = 5;
 
     let mut pool = LocalServerContainerPool::new(pool_config);
 
@@ -65,14 +66,12 @@ fn basic_genesis_mine(){
     server_config.start_wallet=true;
 
     pool.create_server(server_config);
-
     pool.run_all_servers();
 
 }
 
 #[test]
-fn framework_scratch (){
-
+fn framework_scratch () {
     framework::clean_all_output();
 
     //Create a server pool
@@ -84,14 +83,26 @@ fn framework_scratch (){
 
     //Create a server to add into the pool
     let mut server_config = LocalServerContainerConfig::default();
-    server_config.start_miner=true;
-    server_config.start_wallet=true;
+    server_config.start_miner = true;
+    server_config.start_wallet = true;
 
     for i in 0..5 {
         pool.create_server(server_config.clone());
     }
 
-    pool.run_all_servers();
+    pool.connect_all_peers();
+
+    let result_vec=pool.run_all_servers();
+
+    for s in result_vec {
+        println!("Peer count: {}", s.p2p.peer_count());
+    }
+
+    //println!("result count {}", pool.server_containers.len());
+
+    //panic!("arf");
+
+
 
 
 }

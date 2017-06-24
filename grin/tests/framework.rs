@@ -34,6 +34,7 @@ use std::default::Default;
 use std::mem;
 use std::fs;
 use std::sync::{Arc, Mutex, RwLock};
+use std::ops::Deref;
 
 use futures::{Future};
 use futures::future::join_all;
@@ -133,12 +134,9 @@ pub struct LocalServerContainer {
     //Configuration
     config: LocalServerContainerConfig,
 
-    //keep our own event loop, so each server can be
-    //spun up/down at different times
-    //event_loop: Option<Ref<reactor::Core>>,
-
-    //The grin server instance
-    //pub p2p_server: Option<Ref<grin::Server>>,
+    //Structure of references to the
+    //internal server data
+    pub p2p_server_ref: Option<grin::ServerRef>,
 
     //The API server instance
     api_server: Option<api::ApiServer>,
@@ -152,6 +150,9 @@ pub struct LocalServerContainer {
     //Whether the server is also running a wallet
     //Not used if running wallet without server
     pub wallet_is_running: bool,
+
+    //the list of peers to connect to
+    pub peer_list: Vec<String>,
     
     //base directory for the server instance
     working_dir: String,
@@ -167,18 +168,18 @@ impl LocalServerContainer {
         let working_dir = format!("target/test_servers/{}", config.name);
         Ok((LocalServerContainer {
             config:config,
-            //event_loop: None,
-            //p2p_server: None,
+            p2p_server_ref: None,
             api_server: None,
             server_is_running: false,
             server_is_mining: false,
             wallet_is_running: false,
             working_dir: working_dir,
+            peer_list: Vec::new(),
        }))
     }
 
     pub fn run_server(&mut self,
-                         duration_in_seconds: u64) -> grin::Server
+                         duration_in_seconds: u64) -> grin::ServerRef
     {
 
         let mut event_loop = reactor::Core::new().unwrap();
@@ -194,6 +195,7 @@ impl LocalServerContainer {
                 ..Default::default()
             }, &event_loop.handle()).unwrap();
 
+        self.p2p_server_ref = Some(s.get_server_ref().unwrap());
 
         if self.config.start_wallet == true{
             self.run_wallet(duration_in_seconds+5);
@@ -213,6 +215,11 @@ impl LocalServerContainer {
             s.start_miner(miner_config);
         }
 
+        for p in &mut self.peer_list {
+            println!("{} connecting to peer: {}", self.config.p2p_server_port, p);
+            s.connect_peer(p.parse().unwrap()).unwrap();
+        }
+
         let timeout = Timer::default().sleep(time::Duration::from_secs(duration_in_seconds));
 
         event_loop.run(timeout);
@@ -221,9 +228,7 @@ impl LocalServerContainer {
             self.stop_wallet();
         }
 
-        //return a remote handle to the result of the run, so it can be accessed from the main
-        //running thread
-        s
+        s.get_server_ref().unwrap()
 
     }
         
@@ -276,6 +281,12 @@ impl LocalServerContainer {
     pub fn stop_wallet(&mut self){
         let mut api_server = self.api_server.as_mut().unwrap();
         api_server.stop();
+    }
+
+    /// Adds a peer to this server to connect to upon running
+
+    pub fn add_peer(&mut self, addr:String){
+        self.peer_list.push(addr);
     }
     
 }
@@ -330,7 +341,7 @@ pub struct LocalServerContainerPool {
     pub config: LocalServerContainerPoolConfig,
 
     //keep ahold of all the created servers thread-safely
-    pub server_containers: Vec<Arc<grin::Server>>,
+    server_containers: Vec<LocalServerContainer>,
 
     //Keep track of what the last ports a server was opened on
     next_p2p_port: u16,
@@ -339,15 +350,6 @@ pub struct LocalServerContainerPool {
 
     next_wallet_port: u16,
 
-    //A cpu pool, as we're going to try to keep each server within it's
-    //own thread on a CPU core
-    pool: futures_cpupool::CpuPool,
-
-    //keep track of futures to run in one go as we add servers
-    server_futures: Vec<futures_cpupool::CpuFuture<(), ()>>,
-
-    //keep track of peers that are (will be) running
-    peer_list: Vec<String>,
 }
 
 impl LocalServerContainerPool {
@@ -359,9 +361,6 @@ impl LocalServerContainerPool {
             next_wallet_port: config.base_wallet_port,
             config: config,
             server_containers: Vec::new(),
-            pool: futures_cpupool::Builder::new().create(),
-            server_futures: Vec::new(),
-            peer_list: Vec::new(),
 
         })
     }
@@ -399,33 +398,14 @@ impl LocalServerContainerPool {
                                      server_config.base_addr,
                                      server_config.p2p_server_port);
 
-        self.peer_list.push(server_address);
-
-        let mut server = LocalServerContainer::new(server_config).unwrap();
+        let mut server_container = LocalServerContainer::new(server_config).unwrap();
         //self.server_containers.push(server_arc);
 
         //Create a future that runs the server for however many seconds
         //collect them all and run them in the run_all_servers
         let run_time = self.config.run_length_in_seconds;
 
-        let future=self.pool.spawn_fn(move || {
-            let result_server=server.run_server(run_time);
-
-            println!("peer count: {}", result_server.peer_count());
-
-            //STUMBLING BLOCK HERE
-            //There doesn't appear to be any way to collect the grin::Servers from these
-            //separate spawned threads as the struct contains a reactor::Handle, which under
-            //no circumstances is allowed to share any data across threads
-
-            /*self.server_containers.push(Arc::new(result_server));
-            self.result_server_handles.push(result_handle);*/
-
-            let result: Result<_, ()> = Ok(());
-            result
-        });
-
-        self.server_futures.push(future);
+        self.server_containers.push(server_container);
 
     }
 
@@ -439,19 +419,65 @@ impl LocalServerContainerPool {
         }
     }
 
-
-    /// runs all servers, calling the closure when all servers
-    /// have reported that they're done
+    /// runs all servers, and returns a vector of references to the servers
+    /// once they've all been run
     ///
 
-    pub fn run_all_servers(self){
-        join_all(self.server_futures).wait();
+    pub fn run_all_servers(self) -> Vec<grin::ServerRef>{
+        // join_all(self.server_futures).wait();
+        let run_length = self.config.run_length_in_seconds;
+        let mut handles = vec![];
+
+        // return handles to all of the servers, wrapped in mutexes, handles, etc
+        let return_containers = Arc::new(Mutex::new(Vec::new()));
+
+        for mut s in self.server_containers {
+            let return_container_ref = return_containers.clone();
+            let handle=thread::spawn(move || {
+                let server_ref=s.run_server(run_length);
+                return_container_ref.lock().unwrap().push(server_ref);
+            });
+            //Not a big fan of sleeping hack here, but there appears to be a
+            //concurrency issue when creating files in rocksdb that causes
+            //failure if we don't pause a bit before starting the next server
+            thread::sleep(time::Duration::from_millis(100));
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            match handle.join() {
+                Ok(v) => {}
+                Err(e) => {
+                    println!("Error starting server thread: {:?}", e);
+                    panic!(e);
+                }
+            }
+        }
+        //return a much simplified version of the results
+        let return_vec=return_containers.lock().unwrap();
+        return_vec.clone()
     }
 
-    pub fn connect_all_peers(&self){
+    pub fn connect_all_peers(&mut self){
+        /// just pull out all currently active servers, build a list,
+        /// and feed into all servers
 
-        //s.server.connect_peer(a.parse().unwrap()).unwrap();
+        let mut server_addresses:Vec<String> = Vec::new();
+        for s in &self.server_containers {
+            let server_address = format!("{}:{}",
+                                         s.config.base_addr,
+                                         s.config.p2p_server_port);
+            server_addresses.push(server_address);
+        }
 
+        for a in server_addresses {
+            for s in &mut self.server_containers {
+                if format!("{}:{}", s.config.base_addr,
+                                    s.config.p2p_server_port) != a {
+                    s.add_peer(a.clone());
+                }
+            }
+        }
     }
 
 }

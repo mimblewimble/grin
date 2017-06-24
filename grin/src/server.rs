@@ -56,6 +56,19 @@ pub struct Server {
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 }
 
+/// Thread-safe container to return all of the server data outside
+/// of the reactor event_handle, which can't be passed across threads
+///
+#[derive(Clone)]
+pub struct ServerRef {
+	pub config: ServerConfig,
+	pub p2p: Arc<p2p::Server>,
+	pub chain_head: Arc<Mutex<chain::Tip>>,
+	pub chain_store: Arc<chain::ChainStore>,
+	pub chain_adapter: Arc<ChainToPoolAndNetAdapter>,
+	pub tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+}
+
 impl Server {
 	/// Instantiates and starts a new server.
 	pub fn start(config: ServerConfig) -> Result<Server, Error> {
@@ -162,6 +175,17 @@ impl Server {
 		let head = self.chain_head.clone();
 		let h = head.lock().unwrap();
 		h.clone()
+	}
+
+	pub fn get_server_ref(&self) -> Result<ServerRef, Error>{
+		Ok(ServerRef{
+			config: self.config.clone(),
+			p2p: self.p2p.clone(),
+			chain_head: self.chain_head.clone(),
+			chain_store: self.chain_store.clone(),
+			chain_adapter: self.chain_adapter.clone(),
+			tx_pool: self.tx_pool.clone(),
+		})
 	}
 }
 
