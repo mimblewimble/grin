@@ -17,6 +17,8 @@
 
 use rand::{self, Rng};
 use std::sync::{Arc, Mutex, RwLock};
+use std::thread;
+use std;
 use time;
 
 use adapters::{ChainToPoolAndNetAdapter, PoolToChainAdapter};
@@ -87,6 +89,10 @@ impl Miner {
 			       latest_hash,
 			       b.header.difficulty);
 			let mut iter_count = 0;
+			if self.config.slow_down_in_millis > 0 {
+				debug!("Artifically slowing down loop by {}ms per iteration.",
+					self.config.slow_down_in_millis);
+			}
 			while head.hash() == latest_hash && time::get_time().sec < deadline {
 				let pow_hash = b.hash();
 				let mut miner = cuckoo::Miner::new(&pow_hash[..],
@@ -103,6 +109,11 @@ impl Miner {
 					latest_hash = self.chain_head.lock().unwrap().last_block_h;
 				}
 				iter_count += 1;
+
+				//Artifical slow down
+				if self.config.slow_down_in_millis > 0 {
+					thread::sleep(std::time::Duration::from_millis(2000));
+				}
 			}
 
 			// if we found a solution, push our block out

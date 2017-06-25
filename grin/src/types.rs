@@ -106,6 +106,10 @@ pub struct MinerConfig {
 	/// Attributes the reward to a random private key instead of contacting the
 	/// wallet receiver. Mostly used for tests.
 	pub burn_reward: bool,
+
+	/// a testing attribute for the time being that artifically slows down the
+	/// mining loop by adding a sleep to the thread
+	pub slow_down_in_millis: u64,
 }
 
 impl Default for ServerConfig {
@@ -128,6 +132,7 @@ impl Default for MinerConfig {
 			enable_mining: false,
 			wallet_receiver_url: "http://localhost:13416".to_string(),
 			burn_reward: false,
+			slow_down_in_millis: 0,
 		}
 	}
 }

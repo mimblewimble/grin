@@ -90,9 +90,19 @@ pub struct LocalServerContainerConfig {
     //Whether we're going to mine
     pub start_miner: bool,
 
+    //time in millis by which to artifically slow down the mining loop
+    //in this container
+    pub miner_slowdown_in_millis: u64,
+
     //Whether we're going to run a wallet as well,
     //can use same server instance as a validating node for convenience
     pub start_wallet: bool,
+
+    //address of a server to use as a seed
+    pub seed_addr: String,
+
+    //keep track of whether this server is supposed to be seeding
+    pub is_seeding: bool,
 
     //Whether to burn mining rewards
     pub burn_mining_rewards: bool,
@@ -116,11 +126,14 @@ impl Default for LocalServerContainerConfig {
             p2p_server_port: 13414,
             api_server_port: 13415,
             wallet_port: 13416,
+            seed_addr: String::from(""),
+            is_seeding: false,
             start_miner: false,
             start_wallet: false,
             burn_mining_rewards: false,
             coinbase_wallet_address: String::from(""),
             wallet_validating_node_url: String::from(""),
+            miner_slowdown_in_millis: 0,
 		}
 	}
 }
@@ -185,6 +198,13 @@ impl LocalServerContainer {
         let mut event_loop = reactor::Core::new().unwrap();
 
         let api_addr = format!("{}:{}", self.config.base_addr, self.config.api_server_port);
+
+        let mut seeding_type=grin::Seeding::None;
+
+        if self.config.seed_addr.len()>0{
+            seeding_type=grin::Seeding::List(vec![self.config.seed_addr.to_string()]);
+        }
+
         
         let s = grin::Server::future(
             grin::ServerConfig{
@@ -192,6 +212,7 @@ impl LocalServerContainer {
                 db_root: format!("{}/.grin", self.working_dir),
                 cuckoo_size: 12,
                 p2p_config: p2p::P2PConfig{port: self.config.p2p_server_port, ..p2p::P2PConfig::default()},
+                seeding_type: seeding_type,
                 ..Default::default()
             }, &event_loop.handle()).unwrap();
 
@@ -199,14 +220,15 @@ impl LocalServerContainer {
 
         if self.config.start_wallet == true{
             self.run_wallet(duration_in_seconds+5);
-            //give half a second to start before continuing
-            thread::sleep(time::Duration::from_millis(500));
+            //give a second to start wallet before continuing
+            thread::sleep(time::Duration::from_millis(1000));
         }
 
         let mut miner_config = grin::MinerConfig {
             enable_mining: self.config.start_miner,
             burn_reward: self.config.burn_mining_rewards,
             wallet_receiver_url : self.config.coinbase_wallet_address.clone(),
+            slow_down_in_millis: self.config.miner_slowdown_in_millis.clone(),
             ..Default::default()
         };
 
@@ -350,6 +372,9 @@ pub struct LocalServerContainerPool {
 
     next_wallet_port: u16,
 
+    //keep track of whether a seed exists, and pause a bit if so
+    is_seeding: bool,
+
 }
 
 impl LocalServerContainerPool {
@@ -361,15 +386,17 @@ impl LocalServerContainerPool {
             next_wallet_port: config.base_wallet_port,
             config: config,
             server_containers: Vec::new(),
+            is_seeding: false,
 
         })
     }
 
     /// adds a single server on the next available port
-    /// overriding passed-in values as necessary
+    /// overriding passed-in values as necessary. Config object is an OUT value with
+    /// ports/addresses filled in
     ///
 
-    pub fn create_server(&mut self, mut server_config:LocalServerContainerConfig)
+    pub fn create_server(&mut self, server_config:&mut LocalServerContainerConfig)
     {
 
         //If we're calling it this way, need to override these
@@ -394,11 +421,15 @@ impl LocalServerContainerPool {
         self.next_api_port+=1;
         self.next_wallet_port+=1;
 
+        if server_config.is_seeding {
+            self.is_seeding=true;
+        }
+
         let server_address = format!("{}:{}",
                                      server_config.base_addr,
                                      server_config.p2p_server_port);
 
-        let mut server_container = LocalServerContainer::new(server_config).unwrap();
+        let mut server_container = LocalServerContainer::new(server_config.clone()).unwrap();
         //self.server_containers.push(server_arc);
 
         //Create a future that runs the server for however many seconds
@@ -406,6 +437,7 @@ impl LocalServerContainerPool {
         let run_time = self.config.run_length_in_seconds;
 
         self.server_containers.push(server_container);
+
 
     }
 
@@ -424,16 +456,23 @@ impl LocalServerContainerPool {
     ///
 
     pub fn run_all_servers(self) -> Vec<grin::ServerRef>{
-        // join_all(self.server_futures).wait();
+
         let run_length = self.config.run_length_in_seconds;
         let mut handles = vec![];
 
         // return handles to all of the servers, wrapped in mutexes, handles, etc
         let return_containers = Arc::new(Mutex::new(Vec::new()));
 
+        let is_seeding = self.is_seeding.clone();
+
         for mut s in self.server_containers {
             let return_container_ref = return_containers.clone();
             let handle=thread::spawn(move || {
+                if is_seeding && !s.config.is_seeding {
+                    //there's a seed and we're not it, so hang around longer and give the seed
+                    //a chance to start
+                    thread::sleep(time::Duration::from_millis(2000));
+                }
                 let server_ref=s.run_server(run_length);
                 return_container_ref.lock().unwrap().push(server_ref);
             });
@@ -442,6 +481,7 @@ impl LocalServerContainerPool {
             //failure if we don't pause a bit before starting the next server
             thread::sleep(time::Duration::from_millis(100));
             handles.push(handle);
+
         }
 
         for handle in handles {

@@ -33,8 +33,6 @@ mod framework;
 use std::thread;
 use std::time;
 use std::default::Default;
-use std::cell::RefCell;
-use std::ops::Deref;
 
 use futures::{Future, Poll, Async};
 use futures::task::park;
@@ -65,13 +63,15 @@ fn basic_genesis_mine(){
     server_config.start_miner=true;
     server_config.start_wallet=true;
 
-    pool.create_server(server_config);
+    pool.create_server(&mut server_config);
     pool.run_all_servers();
 
 }
 
 #[test]
 fn framework_scratch () {
+    env_logger::init();
+
     framework::clean_all_output();
 
     //Create a server pool
@@ -86,8 +86,8 @@ fn framework_scratch () {
     server_config.start_miner = true;
     server_config.start_wallet = true;
 
-    for i in 0..5 {
-        pool.create_server(server_config.clone());
+    for i in 0..3 {
+        pool.create_server(&mut server_config);
     }
 
     pool.connect_all_peers();
@@ -98,11 +98,52 @@ fn framework_scratch () {
         println!("Peer count: {}", s.p2p.peer_count());
     }
 
-    //println!("result count {}", pool.server_containers.len());
+}
 
-    //panic!("arf");
+/// Create 1 server, start it mining, then connect 4 other peers mining and using the first
+/// as a seed. Meant to test the evolution of mining difficulty with miners running at
+/// different rates
 
+#[test]
+fn simulate_parallel_mining(){
+    env_logger::init();
 
+    framework::clean_all_output();
+
+    //Create a server pool
+    let mut pool_config = LocalServerContainerPoolConfig::default();
+    pool_config.base_name = format!("my_pool");
+    pool_config.run_length_in_seconds = 60;
+
+    let mut pool = LocalServerContainerPool::new(pool_config);
+
+    //Create a first seed server to add into the pool
+    let mut server_config = LocalServerContainerConfig::default();
+    server_config.start_miner = true;
+    server_config.start_wallet = true;
+    server_config.is_seeding = true;
+
+    pool.create_server(&mut server_config);
+
+    //point next servers at first seed
+    server_config.is_seeding=false;
+    server_config.seed_addr=String::from(format!("{}:{}",server_config.base_addr,
+                                         server_config.p2p_server_port));
+
+    //And create 4 more, then let them run for a while
+    for i in 0..4 {
+        //fudge in some slowdown
+        server_config.miner_slowdown_in_millis = i*2;
+        pool.create_server(&mut server_config);
+    }
+
+    pool.connect_all_peers();
+
+    let result_vec=pool.run_all_servers();
+
+    //Check mining difficulty here?, though I'd think it's more valuable
+    //to simply output it. Can at least see the evolution of the difficulty target
+    //in the debug log output for now
 
 
 }
