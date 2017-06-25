@@ -136,3 +136,15 @@ impl Default for MinerConfig {
 		}
 	}
 }
+
+/// Thread-safe container to return all sever related stats that other
+/// consumers might be interested in, such as test results
+///
+///
+///
+
+#[derive(Clone)]
+pub struct ServerStats {
+	pub peer_count:u32,
+	pub head: chain::Tip,
+}

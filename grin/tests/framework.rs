@@ -149,7 +149,7 @@ pub struct LocalServerContainer {
 
     //Structure of references to the
     //internal server data
-    pub p2p_server_ref: Option<grin::ServerRef>,
+    pub p2p_server_stats: Option<grin::ServerStats>,
 
     //The API server instance
     api_server: Option<api::ApiServer>,
@@ -181,7 +181,7 @@ impl LocalServerContainer {
         let working_dir = format!("target/test_servers/{}", config.name);
         Ok((LocalServerContainer {
             config:config,
-            p2p_server_ref: None,
+            p2p_server_stats: None,
             api_server: None,
             server_is_running: false,
             server_is_mining: false,
@@ -192,7 +192,7 @@ impl LocalServerContainer {
     }
 
     pub fn run_server(&mut self,
-                         duration_in_seconds: u64) -> grin::ServerRef
+                         duration_in_seconds: u64) -> grin::ServerStats
     {
 
         let mut event_loop = reactor::Core::new().unwrap();
@@ -216,7 +216,7 @@ impl LocalServerContainer {
                 ..Default::default()
             }, &event_loop.handle()).unwrap();
 
-        self.p2p_server_ref = Some(s.get_server_ref().unwrap());
+        self.p2p_server_stats = Some(s.get_server_stats().unwrap());
 
         if self.config.start_wallet == true{
             self.run_wallet(duration_in_seconds+5);
@@ -250,7 +250,7 @@ impl LocalServerContainer {
             self.stop_wallet();
         }
 
-        s.get_server_ref().unwrap()
+        s.get_server_stats().unwrap()
 
     }
         
@@ -455,7 +455,7 @@ impl LocalServerContainerPool {
     /// once they've all been run
     ///
 
-    pub fn run_all_servers(self) -> Vec<grin::ServerRef>{
+    pub fn run_all_servers(self) -> Vec<grin::ServerStats>{
 
         let run_length = self.config.run_length_in_seconds;
         let mut handles = vec![];
@@ -479,7 +479,7 @@ impl LocalServerContainerPool {
             //Not a big fan of sleeping hack here, but there appears to be a
             //concurrency issue when creating files in rocksdb that causes
             //failure if we don't pause a bit before starting the next server
-            thread::sleep(time::Duration::from_millis(100));
+            thread::sleep(time::Duration::from_millis(500));
             handles.push(handle);
 
         }
@@ -489,7 +489,7 @@ impl LocalServerContainerPool {
                 Ok(v) => {}
                 Err(e) => {
                     println!("Error starting server thread: {:?}", e);
-                    panic!(e);
+                    //panic!(e);
                 }
             }
         }

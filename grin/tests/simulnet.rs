@@ -54,7 +54,7 @@ fn basic_genesis_mine(){
     //Create a server pool
     let mut pool_config = LocalServerContainerPoolConfig::default();
     pool_config.base_name = format!("my_pool");
-    pool_config.run_length_in_seconds = 5;
+    pool_config.run_length_in_seconds = 20;
 
     let mut pool = LocalServerContainerPool::new(pool_config);
 
@@ -68,8 +68,11 @@ fn basic_genesis_mine(){
 
 }
 
+/// Creates 5 servers, first being a seed and check that through peer address
+/// messages they all end up connected.
+
 #[test]
-fn framework_scratch () {
+fn simulate_seeding () {
     env_logger::init();
 
     framework::clean_all_output();
@@ -77,16 +80,24 @@ fn framework_scratch () {
     //Create a server pool
     let mut pool_config = LocalServerContainerPoolConfig::default();
     pool_config.base_name = format!("my_pool");
-    pool_config.run_length_in_seconds = 5;
+    pool_config.run_length_in_seconds = 30;
 
     let mut pool = LocalServerContainerPool::new(pool_config);
 
-    //Create a server to add into the pool
+    //Create a first seed server to add into the pool
     let mut server_config = LocalServerContainerConfig::default();
-    server_config.start_miner = true;
+    //server_config.start_miner = true;
     server_config.start_wallet = true;
+    server_config.is_seeding = true;
 
-    for i in 0..3 {
+    pool.create_server(&mut server_config);
+
+    //point next servers at first seed
+    server_config.is_seeding=false;
+    server_config.seed_addr=String::from(format!("{}:{}",server_config.base_addr,
+                                                 server_config.p2p_server_port));
+
+    for i in 0..4 {
         pool.create_server(&mut server_config);
     }
 
@@ -95,7 +106,8 @@ fn framework_scratch () {
     let result_vec=pool.run_all_servers();
 
     for s in result_vec {
-        println!("Peer count: {}", s.p2p.peer_count());
+        println!("Peer count: {}", s.peer_count);
+        assert!(s.peer_count >= 4);
     }
 
 }
@@ -113,7 +125,7 @@ fn simulate_parallel_mining(){
     //Create a server pool
     let mut pool_config = LocalServerContainerPoolConfig::default();
     pool_config.base_name = format!("my_pool");
-    pool_config.run_length_in_seconds = 60;
+    pool_config.run_length_in_seconds = 30;
 
     let mut pool = LocalServerContainerPool::new(pool_config);
 
@@ -148,8 +160,11 @@ fn simulate_parallel_mining(){
 
 }
 
+//TODO: Convert these tests to newer framework format
+
 /// Create a network of 5 servers and mine a block, verifying that the block
 /// gets propagated to all.
+
 #[test]
 fn simulate_block_propagation() {
   env_logger::init();
@@ -198,8 +213,12 @@ fn simulate_block_propagation() {
   }));
 }
 
+
+
+
 /// Creates 2 different disconnected servers, mine a few blocks on one, connect
 /// them and check that the 2nd gets all the blocks
+
 #[test]
 fn simulate_full_sync() {
   env_logger::init();
@@ -238,38 +257,6 @@ fn simulate_full_sync() {
   evtlp.run(change(&servers[1]));
 }
 
-/// Creates 5 servers, one being a seed and check that through peer address
-/// messages they all end up connected.
-#[test]
-fn simulate_seeding() {
-  env_logger::init();
-
-  let mut evtlp = reactor::Core::new().unwrap();
-  let handle = evtlp.handle();
-
-  // instantiates 5 servers on different ports, with 0 as a seed
-  let mut servers = vec![];
-  for n in 0..5 {
-      let s = grin::Server::future(
-          grin::ServerConfig{
-            db_root: format!("target/grin-seed-{}", n),
-            cuckoo_size: 12,
-            p2p_config: p2p::P2PConfig{port: 12000+n, ..p2p::P2PConfig::default()},
-            seeding_type: grin::Seeding::List(vec!["127.0.0.1:12000".to_string()]),
-            ..Default::default()
-          }, &handle).unwrap();
-      servers.push(s);
-  }
-
-  // wait a bit and check all servers are now connected
-  evtlp.run(Timer::default().sleep(time::Duration::from_secs(30)).and_then(|_| {
-    for s in servers {
-      // occasionally 2 peers will connect to each other at the same time
-      assert!(s.peer_count() >= 4);
-    }
-    Ok(())
-  }));
-}
 
 // Builds the change future, monitoring for a change of head on the provided server
 fn change<'a>(s: &'a grin::Server) -> HeadChange<'a> {

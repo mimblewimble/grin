@@ -53,5 +53,5 @@ mod seed;
 mod sync;
 mod types;
 
-pub use server::{Server, ServerRef};
-pub use types::{ServerConfig, MinerConfig, Seeding};
+pub use server::{Server};
+pub use types::{ServerConfig, MinerConfig, Seeding, ServerStats};
