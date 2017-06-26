@@ -77,9 +77,6 @@ pub struct ServerConfig {
 	/// Network address for the Rest API HTTP server.
 	pub api_http_addr: String,
 
-	/// Allows overriding the default cuckoo cycle size
-	pub cuckoo_size: u8,
-
 	/// Capabilities expose by this node, also conditions which other peers this
 	/// node will have an affinity toward when connection.
 	pub capabilities: p2p::Capabilities,
@@ -92,6 +89,9 @@ pub struct ServerConfig {
 
 	/// Configuration for the mining daemon
 	pub mining_config: MinerConfig,
+
+	/// Setup the server for tests and testnet
+	pub test_mode: bool,
 }
 
 /// Mining configuration
@@ -110,6 +110,10 @@ pub struct MinerConfig {
 	/// a testing attribute for the time being that artifically slows down the
 	/// mining loop by adding a sleep to the thread
 	pub slow_down_in_millis: u64,
+
+	/// Size of Cuckoo Cycle to mine on
+	pub cuckoo_size: u32,
+
 }
 
 impl Default for ServerConfig {
@@ -117,11 +121,11 @@ impl Default for ServerConfig {
 		ServerConfig {
 			db_root: ".grin".to_string(),
 			api_http_addr: "127.0.0.1:13415".to_string(),
-			cuckoo_size: 0,
 			capabilities: p2p::FULL_NODE,
 			seeding_type: Seeding::None,
 			p2p_config: p2p::P2PConfig::default(),
 			mining_config: MinerConfig::default(),
+			test_mode: true,
 		}
 	}
 }
@@ -133,6 +137,7 @@ impl Default for MinerConfig {
 			wallet_receiver_url: "http://localhost:13416".to_string(),
 			burn_reward: false,
 			slow_down_in_millis: 0,
+			cuckoo_size: 0,
 		}
 	}
 }

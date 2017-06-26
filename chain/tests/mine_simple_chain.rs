@@ -24,6 +24,7 @@ use std::thread;
 use rand::os::OsRng;
 
 use grin_chain::types::*;
+use grin_chain::store;
 use grin_core::core::hash::Hashed;
 use grin_core::core::target::Difficulty;
 use grin_core::pow;
@@ -38,9 +39,8 @@ fn mine_empty_chain() {
 
 	// save a genesis block
 	let mut gen = grin_core::genesis::genesis();
-	gen.header.cuckoo_len = 12;
 	let diff = gen.header.difficulty.clone();
-	pow::pow(&mut gen.header, diff).unwrap();
+	pow::pow_size(&mut gen.header, diff, consensus::TEST_SIZESHIFT as u32).unwrap();
 	store.save_block(&gen).unwrap();
 
 	// setup a new head tip
@@ -58,17 +58,15 @@ fn mine_empty_chain() {
 		let mut b = core::Block::new(&prev.header, vec![], reward_key).unwrap();
 		b.header.timestamp = prev.header.timestamp + time::Duration::seconds(60);
 
-		let (difficulty, _) = consensus::next_target(b.header.timestamp.to_timespec().sec,
-		                                             prev.header.timestamp.to_timespec().sec,
-		                                             prev.header.difficulty.clone(),
-		                                             prev.header.cuckoo_len);
+    let diff_iter = store::DifficultyIter::from(b.header.previous, arc_store.clone());
+		let difficulty = consensus::next_difficulty(diff_iter).unwrap();
 		b.header.difficulty = difficulty.clone();
 
-		pow::pow(&mut b.header, difficulty).unwrap();
+		pow::pow_size(&mut b.header, difficulty, consensus::TEST_SIZESHIFT as u32).unwrap();
 		grin_chain::pipe::process_block(&b,
 		                                arc_store.clone(),
 		                                adapter.clone(),
-		                                grin_chain::pipe::NONE)
+		                                grin_chain::pipe::EASY_POW)
 			.unwrap();
 
 		// checking our new head
@@ -88,9 +86,8 @@ fn mine_forks() {
 
 	// save a genesis block
 	let mut gen = grin_core::genesis::genesis();
-	gen.header.cuckoo_len = 12;
 	let diff = gen.header.difficulty.clone();
-	pow::pow(&mut gen.header, diff).unwrap();
+	pow::pow_size(&mut gen.header, diff, consensus::TEST_SIZESHIFT as u32).unwrap();
 	store.save_block(&gen).unwrap();
 
 	// setup a new head tip

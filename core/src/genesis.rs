@@ -34,7 +34,6 @@ pub fn genesis() -> core::Block {
 				tm_mday: 4,
 				..time::empty_tm()
 			},
-			cuckoo_len: DEFAULT_SIZESHIFT,
 			difficulty: Difficulty::one(),
 			total_difficulty: Difficulty::one(),
 			utxo_merkle: [].hash(),

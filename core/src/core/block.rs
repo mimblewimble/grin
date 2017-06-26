@@ -43,8 +43,6 @@ pub struct BlockHeader {
 	pub previous: Hash,
 	/// Timestamp at which the block was built.
 	pub timestamp: time::Tm,
-	/// Length of the cuckoo cycle used to mine this block.
-	pub cuckoo_len: u8,
 	/// Merkle root of the UTXO set
 	pub utxo_merkle: Hash,
 	/// Merkle tree of hashes for all inputs, outputs and kernels in the block
@@ -67,7 +65,6 @@ impl Default for BlockHeader {
 			height: 0,
 			previous: ZERO_HASH,
 			timestamp: time::at_utc(time::Timespec { sec: 0, nsec: 0 }),
-			cuckoo_len: 20, // only for tests
 			difficulty: Difficulty::one(),
 			total_difficulty: Difficulty::one(),
 			utxo_merkle: ZERO_HASH,
@@ -86,7 +83,6 @@ impl Writeable for BlockHeader {
 		                [write_u64, self.height],
 		                [write_fixed_bytes, &self.previous],
 		                [write_i64, self.timestamp.to_timespec().sec],
-		                [write_u8, self.cuckoo_len],
 		                [write_fixed_bytes, &self.utxo_merkle],
 		                [write_fixed_bytes, &self.tx_merkle],
 		                [write_u8, self.features.bits()]);
@@ -107,7 +103,7 @@ impl Readable for BlockHeader {
 	fn read(reader: &mut Reader) -> Result<BlockHeader, ser::Error> {
 		let height = try!(reader.read_u64());
 		let previous = try!(Hash::read(reader));
-		let (timestamp, cuckoo_len) = ser_multiread!(reader, read_i64, read_u8);
+		let timestamp = reader.read_i64()?;
 		let utxo_merkle = try!(Hash::read(reader));
 		let tx_merkle = try!(Hash::read(reader));
 		let (features, nonce) = ser_multiread!(reader, read_u8, read_u64);
@@ -122,7 +118,6 @@ impl Readable for BlockHeader {
 				sec: timestamp,
 				nsec: 0,
 			}),
-			cuckoo_len: cuckoo_len,
 			utxo_merkle: utxo_merkle,
 			tx_merkle: tx_merkle,
 			features: BlockFeatures::from_bits(features).ok_or(ser::Error::CorruptedData)?,
@@ -284,7 +279,6 @@ impl Block {
 					timestamp: time::now(),
 					previous: prev.hash(),
 					total_difficulty: prev.pow.to_difficulty() + prev.total_difficulty.clone(),
-					cuckoo_len: prev.cuckoo_len,
 					..Default::default()
 				},
 				inputs: inputs,

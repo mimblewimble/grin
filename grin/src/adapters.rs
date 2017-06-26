@@ -32,6 +32,7 @@ use sync;
 /// blocks and transactions are received and forwards to the chain and pool
 /// implementations.
 pub struct NetToChainAdapter {
+	test_mode: bool,
 	/// the reference copy of the current chain state
 	chain_head: Arc<Mutex<chain::Tip>>,
 	chain_store: Arc<chain::ChainStore>,
@@ -64,12 +65,7 @@ impl NetAdapter for NetToChainAdapter {
 		// pushing the new block through the chain pipeline
 		let store = self.chain_store.clone();
 		let chain_adapter = self.chain_adapter.clone();
-		let opts = if self.syncer.borrow().syncing() {
-			chain::SYNC
-		} else {
-			chain::NONE
-		};
-		let res = chain::process_block(&b, store, chain_adapter, opts);
+		let res = chain::process_block(&b, store, chain_adapter, self.chain_opts());
 
 		// log errors and update the shared head reference on success
 		if let Err(e) = res {
@@ -86,19 +82,13 @@ impl NetAdapter for NetToChainAdapter {
 	}
 
 	fn headers_received(&self, bhs: Vec<core::BlockHeader>) {
-		let opts = if self.syncer.borrow().syncing() {
-			chain::SYNC
-		} else {
-			chain::NONE
-		};
-
 		// try to add each header to our header chain
 		let mut added_hs = vec![];
 		for bh in bhs {
 			let store = self.chain_store.clone();
 			let chain_adapter = self.chain_adapter.clone();
 
-			let res = chain::process_block_header(&bh, store, chain_adapter, opts);
+			let res = chain::process_block_header(&bh, store, chain_adapter, self.chain_opts());
 			match res {
 				Ok(_) => {
 					added_hs.push(bh.hash());
@@ -216,13 +206,15 @@ impl NetAdapter for NetToChainAdapter {
 }
 
 impl NetToChainAdapter {
-	pub fn new(chain_head: Arc<Mutex<chain::Tip>>,
+	pub fn new(test_mode: bool,
+	           chain_head: Arc<Mutex<chain::Tip>>,
 	           chain_store: Arc<chain::ChainStore>,
 	           chain_adapter: Arc<ChainToPoolAndNetAdapter>,
 	           tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	           peer_store: Arc<PeerStore>)
 	           -> NetToChainAdapter {
 		NetToChainAdapter {
+			test_mode: test_mode,
 			chain_head: chain_head,
 			chain_store: chain_store,
 			chain_adapter: chain_adapter,
@@ -232,12 +224,27 @@ impl NetToChainAdapter {
 		}
 	}
 
+	/// Start syncing the chain by instantiating and running the Syncer in the
+	/// background (a new thread is created).
 	pub fn start_sync(&self, sync: sync::Syncer) {
 		let arc_sync = Arc::new(sync);
 		self.syncer.init(arc_sync.clone());
 		thread::Builder::new().name("syncer".to_string()).spawn(move || {
 			arc_sync.run();
 		});
+	}
+
+	/// Prepare options for the chain pipeline
+	fn chain_opts(&self) -> chain::Options {
+		let mut opts = if self.syncer.borrow().syncing() {
+			chain::SYNC
+		} else {
+			chain::NONE
+		};
+		if self.test_mode {
+			opts = opts | chain::EASY_POW;
+		}
+		opts
 	}
 }
 

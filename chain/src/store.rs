@@ -14,11 +14,15 @@
 
 //! Implements storage primitives required by the chain
 
+use std::sync::Arc;
+
 use secp::pedersen::Commitment;
 
 use types::*;
 use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader, Output};
+use core::consensus::TargetError;
+use core::core::target::Difficulty;
 use grin_store::{self, Error, to_key, u64_to_key, option_to_not_found};
 
 const STORE_SUBPATH: &'static str = "chain";
@@ -139,5 +143,43 @@ impl ChainStore for ChainKVStore {
 			}
 		}
 		Ok(())
+	}
+}
+
+/// An iterator on blocks, from latest to earliest, specialized to return
+/// information pertaining to block difficulty calculation (timestamp and
+/// previous difficulties). Mostly used by the consensus next difficulty
+/// calculation.
+pub struct DifficultyIter {
+	next: Hash,
+	store: Arc<ChainStore>,
+}
+
+impl DifficultyIter {
+  /// Build a new iterator using the provided chain store and starting from
+  /// the provided block hash.
+	pub fn from(start: Hash, store: Arc<ChainStore>) -> DifficultyIter {
+		DifficultyIter {
+			next: start,
+			store: store,
+		}
+	}
+}
+
+impl Iterator for DifficultyIter {
+	type Item = Result<(i64, Difficulty), TargetError>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		let bhe = self.store.get_block_header(&self.next);
+		match bhe {
+			Err(e) => Some(Err(TargetError(e.to_string()))),
+			Ok(bh) => {
+				if bh.height == 0 {
+					return None;
+				}
+				self.next = bh.previous;
+				Some(Ok((bh.timestamp.to_timespec().sec, bh.difficulty)))
+			}
+		}
 	}
 }

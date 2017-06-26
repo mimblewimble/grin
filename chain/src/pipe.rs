@@ -37,8 +37,10 @@ bitflags! {
     const NONE = 0b00000001,
     /// Runs without checking the Proof of Work, mostly to make testing easier.
     const SKIP_POW = 0b00000010,
+    /// Runs PoW verification with a lower cycle size.
+    const EASY_POW = 0b00000100,
     /// Adds block while in syncing mode.
-    const SYNC = 0b00000100,
+    const SYNC = 0b00001000,
   }
 }
 
@@ -72,6 +74,7 @@ pub enum Error {
 	/// Internal issue when trying to save or load data from store
 	StoreErr(grin_store::Error),
 	SerErr(ser::Error),
+	Other(String),
 }
 
 impl From<grin_store::Error> for Error {
@@ -201,17 +204,20 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 			return Err(Error::WrongTotalDifficulty);
 		}
 
-		let (difficulty, cuckoo_sz) = consensus::next_target(header.timestamp.to_timespec().sec,
-		                                                     prev.timestamp.to_timespec().sec,
-		                                                     prev.difficulty,
-		                                                     prev.cuckoo_len);
+		let diff_iter = store::DifficultyIter::from(header.previous, ctx.store.clone());
+		let difficulty =
+			consensus::next_difficulty(diff_iter).map_err(|e| Error::Other(e.to_string()))?;
 		if header.difficulty < difficulty {
 			return Err(Error::DifficultyTooLow);
 		}
-		if header.cuckoo_len != cuckoo_sz {
-			return Err(Error::WrongCuckooSize);
-		}
-		if !pow::verify(header) {
+
+		let cycle_size = if ctx.opts.intersects(EASY_POW) {
+			consensus::TEST_SIZESHIFT
+		} else {
+			consensus::DEFAULT_SIZESHIFT
+		};
+		debug!("Validating block with cuckoo size {}", cycle_size);
+		if !pow::verify_size(header, cycle_size as u32) {
 			return Err(Error::InvalidPow);
 		}
 	}
