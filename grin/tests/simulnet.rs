@@ -27,6 +27,7 @@ extern crate tokio_core;
 extern crate tokio_timer;
 
 use std::sync::{Arc, Mutex, RwLock};
+use std::fs;
 
 mod framework;
 
@@ -52,12 +53,17 @@ use framework::{LocalServerContainer, LocalServerContainerConfig,
 fn basic_genesis_mine(){
     env_logger::init();
 
-    framework::clean_all_output();
+    let test_name_dir="genesis_mine";
+    framework::clean_all_output(test_name_dir);
 
     //Create a server pool
     let mut pool_config = LocalServerContainerPoolConfig::default();
-    pool_config.base_name = format!("my_pool");
+    pool_config.base_name = String::from(test_name_dir);
     pool_config.run_length_in_seconds = 20;
+
+    pool_config.base_api_port=30000;
+    pool_config.base_p2p_port=31000;
+    pool_config.base_wallet_port=32000;
 
     let mut pool = LocalServerContainerPool::new(pool_config);
 
@@ -78,12 +84,18 @@ fn basic_genesis_mine(){
 fn simulate_seeding () {
     env_logger::init();
 
-    framework::clean_all_output();
+    let test_name_dir="simulate_seeding";
+    framework::clean_all_output(test_name_dir);
 
     //Create a server pool
     let mut pool_config = LocalServerContainerPoolConfig::default();
-    pool_config.base_name = format!("my_pool");
+    pool_config.base_name = String::from(test_name_dir);
     pool_config.run_length_in_seconds = 30;
+
+    //have to select different ports because of tests being run in parallel
+    pool_config.base_api_port=30020;
+    pool_config.base_p2p_port=31020;
+    pool_config.base_wallet_port=32020;
 
     let mut pool = LocalServerContainerPool::new(pool_config);
 
@@ -117,12 +129,18 @@ fn simulate_seeding () {
 fn simulate_parallel_mining(){
     env_logger::init();
 
-    framework::clean_all_output();
+    let test_name_dir="simulate_parallel_mining";
+    framework::clean_all_output(test_name_dir);
 
     //Create a server pool
     let mut pool_config = LocalServerContainerPoolConfig::default();
-    pool_config.base_name = format!("my_pool");
+    pool_config.base_name = String::from(test_name_dir);
     pool_config.run_length_in_seconds = 30;
+
+    //have to select different ports because of tests being run in parallel
+    pool_config.base_api_port=30040;
+    pool_config.base_p2p_port=31040;
+    pool_config.base_wallet_port=32040;
 
     let mut pool = LocalServerContainerPool::new(pool_config);
 
@@ -131,6 +149,9 @@ fn simulate_parallel_mining(){
     server_config.start_miner = true;
     server_config.start_wallet = true;
     server_config.is_seeding = true;
+
+    //This is the default value, can play with this here for convenience
+    server_config.cuckoo_size=consensus::TEST_SIZESHIFT as u32;
 
     pool.create_server(&mut server_config);
 
@@ -166,6 +187,9 @@ fn simulate_parallel_mining(){
 fn simulate_block_propagation() {
   env_logger::init();
 
+  let test_name_dir="test_servers/grin-prop";
+  framework::clean_all_output(test_name_dir);
+
   let mut evtlp = reactor::Core::new().unwrap();
   let handle = evtlp.handle();
 
@@ -182,7 +206,7 @@ fn simulate_block_propagation() {
       let s = grin::Server::future(
           grin::ServerConfig{
             api_http_addr: format!("127.0.0.1:{}", 20000+n),
-            db_root: format!("target/grin-prop-{}", n),
+            db_root: format!("target/{}/grin-prop-{}", test_name_dir, n),
             p2p_config: p2p::P2PConfig{port: 10000+n, ..p2p::P2PConfig::default()},
             ..Default::default()
           }, &handle).unwrap();
@@ -220,6 +244,9 @@ fn simulate_block_propagation() {
 fn simulate_full_sync() {
   env_logger::init();
 
+  let test_name_dir="test_servers/grin-sync";
+  framework::clean_all_output(test_name_dir);
+
   let mut evtlp = reactor::Core::new().unwrap();
   let handle = evtlp.handle();
 
@@ -235,7 +262,7 @@ fn simulate_full_sync() {
   for n in 0..2 {
       let s = grin::Server::future(
           grin::ServerConfig{
-            db_root: format!("target/grin-sync-{}", n),
+            db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
             p2p_config: p2p::P2PConfig{port: 11000+n, ..p2p::P2PConfig::default()},
             ..Default::default()
           }, &handle).unwrap();

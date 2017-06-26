@@ -27,7 +27,6 @@ extern crate tokio_core;
 extern crate tokio_timer;
 extern crate futures_cpupool;
 
-
 use std::thread;
 use std::time;
 use std::default::Default;
@@ -48,12 +47,13 @@ use secp::Secp256k1;
 use tiny_keccak::Keccak;
 
 use wallet::WalletConfig;
+use core::consensus;
 
 
 /// Just removes all results from previous runs
 
-pub fn clean_all_output(){
-    let target_dir = format!("target/test_servers");
+pub fn clean_all_output(test_name_dir:&str){
+    let target_dir = format!("target/{}", test_name_dir);
     fs::remove_dir_all(target_dir);
 }
 
@@ -107,6 +107,9 @@ pub struct LocalServerContainerConfig {
     //Whether to burn mining rewards
     pub burn_mining_rewards: bool,
 
+    //size of cuckoo graph for mining
+    pub cuckoo_size: u32,
+
     //full address to send coinbase rewards to
     pub coinbase_wallet_address: String,
 
@@ -130,6 +133,7 @@ impl Default for LocalServerContainerConfig {
             is_seeding: false,
             start_miner: false,
             start_wallet: false,
+            cuckoo_size: consensus::TEST_SIZESHIFT as u32,
             burn_mining_rewards: false,
             coinbase_wallet_address: String::from(""),
             wallet_validating_node_url: String::from(""),
@@ -194,7 +198,6 @@ impl LocalServerContainer {
     pub fn run_server(&mut self,
                          duration_in_seconds: u64) -> grin::ServerStats
     {
-
         let mut event_loop = reactor::Core::new().unwrap();
 
         let api_addr = format!("{}:{}", self.config.base_addr, self.config.api_server_port);
@@ -210,7 +213,6 @@ impl LocalServerContainer {
             grin::ServerConfig{
                 api_http_addr: api_addr,
                 db_root: format!("{}/.grin", self.working_dir),
-                cuckoo_size: 12,
                 p2p_config: p2p::P2PConfig{port: self.config.p2p_server_port, ..p2p::P2PConfig::default()},
                 seeding_type: seeding_type,
                 ..Default::default()
@@ -227,6 +229,7 @@ impl LocalServerContainer {
         let mut miner_config = grin::MinerConfig {
             enable_mining: self.config.start_miner,
             burn_reward: self.config.burn_mining_rewards,
+            cuckoo_size: self.config.cuckoo_size,
             wallet_receiver_url : self.config.coinbase_wallet_address.clone(),
             slow_down_in_millis: self.config.miner_slowdown_in_millis.clone(),
             ..Default::default()
@@ -489,7 +492,7 @@ impl LocalServerContainerPool {
                 Ok(v) => {}
                 Err(e) => {
                     println!("Error starting server thread: {:?}", e);
-                    //panic!(e);
+                    panic!(e);
                 }
             }
         }
