@@ -17,6 +17,8 @@
 
 use rand::{self, Rng};
 use std::sync::{Arc, Mutex, RwLock};
+use std::thread;
+use std;
 use time;
 
 use adapters::{ChainToPoolAndNetAdapter, PoolToChainAdapter};
@@ -31,6 +33,7 @@ use secp;
 use pool;
 use types::{MinerConfig, Error};
 use util;
+use wallet::{CbAmount, WalletReceiveRequest, CbData};
 
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
@@ -86,6 +89,10 @@ impl Miner {
 			       latest_hash,
 			       b.header.difficulty);
 			let mut iter_count = 0;
+			if self.config.slow_down_in_millis > 0 {
+				debug!("Artifically slowing down loop by {}ms per iteration.",
+					self.config.slow_down_in_millis);
+			}
 			while head.hash() == latest_hash && time::get_time().sec < deadline {
 				let pow_hash = b.hash();
 				let mut miner =
@@ -101,6 +108,11 @@ impl Miner {
 					latest_hash = self.chain_head.lock().unwrap().last_block_h;
 				}
 				iter_count += 1;
+
+				//Artifical slow down
+				if self.config.slow_down_in_millis > 0 {
+					thread::sleep(std::time::Duration::from_millis(2000));
+				}
 			}
 
 			// if we found a solution, push our block out
@@ -174,8 +186,9 @@ impl Miner {
 		} else {
 			let url = format!("{}/v1/receive/coinbase",
 			                  self.config.wallet_receiver_url.as_str());
+			let request = WalletReceiveRequest::Coinbase(CbAmount{amount: consensus::REWARD});
 			let res: CbData = api::client::post(url.as_str(),
-			                                    &CbAmount { amount: consensus::REWARD })
+			                                    &request)
 				.expect("Wallet receiver unreachable, could not claim reward. Is it running?");
 			let out_bin = util::from_hex(res.output).unwrap();
 			let kern_bin = util::from_hex(res.kernel).unwrap();
@@ -185,15 +198,4 @@ impl Miner {
 			(output, kernel)
 		}
 	}
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct CbAmount {
-	amount: u64,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct CbData {
-	output: String,
-	kernel: String,
 }

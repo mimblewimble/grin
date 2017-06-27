@@ -21,20 +21,29 @@ use core::core::{Transaction, build};
 use extkey::ExtendedKey;
 use types::*;
 
+use api;
+
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
 /// UTXOs. The destination can be "stdout" (for command line) or a URL to the
 /// recipients wallet receiver (to be implemented).
 pub fn issue_send_tx(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64, dest: String) -> Result<(), Error> {
-	checker::refresh_outputs(&WalletConfig::default(), ext_key);
-
+	checker::refresh_outputs(&config, ext_key);
+	
 	let (tx, blind_sum) = build_send_tx(config, ext_key, amount)?;
 	let json_tx = partial_tx_to_json(amount, blind_sum, tx);
+	
 	if dest == "stdout" {
 		println!("{}", json_tx);
 	} else if &dest[..4] == "http" {
-		// TODO
-		unimplemented!();
+		let url = format!("{}/v1/receive/receive_json_tx",
+			                  &dest);
+		debug!("Posting partial transaction to {}", url);
+		let request = WalletReceiveRequest::PartialTransaction(json_tx);
+		let res: CbData = api::client::post(url.as_str(),
+			                                    &request)
+				.expect(&format!("Wallet receiver at {} unreachable, could not send transaction. Is it running?", url));
+			
 	}
 	Ok(())
 }

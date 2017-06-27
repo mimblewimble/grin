@@ -120,6 +120,8 @@ impl Server {
 
 		evt_handle.spawn(server.start(evt_handle.clone()).map_err(|_| ()));
 
+		info!("Starting rest apis at: {}", &config.api_http_addr);
+
 		api::start_rest_apis(config.api_http_addr.clone(),
 		                     chain_store.clone(),
 		                     shared_head.clone(),
@@ -165,6 +167,17 @@ impl Server {
 		let head = self.chain_head.clone();
 		let h = head.lock().unwrap();
 		h.clone()
+	}
+
+	/// Returns a set of stats about this server. This and the ServerStats structure
+	/// can be updated over time to include any information needed by tests or other
+	/// consumers
+
+	pub fn get_server_stats(&self) -> Result<ServerStats, Error>{
+		Ok(ServerStats{
+			peer_count: self.peer_count(),
+			head: self.head(),
+		})
 	}
 }
 

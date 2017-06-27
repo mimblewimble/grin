@@ -58,7 +58,12 @@ fn main() {
                 .arg(Arg::with_name("port")
                      .short("p")
                      .long("port")
-                     .help("Port to start the server on")
+                     .help("Port to start the P2P server on")
+                     .takes_value(true))
+				.arg(Arg::with_name("api_port")
+                     .short("a")
+                     .long("api_port")
+                     .help("Port on which to start the api server (e.g. transaction pool api)")
                      .takes_value(true))
                 .arg(Arg::with_name("seed")
                      .short("s")
@@ -102,15 +107,20 @@ fn main() {
                      .long("pass")
                      .help("Wallet passphrase used to generate the private key seed")
                      .takes_value(true))
-				.arg(Arg::with_name("dir")
-                     .short("d")
-                     .long("dir")
+				.arg(Arg::with_name("data_dir")
+                     .short("dd")
+                     .long("data_dir")
                      .help("Directory in which to store wallet files (defaults to current directory)")
                      .takes_value(true))
 				.arg(Arg::with_name("port")
                      .short("r")
                      .long("port")
                      .help("Port on which to run the wallet receiver when in receiver mode")
+                     .takes_value(true))
+				.arg(Arg::with_name("api_server_address")
+                     .short("a")
+                     .long("api_server_address")
+                     .help("The api address of a running node on which to check inputs and post transactions")
                      .takes_value(true))	 	 
                 .subcommand(SubCommand::with_name("receive")
                             .about("Run the wallet in receiving mode. If an input file is provided, will process it, otherwise runs in server mode waiting for send requests.")
@@ -168,9 +178,16 @@ fn server_command(server_args: &ArgMatches) {
 	if let Some(port) = server_args.value_of("port") {
 		server_config.p2p_config.port = port.parse().unwrap();
 	}
+	 
+	if let Some(api_port) = server_args.value_of("api_port") {
+		let default_ip = "127.0.0.1";
+		server_config.api_http_addr = format!("{}:{}", default_ip, api_port);
+	}
+
 	if server_args.is_present("mine") {
 		server_config.mining_config.enable_mining = true;
 	}
+	
 	if let Some(wallet_url) = server_args.value_of("wallet_url") {
 		server_config.mining_config.wallet_receiver_url = wallet_url.to_string();
 	}
@@ -232,6 +249,11 @@ fn wallet_command(wallet_args: &ArgMatches) {
 	if let Some(dir) = wallet_args.value_of("dir") {
 		wallet_config.data_file_dir = dir.to_string().clone();
 	}
+
+	if let Some(sa) = wallet_args.value_of("api_server_address") {
+		wallet_config.check_node_api_http_addr = sa.to_string().clone();
+	}
+
 	
 	match wallet_args.subcommand() {
 		

@@ -107,8 +107,13 @@ pub struct MinerConfig {
 	/// wallet receiver. Mostly used for tests.
 	pub burn_reward: bool,
 
+	/// a testing attribute for the time being that artifically slows down the
+	/// mining loop by adding a sleep to the thread
+	pub slow_down_in_millis: u64,
+
 	/// Size of Cuckoo Cycle to mine on
 	pub cuckoo_size: u32,
+
 }
 
 impl Default for ServerConfig {
@@ -131,7 +136,20 @@ impl Default for MinerConfig {
 			enable_mining: false,
 			wallet_receiver_url: "http://localhost:13416".to_string(),
 			burn_reward: false,
+			slow_down_in_millis: 0,
 			cuckoo_size: 0,
 		}
 	}
+}
+
+/// Thread-safe container to return all sever related stats that other
+/// consumers might be interested in, such as test results
+///
+///
+///
+
+#[derive(Clone)]
+pub struct ServerStats {
+	pub peer_count:u32,
+	pub head: chain::Tip,
 }

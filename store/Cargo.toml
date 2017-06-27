@@ -7,6 +7,13 @@ workspace = ".."
 [dependencies]
 byteorder = "^0.5"
 rocksdb = "^0.6.0"
+## When using GCC 7, the rust-rocksdb dependency doesn't compile
+## To get around this (temporarily) clone (beside the 'grin' directory)
+## https://github.com/spacejam/rust-rocksdb.git
+## Manually apply the changes in:
+## https://github.com/facebook/rocksdb/commit/816c1e30ca73615c75fc208ddcc4b05012b30951
+## And swap the dependency for the one below
+#rocksdb = { path = "../../rust-rocksdb" }
 tiny-keccak = "1.1"
 
 grin_core = { path = "../core" }

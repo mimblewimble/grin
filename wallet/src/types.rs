@@ -78,7 +78,12 @@ impl From<api::Error> for Error {
 
 #[derive(Debug, Clone)]
 pub struct WalletConfig {
+	//The api address that this api server (i.e. this wallet) will run
 	pub api_http_addr: String,
+	//The api address of a running server node, against which transaction inputs will be checked
+	//during send
+	pub check_node_api_http_addr: String,
+	//The directory in which wallet files are stored
 	pub data_file_dir: String,
 }
 
@@ -86,6 +91,7 @@ impl Default for WalletConfig {
 	fn default() -> WalletConfig {
 		WalletConfig { 
 			api_http_addr: "http://127.0.0.1:13415".to_string(),
+			check_node_api_http_addr: "http://127.0.0.1:13415".to_string(),
 			data_file_dir: ".".to_string(),
 		}
 	}
@@ -277,4 +283,25 @@ pub fn partial_tx_from_json(json_str: &str) -> Result<(u64, SecretKey, Transacti
 			})?;
 
 	Ok((partial_tx.amount, blinding, tx))
+}
+
+/// Amount in request to build a coinbase output.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum WalletReceiveRequest {
+	Coinbase(CbAmount),
+	PartialTransaction(String),
+	Finalize(String),
+}
+
+/// Amount in request to build a coinbase output.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CbAmount {
+	pub amount: u64,
+}
+
+/// Response to build a coinbase output.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CbData {
+	pub output: String,
+	pub kernel: String,
 }
