@@ -153,11 +153,12 @@ impl Server {
 	/// Start mining for blocks on a separate thread. Relies on a toy miner,
 	/// mostly for testing.
 	pub fn start_miner(&self, config: MinerConfig) {
-		let miner = miner::Miner::new(config,
+		let mut miner = miner::Miner::new(config,
 		                              self.chain_head.clone(),
 		                              self.chain_store.clone(),
 		                              self.chain_adapter.clone(),
 		                              self.tx_pool.clone());
+		miner.set_debug_output_id(format!("Port {}",self.config.p2p_config.port));
 		thread::spawn(move || {
 			miner.run_loop();
 		});

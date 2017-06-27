@@ -53,7 +53,7 @@ use core::consensus;
 /// Just removes all results from previous runs
 
 pub fn clean_all_output(test_name_dir:&str){
-    let target_dir = format!("target/{}", test_name_dir);
+    let target_dir = format!("target/test_servers/{}", test_name_dir);
     fs::remove_dir_all(target_dir);
 }
 
@@ -414,11 +414,10 @@ impl LocalServerContainerPool {
 
 
         //Use self as coinbase wallet
-        if server_config.coinbase_wallet_address.len()==0 {
-            server_config.coinbase_wallet_address=String::from(format!("http://{}:{}",
+        server_config.coinbase_wallet_address=String::from(format!("http://{}:{}",
                     server_config.base_addr,
                     server_config.wallet_port));
-        }
+
 
         self.next_p2p_port+=1;
         self.next_api_port+=1;
