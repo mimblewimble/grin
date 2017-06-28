@@ -155,7 +155,7 @@ pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
 	// a difficulty up from 1, we end up with 1.25 as a ratio which rounds back to zero 
 	// and keeps the difficulty at 1
 	if diff_avg == diff_calc {
-		if ts_damp > UPPER_TIME_BOUND && diff_calc >= Difficulty::one() {
+		if ts_damp > UPPER_TIME_BOUND && diff_calc > Difficulty::one() {
 			diff_calc=diff_calc - Difficulty::from_num(1);
 		}	
 		if ts_damp < LOWER_TIME_BOUND {
