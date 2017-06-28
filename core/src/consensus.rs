@@ -148,9 +148,26 @@ pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
 		ts_damp
 	};
 
-	// Final ratio calculation
-	Ok(diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW as u32) /
-	   Difficulty::from_num(adj_ts as u32))
+	let mut diff_calc:Difficulty = diff_avg.clone() * Difficulty::from_num(BLOCK_TIME_WINDOW as u32) /
+	   Difficulty::from_num(adj_ts as u32);
+
+	// we need to fiddle this here for lower difficulties, because when trying to adjust
+	// a difficulty up from 1, we end up with 1.25 as a ratio which rounds back to zero 
+	// and keeps the difficulty at 1
+	if diff_avg == diff_calc {
+		if ts_damp > UPPER_TIME_BOUND && diff_calc >= Difficulty::one() {
+			diff_calc=diff_calc - Difficulty::from_num(1);
+		}	
+		if ts_damp < LOWER_TIME_BOUND {
+			diff_calc=diff_calc + Difficulty::from_num(1);
+		}		
+	}
+	
+	if diff_calc==Difficulty::zero() {
+		return Err(TargetError(String::from("About to set difficulty to zero... this shouldn't happen.")));
+	}
+	
+	Ok(diff_calc)
 }
 
 #[cfg(test)]

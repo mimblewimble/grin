@@ -17,7 +17,7 @@
 //! the related difficulty, defined as the maximum target divided by the hash.
 
 use std::fmt;
-use std::ops::{Add, Mul, Div};
+use std::ops::{Add, Mul, Div, Sub};
 
 use bigint::BigUint;
 use serde::{Serialize, Serializer, Deserialize, Deserializer, de};
@@ -83,6 +83,13 @@ impl Add<Difficulty> for Difficulty {
 	type Output = Difficulty;
 	fn add(self, other: Difficulty) -> Difficulty {
 		Difficulty { num: self.num + other.num }
+	}
+}
+
+impl Sub<Difficulty> for Difficulty {
+	type Output = Difficulty;
+	fn sub(self, other: Difficulty) -> Difficulty {
+		Difficulty { num: self.num - other.num }
 	}
 }
 
