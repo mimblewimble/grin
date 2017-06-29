@@ -60,6 +60,10 @@ pub const CUT_THROUGH_HORIZON: u32 = 48 * 3600 / (BLOCK_TIME_SEC as u32);
 /// peer-to-peer networking layer only for DoS protection.
 pub const MAX_MSG_LEN: u64 = 20_000_000;
 
+/// The minimum mining difficulty we'll allow
+
+pub const MINIMUM_DIFFICULTY: u32 = 10;
+
 pub const MEDIAN_TIME_WINDOW: u32 = 11;
 
 pub const DIFFICULTY_ADJUST_WINDOW: u32 = 23;
@@ -103,15 +107,10 @@ pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
 	// Sum of difficulties in the window, used to calculate the average later.
 	let mut diff_sum = Difficulty::zero();
 
-	// How many blocks we've gone back, to avoid having to count the whole set
-	let mut blocks_read = 0;
-
 	// Enumerating backward over blocks
 	for (n, head_info) in cursor.into_iter().enumerate() {
 		let m = n as u32;
 		let (ts, diff) = head_info?;
-
-		blocks_read += 1;
 
 		// Sum each element in the adjustment window. In addition, retain
 		// timestamps within median windows (at ]start;start-11] and ]end;end-11]
@@ -129,14 +128,9 @@ pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
 		}
 	}
 
-	if blocks_read == 0 {blocks_read = 1;}
-
-	// Check we have enough blocks. If not, it's a new blockchain,
-	// return current height as difficulty until there's
-	// enough data to adjust
-
+	// Check we have enough blocks
 	if window_end.len() < (MEDIAN_TIME_WINDOW as usize) {
-		return Ok(Difficulty::from_num(blocks_read));
+		return Ok(Difficulty::from_num(MINIMUM_DIFFICULTY));
 	}
 
 	// Calculating time medians at the beginning and end of the window.
@@ -158,30 +152,8 @@ pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
 		ts_damp
 	};
 
-	let mut diff_calc:Difficulty = diff_avg.clone() * Difficulty::from_num(BLOCK_TIME_WINDOW as u32) /
-	   Difficulty::from_num(adj_ts as u32);
-
-	// we need to fiddle this here for the initial value, of 1, which probably won't happen
-	// because we're now using the block height as new minimum difficulty, however cover this
-	// off just in case.. average of everything was 1 and time was short, so we want to ensure
-	// difficulty is at least bumped to 2 cause it works out to 1.25 and gets rounded down
-	// otherwise
-
-	if diff_avg == diff_calc && diff_avg == Difficulty::one() {
-		// Forget dampening in this case; numbers are too small
-		if begin_ts-end_ts <= LOWER_TIME_BOUND {
-			diff_calc=diff_calc + Difficulty::from_num(1);
-		}		
-	}
-	
-	// This should never happen but will quickly ruin one's blockchain if this happens to become 
-	// a valid block, so cause a panic
-	
-	if diff_calc==Difficulty::zero() {
-		return Err(TargetError(String::from("About to set difficulty to zero... this shouldn't happen.")));
-	}
-	
-	Ok(diff_calc)
+	Ok(diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW as u32) /
+	   Difficulty::from_num(adj_ts as u32))
 }
 
 #[cfg(test)]
@@ -216,12 +188,13 @@ mod test {
 	#[test]
 	fn next_target_adjustment() {
 		// not enough data
-		assert_eq!(next_difficulty(vec![]).unwrap(), Difficulty::one());
+		assert_eq!(next_difficulty(vec![]).unwrap(), Difficulty::from_num(MINIMUM_DIFFICULTY));
 		
 		assert_eq!(next_difficulty(vec![Ok((60, Difficulty::one()))]).unwrap(),
-		           Difficulty::one());
+		           Difficulty::from_num(MINIMUM_DIFFICULTY));
+				   
 		assert_eq!(next_difficulty(repeat(60, 10, DIFFICULTY_ADJUST_WINDOW)).unwrap(),
-		           Difficulty::from_num(DIFFICULTY_ADJUST_WINDOW));
+		           Difficulty::from_num(MINIMUM_DIFFICULTY));
 
 		// just enough data, right interval, should stay constant
 		
@@ -235,10 +208,6 @@ mod test {
 		let mut s2 = repeat_offs((sec * 60) as i64, 60, 1545, DIFFICULTY_ADJUST_WINDOW / 2);
 		s2.append(&mut s1);
 		assert_eq!(next_difficulty(s2).unwrap(), Difficulty::from_num(999));
-
-		// checking initial condition, diff at 1 and too fast
-		assert_eq!(next_difficulty(repeat(50, 1, just_enough)).unwrap(),
-				   Difficulty::from_num(2));
 
 		// too slow, diff goes down
 		assert_eq!(next_difficulty(repeat(90, 1000, just_enough)).unwrap(),

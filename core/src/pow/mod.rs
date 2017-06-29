@@ -28,6 +28,7 @@ pub mod cuckoo;
 use time;
 
 use consensus::EASINESS;
+use consensus::MINIMUM_DIFFICULTY;
 use core::BlockHeader;
 use core::hash::Hashed;
 use core::target::Difficulty;
@@ -92,9 +93,9 @@ mod test {
 	fn genesis_pow() {
 		let mut b = genesis::genesis();
 		b.header.nonce = 310;
-		pow_size(&mut b.header, Difficulty::one(), 12).unwrap();
+		pow_size(&mut b.header, Difficulty::from_num(MINIMUM_DIFFICULTY), 12).unwrap();
 		assert!(b.header.nonce != 310);
-		assert!(b.header.pow.to_difficulty() >= Difficulty::one());
+		assert!(b.header.pow.to_difficulty() >= Difficulty::from_num(MINIMUM_DIFFICULTY));
 		assert!(verify_size(&b.header, 12));
 	}
 }

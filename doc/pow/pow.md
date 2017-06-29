@@ -130,7 +130,7 @@ to change).
 
 The difficulty calculation is based on both Digishield and GravityWave family of difficulty computation, 
 coming to something very close to Zcash. The refence difficulty is an average of the difficulty over a window of
-23 blocks (the current concensus value). The corresponding timespan is calculated by using the difference between 
+23 blocks (the current consensus value). The corresponding timespan is calculated by using the difference between 
 the median timestamps at the beginning and the end of the window. If the timespan is higher or lower than a certain
 range, (adjusted with a dampening factor to allow for normal variation,) then the difficulty is raised or lowered
 to a value aiming for the target block solve time.
@@ -156,8 +156,8 @@ valid Proofs-of-Work to create the latest block in the chain. The following is a
             * The cuckoo graph generator is initialised, which accepts as parameters:
                 * The hash of the potential block header, which is to be used as the key to a SIPHASH function
                 that will generate pairs of locations for each node in the graph. 
-                * The size of the graph (a concensus value).
-                * An easiness value, (a concensus value) representing the M/N ratio described above denoting the probability
+                * The size of the graph (a consensus value).
+                * An easiness value, (a consensus value) representing the M/N ratio described above denoting the probability
                 of a solution appearing in the graph
             * The Cuckoo Cycle detection algorithm tries to find a solution (i.e. a cycle of length 42) within the generated
             graph. 
@@ -175,11 +175,11 @@ valid Proofs-of-Work to create the latest block in the chain. The following is a
 
 Controlling the overall difficulty of the mining loop requires finding a balance between the three values outlined above:
 
-* Graph size (currently represented as a bit-shift value n representing a size of 2^n nodes, concensus value
+* Graph size (currently represented as a bit-shift value n representing a size of 2^n nodes, consensus value
   DEFAULT_SIZESHIFT). Smaller graphs can be exhaustively searched more quickly, but will also have fewer 
   solutions for a given easiness value. A very small graph needs a higher easiness value to have the same 
   chance to have a solution as a larger graph with a lower easiness value.
-* The 'Easiness' concensus value, or the M/N ratio of the graph expressed as a percentage. The higher this value, the more likely
+* The 'Easiness' consensus value, or the M/N ratio of the graph expressed as a percentage. The higher this value, the more likely
   it is a generated graph will contain a solution. In tandem with the above, the larger the graph, the more solutions 
   it will contain for a given easiness value.
 * The evolving network difficulty hash.  
