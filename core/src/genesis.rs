@@ -18,6 +18,7 @@ use time;
 
 use core;
 use consensus::DEFAULT_SIZESHIFT;
+use consensus::MINIMUM_DIFFICULTY;
 use core::hash::Hashed;
 use core::target::Difficulty;
 
@@ -34,8 +35,8 @@ pub fn genesis() -> core::Block {
 				tm_mday: 4,
 				..time::empty_tm()
 			},
-			difficulty: Difficulty::one(),
-			total_difficulty: Difficulty::one(),
+			difficulty: Difficulty::from_num(MINIMUM_DIFFICULTY),
+			total_difficulty: Difficulty::from_num(MINIMUM_DIFFICULTY),
 			utxo_merkle: [].hash(),
 			tx_merkle: [].hash(),
 			features: core::DEFAULT_BLOCK,

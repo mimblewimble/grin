@@ -24,7 +24,9 @@ use time;
 use adapters::{ChainToPoolAndNetAdapter, PoolToChainAdapter};
 use api;
 use core::consensus;
+use core::consensus::*;
 use core::core;
+use core::core::target::*;
 use core::core::hash::{Hash, Hashed};
 use core::pow::cuckoo;
 use core::ser;
@@ -45,6 +47,10 @@ pub struct Miner {
 	/// chain adapter to net
 	chain_adapter: Arc<ChainToPoolAndNetAdapter>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+
+	//Just to hold the port we're on, so this miner can be identified
+	//while watching debug output
+	debug_output_id: String,
 }
 
 impl Miner {
@@ -62,13 +68,23 @@ impl Miner {
 			chain_store: chain_store,
 			chain_adapter: chain_adapter,
 			tx_pool: tx_pool,
+			debug_output_id: String::from("none"),
 		}
 	}
+
+	/// Keeping this optional so setting in a separate funciton
+	/// instead of in the new function
+
+	pub fn set_debug_output_id(&mut self, debug_output_id: String){
+		self.debug_output_id=debug_output_id;
+	}
+
 
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
 	pub fn run_loop(&self) {
-		info!("Starting miner loop.");
+
+		info!("(Server ID: {}) Starting miner loop.", self.debug_output_id);
 		let mut coinbase = self.get_coinbase();
 		loop {
 			// get the latest chain state and build a block on top of it
@@ -84,21 +100,29 @@ impl Miner {
 			// transactions) and as long as the head hasn't changed
 			let deadline = time::get_time().sec + 2;
 			let mut sol = None;
-			debug!("Mining at Cuckoo{} for at most 2 secs on block {} at difficulty {}.",
+			debug!("(Server ID: {}) Mining at Cuckoo{} for at most 2 secs on block {} at difficulty {}.",
+			       self.debug_output_id,
 			       self.config.cuckoo_size,
 			       latest_hash,
 			       b.header.difficulty);
 			let mut iter_count = 0;
 			if self.config.slow_down_in_millis > 0 {
-				debug!("Artifically slowing down loop by {}ms per iteration.",
-					self.config.slow_down_in_millis);
+				debug!("(Server ID: {}) Artificially slowing down loop by {}ms per iteration.",
+				self.debug_output_id,
+				self.config.slow_down_in_millis);
 			}
 			while head.hash() == latest_hash && time::get_time().sec < deadline {
 				let pow_hash = b.hash();
 				let mut miner =
 					cuckoo::Miner::new(&pow_hash[..], consensus::EASINESS, self.config.cuckoo_size);
 				if let Ok(proof) = miner.mine() {
-					if proof.to_difficulty() >= b.header.difficulty {
+					let proof_diff=proof.to_difficulty();
+					debug!("(Server ID: {}) Header difficulty is: {}, Proof difficulty is: {}",
+					self.debug_output_id,
+					b.header.difficulty,
+					proof_diff);
+
+					if proof_diff >= b.header.difficulty {
 						sol = Some(proof);
 						break;
 					}
@@ -109,16 +133,17 @@ impl Miner {
 				}
 				iter_count += 1;
 
-				//Artifical slow down
+				//Artificial slow down
 				if self.config.slow_down_in_millis > 0 {
-					thread::sleep(std::time::Duration::from_millis(2000));
+					thread::sleep(std::time::Duration::from_millis(self.config.slow_down_in_millis));
 				}
 			}
 
 			// if we found a solution, push our block out
 			if let Some(proof) = sol {
-				info!("Found valid proof of work, adding block {}.", b.hash());
-				b.header.pow = proof;
+				info!("(Server ID: {}) Found valid proof of work, adding block {}.",
+					  self.debug_output_id, b.hash());
+					b.header.pow = proof;
 				let opts = if self.config.cuckoo_size < consensus::DEFAULT_SIZESHIFT as u32 {
 					chain::EASY_POW
 				} else {
@@ -129,7 +154,8 @@ impl Miner {
 				                               self.chain_adapter.clone(),
 				                               opts);
 				if let Err(e) = res {
-					error!("Error validating mined block: {:?}", e);
+					error!("(Server ID: {}) Error validating mined block: {:?}",
+					self.debug_output_id, e);
 				} else if let Ok(Some(tip)) = res {
 					let chain_head = self.chain_head.clone();
 					let mut head = chain_head.lock().unwrap();
@@ -137,8 +163,9 @@ impl Miner {
 					*head = tip;
 				}
 			} else {
-				debug!("No solution found after {} iterations, continuing...",
-				       iter_count)
+				debug!("(Server ID: {}) No solution found after {} iterations, continuing...",
+				    self.debug_output_id,
+					iter_count)
 			}
 		}
 	}
@@ -162,9 +189,11 @@ impl Miner {
 		let txs = txs_box.iter().map(|tx| tx.as_ref()).collect();
 		let (output, kernel) = coinbase;
 		let mut b = core::Block::with_reward(head, txs, output, kernel).unwrap();
-		debug!("Built new block with {} inputs and {} outputs",
+		debug!("(Server ID: {}) Built new block with {} inputs and {} outputs, difficulty: {}",
+			   self.debug_output_id,
 		       b.inputs.len(),
-		       b.outputs.len());
+		       b.outputs.len(),
+			   difficulty);
 
 		// making sure we're not spending time mining a useless block
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
@@ -189,7 +218,8 @@ impl Miner {
 			let request = WalletReceiveRequest::Coinbase(CbAmount{amount: consensus::REWARD});
 			let res: CbData = api::client::post(url.as_str(),
 			                                    &request)
-				.expect("Wallet receiver unreachable, could not claim reward. Is it running?");
+				.expect(format!("(Server ID: {}) Wallet receiver unreachable, could not claim reward. Is it running?",
+				self.debug_output_id.as_str()).as_str());
 			let out_bin = util::from_hex(res.output).unwrap();
 			let kern_bin = util::from_hex(res.kernel).unwrap();
 			let output = ser::deserialize(&mut &out_bin[..]).unwrap();

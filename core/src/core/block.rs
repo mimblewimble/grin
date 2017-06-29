@@ -23,6 +23,7 @@ use core::Committed;
 use core::{Input, Output, Proof, TxKernel, Transaction, COINBASE_KERNEL, COINBASE_OUTPUT};
 use core::transaction::merkle_inputs_outputs;
 use consensus::REWARD;
+use consensus::MINIMUM_DIFFICULTY;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use ser::{self, Readable, Reader, Writeable, Writer};
@@ -65,8 +66,8 @@ impl Default for BlockHeader {
 			height: 0,
 			previous: ZERO_HASH,
 			timestamp: time::at_utc(time::Timespec { sec: 0, nsec: 0 }),
-			difficulty: Difficulty::one(),
-			total_difficulty: Difficulty::one(),
+			difficulty: Difficulty::from_num(MINIMUM_DIFFICULTY),
+			total_difficulty: Difficulty::from_num(MINIMUM_DIFFICULTY),
 			utxo_merkle: ZERO_HASH,
 			tx_merkle: ZERO_HASH,
 			features: DEFAULT_BLOCK,

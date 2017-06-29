@@ -60,6 +60,10 @@ pub const CUT_THROUGH_HORIZON: u32 = 48 * 3600 / (BLOCK_TIME_SEC as u32);
 /// peer-to-peer networking layer only for DoS protection.
 pub const MAX_MSG_LEN: u64 = 20_000_000;
 
+/// The minimum mining difficulty we'll allow
+
+pub const MINIMUM_DIFFICULTY: u32 = 10;
+
 pub const MEDIAN_TIME_WINDOW: u32 = 11;
 
 pub const DIFFICULTY_ADJUST_WINDOW: u32 = 23;
@@ -126,7 +130,7 @@ pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
 
 	// Check we have enough blocks
 	if window_end.len() < (MEDIAN_TIME_WINDOW as usize) {
-		return Ok(Difficulty::one());
+		return Ok(Difficulty::from_num(MINIMUM_DIFFICULTY));
 	}
 
 	// Calculating time medians at the beginning and end of the window.
@@ -136,7 +140,7 @@ pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
 	let end_ts = window_end[window_end.len() / 2];
 
 	// Average difficulty and dampened average time
-	let diff_avg = diff_sum / Difficulty::from_num(DIFFICULTY_ADJUST_WINDOW);
+	let diff_avg = diff_sum.clone() / Difficulty::from_num(DIFFICULTY_ADJUST_WINDOW);
 	let ts_damp = (3 * BLOCK_TIME_WINDOW + (begin_ts - end_ts)) / 4;
 
 	// Apply time bounds
@@ -148,7 +152,6 @@ pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
 		ts_damp
 	};
 
-	// Final ratio calculation
 	Ok(diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW as u32) /
 	   Difficulty::from_num(adj_ts as u32))
 }
@@ -185,13 +188,16 @@ mod test {
 	#[test]
 	fn next_target_adjustment() {
 		// not enough data
-		assert_eq!(next_difficulty(vec![]).unwrap(), Difficulty::one());
+		assert_eq!(next_difficulty(vec![]).unwrap(), Difficulty::from_num(MINIMUM_DIFFICULTY));
+		
 		assert_eq!(next_difficulty(vec![Ok((60, Difficulty::one()))]).unwrap(),
-		           Difficulty::one());
+		           Difficulty::from_num(MINIMUM_DIFFICULTY));
+				   
 		assert_eq!(next_difficulty(repeat(60, 10, DIFFICULTY_ADJUST_WINDOW)).unwrap(),
-		           Difficulty::one());
+		           Difficulty::from_num(MINIMUM_DIFFICULTY));
 
 		// just enough data, right interval, should stay constant
+		
 		let just_enough = DIFFICULTY_ADJUST_WINDOW + MEDIAN_TIME_WINDOW;
 		assert_eq!(next_difficulty(repeat(60, 1000, just_enough)).unwrap(),
 		           Difficulty::from_num(1000));

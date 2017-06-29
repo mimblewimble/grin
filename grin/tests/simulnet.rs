@@ -130,12 +130,12 @@ fn simulate_parallel_mining(){
     env_logger::init();
 
     let test_name_dir="simulate_parallel_mining";
-    framework::clean_all_output(test_name_dir);
+    //framework::clean_all_output(test_name_dir);
 
     //Create a server pool
     let mut pool_config = LocalServerContainerPoolConfig::default();
     pool_config.base_name = String::from(test_name_dir);
-    pool_config.run_length_in_seconds = 30;
+    pool_config.run_length_in_seconds = 60;
 
     //have to select different ports because of tests being run in parallel
     pool_config.base_api_port=30040;
@@ -161,7 +161,7 @@ fn simulate_parallel_mining(){
                                          server_config.p2p_server_port));
 
     //And create 4 more, then let them run for a while
-    for i in 0..4 {
+    for i in 1..4 {
         //fudge in some slowdown
         server_config.miner_slowdown_in_millis = i*2;
         pool.create_server(&mut server_config);
