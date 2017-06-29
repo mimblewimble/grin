@@ -236,8 +236,6 @@ mod test {
 		s2.append(&mut s1);
 		assert_eq!(next_difficulty(s2).unwrap(), Difficulty::from_num(999));
 
-		println!("ARF {}", next_difficulty(repeat(50, 1, just_enough)).unwrap());
-
 		// checking initial condition, diff at 1 and too fast
 		assert_eq!(next_difficulty(repeat(50, 1, just_enough)).unwrap(),
 				   Difficulty::from_num(2));
