@@ -26,130 +26,57 @@ use core::core::target::Difficulty;
 use core::core::{BlockHeader, Block, Proof};
 use core::pow;
 use core::ser;
-use grin_store;
-use types;
-use types::{Tip, ChainStore, ChainAdapter, NoopAdapter};
+use types::*;
 use store;
-
-bitflags! {
-  /// Options for block validation
-  pub flags Options: u32 {
-    const NONE = 0b00000001,
-    /// Runs without checking the Proof of Work, mostly to make testing easier.
-    const SKIP_POW = 0b00000010,
-    /// Runs PoW verification with a lower cycle size.
-    const EASY_POW = 0b00000100,
-    /// Adds block while in syncing mode.
-    const SYNC = 0b00001000,
-  }
-}
 
 /// Contextual information required to process a new block and either reject or
 /// accept it.
 pub struct BlockContext {
-	opts: Options,
-	store: Arc<ChainStore>,
-	adapter: Arc<ChainAdapter>,
-	head: Tip,
-}
-
-#[derive(Debug)]
-pub enum Error {
-	/// The block doesn't fit anywhere in our chain
-	Unfit(String),
-	/// Difficulty is too low either compared to ours or the block PoW hash
-	DifficultyTooLow,
-	/// Addition of difficulties on all previous block is wrong
-	WrongTotalDifficulty,
-	/// Size of the Cuckoo graph in block header doesn't match PoW requirements
-	WrongCuckooSize,
-	/// The proof of work is invalid
-	InvalidPow,
-	/// The block doesn't sum correctly or a tx signature is invalid
-	InvalidBlockProof(secp::Error),
-	/// Block time is too old
-	InvalidBlockTime,
-	/// Block height is invalid (not previous + 1)
-	InvalidBlockHeight,
-	/// Internal issue when trying to save or load data from store
-	StoreErr(grin_store::Error),
-	SerErr(ser::Error),
-	Other(String),
-}
-
-impl From<grin_store::Error> for Error {
-	fn from(e: grin_store::Error) -> Error {
-		Error::StoreErr(e)
-	}
-}
-impl From<ser::Error> for Error {
-	fn from(e: ser::Error) -> Error {
-		Error::SerErr(e)
-	}
+	pub opts: Options,
+	pub store: Arc<ChainStore>,
+	pub adapter: Arc<ChainAdapter>,
+	pub head: Tip,
+	pub lock: Arc<Mutex<bool>>,
 }
 
 /// Runs the block processing pipeline, including validation and finding a
 /// place for the new block in the chain. Returns the new
 /// chain head if updated.
-pub fn process_block(b: &Block,
-                     store: Arc<ChainStore>,
-                     adapter: Arc<ChainAdapter>,
-                     opts: Options)
-                     -> Result<Option<Tip>, Error> {
+pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
-
-	let head = store.head().map_err(&Error::StoreErr)?;
-
-	let mut ctx = BlockContext {
-		opts: opts,
-		store: store,
-		adapter: adapter,
-		head: head,
-	};
 
 	info!("Starting validation pipeline for block {} at {} with {} inputs and {} outputs.",
 	      b.hash(),
 	      b.header.height,
 	      b.inputs.len(),
 	      b.outputs.len());
-	try!(check_known(b.hash(), &mut ctx));
+	check_known(b.hash(), &mut ctx)?;
 
 	if !ctx.opts.intersects(SYNC) {
 		// in sync mode, the header has already been validated
-		try!(validate_header(&b.header, &mut ctx));
+		validate_header(&b.header, &mut ctx)?;
 	}
-	try!(validate_block(b, &mut ctx));
+	validate_block(b, &mut ctx)?;
 	debug!("Block at {} with hash {} is valid, going to save and append.",
 	       b.header.height,
 	       b.hash());
-	try!(add_block(b, &mut ctx));
-	// TODO a global lock should be set before that step or even earlier
+
+	ctx.lock.lock();
+	add_block(b, &mut ctx)?;
 	update_head(b, &mut ctx)
 }
 
-pub fn process_block_header(bh: &BlockHeader,
-                            store: Arc<ChainStore>,
-                            adapter: Arc<ChainAdapter>,
-                            opts: Options)
-                            -> Result<Option<Tip>, Error> {
-
-	let head = store.get_header_head().map_err(&Error::StoreErr)?;
-
-	let mut ctx = BlockContext {
-		opts: opts,
-		store: store,
-		adapter: adapter,
-		head: head,
-	};
+pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
 
 	info!("Starting validation pipeline for block header {} at {}.",
 	      bh.hash(),
 	      bh.height);
-	try!(check_known(bh.hash(), &mut ctx));
-	try!(validate_header(&bh, &mut ctx));
-	try!(add_block_header(bh, &mut ctx));
-	// TODO a global lock should be set before that step or even earlier
+	check_known(bh.hash(), &mut ctx)?;
+	validate_header(&bh, &mut ctx)?;
+	add_block_header(bh, &mut ctx)?;
+
+	ctx.lock.lock();
 	update_header_head(bh, &mut ctx)
 }
 

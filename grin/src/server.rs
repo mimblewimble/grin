@@ -45,13 +45,8 @@ pub struct Server {
 	evt_handle: reactor::Handle,
 	/// handle to our network server
 	p2p: Arc<p2p::Server>,
-	/// the reference copy of the current chain state
-	chain_head: Arc<Mutex<chain::Tip>>,
 	/// data store access
-	chain_store: Arc<chain::ChainStore>,
-	/// chain adapter to net, required for miner and anything that submits
-	/// blocks
-	chain_adapter: Arc<ChainToPoolAndNetAdapter>,
+	chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 }
@@ -84,27 +79,25 @@ impl Server {
 	pub fn future(mut config: ServerConfig, evt_handle: &reactor::Handle) -> Result<Server, Error> {
 		check_config(&mut config);
 
-		let (chain_store, head) = try!(store_head(&config));
-		let shared_head = Arc::new(Mutex::new(head));
-
-		let peer_store = Arc::new(p2p::PeerStore::new(config.db_root.clone())?);
-
-		let pool_adapter = Arc::new(PoolToChainAdapter::new(shared_head.clone(),
-		                                                    chain_store.clone()));
-		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(pool_adapter)));
+		let pool_adapter = Arc::new(PoolToChainAdapter::new());
+		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(pool_adapter.clone())));
 
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));
+		let shared_chain = Arc::new(chain::Chain::init(config.test_mode,
+		                                               config.db_root.clone(),
+		                                               chain_adapter.clone())?);
+		pool_adapter.set_chain(shared_chain.clone());
+
+		let peer_store = Arc::new(p2p::PeerStore::new(config.db_root.clone())?);
 		let net_adapter = Arc::new(NetToChainAdapter::new(config.test_mode,
-		                                                  shared_head.clone(),
-		                                                  chain_store.clone(),
-		                                                  chain_adapter.clone(),
+		                                                  shared_chain.clone(),
 		                                                  tx_pool.clone(),
 		                                                  peer_store.clone()));
-		let server =
+		let p2p_server =
 			Arc::new(p2p::Server::new(config.capabilities, config.p2p_config, net_adapter.clone()));
-		chain_adapter.init(server.clone());
+		chain_adapter.init(p2p_server.clone());
 
-		let seed = seed::Seeder::new(config.capabilities, peer_store.clone(), server.clone());
+		let seed = seed::Seeder::new(config.capabilities, peer_store.clone(), p2p_server.clone());
 		match config.seeding_type.clone() {
 			Seeding::None => {}
 			Seeding::List(seeds) => {
@@ -115,26 +108,23 @@ impl Server {
 			}
 		}
 
-		let sync = sync::Syncer::new(chain_store.clone(), server.clone());
+		let sync = sync::Syncer::new(shared_chain.clone(), p2p_server.clone());
 		net_adapter.start_sync(sync);
 
-		evt_handle.spawn(server.start(evt_handle.clone()).map_err(|_| ()));
+		evt_handle.spawn(p2p_server.start(evt_handle.clone()).map_err(|_| ()));
 
 		info!("Starting rest apis at: {}", &config.api_http_addr);
 
 		api::start_rest_apis(config.api_http_addr.clone(),
-		                     chain_store.clone(),
-		                     shared_head.clone(),
+		                     shared_chain.clone(),
 		                     tx_pool.clone());
 
 		warn!("Grin server started.");
 		Ok(Server {
 			config: config,
 			evt_handle: evt_handle.clone(),
-			p2p: server,
-			chain_head: shared_head,
-			chain_store: chain_store,
-			chain_adapter: chain_adapter,
+			p2p: p2p_server,
+			chain: shared_chain,
 			tx_pool: tx_pool,
 		})
 	}
@@ -153,11 +143,7 @@ impl Server {
 	/// Start mining for blocks on a separate thread. Relies on a toy miner,
 	/// mostly for testing.
 	pub fn start_miner(&self, config: MinerConfig) {
-		let mut miner = miner::Miner::new(config,
-		                              self.chain_head.clone(),
-		                              self.chain_store.clone(),
-		                              self.chain_adapter.clone(),
-		                              self.tx_pool.clone());
+		let mut miner = miner::Miner::new(config, self.chain.clone(), self.tx_pool.clone());
 		miner.set_debug_output_id(format!("Port {}",self.config.p2p_config.port));
 		thread::spawn(move || {
 			miner.run_loop();
@@ -165,9 +151,7 @@ impl Server {
 	}
 
 	pub fn head(&self) -> chain::Tip {
-		let head = self.chain_head.clone();
-		let h = head.lock().unwrap();
-		h.clone()
+		self.chain.head().unwrap()
 	}
 
 	/// Returns a set of stats about this server. This and the ServerStats structure
@@ -180,44 +164,6 @@ impl Server {
 			head: self.head(),
 		})
 	}
-}
-
-// Helper function to create the chain storage and check if it already has a
-// genesis block
-fn store_head(config: &ServerConfig)
-              -> Result<(Arc<chain::store::ChainKVStore>, chain::Tip), Error> {
-	let chain_store = try!(chain::store::ChainKVStore::new(config.db_root.clone())
-		.map_err(&Error::Store));
-
-	// check if we have a head in store, otherwise the genesis block is it
-	let head = match chain_store.head() {
-		Ok(tip) => tip,
-		Err(store::Error::NotFoundErr) => {
-			info!("No genesis block found, creating and saving one.");
-			let mut gen = core::genesis::genesis();
-			let diff = gen.header.difficulty.clone();
-			core::pow::pow_size(&mut gen.header,
-			                    diff,
-			                    config.mining_config.cuckoo_size as u32)
-				.unwrap();
-			chain_store.save_block(&gen).map_err(&Error::Store)?;
-			let tip = chain::types::Tip::new(gen.hash());
-			chain_store.save_head(&tip).map_err(&Error::Store)?;
-			info!("Saved genesis block with hash {}", gen.hash());
-			tip
-		}
-		Err(e) => return Err(Error::Store(e)),
-	};
-
-	let head = chain_store.head()?;
-	let head_header = chain_store.head_header()?;
-	info!("Starting server with head {} at {} and header head {} at {}",
-	      head.last_block_h,
-	      head.height,
-	      head_header.hash(),
-	      head_header.height);
-
-	Ok((Arc::new(chain_store), head))
 }
 
 fn check_config(config: &mut ServerConfig) {

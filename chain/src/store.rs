@@ -156,8 +156,8 @@ pub struct DifficultyIter {
 }
 
 impl DifficultyIter {
-  /// Build a new iterator using the provided chain store and starting from
-  /// the provided block hash.
+	/// Build a new iterator using the provided chain store and starting from
+	/// the provided block hash.
 	pub fn from(start: Hash, store: Arc<ChainStore>) -> DifficultyIter {
 		DifficultyIter {
 			next: start,

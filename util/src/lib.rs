@@ -26,6 +26,7 @@ pub use hex::*;
 // construction. This implementation will purposefully fail hard if not used
 // properly, for example if it's not initialized before being first used
 // (borrowed).
+#[derive(Clone)]
 pub struct OneTime<T> {
     inner: RefCell<Option<T>>,
 }

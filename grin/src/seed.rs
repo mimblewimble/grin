@@ -166,13 +166,18 @@ impl Seeder {
 	                    rx: mpsc::UnboundedReceiver<SocketAddr>)
 	                    -> Box<Future<Item = (), Error = ()>> {
 		let capab = self.capabilities;
+		let p2p_store = self.peer_store.clone();
 		let p2p_server = self.p2p.clone();
 
 		let listener = rx.for_each(move |peer_addr| {
 			debug!("New peer address to connect to: {}.", peer_addr);
 			let inner_h = h.clone();
 			if p2p_server.peer_count() < PEER_MAX_COUNT {
-				connect_and_req(capab, p2p_server.clone(), inner_h, peer_addr)
+				connect_and_req(capab,
+				                p2p_store.clone(),
+				                p2p_server.clone(),
+				                inner_h,
+				                peer_addr)
 			} else {
 				Box::new(future::ok(()))
 			}
@@ -222,6 +227,7 @@ pub fn predefined_seeds(addrs_str: Vec<String>)
 }
 
 fn connect_and_req(capab: p2p::Capabilities,
+                   peer_store: Arc<p2p::PeerStore>,
                    p2p: Arc<p2p::Server>,
                    h: reactor::Handle,
                    addr: SocketAddr)
@@ -234,6 +240,7 @@ fn connect_and_req(capab: p2p::Capabilities,
 				}
 				Err(e) => {
 					error!("Peer request error: {:?}", e);
+					peer_store.update_state(addr, p2p::State::Defunct);
 				}
 				_ => {}
 			}

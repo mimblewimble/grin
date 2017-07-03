@@ -14,13 +14,63 @@
 
 //! Base types that the block chain pipeline requires.
 
+use secp;
 use secp::pedersen::Commitment;
 
-use grin_store::Error;
+use grin_store as store;
 use core::core::{Block, BlockHeader, Output};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::ser;
+use grin_store;
+
+bitflags! {
+  /// Options for block validation
+  pub flags Options: u32 {
+    const NONE = 0b00000001,
+    /// Runs without checking the Proof of Work, mostly to make testing easier.
+    const SKIP_POW = 0b00000010,
+    /// Runs PoW verification with a lower cycle size.
+    const EASY_POW = 0b00000100,
+    /// Adds block while in syncing mode.
+    const SYNC = 0b00001000,
+  }
+}
+
+#[derive(Debug)]
+pub enum Error {
+	/// The block doesn't fit anywhere in our chain
+	Unfit(String),
+	/// Difficulty is too low either compared to ours or the block PoW hash
+	DifficultyTooLow,
+	/// Addition of difficulties on all previous block is wrong
+	WrongTotalDifficulty,
+	/// Size of the Cuckoo graph in block header doesn't match PoW requirements
+	WrongCuckooSize,
+	/// The proof of work is invalid
+	InvalidPow,
+	/// The block doesn't sum correctly or a tx signature is invalid
+	InvalidBlockProof(secp::Error),
+	/// Block time is too old
+	InvalidBlockTime,
+	/// Block height is invalid (not previous + 1)
+	InvalidBlockHeight,
+	/// Internal issue when trying to save or load data from store
+	StoreErr(grin_store::Error),
+	SerErr(ser::Error),
+	Other(String),
+}
+
+impl From<grin_store::Error> for Error {
+	fn from(e: grin_store::Error) -> Error {
+		Error::StoreErr(e)
+	}
+}
+impl From<ser::Error> for Error {
+	fn from(e: ser::Error) -> Error {
+		Error::SerErr(e)
+	}
+}
 
 /// The tip of a fork. A handle to the fork ancestry from its leaf in the
 /// blockchain tree. References the max height and the latest and previous
@@ -89,53 +139,53 @@ impl ser::Readable for Tip {
 /// blocks.
 pub trait ChainStore: Send + Sync {
 	/// Get the tip that's also the head of the chain
-	fn head(&self) -> Result<Tip, Error>;
+	fn head(&self) -> Result<Tip, store::Error>;
 
 	/// Block header for the chain head
-	fn head_header(&self) -> Result<BlockHeader, Error>;
+	fn head_header(&self) -> Result<BlockHeader, store::Error>;
 
 	/// Save the provided tip as the current head of our chain
-	fn save_head(&self, t: &Tip) -> Result<(), Error>;
+	fn save_head(&self, t: &Tip) -> Result<(), store::Error>;
 
 	/// Save the provided tip as the current head of the body chain, leaving the
 	/// header chain alone.
-	fn save_body_head(&self, t: &Tip) -> Result<(), Error>;
+	fn save_body_head(&self, t: &Tip) -> Result<(), store::Error>;
 
 	/// Gets a block header by hash
-	fn get_block(&self, h: &Hash) -> Result<Block, Error>;
+	fn get_block(&self, h: &Hash) -> Result<Block, store::Error>;
 
 	/// Gets a block header by hash
-	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error>;
+	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, store::Error>;
 
 	/// Checks whether a block has been been processed and saved
-	fn check_block_exists(&self, h: &Hash) -> Result<bool, Error>;
+	fn check_block_exists(&self, h: &Hash) -> Result<bool, store::Error>;
 
 	/// Save the provided block in store
-	fn save_block(&self, b: &Block) -> Result<(), Error>;
+	fn save_block(&self, b: &Block) -> Result<(), store::Error>;
 
 	/// Save the provided block header in store
-	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), Error>;
+	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), store::Error>;
 
 	/// Get the tip of the header chain
-	fn get_header_head(&self) -> Result<Tip, Error>;
+	fn get_header_head(&self) -> Result<Tip, store::Error>;
 
 	/// Save the provided tip as the current head of the block header chain
-	fn save_header_head(&self, t: &Tip) -> Result<(), Error>;
+	fn save_header_head(&self, t: &Tip) -> Result<(), store::Error>;
 
 	/// Gets the block header at the provided height
-	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error>;
+	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, store::Error>;
 
 	/// Gets an output by its commitment
-	fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, Error>;
+	fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, store::Error>;
 
 	/// Checks whether an output commitment exists and returns the output hash
-	fn has_output_commit(&self, commit: &Commitment) -> Result<Hash, Error>;
+	fn has_output_commit(&self, commit: &Commitment) -> Result<Hash, store::Error>;
 
 	/// Saves the provided block header at the corresponding height. Also check
 	/// the consistency of the height chain in store by assuring previous
 	/// headers
 	/// are also at their respective heights.
-	fn setup_height(&self, bh: &BlockHeader) -> Result<(), Error>;
+	fn setup_height(&self, bh: &BlockHeader) -> Result<(), store::Error>;
 }
 
 /// Bridge between the chain pipeline and the rest of the system. Handles

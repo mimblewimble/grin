@@ -254,9 +254,8 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
-	
 	match wallet_args.subcommand() {
-		
+
 		("receive", Some(receive_args)) => {
 			if let Some(f) = receive_args.value_of("input") {
 				let mut file = File::open(f).expect("Unable to open transaction file.");
@@ -264,12 +263,14 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				file.read_to_string(&mut contents).expect("Unable to read transaction file.");
 				wallet::receive_json_tx(&wallet_config, &key, contents.as_str()).unwrap();
 			} else {
-				info!("Starting the Grin wallet receiving daemon at {}...", wallet_config.api_http_addr);
+				info!("Starting the Grin wallet receiving daemon at {}...",
+				      wallet_config.api_http_addr);
 				let mut apis = api::ApiServer::new("/v1".to_string());
-				apis.register_endpoint("/receive".to_string(), wallet::WalletReceiver { 
-					key: key,
-					config: wallet_config
-				});
+				apis.register_endpoint("/receive".to_string(),
+				                       wallet::WalletReceiver {
+					                       key: key,
+					                       config: wallet_config,
+				                       });
 				apis.start(addr).unwrap_or_else(|e| {
 					error!("Failed to start Grin wallet receiver: {}.", e);
 				});
@@ -304,7 +305,7 @@ fn read_config() -> grin::ServerConfig {
 
 fn default_config() -> grin::ServerConfig {
 	grin::ServerConfig {
-    test_mode: true,
+		test_mode: true,
 		seeding_type: grin::Seeding::WebStatic,
 		..Default::default()
 	}

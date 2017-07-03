@@ -31,7 +31,7 @@ use p2p;
 use types::Error;
 
 pub struct Syncer {
-	chain_store: Arc<chain::ChainStore>,
+	chain: Arc<chain::Chain>,
 	p2p: Arc<p2p::Server>,
 
 	sync: Mutex<bool>,
@@ -41,9 +41,9 @@ pub struct Syncer {
 }
 
 impl Syncer {
-	pub fn new(chain_store: Arc<chain::ChainStore>, p2p: Arc<p2p::Server>) -> Syncer {
+	pub fn new(chain_ref: Arc<chain::Chain>, p2p: Arc<p2p::Server>) -> Syncer {
 		Syncer {
-			chain_store: chain_store,
+			chain: chain_ref,
 			p2p: p2p,
 			sync: Mutex::new(true),
 			last_header_req: Mutex::new(Instant::now() - Duration::from_secs(2)),
@@ -79,7 +79,7 @@ impl Syncer {
 		// as a peer with higher difficulty exists and we're not fully caught up
 		info!("Starting sync loop.");
 		loop {
-			let tip = self.chain_store.get_header_head()?;
+			let tip = self.chain.get_header_head()?;
 			// TODO do something better (like trying to get more) if we lose peers
 			let peer = self.p2p.most_work_peer().unwrap();
 
@@ -117,15 +117,15 @@ impl Syncer {
 	/// blocks
 	fn init_download(&self) -> Result<(), Error> {
 		// compare the header's head to the full one to see what we're missing
-		let header_head = self.chain_store.get_header_head()?;
-		let full_head = self.chain_store.head()?;
+		let header_head = self.chain.get_header_head()?;
+		let full_head = self.chain.head()?;
 		let mut blocks_to_download = self.blocks_to_download.lock().unwrap();
 
 		// go back the chain and insert for download all blocks we only have the
 		// head for
 		let mut prev_h = header_head.last_block_h;
 		while prev_h != full_head.last_block_h {
-			let header = self.chain_store.get_block_header(&prev_h)?;
+			let header = self.chain.get_block_header(&prev_h)?;
 			blocks_to_download.push(header.hash());
 			prev_h = header.previous;
 		}
@@ -174,7 +174,7 @@ impl Syncer {
 			*last_header_req = Instant::now();
 		}
 
-		let tip = self.chain_store.get_header_head()?;
+		let tip = self.chain.get_header_head()?;
 		let peer = self.p2p.most_work_peer();
 		let locator = self.get_locator(&tip)?;
 		if let Some(p) = peer {
@@ -221,7 +221,7 @@ impl Syncer {
 
 		// Iteratively travel the header chain back from our head and retain the
 		// headers at the wanted heights.
-		let mut header = self.chain_store.get_block_header(&tip.last_block_h)?;
+		let mut header = self.chain.get_block_header(&tip.last_block_h)?;
 		let mut locator = vec![];
 		while heights.len() > 0 {
 			if header.height == heights[0] {
@@ -229,7 +229,7 @@ impl Syncer {
 				locator.push(header.hash());
 			}
 			if header.height > 0 {
-				header = self.chain_store.get_block_header(&header.previous)?;
+				header = self.chain.get_block_header(&header.previous)?;
 			}
 		}
 		Ok(locator)

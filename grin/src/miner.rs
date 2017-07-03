@@ -26,7 +26,7 @@ use api;
 use core::consensus;
 use core::consensus::*;
 use core::core;
-use core::core::target::*;
+use core::core::target::Difficulty;
 use core::core::hash::{Hash, Hashed};
 use core::pow::cuckoo;
 use core::ser;
@@ -42,10 +42,7 @@ const MAX_TX: u32 = 5000;
 
 pub struct Miner {
 	config: MinerConfig,
-	chain_head: Arc<Mutex<chain::Tip>>,
-	chain_store: Arc<chain::ChainStore>,
-	/// chain adapter to net
-	chain_adapter: Arc<ChainToPoolAndNetAdapter>,
+	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 
 	//Just to hold the port we're on, so this miner can be identified
@@ -57,16 +54,12 @@ impl Miner {
 	/// Creates a new Miner. Needs references to the chain state and its
 	/// storage.
 	pub fn new(config: MinerConfig,
-	           chain_head: Arc<Mutex<chain::Tip>>,
-	           chain_store: Arc<chain::ChainStore>,
-	           chain_adapter: Arc<ChainToPoolAndNetAdapter>,
+	           chain_ref: Arc<chain::Chain>,
 	           tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>)
 	           -> Miner {
 		Miner {
 			config: config,
-			chain_head: chain_head,
-			chain_store: chain_store,
-			chain_adapter: chain_adapter,
+			chain: chain_ref,
 			tx_pool: tx_pool,
 			debug_output_id: String::from("none"),
 		}
@@ -88,12 +81,8 @@ impl Miner {
 		let mut coinbase = self.get_coinbase();
 		loop {
 			// get the latest chain state and build a block on top of it
-			let head: core::BlockHeader;
-			let mut latest_hash: Hash;
-			{
-				head = self.chain_store.head_header().unwrap();
-				latest_hash = self.chain_head.lock().unwrap().last_block_h;
-			}
+			let head = self.chain.head_header().unwrap();
+			let mut latest_hash = self.chain.head().unwrap().last_block_h;
 			let mut b = self.build_block(&head, coinbase.clone());
 
 			// look for a pow for at most 2 sec on the same block (to give a chance to new
@@ -128,9 +117,7 @@ impl Miner {
 					}
 				}
 				b.header.nonce += 1;
-				{
-					latest_hash = self.chain_head.lock().unwrap().last_block_h;
-				}
+				latest_hash = self.chain.head().unwrap().last_block_h;
 				iter_count += 1;
 
 				//Artificial slow down
@@ -149,18 +136,12 @@ impl Miner {
 				} else {
 					chain::NONE
 				};
-				let res = chain::process_block(&b,
-				                               self.chain_store.clone(),
-				                               self.chain_adapter.clone(),
-				                               opts);
+				let res = self.chain.process_block(&b, opts);
 				if let Err(e) = res {
 					error!("(Server ID: {}) Error validating mined block: {:?}",
 					self.debug_output_id, e);
-				} else if let Ok(Some(tip)) = res {
-					let chain_head = self.chain_head.clone();
-					let mut head = chain_head.lock().unwrap();
+				} else {
 					coinbase = self.get_coinbase();
-					*head = tip;
 				}
 			} else {
 				debug!("(Server ID: {}) No solution found after {} iterations, continuing...",
@@ -182,7 +163,7 @@ impl Miner {
 			now_sec += 1;
 		}
 
-		let diff_iter = chain::store::DifficultyIter::from(head.hash(), self.chain_store.clone());
+		let diff_iter = self.chain.difficulty_iter();
 		let difficulty = consensus::next_difficulty(diff_iter).unwrap();
 
 		let txs_box = self.tx_pool.read().unwrap().prepare_mineable_transactions(MAX_TX);

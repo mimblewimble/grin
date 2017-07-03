@@ -32,7 +32,7 @@ enum_from_primitive! {
   pub enum State {
     Healthy,
     Banned,
-    Dead,
+    Defunct,
   }
 }
 

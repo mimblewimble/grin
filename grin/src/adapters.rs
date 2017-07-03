@@ -33,10 +33,7 @@ use sync;
 /// implementations.
 pub struct NetToChainAdapter {
 	test_mode: bool,
-	/// the reference copy of the current chain state
-	chain_head: Arc<Mutex<chain::Tip>>,
-	chain_store: Arc<chain::ChainStore>,
-	chain_adapter: Arc<ChainToPoolAndNetAdapter>,
+	chain: Arc<chain::Chain>,
 	peer_store: Arc<PeerStore>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 
@@ -45,7 +42,7 @@ pub struct NetToChainAdapter {
 
 impl NetAdapter for NetToChainAdapter {
 	fn total_difficulty(&self) -> Difficulty {
-		self.chain_head.lock().unwrap().clone().total_difficulty
+		self.chain.total_difficulty()
 	}
 
 	fn transaction_received(&self, tx: core::Transaction) {
@@ -63,17 +60,10 @@ impl NetAdapter for NetToChainAdapter {
 		       b.hash());
 
 		// pushing the new block through the chain pipeline
-		let store = self.chain_store.clone();
-		let chain_adapter = self.chain_adapter.clone();
-		let res = chain::process_block(&b, store, chain_adapter, self.chain_opts());
+		let res = self.chain.process_block(&b, self.chain_opts());
 
-		// log errors and update the shared head reference on success
 		if let Err(e) = res {
 			debug!("Block {} refused by chain: {:?}", b.hash(), e);
-		} else if let Ok(Some(tip)) = res {
-			let chain_head = self.chain_head.clone();
-			let mut head = chain_head.lock().unwrap();
-			*head = tip;
 		}
 
 		if self.syncer.borrow().syncing() {
@@ -85,10 +75,7 @@ impl NetAdapter for NetToChainAdapter {
 		// try to add each header to our header chain
 		let mut added_hs = vec![];
 		for bh in bhs {
-			let store = self.chain_store.clone();
-			let chain_adapter = self.chain_adapter.clone();
-
-			let res = chain::process_block_header(&bh, store, chain_adapter, self.chain_opts());
+			let res = self.chain.process_block_header(&bh, self.chain_opts());
 			match res {
 				Ok(_) => {
 					added_hs.push(bh.hash());
@@ -122,10 +109,10 @@ impl NetAdapter for NetToChainAdapter {
 		}
 
 		// go through the locator vector and check if we know any of these headers
-		let known = self.chain_store.get_block_header(&locator[0]);
+		let known = self.chain.get_block_header(&locator[0]);
 		let header = match known {
 			Ok(header) => header,
-			Err(store::Error::NotFoundErr) => {
+			Err(chain::Error::StoreErr(store::Error::NotFoundErr)) => {
 				return self.locate_headers(locator[1..].to_vec());
 			}
 			Err(e) => {
@@ -138,10 +125,10 @@ impl NetAdapter for NetToChainAdapter {
 		let hh = header.height;
 		let mut headers = vec![];
 		for h in (hh + 1)..(hh + (p2p::MAX_BLOCK_HEADERS as u64)) {
-			let header = self.chain_store.get_header_by_height(h);
+			let header = self.chain.get_header_by_height(h);
 			match header {
 				Ok(head) => headers.push(head),
-				Err(store::Error::NotFoundErr) => break,
+				Err(chain::Error::StoreErr(store::Error::NotFoundErr)) => break,
 				Err(e) => {
 					error!("Could not build header locator: {:?}", e);
 					return vec![];
@@ -153,8 +140,7 @@ impl NetAdapter for NetToChainAdapter {
 
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
-		let store = self.chain_store.clone();
-		let b = store.get_block(&h);
+		let b = self.chain.get_block(&h);
 		match b {
 			Ok(b) => Some(b),
 			_ => None,
@@ -207,17 +193,13 @@ impl NetAdapter for NetToChainAdapter {
 
 impl NetToChainAdapter {
 	pub fn new(test_mode: bool,
-	           chain_head: Arc<Mutex<chain::Tip>>,
-	           chain_store: Arc<chain::ChainStore>,
-	           chain_adapter: Arc<ChainToPoolAndNetAdapter>,
+	           chain_ref: Arc<chain::Chain>,
 	           tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	           peer_store: Arc<PeerStore>)
 	           -> NetToChainAdapter {
 		NetToChainAdapter {
 			test_mode: test_mode,
-			chain_head: chain_head,
-			chain_store: chain_store,
-			chain_adapter: chain_adapter,
+			chain: chain_ref,
 			peer_store: peer_store,
 			tx_pool: tx_pool,
 			syncer: OneTime::new(),
@@ -283,63 +265,26 @@ impl ChainToPoolAndNetAdapter {
 }
 
 /// Implements the view of the blockchain required by the TransactionPool to
-/// operate. This is mostly getting information on unspent outputs in a
-/// manner consistent with the chain state.
+/// operate. Mostly needed to break any direct lifecycle or implementation
+/// dependency between the pool and the chain.
 #[derive(Clone)]
 pub struct PoolToChainAdapter {
-	chain_head: Arc<Mutex<chain::Tip>>,
-	chain_store: Arc<chain::ChainStore>,
-}
-
-macro_rules! none_err {
-  ($trying:expr) => {{
-    let tried = $trying;
-    if let Err(_) = tried {
-      return None;
-    }
-    tried.unwrap()
-  }}
+	chain: OneTime<Arc<chain::Chain>>,
 }
 
 impl PoolToChainAdapter {
 	/// Create a new pool adapter
-	pub fn new(chain_head: Arc<Mutex<chain::Tip>>,
-	           chain_store: Arc<chain::ChainStore>)
-	           -> PoolToChainAdapter {
-		PoolToChainAdapter {
-			chain_head: chain_head,
-			chain_store: chain_store,
-		}
+	pub fn new() -> PoolToChainAdapter {
+		PoolToChainAdapter { chain: OneTime::new() }
+	}
+
+	pub fn set_chain(&self, chain_ref: Arc<chain::Chain>) {
+		self.chain.init(chain_ref);
 	}
 }
 
 impl pool::BlockChain for PoolToChainAdapter {
 	fn get_unspent(&self, output_ref: &Commitment) -> Option<Output> {
-		// TODO use an actual UTXO tree
-		// in the meantime doing it the *very* expensive way:
-		//   1. check the output exists
-		//   2. run the chain back from the head to check it hasn't been spent
-		if let Ok(out) = self.chain_store.get_output_by_commit(output_ref) {
-			let mut block_h: Hash;
-			{
-				let chain_head = self.chain_head.clone();
-				let head = chain_head.lock().unwrap();
-				block_h = head.last_block_h;
-			}
-			loop {
-				let b = none_err!(self.chain_store.get_block(&block_h));
-				for input in b.inputs {
-					if input.commitment() == *output_ref {
-						return None;
-					}
-				}
-				if b.header.height == 1 {
-					return Some(out);
-				} else {
-					block_h = b.header.previous;
-				}
-			}
-		}
-		None
+		self.chain.borrow().get_unspent(output_ref)
 	}
 }

@@ -34,11 +34,12 @@ extern crate grin_core as core;
 extern crate grin_store;
 extern crate secp256k1zkp as secp;
 
+mod chain;
 pub mod pipe;
 pub mod store;
 pub mod types;
 
 // Re-export the base interface
 
-pub use types::{ChainStore, Tip, ChainAdapter};
-pub use pipe::{SYNC, NONE, EASY_POW, process_block, process_block_header, Options, Error};
+pub use chain::Chain;
+pub use types::{ChainStore, Tip, ChainAdapter, SYNC, NONE, SKIP_POW, EASY_POW, Options, Error};
