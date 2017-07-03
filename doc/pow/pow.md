@@ -28,12 +28,14 @@ further technical details.
 
 ## Cycles in a Graph
 
-Cuckoo Cycles is an algorithm meant to detect cycles in a random bipartite graphs graph of N nodes and M edges.
-In plainer terms, a Node is simply an element storing a value, an Edge is a line connecting two nodes,
-and a graph is bipartite when it's split into two groupings. The simple
-graph below, with values placed at random, denotes just such a graph, with 8 Nodes storing 8 values 
-divided into 2 groups (one row on top and one row on the bottom,) and zero Edges (i.e. no lines
-connecting any nodes.) 
+Cuckoo Cycles is an algorithm meant to detect cycles in a bipartite graph of N nodes 
+and M edges. In plainer terms, a bipartite graph is one in which nodes are separated into
+two separate groupings. In the case of the Cuckoo hashtable in Cuckoo Cycles, one side of the graph
+is an array numbered with odd indices (up to the size of the graph), and the other numbered with even
+indices. A node is simply a numbered 'space' on either side of the Cuckoo Table, and an Edge is a 
+line connecting two nodes on opposite sides. The simple graph below, denotes just such a graph, 
+with 4 nodes in the 'even' side (top), 4 nodes on the odd side (bottom) and zero Edges 
+(i.e. no lines connecting any nodes.) 
 
 ![alt text](images/cuckoo_base_numbered_minimal.png)
 
@@ -43,42 +45,46 @@ Let's throw a few Edges into the graph now, randomly:
 
 ![alt text](images/cuckoo_base_numbered_few_edges.png)
 
-*8 Nodes with 4 Edges*
+*8 Nodes with 4 Edges, no solution*
 
 We now have a randomly-generated graph with 8 nodes (N) and 4 edges (M), or an NxM graph where 
 N=8 and M=4. Our basic Proof-of-Work is now concerned with finding 'cycles' of a certain length 
-within this random graph, or, put simply, a path of connected nodes. So, if we were looking
-for a cycle of length 3 (a path connecting 3 nodes), one can be detected in this graph, 
-i.e. the path running from 5 to 6 to 3:
-
-![alt text](images/cuckoo_base_numbered_few_edges_cycle.png)
-
-*Cycle found*
+within this random graph, or, put simply, a series of connected nodes starting and ending on the 
+same node. So, if we were looking for a cycle of length 4 (a path connecting 4 nodes, starting
+and ending on the same node), one cannot be detected in this graph.
 
 Adjusting the number of Edges M relative to the number of Nodes N changes the difficulty of the 
 cycle-finding problem, and the probability that a cycle exists in the current graph. For instance,
-if our POW problem were to find a cycle of length 5 in the graph, the current difficulty of 5/8 (M/N)
-would mean that all 4 edges would need to be randomly generated in a perfect cycle in order for
-there to be a solution. If you increase the number of edges relative to the number of nodes,
-you increase the probability that a solution exists:
+if our POW problem were to find a cycle of length 4 in the graph, the current difficulty of 4/8 (M/N)
+would mean that all 4 edges would need to be randomly generated in a perfect cycle (from 0-5-4-1-0)
+in order for there to be a solution. 
+
+Let's add a few more edges, again at random:
+
+![alt text](images/cuckoo_base_numbered_few_edges_cycle.png)
+
+*Cycle Found from 0-5-4-1-0*
+
+If you increase the number of edges relative to the number 
+of nodes, you increase the probability that a solution exists. With a few more edges added to the graph above,
+a cycle of length 4 has appeared from 0-5-4-1-0, and the graph has a solution.
+
+Thus, modifying the ratio M/N changes the number of expected occurrences of a cycle within a randomly
+generated graph. 
+
+For a small graph such as the one above, determining whether a cycle of a certain length exists 
+is trivial. But as the graphs get larger, detecting such cycles becomes more difficult. For instance,
+does this graph have a cycle of length 8, i.e. 8 connected nodes starting and ending on the same node?
 
 ![alt text](images/cuckoo_base_numbered_many_edges.png)
 
-*MxN = 9x8  - Cycle of length 5 found*
-
-So modifying the ratio M/N changes the number of expected occurrences of a cycle within a randomly
-generated graph. 
-
-For a small graph such as the one above, determining whether a cycle of a certain length exists is trivial. 
-But as the graphs get larger, detecting such cycles becomes more difficult. For instance, does this
- graph have a cycle of length 7, i.e. 7 directly connected nodes?
-
-![alt text](images/cuckoo_base_numbered_many.png)
-
 *Meat-space Cycle Detection exercise*
 
-The answer is left as an exercise to the reader, but the overall takeaway is that detecting such cycles becomes
-a more difficult exercise as the size of a graph grows. It also becomes easier as M/N becomes larger, i.e. you add more edges relative to the number of nodes in a graph. 
+The answer is left as an exercise to the reader, but the overall takeaways are: 
+
+* Detecting cycles in a graph becomes more difficult exercise as the size of a graph grows. 
+* The probability of a cycle of a given length in a graph increases as M/N becomes larger,
+i.e. you add more edges relative to the number of nodes in a graph. 
 
 ## Cuckoo Cycles
 
@@ -91,10 +97,12 @@ variants on the algorithm that make various speed/memory tradeoffs, again beyond
 However, there are a few details following from the above that we need to keep in mind before going on to more 
 technical aspects of Grin's proof-of-work.
  
-* The 'random' graphs demonstrated above are not actually random but are generated by putting nodes through a
-seeded hashing function, SIPHASH, generating two potential locations (one in each array) for each node in the graph.
-The seed will come from a hash of a block header, outlined further below. 
-* The 'Proof' created by this algorithm is a set of nonces that generate the cycle, which can be trivially validated by other nodes.
+* The 'random' edges in the graph demonstrated above are not actually random but are generated by 
+putting nonces (0..N) through a seeded hash function, SIPHASH. This function generates 2  
+locations for each nonce, one on either side of the table, and repesents them as an edge between them.
+The seed for this function is based on a hash of a block header, outlined further below.
+* The 'Proof' created by this algorithm is a set of nonces that generate a cycle of length 42, 
+which can be trivially validated by other peers.
 * Two main parameters, as explained above, are passed into the Cuckoo Cycle algorithm that affect the probability of a solution, and the
 time it takes to search the graph for a solution: 
     * The M/N ratio outlined above, which controls the number of edges relative to the size of the graph
@@ -157,7 +165,7 @@ valid Proofs-of-Work to create the latest block in the chain. The following is a
             * The new block header is hashed to create a hash value
             * The cuckoo graph generator is initialised, which accepts as parameters:
                 * The hash of the potential block header, which is to be used as the key to a SIPHASH function
-                that will generate pairs of locations for each node in the graph. 
+                that will generate pairs of locations for each element in a set of nonces 0..N in the graph. 
                 * The size of the graph (a consensus value).
                 * An easiness value, (a consensus value) representing the M/N ratio described above denoting the probability
                 of a solution appearing in the graph
