@@ -7,12 +7,12 @@ This document is meant to outline, at a level suitable for someone without prior
 the algorithms and processes currently involved in Grin's Proof-of-Work system. We'll start
 with a general overview of cycles in a graph and the Cuckoo Cycle algorithm which forms the 
 basis of Grin's proof-of-work. We'll then move on to Grin-specific details, which will outline
-the other systems that combine with Cuckoo Cycles to form the entirety of mining in Grin.
+the other systems that combine with Cuckoo Cycle to form the entirety of mining in Grin.
 
 Please note that Grin is currently under active development, and any and all of this is subject to
 (and will) change before a general release.
 
-# Graphs and Cuckoo Cycles
+# Graphs and Cuckoo Cycle
 
 Grin's basic Proof-of-Work algorithm is called Cuckoo Cycle, which is specifically designed
 to be resistant to Bitcoin style hardware arms-races. It is primarily a memory bound algorithm,
@@ -28,12 +28,14 @@ further technical details.
 
 ## Cycles in a Graph
 
-Cuckoo Cycles is an algorithm meant to detect cycles in a random bipartite graphs graph of N nodes and M edges.
-In plainer terms, a Node is simply an element storing a value, an Edge is a line connecting two nodes,
-and a graph is bipartite when it's split into two groupings. The simple
-graph below, with values placed at random, denotes just such a graph, with 8 Nodes storing 8 values 
-divided into 2 groups (one row on top and one row on the bottom,) and zero Edges (i.e. no lines
-connecting any nodes.) 
+Cuckoo Cycle is an algorithm meant to detect cycles in a bipartite graph of N nodes 
+and M edges. In plainer terms, a bipartite graph is one in which edges (i.e. lines connecting nodes)
+go only between 2 separate groups of nodes. In the case of the Cuckoo hashtable in Cuckoo Cycle, 
+one side of the graph is an array numbered with odd indices (up to the size of the graph), and the other is numbered with even
+indices. A node is simply a numbered 'space' on either side of the Cuckoo Table, and an Edge is a 
+line connecting two nodes on opposite sides. The simple graph below denotes just such a graph, 
+with 4 nodes on the 'even' side (top), 4 nodes on the odd side (bottom) and zero Edges 
+(i.e. no lines connecting any nodes.) 
 
 ![alt text](images/cuckoo_base_numbered_minimal.png)
 
@@ -43,46 +45,50 @@ Let's throw a few Edges into the graph now, randomly:
 
 ![alt text](images/cuckoo_base_numbered_few_edges.png)
 
-*8 Nodes with 4 Edges*
+*8 Nodes with 4 Edges, no solution*
 
 We now have a randomly-generated graph with 8 nodes (N) and 4 edges (M), or an NxM graph where 
 N=8 and M=4. Our basic Proof-of-Work is now concerned with finding 'cycles' of a certain length 
-within this random graph, or, put simply, a path of connected nodes. So, if we were looking
-for a cycle of length 3 (a path connecting 3 nodes), one can be detected in this graph, 
-i.e. the path running from 5 to 6 to 3:
-
-![alt text](images/cuckoo_base_numbered_few_edges_cycle.png)
-
-*Cycle found*
+within this random graph, or, put simply, a series of connected nodes starting and ending on the 
+same node. So, if we were looking for a cycle of length 4 (a path connecting 4 nodes, starting
+and ending on the same node), one cannot be detected in this graph.
 
 Adjusting the number of Edges M relative to the number of Nodes N changes the difficulty of the 
 cycle-finding problem, and the probability that a cycle exists in the current graph. For instance,
-if our POW problem were to find a cycle of length 5 in the graph, the current difficulty of 5/8 (M/N)
-would mean that all 4 edges would need to be randomly generated in a perfect cycle in order for
-there to be a solution. If you increase the number of edges relative to the number of nodes,
-you increase the probability that a solution exists:
+if our POW problem were concerned with finding a cycle of length 4 in the graph, the current difficulty of 4/8 (M/N)
+would mean that all 4 edges would need to be randomly generated in a perfect cycle (from 0-5-4-1-0)
+in order for there to be a solution. 
+
+Let's add a few more edges, again at random:
+
+![alt text](images/cuckoo_base_numbered_few_edges_cycle.png)
+
+*Cycle Found from 0-5-4-1-0*
+
+If you increase the number of edges relative to the number 
+of nodes, you increase the probability that a solution exists. With a few more edges added to the graph above,
+a cycle of length 4 has appeared from 0-5-4-1-0, and the graph has a solution.
+
+Thus, modifying the ratio M/N changes the number of expected occurrences of a cycle for a graph with 
+randomly generated edges. 
+
+For a small graph such as the one above, determining whether a cycle of a certain length exists 
+is trivial. But as the graphs get larger, detecting such cycles becomes more difficult. For instance,
+does this graph have a cycle of length 8, i.e. 8 connected nodes starting and ending on the same node?
 
 ![alt text](images/cuckoo_base_numbered_many_edges.png)
 
-*MxN = 9x8  - Cycle of length 5 found*
-
-So modifying the ratio M/N changes the number of expected occurrences of a cycle within a randomly
-generated graph. 
-
-For a small graph such as the one above, determining whether a cycle of a certain length exists is trivial. 
-But as the graphs get larger, detecting such cycles becomes more difficult. For instance, does this
- graph have a cycle of length 7, i.e. 7 directly connected nodes?
-
-![alt text](images/cuckoo_base_numbered_many.png)
-
 *Meat-space Cycle Detection exercise*
 
-The answer is left as an exercise to the reader, but the overall takeaway is that detecting such cycles becomes
-a more difficult exercise as the size of a graph grows. It also becomes easier as M/N becomes larger, i.e. you add more edges relative to the number of nodes in a graph. 
+The answer is left as an exercise to the reader, but the overall takeaways are: 
 
-## Cuckoo Cycles
+* Detecting cycles in a graph becomes more difficult exercise as the size of a graph grows. 
+* The probability of a cycle of a given length in a graph increases as M/N becomes larger,
+i.e. you add more edges relative to the number of nodes in a graph. 
 
-The Cuckoo Cycles algorithm is a specialised algorithm designed to solve exactly this problem, and it does
+## Cuckoo Cycle
+
+The Cuckoo Cycle algorithm is a specialised algorithm designed to solve exactly this problem, and it does
 so by inserting values into a structure called a 'Cuckoo Hashtable' according to a hash which maps nodes
 into possible locations in two separate arrays. This document won't go into detail on the base algorithm, as
 it's outlined plainly enough in section 5 of the 
@@ -91,14 +97,19 @@ variants on the algorithm that make various speed/memory tradeoffs, again beyond
 However, there are a few details following from the above that we need to keep in mind before going on to more 
 technical aspects of Grin's proof-of-work.
  
-* The 'random' graphs demonstrated above are not actually random but are generated by putting nodes through a
-seeded hashing function, SIPHASH, generating two potential locations (one in each array) for each node in the graph.
-The seed will come from a hash of a block header, outlined further below. 
-* The 'Proof' created by this algorithm is a set of nonces that generate the cycle, which can be trivially validated by other nodes.
+* The 'random' edges in the graph demonstrated above are not actually random but are generated by 
+putting edge indices (0..N) through a seeded hash function, SIPHASH. Each edge index is put through the 
+SIPHASH function twice to create two edge endpoints, with the first input value being 2 * edge_index, 
+and the second 2 * edge_index+1. The seed for this function is based on a hash of a block header, 
+outlined further below.
+* The 'Proof' created by this algorithm is a set of nonces that generate a cycle of length 42, 
+which can be trivially validated by other peers.
 * Two main parameters, as explained above, are passed into the Cuckoo Cycle algorithm that affect the probability of a solution, and the
 time it takes to search the graph for a solution: 
-    * The M/N ratio outlined above, which controls the number of edges relative to the size of the graph
+    * The M/N ratio outlined above, which controls the number of edges relative to the size of the graph.
+    Cuckoo Cycle fixes M at N/2, which limits the number of cycles to a few at most.
     * The size of the graph itself
+ 
 
 How these parameters interact in practice is looked at in more [detail below](#mining-loop-difficulty-control-and-timing).
 
@@ -106,7 +117,7 @@ Now, (hopefully) armed with a basic understanding of what the Cuckoo Cycle algor
 
 # Mining in Grin
 
-The Cuckoo Cycle outlined above forms the basis of Grin's mining process, however Grin uses Cuckoo Cycles in tandem with several other systems to create a Proof-of-Work.
+The Cuckoo Cycle outlined above forms the basis of Grin's mining process, however Grin uses Cuckoo Cycle in tandem with several other systems to create a Proof-of-Work.
 
 ### Additional Difficulty Control
 
@@ -157,7 +168,7 @@ valid Proofs-of-Work to create the latest block in the chain. The following is a
             * The new block header is hashed to create a hash value
             * The cuckoo graph generator is initialised, which accepts as parameters:
                 * The hash of the potential block header, which is to be used as the key to a SIPHASH function
-                that will generate pairs of locations for each node in the graph. 
+                that will generate pairs of locations for each element in a set of nonces 0..N in the graph. 
                 * The size of the graph (a consensus value).
                 * An easiness value, (a consensus value) representing the M/N ratio described above denoting the probability
                 of a solution appearing in the graph
@@ -183,7 +194,8 @@ Controlling the overall difficulty of the mining loop requires finding a balance
   chance to have a solution as a larger graph with a lower easiness value.
 * The 'Easiness' consensus value, or the M/N ratio of the graph expressed as a percentage. The higher this value, the more likely
   it is a generated graph will contain a solution. In tandem with the above, the larger the graph, the more solutions 
-  it will contain for a given easiness value.
+  it will contain for a given easiness value. The Cuckoo Cycle implementations fix this M to N/2, giving
+  a ratio of 50%
 * The evolving network difficulty hash.  
 
 These values need to be carefully tweaked in order for the mining algorithm to find the right balance between the 
@@ -191,14 +203,14 @@ cuckoo graph size and the evolving difficulty. The POW needs to remain mostly Cu
 reasonably short block times that allow new transactions to be quickly processed.
 
 If the graph size is too low and the easiness too high, for instance, then many cuckoo cycle solutions can easily be 
-found for a given block, and the POW will start to favour those who can hash faster, precisely what Cuckoo Cycles is 
+found for a given block, and the POW will start to favour those who can hash faster, precisely what Cuckoo Cycle is 
 trying to avoid. If the graph is too large and easiness too low, however, then it can potentially take any solver a 
 long time to find a solution in a single graph, well outside a window in which you'd like to stop to collect new
 transactions.
 
-These values are currently set to 2^12 for the graph size and 50% for the easiness value, however they are only
-temporary values for testing. The current miner implementation is very unoptimised, and the graph size will need
-to be changed as faster and more optimised Cuckoo Cycle algorithms are put in place.
+These values are currently set to 2^12 for the graph size and 50% (as fixed by Cuckoo Cycle) for the easiness value, 
+however the size is only a temporary values for testing. The current miner implementation is very unoptimised, 
+and the graph size will need to be changed as faster and more optimised Cuckoo Cycle algorithms are put in place.
 
 ### Pooling Capability
 
