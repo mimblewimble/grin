@@ -31,10 +31,10 @@ further technical details.
 Cuckoo Cycles is an algorithm meant to detect cycles in a bipartite graph of N nodes 
 and M edges. In plainer terms, a bipartite graph is one in which nodes are separated into
 two separate groupings. In the case of the Cuckoo hashtable in Cuckoo Cycles, one side of the graph
-is an array numbered with odd indices (up to the size of the graph), and the other numbered with even
+is an array numbered with odd indices (up to the size of the graph), and the other is numbered with even
 indices. A node is simply a numbered 'space' on either side of the Cuckoo Table, and an Edge is a 
 line connecting two nodes on opposite sides. The simple graph below, denotes just such a graph, 
-with 4 nodes in the 'even' side (top), 4 nodes on the odd side (bottom) and zero Edges 
+with 4 nodes on the 'even' side (top), 4 nodes on the odd side (bottom) and zero Edges 
 (i.e. no lines connecting any nodes.) 
 
 ![alt text](images/cuckoo_base_numbered_minimal.png)
@@ -55,7 +55,7 @@ and ending on the same node), one cannot be detected in this graph.
 
 Adjusting the number of Edges M relative to the number of Nodes N changes the difficulty of the 
 cycle-finding problem, and the probability that a cycle exists in the current graph. For instance,
-if our POW problem were to find a cycle of length 4 in the graph, the current difficulty of 4/8 (M/N)
+if our POW problem were concerned with finding a cycle of length 4 in the graph, the current difficulty of 4/8 (M/N)
 would mean that all 4 edges would need to be randomly generated in a perfect cycle (from 0-5-4-1-0)
 in order for there to be a solution. 
 
@@ -69,8 +69,8 @@ If you increase the number of edges relative to the number
 of nodes, you increase the probability that a solution exists. With a few more edges added to the graph above,
 a cycle of length 4 has appeared from 0-5-4-1-0, and the graph has a solution.
 
-Thus, modifying the ratio M/N changes the number of expected occurrences of a cycle within a randomly
-generated graph. 
+Thus, modifying the ratio M/N changes the number of expected occurrences of a cycle for a graph with 
+randomly generated edges. 
 
 For a small graph such as the one above, determining whether a cycle of a certain length exists 
 is trivial. But as the graphs get larger, detecting such cycles becomes more difficult. For instance,
