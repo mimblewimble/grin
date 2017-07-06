@@ -77,7 +77,6 @@ pub trait Committed {
 	fn overage(&self) -> i64;
 }
 
-
 /// Proof of work
 #[derive(Copy)]
 pub struct Proof(pub [u32; PROOFSIZE]);

@@ -114,6 +114,7 @@ pub struct MinerConfig {
 	/// Size of Cuckoo Cycle to mine on
 	pub cuckoo_size: u32,
 
+
 }
 
 impl Default for ServerConfig {
