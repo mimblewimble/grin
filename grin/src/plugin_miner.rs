@@ -51,8 +51,8 @@ impl MiningWorker for PluginMiner {
 		//First, load and query the plugins in the given directory
     	let mut plugin_manager = CuckooPluginManager::new().unwrap();
     	let result=plugin_manager.load_plugin_dir(String::from(format!("{}/deps", exe_path))).expect("");
-    	//Get a list of installed plugins and capabilities
-    	let caps = plugin_manager.get_available_plugins().unwrap();
+    	//Get a list of installed plugins and capabilities.. filtering for the one we want, if any
+    	let caps = plugin_manager.get_available_plugins("simple_12").unwrap();
 		//Select a plugin somehow, and insert it into the miner configuration
     	//being created below
     

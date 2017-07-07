@@ -108,10 +108,10 @@ impl Miner {
 				let pow_hash = b.hash();
 				if let Ok(proof) = miner.mine(&pow_hash[..]) {
 					let proof_diff=proof.to_difficulty();
-					debug!("(Server ID: {}) Header difficulty is: {}, Proof difficulty is: {}",
+					/*debug!("(Server ID: {}) Header difficulty is: {}, Proof difficulty is: {}",
 					self.debug_output_id,
 					b.header.difficulty,
-					proof_diff);
+					proof_diff);*/
 
 					if proof_diff >= b.header.difficulty {
 						sol = Some(proof);
