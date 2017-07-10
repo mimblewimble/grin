@@ -52,7 +52,7 @@ extern crate cuckoo_miner;
 mod adapters;
 mod miner;
 #[cfg(feature = "use-cuckoo-miner")]
-mod plugin_miner;
+mod plugin;
 mod server;
 mod seed;
 mod sync;

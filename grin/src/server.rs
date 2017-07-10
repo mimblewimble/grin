@@ -42,7 +42,7 @@ use sync;
 use types::*;
 
 #[cfg(feature = "use-cuckoo-miner")]
-use plugin_miner::PluginMiner;
+use plugin::PluginMiner;
 
 /// Grin server holding internal structures.
 pub struct Server {

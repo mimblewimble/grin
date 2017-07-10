@@ -22,6 +22,7 @@ use std::env;
 use core::pow::cuckoo;
 use core::pow::cuckoo::Error;
 use core::pow::MiningWorker;
+use core::consensus::TEST_SIZESHIFT;
 
 use core::core::Proof;
 
@@ -40,7 +41,11 @@ pub struct PluginMiner {
 
 impl MiningWorker for PluginMiner {
 
-	// Initialise the plugin parameters for now
+	/// This will initialise a plugin according to what's currently
+	/// included in CONSENSUS::TEST_SIZESHIFT, just using the edgetrim
+	/// version of the miner for now, though this should become
+	/// configurable somehow
+
 	fn new(ease: u32, sizeshift: u32) -> Self {
 
 		//Get directory of executable
@@ -49,18 +54,31 @@ impl MiningWorker for PluginMiner {
 		let exe_path=exe_path.to_str().unwrap();
 
 		//First, load and query the plugins in the given directory
+		//These should all be stored in 'deps' at the moment relative, though
+		//to the executable path, though they should appear somewhere else 
+		//when packaging is more//thought out 
+
     	let mut plugin_manager = CuckooPluginManager::new().unwrap();
     	let result=plugin_manager.load_plugin_dir(String::from(format!("{}/deps", exe_path))).expect("");
-    	//Get a list of installed plugins and capabilities.. filtering for the one we want, if any
-    	let caps = plugin_manager.get_available_plugins("simple_12").unwrap();
-		//Select a plugin somehow, and insert it into the miner configuration
-    	//being created below
+
+    	//Get a list of installed plugins and capabilities.. filtering for the one we want
+		//Just use the baseline edgetrim (i.e. cuckoo_miner.cpp) for now
+		//You need to change the value TEST_SIZESHIFT in consensus.rs for now to modify this,
+		//so that blocks mined in this version will validate
+
+		let filter = format!("simple_{}", TEST_SIZESHIFT);
+
+    	let caps = plugin_manager.get_available_plugins(&filter).unwrap();
+		//insert it into the miner configuration being created below
     
     	let mut config = CuckooMinerConfig::new();
-		//Just load the first one for now, should be 'cuckoo12'
-        println!("Mining using plugin: {}", caps[0].full_path.clone());
+
+        info!("Mining using plugin: {}", caps[0].full_path.clone());
     	config.plugin_full_path = caps[0].full_path.clone();
-		config.num_threads=1;
+		//Set threads, should read this from a configuration file
+		//somewhere or query the system to determine a default
+		config.num_threads=4;
+		//let plugin decide number of trims
 		config.num_trims=0;
 
 		//this will load the associated plugin
@@ -71,7 +89,10 @@ impl MiningWorker for PluginMiner {
 			last_solution: CuckooMinerSolution::new(),
 		}
 	}
-	
+
+	/// And simply calls the mine function of the loaded plugin
+	/// returning whether a solution was found and the solution itself
+
 	fn mine(&mut self, header: &[u8]) -> Result<Proof, cuckoo::Error> {
         let result = self.miner.mine(&header, &mut self.last_solution).unwrap();
 		if result == true {

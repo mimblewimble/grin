@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Mining plugin manager, using the cuckoo-miner crate to provide
+//! a mining worker implementation
+//!
+
 use rand::{thread_rng, Rng};
 use std::cmp::min;
 use std::net::SocketAddr;
