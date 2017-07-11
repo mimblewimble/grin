@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2017 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,28 +14,168 @@
 
 //! Configuration file management
 
+use std::env;
+use std::io::Read;
+use std::path::PathBuf;
+use std::fs::File;
+
 use toml;
 use grin::{ServerConfig,
            MinerConfig};
 use wallet::WalletConfig;
 
-/// Going to hold all of the various configuration types 
-/// separately for now, then put them together as a single
-/// ServerConfig object afterwards. This is to flatten 
-/// out the configuration file into logical sections,
-/// as they tend to be quite nested in the code
-/// Most structs optional, as they may or may not
-/// be needed depending on what's being run
+use types::{ConfigMembers,
+            GlobalConfig,
+            ConfigError};
 
-#[derive(Debug, Deserialize)]
-pub struct GlobalConfig {
-    server: Option<ServerConfig>,
-    mining: Option<MinerConfig>,
-    wallet: Option<WalletConfig>
+/// The default file name to use when trying to derive
+/// the config file location
+
+const CONFIG_FILE_NAME: &'static str = "grin.toml";
+const GRIN_HOME: &'static str = ".grin";
+
+/// Returns the defaults, as strewn throughout the code
+
+impl Default for ConfigMembers {
+	fn default() -> ConfigMembers {
+        ConfigMembers {
+            server: ServerConfig::default(),
+            mining: Some(MinerConfig::default()),
+            //wallet: Some(WalletConfig::default()),
+	    }
+    }
+}
+
+impl Default for GlobalConfig {
+	fn default() -> GlobalConfig{
+        GlobalConfig {
+            config_file_path: None,
+            using_config_file: false,
+            members: Some(ConfigMembers::default())
+	    }
+    }
+}
+
+impl GlobalConfig {
+
+    /// Need to decide on rules where to read the config file from,
+    /// but will take a stab at logic for now
+
+    fn derive_config_location(&mut self) -> Result<(), ConfigError> {
+        //First, check working directory
+        let mut config_path = env::current_dir().unwrap();
+        config_path.push(CONFIG_FILE_NAME);
+        if config_path.exists() {
+            self.config_file_path = Some(config_path);
+            return Ok(())
+        }
+        //Next, look in directory of executable
+		let mut config_path=env::current_exe().unwrap();
+		config_path.pop();
+		config_path.push(CONFIG_FILE_NAME);
+        if config_path.exists() {
+            self.config_file_path = Some(config_path);
+            return Ok(())
+        }
+        //Then look in {user_home}/.grin
+        let config_path = env::home_dir();
+        if let Some(mut p) = config_path {
+            p.push(GRIN_HOME);
+            p.push(CONFIG_FILE_NAME);
+            if p.exists() {
+                self.config_file_path = Some(p);
+                return Ok(())
+            }
+        }
+        
+        // Give up
+        Err(ConfigError::FileNotFoundError(String::from("")))
+        
+    }
+
+    /// Takes the path to a config file, or if NONE, tries
+    /// to determine a config file based on rules in
+    /// derive_config_location
+
+    pub fn new(file_path:Option<&str>) -> Result<GlobalConfig, ConfigError> {
+        let mut return_value = GlobalConfig::default();
+        if let Some(fp) = file_path {
+            return_value.config_file_path = Some(PathBuf::from(&fp));
+        } else {
+            return_value.derive_config_location();
+        }
+
+        //No attempt at a config file, just return defaults
+        if let None = return_value.config_file_path {
+            return Ok(return_value);
+        }
+
+        //Config file path is given but not valid
+        if !return_value.config_file_path.as_mut().unwrap().exists() {
+            return Err(
+                ConfigError::FileNotFoundError(String::from(return_value.config_file_path.as_mut()
+                        .unwrap().to_str().unwrap().clone()))
+            );
+        }
+
+        //Try to parse the config file if it exists
+        //explode if it does exist but something's wrong
+        //with it
+        return_value.read_config()
+    }
+
+    pub fn read_config(mut self) -> Result<GlobalConfig, ConfigError> {
+        let mut file = File::open(self.config_file_path.as_mut().unwrap())?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        let decoded:Result<ConfigMembers, toml::de::Error> = toml::from_str(&contents);
+        match decoded {
+            Ok(mut gc) => {
+                //Put the struct back together, because the config
+                //file was flattened a bit
+                gc.server.mining_config = gc.mining.clone();
+                self.using_config_file = true;
+                self.members = Some(gc);
+                return Ok(self)
+            },
+            Err (e) => {
+                return Err(
+                    ConfigError::ParseError(String::from(self.config_file_path.as_mut()
+                            .unwrap().to_str().unwrap().clone()),
+                        String::from(format!("{}", e))
+                    )
+                );
+            }
+        }
+    }
+
+    pub fn ser_config(&mut self) -> Result<String, ConfigError> {
+        let encoded:Result<String, toml::ser::Error> = toml::to_string(self.members.as_mut().unwrap());
+        match encoded {
+            Ok(enc) => {
+                return Ok(enc)
+            },
+            Err (e) => {
+                return Err(
+                    ConfigError::SerializationError(
+                        String::from(format!("{}", e))
+                    )
+                );
+            }
+        }
+    }
+
+    /*pub fn wallet_enabled(&mut self) -> bool {
+        return self.members.as_mut().unwrap().wallet.as_mut().unwrap().enable_wallet;
+    }*/
+
+    pub fn mining_enabled(&mut self) -> bool {
+        return self.members.as_mut().unwrap().mining.as_mut().unwrap().enable_mining;
+    }
 }
 
 #[test]
-fn read_config() {
+fn test_read_config() {
     let toml_str = r#"
         #Section is optional, if not here or enable_server is false, will only run wallet
         [server]
@@ -61,16 +201,6 @@ fn read_config() {
         #testing value, should really be removed and read from consensus instead, optional
         #cuckoo_size = 12
 
-        #Wallet section is optional. If it's not here, server won't run a wallet
-        [wallet]
-        #whether to run a wallet
-        enable_wallet = true
-        #the address on which to run the wallet listener
-        api_http_addr = "http://127.0.0.1:13415"
-        #the address of a listening node to send finalised transactions to
-		check_node_api_http_addr = "http://127.0.0.1:13415"
-        #The location of the wallet.dat file
-		data_file_dir = "."
 
     "#;
 

@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2017 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,8 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
+
+extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate toml;
@@ -29,4 +31,6 @@ extern crate grin_p2p as p2p;
 extern crate grin_wallet as wallet;
 
 pub mod config;
-pub use config::GlobalConfig;
+pub mod types;
+
+pub use types::{GlobalConfig, ConfigMembers, ConfigError};

@@ -105,8 +105,8 @@ impl Server {
 		let seed = seed::Seeder::new(config.capabilities, peer_store.clone(), p2p_server.clone());
 		match config.seeding_type.clone() {
 			Seeding::None => {}
-			Seeding::List(seeds) => {
-				seed.connect_and_monitor(evt_handle.clone(), seed::predefined_seeds(seeds));
+			Seeding::List => {
+				seed.connect_and_monitor(evt_handle.clone(), seed::predefined_seeds(config.seeds.as_mut().unwrap().clone()));
 			}
 			Seeding::WebStatic => {
 				seed.connect_and_monitor(evt_handle.clone(), seed::web_seeds(evt_handle.clone()));

@@ -99,7 +99,8 @@ impl Miner {
 			       latest_hash,
 			       b.header.difficulty);
 			let mut iter_count = 0;
-			if self.config.slow_down_in_millis.unwrap() > 0 {
+			
+			if self.config.slow_down_in_millis != None && self.config.slow_down_in_millis.unwrap() > 0 {
 				debug!("(Server ID: {}) Artificially slowing down loop by {}ms per iteration.",
 				self.debug_output_id,
 				self.config.slow_down_in_millis.unwrap());
@@ -123,7 +124,7 @@ impl Miner {
 				iter_count += 1;
 
 				//Artificial slow down
-				if self.config.slow_down_in_millis.unwrap() > 0 {
+				if self.config.slow_down_in_millis != None && self.config.slow_down_in_millis.unwrap() > 0 {
 					thread::sleep(std::time::Duration::from_millis(self.config.slow_down_in_millis.unwrap()));
 				}
 			}

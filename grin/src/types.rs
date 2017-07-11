@@ -62,7 +62,7 @@ pub enum Seeding {
 	/// No seeding, mostly for tests that programmatically connect
 	None,
 	/// A list of seed addresses provided to the server
-	List(Vec<String>),
+	List,
 	/// Automatically download a text file with a list of server addresses
 	WebStatic,
 }
@@ -71,30 +71,30 @@ pub enum Seeding {
 /// different components.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
-	/// For config file consistency, whether to run the server (we could just want a wallet)
-	pub enable_server : bool,
-
 	/// Directory under which the rocksdb stores will be created
 	pub db_root: String,
 
 	/// Network address for the Rest API HTTP server.
 	pub api_http_addr: String,
 
-	/// Capabilities expose by this node, also conditions which other peers this
-	/// node will have an affinity toward when connection.
-	pub capabilities: p2p::Capabilities,
+	/// Setup the server for tests and testnet
+	pub test_mode: bool,
 
 	/// Method used to get the list of seed nodes for initial bootstrap.
 	pub seeding_type: Seeding,
+	
+	/// The list of seed nodes, if using Seeding as a seed type
+	pub seeds: Option<Vec<String>>,
+
+	/// Capabilities expose by this node, also conditions which other peers this
+	/// node will have an affinity toward when connection.
+	pub capabilities: p2p::Capabilities,
 
 	/// Configuration for the peer-to-peer server
 	pub p2p_config: Option<p2p::P2PConfig>,
 
 	/// Configuration for the mining daemon
 	pub mining_config: Option<MinerConfig>,
-
-	/// Setup the server for tests and testnet
-	pub test_mode: bool,
 }
 
 /// Mining configuration
@@ -123,11 +123,11 @@ pub struct MinerConfig {
 impl Default for ServerConfig {
 	fn default() -> ServerConfig {
 		ServerConfig {
-			enable_server: true,
 			db_root: ".grin".to_string(),
 			api_http_addr: "127.0.0.1:13415".to_string(),
 			capabilities: p2p::FULL_NODE,
 			seeding_type: Seeding::None,
+			seeds: None,
 			p2p_config: Some(p2p::P2PConfig::default()),
 			mining_config: Some(MinerConfig::default()),
 			test_mode: true,

@@ -1,0 +1,60 @@
+# Sample Server Configuration File for Grin
+#
+# When running the grin executable without specifying any command line
+# arguments, it will look for this file in three places, in the following
+# order:
+#
+# -The working directory
+# -The directory in which the executable resides
+# -[user home]/.grin
+#
+
+#Server connection details
+[server]
+
+#the address on which services will listen, e.g. Transaction Pool
+api_http_addr = "127.0.0.1:13413"
+
+#the directory, relative to current, in which the grin blockchain
+#is stored
+db_root = ".grin"
+
+#How to seed this server, can be None, List or WebStatic
+seeding_type = "None"
+
+#if seeding_type = List, the list of peers to connect to.
+#seeds = ["192.168.0.1:8080","192.168.0.2:8080"]
+
+#Whether to run in test mode, which at the moment affects cuckoo_size
+#if this is false tries to use a slow cuckoo30 at the moment, not 
+#recommended
+test_mode = true
+
+#7 = Bit flags for FULL_NODE, this structure needs to be changed
+#internally to make it more configurable
+capabilities = [7]
+        
+#The P2P server details (i.e. the server that communicates with other
+#grin server nodes
+[server.p2p_config]
+host = "127.0.0.1"
+port = 13414
+        
+#Mining details. This section is optional. If it's not here, the server 
+#will default to not mining. 
+
+[mining]
+#flag whether mining is enabled
+enable_mining = true
+
+#the wallet reciever to which coinbase rewards will be sent
+wallet_receiver_url = "http://127.0.0.1:13415"
+
+#whether to ignore the reward (mostly for testing)
+burn_reward = true
+
+#testing value, optional
+#slow_down_in_millis = 30
+
+#testing value, should really be removed and read from consensus instead, optional
+#cuckoo_size = 12
