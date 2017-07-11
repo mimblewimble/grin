@@ -76,8 +76,10 @@ impl From<api::Error> for Error {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletConfig {
+	//Whether to run a wallet
+	pub enable_wallet: bool,
 	//The api address that this api server (i.e. this wallet) will run
 	pub api_http_addr: String,
 	//The api address of a running server node, against which transaction inputs will be checked
@@ -90,6 +92,7 @@ pub struct WalletConfig {
 impl Default for WalletConfig {
 	fn default() -> WalletConfig {
 		WalletConfig { 
+			enable_wallet: false,
 			api_http_addr: "http://127.0.0.1:13415".to_string(),
 			check_node_api_http_addr: "http://127.0.0.1:13415".to_string(),
 			data_file_dir: ".".to_string(),

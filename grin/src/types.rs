@@ -71,6 +71,9 @@ pub enum Seeding {
 /// different components.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
+	/// For config file consistency, whether to run the server (we could just want a wallet)
+	pub enable_server : bool,
+
 	/// Directory under which the rocksdb stores will be created
 	pub db_root: String,
 
@@ -85,10 +88,10 @@ pub struct ServerConfig {
 	pub seeding_type: Seeding,
 
 	/// Configuration for the peer-to-peer server
-	pub p2p_config: p2p::P2PConfig,
+	pub p2p_config: Option<p2p::P2PConfig>,
 
 	/// Configuration for the mining daemon
-	pub mining_config: MinerConfig,
+	pub mining_config: Option<MinerConfig>,
 
 	/// Setup the server for tests and testnet
 	pub test_mode: bool,
@@ -109,10 +112,10 @@ pub struct MinerConfig {
 
 	/// a testing attribute for the time being that artifically slows down the
 	/// mining loop by adding a sleep to the thread
-	pub slow_down_in_millis: u64,
+	pub slow_down_in_millis: Option<u64>,
 
 	/// Size of Cuckoo Cycle to mine on
-	pub cuckoo_size: u32,
+	pub cuckoo_size: Option<u32>,
 
 
 }
@@ -120,12 +123,13 @@ pub struct MinerConfig {
 impl Default for ServerConfig {
 	fn default() -> ServerConfig {
 		ServerConfig {
+			enable_server: true,
 			db_root: ".grin".to_string(),
 			api_http_addr: "127.0.0.1:13415".to_string(),
 			capabilities: p2p::FULL_NODE,
 			seeding_type: Seeding::None,
-			p2p_config: p2p::P2PConfig::default(),
-			mining_config: MinerConfig::default(),
+			p2p_config: Some(p2p::P2PConfig::default()),
+			mining_config: Some(MinerConfig::default()),
 			test_mode: true,
 		}
 	}
@@ -137,8 +141,8 @@ impl Default for MinerConfig {
 			enable_mining: false,
 			wallet_receiver_url: "http://localhost:13416".to_string(),
 			burn_reward: false,
-			slow_down_in_millis: 0,
-			cuckoo_size: 0
+			slow_down_in_millis: Some(0),
+			cuckoo_size: Some(0)
 		}
 	}
 }

@@ -26,6 +26,7 @@ extern crate tiny_keccak;
 extern crate grin_api as api;
 extern crate grin_grin as grin;
 extern crate grin_wallet as wallet;
+extern crate grin_config as config;
 extern crate secp256k1zkp as secp;
 
 const GRIN_HOME: &'static str = ".grin";
@@ -43,6 +44,8 @@ use daemonize::Daemonize;
 use secp::Secp256k1;
 
 use wallet::WalletConfig;
+
+use config::GlobalConfig;
 
 fn main() {
 	env_logger::init().unwrap();
