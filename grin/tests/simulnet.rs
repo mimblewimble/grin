@@ -125,7 +125,10 @@ fn simulate_seeding () {
 /// as a seed. Meant to test the evolution of mining difficulty with miners running at
 /// different rates
 
-#[test]
+
+//Just going to comment this out as an automatically run test for the time being,
+//As it's more for actively testing and hurts CI a lot
+//#[test]
 fn simulate_parallel_mining(){
     env_logger::init();
 

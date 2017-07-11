@@ -19,6 +19,7 @@ use rand::{self, Rng};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std;
+use std::env;
 use time;
 
 use adapters::{ChainToPoolAndNetAdapter, PoolToChainAdapter};
@@ -26,9 +27,11 @@ use api;
 use core::consensus;
 use core::consensus::*;
 use core::core;
+use core::core::Proof;
+use core::pow::cuckoo;
 use core::core::target::Difficulty;
 use core::core::hash::{Hash, Hashed};
-use core::pow::cuckoo;
+use core::pow::MiningWorker;
 use core::ser;
 use chain;
 use secp;
@@ -75,10 +78,11 @@ impl Miner {
 
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
-	pub fn run_loop(&self) {
+	pub fn run_loop<T: MiningWorker>(&self, mut miner:T) {
 
 		info!("(Server ID: {}) Starting miner loop.", self.debug_output_id);
 		let mut coinbase = self.get_coinbase();
+
 		loop {
 			// get the latest chain state and build a block on top of it
 			let head = self.chain.head_header().unwrap();
@@ -102,14 +106,12 @@ impl Miner {
 			}
 			while head.hash() == latest_hash && time::get_time().sec < deadline {
 				let pow_hash = b.hash();
-				let mut miner =
-					cuckoo::Miner::new(&pow_hash[..], consensus::EASINESS, self.config.cuckoo_size);
-				if let Ok(proof) = miner.mine() {
+				if let Ok(proof) = miner.mine(&pow_hash[..]) {
 					let proof_diff=proof.to_difficulty();
-					debug!("(Server ID: {}) Header difficulty is: {}, Proof difficulty is: {}",
+					/*debug!("(Server ID: {}) Header difficulty is: {}, Proof difficulty is: {}",
 					self.debug_output_id,
 					b.header.difficulty,
-					proof_diff);
+					proof_diff);*/
 
 					if proof_diff >= b.header.difficulty {
 						sol = Some(proof);

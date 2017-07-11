@@ -31,8 +31,24 @@ use consensus::EASINESS;
 use consensus::MINIMUM_DIFFICULTY;
 use core::BlockHeader;
 use core::hash::Hashed;
+use core::Proof;
 use core::target::Difficulty;
 use pow::cuckoo::{Cuckoo, Miner, Error};
+
+
+/// Should be implemented by anything providing mining services
+///
+
+pub trait MiningWorker {
+	
+	//This only sets parameters and does initialisation work now
+	fn new(ease: u32, sizeshift: u32) -> Self;
+	
+	//Actually perform a mining attempt on the given input and
+	//return a proof if found
+	fn mine(&mut self, header: &[u8]) -> Result<Proof, Error>;
+
+}
 
 /// Validates the proof of work of a given header, and that the proof of work
 /// satisfies the requirements of the header.
@@ -65,7 +81,7 @@ pub fn pow_size(bh: &mut BlockHeader, diff: Difficulty, sizeshift: u32) -> Resul
 
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good
-		if let Ok(proof) = Miner::new(&pow_hash[..], EASINESS, sizeshift).mine() {
+		if let Ok(proof) = Miner::new(EASINESS, sizeshift).mine(&pow_hash[..]) {
 			if proof.to_difficulty() >= diff {
 				bh.pow = proof;
 				return Ok(());

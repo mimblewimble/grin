@@ -31,6 +31,8 @@ use chain;
 use chain::ChainStore;
 use core::{self, consensus};
 use core::core::hash::Hashed;
+use core::pow::cuckoo;
+use core::pow::MiningWorker;
 use miner;
 use p2p;
 use pool;
@@ -38,6 +40,9 @@ use seed;
 use store;
 use sync;
 use types::*;
+
+#[cfg(feature = "use-cuckoo-miner")]
+use plugin::PluginMiner;
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -142,11 +147,24 @@ impl Server {
 
 	/// Start mining for blocks on a separate thread. Relies on a toy miner,
 	/// mostly for testing.
+	#[cfg(not(feature = "use-cuckoo-miner"))]
 	pub fn start_miner(&self, config: MinerConfig) {
-		let mut miner = miner::Miner::new(config, self.chain.clone(), self.tx_pool.clone());
+		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
 		miner.set_debug_output_id(format!("Port {}",self.config.p2p_config.port));
 		thread::spawn(move || {
-			miner.run_loop();
+			let test_cuckoo_miner = cuckoo::Miner::new(consensus::EASINESS, config.cuckoo_size.clone());
+			miner.run_loop(test_cuckoo_miner);
+		});
+	}
+
+	/// And a version we only get if we're using the cuckoo miner crate
+	#[cfg(feature = "use-cuckoo-miner")]
+	pub fn start_miner(&self, config: MinerConfig) {
+		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
+		miner.set_debug_output_id(format!("Port {}",self.config.p2p_config.port));
+		thread::spawn(move || {
+			let test_cuckoo_miner = PluginMiner::new(consensus::EASINESS, config.cuckoo_size.clone());
+			miner.run_loop(test_cuckoo_miner);
 		});
 	}
 
