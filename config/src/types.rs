@@ -26,16 +26,16 @@ use wallet::WalletConfig;
 /// Error type wrapping config errors.
 #[derive(Debug)]
 pub enum ConfigError {
-	/// Error originating from the db storage.
-	ParseError (String, String),
+    /// Error with parsing of config file
+    ParseError (String, String),
 
-    /// Error with fileIO
+    /// Error with fileIO while reading config file
     FileIOError (String, String),
 
     /// No file found
     FileNotFoundError (String),
 
-    ///
+    /// Error serializing config values
     SerializationError (String),
 }
 
