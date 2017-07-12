@@ -95,12 +95,17 @@ impl Peer {
 					*state = State::Disconnected;
 					info!("Client {} disconnected.", addr);
 					Ok(())
-				}
+				},
 				Err(Error::Serialization(e)) => {
 					*state = State::Banned;
 					info!("Client {} corrupted, ban.", addr);
 					Err(Error::Serialization(e))
-				}
+				},
+				Err(Error::Invalid) => {
+					*state = State::Banned;
+					info!("Client {} untrusted, ban.", addr);					
+					Err(Error::Invalid)				
+				},
 				Err(_) => {
 					*state = State::Disconnected;
 					info!("Client {} connection lost.", addr);
