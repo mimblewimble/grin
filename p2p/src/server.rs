@@ -20,6 +20,7 @@ use std::net::SocketAddr;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+use std::io;
 
 use futures;
 use futures::{Future, Stream};
@@ -41,19 +42,19 @@ impl NetAdapter for DummyAdapter {
 	fn total_difficulty(&self) -> Difficulty {
 		Difficulty::one()
 	}
-	fn transaction_received(&self, tx: core::Transaction) {}
-	fn block_received(&self, b: core::Block) {}
-	fn headers_received(&self, bh: Vec<core::BlockHeader>) {}
-	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
-		vec![]
+	fn transaction_received(&self, tx: core::Transaction) -> io::Result<()> { Ok(()) }
+	fn block_received(&self, b: core::Block) -> io::Result<()> { Ok(()) }
+	fn headers_received(&self, bh: Vec<core::BlockHeader>) -> io::Result<()> { Ok(()) }
+	fn locate_headers(&self, locator: Vec<Hash>) -> Option<Vec<core::BlockHeader>> {
+		None
 	}
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		None
 	}
-	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr> {
-		vec![]
+	fn find_peer_addrs(&self, capab: Capabilities) -> Option<Vec<SocketAddr>> {
+		None
 	}
-	fn peer_addrs_received(&self, peer_addrs: Vec<SocketAddr>) {}
+	fn peer_addrs_received(&self, peer_addrs: Vec<SocketAddr>) -> io::Result<()> { Ok(())}
 	fn peer_connected(&self, pi: &PeerInfo) {}
 }
 

@@ -161,16 +161,17 @@ fn handle_payload(adapter: &NetAdapter,
 		Type::GetHeaders => {
 			// load headers from the locator
 			let loc = ser::deserialize::<Locator>(&mut &buf[..])?;
-			let headers = adapter.locate_headers(loc.hashes);
 
-			// serialize and send all the headers over
-			let mut body_data = vec![];
-			try!(ser::serialize(&mut body_data, &Headers { headers: headers }));
-			let mut data = vec![];
-			try!(ser::serialize(&mut data,
-			                    &MsgHeader::new(Type::Headers, body_data.len() as u64)));
-			data.append(&mut body_data);
-			sender.send(data);
+            if let Some(headers) = adapter.locate_headers(loc.hashes) {
+                // serialize and send all the headers over
+                let mut body_data = vec![];
+                try!(ser::serialize(&mut body_data, &Headers { headers: headers }));
+                let mut data = vec![];
+                try!(ser::serialize(&mut data,
+                                    &MsgHeader::new(Type::Headers, body_data.len() as u64)));
+                data.append(&mut body_data);
+                sender.send(data);
+            }
 
 			Ok(None)
 		}
@@ -181,19 +182,20 @@ fn handle_payload(adapter: &NetAdapter,
 		}
 		Type::GetPeerAddrs => {
 			let get_peers = ser::deserialize::<GetPeerAddrs>(&mut &buf[..])?;
-			let peer_addrs = adapter.find_peer_addrs(get_peers.capabilities);
-
-			// serialize and send all the headers over
-			let mut body_data = vec![];
-			try!(ser::serialize(&mut body_data,
-			                    &PeerAddrs {
-				                    peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
-			                    }));
-			let mut data = vec![];
-			try!(ser::serialize(&mut data,
-			                    &MsgHeader::new(Type::PeerAddrs, body_data.len() as u64)));
-			data.append(&mut body_data);
-			sender.send(data);
+            
+            if let Some(peer_addrs) = adapter.find_peer_addrs(get_peers.capabilities) {
+                // serialize and send all the headers over
+                let mut body_data = vec![];
+                try!(ser::serialize(&mut body_data,
+                                    &PeerAddrs {
+                                        peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
+                                    }));
+                let mut data = vec![];
+                try!(ser::serialize(&mut data,
+                                    &MsgHeader::new(Type::PeerAddrs, body_data.len() as u64)));
+                data.append(&mut body_data);
+                sender.send(data);
+            }
 
 			Ok(None)
 		}
