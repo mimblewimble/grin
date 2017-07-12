@@ -199,7 +199,7 @@ fn simulate_block_propagation() {
   let miner_config = grin::MinerConfig{
     enable_mining: true,
     burn_reward: true,
-    cuckoo_size: consensus::TEST_SIZESHIFT as u32,
+    cuckoo_size: Some(consensus::TEST_SIZESHIFT as u32),
     ..Default::default()
   };
 
@@ -210,7 +210,7 @@ fn simulate_block_propagation() {
           grin::ServerConfig{
             api_http_addr: format!("127.0.0.1:{}", 20000+n),
             db_root: format!("target/{}/grin-prop-{}", test_name_dir, n),
-            p2p_config: p2p::P2PConfig{port: 10000+n, ..p2p::P2PConfig::default()},
+            p2p_config: Some(p2p::P2PConfig{port: 10000+n, ..p2p::P2PConfig::default()}),
             ..Default::default()
           }, &handle).unwrap();
       servers.push(s);
@@ -256,7 +256,7 @@ fn simulate_full_sync() {
   let miner_config = grin::MinerConfig{
     enable_mining: true,
     burn_reward: true,
-    cuckoo_size: consensus::TEST_SIZESHIFT as u32,
+    cuckoo_size: Some(consensus::TEST_SIZESHIFT as u32),
     ..Default::default()
   };
 
@@ -266,7 +266,7 @@ fn simulate_full_sync() {
       let s = grin::Server::future(
           grin::ServerConfig{
             db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
-            p2p_config: p2p::P2PConfig{port: 11000+n, ..p2p::P2PConfig::default()},
+            p2p_config: Some(p2p::P2PConfig{port: 11000+n, ..p2p::P2PConfig::default()}),
             ..Default::default()
           }, &handle).unwrap();
       servers.push(s);

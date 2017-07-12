@@ -203,9 +203,11 @@ impl LocalServerContainer {
         let api_addr = format!("{}:{}", self.config.base_addr, self.config.api_server_port);
 
         let mut seeding_type=grin::Seeding::None;
+        let mut seeds=Vec::new();
 
         if self.config.seed_addr.len()>0{
-            seeding_type=grin::Seeding::List(vec![self.config.seed_addr.to_string()]);
+            seeding_type=grin::Seeding::List;
+            seeds=vec![self.config.seed_addr.to_string()];
         }
 
         
@@ -213,7 +215,8 @@ impl LocalServerContainer {
             grin::ServerConfig{
                 api_http_addr: api_addr,
                 db_root: format!("{}/.grin", self.working_dir),
-                p2p_config: p2p::P2PConfig{port: self.config.p2p_server_port, ..p2p::P2PConfig::default()},
+                p2p_config: Some(p2p::P2PConfig{port: self.config.p2p_server_port, ..p2p::P2PConfig::default()}),
+                seeds: Some(seeds),
                 seeding_type: seeding_type,
                 ..Default::default()
             }, &event_loop.handle()).unwrap();
@@ -229,9 +232,9 @@ impl LocalServerContainer {
         let mut miner_config = grin::MinerConfig {
             enable_mining: self.config.start_miner,
             burn_reward: self.config.burn_mining_rewards,
-            cuckoo_size: self.config.cuckoo_size,
+            cuckoo_size: Some(self.config.cuckoo_size),
             wallet_receiver_url : self.config.coinbase_wallet_address.clone(),
-            slow_down_in_millis: self.config.miner_slowdown_in_millis.clone(),
+            slow_down_in_millis: Some(self.config.miner_slowdown_in_millis.clone()),
             ..Default::default()
         };
 
