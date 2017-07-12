@@ -155,8 +155,7 @@ fn handle_payload(adapter: &NetAdapter,
 		Type::Block => {
 			let b = ser::deserialize::<core::Block>(&mut &buf[..])?;
 			let bh = b.hash();
-			adapter.block_received(b);
-			Ok(Some(bh))
+			adapter.block_received(b).and(Ok(Some(bh)))
 		}
 		Type::GetHeaders => {
 			// load headers from the locator
@@ -200,7 +199,7 @@ fn handle_payload(adapter: &NetAdapter,
 		}
 		Type::PeerAddrs => {
 			let peer_addrs = ser::deserialize::<PeerAddrs>(&mut &buf[..])?;
-			adapter.peer_addrs_received(peer_addrs.peers.iter().map(|pa| pa.0).collect()).map(|_| None)
+			adapter.peer_addrs_received(peer_addrs.peers.iter().map(|pa| pa.0).collect()).and(Ok(None))
 		}
 		_ => {
 			debug!("unknown message type {:?}", header.msg_type);
