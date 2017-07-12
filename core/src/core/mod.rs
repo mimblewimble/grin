@@ -17,8 +17,10 @@
 pub mod block;
 pub mod build;
 pub mod hash;
+pub mod sumtree;
 pub mod target;
 pub mod transaction;
+//pub mod txoset;
 #[allow(dead_code)]
 
 use std::fmt;
