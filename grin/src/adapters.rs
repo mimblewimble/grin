@@ -46,19 +46,19 @@ impl NetAdapter for NetToChainAdapter {
 		self.chain.total_difficulty()
 	}
 
-	fn transaction_received(&self, tx: core::Transaction) -> io::Result<()> {
+	fn transaction_received(&self, tx: core::Transaction) -> Result<(), p2p::Error> {
 		let source = pool::TxSource {
 			debug_name: "p2p".to_string(),
 			identifier: "?.?.?.?".to_string(),
 		};
 		if let Err(e) = self.tx_pool.write().unwrap().add_to_memory_pool(source, tx) {
 			error!("Transaction rejected: {:?}", e);
-			return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid Transaction"));
+			return Err(p2p::Error::Invalid);
 		}
 		Ok(())
 	}
 
-	fn block_received(&self, b: core::Block) -> io::Result<()> {
+	fn block_received(&self, b: core::Block) -> Result<(), p2p::Error> {
 		debug!("Received block {} from network, going to process.",
 		       b.hash());
 
@@ -67,7 +67,7 @@ impl NetAdapter for NetToChainAdapter {
 
 		if let Err(e) = res {
 			debug!("Block {} refused by chain: {:?}", b.hash(), e);
-			return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid Block"));			
+			return Err(p2p::Error::Invalid);			
 		}
 
 		if self.syncer.borrow().syncing() {
@@ -77,7 +77,7 @@ impl NetAdapter for NetToChainAdapter {
 		Ok(())
 	}
 
-	fn headers_received(&self, bhs: Vec<core::BlockHeader>) -> io::Result<()> {
+	fn headers_received(&self, bhs: Vec<core::BlockHeader>) -> Result<(), p2p::Error> {
 		// try to add each header to our header chain
 		let mut added_hs = vec![];
 		for bh in bhs {
@@ -91,15 +91,15 @@ impl NetAdapter for NetToChainAdapter {
 					      bh.hash(),
 					      bh.height,
 					      s);
-					return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid Header Format"));					
+					return Err(p2p::Error::Invalid);					
 				}
 				Err(chain::Error::StoreErr(e)) => {
 					error!("Store error processing block header {}: {:?}", bh.hash(), e);
-					return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid Header Format"));
+					return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid Header Format").into());
 				}
 				Err(e) => {
 					info!("Invalid block header {}: {:?}.", bh.hash(), e);
-					return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid Headers"));
+					return Err(p2p::Error::Invalid);
 				}
 			}
 		}
@@ -165,7 +165,7 @@ impl NetAdapter for NetToChainAdapter {
 	}
 
 	/// A list of peers has been received from one of our peers.
-	fn peer_addrs_received(&self, peer_addrs: Vec<SocketAddr>) -> io::Result<()> {
+	fn peer_addrs_received(&self, peer_addrs: Vec<SocketAddr>) -> Result<(), p2p::Error> {
 		debug!("Received {} peer addrs, saving.", peer_addrs.len());
 		for pa in peer_addrs {
 			if let Ok(e) = self.peer_store.exists_peer(pa) {
@@ -181,7 +181,7 @@ impl NetAdapter for NetToChainAdapter {
 			};
 			if let Err(e) = self.peer_store.save_peer(&peer) {
 				error!("Could not save received peer address: {:?}", e);
-				return Err(io::Error::new(io::ErrorKind::InvalidData, "Could not save recieved peer address"))
+				return Err(io::Error::new(io::ErrorKind::InvalidData, "Could not save recieved peer address").into())
 			}
 		}
 

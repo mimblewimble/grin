@@ -42,6 +42,7 @@ pub const MAX_PEER_ADDRS: u32 = 256;
 pub enum Error {
 	Serialization(ser::Error),
 	Connection(io::Error),
+	Invalid,
 	ConnectionClose,
 	Timeout,
 }
@@ -155,15 +156,15 @@ pub trait NetAdapter: Sync + Send {
 	fn total_difficulty(&self) -> Difficulty;
 
 	/// A valid transaction has been received from one of our peers
-	fn transaction_received(&self, tx: core::Transaction) -> io::Result<()>;
+	fn transaction_received(&self, tx: core::Transaction) -> Result<(), Error>;
 
 	/// A block has been received from one of our peers
-	fn block_received(&self, b: core::Block) -> io::Result<()>;
+	fn block_received(&self, b: core::Block) -> Result<(), Error>;
 
 	/// A set of block header has been received, typically in response to a
 	/// block
 	/// header request.
-	fn headers_received(&self, bh: Vec<core::BlockHeader>) -> io::Result<()>;
+	fn headers_received(&self, bh: Vec<core::BlockHeader>) -> Result<(), Error>;
 
 	/// Finds a list of block headers based on the provided locator. Tries to
 	/// identify the common chain and gets the headers that follow it
@@ -178,7 +179,7 @@ pub trait NetAdapter: Sync + Send {
 	fn find_peer_addrs(&self, capab: Capabilities) -> Option<Vec<SocketAddr>>;
 
 	/// A list of peers has been received from one of our peers.
-	fn peer_addrs_received(&self, Vec<SocketAddr>) -> io::Result<()>;
+	fn peer_addrs_received(&self, Vec<SocketAddr>) -> Result<(), Error>;
 
 	/// Network successfully connected to a peer.
 	fn peer_connected(&self, &PeerInfo);

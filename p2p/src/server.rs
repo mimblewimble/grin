@@ -42,9 +42,9 @@ impl NetAdapter for DummyAdapter {
 	fn total_difficulty(&self) -> Difficulty {
 		Difficulty::one()
 	}
-	fn transaction_received(&self, tx: core::Transaction) -> io::Result<()> { Ok(()) }
-	fn block_received(&self, b: core::Block) -> io::Result<()> { Ok(()) }
-	fn headers_received(&self, bh: Vec<core::BlockHeader>) -> io::Result<()> { Ok(()) }
+	fn transaction_received(&self, tx: core::Transaction) -> Result<(), Error> { Ok(()) }
+	fn block_received(&self, b: core::Block) -> Result<(), Error> { Ok(()) }
+	fn headers_received(&self, bh: Vec<core::BlockHeader>) -> Result<(), Error> { Ok(()) }
 	fn locate_headers(&self, locator: Vec<Hash>) -> Option<Vec<core::BlockHeader>> {
 		None
 	}
@@ -54,7 +54,7 @@ impl NetAdapter for DummyAdapter {
 	fn find_peer_addrs(&self, capab: Capabilities) -> Option<Vec<SocketAddr>> {
 		None
 	}
-	fn peer_addrs_received(&self, peer_addrs: Vec<SocketAddr>) -> io::Result<()> { Ok(())}
+	fn peer_addrs_received(&self, peer_addrs: Vec<SocketAddr>) -> Result<(), Error> { Ok(())}
 	fn peer_connected(&self, pi: &PeerInfo) {}
 }
 
