@@ -91,7 +91,7 @@ impl NetAdapter for NetToChainAdapter {
 					      bh.hash(),
 					      bh.height,
 					      s);
-					return Err(p2p::Error::Invalid);					
+					return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid Time").into());
 				}
 				Err(chain::Error::StoreErr(e)) => {
 					error!("Store error processing block header {}: {:?}", bh.hash(), e);
