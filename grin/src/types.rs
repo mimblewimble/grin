@@ -62,7 +62,7 @@ pub enum Seeding {
 	/// No seeding, mostly for tests that programmatically connect
 	None,
 	/// A list of seed addresses provided to the server
-	List(Vec<String>),
+	List,
 	/// Automatically download a text file with a list of server addresses
 	WebStatic,
 }
@@ -77,21 +77,24 @@ pub struct ServerConfig {
 	/// Network address for the Rest API HTTP server.
 	pub api_http_addr: String,
 
+	/// Setup the server for tests and testnet
+	pub test_mode: bool,
+
+	/// Method used to get the list of seed nodes for initial bootstrap.
+	pub seeding_type: Seeding,
+	
+	/// The list of seed nodes, if using Seeding as a seed type
+	pub seeds: Option<Vec<String>>,
+
 	/// Capabilities expose by this node, also conditions which other peers this
 	/// node will have an affinity toward when connection.
 	pub capabilities: p2p::Capabilities,
 
-	/// Method used to get the list of seed nodes for initial bootstrap.
-	pub seeding_type: Seeding,
-
 	/// Configuration for the peer-to-peer server
-	pub p2p_config: p2p::P2PConfig,
+	pub p2p_config: Option<p2p::P2PConfig>,
 
 	/// Configuration for the mining daemon
-	pub mining_config: MinerConfig,
-
-	/// Setup the server for tests and testnet
-	pub test_mode: bool,
+	pub mining_config: Option<MinerConfig>,
 }
 
 /// Mining configuration
@@ -109,10 +112,10 @@ pub struct MinerConfig {
 
 	/// a testing attribute for the time being that artifically slows down the
 	/// mining loop by adding a sleep to the thread
-	pub slow_down_in_millis: u64,
+	pub slow_down_in_millis: Option<u64>,
 
 	/// Size of Cuckoo Cycle to mine on
-	pub cuckoo_size: u32,
+	pub cuckoo_size: Option<u32>,
 
 
 }
@@ -124,8 +127,9 @@ impl Default for ServerConfig {
 			api_http_addr: "127.0.0.1:13415".to_string(),
 			capabilities: p2p::FULL_NODE,
 			seeding_type: Seeding::None,
-			p2p_config: p2p::P2PConfig::default(),
-			mining_config: MinerConfig::default(),
+			seeds: None,
+			p2p_config: Some(p2p::P2PConfig::default()),
+			mining_config: Some(MinerConfig::default()),
 			test_mode: true,
 		}
 	}
@@ -137,8 +141,8 @@ impl Default for MinerConfig {
 			enable_mining: false,
 			wallet_receiver_url: "http://localhost:13416".to_string(),
 			burn_reward: false,
-			slow_down_in_millis: 0,
-			cuckoo_size: 0
+			slow_down_in_millis: Some(0),
+			cuckoo_size: Some(0)
 		}
 	}
 }

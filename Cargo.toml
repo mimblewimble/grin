@@ -4,11 +4,12 @@ version = "0.1.0"
 authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
 
 [workspace]
-members = ["api", "chain", "core", "grin", "p2p", "store", "util", "pool", "wallet"]
+members = ["api", "chain", "config", "core", "grin", "p2p", "store", "util", "pool", "wallet"]
 
 [dependencies]
 grin_api = { path = "./api" }
 grin_wallet = { path = "./wallet" }
+grin_config = { path = "./config" }
 secp256k1zkp = { path = "./secp256k1zkp" }
 
 clap = "^2.23.3"

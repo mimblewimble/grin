@@ -62,10 +62,10 @@ impl Server {
 		check_config(&mut config);
 		let mut evtlp = reactor::Core::new().unwrap();
 
-		let mining_config = config.mining_config.clone();
+		let mut mining_config = config.mining_config.clone();
 		let serv = Server::future(config, &evtlp.handle())?;
-		if mining_config.enable_mining {
-			serv.start_miner(mining_config);
+		if mining_config.as_mut().unwrap().enable_mining {
+			serv.start_miner(mining_config.unwrap());
 		}
 
 		let forever = Timer::default()
@@ -99,14 +99,14 @@ impl Server {
 		                                                  tx_pool.clone(),
 		                                                  peer_store.clone()));
 		let p2p_server =
-			Arc::new(p2p::Server::new(config.capabilities, config.p2p_config, net_adapter.clone()));
+			Arc::new(p2p::Server::new(config.capabilities, config.p2p_config.unwrap(), net_adapter.clone()));
 		chain_adapter.init(p2p_server.clone());
 
 		let seed = seed::Seeder::new(config.capabilities, peer_store.clone(), p2p_server.clone());
 		match config.seeding_type.clone() {
 			Seeding::None => {}
-			Seeding::List(seeds) => {
-				seed.connect_and_monitor(evt_handle.clone(), seed::predefined_seeds(seeds));
+			Seeding::List => {
+				seed.connect_and_monitor(evt_handle.clone(), seed::predefined_seeds(config.seeds.as_mut().unwrap().clone()));
 			}
 			Seeding::WebStatic => {
 				seed.connect_and_monitor(evt_handle.clone(), seed::web_seeds(evt_handle.clone()));
@@ -150,9 +150,9 @@ impl Server {
 	#[cfg(not(feature = "use-cuckoo-miner"))]
 	pub fn start_miner(&self, config: MinerConfig) {
 		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
-		miner.set_debug_output_id(format!("Port {}",self.config.p2p_config.port));
+		miner.set_debug_output_id(format!("Port {}",self.config.p2p_config.unwrap().port));
 		thread::spawn(move || {
-			let test_cuckoo_miner = cuckoo::Miner::new(consensus::EASINESS, config.cuckoo_size.clone());
+			let test_cuckoo_miner = cuckoo::Miner::new(consensus::EASINESS, config.cuckoo_size.unwrap().clone());
 			miner.run_loop(test_cuckoo_miner);
 		});
 	}
@@ -163,7 +163,7 @@ impl Server {
 		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
 		miner.set_debug_output_id(format!("Port {}",self.config.p2p_config.port));
 		thread::spawn(move || {
-			let test_cuckoo_miner = PluginMiner::new(consensus::EASINESS, config.cuckoo_size.clone());
+			let test_cuckoo_miner = PluginMiner::new(consensus::EASINESS, config.cuckoo_size.unwrap().clone());
 			miner.run_loop(test_cuckoo_miner);
 		});
 	}
@@ -186,9 +186,9 @@ impl Server {
 
 fn check_config(config: &mut ServerConfig) {
 	// applying test/normal config
-	config.mining_config.cuckoo_size = if config.test_mode {
-		consensus::TEST_SIZESHIFT as u32
+	config.mining_config.as_mut().unwrap().cuckoo_size = if config.test_mode {
+		Some(consensus::TEST_SIZESHIFT as u32)
 	} else {
-		consensus::DEFAULT_SIZESHIFT as u32
+		Some(consensus::DEFAULT_SIZESHIFT as u32)
 	};
 }

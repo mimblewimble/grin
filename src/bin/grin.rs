@@ -26,9 +26,8 @@ extern crate tiny_keccak;
 extern crate grin_api as api;
 extern crate grin_grin as grin;
 extern crate grin_wallet as wallet;
+extern crate grin_config as config;
 extern crate secp256k1zkp as secp;
-
-const GRIN_HOME: &'static str = ".grin";
 
 use std::env;
 use std::thread;
@@ -43,6 +42,16 @@ use daemonize::Daemonize;
 use secp::Secp256k1;
 
 use wallet::WalletConfig;
+
+use config::{GlobalConfig, ConfigError};
+
+fn start_from_config_file(mut global_config:GlobalConfig){
+	info!("Starting the Grin server from configuration file at {}", global_config.config_file_path.unwrap().to_str().unwrap());	
+	grin::Server::start(global_config.members.as_mut().unwrap().server.clone()).unwrap();
+	loop {
+		thread::sleep(Duration::from_secs(60));
+	}
+}
 
 fn main() {
 	env_logger::init().unwrap();
@@ -80,12 +89,6 @@ fn main() {
                      .long("wallet_url")
                      .help("A listening wallet receiver to which mining rewards will be sent")
 					 .takes_value(true))
-                .arg(Arg::with_name("config")
-                     .short("c")
-                     .long("config")
-                     .value_name("FILE.json")
-                     .help("Sets a custom json configuration file")
-                     .takes_value(true))
                 .subcommand(SubCommand::with_name("start")
                             .about("Start the Grin server as a daemon"))
                 .subcommand(SubCommand::with_name("stop")
@@ -162,7 +165,34 @@ fn main() {
 			wallet_command(wallet_args);
 		}
 
-		_ => println!("Unknown command, use 'grin help' for a list of all commands"),
+		//If nothing is specified, try to load up and use a config file instead
+		//this should possibly become the way to configure most things
+		//with most command line options being phased out
+		_ => {
+				//This will return a global config object,
+				//which will either contain defaults for all
+				//of the config structures or a configuration 
+				//read from a config file
+
+				let mut global_config = GlobalConfig::new(None);
+				match global_config {
+					Ok(gc) => {
+						if (gc.using_config_file){
+							start_from_config_file(gc);
+						} else {
+							//won't attempt to just start with defaults,
+							//and will reject 
+							println!("Unknown command, and no configuration file was found.");
+							println!("Use 'grin help' for a list of all commands.");
+						}
+					}
+					Err(e) => {
+						println!("{}", e);
+					}
+				}
+			
+				
+		}
 	}
 }
 
@@ -173,10 +203,11 @@ fn main() {
 fn server_command(server_args: &ArgMatches) {
 	info!("Starting the Grin server...");
 
-	// configuration wrangling
-	let mut server_config = read_config();
+	// just get defaults from the global config
+	let mut server_config = GlobalConfig::default().members.unwrap().server;
+
 	if let Some(port) = server_args.value_of("port") {
-		server_config.p2p_config.port = port.parse().unwrap();
+		server_config.p2p_config.as_mut().unwrap().port = port.parse().unwrap();
 	}
 	 
 	if let Some(api_port) = server_args.value_of("api_port") {
@@ -185,16 +216,21 @@ fn server_command(server_args: &ArgMatches) {
 	}
 
 	if server_args.is_present("mine") {
-		server_config.mining_config.enable_mining = true;
+		server_config.mining_config.as_mut().unwrap().enable_mining = true;
 	}
 	
 	if let Some(wallet_url) = server_args.value_of("wallet_url") {
-		server_config.mining_config.wallet_receiver_url = wallet_url.to_string();
+		server_config.mining_config.as_mut().unwrap().wallet_receiver_url = wallet_url.to_string();
 	}
 
 	if let Some(seeds) = server_args.values_of("seed") {
-		server_config.seeding_type = grin::Seeding::List(seeds.map(|s| s.to_string()).collect());
+		server_config.seeding_type = grin::Seeding::List;
+		server_config.seeds = Some(seeds.map(|s| s.to_string()).collect());
 	}
+
+	/*let mut sc = GlobalConfig::default();
+	sc.members.as_mut().unwrap().server = server_config.clone();
+	println!("{}", sc.ser_config().unwrap());*/
 
 	// start the server in the different run modes (interactive or daemon)
 	match server_args.subcommand() {
@@ -291,22 +327,3 @@ fn wallet_command(wallet_args: &ArgMatches) {
 	}
 }
 
-fn read_config() -> grin::ServerConfig {
-	let mut config_path = env::home_dir().ok_or("Failed to detect home directory!").unwrap();
-	config_path.push(GRIN_HOME);
-	if !config_path.exists() {
-		return default_config();
-	}
-	let mut config_file = File::open(config_path).unwrap();
-	let mut config_content = String::new();
-	config_file.read_to_string(&mut config_content).unwrap();
-	serde_json::from_str(config_content.as_str()).unwrap()
-}
-
-fn default_config() -> grin::ServerConfig {
-	grin::ServerConfig {
-		test_mode: true,
-		seeding_type: grin::Seeding::WebStatic,
-		..Default::default()
-	}
-}

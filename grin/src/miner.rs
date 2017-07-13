@@ -95,14 +95,15 @@ impl Miner {
 			let mut sol = None;
 			debug!("(Server ID: {}) Mining at Cuckoo{} for at most 2 secs on block {} at difficulty {}.",
 			       self.debug_output_id,
-			       self.config.cuckoo_size,
+			       self.config.cuckoo_size.unwrap(),
 			       latest_hash,
 			       b.header.difficulty);
 			let mut iter_count = 0;
-			if self.config.slow_down_in_millis > 0 {
+			
+			if self.config.slow_down_in_millis != None && self.config.slow_down_in_millis.unwrap() > 0 {
 				debug!("(Server ID: {}) Artificially slowing down loop by {}ms per iteration.",
 				self.debug_output_id,
-				self.config.slow_down_in_millis);
+				self.config.slow_down_in_millis.unwrap());
 			}
 			while head.hash() == latest_hash && time::get_time().sec < deadline {
 				let pow_hash = b.hash();
@@ -123,8 +124,8 @@ impl Miner {
 				iter_count += 1;
 
 				//Artificial slow down
-				if self.config.slow_down_in_millis > 0 {
-					thread::sleep(std::time::Duration::from_millis(self.config.slow_down_in_millis));
+				if self.config.slow_down_in_millis != None && self.config.slow_down_in_millis.unwrap() > 0 {
+					thread::sleep(std::time::Duration::from_millis(self.config.slow_down_in_millis.unwrap()));
 				}
 			}
 
@@ -133,7 +134,7 @@ impl Miner {
 				info!("(Server ID: {}) Found valid proof of work, adding block {}.",
 					  self.debug_output_id, b.hash());
 					b.header.pow = proof;
-				let opts = if self.config.cuckoo_size < consensus::DEFAULT_SIZESHIFT as u32 {
+				let opts = if self.config.cuckoo_size.unwrap() < consensus::DEFAULT_SIZESHIFT as u32 {
 					chain::EASY_POW
 				} else {
 					chain::NONE

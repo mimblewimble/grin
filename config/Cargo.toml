@@ -1,0 +1,14 @@
+[package]
+name = "grin_config"
+version = "0.1.0"
+authors = [" yeastplume"]
+workspace = ".."
+
+[dependencies]
+serde = "~1.0.8"
+serde_derive = "~1.0.8"
+toml = "0.4"
+
+grin_grin = { path = "../grin" }
+grin_p2p = { path = "../p2p" }
+grin_wallet = { path = "../wallet"}
