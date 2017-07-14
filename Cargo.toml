@@ -9,6 +9,7 @@ members = ["api", "chain", "config", "core", "grin", "p2p", "store", "util", "po
 [dependencies]
 grin_api = { path = "./api" }
 grin_wallet = { path = "./wallet" }
+grin_grin = { path = "./grin" }
 grin_config = { path = "./config" }
 secp256k1zkp = { path = "./secp256k1zkp" }
 
@@ -20,14 +21,5 @@ serde = "~1.0.8"
 serde_derive = "~1.0.8"
 serde_json = "~1.0.2"
 tiny-keccak = "1.1"
-
-[dependencies.grin_grin]
-path = "./grin"
-version = "*"
-default-features = false
-#Comment this in to use the cuckoo-miner package
-#ensure cuckoo-miner is cloned next to the 
-#grin directory
-#features = ["cuckoo_miner", "use-cuckoo-miner"]
 
 

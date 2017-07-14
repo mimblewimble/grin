@@ -45,7 +45,7 @@ pub const DEFAULT_SIZESHIFT: u8 = 30;
 /// Lower Cuckoo size shift for tests and testnet
 /// This should be changed to correspond with the
 /// loaded plugin if using cuckoo-miner
-pub const TEST_SIZESHIFT: u8 = 12;
+pub const TEST_SIZESHIFT: u8 = 16;
 
 /// Default Cuckoo Cycle easiness, high enough to have good likeliness to find
 /// a solution.

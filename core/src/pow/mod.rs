@@ -24,6 +24,7 @@
 
 mod siphash;
 pub mod cuckoo;
+use std::collections::HashMap;
 
 use time;
 
@@ -42,7 +43,8 @@ use pow::cuckoo::{Cuckoo, Miner, Error};
 pub trait MiningWorker {
 	
 	//This only sets parameters and does initialisation work now
-	fn new(ease: u32, sizeshift: u32) -> Self;
+	fn new(ease: u32, 
+		   sizeshift: u32) -> Self;
 	
 	//Actually perform a mining attempt on the given input and
 	//return a proof if found

@@ -153,9 +153,6 @@ fn simulate_parallel_mining(){
     server_config.start_wallet = true;
     server_config.is_seeding = true;
 
-    //This is the default value, can play with this here for convenience
-    server_config.cuckoo_size=consensus::TEST_SIZESHIFT as u32;
-
     pool.create_server(&mut server_config);
 
     //point next servers at first seed
@@ -199,7 +196,6 @@ fn simulate_block_propagation() {
   let miner_config = grin::MinerConfig{
     enable_mining: true,
     burn_reward: true,
-    cuckoo_size: Some(consensus::TEST_SIZESHIFT as u32),
     ..Default::default()
   };
 
@@ -255,8 +251,7 @@ fn simulate_full_sync() {
 
   let miner_config = grin::MinerConfig{
     enable_mining: true,
-    burn_reward: true,
-    cuckoo_size: Some(consensus::TEST_SIZESHIFT as u32),
+    burn_reward: true,    
     ..Default::default()
   };
 

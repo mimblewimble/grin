@@ -41,7 +41,6 @@ use store;
 use sync;
 use types::*;
 
-#[cfg(feature = "use-cuckoo-miner")]
 use plugin::PluginMiner;
 
 /// Grin server holding internal structures.
@@ -58,8 +57,7 @@ pub struct Server {
 
 impl Server {
 	/// Instantiates and starts a new server.
-	pub fn start(mut config: ServerConfig) -> Result<Server, Error> {
-		check_config(&mut config);
+	pub fn start(config: ServerConfig) -> Result<Server, Error> {
 		let mut evtlp = reactor::Core::new().unwrap();
 
 		let mut mining_config = config.mining_config.clone();
@@ -82,7 +80,6 @@ impl Server {
 
 	/// Instantiates a new server associated with the provided future reactor.
 	pub fn future(mut config: ServerConfig, evt_handle: &reactor::Handle) -> Result<Server, Error> {
-		check_config(&mut config);
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
 		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(pool_adapter.clone())));
@@ -145,26 +142,27 @@ impl Server {
 		self.p2p.peer_count()
 	}
 
-	/// Start mining for blocks on a separate thread. Relies on a toy miner,
-	/// mostly for testing.
-	#[cfg(not(feature = "use-cuckoo-miner"))]
+	/// Start mining for blocks on a separate thread. Uses toy miner by default,
+	/// mostly for testing, but can also load a plugin from cuckoo-miner
 	pub fn start_miner(&self, config: MinerConfig) {
+		let cuckoo_size = match self.config.test_mode {
+			true => consensus::TEST_SIZESHIFT as u32,
+			false => consensus::DEFAULT_SIZESHIFT as u32,
+		}; 
 		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
 		miner.set_debug_output_id(format!("Port {}",self.config.p2p_config.unwrap().port));
+		let server_config = self.config.clone();
 		thread::spawn(move || {
-			let test_cuckoo_miner = cuckoo::Miner::new(consensus::EASINESS, config.cuckoo_size.unwrap().clone());
-			miner.run_loop(test_cuckoo_miner);
-		});
-	}
-
-	/// And a version we only get if we're using the cuckoo miner crate
-	#[cfg(feature = "use-cuckoo-miner")]
-	pub fn start_miner(&self, config: MinerConfig) {
-		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
-		miner.set_debug_output_id(format!("Port {}",self.config.p2p_config.port));
-		thread::spawn(move || {
-			let test_cuckoo_miner = PluginMiner::new(consensus::EASINESS, config.cuckoo_size.unwrap().clone());
-			miner.run_loop(test_cuckoo_miner);
+			if config.use_cuckoo_miner {
+				let mut cuckoo_miner = PluginMiner::new(consensus::EASINESS, 
+													cuckoo_size);
+				cuckoo_miner.init(config.clone(),server_config);									
+				miner.run_loop(cuckoo_miner, cuckoo_size);
+			} else {
+				let test_internal_miner = cuckoo::Miner::new(consensus::EASINESS, cuckoo_size);
+				miner.run_loop(test_internal_miner, cuckoo_size);
+			}
+			
 		});
 	}
 
@@ -182,13 +180,4 @@ impl Server {
 			head: self.head(),
 		})
 	}
-}
-
-fn check_config(config: &mut ServerConfig) {
-	// applying test/normal config
-	config.mining_config.as_mut().unwrap().cuckoo_size = if config.test_mode {
-		Some(consensus::TEST_SIZESHIFT as u32)
-	} else {
-		Some(consensus::DEFAULT_SIZESHIFT as u32)
-	};
 }

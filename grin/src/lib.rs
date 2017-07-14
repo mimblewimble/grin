@@ -46,12 +46,10 @@ extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 extern crate secp256k1zkp as secp;
 
-#[cfg(feature = "use-cuckoo-miner")]
 extern crate cuckoo_miner;
 
 mod adapters;
 mod miner;
-#[cfg(feature = "use-cuckoo-miner")]
 mod plugin;
 mod server;
 mod seed;
