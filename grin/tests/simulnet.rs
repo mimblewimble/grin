@@ -196,6 +196,9 @@ fn simulate_block_propagation() {
   let miner_config = grin::MinerConfig{
     enable_mining: true,
     burn_reward: true,
+    use_cuckoo_miner: true,
+    cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
+    cuckoo_miner_plugin_type: Some(String::from("simple")),
     ..Default::default()
   };
 
@@ -251,7 +254,10 @@ fn simulate_full_sync() {
 
   let miner_config = grin::MinerConfig{
     enable_mining: true,
-    burn_reward: true,    
+    burn_reward: true,
+    use_cuckoo_miner: true,
+    cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
+    cuckoo_miner_plugin_type: Some(String::from("simple")),
     ..Default::default()
   };
 
@@ -269,7 +275,7 @@ fn simulate_full_sync() {
 
   // mine a few blocks on server 1
   servers[0].start_miner(miner_config);
-  thread::sleep(time::Duration::from_secs(15));
+  thread::sleep(time::Duration::from_secs(45));
 
   // connect 1 and 2
   let addr = format!("{}:{}", "127.0.0.1", 11001);
