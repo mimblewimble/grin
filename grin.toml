@@ -57,7 +57,7 @@ enable_mining = true
 
 #Whether to use cuckoo-miner,  and related parameters
 
-use_cuckoo_miner = false
+use_cuckoo_miner = true
 
 #If using cuckoo_miner, the directory in which plugins are installed
 #if not specified, grin will look in the directory /deps relative
