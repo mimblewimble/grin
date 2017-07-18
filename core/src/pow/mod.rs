@@ -113,7 +113,8 @@ mod test {
 	fn genesis_pow() {
 		let mut b = genesis::genesis();
 		b.header.nonce = 310;
-		pow_size(&mut b.header, Difficulty::from_num(MINIMUM_DIFFICULTY), 12).unwrap();
+		let mut internal_miner = cuckoo::Miner::new(EASINESS, 12);
+		pow_size(&mut internal_miner, &mut b.header, Difficulty::from_num(MINIMUM_DIFFICULTY), 12).unwrap();
 		assert!(b.header.nonce != 310);
 		assert!(b.header.pow.to_difficulty() >= Difficulty::from_num(MINIMUM_DIFFICULTY));
 		assert!(verify_size(&b.header, 12));
