@@ -78,7 +78,7 @@ impl Miner {
 
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
-	pub fn run_loop<T: MiningWorker>(&self, mut miner:T) {
+	pub fn run_loop<T: MiningWorker>(&self, mut miner:T, cuckoo_size:u32) {
 
 		info!("(Server ID: {}) Starting miner loop.", self.debug_output_id);
 		let mut coinbase = self.get_coinbase();
@@ -95,7 +95,7 @@ impl Miner {
 			let mut sol = None;
 			debug!("(Server ID: {}) Mining at Cuckoo{} for at most 2 secs on block {} at difficulty {}.",
 			       self.debug_output_id,
-			       self.config.cuckoo_size.unwrap(),
+			       cuckoo_size,
 			       latest_hash,
 			       b.header.difficulty);
 			let mut iter_count = 0;
@@ -134,7 +134,7 @@ impl Miner {
 				info!("(Server ID: {}) Found valid proof of work, adding block {}.",
 					  self.debug_output_id, b.hash());
 					b.header.pow = proof;
-				let opts = if self.config.cuckoo_size.unwrap() < consensus::DEFAULT_SIZESHIFT as u32 {
+				let opts = if cuckoo_size < consensus::DEFAULT_SIZESHIFT as u32 {
 					chain::EASY_POW
 				} else {
 					chain::NONE

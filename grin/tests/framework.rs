@@ -107,9 +107,6 @@ pub struct LocalServerContainerConfig {
     //Whether to burn mining rewards
     pub burn_mining_rewards: bool,
 
-    //size of cuckoo graph for mining
-    pub cuckoo_size: u32,
-
     //full address to send coinbase rewards to
     pub coinbase_wallet_address: String,
 
@@ -133,7 +130,6 @@ impl Default for LocalServerContainerConfig {
             is_seeding: false,
             start_miner: false,
             start_wallet: false,
-            cuckoo_size: consensus::TEST_SIZESHIFT as u32,
             burn_mining_rewards: false,
             coinbase_wallet_address: String::from(""),
             wallet_validating_node_url: String::from(""),
@@ -232,12 +228,14 @@ impl LocalServerContainer {
         let mut miner_config = grin::MinerConfig {
             enable_mining: self.config.start_miner,
             burn_reward: self.config.burn_mining_rewards,
-            cuckoo_size: Some(self.config.cuckoo_size),
+            use_cuckoo_miner: true,
+            cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
+            cuckoo_miner_plugin_type: Some(String::from("simple")),
             wallet_receiver_url : self.config.coinbase_wallet_address.clone(),
             slow_down_in_millis: Some(self.config.miner_slowdown_in_millis.clone()),
             ..Default::default()
         };
-
+          
         if self.config.start_miner == true {
             println!("starting Miner on port {}", self.config.p2p_server_port);
             s.start_miner(miner_config);

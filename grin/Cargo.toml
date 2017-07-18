@@ -4,10 +4,6 @@ version = "0.1.0"
 authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
 workspace = ".."
 
-[features]
-# Compliation flag whether to include the experimental cuckoo-miner crate
-use-cuckoo-miner = []
-
 [dependencies]
 grin_api = { path = "../api" }
 grin_chain = { path = "../chain" }
@@ -19,7 +15,7 @@ grin_util = { path = "../util" }
 grin_wallet = { path = "../wallet" }
 secp256k1zkp = { path = "../secp256k1zkp" }
 
-#cuckoo_miner = { version = "*", optional=true, path = "../../cuckoo-miner"}
+cuckoo_miner = { git = "https://github.com/mimblewimble/cuckoo-miner", tag="grin_integration"}
 
 env_logger="^0.3.5"
 futures = "^0.1.9"

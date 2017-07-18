@@ -23,10 +23,13 @@ use core::core::{Block, BlockHeader, Output};
 use core::core::target::Difficulty;
 use core::core::hash::Hash;
 use core::{consensus, genesis, pow};
+use core::pow::MiningWorker;
 use grin_store;
 use pipe;
 use store;
 use types::*;
+
+
 
 /// Helper macro to transform a Result into an Option with None in case
 /// of error
@@ -78,7 +81,8 @@ impl Chain {
 				} else {
 					consensus::DEFAULT_SIZESHIFT
 				};
-				pow::pow_size(&mut gen.header, diff, sz as u32).unwrap();
+				let mut internal_miner = pow::cuckoo::Miner::new(consensus::EASINESS, sz as u32);
+				pow::pow_size(&mut internal_miner, &mut gen.header, diff, sz as u32).unwrap();
 				chain_store.save_block(&gen)?;
 
 				// saving a new tip based on genesis

@@ -24,6 +24,7 @@
 
 mod siphash;
 pub mod cuckoo;
+use std::collections::HashMap;
 
 use time;
 
@@ -42,7 +43,8 @@ use pow::cuckoo::{Cuckoo, Miner, Error};
 pub trait MiningWorker {
 	
 	//This only sets parameters and does initialisation work now
-	fn new(ease: u32, sizeshift: u32) -> Self;
+	fn new(ease: u32, 
+		   sizeshift: u32) -> Self;
 	
 	//Actually perform a mining attempt on the given input and
 	//return a proof if found
@@ -63,14 +65,15 @@ pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
 
 /// Uses the much easier Cuckoo20 (mostly for
 /// tests).
-pub fn pow20(bh: &mut BlockHeader, diff: Difficulty) -> Result<(), Error> {
-	pow_size(bh, diff, 20)
+pub fn pow20<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader, diff: Difficulty) -> Result<(), Error> {
+	pow_size(miner, bh, diff, 20)
 }
 
-/// Runs a naive single-threaded proof of work computation over the provided
-/// block, until the required difficulty target is reached. May take a
-/// while for a low target...
-pub fn pow_size(bh: &mut BlockHeader, diff: Difficulty, sizeshift: u32) -> Result<(), Error> {
+/// Runs a proof of work computation over the provided block using the provided Mining Worker,
+/// until the required difficulty target is reached. May take a while for a low target...
+
+pub fn pow_size<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader, 
+								 diff: Difficulty, sizeshift: u32) -> Result<(), Error> {
 	let start_nonce = bh.nonce;
 
 	// try to find a cuckoo cycle on that header hash
@@ -81,7 +84,8 @@ pub fn pow_size(bh: &mut BlockHeader, diff: Difficulty, sizeshift: u32) -> Resul
 
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good
-		if let Ok(proof) = Miner::new(EASINESS, sizeshift).mine(&pow_hash[..]) {
+
+		if let Ok(proof) = miner.mine(&pow_hash[..]) {
 			if proof.to_difficulty() >= diff {
 				bh.pow = proof;
 				return Ok(());
@@ -109,7 +113,8 @@ mod test {
 	fn genesis_pow() {
 		let mut b = genesis::genesis();
 		b.header.nonce = 310;
-		pow_size(&mut b.header, Difficulty::from_num(MINIMUM_DIFFICULTY), 12).unwrap();
+		let mut internal_miner = cuckoo::Miner::new(EASINESS, 12);
+		pow_size(&mut internal_miner, &mut b.header, Difficulty::from_num(MINIMUM_DIFFICULTY), 12).unwrap();
 		assert!(b.header.nonce != 310);
 		assert!(b.header.pow.to_difficulty() >= Difficulty::from_num(MINIMUM_DIFFICULTY));
 		assert!(verify_size(&b.header, 12));

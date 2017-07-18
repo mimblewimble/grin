@@ -153,9 +153,6 @@ fn simulate_parallel_mining(){
     server_config.start_wallet = true;
     server_config.is_seeding = true;
 
-    //This is the default value, can play with this here for convenience
-    server_config.cuckoo_size=consensus::TEST_SIZESHIFT as u32;
-
     pool.create_server(&mut server_config);
 
     //point next servers at first seed
@@ -199,7 +196,9 @@ fn simulate_block_propagation() {
   let miner_config = grin::MinerConfig{
     enable_mining: true,
     burn_reward: true,
-    cuckoo_size: Some(consensus::TEST_SIZESHIFT as u32),
+    use_cuckoo_miner: true,
+    cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
+    cuckoo_miner_plugin_type: Some(String::from("simple")),
     ..Default::default()
   };
 
@@ -256,7 +255,9 @@ fn simulate_full_sync() {
   let miner_config = grin::MinerConfig{
     enable_mining: true,
     burn_reward: true,
-    cuckoo_size: Some(consensus::TEST_SIZESHIFT as u32),
+    use_cuckoo_miner: true,
+    cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
+    cuckoo_miner_plugin_type: Some(String::from("simple")),
     ..Default::default()
   };
 
@@ -274,7 +275,7 @@ fn simulate_full_sync() {
 
   // mine a few blocks on server 1
   servers[0].start_miner(miner_config);
-  thread::sleep(time::Duration::from_secs(15));
+  thread::sleep(time::Duration::from_secs(45));
 
   // connect 1 and 2
   let addr = format!("{}:{}", "127.0.0.1", 11001);

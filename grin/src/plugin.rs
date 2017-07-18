@@ -22,9 +22,12 @@ use std::env;
 use core::pow::cuckoo;
 use core::pow::cuckoo::Error;
 use core::pow::MiningWorker;
-use core::consensus::TEST_SIZESHIFT;
+use core::consensus::{TEST_SIZESHIFT, DEFAULT_SIZESHIFT};
+
+use std::collections::HashMap;
 
 use core::core::Proof;
+use types::{MinerConfig, ServerConfig};
 
 use cuckoo_miner::{
 	CuckooMiner,
@@ -35,8 +38,82 @@ use cuckoo_miner::{
 	CuckooPluginCapabilities};
 
 pub struct PluginMiner {
-	miner:CuckooMiner,
+	miner:Option<CuckooMiner>,
 	last_solution: CuckooMinerSolution,
+}
+
+impl Default for PluginMiner {
+	fn default() -> PluginMiner {
+		PluginMiner {
+			miner: None,
+			last_solution: CuckooMinerSolution::new(),
+		}
+	}
+}
+
+impl PluginMiner {
+	pub fn init(&mut self, miner_config: MinerConfig, server_config: ServerConfig){
+				//Get directory of executable
+		let mut exe_path=env::current_exe().unwrap();
+		exe_path.pop();
+		let exe_path=exe_path.to_str().unwrap();
+
+		let plugin_install_path = match miner_config.cuckoo_miner_plugin_dir {
+			Some(s) => s,
+			None => String::from(format!("{}/deps", exe_path))
+		};
+
+		let plugin_impl_filter = match miner_config.cuckoo_miner_plugin_type {
+			Some(s) => s,
+			None => String::from("simple")
+		};
+
+		//First, load and query the plugins in the given directory
+		//These should all be stored in 'deps' at the moment relative
+		//to the executable path, though they should appear somewhere else 
+		//when packaging is more//thought out 
+
+    	let mut plugin_manager = CuckooPluginManager::new().unwrap();
+    	let result=plugin_manager.load_plugin_dir(plugin_install_path);
+
+		if let Err(e) = result {
+			error!("Unable to load cuckoo-miner plugin directory, either from configuration or [exe_path]/deps.");
+			panic!("Unable to load plugin directory... Please check configuration values");
+		}
+
+    	//The miner implementation needs to match what's in the consensus sizeshift value
+		//
+		let sz = if server_config.test_mode {
+			TEST_SIZESHIFT
+		} else {
+			DEFAULT_SIZESHIFT
+		};
+
+		//So this is built dynamically based on the plugin implementation
+		//type and the consensus sizeshift
+		let filter = format!("{}_{}", plugin_impl_filter, sz);
+
+    	let caps = plugin_manager.get_available_plugins(&filter).unwrap();
+		//insert it into the miner configuration being created below
+
+    
+    	let mut config = CuckooMinerConfig::new();
+
+        info!("Mining using plugin: {}", caps[0].full_path.clone());
+    	config.plugin_full_path = caps[0].full_path.clone();
+		if let Some(l) = miner_config.cuckoo_miner_parameter_list {
+			config.parameter_list = l.clone();
+		}
+
+		//this will load the associated plugin
+		let result=CuckooMiner::new(config);
+		if let Err(e) = result {
+			error!("Error initializing mining plugin: {:?}", e);
+			error!("Accepted values are: {:?}", caps[0].parameters);
+			panic!("Unable to init mining plugin.");
+		}
+		self.miner=Some(result.unwrap());
+	} 
 }
 
 impl MiningWorker for PluginMiner {
@@ -46,55 +123,16 @@ impl MiningWorker for PluginMiner {
 	/// version of the miner for now, though this should become
 	/// configurable somehow
 
-	fn new(ease: u32, sizeshift: u32) -> Self {
-
-		//Get directory of executable
-		let mut exe_path=env::current_exe().unwrap();
-		exe_path.pop();
-		let exe_path=exe_path.to_str().unwrap();
-
-		//First, load and query the plugins in the given directory
-		//These should all be stored in 'deps' at the moment relative, though
-		//to the executable path, though they should appear somewhere else 
-		//when packaging is more//thought out 
-
-    	let mut plugin_manager = CuckooPluginManager::new().unwrap();
-    	let result=plugin_manager.load_plugin_dir(String::from(format!("{}/deps", exe_path))).expect("");
-
-    	//Get a list of installed plugins and capabilities.. filtering for the one we want
-		//Just use the baseline edgetrim (i.e. cuckoo_miner.cpp) for now
-		//You need to change the value TEST_SIZESHIFT in consensus.rs for now to modify this,
-		//so that blocks mined in this version will validate
-
-		let filter = format!("simple_{}", TEST_SIZESHIFT);
-
-    	let caps = plugin_manager.get_available_plugins(&filter).unwrap();
-		//insert it into the miner configuration being created below
-    
-    	let mut config = CuckooMinerConfig::new();
-
-        info!("Mining using plugin: {}", caps[0].full_path.clone());
-    	config.plugin_full_path = caps[0].full_path.clone();
-		//Set threads, should read this from a configuration file
-		//somewhere or query the system to determine a default
-		config.num_threads=4;
-		//let plugin decide number of trims
-		config.num_trims=0;
-
-		//this will load the associated plugin
-		let miner = CuckooMiner::new(config).expect("");
-
-		PluginMiner {
-			miner: miner,
-			last_solution: CuckooMinerSolution::new(),
-		}
+	fn new(ease: u32, 
+		   sizeshift: u32) -> Self {
+		PluginMiner::default()
 	}
 
 	/// And simply calls the mine function of the loaded plugin
 	/// returning whether a solution was found and the solution itself
 
 	fn mine(&mut self, header: &[u8]) -> Result<Proof, cuckoo::Error> {
-        let result = self.miner.mine(&header, &mut self.last_solution).unwrap();
+        let result = self.miner.as_mut().unwrap().mine(&header, &mut self.last_solution).unwrap();
 		if result == true {
             return Ok(Proof(self.last_solution.solution_nonces));
         }

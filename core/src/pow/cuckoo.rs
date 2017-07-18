@@ -18,6 +18,7 @@
 //! miner will be much faster in almost every environment.
 
 use std::collections::HashSet;
+use std::collections::HashMap;
 use std::cmp;
 
 use crypto::digest::Digest;
@@ -162,7 +163,8 @@ pub struct Miner {
 impl MiningWorker for Miner {
 
 	/// Creates a new miner
-	fn new(ease: u32, sizeshift: u32) -> Miner {
+	fn new(ease: u32, 
+		   sizeshift: u32) -> Miner {
 		let size = 1 << sizeshift;
 		let graph = vec![0; size + 1];
 		let easiness = (ease as u64) * (size as u64) / 100;

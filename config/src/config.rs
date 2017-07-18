@@ -198,9 +198,6 @@ fn test_read_config() {
         burn_reward = false
         #testing value, optional
         #slow_down_in_millis = 30
-        #testing value, should really be removed and read from consensus instead, optional
-        #cuckoo_size = 12
-
 
     "#;
 
