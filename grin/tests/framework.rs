@@ -228,11 +228,14 @@ impl LocalServerContainer {
         let mut miner_config = grin::MinerConfig {
             enable_mining: self.config.start_miner,
             burn_reward: self.config.burn_mining_rewards,
+            use_cuckoo_miner: true,
+            cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
+            cuckoo_miner_plugin_type: Some(String::from("simple")),
             wallet_receiver_url : self.config.coinbase_wallet_address.clone(),
             slow_down_in_millis: Some(self.config.miner_slowdown_in_millis.clone()),
             ..Default::default()
         };
-
+          
         if self.config.start_miner == true {
             println!("starting Miner on port {}", self.config.p2p_server_port);
             s.start_miner(miner_config);

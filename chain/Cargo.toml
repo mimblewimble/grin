@@ -19,3 +19,8 @@ secp256k1zkp = { path = "../secp256k1zkp" }
 [dev-dependencies]
 env_logger="^0.3.5"
 rand = "^0.3"
+
+#just to instantiate a mining worker during a test
+#while the miner implementation supports both 
+#cuckoo_miner and the built-in version
+grin_grin = { path = "../grin" }
