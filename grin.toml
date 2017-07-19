@@ -70,7 +70,8 @@ use_cuckoo_miner = true
 #directory
 #Plugins currently included are:
 #"simple" : the basic cuckoo algorithm
-#"edgetrim" : an algorithm trading speed for a much lower memory footpring
+#"edgetrim" : an algorithm trading speed for a much lower memory footprint
+#"tomato" : Time memory-tradeoff... low memory but very slow
 #Not included but verified working:
 #"cuda" a gpu miner - which currently needs to bebuilt and installed 
 #separately from#the cuckoo-miner repository. Instructions found there

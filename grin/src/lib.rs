@@ -34,6 +34,8 @@ extern crate serde_derive;
 extern crate time;
 extern crate tokio_core;
 extern crate tokio_timer;
+#[macro_use]
+extern crate lazy_static;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;
