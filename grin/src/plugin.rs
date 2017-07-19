@@ -29,6 +29,8 @@ use std::collections::HashMap;
 use core::core::Proof;
 use types::{MinerConfig, ServerConfig};
 
+use std::sync::{Mutex};
+
 use cuckoo_miner::{
 	CuckooMiner,
 	CuckooPluginManager,
@@ -36,6 +38,15 @@ use cuckoo_miner::{
 	CuckooMinerError,
 	CuckooMinerSolution,
 	CuckooPluginCapabilities};
+
+//For now, we're just going to keep a static reference around to the loaded config
+//And not allow querying the plugin directory twice once a plugin has been selected
+//This is to keep compatibility with multi-threaded testing, so that spawned
+//testing threads don't try to load/unload the library while another thread is
+//using it.
+lazy_static!{
+    static ref LOADED_CONFIG: Mutex<Option<CuckooMinerConfig>> = Mutex::new(None);
+}
 
 pub struct PluginMiner {
 	miner:Option<CuckooMiner>,
@@ -73,6 +84,17 @@ impl PluginMiner {
 		//to the executable path, though they should appear somewhere else 
 		//when packaging is more//thought out 
 
+		let mut loaded_config_ref = LOADED_CONFIG.lock().unwrap();
+
+		//Load from here instead
+		if let Some(ref c) = *loaded_config_ref {
+			debug!("Not re-loading plugin or directory.");
+			//this will load the associated plugin
+			let result=CuckooMiner::new(c.clone());
+			self.miner=Some(result.unwrap());
+			return;
+		}
+
     	let mut plugin_manager = CuckooPluginManager::new().unwrap();
     	let result=plugin_manager.load_plugin_dir(plugin_install_path);
 
@@ -96,14 +118,17 @@ impl PluginMiner {
     	let caps = plugin_manager.get_available_plugins(&filter).unwrap();
 		//insert it into the miner configuration being created below
 
-    
     	let mut config = CuckooMinerConfig::new();
-
+	
         info!("Mining using plugin: {}", caps[0].full_path.clone());
     	config.plugin_full_path = caps[0].full_path.clone();
 		if let Some(l) = miner_config.cuckoo_miner_parameter_list {
 			config.parameter_list = l.clone();
 		}
+
+		//Store this config now, because we just want one instance
+		//of the plugin lib per invocation now
+		*loaded_config_ref=Some(config.clone());
 
 		//this will load the associated plugin
 		let result=CuckooMiner::new(config);
@@ -112,6 +137,8 @@ impl PluginMiner {
 			error!("Accepted values are: {:?}", caps[0].parameters);
 			panic!("Unable to init mining plugin.");
 		}
+
+		
 		self.miner=Some(result.unwrap());
 	} 
 }
