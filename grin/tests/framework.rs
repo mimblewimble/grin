@@ -20,7 +20,7 @@ extern crate grin_api as api;
 extern crate grin_wallet as wallet;
 extern crate secp256k1zkp as secp;
 
-extern crate blake2;
+extern crate blake2_rfc as blake2;;
 extern crate env_logger;
 extern crate futures;
 extern crate tokio_core;

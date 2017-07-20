@@ -104,6 +104,7 @@ mod test {
 	use super::*;
 	use core::target::Difficulty;
 	use genesis;
+  use consensus::MINIMUM_DIFFICULTY;
 
 	#[test]
 	fn genesis_pow() {
