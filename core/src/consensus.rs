@@ -19,10 +19,7 @@
 //! enough, consensus-relevant constants and short functions should be kept
 //! here.
 
-use std::cmp;
 use std::fmt;
-
-use bigint::{BigInt, Sign};
 
 use core::target::Difficulty;
 
@@ -64,17 +61,21 @@ pub const CUT_THROUGH_HORIZON: u32 = 48 * 3600 / (BLOCK_TIME_SEC as u32);
 pub const MAX_MSG_LEN: u64 = 20_000_000;
 
 /// The minimum mining difficulty we'll allow
-
 pub const MINIMUM_DIFFICULTY: u32 = 10;
 
+/// Time window in blocks to calculate block time median
 pub const MEDIAN_TIME_WINDOW: u32 = 11;
 
+/// Number of blocks used to calculate difficulty adjustments
 pub const DIFFICULTY_ADJUST_WINDOW: u32 = 23;
 
+/// Average time span of the difficulty adjustment window
 pub const BLOCK_TIME_WINDOW: i64 = (DIFFICULTY_ADJUST_WINDOW as i64) * BLOCK_TIME_SEC;
 
+/// Maximum size time window used for difficutly adjustments
 pub const UPPER_TIME_BOUND: i64 = BLOCK_TIME_WINDOW * 4 / 3;
 
+/// Minimum size time window used for difficutly adjustments
 pub const LOWER_TIME_BOUND: i64 = BLOCK_TIME_WINDOW * 5 / 6;
 
 /// Error when computing the next difficulty adjustment.

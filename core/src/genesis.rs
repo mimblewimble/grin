@@ -17,7 +17,6 @@
 use time;
 
 use core;
-use consensus::DEFAULT_SIZESHIFT;
 use consensus::MINIMUM_DIFFICULTY;
 use core::hash::Hashed;
 use core::target::Difficulty;

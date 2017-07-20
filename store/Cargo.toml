@@ -14,6 +14,5 @@ rocksdb = "^0.6.0"
 ## https://github.com/facebook/rocksdb/commit/816c1e30ca73615c75fc208ddcc4b05012b30951
 ## And swap the dependency for the one below
 #rocksdb = { path = "../../rust-rocksdb" }
-tiny-keccak = "1.1"
 
 grin_core = { path = "../core" }

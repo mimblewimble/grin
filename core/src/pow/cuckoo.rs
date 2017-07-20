@@ -18,7 +18,6 @@
 //! miner will be much faster in almost every environment.
 
 use std::collections::HashSet;
-use std::collections::HashMap;
 use std::cmp;
 
 use crypto::digest::Digest;

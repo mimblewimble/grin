@@ -19,7 +19,6 @@ extern crate grin_chain as chain;
 extern crate grin_api as api;
 extern crate grin_wallet as wallet;
 extern crate secp256k1zkp as secp;
-extern crate tiny_keccak;
 
 extern crate env_logger;
 extern crate futures;
