@@ -19,8 +19,8 @@ extern crate grin_chain as chain;
 extern crate grin_api as api;
 extern crate grin_wallet as wallet;
 extern crate secp256k1zkp as secp;
-extern crate tiny_keccak;
 
+extern crate blake2;
 extern crate env_logger;
 extern crate futures;
 extern crate tokio_core;
@@ -35,6 +35,7 @@ use std::fs;
 use std::sync::{Arc, Mutex, RwLock};
 use std::ops::Deref;
 
+use blake2::blake2b::blake2b;
 use futures::{Future};
 use futures::future::join_all;
 use futures::task::park;
@@ -44,7 +45,6 @@ use tokio_core::reactor::Handle;
 use tokio_timer::Timer;
 
 use secp::Secp256k1;
-use tiny_keccak::Keccak;
 
 use wallet::WalletConfig;
 use core::consensus;
@@ -269,10 +269,7 @@ impl LocalServerContainer {
         //Just use the name of the server for a seed for now
         let seed = format!("{}", self.config.name);
 
-	    let mut sha3 = Keccak::new_sha3_256();
-	    sha3.update(seed.as_bytes());
-	    let mut seed = [0; 32];
-	    sha3.finalize(&mut seed);
+        let seed = blake2b(32, &[], seed.as_bytes());
 
 	    let s = Secp256k1::new();
 	    let key = wallet::ExtendedKey::from_seed(&s, &seed[..])

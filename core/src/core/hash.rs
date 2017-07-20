@@ -19,8 +19,9 @@
 
 use std::cmp::min;
 use std::{fmt, ops};
-use tiny_keccak::Keccak;
 use std::convert::AsRef;
+
+use blake2::blake2b::Blake2b;
 
 use ser::{self, Reader, Readable, Writer, Writeable, Error, AsFixedBytes};
 
@@ -129,28 +130,28 @@ impl Writeable for Hash {
 
 /// Serializer that outputs a hash of the serialized object
 pub struct HashWriter {
-	state: Keccak,
+	state: Blake2b,
 }
 
 impl HashWriter {
 	/// Consume the `HashWriter`, outputting its current hash into a 32-byte
 	/// array
 	pub fn finalize(self, output: &mut [u8]) {
-		self.state.finalize(output);
+		output.copy_from_slice(self.state.finalize().as_bytes());
 	}
 
 	/// Consume the `HashWriter`, outputting a `Hash` corresponding to its
 	/// current state
 	pub fn into_hash(self) -> Hash {
-		let mut new_hash = ZERO_HASH;
-		self.state.finalize(&mut new_hash.0[..]);
-		new_hash
+    let mut res = [0; 32];
+		(&mut res).copy_from_slice(self.state.finalize().as_bytes());
+    Hash(res)
 	}
 }
 
 impl Default for HashWriter {
 	fn default() -> HashWriter {
-		HashWriter { state: Keccak::new_sha3_256() }
+		HashWriter { state: Blake2b::new(32) }
 	}
 }
 

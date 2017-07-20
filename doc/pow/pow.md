@@ -124,7 +124,7 @@ The Cuckoo Cycle outlined above forms the basis of Grin's mining process, howeve
 In order to provide additional difficulty control in a manner that meets the needs of a network with constantly evolving hashpower
 availability, a further Hashcash-based difficulty check is applied to potential solution sets as follows: 
 
-If the SHA3-256 (Keccak) hash
+If the Blake2b hash
 of a potential set of solution nonces (currently an array of 42 u32s representing the cycle nonces,) 
 is less than an evolving difficulty target T, then the solution is considered valid. More precisely, 
 the proof difficulty is calculated as the maximum target hash (2^256) divided by the current hash, 
@@ -174,11 +174,11 @@ valid Proofs-of-Work to create the latest block in the chain. The following is a
                 of a solution appearing in the graph
             * The Cuckoo Cycle detection algorithm tries to find a solution (i.e. a cycle of length 42) within the generated
             graph. 
-            * If a cycle is found, a SHA3-256 hash of the proof is created and is compared to the current target
+            * If a cycle is found, a Blake2b hash of the proof is created and is compared to the current target
             difficulty, as outlined in [Additional Difficulty Control](#additional-difficulty-control) above.
-            * If the SHA3-256 Hash difficulty is greater than or equal to the target difficulty, the block is sent to the
+            * If the Blake2b Hash difficulty is greater than or equal to the target difficulty, the block is sent to the
             transaction pool, propogated amongst peers for validation, and work begins on the next block.
-            * If the SHA3-256 Hash difficulty is less than the target difficulty, the proof is thrown out and the timed loop continues.
+            * If the Blake2b Hash difficulty is less than the target difficulty, the proof is thrown out and the timed loop continues.
             * If no solution is found, increment the nonce in the header by 1, and update the header's timestamp so the next iteration
             hashes a different value for seeding the next loop's graph generation step.
             * If the loop times out with no solution found, start over again from the top, collecting new transactions and creating
@@ -229,7 +229,7 @@ every time while larger miners can move on as soon as they find a solution. So i
 a POW that requires multiple solution attempts with each attempt taking a relatively small amount of time is desirable.
 
 Following from the this, Grin's progress-freeness is due to the fact that a solution to a Cuckoo with Grin's default parameters
-can typically be found in under a second on most GPUs, and there is the additional requirement of the SHA3-256 difficulty check
+can typically be found in under a second on most GPUs, and there is the additional requirement of the Blake2b difficulty check
 on top of that. Members of a pool are thus able to prove they're working on a solution to a block by submitting valid Cuckoo solutions
 (or a small bundle of them) that simply fall under the current network target difficulty.
 

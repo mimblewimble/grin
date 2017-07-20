@@ -23,6 +23,7 @@
 
 #[macro_use]
 extern crate bitflags;
+extern crate blake2_rfc as blake2;
 extern crate byteorder;
 extern crate crypto;
 extern crate num_bigint as bigint;
@@ -32,7 +33,6 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate time;
-extern crate tiny_keccak;
 
 #[macro_use]
 pub mod macros;

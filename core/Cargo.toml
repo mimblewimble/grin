@@ -6,6 +6,7 @@ workspace = ".."
 
 [dependencies]
 bitflags = "~0.7.0"
+blake2-rfc = "~0.2.17"
 byteorder = "^0.5"
 num-bigint = "^0.1.35"
 rust-crypto = "^0.2"
@@ -13,6 +14,5 @@ rand = "^0.3"
 serde = "~1.0.8"
 serde_derive = "~1.0.8"
 time = "^0.1"
-tiny-keccak = "1.1"
 
 secp256k1zkp = { path = "../secp256k1zkp" }
