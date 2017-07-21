@@ -19,7 +19,7 @@ use rand::{self, Rng};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std;
-use std::env;
+use std::{env, str};
 use time;
 
 use adapters::{ChainToPoolAndNetAdapter, PoolToChainAdapter};
@@ -33,6 +33,8 @@ use core::core::target::Difficulty;
 use core::core::hash::{Hash, Hashed};
 use core::pow::MiningWorker;
 use core::ser;
+use core::ser::{Writer, Writeable, AsFixedBytes};
+
 use chain;
 use secp;
 use pool;
@@ -40,8 +42,67 @@ use types::{MinerConfig, Error};
 use util;
 use wallet::{CbAmount, WalletReceiveRequest, CbData};
 
+use itertools::Itertools;
+
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
+
+const PRE_NONCE_SIZE: usize = 113;
+const POST_NONCE_SIZE: usize = 5;
+
+/// Serializer that outputs pre and post nonce portions of a block header
+/// which can then be sent off to miner to mutate at will
+pub struct HeaderPartWriter {
+	//
+	pub pre_nonce: [u8;PRE_NONCE_SIZE],
+	pub post_nonce: [u8;POST_NONCE_SIZE],
+	bytes_written: usize,
+	writing_pre: bool,
+}
+
+impl Default for HeaderPartWriter {
+	fn default() -> HeaderPartWriter {
+		HeaderPartWriter { 
+			bytes_written: 0,
+			writing_pre: true,
+			pre_nonce: [0;PRE_NONCE_SIZE],
+			post_nonce: [0;POST_NONCE_SIZE],
+		}
+	}
+}
+
+impl HeaderPartWriter {
+	pub fn parts_as_hex_strings(&self)->(String, String) {
+		(
+		    String::from(format!("{:02x}", self.pre_nonce.iter().format(""))),
+			String::from(format!("{:02x}", self.post_nonce.iter().format(""))),
+		)
+	}
+}
+
+impl ser::Writer for HeaderPartWriter {
+	fn serialization_mode(&self) -> ser::SerializationMode {
+		ser::SerializationMode::Hash
+	}
+
+	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, bytes_in: &T) -> Result<(), ser::Error> {
+		if self.writing_pre {
+			self.pre_nonce[self.bytes_written..self.bytes_written+bytes_in.len()].clone_from_slice(bytes_in.as_ref());
+		} else if self.bytes_written!=0 {
+			//i.e. don't write nonce
+			self.post_nonce[self.bytes_written-8..self.bytes_written-8+bytes_in.len()].clone_from_slice(bytes_in.as_ref());
+		}
+
+		self.bytes_written+=bytes_in.len();
+		
+		if self.bytes_written==PRE_NONCE_SIZE && self.writing_pre {
+			self.writing_pre=false;
+			self.bytes_written=0;
+		}
+
+		Ok(())
+	}
+}
 
 pub struct Miner {
 	config: MinerConfig,
@@ -106,6 +167,13 @@ impl Miner {
 				self.config.slow_down_in_millis.unwrap());
 			}
 			while head.hash() == latest_hash && time::get_time().sec < deadline {
+				//Testing getting the header in parts
+				let mut header_parts = HeaderPartWriter::default();
+				ser::Writeable::write(&b.header, &mut header_parts).unwrap();
+				let (pre, post) = header_parts.parts_as_hex_strings();
+				/*debug!("Pre header part is: {}", pre);
+				debug!("Post header part is: {}", post);*/
+				
 				let pow_hash = b.hash();
 				if let Ok(proof) = miner.mine(&pow_hash[..]) {
 					let proof_diff=proof.to_difficulty();
