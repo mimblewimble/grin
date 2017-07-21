@@ -36,6 +36,7 @@ extern crate tokio_core;
 extern crate tokio_timer;
 #[macro_use]
 extern crate lazy_static;
+extern crate itertools;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;
