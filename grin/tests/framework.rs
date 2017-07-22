@@ -20,7 +20,7 @@ extern crate grin_api as api;
 extern crate grin_wallet as wallet;
 extern crate secp256k1zkp as secp;
 
-extern crate blake2_rfc as blake2;;
+extern crate blake2_rfc as blake2;
 extern crate env_logger;
 extern crate futures;
 extern crate tokio_core;
@@ -35,7 +35,6 @@ use std::fs;
 use std::sync::{Arc, Mutex, RwLock};
 use std::ops::Deref;
 
-use blake2::blake2b::blake2b;
 use futures::{Future};
 use futures::future::join_all;
 use futures::task::park;
@@ -269,10 +268,10 @@ impl LocalServerContainer {
         //Just use the name of the server for a seed for now
         let seed = format!("{}", self.config.name);
 
-        let seed = blake2b(32, &[], seed.as_bytes());
+        let seed = blake2::blake2b::blake2b(32, &[], seed.as_bytes());
 
 	    let s = Secp256k1::new();
-	    let key = wallet::ExtendedKey::from_seed(&s, &seed[..])
+	    let key = wallet::ExtendedKey::from_seed(&s, seed.as_bytes())
 		         .expect("Error deriving extended key from seed.");
         
         println!("Starting the Grin wallet receiving daemon on {} ", self.config.wallet_port );
