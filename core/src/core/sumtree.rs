@@ -653,7 +653,7 @@ where
 }
 
 #[allow(dead_code)]
-fn print_tree<T>(tree: &SumTree<T>)
+pub fn print_tree<T>(tree: &SumTree<T>)
 where
 	T: Summable + Writeable,
 	T::Sum: std::fmt::Debug,
@@ -848,7 +848,7 @@ mod test {
 		assert_eq!(tree.root_sum(), Some((expected, 28 + 0x1000)));
 		assert_eq!(tree.root_sum(), compute_root(elems[0..8].iter()));
 		assert_eq!(tree.unpruned_len(), 8);
-		prune!(prune, tree, elems[7]);
+    prune!(prune, tree, elems[7]);
 
 		// If we weren't pruning, try changing some elements
 		if !prune {
