@@ -116,7 +116,7 @@ impl<T: Summable> NodeData<T> {
 		(self.hash, self.sum())
 	}
 
-	fn n_children(&self) -> usize {
+	fn n_leaves(&self) -> usize {
 		if self.full {
 			1 << self.depth
 		} else {
@@ -126,7 +126,7 @@ impl<T: Summable> NodeData<T> {
 				..
 			} = self.node
 			{
-				lchild.n_children() + rchild.n_children()
+				lchild.n_leaves() + rchild.n_leaves()
 			} else {
 				unreachable!()
 			}
@@ -216,16 +216,18 @@ where
 		}
 	}
 
-	/// Accessor for number of elements in the tree, not including pruned ones
+	/// Accessor for number of elements (leaves) in the tree, not including
+  /// pruned ones.
 	pub fn len(&self) -> usize {
 		self.index.len()
 	}
 
-	/// Accessor for number of elements in the tree, including pruned ones
+	/// Accessor for number of elements (leaves) in the tree, including pruned
+  /// ones.
 	pub fn unpruned_len(&self) -> usize {
 		match self.root {
 			None => 0,
-			Some(ref node) => node.n_children(),
+			Some(ref node) => node.n_leaves(),
 		}
 	}
 
@@ -266,7 +268,7 @@ where
 		};
 
 		// Put new root in place and record insertion
-		let index = old_root.n_children();
+		let index = old_root.n_leaves();
 		self.root = Some(SumTree::insert_right_of(old_root, new_node));
 		self.index.insert(index_hash, index);
 		true
