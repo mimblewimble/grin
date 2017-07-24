@@ -227,19 +227,19 @@ impl Miner {
 		loop {
 			// get the latest chain state and build a block on top of it
 			let head = self.chain.head_header().unwrap();
-			let mut latest_hash = self.chain.head().unwrap().last_block_h;
+			let latest_hash = self.chain.head().unwrap().last_block_h;
 			let mut b = self.build_block(&head, coinbase.clone());
 
 			// look for a pow for at most 2 sec on the same block (to give a chance to new
 			// transactions) and as long as the head hasn't changed
 			let deadline = time::get_time().sec + 2;
-			let mut sol = None;
+			let sol = None;
 			debug!("(Server ID: {}) Mining at Cuckoo{} for at most 2 secs on block {} at difficulty {}.",
 			       self.debug_output_id,
 			       cuckoo_size,
 			       latest_hash,
 			       b.header.difficulty);
-			let mut iter_count = 0;
+			let iter_count = 0;
 
 			//Get parts of the header
 			let mut header_parts = HeaderPartWriter::default();
@@ -248,32 +248,14 @@ impl Miner {
 
 			let plugin_miner=miner.miner.as_mut().unwrap();
 			//Start the miner working
-			plugin_miner.notify(1, pre_header, post_header, 2, false);
+			plugin_miner.notify(1, &pre, &post, b.header.difficulty.clone().into_biguint(), false);
 
 			loop {
-				if miner.is_solution_found() {
-					miner.stop_jobs();
+				if plugin_miner.is_solution_found() {
+					//sol = Proof(self.last_solution.solution_nonces);
+					plugin_miner.stop_jobs();
+					break;
 				}
-			}
-
-			while head.hash() == latest_hash && time::get_time().sec < deadline {
-				
-
-				/*debug!("Pre header part is: {}", pre);
-				debug!("Post header part is: {}", post);*/
-				
-				let pow_hash = b.hash();
-				if let Ok(proof) = miner.mine(&pow_hash[..]) {
-					let proof_diff=proof.to_difficulty();
-					if proof_diff >= b.header.difficulty {
-						sol = Some(proof);
-						break;
-					}
-				}
-				b.header.nonce += 1;
-				latest_hash = self.chain.head().unwrap().last_block_h;
-				iter_count += 1;
-
 			}
 
 			// if we found a solution, push our block out
