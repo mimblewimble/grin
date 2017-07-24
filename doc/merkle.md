@@ -179,16 +179,16 @@ insertion positions is also required.
 The sum tree is split in chunks that are handled independently and stored in
 separate files.
 
-            G
-           / \
-          M   \
-        /   \  \   ---- cutoff height H
-       X     Y  \
-      / \   / \  \
-     A   B C   D  E
+    3         G
+             / \
+    2       M   \
+          /   \  \
+    1    X     Y  \  ---- cutoff height H=1
+        / \   / \  \
+    0  A   B C   D  E
 
-    [----] [----] 
-    chunk1 chunk2
+      [----] [----] 
+     chunk1 chunk2
 
 Each chunk is a full tree rooted at height H, lesser than R, the height of the
 tree root. Because our MMR is append-only, each chunk is guaranteed to never
@@ -197,7 +197,7 @@ contains the top nodes (above H) in the MMR as well as the leftover nodes on
 its right side.
 
 In the example above, we have 2 chunks X[A,B] and Y[C,D] and a root chunk
-G[M,E].
+G[M,E]. The cutoff height H=1 and the root height R=3.
 
 Note that each non-root chunk is a complete and fully valid MMR sum tree in
 itself. The the root chunk, with each chunk replaced with a single pruned
@@ -209,16 +209,16 @@ size of the root chunk.
 Assuming a cutoff height of H and a root height of R, the size (in nodes) of
 each chunk is:
 
-    chunk_size = 2^(R+1)-1
+    chunk_size = 2^(H+1)-1
 
 The maximum size of the root chunk is:
 
-    root_size = 2^(R-H+1)-1 + 2^(R+1)-2
+    max_root_size = 2^(R-H)-1 + 2^(H+1)-2
 
 If we set the cutoff height H=15 and assume a node size of 50 bytes, for a tree
 with a root at height 26 (capable of containing all Bitcoin UTXOs as this time)
 we obtain a chunk size of about 3.3MB (without pruning) and a maximum root chunk
-size of about 3.5MB.
+size of about 3.4MB.
 
 ### Tombstone Log
 
