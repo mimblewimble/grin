@@ -157,7 +157,7 @@ impl Server {
 				let mut cuckoo_miner = PluginMiner::new(consensus::EASINESS, 
 													cuckoo_size);
 				cuckoo_miner.init(config.clone(),server_config);									
-				miner.run_loop(cuckoo_miner, cuckoo_size);
+				miner.run_async_loop(cuckoo_miner, cuckoo_size);
 			} else {
 				let test_internal_miner = cuckoo::Miner::new(consensus::EASINESS, cuckoo_size);
 				miner.run_loop(test_internal_miner, cuckoo_size);
