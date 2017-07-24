@@ -155,3 +155,137 @@ this sum on a pruned node is zero or not.
 
 (To appear alongside an implementation.)
 
+## Storage
+
+The sum tree data structure allows the efficient storage of the output set and
+output witnesses while allowing immediate retrieval of a root hash or root sum
+(when applicable). However, the tree must contain every output commitment and
+witness hash in the system. This data too big to be permanently stored in
+memory and too costly to be rebuilt from scratch at every restart, even if we
+consider pruning (at this time, Bitcoin has over 50M UTXOs which would require
+at least 3.2GB, assuming a couple hashes per UTXO). So we need an efficient way
+to store this data structure on disk.
+
+Another limitation of a hash tree is that, given a key (i.e. an output
+commitment), it's impossible to find the leaf in the tree associated with that
+key. We can't walk down the tree from the root in any meaningful way. So an
+additional index over the whole key space is required. As an MMR is an append
+only binary tree, we can find a key in the tree by its insertion position. So a
+full index of keys inserted in the tree (i.e. an output commitment) to their
+insertion positions is also required.
+
+### Sum Tree Disk Storage
+
+The sum tree is split in chunks that are handled independently and stored in
+separate files.
+
+            G
+           / \
+          M   \
+        /   \  \   ---- cutoff height H
+       X     Y  \
+      / \   / \  \
+     A   B C   D  E
+
+    [----] [----] 
+    chunk1 chunk2
+
+Each chunk is a full tree rooted at height H, lesser than R, the height of the
+tree root. Because our MMR is append-only, each chunk is guaranteed to never
+change on additions. The remaining nodes are captured in a root chunk that
+contains the top nodes (above H) in the MMR as well as the leftover nodes on
+its right side.
+
+In the example above, we have 2 chunks X[A,B] and Y[C,D] and a root chunk
+G[M,E].
+
+Note that each non-root chunk is a complete and fully valid MMR sum tree in
+itself. The the root chunk, with each chunk replaced with a single pruned
+node is also a complete and fully valid MMR.
+
+As new leaves get inserted in the tree, more chunks get extracted, reducing the
+size of the root chunk.
+
+Assuming a cutoff height of H and a root height of R, the size (in nodes) of
+each chunk is:
+
+    chunk_size = 2^(R+1)-1
+
+The maximum size of the root chunk is:
+
+    root_size = 2^(R-H+1)-1 + 2^(R+1)-2
+
+If we set the cutoff height H=15 and assume a node size of 50 bytes, for a tree
+with a root at height 26 (capable of containing all Bitcoin UTXOs as this time)
+we obtain a chunk size of about 3.3MB (without pruning) and a maximum root chunk
+size of about 3.5MB.
+
+### Tombstone Log
+
+Deleting a leaf in a given tree can be expensive if done naively, especially
+if spread on multiple chunks that aren't stored in memory. It would require
+loading the affected chunks, removing the node (and possibly pruning parents)
+and re-saving the whole chunks back.
+
+To avoid this, we maintain a simple append-only log of deletion operations that
+tombstone a given leaf node. When the tombstone log becomes too large, we can
+easily, in the background, apply it as a whole on affected chunks.
+
+Note that our sum MMR never actually fully deletes a key (i.e. output
+commitment) as subsequent leaf nodes aren't shifted and parents don't need
+rebalancing. Deleting a node just makes its storage in the tree unecessary,
+allowing for potential additional pruning of parent nodes.
+
+### Key to Tree Insertion Position Index
+
+For its operation, our sum MMR needs an index from key (i.e. an output
+commitment) to the position of that key in insertion order. From that
+position, the tree can be walked down to find the corresponding leaf node.
+
+To hold that index without having to keep it all in memory, we store it in a
+fast KV store (rocksdb, a leveldb fork). This reduces the implementation effort
+while still keeping great performance. In the future we may adopt a more
+specialized storage to hold this index.
+
+### Design Notes
+
+We chose explicitly to not try to save the whole tree into a KV store. While
+this may sound attractive, mapping a sum tree structure onto a KV store is
+non-trivial. Having a separate storage mechanism for the MMR introduces
+multiple advantages:
+
+* Storing all nodes in a KV store makes it impossible to fully separate
+the implementation of the tree and its persistence. The tree implementation
+gets more complex to include persistence concerns, making the whole system
+much harder to understand, debug and maintain.
+* The state of the tree is consensus critical. We want to minimize the
+dependency on 3rd party storages whose change in behavior could impact our
+consensus (the position index is less critical than the tree, being layered
+above).
+* The overall system can be simpler and faster: because of some particular
+properties of our MMR (append-only, same size keys, composable), the storage
+solution is actually rather straightforward and allows us to do multiple
+optimizations (i.e. bulk operations, no updates, etc.).
+
+### Operations
+
+We list here most main operations that the combined sum tree structure and its
+storage logic have to implement. Operations that have side-effects (push, prune,
+truncate) need to be reversible in case the result of the modification is deemed
+invalid (root or sum don't match). 
+
+* Bulk Push (new block):
+  1. Partially clone last in-memory chunk (full subtrees will not change).
+  2. Append all new hashes to the clone.
+  3. New root hash and sum can be checked immediately.
+  4. On commit, insert new hashes to position index, merge the clone in the
+  latest in-memory chunk, save.
+* Prune (new block): 
+  1. On commit, delete from position index, add to append-only tombstone file.
+  2. When append-only tombstone files becomes too large, apply fully and delete
+  (in background).
+* Exists (new block or tx): directly check the key/position index.
+* Truncate (fork): usually combined with a bulk push.
+  1. Partially clone truncated last (or before last) in-memory chunk (again, full subtrees before the truncation position will not change).
+  2. Proceed with bulk push as normal.
+
