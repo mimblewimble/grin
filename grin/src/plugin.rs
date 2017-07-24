@@ -49,7 +49,7 @@ lazy_static!{
 }
 
 pub struct PluginMiner {
-	miner:Option<CuckooMiner>,
+	pub miner:Option<CuckooMiner>,
 	last_solution: CuckooMinerSolution,
 }
 
