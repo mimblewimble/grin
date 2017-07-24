@@ -42,6 +42,7 @@ use types::{MinerConfig, Error};
 use util;
 use wallet::{CbAmount, WalletReceiveRequest, CbData};
 
+use plugin::PluginMiner;
 use itertools::Itertools;
 
 // Max number of transactions this miner will assemble in a block
@@ -167,13 +168,7 @@ impl Miner {
 				self.config.slow_down_in_millis.unwrap());
 			}
 			while head.hash() == latest_hash && time::get_time().sec < deadline {
-				//Testing getting the header in parts
-				let mut header_parts = HeaderPartWriter::default();
-				ser::Writeable::write(&b.header, &mut header_parts).unwrap();
-				let (pre, post) = header_parts.parts_as_hex_strings();
-				/*debug!("Pre header part is: {}", pre);
-				debug!("Post header part is: {}", post);*/
-				
+								
 				let pow_hash = b.hash();
 				if let Ok(proof) = miner.mine(&pow_hash[..]) {
 					let proof_diff=proof.to_difficulty();
@@ -221,6 +216,91 @@ impl Miner {
 			}
 		}
 	}
+
+	/// Starts the mining loop, building a new block on top of the existing
+	/// chain anytime required and looking for PoW solution.
+	pub fn run_async_loop(&self, mut miner:PluginMiner, cuckoo_size:u32) {
+
+		info!("(Server ID: {}) Starting miner loop.", self.debug_output_id);
+		let mut coinbase = self.get_coinbase();
+
+		loop {
+			// get the latest chain state and build a block on top of it
+			let head = self.chain.head_header().unwrap();
+			let mut latest_hash = self.chain.head().unwrap().last_block_h;
+			let mut b = self.build_block(&head, coinbase.clone());
+
+			// look for a pow for at most 2 sec on the same block (to give a chance to new
+			// transactions) and as long as the head hasn't changed
+			let deadline = time::get_time().sec + 2;
+			let mut sol = None;
+			debug!("(Server ID: {}) Mining at Cuckoo{} for at most 2 secs on block {} at difficulty {}.",
+			       self.debug_output_id,
+			       cuckoo_size,
+			       latest_hash,
+			       b.header.difficulty);
+			let mut iter_count = 0;
+
+			//Get parts of the header
+			let mut header_parts = HeaderPartWriter::default();
+			ser::Writeable::write(&b.header, &mut header_parts).unwrap();
+			let (pre, post) = header_parts.parts_as_hex_strings();
+
+			let plugin_miner=miner.miner.as_mut().unwrap();
+			//Start the miner working
+			plugin_miner.notify(1, pre_header, post_header, 2, false);
+
+			loop {
+				if miner.is_solution_found() {
+					miner.stop_jobs();
+				}
+			}
+
+			while head.hash() == latest_hash && time::get_time().sec < deadline {
+				
+
+				/*debug!("Pre header part is: {}", pre);
+				debug!("Post header part is: {}", post);*/
+				
+				let pow_hash = b.hash();
+				if let Ok(proof) = miner.mine(&pow_hash[..]) {
+					let proof_diff=proof.to_difficulty();
+					if proof_diff >= b.header.difficulty {
+						sol = Some(proof);
+						break;
+					}
+				}
+				b.header.nonce += 1;
+				latest_hash = self.chain.head().unwrap().last_block_h;
+				iter_count += 1;
+
+			}
+
+			// if we found a solution, push our block out
+			if let Some(proof) = sol {
+				info!("(Server ID: {}) Found valid proof of work, adding block {}.",
+					  self.debug_output_id, b.hash());
+					b.header.pow = proof;
+				let opts = if cuckoo_size < consensus::DEFAULT_SIZESHIFT as u32 {
+					chain::EASY_POW
+				} else {
+					chain::NONE
+				};
+				let res = self.chain.process_block(&b, opts);
+				if let Err(e) = res {
+					error!("(Server ID: {}) Error validating mined block: {:?}",
+					self.debug_output_id, e);
+				} else {
+					coinbase = self.get_coinbase();
+				}
+			} else {
+				debug!("(Server ID: {}) No solution found after {} iterations, continuing...",
+				    self.debug_output_id,
+					iter_count)
+			}
+		}
+	}
+
 
 	/// Builds a new block with the chain head as previous and eligible
 	/// transactions from the pool.
