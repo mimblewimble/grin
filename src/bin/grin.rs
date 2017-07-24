@@ -21,7 +21,7 @@ extern crate log;
 extern crate env_logger;
 extern crate serde;
 extern crate serde_json;
-extern crate blake2;
+extern crate blake2_rfc as blake2;
 
 extern crate grin_api as api;
 extern crate grin_grin as grin;
@@ -35,7 +35,6 @@ use std::io::Read;
 use std::fs::File;
 use std::time::Duration;
 
-use blake2::blake2b::blake2b;
 use clap::{Arg, App, SubCommand, ArgMatches};
 use daemonize::Daemonize;
 
@@ -264,10 +263,10 @@ fn wallet_command(wallet_args: &ArgMatches) {
 	let hd_seed = wallet_args.value_of("pass").expect("Wallet passphrase required.");
 
 	// TODO do something closer to BIP39, eazy solution right now
-  let seed = blake2b(32, &[], hd_seed.as_bytes());
+  let seed = blake2::blake2b::blake2b(32, &[], hd_seed.as_bytes());
 
 	let s = Secp256k1::new();
-	let key = wallet::ExtendedKey::from_seed(&s, &seed[..])
+	let key = wallet::ExtendedKey::from_seed(&s, seed.as_bytes())
 		.expect("Error deriving extended key from seed.");
 
 	let default_ip = "127.0.0.1";
