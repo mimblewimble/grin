@@ -172,10 +172,10 @@ impl Miner {
 				let pow_hash = b.hash();
 				if let Ok(proof) = miner.mine(&pow_hash[..]) {
 					let proof_diff=proof.to_difficulty();
-					/*debug!("(Server ID: {}) Header difficulty is: {}, Proof difficulty is: {}",
+					debug!("(Server ID: {}) Header difficulty is: {}, Proof difficulty is: {}",
 					self.debug_output_id,
 					b.header.difficulty,
-					proof_diff);*/
+					proof_diff);
 
 					if proof_diff >= b.header.difficulty {
 						sol = Some(proof);
@@ -233,11 +233,11 @@ impl Miner {
 			// look for a pow for at most 2 sec on the same block (to give a chance to new
 			// transactions) and as long as the head hasn't changed
 			let deadline = time::get_time().sec + 2;
-			let sol = None;
-			debug!("(Server ID: {}) Mining at Cuckoo{} for at most 2 secs on block {} at difficulty {}.",
+			let mut sol = None;
+			debug!("(Server ID: {}) Mining at Cuckoo{} for at most 2 secs at block height {} at difficulty {}.",
 			       self.debug_output_id,
 			       cuckoo_size,
-			       latest_hash,
+			       b.header.height,
 			       b.header.difficulty);
 			let iter_count = 0;
 
@@ -247,14 +247,29 @@ impl Miner {
 			let (pre, post) = header_parts.parts_as_hex_strings();
 
 			let plugin_miner=miner.miner.as_mut().unwrap();
-			//Start the miner working
-			plugin_miner.notify(1, &pre, &post, b.header.difficulty.clone().into_biguint(), false);
 
-			loop {
-				if plugin_miner.is_solution_found() {
-					//sol = Proof(self.last_solution.solution_nonces);
-					plugin_miner.stop_jobs();
-					break;
+			//Start the miner working
+			plugin_miner.notify(1, &pre, &post, false);
+
+			while head.hash() == latest_hash {
+				if let Some(s) = plugin_miner.get_solution()  {
+					
+					let proof = Proof(s.solution_nonces);
+					let proof_diff=proof.to_difficulty();
+					
+					debug!("(Server ID: {}) Header difficulty is: {}, Proof difficulty is: {}",
+					self.debug_output_id,
+					b.header.difficulty,
+					proof_diff);
+					
+					//check difficulty
+					if proof_diff >= b.header.difficulty {
+						println!("nonce: {}", s.get_nonce_as_u64());
+						sol = Some(proof);
+						b.header.nonce=s.get_nonce_as_u64();
+						plugin_miner.stop_jobs();
+						break;
+					}
 				}
 			}
 
