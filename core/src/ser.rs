@@ -387,18 +387,72 @@ impl Writeable for [u8; 4] {
 }
 
 /// Useful marker trait on types that can be sized byte slices
-pub trait AsFixedBytes: Sized + AsRef<[u8]> {}
+pub trait AsFixedBytes: Sized + AsRef<[u8]> {
+	fn len(&self) -> usize;
+}
 
-impl<'a> AsFixedBytes for &'a [u8] {}
-impl AsFixedBytes for Vec<u8> {}
-impl AsFixedBytes for [u8; 1] {}
-impl AsFixedBytes for [u8; 2] {}
-impl AsFixedBytes for [u8; 4] {}
-impl AsFixedBytes for [u8; 8] {}
-impl AsFixedBytes for [u8; 32] {}
-impl AsFixedBytes for String {}
-impl AsFixedBytes for ::core::hash::Hash {}
-impl AsFixedBytes for ::secp::pedersen::RangeProof {}
-impl AsFixedBytes for ::secp::key::SecretKey {}
-impl AsFixedBytes for ::secp::Signature {}
-impl AsFixedBytes for ::secp::pedersen::Commitment {}
+impl<'a> AsFixedBytes for &'a [u8] {
+	fn len(&self) -> usize {
+		return 1;
+	}
+}
+impl AsFixedBytes for Vec<u8> {
+	fn len(&self) -> usize {
+		return self.len();
+	}
+}
+impl AsFixedBytes for [u8; 1] {
+	fn len(&self) -> usize {
+		return 1;
+	}
+}
+impl AsFixedBytes for [u8; 2] {
+	fn len(&self) -> usize {
+		return 2;
+	}
+}
+impl AsFixedBytes for [u8; 4] {
+	fn len(&self) -> usize {
+		return 4;
+	}
+}
+impl AsFixedBytes for [u8; 8] {
+	fn len(&self) -> usize {
+		return 8;
+	}
+}
+impl AsFixedBytes for [u8; 32] {
+	fn len(&self) -> usize {
+		return 32;
+	}
+}
+impl AsFixedBytes for String {
+	fn len(&self) -> usize {
+		return self.len();
+	}
+}
+impl AsFixedBytes for ::core::hash::Hash {
+	fn len(&self) -> usize {
+		return 32;
+	}
+}
+impl AsFixedBytes for ::secp::pedersen::RangeProof {
+	fn len(&self) -> usize {
+		return self.plen;
+	}
+}
+impl AsFixedBytes for ::secp::key::SecretKey {
+	fn len(&self) -> usize {
+		return 1;
+	}
+}
+impl AsFixedBytes for ::secp::Signature {
+	fn len(&self) -> usize {
+		return 64;
+	}
+}
+impl AsFixedBytes for ::secp::pedersen::Commitment {
+	fn len(&self) -> usize {
+		return PEDERSEN_COMMITMENT_SIZE;
+	}
+}
