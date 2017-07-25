@@ -59,6 +59,12 @@ enable_mining = true
 
 use_cuckoo_miner = true
 
+#Whether to use async mode for cuckoo miner, if the plugin supports it.
+#this allows for many searches to be run in parallel, e.g. if the system
+#has multiple GPUs
+
+cuckoo_miner_async_mode = true
+
 #If using cuckoo_miner, the directory in which plugins are installed
 #if not specified, grin will look in the directory /deps relative
 #to the executable

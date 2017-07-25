@@ -107,6 +107,9 @@ pub struct MinerConfig {
 	/// Whether to use the cuckoo-miner crate and plugin for mining
 	pub use_cuckoo_miner: bool,
 
+	/// Whether to use the async version of mining
+	pub cuckoo_miner_async_mode: Option<bool>,
+
 	/// The location in which cuckoo miner plugins are stored
 	pub cuckoo_miner_plugin_dir: Option<String>,
 
@@ -150,6 +153,7 @@ impl Default for MinerConfig {
 		MinerConfig {
 			enable_mining: false,
 			use_cuckoo_miner: false,
+			cuckoo_miner_async_mode: None,
 			cuckoo_miner_plugin_dir: None,
 			cuckoo_miner_plugin_type: None,
 			cuckoo_miner_parameter_list: None,
