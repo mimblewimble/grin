@@ -55,8 +55,12 @@ const POST_NONCE_SIZE: usize = 5;
 /// which can then be sent off to miner to mutate at will
 pub struct HeaderPartWriter {
 	//
-	pub pre_nonce: [u8;PRE_NONCE_SIZE],
-	pub post_nonce: [u8;POST_NONCE_SIZE],
+	pub pre_nonce: Vec<u8>,
+	// Post nonce is currently variable length
+	// because of difficulty
+	pub post_nonce: Vec<u8>,
+	//which difficulty field we're on
+	diff_index: usize,
 	bytes_written: usize,
 	writing_pre: bool,
 }
@@ -66,8 +70,9 @@ impl Default for HeaderPartWriter {
 		HeaderPartWriter { 
 			bytes_written: 0,
 			writing_pre: true,
-			pre_nonce: [0;PRE_NONCE_SIZE],
-			post_nonce: [0;POST_NONCE_SIZE],
+			diff_index: 0,
+			pre_nonce: Vec::new(),
+			post_nonce: Vec::new(),
 		}
 	}
 }
@@ -75,7 +80,7 @@ impl Default for HeaderPartWriter {
 impl HeaderPartWriter {
 	pub fn parts_as_hex_strings(&self)->(String, String) {
 		(
-		    String::from(format!("{:02x}", self.pre_nonce.iter().format(""))),
+			String::from(format!("{:02x}", self.pre_nonce.iter().format(""))),
 			String::from(format!("{:02x}", self.post_nonce.iter().format(""))),
 		)
 	}
@@ -88,10 +93,15 @@ impl ser::Writer for HeaderPartWriter {
 
 	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, bytes_in: &T) -> Result<(), ser::Error> {
 		if self.writing_pre {
-			self.pre_nonce[self.bytes_written..self.bytes_written+bytes_in.len()].clone_from_slice(bytes_in.as_ref());
+			for i in 0..bytes_in.len() {self.pre_nonce.push(bytes_in.as_ref()[i])};
+			
 		} else if self.bytes_written!=0 {
-			//i.e. don't write nonce
-			self.post_nonce[self.bytes_written-8..self.bytes_written-8+bytes_in.len()].clone_from_slice(bytes_in.as_ref());
+			//if (self.diff_index != 3) {
+				//i.e. don't write nonce, or length of SECOND difficulty field. v/ awkward,
+				//should change internal representation
+				for i in 0..bytes_in.len() {self.post_nonce.push(bytes_in.as_ref()[i])};
+			//}
+			self.diff_index+=1;
 		}
 
 		self.bytes_written+=bytes_in.len();
@@ -221,7 +231,7 @@ impl Miner {
 	/// chain anytime required and looking for PoW solution.
 	pub fn run_async_loop(&self, mut miner:PluginMiner, cuckoo_size:u32) {
 
-		info!("(Server ID: {}) Starting miner loop.", self.debug_output_id);
+		info!("(Server ID: {}) Starting miner loop - Using Cuckoo-Miner in async mode.", self.debug_output_id);
 		let mut coinbase = self.get_coinbase();
 
 		loop {
@@ -257,17 +267,19 @@ impl Miner {
 					let proof = Proof(s.solution_nonces);
 					let proof_diff=proof.to_difficulty();
 					
-					debug!("(Server ID: {}) Header difficulty is: {}, Proof difficulty is: {}",
+					/*debug!("(Server ID: {}) Header difficulty is: {}, Proof difficulty is: {}",
 					self.debug_output_id,
 					b.header.difficulty,
-					proof_diff);
+					proof_diff);*/
 					
 					//check difficulty
 					if proof_diff >= b.header.difficulty {
-						println!("nonce: {}", s.get_nonce_as_u64());
+						
+						//debug!("nonce: {}, proof:{:?}", s.get_nonce_as_u64(), s);
 						sol = Some(proof);
 						b.header.nonce=s.get_nonce_as_u64();
 						plugin_miner.stop_jobs();
+						//debug!("Pre: {}, Post: {}, Hash: {}, ", pre, post, b.hash());
 						break;
 					}
 				}
