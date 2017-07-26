@@ -182,10 +182,10 @@ impl Miner {
 				let pow_hash = b.hash();
 				if let Ok(proof) = miner.mine(&pow_hash[..]) {
 					let proof_diff=proof.to_difficulty();
-					debug!("(Server ID: {}) Header difficulty is: {}, Proof difficulty is: {}",
+					/*debug!("(Server ID: {}) Header difficulty is: {}, Proof difficulty is: {}",
 					self.debug_output_id,
 					b.header.difficulty,
-					proof_diff);
+					proof_diff);*/
 
 					if proof_diff >= b.header.difficulty {
 						sol = Some(proof);
@@ -258,10 +258,15 @@ impl Miner {
 
 			let plugin_miner=miner.miner.as_mut().unwrap();
 
+			// look for a pow for at most 2 sec on the same block (to give a chance to new
+			// transactions) and as long as the head hasn't changed
+			// Will change this to something else at some point
+			let deadline = time::get_time().sec + 2;
+
 			//Start the miner working
 			plugin_miner.notify(1, &pre, &post, false);
 
-			while head.hash() == latest_hash {
+			while head.hash() == latest_hash && time::get_time().sec < deadline {
 				if let Some(s) = plugin_miner.get_solution()  {
 					
 					let proof = Proof(s.solution_nonces);
@@ -284,6 +289,7 @@ impl Miner {
 					}
 				}
 			}
+			plugin_miner.stop_jobs();
 
 			// if we found a solution, push our block out
 			if let Some(proof) = sol {
@@ -305,7 +311,7 @@ impl Miner {
 			} else {
 				debug!("(Server ID: {}) No solution found after {} iterations, continuing...",
 				    self.debug_output_id,
-					iter_count)
+					plugin_miner.get_hashes_since_last_call().unwrap())
 			}
 		}
 	}
