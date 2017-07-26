@@ -29,7 +29,6 @@ extern crate grin_wallet as wallet;
 extern crate grin_config as config;
 extern crate secp256k1zkp as secp;
 
-use std::env;
 use std::thread;
 use std::io::Read;
 use std::fs::File;
@@ -40,12 +39,14 @@ use daemonize::Daemonize;
 
 use secp::Secp256k1;
 
+use config::GlobalConfig;
 use wallet::WalletConfig;
 
-use config::{GlobalConfig, ConfigError};
-
-fn start_from_config_file(mut global_config:GlobalConfig){
-	info!("Starting the Grin server from configuration file at {}", global_config.config_file_path.unwrap().to_str().unwrap());	
+fn start_from_config_file(mut global_config: GlobalConfig) {
+	info!(
+		"Starting the Grin server from configuration file at {}",
+		global_config.config_file_path.unwrap().to_str().unwrap()
+	);
 	grin::Server::start(global_config.members.as_mut().unwrap().server.clone()).unwrap();
 	loop {
 		thread::sleep(Duration::from_secs(60));
@@ -164,33 +165,33 @@ fn main() {
 			wallet_command(wallet_args);
 		}
 
-		//If nothing is specified, try to load up and use a config file instead
-		//this should possibly become the way to configure most things
-		//with most command line options being phased out
+		// If nothing is specified, try to load up and use a config file instead
+		// this should possibly become the way to configure most things
+		// with most command line options being phased out
 		_ => {
-				//This will return a global config object,
-				//which will either contain defaults for all
-				//of the config structures or a configuration 
-				//read from a config file
+			// This will return a global config object,
+			// which will either contain defaults for all
+			// of the config structures or a configuration
+			// read from a config file
 
-				let mut global_config = GlobalConfig::new(None);
-				match global_config {
-					Ok(gc) => {
-						if (gc.using_config_file){
-							start_from_config_file(gc);
-						} else {
-							//won't attempt to just start with defaults,
-							//and will reject 
-							println!("Unknown command, and no configuration file was found.");
-							println!("Use 'grin help' for a list of all commands.");
-						}
-					}
-					Err(e) => {
-						println!("{}", e);
+			let global_config = GlobalConfig::new(None);
+			match global_config {
+				Ok(gc) => {
+					if gc.using_config_file {
+						start_from_config_file(gc);
+					} else {
+						// won't attempt to just start with defaults,
+						// and will reject
+						println!("Unknown command, and no configuration file was found.");
+						println!("Use 'grin help' for a list of all commands.");
 					}
 				}
-			
-				
+				Err(e) => {
+					println!("{}", e);
+				}
+			}
+
+
 		}
 	}
 }
@@ -208,7 +209,7 @@ fn server_command(server_args: &ArgMatches) {
 	if let Some(port) = server_args.value_of("port") {
 		server_config.p2p_config.as_mut().unwrap().port = port.parse().unwrap();
 	}
-	 
+
 	if let Some(api_port) = server_args.value_of("api_port") {
 		let default_ip = "127.0.0.1";
 		server_config.api_http_addr = format!("{}:{}", default_ip, api_port);
@@ -217,9 +218,13 @@ fn server_command(server_args: &ArgMatches) {
 	if server_args.is_present("mine") {
 		server_config.mining_config.as_mut().unwrap().enable_mining = true;
 	}
-	
+
 	if let Some(wallet_url) = server_args.value_of("wallet_url") {
-		server_config.mining_config.as_mut().unwrap().wallet_receiver_url = wallet_url.to_string();
+		server_config
+			.mining_config
+			.as_mut()
+			.unwrap()
+			.wallet_receiver_url = wallet_url.to_string();
 	}
 
 	if let Some(seeds) = server_args.values_of("seed") {
@@ -260,14 +265,17 @@ fn server_command(server_args: &ArgMatches) {
 }
 
 fn wallet_command(wallet_args: &ArgMatches) {
-	let hd_seed = wallet_args.value_of("pass").expect("Wallet passphrase required.");
+	let hd_seed = wallet_args.value_of("pass").expect(
+		"Wallet passphrase required.",
+	);
 
 	// TODO do something closer to BIP39, eazy solution right now
-  let seed = blake2::blake2b::blake2b(32, &[], hd_seed.as_bytes());
+	let seed = blake2::blake2b::blake2b(32, &[], hd_seed.as_bytes());
 
 	let s = Secp256k1::new();
-	let key = wallet::ExtendedKey::from_seed(&s, seed.as_bytes())
-		.expect("Error deriving extended key from seed.");
+	let key = wallet::ExtendedKey::from_seed(&s, seed.as_bytes()).expect(
+		"Error deriving extended key from seed.",
+	);
 
 	let default_ip = "127.0.0.1";
 	let mut addr = format!("{}:13416", default_ip);
@@ -292,24 +300,31 @@ fn wallet_command(wallet_args: &ArgMatches) {
 			if let Some(f) = receive_args.value_of("input") {
 				let mut file = File::open(f).expect("Unable to open transaction file.");
 				let mut contents = String::new();
-				file.read_to_string(&mut contents).expect("Unable to read transaction file.");
+				file.read_to_string(&mut contents).expect(
+					"Unable to read transaction file.",
+				);
 				wallet::receive_json_tx(&wallet_config, &key, contents.as_str()).unwrap();
 			} else {
-				info!("Starting the Grin wallet receiving daemon at {}...",
-				      wallet_config.api_http_addr);
+				info!(
+					"Starting the Grin wallet receiving daemon at {}...",
+					wallet_config.api_http_addr
+				);
 				let mut apis = api::ApiServer::new("/v1".to_string());
-				apis.register_endpoint("/receive".to_string(),
-				                       wallet::WalletReceiver {
-					                       key: key,
-					                       config: wallet_config,
-				                       });
+				apis.register_endpoint(
+					"/receive".to_string(),
+					wallet::WalletReceiver {
+						key: key,
+						config: wallet_config,
+					},
+				);
 				apis.start(addr).unwrap_or_else(|e| {
 					error!("Failed to start Grin wallet receiver: {}.", e);
 				});
 			}
 		}
 		("send", Some(send_args)) => {
-			let amount = send_args.value_of("amount")
+			let amount = send_args
+				.value_of("amount")
 				.expect("Amount to send required")
 				.parse()
 				.expect("Could not parse amount as a whole number.");
@@ -322,4 +337,3 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}
 }
-
