@@ -164,10 +164,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 /// Fully validate the block content.
 fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	if b.header.height > ctx.head.height + 1 {
-		// check orphan again, an orphan coming out of order from sync will have
-		// bypassed header checks
-		// TODO actually handle orphans and add them to a size-limited set
-		return Err(Error::Unfit("orphan".to_string()));
+		return Err(Error::Orphan);
 	}
 
 	let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);

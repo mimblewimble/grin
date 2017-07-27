@@ -125,8 +125,10 @@ impl Chain {
 			Ok(Some(ref tip)) => {
 				// block got accepted and extended the head, updating our head
 				let chain_head = self.head.clone();
-				let mut head = chain_head.lock().unwrap();
-				*head = tip.clone();
+				{
+					let mut head = chain_head.lock().unwrap();
+					*head = tip.clone();
+				}
 
 				self.check_orphans();
 			}
