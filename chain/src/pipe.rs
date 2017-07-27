@@ -46,11 +46,13 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
-	info!("Starting validation pipeline for block {} at {} with {} inputs and {} outputs.",
-	      b.hash(),
-	      b.header.height,
-	      b.inputs.len(),
-	      b.outputs.len());
+	info!(
+		"Starting validation pipeline for block {} at {} with {} inputs and {} outputs.",
+		b.hash(),
+		b.header.height,
+		b.inputs.len(),
+		b.outputs.len()
+	);
 	check_known(b.hash(), &mut ctx)?;
 
 	if !ctx.opts.intersects(SYNC) {
@@ -58,9 +60,11 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		validate_header(&b.header, &mut ctx)?;
 	}
 	validate_block(b, &mut ctx)?;
-	debug!("Block at {} with hash {} is valid, going to save and append.",
-	       b.header.height,
-	       b.hash());
+	debug!(
+		"Block at {} with hash {} is valid, going to save and append.",
+		b.header.height,
+		b.hash()
+	);
 
 	ctx.lock.lock();
 	add_block(b, &mut ctx)?;
@@ -69,9 +73,11 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 
 pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
 
-	info!("Starting validation pipeline for block header {} at {}.",
-	      bh.hash(),
-	      bh.height);
+	info!(
+		"Starting validation pipeline for block header {} at {}.",
+		bh.hash(),
+		bh.height
+	);
 	check_known(bh.hash(), &mut ctx)?;
 	validate_header(&bh, &mut ctx)?;
 	add_block_header(bh, &mut ctx)?;
@@ -106,7 +112,9 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		return Err(Error::Orphan);
 	}
 
-	let prev = try!(ctx.store.get_block_header(&header.previous).map_err(&Error::StoreErr));
+	let prev = try!(ctx.store.get_block_header(&header.previous).map_err(
+		&Error::StoreErr,
+	));
 
 	if header.height != prev.height + 1 {
 		return Err(Error::InvalidBlockHeight);
@@ -117,7 +125,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		return Err(Error::InvalidBlockTime);
 	}
 	if header.timestamp >
-	   time::now() + time::Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64)) {
+		time::now() + time::Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
+	{
 		// refuse blocks more than 12 blocks intervals in future (as in bitcoin)
 		// TODO add warning in p2p code if local time is too different from peers
 		return Err(Error::InvalidBlockTime);
@@ -131,8 +140,9 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		}
 
 		let diff_iter = store::DifficultyIter::from(header.previous, ctx.store.clone());
-		let difficulty =
-			consensus::next_difficulty(diff_iter).map_err(|e| Error::Other(e.to_string()))?;
+		let difficulty = consensus::next_difficulty(diff_iter).map_err(|e| {
+			Error::Other(e.to_string())
+		})?;
 		if header.difficulty < difficulty {
 			return Err(Error::DifficultyTooLow);
 		}
@@ -224,9 +234,11 @@ fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option
 		ctx.store.save_header_head(&tip).map_err(&Error::StoreErr)?;
 
 		ctx.head = tip.clone();
-		info!("Updated block header head to {} at {}.",
-		      bh.hash(),
-		      bh.height);
+		info!(
+			"Updated block header head to {} at {}.",
+			bh.hash(),
+			bh.height
+		);
 		Ok(Some(tip))
 	} else {
 		Ok(None)

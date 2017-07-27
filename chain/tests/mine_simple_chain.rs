@@ -40,28 +40,28 @@ use grin_core::pow::MiningWorker;
 
 #[test]
 fn mine_empty_chain() {
-  env_logger::init();
+	env_logger::init();
 	let mut rng = OsRng::new().unwrap();
-  let chain = grin_chain::Chain::init(true, ".grin".to_string(), Arc::new(NoopAdapter{})).unwrap();
+	let chain = grin_chain::Chain::init(true, ".grin".to_string(), Arc::new(NoopAdapter {}))
+		.unwrap();
 
 	// mine and add a few blocks
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
 
 	let server_config = ServerConfig::default();
-  let mut miner_config = grin::MinerConfig{
-    enable_mining: true,
-    burn_reward: true,    
-    ..Default::default()
-  };
+	let mut miner_config = grin::MinerConfig {
+		enable_mining: true,
+		burn_reward: true,
+		..Default::default()
+	};
 	miner_config.cuckoo_miner_plugin_dir = Some(String::from("../target/debug/deps"));
 
-	let mut cuckoo_miner = PluginMiner::new(consensus::EASINESS, 
-													consensus::TEST_SIZESHIFT as u32 );
-	cuckoo_miner.init(miner_config ,server_config);
-	
+	let mut cuckoo_miner = PluginMiner::new(consensus::EASINESS, consensus::TEST_SIZESHIFT as u32);
+	cuckoo_miner.init(miner_config, server_config);
+
 	for n in 1..4 {
-    let prev = chain.head_header().unwrap();
+		let prev = chain.head_header().unwrap();
 		let mut b = core::Block::new(&prev, vec![], reward_key).unwrap();
 		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
@@ -69,13 +69,13 @@ fn mine_empty_chain() {
 		b.header.difficulty = difficulty.clone();
 
 		pow::pow_size(
-      &mut cuckoo_miner,
-      &mut b.header,
-      difficulty,
-      consensus::TEST_SIZESHIFT as u32,
-    ).unwrap();
+			&mut cuckoo_miner,
+			&mut b.header,
+			difficulty,
+			consensus::TEST_SIZESHIFT as u32,
+		).unwrap();
 
-    let bhash = b.hash();
+		let bhash = b.hash();
 		chain.process_block(b, grin_chain::EASY_POW).unwrap();
 
 		// checking our new head
@@ -87,38 +87,39 @@ fn mine_empty_chain() {
 
 #[test]
 fn mine_forks() {
-  env_logger::init();
+	env_logger::init();
 	let mut rng = OsRng::new().unwrap();
-  let chain = grin_chain::Chain::init(true, ".grin2".to_string(), Arc::new(NoopAdapter{})).unwrap();
+	let chain = grin_chain::Chain::init(true, ".grin2".to_string(), Arc::new(NoopAdapter {}))
+		.unwrap();
 
 	// mine and add a few blocks
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
 
 	for n in 1..4 {
-    let prev = chain.head_header().unwrap();
+		let prev = chain.head_header().unwrap();
 		let mut b = core::Block::new(&prev, vec![], reward_key).unwrap();
 		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
-    b.header.total_difficulty = Difficulty::from_num(2*n);
-    let bhash = b.hash();
+		b.header.total_difficulty = Difficulty::from_num(2 * n);
+		let bhash = b.hash();
 		chain.process_block(b, grin_chain::SKIP_POW).unwrap();
 
 		// checking our new head
-    thread::sleep(::std::time::Duration::from_millis(50));
+		thread::sleep(::std::time::Duration::from_millis(50));
 		let head = chain.head().unwrap();
 		assert_eq!(head.height, n as u64);
 		assert_eq!(head.last_block_h, bhash);
 		assert_eq!(head.prev_block_h, prev.hash());
 
-    // build another block with higher difficulty
+		// build another block with higher difficulty
 		let mut b = core::Block::new(&prev, vec![], reward_key).unwrap();
 		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
-    b.header.total_difficulty = Difficulty::from_num(2*n+1);
-    let bhash = b.hash();
+		b.header.total_difficulty = Difficulty::from_num(2 * n + 1);
+		let bhash = b.hash();
 		chain.process_block(b, grin_chain::SKIP_POW).unwrap();
 
 		// checking head switch
-    thread::sleep(::std::time::Duration::from_millis(50));
+		thread::sleep(::std::time::Duration::from_millis(50));
 		let head = chain.head().unwrap();
 		assert_eq!(head.height, n as u64);
 		assert_eq!(head.last_block_h, bhash);

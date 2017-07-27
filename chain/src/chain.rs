@@ -53,7 +53,7 @@ pub struct Chain {
 
 	head: Arc<Mutex<Tip>>,
 	block_process_lock: Arc<Mutex<bool>>,
-  orphans: Arc<Mutex<VecDeque<Block>>>,
+	orphans: Arc<Mutex<VecDeque<Block>>>,
 
 	test_mode: bool,
 }
@@ -67,10 +67,11 @@ impl Chain {
 	/// on the current chain head to make sure it exists and creates one based
 	/// on
 	/// the genesis block if necessary.
-	pub fn init(test_mode: bool,
-	            db_root: String,
-	            adapter: Arc<ChainAdapter>)
-	            -> Result<Chain, Error> {
+	pub fn init(
+		test_mode: bool,
+		db_root: String,
+		adapter: Arc<ChainAdapter>,
+	) -> Result<Chain, Error> {
 		let chain_store = store::ChainKVStore::new(db_root)?;
 
 		// check if we have a head in store, otherwise the genesis block is it
@@ -105,7 +106,7 @@ impl Chain {
 			adapter: adapter,
 			head: Arc::new(Mutex::new(head)),
 			block_process_lock: Arc::new(Mutex::new(true)),
-      orphans: Arc::new(Mutex::new(VecDeque::with_capacity(MAX_ORPHANS+1))),
+			orphans: Arc::new(Mutex::new(VecDeque::with_capacity(MAX_ORPHANS + 1))),
 			test_mode: test_mode,
 		})
 	}
@@ -120,32 +121,33 @@ impl Chain {
 
 		let res = pipe::process_block(&b, ctx);
 
-    match res {
-      Ok(Some(ref tip)) => {
-        // block got accepted and extended the head, updating our head
-        let chain_head = self.head.clone();
-        let mut head = chain_head.lock().unwrap();
-        *head = tip.clone();
+		match res {
+			Ok(Some(ref tip)) => {
+				// block got accepted and extended the head, updating our head
+				let chain_head = self.head.clone();
+				let mut head = chain_head.lock().unwrap();
+				*head = tip.clone();
 
-        self.check_orphans();
-      }
-      Err(Error::Orphan) => {
-        let mut orphans = self.orphans.lock().unwrap();
-        orphans.push_front(b);
-        orphans.truncate(MAX_ORPHANS);
-      }
-      _ => {}
-    }
+				self.check_orphans();
+			}
+			Err(Error::Orphan) => {
+				let mut orphans = self.orphans.lock().unwrap();
+				orphans.push_front(b);
+				orphans.truncate(MAX_ORPHANS);
+			}
+			_ => {}
+		}
 
 		res
 	}
 
 	/// Attempt to add a new header to the header chain. Only necessary during
 	/// sync.
-	pub fn process_block_header(&self,
-	                            bh: &BlockHeader,
-	                            opts: Options)
-	                            -> Result<Option<Tip>, Error> {
+	pub fn process_block_header(
+		&self,
+		bh: &BlockHeader,
+		opts: Options,
+	) -> Result<Option<Tip>, Error> {
 
 		let head = self.store.get_header_head().map_err(&Error::StoreErr)?;
 		let ctx = self.ctx_from_head(head, opts);
@@ -167,32 +169,32 @@ impl Chain {
 		}
 	}
 
-  /// Pop orphans out of the queue and check if we can now accept them.
-  fn check_orphans(&self) {
-    // first check how many we have to retry, unfort. we can't extend the lock
-    // in the loop as it needs to be freed before going in process_block
-    let mut orphan_count = 0;
-    {
-      let orphans = self.orphans.lock().unwrap();
-      orphan_count = orphans.len();
-    }
+	/// Pop orphans out of the queue and check if we can now accept them.
+	fn check_orphans(&self) {
+		// first check how many we have to retry, unfort. we can't extend the lock
+		// in the loop as it needs to be freed before going in process_block
+		let mut orphan_count = 0;
+		{
+			let orphans = self.orphans.lock().unwrap();
+			orphan_count = orphans.len();
+		}
 
-    // pop each orphan and retry, if still orphaned, will be pushed again
+		// pop each orphan and retry, if still orphaned, will be pushed again
 		let mut opts = NONE;
 		if self.test_mode {
 			opts = opts | EASY_POW;
 		}
-    for _ in 0..orphan_count {
-      let mut popped = None;
-      {
-        let mut orphans = self.orphans.lock().unwrap();
-        popped = orphans.pop_back();
-      }
-      if let Some(orphan) = popped {
-        self.process_block(orphan, opts);
-      }
-    }
-  }
+		for _ in 0..orphan_count {
+			let mut popped = None;
+			{
+				let mut orphans = self.orphans.lock().unwrap();
+				popped = orphans.pop_back();
+			}
+			if let Some(orphan) = popped {
+				self.process_block(orphan, opts);
+			}
+		}
+	}
 
 	/// Gets an unspent output from its commitment. With return None if the
 	/// output
@@ -252,7 +254,9 @@ impl Chain {
 
 	/// Gets the block header at the provided height
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
-		self.store.get_header_by_height(height).map_err(&Error::StoreErr)
+		self.store.get_header_by_height(height).map_err(
+			&Error::StoreErr,
+		)
 	}
 
 	/// Get the tip of the header chain
