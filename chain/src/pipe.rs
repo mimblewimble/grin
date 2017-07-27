@@ -103,8 +103,7 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 /// TODO require only the block header (with length information)
 fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	if header.height > ctx.head.height + 1 {
-		// TODO actually handle orphans and add them to a size-limited set
-		return Err(Error::Unfit("orphan".to_string()));
+		return Err(Error::Orphan);
 	}
 
 	let prev = try!(ctx.store.get_block_header(&header.previous).map_err(&Error::StoreErr));

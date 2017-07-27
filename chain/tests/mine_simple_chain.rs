@@ -68,13 +68,20 @@ fn mine_empty_chain() {
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 		b.header.difficulty = difficulty.clone();
 
-		pow::pow_size(&mut cuckoo_miner, &mut b.header, difficulty, consensus::TEST_SIZESHIFT as u32).unwrap();
-		chain.process_block(&b, grin_chain::EASY_POW).unwrap();
+		pow::pow_size(
+      &mut cuckoo_miner,
+      &mut b.header,
+      difficulty,
+      consensus::TEST_SIZESHIFT as u32,
+    ).unwrap();
+
+    let bhash = b.hash();
+		chain.process_block(b, grin_chain::EASY_POW).unwrap();
 
 		// checking our new head
 		let head = chain.head().unwrap();
 		assert_eq!(head.height, n);
-		assert_eq!(head.last_block_h, b.hash());
+		assert_eq!(head.last_block_h, bhash);
 	}
 }
 
@@ -93,26 +100,28 @@ fn mine_forks() {
 		let mut b = core::Block::new(&prev, vec![], reward_key).unwrap();
 		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
     b.header.total_difficulty = Difficulty::from_num(2*n);
-		chain.process_block(&b, grin_chain::SKIP_POW).unwrap();
+    let bhash = b.hash();
+		chain.process_block(b, grin_chain::SKIP_POW).unwrap();
 
 		// checking our new head
     thread::sleep(::std::time::Duration::from_millis(50));
 		let head = chain.head().unwrap();
 		assert_eq!(head.height, n as u64);
-		assert_eq!(head.last_block_h, b.hash());
+		assert_eq!(head.last_block_h, bhash);
 		assert_eq!(head.prev_block_h, prev.hash());
 
     // build another block with higher difficulty
 		let mut b = core::Block::new(&prev, vec![], reward_key).unwrap();
 		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
     b.header.total_difficulty = Difficulty::from_num(2*n+1);
-		chain.process_block(&b, grin_chain::SKIP_POW).unwrap();
+    let bhash = b.hash();
+		chain.process_block(b, grin_chain::SKIP_POW).unwrap();
 
 		// checking head switch
     thread::sleep(::std::time::Duration::from_millis(50));
 		let head = chain.head().unwrap();
 		assert_eq!(head.height, n as u64);
-		assert_eq!(head.last_block_h, b.hash());
+		assert_eq!(head.last_block_h, bhash);
 		assert_eq!(head.prev_block_h, prev.hash());
 	}
 }

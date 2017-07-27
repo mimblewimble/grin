@@ -41,6 +41,8 @@ bitflags! {
 pub enum Error {
 	/// The block doesn't fit anywhere in our chain
 	Unfit(String),
+  /// Special case of orphan blocks
+  Orphan,
 	/// Difficulty is too low either compared to ours or the block PoW hash
 	DifficultyTooLow,
 	/// Addition of difficulties on all previous block is wrong

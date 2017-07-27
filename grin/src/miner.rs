@@ -139,7 +139,7 @@ impl Miner {
 				} else {
 					chain::NONE
 				};
-				let res = self.chain.process_block(&b, opts);
+				let res = self.chain.process_block(b, opts);
 				if let Err(e) = res {
 					error!("(Server ID: {}) Error validating mined block: {:?}",
 					self.debug_output_id, e);

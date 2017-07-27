@@ -15,6 +15,7 @@
 //! Facade and handler for the rest of the blockchain implementation
 //! and mostly the chain pipeline.
 
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use secp::pedersen::Commitment;
@@ -29,7 +30,7 @@ use pipe;
 use store;
 use types::*;
 
-
+const MAX_ORPHANS: usize = 20;
 
 /// Helper macro to transform a Result into an Option with None in case
 /// of error
@@ -49,8 +50,11 @@ macro_rules! none_err {
 pub struct Chain {
 	store: Arc<ChainStore>,
 	adapter: Arc<ChainAdapter>,
+
 	head: Arc<Mutex<Tip>>,
 	block_process_lock: Arc<Mutex<bool>>,
+  orphans: Arc<Mutex<VecDeque<Block>>>,
+
 	test_mode: bool,
 }
 
@@ -101,26 +105,37 @@ impl Chain {
 			adapter: adapter,
 			head: Arc::new(Mutex::new(head)),
 			block_process_lock: Arc::new(Mutex::new(true)),
+      orphans: Arc::new(Mutex::new(VecDeque::with_capacity(MAX_ORPHANS+1))),
 			test_mode: test_mode,
 		})
 	}
 
 	/// Attempt to add a new block to the chain. Returns the new chain tip if it
 	/// has been added to the longest chain, None if it's added to an (as of
-	/// now)
-	/// orphan chain.
-	pub fn process_block(&self, b: &Block, opts: Options) -> Result<Option<Tip>, Error> {
+	/// now) orphan chain.
+	pub fn process_block(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
 
 		let head = self.store.head().map_err(&Error::StoreErr)?;
 		let ctx = self.ctx_from_head(head, opts);
 
-		let res = pipe::process_block(b, ctx);
+		let res = pipe::process_block(&b, ctx);
 
-		if let Ok(Some(ref tip)) = res {
-			let chain_head = self.head.clone();
-			let mut head = chain_head.lock().unwrap();
-			*head = tip.clone();
-		}
+    match res {
+      Ok(Some(ref tip)) => {
+        // block got accepted and extended the head, updating our head
+        let chain_head = self.head.clone();
+        let mut head = chain_head.lock().unwrap();
+        *head = tip.clone();
+
+        self.check_orphans();
+      }
+      Err(Error::Orphan) => {
+        let mut orphans = self.orphans.lock().unwrap();
+        orphans.push_front(b);
+        orphans.truncate(MAX_ORPHANS);
+      }
+      _ => {}
+    }
 
 		res
 	}
@@ -151,6 +166,33 @@ impl Chain {
 			lock: self.block_process_lock.clone(),
 		}
 	}
+
+  /// Pop orphans out of the queue and check if we can now accept them.
+  fn check_orphans(&self) {
+    // first check how many we have to retry, unfort. we can't extend the lock
+    // in the loop as it needs to be freed before going in process_block
+    let mut orphan_count = 0;
+    {
+      let orphans = self.orphans.lock().unwrap();
+      orphan_count = orphans.len();
+    }
+
+    // pop each orphan and retry, if still orphaned, will be pushed again
+		let mut opts = NONE;
+		if self.test_mode {
+			opts = opts | EASY_POW;
+		}
+    for _ in 0..orphan_count {
+      let mut popped = None;
+      {
+        let mut orphans = self.orphans.lock().unwrap();
+        popped = orphans.pop_back();
+      }
+      if let Some(orphan) = popped {
+        self.process_block(orphan, opts);
+      }
+    }
+  }
 
 	/// Gets an unspent output from its commitment. With return None if the
 	/// output
