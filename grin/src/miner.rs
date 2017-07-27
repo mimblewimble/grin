@@ -229,7 +229,7 @@ impl Miner {
 
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
-	pub fn run_async_loop(&self, mut miner:PluginMiner, cuckoo_size:u32) {
+	pub fn run_async_loop(&self, mut plugin_miner:PluginMiner, cuckoo_size:u32) {
 
 		info!("(Server ID: {}) Starting miner loop - Using Cuckoo-Miner in async mode.", self.debug_output_id);
 		let mut coinbase = self.get_coinbase();
@@ -256,18 +256,17 @@ impl Miner {
 			ser::Writeable::write(&b.header, &mut header_parts).unwrap();
 			let (pre, post) = header_parts.parts_as_hex_strings();
 
-			let plugin_miner=miner.miner.as_mut().unwrap();
-
 			// look for a pow for at most 2 sec on the same block (to give a chance to new
 			// transactions) and as long as the head hasn't changed
 			// Will change this to something else at some point
 			let deadline = time::get_time().sec + 2;
 
 			//Start the miner working
-			plugin_miner.notify(1, &pre, &post, false);
+	        let miner = plugin_miner.get_consumable();
+    	    let job_handle=miner.notify(1, &pre, &post, false).unwrap();
 
 			while head.hash() == latest_hash && time::get_time().sec < deadline {
-				if let Some(s) = plugin_miner.get_solution()  {
+				if let Some(s) = job_handle.get_solution()  {
 					
 					let proof = Proof(s.solution_nonces);
 					let proof_diff=proof.to_difficulty();
@@ -283,13 +282,12 @@ impl Miner {
 						//debug!("nonce: {}, proof:{:?}", s.get_nonce_as_u64(), s);
 						sol = Some(proof);
 						b.header.nonce=s.get_nonce_as_u64();
-						plugin_miner.stop_jobs();
 						//debug!("Pre: {}, Post: {}, Hash: {}, ", pre, post, b.hash());
 						break;
 					}
 				}
 			}
-			plugin_miner.stop_jobs();
+			job_handle.stop_jobs();
 
 			// if we found a solution, push our block out
 			if let Some(proof) = sol {
@@ -311,7 +309,7 @@ impl Miner {
 			} else {
 				debug!("(Server ID: {}) No solution found after {} iterations, continuing...",
 				    self.debug_output_id,
-					plugin_miner.get_hashes_since_last_call().unwrap())
+					job_handle.get_hashes_since_last_call().unwrap())
 			}
 		}
 	}
