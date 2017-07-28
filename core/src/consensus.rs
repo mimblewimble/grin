@@ -30,7 +30,7 @@ pub const REWARD: u64 = 1_000_000_000;
 /// that we may reduce this value in the future as we get more data on mining
 /// with Cuckoo Cycle, networks improve and block propagation is optimized
 /// (adjusting the reward accordingly).
-pub const BLOCK_TIME_SEC: i64 = 60;
+pub const BLOCK_TIME_SEC: u64 = 60;
 
 /// Cuckoo-cycle proof size (cycle length)
 pub const PROOFSIZE: usize = 42;
@@ -61,22 +61,22 @@ pub const CUT_THROUGH_HORIZON: u32 = 48 * 3600 / (BLOCK_TIME_SEC as u32);
 pub const MAX_MSG_LEN: u64 = 20_000_000;
 
 /// The minimum mining difficulty we'll allow
-pub const MINIMUM_DIFFICULTY: u32 = 10;
+pub const MINIMUM_DIFFICULTY: u64 = 10;
 
 /// Time window in blocks to calculate block time median
-pub const MEDIAN_TIME_WINDOW: u32 = 11;
+pub const MEDIAN_TIME_WINDOW: u64 = 11;
 
 /// Number of blocks used to calculate difficulty adjustments
-pub const DIFFICULTY_ADJUST_WINDOW: u32 = 23;
+pub const DIFFICULTY_ADJUST_WINDOW: u64 = 23;
 
 /// Average time span of the difficulty adjustment window
-pub const BLOCK_TIME_WINDOW: i64 = (DIFFICULTY_ADJUST_WINDOW as i64) * BLOCK_TIME_SEC;
+pub const BLOCK_TIME_WINDOW: u64 = DIFFICULTY_ADJUST_WINDOW * BLOCK_TIME_SEC;
 
 /// Maximum size time window used for difficutly adjustments
-pub const UPPER_TIME_BOUND: i64 = BLOCK_TIME_WINDOW * 4 / 3;
+pub const UPPER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW * 4 / 3;
 
 /// Minimum size time window used for difficutly adjustments
-pub const LOWER_TIME_BOUND: i64 = BLOCK_TIME_WINDOW * 5 / 6;
+pub const LOWER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW * 5 / 6;
 
 /// Error when computing the next difficulty adjustment.
 #[derive(Debug, Clone)]
@@ -100,7 +100,7 @@ impl fmt::Display for TargetError {
 /// difference between the median timestamps at the beginning and the end
 /// of the window.
 pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
-	where T: IntoIterator<Item = Result<(i64, Difficulty), TargetError>>
+	where T: IntoIterator<Item = Result<(u64, Difficulty), TargetError>>
 {
 
 	// Block times at the begining and end of the adjustment window, used to
@@ -113,7 +113,7 @@ pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
 
 	// Enumerating backward over blocks
 	for (n, head_info) in cursor.into_iter().enumerate() {
-		let m = n as u32;
+		let m = n as u64;
 		let (ts, diff) = head_info?;
 
 		// Sum each element in the adjustment window. In addition, retain
@@ -156,9 +156,12 @@ pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
 		ts_damp
 	};
 
-	Ok(diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW as u32) /
-	   Difficulty::from_num(adj_ts as u32))
+	Ok(diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW) /
+	   Difficulty::from_num(adj_ts))
 }
+
+#[cfg(test)]
+use std;
 
 #[cfg(test)]
 mod test {
@@ -168,18 +171,20 @@ mod test {
 
 	// Builds an iterator for next difficulty calculation with the provided
 	// constant time interval, difficulty and total length.
-	fn repeat(interval: i64, diff: u32, len: u32) -> Vec<Result<(i64, Difficulty), TargetError>> {
+	fn repeat(interval: u64, diff: u64, len: u64) -> Vec<Result<(u64, Difficulty), TargetError>> {
+		//watch overflow here, length shouldn't be ridiculous anyhow
+		assert!(len < std::usize::MAX as u64);
 		let diffs = vec![Difficulty::from_num(diff); len as usize];
-		let times = (0..(len as usize)).map(|n| (n as i64) * interval).rev();
+		let times = (0..(len as usize)).map(|n| n * interval as usize).rev();
 		let pairs = times.zip(diffs.iter());
-		pairs.map(|(t, d)| Ok((t, d.clone()))).collect::<Vec<_>>()
+		pairs.map(|(t, d)| Ok((t as u64, d.clone()))).collect::<Vec<_>>()
 	}
 
-	fn repeat_offs(from: i64,
-	               interval: i64,
-	               diff: u32,
-	               len: u32)
-	               -> Vec<Result<(i64, Difficulty), TargetError>> {
+	fn repeat_offs(from: u64,
+	               interval: u64,
+	               diff: u64,
+	               len: u64)
+	               -> Vec<Result<(u64, Difficulty), TargetError>> {
 		map_vec!(repeat(interval, diff, len), |e| {
 			match e.clone() {
 				Err(e) => Err(e),
@@ -209,7 +214,7 @@ mod test {
 		// checking averaging works, window length is odd so need to compensate a little
 		let sec = DIFFICULTY_ADJUST_WINDOW / 2 + 1 + MEDIAN_TIME_WINDOW;
 		let mut s1 = repeat(60, 500, sec);
-		let mut s2 = repeat_offs((sec * 60) as i64, 60, 1545, DIFFICULTY_ADJUST_WINDOW / 2);
+		let mut s2 = repeat_offs((sec * 60) as u64, 60, 1545, DIFFICULTY_ADJUST_WINDOW / 2);
 		s2.append(&mut s1);
 		assert_eq!(next_difficulty(s2).unwrap(), Difficulty::from_num(999));
 
