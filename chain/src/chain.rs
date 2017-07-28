@@ -53,7 +53,7 @@ pub struct Chain {
 
 	head: Arc<Mutex<Tip>>,
 	block_process_lock: Arc<Mutex<bool>>,
-	orphans: Arc<Mutex<VecDeque<Block>>>,
+	orphans: Arc<Mutex<VecDeque<(Options, Block)>>>,
 
 	test_mode: bool,
 }
@@ -134,7 +134,7 @@ impl Chain {
 			}
 			Err(Error::Orphan) => {
 				let mut orphans = self.orphans.lock().unwrap();
-				orphans.push_front(b);
+				orphans.push_front((opts, b));
 				orphans.truncate(MAX_ORPHANS);
 			}
 			_ => {}
@@ -182,17 +182,13 @@ impl Chain {
 		}
 
 		// pop each orphan and retry, if still orphaned, will be pushed again
-		let mut opts = NONE;
-		if self.test_mode {
-			opts = opts | EASY_POW;
-		}
 		for _ in 0..orphan_count {
 			let mut popped = None;
 			{
 				let mut orphans = self.orphans.lock().unwrap();
 				popped = orphans.pop_back();
 			}
-			if let Some(orphan) = popped {
+			if let Some((opts, orphan)) = popped {
 				self.process_block(orphan, opts);
 			}
 		}
