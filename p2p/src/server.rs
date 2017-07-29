@@ -36,28 +36,6 @@ use handshake::Handshake;
 use peer::Peer;
 use types::*;
 
-/// A no-op network adapter used for testing.
-pub struct DummyAdapter {}
-impl NetAdapter for DummyAdapter {
-	fn total_difficulty(&self) -> Difficulty {
-		Difficulty::one()
-	}
-	fn transaction_received(&self, tx: core::Transaction) -> Result<(), Error> { Ok(()) }
-	fn block_received(&self, b: core::Block) -> Result<(), Error> { Ok(()) }
-	fn headers_received(&self, bh: Vec<core::BlockHeader>) -> Result<(), Error> { Ok(()) }
-	fn locate_headers(&self, locator: Vec<Hash>) -> Option<Vec<core::BlockHeader>> {
-		None
-	}
-	fn get_block(&self, h: Hash) -> Option<core::Block> {
-		None
-	}
-	fn find_peer_addrs(&self, capab: Capabilities) -> Option<Vec<SocketAddr>> {
-		None
-	}
-	fn peer_addrs_received(&self, peer_addrs: Vec<SocketAddr>) -> Result<(), Error> { Ok(())}
-	fn peer_connected(&self, pi: &PeerInfo) {}
-}
-
 /// P2P server implementation, handling bootstrapping to find and connect to
 /// peers, receiving connections from other peers and keep track of all of them.
 pub struct Server {
