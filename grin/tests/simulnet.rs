@@ -256,7 +256,7 @@ fn simulate_full_sync() {
     enable_mining: true,
     burn_reward: true,
     use_cuckoo_miner: true,
-    cuckoo_miner_async_mode: None,
+    cuckoo_miner_async_mode: false,
     cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
     cuckoo_miner_plugin_type: Some(String::from("simple")),
     ..Default::default()
