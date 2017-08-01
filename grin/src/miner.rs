@@ -168,7 +168,7 @@ impl Miner {
 
 		//Start the miner working
 	    let miner = plugin_miner.get_consumable();
-    	let job_handle=miner.notify(1, &pre, &post, difficulty.into_num(), false).unwrap();
+    	let job_handle=miner.notify(1, &pre, &post, difficulty.into_num()).unwrap();
 
 		let mut sol=None;
 
