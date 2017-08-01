@@ -53,6 +53,7 @@ fn peer_handshake() {
 	let rhandle = handle.clone();
 	let timeout = reactor::Timeout::new(time::Duration::new(1, 0), &handle).unwrap();
 	let timeout_send = reactor::Timeout::new(time::Duration::new(2, 0), &handle).unwrap();
+
 	handle.spawn(timeout.from_err()
 		.and_then(move |_| {
 			let p2p_conf = p2p::P2PConfig::default();
@@ -95,7 +96,7 @@ fn peer_handshake() {
 /// Starts a server with complete rejection policy, connects a peer, send any tx payload + check peer is banned
 #[test]
 fn peer_banning() {
-	env_logger::init().unwrap();
+	// env_logger::init().unwrap();
 
 	let mut evtlp = Core::new().unwrap();
 	let handle = evtlp.handle();
@@ -103,7 +104,7 @@ fn peer_banning() {
 	let net_adapter = Arc::new(RejectingAdapter {});
 	let server = p2p::Server::new(p2p::UNKNOWN, p2p_conf, net_adapter.clone());
 	let run_server = server.start(handle.clone());
-	let my_addr = "127.0.0.1:5000".parse().unwrap();
+	let my_addr: SocketAddr = "127.0.0.1:5000".parse().unwrap();
 
 	let phandle = handle.clone();
 	let rhandle = handle.clone();
@@ -119,18 +120,22 @@ fn peer_banning() {
 					Peer::connect(socket,
 					              p2p::UNKNOWN,
 					              Difficulty::one(),
-					              my_addr,
+					              my_addr.clone(),
 					              &p2p::handshake::Handshake::new())
 				})
 				.and_then(move |(socket, peer)| {
 					rhandle.spawn(peer.run(socket, net_adapter.clone()).map_err(|e| {
 						panic!("Client run failed: {:?}", e);
 					}));
-					server.broadcast_block(&Block::default());
-					Ok((server, peer))
+					peer.send_block(&Block::default());
+					timeout_send.from_err().map(|_| peer)
 				})
-				.and_then(|(server, peer)| {
-					println!("{:?}", peer.info);
+				.and_then(move |peer| {
+					assert!(server.peer_count() > 0);
+
+					let s_peer = server.get_peer(my_addr.clone()).expect("get server peer by address");
+					assert!(s_peer.is_banned(), "Peer must be banned");
+
 					server.stop();
 					Ok(())
 				})
