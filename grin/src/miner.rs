@@ -277,8 +277,14 @@ impl Miner {
 			let mut b = self.build_block(&head, coinbase.clone());
 
 			let mut sol=None;
+			let mut use_async=false;
+			if let Some(c)=self.config.cuckoo_miner_async_mode {
+				if c {
+					use_async=true;
+				}
+			}
 			if let Some(mut p) = plugin_miner.as_mut() {
-				if miner_config.cuckoo_miner_async_mode.unwrap() {
+				if use_async {
 					sol = self.inner_loop_async(&mut p, 
 						b.header.difficulty.clone(), 
 						&mut b,
