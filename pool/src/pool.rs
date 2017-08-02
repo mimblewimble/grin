@@ -708,15 +708,15 @@ mod tests {
         // Now we prepare the block that will cause the above condition.
         // First, the transactions we want in the block:
         // - Copy of 1
-        let mut block_tx_1 = test_transaction(vec![10], vec![8]);
+        let block_tx_1 = test_transaction(vec![10], vec![8]);
         // - Conflict w/ 2, satisfies 7
-        let mut block_tx_2 = test_transaction(vec![20], vec![7]);
+        let block_tx_2 = test_transaction(vec![20], vec![7]);
         // - Copy of 4
-        let mut block_tx_3 = test_transaction(vec![8], vec![4,3]);
+        let block_tx_3 = test_transaction(vec![8], vec![4,3]);
         // - Output conflict w/ 8
-        let mut block_tx_4 = test_transaction(vec![40], vec![9]);
-        let block_transactions = vec![&mut block_tx_1, &mut block_tx_2,
-            &mut block_tx_3, &mut block_tx_4];
+        let block_tx_4 = test_transaction(vec![40], vec![9]);
+        let block_transactions = vec![&block_tx_1, &block_tx_2, &block_tx_3,
+          &block_tx_4];
 
         let block = block::Block::new(&block::BlockHeader::default(),
             block_transactions, key::ONE_KEY).unwrap();
@@ -821,8 +821,8 @@ mod tests {
             // TODO: This is ugly, either make block::new take owned
             // txs instead of mut refs, or change 
             // prepare_mineable_transactions to return mut refs
-            let mut block_txs: Vec<transaction::Transaction> = txs.drain(..).map(|x| *x).collect();
-            let tx_refs = block_txs.iter_mut().collect();
+            let block_txs: Vec<transaction::Transaction> = txs.drain(..).map(|x| *x).collect();
+            let tx_refs = block_txs.iter().collect();
             block = block::Block::new(&block::BlockHeader::default(),
                 tx_refs, key::ONE_KEY).unwrap();
         }

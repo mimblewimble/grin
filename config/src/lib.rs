@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2017 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Implementation of the MimbleWimble paper.
-//! https://download.wpsoftware.net/bitcoin/wizardry/mimblewimble.txt
+//! Crate wrapping up the Grin binary and configuration file
 
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
@@ -21,24 +20,17 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-#[macro_use]
-extern crate bitflags;
-extern crate blake2_rfc as blake2;
-extern crate byteorder;
-extern crate crypto;
-extern crate num_bigint as bigint;
-extern crate rand;
-extern crate secp256k1zkp as secp;
+
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate time;
+extern crate toml;
 
-#[macro_use]
-pub mod macros;
+extern crate grin_grin as grin;
+extern crate grin_p2p as p2p;
+extern crate grin_wallet as wallet;
 
-pub mod consensus;
-pub mod core;
-pub mod genesis;
-pub mod pow;
-pub mod ser;
+pub mod config;
+pub mod types;
+
+pub use types::{GlobalConfig, ConfigMembers, ConfigError};

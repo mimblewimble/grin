@@ -19,10 +19,7 @@
 //! enough, consensus-relevant constants and short functions should be kept
 //! here.
 
-use std::cmp;
 use std::fmt;
-
-use bigint::{BigInt, Sign};
 
 use core::target::Difficulty;
 
@@ -38,11 +35,14 @@ pub const BLOCK_TIME_SEC: i64 = 60;
 /// Cuckoo-cycle proof size (cycle length)
 pub const PROOFSIZE: usize = 42;
 
+
 /// Default Cuckoo Cycle size shift used for mining and validating.
 pub const DEFAULT_SIZESHIFT: u8 = 30;
 
 /// Lower Cuckoo size shift for tests and testnet
-pub const TEST_SIZESHIFT: u8 = 12;
+/// This should be changed to correspond with the
+/// loaded plugin if using cuckoo-miner
+pub const TEST_SIZESHIFT: u8 = 16;
 
 /// Default Cuckoo Cycle easiness, high enough to have good likeliness to find
 /// a solution.
@@ -61,17 +61,21 @@ pub const CUT_THROUGH_HORIZON: u32 = 48 * 3600 / (BLOCK_TIME_SEC as u32);
 pub const MAX_MSG_LEN: u64 = 20_000_000;
 
 /// The minimum mining difficulty we'll allow
-
 pub const MINIMUM_DIFFICULTY: u32 = 10;
 
+/// Time window in blocks to calculate block time median
 pub const MEDIAN_TIME_WINDOW: u32 = 11;
 
+/// Number of blocks used to calculate difficulty adjustments
 pub const DIFFICULTY_ADJUST_WINDOW: u32 = 23;
 
+/// Average time span of the difficulty adjustment window
 pub const BLOCK_TIME_WINDOW: i64 = (DIFFICULTY_ADJUST_WINDOW as i64) * BLOCK_TIME_SEC;
 
+/// Maximum size time window used for difficutly adjustments
 pub const UPPER_TIME_BOUND: i64 = BLOCK_TIME_WINDOW * 4 / 3;
 
+/// Minimum size time window used for difficutly adjustments
 pub const LOWER_TIME_BOUND: i64 = BLOCK_TIME_WINDOW * 5 / 6;
 
 /// Error when computing the next difficulty adjustment.

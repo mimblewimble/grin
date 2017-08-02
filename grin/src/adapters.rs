@@ -59,11 +59,12 @@ impl NetAdapter for NetToChainAdapter {
 	}
 
 	fn block_received(&self, b: core::Block) -> Result<(), p2p::Error> {
-		debug!("Received block {} from network, going to process.",
-		       b.hash());
+
+    let bhash = b.hash();
+		debug!("Received block {} from network, going to process.", bhash);
 
 		// pushing the new block through the chain pipeline
-		let res = self.chain.process_block(&b, self.chain_opts());
+		let res = self.chain.process_block(b, self.chain_opts());
 
 		if let Err(e) = res {
 			debug!("Block {} refused by chain: {:?}", b.hash(), e);
@@ -71,7 +72,7 @@ impl NetAdapter for NetToChainAdapter {
 		}
 
 		if self.syncer.borrow().syncing() {
-			self.syncer.borrow().block_received(b.hash());
+			self.syncer.borrow().block_received(bhash);
 		}
 
 		Ok(())

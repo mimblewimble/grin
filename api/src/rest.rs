@@ -346,9 +346,11 @@ mod test {
 	impl ApiEndpoint for TestApi {
 		type ID = String;
 		type T = Animal;
+    type OP_IN = ();
+    type OP_OUT = ();
 
-		fn methods(&self) -> Vec<Method> {
-			vec![Method::Get]
+		fn operations(&self) -> Vec<Operation> {
+			vec![Operation::Get]
 		}
 
 		fn get(&self, name: String) -> ApiResult<Animal> {

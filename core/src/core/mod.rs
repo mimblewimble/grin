@@ -17,8 +17,10 @@
 pub mod block;
 pub mod build;
 pub mod hash;
+pub mod sumtree;
 pub mod target;
 pub mod transaction;
+//pub mod txoset;
 #[allow(dead_code)]
 
 use std::fmt;
@@ -76,7 +78,6 @@ pub trait Committed {
 	/// fee) or positive (a reward).
 	fn overage(&self) -> i64;
 }
-
 
 /// Proof of work
 #[derive(Copy)]

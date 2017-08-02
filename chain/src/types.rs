@@ -41,12 +41,12 @@ bitflags! {
 pub enum Error {
 	/// The block doesn't fit anywhere in our chain
 	Unfit(String),
+	/// Special case of orphan blocks
+	Orphan,
 	/// Difficulty is too low either compared to ours or the block PoW hash
 	DifficultyTooLow,
 	/// Addition of difficulties on all previous block is wrong
 	WrongTotalDifficulty,
-	/// Size of the Cuckoo graph in block header doesn't match PoW requirements
-	WrongCuckooSize,
 	/// The proof of work is invalid
 	InvalidPow,
 	/// The block doesn't sum correctly or a tx signature is invalid
@@ -57,7 +57,9 @@ pub enum Error {
 	InvalidBlockHeight,
 	/// Internal issue when trying to save or load data from store
 	StoreErr(grin_store::Error),
+	/// Error serializing or deserializing a type
 	SerErr(ser::Error),
+	/// Anything else
 	Other(String),
 }
 
@@ -197,7 +199,8 @@ pub trait ChainAdapter {
 	fn block_accepted(&self, b: &Block);
 }
 
-pub struct NoopAdapter { }
+/// Dummy adapter used as a placeholder for real implementations
+pub struct NoopAdapter {}
 impl ChainAdapter for NoopAdapter {
 	fn block_accepted(&self, b: &Block) {}
 }

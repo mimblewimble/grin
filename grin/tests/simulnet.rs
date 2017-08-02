@@ -19,7 +19,6 @@ extern crate grin_chain as chain;
 extern crate grin_api as api;
 extern crate grin_wallet as wallet;
 extern crate secp256k1zkp as secp;
-extern crate tiny_keccak;
 
 extern crate env_logger;
 extern crate futures;
@@ -125,7 +124,10 @@ fn simulate_seeding () {
 /// as a seed. Meant to test the evolution of mining difficulty with miners running at
 /// different rates
 
-#[test]
+
+//Just going to comment this out as an automatically run test for the time being,
+//As it's more for actively testing and hurts CI a lot
+//#[test]
 fn simulate_parallel_mining(){
     env_logger::init();
 
@@ -149,9 +151,6 @@ fn simulate_parallel_mining(){
     server_config.start_miner = true;
     server_config.start_wallet = true;
     server_config.is_seeding = true;
-
-    //This is the default value, can play with this here for convenience
-    server_config.cuckoo_size=consensus::TEST_SIZESHIFT as u32;
 
     pool.create_server(&mut server_config);
 
@@ -196,7 +195,9 @@ fn simulate_block_propagation() {
   let miner_config = grin::MinerConfig{
     enable_mining: true,
     burn_reward: true,
-    cuckoo_size: consensus::TEST_SIZESHIFT as u32,
+    use_cuckoo_miner: true,
+    cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
+    cuckoo_miner_plugin_type: Some(String::from("simple")),
     ..Default::default()
   };
 
@@ -207,7 +208,7 @@ fn simulate_block_propagation() {
           grin::ServerConfig{
             api_http_addr: format!("127.0.0.1:{}", 20000+n),
             db_root: format!("target/{}/grin-prop-{}", test_name_dir, n),
-            p2p_config: p2p::P2PConfig{port: 10000+n, ..p2p::P2PConfig::default()},
+            p2p_config: Some(p2p::P2PConfig{port: 10000+n, ..p2p::P2PConfig::default()}),
             ..Default::default()
           }, &handle).unwrap();
       servers.push(s);
@@ -253,7 +254,9 @@ fn simulate_full_sync() {
   let miner_config = grin::MinerConfig{
     enable_mining: true,
     burn_reward: true,
-    cuckoo_size: consensus::TEST_SIZESHIFT as u32,
+    use_cuckoo_miner: true,
+    cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
+    cuckoo_miner_plugin_type: Some(String::from("simple")),
     ..Default::default()
   };
 
@@ -263,7 +266,7 @@ fn simulate_full_sync() {
       let s = grin::Server::future(
           grin::ServerConfig{
             db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
-            p2p_config: p2p::P2PConfig{port: 11000+n, ..p2p::P2PConfig::default()},
+            p2p_config: Some(p2p::P2PConfig{port: 11000+n, ..p2p::P2PConfig::default()}),
             ..Default::default()
           }, &handle).unwrap();
       servers.push(s);
@@ -271,7 +274,7 @@ fn simulate_full_sync() {
 
   // mine a few blocks on server 1
   servers[0].start_miner(miner_config);
-  thread::sleep(time::Duration::from_secs(15));
+  thread::sleep(time::Duration::from_secs(45));
 
   // connect 1 and 2
   let addr = format!("{}:{}", "127.0.0.1", 11001);

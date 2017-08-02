@@ -28,11 +28,26 @@ pub mod cuckoo;
 use time;
 
 use consensus::EASINESS;
-use consensus::MINIMUM_DIFFICULTY;
 use core::BlockHeader;
 use core::hash::Hashed;
+use core::Proof;
 use core::target::Difficulty;
-use pow::cuckoo::{Cuckoo, Miner, Error};
+use pow::cuckoo::{Cuckoo, Error};
+
+
+/// Should be implemented by anything providing mining services
+///
+
+pub trait MiningWorker {
+	
+	/// This only sets parameters and does initialisation work now
+	fn new(ease: u32, sizeshift: u32) -> Self;
+	
+	/// Actually perform a mining attempt on the given input and
+	/// return a proof if found
+	fn mine(&mut self, header: &[u8]) -> Result<Proof, Error>;
+
+}
 
 /// Validates the proof of work of a given header, and that the proof of work
 /// satisfies the requirements of the header.
@@ -47,14 +62,14 @@ pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
 
 /// Uses the much easier Cuckoo20 (mostly for
 /// tests).
-pub fn pow20(bh: &mut BlockHeader, diff: Difficulty) -> Result<(), Error> {
-	pow_size(bh, diff, 20)
+pub fn pow20<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader, diff: Difficulty) -> Result<(), Error> {
+	pow_size(miner, bh, diff, 20)
 }
 
-/// Runs a naive single-threaded proof of work computation over the provided
-/// block, until the required difficulty target is reached. May take a
-/// while for a low target...
-pub fn pow_size(bh: &mut BlockHeader, diff: Difficulty, sizeshift: u32) -> Result<(), Error> {
+/// Runs a proof of work computation over the provided block using the provided Mining Worker,
+/// until the required difficulty target is reached. May take a while for a low target...
+pub fn pow_size<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader, 
+								 diff: Difficulty, sizeshift: u32) -> Result<(), Error> {
 	let start_nonce = bh.nonce;
 
 	// try to find a cuckoo cycle on that header hash
@@ -65,7 +80,8 @@ pub fn pow_size(bh: &mut BlockHeader, diff: Difficulty, sizeshift: u32) -> Resul
 
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good
-		if let Ok(proof) = Miner::new(&pow_hash[..], EASINESS, sizeshift).mine() {
+
+		if let Ok(proof) = miner.mine(&pow_hash[..]) {
 			if proof.to_difficulty() >= diff {
 				bh.pow = proof;
 				return Ok(());
@@ -88,12 +104,14 @@ mod test {
 	use super::*;
 	use core::target::Difficulty;
 	use genesis;
+  use consensus::MINIMUM_DIFFICULTY;
 
 	#[test]
 	fn genesis_pow() {
 		let mut b = genesis::genesis();
 		b.header.nonce = 310;
-		pow_size(&mut b.header, Difficulty::from_num(MINIMUM_DIFFICULTY), 12).unwrap();
+		let mut internal_miner = cuckoo::Miner::new(EASINESS, 12);
+		pow_size(&mut internal_miner, &mut b.header, Difficulty::from_num(MINIMUM_DIFFICULTY), 12).unwrap();
 		assert!(b.header.nonce != 310);
 		assert!(b.header.pow.to_difficulty() >= Difficulty::from_num(MINIMUM_DIFFICULTY));
 		assert!(verify_size(&b.header, 12));
