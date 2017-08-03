@@ -181,7 +181,7 @@ fn simulate_parallel_mining(){
 /// gets propagated to all.
 
 #[test]
-fn simulate_block_propagation() {
+fn a_simulate_block_propagation() {
   env_logger::init();
 
   let test_name_dir="test_servers/grin-prop";
