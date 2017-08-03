@@ -104,12 +104,12 @@ fn peer_banning() {
 	let net_adapter = Arc::new(RejectingAdapter {});
 	let server = p2p::Server::new(p2p::UNKNOWN, p2p_conf, net_adapter.clone());
 	let run_server = server.start(handle.clone());
-	let my_addr: SocketAddr = "127.0.0.1:5000".parse().unwrap();
+	let my_addr: SocketAddr = "127.0.0.1:6000".parse().unwrap();
 
 	let phandle = handle.clone();
 	let rhandle = handle.clone();
 	let timeout = reactor::Timeout::new(time::Duration::new(1, 0), &handle).unwrap();
-	let timeout_send = reactor::Timeout::new(time::Duration::new(2, 0), &handle).unwrap();
+	let timeout_send = reactor::Timeout::new(time::Duration::new(4, 0), &handle).unwrap();
 
 	handle.spawn(timeout.from_err()
 		.and_then(move |_| {
