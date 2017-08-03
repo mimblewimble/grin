@@ -138,8 +138,7 @@ fn simulate_parallel_mining(){
     let mut pool_config = LocalServerContainerPoolConfig::default();
     pool_config.base_name = String::from(test_name_dir);
     pool_config.run_length_in_seconds = 60;
-
-    //have to select different ports because of tests being run in parallel
+//have to select different ports because of tests being run in parallel
     pool_config.base_api_port=30040;
     pool_config.base_p2p_port=31040;
     pool_config.base_wallet_port=32040;
@@ -178,12 +177,11 @@ fn simulate_parallel_mining(){
 }
 
 //TODO: Convert these tests to newer framework format
-
 /// Create a network of 5 servers and mine a block, verifying that the block
 /// gets propagated to all.
 
 #[test]
-fn simulate_block_propagation() {
+fn a_simulate_block_propagation() {
   env_logger::init();
 
   let test_name_dir="test_servers/grin-prop";
@@ -196,6 +194,7 @@ fn simulate_block_propagation() {
     enable_mining: true,
     burn_reward: true,
     use_cuckoo_miner: true,
+    cuckoo_miner_async_mode: None,
     cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
     cuckoo_miner_plugin_type: Some(String::from("simple")),
     ..Default::default()
@@ -206,9 +205,9 @@ fn simulate_block_propagation() {
   for n in 0..5 {
       let s = grin::Server::future(
           grin::ServerConfig{
-            api_http_addr: format!("127.0.0.1:{}", 20000+n),
+            api_http_addr: format!("127.0.0.1:{}", 19000+n),
             db_root: format!("target/{}/grin-prop-{}", test_name_dir, n),
-            p2p_config: Some(p2p::P2PConfig{port: 10000+n, ..p2p::P2PConfig::default()}),
+            p2p_config: Some(p2p::P2PConfig{port: 18000+n, ..p2p::P2PConfig::default()}),
             ..Default::default()
           }, &handle).unwrap();
       servers.push(s);
@@ -218,7 +217,7 @@ fn simulate_block_propagation() {
   for n in 0..5 {
     for m in 0..5 {
       if m == n { continue }
-      let addr = format!("{}:{}", "127.0.0.1", 10000+m);
+      let addr = format!("{}:{}", "127.0.0.1", 18000+m);
       servers[n].connect_peer(addr.parse().unwrap()).unwrap();
     }
   }
@@ -255,6 +254,7 @@ fn simulate_full_sync() {
     enable_mining: true,
     burn_reward: true,
     use_cuckoo_miner: true,
+    cuckoo_miner_async_mode: Some(false),
     cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
     cuckoo_miner_plugin_type: Some(String::from("simple")),
     ..Default::default()

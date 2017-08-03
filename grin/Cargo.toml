@@ -15,7 +15,8 @@ grin_util = { path = "../util" }
 grin_wallet = { path = "../wallet" }
 secp256k1zkp = { path = "../secp256k1zkp" }
 
-cuckoo_miner = { git = "https://github.com/mimblewimble/cuckoo-miner", tag="grin_integration_2"}
+cuckoo_miner = { git = "https://github.com/mimblewimble/cuckoo-miner", tag="grin_integration_4"}
+#cuckoo_miner = { path = "../../cuckoo-miner"}
 
 blake2-rfc = "~0.2.17"
 env_logger="^0.3.5"
@@ -29,4 +30,5 @@ serde_derive = "~1.0.8"
 tokio-core="^0.1.1"
 tokio-timer="^0.1.0"
 rand = "^0.3"
-lazy_static = "0.2.8"
+lazy_static = "~0.2.8"
+itertools = "~0.6.0"

@@ -153,16 +153,7 @@ impl Server {
 		miner.set_debug_output_id(format!("Port {}",self.config.p2p_config.unwrap().port));
 		let server_config = self.config.clone();
 		thread::spawn(move || {
-			if config.use_cuckoo_miner {
-				let mut cuckoo_miner = PluginMiner::new(consensus::EASINESS, 
-													cuckoo_size);
-				cuckoo_miner.init(config.clone(),server_config);									
-				miner.run_loop(cuckoo_miner, cuckoo_size);
-			} else {
-				let test_internal_miner = cuckoo::Miner::new(consensus::EASINESS, cuckoo_size);
-				miner.run_loop(test_internal_miner, cuckoo_size);
-			}
-			
+			miner.run_loop(config.clone(), server_config, cuckoo_size);		
 		});
 	}
 

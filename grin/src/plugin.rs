@@ -49,14 +49,16 @@ lazy_static!{
 }
 
 pub struct PluginMiner {
-	miner:Option<CuckooMiner>,
+	pub miner:Option<CuckooMiner>,
 	last_solution: CuckooMinerSolution,
+	config: CuckooMinerConfig,
 }
 
 impl Default for PluginMiner {
 	fn default() -> PluginMiner {
 		PluginMiner {
 			miner: None,
+			config: CuckooMinerConfig::new(),
 			last_solution: CuckooMinerSolution::new(),
 		}
 	}
@@ -131,16 +133,28 @@ impl PluginMiner {
 		*loaded_config_ref=Some(config.clone());
 
 		//this will load the associated plugin
-		let result=CuckooMiner::new(config);
+		let result=CuckooMiner::new(config.clone());
 		if let Err(e) = result {
 			error!("Error initializing mining plugin: {:?}", e);
 			error!("Accepted values are: {:?}", caps[0].parameters);
 			panic!("Unable to init mining plugin.");
 		}
 
-		
+		self.config=config.clone();		
 		self.miner=Some(result.unwrap());
-	} 
+	}
+
+	pub fn get_consumable(&mut self)->CuckooMiner{
+		
+		//this will load the associated plugin
+		let result=CuckooMiner::new(self.config.clone());
+		if let Err(e) = result {
+			error!("Error initializing mining plugin: {:?}", e);
+			panic!("Unable to init mining plugin.");
+		}
+		result.unwrap()
+	}
+	
 }
 
 impl MiningWorker for PluginMiner {

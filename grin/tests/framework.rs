@@ -228,6 +228,7 @@ impl LocalServerContainer {
             enable_mining: self.config.start_miner,
             burn_reward: self.config.burn_mining_rewards,
             use_cuckoo_miner: true,
+            cuckoo_miner_async_mode: Some(false),
             cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
             cuckoo_miner_plugin_type: Some(String::from("simple")),
             wallet_receiver_url : self.config.coinbase_wallet_address.clone(),
