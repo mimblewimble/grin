@@ -184,7 +184,7 @@ impl DifficultyIter {
 }
 
 impl Iterator for DifficultyIter {
-	type Item = Result<(i64, Difficulty), TargetError>;
+	type Item = Result<(u64, Difficulty), TargetError>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		let bhe = self.store.get_block_header(&self.next);
@@ -195,7 +195,7 @@ impl Iterator for DifficultyIter {
 					return None;
 				}
 				self.next = bh.previous;
-				Some(Ok((bh.timestamp.to_timespec().sec, bh.difficulty)))
+				Some(Ok((bh.timestamp.to_timespec().sec as u64, bh.difficulty)))
 			}
 		}
 	}
