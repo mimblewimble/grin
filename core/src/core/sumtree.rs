@@ -403,7 +403,50 @@ where
 		}
 	}
 
-	// TODO push_many to allow bulk updates
+  fn clone_pruned_recurse(node: &NodeData<T>) -> NodeData<T> {
+    if node.full {
+      // replaces full internal nodes, leaves and already pruned nodes are full
+      // as well
+      NodeData {
+        full: true,
+        node: Node::Pruned(node.sum()),
+        hash: node.hash,
+        depth: node.depth,
+      }
+    } else {
+			if let Node::Internal { ref lchild, ref rchild, ref sum } = node.node {
+        // just recurse on each side to get the pruned version
+        NodeData {
+          full: false,
+          node: Node::Internal {
+            lchild: Box::new(SumTree::clone_pruned_recurse(lchild)),
+            rchild: Box::new(SumTree::clone_pruned_recurse(rchild)),
+            sum: sum.clone(),
+          },
+          hash: node.hash,
+          depth: node.depth,
+        }
+      } else {
+        unreachable!()
+      }
+    }
+  }
+
+  /// Minimal clone of this tree, replacing all full nodes with a pruned node,
+  /// therefore only copying non-full subtrees.
+  pub fn clone_pruned(&self) -> SumTree<T> {
+    match self.root {
+      Some(ref node) => {
+        SumTree {
+          index: HashMap::new(),
+          root: Some(SumTree::clone_pruned_recurse(node)),
+        }
+      },
+      None => SumTree::new(),
+    }
+  }
+
+	// TODO push_many, truncate to allow bulk updates
 }
 
 // A SumTree is encoded as follows: an empty tree is the single byte 0x00.
