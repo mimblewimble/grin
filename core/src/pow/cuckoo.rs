@@ -23,7 +23,6 @@ use std::cmp;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 
-use consensus::PROOFSIZE;
 use core::Proof;
 use pow::siphash::siphash24;
 use pow::MiningWorker;
@@ -101,9 +100,9 @@ impl Cuckoo {
 	pub fn verify(&self, proof: Proof, ease: u64) -> bool {
 		let easiness = ease * (self.size as u64) / 100;
 		let nonces = proof.to_u64s();
-		let mut us = [0; PROOFSIZE];
-		let mut vs = [0; PROOFSIZE];
-		for n in 0..PROOFSIZE {
+		let mut us = vec![0; proof.proof_size];
+		let mut vs = vec![0; proof.proof_size];
+		for n in 0..proof.proof_size {
 			if nonces[n] >= easiness || (n != 0 && nonces[n] <= nonces[n - 1]) {
 				return false;
 			}
@@ -111,10 +110,10 @@ impl Cuckoo {
 			vs[n] = self.new_node(nonces[n], 1);
 		}
 		let mut i = 0;
-		let mut count = PROOFSIZE;
+		let mut count = proof.proof_size;
 		loop {
 			let mut j = i;
-			for k in 0..PROOFSIZE {
+			for k in 0..proof.proof_size {
 				// find unique other j with same vs[j]
 				if k != i && vs[k] == vs[i] {
 					if j != i {
@@ -127,7 +126,7 @@ impl Cuckoo {
 				return false;
 			}
 			i = j;
-			for k in 0..PROOFSIZE {
+			for k in 0..proof.proof_size {
 				// find unique other i with same us[i]
 				if k != j && us[k] == us[j] {
 					if i != j {
@@ -154,6 +153,7 @@ impl Cuckoo {
 /// tests, being impractical with sizes greater than 2^22.
 pub struct Miner {
 	easiness: u64,
+	proof_size: usize,
 	cuckoo: Option<Cuckoo>,
 	graph: Vec<u32>,
 	sizeshift: u32,
@@ -163,7 +163,8 @@ impl MiningWorker for Miner {
 
 	/// Creates a new miner
 	fn new(ease: u32, 
-		   sizeshift: u32) -> Miner {
+		   sizeshift: u32,
+		   proof_size: usize) -> Miner {
 		let size = 1 << sizeshift;
 		let graph = vec![0; size + 1];
 		let easiness = (ease as u64) * (size as u64) / 100;
@@ -172,6 +173,7 @@ impl MiningWorker for Miner {
 			cuckoo: None,
 			graph: graph,
 			sizeshift: sizeshift,
+			proof_size: proof_size,
 		}
 	}
 	
@@ -186,7 +188,7 @@ impl MiningWorker for Miner {
 /// What type of cycle we have found?
 enum CycleSol {
 	/// A cycle of the right length is a valid proof.
-	ValidProof([u32; PROOFSIZE]),
+	ValidProof(Vec<u32>),
 	/// A cycle of the wrong length is great, but not a proof.
 	InvalidCycle(usize),
 	/// No cycles have been found.
@@ -214,7 +216,7 @@ impl Miner {
 			let sol = self.find_sol(nu, &us, nv, &vs);
 			match sol {
 				CycleSol::ValidProof(res) => {
-					return Ok(Proof(res))
+					return Ok(Proof::new(res.to_vec()));
 				},
 				CycleSol::InvalidCycle(_) => continue,
 				CycleSol::NoCycle => {
@@ -266,7 +268,7 @@ impl Miner {
 				nu += 1;
 				nv += 1;
 			}
-			if nu + nv + 1 == PROOFSIZE {
+			if nu + nv + 1 == self.proof_size {
 				self.solution(&us, nu as u32, &vs, nv as u32)
 			} else {
 				CycleSol::InvalidCycle(nu + nv + 1)
@@ -299,7 +301,7 @@ impl Miner {
 			});
 		}
 		let mut n = 0;
-		let mut sol = [0; PROOFSIZE];
+		let mut sol = vec![0; self.proof_size];
 		for nonce in 0..self.easiness {
 			let edge = self.cuckoo.as_mut().unwrap().new_edge(nonce);
 			if cycle.contains(&edge) {
@@ -308,7 +310,7 @@ impl Miner {
 				cycle.remove(&edge);
 			}
 		}
-		return if n == PROOFSIZE {
+		return if n == self.proof_size {
 			CycleSol::ValidProof(sol)
 		} else {
 			CycleSol::NoCycle

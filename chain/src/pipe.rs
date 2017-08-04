@@ -28,6 +28,7 @@ use core::pow;
 use core::ser;
 use types::*;
 use store;
+use core::global::*;
 
 /// Contextual information required to process a new block and either reject or
 /// accept it.
@@ -147,10 +148,15 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 			return Err(Error::DifficultyTooLow);
 		}
 
+		let param_ref=MINING_PARAMETER_MODE.read().unwrap();
 		let cycle_size = if ctx.opts.intersects(EASY_POW) {
-			consensus::TEST_SIZESHIFT
+			match *param_ref {
+				MiningParameterMode::AutomatedTesting => AUTOMATED_TESTING_SIZESHIFT,
+				MiningParameterMode::UserTesting => USER_TESTING_SIZESHIFT,
+				MiningParameterMode::Production => consensus::DEFAULT_SIZESHIFT,
+			}
 		} else {
-			consensus::DEFAULT_SIZESHIFT
+			consensus::DEFAULT_SIZESHIFT 
 		};
 		debug!("Validating block with cuckoo size {}", cycle_size);
 		if !pow::verify_size(header, cycle_size as u32) {

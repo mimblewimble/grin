@@ -41,7 +41,7 @@ use pow::cuckoo::{Cuckoo, Error};
 pub trait MiningWorker {
 	
 	/// This only sets parameters and does initialisation work now
-	fn new(ease: u32, sizeshift: u32) -> Self;
+	fn new(ease: u32, sizeshift: u32, proof_size:usize) -> Self;
 	
 	/// Actually perform a mining attempt on the given input and
 	/// return a proof if found
@@ -54,10 +54,10 @@ pub trait MiningWorker {
 pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
 	// make sure the pow hash shows a difficulty at least as large as the target
 	// difficulty
-	if bh.difficulty > bh.pow.to_difficulty() {
+	if bh.difficulty > bh.pow.clone().to_difficulty() {
 		return false;
 	}
-	Cuckoo::new(&bh.hash()[..], cuckoo_sz).verify(bh.pow, EASINESS as u64)
+	Cuckoo::new(&bh.hash()[..], cuckoo_sz).verify(bh.pow.clone(), EASINESS as u64)
 }
 
 /// Uses the much easier Cuckoo20 (mostly for
@@ -82,7 +82,7 @@ pub fn pow_size<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader,
 		// diff, we're all good
 
 		if let Ok(proof) = miner.mine(&pow_hash[..]) {
-			if proof.to_difficulty() >= diff {
+			if proof.clone().to_difficulty() >= diff {
 				bh.pow = proof;
 				return Ok(());
 			}

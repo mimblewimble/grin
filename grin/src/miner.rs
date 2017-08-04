@@ -174,7 +174,7 @@ impl Miner {
 
 		while head.hash() == *latest_hash && time::get_time().sec < deadline {
 			if let Some(s) = job_handle.get_solution()  {
-				sol = Some(Proof(s.solution_nonces));
+				sol = Some(Proof::new(s.solution_nonces.to_vec()));
 				b.header.nonce=s.get_nonce_as_u64();
 				break;
 			}
@@ -221,7 +221,7 @@ impl Miner {
 							
 			let pow_hash = b.hash();
 			if let Ok(proof) = miner.mine(&pow_hash[..]) {
-				let proof_diff=proof.to_difficulty();
+				let proof_diff=proof.clone().to_difficulty();
 				/*debug!("(Server ID: {}) Header difficulty is: {}, Proof difficulty is: {}",
 				self.debug_output_id,
 				b.header.difficulty,
@@ -256,16 +256,17 @@ impl Miner {
 	pub fn run_loop(&self, 
 					miner_config:MinerConfig, 
 					server_config:ServerConfig, 
-					cuckoo_size:u32) {
+					cuckoo_size:u32,
+					proof_size:usize) {
 
 		info!("(Server ID: {}) Starting miner loop.", self.debug_output_id);
 		let mut plugin_miner=None;
 		let mut miner=None;
 		if miner_config.use_cuckoo_miner  {
-			plugin_miner = Some(PluginMiner::new(consensus::EASINESS, cuckoo_size));
+			plugin_miner = Some(PluginMiner::new(consensus::EASINESS, cuckoo_size, proof_size));
 			plugin_miner.as_mut().unwrap().init(miner_config.clone(),server_config);
 		} else {
-			miner = Some(cuckoo::Miner::new(consensus::EASINESS, cuckoo_size));
+			miner = Some(cuckoo::Miner::new(consensus::EASINESS, cuckoo_size, proof_size));
 		}
 
 		let mut coinbase = self.get_coinbase();
