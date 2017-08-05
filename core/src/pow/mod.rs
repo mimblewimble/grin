@@ -31,6 +31,7 @@ use consensus::EASINESS;
 use core::BlockHeader;
 use core::hash::Hashed;
 use core::Proof;
+use global::*;
 use core::target::Difficulty;
 use pow::cuckoo::{Cuckoo, Error};
 
@@ -104,16 +105,17 @@ mod test {
 	use super::*;
 	use core::target::Difficulty;
 	use genesis;
-  use consensus::MINIMUM_DIFFICULTY;
+  	use consensus::MINIMUM_DIFFICULTY;
 
 	#[test]
 	fn genesis_pow() {
+        set_global_mining_mode(MiningParameterMode::AutomatedTesting);
 		let mut b = genesis::genesis();
 		b.header.nonce = 310;
-		let mut internal_miner = cuckoo::Miner::new(EASINESS, 12);
-		pow_size(&mut internal_miner, &mut b.header, Difficulty::from_num(MINIMUM_DIFFICULTY), 12).unwrap();
+		let mut internal_miner = cuckoo::Miner::new(EASINESS, get_global_sizeshift() as u32, get_global_proofsize());
+		pow_size(&mut internal_miner, &mut b.header, Difficulty::from_num(MINIMUM_DIFFICULTY), get_global_sizeshift() as u32).unwrap();
 		assert!(b.header.nonce != 310);
-		assert!(b.header.pow.to_difficulty() >= Difficulty::from_num(MINIMUM_DIFFICULTY));
-		assert!(verify_size(&b.header, 12));
+		assert!(b.header.pow.clone().to_difficulty() >= Difficulty::from_num(MINIMUM_DIFFICULTY));
+		assert!(verify_size(&b.header, get_global_sizeshift() as u32));
 	}
 }

@@ -64,12 +64,7 @@ pub struct BlockHeader {
 
 impl Default for BlockHeader {
 	fn default() -> BlockHeader {
-		let param_ref=MINING_PARAMETER_MODE.read().unwrap();
-		let proof_size = match *param_ref {
-			MiningParameterMode::AutomatedTesting => AUTOMATED_TESTING_PROOF_SIZE,
-			MiningParameterMode::UserTesting => USER_TESTING_PROOF_SIZE,
-			MiningParameterMode::Production => PROOFSIZE,
-		};
+		let proof_size = get_global_proofsize();
 		BlockHeader {
 			height: 0,
 			previous: ZERO_HASH,

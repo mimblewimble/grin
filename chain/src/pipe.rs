@@ -120,9 +120,9 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	if header.height != prev.height + 1 {
 		return Err(Error::InvalidBlockHeight);
 	}
-	if header.timestamp <= prev.timestamp {
+	if header.timestamp <= prev.timestamp && !is_automated_testing_mode(){
 		// prevent time warp attacks and some timestamp manipulations by forcing strict
-		// time progression
+		// time progression (but not in CI mode)
 		return Err(Error::InvalidBlockTime);
 	}
 	if header.timestamp >
@@ -150,11 +150,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 
 		let param_ref=MINING_PARAMETER_MODE.read().unwrap();
 		let cycle_size = if ctx.opts.intersects(EASY_POW) {
-			match *param_ref {
-				MiningParameterMode::AutomatedTesting => AUTOMATED_TESTING_SIZESHIFT,
-				MiningParameterMode::UserTesting => USER_TESTING_SIZESHIFT,
-				MiningParameterMode::Production => consensus::DEFAULT_SIZESHIFT,
-			}
+			get_global_sizeshift()
 		} else {
 			consensus::DEFAULT_SIZESHIFT 
 		};

@@ -81,17 +81,8 @@ impl Chain {
 				let mut gen = genesis::genesis();
 				let diff = gen.header.difficulty.clone();
 				
-				let param_ref=MINING_PARAMETER_MODE.read().unwrap();
-				let sz = match *param_ref {
-					MiningParameterMode::AutomatedTesting => AUTOMATED_TESTING_SIZESHIFT,
-					MiningParameterMode::UserTesting => USER_TESTING_SIZESHIFT,
-					MiningParameterMode::Production => consensus::DEFAULT_SIZESHIFT,
-				};
-				let proof_size = match *param_ref {
-					MiningParameterMode::AutomatedTesting => AUTOMATED_TESTING_PROOF_SIZE,
-					MiningParameterMode::UserTesting => AUTOMATED_TESTING_PROOF_SIZE,
-					MiningParameterMode::Production => consensus::PROOFSIZE,
-				};
+				let sz = get_global_sizeshift();
+				let proof_size = get_global_proofsize();
 
 				let mut internal_miner = pow::cuckoo::Miner::new(consensus::EASINESS, sz as u32, proof_size);
 				pow::pow_size(&mut internal_miner, &mut gen.header, diff, sz as u32).unwrap();

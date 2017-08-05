@@ -32,17 +32,19 @@ use grin_core::core::target::Difficulty;
 use grin_core::pow;
 use grin_core::core;
 use grin_core::consensus;
+use grin_core::pow::cuckoo;
+use grin_core::global::*;
 
 use grin::{ServerConfig, MinerConfig};
-use grin::PluginMiner;
 
 use grin_core::pow::MiningWorker;
 
 #[test]
 fn mine_empty_chain() {
 	env_logger::init();
+    set_global_mining_mode(MiningParameterMode::AutomatedTesting);
 	let mut rng = OsRng::new().unwrap();
-	let chain = grin_chain::Chain::init(true, ".grin".to_string(), Arc::new(NoopAdapter {}))
+	let chain = grin_chain::Chain::init(".grin".to_string(), Arc::new(NoopAdapter {}))
 		.unwrap();
 
 	// mine and add a few blocks
@@ -57,8 +59,7 @@ fn mine_empty_chain() {
 	};
 	miner_config.cuckoo_miner_plugin_dir = Some(String::from("../target/debug/deps"));
 
-	let mut cuckoo_miner = PluginMiner::new(consensus::EASINESS, consensus::TEST_SIZESHIFT as u32);
-	cuckoo_miner.init(miner_config, server_config);
+	let mut cuckoo_miner = cuckoo::Miner::new(consensus::EASINESS, get_global_sizeshift() as u32, get_global_proofsize());
 
 	for n in 1..4 {
 		let prev = chain.head_header().unwrap();
@@ -72,7 +73,7 @@ fn mine_empty_chain() {
 			&mut cuckoo_miner,
 			&mut b.header,
 			difficulty,
-			consensus::TEST_SIZESHIFT as u32,
+			get_global_sizeshift() as u32,
 		).unwrap();
 
 		let bhash = b.hash();
@@ -89,7 +90,7 @@ fn mine_empty_chain() {
 fn mine_forks() {
 	env_logger::init();
 	let mut rng = OsRng::new().unwrap();
-	let chain = grin_chain::Chain::init(true, ".grin2".to_string(), Arc::new(NoopAdapter {}))
+	let chain = grin_chain::Chain::init(".grin2".to_string(), Arc::new(NoopAdapter {}))
 		.unwrap();
 
 	// mine and add a few blocks

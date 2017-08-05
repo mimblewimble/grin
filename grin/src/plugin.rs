@@ -106,12 +106,7 @@ impl PluginMiner {
 			panic!("Unable to load plugin directory... Please check configuration values");
 		}
 
-		let param_ref=MINING_PARAMETER_MODE.read().unwrap();
-		let sz = match *param_ref {
-			MiningParameterMode::AutomatedTesting => AUTOMATED_TESTING_SIZESHIFT,
-			MiningParameterMode::UserTesting => USER_TESTING_SIZESHIFT,
-			MiningParameterMode::Production => DEFAULT_SIZESHIFT,
-		};
+		let sz = get_global_sizeshift();
 
 		//So this is built dynamically based on the plugin implementation
 		//type and the consensus sizeshift

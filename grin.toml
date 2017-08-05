@@ -34,7 +34,7 @@ seeding_type = "None"
 #UserTesting - For regular user testing, much lighter than production more
 #Production - Full production cuckoo parameters
 
-mining_parameter_mode = "AutomatedTesting"
+mining_parameter_mode = "UserTesting"
 
 #7 = Bit flags for FULL_NODE, this structure needs to be changed
 #internally to make it more configurable
@@ -58,7 +58,7 @@ enable_mining = true
 
 #Whether to use cuckoo-miner,  and related parameters
 
-use_cuckoo_miner = false 
+use_cuckoo_miner = true 
 
 #Whether to use async mode for cuckoo miner, if the plugin supports it.
 #this allows for many searches to be run in parallel, e.g. if the system

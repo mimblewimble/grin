@@ -144,17 +144,8 @@ impl Server {
 	/// Start mining for blocks on a separate thread. Uses toy miner by default,
 	/// mostly for testing, but can also load a plugin from cuckoo-miner
 	pub fn start_miner(&self, config: MinerConfig) {
-		let param_ref=MINING_PARAMETER_MODE.read().unwrap();
-		let cuckoo_size = match *param_ref {
-			MiningParameterMode::AutomatedTesting => AUTOMATED_TESTING_SIZESHIFT,
-			MiningParameterMode::UserTesting => USER_TESTING_SIZESHIFT,
-			MiningParameterMode::Production => consensus::DEFAULT_SIZESHIFT,
-		};
-		let proof_size = match *param_ref {
-			MiningParameterMode::AutomatedTesting => AUTOMATED_TESTING_PROOF_SIZE,
-			MiningParameterMode::UserTesting => AUTOMATED_TESTING_PROOF_SIZE,
-			MiningParameterMode::Production => consensus::PROOFSIZE,
-		};
+		let cuckoo_size = get_global_sizeshift();
+		let proof_size = get_global_proofsize();
 
 		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
 		miner.set_debug_output_id(format!("Port {}",self.config.p2p_config.unwrap().port));

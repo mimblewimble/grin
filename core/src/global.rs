@@ -22,6 +22,8 @@
 /// e.g. CI, User testing, production values
 
 use std::sync::{RwLock};
+use consensus::PROOFSIZE;
+use consensus::DEFAULT_SIZESHIFT;
 
 /// Define these here, as they should be developer-set, not really tweakable
 /// by users
@@ -48,5 +50,37 @@ pub enum MiningParameterMode {
 
 lazy_static!{
     pub static ref MINING_PARAMETER_MODE: RwLock<MiningParameterMode> = RwLock::new(MiningParameterMode::Production);
+}
+
+pub fn set_global_mining_mode(mode:MiningParameterMode){
+	let mut param_ref=MINING_PARAMETER_MODE.write().unwrap();
+	*param_ref=mode;
+}
+
+pub fn get_global_sizeshift() -> u8 {
+	let param_ref=MINING_PARAMETER_MODE.read().unwrap();
+	match *param_ref {
+		MiningParameterMode::AutomatedTesting => AUTOMATED_TESTING_SIZESHIFT,
+		MiningParameterMode::UserTesting => USER_TESTING_SIZESHIFT,
+		MiningParameterMode::Production => DEFAULT_SIZESHIFT,
+	}
+}
+
+pub fn get_global_proofsize() -> usize {
+	let param_ref=MINING_PARAMETER_MODE.read().unwrap();
+	match *param_ref {
+		MiningParameterMode::AutomatedTesting => AUTOMATED_TESTING_PROOF_SIZE,
+		MiningParameterMode::UserTesting => USER_TESTING_PROOF_SIZE,
+		MiningParameterMode::Production => PROOFSIZE,
+	}
+}
+
+pub fn is_automated_testing_mode() -> bool {
+	let param_ref=MINING_PARAMETER_MODE.read().unwrap();
+	if let MiningParameterMode::AutomatedTesting=*param_ref {
+		return true;
+	} else {
+		return false;
+	}
 }
 
