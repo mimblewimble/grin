@@ -17,6 +17,7 @@
 pub mod block;
 pub mod build;
 pub mod hash;
+pub mod pmmr;
 pub mod sumtree;
 pub mod target;
 pub mod transaction;
