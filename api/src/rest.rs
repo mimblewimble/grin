@@ -30,9 +30,8 @@ use iron::{Iron, Request, Response, IronResult, IronError, status, headers, List
 use iron::method::Method;
 use iron::modifiers::Header;
 use iron::middleware::Handler;
-use iron::error::HttpResult;
 use router::Router;
-use serde::{Serialize, Deserialize};
+use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json;
 

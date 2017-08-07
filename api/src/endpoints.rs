@@ -21,11 +21,10 @@
 //   }
 // }
 
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::thread;
 
 use core::core::{Transaction, Output};
-use core::core::hash::Hash;
 use core::ser;
 use chain::{self, Tip};
 use pool;
@@ -81,7 +80,7 @@ impl ApiEndpoint for OutputApi {
       Some(utxo) => Ok(utxo),
       None => Err(Error::NotFound),
     }
-		
+
 	}
 }
 
