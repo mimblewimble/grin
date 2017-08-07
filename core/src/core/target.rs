@@ -21,11 +21,9 @@
 
 use std::fmt;
 use std::ops::{Add, Mul, Div, Sub};
-use std::io::Cursor;
-use std::u64::MAX;
 
 use serde::{Serialize, Serializer, Deserialize, Deserializer, de};
-use byteorder::{ByteOrder, ReadBytesExt, BigEndian};
+use byteorder::{ByteOrder, BigEndian};
 
 use core::hash::Hash;
 use ser::{self, Reader, Writer, Writeable, Readable};
@@ -150,7 +148,7 @@ impl<'de> de::Visitor<'de> for DiffVisitor {
 		where E: de::Error
 	{
 		let num_in = s.parse::<u64>();
-		if let Err(e)=num_in {
+		if let Err(_)=num_in {
         	return Err(de::Error::invalid_value(de::Unexpected::Str(s), &"a value number"));
       	};
 		Ok(Difficulty { num: num_in.unwrap() })

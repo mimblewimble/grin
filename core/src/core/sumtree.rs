@@ -698,6 +698,7 @@ where
 }
 
 #[allow(dead_code)]
+#[allow(missing_docs)]
 pub fn print_tree<T>(tree: &SumTree<T>)
 where
 	T: Summable + Writeable,

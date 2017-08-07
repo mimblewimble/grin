@@ -41,10 +41,15 @@ use pow::cuckoo::{Cuckoo, Error};
 ///
 
 pub trait MiningWorker {
-	
+
 	/// This only sets parameters and does initialisation work now
+<<<<<<< HEAD
 	fn new(ease: u32, sizeshift: u32, proof_size:usize) -> Self;
 	
+=======
+	fn new(ease: u32, sizeshift: u32) -> Self;
+
+>>>>>>> grin_core build and test
 	/// Actually perform a mining attempt on the given input and
 	/// return a proof if found
 	fn mine(&mut self, header: &[u8]) -> Result<Proof, Error>;
@@ -70,8 +75,8 @@ pub fn pow20<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader, diff: Difficul
 
 /// Runs a proof of work computation over the provided block using the provided Mining Worker,
 /// until the required difficulty target is reached. May take a while for a low target...
-pub fn pow_size<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader, 
-								 diff: Difficulty, sizeshift: u32) -> Result<(), Error> {
+pub fn pow_size<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader,
+								 diff: Difficulty, _: u32) -> Result<(), Error> {
 	let start_nonce = bh.nonce;
 
 	// try to find a cuckoo cycle on that header hash

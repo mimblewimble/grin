@@ -39,6 +39,7 @@ macro_rules! try_map_vec {
 
 /// Eliminates some of the verbosity in having iter and collect
 /// around every fitler_map call.
+#[macro_export]
 macro_rules! filter_map_vec {
   ($thing:expr, $mapfn:expr ) => {
     $thing.iter()
@@ -52,6 +53,7 @@ macro_rules! filter_map_vec {
 /// Example:
 ///   let foo = vec![1,2,3]
 ///   println!(tee!(foo, foo.append(vec![3,4,5]))
+#[macro_export]
 macro_rules! tee {
   ($thing:ident, $thing_expr:expr) => {
     {
