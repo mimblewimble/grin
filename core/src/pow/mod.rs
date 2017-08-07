@@ -58,6 +58,10 @@ pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
 	if bh.difficulty > bh.pow.clone().to_difficulty() {
 		return false;
 	}
+    // ensure the proof size is the same as what we're expecting
+    if bh.pow.proof_size != get_global_proofsize() {
+        return false;
+    }
 	Cuckoo::new(&bh.hash()[..], cuckoo_sz).verify(bh.pow.clone(), EASINESS as u64)
 }
 
