@@ -92,7 +92,7 @@ pub struct PoolApi<T> {
 }
 
 #[derive(Serialize, Deserialize)]
-struct PoolInfo {
+pub struct PoolInfo {
 	pool_size: usize,
 	orphans_size: usize,
 	total_size: usize,
@@ -145,7 +145,7 @@ impl<T> ApiEndpoint for PoolApi<T>
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
 #[derive(Serialize, Deserialize)]
-struct TxWrapper {
+pub struct TxWrapper {
 	tx_hex: String,
 }
 
