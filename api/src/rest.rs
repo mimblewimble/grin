@@ -330,7 +330,6 @@ impl ApiServer {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use rest::*;
 
 	#[derive(Serialize, Deserialize)]
 	pub struct Animal {
