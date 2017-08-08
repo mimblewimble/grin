@@ -36,6 +36,8 @@ pub use self::transaction::{Transaction, Input, Output, TxKernel, COINBASE_KERNE
 use self::hash::{Hash, Hashed, ZERO_HASH};
 use ser::{Writeable, Writer, Reader, Readable, Error};
 
+use global;
+
 /// Implemented by types that hold inputs and outputs including Pedersen
 /// commitments. Handles the collection of the commitments as well as their
 /// summing, taking potential explicit overages of fees into account.
@@ -162,7 +164,7 @@ impl Proof {
 
 impl Readable for Proof {
 	fn read(reader: &mut Reader) -> Result<Proof, Error> {
-		let proof_size = try!(reader.read_u32()) as usize;
+		let proof_size = global::proofsize();
 		let mut pow = vec![0u32; proof_size];
 		for n in 0..proof_size {
 			pow[n] = try!(reader.read_u32());
@@ -173,7 +175,6 @@ impl Readable for Proof {
 
 impl Writeable for Proof {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		try!(writer.write_u32(self.proof_size as u32));
 		for n in 0..self.proof_size {
 			try!(writer.write_u32(self.nonces[n]));
 		}

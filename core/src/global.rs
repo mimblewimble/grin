@@ -52,12 +52,12 @@ lazy_static!{
     pub static ref MINING_PARAMETER_MODE: RwLock<MiningParameterMode> = RwLock::new(MiningParameterMode::Production);
 }
 
-pub fn set_global_mining_mode(mode:MiningParameterMode){
+pub fn set_mining_mode(mode:MiningParameterMode){
 	let mut param_ref=MINING_PARAMETER_MODE.write().unwrap();
 	*param_ref=mode;
 }
 
-pub fn get_global_sizeshift() -> u8 {
+pub fn sizeshift() -> u8 {
 	let param_ref=MINING_PARAMETER_MODE.read().unwrap();
 	match *param_ref {
 		MiningParameterMode::AutomatedTesting => AUTOMATED_TESTING_SIZESHIFT,
@@ -66,7 +66,7 @@ pub fn get_global_sizeshift() -> u8 {
 	}
 }
 
-pub fn get_global_proofsize() -> usize {
+pub fn proofsize() -> usize {
 	let param_ref=MINING_PARAMETER_MODE.read().unwrap();
 	match *param_ref {
 		MiningParameterMode::AutomatedTesting => AUTOMATED_TESTING_PROOF_SIZE,

@@ -28,7 +28,7 @@ use consensus::PROOFSIZE;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use ser::{self, Readable, Reader, Writeable, Writer};
-use global::*;
+use global;
 
 bitflags! {
     /// Options for block validation
@@ -64,7 +64,7 @@ pub struct BlockHeader {
 
 impl Default for BlockHeader {
 	fn default() -> BlockHeader {
-		let proof_size = get_global_proofsize();
+		let proof_size = global::proofsize();
 		BlockHeader {
 			height: 0,
 			previous: ZERO_HASH,
