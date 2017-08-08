@@ -97,7 +97,8 @@ impl Chain {
 			Err(e) => return Err(Error::StoreErr(e)),
 		};
 
-		let head = chain_store.head()?;
+        // TODO - confirm this was safe to remove based on code above?
+		// let head = chain_store.head()?;
 
 		Ok(Chain {
 			store: Arc::new(chain_store),
@@ -176,21 +177,13 @@ impl Chain {
 	fn check_orphans(&self) {
 		// first check how many we have to retry, unfort. we can't extend the lock
 		// in the loop as it needs to be freed before going in process_block
-		let mut orphan_count = 0;
-		{
-			let orphans = self.orphans.lock().unwrap();
-			orphan_count = orphans.len();
-		}
+		let orphan_count = self.orphans.lock().unwrap().len();
 
 		// pop each orphan and retry, if still orphaned, will be pushed again
 		for _ in 0..orphan_count {
-			let mut popped = None;
-			{
-				let mut orphans = self.orphans.lock().unwrap();
-				popped = orphans.pop_back();
-			}
+            let popped = self.orphans.lock().unwrap().pop_back();
 			if let Some((opts, orphan)) = popped {
-				self.process_block(orphan, opts);
+				self.process_block(orphan, opts).unwrap();
 			}
 		}
 	}

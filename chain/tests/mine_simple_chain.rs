@@ -26,7 +26,6 @@ use std::thread;
 use rand::os::OsRng;
 
 use grin_chain::types::*;
-use grin_chain::store;
 use grin_core::core::hash::Hashed;
 use grin_core::core::target::Difficulty;
 use grin_core::pow;
@@ -42,7 +41,7 @@ use grin_core::pow::MiningWorker;
 
 #[test]
 fn mine_empty_chain() {
-	env_logger::init();
+	let _ = env_logger::init();
     global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 	let mut rng = OsRng::new().unwrap();
 	let chain = grin_chain::Chain::init(".grin".to_string(), Arc::new(NoopAdapter {}))
@@ -60,7 +59,7 @@ fn mine_empty_chain() {
 	};
 	miner_config.cuckoo_miner_plugin_dir = Some(String::from("../target/debug/deps"));
 
-	let mut cuckoo_miner = cuckoo::Miner::new(consensus::EASINESS, global::sizeshift() as u32, global::proofsize()); 
+	let mut cuckoo_miner = cuckoo::Miner::new(consensus::EASINESS, global::sizeshift() as u32, global::proofsize());
 	for n in 1..4 {
 		let prev = chain.head_header().unwrap();
 		let mut b = core::Block::new(&prev, vec![], reward_key).unwrap();
@@ -88,7 +87,7 @@ fn mine_empty_chain() {
 
 #[test]
 fn mine_forks() {
-	env_logger::init();
+	let _ = env_logger::init();
 	let mut rng = OsRng::new().unwrap();
 	let chain = grin_chain::Chain::init(".grin2".to_string(), Arc::new(NoopAdapter {}))
 		.unwrap();

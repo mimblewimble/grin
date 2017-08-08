@@ -43,13 +43,8 @@ use pow::cuckoo::{Cuckoo, Error};
 pub trait MiningWorker {
 
 	/// This only sets parameters and does initialisation work now
-<<<<<<< HEAD
 	fn new(ease: u32, sizeshift: u32, proof_size:usize) -> Self;
-	
-=======
-	fn new(ease: u32, sizeshift: u32) -> Self;
 
->>>>>>> grin_core build and test
 	/// Actually perform a mining attempt on the given input and
 	/// return a proof if found
 	fn mine(&mut self, header: &[u8]) -> Result<Proof, Error>;
