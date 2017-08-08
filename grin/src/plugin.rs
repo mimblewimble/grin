@@ -23,7 +23,7 @@ use core::pow::cuckoo;
 use core::pow::cuckoo::Error;
 use core::pow::MiningWorker;
 use core::consensus::DEFAULT_SIZESHIFT;
-use core::global; 
+use core::global;
 use std::collections::HashMap;
 
 use core::core::Proof;
@@ -35,9 +35,7 @@ use cuckoo_miner::{
 	CuckooMiner,
 	CuckooPluginManager,
 	CuckooMinerConfig,
-	CuckooMinerError,
-	CuckooMinerSolution,
-	CuckooPluginCapabilities};
+	CuckooMinerSolution};
 
 //For now, we're just going to keep a static reference around to the loaded config
 //And not allow querying the plugin directory twice once a plugin has been selected
@@ -48,7 +46,9 @@ lazy_static!{
     static ref LOADED_CONFIG: Mutex<Option<CuckooMinerConfig>> = Mutex::new(None);
 }
 
+/// plugin miner
 pub struct PluginMiner {
+	/// the miner
 	pub miner:Option<CuckooMiner>,
 	last_solution: CuckooMinerSolution,
 	config: CuckooMinerConfig,
@@ -65,6 +65,7 @@ impl Default for PluginMiner {
 }
 
 impl PluginMiner {
+	/// Init the plugin miner
 	pub fn init(&mut self, miner_config: MinerConfig, server_config: ServerConfig){
 				//Get directory of executable
 		let mut exe_path=env::current_exe().unwrap();
@@ -83,8 +84,8 @@ impl PluginMiner {
 
 		//First, load and query the plugins in the given directory
 		//These should all be stored in 'deps' at the moment relative
-		//to the executable path, though they should appear somewhere else 
-		//when packaging is more//thought out 
+		//to the executable path, though they should appear somewhere else
+		//when packaging is more//thought out
 
 		let mut loaded_config_ref = LOADED_CONFIG.lock().unwrap();
 
@@ -100,7 +101,7 @@ impl PluginMiner {
     	let mut plugin_manager = CuckooPluginManager::new().unwrap();
     	let result=plugin_manager.load_plugin_dir(plugin_install_path);
 
-		if let Err(e) = result {
+		if let Err(_) = result {
 			error!("Unable to load cuckoo-miner plugin directory, either from configuration or [exe_path]/deps.");
 			panic!("Unable to load plugin directory... Please check configuration values");
 		}
@@ -115,7 +116,7 @@ impl PluginMiner {
 		//insert it into the miner configuration being created below
 
     	let mut config = CuckooMinerConfig::new();
-	
+
         info!("Mining using plugin: {}", caps[0].full_path.clone());
     	config.plugin_full_path = caps[0].full_path.clone();
 		if let Some(l) = miner_config.cuckoo_miner_parameter_list {
@@ -134,12 +135,13 @@ impl PluginMiner {
 			panic!("Unable to init mining plugin.");
 		}
 
-		self.config=config.clone();		
+		self.config=config.clone();
 		self.miner=Some(result.unwrap());
 	}
 
+	/// Get the miner
 	pub fn get_consumable(&mut self)->CuckooMiner{
-		
+
 		//this will load the associated plugin
 		let result=CuckooMiner::new(self.config.clone());
 		if let Err(e) = result {
@@ -148,7 +150,7 @@ impl PluginMiner {
 		}
 		result.unwrap()
 	}
-	
+
 }
 
 impl MiningWorker for PluginMiner {
@@ -158,7 +160,7 @@ impl MiningWorker for PluginMiner {
 	/// version of the miner for now, though this should become
 	/// configurable somehow
 
-	fn new(ease: u32, 
+	fn new(ease: u32,
 		   sizeshift: u32,
 		   proof_size: usize) -> Self {
 		PluginMiner::default()
@@ -175,4 +177,3 @@ impl MiningWorker for PluginMiner {
         Err(Error::NoSolution)
 	}
 }
-

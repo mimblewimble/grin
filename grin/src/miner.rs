@@ -65,7 +65,7 @@ pub struct HeaderPartWriter {
 
 impl Default for HeaderPartWriter {
 	fn default() -> HeaderPartWriter {
-		HeaderPartWriter { 
+		HeaderPartWriter {
 			bytes_written: 0,
 			writing_pre: true,
 			pre_nonce: Vec::new(),
@@ -91,13 +91,13 @@ impl ser::Writer for HeaderPartWriter {
 	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, bytes_in: &T) -> Result<(), ser::Error> {
 		if self.writing_pre {
 			for i in 0..bytes_in.len() {self.pre_nonce.push(bytes_in.as_ref()[i])};
-			
+
 		} else if self.bytes_written!=0 {
 			for i in 0..bytes_in.len() {self.post_nonce.push(bytes_in.as_ref()[i])};
 		}
 
 		self.bytes_written+=bytes_in.len();
-		
+
 		if self.bytes_written==PRE_NONCE_SIZE && self.writing_pre {
 			self.writing_pre=false;
 			self.bytes_written=0;
@@ -140,20 +140,20 @@ impl Miner {
 	}
 
 	/// Inner part of the mining loop for cuckoo-miner asynch mode
-	pub fn inner_loop_async(&self, plugin_miner:&mut PluginMiner, 
-							difficulty:Difficulty, 
+	pub fn inner_loop_async(&self, plugin_miner:&mut PluginMiner,
+							difficulty:Difficulty,
 							b:&mut Block,
 							cuckoo_size: u32,
 							head:&BlockHeader,
-							latest_hash:&Hash) 
+							latest_hash:&Hash)
 		-> Option<Proof> {
-		
+
 		debug!("(Server ID: {}) Mining at Cuckoo{} for at most 2 secs at height {} and difficulty {}.",
 			self.debug_output_id,
 			cuckoo_size,
 			b.header.height,
 			b.header.difficulty);
-		
+
 		// look for a pow for at most 2 sec on the same block (to give a chance to new
 		// transactions) and as long as the head hasn't changed
 		// Will change this to something else at some point
@@ -189,12 +189,12 @@ impl Miner {
 	}
 
 	/// The inner part of mining loop for synchronous mode
-	pub fn inner_loop_sync<T: MiningWorker>(&self, 
-						    miner:&mut T, 
+	pub fn inner_loop_sync<T: MiningWorker>(&self,
+						    miner:&mut T,
 							b:&mut Block,
-							cuckoo_size: u32, 
+							cuckoo_size: u32,
 							head:&BlockHeader,
-							latest_hash:&mut Hash) 
+							latest_hash:&mut Hash)
 		-> Option<Proof> {
 		// look for a pow for at most 2 sec on the same block (to give a chance to new
 		// transactions) and as long as the head hasn't changed
@@ -206,7 +206,7 @@ impl Miner {
 		       latest_hash,
 		       b.header.difficulty);
 		let mut iter_count = 0;
-		
+
 		if self.config.slow_down_in_millis != None && self.config.slow_down_in_millis.unwrap() > 0 {
 			debug!("(Server ID: {}) Artificially slowing down loop by {}ms per iteration.",
 			self.debug_output_id,
@@ -215,7 +215,7 @@ impl Miner {
 
 		let mut sol=None;
 		while head.hash() == *latest_hash && time::get_time().sec < deadline {
-							
+
 			let pow_hash = b.hash();
 			if let Ok(proof) = miner.mine(&pow_hash[..]) {
 				let proof_diff=proof.clone().to_difficulty();
@@ -250,9 +250,9 @@ impl Miner {
 
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
-	pub fn run_loop(&self, 
-					miner_config:MinerConfig, 
-					server_config:ServerConfig, 
+	pub fn run_loop(&self,
+					miner_config:MinerConfig,
+					server_config:ServerConfig,
 					cuckoo_size:u32,
 					proof_size:usize) {
 
@@ -283,28 +283,28 @@ impl Miner {
 			}
 			if let Some(mut p) = plugin_miner.as_mut() {
 				if use_async {
-					sol = self.inner_loop_async(&mut p, 
-						b.header.difficulty.clone(), 
+					sol = self.inner_loop_async(&mut p,
+						b.header.difficulty.clone(),
 						&mut b,
 						cuckoo_size,
 						&head,
 						&latest_hash);
 				} else {
-					sol = self.inner_loop_sync(p, 
+					sol = self.inner_loop_sync(p,
 					&mut b,
 					cuckoo_size,
 					&head,
 					&mut latest_hash);
 				}
-			} 
+			}
 			if let Some(mut m) = miner.as_mut() {
-				sol = self.inner_loop_sync(m, 
+				sol = self.inner_loop_sync(m,
 					&mut b,
 					cuckoo_size,
 					&head,
 					&mut latest_hash);
 			}
-			
+
 			// if we found a solution, push our block out
 			if let Some(proof) = sol {
 				info!("(Server ID: {}) Found valid proof of work, adding block {}.",
@@ -322,7 +322,7 @@ impl Miner {
 				} else {
 					coinbase = self.get_coinbase();
 				}
-			} 
+			}
 		}
 	}
 

@@ -13,15 +13,14 @@
 // limitations under the License.
 
 use std::net::SocketAddr;
-use std::ops::Deref;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::thread;
 
 use chain::{self, ChainAdapter};
 use core::core::{self, Output};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use p2p::{self, NetAdapter, Server, PeerStore, PeerData, Capabilities, State};
+use p2p::{self, NetAdapter, Server, PeerStore, PeerData, State};
 use pool;
 use secp::pedersen::Commitment;
 use util::OneTime;
@@ -211,8 +210,8 @@ impl NetToChainAdapter {
 		let arc_sync = Arc::new(sync);
 		self.syncer.init(arc_sync.clone());
 		thread::Builder::new().name("syncer".to_string()).spawn(move || {
-			arc_sync.run();
-		});
+			arc_sync.run().unwrap();
+		}).unwrap();
 	}
 
 	/// Prepare options for the chain pipeline
