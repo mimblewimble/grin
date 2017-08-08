@@ -30,7 +30,8 @@ use pipe;
 use store;
 use types::*;
 
-use core::global::*;
+use core::global;
+use core::global::{MiningParameterMode,MINING_PARAMETER_MODE};
 
 const MAX_ORPHANS: usize = 20;
 
@@ -81,11 +82,10 @@ impl Chain {
 				let mut gen = genesis::genesis();
 				let diff = gen.header.difficulty.clone();
 				
-				let sz = get_global_sizeshift();
-				let proof_size = get_global_proofsize();
+				let sz = global::sizeshift();
+				let proof_size = global::proofsize();
 
-				let mut internal_miner = pow::cuckoo::Miner::new(consensus::EASINESS, sz as u32, proof_size);
-				pow::pow_size(&mut internal_miner, &mut gen.header, diff, sz as u32).unwrap();
+				let mut internal_miner = pow::cuckoo::Miner::new(consensus::EASINESS, sz as u32, proof_size); pow::pow_size(&mut internal_miner, &mut gen.header, diff, sz as u32).unwrap();
 				chain_store.save_block(&gen)?;
 
 				// saving a new tip based on genesis

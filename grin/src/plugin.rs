@@ -23,8 +23,7 @@ use core::pow::cuckoo;
 use core::pow::cuckoo::Error;
 use core::pow::MiningWorker;
 use core::consensus::DEFAULT_SIZESHIFT;
-use core::global::*;
-
+use core::global; 
 use std::collections::HashMap;
 
 use core::core::Proof;
@@ -106,7 +105,7 @@ impl PluginMiner {
 			panic!("Unable to load plugin directory... Please check configuration values");
 		}
 
-		let sz = get_global_sizeshift();
+		let sz = global::sizeshift();
 
 		//So this is built dynamically based on the plugin implementation
 		//type and the consensus sizeshift

@@ -42,7 +42,7 @@ use sync;
 use types::*;
 
 use plugin::PluginMiner;
-use core::global::*;
+use core::global;
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -144,8 +144,9 @@ impl Server {
 	/// Start mining for blocks on a separate thread. Uses toy miner by default,
 	/// mostly for testing, but can also load a plugin from cuckoo-miner
 	pub fn start_miner(&self, config: MinerConfig) {
-		let cuckoo_size = get_global_sizeshift();
-		let proof_size = get_global_proofsize();
+		let cuckoo_size = global::sizeshift();
+		let proof_size = global::proofsize();
+
 
 		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
 		miner.set_debug_output_id(format!("Port {}",self.config.p2p_config.unwrap().port));

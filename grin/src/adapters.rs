@@ -27,7 +27,8 @@ use secp::pedersen::Commitment;
 use util::OneTime;
 use store;
 use sync;
-use core::global::*;
+use core::global;
+use core::global::{MiningParameterMode,MINING_PARAMETER_MODE};
 
 /// Implementation of the NetAdapter for the blockchain. Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool

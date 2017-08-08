@@ -58,7 +58,7 @@ enable_mining = true
 
 #Whether to use cuckoo-miner,  and related parameters
 
-use_cuckoo_miner = true 
+use_cuckoo_miner = true
 
 #Whether to use async mode for cuckoo miner, if the plugin supports it.
 #this allows for many searches to be run in parallel, e.g. if the system

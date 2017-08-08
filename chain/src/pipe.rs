@@ -28,7 +28,8 @@ use core::pow;
 use core::ser;
 use types::*;
 use store;
-use core::global::*;
+use core::global;
+use core::global::{MiningParameterMode,MINING_PARAMETER_MODE};
 
 /// Contextual information required to process a new block and either reject or
 /// accept it.
@@ -120,7 +121,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	if header.height != prev.height + 1 {
 		return Err(Error::InvalidBlockHeight);
 	}
-	if header.timestamp <= prev.timestamp && !is_automated_testing_mode(){
+	if header.timestamp <= prev.timestamp && !global::is_automated_testing_mode(){
 		// prevent time warp attacks and some timestamp manipulations by forcing strict
 		// time progression (but not in CI mode)
 		return Err(Error::InvalidBlockTime);
@@ -150,7 +151,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 
 		let param_ref=MINING_PARAMETER_MODE.read().unwrap();
 		let cycle_size = if ctx.opts.intersects(EASY_POW) {
-			get_global_sizeshift()
+			global::sizeshift()
 		} else {
 			consensus::DEFAULT_SIZESHIFT 
 		};

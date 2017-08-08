@@ -40,7 +40,8 @@ use tokio_core::reactor;
 use tokio_timer::Timer;
 
 use core::consensus;
-use core::global::*;
+use core::global;
+use core::global::{MiningParameterMode, MINING_PARAMETER_MODE};
 use wallet::WalletConfig;
 
 use framework::{LocalServerContainer, LocalServerContainerConfig, LocalServerContainerPoolConfig,
@@ -51,7 +52,7 @@ use framework::{LocalServerContainer, LocalServerContainerConfig, LocalServerCon
 #[test]
 fn basic_genesis_mine() {
 	env_logger::init();
-    set_global_mining_mode(MiningParameterMode::AutomatedTesting);
+    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "genesis_mine";
 	framework::clean_all_output(test_name_dir);
@@ -82,7 +83,7 @@ fn basic_genesis_mine() {
 #[test]
 fn simulate_seeding() {
 	env_logger::init();
-  set_global_mining_mode(MiningParameterMode::AutomatedTesting);
+    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "simulate_seeding";
 	framework::clean_all_output(test_name_dir);
@@ -137,7 +138,7 @@ fn simulate_seeding() {
 //#[test]
 fn simulate_parallel_mining() {
 	env_logger::init();
-  set_global_mining_mode(MiningParameterMode::AutomatedTesting);
+    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "simulate_parallel_mining";
 	// framework::clean_all_output(test_name_dir);
@@ -193,7 +194,7 @@ fn simulate_parallel_mining() {
 #[test]
 fn a_simulate_block_propagation() {
 	env_logger::init();
-    set_global_mining_mode(MiningParameterMode::AutomatedTesting);
+    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "grin-prop";
 	framework::clean_all_output(test_name_dir);
@@ -260,7 +261,7 @@ fn a_simulate_block_propagation() {
 #[test]
 fn simulate_full_sync() {
 	env_logger::init();
-  set_global_mining_mode(MiningParameterMode::AutomatedTesting);
+    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "grin-sync";
 	framework::clean_all_output(test_name_dir);

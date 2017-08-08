@@ -42,7 +42,7 @@ use secp::Secp256k1;
 
 use config::GlobalConfig;
 use wallet::WalletConfig;
-use core::global::*;
+use core::global;
 
 fn start_from_config_file(mut global_config: GlobalConfig) {
 	info!(
@@ -50,7 +50,7 @@ fn start_from_config_file(mut global_config: GlobalConfig) {
 		global_config.config_file_path.unwrap().to_str().unwrap()
 	);
 
-	set_global_mining_mode(global_config.members.as_mut().unwrap().server.clone().mining_parameter_mode.unwrap());
+	global::set_mining_mode(global_config.members.as_mut().unwrap().server.clone().mining_parameter_mode.unwrap());
 
 	grin::Server::start(global_config.members.as_mut().unwrap().server.clone()).unwrap();
 	loop {
