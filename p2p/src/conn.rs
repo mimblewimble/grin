@@ -24,10 +24,10 @@ use futures;
 use futures::{Stream, Future};
 use futures::stream;
 use futures::sync::mpsc::{Sender, UnboundedSender, UnboundedReceiver};
-use tokio_core::io::{write_all, read_exact};
 use tokio_core::net::TcpStream;
+use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_io::io::{read_exact, write_all};
 use tokio_timer::{Timer, TimerError};
-use tokio_io::*;
 
 use core::core::hash::Hash;
 use core::ser;

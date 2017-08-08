@@ -19,7 +19,7 @@ use num::FromPrimitive;
 
 use futures::future::{Future, ok};
 use tokio_core::net::TcpStream;
-use tokio_core::io::{write_all, read_exact};
+use tokio_io::io::{read_exact, write_all};
 
 use core::consensus::MAX_MSG_LEN;
 use core::core::BlockHeader;

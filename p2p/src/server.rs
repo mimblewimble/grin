@@ -275,8 +275,7 @@ impl Server {
 		for p in peers.deref() {
 			p.stop();
 		}
-		// TODO - complete() deprecated but needs an unwrap()?
-		self.stop.into_inner().unwrap().complete(());
+		self.stop.into_inner().unwrap().send(()).unwrap();
 	}
 }
 
