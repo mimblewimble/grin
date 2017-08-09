@@ -173,17 +173,25 @@ impl Chain {
 		}
 	}
 
-	/// Pop orphans out of the queue and check if we can now accept them.
+    /// Pop orphans out of the queue and check if we can now accept them.
 	fn check_orphans(&self) {
 		// first check how many we have to retry, unfort. we can't extend the lock
 		// in the loop as it needs to be freed before going in process_block
-		let orphan_count = self.orphans.lock().unwrap().len();
+		let orphan_count;
+		{
+			let orphans = self.orphans.lock().unwrap();
+			orphan_count = orphans.len();
+		}
 
 		// pop each orphan and retry, if still orphaned, will be pushed again
 		for _ in 0..orphan_count {
-            let popped = self.orphans.lock().unwrap().pop_back();
+			let popped;
+			{
+				let mut orphans = self.orphans.lock().unwrap();
+				popped = orphans.pop_back();
+			}
 			if let Some((opts, orphan)) = popped {
-				self.process_block(orphan, opts).unwrap();
+				let _process_result = self.process_block(orphan, opts);
 			}
 		}
 	}
