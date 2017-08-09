@@ -42,6 +42,7 @@ use sync;
 use types::*;
 
 use plugin::PluginMiner;
+use core::global;
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -85,14 +86,12 @@ impl Server {
 		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(pool_adapter.clone())));
 
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));
-		let shared_chain = Arc::new(chain::Chain::init(config.test_mode,
-		                                               config.db_root.clone(),
+		let shared_chain = Arc::new(chain::Chain::init(config.db_root.clone(),
 		                                               chain_adapter.clone())?);
 		pool_adapter.set_chain(shared_chain.clone());
 
 		let peer_store = Arc::new(p2p::PeerStore::new(config.db_root.clone())?);
-		let net_adapter = Arc::new(NetToChainAdapter::new(config.test_mode,
-		                                                  shared_chain.clone(),
+		let net_adapter = Arc::new(NetToChainAdapter::new(shared_chain.clone(),
 		                                                  tx_pool.clone(),
 		                                                  peer_store.clone()));
 		let p2p_server =
@@ -145,15 +144,15 @@ impl Server {
 	/// Start mining for blocks on a separate thread. Uses toy miner by default,
 	/// mostly for testing, but can also load a plugin from cuckoo-miner
 	pub fn start_miner(&self, config: MinerConfig) {
-		let cuckoo_size = match self.config.test_mode {
-			true => consensus::TEST_SIZESHIFT as u32,
-			false => consensus::DEFAULT_SIZESHIFT as u32,
-		}; 
+		let cuckoo_size = global::sizeshift();
+		let proof_size = global::proofsize();
+
+
 		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
 		miner.set_debug_output_id(format!("Port {}",self.config.p2p_config.unwrap().port));
 		let server_config = self.config.clone();
 		thread::spawn(move || {
-			miner.run_loop(config.clone(), server_config, cuckoo_size);		
+			miner.run_loop(config.clone(), server_config, cuckoo_size as u32, proof_size);		
 		});
 	}
 

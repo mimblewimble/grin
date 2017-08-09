@@ -30,12 +30,13 @@ use std::cmp::Ordering;
 use secp::{self, Secp256k1};
 use secp::pedersen::*;
 
-use consensus::PROOFSIZE;
 pub use self::block::{Block, BlockHeader, DEFAULT_BLOCK};
 pub use self::transaction::{Transaction, Input, Output, TxKernel, COINBASE_KERNEL,
                             COINBASE_OUTPUT, DEFAULT_OUTPUT};
 use self::hash::{Hash, Hashed, ZERO_HASH};
 use ser::{Writeable, Writer, Reader, Readable, Error};
+
+use global;
 
 /// Implemented by types that hold inputs and outputs including Pedersen
 /// commitments. Handles the collection of the commitments as well as their
@@ -81,15 +82,17 @@ pub trait Committed {
 }
 
 /// Proof of work
-#[derive(Copy)]
-pub struct Proof(pub [u32; PROOFSIZE]);
+pub struct Proof {
+	pub nonces:Vec<u32>,
+    pub proof_size: usize,
+}
 
 impl fmt::Debug for Proof {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		try!(write!(f, "Cuckoo("));
-		for (i, val) in self.0[..].iter().enumerate() {
+		for (i, val) in self.nonces[..].iter().enumerate() {
 			try!(write!(f, "{:x}", val));
-			if i < PROOFSIZE - 1 {
+			if i < self.nonces.len() - 1 {
 				try!(write!(f, " "));
 			}
 		}
@@ -98,39 +101,58 @@ impl fmt::Debug for Proof {
 }
 impl PartialOrd for Proof {
 	fn partial_cmp(&self, other: &Proof) -> Option<Ordering> {
-		self.0.partial_cmp(&other.0)
+		self.nonces.partial_cmp(&other.nonces)
 	}
 }
 impl PartialEq for Proof {
 	fn eq(&self, other: &Proof) -> bool {
-		self.0[..] == other.0[..]
+		self.nonces[..] == other.nonces[..]
 	}
 }
 impl Eq for Proof {}
 impl Clone for Proof {
 	fn clone(&self) -> Proof {
-		*self
+		let mut out_nonces = Vec::new();
+		for n in self.nonces.iter() {
+			out_nonces.push(*n as u32);
+		}
+		Proof {
+			proof_size: out_nonces.len(),
+			nonces: out_nonces,
+		}
 	}
 }
 
 impl Proof {
+	
 	/// Builds a proof with all bytes zeroed out
-	pub fn zero() -> Proof {
-		Proof([0; PROOFSIZE])
+	pub fn new(in_nonces:Vec<u32>) -> Proof {
+		Proof {
+			proof_size: in_nonces.len(),
+			nonces: in_nonces,
+		}
+	}
+
+	/// Builds a proof with all bytes zeroed out
+	pub fn zero(proof_size:usize) -> Proof {
+		Proof {
+			proof_size: proof_size,
+			nonces: vec![0;proof_size],
+		}
 	}
 
 	/// Converts the proof to a vector of u64s
 	pub fn to_u64s(&self) -> Vec<u64> {
-		let mut nonces = Vec::with_capacity(PROOFSIZE);
-		for n in self.0.iter() {
-			nonces.push(*n as u64);
+		let mut out_nonces = Vec::with_capacity(self.proof_size);
+		for n in self.nonces.iter() {
+			out_nonces.push(*n as u64);
 		}
-		nonces
+		out_nonces
 	}
 
 	/// Converts the proof to a vector of u32s
 	pub fn to_u32s(&self) -> Vec<u32> {
-		self.0.to_vec()
+		self.clone().nonces
 	}
 
 	/// Converts the proof to a proof-of-work Target so they can be compared.
@@ -142,18 +164,19 @@ impl Proof {
 
 impl Readable for Proof {
 	fn read(reader: &mut Reader) -> Result<Proof, Error> {
-		let mut pow = [0u32; PROOFSIZE];
-		for n in 0..PROOFSIZE {
+		let proof_size = global::proofsize();
+		let mut pow = vec![0u32; proof_size];
+		for n in 0..proof_size {
 			pow[n] = try!(reader.read_u32());
 		}
-		Ok(Proof(pow))
+		Ok(Proof::new(pow))
 	}
 }
 
 impl Writeable for Proof {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		for n in 0..PROOFSIZE {
-			try!(writer.write_u32(self.0[n]));
+		for n in 0..self.proof_size {
+			try!(writer.write_u32(self.nonces[n]));
 		}
 		Ok(())
 	}

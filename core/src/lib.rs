@@ -33,6 +33,8 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate time;
+#[macro_use]
+extern crate lazy_static;
 
 #[macro_use]
 pub mod macros;
@@ -42,3 +44,4 @@ pub mod core;
 pub mod genesis;
 pub mod pow;
 pub mod ser;
+pub mod global;

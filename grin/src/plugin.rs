@@ -22,8 +22,8 @@ use std::env;
 use core::pow::cuckoo;
 use core::pow::cuckoo::Error;
 use core::pow::MiningWorker;
-use core::consensus::{TEST_SIZESHIFT, DEFAULT_SIZESHIFT};
-
+use core::consensus::DEFAULT_SIZESHIFT;
+use core::global; 
 use std::collections::HashMap;
 
 use core::core::Proof;
@@ -105,13 +105,7 @@ impl PluginMiner {
 			panic!("Unable to load plugin directory... Please check configuration values");
 		}
 
-    	//The miner implementation needs to match what's in the consensus sizeshift value
-		//
-		let sz = if server_config.test_mode {
-			TEST_SIZESHIFT
-		} else {
-			DEFAULT_SIZESHIFT
-		};
+		let sz = global::sizeshift();
 
 		//So this is built dynamically based on the plugin implementation
 		//type and the consensus sizeshift
@@ -165,7 +159,8 @@ impl MiningWorker for PluginMiner {
 	/// configurable somehow
 
 	fn new(ease: u32, 
-		   sizeshift: u32) -> Self {
+		   sizeshift: u32,
+		   proof_size: usize) -> Self {
 		PluginMiner::default()
 	}
 
@@ -175,7 +170,7 @@ impl MiningWorker for PluginMiner {
 	fn mine(&mut self, header: &[u8]) -> Result<Proof, cuckoo::Error> {
         let result = self.miner.as_mut().unwrap().mine(&header, &mut self.last_solution).unwrap();
 		if result == true {
-            return Ok(Proof(self.last_solution.solution_nonces));
+            return Ok(Proof::new(self.last_solution.solution_nonces.to_vec()));
         }
         Err(Error::NoSolution)
 	}

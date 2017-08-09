@@ -40,198 +40,217 @@ use tokio_core::reactor;
 use tokio_timer::Timer;
 
 use core::consensus;
+use core::global;
+use core::global::{MiningParameterMode, MINING_PARAMETER_MODE};
 use wallet::WalletConfig;
 
-use framework::{LocalServerContainer, LocalServerContainerConfig,
-                LocalServerContainerPoolConfig, LocalServerContainerPool};
+use framework::{LocalServerContainer, LocalServerContainerConfig, LocalServerContainerPoolConfig,
+                LocalServerContainerPool};
 
 /// Testing the frameworks by starting a fresh server, creating a genesis
 /// Block and mining into a wallet for a bit
-
 #[test]
-fn basic_genesis_mine(){
-    env_logger::init();
+fn basic_genesis_mine() {
+	env_logger::init();
+    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
-    let test_name_dir="genesis_mine";
-    framework::clean_all_output(test_name_dir);
+	let test_name_dir = "genesis_mine";
+	framework::clean_all_output(test_name_dir);
 
-    //Create a server pool
-    let mut pool_config = LocalServerContainerPoolConfig::default();
-    pool_config.base_name = String::from(test_name_dir);
-    pool_config.run_length_in_seconds = 20;
+	// Create a server pool
+	let mut pool_config = LocalServerContainerPoolConfig::default();
+	pool_config.base_name = String::from(test_name_dir);
+	pool_config.run_length_in_seconds = 5;
 
-    pool_config.base_api_port=30000;
-    pool_config.base_p2p_port=31000;
-    pool_config.base_wallet_port=32000;
+	pool_config.base_api_port = 30000;
+	pool_config.base_p2p_port = 31000;
+	pool_config.base_wallet_port = 32000;
 
-    let mut pool = LocalServerContainerPool::new(pool_config);
+	let mut pool = LocalServerContainerPool::new(pool_config);
 
-    //Create a server to add into the pool
-    let mut server_config = LocalServerContainerConfig::default();
-    server_config.start_miner=true;
-    server_config.start_wallet=true;
+	// Create a server to add into the pool
+	let mut server_config = LocalServerContainerConfig::default();
+	server_config.start_miner = true;
+	server_config.start_wallet = true;
 
-    pool.create_server(&mut server_config);
-    pool.run_all_servers();
+	pool.create_server(&mut server_config);
+	pool.run_all_servers();
 
 }
 
 /// Creates 5 servers, first being a seed and check that through peer address
 /// messages they all end up connected.
-
 #[test]
-fn simulate_seeding () {
-    env_logger::init();
+fn simulate_seeding() {
+	env_logger::init();
+    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
-    let test_name_dir="simulate_seeding";
-    framework::clean_all_output(test_name_dir);
+	let test_name_dir = "simulate_seeding";
+	framework::clean_all_output(test_name_dir);
 
-    //Create a server pool
-    let mut pool_config = LocalServerContainerPoolConfig::default();
-    pool_config.base_name = String::from(test_name_dir);
-    pool_config.run_length_in_seconds = 30;
+	// Create a server pool
+	let mut pool_config = LocalServerContainerPoolConfig::default();
+	pool_config.base_name = String::from(test_name_dir);
+	pool_config.run_length_in_seconds = 30;
 
-    //have to select different ports because of tests being run in parallel
-    pool_config.base_api_port=30020;
-    pool_config.base_p2p_port=31020;
-    pool_config.base_wallet_port=32020;
+	// have to select different ports because of tests being run in parallel
+	pool_config.base_api_port = 30020;
+	pool_config.base_p2p_port = 31020;
+	pool_config.base_wallet_port = 32020;
 
-    let mut pool = LocalServerContainerPool::new(pool_config);
+	let mut pool = LocalServerContainerPool::new(pool_config);
 
-    //Create a first seed server to add into the pool
-    let mut server_config = LocalServerContainerConfig::default();
-    //server_config.start_miner = true;
-    server_config.start_wallet = true;
-    server_config.is_seeding = true;
+	// Create a first seed server to add into the pool
+	let mut server_config = LocalServerContainerConfig::default();
+	// server_config.start_miner = true;
+	server_config.start_wallet = true;
+	server_config.is_seeding = true;
 
-    pool.create_server(&mut server_config);
+	pool.create_server(&mut server_config);
 
-    //point next servers at first seed
-    server_config.is_seeding = false;
-    server_config.seed_addr = String::from(format!("{}:{}", server_config.base_addr,
-                                                   server_config.p2p_server_port));
+	// point next servers at first seed
+	server_config.is_seeding = false;
+	server_config.seed_addr = String::from(format!(
+		"{}:{}",
+		server_config.base_addr,
+		server_config.p2p_server_port
+	));
 
-    for i in 0..4 {
-        pool.create_server(&mut server_config);
-    }
+	for i in 0..4 {
+		pool.create_server(&mut server_config);
+	}
 
-    pool.connect_all_peers();
+	pool.connect_all_peers();
 
-    let result_vec = pool.run_all_servers();
+	let result_vec = pool.run_all_servers();
 }
 
-/// Create 1 server, start it mining, then connect 4 other peers mining and using the first
-/// as a seed. Meant to test the evolution of mining difficulty with miners running at
+/// Create 1 server, start it mining, then connect 4 other peers mining and
+/// using the first
+/// as a seed. Meant to test the evolution of mining difficulty with miners
+/// running at
 /// different rates
 
 
-//Just going to comment this out as an automatically run test for the time being,
-//As it's more for actively testing and hurts CI a lot
+// Just going to comment this out as an automatically run test for the time
+// being,
+// As it's more for actively testing and hurts CI a lot
 //#[test]
-fn simulate_parallel_mining(){
-    env_logger::init();
+fn simulate_parallel_mining() {
+	env_logger::init();
+    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
-    let test_name_dir="simulate_parallel_mining";
-    //framework::clean_all_output(test_name_dir);
+	let test_name_dir = "simulate_parallel_mining";
+	// framework::clean_all_output(test_name_dir);
 
-    //Create a server pool
-    let mut pool_config = LocalServerContainerPoolConfig::default();
-    pool_config.base_name = String::from(test_name_dir);
-    pool_config.run_length_in_seconds = 60;
-//have to select different ports because of tests being run in parallel
-    pool_config.base_api_port=30040;
-    pool_config.base_p2p_port=31040;
-    pool_config.base_wallet_port=32040;
+	// Create a server pool
+	let mut pool_config = LocalServerContainerPoolConfig::default();
+	pool_config.base_name = String::from(test_name_dir);
+	pool_config.run_length_in_seconds = 60;
+	// have to select different ports because of tests being run in parallel
+	pool_config.base_api_port = 30040;
+	pool_config.base_p2p_port = 31040;
+	pool_config.base_wallet_port = 32040;
 
-    let mut pool = LocalServerContainerPool::new(pool_config);
+	let mut pool = LocalServerContainerPool::new(pool_config);
 
-    //Create a first seed server to add into the pool
-    let mut server_config = LocalServerContainerConfig::default();
-    server_config.start_miner = true;
-    server_config.start_wallet = true;
-    server_config.is_seeding = true;
+	// Create a first seed server to add into the pool
+	let mut server_config = LocalServerContainerConfig::default();
+	server_config.start_miner = true;
+	server_config.start_wallet = true;
+	server_config.is_seeding = true;
 
-    pool.create_server(&mut server_config);
+	pool.create_server(&mut server_config);
 
-    //point next servers at first seed
-    server_config.is_seeding=false;
-    server_config.seed_addr=String::from(format!("{}:{}",server_config.base_addr,
-                                         server_config.p2p_server_port));
+	// point next servers at first seed
+	server_config.is_seeding = false;
+	server_config.seed_addr = String::from(format!(
+		"{}:{}",
+		server_config.base_addr,
+		server_config.p2p_server_port
+	));
 
-    //And create 4 more, then let them run for a while
-    for i in 1..4 {
-        //fudge in some slowdown
-        server_config.miner_slowdown_in_millis = i*2;
-        pool.create_server(&mut server_config);
-    }
+	// And create 4 more, then let them run for a while
+	for i in 1..4 {
+		// fudge in some slowdown
+		server_config.miner_slowdown_in_millis = i * 2;
+		pool.create_server(&mut server_config);
+	}
 
-    pool.connect_all_peers();
+	pool.connect_all_peers();
 
-    let result_vec=pool.run_all_servers();
+	let result_vec = pool.run_all_servers();
 
-    //Check mining difficulty here?, though I'd think it's more valuable
-    //to simply output it. Can at least see the evolution of the difficulty target
-    //in the debug log output for now
+	// Check mining difficulty here?, though I'd think it's more valuable
+	// to simply output it. Can at least see the evolution of the difficulty target
+	// in the debug log output for now
 
 
 }
 
-//TODO: Convert these tests to newer framework format
+// TODO: Convert these tests to newer framework format
 /// Create a network of 5 servers and mine a block, verifying that the block
 /// gets propagated to all.
-
 #[test]
 fn a_simulate_block_propagation() {
-  env_logger::init();
+	env_logger::init();
+    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
-  let test_name_dir="test_servers/grin-prop";
-  framework::clean_all_output(test_name_dir);
+	let test_name_dir = "grin-prop";
+	framework::clean_all_output(test_name_dir);
 
-  let mut evtlp = reactor::Core::new().unwrap();
-  let handle = evtlp.handle();
+	let mut evtlp = reactor::Core::new().unwrap();
+	let handle = evtlp.handle();
 
-  let miner_config = grin::MinerConfig{
-    enable_mining: true,
-    burn_reward: true,
-    use_cuckoo_miner: true,
-    cuckoo_miner_async_mode: None,
-    cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
-    cuckoo_miner_plugin_type: Some(String::from("simple")),
-    ..Default::default()
-  };
+	let miner_config = grin::MinerConfig {
+		enable_mining: true,
+		burn_reward: true,
+		use_cuckoo_miner: false,
+		cuckoo_miner_async_mode: None,
+		cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
+		cuckoo_miner_plugin_type: Some(String::from("simple")),
+		..Default::default()
+	};
 
-  // instantiates 5 servers on different ports
-  let mut servers = vec![];
-  for n in 0..5 {
-      let s = grin::Server::future(
-          grin::ServerConfig{
-            api_http_addr: format!("127.0.0.1:{}", 19000+n),
-            db_root: format!("target/{}/grin-prop-{}", test_name_dir, n),
-            p2p_config: Some(p2p::P2PConfig{port: 18000+n, ..p2p::P2PConfig::default()}),
-            ..Default::default()
-          }, &handle).unwrap();
-      servers.push(s);
-  }
+	// instantiates 5 servers on different ports
+	let mut servers = vec![];
+	for n in 0..5 {
+		let s = grin::Server::future(
+			grin::ServerConfig {
+				api_http_addr: format!("127.0.0.1:{}", 19000 + n),
+				db_root: format!("target/{}/grin-prop-{}", test_name_dir, n),
+				p2p_config: Some(p2p::P2PConfig {
+					port: 18000 + n,
+					..p2p::P2PConfig::default()
+				}),
+				..Default::default()
+			},
+			&handle,
+		).unwrap();
+		servers.push(s);
+	}
 
-  // everyone connects to everyone else
-  for n in 0..5 {
-    for m in 0..5 {
-      if m == n { continue }
-      let addr = format!("{}:{}", "127.0.0.1", 18000+m);
-      servers[n].connect_peer(addr.parse().unwrap()).unwrap();
-    }
-  }
+	// everyone connects to everyone else
+	for n in 0..5 {
+		for m in 0..5 {
+			if m == n {
+				continue;
+			}
+			let addr = format!("{}:{}", "127.0.0.1", 18000 + m);
+			servers[n].connect_peer(addr.parse().unwrap()).unwrap();
+		}
+	}
 
-  // start mining
-  servers[0].start_miner(miner_config);
-  let original_height = servers[0].head().height;
+	// start mining
+	servers[0].start_miner(miner_config);
+	let original_height = servers[0].head().height;
 
-  // monitor for a change of head on a different server and check whether
-  // chain height has changed
-  evtlp.run(change(&servers[4]).and_then(|tip| {
-    assert!(tip.height == original_height+1);
-    Ok(())
-  }));
+	// monitor for a change of head on a different server and check whether
+	// chain height has changed
+	evtlp.run(change(&servers[4]).and_then(|tip| {
+		assert!(tip.height == original_height + 1);
+		Ok(())
+	}));
 }
 
 
@@ -239,79 +258,85 @@ fn a_simulate_block_propagation() {
 
 /// Creates 2 different disconnected servers, mine a few blocks on one, connect
 /// them and check that the 2nd gets all the blocks
-
 #[test]
 fn simulate_full_sync() {
-  env_logger::init();
+	env_logger::init();
+    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
-  let test_name_dir="test_servers/grin-sync";
-  framework::clean_all_output(test_name_dir);
+	let test_name_dir = "grin-sync";
+	framework::clean_all_output(test_name_dir);
 
-  let mut evtlp = reactor::Core::new().unwrap();
-  let handle = evtlp.handle();
+	let mut evtlp = reactor::Core::new().unwrap();
+	let handle = evtlp.handle();
 
-  let miner_config = grin::MinerConfig{
-    enable_mining: true,
-    burn_reward: true,
-    use_cuckoo_miner: true,
-    cuckoo_miner_async_mode: Some(false),
-    cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
-    cuckoo_miner_plugin_type: Some(String::from("simple")),
-    ..Default::default()
-  };
+	let miner_config = grin::MinerConfig {
+		enable_mining: true,
+		burn_reward: true,
+		use_cuckoo_miner: false,
+		cuckoo_miner_async_mode: Some(false),
+		cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
+		cuckoo_miner_plugin_type: Some(String::from("simple")),
+		..Default::default()
+	};
 
-  // instantiates 2 servers on different ports
-  let mut servers = vec![];
-  for n in 0..2 {
-      let s = grin::Server::future(
-          grin::ServerConfig{
-            db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
-            p2p_config: Some(p2p::P2PConfig{port: 11000+n, ..p2p::P2PConfig::default()}),
-            ..Default::default()
-          }, &handle).unwrap();
-      servers.push(s);
-  }
+	// instantiates 2 servers on different ports
+	let mut servers = vec![];
+	for n in 0..2 {
+		let s = grin::Server::future(
+			grin::ServerConfig {
+				db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
+				p2p_config: Some(p2p::P2PConfig {
+					port: 11000 + n,
+					..p2p::P2PConfig::default()
+				}),
+				..Default::default()
+			},
+			&handle,
+		).unwrap();
+		servers.push(s);
+	}
 
-  // mine a few blocks on server 1
-  servers[0].start_miner(miner_config);
-  thread::sleep(time::Duration::from_secs(45));
+	// mine a few blocks on server 1
+	servers[0].start_miner(miner_config);
+	thread::sleep(time::Duration::from_secs(5));
 
-  // connect 1 and 2
-  let addr = format!("{}:{}", "127.0.0.1", 11001);
-  servers[0].connect_peer(addr.parse().unwrap()).unwrap();
+	// connect 1 and 2
+	let addr = format!("{}:{}", "127.0.0.1", 11001);
+	servers[0].connect_peer(addr.parse().unwrap()).unwrap();
 
-  // 2 should get blocks
-  evtlp.run(change(&servers[1]));
+	// 2 should get blocks
+	evtlp.run(change(&servers[1]));
 }
 
-// Builds the change future, monitoring for a change of head on the provided server
+// Builds the change future, monitoring for a change of head on the provided
+// server
 fn change<'a>(s: &'a grin::Server) -> HeadChange<'a> {
-  let start_head = s.head();
-  HeadChange {
-    server: s,
-    original: start_head,
-  }
+	let start_head = s.head();
+	HeadChange {
+		server: s,
+		original: start_head,
+	}
 }
 
 /// Future that monitors when a server has had its head updated. Current
 /// implementation isn't optimized, only use for tests.
 struct HeadChange<'a> {
-  server: &'a grin::Server,
-  original:  chain::Tip,
+	server: &'a grin::Server,
+	original: chain::Tip,
 }
 
 impl<'a> Future for HeadChange<'a> {
-  type Item = chain::Tip;
-  type Error = ();
+	type Item = chain::Tip;
+	type Error = ();
 
-  fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-    let new_head = self.server.head();
-    if new_head.last_block_h != self.original.last_block_h {
-      Ok(Async::Ready(new_head))
-    } else {
-      // egregious polling, asking the task to schedule us every iteration
-      park().unpark();
-      Ok(Async::NotReady)
-    }
-  }
+	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+		let new_head = self.server.head();
+		if new_head.last_block_h != self.original.last_block_h {
+			Ok(Async::Ready(new_head))
+		} else {
+			// egregious polling, asking the task to schedule us every iteration
+			park().unpark();
+			Ok(Async::NotReady)
+		}
+	}
 }

@@ -16,16 +16,15 @@
 //! block and mine the block to produce a valid header with its proof-of-work.
 
 use rand::{self, Rng};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std;
-use std::{env, str};
+use std::{str};
 use time;
 
-use adapters::{ChainToPoolAndNetAdapter, PoolToChainAdapter};
+use adapters::{PoolToChainAdapter};
 use api;
 use core::consensus;
-use core::consensus::*;
 use core::core;
 use core::core::Proof;
 use core::pow::cuckoo;
@@ -34,12 +33,12 @@ use core::core::{Block, BlockHeader};
 use core::core::hash::{Hash, Hashed};
 use core::pow::MiningWorker;
 use core::ser;
-use core::ser::{Writer, Writeable, AsFixedBytes};
+use core::ser::{AsFixedBytes};
 
 use chain;
 use secp;
 use pool;
-use types::{MinerConfig, ServerConfig, Error};
+use types::{MinerConfig, ServerConfig};
 use util;
 use wallet::{CbAmount, WalletReceiveRequest, CbData};
 
@@ -50,7 +49,6 @@ use itertools::Itertools;
 const MAX_TX: u32 = 5000;
 
 const PRE_NONCE_SIZE: usize = 113;
-const POST_NONCE_SIZE: usize = 5;
 
 /// Serializer that outputs pre and post nonce portions of a block header
 /// which can then be sent off to miner to mutate at will
@@ -174,7 +172,7 @@ impl Miner {
 
 		while head.hash() == *latest_hash && time::get_time().sec < deadline {
 			if let Some(s) = job_handle.get_solution()  {
-				sol = Some(Proof(s.solution_nonces));
+				sol = Some(Proof::new(s.solution_nonces.to_vec()));
 				b.header.nonce=s.get_nonce_as_u64();
 				break;
 			}
@@ -193,7 +191,6 @@ impl Miner {
 	/// The inner part of mining loop for synchronous mode
 	pub fn inner_loop_sync<T: MiningWorker>(&self, 
 						    miner:&mut T, 
-							difficulty:Difficulty, 
 							b:&mut Block,
 							cuckoo_size: u32, 
 							head:&BlockHeader,
@@ -221,7 +218,7 @@ impl Miner {
 							
 			let pow_hash = b.hash();
 			if let Ok(proof) = miner.mine(&pow_hash[..]) {
-				let proof_diff=proof.to_difficulty();
+				let proof_diff=proof.clone().to_difficulty();
 				/*debug!("(Server ID: {}) Header difficulty is: {}, Proof difficulty is: {}",
 				self.debug_output_id,
 				b.header.difficulty,
@@ -256,16 +253,17 @@ impl Miner {
 	pub fn run_loop(&self, 
 					miner_config:MinerConfig, 
 					server_config:ServerConfig, 
-					cuckoo_size:u32) {
+					cuckoo_size:u32,
+					proof_size:usize) {
 
 		info!("(Server ID: {}) Starting miner loop.", self.debug_output_id);
 		let mut plugin_miner=None;
 		let mut miner=None;
 		if miner_config.use_cuckoo_miner  {
-			plugin_miner = Some(PluginMiner::new(consensus::EASINESS, cuckoo_size));
+			plugin_miner = Some(PluginMiner::new(consensus::EASINESS, cuckoo_size, proof_size));
 			plugin_miner.as_mut().unwrap().init(miner_config.clone(),server_config);
 		} else {
-			miner = Some(cuckoo::Miner::new(consensus::EASINESS, cuckoo_size));
+			miner = Some(cuckoo::Miner::new(consensus::EASINESS, cuckoo_size, proof_size));
 		}
 
 		let mut coinbase = self.get_coinbase();
@@ -293,7 +291,6 @@ impl Miner {
 						&latest_hash);
 				} else {
 					sol = self.inner_loop_sync(p, 
-					b.header.difficulty.clone(), 
 					&mut b,
 					cuckoo_size,
 					&head,
@@ -302,7 +299,6 @@ impl Miner {
 			} 
 			if let Some(mut m) = miner.as_mut() {
 				sol = self.inner_loop_sync(m, 
-					b.header.difficulty.clone(), 
 					&mut b,
 					cuckoo_size,
 					&head,

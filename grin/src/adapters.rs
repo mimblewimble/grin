@@ -27,12 +27,13 @@ use secp::pedersen::Commitment;
 use util::OneTime;
 use store;
 use sync;
+use core::global;
+use core::global::{MiningParameterMode,MINING_PARAMETER_MODE};
 
 /// Implementation of the NetAdapter for the blockchain. Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
 /// implementations.
 pub struct NetToChainAdapter {
-	test_mode: bool,
 	chain: Arc<chain::Chain>,
 	peer_store: Arc<PeerStore>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
@@ -192,13 +193,11 @@ impl NetAdapter for NetToChainAdapter {
 }
 
 impl NetToChainAdapter {
-	pub fn new(test_mode: bool,
-	           chain_ref: Arc<chain::Chain>,
+	pub fn new(chain_ref: Arc<chain::Chain>,
 	           tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	           peer_store: Arc<PeerStore>)
 	           -> NetToChainAdapter {
 		NetToChainAdapter {
-			test_mode: test_mode,
 			chain: chain_ref,
 			peer_store: peer_store,
 			tx_pool: tx_pool,
@@ -218,14 +217,17 @@ impl NetToChainAdapter {
 
 	/// Prepare options for the chain pipeline
 	fn chain_opts(&self) -> chain::Options {
-		let mut opts = if self.syncer.borrow().syncing() {
+		let opts = if self.syncer.borrow().syncing() {
 			chain::SYNC
 		} else {
 			chain::NONE
 		};
-		if self.test_mode {
-			opts = opts | chain::EASY_POW;
-		}
+		let param_ref=MINING_PARAMETER_MODE.read().unwrap();
+		let opts = match *param_ref {
+			MiningParameterMode::AutomatedTesting => opts | chain::EASY_POW,
+			MiningParameterMode::UserTesting => opts | chain::EASY_POW,
+			MiningParameterMode::Production => opts,
+		};
 		opts
 	}
 }

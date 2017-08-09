@@ -53,7 +53,10 @@ use core::consensus;
 
 pub fn clean_all_output(test_name_dir:&str){
     let target_dir = format!("target/test_servers/{}", test_name_dir);
-    fs::remove_dir_all(target_dir);
+    let result = fs::remove_dir_all(target_dir);
+    if let Err(e) = result {
+        println!("{}",e);
+    }
 }
 
 /// Errors that can be returned by LocalServerContainer
@@ -227,7 +230,7 @@ impl LocalServerContainer {
         let mut miner_config = grin::MinerConfig {
             enable_mining: self.config.start_miner,
             burn_reward: self.config.burn_mining_rewards,
-            use_cuckoo_miner: true,
+            use_cuckoo_miner: false,
             cuckoo_miner_async_mode: Some(false),
             cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
             cuckoo_miner_plugin_type: Some(String::from("simple")),

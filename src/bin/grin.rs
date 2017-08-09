@@ -27,6 +27,7 @@ extern crate grin_api as api;
 extern crate grin_grin as grin;
 extern crate grin_wallet as wallet;
 extern crate grin_config as config;
+extern crate grin_core as core;
 extern crate secp256k1zkp as secp;
 
 use std::thread;
@@ -41,12 +42,16 @@ use secp::Secp256k1;
 
 use config::GlobalConfig;
 use wallet::WalletConfig;
+use core::global;
 
 fn start_from_config_file(mut global_config: GlobalConfig) {
 	info!(
 		"Starting the Grin server from configuration file at {}",
 		global_config.config_file_path.unwrap().to_str().unwrap()
 	);
+
+	global::set_mining_mode(global_config.members.as_mut().unwrap().server.clone().mining_parameter_mode.unwrap());
+
 	grin::Server::start(global_config.members.as_mut().unwrap().server.clone()).unwrap();
 	loop {
 		thread::sleep(Duration::from_secs(60));
