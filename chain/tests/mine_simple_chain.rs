@@ -21,6 +21,7 @@ extern crate secp256k1zkp as secp;
 
 extern crate grin_grin as grin;
 
+use std::fs;
 use std::sync::Arc;
 use std::thread;
 use rand::os::OsRng;
@@ -40,10 +41,17 @@ use grin::{ServerConfig, MinerConfig};
 
 use grin_core::pow::MiningWorker;
 
+
+fn clean_output_dir(dir_name:&str){
+    let _ = fs::remove_dir_all(dir_name);
+}
+
 #[test]
 fn mine_empty_chain() {
 	env_logger::init();
+	clean_output_dir(".grin");
     global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+
 	let mut rng = OsRng::new().unwrap();
 	let chain = grin_chain::Chain::init(".grin".to_string(), Arc::new(NoopAdapter {}))
 		.unwrap();
@@ -60,7 +68,7 @@ fn mine_empty_chain() {
 	};
 	miner_config.cuckoo_miner_plugin_dir = Some(String::from("../target/debug/deps"));
 
-	let mut cuckoo_miner = cuckoo::Miner::new(consensus::EASINESS, global::sizeshift() as u32, global::proofsize()); 
+	let mut cuckoo_miner = cuckoo::Miner::new(consensus::EASINESS, global::sizeshift() as u32, global::proofsize());
 	for n in 1..4 {
 		let prev = chain.head_header().unwrap();
 		let mut b = core::Block::new(&prev, vec![], reward_key).unwrap();
@@ -89,6 +97,8 @@ fn mine_empty_chain() {
 #[test]
 fn mine_forks() {
 	env_logger::init();
+	clean_output_dir(".grin2");
+
 	let mut rng = OsRng::new().unwrap();
 	let chain = grin_chain::Chain::init(".grin2".to_string(), Arc::new(NoopAdapter {}))
 		.unwrap();
