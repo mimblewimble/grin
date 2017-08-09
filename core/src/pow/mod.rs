@@ -84,6 +84,7 @@ pub fn pow_size<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader,
 		// diff, we're all good
 
 		if let Ok(proof) = miner.mine(&pow_hash[..]) {
+println!("diff: {}", proof.clone().to_difficulty());
 			if proof.clone().to_difficulty() >= diff {
 				bh.pow = proof;
 				return Ok(());
