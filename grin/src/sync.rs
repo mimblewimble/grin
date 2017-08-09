@@ -151,7 +151,11 @@ impl Syncer {
 			while blocks_to_download.len() > 0 && blocks_downloading.len() < MAX_BODY_DOWNLOADS {
 				let h = blocks_to_download.pop().unwrap();
 				let peer = self.p2p.random_peer().unwrap();
-				peer.send_block_request(h).unwrap();
+				let send_result = peer.send_block_request(h);
+				match send_result {
+					Ok(_) => {}
+					Err(_) => {}
+				}
 				blocks_downloading.push((h, Instant::now()));
 			}
 			debug!("Requesting more full block hashes to download, total: {}.",

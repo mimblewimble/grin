@@ -209,9 +209,17 @@ impl NetToChainAdapter {
 	pub fn start_sync(&self, sync: sync::Syncer) {
 		let arc_sync = Arc::new(sync);
 		self.syncer.init(arc_sync.clone());
-		thread::Builder::new().name("syncer".to_string()).spawn(move || {
-			arc_sync.run().unwrap();
-		}).unwrap();
+		let spawn_result = thread::Builder::new().name("syncer".to_string()).spawn(move || {
+			let sync_run_result = arc_sync.run();
+			match sync_run_result {
+				Ok(_) => {}
+				Err(_) => {}
+			}
+		});
+		match spawn_result {
+			Ok(_) => {}
+			Err(_) => {}
+		}
 	}
 
 	/// Prepare options for the chain pipeline
