@@ -91,7 +91,12 @@ impl Seeder {
 				for p in disconnected {
 					if p.is_banned() {
 						debug!("Marking peer {} as banned.", p.info.addr);
-						peer_store.update_state(p.info.addr, p2p::State::Banned).unwrap();
+						let update_result = peer_store.update_state(
+							p.info.addr, p2p::State::Banned);
+						match update_result {
+							Ok(()) => {}
+							Err(_) => {}
+						}
 					}
 				}
 
@@ -238,11 +243,19 @@ fn connect_and_req(capab: p2p::Capabilities,
 		.then(move |p| {
 			match p {
 				Ok(Some(p)) => {
-					p.send_peer_request(capab).unwrap();
+					let peer_result = p.send_peer_request(capab);
+					match peer_result {
+						Ok(()) => {}
+						Err(_) => {}
+					}
 				}
 				Err(e) => {
 					error!("Peer request error: {:?}", e);
-					peer_store.update_state(addr, p2p::State::Defunct).unwrap();
+					let update_result = peer_store.update_state(addr, p2p::State::Defunct);
+					match update_result {
+						Ok(()) => {}
+						Err(_) => {}
+					}
 				}
 				_ => {}
 			}
