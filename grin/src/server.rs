@@ -28,7 +28,6 @@ use tokio_timer::Timer;
 use adapters::*;
 use api;
 use chain;
-use core::consensus;
 use miner;
 use p2p;
 use pool;
@@ -36,7 +35,6 @@ use seed;
 use sync;
 use types::*;
 
-use plugin::PluginMiner;
 use core::global;
 
 /// Grin server holding internal structures.

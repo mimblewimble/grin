@@ -26,7 +26,6 @@ use core::pow;
 use types::*;
 use store;
 use core::global;
-use core::global::{MiningParameterMode,MINING_PARAMETER_MODE};
 
 /// Contextual information required to process a new block and either reject or
 /// accept it.
@@ -152,11 +151,10 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 			return Err(Error::DifficultyTooLow);
 		}
 
-		let param_ref=MINING_PARAMETER_MODE.read().unwrap();
 		let cycle_size = if ctx.opts.intersects(EASY_POW) {
 			global::sizeshift()
 		} else {
-			consensus::DEFAULT_SIZESHIFT 
+			consensus::DEFAULT_SIZESHIFT
 		};
 		debug!("Validating block with cuckoo size {}", cycle_size);
 		if !pow::verify_size(header, cycle_size as u32) {

@@ -333,7 +333,7 @@ impl<'a> Future for HeadChange<'a> {
 			Ok(Async::Ready(new_head))
 		} else {
 			// egregious polling, asking the task to schedule us every iteration
-			park().unpark();
+			current().notify();
 			Ok(Async::NotReady)
 		}
 	}

@@ -31,8 +31,6 @@ use consensus::EASINESS;
 use core::BlockHeader;
 use core::hash::Hashed;
 use core::Proof;
-use global;
-use global::{MiningParameterMode, MINING_PARAMETER_MODE};
 use core::target::Difficulty;
 use pow::cuckoo::{Cuckoo, Error};
 
@@ -104,9 +102,12 @@ pub fn pow_size<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader,
 #[cfg(test)]
 mod test {
 	use super::*;
+	use global;
 	use core::target::Difficulty;
 	use genesis;
   	use consensus::MINIMUM_DIFFICULTY;
+	use global::MiningParameterMode;
+
 
 	#[test]
 	fn genesis_pow() {

@@ -33,9 +33,7 @@ use grin_core::core;
 use grin_core::consensus;
 use grin_core::pow::cuckoo;
 use grin_core::global;
-use grin_core::global::{MiningParameterMode,MINING_PARAMETER_MODE};
-
-use grin::{ServerConfig, MinerConfig};
+use grin_core::global::MiningParameterMode;
 
 use grin_core::pow::MiningWorker;
 
@@ -51,7 +49,6 @@ fn mine_empty_chain() {
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
 
-	let server_config = ServerConfig::default();
 	let mut miner_config = grin::MinerConfig {
 		enable_mining: true,
 		burn_reward: true,

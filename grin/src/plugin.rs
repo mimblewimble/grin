@@ -22,9 +22,7 @@ use std::env;
 use core::pow::cuckoo;
 use core::pow::cuckoo::Error;
 use core::pow::MiningWorker;
-use core::consensus::DEFAULT_SIZESHIFT;
 use core::global;
-use std::collections::HashMap;
 
 use core::core::Proof;
 use types::{MinerConfig, ServerConfig};
@@ -66,7 +64,7 @@ impl Default for PluginMiner {
 
 impl PluginMiner {
 	/// Init the plugin miner
-	pub fn init(&mut self, miner_config: MinerConfig, server_config: ServerConfig){
+	pub fn init(&mut self, miner_config: MinerConfig, _server_config: ServerConfig){
 				//Get directory of executable
 		let mut exe_path=env::current_exe().unwrap();
 		exe_path.pop();
@@ -160,9 +158,9 @@ impl MiningWorker for PluginMiner {
 	/// version of the miner for now, though this should become
 	/// configurable somehow
 
-	fn new(ease: u32,
-		   sizeshift: u32,
-		   proof_size: usize) -> Self {
+	fn new(_ease: u32,
+		   _sizeshift: u32,
+		   _proof_size: usize) -> Self {
 		PluginMiner::default()
 	}
 
