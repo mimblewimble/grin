@@ -348,13 +348,12 @@ mod test {
 				0x5d842, 0x5fa33, 0x6464e, 0x676ee, 0x685d6, 0x69df0, 0x6a5fd, 
 				0x6bda3, 0x72544, 0x77974, 0x7908c, 0x80e67, 0x81ef4, 0x8d882];
 	// cuckoo28 at 50% edges of letter 'u'
-	static V4:[u32;42] = [0x1abd16, 0x7bb47e, 0x860253, 0xfad0b2, 0x121aa4d, 0x150a10b,
-	             0x20605cb, 0x20ae7e3, 0x235a9be, 0x2640f4a, 0x2724c36, 0x2a6d38c,
-	             0x2c50b28, 0x30850f2, 0x309668a, 0x30c85bd, 0x345f42c, 0x3901676,
-	             0x432838f, 0x472158a, 0x4d04e9d, 0x4d6a987, 0x4f577bf, 0x4fbc49c,
-	             0x593978d, 0x5acd98f, 0x5e60917, 0x6310602, 0x6385e88, 0x64f149c,
-	             0x66d472e, 0x68e4df9, 0x6b4a89c, 0x6bb751d, 0x6e09792, 0x6e57e1d,
-	             0x6ecfcdd, 0x70abddc, 0x7291dfd, 0x788069e, 0x79a15b1, 0x7d1a1e9];
+	static V4:[u32;42] = [0x1CBBFD, 0x2C5452, 0x520338, 0x6740C5, 0x8C6997, 0xC77150, 0xFD4972, 
+				0x1060FA7, 0x11BFEA0, 0x1343E8D, 0x14CE02A, 0x1533515, 0x1715E61, 0x1996D9B, 
+				0x1CB296B, 0x1FCA180, 0x209A367, 0x20AD02E, 0x23CD2E4, 0x2A3B360, 0x2DD1C0C, 
+				0x333A200, 0x33D77BC, 0x3620C78, 0x3DD7FB8, 0x3FBFA49, 0x41BDED2, 0x4A86FD9, 
+				0x570DE24, 0x57CAB86, 0x594B886, 0x5C74C94, 0x5DE7572, 0x60ADD6F, 0x635918B, 
+				0x6C9E120, 0x6EFA583, 0x7394ACA, 0x7556A23, 0x77F70AA, 0x7CF750A, 0x7F60790];
 
 	/// Find a 42-cycle on Cuckoo20 at 75% easiness and verifiy against a few
 	/// known cycle proofs
@@ -380,7 +379,9 @@ mod test {
 
 	#[test]
 	fn validate28_vectors() {
-		assert!(Cuckoo::new(&[117], 28).verify(Proof::new(V4.to_vec().clone()), 50));
+		let mut test_header=[0;32];
+		test_header[0]=24;
+		assert!(Cuckoo::new(&test_header, 28).verify(Proof::new(V4.to_vec().clone()), 50));
 	}
 
 	#[test]
@@ -390,7 +391,10 @@ mod test {
 		assert!(!Cuckoo::new(&[49], 20).verify(Proof::new(vec![0xffff; 42]), 75));
 		// wrong data for proof
 		assert!(!Cuckoo::new(&[50], 20).verify(Proof::new(V1.to_vec().clone()), 75));
-		assert!(!Cuckoo::new(&[117], 20).verify(Proof::new(V4.to_vec().clone()), 50));
+		let mut test_header=[0;32];
+		test_header[0]=24;
+		assert!(!Cuckoo::new(&test_header, 20).verify(Proof::new(V4.to_vec().clone()), 50));
+		
 	}
 
 	#[test]
