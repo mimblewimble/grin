@@ -20,8 +20,7 @@
 use std::collections::HashSet;
 use std::cmp;
 
-use crypto::digest::Digest;
-use crypto::sha2::Sha256;
+use blake2;
 
 use core::Proof;
 use pow::siphash::siphash24;
@@ -58,10 +57,8 @@ impl Cuckoo {
 	/// serialized block header.
 	pub fn new(header: &[u8], sizeshift: u32) -> Cuckoo {
 		let size = 1 << sizeshift;
-		let mut hasher = Sha256::new();
-		let mut hashed = [0; 32];
-		hasher.input(header);
-		hasher.result(&mut hashed);
+        let hashed=blake2::blake2b::blake2b(32, &[], header);
+        let hashed=hashed.as_bytes();
 
 		let k0 = u8_to_u64(hashed, 0);
 		let k1 = u8_to_u64(hashed, 8);
@@ -320,7 +317,7 @@ impl Miner {
 
 
 /// Utility to transform a 8 bytes of a byte array into a u64.
-fn u8_to_u64(p: [u8; 32], i: usize) -> u64 {
+fn u8_to_u64(p:&[u8], i: usize) -> u64 {
 	(p[i] as u64) | (p[i + 1] as u64) << 8 | (p[i + 2] as u64) << 16 | (p[i + 3] as u64) << 24 |
 	(p[i + 4] as u64) << 32 | (p[i + 5] as u64) << 40 |
 	(p[i + 6] as u64) << 48 | (p[i + 7] as u64) << 56
