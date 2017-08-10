@@ -41,20 +41,20 @@ impl NetAdapter for DummyAdapter {
 	fn total_difficulty(&self) -> Difficulty {
 		Difficulty::one()
 	}
-	fn transaction_received(&self, tx: core::Transaction) {}
-	fn block_received(&self, b: core::Block) {}
-	fn headers_received(&self, bh: Vec<core::BlockHeader>) {}
-	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
+	fn transaction_received(&self, _: core::Transaction) {}
+	fn block_received(&self, _: core::Block) {}
+	fn headers_received(&self, _: Vec<core::BlockHeader>) {}
+	fn locate_headers(&self, _: Vec<Hash>) -> Vec<core::BlockHeader> {
 		vec![]
 	}
-	fn get_block(&self, h: Hash) -> Option<core::Block> {
+	fn get_block(&self, _: Hash) -> Option<core::Block> {
 		None
 	}
-	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr> {
+	fn find_peer_addrs(&self, _: Capabilities) -> Vec<SocketAddr> {
 		vec![]
 	}
-	fn peer_addrs_received(&self, peer_addrs: Vec<SocketAddr>) {}
-	fn peer_connected(&self, pi: &PeerInfo) {}
+	fn peer_addrs_received(&self, _: Vec<SocketAddr>) {}
+	fn peer_connected(&self, _: &PeerInfo) {}
 }
 
 /// P2P server implementation, handling bootstrapping to find and connect to
@@ -97,7 +97,7 @@ impl Server {
 
 		// main peer acceptance future handling handshake
 		let hp = h.clone();
-		let peers = socket.incoming().map_err(From::from).map(move |(conn, addr)| {
+		let peers = socket.incoming().map_err(From::from).map(move |(conn, _)| {
 			let adapter = adapter.clone();
 			let total_diff = adapter.total_difficulty();
 			let peers = peers.clone();
@@ -275,7 +275,7 @@ impl Server {
 		for p in peers.deref() {
 			p.stop();
 		}
-		self.stop.into_inner().unwrap().complete(());
+		self.stop.into_inner().unwrap().send(()).unwrap();
 	}
 }
 

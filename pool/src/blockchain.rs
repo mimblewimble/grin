@@ -1,7 +1,7 @@
 // This file is (hopefully) temporary.
 //
 // It contains a trait based on (but not exactly equal to) the trait defined
-// for the blockchain UTXO set, discussed at 
+// for the blockchain UTXO set, discussed at
 // https://github.com/ignopeverell/grin/issues/29, and a dummy implementation
 // of said trait.
 // Notably, UtxoDiff has been left off, and the question of how to handle
@@ -20,11 +20,12 @@ use std::sync::RwLock;
 
 use types::BlockChain;
 
-/// A DummyUtxoSet for mocking up the chain 
+/// A DummyUtxoSet for mocking up the chain
 pub struct DummyUtxoSet {
     outputs : HashMap<Commitment, transaction::Output>
 }
 
+#[allow(dead_code)]
 impl DummyUtxoSet {
     pub fn empty() -> DummyUtxoSet{
         DummyUtxoSet{outputs: HashMap::new()}
@@ -50,7 +51,7 @@ impl DummyUtxoSet {
             self.outputs.insert(output.commitment(), output.clone());
         }
     }
-    pub fn rewind(&self, b: &block::Block) -> DummyUtxoSet {
+    pub fn rewind(&self, _: &block::Block) -> DummyUtxoSet {
         DummyUtxoSet{outputs: HashMap::new()}
     }
     pub fn get_output(&self, output_ref: &Commitment) -> Option<&transaction::Output> {
@@ -75,10 +76,12 @@ impl DummyUtxoSet {
 
 /// A DummyChain is the mocked chain for playing with what methods we would
 /// need
+#[allow(dead_code)]
 pub struct DummyChainImpl {
     utxo: RwLock<DummyUtxoSet>
 }
 
+#[allow(dead_code)]
 impl DummyChainImpl {
     pub fn new() -> DummyChainImpl {
         DummyChainImpl{

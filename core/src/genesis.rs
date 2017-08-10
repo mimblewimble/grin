@@ -18,7 +18,6 @@ use time;
 
 use core;
 use consensus::MINIMUM_DIFFICULTY;
-use consensus::PROOFSIZE;
 use core::hash::Hashed;
 use core::target::Difficulty;
 use global;

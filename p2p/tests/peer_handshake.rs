@@ -26,7 +26,6 @@ use futures::future::Future;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::{self, Core};
 
-use core::ser;
 use core::core::target::Difficulty;
 use p2p::Peer;
 

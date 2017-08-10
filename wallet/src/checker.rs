@@ -29,7 +29,7 @@ pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) {
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 
 	// operate within a lock on wallet data
-	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+	let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
 		// check each output that's not spent
 		for out in &mut wallet_data.outputs {
@@ -41,7 +41,7 @@ pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) {
 				// TODO check the pool for unconfirmed
 
 				let out_res = get_output_by_commitment(config, commitment);
-		
+
 				if out_res.is_ok() {
 					// output is known, it's a new utxo
 					out.status = OutputStatus::Unspent;

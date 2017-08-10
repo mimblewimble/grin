@@ -84,7 +84,7 @@ pub struct ServerConfig {
 
 	/// Method used to get the list of seed nodes for initial bootstrap.
 	pub seeding_type: Seeding,
-	
+
 	/// The list of seed nodes, if using Seeding as a seed type
 	pub seeds: Option<Vec<String>>,
 
@@ -173,6 +173,8 @@ impl Default for MinerConfig {
 
 #[derive(Clone)]
 pub struct ServerStats {
+	/// Number of peers
 	pub peer_count:u32,
+	/// Chain head
 	pub head: chain::Tip,
 }

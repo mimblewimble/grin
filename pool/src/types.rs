@@ -16,10 +16,6 @@
 //! and its top-level members.
 
 use std::vec::Vec;
-use std::sync::Arc;
-use std::sync::RwLock;
-use std::sync::Weak;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::iter::Iterator;
 use std::fmt;
@@ -28,19 +24,16 @@ use secp::pedersen::Commitment;
 
 pub use graph;
 
-use time;
-
 use core::core::transaction;
-use core::core::block;
 use core::core::hash;
 
 /// Placeholder: the data representing where we heard about a tx from.
 ///
-/// Used to make decisions based on transaction acceptance priority from 
+/// Used to make decisions based on transaction acceptance priority from
 /// various sources. For example, a node may want to bypass pool size
 /// restrictions when accepting a transaction from a local wallet.
 ///
-/// Most likely this will evolve to contain some sort of network identifier, 
+/// Most likely this will evolve to contain some sort of network identifier,
 /// once we get a better sense of what transaction building might look like.
 pub struct TxSource {
     /// Human-readable name used for logging and errors.
@@ -71,14 +64,31 @@ impl fmt::Debug for Parent {
     }
 }
 
+// TODO document this enum more accurately
+/// Enum of errors
 #[derive(Debug)]
 pub enum PoolError {
+    /// An invalid pool entry
     Invalid,
+    /// An entry already in the pool
     AlreadyInPool,
-    DuplicateOutput{other_tx: Option<hash::Hash>, in_chain: bool,
-        output: Commitment},
-    DoubleSpend{other_tx: hash::Hash, spent_output: Commitment},
-    // An orphan successfully added to the orphans set
+    /// A duplicate output
+    DuplicateOutput{
+        /// The other transaction
+        other_tx: Option<hash::Hash>,
+        /// Is in chain?
+        in_chain: bool,
+        /// The output
+        output: Commitment
+    },
+    /// A double spend
+    DoubleSpend{
+        /// The other transaction
+        other_tx: hash::Hash,
+        /// The spent output
+        spent_output: Commitment
+    },
+    /// An orphan successfully added to the orphans set
     OrphanTransaction,
 }
 
@@ -95,9 +105,9 @@ pub trait BlockChain {
 /// the blockchain.
 /// Reservations of outputs by orphan transactions (not fully connected) are
 /// not respected.
-/// Spending references (input -> output) exist in two structures: internal 
-/// graph references are contained in the pool edge sets, while references 
-/// sourced from the blockchain's UTXO set are contained in the 
+/// Spending references (input -> output) exist in two structures: internal
+/// graph references are contained in the pool edge sets, while references
+/// sourced from the blockchain's UTXO set are contained in the
 /// blockchain_connections set.
 /// Spent by references (output-> input) exist in two structures: pool-pool
 /// connections are in the pool edge set, while unspent (dangling) references
@@ -105,12 +115,12 @@ pub trait BlockChain {
 pub struct Pool {
     graph : graph::DirectedGraph,
 
-    // available_outputs are unspent outputs of the current pool set, 
-    // maintained as edges with empty destinations, keyed by the 
+    // available_outputs are unspent outputs of the current pool set,
+    // maintained as edges with empty destinations, keyed by the
     // output's hash.
     available_outputs: HashMap<Commitment, graph::Edge>,
 
-    // Consumed blockchain utxo's are kept in a separate map. 
+    // Consumed blockchain utxo's are kept in a separate map.
     consumed_blockchain_outputs: HashMap<Commitment, graph::Edge>
 }
 
@@ -209,7 +219,7 @@ impl Pool {
     }
 }
 
-impl TransactionGraphContainer for Pool { 
+impl TransactionGraphContainer for Pool {
     fn get_graph(&self) -> &graph::DirectedGraph {
         &self.graph
     }
@@ -225,21 +235,21 @@ impl TransactionGraphContainer for Pool {
 }
 
 /// Orphans contains the elements of the transaction graph that have not been
-/// connected in full to the blockchain. 
+/// connected in full to the blockchain.
 pub struct Orphans {
     graph : graph::DirectedGraph,
 
-    // available_outputs are unspent outputs of the current orphan set, 
+    // available_outputs are unspent outputs of the current orphan set,
     // maintained as edges with empty destinations.
     available_outputs: HashMap<Commitment, graph::Edge>,
 
-    // missing_outputs are spending references (inputs) with missing 
+    // missing_outputs are spending references (inputs) with missing
     // corresponding outputs, maintained as edges with empty sources.
     missing_outputs: HashMap<Commitment, graph::Edge>,
 
     // pool_connections are bidirectional edges which connect to the pool
-    // graph. They should map one-to-one to pool graph available_outputs. 
-    // pool_connections should not be viewed authoritatively, they are 
+    // graph. They should map one-to-one to pool graph available_outputs.
+    // pool_connections should not be viewed authoritatively, they are
     // merely informational until the transaction is officially connected to
     // the pool.
     pool_connections: HashMap<Commitment, graph::Edge>,
@@ -255,12 +265,12 @@ impl Orphans {
         }
     }
 
-    /// Checks for a double spent output, given the hash of the output, 
+    /// Checks for a double spent output, given the hash of the output,
     /// ONLY in the data maintained by the orphans set. This includes links
     /// to the pool as well as links internal to orphan transactions.
     /// Returns the transaction hash corresponding to the conflicting
     /// transaction.
-    fn check_double_spend(&self, o: transaction::Output) -> Option<hash::Hash> {
+    pub fn check_double_spend(&self, o: transaction::Output) -> Option<hash::Hash> {
         self.graph.get_edge_by_commitment(&o.commitment()).or(self.pool_connections.get(&o.commitment())).map(|x| x.destination_hash().unwrap())
     }
 
@@ -340,14 +350,14 @@ impl TransactionGraphContainer for Orphans {
 ///     consumed by another transaction in this graph,
 /// 3) [External] Unspent: An output produced by a transaction in this graph
 ///     that is not yet spent.
-/// 
+///
 /// There is no concept of an external "spent by" reference (output produced by
-/// a transaction in the graph spent by a transaction in another source), as 
+/// a transaction in the graph spent by a transaction in another source), as
 /// these references are expected to be maintained by descendent graph. Outputs
-/// follow a heirarchy (Blockchain -> Pool -> Orphans) where each descendent 
-/// exists at a lower priority than their parent. An output consumed by a 
+/// follow a heirarchy (Blockchain -> Pool -> Orphans) where each descendent
+/// exists at a lower priority than their parent. An output consumed by a
 /// child graph is marked as unspent in the parent graph and an external spent
-/// in the child. This ensures that no descendent set must modify state in a 
+/// in the child. This ensures that no descendent set must modify state in a
 /// set of higher priority.
 pub trait TransactionGraphContainer {
     /// Accessor for graph object
@@ -365,7 +375,7 @@ pub trait TransactionGraphContainer {
         self.get_available_output(c).is_some()
     }
 
-    /// Checks if the pool has anything by this output already, between 
+    /// Checks if the pool has anything by this output already, between
     /// available outputs and internal ones.
     fn find_output(&self, c: &Commitment) -> Option<hash::Hash> {
         self.get_available_output(c).

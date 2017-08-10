@@ -14,12 +14,11 @@
 
 //! Provides wrappers for throttling readers and writers
 
-use std::time::{Instant, Duration};
+use std::time::Instant;
 use std::io;
 
 use futures::*;
 use tokio_io::*;
-use bytes::{Buf, BytesMut, BufMut};
 
 /// A Rate Limited Reader
 #[derive(Debug)]
@@ -32,6 +31,7 @@ pub struct ThrottledReader<R: AsyncRead> {
 	last_check: Instant,
 }
 
+#[allow(dead_code)]
 impl<R: AsyncRead> ThrottledReader<R> {
 	/// Adds throttling to a reader.
 	/// The resulting reader will read at most `max` amount of bytes per second
@@ -105,6 +105,7 @@ pub struct ThrottledWriter<W: AsyncWrite> {
 	last_check: Instant,
 }
 
+#[allow(dead_code)]
 impl<W: AsyncWrite> ThrottledWriter<W> {
 	/// Adds throttling to a writer.
 	/// The resulting writer will write at most `max` amount of bytes per second
@@ -188,7 +189,7 @@ mod test {
 		for _ in 0..16 {
 			let _ = t_buf.write_buf(&mut Cursor::new(vec![1; 8]));
 		}
-		
+
 		let cursor = t_buf.into_inner();
 		assert_eq!(cursor.position(), 8);
 	}
@@ -203,7 +204,7 @@ mod test {
 		for _ in 0..16 {
 			let _ = t_buf.read_buf(&mut dst);
 		}
-		
+
 		assert_eq!(dst.position(), 8);
 	}
 }

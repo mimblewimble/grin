@@ -83,7 +83,10 @@ pub trait Committed {
 
 /// Proof of work
 pub struct Proof {
+    /// The nonces
 	pub nonces:Vec<u32>,
+    
+    /// The proof size
     pub proof_size: usize,
 }
 
@@ -124,7 +127,7 @@ impl Clone for Proof {
 }
 
 impl Proof {
-	
+
 	/// Builds a proof with all bytes zeroed out
 	pub fn new(in_nonces:Vec<u32>) -> Proof {
 		Proof {

@@ -30,23 +30,15 @@ extern crate futures_cpupool;
 use std::thread;
 use std::time;
 use std::default::Default;
-use std::mem;
 use std::fs;
-use std::sync::{Arc, Mutex, RwLock};
-use std::ops::Deref;
+use std::sync::{Arc, Mutex};
 
-use futures::{Future};
-use futures::future::join_all;
-use futures::task::park;
 use tokio_core::reactor;
-use tokio_core::reactor::Remote;
-use tokio_core::reactor::Handle;
 use tokio_timer::Timer;
 
 use secp::Secp256k1;
 
 use wallet::WalletConfig;
-use core::consensus;
 
 
 /// Just removes all results from previous runs
@@ -61,18 +53,19 @@ pub fn clean_all_output(test_name_dir:&str){
 
 /// Errors that can be returned by LocalServerContainer
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum Error {
 	Internal(String),
 	Argument(String),
-	NotFound,
+    NotFound,
 }
 
 /// All-in-one server configuration struct, for convenience
-/// 
+///
 
 #[derive(Clone)]
 pub struct LocalServerContainerConfig {
-    
+
     //user friendly name for the server, also denotes what dir
     //the data files will appear in
     pub name: String,
@@ -81,8 +74,8 @@ pub struct LocalServerContainerConfig {
     pub base_addr: String,
 
     //Port the server (p2p) is running on
-    pub p2p_server_port: u16, 
-    
+    pub p2p_server_port: u16,
+
     //Port the API server is running on
     pub api_server_port: u16,
 
@@ -113,7 +106,7 @@ pub struct LocalServerContainerConfig {
     pub coinbase_wallet_address: String,
 
     //When running a wallet, the address to check inputs and send
-    //finalised transactions to, 
+    //finalised transactions to,
     pub wallet_validating_node_url:String,
 
 
@@ -168,7 +161,7 @@ pub struct LocalServerContainer {
 
     //the list of peers to connect to
     pub peer_list: Vec<String>,
-    
+
     //base directory for the server instance
     working_dir: String,
 
@@ -193,8 +186,7 @@ impl LocalServerContainer {
        }))
     }
 
-    pub fn run_server(&mut self,
-                         duration_in_seconds: u64) -> grin::ServerStats
+    pub fn run_server(&mut self, duration_in_seconds: u64) -> grin::ServerStats
     {
         let mut event_loop = reactor::Core::new().unwrap();
 
@@ -208,7 +200,7 @@ impl LocalServerContainer {
             seeds=vec![self.config.seed_addr.to_string()];
         }
 
-        
+
         let s = grin::Server::future(
             grin::ServerConfig{
                 api_http_addr: api_addr,
@@ -227,7 +219,7 @@ impl LocalServerContainer {
             thread::sleep(time::Duration::from_millis(1000));
         }
 
-        let mut miner_config = grin::MinerConfig {
+        let miner_config = grin::MinerConfig {
             enable_mining: self.config.start_miner,
             burn_reward: self.config.burn_mining_rewards,
             use_cuckoo_miner: false,
@@ -238,7 +230,7 @@ impl LocalServerContainer {
             slow_down_in_millis: Some(self.config.miner_slowdown_in_millis.clone()),
             ..Default::default()
         };
-          
+
         if self.config.start_miner == true {
             println!("starting Miner on port {}", self.config.p2p_server_port);
             s.start_miner(miner_config);
@@ -251,7 +243,7 @@ impl LocalServerContainer {
 
         let timeout = Timer::default().sleep(time::Duration::from_secs(duration_in_seconds));
 
-        event_loop.run(timeout);
+        event_loop.run(timeout).unwrap();
 
         if self.wallet_is_running{
             self.stop_wallet();
@@ -260,15 +252,15 @@ impl LocalServerContainer {
         s.get_server_stats().unwrap()
 
     }
-        
+
     /// Starts a wallet daemon to receive and returns the
     /// listening server url
-    
-    pub fn run_wallet(&mut self, duration_in_seconds: u64) {
+
+    pub fn run_wallet(&mut self, _duration_in_seconds: u64) {
 
         //URL on which to start the wallet listener (i.e. api server)
       	let url = format!("{}:{}", self.config.base_addr, self.config.wallet_port);
-                
+
         //Just use the name of the server for a seed for now
         let seed = format!("{}", self.config.name);
 
@@ -277,18 +269,18 @@ impl LocalServerContainer {
 	    let s = Secp256k1::new();
 	    let key = wallet::ExtendedKey::from_seed(&s, seed.as_bytes())
 		         .expect("Error deriving extended key from seed.");
-        
+
         println!("Starting the Grin wallet receiving daemon on {} ", self.config.wallet_port );
 
         let mut wallet_config = WalletConfig::default();
-        
+
         wallet_config.api_http_addr = format!("http://{}", url);
         wallet_config.check_node_api_http_addr = self.config.wallet_validating_node_url.clone();
-        wallet_config.data_file_dir=self.working_dir.clone();        
+        wallet_config.data_file_dir=self.working_dir.clone();
 
         let mut api_server = api::ApiServer::new("/v1".to_string());
-	  
-	    api_server.register_endpoint("/receive".to_string(), wallet::WalletReceiver { 
+
+	    api_server.register_endpoint("/receive".to_string(), wallet::WalletReceiver {
             key: key,
             config: wallet_config,
         });
@@ -301,9 +293,9 @@ impl LocalServerContainer {
         self.wallet_is_running = true;
 
     }
-    
+
     /// Stops the running wallet server
-    
+
     pub fn stop_wallet(&mut self){
         let mut api_server = self.api_server.as_mut().unwrap();
         api_server.stop();
@@ -314,7 +306,7 @@ impl LocalServerContainer {
     pub fn add_peer(&mut self, addr:String){
         self.peer_list.push(addr);
     }
-    
+
 }
 
 /// Configuration values for container pool
@@ -428,16 +420,16 @@ impl LocalServerContainerPool {
             self.is_seeding=true;
         }
 
-        let server_address = format!("{}:{}",
-                                     server_config.base_addr,
-                                     server_config.p2p_server_port);
+        let _server_address = format!("{}:{}",
+                                      server_config.base_addr,
+                                      server_config.p2p_server_port);
 
-        let mut server_container = LocalServerContainer::new(server_config.clone()).unwrap();
+        let server_container = LocalServerContainer::new(server_config.clone()).unwrap();
         //self.server_containers.push(server_arc);
 
         //Create a future that runs the server for however many seconds
         //collect them all and run them in the run_all_servers
-        let run_time = self.config.run_length_in_seconds;
+        let _run_time = self.config.run_length_in_seconds;
 
         self.server_containers.push(server_container);
 
@@ -447,9 +439,9 @@ impl LocalServerContainerPool {
     /// adds n servers, ready to run
     ///
     ///
-
+    #[allow(dead_code)]
     pub fn create_servers(&mut self, number: u16){
-        for n in 0..number {
+        for _ in 0..number {
             //self.create_server();
         }
     }
@@ -489,7 +481,7 @@ impl LocalServerContainerPool {
 
         for handle in handles {
             match handle.join() {
-                Ok(v) => {}
+                Ok(_) => {}
                 Err(e) => {
                     println!("Error starting server thread: {:?}", e);
                     panic!(e);
@@ -522,5 +514,4 @@ impl LocalServerContainerPool {
             }
         }
     }
-
 }

@@ -33,6 +33,7 @@ pub const MAX_LOCATORS: u32 = 10;
 pub const MAX_BLOCK_HEADERS: u32 = 512;
 
 /// Maximum number of block bodies a peer should ever ask for and send
+#[allow(dead_code)]
 pub const MAX_BLOCK_BODIES: u32 = 16;
 
 /// Maximum number of peer addresses a peer should ever send
@@ -57,7 +58,7 @@ impl From<io::Error> for Error {
 	}
 }
 impl From<TimerError> for Error {
-	fn from(e: TimerError) -> Error {
+	fn from(_: TimerError) -> Error {
 		Error::Timeout
 	}
 }

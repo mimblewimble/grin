@@ -19,10 +19,8 @@
 use rand::{thread_rng, Rng};
 use std::cmp::min;
 use std::net::SocketAddr;
-use std::ops::Deref;
 use std::str::{self, FromStr};
 use std::sync::Arc;
-use std::thread;
 use std::time;
 
 use cpupool;
@@ -93,7 +91,12 @@ impl Seeder {
 				for p in disconnected {
 					if p.is_banned() {
 						debug!("Marking peer {} as banned.", p.info.addr);
-						peer_store.update_state(p.info.addr, p2p::State::Banned);
+						let update_result = peer_store.update_state(
+							p.info.addr, p2p::State::Banned);
+						match update_result {
+							Ok(()) => {}
+							Err(_) => {}
+						}
 					}
 				}
 
@@ -240,11 +243,19 @@ fn connect_and_req(capab: p2p::Capabilities,
 		.then(move |p| {
 			match p {
 				Ok(Some(p)) => {
-					p.send_peer_request(capab);
+					let peer_result = p.send_peer_request(capab);
+					match peer_result {
+						Ok(()) => {}
+						Err(_) => {}
+					}
 				}
 				Err(e) => {
 					error!("Peer request error: {:?}", e);
-					peer_store.update_state(addr, p2p::State::Defunct);
+					let update_result = peer_store.update_state(addr, p2p::State::Defunct);
+					match update_result {
+						Ok(()) => {}
+						Err(_) => {}
+					}
 				}
 				_ => {}
 			}

@@ -388,6 +388,7 @@ impl Writeable for [u8; 4] {
 
 /// Useful marker trait on types that can be sized byte slices
 pub trait AsFixedBytes: Sized + AsRef<[u8]> {
+	/// The length in bytes
 	fn len(&self) -> usize;
 }
 

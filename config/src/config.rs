@@ -22,7 +22,6 @@ use std::fs::File;
 use toml;
 use grin::{ServerConfig,
            MinerConfig};
-use wallet::WalletConfig;
 
 use types::{ConfigMembers,
             GlobalConfig,
@@ -87,10 +86,10 @@ impl GlobalConfig {
                 return Ok(())
             }
         }
-        
+
         // Give up
         Err(ConfigError::FileNotFoundError(String::from("")))
-        
+
     }
 
     /// Takes the path to a config file, or if NONE, tries
@@ -102,7 +101,7 @@ impl GlobalConfig {
         if let Some(fp) = file_path {
             return_value.config_file_path = Some(PathBuf::from(&fp));
         } else {
-            return_value.derive_config_location();
+            return_value.derive_config_location().unwrap();
         }
 
         //No attempt at a config file, just return defaults
@@ -124,6 +123,7 @@ impl GlobalConfig {
         return_value.read_config()
     }
 
+    /// Read config
     pub fn read_config(mut self) -> Result<GlobalConfig, ConfigError> {
         let mut file = File::open(self.config_file_path.as_mut().unwrap())?;
         let mut contents = String::new();
@@ -149,6 +149,7 @@ impl GlobalConfig {
         }
     }
 
+    /// Serialize config
     pub fn ser_config(&mut self) -> Result<String, ConfigError> {
         let encoded:Result<String, toml::ser::Error> = toml::to_string(self.members.as_mut().unwrap());
         match encoded {
@@ -169,6 +170,7 @@ impl GlobalConfig {
         return self.members.as_mut().unwrap().wallet.as_mut().unwrap().enable_wallet;
     }*/
 
+    /// Enable mining
     pub fn mining_enabled(&mut self) -> bool {
         return self.members.as_mut().unwrap().mining.as_mut().unwrap().enable_mining;
     }
@@ -186,11 +188,11 @@ fn test_read_config() {
         test_mode = false
         #7 = FULL_NODE, not sure how to serialise this properly to use constants
         capabilities = [7]
-        
+
         [server.p2p_config]
         host = "127.0.0.1"
         port = 13414
-        
+
         #Mining section is optional, if it's not here it will default to not mining
         [mining]
         enable_mining = true

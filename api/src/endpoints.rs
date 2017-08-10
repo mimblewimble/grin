@@ -21,11 +21,10 @@
 //   }
 // }
 
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::thread;
 
 use core::core::{Transaction, Output};
-use core::core::hash::Hash;
 use core::ser;
 use chain::{self, Tip};
 use pool;
@@ -51,7 +50,7 @@ impl ApiEndpoint for ChainApi {
 		vec![Operation::Get]
 	}
 
-	fn get(&self, id: String) -> ApiResult<Tip> {
+	fn get(&self, _: String) -> ApiResult<Tip> {
 		self.chain.head().map_err(|e| Error::Internal(format!("{:?}", e)))
 	}
 }
@@ -75,13 +74,13 @@ impl ApiEndpoint for OutputApi {
 
 	fn get(&self, id: String) -> ApiResult<Output> {
 		debug!("GET output {}", id);
-		let c = util::from_hex(id.clone()).map_err(|e| Error::Argument(format!("Not a valid commitment: {}", id)))?;
+		let c = util::from_hex(id.clone()).map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
 
     match self.chain.get_unspent(&Commitment::from_vec(c)) {
       Some(utxo) => Ok(utxo),
       None => Err(Error::NotFound),
     }
-		
+
 	}
 }
 
@@ -93,7 +92,7 @@ pub struct PoolApi<T> {
 }
 
 #[derive(Serialize, Deserialize)]
-struct PoolInfo {
+pub struct PoolInfo {
 	pool_size: usize,
 	orphans_size: usize,
 	total_size: usize,
@@ -111,7 +110,7 @@ impl<T> ApiEndpoint for PoolApi<T>
 		vec![Operation::Get, Operation::Custom("push".to_string())]
 	}
 
-	fn get(&self, id: String) -> ApiResult<PoolInfo> {
+	fn get(&self, _: String) -> ApiResult<PoolInfo> {
 		let pool = self.tx_pool.read().unwrap();
 		Ok(PoolInfo {
 			pool_size: pool.pool_size(),
@@ -120,9 +119,9 @@ impl<T> ApiEndpoint for PoolApi<T>
 		})
 	}
 
-	fn operation(&self, op: String, input: TxWrapper) -> ApiResult<()> {
+	fn operation(&self, _: String, input: TxWrapper) -> ApiResult<()> {
 		let tx_bin = util::from_hex(input.tx_hex)
-      .map_err(|e| Error::Argument(format!("Invalid hex in transaction wrapper.")))?;
+      .map_err(|_| Error::Argument(format!("Invalid hex in transaction wrapper.")))?;
 
 		let tx: Transaction = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
 				Error::Argument("Could not deserialize transaction, invalid format.".to_string())
@@ -146,7 +145,7 @@ impl<T> ApiEndpoint for PoolApi<T>
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
 #[derive(Serialize, Deserialize)]
-struct TxWrapper {
+pub struct TxWrapper {
 	tx_hex: String,
 }
 
