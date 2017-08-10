@@ -50,13 +50,13 @@
 //! So we may as well have it in place already.
 
 use std::convert::From;
-use secp::{self, Secp256k1};
+use secp::{self};
 use secp::key::SecretKey;
 
 use core::core::{Block, Transaction, TxKernel, Output, build};
 use core::ser;
 use api::{self, ApiEndpoint, Operation, ApiResult};
-use extkey::{self, ExtendedKey};
+use extkey::ExtendedKey;
 use types::*;
 use util;
 
@@ -70,13 +70,13 @@ struct TxWrapper {
 /// transaction, adding our receiving output, to broadcast to the rest of the
 /// network.
 pub fn receive_json_tx(config: &WalletConfig, ext_key: &ExtendedKey, partial_tx_str: &str) -> Result<(), Error> {
-	
+
 	let (amount, blinding, partial_tx) = partial_tx_from_json(partial_tx_str)?;
 	let final_tx = receive_transaction(&config, ext_key, amount, blinding, partial_tx)?;
 	let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
 
 	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
-	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })?;
+	let _: TxWrapper = api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })?;
 	Ok(())
 }
 
@@ -135,9 +135,9 @@ impl ApiEndpoint for WalletReceiver {
 					WalletReceiveRequest::PartialTransaction(partial_tx_str) => {
 						debug!("Operation {} with transaction {}", op, &partial_tx_str);
 						receive_json_tx(&self.config, &self.key, &partial_tx_str).map_err(|e| {
-									api::Error::Internal(format!("Error processing partial transaction: {:?}", e))
-								});
-						
+							api::Error::Internal(format!("Error processing partial transaction: {:?}", e))
+						}).unwrap();
+
 						//TODO: Return emptiness for now, should be a proper enum return type
 						Ok(CbData {
 							output: String::from(""),

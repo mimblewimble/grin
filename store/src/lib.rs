@@ -187,6 +187,8 @@ impl<'a> Batch<'a> {
 		}
 	}
 
+	/// Delete a single key from the batch. The write function
+	/// must be called to "commit" the batch to storage.
 	pub fn delete(mut self, key: &[u8]) -> Result<Batch<'a>, Error> {
 		self.batch.delete(key)?;
 		Ok(self)

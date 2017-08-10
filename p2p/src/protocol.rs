@@ -14,9 +14,7 @@
 
 use std::sync::{Mutex, Arc};
 
-use futures;
 use futures::Future;
-use futures::stream;
 use futures::sync::mpsc::UnboundedSender;
 use tokio_core::net::TcpStream;
 
@@ -28,6 +26,7 @@ use msg::*;
 use types::*;
 use util::OneTime;
 
+#[allow(dead_code)]
 pub struct ProtocolV1 {
 	conn: OneTime<TimeoutConnection>,
 
@@ -128,7 +127,7 @@ fn handle_payload(adapter: &NetAdapter,
 	match header.msg_type {
 		Type::Ping => {
 			let data = ser::ser_vec(&MsgHeader::new(Type::Pong, 0))?;
-			sender.send(data);
+			sender.send(data).unwrap();
 			Ok(None)
 		}
 		Type::Pong => Ok(None),
@@ -148,7 +147,7 @@ fn handle_payload(adapter: &NetAdapter,
 				try!(ser::serialize(&mut data,
 				                    &MsgHeader::new(Type::Block, body_data.len() as u64)));
 				data.append(&mut body_data);
-				sender.send(data);
+				sender.send(data).unwrap();
 			}
 			Ok(None)
 		}
@@ -170,7 +169,7 @@ fn handle_payload(adapter: &NetAdapter,
 			try!(ser::serialize(&mut data,
 			                    &MsgHeader::new(Type::Headers, body_data.len() as u64)));
 			data.append(&mut body_data);
-			sender.send(data);
+			sender.send(data).unwrap();
 
 			Ok(None)
 		}
@@ -193,7 +192,7 @@ fn handle_payload(adapter: &NetAdapter,
 			try!(ser::serialize(&mut data,
 			                    &MsgHeader::new(Type::PeerAddrs, body_data.len() as u64)));
 			data.append(&mut body_data);
-			sender.send(data);
+			sender.send(data).unwrap();
 
 			Ok(None)
 		}

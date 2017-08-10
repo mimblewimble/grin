@@ -38,7 +38,7 @@
 use std::clone::Clone;
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops::{self, Deref};
+use std::ops::{self};
 
 use core::hash::{Hash, Hashed};
 use ser::{self, Readable, Reader, Writeable, Writer};
@@ -96,11 +96,14 @@ impl<T> Summable for NoSum<T> {
 /// of two HashSums is the (Hash(h1|h2), h1 + h2) HashSum.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HashSum<T> where T: Summable {
+	/// The hash
 	pub hash: Hash,
+	/// The sum
 	pub sum: T::Sum,
 }
 
 impl<T> HashSum<T> where T: Summable + Writeable {
+	/// Create a hash sum from a summable
 	pub fn from_summable(idx: u64, elmt: T) -> HashSum<T> {
 		let hash = Hashed::hash(&elmt);
 		let sum = elmt.sum();
@@ -156,7 +159,7 @@ pub trait Backend<T> where T: Summable {
 /// Heavily relies on navigation operations within a binary tree. In particular,
 /// all the implementation needs to keep track of the MMR structure is how far
 /// we are in the sequence of nodes making up the MMR.
-struct PMMR<T, B> where T: Summable, B: Backend<T> {
+pub struct PMMR<T, B> where T: Summable, B: Backend<T> {
 	last_pos: u64,
 	backend: B,
 	// only needed for parameterizing Backend
@@ -179,7 +182,7 @@ impl<T, B> PMMR<T, B> where T: Summable + Writeable + Debug + Clone, B: Backend<
 	pub fn root(&self) -> HashSum<T> {
 		let peaks_pos = peaks(self.last_pos);
 		let peaks: Vec<Option<HashSum<T>>> = map_vec!(peaks_pos, |&pi| self.backend.get(pi));
-		
+
 		let mut ret = None;
 		for peak in peaks {
 			ret = match (ret, peak) {
@@ -199,7 +202,7 @@ impl<T, B> PMMR<T, B> where T: Summable + Writeable + Debug + Clone, B: Backend<
 		let mut to_append = vec![current_hashsum.clone()];
 		let mut height = 0;
 		let mut pos = elmt_pos;
-		
+
 		// we look ahead one position in the MMR, if the expected node has a higher
 		// height it means we have to build a higher peak by summing with a previous
 		// sibling. we do it iteratively in case the new peak itself allows the
@@ -231,13 +234,12 @@ impl<T, B> PMMR<T, B> where T: Summable + Writeable + Debug + Clone, B: Backend<
 			// only leaves can be pruned
 			return;
 		}
-	
+
 		// loop going up the tree, from node to parent, as long as we stay inside
 		// the tree.
 		let mut to_prune = vec![];
 		let mut current = position;
 		while current+1 < self.last_pos {
-			let current_height = bintree_postorder_height(current);
 			let next_height = bintree_postorder_height(current+1);
 
 			// compare the node's height to the next height, if the next is higher
@@ -257,7 +259,7 @@ impl<T, B> PMMR<T, B> where T: Summable + Writeable + Debug + Clone, B: Backend<
 				// can't prune when our parent isn't here yet
 				break;
 			}
-			to_prune.push(current); 
+			to_prune.push(current);
 
 			// if we have a pruned sibling, we can continue up the tree
 			// otherwise we're done
@@ -289,7 +291,7 @@ fn peaks(num: u64) -> Vec<u64> {
 	if bintree_postorder_height(num+1) > bintree_postorder_height(num) {
 		return vec![];
 	}
-	
+
 	// our top peak is always on the leftmost side of the tree and leftmost trees
 	// have for index a binary values with all 1s (i.e. 11, 111, 1111, etc.)
 	let mut top = 1;
@@ -454,8 +456,10 @@ fn most_significant_pos(num: u64) -> u64 {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::hash::{Hash, Hashed};
+	use core::hash::Hashed;
 	use std::sync::{Arc, Mutex};
+	use std::ops::Deref;
+
 
 	#[test]
 	fn some_all_ones() {
@@ -687,7 +691,7 @@ mod test {
 		pmmr.prune(1);
 		assert_eq!(orig_root, pmmr.root());
 		assert_eq!(ba.used_size(), orig_sz - 7);
-		
+
 		// pruning everything should only leave us the peaks
 		for n in 1..16 {
 			pmmr.prune(n);

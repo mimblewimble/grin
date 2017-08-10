@@ -143,6 +143,7 @@ impl AsRef<[u8]> for RangeProof {
 }
 
 impl RangeProof {
+    /// Create the zero range proof
 	pub fn zero() -> RangeProof {
 		RangeProof {
 			proof: [0; constants::MAX_PROOF_SIZE],

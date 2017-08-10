@@ -25,9 +25,6 @@ extern crate futures;
 extern crate tokio_core;
 extern crate tokio_timer;
 
-use std::sync::{Arc, Mutex, RwLock};
-use std::fs;
-
 mod framework;
 
 use std::thread;
@@ -35,7 +32,7 @@ use std::time;
 use std::default::Default;
 
 use futures::{Future, Poll, Async};
-use futures::task::park;
+use futures::task::current;
 use tokio_core::reactor;
 use tokio_timer::Timer;
 
@@ -51,7 +48,7 @@ use framework::{LocalServerContainer, LocalServerContainerConfig, LocalServerCon
 /// Block and mining into a wallet for a bit
 #[test]
 fn basic_genesis_mine() {
-	env_logger::init();
+    let _ = env_logger::init();
     global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "genesis_mine";
@@ -82,7 +79,7 @@ fn basic_genesis_mine() {
 /// messages they all end up connected.
 #[test]
 fn simulate_seeding() {
-	env_logger::init();
+    let _ = env_logger::init();
     global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "simulate_seeding";
@@ -116,13 +113,13 @@ fn simulate_seeding() {
 		server_config.p2p_server_port
 	));
 
-	for i in 0..4 {
-		pool.create_server(&mut server_config);
-	}
+    for _ in 0..4 {
+        pool.create_server(&mut server_config);
+    }
 
 	pool.connect_all_peers();
 
-	let result_vec = pool.run_all_servers();
+    let _ = pool.run_all_servers();
 }
 
 /// Create 1 server, start it mining, then connect 4 other peers mining and
@@ -136,8 +133,9 @@ fn simulate_seeding() {
 // being,
 // As it's more for actively testing and hurts CI a lot
 //#[test]
+#[allow(dead_code)]
 fn simulate_parallel_mining() {
-	env_logger::init();
+    let _ = env_logger::init();
     global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "simulate_parallel_mining";
@@ -179,7 +177,7 @@ fn simulate_parallel_mining() {
 
 	pool.connect_all_peers();
 
-	let result_vec = pool.run_all_servers();
+    let _ = pool.run_all_servers();
 
 	// Check mining difficulty here?, though I'd think it's more valuable
 	// to simply output it. Can at least see the evolution of the difficulty target
@@ -335,7 +333,7 @@ impl<'a> Future for HeadChange<'a> {
 			Ok(Async::Ready(new_head))
 		} else {
 			// egregious polling, asking the task to schedule us every iteration
-			park().unpark();
+			current().notify();
 			Ok(Async::NotReady)
 		}
 	}

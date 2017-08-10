@@ -28,14 +28,19 @@ use consensus::DEFAULT_SIZESHIFT;
 /// Define these here, as they should be developer-set, not really tweakable
 /// by users
 
+/// Automated testing sizeshift
 pub const AUTOMATED_TESTING_SIZESHIFT:u8 = 10;
 
+/// Automated testing proof size
 pub const AUTOMATED_TESTING_PROOF_SIZE:usize = 4;
 
+/// User testing sizeshift
 pub const USER_TESTING_SIZESHIFT:u8 = 16;
 
+/// User testing proof size
 pub const USER_TESTING_PROOF_SIZE:usize = 42;
 
+/// Mining parameter modes
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MiningParameterMode {
 	/// For CI testing
@@ -49,14 +54,17 @@ pub enum MiningParameterMode {
 }
 
 lazy_static!{
+    /// The mining parameter mode
     pub static ref MINING_PARAMETER_MODE: RwLock<MiningParameterMode> = RwLock::new(MiningParameterMode::Production);
 }
 
+/// Set the mining mode
 pub fn set_mining_mode(mode:MiningParameterMode){
 	let mut param_ref=MINING_PARAMETER_MODE.write().unwrap();
 	*param_ref=mode;
 }
 
+/// The sizeshift
 pub fn sizeshift() -> u8 {
 	let param_ref=MINING_PARAMETER_MODE.read().unwrap();
 	match *param_ref {
@@ -66,6 +74,7 @@ pub fn sizeshift() -> u8 {
 	}
 }
 
+/// The proofsize
 pub fn proofsize() -> usize {
 	let param_ref=MINING_PARAMETER_MODE.read().unwrap();
 	match *param_ref {
@@ -75,6 +84,7 @@ pub fn proofsize() -> usize {
 	}
 }
 
+/// Are we in automated testing mode?
 pub fn is_automated_testing_mode() -> bool {
 	let param_ref=MINING_PARAMETER_MODE.read().unwrap();
 	if let MiningParameterMode::AutomatedTesting=*param_ref {
@@ -83,4 +93,3 @@ pub fn is_automated_testing_mode() -> bool {
 		return false;
 	}
 }
-

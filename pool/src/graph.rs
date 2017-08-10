@@ -15,15 +15,9 @@
 //! Base types for the transaction pool's Directed Acyclic Graphs
 
 use std::vec::Vec;
-use std::sync::Arc;
-use std::sync::RwLock;
-use std::sync::Weak;
-use std::cell::RefCell;
 use std::collections::HashMap;
 
 use secp::pedersen::Commitment;
-use secp::{Secp256k1, ContextFlag};
-use secp::key;
 
 use time;
 use rand;
@@ -36,24 +30,28 @@ use core::core;
 /// These are the vertices of both of the graph structures
 pub struct PoolEntry {
     // Core data
-    // Unique identifier of this pool entry and the corresponding transaction
+    /// Unique identifier of this pool entry and the corresponding transaction
     pub transaction_hash: core::hash::Hash,
 
-    // Metadata 
-    size_estimate: u64,
+    // Metadata
+    /// Size estimate
+    pub size_estimate: u64,
+    /// Receive timestamp
     pub receive_ts: time::Tm,
 }
 
 impl PoolEntry {
+    /// Create new transaction pool entry
     pub fn new(tx: &core::transaction::Transaction) -> PoolEntry {
         PoolEntry{
             transaction_hash: transaction_identifier(tx),
             size_estimate : estimate_transaction_size(tx),
-            receive_ts: time::now()} 
+            receive_ts: time::now()}
     }
 }
 
-fn estimate_transaction_size(tx: &core::transaction::Transaction) -> u64 {
+/// TODO guessing this needs implementing
+fn estimate_transaction_size(_tx: &core::transaction::Transaction) -> u64 {
     0
 }
 
@@ -72,24 +70,32 @@ pub struct Edge {
 }
 
 impl Edge{
+    /// Create new edge
     pub fn new(source: Option<core::hash::Hash>, destination: Option<core::hash::Hash>, output: Commitment) -> Edge {
         Edge{source: source, destination: destination, output: output}
     }
 
+    /// Create new edge with a source
     pub fn with_source(&self, src: Option<core::hash::Hash>) -> Edge {
         Edge{source: src, destination: self.destination, output: self.output}
     }
 
+    /// Create new edge with destination
     pub fn with_destination(&self, dst: Option<core::hash::Hash>) -> Edge {
         Edge{source: self.source, destination: dst, output: self.output}
     }
 
+    /// The output commitment of the edge
     pub fn output_commitment(&self) -> Commitment {
         self.output
     }
+
+    /// The destination hash of the edge
     pub fn destination_hash(&self) -> Option<core::hash::Hash> {
         self.destination
     }
+
+    /// The source hash of the edge
     pub fn source_hash(&self) -> Option<core::hash::Hash> {
         self.source
     }
@@ -108,13 +114,14 @@ pub struct DirectedGraph {
     edges: HashMap<Commitment, Edge>,
     vertices: Vec<PoolEntry>,
 
-    // A small optimization: keeping roots (vertices with in-degree 0) in a 
+    // A small optimization: keeping roots (vertices with in-degree 0) in a
     // separate list makes topological sort a bit faster. (This is true for
     // Kahn's, not sure about other implementations)
     roots: Vec<PoolEntry>,
 }
 
 impl DirectedGraph {
+    /// Create an empty directed graph
     pub fn empty() -> DirectedGraph {
         DirectedGraph{
             edges: HashMap::new(),
@@ -123,14 +130,17 @@ impl DirectedGraph {
         }
     }
 
+    /// Get an edge by its commitment
     pub fn get_edge_by_commitment(&self, output_commitment: &Commitment) -> Option<&Edge> {
         self.edges.get(output_commitment)
     }
 
+    /// Remove an edge by its commitment
     pub fn remove_edge_by_commitment(&mut self, output_commitment: &Commitment) -> Option<Edge> {
         self.edges.remove(output_commitment)
     }
 
+    /// Remove a vertex by its hash
     pub fn remove_vertex(&mut self, tx_hash: core::hash::Hash) -> Option<PoolEntry> {
         match self.roots.iter().position(|x| x.transaction_hash == tx_hash) {
             Some(i) => Some(self.roots.swap_remove(i)),
@@ -163,8 +173,8 @@ impl DirectedGraph {
         }
     }
 
-    // add_vertex_only adds a vertex, meant to be complemented by add_edge_only
-    // in cases where delivering a vector of edges is not feasible or efficient
+    /// add_vertex_only adds a vertex, meant to be complemented by add_edge_only
+    /// in cases where delivering a vector of edges is not feasible or efficient
     pub fn add_vertex_only(&mut self, vertex: PoolEntry, is_root: bool) {
         if is_root {
             self.roots.push(vertex);
@@ -173,6 +183,7 @@ impl DirectedGraph {
         }
     }
 
+    /// add_edge_only adds an edge
     pub fn add_edge_only(&mut self, edge: Edge) {
         self.edges.insert(edge.output_commitment(), edge);
     }
@@ -181,7 +192,7 @@ impl DirectedGraph {
     pub fn len_vertices(&self) -> usize {
         self.vertices.len() + self.roots.len()
     }
-   
+
     /// Number of root vertices only
     pub fn len_roots(&self) -> usize {
         self.roots.len()
@@ -209,6 +220,8 @@ pub fn transaction_identifier(tx: &core::transaction::Transaction) -> core::hash
 #[cfg(test)]
 mod tests {
     use super::*;
+    use secp::{Secp256k1, ContextFlag};
+    use secp::key;
 
     #[test]
     fn test_add_entry() {
@@ -243,7 +256,7 @@ mod tests {
 }
 
 /// For testing/debugging: a random tx hash
-fn random_hash() -> core::hash::Hash {
+pub fn random_hash() -> core::hash::Hash {
     let hash_bytes: [u8;32]= rand::random();
     core::hash::Hash(hash_bytes)
 }

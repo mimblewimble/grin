@@ -91,7 +91,7 @@ impl Peer {
 			// handle disconnection, standard disconnections aren't considered an error
 			let mut state = state.write().unwrap();
 			match res {
-				Ok(res) => {
+				Ok(_) => {
 					*state = State::Disconnected;
 					info!("Client {} disconnected.", addr);
 					Ok(())

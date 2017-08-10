@@ -17,36 +17,31 @@
 //! as a facade.
 
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time;
 
-use futures::{future, Future, Stream};
+use futures::{Future, Stream};
 use tokio_core::reactor;
 use tokio_timer::Timer;
 
 use adapters::*;
 use api;
 use chain;
-use chain::ChainStore;
-use core::{self, consensus};
-use core::core::hash::Hashed;
-use core::pow::cuckoo;
-use core::pow::MiningWorker;
 use miner;
 use p2p;
 use pool;
 use seed;
-use store;
 use sync;
 use types::*;
 
-use plugin::PluginMiner;
 use core::global;
 
 /// Grin server holding internal structures.
 pub struct Server {
+	/// server config
 	pub config: ServerConfig,
+	/// event handle
 	evt_handle: reactor::Handle,
 	/// handle to our network server
 	p2p: Arc<p2p::Server>,
@@ -137,6 +132,7 @@ impl Server {
 		Ok(())
 	}
 
+	/// Number of peers
 	pub fn peer_count(&self) -> u32 {
 		self.p2p.peer_count()
 	}
@@ -152,10 +148,11 @@ impl Server {
 		miner.set_debug_output_id(format!("Port {}",self.config.p2p_config.unwrap().port));
 		let server_config = self.config.clone();
 		thread::spawn(move || {
-			miner.run_loop(config.clone(), server_config, cuckoo_size as u32, proof_size);		
+			miner.run_loop(config.clone(), server_config, cuckoo_size as u32, proof_size);
 		});
 	}
 
+	/// The chain head
 	pub fn head(&self) -> chain::Tip {
 		self.chain.head().unwrap()
 	}

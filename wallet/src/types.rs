@@ -65,7 +65,7 @@ impl From<serde_json::Error> for Error {
 }
 
 impl From<num::ParseIntError> for Error {
-	fn from(e: num::ParseIntError) -> Error {
+	fn from(_: num::ParseIntError) -> Error {
 		Error::Format("Invalid hex".to_string())
 	}
 }
@@ -91,7 +91,7 @@ pub struct WalletConfig {
 
 impl Default for WalletConfig {
 	fn default() -> WalletConfig {
-		WalletConfig { 
+		WalletConfig {
 			enable_wallet: false,
 			api_http_addr: "http://127.0.0.1:13415".to_string(),
 			check_node_api_http_addr: "http://127.0.0.1:13415".to_string(),
@@ -161,12 +161,12 @@ impl WalletData {
 		fs::create_dir_all(data_file_dir).unwrap_or_else(|why| {
         	info!("! {:?}", why.kind());
     	});
-		
+
 		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
 		let lock_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, LOCK_FILE);
 
 		// create the lock files, if it already exists, will produce an error
-    	OpenOptions::new().write(true).create_new(true).open(lock_file_path).map_err(|e| {
+    	OpenOptions::new().write(true).create_new(true).open(lock_file_path).map_err(|_| {
 				Error::WalletData(format!("Could not create wallet lock file. Either \
             some other process is using the wallet or there's a write access \
             issue."))
@@ -178,7 +178,7 @@ impl WalletData {
 		wdat.write(data_file_path)?;
 
 		// delete the lock file
-		fs::remove_file(lock_file_path).map_err(|e| {
+		fs::remove_file(lock_file_path).map_err(|_| {
 				Error::WalletData(format!("Could not remove wallet lock file. Maybe insufficient \
 				                           rights?"))
 			})?;

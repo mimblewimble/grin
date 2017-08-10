@@ -27,6 +27,7 @@ use grin_store;
 bitflags! {
   /// Options for block validation
   pub flags Options: u32 {
+    /// None flag
     const NONE = 0b00000001,
     /// Runs without checking the Proof of Work, mostly to make testing easier.
     const SKIP_POW = 0b00000010,
@@ -37,6 +38,7 @@ bitflags! {
   }
 }
 
+/// Errors
 #[derive(Debug)]
 pub enum Error {
 	/// The block doesn't fit anywhere in our chain
@@ -202,5 +204,5 @@ pub trait ChainAdapter {
 /// Dummy adapter used as a placeholder for real implementations
 pub struct NoopAdapter {}
 impl ChainAdapter for NoopAdapter {
-	fn block_accepted(&self, b: &Block) {}
+	fn block_accepted(&self, _: &Block) {}
 }

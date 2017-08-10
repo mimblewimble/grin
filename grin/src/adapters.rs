@@ -13,21 +13,19 @@
 // limitations under the License.
 
 use std::net::SocketAddr;
-use std::ops::Deref;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::thread;
 
 use chain::{self, ChainAdapter};
 use core::core::{self, Output};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use p2p::{self, NetAdapter, Server, PeerStore, PeerData, Capabilities, State};
+use p2p::{self, NetAdapter, Server, PeerStore, PeerData, State};
 use pool;
 use secp::pedersen::Commitment;
 use util::OneTime;
 use store;
 use sync;
-use core::global;
 use core::global::{MiningParameterMode,MINING_PARAMETER_MODE};
 
 /// Implementation of the NetAdapter for the blockchain. Gets notified when new
@@ -210,9 +208,17 @@ impl NetToChainAdapter {
 	pub fn start_sync(&self, sync: sync::Syncer) {
 		let arc_sync = Arc::new(sync);
 		self.syncer.init(arc_sync.clone());
-		thread::Builder::new().name("syncer".to_string()).spawn(move || {
-			arc_sync.run();
+		let spawn_result = thread::Builder::new().name("syncer".to_string()).spawn(move || {
+			let sync_run_result = arc_sync.run();
+			match sync_run_result {
+				Ok(_) => {}
+				Err(_) => {}
+			}
 		});
+		match spawn_result {
+			Ok(_) => {}
+			Err(_) => {}
+		}
 	}
 
 	/// Prepare options for the chain pipeline

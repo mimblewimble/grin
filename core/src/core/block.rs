@@ -24,7 +24,6 @@ use core::{Input, Output, Proof, TxKernel, Transaction, COINBASE_KERNEL, COINBAS
 use core::transaction::merkle_inputs_outputs;
 use consensus::REWARD;
 use consensus::MINIMUM_DIFFICULTY;
-use consensus::PROOFSIZE;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use ser::{self, Readable, Reader, Writeable, Writer};
