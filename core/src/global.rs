@@ -93,7 +93,6 @@ pub fn is_automated_testing_mode() -> bool {
 		return false;
 	}
 }
-<<<<<<< HEAD
 
 /// Helper function to get a nonce known to create a valid POW on 
 /// the genesis block, to prevent it taking ages. Should be fine for now
@@ -108,5 +107,3 @@ pub fn get_genesis_nonce() -> u64 {
 		MiningParameterMode::Production => 0, //TBD
 	}
 }
-=======
->>>>>>> master
