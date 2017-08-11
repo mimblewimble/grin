@@ -93,3 +93,17 @@ pub fn is_automated_testing_mode() -> bool {
 		return false;
 	}
 }
+
+/// Helper function to get a nonce known to create a valid POW on 
+/// the genesis block, to prevent it taking ages. Should be fine for now
+/// as the genesis block POW solution turns out to be the same for every new block chain
+/// at the moment
+
+pub fn get_genesis_nonce() -> u64 {
+	let param_ref=MINING_PARAMETER_MODE.read().unwrap();
+	match *param_ref {
+		MiningParameterMode::AutomatedTesting => 0, //won't make a difference
+		MiningParameterMode::UserTesting => 22141, //Magic nonce for current genesis block at cuckoo16
+		MiningParameterMode::Production => 0, //TBD
+	}
+}

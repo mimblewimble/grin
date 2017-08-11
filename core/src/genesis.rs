@@ -41,7 +41,7 @@ pub fn genesis() -> core::Block {
 			utxo_merkle: [].hash(),
 			tx_merkle: [].hash(),
 			features: core::DEFAULT_BLOCK,
-			nonce: 0,
+			nonce: global::get_genesis_nonce(),
 			pow: core::Proof::zero(proof_size), // TODO get actual PoW solution
 		},
 		inputs: vec![],

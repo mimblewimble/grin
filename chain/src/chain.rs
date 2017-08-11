@@ -85,7 +85,8 @@ impl Chain {
 				let sz = global::sizeshift();
 				let proof_size = global::proofsize();
 
-				let mut internal_miner = pow::cuckoo::Miner::new(consensus::EASINESS, sz as u32, proof_size); pow::pow_size(&mut internal_miner, &mut gen.header, diff, sz as u32).unwrap();
+				let mut internal_miner = pow::cuckoo::Miner::new(consensus::EASINESS, sz as u32, proof_size); 
+				pow::pow_size(&mut internal_miner, &mut gen.header, diff, sz as u32).unwrap();
 				chain_store.save_block(&gen)?;
 
 				// saving a new tip based on genesis
