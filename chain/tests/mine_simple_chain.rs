@@ -21,6 +21,7 @@ extern crate secp256k1zkp as secp;
 
 extern crate grin_grin as grin;
 
+use std::fs;
 use std::sync::Arc;
 use std::thread;
 use rand::os::OsRng;
@@ -37,10 +38,17 @@ use grin_core::global::MiningParameterMode;
 
 use grin_core::pow::MiningWorker;
 
+
+fn clean_output_dir(dir_name:&str){
+    let _ = fs::remove_dir_all(dir_name);
+}
+
 #[test]
 fn mine_empty_chain() {
-	let _ = env_logger::init();
+    let _ = env_logger::init();
+	clean_output_dir(".grin");
     global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+
 	let mut rng = OsRng::new().unwrap();
 	let chain = grin_chain::Chain::init(".grin".to_string(), Arc::new(NoopAdapter {}))
 		.unwrap();
@@ -84,7 +92,9 @@ fn mine_empty_chain() {
 
 #[test]
 fn mine_forks() {
-	let _ = env_logger::init();
+    let _ = env_logger::init();
+	clean_output_dir(".grin2");
+
 	let mut rng = OsRng::new().unwrap();
 	let chain = grin_chain::Chain::init(".grin2".to_string(), Arc::new(NoopAdapter {}))
 		.unwrap();
