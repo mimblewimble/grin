@@ -41,6 +41,7 @@ pub struct ChainKVStore {
 }
 
 impl ChainKVStore {
+	/// Create new chain store
 	pub fn new(root_path: String) -> Result<ChainKVStore, Error> {
 		let db = grin_store::Store::open(format!("{}/{}", root_path, STORE_SUBPATH).as_str())?;
 		Ok(ChainKVStore { db: db })
@@ -152,7 +153,7 @@ impl ChainStore for ChainKVStore {
 				self.db.put_ser(
 					&u64_to_key(HEADER_HEIGHT_PREFIX, real_prev.height),
 					&real_prev,
-				);
+				).unwrap();
 				prev_h = real_prev.previous;
 				prev_height = real_prev.height - 1;
 			} else {
@@ -184,7 +185,7 @@ impl DifficultyIter {
 }
 
 impl Iterator for DifficultyIter {
-	type Item = Result<(i64, Difficulty), TargetError>;
+	type Item = Result<(u64, Difficulty), TargetError>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		let bhe = self.store.get_block_header(&self.next);
@@ -195,7 +196,7 @@ impl Iterator for DifficultyIter {
 					return None;
 				}
 				self.next = bh.previous;
-				Some(Ok((bh.timestamp.to_timespec().sec, bh.difficulty)))
+				Some(Ok((bh.timestamp.to_timespec().sec as u64, bh.difficulty)))
 			}
 		}
 	}

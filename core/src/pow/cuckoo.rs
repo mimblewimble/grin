@@ -20,10 +20,8 @@
 use std::collections::HashSet;
 use std::cmp;
 
-use crypto::digest::Digest;
-use crypto::sha2::Sha256;
+use blake2;
 
-use consensus::PROOFSIZE;
 use core::Proof;
 use pow::siphash::siphash24;
 use pow::MiningWorker;
@@ -59,10 +57,8 @@ impl Cuckoo {
 	/// serialized block header.
 	pub fn new(header: &[u8], sizeshift: u32) -> Cuckoo {
 		let size = 1 << sizeshift;
-		let mut hasher = Sha256::new();
-		let mut hashed = [0; 32];
-		hasher.input(header);
-		hasher.result(&mut hashed);
+        let hashed=blake2::blake2b::blake2b(32, &[], header);
+        let hashed=hashed.as_bytes();
 
 		let k0 = u8_to_u64(hashed, 0);
 		let k1 = u8_to_u64(hashed, 8);
@@ -101,9 +97,9 @@ impl Cuckoo {
 	pub fn verify(&self, proof: Proof, ease: u64) -> bool {
 		let easiness = ease * (self.size as u64) / 100;
 		let nonces = proof.to_u64s();
-		let mut us = [0; PROOFSIZE];
-		let mut vs = [0; PROOFSIZE];
-		for n in 0..PROOFSIZE {
+		let mut us = vec![0; proof.proof_size];
+		let mut vs = vec![0; proof.proof_size];
+		for n in 0..proof.proof_size {
 			if nonces[n] >= easiness || (n != 0 && nonces[n] <= nonces[n - 1]) {
 				return false;
 			}
@@ -111,10 +107,10 @@ impl Cuckoo {
 			vs[n] = self.new_node(nonces[n], 1);
 		}
 		let mut i = 0;
-		let mut count = PROOFSIZE;
+		let mut count = proof.proof_size;
 		loop {
 			let mut j = i;
-			for k in 0..PROOFSIZE {
+			for k in 0..proof.proof_size {
 				// find unique other j with same vs[j]
 				if k != i && vs[k] == vs[i] {
 					if j != i {
@@ -127,7 +123,7 @@ impl Cuckoo {
 				return false;
 			}
 			i = j;
-			for k in 0..PROOFSIZE {
+			for k in 0..proof.proof_size {
 				// find unique other i with same us[i]
 				if k != j && us[k] == us[j] {
 					if i != j {
@@ -154,6 +150,7 @@ impl Cuckoo {
 /// tests, being impractical with sizes greater than 2^22.
 pub struct Miner {
 	easiness: u64,
+	proof_size: usize,
 	cuckoo: Option<Cuckoo>,
 	graph: Vec<u32>,
 	sizeshift: u32,
@@ -163,7 +160,8 @@ impl MiningWorker for Miner {
 
 	/// Creates a new miner
 	fn new(ease: u32, 
-		   sizeshift: u32) -> Miner {
+		   sizeshift: u32,
+		   proof_size: usize) -> Miner {
 		let size = 1 << sizeshift;
 		let graph = vec![0; size + 1];
 		let easiness = (ease as u64) * (size as u64) / 100;
@@ -172,6 +170,7 @@ impl MiningWorker for Miner {
 			cuckoo: None,
 			graph: graph,
 			sizeshift: sizeshift,
+			proof_size: proof_size,
 		}
 	}
 	
@@ -186,7 +185,7 @@ impl MiningWorker for Miner {
 /// What type of cycle we have found?
 enum CycleSol {
 	/// A cycle of the right length is a valid proof.
-	ValidProof([u32; PROOFSIZE]),
+	ValidProof(Vec<u32>),
 	/// A cycle of the wrong length is great, but not a proof.
 	InvalidCycle(usize),
 	/// No cycles have been found.
@@ -214,7 +213,7 @@ impl Miner {
 			let sol = self.find_sol(nu, &us, nv, &vs);
 			match sol {
 				CycleSol::ValidProof(res) => {
-					return Ok(Proof(res))
+					return Ok(Proof::new(res.to_vec()));
 				},
 				CycleSol::InvalidCycle(_) => continue,
 				CycleSol::NoCycle => {
@@ -266,7 +265,7 @@ impl Miner {
 				nu += 1;
 				nv += 1;
 			}
-			if nu + nv + 1 == PROOFSIZE {
+			if nu + nv + 1 == self.proof_size {
 				self.solution(&us, nu as u32, &vs, nv as u32)
 			} else {
 				CycleSol::InvalidCycle(nu + nv + 1)
@@ -299,7 +298,7 @@ impl Miner {
 			});
 		}
 		let mut n = 0;
-		let mut sol = [0; PROOFSIZE];
+		let mut sol = vec![0; self.proof_size];
 		for nonce in 0..self.easiness {
 			let edge = self.cuckoo.as_mut().unwrap().new_edge(nonce);
 			if cycle.contains(&edge) {
@@ -308,7 +307,7 @@ impl Miner {
 				cycle.remove(&edge);
 			}
 		}
-		return if n == PROOFSIZE {
+		return if n == self.proof_size {
 			CycleSol::ValidProof(sol)
 		} else {
 			CycleSol::NoCycle
@@ -318,7 +317,7 @@ impl Miner {
 
 
 /// Utility to transform a 8 bytes of a byte array into a u64.
-fn u8_to_u64(p: [u8; 32], i: usize) -> u64 {
+fn u8_to_u64(p:&[u8], i: usize) -> u64 {
 	(p[i] as u64) | (p[i + 1] as u64) << 8 | (p[i + 2] as u64) << 16 | (p[i + 3] as u64) << 24 |
 	(p[i + 4] as u64) << 32 | (p[i + 5] as u64) << 40 |
 	(p[i + 6] as u64) << 48 | (p[i + 7] as u64) << 56
@@ -329,68 +328,73 @@ mod test {
 	use super::*;
 	use core::Proof;
 
-	static V1: Proof = Proof([0xe13, 0x410c, 0x7974, 0x8317, 0xb016, 0xb992, 0xe3c8, 0x1038a,
-	                          0x116f0, 0x15ed2, 0x165a2, 0x17793, 0x17dd1, 0x1f885, 0x20932,
-	                          0x20936, 0x2171b, 0x28968, 0x2b184, 0x30b8e, 0x31d28, 0x35782,
-	                          0x381ea, 0x38321, 0x3b414, 0x3e14b, 0x43615, 0x49a51, 0x4a319,
-	                          0x58271, 0x5dbb9, 0x5dbcf, 0x62db4, 0x653d2, 0x655f6, 0x66382,
-	                          0x7057d, 0x765b0, 0x79c7c, 0x83167, 0x86e7b, 0x8a5f4]);
-	static V2: Proof = Proof([0x33b8, 0x3fd9, 0x8f2b, 0xba0d, 0x11e2d, 0x1d51d, 0x2786e, 0x29625,
-	                          0x2a862, 0x2a972, 0x2e6d7, 0x319df, 0x37ce7, 0x3f771, 0x4373b,
-	                          0x439b7, 0x48626, 0x49c7d, 0x4a6f1, 0x4a808, 0x4e518, 0x519e3,
-	                          0x526bb, 0x54988, 0x564e9, 0x58a6c, 0x5a4dd, 0x63fa2, 0x68ad1,
-	                          0x69e52, 0x6bf53, 0x70841, 0x76343, 0x763a4, 0x79681, 0x7d006,
-	                          0x7d633, 0x7eebe, 0x7fe7c, 0x811fa, 0x863c1, 0x8b149]);
-	static V3: Proof = Proof([0x24ae, 0x5180, 0x9f3d, 0xd379, 0x102c9, 0x15787, 0x16df4, 0x19509,
-	                          0x19a78, 0x235a0, 0x24210, 0x24410, 0x2567f, 0x282c3, 0x2d986,
-	                          0x2efde, 0x319d7, 0x334d7, 0x336dd, 0x34296, 0x35809, 0x3ad40,
-	                          0x46d81, 0x48c92, 0x4b374, 0x4c353, 0x4fe4c, 0x50e4f, 0x53202,
-	                          0x5d167, 0x6527c, 0x6a8b5, 0x6c70d, 0x76d90, 0x794f4, 0x7c411,
-	                          0x7c5d4, 0x7f59f, 0x7fead, 0x872d8, 0x875b4, 0x95c6b]);
+
+	static V1:[u32;42] = [0x1fe9, 0x2050, 0x4581, 0x6322, 0x65ab, 0xb3c1, 0xc1a4, 
+			    0xe257, 0x106ae, 0x17b11, 0x202d4, 0x2705d, 0x2deb2, 0x2f80e, 
+			 	0x32298, 0x34782, 0x35c5a, 0x37458, 0x38f28, 0x406b2, 0x40e34, 
+				0x40fc6, 0x42220, 0x42d13, 0x46c0f, 0x4fd47, 0x55ad2, 0x598f7, 
+				0x5aa8f, 0x62aa3, 0x65725, 0x65dcb, 0x671c7, 0x6eb20, 0x752fe, 
+				0x7594f, 0x79b9c, 0x7f775, 0x81635, 0x8401c, 0x844e5, 0x89fa8];
+	static V2:[u32;42] = [0x2a37, 0x7557, 0xa3c3, 0xfce6, 0x1248e, 0x15837, 0x1827f, 
+				0x18a93, 0x1a7dd, 0x1b56b, 0x1ceb4, 0x1f962, 0x1fe2a, 0x29cb9, 
+				0x2f30e, 0x2f771, 0x336bf, 0x34355, 0x391d7, 0x39495, 0x3be0c, 
+				0x463be, 0x4d0c2, 0x4eead, 0x50214, 0x520de, 0x52a86, 0x53818, 
+				0x53b3b, 0x54c0b, 0x572fa, 0x5d79c, 0x5e3c2, 0x6769e, 0x6a0fe, 
+				0x6d835, 0x6fc7c, 0x70f03, 0x79d4a, 0x7b03e, 0x81e09, 0x9bd44];
+	static V3:[u32;42] = [0x8158, 0x9f18, 0xc4ba, 0x108c7, 0x11caa, 0x13b82, 0x1618f, 
+				0x1c83b, 0x1ec89, 0x24354, 0x28864, 0x2a0fb, 0x2ce50, 0x2e8fa, 
+				0x32b36, 0x343e6, 0x34dc9, 0x36881, 0x3ffca, 0x40f79, 0x42721, 
+				0x43b8c, 0x44b9d, 0x47ed3, 0x4cd34, 0x5278a, 0x5ab64, 0x5b4d4, 
+				0x5d842, 0x5fa33, 0x6464e, 0x676ee, 0x685d6, 0x69df0, 0x6a5fd, 
+				0x6bda3, 0x72544, 0x77974, 0x7908c, 0x80e67, 0x81ef4, 0x8d882];
 	// cuckoo28 at 50% edges of letter 'u'
-	static V4: Proof = Proof([0x1abd16, 0x7bb47e, 0x860253, 0xfad0b2, 0x121aa4d, 0x150a10b,
-	                          0x20605cb, 0x20ae7e3, 0x235a9be, 0x2640f4a, 0x2724c36, 0x2a6d38c,
-	                          0x2c50b28, 0x30850f2, 0x309668a, 0x30c85bd, 0x345f42c, 0x3901676,
-	                          0x432838f, 0x472158a, 0x4d04e9d, 0x4d6a987, 0x4f577bf, 0x4fbc49c,
-	                          0x593978d, 0x5acd98f, 0x5e60917, 0x6310602, 0x6385e88, 0x64f149c,
-	                          0x66d472e, 0x68e4df9, 0x6b4a89c, 0x6bb751d, 0x6e09792, 0x6e57e1d,
-	                          0x6ecfcdd, 0x70abddc, 0x7291dfd, 0x788069e, 0x79a15b1, 0x7d1a1e9]);
+	static V4:[u32;42] = [0x1CBBFD, 0x2C5452, 0x520338, 0x6740C5, 0x8C6997, 0xC77150, 0xFD4972, 
+				0x1060FA7, 0x11BFEA0, 0x1343E8D, 0x14CE02A, 0x1533515, 0x1715E61, 0x1996D9B, 
+				0x1CB296B, 0x1FCA180, 0x209A367, 0x20AD02E, 0x23CD2E4, 0x2A3B360, 0x2DD1C0C, 
+				0x333A200, 0x33D77BC, 0x3620C78, 0x3DD7FB8, 0x3FBFA49, 0x41BDED2, 0x4A86FD9, 
+				0x570DE24, 0x57CAB86, 0x594B886, 0x5C74C94, 0x5DE7572, 0x60ADD6F, 0x635918B, 
+				0x6C9E120, 0x6EFA583, 0x7394ACA, 0x7556A23, 0x77F70AA, 0x7CF750A, 0x7F60790];
 
 	/// Find a 42-cycle on Cuckoo20 at 75% easiness and verifiy against a few
 	/// known cycle proofs
 	/// generated by other implementations.
 	#[test]
 	fn mine20_vectors() {
-		let nonces1 = Miner::new(75, 20).mine(&[49]).unwrap();
-		assert_eq!(V1, nonces1);
+		let nonces1 = Miner::new(75, 20, 42).mine(&[49]).unwrap();
+		assert_eq!(Proof::new(V1.to_vec()), nonces1);
 
-		let nonces2 = Miner::new(70, 20).mine(&[50]).unwrap();
-		assert_eq!(V2, nonces2);
+		let nonces2 = Miner::new(70, 20, 42).mine(&[50]).unwrap();
+		assert_eq!(Proof::new(V2.to_vec()), nonces2);
 
-		let nonces3 = Miner::new(70, 20).mine(&[51]).unwrap();
-		assert_eq!(V3, nonces3);
+		let nonces3 = Miner::new(70, 20, 42).mine(&[51]).unwrap();
+		assert_eq!(Proof::new(V3.to_vec()), nonces3);
 	}
 
 	#[test]
 	fn validate20_vectors() {
-		assert!(Cuckoo::new(&[49], 20).verify(V1.clone(), 75));
-		assert!(Cuckoo::new(&[50], 20).verify(V2.clone(), 70));
-		assert!(Cuckoo::new(&[51], 20).verify(V3.clone(), 70));
+		assert!(Cuckoo::new(&[49], 20).verify(Proof::new(V1.to_vec().clone()), 75));
+		assert!(Cuckoo::new(&[50], 20).verify(Proof::new(V2.to_vec().clone()), 70));
+		assert!(Cuckoo::new(&[51], 20).verify(Proof::new(V3.to_vec().clone()), 70));
 	}
 
 	#[test]
 	fn validate28_vectors() {
-		assert!(Cuckoo::new(&[117], 28).verify(V4.clone(), 50));
+		let mut test_header=[0;32];
+		test_header[0]=24;
+		assert!(Cuckoo::new(&test_header, 28).verify(Proof::new(V4.to_vec().clone()), 50));
 	}
 
 	#[test]
 	fn validate_fail() {
 		// edge checks
-		assert!(!Cuckoo::new(&[49], 20).verify(Proof([0; 42]), 75));
-		assert!(!Cuckoo::new(&[49], 20).verify(Proof([0xffff; 42]), 75));
+		assert!(!Cuckoo::new(&[49], 20).verify(Proof::new(vec![0; 42]), 75));
+		assert!(!Cuckoo::new(&[49], 20).verify(Proof::new(vec![0xffff; 42]), 75));
 		// wrong data for proof
-		assert!(!Cuckoo::new(&[50], 20).verify(V1.clone(), 75));
-		assert!(!Cuckoo::new(&[117], 20).verify(V4.clone(), 50));
+		assert!(!Cuckoo::new(&[50], 20).verify(Proof::new(V1.to_vec().clone()), 75));
+		let mut test_header=[0;32];
+		test_header[0]=24;
+		assert!(!Cuckoo::new(&test_header, 20).verify(Proof::new(V4.to_vec().clone()), 50));
+		
 	}
 
 	#[test]
@@ -398,13 +402,13 @@ mod test {
 		// cuckoo20
 		for n in 1..5 {
 			let h = [n; 32];
-			let nonces = Miner::new(75, 20).mine(&h).unwrap();
+			let nonces = Miner::new(75, 20, 42).mine(&h).unwrap();
 			assert!(Cuckoo::new(&h, 20).verify(nonces, 75));
 		}
 		// cuckoo18
 		for n in 1..5 {
 			let h = [n; 32];
-			let nonces = Miner::new(75, 18).mine(&h).unwrap();
+			let nonces = Miner::new(75, 18, 42).mine(&h).unwrap();
 			assert!(Cuckoo::new(&h, 18).verify(nonces, 75));
 		}
 	}

@@ -30,6 +30,9 @@ use pipe;
 use store;
 use types::*;
 
+use core::global;
+use core::global::{MiningParameterMode,MINING_PARAMETER_MODE};
+
 const MAX_ORPHANS: usize = 20;
 
 /// Helper macro to transform a Result into an Option with None in case
@@ -54,8 +57,6 @@ pub struct Chain {
 	head: Arc<Mutex<Tip>>,
 	block_process_lock: Arc<Mutex<bool>>,
 	orphans: Arc<Mutex<VecDeque<(Options, Block)>>>,
-
-	test_mode: bool,
 }
 
 unsafe impl Sync for Chain {}
@@ -68,7 +69,6 @@ impl Chain {
 	/// on
 	/// the genesis block if necessary.
 	pub fn init(
-		test_mode: bool,
 		db_root: String,
 		adapter: Arc<ChainAdapter>,
 	) -> Result<Chain, Error> {
@@ -81,12 +81,11 @@ impl Chain {
 				info!("No genesis block found, creating and saving one.");
 				let mut gen = genesis::genesis();
 				let diff = gen.header.difficulty.clone();
-				let sz = if test_mode {
-					consensus::TEST_SIZESHIFT
-				} else {
-					consensus::DEFAULT_SIZESHIFT
-				};
-				let mut internal_miner = pow::cuckoo::Miner::new(consensus::EASINESS, sz as u32);
+				
+				let sz = global::sizeshift();
+				let proof_size = global::proofsize();
+
+				let mut internal_miner = pow::cuckoo::Miner::new(consensus::EASINESS, sz as u32, proof_size); 
 				pow::pow_size(&mut internal_miner, &mut gen.header, diff, sz as u32).unwrap();
 				chain_store.save_block(&gen)?;
 
@@ -99,7 +98,8 @@ impl Chain {
 			Err(e) => return Err(Error::StoreErr(e)),
 		};
 
-		let head = chain_store.head()?;
+        // TODO - confirm this was safe to remove based on code above?
+		// let head = chain_store.head()?;
 
 		Ok(Chain {
 			store: Arc::new(chain_store),
@@ -107,7 +107,6 @@ impl Chain {
 			head: Arc::new(Mutex::new(head)),
 			block_process_lock: Arc::new(Mutex::new(true)),
 			orphans: Arc::new(Mutex::new(VecDeque::with_capacity(MAX_ORPHANS + 1))),
-			test_mode: test_mode,
 		})
 	}
 
@@ -158,10 +157,14 @@ impl Chain {
 	}
 
 	fn ctx_from_head(&self, head: Tip, opts: Options) -> pipe::BlockContext {
-		let mut opts_in = opts;
-		if self.test_mode {
-			opts_in = opts_in | EASY_POW;
-		}
+		let opts_in = opts;
+		let param_ref=MINING_PARAMETER_MODE.read().unwrap();
+		let opts_in = match *param_ref {
+			MiningParameterMode::AutomatedTesting => opts_in | EASY_POW,
+			MiningParameterMode::UserTesting => opts_in | EASY_POW,
+			MiningParameterMode::Production => opts_in,
+		};
+
 		pipe::BlockContext {
 			opts: opts_in,
 			store: self.store.clone(),
@@ -171,11 +174,11 @@ impl Chain {
 		}
 	}
 
-	/// Pop orphans out of the queue and check if we can now accept them.
+    /// Pop orphans out of the queue and check if we can now accept them.
 	fn check_orphans(&self) {
 		// first check how many we have to retry, unfort. we can't extend the lock
 		// in the loop as it needs to be freed before going in process_block
-		let mut orphan_count = 0;
+		let orphan_count;
 		{
 			let orphans = self.orphans.lock().unwrap();
 			orphan_count = orphans.len();
@@ -183,13 +186,13 @@ impl Chain {
 
 		// pop each orphan and retry, if still orphaned, will be pushed again
 		for _ in 0..orphan_count {
-			let mut popped = None;
+			let popped;
 			{
 				let mut orphans = self.orphans.lock().unwrap();
 				popped = orphans.pop_back();
 			}
 			if let Some((opts, orphan)) = popped {
-				self.process_block(orphan, opts);
+				let _process_result = self.process_block(orphan, opts);
 			}
 		}
 	}

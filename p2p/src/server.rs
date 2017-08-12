@@ -76,7 +76,7 @@ impl Server {
 
 		// main peer acceptance future handling handshake
 		let hp = h.clone();
-		let peers = socket.incoming().map_err(From::from).map(move |(conn, addr)| {
+		let peers = socket.incoming().map_err(From::from).map(move |(conn, _)| {
 			let adapter = adapter.clone();
 			let total_diff = adapter.total_difficulty();
 			let peers = peers.clone();
@@ -254,7 +254,7 @@ impl Server {
 		for p in peers.deref() {
 			p.stop();
 		}
-		self.stop.into_inner().unwrap().complete(());
+		self.stop.into_inner().unwrap().send(()).unwrap();
 	}
 }
 

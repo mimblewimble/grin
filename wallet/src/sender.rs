@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::convert::From;
-use secp::{self, Secp256k1};
+use secp::{self};
 use secp::key::SecretKey;
 
 use checker;
@@ -29,21 +29,18 @@ use api;
 /// recipients wallet receiver (to be implemented).
 pub fn issue_send_tx(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64, dest: String) -> Result<(), Error> {
 	checker::refresh_outputs(&config, ext_key);
-	
+
 	let (tx, blind_sum) = build_send_tx(config, ext_key, amount)?;
 	let json_tx = partial_tx_to_json(amount, blind_sum, tx);
-	
+
 	if dest == "stdout" {
 		println!("{}", json_tx);
 	} else if &dest[..4] == "http" {
-		let url = format!("{}/v1/receive/receive_json_tx",
-			                  &dest);
+		let url = format!("{}/v1/receive/receive_json_tx", &dest);
 		debug!("Posting partial transaction to {}", url);
 		let request = WalletReceiveRequest::PartialTransaction(json_tx);
-		let res: CbData = api::client::post(url.as_str(),
-			                                    &request)
-				.expect(&format!("Wallet receiver at {} unreachable, could not send transaction. Is it running?", url));
-			
+		let _: CbData = api::client::post(url.as_str(), &request)
+			.expect(&format!("Wallet receiver at {} unreachable, could not send transaction. Is it running?", url));
 	}
 	Ok(())
 }

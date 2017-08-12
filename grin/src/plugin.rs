@@ -22,9 +22,7 @@ use std::env;
 use core::pow::cuckoo;
 use core::pow::cuckoo::Error;
 use core::pow::MiningWorker;
-use core::consensus::{TEST_SIZESHIFT, DEFAULT_SIZESHIFT};
-
-use std::collections::HashMap;
+use core::global;
 
 use core::core::Proof;
 use types::{MinerConfig, ServerConfig};
@@ -35,9 +33,7 @@ use cuckoo_miner::{
 	CuckooMiner,
 	CuckooPluginManager,
 	CuckooMinerConfig,
-	CuckooMinerError,
-	CuckooMinerSolution,
-	CuckooPluginCapabilities};
+	CuckooMinerSolution};
 
 //For now, we're just going to keep a static reference around to the loaded config
 //And not allow querying the plugin directory twice once a plugin has been selected
@@ -48,22 +44,27 @@ lazy_static!{
     static ref LOADED_CONFIG: Mutex<Option<CuckooMinerConfig>> = Mutex::new(None);
 }
 
+/// plugin miner
 pub struct PluginMiner {
-	miner:Option<CuckooMiner>,
+	/// the miner
+	pub miner:Option<CuckooMiner>,
 	last_solution: CuckooMinerSolution,
+	config: CuckooMinerConfig,
 }
 
 impl Default for PluginMiner {
 	fn default() -> PluginMiner {
 		PluginMiner {
 			miner: None,
+			config: CuckooMinerConfig::new(),
 			last_solution: CuckooMinerSolution::new(),
 		}
 	}
 }
 
 impl PluginMiner {
-	pub fn init(&mut self, miner_config: MinerConfig, server_config: ServerConfig){
+	/// Init the plugin miner
+	pub fn init(&mut self, miner_config: MinerConfig, _server_config: ServerConfig){
 				//Get directory of executable
 		let mut exe_path=env::current_exe().unwrap();
 		exe_path.pop();
@@ -81,8 +82,8 @@ impl PluginMiner {
 
 		//First, load and query the plugins in the given directory
 		//These should all be stored in 'deps' at the moment relative
-		//to the executable path, though they should appear somewhere else 
-		//when packaging is more//thought out 
+		//to the executable path, though they should appear somewhere else
+		//when packaging is more//thought out
 
 		let mut loaded_config_ref = LOADED_CONFIG.lock().unwrap();
 
@@ -98,18 +99,12 @@ impl PluginMiner {
     	let mut plugin_manager = CuckooPluginManager::new().unwrap();
     	let result=plugin_manager.load_plugin_dir(plugin_install_path);
 
-		if let Err(e) = result {
+		if let Err(_) = result {
 			error!("Unable to load cuckoo-miner plugin directory, either from configuration or [exe_path]/deps.");
 			panic!("Unable to load plugin directory... Please check configuration values");
 		}
 
-    	//The miner implementation needs to match what's in the consensus sizeshift value
-		//
-		let sz = if server_config.test_mode {
-			TEST_SIZESHIFT
-		} else {
-			DEFAULT_SIZESHIFT
-		};
+		let sz = global::sizeshift();
 
 		//So this is built dynamically based on the plugin implementation
 		//type and the consensus sizeshift
@@ -119,7 +114,7 @@ impl PluginMiner {
 		//insert it into the miner configuration being created below
 
     	let mut config = CuckooMinerConfig::new();
-	
+
         info!("Mining using plugin: {}", caps[0].full_path.clone());
     	config.plugin_full_path = caps[0].full_path.clone();
 		if let Some(l) = miner_config.cuckoo_miner_parameter_list {
@@ -131,16 +126,29 @@ impl PluginMiner {
 		*loaded_config_ref=Some(config.clone());
 
 		//this will load the associated plugin
-		let result=CuckooMiner::new(config);
+		let result=CuckooMiner::new(config.clone());
 		if let Err(e) = result {
 			error!("Error initializing mining plugin: {:?}", e);
 			error!("Accepted values are: {:?}", caps[0].parameters);
 			panic!("Unable to init mining plugin.");
 		}
 
-		
+		self.config=config.clone();
 		self.miner=Some(result.unwrap());
-	} 
+	}
+
+	/// Get the miner
+	pub fn get_consumable(&mut self)->CuckooMiner{
+
+		//this will load the associated plugin
+		let result=CuckooMiner::new(self.config.clone());
+		if let Err(e) = result {
+			error!("Error initializing mining plugin: {:?}", e);
+			panic!("Unable to init mining plugin.");
+		}
+		result.unwrap()
+	}
+
 }
 
 impl MiningWorker for PluginMiner {
@@ -150,8 +158,9 @@ impl MiningWorker for PluginMiner {
 	/// version of the miner for now, though this should become
 	/// configurable somehow
 
-	fn new(ease: u32, 
-		   sizeshift: u32) -> Self {
+	fn new(_ease: u32,
+		   _sizeshift: u32,
+		   _proof_size: usize) -> Self {
 		PluginMiner::default()
 	}
 
@@ -161,9 +170,8 @@ impl MiningWorker for PluginMiner {
 	fn mine(&mut self, header: &[u8]) -> Result<Proof, cuckoo::Error> {
         let result = self.miner.as_mut().unwrap().mine(&header, &mut self.last_solution).unwrap();
 		if result == true {
-            return Ok(Proof(self.last_solution.solution_nonces));
+            return Ok(Proof::new(self.last_solution.solution_nonces.to_vec()));
         }
         Err(Error::NoSolution)
 	}
 }
-

@@ -21,35 +21,42 @@ extern crate secp256k1zkp as secp;
 
 extern crate grin_grin as grin;
 
+use std::fs;
 use std::sync::Arc;
 use std::thread;
 use rand::os::OsRng;
 
 use grin_chain::types::*;
-use grin_chain::store;
 use grin_core::core::hash::Hashed;
 use grin_core::core::target::Difficulty;
 use grin_core::pow;
 use grin_core::core;
 use grin_core::consensus;
-
-use grin::{ServerConfig, MinerConfig};
-use grin::PluginMiner;
+use grin_core::pow::cuckoo;
+use grin_core::global;
+use grin_core::global::MiningParameterMode;
 
 use grin_core::pow::MiningWorker;
 
+
+fn clean_output_dir(dir_name:&str){
+    let _ = fs::remove_dir_all(dir_name);
+}
+
 #[test]
 fn mine_empty_chain() {
-	env_logger::init();
+    let _ = env_logger::init();
+	clean_output_dir(".grin");
+    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+
 	let mut rng = OsRng::new().unwrap();
-	let chain = grin_chain::Chain::init(true, ".grin".to_string(), Arc::new(NoopAdapter {}))
+	let chain = grin_chain::Chain::init(".grin".to_string(), Arc::new(NoopAdapter {}))
 		.unwrap();
 
 	// mine and add a few blocks
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
 
-	let server_config = ServerConfig::default();
 	let mut miner_config = grin::MinerConfig {
 		enable_mining: true,
 		burn_reward: true,
@@ -57,9 +64,7 @@ fn mine_empty_chain() {
 	};
 	miner_config.cuckoo_miner_plugin_dir = Some(String::from("../target/debug/deps"));
 
-	let mut cuckoo_miner = PluginMiner::new(consensus::EASINESS, consensus::TEST_SIZESHIFT as u32);
-	cuckoo_miner.init(miner_config, server_config);
-
+	let mut cuckoo_miner = cuckoo::Miner::new(consensus::EASINESS, global::sizeshift() as u32, global::proofsize());
 	for n in 1..4 {
 		let prev = chain.head_header().unwrap();
 		let mut b = core::Block::new(&prev, vec![], reward_key).unwrap();
@@ -72,7 +77,7 @@ fn mine_empty_chain() {
 			&mut cuckoo_miner,
 			&mut b.header,
 			difficulty,
-			consensus::TEST_SIZESHIFT as u32,
+			global::sizeshift() as u32,
 		).unwrap();
 
 		let bhash = b.hash();
@@ -87,9 +92,11 @@ fn mine_empty_chain() {
 
 #[test]
 fn mine_forks() {
-	env_logger::init();
+    let _ = env_logger::init();
+	clean_output_dir(".grin2");
+
 	let mut rng = OsRng::new().unwrap();
-	let chain = grin_chain::Chain::init(true, ".grin2".to_string(), Arc::new(NoopAdapter {}))
+	let chain = grin_chain::Chain::init(".grin2".to_string(), Arc::new(NoopAdapter {}))
 		.unwrap();
 
 	// mine and add a few blocks

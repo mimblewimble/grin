@@ -13,8 +13,7 @@
 // limitations under the License.
 
 use std::net::SocketAddr;
-use std::ops::Deref;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::io;
 
@@ -22,18 +21,18 @@ use chain::{self, ChainAdapter};
 use core::core::{self, Output};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use p2p::{self, NetAdapter, Server, PeerStore, PeerData, Capabilities, State};
+use p2p::{self, NetAdapter, Server, PeerStore, PeerData, State};
 use pool;
 use secp::pedersen::Commitment;
 use util::OneTime;
 use store;
 use sync;
+use core::global::{MiningParameterMode,MINING_PARAMETER_MODE};
 
 /// Implementation of the NetAdapter for the blockchain. Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
 /// implementations.
 pub struct NetToChainAdapter {
-	test_mode: bool,
 	chain: Arc<chain::Chain>,
 	peer_store: Arc<PeerStore>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
@@ -206,13 +205,11 @@ impl NetAdapter for NetToChainAdapter {
 }
 
 impl NetToChainAdapter {
-	pub fn new(test_mode: bool,
-	           chain_ref: Arc<chain::Chain>,
+	pub fn new(chain_ref: Arc<chain::Chain>,
 	           tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	           peer_store: Arc<PeerStore>)
 	           -> NetToChainAdapter {
 		NetToChainAdapter {
-			test_mode: test_mode,
 			chain: chain_ref,
 			peer_store: peer_store,
 			tx_pool: tx_pool,
@@ -225,21 +222,32 @@ impl NetToChainAdapter {
 	pub fn start_sync(&self, sync: sync::Syncer) {
 		let arc_sync = Arc::new(sync);
 		self.syncer.init(arc_sync.clone());
-		thread::Builder::new().name("syncer".to_string()).spawn(move || {
-			arc_sync.run();
+		let spawn_result = thread::Builder::new().name("syncer".to_string()).spawn(move || {
+			let sync_run_result = arc_sync.run();
+			match sync_run_result {
+				Ok(_) => {}
+				Err(_) => {}
+			}
 		});
+		match spawn_result {
+			Ok(_) => {}
+			Err(_) => {}
+		}
 	}
 
 	/// Prepare options for the chain pipeline
 	fn chain_opts(&self) -> chain::Options {
-		let mut opts = if self.syncer.borrow().syncing() {
+		let opts = if self.syncer.borrow().syncing() {
 			chain::SYNC
 		} else {
 			chain::NONE
 		};
-		if self.test_mode {
-			opts = opts | chain::EASY_POW;
-		}
+		let param_ref=MINING_PARAMETER_MODE.read().unwrap();
+		let opts = match *param_ref {
+			MiningParameterMode::AutomatedTesting => opts | chain::EASY_POW,
+			MiningParameterMode::UserTesting => opts | chain::EASY_POW,
+			MiningParameterMode::Production => opts,
+		};
 		opts
 	}
 }

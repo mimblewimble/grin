@@ -19,6 +19,7 @@ use api;
 use chain;
 use p2p;
 use store;
+use core::global::MiningParameterMode;
 
 /// Error type wrapping underlying module errors.
 #[derive(Debug)]
@@ -79,11 +80,11 @@ pub struct ServerConfig {
 	pub api_http_addr: String,
 
 	/// Setup the server for tests and testnet
-	pub test_mode: bool,
+	pub mining_parameter_mode: Option<MiningParameterMode>,
 
 	/// Method used to get the list of seed nodes for initial bootstrap.
 	pub seeding_type: Seeding,
-	
+
 	/// The list of seed nodes, if using Seeding as a seed type
 	pub seeds: Option<Vec<String>>,
 
@@ -106,6 +107,9 @@ pub struct MinerConfig {
 
 	/// Whether to use the cuckoo-miner crate and plugin for mining
 	pub use_cuckoo_miner: bool,
+
+	/// Whether to use the async version of mining
+	pub cuckoo_miner_async_mode: Option<bool>,
 
 	/// The location in which cuckoo miner plugins are stored
 	pub cuckoo_miner_plugin_dir: Option<String>,
@@ -140,7 +144,7 @@ impl Default for ServerConfig {
 			seeds: None,
 			p2p_config: Some(p2p::P2PConfig::default()),
 			mining_config: Some(MinerConfig::default()),
-			test_mode: true,
+			mining_parameter_mode: Some(MiningParameterMode::Production),
 		}
 	}
 }
@@ -150,6 +154,7 @@ impl Default for MinerConfig {
 		MinerConfig {
 			enable_mining: false,
 			use_cuckoo_miner: false,
+			cuckoo_miner_async_mode: None,
 			cuckoo_miner_plugin_dir: None,
 			cuckoo_miner_plugin_type: None,
 			cuckoo_miner_parameter_list: None,
@@ -168,6 +173,8 @@ impl Default for MinerConfig {
 
 #[derive(Clone)]
 pub struct ServerStats {
+	/// Number of peers
 	pub peer_count:u32,
+	/// Chain head
 	pub head: chain::Tip,
 }

@@ -24,12 +24,12 @@ use futures;
 use futures::{Stream, Future};
 use futures::stream;
 use futures::sync::mpsc::{Sender, UnboundedSender, UnboundedReceiver};
-use tokio_core::io::{WriteHalf, ReadHalf, write_all, read_exact};
 use tokio_core::net::TcpStream;
+use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_io::io::{read_exact, write_all};
 use tokio_timer::{Timer, TimerError};
-use tokio_io::*;
 
-use core::core::hash::{Hash, ZERO_HASH};
+use core::core::hash::Hash;
 use core::ser;
 use msg::*;
 use types::Error;
@@ -65,6 +65,7 @@ impl<F> Handler for F
 /// A higher level connection wrapping the TcpStream. Maintains the amount of
 /// data transmitted and deals with the low-level task of sending and
 /// receiving data, parsing message headers and timeouts.
+#[allow(dead_code)]
 pub struct Connection {
 	// Channel to push bytes to the remote peer
 	outbound_chan: UnboundedSender<Vec<u8>>,
@@ -150,7 +151,7 @@ impl Connection {
 			})
       // write the data and make sure the future returns the right types
 			.fold(writer, |writer, data| {
-        write_all(writer, data).map_err(|e| Error::Connection(e)).map(|(writer, buf)| writer)
+        write_all(writer, data).map_err(|e| Error::Connection(e)).map(|(writer, _)| writer)
       });
 		Box::new(send_data)
 	}
@@ -287,7 +288,7 @@ impl TimeoutConnection {
 			underlying: conn,
 			expected_responses: expects,
 		};
-		(me, Box::new(fut.select(timer).map(|_| ()).map_err(|(e1, e2)| e1)))
+		(me, Box::new(fut.select(timer).map(|_| ()).map_err(|(e1, _)| e1)))
 	}
 
 	/// Sends a request and registers a timer on the provided message type and
@@ -298,7 +299,7 @@ impl TimeoutConnection {
 	                                       body: &W,
 	                                       expect_h: Option<(Hash)>)
 	                                       -> Result<(), Error> {
-		let sent = try!(self.underlying.send_msg(t, body));
+		let _sent = try!(self.underlying.send_msg(t, body));
 
 		let mut expects = self.expected_responses.lock().unwrap();
 		expects.push((rt, expect_h, Instant::now()));

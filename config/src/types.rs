@@ -20,7 +20,6 @@ use std::fmt;
 
 use grin::{ServerConfig,
            MinerConfig};
-use wallet::WalletConfig;
 
 
 /// Error type wrapping config errors.
@@ -54,7 +53,7 @@ impl fmt::Display for ConfigError {
             ConfigError::SerializationError(ref message) => {
                 write!(f, "Error serializing configuration: {}", message)
             }
-        }   
+        }
     }
 }
 
@@ -67,9 +66,9 @@ impl From<io::Error> for ConfigError {
     }
 }
 
-/// Going to hold all of the various configuration types 
+/// Going to hold all of the various configuration types
 /// separately for now, then put them together as a single
-/// ServerConfig object afterwards. This is to flatten 
+/// ServerConfig object afterwards. This is to flatten
 /// out the configuration file into logical sections,
 /// as they tend to be quite nested in the code
 /// Most structs optional, as they may or may not
@@ -77,12 +76,13 @@ impl From<io::Error> for ConfigError {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GlobalConfig {
-    //Keep track of the file we've read
+    ///Keep track of the file we've read
     pub config_file_path: Option<PathBuf>,
-    //keep track of whether we're using
-    //a config file or just the defaults
-    //for each member
+    /// keep track of whether we're using
+    /// a config file or just the defaults
+    /// for each member
     pub using_config_file: bool,
+    /// Global member config
     pub members: Option<ConfigMembers>,
 }
 
@@ -93,7 +93,9 @@ pub struct GlobalConfig {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConfigMembers {
+    /// Server config
     pub server: ServerConfig,
+    /// Mining config
     pub mining: Option<MinerConfig>,
     //removing wallet from here for now,
     //as its concerns are separate from the server's, really

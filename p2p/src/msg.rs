@@ -19,7 +19,7 @@ use num::FromPrimitive;
 
 use futures::future::{Future, ok};
 use tokio_core::net::TcpStream;
-use tokio_core::io::{write_all, read_exact};
+use tokio_io::io::{read_exact, write_all};
 
 use core::consensus::MAX_MSG_LEN;
 use core::core::BlockHeader;
@@ -42,6 +42,7 @@ const MAGIC: [u8; 2] = [0x1e, 0xc5];
 pub const HEADER_LEN: u64 = 11;
 
 /// Codes for each error that can be produced reading a message.
+#[allow(dead_code)]
 pub enum ErrCodes {
 	UnsupportedVersion = 100,
 }
@@ -105,12 +106,12 @@ pub fn write_msg<T>(conn: TcpStream,
 	let write_msg = ok((conn)).and_then(move |conn| {
 		// prepare the body first so we know its serialized length
 		let mut body_buf = vec![];
-		ser::serialize(&mut body_buf, &msg);
+		ser::serialize(&mut body_buf, &msg).unwrap();
 
 		// build and serialize the header using the body size
 		let mut header_buf = vec![];
 		let blen = body_buf.len() as u64;
-		ser::serialize(&mut header_buf, &MsgHeader::new(msg_type, blen));
+		ser::serialize(&mut header_buf, &MsgHeader::new(msg_type, blen)).unwrap();
 
 		// send the whole thing
 		write_all(conn, header_buf)
@@ -202,9 +203,9 @@ impl Writeable for Hand {
 		                [write_u32, self.version],
 		                [write_u32, self.capabilities.bits()],
 		                [write_u64, self.nonce]);
-		self.total_difficulty.write(writer);
-		self.sender_addr.write(writer);
-		self.receiver_addr.write(writer);
+		self.total_difficulty.write(writer).unwrap();
+		self.sender_addr.write(writer).unwrap();
+		self.receiver_addr.write(writer).unwrap();
 		writer.write_bytes(&self.user_agent)
 	}
 }
@@ -250,8 +251,8 @@ impl Writeable for Shake {
 		ser_multiwrite!(writer,
 		                [write_u32, self.version],
 		                [write_u32, self.capabilities.bits()]);
-		self.total_difficulty.write(writer);
-		writer.write_bytes(&self.user_agent);
+		self.total_difficulty.write(writer).unwrap();
+		writer.write_bytes(&self.user_agent).unwrap();
 		Ok(())
 	}
 }
@@ -302,7 +303,7 @@ impl Writeable for PeerAddrs {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		try!(writer.write_u32(self.peers.len() as u32));
 		for p in &self.peers {
-			p.write(writer);
+			p.write(writer).unwrap();
 		}
 		Ok(())
 	}
@@ -464,13 +465,13 @@ impl Readable for Headers {
 pub struct Empty {}
 
 impl Writeable for Empty {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, _: &mut W) -> Result<(), ser::Error> {
 		Ok(())
 	}
 }
 
 impl Readable for Empty {
-	fn read(reader: &mut Reader) -> Result<Empty, ser::Error> {
+	fn read(_: &mut Reader) -> Result<Empty, ser::Error> {
 		Ok(Empty {})
 	}
 }

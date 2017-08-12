@@ -31,7 +31,6 @@ extern crate grin_util as util;
 #[macro_use]
 extern crate log;
 extern crate futures;
-#[macro_use]
 extern crate tokio_core;
 extern crate tokio_io;
 extern crate bytes;

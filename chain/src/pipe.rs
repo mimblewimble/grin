@@ -14,7 +14,6 @@
 
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
-use std::convert::From;
 use std::sync::{Arc, Mutex};
 
 use secp;
@@ -22,20 +21,24 @@ use time;
 
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
-use core::core::target::Difficulty;
-use core::core::{BlockHeader, Block, Proof};
+use core::core::{BlockHeader, Block};
 use core::pow;
-use core::ser;
 use types::*;
 use store;
+use core::global;
 
 /// Contextual information required to process a new block and either reject or
 /// accept it.
 pub struct BlockContext {
+	/// The options
 	pub opts: Options,
+	/// The store
 	pub store: Arc<ChainStore>,
+	/// The adapter
 	pub adapter: Arc<ChainAdapter>,
+	/// The head
 	pub head: Tip,
+	/// The lock
 	pub lock: Arc<Mutex<bool>>,
 }
 
@@ -66,11 +69,12 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		b.hash()
 	);
 
-	ctx.lock.lock();
+	let _ = ctx.lock.lock().unwrap();
 	add_block(b, &mut ctx)?;
 	update_head(b, &mut ctx)
 }
 
+/// Process the block header
 pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
 
 	info!(
@@ -82,7 +86,7 @@ pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<O
 	validate_header(&bh, &mut ctx)?;
 	add_block_header(bh, &mut ctx)?;
 
-	ctx.lock.lock();
+	let _ = ctx.lock.lock().unwrap();
 	update_header_head(bh, &mut ctx)
 }
 
@@ -119,9 +123,9 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	if header.height != prev.height + 1 {
 		return Err(Error::InvalidBlockHeight);
 	}
-	if header.timestamp <= prev.timestamp {
+	if header.timestamp <= prev.timestamp && !global::is_automated_testing_mode(){
 		// prevent time warp attacks and some timestamp manipulations by forcing strict
-		// time progression
+		// time progression (but not in CI mode)
 		return Err(Error::InvalidBlockTime);
 	}
 	if header.timestamp >
@@ -148,7 +152,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		}
 
 		let cycle_size = if ctx.opts.intersects(EASY_POW) {
-			consensus::TEST_SIZESHIFT
+			global::sizeshift()
 		} else {
 			consensus::DEFAULT_SIZESHIFT
 		};

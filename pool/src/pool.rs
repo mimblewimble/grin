@@ -20,22 +20,22 @@ pub use graph;
 use core::core::transaction;
 use core::core::block;
 use core::core::hash;
-// Temporary blockchain dummy impls
-use blockchain::{DummyChain, DummyChainImpl, DummyUtxoSet};
 
 use secp;
 use secp::pedersen::Commitment;
 
-use std::sync::{Arc, RwLock, Weak};
+use std::sync::Arc;
 use std::collections::HashMap;
 
 /// The pool itself.
 /// The transactions HashMap holds ownership of all transactions in the pool,
 /// keyed by their transaction hash.
 pub struct TransactionPool<T> {
+    /// All transactions in the pool
     pub transactions: HashMap<hash::Hash, Box<transaction::Transaction>>,
-
+    /// The pool itself
     pub pool : Pool,
+    /// Orphans in the pool
     pub orphans: Orphans,
 
     // blockchain is a DummyChain, for now, which mimics what the future
@@ -44,6 +44,7 @@ pub struct TransactionPool<T> {
 }
 
 impl<T> TransactionPool<T> where T: BlockChain {
+    /// Create a new transaction pool
     pub fn new(chain: Arc<T>) -> TransactionPool<T> {
         TransactionPool{
             transactions: HashMap::new(),
@@ -53,15 +54,15 @@ impl<T> TransactionPool<T> where T: BlockChain {
         }
     }
 
-    /// Searches for an output, designated by its commitment, from the current 
+    /// Searches for an output, designated by its commitment, from the current
     /// best UTXO view, presented by taking the best blockchain UTXO set (as
     /// determined by the blockchain component) and rectifying pool spent and
     /// unspents.
-    /// Detects double spends and unknown references from the pool and 
+    /// Detects double spends and unknown references from the pool and
     /// blockchain only; any conflicts with entries in the orphans set must
     /// be accounted for separately, if relevant.
     pub fn search_for_best_output(&self, output_commitment: &Commitment) -> Parent {
-        // The current best unspent set is: 
+        // The current best unspent set is:
         //   Pool unspent + (blockchain unspent - pool->blockchain spent)
         // Pool unspents are unconditional so we check those first
         self.pool.get_available_output(output_commitment).
@@ -76,7 +77,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
     // output designated by output_commitment.
     fn search_blockchain_unspents(&self, output_commitment: &Commitment) -> Option<Parent> {
         self.blockchain.get_unspent(output_commitment).
-            map(|o| match self.pool.get_blockchain_spent(output_commitment) {
+            map(|_| match self.pool.get_blockchain_spent(output_commitment) {
                 Some(x) => Parent::AlreadySpent{other_tx: x.destination_hash().unwrap()},
                 None => Parent::BlockTransaction,
             })
@@ -96,10 +97,12 @@ impl<T> TransactionPool<T> where T: BlockChain {
         self.pool.num_transactions()
     }
 
+    /// Get the number of orphans in the pool
     pub fn orphans_size(&self) -> usize {
         self.orphans.num_transactions()
     }
 
+    /// Get the total size (transactions + orphans) of the pool
     pub fn total_size(&self) -> usize {
         self.pool.num_transactions() + self.orphans.num_transactions()
     }
@@ -110,15 +113,15 @@ impl<T> TransactionPool<T> where T: BlockChain {
     /// if necessary, and performing any connection-related validity checks.
     /// Happens under an exclusive mutable reference gated by the write portion
     /// of a RWLock.
-    pub fn add_to_memory_pool(&mut self, source: TxSource, tx: transaction::Transaction) -> Result<(), PoolError> {
+    pub fn add_to_memory_pool(&mut self, _: TxSource, tx: transaction::Transaction) -> Result<(), PoolError> {
         // Making sure the transaction is valid before anything else.
         let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
         tx.validate(&secp).map_err(|_| PoolError::Invalid)?;
 
-        // The first check invovles ensuring that an identical transaction is 
+        // The first check invovles ensuring that an identical transaction is
         // not already in the pool's transaction set.
-        // A non-authoritative similar check should be performed under the 
-        // pool's read lock before we get to this point, which would catch the 
+        // A non-authoritative similar check should be performed under the
+        // pool's read lock before we get to this point, which would catch the
         // majority of duplicate cases. The race condition is caught here.
         // TODO: When the transaction identifier is finalized, the assumptions
         // here may change depending on the exact coverage of the identifier.
@@ -156,7 +159,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
 
         // Next we examine the outputs this transaction creates and ensure
         // that they do not already exist.
-        // I believe its worth preventing duplicate outputs from being 
+        // I believe its worth preventing duplicate outputs from being
         // accepted, even though it is possible for them to be mined
         // with strict ordering. In the future, if desirable, this could
         // be node policy config or more intelligent.
@@ -182,8 +185,8 @@ impl<T> TransactionPool<T> where T: BlockChain {
             // output is unique. No further checks are necessary.
             self.pool.add_pool_transaction(pool_entry, blockchain_refs,
                 pool_refs, new_unspents);
-            
-            self.reconcile_orphans();
+
+            self.reconcile_orphans().unwrap();
             self.transactions.insert(tx_hash, Box::new(tx));
             Ok(())
 
@@ -194,11 +197,11 @@ impl<T> TransactionPool<T> where T: BlockChain {
             // checking above.
             // First, any references resolved to the pool need to be compared
             // against active orphan pool_connections.
-            // Note that pool_connections here also does double duty to 
+            // Note that pool_connections here also does double duty to
             // account for blockchain connections.
             for pool_ref in pool_refs.iter().chain(blockchain_refs.iter()) {
                 match self.orphans.get_external_spent_output(&pool_ref.output_commitment()){
-                    // Should the below err be subtyped to orphans somehow? 
+                    // Should the below err be subtyped to orphans somehow?
                     Some(x) => return Err(PoolError::DoubleSpend{other_tx: x.destination_hash().unwrap(), spent_output: x.output_commitment()}),
                     None => {},
                 }
@@ -223,8 +226,8 @@ impl<T> TransactionPool<T> where T: BlockChain {
     /// Check the output for a conflict with an existing output.
     ///
     /// Checks the output (by commitment) against outputs in the blockchain
-    /// or in the pool. If the transaction is destined for orphans, the 
-    /// orphans set is checked as well. 
+    /// or in the pool. If the transaction is destined for orphans, the
+    /// orphans set is checked as well.
     fn check_duplicate_outputs(&self, output : &transaction::Output, is_orphan: bool) -> Result<(), PoolError> {
         // Checking against current blockchain unspent outputs
         // We want outputs even if they're spent by pool txs, so we ignore
@@ -249,7 +252,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
         };
 
 
-        // If the transaction might go into orphans, perform the same 
+        // If the transaction might go into orphans, perform the same
         // checks as above but against the orphan set instead.
         if is_orphan {
             // Checking against orphan outputs
@@ -295,7 +298,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
                         None => {
                             // The reference does not resolve to anything.
                             // Make sure this missing_output has not already
-                            // been claimed, then add this entry to 
+                            // been claimed, then add this entry to
                             // missing_refs
                             match self.orphans.get_unknown_output(&orphan_commitment) {
                                 Some(x) => return Err(PoolError::DoubleSpend{
@@ -311,7 +314,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
         Ok(missing_refs)
     }
 
-    /// The primary goal of the reconcile_orphans method is to eliminate any 
+    /// The primary goal of the reconcile_orphans method is to eliminate any
     /// orphans who conflict with the recently accepted pool transaction.
     /// TODO: How do we handle fishing orphans out that look like they could
     /// be freed? Current thought is to do so under a different lock domain
@@ -332,9 +335,9 @@ impl<T> TransactionPool<T> where T: BlockChain {
     ///
     /// Returns a list of transactions which have been evicted from the pool
     /// due to the recent block. Because transaction association information is
-    /// irreversibly lost in the blockchain, we must keep track of these 
+    /// irreversibly lost in the blockchain, we must keep track of these
     /// evicted transactions elsewhere so that we can make a best effort at
-    /// returning them to the pool in the event of a reorg that invalidates 
+    /// returning them to the pool in the event of a reorg that invalidates
     /// this block.
     pub fn reconcile_block(&mut self, block: &block::Block) -> Result<Vec<Box<transaction::Transaction>>, PoolError> {
         // If this pool has been kept in sync correctly, serializing all
@@ -350,7 +353,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
         // consumes the same blockchain output.
         // If one exists, we mark the transaction and then examine its
         // children. Recursively, we mark each child until a child is
-        // fully satisfied by outputs in the updated utxo view (after 
+        // fully satisfied by outputs in the updated utxo view (after
         // reconciliation of the block), or there are no more children.
         //
         // Additionally, to protect our invariant dictating no duplicate
@@ -358,11 +361,11 @@ impl<T> TransactionPool<T> where T: BlockChain {
         // against outputs generated by the pool and the corresponding
         // transactions are also marked.
         //
-        // After marking concludes, sweeping begins. In order, the marked 
+        // After marking concludes, sweeping begins. In order, the marked
         // transactions are removed, the vertexes corresponding to the
         // transactions are removed, all the marked transactions' outputs are
         // removed, and all remaining non-blockchain inputs are returned to the
-        // unspent_outputs set. 
+        // unspent_outputs set.
         //
         // After the pool has been successfully processed, an orphans
         // reconciliation job is triggered.
@@ -389,7 +392,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
         }
         let freed_txs = self.sweep_transactions(marked_transactions);
 
-        self.reconcile_orphans();
+        self.reconcile_orphans().unwrap();
 
         Ok(freed_txs)
     }
@@ -397,9 +400,9 @@ impl<T> TransactionPool<T> where T: BlockChain {
     /// The mark portion of our mark-and-sweep pool cleanup.
     ///
     /// The transaction designated by conflicting_tx is immediately marked.
-    /// Each output of this transaction is then examined; if a transaction in 
-    /// the pool spends this output and the output is not replaced by an 
-    /// identical output included in the updated UTXO set, the child is marked 
+    /// Each output of this transaction is then examined; if a transaction in
+    /// the pool spends this output and the output is not replaced by an
+    /// identical output included in the updated UTXO set, the child is marked
     /// as well and the process continues recursively.
     ///
     /// Marked transactions are added to the mutable marked_txs HashMap which
@@ -466,6 +469,8 @@ mod tests {
     use secp::{Secp256k1, ContextFlag, constants};
     use secp::key;
     use core::core::build;
+    use blockchain::{DummyChain, DummyChainImpl, DummyUtxoSet};
+    use std::sync::{Arc, RwLock};
 
     macro_rules! expect_output_parent {
         ($pool:expr, $expected:pat, $( $output:expr ),+ ) => {
@@ -477,7 +482,6 @@ mod tests {
             )*
         }
     }
-
 
     #[test]
     /// A basic test; add a pair of transactions to the pool.
@@ -542,7 +546,8 @@ mod tests {
 
         }
     }
-   #[test]
+
+    #[test]
     /// Testing various expected error conditions
     pub fn test_pool_add_error() {
         let mut dummy_chain = DummyChainImpl::new();
@@ -595,7 +600,7 @@ mod tests {
                 Ok(_) => panic!("Expected error when adding double spend, got Ok"),
                 Err(x) => {
                     match x {
-                        PoolError::DoubleSpend{other_tx, spent_output} => {
+                        PoolError::DoubleSpend{other_tx: _, spent_output} => {
                             if spent_output != test_output(6).commitment() {
                                 panic!("Unexpected parameter in DoubleSpend: {:?}", x);
                             }
@@ -647,7 +652,7 @@ mod tests {
         let pool = RwLock::new(test_setup(&chain_ref));
 
         // Preparation: We will introduce a three root pool transactions.
-        // 1. A transaction that should be invalidated because it is exactly 
+        // 1. A transaction that should be invalidated because it is exactly
         //  contained in the block.
         // 2. A transaction that should be invalidated because the input is
         //  consumed in the block, although it is not exactly consumed.
@@ -657,7 +662,7 @@ mod tests {
         let valid_transaction = test_transaction(vec![30], vec![14,15]);
 
         // We will also introduce a few children:
-        // 4. A transaction that descends from transaction 1, that is in 
+        // 4. A transaction that descends from transaction 1, that is in
         //  turn exactly contained in the block.
         let block_child = test_transaction(vec![8], vec![4,3]);
         // 5. A transaction that descends from transaction 4, that is not
@@ -681,9 +686,9 @@ mod tests {
         //  transaction 9
         let mixed_child = test_transaction(vec![11,13], vec![2]);
 
-        // Add transactions. 
+        // Add transactions.
         // Note: There are some ordering constraints that must be followed here
-        // until orphans is 100% implemented. Once the orphans process has 
+        // until orphans is 100% implemented. Once the orphans process has
         // stabilized, we can mix these up to exercise that path a bit.
         let mut txs_to_add = vec![block_transaction, conflict_transaction,
             valid_transaction, block_child, pool_child, conflict_child,
@@ -755,7 +760,7 @@ mod tests {
             expect_output_parent!(read_pool,
                 Parent::AlreadySpent{other_tx: _}, 15);
 
-            // We should have unspent pool references at 1, 13, 14 
+            // We should have unspent pool references at 1, 13, 14
             expect_output_parent!(read_pool,
                 Parent::PoolTransaction{tx_ref: _}, 1, 13, 14);
 
@@ -765,9 +770,8 @@ mod tests {
             // Evicted transactions should have unknown outputs
             expect_output_parent!(read_pool, Parent::Unknown, 2, 11);
         }
-
-
     }
+
     #[test]
     /// Test transaction selection and block building.
     fn test_block_building() {
@@ -819,7 +823,7 @@ mod tests {
             txs = read_pool.prepare_mineable_transactions(3);
             assert_eq!(txs.len(), 3);
             // TODO: This is ugly, either make block::new take owned
-            // txs instead of mut refs, or change 
+            // txs instead of mut refs, or change
             // prepare_mineable_transactions to return mut refs
             let block_txs: Vec<transaction::Transaction> = txs.drain(..).map(|x| *x).collect();
             let tx_refs = block_txs.iter().collect();
@@ -840,7 +844,7 @@ mod tests {
             assert_eq!(write_pool.total_size(), 2);
         }
 
-    
+
     }
 
 
@@ -856,7 +860,7 @@ mod tests {
     /// Cobble together a test transaction for testing the transaction pool.
     ///
     /// Connectivity here is the most important element.
-    /// Every output is given a blinding key equal to its value, so that the 
+    /// Every output is given a blinding key equal to its value, so that the
     /// entire commitment can be derived deterministically from just the value.
     ///
     /// Fees are the remainder between input and output values, so the numbers

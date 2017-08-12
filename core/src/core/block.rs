@@ -27,6 +27,7 @@ use consensus::MINIMUM_DIFFICULTY;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use ser::{self, Readable, Reader, Writeable, Writer};
+use global;
 
 bitflags! {
     /// Options for block validation
@@ -62,6 +63,7 @@ pub struct BlockHeader {
 
 impl Default for BlockHeader {
 	fn default() -> BlockHeader {
+		let proof_size = global::proofsize();
 		BlockHeader {
 			height: 0,
 			previous: ZERO_HASH,
@@ -72,7 +74,7 @@ impl Default for BlockHeader {
 			tx_merkle: ZERO_HASH,
 			features: DEFAULT_BLOCK,
 			nonce: 0,
-			pow: Proof::zero(),
+			pow: Proof::zero(proof_size),
 		}
 	}
 }
@@ -279,7 +281,7 @@ impl Block {
 					height: prev.height + 1,
 					timestamp: time::now(),
 					previous: prev.hash(),
-					total_difficulty: prev.pow.to_difficulty() + prev.total_difficulty.clone(),
+					total_difficulty: prev.pow.clone().to_difficulty() + prev.total_difficulty.clone(),
 					..Default::default()
 				},
 				inputs: inputs,

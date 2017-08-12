@@ -20,7 +20,6 @@
 /// How many block bodies to download in parallel
 const MAX_BODY_DOWNLOADS: usize = 8;
 
-use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Instant, Duration};
@@ -152,7 +151,11 @@ impl Syncer {
 			while blocks_to_download.len() > 0 && blocks_downloading.len() < MAX_BODY_DOWNLOADS {
 				let h = blocks_to_download.pop().unwrap();
 				let peer = self.p2p.random_peer().unwrap();
-				peer.send_block_request(h);
+				let send_result = peer.send_block_request(h);
+				match send_result {
+					Ok(_) => {}
+					Err(_) => {}
+				}
 				blocks_downloading.push((h, Instant::now()));
 			}
 			debug!("Requesting more full block hashes to download, total: {}.",
@@ -199,7 +202,7 @@ impl Syncer {
 		}
 		// ask for more headers if we got as many as required
 		if hs_len == (p2p::MAX_BLOCK_HEADERS as usize) {
-			self.request_headers();
+			self.request_headers().unwrap();
 		}
 	}
 

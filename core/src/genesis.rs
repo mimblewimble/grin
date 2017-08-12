@@ -20,10 +20,12 @@ use core;
 use consensus::MINIMUM_DIFFICULTY;
 use core::hash::Hashed;
 use core::target::Difficulty;
+use global;
 
 /// Genesis block definition. It has no rewards, no inputs, no outputs, no
 /// fees and a height of zero.
 pub fn genesis() -> core::Block {
+	let proof_size = global::proofsize();
 	core::Block {
 		header: core::BlockHeader {
 			height: 0,
@@ -39,8 +41,8 @@ pub fn genesis() -> core::Block {
 			utxo_merkle: [].hash(),
 			tx_merkle: [].hash(),
 			features: core::DEFAULT_BLOCK,
-			nonce: 0,
-			pow: core::Proof::zero(), // TODO get actual PoW solution
+			nonce: global::get_genesis_nonce(),
+			pow: core::Proof::zero(proof_size), // TODO get actual PoW solution
 		},
 		inputs: vec![],
 		outputs: vec![],
