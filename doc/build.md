@@ -46,11 +46,11 @@ For the sake of example, we're going to run three nodes with varying setups. Cre
 
 As before, node 1 will create the blockchain and begin mining. As we'll be running many servers from the same machine, we'll configure specific ports for other servers to explicitly connect to.
 
-First, we run a wallet server to recieve rewards on port 15000 (we'll log in debug mode for more information about what's happening)
+First, we run a wallet server to receive rewards on port 15000 (we'll log in debug mode for more information about what's happening)
 
     node1$ RUST_LOG=grin=debug grin wallet -p "password" -r 15000 receive
 
-Then we start node 1 mining with its P2P server bound to port 10000 and its api server at 10001. We also provide our wallet address where we'll recieve mining rewards. In another terminal:
+Then we start node 1 mining with its P2P server bound to port 10000 and its api server at 10001. We also provide our wallet address where we'll receive mining rewards. In another terminal:
 
     node1$ RUST_LOG=grin=debug grin server -m -p 10000 -a 10001 -w "http://127.0.0.1:15000" run
 
@@ -79,7 +79,7 @@ who will add a blinding factor before posting it to the blockchain. The above co
 
 ### Node 1 - Send money to node 3
 
-With all of your severs happily running and your terminals scrolling away, let's spend some of the coins mined in node 1 by sending them to node 3's listening wallet.
+With all of your servers happily running and your terminals scrolling away, let's spend some of the coins mined in node 1 by sending them to node 3's listening wallet.
 
 In yet another terminal in node 1's directory, create a new partial transaction spending 20000 coins and send them on to node 3's wallet listener. We'll also specify that we'll
 use node 2's API listener to validate our transaction inputs before sending:

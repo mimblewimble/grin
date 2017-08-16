@@ -63,7 +63,7 @@ With this information it can verify:
 
 * the total difficulty on that chain (present in all block headers)
 * the sum of all UTXO commitments equals the expected money supply
-* the root hash of all UTXOs match the rooth hash in the block header
+* the root hash of all UTXOs match the root hash in the block header
 
 Once the validation done, the peer can download and validate the blocks content
 from the horizon up to the head.
