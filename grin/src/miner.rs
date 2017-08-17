@@ -35,6 +35,8 @@ use core::pow::MiningWorker;
 use core::ser;
 use core::ser::{AsFixedBytes};
 
+//use core::genesis;
+
 use chain;
 use secp;
 use pool;
@@ -43,7 +45,9 @@ use util;
 use wallet::{CbAmount, WalletReceiveRequest, CbData};
 
 use plugin::PluginMiner;
+
 use itertools::Itertools;
+
 
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
@@ -145,24 +149,37 @@ impl Miner {
 							b:&mut Block,
 							cuckoo_size: u32,
 							head:&BlockHeader,
-							latest_hash:&Hash)
+							latest_hash:&Hash,
+                            attempt_time_per_block: u32)
 		-> Option<Proof> {
 
-		debug!("(Server ID: {}) Mining at Cuckoo{} for at most 2 secs at height {} and difficulty {}.",
+		debug!("(Server ID: {}) Mining at Cuckoo{} for at most {} secs at height {} and difficulty {}.",
 			self.debug_output_id,
 			cuckoo_size,
+            attempt_time_per_block,
 			b.header.height,
 			b.header.difficulty);
 
-		// look for a pow for at most 2 sec on the same block (to give a chance to new
+		// look for a pow for at most 10 sec on the same block (to give a chance to new
 		// transactions) and as long as the head hasn't changed
 		// Will change this to something else at some point
-		let deadline = time::get_time().sec + 2;
+		let deadline = time::get_time().sec + attempt_time_per_block as i64;
+
+        // how often to output stats
+        let stat_output_interval = 2;
+		let mut next_stat_output = time::get_time().sec + stat_output_interval;
 
 		//Get parts of the header
 		let mut header_parts = HeaderPartWriter::default();
 		ser::Writeable::write(&b.header, &mut header_parts).unwrap();
 		let (pre, post) = header_parts.parts_as_hex_strings();
+
+        //Just test output to mine a genesis block when needed
+		/*let mut header_parts = HeaderPartWriter::default();
+		let gen = genesis::genesis();
+		ser::Writeable::write(&gen.header, &mut header_parts).unwrap();
+		let (pre, post) = header_parts.parts_as_hex_strings();
+		println!("pre, post: {}, {}", pre, post);*/
 
 		//Start the miner working
 	    let miner = plugin_miner.get_consumable();
@@ -174,8 +191,26 @@ impl Miner {
 			if let Some(s) = job_handle.get_solution()  {
 				sol = Some(Proof::new(s.solution_nonces.to_vec()));
 				b.header.nonce=s.get_nonce_as_u64();
+                println!("Nonce: {}", b.header.nonce);
 				break;
 			}
+            if time::get_time().sec > next_stat_output {
+                let stats = job_handle.get_stats();
+                if let Ok(stat_vec) = stats {
+                    for s in stat_vec {
+                        if s.last_start_time==0 {
+                            continue;
+                        }
+                        let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
+                        let last_hashes_per_sec = 1.0 / last_solution_time_secs;
+                        debug!("Mining on Device {} - {}: Last hash time: {} - Hashes per second: {:.*} - Total Attempts: {}",
+                               s.device_id, s.device_name,
+                               last_solution_time_secs, 3, last_hashes_per_sec,
+                               s.iterations_completed);
+                    }
+                } 
+		        next_stat_output = time::get_time().sec + stat_output_interval;
+            }
 		}
 		if sol==None {
 			debug!("(Server ID: {}) No solution found after {} iterations, continuing...",
@@ -288,7 +323,8 @@ impl Miner {
 						&mut b,
 						cuckoo_size,
 						&head,
-						&latest_hash);
+						&latest_hash,
+                        miner_config.attempt_time_per_block);
 				} else {
 					sol = self.inner_loop_sync(p,
 					&mut b,

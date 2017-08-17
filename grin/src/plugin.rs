@@ -70,6 +70,8 @@ impl PluginMiner {
 		exe_path.pop();
 		let exe_path=exe_path.to_str().unwrap();
 
+        println!("Plugin dir: {}", miner_config.clone().cuckoo_miner_plugin_dir.unwrap());
+
 		let plugin_install_path = match miner_config.cuckoo_miner_plugin_dir {
 			Some(s) => s,
 			None => String::from(format!("{}/deps", exe_path))

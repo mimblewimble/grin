@@ -94,6 +94,17 @@ pub fn is_automated_testing_mode() -> bool {
 	}
 }
 
+/// Are we in production mode?
+pub fn is_production_mode() -> bool {
+	let param_ref=MINING_PARAMETER_MODE.read().unwrap();
+	if let MiningParameterMode::Production=*param_ref {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+
 /// Helper function to get a nonce known to create a valid POW on 
 /// the genesis block, to prevent it taking ages. Should be fine for now
 /// as the genesis block POW solution turns out to be the same for every new block chain
@@ -104,6 +115,20 @@ pub fn get_genesis_nonce() -> u64 {
 	match *param_ref {
 		MiningParameterMode::AutomatedTesting => 0, //won't make a difference
 		MiningParameterMode::UserTesting => 22141, //Magic nonce for current genesis block at cuckoo16
-		MiningParameterMode::Production => 0, //TBD
+		MiningParameterMode::Production => 1429942738856787200, //Magic nonce for current genesis at cuckoo30
 	}
+}
+
+/// Returns the genesis POW for production, because it takes far too long to mine at production values
+/// using the internal miner
+
+pub fn get_genesis_pow() -> [u32;42]{
+    //TODO: This is diff 26, probably just want a 10: mine one
+	[7444824, 11926557, 28520390, 30594072, 50854023, 52797085, 57882033, 
+     59816511, 61404804, 84947619, 87779345, 115270337, 162618676, 
+     166860710, 178656003, 178971372, 200454733, 209197630, 221231015, 
+     228598741, 241012783, 245401183, 279080304, 295848517, 327300943, 
+     329741709, 366394532, 382493153, 389329248, 404353381, 406012911, 
+     418813499, 426573907, 452566575, 456930760, 463021458, 474340589, 
+     476248039, 478197093, 487576917, 495653489, 501862896]
 }

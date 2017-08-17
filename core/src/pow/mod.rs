@@ -32,6 +32,7 @@ use core::BlockHeader;
 use core::hash::Hashed;
 use core::Proof;
 use core::target::Difficulty;
+use global;
 use pow::cuckoo::{Cuckoo, Error};
 
 
@@ -71,6 +72,15 @@ pub fn pow20<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader, diff: Difficul
 pub fn pow_size<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader,
 								 diff: Difficulty, _: u32) -> Result<(), Error> {
 	let start_nonce = bh.nonce;
+
+	// if we're in production mode, try the pre-mined solution first
+	if global::is_production_mode() {
+		let p = Proof::new(global::get_genesis_pow().to_vec());
+		if p.clone().to_difficulty() >= diff {
+			bh.pow = p;
+			return Ok(());
+		}
+	}
 
 	// try to find a cuckoo cycle on that header hash
 	loop {

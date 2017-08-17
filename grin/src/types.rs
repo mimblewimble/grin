@@ -121,6 +121,10 @@ pub struct MinerConfig {
 	/// to the plugin being loaded
 	pub cuckoo_miner_parameter_list: Option<HashMap<String, u32>>,
 
+    /// How long to wait before stopping the miner, recollecting transactions
+    /// and starting again
+    pub attempt_time_per_block: u32, 
+
 	/// Base address to the HTTP wallet receiver
 	pub wallet_receiver_url: String,
 
@@ -161,6 +165,7 @@ impl Default for MinerConfig {
 			wallet_receiver_url: "http://localhost:13416".to_string(),
 			burn_reward: false,
 			slow_down_in_millis: Some(0),
+            attempt_time_per_block: 2,
 		}
 	}
 }
