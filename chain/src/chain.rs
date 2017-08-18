@@ -24,8 +24,6 @@ use core::core::{Block, BlockHeader, Output};
 use core::core::target::Difficulty;
 use core::core::hash::Hash;
 use core::{consensus, genesis};
-use pow;
-use pow::MiningWorker;
 use grin_store;
 use pipe;
 use store;
@@ -69,10 +67,11 @@ impl Chain {
 	/// on the current chain head to make sure it exists and creates one based
 	/// on
 	/// the genesis block if necessary.
-	pub fn init(
+	pub fn init<F>(
 		db_root: String,
 		adapter: Arc<ChainAdapter>,
-	) -> Result<Chain, Error> {
+		f:F
+	) where F:FnOnce -> Result<Chain, Error> {
 		let chain_store = store::ChainKVStore::new(db_root)?;
 
 		// check if we have a head in store, otherwise the genesis block is it
@@ -81,6 +80,9 @@ impl Chain {
 			Err(grin_store::Error::NotFoundErr) => {
 				info!("No genesis block found, creating and saving one.");
 				let mut gen = genesis::genesis();
+				//Move the miner call into a closure provided by the caller,
+				//to remove the circular dependency on the pow crate
+				/*let mut gen = genesis::genesis();
 				let diff = gen.header.difficulty.clone();
 				
 				let sz = global::sizeshift();
@@ -88,6 +90,7 @@ impl Chain {
 
 				let mut internal_miner = pow::cuckoo::Miner::new(consensus::EASINESS, sz as u32, proof_size); 
 				pow::pow_size(&mut internal_miner, &mut gen.header, diff, sz as u32).unwrap();
+				*/
 				chain_store.save_block(&gen)?;
 
 				// saving a new tip based on genesis

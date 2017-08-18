@@ -36,6 +36,7 @@ use sync;
 use types::*;
 
 use core::global;
+use pow::miner;
 
 /// Grin server holding internal structures.
 pub struct Server {

@@ -9,4 +9,7 @@ blake2-rfc = "~0.2.17"
 rand = "^0.3"
 time = "^0.1"
 
+#cuckoo_miner = { git = "https://github.com/mimblewimble/cuckoo-miner", tag="grin_integration_5"}
+cuckoo_miner = { path = "../../cuckoo-miner"}
+
 grin_core = { path = "../core" }

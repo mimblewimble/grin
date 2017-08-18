@@ -34,8 +34,13 @@ extern crate time;
 
 extern crate grin_core as core;
 
+extern crate cuckoo_miner;
+
 mod siphash;
+mod plugin;
 pub mod cuckoo;
+pub mod miner;
+pub mod types;
 
 use core::consensus::EASINESS;
 use core::core::BlockHeader;
