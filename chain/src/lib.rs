@@ -31,6 +31,7 @@ extern crate serde_derive;
 extern crate time;
 
 extern crate grin_core as core;
+extern crate grin_pow as pow;
 extern crate grin_store;
 extern crate secp256k1zkp as secp;
 

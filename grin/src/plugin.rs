@@ -19,9 +19,9 @@
 
 use std::env;
 
-use core::pow::cuckoo;
-use core::pow::cuckoo::Error;
-use core::pow::MiningWorker;
+use pow::cuckoo;
+use pow::cuckoo::Error;
+use pow::MiningWorker;
 use core::global;
 
 use core::core::Proof;

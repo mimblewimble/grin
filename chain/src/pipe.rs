@@ -22,7 +22,7 @@ use time;
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
 use core::core::{BlockHeader, Block};
-use core::pow;
+use pow;
 use types::*;
 use store;
 use core::global;

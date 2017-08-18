@@ -47,6 +47,7 @@ extern crate grin_pool as pool;
 extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
+extern crate grin_pow as pow;
 extern crate secp256k1zkp as secp;
 
 extern crate cuckoo_miner;

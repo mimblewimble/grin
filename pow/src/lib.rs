@@ -22,18 +22,33 @@
 //! Note that this miner implementation is here mostly for tests and
 //! reference. It's not optimized for speed.
 
+#![deny(non_upper_case_globals)]
+#![deny(non_camel_case_types)]
+#![deny(non_snake_case)]
+#![deny(unused_mut)]
+#![warn(missing_docs)]
+
+
+extern crate blake2_rfc as blake2;
+extern crate byteorder;
+extern crate crypto;
+extern crate num_bigint as bigint;
+extern crate rand;
+extern crate secp256k1zkp as secp;
+extern crate serde;
+extern crate time;
+
 mod siphash;
 pub mod cuckoo;
 
-use time;
+extern crate grin_core as core;
 
-use consensus::EASINESS;
-use core::BlockHeader;
-use core::hash::Hashed;
-use core::Proof;
-use core::target::Difficulty;
-use pow::cuckoo::{Cuckoo, Error};
-
+use core::consensus::EASINESS;
+use core::core::BlockHeader;
+use core::core::hash::Hashed;
+use core::core::Proof;
+use core::core::target::Difficulty;
+use cuckoo::{Cuckoo, Error};
 
 /// Should be implemented by anything providing mining services
 ///

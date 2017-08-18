@@ -27,11 +27,11 @@ use api;
 use core::consensus;
 use core::core;
 use core::core::Proof;
-use core::pow::cuckoo;
+use pow::cuckoo;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
 use core::core::hash::{Hash, Hashed};
-use core::pow::MiningWorker;
+use pow::MiningWorker;
 use core::ser;
 use core::ser::{AsFixedBytes};
 

@@ -22,9 +22,9 @@ use std::cmp;
 
 use blake2;
 
-use core::Proof;
-use pow::siphash::siphash24;
-use pow::MiningWorker;
+use core::core::Proof;
+use siphash::siphash24;
+use MiningWorker;
 
 const MAXPATHLEN: usize = 8192;
 

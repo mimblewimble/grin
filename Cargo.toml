@@ -12,6 +12,7 @@ grin_wallet = { path = "./wallet" }
 grin_grin = { path = "./grin" }
 grin_config = { path = "./config" }
 grin_core = { path = "./core" }
+grin_pow = { path = "./pow"}
 secp256k1zkp = { path = "./secp256k1zkp" }
 
 blake2-rfc = "~0.2.17"
