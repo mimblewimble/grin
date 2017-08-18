@@ -282,13 +282,11 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		"Error deriving extended key from seed.",
 	);
 
-	let default_ip = "127.0.0.1";
-	let mut addr = format!("{}:13416", default_ip);
 
 	let mut wallet_config = WalletConfig::default();
 	if let Some(port) = wallet_args.value_of("port") {
-		addr = format!("{}:{}", default_ip, port);
-		wallet_config.api_http_addr = format!("http://{}", addr).to_string();
+		let default_ip = "127.0.0.1";
+		wallet_config.api_http_addr = format!("{}:{}", default_ip, port);
 	}
 
 	if let Some(dir) = wallet_args.value_of("dir") {
@@ -319,10 +317,10 @@ fn wallet_command(wallet_args: &ArgMatches) {
 					"/receive".to_string(),
 					wallet::WalletReceiver {
 						key: key,
-						config: wallet_config,
+						config: wallet_config.clone(),
 					},
 				);
-				apis.start(addr).unwrap_or_else(|e| {
+				apis.start(wallet_config.api_http_addr).unwrap_or_else(|e| {
 					error!("Failed to start Grin wallet receiver: {}.", e);
 				});
 			}
