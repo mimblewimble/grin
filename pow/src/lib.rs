@@ -28,26 +28,21 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-
 extern crate blake2_rfc as blake2;
-extern crate byteorder;
-extern crate crypto;
-extern crate num_bigint as bigint;
 extern crate rand;
-extern crate secp256k1zkp as secp;
-extern crate serde;
 extern crate time;
+
+extern crate grin_core as core;
 
 mod siphash;
 pub mod cuckoo;
-
-extern crate grin_core as core;
 
 use core::consensus::EASINESS;
 use core::core::BlockHeader;
 use core::core::hash::Hashed;
 use core::core::Proof;
 use core::core::target::Difficulty;
+use core::global;
 use cuckoo::{Cuckoo, Error};
 
 /// Should be implemented by anything providing mining services
@@ -86,6 +81,15 @@ pub fn pow20<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader, diff: Difficul
 pub fn pow_size<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader,
 								 diff: Difficulty, _: u32) -> Result<(), Error> {
 	let start_nonce = bh.nonce;
+
+	// if we're in production mode, try the pre-mined solution first
+	if global::is_production_mode() {
+		let p = Proof::new(global::get_genesis_pow().to_vec());
+		if p.clone().to_difficulty() >= diff {
+			bh.pow = p;
+			return Ok(());
+		}
+	}
 
 	// try to find a cuckoo cycle on that header hash
 	loop {

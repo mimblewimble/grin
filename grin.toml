@@ -34,7 +34,7 @@ seeding_type = "None"
 #UserTesting - For regular user testing, much lighter than production more
 #Production - Full production cuckoo parameters
 
-mining_parameter_mode = "UserTesting"
+mining_parameter_mode = "Production"
 
 #7 = Bit flags for FULL_NODE, this structure needs to be changed
 #internally to make it more configurable
@@ -66,13 +66,13 @@ use_cuckoo_miner = true
 #so in a post-release world this should only be used if you really want
 #to run cards in parallel
 
-cuckoo_miner_async_mode = false
+cuckoo_miner_async_mode = true
 
 #If using cuckoo_miner, the directory in which plugins are installed
 #if not specified, grin will look in the directory /deps relative
 #to the executable
 
-#cuckoo_miner_plugin_dir = "target/debug/deps"
+cuckoo_miner_plugin_dir = "deps"
 
 #if using cuckoo_miner, the implementation to use.. currently
 #just filters for this word in the filenames in the plugin 
@@ -89,6 +89,11 @@ cuckoo_miner_plugin_type = "simple"
 
 #the list of parameters if you're using "edgetrim"
 #cuckoo_miner_parameter_list = {NUM_THREADS=4, NUM_TRIMS=7}
+
+#The amount of time, in seconds, to attempt to mine on a particular
+#header before stopping and re-collecting transactions from the pool
+
+attempt_time_per_block = 30
 
 #the wallet reciever to which coinbase rewards will be sent
 
