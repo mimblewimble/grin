@@ -21,6 +21,7 @@ env:
     - TEST_DIR=p2p
     - TEST_DIR=api
     - TEST_DIR=pool
+    - TEST_DIR=pow
     - RUST_TEST_THREADS=1 TEST_DIR=grin
 
 script: cd $TEST_DIR && cargo test --verbose

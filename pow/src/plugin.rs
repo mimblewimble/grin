@@ -25,7 +25,7 @@ use MiningWorker;
 use core::global;
 
 use core::core::Proof;
-use types::{MinerConfig, ServerConfig};
+use types::MinerConfig;
 
 use std::sync::{Mutex};
 
@@ -64,7 +64,7 @@ impl Default for PluginMiner {
 
 impl PluginMiner {
 	/// Init the plugin miner
-	pub fn init(&mut self, miner_config: MinerConfig, _server_config: ServerConfig){
+	pub fn init(&mut self, miner_config: MinerConfig){
 				//Get directory of executable
 		let mut exe_path=env::current_exe().unwrap();
 		exe_path.pop();

@@ -18,9 +18,8 @@ use std::path::PathBuf;
 use std::io;
 use std::fmt;
 
-use grin::{ServerConfig,
-           MinerConfig};
-
+use grin::ServerConfig;
+use pow::types::MinerConfig;
 
 /// Error type wrapping config errors.
 #[derive(Debug)]

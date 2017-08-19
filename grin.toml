@@ -34,7 +34,7 @@ seeding_type = "None"
 #UserTesting - For regular user testing, much lighter than production more
 #Production - Full production cuckoo parameters
 
-mining_parameter_mode = "Production"
+mining_parameter_mode = "UserTesting"
 
 #7 = Bit flags for FULL_NODE, this structure needs to be changed
 #internally to make it more configurable
@@ -72,7 +72,7 @@ cuckoo_miner_async_mode = true
 #if not specified, grin will look in the directory /deps relative
 #to the executable
 
-cuckoo_miner_plugin_dir = "deps"
+cuckoo_miner_plugin_dir = "/home/mcordner/projects/rust/cuckoo-miner-plugins/build/plugins"
 
 #if using cuckoo_miner, the implementation to use.. currently
 #just filters for this word in the filenames in the plugin 

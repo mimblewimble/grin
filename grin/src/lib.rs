@@ -34,8 +34,6 @@ extern crate serde_derive;
 extern crate time;
 extern crate tokio_core;
 extern crate tokio_timer;
-#[macro_use]
-extern crate lazy_static;
 extern crate itertools;
 
 extern crate grin_api as api;
@@ -55,6 +53,7 @@ mod server;
 mod seed;
 mod sync;
 mod types;
+mod miner;
 
 pub use server::{Server};
-pub use types::{ServerConfig, MinerConfig, Seeding, ServerStats};
+pub use types::{ServerConfig, Seeding, ServerStats};

@@ -40,11 +40,11 @@ use core::ser::{AsFixedBytes};
 use chain;
 use secp;
 use pool;
-use types::{MinerConfig, ServerConfig};
+use pow::types::MinerConfig;
 use util;
 use wallet::{CbAmount, WalletReceiveRequest, CbData};
 
-use plugin::PluginMiner;
+use pow::plugin::PluginMiner;
 
 use itertools::Itertools;
 
@@ -287,7 +287,6 @@ impl Miner {
 	/// chain anytime required and looking for PoW solution.
 	pub fn run_loop(&self,
 					miner_config:MinerConfig,
-					server_config:ServerConfig,
 					cuckoo_size:u32,
 					proof_size:usize) {
 
@@ -296,7 +295,7 @@ impl Miner {
 		let mut miner=None;
 		if miner_config.use_cuckoo_miner  {
 			plugin_miner = Some(PluginMiner::new(consensus::EASINESS, cuckoo_size, proof_size));
-			plugin_miner.as_mut().unwrap().init(miner_config.clone(),server_config);
+			plugin_miner.as_mut().unwrap().init(miner_config.clone());
 		} else {
 			miner = Some(cuckoo::Miner::new(consensus::EASINESS, cuckoo_size, proof_size));
 		}

@@ -31,15 +31,22 @@
 extern crate blake2_rfc as blake2;
 extern crate rand;
 extern crate time;
+#[macro_use]
+extern crate lazy_static;
+#[macro_use]
+extern crate log;
+extern crate env_logger;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 
 extern crate grin_core as core;
 
 extern crate cuckoo_miner;
 
 mod siphash;
-mod plugin;
+pub mod plugin;
 pub mod cuckoo;
-pub mod miner;
 pub mod types;
 
 use core::consensus::EASINESS;
@@ -127,10 +134,10 @@ pub fn pow_size<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader,
 mod test {
 	use super::*;
 	use global;
-	use core::target::Difficulty;
-	use genesis;
-  	use consensus::MINIMUM_DIFFICULTY;
-	use global::MiningParameterMode;
+	use core::core::target::Difficulty;
+	use core::genesis;
+  	use core::consensus::MINIMUM_DIFFICULTY;
+	use core::global::MiningParameterMode;
 
 
 	#[test]

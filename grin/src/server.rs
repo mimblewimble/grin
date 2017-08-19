@@ -34,9 +34,12 @@ use pool;
 use seed;
 use sync;
 use types::*;
+use pow;
+use pow::MiningWorker;
 
 use core::global;
-use pow::miner;
+use core::{consensus, genesis};
+
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -82,8 +85,26 @@ impl Server {
 		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(pool_adapter.clone())));
 
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));
+
+		let mut genesis_block = None;
+		if !chain::Chain::chain_exists(config.db_root.clone()){
+			
+			info!("No genesis block found, creating and saving one.");
+			let mut gen = genesis::genesis();
+			let diff = gen.header.difficulty.clone();
+					
+			let sz = global::sizeshift();
+			let proof_size = global::proofsize();
+
+			let mut internal_miner = pow::cuckoo::Miner::new(consensus::EASINESS, sz as u32, proof_size); 
+			pow::pow_size(&mut internal_miner, &mut gen.header, diff, sz as u32).unwrap();
+			genesis_block=Some(gen);
+		}
 		let shared_chain = Arc::new(chain::Chain::init(config.db_root.clone(),
-		                                               chain_adapter.clone())?);
+		                                               chain_adapter.clone(),
+													   genesis_block,
+													   pow::verify_size)?);
+			
 		pool_adapter.set_chain(shared_chain.clone());
 
 		let peer_store = Arc::new(p2p::PeerStore::new(config.db_root.clone())?);
@@ -140,16 +161,15 @@ impl Server {
 
 	/// Start mining for blocks on a separate thread. Uses toy miner by default,
 	/// mostly for testing, but can also load a plugin from cuckoo-miner
-	pub fn start_miner(&self, config: MinerConfig) {
+	pub fn start_miner(&self, config: pow::types::MinerConfig) {
 		let cuckoo_size = global::sizeshift();
 		let proof_size = global::proofsize();
 
 
 		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
 		miner.set_debug_output_id(format!("Port {}",self.config.p2p_config.unwrap().port));
-		let server_config = self.config.clone();
 		thread::spawn(move || {
-			miner.run_loop(config.clone(), server_config, cuckoo_size as u32, proof_size);
+			miner.run_loop(config.clone(), cuckoo_size as u32, proof_size);
 		});
 	}
 
