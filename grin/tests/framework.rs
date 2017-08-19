@@ -18,6 +18,7 @@ extern crate grin_p2p as p2p;
 extern crate grin_chain as chain;
 extern crate grin_api as api;
 extern crate grin_wallet as wallet;
+extern crate grin_pow as pow;
 extern crate secp256k1zkp as secp;
 
 extern crate blake2_rfc as blake2;
@@ -200,7 +201,6 @@ impl LocalServerContainer {
             seeds=vec![self.config.seed_addr.to_string()];
         }
 
-
         let s = grin::Server::future(
             grin::ServerConfig{
                 api_http_addr: api_addr,
@@ -219,7 +219,7 @@ impl LocalServerContainer {
             thread::sleep(time::Duration::from_millis(1000));
         }
 
-        let miner_config = grin::MinerConfig {
+        let miner_config = pow::types::MinerConfig {
             enable_mining: self.config.start_miner,
             burn_reward: self.config.burn_mining_rewards,
             use_cuckoo_miner: false,
