@@ -35,11 +35,8 @@ use seed;
 use sync;
 use types::*;
 use pow;
-use pow::MiningWorker;
 
 use core::global;
-use core::{consensus, genesis};
-
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -52,7 +49,7 @@ pub struct Server {
 	/// data store access
 	chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 }
 
 impl Server {
@@ -88,18 +85,9 @@ impl Server {
 
 		let mut genesis_block = None;
 		if !chain::Chain::chain_exists(config.db_root.clone()){
-			
-			info!("No genesis block found, creating and saving one.");
-			let mut gen = genesis::genesis();
-			let diff = gen.header.difficulty.clone();
-					
-			let sz = global::sizeshift();
-			let proof_size = global::proofsize();
-
-			let mut internal_miner = pow::cuckoo::Miner::new(consensus::EASINESS, sz as u32, proof_size); 
-			pow::pow_size(&mut internal_miner, &mut gen.header, diff, sz as u32).unwrap();
-			genesis_block=Some(gen);
+			genesis_block=pow::mine_genesis_block(config.mining_config.clone());
 		}
+
 		let shared_chain = Arc::new(chain::Chain::init(config.db_root.clone(),
 		                                               chain_adapter.clone(),
 													   genesis_block,
@@ -164,7 +152,6 @@ impl Server {
 	pub fn start_miner(&self, config: pow::types::MinerConfig) {
 		let cuckoo_size = global::sizeshift();
 		let proof_size = global::proofsize();
-
 
 		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
 		miner.set_debug_output_id(format!("Port {}",self.config.p2p_config.unwrap().port));

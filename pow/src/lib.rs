@@ -49,12 +49,13 @@ pub mod plugin;
 pub mod cuckoo;
 pub mod types;
 
-use core::consensus::EASINESS;
+use core::consensus;
 use core::core::BlockHeader;
 use core::core::hash::Hashed;
 use core::core::Proof;
 use core::core::target::Difficulty;
 use core::global;
+use core::genesis;
 use cuckoo::{Cuckoo, Error};
 
 /// Should be implemented by anything providing mining services
@@ -63,7 +64,7 @@ use cuckoo::{Cuckoo, Error};
 pub trait MiningWorker {
 
 	/// This only sets parameters and does initialisation work now
-	fn new(ease: u32, sizeshift: u32, proof_size:usize) -> Self;
+	fn new(ease: u32, sizeshift: u32, proof_size:usize) -> Self where Self:Sized;
 
 	/// Actually perform a mining attempt on the given input and
 	/// return a proof if found
@@ -79,7 +80,7 @@ pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
 	if bh.difficulty > bh.pow.clone().to_difficulty() {
 		return false;
 	}
-	Cuckoo::new(&bh.hash()[..], cuckoo_sz).verify(bh.pow.clone(), EASINESS as u64)
+	Cuckoo::new(&bh.hash()[..], cuckoo_sz).verify(bh.pow.clone(), consensus::EASINESS as u64)
 }
 
 /// Uses the much easier Cuckoo20 (mostly for
@@ -88,9 +89,38 @@ pub fn pow20<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader, diff: Difficul
 	pow_size(miner, bh, diff, 20)
 }
 
+/// Mines a genesis block, using the config specified miner if specified. Otherwise,
+/// uses the internal miner
+///
+
+pub fn mine_genesis_block(miner_config:Option<types::MinerConfig>)->Option<core::core::Block> {
+	info!("Starting miner loop for Genesis Block");
+	let mut gen = genesis::genesis();
+	let diff = gen.header.difficulty.clone();
+			
+	let sz = global::sizeshift() as u32;
+	let proof_size = global::proofsize();
+
+	let mut miner:Box<MiningWorker> = match miner_config {
+		Some(c) => {
+			if c.use_cuckoo_miner  {
+				let mut p = plugin::PluginMiner::new(consensus::EASINESS, sz, proof_size);
+				p.init(c.clone());
+				Box::new(p)
+
+			} else {
+				Box::new(cuckoo::Miner::new(consensus::EASINESS, sz, proof_size))
+			}		
+		},
+		None => Box::new(cuckoo::Miner::new(consensus::EASINESS, sz, proof_size)),
+	};
+	pow_size(&mut *miner, &mut gen.header, diff, sz as u32).unwrap();
+	Some(gen)
+}
+
 /// Runs a proof of work computation over the provided block using the provided Mining Worker,
 /// until the required difficulty target is reached. May take a while for a low target...
-pub fn pow_size<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader,
+pub fn pow_size<T: MiningWorker + ?Sized>(miner:&mut T, bh: &mut BlockHeader,
 								 diff: Difficulty, _: u32) -> Result<(), Error> {
 	let start_nonce = bh.nonce;
 
@@ -145,7 +175,7 @@ mod test {
         global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 		let mut b = genesis::genesis();
 		b.header.nonce = 310;
-		let mut internal_miner = cuckoo::Miner::new(EASINESS, global::sizeshift() as u32, global::proofsize());
+		let mut internal_miner = cuckoo::Miner::new(consensus::EASINESS, global::sizeshift() as u32, global::proofsize());
 		pow_size(&mut internal_miner, &mut b.header, Difficulty::from_num(MINIMUM_DIFFICULTY), global::sizeshift() as u32).unwrap();
 		assert!(b.header.nonce != 310);
 		assert!(b.header.pow.clone().to_difficulty() >= Difficulty::from_num(MINIMUM_DIFFICULTY));

@@ -29,7 +29,6 @@ use chain::types::*;
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::consensus;
-use core::genesis;
 use core::global;
 use core::global::MiningParameterMode;
 
@@ -39,22 +38,6 @@ fn clean_output_dir(dir_name:&str){
     let _ = fs::remove_dir_all(dir_name);
 }
 
-fn mine_genesis_block(db_root:String)->Option<core::core::Block> {
-	let mut genesis_block = None;
-	if !chain::Chain::chain_exists(db_root.clone()){
-		let mut gen = genesis::genesis();
-		let diff = gen.header.difficulty.clone();
-				
-		let sz = global::sizeshift();
-		let proof_size = global::proofsize();
-
-		let mut internal_miner = cuckoo::Miner::new(consensus::EASINESS, sz as u32, proof_size); 
-		pow::pow_size(&mut internal_miner, &mut gen.header, diff, sz as u32).unwrap();
-		genesis_block=Some(gen);
-	}
-	genesis_block
-}
-
 #[test]
 fn mine_empty_chain() {
     let _ = env_logger::init();
@@ -62,9 +45,12 @@ fn mine_empty_chain() {
     global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let mut rng = OsRng::new().unwrap();
-	let gb = mine_genesis_block(".grin".to_string());
+	let mut genesis_block = None;
+	if !chain::Chain::chain_exists(".grin".to_string()){
+		genesis_block=pow::mine_genesis_block(None);
+	}
 	let chain = chain::Chain::init(".grin".to_string(), Arc::new(NoopAdapter {}),
-									gb, pow::verify_size).unwrap();
+									genesis_block, pow::verify_size).unwrap();
 
 	// mine and add a few blocks
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
@@ -109,9 +95,13 @@ fn mine_forks() {
 	clean_output_dir(".grin2");
 
 	let mut rng = OsRng::new().unwrap();
-	let gb = mine_genesis_block(".grin2".to_string());
+
+	let mut genesis_block = None;
+	if !chain::Chain::chain_exists(".grin2".to_string()){
+		genesis_block=pow::mine_genesis_block(None);
+	}
 	let chain = chain::Chain::init(".grin2".to_string(), Arc::new(NoopAdapter {}),
-									gb, pow::verify_size).unwrap();
+									genesis_block, pow::verify_size).unwrap();
 
 	// mine and add a few blocks
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
