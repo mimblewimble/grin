@@ -66,13 +66,13 @@ use_cuckoo_miner = true
 #so in a post-release world this should only be used if you really want
 #to run cards in parallel
 
-cuckoo_miner_async_mode = true
+cuckoo_miner_async_mode = false
 
 #If using cuckoo_miner, the directory in which plugins are installed
 #if not specified, grin will look in the directory /deps relative
 #to the executable
 
-cuckoo_miner_plugin_dir = "/home/mcordner/projects/rust/cuckoo-miner-plugins/build/plugins"
+#cuckoo_miner_plugin_dir = "target/debug/deps"
 
 #if using cuckoo_miner, the implementation to use.. currently
 #just filters for this word in the filenames in the plugin 
