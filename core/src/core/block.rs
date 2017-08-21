@@ -381,15 +381,19 @@ impl Block {
 	pub fn validate(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
 		self.verify_coinbase(secp)?;
 		self.verify_kernels(secp)?;
-
-		// verify the transaction Merkle root
-		let tx_merkle = merkle_inputs_outputs(&self.inputs, &self.outputs);
-		if tx_merkle != self.header.tx_merkle {
-			// TODO more specific error
-			return Err(secp::Error::IncorrectCommitSum);
-		}
-		Ok(())
+        self.verify_merkle_inputs_outputs()?;
+        Ok(())
 	}
+
+    /// Verify the transaction Merkle root
+    pub fn verify_merkle_inputs_outputs(&self) -> Result<(), secp::Error> {
+        let tx_merkle = merkle_inputs_outputs(&self.inputs, &self.outputs);
+        if tx_merkle != self.header.tx_merkle {
+            // TODO more specific error
+            return Err(secp::Error::IncorrectCommitSum);
+        }
+        Ok(())
+    }
 
 	/// Validate the sum of input/output commitments match the sum in kernels
 	/// and
@@ -551,4 +555,66 @@ mod test {
 		assert_eq!(b3.inputs.len(), 3);
 		assert_eq!(b3.outputs.len(), 4);
 	}
+
+    #[test]
+    fn empty_block_with_coinbase_is_valid() {
+        let ref secp = new_secp();
+        let b = new_block(vec![], secp);
+
+        assert_eq!(b.inputs.len(), 0);
+        assert_eq!(b.outputs.len(), 1);
+        assert_eq!(b.kernels.len(), 1);
+
+        let coinbase_outputs = b.outputs
+			.iter()
+			.filter(|out| out.features.contains(COINBASE_OUTPUT))
+            .map(|o| o.clone())
+			.collect::<Vec<_>>();
+        assert_eq!(coinbase_outputs.len(), 1);
+
+        let coinbase_kernels = b.kernels
+			.iter()
+			.filter(|out| out.features.contains(COINBASE_KERNEL))
+            .map(|o| o.clone())
+			.collect::<Vec<_>>();
+        assert_eq!(coinbase_kernels.len(), 1);
+
+        // the block should be valid here (single coinbase output with corresponding txn kernel)
+        assert_eq!(b.validate(&secp), Ok(()));
+    }
+
+    #[test]
+    // test that flipping the COINBASE_OUTPUT flag on the output features
+    // invalidates the block and specifically it causes verify_coinbase to fail
+    // additionally verifying the merkle_inputs_outputs also fails
+    fn remove_coinbase_output_flag() {
+        let ref secp = new_secp();
+        let mut b = new_block(vec![], secp);
+
+        assert!(b.outputs[0].features.contains(COINBASE_OUTPUT));
+        b.outputs[0].features.remove(COINBASE_OUTPUT);
+
+        assert_eq!(b.verify_coinbase(&secp), Err(secp::Error::IncorrectCommitSum));
+        assert_eq!(b.verify_kernels(&secp), Ok(()));
+        assert_eq!(b.verify_merkle_inputs_outputs(), Err(secp::Error::IncorrectCommitSum));
+
+        assert_eq!(b.validate(&secp), Err(secp::Error::IncorrectCommitSum));
+    }
+
+    #[test]
+    // test that flipping the COINBASE_KERNEL flag on the kernel features
+    // invalidates the block and specifically it causes verify_coinbase to fail
+    fn remove_coinbase_kernel_flag() {
+        let ref secp = new_secp();
+        let mut b = new_block(vec![], secp);
+
+        assert!(b.kernels[0].features.contains(COINBASE_KERNEL));
+        b.kernels[0].features.remove(COINBASE_KERNEL);
+
+        assert_eq!(b.verify_coinbase(&secp), Err(secp::Error::IncorrectCommitSum));
+        assert_eq!(b.verify_kernels(&secp), Ok(()));
+        assert_eq!(b.verify_merkle_inputs_outputs(), Ok(()));
+
+        assert_eq!(b.validate(&secp), Err(secp::Error::IncorrectCommitSum));
+    }
 }
