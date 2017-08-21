@@ -93,7 +93,7 @@ impl Default for WalletConfig {
 	fn default() -> WalletConfig {
 		WalletConfig {
 			enable_wallet: false,
-			api_http_addr: "http://127.0.0.1:13415".to_string(),
+			api_http_addr: "127.0.0.1:13416".to_string(),
 			check_node_api_http_addr: "http://127.0.0.1:13415".to_string(),
 			data_file_dir: ".".to_string(),
 		}
