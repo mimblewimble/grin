@@ -380,7 +380,7 @@ fn peaks(num: u64) -> Vec<u64> {
 /// To get the height of any node (say 1101), we need to travel left in the
 /// tree, get the leftmost node and count the ones. To travel left, we just
 /// need to subtract the position by it's most significant bit, mins one. For
-/// example to get from 1101 to 110 we subtract it by (1000-1) (`13-(8-1)=5`).
+/// example to get from 1101 to 110 we subtract it by (1000-1) (`13-(8-1)=6`).
 /// Then to to get 110 to 11, we subtract it by (100-1) ('6-(4-1)=3`).
 ///
 /// By applying this operation recursively, until we get a number that, in

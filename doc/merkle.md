@@ -233,7 +233,7 @@ easily, in the background, apply it as a whole on affected chunks.
 
 Note that our sum MMR never actually fully deletes a key (i.e. output
 commitment) as subsequent leaf nodes aren't shifted and parents don't need
-rebalancing. Deleting a node just makes its storage in the tree unecessary,
+rebalancing. Deleting a node just makes its storage in the tree unnecessary,
 allowing for potential additional pruning of parent nodes.
 
 ### Key to Tree Insertion Position Index
