@@ -16,8 +16,8 @@ grin_wallet = { path = "../wallet" }
 grin_pow = { path = "../pow" }
 secp256k1zkp = { path = "../secp256k1zkp" }
 
-#cuckoo_miner = { git = "https://github.com/mimblewimble/cuckoo-miner", tag="grin_integration_5"}
-cuckoo_miner = { path = "../../cuckoo-miner"}
+cuckoo_miner = { git = "https://github.com/mimblewimble/cuckoo-miner", tag="grin_integration_5"}
+#cuckoo_miner = { path = "../../cuckoo-miner"}
 
 blake2-rfc = "~0.2.17"
 env_logger="^0.3.5"
