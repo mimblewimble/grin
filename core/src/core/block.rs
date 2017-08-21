@@ -38,6 +38,7 @@ bitflags! {
 }
 
 /// Block header, fairly standard compared to other blockchains.
+#[derive(Debug, PartialEq)]
 pub struct BlockHeader {
 	/// Height of this block since the genesis block (height 0)
 	pub height: u64,
@@ -136,6 +137,7 @@ impl Readable for BlockHeader {
 /// non-explicit, assumed to be deducible from block height (similar to
 /// bitcoin's schedule) and expressed as a global transaction fee (added v.H),
 /// additive to the total of fees ever collected.
+#[derive(Debug)]
 pub struct Block {
 	/// The header with metadata and commitments to the rest of the data
 	pub header: BlockHeader,
@@ -616,5 +618,24 @@ mod test {
         assert_eq!(b.verify_merkle_inputs_outputs(), Ok(()));
 
         assert_eq!(b.validate(&secp), Err(secp::Error::IncorrectCommitSum));
+    }
+
+    #[test]
+    fn serialize_deserialize_block() {
+        let ref secp = new_secp();
+        let b = new_block(vec![], secp);
+
+        let mut vec = Vec::new();
+        ser::serialize(&mut vec, &b).expect("serialization failed");
+        let b2: Block = ser::deserialize(&mut &vec[..]).unwrap();
+
+        assert_eq!(b.inputs, b2.inputs);
+        assert_eq!(b.outputs, b2.outputs);
+        assert_eq!(b.kernels, b2.kernels);
+
+        // TODO - timestamps are not coming back equal here (UTC related?) -
+        // timestamp: Tm { tm_sec: 51, tm_min: 7, tm_hour: 23, tm_mday: 20, tm_mon: 7, tm_year: 117, tm_wday: 0, tm_yday: 231, tm_isdst: 1, tm_utcoff: -14400, tm_nsec: 780878000 },
+        // timestamp: Tm { tm_sec: 51, tm_min: 7, tm_hour: 3, tm_mday: 21, tm_mon: 7, tm_year: 117, tm_wday: 1, tm_yday: 232, tm_isdst: 0, tm_utcoff: 0, tm_nsec: 0 },
+        assert_eq!(b.header, b2.header);
     }
 }
