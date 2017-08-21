@@ -85,7 +85,7 @@ impl Chain {
 		db_root: String,
 		adapter: Arc<ChainAdapter>,
 		gen_block: Option<Block>,
-    	pow_verifier: fn(&BlockHeader, u32) -> bool,
+		pow_verifier: fn(&BlockHeader, u32) -> bool,
 	) -> Result<Chain, Error> {
 		let chain_store = store::ChainKVStore::new(db_root)?;
 
@@ -93,7 +93,7 @@ impl Chain {
 		let head = match chain_store.head() {
 			Ok(tip) => tip,
 			Err(grin_store::Error::NotFoundErr) => {
-							if let None = gen_block {
+				if let None = gen_block {
 					return Err(Error::GenesisBlockRequired);
 				}
 

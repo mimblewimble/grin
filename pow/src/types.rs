@@ -67,7 +67,7 @@ impl Default for MinerConfig {
 			wallet_receiver_url: "http://localhost:13416".to_string(),
 			burn_reward: false,
 			slow_down_in_millis: Some(0),
-            attempt_time_per_block: 2,
+i			attempt_time_per_block: 2,
 		}
 	}
 }
