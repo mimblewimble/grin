@@ -32,6 +32,7 @@ use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
 use core::core::hash::{Hash, Hashed};
 use pow::MiningWorker;
+use pow::types::MinerConfig;
 use core::ser;
 use core::ser::{AsFixedBytes};
 
@@ -40,7 +41,6 @@ use core::ser::{AsFixedBytes};
 use chain;
 use secp;
 use pool;
-use pow::types::MinerConfig;
 use util;
 use wallet::{CbAmount, WalletReceiveRequest, CbData};
 
@@ -229,15 +229,17 @@ impl Miner {
 							b:&mut Block,
 							cuckoo_size: u32,
 							head:&BlockHeader,
+							attempt_time_per_block: u32,
 							latest_hash:&mut Hash)
 		-> Option<Proof> {
 		// look for a pow for at most 2 sec on the same block (to give a chance to new
 		// transactions) and as long as the head hasn't changed
-		let deadline = time::get_time().sec + 2;
+		let deadline = time::get_time().sec + attempt_time_per_block as i64;
 
-		debug!("(Server ID: {}) Mining at Cuckoo{} for at most 2 secs on block {} at difficulty {}.",
+		debug!("(Server ID: {}) Mining at Cuckoo{} for at most {} secs on block {} at difficulty {}.",
 		       self.debug_output_id,
 		       cuckoo_size,
+			   attempt_time_per_block,
 		       latest_hash,
 		       b.header.difficulty);
 		let mut iter_count = 0;
@@ -329,6 +331,7 @@ impl Miner {
 					&mut b,
 					cuckoo_size,
 					&head,
+					miner_config.attempt_time_per_block,
 					&mut latest_hash);
 				}
 			}
@@ -337,6 +340,7 @@ impl Miner {
 					&mut b,
 					cuckoo_size,
 					&head,
+					miner_config.attempt_time_per_block,
 					&mut latest_hash);
 			}
 
