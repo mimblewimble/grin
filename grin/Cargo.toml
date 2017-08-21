@@ -28,3 +28,6 @@ tokio-core="^0.1.1"
 tokio-timer="^0.1.0"
 rand = "^0.3"
 itertools = "~0.6.0"
+
+[dev_dependencies]
+blake2-rfc = "~0.2.17"
