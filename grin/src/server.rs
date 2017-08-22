@@ -49,7 +49,7 @@ pub struct Server {
 	/// data store access
 	chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 }
 
 impl Server {
@@ -89,9 +89,9 @@ impl Server {
 		}
 
 		let shared_chain = Arc::new(chain::Chain::init(config.db_root.clone(),
-														chain_adapter.clone(),
-														genesis_block,
-														pow::verify_size)?);
+																chain_adapter.clone(),
+																genesis_block,
+																pow::verify_size)?);
 			
 		pool_adapter.set_chain(shared_chain.clone());
 
@@ -122,8 +122,8 @@ impl Server {
 		info!("Starting rest apis at: {}", &config.api_http_addr);
 
 		api::start_rest_apis(config.api_http_addr.clone(),
-								shared_chain.clone(),
-								tx_pool.clone());
+												 shared_chain.clone(),
+												 tx_pool.clone());
 
 		warn!("Grin server started.");
 		Ok(Server {
