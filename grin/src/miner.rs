@@ -144,21 +144,22 @@ impl Miner {
 	}
 
 	/// Inner part of the mining loop for cuckoo-miner asynch mode
-	pub fn inner_loop_async(&self, plugin_miner:&mut PluginMiner,
-							difficulty:Difficulty,
-							b:&mut Block,
-							cuckoo_size: u32,
-							head:&BlockHeader,
-							latest_hash:&Hash,
-							attempt_time_per_block: u32)
-		-> Option<Proof> {
+	pub fn inner_loop_async(&self, 
+	                        plugin_miner:&mut PluginMiner,
+	                        difficulty:Difficulty,
+	                        b:&mut Block,
+	                        cuckoo_size: u32,
+	                        head:&BlockHeader,
+	                        latest_hash:&Hash,
+	                        attempt_time_per_block: u32)
+	                        -> Option<Proof> {
 
 		debug!("(Server ID: {}) Mining at Cuckoo{} for at most {} secs at height {} and difficulty {}.",
-			self.debug_output_id,
-			cuckoo_size,
-			 attempt_time_per_block,
-			b.header.height,
-			b.header.difficulty);
+		        self.debug_output_id,
+		        cuckoo_size,
+		        attempt_time_per_block,
+		        b.header.height,
+		        b.header.difficulty);
 
 		// look for a pow for at most 10 sec on the same block (to give a chance to new
 		// transactions) and as long as the head hasn't changed
@@ -225,23 +226,23 @@ i						let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
 
 	/// The inner part of mining loop for synchronous mode
 	pub fn inner_loop_sync<T: MiningWorker>(&self,
-						    miner:&mut T,
-							b:&mut Block,
-							cuckoo_size: u32,
-							head:&BlockHeader,
-							attempt_time_per_block: u32,
-							latest_hash:&mut Hash)
-		-> Option<Proof> {
+	                                        miner:&mut T,
+	                                        b:&mut Block,
+	                                        cuckoo_size: u32,
+	                                        head:&BlockHeader,
+	                                        attempt_time_per_block: u32,
+	                                        latest_hash:&mut Hash)
+	                                        -> Option<Proof> {
 		// look for a pow for at most 2 sec on the same block (to give a chance to new
 		// transactions) and as long as the head hasn't changed
 		let deadline = time::get_time().sec + attempt_time_per_block as i64;
 
 		debug!("(Server ID: {}) Mining at Cuckoo{} for at most {} secs on block {} at difficulty {}.",
-			self.debug_output_id,
-			cuckoo_size,
-			attempt_time_per_block,
-			latest_hash,
-			b.header.difficulty);
+		        self.debug_output_id,
+		        cuckoo_size,
+		        attempt_time_per_block,
+		        latest_hash,
+		        b.header.difficulty);
 		let mut iter_count = 0;
 
 		if self.config.slow_down_in_millis != None && self.config.slow_down_in_millis.unwrap() > 0 {
@@ -261,7 +262,7 @@ i						let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
 				b.header.difficulty,
 				proof_diff);*/
 
-			if proof_diff >= b.header.difficulty {
+				if proof_diff >= b.header.difficulty {
 					sol = Some(proof);
 					break;
 				}
@@ -278,8 +279,8 @@ i						let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
 
 		if sol==None {
 			debug!("(Server ID: {}) No solution found after {} iterations, continuing...",
-				self.debug_output_id,
-				iter_count)
+			       self.debug_output_id,
+			       iter_count)
 		}
 
 		sol
@@ -288,9 +289,9 @@ i						let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
 	pub fn run_loop(&self,
-					miner_config:MinerConfig,
-					cuckoo_size:u32,
-					proof_size:usize) {
+	                miner_config:MinerConfig,
+	                cuckoo_size:u32,
+	                proof_size:usize) {
 
 		info!("(Server ID: {}) Starting miner loop.", self.debug_output_id);
 		let mut plugin_miner=None;
@@ -320,35 +321,35 @@ i						let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
 			if let Some(mut p) = plugin_miner.as_mut() {
 				if use_async {
 					sol = self.inner_loop_async(&mut p,
-						b.header.difficulty.clone(),
-						&mut b,
-						cuckoo_size,
-						&head,
-						&latest_hash,
-						miner_config.attempt_time_per_block);
+					      b.header.difficulty.clone(),
+					      &mut b,
+					      cuckoo_size,
+					      &head,
+					      &latest_hash,
+					      miner_config.attempt_time_per_block);
 				} else {
 					sol = self.inner_loop_sync(p,
-					&mut b,
-					cuckoo_size,
-					&head,
-					miner_config.attempt_time_per_block,
-					&mut latest_hash);
+					      &mut b,
+					      cuckoo_size,
+					      &head,
+					      miner_config.attempt_time_per_block,
+					      &mut latest_hash);
 				}
 			}
 			if let Some(mut m) = miner.as_mut() {
 				sol = self.inner_loop_sync(m,
-					&mut b,
-					cuckoo_size,
-					&head,
-					miner_config.attempt_time_per_block,
-					&mut latest_hash);
+				      &mut b,
+				      cuckoo_size,
+				      &head,
+				      miner_config.attempt_time_per_block,
+				      &mut latest_hash);
 			}
 
 			// if we found a solution, push our block out
 			if let Some(proof) = sol {
 				info!("(Server ID: {}) Found valid proof of work, adding block {}.",
-					  self.debug_output_id, b.hash());
-					b.header.pow = proof;
+				      self.debug_output_id, b.hash());
+				      b.header.pow = proof;
 				let opts = if cuckoo_size < consensus::DEFAULT_SIZESHIFT as u32 {
 					chain::EASY_POW
 				} else {
@@ -368,9 +369,9 @@ i						let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
 	/// Builds a new block with the chain head as previous and eligible
 	/// transactions from the pool.
 	fn build_block(&self,
-					head: &core::BlockHeader,
-					coinbase: (core::Output, core::TxKernel))
-					-> core::Block {
+	               head: &core::BlockHeader,
+	               coinbase: (core::Output, core::TxKernel))
+	               -> core::Block {
 		let mut now_sec = time::get_time().sec;
 		let head_sec = head.timestamp.to_timespec().sec;
 		if now_sec == head_sec {
