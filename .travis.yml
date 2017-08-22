@@ -22,6 +22,7 @@ env:
     - TEST_DIR=api
     - TEST_DIR=pool
     - TEST_DIR=pow
+    - TEST_DIR=wallet
     - RUST_TEST_THREADS=1 TEST_DIR=grin
 
 script: cd $TEST_DIR && cargo test --verbose
