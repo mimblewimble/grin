@@ -89,16 +89,16 @@ impl Server {
 		}
 
 		let shared_chain = Arc::new(chain::Chain::init(config.db_root.clone(),
-																chain_adapter.clone(),
-																genesis_block,
-																pow::verify_size)?);
+		                                               chain_adapter.clone(),
+		                                               genesis_block,
+		                                               pow::verify_size)?);
 			
 		pool_adapter.set_chain(shared_chain.clone());
 
 		let peer_store = Arc::new(p2p::PeerStore::new(config.db_root.clone())?);
 		let net_adapter = Arc::new(NetToChainAdapter::new(shared_chain.clone(),
-															tx_pool.clone(),
-															peer_store.clone()));
+		                                                  tx_pool.clone(),
+		                                                  peer_store.clone()));
 		let p2p_server =
 			Arc::new(p2p::Server::new(config.capabilities, config.p2p_config.unwrap(), net_adapter.clone()));
 		chain_adapter.init(p2p_server.clone());
@@ -122,8 +122,8 @@ impl Server {
 		info!("Starting rest apis at: {}", &config.api_http_addr);
 
 		api::start_rest_apis(config.api_http_addr.clone(),
-												 shared_chain.clone(),
-												 tx_pool.clone());
+		                     shared_chain.clone(),
+		                     tx_pool.clone());
 
 		warn!("Grin server started.");
 		Ok(Server {
