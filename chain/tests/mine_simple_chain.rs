@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2017 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,32 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate grin_core;
-extern crate grin_chain;
+extern crate grin_core as core;
+extern crate grin_chain as chain;
 extern crate env_logger;
 extern crate time;
 extern crate rand;
 extern crate secp256k1zkp as secp;
-
-extern crate grin_grin as grin;
+extern crate grin_pow as pow;
 
 use std::fs;
 use std::sync::Arc;
 use std::thread;
 use rand::os::OsRng;
 
-use grin_chain::types::*;
-use grin_core::core::hash::Hashed;
-use grin_core::core::target::Difficulty;
-use grin_core::pow;
-use grin_core::core;
-use grin_core::consensus;
-use grin_core::pow::cuckoo;
-use grin_core::global;
-use grin_core::global::MiningParameterMode;
+use chain::types::*;
+use core::core::hash::Hashed;
+use core::core::target::Difficulty;
+use core::consensus;
+use core::global;
+use core::global::MiningParameterMode;
 
-use grin_core::pow::MiningWorker;
-
+use pow::{types, cuckoo, MiningWorker};
 
 fn clean_output_dir(dir_name:&str){
     let _ = fs::remove_dir_all(dir_name);
@@ -50,14 +45,18 @@ fn mine_empty_chain() {
     global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let mut rng = OsRng::new().unwrap();
-	let chain = grin_chain::Chain::init(".grin".to_string(), Arc::new(NoopAdapter {}))
-		.unwrap();
+	let mut genesis_block = None;
+	if !chain::Chain::chain_exists(".grin".to_string()){
+		genesis_block=pow::mine_genesis_block(None);
+	}
+	let chain = chain::Chain::init(".grin".to_string(), Arc::new(NoopAdapter {}),
+									genesis_block, pow::verify_size).unwrap();
 
 	// mine and add a few blocks
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
 
-	let mut miner_config = grin::MinerConfig {
+	let mut miner_config = types::MinerConfig {
 		enable_mining: true,
 		burn_reward: true,
 		..Default::default()
@@ -67,7 +66,7 @@ fn mine_empty_chain() {
 	let mut cuckoo_miner = cuckoo::Miner::new(consensus::EASINESS, global::sizeshift() as u32, global::proofsize());
 	for n in 1..4 {
 		let prev = chain.head_header().unwrap();
-		let mut b = core::Block::new(&prev, vec![], reward_key).unwrap();
+		let mut b = core::core::Block::new(&prev, vec![], reward_key).unwrap();
 		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -81,7 +80,7 @@ fn mine_empty_chain() {
 		).unwrap();
 
 		let bhash = b.hash();
-		chain.process_block(b, grin_chain::EASY_POW).unwrap();
+		chain.process_block(b, chain::EASY_POW).unwrap();
 
 		// checking our new head
 		let head = chain.head().unwrap();
@@ -96,8 +95,13 @@ fn mine_forks() {
 	clean_output_dir(".grin2");
 
 	let mut rng = OsRng::new().unwrap();
-	let chain = grin_chain::Chain::init(".grin2".to_string(), Arc::new(NoopAdapter {}))
-		.unwrap();
+
+	let mut genesis_block = None;
+	if !chain::Chain::chain_exists(".grin2".to_string()){
+		genesis_block=pow::mine_genesis_block(None);
+	}
+	let chain = chain::Chain::init(".grin2".to_string(), Arc::new(NoopAdapter {}),
+									genesis_block, pow::verify_size).unwrap();
 
 	// mine and add a few blocks
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
@@ -105,11 +109,11 @@ fn mine_forks() {
 
 	for n in 1..4 {
 		let prev = chain.head_header().unwrap();
-		let mut b = core::Block::new(&prev, vec![], reward_key).unwrap();
+		let mut b = core::core::Block::new(&prev, vec![], reward_key).unwrap();
 		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 		b.header.total_difficulty = Difficulty::from_num(2 * n);
 		let bhash = b.hash();
-		chain.process_block(b, grin_chain::SKIP_POW).unwrap();
+		chain.process_block(b, chain::SKIP_POW).unwrap();
 
 		// checking our new head
 		thread::sleep(::std::time::Duration::from_millis(50));
@@ -119,11 +123,11 @@ fn mine_forks() {
 		assert_eq!(head.prev_block_h, prev.hash());
 
 		// build another block with higher difficulty
-		let mut b = core::Block::new(&prev, vec![], reward_key).unwrap();
+		let mut b = core::core::Block::new(&prev, vec![], reward_key).unwrap();
 		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 		b.header.total_difficulty = Difficulty::from_num(2 * n + 1);
 		let bhash = b.hash();
-		chain.process_block(b, grin_chain::SKIP_POW).unwrap();
+		chain.process_block(b, chain::SKIP_POW).unwrap();
 
 		// checking head switch
 		thread::sleep(::std::time::Duration::from_millis(50));

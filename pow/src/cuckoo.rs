@@ -22,9 +22,9 @@ use std::cmp;
 
 use blake2;
 
-use core::Proof;
-use pow::siphash::siphash24;
-use pow::MiningWorker;
+use core::core::Proof;
+use siphash::siphash24;
+use MiningWorker;
 
 const MAXPATHLEN: usize = 8192;
 
@@ -326,7 +326,7 @@ fn u8_to_u64(p:&[u8], i: usize) -> u64 {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::Proof;
+	use core::core::Proof;
 
 
 	static V1:[u32;42] = [0x1fe9, 0x2050, 0x4581, 0x6322, 0x65ab, 0xb3c1, 0xc1a4, 

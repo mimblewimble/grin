@@ -34,8 +34,6 @@ extern crate serde_derive;
 extern crate time;
 extern crate tokio_core;
 extern crate tokio_timer;
-#[macro_use]
-extern crate lazy_static;
 extern crate itertools;
 
 extern crate grin_api as api;
@@ -47,18 +45,15 @@ extern crate grin_pool as pool;
 extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
+extern crate grin_pow as pow;
 extern crate secp256k1zkp as secp;
 
-extern crate cuckoo_miner;
-
 mod adapters;
-mod miner;
-mod plugin;
 mod server;
 mod seed;
 mod sync;
 mod types;
+mod miner;
 
 pub use server::{Server};
-pub use types::{ServerConfig, MinerConfig, Seeding, ServerStats};
-pub use plugin::PluginMiner;
+pub use types::{ServerConfig, Seeding, ServerStats};

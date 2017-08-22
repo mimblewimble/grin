@@ -22,7 +22,6 @@ use time;
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
 use core::core::{BlockHeader, Block};
-use core::pow;
 use types::*;
 use store;
 use core::global;
@@ -38,6 +37,8 @@ pub struct BlockContext {
 	pub adapter: Arc<ChainAdapter>,
 	/// The head
 	pub head: Tip,
+	/// The POW verification function
+	pub pow_verifier: fn(&BlockHeader, u32) -> bool,
 	/// The lock
 	pub lock: Arc<Mutex<bool>>,
 }
@@ -157,7 +158,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 			consensus::DEFAULT_SIZESHIFT
 		};
 		debug!("Validating block with cuckoo size {}", cycle_size);
-		if !pow::verify_size(header, cycle_size as u32) {
+		if !(ctx.pow_verifier)(header, cycle_size as u32) {
 			return Err(Error::InvalidPow);
 		}
 	}

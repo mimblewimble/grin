@@ -1,0 +1,24 @@
+[package]
+name = "grin_pow"
+version = "0.1.0"
+authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
+workspace = ".."
+
+[dependencies]
+blake2-rfc = "~0.2.17"
+rand = "^0.3"
+time = "^0.1"
+env_logger="^0.3.5"
+log = "^0.3"
+lazy_static = "~0.2.8"
+serde = "~1.0.8"
+serde_derive = "~1.0.8"
+
+cuckoo_miner = { git = "https://github.com/mimblewimble/cuckoo-miner", tag="grin_integration_6"}
+#cuckoo_miner = { path = "../../cuckoo-miner"}
+
+grin_core = { path = "../core" }
+
+[dev_dependencies]
+grin_chain = { path = "../chain"}
+secp256k1zkp = { path = "../secp256k1zkp" }

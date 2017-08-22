@@ -29,6 +29,7 @@ extern crate toml;
 extern crate grin_grin as grin;
 extern crate grin_p2p as p2p;
 extern crate grin_wallet as wallet;
+extern crate grin_pow as pow;
 
 pub mod config;
 pub mod types;

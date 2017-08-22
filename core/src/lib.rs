@@ -42,6 +42,5 @@ pub mod macros;
 pub mod consensus;
 pub mod core;
 pub mod genesis;
-pub mod pow;
 pub mod ser;
 pub mod global;

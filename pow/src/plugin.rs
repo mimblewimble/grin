@@ -19,13 +19,13 @@
 
 use std::env;
 
-use core::pow::cuckoo;
-use core::pow::cuckoo::Error;
-use core::pow::MiningWorker;
+use cuckoo;
+use cuckoo::Error;
+use MiningWorker;
 use core::global;
 
 use core::core::Proof;
-use types::{MinerConfig, ServerConfig};
+use types::MinerConfig;
 
 use std::sync::{Mutex};
 
@@ -64,11 +64,13 @@ impl Default for PluginMiner {
 
 impl PluginMiner {
 	/// Init the plugin miner
-	pub fn init(&mut self, miner_config: MinerConfig, _server_config: ServerConfig){
+	pub fn init(&mut self, miner_config: MinerConfig){
 				//Get directory of executable
 		let mut exe_path=env::current_exe().unwrap();
 		exe_path.pop();
 		let exe_path=exe_path.to_str().unwrap();
+
+        //println!("Plugin dir: {}", miner_config.clone().cuckoo_miner_plugin_dir.unwrap());
 
 		let plugin_install_path = match miner_config.cuckoo_miner_plugin_dir {
 			Some(s) => s,
@@ -86,7 +88,7 @@ impl PluginMiner {
 		//when packaging is more//thought out
 
 		let mut loaded_config_ref = LOADED_CONFIG.lock().unwrap();
-
+		
 		//Load from here instead
 		if let Some(ref c) = *loaded_config_ref {
 			debug!("Not re-loading plugin or directory.");

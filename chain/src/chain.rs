@@ -23,14 +23,11 @@ use secp::pedersen::Commitment;
 use core::core::{Block, BlockHeader, Output};
 use core::core::target::Difficulty;
 use core::core::hash::Hash;
-use core::{consensus, genesis, pow};
-use core::pow::MiningWorker;
 use grin_store;
 use pipe;
 use store;
 use types::*;
 
-use core::global;
 use core::global::{MiningParameterMode,MINING_PARAMETER_MODE};
 
 const MAX_ORPHANS: usize = 20;
@@ -57,12 +54,28 @@ pub struct Chain {
 	head: Arc<Mutex<Tip>>,
 	block_process_lock: Arc<Mutex<bool>>,
 	orphans: Arc<Mutex<VecDeque<(Options, Block)>>>,
+
+	//POW verification function
+	pow_verifier: fn(&BlockHeader, u32) -> bool,
 }
 
 unsafe impl Sync for Chain {}
 unsafe impl Send for Chain {}
 
 impl Chain {
+
+	/// Check whether the chain exists. If not, the call to 'init' will
+	/// expect an already mined genesis block. This keeps the chain free
+	/// from needing to know about the mining implementation
+	pub fn chain_exists(db_root: String)->bool {
+		let chain_store = store::ChainKVStore::new(db_root).unwrap();
+		match chain_store.head() {
+			Ok(_) => {true},
+			Err(grin_store::Error::NotFoundErr) => false,
+			Err(_) => false,
+		}
+	}
+
 	/// Initializes the blockchain and returns a new Chain instance. Does a
 	/// check
 	/// on the current chain head to make sure it exists and creates one based
@@ -71,6 +84,8 @@ impl Chain {
 	pub fn init(
 		db_root: String,
 		adapter: Arc<ChainAdapter>,
+		gen_block: Option<Block>,
+		pow_verifier: fn(&BlockHeader, u32) -> bool,
 	) -> Result<Chain, Error> {
 		let chain_store = store::ChainKVStore::new(db_root)?;
 
@@ -78,15 +93,11 @@ impl Chain {
 		let head = match chain_store.head() {
 			Ok(tip) => tip,
 			Err(grin_store::Error::NotFoundErr) => {
-				info!("No genesis block found, creating and saving one.");
-				let mut gen = genesis::genesis();
-				let diff = gen.header.difficulty.clone();
-				
-				let sz = global::sizeshift();
-				let proof_size = global::proofsize();
+				if let None = gen_block {
+					return Err(Error::GenesisBlockRequired);
+				}
 
-				let mut internal_miner = pow::cuckoo::Miner::new(consensus::EASINESS, sz as u32, proof_size); 
-				pow::pow_size(&mut internal_miner, &mut gen.header, diff, sz as u32).unwrap();
+				let gen = gen_block.unwrap();
 				chain_store.save_block(&gen)?;
 
 				// saving a new tip based on genesis
@@ -107,6 +118,7 @@ impl Chain {
 			head: Arc::new(Mutex::new(head)),
 			block_process_lock: Arc::new(Mutex::new(true)),
 			orphans: Arc::new(Mutex::new(VecDeque::with_capacity(MAX_ORPHANS + 1))),
+			pow_verifier: pow_verifier,
 		})
 	}
 
@@ -170,6 +182,7 @@ impl Chain {
 			store: self.store.clone(),
 			adapter: self.adapter.clone(),
 			head: head,
+			pow_verifier: self.pow_verifier,
 			lock: self.block_process_lock.clone(),
 		}
 	}

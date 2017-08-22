@@ -61,6 +61,8 @@ pub enum Error {
 	StoreErr(grin_store::Error),
 	/// Error serializing or deserializing a type
 	SerErr(ser::Error),
+	/// No chain exists and genesis block is required
+	GenesisBlockRequired,
 	/// Anything else
 	Other(String),
 }

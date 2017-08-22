@@ -90,6 +90,11 @@ cuckoo_miner_plugin_type = "simple"
 #the list of parameters if you're using "edgetrim"
 #cuckoo_miner_parameter_list = {NUM_THREADS=4, NUM_TRIMS=7}
 
+#The amount of time, in seconds, to attempt to mine on a particular
+#header before stopping and re-collecting transactions from the pool
+
+attempt_time_per_block = 30
+
 #the wallet reciever to which coinbase rewards will be sent
 
 wallet_receiver_url = "http://127.0.0.1:13415"

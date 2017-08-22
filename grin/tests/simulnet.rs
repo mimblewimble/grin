@@ -18,6 +18,7 @@ extern crate grin_p2p as p2p;
 extern crate grin_chain as chain;
 extern crate grin_api as api;
 extern crate grin_wallet as wallet;
+extern crate grin_pow as pow;
 extern crate secp256k1zkp as secp;
 
 extern crate env_logger;
@@ -200,7 +201,7 @@ fn a_simulate_block_propagation() {
 	let mut evtlp = reactor::Core::new().unwrap();
 	let handle = evtlp.handle();
 
-	let miner_config = grin::MinerConfig {
+	let miner_config = pow::types::MinerConfig {
 		enable_mining: true,
 		burn_reward: true,
 		use_cuckoo_miner: false,
@@ -267,7 +268,7 @@ fn simulate_full_sync() {
 	let mut evtlp = reactor::Core::new().unwrap();
 	let handle = evtlp.handle();
 
-	let miner_config = grin::MinerConfig {
+	let miner_config = pow::types::MinerConfig {
 		enable_mining: true,
 		burn_reward: true,
 		use_cuckoo_miner: false,
