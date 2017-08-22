@@ -90,3 +90,43 @@ fn build_send_tx(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64) -> R
 		build::transaction(parts).map_err(&From::from)
 	})?
 }
+
+#[cfg(test)]
+mod test {
+	extern crate rustc_serialize as serialize;
+
+	use core::core::build::{input, output, transaction};
+	use types::{OutputData, OutputStatus};
+
+	use secp::Secp256k1;
+	use super::ExtendedKey;
+	use self::serialize::hex::FromHex;
+
+	#[test]
+	// demonstrate that input.commitment == referenced output.commitment
+	// based on the wallet extended key and the coin being spent
+	fn output_commitment_equals_input_commitment_on_spend() {
+		let secp = Secp256k1::new();
+		let seed = "000102030405060708090a0b0c0d0e0f".from_hex().unwrap();
+
+		let ext_key = ExtendedKey::from_seed(&secp, &seed.as_slice()).unwrap();
+
+		let out_key = ext_key.derive(&secp, 1).unwrap();
+
+		let coin = OutputData {
+			fingerprint: out_key.fingerprint,
+			n_child: out_key.n_child,
+			value: 5,
+			status: OutputStatus::Unconfirmed,
+		};
+
+		let (tx, _) = transaction(vec![output(coin.value, out_key.key)]).unwrap();
+
+		let in_key = ext_key.derive(&secp, coin.n_child).unwrap();
+
+		let (tx2, _) = transaction(vec![input(coin.value, in_key.key)]).unwrap();
+
+		assert_eq!(in_key.key, out_key.key);
+		assert_eq!(tx.outputs[0].commitment(), tx2.inputs[0].commitment());
+	}
+}
