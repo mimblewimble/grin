@@ -202,7 +202,7 @@ impl Miner {
 						if s.last_start_time==0 {
 							continue;
 						}
-i						let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
+						let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
 						let last_hashes_per_sec = 1.0 / last_solution_time_secs;
 						debug!("Mining on Device {} - {}: Last hash time: {} - Hashes per second: {:.*} - Total Attempts: {}",
 							s.device_id, s.device_name,
@@ -413,7 +413,7 @@ i						let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
 			 					self.config.wallet_receiver_url.as_str());
 			let request = WalletReceiveRequest::Coinbase(CbAmount{amount: consensus::REWARD});
 			let res: CbData = api::client::post(url.as_str(),
-								&request)
+			                                    &request)
 				.expect(format!("(Server ID: {}) Wallet receiver unreachable, could not claim reward. Is it running?",
 				self.debug_output_id.as_str()).as_str());
 			let out_bin = util::from_hex(res.output).unwrap();
