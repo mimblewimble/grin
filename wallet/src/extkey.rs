@@ -209,7 +209,7 @@ mod test {
 		let secret_key = SecretKey::from_slice(&s, sec.as_slice()).unwrap();
 		let chaincode =
 			"b7c6740dea1920ec629b3593678f6d8dc40fe6ec1ed824fcde37f476cd6c048c".from_hex().unwrap();
-		let fingerprint = "00000000".from_hex().unwrap();
+		let fingerprint = "8963be69".from_hex().unwrap();
 		let depth = 0;
 		let n_child = 0;
 		assert_eq!(extk.key, secret_key);
@@ -221,7 +221,7 @@ mod test {
 
 	#[test]
 	fn extkey_derivation() {
-		// TODO More test verctors
+		// TODO More test vectors
 		let s = Secp256k1::new();
 		let seed = "000102030405060708090a0b0c0d0e0f".from_hex().unwrap();
 		let extk = ExtendedKey::from_seed(&s, &seed.as_slice()).unwrap();
