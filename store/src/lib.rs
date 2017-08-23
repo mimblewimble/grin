@@ -22,7 +22,13 @@
 
 extern crate byteorder;
 extern crate grin_core as core;
+#[macro_use]
+extern crate log;
+extern crate env_logger;
+extern crate memmap;
 extern crate rocksdb;
+
+mod sumtree;
 
 const SEP: u8 = ':' as u8;
 
@@ -39,23 +45,23 @@ use core::ser;
 /// Main error type for this crate.
 #[derive(Debug)]
 pub enum Error {
-	/// Couldn't find what we were looking for
-	NotFoundErr,
-	/// Wraps an error originating from RocksDB (which unfortunately returns
-	/// string errors).
-	RocksDbErr(String),
-	/// Wraps a serialization error for Writeable or Readable
-	SerErr(ser::Error),
+/// Couldn't find what we were looking for
+NotFoundErr,
+/// Wraps an error originating from RocksDB (which unfortunately returns
+/// string errors).
+RocksDbErr(String),
+/// Wraps a serialization error for Writeable or Readable
+SerErr(ser::Error),
 }
 
 impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match self {
-			&Error::NotFoundErr => write!(f, "Not Found"),
-			&Error::RocksDbErr(ref s) => write!(f, "RocksDb Error: {}", s),
-			&Error::SerErr(ref e) => write!(f, "Serialization Error: {}", e.to_string()),
-		}
+fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	match self {
+		&Error::NotFoundErr => write!(f, "Not Found"),
+		&Error::RocksDbErr(ref s) => write!(f, "RocksDb Error: {}", s),
+		&Error::SerErr(ref e) => write!(f, "Serialization Error: {}", e.to_string()),
 	}
+}
 }
 
 impl From<rocksdb::Error> for Error {

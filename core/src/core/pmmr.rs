@@ -54,7 +54,7 @@ pub trait Summable {
 
 	/// Length of the Sum type when serialized. Can be used as a hint by
 	/// underlying storages.
-	fn sum_len(&self) -> usize;
+	fn sum_len() -> usize;
 }
 
 /// An empty sum that takes no space, to store elements that do not need summing
@@ -87,7 +87,7 @@ impl<T> Summable for NoSum<T> {
 	fn sum(&self) -> NullSum {
 		NullSum
 	}
-	fn sum_len(&self) -> usize {
+	fn sum_len() -> usize {
 		return 0;
 	}
 }
@@ -104,8 +104,8 @@ pub struct HashSum<T> where T: Summable {
 
 impl<T> HashSum<T> where T: Summable + Writeable {
 	/// Create a hash sum from a summable
-	pub fn from_summable(idx: u64, elmt: T) -> HashSum<T> {
-		let hash = Hashed::hash(&elmt);
+	pub fn from_summable(idx: u64, elmt: &T) -> HashSum<T> {
+		let hash = Hashed::hash(elmt);
 		let sum = elmt.sum();
 		let node_hash = (idx, &sum, hash).hash();
 		HashSum {
@@ -144,12 +144,16 @@ impl<T> ops::Add for HashSum<T> where T: Summable {
 /// Storage backend for the MMR, just needs to be indexed by order of insertion.
 /// The remove operation can be a no-op for unoptimized backends.
 pub trait Backend<T> where T: Summable {
-	/// Append the provided HashSums to the backend storage.
-	fn append(&self, data: Vec<HashSum<T>>);
+	/// Append the provided HashSums to the backend storage. The position of the
+	/// first element of the Vec in the MMR is provided to help the
+	/// implementation.
+	fn append(&self, position: u64, data: Vec<HashSum<T>>) -> Result<(), String>;
+
 	/// Get a HashSum by insertion position
 	fn get(&self, position: u64) -> Option<HashSum<T>>;
+
 	/// Remove HashSums by insertion position
-	fn remove(&self, positions: Vec<u64>);
+	fn remove(&self, positions: Vec<u64>) -> Result<(), String>;
 }
 
 /// Prunable Merkle Mountain Range implementation. All positions within the tree
@@ -198,7 +202,7 @@ impl<T, B> PMMR<T, B> where T: Summable + Writeable + Debug + Clone, B: Backend<
 	/// the same time if applicable.
 	pub fn push(&mut self, elmt: T) -> u64 {
 		let elmt_pos = self.last_pos + 1;
-		let mut current_hashsum = HashSum::from_summable(elmt_pos, elmt);
+		let mut current_hashsum = HashSum::from_summable(elmt_pos, &elmt);
 		let mut to_append = vec![current_hashsum.clone()];
 		let mut height = 0;
 		let mut pos = elmt_pos;
@@ -219,7 +223,7 @@ impl<T, B> PMMR<T, B> where T: Summable + Writeable + Debug + Clone, B: Backend<
 		}
 
 		// append all the new nodes and update the MMR index
-		self.backend.append(to_append);
+		self.backend.append(elmt_pos, to_append);
 		self.last_pos = pos;
 		elmt_pos
 	}
@@ -380,7 +384,7 @@ fn peaks(num: u64) -> Vec<u64> {
 /// To get the height of any node (say 1101), we need to travel left in the
 /// tree, get the leftmost node and count the ones. To travel left, we just
 /// need to subtract the position by it's most significant bit, mins one. For
-/// example to get from 1101 to 110 we subtract it by (1000-1) (`13-(8-1)=6`).
+/// example to get from 1101 to 110 we subtract it by (1000-1) (`13-(8-1)=5`).
 /// Then to to get 110 to 11, we subtract it by (100-1) ('6-(4-1)=3`).
 ///
 /// By applying this operation recursively, until we get a number that, in
@@ -520,7 +524,7 @@ mod test {
 			self.0[0] as u64 * 0x1000 + self.0[1] as u64 * 0x100 + self.0[2] as u64 * 0x10 +
 				self.0[3] as u64
 		}
-		fn sum_len(&self) -> usize {
+		fn sum_len() -> usize {
 			4
 		}
 	}
@@ -539,19 +543,21 @@ mod test {
 		elems: Arc<Mutex<Vec<Option<HashSum<TestElem>>>>>,
 	}
 	impl Backend<TestElem> for VecBackend {
-		fn append(&self, data: Vec<HashSum<TestElem>>) {
+		fn append(&self, position: u64, data: Vec<HashSum<TestElem>>) -> Result<(), String> {
 			let mut elems = self.elems.lock().unwrap();
 			elems.append(&mut map_vec!(data, |d| Some(d.clone())));
+			Ok(())
 		}
 		fn get(&self, position: u64) -> Option<HashSum<TestElem>> {
 			let elems = self.elems.lock().unwrap();
 			elems[(position-1) as usize].clone()
 		}
-		fn remove(&self, positions: Vec<u64>) {
+		fn remove(&self, positions: Vec<u64>) -> Result<(), String> {
 			let mut elems = self.elems.lock().unwrap();
 			for n in positions {
 				elems[(n-1) as usize] = None
 			}
+			Ok(())
 		}
 	}
 	impl VecBackend {
@@ -594,49 +600,49 @@ mod test {
 
 		// two elements
 		pmmr.push(elems[1]);
-		let sum2 = HashSum::from_summable(1, elems[0]) + HashSum::from_summable(2, elems[1]);
+		let sum2 = HashSum::from_summable(1, &elems[0]) + HashSum::from_summable(2, &elems[1]);
 		assert_eq!(pmmr.root(), sum2);
 		assert_eq!(pmmr.unpruned_size(), 3);
 
 		// three elements
 		pmmr.push(elems[2]);
-		let sum3 = sum2.clone() + HashSum::from_summable(4, elems[2]);
+		let sum3 = sum2.clone() + HashSum::from_summable(4, &elems[2]);
 		assert_eq!(pmmr.root(), sum3);
 		assert_eq!(pmmr.unpruned_size(), 4);
 
 		// four elements
 		pmmr.push(elems[3]);
-		let sum4 = sum2 + (HashSum::from_summable(4, elems[2]) + HashSum::from_summable(5, elems[3]));
+		let sum4 = sum2 + (HashSum::from_summable(4, &elems[2]) + HashSum::from_summable(5, &elems[3]));
 		assert_eq!(pmmr.root(), sum4);
 		assert_eq!(pmmr.unpruned_size(), 7);
 
 		// five elements
 		pmmr.push(elems[4]);
-		let sum5 = sum4.clone() + HashSum::from_summable(8, elems[4]);
+		let sum5 = sum4.clone() + HashSum::from_summable(8, &elems[4]);
 		assert_eq!(pmmr.root(), sum5);
 		assert_eq!(pmmr.unpruned_size(), 8);
 
 		// six elements
 		pmmr.push(elems[5]);
-		let sum6 = sum4.clone() + (HashSum::from_summable(8, elems[4]) + HashSum::from_summable(9, elems[5]));
+		let sum6 = sum4.clone() + (HashSum::from_summable(8, &elems[4]) + HashSum::from_summable(9, &elems[5]));
 		assert_eq!(pmmr.root(), sum6.clone());
 		assert_eq!(pmmr.unpruned_size(), 10);
 
 		// seven elements
 		pmmr.push(elems[6]);
-		let sum7 = sum6 + HashSum::from_summable(11, elems[6]);
+		let sum7 = sum6 + HashSum::from_summable(11, &elems[6]);
 		assert_eq!(pmmr.root(), sum7);
 		assert_eq!(pmmr.unpruned_size(), 11);
 
 		// eight elements
 		pmmr.push(elems[7]);
-		let sum8 = sum4 + ((HashSum::from_summable(8, elems[4]) + HashSum::from_summable(9, elems[5])) + (HashSum::from_summable(11, elems[6]) + HashSum::from_summable(12, elems[7])));
+		let sum8 = sum4 + ((HashSum::from_summable(8, &elems[4]) + HashSum::from_summable(9, &elems[5])) + (HashSum::from_summable(11, &elems[6]) + HashSum::from_summable(12, &elems[7])));
 		assert_eq!(pmmr.root(), sum8);
 		assert_eq!(pmmr.unpruned_size(), 15);
 
 		// nine elements
 		pmmr.push(elems[8]);
-		let sum9 = sum8 + HashSum::from_summable(16, elems[8]);
+		let sum9 = sum8 + HashSum::from_summable(16, &elems[8]);
 		assert_eq!(pmmr.root(), sum9);
 		assert_eq!(pmmr.unpruned_size(), 16);
 	}
