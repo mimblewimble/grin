@@ -74,7 +74,7 @@ impl PluginMiner {
 
 		let plugin_install_path = match miner_config.cuckoo_miner_plugin_dir {
 			Some(s) => s,
-			None => String::from(format!("{}/deps", exe_path))
+			None => String::from(format!("{}/plugins", exe_path))
 		};
 
 		let plugin_impl_filter = match miner_config.cuckoo_miner_plugin_type {
@@ -83,7 +83,7 @@ impl PluginMiner {
 		};
 
 		//First, load and query the plugins in the given directory
-		//These should all be stored in 'deps' at the moment relative
+		//These should all be stored in 'plugins' at the moment relative
 		//to the executable path, though they should appear somewhere else
 		//when packaging is more//thought out
 
@@ -102,7 +102,7 @@ impl PluginMiner {
     	let result=plugin_manager.load_plugin_dir(plugin_install_path);
 
 		if let Err(_) = result {
-			error!("Unable to load cuckoo-miner plugin directory, either from configuration or [exe_path]/deps.");
+			error!("Unable to load cuckoo-miner plugin directory, either from configuration or [exe_path]/plugins.");
 			panic!("Unable to load plugin directory... Please check configuration values");
 		}
 

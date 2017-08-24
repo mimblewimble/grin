@@ -80,6 +80,7 @@ cuckoo_miner_async_mode = false
 #Plugins currently included are:
 #"simple" : the basic cuckoo algorithm
 #"edgetrim" : an algorithm trading speed for a much lower memory footprint
+#"matrix" : fastest available CPU miner, with largest memory footprint
 #"tomato" : Time memory-tradeoff... low memory but very slow
 #Not included but verified working:
 #"cuda" a gpu miner - which currently needs to bebuilt and installed 
@@ -87,7 +88,7 @@ cuckoo_miner_async_mode = false
 
 cuckoo_miner_plugin_type = "simple"
 
-#the list of parameters if you're using "edgetrim"
+#the list of parameters if you're using "edgetrim or matrix"
 #cuckoo_miner_parameter_list = {NUM_THREADS=4, NUM_TRIMS=7}
 
 #The amount of time, in seconds, to attempt to mine on a particular
