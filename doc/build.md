@@ -8,6 +8,12 @@
 or see instructions at:
 https://www.rust-lang.org
 
+## Install cmake
+
+grin needs cmake 3.8 or greater to compile the mining plugins found in [Cuckoo Miner](https://github.com/mimblewimble/cuckoo-miner). See
+your distribution's instructions for ensuring cmake is installed and
+available on the path.  
+
 ## Clone Grin
 
     git clone https://github.com/ignopeverell/grin.git
