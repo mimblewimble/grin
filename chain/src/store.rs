@@ -33,6 +33,8 @@ const HEAD_PREFIX: u8 = 'H' as u8;
 const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const OUTPUT_COMMIT_PREFIX: u8 = 'o' as u8;
+const HEADER_BY_INPUT_PREFIX: u8 = 'p' as u8;
+const HEADER_BY_OUTPUT_PREFIX: u8 = 'q' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
 /// store.
@@ -97,27 +99,28 @@ impl ChainStore for ChainKVStore {
 		let mut batch = self.db
 			.batch()
 			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?
-			.put_ser(
-				&to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..],
-				&b.header,
-			)?;
+			.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..], &b.header)?;
+
+		// input commitment to hash index
+		for inp in &b.inputs {
+			let mut inp_bytes = inp.commitment().as_ref().to_vec();
+			batch = batch
+				.put_ser(&to_key(HEADER_BY_INPUT_PREFIX, &mut inp_bytes)[..], &b.hash().to_vec())?;
+		}
 
 		// saving the full output under its hash, as well as a commitment to hash index
 		for out in &b.outputs {
-			let mut out_bytes = out.commit.as_ref().to_vec();
-			batch = batch.put_ser(
-				&to_key(OUTPUT_COMMIT_PREFIX, &mut out_bytes)[..],
-				out,
-			)?;
+			let mut out_bytes = out.commitment().as_ref().to_vec();
+			batch = batch
+				.put_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut out_bytes)[..], out)?
+				.put_ser(&to_key(HEADER_BY_OUTPUT_PREFIX, &mut out_bytes)[..], &b.hash().to_vec())?;
 		}
+
 		batch.write()
 	}
 
 	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), Error> {
-		self.db.put_ser(
-			&to_key(BLOCK_HEADER_PREFIX, &mut bh.hash().to_vec())[..],
-			bh,
-		)
+		self.db.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut bh.hash().to_vec())[..], bh)
 	}
 
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {

@@ -386,6 +386,12 @@ impl Writeable for [u8; 4] {
 	}
 }
 
+impl Writeable for Vec<u8> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_fixed_bytes(self)
+	}
+}
+
 /// Useful marker trait on types that can be sized byte slices
 pub trait AsFixedBytes: Sized + AsRef<[u8]> {
 	/// The length in bytes
