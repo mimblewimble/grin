@@ -119,6 +119,20 @@ impl ChainStore for ChainKVStore {
 		batch.write()
 	}
 
+	fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
+		option_to_not_found(self.db.get_ser(&to_key(
+			HEADER_BY_OUTPUT_PREFIX,
+			&mut commit.as_ref().to_vec(),
+		)))
+	}
+
+	fn get_block_header_by_input_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
+		option_to_not_found(self.db.get_ser(&to_key(
+			HEADER_BY_INPUT_PREFIX,
+			&mut commit.as_ref().to_vec(),
+		)))
+	}
+
 	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), Error> {
 		self.db.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut bh.hash().to_vec())[..], bh)
 	}
@@ -134,6 +148,8 @@ impl ChainStore for ChainKVStore {
 		)))
 	}
 
+	// TODO - this looks identical to get_output_by_commit above
+	// TODO - are we sure this returns a hash correctly?
 	fn has_output_commit(&self, commit: &Commitment) -> Result<Hash, Error> {
 		option_to_not_found(self.db.get_ser(&to_key(
 			OUTPUT_COMMIT_PREFIX,

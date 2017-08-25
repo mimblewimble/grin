@@ -23,7 +23,7 @@ use secp::pedersen::Commitment;
 use core::core::{Block, BlockHeader, Output};
 use core::core::target::Difficulty;
 use core::core::hash::Hash;
-use grin_store;
+use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use types::*;
@@ -71,7 +71,7 @@ impl Chain {
 		let chain_store = store::ChainKVStore::new(db_root).unwrap();
 		match chain_store.head() {
 			Ok(_) => {true},
-			Err(grin_store::Error::NotFoundErr) => false,
+			Err(NotFoundErr) => false,
 			Err(_) => false,
 		}
 	}
@@ -92,7 +92,7 @@ impl Chain {
 		// check if we have a head in store, otherwise the genesis block is it
 		let head = match chain_store.head() {
 			Ok(tip) => tip,
-			Err(grin_store::Error::NotFoundErr) => {
+			Err(NotFoundErr) => {
 				if let None = gen_block {
 					return Err(Error::GenesisBlockRequired);
 				}
@@ -213,32 +213,30 @@ impl Chain {
 	/// Gets an unspent output from its commitment. With return None if the
 	/// output
 	/// doesn't exist or has been spent. This querying is done in a way that's
-	/// constistent with the current chain state and more specifically the
+	/// consistent with the current chain state and more specifically the
 	/// current
 	/// branch it is on in case of forks.
 	pub fn get_unspent(&self, output_ref: &Commitment) -> Option<Output> {
-		// TODO use an actual UTXO tree
-		// in the meantime doing it the *very* expensive way:
-		//   1. check the output exists
-		//   2. run the chain back from the head to check it hasn't been spent
-		if let Ok(out) = self.store.get_output_by_commit(output_ref) {
-			let head = none_err!(self.store.head());
-			let mut block_h = head.last_block_h;
-			loop {
-				let b = none_err!(self.store.get_block(&block_h));
-				for input in b.inputs {
-					if input.commitment() == *output_ref {
-						return None;
-					}
-				}
-				if b.header.height == 1 {
-					return Some(out);
-				} else {
-					block_h = b.header.previous;
-				}
-			}
-		}
-		None
+
+        // TODO - check this is safe to do based on comments above about chain state
+        // TODO - need to do some final check to ensure valid for current chain state?
+
+        // TODO - still trying to get my head around none_err! - maybe this helps here?
+
+        // basically look for a block header spending an input with the output commitment
+        // if we don't find one then the output is unspent
+        let header = self.store.get_block_header_by_input_commit(output_ref);
+        match header {
+            Ok(_) => None,
+            Err(NotFoundErr) => {
+                let output = self.store.get_output_by_commit(output_ref);
+                match output {
+                    Ok(out) => Some(out),
+                    Err(_) => None
+                }
+            },
+            Err(_) => None
+        }
 	}
 
 	/// Total difficulty at the head of the chain
