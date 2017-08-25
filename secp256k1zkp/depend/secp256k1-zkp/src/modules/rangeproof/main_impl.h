@@ -13,7 +13,7 @@
 #include "modules/rangeproof/switch_impl.h"
 
 void secp256k1_switch_context_initialize(secp256k1_context* ctx) {
-    secp256k1_switch_context_build(&ctx->pedersen_ctx, &ctx->error_callback);
+    secp256k1_pedersen_context_build(&ctx->switch_ctx, secp256k1_ge_const_g3, &ctx->error_callback);
 }
 
 /* Generates a simple switch commitment: *commit = blind * G3. The commitment is 33 bytes, the blinding factor is 32 bytes.*/
@@ -25,12 +25,12 @@ int secp256k1_switch_commit(const secp256k1_context* ctx, unsigned char *commit,
     int overflow;
     int ret = 0;
     ARG_CHECK(ctx != NULL);
-    ARG_CHECK(secp256k1_pedersen_context_is_built(&ctx->pedersen_ctx));
+    ARG_CHECK(secp256k1_pedersen_context_is_built(&ctx->switch_ctx));
     ARG_CHECK(commit != NULL);
     ARG_CHECK(blind != NULL);
     secp256k1_scalar_set_b32(&sec, blind, &overflow);
     if (!overflow) {
-        secp256k1_switch_ecmult(&ctx->pedersen_ctx, &rj, &sec);
+        secp256k1_switch_ecmult(&ctx->switch_ctx, &rj, &sec);
         if (!secp256k1_gej_is_infinity(&rj)) {
             secp256k1_ge_set_gej(&r, &rj);
             sz = 33;
@@ -44,7 +44,7 @@ int secp256k1_switch_commit(const secp256k1_context* ctx, unsigned char *commit,
 }
 
 void secp256k1_pedersen_context_initialize(secp256k1_context* ctx) {
-    secp256k1_pedersen_context_build(&ctx->pedersen_ctx, &ctx->error_callback);
+    secp256k1_pedersen_context_build(&ctx->pedersen_ctx, secp256k1_ge_const_g2, &ctx->error_callback);
 }
 
 /* Generates a pedersen commitment: *commit = blind * G + value * G2. The commitment is 33 bytes, the blinding factor is 32 bytes.*/

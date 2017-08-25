@@ -25,7 +25,7 @@ static void secp256k1_pedersen_context_init(secp256k1_pedersen_context *ctx) {
     ctx->prec = NULL;
 }
 
-static void secp256k1_pedersen_context_build(secp256k1_pedersen_context *ctx, const secp256k1_callback *cb) {
+static void secp256k1_pedersen_context_build(secp256k1_pedersen_context *ctx, const secp256k1_ge ge, const secp256k1_callback *cb) {
     secp256k1_ge prec[256];
     secp256k1_gej gj;
     secp256k1_gej nums_gej;
@@ -38,7 +38,7 @@ static void secp256k1_pedersen_context_build(secp256k1_pedersen_context *ctx, co
     ctx->prec = (secp256k1_ge_storage (*)[16][16])checked_malloc(cb, sizeof(*ctx->prec));
 
     /* get the generator */
-    secp256k1_gej_set_ge(&gj, &secp256k1_ge_const_g2);
+    secp256k1_gej_set_ge(&gj, &ge);
 
     /* Construct a group element with no known corresponding scalar (nothing up my sleeve). */
     {
