@@ -1,31 +1,36 @@
 /***********************************************************************
- * Copyright (c) 2015 Gregory Maxwell                                  *
+ * Copyright (c) 2017 Gregory Maxwell                                  *
  * Distributed under the MIT software license, see the accompanying    *
  * file COPYING or http://www.opensource.org/licenses/mit-license.php. *
  ***********************************************************************/
 
-#ifndef _SECP256K1_PEDERSEN_IMPL_H_
-#define _SECP256K1_PEDERSEN_IMPL_H_
+#ifndef _SECP256K1_SWITCH_IMPL_H_
+#define _SECP256K1_SWITCH_IMPL_H_
 
-/** Alternative generator for secp256k1.
- *  This is the sha256 of 'g' after DER encoding (without compression),
+#include "switch.h"
+
+/** Alternative-alternative generator for secp256k1.
+ *  This is the sha256 of the sha256 of 'g' after DER encoding (without compression),
  *  which happens to be a point on the curve.
- *  sage: G2 = EllipticCurve ([F (0), F (7)]).lift_x(int(hashlib.sha256('0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8'.decode('hex')).hexdigest(),16))
- *  sage: '%x %x'%G2.xy()
+ *  sage: gen_h =  hashlib.sha256('0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8'.decode('hex'))
+ *  sage: gen_j_input = gen_h.hexdigest()
+ *  sage: gen_j =  hashlib.sha256(gen_j_input.decode('hex'))
+ *  sage: G3 = EllipticCurve ([F (0), F (7)]).lift_x(int(gen_j.hexdigest(),16))
+ *  sage: '%x %x'%G3.xy()
  */
 
-static const secp256k1_ge secp256k1_ge_const_g2 = SECP256K1_GE_CONST(
-    0x50929b74UL, 0xc1a04954UL, 0xb78b4b60UL, 0x35e97a5eUL,
-    0x078a5a0fUL, 0x28ec96d5UL, 0x47bfee9aUL, 0xce803ac0UL,
-    0x31d3c686UL, 0x3973926eUL, 0x049e637cUL, 0xb1b5f40aUL,
-    0x36dac28aUL, 0xf1766968UL, 0xc30c2313UL, 0xf3a38904UL
+static const secp256k1_ge secp256k1_ge_const_g3 = SECP256K1_GE_CONST(
+    0xb860f567UL, 0x95fc03f3UL, 0xc2168538UL, 0x3d1b5a2fUL,
+    0x2954f49bUL, 0x7e398b8dUL, 0x2a019393UL, 0x3621155fUL,
+    0x5bc0f62cUL, 0xd35570acUL, 0xbdc0bd8bUL, 0xfc5a95ceUL,
+    0x9a5a5965UL, 0x8b30a903UL, 0xa6fe5d22UL, 0x593a37f5UL
 );
 
-static void secp256k1_pedersen_context_init(secp256k1_pedersen_context *ctx) {
+static void secp256k1_switch_context_init(secp256k1_switch_context *ctx) {
     ctx->prec = NULL;
 }
 
-static void secp256k1_pedersen_context_build(secp256k1_pedersen_context *ctx, const secp256k1_callback *cb) {
+static void secp256k1_switch_context_build(secp256k1_switch_context *ctx, const secp256k1_callback *cb) {
     secp256k1_ge prec[256];
     secp256k1_gej gj;
     secp256k1_gej nums_gej;
@@ -38,7 +43,7 @@ static void secp256k1_pedersen_context_build(secp256k1_pedersen_context *ctx, co
     ctx->prec = (secp256k1_ge_storage (*)[16][16])checked_malloc(cb, sizeof(*ctx->prec));
 
     /* get the generator */
-    secp256k1_gej_set_ge(&gj, &secp256k1_ge_const_g2);
+    secp256k1_gej_set_ge(&gj, &secp256k1_ge_const_g3);
 
     /* Construct a group element with no known corresponding scalar (nothing up my sleeve). */
     {
@@ -84,14 +89,15 @@ static void secp256k1_pedersen_context_build(secp256k1_pedersen_context *ctx, co
             secp256k1_ge_to_storage(&(*ctx->prec)[j][i], &prec[j*16 + i]);
         }
     }
+
 }
 
-static int secp256k1_pedersen_context_is_built(const secp256k1_pedersen_context* ctx) {
+static int secp256k1_switch_context_is_built(const secp256k1_switch_context* ctx) {
     return ctx->prec != NULL;
 }
 
-static void secp256k1_pedersen_context_clone(secp256k1_pedersen_context *dst,
-                                               const secp256k1_pedersen_context *src, const secp256k1_callback *cb) {
+static void secp256k1_switch_context_clone(secp256k1_switch_context *dst,
+                                               const secp256k1_switch_context *src, const secp256k1_callback *cb) {
     if (src->prec == NULL) {
         dst->prec = NULL;
     } else {
@@ -100,13 +106,13 @@ static void secp256k1_pedersen_context_clone(secp256k1_pedersen_context *dst,
     }
 }
 
-static void secp256k1_pedersen_context_clear(secp256k1_pedersen_context *ctx) {
+static void secp256k1_switch_context_clear(secp256k1_switch_context *ctx) {
     free(ctx->prec);
     ctx->prec = NULL;
 }
 
-/* Version of secp256k1_ecmult_gen using the second generator and working only on numbers in the range [0 .. 2^64). */
-static void secp256k1_pedersen_ecmult_small(const secp256k1_pedersen_context *ctx, secp256k1_gej *r, uint64_t gn) {
+/* Version of secp256k1_ecmult_gen using the third generator and working only on numbers in the range [0 .. 2^64). */
+static void secp256k1_switch_ecmult_small(const secp256k1_switch_context *ctx, secp256k1_gej *r, uint64_t gn) {
     secp256k1_ge add;
     secp256k1_ge_storage adds;
     int bits;
@@ -126,15 +132,10 @@ static void secp256k1_pedersen_ecmult_small(const secp256k1_pedersen_context *ct
     secp256k1_ge_clear(&add);
 }
 
-/* sec * G + value * G2. */
-SECP256K1_INLINE static void secp256k1_pedersen_ecmult(const secp256k1_ecmult_gen_context *ecmult_gen_ctx,
- const secp256k1_pedersen_context *pedersen_ctx, secp256k1_gej *rj, const secp256k1_scalar *sec, uint64_t value) {
-    secp256k1_gej vj;
-    secp256k1_ecmult_gen(ecmult_gen_ctx, rj, sec);
-    secp256k1_pedersen_ecmult_small(pedersen_ctx, &vj, value);
-    /* FIXME: constant time. */
-    secp256k1_gej_add_var(rj, rj, &vj, NULL);
-    secp256k1_gej_clear(&vj);
+/* sec * G3 */
+SECP256K1_INLINE static void secp256k1_switch_ecmult(const secp256k1_switch_context *switch_ctx, 
+  secp256k1_gej *rj, const secp256k1_scalar *sec) {
+    secp256k1_switch_ecmult_small(switch_ctx, rj, sec);
 }
 
 #endif
