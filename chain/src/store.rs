@@ -56,8 +56,7 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn head_header(&self) -> Result<BlockHeader, Error> {
-		let head: Tip = try!(option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX])));
-		self.get_block_header(&head.last_block_h)
+		self.get_block_header(&try!(self.head()).last_block_h)
 	}
 
 	fn save_head(&self, t: &Tip) -> Result<(), Error> {
@@ -85,9 +84,7 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		option_to_not_found(self.db.get_ser(
-			&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec()),
-		))
+		option_to_not_found(self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())))
 	}
 
 	fn check_block_exists(&self, h: &Hash) -> Result<bool, Error> {
@@ -105,7 +102,7 @@ impl ChainStore for ChainKVStore {
 		for inp in &b.inputs {
 			let mut inp_bytes = inp.commitment().as_ref().to_vec();
 			batch = batch
-				.put_ser(&to_key(HEADER_BY_INPUT_PREFIX, &mut inp_bytes)[..], &b.hash().to_vec())?;
+				.put_ser(&to_key(HEADER_BY_INPUT_PREFIX, &mut inp_bytes)[..], &b.hash())?;
 		}
 
 		// saving the full output under its hash, as well as a commitment to hash index
@@ -113,24 +110,52 @@ impl ChainStore for ChainKVStore {
 			let mut out_bytes = out.commitment().as_ref().to_vec();
 			batch = batch
 				.put_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut out_bytes)[..], out)?
-				.put_ser(&to_key(HEADER_BY_OUTPUT_PREFIX, &mut out_bytes)[..], &b.hash().to_vec())?;
+				.put_ser(&to_key(HEADER_BY_OUTPUT_PREFIX, &mut out_bytes)[..], &b.hash())?;
 		}
 
 		batch.write()
 	}
 
+	// TODO - this can probably be cleaned up and written closer to idiomatic rust
 	fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(
+		let block_hash = self.db.get_ser(&to_key(
 			HEADER_BY_OUTPUT_PREFIX,
 			&mut commit.as_ref().to_vec(),
-		)))
+		))?;
+
+		match block_hash {
+			Some(hash) => {
+				let block_header = self.get_block_header(&hash)?;
+				let header_at_height = self.get_header_by_height(block_header.height)?;
+				if block_header == header_at_height {
+					Ok(block_header)
+				} else {
+					Err(Error::NotFoundErr)
+				}
+			},
+			None => Err(Error::NotFoundErr)
+		}
 	}
 
+	// TODO - this can probably be cleaned up and written closer to idiomatic rust
 	fn get_block_header_by_input_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(
+		let block_hash = self.db.get_ser(&to_key(
 			HEADER_BY_INPUT_PREFIX,
 			&mut commit.as_ref().to_vec(),
-		)))
+		))?;
+
+		match block_hash {
+			Some(hash) => {
+				let block_header = self.get_block_header(&hash)?;
+				let header_at_height = self.get_header_by_height(block_header.height)?;
+				if block_header.hash() == header_at_height.hash() {
+					Ok(block_header)
+				} else {
+					Err(Error::NotFoundErr)
+				}
+			},
+			None => Err(Error::NotFoundErr)
+		}
 	}
 
 	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), Error> {
@@ -157,6 +182,9 @@ impl ChainStore for ChainKVStore {
 		)))
 	}
 
+	/// Maintain consistency of the "header_by_height" index by traversing back through the
+	/// current chain and updating "header_by_height" until we reach a block_header
+	/// that is consistent with its height (everything prior to this will be consistent)
 	fn setup_height(&self, bh: &BlockHeader) -> Result<(), Error> {
 		self.db.put_ser(
 			&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height),

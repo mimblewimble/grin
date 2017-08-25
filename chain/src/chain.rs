@@ -35,13 +35,13 @@ const MAX_ORPHANS: usize = 20;
 /// Helper macro to transform a Result into an Option with None in case
 /// of error
 macro_rules! none_err {
-  ($trying:expr) => {{
-    let tried = $trying;
-    if let Err(_) = tried {
-      return None;
-    }
-    tried.unwrap()
-  }}
+    ($trying:expr) => {{
+        let tried = $trying;
+        if let Err(_) = tried {
+            return None;
+        }
+        tried.unwrap()
+    }}
 }
 
 /// Facade to the blockchain block processing pipeline and storage. Provides
@@ -111,6 +111,7 @@ impl Chain {
 
         // TODO - confirm this was safe to remove based on code above?
 		// let head = chain_store.head()?;
+
 
 		Ok(Chain {
 			store: Arc::new(chain_store),
@@ -211,21 +212,14 @@ impl Chain {
 	}
 
 	/// Gets an unspent output from its commitment. With return None if the
-	/// output
-	/// doesn't exist or has been spent. This querying is done in a way that's
+	/// output doesn't exist or has been spent. This querying is done in a way that is
 	/// consistent with the current chain state and more specifically the
-	/// current
-	/// branch it is on in case of forks.
+	/// current branch it is on in case of forks.
 	pub fn get_unspent(&self, output_ref: &Commitment) -> Option<Output> {
-
-        // TODO - check this is safe to do based on comments above about chain state
-        // TODO - need to do some final check to ensure valid for current chain state?
-
-        // TODO - still trying to get my head around none_err! - maybe this helps here?
-
-        // basically look for a block header spending an input with the output commitment
-        // if we don't find one then the output is unspent
+        // this will only return a block header based on the current chain state
+        // as get_block_header_by_input_commit looks at the block heights
         let header = self.store.get_block_header_by_input_commit(output_ref);
+
         match header {
             Ok(_) => None,
             Err(NotFoundErr) => {
