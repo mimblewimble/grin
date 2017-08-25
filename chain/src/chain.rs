@@ -265,6 +265,20 @@ impl Chain {
 		)
 	}
 
+    /// Gets the block header by the provided input commitment
+    pub fn get_block_header_by_input_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
+        self.store.get_block_header_by_input_commit(commit).map_err(
+            &Error::StoreErr,
+        )
+    }
+
+    /// Gets the block header by the provided output commitment
+    pub fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
+        self.store.get_block_header_by_output_commit(commit).map_err(
+            &Error::StoreErr,
+        )
+    }
+
 	/// Get the tip of the header chain
 	pub fn get_header_head(&self) -> Result<Tip, Error> {
 		self.store.get_header_head().map_err(&Error::StoreErr)

@@ -100,19 +100,16 @@ impl ChainStore for ChainKVStore {
 
 		// input commitment to hash index
 		for inp in &b.inputs {
-			let mut inp_bytes = inp.commitment().as_ref().to_vec();
 			batch = batch
-				.put_ser(&to_key(HEADER_BY_INPUT_PREFIX, &mut inp_bytes)[..], &b.hash())?;
+				.put_ser(&to_key(HEADER_BY_INPUT_PREFIX, &mut inp.commitment().as_ref().to_vec())[..], &b.hash())?;
 		}
 
 		// saving the full output under its hash, as well as a commitment to hash index
 		for out in &b.outputs {
-			let mut out_bytes = out.commitment().as_ref().to_vec();
 			batch = batch
-				.put_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut out_bytes)[..], out)?
-				.put_ser(&to_key(HEADER_BY_OUTPUT_PREFIX, &mut out_bytes)[..], &b.hash())?;
+				.put_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut out.commitment().as_ref().to_vec())[..], out)?
+				.put_ser(&to_key(HEADER_BY_OUTPUT_PREFIX, &mut out.commitment().as_ref().to_vec())[..], &b.hash())?;
 		}
-
 		batch.write()
 	}
 
@@ -127,7 +124,7 @@ impl ChainStore for ChainKVStore {
 			Some(hash) => {
 				let block_header = self.get_block_header(&hash)?;
 				let header_at_height = self.get_header_by_height(block_header.height)?;
-				if block_header == header_at_height {
+				if block_header.hash() == header_at_height.hash() {
 					Ok(block_header)
 				} else {
 					Err(Error::NotFoundErr)
