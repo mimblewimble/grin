@@ -46,7 +46,7 @@ impl PoolEntry {
         PoolEntry{
             transaction_hash: transaction_identifier(tx),
             size_estimate : estimate_transaction_size(tx),
-            receive_ts: time::now()}
+            receive_ts: time::now_utc()}
     }
 }
 
