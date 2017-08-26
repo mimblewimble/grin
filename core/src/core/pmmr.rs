@@ -38,7 +38,7 @@
 use std::clone::Clone;
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops::{self};
+use std::ops::{self, Deref};
 
 use core::hash::{Hash, Hashed};
 use ser::{self, Readable, Reader, Writeable, Writer};
@@ -147,13 +147,13 @@ pub trait Backend<T> where T: Summable {
 	/// Append the provided HashSums to the backend storage. The position of the
 	/// first element of the Vec in the MMR is provided to help the
 	/// implementation.
-	fn append(&self, position: u64, data: Vec<HashSum<T>>) -> Result<(), String>;
+	fn append(&mut self, position: u64, data: Vec<HashSum<T>>) -> Result<(), String>;
 
 	/// Get a HashSum by insertion position
 	fn get(&self, position: u64) -> Option<HashSum<T>>;
 
 	/// Remove HashSums by insertion position
-	fn remove(&self, positions: Vec<u64>) -> Result<(), String>;
+	fn remove(&mut self, positions: Vec<u64>) -> Result<(), String>;
 }
 
 /// Prunable Merkle Mountain Range implementation. All positions within the tree
@@ -163,19 +163,29 @@ pub trait Backend<T> where T: Summable {
 /// Heavily relies on navigation operations within a binary tree. In particular,
 /// all the implementation needs to keep track of the MMR structure is how far
 /// we are in the sequence of nodes making up the MMR.
-pub struct PMMR<T, B> where T: Summable, B: Backend<T> {
+pub struct PMMR<'a, T, B> where T: Summable, B: 'a + Backend<T> {
 	last_pos: u64,
-	backend: B,
+	backend: &'a mut B,
 	// only needed for parameterizing Backend
 	summable: PhantomData<T>,
 }
 
-impl<T, B> PMMR<T, B> where T: Summable + Writeable + Debug + Clone, B: Backend<T> {
+impl<'a, T, B> PMMR<'a, T, B> where T: Summable + Writeable + Debug + Clone, B: 'a + Backend<T> {
 
 	/// Build a new prunable Merkle Mountain Range using the provided backend.
-	pub fn new(backend: B) -> PMMR<T, B> {
+	pub fn new(backend: &'a mut B) -> PMMR<T, B> {
 		PMMR {
 			last_pos: 0,
+			backend: backend,
+			summable: PhantomData,
+		}
+	}
+
+	/// Build a new prunable Merkle Mountain Range pre-initlialized until last_pos
+	/// with the provided backend.
+	pub fn at(backend: &'a mut B, last_pos: u64) -> PMMR<T, B> {
+		PMMR {
+			last_pos: last_pos,
 			backend: backend,
 			summable: PhantomData,
 		}
@@ -232,7 +242,7 @@ impl<T, B> PMMR<T, B> where T: Summable + Writeable + Debug + Clone, B: Backend<
 	/// provide that position and prune, consumers of this API are expected to
 	/// keep an index of elements to positions in the tree. Prunes parent
 	/// nodes as well when they become childless.
-	pub fn prune(&self, position: u64) {
+	pub fn prune(&mut self, position: u64) {
 		let prunable_height = bintree_postorder_height(position);
 		if prunable_height > 0 {
 			// only leaves can be pruned
@@ -281,6 +291,58 @@ impl<T, B> PMMR<T, B> where T: Summable + Writeable + Debug + Clone, B: Backend<
 	/// pruning.
 	pub fn unpruned_size(&self) -> u64 {
 		self.last_pos
+	}
+}
+
+/// Simple MMR backend implementation based on a Vector. Pruning does not
+/// compact the Vector itself but still frees the reference to the
+/// underlying HashSum.
+#[derive(Clone)]
+pub struct VecBackend<T> where T: Summable + Clone {
+	elems: Vec<Option<HashSum<T>>>,
+}
+
+impl<T> Backend<T> for VecBackend<T> where T: Summable + Clone {
+	fn append(&mut self, position: u64, data: Vec<HashSum<T>>) -> Result<(), String> {
+		self.elems.append(&mut map_vec!(data, |d| Some(d.clone())));
+		Ok(())
+	}
+	fn get(&self, position: u64) -> Option<HashSum<T>> {
+		self.elems[(position-1) as usize].clone()
+	}
+	fn remove(&mut self, positions: Vec<u64>) -> Result<(), String> {
+		for n in positions {
+			self.elems[(n-1) as usize] = None
+		}
+		Ok(())
+	}
+}
+
+impl<T> VecBackend<T> where T: Summable + Clone {
+	/// Instantiates a new VecBackend<T>
+	pub fn new() -> VecBackend<T> {
+		VecBackend{elems: vec![]}
+	}
+
+	/// Current number of HashSum elements in the underlying Vec.
+	pub fn used_size(&self) -> usize {
+		let mut usz = self.elems.len();
+		for elem in self.elems.deref() {
+			if elem.is_none() {
+				usz -= 1;
+			}
+		}
+		usz
+	}
+
+	/// Resets the backend, emptying the underlying Vec.
+	pub fn clear(&mut self) {
+		self.elems = Vec::new();
+	}
+
+	/// Total length of the underlying vector.
+	pub fn len(&self) -> usize {
+		self.elems.len()
 	}
 }
 
@@ -461,9 +523,6 @@ fn most_significant_pos(num: u64) -> u64 {
 mod test {
 	use super::*;
 	use core::hash::Hashed;
-	use std::sync::{Arc, Mutex};
-	use std::ops::Deref;
-
 
 	#[test]
 	fn some_all_ones() {
@@ -525,7 +584,7 @@ mod test {
 				self.0[3] as u64
 		}
 		fn sum_len() -> usize {
-			4
+			8
 		}
 	}
 
@@ -535,41 +594,6 @@ mod test {
 			try!(writer.write_u32(self.0[1]));
 			try!(writer.write_u32(self.0[2]));
 			writer.write_u32(self.0[3])
-		}
-	}
-
-	#[derive(Clone)]
-	struct VecBackend {
-		elems: Arc<Mutex<Vec<Option<HashSum<TestElem>>>>>,
-	}
-	impl Backend<TestElem> for VecBackend {
-		fn append(&self, position: u64, data: Vec<HashSum<TestElem>>) -> Result<(), String> {
-			let mut elems = self.elems.lock().unwrap();
-			elems.append(&mut map_vec!(data, |d| Some(d.clone())));
-			Ok(())
-		}
-		fn get(&self, position: u64) -> Option<HashSum<TestElem>> {
-			let elems = self.elems.lock().unwrap();
-			elems[(position-1) as usize].clone()
-		}
-		fn remove(&self, positions: Vec<u64>) -> Result<(), String> {
-			let mut elems = self.elems.lock().unwrap();
-			for n in positions {
-				elems[(n-1) as usize] = None
-			}
-			Ok(())
-		}
-	}
-	impl VecBackend {
-		fn used_size(&self) -> usize {
-			let elems = self.elems.lock().unwrap();
-			let mut usz = elems.len();
-			for elem in elems.deref() {
-				if elem.is_none() {
-					usz -= 1;
-				}
-			}
-			usz
 		}
 	}
 
@@ -587,8 +611,8 @@ mod test {
 			TestElem([1, 0, 0, 0]),
 		];
 
-		let ba = VecBackend{elems: Arc::new(Mutex::new(vec![]))};
-		let mut pmmr = PMMR::new(ba.clone());
+		let mut ba = VecBackend::new();
+		let mut pmmr = PMMR::new(&mut ba);
 
 		// one element
 		pmmr.push(elems[0]);
@@ -661,48 +685,43 @@ mod test {
 			TestElem([1, 0, 0, 0]),
 		];
 
-		let ba = VecBackend{elems: Arc::new(Mutex::new(vec![]))};
-		let mut pmmr = PMMR::new(ba.clone());
-		for elem in &elems[..] {
-			pmmr.push(*elem);
+		let mut ba = VecBackend::new();
+		{
+			let mut pmmr = PMMR::new(&mut ba);
+			for elem in &elems[..] {
+				pmmr.push(*elem);
+			}
+			let orig_root = pmmr.root();
+
+			// pruning a leaf with no parent should do nothing
+			pmmr.prune(16);
+			assert_eq!(orig_root, pmmr.root());
+
+			// pruning leaves with no shared parent just removes 1 element
+			pmmr.prune(2);
+			assert_eq!(orig_root, pmmr.root());
+
+			pmmr.prune(4);
+			assert_eq!(orig_root, pmmr.root());
+
+			// pruning a non-leaf node has no effect
+			pmmr.prune(3);
+			assert_eq!(orig_root, pmmr.root());
+
+			// pruning sibling removes subtree
+			pmmr.prune(5);
+			assert_eq!(orig_root, pmmr.root());
+
+			// pruning all leaves under level >1 removes all subtree
+			pmmr.prune(1);
+			assert_eq!(orig_root, pmmr.root());
+
+			// pruning everything should only leave us the peaks
+			for n in 1..16 {
+				pmmr.prune(n);
+			}
+			assert_eq!(orig_root, pmmr.root());
 		}
-		let orig_root = pmmr.root();
-		let orig_sz = ba.used_size();
-
-		// pruning a leaf with no parent should do nothing
-		pmmr.prune(16);
-		assert_eq!(orig_root, pmmr.root());
-		assert_eq!(ba.used_size(), orig_sz);
-
-		// pruning leaves with no shared parent just removes 1 element
-		pmmr.prune(2);
-		assert_eq!(orig_root, pmmr.root());
-		assert_eq!(ba.used_size(), orig_sz - 1);
-
-		pmmr.prune(4);
-		assert_eq!(orig_root, pmmr.root());
-		assert_eq!(ba.used_size(), orig_sz - 2);
-
-		// pruning a non-leaf node has no effect
-		pmmr.prune(3);
-		assert_eq!(orig_root, pmmr.root());
-		assert_eq!(ba.used_size(), orig_sz - 2);
-
-		// pruning sibling removes subtree
-		pmmr.prune(5);
-		assert_eq!(orig_root, pmmr.root());
-		assert_eq!(ba.used_size(), orig_sz - 4);
-
-		// pruning all leaves under level >1 removes all subtree
-		pmmr.prune(1);
-		assert_eq!(orig_root, pmmr.root());
-		assert_eq!(ba.used_size(), orig_sz - 7);
-
-		// pruning everything should only leave us the peaks
-		for n in 1..16 {
-			pmmr.prune(n);
-		}
-		assert_eq!(orig_root, pmmr.root());
 		assert_eq!(ba.used_size(), 2);
 	}
 }
