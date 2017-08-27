@@ -28,7 +28,7 @@ use pipe;
 use store;
 use types::*;
 
-use core::global::{MiningParameterMode,MINING_PARAMETER_MODE};
+use core::global::{MiningParameterMode, MINING_PARAMETER_MODE};
 
 const MAX_ORPHANS: usize = 20;
 
@@ -55,7 +55,7 @@ pub struct Chain {
 	block_process_lock: Arc<Mutex<bool>>,
 	orphans: Arc<Mutex<VecDeque<(Options, Block)>>>,
 
-	//POW verification function
+	// POW verification function
 	pow_verifier: fn(&BlockHeader, u32) -> bool,
 }
 
@@ -63,14 +63,13 @@ unsafe impl Sync for Chain {}
 unsafe impl Send for Chain {}
 
 impl Chain {
-
 	/// Check whether the chain exists. If not, the call to 'init' will
 	/// expect an already mined genesis block. This keeps the chain free
 	/// from needing to know about the mining implementation
-	pub fn chain_exists(db_root: String)->bool {
+	pub fn chain_exists(db_root: String) -> bool {
 		let chain_store = store::ChainKVStore::new(db_root).unwrap();
 		match chain_store.head() {
-			Ok(_) => {true},
+			Ok(_) => true,
 			Err(grin_store::Error::NotFoundErr) => false,
 			Err(_) => false,
 		}
@@ -109,7 +108,7 @@ impl Chain {
 			Err(e) => return Err(Error::StoreErr(e)),
 		};
 
-        // TODO - confirm this was safe to remove based on code above?
+		// TODO - confirm this was safe to remove based on code above?
 		// let head = chain_store.head()?;
 
 		Ok(Chain {
@@ -170,7 +169,7 @@ impl Chain {
 
 	fn ctx_from_head(&self, head: Tip, opts: Options) -> pipe::BlockContext {
 		let opts_in = opts;
-		let param_ref=MINING_PARAMETER_MODE.read().unwrap();
+		let param_ref = MINING_PARAMETER_MODE.read().unwrap();
 		let opts_in = match *param_ref {
 			MiningParameterMode::AutomatedTesting => opts_in | EASY_POW,
 			MiningParameterMode::UserTesting => opts_in | EASY_POW,
@@ -187,7 +186,7 @@ impl Chain {
 		}
 	}
 
-    /// Pop orphans out of the queue and check if we can now accept them.
+	/// Pop orphans out of the queue and check if we can now accept them.
 	fn check_orphans(&self) {
 		// first check how many we have to retry, unfort. we can't extend the lock
 		// in the loop as it needs to be freed before going in process_block
@@ -268,9 +267,9 @@ impl Chain {
 
 	/// Gets the block header at the provided height
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
-		self.store.get_header_by_height(height).map_err(
-			&Error::StoreErr,
-		)
+		self.store
+			.get_header_by_height(height)
+			.map_err(&Error::StoreErr)
 	}
 
 	/// Get the tip of the header chain

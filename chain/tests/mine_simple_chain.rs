@@ -32,25 +32,29 @@ use core::consensus;
 use core::global;
 use core::global::MiningParameterMode;
 
-use pow::{types, cuckoo, MiningWorker};
+use pow::{cuckoo, types, MiningWorker};
 
-fn clean_output_dir(dir_name:&str){
-    let _ = fs::remove_dir_all(dir_name);
+fn clean_output_dir(dir_name: &str) {
+	let _ = fs::remove_dir_all(dir_name);
 }
 
 #[test]
 fn mine_empty_chain() {
-    let _ = env_logger::init();
+	let _ = env_logger::init();
 	clean_output_dir(".grin");
-    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let mut rng = OsRng::new().unwrap();
 	let mut genesis_block = None;
-	if !chain::Chain::chain_exists(".grin".to_string()){
-		genesis_block=pow::mine_genesis_block(None);
+	if !chain::Chain::chain_exists(".grin".to_string()) {
+		genesis_block = pow::mine_genesis_block(None);
 	}
-	let chain = chain::Chain::init(".grin".to_string(), Arc::new(NoopAdapter {}),
-									genesis_block, pow::verify_size).unwrap();
+	let chain = chain::Chain::init(
+		".grin".to_string(),
+		Arc::new(NoopAdapter {}),
+		genesis_block,
+		pow::verify_size,
+	).unwrap();
 
 	// mine and add a few blocks
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
@@ -63,7 +67,11 @@ fn mine_empty_chain() {
 	};
 	miner_config.cuckoo_miner_plugin_dir = Some(String::from("../target/debug/deps"));
 
-	let mut cuckoo_miner = cuckoo::Miner::new(consensus::EASINESS, global::sizeshift() as u32, global::proofsize());
+	let mut cuckoo_miner = cuckoo::Miner::new(
+		consensus::EASINESS,
+		global::sizeshift() as u32,
+		global::proofsize(),
+	);
 	for n in 1..4 {
 		let prev = chain.head_header().unwrap();
 		let mut b = core::core::Block::new(&prev, vec![], reward_key).unwrap();
@@ -91,17 +99,21 @@ fn mine_empty_chain() {
 
 #[test]
 fn mine_forks() {
-    let _ = env_logger::init();
+	let _ = env_logger::init();
 	clean_output_dir(".grin2");
 
 	let mut rng = OsRng::new().unwrap();
 
 	let mut genesis_block = None;
-	if !chain::Chain::chain_exists(".grin2".to_string()){
-		genesis_block=pow::mine_genesis_block(None);
+	if !chain::Chain::chain_exists(".grin2".to_string()) {
+		genesis_block = pow::mine_genesis_block(None);
 	}
-	let chain = chain::Chain::init(".grin2".to_string(), Arc::new(NoopAdapter {}),
-									genesis_block, pow::verify_size).unwrap();
+	let chain = chain::Chain::init(
+		".grin2".to_string(),
+		Arc::new(NoopAdapter {}),
+		genesis_block,
+		pow::verify_size,
+	).unwrap();
 
 	// mine and add a few blocks
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
