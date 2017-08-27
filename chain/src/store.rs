@@ -23,7 +23,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader, Output};
 use core::consensus::TargetError;
 use core::core::target::Difficulty;
-use grin_store::{self, Error, to_key, u64_to_key, option_to_not_found};
+use grin_store::{self, option_to_not_found, to_key, Error, u64_to_key};
 
 const STORE_SUBPATH: &'static str = "chain";
 
@@ -83,9 +83,10 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		option_to_not_found(self.db.get_ser(
-			&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec()),
-		))
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
+		)
 	}
 
 	fn check_block_exists(&self, h: &Hash) -> Result<bool, Error> {
@@ -105,10 +106,8 @@ impl ChainStore for ChainKVStore {
 		// saving the full output under its hash, as well as a commitment to hash index
 		for out in &b.outputs {
 			let mut out_bytes = out.commit.as_ref().to_vec();
-			batch = batch.put_ser(
-				&to_key(OUTPUT_COMMIT_PREFIX, &mut out_bytes)[..],
-				out,
-			)?;
+			batch = batch
+				.put_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut out_bytes)[..], out)?;
 		}
 		batch.write()
 	}
@@ -125,24 +124,22 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(
-			OUTPUT_COMMIT_PREFIX,
-			&mut commit.as_ref().to_vec(),
-		)))
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut commit.as_ref().to_vec())),
+		)
 	}
 
 	fn has_output_commit(&self, commit: &Commitment) -> Result<Hash, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(
-			OUTPUT_COMMIT_PREFIX,
-			&mut commit.as_ref().to_vec(),
-		)))
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut commit.as_ref().to_vec())),
+		)
 	}
 
 	fn setup_height(&self, bh: &BlockHeader) -> Result<(), Error> {
-		self.db.put_ser(
-			&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height),
-			bh,
-		)?;
+		self.db
+			.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height), bh)?;
 
 		let mut prev_h = bh.previous;
 		let mut prev_height = bh.height - 1;
@@ -150,10 +147,12 @@ impl ChainStore for ChainKVStore {
 			let prev = self.get_header_by_height(prev_height)?;
 			if prev.hash() != prev_h {
 				let real_prev = self.get_block_header(&prev_h)?;
-				self.db.put_ser(
-					&u64_to_key(HEADER_HEIGHT_PREFIX, real_prev.height),
-					&real_prev,
-				).unwrap();
+				self.db
+					.put_ser(
+						&u64_to_key(HEADER_HEIGHT_PREFIX, real_prev.height),
+						&real_prev,
+					)
+					.unwrap();
 				prev_h = real_prev.previous;
 				prev_height = real_prev.height - 1;
 			} else {

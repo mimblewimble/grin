@@ -21,7 +21,7 @@ use time;
 
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
-use core::core::{BlockHeader, Block};
+use core::core::{Block, BlockHeader};
 use types::*;
 use store;
 use core::global;
@@ -117,14 +117,16 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		return Err(Error::Orphan);
 	}
 
-	let prev = try!(ctx.store.get_block_header(&header.previous).map_err(
-		&Error::StoreErr,
-	));
+	let prev = try!(
+		ctx.store
+			.get_block_header(&header.previous,)
+			.map_err(&Error::StoreErr,)
+	);
 
 	if header.height != prev.height + 1 {
 		return Err(Error::InvalidBlockHeight);
 	}
-	if header.timestamp <= prev.timestamp && !global::is_automated_testing_mode(){
+	if header.timestamp <= prev.timestamp && !global::is_automated_testing_mode() {
 		// prevent time warp attacks and some timestamp manipulations by forcing strict
 		// time progression (but not in CI mode)
 		return Err(Error::InvalidBlockTime);
@@ -145,9 +147,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		}
 
 		let diff_iter = store::DifficultyIter::from(header.previous, ctx.store.clone());
-		let difficulty = consensus::next_difficulty(diff_iter).map_err(|e| {
-			Error::Other(e.to_string())
-		})?;
+		let difficulty = consensus::next_difficulty(diff_iter)
+			.map_err(|e| Error::Other(e.to_string()))?;
 		if header.difficulty < difficulty {
 			return Err(Error::DifficultyTooLow);
 		}
