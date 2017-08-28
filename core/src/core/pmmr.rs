@@ -254,21 +254,7 @@ impl<'a, T, B> PMMR<'a, T, B> where T: Summable + Writeable + Debug + Clone, B: 
 		let mut to_prune = vec![];
 		let mut current = position;
 		while current+1 < self.last_pos {
-			let next_height = bintree_postorder_height(current+1);
-
-			// compare the node's height to the next height, if the next is higher
-			// we're on the right hand side of the subtree (otherwise we're on the
-			// left)
-			let sibling: u64;
-			let parent: u64;
-			if next_height > prunable_height {
-				sibling = bintree_jump_left_sibling(current);
-				parent = current + 1;
-			} else {
-				sibling = bintree_jump_right_sibling(current);
-				parent = sibling + 1;
-			}
-
+			let (parent, sibling) = family(current);
 			if parent > self.last_pos {
 				// can't prune when our parent isn't here yet
 				break;
@@ -343,6 +329,97 @@ impl<T> VecBackend<T> where T: Summable + Clone {
 	/// Total length of the underlying vector.
 	pub fn len(&self) -> usize {
 		self.elems.len()
+	}
+}
+
+/// Maintains a list of previously pruned nodes in PMMR, compacting the list as
+/// parents get pruned and allowing checking whether a leaf is pruned. Given
+/// a node's position, computes how much it should get shifted given the
+/// subtrees that have been pruned before.
+///
+/// The PruneList is useful when implementing compact backends for a PMMR (for
+/// example a single large byte array or a file). As nodes get pruned and
+/// removed from the backend to free space, the backend will get more compact
+/// but positions of a node within the PMMR will not match positions in the
+/// backend storage anymore. The PruneList accounts for that mismatch and does
+/// the position translation.
+pub struct PruneList {
+	pub pruned_nodes: Vec<u64>,
+}
+
+impl PruneList {
+	pub fn new() -> PruneList {
+		PruneList{pruned_nodes: vec![]}
+	}
+
+	/// Computes by how many positions a node at pos should be shifted given the
+	/// number of nodes that have already been pruned before it.
+	pub fn get_shift(&self, pos: u64) -> Option<u64> {
+		// get the position where the node at pos would fit in the pruned list, if
+		// it's already pruned, nothing to skip
+		match self.pruned_pos(pos) {
+			None => None,
+			Some(idx) => {
+				// skip by the number of elements pruned in the preceding subtrees,
+				// which is the sum of the size of each subtree
+				Some(
+					self.pruned_nodes[0..(idx as usize)]
+						.iter()
+						.map(|n| (1 << (bintree_postorder_height(*n) + 1)) - 1)
+						.sum(),
+				)
+			}
+		}
+	}
+
+	/// Push the node at the provided position in the prune list. Compacts the
+	/// list if pruning the additional node means a parent can get pruned as
+	/// well.
+	pub fn add(&mut self, pos: u64) {
+		let mut current = pos;
+		loop {
+			let (parent, sibling) = family(current);
+			match self.pruned_nodes.binary_search(&sibling) {
+				Ok(idx) => {
+					self.pruned_nodes.remove(idx);
+					current = parent;
+				}
+				Err(_) => {
+					let idx = self.pruned_nodes.binary_search(&current).unwrap_err();
+					self.pruned_nodes.insert(idx, current);
+					break;
+				}
+			}
+		}
+	}
+
+	/// Gets the position a new pruned node should take in the prune list.
+	/// If the node has already bee pruned, either directly or through one of
+	/// its parents contained in the prune list, returns None.
+	fn pruned_pos(&self, pos: u64) -> Option<usize> {
+		match self.pruned_nodes.binary_search(&pos) {
+			Ok(_) => None,
+			Err(idx) => {
+				if self.pruned_nodes.len() > idx {
+					// the node at pos can't be a child of lower position nodes by MMR
+					// construction but can be a child of the next node, going up parents
+					// from pos to make sure it's not the case
+					let next_peak_pos = self.pruned_nodes[idx];
+					let mut cursor = pos;
+					loop {
+						let (parent, _) = family(cursor);
+						if next_peak_pos == parent {
+							return None;
+						}
+						if next_peak_pos < parent {
+							break;
+						}
+						cursor = parent;
+					}
+				}
+				Some(idx)
+			}
+		}
 	}
 }
 
@@ -455,12 +532,30 @@ fn peaks(num: u64) -> Vec<u64> {
 /// nodes are added in a MMR.
 ///
 /// [1]  https://github.com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.md
-fn bintree_postorder_height(num: u64) -> u64 {
+pub fn bintree_postorder_height(num: u64) -> u64 {
 	let mut h = num;
 	while !all_ones(h) {
 		h = bintree_jump_left(h);
 	}
 	most_significant_pos(h) - 1
+}
+
+/// Calculates the positions of the parent and sibling of the node at the
+/// provided position.
+pub fn family(pos: u64) -> (u64, u64) {
+	let sibling: u64;
+	let parent: u64;
+
+	let pos_height = bintree_postorder_height(pos);
+	let next_height = bintree_postorder_height(pos+1);
+	if next_height > pos_height {
+		sibling = bintree_jump_left_sibling(pos);
+		parent = pos + 1;
+	} else {
+		sibling = bintree_jump_right_sibling(pos);
+		parent = sibling + 1;
+	}
+	(parent, sibling)
 }
 
 /// Calculates the position of the top-left child of a parent node in the
@@ -472,7 +567,6 @@ fn bintree_move_down_left(num: u64) -> Option<u64> {
 	}
 	Some(num - (1 << height))
 }
-
 
 /// Calculates the position of the right sibling of a node a subtree in the
 /// postorder traversal of a full binary tree.
@@ -723,5 +817,44 @@ mod test {
 			assert_eq!(orig_root, pmmr.root());
 		}
 		assert_eq!(ba.used_size(), 2);
+	}
+
+	#[test]
+	fn pmmr_prune_list() {
+		let mut pl = PruneList::new();
+		pl.add(4);
+		assert_eq!(pl.pruned_nodes.len(), 1);
+		assert_eq!(pl.pruned_nodes[0], 4);
+		assert_eq!(pl.get_shift(5), Some(1));
+		assert_eq!(pl.get_shift(2), Some(0));
+		assert_eq!(pl.get_shift(4), None);
+
+		pl.add(5);
+		assert_eq!(pl.pruned_nodes.len(), 1);
+		assert_eq!(pl.pruned_nodes[0], 6);
+		assert_eq!(pl.get_shift(8), Some(3));
+		assert_eq!(pl.get_shift(2), Some(0));
+		assert_eq!(pl.get_shift(5), None);
+
+		pl.add(2);
+		assert_eq!(pl.pruned_nodes.len(), 2);
+		assert_eq!(pl.pruned_nodes[0], 2);
+		assert_eq!(pl.get_shift(8), Some(4));
+		assert_eq!(pl.get_shift(1), Some(0));
+
+		pl.add(8);
+		pl.add(11);
+		assert_eq!(pl.pruned_nodes.len(), 4);
+
+		pl.add(1);
+		assert_eq!(pl.pruned_nodes.len(), 3);
+		assert_eq!(pl.pruned_nodes[0], 7);
+		assert_eq!(pl.get_shift(12), Some(9));
+
+		pl.add(12);
+		assert_eq!(pl.pruned_nodes.len(), 3);
+		assert_eq!(pl.get_shift(12), None);
+		assert_eq!(pl.get_shift(9), Some(8));
+		assert_eq!(pl.get_shift(17), Some(11));
 	}
 }
