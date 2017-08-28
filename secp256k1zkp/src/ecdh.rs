@@ -19,7 +19,7 @@
 use std::ops;
 
 use super::Secp256k1;
-use key::{SecretKey, PublicKey};
+use key::{PublicKey, SecretKey};
 use ffi;
 
 /// A tag used for recovering the public key from a compact signature
@@ -113,7 +113,7 @@ mod tests {
 #[cfg(all(test, feature = "unstable"))]
 mod benches {
 	use rand::thread_rng;
-	use test::{Bencher, black_box};
+	use test::{black_box, Bencher};
 
 	use super::SharedSecret;
 	use super::super::Secp256k1;

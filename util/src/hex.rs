@@ -22,25 +22,28 @@ use std::num;
 
 /// Encode the provided bytes into a hex string
 pub fn to_hex(bytes: Vec<u8>) -> String {
-  let mut s = String::new();
-  for byte in bytes {
-    write!(&mut s, "{:02X}", byte).expect("Unable to write");
-  }
-  s
+	let mut s = String::new();
+	for byte in bytes {
+		write!(&mut s, "{:02X}", byte).expect("Unable to write");
+	}
+	s
 }
 
 /// Decode a hex string into bytes.
 pub fn from_hex(hex_str: String) -> Result<Vec<u8>, num::ParseIntError> {
-  let hex_trim = if &hex_str[..2] == "0x" {
-    hex_str[2..].to_owned()
-  } else {
-    hex_str.clone()
-  };
-  split_n(&hex_trim.trim()[..], 2).iter()
-    .map(|b| u8::from_str_radix(b, 16))
-    .collect::<Result<Vec<u8>, _>>()
+	let hex_trim = if &hex_str[..2] == "0x" {
+		hex_str[2..].to_owned()
+	} else {
+		hex_str.clone()
+	};
+	split_n(&hex_trim.trim()[..], 2)
+		.iter()
+		.map(|b| u8::from_str_radix(b, 16))
+		.collect::<Result<Vec<u8>, _>>()
 }
 
 fn split_n(s: &str, n: usize) -> Vec<&str> {
-  (0 .. (s.len() - n + 1)/2 + 1).map(|i| &s[2*i .. 2*i + n]).collect()
+	(0..(s.len() - n + 1) / 2 + 1)
+		.map(|i| &s[2 * i..2 * i + n])
+		.collect()
 }

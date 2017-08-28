@@ -14,19 +14,19 @@
 
 //! Main crate putting together all the other crates that compose Grin into a
 //! binary.
-
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
 #![deny(non_snake_case)]
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-#[macro_use]
-extern crate log;
 extern crate env_logger;
 extern crate futures;
 extern crate futures_cpupool as cpupool;
 extern crate hyper;
+extern crate itertools;
+#[macro_use]
+extern crate log;
 extern crate rand;
 extern crate serde;
 #[macro_use]
@@ -34,7 +34,6 @@ extern crate serde_derive;
 extern crate time;
 extern crate tokio_core;
 extern crate tokio_timer;
-extern crate itertools;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;
@@ -42,10 +41,10 @@ extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_p2p as p2p;
 extern crate grin_pool as pool;
+extern crate grin_pow as pow;
 extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
-extern crate grin_pow as pow;
 extern crate secp256k1zkp as secp;
 
 mod adapters;
@@ -55,5 +54,5 @@ mod sync;
 mod types;
 mod miner;
 
-pub use server::{Server};
-pub use types::{ServerConfig, Seeding, ServerStats};
+pub use server::Server;
+pub use types::{Seeding, ServerConfig, ServerStats};

@@ -14,7 +14,6 @@
 
 //! The transaction pool, keeping a view of currently-valid transactions that
 //! may be confirmed soon.
-
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
 #![deny(non_snake_case)]
@@ -26,12 +25,12 @@ mod types;
 mod blockchain;
 mod pool;
 
-extern crate time;
-extern crate rand;
 extern crate log;
+extern crate rand;
+extern crate time;
 
 extern crate grin_core as core;
 extern crate secp256k1zkp as secp;
 
 pub use pool::TransactionPool;
-pub use types::{BlockChain, TxSource, PoolError};
+pub use types::{BlockChain, PoolError, TxSource};

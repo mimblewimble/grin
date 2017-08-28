@@ -14,20 +14,20 @@
 
 //! Main for building the binary of a Grin peer-to-peer node.
 
+extern crate blake2_rfc as blake2;
 extern crate clap;
 extern crate daemonize;
+extern crate env_logger;
 #[macro_use]
 extern crate log;
-extern crate env_logger;
 extern crate serde;
 extern crate serde_json;
-extern crate blake2_rfc as blake2;
 
 extern crate grin_api as api;
-extern crate grin_grin as grin;
-extern crate grin_wallet as wallet;
 extern crate grin_config as config;
 extern crate grin_core as core;
+extern crate grin_grin as grin;
+extern crate grin_wallet as wallet;
 extern crate secp256k1zkp as secp;
 
 use std::thread;
@@ -35,7 +35,7 @@ use std::io::Read;
 use std::fs::File;
 use std::time::Duration;
 
-use clap::{Arg, App, SubCommand, ArgMatches};
+use clap::{App, Arg, ArgMatches, SubCommand};
 use daemonize::Daemonize;
 
 use secp::Secp256k1;
@@ -50,7 +50,16 @@ fn start_from_config_file(mut global_config: GlobalConfig) {
 		global_config.config_file_path.unwrap().to_str().unwrap()
 	);
 
-	global::set_mining_mode(global_config.members.as_mut().unwrap().server.clone().mining_parameter_mode.unwrap());
+	global::set_mining_mode(
+		global_config
+			.members
+			.as_mut()
+			.unwrap()
+			.server
+			.clone()
+			.mining_parameter_mode
+			.unwrap(),
+	);
 
 	grin::Server::start(global_config.members.as_mut().unwrap().server.clone()).unwrap();
 	loop {
@@ -118,7 +127,8 @@ fn main() {
 				.arg(Arg::with_name("data_dir")
                      .short("dd")
                      .long("data_dir")
-                     .help("Directory in which to store wallet files (defaults to current directory)")
+                     .help("Directory in which to store wallet files \
+					 	(defaults to current directory)")
                      .takes_value(true))
 				.arg(Arg::with_name("port")
                      .short("r")
@@ -128,17 +138,24 @@ fn main() {
 				.arg(Arg::with_name("api_server_address")
                      .short("a")
                      .long("api_server_address")
-                     .help("The api address of a running node on which to check inputs and post transactions")
-                     .takes_value(true))	 	 
+                     .help("The api address of a running node on which to check inputs and post \
+					 	transactions")
+                     .takes_value(true))
                 .subcommand(SubCommand::with_name("receive")
-                            .about("Run the wallet in receiving mode. If an input file is provided, will process it, otherwise runs in server mode waiting for send requests.")
+                            .about("Run the wallet in receiving mode. If an input file is \
+								provided, will process it, otherwise runs in server mode \
+								waiting for send requests.")
                             .arg(Arg::with_name("input")
                                  .help("Partial transaction to receive, expects as a JSON file.")
                                  .short("i")
                                  .long("input")
                                  .takes_value(true)))
                 .subcommand(SubCommand::with_name("send")
-                            .about("Builds a transaction to send someone some coins. By default, the transaction will just be printed to stdout. If a destination is provided, the command will attempt to contact the receiver at that address and send the transaction directly.")
+                            .about("Builds a transaction to send someone some coins. By default, \
+								the transaction will just be printed to stdout. \
+								If a destination is provided, the command will attempt \
+								to contact the receiver at that address and send the \
+								transaction directly.")
                             .arg(Arg::with_name("amount")
                                  .help("Amount to send in the smallest denomination")
                                  .index(1))
@@ -156,14 +173,12 @@ fn main() {
 		}
 
 		// client commands and options
-		("client", Some(client_args)) => {
-			match client_args.subcommand() {
-				("status", _) => {
-					println!("status info...");
-				}
-				_ => panic!("Unknown client command, use 'grin help client' for details"),
+		("client", Some(client_args)) => match client_args.subcommand() {
+			("status", _) => {
+				println!("status info...");
 			}
-		}
+			_ => panic!("Unknown client command, use 'grin help client' for details"),
+		},
 
 		// client commands and options
 		("wallet", Some(wallet_args)) => {
@@ -195,8 +210,6 @@ fn main() {
 					println!("{}", e);
 				}
 			}
-
-
 		}
 	}
 }
@@ -270,17 +283,16 @@ fn server_command(server_args: &ArgMatches) {
 }
 
 fn wallet_command(wallet_args: &ArgMatches) {
-	let hd_seed = wallet_args.value_of("pass").expect(
-		"Wallet passphrase required.",
-	);
+	let hd_seed = wallet_args
+		.value_of("pass")
+		.expect("Wallet passphrase required.");
 
 	// TODO do something closer to BIP39, eazy solution right now
 	let seed = blake2::blake2b::blake2b(32, &[], hd_seed.as_bytes());
 
 	let s = Secp256k1::new();
-	let key = wallet::ExtendedKey::from_seed(&s, seed.as_bytes()).expect(
-		"Error deriving extended key from seed.",
-	);
+	let key = wallet::ExtendedKey::from_seed(&s, seed.as_bytes())
+		.expect("Error deriving extended key from seed.");
 
 
 	let mut wallet_config = WalletConfig::default();
@@ -298,33 +310,29 @@ fn wallet_command(wallet_args: &ArgMatches) {
 	}
 
 	match wallet_args.subcommand() {
-
-		("receive", Some(receive_args)) => {
-			if let Some(f) = receive_args.value_of("input") {
-				let mut file = File::open(f).expect("Unable to open transaction file.");
-				let mut contents = String::new();
-				file.read_to_string(&mut contents).expect(
-					"Unable to read transaction file.",
-				);
-				wallet::receive_json_tx(&wallet_config, &key, contents.as_str()).unwrap();
-			} else {
-				info!(
-					"Starting the Grin wallet receiving daemon at {}...",
-					wallet_config.api_http_addr
-				);
-				let mut apis = api::ApiServer::new("/v1".to_string());
-				apis.register_endpoint(
-					"/receive".to_string(),
-					wallet::WalletReceiver {
-						key: key,
-						config: wallet_config.clone(),
-					},
-				);
-				apis.start(wallet_config.api_http_addr).unwrap_or_else(|e| {
-					error!("Failed to start Grin wallet receiver: {}.", e);
-				});
-			}
-		}
+		("receive", Some(receive_args)) => if let Some(f) = receive_args.value_of("input") {
+			let mut file = File::open(f).expect("Unable to open transaction file.");
+			let mut contents = String::new();
+			file.read_to_string(&mut contents)
+				.expect("Unable to read transaction file.");
+			wallet::receive_json_tx(&wallet_config, &key, contents.as_str()).unwrap();
+		} else {
+			info!(
+				"Starting the Grin wallet receiving daemon at {}...",
+				wallet_config.api_http_addr
+			);
+			let mut apis = api::ApiServer::new("/v1".to_string());
+			apis.register_endpoint(
+				"/receive".to_string(),
+				wallet::WalletReceiver {
+					key: key,
+					config: wallet_config.clone(),
+				},
+			);
+			apis.start(wallet_config.api_http_addr).unwrap_or_else(|e| {
+				error!("Failed to start Grin wallet receiver: {}.", e);
+			});
+		},
 		("send", Some(send_args)) => {
 			let amount = send_args
 				.value_of("amount")

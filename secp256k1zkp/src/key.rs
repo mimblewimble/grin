@@ -20,10 +20,10 @@ use std::intrinsics::copy_nonoverlapping;
 use std::marker;
 use arrayvec::ArrayVec;
 use rand::Rng;
-use serialize::{Decoder, Decodable, Encoder, Encodable};
-use serde::{Serialize, Deserialize, Serializer, Deserializer};
+use serialize::{Decodable, Decoder, Encodable, Encoder};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use super::{Secp256k1, ContextFlag};
+use super::{ContextFlag, Secp256k1};
 use super::Error::{self, IncapableContext, InvalidPublicKey, InvalidSecretKey};
 use constants;
 use ffi;
@@ -36,16 +36,112 @@ impl_pretty_debug!(SecretKey);
 
 /// The number 1 encoded as a secret key
 /// Deprecated; `static` is not what I want; use `ONE_KEY` instead
-pub static ONE: SecretKey = SecretKey([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+pub static ONE: SecretKey = SecretKey([
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	1,
+]);
 
 /// The number 0 encoded as a secret key
-pub const ZERO_KEY: SecretKey = SecretKey([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                           0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+pub const ZERO_KEY: SecretKey = SecretKey([
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+]);
 
 /// The number 1 encoded as a secret key
-pub const ONE_KEY: SecretKey = SecretKey([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+pub const ONE_KEY: SecretKey = SecretKey([
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	1,
+]);
 
 /// A Secp256k1 public key, used for verification of signatures
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -93,8 +189,8 @@ impl SecretKey {
 	/// Adds one secret key to another, modulo the curve order
 	pub fn add_assign(&mut self, secp: &Secp256k1, other: &SecretKey) -> Result<(), Error> {
 		unsafe {
-			if ffi::secp256k1_ec_privkey_tweak_add(secp.ctx, self.as_mut_ptr(), other.as_ptr()) !=
-			   1 {
+			if ffi::secp256k1_ec_privkey_tweak_add(secp.ctx, self.as_mut_ptr(), other.as_ptr()) != 1
+			{
 				Err(InvalidSecretKey)
 			} else {
 				Ok(())
@@ -106,8 +202,8 @@ impl SecretKey {
 	/// Multiplies one secret key by another, modulo the curve order
 	pub fn mul_assign(&mut self, secp: &Secp256k1, other: &SecretKey) -> Result<(), Error> {
 		unsafe {
-			if ffi::secp256k1_ec_privkey_tweak_mul(secp.ctx, self.as_mut_ptr(), other.as_ptr()) !=
-			   1 {
+			if ffi::secp256k1_ec_privkey_tweak_mul(secp.ctx, self.as_mut_ptr(), other.as_ptr()) != 1
+			{
 				Err(InvalidSecretKey)
 			} else {
 				Ok(())
@@ -156,13 +252,15 @@ impl PublicKey {
 	/// Creates a public key directly from a slice
 	#[inline]
 	pub fn from_slice(secp: &Secp256k1, data: &[u8]) -> Result<PublicKey, Error> {
-
 		let mut pk = unsafe { ffi::PublicKey::blank() };
 		unsafe {
-			if ffi::secp256k1_ec_pubkey_parse(secp.ctx,
-			                                  &mut pk,
-			                                  data.as_ptr(),
-			                                  data.len() as ::libc::size_t) == 1 {
+			if ffi::secp256k1_ec_pubkey_parse(
+				secp.ctx,
+				&mut pk,
+				data.as_ptr(),
+				data.len() as ::libc::size_t,
+			) == 1
+			{
 				Ok(PublicKey(pk))
 			} else {
 				Err(InvalidPublicKey)
@@ -174,10 +272,11 @@ impl PublicKey {
 	/// Serialize the key as a byte-encoded pair of values. In compressed form
 	/// the y-coordinate is represented by only a single bit, as x determines
 	/// it up to one bit.
-	pub fn serialize_vec(&self,
-	                     secp: &Secp256k1,
-	                     compressed: bool)
-	                     -> ArrayVec<[u8; constants::PUBLIC_KEY_SIZE]> {
+	pub fn serialize_vec(
+		&self,
+		secp: &Secp256k1,
+		compressed: bool,
+	) -> ArrayVec<[u8; constants::PUBLIC_KEY_SIZE]> {
 		let mut ret = ArrayVec::new();
 
 		unsafe {
@@ -187,11 +286,13 @@ impl PublicKey {
 			} else {
 				ffi::SECP256K1_SER_UNCOMPRESSED
 			};
-			let err = ffi::secp256k1_ec_pubkey_serialize(secp.ctx,
-			                                             ret.as_ptr(),
-			                                             &mut ret_len,
-			                                             self.as_ptr(),
-			                                             compressed);
+			let err = ffi::secp256k1_ec_pubkey_serialize(
+				secp.ctx,
+				ret.as_ptr(),
+				&mut ret_len,
+				self.as_ptr(),
+				compressed,
+			);
 			debug_assert_eq!(err, 1);
 			ret.set_len(ret_len as usize);
 		}
@@ -205,9 +306,12 @@ impl PublicKey {
 			return Err(IncapableContext);
 		}
 		unsafe {
-			if ffi::secp256k1_ec_pubkey_tweak_add(secp.ctx,
-			                                      &mut self.0 as *mut _,
-			                                      other.as_ptr()) == 1 {
+			if ffi::secp256k1_ec_pubkey_tweak_add(
+				secp.ctx,
+				&mut self.0 as *mut _,
+				other.as_ptr(),
+			) == 1
+			{
 				Ok(())
 			} else {
 				Err(InvalidSecretKey)
@@ -222,9 +326,12 @@ impl PublicKey {
 			return Err(IncapableContext);
 		}
 		unsafe {
-			if ffi::secp256k1_ec_pubkey_tweak_mul(secp.ctx,
-			                                      &mut self.0 as *mut _,
-			                                      other.as_ptr()) == 1 {
+			if ffi::secp256k1_ec_pubkey_tweak_mul(
+				secp.ctx,
+				&mut self.0 as *mut _,
+				other.as_ptr(),
+			) == 1
+			{
 				Ok(())
 			} else {
 				Err(InvalidSecretKey)
@@ -281,7 +388,8 @@ impl Encodable for PublicKey {
 
 impl<'de> Deserialize<'de> for PublicKey {
 	fn deserialize<D>(d: D) -> Result<PublicKey, D::Error>
-		where D: Deserializer<'de>
+	where
+		D: Deserializer<'de>,
 	{
 		use serde::de;
 		struct Visitor {
@@ -296,10 +404,13 @@ impl<'de> Deserialize<'de> for PublicKey {
 
 			#[inline]
 			fn visit_seq<V>(self, mut v: V) -> Result<PublicKey, V::Error>
-				where V: ::serde::de::SeqAccess<'di>
+			where
+				V: ::serde::de::SeqAccess<'di>,
 			{
-				debug_assert!(constants::UNCOMPRESSED_PUBLIC_KEY_SIZE >=
-				              constants::COMPRESSED_PUBLIC_KEY_SIZE);
+				debug_assert!(
+					constants::UNCOMPRESSED_PUBLIC_KEY_SIZE >=
+						constants::COMPRESSED_PUBLIC_KEY_SIZE
+				);
 
 				let s = Secp256k1::with_caps(::ContextFlag::None);
 				unsafe {
@@ -324,13 +435,16 @@ impl<'de> Deserialize<'de> for PublicKey {
 		}
 
 		// Begin actual function
-		d.deserialize_seq(Visitor { marker: ::std::marker::PhantomData })
+		d.deserialize_seq(Visitor {
+			marker: ::std::marker::PhantomData,
+		})
 	}
 }
 
 impl Serialize for PublicKey {
 	fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
-		where S: Serializer
+	where
+		S: Serializer,
 	{
 		let secp = Secp256k1::with_caps(::ContextFlag::None);
 		(&self.serialize_vec(&secp, true)[..]).serialize(s)
@@ -339,13 +453,13 @@ impl Serialize for PublicKey {
 
 #[cfg(test)]
 mod test {
-	use super::super::{Secp256k1, ContextFlag};
-	use super::super::Error::{InvalidPublicKey, InvalidSecretKey, IncapableContext};
+	use super::super::{ContextFlag, Secp256k1};
+	use super::super::Error::{IncapableContext, InvalidPublicKey, InvalidSecretKey};
 	use super::{PublicKey, SecretKey};
 	use super::super::constants;
 	extern crate serde_json;
 
-	use rand::{Rng, thread_rng};
+	use rand::{thread_rng, Rng};
 
 	#[test]
 	fn skey_from_slice() {
@@ -363,20 +477,116 @@ mod test {
 		assert_eq!(PublicKey::from_slice(&s, &[]), Err(InvalidPublicKey));
 		assert_eq!(PublicKey::from_slice(&s, &[1, 2, 3]), Err(InvalidPublicKey));
 
-		let uncompressed =
-			PublicKey::from_slice(&s,
-			                      &[4, 54, 57, 149, 239, 162, 148, 175, 246, 254, 239, 75, 154,
-			                        152, 10, 82, 234, 224, 85, 220, 40, 100, 57, 121, 30, 162,
-			                        94, 156, 135, 67, 74, 49, 179, 57, 236, 53, 162, 124, 149,
-			                        144, 168, 77, 74, 30, 72, 211, 229, 110, 111, 55, 96, 193,
-			                        86, 227, 183, 152, 195, 155, 51, 247, 123, 113, 60, 228, 188]);
+		let uncompressed = PublicKey::from_slice(
+			&s,
+			&[
+				4,
+				54,
+				57,
+				149,
+				239,
+				162,
+				148,
+				175,
+				246,
+				254,
+				239,
+				75,
+				154,
+				152,
+				10,
+				82,
+				234,
+				224,
+				85,
+				220,
+				40,
+				100,
+				57,
+				121,
+				30,
+				162,
+				94,
+				156,
+				135,
+				67,
+				74,
+				49,
+				179,
+				57,
+				236,
+				53,
+				162,
+				124,
+				149,
+				144,
+				168,
+				77,
+				74,
+				30,
+				72,
+				211,
+				229,
+				110,
+				111,
+				55,
+				96,
+				193,
+				86,
+				227,
+				183,
+				152,
+				195,
+				155,
+				51,
+				247,
+				123,
+				113,
+				60,
+				228,
+				188,
+			],
+		);
 		assert!(uncompressed.is_ok());
 
-		let compressed = PublicKey::from_slice(&s,
-		                                       &[3, 23, 183, 225, 206, 31, 159, 148, 195, 42, 67,
-		                                         115, 146, 41, 248, 140, 11, 3, 51, 41, 111, 180,
-		                                         110, 143, 114, 134, 88, 73, 198, 174, 52, 184,
-		                                         78]);
+		let compressed = PublicKey::from_slice(
+			&s,
+			&[
+				3,
+				23,
+				183,
+				225,
+				206,
+				31,
+				159,
+				148,
+				195,
+				42,
+				67,
+				115,
+				146,
+				41,
+				248,
+				140,
+				11,
+				3,
+				51,
+				41,
+				111,
+				180,
+				110,
+				143,
+				114,
+				134,
+				88,
+				73,
+				198,
+				174,
+				52,
+				184,
+				78,
+			],
+		);
 		assert!(compressed.is_ok());
 	}
 
@@ -386,10 +596,14 @@ mod test {
 
 		let (sk1, pk1) = s.generate_keypair(&mut thread_rng()).unwrap();
 		assert_eq!(SecretKey::from_slice(&s, &sk1[..]), Ok(sk1));
-		assert_eq!(PublicKey::from_slice(&s, &pk1.serialize_vec(&s, true)[..]),
-		           Ok(pk1));
-		assert_eq!(PublicKey::from_slice(&s, &pk1.serialize_vec(&s, false)[..]),
-		           Ok(pk1));
+		assert_eq!(
+			PublicKey::from_slice(&s, &pk1.serialize_vec(&s, true)[..]),
+			Ok(pk1)
+		);
+		assert_eq!(
+			PublicKey::from_slice(&s, &pk1.serialize_vec(&s, false)[..]),
+			Ok(pk1)
+		);
 	}
 
 	#[test]
@@ -398,22 +612,90 @@ mod test {
 		// Zero
 		assert_eq!(SecretKey::from_slice(&s, &[0; 32]), Err(InvalidSecretKey));
 		// -1
-		assert_eq!(SecretKey::from_slice(&s, &[0xff; 32]),
-		           Err(InvalidSecretKey));
+		assert_eq!(
+			SecretKey::from_slice(&s, &[0xff; 32]),
+			Err(InvalidSecretKey)
+		);
 		// Top of range
-		assert!(SecretKey::from_slice(&s,
-		                              &[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		                                0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE, 0xBA, 0xAE,
-		                                0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B, 0xBF, 0xD2, 0x5E,
-		                                0x8C, 0xD0, 0x36, 0x41, 0x40])
-			.is_ok());
+		assert!(
+			SecretKey::from_slice(
+				&s,
+				&[
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFE,
+					0xBA,
+					0xAE,
+					0xDC,
+					0xE6,
+					0xAF,
+					0x48,
+					0xA0,
+					0x3B,
+					0xBF,
+					0xD2,
+					0x5E,
+					0x8C,
+					0xD0,
+					0x36,
+					0x41,
+					0x40
+				]
+			).is_ok()
+		);
 		// One past top of range
-		assert!(SecretKey::from_slice(&s,
-		                              &[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-		                                0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE, 0xBA, 0xAE,
-		                                0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B, 0xBF, 0xD2, 0x5E,
-		                                0x8C, 0xD0, 0x36, 0x41, 0x41])
-			.is_err());
+		assert!(
+			SecretKey::from_slice(
+				&s,
+				&[
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFF,
+					0xFE,
+					0xBA,
+					0xAE,
+					0xDC,
+					0xE6,
+					0xAF,
+					0x48,
+					0xA0,
+					0x3B,
+					0xBF,
+					0xD2,
+					0x5E,
+					0x8C,
+					0xD0,
+					0x36,
+					0x41,
+					0x41
+				]
+			).is_err()
+		);
 	}
 
 	#[test]
@@ -459,7 +741,7 @@ mod test {
 		let zero32 = "[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]".as_bytes();
 		let json32 = json::Json::from_reader(&mut Cursor::new(zero32)).unwrap();
 		let zero65 = "[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,\
-                      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]"
+		              0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]"
 			.as_bytes();
 		let json65 = json::Json::from_reader(&mut Cursor::new(zero65)).unwrap();
 		let string = "\"my key\"".as_bytes();
@@ -530,7 +812,7 @@ mod test {
 
 		// All zeroes pk is invalid
 		let zero65 = "[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,\
-                      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]";
+		              0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]";
 		assert!(serde_json::from_str::<PublicKey>(zero31).is_err());
 		assert!(serde_json::from_str::<SecretKey>(zero31).is_err());
 
@@ -543,7 +825,7 @@ mod test {
 
 	#[test]
 	fn test_serialize_serde() {
-		use serde::{Serialize, Deserialize};
+		use serde::{Deserialize, Serialize};
 		use json;
 
 		macro_rules! round_trip (
@@ -564,7 +846,6 @@ mod test {
 
 	#[test]
 	fn test_out_of_range() {
-
 		struct BadRng(u8);
 		impl Rng for BadRng {
 			fn next_u32(&mut self) -> u32 {
@@ -574,10 +855,40 @@ mod test {
 			// group order, then decrement with repeated calls
 			// until it returns a valid key
 			fn fill_bytes(&mut self, data: &mut [u8]) {
-				let group_order: [u8; 32] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-				                             0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xba, 0xae,
-				                             0xdc, 0xe6, 0xaf, 0x48, 0xa0, 0x3b, 0xbf, 0xd2, 0x5e,
-				                             0x8c, 0xd0, 0x36, 0x41, 0x41];
+				let group_order: [u8; 32] = [
+					0xff,
+					0xff,
+					0xff,
+					0xff,
+					0xff,
+					0xff,
+					0xff,
+					0xff,
+					0xff,
+					0xff,
+					0xff,
+					0xff,
+					0xff,
+					0xff,
+					0xff,
+					0xfe,
+					0xba,
+					0xae,
+					0xdc,
+					0xe6,
+					0xaf,
+					0x48,
+					0xa0,
+					0x3b,
+					0xbf,
+					0xd2,
+					0x5e,
+					0x8c,
+					0xd0,
+					0x36,
+					0x41,
+					0x41,
+				];
 				assert_eq!(data.len(), 32);
 				unsafe {
 					use std::intrinsics::copy_nonoverlapping;
@@ -596,20 +907,32 @@ mod test {
 	fn test_pubkey_from_bad_slice() {
 		let s = Secp256k1::new();
 		// Bad sizes
-		assert_eq!(PublicKey::from_slice(&s, &[0; constants::COMPRESSED_PUBLIC_KEY_SIZE - 1]),
-                   Err(InvalidPublicKey));
-		assert_eq!(PublicKey::from_slice(&s, &[0; constants::COMPRESSED_PUBLIC_KEY_SIZE + 1]),
-                   Err(InvalidPublicKey));
-		assert_eq!(PublicKey::from_slice(&s, &[0; constants::UNCOMPRESSED_PUBLIC_KEY_SIZE - 1]),
-                   Err(InvalidPublicKey));
-		assert_eq!(PublicKey::from_slice(&s, &[0; constants::UNCOMPRESSED_PUBLIC_KEY_SIZE + 1]),
-                   Err(InvalidPublicKey));
+		assert_eq!(
+			PublicKey::from_slice(&s, &[0; constants::COMPRESSED_PUBLIC_KEY_SIZE - 1]),
+			Err(InvalidPublicKey)
+		);
+		assert_eq!(
+			PublicKey::from_slice(&s, &[0; constants::COMPRESSED_PUBLIC_KEY_SIZE + 1]),
+			Err(InvalidPublicKey)
+		);
+		assert_eq!(
+			PublicKey::from_slice(&s, &[0; constants::UNCOMPRESSED_PUBLIC_KEY_SIZE - 1]),
+			Err(InvalidPublicKey)
+		);
+		assert_eq!(
+			PublicKey::from_slice(&s, &[0; constants::UNCOMPRESSED_PUBLIC_KEY_SIZE + 1]),
+			Err(InvalidPublicKey)
+		);
 
 		// Bad parse
-		assert_eq!(PublicKey::from_slice(&s, &[0xff; constants::UNCOMPRESSED_PUBLIC_KEY_SIZE]),
-                   Err(InvalidPublicKey));
-		assert_eq!(PublicKey::from_slice(&s, &[0x55; constants::COMPRESSED_PUBLIC_KEY_SIZE]),
-                   Err(InvalidPublicKey));
+		assert_eq!(
+			PublicKey::from_slice(&s, &[0xff; constants::UNCOMPRESSED_PUBLIC_KEY_SIZE]),
+			Err(InvalidPublicKey)
+		);
+		assert_eq!(
+			PublicKey::from_slice(&s, &[0x55; constants::COMPRESSED_PUBLIC_KEY_SIZE]),
+			Err(InvalidPublicKey)
+		);
 	}
 
 	#[test]
@@ -625,8 +948,10 @@ mod test {
 		let s = Secp256k1::new();
 		let (sk, _) = s.generate_keypair(&mut DumbRng(0)).unwrap();
 
-		assert_eq!(&format!("{:?}", sk),
-                   "SecretKey(0200000001000000040000000300000006000000050000000800000007000000)");
+		assert_eq!(
+			&format!("{:?}", sk),
+			"SecretKey(0200000001000000040000000300000006000000050000000800000007000000)"
+		);
 	}
 
 	#[test]
@@ -641,10 +966,114 @@ mod test {
 
 		let s = Secp256k1::new();
 		let (_, pk1) = s.generate_keypair(&mut DumbRng(0)).unwrap();
-		assert_eq!(&pk1.serialize_vec(&s, false)[..],
-                   &[4, 149, 16, 196, 140, 38, 92, 239, 179, 65, 59, 224, 230, 183, 91, 238, 240, 46, 186, 252, 175, 102, 52, 249, 98, 178, 123, 72, 50, 171, 196, 254, 236, 1, 189, 143, 242, 227, 16, 87, 247, 183, 162, 68, 237, 140, 92, 205, 151, 129, 166, 58, 111, 96, 123, 64, 180, 147, 51, 12, 209, 89, 236, 213, 206][..]);
-		assert_eq!(&pk1.serialize_vec(&s, true)[..],
-                   &[2, 149, 16, 196, 140, 38, 92, 239, 179, 65, 59, 224, 230, 183, 91, 238, 240, 46, 186, 252, 175, 102, 52, 249, 98, 178, 123, 72, 50, 171, 196, 254, 236][..]);
+		assert_eq!(
+			&pk1.serialize_vec(&s, false)[..],
+			&[
+				4,
+				149,
+				16,
+				196,
+				140,
+				38,
+				92,
+				239,
+				179,
+				65,
+				59,
+				224,
+				230,
+				183,
+				91,
+				238,
+				240,
+				46,
+				186,
+				252,
+				175,
+				102,
+				52,
+				249,
+				98,
+				178,
+				123,
+				72,
+				50,
+				171,
+				196,
+				254,
+				236,
+				1,
+				189,
+				143,
+				242,
+				227,
+				16,
+				87,
+				247,
+				183,
+				162,
+				68,
+				237,
+				140,
+				92,
+				205,
+				151,
+				129,
+				166,
+				58,
+				111,
+				96,
+				123,
+				64,
+				180,
+				147,
+				51,
+				12,
+				209,
+				89,
+				236,
+				213,
+				206
+			][..]
+		);
+		assert_eq!(
+			&pk1.serialize_vec(&s, true)[..],
+			&[
+				2,
+				149,
+				16,
+				196,
+				140,
+				38,
+				92,
+				239,
+				179,
+				65,
+				59,
+				224,
+				230,
+				183,
+				91,
+				238,
+				240,
+				46,
+				186,
+				252,
+				175,
+				102,
+				52,
+				249,
+				98,
+				178,
+				123,
+				72,
+				50,
+				171,
+				196,
+				254,
+				236
+			][..]
+		);
 	}
 
 	#[test]
@@ -685,7 +1114,7 @@ mod test {
 
 	#[test]
 	fn pubkey_hash() {
-		use std::hash::{Hash, SipHasher, Hasher};
+		use std::hash::{Hash, Hasher, SipHasher};
 		use std::collections::HashSet;
 
 		fn hash<T: Hash>(t: &T) -> u64 {

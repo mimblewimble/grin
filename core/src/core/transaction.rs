@@ -14,14 +14,14 @@
 
 //! Transactions
 
-use byteorder::{ByteOrder, BigEndian};
-use secp::{self, Secp256k1, Message, Signature};
-use secp::pedersen::{RangeProof, Commitment};
+use byteorder::{BigEndian, ByteOrder};
+use secp::{self, Message, Secp256k1, Signature};
+use secp::pedersen::{Commitment, RangeProof};
 
 use core::Committed;
 use core::MerkleRow;
 use core::hash::{Hash, Hashed};
-use ser::{self, Reader, Writer, Readable, Writeable};
+use ser::{self, Readable, Reader, Writeable, Writer};
 
 bitflags! {
     /// Options for a kernel's structure or use
@@ -54,11 +54,13 @@ pub struct TxKernel {
 
 impl Writeable for TxKernel {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(writer,
-		                [write_u8, self.features.bits()],
-		                [write_fixed_bytes, &self.excess],
-		                [write_bytes, &self.excess_sig],
-		                [write_u64, self.fee]);
+		ser_multiwrite!(
+			writer,
+			[write_u8, self.features.bits()],
+			[write_fixed_bytes, &self.excess],
+			[write_bytes, &self.excess_sig],
+			[write_u64, self.fee]
+		);
 		Ok(())
 	}
 }
@@ -105,11 +107,13 @@ pub struct Transaction {
 /// write the transaction as binary.
 impl Writeable for Transaction {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(writer,
-		                [write_u64, self.fee],
-		                [write_bytes, &self.excess_sig],
-		                [write_u64, self.inputs.len() as u64],
-		                [write_u64, self.outputs.len() as u64]);
+		ser_multiwrite!(
+			writer,
+			[write_u64, self.fee],
+			[write_bytes, &self.excess_sig],
+			[write_u64, self.inputs.len() as u64],
+			[write_u64, self.outputs.len() as u64]
+		);
 		for inp in &self.inputs {
 			try!(inp.write(writer));
 		}
@@ -186,7 +190,10 @@ impl Transaction {
 	pub fn with_input(self, input: Input) -> Transaction {
 		let mut new_ins = self.inputs;
 		new_ins.push(input);
-		Transaction { inputs: new_ins, ..self }
+		Transaction {
+			inputs: new_ins,
+			..self
+		}
 	}
 
 	/// Builds a new transaction with the provided output added. Existing
@@ -194,7 +201,10 @@ impl Transaction {
 	pub fn with_output(self, output: Output) -> Transaction {
 		let mut new_outs = self.outputs;
 		new_outs.push(output);
-		Transaction { outputs: new_outs, ..self }
+		Transaction {
+			outputs: new_outs,
+			..self
+		}
 	}
 
 	/// Builds a new transaction with the provided fee.
@@ -296,9 +306,11 @@ pub struct Output {
 /// an Output as binary.
 impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(writer,
-		                [write_u8, self.features.bits()],
-		                [write_fixed_bytes, &self.commit]);
+		ser_multiwrite!(
+			writer,
+			[write_u8, self.features.bits()],
+			[write_fixed_bytes, &self.commit]
+		);
 		// The hash of an output doesn't include the range proof
 		if writer.serialization_mode() == ser::SerializationMode::Full {
 			writer.write_bytes(&self.proof)?

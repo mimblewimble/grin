@@ -14,7 +14,6 @@
 
 //! Networking code to connect to other peers and exchange block, transactions,
 //! etc.
-
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
 #![deny(non_snake_case)]
@@ -22,25 +21,25 @@
 
 #[macro_use]
 extern crate bitflags;
+extern crate bytes;
 #[macro_use]
 extern crate enum_primitive;
+extern crate futures;
 #[macro_use]
 extern crate grin_core as core;
 extern crate grin_store;
 extern crate grin_util as util;
 #[macro_use]
 extern crate log;
-extern crate futures;
-extern crate tokio_core;
-extern crate tokio_io;
-extern crate bytes;
-extern crate tokio_timer;
+extern crate num;
 extern crate rand;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate time;
-extern crate num;
+extern crate tokio_core;
+extern crate tokio_io;
+extern crate tokio_timer;
 
 mod conn;
 pub mod handshake;
@@ -52,8 +51,8 @@ mod server;
 mod store;
 mod types;
 
-pub use server::{Server, DummyAdapter};
+pub use server::{DummyAdapter, Server};
 pub use peer::Peer;
-pub use types::{P2PConfig, NetAdapter, MAX_LOCATORS, MAX_BLOCK_HEADERS, MAX_PEER_ADDRS,
-                Capabilities, UNKNOWN, FULL_NODE, FULL_HIST, PeerInfo, Error};
-pub use store::{PeerStore, PeerData, State};
+pub use types::{Capabilities, Error, NetAdapter, P2PConfig, PeerInfo, FULL_HIST, FULL_NODE,
+                MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS, UNKNOWN};
+pub use store::{PeerData, PeerStore, State};

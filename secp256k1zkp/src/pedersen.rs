@@ -27,8 +27,8 @@ use constants;
 use ffi;
 use key;
 use key::SecretKey;
-use rand::{Rng, OsRng};
-use serde::{ser, de};
+use rand::{OsRng, Rng};
+use serde::{de, ser};
 
 /// A Pedersen commitment
 pub struct Commitment(pub [u8; constants::PEDERSEN_COMMITMENT_SIZE]);
@@ -37,15 +37,15 @@ impl_pretty_debug!(Commitment);
 
 
 impl Commitment {
-  /// Builds a Hash from a byte vector. If the vector is too short, it will be
-  /// completed by zeroes. If it's too long, it will be truncated.
-  pub fn from_vec(v: Vec<u8>) -> Commitment {
-    let mut h = [0; constants::PEDERSEN_COMMITMENT_SIZE];
-    for i in 0..min(v.len(), constants::PEDERSEN_COMMITMENT_SIZE) {
-      h[i] = v[i];
-    }
-    Commitment(h)
-  }
+	/// Builds a Hash from a byte vector. If the vector is too short, it will be
+	/// completed by zeroes. If it's too long, it will be truncated.
+	pub fn from_vec(v: Vec<u8>) -> Commitment {
+		let mut h = [0; constants::PEDERSEN_COMMITMENT_SIZE];
+		for i in 0..min(v.len(), constants::PEDERSEN_COMMITMENT_SIZE) {
+			h[i] = v[i];
+		}
+		Commitment(h)
+	}
 	/// Uninitialized commitment, use with caution
 	unsafe fn blank() -> Commitment {
 		mem::uninitialized()
@@ -78,9 +78,11 @@ impl Clone for RangeProof {
 			use std::intrinsics::copy_nonoverlapping;
 			use std::mem;
 			let mut ret: [u8; constants::MAX_PROOF_SIZE] = mem::uninitialized();
-			copy_nonoverlapping(self.proof.as_ptr(),
-			                    ret.as_mut_ptr(),
-			                    mem::size_of::<RangeProof>());
+			copy_nonoverlapping(
+				self.proof.as_ptr(),
+				ret.as_mut_ptr(),
+				mem::size_of::<RangeProof>(),
+			);
 			RangeProof {
 				proof: ret,
 				plen: self.plen,
@@ -91,7 +93,8 @@ impl Clone for RangeProof {
 
 impl ser::Serialize for RangeProof {
 	fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
-		where S: ser::Serializer
+	where
+		S: ser::Serializer,
 	{
 		(&self.proof[..self.plen]).serialize(s)
 	}
@@ -108,7 +111,8 @@ impl<'di> de::Visitor<'di> for Visitor {
 
 	#[inline]
 	fn visit_seq<V>(self, mut v: V) -> Result<RangeProof, V::Error>
-		where V: de::SeqAccess<'di>
+	where
+		V: de::SeqAccess<'di>,
 	{
 		unsafe {
 			use std::mem;
@@ -128,9 +132,9 @@ impl<'di> de::Visitor<'di> for Visitor {
 
 impl<'de> de::Deserialize<'de> for RangeProof {
 	fn deserialize<D>(d: D) -> Result<RangeProof, D::Error>
-		where D: de::Deserializer<'de>
+	where
+		D: de::Deserializer<'de>,
 	{
-
 		// Begin actual function
 		d.deserialize_seq(Visitor)
 	}
@@ -143,7 +147,7 @@ impl AsRef<[u8]> for RangeProof {
 }
 
 impl RangeProof {
-    /// Create the zero range proof
+	/// Create the zero range proof
 	pub fn zero() -> RangeProof {
 		RangeProof {
 			proof: [0; constants::MAX_PROOF_SIZE],
@@ -201,7 +205,6 @@ impl ::std::fmt::Debug for RangeProof {
 impl Secp256k1 {
 	/// Creates a pedersen commitment from a value and a blinding factor
 	pub fn commit(&self, value: u64, blind: SecretKey) -> Result<Commitment, Error> {
-
 		if self.caps != ContextFlag::Commit {
 			return Err(Error::IncapableContext);
 		}
@@ -215,7 +218,6 @@ impl Secp256k1 {
 	/// Convenience method to Create a pedersen commitment only from a value,
 	/// with a zero blinding factor
 	pub fn commit_value(&self, value: u64) -> Result<Commitment, Error> {
-
 		if self.caps != ContextFlag::Commit {
 			return Err(Error::IncapableContext);
 		}
@@ -229,38 +231,44 @@ impl Secp256k1 {
 
 	/// Taking vectors of positive and negative commitments as well as an
 	/// expected excess, verifies that it all sums to zero.
-	pub fn verify_commit_sum(&self,
-	                         positive: Vec<Commitment>,
-	                         negative: Vec<Commitment>,
-	                         excess: i64)
-	                         -> bool {
+	pub fn verify_commit_sum(
+		&self,
+		positive: Vec<Commitment>,
+		negative: Vec<Commitment>,
+		excess: i64,
+	) -> bool {
 		let pos = map_vec!(positive, |p| p.0.as_ptr());
 		let neg = map_vec!(negative, |n| n.0.as_ptr());
 		unsafe {
-			ffi::secp256k1_pedersen_verify_tally(self.ctx,
-			                                     pos.as_ptr(),
-			                                     pos.len() as i32,
-			                                     neg.as_ptr(),
-			                                     neg.len() as i32,
-			                                     excess) == 1
+			ffi::secp256k1_pedersen_verify_tally(
+				self.ctx,
+				pos.as_ptr(),
+				pos.len() as i32,
+				neg.as_ptr(),
+				neg.len() as i32,
+				excess,
+			) == 1
 		}
 	}
 
 	/// Computes the sum of multiple positive and negative pedersen commitments.
-	pub fn commit_sum(&self,
-	                  positive: Vec<Commitment>,
-	                  negative: Vec<Commitment>)
-	                  -> Result<Commitment, Error> {
+	pub fn commit_sum(
+		&self,
+		positive: Vec<Commitment>,
+		negative: Vec<Commitment>,
+	) -> Result<Commitment, Error> {
 		let pos = map_vec!(positive, |p| p.0.as_ptr());
 		let neg = map_vec!(negative, |n| n.0.as_ptr());
 		let mut ret = unsafe { Commitment::blank() };
 		let err = unsafe {
-			ffi::secp256k1_pedersen_commit_sum(self.ctx,
-			                                   ret.as_mut_ptr(),
-			                                   pos.as_ptr(),
-			                                   pos.len() as i32,
-			                                   neg.as_ptr(),
-			                                   neg.len() as i32)
+			ffi::secp256k1_pedersen_commit_sum(
+				self.ctx,
+				ret.as_mut_ptr(),
+				pos.as_ptr(),
+				pos.len() as i32,
+				neg.as_ptr(),
+				neg.len() as i32,
+			)
 		};
 		if err == 1 {
 			Ok(ret)
@@ -270,21 +278,26 @@ impl Secp256k1 {
 	}
 
 	/// Computes the sum of multiple positive and negative blinding factors.
-	pub fn blind_sum(&self,
-	                 positive: Vec<SecretKey>,
-	                 negative: Vec<SecretKey>)
-	                 -> Result<SecretKey, Error> {
+	pub fn blind_sum(
+		&self,
+		positive: Vec<SecretKey>,
+		negative: Vec<SecretKey>,
+	) -> Result<SecretKey, Error> {
 		let mut neg = map_vec!(negative, |n| n.as_ptr());
 		let mut all = map_vec!(positive, |p| p.as_ptr());
 		all.append(&mut neg);
 		let mut ret: [u8; 32] = unsafe { mem::uninitialized() };
 		unsafe {
-			assert_eq!(ffi::secp256k1_pedersen_blind_sum(self.ctx,
-                                                         ret.as_mut_ptr(),
-                                                         all.as_ptr(),
-                                                         all.len() as i32,
-                                                         positive.len() as i32),
-                       1)
+			assert_eq!(
+				ffi::secp256k1_pedersen_blind_sum(
+					self.ctx,
+					ret.as_mut_ptr(),
+					all.as_ptr(),
+					all.len() as i32,
+					positive.len() as i32
+				),
+				1
+			)
 		}
 		// secp256k1 should never return an invalid private
 		SecretKey::from_slice(self, &ret)
@@ -293,13 +306,13 @@ impl Secp256k1 {
 	/// Produces a range proof for the provided value, using min and max
 	/// bounds, relying
 	/// on the blinding factor and commitment.
-	pub fn range_proof(&self,
-	                   min: u64,
-	                   value: u64,
-	                   blind: SecretKey,
-	                   commit: Commitment)
-	                   -> RangeProof {
-
+	pub fn range_proof(
+		&self,
+		min: u64,
+		value: u64,
+		blind: SecretKey,
+		commit: Commitment,
+	) -> RangeProof {
 		let mut rng = OsRng::new().unwrap();
 		let mut nonce = [0u8; 32];
 		rng.fill_bytes(&mut nonce);
@@ -311,16 +324,18 @@ impl Secp256k1 {
 			let err = unsafe {
 				// because: "This can randomly fail with probability around one in 2^100.
 				// If this happens, buy a lottery ticket and retry."
-				ffi::secp256k1_rangeproof_sign(self.ctx,
-				                               proof.as_mut_ptr(),
-				                               &mut plen,
-				                               min,
-				                               commit.as_ptr(),
-				                               blind.as_ptr(),
-				                               nonce.as_ptr(),
-				                               0,
-				                               64,
-				                               value)
+				ffi::secp256k1_rangeproof_sign(
+					self.ctx,
+					proof.as_mut_ptr(),
+					&mut plen,
+					min,
+					commit.as_ptr(),
+					blind.as_ptr(),
+					nonce.as_ptr(),
+					0,
+					64,
+					value,
+				)
 			};
 			if retried {
 				break;
@@ -336,26 +351,26 @@ impl Secp256k1 {
 	}
 
 	/// Verify a proof that a committed value is within a range.
-	pub fn verify_range_proof(&self,
-	                          commit: Commitment,
-	                          proof: RangeProof)
-	                          -> Result<ProofRange, Error> {
+	pub fn verify_range_proof(
+		&self,
+		commit: Commitment,
+		proof: RangeProof,
+	) -> Result<ProofRange, Error> {
 		let mut min: u64 = 0;
 		let mut max: u64 = 0;
 
 		let success = unsafe {
-			ffi::secp256k1_rangeproof_verify(self.ctx,
-			                                 &mut min,
-			                                 &mut max,
-			                                 commit.as_ptr(),
-			                                 proof.proof.as_ptr(),
-			                                 proof.plen as i32) == 1
+			ffi::secp256k1_rangeproof_verify(
+				self.ctx,
+				&mut min,
+				&mut max,
+				commit.as_ptr(),
+				proof.proof.as_ptr(),
+				proof.plen as i32,
+			) == 1
 		};
 		if success {
-			Ok(ProofRange {
-				min: min,
-				max: max,
-			})
+			Ok(ProofRange { min: min, max: max })
 		} else {
 			Err(Error::InvalidRangeProof)
 		}
@@ -363,11 +378,12 @@ impl Secp256k1 {
 
 	/// Verify a range proof proof and rewind the proof to recover information
 	/// sent by its author.
-	pub fn rewind_range_proof(&self,
-	                          commit: Commitment,
-	                          proof: RangeProof,
-	                          nonce: [u8; 32])
-	                          -> ProofInfo {
+	pub fn rewind_range_proof(
+		&self,
+		commit: Commitment,
+		proof: RangeProof,
+		nonce: [u8; 32],
+	) -> ProofInfo {
 		let mut value: u64 = 0;
 		let mut blind: [u8; 32] = unsafe { mem::uninitialized() };
 		let mut message = [0u8; constants::PROOF_MSG_SIZE];
@@ -375,17 +391,19 @@ impl Secp256k1 {
 		let mut min: u64 = 0;
 		let mut max: u64 = 0;
 		let success = unsafe {
-			ffi::secp256k1_rangeproof_rewind(self.ctx,
-			                                 blind.as_mut_ptr(),
-			                                 &mut value,
-			                                 message.as_mut_ptr(),
-			                                 &mut mlen,
-			                                 nonce.as_ptr(),
-			                                 &mut min,
-			                                 &mut max,
-			                                 commit.as_ptr(),
-			                                 proof.proof.as_ptr(),
-			                                 proof.plen as i32) == 1
+			ffi::secp256k1_rangeproof_rewind(
+				self.ctx,
+				blind.as_mut_ptr(),
+				&mut value,
+				message.as_mut_ptr(),
+				&mut mlen,
+				nonce.as_ptr(),
+				&mut min,
+				&mut max,
+				commit.as_ptr(),
+				proof.proof.as_ptr(),
+				proof.plen as i32,
+			) == 1
 		};
 		ProofInfo {
 			success: success,
@@ -407,13 +425,15 @@ impl Secp256k1 {
 		let mut min: u64 = 0;
 		let mut max: u64 = 0;
 		let success = unsafe {
-			ffi::secp256k1_rangeproof_info(self.ctx,
-			                               &mut exp,
-			                               &mut mantissa,
-			                               &mut min,
-			                               &mut max,
-			                               proof.proof.as_ptr(),
-			                               proof.plen as i32) == 1
+			ffi::secp256k1_rangeproof_info(
+				self.ctx,
+				&mut exp,
+				&mut mantissa,
+				&mut min,
+				&mut max,
+				proof.proof.as_ptr(),
+				proof.plen as i32,
+			) == 1
 		};
 		ProofInfo {
 			success: success,

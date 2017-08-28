@@ -13,7 +13,6 @@
 // limitations under the License.
 
 //! The block chain itself, validates and accepts new blocks, handles reorgs.
-
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
 #![deny(non_snake_case)]
@@ -42,4 +41,4 @@ pub mod types;
 // Re-export the base interface
 
 pub use chain::Chain;
-pub use types::{ChainStore, Tip, ChainAdapter, SYNC, NONE, SKIP_POW, EASY_POW, Options, Error};
+pub use types::{ChainAdapter, ChainStore, Error, Options, Tip, EASY_POW, NONE, SKIP_POW, SYNC};

@@ -38,9 +38,9 @@ pub struct MinerConfig {
 	/// to the plugin being loaded
 	pub cuckoo_miner_parameter_list: Option<HashMap<String, u32>>,
 
-    /// How long to wait before stopping the miner, recollecting transactions
-    /// and starting again
-    pub attempt_time_per_block: u32, 
+	/// How long to wait before stopping the miner, recollecting transactions
+	/// and starting again
+	pub attempt_time_per_block: u32,
 
 	/// Base address to the HTTP wallet receiver
 	pub wallet_receiver_url: String,
@@ -52,7 +52,6 @@ pub struct MinerConfig {
 	/// a testing attribute for the time being that artifically slows down the
 	/// mining loop by adding a sleep to the thread
 	pub slow_down_in_millis: Option<u64>,
-
 }
 
 impl Default for MinerConfig {
@@ -71,4 +70,3 @@ impl Default for MinerConfig {
 		}
 	}
 }
-

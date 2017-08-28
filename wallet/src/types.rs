@@ -78,14 +78,14 @@ impl From<api::Error> for Error {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletConfig {
-	//Whether to run a wallet
+	// Whether to run a wallet
 	pub enable_wallet: bool,
-	//The api address that this api server (i.e. this wallet) will run
+	// The api address that this api server (i.e. this wallet) will run
 	pub api_http_addr: String,
-	//The api address of a running server node, against which transaction inputs will be checked
-	//during send
+	// The api address of a running server node, against which transaction inputs will be checked
+	// during send
 	pub check_node_api_http_addr: String,
-	//The directory in which wallet files are stored
+	// The directory in which wallet files are stored
 	pub data_file_dir: String,
 }
 
@@ -150,27 +150,34 @@ pub struct WalletData {
 impl WalletData {
 	/// Allows the reading and writing of the wallet data within a file lock.
 	/// Just provide a closure taking a mutable WalletData. The lock should
-  /// be held for as short a period as possible to avoid contention.
+	/// be held for as short a period as possible to avoid contention.
 	/// Note that due to the impossibility to do an actual file lock easily
 	/// across operating systems, this just creates a lock file with a "should
-  /// not exist" option.
-	pub fn with_wallet<T, F>(data_file_dir:&str, f: F) -> Result<T, Error>
-		where F: FnOnce(&mut WalletData) -> T
+	/// not exist" option.
+	pub fn with_wallet<T, F>(data_file_dir: &str, f: F) -> Result<T, Error>
+	where
+		F: FnOnce(&mut WalletData) -> T,
 	{
-		//create directory if it doesn't exist
+		// create directory if it doesn't exist
 		fs::create_dir_all(data_file_dir).unwrap_or_else(|why| {
-        	info!("! {:?}", why.kind());
-    	});
+			info!("! {:?}", why.kind());
+		});
 
 		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
 		let lock_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, LOCK_FILE);
 
 		// create the lock files, if it already exists, will produce an error
-    	OpenOptions::new().write(true).create_new(true).open(lock_file_path).map_err(|_| {
-				Error::WalletData(format!("Could not create wallet lock file. Either \
-            some other process is using the wallet or there's a write access \
-            issue."))
-    	})?;
+		OpenOptions::new()
+			.write(true)
+			.create_new(true)
+			.open(lock_file_path)
+			.map_err(|_| {
+				Error::WalletData(format!(
+					"Could not create wallet lock file. Either \
+					 some other process is using the wallet or there's a write access \
+					 issue."
+				))
+			})?;
 
 		// do what needs to be done
 		let mut wdat = WalletData::read_or_create(data_file_path)?;
@@ -179,15 +186,17 @@ impl WalletData {
 
 		// delete the lock file
 		fs::remove_file(lock_file_path).map_err(|_| {
-				Error::WalletData(format!("Could not remove wallet lock file. Maybe insufficient \
-				                           rights?"))
-			})?;
+			Error::WalletData(format!(
+				"Could not remove wallet lock file. Maybe insufficient \
+				 rights?"
+			))
+		})?;
 
 		Ok(res)
 	}
 
 	/// Read the wallet data or created a brand new one if it doesn't exist yet
-	fn read_or_create(data_file_path:&str) -> Result<WalletData, Error> {
+	fn read_or_create(data_file_path: &str) -> Result<WalletData, Error> {
 		if Path::new(data_file_path).exists() {
 			WalletData::read(data_file_path)
 		} else {
@@ -197,21 +206,26 @@ impl WalletData {
 	}
 
 	/// Read the wallet data from disk.
-	fn read(data_file_path:&str) -> Result<WalletData, Error> {
-		let data_file = File::open(data_file_path)
-      .map_err(|e| Error::WalletData(format!("Could not open {}: {}", data_file_path, e)))?;
-		serde_json::from_reader(data_file)
-			.map_err(|e| Error::WalletData(format!("Error reading {}: {}", data_file_path, e)))
+	fn read(data_file_path: &str) -> Result<WalletData, Error> {
+		let data_file = File::open(data_file_path).map_err(|e| {
+			Error::WalletData(format!("Could not open {}: {}", data_file_path, e))
+		})?;
+		serde_json::from_reader(data_file).map_err(|e| {
+			Error::WalletData(format!("Error reading {}: {}", data_file_path, e))
+		})
 	}
 
 	/// Write the wallet data to disk.
-	fn write(&self, data_file_path:&str) -> Result<(), Error> {
-		let mut data_file = File::create(data_file_path)
-      .map_err(|e| Error::WalletData(format!("Could not create {}: {}", data_file_path, e)))?;
-		let res_json = serde_json::to_vec_pretty(self)
-      .map_err(|_| Error::WalletData(format!("Error serializing wallet data.")))?;
-		data_file.write_all(res_json.as_slice())
-			.map_err(|e| Error::WalletData(format!("Error writing {}: {}", data_file_path, e)))
+	fn write(&self, data_file_path: &str) -> Result<(), Error> {
+		let mut data_file = File::create(data_file_path).map_err(|e| {
+			Error::WalletData(format!("Could not create {}: {}", data_file_path, e))
+		})?;
+		let res_json = serde_json::to_vec_pretty(self).map_err(|_| {
+			Error::WalletData(format!("Error serializing wallet data."))
+		})?;
+		data_file.write_all(res_json.as_slice()).map_err(|e| {
+			Error::WalletData(format!("Error writing {}: {}", data_file_path, e))
+		})
 	}
 
 	/// Append a new output information to the wallet data.
@@ -280,10 +294,11 @@ pub fn partial_tx_from_json(json_str: &str) -> Result<(u64, SecretKey, Transacti
 	let blind_bin = util::from_hex(partial_tx.blind_sum)?;
 	let blinding = SecretKey::from_slice(&secp, &blind_bin[..])?;
 	let tx_bin = util::from_hex(partial_tx.tx)?;
-	let tx =
-		ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
-				Error::Format("Could not deserialize transaction, invalid format.".to_string())
-			})?;
+	let tx = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
+		Error::Format(
+			"Could not deserialize transaction, invalid format.".to_string(),
+		)
+	})?;
 
 	Ok((partial_tx.amount, blinding, tx))
 }

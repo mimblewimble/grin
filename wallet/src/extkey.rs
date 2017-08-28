@@ -17,7 +17,7 @@
 
 use std::{error, fmt};
 
-use byteorder::{ByteOrder, BigEndian};
+use byteorder::{BigEndian, ByteOrder};
 use crypto::mac::Mac;
 use crypto::hmac::Hmac;
 use crypto::sha2::Sha256;
@@ -118,8 +118,8 @@ impl ExtendedKey {
 		let mut chaincode: [u8; 32] = [0; 32];
 		(&mut chaincode).copy_from_slice(&derived[32..]);
 		// TODO Error handling
-		let secret_key = SecretKey::from_slice(&secp, &derived[0..32])
-			.expect("Error generating from seed");
+		let secret_key =
+			SecretKey::from_slice(&secp, &derived[0..32]).expect("Error generating from seed");
 
 		let mut ext_key = ExtendedKey {
 			depth: 0,
@@ -166,9 +166,10 @@ impl ExtendedKey {
 		let mut derived = [0; 64];
 		hmac.raw_result(&mut derived);
 
-		let mut secret_key = SecretKey::from_slice(&secp, &derived[0..32])
-			.expect("Error deriving key");
-		secret_key.add_assign(secp, &self.key)
+		let mut secret_key =
+			SecretKey::from_slice(&secp, &derived[0..32]).expect("Error deriving key");
+		secret_key
+			.add_assign(secp, &self.key)
 			.expect("Error deriving key");
 		// TODO check if key != 0 ?
 
@@ -204,11 +205,13 @@ mod test {
 		let s = Secp256k1::new();
 		let seed = "000102030405060708090a0b0c0d0e0f".from_hex().unwrap();
 		let extk = ExtendedKey::from_seed(&s, &seed.as_slice()).unwrap();
-		let sec =
-			"04a7d66a82221501e67f2665332180bd1192c5e58a2cd26613827deb8ba14e75".from_hex().unwrap();
+		let sec = "04a7d66a82221501e67f2665332180bd1192c5e58a2cd26613827deb8ba14e75"
+			.from_hex()
+			.unwrap();
 		let secret_key = SecretKey::from_slice(&s, sec.as_slice()).unwrap();
-		let chaincode =
-			"b7c6740dea1920ec629b3593678f6d8dc40fe6ec1ed824fcde37f476cd6c048c".from_hex().unwrap();
+		let chaincode = "b7c6740dea1920ec629b3593678f6d8dc40fe6ec1ed824fcde37f476cd6c048c"
+			.from_hex()
+			.unwrap();
 		let fingerprint = "8963be69".from_hex().unwrap();
 		let depth = 0;
 		let n_child = 0;
@@ -226,11 +229,13 @@ mod test {
 		let seed = "000102030405060708090a0b0c0d0e0f".from_hex().unwrap();
 		let extk = ExtendedKey::from_seed(&s, &seed.as_slice()).unwrap();
 		let derived = extk.derive(&s, 0).unwrap();
-		let sec =
-			"908bf3264b8f5f5a5be57d3b0afa36eb5dbcc464ff4da2cf71183e8ec755184b".from_hex().unwrap();
+		let sec = "908bf3264b8f5f5a5be57d3b0afa36eb5dbcc464ff4da2cf71183e8ec755184b"
+			.from_hex()
+			.unwrap();
 		let secret_key = SecretKey::from_slice(&s, sec.as_slice()).unwrap();
-		let chaincode =
-			"e90c4559501fb956fa8ddcd6d08499691678cfd6d69e41efb9ee8e87f327e30a".from_hex().unwrap();
+		let chaincode = "e90c4559501fb956fa8ddcd6d08499691678cfd6d69e41efb9ee8e87f327e30a"
+			.from_hex()
+			.unwrap();
 		let fingerprint = "8963be69".from_hex().unwrap();
 		let depth = 1;
 		let n_child = 0;

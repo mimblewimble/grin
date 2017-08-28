@@ -21,7 +21,7 @@ use secp::{self, pedersen};
 use util;
 
 use extkey::ExtendedKey;
-use types::{WalletConfig, OutputStatus, WalletData};
+use types::{OutputStatus, WalletConfig, WalletData};
 
 /// Goes through the list of outputs that haven't been spent yet and check
 /// with a node whether their status has changed.
@@ -52,8 +52,9 @@ pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) {
 						out.status = OutputStatus::Spent;
 					}
 				} else {
-					//TODO find error with connection and return
-					//error!("Error contacting server node at {}. Is it running?", config.check_node_api_http_addr);
+					// TODO find error with connection and return
+					// error!("Error contacting server node at {}. Is it running?",
+					// config.check_node_api_http_addr);
 				}
 			}
 		}
@@ -62,11 +63,14 @@ pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) {
 
 // queries a reachable node for a given output, checking whether it's been
 // confirmed
-fn get_output_by_commitment(config: &WalletConfig,
-                            commit: pedersen::Commitment)
-                            -> Result<Output, api::Error> {
-	let url = format!("{}/v1/chain/utxo/{}",
-	                  config.check_node_api_http_addr,
-	                  util::to_hex(commit.as_ref().to_vec()));
+fn get_output_by_commitment(
+	config: &WalletConfig,
+	commit: pedersen::Commitment,
+) -> Result<Output, api::Error> {
+	let url = format!(
+		"{}/v1/chain/utxo/{}",
+		config.check_node_api_http_addr,
+		util::to_hex(commit.as_ref().to_vec())
+	);
 	api::client::get::<Output>(url.as_str())
 }

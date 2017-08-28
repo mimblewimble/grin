@@ -21,7 +21,7 @@ pub mod pmmr;
 pub mod sumtree;
 pub mod target;
 pub mod transaction;
-//pub mod txoset;
+// pub mod txoset;
 #[allow(dead_code)]
 
 use std::fmt;
@@ -31,10 +31,10 @@ use secp::{self, Secp256k1};
 use secp::pedersen::*;
 
 pub use self::block::{Block, BlockHeader, DEFAULT_BLOCK};
-pub use self::transaction::{Transaction, Input, Output, TxKernel, COINBASE_KERNEL,
+pub use self::transaction::{Input, Output, Transaction, TxKernel, COINBASE_KERNEL,
                             COINBASE_OUTPUT, DEFAULT_OUTPUT};
 use self::hash::{Hash, Hashed, ZERO_HASH};
-use ser::{Writeable, Writer, Reader, Readable, Error};
+use ser::{Error, Readable, Reader, Writeable, Writer};
 
 use global;
 
@@ -83,11 +83,11 @@ pub trait Committed {
 
 /// Proof of work
 pub struct Proof {
-    /// The nonces
-	pub nonces:Vec<u32>,
-    
-    /// The proof size
-    pub proof_size: usize,
+	/// The nonces
+	pub nonces: Vec<u32>,
+
+	/// The proof size
+	pub proof_size: usize,
 }
 
 impl fmt::Debug for Proof {
@@ -127,9 +127,8 @@ impl Clone for Proof {
 }
 
 impl Proof {
-
 	/// Builds a proof with all bytes zeroed out
-	pub fn new(in_nonces:Vec<u32>) -> Proof {
+	pub fn new(in_nonces: Vec<u32>) -> Proof {
 		Proof {
 			proof_size: in_nonces.len(),
 			nonces: in_nonces,
@@ -137,10 +136,10 @@ impl Proof {
 	}
 
 	/// Builds a proof with all bytes zeroed out
-	pub fn zero(proof_size:usize) -> Proof {
+	pub fn zero(proof_size: usize) -> Proof {
 		Proof {
 			proof_size: proof_size,
-			nonces: vec![0;proof_size],
+			nonces: vec![0; proof_size],
 		}
 	}
 
@@ -207,7 +206,9 @@ impl Iterator for HPairIter {
 	type Item = HPair;
 
 	fn next(&mut self) -> Option<HPair> {
-		self.0.pop().map(|first| HPair(first, self.0.pop().unwrap_or(ZERO_HASH)))
+		self.0
+			.pop()
+			.map(|first| HPair(first, self.0.pop().unwrap_or(ZERO_HASH)))
 	}
 }
 /// A row in a Merkle tree. Can be built from a vector of hashes. Calculates
@@ -240,8 +241,8 @@ mod test {
 	use secp::key::SecretKey;
 	use ser;
 	use rand::os::OsRng;
-	use core::build::{self, input, output, input_rand, output_rand, with_fee, initial_tx,
-	                  with_excess};
+	use core::build::{self, initial_tx, input, input_rand, output, output_rand, with_excess,
+	                  with_fee};
 
 	fn new_secp() -> Secp256k1 {
 		secp::Secp256k1::with_caps(secp::ContextFlag::Commit)
@@ -299,9 +300,12 @@ mod test {
 
 	#[test]
 	fn hash_output() {
-		let (tx, _) =
-			build::transaction(vec![input_rand(75), output_rand(42), output_rand(32), with_fee(1)])
-				.unwrap();
+		let (tx, _) = build::transaction(vec![
+			input_rand(75),
+			output_rand(42),
+			output_rand(32),
+			with_fee(1),
+		]).unwrap();
 		let h = tx.outputs[0].hash();
 		assert!(h != ZERO_HASH);
 		let h2 = tx.outputs[1].hash();
@@ -348,8 +352,8 @@ mod test {
 
 			// Alice builds her transaction, with change, which also produces the sum
 			// of blinding factors before they're obscured.
-			let (tx, sum) = build::transaction(vec![in1, in2, output_rand(1), with_fee(1)])
-				.unwrap();
+			let (tx, sum) =
+				build::transaction(vec![in1, in2, output_rand(1), with_fee(1)]).unwrap();
 			tx_alice = tx;
 			blind_sum = sum;
 		}
@@ -357,9 +361,11 @@ mod test {
 		// From now on, Bob only has the obscured transaction and the sum of
 		// blinding factors. He adds his output, finalizes the transaction so it's
 		// ready for broadcast.
-		let (tx_final, _) =
-			build::transaction(vec![initial_tx(tx_alice), with_excess(blind_sum), output_rand(5)])
-				.unwrap();
+		let (tx_final, _) = build::transaction(vec![
+			initial_tx(tx_alice),
+			with_excess(blind_sum),
+			output_rand(5),
+		]).unwrap();
 
 		tx_final.validate(&secp).unwrap();
 	}
@@ -405,8 +411,12 @@ mod test {
 
 	// utility producing a transaction with 2 inputs and a single outputs
 	pub fn tx2i1o() -> Transaction {
-		build::transaction(vec![input_rand(10), input_rand(11), output_rand(20), with_fee(1)])
-			.map(|(tx, _)| tx)
+		build::transaction(vec![
+			input_rand(10),
+			input_rand(11),
+			output_rand(20),
+			with_fee(1),
+		]).map(|(tx, _)| tx)
 			.unwrap()
 	}
 

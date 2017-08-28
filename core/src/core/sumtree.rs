@@ -217,13 +217,13 @@ where
 	}
 
 	/// Accessor for number of elements (leaves) in the tree, not including
-  /// pruned ones.
+	/// pruned ones.
 	pub fn len(&self) -> usize {
 		self.index.len()
 	}
 
 	/// Accessor for number of elements (leaves) in the tree, including pruned
-  /// ones.
+	/// ones.
 	pub fn unpruned_len(&self) -> usize {
 		match self.root {
 			None => 0,
@@ -403,17 +403,17 @@ where
 		}
 	}
 
-  fn clone_pruned_recurse(node: &NodeData<T>) -> NodeData<T> {
-    if node.full {
-      // replaces full internal nodes, leaves and already pruned nodes are full
-      // as well
-      NodeData {
-        full: true,
-        node: Node::Pruned(node.sum()),
-        hash: node.hash,
-        depth: node.depth,
-      }
-    } else {
+	fn clone_pruned_recurse(node: &NodeData<T>) -> NodeData<T> {
+		if node.full {
+			// replaces full internal nodes, leaves and already pruned nodes are full
+			// as well
+			NodeData {
+				full: true,
+				node: Node::Pruned(node.sum()),
+				hash: node.hash,
+				depth: node.depth,
+			}
+		} else {
 			if let Node::Internal { ref lchild, ref rchild, ref sum } = node.node {
         // just recurse on each side to get the pruned version
         NodeData {
@@ -429,22 +429,20 @@ where
       } else {
         unreachable!()
       }
-    }
-  }
+		}
+	}
 
-  /// Minimal clone of this tree, replacing all full nodes with a pruned node,
-  /// therefore only copying non-full subtrees.
-  pub fn clone_pruned(&self) -> SumTree<T> {
-    match self.root {
-      Some(ref node) => {
-        SumTree {
-          index: HashMap::new(),
-          root: Some(SumTree::clone_pruned_recurse(node)),
-        }
-      },
-      None => SumTree::new(),
-    }
-  }
+	/// Minimal clone of this tree, replacing all full nodes with a pruned node,
+	/// therefore only copying non-full subtrees.
+	pub fn clone_pruned(&self) -> SumTree<T> {
+		match self.root {
+			Some(ref node) => SumTree {
+				index: HashMap::new(),
+				root: Some(SumTree::clone_pruned_recurse(node)),
+			},
+			None => SumTree::new(),
+		}
+	}
 
 	// TODO push_many, truncate to allow bulk updates
 }
@@ -542,13 +540,11 @@ where
 			*tree_index += 1;
 			Node::Leaf(sum)
 		}
-		(_, _) => {
-			Node::Internal {
-				lchild: Box::new(try!(node_read_recurse(reader, index, tree_index))),
-				rchild: Box::new(try!(node_read_recurse(reader, index, tree_index))),
-				sum: sum,
-			}
-		}
+		(_, _) => Node::Internal {
+			lchild: Box::new(try!(node_read_recurse(reader, index, tree_index))),
+			rchild: Box::new(try!(node_read_recurse(reader, index, tree_index))),
+			sum: sum,
+		},
 	};
 
 	Ok(NodeData {
@@ -894,7 +890,7 @@ mod test {
 		assert_eq!(tree.root_sum(), Some((expected, 28 + 0x1000)));
 		assert_eq!(tree.root_sum(), compute_root(elems[0..8].iter()));
 		assert_eq!(tree.unpruned_len(), 8);
-    prune!(prune, tree, elems[7]);
+		prune!(prune, tree, elems[7]);
 
 		// If we weren't pruning, try changing some elements
 		if !prune {

@@ -171,7 +171,8 @@ macro_rules! impl_array_newtype {
                 impl<'di> ::serde::de::Visitor<'di> for Visitor {
                     type Value = $thing;
 
-                    fn expecting(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                    fn expecting(&self, formatter: &mut ::std::fmt::Formatter)
+                        -> ::std::fmt::Result {
                       formatter.write_str("an array of bytes")
                     }
 

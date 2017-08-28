@@ -14,10 +14,10 @@
 
 //! Message types that transit over the network and related serialization code.
 
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use num::FromPrimitive;
 
-use futures::future::{Future, ok};
+use futures::future::{ok, Future};
 use tokio_core::net::TcpStream;
 use tokio_io::io::{read_exact, write_all};
 
@@ -25,7 +25,7 @@ use core::consensus::MAX_MSG_LEN;
 use core::core::BlockHeader;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
-use core::ser::{self, Writeable, Readable, Writer, Reader};
+use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::*;
 
@@ -70,7 +70,8 @@ enum_from_primitive! {
 /// the  header first, handles its validation and then reads the Readable body,
 /// allocating buffers of the right size.
 pub fn read_msg<T>(conn: TcpStream) -> Box<Future<Item = (TcpStream, T), Error = Error>>
-	where T: Readable + 'static
+where
+	T: Readable + 'static,
 {
 	let read_header = read_exact(conn, vec![0u8; HEADER_LEN as usize])
 		.from_err()
@@ -84,7 +85,8 @@ pub fn read_msg<T>(conn: TcpStream) -> Box<Future<Item = (TcpStream, T), Error =
 			Ok((reader, header))
 		});
 
-	let read_msg = read_header.and_then(|(reader, header)| {
+	let read_msg = read_header
+		.and_then(|(reader, header)| {
 			read_exact(reader, vec![0u8; header.msg_len as usize]).from_err()
 		})
 		.and_then(|(reader, buf)| {
@@ -97,11 +99,13 @@ pub fn read_msg<T>(conn: TcpStream) -> Box<Future<Item = (TcpStream, T), Error =
 /// Future combinator to write a full message from a Writeable payload.
 /// Serializes the payload first and then sends the message header and that
 /// payload.
-pub fn write_msg<T>(conn: TcpStream,
-                    msg: T,
-                    msg_type: Type)
-                    -> Box<Future<Item = TcpStream, Error = Error>>
-	where T: Writeable + 'static
+pub fn write_msg<T>(
+	conn: TcpStream,
+	msg: T,
+	msg_type: Type,
+) -> Box<Future<Item = TcpStream, Error = Error>>
+where
+	T: Writeable + 'static,
 {
 	let write_msg = ok((conn)).and_then(move |conn| {
 		// prepare the body first so we know its serialized length
@@ -149,11 +153,13 @@ impl MsgHeader {
 
 impl Writeable for MsgHeader {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(writer,
-		                [write_u8, self.magic[0]],
-		                [write_u8, self.magic[1]],
-		                [write_u8, self.msg_type as u8],
-		                [write_u64, self.msg_len]);
+		ser_multiwrite!(
+			writer,
+			[write_u8, self.magic[0]],
+			[write_u8, self.magic[1]],
+			[write_u8, self.msg_type as u8],
+			[write_u64, self.msg_len]
+		);
 		Ok(())
 	}
 }
@@ -164,13 +170,11 @@ impl Readable for MsgHeader {
 		try!(reader.expect_u8(MAGIC[1]));
 		let (t, len) = ser_multiread!(reader, read_u8, read_u64);
 		match Type::from_u8(t) {
-			Some(ty) => {
-				Ok(MsgHeader {
-					magic: MAGIC,
-					msg_type: ty,
-					msg_len: len,
-				})
-			}
+			Some(ty) => Ok(MsgHeader {
+				magic: MAGIC,
+				msg_type: ty,
+				msg_len: len,
+			}),
 			None => Err(ser::Error::CorruptedData),
 		}
 	}
@@ -199,10 +203,12 @@ pub struct Hand {
 
 impl Writeable for Hand {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(writer,
-		                [write_u32, self.version],
-		                [write_u32, self.capabilities.bits()],
-		                [write_u64, self.nonce]);
+		ser_multiwrite!(
+			writer,
+			[write_u32, self.version],
+			[write_u32, self.capabilities.bits()],
+			[write_u64, self.nonce]
+		);
 		self.total_difficulty.write(writer).unwrap();
 		self.sender_addr.write(writer).unwrap();
 		self.receiver_addr.write(writer).unwrap();
@@ -248,9 +254,11 @@ pub struct Shake {
 
 impl Writeable for Shake {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(writer,
-		                [write_u32, self.version],
-		                [write_u32, self.capabilities.bits()]);
+		ser_multiwrite!(
+			writer,
+			[write_u32, self.version],
+			[write_u32, self.capabilities.bits()]
+		);
 		self.total_difficulty.write(writer).unwrap();
 		writer.write_bytes(&self.user_agent).unwrap();
 		Ok(())
@@ -289,7 +297,9 @@ impl Readable for GetPeerAddrs {
 	fn read(reader: &mut Reader) -> Result<GetPeerAddrs, ser::Error> {
 		let capab = try!(reader.read_u32());
 		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData));
-		Ok(GetPeerAddrs { capabilities: capabilities })
+		Ok(GetPeerAddrs {
+			capabilities: capabilities,
+		})
 	}
 }
 
@@ -362,10 +372,12 @@ impl Writeable for SockAddr {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		match self.0 {
 			SocketAddr::V4(sav4) => {
-				ser_multiwrite!(writer,
-				                [write_u8, 0],
-				                [write_fixed_bytes, &sav4.ip().octets().to_vec()],
-				                [write_u16, sav4.port()]);
+				ser_multiwrite!(
+					writer,
+					[write_u8, 0],
+					[write_fixed_bytes, &sav4.ip().octets().to_vec()],
+					[write_u16, sav4.port()]
+				);
 			}
 			SocketAddr::V6(sav6) => {
 				try!(writer.write_u8(1));
@@ -385,25 +397,19 @@ impl Readable for SockAddr {
 		if v4_or_v6 == 0 {
 			let ip = try!(reader.read_fixed_bytes(4));
 			let port = try!(reader.read_u16());
-			Ok(SockAddr(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(ip[0],
-			                                                           ip[1],
-			                                                           ip[2],
-			                                                           ip[3]),
-			                                             port))))
+			Ok(SockAddr(SocketAddr::V4(SocketAddrV4::new(
+				Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]),
+				port,
+			))))
 		} else {
 			let ip = try_map_vec!([0..8], |_| reader.read_u16());
 			let port = try!(reader.read_u16());
-			Ok(SockAddr(SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::new(ip[0],
-			                                                           ip[1],
-			                                                           ip[2],
-			                                                           ip[3],
-			                                                           ip[4],
-			                                                           ip[5],
-			                                                           ip[6],
-			                                                           ip[7]),
-			                                             port,
-			                                             0,
-			                                             0))))
+			Ok(SockAddr(SocketAddr::V6(SocketAddrV6::new(
+				Ipv6Addr::new(ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7]),
+				port,
+				0,
+				0,
+			))))
 		}
 	}
 }

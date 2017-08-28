@@ -119,12 +119,10 @@ impl Default for ServerConfig {
 ///
 ///
 ///
-
 #[derive(Clone)]
 pub struct ServerStats {
 	/// Number of peers
-	pub peer_count:u32,
+	pub peer_count: u32,
 	/// Chain head
 	pub head: chain::Tip,
 }
-
