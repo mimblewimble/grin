@@ -460,7 +460,7 @@ impl Block {
 		let switch_commit = secp.switch_commit(skey).unwrap();
 		let rproof = secp.range_proof(0, REWARD, skey, commit);
 
-		println!("{:?}", switch_commit);
+		//println!("{:?}", switch_commit);
 
 		let output = Output {
 			features: COINBASE_OUTPUT,
