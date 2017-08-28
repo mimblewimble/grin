@@ -20,8 +20,12 @@ print 'gG: %s' % gG
 gen_g = '%x %x'%gG.xy()
 print 'GENERATOR G: %s'%gen_g
 
+#this doesn't create a point on the curve
 #gen_j_input = '04%x%x'%gG.xy()
+
+#this does
 gen_j_input = gen2.hexdigest()
+
 print 'gen_j_input: %s'%gen_j_input
 gen3 =  hashlib.sha256(gen_j_input.decode('hex'))
 gJ = EllipticCurve ([F (0), F(7)]).lift_x(int(gen3.hexdigest(),16))
