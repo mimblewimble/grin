@@ -20,7 +20,7 @@ use secp::key::SecretKey;
 use std::collections::HashSet;
 
 use core::Committed;
-use core::{Input, Output, Proof, TxKernel, Transaction, COINBASE_KERNEL, COINBASE_OUTPUT};
+use core::{Input, Output, Proof, Transaction, TxKernel, COINBASE_KERNEL, COINBASE_OUTPUT};
 use core::transaction::merkle_inputs_outputs;
 use consensus::REWARD;
 use consensus::MINIMUM_DIFFICULTY;
@@ -83,13 +83,15 @@ impl Default for BlockHeader {
 /// Serialization of a block header
 impl Writeable for BlockHeader {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(writer,
-		                [write_u64, self.height],
-		                [write_fixed_bytes, &self.previous],
-		                [write_i64, self.timestamp.to_timespec().sec],
-		                [write_fixed_bytes, &self.utxo_merkle],
-		                [write_fixed_bytes, &self.tx_merkle],
-		                [write_u8, self.features.bits()]);
+		ser_multiwrite!(
+			writer,
+			[write_u64, self.height],
+			[write_fixed_bytes, &self.previous],
+			[write_i64, self.timestamp.to_timespec().sec],
+			[write_fixed_bytes, &self.utxo_merkle],
+			[write_fixed_bytes, &self.tx_merkle],
+			[write_u8, self.features.bits()]
+		);
 
 		try!(writer.write_u64(self.nonce));
 		try!(self.difficulty.write(writer));
@@ -157,10 +159,12 @@ impl Writeable for Block {
 		try!(self.header.write(writer));
 
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			ser_multiwrite!(writer,
-			                [write_u64, self.inputs.len() as u64],
-			                [write_u64, self.outputs.len() as u64],
-			                [write_u64, self.kernels.len() as u64]);
+			ser_multiwrite!(
+				writer,
+				[write_u64, self.inputs.len() as u64],
+				[write_u64, self.outputs.len() as u64],
+				[write_u64, self.kernels.len() as u64]
+			);
 
 			for inp in &self.inputs {
 				try!(inp.write(writer));
@@ -229,11 +233,11 @@ impl Block {
 	/// Builds a new block from the header of the previous block, a vector of
 	/// transactions and the private key that will receive the reward. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
-	pub fn new(prev: &BlockHeader,
-	           txs: Vec<&Transaction>,
-	           reward_key: SecretKey)
-	           -> Result<Block, secp::Error> {
-
+	pub fn new(
+		prev: &BlockHeader,
+		txs: Vec<&Transaction>,
+		reward_key: SecretKey,
+	) -> Result<Block, secp::Error> {
 		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let (reward_out, reward_proof) = try!(Block::reward_output(reward_key, &secp));
 
@@ -243,11 +247,12 @@ impl Block {
 	/// Builds a new block ready to mine from the header of the previous block,
 	/// a vector of transactions and the reward information. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
-	pub fn with_reward(prev: &BlockHeader,
-	                   txs: Vec<&Transaction>,
-	                   reward_out: Output,
-	                   reward_kern: TxKernel)
-	                   -> Result<Block, secp::Error> {
+	pub fn with_reward(
+		prev: &BlockHeader,
+		txs: Vec<&Transaction>,
+		reward_out: Output,
+		reward_kern: TxKernel,
+	) -> Result<Block, secp::Error> {
 		// note: the following reads easily but may not be the most efficient due to
 		// repeated iterations, revisit if a problem
 		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
@@ -259,18 +264,16 @@ impl Block {
 		// build vectors with all inputs and all outputs, ordering them by hash
 		// needs to be a fold so we don't end up with a vector of vectors and we
 		// want to fullt own the refs (not just a pointer like flat_map).
-		let mut inputs = txs.iter()
-			.fold(vec![], |mut acc, ref tx| {
-				let mut inputs = tx.inputs.clone();
-				acc.append(&mut inputs);
-				acc
-			});
-		let mut outputs = txs.iter()
-			.fold(vec![], |mut acc, ref tx| {
-				let mut outputs = tx.outputs.clone();
-				acc.append(&mut outputs);
-				acc
-			});
+		let mut inputs = txs.iter().fold(vec![], |mut acc, ref tx| {
+			let mut inputs = tx.inputs.clone();
+			acc.append(&mut inputs);
+			acc
+		});
+		let mut outputs = txs.iter().fold(vec![], |mut acc, ref tx| {
+			let mut outputs = tx.outputs.clone();
+			acc.append(&mut outputs);
+			acc
+		});
 		outputs.push(reward_out);
 
 		inputs.sort_by_key(|inp| inp.hash());
@@ -278,19 +281,24 @@ impl Block {
 
 		// calculate the overall Merkle tree and fees
 
-		Ok(Block {
+		Ok(
+			Block {
 				header: BlockHeader {
 					height: prev.height + 1,
-					timestamp: time::Tm { tm_nsec: 0, ..time::now_utc() },
+					timestamp: time::Tm {
+						tm_nsec: 0,
+						..time::now_utc()
+					},
 					previous: prev.hash(),
-					total_difficulty: prev.pow.clone().to_difficulty() + prev.total_difficulty.clone(),
+					total_difficulty: prev.pow.clone().to_difficulty() +
+						prev.total_difficulty.clone(),
 					..Default::default()
 				},
 				inputs: inputs,
 				outputs: outputs,
 				kernels: kernels,
-			}
-			.compact())
+			}.compact(),
+		)
 	}
 
 
@@ -363,18 +371,17 @@ impl Block {
 		all_outputs.sort_by_key(|out| out.hash());
 
 		Block {
-				// compact will fix the merkle tree
-				header: BlockHeader {
-					pow: self.header.pow.clone(),
-					difficulty: self.header.difficulty.clone(),
-					total_difficulty: self.header.total_difficulty.clone(),
-					..self.header
-				},
-				inputs: all_inputs,
-				outputs: all_outputs,
-				kernels: all_kernels,
-			}
-			.compact()
+			// compact will fix the merkle tree
+			header: BlockHeader {
+				pow: self.header.pow.clone(),
+				difficulty: self.header.difficulty.clone(),
+				total_difficulty: self.header.total_difficulty.clone(),
+				..self.header
+			},
+			inputs: all_inputs,
+			outputs: all_outputs,
+			kernels: all_kernels,
+		}.compact()
 	}
 
 	/// Validates all the elements in a block that can be checked without
@@ -383,19 +390,19 @@ impl Block {
 	pub fn validate(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
 		self.verify_coinbase(secp)?;
 		self.verify_kernels(secp)?;
-        self.verify_merkle_inputs_outputs()?;
-        Ok(())
+		self.verify_merkle_inputs_outputs()?;
+		Ok(())
 	}
 
-    /// Verify the transaction Merkle root
-    pub fn verify_merkle_inputs_outputs(&self) -> Result<(), secp::Error> {
-        let tx_merkle = merkle_inputs_outputs(&self.inputs, &self.outputs);
-        if tx_merkle != self.header.tx_merkle {
-            // TODO more specific error
-            return Err(secp::Error::IncorrectCommitSum);
-        }
-        Ok(())
-    }
+	/// Verify the transaction Merkle root
+	pub fn verify_merkle_inputs_outputs(&self) -> Result<(), secp::Error> {
+		let tx_merkle = merkle_inputs_outputs(&self.inputs, &self.outputs);
+		if tx_merkle != self.header.tx_merkle {
+			// TODO more specific error
+			return Err(secp::Error::IncorrectCommitSum);
+		}
+		Ok(())
+	}
 
 	/// Validate the sum of input/output commitments match the sum in kernels
 	/// and
@@ -441,20 +448,22 @@ impl Block {
 		// verifying the kernels on a block composed of just the coinbase outputs
 		// and kernels checks all we need
 		Block {
-				header: BlockHeader::default(),
-				inputs: vec![],
-				outputs: cb_outs,
-				kernels: cb_kerns,
-			}
-			.verify_kernels(secp)
+			header: BlockHeader::default(),
+			inputs: vec![],
+			outputs: cb_outs,
+			kernels: cb_kerns,
+		}.verify_kernels(secp)
 	}
 
 	/// Builds the blinded output and related signature proof for the block
 	/// reward.
-	pub fn reward_output(skey: secp::key::SecretKey,
-	                     secp: &Secp256k1)
-	                     -> Result<(Output, TxKernel), secp::Error> {
-		let msg = try!(secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE]));
+	pub fn reward_output(
+		skey: secp::key::SecretKey,
+		secp: &Secp256k1,
+	) -> Result<(Output, TxKernel), secp::Error> {
+		let msg = try!(secp::Message::from_slice(
+			&[0; secp::constants::MESSAGE_SIZE]
+		));
 		let sig = try!(secp.sign(&msg, &skey));
 		let commit = secp.commit(REWARD, skey).unwrap();
 		let rproof = secp.range_proof(0, REWARD, skey, commit);
@@ -483,7 +492,7 @@ impl Block {
 mod test {
 	use super::*;
 	use core::Transaction;
-	use core::build::{self, input, output, input_rand, output_rand, with_fee};
+	use core::build::{self, input, input_rand, output, output_rand, with_fee};
 	use core::test::tx2i1o;
 
 	use secp::{self, Secp256k1};
@@ -518,8 +527,8 @@ mod test {
 
 		let mut btx1 = tx2i1o();
 		let skey = SecretKey::new(secp, &mut rng);
-		let (mut btx2, _) = build::transaction(vec![input_rand(5), output(4, skey), with_fee(1)])
-			.unwrap();
+		let (mut btx2, _) =
+			build::transaction(vec![input_rand(5), output(4, skey), with_fee(1)]).unwrap();
 
 		// spending tx2
 		let mut btx3 = txspend1i1o(4, skey);
@@ -541,8 +550,8 @@ mod test {
 
 		let mut btx1 = tx2i1o();
 		let skey = SecretKey::new(secp, &mut rng);
-		let (mut btx2, _) = build::transaction(vec![input_rand(5), output(4, skey), with_fee(1)])
-			.unwrap();
+		let (mut btx2, _) =
+			build::transaction(vec![input_rand(5), output(4, skey), with_fee(1)]).unwrap();
 
 		// spending tx2
 		let mut btx3 = txspend1i1o(4, skey);
@@ -558,80 +567,90 @@ mod test {
 		assert_eq!(b3.outputs.len(), 4);
 	}
 
-    #[test]
-    fn empty_block_with_coinbase_is_valid() {
-        let ref secp = new_secp();
-        let b = new_block(vec![], secp);
+	#[test]
+	fn empty_block_with_coinbase_is_valid() {
+		let ref secp = new_secp();
+		let b = new_block(vec![], secp);
 
-        assert_eq!(b.inputs.len(), 0);
-        assert_eq!(b.outputs.len(), 1);
-        assert_eq!(b.kernels.len(), 1);
+		assert_eq!(b.inputs.len(), 0);
+		assert_eq!(b.outputs.len(), 1);
+		assert_eq!(b.kernels.len(), 1);
 
-        let coinbase_outputs = b.outputs
+		let coinbase_outputs = b.outputs
 			.iter()
 			.filter(|out| out.features.contains(COINBASE_OUTPUT))
-            .map(|o| o.clone())
+			.map(|o| o.clone())
 			.collect::<Vec<_>>();
-        assert_eq!(coinbase_outputs.len(), 1);
+		assert_eq!(coinbase_outputs.len(), 1);
 
-        let coinbase_kernels = b.kernels
+		let coinbase_kernels = b.kernels
 			.iter()
 			.filter(|out| out.features.contains(COINBASE_KERNEL))
-            .map(|o| o.clone())
+			.map(|o| o.clone())
 			.collect::<Vec<_>>();
-        assert_eq!(coinbase_kernels.len(), 1);
+		assert_eq!(coinbase_kernels.len(), 1);
 
-        // the block should be valid here (single coinbase output with corresponding txn kernel)
-        assert_eq!(b.validate(&secp), Ok(()));
-    }
+		// the block should be valid here (single coinbase output with corresponding
+		// txn kernel)
+		assert_eq!(b.validate(&secp), Ok(()));
+	}
 
-    #[test]
-    // test that flipping the COINBASE_OUTPUT flag on the output features
-    // invalidates the block and specifically it causes verify_coinbase to fail
-    // additionally verifying the merkle_inputs_outputs also fails
-    fn remove_coinbase_output_flag() {
-        let ref secp = new_secp();
-        let mut b = new_block(vec![], secp);
+	#[test]
+	// test that flipping the COINBASE_OUTPUT flag on the output features
+	// invalidates the block and specifically it causes verify_coinbase to fail
+	// additionally verifying the merkle_inputs_outputs also fails
+	fn remove_coinbase_output_flag() {
+		let ref secp = new_secp();
+		let mut b = new_block(vec![], secp);
 
-        assert!(b.outputs[0].features.contains(COINBASE_OUTPUT));
-        b.outputs[0].features.remove(COINBASE_OUTPUT);
+		assert!(b.outputs[0].features.contains(COINBASE_OUTPUT));
+		b.outputs[0].features.remove(COINBASE_OUTPUT);
 
-        assert_eq!(b.verify_coinbase(&secp), Err(secp::Error::IncorrectCommitSum));
-        assert_eq!(b.verify_kernels(&secp), Ok(()));
-        assert_eq!(b.verify_merkle_inputs_outputs(), Err(secp::Error::IncorrectCommitSum));
+		assert_eq!(
+			b.verify_coinbase(&secp),
+			Err(secp::Error::IncorrectCommitSum)
+		);
+		assert_eq!(b.verify_kernels(&secp), Ok(()));
+		assert_eq!(
+			b.verify_merkle_inputs_outputs(),
+			Err(secp::Error::IncorrectCommitSum)
+		);
 
-        assert_eq!(b.validate(&secp), Err(secp::Error::IncorrectCommitSum));
-    }
+		assert_eq!(b.validate(&secp), Err(secp::Error::IncorrectCommitSum));
+	}
 
-    #[test]
-    // test that flipping the COINBASE_KERNEL flag on the kernel features
-    // invalidates the block and specifically it causes verify_coinbase to fail
-    fn remove_coinbase_kernel_flag() {
-        let ref secp = new_secp();
-        let mut b = new_block(vec![], secp);
+	#[test]
+	// test that flipping the COINBASE_KERNEL flag on the kernel features
+	// invalidates the block and specifically it causes verify_coinbase to fail
+	fn remove_coinbase_kernel_flag() {
+		let ref secp = new_secp();
+		let mut b = new_block(vec![], secp);
 
-        assert!(b.kernels[0].features.contains(COINBASE_KERNEL));
-        b.kernels[0].features.remove(COINBASE_KERNEL);
+		assert!(b.kernels[0].features.contains(COINBASE_KERNEL));
+		b.kernels[0].features.remove(COINBASE_KERNEL);
 
-        assert_eq!(b.verify_coinbase(&secp), Err(secp::Error::IncorrectCommitSum));
-        assert_eq!(b.verify_kernels(&secp), Ok(()));
-        assert_eq!(b.verify_merkle_inputs_outputs(), Ok(()));
+		assert_eq!(
+			b.verify_coinbase(&secp),
+			Err(secp::Error::IncorrectCommitSum)
+		);
+		assert_eq!(b.verify_kernels(&secp), Ok(()));
+		assert_eq!(b.verify_merkle_inputs_outputs(), Ok(()));
 
-        assert_eq!(b.validate(&secp), Err(secp::Error::IncorrectCommitSum));
-    }
+		assert_eq!(b.validate(&secp), Err(secp::Error::IncorrectCommitSum));
+	}
 
-    #[test]
-    fn serialize_deserialize_block() {
-        let ref secp = new_secp();
-        let b = new_block(vec![], secp);
+	#[test]
+	fn serialize_deserialize_block() {
+		let ref secp = new_secp();
+		let b = new_block(vec![], secp);
 
-        let mut vec = Vec::new();
-        ser::serialize(&mut vec, &b).expect("serialization failed");
-        let b2: Block = ser::deserialize(&mut &vec[..]).unwrap();
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b).expect("serialization failed");
+		let b2: Block = ser::deserialize(&mut &vec[..]).unwrap();
 
-        assert_eq!(b.inputs, b2.inputs);
-        assert_eq!(b.outputs, b2.outputs);
-        assert_eq!(b.kernels, b2.kernels);
-        assert_eq!(b.header, b2.header);
-    }
+		assert_eq!(b.inputs, b2.inputs);
+		assert_eq!(b.outputs, b2.outputs);
+		assert_eq!(b.kernels, b2.kernels);
+		assert_eq!(b.header, b2.header);
+	}
 }

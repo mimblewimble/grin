@@ -13,7 +13,6 @@
 //
 
 //! # Build script
-
 // Coding conventions
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
@@ -24,12 +23,13 @@
 extern crate gcc;
 
 fn main() {
-    let mut base_config = gcc::Config::new();
-    base_config.include("depend/secp256k1-zkp/")
+	let mut base_config = gcc::Config::new();
+	base_config.include("depend/secp256k1-zkp/")
                .include("depend/secp256k1-zkp/include")
                .include("depend/secp256k1-zkp/src")
                .flag("-g")
-               // TODO these three should be changed to use libgmp, at least until secp PR 290 is merged
+               // TODO these three should be changed to use libgmp,
+			   // at least until secp PR 290 is merged
                .define("USE_NUM_NONE", Some("1"))
                .define("USE_FIELD_INV_BUILTIN", Some("1"))
                .define("USE_SCALAR_INV_BUILTIN", Some("1"))
@@ -43,8 +43,9 @@ fn main() {
                .define("ENABLE_MODULE_RECOVERY", Some("1"))
                .define("ENABLE_MODULE_RANGEPROOF", Some("1"));
 
-    // secp256k1
-    base_config.file("depend/secp256k1-zkp/contrib/lax_der_parsing.c")
-        .file("depend/secp256k1-zkp/src/secp256k1.c")
-        .compile("libsecp256k1-zkp.a");
+	// secp256k1
+	base_config
+		.file("depend/secp256k1-zkp/contrib/lax_der_parsing.c")
+		.file("depend/secp256k1-zkp/src/secp256k1.c")
+		.compile("libsecp256k1-zkp.a");
 }

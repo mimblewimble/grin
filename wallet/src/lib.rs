@@ -36,6 +36,6 @@ mod sender;
 mod types;
 
 pub use extkey::ExtendedKey;
-pub use receiver::{WalletReceiver, receive_json_tx};
+pub use receiver::{receive_json_tx, WalletReceiver};
 pub use sender::issue_send_tx;
-pub use types::{WalletConfig, WalletReceiveRequest, CbAmount, CbData};
+pub use types::{CbAmount, CbData, WalletConfig, WalletReceiveRequest};

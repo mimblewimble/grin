@@ -20,13 +20,13 @@
 //! wrapper in case the internal representation needs to change again
 
 use std::fmt;
-use std::ops::{Add, Mul, Div, Sub};
+use std::ops::{Add, Div, Mul, Sub};
 
-use serde::{Serialize, Serializer, Deserialize, Deserializer, de};
-use byteorder::{ByteOrder, BigEndian};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use byteorder::{BigEndian, ByteOrder};
 
 use core::hash::Hash;
-use ser::{self, Reader, Writer, Writeable, Readable};
+use ser::{self, Readable, Reader, Writeable, Writer};
 
 /// The target is the 32-bytes hash block hashes must be lower than.
 pub const MAX_TARGET: [u8; 8] = [0xf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
@@ -59,11 +59,13 @@ impl Difficulty {
 	/// provided hash.
 	pub fn from_hash(h: &Hash) -> Difficulty {
 		let max_target = BigEndian::read_u64(&MAX_TARGET);
-		//Use the first 64 bits of the given hash
-		let mut in_vec=h.to_vec();
+		// Use the first 64 bits of the given hash
+		let mut in_vec = h.to_vec();
 		in_vec.truncate(8);
 		let num = BigEndian::read_u64(&in_vec);
-		Difficulty { num: max_target / num }
+		Difficulty {
+			num: max_target / num,
+		}
 	}
 
 	/// Converts the difficulty into a u64
@@ -81,28 +83,36 @@ impl fmt::Display for Difficulty {
 impl Add<Difficulty> for Difficulty {
 	type Output = Difficulty;
 	fn add(self, other: Difficulty) -> Difficulty {
-		Difficulty { num: self.num + other.num }
+		Difficulty {
+			num: self.num + other.num,
+		}
 	}
 }
 
 impl Sub<Difficulty> for Difficulty {
 	type Output = Difficulty;
 	fn sub(self, other: Difficulty) -> Difficulty {
-		Difficulty { num: self.num - other.num }
+		Difficulty {
+			num: self.num - other.num,
+		}
 	}
 }
 
 impl Mul<Difficulty> for Difficulty {
 	type Output = Difficulty;
 	fn mul(self, other: Difficulty) -> Difficulty {
-		Difficulty { num: self.num * other.num }
+		Difficulty {
+			num: self.num * other.num,
+		}
 	}
 }
 
 impl Div<Difficulty> for Difficulty {
 	type Output = Difficulty;
 	fn div(self, other: Difficulty) -> Difficulty {
-		Difficulty { num: self.num / other.num }
+		Difficulty {
+			num: self.num / other.num,
+		}
 	}
 }
 
@@ -121,7 +131,8 @@ impl Readable for Difficulty {
 
 impl Serialize for Difficulty {
 	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-		where S: Serializer
+	where
+		S: Serializer,
 	{
 		serializer.serialize_u64(self.num)
 	}
@@ -129,7 +140,8 @@ impl Serialize for Difficulty {
 
 impl<'de> Deserialize<'de> for Difficulty {
 	fn deserialize<D>(deserializer: D) -> Result<Difficulty, D::Error>
-		where D: Deserializer<'de>
+	where
+		D: Deserializer<'de>,
 	{
 		deserializer.deserialize_u64(DiffVisitor)
 	}
@@ -145,12 +157,18 @@ impl<'de> de::Visitor<'de> for DiffVisitor {
 	}
 
 	fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-		where E: de::Error
+	where
+		E: de::Error,
 	{
 		let num_in = s.parse::<u64>();
-		if let Err(_)=num_in {
-        	return Err(de::Error::invalid_value(de::Unexpected::Str(s), &"a value number"));
-      	};
-		Ok(Difficulty { num: num_in.unwrap() })
+		if let Err(_) = num_in {
+			return Err(de::Error::invalid_value(
+				de::Unexpected::Str(s),
+				&"a value number",
+			));
+		};
+		Ok(Difficulty {
+			num: num_in.unwrap(),
+		})
 	}
 }

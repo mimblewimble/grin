@@ -19,9 +19,9 @@
 //! To use it simply implement `Writeable` or `Readable` and then use the
 //! `serialize` or `deserialize` functions on them as appropriate.
 
-use std::{error, fmt, cmp};
-use std::io::{self, Write, Read};
-use byteorder::{ByteOrder, ReadBytesExt, BigEndian};
+use std::{cmp, error, fmt};
+use std::io::{self, Read, Write};
+use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use secp::pedersen::Commitment;
 use secp::pedersen::RangeProof;
 use secp::constants::PEDERSEN_COMMITMENT_SIZE;
@@ -55,9 +55,10 @@ impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match *self {
 			Error::IOErr(ref e) => write!(f, "{}", e),
-			Error::UnexpectedData { expected: ref e, received: ref r } => {
-				write!(f, "expected {:?}, got {:?}", e, r)
-			}
+			Error::UnexpectedData {
+				expected: ref e,
+				received: ref r,
+			} => write!(f, "expected {:?}, got {:?}", e, r),
 			Error::CorruptedData => f.write_str("corrupted data"),
 			Error::TooLargeReadErr => f.write_str("too large read"),
 		}
@@ -75,7 +76,10 @@ impl error::Error for Error {
 	fn description(&self) -> &str {
 		match *self {
 			Error::IOErr(ref e) => error::Error::description(e),
-			Error::UnexpectedData { expected: _, received: _ } => "unexpected data",
+			Error::UnexpectedData {
+				expected: _,
+				received: _,
+			} => "unexpected data",
 			Error::CorruptedData => "corrupted data",
 			Error::TooLargeReadErr => "too large read",
 		}
@@ -180,7 +184,8 @@ pub trait Writeable {
 /// Reads directly to a Reader, a utility type thinly wrapping an
 /// underlying Read implementation.
 pub trait Readable
-	where Self: Sized
+where
+	Self: Sized,
 {
 	/// Reads the data necessary to this Readable from the provided reader
 	fn read(reader: &mut Reader) -> Result<Self, Error>;
@@ -245,7 +250,10 @@ impl<'a> Reader for BinReader<'a> {
 			return Err(Error::TooLargeReadErr);
 		}
 		let mut buf = vec![0; length];
-		self.source.read_exact(&mut buf).map(move |_| buf).map_err(Error::IOErr)
+		self.source
+			.read_exact(&mut buf)
+			.map(move |_| buf)
+			.map_err(Error::IOErr)
 	}
 
 	fn expect_u8(&mut self, val: u8) -> Result<u8, Error> {
@@ -365,18 +373,22 @@ impl<A: Writeable, B: Writeable, C: Writeable, D: Writeable> Writeable for (A, B
 
 impl<A: Readable, B: Readable, C: Readable> Readable for (A, B, C) {
 	fn read(reader: &mut Reader) -> Result<(A, B, C), Error> {
-		Ok((try!(Readable::read(reader)),
-		    try!(Readable::read(reader)),
-		    try!(Readable::read(reader))))
+		Ok((
+			try!(Readable::read(reader)),
+			try!(Readable::read(reader)),
+			try!(Readable::read(reader)),
+		))
 	}
 }
 
 impl<A: Readable, B: Readable, C: Readable, D: Readable> Readable for (A, B, C, D) {
 	fn read(reader: &mut Reader) -> Result<(A, B, C, D), Error> {
-		Ok((try!(Readable::read(reader)),
-		    try!(Readable::read(reader)),
-		    try!(Readable::read(reader)),
-		    try!(Readable::read(reader))))
+		Ok((
+			try!(Readable::read(reader)),
+			try!(Readable::read(reader)),
+			try!(Readable::read(reader)),
+			try!(Readable::read(reader)),
+		))
 	}
 }
 

@@ -23,7 +23,7 @@ use std::convert::AsRef;
 
 use blake2::blake2b::Blake2b;
 
-use ser::{self, Reader, Readable, Writer, Writeable, Error, AsFixedBytes};
+use ser::{self, AsFixedBytes, Error, Readable, Reader, Writeable, Writer};
 
 /// A hash consisting of all zeroes, used as a sentinel. No known preimage.
 pub const ZERO_HASH: Hash = Hash([0; 32]);
@@ -143,15 +143,17 @@ impl HashWriter {
 	/// Consume the `HashWriter`, outputting a `Hash` corresponding to its
 	/// current state
 	pub fn into_hash(self) -> Hash {
-    let mut res = [0; 32];
+		let mut res = [0; 32];
 		(&mut res).copy_from_slice(self.state.finalize().as_bytes());
-    Hash(res)
+		Hash(res)
 	}
 }
 
 impl Default for HashWriter {
 	fn default() -> HashWriter {
-		HashWriter { state: Blake2b::new(32) }
+		HashWriter {
+			state: Blake2b::new(32),
+		}
 	}
 }
 

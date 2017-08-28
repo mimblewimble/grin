@@ -26,4 +26,12 @@ env:
     - TEST_DIR=wallet
     - RUST_TEST_THREADS=1 TEST_DIR=grin
 
-script: cd $TEST_DIR && cargo test --verbose
+install:
+  - rustup install nightly
+  - which rustfmt || rustup run nightly cargo install rustfmt-nightly
+
+script:
+  - cd $TEST_DIR
+  - cargo +nightly fmt -- --write-mode=diff
+  - cargo build
+  - cargo test --verbose

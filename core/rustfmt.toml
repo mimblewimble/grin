@@ -1,3 +1,6 @@
 hard_tabs = true
 wrap_comments = true
 write_mode = "Overwrite"
+
+# one big url in a comment - tbd what to do here
+error_on_line_overflow_comments = false

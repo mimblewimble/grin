@@ -14,7 +14,6 @@
 
 //! Implementation of the MimbleWimble paper.
 //! https://download.wpsoftware.net/bitcoin/wizardry/mimblewimble.txt
-
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
 #![deny(non_snake_case)]
@@ -26,6 +25,8 @@ extern crate bitflags;
 extern crate blake2_rfc as blake2;
 extern crate byteorder;
 extern crate crypto;
+#[macro_use]
+extern crate lazy_static;
 extern crate num_bigint as bigint;
 extern crate rand;
 extern crate secp256k1zkp as secp;
@@ -33,8 +34,6 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate time;
-#[macro_use]
-extern crate lazy_static;
 
 #[macro_use]
 pub mod macros;
