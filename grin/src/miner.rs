@@ -398,7 +398,7 @@ impl Miner {
 		let mut rng = rand::OsRng::new().unwrap();
 		b.header.nonce = rng.gen();
 		b.header.difficulty = difficulty;
-		b.header.timestamp = time::at(time::Timespec::new(now_sec, 0));
+		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
 		b
 	}
 
