@@ -15,10 +15,10 @@ o = '%x' % (EllipticCurve ([F (a), F(b)]).order())
 print o 
 
 gen2 =  hashlib.sha256('0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8'.decode('hex'))
-gG = EllipticCurve ([F (0), F(7)]).lift_x(int(gen2.hexdigest(),16))
-print 'gG: %s' % gG
-gen_g = '%x %x'%gG.xy()
-print 'GENERATOR G: %s'%gen_g
+gH = EllipticCurve ([F (0), F(7)]).lift_x(int(gen2.hexdigest(),16))
+print 'gH: %s' % gH
+gen_h = '%x %x'%gH.xy()
+print 'GENERATOR H: %s'%gen_h
 
 #this doesn't create a point on the curve
 #gen_j_input = '04%x%x'%gG.xy()
