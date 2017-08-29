@@ -24,6 +24,7 @@ use secp::pedersen::Commitment;
 
 pub use graph;
 
+use core::core::block;
 use core::core::transaction;
 use core::core::hash;
 
@@ -46,7 +47,7 @@ pub struct TxSource {
 #[derive(Clone)]
 pub enum Parent {
     Unknown,
-    BlockTransaction,
+    BlockTransaction{output: transaction::Output},
     PoolTransaction{tx_ref: hash::Hash},
     AlreadySpent{other_tx: hash::Hash},
 }
@@ -55,7 +56,7 @@ impl fmt::Debug for Parent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Parent::Unknown => write!(f, "Parent: Unknown"),
-            &Parent::BlockTransaction => write!(f, "Parent: Block Transaction"),
+            &Parent::BlockTransaction{output: _} => write!(f, "Parent: Block Transaction"),
             &Parent::PoolTransaction{tx_ref: x} => write!(f,
                 "Parent: Pool Transaction ({:?})", x),
             &Parent::AlreadySpent{other_tx: x} => write!(f,
@@ -99,6 +100,10 @@ pub trait BlockChain {
   /// a result with its current view of the most worked chain, ignoring
   /// orphans, etc.
   fn get_unspent(&self, output_ref: &Commitment) -> Option<transaction::Output>;
+
+  /// Get the block header by outputcommitment.
+  /// TODO - is this breaking encapsulation too much?
+  fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Option<block::BlockHeader>;
 }
 
 /// Pool contains the elements of the graph that are connected, in full, to
