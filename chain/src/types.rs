@@ -184,8 +184,11 @@ pub trait ChainStore: Send + Sync {
 	/// Gets an output by its commitment
 	fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, store::Error>;
 
-	/// Checks whether an output commitment exists and returns the output hash
-	fn has_output_commit(&self, commit: &Commitment) -> Result<Hash, store::Error>;
+    /// Checks whether an output commitment exists and returns the output hash
+    fn has_output_commit(&self, commit: &Commitment) -> Result<Hash, store::Error>;
+
+    /// Gets a block_header for the given input commit
+    fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, store::Error>;
 
 	/// Saves the provided block header at the corresponding height. Also check
 	/// the consistency of the height chain in store by assuring previous

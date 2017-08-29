@@ -23,7 +23,7 @@ use secp::pedersen::Commitment;
 use core::core::{Block, BlockHeader, Output};
 use core::core::target::Difficulty;
 use core::core::hash::Hash;
-use grin_store;
+use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use types::*;
@@ -35,13 +35,13 @@ const MAX_ORPHANS: usize = 20;
 /// Helper macro to transform a Result into an Option with None in case
 /// of error
 macro_rules! none_err {
-  ($trying:expr) => {{
-    let tried = $trying;
-    if let Err(_) = tried {
-      return None;
-    }
-    tried.unwrap()
-  }}
+    ($trying:expr) => {{
+        let tried = $trying;
+        if let Err(_) = tried {
+            return None;
+        }
+        tried.unwrap()
+    }}
 }
 
 /// Facade to the blockchain block processing pipeline and storage. Provides
@@ -71,7 +71,7 @@ impl Chain {
 		let chain_store = store::ChainKVStore::new(db_root).unwrap();
 		match chain_store.head() {
 			Ok(_) => {true},
-			Err(grin_store::Error::NotFoundErr) => false,
+			Err(NotFoundErr) => false,
 			Err(_) => false,
 		}
 	}
@@ -92,7 +92,7 @@ impl Chain {
 		// check if we have a head in store, otherwise the genesis block is it
 		let head = match chain_store.head() {
 			Ok(tip) => tip,
-			Err(grin_store::Error::NotFoundErr) => {
+			Err(NotFoundErr) => {
 				if let None = gen_block {
 					return Err(Error::GenesisBlockRequired);
 				}
@@ -111,6 +111,7 @@ impl Chain {
 
         // TODO - confirm this was safe to remove based on code above?
 		// let head = chain_store.head()?;
+
 
 		Ok(Chain {
 			store: Arc::new(chain_store),
@@ -210,7 +211,7 @@ impl Chain {
 		}
 	}
 
-	/// Gets an unspent output from its commitment. With return None if the
+    /// Gets an unspent output from its commitment. With return None if the
 	/// output
 	/// doesn't exist or has been spent. This querying is done in a way that's
 	/// constistent with the current chain state and more specifically the
@@ -272,6 +273,13 @@ impl Chain {
 			&Error::StoreErr,
 		)
 	}
+
+    /// Gets the block header by the provided output commitment
+    pub fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
+        self.store.get_block_header_by_output_commit(commit).map_err(
+            &Error::StoreErr,
+        )
+    }
 
 	/// Get the tip of the header chain
 	pub fn get_header_head(&self) -> Result<Tip, Error> {
