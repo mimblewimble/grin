@@ -134,27 +134,6 @@ impl ChainStore for ChainKVStore {
 		}
 	}
 
-	// TODO - this can probably be cleaned up and written closer to idiomatic rust
-	fn get_block_header_by_input_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
-		let block_hash = self.db.get_ser(&to_key(
-			HEADER_BY_INPUT_PREFIX,
-			&mut commit.as_ref().to_vec(),
-		))?;
-
-		match block_hash {
-			Some(hash) => {
-				let block_header = self.get_block_header(&hash)?;
-				let header_at_height = self.get_header_by_height(block_header.height)?;
-				if block_header.hash() == header_at_height.hash() {
-					Ok(block_header)
-				} else {
-					Err(Error::NotFoundErr)
-				}
-			},
-			None => Err(Error::NotFoundErr)
-		}
-	}
-
 	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), Error> {
 		self.db.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut bh.hash().to_vec())[..], bh)
 	}

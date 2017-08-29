@@ -23,7 +23,6 @@ use std::fs;
 use chain::ChainStore;
 use core::core::hash::Hashed;
 use core::core::{Block, BlockHeader};
-use core::core::build::{input_rand, output_rand, transaction};
 use secp::key;
 
 fn clean_output_dir(dir_name: &str) {
@@ -52,27 +51,6 @@ fn test_various_store_indices() {
 
 	let block_header = chain_store
 		.get_block_header_by_output_commit(&commit)
-		.unwrap();
-	assert_eq!(block_header.hash(), block_hash);
-
-	let txn = transaction(vec![input_rand(5), output_rand(5)])
-		.map(|(tx, _)| tx)
-		.unwrap();
-	let block = Block::new(&block.header, vec![&txn], key::ONE_KEY).unwrap();
-	let commit = block.inputs[0].commitment();
-	let block_hash = block.hash();
-
-	chain_store.save_block(&block).unwrap();
-	chain_store.setup_height(&block.header).unwrap();
-
-	let block_header = chain_store.get_block_header(&block_hash).unwrap();
-	assert_eq!(block_header.hash(), block_hash);
-
-	let block_header = chain_store.get_header_by_height(2).unwrap();
-	assert_eq!(block_header.hash(), block_hash);
-
-	let block_header = chain_store
-		.get_block_header_by_input_commit(&commit)
 		.unwrap();
 	assert_eq!(block_header.hash(), block_hash);
 }
