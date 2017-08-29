@@ -33,8 +33,7 @@ const HEAD_PREFIX: u8 = 'H' as u8;
 const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const OUTPUT_COMMIT_PREFIX: u8 = 'o' as u8;
-const HEADER_BY_INPUT_PREFIX: u8 = 'p' as u8;
-const HEADER_BY_OUTPUT_PREFIX: u8 = 'q' as u8;
+const HEADER_BY_OUTPUT_PREFIX: u8 = 'p' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
 /// store.
@@ -98,12 +97,6 @@ impl ChainStore for ChainKVStore {
 			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?
 			.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..], &b.header)?;
 
-		// input commitment to hash index
-		for inp in &b.inputs {
-			batch = batch
-				.put_ser(&to_key(HEADER_BY_INPUT_PREFIX, &mut inp.commitment().as_ref().to_vec())[..], &b.hash())?;
-		}
-
 		// saving the full output under its hash, as well as a commitment to hash index
 		for out in &b.outputs {
 			batch = batch
@@ -113,7 +106,16 @@ impl ChainStore for ChainKVStore {
 		batch.write()
 	}
 
-	// TODO - this can probably be cleaned up and written closer to idiomatic rust
+	// lookup the block header hash by output commitment
+	// lookup the block header based on this hash
+	// to check the chain is correct compare this block header to
+	// the block header currently indexed at the relevant block height (tbd if actually necessary)
+	//
+	// NOTE: This index is not exhaustive.
+	// This node may not have seen this full block, so may not have populated the index.
+	// Block headers older than some threshold (2 months?) will not necessarily be included
+	// in this index.
+	//
 	fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
 		let block_hash = self.db.get_ser(&to_key(
 			HEADER_BY_OUTPUT_PREFIX,
