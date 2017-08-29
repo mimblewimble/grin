@@ -72,7 +72,7 @@ cuckoo_miner_async_mode = false
 #if not specified, grin will look in the directory /deps relative
 #to the executable
 
-#cuckoo_miner_plugin_dir = "target/debug/deps"
+#cuckoo_miner_plugin_dir = "target/debug/plugins"
 
 #if using cuckoo_miner, the implementation to use.. currently
 #just filters for this word in the filenames in the plugin 

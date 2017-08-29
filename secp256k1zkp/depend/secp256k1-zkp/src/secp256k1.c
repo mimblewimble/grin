@@ -58,6 +58,7 @@ struct secp256k1_context_struct {
     secp256k1_ecmult_gen_context ecmult_gen_ctx;
 #ifdef ENABLE_MODULE_RANGEPROOF
     secp256k1_pedersen_context pedersen_ctx;
+    secp256k1_pedersen_context switch_ctx;
     secp256k1_rangeproof_context rangeproof_ctx;
 #endif
     secp256k1_callback illegal_callback;

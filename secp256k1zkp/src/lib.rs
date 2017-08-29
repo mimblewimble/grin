@@ -462,6 +462,7 @@ impl Secp256k1 {
 		if caps == ContextFlag::Commit {
 			unsafe {
 				ffi::secp256k1_pedersen_context_initialize(ctx);
+				ffi::secp256k1_switch_context_initialize(ctx);
 				ffi::secp256k1_rangeproof_context_initialize(ctx);
 			}
 		}

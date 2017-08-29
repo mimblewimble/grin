@@ -457,6 +457,7 @@ impl Block {
 		let msg = try!(secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE]));
 		let sig = try!(secp.sign(&msg, &skey));
 		let commit = secp.commit(REWARD, skey).unwrap();
+		//let switch_commit = secp.switch_commit(skey).unwrap();
 		let rproof = secp.range_proof(0, REWARD, skey, commit);
 
 		let output = Output {

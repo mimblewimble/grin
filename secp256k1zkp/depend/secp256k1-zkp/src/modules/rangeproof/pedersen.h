@@ -1,5 +1,5 @@
 /**********************************************************************
- * Copyright (c) 2014, 2015 Gregory Maxwell                          *
+ * Copyright (c) 2014, 2015 Gregory Maxwell                           *
  * Distributed under the MIT software license, see the accompanying   *
  * file COPYING or http://www.opensource.org/licenses/mit-license.php.*
  **********************************************************************/
@@ -17,7 +17,8 @@ typedef struct {
 } secp256k1_pedersen_context;
 
 static void secp256k1_pedersen_context_init(secp256k1_pedersen_context* ctx);
-static void secp256k1_pedersen_context_build(secp256k1_pedersen_context* ctx, const secp256k1_callback* cb);
+static void secp256k1_pedersen_context_build(secp256k1_pedersen_context* ctx, const secp256k1_ge ge,
+                                             const secp256k1_callback* cb);
 static void secp256k1_pedersen_context_clone(secp256k1_pedersen_context *dst,
                                                const secp256k1_pedersen_context* src, const secp256k1_callback* cb);
 static void secp256k1_pedersen_context_clear(secp256k1_pedersen_context* ctx);

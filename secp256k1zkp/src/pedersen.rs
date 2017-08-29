@@ -199,6 +199,20 @@ impl ::std::fmt::Debug for RangeProof {
 }
 
 impl Secp256k1 {
+
+	/// Creates a switch commitment from a blinding factor
+	pub fn switch_commit(&self,  blind: SecretKey) -> Result<Commitment, Error> {
+
+		if self.caps != ContextFlag::Commit {
+			return Err(Error::IncapableContext);
+		}
+		let mut commit = [0; 33];
+		unsafe {
+			ffi::secp256k1_switch_commit(self.ctx, commit.as_mut_ptr(), blind.as_ptr())
+		};
+		Ok(Commitment(commit))
+	}
+
 	/// Creates a pedersen commitment from a value and a blinding factor
 	pub fn commit(&self, value: u64, blind: SecretKey) -> Result<Commitment, Error> {
 
