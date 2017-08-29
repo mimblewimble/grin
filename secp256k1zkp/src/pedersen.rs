@@ -200,7 +200,7 @@ impl ::std::fmt::Debug for RangeProof {
 
 impl Secp256k1 {
 
-/// Creates a switch commitment from a blinding factor
+	/// Creates a switch commitment from a blinding factor
 	pub fn switch_commit(&self,  blind: SecretKey) -> Result<Commitment, Error> {
 
 		if self.caps != ContextFlag::Commit {
