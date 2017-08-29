@@ -66,6 +66,7 @@ fn sumtree_append() {
 		TestElem([1, 0, 0, 0]),
 	];
 
+	// adding first set of 4 elements and sync
 	let mut mmr_size: u64;
 	let mut backend = store::sumtree::PMMRBackend::new(data_dir).unwrap();
 	{
@@ -77,6 +78,7 @@ fn sumtree_append() {
 	}
 	backend.sync().unwrap();
 
+	// adding the rest and sync again
 	{
 		let mut pmmr = PMMR::at(&mut backend, mmr_size);
 		for elem in &elems[4..elems.len()] {
@@ -86,6 +88,7 @@ fn sumtree_append() {
 	}
 	backend.sync().unwrap();
 
+	// check the resulting backend store and the computation of the root
 	let hash = Hashed::hash(&elems[0].clone());
 	let sum = elems[0].sum();
 	let node_hash = (1 as u64, &sum, hash).hash();

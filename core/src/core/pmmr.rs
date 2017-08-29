@@ -396,7 +396,7 @@ impl PruneList {
 	/// Gets the position a new pruned node should take in the prune list.
 	/// If the node has already bee pruned, either directly or through one of
 	/// its parents contained in the prune list, returns None.
-	fn pruned_pos(&self, pos: u64) -> Option<usize> {
+	pub fn pruned_pos(&self, pos: u64) -> Option<usize> {
 		match self.pruned_nodes.binary_search(&pos) {
 			Ok(_) => None,
 			Err(idx) => {

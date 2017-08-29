@@ -342,6 +342,15 @@ impl<T> Readable for Vec<T> where T: Readable {
 	}
 }
 
+impl<T> Writeable for Vec<T> where T: Writeable {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		for elmt in self {
+			elmt.write(writer)?;
+		}
+		Ok(())
+	}
+}
+
 impl<'a, A: Writeable> Writeable for &'a A {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		Writeable::write(*self, writer)
