@@ -26,6 +26,9 @@ use core::target::Difficulty;
 /// The block subsidy amount
 pub const REWARD: u64 = 1_000_000_000;
 
+/// Number of blocks before a coinbase matures and can be spent
+pub const COINBASE_MATURITY: u64 = 1_000;
+
 /// Block interval, in seconds, the network will tune its next_target for. Note
 /// that we may reduce this value in the future as we get more data on mining
 /// with Cuckoo Cycle, networks improve and block propagation is optimized
@@ -192,15 +195,15 @@ mod test {
 	fn next_target_adjustment() {
 		// not enough data
 		assert_eq!(next_difficulty(vec![]).unwrap(), Difficulty::from_num(MINIMUM_DIFFICULTY));
-		
+
 		assert_eq!(next_difficulty(vec![Ok((60, Difficulty::one()))]).unwrap(),
 		           Difficulty::from_num(MINIMUM_DIFFICULTY));
-				   
+
 		assert_eq!(next_difficulty(repeat(60, 10, DIFFICULTY_ADJUST_WINDOW)).unwrap(),
 		           Difficulty::from_num(MINIMUM_DIFFICULTY));
 
 		// just enough data, right interval, should stay constant
-		
+
 		let just_enough = DIFFICULTY_ADJUST_WINDOW + MEDIAN_TIME_WINDOW;
 		assert_eq!(next_difficulty(repeat(60, 1000, just_enough)).unwrap(),
 		           Difficulty::from_num(1000));

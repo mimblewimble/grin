@@ -89,6 +89,13 @@ pub enum PoolError {
         /// The spent output
         spent_output: Commitment
     },
+    /// Attempt to spend a coinbase output before it matures (1000 blocks?)
+    ImmatureCoinbase{
+        /// The block header of the block containing the coinbase output
+        header: block::BlockHeader,
+        /// The unspent coinbase output
+        output: Commitment,
+    },
     /// An orphan successfully added to the orphans set
     OrphanTransaction,
 }
