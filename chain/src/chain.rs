@@ -276,9 +276,11 @@ impl Chain {
 
     /// Gets the block header by the provided output commitment
     pub fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Option<BlockHeader> {
-        self.store.get_block_header_by_output_commit(commit).map_err(
-            &Error::StoreErr,
-        )
+        let header = self.store.get_block_header_by_output_commit(commit);
+        match header {
+            Ok(h) => Some(h),
+            Err(_) => None,
+        }
     }
 
 	/// Get the tip of the header chain
