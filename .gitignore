@@ -1,5 +1,7 @@
 *.swp
-.*
+.DS_Store
+.grin
+.grin2
 target
 Cargo.lock
 **.iml
