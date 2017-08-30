@@ -179,13 +179,13 @@ fn validate_block(block: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	for input in &block.inputs {
 		// TODO check every input exists as a UTXO using the UTXO index
 
-		// now check any coinbase inputs have sufficently matured
+		// now check that any coinbase inputs have matured sufficiently
 		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
 			if output.features.contains(transaction::COINBASE_OUTPUT) {
 				if let Ok(output_header) = ctx.store.get_block_header_by_output_commit(&input.commitment()) {
 					// TODO - make sure we are not off-by-1 here vs. the equivalent tansaction validation rule
 					if block.header.height <= output_header.height + consensus::COINBASE_MATURITY {
-						// TODO - here we need to blow up with ImmatureCoinbase
+						return Err(Error::ImmatureCoinbase);
 					}
 				};
 			};

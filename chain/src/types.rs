@@ -57,6 +57,8 @@ pub enum Error {
 	InvalidBlockTime,
 	/// Block height is invalid (not previous + 1)
 	InvalidBlockHeight,
+    /// coinbase can only be spent after it has matured (n blocks)
+    ImmatureCoinbase,
 	/// Internal issue when trying to save or load data from store
 	StoreErr(grin_store::Error),
 	/// Error serializing or deserializing a type
