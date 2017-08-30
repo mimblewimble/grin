@@ -16,13 +16,11 @@ To learn more, read our [introduction to MimbleWimble and Grin](doc/intro.md).
 
 ## Status
 
-Grin is still an infant, much is left to be done and contributions are welcome (see below). Check our [mailing list archives](https://lists.launchpad.net/mimblewimble/) for the latest status.
+Grin is still an infant, much is left to be done and [contributions](CONTRIBUTING.md) are welcome (see below). Check our [mailing list archives](https://lists.launchpad.net/mimblewimble/) for the latest status.
 
 ## Contributing
 
-Find an area you can help with and do it. Open source is about collaboration and open participation. Try to make your code look like what already exists and submit a pull request. If you're looking for additional ideas, the code includes TODO comments for minor to major improvements. Grep is your friend.
-
-Additional tests are rewarded with an immense amount of positive karma. So is documentation.
+To get involved, read our [contributing docs](CONTRIBUTING.md).
 
 Find us:
 
@@ -34,8 +32,6 @@ Find us:
 To learn more about the technology, read our [introduction](doc/intro.md).
 
 To build and try out Grin, see the [build docs](doc/build.md).
-
-For info on the Grin style guide, see the [style docs](doc/style.md).
 
 ## Philosophy
 
