@@ -22,6 +22,7 @@ use time;
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
 use core::core::{BlockHeader, Block};
+use core::core::transaction;
 use types::*;
 use store;
 use core::global;
@@ -167,15 +168,29 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 }
 
 /// Fully validate the block content.
-fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
-	if b.header.height > ctx.head.height + 1 {
+fn validate_block(block: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
+	if block.header.height > ctx.head.height + 1 {
 		return Err(Error::Orphan);
 	}
 
 	let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-	try!(b.validate(&curve).map_err(&Error::InvalidBlockProof));
+	try!(block.validate(&curve).map_err(&Error::InvalidBlockProof));
 
-	// TODO check every input exists as a UTXO using the UTXO index
+	for input in &block.inputs {
+		// TODO check every input exists as a UTXO using the UTXO index
+
+		// now check any coinbase inputs have sufficently matured
+		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
+			if output.features.contains(transaction::COINBASE_OUTPUT) {
+				if let Ok(output_header) = ctx.store.get_block_header_by_output_commit(&input.commitment()) {
+					// TODO - make sure we are not off-by-1 here vs. the equivalent tansaction validation rule
+					if block.header.height <= output_header.height + consensus::COINBASE_MATURITY {
+						// TODO - here we need to blow up with ImmatureCoinbase
+					}
+				};
+			};
+		};
+	};
 
 	Ok(())
 }

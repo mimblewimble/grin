@@ -20,7 +20,7 @@ pub use graph;
 use core::core::transaction;
 use core::core::block;
 use core::core::hash;
-use core::consensus::COINBASE_MATURITY;
+use core::consensus;
 
 use secp;
 use secp::pedersen::Commitment;
@@ -153,8 +153,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
                     if output.features.contains(transaction::COINBASE_OUTPUT) {
                         if let Some(out_header) = self.blockchain.get_block_header_by_output_commit(&output.commitment()) {
                             if let Some(head_header) = self.blockchain.head_header() {
-                                let diff = head_header.height - out_header.height;
-                                if diff < COINBASE_MATURITY {
+                                if head_header.height <= out_header.height + consensus::COINBASE_MATURITY {
                                     return Err(PoolError::ImmatureCoinbase{
                                         header: out_header,
                                         output: output.commitment()
