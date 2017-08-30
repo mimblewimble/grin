@@ -300,4 +300,8 @@ impl pool::BlockChain for PoolToChainAdapter {
 	fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Option<BlockHeader> {
 		self.chain.borrow().get_block_header_by_output_commit(commit)
 	}
+
+	fn head_header(&self) -> Option<BlockHeader> {
+		self.chain.borrow().head_header()
+	}
 }

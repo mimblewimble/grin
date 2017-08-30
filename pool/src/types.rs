@@ -101,9 +101,12 @@ pub trait BlockChain {
   /// orphans, etc.
   fn get_unspent(&self, output_ref: &Commitment) -> Option<transaction::Output>;
 
-  /// Get the block header by outputcommitment.
+  /// Get the block header by output commitment (needed for spending coinbase after n blocks)
   /// TODO - is this breaking encapsulation too much?
   fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Option<block::BlockHeader>;
+
+  /// TODO - again, are we breaking encapsulation here?
+  fn head_header(&self) -> Option<block::BlockHeader>;
 }
 
 /// Pool contains the elements of the graph that are connected, in full, to

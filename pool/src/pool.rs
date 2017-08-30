@@ -149,9 +149,14 @@ impl<T> TransactionPool<T> where T: BlockChain {
             match self.search_for_best_output(&input.commitment()) {
                 Parent::PoolTransaction{tx_ref: x} => pool_refs.push(base.with_source(Some(x))),
                 Parent::BlockTransaction{output} => {
+                    // TODO - pull this out into a separate function
+
                     println!("output features - {:?}", output.features);
 
-                    let header = self.blockchain.get_block_header_by_output_commit(&output.commitment());
+                    if output.features.contains(transaction::COINBASE_OUTPUT) {
+                        let out_header = self.blockchain.get_block_header_by_output_commit(&output.commitment());
+                        let head_header = self.blockchain.head_header();
+                    };
 
                     blockchain_refs.push(base)
                 },

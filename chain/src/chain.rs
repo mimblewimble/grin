@@ -253,8 +253,12 @@ impl Chain {
 	}
 
 	/// Block header for the chain head
-	pub fn head_header(&self) -> Result<BlockHeader, Error> {
-		self.store.head_header().map_err(&Error::StoreErr)
+	pub fn head_header(&self) -> Option<BlockHeader> {
+		let header = self.store.head_header();
+        match header {
+            Ok(h) => Some(h),
+            Err(_) => None,
+        }
 	}
 
 	/// Gets a block header by hash
