@@ -78,6 +78,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
     // output designated by output_commitment.
     fn search_blockchain_unspents(&self, output_commitment: &Commitment) -> Option<Parent> {
         self.blockchain.get_unspent(output_commitment).
+            ok().
             map(|output| match self.pool.get_blockchain_spent(output_commitment) {
                 Some(x) => Parent::AlreadySpent{other_tx: x.destination_hash().unwrap()},
                 None => Parent::BlockTransaction{output},
@@ -151,8 +152,8 @@ impl<T> TransactionPool<T> where T: BlockChain {
                 Parent::BlockTransaction{output} => {
                     // TODO - pull this out into a separate function?
                     if output.features.contains(transaction::COINBASE_OUTPUT) {
-                        if let Some(out_header) = self.blockchain.get_block_header_by_output_commit(&output.commitment()) {
-                            if let Some(head_header) = self.blockchain.head_header() {
+                        if let Ok(out_header) = self.blockchain.get_block_header_by_output_commit(&output.commitment()) {
+                            if let Ok(head_header) = self.blockchain.head_header() {
                                 if head_header.height <= out_header.height + consensus::COINBASE_MATURITY {
                                     return Err(PoolError::ImmatureCoinbase{
                                         header: out_header,
@@ -246,7 +247,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
         // Checking against current blockchain unspent outputs
         // We want outputs even if they're spent by pool txs, so we ignore
         // consumed_blockchain_outputs
-        if self.blockchain.get_unspent(&output.commitment()).is_some() {
+        if self.blockchain.get_unspent(&output.commitment()).is_ok() {
             return Err(PoolError::DuplicateOutput{
                 other_tx: None,
                 in_chain: true,
@@ -431,7 +432,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
         for output in &tx_ref.unwrap().outputs {
             match self.pool.get_internal_spent_output(&output.commitment()) {
                 Some(x) => {
-                    if self.blockchain.get_unspent(&x.output_commitment()).is_none() {
+                    if self.blockchain.get_unspent(&x.output_commitment()).is_err() {
                         self.mark_transaction(x.destination_hash().unwrap(), marked_txs);
                     }
                 },

@@ -59,6 +59,10 @@ pub enum Error {
 	InvalidBlockHeight,
 	/// coinbase can only be spent after it has matured (n blocks)
 	ImmatureCoinbase,
+	/// output not found
+	OutputNotFound,
+	/// output spent
+	OutputSpent,
 	/// Internal issue when trying to save or load data from store
 	StoreErr(grin_store::Error),
 	/// Error serializing or deserializing a type

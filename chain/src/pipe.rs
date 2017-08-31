@@ -179,6 +179,7 @@ fn validate_block(block: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	for input in &block.inputs {
 		// TODO check every input exists as a UTXO using the UTXO index
 
+		// TODO - need to consider error handling at various steps in here
 		// now check that any coinbase inputs have matured sufficiently
 		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
 			if output.features.contains(transaction::COINBASE_OUTPUT) {

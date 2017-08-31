@@ -27,6 +27,7 @@ pub use graph;
 use core::core::block;
 use core::core::transaction;
 use core::core::hash;
+use core::types::CoreError;
 
 /// Placeholder: the data representing where we heard about a tx from.
 ///
@@ -102,18 +103,19 @@ pub enum PoolError {
 
 /// Interface that the pool requires from a blockchain implementation.
 pub trait BlockChain {
-  /// Get an unspent output by its commitment. Will return None if the output
-  /// is spent or if it doesn't exist. The blockchain is expected to produce
-  /// a result with its current view of the most worked chain, ignoring
-  /// orphans, etc.
-  fn get_unspent(&self, output_ref: &Commitment) -> Option<transaction::Output>;
+    /// Get an unspent output by its commitment. Will return None if the output
+    /// is spent or if it doesn't exist. The blockchain is expected to produce
+    /// a result with its current view of the most worked chain, ignoring
+    /// orphans, etc.
+    fn get_unspent(&self, output_ref: &Commitment)
+        -> Result<transaction::Output, CoreError>;
 
-  /// Get the block header by output commitment (needed for spending coinbase after n blocks)
-  /// TODO - is this breaking encapsulation too much?
-  fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Option<block::BlockHeader>;
+    /// Get the block header by output commitment (needed for spending coinbase after n blocks)
+    fn get_block_header_by_output_commit(&self, commit: &Commitment)
+        -> Result<block::BlockHeader, CoreError>;
 
-  /// TODO - again, are we breaking encapsulation here?
-  fn head_header(&self) -> Option<block::BlockHeader>;
+    /// Get the block header at the head
+    fn head_header(&self) -> Result<block::BlockHeader, CoreError>;
 }
 
 /// Pool contains the elements of the graph that are connected, in full, to
