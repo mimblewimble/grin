@@ -52,7 +52,7 @@ fn sumtree_append() {
 	let _ = env_logger::init();
 
 	let t = time::get_time();
-	let data_dir = format!("./{}.{}", t.sec, t.nsec);
+	let data_dir = format!("./target/{}.{}", t.sec, t.nsec);
 	fs::create_dir_all(data_dir.clone()).unwrap();
 
 	let elems = vec![
@@ -119,7 +119,7 @@ fn sumtree_prune_compact() {
 	let _ = env_logger::init();
 
 	let t = time::get_time();
-	let data_dir = format!("./{}.{}", t.sec, t.nsec);
+	let data_dir = format!("./target/{}.{}", t.sec, t.nsec);
 	fs::create_dir_all(data_dir.clone()).unwrap();
 
 	let elems = vec![
