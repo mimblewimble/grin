@@ -10,7 +10,6 @@
 use core::core::hash;
 use core::core::block;
 use core::core::transaction;
-use core::types::CoreError;
 
 use std::collections::HashMap;
 use std::clone::Clone;
@@ -19,7 +18,7 @@ use secp::pedersen::Commitment;
 
 use std::sync::RwLock;
 
-use types::BlockChain;
+use types::{BlockChain, PoolError};
 
 /// A DummyUtxoSet for mocking up the chain
 pub struct DummyUtxoSet {
@@ -91,21 +90,21 @@ impl DummyChainImpl {
 }
 
 impl BlockChain for DummyChainImpl {
-    fn get_unspent(&self, commitment: &Commitment) -> Result<transaction::Output, CoreError> {
+    fn get_unspent(&self, commitment: &Commitment) -> Result<transaction::Output, PoolError> {
         let output = self.utxo.read().unwrap().get_output(commitment).cloned();
         match output {
             Some(o) => Ok(o),
-            None => Err(CoreError::GenericCoreError),
+            None => Err(PoolError::GenericPoolError),
         }
     }
 
     // TODO - this is not right
-    fn get_block_header_by_output_commit(&self, _: &Commitment) -> Result<block::BlockHeader, CoreError> {
+    fn get_block_header_by_output_commit(&self, _: &Commitment) -> Result<block::BlockHeader, PoolError> {
         Ok(block::BlockHeader::default())
     }
 
     // TODO - this is not right
-    fn head_header(&self) -> Result<block::BlockHeader, CoreError> {
+    fn head_header(&self) -> Result<block::BlockHeader, PoolError> {
         Ok(block::BlockHeader::default())
     }
 }

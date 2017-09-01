@@ -27,7 +27,6 @@ pub use graph;
 use core::core::block;
 use core::core::transaction;
 use core::core::hash;
-use core::types::CoreError;
 
 /// Placeholder: the data representing where we heard about a tx from.
 ///
@@ -99,6 +98,12 @@ pub enum PoolError {
     },
     /// An orphan successfully added to the orphans set
     OrphanTransaction,
+    /// TODO - wip, just getting imports working, remove this and use more specific errors
+    GenericPoolError,
+    /// TODO - is this the right level of abstraction for pool errors?
+    OutputNotFound,
+    // TODO - is this the right level of abstraction for pool errors?
+    OutputSpent,
 }
 
 /// Interface that the pool requires from a blockchain implementation.
@@ -108,14 +113,14 @@ pub trait BlockChain {
     /// a result with its current view of the most worked chain, ignoring
     /// orphans, etc.
     fn get_unspent(&self, output_ref: &Commitment)
-        -> Result<transaction::Output, CoreError>;
+        -> Result<transaction::Output, PoolError>;
 
     /// Get the block header by output commitment (needed for spending coinbase after n blocks)
     fn get_block_header_by_output_commit(&self, commit: &Commitment)
-        -> Result<block::BlockHeader, CoreError>;
+        -> Result<block::BlockHeader, PoolError>;
 
     /// Get the block header at the head
-    fn head_header(&self) -> Result<block::BlockHeader, CoreError>;
+    fn head_header(&self) -> Result<block::BlockHeader, PoolError>;
 }
 
 /// Pool contains the elements of the graph that are connected, in full, to
