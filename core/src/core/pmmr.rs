@@ -385,8 +385,9 @@ impl PruneList {
 					current = parent;
 				}
 				Err(_) => {
-					let idx = self.pruned_nodes.binary_search(&current).unwrap_err();
-					self.pruned_nodes.insert(idx, current);
+					if let Err(idx) = self.pruned_nodes.binary_search(&current) {
+						self.pruned_nodes.insert(idx, current);
+					}
 					break;
 				}
 			}
@@ -453,7 +454,6 @@ fn peaks(num: u64) -> Vec<u64> {
 	let mut peak = top;
 	'outer: loop {
 		peak = bintree_jump_right_sibling(peak);
-		//println!("peak {}", peak);
 		while peak > num {
 			match bintree_move_down_left(peak) {
 				Some(p) => peak = p,
@@ -779,38 +779,68 @@ mod test {
 			TestElem([1, 0, 0, 0]),
 		];
 
+		let orig_root: HashSum<TestElem>;
+		let sz: u64;
 		let mut ba = VecBackend::new();
 		{
 			let mut pmmr = PMMR::new(&mut ba);
 			for elem in &elems[..] {
 				pmmr.push(*elem);
 			}
-			let orig_root = pmmr.root();
+			orig_root = pmmr.root();
+			sz = pmmr.unpruned_size();
+		}
 
-			// pruning a leaf with no parent should do nothing
+		// pruning a leaf with no parent should do nothing
+		{
+			let mut pmmr = PMMR::at(&mut ba, sz);
 			pmmr.prune(16);
 			assert_eq!(orig_root, pmmr.root());
+		}
+		assert_eq!(ba.used_size(), 16);
 
-			// pruning leaves with no shared parent just removes 1 element
+		// pruning leaves with no shared parent just removes 1 element
+		{
+			let mut pmmr = PMMR::at(&mut ba, sz);
 			pmmr.prune(2);
 			assert_eq!(orig_root, pmmr.root());
+		}
+		assert_eq!(ba.used_size(), 15);
 
+		{
+			let mut pmmr = PMMR::at(&mut ba, sz);
 			pmmr.prune(4);
 			assert_eq!(orig_root, pmmr.root());
+		}
+		assert_eq!(ba.used_size(), 14);
 
-			// pruning a non-leaf node has no effect
+		// pruning a non-leaf node has no effect
+		{
+			let mut pmmr = PMMR::at(&mut ba, sz);
 			pmmr.prune(3);
 			assert_eq!(orig_root, pmmr.root());
+		}
+		assert_eq!(ba.used_size(), 14);
 
-			// pruning sibling removes subtree
+		// pruning sibling removes subtree
+		{
+			let mut pmmr = PMMR::at(&mut ba, sz);
 			pmmr.prune(5);
 			assert_eq!(orig_root, pmmr.root());
+		}
+		assert_eq!(ba.used_size(), 12);
 
-			// pruning all leaves under level >1 removes all subtree
+		// pruning all leaves under level >1 removes all subtree
+		{
+			let mut pmmr = PMMR::at(&mut ba, sz);
 			pmmr.prune(1);
 			assert_eq!(orig_root, pmmr.root());
+		}
+		assert_eq!(ba.used_size(), 9);
 
-			// pruning everything should only leave us the peaks
+		// pruning everything should only leave us the peaks
+		{
+			let mut pmmr = PMMR::at(&mut ba, sz);
 			for n in 1..16 {
 				pmmr.prune(n);
 			}

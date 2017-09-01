@@ -106,10 +106,15 @@ impl AppendOnlyFile {
 			// in which case we skip 
 			let mut buf_start = 0;
 			while prune_offs[prune_pos] >= read && prune_offs[prune_pos] < read + len {
-				writer.write_all(&buf[buf_start..prune_pos])?;
-				buf_start = (prune_offs[prune_pos] + prune_len) as usize;
+				let prune_at = prune_offs[prune_pos] as usize;
+				if prune_at != buf_start {
+					writer.write_all(&buf[buf_start..prune_at])?;
+				}
+				buf_start = prune_at + (prune_len as usize);
 				if prune_offs.len() > prune_pos + 1 {
 					prune_pos += 1;
+				} else {
+					break;
 				}
 			}
 			writer.write_all(&mut buf[buf_start..(len as usize)])?;
@@ -235,11 +240,8 @@ where
 			return self.buffer.get((pos_sz - self.buffer_index) as u64);
 		}
 
-		// The MMR starts at 1, our backend starts at 0
-		let pos = position - 1;
-
 		// Second, check if this position has been pruned in the remove log
-		if self.remove_log.includes(pos) {
+		if self.remove_log.includes(position) {
 			return None;
 		}
 
@@ -248,6 +250,9 @@ where
 		if let None = shift {
 			return None
 		}
+
+		// The MMR starts at 1, our binary backend starts at 0
+		let pos = position - 1;
 
 		// Must be on disk, doing a read at the correct position
 		let record_len = 32 + T::sum_len();
@@ -267,7 +272,9 @@ where
 
 	/// Remove HashSums by insertion position
 	fn remove(&mut self, positions: Vec<u64>) -> Result<(), String> {
-		self.buffer.remove(positions.clone()).unwrap();
+		if self.buffer.used_size() > 0 {
+			self.buffer.remove(positions.clone()).unwrap();
+		}
 		self.remove_log.append(positions).map_err(|e| {
 			format!("Could not write to log storage, disk full? {:?}", e)
 		})
@@ -337,7 +344,7 @@ where
 		let record_len = (32 + T::sum_len()) as u64;
 		let to_rm = self.remove_log.removed.iter().map(|pos| {
 			let shift = self.pruned_nodes.get_shift(*pos);
-			(*pos - shift.unwrap()) * record_len
+			(*pos - 1 - shift.unwrap()) * record_len
 		}).collect();
 		self.hashsum_file.save_prune(tmp_prune_file.clone(), to_rm, record_len)?;
 
@@ -353,7 +360,7 @@ where
 		self.hashsum_file.sync()?;
 
 		// 4. truncate the rm log
-		self.remove_log.truncate()?;
+		//self.remove_log.truncate()?;
 
 		Ok(())
 	}

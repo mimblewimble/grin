@@ -51,7 +51,8 @@ impl Writeable for TestElem {
 fn sumtree_append() {
 	let _ = env_logger::init();
 
-	let data_dir = format!("./{}", time::get_time().sec);
+	let t = time::get_time();
+	let data_dir = format!("./{}.{}", t.sec, t.nsec);
 	fs::create_dir_all(data_dir.clone()).unwrap();
 
 	let elems = vec![
@@ -110,5 +111,69 @@ fn sumtree_append() {
 	{
 		let pmmr = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(pmmr.root(), sum9);
+	}
+}
+
+#[test]
+fn sumtree_prune_compact() {
+	let _ = env_logger::init();
+
+	let t = time::get_time();
+	let data_dir = format!("./{}.{}", t.sec, t.nsec);
+	fs::create_dir_all(data_dir.clone()).unwrap();
+
+	let elems = vec![
+		TestElem([0, 0, 0, 1]),
+		TestElem([0, 0, 0, 2]),
+		TestElem([0, 0, 0, 3]),
+		TestElem([0, 0, 0, 4]),
+		TestElem([0, 0, 0, 5]),
+		TestElem([0, 0, 0, 6]),
+		TestElem([0, 0, 0, 7]),
+		TestElem([0, 0, 0, 8]),
+		TestElem([1, 0, 0, 0]),
+	];
+
+	// setup the mmr store with all elements
+	let mmr_size: u64;
+	let mut backend = store::sumtree::PMMRBackend::new(data_dir).unwrap();
+	{
+		let mut pmmr = PMMR::new(&mut backend);
+		for elem in &elems[..] {
+			pmmr.push(elem.clone());
+		}
+		mmr_size = pmmr.unpruned_size();
+	}
+	backend.sync().unwrap();
+	
+	// save the root
+	let root: HashSum<TestElem>;
+	{
+		let pmmr = PMMR::at(&mut backend, mmr_size);
+		root = pmmr.root();
+	}
+
+	// pruning some choice nodes
+	{
+		let mut pmmr = PMMR::at(&mut backend, mmr_size);
+		pmmr.prune(1);
+		pmmr.prune(4);
+		pmmr.prune(5);
+	}
+	backend.sync().unwrap();
+
+	// check the root
+	{
+		let pmmr = PMMR::at(&mut backend, mmr_size);
+		assert_eq!(root, pmmr.root());
+	}
+
+	// compact
+	backend.check_compact(2).unwrap();
+
+	// recheck the root
+	{
+		let pmmr = PMMR::at(&mut backend, mmr_size);
+		assert_eq!(root, pmmr.root());
 	}
 }
