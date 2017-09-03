@@ -50,7 +50,16 @@ fn start_from_config_file(mut global_config: GlobalConfig) {
 		global_config.config_file_path.unwrap().to_str().unwrap()
 	);
 
-	global::set_mining_mode(global_config.members.as_mut().unwrap().server.clone().mining_parameter_mode.unwrap());
+	global::set_mining_mode(
+		global_config
+			.members
+			.as_mut()
+			.unwrap()
+			.server
+			.clone()
+			.mining_parameter_mode
+			.unwrap(),
+	);
 
 	grin::Server::start(global_config.members.as_mut().unwrap().server.clone()).unwrap();
 	loop {
@@ -66,17 +75,35 @@ fn main() {
 	// found so that the switches override the
 	// global config file
 
-  // This will return a global config object,
-	// which will either contain defaults for all // of the config structures or a configuration
+	// This will return a global config object,
+	// which will either contain defaults for all // of the config structures or a
+	// configuration
 	// read from a config file
 
-	let mut global_config = GlobalConfig::new(None).unwrap_or_else(|e|{
+	let mut global_config = GlobalConfig::new(None).unwrap_or_else(|e| {
 		panic!("Error parsing config file: {}", e);
 	});
 
 	if global_config.using_config_file {
-		info!("Using configuration file at: {}", global_config.config_file_path.clone().unwrap().to_str().unwrap());
-		global::set_mining_mode(global_config.members.as_mut().unwrap().server.clone().mining_parameter_mode.unwrap());
+		info!(
+			"Using configuration file at: {}",
+			global_config
+				.config_file_path
+				.clone()
+				.unwrap()
+				.to_str()
+				.unwrap()
+		);
+		global::set_mining_mode(
+			global_config
+				.members
+				.as_mut()
+				.unwrap()
+				.server
+				.clone()
+				.mining_parameter_mode
+				.unwrap(),
+		);
 	}
 
 	let args = App::new("Grin")
@@ -136,7 +163,8 @@ fn main() {
 				.arg(Arg::with_name("data_dir")
                      .short("dd")
                      .long("data_dir")
-                     .help("Directory in which to store wallet files (defaults to current directory)")
+                     .help("Directory in which to store wallet files (defaults to current \
+                     directory)")
                      .takes_value(true))
 				.arg(Arg::with_name("port")
                      .short("r")
@@ -146,17 +174,23 @@ fn main() {
 				.arg(Arg::with_name("api_server_address")
                      .short("a")
                      .long("api_server_address")
-                     .help("The api address of a running node on which to check inputs and post transactions")
-                     .takes_value(true))	 	 
+                     .help("The api address of a running node on which to check inputs and \
+                     post transactions")
+                     .takes_value(true))
                 .subcommand(SubCommand::with_name("receive")
-                            .about("Run the wallet in receiving mode. If an input file is provided, will process it, otherwise runs in server mode waiting for send requests.")
+                            .about("Run the wallet in receiving mode. If an input file is \
+                            provided, will process it, otherwise runs in server mode waiting \
+                            for send requests.")
                             .arg(Arg::with_name("input")
                                  .help("Partial transaction to receive, expects as a JSON file.")
                                  .short("i")
                                  .long("input")
                                  .takes_value(true)))
                 .subcommand(SubCommand::with_name("send")
-                            .about("Builds a transaction to send someone some coins. By default, the transaction will just be printed to stdout. If a destination is provided, the command will attempt to contact the receiver at that address and send the transaction directly.")
+                            .about("Builds a transaction to send someone some coins. By default, \
+                            the transaction will just be printed to stdout. If a destination is \
+                            provided, the command will attempt to contact the receiver at that \
+                            address and send the transaction directly.")
                             .arg(Arg::with_name("amount")
                                  .help("Amount to send in the smallest denomination")
                                  .index(1))
