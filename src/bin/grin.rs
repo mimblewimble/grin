@@ -61,6 +61,24 @@ fn start_from_config_file(mut global_config: GlobalConfig) {
 fn main() {
 	env_logger::init().unwrap();
 
+	// First, load a global config object,
+	// then modify that object with any switches
+	// found so that the switches override the
+	// global config file
+
+  // This will return a global config object,
+	// which will either contain defaults for all // of the config structures or a configuration
+	// read from a config file
+
+	let mut global_config = GlobalConfig::new(None).unwrap_or_else(|e|{
+		panic!("Error parsing config file: {}", e);
+	});
+
+	if global_config.using_config_file {
+		info!("Using configuration file at: {}", global_config.config_file_path.clone().unwrap().to_str().unwrap());
+		global::set_mining_mode(global_config.members.as_mut().unwrap().server.clone().mining_parameter_mode.unwrap());
+	}
+
 	let args = App::new("Grin")
     .version("0.1")
     .author("The Grin Team")
@@ -74,7 +92,7 @@ fn main() {
                      .long("port")
                      .help("Port to start the P2P server on")
                      .takes_value(true))
-				.arg(Arg::with_name("api_port")
+                .arg(Arg::with_name("api_port")
                      .short("a")
                      .long("api_port")
                      .help("Port on which to start the api server (e.g. transaction pool api)")
@@ -89,11 +107,11 @@ fn main() {
                      .short("m")
                      .long("mine")
                      .help("Starts the debugging mining loop"))
-				.arg(Arg::with_name("wallet_url")
+                .arg(Arg::with_name("wallet_url")
                      .short("w")
                      .long("wallet_url")
                      .help("A listening wallet receiver to which mining rewards will be sent")
-					 .takes_value(true))
+                .takes_value(true))
                 .subcommand(SubCommand::with_name("start")
                             .about("Start the Grin server as a daemon"))
                 .subcommand(SubCommand::with_name("stop")
@@ -152,7 +170,7 @@ fn main() {
 	match args.subcommand() {
 		// server commands and options
 		("server", Some(server_args)) => {
-			server_command(server_args);
+			server_command(server_args, global_config);
 		}
 
 		// client commands and options
@@ -170,33 +188,18 @@ fn main() {
 			wallet_command(wallet_args);
 		}
 
-		// If nothing is specified, try to load up and use a config file instead
-		// this should possibly become the way to configure most things
+		// If nothing is specified, try to just use the config file instead
+		// this could possibly become the way to configure most things
 		// with most command line options being phased out
 		_ => {
-			// This will return a global config object,
-			// which will either contain defaults for all
-			// of the config structures or a configuration
-			// read from a config file
-
-			let global_config = GlobalConfig::new(None);
-			match global_config {
-				Ok(gc) => {
-					if gc.using_config_file {
-						start_from_config_file(gc);
-					} else {
-						// won't attempt to just start with defaults,
-						// and will reject
-						println!("Unknown command, and no configuration file was found.");
-						println!("Use 'grin help' for a list of all commands.");
-					}
-				}
-				Err(e) => {
-					println!("{}", e);
-				}
+			if global_config.using_config_file {
+				start_from_config_file(global_config);
+			} else {
+				// won't attempt to just start with defaults,
+				// and will reject
+				println!("Unknown command, and no configuration file was found.");
+				println!("Use 'grin help' for a list of all commands.");
 			}
-
-
 		}
 	}
 }
@@ -205,11 +208,11 @@ fn main() {
 /// stopping the Grin blockchain server. Processes all the command line
 /// arguments
 /// to build a proper configuration and runs Grin with that configuration.
-fn server_command(server_args: &ArgMatches) {
+fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 	info!("Starting the Grin server...");
 
 	// just get defaults from the global config
-	let mut server_config = GlobalConfig::default().members.unwrap().server;
+	let mut server_config = global_config.members.unwrap().server;
 
 	if let Some(port) = server_args.value_of("port") {
 		server_config.p2p_config.as_mut().unwrap().port = port.parse().unwrap();
@@ -236,10 +239,6 @@ fn server_command(server_args: &ArgMatches) {
 		server_config.seeding_type = grin::Seeding::List;
 		server_config.seeds = Some(seeds.map(|s| s.to_string()).collect());
 	}
-
-	/*let mut sc = GlobalConfig::default();
-	sc.members.as_mut().unwrap().server = server_config.clone();
-	println!("{}", sc.ser_config().unwrap());*/
 
 	// start the server in the different run modes (interactive or daemon)
 	match server_args.subcommand() {
