@@ -1,6 +1,6 @@
 # Range Proofs - A Primer
 
-This document is intended to give the reader a high level conceptual overview of what Range Proofs are and how they're contructed. Understanding range proofs is not 100% necessary in order to understand Mimblewimble, however it is necessary to understand that the blinding factor used to create an output on the block chain must be known in order to create a valid range proof. An explantion of why this is the case follows, by giving an elementary example of the creation of a range proof. 
+This document is intended to give the reader a high level conceptual overview of what range proofs are and how they're contructed. Understanding range proofs is not 100% necessary in order to understand Mimblewimble, however it is necessary to understand that the blinding factor used to create an output on the block chain must be known in order to create a valid range proof. An explantion of why this is the case follows through an elementary example of the creation of a range proof. 
 
 Note that this document is derived from Greg Maxwell's [Confidential Transactions Paper](https://people.xiph.org/~greg/confidential_values.txt), in which the concept of a range proof originated. This document simply further illustrates the concepts found in that paper. [Further reading](#further-reading) is provided at the end of the document.
 
@@ -20,13 +20,13 @@ Firstly, rember a commitment actually appears in the UTXO set as a large, mostly
 C = 2342384723497239482384234.... 
 ```
 
-This number is made up of two public keys, one that only exists as a point on curve G, and one that only exists on curve H. (More specifically, the key 113*G is only usable for signature operations when using generator G as a parameter to the ECDSA algorithm, and the key 20*H can only create a signature when using the generator H as a parameter). In reality, the private key 113 is a very large 256 bit integer while 20 is a relatively tiny value that represents a usable currency amount, so the large number that appears on the blockchain is made up of something that looks more like:
+This number is made up of two public keys, one that only exists as a point on curve G, and one that only exists on curve H. (More specifically, the key 113G is only usable for signature operations when using generator G as a parameter to the ECDSA algorithm, and the key 20H can only create a signature when using the generator H as a parameter). In reality, the private key 113 is a very large 256 bit integer while 20 is a relatively tiny value that represents a usable currency amount, so the large number that appears on the blockchain is made up of something that looks more like:
 
 ```
 C = (32849234923..74932897423987G + 20H)
 ```
 
-Our commitments are of the form (bG + vH), where b is a blinding factor and v is the value. It's important to note that bG is a valid public key on G, and vH is a valid public key on H, but the large number created by adding these two values together is more or less meaningless taken on its own. The sum of these two values, for any possible values of b or g, will not create a public key that's valid using either generator G or H, and G and H don't "add together" to create a third generator.
+Our commitments are of the form (bG + vH), where b is a blinding factor and v is the value. It's important to note that bG is a valid public key on G, and vH is a valid public key on H, but the large number created by adding these two values together is more or less meaningless in the context of either G or H taken on its own. The sum of these two values, for any possible values of b or g, will not create a public key that's valid using either generator G or H.
 
 ## Commitments to Zero
 
@@ -103,13 +103,15 @@ or
 (24G + 1H) + (25G + 2H) + (26G + 4H) + (27G + 8H) + (11G + 16H) = C
 ```
 
-Obviously, this summation is not necessarily true because 1+2+4+8+16 is not equal to 20. But note that the values for v have been deliberately chosen to be powers of two. Therefore, I can use them to create the binary representation of any number up to 2^5, so long as I assume that some of the values actually chosen for v won't be what's shown above, but 0 instead. And a method of proving whether a commitment is a commitment to 0 OR a particular value has just been demonstrated.
+Obviously, this summation is not necessarily true because 1+2+4+8+16 is not equal to 20. But note that the values for v have been deliberately chosen to be powers of two. Therefore, I can use them to create the binary representation of any number up to 2<sup>5</sup> so long as I assume that some of the values actually chosen for v won't be what's shown above, but 0 instead. And a method of proving whether a commitment is a commitment to 0 OR a particular value has just been demonstrated.
 
 So all I need to do is provide a ring signature over each commitment value C1..C5, which demonstrates that:
 
+```
 C1 is 1 OR 0 - C2 is 2 OR 0 - C3 is 4 OR 0 - C4 is 8 OR 0 - C5 is 16 OR 0
+```
 
-Therefore, so long as my committed value can be represented in less than 2^5 bits, I've proven that its value must lie somewhere between 0 and 2^5 without revealing anything further about its value. 
+Therefore, so long as my committed value can be represented in less than 2<sup>5</sup> bits, I've proven that its value must lie somewhere between 0 and 2<sup>5</sup> without revealing anything further about its value. 
 
 ## Conclusion
 
@@ -117,11 +119,11 @@ This is the essence of a Range Proof, used to demonstrate that commitments are p
 
 ## Further Details
 
-Note that for efficiency reasons, the range proofs used in Grin actually build up numbers in base 4 instead of base 2. Binary is easier for the sake of the example, as most people aren't as familiar with base 4 arithmetic.
+Note that for efficiency reasons, the range proofs used in Grin actually build up numbers in base 4 instead of base 2. However, binary is easier for the sake of the example, as most people aren't as familiar with base 4 arithmetic.
 
 ## FAQ
 
-Q: If I have an output O=bG+vH on the blockchain, and there is only a finite number of usable amounts for vH, why can't I reveal the amount by just subtracting each possible vH value from O until I get a value that can be used to create a signature on H? 
+Q: If I have an output `O=bG+vH` on the blockchain, and there is only a finite number of usable amounts for vH, why can't I reveal the amount by just subtracting each possible vH value from O until I get a value that can be used to create a signature on H? 
 
 # Further Reading
 
