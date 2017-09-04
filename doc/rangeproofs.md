@@ -26,7 +26,7 @@ This number is made up of two public keys, one that only exists as a point on cu
 C = (32849234923..74932897423987G + 20H)
 ```
 
-Our commitments are of the form (bG + vH), where b is a blinding factor and v is the value. It's important to note that bG is a valid public key on G, and vH is a valid public key on H, but the large number created by adding these two values together is more or less meaningless in the context of either G or H taken on its own. The sum of these two values, for any possible values of b or g, will not create a public key that's valid using either generator G or H.
+Our commitments are of the form (bG + vH), where b is a blinding factor and v is the value. It's important to note that bG is a valid public key on G, and vH is a valid public key on H, but the large number created by adding these two values together is more or less meaningless in the context of either G or H taken on its own. The sum of these two values, for any possible values of b or v, will not create a public key that's valid using either generator G or H.
 
 ## Commitments to Zero
 
