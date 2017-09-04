@@ -260,6 +260,8 @@ the number. We won't elaborate on the range proof, but you just need to know
 that for any `r.G + v.H` we can build a proof that will show that _v_ is greater than
 zero and does not overflow.
 
+It's also important to note that in order to create a valid range proof from the example above, both of the values 113 and 28 used in creating and signing for the excess value must be known. The reason for this, as well as a more detailed description of range proofs are further detailed in the [range proof primer](rangeproofs.md).
+
 <a name="transaction-conclusion"></a>
 ### Putting It All Together
 
