@@ -123,7 +123,7 @@ Note that for efficiency reasons, the range proofs used in Grin actually build u
 
 ## FAQ
 
-Q: If I have an output `C=bG+vH` on the blockchain, and there is only a finite number of usable amounts for vH, why can't I reveal the amount by just subtracting each possible vH value from O until I get a value that can be used to create a signature on H? 
+Q: If I have an output `C=bG+vH` on the blockchain, and there is only a finite number of usable amounts for vH, why can't I reveal the amount by just subtracting each possible vH value from C until I get a value that can be used to create a signature on H? 
 
 # Further Reading
 
