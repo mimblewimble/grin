@@ -1,31 +1,83 @@
-# Basic Build Instructions on Linux/Unix
+# Grin - Build, Configuration, and Running
 
-## Install Rust
+# Building
 
+## Supported Platforms
+
+Note that it's still too early in development to declare 'officially supported' plaforms, but at the moment, the situation is:
+
+* Linux - Primary platform, as most development and testing is happening here
+* Mac OS - Known to work, but may be slight hiccups
+* Windows - Known to compile, but working status unknown, and not a focus for the development team at present. Note that no mining plugins will be present on a Windows system after building Grin.
+
+The instructions below will assume a Linux system.
+
+## Build Prerequisites
+
+In order to compile and run Grin on your machine, you should have installed:
+
+* <b>Git</b> - to clone the repository
+* <b>cmake</b> - 3.2 or greater should be installed and on your $PATH. Used by the build to compile the mining plugins found in the included [Cuckoo Miner](https://github.com/mimblewimble/cuckoo-miner) 
+* <b>Rust</b> - via [Rustup](https://www.rustup.rs/) - Can be installed via your package manager or manually via the following commands:
+```
     curl https://sh.rustup.rs -sSf | sh
     source $HOME/.cargo/env
+```
 
-or see instructions at:
-https://www.rust-lang.org
+## Build Instructions (Linux/Unix)
 
-## Install cmake
 
-grin needs cmake 3.8 or greater to compile the mining plugins found in [Cuckoo Miner](https://github.com/mimblewimble/cuckoo-miner). See
-your distribution's instructions for ensuring cmake is installed and
-available on the path.  
-
-## Clone Grin
+### Clone Grin
 
     git clone https://github.com/ignopeverell/grin.git
 
-## Build Grin
+### Build Grin
 
     cd grin
     cargo build
 
-After compiling you'll get a binary at target/debug/grin. Place that in your path. Running 'grin help' should print a helpful message. 
+## What have I just built?
 
-## Basic Execution
+Provided all of the prerequisites were installed and there were no issues, there should be 3 things in your project directory that you need to pay attention to in order to configure and run grin. These are:
+
+* The Grin binary, which should be located in your project directory as target/debug/grin
+
+* A set of mining plugins, which should be in the 'plugins' directory located next to the grin executable
+
+* A configuration file in the root project directory named grin.toml 
+
+By default, executing:
+
+```
+RUST_LOG=grin=debug cargo run
+```
+from the build directory will run grin using the defaults in the grin.toml file, creating a new blockchain locally and mining using a simple version of the embedded miner.
+
+For the time being, it's recommended just to put the built version of grin on your path, e.g. via:
+
+```
+export $PATH /path/to/grin/dir/target/grin:$PATH
+```
+
+# Configuration
+
+Grin is currently configured via a combination of configuration file and command line switches, with any provided switches overriding the contents of the configuration file. To see a list of commands and switches use:
+
+```
+grin help
+```
+
+At startup, grin looks for a configuration file called 'grin.toml' in the following places in the following order, using the first one it finds:
+
+* The current working directory
+* The directory in which the grin executable is located
+* {USER_HOME}/.grin
+
+If no configuration file is found, command line switches must be given to grin in order to start it. If a configuration file is found but no command line switches are provided, grin starts in server mode using the values found in the configuration file.
+
+At present, the relevant modes of operation are 'server' and 'wallet'. When running in server mode, any command line switches provided will override the values found in the configuration file. Running in wallet mode does not currently use any values from the configuration file.
+
+# Basic Execution
 
 For a basic example simulating a single node network, create a directory called 'node1' and change your working directory to it. You'll use this directory to run a wallet and create a new blockchain via a server running in mining mode.
 
@@ -38,7 +90,7 @@ Before running your mining server, a wallet server needs to be set up and listen
     node1$ RUST_LOG=grin=info grin server -m run
 
 This creates a new .grin database directory in the current directory, and begins mining new blocks (with no transactions, for now). Note this starts two services listening on two default ports, 
-port 13414 for the peer-to-peer (P2P) service which keeps all nodes synchronised, and 13415 for the Rest API service used to verify transactions and post new transactions to the pool (for example). These ports can be configured via command line arguments.
+port 13414 for the peer-to-peer (P2P) service which keeps all nodes synchronised, and 13415 for the Rest API service used to verify transactions and post new transactions to the pool (for example). These ports can be configured via command line switches, or via a grin.toml file in the working directory.
 
 Let the mining server find a few blocks, then stop (just ctrl-c) the mining server and the wallet server. You'll notice grin has created a database directory (.grin) in which the blockchain and peer data is stored. There should also be a wallet.dat file in the current directory, which contains a few coinbase mining rewards created each time the server mines a new block.
 
@@ -95,7 +147,4 @@ use node 2's API listener to validate our transaction inputs before sending:
 Your terminal windows should all light up now. Node 1 will check its inputs against node 2, and then send a partial transaction to node 3's wallet listener. Node 3 has been configured to 
 send signed and finalised transactions to the api listener on node 1, which should then add the transaction to the next block and validate it via mining.
 
-You can feel free to try any number of permutations or combinations of the above, just note that grin is very new and under active development, so your mileage may vary.
-
-
-
+You can feel free to try any number of permutations or combinations of the above, just note that grin is very new and under active development, so your mileage may vary. You can also use a separate 'grin.toml' file in each server directory to simplify command line switches.
