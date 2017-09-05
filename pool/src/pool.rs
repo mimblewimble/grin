@@ -120,7 +120,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
         let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
         tx.validate(&secp).map_err(|_| PoolError::Invalid)?;
 
-        // The first check invovles ensuring that an identical transaction is
+        // The first check involves ensuring that an identical transaction is
         // not already in the pool's transaction set.
         // A non-authoritative similar check should be performed under the
         // pool's read lock before we get to this point, which would catch the
@@ -480,7 +480,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
 #[cfg(test)]
 mod tests {
     use super::*;
-	use types::*;
+    use types::*;
     use secp::{Secp256k1, ContextFlag, constants};
     use secp::key;
     use core::core::build;
@@ -503,7 +503,7 @@ mod tests {
     fn test_basic_pool_add() {
         let mut dummy_chain = DummyChainImpl::new();
 
-        let parent_transaction = test_transaction(vec![5,6,7],vec![11,4]);
+        let parent_transaction = test_transaction(vec![5,6,7], vec![11,4]);
         // We want this transaction to be rooted in the blockchain.
         let new_utxo = DummyUtxoSet::empty().
             with_output(test_output(5)).
@@ -645,8 +645,60 @@ mod tests {
     }
 
     #[test]
+    fn test_immature_coinbase() {
+        let mut dummy_chain = DummyChainImpl::new();
+        let coinbase_output = test_coinbase_output(15);
+        dummy_chain.update_utxo_set(DummyUtxoSet::empty().with_output(coinbase_output));
+
+        let chain_ref = Arc::new(dummy_chain);
+        let pool = RwLock::new(test_setup(&chain_ref));
+
+        {
+            let mut write_pool = pool.write().unwrap();
+
+            let coinbase_header = block::BlockHeader {height: 1, ..block::BlockHeader::default()};
+            chain_ref.store_header_by_output_commitment(coinbase_output.commitment(), &coinbase_header);
+
+            let head_header = block::BlockHeader {height: 2, ..block::BlockHeader::default()};
+            chain_ref.store_head_header(&head_header);
+
+            let txn = test_transaction(vec![15], vec![10, 4]);
+            let result = write_pool.add_to_memory_pool(test_source(), txn);
+            match result {
+                Err(PoolError::ImmatureCoinbase{header: _, output: out}) => {
+                    assert_eq!(out, coinbase_output.commitment());
+                },
+                _ => panic!("expected ImmatureCoinbase error here"),
+            };
+
+            let head_header = block::BlockHeader {height: 1001, ..block::BlockHeader::default()};
+            chain_ref.store_head_header(&head_header);
+
+            let txn = test_transaction(vec![15], vec![10, 4]);
+            let result = write_pool.add_to_memory_pool(test_source(), txn);
+            match result {
+                Err(PoolError::ImmatureCoinbase{header: _, output: out}) => {
+                    assert_eq!(out, coinbase_output.commitment());
+                },
+                _ => panic!("expected ImmatureCoinbase error here"),
+            };
+
+            let head_header = block::BlockHeader {height: 1002, ..block::BlockHeader::default()};
+            chain_ref.store_head_header(&head_header);
+
+            let txn = test_transaction(vec![15], vec![10, 4]);
+            let result = write_pool.add_to_memory_pool(test_source(), txn);
+            match result {
+                Ok(_) => {},
+                Err(_) => panic!("this should not return an error here"),
+            };
+        }
+    }
+
+    #[test]
     /// Testing an expected orphan
     fn test_add_orphan() {
+        // TODO we need a test here
     }
 
     #[test]
@@ -906,6 +958,17 @@ mod tests {
         let output_commitment = ec.commit(value, output_key).unwrap();
         transaction::Output{
             features: transaction::DEFAULT_OUTPUT,
+            commit: output_commitment,
+            proof: ec.range_proof(0, value, output_key, output_commitment)}
+    }
+
+    /// Deterministically generate a coinbase output defined by our test scheme
+    fn test_coinbase_output(value: u64) -> transaction::Output {
+        let ec = Secp256k1::with_caps(ContextFlag::Commit);
+        let output_key = test_key(value);
+        let output_commitment = ec.commit(value, output_key).unwrap();
+        transaction::Output{
+            features: transaction::COINBASE_OUTPUT,
             commit: output_commitment,
             proof: ec.range_proof(0, value, output_key, output_commitment)}
     }

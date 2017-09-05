@@ -102,7 +102,7 @@ pub enum PoolError {
     GenericPoolError,
     /// TODO - is this the right level of abstraction for pool errors?
     OutputNotFound,
-    // TODO - is this the right level of abstraction for pool errors?
+    /// TODO - is this the right level of abstraction for pool errors?
     OutputSpent,
 }
 
