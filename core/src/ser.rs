@@ -327,6 +327,30 @@ impl_int!(u32, write_u32, read_u32);
 impl_int!(u64, write_u64, read_u64);
 impl_int!(i64, write_i64, read_i64);
 
+impl<T> Readable for Vec<T> where T: Readable {
+	fn read(reader: &mut Reader) -> Result<Vec<T>, Error> {
+		let mut buf = Vec::new();
+		loop {
+			let elem = T::read(reader);
+			match elem {
+				Ok(e) => buf.push(e),
+				Err(Error::IOErr(ref ioerr)) if ioerr.kind() == io::ErrorKind::UnexpectedEof => break,
+				Err(e) => return Err(e),
+			}
+		}
+		Ok(buf)
+	}
+}
+
+impl<T> Writeable for Vec<T> where T: Writeable {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		for elmt in self {
+			elmt.write(writer)?;
+		}
+		Ok(())
+	}
+}
+
 impl<'a, A: Writeable> Writeable for &'a A {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		Writeable::write(*self, writer)
@@ -383,12 +407,6 @@ impl<A: Readable, B: Readable, C: Readable, D: Readable> Readable for (A, B, C, 
 impl Writeable for [u8; 4] {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_bytes(self)
-	}
-}
-
-impl Writeable for Vec<u8> {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_fixed_bytes(self)
 	}
 }
 
