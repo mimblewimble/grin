@@ -23,70 +23,17 @@ use core::ser::*;
 use core::core::pmmr::{PMMR, Summable, HashSum, Backend};
 use core::core::hash::Hashed;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-struct TestElem([u32; 4]);
-impl Summable for TestElem {
-	type Sum = u64;
-	fn sum(&self) -> u64 {
-		// sums are not allowed to overflow, so we use this simple
-		// non-injective "sum" function that will still be homomorphic
-		self.0[0] as u64 * 0x1000 + self.0[1] as u64 * 0x100 + self.0[2] as u64 * 0x10 +
-			self.0[3] as u64
-	}
-	fn sum_len() -> usize {
-		8
-	}
-}
-
-impl Writeable for TestElem {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		try!(writer.write_u32(self.0[0]));
-		try!(writer.write_u32(self.0[1]));
-		try!(writer.write_u32(self.0[2]));
-		writer.write_u32(self.0[3])
-	}
-}
-
 #[test]
 fn sumtree_append() {
-	let _ = env_logger::init();
-
-	let t = time::get_time();
-	let data_dir = format!("./target/{}.{}", t.sec, t.nsec);
-	fs::create_dir_all(data_dir.clone()).unwrap();
-
-	let elems = vec![
-		TestElem([0, 0, 0, 1]),
-		TestElem([0, 0, 0, 2]),
-		TestElem([0, 0, 0, 3]),
-		TestElem([0, 0, 0, 4]),
-		TestElem([0, 0, 0, 5]),
-		TestElem([0, 0, 0, 6]),
-		TestElem([0, 0, 0, 7]),
-		TestElem([0, 0, 0, 8]),
-		TestElem([1, 0, 0, 0]),
-	];
+	let (data_dir, elems) = setup();
+	let mut backend = store::sumtree::PMMRBackend::new(data_dir).unwrap();
 
 	// adding first set of 4 elements and sync
-	let mut mmr_size: u64;
-	let mut backend = store::sumtree::PMMRBackend::new(data_dir).unwrap();
-	{
-		let mut pmmr = PMMR::new(&mut backend);
-		for elem in &elems[0..4] {
-			pmmr.push(elem.clone());
-		}
-		mmr_size = pmmr.unpruned_size();
-	}
+	let mut mmr_size = load(0, &elems[0..4], &mut backend);
 	backend.sync().unwrap();
 
 	// adding the rest and sync again
-	{
-		let mut pmmr = PMMR::at(&mut backend, mmr_size);
-		for elem in &elems[4..elems.len()] {
-			pmmr.push(elem.clone());
-		}
-		mmr_size = pmmr.unpruned_size();
-	}
+	mmr_size = load(mmr_size, &elems[4..9], &mut backend);
 	backend.sync().unwrap();
 
 	// check the resulting backend store and the computation of the root
@@ -116,34 +63,11 @@ fn sumtree_append() {
 
 #[test]
 fn sumtree_prune_compact() {
-	let _ = env_logger::init();
-
-	let t = time::get_time();
-	let data_dir = format!("./target/{}.{}", t.sec, t.nsec);
-	fs::create_dir_all(data_dir.clone()).unwrap();
-
-	let elems = vec![
-		TestElem([0, 0, 0, 1]),
-		TestElem([0, 0, 0, 2]),
-		TestElem([0, 0, 0, 3]),
-		TestElem([0, 0, 0, 4]),
-		TestElem([0, 0, 0, 5]),
-		TestElem([0, 0, 0, 6]),
-		TestElem([0, 0, 0, 7]),
-		TestElem([0, 0, 0, 8]),
-		TestElem([1, 0, 0, 0]),
-	];
+	let (data_dir, elems) = setup();
 
 	// setup the mmr store with all elements
-	let mmr_size: u64;
 	let mut backend = store::sumtree::PMMRBackend::new(data_dir).unwrap();
-	{
-		let mut pmmr = PMMR::new(&mut backend);
-		for elem in &elems[..] {
-			pmmr.push(elem.clone());
-		}
-		mmr_size = pmmr.unpruned_size();
-	}
+	let mmr_size = load(0, &elems[..], &mut backend);
 	backend.sync().unwrap();
 	
 	// save the root
@@ -175,5 +99,101 @@ fn sumtree_prune_compact() {
 	{
 		let pmmr = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(root, pmmr.root());
+	}
+}
+
+#[test]
+fn sumtree_reload() {
+	let (data_dir, elems) = setup();
+
+	// set everything up with a first backend
+	let mmr_size: u64;
+	let root: HashSum<TestElem>;
+	{
+		let mut backend = store::sumtree::PMMRBackend::new(data_dir.clone()).unwrap();
+		mmr_size = load(0, &elems[..], &mut backend);
+		backend.sync().unwrap();
+		
+		// save the root and prune some nodes so we have prune data
+		{
+			let mut pmmr = PMMR::at(&mut backend, mmr_size);
+			root = pmmr.root();
+			pmmr.prune(1);
+			pmmr.prune(4);
+		}
+		backend.sync().unwrap();
+		backend.check_compact(1).unwrap();
+		backend.sync().unwrap();
+
+		// prune some more to get rm log data
+		{
+			let mut pmmr = PMMR::at(&mut backend, mmr_size);
+			pmmr.prune(5);
+		}
+		backend.sync().unwrap();
+	}
+
+	// create a new backend and check everything is kosher
+	{
+		let mut backend = store::sumtree::PMMRBackend::new(data_dir).unwrap();
+		{
+			let pmmr = PMMR::at(&mut backend, mmr_size);
+			assert_eq!(root, pmmr.root());
+		}
+		assert_eq!(backend.get(5), None);
+	}
+}
+
+fn setup() -> (String, Vec<TestElem>) {
+	let _ = env_logger::init();
+	let t = time::get_time();
+	let data_dir = format!("./target/{}.{}", t.sec, t.nsec);
+	fs::create_dir_all(data_dir.clone()).unwrap();
+
+	let elems = vec![
+		TestElem([0, 0, 0, 1]),
+		TestElem([0, 0, 0, 2]),
+		TestElem([0, 0, 0, 3]),
+		TestElem([0, 0, 0, 4]),
+		TestElem([0, 0, 0, 5]),
+		TestElem([0, 0, 0, 6]),
+		TestElem([0, 0, 0, 7]),
+		TestElem([0, 0, 0, 8]),
+		TestElem([1, 0, 0, 0]),
+	];
+	(data_dir, elems)
+}
+
+fn load(pos: u64, elems: &[TestElem],
+				backend: &mut store::sumtree::PMMRBackend<TestElem>) -> u64 {
+
+	let mut pmmr = PMMR::at(backend, pos);
+	for elem in elems {
+		pmmr.push(elem.clone());
+	}
+	pmmr.unpruned_size()
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+struct TestElem([u32; 4]);
+impl Summable for TestElem {
+	type Sum = u64;
+	fn sum(&self) -> u64 {
+		// sums are not allowed to overflow, so we use this simple
+		// non-injective "sum" function that will still be homomorphic
+		self.0[0] as u64 * 0x1000 + self.0[1] as u64 * 0x100 + self.0[2] as u64 * 0x10 +
+			self.0[3] as u64
+	}
+	fn sum_len() -> usize {
+		8
+	}
+}
+
+impl Writeable for TestElem {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		try!(writer.write_u32(self.0[0]));
+		try!(writer.write_u32(self.0[1]));
+		try!(writer.write_u32(self.0[2]));
+		writer.write_u32(self.0[3])
 	}
 }

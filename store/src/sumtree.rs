@@ -49,11 +49,16 @@ impl AppendOnlyFile {
 			.append(true)
 			.create(true)
 			.open(path.clone())?;
-		Ok(AppendOnlyFile {
-			path: path,
+		let mut aof = AppendOnlyFile {
+			path: path.clone(),
 			file: file,
 			mmap: None,
-		})
+		};
+		let file_path = Path::new(&path);
+		if file_path.exists() {
+			aof.sync();
+		}
+		Ok(aof)
 	}
 
 	/// Append data to the file.
@@ -360,7 +365,7 @@ where
 		self.hashsum_file.sync()?;
 
 		// 4. truncate the rm log
-		//self.remove_log.truncate()?;
+		self.remove_log.truncate()?;
 
 		Ok(())
 	}
