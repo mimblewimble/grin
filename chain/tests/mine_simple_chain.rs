@@ -86,6 +86,26 @@ fn mine_empty_chain() {
 		let head = chain.head().unwrap();
 		assert_eq!(head.height, n);
 		assert_eq!(head.last_block_h, bhash);
+
+        // now check the block_header of the head
+        let header = chain.head_header().unwrap();
+        assert_eq!(header.height, n);
+        assert_eq!(header.hash(), bhash);
+
+        // now check the block itself
+        let block = chain.get_block(&header.hash()).unwrap();
+        assert_eq!(block.header.height, n);
+        assert_eq!(block.hash(), bhash);
+        assert_eq!(block.outputs.len(), 1);
+
+        // now check the block height index
+        let header_by_height = chain.get_header_by_height(n).unwrap();
+        assert_eq!(header_by_height.hash(), bhash);
+
+        // now check the header output index
+        let output = block.outputs[0];
+        let header_by_output_commit = chain.get_block_header_by_output_commit(&output.commitment()).unwrap();
+        assert_eq!(header_by_output_commit.hash(), bhash);
 	}
 }
 

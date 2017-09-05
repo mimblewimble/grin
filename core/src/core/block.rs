@@ -281,7 +281,7 @@ impl Block {
 		Ok(Block {
 				header: BlockHeader {
 					height: prev.height + 1,
-					timestamp: time::now(),
+					timestamp: time::Tm { tm_nsec: 0, ..time::now_utc() },
 					previous: prev.hash(),
 					total_difficulty: prev.pow.clone().to_difficulty() + prev.total_difficulty.clone(),
 					..Default::default()
@@ -457,6 +457,7 @@ impl Block {
 		let msg = try!(secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE]));
 		let sig = try!(secp.sign(&msg, &skey));
 		let commit = secp.commit(REWARD, skey).unwrap();
+		//let switch_commit = secp.switch_commit(skey).unwrap();
 		let rproof = secp.range_proof(0, REWARD, skey, commit);
 
 		let output = Output {
@@ -632,10 +633,6 @@ mod test {
         assert_eq!(b.inputs, b2.inputs);
         assert_eq!(b.outputs, b2.outputs);
         assert_eq!(b.kernels, b2.kernels);
-
-        // TODO - timestamps are not coming back equal here (UTC related?) -
-        // assert_eq!(b.header, b2.header);
-        // timestamp: Tm { tm_sec: 51, tm_min: 7, tm_hour: 23, tm_mday: 20, tm_mon: 7, tm_year: 117, tm_wday: 0, tm_yday: 231, tm_isdst: 1, tm_utcoff: -14400, tm_nsec: 780878000 },
-        // timestamp: Tm { tm_sec: 51, tm_min: 7, tm_hour: 3, tm_mday: 21, tm_mon: 7, tm_year: 117, tm_wday: 1, tm_yday: 232, tm_isdst: 0, tm_utcoff: 0, tm_nsec: 0 },
+        assert_eq!(b.header, b2.header);
     }
 }

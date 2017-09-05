@@ -13,6 +13,7 @@
  *  sage: G2 = EllipticCurve ([F (0), F (7)]).lift_x(int(hashlib.sha256('0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8'.decode('hex')).hexdigest(),16))
  *  sage: '%x %x'%G2.xy()
  */
+
 static const secp256k1_ge secp256k1_ge_const_g2 = SECP256K1_GE_CONST(
     0x50929b74UL, 0xc1a04954UL, 0xb78b4b60UL, 0x35e97a5eUL,
     0x078a5a0fUL, 0x28ec96d5UL, 0x47bfee9aUL, 0xce803ac0UL,
@@ -24,7 +25,7 @@ static void secp256k1_pedersen_context_init(secp256k1_pedersen_context *ctx) {
     ctx->prec = NULL;
 }
 
-static void secp256k1_pedersen_context_build(secp256k1_pedersen_context *ctx, const secp256k1_callback *cb) {
+static void secp256k1_pedersen_context_build(secp256k1_pedersen_context *ctx, const secp256k1_ge ge, const secp256k1_callback *cb) {
     secp256k1_ge prec[256];
     secp256k1_gej gj;
     secp256k1_gej nums_gej;
@@ -37,7 +38,7 @@ static void secp256k1_pedersen_context_build(secp256k1_pedersen_context *ctx, co
     ctx->prec = (secp256k1_ge_storage (*)[16][16])checked_malloc(cb, sizeof(*ctx->prec));
 
     /* get the generator */
-    secp256k1_gej_set_ge(&gj, &secp256k1_ge_const_g2);
+    secp256k1_gej_set_ge(&gj, &ge);
 
     /* Construct a group element with no known corresponding scalar (nothing up my sleeve). */
     {

@@ -33,6 +33,7 @@ const HEAD_PREFIX: u8 = 'H' as u8;
 const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const OUTPUT_COMMIT_PREFIX: u8 = 'o' as u8;
+const HEADER_BY_OUTPUT_PREFIX: u8 = 'p' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
 /// store.
@@ -54,8 +55,7 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn head_header(&self) -> Result<BlockHeader, Error> {
-		let head: Tip = try!(option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX])));
-		self.get_block_header(&head.last_block_h)
+		self.get_block_header(&try!(self.head()).last_block_h)
 	}
 
 	fn save_head(&self, t: &Tip) -> Result<(), Error> {
@@ -83,9 +83,7 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		option_to_not_found(self.db.get_ser(
-			&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec()),
-		))
+		option_to_not_found(self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())))
 	}
 
 	fn check_block_exists(&self, h: &Hash) -> Result<bool, Error> {
@@ -97,27 +95,49 @@ impl ChainStore for ChainKVStore {
 		let mut batch = self.db
 			.batch()
 			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?
-			.put_ser(
-				&to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..],
-				&b.header,
-			)?;
+			.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..], &b.header)?;
 
 		// saving the full output under its hash, as well as a commitment to hash index
 		for out in &b.outputs {
-			let mut out_bytes = out.commit.as_ref().to_vec();
-			batch = batch.put_ser(
-				&to_key(OUTPUT_COMMIT_PREFIX, &mut out_bytes)[..],
-				out,
-			)?;
+			batch = batch
+				.put_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut out.commitment().as_ref().to_vec())[..], out)?
+				.put_ser(&to_key(HEADER_BY_OUTPUT_PREFIX, &mut out.commitment().as_ref().to_vec())[..], &b.hash())?;
 		}
 		batch.write()
 	}
 
+	// lookup the block header hash by output commitment
+	// lookup the block header based on this hash
+	// to check the chain is correct compare this block header to
+	// the block header currently indexed at the relevant block height (tbd if actually necessary)
+	//
+	// NOTE: This index is not exhaustive.
+	// This node may not have seen this full block, so may not have populated the index.
+	// Block headers older than some threshold (2 months?) will not necessarily be included
+	// in this index.
+	//
+	fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
+		let block_hash = self.db.get_ser(&to_key(
+			HEADER_BY_OUTPUT_PREFIX,
+			&mut commit.as_ref().to_vec(),
+		))?;
+
+		match block_hash {
+			Some(hash) => {
+				let block_header = self.get_block_header(&hash)?;
+				let header_at_height = self.get_header_by_height(block_header.height)?;
+				if block_header.hash() == header_at_height.hash() {
+					Ok(block_header)
+				} else {
+					Err(Error::NotFoundErr)
+				}
+			},
+			None => Err(Error::NotFoundErr)
+		}
+	}
+
 	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), Error> {
-		self.db.put_ser(
-			&to_key(BLOCK_HEADER_PREFIX, &mut bh.hash().to_vec())[..],
-			bh,
-		)
+		self.db.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut bh.hash().to_vec())[..], bh)
 	}
 
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
@@ -131,6 +151,8 @@ impl ChainStore for ChainKVStore {
 		)))
 	}
 
+	// TODO - this looks identical to get_output_by_commit above
+	// TODO - are we sure this returns a hash correctly?
 	fn has_output_commit(&self, commit: &Commitment) -> Result<Hash, Error> {
 		option_to_not_found(self.db.get_ser(&to_key(
 			OUTPUT_COMMIT_PREFIX,
@@ -138,6 +160,9 @@ impl ChainStore for ChainKVStore {
 		)))
 	}
 
+	/// Maintain consistency of the "header_by_height" index by traversing back through the
+	/// current chain and updating "header_by_height" until we reach a block_header
+	/// that is consistent with its height (everything prior to this will be consistent)
 	fn setup_height(&self, bh: &BlockHeader) -> Result<(), Error> {
 		self.db.put_ser(
 			&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height),

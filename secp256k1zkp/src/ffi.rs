@@ -137,6 +137,7 @@ extern "C" {
 	pub fn secp256k1_context_randomize(cx: *mut Context, seed32: *const c_uchar) -> c_int;
 
 	pub fn secp256k1_pedersen_context_initialize(ctx: *mut Context);
+	pub fn secp256k1_switch_context_initialize(ctx: *mut Context);
 	pub fn secp256k1_rangeproof_context_initialize(ctx: *mut Context);
 
 	// TODO secp256k1_context_set_illegal_callback
@@ -291,6 +292,13 @@ extern "C" {
 	                      point: *const PublicKey,
 	                      scalar: *const c_uchar)
 	                      -> c_int;
+
+	// Generates a switch commitment: *commit = blind * J 
+	// The commitment is 33 bytes, the blinding factor is 32 bytes.
+	pub fn secp256k1_switch_commit(ctx: *const Context,
+	                                 commit: *mut c_uchar,
+	                                 blind: *const c_uchar)
+	                                 -> c_int;
 
 	// Generates a pedersen commitment: *commit = blind * G + value * G2.
 	// The commitment is 33 bytes, the blinding factor is 32 bytes.

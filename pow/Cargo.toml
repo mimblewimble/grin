@@ -14,7 +14,7 @@ lazy_static = "~0.2.8"
 serde = "~1.0.8"
 serde_derive = "~1.0.8"
 
-cuckoo_miner = { git = "https://github.com/mimblewimble/cuckoo-miner", tag="grin_integration_6"}
+cuckoo_miner = { git = "https://github.com/mimblewimble/cuckoo-miner", tag="grin_integration_8"}
 #cuckoo_miner = { path = "../../cuckoo-miner"}
 
 grin_core = { path = "../core" }
