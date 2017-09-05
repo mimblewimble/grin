@@ -115,7 +115,7 @@ Obviously, this summation is not necessarily true because 1+2+4+8+16 is not equa
 So all I need to do is provide a ring signature over each commitment value C1..C5, which demonstrates that:
 
 ```
-C1 is 1 OR 0 - C2 is 2 OR 0 - C3 is 4 OR 0 - C4 is 8 OR 0 - C5 is 16 OR 0
+C1 is 1 OR 0   C2 is 2 OR 0   C3 is 4 OR 0   C4 is 8 OR 0   C5 is 16 OR 0
 ```
 
 Therefore, so long as my committed value can be represented in less than 2<sup>5</sup> bits, I've proven that its value must lie somewhere between 0 and 2<sup>5</sup> without revealing anything further about its value. 
