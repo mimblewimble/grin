@@ -126,7 +126,7 @@ This is the essence of a Range Proof, used to demonstrate that commitments are p
 
 ## Further Details
 
-Note that for efficiency reasons, the range proofs used in Grin actually build up numbers in base 4 instead of base 2. However, binary is easier for the sake of the example, as mosuuupeople aren't as familiar with base 4 arithmetic.
+Note that for efficiency reasons, the range proofs used in Grin actually build up numbers in base 4 instead of base 2. However, binary is easier for the sake of the example, as binary is more familiar to most people than base 4 arithmetic.
 
 ## FAQ
 
