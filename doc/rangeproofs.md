@@ -132,7 +132,7 @@ Note that for efficiency reasons, the range proofs used in Grin actually build u
 
 Q: If I have an output `C=bG+vH` on the blockchain, and there is only a finite number of usable amounts for vH, why can't I reveal the amount by just subtracting each possible vH value from C until I get a value that can be used to create a signature on H? 
 
-A: Pedersen Commitments are information-theoretically private. For any value of v I choose in `bG+vH`, I can choose a value of b that will make the entire commitment sum to C. Even given infinite computing power, it remains impossible to determing what the intended value of v in a given commitment is without knowing the blinding factor.
+A: Pedersen Commitments are information-theoretically private. For any value of v I choose in `bG+vH`, I can choose a value of b that will make the entire commitment sum to C. Even given infinite computing power, it remains impossible to determine what the intended value of v in a given commitment is without knowing the blinding factor.
 
 # Further Reading
 
