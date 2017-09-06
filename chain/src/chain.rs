@@ -16,7 +16,7 @@
 //! and mostly the chain pipeline.
 
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use secp::pedersen::Commitment;
 
@@ -26,6 +26,7 @@ use core::core::hash::Hash;
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
+use sumtree;
 use types::*;
 
 use core::global::{MiningParameterMode,MINING_PARAMETER_MODE};
@@ -52,8 +53,8 @@ pub struct Chain {
 	adapter: Arc<ChainAdapter>,
 
 	head: Arc<Mutex<Tip>>,
-	block_process_lock: Arc<Mutex<bool>>,
 	orphans: Arc<Mutex<VecDeque<(Options, Block)>>>,
+	sumtrees: Arc<RwLock<sumtree::SumTrees>>,
 
 	//POW verification function
 	pow_verifier: fn(&BlockHeader, u32) -> bool,
@@ -85,6 +86,7 @@ impl Chain {
 		db_root: String,
 		adapter: Arc<ChainAdapter>,
 		gen_block: Option<Block>,
+		sumtrees: sumtree::SumTrees,
 		pow_verifier: fn(&BlockHeader, u32) -> bool,
 	) -> Result<Chain, Error> {
 		let chain_store = store::ChainKVStore::new(db_root)?;
@@ -117,8 +119,8 @@ impl Chain {
 			store: Arc::new(chain_store),
 			adapter: adapter,
 			head: Arc::new(Mutex::new(head)),
-			block_process_lock: Arc::new(Mutex::new(true)),
 			orphans: Arc::new(Mutex::new(VecDeque::with_capacity(MAX_ORPHANS + 1))),
+			sumtrees: Arc::new(RwLock::new(sumtrees)),
 			pow_verifier: pow_verifier,
 		})
 	}
@@ -184,7 +186,7 @@ impl Chain {
 			adapter: self.adapter.clone(),
 			head: head,
 			pow_verifier: self.pow_verifier,
-			lock: self.block_process_lock.clone(),
+			sumtrees: self.sumtrees.clone(),
 		}
 	}
 

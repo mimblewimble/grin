@@ -37,6 +37,7 @@ extern crate secp256k1zkp as secp;
 mod chain;
 pub mod pipe;
 pub mod store;
+pub mod sumtree;
 pub mod types;
 
 // Re-export the base interface

@@ -35,7 +35,6 @@ pub struct Commitment(pub [u8; constants::PEDERSEN_COMMITMENT_SIZE]);
 impl_array_newtype!(Commitment, u8, constants::PEDERSEN_COMMITMENT_SIZE);
 impl_pretty_debug!(Commitment);
 
-
 impl Commitment {
   /// Builds a Hash from a byte vector. If the vector is too short, it will be
   /// completed by zeroes. If it's too long, it will be truncated.

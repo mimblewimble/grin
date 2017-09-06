@@ -56,7 +56,7 @@ impl AppendOnlyFile {
 		};
 		let file_path = Path::new(&path);
 		if file_path.exists() {
-			aof.sync();
+			aof.sync()?;
 		}
 		Ok(aof)
 	}
@@ -316,6 +316,10 @@ where
 		self.buffer.clear();
 
 		self.hashsum_file.sync()
+	}
+
+	pub fn discard(&mut self) {
+		self.buffer = VecBackend::new();
 	}
 
 	/// Checks the length of the remove log to see if it should get compacted.

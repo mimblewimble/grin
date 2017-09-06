@@ -261,7 +261,6 @@ impl<'a> Reader for BinReader<'a> {
 	}
 }
 
-
 impl Readable for Commitment {
 	fn read(reader: &mut Reader) -> Result<Commitment, Error> {
 		let a = try!(reader.read_fixed_bytes(PEDERSEN_COMMITMENT_SIZE));
@@ -270,6 +269,18 @@ impl Readable for Commitment {
 			c[i] = a[i];
 		}
 		Ok(Commitment(c))
+	}
+}
+
+impl Writeable for Commitment {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_fixed_bytes(self)
+	}
+}
+
+impl Writeable for RangeProof {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_fixed_bytes(self)
 	}
 }
 

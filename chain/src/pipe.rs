@@ -14,7 +14,7 @@
 
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use secp;
 use time;
@@ -24,6 +24,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::{BlockHeader, Block};
 use types::*;
 use store;
+use sumtree;
 use core::global;
 
 /// Contextual information required to process a new block and either reject or
@@ -39,8 +40,8 @@ pub struct BlockContext {
 	pub head: Tip,
 	/// The POW verification function
 	pub pow_verifier: fn(&BlockHeader, u32) -> bool,
-	/// The lock
-	pub lock: Arc<Mutex<bool>>,
+	/// MMR sum tree states
+	pub sumtrees: Arc<RwLock<sumtree::SumTrees>>,
 }
 
 /// Runs the block processing pipeline, including validation and finding a
@@ -63,16 +64,23 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		// in sync mode, the header has already been validated
 		validate_header(&b.header, &mut ctx)?;
 	}
-	validate_block(b, &mut ctx)?;
-	debug!(
-		"Block at {} with hash {} is valid, going to save and append.",
-		b.header.height,
-		b.hash()
-	);
 
-	let _ = ctx.lock.lock().unwrap();
-	add_block(b, &mut ctx)?;
-	update_head(b, &mut ctx)
+	// take the lock on the sum trees and start a chain extension unit of work
+	// dependent on the success of the internal validation and saving operations
+	let local_sumtrees = ctx.sumtrees.clone();
+	let mut sumtrees = local_sumtrees.write().unwrap();
+	sumtree::extending(&mut sumtrees, |mut extension| {
+
+		validate_block(b, &mut ctx, &mut extension)?;
+		debug!(
+			"Block at {} with hash {} is valid, going to save and append.",
+			b.header.height,
+			b.hash()
+		);
+
+		add_block(b, &mut ctx)?;
+		update_head(b, &mut ctx, &mut extension)
+	})
 }
 
 /// Process the block header
@@ -87,7 +95,9 @@ pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<O
 	validate_header(&bh, &mut ctx)?;
 	add_block_header(bh, &mut ctx)?;
 
-	let _ = ctx.lock.lock().unwrap();
+	// just taking the shared lock
+	let _ = ctx.sumtrees.write().unwrap();
+
 	update_header_head(bh, &mut ctx)
 }
 
@@ -167,15 +177,28 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 }
 
 /// Fully validate the block content.
-fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
+fn validate_block(b: &Block, ctx: &mut BlockContext, ext: &mut sumtree::Extension) -> Result<(), Error> {
 	if b.header.height > ctx.head.height + 1 {
 		return Err(Error::Orphan);
 	}
-
+ 
+	// main isolated block validation, checks all commitment sums and sigs
 	let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	try!(b.validate(&curve).map_err(&Error::InvalidBlockProof));
 
-	// TODO check every input exists as a UTXO using the UTXO index
+	// apply the new block to the MMR trees and check the new root hashes
+	if b.header.previous == ctx.head.last_block_h {
+		ext.apply_blocks(vec![b])?;
+	} else {
+		// TODO handle branch case
+	}
+	let (utxo_root, rproof_root, kernel_root) = ext.roots();
+	if utxo_root.hash != b.header.utxo_root ||
+		rproof_root.hash != b.header.range_proof_root ||
+		kernel_root.hash != b.header.kernel_root {
+
+		return Err(Error::InvalidRoot);
+	}
 
 	Ok(())
 }
@@ -200,7 +223,7 @@ fn add_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Erro
 /// Directly updates the head if we've just appended a new block to it or handle
 /// the situation where we've just added enough work to have a fork with more
 /// work than the head.
-fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
+fn update_head(b: &Block, ctx: &mut BlockContext, ext: &mut sumtree::Extension) -> Result<Option<Tip>, Error> {
 	// if we made a fork with more work than the head (which should also be true
 	// when extending the head), update it
 	let tip = Tip::from_block(&b.header);
@@ -216,6 +239,7 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 		} else {
 			ctx.store.save_head(&tip).map_err(&Error::StoreErr)?;
 		}
+		// TODO if we're switching branch, make sure to backtrack the sum trees
 
 		ctx.head = tip.clone();
 		info!("Updated head to {} at {}.", b.hash(), b.header.height);

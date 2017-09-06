@@ -57,10 +57,14 @@ pub enum Error {
 	InvalidBlockTime,
 	/// Block height is invalid (not previous + 1)
 	InvalidBlockHeight,
+	/// One of the root hashes in the block is invalid
+	InvalidRoot,
 	/// Internal issue when trying to save or load data from store
 	StoreErr(grin_store::Error),
 	/// Error serializing or deserializing a type
 	SerErr(ser::Error),
+	/// Error while updating the sum trees
+	SumTreeErr(String),
 	/// No chain exists and genesis block is required
 	GenesisBlockRequired,
 	/// Anything else
