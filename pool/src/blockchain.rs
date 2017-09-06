@@ -149,10 +149,9 @@ impl DummyChain for DummyChainImpl {
         self.block_headers.write().unwrap().insert(commitment, block_header.clone());
     }
     fn store_head_header(&self, block_header: &block::BlockHeader) {
-        // how to store a single value here?
         let mut h = self.head_header.write().unwrap();
         h.clear();
-        h.push(block_header.clone());
+        h.insert(0, block_header.clone());
     }
 }
 
