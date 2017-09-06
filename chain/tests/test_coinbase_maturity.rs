@@ -111,7 +111,45 @@ fn test_coinbase_maturity() {
         _ => panic!("expected ImmatureCoinbase error here"),
     };
 
-    // TODO - mine a chain of 1000 blocks and then check we can successfully
-    // spend a coinbase output...
-    panic!("not yet implemented");
+    for _ in 1..15 {
+        let prev = chain.head_header().unwrap();
+        println!("{:?}", prev);
+        let mut block = core::core::Block::new(&prev, vec![], reward_key).unwrap();
+        block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+
+        let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+        block.header.difficulty = difficulty.clone();
+
+        pow::pow_size(
+            &mut cuckoo_miner,
+            &mut block.header,
+            difficulty,
+            global::sizeshift() as u32,
+        ).unwrap();
+
+        chain.process_block(block, chain::EASY_POW).unwrap();
+    };
+
+    let prev = chain.head_header().unwrap();
+
+    let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], reward_key).unwrap();
+
+    block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+
+    let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+    block.header.difficulty = difficulty.clone();
+
+    pow::pow_size(
+        &mut cuckoo_miner,
+        &mut block.header,
+        difficulty,
+        global::sizeshift() as u32,
+    ).unwrap();
+
+    let result = chain.process_block(block, chain::EASY_POW);
+    match result {
+        Ok(_) => (),
+        Err(Error::ImmatureCoinbase) => panic!("we should not get an ImmatureCoinbase here"),
+        Err(_) => panic!("we did not expect an error here"),
+    };
 }

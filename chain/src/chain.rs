@@ -127,7 +127,6 @@ impl Chain {
 	/// has been added to the longest chain, None if it's added to an (as of
 	/// now) orphan chain.
 	pub fn process_block(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
-
 		let head = self.store.head().map_err(&Error::StoreErr)?;
 		let ctx = self.ctx_from_head(head, opts);
 
