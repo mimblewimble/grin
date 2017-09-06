@@ -111,7 +111,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
 
     /// Attempts to add a transaction to the pool.
     ///
-    /// Adds a transation to the memory pool, deferring to the orphans pool
+    /// Adds a transaction to the memory pool, deferring to the orphans pool
     /// if necessary, and performing any connection-related validity checks.
     /// Happens under an exclusive mutable reference gated by the write portion
     /// of a RWLock.
@@ -671,7 +671,7 @@ mod tests {
                 _ => panic!("expected ImmatureCoinbase error here"),
             };
 
-            let head_header = block::BlockHeader {height: 1001, ..block::BlockHeader::default()};
+            let head_header = block::BlockHeader {height: 11, ..block::BlockHeader::default()};
             chain_ref.store_head_header(&head_header);
 
             let txn = test_transaction(vec![15], vec![10, 4]);
@@ -683,7 +683,7 @@ mod tests {
                 _ => panic!("expected ImmatureCoinbase error here"),
             };
 
-            let head_header = block::BlockHeader {height: 1002, ..block::BlockHeader::default()};
+            let head_header = block::BlockHeader {height: 12, ..block::BlockHeader::default()};
             chain_ref.store_head_header(&head_header);
 
             let txn = test_transaction(vec![15], vec![10, 4]);

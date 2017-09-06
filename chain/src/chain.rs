@@ -32,18 +32,6 @@ use core::global::{MiningParameterMode,MINING_PARAMETER_MODE};
 
 const MAX_ORPHANS: usize = 20;
 
-/// Helper macro to transform a Result into an Option with None in case
-/// of error
-// macro_rules! none_err {
-// 	($trying:expr) => {{
-// 		let tried = $trying;
-// 		if let Err(_) = tried {
-// 			return None;
-// 		}
-// 		tried.unwrap()
-// 	}}
-// }
-
 /// Facade to the blockchain block processing pipeline and storage. Provides
 /// the current view of the UTXO set according to the chain state. Also
 /// maintains locking for the pipeline to avoid conflicting processing.

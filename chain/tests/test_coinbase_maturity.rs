@@ -52,7 +52,6 @@ fn test_coinbase_maturity() {
 									genesis_block, pow::verify_size).unwrap();
 
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
 
 	let mut miner_config = types::MinerConfig {
 		enable_mining: true,
@@ -64,6 +63,7 @@ fn test_coinbase_maturity() {
 	let mut cuckoo_miner = cuckoo::Miner::new(consensus::EASINESS, global::sizeshift() as u32, global::proofsize());
 
 	let prev = chain.head_header().unwrap();
+    let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
 	let mut block = core::core::Block::new(&prev, vec![], reward_key).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
@@ -91,6 +91,7 @@ fn test_coinbase_maturity() {
         build::with_fee(1)]
     ).unwrap();
 
+    let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
 	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], reward_key).unwrap();
 
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
@@ -111,9 +112,12 @@ fn test_coinbase_maturity() {
         _ => panic!("expected ImmatureCoinbase error here"),
     };
 
-    for _ in 1..15 {
+    // mine 10 blocks so we increase the height sufficiently
+    // coinbase will mature and be spendable in the block after these
+    for _ in 0..10 {
         let prev = chain.head_header().unwrap();
-        println!("{:?}", prev);
+
+        let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
         let mut block = core::core::Block::new(&prev, vec![], reward_key).unwrap();
         block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
@@ -132,6 +136,7 @@ fn test_coinbase_maturity() {
 
     let prev = chain.head_header().unwrap();
 
+    let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
     let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], reward_key).unwrap();
 
     block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
@@ -146,8 +151,6 @@ fn test_coinbase_maturity() {
         global::sizeshift() as u32,
     ).unwrap();
 
-    // TODO - this is failing right now as every coinbase output has an identical commitment
-    // so it never gets older from the perspective of our "block header by output commitment" index
     let result = chain.process_block(block, chain::EASY_POW);
     match result {
         Ok(_) => (),
