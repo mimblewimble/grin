@@ -146,6 +146,8 @@ fn test_coinbase_maturity() {
         global::sizeshift() as u32,
     ).unwrap();
 
+    // TODO - this is failing right now as every coinbase output has an identical commitment
+    // so it never gets older from the perspective of our "block header by output commitment" index
     let result = chain.process_block(block, chain::EASY_POW);
     match result {
         Ok(_) => (),
