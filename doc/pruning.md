@@ -10,7 +10,7 @@ understanding of the MimbleWimble protocol):
 1. Transaction outputs, which include for each output:
     1. A Pedersen commitment (33 bytes).
     2. A range proof (over 5KB at this time).
-2. Transaction inputs which are just output references (32 bytes).
+2. Transaction inputs, which are just output references (32 bytes).
 3. Transaction "proofs", which include for each transaction:
     1. The excess commitment sum for the transaction (33 bytes).
     2. A signature generated with the excess (71 bytes average).
