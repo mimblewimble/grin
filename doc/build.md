@@ -98,7 +98,7 @@ Let the mining server find a few blocks, then stop (just ctrl-c) the mining serv
 
 The following outlines a more advanced example simulating a multi-server network with transactions being posted. 
 
-For the sake of example, we're going to run three nodes with varying setups. Create two more directories beside your node1 directory, called node2 and node3. If you want to clear data from your previous run (or anytime you want to reset the blockchain and all peer data,) just delete the wallet.dat file in the server1 directory and run rm -rf .grin to remove grin's database. 
+For the sake of example, we're going to run three nodes with varying setups. Create two more directories beside your node1 directory, called node2 and node3. If you want to clear data from your previous run (or anytime you want to reset the blockchain and all peer data) just delete the wallet.dat file in the server1 directory and run rm -rf .grin to remove grin's database.
 
 ### Node 1: Genesis and Miner
 

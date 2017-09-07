@@ -3,7 +3,7 @@ Blockchain Syncing
 
 We describe here the different methods used by a new node when joining the network
 to catch up with the latest chain state. We start with reminding the reader of the
-following assumptions, that are all characteristics of Grin or MimbleWimble:
+following assumptions, which are all characteristics of Grin or MimbleWimble:
 
 * All block headers include the root hash of all unspent outputs in the chain at
   the time of that block.
@@ -38,7 +38,7 @@ provide history archival and allow later checks and verifications to be made.
 Identical to other blockchains:
 
 * If all nodes we're connected to are dishonest (sybil attack or similar), we can
-  be lied about the whole chain state.
+  be lied to about the whole chain state.
 * Someone with enormous mining power could rewrite the whole history.
 * Etc.
 
@@ -65,7 +65,7 @@ With this information it can verify:
 * the sum of all UTXO commitments equals the expected money supply
 * the root hash of all UTXOs match the root hash in the block header
 
-Once the validation done, the peer can download and validate the blocks content
+Once the validation is done, the peer can download and validate the blocks content
 from the horizon up to the head.
 
 While this algorithm still works for very low values of `Z` (or in the extreme case
