@@ -547,6 +547,11 @@ mod tests {
             secp.commit(value, blinding).unwrap()
         }
 
+        fn commit_value(value: u64) -> Commitment {
+            let secp = Secp256k1::with_caps(ContextFlag::Commit);
+            secp.commit_value(value).unwrap()
+        }
+
         let blind_pos = SecretKey::new(&secp, &mut OsRng::new().unwrap());
         let blind_neg = SecretKey::new(&secp, &mut OsRng::new().unwrap());
 
@@ -569,6 +574,15 @@ mod tests {
             vec![commit(5, blind_pos)],
             vec![commit(4, blind_neg), commit(2, blind_sum)],
             -1
+        ));
+
+        // now a more realistic example
+        // blinding factors net out,
+        // values net out except for a single excess commitment (with zero blinding factor)
+        assert!(secp.verify_commit_sum(
+            vec![commit(5, blind_pos), commit_value(1001)],
+            vec![commit(3, blind_neg), commit(2, blind_sum)],
+            1001
         ));
     }
 }
