@@ -37,19 +37,21 @@ impl_pretty_debug!(Commitment);
 
 
 impl Commitment {
-  /// Builds a Hash from a byte vector. If the vector is too short, it will be
-  /// completed by zeroes. If it's too long, it will be truncated.
-  pub fn from_vec(v: Vec<u8>) -> Commitment {
-    let mut h = [0; constants::PEDERSEN_COMMITMENT_SIZE];
-    for i in 0..min(v.len(), constants::PEDERSEN_COMMITMENT_SIZE) {
-      h[i] = v[i];
+    /// Builds a Hash from a byte vector. If the vector is too short, it will be
+    /// completed by zeroes. If it's too long, it will be truncated.
+    pub fn from_vec(v: Vec<u8>) -> Commitment {
+        let mut h = [0; constants::PEDERSEN_COMMITMENT_SIZE];
+        for i in 0..min(v.len(), constants::PEDERSEN_COMMITMENT_SIZE) {
+            h[i] = v[i];
+        }
+        Commitment(h)
     }
-    Commitment(h)
-  }
+
 	/// Uninitialized commitment, use with caution
 	unsafe fn blank() -> Commitment {
 		mem::uninitialized()
 	}
+
 	/// Converts a commitment to a public key
 	pub fn to_pubkey(&self, secp: &Secp256k1) -> Result<key::PublicKey, Error> {
 		key::PublicKey::from_slice(secp, &self.0)
@@ -440,4 +442,147 @@ impl Secp256k1 {
 			mantissa: mantissa,
 		}
 	}
+}
+
+#[cfg(test)]
+mod tests {
+    use Secp256k1;
+    use super::Commitment;
+    use ContextFlag;
+    use key::{ONE_KEY, ZERO_KEY, SecretKey};
+
+    use rand::os::OsRng;
+
+    #[test]
+    fn test_verify_commit_sum_zero_keys() {
+        let secp = Secp256k1::with_caps(ContextFlag::Commit);
+
+        fn commit(value: u64) -> Commitment {
+            let secp = Secp256k1::with_caps(ContextFlag::Commit);
+            let blinding = ZERO_KEY;
+            secp.commit(value, blinding).unwrap()
+        }
+
+        assert!(secp.verify_commit_sum(
+            vec![],
+            vec![],
+            0
+        ));
+
+        assert!(secp.verify_commit_sum(
+            vec![commit(5)],
+            vec![commit(5)],
+            0
+        ));
+
+        assert!(secp.verify_commit_sum(
+            vec![commit(5)],
+            vec![commit(3)],
+            2
+        ));
+
+        assert!(secp.verify_commit_sum(
+            vec![commit(3), commit(2)],
+            vec![commit(5)],
+            0
+        ));
+
+        assert!(secp.verify_commit_sum(
+            vec![commit(2), commit(4)],
+            vec![commit(3), commit(2)],
+            1
+        ));
+    }
+
+    #[test]
+    fn test_verify_commit_sum_one_keys() {
+        let secp = Secp256k1::with_caps(ContextFlag::Commit);
+
+        fn commit(value: u64, blinding: SecretKey) -> Commitment {
+            let secp = Secp256k1::with_caps(ContextFlag::Commit);
+            secp.commit(value, blinding).unwrap()
+
+        }
+
+        assert!(secp.verify_commit_sum(
+            vec![commit(5, ONE_KEY)],
+            vec![commit(5, ONE_KEY)],
+            0
+        ));
+
+        // we expect this not to verify
+        // even though the values add up to 0
+        // the keys themselves do not add to 0
+        assert_eq!(secp.verify_commit_sum(
+            vec![commit(3, ONE_KEY), commit(2, ONE_KEY)],
+            vec![commit(5, ONE_KEY)],
+            0
+        ), false);
+
+        // to get these to verify we need to
+        // use the same "sum" of blinding factors on both sides
+        let two_key = secp.blind_sum(vec![ONE_KEY, ONE_KEY], vec![]).unwrap();
+        assert!(secp.verify_commit_sum(
+            vec![commit(3, ONE_KEY), commit(2, ONE_KEY)],
+            vec![commit(5, two_key)],
+            0
+        ));
+
+        // similarly here - with the blinding factors cancelling out
+        // the excess is simply the difference between
+        // the positive values and the negative values
+        assert!(secp.verify_commit_sum(
+            vec![commit(3, ONE_KEY), commit(2, ONE_KEY)],
+            vec![commit(4, two_key)],
+            1
+        ));
+    }
+
+    #[test]
+    fn test_verify_commit_sum_random_keys() {
+        let secp = Secp256k1::with_caps(ContextFlag::Commit);
+
+        fn commit(value: u64, blinding: SecretKey) -> Commitment {
+            let secp = Secp256k1::with_caps(ContextFlag::Commit);
+            secp.commit(value, blinding).unwrap()
+        }
+
+        fn commit_value(value: u64) -> Commitment {
+            let secp = Secp256k1::with_caps(ContextFlag::Commit);
+            secp.commit_value(value).unwrap()
+        }
+
+        let blind_pos = SecretKey::new(&secp, &mut OsRng::new().unwrap());
+        let blind_neg = SecretKey::new(&secp, &mut OsRng::new().unwrap());
+
+        // now construct blinding factor to net out appropriately
+        let blind_sum = secp.blind_sum(vec![blind_pos], vec![blind_neg]).unwrap();
+
+        assert!(secp.verify_commit_sum(
+            vec![commit(5, blind_pos)],
+            vec![commit(3, blind_neg), commit(2, blind_sum)],
+            0
+        ));
+
+        assert!(secp.verify_commit_sum(
+            vec![commit(6, blind_pos)],
+            vec![commit(3, blind_neg), commit(2, blind_sum)],
+            1
+        ));
+
+        assert!(secp.verify_commit_sum(
+            vec![commit(5, blind_pos)],
+            vec![commit(4, blind_neg), commit(2, blind_sum)],
+            -1
+        ));
+
+        // now a more realistic example
+        // blinding factors net out,
+        // values net out except for a single excess commitment (with zero blinding factor)
+        assert!(secp.verify_commit_sum(
+            vec![commit(5, blind_pos), commit_value(1001)],
+            vec![commit(3, blind_neg), commit(2, blind_sum)],
+            1001
+        ));
+    }
 }
