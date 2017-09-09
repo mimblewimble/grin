@@ -333,6 +333,8 @@ impl Output {
 
 	/// Validates the range proof using the commitment
 	pub fn verify_proof(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
+		/// secp.verify returns range if and only if both min_value and max_value less than 2^64
+                /// since group order is much larger (~2^256) we can be sure overflow is not the case
 		secp.verify_range_proof(self.commit, self.proof).map(|_| ())
 	}
 }
