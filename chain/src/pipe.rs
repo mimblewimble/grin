@@ -14,7 +14,7 @@
 
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 use secp;
 use time;

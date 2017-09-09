@@ -35,14 +35,14 @@ use core::global::MiningParameterMode;
 use pow::{types, cuckoo, MiningWorker};
 
 fn clean_output_dir(dir_name:&str){
-    let _ = fs::remove_dir_all(dir_name);
+	let _ = fs::remove_dir_all(dir_name);
 }
 
 #[test]
 fn mine_empty_chain() {
-    let _ = env_logger::init();
+	let _ = env_logger::init();
 	clean_output_dir(".grin");
-    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let mut rng = OsRng::new().unwrap();
 	let mut genesis_block = None;
@@ -71,6 +71,7 @@ fn mine_empty_chain() {
 
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 		b.header.difficulty = difficulty.clone();
+		chain.set_sumtree_roots(&mut b).unwrap();
 
 		pow::pow_size(
 			&mut cuckoo_miner,

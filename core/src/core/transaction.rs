@@ -374,7 +374,11 @@ impl Writeable for SumCommit {
 
 impl Readable for SumCommit {
 	fn read(reader: &mut Reader) -> Result<SumCommit, ser::Error> {
-		unimplemented!()
+		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
+		Ok(SumCommit {
+			commit: Commitment::read(reader)?,
+			secp: secp,
+		})
 	}
 }
 

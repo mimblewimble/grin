@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::io;
+//! Utility structs to handle the 3 sumtrees (utxo, range proof, kernel) more
+//! conveniently and transactionally.
+
+use std::fs;
+use std::path::Path;
 
 use secp;
 use secp::pedersen::RangeProof;
@@ -22,9 +26,27 @@ use core::core::pmmr::{Summable, NoSum, PMMR, HashSum};
 use grin_store::sumtree::PMMRBackend;
 use types::Error;
 
+const SUMTREES_SUBDIR: &'static str = "sumtrees";
+const UTXO_SUBDIR: &'static str = "utxo";
+const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
+const KERNEL_SUBDIR: &'static str = "kernel";
+
 struct PMMRHandle<T> where T: Summable + Clone {
 	backend: PMMRBackend<T>,
 	last_pos: u64,
+}
+
+impl<T> PMMRHandle<T> where T: Summable + Clone {
+	fn new(root_dir: String, file_name: &str) -> Result<PMMRHandle<T>, Error> {
+		let path = Path::new(&root_dir).join(SUMTREES_SUBDIR).join(file_name);
+		fs::create_dir_all(path.clone())?;
+		let be = PMMRBackend::new(path.to_str().unwrap().to_string())?;
+		let sz = be.unpruned_size()?;
+		Ok(PMMRHandle {
+			backend: be,
+			last_pos: sz,
+		})
+	}
 }
 
 /// An easy to manipulate structure holding the 3 sum trees necessary to
@@ -34,6 +56,17 @@ pub struct SumTrees {
 	output_pmmr_h: PMMRHandle<SumCommit>,
 	rproof_pmmr_h: PMMRHandle<NoSum<RangeProof>>,
 	kernel_pmmr_h: PMMRHandle<NoSum<TxKernel>>,
+}
+
+impl SumTrees {
+	/// Open an existing or new set of backends for the SumTrees
+	pub fn open(root_dir: String) -> Result<SumTrees, Error> {
+		Ok(SumTrees {
+			output_pmmr_h: PMMRHandle::new(root_dir.clone(), UTXO_SUBDIR)?,
+			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR)?,
+			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR)?,
+		})
+	}
 }
 
 /// Starts a new unit of work to extend the chain with additional blocks,
@@ -61,9 +94,9 @@ pub fn extending<'a, F, T>(trees: &'a mut SumTrees, inner: F) -> Result<T, Error
 			Err(e)
 		}
 		Ok(r) => {
-			trees.output_pmmr_h.backend.sync().map_err(|e| Error::SumTreeErr(e.to_string()))?;
-			trees.rproof_pmmr_h.backend.sync().map_err(|e| Error::SumTreeErr(e.to_string()))?;
-			trees.kernel_pmmr_h.backend.sync().map_err(|e| Error::SumTreeErr(e.to_string()))?;
+			trees.output_pmmr_h.backend.sync()?;
+			trees.rproof_pmmr_h.backend.sync()?;
+			trees.kernel_pmmr_h.backend.sync()?;
 			trees.output_pmmr_h.last_pos = sizes.0;
 			trees.rproof_pmmr_h.last_pos = sizes.1;
 			trees.kernel_pmmr_h.last_pos = sizes.2;
@@ -84,7 +117,7 @@ pub struct Extension<'a> {
 
 impl<'a> Extension<'a> {
 
-	// contructor
+	// constructor
 	fn new(trees: &'a mut SumTrees) -> Extension<'a> {
 		Extension {
 			output_pmmr: PMMR::at(&mut trees.output_pmmr_h.backend, trees.output_pmmr_h.last_pos),

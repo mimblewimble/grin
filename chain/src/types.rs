@@ -14,6 +14,8 @@
 
 //! Base types that the block chain pipeline requires.
 
+use std::io;
+
 use secp;
 use secp::pedersen::Commitment;
 
@@ -79,6 +81,11 @@ impl From<grin_store::Error> for Error {
 impl From<ser::Error> for Error {
 	fn from(e: ser::Error) -> Error {
 		Error::SerErr(e)
+	}
+}
+impl From<io::Error> for Error {
+	fn from(e: io::Error) -> Error {
+		Error::SumTreeErr(e.to_string())
 	}
 }
 

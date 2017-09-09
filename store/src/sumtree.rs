@@ -55,8 +55,10 @@ impl AppendOnlyFile {
 			mmap: None,
 		};
 		let file_path = Path::new(&path);
-		if file_path.exists() {
-			aof.sync()?;
+		if let Ok(sz) = aof.size() {
+			if sz > 0 {
+				aof.sync()?;
+			}
 		}
 		Ok(aof)
 	}
@@ -143,6 +145,8 @@ struct RemoveLog {
 	file: File,
 	// Ordered vector of MMR positions that should get eventually removed.
 	removed: Vec<u64>,
+	// Holds positions temporarily until flush is called.
+	removed_tmp: Vec<u64>,
 }
 
 impl RemoveLog {
@@ -155,6 +159,7 @@ impl RemoveLog {
 			path: path,
 			file: file,
 			removed: removed,
+			removed_tmp: vec![],
 		})
 	}
 
@@ -166,24 +171,43 @@ impl RemoveLog {
 	}
 
 	/// Append a set of new positions to the remove log. Both adds those
-	/// positions
-	/// to the ordered in-memory set and to the file.
+	/// positions the ordered in-memory set and to the file.
 	fn append(&mut self, elmts: Vec<u64>) -> io::Result<()> {
 		for elmt in elmts {
+			match self.removed_tmp.binary_search(&elmt) {
+				Ok(_) => continue,
+				Err(idx) => {
+					self.removed_tmp.insert(idx, elmt);
+				}
+			}
+		}
+		Ok(())
+	}
+
+	/// Flush the positions to remove to file.
+	fn flush(&mut self) -> io::Result<()> {
+		for elmt in &self.removed_tmp {
 			match self.removed.binary_search(&elmt) {
 				Ok(_) => continue,
 				Err(idx) => {
 					self.file.write_all(&ser::ser_vec(&elmt).unwrap()[..])?;
-					self.removed.insert(idx, elmt);
+					self.removed.insert(idx, *elmt);
 				}
 			}
 		}
+		self.removed_tmp = vec![];
 		self.file.sync_data()
+	}
+
+	/// Discard pending changes
+	fn discard(&mut self) {
+		self.removed_tmp = vec![];
 	}
 
 	/// Whether the remove log currently includes the provided position.
 	fn includes(&self, elmt: u64) -> bool {
-		self.removed.binary_search(&elmt).is_ok()
+		self.removed.binary_search(&elmt).is_ok() ||
+			self.removed_tmp.binary_search(&elmt).is_ok()
 	}
 
 	/// Number of positions stored in the remove log.
@@ -226,14 +250,6 @@ where
 			position - (self.buffer_index as u64),
 			data.clone(),
 		)?;
-		for hs in data {
-			if let Err(e) = self.hashsum_file.append(&ser::ser_vec(&hs).unwrap()[..]) {
-				return Err(format!(
-					"Could not write to log storage, disk full? {:?}",
-					e
-				));
-			}
-		}
 		Ok(())
 	}
 
@@ -241,7 +257,7 @@ where
 	fn get(&self, position: u64) -> Option<HashSum<T>> {
 		// First, check if it's in our temporary write buffer
 		let pos_sz = position as usize;
-		if pos_sz - 1 >= self.buffer_index && pos_sz - 1 < self.buffer_index + self.buffer.len() {
+		if pos_sz > self.buffer_index && pos_sz - 1 < self.buffer_index + self.buffer.len() {
 			return self.buffer.get((pos_sz - self.buffer_index) as u64);
 		}
 
@@ -278,7 +294,12 @@ where
 	/// Remove HashSums by insertion position
 	fn remove(&mut self, positions: Vec<u64>) -> Result<(), String> {
 		if self.buffer.used_size() > 0 {
-			self.buffer.remove(positions.clone()).unwrap();
+			for position in &positions {
+				let pos_sz = *position as usize;
+				if pos_sz > self.buffer_index && pos_sz - 1 < self.buffer_index + self.buffer.len() {
+					self.buffer.remove(vec![*position]).unwrap();
+				}
+			}
 		}
 		self.remove_log.append(positions).map_err(|e| {
 			format!("Could not write to log storage, disk full? {:?}", e)
@@ -309,17 +330,40 @@ where
 		})
 	}
 
+	/// Total size of the PMMR stored by this backend. Only produces the fully
+	/// sync'd size.
+	pub fn unpruned_size(&self) -> io::Result<u64> {
+		let total_shift = self.pruned_nodes.get_shift(::std::u64::MAX).unwrap();
+		let rm_len = self.remove_log.len() as u64;
+		let record_len = 32 + T::sum_len() as u64;
+		let sz = self.hashsum_file.size()?;
+		Ok(sz / record_len + rm_len + total_shift)
+	}
+
 	/// Syncs all files to disk. A call to sync is required to ensure all the
 	/// data has been successfully written to disk.
 	pub fn sync(&mut self) -> io::Result<()> {
+		for elem in &self.buffer.elems {
+			if let Some(ref hs) = *elem {
+				if let Err(e) = self.hashsum_file.append(&ser::ser_vec(&hs).unwrap()[..]) {
+					return Err(io::Error::new(
+						io::ErrorKind::Interrupted,
+						format!("Could not write to log storage, disk full? {:?}", e)
+					));
+				}
+			}
+		}
+
 		self.buffer_index = self.buffer_index + self.buffer.len();
 		self.buffer.clear();
 
+		self.remove_log.flush()?;
 		self.hashsum_file.sync()
 	}
 
 	pub fn discard(&mut self) {
 		self.buffer = VecBackend::new();
+		self.remove_log.discard();
 	}
 
 	/// Checks the length of the remove log to see if it should get compacted.

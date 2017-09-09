@@ -18,11 +18,12 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, RwLock};
 
-use secp::pedersen::Commitment;
+use secp::pedersen::{Commitment, RangeProof};
 
 use core::core::{Block, BlockHeader, Output};
 use core::core::target::Difficulty;
 use core::core::hash::Hash;
+use core::core::pmmr::{HashSum, NoSum};
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
@@ -86,10 +87,9 @@ impl Chain {
 		db_root: String,
 		adapter: Arc<ChainAdapter>,
 		gen_block: Option<Block>,
-		sumtrees: sumtree::SumTrees,
 		pow_verifier: fn(&BlockHeader, u32) -> bool,
 	) -> Result<Chain, Error> {
-		let chain_store = store::ChainKVStore::new(db_root)?;
+		let chain_store = store::ChainKVStore::new(db_root.clone())?;
 
 		// check if we have a head in store, otherwise the genesis block is it
 		let head = match chain_store.head() {
@@ -111,9 +111,7 @@ impl Chain {
 			Err(e) => return Err(Error::StoreErr(e)),
 		};
 
-        // TODO - confirm this was safe to remove based on code above?
-		// let head = chain_store.head()?;
-
+		let sumtrees = sumtree::SumTrees::open(db_root)?;
 
 		Ok(Chain {
 			store: Arc::new(chain_store),
@@ -213,12 +211,10 @@ impl Chain {
 		}
 	}
 
-    /// Gets an unspent output from its commitment. With return None if the
-	/// output
-	/// doesn't exist or has been spent. This querying is done in a way that's
-	/// constistent with the current chain state and more specifically the
-	/// current
-	/// branch it is on in case of forks.
+	/// Gets an unspent output from its commitment. With return None if the
+	/// output doesn't exist or has been spent. This querying is done in a
+	/// way that's consistent with the current chain state and more
+	/// specifically the current branch it is on in case of forks.
 	pub fn get_unspent(&self, output_ref: &Commitment) -> Option<Output> {
 		// TODO use an actual UTXO tree
 		// in the meantime doing it the *very* expensive way:
@@ -242,6 +238,34 @@ impl Chain {
 			}
 		}
 		None
+	}
+
+	/// Sets the sumtree roots on a brand new block by applying the block on the
+	/// current sumtree state.
+	pub fn set_sumtree_roots(&self, b: &mut Block) -> Result<(), Error> {
+		let mut sumtrees = self.sumtrees.write().unwrap();
+		let mut roots_in = None;
+	
+		let res: Result<(), Error> = sumtree::extending(&mut sumtrees, |mut extension| {
+			// apply the block on the sumtrees and check the resulting root
+			extension.apply_blocks(vec![b])?;
+			roots_in = Some(extension.roots());
+
+			// error to force rollback
+			Err(Error::InvalidRoot)
+		});
+		let roots = roots_in.unwrap();
+
+		match res {
+			Err(Error::InvalidRoot) => {
+				b.header.utxo_root = roots.0.hash;
+				b.header.range_proof_root = roots.1.hash;
+				b.header.kernel_root = roots.2.hash;
+				Ok(())
+			}
+			Err(e) => Err(e),
+			Ok(_) => unreachable!(),
+		}
 	}
 
 	/// Total difficulty at the head of the chain

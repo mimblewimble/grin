@@ -290,7 +290,7 @@ impl<'a, T, B> PMMR<'a, T, B> where T: Summable + Hashed + Clone, B: 'a + Backen
 /// underlying HashSum.
 #[derive(Clone)]
 pub struct VecBackend<T> where T: Summable + Clone {
-	elems: Vec<Option<HashSum<T>>>,
+	pub elems: Vec<Option<HashSum<T>>>,
 }
 
 impl<T> Backend<T> for VecBackend<T> where T: Summable + Clone {
