@@ -233,7 +233,7 @@ mod tests {
         let outputs = vec![core::transaction::Output{
                 features: core::transaction::DEFAULT_OUTPUT,
                 commit: output_commit,
-                proof: ec.range_proof(0, 100, key::ZERO_KEY, output_commit)}];
+                proof: ec.range_proof(0, 100, key::ZERO_KEY, output_commit, ec.nonce())}];
         let test_transaction = core::transaction::Transaction::new(inputs,
             outputs, 5);
 

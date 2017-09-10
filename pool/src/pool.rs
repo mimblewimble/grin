@@ -892,7 +892,7 @@ mod tests {
         transaction::Output{
             features: transaction::DEFAULT_OUTPUT,
             commit: output_commitment,
-            proof: ec.range_proof(0, value, output_key, output_commitment)}
+            proof: ec.range_proof(0, value, output_key, output_commitment, ec.nonce())}
     }
 
     /// Makes a SecretKey from a single u64

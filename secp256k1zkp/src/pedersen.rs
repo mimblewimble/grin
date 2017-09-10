@@ -163,6 +163,7 @@ impl RangeProof {
 }
 
 /// The range that was proven
+#[derive(Debug)]
 pub struct ProofRange {
 	/// Min value that was proven
 	pub min: u64,
@@ -306,20 +307,25 @@ impl Secp256k1 {
 		SecretKey::from_slice(self, &ret)
 	}
 
+    /// Convenience function for generating a random nonce for a range proof.
+    /// We will need the nonce later if we want to rewind the range proof.
+    pub fn nonce(&self) -> [u8; 32] {
+        let mut rng = OsRng::new().unwrap();
+        let mut nonce = [0u8; 32];
+        rng.fill_bytes(&mut nonce);
+        nonce
+    }
+
 	/// Produces a range proof for the provided value, using min and max
 	/// bounds, relying
 	/// on the blinding factor and commitment.
 	pub fn range_proof(&self,
-	                   min: u64,
-	                   value: u64,
-	                   blind: SecretKey,
-	                   commit: Commitment)
-	                   -> RangeProof {
-
-		let mut rng = OsRng::new().unwrap();
-		let mut nonce = [0u8; 32];
-		rng.fill_bytes(&mut nonce);
-
+                        min: u64,
+                        value: u64,
+                        blind: SecretKey,
+                        commit: Commitment,
+                        nonce: [u8; 32])
+                        -> RangeProof {
 		let mut retried = false;
 		let mut proof = [0; constants::MAX_PROOF_SIZE];
 		let mut plen = constants::MAX_PROOF_SIZE as i32;
@@ -584,5 +590,68 @@ mod tests {
             vec![commit(3, blind_neg), commit(2, blind_sum)],
             1001
         ));
+    }
+
+    #[test]
+    fn test_commit_sum() {
+        let secp = Secp256k1::with_caps(ContextFlag::Commit);
+
+        fn commit(value: u64, blinding: SecretKey) -> Commitment {
+            let secp = Secp256k1::with_caps(ContextFlag::Commit);
+            secp.commit(value, blinding).unwrap()
+        }
+
+        let blind_a = SecretKey::new(&secp, &mut OsRng::new().unwrap());
+        let blind_b = SecretKey::new(&secp, &mut OsRng::new().unwrap());
+
+        let commit_a = commit(3, blind_a);
+        let commit_b = commit(2, blind_b);
+
+        let blind_c = secp.blind_sum(vec![blind_a, blind_b], vec![]).unwrap();
+
+        let commit_c = commit(3 + 2, blind_c);
+
+        let commit_d = secp.commit_sum(vec![commit_a, commit_b], vec![]).unwrap();
+        assert_eq!(commit_c, commit_d);
+    }
+
+    #[test]
+    fn test_range_proof() {
+        let secp = Secp256k1::with_caps(ContextFlag::Commit);
+        let blinding = SecretKey::new(&secp, &mut OsRng::new().unwrap());
+
+        let commit = secp.commit(7, blinding).unwrap();
+        let nonce = secp.nonce();
+        let range_proof = secp.range_proof(0, 7, blinding, commit, nonce);
+        let proof_range = secp.verify_range_proof(commit, range_proof).unwrap();
+
+        assert_eq!(proof_range.min, 0);
+
+        let proof_info = secp.range_proof_info(range_proof);
+        assert!(proof_info.success);
+        assert_eq!(proof_info.min, 0);
+        // check we get no information back for the value here
+        assert_eq!(proof_info.value, 0);
+
+        let proof_info = secp.rewind_range_proof(commit, range_proof, nonce);
+        assert!(proof_info.success);
+        assert_eq!(proof_info.min, 0);
+        assert_eq!(proof_info.value, 7);
+
+        // check we cannot rewind a range proof without the original nonce
+        let bad_nonce = secp.nonce();
+        let bad_info = secp.rewind_range_proof(commit, range_proof, bad_nonce);
+        assert_eq!(bad_info.success, false);
+        assert_eq!(bad_info.value, 0);
+
+        // check we can construct and verify a range proof on value 0
+        let commit = secp.commit(0, blinding).unwrap();
+        let nonce = secp.nonce();
+        let range_proof = secp.range_proof(0, 0, blinding, commit, nonce);
+        let proof_range = secp.verify_range_proof(commit, range_proof).unwrap();
+        let proof_info = secp.rewind_range_proof(commit, range_proof, nonce);
+        assert!(proof_info.success);
+        assert_eq!(proof_info.min, 0);
+        assert_eq!(proof_info.value, 0);
     }
 }
