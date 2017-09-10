@@ -18,12 +18,11 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, RwLock};
 
-use secp::pedersen::{Commitment, RangeProof};
+use secp::pedersen::Commitment;
 
 use core::core::{Block, BlockHeader, Output};
 use core::core::target::Difficulty;
 use core::core::hash::Hash;
-use core::core::pmmr::{HashSum, NoSum};
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
@@ -111,10 +110,11 @@ impl Chain {
 			Err(e) => return Err(Error::StoreErr(e)),
 		};
 
-		let sumtrees = sumtree::SumTrees::open(db_root)?;
+		let store = Arc::new(chain_store);
+		let sumtrees = sumtree::SumTrees::open(db_root, store.clone())?;
 
 		Ok(Chain {
-			store: Arc::new(chain_store),
+			store: store,
 			adapter: adapter,
 			head: Arc::new(Mutex::new(head)),
 			orphans: Arc::new(Mutex::new(VecDeque::with_capacity(MAX_ORPHANS + 1))),
@@ -300,12 +300,12 @@ impl Chain {
 		)
 	}
 
-    /// Gets the block header by the provided output commitment
-    pub fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
-        self.store.get_block_header_by_output_commit(commit).map_err(
-            &Error::StoreErr,
-        )
-    }
+	/// Gets the block header by the provided output commitment
+	pub fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
+		self.store.get_block_header_by_output_commit(commit).map_err(
+			&Error::StoreErr,
+			)
+	}
 
 	/// Get the tip of the header chain
 	pub fn get_header_head(&self) -> Result<Tip, Error> {

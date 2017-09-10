@@ -17,6 +17,7 @@
 
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 
 use secp;
 use secp::pedersen::RangeProof;
@@ -24,6 +25,7 @@ use secp::pedersen::RangeProof;
 use core::core::{Block, TxKernel, SumCommit};
 use core::core::pmmr::{Summable, NoSum, PMMR, HashSum};
 use grin_store::sumtree::PMMRBackend;
+use types::ChainStore;
 use types::Error;
 
 const SUMTREES_SUBDIR: &'static str = "sumtrees";
@@ -51,20 +53,30 @@ impl<T> PMMRHandle<T> where T: Summable + Clone {
 
 /// An easy to manipulate structure holding the 3 sum trees necessary to
 /// validate blocks and capturing the UTXO set, the range proofs and the
-/// kernels.
+/// kernels. Also handles the index of Commitments to positions in the
+/// output and range proof sum trees.
+///
+/// Note that the index is never authoritative, only the trees are
+/// guaranteed to indicate whether an output is spent or not. The index
+/// may have commitments that have already been spent, even with
+/// pruning enabled.
 pub struct SumTrees {
 	output_pmmr_h: PMMRHandle<SumCommit>,
 	rproof_pmmr_h: PMMRHandle<NoSum<RangeProof>>,
 	kernel_pmmr_h: PMMRHandle<NoSum<TxKernel>>,
+
+	// chain store used as index of commitments to MMR positions
+	commit_index: Arc<ChainStore>,
 }
 
 impl SumTrees {
 	/// Open an existing or new set of backends for the SumTrees
-	pub fn open(root_dir: String) -> Result<SumTrees, Error> {
+	pub fn open(root_dir: String, commit_index: Arc<ChainStore>) -> Result<SumTrees, Error> {
 		Ok(SumTrees {
 			output_pmmr_h: PMMRHandle::new(root_dir.clone(), UTXO_SUBDIR)?,
 			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR)?,
 			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR)?,
+			commit_index: commit_index,
 		})
 	}
 }
@@ -82,7 +94,8 @@ pub fn extending<'a, F, T>(trees: &'a mut SumTrees, inner: F) -> Result<T, Error
 	let sizes: (u64, u64, u64);
 	let res: Result<T, Error>;
 	{
-		let mut extension = Extension::new(trees);
+		let commit_index = trees.commit_index.clone();
+		let mut extension = Extension::new(trees, commit_index);
 		res = inner(&mut extension);
 		sizes = extension.sizes();
 	}
@@ -113,32 +126,56 @@ pub struct Extension<'a> {
 	output_pmmr: PMMR<'a, SumCommit, PMMRBackend<SumCommit>>,
 	rproof_pmmr: PMMR<'a, NoSum<RangeProof>, PMMRBackend<NoSum<RangeProof>>>,
 	kernel_pmmr: PMMR<'a, NoSum<TxKernel>, PMMRBackend<NoSum<TxKernel>>>,
+	commit_index: Arc<ChainStore>,
 }
 
 impl<'a> Extension<'a> {
 
 	// constructor
-	fn new(trees: &'a mut SumTrees) -> Extension<'a> {
+	fn new(trees: &'a mut SumTrees, commit_index: Arc<ChainStore>) -> Extension<'a> {
 		Extension {
 			output_pmmr: PMMR::at(&mut trees.output_pmmr_h.backend, trees.output_pmmr_h.last_pos),
 			rproof_pmmr: PMMR::at(&mut trees.rproof_pmmr_h.backend, trees.rproof_pmmr_h.last_pos),
 			kernel_pmmr: PMMR::at(&mut trees.kernel_pmmr_h.backend, trees.kernel_pmmr_h.last_pos),
+			commit_index: commit_index,
 		}
 	}
 
 	/// Apply a new set of blocks on top the existing sum trees. Blocks are
-	/// applied in order of the provided Vec.
+	/// applied in order of the provided Vec. If pruning is enabled, inputs also
+	/// prune MMR data.
 	pub fn apply_blocks(&mut self, blocks: Vec<&Block>) -> Result<(), Error> {
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 		for b in blocks {
+
+			// doing inputs first guarantees an input can't spend an output in the
+			// same block, enforcing block cut-through
+			for input in &b.inputs {
+				let pos_res = self.commit_index.get_commit_pos(&input.commitment());
+				if let Ok(pos) = pos_res {
+					match self.output_pmmr.prune(pos) {
+						Ok(true) => {},
+						Ok(false) => return Err(Error::AlreadySpent),
+						Err(s) => return Err(Error::SumTreeErr(s)),
+					}
+				} else {
+					return Err(Error::SumTreeErr(format!("Missing index for {:?}", input.commitment())));
+				}
+			}
+
 			for out in &b.outputs {
+				// push new outputs commitments in their MMR
 				self.output_pmmr.push(SumCommit {
 					commit: out.commitment(),
 					secp: secp.clone(),
 				}).map_err(&Error::SumTreeErr)?;
+
+				// push range proofs in their MMR
 				self.rproof_pmmr.push(NoSum(out.proof)).map_err(&Error::SumTreeErr)?;
 			}
+
 			for kernel in &b.kernels {
+				// push kernels in their MMR
 				self.kernel_pmmr.push(NoSum(kernel.clone())).map_err(&Error::SumTreeErr)?;
 			}
 		}

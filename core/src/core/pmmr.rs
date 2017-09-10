@@ -247,11 +247,14 @@ impl<'a, T, B> PMMR<'a, T, B> where T: Summable + Hashed + Clone, B: 'a + Backen
 	/// provide that position and prune, consumers of this API are expected to
 	/// keep an index of elements to positions in the tree. Prunes parent
 	/// nodes as well when they become childless.
-	pub fn prune(&mut self, position: u64) -> Result<(), String> {
+	pub fn prune(&mut self, position: u64) -> Result<bool, String> {
+		if let None = self.backend.get(position) {
+			return Ok(false)
+		}
 		let prunable_height = bintree_postorder_height(position);
 		if prunable_height > 0 {
 			// only leaves can be pruned
-			return Ok(());
+			return Err(format!("Node at {} is not a leaf, can't prune.", position));
 		}
 
 		// loop going up the tree, from node to parent, as long as we stay inside
@@ -275,7 +278,8 @@ impl<'a, T, B> PMMR<'a, T, B> where T: Summable + Hashed + Clone, B: 'a + Backen
 			}
 		}
 
-		self.backend.remove(to_prune)
+		self.backend.remove(to_prune)?;
+		Ok(true)
 	}
 
 	/// Total size of the tree, including intermediary nodes an ignoring any

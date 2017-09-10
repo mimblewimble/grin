@@ -34,6 +34,7 @@ const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const OUTPUT_COMMIT_PREFIX: u8 = 'o' as u8;
 const HEADER_BY_OUTPUT_PREFIX: u8 = 'p' as u8;
+const COMMIT_POS_PREFIX: u8 = 'c' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
 /// store.
@@ -151,13 +152,12 @@ impl ChainStore for ChainKVStore {
 		)))
 	}
 
-	// TODO - this looks identical to get_output_by_commit above
-	// TODO - are we sure this returns a hash correctly?
-	fn has_output_commit(&self, commit: &Commitment) -> Result<Hash, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(
-			OUTPUT_COMMIT_PREFIX,
-			&mut commit.as_ref().to_vec(),
-		)))
+	fn save_commit_pos(&self, commit: &Commitment, pos: u64) -> Result<(), Error> {
+		self.db.put_ser(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())[..], &pos)
+	}
+
+	fn get_commit_pos(&self, commit: &Commitment) -> Result<u64, Error> {
+		option_to_not_found(self.db.get_ser(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())))
 	}
 
 	/// Maintain consistency of the "header_by_height" index by traversing back through the

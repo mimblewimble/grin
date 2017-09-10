@@ -79,7 +79,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		);
 
 		add_block(b, &mut ctx)?;
-		update_head(b, &mut ctx, &mut extension)
+		update_head(b, &mut ctx)
 	})
 }
 
@@ -223,7 +223,7 @@ fn add_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Erro
 /// Directly updates the head if we've just appended a new block to it or handle
 /// the situation where we've just added enough work to have a fork with more
 /// work than the head.
-fn update_head(b: &Block, ctx: &mut BlockContext, ext: &mut sumtree::Extension) -> Result<Option<Tip>, Error> {
+fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
 	// if we made a fork with more work than the head (which should also be true
 	// when extending the head), update it
 	let tip = Tip::from_block(&b.header);
