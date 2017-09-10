@@ -458,7 +458,8 @@ impl Block {
 		let sig = try!(secp.sign(&msg, &skey));
 		let commit = secp.commit(REWARD, skey).unwrap();
 		//let switch_commit = secp.switch_commit(skey).unwrap();
-		let rproof = secp.range_proof(0, REWARD, skey, commit);
+		let nonce = secp.nonce();
+		let rproof = secp.range_proof(0, REWARD, skey, commit, nonce);
 
 		let output = Output {
 			features: COINBASE_OUTPUT,
