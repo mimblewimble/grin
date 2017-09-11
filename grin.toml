@@ -34,7 +34,7 @@ seeding_type = "None"
 #UserTesting - For regular user testing, much lighter than production more
 #Production - Full production cuckoo parameters
 
-mining_parameter_mode = "Production"
+mining_parameter_mode = "UserTesting"
 
 #7 = Bit flags for FULL_NODE, this structure needs to be changed
 #internally to make it more configurable
@@ -66,7 +66,7 @@ use_cuckoo_miner = true
 #so in a post-release world this should only be used if you really want
 #to run cards in parallel
 
-cuckoo_miner_async_mode = true
+cuckoo_miner_async_mode = false
 
 #If using cuckoo_miner, the directory in which plugins are installed
 #if not specified, grin will look in the directory /deps relative
@@ -90,27 +90,40 @@ burn_reward = true
 #testing value, optional
 #slow_down_in_millis = 30
 
-#if using cuckoo_miner, the plugins to load.. currently
-#just filters for this word in the filenames in the plugin 
-#directory
-#Plugins currently included are:
-#"simple" : the basic cuckoo algorithm
-#"edgetrim" : an algorithm trading speed for a much lower memory footprint
-#"matrix" : fastest available CPU miner, with largest memory footprint
-#"tomato" : Time memory-tradeoff... low memory but very slow
-#Not included but verified working:
-#"cuda" a gpu miner - which currently needs to bebuilt and installed 
-#separately from the cuckoo-miner repository. Instructions found there
+#########################################
+### CUCKOO MINER PLUGIN CONFIGURATION ###
+#########################################
 
-#the list of parameters if you're using "edgetrim or matrix"
-#cuckoo_miner_parameter_list = {NUM_THREADS=4, NUM_TRIMS=7}
+# These entries configure instances of cuckoo miner
+# plugins if the 'use_cuckoo_miner' value above is
+# set to 'true'.
+#
+# Multiple plugins can be specified, (e.g. a cpu
+# miner and a gpu miner running in parallel). However,
+# if 'use_async_mode' above is set to 'false', only
+# the first plugin specified will be used for mining
+# in single-threaded mode
 
-[[mining.cuckoo_miner_plugin_config]]
-type_filter = "matrix"
-parameter_list = {}
+# You'll likely get the best performance using a
+# single GPU and single CPU plugin in parallel
 
 [[mining.cuckoo_miner_plugin_config]]
-type_filter = "cuda"
-parameter_list = {}
+type_filter = "lean_cpu"
+parameter_list = {NUM_THREADS=4, NUM_TRIMS=7}
+
+#The fastest cpu algorithm, but consumes the most memory
+#Can currently be used only in Production (30) Mode
+
+#[[mining.cuckoo_miner_plugin_config]]
+#type_filter = "mean_cpu"
+#parameter_list = {NUM_THREADS=4, NUM_TRIMS=60}
+
+#CUDA verion of lean miner
+#Can currently be used only in Production (30) Mode
+
+#[[mining.cuckoo_miner_plugin_config]]
+#type_filter = "lean_cuda"
+#parameter_list = {}
+
 
 
