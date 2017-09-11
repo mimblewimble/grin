@@ -465,10 +465,13 @@ impl Block {
 	                     -> Result<(Output, TxKernel), secp::Error> {
 		let msg = try!(secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE]));
 		let sig = try!(secp.sign(&msg, &skey));
-		let commit = secp.commit(REWARD, skey).unwrap();
+
+        let commit = secp.commit(REWARD, skey).unwrap();
 		//let switch_commit = secp.switch_commit(skey).unwrap();
+
+        let message = secp::pedersen::ProofMessage::empty();
 		let nonce = secp.nonce();
-		let rproof = secp.range_proof(0, REWARD, skey, commit, nonce);
+		let rproof = secp.range_proof(0, REWARD, skey, commit, &message, nonce);
 
 		let output = Output {
 			features: COINBASE_OUTPUT,
