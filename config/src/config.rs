@@ -22,9 +22,7 @@ use std::fs::File;
 use toml;
 use grin::ServerConfig;
 use pow::types::MinerConfig;
-use types::{ConfigMembers,
-            GlobalConfig,
-            ConfigError};
+use types::{ConfigMembers, GlobalConfig, ConfigError};
 
 /// The default file name to use when trying to derive
 /// the config file location
@@ -36,148 +34,159 @@ const GRIN_HOME: &'static str = ".grin";
 
 impl Default for ConfigMembers {
 	fn default() -> ConfigMembers {
-        ConfigMembers {
-            server: ServerConfig::default(),
-            mining: Some(MinerConfig::default()),
-            //wallet: Some(WalletConfig::default()),
-	    }
-    }
+		ConfigMembers {
+			server: ServerConfig::default(),
+			mining: Some(MinerConfig::default()),
+		}
+	}
 }
 
 impl Default for GlobalConfig {
-	fn default() -> GlobalConfig{
-        GlobalConfig {
-            config_file_path: None,
-            using_config_file: false,
-            members: Some(ConfigMembers::default())
-	    }
-    }
+	fn default() -> GlobalConfig {
+		GlobalConfig {
+			config_file_path: None,
+			using_config_file: false,
+			members: Some(ConfigMembers::default()),
+		}
+	}
 }
 
 impl GlobalConfig {
+	/// Need to decide on rules where to read the config file from,
+	/// but will take a stab at logic for now
 
-    /// Need to decide on rules where to read the config file from,
-    /// but will take a stab at logic for now
-
-    fn derive_config_location(&mut self) -> Result<(), ConfigError> {
-        //First, check working directory
-        let mut config_path = env::current_dir().unwrap();
-        config_path.push(CONFIG_FILE_NAME);
-        if config_path.exists() {
-            self.config_file_path = Some(config_path);
-            return Ok(())
-        }
-        //Next, look in directory of executable
-		let mut config_path=env::current_exe().unwrap();
+	fn derive_config_location(&mut self) -> Result<(), ConfigError> {
+		// First, check working directory
+		let mut config_path = env::current_dir().unwrap();
+		config_path.push(CONFIG_FILE_NAME);
+		if config_path.exists() {
+			self.config_file_path = Some(config_path);
+			return Ok(());
+		}
+		// Next, look in directory of executable
+		let mut config_path = env::current_exe().unwrap();
 		config_path.pop();
 		config_path.push(CONFIG_FILE_NAME);
-        if config_path.exists() {
-            self.config_file_path = Some(config_path);
-            return Ok(())
-        }
-        //Then look in {user_home}/.grin
-        let config_path = env::home_dir();
-        if let Some(mut p) = config_path {
-            p.push(GRIN_HOME);
-            p.push(CONFIG_FILE_NAME);
-            if p.exists() {
-                self.config_file_path = Some(p);
-                return Ok(())
-            }
-        }
+		if config_path.exists() {
+			self.config_file_path = Some(config_path);
+			return Ok(());
+		}
+		// Then look in {user_home}/.grin
+		let config_path = env::home_dir();
+		if let Some(mut p) = config_path {
+			p.push(GRIN_HOME);
+			p.push(CONFIG_FILE_NAME);
+			if p.exists() {
+				self.config_file_path = Some(p);
+				return Ok(());
+			}
+		}
 
-        // Give up
-        Err(ConfigError::FileNotFoundError(String::from("")))
+		// Give up
+		Err(ConfigError::FileNotFoundError(String::from("")))
 
-    }
+	}
 
-    /// Takes the path to a config file, or if NONE, tries
-    /// to determine a config file based on rules in
-    /// derive_config_location
+	/// Takes the path to a config file, or if NONE, tries
+	/// to determine a config file based on rules in
+	/// derive_config_location
 
-    pub fn new(file_path:Option<&str>) -> Result<GlobalConfig, ConfigError> {
-        let mut return_value = GlobalConfig::default();
-        if let Some(fp) = file_path {
-            return_value.config_file_path = Some(PathBuf::from(&fp));
-        } else {
-            return_value.derive_config_location().unwrap();
-        }
+	pub fn new(file_path: Option<&str>) -> Result<GlobalConfig, ConfigError> {
+		let mut return_value = GlobalConfig::default();
+		if let Some(fp) = file_path {
+			return_value.config_file_path = Some(PathBuf::from(&fp));
+		} else {
+			return_value.derive_config_location().unwrap();
+		}
 
-        //No attempt at a config file, just return defaults
-        if let None = return_value.config_file_path {
-            return Ok(return_value);
-        }
+		// No attempt at a config file, just return defaults
+		if let None = return_value.config_file_path {
+			return Ok(return_value);
+		}
 
-        //Config file path is given but not valid
-        if !return_value.config_file_path.as_mut().unwrap().exists() {
-            return Err(
-                ConfigError::FileNotFoundError(String::from(return_value.config_file_path.as_mut()
-                        .unwrap().to_str().unwrap().clone()))
-            );
-        }
+		// Config file path is given but not valid
+		if !return_value.config_file_path.as_mut().unwrap().exists() {
+			return Err(ConfigError::FileNotFoundError(String::from(
+				return_value
+					.config_file_path
+					.as_mut()
+					.unwrap()
+					.to_str()
+					.unwrap()
+					.clone(),
+			)));
+		}
 
-        //Try to parse the config file if it exists
-        //explode if it does exist but something's wrong
-        //with it
-        return_value.read_config()
-    }
+		// Try to parse the config file if it exists
+		// explode if it does exist but something's wrong
+		// with it
+		return_value.read_config()
+	}
 
-    /// Read config
-    pub fn read_config(mut self) -> Result<GlobalConfig, ConfigError> {
-        let mut file = File::open(self.config_file_path.as_mut().unwrap())?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        let decoded:Result<ConfigMembers, toml::de::Error> = toml::from_str(&contents);
-        match decoded {
-            Ok(mut gc) => {
-                //Put the struct back together, because the config
-                //file was flattened a bit
-                gc.server.mining_config = gc.mining.clone();
-                self.using_config_file = true;
-                self.members = Some(gc);
-                return Ok(self)
-            },
-            Err (e) => {
-                return Err(
-                    ConfigError::ParseError(String::from(self.config_file_path.as_mut()
-                            .unwrap().to_str().unwrap().clone()),
-                        String::from(format!("{}", e))
-                    )
-                );
-            }
-        }
-    }
+	/// Read config
+	pub fn read_config(mut self) -> Result<GlobalConfig, ConfigError> {
+		let mut file = File::open(self.config_file_path.as_mut().unwrap())?;
+		let mut contents = String::new();
+		file.read_to_string(&mut contents)?;
+		let decoded: Result<ConfigMembers, toml::de::Error> = toml::from_str(&contents);
+		match decoded {
+			Ok(mut gc) => {
+				// Put the struct back together, because the config
+				// file was flattened a bit
+				gc.server.mining_config = gc.mining.clone();
+				self.using_config_file = true;
+				self.members = Some(gc);
+				return Ok(self);
+			}
+			Err(e) => {
+				return Err(ConfigError::ParseError(
+					String::from(
+						self.config_file_path
+							.as_mut()
+							.unwrap()
+							.to_str()
+							.unwrap()
+							.clone(),
+					),
+					String::from(format!("{}", e)),
+				));
+			}
+		}
+	}
 
-    /// Serialize config
-    pub fn ser_config(&mut self) -> Result<String, ConfigError> {
-        let encoded:Result<String, toml::ser::Error> = toml::to_string(self.members.as_mut().unwrap());
-        match encoded {
-            Ok(enc) => {
-                return Ok(enc)
-            },
-            Err (e) => {
-                return Err(
-                    ConfigError::SerializationError(
-                        String::from(format!("{}", e))
-                    )
-                );
-            }
-        }
-    }
+	/// Serialize config
+	pub fn ser_config(&mut self) -> Result<String, ConfigError> {
+		let encoded: Result<String, toml::ser::Error> =
+			toml::to_string(self.members.as_mut().unwrap());
+		match encoded {
+			Ok(enc) => return Ok(enc),
+			Err(e) => {
+				return Err(ConfigError::SerializationError(
+					String::from(format!("{}", e)),
+				));
+			}
+		}
+	}
 
-    /*pub fn wallet_enabled(&mut self) -> bool {
+	/*pub fn wallet_enabled(&mut self) -> bool {
         return self.members.as_mut().unwrap().wallet.as_mut().unwrap().enable_wallet;
     }*/
 
-    /// Enable mining
-    pub fn mining_enabled(&mut self) -> bool {
-        return self.members.as_mut().unwrap().mining.as_mut().unwrap().enable_mining;
-    }
+	/// Enable mining
+	pub fn mining_enabled(&mut self) -> bool {
+		return self.members
+			.as_mut()
+			.unwrap()
+			.mining
+			.as_mut()
+			.unwrap()
+			.enable_mining;
+	}
 }
 
 #[test]
 fn test_read_config() {
-    let toml_str = r#"
+	let toml_str = r#"
         #Section is optional, if not here or enable_server is false, will only run wallet
         [server]
         enable_server = true
@@ -202,9 +211,9 @@ fn test_read_config() {
 
     "#;
 
-    let mut decoded: GlobalConfig = toml::from_str(toml_str).unwrap();
-    decoded.server.as_mut().unwrap().mining_config = decoded.mining;
-    println!("Decoded.server: {:?}", decoded.server);
-    println!("Decoded wallet: {:?}", decoded.wallet);
-    panic!("panic");
+	let mut decoded: GlobalConfig = toml::from_str(toml_str).unwrap();
+	decoded.server.as_mut().unwrap().mining_config = decoded.mining;
+	println!("Decoded.server: {:?}", decoded.server);
+	println!("Decoded wallet: {:?}", decoded.wallet);
+	panic!("panic");
 }

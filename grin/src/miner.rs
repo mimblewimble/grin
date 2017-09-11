@@ -196,27 +196,34 @@ impl Miner {
 				break;
 			}
 			if time::get_time().sec > next_stat_output {
-			let stats = job_handle.get_stats();
-				if let Ok(stat_vec) = stats {
-					for s in stat_vec {
-						if s.last_start_time==0 {
-							continue;
+			for i in 0..plugin_miner.loaded_plugin_count(){
+				let stats = job_handle.get_stats(i);
+					if let Ok(stat_vec) = stats {
+						for s in stat_vec {
+							if s.last_start_time==0 {
+								continue;
+							}
+							let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
+							let last_hashes_per_sec = 1.0 / last_solution_time_secs;
+							debug!("Plugin {} - Mining on Device {} - {}: Last hash time: {} - Hashes per second: {:.*} - Total Attempts: {}",
+								i,
+								s.device_id, s.device_name,
+								last_solution_time_secs, 3, last_hashes_per_sec,
+								s.iterations_completed);
 						}
-						let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
-						let last_hashes_per_sec = 1.0 / last_solution_time_secs;
-						debug!("Mining on Device {} - {}: Last hash time: {} - Hashes per second: {:.*} - Total Attempts: {}",
-							s.device_id, s.device_name,
-							last_solution_time_secs, 3, last_hashes_per_sec,
-							s.iterations_completed);
-					}
-				} 
-				next_stat_output = time::get_time().sec + stat_output_interval;
+					} 
+					next_stat_output = time::get_time().sec + stat_output_interval;
+				}
 			}
 		}
 		if sol==None {
+			let mut hash_count = 0;
+			for i in 0..plugin_miner.loaded_plugin_count(){
+				hash_count+=job_handle.get_hashes_since_last_call(i);
+			}
 			debug!("(Server ID: {}) No solution found after {} iterations, continuing...",
-				    self.debug_output_id,
-					job_handle.get_hashes_since_last_call().unwrap())
+				self.debug_output_id,
+				hash_count);
 		}
 
 		job_handle.stop_jobs();
@@ -410,7 +417,7 @@ impl Miner {
 			core::Block::reward_output(skey, &secp_inst).unwrap()
 		} else {
 			let url = format!("{}/v1/receive/coinbase",
-			 					self.config.wallet_receiver_url.as_str());
+                        self.config.wallet_receiver_url.as_str());
 			let request = WalletReceiveRequest::Coinbase(CbAmount{amount: consensus::REWARD});
 			let res: CbData = api::client::post(url.as_str(),
 			                                    &request)

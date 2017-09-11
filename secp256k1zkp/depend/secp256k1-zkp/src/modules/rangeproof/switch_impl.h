@@ -29,7 +29,7 @@ static const secp256k1_ge secp256k1_ge_const_g3 = SECP256K1_GE_CONST(
 /* sec * G3 */
 SECP256K1_INLINE static void secp256k1_switch_ecmult(const secp256k1_pedersen_context *switch_ctx, 
   secp256k1_gej *rj, const secp256k1_scalar *sec) {
-    secp256k1_pedersen_ecmult_small(switch_ctx, rj, sec);
+    secp256k1_pedersen_ecmult_small(switch_ctx, rj, (uint64_t) sec);
 }
 
 #endif

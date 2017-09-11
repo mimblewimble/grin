@@ -41,7 +41,8 @@ fn main() {
                .define("ENABLE_MODULE_ECDH", Some("1"))
                .define("ENABLE_MODULE_SCHNORR", Some("1"))
                .define("ENABLE_MODULE_RECOVERY", Some("1"))
-               .define("ENABLE_MODULE_RANGEPROOF", Some("1"));
+               .define("ENABLE_MODULE_RANGEPROOF", Some("1"))
+               .warnings(false);
 
     // secp256k1
     base_config.file("depend/secp256k1-zkp/contrib/lax_der_parsing.c")

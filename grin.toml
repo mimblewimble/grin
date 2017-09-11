@@ -14,7 +14,7 @@
 
 #the address on which services will listen, e.g. Transaction Pool
 
-api_http_addr = "127.0.0.1:13413"
+api_http_addr = "127.0.0.1:13415"
 
 #the directory, relative to current, in which the grin blockchain
 #is stored
@@ -34,7 +34,7 @@ seeding_type = "None"
 #UserTesting - For regular user testing, much lighter than production more
 #Production - Full production cuckoo parameters
 
-mining_parameter_mode = "UserTesting"
+mining_parameter_mode = "Production"
 
 #7 = Bit flags for FULL_NODE, this structure needs to be changed
 #internally to make it more configurable
@@ -66,7 +66,7 @@ use_cuckoo_miner = true
 #so in a post-release world this should only be used if you really want
 #to run cards in parallel
 
-cuckoo_miner_async_mode = false
+cuckoo_miner_async_mode = true
 
 #If using cuckoo_miner, the directory in which plugins are installed
 #if not specified, grin will look in the directory /deps relative
@@ -74,7 +74,23 @@ cuckoo_miner_async_mode = false
 
 #cuckoo_miner_plugin_dir = "target/debug/plugins"
 
-#if using cuckoo_miner, the implementation to use.. currently
+#The amount of time, in seconds, to attempt to mine on a particular
+#header before stopping and re-collecting transactions from the pool
+
+attempt_time_per_block = 30
+
+#the wallet reciever to which coinbase rewards will be sent
+
+wallet_receiver_url = "http://127.0.0.1:13425"
+
+#whether to ignore the reward (mostly for testing)
+
+burn_reward = true
+
+#testing value, optional
+#slow_down_in_millis = 30
+
+#if using cuckoo_miner, the plugins to load.. currently
 #just filters for this word in the filenames in the plugin 
 #directory
 #Plugins currently included are:
@@ -84,26 +100,17 @@ cuckoo_miner_async_mode = false
 #"tomato" : Time memory-tradeoff... low memory but very slow
 #Not included but verified working:
 #"cuda" a gpu miner - which currently needs to bebuilt and installed 
-#separately from#the cuckoo-miner repository. Instructions found there
-
-cuckoo_miner_plugin_type = "simple"
+#separately from the cuckoo-miner repository. Instructions found there
 
 #the list of parameters if you're using "edgetrim or matrix"
 #cuckoo_miner_parameter_list = {NUM_THREADS=4, NUM_TRIMS=7}
 
-#The amount of time, in seconds, to attempt to mine on a particular
-#header before stopping and re-collecting transactions from the pool
+[[mining.cuckoo_miner_plugin_config]]
+type_filter = "matrix"
+parameter_list = {}
 
-attempt_time_per_block = 30
+[[mining.cuckoo_miner_plugin_config]]
+type_filter = "cuda"
+parameter_list = {}
 
-#the wallet reciever to which coinbase rewards will be sent
-
-wallet_receiver_url = "http://127.0.0.1:13415"
-
-#whether to ignore the reward (mostly for testing)
-
-burn_reward = true
-
-#testing value, optional
-#slow_down_in_millis = 30
 
