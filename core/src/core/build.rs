@@ -112,8 +112,7 @@ pub fn output(value: u64, blinding: SecretKey) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
 		let commit = build.secp.commit(value, blinding).unwrap();
 		let message = ProofMessage::empty();
-		let nonce = build.secp.nonce();
-		let rproof = build.secp.range_proof(0, value, blinding, commit, &message, nonce);
+		let rproof = build.secp.range_proof(0, value, blinding, commit, &message);
 		(tx.with_output(Output {
 			features: DEFAULT_OUTPUT,
 			commit: commit,
@@ -131,8 +130,7 @@ pub fn output_rand(value: u64) -> Box<Append> {
 		let blinding = SecretKey::new(&build.secp, &mut build.rng);
 		let commit = build.secp.commit(value, blinding).unwrap();
 		let message = ProofMessage::empty();
-		let nonce = build.secp.nonce();
-		let rproof = build.secp.range_proof(0, value, blinding, commit, &message, nonce);
+		let rproof = build.secp.range_proof(0, value, blinding, commit, &message);
 		(tx.with_output(Output {
 			features: DEFAULT_OUTPUT,
 			commit: commit,
