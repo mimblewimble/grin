@@ -32,18 +32,6 @@ use core::global::{MiningParameterMode,MINING_PARAMETER_MODE};
 
 const MAX_ORPHANS: usize = 20;
 
-/// Helper macro to transform a Result into an Option with None in case
-/// of error
-macro_rules! none_err {
-    ($trying:expr) => {{
-        let tried = $trying;
-        if let Err(_) = tried {
-            return None;
-        }
-        tried.unwrap()
-    }}
-}
-
 /// Facade to the blockchain block processing pipeline and storage. Provides
 /// the current view of the UTXO set according to the chain state. Also
 /// maintains locking for the pipeline to avoid conflicting processing.
@@ -127,7 +115,6 @@ impl Chain {
 	/// has been added to the longest chain, None if it's added to an (as of
 	/// now) orphan chain.
 	pub fn process_block(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
-
 		let head = self.store.head().map_err(&Error::StoreErr)?;
 		let ctx = self.ctx_from_head(head, opts);
 
@@ -211,35 +198,37 @@ impl Chain {
 		}
 	}
 
-    /// Gets an unspent output from its commitment. With return None if the
-	/// output
-	/// doesn't exist or has been spent. This querying is done in a way that's
-	/// constistent with the current chain state and more specifically the
+    /// Gets an unspent output from its commitment.
+	/// Will return an Error if the output doesn't exist or has been spent.
+	/// This querying is done in a way that's
+	/// consistent with the current chain state and more specifically the
 	/// current
 	/// branch it is on in case of forks.
-	pub fn get_unspent(&self, output_ref: &Commitment) -> Option<Output> {
+	pub fn get_unspent(&self, output_ref: &Commitment) -> Result<Output, Error> {
 		// TODO use an actual UTXO tree
 		// in the meantime doing it the *very* expensive way:
 		//   1. check the output exists
 		//   2. run the chain back from the head to check it hasn't been spent
 		if let Ok(out) = self.store.get_output_by_commit(output_ref) {
-			let head = none_err!(self.store.head());
-			let mut block_h = head.last_block_h;
-			loop {
-				let b = none_err!(self.store.get_block(&block_h));
-				for input in b.inputs {
-					if input.commitment() == *output_ref {
-						return None;
+			if let Ok(head) = self.store.head() {
+				let mut block_h = head.last_block_h;
+				loop {
+					if let Ok(b) = self.store.get_block(&block_h) {
+						for input in b.inputs {
+							if input.commitment() == *output_ref {
+								return Err(Error::OutputSpent);
+							}
+						}
+						if b.header.height == 1 {
+							return Ok(out);
+						} else {
+							block_h = b.header.previous;
+						}
 					}
-				}
-				if b.header.height == 1 {
-					return Some(out);
-				} else {
-					block_h = b.header.previous;
 				}
 			}
 		}
-		None
+		Err(Error::OutputNotFound)
 	}
 
 	/// Total difficulty at the head of the chain
@@ -274,12 +263,12 @@ impl Chain {
 		)
 	}
 
-    /// Gets the block header by the provided output commitment
-    pub fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
-        self.store.get_block_header_by_output_commit(commit).map_err(
-            &Error::StoreErr,
-        )
-    }
+	/// Gets the block header by the provided output commitment
+	pub fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
+		self.store.get_block_header_by_output_commit(commit).map_err(
+			&Error::StoreErr,
+		)
+	}
 
 	/// Get the tip of the header chain
 	pub fn get_header_head(&self) -> Result<Tip, Error> {

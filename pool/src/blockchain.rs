@@ -18,7 +18,25 @@ use secp::pedersen::Commitment;
 
 use std::sync::RwLock;
 
-use types::BlockChain;
+use types::{BlockChain, PoolError};
+
+#[derive(Debug)]
+pub struct DummyBlockHeaderIndex {
+    block_headers: HashMap<Commitment, block::BlockHeader>
+}
+
+impl DummyBlockHeaderIndex {
+    pub fn insert(&mut self, commit: Commitment, block_header: block::BlockHeader) {
+        self.block_headers.insert(commit, block_header);
+    }
+
+    pub fn get_block_header_by_output_commit(&self, commit: Commitment) -> Result<&block::BlockHeader, PoolError> {
+        match self.block_headers.get(&commit) {
+            Some(h) => Ok(h),
+            None => Err(PoolError::GenericPoolError)
+        }
+    }
+}
 
 /// A DummyUtxoSet for mocking up the chain
 pub struct DummyUtxoSet {
@@ -78,20 +96,45 @@ impl DummyUtxoSet {
 /// need
 #[allow(dead_code)]
 pub struct DummyChainImpl {
-    utxo: RwLock<DummyUtxoSet>
+    utxo: RwLock<DummyUtxoSet>,
+    block_headers: RwLock<DummyBlockHeaderIndex>,
+    head_header: RwLock<Vec<block::BlockHeader>>,
 }
 
 #[allow(dead_code)]
 impl DummyChainImpl {
     pub fn new() -> DummyChainImpl {
         DummyChainImpl{
-            utxo: RwLock::new(DummyUtxoSet{outputs: HashMap::new()})}
+            utxo: RwLock::new(DummyUtxoSet{outputs: HashMap::new()}),
+            block_headers: RwLock::new(DummyBlockHeaderIndex{block_headers: HashMap::new()}),
+            head_header: RwLock::new(vec![]),
+        }
     }
 }
 
 impl BlockChain for DummyChainImpl {
-    fn get_unspent(&self, commitment: &Commitment) -> Option<transaction::Output> {
-        self.utxo.read().unwrap().get_output(commitment).cloned()
+    fn get_unspent(&self, commitment: &Commitment) -> Result<transaction::Output, PoolError> {
+        let output = self.utxo.read().unwrap().get_output(commitment).cloned();
+        match output {
+            Some(o) => Ok(o),
+            None => Err(PoolError::GenericPoolError),
+        }
+    }
+
+    fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<block::BlockHeader, PoolError> {
+        match self.block_headers.read().unwrap().get_block_header_by_output_commit(*commit) {
+            Ok(h) => Ok(h.clone()),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn head_header(&self) -> Result<block::BlockHeader, PoolError> {
+        let headers = self.head_header.read().unwrap();
+        if headers.len() > 0 {
+            Ok(headers[0].clone())
+        } else {
+            Err(PoolError::GenericPoolError)
+        }
     }
 }
 
@@ -102,9 +145,19 @@ impl DummyChain for DummyChainImpl {
     fn apply_block(&self, b: &block::Block) {
         self.utxo.write().unwrap().with_block(b);
     }
+    fn store_header_by_output_commitment(&self, commitment: Commitment, block_header: &block::BlockHeader) {
+        self.block_headers.write().unwrap().insert(commitment, block_header.clone());
+    }
+    fn store_head_header(&self, block_header: &block::BlockHeader) {
+        let mut h = self.head_header.write().unwrap();
+        h.clear();
+        h.insert(0, block_header.clone());
+    }
 }
 
 pub trait DummyChain: BlockChain {
     fn update_utxo_set(&mut self, new_utxo: DummyUtxoSet);
     fn apply_block(&self, b: &block::Block);
+    fn store_header_by_output_commitment(&self, commitment: Commitment, block_header: &block::BlockHeader);
+    fn store_head_header(&self, block_header: &block::BlockHeader);
 }

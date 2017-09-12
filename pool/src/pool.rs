@@ -20,6 +20,7 @@ pub use graph;
 use core::core::transaction;
 use core::core::block;
 use core::core::hash;
+use core::consensus;
 
 use secp;
 use secp::pedersen::Commitment;
@@ -77,9 +78,10 @@ impl<T> TransactionPool<T> where T: BlockChain {
     // output designated by output_commitment.
     fn search_blockchain_unspents(&self, output_commitment: &Commitment) -> Option<Parent> {
         self.blockchain.get_unspent(output_commitment).
-            map(|_| match self.pool.get_blockchain_spent(output_commitment) {
+            ok().
+            map(|output| match self.pool.get_blockchain_spent(output_commitment) {
                 Some(x) => Parent::AlreadySpent{other_tx: x.destination_hash().unwrap()},
-                None => Parent::BlockTransaction,
+                None => Parent::BlockTransaction{output},
             })
     }
 
@@ -109,7 +111,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
 
     /// Attempts to add a transaction to the pool.
     ///
-    /// Adds a transation to the memory pool, deferring to the orphans pool
+    /// Adds a transaction to the memory pool, deferring to the orphans pool
     /// if necessary, and performing any connection-related validity checks.
     /// Happens under an exclusive mutable reference gated by the write portion
     /// of a RWLock.
@@ -118,7 +120,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
         let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
         tx.validate(&secp).map_err(|_| PoolError::Invalid)?;
 
-        // The first check invovles ensuring that an identical transaction is
+        // The first check involves ensuring that an identical transaction is
         // not already in the pool's transaction set.
         // A non-authoritative similar check should be performed under the
         // pool's read lock before we get to this point, which would catch the
@@ -132,7 +134,6 @@ impl<T> TransactionPool<T> where T: BlockChain {
             return Err(PoolError::AlreadyInPool)
         }
 
-
         // The next issue is to identify all unspent outputs that
         // this transaction will consume and make sure they exist in the set.
         let mut pool_refs: Vec<graph::Edge> = Vec::new();
@@ -140,8 +141,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
         let mut blockchain_refs: Vec<graph::Edge> = Vec::new();
 
         for input in &tx.inputs {
-            let base = graph::Edge::new(None, Some(tx_hash),
-                input.commitment());
+            let base = graph::Edge::new(None, Some(tx_hash), input.commitment());
 
             // Note that search_for_best_output does not examine orphans, by
             // design. If an incoming transaction consumes pool outputs already
@@ -149,7 +149,22 @@ impl<T> TransactionPool<T> where T: BlockChain {
             // into the pool.
             match self.search_for_best_output(&input.commitment()) {
                 Parent::PoolTransaction{tx_ref: x} => pool_refs.push(base.with_source(Some(x))),
-                Parent::BlockTransaction => blockchain_refs.push(base),
+                Parent::BlockTransaction{output} => {
+                    // TODO - pull this out into a separate function?
+                    if output.features.contains(transaction::COINBASE_OUTPUT) {
+                        if let Ok(out_header) = self.blockchain.get_block_header_by_output_commit(&output.commitment()) {
+                            if let Ok(head_header) = self.blockchain.head_header() {
+                                if head_header.height <= out_header.height + consensus::COINBASE_MATURITY {
+                                    return Err(PoolError::ImmatureCoinbase{
+                                        header: out_header,
+                                        output: output.commitment()
+                                    })
+                                };
+                            };
+                        };
+                    };
+                    blockchain_refs.push(base);
+                },
                 Parent::Unknown => orphan_refs.push(base),
                 Parent::AlreadySpent{other_tx: x} => return Err(PoolError::DoubleSpend{other_tx: x, spent_output: input.commitment()}),
             }
@@ -232,7 +247,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
         // Checking against current blockchain unspent outputs
         // We want outputs even if they're spent by pool txs, so we ignore
         // consumed_blockchain_outputs
-        if self.blockchain.get_unspent(&output.commitment()).is_some() {
+        if self.blockchain.get_unspent(&output.commitment()).is_ok() {
             return Err(PoolError::DuplicateOutput{
                 other_tx: None,
                 in_chain: true,
@@ -417,7 +432,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
         for output in &tx_ref.unwrap().outputs {
             match self.pool.get_internal_spent_output(&output.commitment()) {
                 Some(x) => {
-                    if self.blockchain.get_unspent(&x.output_commitment()).is_none() {
+                    if self.blockchain.get_unspent(&x.output_commitment()).is_err() {
                         self.mark_transaction(x.destination_hash().unwrap(), marked_txs);
                     }
                 },
@@ -465,7 +480,7 @@ impl<T> TransactionPool<T> where T: BlockChain {
 #[cfg(test)]
 mod tests {
     use super::*;
-	use types::*;
+    use types::*;
     use secp::{Secp256k1, ContextFlag, constants};
     use secp::key;
     use core::core::build;
@@ -488,7 +503,7 @@ mod tests {
     fn test_basic_pool_add() {
         let mut dummy_chain = DummyChainImpl::new();
 
-        let parent_transaction = test_transaction(vec![5,6,7],vec![11,4]);
+        let parent_transaction = test_transaction(vec![5,6,7], vec![11,4]);
         // We want this transaction to be rooted in the blockchain.
         let new_utxo = DummyUtxoSet::empty().
             with_output(test_output(5)).
@@ -540,7 +555,7 @@ mod tests {
             expect_output_parent!(read_pool,
                 Parent::AlreadySpent{other_tx: _}, 11, 5);
             expect_output_parent!(read_pool,
-                Parent::BlockTransaction, 8);
+                Parent::BlockTransaction{output: _}, 8);
             expect_output_parent!(read_pool,
                 Parent::Unknown, 20);
 
@@ -630,8 +645,60 @@ mod tests {
     }
 
     #[test]
+    fn test_immature_coinbase() {
+        let mut dummy_chain = DummyChainImpl::new();
+        let coinbase_output = test_coinbase_output(15);
+        dummy_chain.update_utxo_set(DummyUtxoSet::empty().with_output(coinbase_output));
+
+        let chain_ref = Arc::new(dummy_chain);
+        let pool = RwLock::new(test_setup(&chain_ref));
+
+        {
+            let mut write_pool = pool.write().unwrap();
+
+            let coinbase_header = block::BlockHeader {height: 1, ..block::BlockHeader::default()};
+            chain_ref.store_header_by_output_commitment(coinbase_output.commitment(), &coinbase_header);
+
+            let head_header = block::BlockHeader {height: 2, ..block::BlockHeader::default()};
+            chain_ref.store_head_header(&head_header);
+
+            let txn = test_transaction(vec![15], vec![10, 4]);
+            let result = write_pool.add_to_memory_pool(test_source(), txn);
+            match result {
+                Err(PoolError::ImmatureCoinbase{header: _, output: out}) => {
+                    assert_eq!(out, coinbase_output.commitment());
+                },
+                _ => panic!("expected ImmatureCoinbase error here"),
+            };
+
+            let head_header = block::BlockHeader {height: 11, ..block::BlockHeader::default()};
+            chain_ref.store_head_header(&head_header);
+
+            let txn = test_transaction(vec![15], vec![10, 4]);
+            let result = write_pool.add_to_memory_pool(test_source(), txn);
+            match result {
+                Err(PoolError::ImmatureCoinbase{header: _, output: out}) => {
+                    assert_eq!(out, coinbase_output.commitment());
+                },
+                _ => panic!("expected ImmatureCoinbase error here"),
+            };
+
+            let head_header = block::BlockHeader {height: 12, ..block::BlockHeader::default()};
+            chain_ref.store_head_header(&head_header);
+
+            let txn = test_transaction(vec![15], vec![10, 4]);
+            let result = write_pool.add_to_memory_pool(test_source(), txn);
+            match result {
+                Ok(_) => {},
+                Err(_) => panic!("this should not return an error here"),
+            };
+        }
+    }
+
+    #[test]
     /// Testing an expected orphan
     fn test_add_orphan() {
+        // TODO we need a test here
     }
 
     #[test]
@@ -750,7 +817,7 @@ mod tests {
             assert_eq!(read_pool.total_size(), 4);
 
             // We should have available blockchain outputs at 9 and 3
-            expect_output_parent!(read_pool, Parent::BlockTransaction, 9, 3);
+            expect_output_parent!(read_pool, Parent::BlockTransaction{output: _}, 9, 3);
 
             // We should have spent blockchain outputs at 4 and 7
             expect_output_parent!(read_pool,
@@ -893,6 +960,17 @@ mod tests {
             features: transaction::DEFAULT_OUTPUT,
             commit: output_commitment,
             proof: ec.range_proof(0, value, output_key, output_commitment, ec.nonce())}
+    }
+
+    /// Deterministically generate a coinbase output defined by our test scheme
+    fn test_coinbase_output(value: u64) -> transaction::Output {
+        let ec = Secp256k1::with_caps(ContextFlag::Commit);
+        let output_key = test_key(value);
+        let output_commitment = ec.commit(value, output_key).unwrap();
+        transaction::Output{
+            features: transaction::COINBASE_OUTPUT,
+            commit: output_commitment,
+            proof: ec.range_proof(0, value, output_key, output_commitment)}
     }
 
     /// Makes a SecretKey from a single u64

@@ -25,17 +25,17 @@ use core::ser;
 use grin_store;
 
 bitflags! {
-  /// Options for block validation
-  pub flags Options: u32 {
-    /// None flag
-    const NONE = 0b00000001,
-    /// Runs without checking the Proof of Work, mostly to make testing easier.
-    const SKIP_POW = 0b00000010,
-    /// Runs PoW verification with a lower cycle size.
-    const EASY_POW = 0b00000100,
-    /// Adds block while in syncing mode.
-    const SYNC = 0b00001000,
-  }
+/// Options for block validation
+	pub flags Options: u32 {
+		/// None flag
+		const NONE = 0b00000001,
+		/// Runs without checking the Proof of Work, mostly to make testing easier.
+		const SKIP_POW = 0b00000010,
+		/// Runs PoW verification with a lower cycle size.
+		const EASY_POW = 0b00000100,
+		/// Adds block while in syncing mode.
+		const SYNC = 0b00001000,
+	}
 }
 
 /// Errors
@@ -57,6 +57,12 @@ pub enum Error {
 	InvalidBlockTime,
 	/// Block height is invalid (not previous + 1)
 	InvalidBlockHeight,
+	/// coinbase can only be spent after it has matured (n blocks)
+	ImmatureCoinbase,
+	/// output not found
+	OutputNotFound,
+	/// output spent
+	OutputSpent,
 	/// Internal issue when trying to save or load data from store
 	StoreErr(grin_store::Error),
 	/// Error serializing or deserializing a type
