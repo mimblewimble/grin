@@ -16,6 +16,7 @@
 
 use byteorder::{ByteOrder, BigEndian};
 use secp::{self, Secp256k1, Message, Signature};
+use secp::key::SecretKey;
 use secp::pedersen::{RangeProof, Commitment};
 
 use core::Committed;
@@ -337,6 +338,17 @@ impl Output {
                 /// since group order is much larger (~2^256) we can be sure overflow is not the case
 		secp.verify_range_proof(self.commit, self.proof).map(|_| ())
 	}
+
+    /// Given the original blinding factor we can recover the value from
+    /// the range proof and the commitment
+    pub fn recover_value(&self, secp: &Secp256k1, nonce: SecretKey) -> Option<u64> {
+        let proof_info = secp.rewind_range_proof(self.commit, self.proof, nonce);
+        if proof_info.success {
+            Some(proof_info.value)
+        } else {
+            None
+        }
+    }
 }
 
 /// Utility function to calculate the Merkle root of vectors of inputs and
@@ -351,4 +363,42 @@ fn u64_to_32bytes(n: u64) -> [u8; 32] {
 	let mut bytes = [0; 32];
 	BigEndian::write_u64(&mut bytes[24..32], n);
 	bytes
+}
+
+#[cfg(test)]
+mod test {
+	use super::*;
+    use secp::pedersen::ProofMessage;
+    use rand::os::OsRng;
+
+
+    #[test]
+    fn test_output_value_recovery() {
+        let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
+        let mut rng = OsRng::new().unwrap();
+
+        let value = 103;
+
+        let blinding = SecretKey::new(&secp, &mut rng);
+		let commit = secp.commit(value, blinding).unwrap();
+		let message = ProofMessage::empty();
+		let range_proof = secp.range_proof(0, value, blinding, commit, &message);
+		let output = Output {
+			features: DEFAULT_OUTPUT,
+			commit: commit,
+			proof: range_proof,
+		};
+
+        // check we can successfully recover the value with the original blinding factor
+        let recovered_value = output.recover_value(&secp, blinding).unwrap();
+
+        assert_eq!(recovered_value, value);
+
+        // check we cannot recover the value without the original blinding factor
+        let not_recoverable = output.recover_value(&secp, SecretKey::new(&secp, &mut rng));
+        match not_recoverable {
+            Some(_) => panic!("expected value to be None here"),
+            None => {}
+        }
+    }
 }
