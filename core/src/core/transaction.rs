@@ -371,13 +371,12 @@ mod test {
     use secp::pedersen::ProofMessage;
     use rand::os::OsRng;
 
-
     #[test]
     fn test_output_value_recovery() {
         let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
         let mut rng = OsRng::new().unwrap();
 
-        let value = 103;
+        let value = 1003;
 
         let blinding = SecretKey::new(&secp, &mut rng);
 		let commit = secp.commit(value, blinding).unwrap();
