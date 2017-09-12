@@ -56,7 +56,7 @@ from the build directory will run grin using the defaults in the grin.toml file,
 For the time being, it's recommended just to put the built version of grin on your path, e.g. via:
 
 ```
-export $PATH /path/to/grin/dir/target/grin:$PATH
+export $PATH=/path/to/grin/dir/target/grin:$PATH
 ```
 
 # Configuration
