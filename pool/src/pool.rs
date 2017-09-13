@@ -970,10 +970,11 @@ mod tests {
         let ec = Secp256k1::with_caps(ContextFlag::Commit);
         let output_key = test_key(value);
         let output_commitment = ec.commit(value, output_key).unwrap();
+        let message = ProofMessage::empty();
         transaction::Output{
             features: transaction::COINBASE_OUTPUT,
             commit: output_commitment,
-            proof: ec.range_proof(0, value, output_key, output_commitment)}
+            proof: ec.range_proof(0, value, output_key, output_commitment, &message)}
     }
 
     /// Makes a SecretKey from a single u64
