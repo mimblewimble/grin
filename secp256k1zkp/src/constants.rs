@@ -51,7 +51,9 @@ pub const PEDERSEN_COMMITMENT_SIZE: usize = 33;
 pub const MAX_PROOF_SIZE: usize = 5134;
 
 /// The maximum size of a message embedded in a range proof
-pub const PROOF_MSG_SIZE: usize = 4096;
+// TODO - why does this hang if we set it as 4096???
+// pub const PROOF_MSG_SIZE: usize = 4096;
+pub const PROOF_MSG_SIZE: usize = 2048;
 
 /// The order of the secp256k1 curve
 pub const CURVE_ORDER: [u8; 32] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,

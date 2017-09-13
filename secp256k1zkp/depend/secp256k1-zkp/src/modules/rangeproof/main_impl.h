@@ -226,19 +226,21 @@ int secp256k1_rangeproof_verify(const secp256k1_context* ctx, uint64_t *min_valu
 }
 
 int secp256k1_rangeproof_sign(const secp256k1_context* ctx, unsigned char *proof, int *plen, uint64_t min_value,
- const unsigned char *commit, const unsigned char *blind, const unsigned char *nonce, int exp, int min_bits, uint64_t value){
+ const unsigned char *commit, const unsigned char *blind, const unsigned char *nonce, int exp, int min_bits, uint64_t value,
+ const unsigned char *message, size_t msg_len){
     ARG_CHECK(ctx != NULL);
     ARG_CHECK(proof != NULL);
     ARG_CHECK(plen != NULL);
     ARG_CHECK(commit != NULL);
     ARG_CHECK(blind != NULL);
     ARG_CHECK(nonce != NULL);
+    ARG_CHECK(message != NULL || msg_len == 0);
     ARG_CHECK(secp256k1_ecmult_context_is_built(&ctx->ecmult_ctx));
     ARG_CHECK(secp256k1_ecmult_gen_context_is_built(&ctx->ecmult_gen_ctx));
     ARG_CHECK(secp256k1_pedersen_context_is_built(&ctx->pedersen_ctx));
     ARG_CHECK(secp256k1_rangeproof_context_is_built(&ctx->rangeproof_ctx));
     return secp256k1_rangeproof_sign_impl(&ctx->ecmult_ctx, &ctx->ecmult_gen_ctx, &ctx->pedersen_ctx, &ctx->rangeproof_ctx,
-     proof, plen, min_value, commit, blind, nonce, exp, min_bits, value);
+     proof, plen, min_value, commit, blind, nonce, exp, min_bits, value, message, msg_len);
 }
 
 #endif

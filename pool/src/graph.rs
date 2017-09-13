@@ -221,19 +221,20 @@ pub fn transaction_identifier(tx: &core::transaction::Transaction) -> core::hash
 mod tests {
     use super::*;
     use secp::{Secp256k1, ContextFlag};
+    use secp::pedersen::ProofMessage;
     use secp::key;
 
     #[test]
     fn test_add_entry() {
         let ec = Secp256k1::with_caps(ContextFlag::Commit);
-
+        let message = ProofMessage::empty();
         let output_commit = ec.commit_value(70).unwrap();
         let inputs = vec![core::transaction::Input(ec.commit_value(50).unwrap()),
                 core::transaction::Input(ec.commit_value(25).unwrap())];
         let outputs = vec![core::transaction::Output{
                 features: core::transaction::DEFAULT_OUTPUT,
                 commit: output_commit,
-                proof: ec.range_proof(0, 100, key::ZERO_KEY, output_commit, ec.nonce())}];
+                proof: ec.range_proof(0, 100, key::ZERO_KEY, output_commit, &message)}];
         let test_transaction = core::transaction::Transaction::new(inputs,
             outputs, 5);
 

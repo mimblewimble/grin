@@ -293,7 +293,7 @@ extern "C" {
 	                      scalar: *const c_uchar)
 	                      -> c_int;
 
-	// Generates a switch commitment: *commit = blind * J 
+	// Generates a switch commitment: *commit = blind * J
 	// The commitment is 33 bytes, the blinding factor is 32 bytes.
 	pub fn secp256k1_switch_commit(ctx: *const Context,
 	                                 commit: *mut c_uchar,
@@ -377,6 +377,8 @@ extern "C" {
 	                                 nonce: *const c_uchar,
 	                                 exp: c_int,
 	                                 min_bits: c_int,
-	                                 value: uint64_t)
+	                                 value: uint64_t,
+                                     message: *const c_uchar,
+                                     msg_len: c_int)
 	                                 -> c_int;
 }

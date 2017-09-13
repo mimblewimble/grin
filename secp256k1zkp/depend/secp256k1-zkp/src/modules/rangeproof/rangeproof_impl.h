@@ -266,7 +266,8 @@ SECP256K1_INLINE static int secp256k1_range_proveparams(uint64_t *v, int *rings,
 SECP256K1_INLINE static int secp256k1_rangeproof_sign_impl(const secp256k1_ecmult_context* ecmult_ctx,
  const secp256k1_ecmult_gen_context* ecmult_gen_ctx, const secp256k1_pedersen_context* pedersen_ctx,
  const secp256k1_rangeproof_context* rangeproof_ctx, unsigned char *proof, int *plen, uint64_t min_value,
- const unsigned char *commit, const unsigned char *blind, const unsigned char *nonce, int exp, int min_bits, uint64_t value){
+ const unsigned char *commit, const unsigned char *blind, const unsigned char *nonce, int exp, int min_bits, uint64_t value,
+ const unsigned char *message, int msg_len){
     secp256k1_gej pubs[128];     /* Candidate digits for our proof, most inferred. */
     secp256k1_scalar s[128];     /* Signatures in our proof, most forged. */
     secp256k1_scalar sec[32];    /* Blinding factors for the correct digits. */
@@ -306,6 +307,13 @@ SECP256K1_INLINE static int secp256k1_rangeproof_sign_impl(const secp256k1_ecmul
         }
         len += 8;
     }
+    /* Do we have enough room in the proof for the message? Each ring gives us 128 bytes, but the
+     * final ring is used to encode the blinding factor and the value, so we can't use that. (Well,
+     * technically there are 64 bytes available if we avoided the other data, but this is difficult
+     * because it's not always in the same place. */
+    if (msg_len > 0 && msg_len > 128 * (rings - 1)) {
+        return 0;
+    }
     /* Do we have enough room for the proof? */
     if (*plen - len < 32 * (npub + rings - 1) + 32 + ((rings+6) >> 3)) {
         return 0;
@@ -315,6 +323,9 @@ SECP256K1_INLINE static int secp256k1_rangeproof_sign_impl(const secp256k1_ecmul
     secp256k1_sha256_write(&sha256_m, proof, len);
 
     memset(prep, 0, 4096);
+    if (message != NULL) {
+        memcpy(prep, message, msg_len);
+    }
     /* Note, the data corresponding to the blinding factors must be zero. */
     if (rsizes[rings - 1] > 1) {
         int idx;
