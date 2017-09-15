@@ -188,10 +188,42 @@ fn validate_block(b: &Block, ctx: &mut BlockContext, ext: &mut sumtree::Extensio
 
 	// apply the new block to the MMR trees and check the new root hashes
 	if b.header.previous == ctx.head.last_block_h {
-		ext.apply_blocks(vec![b])?;
+		// standard head extension
+		ext.apply_block(b)?;
 	} else {
-		// TODO handle branch case
+	
+		// extending a fork, first identify the block where forking occurred
+		// keeping the hashes of blocks along the fork
+		let mut current = b.header.previous;
+		let mut hashes = vec![];
+		loop {
+			let curr_header = ctx.store.get_block_header(&current)?;
+			let height_header = ctx.store.get_header_by_height(curr_header.height)?;
+			if curr_header.hash() != height_header.hash() {
+				hashes.insert(0, curr_header.hash());
+				current = curr_header.previous;
+			} else {
+				break;
+			}
+		}
+
+		// rewind the sum trees up the forking block, providing the height of the
+		// forked block and the last commitment we want to rewind to
+		let forked_block = ctx.store.get_block(&current)?;
+		if forked_block.header.height > 0 {
+			let last_output = &forked_block.outputs[forked_block.outputs.len() - 1];
+			let last_kernel = &forked_block.kernels[forked_block.kernels.len() - 1];
+			ext.rewind(forked_block.header.height, last_output, last_kernel)?;
+		}
+
+		// apply all forked blocks, including this new one
+		for h in hashes {
+			let fb = ctx.store.get_block(&h)?;
+			ext.apply_block(&fb)?;
+		}
+		ext.apply_block(&b)?;
 	}
+
 	let (utxo_root, rproof_root, kernel_root) = ext.roots();
 	if utxo_root.hash != b.header.utxo_root ||
 		rproof_root.hash != b.header.range_proof_root ||

@@ -16,13 +16,14 @@
 //! conveniently and transactionally.
 
 use std::fs;
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
 use secp;
-use secp::pedersen::RangeProof;
+use secp::pedersen::{RangeProof, Commitment};
 
-use core::core::{Block, TxKernel, SumCommit};
+use core::core::{Block, TxKernel, Output, SumCommit};
 use core::core::pmmr::{Summable, NoSum, PMMR, HashSum};
 use grin_store::sumtree::PMMRBackend;
 use types::ChainStore;
@@ -97,6 +98,9 @@ pub fn extending<'a, F, T>(trees: &'a mut SumTrees, inner: F) -> Result<T, Error
 		let commit_index = trees.commit_index.clone();
 		let mut extension = Extension::new(trees, commit_index);
 		res = inner(&mut extension);
+		if res.is_ok() {
+			extension.save_pos_index()?;
+		}
 		sizes = extension.sizes();
 	}
 	match res {
@@ -126,7 +130,10 @@ pub struct Extension<'a> {
 	output_pmmr: PMMR<'a, SumCommit, PMMRBackend<SumCommit>>,
 	rproof_pmmr: PMMR<'a, NoSum<RangeProof>, PMMRBackend<NoSum<RangeProof>>>,
 	kernel_pmmr: PMMR<'a, NoSum<TxKernel>, PMMRBackend<NoSum<TxKernel>>>,
+
 	commit_index: Arc<ChainStore>,
+	new_output_commits: HashMap<Commitment, u64>,
+	new_kernel_excesses: HashMap<Commitment, u64>,
 }
 
 impl<'a> Extension<'a> {
@@ -138,47 +145,79 @@ impl<'a> Extension<'a> {
 			rproof_pmmr: PMMR::at(&mut trees.rproof_pmmr_h.backend, trees.rproof_pmmr_h.last_pos),
 			kernel_pmmr: PMMR::at(&mut trees.kernel_pmmr_h.backend, trees.kernel_pmmr_h.last_pos),
 			commit_index: commit_index,
+			new_output_commits: HashMap::new(),
+			new_kernel_excesses: HashMap::new(),
 		}
 	}
 
 	/// Apply a new set of blocks on top the existing sum trees. Blocks are
 	/// applied in order of the provided Vec. If pruning is enabled, inputs also
 	/// prune MMR data.
-	pub fn apply_blocks(&mut self, blocks: Vec<&Block>) -> Result<(), Error> {
+	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-		for b in blocks {
 
-			// doing inputs first guarantees an input can't spend an output in the
-			// same block, enforcing block cut-through
-			for input in &b.inputs {
-				let pos_res = self.commit_index.get_commit_pos(&input.commitment());
-				if let Ok(pos) = pos_res {
-					match self.output_pmmr.prune(pos) {
-						Ok(true) => {},
-						Ok(false) => return Err(Error::AlreadySpent),
-						Err(s) => return Err(Error::SumTreeErr(s)),
-					}
-				} else {
-					return Err(Error::SumTreeErr(format!("Missing index for {:?}", input.commitment())));
+		// doing inputs first guarantees an input can't spend an output in the
+		// same block, enforcing block cut-through
+		for input in &b.inputs {
+			let pos_res = self.commit_index.get_output_pos(&input.commitment());
+			if let Ok(pos) = pos_res {
+				match self.output_pmmr.prune(pos, b.header.height as u32) {
+					Ok(true) => {
+						self.rproof_pmmr.prune(pos, b.header.height as u32)
+							.map_err(|s| Error::SumTreeErr(s))?;
+					},
+					Ok(false) => return Err(Error::AlreadySpent),
+					Err(s) => return Err(Error::SumTreeErr(s)),
 				}
-			}
-
-			for out in &b.outputs {
-				// push new outputs commitments in their MMR
-				self.output_pmmr.push(SumCommit {
-					commit: out.commitment(),
-					secp: secp.clone(),
-				}).map_err(&Error::SumTreeErr)?;
-
-				// push range proofs in their MMR
-				self.rproof_pmmr.push(NoSum(out.proof)).map_err(&Error::SumTreeErr)?;
-			}
-
-			for kernel in &b.kernels {
-				// push kernels in their MMR
-				self.kernel_pmmr.push(NoSum(kernel.clone())).map_err(&Error::SumTreeErr)?;
+			} else {
+				return Err(Error::SumTreeErr(format!("Missing index for {:?}", input.commitment())));
 			}
 		}
+
+		for out in &b.outputs {
+			if let Ok(_) = self.commit_index.get_output_pos(&out.commitment()) {
+				return Err(Error::DuplicateCommitment(out.commitment()));
+			}
+			// push new outputs commitments in their MMR and save them in the index
+			let pos = self.output_pmmr.push(SumCommit {
+				commit: out.commitment(),
+				secp: secp.clone(),
+			}).map_err(&Error::SumTreeErr)?;
+
+			self.new_output_commits.insert(out.commitment(), pos);
+
+			// push range proofs in their MMR
+			self.rproof_pmmr.push(NoSum(out.proof)).map_err(&Error::SumTreeErr)?;
+		}
+
+		for kernel in &b.kernels {
+			if let Ok(_) = self.commit_index.get_kernel_pos(&kernel.excess) {
+				return Err(Error::DuplicateKernel(kernel.excess.clone()));
+			}
+			// push kernels in their MMR
+			let pos = self.kernel_pmmr.push(NoSum(kernel.clone())).map_err(&Error::SumTreeErr)?;
+			self.new_kernel_excesses.insert(kernel.excess, pos);
+		}
+		Ok(())
+	}
+
+	fn save_pos_index(&self) -> Result<(), Error> {
+		for (commit, pos) in &self.new_output_commits {
+			self.commit_index.save_output_pos(commit, *pos)?;
+		}
+		for (excess, pos) in &self.new_kernel_excesses {
+			self.commit_index.save_kernel_pos(excess, *pos)?;
+		}
+		Ok(())
+	}
+
+	pub fn rewind(&mut self, height: u64, output: &Output, kernel: &TxKernel) -> Result<(), Error> {
+		let out_pos_rew = self.commit_index.get_output_pos(&output.commitment())?;
+		let kern_pos_rew = self.commit_index.get_kernel_pos(&kernel.excess)?;
+
+		self.output_pmmr.rewind(out_pos_rew, height as u32).map_err(&Error::SumTreeErr)?;
+		self.rproof_pmmr.rewind(out_pos_rew, height as u32).map_err(&Error::SumTreeErr)?;
+		self.kernel_pmmr.rewind(kern_pos_rew, height as u32).map_err(&Error::SumTreeErr)?;
 		Ok(())
 	}
 

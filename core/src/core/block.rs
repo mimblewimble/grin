@@ -37,7 +37,7 @@ bitflags! {
 }
 
 /// Block header, fairly standard compared to other blockchains.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BlockHeader {
 	/// Height of this block since the genesis block (height 0)
 	pub height: u64,

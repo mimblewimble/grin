@@ -63,6 +63,10 @@ pub enum Error {
 	InvalidRoot,
 	/// One of the inputs in the block has already been spent
 	AlreadySpent,
+	/// An output with that commitment already exists (should be unique)
+	DuplicateCommitment(Commitment),
+	/// A kernel with that excess commitment already exists (should be unique)
+	DuplicateKernel(Commitment),
 	/// Internal issue when trying to save or load data from store
 	StoreErr(grin_store::Error),
 	/// Error serializing or deserializing a type
@@ -200,13 +204,21 @@ pub trait ChainStore: Send + Sync {
 	/// Gets a block_header for the given input commit
 	fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, store::Error>;
 
-	/// Saves the position of a commitment in the UTXO MMR. Used as an index
-	/// for spending and pruning.
-	fn save_commit_pos(&self, commit: &Commitment, pos: u64) -> Result<(), store::Error>;
+	/// Saves the position of an output, represented by its commitment, in the
+	/// UTXO MMR. Used as an index for spending and pruning.
+	fn save_output_pos(&self, commit: &Commitment, pos: u64) -> Result<(), store::Error>;
 
-	/// Gets the position of a commitment in the UTXO MMR. Used as an index
-	/// for spending and pruning.
-	fn get_commit_pos(&self, commit: &Commitment) -> Result<u64, store::Error>;
+	/// Gets the position of an output, represented by its commitment, in the
+	/// UTXO MMR. Used as an index for spending and pruning.
+	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, store::Error>;
+
+	/// Saves the position of a kernel, represented by its excess, in the
+	/// UTXO MMR. Used as an index for spending and pruning.
+	fn save_kernel_pos(&self, commit: &Commitment, pos: u64) -> Result<(), store::Error>;
+
+	/// Gets the position of a kernel, represented by its excess, in the
+	/// UTXO MMR. Used as an index for spending and pruning.
+	fn get_kernel_pos(&self, commit: &Commitment) -> Result<u64, store::Error>;
 
 	/// Saves the provided block header at the corresponding height. Also check
 	/// the consistency of the height chain in store by assuring previous

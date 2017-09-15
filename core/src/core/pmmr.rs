@@ -80,7 +80,7 @@ impl Writeable for NullSum {
 }
 
 /// Wrapper for a type that allows it to be inserted in a tree without summing
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NoSum<T>(pub T);
 impl<T> Summable for NoSum<T> {
 	type Sum = NullSum;
@@ -147,18 +147,26 @@ impl<T> ops::Add for HashSum<T> where T: Summable {
 }
 
 /// Storage backend for the MMR, just needs to be indexed by order of insertion.
-/// The remove operation can be a no-op for unoptimized backends.
+/// The PMMR itself does not need the Backend to be accurate on the existence
+/// of an element (i.e. remove could be a no-op) but layers above can
+/// depend on an accurate Backend to check existence.
 pub trait Backend<T> where T: Summable {
+
 	/// Append the provided HashSums to the backend storage. The position of the
 	/// first element of the Vec in the MMR is provided to help the
 	/// implementation.
 	fn append(&mut self, position: u64, data: Vec<HashSum<T>>) -> Result<(), String>;
 
+	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String>;
+
 	/// Get a HashSum by insertion position
 	fn get(&self, position: u64) -> Option<HashSum<T>>;
 
-	/// Remove HashSums by insertion position
-	fn remove(&mut self, positions: Vec<u64>) -> Result<(), String>;
+	/// Remove HashSums by insertion position. An index is also provided so the
+	/// underlying backend can implement some rollback of positions up to a
+	/// given index (practically the index is a the height of a block that
+	/// triggered removal).
+	fn remove(&mut self, positions: Vec<u64>, index: u32) -> Result<(), String>;
 }
 
 /// Prunable Merkle Mountain Range implementation. All positions within the tree
@@ -243,11 +251,28 @@ impl<'a, T, B> PMMR<'a, T, B> where T: Summable + Hashed + Clone, B: 'a + Backen
 		Ok(elmt_pos)
 	}
 
-	/// Prune an element from the tree given its index. Note that to be able to
+	/// Rewind the PMMR to a previous position, as is all push operations after
+	/// that had been canceled. Expects a position in the PMMR to rewind to as
+	/// well as the consumer-provided index of when the change occurred.
+	pub fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {
+		// identify which actual position we should rewind to as the provided
+		// position is a leaf, which may had some parent that needs to exist
+		// afterward for the MMR to be valid
+		let mut pos = position;
+		while bintree_postorder_height(pos+1) > 0 {
+			pos += 1;
+		}
+
+		self.backend.rewind(pos, index)?;
+		self.last_pos = pos;
+		Ok(())
+	}
+
+	/// Prune an element from the tree given its position. Note that to be able to
 	/// provide that position and prune, consumers of this API are expected to
 	/// keep an index of elements to positions in the tree. Prunes parent
 	/// nodes as well when they become childless.
-	pub fn prune(&mut self, position: u64) -> Result<bool, String> {
+	pub fn prune(&mut self, position: u64, index: u32) -> Result<bool, String> {
 		if let None = self.backend.get(position) {
 			return Ok(false)
 		}
@@ -278,7 +303,7 @@ impl<'a, T, B> PMMR<'a, T, B> where T: Summable + Hashed + Clone, B: 'a + Backen
 			}
 		}
 
-		self.backend.remove(to_prune)?;
+		self.backend.remove(to_prune, index)?;
 		Ok(true)
 	}
 
@@ -306,10 +331,15 @@ impl<T> Backend<T> for VecBackend<T> where T: Summable + Clone {
 	fn get(&self, position: u64) -> Option<HashSum<T>> {
 		self.elems[(position-1) as usize].clone()
 	}
-	fn remove(&mut self, positions: Vec<u64>) -> Result<(), String> {
+	fn remove(&mut self, positions: Vec<u64>, index: u32) -> Result<(), String> {
 		for n in positions {
 			self.elems[(n-1) as usize] = None
 		}
+		Ok(())
+	}
+	#[allow(unused_variables)]
+	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {
+		self.elems = self.elems[0..(position as usize)+1].to_vec();
 		Ok(())
 	}
 }
