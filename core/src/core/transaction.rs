@@ -214,9 +214,14 @@ impl Transaction {
 		// pretend the sum is a public key (which it is, being of the form r.G) and
 		// verify the transaction sig with it
 		let pubk = rsum.to_pubkey(secp)?;
+		println!("before from_slice");
 		let msg = Message::from_slice(&u64_to_32bytes(self.fee))?;
+		println!("before from_der");
 		let sig = Signature::from_der(secp, &self.excess_sig)?;
+
+		println!("before verify");
 		secp.verify(&msg, &sig, &pubk)?;
+		println!("after verify");
 
 		Ok(TxKernel {
 			features: DEFAULT_KERNEL,
