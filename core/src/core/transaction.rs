@@ -81,9 +81,16 @@ impl TxKernel {
 	/// message.
 	pub fn verify(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
 		let msg = try!(Message::from_slice(&u64_to_32bytes(self.fee)));
-		let pubk = try!(self.excess.to_pubkey(secp));
 		let sig = try!(Signature::from_der(secp, &self.excess_sig));
-		secp.verify(&msg, &sig, &pubk)
+
+		let pubkeys = self.excess.to_two_pubkeys(secp);
+
+		// TODO - maybe implement a commitment.verify(&secp, &msg, &sig)
+		// so we don't have to expose to_two_pubkeys()
+		match secp.verify(&msg, &sig, &pubkeys[0]) {
+			Ok(_) => Ok(()),
+			Err(_) => secp.verify(&msg, &sig, &pubkeys[1])
+		}
 	}
 }
 
@@ -213,22 +220,33 @@ impl Transaction {
 
 		// pretend the sum is a public key (which it is, being of the form r.G) and
 		// verify the transaction sig with it
-		let pubk = rsum.to_pubkey(secp)?;
-		println!("before from_slice");
+
 		let msg = Message::from_slice(&u64_to_32bytes(self.fee))?;
-		println!("before from_der");
 		let sig = Signature::from_der(secp, &self.excess_sig)?;
 
-		println!("before verify");
-		secp.verify(&msg, &sig, &pubk)?;
-		println!("after verify");
+		// TODO - implement a commitment.verify(&secp, &msg, &sig);
+		// so we don't have to expose to_two_pubkeys()
 
-		Ok(TxKernel {
+		let pubkeys = rsum.to_two_pubkeys(secp);
+
+		let tx_kernel = TxKernel {
 			features: DEFAULT_KERNEL,
 			excess: rsum,
 			excess_sig: self.excess_sig.clone(),
 			fee: self.fee,
-		})
+		};
+
+		// TODO - maybe implement a commitment.verify(&secp, &msg, &sig)
+		// so we don't have to expose to_two_pubkeys()
+		match secp.verify(&msg, &sig, &pubkeys[0]) {
+			Ok(_) => Ok(tx_kernel),
+			Err(_) => {
+				match secp.verify(&msg, &sig, &pubkeys[1]) {
+					Ok(_) => Ok(tx_kernel),
+					Err(e) => Err(e)
+				}
+			}
+		}
 	}
 
 	/// Validates all relevant parts of a fully built transaction. Checks the
@@ -338,8 +356,8 @@ impl Output {
 
 	/// Validates the range proof using the commitment
 	pub fn verify_proof(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
-		/// secp.verify returns range if and only if both min_value and max_value less than 2^64
-                /// since group order is much larger (~2^256) we can be sure overflow is not the case
+		/// secp.verify_range_proof returns range if and only if both min_value and max_value less than 2^64
+		/// since group order is much larger (~2^256) we can be sure overflow is not the case
 		secp.verify_range_proof(self.commit, self.proof).map(|_| ())
 	}
 }
