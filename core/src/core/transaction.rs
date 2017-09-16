@@ -82,15 +82,7 @@ impl TxKernel {
 	pub fn verify(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
 		let msg = try!(Message::from_slice(&u64_to_32bytes(self.fee)));
 		let sig = try!(Signature::from_der(secp, &self.excess_sig));
-
-		let pubkeys = self.excess.to_two_pubkeys(secp);
-
-		// TODO - maybe implement a commitment.verify(&secp, &msg, &sig)
-		// so we don't have to expose to_two_pubkeys()
-		match secp.verify(&msg, &sig, &pubkeys[0]) {
-			Ok(_) => Ok(()),
-			Err(_) => secp.verify(&msg, &sig, &pubkeys[1])
-		}
+		secp.verify_from_commit(&msg, &sig, &self.excess)
 	}
 }
 
@@ -218,16 +210,8 @@ impl Transaction {
 	pub fn verify_sig(&self, secp: &Secp256k1) -> Result<TxKernel, secp::Error> {
 		let rsum = self.sum_commitments(secp)?;
 
-		// pretend the sum is a public key (which it is, being of the form r.G) and
-		// verify the transaction sig with it
-
 		let msg = Message::from_slice(&u64_to_32bytes(self.fee))?;
 		let sig = Signature::from_der(secp, &self.excess_sig)?;
-
-		// TODO - implement a commitment.verify(&secp, &msg, &sig);
-		// so we don't have to expose to_two_pubkeys()
-
-		let pubkeys = rsum.to_two_pubkeys(secp);
 
 		let tx_kernel = TxKernel {
 			features: DEFAULT_KERNEL,
@@ -236,16 +220,16 @@ impl Transaction {
 			fee: self.fee,
 		};
 
-		// TODO - maybe implement a commitment.verify(&secp, &msg, &sig)
-		// so we don't have to expose to_two_pubkeys()
-		match secp.verify(&msg, &sig, &pubkeys[0]) {
+		// pretend the sum is a public key (which it is, being of the form r.G) and
+		// verify the transaction sig with it
+		//
+		// we originally converted the commitment to a pubkey here (commitment to zero)
+		// and then passed the pubkey to secp.verify()
+		// the secp api no longer allows us to do this so we have wrapped the complexity
+		// of generating a publick key from a commitment behind verify_from_commit
+		match secp.verify_from_commit(&msg, &sig, &rsum) {
 			Ok(_) => Ok(tx_kernel),
-			Err(_) => {
-				match secp.verify(&msg, &sig, &pubkeys[1]) {
-					Ok(_) => Ok(tx_kernel),
-					Err(e) => Err(e)
-				}
-			}
+			Err(e) => Err(e)
 		}
 	}
 
