@@ -213,13 +213,6 @@ impl Transaction {
 		let msg = Message::from_slice(&u64_to_32bytes(self.fee))?;
 		let sig = Signature::from_der(secp, &self.excess_sig)?;
 
-		let tx_kernel = TxKernel {
-			features: DEFAULT_KERNEL,
-			excess: rsum,
-			excess_sig: self.excess_sig.clone(),
-			fee: self.fee,
-		};
-
 		// pretend the sum is a public key (which it is, being of the form r.G) and
 		// verify the transaction sig with it
 		//
@@ -227,10 +220,14 @@ impl Transaction {
 		// and then passed the pubkey to secp.verify()
 		// the secp api no longer allows us to do this so we have wrapped the complexity
 		// of generating a publick key from a commitment behind verify_from_commit
-		match secp.verify_from_commit(&msg, &sig, &rsum) {
-			Ok(_) => Ok(tx_kernel),
-			Err(e) => Err(e)
-		}
+		secp.verify_from_commit(&msg, &sig, &rsum)?;
+
+		Ok(TxKernel {
+			features: DEFAULT_KERNEL,
+			excess: rsum,
+			excess_sig: self.excess_sig.clone(),
+			fee: self.fee,
+		})
 	}
 
 	/// Validates all relevant parts of a fully built transaction. Checks the

@@ -236,6 +236,7 @@ impl Block {
 
 		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let (reward_out, reward_proof) = try!(Block::reward_output(reward_key, &secp));
+
 		Block::with_reward(prev, txs, reward_out, reward_proof)
 	}
 
