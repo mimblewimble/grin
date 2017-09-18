@@ -7,9 +7,7 @@ authors = ["Grin Authors <mimblewimble@lists.launchpad.net>"]
 grin_core = { path = "../core" }
 grin_store = { path = "../store" }
 grin_p2p = { path = "../p2p" }
-# secp256k1zkp = { path = "../../rust-secp256k1-zkp" }
 secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }
-# secp256k1zkp = { git = "https://github.com/antiochp/rust-secp256k1-zkp", branch = "port_grin_changes" }
 time = "^0.1"
 rand = "0.3"
 log = "0.3"
