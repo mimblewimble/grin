@@ -398,7 +398,7 @@ impl Miner {
 		b.header.nonce = rng.gen();
 		b.header.difficulty = difficulty;
 		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
-		self.chain.set_sumtree_roots(b);
+		self.chain.set_sumtree_roots(&mut b).expect("Error setting sum tree roots");
 		b
 	}
 

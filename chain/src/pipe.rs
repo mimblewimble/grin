@@ -84,7 +84,6 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		if h.is_none() {
 			extension.force_rollback();
 		}
-		extension.dump();
 		Ok(h)
 	})
 }
