@@ -12,23 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// pub struct HashID(pub [u8; 32]);
-//
-// impl FromStr for HashId {
-//   type Err = ;
-//
-//   fn from_str(s: &str) -> Result<HashId, > {
-//   }
-// }
 
 use std::sync::{Arc, RwLock};
 use std::thread;
 
-use core::core::{Transaction, Output};
+use chain;
+use core::core::Transaction;
 use core::ser;
-use chain::{self, Tip};
 use pool;
 use rest::*;
+use types::*;
 use secp::pedersen::Commitment;
 use util;
 
@@ -51,7 +44,10 @@ impl ApiEndpoint for ChainApi {
 	}
 
 	fn get(&self, _: String) -> ApiResult<Tip> {
-		self.chain.head().map_err(|e| Error::Internal(format!("{:?}", e)))
+		match self.chain.head() {
+			Ok(tip) => Ok(Tip::from_tip(tip)),
+			Err(e) => Err(Error::Internal(format!("{:?}", e)))
+		}
 	}
 }
 
@@ -75,12 +71,14 @@ impl ApiEndpoint for OutputApi {
 	fn get(&self, id: String) -> ApiResult<Output> {
 		debug!("GET output {}", id);
 		let c = util::from_hex(id.clone()).map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
+		let commit = Commitment::from_vec(c);
 
-		// TODO - can probably clean up the error mapping here
-		match self.chain.get_unspent(&Commitment::from_vec(c)) {
-			Ok(utxo) => Ok(utxo),
-			Err(_) => Err(Error::NotFound),
-		}
+		let out = self.chain.get_unspent(&commit)
+			.map_err(|_| Error::NotFound)?;
+		let header = self.chain.get_block_header_by_output_commit(&commit)
+			.map_err(|_| Error::NotFound)?;
+
+		Ok(Output::from_output(&out, &header))
 	}
 }
 
@@ -89,13 +87,6 @@ impl ApiEndpoint for OutputApi {
 #[derive(Clone)]
 pub struct PoolApi<T> {
 	tx_pool: Arc<RwLock<pool::TransactionPool<T>>>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct PoolInfo {
-	pool_size: usize,
-	orphans_size: usize,
-	total_size: usize,
 }
 
 impl<T> ApiEndpoint for PoolApi<T>
@@ -120,20 +111,23 @@ impl<T> ApiEndpoint for PoolApi<T>
 	}
 
 	fn operation(&self, _: String, input: TxWrapper) -> ApiResult<()> {
-		let tx_bin = util::from_hex(input.tx_hex)
-      .map_err(|_| Error::Argument(format!("Invalid hex in transaction wrapper.")))?;
+		let tx_bin = util::from_hex(input.tx_hex).map_err(|_| {
+			Error::Argument(format!("Invalid hex in transaction wrapper."))
+		})?;
 
 		let tx: Transaction = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
-				Error::Argument("Could not deserialize transaction, invalid format.".to_string())
-			})?;
+			Error::Argument("Could not deserialize transaction, invalid format.".to_string())
+		})?;
 
 		let source = pool::TxSource {
 			debug_name: "push-api".to_string(),
 			identifier: "?.?.?.?".to_string(),
 		};
-		debug!("Pushing transaction with {} inputs and {} outputs to pool.",
-		       tx.inputs.len(),
-		       tx.outputs.len());
+		info!(
+			"Pushing transaction with {} inputs and {} outputs to pool.",
+			tx.inputs.len(),
+			tx.outputs.len()
+		);
 		self.tx_pool
 			.write()
 			.unwrap()

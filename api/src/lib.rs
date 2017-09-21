@@ -32,6 +32,8 @@ extern crate serde_json;
 pub mod client;
 mod endpoints;
 mod rest;
+mod types;
 
 pub use endpoints::start_rest_apis;
+pub use types::*;
 pub use rest::*;

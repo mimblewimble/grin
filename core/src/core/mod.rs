@@ -30,9 +30,8 @@ use std::cmp::Ordering;
 use secp::{self, Secp256k1};
 use secp::pedersen::*;
 
-pub use self::block::{Block, BlockHeader, DEFAULT_BLOCK};
-pub use self::transaction::{Transaction, Input, Output, TxKernel, COINBASE_KERNEL,
-                            COINBASE_OUTPUT, DEFAULT_OUTPUT};
+pub use self::block::*;
+pub use self::transaction::*;
 use self::hash::{Hash, Hashed, ZERO_HASH};
 use ser::{Writeable, Writer, Reader, Readable, Error};
 

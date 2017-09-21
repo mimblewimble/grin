@@ -28,7 +28,7 @@ use api;
 /// UTXOs. The destination can be "stdout" (for command line) or a URL to the
 /// recipients wallet receiver (to be implemented).
 pub fn issue_send_tx(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64, dest: String) -> Result<(), Error> {
-	checker::refresh_outputs(&config, ext_key);
+	let _ = checker::refresh_outputs(&config, ext_key);
 
 	let (tx, blind_sum) = build_send_tx(config, ext_key, amount)?;
 	let json_tx = partial_tx_to_json(amount, blind_sum, tx);
@@ -82,6 +82,8 @@ fn build_send_tx(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64) -> R
 			n_child: change_key.n_child,
 			value: change as u64,
 			status: OutputStatus::Unconfirmed,
+			height: 0,
+			lock_height: 0,
 		});
 		for mut coin in coins {
 			coin.lock();
@@ -118,6 +120,8 @@ mod test {
 			n_child: out_key.n_child,
 			value: 5,
 			status: OutputStatus::Unconfirmed,
+			height: 0,
+			lock_height: 0,
 		};
 
 		let (tx, _) = transaction(vec![output(coin.value, out_key.key)]).unwrap();

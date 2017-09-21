@@ -108,6 +108,7 @@ impl Default for WalletConfig {
 pub enum OutputStatus {
 	Unconfirmed,
 	Unspent,
+	Immature,
 	Locked,
 	Spent,
 }
@@ -125,6 +126,9 @@ pub struct OutputData {
 	pub value: u64,
 	/// Current status of the output
 	pub status: OutputStatus,
+	/// Height of the output
+	pub height: u64,
+	pub lock_height: u64,
 }
 
 impl OutputData {
