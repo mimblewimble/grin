@@ -38,7 +38,7 @@ bitflags! {
 }
 
 /// Block header, fairly standard compared to other blockchains.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BlockHeader {
 	/// Height of this block since the genesis block (height 0)
 	pub height: u64,
@@ -258,7 +258,7 @@ impl Block {
 
 		// build vectors with all inputs and all outputs, ordering them by hash
 		// needs to be a fold so we don't end up with a vector of vectors and we
-		// want to fullt own the refs (not just a pointer like flat_map).
+		// want to fully own the refs (not just a pointer like flat_map).
 		let mut inputs = txs.iter()
 			.fold(vec![], |mut acc, ref tx| {
 				let mut inputs = tx.inputs.clone();
@@ -307,28 +307,37 @@ impl Block {
 	/// Matches any output with a potential spending input, eliminating them
 	/// from the block. Provides a simple way to compact the block. The
 	/// elimination is stable with respect to inputs and outputs order.
+    ///
+    /// NOTE: exclude coinbase from compaction process
+    /// if a block contains a new coinbase output and
+    /// is a transaction spending a previous coinbase
+    /// we do not want to compact these away
+    ///
 	pub fn compact(&self) -> Block {
-		// the chosen ones
-		let mut new_inputs = vec![];
+        let in_set = self.inputs
+            .iter()
+            .map(|inp| inp.commitment())
+            .collect::<HashSet<_>>();
 
-		// build a set of all output commitments
-		let mut out_set = HashSet::new();
-		for out in &self.outputs {
-			out_set.insert(out.commitment());
-		}
-		// removes from the set any hash referenced by an input, keeps the inputs that
-		// don't have a match
-		for inp in &self.inputs {
-			if !out_set.remove(&inp.commitment()) {
-				new_inputs.push(*inp);
-			}
-		}
-		// we got ourselves a keep list in that set
-		let new_outputs = self.outputs
-			.iter()
-			.filter(|out| out_set.contains(&(out.commitment())))
-			.map(|&out| out)
-			.collect::<Vec<Output>>();
+        let out_set = self.outputs
+            .iter()
+            .filter(|out| !out.features.contains(COINBASE_OUTPUT))
+            .map(|out| out.commitment())
+            .collect::<HashSet<_>>();
+
+        let commitments_to_compact = in_set.intersection(&out_set).collect::<HashSet<_>>();
+
+        let new_inputs = self.inputs
+            .iter()
+            .filter(|inp| !commitments_to_compact.contains(&inp.commitment()))
+            .map(|&inp| inp)
+            .collect::<Vec<_>>();
+
+        let new_outputs = self.outputs
+            .iter()
+            .filter(|out| !commitments_to_compact.contains(&out.commitment()))
+            .map(|&out| out)
+            .collect::<Vec<_>>();
 
 		let tx_merkle = merkle_inputs_outputs(&new_inputs, &new_outputs);
 
@@ -429,12 +438,12 @@ impl Block {
 	fn verify_coinbase(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
 		let cb_outs = self.outputs
 			.iter()
-			.filter(|out| out.features.intersects(COINBASE_OUTPUT))
+			.filter(|out| out.features.contains(COINBASE_OUTPUT))
 			.map(|o| o.clone())
 			.collect::<Vec<_>>();
 		let cb_kerns = self.kernels
 			.iter()
-			.filter(|k| k.features.intersects(COINBASE_KERNEL))
+			.filter(|k| k.features.contains(COINBASE_KERNEL))
 			.map(|k| k.clone())
 			.collect::<Vec<_>>();
 

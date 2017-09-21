@@ -22,6 +22,7 @@ use time;
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
 use core::core::{BlockHeader, Block};
+use core::core::transaction;
 use types::*;
 use store;
 use core::global;
@@ -63,6 +64,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		// in sync mode, the header has already been validated
 		validate_header(&b.header, &mut ctx)?;
 	}
+
 	validate_block(b, &mut ctx)?;
 	debug!(
 		"Block at {} with hash {} is valid, going to save and append.",
@@ -167,15 +169,40 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 }
 
 /// Fully validate the block content.
-fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
-	if b.header.height > ctx.head.height + 1 {
+fn validate_block(block: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
+	if block.header.height > ctx.head.height + 1 {
 		return Err(Error::Orphan);
 	}
 
 	let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-	try!(b.validate(&curve).map_err(&Error::InvalidBlockProof));
+	try!(block.validate(&curve).map_err(&Error::InvalidBlockProof));
+
+	// check that all the outputs of the block are "new" -
+	// that they do not clobber any existing unspent outputs (by their commitment)
+	//
+	// TODO - do we need to do this here (and can we do this here if we need access to the chain)
+	// see check_duplicate_outputs in pool for the analogous operation on transaction outputs
+	// for output in &block.outputs {
+		// here we would check that the output is not a duplicate output based on the current chain
+	// };
+
 
 	// TODO check every input exists as a UTXO using the UTXO index
+
+	// check that any coinbase outputs are spendable (that they have matured sufficiently)
+	for input in &block.inputs {
+		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
+			if output.features.contains(transaction::COINBASE_OUTPUT) {
+				if let Ok(output_header) = ctx.store.get_block_header_by_output_commit(&input.commitment()) {
+
+					// TODO - make sure we are not off-by-1 here vs. the equivalent tansaction validation rule
+					if block.header.height <= output_header.height + consensus::COINBASE_MATURITY {
+						return Err(Error::ImmatureCoinbase);
+					}
+				};
+			};
+		};
+	};
 
 	Ok(())
 }
