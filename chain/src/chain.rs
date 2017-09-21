@@ -204,32 +204,15 @@ impl Chain {
 	/// Gets an unspent output from its commitment. With return None if the
 	/// output doesn't exist or has been spent. This querying is done in a
 	/// way that's consistent with the current chain state and more
-	/// specifically the current branch it is on in case of forks.
+	/// specifically the current winning fork.
 	pub fn get_unspent(&self, output_ref: &Commitment) -> Result<Output, Error> {
-		// TODO use an actual UTXO tree
-		// in the meantime doing it the *very* expensive way:
-		//   1. check the output exists
-		//   2. run the chain back from the head to check it hasn't been spent
-		if let Ok(out) = self.store.get_output_by_commit(output_ref) {
-			if let Ok(head) = self.store.head() {
-				let mut block_h = head.last_block_h;
-				loop {
-					if let Ok(b) = self.store.get_block(&block_h) {
-						for input in b.inputs {
-							if input.commitment() == *output_ref {
-								return Err(Error::OutputSpent);
-							}
-						}
-						if b.header.height == 1 {
-							return Ok(out);
-						} else {
-							block_h = b.header.previous;
-						}
-					}
-				}
-			}
+		let sumtrees = self.sumtrees.read().unwrap();
+		let is_unspent = sumtrees.is_unspent(output_ref)?;
+		if is_unspent {
+			self.store.get_output_by_commit(output_ref).map_err(&Error::StoreErr)
+		} else {
+			Err(Error::OutputNotFound)
 		}
-		Err(Error::OutputNotFound)
 	}
 
 	/// Sets the sumtree roots on a brand new block by applying the block on the

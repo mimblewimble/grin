@@ -24,7 +24,8 @@ use secp;
 use secp::pedersen::{RangeProof, Commitment};
 
 use core::core::{Block, TxKernel, Output, SumCommit};
-use core::core::pmmr::{Summable, NoSum, PMMR, HashSum};
+use core::core::pmmr::{Summable, NoSum, PMMR, HashSum, Backend};
+use grin_store;
 use grin_store::sumtree::PMMRBackend;
 use types::ChainStore;
 use types::Error;
@@ -79,6 +80,16 @@ impl SumTrees {
 			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR)?,
 			commit_index: commit_index,
 		})
+	}
+
+	/// Wether a given commitment exists in the Output MMR and it's unspent
+	pub fn is_unspent(&self, commit: &Commitment) -> Result<bool, Error> {
+		let rpos = self.commit_index.get_output_pos(commit);
+		match rpos {
+			Ok(pos) => Ok(self.output_pmmr_h.backend.get(pos).is_some()),
+			Err(grin_store::Error::NotFoundErr) => Ok(false),
+			Err(e) => Err(Error::StoreErr(e))
+		}
 	}
 }
 
