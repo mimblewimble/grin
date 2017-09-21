@@ -307,6 +307,12 @@ impl<'a, T, B> PMMR<'a, T, B> where T: Summable + Hashed + Clone, B: 'a + Backen
 		Ok(true)
 	}
 
+	/// Helper function to get the HashSum of a node at a given position from
+	/// the backend.
+	pub fn get(&self, position: u64) -> Option<HashSum<T>> {
+		self.backend.get(position)
+	}
+
 	/// Total size of the tree, including intermediary nodes an ignoring any
 	/// pruning.
 	pub fn unpruned_size(&self) -> u64 {
@@ -840,7 +846,7 @@ mod test {
 		// pruning a leaf with no parent should do nothing
 		{
 			let mut pmmr = PMMR::at(&mut ba, sz);
-			pmmr.prune(16).unwrap();
+			pmmr.prune(16, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
 		assert_eq!(ba.used_size(), 16);
@@ -848,14 +854,14 @@ mod test {
 		// pruning leaves with no shared parent just removes 1 element
 		{
 			let mut pmmr = PMMR::at(&mut ba, sz);
-			pmmr.prune(2).unwrap();
+			pmmr.prune(2, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
 		assert_eq!(ba.used_size(), 15);
 
 		{
 			let mut pmmr = PMMR::at(&mut ba, sz);
-			pmmr.prune(4).unwrap();
+			pmmr.prune(4, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
 		assert_eq!(ba.used_size(), 14);
@@ -863,7 +869,7 @@ mod test {
 		// pruning a non-leaf node has no effect
 		{
 			let mut pmmr = PMMR::at(&mut ba, sz);
-			pmmr.prune(3).unwrap();
+			pmmr.prune(3, 0).unwrap_err();
 			assert_eq!(orig_root, pmmr.root());
 		}
 		assert_eq!(ba.used_size(), 14);
@@ -871,7 +877,7 @@ mod test {
 		// pruning sibling removes subtree
 		{
 			let mut pmmr = PMMR::at(&mut ba, sz);
-			pmmr.prune(5).unwrap();
+			pmmr.prune(5, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
 		assert_eq!(ba.used_size(), 12);
@@ -879,7 +885,7 @@ mod test {
 		// pruning all leaves under level >1 removes all subtree
 		{
 			let mut pmmr = PMMR::at(&mut ba, sz);
-			pmmr.prune(1).unwrap();
+			pmmr.prune(1, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
 		assert_eq!(ba.used_size(), 9);
@@ -888,7 +894,7 @@ mod test {
 		{
 			let mut pmmr = PMMR::at(&mut ba, sz);
 			for n in 1..16 {
-				pmmr.prune(n).unwrap();
+				pmmr.prune(n, 0);
 			}
 			assert_eq!(orig_root, pmmr.root());
 		}

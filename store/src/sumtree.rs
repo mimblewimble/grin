@@ -267,6 +267,9 @@ where
 	// buffers addition of new elements until they're fully written to disk
 	buffer: VecBackend<T>,
 	buffer_index: usize,
+	// whether a rewind occurred since last flush, the rewind position, index
+	// and buffer index are captured
+	rewind: Option<(u64, u32, usize)>,
 }
 
 impl<T> Backend<T> for PMMRBackend<T>
@@ -324,8 +327,8 @@ where
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {
 		assert!(self.buffer.len() == 0, "Rewind on non empty buffer.");
 		self.remove_log.truncate(index).map_err(|e| format!("Could not truncate remove log: {}", e))?;
+		self.rewind = Some((position, index, self.buffer_index));
 		self.buffer_index = position as usize;
-		//self.remove_log.flush().map_err(|e| format!("Could not flush remove log: {}", e))?;
 		Ok(())
 	}
 
@@ -365,6 +368,7 @@ where
 			buffer: VecBackend::new(),
 			buffer_index: (sz as usize) / record_len,
 			pruned_nodes: pmmr::PruneList{pruned_nodes: prune_list},
+			rewind: None,
 		})
 	}
 
@@ -381,6 +385,11 @@ where
 	/// Syncs all files to disk. A call to sync is required to ensure all the
 	/// data has been successfully written to disk.
 	pub fn sync(&mut self) -> io::Result<()> {
+		// truncating the storage file if a rewind occurred
+		if let Some((pos, _, _)) = self.rewind {
+			let record_len = 32 + T::sum_len() as u64;
+			self.hashsum_file.truncate(pos * record_len)?;
+		}
 		for elem in &self.buffer.elems {
 			if let Some(ref hs) = *elem {
 				if let Err(e) = self.hashsum_file.append(&ser::ser_vec(&hs).unwrap()[..]) {
@@ -394,15 +403,20 @@ where
 
 		self.buffer_index = self.buffer_index + self.buffer.len();
 		self.buffer.clear();
-
 		self.remove_log.flush()?;
-		self.hashsum_file.sync()
+		self.hashsum_file.sync()?;	
+		self.rewind = None;
+		Ok(())
 	}
 
 	/// Discard the current, non synced state of the backend.
 	pub fn discard(&mut self) {
+		if let Some((_, _, bi)) = self.rewind {
+			self.buffer_index = bi;
+		}
 		self.buffer = VecBackend::new();
 		self.remove_log.discard();
+		self.rewind = None;
 	}
 
 	/// Checks the length of the remove log to see if it should get compacted.

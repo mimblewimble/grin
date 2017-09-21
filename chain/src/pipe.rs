@@ -79,7 +79,12 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		);
 
 		add_block(b, &mut ctx)?;
-		update_head(b, &mut ctx)
+		let h = update_head(b, &mut ctx)?;
+		if h.is_none() {
+			extension.force_rollback();
+		}
+		extension.dump();
+		Ok(h)
 	})
 }
 
@@ -229,6 +234,7 @@ fn validate_block(b: &Block, ctx: &mut BlockContext, ext: &mut sumtree::Extensio
 		rproof_root.hash != b.header.range_proof_root ||
 		kernel_root.hash != b.header.kernel_root {
 
+		ext.dump();
 		return Err(Error::InvalidRoot);
 	}
 

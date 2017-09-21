@@ -94,11 +94,13 @@ pub fn extending<'a, F, T>(trees: &'a mut SumTrees, inner: F) -> Result<T, Error
 	
 	let sizes: (u64, u64, u64);
 	let res: Result<T, Error>;
+	let rollback: bool;
 	{
 		let commit_index = trees.commit_index.clone();
 		let mut extension = Extension::new(trees, commit_index);
 		res = inner(&mut extension);
-		if res.is_ok() {
+		rollback = extension.rollback;
+		if res.is_ok() && !rollback {
 			extension.save_pos_index()?;
 		}
 		sizes = extension.sizes();
@@ -111,12 +113,18 @@ pub fn extending<'a, F, T>(trees: &'a mut SumTrees, inner: F) -> Result<T, Error
 			Err(e)
 		}
 		Ok(r) => {
-			trees.output_pmmr_h.backend.sync()?;
-			trees.rproof_pmmr_h.backend.sync()?;
-			trees.kernel_pmmr_h.backend.sync()?;
-			trees.output_pmmr_h.last_pos = sizes.0;
-			trees.rproof_pmmr_h.last_pos = sizes.1;
-			trees.kernel_pmmr_h.last_pos = sizes.2;
+			if rollback {
+				trees.output_pmmr_h.backend.discard();
+				trees.rproof_pmmr_h.backend.discard();
+				trees.kernel_pmmr_h.backend.discard();
+			} else {
+				trees.output_pmmr_h.backend.sync()?;
+				trees.rproof_pmmr_h.backend.sync()?;
+				trees.kernel_pmmr_h.backend.sync()?;
+				trees.output_pmmr_h.last_pos = sizes.0;
+				trees.rproof_pmmr_h.last_pos = sizes.1;
+				trees.kernel_pmmr_h.last_pos = sizes.2;
+			}
 
 			Ok(r)
 		}
@@ -134,6 +142,7 @@ pub struct Extension<'a> {
 	commit_index: Arc<ChainStore>,
 	new_output_commits: HashMap<Commitment, u64>,
 	new_kernel_excesses: HashMap<Commitment, u64>,
+	rollback: bool
 }
 
 impl<'a> Extension<'a> {
@@ -147,6 +156,7 @@ impl<'a> Extension<'a> {
 			commit_index: commit_index,
 			new_output_commits: HashMap::new(),
 			new_kernel_excesses: HashMap::new(),
+			rollback: false,
 		}
 	}
 
@@ -211,6 +221,8 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	/// Rewinds the MMRs to the provided position, given the last output and
+	/// last kernel of the block we want to rewind to.
 	pub fn rewind(&mut self, height: u64, output: &Output, kernel: &TxKernel) -> Result<(), Error> {
 		let out_pos_rew = self.commit_index.get_output_pos(&output.commitment())?;
 		let kern_pos_rew = self.commit_index.get_kernel_pos(&kernel.excess)?;
@@ -227,8 +239,34 @@ impl<'a> Extension<'a> {
 		(self.output_pmmr.root(), self.rproof_pmmr.root(), self.kernel_pmmr.root())
 	}
 
+	/// Force the rollback of this extension, no matter the result
+	pub fn force_rollback(&mut self) {
+		self.rollback = true;
+	}
+
 	// Sizes of the sum trees, used by `extending` on rollback.
 	fn sizes(&self) -> (u64, u64, u64) {
 		(self.output_pmmr.unpruned_size(), self.rproof_pmmr.unpruned_size(), self.kernel_pmmr.unpruned_size())
+	}
+
+	/// Debugging utility to print information about the MMRs.
+	pub fn dump(&self) {
+		let sz = self.output_pmmr.unpruned_size();
+		if sz > 25 {
+			return;
+		}
+		println!("UXTO set, size: {}", sz);
+		for n in 0..sz {
+			print!("{:>8} ", n + 1);
+		}
+		println!("");
+		for n in 1..(sz+1) {
+			let ohs = self.output_pmmr.get(n);
+			match ohs {
+				Some(hs) => print!("{} ", hs.hash),
+				None => print!("??"),
+			}
+		}
+		println!("");
 	}
 }

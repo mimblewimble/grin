@@ -142,15 +142,17 @@ impl Chain {
 					let mut head = chain_head.lock().unwrap();
 					*head = tip.clone();
 				}
-
 				self.check_orphans();
 			}
+			Ok(None) => {}
 			Err(Error::Orphan) => {
 				let mut orphans = self.orphans.lock().unwrap();
 				orphans.push_front((opts, b));
 				orphans.truncate(MAX_ORPHANS);
 			}
-			_ => {}
+			Err(ref e) => {
+				info!("Rejected block {} at {} : {:?}", b.hash(), b.header.height, e);
+			}
 		}
 
 		res
@@ -245,28 +247,18 @@ impl Chain {
 	/// current sumtree state.
 	pub fn set_sumtree_roots(&self, b: &mut Block) -> Result<(), Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
-		let mut roots_in = None;
 	
-		let res: Result<(), Error> = sumtree::extending(&mut sumtrees, |mut extension| {
+		let roots = sumtree::extending(&mut sumtrees, |mut extension| {
 			// apply the block on the sumtrees and check the resulting root
 			extension.apply_block(b)?;
-			roots_in = Some(extension.roots());
+			extension.force_rollback();
+			Ok(extension.roots())
+		})?;
 
-			// error to force rollback
-			Err(Error::InvalidRoot)
-		});
-
-		match res {
-			Err(Error::InvalidRoot) => {
-				let roots = roots_in.unwrap();
-				b.header.utxo_root = roots.0.hash;
-				b.header.range_proof_root = roots.1.hash;
-				b.header.kernel_root = roots.2.hash;
-				Ok(())
-			}
-			Err(e) => Err(e),
-			Ok(_) => unreachable!(),
-		}
+		b.header.utxo_root = roots.0.hash;
+		b.header.range_proof_root = roots.1.hash;
+		b.header.kernel_root = roots.2.hash;
+		Ok(())
 	}
 
 	/// Total difficulty at the head of the chain

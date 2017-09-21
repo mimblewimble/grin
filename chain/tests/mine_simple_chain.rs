@@ -22,7 +22,6 @@ extern crate grin_pow as pow;
 
 use std::fs;
 use std::sync::Arc;
-use std::thread;
 use rand::os::OsRng;
 
 use chain::Chain;
@@ -40,19 +39,22 @@ fn clean_output_dir(dir_name:&str){
 	let _ = fs::remove_dir_all(dir_name);
 }
 
-#[test]
-fn mine_empty_chain() {
+fn setup(dir_name: &str) -> Chain {
 	let _ = env_logger::init();
-	clean_output_dir(".grin");
+	clean_output_dir(dir_name);
 	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
-
-	let mut rng = OsRng::new().unwrap();
 	let mut genesis_block = None;
-	if !chain::Chain::chain_exists(".grin".to_string()){
+	if !chain::Chain::chain_exists(dir_name.to_string()){
 		genesis_block=pow::mine_genesis_block(None);
 	}
-	let chain = chain::Chain::init(".grin".to_string(), Arc::new(NoopAdapter {}),
-									genesis_block, pow::verify_size).unwrap();
+	chain::Chain::init(dir_name.to_string(), Arc::new(NoopAdapter {}),
+									genesis_block, pow::verify_size).unwrap()
+}
+
+#[test]
+fn mine_empty_chain() {
+	let mut rng = OsRng::new().unwrap();
+	let chain = setup(".grin");
 
 	// mine and add a few blocks
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
@@ -116,22 +118,11 @@ fn mine_empty_chain() {
 
 #[test]
 fn mine_forks() {
-	let _ = env_logger::init();
-	clean_output_dir(".grin2");
-	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
-
-	let mut rng = OsRng::new().unwrap();
-
-	let mut genesis_block = None;
-	if !chain::Chain::chain_exists(".grin2".to_string()){
-		genesis_block = pow::mine_genesis_block(None);
-	}
-	let chain = chain::Chain::init(".grin2".to_string(), Arc::new(NoopAdapter {}),
-									genesis_block, pow::verify_size).unwrap();
+	let chain = setup(".grin2");
 
 	// add a first block to not fork genesis
 	let prev = chain.head_header().unwrap();
-	let mut b = prepare_block(&prev, &chain, 2);
+	let b = prepare_block(&prev, &chain, 2);
 	chain.process_block(b, chain::SKIP_POW).unwrap();
 
 	// mine and add a few blocks
@@ -139,10 +130,10 @@ fn mine_forks() {
 	for n in 1..4 {
 		// first block for one branch
 		let prev = chain.head_header().unwrap();
-		let mut b1 = prepare_block(&prev, &chain, 3 * n);
+		let b1 = prepare_block(&prev, &chain, 3 * n);
 
 		// 2nd block with higher difficulty for other branch
-		let mut b2 = prepare_block(&prev, &chain, 3 * n + 1);
+		let b2 = prepare_block(&prev, &chain, 3 * n + 1);
 
 		// process the first block to extend the chain
 		let bhash = b1.hash();
@@ -168,35 +159,24 @@ fn mine_forks() {
 
 #[test]
 fn mine_losing_fork() {
-	let _ = env_logger::init();
-	clean_output_dir(".grin2");
-	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
-
-	let mut genesis_block = None;
-	if !chain::Chain::chain_exists(".grin2".to_string()){
-		genesis_block = pow::mine_genesis_block(None);
-	}
-	let chain = chain::Chain::init(".grin2".to_string(), Arc::new(NoopAdapter {}),
-									genesis_block, pow::verify_size).unwrap();
-
-	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
+	let chain = setup(".grin3");
 
 	// add a first block we'll be forking from
 	let prev = chain.head_header().unwrap();
-	let mut b1 = prepare_block(&prev, &chain, 2);
+	let b1 = prepare_block(&prev, &chain, 2);
 	let b1head = b1.header.clone();
 	chain.process_block(b1, chain::SKIP_POW).unwrap();
 
 	// prepare the 2 successor, sibling blocks, one with lower diff
-	let mut b2 = prepare_block(&b1head, &chain, 4);
+	let b2 = prepare_block(&b1head, &chain, 4);
 	let b2head = b2.header.clone();
-	let mut bfork = prepare_block(&b1head, &chain, 3);
+	let bfork = prepare_block(&b1head, &chain, 3);
 
 	// add higher difficulty first, prepare its successor, then fork
 	// with lower diff
 	chain.process_block(b2, chain::SKIP_POW).unwrap();
 	assert_eq!(chain.head_header().unwrap().hash(), b2head.hash());
-	let mut b3 = prepare_block(&b2head, &chain, 5);
+	let b3 = prepare_block(&b2head, &chain, 5);
 	chain.process_block(bfork, chain::SKIP_POW).unwrap();
 
 	// adding the successor
@@ -205,13 +185,64 @@ fn mine_losing_fork() {
 	assert_eq!(chain.head_header().unwrap().hash(), b3head.hash());
 }
 
+#[test]
+fn longer_fork() {
+	// to make it easier to compute the sumtree roots in the test, we
+	// prepare 2 chains, the 2nd will be have the forked blocks we can
+	// then send back on the 1st
+	let chain = setup(".grin4");
+	let chain_fork = setup(".grin5");
+
+	// add blocks to both chains, 20 on the main one, only the first 5
+	// for the forked chain
+	let mut prev = chain.head_header().unwrap();
+	let forking_header: BlockHeader;
+	for n in 0..10 {
+		let b = prepare_block(&prev, &chain, n + 2);
+		let bh = b.header.clone();
+
+		if n < 5 {
+			let b_fork = b.clone();
+			chain_fork.process_block(b_fork, chain::SKIP_POW).unwrap();
+		}
+
+		chain.process_block(b, chain::SKIP_POW).unwrap();
+		prev = bh;
+	}
+
+	// check both chains are in the expected state
+	let head = chain.head_header().unwrap();
+	assert_eq!(head.height, 10);
+	assert_eq!(head.hash(), prev.hash());
+	let head_fork = chain_fork.head_header().unwrap();
+	assert_eq!(head_fork.height, 5);
+
+	let mut prev_fork = head_fork.clone();
+	for n in 0..7 {
+		let b_fork = prepare_block(&prev_fork, &chain_fork, n + 7);
+		let bh_fork = b_fork.header.clone();
+
+		let b = b_fork.clone();
+		let bh = b.header.clone();
+		chain.process_block(b, chain::SKIP_POW).unwrap();
+
+		chain_fork.process_block(b_fork, chain::SKIP_POW).unwrap();
+		prev_fork = bh_fork;
+	}
+}
+
 fn prepare_block(prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
+	let mut b = prepare_block_nosum(prev, diff);
+	chain.set_sumtree_roots(&mut b).unwrap();
+	b
+}
+
+fn prepare_block_nosum(prev: &BlockHeader, diff: u64) -> Block {
 	let mut rng = OsRng::new().unwrap();
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
 	let mut b = core::core::Block::new(prev, vec![], reward_key).unwrap();
 	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 	b.header.total_difficulty = Difficulty::from_num(diff);
-	chain.set_sumtree_roots(&mut b).unwrap();
 	b
 }
