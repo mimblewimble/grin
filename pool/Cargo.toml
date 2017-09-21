@@ -7,7 +7,7 @@ authors = ["Grin Authors <mimblewimble@lists.launchpad.net>"]
 grin_core = { path = "../core" }
 grin_store = { path = "../store" }
 grin_p2p = { path = "../p2p" }
-secp256k1zkp = { path = "../secp256k1zkp" }
+secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }
 time = "^0.1"
 rand = "0.3"
 log = "0.3"

@@ -81,9 +81,8 @@ impl TxKernel {
 	/// message.
 	pub fn verify(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
 		let msg = try!(Message::from_slice(&u64_to_32bytes(self.fee)));
-		let pubk = try!(self.excess.to_pubkey(secp));
 		let sig = try!(Signature::from_der(secp, &self.excess_sig));
-		secp.verify(&msg, &sig, &pubk)
+		secp.verify_from_commit(&msg, &sig, &self.excess)
 	}
 }
 
@@ -211,12 +210,17 @@ impl Transaction {
 	pub fn verify_sig(&self, secp: &Secp256k1) -> Result<TxKernel, secp::Error> {
 		let rsum = self.sum_commitments(secp)?;
 
-		// pretend the sum is a public key (which it is, being of the form r.G) and
-		// verify the transaction sig with it
-		let pubk = rsum.to_pubkey(secp)?;
 		let msg = Message::from_slice(&u64_to_32bytes(self.fee))?;
 		let sig = Signature::from_der(secp, &self.excess_sig)?;
-		secp.verify(&msg, &sig, &pubk)?;
+
+		// pretend the sum is a public key (which it is, being of the form r.G) and
+		// verify the transaction sig with it
+		//
+		// we originally converted the commitment to a pubkey here (commitment to zero)
+		// and then passed the pubkey to secp.verify()
+		// the secp api no longer allows us to do this so we have wrapped the complexity
+		// of generating a publick key from a commitment behind verify_from_commit
+		secp.verify_from_commit(&msg, &sig, &rsum)?;
 
 		Ok(TxKernel {
 			features: DEFAULT_KERNEL,
@@ -333,8 +337,8 @@ impl Output {
 
 	/// Validates the range proof using the commitment
 	pub fn verify_proof(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
-		/// secp.verify returns range if and only if both min_value and max_value less than 2^64
-                /// since group order is much larger (~2^256) we can be sure overflow is not the case
+		/// secp.verify_range_proof returns range if and only if both min_value and max_value less than 2^64
+		/// since group order is much larger (~2^256) we can be sure overflow is not the case
 		secp.verify_range_proof(self.commit, self.proof).map(|_| ())
 	}
 }

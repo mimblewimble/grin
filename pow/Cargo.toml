@@ -15,10 +15,9 @@ serde = "~1.0.8"
 serde_derive = "~1.0.8"
 
 cuckoo_miner = { git = "https://github.com/mimblewimble/cuckoo-miner", tag="grin_integration_8"}
-#cuckoo_miner = { path = "../../cuckoo-miner"}
 
 grin_core = { path = "../core" }
 
 [dev_dependencies]
 grin_chain = { path = "../chain"}
-secp256k1zkp = { path = "../secp256k1zkp" }
+secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }

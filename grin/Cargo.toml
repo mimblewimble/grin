@@ -14,7 +14,7 @@ grin_pool = { path = "../pool" }
 grin_util = { path = "../util" }
 grin_wallet = { path = "../wallet" }
 grin_pow = { path = "../pow" }
-secp256k1zkp = { path = "../secp256k1zkp" }
+secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }
 
 env_logger="^0.3.5"
 futures = "^0.1.9"

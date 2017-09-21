@@ -10,8 +10,7 @@ grin_chain = { path = "../chain" }
 grin_pool = { path = "../pool" }
 grin_store = { path = "../store" }
 grin_util = { path = "../util" }
-secp256k1zkp = { path = "../secp256k1zkp" }
-
+secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }
 hyper = "~0.10.6"
 iron = "~0.5.1"
 log = "~0.3"

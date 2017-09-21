@@ -83,11 +83,11 @@ pub trait Committed {
 
 /// Proof of work
 pub struct Proof {
-    /// The nonces
+	/// The nonces
 	pub nonces:Vec<u32>,
-    
-    /// The proof size
-    pub proof_size: usize,
+
+	/// The proof size
+	pub proof_size: usize,
 }
 
 impl fmt::Debug for Proof {
