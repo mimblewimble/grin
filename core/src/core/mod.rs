@@ -29,10 +29,9 @@ use std::cmp::Ordering;
 use secp::{self, Secp256k1};
 use secp::pedersen::*;
 
-pub use self::block::{Block, BlockHeader, DEFAULT_BLOCK};
-pub use self::transaction::{Transaction, Input, Output, TxKernel, SumCommit,
-														COINBASE_KERNEL, COINBASE_OUTPUT, DEFAULT_OUTPUT};
-use self::hash::Hashed;
+pub use self::block::*;
+pub use self::transaction::*;
+use self::hash::{Hash, Hashed, ZERO_HASH};
 use ser::{Writeable, Writer, Reader, Readable, Error};
 
 use global;
@@ -82,11 +81,11 @@ pub trait Committed {
 
 /// Proof of work
 pub struct Proof {
-    /// The nonces
+	/// The nonces
 	pub nonces:Vec<u32>,
-    
-    /// The proof size
-    pub proof_size: usize,
+
+	/// The proof size
+	pub proof_size: usize,
 }
 
 impl fmt::Debug for Proof {

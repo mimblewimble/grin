@@ -15,5 +15,4 @@ serde = "~1.0.8"
 serde_derive = "~1.0.8"
 time = "^0.1"
 lazy_static = "~0.2.8"
-
-secp256k1zkp = { path = "../secp256k1zkp" }
+secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }

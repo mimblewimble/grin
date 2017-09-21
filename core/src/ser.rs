@@ -187,13 +187,13 @@ pub trait Readable
 }
 
 /// Deserializes a Readeable from any std::io::Read implementation.
-pub fn deserialize<T: Readable>(mut source: &mut Read) -> Result<T, Error> {
+pub fn deserialize<T: Readable>(source: &mut Read) -> Result<T, Error> {
 	let mut reader = BinReader { source: source };
 	T::read(&mut reader)
 }
 
 /// Serializes a Writeable into any std::io::Write implementation.
-pub fn serialize<W: Writeable>(mut sink: &mut Write, thing: &W) -> Result<(), Error> {
+pub fn serialize<W: Writeable>(sink: &mut Write, thing: &W) -> Result<(), Error> {
 	let mut writer = BinWriter { sink: sink };
 	thing.write(&mut writer)
 }

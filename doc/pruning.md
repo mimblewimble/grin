@@ -8,12 +8,12 @@ The grin blockchain includes the following types of data (we assume prior
 understanding of the MimbleWimble protocol):
 
 1. Transaction outputs, which include for each output:
-  1. A Pedersen commitment (33 bytes).
-  2. A range proof (over 5KB at this time).
-2. Transaction inputs which are just output references (32 bytes).
+    1. A Pedersen commitment (33 bytes).
+    2. A range proof (over 5KB at this time).
+2. Transaction inputs, which are just output references (32 bytes).
 3. Transaction "proofs", which include for each transaction:
-  1. The excess commitment sum for the transaction (33 bytes).
-  2. A signature generated with the excess (71 bytes average).
+    1. The excess commitment sum for the transaction (33 bytes).
+    2. A signature generated with the excess (71 bytes average).
 4. A block header includes Merkle trees and proof of work (about 250 bytes).
 
 Assuming a blockchain of a million blocks, 10 million transactions (2 inputs, 2.5

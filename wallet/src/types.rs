@@ -94,7 +94,7 @@ impl Default for WalletConfig {
 		WalletConfig {
 			enable_wallet: false,
 			api_http_addr: "127.0.0.1:13416".to_string(),
-			check_node_api_http_addr: "http://127.0.0.1:13415".to_string(),
+			check_node_api_http_addr: "http://127.0.0.1:13413".to_string(),
 			data_file_dir: ".".to_string(),
 		}
 	}
@@ -108,6 +108,7 @@ impl Default for WalletConfig {
 pub enum OutputStatus {
 	Unconfirmed,
 	Unspent,
+	Immature,
 	Locked,
 	Spent,
 }
@@ -118,13 +119,16 @@ pub enum OutputStatus {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OutputData {
 	/// Private key fingerprint (in case the wallet tracks multiple)
-	pub fingerprint: [u8; 4],
+	pub fingerprint: extkey::Fingerprint,
 	/// How many derivations down from the root key
 	pub n_child: u32,
 	/// Value of the output, necessary to rebuild the commitment
 	pub value: u64,
 	/// Current status of the output
 	pub status: OutputStatus,
+	/// Height of the output
+	pub height: u64,
+	pub lock_height: u64,
 }
 
 impl OutputData {
@@ -150,27 +154,26 @@ pub struct WalletData {
 impl WalletData {
 	/// Allows the reading and writing of the wallet data within a file lock.
 	/// Just provide a closure taking a mutable WalletData. The lock should
-  /// be held for as short a period as possible to avoid contention.
+	/// be held for as short a period as possible to avoid contention.
 	/// Note that due to the impossibility to do an actual file lock easily
 	/// across operating systems, this just creates a lock file with a "should
-  /// not exist" option.
+	/// not exist" option.
 	pub fn with_wallet<T, F>(data_file_dir:&str, f: F) -> Result<T, Error>
 		where F: FnOnce(&mut WalletData) -> T
 	{
 		//create directory if it doesn't exist
 		fs::create_dir_all(data_file_dir).unwrap_or_else(|why| {
-        	info!("! {:?}", why.kind());
+			info!("! {:?}", why.kind());
     	});
 
 		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
 		let lock_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, LOCK_FILE);
 
 		// create the lock files, if it already exists, will produce an error
-    	OpenOptions::new().write(true).create_new(true).open(lock_file_path).map_err(|_| {
+		OpenOptions::new().write(true).create_new(true).open(lock_file_path).map_err(|_| {
 				Error::WalletData(format!("Could not create wallet lock file. Either \
-            some other process is using the wallet or there's a write access \
-            issue."))
-    	})?;
+				some other process is using the wallet or there's a write access issue."))
+		})?;
 
 		// do what needs to be done
 		let mut wdat = WalletData::read_or_create(data_file_path)?;
@@ -222,13 +225,13 @@ impl WalletData {
 	/// Select a subset of unspent outputs to spend in a transaction
 	/// transferring
 	/// the provided amount.
-	pub fn select(&self, fingerprint: [u8; 4], amount: u64) -> (Vec<OutputData>, i64) {
+	pub fn select(&self, fingerprint: &extkey::Fingerprint, amount: u64) -> (Vec<OutputData>, i64) {
 		let mut to_spend = vec![];
 		let mut input_total = 0;
 		// TODO very naive impl for now, there's definitely better coin selection
 		// algos available
 		for out in &self.outputs {
-			if out.status == OutputStatus::Unspent && out.fingerprint == fingerprint {
+			if out.status == OutputStatus::Unspent && out.fingerprint == *fingerprint {
 				to_spend.push(out.clone());
 				input_total += out.value;
 				if input_total >= amount {
@@ -240,10 +243,10 @@ impl WalletData {
 	}
 
 	/// Next child index when we want to create a new output.
-	pub fn next_child(&self, fingerprint: [u8; 4]) -> u32 {
+	pub fn next_child(&self, fingerprint: &extkey::Fingerprint) -> u32 {
 		let mut max_n = 0;
 		for out in &self.outputs {
-			if max_n < out.n_child && out.fingerprint == fingerprint {
+			if max_n < out.n_child && out.fingerprint == *fingerprint {
 				max_n = out.n_child;
 			}
 		}

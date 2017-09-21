@@ -24,6 +24,7 @@ use secp::pedersen::Commitment;
 
 pub use graph;
 
+use core::core::block;
 use core::core::transaction;
 use core::core::hash;
 
@@ -46,7 +47,7 @@ pub struct TxSource {
 #[derive(Clone)]
 pub enum Parent {
     Unknown,
-    BlockTransaction,
+    BlockTransaction{output: transaction::Output},
     PoolTransaction{tx_ref: hash::Hash},
     AlreadySpent{other_tx: hash::Hash},
 }
@@ -55,7 +56,7 @@ impl fmt::Debug for Parent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Parent::Unknown => write!(f, "Parent: Unknown"),
-            &Parent::BlockTransaction => write!(f, "Parent: Block Transaction"),
+            &Parent::BlockTransaction{output: _} => write!(f, "Parent: Block Transaction"),
             &Parent::PoolTransaction{tx_ref: x} => write!(f,
                 "Parent: Pool Transaction ({:?})", x),
             &Parent::AlreadySpent{other_tx: x} => write!(f,
@@ -88,17 +89,38 @@ pub enum PoolError {
         /// The spent output
         spent_output: Commitment
     },
+    /// Attempt to spend a coinbase output before it matures (1000 blocks?)
+    ImmatureCoinbase{
+        /// The block header of the block containing the coinbase output
+        header: block::BlockHeader,
+        /// The unspent coinbase output
+        output: Commitment,
+    },
     /// An orphan successfully added to the orphans set
     OrphanTransaction,
+    /// TODO - wip, just getting imports working, remove this and use more specific errors
+    GenericPoolError,
+    /// TODO - is this the right level of abstraction for pool errors?
+    OutputNotFound,
+    /// TODO - is this the right level of abstraction for pool errors?
+    OutputSpent,
 }
 
 /// Interface that the pool requires from a blockchain implementation.
 pub trait BlockChain {
-  /// Get an unspent output by its commitment. Will return None if the output
-  /// is spent or if it doesn't exist. The blockchain is expected to produce
-  /// a result with its current view of the most worked chain, ignoring
-  /// orphans, etc.
-  fn get_unspent(&self, output_ref: &Commitment) -> Option<transaction::Output>;
+    /// Get an unspent output by its commitment. Will return None if the output
+    /// is spent or if it doesn't exist. The blockchain is expected to produce
+    /// a result with its current view of the most worked chain, ignoring
+    /// orphans, etc.
+    fn get_unspent(&self, output_ref: &Commitment)
+        -> Result<transaction::Output, PoolError>;
+
+    /// Get the block header by output commitment (needed for spending coinbase after n blocks)
+    fn get_block_header_by_output_commit(&self, commit: &Commitment)
+        -> Result<block::BlockHeader, PoolError>;
+
+    /// Get the block header at the head
+    fn head_header(&self) -> Result<block::BlockHeader, PoolError>;
 }
 
 /// Pool contains the elements of the graph that are connected, in full, to

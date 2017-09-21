@@ -18,6 +18,7 @@ use std::thread;
 
 use chain::{self, ChainAdapter};
 use core::core::{self, Output};
+use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use p2p::{self, NetAdapter, Server, PeerStore, PeerData, State};
@@ -292,7 +293,22 @@ impl PoolToChainAdapter {
 }
 
 impl pool::BlockChain for PoolToChainAdapter {
-	fn get_unspent(&self, output_ref: &Commitment) -> Option<Output> {
+	fn get_unspent(&self, output_ref: &Commitment) -> Result<Output, pool::PoolError> {
 		self.chain.borrow().get_unspent(output_ref)
+			.map_err(|e| match e {
+				chain::types::Error::OutputNotFound => pool::PoolError::OutputNotFound,
+				chain::types::Error::OutputSpent => pool::PoolError::OutputSpent,
+				_ => pool::PoolError::GenericPoolError,
+			})
+	}
+
+	fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, pool::PoolError> {
+		self.chain.borrow().get_block_header_by_output_commit(commit)
+			.map_err(|_| pool::PoolError::GenericPoolError)
+	}
+
+	fn head_header(&self) -> Result<BlockHeader, pool::PoolError> {
+		self.chain.borrow().head_header()
+			.map_err(|_| pool::PoolError::GenericPoolError)
 	}
 }

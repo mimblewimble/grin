@@ -40,16 +40,16 @@ mining_parameter_mode = "UserTesting"
 #internally to make it more configurable
 
 capabilities = [7]
-        
+
 #The P2P server details (i.e. the server that communicates with other
 #grin server nodes
 
 [server.p2p_config]
 host = "127.0.0.1"
 port = 13414
-        
-#Mining details. This section is optional. If it's not here, the server 
-#will default to not mining. 
+
+#Mining details. This section is optional. If it's not here, the server
+#will default to not mining.
 [mining]
 
 #flag whether mining is enabled
@@ -75,7 +75,7 @@ cuckoo_miner_async_mode = false
 #cuckoo_miner_plugin_dir = "target/debug/plugins"
 
 #if using cuckoo_miner, the implementation to use.. currently
-#just filters for this word in the filenames in the plugin 
+#just filters for this word in the filenames in the plugin
 #directory
 #Plugins currently included are:
 #"simple" : the basic cuckoo algorithm
@@ -83,7 +83,7 @@ cuckoo_miner_async_mode = false
 #"matrix" : fastest available CPU miner, with largest memory footprint
 #"tomato" : Time memory-tradeoff... low memory but very slow
 #Not included but verified working:
-#"cuda" a gpu miner - which currently needs to bebuilt and installed 
+#"cuda" a gpu miner - which currently needs to bebuilt and installed
 #separately from#the cuckoo-miner repository. Instructions found there
 
 cuckoo_miner_plugin_type = "simple"
@@ -98,7 +98,7 @@ attempt_time_per_block = 30
 
 #the wallet reciever to which coinbase rewards will be sent
 
-wallet_receiver_url = "http://127.0.0.1:13415"
+wallet_receiver_url = "http://127.0.0.1:13416"
 
 #whether to ignore the reward (mostly for testing)
 
@@ -106,4 +106,3 @@ burn_reward = true
 
 #testing value, optional
 #slow_down_in_millis = 30
-

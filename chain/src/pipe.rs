@@ -22,6 +22,7 @@ use time;
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
 use core::core::{BlockHeader, Block};
+use core::core::transaction;
 use types::*;
 use store;
 use sumtree;
@@ -191,6 +192,16 @@ fn validate_block(b: &Block, ctx: &mut BlockContext, ext: &mut sumtree::Extensio
 	let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	try!(b.validate(&curve).map_err(&Error::InvalidBlockProof));
 
+	// check that all the outputs of the block are "new" -
+	// that they do not clobber any existing unspent outputs (by their commitment)
+	//
+	// TODO - do we need to do this here (and can we do this here if we need access to the chain)
+	// see check_duplicate_outputs in pool for the analogous operation on transaction outputs
+	// for output in &block.outputs {
+		// here we would check that the output is not a duplicate output based on the current chain
+	// };
+
+
 	// apply the new block to the MMR trees and check the new root hashes
 	if b.header.previous == ctx.head.last_block_h {
 		// standard head extension
@@ -237,6 +248,21 @@ fn validate_block(b: &Block, ctx: &mut BlockContext, ext: &mut sumtree::Extensio
 		ext.dump();
 		return Err(Error::InvalidRoot);
 	}
+
+	// check that any coinbase outputs are spendable (that they have matured sufficiently)
+	for input in &b.inputs {
+		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
+			if output.features.contains(transaction::COINBASE_OUTPUT) {
+				if let Ok(output_header) = ctx.store.get_block_header_by_output_commit(&input.commitment()) {
+
+					// TODO - make sure we are not off-by-1 here vs. the equivalent tansaction validation rule
+					if b.header.height <= output_header.height + consensus::COINBASE_MATURITY {
+						return Err(Error::ImmatureCoinbase);
+					}
+				};
+			};
+		};
+	};
 
 	Ok(())
 }

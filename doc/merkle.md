@@ -11,7 +11,7 @@ treat Merkle sum trees as the default option, and address the sums here.
 
 A design goal of Grin is that all structures be as easy to implement and
 as simple as possible. MimbleWimble introduces a lot of new cryptography
-so it should made as easy to understand as possible. Its validation rules
+so it should be made as easy to understand as possible. Its validation rules
 are simple to specify (no scripts) and Grin is written in a language with
 very explicit semantics, so simplicity is also good to achieve well-understood
 consensus rules.
@@ -31,8 +31,8 @@ The root sum should be equal to the sum of all excesses since the genesis.
 
 Design requirements:
 
-1. Efficient additions and updating from unspent to spent
-2. Efficient proofs that a specific output was spent
+1. Efficient additions and updating from unspent to spent.
+2. Efficient proofs that a specific output was spent.
 3. Efficient storage of diffs between UTXO roots.
 4. Efficient tree storage even with missing data, even with millions of entries.
 5. If a node commits to NULL, it has no unspent children and its data should
@@ -147,8 +147,8 @@ structure of the tree without needing all the hashes, and can determine which
 nodes are siblings, and so on.
 
 In the output set each node also commits to a sum of its unspent children, so
-a validator knows if it is missing data on unspent coins, by checking whether
-this sum on a pruned node is zero or not.
+a validator knows if it is missing data on unspent coins by checking whether or
+not this sum on a pruned node is zero.
 
 
 ## Algorithms
@@ -174,12 +174,3 @@ only binary tree, we can find a key in the tree by its insertion position. So a
 full index of keys inserted in the tree (i.e. an output commitment) to their
 insertion positions is also required.
 
-## Notes
-
-Hashing block data:
-
-* Output hash includes the commitment and features but not the rangeproof. The
-hash is stored and committed to in the PMMR.
-* The range proofs have their own hashes and sum to zero. They have their own
-PMMR.
-* The kernels have their own hashes and sum to zero. They have their own PMMR.
