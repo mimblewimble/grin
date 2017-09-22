@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::{num, thread, time};
 use std::convert::From;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
-use std::num;
 use std::path::Path;
 use std::path::MAIN_SEPARATOR;
+
 
 use serde_json;
 
@@ -164,16 +165,36 @@ impl WalletData {
 		//create directory if it doesn't exist
 		fs::create_dir_all(data_file_dir).unwrap_or_else(|why| {
 			info!("! {:?}", why.kind());
-    	});
+		});
 
 		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
 		let lock_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, LOCK_FILE);
 
 		// create the lock files, if it already exists, will produce an error
-		OpenOptions::new().write(true).create_new(true).open(lock_file_path).map_err(|_| {
-				Error::WalletData(format!("Could not create wallet lock file. Either \
-				some other process is using the wallet or there's a write access issue."))
-		})?;
+		// sleep and retry a few times if we cannot get it the first time
+		let mut retries = 0;
+		loop {
+			let result = OpenOptions::new()
+				.write(true)
+				.create_new(true)
+				.open(lock_file_path)
+				.map_err(|_| {
+					Error::WalletData(format!("Could not create wallet lock file. Either \
+					some other process is using the wallet or there's a write access issue."))
+				});
+			match result {
+				Ok(_) => { break; },
+				Err(e) => {
+					if retries >= 3 {
+						return Err(e);
+					}
+					debug!("failed to obtain wallet.lock, retries - {}, sleeping", retries);
+					retries += 1;
+					thread::sleep(time::Duration::from_millis(500));
+				}
+			}
+		}
+
 
 		// do what needs to be done
 		let mut wdat = WalletData::read_or_create(data_file_path)?;
@@ -182,9 +203,10 @@ impl WalletData {
 
 		// delete the lock file
 		fs::remove_file(lock_file_path).map_err(|_| {
-				Error::WalletData(format!("Could not remove wallet lock file. Maybe insufficient \
-				                           rights?"))
-			})?;
+			Error::WalletData(
+				format!("Could not remove wallet lock file. Maybe insufficient rights?")
+			)
+		})?;
 
 		Ok(res)
 	}
@@ -201,25 +223,40 @@ impl WalletData {
 
 	/// Read the wallet data from disk.
 	fn read(data_file_path:&str) -> Result<WalletData, Error> {
-		let data_file = File::open(data_file_path)
-      .map_err(|e| Error::WalletData(format!("Could not open {}: {}", data_file_path, e)))?;
-		serde_json::from_reader(data_file)
-			.map_err(|e| Error::WalletData(format!("Error reading {}: {}", data_file_path, e)))
+		let data_file = File::open(data_file_path).map_err(|e| {
+			Error::WalletData(format!("Could not open {}: {}", data_file_path, e))
+		})?;
+		serde_json::from_reader(data_file).map_err(|e| {
+			Error::WalletData(format!("Error reading {}: {}", data_file_path, e))
+		})
 	}
 
 	/// Write the wallet data to disk.
 	fn write(&self, data_file_path:&str) -> Result<(), Error> {
-		let mut data_file = File::create(data_file_path)
-      .map_err(|e| Error::WalletData(format!("Could not create {}: {}", data_file_path, e)))?;
-		let res_json = serde_json::to_vec_pretty(self)
-      .map_err(|_| Error::WalletData(format!("Error serializing wallet data.")))?;
-		data_file.write_all(res_json.as_slice())
-			.map_err(|e| Error::WalletData(format!("Error writing {}: {}", data_file_path, e)))
+		let mut data_file = File::create(data_file_path).map_err(|e| {
+			Error::WalletData(format!("Could not create {}: {}", data_file_path, e))
+		})?;
+		let res_json = serde_json::to_vec_pretty(self).map_err(|_| {
+			Error::WalletData(format!("Error serializing wallet data."))
+		})?;
+		data_file.write_all(res_json.as_slice()).map_err(|e| {
+			Error::WalletData(format!("Error writing {}: {}", data_file_path, e))
+		})
 	}
 
 	/// Append a new output information to the wallet data.
 	pub fn append_output(&mut self, out: OutputData) {
 		self.outputs.push(out);
+	}
+
+	pub fn lock_output(&mut self, out: &OutputData) {
+		if let Some(out_to_lock) = self.outputs.iter_mut().find(|out_to_lock| {
+			out_to_lock.n_child == out.n_child &&
+			out_to_lock.fingerprint == out.fingerprint &&
+			out_to_lock.value == out.value
+		}) {
+			out_to_lock.lock();
+		}
 	}
 
 	/// Select a subset of unspent outputs to spend in a transaction
@@ -283,10 +320,9 @@ pub fn partial_tx_from_json(json_str: &str) -> Result<(u64, SecretKey, Transacti
 	let blind_bin = util::from_hex(partial_tx.blind_sum)?;
 	let blinding = SecretKey::from_slice(&secp, &blind_bin[..])?;
 	let tx_bin = util::from_hex(partial_tx.tx)?;
-	let tx =
-		ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
-				Error::Format("Could not deserialize transaction, invalid format.".to_string())
-			})?;
+	let tx = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
+		Error::Format("Could not deserialize transaction, invalid format.".to_string())
+	})?;
 
 	Ok((partial_tx.amount, blinding, tx))
 }

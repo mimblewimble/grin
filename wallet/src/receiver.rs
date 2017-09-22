@@ -69,14 +69,19 @@ struct TxWrapper {
 /// Receive an already well formed JSON transaction issuance and finalize the
 /// transaction, adding our receiving output, to broadcast to the rest of the
 /// network.
-pub fn receive_json_tx(config: &WalletConfig, ext_key: &ExtendedKey, partial_tx_str: &str) -> Result<(), Error> {
-
+pub fn receive_json_tx(
+	config: &WalletConfig,
+	ext_key: &ExtendedKey,
+	partial_tx_str: &str
+) -> Result<(), Error> {
 	let (amount, blinding, partial_tx) = partial_tx_from_json(partial_tx_str)?;
 	let final_tx = receive_transaction(&config, ext_key, amount, blinding, partial_tx)?;
 	let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
 
 	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
-	let _: TxWrapper = api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })?;
+	let _: () = api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).map_err(|e| {
+		Error::Node(e)
+	})?;
 	Ok(())
 }
 

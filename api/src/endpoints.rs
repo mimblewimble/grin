@@ -132,7 +132,10 @@ impl<T> ApiEndpoint for PoolApi<T>
 			.write()
 			.unwrap()
 			.add_to_memory_pool(source, tx)
-			.map_err(|e| Error::Internal(format!("Addition to transaction pool failed: {:?}", e)))?;
+			.map_err(|e| {
+				Error::Internal(format!("Addition to transaction pool failed: {:?}", e))
+			})?;
+
 		Ok(())
 	}
 }
