@@ -16,57 +16,78 @@
 //! the wallet storage and update them.
 
 use api;
-use core::core::Output;
+use extkey::ExtendedKey;
 use secp::{self, pedersen};
+use types::*;
 use util;
 
-use extkey::ExtendedKey;
-use types::{WalletConfig, OutputStatus, WalletData};
+
+fn refresh_output(
+	out: &mut OutputData,
+	api_out: Option<api::Output>,
+	tip: &api::Tip,
+) {
+	if let Some(api_out) = api_out {
+		out.height = api_out.height;
+		out.lock_height = api_out.lock_height;
+
+		if api_out.lock_height > tip.height {
+			out.status = OutputStatus::Immature;
+		} else {
+			out.status = OutputStatus::Unspent;
+		}
+	} else if out.status == OutputStatus::Unspent {
+		out.status = OutputStatus::Spent;
+	}
+}
 
 /// Goes through the list of outputs that haven't been spent yet and check
 /// with a node whether their status has changed.
-pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) {
+pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) -> Result<(), Error>{
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
+	let tip = get_tip(config)?;
 
-	// operate within a lock on wallet data
-	let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-
+	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		// check each output that's not spent
-		for out in &mut wallet_data.outputs {
-			if out.status != OutputStatus::Spent {
-				// figure out the commitment
-				let key = ext_key.derive(&secp, out.n_child).unwrap();
-				let commitment = secp.commit(out.value, key.key).unwrap();
+		for mut out in wallet_data.outputs
+			.iter_mut()
+			.filter(|out| out.status != OutputStatus::Spent) {
 
-				// TODO check the pool for unconfirmed
+			// figure out the commitment
+			// TODO check the pool for unconfirmed
+			let key = ext_key.derive(&secp, out.n_child).unwrap();
+			let commitment = secp.commit(out.value, key.key).unwrap();
 
-				let out_res = get_output_by_commitment(config, commitment);
-
-				if out_res.is_ok() {
-					// output is known, it's a new utxo
-					out.status = OutputStatus::Unspent;
-
-				} else if out.status == OutputStatus::Unspent {
-					// a UTXO we can't find anymore has been spent
-					if let Err(api::Error::NotFound) = out_res {
-						out.status = OutputStatus::Spent;
-					}
-				} else {
+			match get_output_by_commitment(config, commitment) {
+				Ok(api_out) => refresh_output(&mut out, api_out, &tip),
+				Err(_) => {
 					//TODO find error with connection and return
 					//error!("Error contacting server node at {}. Is it running?", config.check_node_api_http_addr);
 				}
 			}
 		}
-	});
+	})
 }
 
-// queries a reachable node for a given output, checking whether it's been
-// confirmed
-fn get_output_by_commitment(config: &WalletConfig,
-                            commit: pedersen::Commitment)
-                            -> Result<Output, api::Error> {
-	let url = format!("{}/v1/chain/utxo/{}",
-	                  config.check_node_api_http_addr,
-	                  util::to_hex(commit.as_ref().to_vec()));
-	api::client::get::<Output>(url.as_str())
+fn get_tip(config: &WalletConfig) -> Result<api::Tip, Error> {
+	let url = format!("{}/v1/chain", config.check_node_api_http_addr);
+	api::client::get::<api::Tip>(url.as_str())
+		.map_err(|e| Error::Node(e))
+}
+
+// queries a reachable node for a given output, checking whether it's been confirmed
+fn get_output_by_commitment(
+	config: &WalletConfig,
+	commit: pedersen::Commitment
+) -> Result<Option<api::Output>, Error> {
+	let url = format!(
+		"{}/v1/chain/utxo/{}",
+		config.check_node_api_http_addr,
+		util::to_hex(commit.as_ref().to_vec())
+	);
+	match api::client::get::<api::Output>(url.as_str()) {
+		Ok(out) => Ok(Some(out)),
+		Err(api::Error::NotFound) => Ok(None),
+		Err(e) => Err(Error::Node(e)),
+	}
 }
