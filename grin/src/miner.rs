@@ -148,7 +148,7 @@ impl Miner {
 		self.debug_output_id = debug_output_id;
 	}
 
-	/// Inner part of the mining loop for cuckoo-miner asynch mode
+	/// Inner part of the mining loop for cuckoo-miner async mode
 	pub fn inner_loop_async(
 		&self,
 		plugin_miner: &mut PluginMiner,
@@ -169,7 +169,8 @@ impl Miner {
 			b.header.difficulty
 		);
 
-		// look for a pow for at most 10 sec on the same block (to give a chance to new
+		// look for a pow for at most attempt_time_per_block sec on the 
+		// same block (to give a chance to new
 		// transactions) and as long as the head hasn't changed
 		// Will change this to something else at some point
 		let deadline = time::get_time().sec + attempt_time_per_block as i64;
@@ -200,22 +201,20 @@ impl Miner {
 			if let Some(s) = job_handle.get_solution() {
 				sol = Some(Proof::new(s.solution_nonces.to_vec()));
 				b.header.nonce = s.get_nonce_as_u64();
-				println!("Nonce: {}", b.header.nonce);
+				//debug!("Nonce: {}", b.header.nonce);
 				break;
 			}
 			if time::get_time().sec > next_stat_output {
+				let mut sps_total=0.0;
 				for i in 0..plugin_miner.loaded_plugin_count() {
 					let stats = job_handle.get_stats(i);
 					if let Ok(stat_vec) = stats {
 						for s in stat_vec {
-							if s.last_start_time == 0 {
-								continue;
-							}
 							let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
 							let last_hashes_per_sec = 1.0 / last_solution_time_secs;
 							debug!(
-								"Plugin {} - Mining on Device {} - {}: Last hash time: {} \
-								- Hashes per second: {:.*} - Total Attempts: {}",
+								"Mining: Plugin {} - Device {} ({}): Last Solution time: {}; \
+								Solutions per second: {:.*} - Total Attempts: {}",
 								i,
 								s.device_id,
 								s.device_name,
@@ -224,21 +223,21 @@ impl Miner {
 								last_hashes_per_sec,
 								s.iterations_completed
 							);
+							if last_hashes_per_sec.is_finite() {
+								sps_total+=last_hashes_per_sec;
+							}
 						}
 					}
+					debug!("Total solutions per second: {}", sps_total);
 					next_stat_output = time::get_time().sec + stat_output_interval;
 				}
 			}
 		}
 		if sol == None {
-			let mut hash_count = 0;
-			for i in 0..plugin_miner.loaded_plugin_count() {
-				hash_count += job_handle.get_hashes_since_last_call(i);
-			}
 			debug!(
-				"(Server ID: {}) No solution found after {} iterations, continuing...",
+				"(Server ID: {}) No solution found after {} seconds, continuing...",
 				self.debug_output_id,
-				hash_count
+				attempt_time_per_block
 			);
 		}
 
@@ -247,8 +246,90 @@ impl Miner {
 
 	}
 
-	/// The inner part of mining loop for synchronous mode
-	pub fn inner_loop_sync<T: MiningWorker>(
+	/// The inner part of mining loop for cuckoo miner sync mode
+	pub fn inner_loop_sync_plugin(
+		&self,
+		plugin_miner: &mut PluginMiner,
+		b: &mut Block,
+		cuckoo_size: u32,
+		head: &BlockHeader,
+		attempt_time_per_block: u32,
+		latest_hash: &mut Hash,
+	) -> Option<Proof> {
+		// look for a pow for at most 2 sec on the same block (to give a chance to new
+		// transactions) and as long as the head hasn't changed
+		let deadline = time::get_time().sec + attempt_time_per_block as i64;
+		let stat_check_interval = 3;
+		let mut next_stat_check = time::get_time().sec + stat_check_interval;
+
+		debug!(
+			"(Server ID: {}) Mining at Cuckoo{} for {} secs (will wait for last solution) on block {} at difficulty {}.",
+			self.debug_output_id,
+			cuckoo_size,
+			attempt_time_per_block,
+			latest_hash,
+			b.header.difficulty
+		);
+		let mut iter_count = 0;
+
+		if self.config.slow_down_in_millis != None && self.config.slow_down_in_millis.unwrap() > 0 {
+			debug!(
+				"(Server ID: {}) Artificially slowing down loop by {}ms per iteration.",
+				self.debug_output_id,
+				self.config.slow_down_in_millis.unwrap()
+			);
+		}
+
+		let mut sol = None;
+		while head.hash() == *latest_hash && time::get_time().sec < deadline {
+
+			let pow_hash = b.hash();
+			if let Ok(proof) = plugin_miner.mine(&pow_hash[..]) {
+				let proof_diff = proof.clone().to_difficulty();
+				if proof_diff >= b.header.difficulty {
+					sol = Some(proof);
+					break;
+				}
+			}
+
+			if time::get_time().sec >= next_stat_check {
+				let stats_vec=plugin_miner.get_stats(0).unwrap();
+				for s in stats_vec.into_iter() {
+					let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
+					let last_hashes_per_sec = 1.0 / last_solution_time_secs;
+					println!("Plugin 0 - Device {} ({}) - Last Solution time: {}; Solutions per second: {:.*}", 
+					s.device_id, s.device_name, last_solution_time_secs, 3, last_hashes_per_sec);
+				}
+				next_stat_check = time::get_time().sec + stat_check_interval;
+			}
+
+			b.header.nonce += 1;
+			*latest_hash = self.chain.head().unwrap().last_block_h;
+			iter_count += 1;
+
+			// Artificial slow down
+			if self.config.slow_down_in_millis != None &&
+				self.config.slow_down_in_millis.unwrap() > 0
+			{
+				thread::sleep(std::time::Duration::from_millis(
+					self.config.slow_down_in_millis.unwrap(),
+				));
+			}
+		}
+
+		if sol == None {
+			debug!(
+				"(Server ID: {}) No solution found after {} iterations, continuing...",
+				self.debug_output_id,
+				iter_count
+			)
+		}
+
+		sol
+	}
+
+	/// The inner part of mining loop for the internal miner
+	pub fn inner_loop_sync_internal<T: MiningWorker>(
 		&self,
 		miner: &mut T,
 		b: &mut Block,
@@ -285,16 +366,12 @@ impl Miner {
 			let pow_hash = b.hash();
 			if let Ok(proof) = miner.mine(&pow_hash[..]) {
 				let proof_diff = proof.clone().to_difficulty();
-				/*debug!("(Server ID: {}) Header difficulty is: {}, Proof difficulty is: {}",
-				self.debug_output_id,
-				b.header.difficulty,
-				proof_diff);*/
-
 				if proof_diff >= b.header.difficulty {
 					sol = Some(proof);
 					break;
 				}
 			}
+
 			b.header.nonce += 1;
 			*latest_hash = self.chain.head().unwrap().last_block_h;
 			iter_count += 1;
@@ -319,7 +396,6 @@ impl Miner {
 
 		sol
 	}
-
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
 	pub fn run_loop(&self, miner_config: MinerConfig, cuckoo_size: u32, proof_size: usize) {
@@ -369,7 +445,7 @@ impl Miner {
 						miner_config.attempt_time_per_block,
 					);
 				} else {
-					sol = self.inner_loop_sync(
+					sol = self.inner_loop_sync_plugin(
 						p,
 						&mut b,
 						cuckoo_size,
@@ -380,7 +456,7 @@ impl Miner {
 				}
 			}
 			if let Some(mut m) = miner.as_mut() {
-				sol = self.inner_loop_sync(
+				sol = self.inner_loop_sync_internal(
 					m,
 					&mut b,
 					cuckoo_size,

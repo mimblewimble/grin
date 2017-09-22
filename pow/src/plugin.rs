@@ -29,7 +29,8 @@ use types::MinerConfig;
 
 use std::sync::Mutex;
 
-use cuckoo_miner::{CuckooMiner, CuckooPluginManager, CuckooMinerConfig, CuckooMinerSolution};
+use cuckoo_miner::{CuckooMiner, CuckooPluginManager, CuckooMinerConfig, CuckooMinerSolution,
+CuckooMinerDeviceStats, CuckooMinerError};
 
 // For now, we're just going to keep a static reference around to the loaded
 // config
@@ -94,6 +95,7 @@ impl PluginMiner {
 			// this will load the associated plugin
 			let result = CuckooMiner::new(c.clone());
 			self.miner = Some(result.unwrap());
+			self.config = c.clone();
 			return;
 		}
 
@@ -163,6 +165,11 @@ impl PluginMiner {
 	pub fn loaded_plugin_count(&self) -> usize {
 		self.config.len()
 	}
+
+	/// Get stats
+	pub fn get_stats(&self, index:usize) -> Result<Vec<CuckooMinerDeviceStats>, CuckooMinerError> {
+		self.miner.as_ref().unwrap().get_stats(index) 
+	}
 }
 
 impl MiningWorker for PluginMiner {
@@ -178,7 +185,7 @@ impl MiningWorker for PluginMiner {
 	/// And simply calls the mine function of the loaded plugin
 	/// returning whether a solution was found and the solution itself
 
-	fn mine(&mut self, header: &[u8]) -> Result<Proof, cuckoo::Error> {
+	fn mine(&mut self, header: &[u8]) -> Result<Proof, cuckoo::Error>{
 		let result = self.miner
 			.as_mut()
 			.unwrap()

@@ -51,7 +51,9 @@ impl ApiEndpoint for ChainApi {
 	}
 
 	fn get(&self, _: String) -> ApiResult<Tip> {
-		self.chain.head().map_err(|e| Error::Internal(format!("{:?}", e)))
+		self.chain.head().map_err(
+			|e| Error::Internal(format!("{:?}", e)),
+		)
 	}
 }
 
@@ -74,7 +76,9 @@ impl ApiEndpoint for OutputApi {
 
 	fn get(&self, id: String) -> ApiResult<Output> {
 		debug!("GET output {}", id);
-		let c = util::from_hex(id.clone()).map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
+		let c = util::from_hex(id.clone()).map_err(|_| {
+			Error::Argument(format!("Not a valid commitment: {}", id))
+		})?;
 
 		// TODO - can probably clean up the error mapping here
 		match self.chain.get_unspent(&Commitment::from_vec(c)) {
@@ -99,7 +103,8 @@ pub struct PoolInfo {
 }
 
 impl<T> ApiEndpoint for PoolApi<T>
-    where T: pool::BlockChain + Clone + Send + Sync + 'static
+where
+	T: pool::BlockChain + Clone + Send + Sync + 'static,
 {
 	type ID = String;
 	type T = PoolInfo;
@@ -120,25 +125,32 @@ impl<T> ApiEndpoint for PoolApi<T>
 	}
 
 	fn operation(&self, _: String, input: TxWrapper) -> ApiResult<()> {
-		let tx_bin = util::from_hex(input.tx_hex)
-      .map_err(|_| Error::Argument(format!("Invalid hex in transaction wrapper.")))?;
+		let tx_bin = util::from_hex(input.tx_hex).map_err(|_| {
+			Error::Argument(format!("Invalid hex in transaction wrapper."))
+		})?;
 
 		let tx: Transaction = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
-				Error::Argument("Could not deserialize transaction, invalid format.".to_string())
-			})?;
+			Error::Argument(
+				"Could not deserialize transaction, invalid format.".to_string(),
+			)
+		})?;
 
 		let source = pool::TxSource {
 			debug_name: "push-api".to_string(),
 			identifier: "?.?.?.?".to_string(),
 		};
-		debug!("Pushing transaction with {} inputs and {} outputs to pool.",
-		       tx.inputs.len(),
-		       tx.outputs.len());
+		debug!(
+			"Pushing transaction with {} inputs and {} outputs to pool.",
+			tx.inputs.len(),
+			tx.outputs.len()
+		);
 		self.tx_pool
 			.write()
 			.unwrap()
 			.add_to_memory_pool(source, tx)
-			.map_err(|e| Error::Internal(format!("Addition to transaction pool failed: {:?}", e)))?;
+			.map_err(|e| {
+				Error::Internal(format!("Addition to transaction pool failed: {:?}", e))
+			})?;
 		Ok(())
 	}
 }
@@ -151,20 +163,21 @@ pub struct TxWrapper {
 
 /// Start all server REST APIs. Just register all of them on a ApiServer
 /// instance and runs the corresponding HTTP server.
-pub fn start_rest_apis<T>(addr: String,
-                          chain: Arc<chain::Chain>,
-                          tx_pool: Arc<RwLock<pool::TransactionPool<T>>>)
-	where T: pool::BlockChain + Clone + Send + Sync + 'static
+pub fn start_rest_apis<T>(
+	addr: String,
+	chain: Arc<chain::Chain>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<T>>>,
+) where
+	T: pool::BlockChain + Clone + Send + Sync + 'static,
 {
 
 	thread::spawn(move || {
 		let mut apis = ApiServer::new("/v1".to_string());
-		apis.register_endpoint("/chain".to_string(),
-		                       ChainApi { chain: chain.clone() });
-		apis.register_endpoint("/chain/utxo".to_string(),
-		                       OutputApi {
-			                       chain: chain.clone(),
-		                       });
+		apis.register_endpoint("/chain".to_string(), ChainApi { chain: chain.clone() });
+		apis.register_endpoint(
+			"/chain/utxo".to_string(),
+			OutputApi { chain: chain.clone() },
+		);
 		apis.register_endpoint("/pool".to_string(), PoolApi { tx_pool: tx_pool });
 
 		apis.start(&addr[..]).unwrap_or_else(|e| {
