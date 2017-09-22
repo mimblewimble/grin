@@ -169,7 +169,7 @@ impl Miner {
 			b.header.difficulty
 		);
 
-		// look for a pow for at most attempt_time_per_block sec on the 
+		// look for a pow for at most attempt_time_per_block sec on the
 		// same block (to give a chance to new
 		// transactions) and as long as the head hasn't changed
 		// Will change this to something else at some point
@@ -201,11 +201,11 @@ impl Miner {
 			if let Some(s) = job_handle.get_solution() {
 				sol = Some(Proof::new(s.solution_nonces.to_vec()));
 				b.header.nonce = s.get_nonce_as_u64();
-				//debug!("Nonce: {}", b.header.nonce);
+				// debug!("Nonce: {}", b.header.nonce);
 				break;
 			}
 			if time::get_time().sec > next_stat_output {
-				let mut sps_total=0.0;
+				let mut sps_total = 0.0;
 				for i in 0..plugin_miner.loaded_plugin_count() {
 					let stats = job_handle.get_stats(i);
 					if let Ok(stat_vec) = stats {
@@ -224,7 +224,7 @@ impl Miner {
 								s.iterations_completed
 							);
 							if last_hashes_per_sec.is_finite() {
-								sps_total+=last_hashes_per_sec;
+								sps_total += last_hashes_per_sec;
 							}
 						}
 					}
@@ -263,7 +263,8 @@ impl Miner {
 		let mut next_stat_check = time::get_time().sec + stat_check_interval;
 
 		debug!(
-			"(Server ID: {}) Mining at Cuckoo{} for {} secs (will wait for last solution) on block {} at difficulty {}.",
+			"(Server ID: {}) Mining at Cuckoo{} for {} secs (will wait for last solution)\
+				on block {} at difficulty {}.",
 			self.debug_output_id,
 			cuckoo_size,
 			attempt_time_per_block,
@@ -293,12 +294,18 @@ impl Miner {
 			}
 
 			if time::get_time().sec >= next_stat_check {
-				let stats_vec=plugin_miner.get_stats(0).unwrap();
+				let stats_vec = plugin_miner.get_stats(0).unwrap();
 				for s in stats_vec.into_iter() {
 					let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
 					let last_hashes_per_sec = 1.0 / last_solution_time_secs;
-					println!("Plugin 0 - Device {} ({}) - Last Solution time: {}; Solutions per second: {:.*}", 
-					s.device_id, s.device_name, last_solution_time_secs, 3, last_hashes_per_sec);
+					println!(
+						"Plugin 0 - Device {} ({}) - Last Solution time: {}; Solutions per second: {:.*}",
+						s.device_id,
+						s.device_name,
+						last_solution_time_secs,
+						3,
+						last_hashes_per_sec
+					);
 				}
 				next_stat_check = time::get_time().sec + stat_check_interval;
 			}
