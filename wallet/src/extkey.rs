@@ -16,6 +16,7 @@
 /// in its wallet logic. Largely inspired by bitcoin's BIP32.
 
 use std::{error, fmt};
+use std::cmp::min;
 
 use byteorder::{ByteOrder, BigEndian};
 use crypto::mac::Mac;
@@ -58,6 +59,74 @@ impl error::Error for Error {
 	}
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Fingerprint([u8; 4]);
+
+impl Fingerprint {
+	fn from_bytes(bytes: &[u8]) -> Fingerprint {
+		let mut fingerprint = [0; 4];
+		for i in 0..min(4, bytes.len()) {
+			fingerprint[i] = bytes[i];
+		}
+		Fingerprint(fingerprint)
+	}
+
+	fn zero() -> Fingerprint {
+		Fingerprint([0; 4])
+	}
+}
+
+impl PartialEq for Fingerprint {
+	fn eq(&self, other: &Self) -> bool {
+		self.0.as_ref() == other.0.as_ref()
+	}
+}
+
+impl ::std::fmt::Display for Fingerprint {
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+		for i in self.0.iter().cloned() {
+			try!(write!(f, "{:02x}", i));
+		}
+		write!(f, "")
+	}
+}
+
+impl ::std::fmt::Debug for Fingerprint {
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+		try!(write!(f, "{}(", stringify!(Fingerprint)));
+		for i in self.0.iter().cloned() {
+			try!(write!(f, "{:02x}", i));
+		}
+		write!(f, ")")
+	}
+}
+
+pub struct Identifier([u8; 20]);
+
+impl Identifier {
+	fn from_bytes(bytes: &[u8]) -> Identifier {
+		let mut identifier = [0; 20];
+		for i in 0..min(20, bytes.len()) {
+			identifier[i] = bytes[i];
+		}
+		Identifier(identifier)
+	}
+
+	pub fn fingerprint(&self) -> Fingerprint {
+		Fingerprint::from_bytes(&self.0)
+	}
+}
+
+impl ::std::fmt::Debug for Identifier {
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+		try!(write!(f, "{}(", stringify!(Identifier)));
+		for i in self.0.iter().cloned() {
+			try!(write!(f, "{:02x}", i));
+		}
+		write!(f, ")")
+	}
+}
+
 /// An ExtendedKey is a secret key which can be used to derive new
 /// secret keys to blind the commitment of a transaction output.
 /// To be usable, a secret key should have an amount assigned to it,
@@ -70,7 +139,7 @@ pub struct ExtendedKey {
 	/// Child number of the key
 	pub n_child: u32,
 	/// Parent key's fingerprint
-	pub fingerprint: [u8; 4],
+	pub fingerprint: Fingerprint,
 	/// Code of the derivation chain
 	pub chaincode: [u8; 32],
 	/// Actual private key
@@ -85,8 +154,7 @@ impl ExtendedKey {
 			return Err(Error::InvalidSliceSize);
 		}
 		let depth: u8 = slice[0];
-		let mut fingerprint: [u8; 4] = [0; 4];
-		(&mut fingerprint).copy_from_slice(&slice[1..5]);
+		let fingerprint = Fingerprint::from_bytes(&slice[1..5]);
 		let n_child = BigEndian::read_u32(&slice[5..9]);
 		let mut chaincode: [u8; 32] = [0; 32];
 		(&mut chaincode).copy_from_slice(&slice[9..41]);
@@ -123,23 +191,20 @@ impl ExtendedKey {
 
 		let mut ext_key = ExtendedKey {
 			depth: 0,
-			fingerprint: [0; 4],
+			fingerprint: Fingerprint::zero(),
 			n_child: 0,
 			chaincode: chaincode,
 			key: secret_key,
 		};
 
-		let mut fingerprint: [u8; 4] = [0; 4];
-		let identifier = ext_key.identifier();
-		(&mut fingerprint).clone_from_slice(&identifier[0..4]);
-		ext_key.fingerprint = fingerprint;
+		ext_key.fingerprint = ext_key.identifier().fingerprint();
 
 		Ok(ext_key)
 	}
 
 	/// Return the identifier of the key, which is the
 	/// Hash160 of the private key
-	pub fn identifier(&self) -> [u8; 20] {
+	pub fn identifier(&self) -> Identifier {
 		let mut sha = Sha256::new();
 		sha.input(&self.key[..]);
 
@@ -151,7 +216,7 @@ impl ExtendedKey {
 
 		let mut identifier = [0; 20];
 		ripe.result(&mut identifier);
-		return identifier;
+		Identifier::from_bytes(&identifier)
 	}
 
 	/// Derive an extended key from an extended key
@@ -175,13 +240,9 @@ impl ExtendedKey {
 		let mut chain_code: [u8; 32] = [0; 32];
 		(&mut chain_code).clone_from_slice(&derived[32..]);
 
-		let mut fingerprint: [u8; 4] = [0; 4];
-		let parent_identifier = self.identifier();
-		(&mut fingerprint).clone_from_slice(&parent_identifier[0..4]);
-
 		Ok(ExtendedKey {
 			depth: self.depth + 1,
-			fingerprint: fingerprint,
+			fingerprint: self.identifier().fingerprint(),
 			n_child: n,
 			chaincode: chain_code,
 			key: secret_key,
@@ -195,7 +256,7 @@ mod test {
 
 	use secp::Secp256k1;
 	use secp::key::SecretKey;
-	use super::ExtendedKey;
+	use super::{ExtendedKey, Fingerprint};
 	use self::serialize::hex::FromHex;
 
 	#[test]
@@ -213,7 +274,7 @@ mod test {
 		let depth = 0;
 		let n_child = 0;
 		assert_eq!(extk.key, secret_key);
-		assert_eq!(extk.fingerprint, fingerprint.as_slice());
+		assert_eq!(extk.fingerprint, Fingerprint::from_bytes(fingerprint.as_slice()));
 		assert_eq!(extk.chaincode, chaincode.as_slice());
 		assert_eq!(extk.depth, depth);
 		assert_eq!(extk.n_child, n_child);
@@ -235,7 +296,7 @@ mod test {
 		let depth = 1;
 		let n_child = 0;
 		assert_eq!(derived.key, secret_key);
-		assert_eq!(derived.fingerprint, fingerprint.as_slice());
+		assert_eq!(derived.fingerprint, Fingerprint::from_bytes(fingerprint.as_slice()));
 		assert_eq!(derived.chaincode, chaincode.as_slice());
 		assert_eq!(derived.depth, depth);
 		assert_eq!(derived.n_child, n_child);

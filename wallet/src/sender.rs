@@ -56,7 +56,7 @@ fn build_send_tx(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64) -> R
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
 		// second, check from our local wallet data for outputs to spend
-		let (coins, change) = wallet_data.select(ext_key.fingerprint, amount);
+		let (coins, change) = wallet_data.select(&ext_key.fingerprint, amount);
 		if change < 0 {
 			return Err(Error::NotEnoughFunds((-change) as u64));
 		}
@@ -71,7 +71,7 @@ fn build_send_tx(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64) -> R
 		}
 
 		// fourth, derive a new private for change and build the change output
-		let next_child = wallet_data.next_child(ext_key.fingerprint);
+		let next_child = wallet_data.next_child(&ext_key.fingerprint);
 		let change_key = ext_key.derive(&secp, next_child).map_err(|e| Error::Key(e))?;
 		parts.push(build::output(change as u64, change_key.key));
 
