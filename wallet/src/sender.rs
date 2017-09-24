@@ -95,21 +95,23 @@ fn build_send_tx(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64) -> R
 
 #[cfg(test)]
 mod test {
-	extern crate rustc_serialize as serialize;
-
 	use core::core::build::{input, output, transaction};
 	use types::{OutputData, OutputStatus};
 
 	use secp::Secp256k1;
 	use super::ExtendedKey;
-	use self::serialize::hex::FromHex;
+	use util;
+
+	fn from_hex(hex_str: &str) -> Vec<u8> {
+		util::from_hex(hex_str.to_string()).unwrap()
+	}
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment
 	// based on the wallet extended key and the coin being spent
 	fn output_commitment_equals_input_commitment_on_spend() {
 		let secp = Secp256k1::new();
-		let seed = "000102030405060708090a0b0c0d0e0f".from_hex().unwrap();
+		let seed = from_hex("000102030405060708090a0b0c0d0e0f");
 
 		let ext_key = ExtendedKey::from_seed(&secp, &seed.as_slice()).unwrap();
 
