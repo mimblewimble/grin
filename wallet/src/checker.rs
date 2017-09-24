@@ -32,7 +32,7 @@ fn refresh_output(
 		out.lock_height = api_out.lock_height;
 
 		if out.status == OutputStatus::Locked {
-			// leave it Locked locally for now
+			// leave it Locked locally for now - waiting for it to be spent
 		} else if api_out.lock_height >= tip.height {
 			out.status = OutputStatus::Immature;
 		} else {

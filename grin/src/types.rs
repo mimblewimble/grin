@@ -17,6 +17,7 @@ use std::convert::From;
 use api;
 use chain;
 use p2p;
+use secp;
 use store;
 use pow;
 use core::global::MiningParameterMode;
@@ -32,6 +33,8 @@ pub enum Error {
 	P2P(p2p::Error),
 	/// Error originating from HTTP API calls
 	API(api::Error),
+	/// Error originating from underlying secp lib
+	Secp(secp::Error),
 }
 
 impl From<chain::Error> for Error {
@@ -127,4 +130,3 @@ pub struct ServerStats {
 	/// Chain head
 	pub head: chain::Tip,
 }
-

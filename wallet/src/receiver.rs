@@ -173,7 +173,7 @@ fn receive_coinbase(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64) -
 			fingerprint: coinbase_key.fingerprint,
 			n_child: coinbase_key.n_child,
 			value: amount,
-			status: OutputStatus::Unconfirmed,
+			status: OutputStatus::CoinbaseReserved,
 			height: 0,
 			lock_height: 0,
 		});
@@ -185,13 +185,13 @@ fn receive_coinbase(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64) -
 }
 
 /// Builds a full transaction from the partial one sent to us for transfer
-fn receive_transaction(config: &WalletConfig,
-					   ext_key: &ExtendedKey,
-                       amount: u64,
-                       blinding: SecretKey,
-                       partial: Transaction)
-                       -> Result<Transaction, Error> {
-
+fn receive_transaction(
+	config: &WalletConfig,
+	ext_key: &ExtendedKey,
+	amount: u64,
+	blinding: SecretKey,
+	partial: Transaction
+) -> Result<Transaction, Error> {
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 
 	// operate within a lock on wallet data
@@ -200,9 +200,16 @@ fn receive_transaction(config: &WalletConfig,
 		let next_child = wallet_data.next_child(&ext_key.fingerprint);
 		let out_key = ext_key.derive(&secp, next_child).map_err(|e| Error::Key(e))?;
 
-		let (tx_final, _) = build::transaction(vec![build::initial_tx(partial),
-		                                            build::with_excess(blinding),
-		                                            build::output(amount, out_key.key)])?;
+		// TODO - actual fee calculation
+		let fee_amount = 1;
+		let out_amount = amount - fee_amount;
+
+		let (tx_final, _) = build::transaction(vec![
+			build::initial_tx(partial),
+			build::with_excess(blinding),
+			build::output(out_amount, out_key.key),
+			build::with_fee(fee_amount),
+		])?;
 
 		// make sure the resulting transaction is valid (could have been lied to
 		// on excess)
@@ -212,14 +219,16 @@ fn receive_transaction(config: &WalletConfig,
 		wallet_data.append_output(OutputData {
 			fingerprint: out_key.fingerprint,
 			n_child: out_key.n_child,
-			value: amount,
+			value: out_amount,
 			status: OutputStatus::Unconfirmed,
 			height: 0,
 			lock_height: 0,
 		});
 
-		debug!("Using child {} for a new transaction output.",
-		       out_key.n_child);
+		debug!(
+			"Using child {} for a new transaction output.",
+			out_key.n_child
+		);
 
 		Ok(tx_final)
 	})?
