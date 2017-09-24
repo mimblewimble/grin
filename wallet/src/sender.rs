@@ -85,8 +85,8 @@ fn build_send_tx(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64) -> R
 			height: 0,
 			lock_height: 0,
 		});
-		for mut coin in coins {
-			coin.lock();
+		for coin in coins {
+			wallet_data.lock_output(&coin);
 		}
 
 		build::transaction(parts).map_err(&From::from)

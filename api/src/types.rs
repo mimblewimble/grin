@@ -58,9 +58,9 @@ pub struct Output {
 
 impl Output {
 	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader) -> Output {
-		let (output_type, maturity) = match output.features {
+		let (output_type, lock_height) = match output.features {
 			x if x.contains(core::transaction::COINBASE_OUTPUT) => {
-				(OutputType::Coinbase, consensus::COINBASE_MATURITY)
+				(OutputType::Coinbase, block_header.height + consensus::COINBASE_MATURITY)
 			},
 			_ => (OutputType::Transaction, 0),
 		};
@@ -69,7 +69,7 @@ impl Output {
 			commit: output.commit,
 			proof: output.proof,
 			height: block_header.height,
-			lock_height: block_header.height + maturity,
+			lock_height: lock_height,
 		}
 	}
 }

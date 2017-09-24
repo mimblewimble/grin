@@ -671,7 +671,7 @@ mod tests {
                 _ => panic!("expected ImmatureCoinbase error here"),
             };
 
-            let head_header = block::BlockHeader {height: 11, ..block::BlockHeader::default()};
+            let head_header = block::BlockHeader {height: 4, ..block::BlockHeader::default()};
             chain_ref.store_head_header(&head_header);
 
             let txn = test_transaction(vec![15], vec![10, 4]);
@@ -683,7 +683,7 @@ mod tests {
                 _ => panic!("expected ImmatureCoinbase error here"),
             };
 
-            let head_header = block::BlockHeader {height: 12, ..block::BlockHeader::default()};
+            let head_header = block::BlockHeader {height: 5, ..block::BlockHeader::default()};
             chain_ref.store_head_header(&head_header);
 
             let txn = test_transaction(vec![15], vec![10, 4]);
