@@ -12,7 +12,6 @@ addons:
     packages:
       - g++-5
       - cmake
-      - libsodium-dev
 
 env:
   global:
