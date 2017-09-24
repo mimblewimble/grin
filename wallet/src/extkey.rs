@@ -252,25 +252,27 @@ impl ExtendedKey {
 
 #[cfg(test)]
 mod test {
-	extern crate rustc_serialize as serialize;
-
 	use secp::Secp256k1;
 	use secp::key::SecretKey;
 	use super::{ExtendedKey, Fingerprint};
-	use self::serialize::hex::FromHex;
+	use util;
+
+	fn from_hex(hex_str: &str) -> Vec<u8> {
+		util::from_hex(hex_str.to_string()).unwrap()
+	}
 
 	#[test]
 	fn extkey_from_seed() {
 		// TODO More test vectors
 		let s = Secp256k1::new();
-		let seed = "000102030405060708090a0b0c0d0e0f".from_hex().unwrap();
+		let seed = from_hex("000102030405060708090a0b0c0d0e0f");
 		let extk = ExtendedKey::from_seed(&s, &seed.as_slice()).unwrap();
 		let sec =
-			"04a7d66a82221501e67f2665332180bd1192c5e58a2cd26613827deb8ba14e75".from_hex().unwrap();
+			from_hex("04a7d66a82221501e67f2665332180bd1192c5e58a2cd26613827deb8ba14e75");
 		let secret_key = SecretKey::from_slice(&s, sec.as_slice()).unwrap();
 		let chaincode =
-			"b7c6740dea1920ec629b3593678f6d8dc40fe6ec1ed824fcde37f476cd6c048c".from_hex().unwrap();
-		let fingerprint = "8963be69".from_hex().unwrap();
+			from_hex("b7c6740dea1920ec629b3593678f6d8dc40fe6ec1ed824fcde37f476cd6c048c");
+		let fingerprint = from_hex("8963be69");
 		let depth = 0;
 		let n_child = 0;
 		assert_eq!(extk.key, secret_key);
@@ -284,15 +286,15 @@ mod test {
 	fn extkey_derivation() {
 		// TODO More test vectors
 		let s = Secp256k1::new();
-		let seed = "000102030405060708090a0b0c0d0e0f".from_hex().unwrap();
+		let seed = from_hex("000102030405060708090a0b0c0d0e0f");
 		let extk = ExtendedKey::from_seed(&s, &seed.as_slice()).unwrap();
 		let derived = extk.derive(&s, 0).unwrap();
 		let sec =
-			"908bf3264b8f5f5a5be57d3b0afa36eb5dbcc464ff4da2cf71183e8ec755184b".from_hex().unwrap();
+			from_hex("908bf3264b8f5f5a5be57d3b0afa36eb5dbcc464ff4da2cf71183e8ec755184b");
 		let secret_key = SecretKey::from_slice(&s, sec.as_slice()).unwrap();
 		let chaincode =
-			"e90c4559501fb956fa8ddcd6d08499691678cfd6d69e41efb9ee8e87f327e30a".from_hex().unwrap();
-		let fingerprint = "8963be69".from_hex().unwrap();
+			from_hex("e90c4559501fb956fa8ddcd6d08499691678cfd6d69e41efb9ee8e87f327e30a");
+		let fingerprint = from_hex("8963be69");
 		let depth = 1;
 		let n_child = 0;
 		assert_eq!(derived.key, secret_key);
