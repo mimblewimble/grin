@@ -40,16 +40,16 @@ mining_parameter_mode = "Production"
 #internally to make it more configurable
 
 capabilities = [7]
-        
+
 #The P2P server details (i.e. the server that communicates with other
 #grin server nodes
 
 [server.p2p_config]
 host = "127.0.0.1"
 port = 13414
-        
-#Mining details. This section is optional. If it's not here, the server 
-#will default to not mining. 
+
+#Mining details. This section is optional. If it's not here, the server
+#will default to not mining.
 [mining]
 
 #flag whether mining is enabled
@@ -74,14 +74,14 @@ cuckoo_miner_async_mode = true
 
 #cuckoo_miner_plugin_dir = "target/debug/plugins"
 
-#The amount of time, in seconds, to attempt to mine on a particular
+The amount of time, in seconds, to attempt to mine on a particular
 #header before stopping and re-collecting transactions from the pool
 
 attempt_time_per_block = 90
 
 #the wallet reciever to which coinbase rewards will be sent
 
-wallet_receiver_url = "http://127.0.0.1:13425"
+wallet_receiver_url = "http://127.0.0.1:13416"
 
 #whether to ignore the reward (mostly for testing)
 
@@ -124,6 +124,3 @@ parameter_list = {NUM_THREADS=1, NUM_TRIMS=7}
 #[[mining.cuckoo_miner_plugin_config]]
 #type_filter = "lean_cuda"
 #parameter_list = {}
-
-
-

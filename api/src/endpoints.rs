@@ -12,23 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// pub struct HashID(pub [u8; 32]);
-//
-// impl FromStr for HashId {
-//   type Err = ;
-//
-//   fn from_str(s: &str) -> Result<HashId, > {
-//   }
-// }
 
 use std::sync::{Arc, RwLock};
 use std::thread;
 
-use core::core::{Transaction, Output};
+use chain;
+use core::core::Transaction;
 use core::ser;
-use chain::{self, Tip};
 use pool;
 use rest::*;
+use types::*;
 use secp::pedersen::Commitment;
 use util;
 
@@ -51,9 +44,10 @@ impl ApiEndpoint for ChainApi {
 	}
 
 	fn get(&self, _: String) -> ApiResult<Tip> {
-		self.chain.head().map_err(
-			|e| Error::Internal(format!("{:?}", e)),
-		)
+		match self.chain.head() {
+			Ok(tip) => Ok(Tip::from_tip(tip)),
+			Err(e) => Err(Error::Internal(format!("{:?}", e)))
+		}
 	}
 }
 
@@ -76,15 +70,15 @@ impl ApiEndpoint for OutputApi {
 
 	fn get(&self, id: String) -> ApiResult<Output> {
 		debug!("GET output {}", id);
-		let c = util::from_hex(id.clone()).map_err(|_| {
-			Error::Argument(format!("Not a valid commitment: {}", id))
-		})?;
+		let c = util::from_hex(id.clone()).map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
+		let commit = Commitment::from_vec(c);
 
-		// TODO - can probably clean up the error mapping here
-		match self.chain.get_unspent(&Commitment::from_vec(c)) {
-			Ok(utxo) => Ok(utxo),
-			Err(_) => Err(Error::NotFound),
-		}
+		let out = self.chain.get_unspent(&commit)
+			.map_err(|_| Error::NotFound)?;
+		let header = self.chain.get_block_header_by_output_commit(&commit)
+			.map_err(|_| Error::NotFound)?;
+
+		Ok(Output::from_output(&out, &header))
 	}
 }
 
@@ -95,16 +89,8 @@ pub struct PoolApi<T> {
 	tx_pool: Arc<RwLock<pool::TransactionPool<T>>>,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct PoolInfo {
-	pool_size: usize,
-	orphans_size: usize,
-	total_size: usize,
-}
-
 impl<T> ApiEndpoint for PoolApi<T>
-where
-	T: pool::BlockChain + Clone + Send + Sync + 'static,
+    where T: pool::BlockChain + Clone + Send + Sync + 'static
 {
 	type ID = String;
 	type T = PoolInfo;
@@ -130,16 +116,14 @@ where
 		})?;
 
 		let tx: Transaction = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
-			Error::Argument(
-				"Could not deserialize transaction, invalid format.".to_string(),
-			)
+			Error::Argument("Could not deserialize transaction, invalid format.".to_string())
 		})?;
 
 		let source = pool::TxSource {
 			debug_name: "push-api".to_string(),
 			identifier: "?.?.?.?".to_string(),
 		};
-		debug!(
+		info!(
 			"Pushing transaction with {} inputs and {} outputs to pool.",
 			tx.inputs.len(),
 			tx.outputs.len()
@@ -151,6 +135,7 @@ where
 			.map_err(|e| {
 				Error::Internal(format!("Addition to transaction pool failed: {:?}", e))
 			})?;
+
 		Ok(())
 	}
 }
@@ -163,21 +148,20 @@ pub struct TxWrapper {
 
 /// Start all server REST APIs. Just register all of them on a ApiServer
 /// instance and runs the corresponding HTTP server.
-pub fn start_rest_apis<T>(
-	addr: String,
-	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<T>>>,
-) where
-	T: pool::BlockChain + Clone + Send + Sync + 'static,
+pub fn start_rest_apis<T>(addr: String,
+                          chain: Arc<chain::Chain>,
+                          tx_pool: Arc<RwLock<pool::TransactionPool<T>>>)
+	where T: pool::BlockChain + Clone + Send + Sync + 'static
 {
 
 	thread::spawn(move || {
 		let mut apis = ApiServer::new("/v1".to_string());
-		apis.register_endpoint("/chain".to_string(), ChainApi { chain: chain.clone() });
-		apis.register_endpoint(
-			"/chain/utxo".to_string(),
-			OutputApi { chain: chain.clone() },
-		);
+		apis.register_endpoint("/chain".to_string(),
+		                       ChainApi { chain: chain.clone() });
+		apis.register_endpoint("/chain/utxo".to_string(),
+		                       OutputApi {
+			                       chain: chain.clone(),
+		                       });
 		apis.register_endpoint("/pool".to_string(), PoolApi { tx_pool: tx_pool });
 
 		apis.start(&addr[..]).unwrap_or_else(|e| {

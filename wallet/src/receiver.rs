@@ -69,14 +69,19 @@ struct TxWrapper {
 /// Receive an already well formed JSON transaction issuance and finalize the
 /// transaction, adding our receiving output, to broadcast to the rest of the
 /// network.
-pub fn receive_json_tx(config: &WalletConfig, ext_key: &ExtendedKey, partial_tx_str: &str) -> Result<(), Error> {
-
+pub fn receive_json_tx(
+	config: &WalletConfig,
+	ext_key: &ExtendedKey,
+	partial_tx_str: &str
+) -> Result<(), Error> {
 	let (amount, blinding, partial_tx) = partial_tx_from_json(partial_tx_str)?;
 	let final_tx = receive_transaction(&config, ext_key, amount, blinding, partial_tx)?;
 	let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
 
 	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
-	let _: TxWrapper = api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })?;
+	let _: () = api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).map_err(|e| {
+		Error::Node(e)
+	})?;
 	Ok(())
 }
 
@@ -160,7 +165,7 @@ fn receive_coinbase(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64) -
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
 		// derive a new private for the reward
-		let next_child = wallet_data.next_child(ext_key.fingerprint);
+		let next_child = wallet_data.next_child(&ext_key.fingerprint);
 		let coinbase_key = ext_key.derive(&secp, next_child).map_err(|e| Error::Key(e))?;
 
 		// track the new output and return the stuff needed for reward
@@ -169,6 +174,8 @@ fn receive_coinbase(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64) -
 			n_child: coinbase_key.n_child,
 			value: amount,
 			status: OutputStatus::Unconfirmed,
+			height: 0,
+			lock_height: 0,
 		});
 		debug!("Using child {} for a new coinbase output.",
 		       coinbase_key.n_child);
@@ -190,7 +197,7 @@ fn receive_transaction(config: &WalletConfig,
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
-		let next_child = wallet_data.next_child(ext_key.fingerprint);
+		let next_child = wallet_data.next_child(&ext_key.fingerprint);
 		let out_key = ext_key.derive(&secp, next_child).map_err(|e| Error::Key(e))?;
 
 		let (tx_final, _) = build::transaction(vec![build::initial_tx(partial),
@@ -207,6 +214,8 @@ fn receive_transaction(config: &WalletConfig,
 			n_child: out_key.n_child,
 			value: amount,
 			status: OutputStatus::Unconfirmed,
+			height: 0,
+			lock_height: 0,
 		});
 
 		debug!("Using child {} for a new transaction output.",

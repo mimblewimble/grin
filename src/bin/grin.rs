@@ -107,9 +107,9 @@ fn main() {
 	}
 
 	let args = App::new("Grin")
-    .version("0.1")
-    .author("The Grin Team")
-    .about("Lightweight implementation of the MimbleWimble protocol.")
+		.version("0.1")
+		.author("The Grin Team")
+		.about("Lightweight implementation of the MimbleWimble protocol.")
 
     // specification of all the server commands and options
     .subcommand(SubCommand::with_name("server")
@@ -152,54 +152,59 @@ fn main() {
                 .subcommand(SubCommand::with_name("status")
                             .about("current status of the Grin chain")))
 
-    // specification of the wallet commands and options
-    .subcommand(SubCommand::with_name("wallet")
-                .about("Wallet software for Grin")
-                .arg(Arg::with_name("pass")
-                     .short("p")
-                     .long("pass")
-                     .help("Wallet passphrase used to generate the private key seed")
-                     .takes_value(true))
-				.arg(Arg::with_name("data_dir")
-                     .short("dd")
-                     .long("data_dir")
-                     .help("Directory in which to store wallet files (defaults to current \
-                     directory)")
-                     .takes_value(true))
-				.arg(Arg::with_name("port")
-                     .short("r")
-                     .long("port")
-                     .help("Port on which to run the wallet receiver when in receiver mode")
-                     .takes_value(true))
-				.arg(Arg::with_name("api_server_address")
-                     .short("a")
-                     .long("api_server_address")
-                     .help("The api address of a running node on which to check inputs and \
-                     post transactions")
-                     .takes_value(true))
-                .subcommand(SubCommand::with_name("receive")
-                            .about("Run the wallet in receiving mode. If an input file is \
-                            provided, will process it, otherwise runs in server mode waiting \
-                            for send requests.")
-                            .arg(Arg::with_name("input")
-                                 .help("Partial transaction to receive, expects as a JSON file.")
-                                 .short("i")
-                                 .long("input")
-                                 .takes_value(true)))
-                .subcommand(SubCommand::with_name("send")
-                            .about("Builds a transaction to send someone some coins. By default, \
-                            the transaction will just be printed to stdout. If a destination is \
-                            provided, the command will attempt to contact the receiver at that \
-                            address and send the transaction directly.")
-                            .arg(Arg::with_name("amount")
-                                 .help("Amount to send in the smallest denomination")
-                                 .index(1))
-                            .arg(Arg::with_name("dest")
-                                 .help("Send the transaction to the provided server")
-                                 .short("d")
-                                 .long("dest")
-                                 .takes_value(true))))
-    .get_matches();
+	// specification of the wallet commands and options
+	.subcommand(SubCommand::with_name("wallet")
+		.about("Wallet software for Grin")
+		.arg(Arg::with_name("pass")
+			.short("p")
+			.long("pass")
+			.help("Wallet passphrase used to generate the private key seed")
+			.takes_value(true))
+		.arg(Arg::with_name("data_dir")
+			.short("dd")
+			.long("data_dir")
+			.help("Directory in which to store wallet files (defaults to current \
+			directory)")
+			.takes_value(true))
+		.arg(Arg::with_name("port")
+			.short("r")
+			.long("port")
+			.help("Port on which to run the wallet receiver when in receiver mode")
+			.takes_value(true))
+		.arg(Arg::with_name("api_server_address")
+			.short("a")
+			.long("api_server_address")
+			.help("Api address of running node on which to check inputs and post transactions")
+			.takes_value(true))
+
+		.subcommand(SubCommand::with_name("receive")
+			.about("Run the wallet in receiving mode. If an input file is \
+				provided, will process it, otherwise runs in server mode waiting \
+				for send requests.")
+			.arg(Arg::with_name("input")
+				.help("Partial transaction to receive, expects as a JSON file.")
+				.short("i")
+				.long("input")
+				.takes_value(true)))
+
+		.subcommand(SubCommand::with_name("send")
+			.about("Builds a transaction to send someone some coins. By default, \
+				the transaction will just be printed to stdout. If a destination is \
+				provided, the command will attempt to contact the receiver at that \
+				address and send the transaction directly.")
+			.arg(Arg::with_name("amount")
+				.help("Amount to send in the smallest denomination")
+				.index(1))
+			.arg(Arg::with_name("dest")
+				.help("Send the transaction to the provided server")
+				.short("d")
+				.long("dest")
+				.takes_value(true)))
+
+		.subcommand(SubCommand::with_name("info")
+			.about("basic wallet info (outputs)")))
+
+	.get_matches();
 
 	match args.subcommand() {
 		// server commands and options
@@ -369,7 +374,10 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				dest = d;
 			}
 			wallet::issue_send_tx(&wallet_config, &key, amount, dest.to_string()).unwrap();
-		}
+		},
+		("info", Some(_)) => {
+			wallet::show_info(&wallet_config, &key);
+		},
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}
 }
