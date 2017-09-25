@@ -14,7 +14,7 @@
 
 #the address on which services will listen, e.g. Transaction Pool
 
-api_http_addr = "127.0.0.1:13415"
+api_http_addr = "127.0.0.1:13413"
 
 #the directory, relative to current, in which the grin blockchain
 #is stored
