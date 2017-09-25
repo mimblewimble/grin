@@ -213,7 +213,7 @@ impl Miner {
 							let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
 							let last_hashes_per_sec = 1.0 / last_solution_time_secs;
 							debug!(
-								"Mining: Plugin {} - Device {} ({}): Last Solution time: {}; \
+								"Mining: Plugin {} - Device {} ({}): Last Solution time: {}s; \
 								Solutions per second: {:.*} - Total Attempts: {}",
 								i,
 								s.device_id,
@@ -263,7 +263,7 @@ impl Miner {
 		let mut next_stat_check = time::get_time().sec + stat_check_interval;
 
 		debug!(
-			"(Server ID: {}) Mining at Cuckoo{} for {} secs (will wait for last solution)\
+			"(Server ID: {}) Mining at Cuckoo{} for {} secs (will wait for last solution) \
 				on block {} at difficulty {}.",
 			self.debug_output_id,
 			cuckoo_size,

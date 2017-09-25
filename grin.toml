@@ -66,7 +66,7 @@ use_cuckoo_miner = true
 #so in a post-release world this should only be used if you really want
 #to run cards in parallel
 
-cuckoo_miner_async_mode = true
+cuckoo_miner_async_mode = false
 
 #If using cuckoo_miner, the directory in which plugins are installed
 #if not specified, grin will look in the directory /deps relative
@@ -74,7 +74,7 @@ cuckoo_miner_async_mode = true
 
 #cuckoo_miner_plugin_dir = "target/debug/plugins"
 
-The amount of time, in seconds, to attempt to mine on a particular
+#The amount of time, in seconds, to attempt to mine on a particular
 #header before stopping and re-collecting transactions from the pool
 
 attempt_time_per_block = 90
@@ -107,16 +107,18 @@ burn_reward = true
 # You'll likely get the best performance using a
 # single GPU and single CPU plugin in parallel
 
-[[mining.cuckoo_miner_plugin_config]]
-type_filter = "lean_cpu"
-parameter_list = {NUM_THREADS=1, NUM_TRIMS=7}
-
 #The fastest cpu algorithm, but consumes the most memory
-#Can currently be used only in Production (30) Mode
+
+[[mining.cuckoo_miner_plugin_config]]
+type_filter = "mean_cpu"
+parameter_list = {NUM_THREADS=4, NUM_TRIMS=64}
+
+#note lean_cpu currently has a bug which prevents it from
+#working with threads > 1
 
 #[[mining.cuckoo_miner_plugin_config]]
-#type_filter = "mean_cpu"
-#parameter_list = {NUM_THREADS=8, NUM_TRIMS=60}
+#type_filter = "lean_cpu"
+#parameter_list = {NUM_THREADS=1, NUM_TRIMS=7}
 
 #CUDA verion of lean miner
 #Can currently be used only in Production (30) Mode
