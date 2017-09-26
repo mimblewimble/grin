@@ -1,8 +1,6 @@
 Grin's Proof-of-Work
 ====================
 
-[WIP and subject to review, may still contain errors]
-
 This document is meant to outline, at a level suitable for someone without prior knowledge, 
 the algorithms and processes currently involved in Grin's Proof-of-Work system. We'll start
 with a general overview of cycles in a graph and the Cuckoo Cycle algorithm which forms the 
@@ -16,8 +14,8 @@ Please note that Grin is currently under active development, and any and all of 
 
 Grin's basic Proof-of-Work algorithm is called Cuckoo Cycle, which is specifically designed
 to be resistant to Bitcoin style hardware arms-races. It is primarily a memory bound algorithm,
-which, (at least in theory,) means that solution time is limited to the speed of a system's RAM
-rather than processor or GPU speed. As such, mining Cuckoo Cycle solutions should be viable on
+which, (at least in theory,) means that solution time is bound by memory bandwidth
+rather than raw processor or GPU speed. As such, mining Cuckoo Cycle solutions should be viable on
 most commodity hardware, and require far less energy than most other GPU, CPU or ASIC-bound 
 proof of work algorithms.
 
@@ -26,11 +24,16 @@ can be found in [his github repository](https://github.com/tromp/cuckoo). The
 [white paper](https://github.com/tromp/cuckoo/blob/master/doc/cuckoo.pdf) is the best source of
 further technical details. 
 
+There is also a [podcast with Mike from Monero Monitor](https://moneromonitor.com/episodes/2017-09-26-Episode-014.html)
+in which John Tromp talks at length about Cuckoo Cycle; recommended listening for anyone wanting
+more background on Cuckoo Cycle, including more technical detail, the history of the algorihm's development
+and some of the motivations behind it.
+
 ## Cycles in a Graph
 
 Cuckoo Cycle is an algorithm meant to detect cycles in a bipartite graph of N nodes 
 and M edges. In plainer terms, a bipartite graph is one in which edges (i.e. lines connecting nodes)
-go only between 2 separate groups of nodes. In the case of the Cuckoo hashtable in Cuckoo Cycle, 
+travel only between 2 separate groups of nodes. In the case of the Cuckoo hashtable in Cuckoo Cycle, 
 one side of the graph is an array numbered with odd indices (up to the size of the graph), and the other is numbered with even
 indices. A node is simply a numbered 'space' on either side of the Cuckoo Table, and an Edge is a 
 line connecting two nodes on opposite sides. The simple graph below denotes just such a graph, 
