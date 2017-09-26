@@ -15,7 +15,8 @@
 //! Library module for the main wallet functionalities provided by Grin.
 
 extern crate byteorder;
-extern crate crypto;
+extern crate sodiumoxide;
+extern crate ripemd160;
 #[macro_use]
 extern crate log;
 extern crate rand;

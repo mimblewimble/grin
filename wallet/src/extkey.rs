@@ -18,13 +18,11 @@
 use std::{error, fmt};
 use std::cmp::min;
 
+use sodiumoxide::crypto::auth::hmacsha512;
+use sodiumoxide::crypto::hash::sha256;
+use ripemd160::{Digest, Ripemd160};
+
 use byteorder::{ByteOrder, BigEndian};
-use crypto::mac::Mac;
-use crypto::hmac::Hmac;
-use crypto::sha2::Sha256;
-use crypto::sha2::Sha512;
-use crypto::ripemd160::Ripemd160;
-use crypto::digest::Digest;
 use secp::Secp256k1;
 use secp::key::SecretKey;
 
@@ -172,16 +170,25 @@ impl ExtendedKey {
 		})
 	}
 
+	/// TODO - use a better seed
+	fn mimble_seed() -> hmacsha512::Key {
+		let mimble_seed = b"Mimble seed";
+
+		let mut key_bytes = [0u8; 32];
+		for i in 0..mimble_seed.len() {
+			key_bytes[i] = mimble_seed[i];
+		}
+		hmacsha512::Key(key_bytes)
+	}
+
 	/// Creates a new extended master key from a seed
 	pub fn from_seed(secp: &Secp256k1, seed: &[u8]) -> Result<ExtendedKey, Error> {
-		let mut hmac = Hmac::new(Sha512::new(), b"Mimble seed");
 		match seed.len() {
-			16 | 32 | 64 => hmac.input(&seed),
+			16 | 32 | 64 => {},
 			_ => return Err(Error::InvalidSeedSize),
 		}
 
-		let mut derived: [u8; 64] = [0; 64];
-		hmac.raw_result(&mut derived);
+		let derived = hmacsha512::authenticate(seed, &ExtendedKey::mimble_seed());
 
 		let mut chaincode: [u8; 32] = [0; 32];
 		(&mut chaincode).copy_from_slice(&derived[32..]);
@@ -205,31 +212,21 @@ impl ExtendedKey {
 	/// Return the identifier of the key, which is the
 	/// Hash160 of the private key
 	pub fn identifier(&self) -> Identifier {
-		let mut sha = Sha256::new();
-		sha.input(&self.key[..]);
-
-		let mut shres = [0; 32];
-		sha.result(&mut shres);
-
-		let mut ripe = Ripemd160::new();
-		ripe.input(&shres[..]);
-
-		let mut identifier = [0; 20];
-		ripe.result(&mut identifier);
+		let digest = sha256::hash(&self.key[..]);
+		let identifier = Ripemd160::digest(&digest[..]);
 		Identifier::from_bytes(&identifier)
 	}
 
 	/// Derive an extended key from an extended key
 	pub fn derive(&self, secp: &Secp256k1, n: u32) -> Result<ExtendedKey, Error> {
-		let mut hmac = Hmac::new(Sha512::new(), &self.chaincode[..]);
+		let hmac = hmacsha512::Key(self.chaincode.clone());
+
 		let mut n_bytes: [u8; 4] = [0; 4];
 		BigEndian::write_u32(&mut n_bytes, n);
+		let mut seed = self.key[..].to_vec();
+		seed.extend_from_slice(&n_bytes);
 
-		hmac.input(&self.key[..]);
-		hmac.input(&n_bytes[..]);
-
-		let mut derived = [0; 64];
-		hmac.raw_result(&mut derived);
+		let derived = hmacsha512::authenticate(&seed, &hmac);
 
 		let mut secret_key = SecretKey::from_slice(&secp, &derived[0..32])
 			.expect("Error deriving key");
