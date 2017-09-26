@@ -19,12 +19,7 @@ use std::{error, fmt};
 use std::cmp::min;
 
 use byteorder::{ByteOrder, BigEndian};
-use crypto::mac::Mac;
-use crypto::hmac::Hmac;
-use crypto::sha2::Sha256;
-use crypto::sha2::Sha512;
-use crypto::ripemd160::Ripemd160;
-use crypto::digest::Digest;
+use blake2::blake2b::blake2b;
 use secp::Secp256k1;
 use secp::key::SecretKey;
 
@@ -101,6 +96,7 @@ impl ::std::fmt::Debug for Fingerprint {
 	}
 }
 
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Identifier([u8; 20]);
 
 impl Identifier {
@@ -114,6 +110,12 @@ impl Identifier {
 
 	pub fn fingerprint(&self) -> Fingerprint {
 		Fingerprint::from_bytes(&self.0)
+	}
+}
+
+impl PartialEq for Identifier {
+	fn eq(&self, other: &Self) -> bool {
+		self.0.as_ref() == other.0.as_ref()
 	}
 }
 
@@ -174,19 +176,20 @@ impl ExtendedKey {
 
 	/// Creates a new extended master key from a seed
 	pub fn from_seed(secp: &Secp256k1, seed: &[u8]) -> Result<ExtendedKey, Error> {
-		let mut hmac = Hmac::new(Sha512::new(), b"Mimble seed");
 		match seed.len() {
-			16 | 32 | 64 => hmac.input(&seed),
+			16 | 32 | 64 => (),
 			_ => return Err(Error::InvalidSeedSize),
 		}
 
-		let mut derived: [u8; 64] = [0; 64];
-		hmac.raw_result(&mut derived);
+		// let mut derived: [u8; 64] = [0; 64];
+		// hmac.raw_result(&mut derived);
+
+		let derived = blake2b(64, b"Mimble seed", seed);
 
 		let mut chaincode: [u8; 32] = [0; 32];
-		(&mut chaincode).copy_from_slice(&derived[32..]);
+		(&mut chaincode).copy_from_slice(&derived.as_bytes()[32..]);
 		// TODO Error handling
-		let secret_key = SecretKey::from_slice(&secp, &derived[0..32])
+		let secret_key = SecretKey::from_slice(&secp, &derived.as_bytes()[0..32])
 			.expect("Error generating from seed");
 
 		let mut ext_key = ExtendedKey {
@@ -202,43 +205,30 @@ impl ExtendedKey {
 		Ok(ext_key)
 	}
 
-	/// Return the identifier of the key, which is the
-	/// Hash160 of the private key
+	/// Return the identifier of the key
+	/// which is the blake2b hash (20 bit digest)
 	pub fn identifier(&self) -> Identifier {
-		let mut sha = Sha256::new();
-		sha.input(&self.key[..]);
-
-		let mut shres = [0; 32];
-		sha.result(&mut shres);
-
-		let mut ripe = Ripemd160::new();
-		ripe.input(&shres[..]);
-
-		let mut identifier = [0; 20];
-		ripe.result(&mut identifier);
-		Identifier::from_bytes(&identifier)
+		let identifier = blake2b(20, &[], &self.key[..]);
+		Identifier::from_bytes(&identifier.as_bytes())
 	}
 
 	/// Derive an extended key from an extended key
 	pub fn derive(&self, secp: &Secp256k1, n: u32) -> Result<ExtendedKey, Error> {
-		let mut hmac = Hmac::new(Sha512::new(), &self.chaincode[..]);
 		let mut n_bytes: [u8; 4] = [0; 4];
 		BigEndian::write_u32(&mut n_bytes, n);
+		let mut seed = self.key[..].to_vec();
+		seed.extend_from_slice(&n_bytes);
 
-		hmac.input(&self.key[..]);
-		hmac.input(&n_bytes[..]);
+		let derived = blake2b(64, &self.chaincode[..], &seed[..]);
 
-		let mut derived = [0; 64];
-		hmac.raw_result(&mut derived);
-
-		let mut secret_key = SecretKey::from_slice(&secp, &derived[0..32])
+		let mut secret_key = SecretKey::from_slice(&secp, &derived.as_bytes()[0..32])
 			.expect("Error deriving key");
 		secret_key.add_assign(secp, &self.key)
 			.expect("Error deriving key");
 		// TODO check if key != 0 ?
 
 		let mut chain_code: [u8; 32] = [0; 32];
-		(&mut chain_code).clone_from_slice(&derived[32..]);
+		(&mut chain_code).clone_from_slice(&derived.as_bytes()[32..]);
 
 		Ok(ExtendedKey {
 			depth: self.depth + 1,
@@ -254,7 +244,7 @@ impl ExtendedKey {
 mod test {
 	use secp::Secp256k1;
 	use secp::key::SecretKey;
-	use super::{ExtendedKey, Fingerprint};
+	use super::{ExtendedKey, Fingerprint, Identifier};
 	use util;
 
 	fn from_hex(hex_str: &str) -> Vec<u8> {
@@ -268,15 +258,21 @@ mod test {
 		let seed = from_hex("000102030405060708090a0b0c0d0e0f");
 		let extk = ExtendedKey::from_seed(&s, &seed.as_slice()).unwrap();
 		let sec =
-			from_hex("04a7d66a82221501e67f2665332180bd1192c5e58a2cd26613827deb8ba14e75");
+			from_hex("c3f5ae520f474b390a637de4669c84d0ed9bbc21742577fac930834d3c3083dd");
 		let secret_key = SecretKey::from_slice(&s, sec.as_slice()).unwrap();
 		let chaincode =
-			from_hex("b7c6740dea1920ec629b3593678f6d8dc40fe6ec1ed824fcde37f476cd6c048c");
-		let fingerprint = from_hex("8963be69");
+			from_hex("e7298e68452b0c6d54837670896e1aee76b118075150d90d4ee416ece106ae72");
+		let identifier = from_hex("942b6c0bd43bdcb24f3edfe7fadbc77054ecc4f2");
+		let fingerprint = from_hex("942b6c0b");
 		let depth = 0;
 		let n_child = 0;
 		assert_eq!(extk.key, secret_key);
+		assert_eq!(extk.identifier(), Identifier::from_bytes(identifier.as_slice()));
 		assert_eq!(extk.fingerprint, Fingerprint::from_bytes(fingerprint.as_slice()));
+		assert_eq!(
+			extk.identifier().fingerprint(),
+			Fingerprint::from_bytes(fingerprint.as_slice())
+		);
 		assert_eq!(extk.chaincode, chaincode.as_slice());
 		assert_eq!(extk.depth, depth);
 		assert_eq!(extk.n_child, n_child);
@@ -290,15 +286,22 @@ mod test {
 		let extk = ExtendedKey::from_seed(&s, &seed.as_slice()).unwrap();
 		let derived = extk.derive(&s, 0).unwrap();
 		let sec =
-			from_hex("908bf3264b8f5f5a5be57d3b0afa36eb5dbcc464ff4da2cf71183e8ec755184b");
+			from_hex("d75f70beb2bd3b56f9b064087934bdedee98e4b5aae6280c58b4eff38847888f");
 		let secret_key = SecretKey::from_slice(&s, sec.as_slice()).unwrap();
 		let chaincode =
-			from_hex("e90c4559501fb956fa8ddcd6d08499691678cfd6d69e41efb9ee8e87f327e30a");
-		let fingerprint = from_hex("8963be69");
+			from_hex("243cb881e1549e714db31d23af45540b13ad07941f64a786bbf3313b4de1df52");
+		let fingerprint = from_hex("942b6c0b");
+		let identifier = from_hex("8b011f14345f3f0071e85f6eec116de1e575ea10");
+		let identifier_fingerprint = from_hex("8b011f14");
 		let depth = 1;
 		let n_child = 0;
 		assert_eq!(derived.key, secret_key);
+		assert_eq!(derived.identifier(), Identifier::from_bytes(identifier.as_slice()));
 		assert_eq!(derived.fingerprint, Fingerprint::from_bytes(fingerprint.as_slice()));
+		assert_eq!(
+			derived.identifier().fingerprint(),
+			Fingerprint::from_bytes(identifier_fingerprint.as_slice())
+		);
 		assert_eq!(derived.chaincode, chaincode.as_slice());
 		assert_eq!(derived.depth, depth);
 		assert_eq!(derived.n_child, n_child);
