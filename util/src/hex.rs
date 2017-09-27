@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2017 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ use std::num;
 pub fn to_hex(bytes: Vec<u8>) -> String {
   let mut s = String::new();
   for byte in bytes {
-    write!(&mut s, "{:02X}", byte).expect("Unable to write");
+    write!(&mut s, "{:02x}", byte).expect("Unable to write");
   }
   s
 }
@@ -43,4 +43,23 @@ pub fn from_hex(hex_str: String) -> Result<Vec<u8>, num::ParseIntError> {
 
 fn split_n(s: &str, n: usize) -> Vec<&str> {
   (0 .. (s.len() - n + 1)/2 + 1).map(|i| &s[2*i .. 2*i + n]).collect()
+}
+
+#[cfg(test)]
+mod test {
+	use super::*;
+
+	#[test]
+	fn test_to_hex() {
+		assert_eq!(to_hex(vec![0, 0, 0, 0]), "00000000");
+		assert_eq!(to_hex(vec![10, 11, 12, 13]), "0a0b0c0d");
+		assert_eq!(to_hex(vec![0, 0, 0, 255]), "000000ff");
+	}
+
+	#[test]
+	fn test_from_hex() {
+		assert_eq!(from_hex("00000000".to_string()).unwrap(), vec![0, 0, 0, 0]);
+		assert_eq!(from_hex("0a0b0c0d".to_string()).unwrap(), vec![10, 11, 12, 13]);
+		assert_eq!(from_hex("000000ff".to_string()).unwrap(), vec![0, 0, 0, 255]);
+	}
 }

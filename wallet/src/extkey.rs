@@ -18,6 +18,8 @@
 use std::{error, fmt};
 use std::cmp::min;
 
+use util;
+
 use byteorder::{ByteOrder, BigEndian};
 use blake2::blake2b::blake2b;
 use secp::Secp256k1;
@@ -54,8 +56,8 @@ impl error::Error for Error {
 	}
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct Fingerprint([u8; 4]);
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct Fingerprint(String);
 
 impl Fingerprint {
 	fn from_bytes(bytes: &[u8]) -> Fingerprint {
@@ -63,38 +65,20 @@ impl Fingerprint {
 		for i in 0..min(4, bytes.len()) {
 			fingerprint[i] = bytes[i];
 		}
-		Fingerprint(fingerprint)
+		Fingerprint(util::to_hex(fingerprint.to_vec()))
 	}
 
 	fn zero() -> Fingerprint {
-		Fingerprint([0; 4])
+		Fingerprint::from_bytes(&[0; 4])
 	}
 }
 
-impl PartialEq for Fingerprint {
-	fn eq(&self, other: &Self) -> bool {
-		self.0.as_ref() == other.0.as_ref()
+impl fmt::Display for Fingerprint {
+	fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+		f.write_str(&self.0)
 	}
 }
 
-impl ::std::fmt::Display for Fingerprint {
-	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-		for i in self.0.iter().cloned() {
-			try!(write!(f, "{:02x}", i));
-		}
-		write!(f, "")
-	}
-}
-
-impl ::std::fmt::Debug for Fingerprint {
-	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-		try!(write!(f, "{}(", stringify!(Fingerprint)));
-		for i in self.0.iter().cloned() {
-			try!(write!(f, "{:02x}", i));
-		}
-		write!(f, ")")
-	}
-}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Identifier([u8; 20]);
