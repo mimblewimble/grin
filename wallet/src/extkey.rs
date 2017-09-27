@@ -73,6 +73,12 @@ impl Fingerprint {
 	}
 }
 
+impl fmt::Display for Fingerprint {
+	fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+		f.write_str(&self.0)
+	}
+}
+
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Identifier([u8; 20]);

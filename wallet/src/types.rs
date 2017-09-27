@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{num, thread, time};
+use std::{fmt, num, thread, time};
 use std::convert::From;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -112,6 +112,18 @@ pub enum OutputStatus {
 	Immature,
 	Locked,
 	Spent,
+}
+
+impl fmt::Display for OutputStatus {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			OutputStatus::Unconfirmed => write!(f, "Unconfirmed"),
+			OutputStatus::Unspent => write!(f, "Unspent"),
+			OutputStatus::Immature => write!(f, "Immature"),
+			OutputStatus::Locked => write!(f, "Locked"),
+			OutputStatus::Spent => write!(f, "Spent"),
+		}
+	}
 }
 
 /// Information about an output that's being tracked by the wallet. Must be
