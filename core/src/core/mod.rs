@@ -18,7 +18,6 @@ pub mod block;
 pub mod build;
 pub mod hash;
 pub mod pmmr;
-pub mod sumtree;
 pub mod target;
 pub mod transaction;
 //pub mod txoset;
@@ -181,52 +180,6 @@ impl Writeable for Proof {
 			try!(writer.write_u32(self.nonces[n]));
 		}
 		Ok(())
-	}
-}
-
-/// Two hashes that will get hashed together in a Merkle tree to build the next
-/// level up.
-struct HPair(Hash, Hash);
-
-impl Writeable for HPair {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		try!(writer.write_bytes(&self.0));
-		try!(writer.write_bytes(&self.1));
-		Ok(())
-	}
-}
-/// An iterator over hashes in a vector that pairs them to build a row in a
-/// Merkle tree. If the vector has an odd number of hashes, it appends a zero
-/// hash
-/// See https://bitcointalk.org/index.php?topic=102395.0 CVE-2012-2459 (block
-/// merkle calculation exploit)
-/// for the argument against duplication of last hash
-struct HPairIter(Vec<Hash>);
-impl Iterator for HPairIter {
-	type Item = HPair;
-
-	fn next(&mut self) -> Option<HPair> {
-		self.0.pop().map(|first| HPair(first, self.0.pop().unwrap_or(ZERO_HASH)))
-	}
-}
-/// A row in a Merkle tree. Can be built from a vector of hashes. Calculates
-/// the next level up, or can recursively go all the way up to its root.
-struct MerkleRow(Vec<HPair>);
-impl MerkleRow {
-	fn new(hs: Vec<Hash>) -> MerkleRow {
-		MerkleRow(HPairIter(hs).map(|hp| hp).collect())
-	}
-	fn up(&self) -> MerkleRow {
-		MerkleRow::new(map_vec!(self.0, |hp| hp.hash()))
-	}
-	fn root(&self) -> Hash {
-		if self.0.len() == 0 {
-			[].hash()
-		} else if self.0.len() == 1 {
-			self.0[0].hash()
-		} else {
-			self.up().root()
-		}
 	}
 }
 

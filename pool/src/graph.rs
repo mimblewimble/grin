@@ -25,6 +25,7 @@ use rand;
 use std::fmt;
 
 use core::core;
+use core::core::hash::Hashed;
 
 /// An entry in the transaction pool.
 /// These are the vertices of both of the graph structures
@@ -214,7 +215,8 @@ impl DirectedGraph {
 /// proofs and any extra data the kernel may cover, but it is used initially
 /// for testing purposes.
 pub fn transaction_identifier(tx: &core::transaction::Transaction) -> core::hash::Hash {
-    core::transaction::merkle_inputs_outputs(&tx.inputs, &tx.outputs)
+    // core::transaction::merkle_inputs_outputs(&tx.inputs, &tx.outputs)
+		tx.hash()
 }
 
 #[cfg(test)]

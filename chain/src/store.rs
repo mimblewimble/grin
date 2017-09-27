@@ -34,6 +34,8 @@ const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const OUTPUT_COMMIT_PREFIX: u8 = 'o' as u8;
 const HEADER_BY_OUTPUT_PREFIX: u8 = 'p' as u8;
+const COMMIT_POS_PREFIX: u8 = 'c' as u8;
+const KERNEL_POS_PREFIX: u8 = 'k' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
 /// store.
@@ -151,23 +153,30 @@ impl ChainStore for ChainKVStore {
 		)))
 	}
 
-	// TODO - this looks identical to get_output_by_commit above
-	// TODO - are we sure this returns a hash correctly?
-	fn has_output_commit(&self, commit: &Commitment) -> Result<Hash, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(
-			OUTPUT_COMMIT_PREFIX,
-			&mut commit.as_ref().to_vec(),
-		)))
+	fn save_output_pos(&self, commit: &Commitment, pos: u64) -> Result<(), Error> {
+		self.db.put_ser(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())[..], &pos)
+	}
+
+	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
+		option_to_not_found(self.db.get_ser(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())))
+	}
+
+	fn save_kernel_pos(&self, excess: &Commitment, pos: u64) -> Result<(), Error> {
+		self.db.put_ser(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())[..], &pos)
+	}
+
+	fn get_kernel_pos(&self, excess: &Commitment) -> Result<u64, Error> {
+		option_to_not_found(self.db.get_ser(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())))
 	}
 
 	/// Maintain consistency of the "header_by_height" index by traversing back through the
 	/// current chain and updating "header_by_height" until we reach a block_header
 	/// that is consistent with its height (everything prior to this will be consistent)
 	fn setup_height(&self, bh: &BlockHeader) -> Result<(), Error> {
-		self.db.put_ser(
-			&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height),
-			bh,
-		)?;
+		self.db.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height), bh)?;
+		if bh.height == 0 {
+			return Ok(());
+		}
 
 		let mut prev_h = bh.previous;
 		let mut prev_height = bh.height - 1;

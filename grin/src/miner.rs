@@ -141,9 +141,8 @@ impl Miner {
 		}
 	}
 
-	/// Keeping this optional so setting in a separate funciton
+	/// Keeping this optional so setting in a separate function
 	/// instead of in the new function
-
 	pub fn set_debug_output_id(&mut self, debug_output_id: String) {
 		self.debug_output_id = debug_output_id;
 	}
@@ -538,6 +537,7 @@ impl Miner {
 		b.header.nonce = rng.gen();
 		b.header.difficulty = difficulty;
 		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
+		self.chain.set_sumtree_roots(&mut b).expect("Error setting sum tree roots");
 		b
 	}
 

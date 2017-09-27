@@ -14,6 +14,8 @@
 
 //! Base types that the block chain pipeline requires.
 
+use std::io;
+
 use secp;
 use secp::pedersen::Commitment;
 
@@ -57,6 +59,14 @@ pub enum Error {
 	InvalidBlockTime,
 	/// Block height is invalid (not previous + 1)
 	InvalidBlockHeight,
+	/// One of the root hashes in the block is invalid
+	InvalidRoot,
+	/// One of the inputs in the block has already been spent
+	AlreadySpent,
+	/// An output with that commitment already exists (should be unique)
+	DuplicateCommitment(Commitment),
+	/// A kernel with that excess commitment already exists (should be unique)
+	DuplicateKernel(Commitment),
 	/// coinbase can only be spent after it has matured (n blocks)
 	ImmatureCoinbase,
 	/// output not found
@@ -67,6 +77,8 @@ pub enum Error {
 	StoreErr(grin_store::Error),
 	/// Error serializing or deserializing a type
 	SerErr(ser::Error),
+	/// Error while updating the sum trees
+	SumTreeErr(String),
 	/// No chain exists and genesis block is required
 	GenesisBlockRequired,
 	/// Anything else
@@ -81,6 +93,11 @@ impl From<grin_store::Error> for Error {
 impl From<ser::Error> for Error {
 	fn from(e: ser::Error) -> Error {
 		Error::SerErr(e)
+	}
+}
+impl From<io::Error> for Error {
+	fn from(e: io::Error) -> Error {
+		Error::SumTreeErr(e.to_string())
 	}
 }
 
@@ -190,16 +207,28 @@ pub trait ChainStore: Send + Sync {
 	/// Gets an output by its commitment
 	fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, store::Error>;
 
-    /// Checks whether an output commitment exists and returns the output hash
-    fn has_output_commit(&self, commit: &Commitment) -> Result<Hash, store::Error>;
+	/// Gets a block_header for the given input commit
+	fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, store::Error>;
 
-    /// Gets a block_header for the given input commit
-    fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, store::Error>;
+	/// Saves the position of an output, represented by its commitment, in the
+	/// UTXO MMR. Used as an index for spending and pruning.
+	fn save_output_pos(&self, commit: &Commitment, pos: u64) -> Result<(), store::Error>;
+
+	/// Gets the position of an output, represented by its commitment, in the
+	/// UTXO MMR. Used as an index for spending and pruning.
+	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, store::Error>;
+
+	/// Saves the position of a kernel, represented by its excess, in the
+	/// UTXO MMR. Used as an index for spending and pruning.
+	fn save_kernel_pos(&self, commit: &Commitment, pos: u64) -> Result<(), store::Error>;
+
+	/// Gets the position of a kernel, represented by its excess, in the
+	/// UTXO MMR. Used as an index for spending and pruning.
+	fn get_kernel_pos(&self, commit: &Commitment) -> Result<u64, store::Error>;
 
 	/// Saves the provided block header at the corresponding height. Also check
 	/// the consistency of the height chain in store by assuring previous
-	/// headers
-	/// are also at their respective heights.
+	/// headers are also at their respective heights.
 	fn setup_height(&self, bh: &BlockHeader) -> Result<(), store::Error>;
 }
 

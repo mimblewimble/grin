@@ -21,7 +21,6 @@ use std::collections::HashSet;
 
 use core::Committed;
 use core::{Input, Output, Proof, TxKernel, Transaction, COINBASE_KERNEL, COINBASE_OUTPUT};
-use core::transaction::merkle_inputs_outputs;
 use consensus::REWARD;
 use consensus::MINIMUM_DIFFICULTY;
 use core::hash::{Hash, Hashed, ZERO_HASH};
@@ -46,10 +45,12 @@ pub struct BlockHeader {
 	pub previous: Hash,
 	/// Timestamp at which the block was built.
 	pub timestamp: time::Tm,
-	/// Merkle root of the UTXO set
-	pub utxo_merkle: Hash,
-	/// Merkle tree of hashes for all inputs, outputs and kernels in the block
-	pub tx_merkle: Hash,
+	/// Merklish root of all the commitments in the UTXO set
+	pub utxo_root: Hash,
+	/// Merklish root of all range proofs in the UTXO set
+	pub range_proof_root: Hash,
+	/// Merklish root of all transaction kernels in the UTXO set
+	pub kernel_root: Hash,
 	/// Features specific to this block, allowing possible future extensions
 	pub features: BlockFeatures,
 	/// Nonce increment used to mine this block.
@@ -71,8 +72,9 @@ impl Default for BlockHeader {
 			timestamp: time::at_utc(time::Timespec { sec: 0, nsec: 0 }),
 			difficulty: Difficulty::from_num(MINIMUM_DIFFICULTY),
 			total_difficulty: Difficulty::from_num(MINIMUM_DIFFICULTY),
-			utxo_merkle: ZERO_HASH,
-			tx_merkle: ZERO_HASH,
+			utxo_root: ZERO_HASH,
+			range_proof_root: ZERO_HASH,
+			kernel_root: ZERO_HASH,
 			features: DEFAULT_BLOCK,
 			nonce: 0,
 			pow: Proof::zero(proof_size),
@@ -87,8 +89,9 @@ impl Writeable for BlockHeader {
 		                [write_u64, self.height],
 		                [write_fixed_bytes, &self.previous],
 		                [write_i64, self.timestamp.to_timespec().sec],
-		                [write_fixed_bytes, &self.utxo_merkle],
-		                [write_fixed_bytes, &self.tx_merkle],
+		                [write_fixed_bytes, &self.utxo_root],
+		                [write_fixed_bytes, &self.range_proof_root],
+		                [write_fixed_bytes, &self.kernel_root],
 		                [write_u8, self.features.bits()]);
 
 		try!(writer.write_u64(self.nonce));
@@ -108,8 +111,9 @@ impl Readable for BlockHeader {
 		let height = try!(reader.read_u64());
 		let previous = try!(Hash::read(reader));
 		let timestamp = reader.read_i64()?;
-		let utxo_merkle = try!(Hash::read(reader));
-		let tx_merkle = try!(Hash::read(reader));
+		let utxo_root = try!(Hash::read(reader));
+		let rproof_root = try!(Hash::read(reader));
+		let kernel_root = try!(Hash::read(reader));
 		let (features, nonce) = ser_multiread!(reader, read_u8, read_u64);
 		let difficulty = try!(Difficulty::read(reader));
 		let total_difficulty = try!(Difficulty::read(reader));
@@ -122,8 +126,9 @@ impl Readable for BlockHeader {
 				sec: timestamp,
 				nsec: 0,
 			}),
-			utxo_merkle: utxo_merkle,
-			tx_merkle: tx_merkle,
+			utxo_root: utxo_root,
+			range_proof_root: rproof_root,
+			kernel_root: kernel_root,
 			features: BlockFeatures::from_bits(features).ok_or(ser::Error::CorruptedData)?,
 			pow: pow,
 			nonce: nonce,
@@ -137,7 +142,7 @@ impl Readable for BlockHeader {
 /// non-explicit, assumed to be deducible from block height (similar to
 /// bitcoin's schedule) and expressed as a global transaction fee (added v.H),
 /// additive to the total of fees ever collected.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Block {
 	/// The header with metadata and commitments to the rest of the data
 	pub header: BlockHeader,
@@ -339,11 +344,8 @@ impl Block {
             .map(|&out| out)
             .collect::<Vec<_>>();
 
-		let tx_merkle = merkle_inputs_outputs(&new_inputs, &new_outputs);
-
 		Block {
 			header: BlockHeader {
-				tx_merkle: tx_merkle,
 				pow: self.header.pow.clone(),
 				difficulty: self.header.difficulty.clone(),
 				total_difficulty: self.header.total_difficulty.clone(),
@@ -392,19 +394,8 @@ impl Block {
 	pub fn validate(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
 		self.verify_coinbase(secp)?;
 		self.verify_kernels(secp)?;
-        self.verify_merkle_inputs_outputs()?;
-        Ok(())
+    Ok(())
 	}
-
-    /// Verify the transaction Merkle root
-    pub fn verify_merkle_inputs_outputs(&self) -> Result<(), secp::Error> {
-        let tx_merkle = merkle_inputs_outputs(&self.inputs, &self.outputs);
-        if tx_merkle != self.header.tx_merkle {
-            // TODO more specific error
-            return Err(secp::Error::IncorrectCommitSum);
-        }
-        Ok(())
-    }
 
 	/// Validate the sum of input/output commitments match the sum in kernels
 	/// and
@@ -609,7 +600,6 @@ mod test {
 
         assert_eq!(b.verify_coinbase(&secp), Err(secp::Error::IncorrectCommitSum));
         assert_eq!(b.verify_kernels(&secp), Ok(()));
-        assert_eq!(b.verify_merkle_inputs_outputs(), Err(secp::Error::IncorrectCommitSum));
 
         assert_eq!(b.validate(&secp), Err(secp::Error::IncorrectCommitSum));
     }
@@ -626,7 +616,6 @@ mod test {
 
         assert_eq!(b.verify_coinbase(&secp), Err(secp::Error::IncorrectCommitSum));
         assert_eq!(b.verify_kernels(&secp), Ok(()));
-        assert_eq!(b.verify_merkle_inputs_outputs(), Ok(()));
 
         assert_eq!(b.validate(&secp), Err(secp::Error::IncorrectCommitSum));
     }

@@ -16,7 +16,7 @@
 //! and mostly the chain pipeline.
 
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use secp::pedersen::Commitment;
 
@@ -26,6 +26,7 @@ use core::core::hash::Hash;
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
+use sumtree;
 use types::*;
 
 use core::global::{MiningParameterMode,MINING_PARAMETER_MODE};
@@ -40,8 +41,8 @@ pub struct Chain {
 	adapter: Arc<ChainAdapter>,
 
 	head: Arc<Mutex<Tip>>,
-	block_process_lock: Arc<Mutex<bool>>,
 	orphans: Arc<Mutex<VecDeque<(Options, Block)>>>,
+	sumtrees: Arc<RwLock<sumtree::SumTrees>>,
 
 	//POW verification function
 	pow_verifier: fn(&BlockHeader, u32) -> bool,
@@ -75,7 +76,7 @@ impl Chain {
 		gen_block: Option<Block>,
 		pow_verifier: fn(&BlockHeader, u32) -> bool,
 	) -> Result<Chain, Error> {
-		let chain_store = store::ChainKVStore::new(db_root)?;
+		let chain_store = store::ChainKVStore::new(db_root.clone())?;
 
 		// check if we have a head in store, otherwise the genesis block is it
 		let head = match chain_store.head() {
@@ -87,6 +88,7 @@ impl Chain {
 
 				let gen = gen_block.unwrap();
 				chain_store.save_block(&gen)?;
+				chain_store.setup_height(&gen.header)?;
 
 				// saving a new tip based on genesis
 				let tip = Tip::new(gen.hash());
@@ -97,16 +99,15 @@ impl Chain {
 			Err(e) => return Err(Error::StoreErr(e)),
 		};
 
-        // TODO - confirm this was safe to remove based on code above?
-		// let head = chain_store.head()?;
-
+		let store = Arc::new(chain_store);
+		let sumtrees = sumtree::SumTrees::open(db_root, store.clone())?;
 
 		Ok(Chain {
-			store: Arc::new(chain_store),
+			store: store,
 			adapter: adapter,
 			head: Arc::new(Mutex::new(head)),
-			block_process_lock: Arc::new(Mutex::new(true)),
 			orphans: Arc::new(Mutex::new(VecDeque::with_capacity(MAX_ORPHANS + 1))),
+			sumtrees: Arc::new(RwLock::new(sumtrees)),
 			pow_verifier: pow_verifier,
 		})
 	}
@@ -128,15 +129,17 @@ impl Chain {
 					let mut head = chain_head.lock().unwrap();
 					*head = tip.clone();
 				}
-
 				self.check_orphans();
 			}
+			Ok(None) => {}
 			Err(Error::Orphan) => {
 				let mut orphans = self.orphans.lock().unwrap();
 				orphans.push_front((opts, b));
 				orphans.truncate(MAX_ORPHANS);
 			}
-			_ => {}
+			Err(ref e) => {
+				info!("Rejected block {} at {} : {:?}", b.hash(), b.header.height, e);
+			}
 		}
 
 		res
@@ -171,7 +174,7 @@ impl Chain {
 			adapter: self.adapter.clone(),
 			head: head,
 			pow_verifier: self.pow_verifier,
-			lock: self.block_process_lock.clone(),
+			sumtrees: self.sumtrees.clone(),
 		}
 	}
 
@@ -198,37 +201,36 @@ impl Chain {
 		}
 	}
 
-    /// Gets an unspent output from its commitment.
-	/// Will return an Error if the output doesn't exist or has been spent.
-	/// This querying is done in a way that's
-	/// consistent with the current chain state and more specifically the
-	/// current
-	/// branch it is on in case of forks.
+	/// Gets an unspent output from its commitment. With return None if the
+	/// output doesn't exist or has been spent. This querying is done in a
+	/// way that's consistent with the current chain state and more
+	/// specifically the current winning fork.
 	pub fn get_unspent(&self, output_ref: &Commitment) -> Result<Output, Error> {
-		// TODO use an actual UTXO tree
-		// in the meantime doing it the *very* expensive way:
-		//   1. check the output exists
-		//   2. run the chain back from the head to check it hasn't been spent
-		if let Ok(out) = self.store.get_output_by_commit(output_ref) {
-			if let Ok(head) = self.store.head() {
-				let mut block_h = head.last_block_h;
-				loop {
-					if let Ok(b) = self.store.get_block(&block_h) {
-						for input in b.inputs {
-							if input.commitment() == *output_ref {
-								return Err(Error::OutputSpent);
-							}
-						}
-						if b.header.height == 1 {
-							return Ok(out);
-						} else {
-							block_h = b.header.previous;
-						}
-					}
-				}
-			}
+		let sumtrees = self.sumtrees.read().unwrap();
+		let is_unspent = sumtrees.is_unspent(output_ref)?;
+		if is_unspent {
+			self.store.get_output_by_commit(output_ref).map_err(&Error::StoreErr)
+		} else {
+			Err(Error::OutputNotFound)
 		}
-		Err(Error::OutputNotFound)
+	}
+
+	/// Sets the sumtree roots on a brand new block by applying the block on the
+	/// current sumtree state.
+	pub fn set_sumtree_roots(&self, b: &mut Block) -> Result<(), Error> {
+		let mut sumtrees = self.sumtrees.write().unwrap();
+	
+		let roots = sumtree::extending(&mut sumtrees, |mut extension| {
+			// apply the block on the sumtrees and check the resulting root
+			extension.apply_block(b)?;
+			extension.force_rollback();
+			Ok(extension.roots())
+		})?;
+
+		b.header.utxo_root = roots.0.hash;
+		b.header.range_proof_root = roots.1.hash;
+		b.header.kernel_root = roots.2.hash;
+		Ok(())
 	}
 
 	/// Total difficulty at the head of the chain

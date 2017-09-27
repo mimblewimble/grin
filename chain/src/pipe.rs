@@ -14,7 +14,7 @@
 
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 use secp;
 use time;
@@ -25,6 +25,7 @@ use core::core::{BlockHeader, Block};
 use core::core::transaction;
 use types::*;
 use store;
+use sumtree;
 use core::global;
 
 /// Contextual information required to process a new block and either reject or
@@ -40,8 +41,8 @@ pub struct BlockContext {
 	pub head: Tip,
 	/// The POW verification function
 	pub pow_verifier: fn(&BlockHeader, u32) -> bool,
-	/// The lock
-	pub lock: Arc<Mutex<bool>>,
+	/// MMR sum tree states
+	pub sumtrees: Arc<RwLock<sumtree::SumTrees>>,
 }
 
 /// Runs the block processing pipeline, including validation and finding a
@@ -65,16 +66,26 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		validate_header(&b.header, &mut ctx)?;
 	}
 
-	validate_block(b, &mut ctx)?;
-	debug!(
-		"Block at {} with hash {} is valid, going to save and append.",
-		b.header.height,
-		b.hash()
-	);
+	// take the lock on the sum trees and start a chain extension unit of work
+	// dependent on the success of the internal validation and saving operations
+	let local_sumtrees = ctx.sumtrees.clone();
+	let mut sumtrees = local_sumtrees.write().unwrap();
+	sumtree::extending(&mut sumtrees, |mut extension| {
 
-	let _ = ctx.lock.lock().unwrap();
-	add_block(b, &mut ctx)?;
-	update_head(b, &mut ctx)
+		validate_block(b, &mut ctx, &mut extension)?;
+		debug!(
+			"Block at {} with hash {} is valid, going to save and append.",
+			b.header.height,
+			b.hash()
+		);
+
+		add_block(b, &mut ctx)?;
+		let h = update_head(b, &mut ctx)?;
+		if h.is_none() {
+			extension.force_rollback();
+		}
+		Ok(h)
+	})
 }
 
 /// Process the block header
@@ -89,7 +100,9 @@ pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<O
 	validate_header(&bh, &mut ctx)?;
 	add_block_header(bh, &mut ctx)?;
 
-	let _ = ctx.lock.lock().unwrap();
+	// just taking the shared lock
+	let _ = ctx.sumtrees.write().unwrap();
+
 	update_header_head(bh, &mut ctx)
 }
 
@@ -169,13 +182,14 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 }
 
 /// Fully validate the block content.
-fn validate_block(block: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
-	if block.header.height > ctx.head.height + 1 {
+fn validate_block(b: &Block, ctx: &mut BlockContext, ext: &mut sumtree::Extension) -> Result<(), Error> {
+	if b.header.height > ctx.head.height + 1 {
 		return Err(Error::Orphan);
 	}
-
+ 
+	// main isolated block validation, checks all commitment sums and sigs
 	let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-	try!(block.validate(&curve).map_err(&Error::InvalidBlockProof));
+	try!(b.validate(&curve).map_err(&Error::InvalidBlockProof));
 
 	// check that all the outputs of the block are "new" -
 	// that they do not clobber any existing unspent outputs (by their commitment)
@@ -187,16 +201,61 @@ fn validate_block(block: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	// };
 
 
-	// TODO check every input exists as a UTXO using the UTXO index
+	// apply the new block to the MMR trees and check the new root hashes
+	if b.header.previous == ctx.head.last_block_h {
+		// standard head extension
+		ext.apply_block(b)?;
+	} else {
+	
+		// extending a fork, first identify the block where forking occurred
+		// keeping the hashes of blocks along the fork
+		let mut current = b.header.previous;
+		let mut hashes = vec![];
+		loop {
+			let curr_header = ctx.store.get_block_header(&current)?;
+			let height_header = ctx.store.get_header_by_height(curr_header.height)?;
+			if curr_header.hash() != height_header.hash() {
+				hashes.insert(0, curr_header.hash());
+				current = curr_header.previous;
+			} else {
+				break;
+			}
+		}
+
+		// rewind the sum trees up the forking block, providing the height of the
+		// forked block and the last commitment we want to rewind to
+		let forked_block = ctx.store.get_block(&current)?;
+		if forked_block.header.height > 0 {
+			let last_output = &forked_block.outputs[forked_block.outputs.len() - 1];
+			let last_kernel = &forked_block.kernels[forked_block.kernels.len() - 1];
+			ext.rewind(forked_block.header.height, last_output, last_kernel)?;
+		}
+
+		// apply all forked blocks, including this new one
+		for h in hashes {
+			let fb = ctx.store.get_block(&h)?;
+			ext.apply_block(&fb)?;
+		}
+		ext.apply_block(&b)?;
+	}
+
+	let (utxo_root, rproof_root, kernel_root) = ext.roots();
+	if utxo_root.hash != b.header.utxo_root ||
+		rproof_root.hash != b.header.range_proof_root ||
+		kernel_root.hash != b.header.kernel_root {
+
+		ext.dump();
+		return Err(Error::InvalidRoot);
+	}
 
 	// check that any coinbase outputs are spendable (that they have matured sufficiently)
-	for input in &block.inputs {
+	for input in &b.inputs {
 		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
 			if output.features.contains(transaction::COINBASE_OUTPUT) {
 				if let Ok(output_header) = ctx.store.get_block_header_by_output_commit(&input.commitment()) {
 
 					// TODO - make sure we are not off-by-1 here vs. the equivalent tansaction validation rule
-					if block.header.height <= output_header.height + consensus::COINBASE_MATURITY {
+					if b.header.height <= output_header.height + consensus::COINBASE_MATURITY {
 						return Err(Error::ImmatureCoinbase);
 					}
 				};
@@ -243,6 +302,7 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 		} else {
 			ctx.store.save_head(&tip).map_err(&Error::StoreErr)?;
 		}
+		// TODO if we're switching branch, make sure to backtrack the sum trees
 
 		ctx.head = tip.clone();
 		info!("Updated head to {} at {}.", b.hash(), b.header.height);

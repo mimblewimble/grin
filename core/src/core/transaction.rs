@@ -17,10 +17,10 @@
 use byteorder::{ByteOrder, BigEndian};
 use secp::{self, Secp256k1, Message, Signature};
 use secp::pedersen::{RangeProof, Commitment};
+use std::ops;
 
 use core::Committed;
-use core::MerkleRow;
-use core::hash::{Hash, Hashed};
+use core::pmmr::Summable;
 use ser::{self, Reader, Writer, Readable, Writeable};
 
 bitflags! {
@@ -286,6 +286,10 @@ bitflags! {
 /// transferred. The commitment is a blinded value for the output while the
 /// range proof guarantees the commitment includes a positive value without
 /// overflow and the ownership of the private key.
+///
+/// The hash of an output only covers its features and commitment. The range
+/// proof is expected to have its own hash and is stored and committed to
+/// separately.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Output {
 	/// Options for an output's structure or use
@@ -343,12 +347,60 @@ impl Output {
 	}
 }
 
-/// Utility function to calculate the Merkle root of vectors of inputs and
-/// outputs.
-pub fn merkle_inputs_outputs(inputs: &Vec<Input>, outputs: &Vec<Output>) -> Hash {
-	let mut all_hs = map_vec!(inputs, |inp| inp.hash());
-	all_hs.append(&mut map_vec!(outputs, |out| out.hash()));
-	MerkleRow::new(all_hs).root()
+/// Wrapper to Output commitments to provide the Summable trait.
+#[derive(Clone, Debug)]
+pub struct SumCommit {
+	/// Output commitment
+	pub commit: Commitment,
+	/// Secp256k1 used to sum
+	pub secp: Secp256k1,
+}
+
+/// Outputs get summed through their commitments.
+impl Summable for SumCommit {
+	type Sum = SumCommit;
+
+	fn sum(&self) -> SumCommit {
+		SumCommit {
+			commit: self.commit.clone(),
+			secp: self.secp.clone(),
+		}
+	}
+
+	fn sum_len() -> usize {
+		secp::constants::PEDERSEN_COMMITMENT_SIZE
+	}
+}
+
+impl Writeable for SumCommit {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.commit.write(writer)
+	}
+}
+
+impl Readable for SumCommit {
+	fn read(reader: &mut Reader) -> Result<SumCommit, ser::Error> {
+		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
+		Ok(SumCommit {
+			commit: Commitment::read(reader)?,
+			secp: secp,
+		})
+	}
+}
+
+impl ops::Add for SumCommit {
+	type Output = SumCommit;
+
+	fn add(self, other: SumCommit) -> SumCommit {
+		let sum = match self.secp.commit_sum(vec![self.commit.clone(), other.commit.clone()], vec![]) {
+			Ok(s) => s,
+			Err(_) => Commitment::from_vec(vec![1; 33]),
+		};
+		SumCommit {
+			commit: sum,
+			secp: self.secp,
+		}
+	}
 }
 
 fn u64_to_32bytes(n: u64) -> [u8; 32] {

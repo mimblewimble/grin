@@ -26,6 +26,7 @@ use global;
 /// fees and a height of zero.
 pub fn genesis() -> core::Block {
 	let proof_size = global::proofsize();
+	let empty_hash = [].hash();
 	core::Block {
 		header: core::BlockHeader {
 			height: 0,
@@ -38,8 +39,9 @@ pub fn genesis() -> core::Block {
 			},
 			difficulty: Difficulty::from_num(MINIMUM_DIFFICULTY),
 			total_difficulty: Difficulty::from_num(MINIMUM_DIFFICULTY),
-			utxo_merkle: [].hash(),
-			tx_merkle: [].hash(),
+			utxo_root: empty_hash,
+			range_proof_root: empty_hash,
+			kernel_root: empty_hash,
 			features: core::DEFAULT_BLOCK,
 			nonce: global::get_genesis_nonce(),
 			pow: core::Proof::zero(proof_size), // TODO get actual PoW solution
