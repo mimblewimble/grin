@@ -31,7 +31,7 @@ pub fn show_info(config: &WalletConfig, ext_key: &ExtendedKey) {
 			let key = ext_key.derive(&secp, out.n_child).unwrap();
 
 			println!(
-				"{}, {}, {}, {}, {:?}, {}",
+				"{:?}, {}, {}, {}, {:?}, {}",
 				key.identifier().fingerprint(),
 				out.n_child,
 				out.height,
