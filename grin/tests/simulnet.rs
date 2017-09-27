@@ -49,8 +49,8 @@ use framework::{LocalServerContainer, LocalServerContainerConfig, LocalServerCon
 /// Block and mining into a wallet for a bit
 #[test]
 fn basic_genesis_mine() {
-    let _ = env_logger::init();
-    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+	let _ = env_logger::init();
+	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "genesis_mine";
 	framework::clean_all_output(test_name_dir);
@@ -80,8 +80,8 @@ fn basic_genesis_mine() {
 /// messages they all end up connected.
 #[test]
 fn simulate_seeding() {
-    let _ = env_logger::init();
-    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+	let _ = env_logger::init();
+	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "simulate_seeding";
 	framework::clean_all_output(test_name_dir);
@@ -114,13 +114,13 @@ fn simulate_seeding() {
 		server_config.p2p_server_port
 	));
 
-    for _ in 0..4 {
-        pool.create_server(&mut server_config);
-    }
+	for _ in 0..4 {
+		pool.create_server(&mut server_config);
+	}
 
 	pool.connect_all_peers();
 
-    let _ = pool.run_all_servers();
+	let _ = pool.run_all_servers();
 }
 
 /// Create 1 server, start it mining, then connect 4 other peers mining and
@@ -128,16 +128,14 @@ fn simulate_seeding() {
 /// as a seed. Meant to test the evolution of mining difficulty with miners
 /// running at
 /// different rates
-
-
 // Just going to comment this out as an automatically run test for the time
 // being,
 // As it's more for actively testing and hurts CI a lot
 //#[test]
 #[allow(dead_code)]
 fn simulate_parallel_mining() {
-    let _ = env_logger::init();
-    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+	let _ = env_logger::init();
+	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "simulate_parallel_mining";
 	// framework::clean_all_output(test_name_dir);
@@ -178,7 +176,7 @@ fn simulate_parallel_mining() {
 
 	pool.connect_all_peers();
 
-    let _ = pool.run_all_servers();
+	let _ = pool.run_all_servers();
 
 	// Check mining difficulty here?, though I'd think it's more valuable
 	// to simply output it. Can at least see the evolution of the difficulty target
@@ -193,7 +191,7 @@ fn simulate_parallel_mining() {
 #[test]
 fn a_simulate_block_propagation() {
 	env_logger::init();
-    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "grin-prop";
 	framework::clean_all_output(test_name_dir);
@@ -201,13 +199,18 @@ fn a_simulate_block_propagation() {
 	let mut evtlp = reactor::Core::new().unwrap();
 	let handle = evtlp.handle();
 
+	let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
+	let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();
+	plugin_config.type_filter = String::from("mean_cpu");
+	plugin_config_vec.push(plugin_config);
+
 	let miner_config = pow::types::MinerConfig {
 		enable_mining: true,
 		burn_reward: true,
 		use_cuckoo_miner: false,
 		cuckoo_miner_async_mode: None,
 		cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
-		cuckoo_miner_plugin_type: Some(String::from("simple")),
+		cuckoo_miner_plugin_config: Some(plugin_config_vec),
 		..Default::default()
 	};
 
@@ -260,7 +263,7 @@ fn a_simulate_block_propagation() {
 #[test]
 fn simulate_full_sync() {
 	env_logger::init();
-    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "grin-sync";
 	framework::clean_all_output(test_name_dir);
@@ -268,13 +271,18 @@ fn simulate_full_sync() {
 	let mut evtlp = reactor::Core::new().unwrap();
 	let handle = evtlp.handle();
 
+	let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
+	let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();
+	plugin_config.type_filter = String::from("mean_cpu");
+	plugin_config_vec.push(plugin_config);
+
 	let miner_config = pow::types::MinerConfig {
 		enable_mining: true,
 		burn_reward: true,
 		use_cuckoo_miner: false,
 		cuckoo_miner_async_mode: Some(false),
 		cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
-		cuckoo_miner_plugin_type: Some(String::from("simple")),
+		cuckoo_miner_plugin_config: Some(plugin_config_vec),
 		..Default::default()
 	};
 

@@ -25,7 +25,6 @@
 extern crate bitflags;
 extern crate blake2_rfc as blake2;
 extern crate byteorder;
-extern crate crypto;
 extern crate num_bigint as bigint;
 extern crate rand;
 extern crate secp256k1zkp as secp;

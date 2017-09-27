@@ -121,7 +121,7 @@ pub fn mine_genesis_block(miner_config:Option<types::MinerConfig>)->Option<core:
 /// Runs a proof of work computation over the provided block using the provided Mining Worker,
 /// until the required difficulty target is reached. May take a while for a low target...
 pub fn pow_size<T: MiningWorker + ?Sized>(miner:&mut T, bh: &mut BlockHeader,
-								 diff: Difficulty, _: u32) -> Result<(), Error> {
+	diff: Difficulty, _: u32) -> Result<(), Error> {
 	let start_nonce = bh.nonce;
 
 	// if we're in production mode, try the pre-mined solution first

@@ -31,12 +31,17 @@ fn refresh_output(
 		out.height = api_out.height;
 		out.lock_height = api_out.lock_height;
 
-		if api_out.lock_height > tip.height {
+		if out.status == OutputStatus::Locked {
+			// leave it Locked locally for now
+		} else if api_out.lock_height >= tip.height {
 			out.status = OutputStatus::Immature;
 		} else {
 			out.status = OutputStatus::Unspent;
 		}
-	} else if out.status == OutputStatus::Unspent {
+	} else if vec![
+		OutputStatus::Unspent,
+		OutputStatus::Locked
+	].contains(&out.status) {
 		out.status = OutputStatus::Spent;
 	}
 }
@@ -70,7 +75,7 @@ pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) -> Result<(
 }
 
 fn get_tip(config: &WalletConfig) -> Result<api::Tip, Error> {
-	let url = format!("{}/v1/chain", config.check_node_api_http_addr);
+	let url = format!("{}/v1/chain/1", config.check_node_api_http_addr);
 	api::client::get::<api::Tip>(url.as_str())
 		.map_err(|e| Error::Node(e))
 }

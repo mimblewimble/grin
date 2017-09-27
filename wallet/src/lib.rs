@@ -15,7 +15,7 @@
 //! Library module for the main wallet functionalities provided by Grin.
 
 extern crate byteorder;
-extern crate crypto;
+extern crate blake2_rfc as blake2;
 #[macro_use]
 extern crate log;
 extern crate rand;
@@ -31,11 +31,13 @@ extern crate secp256k1zkp as secp;
 
 mod checker;
 mod extkey;
+mod info;
 mod receiver;
 mod sender;
 mod types;
 
 pub use extkey::ExtendedKey;
+pub use info::show_info;
 pub use receiver::{WalletReceiver, receive_json_tx};
 pub use sender::issue_send_tx;
 pub use types::{WalletConfig, WalletReceiveRequest, CbAmount, CbData};

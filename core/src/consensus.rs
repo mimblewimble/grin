@@ -29,7 +29,7 @@ pub const REWARD: u64 = 1_000_000_000;
 /// Number of blocks before a coinbase matures and can be spent
 /// TODO - reduced this for testing - need to investigate if we can lower this in test env
 // pub const COINBASE_MATURITY: u64 = 1_000;
-pub const COINBASE_MATURITY: u64 = 10;
+pub const COINBASE_MATURITY: u64 = 3;
 
 /// Block interval, in seconds, the network will tune its next_target for. Note
 /// that we may reduce this value in the future as we get more data on mining
