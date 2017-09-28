@@ -521,10 +521,10 @@ mod test {
 
 	// utility producing a transaction that spends an output with the provided
 	// value and blinding key
-	fn txspend1i1o(v: u64, keychain: Keychain, pubkey: Identifier) -> Transaction {
+	fn txspend1i1o(v: u64, keychain: &Keychain, pubkey: Identifier) -> Transaction {
 		build::transaction(
 			vec![input(v, pubkey), output_rand(3), with_fee(1)],
-			keychain,
+			&keychain,
 		).map(|(tx, _)| tx).unwrap()
 	}
 
@@ -538,13 +538,13 @@ mod test {
 		let mut btx1 = tx2i1o();
 		let (mut btx2, _) = build::transaction(
 			vec![input_rand(5), output(4, pubkey), with_fee(1)],
-			keychain,
+			&keychain,
 		).unwrap();
 
 		// spending tx2
 		let keychain_2 = Keychain::from_random_seed().unwrap();
 		let pubkey_2 = keychain_2.derive_pubkey(1).unwrap();
-		let mut btx3 = txspend1i1o(4, keychain_2, pubkey_2);
+		let mut btx3 = txspend1i1o(4, &keychain_2, pubkey_2);
 		let b = new_block(vec![&mut btx1, &mut btx2, &mut btx3], &keychain_2);
 
 		// block should have been automatically compacted (including reward
@@ -566,14 +566,14 @@ mod test {
 
 		let (mut btx2, _) = build::transaction(
 			vec![input_rand(5), output(4, pubkey), with_fee(1)],
-			keychain,
+			&keychain,
 		).unwrap();
 
 		// spending tx2
 		let keychain_2 = Keychain::from_random_seed().unwrap();
 		let pubkey_2 = keychain_2.derive_pubkey(1).unwrap();
 
-		let mut btx3 = txspend1i1o(4, keychain_2, pubkey_2);
+		let mut btx3 = txspend1i1o(4, &keychain_2, pubkey_2);
 
 		let b1 = new_block(vec![&mut btx1, &mut btx2], &keychain_2);
 		b1.validate(&secp).unwrap();
@@ -654,7 +654,7 @@ mod test {
 	#[test]
 	fn serialize_deserialize_block() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let mut b = new_block(vec![], &keychain);
+		let b = new_block(vec![], &keychain);
 
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");

@@ -167,7 +167,7 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let (tx, _) = transaction(
 			vec![input_rand(10), input_rand(11), output_rand(20), with_fee(1)],
-			keychain,
+			&keychain,
 		).unwrap();
 
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
@@ -180,7 +180,7 @@ mod test {
 		let pubkey = keychain.derive_pubkey(1).unwrap();
 		let (tx, _) = transaction(
 			vec![input_rand(6), output(2, pubkey), with_fee(4)],
-			keychain,
+			&keychain,
 		).unwrap();
 
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);

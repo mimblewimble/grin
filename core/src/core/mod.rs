@@ -216,7 +216,7 @@ mod test {
 
 		build::transaction(vec!
 			[input(10, pubkey.clone()), output(1, pubkey.clone()), with_fee(9)],
-			keychain,
+			&keychain,
 		).unwrap();
 	}
 
@@ -261,12 +261,11 @@ mod test {
 	#[test]
 	fn hash_output() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let (tx, _) = build::transaction(vec![
-			input_rand(75),
-			output_rand(42),
-			output_rand(32),
-			with_fee(1)
-		], keychain).unwrap();
+		let (tx, _) =
+			build::transaction(
+				vec![input_rand(75), output_rand(42), output_rand(32), with_fee(1)],
+				&keychain,
+			).unwrap();
 		let h = tx.outputs[0].hash();
 		assert!(h != ZERO_HASH);
 		let h2 = tx.outputs[1].hash();
@@ -316,7 +315,7 @@ mod test {
 			// of blinding factors before they're obscured.
 			let (tx, sum) = build::transaction(
 				vec![in1, in2, output_rand(1), with_fee(1)],
-				alice_keychain,
+				&alice_keychain,
 			).unwrap();
 			tx_alice = tx;
 			blind_sum = sum;
@@ -328,7 +327,7 @@ mod test {
 		let (tx_final, _) =
 			build::transaction(
 				vec![initial_tx(tx_alice), with_excess(blind_sum), output_rand(5)],
-				bob_keychain,
+				&bob_keychain,
 			).unwrap();
 
 		let secp = new_secp();
@@ -381,7 +380,7 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		build::transaction(
 			vec![input_rand(10), input_rand(11), output_rand(20), with_fee(1)],
-			keychain,
+			&keychain,
 		).map(|(tx, _)| tx).unwrap()
 	}
 
@@ -390,7 +389,7 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		build::transaction(
 			vec![input_rand(5), output_rand(4), with_fee(1)],
-			keychain,
+			&keychain,
 		).map(|(tx, _)| tx).unwrap()
 	}
 }
