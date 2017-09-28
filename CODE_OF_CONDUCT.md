@@ -1,7 +1,7 @@
 Grin Code of Conduct
 ====================
 
-Contact: [mailto:mimblewimblemods@googlegroups.com](mimblewimblemods@googlegroups.com)
+Contact: [mimblewimblemods@googlegroups.com](mailto:mimblewimblemods@googlegroups.com)
 
 We are committed to providing a friendly, safe and welcoming environment for all, regardless of level of experience, gender, gender identity and expression, sexual orientation, disability, personal appearance, body size, race, ethnicity, age, religion, nationality, or other similar characteristic.
 
@@ -11,7 +11,7 @@ Please be kind and courteous. There’s no need to be mean or rude. Respect that
 
 Please keep unstructured critique to a minimum. If you have solid ideas you want to experiment with, make a fork and see how it works.
 
-We will exclude you from interaction if you insult, demean or harass anyone. That is not welcome behaviour. We interpret the term “harassment” as including the definition in the [http://citizencodeofconduct.org/](Citizen Code of Conduct); if you have any lack of clarity about what might be included in that concept, please read their definition. In particular, we don’t tolerate behavior that excludes people in socially marginalized groups.
+We will exclude you from interaction if you insult, demean or harass anyone. That is not welcome behaviour. We interpret the term “harassment” as including the definition in the [Citizen Code of Conduct](http://citizencodeofconduct.org/); if you have any lack of clarity about what might be included in that concept, please read their definition. In particular, we don’t tolerate behavior that excludes people in socially marginalized groups.
 
 Private harassment is also unacceptable. No matter who you are, if you feel you have been or are being harassed or made uncomfortable by a community member, please contact one of the channel ops or any of the Grin moderation team immediately. Whether you’re a regular contributor or a newcomer, we care about making this community a safe place for you and we’ve got your back.
 
