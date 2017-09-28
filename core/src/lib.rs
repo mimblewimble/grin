@@ -29,6 +29,7 @@ extern crate num_bigint as bigint;
 extern crate rand;
 extern crate secp256k1zkp as secp;
 extern crate grin_keychain as keychain;
+extern crate grin_util as util;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;

@@ -16,7 +16,6 @@
 
 use time;
 use secp::{self, Secp256k1};
-use secp::key::SecretKey;
 use std::collections::HashSet;
 
 use core::Committed;
@@ -502,6 +501,7 @@ mod test {
 	use core::Transaction;
 	use core::build::{self, input, output, input_rand, output_rand, with_fee};
 	use core::test::tx2i1o;
+	use util;
 
 	use secp::{self, Secp256k1};
 	use secp::key::SecretKey;
@@ -511,12 +511,18 @@ mod test {
 		secp::Secp256k1::with_caps(secp::ContextFlag::Commit)
 	}
 
+	// TODO - do we want to randomize this for each time we use it in the tests?
+	fn new_keychain() -> keychain::Keychain {
+		let seed = util::from_hex("000102030405060708090a0b0c0d0e0f".to_string()).unwrap();
+		keychain::Keychain::from_seed(seed.as_slice()).unwrap()
+	}
+
 	// utility to create a block without worrying about the key or previous
 	// header
 	fn new_block(txs: Vec<&Transaction>, secp: &Secp256k1) -> Block {
-		let mut rng = OsRng::new().unwrap();
-		let skey = SecretKey::new(secp, &mut rng);
-		Block::new(&BlockHeader::default(), txs, skey).unwrap()
+		let keychain = new_keychain();
+		let pubkey = keychain.derive_pubkey(1).unwrap();
+		Block::new(&BlockHeader::default(), txs, &keychain, pubkey).unwrap()
 	}
 
 	// utility producing a transaction that spends an output with the provided

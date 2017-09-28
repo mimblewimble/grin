@@ -33,7 +33,7 @@ pub use self::block::*;
 pub use self::transaction::*;
 use self::hash::{Hash, Hashed, ZERO_HASH};
 use ser::{Writeable, Writer, Reader, Readable, Error};
-
+use keychain;
 use global;
 
 /// Implemented by types that hold inputs and outputs including Pedersen
@@ -191,8 +191,10 @@ mod test {
 	use secp::key::SecretKey;
 	use ser;
 	use rand::os::OsRng;
-	use core::build::{self, input, output, input_rand, output_rand, with_fee, initial_tx,
-	                  with_excess};
+	use core::build::{
+		self, input, output, input_rand, output_rand, with_fee, initial_tx, with_excess
+	};
+	use util;
 
 	fn new_secp() -> Secp256k1 {
 		secp::Secp256k1::with_caps(secp::ContextFlag::Commit)
@@ -322,41 +324,44 @@ mod test {
 
 	#[test]
 	fn reward_empty_block() {
-		let mut rng = OsRng::new().unwrap();
-		let ref secp = new_secp();
-		let skey = SecretKey::new(secp, &mut rng);
+		let keychain = new_keychain();
+		let pubkey = keychain.derive_pubkey(1).unwrap();
 
-		let b = Block::new(&BlockHeader::default(), vec![], skey).unwrap();
-		b.compact().validate(&secp).unwrap();
+		let b = Block::new(&BlockHeader::default(), vec![], &keychain, pubkey).unwrap();
+		b.compact().validate(keychain.secp()).unwrap();
+	}
+
+	// TODO - do we want to randomize this for each time we use it in the tests?
+	fn new_keychain() -> keychain::Keychain {
+		let seed = util::from_hex("000102030405060708090a0b0c0d0e0f".to_string()).unwrap();
+		keychain::Keychain::from_seed(seed.as_slice()).unwrap()
 	}
 
 	#[test]
 	fn reward_with_tx_block() {
-		let mut rng = OsRng::new().unwrap();
-		let ref secp = new_secp();
-		let skey = SecretKey::new(secp, &mut rng);
+		let keychain = new_keychain();
+		let pubkey = keychain.derive_pubkey(1).unwrap();
 
 		let mut tx1 = tx2i1o();
-		tx1.verify_sig(&secp).unwrap();
+		tx1.verify_sig(keychain.secp()).unwrap();
 
-		let b = Block::new(&BlockHeader::default(), vec![&mut tx1], skey).unwrap();
-		b.compact().validate(&secp).unwrap();
+		let b = Block::new(&BlockHeader::default(), vec![&mut tx1], &keychain, pubkey).unwrap();
+		b.compact().validate(keychain.secp()).unwrap();
 	}
 
 	#[test]
 	fn simple_block() {
-		let mut rng = OsRng::new().unwrap();
-		let ref secp = new_secp();
-		let skey = SecretKey::new(secp, &mut rng);
+		let keychain = new_keychain();
+		let pubkey = keychain.derive_pubkey(1).unwrap();
 
 		let mut tx1 = tx2i1o();
-		tx1.verify_sig(&secp).unwrap();
+		tx1.verify_sig(keychain.secp()).unwrap();
 
 		let mut tx2 = tx1i1o();
-		tx2.verify_sig(&secp).unwrap();
+		tx2.verify_sig(keychain.secp()).unwrap();
 
-		let b = Block::new(&BlockHeader::default(), vec![&mut tx1, &mut tx2], skey).unwrap();
-		b.validate(&secp).unwrap();
+		let b = Block::new(&BlockHeader::default(), vec![&mut tx1, &mut tx2], &keychain, pubkey).unwrap();
+		b.validate(keychain.secp()).unwrap();
 	}
 
 	// utility producing a transaction with 2 inputs and a single outputs

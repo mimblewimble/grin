@@ -20,6 +20,7 @@ use extkey;
 
 pub use extkey::Identifier;
 
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Error {
 	ExtendedKey(extkey::Error),
 	Secp(secp::Error),
@@ -40,13 +41,26 @@ pub struct Keychain {
 }
 
 impl Keychain {
+	pub fn from_seed(seed: &[u8]) -> Result<Keychain, Error> {
+		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
+		let extkey = extkey::ExtendedKey::from_seed(&secp, seed)?;
+		let keychain = Keychain {
+			secp: 	secp,
+			extkey: extkey,
+		};
+		Ok(keychain)
+	}
+
+	pub fn derive_pubkey(&self, derivation: u32) -> Result<Identifier, Error> {
+		let extkey = self.extkey.derive(&self.secp, derivation)?;
+		Ok(extkey.identifier())
+	}
+
 	// TODO - this is a work in progress
 	// TODO - smarter lookups - can we cache key_id/fingerprint -> derivation number somehow?
 	pub fn derived_key(&self, pubkey: &Identifier) -> Result<SecretKey, Error> {
 		for i in 1..1000 {
-			let extkey = self.extkey.derive(&self.secp, i).map_err(|e| {
-				Error::ExtendedKey(e)
-			})?;
+			let extkey = self.extkey.derive(&self.secp, i)?;
 			if extkey.identifier() == *pubkey {
 				return Ok(extkey.key)
 			}
