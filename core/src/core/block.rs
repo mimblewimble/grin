@@ -500,7 +500,7 @@ impl Block {
 mod test {
 	use super::*;
 	use core::Transaction;
-	use core::build::{self, input, output, input_rand, output_rand, with_fee};
+	use core::build::{self, input, output, with_fee};
 	use core::test::tx2i1o;
 	use util;
 
@@ -523,7 +523,7 @@ mod test {
 	// value and blinding key
 	fn txspend1i1o(v: u64, keychain: &Keychain, pubkey: Identifier) -> Transaction {
 		build::transaction(
-			vec![input(v, pubkey), output_rand(3), with_fee(1)],
+			vec![input(v, pubkey), output(3, pubkey), with_fee(1)],
 			&keychain,
 		).map(|(tx, _)| tx).unwrap()
 	}
@@ -537,7 +537,7 @@ mod test {
 
 		let mut btx1 = tx2i1o();
 		let (mut btx2, _) = build::transaction(
-			vec![input_rand(5), output(4, pubkey), with_fee(1)],
+			vec![input(5, pubkey), output(4, pubkey), with_fee(1)],
 			&keychain,
 		).unwrap();
 
@@ -565,7 +565,7 @@ mod test {
 		let mut btx1 = tx2i1o();
 
 		let (mut btx2, _) = build::transaction(
-			vec![input_rand(5), output(4, pubkey), with_fee(1)],
+			vec![input(5, pubkey), output(4, pubkey), with_fee(1)],
 			&keychain,
 		).unwrap();
 

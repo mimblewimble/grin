@@ -52,19 +52,19 @@ pub fn input(value: u64, pubkey: Identifier) -> Box<Append> {
 	})
 }
 
-/// Adds an input with the provided value and a randomly generated blinding
-/// key to the transaction being built. This has no real use in practical
-/// applications but is very convenient for tests.
-pub fn input_rand(value: u64) -> Box<Append> {
-	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
-		// TODO - do we randomize the derivation count here?
-		let pubkey = build.keychain.derive_pubkey(1).unwrap();
-		println!("got a pubkey - {:?}", pubkey);
-		let commit = build.keychain.commit(value, &pubkey).unwrap();
-		println!("got a commit - {}", value);
-		(tx.with_input(Input(commit)), sum.sub_pubkey(pubkey.clone()))
-	})
-}
+// /// Adds an input with the provided value and a randomly generated blinding
+// /// key to the transaction being built. This has no real use in practical
+// /// applications but is very convenient for tests.
+// pub fn input_rand(value: u64) -> Box<Append> {
+// 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
+// 		// TODO - do we randomize the derivation count here?
+// 		let pubkey = build.keychain.derive_pubkey(1).unwrap();
+// 		println!("got a pubkey - {:?}", pubkey);
+// 		let commit = build.keychain.commit(value, &pubkey).unwrap();
+// 		println!("got a commit - {}", value);
+// 		(tx.with_input(Input(commit)), sum.sub_pubkey(pubkey.clone()))
+// 	})
+// }
 
 /// Adds an output with the provided value and blinding key to the transaction
 /// being built.
@@ -81,22 +81,22 @@ pub fn output(value: u64, pubkey: Identifier) -> Box<Append> {
 	})
 }
 
-/// Adds an output with the provided value and a randomly generated blinding
-/// key to the transaction being built. This has no real use in practical
-/// applications but is very convenient for tests.
-pub fn output_rand(value: u64) -> Box<Append> {
-	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
-		let pubkey = build.keychain.derive_pubkey(1).unwrap();
-		let commit = build.keychain.commit(value, &pubkey).unwrap();
-		let rproof = build.keychain.range_proof(value, &pubkey, commit).unwrap();
-
-		(tx.with_output(Output {
-			features: DEFAULT_OUTPUT,
-			commit: commit,
-			proof: rproof,
-		}), sum.add_pubkey(pubkey.clone()))
-	})
-}
+// /// Adds an output with the provided value and a randomly generated blinding
+// /// key to the transaction being built. This has no real use in practical
+// /// applications but is very convenient for tests.
+// pub fn output_rand(value: u64) -> Box<Append> {
+// 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
+// 		let pubkey = build.keychain.derive_pubkey(2).unwrap();
+// 		let commit = build.keychain.commit(value, &pubkey).unwrap();
+// 		let rproof = build.keychain.range_proof(value, &pubkey, commit).unwrap();
+//
+// 		(tx.with_output(Output {
+// 			features: DEFAULT_OUTPUT,
+// 			commit: commit,
+// 			proof: rproof,
+// 		}), sum.add_pubkey(pubkey.clone()))
+// 	})
+// }
 
 /// Sets the fee on the transaction being built.
 pub fn with_fee(fee: u64) -> Box<Append> {
@@ -170,8 +170,12 @@ mod test {
 	#[test]
 	fn blind_simple_tx() {
 		let keychain = Keychain::from_random_seed().unwrap();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let pk2 = keychain.derive_pubkey(2).unwrap();
+		let pk3 = keychain.derive_pubkey(3).unwrap();
+
 		let (tx, _) = transaction(
-			vec![input_rand(10), input_rand(11), output_rand(20), with_fee(1)],
+			vec![input(10, pk1), input(11, pk2), output(20, pk3), with_fee(1)],
 			&keychain,
 		).unwrap();
 
@@ -184,7 +188,7 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let pubkey = keychain.derive_pubkey(1).unwrap();
 		let (tx, _) = transaction(
-			vec![input_rand(6), output(2, pubkey), with_fee(4)],
+			vec![input(6, pubkey), output(2, pubkey), with_fee(4)],
 			&keychain,
 		).unwrap();
 

@@ -193,7 +193,7 @@ mod test {
 	use ser;
 	use rand::os::OsRng;
 	use core::build::{
-		self, input, output, input_rand, output_rand, with_fee, initial_tx, with_excess
+		self, input, output, with_fee, initial_tx, with_excess
 	};
 	use util;
 
@@ -261,9 +261,13 @@ mod test {
 	#[test]
 	fn hash_output() {
 		let keychain = Keychain::from_random_seed().unwrap();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let pk2 = keychain.derive_pubkey(2).unwrap();
+		let pk3 = keychain.derive_pubkey(3).unwrap();
+
 		let (tx, _) =
 			build::transaction(
-				vec![input_rand(75), output_rand(42), output_rand(32), with_fee(1)],
+				vec![input(75, pk1), output(42, pk2), output(32, pk3), with_fee(1)],
 				&keychain,
 			).unwrap();
 		let h = tx.outputs[0].hash();
@@ -300,8 +304,11 @@ mod test {
 	/// 2 inputs, 2 outputs transaction.
 	#[test]
 	fn tx_build_exchange() {
-		let alice_keychain = Keychain::from_random_seed().unwrap();
-		let bob_keychain = Keychain::from_random_seed().unwrap();
+		let keychain = Keychain::from_random_seed().unwrap();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let pk2 = keychain.derive_pubkey(2).unwrap();
+		let pk3 = keychain.derive_pubkey(3).unwrap();
+		let pk4 = keychain.derive_pubkey(4).unwrap();
 
 		let tx_alice: Transaction;
 		let blind_sum: BlindingFactor;
@@ -309,13 +316,13 @@ mod test {
 		{
 			// Alice gets 2 of her pre-existing outputs to send 5 coins to Bob, they
 			// become inputs in the new transaction
-			let (in1, in2) = (input_rand(4), input_rand(3));
+			let (in1, in2) = (input(4, pk1), input(3, pk2));
 
 			// Alice builds her transaction, with change, which also produces the sum
 			// of blinding factors before they're obscured.
 			let (tx, sum) = build::transaction(
-				vec![in1, in2, output_rand(1), with_fee(1)],
-				&alice_keychain,
+				vec![in1, in2, output(1, pk3), with_fee(1)],
+				&keychain,
 			).unwrap();
 			tx_alice = tx;
 			blind_sum = sum;
@@ -326,12 +333,11 @@ mod test {
 		// ready for broadcast.
 		let (tx_final, _) =
 			build::transaction(
-				vec![initial_tx(tx_alice), with_excess(blind_sum), output_rand(5)],
-				&bob_keychain,
+				vec![initial_tx(tx_alice), with_excess(blind_sum), output(5, pk4)],
+				&keychain,
 			).unwrap();
 
-		let secp = new_secp();
-		tx_final.validate(&secp).unwrap();
+		tx_final.validate(&keychain.secp()).unwrap();
 	}
 
 	#[test]
@@ -370,6 +376,9 @@ mod test {
 		println!("verified the sig for tx2i1o");
 
 		let mut tx2 = tx1i1o();
+		// TODO - why is this failing for 1i1o but succeeding for 2i1o???
+		// TODO - I suspect we need to increment the derivation number on the keychain for each input/output somehow...
+		// let mut tx2 = tx2i1o();
 		tx2.verify_sig(keychain.secp()).unwrap();
 		println!("verified the sig for tx1i1o");
 
@@ -378,11 +387,26 @@ mod test {
 		b.validate(keychain.secp()).unwrap();
 	}
 
+	#[test]
+	pub fn test_verify_1i1o_sig() {
+		let keychain = new_keychain();
+		let tx = tx1i1o();
+		tx.verify_sig(keychain.secp()).unwrap();
+	}
+
+	#[test]
+	pub fn test_verify_2i1o_sig() {
+		let keychain = new_keychain();
+		let tx = tx2i1o();
+		tx.verify_sig(keychain.secp()).unwrap();
+	}
+
 	// utility producing a transaction with 2 inputs and a single outputs
 	pub fn tx2i1o() -> Transaction {
 		let keychain = new_keychain();
+		let pubkey = keychain.derive_pubkey(1).unwrap();
 		build::transaction(
-			vec![input_rand(10), input_rand(11), output_rand(20), with_fee(1)],
+			vec![input(10, pubkey), input(11, pubkey), output(20, pubkey), with_fee(1)],
 			&keychain,
 		).map(|(tx, _)| tx).unwrap()
 	}
@@ -390,8 +414,9 @@ mod test {
 	// utility producing a transaction with a single input and output
 	pub fn tx1i1o() -> Transaction {
 		let keychain = new_keychain();
+		let pubkey = keychain.derive_pubkey(1).unwrap();
 		build::transaction(
-			vec![input_rand(5), output_rand(4), with_fee(1)],
+			vec![input(5, pubkey), output(4, pubkey), with_fee(1)],
 			&keychain,
 		).map(|(tx, _)| tx).unwrap()
 	}
