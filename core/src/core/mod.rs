@@ -331,7 +331,8 @@ mod test {
 				bob_keychain,
 			).unwrap();
 
-		tx_final.validate(&bob_keychain.secp()).unwrap();
+		let secp = new_secp();
+		tx_final.validate(&secp).unwrap();
 	}
 
 	#[test]
@@ -340,7 +341,8 @@ mod test {
 		let pubkey = keychain.derive_pubkey(1).unwrap();
 
 		let b = Block::new(&BlockHeader::default(), vec![], &keychain, pubkey).unwrap();
-		b.compact().validate(keychain.secp()).unwrap();
+		let secp = new_secp();
+		b.compact().validate(&secp).unwrap();
 	}
 
 	fn new_keychain() -> keychain::Keychain {

@@ -35,8 +35,8 @@ use keychain;
 use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
 
 /// Context information available to transaction combinators.
-pub struct Context {
-	keychain: Keychain,
+pub struct Context<'a> {
+	keychain: &'a Keychain,
 }
 
 /// Function type returned by the transaction combinators. Transforms a
@@ -131,7 +131,7 @@ pub fn initial_tx(tx: Transaction) -> Box<Append> {
 ///
 pub fn transaction(
 	elems: Vec<Box<Append>>,
-	keychain: keychain::Keychain,
+	keychain: &keychain::Keychain,
 ) -> Result<(Transaction, BlindingFactor), keychain::Error> {
 
 	let mut ctx = Context { keychain };

@@ -531,6 +531,7 @@ mod test {
 	#[test]
 	// builds a block with a tx spending another and check if merging occurred
 	fn compactable_block() {
+		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let keychain = Keychain::from_random_seed().unwrap();
 		let pubkey = keychain.derive_pubkey(1).unwrap();
 
@@ -541,12 +542,14 @@ mod test {
 		).unwrap();
 
 		// spending tx2
-		let mut btx3 = txspend1i1o(4, keychain, pubkey);
-		let b = new_block(vec![&mut btx1, &mut btx2, &mut btx3], &keychain);
+		let keychain_2 = Keychain::from_random_seed().unwrap();
+		let pubkey_2 = keychain_2.derive_pubkey(1).unwrap();
+		let mut btx3 = txspend1i1o(4, keychain_2, pubkey_2);
+		let b = new_block(vec![&mut btx1, &mut btx2, &mut btx3], &keychain_2);
 
 		// block should have been automatically compacted (including reward
 		// output) and should still be valid
-		b.validate(&keychain.secp()).unwrap();
+		b.validate(&secp).unwrap();
 		assert_eq!(b.inputs.len(), 3);
 		assert_eq!(b.outputs.len(), 3);
 	}
@@ -567,11 +570,15 @@ mod test {
 		).unwrap();
 
 		// spending tx2
-		let mut btx3 = txspend1i1o(4, keychain, pubkey);
+		let keychain_2 = Keychain::from_random_seed().unwrap();
+		let pubkey_2 = keychain_2.derive_pubkey(1).unwrap();
 
-		let b1 = new_block(vec![&mut btx1, &mut btx2], &keychain);
+		let mut btx3 = txspend1i1o(4, keychain_2, pubkey_2);
+
+		let b1 = new_block(vec![&mut btx1, &mut btx2], &keychain_2);
 		b1.validate(&secp).unwrap();
-		let b2 = new_block(vec![&mut btx3], &keychain);
+
+		let b2 = new_block(vec![&mut btx3], &keychain_2);
 		b2.validate(&secp).unwrap();
 
 		// block should have been automatically compacted and should still be valid
