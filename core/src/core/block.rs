@@ -27,6 +27,7 @@ use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use ser::{self, Readable, Reader, Writeable, Writer};
 use global;
+use keychain;
 
 bitflags! {
     /// Options for block validation
@@ -243,13 +244,13 @@ impl Block {
 	pub fn new(
 		prev: &BlockHeader,
 		txs: Vec<&Transaction>,
-		reward_key: SecretKey,
-	) -> Result<Block, secp::Error> {
-
-		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
-		let (reward_out, reward_proof) = try!(Block::reward_output(reward_key, &secp));
-
-		Block::with_reward(prev, txs, reward_out, reward_proof)
+		keychain: &keychain::Keychain,
+		pubkey: keychain::Identifier,
+	) -> Result<Block, keychain::Error> {
+		
+		let (reward_out, reward_proof) = Block::reward_output(keychain, pubkey)?;
+		let block = Block::with_reward(prev, txs, reward_out, reward_proof)?;
+		Ok(block)
 	}
 
 	/// Builds a new block ready to mine from the header of the previous block,
@@ -461,17 +462,19 @@ impl Block {
 	/// Builds the blinded output and related signature proof for the block
 	/// reward.
 	pub fn reward_output(
-		skey: secp::key::SecretKey,
-		secp: &Secp256k1,
-	) -> Result<(Output, TxKernel), secp::Error> {
-		let msg = try!(secp::Message::from_slice(
-			&[0; secp::constants::MESSAGE_SIZE],
-		));
-		let sig = try!(secp.sign(&msg, &skey));
-		let commit = secp.commit(REWARD, skey).unwrap();
-		// let switch_commit = secp.switch_commit(skey).unwrap();
-		let nonce = secp.nonce();
-		let rproof = secp.range_proof(0, REWARD, skey, commit, nonce);
+		keychain: &keychain::Keychain,
+		pubkey: keychain::Identifier,
+	) -> Result<(Output, TxKernel), keychain::Error> {
+		let secp = keychain.secp();
+
+		let msg = secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE])?;
+		let sig = keychain.sign(&msg, &pubkey)?;
+		let commit = keychain.commit(REWARD, &pubkey)?;
+		//let switch_commit = keychain.switch_commit(pubkey)?;
+
+		// let nonce = secp.nonce();
+		// let rproof = secp.range_proof(0, REWARD, skey, commit, nonce);
+		let rproof = keychain.range_proof(REWARD, &pubkey, commit)?;
 
 		let output = Output {
 			features: COINBASE_OUTPUT,

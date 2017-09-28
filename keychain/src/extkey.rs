@@ -178,9 +178,6 @@ impl ExtendedKey {
 			_ => return Err(Error::InvalidSeedSize),
 		}
 
-		// let mut derived: [u8; 64] = [0; 64];
-		// hmac.raw_result(&mut derived);
-
 		let derived = blake2b(64, b"Mimble seed", seed);
 
 		let mut chaincode: [u8; 32] = [0; 32];
