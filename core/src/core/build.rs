@@ -31,54 +31,12 @@ use secp::key::SecretKey;
 use rand::os::OsRng;
 
 use core::{Transaction, Input, Output, DEFAULT_OUTPUT};
+use keychain;
+use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
 
 /// Context information available to transaction combinators.
 pub struct Context {
-	secp: Secp256k1,
-	rng: OsRng,
-}
-
-/// Accumulator to compute the sum of blinding factors. Keeps track of each
-/// factor as well as the "sign" with which they should be combined.
-pub struct BlindSum {
-	positive: Vec<SecretKey>,
-	negative: Vec<SecretKey>,
-}
-
-impl BlindSum {
-	/// Creates a new blinding factor sum.
-	fn new() -> BlindSum {
-		BlindSum {
-			positive: vec![],
-			negative: vec![],
-		}
-	}
-
-	/// Adds the provided key to the sum of blinding factors.
-	fn add(self, key: SecretKey) -> BlindSum {
-		let mut new_pos = self.positive;
-		new_pos.push(key);
-		BlindSum {
-			positive: new_pos,
-			negative: self.negative,
-		}
-	}
-
-	/// Subtractss the provided key to the sum of blinding factors.
-	fn sub(self, key: SecretKey) -> BlindSum {
-		let mut new_neg = self.negative;
-		new_neg.push(key);
-		BlindSum {
-			positive: self.positive,
-			negative: new_neg,
-		}
-	}
-
-	/// Computes the sum of blinding factors from all the ones that have been
-	/// added and subtracted.
-	fn sum(self, secp: &Secp256k1) -> Result<SecretKey, secp::Error> {
-		secp.blind_sum(self.positive, self.negative)
-	}
+	keychain: Keychain,
 }
 
 /// Function type returned by the transaction combinators. Transforms a
@@ -87,10 +45,10 @@ type Append = for<'a> Fn(&'a mut Context, (Transaction, BlindSum)) -> (Transacti
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
-pub fn input(value: u64, blinding: SecretKey) -> Box<Append> {
+pub fn input(value: u64, pubkey: Identifier) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
-		let commit = build.secp.commit(value, blinding).unwrap();
-		(tx.with_input(Input(commit)), sum.sub(blinding))
+		let commit = build.keychain.commit(value, &pubkey).unwrap();
+		(tx.with_input(Input(commit)), sum.sub_pubkey(pubkey.clone()))
 	})
 }
 
@@ -99,27 +57,25 @@ pub fn input(value: u64, blinding: SecretKey) -> Box<Append> {
 /// applications but is very convenient for tests.
 pub fn input_rand(value: u64) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
-		let blinding = SecretKey::new(&build.secp, &mut build.rng);
-		let commit = build.secp.commit(value, blinding).unwrap();
-		(tx.with_input(Input(commit)), sum.sub(blinding))
+		// TODO - do we randomize the derivation count here?
+		let pubkey = build.keychain.derive_pubkey(1).unwrap();
+		let commit = build.keychain.commit(value, &pubkey).unwrap();
+		(tx.with_input(Input(commit)), sum.sub_pubkey(pubkey.clone()))
 	})
 }
 
 /// Adds an output with the provided value and blinding key to the transaction
 /// being built.
-pub fn output(value: u64, blinding: SecretKey) -> Box<Append> {
+pub fn output(value: u64, pubkey: Identifier) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
-		let commit = build.secp.commit(value, blinding).unwrap();
-		let nonce = build.secp.nonce();
-		let rproof = build.secp.range_proof(0, value, blinding, commit, nonce);
-		(
-			tx.with_output(Output {
-				features: DEFAULT_OUTPUT,
-				commit: commit,
-				proof: rproof,
-			}),
-			sum.add(blinding),
-		)
+		let commit = build.keychain.commit(value, &pubkey).unwrap();
+		let rproof = build.keychain.range_proof(0, &pubkey, commit).unwrap();
+
+		(tx.with_output(Output {
+			features: DEFAULT_OUTPUT,
+			commit: commit,
+			proof: rproof,
+		}), sum.add_pubkey(pubkey.clone()))
 	})
 }
 
@@ -128,18 +84,15 @@ pub fn output(value: u64, blinding: SecretKey) -> Box<Append> {
 /// applications but is very convenient for tests.
 pub fn output_rand(value: u64) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
-		let blinding = SecretKey::new(&build.secp, &mut build.rng);
-		let commit = build.secp.commit(value, blinding).unwrap();
-		let nonce = build.secp.nonce();
-		let rproof = build.secp.range_proof(0, value, blinding, commit, nonce);
-		(
-			tx.with_output(Output {
-				features: DEFAULT_OUTPUT,
-				commit: commit,
-				proof: rproof,
-			}),
-			sum.add(blinding),
-		)
+		let pubkey = build.keychain.derive_pubkey(1).unwrap();
+		let commit = build.keychain.commit(value, &pubkey).unwrap();
+		let rproof = build.keychain.range_proof(value, &pubkey, commit).unwrap();
+
+		(tx.with_output(Output {
+			features: DEFAULT_OUTPUT,
+			commit: commit,
+			proof: rproof,
+		}), sum.add_pubkey(pubkey.clone()))
 	})
 }
 
@@ -153,9 +106,9 @@ pub fn with_fee(fee: u64) -> Box<Append> {
 /// Sets a known excess value on the transaction being built. Usually used in
 /// combination with the initial_tx function when a new transaction is built
 /// by adding to a pre-existing one.
-pub fn with_excess(excess: SecretKey) -> Box<Append> {
+pub fn with_excess(excess: BlindingFactor) -> Box<Append> {
 	Box::new(move |_build, (tx, sum)| -> (Transaction, BlindSum) {
-		(tx, sum.add(excess))
+		(tx, sum.add_blinding_factor(excess.clone()))
 	})
 }
 
@@ -176,20 +129,22 @@ pub fn initial_tx(tx: Transaction) -> Box<Append> {
 /// let (tx2, _) = build::transaction(vec![initial_tx(tx1), with_excess(sum),
 ///   output_rand(2)]).unwrap();
 ///
-pub fn transaction(elems: Vec<Box<Append>>) -> Result<(Transaction, SecretKey), secp::Error> {
-	let mut ctx = Context {
-		secp: Secp256k1::with_caps(secp::ContextFlag::Commit),
-		rng: OsRng::new().unwrap(),
-	};
+pub fn transaction(
+	elems: Vec<Box<Append>>,
+	keychain: keychain::Keychain,
+) -> Result<(Transaction, BlindingFactor), keychain::Error> {
+
+	let mut ctx = Context { keychain };
+
 	let (mut tx, sum) = elems.iter().fold(
-		(Transaction::empty(), BlindSum::new()),
-		|acc, elem| elem(&mut ctx, acc),
+		(Transaction::empty(), BlindSum::new()), |acc, elem| elem(&mut ctx, acc)
 	);
 
-	let blind_sum = sum.sum(&ctx.secp)?;
+	let blind_sum = ctx.keychain.blind_sum(&sum)?;
 	let msg = secp::Message::from_slice(&u64_to_32bytes(tx.fee))?;
-	let sig = ctx.secp.sign(&msg, &blind_sum)?;
-	tx.excess_sig = sig.serialize_der(&ctx.secp);
+	let sig = ctx.keychain.sign_with_blinding(&msg, &blind_sum)?;
+
+	tx.excess_sig = sig.serialize_der(&ctx.keychain.secp());
 
 	Ok((tx, blind_sum))
 }
@@ -205,25 +160,30 @@ fn u64_to_32bytes(n: u64) -> [u8; 32] {
 #[cfg(test)]
 mod test {
 	use super::*;
-
-	use secp::{self, key, Secp256k1};
+	use secp;
 
 	#[test]
 	fn blind_simple_tx() {
-		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
-		let (tx, _) = transaction(vec![
-			input_rand(10),
-			input_rand(11),
-			output_rand(20),
-			with_fee(1),
-		]).unwrap();
+		let keychain = Keychain::from_random_seed().unwrap();
+		let (tx, _) = transaction(
+			vec![input_rand(10), input_rand(11), output_rand(20), with_fee(1)],
+			keychain,
+		).unwrap();
+
+		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 		tx.verify_sig(&secp).unwrap();
 	}
+
 	#[test]
 	fn blind_simpler_tx() {
-		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
-		let (tx, _) = transaction(vec![input_rand(6), output(2, key::ONE_KEY), with_fee(4)])
-			.unwrap();
+		let keychain = Keychain::from_random_seed().unwrap();
+		let pubkey = keychain.derive_pubkey(1).unwrap();
+		let (tx, _) = transaction(
+			vec![input_rand(6), output(2, pubkey), with_fee(4)],
+			keychain,
+		).unwrap();
+
+		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 		tx.verify_sig(&secp).unwrap();
 	}
 }

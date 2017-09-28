@@ -34,6 +34,7 @@ pub use self::transaction::*;
 use self::hash::{Hash, Hashed, ZERO_HASH};
 use ser::{Writeable, Writer, Reader, Readable, Error};
 use keychain;
+use keychain::{BlindingFactor, Keychain};
 use global;
 
 /// Implemented by types that hold inputs and outputs including Pedersen
@@ -203,13 +204,20 @@ mod test {
 	#[test]
 	#[should_panic(expected = "InvalidSecretKey")]
 	fn zero_commit() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let pubkey = keychain.derive_pubkey(1).unwrap();
+
 		// a transaction whose commitment sums to zero shouldn't validate
-		let ref secp = new_secp();
-		let mut rng = OsRng::new().unwrap();
+		// let ref secp = new_secp();
+		// let mut rng = OsRng::new().unwrap();
 
 		// blinding should fail as signing with a zero r*G shouldn't work
-		let skey = SecretKey::new(secp, &mut rng);
-		build::transaction(vec![input(10, skey), output(1, skey), with_fee(9)]).unwrap();
+		// let skey = SecretKey::new(secp, &mut rng);
+
+		build::transaction(vec!
+			[input(10, pubkey.clone()), output(1, pubkey.clone()), with_fee(9)],
+			keychain,
+		).unwrap();
 	}
 
 	#[test]
@@ -252,12 +260,13 @@ mod test {
 
 	#[test]
 	fn hash_output() {
+		let keychain = Keychain::from_random_seed().unwrap();
 		let (tx, _) = build::transaction(vec![
 			input_rand(75),
 			output_rand(42),
 			output_rand(32),
-			with_fee(1),
-		]).unwrap();
+			with_fee(1)
+		], keychain).unwrap();
 		let h = tx.outputs[0].hash();
 		assert!(h != ZERO_HASH);
 		let h2 = tx.outputs[1].hash();
@@ -292,10 +301,11 @@ mod test {
 	/// 2 inputs, 2 outputs transaction.
 	#[test]
 	fn tx_build_exchange() {
-		let ref secp = new_secp();
+		let alice_keychain = Keychain::from_random_seed().unwrap();
+		let bob_keychain = Keychain::from_random_seed().unwrap();
 
 		let tx_alice: Transaction;
-		let blind_sum: SecretKey;
+		let blind_sum: BlindingFactor;
 
 		{
 			// Alice gets 2 of her pre-existing outputs to send 5 coins to Bob, they
@@ -304,8 +314,10 @@ mod test {
 
 			// Alice builds her transaction, with change, which also produces the sum
 			// of blinding factors before they're obscured.
-			let (tx, sum) = build::transaction(vec![in1, in2, output_rand(1), with_fee(1)])
-				.unwrap();
+			let (tx, sum) = build::transaction(
+				vec![in1, in2, output_rand(1), with_fee(1)],
+				alice_keychain,
+			).unwrap();
 			tx_alice = tx;
 			blind_sum = sum;
 		}
@@ -313,13 +325,13 @@ mod test {
 		// From now on, Bob only has the obscured transaction and the sum of
 		// blinding factors. He adds his output, finalizes the transaction so it's
 		// ready for broadcast.
-		let (tx_final, _) = build::transaction(vec![
-			initial_tx(tx_alice),
-			with_excess(blind_sum),
-			output_rand(5),
-		]).unwrap();
+		let (tx_final, _) =
+			build::transaction(
+				vec![initial_tx(tx_alice), with_excess(blind_sum), output_rand(5)],
+				bob_keychain,
+			).unwrap();
 
-		tx_final.validate(&secp).unwrap();
+		tx_final.validate(&bob_keychain.secp()).unwrap();
 	}
 
 	#[test]
@@ -331,10 +343,8 @@ mod test {
 		b.compact().validate(keychain.secp()).unwrap();
 	}
 
-	// TODO - do we want to randomize this for each time we use it in the tests?
 	fn new_keychain() -> keychain::Keychain {
-		let seed = util::from_hex("000102030405060708090a0b0c0d0e0f".to_string()).unwrap();
-		keychain::Keychain::from_seed(seed.as_slice()).unwrap()
+		keychain::Keychain::from_random_seed().unwrap()
 	}
 
 	#[test]
@@ -366,19 +376,19 @@ mod test {
 
 	// utility producing a transaction with 2 inputs and a single outputs
 	pub fn tx2i1o() -> Transaction {
-		build::transaction(vec![
-			input_rand(10),
-			input_rand(11),
-			output_rand(20),
-			with_fee(1),
-		]).map(|(tx, _)| tx)
-			.unwrap()
+		let keychain = Keychain::from_random_seed().unwrap();
+		build::transaction(
+			vec![input_rand(10), input_rand(11), output_rand(20), with_fee(1)],
+			keychain,
+		).map(|(tx, _)| tx).unwrap()
 	}
 
 	// utility producing a transaction with a single input and output
 	pub fn tx1i1o() -> Transaction {
-		build::transaction(vec![input_rand(5), output_rand(4), with_fee(1)])
-			.map(|(tx, _)| tx)
-			.unwrap()
+		let keychain = Keychain::from_random_seed().unwrap();
+		build::transaction(
+			vec![input_rand(5), output_rand(4), with_fee(1)],
+			keychain,
+		).map(|(tx, _)| tx).unwrap()
 	}
 }

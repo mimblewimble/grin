@@ -16,11 +16,13 @@
 
 extern crate blake2_rfc as blake2;
 extern crate byteorder;
+extern crate rand;
 extern crate secp256k1zkp as secp;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
 mod extkey;
+pub use extkey::Identifier;
 pub mod keychain;
-pub use keychain::{Error, Identifier, Keychain};
+pub use keychain::{BlindingFactor, BlindSum, Error, Keychain};
