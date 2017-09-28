@@ -140,7 +140,7 @@ impl Keychain {
 
 	// TODO - this is a work in progress
 	// TODO - smarter lookups - can we cache key_id/fingerprint -> derivation number somehow?
-	pub fn derived_key(&self, pubkey: &Identifier) -> Result<SecretKey, Error> {
+	fn derived_key(&self, pubkey: &Identifier) -> Result<SecretKey, Error> {
 		for i in 1..1000 {
 			let extkey = self.extkey.derive(&self.secp, i)?;
 			if extkey.identifier() == *pubkey {
@@ -174,19 +174,28 @@ impl Keychain {
 		Ok(range_proof)
 	}
 
-	// TODO - how do we deal with this???
-	//
-	// Does it work to pass in vecs of pubkeys and the keychain?
-	//
-	// pub fn blind_sum(
-	// 	&self,
-	// 	positive: Vec<SecretKey>,
-	// 	negative: Vec<SecretKey>
-	// ) -> Result<BlindingFactor, Error> {
-
 	pub fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error> {
-		// TODO TODO TODO
-		Err(Error::KeyDerivation("*** not yet implemented ***".to_string()))
+		let mut pos_keys: Vec<SecretKey> = blind_sum.positive_pubkeys
+			.iter()
+			.filter_map(|k| self.derived_key(&k).ok())
+			.collect();
+		println!("pos_keys - {}", pos_keys.len());
+
+		let mut neg_keys: Vec<SecretKey> = blind_sum.negative_pubkeys
+			.iter()
+			.filter_map(|k| self.derived_key(&k).ok())
+			.collect();
+		println!("neg_keys - {}", neg_keys.len());
+
+		pos_keys.extend(&blind_sum.positive_blinding_factors.iter().map(|b| b.0).collect::<Vec<SecretKey>>());
+		neg_keys.extend(&blind_sum.negative_blinding_factors.iter().map(|b| b.0).collect::<Vec<SecretKey>>());
+
+		println!("pos_keys all - {}", pos_keys.len());
+		println!("neg_keys all - {}", neg_keys.len());
+
+		let blinding = self.secp.blind_sum(pos_keys, neg_keys)?;
+		Ok(BlindingFactor(blinding))
+		// Err(Error::KeyDerivation("*** not yet implemented ***".to_string()))
 	}
 
 	pub fn sign(&self, msg: &Message, pubkey: &Identifier) -> Result<Signature, Error> {

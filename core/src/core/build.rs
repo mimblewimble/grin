@@ -59,7 +59,9 @@ pub fn input_rand(value: u64) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
 		// TODO - do we randomize the derivation count here?
 		let pubkey = build.keychain.derive_pubkey(1).unwrap();
+		println!("got a pubkey - {:?}", pubkey);
 		let commit = build.keychain.commit(value, &pubkey).unwrap();
+		println!("got a commit - {}", value);
 		(tx.with_input(Input(commit)), sum.sub_pubkey(pubkey.clone()))
 	})
 }
@@ -139,10 +141,13 @@ pub fn transaction(
 	let (mut tx, sum) = elems.iter().fold(
 		(Transaction::empty(), BlindSum::new()), |acc, elem| elem(&mut ctx, acc)
 	);
-
+	println!("about to get blind_sum");
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
+	println!("got blind_sum");
 	let msg = secp::Message::from_slice(&u64_to_32bytes(tx.fee))?;
+	println!("got msg");
 	let sig = ctx.keychain.sign_with_blinding(&msg, &blind_sum)?;
+	println!("got sig");
 
 	tx.excess_sig = sig.serialize_der(&ctx.keychain.secp());
 

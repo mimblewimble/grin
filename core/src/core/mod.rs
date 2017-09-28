@@ -367,17 +367,20 @@ mod test {
 
 		let mut tx1 = tx2i1o();
 		tx1.verify_sig(keychain.secp()).unwrap();
+		println!("verified the sig for tx2i1o");
 
 		let mut tx2 = tx1i1o();
 		tx2.verify_sig(keychain.secp()).unwrap();
+		println!("verified the sig for tx1i1o");
 
 		let b = Block::new(&BlockHeader::default(), vec![&mut tx1, &mut tx2], &keychain, pubkey).unwrap();
+		println!("***** got here ok!!!");
 		b.validate(keychain.secp()).unwrap();
 	}
 
 	// utility producing a transaction with 2 inputs and a single outputs
 	pub fn tx2i1o() -> Transaction {
-		let keychain = Keychain::from_random_seed().unwrap();
+		let keychain = new_keychain();
 		build::transaction(
 			vec![input_rand(10), input_rand(11), output_rand(20), with_fee(1)],
 			&keychain,
@@ -386,7 +389,7 @@ mod test {
 
 	// utility producing a transaction with a single input and output
 	pub fn tx1i1o() -> Transaction {
-		let keychain = Keychain::from_random_seed().unwrap();
+		let keychain = new_keychain();
 		build::transaction(
 			vec![input_rand(5), output_rand(4), with_fee(1)],
 			&keychain,
