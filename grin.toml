@@ -54,7 +54,7 @@ port = 13414
 
 #flag whether mining is enabled
 
-enable_mining = true
+enable_mining = false
 
 #Whether to use cuckoo-miner,  and related parameters
 
