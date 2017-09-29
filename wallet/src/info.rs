@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use secp;
 use checker;
 use keychain::{Keychain, Fingerprint};
 use types::{WalletConfig, WalletData};

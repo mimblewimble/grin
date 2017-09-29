@@ -49,9 +49,6 @@
 //! double-exchange will be required as soon as we support Schnorr signatures.
 //! So we may as well have it in place already.
 
-use std::convert::From;
-use secp;
-use secp::key::SecretKey;
 
 use core::core::{Block, Transaction, TxKernel, Output, build};
 use core::ser;

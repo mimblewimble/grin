@@ -15,7 +15,7 @@
 
 
 use secp::{self, Secp256k1};
-use extkey::{Identifier, Fingerprint};
+use extkey::Identifier;
 use keychain::Error;
 
 #[derive(Clone, Debug)]
