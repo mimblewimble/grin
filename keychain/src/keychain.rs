@@ -20,8 +20,7 @@ use secp::key::SecretKey;
 use secp::pedersen::{Commitment, RangeProof};
 use blake2;
 
-use extkey;
-use extkey::Identifier;
+use extkey::{self, Fingerprint, Identifier};
 
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -83,36 +82,25 @@ impl BlindSum {
 	pub fn add_blinding_factor(mut self, blind: BlindingFactor) -> BlindSum {
 		self.positive_blinding_factors.push(blind);
 		self
-		// new_pos.push(key);
-		// BlindSum {
-			// positive: new_pos,
-			// negative: self.negative,
-		// }
 	}
 
 	/// Subtractss the provided key to the sum of blinding factors.
 	pub fn sub_blinding_factor(mut self, blind: BlindingFactor) -> BlindSum {
 		self.negative_blinding_factors.push(blind);
 		self
-		// let mut new_neg = self.negative;
-		// new_neg.push(key);
-		// BlindSum {
-		// 	positive: self.positive,
-		// 	negative: new_neg,
-		// }
 	}
-
-	// /// Computes the sum of blinding factors from all the ones that have been
-	// /// added and subtracted.
-	// fn sum(&self) -> Result<BlindingFactor, Error> {
-	// 	secp.blind_sum(self.positive, self.negative)
-	// }
 }
 
 #[derive(Clone, Debug)]
 pub struct Keychain {
 	secp: Secp256k1,
 	extkey: extkey::ExtendedKey,
+}
+
+impl Keychain {
+	pub fn fingerprint(self) -> Fingerprint {
+		self.extkey.fingerprint
+	}
 }
 
 impl Keychain {

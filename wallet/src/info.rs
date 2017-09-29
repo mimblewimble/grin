@@ -19,8 +19,6 @@ use types::{WalletConfig, WalletData};
 
 pub fn show_info(
 	config: &WalletConfig,
-	// TODO - does a keychain itself have a fingerprint (avoid passing it here)?
-	master_fingerprint: &Fingerprint,
 	keychain: &Keychain,
 ) {
 	let _ = checker::refresh_outputs(&config, keychain);
@@ -33,13 +31,13 @@ pub fn show_info(
 		println!("----------------------------------");
 		for out in &mut wallet_data.outputs
 			.iter()
-			.filter(|out| out.fingerprint == master_fingerprint)
+			.filter(|out| out.fingerprint == keychain.fingerprint())
 		{
 			let pubkey = keychain.derive_pubkey(out.n_child).unwrap();
 
 			println!(
 				"{}, {}, {}, {}, {:?}, {}",
-				pubkey.identifier().fingerprint(),
+				pubkey.fingerprint(),
 				out.n_child,
 				out.height,
 				out.lock_height,

@@ -43,7 +43,7 @@ pub enum Error {
 }
 
 impl From<keychain::Error> for Error {
-	fn from(e: keychain::Error) -> Error { Error::Key(e) }
+	fn from(e: keychain::Error) -> Error { Error::Keychain(e) }
 }
 
 impl From<serde_json::Error> for Error {
@@ -266,8 +266,7 @@ impl WalletData {
 	/// the provided amount.
 	pub fn select(
 		&self,
-		fingerprint:
-		&keychain::Fingerprint,
+		fingerprint: &keychain::Fingerprint,
 		amount: u64
 	) -> (Vec<OutputData>, i64) {
 		let mut to_spend = vec![];
@@ -336,7 +335,7 @@ pub fn partial_tx_from_json(
 
 	// TODO - turn some data into a blinding factor here somehow
 	// let blinding = SecretKey::from_slice(&secp, &blind_bin[..])?;
-	let blinding = Blinding::from_slice(&blind_bin[..])?;
+	let blinding = keychain::BlindingFactor::from_slice(&blind_bin[..])?;
 
 	let tx_bin = util::from_hex(partial_tx.tx)?;
 	let tx = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {

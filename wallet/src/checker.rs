@@ -76,10 +76,10 @@ fn get_output_from_node(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
-	derivation: u64,
+	derivation: u32,
 ) -> Result<Option<api::Output>, Error> {
 	let pubkey = keychain.derive_pubkey(derivation)?;
-	let commit = keychain.commit(amount, pubkey)?;
+	let commit = keychain.commit(amount, &pubkey)?;
 
 	let url = format!(
 		"{}/v1/chain/utxo/{}",

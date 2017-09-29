@@ -27,18 +27,12 @@ use types::*;
 pub fn issue_send_tx(
 	config: &WalletConfig,
 	keychain: &Keychain,
-	master_fingerprint: &Fingerprint,
 	amount: u64,
 	dest: String,
 ) -> Result<(), Error> {
 	let _ = checker::refresh_outputs(config, keychain);
 
-	let (tx, blind_sum) = build_send_tx(
-		config,
-		&master_fingerprint,
-		&keychain,
-		amount,
-	)?;
+	let (tx, blind_sum) = build_send_tx(config, keychain, amount)?;
 	let json_tx = partial_tx_to_json(amount, blind_sum, tx);
 
 	if dest == "stdout" {
@@ -60,7 +54,6 @@ pub fn issue_send_tx(
 /// selecting outputs to spend and building the change.
 fn build_send_tx(
 	config: &WalletConfig,
-	master_fingerprint: &Fingerprint,
 	keychain: &Keychain,
 	amount: u64,
 ) -> Result<(Transaction, BlindingFactor), Error> {
@@ -69,7 +62,7 @@ fn build_send_tx(
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
 		// select some suitable outputs to spend from our local wallet
-		let (coins, change) = wallet_data.select(keychain, amount);
+		let (coins, change) = wallet_data.select(&keychain.fingerprint(), amount);
 		if change < 0 {
 			return Err(Error::NotEnoughFunds((-change) as u64));
 		}
@@ -79,19 +72,19 @@ fn build_send_tx(
 		// build inputs using the appropriate derived pubkeys
 		let mut parts = vec![];
 		for ref coin in coins {
-			let pubkey = keychain.derive_pubkey(coin.n_child).map_err(|e| Error::Key(e))?;
-			parts.push(build::input(coin.value, keychain, pubkey));
+			let pubkey = keychain.derive_pubkey(coin.n_child)?;
+			parts.push(build::input(coin.value, pubkey));
 		}
 
 		// derive an additional pubkey for change and build the change output
-		let change_derivation = wallet_data.next_child(master_fingerprint);
-		let change_key = keychain.derive_pubkey(change_derivation).map_err(|e| Error::Key(e))?;
-		parts.push(build::output(change as u64, keychain, change_key));
+		let change_derivation = wallet_data.next_child(&keychain.fingerprint());
+		let change_key = keychain.derive_pubkey(change_derivation)?;
+		parts.push(build::output(change as u64, change_key));
 
 		// we got that far, time to start tracking the new output, finalize tx
 		// and lock the outputs used
 		wallet_data.append_output(OutputData {
-			fingerprint: master_fingerprint,
+			fingerprint: &keychain.fingerprint(),
 			n_child: change_derivation,
 			value: change as u64,
 			status: OutputStatus::Unconfirmed,
@@ -102,7 +95,8 @@ fn build_send_tx(
 			wallet_data.lock_output(coin);
 		}
 
-		build::transaction(parts).map_err(&From::from)
+		let result = build::transaction(parts, &keychain)?;
+		Ok(result)
 	})?
 }
 
