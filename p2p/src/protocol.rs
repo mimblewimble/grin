@@ -51,7 +51,7 @@ impl Protocol for ProtocolV1 {
 
 		let (conn, listener) = TimeoutConnection::listen(conn, move |sender, header, data| {
 			let adapt = adapter.as_ref();
-			handle_payload(adapt, sender, header, data)
+			handle_payload(adapt, sender, header, data).map_err(|_| ser::Error::CorruptedData)
 		});
 
 		self.conn.init(conn);
@@ -123,7 +123,7 @@ fn handle_payload(adapter: &NetAdapter,
                   sender: UnboundedSender<Vec<u8>>,
                   header: MsgHeader,
                   buf: Vec<u8>)
-                  -> Result<Option<Hash>, ser::Error> {
+                  -> Result<Option<Hash>, Error> {
 	match header.msg_type {
 		Type::Ping => {
 			let data = ser::ser_vec(&MsgHeader::new(Type::Pong, 0))?;
@@ -133,8 +133,8 @@ fn handle_payload(adapter: &NetAdapter,
 		Type::Pong => Ok(None),
 		Type::Transaction => {
 			let tx = ser::deserialize::<core::Transaction>(&mut &buf[..])?;
-			adapter.transaction_received(tx);
-			Ok(None)
+			adapter.transaction_received(tx).and(Ok(None))
+
 		}
 		Type::GetBlock => {
 			let h = ser::deserialize::<Hash>(&mut &buf[..])?;
@@ -154,52 +154,51 @@ fn handle_payload(adapter: &NetAdapter,
 		Type::Block => {
 			let b = ser::deserialize::<core::Block>(&mut &buf[..])?;
 			let bh = b.hash();
-			adapter.block_received(b);
-			Ok(Some(bh))
+			adapter.block_received(b).and(Ok(Some(bh)))
 		}
 		Type::GetHeaders => {
 			// load headers from the locator
 			let loc = ser::deserialize::<Locator>(&mut &buf[..])?;
-			let headers = adapter.locate_headers(loc.hashes);
 
-			// serialize and send all the headers over
-			let mut body_data = vec![];
-			try!(ser::serialize(&mut body_data, &Headers { headers: headers }));
-			let mut data = vec![];
-			try!(ser::serialize(&mut data,
-			                    &MsgHeader::new(Type::Headers, body_data.len() as u64)));
-			data.append(&mut body_data);
-			sender.send(data).unwrap();
+            if let Some(headers) = adapter.locate_headers(loc.hashes) {
+                // serialize and send all the headers over
+                let mut body_data = vec![];
+                try!(ser::serialize(&mut body_data, &Headers { headers: headers }));
+                let mut data = vec![];
+                try!(ser::serialize(&mut data,
+                                    &MsgHeader::new(Type::Headers, body_data.len() as u64)));
+                data.append(&mut body_data);
+                sender.send(data);
+            }
 
 			Ok(None)
 		}
 		Type::Headers => {
 			let headers = ser::deserialize::<Headers>(&mut &buf[..])?;
-			adapter.headers_received(headers.headers);
-			Ok(None)
+			adapter.headers_received(headers.headers).and(Ok(None))
 		}
 		Type::GetPeerAddrs => {
 			let get_peers = ser::deserialize::<GetPeerAddrs>(&mut &buf[..])?;
-			let peer_addrs = adapter.find_peer_addrs(get_peers.capabilities);
-
-			// serialize and send all the headers over
-			let mut body_data = vec![];
-			try!(ser::serialize(&mut body_data,
-			                    &PeerAddrs {
-				                    peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
-			                    }));
-			let mut data = vec![];
-			try!(ser::serialize(&mut data,
-			                    &MsgHeader::new(Type::PeerAddrs, body_data.len() as u64)));
-			data.append(&mut body_data);
-			sender.send(data).unwrap();
+            
+            if let Some(peer_addrs) = adapter.find_peer_addrs(get_peers.capabilities) {
+                // serialize and send all the headers over
+                let mut body_data = vec![];
+                try!(ser::serialize(&mut body_data,
+                                    &PeerAddrs {
+                                        peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
+                                    }));
+                let mut data = vec![];
+                try!(ser::serialize(&mut data,
+                                    &MsgHeader::new(Type::PeerAddrs, body_data.len() as u64)));
+                data.append(&mut body_data);
+                sender.send(data);
+            }
 
 			Ok(None)
 		}
 		Type::PeerAddrs => {
 			let peer_addrs = ser::deserialize::<PeerAddrs>(&mut &buf[..])?;
-			adapter.peer_addrs_received(peer_addrs.peers.iter().map(|pa| pa.0).collect());
-			Ok(None)
+			adapter.peer_addrs_received(peer_addrs.peers.iter().map(|pa| pa.0).collect()).and(Ok(None))
 		}
 		_ => {
 			debug!("unknown message type {:?}", header.msg_type);

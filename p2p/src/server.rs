@@ -20,6 +20,7 @@ use std::net::SocketAddr;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+use std::io;
 
 use futures;
 use futures::{Future, Stream};
@@ -34,28 +35,6 @@ use core::core::target::Difficulty;
 use handshake::Handshake;
 use peer::Peer;
 use types::*;
-
-/// A no-op network adapter used for testing.
-pub struct DummyAdapter {}
-impl NetAdapter for DummyAdapter {
-	fn total_difficulty(&self) -> Difficulty {
-		Difficulty::one()
-	}
-	fn transaction_received(&self, _: core::Transaction) {}
-	fn block_received(&self, _: core::Block) {}
-	fn headers_received(&self, _: Vec<core::BlockHeader>) {}
-	fn locate_headers(&self, _: Vec<Hash>) -> Vec<core::BlockHeader> {
-		vec![]
-	}
-	fn get_block(&self, _: Hash) -> Option<core::Block> {
-		None
-	}
-	fn find_peer_addrs(&self, _: Capabilities) -> Vec<SocketAddr> {
-		vec![]
-	}
-	fn peer_addrs_received(&self, _: Vec<SocketAddr>) {}
-	fn peer_connected(&self, _: &PeerInfo) {}
-}
 
 /// P2P server implementation, handling bootstrapping to find and connect to
 /// peers, receiving connections from other peers and keep track of all of them.

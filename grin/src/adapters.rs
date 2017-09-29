@@ -15,6 +15,7 @@
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 use std::thread;
+use std::io;
 
 use chain::{self, ChainAdapter};
 use core::core::{self, Output};
@@ -45,18 +46,22 @@ impl NetAdapter for NetToChainAdapter {
 		self.chain.total_difficulty()
 	}
 
-	fn transaction_received(&self, tx: core::Transaction) {
+	fn transaction_received(&self, tx: core::Transaction) -> Result<(), p2p::Error> {
 		let source = pool::TxSource {
 			debug_name: "p2p".to_string(),
 			identifier: "?.?.?.?".to_string(),
 		};
 		if let Err(e) = self.tx_pool.write().unwrap().add_to_memory_pool(source, tx) {
 			error!("Transaction rejected: {:?}", e);
+			return Err(p2p::Error::Invalid);
 		}
+		Ok(())
 	}
 
-	fn block_received(&self, b: core::Block) {
-    let bhash = b.hash();
+	fn block_received(&self, b: core::Block) -> Result<(), p2p::Error> {
+
+    	let bhash = b.hash();
+
 		debug!("Received block {} from network, going to process.", bhash);
 
 		// pushing the new block through the chain pipeline
@@ -64,14 +69,17 @@ impl NetAdapter for NetToChainAdapter {
 
 		if let Err(e) = res {
 			debug!("Block {} refused by chain: {:?}", bhash, e);
+			return Err(p2p::Error::Invalid);			
 		}
 
 		if self.syncer.borrow().syncing() {
 			self.syncer.borrow().block_received(bhash);
 		}
+
+		Ok(())
 	}
 
-	fn headers_received(&self, bhs: Vec<core::BlockHeader>) {
+	fn headers_received(&self, bhs: Vec<core::BlockHeader>) -> Result<(), p2p::Error> {
 		// try to add each header to our header chain
 		let mut added_hs = vec![];
 		for bh in bhs {
@@ -85,14 +93,15 @@ impl NetAdapter for NetToChainAdapter {
 					      bh.hash(),
 					      bh.height,
 					      s);
+					return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid Time").into());
 				}
 				Err(chain::Error::StoreErr(e)) => {
 					error!("Store error processing block header {}: {:?}", bh.hash(), e);
-					return;
+					return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid Header Format").into());
 				}
 				Err(e) => {
 					info!("Invalid block header {}: {:?}.", bh.hash(), e);
-					// TODO penalize peer somehow
+					return Err(p2p::Error::Invalid);
 				}
 			}
 		}
@@ -101,11 +110,12 @@ impl NetAdapter for NetToChainAdapter {
 		if self.syncer.borrow().syncing() {
 			self.syncer.borrow().headers_received(added_hs);
 		}
+		Ok(())
 	}
 
-	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
+	fn locate_headers(&self, locator: Vec<Hash>) -> Option<Vec<core::BlockHeader>> {
 		if locator.len() == 0 {
-			return vec![];
+			return None;
 		}
 
 		// go through the locator vector and check if we know any of these headers
@@ -117,7 +127,7 @@ impl NetAdapter for NetToChainAdapter {
 			}
 			Err(e) => {
 				error!("Could not build header locator: {:?}", e);
-				return vec![];
+				return None;
 			}
 		};
 
@@ -131,11 +141,11 @@ impl NetAdapter for NetToChainAdapter {
 				Err(chain::Error::StoreErr(store::Error::NotFoundErr)) => break,
 				Err(e) => {
 					error!("Could not build header locator: {:?}", e);
-					return vec![];
+					return None;
 				}
 			}
 		}
-		headers
+		Some(headers)
 	}
 
 	/// Gets a full block by its hash.
@@ -149,14 +159,15 @@ impl NetAdapter for NetToChainAdapter {
 
 	/// Find good peers we know with the provided capability and return their
 	/// addresses.
-	fn find_peer_addrs(&self, capab: p2p::Capabilities) -> Vec<SocketAddr> {
+	fn find_peer_addrs(&self, capab: p2p::Capabilities) -> Option<Vec<SocketAddr>> {
 		let peers = self.peer_store.find_peers(State::Healthy, capab, p2p::MAX_PEER_ADDRS as usize);
 		debug!("Got {} peer addrs to send.", peers.len());
-		map_vec!(peers, |p| p.addr)
+		if peers.len() == 0 { None } else { Some(map_vec!(peers, |p| p.addr)) }
+
 	}
 
 	/// A list of peers has been received from one of our peers.
-	fn peer_addrs_received(&self, peer_addrs: Vec<SocketAddr>) {
+	fn peer_addrs_received(&self, peer_addrs: Vec<SocketAddr>) -> Result<(), p2p::Error> {
 		debug!("Received {} peer addrs, saving.", peer_addrs.len());
 		for pa in peer_addrs {
 			if let Ok(e) = self.peer_store.exists_peer(pa) {
@@ -172,8 +183,11 @@ impl NetAdapter for NetToChainAdapter {
 			};
 			if let Err(e) = self.peer_store.save_peer(&peer) {
 				error!("Could not save received peer address: {:?}", e);
+				return Err(io::Error::new(io::ErrorKind::InvalidData, "Could not save recieved peer address").into())
 			}
 		}
+
+		Ok(())
 	}
 
 	/// Network successfully connected to a peer.

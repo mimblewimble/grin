@@ -52,7 +52,7 @@ mod server;
 mod store;
 mod types;
 
-pub use server::{Server, DummyAdapter};
+pub use server::Server;
 pub use peer::Peer;
 pub use types::{P2PConfig, NetAdapter, MAX_LOCATORS, MAX_BLOCK_HEADERS, MAX_PEER_ADDRS,
                 Capabilities, UNKNOWN, FULL_NODE, FULL_HIST, PeerInfo, Error};

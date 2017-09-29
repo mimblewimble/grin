@@ -43,6 +43,7 @@ pub const MAX_PEER_ADDRS: u32 = 256;
 pub enum Error {
 	Serialization(ser::Error),
 	Connection(io::Error),
+	Invalid,
 	ConnectionClose,
 	Timeout,
 }
@@ -151,34 +152,35 @@ pub trait Protocol {
 /// forwarding or querying of blocks and transactions from the network among
 /// other things.
 pub trait NetAdapter: Sync + Send {
+
 	/// Current height of our chain.
 	fn total_difficulty(&self) -> Difficulty;
 
 	/// A valid transaction has been received from one of our peers
-	fn transaction_received(&self, tx: core::Transaction);
+	fn transaction_received(&self, tx: core::Transaction) -> Result<(), Error>;
 
 	/// A block has been received from one of our peers
-	fn block_received(&self, b: core::Block);
+	fn block_received(&self, b: core::Block) -> Result<(), Error>;
 
 	/// A set of block header has been received, typically in response to a
 	/// block
 	/// header request.
-	fn headers_received(&self, bh: Vec<core::BlockHeader>);
+	fn headers_received(&self, bh: Vec<core::BlockHeader>) -> Result<(), Error>;
 
 	/// Finds a list of block headers based on the provided locator. Tries to
 	/// identify the common chain and gets the headers that follow it
 	/// immediately.
-	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader>;
+	fn locate_headers(&self, locator: Vec<Hash>) -> Option<Vec<core::BlockHeader>>;
 
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
 
 	/// Find good peers we know with the provided capability and return their
 	/// addresses.
-	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr>;
+	fn find_peer_addrs(&self, capab: Capabilities) -> Option<Vec<SocketAddr>>;
 
 	/// A list of peers has been received from one of our peers.
-	fn peer_addrs_received(&self, Vec<SocketAddr>);
+	fn peer_addrs_received(&self, Vec<SocketAddr>) -> Result<(), Error>;
 
 	/// Network successfully connected to a peer.
 	fn peer_connected(&self, &PeerInfo);
