@@ -62,9 +62,7 @@ use_cuckoo_miner = true
 
 #Whether to use async mode for cuckoo miner, if the plugin supports it.
 #this allows for many searches to be run in parallel, e.g. if the system
-#has multiple GPUs. This creates overhead, especially on faster test miners,
-#so in a post-release world this should only be used if you really want
-#to run cards in parallel
+#has multiple GPUs, or if you want to mine using multiple plugins 
 
 cuckoo_miner_async_mode = false
 
@@ -108,9 +106,17 @@ burn_reward = true
 # single GPU and single CPU plugin in parallel
 
 #The fastest cpu algorithm, but consumes the most memory
+#Also requires instructions that aren't available on
+#older processors. In this case, use mean_compat_cpu
+#instead
+#[[mining.cuckoo_miner_plugin_config]]
+#type_filter = "mean_cpu"
+#parameter_list = {NUM_THREADS=4, NUM_TRIMS=64}
 
+#Same as above, but for older processors. Will be slightly
+#slower.
 [[mining.cuckoo_miner_plugin_config]]
-type_filter = "mean_cpu"
+type_filter = "mean_compat_cpu"
 parameter_list = {NUM_THREADS=4, NUM_TRIMS=64}
 
 #note lean_cpu currently has a bug which prevents it from

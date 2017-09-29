@@ -231,6 +231,9 @@ impl Miner {
 					next_stat_output = time::get_time().sec + stat_output_interval;
 				}
 			}
+			//avoid busy wait
+			let sleep_dur = std::time::Duration::from_millis(100);
+			thread::sleep(sleep_dur);
 		}
 		if sol == None {
 			debug!(
