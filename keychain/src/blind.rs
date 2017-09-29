@@ -14,8 +14,9 @@
 /// Encapsulate a secret key for the blind_sum operation
 
 
-use secp;
+use secp::{self, Secp256k1};
 use extkey::{Identifier, Fingerprint};
+use keychain::Error;
 
 #[derive(Clone, Debug)]
 pub struct BlindingFactor(secp::key::SecretKey);
@@ -27,6 +28,10 @@ impl BlindingFactor {
 
 	pub fn secret_key(&self) -> secp::key::SecretKey {
 		self.0
+	}
+
+	pub fn from_slice(secp: &Secp256k1, data: &[u8]) -> Result<BlindingFactor, Error> {
+		Ok(BlindingFactor(secp::key::SecretKey::from_slice(&secp, data)?))
 	}
 }
 

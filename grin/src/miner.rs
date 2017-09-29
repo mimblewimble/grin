@@ -42,6 +42,7 @@ use chain;
 use secp;
 use pool;
 use util;
+use keychain::Keychain;
 use wallet::{CbAmount, WalletReceiveRequest, CbData};
 
 use pow::plugin::PluginMiner;
@@ -548,10 +549,9 @@ impl Miner {
 
 	fn get_coinbase(&self) -> (core::Output, core::TxKernel) {
 		if self.config.burn_reward {
-			let mut rng = rand::OsRng::new().unwrap();
-			let secp_inst = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-			let skey = secp::key::SecretKey::new(&secp_inst, &mut rng);
-			core::Block::reward_output(skey, &secp_inst).unwrap()
+			let keychain = Keychain::from_random_seed().unwrap();
+			let pubkey = keychain.derive_pubkey(1).unwrap();
+			core::Block::reward_output(&keychain, pubkey).unwrap()
 		} else {
 			let url = format!(
 				"{}/v1/receive/coinbase",

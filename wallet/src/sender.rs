@@ -57,12 +57,13 @@ fn build_send_tx(
 	keychain: &Keychain,
 	amount: u64,
 ) -> Result<(Transaction, BlindingFactor), Error> {
+	let fingerprint = keychain.clone().fingerprint();
 
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
 		// select some suitable outputs to spend from our local wallet
-		let (coins, change) = wallet_data.select(&keychain.fingerprint(), amount);
+		let (coins, change) = wallet_data.select(fingerprint.clone(), amount);
 		if change < 0 {
 			return Err(Error::NotEnoughFunds((-change) as u64));
 		}
@@ -71,27 +72,28 @@ fn build_send_tx(
 
 		// build inputs using the appropriate derived pubkeys
 		let mut parts = vec![];
-		for ref coin in coins {
+		for coin in &coins {
 			let pubkey = keychain.derive_pubkey(coin.n_child)?;
 			parts.push(build::input(coin.value, pubkey));
 		}
 
 		// derive an additional pubkey for change and build the change output
-		let change_derivation = wallet_data.next_child(&keychain.fingerprint());
+		let change_derivation = wallet_data.next_child(fingerprint.clone());
 		let change_key = keychain.derive_pubkey(change_derivation)?;
 		parts.push(build::output(change as u64, change_key));
 
 		// we got that far, time to start tracking the new output, finalize tx
 		// and lock the outputs used
 		wallet_data.append_output(OutputData {
-			fingerprint: keychain.fingerprint(),
+			fingerprint: fingerprint.clone(),
 			n_child: change_derivation,
 			value: change as u64,
 			status: OutputStatus::Unconfirmed,
 			height: 0,
 			lock_height: 0,
 		});
-		for ref coin in coins {
+
+		for coin in &coins {
 			wallet_data.lock_output(coin);
 		}
 
@@ -104,19 +106,14 @@ fn build_send_tx(
 mod test {
 	use core::core::build::{input, output, transaction};
 	use types::{OutputData, OutputStatus};
-	use keychain;
-	use util;
-
-	fn from_hex(hex_str: &str) -> Vec<u8> {
-		util::from_hex(hex_str.to_string()).unwrap()
-	}
+	use keychain::Keychain;
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment
 	// based on the public key and amount begin spent
 	fn output_commitment_equals_input_commitment_on_spend() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pk1 = ext_key.derive(&secp, 1).unwrap();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
 
 		let (tx, _) = transaction(
 			vec![output(105, pk1.clone())],

@@ -26,9 +26,9 @@ extern crate blake2_rfc as blake2;
 extern crate grin_api as api;
 extern crate grin_grin as grin;
 extern crate grin_wallet as wallet;
+extern crate grin_keychain as keychain;
 extern crate grin_config as config;
 extern crate grin_core as core;
-extern crate secp256k1zkp as secp;
 
 use std::thread;
 use std::io::Read;
@@ -38,11 +38,10 @@ use std::time::Duration;
 use clap::{Arg, App, SubCommand, ArgMatches};
 use daemonize::Daemonize;
 
-use secp::Secp256k1;
-
 use config::GlobalConfig;
 use wallet::WalletConfig;
 use core::global;
+use keychain::Keychain;
 
 fn start_from_config_file(mut global_config: GlobalConfig) {
 	info!(
@@ -314,7 +313,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 
 	// TODO do something closer to BIP39, eazy solution right now
 	let seed = blake2::blake2b::blake2b(32, &[], hd_seed.as_bytes());
-	let keychain = keychain::Keychain::from_seed(seed).expect(
+	let keychain = Keychain::from_seed(seed.as_bytes()).expect(
 		"Failed to initialize keychain from the provided seed."
 	);
 
@@ -351,7 +350,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				apis.register_endpoint(
 					"/receive".to_string(),
 					wallet::WalletReceiver {
-						keychain: &keychain,
+						keychain: keychain,
 						config: wallet_config.clone(),
 					},
 				);

@@ -48,11 +48,9 @@ pub struct Keychain {
 
 impl Keychain {
 	pub fn fingerprint(self) -> Fingerprint {
-		self.extkey.fingerprint
+		self.extkey.fingerprint.clone()
 	}
-}
 
-impl Keychain {
 	pub fn from_seed(seed: &[u8]) -> Result<Keychain, Error> {
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let extkey = extkey::ExtendedKey::from_seed(&secp, seed)?;

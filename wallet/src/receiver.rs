@@ -74,7 +74,7 @@ pub fn receive_json_tx(
 	keychain: &Keychain,
 	partial_tx_str: &str,
 ) -> Result<(), Error> {
-	let (amount, blinding, partial_tx) = partial_tx_from_json(partial_tx_str)?;
+	let (amount, blinding, partial_tx) = partial_tx_from_json(keychain, partial_tx_str)?;
 	let final_tx = receive_transaction(config, keychain, amount, blinding, partial_tx)?;
 	let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
 
@@ -170,15 +170,16 @@ fn receive_coinbase(
 	keychain: &Keychain,
 	amount: u64,
 ) -> Result<(Output, TxKernel), Error> {
+	let fingerprint = keychain.clone().fingerprint();
 
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		let derivation = wallet_data.next_child(&keychain.fingerprint());
+		let derivation = wallet_data.next_child(fingerprint.clone());
 		let pubkey = keychain.derive_pubkey(derivation)?;
 
 		// track the new output and return the stuff needed for reward
 		wallet_data.append_output(OutputData {
-			fingerprint: keychain.fingerprint(),
+			fingerprint: fingerprint.clone(),
 			n_child: derivation,
 			value: amount,
 			status: OutputStatus::Unconfirmed,
@@ -186,7 +187,7 @@ fn receive_coinbase(
 			lock_height: 0,
 		});
 		debug!("Received coinbase and built output - {}, {}, {}",
-			keychain.fingerprint(), pubkey.fingerprint(), derivation);
+			fingerprint.clone(), pubkey.fingerprint(), derivation);
 
 		let result = Block::reward_output(&keychain, pubkey)?;
 		Ok(result)
@@ -201,10 +202,11 @@ fn receive_transaction(
 	blinding: BlindingFactor,
 	partial: Transaction,
 ) -> Result<Transaction, Error> {
+	let fingerprint = keychain.clone().fingerprint();
 
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		let derivation = wallet_data.next_child(&keychain.fingerprint());
+		let derivation = wallet_data.next_child(fingerprint.clone());
 		let pubkey = keychain.derive_pubkey(derivation)?;
 
 		// TODO - replace with real fee calculation
@@ -215,7 +217,7 @@ fn receive_transaction(
 		let (tx_final, _) = build::transaction(vec![
 			build::initial_tx(partial),
 			build::with_excess(blinding),
-			build::output(out_amount, pubkey),
+			build::output(out_amount, pubkey.clone()),
 			build::with_fee(fee_amount),
 		], keychain)?;
 
@@ -224,7 +226,7 @@ fn receive_transaction(
 
 		// track the new output and return the finalized transaction to broadcast
 		wallet_data.append_output(OutputData {
-			fingerprint: keychain.fingerprint(),
+			fingerprint: fingerprint.clone(),
 			n_child: derivation,
 			value: out_amount,
 			status: OutputStatus::Unconfirmed,
@@ -232,7 +234,7 @@ fn receive_transaction(
 			lock_height: 0,
 		});
 		debug!("Received txn and built output  - {}, {}, {}",
-			keychain.fingerprint(), pubkey.fingerprint(), derivation);
+			fingerprint.clone(), pubkey.fingerprint(), derivation);
 
 		Ok(tx_final)
 	})?

@@ -272,7 +272,7 @@ impl WalletData {
 	/// the provided amount.
 	pub fn select(
 		&self,
-		fingerprint: &keychain::Fingerprint,
+		fingerprint: keychain::Fingerprint,
 		amount: u64
 	) -> (Vec<OutputData>, i64) {
 		let mut to_spend = vec![];
@@ -281,7 +281,7 @@ impl WalletData {
 		// TODO very naive impl for now - definitely better coin selection
 		// algos available
 		for out in &self.outputs {
-			if out.status == OutputStatus::Unspent && out.fingerprint == *fingerprint {
+			if out.status == OutputStatus::Unspent && out.fingerprint == fingerprint {
 				to_spend.push(out.clone());
 				input_total += out.value;
 				if input_total >= amount {
@@ -294,10 +294,10 @@ impl WalletData {
 	}
 
 	/// Next child index when we want to create a new output.
-	pub fn next_child(&self, fingerprint: &keychain::Fingerprint) -> u32 {
+	pub fn next_child(&self, fingerprint: keychain::Fingerprint) -> u32 {
 		let mut max_n = 0;
 		for out in &self.outputs {
-			if max_n < out.n_child && out.fingerprint == *fingerprint {
+			if max_n < out.n_child && out.fingerprint == fingerprint {
 				max_n = out.n_child;
 			}
 		}
@@ -323,8 +323,7 @@ pub fn partial_tx_to_json(
 ) -> String {
 	let partial_tx = JSONPartialTx {
 		amount: receive_amount,
-		// TODO - blind_sum wraps a secret_key, can we call .as_ref() here?
-		blind_sum: util::to_hex(blind_sum.as_ref().to_vec()),
+		blind_sum: util::to_hex(blind_sum.secret_key().as_ref().to_vec()),
 		tx: util::to_hex(ser::ser_vec(&tx).unwrap()),
 	};
 	serde_json::to_string_pretty(&partial_tx).unwrap()
@@ -333,6 +332,7 @@ pub fn partial_tx_to_json(
 /// Reads a partial transaction encoded as JSON into the amount, sum of blinding
 /// factors and the transaction itself.
 pub fn partial_tx_from_json(
+	keychain: &keychain::Keychain,
 	json_str: &str,
 ) -> Result<(u64, keychain::BlindingFactor, Transaction), Error> {
 	let partial_tx: JSONPartialTx = serde_json::from_str(json_str)?;
@@ -341,7 +341,7 @@ pub fn partial_tx_from_json(
 
 	// TODO - turn some data into a blinding factor here somehow
 	// let blinding = SecretKey::from_slice(&secp, &blind_bin[..])?;
-	let blinding = keychain::BlindingFactor::from_slice(&blind_bin[..])?;
+	let blinding = keychain::BlindingFactor::from_slice(keychain.secp(), &blind_bin[..])?;
 
 	let tx_bin = util::from_hex(partial_tx.tx)?;
 	let tx = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {

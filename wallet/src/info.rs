@@ -21,7 +21,8 @@ pub fn show_info(
 	config: &WalletConfig,
 	keychain: &Keychain,
 ) {
-	let _ = checker::refresh_outputs(&config, keychain);
+	let fingerprint = keychain.clone().fingerprint();
+	let _ = checker::refresh_outputs(&config, &keychain);
 
 	// operate within a lock on wallet data
 	let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
@@ -31,7 +32,7 @@ pub fn show_info(
 		println!("----------------------------------");
 		for out in &mut wallet_data.outputs
 			.iter()
-			.filter(|out| out.fingerprint == keychain.fingerprint())
+			.filter(|out| out.fingerprint == fingerprint)
 		{
 			let pubkey = keychain.derive_pubkey(out.n_child).unwrap();
 
