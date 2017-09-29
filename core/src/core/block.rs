@@ -472,8 +472,6 @@ impl Block {
 		let commit = keychain.commit(REWARD, &pubkey)?;
 		//let switch_commit = keychain.switch_commit(pubkey)?;
 
-		// let nonce = secp.nonce();
-		// let rproof = secp.range_proof(0, REWARD, skey, commit, nonce);
 		let rproof = keychain.range_proof(REWARD, &pubkey, commit)?;
 
 		let output = Output {
@@ -504,13 +502,7 @@ mod test {
 	use core::test::tx2i1o;
 	use util;
 
-	use secp::{self, Secp256k1};
-	use secp::key::SecretKey;
-	use rand::os::OsRng;
-
-	fn new_secp() -> Secp256k1 {
-		secp::Secp256k1::with_caps(secp::ContextFlag::Commit)
-	}
+	use secp;
 
 	// utility to create a block without worrying about the key or previous
 	// header
@@ -521,9 +513,14 @@ mod test {
 
 	// utility producing a transaction that spends an output with the provided
 	// value and blinding key
-	fn txspend1i1o(v: u64, keychain: &Keychain, pubkey: Identifier) -> Transaction {
+	fn txspend1i1o(
+		v: u64,
+		keychain: &Keychain,
+		pk1: Identifier,
+		pk2: Identifier
+	) -> Transaction {
 		build::transaction(
-			vec![input(v, pubkey), output(3, pubkey), with_fee(1)],
+			vec![input(v, pk1), output(3, pk2), with_fee(1)],
 			&keychain,
 		).map(|(tx, _)| tx).unwrap()
 	}
@@ -531,25 +528,25 @@ mod test {
 	#[test]
 	// builds a block with a tx spending another and check if merging occurred
 	fn compactable_block() {
-		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pubkey = keychain.derive_pubkey(1).unwrap();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let pk2 = keychain.derive_pubkey(2).unwrap();
+		let pk3 = keychain.derive_pubkey(3).unwrap();
 
 		let mut btx1 = tx2i1o();
 		let (mut btx2, _) = build::transaction(
-			vec![input(5, pubkey), output(4, pubkey), with_fee(1)],
+			vec![input(5, pk1), output(4, pk2.clone()), with_fee(1)],
 			&keychain,
 		).unwrap();
 
-		// spending tx2
-		let keychain_2 = Keychain::from_random_seed().unwrap();
-		let pubkey_2 = keychain_2.derive_pubkey(1).unwrap();
-		let mut btx3 = txspend1i1o(4, &keychain_2, pubkey_2);
-		let b = new_block(vec![&mut btx1, &mut btx2, &mut btx3], &keychain_2);
+		// spending tx2 - reuse pk2
+
+		let mut btx3 = txspend1i1o(4, &keychain, pk2.clone(), pk3);
+		let b = new_block(vec![&mut btx1, &mut btx2, &mut btx3], &keychain);
 
 		// block should have been automatically compacted (including reward
 		// output) and should still be valid
-		b.validate(&secp).unwrap();
+		b.validate(&keychain.secp()).unwrap();
 		assert_eq!(b.inputs.len(), 3);
 		assert_eq!(b.outputs.len(), 3);
 	}
@@ -558,28 +555,26 @@ mod test {
 	// builds 2 different blocks with a tx spending another and check if merging
 	// occurs
 	fn mergeable_blocks() {
-		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pubkey = keychain.derive_pubkey(1).unwrap();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let pk2 = keychain.derive_pubkey(2).unwrap();
+		let pk3 = keychain.derive_pubkey(3).unwrap();
 
 		let mut btx1 = tx2i1o();
 
 		let (mut btx2, _) = build::transaction(
-			vec![input(5, pubkey), output(4, pubkey), with_fee(1)],
+			vec![input(5, pk1), output(4, pk2.clone()), with_fee(1)],
 			&keychain,
 		).unwrap();
 
-		// spending tx2
-		let keychain_2 = Keychain::from_random_seed().unwrap();
-		let pubkey_2 = keychain_2.derive_pubkey(1).unwrap();
+		// spending tx2 - reuse pk2
+		let mut btx3 = txspend1i1o(4, &keychain, pk2.clone(), pk3);
 
-		let mut btx3 = txspend1i1o(4, &keychain_2, pubkey_2);
+		let b1 = new_block(vec![&mut btx1, &mut btx2], &keychain);
+		b1.validate(&keychain.secp()).unwrap();
 
-		let b1 = new_block(vec![&mut btx1, &mut btx2], &keychain_2);
-		b1.validate(&secp).unwrap();
-
-		let b2 = new_block(vec![&mut btx3], &keychain_2);
-		b2.validate(&secp).unwrap();
+		let b2 = new_block(vec![&mut btx3], &keychain);
+		b2.validate(&keychain.secp()).unwrap();
 
 		// block should have been automatically compacted and should still be valid
 		let b3 = b1.merge(b2);
@@ -587,9 +582,14 @@ mod test {
 		assert_eq!(b3.outputs.len(), 4);
 	}
 
+<<<<<<< HEAD
 	#[test]
 	fn empty_block_with_coinbase_is_valid() {
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
+=======
+    #[test]
+    fn empty_block_with_coinbase_is_valid() {
+>>>>>>> all core tests passing
 		let keychain = Keychain::from_random_seed().unwrap();
 		let b = new_block(vec![], &keychain);
 
@@ -611,10 +611,16 @@ mod test {
 			.collect::<Vec<_>>();
 		assert_eq!(coinbase_kernels.len(), 1);
 
+<<<<<<< HEAD
 		// the block should be valid here (single coinbase output with corresponding
 		// txn kernel)
 		assert_eq!(b.validate(&secp), Ok(()));
 	}
+=======
+        // the block should be valid here (single coinbase output with corresponding txn kernel)
+        assert_eq!(b.validate(&keychain.secp()), Ok(()));
+    }
+>>>>>>> all core tests passing
 
 	#[test]
 	// test that flipping the COINBASE_OUTPUT flag on the output features

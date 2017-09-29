@@ -87,9 +87,7 @@ fn test_coinbase_maturity() {
 	).unwrap();
 
 	assert_eq!(block.outputs.len(), 1);
-	assert!(block.outputs[0].features.contains(
-		transaction::COINBASE_OUTPUT,
-	));
+	assert!(block.outputs[0].features.contains(transaction::COINBASE_OUTPUT));
 
 	chain.process_block(block, chain::EASY_POW).unwrap();
 
@@ -98,9 +96,9 @@ fn test_coinbase_maturity() {
 	let amount = consensus::REWARD;
 	let (coinbase_txn, _) = build::transaction(vec![
 		build::input(amount, reward_key),
-		build::output_rand(amount - 1),
-		build::with_fee(1),
-	]).unwrap();
+		build::output_rand(amount-1),
+		build::with_fee(1)]
+	).unwrap();
 
 	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
 	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], reward_key).unwrap();

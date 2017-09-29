@@ -187,35 +187,18 @@ impl Writeable for Proof {
 mod test {
 	use super::*;
 	use core::hash::ZERO_HASH;
-	use secp;
-	use secp::Secp256k1;
-	use secp::key::SecretKey;
+	use core::build::{input, output, with_fee, initial_tx, with_excess};
 	use ser;
-	use rand::os::OsRng;
-	use core::build::{
-		self, input, output, with_fee, initial_tx, with_excess
-	};
 	use util;
-
-	fn new_secp() -> Secp256k1 {
-		secp::Secp256k1::with_caps(secp::ContextFlag::Commit)
-	}
 
 	#[test]
 	#[should_panic(expected = "InvalidSecretKey")]
 	fn zero_commit() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pubkey = keychain.derive_pubkey(1).unwrap();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
 
-		// a transaction whose commitment sums to zero shouldn't validate
-		// let ref secp = new_secp();
-		// let mut rng = OsRng::new().unwrap();
-
-		// blinding should fail as signing with a zero r*G shouldn't work
-		// let skey = SecretKey::new(secp, &mut rng);
-
-		build::transaction(vec!
-			[input(10, pubkey.clone()), output(1, pubkey.clone()), with_fee(9)],
+		build::transaction(
+			vec![input(10, pk1.clone()), output(9, pk1.clone()), with_fee(1)],
 			&keychain,
 		).unwrap();
 	}
@@ -278,14 +261,14 @@ mod test {
 
 	#[test]
 	fn blind_tx() {
-		let ref secp = new_secp();
+		let keychain = Keychain::from_random_seed().unwrap();
 
 		let btx = tx2i1o();
-		btx.verify_sig(&secp).unwrap(); // unwrap will panic if invalid
+		btx.verify_sig(&keychain.secp()).unwrap(); // unwrap will panic if invalid
 
 		// checks that the range proof on our blind output is sufficiently hiding
 		let Output { proof, .. } = btx.outputs[0];
-		let info = secp.range_proof_info(proof);
+		let info = &keychain.secp().range_proof_info(proof);
 		assert!(info.min == 0);
 		assert!(info.max == u64::max_value());
 	}
@@ -346,8 +329,7 @@ mod test {
 		let pubkey = keychain.derive_pubkey(1).unwrap();
 
 		let b = Block::new(&BlockHeader::default(), vec![], &keychain, pubkey).unwrap();
-		let secp = new_secp();
-		b.compact().validate(&secp).unwrap();
+		b.compact().validate(&keychain.secp()).unwrap();
 	}
 
 	fn new_keychain() -> keychain::Keychain {
@@ -373,17 +355,11 @@ mod test {
 
 		let mut tx1 = tx2i1o();
 		tx1.verify_sig(keychain.secp()).unwrap();
-		println!("verified the sig for tx2i1o");
 
 		let mut tx2 = tx1i1o();
-		// TODO - why is this failing for 1i1o but succeeding for 2i1o???
-		// TODO - I suspect we need to increment the derivation number on the keychain for each input/output somehow...
-		// let mut tx2 = tx2i1o();
 		tx2.verify_sig(keychain.secp()).unwrap();
-		println!("verified the sig for tx1i1o");
 
 		let b = Block::new(&BlockHeader::default(), vec![&mut tx1, &mut tx2], &keychain, pubkey).unwrap();
-		println!("***** got here ok!!!");
 		b.validate(keychain.secp()).unwrap();
 	}
 
@@ -404,9 +380,12 @@ mod test {
 	// utility producing a transaction with 2 inputs and a single outputs
 	pub fn tx2i1o() -> Transaction {
 		let keychain = new_keychain();
-		let pubkey = keychain.derive_pubkey(1).unwrap();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let pk2 = keychain.derive_pubkey(2).unwrap();
+		let pk3 = keychain.derive_pubkey(3).unwrap();
+
 		build::transaction(
-			vec![input(10, pubkey), input(11, pubkey), output(20, pubkey), with_fee(1)],
+			vec![input(10, pk1), input(11, pk2), output(20, pk3), with_fee(1)],
 			&keychain,
 		).map(|(tx, _)| tx).unwrap()
 	}
@@ -414,9 +393,11 @@ mod test {
 	// utility producing a transaction with a single input and output
 	pub fn tx1i1o() -> Transaction {
 		let keychain = new_keychain();
-		let pubkey = keychain.derive_pubkey(1).unwrap();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let pk2 = keychain.derive_pubkey(2).unwrap();
+
 		build::transaction(
-			vec![input(5, pubkey), output(4, pubkey), with_fee(1)],
+			vec![input(5, pk1), output(4, pk2), with_fee(1)],
 			&keychain,
 		).map(|(tx, _)| tx).unwrap()
 	}

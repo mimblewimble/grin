@@ -26,9 +26,7 @@
 //!   with_fee(1)])
 
 use byteorder::{ByteOrder, BigEndian};
-use secp::{self, Secp256k1};
-use secp::key::SecretKey;
-use rand::os::OsRng;
+use secp;
 
 use core::{Transaction, Input, Output, DEFAULT_OUTPUT};
 use keychain;
@@ -52,26 +50,12 @@ pub fn input(value: u64, pubkey: Identifier) -> Box<Append> {
 	})
 }
 
-// /// Adds an input with the provided value and a randomly generated blinding
-// /// key to the transaction being built. This has no real use in practical
-// /// applications but is very convenient for tests.
-// pub fn input_rand(value: u64) -> Box<Append> {
-// 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
-// 		// TODO - do we randomize the derivation count here?
-// 		let pubkey = build.keychain.derive_pubkey(1).unwrap();
-// 		println!("got a pubkey - {:?}", pubkey);
-// 		let commit = build.keychain.commit(value, &pubkey).unwrap();
-// 		println!("got a commit - {}", value);
-// 		(tx.with_input(Input(commit)), sum.sub_pubkey(pubkey.clone()))
-// 	})
-// }
-
 /// Adds an output with the provided value and blinding key to the transaction
 /// being built.
 pub fn output(value: u64, pubkey: Identifier) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
 		let commit = build.keychain.commit(value, &pubkey).unwrap();
-		let rproof = build.keychain.range_proof(0, &pubkey, commit).unwrap();
+		let rproof = build.keychain.range_proof(value, &pubkey, commit).unwrap();
 
 		(tx.with_output(Output {
 			features: DEFAULT_OUTPUT,
@@ -80,23 +64,6 @@ pub fn output(value: u64, pubkey: Identifier) -> Box<Append> {
 		}), sum.add_pubkey(pubkey.clone()))
 	})
 }
-
-// /// Adds an output with the provided value and a randomly generated blinding
-// /// key to the transaction being built. This has no real use in practical
-// /// applications but is very convenient for tests.
-// pub fn output_rand(value: u64) -> Box<Append> {
-// 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
-// 		let pubkey = build.keychain.derive_pubkey(2).unwrap();
-// 		let commit = build.keychain.commit(value, &pubkey).unwrap();
-// 		let rproof = build.keychain.range_proof(value, &pubkey, commit).unwrap();
-//
-// 		(tx.with_output(Output {
-// 			features: DEFAULT_OUTPUT,
-// 			commit: commit,
-// 			proof: rproof,
-// 		}), sum.add_pubkey(pubkey.clone()))
-// 	})
-// }
 
 /// Sets the fee on the transaction being built.
 pub fn with_fee(fee: u64) -> Box<Append> {
@@ -135,22 +102,14 @@ pub fn transaction(
 	elems: Vec<Box<Append>>,
 	keychain: &keychain::Keychain,
 ) -> Result<(Transaction, BlindingFactor), keychain::Error> {
-
 	let mut ctx = Context { keychain };
-
 	let (mut tx, sum) = elems.iter().fold(
 		(Transaction::empty(), BlindSum::new()), |acc, elem| elem(&mut ctx, acc)
 	);
-	println!("about to get blind_sum");
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
-	println!("got blind_sum");
 	let msg = secp::Message::from_slice(&u64_to_32bytes(tx.fee))?;
-	println!("got msg");
 	let sig = ctx.keychain.sign_with_blinding(&msg, &blind_sum)?;
-	println!("got sig");
-
 	tx.excess_sig = sig.serialize_der(&ctx.keychain.secp());
-
 	Ok((tx, blind_sum))
 }
 
@@ -160,12 +119,10 @@ fn u64_to_32bytes(n: u64) -> [u8; 32] {
 	bytes
 }
 
-
 // Just a simple test, most exhaustive tests in the core mod.rs.
 #[cfg(test)]
 mod test {
 	use super::*;
-	use secp;
 
 	#[test]
 	fn blind_simple_tx() {
@@ -179,20 +136,20 @@ mod test {
 			&keychain,
 		).unwrap();
 
-		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-		tx.verify_sig(&secp).unwrap();
+		tx.verify_sig(&keychain.secp()).unwrap();
 	}
 
 	#[test]
 	fn blind_simpler_tx() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pubkey = keychain.derive_pubkey(1).unwrap();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let pk2 = keychain.derive_pubkey(2).unwrap();
+
 		let (tx, _) = transaction(
-			vec![input(6, pubkey), output(2, pubkey), with_fee(4)],
+			vec![input(6, pk1), output(2, pk2), with_fee(4)],
 			&keychain,
 		).unwrap();
 
-		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-		tx.verify_sig(&secp).unwrap();
+		tx.verify_sig(&keychain.secp()).unwrap();
 	}
 }
