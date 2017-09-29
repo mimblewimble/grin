@@ -54,7 +54,7 @@ port = 13414
 
 #flag whether mining is enabled
 
-enable_mining = false
+enable_mining = true
 
 #Whether to use cuckoo-miner,  and related parameters
 
@@ -111,13 +111,13 @@ burn_reward = true
 #instead
 #[[mining.cuckoo_miner_plugin_config]]
 #type_filter = "mean_cpu"
-#parameter_list = {NUM_THREADS=4, NUM_TRIMS=64}
+#parameter_list = {NUM_THREADS=4, NUM_TRIMS=68}
 
 #Same as above, but for older processors. Will be slightly
 #slower.
 [[mining.cuckoo_miner_plugin_config]]
 type_filter = "mean_compat_cpu"
-parameter_list = {NUM_THREADS=4, NUM_TRIMS=64}
+parameter_list = {NUM_THREADS=4, NUM_TRIMS=68}
 
 #note lean_cpu currently has a bug which prevents it from
 #working with threads > 1
