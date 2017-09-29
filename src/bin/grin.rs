@@ -314,7 +314,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 	// TODO do something closer to BIP39, eazy solution right now
 	let seed = blake2::blake2b::blake2b(32, &[], hd_seed.as_bytes());
 	let keychain = Keychain::from_seed(seed.as_bytes()).expect(
-		"Failed to initialize keychain from the provided seed."
+		"Failed to initialize keychain from the provided seed.",
 	);
 
 	let mut wallet_config = WalletConfig::default();
@@ -370,10 +370,10 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				dest = d;
 			}
 			wallet::issue_send_tx(&wallet_config, &keychain, amount, dest.to_string()).unwrap();
-		},
+		}
 		("info", Some(_)) => {
 			wallet::show_info(&wallet_config, &keychain);
-		},
+		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}
 }

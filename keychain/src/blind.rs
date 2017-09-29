@@ -31,7 +31,9 @@ impl BlindingFactor {
 	}
 
 	pub fn from_slice(secp: &Secp256k1, data: &[u8]) -> Result<BlindingFactor, Error> {
-		Ok(BlindingFactor(secp::key::SecretKey::from_slice(&secp, data)?))
+		Ok(BlindingFactor(
+			secp::key::SecretKey::from_slice(&secp, data)?,
+		))
 	}
 }
 
