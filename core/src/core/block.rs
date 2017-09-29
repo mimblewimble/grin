@@ -582,14 +582,8 @@ mod test {
 		assert_eq!(b3.outputs.len(), 4);
 	}
 
-<<<<<<< HEAD
 	#[test]
 	fn empty_block_with_coinbase_is_valid() {
-		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-=======
-    #[test]
-    fn empty_block_with_coinbase_is_valid() {
->>>>>>> all core tests passing
 		let keychain = Keychain::from_random_seed().unwrap();
 		let b = new_block(vec![], &keychain);
 
@@ -611,16 +605,9 @@ mod test {
 			.collect::<Vec<_>>();
 		assert_eq!(coinbase_kernels.len(), 1);
 
-<<<<<<< HEAD
-		// the block should be valid here (single coinbase output with corresponding
-		// txn kernel)
-		assert_eq!(b.validate(&secp), Ok(()));
+		// the block should be valid here (single coinbase output with corresponding txn kernel)
+		assert_eq!(b.validate(&keychain.secp()), Ok(()));
 	}
-=======
-        // the block should be valid here (single coinbase output with corresponding txn kernel)
-        assert_eq!(b.validate(&keychain.secp()), Ok(()));
-    }
->>>>>>> all core tests passing
 
 	#[test]
 	// test that flipping the COINBASE_OUTPUT flag on the output features
