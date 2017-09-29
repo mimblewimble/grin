@@ -470,7 +470,7 @@ impl Block {
 		let msg = secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE])?;
 		let sig = keychain.sign(&msg, &pubkey)?;
 		let commit = keychain.commit(REWARD, &pubkey)?;
-		//let switch_commit = keychain.switch_commit(pubkey)?;
+		// let switch_commit = keychain.switch_commit(pubkey)?;
 
 		let rproof = keychain.range_proof(REWARD, &pubkey, commit)?;
 
@@ -513,16 +513,10 @@ mod test {
 
 	// utility producing a transaction that spends an output with the provided
 	// value and blinding key
-	fn txspend1i1o(
-		v: u64,
-		keychain: &Keychain,
-		pk1: Identifier,
-		pk2: Identifier
-	) -> Transaction {
-		build::transaction(
-			vec![input(v, pk1), output(3, pk2), with_fee(1)],
-			&keychain,
-		).map(|(tx, _)| tx).unwrap()
+	fn txspend1i1o(v: u64, keychain: &Keychain, pk1: Identifier, pk2: Identifier) -> Transaction {
+		build::transaction(vec![input(v, pk1), output(3, pk2), with_fee(1)], &keychain)
+			.map(|(tx, _)| tx)
+			.unwrap()
 	}
 
 	#[test]
@@ -605,7 +599,8 @@ mod test {
 			.collect::<Vec<_>>();
 		assert_eq!(coinbase_kernels.len(), 1);
 
-		// the block should be valid here (single coinbase output with corresponding txn kernel)
+		// the block should be valid here (single coinbase output with corresponding
+		// txn kernel)
 		assert_eq!(b.validate(&keychain.secp()), Ok(()));
 	}
 
@@ -620,10 +615,16 @@ mod test {
 		assert!(b.outputs[0].features.contains(COINBASE_OUTPUT));
 		b.outputs[0].features.remove(COINBASE_OUTPUT);
 
-		assert_eq!(b.verify_coinbase(&keychain.secp()), Err(secp::Error::IncorrectCommitSum));
+		assert_eq!(
+			b.verify_coinbase(&keychain.secp()),
+			Err(secp::Error::IncorrectCommitSum)
+		);
 		assert_eq!(b.verify_kernels(&keychain.secp()), Ok(()));
 
-		assert_eq!(b.validate(&keychain.secp()), Err(secp::Error::IncorrectCommitSum));
+		assert_eq!(
+			b.validate(&keychain.secp()),
+			Err(secp::Error::IncorrectCommitSum)
+		);
 	}
 
 	#[test]
@@ -636,10 +637,16 @@ mod test {
 		assert!(b.kernels[0].features.contains(COINBASE_KERNEL));
 		b.kernels[0].features.remove(COINBASE_KERNEL);
 
-		assert_eq!(b.verify_coinbase(&keychain.secp()), Err(secp::Error::IncorrectCommitSum));
+		assert_eq!(
+			b.verify_coinbase(&keychain.secp()),
+			Err(secp::Error::IncorrectCommitSum)
+		);
 		assert_eq!(b.verify_kernels(&keychain.secp()), Ok(()));
 
-		assert_eq!(b.validate(&keychain.secp()), Err(secp::Error::IncorrectCommitSum));
+		assert_eq!(
+			b.validate(&keychain.secp()),
+			Err(secp::Error::IncorrectCommitSum)
+		);
 	}
 
 	#[test]
