@@ -193,10 +193,11 @@ mod test {
 
 	#[test]
 	#[should_panic(expected = "InvalidSecretKey")]
-	fn zero_commit() {
+	fn test_zero_commit_fails() {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let pk1 = keychain.derive_pubkey(1).unwrap();
 
+		// blinding should fail as signing with a zero r*G shouldn't work
 		build::transaction(
 			vec![input(10, pk1.clone()), output(9, pk1.clone()), with_fee(1)],
 			&keychain,
