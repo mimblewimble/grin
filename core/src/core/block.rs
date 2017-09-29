@@ -451,9 +451,10 @@ impl Block {
 
 	/// Builds the blinded output and related signature proof for the block
 	/// reward.
-	pub fn reward_output(skey: secp::key::SecretKey,
-	                     secp: &Secp256k1)
-	                     -> Result<(Output, TxKernel), secp::Error> {
+	pub fn reward_output(
+		skey: secp::key::SecretKey,
+		secp: &Secp256k1
+	) -> Result<(Output, TxKernel), secp::Error> {
 		let msg = try!(secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE]));
 		let sig = try!(secp.sign(&msg, &skey));
 		let commit = secp.commit(REWARD, skey).unwrap();

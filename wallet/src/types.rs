@@ -107,6 +107,8 @@ impl Default for WalletConfig {
 /// broadcasted or mined).
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum OutputStatus {
+	/// Reserved by miner for potential coinbase output.
+	CoinbaseReserved,
 	Unconfirmed,
 	Unspent,
 	Immature,
