@@ -33,23 +33,27 @@ use core::global::MiningParameterMode;
 
 use pow::{types, cuckoo, MiningWorker};
 
-fn clean_output_dir(dir_name:&str){
-    let _ = fs::remove_dir_all(dir_name);
+fn clean_output_dir(dir_name: &str) {
+	let _ = fs::remove_dir_all(dir_name);
 }
 
 #[test]
 fn test_coinbase_maturity() {
-    let _ = env_logger::init();
+	let _ = env_logger::init();
 	clean_output_dir(".grin");
-    global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let mut rng = OsRng::new().unwrap();
 	let mut genesis_block = None;
-	if !chain::Chain::chain_exists(".grin".to_string()){
-		genesis_block=pow::mine_genesis_block(None);
+	if !chain::Chain::chain_exists(".grin".to_string()) {
+		genesis_block = pow::mine_genesis_block(None);
 	}
-	let chain = chain::Chain::init(".grin".to_string(), Arc::new(NoopAdapter {}),
-									genesis_block, pow::verify_size).unwrap();
+	let chain = chain::Chain::init(
+		".grin".to_string(),
+		Arc::new(NoopAdapter {}),
+		genesis_block,
+		pow::verify_size,
+	).unwrap();
 
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 
@@ -60,10 +64,14 @@ fn test_coinbase_maturity() {
 	};
 	miner_config.cuckoo_miner_plugin_dir = Some(String::from("../target/debug/deps"));
 
-	let mut cuckoo_miner = cuckoo::Miner::new(consensus::EASINESS, global::sizeshift() as u32, global::proofsize());
+	let mut cuckoo_miner = cuckoo::Miner::new(
+		consensus::EASINESS,
+		global::sizeshift() as u32,
+		global::proofsize(),
+	);
 
 	let prev = chain.head_header().unwrap();
-    let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
+	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
 	let mut block = core::core::Block::new(&prev, vec![], reward_key).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
@@ -78,21 +86,23 @@ fn test_coinbase_maturity() {
 		global::sizeshift() as u32,
 	).unwrap();
 
-    assert_eq!(block.outputs.len(), 1);
-    assert!(block.outputs[0].features.contains(transaction::COINBASE_OUTPUT));
+	assert_eq!(block.outputs.len(), 1);
+	assert!(block.outputs[0].features.contains(
+		transaction::COINBASE_OUTPUT,
+	));
 
 	chain.process_block(block, chain::EASY_POW).unwrap();
 
-    let prev = chain.head_header().unwrap();
+	let prev = chain.head_header().unwrap();
 
-    let amount = consensus::REWARD;
-    let (coinbase_txn, _) = build::transaction(vec![
-        build::input(amount, reward_key),
-        build::output_rand(amount-1),
-        build::with_fee(1)]
-    ).unwrap();
+	let amount = consensus::REWARD;
+	let (coinbase_txn, _) = build::transaction(vec![
+		build::input(amount, reward_key),
+		build::output_rand(amount - 1),
+		build::with_fee(1),
+	]).unwrap();
 
-    let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
+	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
 	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], reward_key).unwrap();
 
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
@@ -109,56 +119,56 @@ fn test_coinbase_maturity() {
 	).unwrap();
 
 	let result = chain.process_block(block, chain::EASY_POW);
-    match result {
-        Err(Error::ImmatureCoinbase) => (),
-        _ => panic!("expected ImmatureCoinbase error here"),
-    };
+	match result {
+		Err(Error::ImmatureCoinbase) => (),
+		_ => panic!("expected ImmatureCoinbase error here"),
+	};
 
-    // mine 10 blocks so we increase the height sufficiently
-    // coinbase will mature and be spendable in the block after these
-    for _ in 0..10 {
-        let prev = chain.head_header().unwrap();
+	// mine 10 blocks so we increase the height sufficiently
+	// coinbase will mature and be spendable in the block after these
+	for _ in 0..10 {
+		let prev = chain.head_header().unwrap();
 
-        let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
-        let mut block = core::core::Block::new(&prev, vec![], reward_key).unwrap();
-        block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+		let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
+		let mut block = core::core::Block::new(&prev, vec![], reward_key).unwrap();
+		block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
-        let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
-        block.header.difficulty = difficulty.clone();
-				chain.set_sumtree_roots(&mut block).unwrap();
-
-        pow::pow_size(
-            &mut cuckoo_miner,
-            &mut block.header,
-            difficulty,
-            global::sizeshift() as u32,
-        ).unwrap();
-
-        chain.process_block(block, chain::EASY_POW).unwrap();
-    };
-
-    let prev = chain.head_header().unwrap();
-
-    let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
-    let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], reward_key).unwrap();
-
-    block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
-
-    let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
-    block.header.difficulty = difficulty.clone();
+		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+		block.header.difficulty = difficulty.clone();
 		chain.set_sumtree_roots(&mut block).unwrap();
 
-    pow::pow_size(
-        &mut cuckoo_miner,
-        &mut block.header,
-        difficulty,
-        global::sizeshift() as u32,
-    ).unwrap();
+		pow::pow_size(
+			&mut cuckoo_miner,
+			&mut block.header,
+			difficulty,
+			global::sizeshift() as u32,
+		).unwrap();
 
-    let result = chain.process_block(block, chain::EASY_POW);
-    match result {
-        Ok(_) => (),
-        Err(Error::ImmatureCoinbase) => panic!("we should not get an ImmatureCoinbase here"),
-        Err(_) => panic!("we did not expect an error here"),
-    };
+		chain.process_block(block, chain::EASY_POW).unwrap();
+	}
+
+	let prev = chain.head_header().unwrap();
+
+	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
+	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], reward_key).unwrap();
+
+	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+
+	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+	block.header.difficulty = difficulty.clone();
+	chain.set_sumtree_roots(&mut block).unwrap();
+
+	pow::pow_size(
+		&mut cuckoo_miner,
+		&mut block.header,
+		difficulty,
+		global::sizeshift() as u32,
+	).unwrap();
+
+	let result = chain.process_block(block, chain::EASY_POW);
+	match result {
+		Ok(_) => (),
+		Err(Error::ImmatureCoinbase) => panic!("we should not get an ImmatureCoinbase here"),
+		Err(_) => panic!("we did not expect an error here"),
+	};
 }

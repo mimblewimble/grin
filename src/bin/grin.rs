@@ -374,10 +374,10 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				dest = d;
 			}
 			wallet::issue_send_tx(&wallet_config, &key, amount, dest.to_string()).unwrap();
-		},
+		}
 		("info", Some(_)) => {
 			wallet::show_info(&wallet_config, &key);
-		},
+		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}
 }

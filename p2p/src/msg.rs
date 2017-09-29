@@ -70,7 +70,8 @@ enum_from_primitive! {
 /// the  header first, handles its validation and then reads the Readable body,
 /// allocating buffers of the right size.
 pub fn read_msg<T>(conn: TcpStream) -> Box<Future<Item = (TcpStream, T), Error = Error>>
-	where T: Readable + 'static
+where
+	T: Readable + 'static,
 {
 	let read_header = read_exact(conn, vec![0u8; HEADER_LEN as usize])
 		.from_err()
@@ -84,7 +85,8 @@ pub fn read_msg<T>(conn: TcpStream) -> Box<Future<Item = (TcpStream, T), Error =
 			Ok((reader, header))
 		});
 
-	let read_msg = read_header.and_then(|(reader, header)| {
+	let read_msg = read_header
+		.and_then(|(reader, header)| {
 			read_exact(reader, vec![0u8; header.msg_len as usize]).from_err()
 		})
 		.and_then(|(reader, buf)| {
@@ -97,11 +99,13 @@ pub fn read_msg<T>(conn: TcpStream) -> Box<Future<Item = (TcpStream, T), Error =
 /// Future combinator to write a full message from a Writeable payload.
 /// Serializes the payload first and then sends the message header and that
 /// payload.
-pub fn write_msg<T>(conn: TcpStream,
-                    msg: T,
-                    msg_type: Type)
-                    -> Box<Future<Item = TcpStream, Error = Error>>
-	where T: Writeable + 'static
+pub fn write_msg<T>(
+	conn: TcpStream,
+	msg: T,
+	msg_type: Type,
+) -> Box<Future<Item = TcpStream, Error = Error>>
+where
+	T: Writeable + 'static,
 {
 	let write_msg = ok((conn)).and_then(move |conn| {
 		// prepare the body first so we know its serialized length
@@ -149,11 +153,13 @@ impl MsgHeader {
 
 impl Writeable for MsgHeader {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(writer,
-		                [write_u8, self.magic[0]],
-		                [write_u8, self.magic[1]],
-		                [write_u8, self.msg_type as u8],
-		                [write_u64, self.msg_len]);
+		ser_multiwrite!(
+			writer,
+			[write_u8, self.magic[0]],
+			[write_u8, self.magic[1]],
+			[write_u8, self.msg_type as u8],
+			[write_u64, self.msg_len]
+		);
 		Ok(())
 	}
 }
@@ -199,10 +205,12 @@ pub struct Hand {
 
 impl Writeable for Hand {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(writer,
-		                [write_u32, self.version],
-		                [write_u32, self.capabilities.bits()],
-		                [write_u64, self.nonce]);
+		ser_multiwrite!(
+			writer,
+			[write_u32, self.version],
+			[write_u32, self.capabilities.bits()],
+			[write_u64, self.nonce]
+		);
 		self.total_difficulty.write(writer).unwrap();
 		self.sender_addr.write(writer).unwrap();
 		self.receiver_addr.write(writer).unwrap();
@@ -218,7 +226,9 @@ impl Readable for Hand {
 		let receiver_addr = try!(SockAddr::read(reader));
 		let ua = try!(reader.read_vec());
 		let user_agent = try!(String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData));
-		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData));
+		let capabilities = try!(Capabilities::from_bits(capab).ok_or(
+			ser::Error::CorruptedData,
+		));
 		Ok(Hand {
 			version: version,
 			capabilities: capabilities,
@@ -248,9 +258,11 @@ pub struct Shake {
 
 impl Writeable for Shake {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(writer,
-		                [write_u32, self.version],
-		                [write_u32, self.capabilities.bits()]);
+		ser_multiwrite!(
+			writer,
+			[write_u32, self.version],
+			[write_u32, self.capabilities.bits()]
+		);
 		self.total_difficulty.write(writer).unwrap();
 		writer.write_bytes(&self.user_agent).unwrap();
 		Ok(())
@@ -263,7 +275,9 @@ impl Readable for Shake {
 		let total_diff = try!(Difficulty::read(reader));
 		let ua = try!(reader.read_vec());
 		let user_agent = try!(String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData));
-		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData));
+		let capabilities = try!(Capabilities::from_bits(capab).ok_or(
+			ser::Error::CorruptedData,
+		));
 		Ok(Shake {
 			version: version,
 			capabilities: capabilities,
@@ -288,7 +302,9 @@ impl Writeable for GetPeerAddrs {
 impl Readable for GetPeerAddrs {
 	fn read(reader: &mut Reader) -> Result<GetPeerAddrs, ser::Error> {
 		let capab = try!(reader.read_u32());
-		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData));
+		let capabilities = try!(Capabilities::from_bits(capab).ok_or(
+			ser::Error::CorruptedData,
+		));
 		Ok(GetPeerAddrs { capabilities: capabilities })
 	}
 }
@@ -345,7 +361,9 @@ impl Writeable for PeerError {
 impl Readable for PeerError {
 	fn read(reader: &mut Reader) -> Result<PeerError, ser::Error> {
 		let (code, msg) = ser_multiread!(reader, read_u32, read_vec);
-		let message = try!(String::from_utf8(msg).map_err(|_| ser::Error::CorruptedData));
+		let message = try!(String::from_utf8(msg).map_err(
+			|_| ser::Error::CorruptedData,
+		));
 		Ok(PeerError {
 			code: code,
 			message: message,
@@ -362,10 +380,12 @@ impl Writeable for SockAddr {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		match self.0 {
 			SocketAddr::V4(sav4) => {
-				ser_multiwrite!(writer,
-				                [write_u8, 0],
-				                [write_fixed_bytes, &sav4.ip().octets().to_vec()],
-				                [write_u16, sav4.port()]);
+				ser_multiwrite!(
+					writer,
+					[write_u8, 0],
+					[write_fixed_bytes, &sav4.ip().octets().to_vec()],
+					[write_u16, sav4.port()]
+				);
 			}
 			SocketAddr::V6(sav6) => {
 				try!(writer.write_u8(1));
@@ -385,25 +405,28 @@ impl Readable for SockAddr {
 		if v4_or_v6 == 0 {
 			let ip = try!(reader.read_fixed_bytes(4));
 			let port = try!(reader.read_u16());
-			Ok(SockAddr(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(ip[0],
-			                                                           ip[1],
-			                                                           ip[2],
-			                                                           ip[3]),
-			                                             port))))
+			Ok(SockAddr(SocketAddr::V4(SocketAddrV4::new(
+				Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]),
+				port,
+			))))
 		} else {
 			let ip = try_map_vec!([0..8], |_| reader.read_u16());
 			let port = try!(reader.read_u16());
-			Ok(SockAddr(SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::new(ip[0],
-			                                                           ip[1],
-			                                                           ip[2],
-			                                                           ip[3],
-			                                                           ip[4],
-			                                                           ip[5],
-			                                                           ip[6],
-			                                                           ip[7]),
-			                                             port,
-			                                             0,
-			                                             0))))
+			Ok(SockAddr(SocketAddr::V6(SocketAddrV6::new(
+				Ipv6Addr::new(
+					ip[0],
+					ip[1],
+					ip[2],
+					ip[3],
+					ip[4],
+					ip[5],
+					ip[6],
+					ip[7],
+				),
+				port,
+				0,
+				0,
+			))))
 		}
 	}
 }

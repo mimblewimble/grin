@@ -54,11 +54,13 @@ pub struct TxKernel {
 
 impl Writeable for TxKernel {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(writer,
-		                [write_u8, self.features.bits()],
-		                [write_fixed_bytes, &self.excess],
-		                [write_bytes, &self.excess_sig],
-		                [write_u64, self.fee]);
+		ser_multiwrite!(
+			writer,
+			[write_u8, self.features.bits()],
+			[write_fixed_bytes, &self.excess],
+			[write_bytes, &self.excess_sig],
+			[write_u64, self.fee]
+		);
 		Ok(())
 	}
 }
@@ -66,8 +68,9 @@ impl Writeable for TxKernel {
 impl Readable for TxKernel {
 	fn read(reader: &mut Reader) -> Result<TxKernel, ser::Error> {
 		Ok(TxKernel {
-			features:
-				KernelFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?,
+			features: KernelFeatures::from_bits(reader.read_u8()?).ok_or(
+				ser::Error::CorruptedData,
+			)?,
 			excess: Commitment::read(reader)?,
 			excess_sig: reader.read_vec()?,
 			fee: reader.read_u64()?,
@@ -104,11 +107,13 @@ pub struct Transaction {
 /// write the transaction as binary.
 impl Writeable for Transaction {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(writer,
-		                [write_u64, self.fee],
-		                [write_bytes, &self.excess_sig],
-		                [write_u64, self.inputs.len() as u64],
-		                [write_u64, self.outputs.len() as u64]);
+		ser_multiwrite!(
+			writer,
+			[write_u64, self.fee],
+			[write_bytes, &self.excess_sig],
+			[write_u64, self.inputs.len() as u64],
+			[write_u64, self.outputs.len() as u64]
+		);
 		for inp in &self.inputs {
 			try!(inp.write(writer));
 		}
@@ -185,7 +190,10 @@ impl Transaction {
 	pub fn with_input(self, input: Input) -> Transaction {
 		let mut new_ins = self.inputs;
 		new_ins.push(input);
-		Transaction { inputs: new_ins, ..self }
+		Transaction {
+			inputs: new_ins,
+			..self
+		}
 	}
 
 	/// Builds a new transaction with the provided output added. Existing
@@ -193,7 +201,10 @@ impl Transaction {
 	pub fn with_output(self, output: Output) -> Transaction {
 		let mut new_outs = self.outputs;
 		new_outs.push(output);
-		Transaction { outputs: new_outs, ..self }
+		Transaction {
+			outputs: new_outs,
+			..self
+		}
 	}
 
 	/// Builds a new transaction with the provided fee.
@@ -304,9 +315,11 @@ pub struct Output {
 /// an Output as binary.
 impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(writer,
-		                [write_u8, self.features.bits()],
-		                [write_fixed_bytes, &self.commit]);
+		ser_multiwrite!(
+			writer,
+			[write_u8, self.features.bits()],
+			[write_fixed_bytes, &self.commit]
+		);
 		// The hash of an output doesn't include the range proof
 		if writer.serialization_mode() == ser::SerializationMode::Full {
 			writer.write_bytes(&self.proof)?
@@ -320,8 +333,9 @@ impl Writeable for Output {
 impl Readable for Output {
 	fn read(reader: &mut Reader) -> Result<Output, ser::Error> {
 		Ok(Output {
-			features:
-				OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?,
+			features: OutputFeatures::from_bits(reader.read_u8()?).ok_or(
+				ser::Error::CorruptedData,
+			)?,
 			commit: Commitment::read(reader)?,
 			proof: RangeProof::read(reader)?,
 		})
@@ -341,8 +355,6 @@ impl Output {
 
 	/// Validates the range proof using the commitment
 	pub fn verify_proof(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
-		/// secp.verify_range_proof returns range if and only if both min_value and max_value less than 2^64
-		/// since group order is much larger (~2^256) we can be sure overflow is not the case
 		secp.verify_range_proof(self.commit, self.proof).map(|_| ())
 	}
 }
@@ -392,7 +404,10 @@ impl ops::Add for SumCommit {
 	type Output = SumCommit;
 
 	fn add(self, other: SumCommit) -> SumCommit {
-		let sum = match self.secp.commit_sum(vec![self.commit.clone(), other.commit.clone()], vec![]) {
+		let sum = match self.secp.commit_sum(
+			vec![self.commit.clone(), other.commit.clone()],
+			vec![],
+		) {
 			Ok(s) => s,
 			Err(_) => Commitment::from_vec(vec![1; 33]),
 		};

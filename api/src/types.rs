@@ -30,9 +30,7 @@ pub struct Tip {
 
 impl Tip {
 	pub fn from_tip(tip: chain::Tip) -> Tip {
-		Tip {
-			height: tip.height,
-		}
+		Tip { height: tip.height }
 	}
 }
 
@@ -60,8 +58,11 @@ impl Output {
 	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader) -> Output {
 		let (output_type, lock_height) = match output.features {
 			x if x.contains(core::transaction::COINBASE_OUTPUT) => {
-				(OutputType::Coinbase, block_header.height + consensus::COINBASE_MATURITY)
-			},
+				(
+					OutputType::Coinbase,
+					block_header.height + consensus::COINBASE_MATURITY,
+				)
+			}
 			_ => (OutputType::Transaction, 0),
 		};
 		Output {

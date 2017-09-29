@@ -35,7 +35,7 @@ use core::global::MiningParameterMode;
 
 use pow::{types, cuckoo, MiningWorker};
 
-fn clean_output_dir(dir_name:&str){
+fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
 }
 
@@ -44,11 +44,15 @@ fn setup(dir_name: &str) -> Chain {
 	clean_output_dir(dir_name);
 	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 	let mut genesis_block = None;
-	if !chain::Chain::chain_exists(dir_name.to_string()){
-		genesis_block=pow::mine_genesis_block(None);
+	if !chain::Chain::chain_exists(dir_name.to_string()) {
+		genesis_block = pow::mine_genesis_block(None);
 	}
-	chain::Chain::init(dir_name.to_string(), Arc::new(NoopAdapter {}),
-									genesis_block, pow::verify_size).unwrap()
+	chain::Chain::init(
+		dir_name.to_string(),
+		Arc::new(NoopAdapter {}),
+		genesis_block,
+		pow::verify_size,
+	).unwrap()
 }
 
 #[test]
@@ -67,7 +71,10 @@ fn mine_empty_chain() {
 	miner_config.cuckoo_miner_plugin_dir = Some(String::from("../target/debug/deps"));
 
 	let mut cuckoo_miner = cuckoo::Miner::new(
-		consensus::EASINESS, global::sizeshift() as u32, global::proofsize());
+		consensus::EASINESS,
+		global::sizeshift() as u32,
+		global::proofsize(),
+	);
 	for n in 1..4 {
 		let prev = chain.head_header().unwrap();
 		let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
@@ -83,7 +90,7 @@ fn mine_empty_chain() {
 			&mut b.header,
 			difficulty,
 			global::sizeshift() as u32,
-			).unwrap();
+		).unwrap();
 
 		let bhash = b.hash();
 		chain.process_block(b, chain::EASY_POW).unwrap();
@@ -110,8 +117,9 @@ fn mine_empty_chain() {
 
 		// now check the header output index
 		let output = block.outputs[0];
-		let header_by_output_commit = chain.
-			get_block_header_by_output_commit(&output.commitment()).unwrap();
+		let header_by_output_commit = chain
+			.get_block_header_by_output_commit(&output.commitment())
+			.unwrap();
 		assert_eq!(header_by_output_commit.hash(), bhash);
 	}
 }
@@ -141,7 +149,7 @@ fn mine_forks() {
 
 		// checking our new head
 		let head = chain.head().unwrap();
-		assert_eq!(head.height, (n+1) as u64);
+		assert_eq!(head.height, (n + 1) as u64);
 		assert_eq!(head.last_block_h, bhash);
 		assert_eq!(head.prev_block_h, prev.hash());
 
@@ -151,7 +159,7 @@ fn mine_forks() {
 
 		// checking head switch
 		let head = chain.head().unwrap();
-		assert_eq!(head.height, (n+1) as u64);
+		assert_eq!(head.height, (n + 1) as u64);
 		assert_eq!(head.last_block_h, bhash);
 		assert_eq!(head.prev_block_h, prev.hash());
 	}

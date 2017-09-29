@@ -129,8 +129,10 @@ impl Syncer {
 			prev_h = header.previous;
 		}
 
-		debug!("Added {} full block hashes to download.",
-		       blocks_to_download.len());
+		debug!(
+			"Added {} full block hashes to download.",
+			blocks_to_download.len()
+		);
 		Ok(())
 	}
 
@@ -141,7 +143,8 @@ impl Syncer {
 		if blocks_downloading.len() > MAX_BODY_DOWNLOADS {
 			// clean up potentially dead downloads
 			let twenty_sec_ago = Instant::now() - Duration::from_secs(20);
-			blocks_downloading.iter()
+			blocks_downloading
+				.iter()
 				.position(|&h| h.1 < twenty_sec_ago)
 				.map(|n| blocks_downloading.remove(n));
 		} else {
@@ -158,8 +161,10 @@ impl Syncer {
 				}
 				blocks_downloading.push((h, Instant::now()));
 			}
-			debug!("Requesting more full block hashes to download, total: {}.",
-			       blocks_to_download.len());
+			debug!(
+				"Requesting more full block hashes to download, total: {}.",
+				blocks_to_download.len()
+			);
 		}
 	}
 
@@ -181,10 +186,12 @@ impl Syncer {
 		let peer = self.p2p.most_work_peer();
 		let locator = self.get_locator(&tip)?;
 		if let Some(p) = peer {
-			debug!("Asking peer {} for more block headers starting from {} at {}.",
-			       p.info.addr,
-			       tip.last_block_h,
-			       tip.height);
+			debug!(
+				"Asking peer {} for more block headers starting from {} at {}.",
+				p.info.addr,
+				tip.last_block_h,
+				tip.height
+			);
 			p.send_header_request(locator)?;
 		} else {
 			warn!("Could not get most worked peer to request headers.");

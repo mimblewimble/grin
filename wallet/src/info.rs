@@ -27,9 +27,10 @@ pub fn show_info(config: &WalletConfig, ext_key: &ExtendedKey) {
 		println!("Outputs - ");
 		println!("fingerprint, n_child, height, lock_height, status, value");
 		println!("----------------------------------");
-		for out in &mut wallet_data.outputs
-			.iter()
-			.filter(|o| o.fingerprint == ext_key.fingerprint ) {
+		for out in &mut wallet_data.outputs.iter().filter(|o| {
+			o.fingerprint == ext_key.fingerprint
+		})
+		{
 			let key = ext_key.derive(&secp, out.n_child).unwrap();
 
 			println!(

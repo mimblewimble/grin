@@ -69,7 +69,7 @@ fn sumtree_prune_compact() {
 	let mut backend = store::sumtree::PMMRBackend::new(data_dir).unwrap();
 	let mmr_size = load(0, &elems[..], &mut backend);
 	backend.sync().unwrap();
-	
+
 	// save the root
 	let root: HashSum<TestElem>;
 	{
@@ -113,7 +113,7 @@ fn sumtree_reload() {
 		let mut backend = store::sumtree::PMMRBackend::new(data_dir.clone()).unwrap();
 		mmr_size = load(0, &elems[..], &mut backend);
 		backend.sync().unwrap();
-		
+
 		// save the root and prune some nodes so we have prune data
 		{
 			let mut pmmr = PMMR::at(&mut backend, mmr_size);
@@ -164,8 +164,7 @@ fn setup() -> (String, Vec<TestElem>) {
 	(data_dir, elems)
 }
 
-fn load(pos: u64, elems: &[TestElem],
-				backend: &mut store::sumtree::PMMRBackend<TestElem>) -> u64 {
+fn load(pos: u64, elems: &[TestElem], backend: &mut store::sumtree::PMMRBackend<TestElem>) -> u64 {
 
 	let mut pmmr = PMMR::at(backend, pos);
 	for elem in elems {

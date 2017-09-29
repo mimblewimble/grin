@@ -231,7 +231,7 @@ impl Miner {
 					next_stat_output = time::get_time().sec + stat_output_interval;
 				}
 			}
-			//avoid busy wait
+			// avoid busy wait
 			let sleep_dur = std::time::Duration::from_millis(100);
 			thread::sleep(sleep_dur);
 		}
@@ -540,7 +540,9 @@ impl Miner {
 		b.header.nonce = rng.gen();
 		b.header.difficulty = difficulty;
 		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
-		self.chain.set_sumtree_roots(&mut b).expect("Error setting sum tree roots");
+		self.chain.set_sumtree_roots(&mut b).expect(
+			"Error setting sum tree roots",
+		);
 		b
 	}
 

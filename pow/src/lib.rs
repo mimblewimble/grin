@@ -62,14 +62,14 @@ use cuckoo::{Cuckoo, Error};
 ///
 
 pub trait MiningWorker {
-
 	/// This only sets parameters and does initialisation work now
-	fn new(ease: u32, sizeshift: u32, proof_size:usize) -> Self where Self:Sized;
+	fn new(ease: u32, sizeshift: u32, proof_size: usize) -> Self
+	where
+		Self: Sized;
 
 	/// Actually perform a mining attempt on the given input and
 	/// return a proof if found
 	fn mine(&mut self, header: &[u8]) -> Result<Proof, Error>;
-
 }
 
 /// Validates the proof of work of a given header, and that the proof of work
@@ -85,43 +85,54 @@ pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
 
 /// Uses the much easier Cuckoo20 (mostly for
 /// tests).
-pub fn pow20<T: MiningWorker>(miner:&mut T, bh: &mut BlockHeader, diff: Difficulty) -> Result<(), Error> {
+pub fn pow20<T: MiningWorker>(
+	miner: &mut T,
+	bh: &mut BlockHeader,
+	diff: Difficulty,
+) -> Result<(), Error> {
 	pow_size(miner, bh, diff, 20)
 }
 
-/// Mines a genesis block, using the config specified miner if specified. Otherwise,
+/// Mines a genesis block, using the config specified miner if specified.
+/// Otherwise,
 /// uses the internal miner
 ///
 
-pub fn mine_genesis_block(miner_config:Option<types::MinerConfig>)->Option<core::core::Block> {
+pub fn mine_genesis_block(miner_config: Option<types::MinerConfig>) -> Option<core::core::Block> {
 	info!("Starting miner loop for Genesis Block");
 	let mut gen = genesis::genesis();
 	let diff = gen.header.difficulty.clone();
-			
+
 	let sz = global::sizeshift() as u32;
 	let proof_size = global::proofsize();
 
-	let mut miner:Box<MiningWorker> = match miner_config {
+	let mut miner: Box<MiningWorker> = match miner_config {
 		Some(c) => {
-			if c.use_cuckoo_miner  {
+			if c.use_cuckoo_miner {
 				let mut p = plugin::PluginMiner::new(consensus::EASINESS, sz, proof_size);
 				p.init(c.clone());
 				Box::new(p)
 
 			} else {
 				Box::new(cuckoo::Miner::new(consensus::EASINESS, sz, proof_size))
-			}		
-		},
+			}
+		}
 		None => Box::new(cuckoo::Miner::new(consensus::EASINESS, sz, proof_size)),
 	};
 	pow_size(&mut *miner, &mut gen.header, diff, sz as u32).unwrap();
 	Some(gen)
 }
 
-/// Runs a proof of work computation over the provided block using the provided Mining Worker,
-/// until the required difficulty target is reached. May take a while for a low target...
-pub fn pow_size<T: MiningWorker + ?Sized>(miner:&mut T, bh: &mut BlockHeader,
-	diff: Difficulty, _: u32) -> Result<(), Error> {
+/// Runs a proof of work computation over the provided block using the provided
+/// Mining Worker,
+/// until the required difficulty target is reached. May take a while for a low
+/// target...
+pub fn pow_size<T: MiningWorker + ?Sized>(
+	miner: &mut T,
+	bh: &mut BlockHeader,
+	diff: Difficulty,
+	_: u32,
+) -> Result<(), Error> {
 	let start_nonce = bh.nonce;
 
 	// if we're in production mode, try the pre-mined solution first
@@ -166,17 +177,26 @@ mod test {
 	use global;
 	use core::core::target::Difficulty;
 	use core::genesis;
-  	use core::consensus::MINIMUM_DIFFICULTY;
+	use core::consensus::MINIMUM_DIFFICULTY;
 	use core::global::MiningParameterMode;
 
 
 	#[test]
 	fn genesis_pow() {
-        global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+		global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 		let mut b = genesis::genesis();
 		b.header.nonce = 310;
-		let mut internal_miner = cuckoo::Miner::new(consensus::EASINESS, global::sizeshift() as u32, global::proofsize());
-		pow_size(&mut internal_miner, &mut b.header, Difficulty::from_num(MINIMUM_DIFFICULTY), global::sizeshift() as u32).unwrap();
+		let mut internal_miner = cuckoo::Miner::new(
+			consensus::EASINESS,
+			global::sizeshift() as u32,
+			global::proofsize(),
+		);
+		pow_size(
+			&mut internal_miner,
+			&mut b.header,
+			Difficulty::from_num(MINIMUM_DIFFICULTY),
+			global::sizeshift() as u32,
+		).unwrap();
 		assert!(b.header.nonce != 310);
 		assert!(b.header.pow.clone().to_difficulty() >= Difficulty::from_num(MINIMUM_DIFFICULTY));
 		assert!(verify_size(&b.header, global::sizeshift() as u32));

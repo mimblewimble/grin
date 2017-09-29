@@ -112,12 +112,14 @@ pub fn output(value: u64, blinding: SecretKey) -> Box<Append> {
 		let commit = build.secp.commit(value, blinding).unwrap();
 		let nonce = build.secp.nonce();
 		let rproof = build.secp.range_proof(0, value, blinding, commit, nonce);
-		(tx.with_output(Output {
-			features: DEFAULT_OUTPUT,
-			commit: commit,
-			proof: rproof,
-		}),
-		 sum.add(blinding))
+		(
+			tx.with_output(Output {
+				features: DEFAULT_OUTPUT,
+				commit: commit,
+				proof: rproof,
+			}),
+			sum.add(blinding),
+		)
 	})
 }
 
@@ -130,30 +132,38 @@ pub fn output_rand(value: u64) -> Box<Append> {
 		let commit = build.secp.commit(value, blinding).unwrap();
 		let nonce = build.secp.nonce();
 		let rproof = build.secp.range_proof(0, value, blinding, commit, nonce);
-		(tx.with_output(Output {
-			features: DEFAULT_OUTPUT,
-			commit: commit,
-			proof: rproof,
-		}),
-		 sum.add(blinding))
+		(
+			tx.with_output(Output {
+				features: DEFAULT_OUTPUT,
+				commit: commit,
+				proof: rproof,
+			}),
+			sum.add(blinding),
+		)
 	})
 }
 
 /// Sets the fee on the transaction being built.
 pub fn with_fee(fee: u64) -> Box<Append> {
-	Box::new(move |_build, (tx, sum)| -> (Transaction, BlindSum) { (tx.with_fee(fee), sum) })
+	Box::new(move |_build, (tx, sum)| -> (Transaction, BlindSum) {
+		(tx.with_fee(fee), sum)
+	})
 }
 
 /// Sets a known excess value on the transaction being built. Usually used in
 /// combination with the initial_tx function when a new transaction is built
 /// by adding to a pre-existing one.
 pub fn with_excess(excess: SecretKey) -> Box<Append> {
-	Box::new(move |_build, (tx, sum)| -> (Transaction, BlindSum) { (tx, sum.add(excess)) })
+	Box::new(move |_build, (tx, sum)| -> (Transaction, BlindSum) {
+		(tx, sum.add(excess))
+	})
 }
 
 /// Sets an initial transaction to add to when building a new transaction.
 pub fn initial_tx(tx: Transaction) -> Box<Append> {
-	Box::new(move |_build, (_, sum)| -> (Transaction, BlindSum) { (tx.clone(), sum) })
+	Box::new(move |_build, (_, sum)| -> (Transaction, BlindSum) {
+		(tx.clone(), sum)
+	})
 }
 
 /// Builds a new transaction by combining all the combinators provided in a
@@ -171,8 +181,10 @@ pub fn transaction(elems: Vec<Box<Append>>) -> Result<(Transaction, SecretKey), 
 		secp: Secp256k1::with_caps(secp::ContextFlag::Commit),
 		rng: OsRng::new().unwrap(),
 	};
-	let (mut tx, sum) = elems.iter().fold((Transaction::empty(), BlindSum::new()),
-	                                      |acc, elem| elem(&mut ctx, acc));
+	let (mut tx, sum) = elems.iter().fold(
+		(Transaction::empty(), BlindSum::new()),
+		|acc, elem| elem(&mut ctx, acc),
+	);
 
 	let blind_sum = sum.sum(&ctx.secp)?;
 	let msg = secp::Message::from_slice(&u64_to_32bytes(tx.fee))?;
@@ -199,9 +211,12 @@ mod test {
 	#[test]
 	fn blind_simple_tx() {
 		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
-		let (tx, _) =
-			transaction(vec![input_rand(10), input_rand(11), output_rand(20), with_fee(1)])
-				.unwrap();
+		let (tx, _) = transaction(vec![
+			input_rand(10),
+			input_rand(11),
+			output_rand(20),
+			with_fee(1),
+		]).unwrap();
 		tx.verify_sig(&secp).unwrap();
 	}
 	#[test]

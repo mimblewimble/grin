@@ -28,26 +28,26 @@ pub use hex::*;
 // (borrowed).
 #[derive(Clone)]
 pub struct OneTime<T> {
-    inner: RefCell<Option<T>>,
+	inner: RefCell<Option<T>>,
 }
 
 unsafe impl<T> Sync for OneTime<T> {}
 unsafe impl<T> Send for OneTime<T> {}
 
 impl<T> OneTime<T> {
-    /// Builds a new uninitialized OneTime.
-    pub fn new() -> OneTime<T> {
-        OneTime { inner: RefCell::new(None) }
-    }
+	/// Builds a new uninitialized OneTime.
+	pub fn new() -> OneTime<T> {
+		OneTime { inner: RefCell::new(None) }
+	}
 
-    /// Initializes the OneTime, should only be called once after construction.
-    pub fn init(&self, value: T) {
-        let mut inner_mut = self.inner.borrow_mut();
-        *inner_mut = Some(value);
-    }
+	/// Initializes the OneTime, should only be called once after construction.
+	pub fn init(&self, value: T) {
+		let mut inner_mut = self.inner.borrow_mut();
+		*inner_mut = Some(value);
+	}
 
-    /// Borrows the OneTime, should only be called after initialization.
-    pub fn borrow(&self) -> Ref<T> {
-        Ref::map(self.inner.borrow(), |o| o.as_ref().unwrap())
-    }
+	/// Borrows the OneTime, should only be called after initialization.
+	pub fn borrow(&self) -> Ref<T> {
+		Ref::map(self.inner.borrow(), |o| o.as_ref().unwrap())
+	}
 }

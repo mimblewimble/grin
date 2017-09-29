@@ -42,48 +42,58 @@ unsafe impl Send for Peer {}
 
 impl Peer {
 	/// Initiates the handshake with another peer.
-	pub fn connect(conn: TcpStream,
-	               capab: Capabilities,
-	               total_difficulty: Difficulty,
-	               self_addr: SocketAddr,
-	               hs: &Handshake)
-	               -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
+	pub fn connect(
+		conn: TcpStream,
+		capab: Capabilities,
+		total_difficulty: Difficulty,
+		self_addr: SocketAddr,
+		hs: &Handshake,
+	) -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
 		let connect_peer = hs.connect(capab, total_difficulty, self_addr, conn)
 			.and_then(|(conn, proto, info)| {
-				Ok((conn,
-				    Peer {
-					info: info,
-					proto: Box::new(proto),
-					state: Arc::new(RwLock::new(State::Connected)),
-				}))
+				Ok((
+					conn,
+					Peer {
+						info: info,
+						proto: Box::new(proto),
+						state: Arc::new(RwLock::new(State::Connected)),
+					},
+				))
 			});
 		Box::new(connect_peer)
 	}
 
 	/// Accept a handshake initiated by another peer.
-	pub fn accept(conn: TcpStream,
-	              capab: Capabilities,
-	              total_difficulty: Difficulty,
-	              hs: &Handshake)
-	              -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
-		let hs_peer = hs.handshake(capab, total_difficulty, conn)
-			.and_then(|(conn, proto, info)| {
-				Ok((conn,
-				    Peer {
-					info: info,
-					proto: Box::new(proto),
-					state: Arc::new(RwLock::new(State::Connected)),
-				}))
-			});
+	pub fn accept(
+		conn: TcpStream,
+		capab: Capabilities,
+		total_difficulty: Difficulty,
+		hs: &Handshake,
+	) -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
+		let hs_peer = hs.handshake(capab, total_difficulty, conn).and_then(
+			|(conn,
+			  proto,
+			  info)| {
+				Ok((
+					conn,
+					Peer {
+						info: info,
+						proto: Box::new(proto),
+						state: Arc::new(RwLock::new(State::Connected)),
+					},
+				))
+			},
+		);
 		Box::new(hs_peer)
 	}
 
 	/// Main peer loop listening for messages and forwarding to the rest of the
 	/// system.
-	pub fn run(&self,
-	           conn: TcpStream,
-	           na: Arc<NetAdapter>)
-	           -> Box<Future<Item = (), Error = Error>> {
+	pub fn run(
+		&self,
+		conn: TcpStream,
+		na: Arc<NetAdapter>,
+	) -> Box<Future<Item = (), Error = Error>> {
 
 		let addr = self.info.addr;
 		let state = self.state.clone();

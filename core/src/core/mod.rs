@@ -20,7 +20,7 @@ pub mod hash;
 pub mod pmmr;
 pub mod target;
 pub mod transaction;
-//pub mod txoset;
+// pub mod txoset;
 #[allow(dead_code)]
 
 use std::fmt;
@@ -82,7 +82,7 @@ pub trait Committed {
 /// Proof of work
 pub struct Proof {
 	/// The nonces
-	pub nonces:Vec<u32>,
+	pub nonces: Vec<u32>,
 
 	/// The proof size
 	pub proof_size: usize,
@@ -125,9 +125,8 @@ impl Clone for Proof {
 }
 
 impl Proof {
-
 	/// Builds a proof with all bytes zeroed out
-	pub fn new(in_nonces:Vec<u32>) -> Proof {
+	pub fn new(in_nonces: Vec<u32>) -> Proof {
 		Proof {
 			proof_size: in_nonces.len(),
 			nonces: in_nonces,
@@ -135,10 +134,10 @@ impl Proof {
 	}
 
 	/// Builds a proof with all bytes zeroed out
-	pub fn zero(proof_size:usize) -> Proof {
+	pub fn zero(proof_size: usize) -> Proof {
 		Proof {
 			proof_size: proof_size,
-			nonces: vec![0;proof_size],
+			nonces: vec![0; proof_size],
 		}
 	}
 
@@ -251,9 +250,12 @@ mod test {
 
 	#[test]
 	fn hash_output() {
-		let (tx, _) =
-			build::transaction(vec![input_rand(75), output_rand(42), output_rand(32), with_fee(1)])
-				.unwrap();
+		let (tx, _) = build::transaction(vec![
+			input_rand(75),
+			output_rand(42),
+			output_rand(32),
+			with_fee(1),
+		]).unwrap();
 		let h = tx.outputs[0].hash();
 		assert!(h != ZERO_HASH);
 		let h2 = tx.outputs[1].hash();
@@ -309,9 +311,11 @@ mod test {
 		// From now on, Bob only has the obscured transaction and the sum of
 		// blinding factors. He adds his output, finalizes the transaction so it's
 		// ready for broadcast.
-		let (tx_final, _) =
-			build::transaction(vec![initial_tx(tx_alice), with_excess(blind_sum), output_rand(5)])
-				.unwrap();
+		let (tx_final, _) = build::transaction(vec![
+			initial_tx(tx_alice),
+			with_excess(blind_sum),
+			output_rand(5),
+		]).unwrap();
 
 		tx_final.validate(&secp).unwrap();
 	}
@@ -357,8 +361,12 @@ mod test {
 
 	// utility producing a transaction with 2 inputs and a single outputs
 	pub fn tx2i1o() -> Transaction {
-		build::transaction(vec![input_rand(10), input_rand(11), output_rand(20), with_fee(1)])
-			.map(|(tx, _)| tx)
+		build::transaction(vec![
+			input_rand(10),
+			input_rand(11),
+			output_rand(20),
+			with_fee(1),
+		]).map(|(tx, _)| tx)
 			.unwrap()
 	}
 

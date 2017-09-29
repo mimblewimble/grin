@@ -143,9 +143,9 @@ impl HashWriter {
 	/// Consume the `HashWriter`, outputting a `Hash` corresponding to its
 	/// current state
 	pub fn into_hash(self) -> Hash {
-    let mut res = [0; 32];
+		let mut res = [0; 32];
 		(&mut res).copy_from_slice(self.state.finalize().as_bytes());
-    Hash(res)
+		Hash(res)
 	}
 }
 

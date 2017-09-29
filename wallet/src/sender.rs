@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::convert::From;
-use secp::{self};
+use secp;
 use secp::key::SecretKey;
 
 use checker;
@@ -27,7 +27,12 @@ use api;
 /// wallet
 /// UTXOs. The destination can be "stdout" (for command line) or a URL to the
 /// recipients wallet receiver (to be implemented).
-pub fn issue_send_tx(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64, dest: String) -> Result<(), Error> {
+pub fn issue_send_tx(
+	config: &WalletConfig,
+	ext_key: &ExtendedKey,
+	amount: u64,
+	dest: String,
+) -> Result<(), Error> {
 	let _ = checker::refresh_outputs(&config, ext_key);
 
 	let (tx, blind_sum) = build_send_tx(config, ext_key, amount)?;
@@ -39,8 +44,10 @@ pub fn issue_send_tx(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64, 
 		let url = format!("{}/v1/receive/receive_json_tx", &dest);
 		debug!("Posting partial transaction to {}", url);
 		let request = WalletReceiveRequest::PartialTransaction(json_tx);
-		let _: CbData = api::client::post(url.as_str(), &request)
-			.expect(&format!("Wallet receiver at {} unreachable, could not send transaction. Is it running?", url));
+		let _: CbData = api::client::post(url.as_str(), &request).expect(&format!(
+			"Wallet receiver at {} unreachable, could not send transaction. Is it running?",
+			url
+		));
 	}
 	Ok(())
 }
@@ -48,7 +55,11 @@ pub fn issue_send_tx(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64, 
 /// Builds a transaction to send to someone from the HD seed associated with the
 /// wallet and the amount to send. Handles reading through the wallet data file,
 /// selecting outputs to spend and building the change.
-fn build_send_tx(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64) -> Result<(Transaction, SecretKey), Error> {
+fn build_send_tx(
+	config: &WalletConfig,
+	ext_key: &ExtendedKey,
+	amount: u64,
+) -> Result<(Transaction, SecretKey), Error> {
 	// first, rebuild the private key from the seed
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 
@@ -66,7 +77,9 @@ fn build_send_tx(config: &WalletConfig, ext_key: &ExtendedKey, amount: u64) -> R
 		// third, build inputs using the appropriate key
 		let mut parts = vec![];
 		for coin in &coins {
-			let in_key = ext_key.derive(&secp, coin.n_child).map_err(|e| Error::Key(e))?;
+			let in_key = ext_key.derive(&secp, coin.n_child).map_err(
+				|e| Error::Key(e),
+			)?;
 			parts.push(build::input(coin.value, in_key.key));
 		}
 

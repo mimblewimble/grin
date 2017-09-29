@@ -44,10 +44,11 @@ impl ProtocolV1 {
 
 impl Protocol for ProtocolV1 {
 	/// Sets up the protocol reading, writing and closing logic.
-	fn handle(&self,
-	          conn: TcpStream,
-	          adapter: Arc<NetAdapter>)
-	          -> Box<Future<Item = (), Error = Error>> {
+	fn handle(
+		&self,
+		conn: TcpStream,
+		adapter: Arc<NetAdapter>,
+	) -> Box<Future<Item = (), Error = Error>> {
 
 		let (conn, listener) = TimeoutConnection::listen(conn, move |sender, header, data| {
 			let adapt = adapter.as_ref();
@@ -81,10 +82,12 @@ impl Protocol for ProtocolV1 {
 	}
 
 	fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error> {
-		self.send_request(Type::GetHeaders,
-		                  Type::Headers,
-		                  &Locator { hashes: locator },
-		                  None)
+		self.send_request(
+			Type::GetHeaders,
+			Type::Headers,
+			&Locator { hashes: locator },
+			None,
+		)
 	}
 
 	fn send_block_request(&self, h: Hash) -> Result<(), Error> {
@@ -92,10 +95,12 @@ impl Protocol for ProtocolV1 {
 	}
 
 	fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
-		self.send_request(Type::GetPeerAddrs,
-		                  Type::PeerAddrs,
-		                  &GetPeerAddrs { capabilities: capab },
-		                  None)
+		self.send_request(
+			Type::GetPeerAddrs,
+			Type::PeerAddrs,
+			&GetPeerAddrs { capabilities: capab },
+			None,
+		)
 	}
 
 	/// Close the connection to the remote peer
@@ -109,21 +114,23 @@ impl ProtocolV1 {
 		self.conn.borrow().send_msg(t, body)
 	}
 
-	fn send_request<W: ser::Writeable>(&self,
-	                                   t: Type,
-	                                   rt: Type,
-	                                   body: &W,
-	                                   expect_resp: Option<Hash>)
-	                                   -> Result<(), Error> {
+	fn send_request<W: ser::Writeable>(
+		&self,
+		t: Type,
+		rt: Type,
+		body: &W,
+		expect_resp: Option<Hash>,
+	) -> Result<(), Error> {
 		self.conn.borrow().send_request(t, rt, body, expect_resp)
 	}
 }
 
-fn handle_payload(adapter: &NetAdapter,
-                  sender: UnboundedSender<Vec<u8>>,
-                  header: MsgHeader,
-                  buf: Vec<u8>)
-                  -> Result<Option<Hash>, ser::Error> {
+fn handle_payload(
+	adapter: &NetAdapter,
+	sender: UnboundedSender<Vec<u8>>,
+	header: MsgHeader,
+	buf: Vec<u8>,
+) -> Result<Option<Hash>, ser::Error> {
 	match header.msg_type {
 		Type::Ping => {
 			let data = ser::ser_vec(&MsgHeader::new(Type::Pong, 0))?;
@@ -144,8 +151,10 @@ fn handle_payload(adapter: &NetAdapter,
 				let mut body_data = vec![];
 				try!(ser::serialize(&mut body_data, &b));
 				let mut data = vec![];
-				try!(ser::serialize(&mut data,
-				                    &MsgHeader::new(Type::Block, body_data.len() as u64)));
+				try!(ser::serialize(
+					&mut data,
+					&MsgHeader::new(Type::Block, body_data.len() as u64),
+				));
 				data.append(&mut body_data);
 				sender.send(data).unwrap();
 			}
@@ -164,10 +173,15 @@ fn handle_payload(adapter: &NetAdapter,
 
 			// serialize and send all the headers over
 			let mut body_data = vec![];
-			try!(ser::serialize(&mut body_data, &Headers { headers: headers }));
+			try!(ser::serialize(
+				&mut body_data,
+				&Headers { headers: headers },
+			));
 			let mut data = vec![];
-			try!(ser::serialize(&mut data,
-			                    &MsgHeader::new(Type::Headers, body_data.len() as u64)));
+			try!(ser::serialize(
+				&mut data,
+				&MsgHeader::new(Type::Headers, body_data.len() as u64),
+			));
 			data.append(&mut body_data);
 			sender.send(data).unwrap();
 
@@ -184,13 +198,17 @@ fn handle_payload(adapter: &NetAdapter,
 
 			// serialize and send all the headers over
 			let mut body_data = vec![];
-			try!(ser::serialize(&mut body_data,
-			                    &PeerAddrs {
-				                    peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
-			                    }));
+			try!(ser::serialize(
+				&mut body_data,
+				&PeerAddrs {
+					peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
+				},
+			));
 			let mut data = vec![];
-			try!(ser::serialize(&mut data,
-			                    &MsgHeader::new(Type::PeerAddrs, body_data.len() as u64)));
+			try!(ser::serialize(
+				&mut data,
+				&MsgHeader::new(Type::PeerAddrs, body_data.len() as u64),
+			));
 			data.append(&mut body_data);
 			sender.send(data).unwrap();
 

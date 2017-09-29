@@ -27,7 +27,8 @@ use core::target::Difficulty;
 pub const REWARD: u64 = 1_000_000_000;
 
 /// Number of blocks before a coinbase matures and can be spent
-/// TODO - reduced this for testing - need to investigate if we can lower this in test env
+/// TODO - reduced this for testing - need to investigate if we can lower this
+/// in test env
 // pub const COINBASE_MATURITY: u64 = 1_000;
 pub const COINBASE_MATURITY: u64 = 3;
 
@@ -99,7 +100,8 @@ impl fmt::Display for TargetError {
 /// difference between the median timestamps at the beginning and the end
 /// of the window.
 pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
-	where T: IntoIterator<Item = Result<(u64, Difficulty), TargetError>>
+where
+	T: IntoIterator<Item = Result<(u64, Difficulty), TargetError>>,
 {
 
 	// Block times at the begining and end of the adjustment window, used to
@@ -155,8 +157,9 @@ pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
 		ts_damp
 	};
 
-	Ok(diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW) /
-	   Difficulty::from_num(adj_ts))
+	Ok(
+		diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW) / Difficulty::from_num(adj_ts),
+	)
 }
 
 #[cfg(test)]
@@ -171,24 +174,25 @@ mod test {
 	// Builds an iterator for next difficulty calculation with the provided
 	// constant time interval, difficulty and total length.
 	fn repeat(interval: u64, diff: u64, len: u64) -> Vec<Result<(u64, Difficulty), TargetError>> {
-		//watch overflow here, length shouldn't be ridiculous anyhow
+		// watch overflow here, length shouldn't be ridiculous anyhow
 		assert!(len < std::usize::MAX as u64);
 		let diffs = vec![Difficulty::from_num(diff); len as usize];
 		let times = (0..(len as usize)).map(|n| n * interval as usize).rev();
 		let pairs = times.zip(diffs.iter());
-		pairs.map(|(t, d)| Ok((t as u64, d.clone()))).collect::<Vec<_>>()
+		pairs
+			.map(|(t, d)| Ok((t as u64, d.clone())))
+			.collect::<Vec<_>>()
 	}
 
-	fn repeat_offs(from: u64,
-	               interval: u64,
-	               diff: u64,
-	               len: u64)
-	               -> Vec<Result<(u64, Difficulty), TargetError>> {
-		map_vec!(repeat(interval, diff, len), |e| {
-			match e.clone() {
-				Err(e) => Err(e),
-				Ok((t, d)) => Ok((t + from, d)),
-			}
+	fn repeat_offs(
+		from: u64,
+		interval: u64,
+		diff: u64,
+		len: u64,
+	) -> Vec<Result<(u64, Difficulty), TargetError>> {
+		map_vec!(repeat(interval, diff, len), |e| match e.clone() {
+			Err(e) => Err(e),
+			Ok((t, d)) => Ok((t + from, d)),
 		})
 	}
 
@@ -196,19 +200,28 @@ mod test {
 	#[test]
 	fn next_target_adjustment() {
 		// not enough data
-		assert_eq!(next_difficulty(vec![]).unwrap(), Difficulty::from_num(MINIMUM_DIFFICULTY));
+		assert_eq!(
+			next_difficulty(vec![]).unwrap(),
+			Difficulty::from_num(MINIMUM_DIFFICULTY)
+		);
 
-		assert_eq!(next_difficulty(vec![Ok((60, Difficulty::one()))]).unwrap(),
-		           Difficulty::from_num(MINIMUM_DIFFICULTY));
+		assert_eq!(
+			next_difficulty(vec![Ok((60, Difficulty::one()))]).unwrap(),
+			Difficulty::from_num(MINIMUM_DIFFICULTY)
+		);
 
-		assert_eq!(next_difficulty(repeat(60, 10, DIFFICULTY_ADJUST_WINDOW)).unwrap(),
-		           Difficulty::from_num(MINIMUM_DIFFICULTY));
+		assert_eq!(
+			next_difficulty(repeat(60, 10, DIFFICULTY_ADJUST_WINDOW)).unwrap(),
+			Difficulty::from_num(MINIMUM_DIFFICULTY)
+		);
 
 		// just enough data, right interval, should stay constant
 
 		let just_enough = DIFFICULTY_ADJUST_WINDOW + MEDIAN_TIME_WINDOW;
-		assert_eq!(next_difficulty(repeat(60, 1000, just_enough)).unwrap(),
-		           Difficulty::from_num(1000));
+		assert_eq!(
+			next_difficulty(repeat(60, 1000, just_enough)).unwrap(),
+			Difficulty::from_num(1000)
+		);
 
 		// checking averaging works, window length is odd so need to compensate a little
 		let sec = DIFFICULTY_ADJUST_WINDOW / 2 + 1 + MEDIAN_TIME_WINDOW;
@@ -218,28 +231,44 @@ mod test {
 		assert_eq!(next_difficulty(s2).unwrap(), Difficulty::from_num(999));
 
 		// too slow, diff goes down
-		assert_eq!(next_difficulty(repeat(90, 1000, just_enough)).unwrap(),
-		           Difficulty::from_num(889));
-		assert_eq!(next_difficulty(repeat(120, 1000, just_enough)).unwrap(),
-		           Difficulty::from_num(800));
+		assert_eq!(
+			next_difficulty(repeat(90, 1000, just_enough)).unwrap(),
+			Difficulty::from_num(889)
+		);
+		assert_eq!(
+			next_difficulty(repeat(120, 1000, just_enough)).unwrap(),
+			Difficulty::from_num(800)
+		);
 
 		// too fast, diff goes up
-		assert_eq!(next_difficulty(repeat(55, 1000, just_enough)).unwrap(),
-		           Difficulty::from_num(1021));
-		assert_eq!(next_difficulty(repeat(45, 1000, just_enough)).unwrap(),
-		           Difficulty::from_num(1067));
+		assert_eq!(
+			next_difficulty(repeat(55, 1000, just_enough)).unwrap(),
+			Difficulty::from_num(1021)
+		);
+		assert_eq!(
+			next_difficulty(repeat(45, 1000, just_enough)).unwrap(),
+			Difficulty::from_num(1067)
+		);
 
 		// hitting lower time bound, should always get the same result below
-		assert_eq!(next_difficulty(repeat(20, 1000, just_enough)).unwrap(),
-		           Difficulty::from_num(1200));
-		assert_eq!(next_difficulty(repeat(10, 1000, just_enough)).unwrap(),
-		           Difficulty::from_num(1200));
+		assert_eq!(
+			next_difficulty(repeat(20, 1000, just_enough)).unwrap(),
+			Difficulty::from_num(1200)
+		);
+		assert_eq!(
+			next_difficulty(repeat(10, 1000, just_enough)).unwrap(),
+			Difficulty::from_num(1200)
+		);
 
 		// hitting higher time bound, should always get the same result above
-		assert_eq!(next_difficulty(repeat(160, 1000, just_enough)).unwrap(),
-		           Difficulty::from_num(750));
-		assert_eq!(next_difficulty(repeat(200, 1000, just_enough)).unwrap(),
-		           Difficulty::from_num(750));
+		assert_eq!(
+			next_difficulty(repeat(160, 1000, just_enough)).unwrap(),
+			Difficulty::from_num(750)
+		);
+		assert_eq!(
+			next_difficulty(repeat(200, 1000, just_enough)).unwrap(),
+			Difficulty::from_num(750)
+		);
 	}
 
 }

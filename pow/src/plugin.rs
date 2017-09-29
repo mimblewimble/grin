@@ -30,7 +30,7 @@ use types::MinerConfig;
 use std::sync::Mutex;
 
 use cuckoo_miner::{CuckooMiner, CuckooPluginManager, CuckooMinerConfig, CuckooMinerSolution,
-CuckooMinerDeviceStats, CuckooMinerError};
+                   CuckooMinerDeviceStats, CuckooMinerError};
 
 // For now, we're just going to keep a static reference around to the loaded
 // config
@@ -112,7 +112,7 @@ impl PluginMiner {
 		let sz = global::sizeshift();
 
 		let mut cuckoo_configs = Vec::new();
-		let mut index=0;
+		let mut index = 0;
 		for f in plugin_vec_filters {
 			// So this is built dynamically based on the plugin implementation
 			// type and the consensus sizeshift
@@ -126,12 +126,12 @@ impl PluginMiner {
 			info!("Mining plugin {} - {}", index, caps[0].full_path.clone());
 			config.plugin_full_path = caps[0].full_path.clone();
 			if let Some(l) = miner_config.clone().cuckoo_miner_plugin_config {
-				if let Some(lp) = l[index].parameter_list.clone(){
+				if let Some(lp) = l[index].parameter_list.clone() {
 					config.parameter_list = lp.clone();
 				}
 			}
 			cuckoo_configs.push(config);
-			index+=1;
+			index += 1;
 		}
 		// Store this config now, because we just want one instance
 		// of the plugin lib per invocation now
@@ -141,7 +141,7 @@ impl PluginMiner {
 		let result = CuckooMiner::new(cuckoo_configs.clone());
 		if let Err(e) = result {
 			error!("Error initializing mining plugin: {:?}", e);
-			//error!("Accepted values are: {:?}", caps[0].parameters);
+			// error!("Accepted values are: {:?}", caps[0].parameters);
 			panic!("Unable to init mining plugin.");
 		}
 
@@ -167,8 +167,8 @@ impl PluginMiner {
 	}
 
 	/// Get stats
-	pub fn get_stats(&self, index:usize) -> Result<Vec<CuckooMinerDeviceStats>, CuckooMinerError> {
-		self.miner.as_ref().unwrap().get_stats(index) 
+	pub fn get_stats(&self, index: usize) -> Result<Vec<CuckooMinerDeviceStats>, CuckooMinerError> {
+		self.miner.as_ref().unwrap().get_stats(index)
 	}
 }
 
@@ -185,7 +185,7 @@ impl MiningWorker for PluginMiner {
 	/// And simply calls the mine function of the loaded plugin
 	/// returning whether a solution was found and the solution itself
 
-	fn mine(&mut self, header: &[u8]) -> Result<Proof, cuckoo::Error>{
+	fn mine(&mut self, header: &[u8]) -> Result<Proof, cuckoo::Error> {
 		let result = self.miner
 			.as_mut()
 			.unwrap()

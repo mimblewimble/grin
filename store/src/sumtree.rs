@@ -119,7 +119,7 @@ impl AppendOnlyFile {
 			} as u64;
 
 			// write the buffer, except if we prune offsets in the current span,
-			// in which case we skip 
+			// in which case we skip
 			let mut buf_start = 0;
 			while prune_offs[prune_pos] >= read && prune_offs[prune_pos] < read + len {
 				let prune_at = prune_offs[prune_pos] as usize;
@@ -188,7 +188,11 @@ impl RemoveLog {
 		if last_offs == 0 {
 			self.removed = vec![];
 		} else {
-			self.removed = self.removed.iter().filter(|&&(_, idx)| { idx < last_offs }).map(|x| *x).collect();
+			self.removed = self.removed
+				.iter()
+				.filter(|&&(_, idx)| idx < last_offs)
+				.map(|x| *x)
+				.collect();
 		}
 		Ok(())
 	}
@@ -230,8 +234,7 @@ impl RemoveLog {
 
 	/// Whether the remove log currently includes the provided position.
 	fn includes(&self, elmt: u64) -> bool {
-		include_tuple(&self.removed, elmt) ||
-			include_tuple(&self.removed_tmp, elmt)
+		include_tuple(&self.removed, elmt) || include_tuple(&self.removed_tmp, elmt)
 	}
 
 	/// Number of positions stored in the remove log.
@@ -305,7 +308,7 @@ where
 		// Third, check if it's in the pruned list or its offset
 		let shift = self.pruned_nodes.get_shift(position);
 		if let None = shift {
-			return None
+			return None;
 		}
 
 		// The MMR starts at 1, our binary backend starts at 0
@@ -329,7 +332,9 @@ where
 
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {
 		assert!(self.buffer.len() == 0, "Rewind on non empty buffer.");
-		self.remove_log.truncate(index).map_err(|e| format!("Could not truncate remove log: {}", e))?;
+		self.remove_log.truncate(index).map_err(|e| {
+			format!("Could not truncate remove log: {}", e)
+		})?;
 		self.rewind = Some((position, index, self.buffer_index));
 		self.buffer_index = position as usize;
 		Ok(())
@@ -340,7 +345,9 @@ where
 		if self.buffer.used_size() > 0 {
 			for position in &positions {
 				let pos_sz = *position as usize;
-				if pos_sz > self.buffer_index && pos_sz - 1 < self.buffer_index + self.buffer.len() {
+				if pos_sz > self.buffer_index &&
+					pos_sz - 1 < self.buffer_index + self.buffer.len()
+				{
 					self.buffer.remove(vec![*position], index).unwrap();
 				}
 			}
@@ -370,7 +377,7 @@ where
 			remove_log: rm_log,
 			buffer: VecBackend::new(),
 			buffer_index: (sz as usize) / record_len,
-			pruned_nodes: pmmr::PruneList{pruned_nodes: prune_list},
+			pruned_nodes: pmmr::PruneList { pruned_nodes: prune_list },
 			rewind: None,
 		})
 	}
@@ -398,7 +405,10 @@ where
 				if let Err(e) = self.hashsum_file.append(&ser::ser_vec(&hs).unwrap()[..]) {
 					return Err(io::Error::new(
 						io::ErrorKind::Interrupted,
-						format!("Could not write to log storage, disk full? {:?}", e)
+						format!(
+							"Could not write to log storage, disk full? {:?}",
+							e
+						),
 					));
 				}
 			}
@@ -407,7 +417,7 @@ where
 		self.buffer_index = self.buffer_index + self.buffer.len();
 		self.buffer.clear();
 		self.remove_log.flush()?;
-		self.hashsum_file.sync()?;	
+		self.hashsum_file.sync()?;
 		self.rewind = None;
 		Ok(())
 	}
@@ -431,12 +441,14 @@ where
 	/// to decide whether the remove log has reached its maximum length,
 	/// otherwise the RM_LOG_MAX_NODES default value is used.
 	///
-	/// TODO whatever is calling this should also clean up the commit to position
+	/// TODO whatever is calling this should also clean up the commit to
+	/// position
 	/// index in db
 	pub fn check_compact(&mut self, max_len: usize) -> io::Result<()> {
 		if !(max_len > 0 && self.remove_log.len() > max_len ||
-			max_len == 0 && self.remove_log.len() > RM_LOG_MAX_NODES) {
-			return Ok(())
+			     max_len == 0 && self.remove_log.len() > RM_LOG_MAX_NODES)
+		{
+			return Ok(());
 		}
 
 		// 0. validate none of the nodes in the rm log are in the prune list (to
@@ -444,8 +456,10 @@ where
 		for pos in &self.remove_log.removed[..] {
 			if let None = self.pruned_nodes.pruned_pos(pos.0) {
 				// TODO we likely can recover from this by directly jumping to 3
-				error!("The remove log contains nodes that are already in the pruned \
-							 list, a previous compaction likely failed.");
+				error!(
+					"The remove log contains nodes that are already in the pruned \
+							 list, a previous compaction likely failed."
+				);
 				return Ok(());
 			}
 		}
@@ -454,20 +468,34 @@ where
 		// remove list
 		let tmp_prune_file = format!("{}/{}.prune", self.data_dir, PMMR_DATA_FILE);
 		let record_len = (32 + T::sum_len()) as u64;
-		let to_rm = self.remove_log.removed.iter().map(|&(pos, _)| {
-			let shift = self.pruned_nodes.get_shift(pos);
-			(pos - 1 - shift.unwrap()) * record_len
-		}).collect();
-		self.hashsum_file.save_prune(tmp_prune_file.clone(), to_rm, record_len)?;
+		let to_rm = self.remove_log
+			.removed
+			.iter()
+			.map(|&(pos, _)| {
+				let shift = self.pruned_nodes.get_shift(pos);
+				(pos - 1 - shift.unwrap()) * record_len
+			})
+			.collect();
+		self.hashsum_file.save_prune(
+			tmp_prune_file.clone(),
+			to_rm,
+			record_len,
+		)?;
 
 		// 2. update the prune list and save it in place
 		for &(rm_pos, _) in &self.remove_log.removed[..] {
 			self.pruned_nodes.add(rm_pos);
 		}
-		write_vec(format!("{}/{}", self.data_dir, PMMR_PRUNED_FILE), &self.pruned_nodes.pruned_nodes)?;
+		write_vec(
+			format!("{}/{}", self.data_dir, PMMR_PRUNED_FILE),
+			&self.pruned_nodes.pruned_nodes,
+		)?;
 
 		// 3. move the compact copy to the hashsum file and re-open it
-		fs::rename(tmp_prune_file.clone(), format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
+		fs::rename(
+			tmp_prune_file.clone(),
+			format!("{}/{}", self.data_dir, PMMR_DATA_FILE),
+		)?;
 		self.hashsum_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
 		self.hashsum_file.sync()?;
 
@@ -481,7 +509,9 @@ where
 
 // Read an ordered vector of scalars from a file.
 fn read_ordered_vec<T>(path: String) -> io::Result<Vec<T>>
-	where T: ser::Readable + cmp::Ord {
+where
+	T: ser::Readable + cmp::Ord,
+{
 
 	let file_path = Path::new(&path);
 	let mut ovec = Vec::with_capacity(1000);
@@ -506,7 +536,10 @@ fn read_ordered_vec<T>(path: String) -> io::Result<Vec<T>>
 					Err(_) => {
 						return Err(io::Error::new(
 							io::ErrorKind::InvalidData,
-							format!("Corrupted storage, could not read file at {}", path),
+							format!(
+								"Corrupted storage, could not read file at {}",
+								path
+							),
 						));
 					}
 				}
@@ -519,13 +552,16 @@ fn read_ordered_vec<T>(path: String) -> io::Result<Vec<T>>
 }
 
 fn write_vec<T>(path: String, v: &Vec<T>) -> io::Result<()>
-	where T: ser::Writeable {
-	
+where
+	T: ser::Writeable,
+{
+
 	let mut file_path = File::create(&path)?;
 	ser::serialize(&mut file_path, v).map_err(|_| {
 		io::Error::new(
 			io::ErrorKind::InvalidInput,
-			format!("Failed to serialize data when writing to {}", path))
+			format!("Failed to serialize data when writing to {}", path),
+		)
 	})?;
 	Ok(())
 }

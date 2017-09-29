@@ -85,7 +85,9 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())))
+		option_to_not_found(self.db.get_ser(
+			&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec()),
+		))
 	}
 
 	fn check_block_exists(&self, h: &Hash) -> Result<bool, Error> {
@@ -97,13 +99,30 @@ impl ChainStore for ChainKVStore {
 		let mut batch = self.db
 			.batch()
 			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?
-			.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..], &b.header)?;
+			.put_ser(
+				&to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..],
+				&b.header,
+			)?;
 
 		// saving the full output under its hash, as well as a commitment to hash index
 		for out in &b.outputs {
 			batch = batch
-				.put_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut out.commitment().as_ref().to_vec())[..], out)?
-				.put_ser(&to_key(HEADER_BY_OUTPUT_PREFIX, &mut out.commitment().as_ref().to_vec())[..], &b.hash())?;
+				.put_ser(
+					&to_key(
+						OUTPUT_COMMIT_PREFIX,
+						&mut out.commitment().as_ref().to_vec(),
+					)
+						[..],
+					out,
+				)?
+				.put_ser(
+					&to_key(
+						HEADER_BY_OUTPUT_PREFIX,
+						&mut out.commitment().as_ref().to_vec(),
+					)
+						[..],
+					&b.hash(),
+				)?;
 		}
 		batch.write()
 	}
@@ -111,11 +130,14 @@ impl ChainStore for ChainKVStore {
 	// lookup the block header hash by output commitment
 	// lookup the block header based on this hash
 	// to check the chain is correct compare this block header to
-	// the block header currently indexed at the relevant block height (tbd if actually necessary)
+	// the block header currently indexed at the relevant block height (tbd if
+	// actually necessary)
 	//
 	// NOTE: This index is not exhaustive.
-	// This node may not have seen this full block, so may not have populated the index.
-	// Block headers older than some threshold (2 months?) will not necessarily be included
+	// This node may not have seen this full block, so may not have populated the
+	// index.
+	// Block headers older than some threshold (2 months?) will not necessarily be
+	// included
 	// in this index.
 	//
 	fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
@@ -133,13 +155,16 @@ impl ChainStore for ChainKVStore {
 				} else {
 					Err(Error::NotFoundErr)
 				}
-			},
-			None => Err(Error::NotFoundErr)
+			}
+			None => Err(Error::NotFoundErr),
 		}
 	}
 
 	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), Error> {
-		self.db.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut bh.hash().to_vec())[..], bh)
+		self.db.put_ser(
+			&to_key(BLOCK_HEADER_PREFIX, &mut bh.hash().to_vec())[..],
+			bh,
+		)
 	}
 
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
@@ -154,26 +179,44 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn save_output_pos(&self, commit: &Commitment, pos: u64) -> Result<(), Error> {
-		self.db.put_ser(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())[..], &pos)
+		self.db.put_ser(
+			&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())[..],
+			&pos,
+		)
 	}
 
 	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())))
+		option_to_not_found(self.db.get_ser(&to_key(
+			COMMIT_POS_PREFIX,
+			&mut commit.as_ref().to_vec(),
+		)))
 	}
 
 	fn save_kernel_pos(&self, excess: &Commitment, pos: u64) -> Result<(), Error> {
-		self.db.put_ser(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())[..], &pos)
+		self.db.put_ser(
+			&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())[..],
+			&pos,
+		)
 	}
 
 	fn get_kernel_pos(&self, excess: &Commitment) -> Result<u64, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())))
+		option_to_not_found(self.db.get_ser(&to_key(
+			KERNEL_POS_PREFIX,
+			&mut excess.as_ref().to_vec(),
+		)))
 	}
 
-	/// Maintain consistency of the "header_by_height" index by traversing back through the
-	/// current chain and updating "header_by_height" until we reach a block_header
-	/// that is consistent with its height (everything prior to this will be consistent)
+	/// Maintain consistency of the "header_by_height" index by traversing back
+	/// through the
+	/// current chain and updating "header_by_height" until we reach a
+	/// block_header
+	/// that is consistent with its height (everything prior to this will be
+	/// consistent)
 	fn setup_height(&self, bh: &BlockHeader) -> Result<(), Error> {
-		self.db.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height), bh)?;
+		self.db.put_ser(
+			&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height),
+			bh,
+		)?;
 		if bh.height == 0 {
 			return Ok(());
 		}
@@ -184,10 +227,12 @@ impl ChainStore for ChainKVStore {
 			let prev = self.get_header_by_height(prev_height)?;
 			if prev.hash() != prev_h {
 				let real_prev = self.get_block_header(&prev_h)?;
-				self.db.put_ser(
-					&u64_to_key(HEADER_HEIGHT_PREFIX, real_prev.height),
-					&real_prev,
-				).unwrap();
+				self.db
+					.put_ser(
+						&u64_to_key(HEADER_HEIGHT_PREFIX, real_prev.height),
+						&real_prev,
+					)
+					.unwrap();
 				prev_h = real_prev.previous;
 				prev_height = real_prev.height - 1;
 			} else {

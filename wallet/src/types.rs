@@ -79,14 +79,14 @@ impl From<api::Error> for Error {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletConfig {
-	//Whether to run a wallet
+	// Whether to run a wallet
 	pub enable_wallet: bool,
-	//The api address that this api server (i.e. this wallet) will run
+	// The api address that this api server (i.e. this wallet) will run
 	pub api_http_addr: String,
-	//The api address of a running server node, against which transaction inputs will be checked
-	//during send
+	// The api address of a running server node, against which transaction inputs will be checked
+	// during send
 	pub check_node_api_http_addr: String,
-	//The directory in which wallet files are stored
+	// The directory in which wallet files are stored
 	pub data_file_dir: String,
 }
 
@@ -171,10 +171,11 @@ impl WalletData {
 	/// Note that due to the impossibility to do an actual file lock easily
 	/// across operating systems, this just creates a lock file with a "should
 	/// not exist" option.
-	pub fn with_wallet<T, F>(data_file_dir:&str, f: F) -> Result<T, Error>
-		where F: FnOnce(&mut WalletData) -> T
+	pub fn with_wallet<T, F>(data_file_dir: &str, f: F) -> Result<T, Error>
+	where
+		F: FnOnce(&mut WalletData) -> T,
 	{
-		//create directory if it doesn't exist
+		// create directory if it doesn't exist
 		fs::create_dir_all(data_file_dir).unwrap_or_else(|why| {
 			info!("! {:?}", why.kind());
 		});
@@ -191,16 +192,23 @@ impl WalletData {
 				.create_new(true)
 				.open(lock_file_path)
 				.map_err(|_| {
-					Error::WalletData(format!("Could not create wallet lock file. Either \
-					some other process is using the wallet or there's a write access issue."))
+					Error::WalletData(format!(
+						"Could not create wallet lock file. Either \
+					some other process is using the wallet or there's a write access issue."
+					))
 				});
 			match result {
-				Ok(_) => { break; },
+				Ok(_) => {
+					break;
+				}
 				Err(e) => {
 					if retries >= 3 {
 						return Err(e);
 					}
-					debug!("failed to obtain wallet.lock, retries - {}, sleeping", retries);
+					debug!(
+						"failed to obtain wallet.lock, retries - {}, sleeping",
+						retries
+					);
 					retries += 1;
 					thread::sleep(time::Duration::from_millis(500));
 				}
@@ -215,16 +223,16 @@ impl WalletData {
 
 		// delete the lock file
 		fs::remove_file(lock_file_path).map_err(|_| {
-			Error::WalletData(
-				format!("Could not remove wallet lock file. Maybe insufficient rights?")
-			)
+			Error::WalletData(format!(
+				"Could not remove wallet lock file. Maybe insufficient rights?"
+			))
 		})?;
 
 		Ok(res)
 	}
 
 	/// Read the wallet data or created a brand new one if it doesn't exist yet
-	fn read_or_create(data_file_path:&str) -> Result<WalletData, Error> {
+	fn read_or_create(data_file_path: &str) -> Result<WalletData, Error> {
 		if Path::new(data_file_path).exists() {
 			WalletData::read(data_file_path)
 		} else {
@@ -234,7 +242,7 @@ impl WalletData {
 	}
 
 	/// Read the wallet data from disk.
-	fn read(data_file_path:&str) -> Result<WalletData, Error> {
+	fn read(data_file_path: &str) -> Result<WalletData, Error> {
 		let data_file = File::open(data_file_path).map_err(|e| {
 			Error::WalletData(format!("Could not open {}: {}", data_file_path, e))
 		})?;
@@ -244,7 +252,7 @@ impl WalletData {
 	}
 
 	/// Write the wallet data to disk.
-	fn write(&self, data_file_path:&str) -> Result<(), Error> {
+	fn write(&self, data_file_path: &str) -> Result<(), Error> {
 		let mut data_file = File::create(data_file_path).map_err(|e| {
 			Error::WalletData(format!("Could not create {}: {}", data_file_path, e))
 		})?;
@@ -262,11 +270,12 @@ impl WalletData {
 	}
 
 	pub fn lock_output(&mut self, out: &OutputData) {
-		if let Some(out_to_lock) = self.outputs.iter_mut().find(|out_to_lock| {
-			out_to_lock.n_child == out.n_child &&
-			out_to_lock.fingerprint == out.fingerprint &&
-			out_to_lock.value == out.value
-		}) {
+		if let Some(out_to_lock) =
+			self.outputs.iter_mut().find(|out_to_lock| {
+				out_to_lock.n_child == out.n_child && out_to_lock.fingerprint == out.fingerprint &&
+					out_to_lock.value == out.value
+			})
+		{
 			out_to_lock.lock();
 		}
 	}
@@ -333,7 +342,9 @@ pub fn partial_tx_from_json(json_str: &str) -> Result<(u64, SecretKey, Transacti
 	let blinding = SecretKey::from_slice(&secp, &blind_bin[..])?;
 	let tx_bin = util::from_hex(partial_tx.tx)?;
 	let tx = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
-		Error::Format("Could not deserialize transaction, invalid format.".to_string())
+		Error::Format(
+			"Could not deserialize transaction, invalid format.".to_string(),
+		)
 	})?;
 
 	Ok((partial_tx.amount, blinding, tx))

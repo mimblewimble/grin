@@ -208,7 +208,10 @@ pub trait ChainStore: Send + Sync {
 	fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, store::Error>;
 
 	/// Gets a block_header for the given input commit
-	fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, store::Error>;
+	fn get_block_header_by_output_commit(
+		&self,
+		commit: &Commitment,
+	) -> Result<BlockHeader, store::Error>;
 
 	/// Saves the position of an output, represented by its commitment, in the
 	/// UTXO MMR. Used as an index for spending and pruning.

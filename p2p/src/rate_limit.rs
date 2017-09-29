@@ -77,11 +77,18 @@ impl<R: AsyncRead> io::Read for ThrottledReader<R> {
 
 		// Check if Allowed
 		if self.allowed < 1 {
-			return Err(io::Error::new(io::ErrorKind::WouldBlock, "Reached Allowed Read Limit"))
+			return Err(io::Error::new(
+				io::ErrorKind::WouldBlock,
+				"Reached Allowed Read Limit",
+			));
 		}
 
 		// Read Max Allowed
-		let buf = if buf.len() > self.allowed { &mut buf[0..self.allowed]} else { buf };
+		let buf = if buf.len() > self.allowed {
+			&mut buf[0..self.allowed]
+		} else {
+			buf
+		};
 		let res = self.reader.read(buf);
 
 		// Decrement Allowed amount written
@@ -92,7 +99,7 @@ impl<R: AsyncRead> io::Read for ThrottledReader<R> {
 	}
 }
 
-impl<R: AsyncRead> AsyncRead for ThrottledReader<R> { }
+impl<R: AsyncRead> AsyncRead for ThrottledReader<R> {}
 
 /// A Rate Limited Writer
 #[derive(Debug)]
@@ -151,11 +158,18 @@ impl<W: AsyncWrite> io::Write for ThrottledWriter<W> {
 
 		// Check if Allowed
 		if self.allowed < 1 {
-			return Err(io::Error::new(io::ErrorKind::WouldBlock, "Reached Allowed Write Limit"))
+			return Err(io::Error::new(
+				io::ErrorKind::WouldBlock,
+				"Reached Allowed Write Limit",
+			));
 		}
 
 		// Write max allowed
-		let buf = if buf.len() > self.allowed { &buf[0..self.allowed]} else { buf };
+		let buf = if buf.len() > self.allowed {
+			&buf[0..self.allowed]
+		} else {
+			buf
+		};
 		let res = self.writer.write(buf);
 
 		// Decrement Allowed amount written

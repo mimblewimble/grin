@@ -22,11 +22,7 @@ use types::*;
 use util;
 
 
-fn refresh_output(
-	out: &mut OutputData,
-	api_out: Option<api::Output>,
-	tip: &api::Tip,
-) {
+fn refresh_output(out: &mut OutputData, api_out: Option<api::Output>, tip: &api::Tip) {
 	if let Some(api_out) = api_out {
 		out.height = api_out.height;
 		out.lock_height = api_out.lock_height;
@@ -38,25 +34,23 @@ fn refresh_output(
 		} else {
 			out.status = OutputStatus::Unspent;
 		}
-	} else if vec![
-		OutputStatus::Unspent,
-		OutputStatus::Locked
-	].contains(&out.status) {
+	} else if vec![OutputStatus::Unspent, OutputStatus::Locked].contains(&out.status) {
 		out.status = OutputStatus::Spent;
 	}
 }
 
 /// Goes through the list of outputs that haven't been spent yet and check
 /// with a node whether their status has changed.
-pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) -> Result<(), Error>{
+pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) -> Result<(), Error> {
 	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	let tip = get_tip(config)?;
 
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		// check each output that's not spent
-		for mut out in wallet_data.outputs
-			.iter_mut()
-			.filter(|out| out.status != OutputStatus::Spent) {
+		for mut out in wallet_data.outputs.iter_mut().filter(|out| {
+			out.status != OutputStatus::Spent
+		})
+		{
 
 			// figure out the commitment
 			// TODO check the pool for unconfirmed
@@ -66,8 +60,9 @@ pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) -> Result<(
 			match get_output_by_commitment(config, commitment) {
 				Ok(api_out) => refresh_output(&mut out, api_out, &tip),
 				Err(_) => {
-					//TODO find error with connection and return
-					//error!("Error contacting server node at {}. Is it running?", config.check_node_api_http_addr);
+					// TODO find error with connection and return
+					// error!("Error contacting server node at {}. Is it running?",
+					// config.check_node_api_http_addr);
 				}
 			}
 		}
@@ -76,14 +71,14 @@ pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) -> Result<(
 
 fn get_tip(config: &WalletConfig) -> Result<api::Tip, Error> {
 	let url = format!("{}/v1/chain/1", config.check_node_api_http_addr);
-	api::client::get::<api::Tip>(url.as_str())
-		.map_err(|e| Error::Node(e))
+	api::client::get::<api::Tip>(url.as_str()).map_err(|e| Error::Node(e))
 }
 
-// queries a reachable node for a given output, checking whether it's been confirmed
+// queries a reachable node for a given output, checking whether it's been
+// confirmed
 fn get_output_by_commitment(
 	config: &WalletConfig,
-	commit: pedersen::Commitment
+	commit: pedersen::Commitment,
 ) -> Result<Option<api::Output>, Error> {
 	let url = format!(
 		"{}/v1/chain/utxo/{}",

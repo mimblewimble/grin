@@ -139,7 +139,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	if header.height != prev.height + 1 {
 		return Err(Error::InvalidBlockHeight);
 	}
-	if header.timestamp <= prev.timestamp && !global::is_automated_testing_mode(){
+	if header.timestamp <= prev.timestamp && !global::is_automated_testing_mode() {
 		// prevent time warp attacks and some timestamp manipulations by forcing strict
 		// time progression (but not in CI mode)
 		return Err(Error::InvalidBlockTime);
@@ -182,11 +182,15 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 }
 
 /// Fully validate the block content.
-fn validate_block(b: &Block, ctx: &mut BlockContext, ext: &mut sumtree::Extension) -> Result<(), Error> {
+fn validate_block(
+	b: &Block,
+	ctx: &mut BlockContext,
+	ext: &mut sumtree::Extension,
+) -> Result<(), Error> {
 	if b.header.height > ctx.head.height + 1 {
 		return Err(Error::Orphan);
 	}
- 
+
 	// main isolated block validation, checks all commitment sums and sigs
 	let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	try!(b.validate(&curve).map_err(&Error::InvalidBlockProof));
@@ -194,10 +198,13 @@ fn validate_block(b: &Block, ctx: &mut BlockContext, ext: &mut sumtree::Extensio
 	// check that all the outputs of the block are "new" -
 	// that they do not clobber any existing unspent outputs (by their commitment)
 	//
-	// TODO - do we need to do this here (and can we do this here if we need access to the chain)
-	// see check_duplicate_outputs in pool for the analogous operation on transaction outputs
+	// TODO - do we need to do this here (and can we do this here if we need access
+	// to the chain)
+	// see check_duplicate_outputs in pool for the analogous operation on
+	// transaction outputs
 	// for output in &block.outputs {
-		// here we would check that the output is not a duplicate output based on the current chain
+	// here we would check that the output is not a duplicate output based on the
+	// current chain
 	// };
 
 
@@ -206,7 +213,7 @@ fn validate_block(b: &Block, ctx: &mut BlockContext, ext: &mut sumtree::Extensio
 		// standard head extension
 		ext.apply_block(b)?;
 	} else {
-	
+
 		// extending a fork, first identify the block where forking occurred
 		// keeping the hashes of blocks along the fork
 		let mut current = b.header.previous;
@@ -228,7 +235,11 @@ fn validate_block(b: &Block, ctx: &mut BlockContext, ext: &mut sumtree::Extensio
 		if forked_block.header.height > 0 {
 			let last_output = &forked_block.outputs[forked_block.outputs.len() - 1];
 			let last_kernel = &forked_block.kernels[forked_block.kernels.len() - 1];
-			ext.rewind(forked_block.header.height, last_output, last_kernel)?;
+			ext.rewind(
+				forked_block.header.height,
+				last_output,
+				last_kernel,
+			)?;
 		}
 
 		// apply all forked blocks, including this new one
@@ -240,27 +251,33 @@ fn validate_block(b: &Block, ctx: &mut BlockContext, ext: &mut sumtree::Extensio
 	}
 
 	let (utxo_root, rproof_root, kernel_root) = ext.roots();
-	if utxo_root.hash != b.header.utxo_root ||
-		rproof_root.hash != b.header.range_proof_root ||
-		kernel_root.hash != b.header.kernel_root {
+	if utxo_root.hash != b.header.utxo_root || rproof_root.hash != b.header.range_proof_root ||
+		kernel_root.hash != b.header.kernel_root
+	{
 
 		return Err(Error::InvalidRoot);
 	}
 
-	// check that any coinbase outputs are spendable (that they have matured sufficiently)
+	// check that any coinbase outputs are spendable (that they have matured
+	// sufficiently)
 	for input in &b.inputs {
 		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
 			if output.features.contains(transaction::COINBASE_OUTPUT) {
-				if let Ok(output_header) = ctx.store.get_block_header_by_output_commit(&input.commitment()) {
+				if let Ok(output_header) =
+					ctx.store.get_block_header_by_output_commit(
+						&input.commitment(),
+					)
+				{
 
-					// TODO - make sure we are not off-by-1 here vs. the equivalent tansaction validation rule
+					// TODO - make sure we are not off-by-1 here vs. the equivalent tansaction
+					// validation rule
 					if b.header.height <= output_header.height + consensus::COINBASE_MATURITY {
 						return Err(Error::ImmatureCoinbase);
 					}
 				};
 			};
 		};
-	};
+	}
 
 	Ok(())
 }

@@ -35,12 +35,18 @@ const UTXO_SUBDIR: &'static str = "utxo";
 const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
 const KERNEL_SUBDIR: &'static str = "kernel";
 
-struct PMMRHandle<T> where T: Summable + Clone {
+struct PMMRHandle<T>
+where
+	T: Summable + Clone,
+{
 	backend: PMMRBackend<T>,
 	last_pos: u64,
 }
 
-impl<T> PMMRHandle<T> where T: Summable + Clone {
+impl<T> PMMRHandle<T>
+where
+	T: Summable + Clone,
+{
 	fn new(root_dir: String, file_name: &str) -> Result<PMMRHandle<T>, Error> {
 		let path = Path::new(&root_dir).join(SUMTREES_SUBDIR).join(file_name);
 		fs::create_dir_all(path.clone())?;
@@ -88,7 +94,7 @@ impl SumTrees {
 		match rpos {
 			Ok(pos) => Ok(self.output_pmmr_h.backend.get(pos).is_some()),
 			Err(grin_store::Error::NotFoundErr) => Ok(false),
-			Err(e) => Err(Error::StoreErr(e))
+			Err(e) => Err(Error::StoreErr(e)),
 		}
 	}
 }
@@ -101,8 +107,10 @@ impl SumTrees {
 /// If the closure returns an error, modifications are canceled and the unit
 /// of work is abandoned. Otherwise, the unit of work is permanently applied.
 pub fn extending<'a, F, T>(trees: &'a mut SumTrees, inner: F) -> Result<T, Error>
-	where F: FnOnce(&mut Extension) -> Result<T, Error> {
-	
+where
+	F: FnOnce(&mut Extension) -> Result<T, Error>,
+{
+
 	let sizes: (u64, u64, u64);
 	let res: Result<T, Error>;
 	let rollback: bool;
@@ -153,17 +161,25 @@ pub struct Extension<'a> {
 	commit_index: Arc<ChainStore>,
 	new_output_commits: HashMap<Commitment, u64>,
 	new_kernel_excesses: HashMap<Commitment, u64>,
-	rollback: bool
+	rollback: bool,
 }
 
 impl<'a> Extension<'a> {
-
 	// constructor
 	fn new(trees: &'a mut SumTrees, commit_index: Arc<ChainStore>) -> Extension<'a> {
 		Extension {
-			output_pmmr: PMMR::at(&mut trees.output_pmmr_h.backend, trees.output_pmmr_h.last_pos),
-			rproof_pmmr: PMMR::at(&mut trees.rproof_pmmr_h.backend, trees.rproof_pmmr_h.last_pos),
-			kernel_pmmr: PMMR::at(&mut trees.kernel_pmmr_h.backend, trees.kernel_pmmr_h.last_pos),
+			output_pmmr: PMMR::at(
+				&mut trees.output_pmmr_h.backend,
+				trees.output_pmmr_h.last_pos,
+			),
+			rproof_pmmr: PMMR::at(
+				&mut trees.rproof_pmmr_h.backend,
+				trees.rproof_pmmr_h.last_pos,
+			),
+			kernel_pmmr: PMMR::at(
+				&mut trees.kernel_pmmr_h.backend,
+				trees.kernel_pmmr_h.last_pos,
+			),
 			commit_index: commit_index,
 			new_output_commits: HashMap::new(),
 			new_kernel_excesses: HashMap::new(),
@@ -184,14 +200,17 @@ impl<'a> Extension<'a> {
 			if let Ok(pos) = pos_res {
 				match self.output_pmmr.prune(pos, b.header.height as u32) {
 					Ok(true) => {
-						self.rproof_pmmr.prune(pos, b.header.height as u32)
+						self.rproof_pmmr
+							.prune(pos, b.header.height as u32)
 							.map_err(|s| Error::SumTreeErr(s))?;
-					},
+					}
 					Ok(false) => return Err(Error::AlreadySpent),
 					Err(s) => return Err(Error::SumTreeErr(s)),
 				}
 			} else {
-				return Err(Error::SumTreeErr(format!("Missing index for {:?}", input.commitment())));
+				return Err(Error::SumTreeErr(
+					format!("Missing index for {:?}", input.commitment()),
+				));
 			}
 		}
 
@@ -200,15 +219,19 @@ impl<'a> Extension<'a> {
 				return Err(Error::DuplicateCommitment(out.commitment()));
 			}
 			// push new outputs commitments in their MMR and save them in the index
-			let pos = self.output_pmmr.push(SumCommit {
-				commit: out.commitment(),
-				secp: secp.clone(),
-			}).map_err(&Error::SumTreeErr)?;
+			let pos = self.output_pmmr
+				.push(SumCommit {
+					commit: out.commitment(),
+					secp: secp.clone(),
+				})
+				.map_err(&Error::SumTreeErr)?;
 
 			self.new_output_commits.insert(out.commitment(), pos);
 
 			// push range proofs in their MMR
-			self.rproof_pmmr.push(NoSum(out.proof)).map_err(&Error::SumTreeErr)?;
+			self.rproof_pmmr.push(NoSum(out.proof)).map_err(
+				&Error::SumTreeErr,
+			)?;
 		}
 
 		for kernel in &b.kernels {
@@ -216,7 +239,9 @@ impl<'a> Extension<'a> {
 				return Err(Error::DuplicateKernel(kernel.excess.clone()));
 			}
 			// push kernels in their MMR
-			let pos = self.kernel_pmmr.push(NoSum(kernel.clone())).map_err(&Error::SumTreeErr)?;
+			let pos = self.kernel_pmmr.push(NoSum(kernel.clone())).map_err(
+				&Error::SumTreeErr,
+			)?;
 			self.new_kernel_excesses.insert(kernel.excess, pos);
 		}
 		Ok(())
@@ -238,16 +263,28 @@ impl<'a> Extension<'a> {
 		let out_pos_rew = self.commit_index.get_output_pos(&output.commitment())?;
 		let kern_pos_rew = self.commit_index.get_kernel_pos(&kernel.excess)?;
 
-		self.output_pmmr.rewind(out_pos_rew, height as u32).map_err(&Error::SumTreeErr)?;
-		self.rproof_pmmr.rewind(out_pos_rew, height as u32).map_err(&Error::SumTreeErr)?;
-		self.kernel_pmmr.rewind(kern_pos_rew, height as u32).map_err(&Error::SumTreeErr)?;
+		self.output_pmmr
+			.rewind(out_pos_rew, height as u32)
+			.map_err(&Error::SumTreeErr)?;
+		self.rproof_pmmr
+			.rewind(out_pos_rew, height as u32)
+			.map_err(&Error::SumTreeErr)?;
+		self.kernel_pmmr
+			.rewind(kern_pos_rew, height as u32)
+			.map_err(&Error::SumTreeErr)?;
 		Ok(())
 	}
 
 	/// Current root hashes and sums (if applicable) for the UTXO, range proof
 	/// and kernel sum trees.
-	pub fn roots(&self) -> (HashSum<SumCommit>, HashSum<NoSum<RangeProof>>, HashSum<NoSum<TxKernel>>) {
-		(self.output_pmmr.root(), self.rproof_pmmr.root(), self.kernel_pmmr.root())
+	pub fn roots(
+		&self,
+	) -> (HashSum<SumCommit>, HashSum<NoSum<RangeProof>>, HashSum<NoSum<TxKernel>>) {
+		(
+			self.output_pmmr.root(),
+			self.rproof_pmmr.root(),
+			self.kernel_pmmr.root(),
+		)
 	}
 
 	/// Force the rollback of this extension, no matter the result
@@ -257,7 +294,10 @@ impl<'a> Extension<'a> {
 
 	// Sizes of the sum trees, used by `extending` on rollback.
 	fn sizes(&self) -> (u64, u64, u64) {
-		(self.output_pmmr.unpruned_size(), self.rproof_pmmr.unpruned_size(),
-			self.kernel_pmmr.unpruned_size())
+		(
+			self.output_pmmr.unpruned_size(),
+			self.rproof_pmmr.unpruned_size(),
+			self.kernel_pmmr.unpruned_size(),
+		)
 	}
 }

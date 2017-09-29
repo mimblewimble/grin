@@ -79,35 +79,47 @@ impl Server {
 	pub fn future(mut config: ServerConfig, evt_handle: &reactor::Handle) -> Result<Server, Error> {
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
-		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(pool_adapter.clone())));
+		let tx_pool = Arc::new(RwLock::new(
+			pool::TransactionPool::new(pool_adapter.clone()),
+		));
 
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));
 
 		let mut genesis_block = None;
-		if !chain::Chain::chain_exists(config.db_root.clone()){
-			genesis_block=pow::mine_genesis_block(config.mining_config.clone());
+		if !chain::Chain::chain_exists(config.db_root.clone()) {
+			genesis_block = pow::mine_genesis_block(config.mining_config.clone());
 		}
 
-		let shared_chain = Arc::new(chain::Chain::init(config.db_root.clone(),
-		                                               chain_adapter.clone(),
-		                                               genesis_block,
-		                                               pow::verify_size)?);
-			
+		let shared_chain = Arc::new(chain::Chain::init(
+			config.db_root.clone(),
+			chain_adapter.clone(),
+			genesis_block,
+			pow::verify_size,
+		)?);
+
 		pool_adapter.set_chain(shared_chain.clone());
 
 		let peer_store = Arc::new(p2p::PeerStore::new(config.db_root.clone())?);
-		let net_adapter = Arc::new(NetToChainAdapter::new(shared_chain.clone(),
-		                                                  tx_pool.clone(),
-		                                                  peer_store.clone()));
-		let p2p_server =
-			Arc::new(p2p::Server::new(config.capabilities, config.p2p_config.unwrap(), net_adapter.clone()));
+		let net_adapter = Arc::new(NetToChainAdapter::new(
+			shared_chain.clone(),
+			tx_pool.clone(),
+			peer_store.clone(),
+		));
+		let p2p_server = Arc::new(p2p::Server::new(
+			config.capabilities,
+			config.p2p_config.unwrap(),
+			net_adapter.clone(),
+		));
 		chain_adapter.init(p2p_server.clone());
 
 		let seed = seed::Seeder::new(config.capabilities, peer_store.clone(), p2p_server.clone());
 		match config.seeding_type.clone() {
 			Seeding::None => {}
 			Seeding::List => {
-				seed.connect_and_monitor(evt_handle.clone(), seed::predefined_seeds(config.seeds.as_mut().unwrap().clone()));
+				seed.connect_and_monitor(
+					evt_handle.clone(),
+					seed::predefined_seeds(config.seeds.as_mut().unwrap().clone()),
+				);
 			}
 			Seeding::WebStatic => {
 				seed.connect_and_monitor(evt_handle.clone(), seed::web_seeds(evt_handle.clone()));
@@ -121,9 +133,11 @@ impl Server {
 
 		info!("Starting rest apis at: {}", &config.api_http_addr);
 
-		api::start_rest_apis(config.api_http_addr.clone(),
-		                     shared_chain.clone(),
-		                     tx_pool.clone());
+		api::start_rest_apis(
+			config.api_http_addr.clone(),
+			shared_chain.clone(),
+			tx_pool.clone(),
+		);
 
 		warn!("Grin server started.");
 		Ok(Server {
@@ -138,7 +152,12 @@ impl Server {
 	/// Asks the server to connect to a peer at the provided network address.
 	pub fn connect_peer(&self, addr: SocketAddr) -> Result<(), Error> {
 		let handle = self.evt_handle.clone();
-		handle.spawn(self.p2p.connect_peer(addr, handle.clone()).map(|_| ()).map_err(|_| ()));
+		handle.spawn(
+			self.p2p
+				.connect_peer(addr, handle.clone())
+				.map(|_| ())
+				.map_err(|_| ()),
+		);
 		Ok(())
 	}
 
@@ -154,7 +173,7 @@ impl Server {
 		let proof_size = global::proofsize();
 
 		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
-		miner.set_debug_output_id(format!("Port {}",self.config.p2p_config.unwrap().port));
+		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.unwrap().port));
 		thread::spawn(move || {
 			miner.run_loop(config.clone(), cuckoo_size as u32, proof_size);
 		});
@@ -165,12 +184,14 @@ impl Server {
 		self.chain.head().unwrap()
 	}
 
-	/// Returns a set of stats about this server. This and the ServerStats structure
-	/// can be updated over time to include any information needed by tests or other
+	/// Returns a set of stats about this server. This and the ServerStats
+	/// structure
+	/// can be updated over time to include any information needed by tests or
+	/// other
 	/// consumers
 
-	pub fn get_server_stats(&self) -> Result<ServerStats, Error>{
-		Ok(ServerStats{
+	pub fn get_server_stats(&self) -> Result<ServerStats, Error> {
+		Ok(ServerStats {
 			peer_count: self.peer_count(),
 			head: self.head(),
 		})

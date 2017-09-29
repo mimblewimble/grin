@@ -59,8 +59,8 @@ impl Difficulty {
 	/// provided hash.
 	pub fn from_hash(h: &Hash) -> Difficulty {
 		let max_target = BigEndian::read_u64(&MAX_TARGET);
-		//Use the first 64 bits of the given hash
-		let mut in_vec=h.to_vec();
+		// Use the first 64 bits of the given hash
+		let mut in_vec = h.to_vec();
 		in_vec.truncate(8);
 		let num = BigEndian::read_u64(&in_vec);
 		Difficulty { num: max_target / num }
@@ -121,7 +121,8 @@ impl Readable for Difficulty {
 
 impl Serialize for Difficulty {
 	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-		where S: Serializer
+	where
+		S: Serializer,
 	{
 		serializer.serialize_u64(self.num)
 	}
@@ -129,7 +130,8 @@ impl Serialize for Difficulty {
 
 impl<'de> Deserialize<'de> for Difficulty {
 	fn deserialize<D>(deserializer: D) -> Result<Difficulty, D::Error>
-		where D: Deserializer<'de>
+	where
+		D: Deserializer<'de>,
 	{
 		deserializer.deserialize_u64(DiffVisitor)
 	}
@@ -145,12 +147,16 @@ impl<'de> de::Visitor<'de> for DiffVisitor {
 	}
 
 	fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-		where E: de::Error
+	where
+		E: de::Error,
 	{
 		let num_in = s.parse::<u64>();
-		if let Err(_)=num_in {
-        	return Err(de::Error::invalid_value(de::Unexpected::Str(s), &"a value number"));
-      	};
+		if let Err(_) = num_in {
+			return Err(de::Error::invalid_value(
+				de::Unexpected::Str(s),
+				&"a value number",
+			));
+		};
 		Ok(Difficulty { num: num_in.unwrap() })
 	}
 }

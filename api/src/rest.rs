@@ -203,25 +203,35 @@ struct OpWrapper<E> {
 }
 
 impl<E> Handler for OpWrapper<E>
-    where E: ApiEndpoint
+where
+	E: ApiEndpoint,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let t: E::OP_IN = serde_json::from_reader(req.body.by_ref())
-      .map_err(|e| IronError::new(e, status::BadRequest))?;
+		let t: E::OP_IN = serde_json::from_reader(req.body.by_ref()).map_err(|e| {
+			IronError::new(e, status::BadRequest)
+		})?;
 		let res = self.endpoint.operation(self.operation.clone(), t)?;
-		let res_json = serde_json::to_string(&res)
-      .map_err(|e| IronError::new(e, status::InternalServerError))?;
+		let res_json = serde_json::to_string(&res).map_err(|e| {
+			IronError::new(e, status::InternalServerError)
+		})?;
 		Ok(Response::with((status::Ok, res_json)))
 	}
 }
 
 fn extract_param<ID>(req: &mut Request, param: &'static str) -> IronResult<ID>
-	where ID: ToString + FromStr,
-	      <ID as FromStr>::Err: Debug + Send + error::Error + 'static
+where
+	ID: ToString + FromStr,
+	<ID as FromStr>::Err: Debug + Send + error::Error + 'static,
 {
 
-	let id = req.extensions.get::<Router>().unwrap().find(param).unwrap_or("");
-	id.parse::<ID>().map_err(|e| IronError::new(e, status::BadRequest))
+	let id = req.extensions
+		.get::<Router>()
+		.unwrap()
+		.find(param)
+		.unwrap_or("");
+	id.parse::<ID>().map_err(
+		|e| IronError::new(e, status::BadRequest),
+	)
 }
 
 /// HTTP server allowing the registration of ApiEndpoint implementations.
@@ -229,7 +239,6 @@ pub struct ApiServer {
 	root: String,
 	router: Router,
 	server_listener: Option<Listening>,
-
 }
 
 impl ApiServer {
@@ -245,7 +254,7 @@ impl ApiServer {
 
 	/// Starts the ApiServer at the provided address.
 	pub fn start<A: ToSocketAddrs>(&mut self, addr: A) -> Result<(), String> {
-		//replace this value to satisfy borrow checker
+		// replace this value to satisfy borrow checker
 		let r = mem::replace(&mut self.router, Router::new());
 		let result = Iron::new(r).http(addr);
 		let return_value = result.as_ref().map(|_| ()).map_err(|e| e.to_string());
@@ -254,7 +263,7 @@ impl ApiServer {
 	}
 
 	/// Stops the API server
-	pub fn stop(&mut self){
+	pub fn stop(&mut self) {
 		let r = mem::replace(&mut self.server_listener, None);
 		r.unwrap().close().unwrap();
 	}
@@ -262,8 +271,9 @@ impl ApiServer {
 	/// Register a new API endpoint, providing a relative URL for the new
 	/// endpoint.
 	pub fn register_endpoint<E>(&mut self, subpath: String, endpoint: E)
-		where E: ApiEndpoint,
-		      <<E as ApiEndpoint>::ID as FromStr>::Err: Debug + Send + error::Error
+	where
+		E: ApiEndpoint,
+		<<E as ApiEndpoint>::ID as FromStr>::Err: Debug + Send + error::Error,
 	{
 
 		assert_eq!(subpath.chars().nth(0).unwrap(), '/');
@@ -281,7 +291,12 @@ impl ApiServer {
 					endpoint: endpoint.clone(),
 				};
 				let full_path = format!("{}/{}", root.clone(), op_s.clone());
-				self.router.route(op.to_method(), full_path.clone(), wrapper, route_name);
+				self.router.route(
+					op.to_method(),
+					full_path.clone(),
+					wrapper,
+					route_name,
+				);
 				info!("route: POST {}", full_path);
 			} else {
 
@@ -294,15 +309,21 @@ impl ApiServer {
 					_ => panic!("unreachable"),
 				};
 				let wrapper = ApiWrapper(endpoint.clone());
-				self.router.route(op.to_method(), full_path.clone(), wrapper, route_name);
+				self.router.route(
+					op.to_method(),
+					full_path.clone(),
+					wrapper,
+					route_name,
+				);
 				info!("route: {} {}", op.to_method(), full_path);
 			}
 		}
 
 		// support for the HTTP Options method by differentiating what's on the
 		// root resource vs the id resource
-		let (root_opts, sub_opts) =
-			endpoint.operations().iter().fold((vec![], vec![]), |mut acc, op| {
+		let (root_opts, sub_opts) = endpoint.operations().iter().fold(
+			(vec![], vec![]),
+			|mut acc, op| {
 				let m = op.to_method();
 				if m == Method::Post {
 					acc.0.push(m);
@@ -310,19 +331,26 @@ impl ApiServer {
 					acc.1.push(m);
 				}
 				acc
-			});
-		self.router.options(root.clone(),
-		                    move |_: &mut Request| {
-			                    Ok(Response::with((status::Ok,
-			                                       Header(headers::Allow(root_opts.clone())))))
-			                   },
-		                    "option_".to_string() + route_postfix);
-		self.router.options(root.clone() + "/:id",
-		                    move |_: &mut Request| {
-			                    Ok(Response::with((status::Ok,
-			                                       Header(headers::Allow(sub_opts.clone())))))
-			                   },
-		                    "option_id_".to_string() + route_postfix);
+			},
+		);
+		self.router.options(
+			root.clone(),
+			move |_: &mut Request| {
+				Ok(Response::with(
+					(status::Ok, Header(headers::Allow(root_opts.clone()))),
+				))
+			},
+			"option_".to_string() + route_postfix,
+		);
+		self.router.options(
+			root.clone() + "/:id",
+			move |_: &mut Request| {
+				Ok(Response::with(
+					(status::Ok, Header(headers::Allow(sub_opts.clone()))),
+				))
+			},
+			"option_id_".to_string() + route_postfix,
+		);
 	}
 }
 
@@ -344,8 +372,8 @@ mod test {
 	impl ApiEndpoint for TestApi {
 		type ID = String;
 		type T = Animal;
-    type OP_IN = ();
-    type OP_OUT = ();
+		type OP_IN = ();
+		type OP_OUT = ();
 
 		fn operations(&self) -> Vec<Operation> {
 			vec![Operation::Get]
