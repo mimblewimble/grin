@@ -174,11 +174,11 @@ fn receive_coinbase(
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		let derivation = wallet_data.next_child(&keychain.fingerprint());
-		let pubkey = keychain.derive_pubkey(derivation).map_err(|e| Error::Key(e))?;
+		let pubkey = keychain.derive_pubkey(derivation)?;
 
 		// track the new output and return the stuff needed for reward
 		wallet_data.append_output(OutputData {
-			fingerprint: &keychain.fingerprint(),
+			fingerprint: keychain.fingerprint(),
 			n_child: derivation,
 			value: amount,
 			status: OutputStatus::Unconfirmed,
@@ -190,7 +190,7 @@ fn receive_coinbase(
 
 		let result = Block::reward_output(&keychain, pubkey)?;
 		Ok(result)
-	})
+	})?
 }
 
 /// Builds a full transaction from the partial one sent to us for transfer
@@ -217,7 +217,7 @@ fn receive_transaction(
 			build::with_excess(blinding),
 			build::output(out_amount, pubkey),
 			build::with_fee(fee_amount),
-		])?;
+		], keychain)?;
 
 		// make sure the resulting transaction is valid (could have been lied to on excess)
 		tx_final.validate(&keychain.secp())?;
@@ -235,5 +235,5 @@ fn receive_transaction(
 			keychain.fingerprint(), pubkey.fingerprint(), derivation);
 
 		Ok(tx_final)
-	})
+	})?
 }

@@ -22,7 +22,10 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
+mod blind;
 mod extkey;
+
+pub use blind::{BlindSum, BlindingFactor};
 pub use extkey::{Identifier, Fingerprint, ExtendedKey};
 pub mod keychain;
-pub use keychain::{BlindingFactor, BlindSum, Error, Keychain};
+pub use keychain::{Error, Keychain};

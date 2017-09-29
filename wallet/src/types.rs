@@ -20,6 +20,7 @@ use std::path::Path;
 use std::path::MAIN_SEPARATOR;
 
 use serde_json;
+use secp;
 
 use api;
 use core::core::Transaction;
@@ -35,6 +36,7 @@ const LOCK_FILE: &'static str = "wallet.lock";
 pub enum Error {
 	NotEnoughFunds(u64),
 	Keychain(keychain::Error),
+	Secp(secp::Error),
 	WalletData(String),
 	/// An error in the format of the JSON structures exchanged by the wallet
 	Format(String),
@@ -44,6 +46,10 @@ pub enum Error {
 
 impl From<keychain::Error> for Error {
 	fn from(e: keychain::Error) -> Error { Error::Keychain(e) }
+}
+
+impl From<secp::Error> for Error {
+	fn from(e: secp::Error) -> Error { Error::Secp(e) }
 }
 
 impl From<serde_json::Error> for Error {

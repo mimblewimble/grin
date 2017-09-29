@@ -84,7 +84,7 @@ fn build_send_tx(
 		// we got that far, time to start tracking the new output, finalize tx
 		// and lock the outputs used
 		wallet_data.append_output(OutputData {
-			fingerprint: &keychain.fingerprint(),
+			fingerprint: keychain.fingerprint(),
 			n_child: change_derivation,
 			value: change as u64,
 			status: OutputStatus::Unconfirmed,

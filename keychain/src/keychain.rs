@@ -20,6 +20,7 @@ use secp::key::SecretKey;
 use secp::pedersen::{Commitment, RangeProof};
 use blake2;
 
+use blind::{BlindingFactor, BlindSum};
 use extkey::{self, Fingerprint, Identifier};
 
 
@@ -38,58 +39,6 @@ impl From<extkey::Error> for Error {
 	fn from(e: extkey::Error) -> Error { Error::ExtendedKey(e) }
 }
 
-/// Encapsulate a secret key for the blind_sum operation
-#[derive(Clone, Debug)]
-pub struct BlindingFactor(secp::key::SecretKey);
-
-impl BlindingFactor {
-	fn secret_key(&self) -> secp::key::SecretKey {
-		self.0
-	}
-}
-
-/// Accumulator to compute the sum of blinding factors. Keeps track of each
-/// factor as well as the "sign" with which they should be combined.
-pub struct BlindSum {
-	positive_pubkeys: Vec<Identifier>,
-	negative_pubkeys: Vec<Identifier>,
-	positive_blinding_factors: Vec<BlindingFactor>,
-	negative_blinding_factors: Vec<BlindingFactor>,
-}
-
-impl BlindSum {
-	/// Creates a new blinding factor sum.
-	pub fn new() -> BlindSum {
-		BlindSum {
-			positive_pubkeys: vec![],
-			negative_pubkeys: vec![],
-			positive_blinding_factors: vec![],
-			negative_blinding_factors: vec![],
-		}
-	}
-
-	pub fn add_pubkey(mut self, pubkey: Identifier) -> BlindSum {
-		self.positive_pubkeys.push(pubkey);
-		self
-	}
-
-	pub fn sub_pubkey(mut self, pubkey: Identifier) -> BlindSum {
-		self.negative_pubkeys.push(pubkey);
-		self
-	}
-
-	/// Adds the provided key to the sum of blinding factors.
-	pub fn add_blinding_factor(mut self, blind: BlindingFactor) -> BlindSum {
-		self.positive_blinding_factors.push(blind);
-		self
-	}
-
-	/// Subtractss the provided key to the sum of blinding factors.
-	pub fn sub_blinding_factor(mut self, blind: BlindingFactor) -> BlindSum {
-		self.negative_blinding_factors.push(blind);
-		self
-	}
-}
 
 #[derive(Clone, Debug)]
 pub struct Keychain {
@@ -175,15 +124,21 @@ impl Keychain {
 			.collect();
 		println!("neg_keys - {}", neg_keys.len());
 
-		pos_keys.extend(&blind_sum.positive_blinding_factors.iter().map(|b| b.0).collect::<Vec<SecretKey>>());
-		neg_keys.extend(&blind_sum.negative_blinding_factors.iter().map(|b| b.0).collect::<Vec<SecretKey>>());
+		pos_keys.extend(&blind_sum.positive_blinding_factors
+			.iter()
+			.map(|b| b.secret_key())
+			.collect::<Vec<SecretKey>>());
+
+		neg_keys.extend(&blind_sum.negative_blinding_factors
+			.iter()
+			.map(|b| b.secret_key())
+			.collect::<Vec<SecretKey>>());
 
 		println!("pos_keys all - {}", pos_keys.len());
 		println!("neg_keys all - {}", neg_keys.len());
 
 		let blinding = self.secp.blind_sum(pos_keys, neg_keys)?;
-		Ok(BlindingFactor(blinding))
-		// Err(Error::KeyDerivation("*** not yet implemented ***".to_string()))
+		Ok(BlindingFactor::new(blinding))
 	}
 
 	pub fn sign(&self, msg: &Message, pubkey: &Identifier) -> Result<Signature, Error> {
