@@ -318,6 +318,27 @@ impl<'a, T, B> PMMR<'a, T, B> where T: Summable + Hashed + Clone, B: 'a + Backen
 	pub fn unpruned_size(&self) -> u64 {
 		self.last_pos
 	}
+
+	/// Debugging utility to print information about the MMRs.
+	pub fn dump(&self) {
+		let sz = self.unpruned_size();
+		if sz > 25 {
+			return;
+		}
+		println!("UXTO set, size: {}", sz);
+		for n in 0..sz {
+			print!("{:>8} ", n + 1);
+		}
+		println!("");
+		for n in 1..(sz+1) {
+			let ohs = self.get(n);
+			match ohs {
+				Some(hs) => print!("{} ", hs.hash),
+				None => print!("{:>8} ", "??"),
+			}
+		}
+		println!("");
+	}
 }
 
 /// Simple MMR backend implementation based on a Vector. Pruning does not

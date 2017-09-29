@@ -257,27 +257,7 @@ impl<'a> Extension<'a> {
 
 	// Sizes of the sum trees, used by `extending` on rollback.
 	fn sizes(&self) -> (u64, u64, u64) {
-		(self.output_pmmr.unpruned_size(), self.rproof_pmmr.unpruned_size(), self.kernel_pmmr.unpruned_size())
-	}
-
-	/// Debugging utility to print information about the MMRs.
-	pub fn dump(&self) {
-		let sz = self.output_pmmr.unpruned_size();
-		if sz > 25 {
-			return;
-		}
-		println!("UXTO set, size: {}", sz);
-		for n in 0..sz {
-			print!("{:>8} ", n + 1);
-		}
-		println!("");
-		for n in 1..(sz+1) {
-			let ohs = self.output_pmmr.get(n);
-			match ohs {
-				Some(hs) => print!("{} ", hs.hash),
-				None => print!("??"),
-			}
-		}
-		println!("");
+		(self.output_pmmr.unpruned_size(), self.rproof_pmmr.unpruned_size(),
+			self.kernel_pmmr.unpruned_size())
 	}
 }

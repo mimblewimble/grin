@@ -18,6 +18,7 @@ env:
     - RUST_BACKTRACE="1"
   matrix:
     - TEST_DIR=core
+    - TEST_DIR=store
     - TEST_DIR=chain
     - TEST_DIR=p2p
     - TEST_DIR=api

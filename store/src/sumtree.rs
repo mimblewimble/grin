@@ -22,7 +22,10 @@ use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use std::io::Read;
 
-use libc;
+#[cfg(any(target_os = "linux"))]
+use libc::{off64_t, ftruncate64};
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+use libc::{off_t as off64_t, ftruncate as ftruncate64};
 
 use core::core::pmmr::{self, Summable, Backend, HashSum, VecBackend};
 use core::ser;
@@ -138,7 +141,7 @@ impl AppendOnlyFile {
 	/// Truncates the underlying file to the provided offset
 	fn truncate(&self, offs: u64) -> io::Result<()> {
 		let fd = self.file.as_raw_fd();
-		let res = unsafe { libc::ftruncate64(fd, offs as i64) };
+		let res = unsafe { ftruncate64(fd, offs as off64_t) };
 		if res == -1 {
 			Err(io::Error::last_os_error())
 		} else {
@@ -239,7 +242,7 @@ impl RemoveLog {
 
 fn include_tuple(v: &Vec<(u64, u32)>, e: u64) -> bool {
 	if let Err(pos) = v.binary_search(&(e, 0)) {
-		if pos > 0 && v[pos-1].0 == e {
+		if pos < v.len() && v[pos].0 == e {
 			return true;
 		}
 	}

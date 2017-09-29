@@ -80,9 +80,9 @@ fn sumtree_prune_compact() {
 	// pruning some choice nodes
 	{
 		let mut pmmr = PMMR::at(&mut backend, mmr_size);
-		pmmr.prune(1).unwrap();
-		pmmr.prune(4).unwrap();
-		pmmr.prune(5).unwrap();
+		pmmr.prune(1, 1).unwrap();
+		pmmr.prune(4, 1).unwrap();
+		pmmr.prune(5, 1).unwrap();
 	}
 	backend.sync().unwrap();
 
@@ -118,8 +118,8 @@ fn sumtree_reload() {
 		{
 			let mut pmmr = PMMR::at(&mut backend, mmr_size);
 			root = pmmr.root();
-			pmmr.prune(1).unwrap();
-			pmmr.prune(4).unwrap();
+			pmmr.prune(1, 1).unwrap();
+			pmmr.prune(4, 1).unwrap();
 		}
 		backend.sync().unwrap();
 		backend.check_compact(1).unwrap();
@@ -128,7 +128,7 @@ fn sumtree_reload() {
 		// prune some more to get rm log data
 		{
 			let mut pmmr = PMMR::at(&mut backend, mmr_size);
-			pmmr.prune(5).unwrap();
+			pmmr.prune(5, 1).unwrap();
 		}
 		backend.sync().unwrap();
 	}
