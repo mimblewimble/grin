@@ -1,7 +1,11 @@
 [package]
 name = "grin_wallet"
 version = "0.1.0"
-authors = ["Ignotus Peverell <igno_peverell@protonmail.com>", "Laurent Meunier <laurent.meunier95@gmail.com>"]
+authors = [
+	"Ignotus Peverell <igno_peverell@protonmail.com>",
+	"Laurent Meunier <laurent.meunier95@gmail.com>",
+	"Antioch Peverell",
+]
 
 [dependencies]
 
@@ -15,5 +19,6 @@ serde_json = "~1.0.2"
 
 grin_api = { path = "../api" }
 grin_core = { path = "../core" }
+grin_keychain = { path = "../keychain" }
 grin_util = { path = "../util" }
 secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }

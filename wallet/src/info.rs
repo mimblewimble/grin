@@ -14,12 +14,16 @@
 
 use secp;
 use checker;
-use extkey::ExtendedKey;
+use keychain::{Keychain, Fingerprint};
 use types::{WalletConfig, WalletData};
 
-pub fn show_info(config: &WalletConfig, ext_key: &ExtendedKey) {
-	let _ = checker::refresh_outputs(&config, ext_key);
-	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
+pub fn show_info(
+	config: &WalletConfig,
+	// TODO - does a keychain itself have a fingerprint (avoid passing it here)?
+	master_fingerprint: &Fingerprint,
+	keychain: &Keychain,
+) {
+	let _ = checker::refresh_outputs(&config, keychain);
 
 	// operate within a lock on wallet data
 	let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
@@ -27,15 +31,15 @@ pub fn show_info(config: &WalletConfig, ext_key: &ExtendedKey) {
 		println!("Outputs - ");
 		println!("fingerprint, n_child, height, lock_height, status, value");
 		println!("----------------------------------");
-		for out in &mut wallet_data.outputs.iter().filter(|o| {
-			o.fingerprint == ext_key.fingerprint
-		})
+		for out in &mut wallet_data.outputs
+			.iter()
+			.filter(|out| out.fingerprint == master_fingerprint)
 		{
-			let key = ext_key.derive(&secp, out.n_child).unwrap();
+			let pubkey = keychain.derive_pubkey(out.n_child).unwrap();
 
 			println!(
-				"{}, {}, {}, {}, {}, {}",
-				key.identifier().fingerprint(),
+				"{}, {}, {}, {}, {:?}, {}",
+				pubkey.identifier().fingerprint(),
 				out.n_child,
 				out.height,
 				out.lock_height,

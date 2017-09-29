@@ -23,6 +23,6 @@ extern crate serde;
 extern crate serde_derive;
 
 mod extkey;
-pub use extkey::Identifier;
+pub use extkey::{Identifier, Fingerprint, ExtendedKey};
 pub mod keychain;
 pub use keychain::{BlindingFactor, BlindSum, Error, Keychain};

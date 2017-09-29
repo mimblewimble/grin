@@ -19,16 +19,12 @@ use std::io::Write;
 use std::path::Path;
 use std::path::MAIN_SEPARATOR;
 
-
 use serde_json;
-
-use secp;
-use secp::key::SecretKey;
 
 use api;
 use core::core::Transaction;
 use core::ser;
-use extkey;
+use keychain;
 use util;
 
 const DAT_FILE: &'static str = "wallet.dat";
@@ -38,8 +34,7 @@ const LOCK_FILE: &'static str = "wallet.lock";
 #[derive(Debug)]
 pub enum Error {
 	NotEnoughFunds(u64),
-	Crypto(secp::Error),
-	Key(extkey::Error),
+	Keychain(keychain::Error),
 	WalletData(String),
 	/// An error in the format of the JSON structures exchanged by the wallet
 	Format(String),
@@ -47,34 +42,20 @@ pub enum Error {
 	Node(api::Error),
 }
 
-impl From<secp::Error> for Error {
-	fn from(e: secp::Error) -> Error {
-		Error::Crypto(e)
-	}
-}
-
-impl From<extkey::Error> for Error {
-	fn from(e: extkey::Error) -> Error {
-		Error::Key(e)
-	}
+impl From<keychain::Error> for Error {
+	fn from(e: keychain::Error) -> Error { Error::Key(e) }
 }
 
 impl From<serde_json::Error> for Error {
-	fn from(e: serde_json::Error) -> Error {
-		Error::Format(e.to_string())
-	}
+	fn from(e: serde_json::Error) -> Error { Error::Format(e.to_string()) }
 }
 
 impl From<num::ParseIntError> for Error {
-	fn from(_: num::ParseIntError) -> Error {
-		Error::Format("Invalid hex".to_string())
-	}
+	fn from(_: num::ParseIntError) -> Error { Error::Format("Invalid hex".to_string()) }
 }
 
 impl From<api::Error> for Error {
-	fn from(e: api::Error) -> Error {
-		Error::Node(e)
-	}
+	fn from(e: api::Error) -> Error { Error::Node(e) }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -132,7 +113,7 @@ impl fmt::Display for OutputStatus {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OutputData {
 	/// Private key fingerprint (in case the wallet tracks multiple)
-	pub fingerprint: extkey::Fingerprint,
+	pub fingerprint: keychain::Fingerprint,
 	/// How many derivations down from the root key
 	pub n_child: u32,
 	/// Value of the output, necessary to rebuild the commitment
@@ -283,10 +264,16 @@ impl WalletData {
 	/// Select a subset of unspent outputs to spend in a transaction
 	/// transferring
 	/// the provided amount.
-	pub fn select(&self, fingerprint: &extkey::Fingerprint, amount: u64) -> (Vec<OutputData>, i64) {
+	pub fn select(
+		&self,
+		fingerprint:
+		&keychain::Fingerprint,
+		amount: u64
+	) -> (Vec<OutputData>, i64) {
 		let mut to_spend = vec![];
 		let mut input_total = 0;
-		// TODO very naive impl for now, there's definitely better coin selection
+
+		// TODO very naive impl for now - definitely better coin selection
 		// algos available
 		for out in &self.outputs {
 			if out.status == OutputStatus::Unspent && out.fingerprint == *fingerprint {
@@ -297,11 +284,12 @@ impl WalletData {
 				}
 			}
 		}
+		// TODO - clean up our handling of i64 vs u64 so we are consistent
 		(to_spend, (input_total as i64) - (amount as i64))
 	}
 
 	/// Next child index when we want to create a new output.
-	pub fn next_child(&self, fingerprint: &extkey::Fingerprint) -> u32 {
+	pub fn next_child(&self, fingerprint: &keychain::Fingerprint) -> u32 {
 		let mut max_n = 0;
 		for out in &self.outputs {
 			if max_n < out.n_child && out.fingerprint == *fingerprint {
@@ -323,9 +311,14 @@ struct JSONPartialTx {
 
 /// Encodes the information for a partial transaction (not yet completed by the
 /// receiver) into JSON.
-pub fn partial_tx_to_json(receive_amount: u64, blind_sum: SecretKey, tx: Transaction) -> String {
+pub fn partial_tx_to_json(
+	receive_amount: u64,
+	blind_sum: keychain::BlindingFactor,
+	tx: Transaction,
+) -> String {
 	let partial_tx = JSONPartialTx {
 		amount: receive_amount,
+		// TODO - blind_sum wraps a secret_key, can we call .as_ref() here?
 		blind_sum: util::to_hex(blind_sum.as_ref().to_vec()),
 		tx: util::to_hex(ser::ser_vec(&tx).unwrap()),
 	};
@@ -334,12 +327,17 @@ pub fn partial_tx_to_json(receive_amount: u64, blind_sum: SecretKey, tx: Transac
 
 /// Reads a partial transaction encoded as JSON into the amount, sum of blinding
 /// factors and the transaction itself.
-pub fn partial_tx_from_json(json_str: &str) -> Result<(u64, SecretKey, Transaction), Error> {
+pub fn partial_tx_from_json(
+	json_str: &str,
+) -> Result<(u64, keychain::BlindingFactor, Transaction), Error> {
 	let partial_tx: JSONPartialTx = serde_json::from_str(json_str)?;
 
-	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	let blind_bin = util::from_hex(partial_tx.blind_sum)?;
-	let blinding = SecretKey::from_slice(&secp, &blind_bin[..])?;
+
+	// TODO - turn some data into a blinding factor here somehow
+	// let blinding = SecretKey::from_slice(&secp, &blind_bin[..])?;
+	let blinding = Blinding::from_slice(&blind_bin[..])?;
+
 	let tx_bin = util::from_hex(partial_tx.tx)?;
 	let tx = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
 		Error::Format(

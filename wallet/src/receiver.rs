@@ -56,9 +56,9 @@ use secp::key::SecretKey;
 use core::core::{Block, Transaction, TxKernel, Output, build};
 use core::ser;
 use api::{self, ApiEndpoint, Operation, ApiResult};
-use extkey::ExtendedKey;
 use types::*;
 use util;
+use keychain::{Keychain, Identifier, ExtendedKey, Fingerprint};
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
 #[derive(Serialize, Deserialize)]
@@ -114,19 +114,18 @@ impl ApiEndpoint for WalletReceiver {
 						if cb_amount.amount == 0 {
 							return Err(api::Error::Argument(format!("Zero amount not allowed.")));
 						}
-						let (out, kern) = receive_coinbase(
-							&self.config,
-							&self.key,
-							cb_amount.amount,
-						).map_err(|e| {
-							api::Error::Internal(format!("Error building coinbase: {:?}", e))
-						})?;
-						let out_bin = ser::ser_vec(&out).map_err(|e| {
-							api::Error::Internal(format!("Error serializing output: {:?}", e))
-						})?;
-						let kern_bin = ser::ser_vec(&kern).map_err(|e| {
-							api::Error::Internal(format!("Error serializing kernel: {:?}", e))
-						})?;
+						let (out, kern) =
+							receive_coinbase(&self.config, &self.keychain, cb_amount.amount).map_err(|e| {
+									api::Error::Internal(format!("Error building coinbase: {:?}", e))
+								})?;
+						let out_bin =
+							ser::ser_vec(&out).map_err(|e| {
+									api::Error::Internal(format!("Error serializing output: {:?}", e))
+								})?;
+						let kern_bin =
+							ser::ser_vec(&kern).map_err(|e| {
+									api::Error::Internal(format!("Error serializing kernel: {:?}", e))
+								})?;
 						Ok(CbData {
 							output: util::to_hex(out_bin),
 							kernel: util::to_hex(kern_bin),
@@ -168,33 +167,29 @@ impl ApiEndpoint for WalletReceiver {
 /// Build a coinbase output and the corresponding kernel
 fn receive_coinbase(
 	config: &WalletConfig,
-	ext_key: &ExtendedKey,
+	keychain: &Keychain,
+	fingerprint: Fingerprint,
 	amount: u64,
 ) -> Result<(Output, TxKernel), Error> {
-	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-
-		// derive a new private for the reward
-		let next_child = wallet_data.next_child(&ext_key.fingerprint);
-		let coinbase_key = ext_key.derive(&secp, next_child).map_err(|e| Error::Key(e))?;
+		let derivation = wallet_data.next_child(fingerprint.clone());
+		let pubkey = keychain.derive_key(derivation).map_err(|e| Error::Key(e))?;
 
 		// track the new output and return the stuff needed for reward
 		wallet_data.append_output(OutputData {
-			fingerprint: coinbase_key.fingerprint,
-			n_child: coinbase_key.n_child,
+			fingerprint: fingerprint.clone(),
+			n_child: derivation,
 			value: amount,
 			status: OutputStatus::Unconfirmed,
 			height: 0,
 			lock_height: 0,
 		});
-		debug!(
-			"Using child {} for a new coinbase output.",
-			coinbase_key.n_child
-		);
+		debug!("Received coinbase - {}, {}, {}",
+			fingerprint.clone(), pubkey.fingerprint(), derivation);
 
-		Block::reward_output(coinbase_key.key, &secp).map_err(&From::from)
+		Block::reward_output(&keychain, pubkey).map_err(&From::from)
 	})?
 }
 
