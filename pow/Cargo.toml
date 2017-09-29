@@ -21,7 +21,7 @@ git = "https://github.com/mimblewimble/cuckoo-miner"
 tag="grin_integration_12"
 #path = "../../cuckoo-miner"
 #uncomment this feature to turn off plugin builds
-#features=["no-plugin-build"]
+features=["no-plugin-build"]
 
 [dev_dependencies]
 grin_chain = { path = "../chain"}
