@@ -29,8 +29,9 @@ mod pool;
 extern crate time;
 extern crate rand;
 extern crate log;
-
+extern crate blake2_rfc as blake2;
 extern crate grin_core as core;
+extern crate grin_keychain as keychain;
 extern crate secp256k1zkp as secp;
 
 pub use pool::TransactionPool;
