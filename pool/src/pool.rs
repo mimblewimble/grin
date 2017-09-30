@@ -630,16 +630,10 @@ mod tests {
 		{
 			let read_pool = pool.read().unwrap();
 			assert_eq!(read_pool.total_size(), 2);
-
-			expect_output_parent!(read_pool,
-                Parent::PoolTransaction{tx_ref: _}, 12);
-			expect_output_parent!(read_pool,
-                Parent::AlreadySpent{other_tx: _}, 11, 5);
-			expect_output_parent!(read_pool,
-                Parent::BlockTransaction{output: _}, 8);
-			expect_output_parent!(read_pool,
-                Parent::Unknown, 20);
-
+			expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 12);
+			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 11, 5);
+			expect_output_parent!(read_pool, Parent::BlockTransaction{output: _}, 8);
+			expect_output_parent!(read_pool, Parent::Unknown, 20);
 		}
 	}
 
@@ -724,9 +718,7 @@ mod tests {
 				Err(x) => {
 					match x {
 						PoolError::AlreadyInPool => {}
-						_ => {
-							panic!("Unexpected error when adding already in pool tx: {:?}", x)
-						}
+						_ => panic!("Unexpected error when adding already in pool tx: {:?}", x),
 					};
 				}
 			};
@@ -765,7 +757,10 @@ mod tests {
 			let txn = test_transaction(vec![15], vec![10, 4]);
 			let result = write_pool.add_to_memory_pool(test_source(), txn);
 			match result {
-				Err(PoolError::ImmatureCoinbase { header: _, output: out, }) => {
+				Err(PoolError::ImmatureCoinbase {
+				        header: _,
+				        output: out,
+				    }) => {
 					assert_eq!(out, coinbase_output.commitment());
 				}
 				_ => panic!("expected ImmatureCoinbase error here"),
@@ -780,7 +775,10 @@ mod tests {
 			let txn = test_transaction(vec![15], vec![10, 4]);
 			let result = write_pool.add_to_memory_pool(test_source(), txn);
 			match result {
-				Err(PoolError::ImmatureCoinbase { header: _, output: out, }) => {
+				Err(PoolError::ImmatureCoinbase {
+				        header: _,
+				        output: out,
+				    }) => {
 					assert_eq!(out, coinbase_output.commitment());
 				}
 				_ => panic!("expected ImmatureCoinbase error here"),
@@ -1008,12 +1006,8 @@ mod tests {
 
 			let keychain = Keychain::from_random_seed().unwrap();
 			let pubkey = keychain.derive_pubkey(1).unwrap();
-			block = block::Block::new(
-				&block::BlockHeader::default(),
-				tx_refs,
-				&keychain,
-				pubkey,
-			).unwrap();
+			block = block::Block::new(&block::BlockHeader::default(), tx_refs, &keychain, pubkey)
+				.unwrap();
 		}
 
 		chain_ref.apply_block(&block);
