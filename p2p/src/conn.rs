@@ -183,7 +183,7 @@ impl Connection {
 
 		// infinite iterator stream so we repeat the message reading logic until the
 		// peer is stopped
-		let iter = stream::iter(iter::repeat(()).map(Ok::<(), Error>));
+		let iter = stream::iter_ok(iter::repeat(()).map(Ok::<(), Error>));
 
 		// setup the reading future, getting messages from the peer and processing them
 		let recv_bytes = self.received_bytes.clone();
