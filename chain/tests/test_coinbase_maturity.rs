@@ -93,17 +93,21 @@ fn test_coinbase_maturity() {
 	).unwrap();
 
 	assert_eq!(block.outputs.len(), 1);
-	assert!(block.outputs[0].features.contains(transaction::COINBASE_OUTPUT));
+	assert!(block.outputs[0].features.contains(
+		transaction::COINBASE_OUTPUT,
+	));
 
 	chain.process_block(block, chain::EASY_POW).unwrap();
 
 	let prev = chain.head_header().unwrap();
 
 	let amount = consensus::REWARD;
-	let (coinbase_txn, _) = build::transaction(vec![
-		build::input(amount, pk2),
-		build::output(amount-1, pk3),
-		build::with_fee(1)],
+	let (coinbase_txn, _) = build::transaction(
+		vec![
+			build::input(amount, pk2),
+			build::output(amount - 1, pk3),
+			build::with_fee(1),
+		],
 		&keychain,
 	).unwrap();
 
