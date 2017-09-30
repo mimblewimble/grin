@@ -238,7 +238,7 @@ impl Connection {
 		));
 		data.append(&mut body_data);
 
-		self.outbound_chan.send(data).map_err(
+		self.outbound_chan.unbounded_send(data).map_err(
 			|_| Error::ConnectionClose,
 		)
 	}
