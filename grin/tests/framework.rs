@@ -18,6 +18,7 @@ extern crate grin_p2p as p2p;
 extern crate grin_chain as chain;
 extern crate grin_api as api;
 extern crate grin_wallet as wallet;
+extern crate grin_keychain as keychain;
 extern crate grin_pow as pow;
 extern crate secp256k1zkp as secp;
 
@@ -38,7 +39,7 @@ use tokio_core::reactor;
 use tokio_timer::Timer;
 
 use secp::Secp256k1;
-
+use keychain::Keychain;
 use wallet::WalletConfig;
 
 

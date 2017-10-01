@@ -76,9 +76,8 @@ fn test_coinbase_maturity() {
 	let pk2 = keychain.derive_pubkey(2).unwrap();
 	let pk3 = keychain.derive_pubkey(3).unwrap();
 	let pk4 = keychain.derive_pubkey(4).unwrap();
-	let pk5 = keychain.derive_pubkey(5).unwrap();
 
-	let mut block = core::core::Block::new(&prev, vec![], &keychain, pk1).unwrap();
+	let mut block = core::core::Block::new(&prev, vec![], &keychain, pk1.clone()).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -104,14 +103,19 @@ fn test_coinbase_maturity() {
 	let amount = consensus::REWARD;
 	let (coinbase_txn, _) = build::transaction(
 		vec![
-			build::input(amount, pk2),
-			build::output(amount - 1, pk3),
+			build::input(amount, pk1.clone()),
+			build::output(amount - 1, pk2),
 			build::with_fee(1),
 		],
 		&keychain,
 	).unwrap();
 
-	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, pk4).unwrap();
+	let mut block = core::core::Block::new(
+		&prev,
+		vec![&coinbase_txn],
+		&keychain,
+		pk3.clone()
+	).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -131,9 +135,9 @@ fn test_coinbase_maturity() {
 		_ => panic!("expected ImmatureCoinbase error here"),
 	};
 
-	// mine 10 blocks so we increase the height sufficiently
-	// coinbase will mature and be spendable in the block after these
-	for _ in 0..10 {
+	// mine enough blocks to increase the height sufficiently for
+	// coinbase to reach maturity and be spendable in the next block
+	for _ in 0..3 {
 		let prev = chain.head_header().unwrap();
 
 		let keychain = Keychain::from_random_seed().unwrap();
@@ -158,7 +162,7 @@ fn test_coinbase_maturity() {
 
 	let prev = chain.head_header().unwrap();
 
-	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, pk5).unwrap();
+	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, pk4).unwrap();
 
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 

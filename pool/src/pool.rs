@@ -557,8 +557,6 @@ where
 mod tests {
 	use super::*;
 	use types::*;
-	use secp::{Secp256k1, ContextFlag, constants};
-	use secp::key;
 	use core::core::build;
 	use blockchain::{DummyChain, DummyChainImpl, DummyUtxoSet};
 	use keychain::Keychain;
