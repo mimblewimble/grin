@@ -274,9 +274,8 @@ impl LocalServerContainer {
 		let seed = blake2::blake2b::blake2b(32, &[], seed.as_bytes());
 
 		// TODO - just use from_random_seed here?
-		let keychain = Keychain::from_seed(seed.as_bytes()).expect(
-			"Error initializing keychain from seed"
-		);
+		let keychain =
+			Keychain::from_seed(seed.as_bytes()).expect("Error initializing keychain from seed");
 
 		println!(
 			"Starting the Grin wallet receiving daemon on {} ",
