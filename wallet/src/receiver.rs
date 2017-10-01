@@ -215,10 +215,16 @@ fn receive_transaction(
 		let next_child = wallet_data.next_child(&ext_key.fingerprint);
 		let out_key = ext_key.derive(&secp, next_child).map_err(|e| Error::Key(e))?;
 
+		// TODO - replace with real fee calculation
+		// TODO - note we are not enforcing this in consensus anywhere yet
+		let fee_amount = 1;
+		let out_amount = amount - fee_amount;
+
 		let (tx_final, _) = build::transaction(vec![
 			build::initial_tx(partial),
 			build::with_excess(blinding),
-			build::output(amount, out_key.key),
+			build::output(out_amount, out_key.key),
+			build::with_fee(fee_amount),
 		])?;
 
 		// make sure the resulting transaction is valid (could have been lied to
@@ -229,7 +235,7 @@ fn receive_transaction(
 		wallet_data.append_output(OutputData {
 			fingerprint: out_key.fingerprint,
 			n_child: out_key.n_child,
-			value: amount,
+			value: out_amount,
 			status: OutputStatus::Unconfirmed,
 			height: 0,
 			lock_height: 0,
