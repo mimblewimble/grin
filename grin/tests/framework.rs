@@ -39,7 +39,8 @@ use tokio_core::reactor;
 use tokio_timer::Timer;
 
 use secp::Secp256k1;
-use keychain::Keychain;
+// TODO - why does this need self here? Missing something somewhere.
+use self::keychain::Keychain;
 use wallet::WalletConfig;
 
 
@@ -272,9 +273,9 @@ impl LocalServerContainer {
 
 		let seed = blake2::blake2b::blake2b(32, &[], seed.as_bytes());
 
-		let s = Secp256k1::new();
-		let key = wallet::ExtendedKey::from_seed(&s, seed.as_bytes()).expect(
-			"Error deriving extended key from seed.",
+		// TODO - just use from_random_seed here?
+		let keychain = Keychain::from_seed(seed.as_bytes()).expect(
+			"Error initializing keychain from seed"
 		);
 
 		println!(
@@ -293,7 +294,7 @@ impl LocalServerContainer {
 		api_server.register_endpoint(
 			"/receive".to_string(),
 			wallet::WalletReceiver {
-				key: key,
+				keychain: keychain,
 				config: wallet_config,
 			},
 		);
