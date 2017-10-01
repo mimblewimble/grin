@@ -134,7 +134,7 @@ fn handle_payload(
 	match header.msg_type {
 		Type::Ping => {
 			let data = ser::ser_vec(&MsgHeader::new(Type::Pong, 0))?;
-			sender.send(data).unwrap();
+			sender.unbounded_send(data).unwrap();
 			Ok(None)
 		}
 		Type::Pong => Ok(None),
@@ -156,7 +156,7 @@ fn handle_payload(
 					&MsgHeader::new(Type::Block, body_data.len() as u64),
 				));
 				data.append(&mut body_data);
-				sender.send(data).unwrap();
+				sender.unbounded_send(data).unwrap();
 			}
 			Ok(None)
 		}
@@ -183,7 +183,7 @@ fn handle_payload(
 				&MsgHeader::new(Type::Headers, body_data.len() as u64),
 			));
 			data.append(&mut body_data);
-			sender.send(data).unwrap();
+			sender.unbounded_send(data).unwrap();
 
 			Ok(None)
 		}
@@ -210,7 +210,7 @@ fn handle_payload(
 				&MsgHeader::new(Type::PeerAddrs, body_data.len() as u64),
 			));
 			data.append(&mut body_data);
-			sender.send(data).unwrap();
+			sender.unbounded_send(data).unwrap();
 
 			Ok(None)
 		}

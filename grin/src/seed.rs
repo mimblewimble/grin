@@ -118,7 +118,7 @@ impl Seeder {
 						thread_rng().shuffle(&mut peers[..]);
 						let sz = min(PEER_PREFERRED_COUNT as usize, peers.len());
 						for p in &peers[0..sz] {
-							tx.send(p.addr).unwrap();
+							tx.unbounded_send(p.addr).unwrap();
 						}
 					}
 				}
@@ -165,7 +165,7 @@ impl Seeder {
 				let sz = min(PEER_PREFERRED_COUNT as usize, peer_addrs.len());
 				for addr in &peer_addrs[0..sz] {
 					debug!("Connecting to seed: {}.", addr);
-					tx.send(*addr).unwrap();
+					tx.unbounded_send(*addr).unwrap();
 				}
 				if peer_addrs.len() == 0 {
 					warn!("No seeds were retrieved.");
