@@ -500,7 +500,7 @@ mod test {
 	use core::Transaction;
 	use core::build::{self, input, output, with_fee};
 	use core::test::tx2i1o;
-	use util;
+	use keychain::{Identifier, Keychain};
 
 	use secp;
 

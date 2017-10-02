@@ -34,6 +34,7 @@ pub use self::transaction::*;
 use self::hash::Hashed;
 use ser::{Writeable, Writer, Reader, Readable, Error};
 use global;
+// use keychain;
 
 /// Implemented by types that hold inputs and outputs including Pedersen
 /// commitments. Handles the collection of the commitments as well as their
@@ -187,7 +188,8 @@ mod test {
 	use core::hash::ZERO_HASH;
 	use core::build::{input, output, with_fee, initial_tx, with_excess};
 	use ser;
-	use util;
+	use keychain;
+	use keychain::{Keychain, BlindingFactor};
 
 	#[test]
 	#[should_panic(expected = "InvalidSecretKey")]
