@@ -32,11 +32,15 @@ pub enum Error {
 }
 
 impl From<secp::Error> for Error {
-	fn from(e: secp::Error) -> Error { Error::Secp(e) }
+	fn from(e: secp::Error) -> Error {
+		Error::Secp(e)
+	}
 }
 
 impl From<extkey::Error> for Error {
-	fn from(e: extkey::Error) -> Error { Error::ExtendedKey(e) }
+	fn from(e: extkey::Error) -> Error {
+		Error::ExtendedKey(e)
+	}
 }
 
 
@@ -55,7 +59,7 @@ impl Keychain {
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let extkey = extkey::ExtendedKey::from_seed(&secp, seed)?;
 		let keychain = Keychain {
-			secp: 	secp,
+			secp: secp,
 			extkey: extkey,
 		};
 		Ok(keychain)
@@ -74,12 +78,13 @@ impl Keychain {
 	}
 
 	// TODO - this is a work in progress
-	// TODO - smarter lookups - can we cache key_id/fingerprint -> derivation number somehow?
+	// TODO - smarter lookups - can we cache key_id/fingerprint -> derivation
+	// number somehow?
 	fn derived_key(&self, pubkey: &Identifier) -> Result<SecretKey, Error> {
 		for i in 1..10000 {
 			let extkey = self.extkey.derive(&self.secp, i)?;
 			if extkey.identifier() == *pubkey {
-				return Ok(extkey.key)
+				return Ok(extkey.key);
 			}
 		}
 		Err(Error::KeyDerivation("cannot find one...".to_string()))
@@ -110,24 +115,28 @@ impl Keychain {
 	}
 
 	pub fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error> {
-		let mut pos_keys: Vec<SecretKey> = blind_sum.positive_pubkeys
+		let mut pos_keys: Vec<SecretKey> = blind_sum
+			.positive_pubkeys
 			.iter()
 			.filter_map(|k| self.derived_key(&k).ok())
 			.collect();
 		println!("pos_keys - {}", pos_keys.len());
 
-		let mut neg_keys: Vec<SecretKey> = blind_sum.negative_pubkeys
+		let mut neg_keys: Vec<SecretKey> = blind_sum
+			.negative_pubkeys
 			.iter()
 			.filter_map(|k| self.derived_key(&k).ok())
 			.collect();
 		println!("neg_keys - {}", neg_keys.len());
 
-		pos_keys.extend(&blind_sum.positive_blinding_factors
+		pos_keys.extend(&blind_sum
+			.positive_blinding_factors
 			.iter()
 			.map(|b| b.secret_key())
 			.collect::<Vec<SecretKey>>());
 
-		neg_keys.extend(&blind_sum.negative_blinding_factors
+		neg_keys.extend(&blind_sum
+			.negative_blinding_factors
 			.iter()
 			.map(|b| b.secret_key())
 			.collect::<Vec<SecretKey>>());
@@ -176,7 +185,8 @@ mod test {
 		let msg_bytes = [0; 32];
 		let msg = secp::Message::from_slice(&msg_bytes[..]).unwrap();
 
-		// now create a zero commitment using the key on the keychain associated with the pubkey
+		// now create a zero commitment using the key on the keychain associated with
+		// the pubkey
 		let commit = keychain.commit(0, &pubkey).unwrap();
 
 		// now check we can use our key to verify a signature from this zero commitment
