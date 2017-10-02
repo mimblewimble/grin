@@ -442,8 +442,7 @@ where
 	/// otherwise the RM_LOG_MAX_NODES default value is used.
 	///
 	/// TODO whatever is calling this should also clean up the commit to
-	/// position
-	/// index in db
+	/// position index in db
 	pub fn check_compact(&mut self, max_len: usize) -> io::Result<()> {
 		if !(max_len > 0 && self.remove_log.len() > max_len ||
 			     max_len == 0 && self.remove_log.len() > RM_LOG_MAX_NODES)

@@ -284,7 +284,7 @@ where
 		Ok(elmt_pos)
 	}
 
-	/// Rewind the PMMR to a previous position, as is all push operations after
+	/// Rewind the PMMR to a previous position, as if all push operations after
 	/// that had been canceled. Expects a position in the PMMR to rewind to as
 	/// well as the consumer-provided index of when the change occurred.
 	pub fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {
@@ -302,9 +302,8 @@ where
 	}
 
 	/// Prune an element from the tree given its position. Note that to be able
-	/// to
-	/// provide that position and prune, consumers of this API are expected to
-	/// keep an index of elements to positions in the tree. Prunes parent
+	/// to provide that position and prune, consumers of this API are expected
+	/// to keep an index of elements to positions in the tree. Prunes parent
 	/// nodes as well when they become childless.
 	pub fn prune(&mut self, position: u64, index: u32) -> Result<bool, String> {
 		if let None = self.backend.get(position) {

@@ -144,6 +144,64 @@ fn sumtree_reload() {
 	}
 }
 
+#[test]
+fn sumtree_rewind() {
+	let (data_dir, elems) = setup();
+	let mut backend = store::sumtree::PMMRBackend::new(data_dir).unwrap();
+
+	// adding elements and keeping the corresponding root
+	let mut mmr_size = load(0, &elems[0..4], &mut backend);
+	backend.sync().unwrap();
+	let root1: HashSum<TestElem>;
+	{
+		let pmmr = PMMR::at(&mut backend, mmr_size);
+		root1 = pmmr.root();
+	}
+
+	mmr_size = load(mmr_size, &elems[4..6], &mut backend);
+	backend.sync().unwrap();
+	let root2: HashSum<TestElem>;
+	{
+		let pmmr = PMMR::at(&mut backend, mmr_size);
+		root2 = pmmr.root();
+	}
+
+	mmr_size = load(mmr_size, &elems[6..9], &mut backend);
+	backend.sync().unwrap();
+
+	// prune and compact the 2 first elements to spice things up
+	{
+		let mut pmmr = PMMR::at(&mut backend, mmr_size);
+		pmmr.prune(1, 1).unwrap();
+		pmmr.prune(2, 1).unwrap();
+	}
+	backend.check_compact(1).unwrap();
+	backend.sync().unwrap();
+	
+	// rewind and check the roots still match
+	{
+		let mut pmmr = PMMR::at(&mut backend, mmr_size);
+		pmmr.rewind(9, 3).unwrap();
+		assert_eq!(pmmr.root(), root2);
+	}
+	backend.sync().unwrap();
+	{
+		let pmmr = PMMR::at(&mut backend, 10);
+		assert_eq!(pmmr.root(), root2);
+	}
+
+	{
+		let mut pmmr = PMMR::at(&mut backend, 10);
+		pmmr.rewind(5, 3).unwrap();
+		assert_eq!(pmmr.root(), root1);
+	}
+	backend.sync().unwrap();
+	{
+		let pmmr = PMMR::at(&mut backend, 7);
+		assert_eq!(pmmr.root(), root1);
+	}
+}
+
 fn setup() -> (String, Vec<TestElem>) {
 	let _ = env_logger::init();
 	let t = time::get_time();
