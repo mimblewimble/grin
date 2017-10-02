@@ -17,7 +17,6 @@ extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate rand;
-extern crate secp256k1zkp as secp;
 
 use std::fs;
 
@@ -25,7 +24,6 @@ use chain::ChainStore;
 use core::core::hash::Hashed;
 use core::core::{Block, BlockHeader};
 use keychain::Keychain;
-use secp::key;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);

@@ -18,7 +18,6 @@ extern crate grin_keychain as keychain;
 extern crate env_logger;
 extern crate time;
 extern crate rand;
-extern crate secp256k1zkp as secp;
 extern crate grin_pow as pow;
 
 use std::fs;
@@ -66,8 +65,6 @@ fn mine_empty_chain() {
 	let keychain = Keychain::from_random_seed().unwrap();
 
 	// mine and add a few blocks
-	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-
 	let mut miner_config = types::MinerConfig {
 		enable_mining: true,
 		burn_reward: true,

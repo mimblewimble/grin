@@ -19,7 +19,6 @@ extern crate grin_pow as pow;
 extern crate env_logger;
 extern crate time;
 extern crate rand;
-extern crate secp256k1zkp as secp;
 
 use std::fs;
 use std::sync::Arc;

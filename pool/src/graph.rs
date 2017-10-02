@@ -277,7 +277,6 @@ mod tests {
 			output_commit,
 		);
 
-
 		let mut test_graph = DirectedGraph::empty();
 
 		test_graph.add_entry(test_pool_entry, vec![incoming_edge_1]);
@@ -287,11 +286,9 @@ mod tests {
 		assert_eq!(test_graph.edges.len(), 1);
 	}
 
-
-}
-
-/// For testing/debugging: a random tx hash
-pub fn random_hash() -> core::hash::Hash {
-	let hash_bytes: [u8; 32] = rand::random();
-	core::hash::Hash(hash_bytes)
+	/// For testing/debugging: a random tx hash
+	fn random_hash() -> core::hash::Hash {
+		let hash_bytes: [u8; 32] = rand::random();
+		core::hash::Hash(hash_bytes)
+	}
 }
