@@ -55,7 +55,7 @@ use core::ser;
 use api::{self, ApiEndpoint, Operation, ApiResult};
 use types::*;
 use util;
-use keychain::{BlindingFactor, Keychain, Identifier, ExtendedKey, Fingerprint};
+use keychain::{BlindingFactor, Keychain};
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
 #[derive(Serialize, Deserialize)]

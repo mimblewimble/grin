@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::convert::From;
-
 use api;
 use checker;
 use core::core::{Transaction, build};
-use keychain::{BlindingFactor, Fingerprint, Identifier, Keychain};
+use keychain::{BlindingFactor, Keychain};
 use types::*;
 
 /// Issue a new transaction to the provided sender by spending some of our

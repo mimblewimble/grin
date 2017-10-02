@@ -17,7 +17,7 @@
 
 use api;
 use types::*;
-use keychain::{Keychain, Identifier};
+use keychain::Keychain;
 use util;
 
 

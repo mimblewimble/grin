@@ -31,10 +31,8 @@ use secp::pedersen::*;
 
 pub use self::block::*;
 pub use self::transaction::*;
-use self::hash::{Hash, Hashed, ZERO_HASH};
+use self::hash::Hashed;
 use ser::{Writeable, Writer, Reader, Readable, Error};
-use keychain;
-use keychain::{BlindingFactor, Keychain};
 use global;
 
 /// Implemented by types that hold inputs and outputs including Pedersen

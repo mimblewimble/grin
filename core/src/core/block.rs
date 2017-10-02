@@ -26,7 +26,7 @@ use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use ser::{self, Readable, Reader, Writeable, Writer};
 use global;
-use keychain::{self, Identifier, Keychain};
+use keychain;
 
 
 bitflags! {

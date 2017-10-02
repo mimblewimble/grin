@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use checker;
-use keychain::{Keychain, Fingerprint};
+use keychain::Keychain; 
 use types::{WalletConfig, WalletData};
 
 pub fn show_info(
