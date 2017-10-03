@@ -16,9 +16,8 @@
 //! the wallet storage and update them.
 
 use api;
-use extkey::ExtendedKey;
-use secp::{self, pedersen};
 use types::*;
+use keychain::Keychain;
 use util;
 
 
@@ -41,9 +40,11 @@ fn refresh_output(out: &mut OutputData, api_out: Option<api::Output>, tip: &api:
 
 /// Goes through the list of outputs that haven't been spent yet and check
 /// with a node whether their status has changed.
-pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) -> Result<(), Error> {
-	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-	let tip = get_tip(config)?;
+pub fn refresh_outputs(
+	config: &WalletConfig,
+	keychain: &Keychain,
+) -> Result<(), Error>{
+	let tip = get_tip_from_node(config)?;
 
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		// check each output that's not spent
@@ -52,12 +53,8 @@ pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) -> Result<(
 		})
 		{
 
-			// figure out the commitment
 			// TODO check the pool for unconfirmed
-			let key = ext_key.derive(&secp, out.n_child).unwrap();
-			let commitment = secp.commit(out.value, key.key).unwrap();
-
-			match get_output_by_commitment(config, commitment) {
+			match get_output_from_node(config, keychain, out.value, out.n_child) {
 				Ok(api_out) => refresh_output(&mut out, api_out, &tip),
 				Err(_) => {
 					// TODO find error with connection and return
@@ -69,17 +66,21 @@ pub fn refresh_outputs(config: &WalletConfig, ext_key: &ExtendedKey) -> Result<(
 	})
 }
 
-fn get_tip(config: &WalletConfig) -> Result<api::Tip, Error> {
+fn get_tip_from_node(config: &WalletConfig) -> Result<api::Tip, Error> {
 	let url = format!("{}/v1/chain/1", config.check_node_api_http_addr);
 	api::client::get::<api::Tip>(url.as_str()).map_err(|e| Error::Node(e))
 }
 
-// queries a reachable node for a given output, checking whether it's been
-// confirmed
-fn get_output_by_commitment(
+// queries a reachable node for a given output, checking whether it's been confirmed
+fn get_output_from_node(
 	config: &WalletConfig,
-	commit: pedersen::Commitment,
+	keychain: &Keychain,
+	amount: u64,
+	derivation: u32,
 ) -> Result<Option<api::Output>, Error> {
+	let pubkey = keychain.derive_pubkey(derivation)?;
+	let commit = keychain.commit(amount, &pubkey)?;
+
 	let url = format!(
 		"{}/v1/chain/utxo/{}",
 		config.check_node_api_http_addr,

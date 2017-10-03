@@ -25,4 +25,3 @@ tag="grin_integration_12"
 
 [dev_dependencies]
 grin_chain = { path = "../chain"}
-secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }

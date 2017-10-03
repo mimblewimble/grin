@@ -15,15 +15,15 @@
 extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
+extern crate grin_keychain as keychain;
 extern crate rand;
-extern crate secp256k1zkp as secp;
 
 use std::fs;
 
 use chain::ChainStore;
 use core::core::hash::Hashed;
 use core::core::{Block, BlockHeader};
-use secp::key;
+use keychain::Keychain;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -34,9 +34,12 @@ fn test_various_store_indices() {
 	let _ = env_logger::init();
 	clean_output_dir(".grin");
 
+	let keychain = Keychain::from_random_seed().unwrap();
+	let pubkey = keychain.derive_pubkey(1).unwrap();
+
 	let chain_store = &chain::store::ChainKVStore::new(".grin".to_string()).unwrap() as &ChainStore;
 
-	let block = Block::new(&BlockHeader::default(), vec![], key::ONE_KEY).unwrap();
+	let block = Block::new(&BlockHeader::default(), vec![], &keychain, pubkey).unwrap();
 	let commit = block.outputs[0].commitment();
 	let block_hash = block.hash();
 

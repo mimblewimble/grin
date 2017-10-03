@@ -26,9 +26,9 @@ extern crate blake2_rfc as blake2;
 extern crate grin_api as api;
 extern crate grin_grin as grin;
 extern crate grin_wallet as wallet;
+extern crate grin_keychain as keychain;
 extern crate grin_config as config;
 extern crate grin_core as core;
-extern crate secp256k1zkp as secp;
 
 use std::thread;
 use std::io::Read;
@@ -38,11 +38,10 @@ use std::time::Duration;
 use clap::{Arg, App, SubCommand, ArgMatches};
 use daemonize::Daemonize;
 
-use secp::Secp256k1;
-
 use config::GlobalConfig;
 use wallet::WalletConfig;
 use core::global;
+use keychain::Keychain;
 
 fn start_from_config_file(mut global_config: GlobalConfig) {
 	info!(
@@ -314,12 +313,9 @@ fn wallet_command(wallet_args: &ArgMatches) {
 
 	// TODO do something closer to BIP39, eazy solution right now
 	let seed = blake2::blake2b::blake2b(32, &[], hd_seed.as_bytes());
-
-	let s = Secp256k1::new();
-	let key = wallet::ExtendedKey::from_seed(&s, seed.as_bytes()).expect(
-		"Error deriving extended key from seed.",
+	let keychain = Keychain::from_seed(seed.as_bytes()).expect(
+		"Failed to initialize keychain from the provided seed.",
 	);
-
 
 	let mut wallet_config = WalletConfig::default();
 	if let Some(port) = wallet_args.value_of("port") {
@@ -344,7 +340,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				file.read_to_string(&mut contents).expect(
 					"Unable to read transaction file.",
 				);
-				wallet::receive_json_tx(&wallet_config, &key, contents.as_str()).unwrap();
+				wallet::receive_json_tx(&wallet_config, &keychain, contents.as_str()).unwrap();
 			} else {
 				info!(
 					"Starting the Grin wallet receiving daemon at {}...",
@@ -354,7 +350,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				apis.register_endpoint(
 					"/receive".to_string(),
 					wallet::WalletReceiver {
-						key: key,
+						keychain: keychain,
 						config: wallet_config.clone(),
 					},
 				);
@@ -373,10 +369,10 @@ fn wallet_command(wallet_args: &ArgMatches) {
 			if let Some(d) = send_args.value_of("dest") {
 				dest = d;
 			}
-			wallet::issue_send_tx(&wallet_config, &key, amount, dest.to_string()).unwrap();
+			wallet::issue_send_tx(&wallet_config, &keychain, amount, dest.to_string()).unwrap();
 		}
 		("info", Some(_)) => {
-			wallet::show_info(&wallet_config, &key);
+			wallet::show_info(&wallet_config, &keychain);
 		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}

@@ -12,27 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The transaction pool, keeping a view of currently-valid transactions that
-//! may be confirmed soon.
+//! Library module for the key holder functionalities provided by Grin.
 
-#![deny(non_upper_case_globals)]
-#![deny(non_camel_case_types)]
-#![deny(non_snake_case)]
-#![deny(unused_mut)]
-#![warn(missing_docs)]
-
-pub mod graph;
-mod types;
-mod blockchain;
-mod pool;
-
-extern crate time;
-extern crate rand;
-extern crate log;
 extern crate blake2_rfc as blake2;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
+extern crate byteorder;
+extern crate rand;
 extern crate secp256k1zkp as secp;
+extern crate grin_util as util;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 
-pub use pool::TransactionPool;
-pub use types::{BlockChain, TxSource, PoolError};
+mod blind;
+mod extkey;
+
+pub use blind::{BlindSum, BlindingFactor};
+pub use extkey::{Identifier, Fingerprint, ExtendedKey};
+pub mod keychain;
+pub use keychain::{Error, Keychain};

@@ -31,10 +31,10 @@ use secp::pedersen::*;
 
 pub use self::block::*;
 pub use self::transaction::*;
-use self::hash::{Hash, Hashed, ZERO_HASH};
+use self::hash::Hashed;
 use ser::{Writeable, Writer, Reader, Readable, Error};
-
 use global;
+// use keychain;
 
 /// Implemented by types that hold inputs and outputs including Pedersen
 /// commitments. Handles the collection of the commitments as well as their
@@ -186,28 +186,22 @@ impl Writeable for Proof {
 mod test {
 	use super::*;
 	use core::hash::ZERO_HASH;
-	use secp;
-	use secp::Secp256k1;
-	use secp::key::SecretKey;
+	use core::build::{input, output, with_fee, initial_tx, with_excess};
 	use ser;
-	use rand::os::OsRng;
-	use core::build::{self, input, output, input_rand, output_rand, with_fee, initial_tx,
-	                  with_excess};
-
-	fn new_secp() -> Secp256k1 {
-		secp::Secp256k1::with_caps(secp::ContextFlag::Commit)
-	}
+	use keychain;
+	use keychain::{Keychain, BlindingFactor};
 
 	#[test]
 	#[should_panic(expected = "InvalidSecretKey")]
-	fn zero_commit() {
-		// a transaction whose commitment sums to zero shouldn't validate
-		let ref secp = new_secp();
-		let mut rng = OsRng::new().unwrap();
+	fn test_zero_commit_fails() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
 
 		// blinding should fail as signing with a zero r*G shouldn't work
-		let skey = SecretKey::new(secp, &mut rng);
-		build::transaction(vec![input(10, skey), output(1, skey), with_fee(9)]).unwrap();
+		build::transaction(
+			vec![input(10, pk1.clone()), output(9, pk1.clone()), with_fee(1)],
+			&keychain,
+		).unwrap();
 	}
 
 	#[test]
@@ -250,12 +244,16 @@ mod test {
 
 	#[test]
 	fn hash_output() {
-		let (tx, _) = build::transaction(vec![
-			input_rand(75),
-			output_rand(42),
-			output_rand(32),
-			with_fee(1),
-		]).unwrap();
+		let keychain = Keychain::from_random_seed().unwrap();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let pk2 = keychain.derive_pubkey(2).unwrap();
+		let pk3 = keychain.derive_pubkey(3).unwrap();
+
+		let (tx, _) =
+			build::transaction(
+				vec![input(75, pk1), output(42, pk2), output(32, pk3), with_fee(1)],
+				&keychain,
+			).unwrap();
 		let h = tx.outputs[0].hash();
 		assert!(h != ZERO_HASH);
 		let h2 = tx.outputs[1].hash();
@@ -264,14 +262,14 @@ mod test {
 
 	#[test]
 	fn blind_tx() {
-		let ref secp = new_secp();
+		let keychain = Keychain::from_random_seed().unwrap();
 
 		let btx = tx2i1o();
-		btx.verify_sig(&secp).unwrap(); // unwrap will panic if invalid
+		btx.verify_sig(&keychain.secp()).unwrap(); // unwrap will panic if invalid
 
 		// checks that the range proof on our blind output is sufficiently hiding
 		let Output { proof, .. } = btx.outputs[0];
-		let info = secp.range_proof_info(proof);
+		let info = &keychain.secp().range_proof_info(proof);
 		assert!(info.min == 0);
 		assert!(info.max == u64::max_value());
 	}
@@ -290,20 +288,26 @@ mod test {
 	/// 2 inputs, 2 outputs transaction.
 	#[test]
 	fn tx_build_exchange() {
-		let ref secp = new_secp();
+		let keychain = Keychain::from_random_seed().unwrap();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let pk2 = keychain.derive_pubkey(2).unwrap();
+		let pk3 = keychain.derive_pubkey(3).unwrap();
+		let pk4 = keychain.derive_pubkey(4).unwrap();
 
 		let tx_alice: Transaction;
-		let blind_sum: SecretKey;
+		let blind_sum: BlindingFactor;
 
 		{
 			// Alice gets 2 of her pre-existing outputs to send 5 coins to Bob, they
 			// become inputs in the new transaction
-			let (in1, in2) = (input_rand(4), input_rand(3));
+			let (in1, in2) = (input(4, pk1), input(3, pk2));
 
 			// Alice builds her transaction, with change, which also produces the sum
 			// of blinding factors before they're obscured.
-			let (tx, sum) = build::transaction(vec![in1, in2, output_rand(1), with_fee(1)])
-				.unwrap();
+			let (tx, sum) = build::transaction(
+				vec![in1, in2, output(1, pk3), with_fee(1)],
+				&keychain,
+			).unwrap();
 			tx_alice = tx;
 			blind_sum = sum;
 		}
@@ -311,69 +315,91 @@ mod test {
 		// From now on, Bob only has the obscured transaction and the sum of
 		// blinding factors. He adds his output, finalizes the transaction so it's
 		// ready for broadcast.
-		let (tx_final, _) = build::transaction(vec![
-			initial_tx(tx_alice),
-			with_excess(blind_sum),
-			output_rand(5),
-		]).unwrap();
+		let (tx_final, _) =
+			build::transaction(
+				vec![initial_tx(tx_alice), with_excess(blind_sum), output(5, pk4)],
+				&keychain,
+			).unwrap();
 
-		tx_final.validate(&secp).unwrap();
+		tx_final.validate(&keychain.secp()).unwrap();
 	}
 
 	#[test]
 	fn reward_empty_block() {
-		let mut rng = OsRng::new().unwrap();
-		let ref secp = new_secp();
-		let skey = SecretKey::new(secp, &mut rng);
+		let keychain = new_keychain();
+		let pubkey = keychain.derive_pubkey(1).unwrap();
 
-		let b = Block::new(&BlockHeader::default(), vec![], skey).unwrap();
-		b.compact().validate(&secp).unwrap();
+		let b = Block::new(&BlockHeader::default(), vec![], &keychain, pubkey).unwrap();
+		b.compact().validate(&keychain.secp()).unwrap();
+	}
+
+	fn new_keychain() -> keychain::Keychain {
+		keychain::Keychain::from_random_seed().unwrap()
 	}
 
 	#[test]
 	fn reward_with_tx_block() {
-		let mut rng = OsRng::new().unwrap();
-		let ref secp = new_secp();
-		let skey = SecretKey::new(secp, &mut rng);
+		let keychain = new_keychain();
+		let pubkey = keychain.derive_pubkey(1).unwrap();
 
 		let mut tx1 = tx2i1o();
-		tx1.verify_sig(&secp).unwrap();
+		tx1.verify_sig(keychain.secp()).unwrap();
 
-		let b = Block::new(&BlockHeader::default(), vec![&mut tx1], skey).unwrap();
-		b.compact().validate(&secp).unwrap();
+		let b = Block::new(&BlockHeader::default(), vec![&mut tx1], &keychain, pubkey).unwrap();
+		b.compact().validate(keychain.secp()).unwrap();
 	}
 
 	#[test]
 	fn simple_block() {
-		let mut rng = OsRng::new().unwrap();
-		let ref secp = new_secp();
-		let skey = SecretKey::new(secp, &mut rng);
+		let keychain = new_keychain();
+		let pubkey = keychain.derive_pubkey(1).unwrap();
 
 		let mut tx1 = tx2i1o();
-		tx1.verify_sig(&secp).unwrap();
+		tx1.verify_sig(keychain.secp()).unwrap();
 
 		let mut tx2 = tx1i1o();
-		tx2.verify_sig(&secp).unwrap();
+		tx2.verify_sig(keychain.secp()).unwrap();
 
-		let b = Block::new(&BlockHeader::default(), vec![&mut tx1, &mut tx2], skey).unwrap();
-		b.validate(&secp).unwrap();
+		let b = Block::new(&BlockHeader::default(), vec![&mut tx1, &mut tx2], &keychain, pubkey).unwrap();
+		b.validate(keychain.secp()).unwrap();
+	}
+
+	#[test]
+	pub fn test_verify_1i1o_sig() {
+		let keychain = new_keychain();
+		let tx = tx1i1o();
+		tx.verify_sig(keychain.secp()).unwrap();
+	}
+
+	#[test]
+	pub fn test_verify_2i1o_sig() {
+		let keychain = new_keychain();
+		let tx = tx2i1o();
+		tx.verify_sig(keychain.secp()).unwrap();
 	}
 
 	// utility producing a transaction with 2 inputs and a single outputs
 	pub fn tx2i1o() -> Transaction {
-		build::transaction(vec![
-			input_rand(10),
-			input_rand(11),
-			output_rand(20),
-			with_fee(1),
-		]).map(|(tx, _)| tx)
-			.unwrap()
+		let keychain = new_keychain();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let pk2 = keychain.derive_pubkey(2).unwrap();
+		let pk3 = keychain.derive_pubkey(3).unwrap();
+
+		build::transaction(
+			vec![input(10, pk1), input(11, pk2), output(20, pk3), with_fee(1)],
+			&keychain,
+		).map(|(tx, _)| tx).unwrap()
 	}
 
 	// utility producing a transaction with a single input and output
 	pub fn tx1i1o() -> Transaction {
-		build::transaction(vec![input_rand(5), output_rand(4), with_fee(1)])
-			.map(|(tx, _)| tx)
-			.unwrap()
+		let keychain = new_keychain();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let pk2 = keychain.derive_pubkey(2).unwrap();
+
+		build::transaction(
+			vec![input(5, pk1), output(4, pk2), with_fee(1)],
+			&keychain,
+		).map(|(tx, _)| tx).unwrap()
 	}
 }

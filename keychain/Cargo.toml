@@ -1,0 +1,13 @@
+[package]
+name = "grin_keychain"
+version = "0.1.0"
+authors = ["Antioch Peverell"]
+
+[dependencies]
+byteorder = "1"
+blake2-rfc = "~0.2.17"
+rand = "~0.3"
+serde = "~1.0.8"
+serde_derive = "~1.0.8"
+grin_util = { path = "../util" }
+secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }

@@ -16,7 +16,6 @@
 
 use time;
 use secp::{self, Secp256k1};
-use secp::key::SecretKey;
 use std::collections::HashSet;
 
 use core::Committed;
@@ -27,6 +26,8 @@ use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use ser::{self, Readable, Reader, Writeable, Writer};
 use global;
+use keychain;
+
 
 bitflags! {
     /// Options for block validation
@@ -243,13 +244,13 @@ impl Block {
 	pub fn new(
 		prev: &BlockHeader,
 		txs: Vec<&Transaction>,
-		reward_key: SecretKey,
-	) -> Result<Block, secp::Error> {
+		keychain: &keychain::Keychain,
+		pubkey: keychain::Identifier,
+	) -> Result<Block, keychain::Error> {
 
-		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
-		let (reward_out, reward_proof) = try!(Block::reward_output(reward_key, &secp));
-
-		Block::with_reward(prev, txs, reward_out, reward_proof)
+		let (reward_out, reward_proof) = Block::reward_output(keychain, pubkey)?;
+		let block = Block::with_reward(prev, txs, reward_out, reward_proof)?;
+		Ok(block)
 	}
 
 	/// Builds a new block ready to mine from the header of the previous block,
@@ -461,17 +462,17 @@ impl Block {
 	/// Builds the blinded output and related signature proof for the block
 	/// reward.
 	pub fn reward_output(
-		skey: secp::key::SecretKey,
-		secp: &Secp256k1,
-	) -> Result<(Output, TxKernel), secp::Error> {
-		let msg = try!(secp::Message::from_slice(
-			&[0; secp::constants::MESSAGE_SIZE],
-		));
-		let sig = try!(secp.sign(&msg, &skey));
-		let commit = secp.commit(REWARD, skey).unwrap();
-		// let switch_commit = secp.switch_commit(skey).unwrap();
-		let nonce = secp.nonce();
-		let rproof = secp.range_proof(0, REWARD, skey, commit, nonce);
+		keychain: &keychain::Keychain,
+		pubkey: keychain::Identifier,
+	) -> Result<(Output, TxKernel), keychain::Error> {
+		let secp = keychain.secp();
+
+		let msg = secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE])?;
+		let sig = keychain.sign(&msg, &pubkey)?;
+		let commit = keychain.commit(REWARD, &pubkey)?;
+		// let switch_commit = keychain.switch_commit(pubkey)?;
+
+		let rproof = keychain.range_proof(REWARD, &pubkey, commit)?;
 
 		let output = Output {
 			features: COINBASE_OUTPUT,
@@ -497,29 +498,23 @@ impl Block {
 mod test {
 	use super::*;
 	use core::Transaction;
-	use core::build::{self, input, output, input_rand, output_rand, with_fee};
+	use core::build::{self, input, output, with_fee};
 	use core::test::tx2i1o;
+	use keychain::{Identifier, Keychain};
 
-	use secp::{self, Secp256k1};
-	use secp::key::SecretKey;
-	use rand::os::OsRng;
-
-	fn new_secp() -> Secp256k1 {
-		secp::Secp256k1::with_caps(secp::ContextFlag::Commit)
-	}
+	use secp;
 
 	// utility to create a block without worrying about the key or previous
 	// header
-	fn new_block(txs: Vec<&Transaction>, secp: &Secp256k1) -> Block {
-		let mut rng = OsRng::new().unwrap();
-		let skey = SecretKey::new(secp, &mut rng);
-		Block::new(&BlockHeader::default(), txs, skey).unwrap()
+	fn new_block(txs: Vec<&Transaction>, keychain: &Keychain) -> Block {
+		let pubkey = keychain.derive_pubkey(1).unwrap();
+		Block::new(&BlockHeader::default(), txs, keychain, pubkey).unwrap()
 	}
 
 	// utility producing a transaction that spends an output with the provided
 	// value and blinding key
-	fn txspend1i1o(v: u64, b: SecretKey) -> Transaction {
-		build::transaction(vec![input(v, b), output_rand(3), with_fee(1)])
+	fn txspend1i1o(v: u64, keychain: &Keychain, pk1: Identifier, pk2: Identifier) -> Transaction {
+		build::transaction(vec![input(v, pk1), output(3, pk2), with_fee(1)], &keychain)
 			.map(|(tx, _)| tx)
 			.unwrap()
 	}
@@ -527,21 +522,25 @@ mod test {
 	#[test]
 	// builds a block with a tx spending another and check if merging occurred
 	fn compactable_block() {
-		let mut rng = OsRng::new().unwrap();
-		let ref secp = new_secp();
+		let keychain = Keychain::from_random_seed().unwrap();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let pk2 = keychain.derive_pubkey(2).unwrap();
+		let pk3 = keychain.derive_pubkey(3).unwrap();
 
 		let mut btx1 = tx2i1o();
-		let skey = SecretKey::new(secp, &mut rng);
-		let (mut btx2, _) = build::transaction(vec![input_rand(5), output(4, skey), with_fee(1)])
-			.unwrap();
+		let (mut btx2, _) = build::transaction(
+			vec![input(5, pk1), output(4, pk2.clone()), with_fee(1)],
+			&keychain,
+		).unwrap();
 
-		// spending tx2
-		let mut btx3 = txspend1i1o(4, skey);
-		let b = new_block(vec![&mut btx1, &mut btx2, &mut btx3], secp);
+		// spending tx2 - reuse pk2
+
+		let mut btx3 = txspend1i1o(4, &keychain, pk2.clone(), pk3);
+		let b = new_block(vec![&mut btx1, &mut btx2, &mut btx3], &keychain);
 
 		// block should have been automatically compacted (including reward
 		// output) and should still be valid
-		b.validate(&secp).unwrap();
+		b.validate(&keychain.secp()).unwrap();
 		assert_eq!(b.inputs.len(), 3);
 		assert_eq!(b.outputs.len(), 3);
 	}
@@ -550,21 +549,26 @@ mod test {
 	// builds 2 different blocks with a tx spending another and check if merging
 	// occurs
 	fn mergeable_blocks() {
-		let mut rng = OsRng::new().unwrap();
-		let ref secp = new_secp();
+		let keychain = Keychain::from_random_seed().unwrap();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let pk2 = keychain.derive_pubkey(2).unwrap();
+		let pk3 = keychain.derive_pubkey(3).unwrap();
 
 		let mut btx1 = tx2i1o();
-		let skey = SecretKey::new(secp, &mut rng);
-		let (mut btx2, _) = build::transaction(vec![input_rand(5), output(4, skey), with_fee(1)])
-			.unwrap();
 
-		// spending tx2
-		let mut btx3 = txspend1i1o(4, skey);
+		let (mut btx2, _) = build::transaction(
+			vec![input(5, pk1), output(4, pk2.clone()), with_fee(1)],
+			&keychain,
+		).unwrap();
 
-		let b1 = new_block(vec![&mut btx1, &mut btx2], secp);
-		b1.validate(&secp).unwrap();
-		let b2 = new_block(vec![&mut btx3], secp);
-		b2.validate(&secp).unwrap();
+		// spending tx2 - reuse pk2
+		let mut btx3 = txspend1i1o(4, &keychain, pk2.clone(), pk3);
+
+		let b1 = new_block(vec![&mut btx1, &mut btx2], &keychain);
+		b1.validate(&keychain.secp()).unwrap();
+
+		let b2 = new_block(vec![&mut btx3], &keychain);
+		b2.validate(&keychain.secp()).unwrap();
 
 		// block should have been automatically compacted and should still be valid
 		let b3 = b1.merge(b2);
@@ -574,8 +578,8 @@ mod test {
 
 	#[test]
 	fn empty_block_with_coinbase_is_valid() {
-		let ref secp = new_secp();
-		let b = new_block(vec![], secp);
+		let keychain = Keychain::from_random_seed().unwrap();
+		let b = new_block(vec![], &keychain);
 
 		assert_eq!(b.inputs.len(), 0);
 		assert_eq!(b.outputs.len(), 1);
@@ -597,7 +601,7 @@ mod test {
 
 		// the block should be valid here (single coinbase output with corresponding
 		// txn kernel)
-		assert_eq!(b.validate(&secp), Ok(()));
+		assert_eq!(b.validate(&keychain.secp()), Ok(()));
 	}
 
 	#[test]
@@ -605,44 +609,50 @@ mod test {
 	// invalidates the block and specifically it causes verify_coinbase to fail
 	// additionally verifying the merkle_inputs_outputs also fails
 	fn remove_coinbase_output_flag() {
-		let ref secp = new_secp();
-		let mut b = new_block(vec![], secp);
+		let keychain = Keychain::from_random_seed().unwrap();
+		let mut b = new_block(vec![], &keychain);
 
 		assert!(b.outputs[0].features.contains(COINBASE_OUTPUT));
 		b.outputs[0].features.remove(COINBASE_OUTPUT);
 
 		assert_eq!(
-			b.verify_coinbase(&secp),
+			b.verify_coinbase(&keychain.secp()),
 			Err(secp::Error::IncorrectCommitSum)
 		);
-		assert_eq!(b.verify_kernels(&secp), Ok(()));
+		assert_eq!(b.verify_kernels(&keychain.secp()), Ok(()));
 
-		assert_eq!(b.validate(&secp), Err(secp::Error::IncorrectCommitSum));
+		assert_eq!(
+			b.validate(&keychain.secp()),
+			Err(secp::Error::IncorrectCommitSum)
+		);
 	}
 
 	#[test]
 	// test that flipping the COINBASE_KERNEL flag on the kernel features
 	// invalidates the block and specifically it causes verify_coinbase to fail
 	fn remove_coinbase_kernel_flag() {
-		let ref secp = new_secp();
-		let mut b = new_block(vec![], secp);
+		let keychain = Keychain::from_random_seed().unwrap();
+		let mut b = new_block(vec![], &keychain);
 
 		assert!(b.kernels[0].features.contains(COINBASE_KERNEL));
 		b.kernels[0].features.remove(COINBASE_KERNEL);
 
 		assert_eq!(
-			b.verify_coinbase(&secp),
+			b.verify_coinbase(&keychain.secp()),
 			Err(secp::Error::IncorrectCommitSum)
 		);
-		assert_eq!(b.verify_kernels(&secp), Ok(()));
+		assert_eq!(b.verify_kernels(&keychain.secp()), Ok(()));
 
-		assert_eq!(b.validate(&secp), Err(secp::Error::IncorrectCommitSum));
+		assert_eq!(
+			b.validate(&keychain.secp()),
+			Err(secp::Error::IncorrectCommitSum)
+		);
 	}
 
 	#[test]
 	fn serialize_deserialize_block() {
-		let ref secp = new_secp();
-		let b = new_block(vec![], secp);
+		let keychain = Keychain::from_random_seed().unwrap();
+		let b = new_block(vec![], &keychain);
 
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");

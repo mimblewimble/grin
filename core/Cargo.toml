@@ -15,3 +15,5 @@ serde_derive = "~1.0.8"
 time = "^0.1"
 lazy_static = "~0.2.8"
 secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }
+grin_keychain = { path = "../keychain" }
+grin_util = { path = "../util" }

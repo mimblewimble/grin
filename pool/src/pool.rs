@@ -557,25 +557,26 @@ where
 mod tests {
 	use super::*;
 	use types::*;
-	use secp::{Secp256k1, ContextFlag, constants};
-	use secp::key;
 	use core::core::build;
 	use blockchain::{DummyChain, DummyChainImpl, DummyUtxoSet};
+	use keychain::Keychain;
 	use std::sync::{Arc, RwLock};
+	use blake2;
 
 	macro_rules! expect_output_parent {
-        ($pool:expr, $expected:pat, $( $output:expr ),+ ) => {
-            $(
-                match $pool.search_for_best_output(&test_output($output).commitment()) {
-                    $expected => {},
-                    x => panic!(
-											"Unexpected result from output search for {:?}, got {:?}",
-											$output,
-											x),
-                };
-            )*
-        }
-    }
+		($pool:expr, $expected:pat, $( $output:expr ),+ ) => {
+			$(
+				match $pool.search_for_best_output(&test_output($output).commitment()) {
+					$expected => {},
+					x => panic!(
+						"Unexpected result from output search for {:?}, got {:?}",
+						$output,
+						x,
+					),
+				};
+			)*
+		}
+	}
 
 	#[test]
 	/// A basic test; add a pair of transactions to the pool.
@@ -627,16 +628,10 @@ mod tests {
 		{
 			let read_pool = pool.read().unwrap();
 			assert_eq!(read_pool.total_size(), 2);
-
-			expect_output_parent!(read_pool,
-                Parent::PoolTransaction{tx_ref: _}, 12);
-			expect_output_parent!(read_pool,
-                Parent::AlreadySpent{other_tx: _}, 11, 5);
-			expect_output_parent!(read_pool,
-                Parent::BlockTransaction{output: _}, 8);
-			expect_output_parent!(read_pool,
-                Parent::Unknown, 20);
-
+			expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 12);
+			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 11, 5);
+			expect_output_parent!(read_pool, Parent::BlockTransaction{output: _}, 8);
+			expect_output_parent!(read_pool, Parent::Unknown, 20);
 		}
 	}
 
@@ -721,13 +716,9 @@ mod tests {
 				Err(x) => {
 					match x {
 						PoolError::AlreadyInPool => {}
-						_ => {
-							panic!("Unexpected error when adding already in pool tx: {:?}",
-                            x)
-						}
+						_ => panic!("Unexpected error when adding already in pool tx: {:?}", x),
 					};
 				}
-
 			};
 
 			assert_eq!(write_pool.total_size(), 1);
@@ -868,10 +859,18 @@ mod tests {
 		// Note: There are some ordering constraints that must be followed here
 		// until orphans is 100% implemented. Once the orphans process has
 		// stabilized, we can mix these up to exercise that path a bit.
-		let mut txs_to_add = vec![block_transaction, conflict_transaction,
-            valid_transaction, block_child, pool_child, conflict_child,
-            conflict_valid_child, valid_child_conflict, valid_child_valid,
-            mixed_child];
+		let mut txs_to_add = vec![
+			block_transaction,
+			conflict_transaction,
+			valid_transaction,
+			block_child,
+			pool_child,
+			conflict_child,
+			conflict_valid_child,
+			valid_child_conflict,
+			valid_child_valid,
+			mixed_child,
+		];
 
 		let expected_pool_size = txs_to_add.len();
 
@@ -882,8 +881,7 @@ mod tests {
 			assert_eq!(write_pool.total_size(), 0);
 
 			for tx in txs_to_add.drain(..) {
-				assert!(write_pool.add_to_memory_pool(test_source(),
-                    tx).is_ok());
+				assert!(write_pool.add_to_memory_pool(test_source(), tx).is_ok());
 			}
 
 			assert_eq!(write_pool.total_size(), expected_pool_size);
@@ -898,13 +896,16 @@ mod tests {
 		let block_tx_3 = test_transaction(vec![8], vec![4,3]);
 		// - Output conflict w/ 8
 		let block_tx_4 = test_transaction(vec![40], vec![9]);
-		let block_transactions = vec![&block_tx_1, &block_tx_2, &block_tx_3,
-          &block_tx_4];
+		let block_transactions = vec![&block_tx_1, &block_tx_2, &block_tx_3, &block_tx_4];
+
+		let keychain = Keychain::from_random_seed().unwrap();
+		let pubkey = keychain.derive_pubkey(1).unwrap();
 
 		let block = block::Block::new(
 			&block::BlockHeader::default(),
 			block_transactions,
-			key::ONE_KEY,
+			&keychain,
+			pubkey,
 		).unwrap();
 
 		chain_ref.apply_block(&block);
@@ -934,16 +935,13 @@ mod tests {
 			expect_output_parent!(read_pool, Parent::BlockTransaction{output: _}, 9, 3);
 
 			// We should have spent blockchain outputs at 4 and 7
-			expect_output_parent!(read_pool,
-                Parent::AlreadySpent{other_tx: _}, 4, 7);
+			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 4, 7);
 
 			// We should have spent pool references at 15
-			expect_output_parent!(read_pool,
-                Parent::AlreadySpent{other_tx: _}, 15);
+			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 15);
 
 			// We should have unspent pool references at 1, 13, 14
-			expect_output_parent!(read_pool,
-                Parent::PoolTransaction{tx_ref: _}, 1, 13, 14);
+			expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 1, 13, 14);
 
 			// References internal to the block should be unknown
 			expect_output_parent!(read_pool, Parent::Unknown, 8);
@@ -982,16 +980,11 @@ mod tests {
 			let mut write_pool = pool.write().unwrap();
 			assert_eq!(write_pool.total_size(), 0);
 
-			assert!(write_pool.add_to_memory_pool(test_source(),
-                root_tx_1).is_ok());
-			assert!(write_pool.add_to_memory_pool(test_source(),
-                root_tx_2).is_ok());
-			assert!(write_pool.add_to_memory_pool(test_source(),
-                root_tx_3).is_ok());
-			assert!(write_pool.add_to_memory_pool(test_source(),
-                child_tx_1).is_ok());
-			assert!(write_pool.add_to_memory_pool(test_source(),
-                child_tx_2).is_ok());
+			assert!(write_pool.add_to_memory_pool(test_source(), root_tx_1).is_ok());
+			assert!(write_pool.add_to_memory_pool(test_source(), root_tx_2).is_ok());
+			assert!(write_pool.add_to_memory_pool(test_source(), root_tx_3).is_ok());
+			assert!(write_pool.add_to_memory_pool(test_source(), child_tx_1).is_ok());
+			assert!(write_pool.add_to_memory_pool(test_source(), child_tx_2).is_ok());
 
 			assert_eq!(write_pool.total_size(), 5);
 		}
@@ -1008,7 +1001,10 @@ mod tests {
 			// prepare_mineable_transactions to return mut refs
 			let block_txs: Vec<transaction::Transaction> = txs.drain(..).map(|x| *x).collect();
 			let tx_refs = block_txs.iter().collect();
-			block = block::Block::new(&block::BlockHeader::default(), tx_refs, key::ONE_KEY)
+
+			let keychain = Keychain::from_random_seed().unwrap();
+			let pubkey = keychain.derive_pubkey(1).unwrap();
+			block = block::Block::new(&block::BlockHeader::default(), tx_refs, &keychain, pubkey)
 				.unwrap();
 		}
 
@@ -1024,10 +1020,7 @@ mod tests {
 			assert_eq!(evicted_transactions.unwrap().len(), 3);
 			assert_eq!(write_pool.total_size(), 2);
 		}
-
-
 	}
-
 
 	fn test_setup(dummy_chain: &Arc<DummyChainImpl>) -> TransactionPool<DummyChainImpl> {
 		TransactionPool {
@@ -1050,6 +1043,8 @@ mod tests {
 		input_values: Vec<u64>,
 		output_values: Vec<u64>,
 	) -> transaction::Transaction {
+		let keychain = keychain_for_tests();
+
 		let fees: i64 = input_values.iter().sum::<u64>() as i64 -
 			output_values.iter().sum::<u64>() as i64;
 		assert!(fees >= 0);
@@ -1057,62 +1052,52 @@ mod tests {
 		let mut tx_elements = Vec::new();
 
 		for input_value in input_values {
-			tx_elements.push(build::input(input_value, test_key(input_value)));
+			let pubkey = keychain.derive_pubkey(input_value as u32).unwrap();
+			tx_elements.push(build::input(input_value, pubkey));
 		}
 
 		for output_value in output_values {
-			tx_elements.push(build::output(output_value, test_key(output_value)));
+			let pubkey = keychain.derive_pubkey(output_value as u32).unwrap();
+			tx_elements.push(build::output(output_value, pubkey));
 		}
 		tx_elements.push(build::with_fee(fees as u64));
 
-		let (tx, _) = build::transaction(tx_elements).unwrap();
+		let (tx, _) = build::transaction(tx_elements, &keychain).unwrap();
 		tx
 	}
 
 	/// Deterministically generate an output defined by our test scheme
 	fn test_output(value: u64) -> transaction::Output {
-		let ec = Secp256k1::with_caps(ContextFlag::Commit);
-		let output_key = test_key(value);
-		let output_commitment = ec.commit(value, output_key).unwrap();
+		let keychain = keychain_for_tests();
+		let pubkey = keychain.derive_pubkey(value as u32).unwrap();
+		let commit = keychain.commit(value, &pubkey).unwrap();
+		let proof = keychain.range_proof(value, &pubkey, commit).unwrap();
+
 		transaction::Output {
 			features: transaction::DEFAULT_OUTPUT,
-			commit: output_commitment,
-			proof: ec.range_proof(0, value, output_key, output_commitment, ec.nonce()),
+			commit: commit,
+			proof: proof,
 		}
 	}
 
 	/// Deterministically generate a coinbase output defined by our test scheme
 	fn test_coinbase_output(value: u64) -> transaction::Output {
-		let ec = Secp256k1::with_caps(ContextFlag::Commit);
-		let output_key = test_key(value);
-		let output_commitment = ec.commit(value, output_key).unwrap();
+		let keychain = keychain_for_tests();
+		let pubkey = keychain.derive_pubkey(value as u32).unwrap();
+		let commit = keychain.commit(value, &pubkey).unwrap();
+		let proof = keychain.range_proof(value, &pubkey, commit).unwrap();
+
 		transaction::Output {
 			features: transaction::COINBASE_OUTPUT,
-			commit: output_commitment,
-			proof: ec.range_proof(0, value, output_key, output_commitment, ec.nonce()),
+			commit: commit,
+			proof: proof,
 		}
 	}
 
-	/// Makes a SecretKey from a single u64
-	fn test_key(value: u64) -> key::SecretKey {
-		let ec = Secp256k1::with_caps(ContextFlag::Commit);
-		// SecretKey takes a SECRET_KEY_SIZE slice of u8.
-		assert!(constants::SECRET_KEY_SIZE > 8);
-
-		// (SECRET_KEY_SIZE - 8) zeros, followed by value as a big-endian byte
-		// sequence
-		let mut key_slice = vec![0;constants::SECRET_KEY_SIZE - 8];
-
-		key_slice.push((value >> 56) as u8);
-		key_slice.push((value >> 48) as u8);
-		key_slice.push((value >> 40) as u8);
-		key_slice.push((value >> 32) as u8);
-		key_slice.push((value >> 24) as u8);
-		key_slice.push((value >> 16) as u8);
-		key_slice.push((value >> 8) as u8);
-		key_slice.push(value as u8);
-
-		key::SecretKey::from_slice(&ec, &key_slice).unwrap()
+	fn keychain_for_tests() -> Keychain {
+		let seed = "pool_tests";
+		let seed = blake2::blake2b::blake2b(32, &[], seed.as_bytes());
+		Keychain::from_seed(seed.as_bytes()).unwrap()
 	}
 
 	/// A generic TxSource representing a test

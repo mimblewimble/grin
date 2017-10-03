@@ -230,7 +230,7 @@ impl Transaction {
 		// we originally converted the commitment to a pubkey here (commitment to zero)
 		// and then passed the pubkey to secp.verify()
 		// the secp api no longer allows us to do this so we have wrapped the complexity
-		// of generating a publick key from a commitment behind verify_from_commit
+		// of generating a public key from a commitment behind verify_from_commit
 		secp.verify_from_commit(&msg, &sig, &rsum)?;
 
 		Ok(TxKernel {

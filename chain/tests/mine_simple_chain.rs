@@ -14,10 +14,10 @@
 
 extern crate grin_core as core;
 extern crate grin_chain as chain;
+extern crate grin_keychain as keychain;
 extern crate env_logger;
 extern crate time;
 extern crate rand;
-extern crate secp256k1zkp as secp;
 extern crate grin_pow as pow;
 
 use std::fs;
@@ -32,6 +32,8 @@ use core::core::target::Difficulty;
 use core::consensus;
 use core::global;
 use core::global::MiningParameterMode;
+
+use keychain::Keychain;
 
 use pow::{types, cuckoo, MiningWorker};
 
@@ -60,9 +62,9 @@ fn mine_empty_chain() {
 	let mut rng = OsRng::new().unwrap();
 	let chain = setup(".grin");
 
-	// mine and add a few blocks
-	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
+	let keychain = Keychain::from_random_seed().unwrap();
 
+	// mine and add a few blocks
 	let mut miner_config = types::MinerConfig {
 		enable_mining: true,
 		burn_reward: true,
@@ -77,8 +79,8 @@ fn mine_empty_chain() {
 	);
 	for n in 1..4 {
 		let prev = chain.head_header().unwrap();
-		let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
-		let mut b = core::core::Block::new(&prev, vec![], reward_key).unwrap();
+		let pk = keychain.derive_pubkey(n as u32).unwrap();
+		let mut b = core::core::Block::new(&prev, vec![], &keychain, pk).unwrap();
 		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -246,10 +248,10 @@ fn prepare_block(prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
 }
 
 fn prepare_block_nosum(prev: &BlockHeader, diff: u64) -> Block {
-	let mut rng = OsRng::new().unwrap();
-	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
-	let mut b = core::core::Block::new(prev, vec![], reward_key).unwrap();
+	let keychain = Keychain::from_random_seed().unwrap();
+	let pubkey = keychain.derive_pubkey(1).unwrap();
+
+	let mut b = core::core::Block::new(prev, vec![], &keychain, pubkey).unwrap();
 	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 	b.header.total_difficulty = Difficulty::from_num(diff);
 	b

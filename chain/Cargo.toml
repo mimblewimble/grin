@@ -13,6 +13,7 @@ serde_derive = "~1.0.8"
 time = "^0.1"
 
 grin_core = { path = "../core" }
+grin_keychain = { path = "../keychain" }
 grin_store = { path = "../store" }
 secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }
 

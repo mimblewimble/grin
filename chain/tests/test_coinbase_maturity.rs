@@ -14,15 +14,14 @@
 
 extern crate grin_core as core;
 extern crate grin_chain as chain;
+extern crate grin_keychain as keychain;
+extern crate grin_pow as pow;
 extern crate env_logger;
 extern crate time;
 extern crate rand;
-extern crate secp256k1zkp as secp;
-extern crate grin_pow as pow;
 
 use std::fs;
 use std::sync::Arc;
-use rand::os::OsRng;
 
 use chain::types::*;
 use core::core::build;
@@ -30,6 +29,8 @@ use core::core::transaction;
 use core::consensus;
 use core::global;
 use core::global::MiningParameterMode;
+
+use keychain::Keychain;
 
 use pow::{types, cuckoo, MiningWorker};
 
@@ -43,7 +44,6 @@ fn test_coinbase_maturity() {
 	clean_output_dir(".grin");
 	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
-	let mut rng = OsRng::new().unwrap();
 	let mut genesis_block = None;
 	if !chain::Chain::chain_exists(".grin".to_string()) {
 		genesis_block = pow::mine_genesis_block(None);
@@ -54,8 +54,6 @@ fn test_coinbase_maturity() {
 		genesis_block,
 		pow::verify_size,
 	).unwrap();
-
-	let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 
 	let mut miner_config = types::MinerConfig {
 		enable_mining: true,
@@ -71,8 +69,14 @@ fn test_coinbase_maturity() {
 	);
 
 	let prev = chain.head_header().unwrap();
-	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
-	let mut block = core::core::Block::new(&prev, vec![], reward_key).unwrap();
+
+	let keychain = Keychain::from_random_seed().unwrap();
+	let pk1 = keychain.derive_pubkey(1).unwrap();
+	let pk2 = keychain.derive_pubkey(2).unwrap();
+	let pk3 = keychain.derive_pubkey(3).unwrap();
+	let pk4 = keychain.derive_pubkey(4).unwrap();
+
+	let mut block = core::core::Block::new(&prev, vec![], &keychain, pk1.clone()).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -96,15 +100,17 @@ fn test_coinbase_maturity() {
 	let prev = chain.head_header().unwrap();
 
 	let amount = consensus::REWARD;
-	let (coinbase_txn, _) = build::transaction(vec![
-		build::input(amount, reward_key),
-		build::output_rand(amount - 1),
-		build::with_fee(1),
-	]).unwrap();
+	let (coinbase_txn, _) = build::transaction(
+		vec![
+			build::input(amount, pk1.clone()),
+			build::output(amount - 1, pk2),
+			build::with_fee(1),
+		],
+		&keychain,
+	).unwrap();
 
-	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
-	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], reward_key).unwrap();
-
+	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, pk3.clone())
+		.unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -124,13 +130,15 @@ fn test_coinbase_maturity() {
 		_ => panic!("expected ImmatureCoinbase error here"),
 	};
 
-	// mine 10 blocks so we increase the height sufficiently
-	// coinbase will mature and be spendable in the block after these
-	for _ in 0..10 {
+	// mine enough blocks to increase the height sufficiently for
+	// coinbase to reach maturity and be spendable in the next block
+	for _ in 0..3 {
 		let prev = chain.head_header().unwrap();
 
-		let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
-		let mut block = core::core::Block::new(&prev, vec![], reward_key).unwrap();
+		let keychain = Keychain::from_random_seed().unwrap();
+		let pk = keychain.derive_pubkey(1).unwrap();
+
+		let mut block = core::core::Block::new(&prev, vec![], &keychain, pk).unwrap();
 		block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -149,8 +157,7 @@ fn test_coinbase_maturity() {
 
 	let prev = chain.head_header().unwrap();
 
-	let reward_key = secp::key::SecretKey::new(&secp, &mut rng);
-	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], reward_key).unwrap();
+	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, pk4).unwrap();
 
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
