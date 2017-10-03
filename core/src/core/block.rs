@@ -28,13 +28,29 @@ use ser::{self, Readable, Reader, Writeable, Writer};
 use global;
 use keychain;
 
-
 bitflags! {
     /// Options for block validation
     pub flags BlockFeatures: u8 {
         /// No flags
         const DEFAULT_BLOCK = 0b00000000,
     }
+}
+
+/// Errors thrown by Block validation
+#[derive(Debug, PartialEq)]
+pub enum Error {
+	/// The sum of output minus input commitments does not match the sum of
+	/// kernel commitments
+	KernelSumMismatch,
+	/// Underlying Secp256k1 error (signature validation or invalid public
+	/// key typically)
+	Secp(secp::Error),
+}
+
+impl From<secp::Error> for Error {
+	fn from(e: secp::Error) -> Error {
+		Error::Secp(e)
+	}
 }
 
 /// Block header, fairly standard compared to other blockchains.
@@ -400,18 +416,17 @@ impl Block {
 	}
 
 	/// Validates all the elements in a block that can be checked without
-	/// additional
-	/// data. Includes commitment sums and kernels, Merkle trees, reward, etc.
-	pub fn validate(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
+	/// additional data. Includes commitment sums and kernels, Merkle
+	/// trees, reward, etc.
+	pub fn validate(&self, secp: &Secp256k1) -> Result<(), Error> {
 		self.verify_coinbase(secp)?;
 		self.verify_kernels(secp)?;
 		Ok(())
 	}
 
 	/// Validate the sum of input/output commitments match the sum in kernels
-	/// and
-	/// that all kernel signatures are valid.
-	pub fn verify_kernels(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
+	/// and that all kernel signatures are valid.
+	pub fn verify_kernels(&self, secp: &Secp256k1) -> Result<(), Error> {
 		// sum all inputs and outs commitments
 		let io_sum = self.sum_commitments(secp)?;
 
@@ -421,8 +436,7 @@ impl Block {
 
 		// both should be the same
 		if proof_sum != io_sum {
-			// TODO more specific error
-			return Err(secp::Error::IncorrectCommitSum);
+			return Err(Error::KernelSumMismatch);
 		}
 
 		// verify all signatures with the commitment as pk
@@ -437,7 +451,7 @@ impl Block {
 	// * That the sum of all coinbase-marked outputs equal the supply.
 	// * That the sum of blinding factors for all coinbase-marked outputs match
 	//   the coinbase-marked kernels.
-	fn verify_coinbase(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
+	fn verify_coinbase(&self, secp: &Secp256k1) -> Result<(), Error> {
 		let cb_outs = self.outputs
 			.iter()
 			.filter(|out| out.features.contains(COINBASE_OUTPUT))
@@ -617,13 +631,13 @@ mod test {
 
 		assert_eq!(
 			b.verify_coinbase(&keychain.secp()),
-			Err(secp::Error::IncorrectCommitSum)
+			Err(Error::KernelSumMismatch)
 		);
 		assert_eq!(b.verify_kernels(&keychain.secp()), Ok(()));
 
 		assert_eq!(
 			b.validate(&keychain.secp()),
-			Err(secp::Error::IncorrectCommitSum)
+			Err(Error::KernelSumMismatch)
 		);
 	}
 
@@ -639,13 +653,13 @@ mod test {
 
 		assert_eq!(
 			b.verify_coinbase(&keychain.secp()),
-			Err(secp::Error::IncorrectCommitSum)
+			Err(Error::Secp(secp::Error::IncorrectCommitSum))
 		);
 		assert_eq!(b.verify_kernels(&keychain.secp()), Ok(()));
 
 		assert_eq!(
 			b.validate(&keychain.secp()),
-			Err(secp::Error::IncorrectCommitSum)
+			Err(Error::Secp(secp::Error::IncorrectCommitSum))
 		);
 	}
 
