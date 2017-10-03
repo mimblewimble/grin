@@ -120,14 +120,12 @@ impl Keychain {
 			.iter()
 			.filter_map(|k| self.derived_key(&k).ok())
 			.collect();
-		println!("pos_keys - {}", pos_keys.len());
 
 		let mut neg_keys: Vec<SecretKey> = blind_sum
 			.negative_pubkeys
 			.iter()
 			.filter_map(|k| self.derived_key(&k).ok())
 			.collect();
-		println!("neg_keys - {}", neg_keys.len());
 
 		pos_keys.extend(&blind_sum
 			.positive_blinding_factors
@@ -140,9 +138,6 @@ impl Keychain {
 			.iter()
 			.map(|b| b.secret_key())
 			.collect::<Vec<SecretKey>>());
-
-		println!("pos_keys all - {}", pos_keys.len());
-		println!("neg_keys all - {}", neg_keys.len());
 
 		let blinding = self.secp.blind_sum(pos_keys, neg_keys)?;
 		Ok(BlindingFactor::new(blinding))
