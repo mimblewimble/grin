@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::{core, consensus};
+use core::{core, consensus, global};
 use chain;
 use secp::pedersen;
 
@@ -60,7 +60,7 @@ impl Output {
 			x if x.contains(core::transaction::COINBASE_OUTPUT) => {
 				(
 					OutputType::Coinbase,
-					block_header.height + consensus::COINBASE_MATURITY,
+					block_header.height + global::coinbase_maturity(),
 				)
 			}
 			_ => (OutputType::Transaction, 0),

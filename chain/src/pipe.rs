@@ -271,7 +271,7 @@ fn validate_block(
 
 					// TODO - make sure we are not off-by-1 here vs. the equivalent tansaction
 					// validation rule
-					if b.header.height <= output_header.height + consensus::COINBASE_MATURITY {
+					if b.header.height <= output_header.height + global::coinbase_maturity() {
 						return Err(Error::ImmatureCoinbase);
 					}
 				};
