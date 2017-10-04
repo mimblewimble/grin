@@ -248,23 +248,27 @@ pub fn transaction_identifier(tx: &core::transaction::Transaction) -> core::hash
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use secp::{Secp256k1, ContextFlag};
-	use secp::key;
+	use secp;
+	use keychain::Keychain;
 
 	#[test]
 	fn test_add_entry() {
-		let ec = Secp256k1::with_caps(ContextFlag::Commit);
+		let keychain = Keychain::from_random_seed().unwrap();
+		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let pk2 = keychain.derive_pubkey(2).unwrap();
+		let pk3 = keychain.derive_pubkey(3).unwrap();
 
-		let output_commit = ec.commit_value(70).unwrap();
+		let output_commit = keychain.commit(70, &pk1).unwrap();
 		let inputs = vec![
-			core::transaction::Input(ec.commit_value(50).unwrap()),
-			core::transaction::Input(ec.commit_value(25).unwrap()),
+			core::transaction::Input(keychain.commit(50, &pk2).unwrap()),
+			core::transaction::Input(keychain.commit(25, &pk3).unwrap()),
 		];
+		let msg = secp::pedersen::ProofMessage::empty();
 		let outputs = vec![
 			core::transaction::Output {
 				features: core::transaction::DEFAULT_OUTPUT,
 				commit: output_commit,
-				proof: ec.range_proof(0, 100, key::ZERO_KEY, output_commit, ec.nonce()),
+				proof: keychain.range_proof(100, &pk1, output_commit, msg).unwrap(),
 			},
 		];
 		let test_transaction = core::transaction::Transaction::new(inputs, outputs, 5);

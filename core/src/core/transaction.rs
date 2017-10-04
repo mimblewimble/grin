@@ -21,6 +21,7 @@ use std::ops;
 
 use core::Committed;
 use core::pmmr::Summable;
+use keychain::{Identifier, Keychain};
 use ser::{self, Reader, Writer, Readable, Writeable};
 
 bitflags! {
@@ -357,6 +358,21 @@ impl Output {
 	pub fn verify_proof(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
 		secp.verify_range_proof(self.commit, self.proof).map(|_| ())
 	}
+
+	/// Given the original blinding factor we can recover the
+	/// value from the range proof and the commitment
+	pub fn recover_value(&self, keychain: &Keychain, pubkey: &Identifier) -> Option<u64> {
+		match keychain.rewind_range_proof(pubkey, self.commit, self.proof) {
+			Ok(proof_info) => {
+				if proof_info.success {
+					Some(proof_info.value)
+				} else {
+					None
+				}
+			},
+			Err(_) => None
+		}
+	}
 }
 
 /// Wrapper to Output commitments to provide the Summable trait.
@@ -422,4 +438,39 @@ fn u64_to_32bytes(n: u64) -> [u8; 32] {
 	let mut bytes = [0; 32];
 	BigEndian::write_u64(&mut bytes[24..32], n);
 	bytes
+}
+
+#[cfg(test)]
+mod test {
+	use super::*;
+	use keychain::Keychain;
+	use secp;
+
+	#[test]
+	fn test_output_value_recovery() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let pubkey = keychain.derive_pubkey(1).unwrap();
+
+		let commit = keychain.commit(1003, &pubkey).unwrap();
+		let msg = secp::pedersen::ProofMessage::empty();
+		let proof = keychain.range_proof(1003, &pubkey, commit, msg).unwrap();
+
+		let output = Output {
+			features: DEFAULT_OUTPUT,
+			commit: commit,
+			proof: proof,
+		};
+
+		// check we can successfully recover the value with the original blinding factor
+		let recovered_value = output.recover_value(&keychain, &pubkey).unwrap();
+		assert_eq!(recovered_value, 1003);
+
+		// check we cannot recover the value without the original blinding factor
+		let pubkey2 = keychain.derive_pubkey(2).unwrap();
+		let not_recoverable = output.recover_value(&keychain, &pubkey2);
+		match not_recoverable {
+			Some(_) => panic!("expected value to be None here"),
+			None => {}
+		}
+	}
 }

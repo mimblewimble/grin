@@ -55,7 +55,8 @@ pub fn input(value: u64, pubkey: Identifier) -> Box<Append> {
 pub fn output(value: u64, pubkey: Identifier) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
 		let commit = build.keychain.commit(value, &pubkey).unwrap();
-		let rproof = build.keychain.range_proof(value, &pubkey, commit).unwrap();
+		let msg = secp::pedersen::ProofMessage::empty();
+		let rproof = build.keychain.range_proof(value, &pubkey, commit, msg).unwrap();
 
 		(tx.with_output(Output {
 			features: DEFAULT_OUTPUT,

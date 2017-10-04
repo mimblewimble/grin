@@ -561,6 +561,7 @@ mod tests {
 	use types::*;
 	use core::core::build;
 	use blockchain::{DummyChain, DummyChainImpl, DummyUtxoSet};
+	use secp;
 	use keychain::Keychain;
 	use std::sync::{Arc, RwLock};
 	use blake2;
@@ -1074,7 +1075,8 @@ mod tests {
 		let keychain = keychain_for_tests();
 		let pubkey = keychain.derive_pubkey(value as u32).unwrap();
 		let commit = keychain.commit(value, &pubkey).unwrap();
-		let proof = keychain.range_proof(value, &pubkey, commit).unwrap();
+		let msg = secp::pedersen::ProofMessage::empty();
+		let proof = keychain.range_proof(value, &pubkey, commit, msg).unwrap();
 
 		transaction::Output {
 			features: transaction::DEFAULT_OUTPUT,
@@ -1088,7 +1090,8 @@ mod tests {
 		let keychain = keychain_for_tests();
 		let pubkey = keychain.derive_pubkey(value as u32).unwrap();
 		let commit = keychain.commit(value, &pubkey).unwrap();
-		let proof = keychain.range_proof(value, &pubkey, commit).unwrap();
+		let msg = secp::pedersen::ProofMessage::empty();
+		let proof = keychain.range_proof(value, &pubkey, commit, msg).unwrap();
 
 		transaction::Output {
 			features: transaction::COINBASE_OUTPUT,
