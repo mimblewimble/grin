@@ -42,10 +42,10 @@ pub const USER_TESTING_SIZESHIFT: u8 = 16;
 pub const USER_TESTING_PROOF_SIZE: usize = 42;
 
 /// Automated testing coinbase maturity
-pub const AUTOMATED_TESTING_COINBASE_MATURITY:u64 = 3;
+pub const AUTOMATED_TESTING_COINBASE_MATURITY: u64 = 3;
 
 /// User testing coinbase maturity
-pub const USER_TESTING_COINBASE_MATURITY:u64 = 3;
+pub const USER_TESTING_COINBASE_MATURITY: u64 = 3;
 
 /// Mining parameter modes
 #[derive(Debug, Clone, Serialize, Deserialize)]
