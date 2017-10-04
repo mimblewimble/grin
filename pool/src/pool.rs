@@ -20,6 +20,8 @@ pub use graph;
 use core::core::transaction;
 use core::core::block;
 use core::core::hash;
+use core::global;
+use core::global::{MiningParameterMode, MINING_PARAMETER_MODE};
 use core::consensus;
 
 use secp;
@@ -168,7 +170,7 @@ where
 						{
 							if let Ok(head_header) = self.blockchain.head_header() {
 								if head_header.height <=
-									out_header.height + consensus::COINBASE_MATURITY
+									out_header.height + global::coinbase_maturity()
 								{
 									return Err(PoolError::ImmatureCoinbase {
 										header: out_header,
@@ -727,6 +729,7 @@ mod tests {
 
 	#[test]
 	fn test_immature_coinbase() {
+		global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 		let mut dummy_chain = DummyChainImpl::new();
 		let coinbase_output = test_coinbase_output(15);
 		dummy_chain.update_utxo_set(DummyUtxoSet::empty().with_output(coinbase_output));

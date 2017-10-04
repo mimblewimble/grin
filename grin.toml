@@ -31,10 +31,10 @@ seeding_type = "None"
 #The mining parameter mode, which defines the set of cuckoo parameters
 #used for mining. Can be:
 #AutomatedTesting - For CI builds and instant blockchain creation
-#UserTesting - For regular user testing, much lighter than production more
-#Production - Full production cuckoo parameters
+#UserTesting - For regular user testing (cuckoo 16)
+#Production - Full production cuckoo parameter (cuckoo 30)
 
-mining_parameter_mode = "Production"
+mining_parameter_mode = "UserTesting"
 
 #7 = Bit flags for FULL_NODE, this structure needs to be changed
 #internally to make it more configurable
@@ -54,7 +54,7 @@ port = 13414
 
 #flag whether mining is enabled
 
-enable_mining = false 
+enable_mining = false
 
 #Whether to use cuckoo-miner,  and related parameters
 
@@ -128,6 +128,11 @@ parameter_list = {NUM_THREADS=4, NUM_TRIMS=68}
 
 #CUDA verion of lean miner
 #Can currently be used only in Production (30) Mode
+#This plugin is not built by default. To build:
+#1) Ensure the latest cuda toolkit is installed
+#   (nvcc should be on the pat)
+#2) Uncomment the 'build-cuda-plugin' feature
+#   in pow/Cargo.toml
 
 #[[mining.cuckoo_miner_plugin_config]]
 #type_filter = "lean_cuda"

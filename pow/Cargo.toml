@@ -18,10 +18,12 @@ grin_core = { path = "../core" }
 
 [dependencies.cuckoo_miner]
 git = "https://github.com/mimblewimble/cuckoo-miner"
-tag="grin_integration_12"
+tag="grin_integration_13"
 #path = "../../cuckoo-miner"
 #uncomment this feature to turn off plugin builds
 #features=["no-plugin-build"]
+#uncomment this feature to enable cuda builds (cuda toolkit must be installed)
+#features=["build-cuda-plugins"]
 
 [dev_dependencies]
 grin_chain = { path = "../chain"}

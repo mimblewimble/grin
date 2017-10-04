@@ -24,6 +24,7 @@
 use std::sync::RwLock;
 use consensus::PROOFSIZE;
 use consensus::DEFAULT_SIZESHIFT;
+use consensus::COINBASE_MATURITY;
 
 /// Define these here, as they should be developer-set, not really tweakable
 /// by users
@@ -39,6 +40,12 @@ pub const USER_TESTING_SIZESHIFT: u8 = 16;
 
 /// User testing proof size
 pub const USER_TESTING_PROOF_SIZE: usize = 42;
+
+/// Automated testing coinbase maturity
+pub const AUTOMATED_TESTING_COINBASE_MATURITY: u64 = 3;
+
+/// User testing coinbase maturity
+pub const USER_TESTING_COINBASE_MATURITY: u64 = 3;
 
 /// Mining parameter modes
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,6 +89,16 @@ pub fn proofsize() -> usize {
 		MiningParameterMode::AutomatedTesting => AUTOMATED_TESTING_PROOF_SIZE,
 		MiningParameterMode::UserTesting => USER_TESTING_PROOF_SIZE,
 		MiningParameterMode::Production => PROOFSIZE,
+	}
+}
+
+/// Coinbase maturity
+pub fn coinbase_maturity() -> u64 {
+	let param_ref = MINING_PARAMETER_MODE.read().unwrap();
+	match *param_ref {
+		MiningParameterMode::AutomatedTesting => AUTOMATED_TESTING_COINBASE_MATURITY,
+		MiningParameterMode::UserTesting => USER_TESTING_COINBASE_MATURITY,
+		MiningParameterMode::Production => COINBASE_MATURITY,
 	}
 }
 
