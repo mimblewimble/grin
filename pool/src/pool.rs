@@ -20,6 +20,7 @@ pub use graph;
 use core::core::transaction;
 use core::core::block;
 use core::core::hash;
+use core::global;
 use core::consensus;
 
 use secp;
@@ -168,7 +169,7 @@ where
 						{
 							if let Ok(head_header) = self.blockchain.head_header() {
 								if head_header.height <=
-									out_header.height + consensus::COINBASE_MATURITY
+									out_header.height + global::coinbase_maturity()
 								{
 									return Err(PoolError::ImmatureCoinbase {
 										header: out_header,
