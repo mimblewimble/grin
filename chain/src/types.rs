@@ -20,7 +20,7 @@ use secp;
 use secp::pedersen::Commitment;
 
 use grin_store as store;
-use core::core::{Block, BlockHeader, Output};
+use core::core::{Block, BlockHeader, block, Output};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::ser;
@@ -54,7 +54,7 @@ pub enum Error {
 	/// The proof of work is invalid
 	InvalidPow,
 	/// The block doesn't sum correctly or a tx signature is invalid
-	InvalidBlockProof(secp::Error),
+	InvalidBlockProof(block::Error),
 	/// Block time is too old
 	InvalidBlockTime,
 	/// Block height is invalid (not previous + 1)
