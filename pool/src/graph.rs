@@ -20,7 +20,6 @@ use std::collections::HashMap;
 use secp::pedersen::Commitment;
 
 use time;
-use rand;
 
 use std::fmt;
 

@@ -21,8 +21,6 @@ use core::core::transaction;
 use core::core::block;
 use core::core::hash;
 use core::global;
-use core::global::{MiningParameterMode, MINING_PARAMETER_MODE};
-use core::consensus;
 
 use secp;
 use secp::pedersen::Commitment;
