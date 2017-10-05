@@ -16,7 +16,6 @@
 
 use std::io;
 
-use secp;
 use secp::pedersen::Commitment;
 
 use grin_store as store;
