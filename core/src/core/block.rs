@@ -484,9 +484,10 @@ impl Block {
 		let msg = secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE])?;
 		let sig = keychain.sign(&msg, &pubkey)?;
 		let commit = keychain.commit(REWARD, &pubkey)?;
+		let msg = secp::pedersen::ProofMessage::empty();
 		// let switch_commit = keychain.switch_commit(pubkey)?;
 
-		let rproof = keychain.range_proof(REWARD, &pubkey, commit)?;
+		let rproof = keychain.range_proof(REWARD, &pubkey, commit, msg)?;
 
 		let output = Output {
 			features: COINBASE_OUTPUT,
