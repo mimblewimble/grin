@@ -131,7 +131,7 @@ where
 	) -> Result<(), PoolError> {
 		// Making sure the transaction is valid before anything else.
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-		tx.validate(&secp).map_err(|_| PoolError::Invalid)?;
+		tx.validate(&secp).map_err(|e| PoolError::Invalid)?;
 
 		// The first check involves ensuring that an identical transaction is
 		// not already in the pool's transaction set.
@@ -586,7 +586,7 @@ mod tests {
 	fn test_basic_pool_add() {
 		let mut dummy_chain = DummyChainImpl::new();
 
-		let parent_transaction = test_transaction(vec![5, 6, 7], vec![11, 4]);
+		let parent_transaction = test_transaction(vec![5, 6, 7], vec![11, 3]);
 		// We want this transaction to be rooted in the blockchain.
 		let new_utxo = DummyUtxoSet::empty()
 			.with_output(test_output(5))
@@ -595,7 +595,7 @@ mod tests {
 			.with_output(test_output(8));
 
 		// Prepare a second transaction, connected to the first.
-		let child_transaction = test_transaction(vec![11, 4], vec![12]);
+		let child_transaction = test_transaction(vec![11, 3], vec![12]);
 
 		dummy_chain.update_utxo_set(new_utxo);
 
@@ -682,7 +682,7 @@ mod tests {
 
 			// To test DoubleSpend and AlreadyInPool conditions, we need to add
 			// a valid transaction.
-			let valid_transaction = test_transaction(vec![5,6], vec![8]);
+			let valid_transaction = test_transaction(vec![5,6], vec![9]);
 
 			match write_pool.add_to_memory_pool(test_source(), valid_transaction) {
 				Ok(_) => {}
@@ -712,7 +712,7 @@ mod tests {
 				}
 			};
 
-			let already_in_pool = test_transaction(vec![5,6], vec![8]);
+			let already_in_pool = test_transaction(vec![5,6], vec![9]);
 
 			match write_pool.add_to_memory_pool(test_source(), already_in_pool) {
 				Ok(_) => panic!("Expected error when adding already in pool, got Ok"),
@@ -756,7 +756,7 @@ mod tests {
 			};
 			chain_ref.store_head_header(&head_header);
 
-			let txn = test_transaction(vec![15], vec![10, 4]);
+			let txn = test_transaction(vec![15], vec![10, 3]);
 			let result = write_pool.add_to_memory_pool(test_source(), txn);
 			match result {
 				Err(PoolError::ImmatureCoinbase {
@@ -774,7 +774,7 @@ mod tests {
 			};
 			chain_ref.store_head_header(&head_header);
 
-			let txn = test_transaction(vec![15], vec![10, 4]);
+			let txn = test_transaction(vec![15], vec![10, 3]);
 			let result = write_pool.add_to_memory_pool(test_source(), txn);
 			match result {
 				Err(PoolError::ImmatureCoinbase {
@@ -792,7 +792,7 @@ mod tests {
 			};
 			chain_ref.store_head_header(&head_header);
 
-			let txn = test_transaction(vec![15], vec![10, 4]);
+			let txn = test_transaction(vec![15], vec![10, 3]);
 			let result = write_pool.add_to_memory_pool(test_source(), txn);
 			match result {
 				Ok(_) => {}
@@ -831,33 +831,33 @@ mod tests {
 		//  consumed in the block, although it is not exactly consumed.
 		// 3. A transaction that should remain after block reconciliation.
 		let block_transaction = test_transaction(vec![10], vec![8]);
-		let conflict_transaction = test_transaction(vec![20], vec![12,7]);
-		let valid_transaction = test_transaction(vec![30], vec![14,15]);
+		let conflict_transaction = test_transaction(vec![20], vec![12,6]);
+		let valid_transaction = test_transaction(vec![30], vec![13,15]);
 
 		// We will also introduce a few children:
 		// 4. A transaction that descends from transaction 1, that is in
 		//  turn exactly contained in the block.
-		let block_child = test_transaction(vec![8], vec![4,3]);
+		let block_child = test_transaction(vec![8], vec![5,1]);
 		// 5. A transaction that descends from transaction 4, that is not
 		//  contained in the block at all and should be valid after
 		//  reconciliation.
-		let pool_child = test_transaction(vec![4], vec![1]);
+		let pool_child = test_transaction(vec![5], vec![3]);
 		// 6. A transaction that descends from transaction 2 that does not
 		//  conflict with anything in the block in any way, but should be
 		//  invalidated (orphaned).
-		let conflict_child = test_transaction(vec![12], vec![11]);
+		let conflict_child = test_transaction(vec![12], vec![2]);
 		// 7. A transaction that descends from transaction 2 that should be
 		//  valid due to its inputs being satisfied by the block.
-		let conflict_valid_child = test_transaction(vec![7], vec![5]);
+		let conflict_valid_child = test_transaction(vec![6], vec![4]);
 		// 8. A transaction that descends from transaction 3 that should be
 		//  invalidated due to an output conflict.
-		let valid_child_conflict = test_transaction(vec![14], vec![9]);
+		let valid_child_conflict = test_transaction(vec![13], vec![9]);
 		// 9. A transaction that descends from transaction 3 that should remain
 		//  valid after reconciliation.
-		let valid_child_valid = test_transaction(vec![15], vec![13]);
+		let valid_child_valid = test_transaction(vec![15], vec![11]);
 		// 10. A transaction that descends from both transaction 6 and
 		//  transaction 9
-		let mixed_child = test_transaction(vec![11,13], vec![2]);
+		let mixed_child = test_transaction(vec![2,11], vec![7]);
 
 		// Add transactions.
 		// Note: There are some ordering constraints that must be followed here
@@ -885,7 +885,7 @@ mod tests {
 			assert_eq!(write_pool.total_size(), 0);
 
 			for tx in txs_to_add.drain(..) {
-				assert!(write_pool.add_to_memory_pool(test_source(), tx).is_ok());
+				write_pool.add_to_memory_pool(test_source(), tx).unwrap();
 			}
 
 			assert_eq!(write_pool.total_size(), expected_pool_size);
@@ -895,11 +895,11 @@ mod tests {
 		// - Copy of 1
 		let block_tx_1 = test_transaction(vec![10], vec![8]);
 		// - Conflict w/ 2, satisfies 7
-		let block_tx_2 = test_transaction(vec![20], vec![7]);
+		let block_tx_2 = test_transaction(vec![20], vec![6]);
 		// - Copy of 4
-		let block_tx_3 = test_transaction(vec![8], vec![4,3]);
+		let block_tx_3 = test_transaction(vec![8], vec![5,1]);
 		// - Output conflict w/ 8
-		let block_tx_4 = test_transaction(vec![40], vec![9]);
+		let block_tx_4 = test_transaction(vec![40], vec![9,1]);
 		let block_transactions = vec![&block_tx_1, &block_tx_2, &block_tx_3, &block_tx_4];
 
 		let keychain = Keychain::from_random_seed().unwrap();
@@ -935,23 +935,23 @@ mod tests {
 
 			assert_eq!(read_pool.total_size(), 4);
 
-			// We should have available blockchain outputs at 9 and 3
-			expect_output_parent!(read_pool, Parent::BlockTransaction{output: _}, 9, 3);
+			// We should have available blockchain outputs
+			expect_output_parent!(read_pool, Parent::BlockTransaction{output: _}, 9, 1);
 
-			// We should have spent blockchain outputs at 4 and 7
-			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 4, 7);
+			// We should have spent blockchain outputs
+			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 5, 6);
 
-			// We should have spent pool references at 15
+			// We should have spent pool references
 			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 15);
 
-			// We should have unspent pool references at 1, 13, 14
-			expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 1, 13, 14);
+			// We should have unspent pool references
+			expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 3, 11, 13);
 
 			// References internal to the block should be unknown
 			expect_output_parent!(read_pool, Parent::Unknown, 8);
 
 			// Evicted transactions should have unknown outputs
-			expect_output_parent!(read_pool, Parent::Unknown, 2, 11);
+			expect_output_parent!(read_pool, Parent::Unknown, 2, 7);
 		}
 	}
 
@@ -973,11 +973,11 @@ mod tests {
 
 		let pool = RwLock::new(test_setup(&chain_ref));
 
-		let root_tx_1 = test_transaction(vec![10,20], vec![25]);
+		let root_tx_1 = test_transaction(vec![10,20], vec![24]);
 		let root_tx_2 = test_transaction(vec![30], vec![28]);
 		let root_tx_3 = test_transaction(vec![40], vec![38]);
 
-		let child_tx_1 = test_transaction(vec![25], vec![23]);
+		let child_tx_1 = test_transaction(vec![24], vec![22]);
 		let child_tx_2 = test_transaction(vec![38], vec![32]);
 
 		{
