@@ -181,6 +181,10 @@ where
 	/// implementation.
 	fn append(&mut self, position: u64, data: Vec<HashSum<T>>) -> Result<(), String>;
 
+	/// Rewind the backend state to a previous position, as if all append
+	/// operations after that had been canceled. Expects a position in the PMMR
+	/// to rewind to as well as the consumer-provided index of when the change
+	/// occurred (see remove).
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String>;
 
 	/// Get a HashSum by insertion position
@@ -382,6 +386,7 @@ pub struct VecBackend<T>
 where
 	T: Summable + Clone,
 {
+	/// Backend elements
 	pub elems: Vec<Option<HashSum<T>>>,
 }
 
@@ -397,6 +402,7 @@ where
 	fn get(&self, position: u64) -> Option<HashSum<T>> {
 		self.elems[(position - 1) as usize].clone()
 	}
+	#[allow(unused_variables)]
 	fn remove(&mut self, positions: Vec<u64>, index: u32) -> Result<(), String> {
 		for n in positions {
 			self.elems[(n - 1) as usize] = None
@@ -971,7 +977,7 @@ mod test {
 		{
 			let mut pmmr = PMMR::at(&mut ba, sz);
 			for n in 1..16 {
-				pmmr.prune(n, 0);
+				let _ = pmmr.prune(n, 0);
 			}
 			assert_eq!(orig_root, pmmr.root());
 		}

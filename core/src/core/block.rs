@@ -20,7 +20,7 @@ use std::collections::HashSet;
 
 use core::Committed;
 use core::{Input, Output, Proof, TxKernel, Transaction, COINBASE_KERNEL, COINBASE_OUTPUT};
-use consensus::REWARD;
+use consensus::{REWARD, reward};
 use consensus::MINIMUM_DIFFICULTY;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
@@ -42,6 +42,10 @@ pub enum Error {
 	/// The sum of output minus input commitments does not match the sum of
 	/// kernel commitments
 	KernelSumMismatch,
+	/// Same as above but for the coinbase part of a block, including reward
+	CoinbaseSumMismatch,
+	/// Kernel fee can't be odd, due to half fee burning
+	OddKernelFee,
 	/// Underlying Secp256k1 error (signature validation or invalid public
 	/// key typically)
 	Secp(secp::Error),
@@ -237,7 +241,7 @@ impl Committed for Block {
 		&self.outputs
 	}
 	fn overage(&self) -> i64 {
-		(self.total_fees() as i64) - (REWARD as i64)
+		((self.total_fees() / 2) as i64) - (REWARD as i64)
 	}
 }
 
@@ -264,7 +268,8 @@ impl Block {
 		pubkey: keychain::Identifier,
 	) -> Result<Block, keychain::Error> {
 
-		let (reward_out, reward_proof) = Block::reward_output(keychain, pubkey)?;
+		let fees = txs.iter().map(|tx| tx.fee).sum();
+		let (reward_out, reward_proof) = Block::reward_output(keychain, pubkey, fees)?;
 		let block = Block::with_reward(prev, txs, reward_out, reward_proof)?;
 		Ok(block)
 	}
@@ -278,6 +283,7 @@ impl Block {
 		reward_out: Output,
 		reward_kern: TxKernel,
 	) -> Result<Block, secp::Error> {
+
 		// note: the following reads easily but may not be the most efficient due to
 		// repeated iterations, revisit if a problem
 		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
@@ -420,13 +426,18 @@ impl Block {
 	/// trees, reward, etc.
 	pub fn validate(&self, secp: &Secp256k1) -> Result<(), Error> {
 		self.verify_coinbase(secp)?;
-		self.verify_kernels(secp)?;
+		self.verify_kernels(secp, false)?;
 		Ok(())
 	}
 
 	/// Validate the sum of input/output commitments match the sum in kernels
 	/// and that all kernel signatures are valid.
-	pub fn verify_kernels(&self, secp: &Secp256k1) -> Result<(), Error> {
+	fn verify_kernels(&self, secp: &Secp256k1, skip_sig: bool) -> Result<(), Error> {
+		for k in &self.kernels {
+			if k.fee & 1 != 0 {
+				return Err(Error::OddKernelFee);
+			}
+		}
 		// sum all inputs and outs commitments
 		let io_sum = self.sum_commitments(secp)?;
 
@@ -440,8 +451,10 @@ impl Block {
 		}
 
 		// verify all signatures with the commitment as pk
-		for proof in &self.kernels {
-			proof.verify(secp)?;
+		if !skip_sig {
+			for proof in &self.kernels {
+				proof.verify(secp)?;
+			}
 		}
 		Ok(())
 	}
@@ -452,25 +465,21 @@ impl Block {
 	// * That the sum of blinding factors for all coinbase-marked outputs match
 	//   the coinbase-marked kernels.
 	fn verify_coinbase(&self, secp: &Secp256k1) -> Result<(), Error> {
-		let cb_outs = self.outputs
-			.iter()
-			.filter(|out| out.features.contains(COINBASE_OUTPUT))
-			.map(|o| o.clone())
-			.collect::<Vec<_>>();
-		let cb_kerns = self.kernels
-			.iter()
-			.filter(|k| k.features.contains(COINBASE_KERNEL))
-			.map(|k| k.clone())
-			.collect::<Vec<_>>();
+		let cb_outs = filter_map_vec!(self.outputs, |out| {
+			if out.features.contains(COINBASE_OUTPUT) { Some(out.commitment()) } else { None }
+		});
+		let cb_kerns = filter_map_vec!(self.kernels, |k| {
+			if k.features.contains(COINBASE_KERNEL) { Some(k.excess) } else { None }
+		});
 
-		// verifying the kernels on a block composed of just the coinbase outputs
-		// and kernels checks all we need
-		Block {
-			header: BlockHeader::default(),
-			inputs: vec![],
-			outputs: cb_outs,
-			kernels: cb_kerns,
-		}.verify_kernels(secp)
+		let over_commit = secp.commit_value(reward(self.total_fees()))?;
+		let out_adjust_sum = secp.commit_sum(cb_outs, vec![over_commit])?;
+
+		let kerns_sum = secp.commit_sum(cb_kerns, vec![])?;
+		if kerns_sum != out_adjust_sum {
+			return Err(Error::CoinbaseSumMismatch);
+		}
+		Ok(())
 	}
 
 	/// Builds the blinded output and related signature proof for the block
@@ -478,16 +487,15 @@ impl Block {
 	pub fn reward_output(
 		keychain: &keychain::Keychain,
 		pubkey: keychain::Identifier,
+		fees: u64,
 	) -> Result<(Output, TxKernel), keychain::Error> {
+
 		let secp = keychain.secp();
 
-		let msg = secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE])?;
-		let sig = keychain.sign(&msg, &pubkey)?;
-		let commit = keychain.commit(REWARD, &pubkey)?;
-		let msg = secp::pedersen::ProofMessage::empty();
+		let commit = keychain.commit(reward(fees), &pubkey)?;
 		// let switch_commit = keychain.switch_commit(pubkey)?;
-
-		let rproof = keychain.range_proof(REWARD, &pubkey, commit, msg)?;
+		let msg = secp::pedersen::ProofMessage::empty();
+		let rproof = keychain.range_proof(reward(fees), &pubkey, commit, msg)?;
 
 		let output = Output {
 			features: COINBASE_OUTPUT,
@@ -495,9 +503,12 @@ impl Block {
 			proof: rproof,
 		};
 
-		let over_commit = try!(secp.commit_value(REWARD as u64));
+		let over_commit = secp.commit_value(reward(fees))?;
 		let out_commit = output.commitment();
-		let excess = try!(secp.commit_sum(vec![out_commit], vec![over_commit]));
+		let excess = secp.commit_sum(vec![out_commit], vec![over_commit])?;
+
+		let msg = secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE])?;
+		let sig = keychain.sign(&msg, &pubkey)?;
 
 		let proof = TxKernel {
 			features: COINBASE_KERNEL,
@@ -529,7 +540,7 @@ mod test {
 	// utility producing a transaction that spends an output with the provided
 	// value and blinding key
 	fn txspend1i1o(v: u64, keychain: &Keychain, pk1: Identifier, pk2: Identifier) -> Transaction {
-		build::transaction(vec![input(v, pk1), output(3, pk2), with_fee(1)], &keychain)
+		build::transaction(vec![input(v, pk1), output(3, pk2), with_fee(2)], &keychain)
 			.map(|(tx, _)| tx)
 			.unwrap()
 	}
@@ -544,13 +555,13 @@ mod test {
 
 		let mut btx1 = tx2i1o();
 		let (mut btx2, _) = build::transaction(
-			vec![input(5, pk1), output(4, pk2.clone()), with_fee(1)],
+			vec![input(7, pk1), output(5, pk2.clone()), with_fee(2)],
 			&keychain,
 		).unwrap();
 
 		// spending tx2 - reuse pk2
 
-		let mut btx3 = txspend1i1o(4, &keychain, pk2.clone(), pk3);
+		let mut btx3 = txspend1i1o(5, &keychain, pk2.clone(), pk3);
 		let b = new_block(vec![&mut btx1, &mut btx2, &mut btx3], &keychain);
 
 		// block should have been automatically compacted (including reward
@@ -572,12 +583,12 @@ mod test {
 		let mut btx1 = tx2i1o();
 
 		let (mut btx2, _) = build::transaction(
-			vec![input(5, pk1), output(4, pk2.clone()), with_fee(1)],
+			vec![input(7, pk1), output(5, pk2.clone()), with_fee(2)],
 			&keychain,
 		).unwrap();
 
 		// spending tx2 - reuse pk2
-		let mut btx3 = txspend1i1o(4, &keychain, pk2.clone(), pk3);
+		let mut btx3 = txspend1i1o(5, &keychain, pk2.clone(), pk3);
 
 		let b1 = new_block(vec![&mut btx1, &mut btx2], &keychain);
 		b1.validate(&keychain.secp()).unwrap();
@@ -632,13 +643,13 @@ mod test {
 
 		assert_eq!(
 			b.verify_coinbase(&keychain.secp()),
-			Err(Error::KernelSumMismatch)
+			Err(Error::CoinbaseSumMismatch)
 		);
-		assert_eq!(b.verify_kernels(&keychain.secp()), Ok(()));
+		assert_eq!(b.verify_kernels(&keychain.secp(), false), Ok(()));
 
 		assert_eq!(
 			b.validate(&keychain.secp()),
-			Err(Error::KernelSumMismatch)
+			Err(Error::CoinbaseSumMismatch)
 		);
 	}
 
@@ -656,7 +667,7 @@ mod test {
 			b.verify_coinbase(&keychain.secp()),
 			Err(Error::Secp(secp::Error::IncorrectCommitSum))
 		);
-		assert_eq!(b.verify_kernels(&keychain.secp()), Ok(()));
+		assert_eq!(b.verify_kernels(&keychain.secp(), true), Ok(()));
 
 		assert_eq!(
 			b.validate(&keychain.secp()),

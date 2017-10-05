@@ -49,7 +49,7 @@
 //! double-exchange will be required as soon as we support Schnorr signatures.
 //! So we may as well have it in place already.
 
-
+use core::consensus::reward;
 use core::core::{Block, Transaction, TxKernel, Output, build};
 use core::ser;
 use api::{self, ApiEndpoint, Operation, ApiResult};
@@ -106,16 +106,14 @@ impl ApiEndpoint for WalletReceiver {
 		match op.as_str() {
 			"coinbase" => {
 				match input {
-					WalletReceiveRequest::Coinbase(cb_amount) => {
-						debug!("Operation {} with amount {}", op, cb_amount.amount);
-						if cb_amount.amount == 0 {
-							return Err(api::Error::Argument(format!("Zero amount not allowed.")));
-						}
-						let (out, kern) =
+					WalletReceiveRequest::Coinbase(cb_fees) => {
+						debug!("Operation {} with amount {}", op, cb_fees.fees);
+						let (out, kern, derivation) =
 							receive_coinbase(
 								&self.config,
 								&self.keychain,
-								cb_amount.amount,
+								cb_fees.fees,
+								cb_fees.derivation,
 							).map_err(|e| {
 								api::Error::Internal(format!("Error building coinbase: {:?}", e))
 							})?;
@@ -130,6 +128,7 @@ impl ApiEndpoint for WalletReceiver {
 						Ok(CbData {
 							output: util::to_hex(out_bin),
 							kernel: util::to_hex(kern_bin),
+							derivation: derivation,
 						})
 					}
 					_ => Err(api::Error::Argument(
@@ -149,6 +148,7 @@ impl ApiEndpoint for WalletReceiver {
 						Ok(CbData {
 							output: String::from(""),
 							kernel: String::from(""),
+							derivation: 0,
 						})
 					}
 					_ => Err(api::Error::Argument(
@@ -165,20 +165,24 @@ impl ApiEndpoint for WalletReceiver {
 fn receive_coinbase(
 	config: &WalletConfig,
 	keychain: &Keychain,
-	amount: u64,
-) -> Result<(Output, TxKernel), Error> {
+	fees: u64,
+	mut derivation: u32,
+) -> Result<(Output, TxKernel, u32), Error> {
+
 	let fingerprint = keychain.clone().fingerprint();
 
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		let derivation = wallet_data.next_child(fingerprint.clone());
+		if derivation == 0 {
+			derivation = wallet_data.next_child(fingerprint.clone());
+		}
 		let pubkey = keychain.derive_pubkey(derivation)?;
 
 		// track the new output and return the stuff needed for reward
 		wallet_data.append_output(OutputData {
 			fingerprint: fingerprint.clone(),
 			n_child: derivation,
-			value: amount,
+			value: reward(fees),
 			status: OutputStatus::Unconfirmed,
 			height: 0,
 			lock_height: 0,
@@ -186,8 +190,8 @@ fn receive_coinbase(
 		debug!("Received coinbase and built output - {}, {}, {}",
 			fingerprint.clone(), pubkey.fingerprint(), derivation);
 
-		let result = Block::reward_output(&keychain, pubkey)?;
-		Ok(result)
+		let (out, kern) = Block::reward_output(&keychain, pubkey, fees)?;
+		Ok((out, kern, derivation))
 	})?
 }
 
@@ -199,6 +203,7 @@ fn receive_transaction(
 	blinding: BlindingFactor,
 	partial: Transaction,
 ) -> Result<Transaction, Error> {
+
 	let fingerprint = keychain.clone().fingerprint();
 
 	// operate within a lock on wallet data

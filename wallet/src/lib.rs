@@ -39,4 +39,4 @@ mod types;
 pub use info::show_info;
 pub use receiver::{WalletReceiver, receive_json_tx};
 pub use sender::issue_send_tx;
-pub use types::{WalletConfig, WalletReceiveRequest, CbAmount, CbData};
+pub use types::{WalletConfig, WalletReceiveRequest, BlockFees, CbData};

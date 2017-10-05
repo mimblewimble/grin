@@ -23,7 +23,7 @@ use serde_json;
 use secp;
 
 use api;
-use core::core::Transaction;
+use core::core::{Transaction, transaction};
 use core::ser;
 use keychain;
 use util;
@@ -36,6 +36,7 @@ const LOCK_FILE: &'static str = "wallet.lock";
 pub enum Error {
 	NotEnoughFunds(u64),
 	Keychain(keychain::Error),
+	Transaction(transaction::Error),
 	Secp(secp::Error),
 	WalletData(String),
 	/// An error in the format of the JSON structures exchanged by the wallet
@@ -50,6 +51,10 @@ impl From<keychain::Error> for Error {
 
 impl From<secp::Error> for Error {
 	fn from(e: secp::Error) -> Error { Error::Secp(e) }
+}
+
+impl From<transaction::Error> for Error {
+	fn from(e: transaction::Error) -> Error { Error::Transaction(e) }
 }
 
 impl From<serde_json::Error> for Error {
@@ -268,8 +273,7 @@ impl WalletData {
 	}
 
 	/// Select a subset of unspent outputs to spend in a transaction
-	/// transferring
-	/// the provided amount.
+	/// transferring the provided amount.
 	pub fn select(
 		&self,
 		fingerprint: keychain::Fingerprint,
@@ -356,15 +360,16 @@ pub fn partial_tx_from_json(
 /// Amount in request to build a coinbase output.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum WalletReceiveRequest {
-	Coinbase(CbAmount),
+	Coinbase(BlockFees),
 	PartialTransaction(String),
 	Finalize(String),
 }
 
-/// Amount in request to build a coinbase output.
+/// Fees in block to use for coinbase amount calculation
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CbAmount {
-	pub amount: u64,
+pub struct BlockFees {
+	pub fees: u64,
+	pub derivation: u32,
 }
 
 /// Response to build a coinbase output.
@@ -372,4 +377,5 @@ pub struct CbAmount {
 pub struct CbData {
 	pub output: String,
 	pub kernel: String,
+	pub derivation: u32,
 }

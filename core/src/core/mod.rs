@@ -219,7 +219,7 @@ mod test {
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &tx).expect("serialization failed");
 		let dtx: Transaction = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(dtx.fee, 1);
+		assert_eq!(dtx.fee, 2);
 		assert_eq!(dtx.inputs.len(), 2);
 		assert_eq!(dtx.outputs.len(), 1);
 		assert_eq!(tx.hash(), dtx.hash());
@@ -305,7 +305,7 @@ mod test {
 			// Alice builds her transaction, with change, which also produces the sum
 			// of blinding factors before they're obscured.
 			let (tx, sum) = build::transaction(
-				vec![in1, in2, output(1, pk3), with_fee(1)],
+				vec![in1, in2, output(1, pk3), with_fee(2)],
 				&keychain,
 			).unwrap();
 			tx_alice = tx;
@@ -317,7 +317,7 @@ mod test {
 		// ready for broadcast.
 		let (tx_final, _) =
 			build::transaction(
-				vec![initial_tx(tx_alice), with_excess(blind_sum), output(5, pk4)],
+				vec![initial_tx(tx_alice), with_excess(blind_sum), output(4, pk4)],
 				&keychain,
 			).unwrap();
 
@@ -386,7 +386,7 @@ mod test {
 		let pk3 = keychain.derive_pubkey(3).unwrap();
 
 		build::transaction(
-			vec![input(10, pk1), input(11, pk2), output(20, pk3), with_fee(1)],
+			vec![input(10, pk1), input(11, pk2), output(19, pk3), with_fee(2)],
 			&keychain,
 		).map(|(tx, _)| tx).unwrap()
 	}
@@ -398,7 +398,7 @@ mod test {
 		let pk2 = keychain.derive_pubkey(2).unwrap();
 
 		build::transaction(
-			vec![input(5, pk1), output(4, pk2), with_fee(1)],
+			vec![input(5, pk1), output(3, pk2), with_fee(2)],
 			&keychain,
 		).map(|(tx, _)| tx).unwrap()
 	}

@@ -34,6 +34,22 @@ bitflags! {
     }
 }
 
+/// Errors thrown by Block validation
+#[derive(Debug, PartialEq)]
+pub enum Error {
+	/// Transaction fee can't be odd, due to half fee burning
+	OddFee,
+	/// Underlying Secp256k1 error (signature validation or invalid public
+	/// key typically)
+	Secp(secp::Error),
+}
+
+impl From<secp::Error> for Error {
+	fn from(e: secp::Error) -> Error {
+		Error::Secp(e)
+	}
+}
+
 /// A proof that a transaction sums to zero. Includes both the transaction's
 /// Pedersen commitment and the signature, that guarantees that the commitments
 /// amount to zero. The signature signs the fee, which is retained for
@@ -245,11 +261,14 @@ impl Transaction {
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(&self, secp: &Secp256k1) -> Result<TxKernel, secp::Error> {
+	pub fn validate(&self, secp: &Secp256k1) -> Result<TxKernel, Error> {
+		if self.fee & 1 != 0 {
+			return Err(Error::OddFee);
+		}
 		for out in &self.outputs {
 			out.verify_proof(secp)?;
 		}
-		self.verify_sig(secp)
+		self.verify_sig(secp).map_err(&From::from)
 	}
 }
 
