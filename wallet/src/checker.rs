@@ -48,11 +48,12 @@ pub fn refresh_outputs(
 
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		// check each output that's not spent
-		for mut out in wallet_data.outputs.iter_mut().filter(|out| {
-			out.status != OutputStatus::Spent
-		})
+		for mut out in wallet_data.outputs
+			.values_mut()
+			.filter(|out| {
+				out.status != OutputStatus::Spent
+			})
 		{
-
 			// TODO check the pool for unconfirmed
 			match get_output_from_node(config, keychain, out.value, out.n_child) {
 				Ok(api_out) => refresh_output(&mut out, api_out, &tip),

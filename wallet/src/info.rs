@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use checker;
-use keychain::Keychain; 
+use keychain::Keychain;
 use types::{WalletConfig, WalletData};
 
 pub fn show_info(
@@ -27,18 +27,18 @@ pub fn show_info(
 	let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
 		println!("Outputs - ");
-		println!("fingerprint, n_child, height, lock_height, status, value");
+		println!("identifier, height, lock_height, status, value");
 		println!("----------------------------------");
-		for out in &mut wallet_data.outputs
-			.iter()
-			.filter(|out| out.fingerprint == fingerprint)
-		{
-			let pubkey = keychain.derive_pubkey(out.n_child).unwrap();
 
+		let mut outputs = wallet_data.outputs
+			.values()
+			.filter(|out| out.fingerprint == fingerprint)
+			.collect::<Vec<_>>();
+		outputs.sort_by_key(|out| out.n_child);
+		for out in outputs {
 			println!(
-				"{}, {}, {}, {}, {:?}, {}",
-				pubkey.fingerprint(),
-				out.n_child,
+				"{}..., {}, {}, {:?}, {}",
+				out.identifier.fingerprint(),
 				out.height,
 				out.lock_height,
 				out.status,

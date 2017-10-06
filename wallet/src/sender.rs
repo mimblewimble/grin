@@ -78,12 +78,13 @@ fn build_send_tx(
 		// derive an additional pubkey for change and build the change output
 		let change_derivation = wallet_data.next_child(fingerprint.clone());
 		let change_key = keychain.derive_pubkey(change_derivation)?;
-		parts.push(build::output(change as u64, change_key));
+		parts.push(build::output(change as u64, change_key.clone()));
 
 		// we got that far, time to start tracking the new output, finalize tx
 		// and lock the outputs used
-		wallet_data.append_output(OutputData {
+		wallet_data.add_output(OutputData {
 			fingerprint: fingerprint.clone(),
+			identifier: change_key.clone(),
 			n_child: change_derivation,
 			value: change as u64,
 			status: OutputStatus::Unconfirmed,
@@ -103,7 +104,6 @@ fn build_send_tx(
 #[cfg(test)]
 mod test {
 	use core::core::build::{input, output, transaction};
-	use types::{OutputData, OutputStatus};
 	use keychain::Keychain;
 
 	#[test]

@@ -52,20 +52,20 @@ impl error::Error for Error {
 	}
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct Fingerprint(String);
 
 impl Fingerprint {
+	fn zero() -> Fingerprint {
+		Identifier::from_bytes(&[0; 4]).fingerprint()
+	}
+
 	fn from_bytes(bytes: &[u8]) -> Fingerprint {
 		let mut fingerprint = [0; 4];
 		for i in 0..min(4, bytes.len()) {
 			fingerprint[i] = bytes[i];
 		}
 		Fingerprint(util::to_hex(fingerprint.to_vec()))
-	}
-
-	fn zero() -> Fingerprint {
-		Fingerprint::from_bytes(&[0; 4])
 	}
 }
 
@@ -75,8 +75,8 @@ impl fmt::Display for Fingerprint {
 	}
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct Identifier([u8; 20]);
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Identifier(String);
 
 impl Identifier {
 	fn from_bytes(bytes: &[u8]) -> Identifier {
@@ -84,27 +84,16 @@ impl Identifier {
 		for i in 0..min(20, bytes.len()) {
 			identifier[i] = bytes[i];
 		}
-		Identifier(identifier)
+		Identifier(util::to_hex(identifier.to_vec()))
+	}
+
+	pub fn to_hex(&self) -> String {
+		self.0.clone()
 	}
 
 	pub fn fingerprint(&self) -> Fingerprint {
-		Fingerprint::from_bytes(&self.0)
-	}
-}
-
-impl PartialEq for Identifier {
-	fn eq(&self, other: &Self) -> bool {
-		self.0.as_ref() == other.0.as_ref()
-	}
-}
-
-impl ::std::fmt::Debug for Identifier {
-	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-		try!(write!(f, "{}(", stringify!(Identifier)));
-		for i in self.0.iter().cloned() {
-			try!(write!(f, "{:02x}", i));
-		}
-		write!(f, ")")
+		let hex = &self.0[0..8];
+		Fingerprint(String::from(hex))
 	}
 }
 
