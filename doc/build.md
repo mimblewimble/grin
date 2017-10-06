@@ -6,7 +6,7 @@
 
 Note that it's still too early in development to declare 'officially supported' plaforms, but at the moment, the situation is:
 
-* Linux - Primary platform, as most development and testing is happening here
+* Linux - Primary platform (x86 only, at present), as most development and testing is happening here
 * Mac OS - Known to work, but may be slight hiccups
 * Windows - Known to compile, but working status unknown, and not a focus for the development team at present. Note that no mining plugins will be present on a Windows system after building Grin.
 
@@ -36,6 +36,23 @@ In order to compile and run Grin on your machine, you should have installed:
     cd grin
     cargo build
 
+### Cuckoo-Miner considerations
+
+If you're having issues with building cuckoo-miner plugins (which will usually manifest as a lot of C errors when building the `grin_pow` crate, you can turn mining plugin builds off by editing the file `pow/Cargo.toml' as follows:
+
+```
+#uncomment this feature to turn off plugin builds
+features=["no-plugin-build"]
+```
+
+This may help when building on 32 bit systems or non x86 architectures. You can still use the internal miner to mine by setting:
+
+```
+use_cuckoo_miner = true
+```
+
+In `grin.toml`
+
 ## What have I just built?
 
 Provided all of the prerequisites were installed and there were no issues, there should be 3 things in your project directory that you need to pay attention to in order to configure and run grin. These are:
@@ -56,7 +73,7 @@ from the build directory will run grin using the defaults in the grin.toml file,
 For the time being, it's recommended just to put the built version of grin on your path, e.g. via:
 
 ```
-export $PATH=/path/to/grin/dir/target/grin:$PATH
+export PATH=/path/to/grin/dir/target/debug/grin:$PATH
 ```
 
 # Configuration

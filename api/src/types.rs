@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::{core, consensus, global};
+use core::{core, global};
 use chain;
 use secp::pedersen;
 

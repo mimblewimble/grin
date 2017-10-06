@@ -20,7 +20,6 @@ use std::collections::HashMap;
 use secp::pedersen::Commitment;
 
 use time;
-use rand;
 
 use std::fmt;
 
@@ -250,6 +249,7 @@ mod tests {
 	use super::*;
 	use secp;
 	use keychain::Keychain;
+	use rand;
 
 	#[test]
 	fn test_add_entry() {
