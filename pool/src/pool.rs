@@ -563,6 +563,7 @@ mod tests {
 	use keychain::Keychain;
 	use std::sync::{Arc, RwLock};
 	use blake2;
+	use core::global::MiningParameterMode;
 
 	macro_rules! expect_output_parent {
 		($pool:expr, $expected:pat, $( $output:expr ),+ ) => {

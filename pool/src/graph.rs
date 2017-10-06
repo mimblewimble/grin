@@ -249,6 +249,7 @@ mod tests {
 	use super::*;
 	use secp;
 	use keychain::Keychain;
+	use rand;
 
 	#[test]
 	fn test_add_entry() {
