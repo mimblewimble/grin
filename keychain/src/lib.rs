@@ -22,6 +22,7 @@ extern crate grin_util as util;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+extern crate serde_json;
 
 mod blind;
 mod extkey;
