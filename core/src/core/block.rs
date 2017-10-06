@@ -20,8 +20,7 @@ use std::collections::HashSet;
 
 use core::Committed;
 use core::{Input, Output, Proof, TxKernel, Transaction, COINBASE_KERNEL, COINBASE_OUTPUT};
-use consensus::{REWARD, reward};
-use consensus::MINIMUM_DIFFICULTY;
+use consensus::{MINIMUM_DIFFICULTY, REWARD, reward, exceeds_weight};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use ser::{self, Readable, Reader, Writeable, Writer};
@@ -46,6 +45,8 @@ pub enum Error {
 	CoinbaseSumMismatch,
 	/// Kernel fee can't be odd, due to half fee burning
 	OddKernelFee,
+	/// Too many inputs, outputs or kernels in the block
+	WeightExceeded,
 	/// Underlying Secp256k1 error (signature validation or invalid public
 	/// key typically)
 	Secp(secp::Error),
@@ -425,6 +426,9 @@ impl Block {
 	/// additional data. Includes commitment sums and kernels, Merkle
 	/// trees, reward, etc.
 	pub fn validate(&self, secp: &Secp256k1) -> Result<(), Error> {
+		if exceeds_weight(self.inputs.len(), self.outputs.len(), self.kernels.len()) {
+			return Err(Error::WeightExceeded);
+		}
 		self.verify_coinbase(secp)?;
 		self.verify_kernels(secp, false)?;
 		Ok(())
@@ -527,6 +531,8 @@ mod test {
 	use core::build::{self, input, output, with_fee};
 	use core::test::tx2i1o;
 	use keychain::{Identifier, Keychain};
+	use consensus::*;
+	use std::time::Instant;
 
 	use secp;
 
@@ -543,6 +549,30 @@ mod test {
 		build::transaction(vec![input(v, pk1), output(3, pk2), with_fee(2)], &keychain)
 			.map(|(tx, _)| tx)
 			.unwrap()
+	}
+
+	// Too slow for now #[test]
+	fn too_large_block() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let max_out = MAX_BLOCK_WEIGHT / BLOCK_OUTPUT_WEIGHT;
+
+		let mut pks = vec![];
+		for n in 0..(max_out+1) {
+			pks.push(keychain.derive_pubkey(n as u32).unwrap());
+		}
+
+		let mut parts = vec![];
+		for _ in 0..max_out {
+			parts.push(output(5, pks.pop().unwrap()));
+		}
+
+		let now = Instant::now();
+		parts.append(&mut vec![input(500000, pks.pop().unwrap()), with_fee(2)]);
+		let mut tx = build::transaction(parts, &keychain).map(|(tx, _)| tx).unwrap();
+		println!("Build tx: {}", now.elapsed().as_secs());
+
+		let b = new_block(vec![&mut tx], &keychain);
+		assert!(b.validate(&keychain.secp()).is_err());
 	}
 
 	#[test]

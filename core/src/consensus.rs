@@ -62,6 +62,25 @@ pub const CUT_THROUGH_HORIZON: u32 = 48 * 3600 / (BLOCK_TIME_SEC as u32);
 /// peer-to-peer networking layer only for DoS protection.
 pub const MAX_MSG_LEN: u64 = 20_000_000;
 
+/// Weight of an input when counted against the max block weigth capacity
+pub const BLOCK_INPUT_WEIGHT: usize = 1;
+
+/// Weight of an output when counted against the max block weight capacity
+pub const BLOCK_OUTPUT_WEIGHT: usize = 10;
+
+/// Weight of a kernel when counted against the max block weight capacity
+pub const BLOCK_KERNEL_WEIGHT: usize = 2;
+
+/// Total maximum block weight
+pub const MAX_BLOCK_WEIGHT: usize = 80_000;
+
+/// Whether a block exceeds the maximum acceptable weight
+pub fn exceeds_weight(input_len: usize, output_len: usize, kernel_len: usize) -> bool {
+	input_len * BLOCK_INPUT_WEIGHT +
+		output_len * BLOCK_OUTPUT_WEIGHT +
+		kernel_len * BLOCK_KERNEL_WEIGHT > MAX_BLOCK_WEIGHT
+}
+
 /// The minimum mining difficulty we'll allow
 pub const MINIMUM_DIFFICULTY: u64 = 10;
 
