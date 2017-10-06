@@ -47,27 +47,39 @@ pub enum Error {
 }
 
 impl From<keychain::Error> for Error {
-	fn from(e: keychain::Error) -> Error { Error::Keychain(e) }
+	fn from(e: keychain::Error) -> Error {
+		Error::Keychain(e)
+	}
 }
 
 impl From<secp::Error> for Error {
-	fn from(e: secp::Error) -> Error { Error::Secp(e) }
+	fn from(e: secp::Error) -> Error {
+		Error::Secp(e)
+	}
 }
 
 impl From<transaction::Error> for Error {
-	fn from(e: transaction::Error) -> Error { Error::Transaction(e) }
+	fn from(e: transaction::Error) -> Error {
+		Error::Transaction(e)
+	}
 }
 
 impl From<serde_json::Error> for Error {
-	fn from(e: serde_json::Error) -> Error { Error::Format(e.to_string()) }
+	fn from(e: serde_json::Error) -> Error {
+		Error::Format(e.to_string())
+	}
 }
 
 impl From<num::ParseIntError> for Error {
-	fn from(_: num::ParseIntError) -> Error { Error::Format("Invalid hex".to_string()) }
+	fn from(_: num::ParseIntError) -> Error {
+		Error::Format("Invalid hex".to_string())
+	}
 }
 
 impl From<api::Error> for Error {
-	fn from(e: api::Error) -> Error { Error::Node(e) }
+	fn from(e: api::Error) -> Error {
+		Error::Node(e)
+	}
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -261,7 +273,8 @@ impl WalletData {
 	}
 
 	/// Append a new output data to the wallet data.
-	/// TODO - we should check for overwriting here - only really valid for unconfirmed coinbase
+	/// TODO - we should check for overwriting here - only really valid for
+	/// unconfirmed coinbase
 	pub fn add_output(&mut self, out: OutputData) {
 		self.outputs.insert(out.identifier.to_hex(), out.clone());
 	}
@@ -281,7 +294,7 @@ impl WalletData {
 	pub fn select(
 		&self,
 		fingerprint: keychain::Fingerprint,
-		amount: u64
+		amount: u64,
 	) -> (Vec<OutputData>, i64) {
 		let mut to_spend = vec![];
 		let mut input_total = 0;
