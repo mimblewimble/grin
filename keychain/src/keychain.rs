@@ -74,7 +74,8 @@ impl Keychain {
 
 	pub fn derive_pubkey(&self, derivation: u32) -> Result<Identifier, Error> {
 		let extkey = self.extkey.derive(&self.secp, derivation)?;
-		Ok(extkey.identifier())
+		let pubkey = extkey.identifier(&self.secp)?;
+		Ok(pubkey)
 	}
 
 	// TODO - this is a work in progress
@@ -83,7 +84,7 @@ impl Keychain {
 	fn derived_key(&self, pubkey: &Identifier) -> Result<SecretKey, Error> {
 		for i in 1..10000 {
 			let extkey = self.extkey.derive(&self.secp, i)?;
-			if extkey.identifier() == *pubkey {
+			if extkey.identifier(&self.secp)? == *pubkey {
 				return Ok(extkey.key);
 			}
 		}
