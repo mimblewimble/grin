@@ -129,7 +129,7 @@ where
 	) -> Result<(), PoolError> {
 		// Making sure the transaction is valid before anything else.
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-		tx.validate(&secp).map_err(|e| PoolError::Invalid)?;
+		tx.validate(&secp).map_err(|_e| PoolError::Invalid)?;
 
 		// The first check involves ensuring that an identical transaction is
 		// not already in the pool's transaction set.
