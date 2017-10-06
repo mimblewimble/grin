@@ -465,11 +465,18 @@ impl Block {
 	// * That the sum of blinding factors for all coinbase-marked outputs match
 	//   the coinbase-marked kernels.
 	fn verify_coinbase(&self, secp: &Secp256k1) -> Result<(), Error> {
-		let cb_outs = filter_map_vec!(self.outputs, |out| {
-			if out.features.contains(COINBASE_OUTPUT) { Some(out.commitment()) } else { None }
+		let cb_outs = filter_map_vec!(self.outputs, |out| if out.features.contains(
+			COINBASE_OUTPUT,
+		)
+		{
+			Some(out.commitment())
+		} else {
+			None
 		});
-		let cb_kerns = filter_map_vec!(self.kernels, |k| {
-			if k.features.contains(COINBASE_KERNEL) { Some(k.excess) } else { None }
+		let cb_kerns = filter_map_vec!(self.kernels, |k| if k.features.contains(COINBASE_KERNEL) {
+			Some(k.excess)
+		} else {
+			None
 		});
 
 		let over_commit = secp.commit_value(reward(self.total_fees()))?;
