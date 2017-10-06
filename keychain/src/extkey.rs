@@ -52,20 +52,20 @@ impl error::Error for Error {
 	}
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct Fingerprint(String);
 
 impl Fingerprint {
+	fn zero() -> Fingerprint {
+		Identifier::from_bytes(&[0; 4]).fingerprint()
+	}
+
 	fn from_bytes(bytes: &[u8]) -> Fingerprint {
 		let mut fingerprint = [0; 4];
 		for i in 0..min(4, bytes.len()) {
 			fingerprint[i] = bytes[i];
 		}
 		Fingerprint(util::to_hex(fingerprint.to_vec()))
-	}
-
-	fn zero() -> Fingerprint {
-		Fingerprint::from_bytes(&[0; 4])
 	}
 }
 
@@ -75,8 +75,8 @@ impl fmt::Display for Fingerprint {
 	}
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct Identifier([u8; 20]);
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Identifier(String);
 
 impl Identifier {
 	fn from_bytes(bytes: &[u8]) -> Identifier {
@@ -84,27 +84,16 @@ impl Identifier {
 		for i in 0..min(20, bytes.len()) {
 			identifier[i] = bytes[i];
 		}
-		Identifier(identifier)
+		Identifier(util::to_hex(identifier.to_vec()))
+	}
+
+	pub fn to_hex(&self) -> String {
+		self.0.clone()
 	}
 
 	pub fn fingerprint(&self) -> Fingerprint {
-		Fingerprint::from_bytes(&self.0)
-	}
-}
-
-impl PartialEq for Identifier {
-	fn eq(&self, other: &Self) -> bool {
-		self.0.as_ref() == other.0.as_ref()
-	}
-}
-
-impl ::std::fmt::Debug for Identifier {
-	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-		try!(write!(f, "{}(", stringify!(Identifier)));
-		for i in self.0.iter().cloned() {
-			try!(write!(f, "{:02x}", i));
-		}
-		write!(f, ")")
+		let hex = &self.0[0..8];
+		Fingerprint(String::from(hex))
 	}
 }
 
@@ -199,8 +188,9 @@ impl ExtendedKey {
 
 		let mut secret_key = SecretKey::from_slice(&secp, &derived.as_bytes()[0..32])
 			.expect("Error deriving key");
-		secret_key.add_assign(secp, &self.key)
-			.expect("Error deriving key");
+		secret_key.add_assign(secp, &self.key).expect(
+			"Error deriving key",
+		);
 		// TODO check if key != 0 ?
 
 		let mut chain_code: [u8; 32] = [0; 32];
@@ -233,18 +223,26 @@ mod test {
 		let s = Secp256k1::new();
 		let seed = from_hex("000102030405060708090a0b0c0d0e0f");
 		let extk = ExtendedKey::from_seed(&s, &seed.as_slice()).unwrap();
-		let sec =
-			from_hex("c3f5ae520f474b390a637de4669c84d0ed9bbc21742577fac930834d3c3083dd");
+		let sec = from_hex(
+			"c3f5ae520f474b390a637de4669c84d0ed9bbc21742577fac930834d3c3083dd",
+		);
 		let secret_key = SecretKey::from_slice(&s, sec.as_slice()).unwrap();
-		let chaincode =
-			from_hex("e7298e68452b0c6d54837670896e1aee76b118075150d90d4ee416ece106ae72");
+		let chaincode = from_hex(
+			"e7298e68452b0c6d54837670896e1aee76b118075150d90d4ee416ece106ae72",
+		);
 		let identifier = from_hex("942b6c0bd43bdcb24f3edfe7fadbc77054ecc4f2");
 		let fingerprint = from_hex("942b6c0b");
 		let depth = 0;
 		let n_child = 0;
 		assert_eq!(extk.key, secret_key);
-		assert_eq!(extk.identifier(), Identifier::from_bytes(identifier.as_slice()));
-		assert_eq!(extk.fingerprint, Fingerprint::from_bytes(fingerprint.as_slice()));
+		assert_eq!(
+			extk.identifier(),
+			Identifier::from_bytes(identifier.as_slice())
+		);
+		assert_eq!(
+			extk.fingerprint,
+			Fingerprint::from_bytes(fingerprint.as_slice())
+		);
 		assert_eq!(
 			extk.identifier().fingerprint(),
 			Fingerprint::from_bytes(fingerprint.as_slice())
@@ -261,19 +259,27 @@ mod test {
 		let seed = from_hex("000102030405060708090a0b0c0d0e0f");
 		let extk = ExtendedKey::from_seed(&s, &seed.as_slice()).unwrap();
 		let derived = extk.derive(&s, 0).unwrap();
-		let sec =
-			from_hex("d75f70beb2bd3b56f9b064087934bdedee98e4b5aae6280c58b4eff38847888f");
+		let sec = from_hex(
+			"d75f70beb2bd3b56f9b064087934bdedee98e4b5aae6280c58b4eff38847888f",
+		);
 		let secret_key = SecretKey::from_slice(&s, sec.as_slice()).unwrap();
-		let chaincode =
-			from_hex("243cb881e1549e714db31d23af45540b13ad07941f64a786bbf3313b4de1df52");
+		let chaincode = from_hex(
+			"243cb881e1549e714db31d23af45540b13ad07941f64a786bbf3313b4de1df52",
+		);
 		let fingerprint = from_hex("942b6c0b");
 		let identifier = from_hex("8b011f14345f3f0071e85f6eec116de1e575ea10");
 		let identifier_fingerprint = from_hex("8b011f14");
 		let depth = 1;
 		let n_child = 0;
 		assert_eq!(derived.key, secret_key);
-		assert_eq!(derived.identifier(), Identifier::from_bytes(identifier.as_slice()));
-		assert_eq!(derived.fingerprint, Fingerprint::from_bytes(fingerprint.as_slice()));
+		assert_eq!(
+			derived.identifier(),
+			Identifier::from_bytes(identifier.as_slice())
+		);
+		assert_eq!(
+			derived.fingerprint,
+			Fingerprint::from_bytes(fingerprint.as_slice())
+		);
 		assert_eq!(
 			derived.identifier().fingerprint(),
 			Fingerprint::from_bytes(identifier_fingerprint.as_slice())

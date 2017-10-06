@@ -18,6 +18,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 use std::path::MAIN_SEPARATOR;
+use std::collections::HashMap;
 
 use serde_json;
 use secp;
@@ -46,27 +47,39 @@ pub enum Error {
 }
 
 impl From<keychain::Error> for Error {
-	fn from(e: keychain::Error) -> Error { Error::Keychain(e) }
+	fn from(e: keychain::Error) -> Error {
+		Error::Keychain(e)
+	}
 }
 
 impl From<secp::Error> for Error {
-	fn from(e: secp::Error) -> Error { Error::Secp(e) }
+	fn from(e: secp::Error) -> Error {
+		Error::Secp(e)
+	}
 }
 
 impl From<transaction::Error> for Error {
-	fn from(e: transaction::Error) -> Error { Error::Transaction(e) }
+	fn from(e: transaction::Error) -> Error {
+		Error::Transaction(e)
+	}
 }
 
 impl From<serde_json::Error> for Error {
-	fn from(e: serde_json::Error) -> Error { Error::Format(e.to_string()) }
+	fn from(e: serde_json::Error) -> Error {
+		Error::Format(e.to_string())
+	}
 }
 
 impl From<num::ParseIntError> for Error {
-	fn from(_: num::ParseIntError) -> Error { Error::Format("Invalid hex".to_string()) }
+	fn from(_: num::ParseIntError) -> Error {
+		Error::Format("Invalid hex".to_string())
+	}
 }
 
 impl From<api::Error> for Error {
-	fn from(e: api::Error) -> Error { Error::Node(e) }
+	fn from(e: api::Error) -> Error {
+		Error::Node(e)
+	}
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,6 +138,7 @@ impl fmt::Display for OutputStatus {
 pub struct OutputData {
 	/// Private key fingerprint (in case the wallet tracks multiple)
 	pub fingerprint: keychain::Fingerprint,
+	pub identifier: keychain::Identifier,
 	/// How many derivations down from the root key
 	pub n_child: u32,
 	/// Value of the output, necessary to rebuild the commitment
@@ -133,12 +147,13 @@ pub struct OutputData {
 	pub status: OutputStatus,
 	/// Height of the output
 	pub height: u64,
+	/// Height we are locked until
 	pub lock_height: u64,
 }
 
 impl OutputData {
 	/// Lock a given output to avoid conflicting use
-	pub fn lock(&mut self) {
+	fn lock(&mut self) {
 		self.status = OutputStatus::Locked;
 	}
 }
@@ -153,7 +168,7 @@ impl OutputData {
 /// TODO write locks so files don't get overwritten
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WalletData {
-	pub outputs: Vec<OutputData>,
+	pub outputs: HashMap<String, OutputData>,
 }
 
 impl WalletData {
@@ -229,7 +244,7 @@ impl WalletData {
 			WalletData::read(data_file_path)
 		} else {
 			// just create a new instance, it will get written afterward
-			Ok(WalletData { outputs: vec![] })
+			Ok(WalletData { outputs: HashMap::new() })
 		}
 	}
 
@@ -248,7 +263,7 @@ impl WalletData {
 		let mut data_file = File::create(data_file_path).map_err(|e| {
 			Error::WalletData(format!("Could not create {}: {}", data_file_path, e))
 		})?;
-		let res_json = serde_json::to_vec_pretty(self).map_err(|_| {
+		let res_json = serde_json::to_vec_pretty(self).map_err(|e| {
 			Error::WalletData(format!("Error serializing wallet data."))
 		})?;
 		data_file.write_all(res_json.as_slice()).map_err(|e| {
@@ -256,19 +271,20 @@ impl WalletData {
 		})
 	}
 
-	/// Append a new output information to the wallet data.
-	pub fn append_output(&mut self, out: OutputData) {
-		self.outputs.push(out);
+	/// Append a new output data to the wallet data.
+	/// TODO - we should check for overwriting here - only really valid for
+	/// unconfirmed coinbase
+	pub fn add_output(&mut self, out: OutputData) {
+		self.outputs.insert(out.identifier.to_hex(), out.clone());
 	}
 
+	/// Lock an output data.
+	/// TODO - we should track identifier on these outputs (not just n_child)
 	pub fn lock_output(&mut self, out: &OutputData) {
-		if let Some(out_to_lock) =
-			self.outputs.iter_mut().find(|out_to_lock| {
-				out_to_lock.n_child == out.n_child && out_to_lock.fingerprint == out.fingerprint &&
-					out_to_lock.value == out.value
-			})
-		{
-			out_to_lock.lock();
+		if let Some(out_to_lock) = self.outputs.get_mut(&out.identifier.to_hex()) {
+			if out_to_lock.value == out.value {
+				out_to_lock.lock()
+			}
 		}
 	}
 
@@ -277,14 +293,14 @@ impl WalletData {
 	pub fn select(
 		&self,
 		fingerprint: keychain::Fingerprint,
-		amount: u64
+		amount: u64,
 	) -> (Vec<OutputData>, i64) {
 		let mut to_spend = vec![];
 		let mut input_total = 0;
 
 		// TODO very naive impl for now - definitely better coin selection
 		// algos available
-		for out in &self.outputs {
+		for out in self.outputs.values() {
 			if out.status == OutputStatus::Unspent && out.fingerprint == fingerprint {
 				to_spend.push(out.clone());
 				input_total += out.value;
@@ -300,7 +316,7 @@ impl WalletData {
 	/// Next child index when we want to create a new output.
 	pub fn next_child(&self, fingerprint: keychain::Fingerprint) -> u32 {
 		let mut max_n = 0;
-		for out in &self.outputs {
+		for out in self.outputs.values() {
 			if max_n < out.n_child && out.fingerprint == fingerprint {
 				max_n = out.n_child;
 			}

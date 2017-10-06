@@ -107,7 +107,7 @@ impl ApiEndpoint for WalletReceiver {
 			"coinbase" => {
 				match input {
 					WalletReceiveRequest::Coinbase(cb_fees) => {
-						debug!("Operation {} with amount {}", op, cb_fees.fees);
+						debug!("Operation {} with fees {:?}", op, cb_fees);
 						let (out, kern, derivation) =
 							receive_coinbase(
 								&self.config,
@@ -168,7 +168,6 @@ fn receive_coinbase(
 	fees: u64,
 	mut derivation: u32,
 ) -> Result<(Output, TxKernel, u32), Error> {
-
 	let fingerprint = keychain.clone().fingerprint();
 
 	// operate within a lock on wallet data
@@ -179,8 +178,9 @@ fn receive_coinbase(
 		let pubkey = keychain.derive_pubkey(derivation)?;
 
 		// track the new output and return the stuff needed for reward
-		wallet_data.append_output(OutputData {
+		wallet_data.add_output(OutputData {
 			fingerprint: fingerprint.clone(),
+			identifier: pubkey.clone(),
 			n_child: derivation,
 			value: reward(fees),
 			status: OutputStatus::Unconfirmed,
@@ -213,7 +213,8 @@ fn receive_transaction(
 
 		// TODO - replace with real fee calculation
 		// TODO - note we are not enforcing this in consensus anywhere yet
-		let fee_amount = 1;
+		// Note: consensus rules require this to be an even value so it can be split
+		let fee_amount = 10;
 		let out_amount = amount - fee_amount;
 
 		let (tx_final, _) = build::transaction(vec![
@@ -227,8 +228,9 @@ fn receive_transaction(
 		tx_final.validate(&keychain.secp())?;
 
 		// track the new output and return the finalized transaction to broadcast
-		wallet_data.append_output(OutputData {
+		wallet_data.add_output(OutputData {
 			fingerprint: fingerprint.clone(),
+			identifier: pubkey.clone(),
 			n_child: derivation,
 			value: out_amount,
 			status: OutputStatus::Unconfirmed,
