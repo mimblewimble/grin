@@ -264,7 +264,6 @@ impl WalletData {
 			Error::WalletData(format!("Could not create {}: {}", data_file_path, e))
 		})?;
 		let res_json = serde_json::to_vec_pretty(self).map_err(|e| {
-			println!("***** serialization error - {:?}", e);
 			Error::WalletData(format!("Error serializing wallet data."))
 		})?;
 		data_file.write_all(res_json.as_slice()).map_err(|e| {
