@@ -26,6 +26,11 @@ use core::target::Difficulty;
 /// The block subsidy amount
 pub const REWARD: u64 = 1_000_000_000;
 
+/// Actual block reward for a given total fee amount
+pub fn reward(fee: u64) -> u64 {
+	REWARD + fee / 2
+}
+
 /// Number of blocks before a coinbase matures and can be spent
 pub const COINBASE_MATURITY: u64 = 1_000;
 
