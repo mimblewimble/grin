@@ -272,7 +272,8 @@ impl WalletData {
 	}
 
 	/// Append a new output data to the wallet data.
-	/// TODO - we should check for overwriting here - only really valid for unconfirmed coinbase
+	/// TODO - we should check for overwriting here - only really valid for
+	/// unconfirmed coinbase
 	pub fn add_output(&mut self, out: OutputData) {
 		self.outputs.insert(out.identifier.to_hex(), out.clone());
 	}
