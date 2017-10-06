@@ -38,19 +38,20 @@ In order to compile and run Grin on your machine, you should have installed:
 
 ### Cuckoo-Miner considerations
 
-    If you're having issues with building cuckoo-miner plugins (which will usually manifest as a lot of C errors when building the `grin_pow` crate, you can turn mining plugin builds off by editing the file `pow/Cargo.toml' as follows:
+If you're having issues with building cuckoo-miner plugins (which will usually manifest as a lot of C errors when building the `grin_pow` crate, you can turn mining plugin builds off by editing the file `pow/Cargo.toml' as follows:
 
 ```
 #uncomment this feature to turn off plugin builds
 features=["no-plugin-build"]
 ```
 
-    This may help when building on 32 bit systems or non x86 architectures. You can still use the internal miner to mine by setting:
+This may help when building on 32 bit systems or non x86 architectures. You can still use the internal miner to mine by setting:
+
 ```
 use_cuckoo_miner = true
 ```
 
-    In `grin.toml`
+In `grin.toml`
 
 ## What have I just built?
 
