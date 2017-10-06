@@ -90,15 +90,18 @@ impl Identifier {
 	pub fn to_hex(&self) -> String {
 		self.0.clone()
 	}
+
+	pub fn fingerprint(&self) -> Fingerprint {
+		let hex = &self.0[0..8];
+		Fingerprint(String::from(hex))
+	}
 }
 
-impl ::std::fmt::Debug for Identifier {
-	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-		try!(write!(f, "{}(", stringify!(Identifier)));
-		for i in self.0.iter().cloned() {
-			try!(write!(f, "{:02x}", i));
-		}
-		write!(f, ")")
+/// TODO - this is needed for our ser stuff
+/// TODO - which suggests we *do* need to store this as bytes - to investigate
+impl AsRef<[u8]> for Identifier {
+	fn as_ref(&self) -> &[u8] {
+		&self.0.as_ref()
 	}
 }
 

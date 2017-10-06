@@ -329,7 +329,7 @@ mod test {
 		let keychain = new_keychain();
 		let pubkey = keychain.derive_pubkey(1).unwrap();
 
-		let b = Block::new(&BlockHeader::default(), vec![], &keychain, pubkey).unwrap();
+		let b = Block::new(&BlockHeader::default(), vec![], &keychain, &pubkey).unwrap();
 		b.compact().validate(&keychain.secp()).unwrap();
 	}
 
@@ -345,7 +345,7 @@ mod test {
 		let mut tx1 = tx2i1o();
 		tx1.verify_sig(keychain.secp()).unwrap();
 
-		let b = Block::new(&BlockHeader::default(), vec![&mut tx1], &keychain, pubkey).unwrap();
+		let b = Block::new(&BlockHeader::default(), vec![&mut tx1], &keychain, &pubkey).unwrap();
 		b.compact().validate(keychain.secp()).unwrap();
 	}
 
@@ -360,7 +360,7 @@ mod test {
 		let mut tx2 = tx1i1o();
 		tx2.verify_sig(keychain.secp()).unwrap();
 
-		let b = Block::new(&BlockHeader::default(), vec![&mut tx1, &mut tx2], &keychain, pubkey).unwrap();
+		let b = Block::new(&BlockHeader::default(), vec![&mut tx1, &mut tx2], &keychain, &pubkey).unwrap();
 		b.validate(keychain.secp()).unwrap();
 	}
 
