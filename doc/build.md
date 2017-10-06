@@ -6,7 +6,7 @@
 
 Note that it's still too early in development to declare 'officially supported' plaforms, but at the moment, the situation is:
 
-* Linux - Primary platform, as most development and testing is happening here
+* Linux - Primary platform (x86 only, at present), as most development and testing is happening here
 * Mac OS - Known to work, but may be slight hiccups
 * Windows - Known to compile, but working status unknown, and not a focus for the development team at present. Note that no mining plugins will be present on a Windows system after building Grin.
 
@@ -56,7 +56,7 @@ from the build directory will run grin using the defaults in the grin.toml file,
 For the time being, it's recommended just to put the built version of grin on your path, e.g. via:
 
 ```
-export $PATH=/path/to/grin/dir/target/grin:$PATH
+export PATH=/path/to/grin/dir/target/debug/grin:$PATH
 ```
 
 # Configuration
