@@ -22,6 +22,7 @@
 use std::{error, fmt, cmp};
 use std::io::{self, Write, Read};
 use byteorder::{ByteOrder, ReadBytesExt, BigEndian};
+use keychain::Identifier;
 use secp::pedersen::Commitment;
 use secp::pedersen::RangeProof;
 use secp::constants::PEDERSEN_COMMITMENT_SIZE;
@@ -285,6 +286,19 @@ impl Writeable for Commitment {
 	}
 }
 
+impl Writeable for Identifier {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_fixed_bytes(self)
+	}
+}
+
+impl Readable for Identifier {
+	fn read(reader: &mut Reader) -> Result<Identifier, Error> {
+		let bytes = reader.read_fixed_bytes(20)?;
+		Ok(Identifier::from_bytes(&bytes))
+	}
+}
+
 impl Writeable for RangeProof {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_fixed_bytes(self)
@@ -509,5 +523,10 @@ impl AsFixedBytes for ::secp::Signature {
 impl AsFixedBytes for ::secp::pedersen::Commitment {
 	fn len(&self) -> usize {
 		return PEDERSEN_COMMITMENT_SIZE;
+	}
+}
+impl AsFixedBytes for ::keychain::Identifier {
+	fn len(&self) -> usize {
+		return 20;
 	}
 }

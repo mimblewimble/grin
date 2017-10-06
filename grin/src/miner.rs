@@ -42,7 +42,7 @@ use chain;
 use secp;
 use pool;
 use util;
-use keychain::Keychain;
+use keychain::{Identifier, Keychain};
 use wallet::{BlockFees, WalletReceiveRequest, CbData};
 
 use pow::plugin::PluginMiner;
@@ -431,13 +431,15 @@ impl Miner {
 		// to prevent the wallet from generating a new HD key derivation for each
 		// iteration, we keep the returned derivation to provide it back when
 		// nothing has changed
-		let mut derivation = 0;
+		let mut pubkey = None;
 
 		loop {
+			debug!("in miner loop...");
+
 			// get the latest chain state and build a block on top of it
 			let head = self.chain.head_header().unwrap();
 			let mut latest_hash = self.chain.head().unwrap().last_block_h;
-			let (mut b, deriv) = self.build_block(&head, derivation);
+			let (mut b, block_fees) = self.build_block(&head, pubkey);
 
 			let mut sol = None;
 			let mut use_async = false;
@@ -500,16 +502,22 @@ impl Miner {
 						e
 					);
 				}
-				derivation = 0;
+				debug!("resetting pubkey in miner to None");
+				pubkey = None;
 			} else {
-				derivation = deriv;
+				debug!("setting pubkey in miner to pubkey from block_fees - {:?}", block_fees);
+				pubkey = block_fees.pubkey();
 			}
 		}
 	}
 
 	/// Builds a new block with the chain head as previous and eligible
 	/// transactions from the pool.
-	fn build_block(&self, head: &core::BlockHeader, deriv: u32) -> (core::Block, u32) {
+	fn build_block(
+		&self,
+		head: &core::BlockHeader,
+		pubkey: Option<Identifier>,
+	) -> (core::Block, BlockFees) {
 		// prepare the block header timestamp
 		let mut now_sec = time::get_time().sec;
 		let head_sec = head.timestamp.to_timespec().sec;
@@ -529,7 +537,12 @@ impl Miner {
 
 		// build the coinbase and the block itself
 		let fees = txs.iter().map(|tx| tx.fee).sum();
-		let (output, kernel, deriv) = self.get_coinbase(fees, deriv);
+		let block_fees = BlockFees {
+			fees: fees,
+			pubkey: pubkey,
+		};
+
+		let (output, kernel, block_fees) = self.get_coinbase(block_fees);
 		let mut b = core::Block::with_reward(head, txs, output, kernel).unwrap();
 		debug!(
 			"(Server ID: {}) Built new block with {} inputs and {} outputs, difficulty: {}",
@@ -550,21 +563,28 @@ impl Miner {
 		self.chain.set_sumtree_roots(&mut b).expect(
 			"Error setting sum tree roots",
 		);
-		(b, deriv)
+		(b, block_fees)
 	}
 
-	fn get_coinbase(&self, fees: u64, derivation: u32) -> (core::Output, core::TxKernel, u32) {
+	fn get_coinbase(
+		&self,
+		block_fees: BlockFees,
+	) -> (core::Output, core::TxKernel, BlockFees) {
 		if self.config.burn_reward {
 			let keychain = Keychain::from_random_seed().unwrap();
 			let pubkey = keychain.derive_pubkey(1).unwrap();
-			let (out, kern) = core::Block::reward_output(&keychain, pubkey, fees).unwrap();
-			(out, kern, 0)
+			let (out, kern) = core::Block::reward_output(
+				&keychain,
+				&pubkey,
+				block_fees.fees
+			).unwrap();
+			(out, kern, block_fees)
 		} else {
 			let url = format!(
 				"{}/v1/receive/coinbase",
 				self.config.wallet_receiver_url.as_str()
 			);
-			let request = WalletReceiveRequest::Coinbase(BlockFees { fees: fees, derivation: derivation });
+			let request = WalletReceiveRequest::Coinbase(block_fees.clone());
 			let res: CbData = api::client::post(url.as_str(), &request).expect(
 				format!(
 					"(Server ID: {}) Wallet receiver unreachable, could not claim reward. Is it running?",
@@ -574,10 +594,18 @@ impl Miner {
 			);
 			let out_bin = util::from_hex(res.output).unwrap();
 			let kern_bin = util::from_hex(res.kernel).unwrap();
+			let pubkey_bin = util::from_hex(res.pubkey).unwrap();
 			let output = ser::deserialize(&mut &out_bin[..]).unwrap();
 			let kernel = ser::deserialize(&mut &kern_bin[..]).unwrap();
+			let pubkey = ser::deserialize(&mut &pubkey_bin[..]).unwrap();
+			let block_fees = BlockFees {
+				pubkey: Some(pubkey),
+				.. block_fees
+			};
 
-			(output, kernel, res.derivation)
+			debug!("block_fees here: {:?}", block_fees);
+
+			(output, kernel, block_fees)
 		}
 	}
 }

@@ -51,7 +51,7 @@ pub struct Keychain {
 }
 
 impl Keychain {
-	pub fn fingerprint(self) -> Fingerprint {
+	pub fn fingerprint(&self) -> Fingerprint {
 		self.extkey.fingerprint.clone()
 	}
 
@@ -87,7 +87,19 @@ impl Keychain {
 				return Ok(extkey.key);
 			}
 		}
-		Err(Error::KeyDerivation("cannot find one...".to_string()))
+		Err(Error::KeyDerivation(format!("cannot find extkey for {}", pubkey.fingerprint())))
+	}
+
+	// TODO - clean this and derived_key up, rename them?
+	// TODO - maybe wallet deals exclusively with pubkeys and not derivations - this leaks?
+	pub fn derivation_from_pubkey(&self, pubkey: &Identifier) -> Result<u32, Error> {
+		for i in 1..10000 {
+			let extkey = self.extkey.derive(&self.secp, i)?;
+			if extkey.identifier() == *pubkey {
+				return Ok(extkey.n_child);
+			}
+		}
+		Err(Error::KeyDerivation(format!("cannot find extkey for {}", pubkey.fingerprint())))
 	}
 
 	pub fn commit(&self, amount: u64, pubkey: &Identifier) -> Result<Commitment, Error> {

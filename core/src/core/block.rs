@@ -265,7 +265,7 @@ impl Block {
 		prev: &BlockHeader,
 		txs: Vec<&Transaction>,
 		keychain: &keychain::Keychain,
-		pubkey: keychain::Identifier,
+		pubkey: &keychain::Identifier,
 	) -> Result<Block, keychain::Error> {
 
 		let fees = txs.iter().map(|tx| tx.fee).sum();
@@ -486,16 +486,15 @@ impl Block {
 	/// reward.
 	pub fn reward_output(
 		keychain: &keychain::Keychain,
-		pubkey: keychain::Identifier,
+		pubkey: &keychain::Identifier,
 		fees: u64,
 	) -> Result<(Output, TxKernel), keychain::Error> {
-
 		let secp = keychain.secp();
 
-		let commit = keychain.commit(reward(fees), &pubkey)?;
+		let commit = keychain.commit(reward(fees), pubkey)?;
 		// let switch_commit = keychain.switch_commit(pubkey)?;
 		let msg = secp::pedersen::ProofMessage::empty();
-		let rproof = keychain.range_proof(reward(fees), &pubkey, commit, msg)?;
+		let rproof = keychain.range_proof(reward(fees), pubkey, commit, msg)?;
 
 		let output = Output {
 			features: COINBASE_OUTPUT,

@@ -79,7 +79,7 @@ impl fmt::Display for Fingerprint {
 pub struct Identifier(String);
 
 impl Identifier {
-	fn from_bytes(bytes: &[u8]) -> Identifier {
+	pub fn from_bytes(bytes: &[u8]) -> Identifier {
 		let mut identifier = [0; 20];
 		for i in 0..min(20, bytes.len()) {
 			identifier[i] = bytes[i];
@@ -90,10 +90,15 @@ impl Identifier {
 	pub fn to_hex(&self) -> String {
 		self.0.clone()
 	}
+}
 
-	pub fn fingerprint(&self) -> Fingerprint {
-		let hex = &self.0[0..8];
-		Fingerprint(String::from(hex))
+impl ::std::fmt::Debug for Identifier {
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+		try!(write!(f, "{}(", stringify!(Identifier)));
+		for i in self.0.iter().cloned() {
+			try!(write!(f, "{:02x}", i));
+		}
+		write!(f, ")")
 	}
 }
 

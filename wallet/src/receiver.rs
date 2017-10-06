@@ -108,27 +108,35 @@ impl ApiEndpoint for WalletReceiver {
 				match input {
 					WalletReceiveRequest::Coinbase(cb_fees) => {
 						debug!("Operation {} with fees {:?}", op, cb_fees);
-						let (out, kern, derivation) =
+						let (out, kern, block_fees) =
 							receive_coinbase(
 								&self.config,
 								&self.keychain,
-								cb_fees.fees,
-								cb_fees.derivation,
+								&cb_fees,
 							).map_err(|e| {
 								api::Error::Internal(format!("Error building coinbase: {:?}", e))
 							})?;
 						let out_bin =
 							ser::ser_vec(&out).map_err(|e| {
-									api::Error::Internal(format!("Error serializing output: {:?}", e))
-								})?;
+								api::Error::Internal(format!("Error serializing output: {:?}", e))
+							})?;
 						let kern_bin =
 							ser::ser_vec(&kern).map_err(|e| {
+								api::Error::Internal(format!("Error serializing kernel: {:?}", e))
+							})?;
+						let pubkey_bin = match block_fees.pubkey {
+							Some(pubkey) => {
+								ser::ser_vec(&pubkey).map_err(|e| {
 									api::Error::Internal(format!("Error serializing kernel: {:?}", e))
-								})?;
+								})?
+							},
+							None => vec![],
+						};
+
 						Ok(CbData {
 							output: util::to_hex(out_bin),
 							kernel: util::to_hex(kern_bin),
-							derivation: derivation,
+							pubkey: util::to_hex(pubkey_bin),
 						})
 					}
 					_ => Err(api::Error::Argument(
@@ -148,7 +156,7 @@ impl ApiEndpoint for WalletReceiver {
 						Ok(CbData {
 							output: String::from(""),
 							kernel: String::from(""),
-							derivation: 0,
+							pubkey: String::from(""),
 						})
 					}
 					_ => Err(api::Error::Argument(
@@ -165,33 +173,48 @@ impl ApiEndpoint for WalletReceiver {
 fn receive_coinbase(
 	config: &WalletConfig,
 	keychain: &Keychain,
-	fees: u64,
-	mut derivation: u32,
-) -> Result<(Output, TxKernel, u32), Error> {
-	let fingerprint = keychain.clone().fingerprint();
+	block_fees: &BlockFees,
+) -> Result<(Output, TxKernel, BlockFees), Error> {
+	let fingerprint = keychain.fingerprint();
 
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		if derivation == 0 {
-			derivation = wallet_data.next_child(fingerprint.clone());
-		}
-		let pubkey = keychain.derive_pubkey(derivation)?;
+		let pubkey = block_fees.pubkey();
+		let (pubkey, derivation) = match pubkey {
+			Some(pubkey) => {
+				let derivation = keychain.derivation_from_pubkey(&pubkey)?;
+				(pubkey.clone(), derivation)
+			},
+			None => {
+				let derivation = wallet_data.next_child(fingerprint.clone());
+				let pubkey = keychain.derive_pubkey(derivation)?;
+				(pubkey, derivation)
+			}
+		};
 
 		// track the new output and return the stuff needed for reward
 		wallet_data.add_output(OutputData {
 			fingerprint: fingerprint.clone(),
 			identifier: pubkey.clone(),
 			n_child: derivation,
-			value: reward(fees),
+			value: reward(block_fees.fees),
 			status: OutputStatus::Unconfirmed,
 			height: 0,
 			lock_height: 0,
 		});
-		debug!("Received coinbase and built output - {}, {}, {}",
+
+		debug!("Received coinbase and built candidate output - {}, {}, {}",
 			fingerprint.clone(), pubkey.fingerprint(), derivation);
 
-		let (out, kern) = Block::reward_output(&keychain, pubkey, fees)?;
-		Ok((out, kern, derivation))
+		debug!("block_fees - {:?}", block_fees);
+
+		let mut block_fees = block_fees.clone();
+		block_fees.pubkey = Some(pubkey.clone());
+
+		debug!("block_fees updated - {:?}", block_fees);
+
+		let (out, kern) = Block::reward_output(&keychain, &pubkey, block_fees.fees)?;
+		Ok((out, kern, block_fees))
 	})?
 }
 
