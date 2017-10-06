@@ -261,42 +261,10 @@ impl WalletData {
 	}
 
 	/// Append a new output data to the wallet data.
-	/// TODO - we should key these via Identifier
 	/// TODO - we should check for overwriting here - only really valid for unconfirmed coinbase
 	pub fn add_output(&mut self, out: OutputData) {
 		self.outputs.insert(out.identifier.to_hex(), out.clone());
 	}
-
-	// fn update_output(&mut self, out: OutputData) {
-	// 	if let Some(mut existing) = self.outputs.iter_mut().find(|existing| {
-	// 		existing.fingerprint == out.fingerprint
-	// 			&& existing.n_child == out.n_child
-	// 	}) {
-	// 		existing.update_value(out.value)
-	// 	}
-	// }
-
-	// fn find_existing_by_n_child(&mut self, out: &OutputData) -> Option<OutputData> {
-	// 	self.outputs.iter_mut().find(|existing| {
-	// 		existing.fingerprint == out.fingerprint
-	// 			&& existing.n_child == out.n_child
-	// 	})
-	// }
-
-	// /// Append a new output data, or update if it already exists.
-	// /// TODO - we should track identifier on these outputs (not just n_child)
-	// pub fn append_or_update_output(&mut self, out: OutputData) {
-	// 	let mut existing = self.outputs.iter_mut().find(|existing| {
-	// 		existing.fingerprint == out.fingerprint
-	// 			&& existing.n_child == out.n_child
-	// 	});
-	//
-	//
-	// 	match existing {
-	// 		Some(&mut existing) => existing.update_value(out.value),
-	// 		None => self.append_output(out),
-	// 	}
-	// }
 
 	/// Lock an output data.
 	/// TODO - we should track identifier on these outputs (not just n_child)
