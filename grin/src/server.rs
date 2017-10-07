@@ -80,7 +80,7 @@ impl Server {
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
 		let tx_pool = Arc::new(RwLock::new(
-			pool::TransactionPool::new(pool_adapter.clone()),
+			pool::TransactionPool::new(config.pool_config.clone(), pool_adapter.clone()),
 		));
 
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));

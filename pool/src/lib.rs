@@ -28,6 +28,9 @@ mod pool;
 
 extern crate time;
 extern crate rand;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 extern crate log;
 extern crate blake2_rfc as blake2;
 extern crate grin_core as core;
@@ -35,4 +38,4 @@ extern crate grin_keychain as keychain;
 extern crate secp256k1zkp as secp;
 
 pub use pool::TransactionPool;
-pub use types::{BlockChain, TxSource, PoolError};
+pub use types::{BlockChain, TxSource, PoolError, PoolConfig};

@@ -28,6 +28,27 @@ use core::core::block;
 use core::core::transaction;
 use core::core::hash;
 
+/// Tranasction pool configuration
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PoolConfig {
+	/// Base fee for a transaction to be accepted by the pool. The transaction
+	/// weight is computed from its number of inputs, outputs and kernels and
+	/// multipled by the base fee to compare to the actual transaction fee.
+	pub accept_fee_base: u64,
+
+	/// Maximum capacity of the pool in number of transactions
+	pub max_pool_size: usize,
+}
+
+impl Default for PoolConfig {
+	fn default() -> PoolConfig {
+		PoolConfig {
+			accept_fee_base: 10,
+			max_pool_size: 50_000,
+		}
+	}
+}
+
 /// Placeholder: the data representing where we heard about a tx from.
 ///
 /// Used to make decisions based on transaction acceptance priority from
@@ -105,6 +126,10 @@ pub enum PoolError {
 	OutputNotFound,
 	/// TODO - is this the right level of abstraction for pool errors?
 	OutputSpent,
+	/// Transaction pool is over capacity, can't accept more transactions
+	OverCapacity,
+	/// Transaction fee is too low given its weight
+	LowFeeTransaction(u64),
 }
 
 /// Interface that the pool requires from a blockchain implementation.

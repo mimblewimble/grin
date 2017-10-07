@@ -10,6 +10,8 @@ grin_keychain = { path = "../keychain" }
 grin_store = { path = "../store" }
 grin_p2p = { path = "../p2p" }
 secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }
+serde = "~1.0.8"
+serde_derive = "~1.0.8"
 time = "^0.1"
 rand = "0.3"
 log = "0.3"

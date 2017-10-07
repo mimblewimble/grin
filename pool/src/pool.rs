@@ -14,7 +14,7 @@
 
 //! Top-level Pool type, methods, and tests
 
-use types::{Pool, BlockChain, Orphans, Parent, PoolError, TxSource, TransactionGraphContainer};
+use types::*;
 pub use graph;
 
 use core::core::transaction;
@@ -32,6 +32,7 @@ use std::collections::HashMap;
 /// The transactions HashMap holds ownership of all transactions in the pool,
 /// keyed by their transaction hash.
 pub struct TransactionPool<T> {
+	config: PoolConfig,
 	/// All transactions in the pool
 	pub transactions: HashMap<hash::Hash, Box<transaction::Transaction>>,
 	/// The pool itself
@@ -49,8 +50,9 @@ where
 	T: BlockChain,
 {
 	/// Create a new transaction pool
-	pub fn new(chain: Arc<T>) -> TransactionPool<T> {
+	pub fn new(config: PoolConfig, chain: Arc<T>) -> TransactionPool<T> {
 		TransactionPool {
+			config: config,
 			transactions: HashMap::new(),
 			pool: Pool::empty(),
 			orphans: Orphans::empty(),
@@ -127,6 +129,12 @@ where
 		_: TxSource,
 		tx: transaction::Transaction,
 	) -> Result<(), PoolError> {
+
+		// Do we have the capacity to accept this transaction?
+		if let Err(e) = self.is_acceptable(&tx) {
+			return Err(e);
+		}
+
 		// Making sure the transaction is valid before anything else.
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 		tx.validate(&secp).map_err(|_e| PoolError::Invalid)?;
@@ -550,6 +558,26 @@ where
 			.iter()
 			.map(|x| self.transactions.get(x).unwrap().clone())
 			.collect()
+	}
+
+	/// Whether the transaction is acceptable to the pool, given both how
+	/// full the pool is and the transaction weight.
+	fn is_acceptable(&self, tx: &transaction::Transaction) -> Result<(), PoolError> {
+		if self.total_size() > self.config.max_pool_size {
+			// TODO evict old/large transactions instead
+			return Err(PoolError::OverCapacity);
+		}
+		if self.config.accept_fee_base > 0 {
+			let mut tx_weight = -1 * (tx.inputs.len() as i32) + (4 * tx.outputs.len() as i32) + 1;
+			if tx_weight < 1 {
+				tx_weight = 1;
+			}
+			let threshold = (tx_weight as u64) * self.config.accept_fee_base;
+			if tx.fee < threshold {
+				return Err(PoolError::LowFeeTransaction(threshold));
+			}
+		}
+		Ok(())
 	}
 }
 
@@ -1027,6 +1055,10 @@ mod tests {
 
 	fn test_setup(dummy_chain: &Arc<DummyChainImpl>) -> TransactionPool<DummyChainImpl> {
 		TransactionPool {
+			config: PoolConfig{
+				accept_fee_base: 0,
+				max_pool_size: 10_000,
+			},
 			transactions: HashMap::new(),
 			pool: Pool::empty(),
 			orphans: Orphans::empty(),

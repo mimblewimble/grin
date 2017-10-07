@@ -17,6 +17,7 @@ use std::convert::From;
 use api;
 use chain;
 use p2p;
+use pool;
 use store;
 use pow;
 use core::global::MiningParameterMode;
@@ -97,6 +98,8 @@ pub struct ServerConfig {
 
 	/// Configuration for the mining daemon
 	pub mining_config: Option<pow::types::MinerConfig>,
+
+	pub pool_config: pool::PoolConfig,
 }
 
 impl Default for ServerConfig {
@@ -110,6 +113,7 @@ impl Default for ServerConfig {
 			p2p_config: Some(p2p::P2PConfig::default()),
 			mining_config: Some(pow::types::MinerConfig::default()),
 			mining_parameter_mode: Some(MiningParameterMode::Production),
+			pool_config: pool::PoolConfig::default(),
 		}
 	}
 }
