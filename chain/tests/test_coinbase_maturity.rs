@@ -109,8 +109,7 @@ fn test_coinbase_maturity() {
 		&keychain,
 	).unwrap();
 
-	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &pk3)
-		.unwrap();
+	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &pk3).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
