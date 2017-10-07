@@ -39,7 +39,7 @@ fn test_various_store_indices() {
 
 	let chain_store = &chain::store::ChainKVStore::new(".grin".to_string()).unwrap() as &ChainStore;
 
-	let block = Block::new(&BlockHeader::default(), vec![], &keychain, pubkey).unwrap();
+	let block = Block::new(&BlockHeader::default(), vec![], &keychain, &pubkey).unwrap();
 	let commit = block.outputs[0].commitment();
 	let block_hash = block.hash();
 
