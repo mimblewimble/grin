@@ -76,7 +76,7 @@ fn test_coinbase_maturity() {
 	let pk3 = keychain.derive_pubkey(3).unwrap();
 	let pk4 = keychain.derive_pubkey(4).unwrap();
 
-	let mut block = core::core::Block::new(&prev, vec![], &keychain, pk1.clone()).unwrap();
+	let mut block = core::core::Block::new(&prev, vec![], &keychain, &pk1).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -109,8 +109,7 @@ fn test_coinbase_maturity() {
 		&keychain,
 	).unwrap();
 
-	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, pk3.clone())
-		.unwrap();
+	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &pk3).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -138,7 +137,7 @@ fn test_coinbase_maturity() {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let pk = keychain.derive_pubkey(1).unwrap();
 
-		let mut block = core::core::Block::new(&prev, vec![], &keychain, pk).unwrap();
+		let mut block = core::core::Block::new(&prev, vec![], &keychain, &pk).unwrap();
 		block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -157,7 +156,7 @@ fn test_coinbase_maturity() {
 
 	let prev = chain.head_header().unwrap();
 
-	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, pk4).unwrap();
+	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &pk4).unwrap();
 
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 

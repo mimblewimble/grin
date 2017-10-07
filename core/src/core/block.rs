@@ -266,7 +266,7 @@ impl Block {
 		prev: &BlockHeader,
 		txs: Vec<&Transaction>,
 		keychain: &keychain::Keychain,
-		pubkey: keychain::Identifier,
+		pubkey: &keychain::Identifier,
 	) -> Result<Block, keychain::Error> {
 
 		let fees = txs.iter().map(|tx| tx.fee).sum();
@@ -469,11 +469,18 @@ impl Block {
 	// * That the sum of blinding factors for all coinbase-marked outputs match
 	//   the coinbase-marked kernels.
 	fn verify_coinbase(&self, secp: &Secp256k1) -> Result<(), Error> {
-		let cb_outs = filter_map_vec!(self.outputs, |out| {
-			if out.features.contains(COINBASE_OUTPUT) { Some(out.commitment()) } else { None }
+		let cb_outs = filter_map_vec!(self.outputs, |out| if out.features.contains(
+			COINBASE_OUTPUT,
+		)
+		{
+			Some(out.commitment())
+		} else {
+			None
 		});
-		let cb_kerns = filter_map_vec!(self.kernels, |k| {
-			if k.features.contains(COINBASE_KERNEL) { Some(k.excess) } else { None }
+		let cb_kerns = filter_map_vec!(self.kernels, |k| if k.features.contains(COINBASE_KERNEL) {
+			Some(k.excess)
+		} else {
+			None
 		});
 
 		let over_commit = secp.commit_value(reward(self.total_fees()))?;
@@ -490,16 +497,15 @@ impl Block {
 	/// reward.
 	pub fn reward_output(
 		keychain: &keychain::Keychain,
-		pubkey: keychain::Identifier,
+		pubkey: &keychain::Identifier,
 		fees: u64,
 	) -> Result<(Output, TxKernel), keychain::Error> {
-
 		let secp = keychain.secp();
 
-		let commit = keychain.commit(reward(fees), &pubkey)?;
+		let commit = keychain.commit(reward(fees), pubkey)?;
 		// let switch_commit = keychain.switch_commit(pubkey)?;
 		let msg = secp::pedersen::ProofMessage::empty();
-		let rproof = keychain.range_proof(reward(fees), &pubkey, commit, msg)?;
+		let rproof = keychain.range_proof(reward(fees), pubkey, commit, msg)?;
 
 		let output = Output {
 			features: COINBASE_OUTPUT,
@@ -540,7 +546,7 @@ mod test {
 	// header
 	fn new_block(txs: Vec<&Transaction>, keychain: &Keychain) -> Block {
 		let pubkey = keychain.derive_pubkey(1).unwrap();
-		Block::new(&BlockHeader::default(), txs, keychain, pubkey).unwrap()
+		Block::new(&BlockHeader::default(), txs, keychain, &pubkey).unwrap()
 	}
 
 	// utility producing a transaction that spends an output with the provided

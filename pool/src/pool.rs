@@ -908,7 +908,7 @@ mod tests {
 			&block::BlockHeader::default(),
 			block_transactions,
 			&keychain,
-			pubkey,
+			&pubkey,
 		).unwrap();
 
 		chain_ref.apply_block(&block);
@@ -1007,7 +1007,7 @@ mod tests {
 
 			let keychain = Keychain::from_random_seed().unwrap();
 			let pubkey = keychain.derive_pubkey(1).unwrap();
-			block = block::Block::new(&block::BlockHeader::default(), tx_refs, &keychain, pubkey)
+			block = block::Block::new(&block::BlockHeader::default(), tx_refs, &keychain, &pubkey)
 				.unwrap();
 		}
 

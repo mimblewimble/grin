@@ -15,6 +15,8 @@
 use std::{error, fmt};
 use std::cmp::min;
 
+use serde::{de, ser};
+
 use byteorder::{ByteOrder, BigEndian};
 use blake2::blake2b::blake2b;
 use secp::Secp256k1;
@@ -75,25 +77,83 @@ impl fmt::Display for Fingerprint {
 	}
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Identifier(String);
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct Identifier([u8; 20]);
+
+impl ser::Serialize for Identifier {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: ser::Serializer,
+	{
+		serializer.serialize_str(&self.to_hex())
+	}
+}
+
+impl<'de> de::Deserialize<'de> for Identifier {
+	fn deserialize<D>(deserializer: D) -> Result<Identifier, D::Error>
+	where
+		D: de::Deserializer<'de>,
+	{
+		deserializer.deserialize_u64(IdentifierVisitor)
+	}
+}
+
+struct IdentifierVisitor;
+
+impl<'de> de::Visitor<'de> for IdentifierVisitor {
+	type Value = Identifier;
+
+	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+		formatter.write_str("an identifier")
+	}
+
+	fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+	where
+		E: de::Error,
+	{
+		// TODO - error handling here
+		let identifier = Identifier::from_hex(s).unwrap();
+		Ok(identifier)
+	}
+}
 
 impl Identifier {
-	fn from_bytes(bytes: &[u8]) -> Identifier {
+	pub fn from_bytes(bytes: &[u8]) -> Identifier {
 		let mut identifier = [0; 20];
 		for i in 0..min(20, bytes.len()) {
 			identifier[i] = bytes[i];
 		}
-		Identifier(util::to_hex(identifier.to_vec()))
+		Identifier(identifier)
+	}
+
+	fn from_hex(hex: &str) -> Result<Identifier, Error> {
+		// TODO - error handling, don't unwrap here
+		let bytes = util::from_hex(hex.to_string()).unwrap();
+		Ok(Identifier::from_bytes(&bytes))
 	}
 
 	pub fn to_hex(&self) -> String {
-		self.0.clone()
+		util::to_hex(self.0.to_vec())
 	}
 
 	pub fn fingerprint(&self) -> Fingerprint {
-		let hex = &self.0[0..8];
-		Fingerprint(String::from(hex))
+		Fingerprint::from_bytes(&self.0)
+	}
+}
+
+impl AsRef<[u8]> for Identifier {
+	fn as_ref(&self) -> &[u8] {
+		&self.0.as_ref()
+	}
+}
+
+impl ::std::fmt::Debug for Identifier {
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+		try!(write!(f, "{}(", stringify!(Identifier)));
+		for i in self.0.iter().cloned() {
+			try!(write!(f, "{:02x}", i));
+		}
+		write!(f, ")")
 	}
 }
 
@@ -208,6 +268,8 @@ impl ExtendedKey {
 
 #[cfg(test)]
 mod test {
+	use serde_json;
+
 	use secp::Secp256k1;
 	use secp::key::SecretKey;
 	use super::{ExtendedKey, Fingerprint, Identifier};
@@ -215,6 +277,29 @@ mod test {
 
 	fn from_hex(hex_str: &str) -> Vec<u8> {
 		util::from_hex(hex_str.to_string()).unwrap()
+	}
+
+	#[test]
+	fn test_identifier_json_ser_deser() {
+		let hex = "942b6c0bd43bdcb24f3edfe7fadbc77054ecc4f2";
+		let identifier = Identifier::from_hex(hex).unwrap();
+
+		#[derive(Debug, Serialize, Deserialize, PartialEq)]
+		struct HasAnIdentifier {
+			identifier: Identifier,
+		}
+
+		let has_an_identifier = HasAnIdentifier { identifier };
+
+		let json = serde_json::to_string(&has_an_identifier).unwrap();
+
+		assert_eq!(
+			json,
+			"{\"identifier\":\"942b6c0bd43bdcb24f3edfe7fadbc77054ecc4f2\"}"
+		);
+
+		let deserialized: HasAnIdentifier = serde_json::from_str(&json).unwrap();
+		assert_eq!(deserialized, has_an_identifier);
 	}
 
 	#[test]

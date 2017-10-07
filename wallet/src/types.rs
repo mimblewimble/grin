@@ -264,7 +264,7 @@ impl WalletData {
 			Error::WalletData(format!("Could not create {}: {}", data_file_path, e))
 		})?;
 		let res_json = serde_json::to_vec_pretty(self).map_err(|e| {
-			Error::WalletData(format!("Error serializing wallet data."))
+			Error::WalletData(format!("Error serializing wallet data: {}", e))
 		})?;
 		data_file.write_all(res_json.as_slice()).map_err(|e| {
 			Error::WalletData(format!("Error writing {}: {}", data_file_path, e))
@@ -385,7 +385,13 @@ pub enum WalletReceiveRequest {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BlockFees {
 	pub fees: u64,
-	pub derivation: u32,
+	pub pubkey: Option<keychain::Identifier>,
+}
+
+impl BlockFees {
+	pub fn pubkey(&self) -> Option<keychain::Identifier> {
+		self.pubkey.clone()
+	}
 }
 
 /// Response to build a coinbase output.
@@ -393,5 +399,5 @@ pub struct BlockFees {
 pub struct CbData {
 	pub output: String,
 	pub kernel: String,
-	pub derivation: u32,
+	pub pubkey: String,
 }
