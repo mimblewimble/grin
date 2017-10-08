@@ -99,6 +99,8 @@ pub struct ServerConfig {
 	/// Configuration for the mining daemon
 	pub mining_config: Option<pow::types::MinerConfig>,
 
+	/// Transaction pool configuration
+	#[serde(default)]
 	pub pool_config: pool::PoolConfig,
 }
 

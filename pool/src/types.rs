@@ -34,20 +34,25 @@ pub struct PoolConfig {
 	/// Base fee for a transaction to be accepted by the pool. The transaction
 	/// weight is computed from its number of inputs, outputs and kernels and
 	/// multipled by the base fee to compare to the actual transaction fee.
+	#[serde="default_accept_fee_base"]
 	pub accept_fee_base: u64,
 
 	/// Maximum capacity of the pool in number of transactions
+	#[serde="default_max_pool_size"]
 	pub max_pool_size: usize,
 }
 
 impl Default for PoolConfig {
 	fn default() -> PoolConfig {
 		PoolConfig {
-			accept_fee_base: 10,
-			max_pool_size: 50_000,
+			accept_fee_base: default_accept_fee_base(),
+			max_pool_size: default_max_pool_size(),
 		}
 	}
 }
+
+fn default_accept_fee_base() -> u64 { 10 }
+fn default_max_pool_size() -> usize { 50_000 }
 
 /// Placeholder: the data representing where we heard about a tx from.
 ///
