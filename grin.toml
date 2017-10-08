@@ -48,6 +48,17 @@ capabilities = [7]
 host = "127.0.0.1"
 port = 13414
 
+#Transaction pool configuration
+[server.pool_config]
+
+#Base fee for a transaction to be accepted by the pool. The transaction
+#weight is computed from its number of inputs, outputs and kernels and
+#multipled by the base fee to compare to the actual transaction fee.
+accept_fee_base = 100
+
+#Maximum capacity of the pool in number of transactions
+max_pool_size = 100
+
 #Mining details. This section is optional. If it's not here, the server
 #will default to not mining.
 [mining]
