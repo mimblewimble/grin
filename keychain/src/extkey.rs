@@ -241,7 +241,7 @@ impl ExtendedKey {
 	}
 
 	/// Return the identifier of the key
-	/// which is the blake2b hash (20 bit digest) of the PublicKey
+	/// which is the blake2b hash (20 byte digest) of the PublicKey
 	// corresponding to the underlying SecretKey
 	pub fn identifier(&self, secp: &Secp256k1) -> Result<Identifier, Error> {
 		let pubkey = PublicKey::from_secret_key(secp, &self.key)?;
