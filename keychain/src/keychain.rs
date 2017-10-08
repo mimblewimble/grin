@@ -96,7 +96,7 @@ impl Keychain {
 	pub fn derivation_from_pubkey(&self, pubkey: &Identifier) -> Result<u32, Error> {
 		for i in 1..10000 {
 			let extkey = self.extkey.derive(&self.secp, i)?;
-			if extkey.identifier() == *pubkey {
+			if extkey.identifier(&self.secp)? == *pubkey {
 				return Ok(extkey.n_child);
 			}
 		}

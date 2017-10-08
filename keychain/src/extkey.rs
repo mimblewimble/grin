@@ -34,6 +34,12 @@ pub enum Error {
 	Secp(secp::Error),
 }
 
+impl From<secp::Error> for Error {
+	fn from(e: secp::Error) -> Error {
+		Error::Secp(e)
+	}
+}
+
 // Passthrough Debug to Display, since errors should be user-visible
 impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
