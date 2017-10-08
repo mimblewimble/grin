@@ -58,7 +58,7 @@ impl error::Error for Error {
 			// TODO change when ser. ext. size is fixed
 			Error::InvalidSliceSize => "keychain: serialized extended key must be of size 73",
 			Error::InvalidExtendedKey => "keychain: the given serialized extended key is invalid",
-			Error::Secp(_) => "keychain: secp error"
+			Error::Secp(_) => "keychain: secp error",
 		}
 	}
 }
@@ -327,15 +327,22 @@ mod test {
 			"c3f5ae520f474b390a637de4669c84d0ed9bbc21742577fac930834d3c3083dd",
 		);
 		let secret_key = SecretKey::from_slice(&s, sec.as_slice()).unwrap();
-		let chaincode =
-			from_hex("e7298e68452b0c6d54837670896e1aee76b118075150d90d4ee416ece106ae72");
+		let chaincode = from_hex(
+			"e7298e68452b0c6d54837670896e1aee76b118075150d90d4ee416ece106ae72",
+		);
 		let identifier = from_hex("d291fc2dca90fc8b005a01638d616fda770ec552");
 		let fingerprint = from_hex("d291fc2d");
 		let depth = 0;
 		let n_child = 0;
 		assert_eq!(extk.key, secret_key);
-		assert_eq!(extk.identifier(&s).unwrap(), Identifier::from_bytes(identifier.as_slice()));
-		assert_eq!(extk.fingerprint, Fingerprint::from_bytes(fingerprint.as_slice()));
+		assert_eq!(
+			extk.identifier(&s).unwrap(),
+			Identifier::from_bytes(identifier.as_slice())
+		);
+		assert_eq!(
+			extk.fingerprint,
+			Fingerprint::from_bytes(fingerprint.as_slice())
+		);
 		assert_eq!(
 			extk.identifier(&s).unwrap().fingerprint(),
 			Fingerprint::from_bytes(fingerprint.as_slice())
@@ -356,16 +363,23 @@ mod test {
 			"d75f70beb2bd3b56f9b064087934bdedee98e4b5aae6280c58b4eff38847888f",
 		);
 		let secret_key = SecretKey::from_slice(&s, sec.as_slice()).unwrap();
-		let chaincode =
-			from_hex("243cb881e1549e714db31d23af45540b13ad07941f64a786bbf3313b4de1df52");
+		let chaincode = from_hex(
+			"243cb881e1549e714db31d23af45540b13ad07941f64a786bbf3313b4de1df52",
+		);
 		let fingerprint = from_hex("d291fc2d");
 		let identifier = from_hex("027a8e290736af382fc943bdabb774bc2d14fd95");
 		let identifier_fingerprint = from_hex("027a8e29");
 		let depth = 1;
 		let n_child = 0;
 		assert_eq!(derived.key, secret_key);
-		assert_eq!(derived.identifier(&s).unwrap(), Identifier::from_bytes(identifier.as_slice()));
-		assert_eq!(derived.fingerprint, Fingerprint::from_bytes(fingerprint.as_slice()));
+		assert_eq!(
+			derived.identifier(&s).unwrap(),
+			Identifier::from_bytes(identifier.as_slice())
+		);
+		assert_eq!(
+			derived.fingerprint,
+			Fingerprint::from_bytes(fingerprint.as_slice())
+		);
 		assert_eq!(
 			derived.identifier(&s).unwrap().fingerprint(),
 			Fingerprint::from_bytes(identifier_fingerprint.as_slice())
