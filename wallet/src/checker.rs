@@ -28,7 +28,7 @@ fn refresh_output(out: &mut OutputData, api_out: Option<api::Output>, tip: &api:
 
 		if out.status == OutputStatus::Locked {
 			// leave it Locked locally for now
-		} else if api_out.lock_height >= tip.height {
+		} else if api_out.lock_height > tip.height {
 			out.status = OutputStatus::Immature;
 		} else {
 			out.status = OutputStatus::Unspent;
@@ -67,7 +67,7 @@ pub fn refresh_outputs(
 	})
 }
 
-fn get_tip_from_node(config: &WalletConfig) -> Result<api::Tip, Error> {
+pub fn get_tip_from_node(config: &WalletConfig) -> Result<api::Tip, Error> {
 	let url = format!("{}/v1/chain/1", config.check_node_api_http_addr);
 	api::client::get::<api::Tip>(url.as_str()).map_err(|e| Error::Node(e))
 }
@@ -79,6 +79,7 @@ fn get_output_from_node(
 	amount: u64,
 	derivation: u32,
 ) -> Result<Option<api::Output>, Error> {
+	// do we want to store these commitments in wallet.dat?
 	let pubkey = keychain.derive_pubkey(derivation)?;
 	let commit = keychain.commit(amount, &pubkey)?;
 

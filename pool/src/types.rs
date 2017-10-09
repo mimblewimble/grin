@@ -115,12 +115,19 @@ pub enum PoolError {
 		/// The spent output
 		spent_output: Commitment,
 	},
-	/// Attempt to spend a coinbase output before it matures (1000 blocks?)
+	/// Attempt to spend an output before it matures
+	/// lock_height must not exceed current block height
 	ImmatureCoinbase {
-		/// The block header of the block containing the coinbase output
+		/// The block header of the block containing the output
 		header: block::BlockHeader,
-		/// The unspent coinbase output
+		/// The unspent output
 		output: Commitment,
+	},
+	/// Attempt to add a transaction to the pool with lock_height
+	/// greater than height of current block
+	ImmatureTransaction {
+		/// The lock height of the invalid transaction
+		lock_height: u64,
 	},
 	/// An orphan successfully added to the orphans set
 	OrphanTransaction,

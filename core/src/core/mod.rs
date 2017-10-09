@@ -209,8 +209,8 @@ mod test {
 		let tx = tx2i1o();
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &tx).expect("serialized failed");
-		assert!(vec.len() > 5320);
-		assert!(vec.len() < 5340);
+		assert!(vec.len() > 5340);
+		assert!(vec.len() < 5360);
 	}
 
 	#[test]
@@ -249,11 +249,15 @@ mod test {
 		let pk2 = keychain.derive_pubkey(2).unwrap();
 		let pk3 = keychain.derive_pubkey(3).unwrap();
 
-		let (tx, _) =
-			build::transaction(
-				vec![input(75, pk1), output(42, pk2), output(32, pk3), with_fee(1)],
-				&keychain,
-			).unwrap();
+		let (tx, _) = build::transaction(
+			vec![
+				input(75, pk1),
+				output(42, pk2),
+				output(32, pk3),
+				with_fee(1),
+			],
+			&keychain,
+		).unwrap();
 		let h = tx.outputs[0].hash();
 		assert!(h != ZERO_HASH);
 		let h2 = tx.outputs[1].hash();
@@ -304,10 +308,8 @@ mod test {
 
 			// Alice builds her transaction, with change, which also produces the sum
 			// of blinding factors before they're obscured.
-			let (tx, sum) = build::transaction(
-				vec![in1, in2, output(1, pk3), with_fee(2)],
-				&keychain,
-			).unwrap();
+			let (tx, sum) =
+				build::transaction(vec![in1, in2, output(1, pk3), with_fee(2)], &keychain).unwrap();
 			tx_alice = tx;
 			blind_sum = sum;
 		}
@@ -315,11 +317,10 @@ mod test {
 		// From now on, Bob only has the obscured transaction and the sum of
 		// blinding factors. He adds his output, finalizes the transaction so it's
 		// ready for broadcast.
-		let (tx_final, _) =
-			build::transaction(
-				vec![initial_tx(tx_alice), with_excess(blind_sum), output(4, pk4)],
-				&keychain,
-			).unwrap();
+		let (tx_final, _) = build::transaction(
+			vec![initial_tx(tx_alice), with_excess(blind_sum), output(4, pk4)],
+			&keychain,
+		).unwrap();
 
 		tx_final.validate(&keychain.secp()).unwrap();
 	}
@@ -360,7 +361,12 @@ mod test {
 		let mut tx2 = tx1i1o();
 		tx2.verify_sig(keychain.secp()).unwrap();
 
-		let b = Block::new(&BlockHeader::default(), vec![&mut tx1, &mut tx2], &keychain, &pubkey).unwrap();
+		let b = Block::new(
+			&BlockHeader::default(),
+			vec![&mut tx1, &mut tx2],
+			&keychain,
+			&pubkey,
+		).unwrap();
 		b.validate(keychain.secp()).unwrap();
 	}
 
@@ -388,7 +394,8 @@ mod test {
 		build::transaction(
 			vec![input(10, pk1), input(11, pk2), output(19, pk3), with_fee(2)],
 			&keychain,
-		).map(|(tx, _)| tx).unwrap()
+		).map(|(tx, _)| tx)
+			.unwrap()
 	}
 
 	// utility producing a transaction with a single input and output
@@ -397,9 +404,8 @@ mod test {
 		let pk1 = keychain.derive_pubkey(1).unwrap();
 		let pk2 = keychain.derive_pubkey(2).unwrap();
 
-		build::transaction(
-			vec![input(5, pk1), output(3, pk2), with_fee(2)],
-			&keychain,
-		).map(|(tx, _)| tx).unwrap()
+		build::transaction(vec![input(5, pk1), output(3, pk2), with_fee(2)], &keychain)
+			.map(|(tx, _)| tx)
+			.unwrap()
 	}
 }

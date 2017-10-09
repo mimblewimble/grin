@@ -153,6 +153,11 @@ where
 			return Err(PoolError::AlreadyInPool);
 		}
 
+		let head_header = self.blockchain.head_header()?;
+		if head_header.height < tx.lock_height {
+			return Err(PoolError::ImmatureTransaction{ lock_height: tx.lock_height });
+		}
+
 		// The next issue is to identify all unspent outputs that
 		// this transaction will consume and make sure they exist in the set.
 		let mut pool_refs: Vec<graph::Edge> = Vec::new();
@@ -174,15 +179,12 @@ where
 						if let Ok(out_header) = self.blockchain
 							.get_block_header_by_output_commit(&output.commitment())
 						{
-							if let Ok(head_header) = self.blockchain.head_header() {
-								if head_header.height <=
-									out_header.height + global::coinbase_maturity()
-								{
-									return Err(PoolError::ImmatureCoinbase {
-										header: out_header,
-										output: output.commitment(),
-									});
-								};
+							let lock_height = out_header.height + global::coinbase_maturity();
+							if head_header.height < lock_height {
+								return Err(PoolError::ImmatureCoinbase {
+									header: out_header,
+									output: output.commitment(),
+								});
 							};
 						};
 					};
@@ -549,6 +551,9 @@ where
 	/// Fetch mineable transactions.
 	///
 	/// Select a set of mineable transactions for block building.
+	///
+	/// TODO - txs have lock_heights, so possible to have "invalid" (immature) txs here?
+	///
 	pub fn prepare_mineable_transactions(
 		&self,
 		num_to_fetch: u32,

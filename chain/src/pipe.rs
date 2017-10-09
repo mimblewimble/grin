@@ -134,8 +134,10 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 
 	// check version, enforces scheduled hard fork
 	if !consensus::valid_header_version(header.height, header.version) {
-		error!("Invalid block header version received ({}), maybe update Grin?",
-			header.version);
+		error!(
+			"Invalid block header version received ({}), maybe update Grin?",
+			header.version
+		);
 		return Err(Error::InvalidBlockVersion(header.version));
 	}
 
@@ -269,8 +271,7 @@ fn validate_block(
 		return Err(Error::InvalidRoot);
 	}
 
-	// check that any coinbase outputs are spendable (that they have matured
-	// sufficiently)
+	// check for any outputs with lock_heights greater than current block height
 	for input in &b.inputs {
 		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
 			if output.features.contains(transaction::COINBASE_OUTPUT) {
