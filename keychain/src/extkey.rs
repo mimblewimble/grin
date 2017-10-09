@@ -19,8 +19,9 @@ use serde::{de, ser};
 
 use byteorder::{ByteOrder, BigEndian};
 use blake2::blake2b::blake2b;
+use secp;
 use secp::Secp256k1;
-use secp::key::SecretKey;
+use secp::key::{PublicKey, SecretKey};
 use util;
 
 /// An ExtKey error
@@ -30,6 +31,13 @@ pub enum Error {
 	InvalidSeedSize,
 	InvalidSliceSize,
 	InvalidExtendedKey,
+	Secp(secp::Error),
+}
+
+impl From<secp::Error> for Error {
+	fn from(e: secp::Error) -> Error {
+		Error::Secp(e)
+	}
 }
 
 // Passthrough Debug to Display, since errors should be user-visible
@@ -46,10 +54,11 @@ impl error::Error for Error {
 
 	fn description(&self) -> &str {
 		match *self {
-			Error::InvalidSeedSize => "wallet: seed isn't of size 128, 256 or 512",
+			Error::InvalidSeedSize => "keychain: seed isn't of size 128, 256 or 512",
 			// TODO change when ser. ext. size is fixed
-			Error::InvalidSliceSize => "wallet: serialized extended key must be of size 73",
-			Error::InvalidExtendedKey => "wallet: the given serialized extended key is invalid",
+			Error::InvalidSliceSize => "keychain: serialized extended key must be of size 73",
+			Error::InvalidExtendedKey => "keychain: the given serialized extended key is invalid",
+			Error::Secp(_) => "keychain: secp error",
 		}
 	}
 }
@@ -225,16 +234,20 @@ impl ExtendedKey {
 			key: secret_key,
 		};
 
-		ext_key.fingerprint = ext_key.identifier().fingerprint();
+		let identifier = ext_key.identifier(secp)?;
+		ext_key.fingerprint = identifier.fingerprint();
 
 		Ok(ext_key)
 	}
 
 	/// Return the identifier of the key
-	/// which is the blake2b hash (20 bit digest)
-	pub fn identifier(&self) -> Identifier {
-		let identifier = blake2b(20, &[], &self.key[..]);
-		Identifier::from_bytes(&identifier.as_bytes())
+	/// which is the blake2b hash (20 byte digest) of the PublicKey
+	// corresponding to the underlying SecretKey
+	pub fn identifier(&self, secp: &Secp256k1) -> Result<Identifier, Error> {
+		let pubkey = PublicKey::from_secret_key(secp, &self.key)?;
+		let bytes = pubkey.serialize_vec(secp, true);
+		let identifier = blake2b(20, &[], &bytes[..]);
+		Ok(Identifier::from_bytes(&identifier.as_bytes()))
 	}
 
 	/// Derive an extended key from an extended key
@@ -256,9 +269,11 @@ impl ExtendedKey {
 		let mut chain_code: [u8; 32] = [0; 32];
 		(&mut chain_code).clone_from_slice(&derived.as_bytes()[32..]);
 
+		let identifier = self.identifier(&secp)?;
+
 		Ok(ExtendedKey {
 			depth: self.depth + 1,
-			fingerprint: self.identifier().fingerprint(),
+			fingerprint: identifier.fingerprint(),
 			n_child: n,
 			chaincode: chain_code,
 			key: secret_key,
@@ -315,13 +330,13 @@ mod test {
 		let chaincode = from_hex(
 			"e7298e68452b0c6d54837670896e1aee76b118075150d90d4ee416ece106ae72",
 		);
-		let identifier = from_hex("942b6c0bd43bdcb24f3edfe7fadbc77054ecc4f2");
-		let fingerprint = from_hex("942b6c0b");
+		let identifier = from_hex("d291fc2dca90fc8b005a01638d616fda770ec552");
+		let fingerprint = from_hex("d291fc2d");
 		let depth = 0;
 		let n_child = 0;
 		assert_eq!(extk.key, secret_key);
 		assert_eq!(
-			extk.identifier(),
+			extk.identifier(&s).unwrap(),
 			Identifier::from_bytes(identifier.as_slice())
 		);
 		assert_eq!(
@@ -329,7 +344,7 @@ mod test {
 			Fingerprint::from_bytes(fingerprint.as_slice())
 		);
 		assert_eq!(
-			extk.identifier().fingerprint(),
+			extk.identifier(&s).unwrap().fingerprint(),
 			Fingerprint::from_bytes(fingerprint.as_slice())
 		);
 		assert_eq!(extk.chaincode, chaincode.as_slice());
@@ -351,14 +366,14 @@ mod test {
 		let chaincode = from_hex(
 			"243cb881e1549e714db31d23af45540b13ad07941f64a786bbf3313b4de1df52",
 		);
-		let fingerprint = from_hex("942b6c0b");
-		let identifier = from_hex("8b011f14345f3f0071e85f6eec116de1e575ea10");
-		let identifier_fingerprint = from_hex("8b011f14");
+		let fingerprint = from_hex("d291fc2d");
+		let identifier = from_hex("027a8e290736af382fc943bdabb774bc2d14fd95");
+		let identifier_fingerprint = from_hex("027a8e29");
 		let depth = 1;
 		let n_child = 0;
 		assert_eq!(derived.key, secret_key);
 		assert_eq!(
-			derived.identifier(),
+			derived.identifier(&s).unwrap(),
 			Identifier::from_bytes(identifier.as_slice())
 		);
 		assert_eq!(
@@ -366,7 +381,7 @@ mod test {
 			Fingerprint::from_bytes(fingerprint.as_slice())
 		);
 		assert_eq!(
-			derived.identifier().fingerprint(),
+			derived.identifier(&s).unwrap().fingerprint(),
 			Fingerprint::from_bytes(identifier_fingerprint.as_slice())
 		);
 		assert_eq!(derived.chaincode, chaincode.as_slice());
