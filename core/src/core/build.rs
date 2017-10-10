@@ -83,11 +83,14 @@ pub fn output_raw(value: u64, sk: secp::key::SecretKey) -> Box<Append> {
 		let rproof = secp.range_proof(0, value, sk, commit, msg);
 		let pubkey = secp::key::PublicKey::from_secret_key(secp, &sk).unwrap();
 
-		(tx.with_output(Output {
-			features: DEFAULT_OUTPUT,
-			commit: commit,
-			proof: rproof,
-		}), sum.add_pubkey(Identifier::from_pubkey(secp, &pubkey)))
+		(
+			tx.with_output(Output {
+				features: DEFAULT_OUTPUT,
+				commit: commit,
+				proof: rproof,
+			}),
+			sum.add_pubkey(Identifier::from_pubkey(secp, &pubkey)),
+		)
 	})
 }
 
