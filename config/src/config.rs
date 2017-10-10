@@ -96,7 +96,7 @@ impl GlobalConfig {
 		if let Some(fp) = file_path {
 			return_value.config_file_path = Some(PathBuf::from(&fp));
 		} else {
-			return_value.derive_config_location().unwrap();
+			let _result=return_value.derive_config_location();
 		}
 
 		// No attempt at a config file, just return defaults
