@@ -59,6 +59,8 @@ impl From<secp::Error> for Error {
 pub struct TxKernel {
 	/// Options for a kernel's structure or use
 	pub features: KernelFeatures,
+	/// Fee originally included in the transaction this proof is for.
+	pub fee: u64,
 	/// This kernel is not valid earlier than lock_height blocks
 	/// The max lock_height of all *inputs* to this transaction
 	pub lock_height: u64,
@@ -69,8 +71,6 @@ pub struct TxKernel {
 	/// The signature proving the excess is a valid public key, which signs
 	/// the transaction fee.
 	pub excess_sig: Vec<u8>,
-	/// Fee originally included in the transaction this proof is for.
-	pub fee: u64,
 }
 
 impl Writeable for TxKernel {
@@ -78,10 +78,10 @@ impl Writeable for TxKernel {
 		ser_multiwrite!(
 			writer,
 			[write_u8, self.features.bits()],
+			[write_u64, self.fee],
 			[write_u64, self.lock_height],
 			[write_fixed_bytes, &self.excess],
-			[write_bytes, &self.excess_sig],
-			[write_u64, self.fee]
+			[write_bytes, &self.excess_sig]
 		);
 		Ok(())
 	}
@@ -95,10 +95,10 @@ impl Readable for TxKernel {
 
 		Ok(TxKernel {
 			features: features,
+			fee: reader.read_u64()?,
 			lock_height: reader.read_u64()?,
 			excess: Commitment::read(reader)?,
 			excess_sig: reader.read_vec()?,
-			fee: reader.read_u64()?,
 		})
 	}
 }
