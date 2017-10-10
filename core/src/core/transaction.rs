@@ -216,7 +216,7 @@ impl Transaction {
 		inputs: Vec<Input>,
 		outputs: Vec<Output>,
 		fee: u64,
-		lock_height: u64
+		lock_height: u64,
 	) -> Transaction {
 		Transaction {
 			fee: fee,
@@ -255,7 +255,10 @@ impl Transaction {
 	}
 
 	pub fn with_lock_height(self, lock_height: u64) -> Transaction {
-		Transaction { lock_height: lock_height, ..self }
+		Transaction {
+			lock_height: lock_height,
+			..self
+		}
 	}
 
 	/// The verification for a MimbleWimble transaction involves getting the
@@ -290,7 +293,11 @@ impl Transaction {
 			fee: self.fee,
 			lock_height: self.lock_height,
 		};
-		debug!("tx verify_sig: fee - {}, lock_height - {}", kernel.fee, kernel.lock_height);
+		debug!(
+			"tx verify_sig: fee - {}, lock_height - {}",
+			kernel.fee,
+			kernel.lock_height
+		);
 
 		Ok(kernel)
 	}
