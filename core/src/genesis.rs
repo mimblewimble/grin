@@ -29,6 +29,7 @@ pub fn genesis() -> core::Block {
 	let empty_hash = [].hash();
 	core::Block {
 		header: core::BlockHeader {
+			version: 1,
 			height: 0,
 			previous: core::hash::Hash([0xff; 32]),
 			timestamp: time::Tm {
@@ -42,7 +43,6 @@ pub fn genesis() -> core::Block {
 			utxo_root: empty_hash,
 			range_proof_root: empty_hash,
 			kernel_root: empty_hash,
-			features: core::DEFAULT_BLOCK,
 			nonce: global::get_genesis_nonce(),
 			pow: core::Proof::zero(proof_size), // TODO get actual PoW solution
 		},

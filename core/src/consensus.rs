@@ -81,6 +81,29 @@ pub fn exceeds_weight(input_len: usize, output_len: usize, kernel_len: usize) ->
 		kernel_len * BLOCK_KERNEL_WEIGHT > MAX_BLOCK_WEIGHT
 }
 
+/// Fork every 250,000 blocks for first 2 years, simple number and just a
+/// little less than 6 months.
+pub const HARD_FORK_INTERVAL: u64 = 250_000;
+
+/// Check whether the block version is valid at a given height, implements
+/// 6 months interval scheduled hard forks for the first 2 years.
+pub fn valid_header_version(height: u64, version: u16) -> bool {
+	// uncomment below as we go from hard fork to hard fork
+	if height <= HARD_FORK_INTERVAL && version == 1 {
+		true
+	/* } else if height <= 2 * HARD_FORK_INTERVAL && version == 2 {
+		true */
+	/* } else if height <= 3 * HARD_FORK_INTERVAL && version == 3 {
+		true */
+	/* } else if height <= 4 * HARD_FORK_INTERVAL && version == 4 {
+		true */
+	/* } else if height > 4 * HARD_FORK_INTERVAL && version > 4 {
+		true */
+	} else {
+		false
+	}
+}
+
 /// The minimum mining difficulty we'll allow
 pub const MINIMUM_DIFFICULTY: u64 = 10;
 
@@ -292,4 +315,27 @@ mod test {
 		);
 	}
 
+	#[test]
+	fn hard_fork_1() {
+		assert!(valid_header_version(0, 1));
+		assert!(valid_header_version(10, 1));
+		assert!(!valid_header_version(10, 2));
+		assert!(valid_header_version(250_000, 1));
+		assert!(!valid_header_version(250_001, 1));
+		assert!(!valid_header_version(500_000, 1));
+		assert!(!valid_header_version(250_001, 2));
+	}
+
+	// #[test]
+	// fn hard_fork_2() {
+	// 	assert!(valid_header_version(0, 1));
+	// 	assert!(valid_header_version(10, 1));
+	// 	assert!(valid_header_version(10, 2));
+	// 	assert!(valid_header_version(250_000, 1));
+	// 	assert!(!valid_header_version(250_001, 1));
+	// 	assert!(!valid_header_version(500_000, 1));
+	// 	assert!(valid_header_version(250_001, 2));
+	// 	assert!(valid_header_version(500_000, 2));
+	// 	assert!(!valid_header_version(500_001, 2));
+	// }
 }

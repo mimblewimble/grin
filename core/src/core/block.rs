@@ -27,14 +27,6 @@ use ser::{self, Readable, Reader, Writeable, Writer};
 use global;
 use keychain;
 
-bitflags! {
-    /// Options for block validation
-    pub flags BlockFeatures: u8 {
-        /// No flags
-        const DEFAULT_BLOCK = 0b00000000,
-    }
-}
-
 /// Errors thrown by Block validation
 #[derive(Debug, PartialEq)]
 pub enum Error {
@@ -61,6 +53,8 @@ impl From<secp::Error> for Error {
 /// Block header, fairly standard compared to other blockchains.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BlockHeader {
+	/// Version of the block
+	pub version: u16,
 	/// Height of this block since the genesis block (height 0)
 	pub height: u64,
 	/// Hash of the block previous to this in the chain.
@@ -73,8 +67,6 @@ pub struct BlockHeader {
 	pub range_proof_root: Hash,
 	/// Merklish root of all transaction kernels in the UTXO set
 	pub kernel_root: Hash,
-	/// Features specific to this block, allowing possible future extensions
-	pub features: BlockFeatures,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
 	/// Proof of work data.
@@ -89,6 +81,7 @@ impl Default for BlockHeader {
 	fn default() -> BlockHeader {
 		let proof_size = global::proofsize();
 		BlockHeader {
+			version: 1,
 			height: 0,
 			previous: ZERO_HASH,
 			timestamp: time::at_utc(time::Timespec { sec: 0, nsec: 0 }),
@@ -97,7 +90,6 @@ impl Default for BlockHeader {
 			utxo_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
 			kernel_root: ZERO_HASH,
-			features: DEFAULT_BLOCK,
 			nonce: 0,
 			pow: Proof::zero(proof_size),
 		}
@@ -109,13 +101,13 @@ impl Writeable for BlockHeader {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(
 			writer,
+			[write_u16, self.version],
 			[write_u64, self.height],
 			[write_fixed_bytes, &self.previous],
 			[write_i64, self.timestamp.to_timespec().sec],
 			[write_fixed_bytes, &self.utxo_root],
 			[write_fixed_bytes, &self.range_proof_root],
-			[write_fixed_bytes, &self.kernel_root],
-			[write_u8, self.features.bits()]
+			[write_fixed_bytes, &self.kernel_root]
 		);
 
 		try!(writer.write_u64(self.nonce));
@@ -132,18 +124,19 @@ impl Writeable for BlockHeader {
 /// Deserialization of a block header
 impl Readable for BlockHeader {
 	fn read(reader: &mut Reader) -> Result<BlockHeader, ser::Error> {
-		let height = try!(reader.read_u64());
-		let previous = try!(Hash::read(reader));
+		let (version, height) = ser_multiread!(reader, read_u16, read_u64);
+		let previous = Hash::read(reader)?;
 		let timestamp = reader.read_i64()?;
-		let utxo_root = try!(Hash::read(reader));
-		let rproof_root = try!(Hash::read(reader));
-		let kernel_root = try!(Hash::read(reader));
-		let (features, nonce) = ser_multiread!(reader, read_u8, read_u64);
-		let difficulty = try!(Difficulty::read(reader));
-		let total_difficulty = try!(Difficulty::read(reader));
-		let pow = try!(Proof::read(reader));
+		let utxo_root = Hash::read(reader)?;
+		let rproof_root = Hash::read(reader)?;
+		let kernel_root = Hash::read(reader)?;
+		let nonce = reader.read_u64()?;
+		let difficulty = Difficulty::read(reader)?;
+		let total_difficulty = Difficulty::read(reader)?;
+		let pow = Proof::read(reader)?;
 
 		Ok(BlockHeader {
+			version: version,
 			height: height,
 			previous: previous,
 			timestamp: time::at_utc(time::Timespec {
@@ -153,9 +146,6 @@ impl Readable for BlockHeader {
 			utxo_root: utxo_root,
 			range_proof_root: rproof_root,
 			kernel_root: kernel_root,
-			features: BlockFeatures::from_bits(features).ok_or(
-				ser::Error::CorruptedData,
-			)?,
 			pow: pow,
 			nonce: nonce,
 			difficulty: difficulty,

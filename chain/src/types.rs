@@ -72,6 +72,8 @@ pub enum Error {
 	OutputNotFound,
 	/// output spent
 	OutputSpent,
+	/// Invalid block version, either a mistake or outdated software
+	InvalidBlockVersion(u16),
 	/// Internal issue when trying to save or load data from store
 	StoreErr(grin_store::Error),
 	/// Error serializing or deserializing a type

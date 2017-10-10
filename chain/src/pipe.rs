@@ -132,6 +132,34 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		return Err(Error::Orphan);
 	}
 
+	// check version, enforces scheduled hard fork
+	if !consensus::valid_header_version(header.height, header.version) {
+		error!("Invalid block header version received ({}), maybe update Grin?",
+			header.version);
+		return Err(Error::InvalidBlockVersion(header.version));
+	}
+
+	if header.timestamp >
+		time::now_utc() + time::Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
+	{
+		// refuse blocks more than 12 blocks intervals in future (as in bitcoin)
+		// TODO add warning in p2p code if local time is too different from peers
+		return Err(Error::InvalidBlockTime);
+	}
+
+	if !ctx.opts.intersects(SKIP_POW) {
+		let cycle_size = if ctx.opts.intersects(EASY_POW) {
+			global::sizeshift()
+		} else {
+			consensus::DEFAULT_SIZESHIFT
+		};
+		debug!("Validating block with cuckoo size {}", cycle_size);
+		if !(ctx.pow_verifier)(header, cycle_size as u32) {
+			return Err(Error::InvalidPow);
+		}
+	}
+
+	// first I/O cost, better as late as possible
 	let prev = try!(ctx.store.get_block_header(&header.previous).map_err(
 		&Error::StoreErr,
 	));
@@ -142,13 +170,6 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	if header.timestamp <= prev.timestamp && !global::is_automated_testing_mode() {
 		// prevent time warp attacks and some timestamp manipulations by forcing strict
 		// time progression (but not in CI mode)
-		return Err(Error::InvalidBlockTime);
-	}
-	if header.timestamp >
-		time::now_utc() + time::Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
-	{
-		// refuse blocks more than 12 blocks intervals in future (as in bitcoin)
-		// TODO add warning in p2p code if local time is too different from peers
 		return Err(Error::InvalidBlockTime);
 	}
 
@@ -165,16 +186,6 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		})?;
 		if header.difficulty < difficulty {
 			return Err(Error::DifficultyTooLow);
-		}
-
-		let cycle_size = if ctx.opts.intersects(EASY_POW) {
-			global::sizeshift()
-		} else {
-			consensus::DEFAULT_SIZESHIFT
-		};
-		debug!("Validating block with cuckoo size {}", cycle_size);
-		if !(ctx.pow_verifier)(header, cycle_size as u32) {
-			return Err(Error::InvalidPow);
 		}
 	}
 
