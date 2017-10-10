@@ -39,7 +39,7 @@ pub struct Context<'a> {
 
 /// Function type returned by the transaction combinators. Transforms a
 /// (Transaction, BlindSum) pair into another, provided some context.
-type Append = for<'a> Fn(&'a mut Context, (Transaction, BlindSum)) -> (Transaction, BlindSum);
+pub type Append = for<'a> Fn(&'a mut Context, (Transaction, BlindSum)) -> (Transaction, BlindSum);
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
@@ -50,8 +50,8 @@ pub fn input(value: u64, pubkey: Identifier) -> Box<Append> {
 	})
 }
 
-/// Adds an output with the provided value and blinding key to the transaction
-/// being built.
+/// Adds an output with the provided value and key identifier from the
+/// keychain.
 pub fn output(value: u64, pubkey: Identifier) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
 		let commit = build.keychain.commit(value, &pubkey).unwrap();
@@ -69,6 +69,25 @@ pub fn output(value: u64, pubkey: Identifier) -> Box<Append> {
 			}),
 			sum.add_pubkey(pubkey.clone()),
 		)
+	})
+}
+
+/// Adds an output with the provided value and blinding key to the transaction
+/// being built. Mostly for tests, regular transaction building should use the
+/// keychain and identifier version of output building.
+pub fn output_raw(value: u64, sk: secp::key::SecretKey) -> Box<Append> {
+	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
+		let secp = build.keychain.secp();
+		let commit = secp.commit(value, sk).unwrap();
+		let msg = secp::pedersen::ProofMessage::empty();
+		let rproof = secp.range_proof(0, value, sk, commit, msg);
+		let pubkey = secp::key::PublicKey::from_secret_key(secp, &sk).unwrap();
+
+		(tx.with_output(Output {
+			features: DEFAULT_OUTPUT,
+			commit: commit,
+			proof: rproof,
+		}), sum.add_pubkey(Identifier::from_pubkey(secp, &pubkey)))
 	})
 }
 

@@ -135,6 +135,12 @@ impl Identifier {
 		Identifier(identifier)
 	}
 
+	pub fn from_pubkey(secp: &Secp256k1, pubkey: &PublicKey) -> Identifier {
+		let bytes = pubkey.serialize_vec(secp, true);
+		let identifier = blake2b(20, &[], &bytes[..]);
+		Identifier::from_bytes(&identifier.as_bytes())
+	}
+
 	fn from_hex(hex: &str) -> Result<Identifier, Error> {
 		// TODO - error handling, don't unwrap here
 		let bytes = util::from_hex(hex.to_string()).unwrap();
@@ -245,9 +251,7 @@ impl ExtendedKey {
 	// corresponding to the underlying SecretKey
 	pub fn identifier(&self, secp: &Secp256k1) -> Result<Identifier, Error> {
 		let pubkey = PublicKey::from_secret_key(secp, &self.key)?;
-		let bytes = pubkey.serialize_vec(secp, true);
-		let identifier = blake2b(20, &[], &bytes[..]);
-		Ok(Identifier::from_bytes(&identifier.as_bytes()))
+		Ok(Identifier::from_pubkey(secp, &pubkey))
 	}
 
 	/// Derive an extended key from an extended key

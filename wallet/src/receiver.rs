@@ -53,14 +53,14 @@ use core::consensus::reward;
 use core::core::{Block, Transaction, TxKernel, Output, build};
 use core::ser;
 use api::{self, ApiEndpoint, Operation, ApiResult};
+use keychain::{BlindingFactor, Keychain};
 use types::*;
 use util;
-use keychain::{BlindingFactor, Keychain};
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
 #[derive(Serialize, Deserialize)]
-struct TxWrapper {
-	tx_hex: String,
+pub struct TxWrapper {
+	pub tx_hex: String,
 }
 
 /// Receive an already well formed JSON transaction issuance and finalize the
@@ -243,7 +243,7 @@ fn receive_transaction(
 		// so 80 is basically the minimum fee for a basic transaction
 		// so lets use 100 for now (revisit this)
 
-		let fee_amount = 100;
+		let fee_amount = tx_fee(partial.inputs.len(), partial.outputs.len() + 1, None);
 		let out_amount = amount - fee_amount;
 
 		let (tx_final, _) = build::transaction(vec![

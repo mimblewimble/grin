@@ -200,6 +200,14 @@ fn main() {
 				.long("dest")
 				.takes_value(true)))
 
+		.subcommand(SubCommand::with_name("burn")
+			.about("** TESTING ONLY ** Burns the provided amount to a known \
+				key. Similar to send but burns an output to allow single-party \
+				transactions.")
+			.arg(Arg::with_name("amount")
+				.help("Amount to burn in the smallest denomination")
+				.index(1)))
+
 		.subcommand(SubCommand::with_name("info")
 			.about("basic wallet info (outputs)")))
 
@@ -370,6 +378,14 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				dest = d;
 			}
 			wallet::issue_send_tx(&wallet_config, &keychain, amount, dest.to_string()).unwrap();
+		}
+		("burn", Some(send_args)) => {
+			let amount = send_args
+				.value_of("amount")
+				.expect("Amount to burn required")
+				.parse()
+				.expect("Could not parse amount as a whole number.");
+			wallet::issue_burn_tx(&wallet_config, &keychain, amount).unwrap();
 		}
 		("info", Some(_)) => {
 			wallet::show_info(&wallet_config, &keychain);
