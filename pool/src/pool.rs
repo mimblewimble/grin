@@ -594,7 +594,6 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use types::*;
 	use core::core::build;
 	use blockchain::{DummyChain, DummyChainImpl, DummyUtxoSet};
 	use secp;
@@ -622,6 +621,8 @@ mod tests {
 	/// A basic test; add a pair of transactions to the pool.
 	fn test_basic_pool_add() {
 		let mut dummy_chain = DummyChainImpl::new();
+		let head_header = block::BlockHeader { height: 1, .. block::BlockHeader::default() };
+		dummy_chain.store_head_header(&head_header);
 
 		let parent_transaction = test_transaction(vec![5, 6, 7], vec![11, 3]);
 		// We want this transaction to be rooted in the blockchain.
@@ -679,6 +680,8 @@ mod tests {
 	/// Testing various expected error conditions
 	pub fn test_pool_add_error() {
 		let mut dummy_chain = DummyChainImpl::new();
+		let head_header = block::BlockHeader { height: 1, .. block::BlockHeader::default() };
+		dummy_chain.store_head_header(&head_header);
 
 		let new_utxo = DummyUtxoSet::empty()
 			.with_output(test_output(5))
@@ -806,7 +809,7 @@ mod tests {
 			};
 
 			let head_header = block::BlockHeader {
-				height: 4,
+				height: 3,
 				..block::BlockHeader::default()
 			};
 			chain_ref.store_head_header(&head_header);
@@ -848,6 +851,8 @@ mod tests {
 	/// Testing block reconciliation
 	fn test_block_reconciliation() {
 		let mut dummy_chain = DummyChainImpl::new();
+		let head_header = block::BlockHeader { height: 1, .. block::BlockHeader::default() };
+		dummy_chain.store_head_header(&head_header);
 
 		let new_utxo = DummyUtxoSet::empty()
 			.with_output(test_output(10))
@@ -997,6 +1002,8 @@ mod tests {
 	fn test_block_building() {
 		// Add a handful of transactions
 		let mut dummy_chain = DummyChainImpl::new();
+		let head_header = block::BlockHeader { height: 1, .. block::BlockHeader::default() };
+		dummy_chain.store_head_header(&head_header);
 
 		let new_utxo = DummyUtxoSet::empty()
 			.with_output(test_output(10))
