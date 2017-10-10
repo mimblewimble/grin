@@ -76,7 +76,7 @@ fn build_send_tx(
 		}
 
 		// build transaction skeleton with inputs and change
-		let parts = inputs_and_change(&coins, keychain, fingerprint, wallet_data, amount)?;
+		let mut parts = inputs_and_change(&coins, keychain, fingerprint, wallet_data, amount)?;
 
 		// This is more proof of concept than anything but here we set a
 		// lock_height on the transaction being sent (based on current chain height via api).
