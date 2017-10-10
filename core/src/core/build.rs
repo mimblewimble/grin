@@ -72,28 +72,6 @@ pub fn output(value: u64, pubkey: Identifier) -> Box<Append> {
 	})
 }
 
-/// Adds an output with the provided value and blinding key to the transaction
-/// being built. Mostly for tests, regular transaction building should use the
-/// keychain and identifier version of output building.
-pub fn output_raw(value: u64, sk: secp::key::SecretKey) -> Box<Append> {
-	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
-		let secp = build.keychain.secp();
-		let commit = secp.commit(value, sk).unwrap();
-		let msg = secp::pedersen::ProofMessage::empty();
-		let rproof = secp.range_proof(0, value, sk, commit, msg);
-		let pubkey = secp::key::PublicKey::from_secret_key(secp, &sk).unwrap();
-
-		(
-			tx.with_output(Output {
-				features: DEFAULT_OUTPUT,
-				commit: commit,
-				proof: rproof,
-			}),
-			sum.add_pubkey(Identifier::from_pubkey(secp, &pubkey)),
-		)
-	})
-}
-
 /// Sets the fee on the transaction being built.
 pub fn with_fee(fee: u64) -> Box<Append> {
 	Box::new(move |_build, (tx, sum)| -> (Transaction, BlindSum) {

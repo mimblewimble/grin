@@ -16,12 +16,10 @@ use api;
 use checker;
 use core::core::{Transaction, build};
 use core::ser;
-use keychain::{BlindingFactor, Keychain, Fingerprint};
+use keychain::{BlindingFactor, Keychain, Fingerprint, Identifier};
 use receiver::TxWrapper;
 use types::*;
 use util;
-
-use secp;
 
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
@@ -95,19 +93,18 @@ pub fn issue_burn_tx(
 
 	let _ = checker::refresh_outputs(config, keychain);
 	let fingerprint = keychain.clone().fingerprint();
-	let sk_burn = secp::key::SecretKey::from_slice(keychain.secp(), &[1, 32])?;
 
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |mut wallet_data| {
 		
 		// select all suitable outputs by passing largest amount
-		let (coins, _) = wallet_data.select(fingerprint.clone(), amount);
+		let (coins, _) = wallet_data.select(fingerprint.clone(), u64::max_value());
 
 		// build transaction skeleton with inputs and change
 		let mut parts = inputs_and_change(&coins, keychain, fingerprint, &mut wallet_data, amount)?;
 
 		// add burn output and fees
-		parts.push(build::output_raw(amount, sk_burn));
+		parts.push(build::output(amount, Identifier::from_bytes(&[0; 20])));
 
 		// finalize the burn transaction and send
 		let (tx_burn, _) = build::transaction(parts, &keychain)?;

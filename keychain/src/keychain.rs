@@ -48,6 +48,10 @@ impl From<extkey::Error> for Error {
 pub struct Keychain {
 	secp: Secp256k1,
 	extkey: extkey::ExtendedKey,
+
+	/// for tests and burn only, associate the zero fingerprint to a known
+	/// dummy private key
+	pub enable_burn_key: bool,
 }
 
 impl Keychain {
@@ -61,6 +65,7 @@ impl Keychain {
 		let keychain = Keychain {
 			secp: secp,
 			extkey: extkey,
+			enable_burn_key: false,
 		};
 		Ok(keychain)
 	}
@@ -82,6 +87,13 @@ impl Keychain {
 	// TODO - smarter lookups - can we cache key_id/fingerprint -> derivation
 	// number somehow?
 	fn derived_key(&self, pubkey: &Identifier) -> Result<SecretKey, Error> {
+		if self.enable_burn_key {
+			// for tests and burn only, associate the zero fingerprint to a known
+			// dummy private key
+			if pubkey.fingerprint().to_string() == "00000000" {
+				return Ok(SecretKey::from_slice(&self.secp, &[1; 32])?);
+			}
+		}
 		for i in 1..10000 {
 			let extkey = self.extkey.derive(&self.secp, i)?;
 			if extkey.identifier(&self.secp)? == *pubkey {

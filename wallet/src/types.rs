@@ -40,7 +40,10 @@ pub fn tx_fee(input_len: usize, output_len: usize, base_fee: Option<u64>) -> u64
 		Some(bf)  => bf,
 		None => DEFAULT_BASE_FEE,
 	};
-	let tx_weight = -1 * (input_len as i32) + (output_len as i32) + 1;
+	let mut tx_weight = -1 * (input_len as i32) + (output_len as i32) + 1;
+	if tx_weight < 1 {
+		tx_weight = 1;
+	}
 
 	(tx_weight as u64) * use_base_fee
 }
