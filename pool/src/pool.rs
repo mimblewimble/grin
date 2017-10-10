@@ -568,7 +568,6 @@ where
 			return Err(PoolError::OverCapacity);
 		}
 
-		//
 		// for a basic transaction (1 input, 2 outputs) -
 		// (-1 * 1) + (4 * 2) + 1 = 8
 		// 8 * 10 = 80
@@ -1061,7 +1060,7 @@ mod tests {
 
 	fn test_setup(dummy_chain: &Arc<DummyChainImpl>) -> TransactionPool<DummyChainImpl> {
 		TransactionPool {
-			config: PoolConfig{
+			config: PoolConfig {
 				accept_fee_base: 0,
 				max_pool_size: 10_000,
 			},
