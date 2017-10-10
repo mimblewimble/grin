@@ -234,10 +234,13 @@ fn receive_transaction(
 		let derivation = wallet_data.next_child(fingerprint.clone());
 		let pubkey = keychain.derive_pubkey(derivation)?;
 
-		// TODO - replace with real fee calculation
-		// TODO - note we are not enforcing this in consensus anywhere yet
-		// Note: consensus rules require this to be an even value so it can be split
-		let fee_amount = 10;
+		// from pool.rs
+		// (-1 * num_inputs) + (4 * num_outputs) + 1
+		// then multiply by accept_fee_base==10
+		// so 80 is basically the minimum fee for a basic transaction
+		// so lets use 100 for now (revisit this)
+
+		let fee_amount = 100;
 		let out_amount = amount - fee_amount;
 
 		let (tx_final, _) = build::transaction(vec![
