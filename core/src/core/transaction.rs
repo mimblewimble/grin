@@ -116,7 +116,9 @@ impl TxKernel {
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
 	pub fn verify(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
-		let msg = try!(Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height)));
+		let msg = try!(Message::from_slice(
+			&kernel_sig_msg(self.fee, self.lock_height),
+		));
 		let sig = try!(Signature::from_der(secp, &self.excess_sig));
 		secp.verify_from_commit(&msg, &sig, &self.excess)
 	}
@@ -254,12 +256,15 @@ impl Transaction {
 
 	/// Builds a new transaction with the provided fee.
 	pub fn with_fee(self, fee: u64) -> Transaction {
-		Transaction { fee: fee, .. self }
+		Transaction { fee: fee, ..self }
 	}
 
 	/// Builds a new transaction with the provided lock_height.
 	pub fn with_lock_height(self, lock_height: u64) -> Transaction {
-		Transaction { lock_height: lock_height, .. self }
+		Transaction {
+			lock_height: lock_height,
+			..self
+		}
 	}
 
 	/// The verification for a MimbleWimble transaction involves getting the
