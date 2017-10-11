@@ -40,9 +40,9 @@ pub enum Error {
 	/// Too many inputs, outputs or kernels in the block
 	WeightExceeded,
 	/// Kernel not valid due to lock_height exceeding block header height
-	KernelLockHeight{
+	KernelLockHeight {
 		/// The lock_height causing this validation error
-		lock_height: u64
+		lock_height: u64,
 	},
 	/// Underlying Secp256k1 error (signature validation or invalid public key typically)
 	Secp(secp::Error),
@@ -266,11 +266,7 @@ impl Block {
 		pubkey: &keychain::Identifier,
 	) -> Result<Block, keychain::Error> {
 		let fees = txs.iter().map(|tx| tx.fee).sum();
-		let (reward_out, reward_proof) = Block::reward_output(
-			keychain,
-			pubkey,
-			fees,
-		)?;
+		let (reward_out, reward_proof) = Block::reward_output(keychain, pubkey, fees)?;
 		let block = Block::with_reward(prev, txs, reward_out, reward_proof)?;
 		Ok(block)
 	}
@@ -447,7 +443,7 @@ impl Block {
 			}
 
 			if k.lock_height > self.header.height {
-				return Err(Error::KernelLockHeight{ lock_height: k.lock_height });
+				return Err(Error::KernelLockHeight { lock_height: k.lock_height });
 			}
 		}
 
