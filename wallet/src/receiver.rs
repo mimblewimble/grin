@@ -222,19 +222,23 @@ fn receive_coinbase(config: &WalletConfig,
 
 		debug!(LOGGER, "block_fees updated - {:?}", block_fees);
 
-		let (out, kern) = Block::reward_output(&keychain, &pubkey, block_fees.fees)?;
+		let (out, kern) = Block::reward_output(
+			&keychain,
+			&pubkey,
+			block_fees.fees,
+		)?;
 		Ok((out, kern, block_fees))
 	})?
 }
 
 /// Builds a full transaction from the partial one sent to us for transfer
-fn receive_transaction(config: &WalletConfig,
-                       keychain: &Keychain,
-                       amount: u64,
-                       blinding: BlindingFactor,
-                       partial: Transaction)
-                       -> Result<Transaction, Error> {
-
+fn receive_transaction(
+	config: &WalletConfig,
+	keychain: &Keychain,
+	amount: u64,
+	blinding: BlindingFactor,
+	partial: Transaction,
+) -> Result<Transaction, Error> {
 	let fingerprint = keychain.clone().fingerprint();
 
 	// operate within a lock on wallet data
@@ -280,7 +284,6 @@ fn receive_transaction(config: &WalletConfig,
 			pubkey.fingerprint(),
 			derivation
 		);
-
 		Ok(tx_final)
 	})?
 }

@@ -26,23 +26,23 @@ problem_files=()
 printf "[pre_commit] rustfmt "
 for file in $(git diff --name-only --cached); do
 	if [ ${file: -3} == ".rs" ]; then
-        cargo +nightly fmt -- --skip-children --write-mode=diff $file &>/dev/null
-				if [ $? != 0 ]; then
-					problem_files+=($file)
-					result=1
-				fi
+		cargo +nightly fmt -- --skip-children --write-mode=diff $file &>/dev/null
+		if [ $? != 0 ]; then
+			problem_files+=($file)
+			result=1
+		fi
 	fi
 done
 
 if [ $result != 0 ]; then
 	printf "\033[0;31mfail\033[0m \n"
-  printf "[pre_commit] the following files need formatting: \n"
+	printf "[pre_commit] the following files need formatting: \n"
 
 	for file in $problem_files; do
 		printf "    cargo +nightly fmt -- $file\n"
 	done
 else
-  printf "\033[0;32mok\033[0m \n"
+	printf "\033[0;32mok\033[0m \n"
 fi
 
 exit 0

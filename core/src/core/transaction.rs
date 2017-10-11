@@ -25,13 +25,13 @@ use keychain::{Identifier, Keychain};
 use ser::{self, Reader, Writer, Readable, Writeable};
 
 bitflags! {
-    /// Options for a kernel's structure or use
-    pub flags KernelFeatures: u8 {
-        /// No flags
-        const DEFAULT_KERNEL = 0b00000000,
-        /// Kernel matching a coinbase output
-        const COINBASE_KERNEL = 0b00000001,
-    }
+	/// Options for a kernel's structure or use
+	pub flags KernelFeatures: u8 {
+		/// No flags
+		const DEFAULT_KERNEL = 0b00000000,
+		/// Kernel matching a coinbase output
+		const COINBASE_KERNEL = 0b00000001,
+	}
 }
 
 /// Errors thrown by Block validation
@@ -50,14 +50,28 @@ impl From<secp::Error> for Error {
 	}
 }
 
+/// Construct msg bytes from tx fee and lock_height
+pub fn kernel_sig_msg(fee: u64, lock_height: u64) -> [u8; 32] {
+	let mut bytes = [0; 32];
+	BigEndian::write_u64(&mut bytes[16..24], fee);
+	BigEndian::write_u64(&mut bytes[24..], lock_height);
+	bytes
+}
+
 /// A proof that a transaction sums to zero. Includes both the transaction's
 /// Pedersen commitment and the signature, that guarantees that the commitments
-/// amount to zero. The signature signs the fee, which is retained for
+/// amount to zero.
+/// The signature signs the fee and the lock_height, which are retained for
 /// signature validation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TxKernel {
 	/// Options for a kernel's structure or use
 	pub features: KernelFeatures,
+	/// Fee originally included in the transaction this proof is for.
+	pub fee: u64,
+	/// This kernel is not valid earlier than lock_height blocks
+	/// The max lock_height of all *inputs* to this transaction
+	pub lock_height: u64,
 	/// Remainder of the sum of all transaction commitments. If the transaction
 	/// is well formed, amounts components should sum to zero and the excess
 	/// is hence a valid public key.
@@ -65,8 +79,6 @@ pub struct TxKernel {
 	/// The signature proving the excess is a valid public key, which signs
 	/// the transaction fee.
 	pub excess_sig: Vec<u8>,
-	/// Fee originally included in the transaction this proof is for.
-	pub fee: u64,
 }
 
 impl Writeable for TxKernel {
@@ -74,9 +86,10 @@ impl Writeable for TxKernel {
 		ser_multiwrite!(
 			writer,
 			[write_u8, self.features.bits()],
+			[write_u64, self.fee],
+			[write_u64, self.lock_height],
 			[write_fixed_bytes, &self.excess],
-			[write_bytes, &self.excess_sig],
-			[write_u64, self.fee]
+			[write_bytes, &self.excess_sig]
 		);
 		Ok(())
 	}
@@ -84,13 +97,16 @@ impl Writeable for TxKernel {
 
 impl Readable for TxKernel {
 	fn read(reader: &mut Reader) -> Result<TxKernel, ser::Error> {
+		let features = KernelFeatures::from_bits(reader.read_u8()?).ok_or(
+			ser::Error::CorruptedData,
+		)?;
+
 		Ok(TxKernel {
-			features: KernelFeatures::from_bits(reader.read_u8()?).ok_or(
-				ser::Error::CorruptedData,
-			)?,
+			features: features,
+			fee: reader.read_u64()?,
+			lock_height: reader.read_u64()?,
 			excess: Commitment::read(reader)?,
 			excess_sig: reader.read_vec()?,
-			fee: reader.read_u64()?,
 		})
 	}
 }
@@ -100,7 +116,9 @@ impl TxKernel {
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
 	pub fn verify(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
-		let msg = try!(Message::from_slice(&u64_to_32bytes(self.fee)));
+		let msg = try!(Message::from_slice(
+			&kernel_sig_msg(self.fee, self.lock_height),
+		));
 		let sig = try!(Signature::from_der(secp, &self.excess_sig));
 		secp.verify_from_commit(&msg, &sig, &self.excess)
 	}
@@ -115,6 +133,9 @@ pub struct Transaction {
 	pub outputs: Vec<Output>,
 	/// Fee paid by the transaction.
 	pub fee: u64,
+	/// Transaction is not valid before this block height.
+	/// It is invalid for this to be less than the lock_height of any UTXO being spent.
+	pub lock_height: u64,
 	/// The signature proving the excess is a valid public key, which signs
 	/// the transaction fee.
 	pub excess_sig: Vec<u8>,
@@ -127,6 +148,7 @@ impl Writeable for Transaction {
 		ser_multiwrite!(
 			writer,
 			[write_u64, self.fee],
+			[write_u64, self.lock_height],
 			[write_bytes, &self.excess_sig],
 			[write_u64, self.inputs.len() as u64],
 			[write_u64, self.outputs.len() as u64]
@@ -145,14 +167,15 @@ impl Writeable for Transaction {
 /// transaction from a binary stream.
 impl Readable for Transaction {
 	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
-		let (fee, excess_sig, input_len, output_len) =
-			ser_multiread!(reader, read_u64, read_vec, read_u64, read_u64);
+		let (fee, lock_height, excess_sig, input_len, output_len) =
+			ser_multiread!(reader, read_u64, read_u64, read_vec, read_u64, read_u64);
 
 		let inputs = try!((0..input_len).map(|_| Input::read(reader)).collect());
 		let outputs = try!((0..output_len).map(|_| Output::read(reader)).collect());
 
 		Ok(Transaction {
 			fee: fee,
+			lock_height: lock_height,
 			excess_sig: excess_sig,
 			inputs: inputs,
 			outputs: outputs,
@@ -185,17 +208,24 @@ impl Transaction {
 	pub fn empty() -> Transaction {
 		Transaction {
 			fee: 0,
+			lock_height: 0,
 			excess_sig: vec![],
 			inputs: vec![],
 			outputs: vec![],
 		}
 	}
 
-	/// Creates a new transaction initialized with the provided inputs,
-	/// outputs and fee.
-	pub fn new(inputs: Vec<Input>, outputs: Vec<Output>, fee: u64) -> Transaction {
+	/// Creates a new transaction initialized with
+	/// the provided inputs, outputs, fee and lock_height.
+	pub fn new(
+		inputs: Vec<Input>,
+		outputs: Vec<Output>,
+		fee: u64,
+		lock_height: u64,
+	) -> Transaction {
 		Transaction {
 			fee: fee,
+			lock_height: lock_height,
 			excess_sig: vec![],
 			inputs: inputs,
 			outputs: outputs,
@@ -229,6 +259,14 @@ impl Transaction {
 		Transaction { fee: fee, ..self }
 	}
 
+	/// Builds a new transaction with the provided lock_height.
+	pub fn with_lock_height(self, lock_height: u64) -> Transaction {
+		Transaction {
+			lock_height: lock_height,
+			..self
+		}
+	}
+
 	/// The verification for a MimbleWimble transaction involves getting the
 	/// excess of summing all commitments and using it as a public key
 	/// to verify the embedded signature. The rational is that if the values
@@ -238,7 +276,7 @@ impl Transaction {
 	pub fn verify_sig(&self, secp: &Secp256k1) -> Result<TxKernel, secp::Error> {
 		let rsum = self.sum_commitments(secp)?;
 
-		let msg = Message::from_slice(&u64_to_32bytes(self.fee))?;
+		let msg = Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height))?;
 		let sig = Signature::from_der(secp, &self.excess_sig)?;
 
 		// pretend the sum is a public key (which it is, being of the form r.G) and
@@ -250,12 +288,20 @@ impl Transaction {
 		// of generating a public key from a commitment behind verify_from_commit
 		secp.verify_from_commit(&msg, &sig, &rsum)?;
 
-		Ok(TxKernel {
+		let kernel = TxKernel {
 			features: DEFAULT_KERNEL,
 			excess: rsum,
 			excess_sig: self.excess_sig.clone(),
 			fee: self.fee,
-		})
+			lock_height: self.lock_height,
+		};
+		debug!(
+			"tx verify_sig: fee - {}, lock_height - {}",
+			kernel.fee,
+			kernel.lock_height
+		);
+
+		Ok(kernel)
 	}
 
 	/// Validates all relevant parts of a fully built transaction. Checks the
@@ -303,14 +349,14 @@ impl Input {
 }
 
 bitflags! {
-    /// Options for block validation
-    #[derive(Serialize, Deserialize)]
-    pub flags OutputFeatures: u8 {
-        /// No flags
-        const DEFAULT_OUTPUT = 0b00000000,
-        /// Output is a coinbase output, has fixed amount and must not be spent until maturity
-        const COINBASE_OUTPUT = 0b00000001,
-    }
+	/// Options for block validation
+	#[derive(Serialize, Deserialize)]
+	pub flags OutputFeatures: u8 {
+		/// No flags
+		const DEFAULT_OUTPUT = 0b00000000,
+		/// Output is a coinbase output, must not be spent until maturity
+		const COINBASE_OUTPUT = 0b00000001,
+	}
 }
 
 /// Output for a transaction, defining the new ownership of coins that are being
@@ -318,9 +364,8 @@ bitflags! {
 /// range proof guarantees the commitment includes a positive value without
 /// overflow and the ownership of the private key.
 ///
-/// The hash of an output only covers its features and commitment. The range
-/// proof is expected to have its own hash and is stored and committed to
-/// separately.
+/// The hash of an output only covers its features, lock_height and commitment.
+/// The range proof is expected to have its own hash and is stored and committed to separately.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Output {
 	/// Options for an output's structure or use
@@ -335,11 +380,9 @@ pub struct Output {
 /// an Output as binary.
 impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(
-			writer,
-			[write_u8, self.features.bits()],
-			[write_fixed_bytes, &self.commit]
-		);
+		writer.write_u8(self.features.bits())?;
+		writer.write_fixed_bytes(&self.commit)?;
+
 		// The hash of an output doesn't include the range proof
 		if writer.serialization_mode() == ser::SerializationMode::Full {
 			writer.write_bytes(&self.proof)?
@@ -352,10 +395,12 @@ impl Writeable for Output {
 /// an Output from a binary stream.
 impl Readable for Output {
 	fn read(reader: &mut Reader) -> Result<Output, ser::Error> {
+		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
+			ser::Error::CorruptedData,
+		)?;
+
 		Ok(Output {
-			features: OutputFeatures::from_bits(reader.read_u8()?).ok_or(
-				ser::Error::CorruptedData,
-			)?,
+			features: features,
 			commit: Commitment::read(reader)?,
 			proof: RangeProof::read(reader)?,
 		})
@@ -388,8 +433,8 @@ impl Output {
 				} else {
 					None
 				}
-			},
-			Err(_) => None
+			}
+			Err(_) => None,
 		}
 	}
 }
@@ -453,17 +498,79 @@ impl ops::Add for SumCommit {
 	}
 }
 
-fn u64_to_32bytes(n: u64) -> [u8; 32] {
-	let mut bytes = [0; 32];
-	BigEndian::write_u64(&mut bytes[24..32], n);
-	bytes
-}
-
 #[cfg(test)]
 mod test {
 	use super::*;
 	use keychain::Keychain;
 	use secp;
+
+	#[test]
+	fn test_kernel_ser_deser() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let pubkey = keychain.derive_pubkey(1).unwrap();
+		let commit = keychain.commit(5, &pubkey).unwrap();
+
+		// just some bytes for testing ser/deser
+		let sig = vec![1, 0, 0, 0, 0, 0, 0, 1];
+
+		let kernel = TxKernel {
+			features: DEFAULT_KERNEL,
+			lock_height: 0,
+			excess: commit,
+			excess_sig: sig.clone(),
+			fee: 10,
+		};
+
+		let mut vec = vec![];
+		ser::serialize(&mut vec, &kernel).expect("serialized failed");
+		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
+		assert_eq!(kernel2.features, DEFAULT_KERNEL);
+		assert_eq!(kernel2.lock_height, 0);
+		assert_eq!(kernel2.excess, commit);
+		assert_eq!(kernel2.excess_sig, sig.clone());
+		assert_eq!(kernel2.fee, 10);
+
+		// now check a kernel with lock_height serializes/deserializes correctly
+		let kernel = TxKernel {
+			features: DEFAULT_KERNEL,
+			lock_height: 100,
+			excess: commit,
+			excess_sig: sig.clone(),
+			fee: 10,
+		};
+
+		let mut vec = vec![];
+		ser::serialize(&mut vec, &kernel).expect("serialized failed");
+		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
+		assert_eq!(kernel2.features, DEFAULT_KERNEL);
+		assert_eq!(kernel2.lock_height, 100);
+		assert_eq!(kernel2.excess, commit);
+		assert_eq!(kernel2.excess_sig, sig.clone());
+		assert_eq!(kernel2.fee, 10);
+	}
+
+	#[test]
+	fn test_output_ser_deser() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let pubkey = keychain.derive_pubkey(1).unwrap();
+		let commit = keychain.commit(5, &pubkey).unwrap();
+		let msg = secp::pedersen::ProofMessage::empty();
+		let proof = keychain.range_proof(5, &pubkey, commit, msg).unwrap();
+
+		let out = Output {
+			features: DEFAULT_OUTPUT,
+			commit: commit,
+			proof: proof,
+		};
+
+		let mut vec = vec![];
+		ser::serialize(&mut vec, &out).expect("serialized failed");
+		let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
+
+		assert_eq!(dout.features, DEFAULT_OUTPUT);
+		assert_eq!(dout.commit, out.commit);
+		assert_eq!(dout.proof, out.proof);
+	}
 
 	#[test]
 	fn test_output_value_recovery() {

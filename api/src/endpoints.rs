@@ -78,6 +78,7 @@ impl ApiEndpoint for OutputApi {
 		let out = self.chain
 			.get_unspent(&commit)
 			.map_err(|_| Error::NotFound)?;
+
 		let header = self.chain
 			.get_block_header_by_output_commit(&commit)
 			.map_err(|_| Error::NotFound)?;

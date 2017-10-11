@@ -543,10 +543,8 @@ impl Miner {
 
 		// build the coinbase and the block itself
 		let fees = txs.iter().map(|tx| tx.fee).sum();
-		let block_fees = BlockFees {
-			fees: fees,
-			pubkey: pubkey,
-		};
+		let height = head.height + 1;
+		let block_fees = BlockFees { fees, pubkey, height };
 
 		let (output, kernel, block_fees) = self.get_coinbase(block_fees);
 		let mut b = core::Block::with_reward(head, txs, output, kernel).unwrap();
@@ -577,8 +575,11 @@ impl Miner {
 		if self.config.burn_reward {
 			let keychain = Keychain::from_random_seed().unwrap();
 			let pubkey = keychain.derive_pubkey(1).unwrap();
-			let (out, kern) = core::Block::reward_output(&keychain, &pubkey, block_fees.fees)
-				.unwrap();
+			let (out, kern) = core::Block::reward_output(
+				&keychain,
+				&pubkey,
+				block_fees.fees,
+			).unwrap();
 			(out, kern, block_fees)
 		} else {
 			let url = format!(

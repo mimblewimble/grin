@@ -39,8 +39,12 @@ pub enum Error {
 	OddKernelFee,
 	/// Too many inputs, outputs or kernels in the block
 	WeightExceeded,
-	/// Underlying Secp256k1 error (signature validation or invalid public
-	/// key typically)
+	/// Kernel not valid due to lock_height exceeding block header height
+	KernelLockHeight {
+		/// The lock_height causing this validation error
+		lock_height: u64,
+	},
+	/// Underlying Secp256k1 error (signature validation or invalid public key typically)
 	Secp(secp::Error),
 }
 
@@ -252,13 +256,15 @@ impl Block {
 	/// Builds a new block from the header of the previous block, a vector of
 	/// transactions and the private key that will receive the reward. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
+	///
+	/// Only used in tests (to be confirmed, may be wrong here).
+	///
 	pub fn new(
 		prev: &BlockHeader,
 		txs: Vec<&Transaction>,
 		keychain: &keychain::Keychain,
 		pubkey: &keychain::Identifier,
 	) -> Result<Block, keychain::Error> {
-
 		let fees = txs.iter().map(|tx| tx.fee).sum();
 		let (reward_out, reward_proof) = Block::reward_output(keychain, pubkey, fees)?;
 		let block = Block::with_reward(prev, txs, reward_out, reward_proof)?;
@@ -415,6 +421,9 @@ impl Block {
 	/// Validates all the elements in a block that can be checked without
 	/// additional data. Includes commitment sums and kernels, Merkle
 	/// trees, reward, etc.
+	///
+	/// TODO - performs various verification steps - discuss renaming this to "verify"
+	///
 	pub fn validate(&self, secp: &Secp256k1) -> Result<(), Error> {
 		if exceeds_weight(self.inputs.len(), self.outputs.len(), self.kernels.len()) {
 			return Err(Error::WeightExceeded);
@@ -424,14 +433,20 @@ impl Block {
 		Ok(())
 	}
 
-	/// Validate the sum of input/output commitments match the sum in kernels
+	/// Verifies the sum of input/output commitments match the sum in kernels
 	/// and that all kernel signatures are valid.
+	/// TODO - when would we skip_sig? Is this needed or used anywhere?
 	fn verify_kernels(&self, secp: &Secp256k1, skip_sig: bool) -> Result<(), Error> {
 		for k in &self.kernels {
 			if k.fee & 1 != 0 {
 				return Err(Error::OddKernelFee);
 			}
+
+			if k.lock_height > self.header.height {
+				return Err(Error::KernelLockHeight { lock_height: k.lock_height });
+			}
 		}
+
 		// sum all inputs and outs commitments
 		let io_sum = self.sum_commitments(secp)?;
 
@@ -483,8 +498,7 @@ impl Block {
 		Ok(())
 	}
 
-	/// Builds the blinded output and related signature proof for the block
-	/// reward.
+	/// Builds the blinded output and related signature proof for the block reward.
 	pub fn reward_output(
 		keychain: &keychain::Keychain,
 		pubkey: &keychain::Identifier,
@@ -515,6 +529,7 @@ impl Block {
 			excess: excess,
 			excess_sig: sig.serialize_der(&secp),
 			fee: 0,
+			lock_height: 0,
 		};
 		Ok((output, proof))
 	}
@@ -553,7 +568,7 @@ mod test {
 		let max_out = MAX_BLOCK_WEIGHT / BLOCK_OUTPUT_WEIGHT;
 
 		let mut pks = vec![];
-		for n in 0..(max_out+1) {
+		for n in 0..(max_out + 1) {
 			pks.push(keychain.derive_pubkey(n as u32).unwrap());
 		}
 
@@ -564,7 +579,9 @@ mod test {
 
 		let now = Instant::now();
 		parts.append(&mut vec![input(500000, pks.pop().unwrap()), with_fee(2)]);
-		let mut tx = build::transaction(parts, &keychain).map(|(tx, _)| tx).unwrap();
+		let mut tx = build::transaction(parts, &keychain)
+			.map(|(tx, _)| tx)
+			.unwrap();
 		println!("Build tx: {}", now.elapsed().as_secs());
 
 		let b = new_block(vec![&mut tx], &keychain);

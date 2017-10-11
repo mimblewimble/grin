@@ -271,7 +271,7 @@ mod tests {
 				proof: keychain.range_proof(100, &pk1, output_commit, msg).unwrap(),
 			},
 		];
-		let test_transaction = core::transaction::Transaction::new(inputs, outputs, 5);
+		let test_transaction = core::transaction::Transaction::new(inputs, outputs, 5, 0);
 
 		let test_pool_entry = PoolEntry::new(&test_transaction);
 

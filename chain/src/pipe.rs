@@ -268,8 +268,7 @@ fn validate_block(b: &Block,
 		return Err(Error::InvalidRoot);
 	}
 
-	// check that any coinbase outputs are spendable (that they have matured
-	// sufficiently)
+	// check for any outputs with lock_heights greater than current block height
 	for input in &b.inputs {
 		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
 			if output.features.contains(transaction::COINBASE_OUTPUT) {
