@@ -186,7 +186,8 @@ impl Writeable for Proof {
 mod test {
 	use super::*;
 	use core::hash::ZERO_HASH;
-	use core::build::{input, output, with_fee, initial_tx, with_excess};
+	use core::build::{input, output, with_fee, initial_tx, with_excess, with_lock_height};
+	use core::block::Error::KernelLockHeight;
 	use ser;
 	use keychain;
 	use keychain::{Keychain, BlindingFactor};
@@ -327,20 +328,16 @@ mod test {
 
 	#[test]
 	fn reward_empty_block() {
-		let keychain = new_keychain();
+		let keychain = keychain::Keychain::from_random_seed().unwrap();
 		let pubkey = keychain.derive_pubkey(1).unwrap();
 
 		let b = Block::new(&BlockHeader::default(), vec![], &keychain, &pubkey).unwrap();
 		b.compact().validate(&keychain.secp()).unwrap();
 	}
 
-	fn new_keychain() -> keychain::Keychain {
-		keychain::Keychain::from_random_seed().unwrap()
-	}
-
 	#[test]
 	fn reward_with_tx_block() {
-		let keychain = new_keychain();
+		let keychain = keychain::Keychain::from_random_seed().unwrap();
 		let pubkey = keychain.derive_pubkey(1).unwrap();
 
 		let mut tx1 = tx2i1o();
@@ -352,14 +349,11 @@ mod test {
 
 	#[test]
 	fn simple_block() {
-		let keychain = new_keychain();
+		let keychain = keychain::Keychain::from_random_seed().unwrap();
 		let pubkey = keychain.derive_pubkey(1).unwrap();
 
 		let mut tx1 = tx2i1o();
-		tx1.verify_sig(keychain.secp()).unwrap();
-
 		let mut tx2 = tx1i1o();
-		tx2.verify_sig(keychain.secp()).unwrap();
 
 		let b = Block::new(
 			&BlockHeader::default(),
@@ -371,22 +365,65 @@ mod test {
 	}
 
 	#[test]
+	fn test_block_with_timelocked_tx() {
+		let keychain = keychain::Keychain::from_random_seed().unwrap();
+
+		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let pk2 = keychain.derive_pubkey(2).unwrap();
+		let pk3 = keychain.derive_pubkey(3).unwrap();
+
+		// first check we can add a timelocked tx where lock height matches current block height
+		// and that the resulting block is valid
+		let tx1 = build::transaction(
+			vec![input(5, pk1.clone()), output(3, pk2.clone()), with_fee(2), with_lock_height(1)],
+			&keychain,
+		).map(|(tx, _)| tx).unwrap();
+
+		let b = Block::new(
+			&BlockHeader::default(),
+			vec![&tx1],
+			&keychain,
+			&pk3.clone(),
+		).unwrap();
+		b.validate(keychain.secp()).unwrap();
+
+		// now try adding a timelocked tx where lock height is greater than current block height
+		let tx1 = build::transaction(
+			vec![input(5, pk1.clone()), output(3, pk2.clone()), with_fee(2), with_lock_height(2)],
+			&keychain,
+		).map(|(tx, _)| tx).unwrap();
+
+		let b = Block::new(
+			&BlockHeader::default(),
+			vec![&tx1],
+			&keychain,
+			&pk3.clone(),
+		).unwrap();
+		match b.validate(keychain.secp()) {
+			Err(KernelLockHeight{ lock_height: height}) => {
+				assert_eq!(height, 2);
+			},
+			_ => panic!("expecting KernelLockHeight error here"),
+		}
+	}
+
+	#[test]
 	pub fn test_verify_1i1o_sig() {
-		let keychain = new_keychain();
+		let keychain = keychain::Keychain::from_random_seed().unwrap();
 		let tx = tx1i1o();
 		tx.verify_sig(keychain.secp()).unwrap();
 	}
 
 	#[test]
 	pub fn test_verify_2i1o_sig() {
-		let keychain = new_keychain();
+		let keychain = keychain::Keychain::from_random_seed().unwrap();
 		let tx = tx2i1o();
 		tx.verify_sig(keychain.secp()).unwrap();
 	}
 
 	// utility producing a transaction with 2 inputs and a single outputs
 	pub fn tx2i1o() -> Transaction {
-		let keychain = new_keychain();
+		let keychain = keychain::Keychain::from_random_seed().unwrap();
 		let pk1 = keychain.derive_pubkey(1).unwrap();
 		let pk2 = keychain.derive_pubkey(2).unwrap();
 		let pk3 = keychain.derive_pubkey(3).unwrap();
@@ -400,7 +437,7 @@ mod test {
 
 	// utility producing a transaction with a single input and output
 	pub fn tx1i1o() -> Transaction {
-		let keychain = new_keychain();
+		let keychain = keychain::Keychain::from_random_seed().unwrap();
 		let pk1 = keychain.derive_pubkey(1).unwrap();
 		let pk2 = keychain.derive_pubkey(2).unwrap();
 
