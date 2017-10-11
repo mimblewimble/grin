@@ -66,14 +66,14 @@ Provided all of the prerequisites were installed and there were no issues, there
 By default, executing:
 
 ```
-RUST_LOG=grin=debug cargo run
+cargo run
 ```
 from the build directory will run grin using the defaults in the grin.toml file, creating a new blockchain locally and mining using a simple version of the embedded miner.
 
 For the time being, it's recommended just to put the built version of grin on your path, e.g. via:
 
 ```
-export PATH=/path/to/grin/dir/target/debug/grin:$PATH
+export PATH=/path/to/grin/dir/target/debug:$PATH
 ```
 
 # Configuration
@@ -100,11 +100,11 @@ For a basic example simulating a single node network, create a directory called 
 
 Before running your mining server, a wallet server needs to be set up and listening so that the mining server knows where to send mining rewards. Do this from the first node directory with the following command:
 
-    node1$ RUST_LOG=grin=info grin wallet -p "password" receive
+    node1$ grin wallet -p "password" receive
 
-(Note you can substitute 'RUST_LOG=grin=debug' if you'd like to see more detailed debug output.) This will create a wallet server listening on the default port 13415 with the password "password". Next, in another terminal window in the 'node1' directory, run a full mining node with the following command:
+This will create a wallet server listening on the default port 13415 with the password "password". Next, in another terminal window in the 'node1' directory, run a full mining node with the following command:
 
-    node1$ RUST_LOG=grin=info grin server -m run
+    node1$ grin server -m run
 
 This creates a new .grin database directory in the current directory, and begins mining new blocks (with no transactions, for now). Note this starts two services listening on two default ports, 
 port 13414 for the peer-to-peer (P2P) service which keeps all nodes synchronised, and 13415 for the Rest API service used to verify transactions and post new transactions to the pool (for example). These ports can be configured via command line switches, or via a grin.toml file in the working directory.
@@ -123,11 +123,11 @@ As before, node 1 will create the blockchain and begin mining. As we'll be runni
 
 First, we run a wallet server to receive rewards on port 15000 (we'll log in debug mode for more information about what's happening)
 
-    node1$ RUST_LOG=grin=debug grin wallet -p "password" -r 15000 receive
+    node1$ grin wallet -p "password" -r 15000 receive
 
 Then we start node 1 mining with its P2P server bound to port 10000 and its api server at 10001. We also provide our wallet address where we'll receive mining rewards. In another terminal:
 
-    node1$ RUST_LOG=grin=debug grin server -m -p 10000 -a 10001 -w "http://127.0.0.1:15000" run
+    node1$ grin server -m -p 10000 -a 10001 -w "http://127.0.0.1:15000" run
 
 ### Node 2: Regular Node (not mining)
 
@@ -135,7 +135,7 @@ We'll set up Node 2 as a simple validating node (i.e. it won't mine,) but we'll 
 
 In a new terminal, tell node 2 to run a sever using node 1's P2P address as a seed.  Node 2's P2P server will run on port 20000 and its API server will run on port 20001.
 
-    node2$ RUST_LOG=grin=debug grin server -s "127.0.0.1:10000" -p 20000 -a 20001 run
+    node2$ grin server -s "127.0.0.1:10000" -p 20000 -a 20001 run
 
 Node 2 will then sync and process and validate new blocks that node 1 may find.
 
@@ -143,11 +143,11 @@ Node 2 will then sync and process and validate new blocks that node 1 may find.
 
 Similar to Node 2, we'll set up node 3 as a non-mining node seeded with node 2 (node 1 could also be used). However, we'll also run another wallet in listener mode on this node:
 
-    node3$ RUST_LOG=grin=debug grin server -s "127.0.0.1:20000" -p 30000 -a 30001 run
+    node3$ grin server -s "127.0.0.1:20000" -p 30000 -a 30001 run
 
 Node 3 is now running it's P2P service on port 30000 and its API server on 30001. You should be able to see it syncing its blockchain and peer data with nodes 1 and 2. Now start up a wallet listener.
 
-    node3$ RUST_LOG=grin=debug grin wallet -p "password" -a "http://127.0.0.1:10001" -r 35000 receive
+    node3$ grin wallet -p "password" -a "http://127.0.0.1:10001" -r 35000 receive
 
 In contrast to other blockchains, a feature of a MimbleWimble is that a transaction cannot just be directly posted to the blockchain. It first needs to be sent from the sender to the receiver,
 who will add a blinding factor before posting it to the blockchain. The above command tells the wallet server to listen for transactions on port 35000, and, after applying it's own blinding factor to the transaction, forward them on to the listening API server on node 1. (NB: we should theoretically be able to post transactions to node 3 or 2, but for some reason transactions posted to peers don't seem to propagate properly at present)
@@ -159,7 +159,7 @@ With all of your servers happily running and your terminals scrolling away, let'
 In yet another terminal in node 1's directory, create a new partial transaction spending 20000 coins and send them on to node 3's wallet listener. We'll also specify that we'll
 use node 2's API listener to validate our transaction inputs before sending:
 
-    node1$ RUST_LOG=grin=debug grin wallet -p "password" -a "http://127.0.0.1:20001" send 20000 -d "http://127.0.0.1:35000"
+    node1$ grin wallet -p "password" -a "http://127.0.0.1:20001" send 20000 -d "http://127.0.0.1:35000"
 
 Your terminal windows should all light up now. Node 1 will check its inputs against node 2, and then send a partial transaction to node 3's wallet listener. Node 3 has been configured to 
 send signed and finalised transactions to the api listener on node 1, which should then add the transaction to the next block and validate it via mining.

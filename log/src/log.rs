@@ -32,7 +32,9 @@ fn convert_log_level(in_level:&LogLevel)->Level{
 }
 
 lazy_static! {
+	/// Static Logging configuration, should only be set once, before first logging call
 	static ref LOGGING_CONFIG: Mutex<LoggingConfig> = Mutex::new(LoggingConfig::default());
+	/// And a static reference to the logger itself, accessible from all crates
 	pub static ref LOGGER: Logger = {
 		let config = LOGGING_CONFIG.lock().unwrap();
 		let slog_level_stdout = convert_log_level(&config.stdout_log_level);
@@ -48,31 +50,33 @@ lazy_static! {
 			terminal_drain = slog_async::Async::new(Discard{}).build().fuse();
 		}
 		
-		//File drain
-		let file = OpenOptions::new()
-			.create(true)
-			.write(true)
-			.append(config.log_file_append)
-			.truncate(false)
-			.open(&config.log_file_path)
-			.unwrap();
+		let mut file_drain_final = slog_async::Async::new(Discard{}).build().fuse();
 
-		let file_decorator = slog_term::PlainDecorator::new(file);
-		let file_drain = slog_term::FullFormat::new(file_decorator).build().fuse();
-		let file_drain = LevelFilter::new(file_drain, slog_level_file).fuse();
-		let mut file_drain = slog_async::Async::new(file_drain).build().fuse();
+		if config.log_to_file {
+			//File drain
+			let file = OpenOptions::new()
+				.create(true)
+				.write(true)
+				.append(config.log_file_append)
+				.truncate(false)
+				.open(&config.log_file_path)
+				.unwrap();
 
-		if !config.log_to_file {
-			file_drain = slog_async::Async::new(Discard{}).build().fuse();
+			let file_decorator = slog_term::PlainDecorator::new(file);
+			let file_drain = slog_term::FullFormat::new(file_decorator).build().fuse();
+			let file_drain = LevelFilter::new(file_drain, slog_level_file).fuse();
+			file_drain_final = slog_async::Async::new(file_drain).build().fuse();
 		}
 
 		//Compose file and terminal drains
-		let composite_drain = Duplicate::new(terminal_drain, file_drain).fuse();
+		let composite_drain = Duplicate::new(terminal_drain, file_drain_final).fuse();
 
 		let log = Logger::root(composite_drain, o!());
 		log
   };
 }
+
+/// Initialises the logger with the given configuration
 
 pub fn init(config:Option<LoggingConfig>){
 	if let Some(c) = config {

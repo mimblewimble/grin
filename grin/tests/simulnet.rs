@@ -21,7 +21,6 @@ extern crate grin_wallet as wallet;
 extern crate grin_pow as pow;
 extern crate secp256k1zkp as secp;
 
-extern crate env_logger;
 extern crate futures;
 extern crate tokio_core;
 extern crate tokio_timer;
@@ -49,7 +48,6 @@ use framework::{LocalServerContainer, LocalServerContainerConfig, LocalServerCon
 /// Block and mining into a wallet for a bit
 #[test]
 fn basic_genesis_mine() {
-	let _ = env_logger::init();
 	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "genesis_mine";
@@ -80,7 +78,6 @@ fn basic_genesis_mine() {
 /// messages they all end up connected.
 #[test]
 fn simulate_seeding() {
-	let _ = env_logger::init();
 	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "simulate_seeding";
@@ -134,7 +131,6 @@ fn simulate_seeding() {
 //#[test]
 #[allow(dead_code)]
 fn simulate_parallel_mining() {
-	let _ = env_logger::init();
 	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "simulate_parallel_mining";
@@ -190,7 +186,6 @@ fn simulate_parallel_mining() {
 /// gets propagated to all.
 #[test]
 fn a_simulate_block_propagation() {
-	env_logger::init();
 	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "grin-prop";
@@ -262,7 +257,6 @@ fn a_simulate_block_propagation() {
 /// them and check that the 2nd gets all the blocks
 #[test]
 fn simulate_full_sync() {
-	env_logger::init();
 	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "grin-sync";

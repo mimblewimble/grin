@@ -14,7 +14,6 @@
 
 extern crate grin_core as core;
 extern crate grin_p2p as p2p;
-extern crate env_logger;
 extern crate futures;
 extern crate tokio_core;
 
@@ -33,7 +32,6 @@ use p2p::Peer;
 // followed by a ping/pong exchange to make sure the connection is live.
 #[test]
 fn peer_handshake() {
-	env_logger::init().unwrap();
 
 	let mut evtlp = Core::new().unwrap();
 	let handle = evtlp.handle();

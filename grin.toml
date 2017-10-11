@@ -59,7 +59,7 @@ port = 13414
 [logging]
 
 # Whether to log to stdout
-log_to_stdout = false
+log_to_stdout = true
 
 # Log level for stdout: Critical, Error, Warning, Info, Debug, Trace
 stdout_log_level = "Debug"
@@ -86,7 +86,7 @@ log_file_append = true
 
 #flag whether mining is enabled
 
-enable_mining = true
+enable_mining = false
 
 #Whether to use cuckoo-miner,  and related parameters
 
@@ -107,7 +107,7 @@ cuckoo_miner_async_mode = false
 #The amount of time, in seconds, to attempt to mine on a particular
 #header before stopping and re-collecting transactions from the pool
 
-attempt_time_per_block = 30
+attempt_time_per_block = 90
 
 #the wallet reciever to which coinbase rewards will be sent
 
@@ -115,7 +115,7 @@ wallet_receiver_url = "http://127.0.0.1:13416"
 
 #whether to ignore the reward (mostly for testing)
 
-burn_reward = true
+burn_reward = false
 
 #testing value, optional
 #slow_down_in_millis = 30

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 //! Logging configuration types
-use slog::Level;
 
 /// Log level types, as slog's don't implement serialize
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,7 +53,7 @@ impl Default for LoggingConfig {
 		LoggingConfig {
 			log_to_stdout: true,
 			stdout_log_level: LogLevel::Debug,
-			log_to_file: true,
+			log_to_file: false,
 			file_log_level: LogLevel::Trace,
 			log_file_path: String::from("grin.log"),
 			log_file_append: false,
