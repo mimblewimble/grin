@@ -25,10 +25,10 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use byteorder::{ByteOrder, BigEndian};
 use secp;
 
 use core::{Transaction, Input, Output, DEFAULT_OUTPUT};
+use core::transaction::kernel_sig_msg;
 use keychain;
 use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
 
@@ -122,20 +122,10 @@ pub fn transaction(
 		|acc, elem| elem(&mut ctx, acc),
 	);
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
-	let msg = secp::Message::from_slice(&transaction_fee_and_lock_height_to_bytes(
-		tx.fee,
-		tx.lock_height,
-	))?;
+	let msg = secp::Message::from_slice(&kernel_sig_msg(tx.fee, tx.lock_height))?;
 	let sig = ctx.keychain.sign_with_blinding(&msg, &blind_sum)?;
 	tx.excess_sig = sig.serialize_der(&ctx.keychain.secp());
 	Ok((tx, blind_sum))
-}
-
-fn transaction_fee_and_lock_height_to_bytes(fee: u64, lock_height: u64) -> [u8; 32] {
-	let mut bytes = [0; 32];
-	BigEndian::write_u64(&mut bytes[16..24], fee);
-	BigEndian::write_u64(&mut bytes[24..], lock_height);
-	bytes
 }
 
 // Just a simple test, most exhaustive tests in the core mod.rs.

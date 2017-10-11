@@ -50,6 +50,14 @@ impl From<secp::Error> for Error {
 	}
 }
 
+/// Construct msg bytes from tx fee and lock_height
+pub fn kernel_sig_msg(fee: u64, lock_height: u64) -> [u8; 32] {
+	let mut bytes = [0; 32];
+	BigEndian::write_u64(&mut bytes[16..24], fee);
+	BigEndian::write_u64(&mut bytes[24..], lock_height);
+	bytes
+}
+
 /// A proof that a transaction sums to zero. Includes both the transaction's
 /// Pedersen commitment and the signature, that guarantees that the commitments
 /// amount to zero.
@@ -108,12 +116,7 @@ impl TxKernel {
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
 	pub fn verify(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
-		let msg = try!(Message::from_slice(
-			&transaction_fee_and_lock_height_to_bytes(
-				self.fee,
-				self.lock_height,
-			),
-		));
+		let msg = try!(Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height)));
 		let sig = try!(Signature::from_der(secp, &self.excess_sig));
 		secp.verify_from_commit(&msg, &sig, &self.excess)
 	}
@@ -251,14 +254,12 @@ impl Transaction {
 
 	/// Builds a new transaction with the provided fee.
 	pub fn with_fee(self, fee: u64) -> Transaction {
-		Transaction { fee: fee, ..self }
+		Transaction { fee: fee, .. self }
 	}
 
+	/// Builds a new transaction with the provided lock_height.
 	pub fn with_lock_height(self, lock_height: u64) -> Transaction {
-		Transaction {
-			lock_height: lock_height,
-			..self
-		}
+		Transaction { lock_height: lock_height, .. self }
 	}
 
 	/// The verification for a MimbleWimble transaction involves getting the
@@ -270,11 +271,7 @@ impl Transaction {
 	pub fn verify_sig(&self, secp: &Secp256k1) -> Result<TxKernel, secp::Error> {
 		let rsum = self.sum_commitments(secp)?;
 
-		// TODO - move the message generation into consensus.rs for consistency
-		let msg = Message::from_slice(&transaction_fee_and_lock_height_to_bytes(
-			self.fee,
-			self.lock_height,
-		))?;
+		let msg = Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height))?;
 		let sig = Signature::from_der(secp, &self.excess_sig)?;
 
 		// pretend the sum is a public key (which it is, being of the form r.G) and
@@ -495,18 +492,6 @@ impl ops::Add for SumCommit {
 		}
 	}
 }
-
-/// TODO - consider putting this in consensus.rs so we can reuse it
-/// consistently across Transaction and TxKernel
-/// TODO - add some test coverage for this to make sure the bytes are in there
-/// correctly
-fn transaction_fee_and_lock_height_to_bytes(fee: u64, lock_height: u64) -> [u8; 32] {
-	let mut bytes = [0; 32];
-	BigEndian::write_u64(&mut bytes[16..24], fee);
-	BigEndian::write_u64(&mut bytes[24..], lock_height);
-	bytes
-}
-
 
 #[cfg(test)]
 mod test {
