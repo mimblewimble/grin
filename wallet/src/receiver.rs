@@ -213,7 +213,11 @@ fn receive_coinbase(
 
 		debug!("block_fees updated - {:?}", block_fees);
 
-		let (out, kern) = Block::reward_output(&keychain, &pubkey, block_fees.fees)?;
+		let (out, kern) = Block::reward_output(
+			&keychain,
+			&pubkey,
+			block_fees.fees,
+		)?;
 		Ok((out, kern, block_fees))
 	})?
 }
@@ -226,7 +230,6 @@ fn receive_transaction(
 	blinding: BlindingFactor,
 	partial: Transaction,
 ) -> Result<Transaction, Error> {
-
 	let fingerprint = keychain.clone().fingerprint();
 
 	// operate within a lock on wallet data
@@ -263,7 +266,7 @@ fn receive_transaction(
 			height: 0,
 			lock_height: 0,
 		});
-		debug!("Received txn and built output  - {}, {}, {}",
+		debug!("Received txn and built output - {}, {}, {}",
 			fingerprint.clone(), pubkey.fingerprint(), derivation);
 
 		Ok(tx_final)

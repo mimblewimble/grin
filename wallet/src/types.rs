@@ -385,6 +385,7 @@ pub enum WalletReceiveRequest {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BlockFees {
 	pub fees: u64,
+	pub height: u64,
 	pub pubkey: Option<keychain::Identifier>,
 }
 

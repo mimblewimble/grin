@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2017 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,11 +15,7 @@
 //! Persistent and prunable Merkle Mountain Range implementation. For a high
 //! level description of MMRs, see:
 //!
-//! https://github.
-//! com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.
-//!
-//!
-//! md
+//! https://github.com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.md
 //!
 //! This implementation is built in two major parts:
 //!
@@ -648,7 +644,9 @@ fn peaks(num: u64) -> Vec<u64> {
 /// any node, from its postorder traversal position. Which is the order in which
 /// nodes are added in a MMR.
 ///
-/// [1]  https://github.com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.md
+/// [1]  https://github.
+/// com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.
+/// md
 pub fn bintree_postorder_height(num: u64) -> u64 {
 	let mut h = num;
 	while !all_ones(h) {

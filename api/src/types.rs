@@ -50,7 +50,7 @@ pub struct Output {
 	pub proof: pedersen::RangeProof,
 	/// The height of the block creating this output
 	pub height: u64,
-	/// The lock height (spendable after block)
+	/// The lock height (earliest block this output can be spent)
 	pub lock_height: u64,
 }
 
@@ -65,6 +65,7 @@ impl Output {
 			}
 			_ => (OutputType::Transaction, 0),
 		};
+
 		Output {
 			output_type: output_type,
 			commit: output.commit,

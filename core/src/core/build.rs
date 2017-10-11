@@ -25,10 +25,10 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use byteorder::{ByteOrder, BigEndian};
 use secp;
 
 use core::{Transaction, Input, Output, DEFAULT_OUTPUT};
+use core::transaction::kernel_sig_msg;
 use keychain;
 use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
 
@@ -56,13 +56,19 @@ pub fn output(value: u64, pubkey: Identifier) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
 		let commit = build.keychain.commit(value, &pubkey).unwrap();
 		let msg = secp::pedersen::ProofMessage::empty();
-		let rproof = build.keychain.range_proof(value, &pubkey, commit, msg).unwrap();
+		let rproof = build
+			.keychain
+			.range_proof(value, &pubkey, commit, msg)
+			.unwrap();
 
-		(tx.with_output(Output {
-			features: DEFAULT_OUTPUT,
-			commit: commit,
-			proof: rproof,
-		}), sum.add_pubkey(pubkey.clone()))
+		(
+			tx.with_output(Output {
+				features: DEFAULT_OUTPUT,
+				commit: commit,
+				proof: rproof,
+			}),
+			sum.add_pubkey(pubkey.clone()),
+		)
 	})
 }
 
@@ -70,6 +76,13 @@ pub fn output(value: u64, pubkey: Identifier) -> Box<Append> {
 pub fn with_fee(fee: u64) -> Box<Append> {
 	Box::new(move |_build, (tx, sum)| -> (Transaction, BlindSum) {
 		(tx.with_fee(fee), sum)
+	})
+}
+
+/// Sets the lock_height on the transaction being built.
+pub fn with_lock_height(lock_height: u64) -> Box<Append> {
+	Box::new(move |_build, (tx, sum)| -> (Transaction, BlindSum) {
+		(tx.with_lock_height(lock_height), sum)
 	})
 }
 
@@ -95,9 +108,9 @@ pub fn initial_tx(tx: Transaction) -> Box<Append> {
 ///
 /// Example:
 /// let (tx1, sum) = build::transaction(vec![input_rand(4), output_rand(1),
-///   with_fee(1)]).unwrap();
+///   with_fee(1)], keychain).unwrap();
 /// let (tx2, _) = build::transaction(vec![initial_tx(tx1), with_excess(sum),
-///   output_rand(2)]).unwrap();
+///   output_rand(2)], keychain).unwrap();
 ///
 pub fn transaction(
 	elems: Vec<Box<Append>>,
@@ -105,19 +118,14 @@ pub fn transaction(
 ) -> Result<(Transaction, BlindingFactor), keychain::Error> {
 	let mut ctx = Context { keychain };
 	let (mut tx, sum) = elems.iter().fold(
-		(Transaction::empty(), BlindSum::new()), |acc, elem| elem(&mut ctx, acc)
+		(Transaction::empty(), BlindSum::new()),
+		|acc, elem| elem(&mut ctx, acc),
 	);
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
-	let msg = secp::Message::from_slice(&u64_to_32bytes(tx.fee))?;
+	let msg = secp::Message::from_slice(&kernel_sig_msg(tx.fee, tx.lock_height))?;
 	let sig = ctx.keychain.sign_with_blinding(&msg, &blind_sum)?;
 	tx.excess_sig = sig.serialize_der(&ctx.keychain.secp());
 	Ok((tx, blind_sum))
-}
-
-fn u64_to_32bytes(n: u64) -> [u8; 32] {
-	let mut bytes = [0; 32];
-	BigEndian::write_u64(&mut bytes[24..32], n);
-	bytes
 }
 
 // Just a simple test, most exhaustive tests in the core mod.rs.
@@ -146,10 +154,8 @@ mod test {
 		let pk1 = keychain.derive_pubkey(1).unwrap();
 		let pk2 = keychain.derive_pubkey(2).unwrap();
 
-		let (tx, _) = transaction(
-			vec![input(6, pk1), output(2, pk2), with_fee(4)],
-			&keychain,
-		).unwrap();
+		let (tx, _) = transaction(vec![input(6, pk1), output(2, pk2), with_fee(4)], &keychain)
+			.unwrap();
 
 		tx.verify_sig(&keychain.secp()).unwrap();
 	}

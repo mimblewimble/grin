@@ -28,9 +28,12 @@ pub fn issue_send_tx(
 	amount: u64,
 	dest: String,
 ) -> Result<(), Error> {
-	let _ = checker::refresh_outputs(config, keychain);
+	checker::refresh_outputs(config, keychain)?;
 
-	let (tx, blind_sum) = build_send_tx(config, keychain, amount)?;
+	let chain_tip = checker::get_tip_from_node(config)?;
+	let lock_height = chain_tip.height;
+
+	let (tx, blind_sum) = build_send_tx(config, keychain, amount, lock_height)?;
 	let json_tx = partial_tx_to_json(amount, blind_sum, tx);
 
 	if dest == "stdout" {
@@ -54,6 +57,7 @@ fn build_send_tx(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
+	lock_height: u64,
 ) -> Result<(Transaction, BlindingFactor), Error> {
 	let fingerprint = keychain.clone().fingerprint();
 
@@ -66,10 +70,16 @@ fn build_send_tx(
 			return Err(Error::NotEnoughFunds((-change) as u64));
 		}
 
-		// TODO add fees, which is likely going to make this iterative
-
 		// build inputs using the appropriate derived pubkeys
 		let mut parts = vec![];
+
+		// This is more proof of concept than anything but here we set a
+		// lock_height on the transaction being sent (based on current chain height via api).
+		parts.push(build::with_lock_height(lock_height));
+
+		// TODO add fees, which is likely going to make this iterative
+		// parts.push(build::with_fees(100));
+
 		for coin in &coins {
 			let pubkey = keychain.derive_pubkey(coin.n_child)?;
 			parts.push(build::input(coin.value, pubkey));
