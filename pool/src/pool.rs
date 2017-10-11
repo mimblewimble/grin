@@ -155,7 +155,9 @@ where
 
 		let head_header = self.blockchain.head_header()?;
 		if head_header.height < tx.lock_height {
-			return Err(PoolError::ImmatureTransaction{ lock_height: tx.lock_height });
+			return Err(PoolError::ImmatureTransaction {
+				lock_height: tx.lock_height,
+			});
 		}
 
 		// The next issue is to identify all unspent outputs that
@@ -552,7 +554,8 @@ where
 	///
 	/// Select a set of mineable transactions for block building.
 	///
-	/// TODO - txs have lock_heights, so possible to have "invalid" (immature) txs here?
+	/// TODO - txs have lock_heights, so possible to have "invalid" (immature)
+	/// txs here?
 	///
 	pub fn prepare_mineable_transactions(
 		&self,
@@ -621,7 +624,10 @@ mod tests {
 	/// A basic test; add a pair of transactions to the pool.
 	fn test_basic_pool_add() {
 		let mut dummy_chain = DummyChainImpl::new();
-		let head_header = block::BlockHeader { height: 1, .. block::BlockHeader::default() };
+		let head_header = block::BlockHeader {
+			height: 1,
+			..block::BlockHeader::default()
+		};
 		dummy_chain.store_head_header(&head_header);
 
 		let parent_transaction = test_transaction(vec![5, 6, 7], vec![11, 3]);
@@ -680,7 +686,10 @@ mod tests {
 	/// Testing various expected error conditions
 	pub fn test_pool_add_error() {
 		let mut dummy_chain = DummyChainImpl::new();
-		let head_header = block::BlockHeader { height: 1, .. block::BlockHeader::default() };
+		let head_header = block::BlockHeader {
+			height: 1,
+			..block::BlockHeader::default()
+		};
 		dummy_chain.store_head_header(&head_header);
 
 		let new_utxo = DummyUtxoSet::empty()
@@ -862,7 +871,10 @@ mod tests {
 	/// Testing block reconciliation
 	fn test_block_reconciliation() {
 		let mut dummy_chain = DummyChainImpl::new();
-		let head_header = block::BlockHeader { height: 1, .. block::BlockHeader::default() };
+		let head_header = block::BlockHeader {
+			height: 1,
+			..block::BlockHeader::default()
+		};
 		dummy_chain.store_head_header(&head_header);
 
 		let new_utxo = DummyUtxoSet::empty()
@@ -1013,7 +1025,10 @@ mod tests {
 	fn test_block_building() {
 		// Add a handful of transactions
 		let mut dummy_chain = DummyChainImpl::new();
-		let head_header = block::BlockHeader { height: 1, .. block::BlockHeader::default() };
+		let head_header = block::BlockHeader {
+			height: 1,
+			..block::BlockHeader::default()
+		};
 		dummy_chain.store_head_header(&head_header);
 
 		let new_utxo = DummyUtxoSet::empty()
