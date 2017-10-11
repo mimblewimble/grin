@@ -31,5 +31,12 @@ extern crate slog_async;
 #[macro_use]
 extern crate lazy_static;
 
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+
 pub mod log;
-pub use log::LOGGER;
+pub use log::{LOGGER, init};
+
+pub mod types;
+pub use types::LoggingConfig;

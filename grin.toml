@@ -9,6 +9,10 @@
 # -[user home]/.grin
 #
 
+#########################################
+### SERVER CONFIGURATION              ###
+#########################################
+
 #Server connection details
 [server]
 
@@ -47,6 +51,34 @@ capabilities = [7]
 [server.p2p_config]
 host = "127.0.0.1"
 port = 13414
+
+#########################################
+### LOGGING CONFIGURATION             ###
+#########################################
+
+[logging]
+
+# Whether to log to stdout
+log_to_stdout = false
+
+# Log level for stdout: Critical, Error, Warning, Info, Debug, Trace
+stdout_log_level = "Debug"
+
+# Whether to log to a file
+log_to_file = true
+
+# Log level for file: Critical, Error, Warning, Info, Debug, Trace
+file_log_level = "Trace"
+
+# Log file path
+log_file_path = "grin.log"
+
+# Whether to append to the log file (true), or replace it on every run (false)
+log_file_append = true
+
+#########################################
+### MINING CONFIGURATION              ###
+#########################################
 
 #Mining details. This section is optional. If it's not here, the server
 #will default to not mining.

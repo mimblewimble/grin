@@ -85,6 +85,8 @@ fn main() {
 	});
 
 	if global_config.using_config_file {
+		//initialise the logger
+		log::init(global_config.members.as_mut().unwrap().logging.clone());
 		info!(
 			log::LOGGER,
 			"Using configuration file at: {}",

@@ -12,17 +12,72 @@
 // limitations under the License.
 
 //! Logging wrapper to be used throughout all crates in the workspace
-
-use slog::{Logger, Drain};
+use std::fs::OpenOptions;
+use std::sync::Mutex;
+use slog::{Logger, Drain, Level, LevelFilter, Duplicate, Discard};
 use slog_term;
 use slog_async;
 
+use types::{LogLevel, LoggingConfig};
+
+fn convert_log_level(in_level:&LogLevel)->Level{
+	match *in_level {
+		LogLevel::Info => Level::Info,
+		LogLevel::Critical => Level::Critical,
+		LogLevel::Warning => Level::Warning,
+		LogLevel::Debug => Level::Debug,
+		LogLevel::Trace => Level::Trace,
+		LogLevel::Error => Level::Error,
+	}
+}
+
 lazy_static! {
+	static ref LOGGING_CONFIG: Mutex<LoggingConfig> = Mutex::new(LoggingConfig::default());
 	pub static ref LOGGER: Logger = {
-		let decorator = slog_term::TermDecorator::new().build();
-		let drain = slog_term::FullFormat::new(decorator).build().fuse();
-		let drain = slog_async::Async::new(drain).build().fuse();
-		let log = Logger::root(drain, o!());
-		log 
+		let config = LOGGING_CONFIG.lock().unwrap();
+		let slog_level_stdout = convert_log_level(&config.stdout_log_level);
+		let slog_level_file = convert_log_level(&config.file_log_level);
+
+		//Terminal output drain
+		let terminal_decorator = slog_term::TermDecorator::new().build();
+		let terminal_drain = slog_term::FullFormat::new(terminal_decorator).build().fuse();
+		let terminal_drain = LevelFilter::new(terminal_drain, slog_level_stdout).fuse();
+		let mut terminal_drain = slog_async::Async::new(terminal_drain).build().fuse();
+
+		if !config.log_to_stdout {
+			terminal_drain = slog_async::Async::new(Discard{}).build().fuse();
+		}
+		
+		//File drain
+		let file = OpenOptions::new()
+			.create(true)
+			.write(true)
+			.append(config.log_file_append)
+			.truncate(false)
+			.open(&config.log_file_path)
+			.unwrap();
+
+		let file_decorator = slog_term::PlainDecorator::new(file);
+		let file_drain = slog_term::FullFormat::new(file_decorator).build().fuse();
+		let file_drain = LevelFilter::new(file_drain, slog_level_file).fuse();
+		let mut file_drain = slog_async::Async::new(file_drain).build().fuse();
+
+		if !config.log_to_file {
+			file_drain = slog_async::Async::new(Discard{}).build().fuse();
+		}
+
+		//Compose file and terminal drains
+		let composite_drain = Duplicate::new(terminal_drain, file_drain).fuse();
+
+		let log = Logger::root(composite_drain, o!());
+		log
   };
+}
+
+pub fn init(config:Option<LoggingConfig>){
+	if let Some(c) = config {
+		let mut config_ref=LOGGING_CONFIG.lock().unwrap();
+		*config_ref=c.clone();
+	}
+	
 }
