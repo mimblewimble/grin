@@ -77,10 +77,7 @@ impl<R: AsyncRead> io::Read for ThrottledReader<R> {
 
 		// Check if Allowed
 		if self.allowed < 1 {
-			return Err(io::Error::new(
-				io::ErrorKind::WouldBlock,
-				"Reached Allowed Read Limit",
-			));
+			return Err(io::Error::new(io::ErrorKind::WouldBlock, "Reached Allowed Read Limit"));
 		}
 
 		// Read Max Allowed
@@ -158,10 +155,7 @@ impl<W: AsyncWrite> io::Write for ThrottledWriter<W> {
 
 		// Check if Allowed
 		if self.allowed < 1 {
-			return Err(io::Error::new(
-				io::ErrorKind::WouldBlock,
-				"Reached Allowed Write Limit",
-			));
+			return Err(io::Error::new(io::ErrorKind::WouldBlock, "Reached Allowed Write Limit"));
 		}
 
 		// Write max allowed

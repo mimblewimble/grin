@@ -17,11 +17,12 @@ extern crate grin_chain as chain;
 extern crate grin_pool as pool;
 extern crate grin_store as store;
 extern crate grin_util as util;
+extern crate grin_log as log;
 extern crate secp256k1zkp as secp;
 
 extern crate hyper;
 #[macro_use]
-extern crate log;
+extern crate slog;
 extern crate iron;
 extern crate router;
 extern crate serde;

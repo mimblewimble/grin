@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The transaction pool, keeping a view of currently-valid transactions that
-//! may be confirmed soon.
+//! Global logging configuration and macros
+//! Please ensure this crate does not depend on any other
+//! crates in the workspace, as it needs to be accessible
+//! from all of them.
 
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
@@ -21,20 +23,13 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-pub mod graph;
-mod types;
-mod blockchain;
-mod pool;
-
-extern crate time;
-extern crate rand;
-extern crate serde;
 #[macro_use]
-extern crate serde_derive;
-extern crate blake2_rfc as blake2;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate secp256k1zkp as secp;
+extern crate slog;
+extern crate slog_term;
+extern crate slog_async;
 
-pub use pool::TransactionPool;
-pub use types::{BlockChain, TxSource, PoolError, PoolConfig};
+#[macro_use]
+extern crate lazy_static;
+
+pub mod log;
+pub use log::LOGGER;

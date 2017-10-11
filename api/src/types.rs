@@ -58,10 +58,7 @@ impl Output {
 	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader) -> Output {
 		let (output_type, lock_height) = match output.features {
 			x if x.contains(core::transaction::COINBASE_OUTPUT) => {
-				(
-					OutputType::Coinbase,
-					block_header.height + global::coinbase_maturity(),
-				)
+				(OutputType::Coinbase, block_header.height + global::coinbase_maturity())
 			}
 			_ => (OutputType::Transaction, 0),
 		};

@@ -70,8 +70,7 @@ enum_from_primitive! {
 /// the  header first, handles its validation and then reads the Readable body,
 /// allocating buffers of the right size.
 pub fn read_msg<T>(conn: TcpStream) -> Box<Future<Item = (TcpStream, T), Error = Error>>
-where
-	T: Readable + 'static,
+	where T: Readable + 'static
 {
 	let read_header = read_exact(conn, vec![0u8; HEADER_LEN as usize])
 		.from_err()
@@ -99,13 +98,11 @@ where
 /// Future combinator to write a full message from a Writeable payload.
 /// Serializes the payload first and then sends the message header and that
 /// payload.
-pub fn write_msg<T>(
-	conn: TcpStream,
-	msg: T,
-	msg_type: Type,
-) -> Box<Future<Item = TcpStream, Error = Error>>
-where
-	T: Writeable + 'static,
+pub fn write_msg<T>(conn: TcpStream,
+                    msg: T,
+                    msg_type: Type)
+                    -> Box<Future<Item = TcpStream, Error = Error>>
+	where T: Writeable + 'static
 {
 	let write_msg = ok((conn)).and_then(move |conn| {
 		// prepare the body first so we know its serialized length
@@ -226,9 +223,7 @@ impl Readable for Hand {
 		let receiver_addr = try!(SockAddr::read(reader));
 		let ua = try!(reader.read_vec());
 		let user_agent = try!(String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData));
-		let capabilities = try!(Capabilities::from_bits(capab).ok_or(
-			ser::Error::CorruptedData,
-		));
+		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData));
 		Ok(Hand {
 			version: version,
 			capabilities: capabilities,
@@ -275,9 +270,7 @@ impl Readable for Shake {
 		let total_diff = try!(Difficulty::read(reader));
 		let ua = try!(reader.read_vec());
 		let user_agent = try!(String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData));
-		let capabilities = try!(Capabilities::from_bits(capab).ok_or(
-			ser::Error::CorruptedData,
-		));
+		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData));
 		Ok(Shake {
 			version: version,
 			capabilities: capabilities,
@@ -302,9 +295,7 @@ impl Writeable for GetPeerAddrs {
 impl Readable for GetPeerAddrs {
 	fn read(reader: &mut Reader) -> Result<GetPeerAddrs, ser::Error> {
 		let capab = try!(reader.read_u32());
-		let capabilities = try!(Capabilities::from_bits(capab).ok_or(
-			ser::Error::CorruptedData,
-		));
+		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData));
 		Ok(GetPeerAddrs { capabilities: capabilities })
 	}
 }
@@ -361,9 +352,7 @@ impl Writeable for PeerError {
 impl Readable for PeerError {
 	fn read(reader: &mut Reader) -> Result<PeerError, ser::Error> {
 		let (code, msg) = ser_multiread!(reader, read_u32, read_vec);
-		let message = try!(String::from_utf8(msg).map_err(
-			|_| ser::Error::CorruptedData,
-		));
+		let message = try!(String::from_utf8(msg).map_err(|_| ser::Error::CorruptedData));
 		Ok(PeerError {
 			code: code,
 			message: message,

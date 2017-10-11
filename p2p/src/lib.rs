@@ -28,8 +28,9 @@ extern crate enum_primitive;
 extern crate grin_core as core;
 extern crate grin_store;
 extern crate grin_util as util;
+extern crate grin_log as log;
 #[macro_use]
-extern crate log;
+extern crate slog;
 extern crate futures;
 extern crate tokio_core;
 extern crate tokio_io;

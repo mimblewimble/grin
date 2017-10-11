@@ -54,7 +54,7 @@ port = 13414
 
 #flag whether mining is enabled
 
-enable_mining = false
+enable_mining = true
 
 #Whether to use cuckoo-miner,  and related parameters
 
@@ -75,7 +75,7 @@ cuckoo_miner_async_mode = false
 #The amount of time, in seconds, to attempt to mine on a particular
 #header before stopping and re-collecting transactions from the pool
 
-attempt_time_per_block = 90
+attempt_time_per_block = 30
 
 #the wallet reciever to which coinbase rewards will be sent
 

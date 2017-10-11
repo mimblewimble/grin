@@ -17,7 +17,7 @@
 extern crate byteorder;
 extern crate blake2_rfc as blake2;
 #[macro_use]
-extern crate log;
+extern crate slog;
 extern crate rand;
 extern crate serde;
 #[macro_use]
@@ -27,6 +27,7 @@ extern crate serde_json;
 extern crate grin_api as api;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_log as log;
 extern crate grin_util as util;
 extern crate secp256k1zkp as secp;
 

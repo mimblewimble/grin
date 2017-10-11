@@ -22,8 +22,7 @@
 #![warn(missing_docs)]
 
 #[macro_use]
-extern crate log;
-extern crate env_logger;
+extern crate slog;
 extern crate futures;
 extern crate futures_cpupool as cpupool;
 extern crate hyper;
@@ -47,6 +46,7 @@ extern crate grin_util as util;
 extern crate grin_keychain as keychain;
 extern crate grin_wallet as wallet;
 extern crate grin_pow as pow;
+extern crate grin_log as log;
 extern crate secp256k1zkp as secp;
 
 mod adapters;
