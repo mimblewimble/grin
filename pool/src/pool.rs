@@ -765,6 +765,17 @@ mod tests {
 			};
 
 			assert_eq!(write_pool.total_size(), 1);
+
+			// now attempt to add a timelocked tx to the pool
+			// should fail as invalid based on current height
+			let timelocked_tx_1 = timelocked_transaction(vec![9], vec![5], 10);
+			match write_pool.add_to_memory_pool(test_source(), timelocked_tx_1) {
+				Err(PoolError::ImmatureTransaction { lock_height: height }) => {
+					assert_eq!(height, 10);
+				}
+				Err(e) => panic!("expected ImmatureTransaction error here - {:?}", e),
+				Ok(_) => panic!("expected ImmatureTransaction error here"),
+			};
 		}
 	}
 
@@ -1017,7 +1028,7 @@ mod tests {
 
 		let pool = RwLock::new(test_setup(&chain_ref));
 
-		let root_tx_1 = test_transaction(vec![10,20], vec![24]);
+		let root_tx_1 = test_transaction(vec![10, 20], vec![24]);
 		let root_tx_2 = test_transaction(vec![30], vec![28]);
 		let root_tx_3 = test_transaction(vec![40], vec![38]);
 
@@ -1114,6 +1125,35 @@ mod tests {
 		}
 		tx_elements.push(build::with_fee(fees as u64));
 
+		let (tx, _) = build::transaction(tx_elements, &keychain).unwrap();
+		tx
+	}
+
+	fn timelocked_transaction(
+		input_values: Vec<u64>,
+		output_values: Vec<u64>,
+		lock_height: u64,
+	) -> transaction::Transaction {
+		let keychain = keychain_for_tests();
+
+		let fees: i64 = input_values.iter().sum::<u64>() as i64 -
+			output_values.iter().sum::<u64>() as i64;
+		assert!(fees >= 0);
+
+		let mut tx_elements = Vec::new();
+
+		for input_value in input_values {
+			let pubkey = keychain.derive_pubkey(input_value as u32).unwrap();
+			tx_elements.push(build::input(input_value, pubkey));
+		}
+
+		for output_value in output_values {
+			let pubkey = keychain.derive_pubkey(output_value as u32).unwrap();
+			tx_elements.push(build::output(output_value, pubkey));
+		}
+		tx_elements.push(build::with_fee(fees as u64));
+
+		tx_elements.push(build::with_lock_height(lock_height));
 		let (tx, _) = build::transaction(tx_elements, &keychain).unwrap();
 		tx
 	}
