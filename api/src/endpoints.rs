@@ -71,13 +71,12 @@ impl ApiEndpoint for OutputApi {
 
 	fn get(&self, id: String) -> ApiResult<Output> {
 		debug!(LOGGER, "GET output {}", id);
-		let c = util::from_hex(id.clone())
-			.map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
+		let c = util::from_hex(id.clone()).map_err(|_| {
+			Error::Argument(format!("Not a valid commitment: {}", id))
+		})?;
 		let commit = Commitment::from_vec(c);
 
-		let out = self.chain
-			.get_unspent(&commit)
-			.map_err(|_| Error::NotFound)?;
+		let out = self.chain.get_unspent(&commit).map_err(|_| Error::NotFound)?;
 
 		let header = self.chain
 			.get_block_header_by_output_commit(&commit)
@@ -95,7 +94,8 @@ pub struct PoolApi<T> {
 }
 
 impl<T> ApiEndpoint for PoolApi<T>
-    where T: pool::BlockChain + Clone + Send + Sync + 'static
+where
+	T: pool::BlockChain + Clone + Send + Sync + 'static,
 {
 	type ID = String;
 	type T = PoolInfo;
@@ -116,13 +116,15 @@ impl<T> ApiEndpoint for PoolApi<T>
 	}
 
 	fn operation(&self, _: String, input: TxWrapper) -> ApiResult<()> {
-		let tx_bin = util::from_hex(input.tx_hex)
-			.map_err(|_| Error::Argument(format!("Invalid hex in transaction wrapper.")))?;
+		let tx_bin = util::from_hex(input.tx_hex).map_err(|_| {
+			Error::Argument(format!("Invalid hex in transaction wrapper."))
+		})?;
 
-		let tx: Transaction = ser::deserialize(&mut &tx_bin[..])
-			.map_err(|_| {
-				Error::Argument("Could not deserialize transaction, invalid format.".to_string())
-			})?;
+		let tx: Transaction = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
+			Error::Argument(
+				"Could not deserialize transaction, invalid format.".to_string(),
+			)
+		})?;
 
 		let source = pool::TxSource {
 			debug_name: "push-api".to_string(),
@@ -138,7 +140,9 @@ impl<T> ApiEndpoint for PoolApi<T>
 			.write()
 			.unwrap()
 			.add_to_memory_pool(source, tx)
-			.map_err(|e| Error::Internal(format!("Addition to transaction pool failed: {:?}", e)))?;
+			.map_err(|e| {
+				Error::Internal(format!("Addition to transaction pool failed: {:?}", e))
+			})?;
 
 		Ok(())
 	}
@@ -152,10 +156,12 @@ pub struct TxWrapper {
 
 /// Start all server REST APIs. Just register all of them on a ApiServer
 /// instance and runs the corresponding HTTP server.
-pub fn start_rest_apis<T>(addr: String,
-                          chain: Arc<chain::Chain>,
-                          tx_pool: Arc<RwLock<pool::TransactionPool<T>>>)
-	where T: pool::BlockChain + Clone + Send + Sync + 'static
+pub fn start_rest_apis<T>(
+	addr: String,
+	chain: Arc<chain::Chain>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<T>>>,
+) where
+	T: pool::BlockChain + Clone + Send + Sync + 'static,
 {
 
 	thread::spawn(move || {
