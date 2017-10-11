@@ -43,6 +43,8 @@ pub enum Error {
 	CorruptedData,
 	/// When asked to read too much data
 	TooLargeReadErr,
+	/// Something was not sorted when consensus rules requires it to be sorted
+	BadlySorted,
 }
 
 impl From<io::Error> for Error {
@@ -61,6 +63,7 @@ impl fmt::Display for Error {
 			} => write!(f, "expected {:?}, got {:?}", e, r),
 			Error::CorruptedData => f.write_str("corrupted data"),
 			Error::TooLargeReadErr => f.write_str("too large read"),
+			Error::BadlySorted => f.write_str("badly sorted data"),
 		}
 	}
 }
@@ -82,6 +85,7 @@ impl error::Error for Error {
 			} => "unexpected data",
 			Error::CorruptedData => "corrupted data",
 			Error::TooLargeReadErr => "too large read",
+			Error::BadlySorted => "badly sorted data",
 		}
 	}
 }

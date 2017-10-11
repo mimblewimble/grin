@@ -20,6 +20,7 @@ use secp::pedersen::{RangeProof, Commitment};
 use std::ops;
 
 use core::Committed;
+use core::hash::Hashed;
 use core::pmmr::Summable;
 use keychain::{Identifier, Keychain};
 use ser::{self, Reader, Writer, Readable, Writeable};
@@ -153,10 +154,14 @@ impl Writeable for Transaction {
 			[write_u64, self.inputs.len() as u64],
 			[write_u64, self.outputs.len() as u64]
 		);
-		for inp in &self.inputs {
+		let mut sorted_inputs = self.inputs.clone();
+		sorted_inputs.sort_by_key(|input| input.hash());
+		for inp in sorted_inputs.iter() {
 			try!(inp.write(writer));
 		}
-		for out in &self.outputs {
+		let mut sorted_outputs = self.outputs.clone();
+		sorted_outputs.sort_by_key(|output| output.hash());
+		for out in sorted_outputs.iter() {
 			try!(out.write(writer));
 		}
 		Ok(())
@@ -170,8 +175,23 @@ impl Readable for Transaction {
 		let (fee, lock_height, excess_sig, input_len, output_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_vec, read_u64, read_u64);
 
-		let inputs = try!((0..input_len).map(|_| Input::read(reader)).collect());
-		let outputs = try!((0..output_len).map(|_| Output::read(reader)).collect());
+		let inputs: Vec<_> = try!((0..input_len).map(|_| Input::read(reader)).collect());
+		let outputs: Vec<_> = try!((0..output_len).map(|_| Output::read(reader)).collect());
+
+		//
+		// TODO - is this the right place to do this? Is this the right approach?
+		//
+		// Consensus rule that inputs and outputs are *required* to be sorted on the wire.
+		// Simply reject anything at deserialization time if not sorted as required.
+		// This is to avoid the possibility of "fingerprinting" txs based on any
+		// information from the order of inputs or outputs.
+		//
+		let mut sorted_inputs = inputs.clone();
+		sorted_inputs.sort_by_key(|input| input.hash());
+		if sorted_inputs != inputs { return Err(ser::Error::BadlySorted); }
+		let mut sorted_outputs = outputs.clone();
+		sorted_outputs.sort_by_key(|output| output.hash());
+		if sorted_outputs != outputs { return Err(ser::Error::BadlySorted); }
 
 		Ok(Transaction {
 			fee: fee,
@@ -183,7 +203,6 @@ impl Readable for Transaction {
 		})
 	}
 }
-
 
 impl Committed for Transaction {
 	fn inputs_committed(&self) -> &Vec<Input> {
