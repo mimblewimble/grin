@@ -77,8 +77,7 @@ pub const MAX_BLOCK_WEIGHT: usize = 80_000;
 
 /// Whether a block exceeds the maximum acceptable weight
 pub fn exceeds_weight(input_len: usize, output_len: usize, kernel_len: usize) -> bool {
-	input_len * BLOCK_INPUT_WEIGHT +
-		output_len * BLOCK_OUTPUT_WEIGHT +
+	input_len * BLOCK_INPUT_WEIGHT + output_len * BLOCK_OUTPUT_WEIGHT +
 		kernel_len * BLOCK_KERNEL_WEIGHT > MAX_BLOCK_WEIGHT
 }
 
