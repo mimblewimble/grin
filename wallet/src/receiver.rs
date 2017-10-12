@@ -248,7 +248,10 @@ fn receive_transaction(
 		// we could just overwrite the fee here (but we won't) due to the ecdsa sig
 		let fee = tx_fee(partial.inputs.len(), partial.outputs.len() + 1, None);
 		if fee != partial.fee {
-			return Err(Error::FeeDispute{ sender_fee: partial.fee, recipient_fee: fee });
+			return Err(Error::FeeDispute {
+				sender_fee: partial.fee,
+				recipient_fee: fee,
+			});
 		}
 
 		let out_amount = amount - fee;

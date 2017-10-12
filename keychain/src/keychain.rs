@@ -89,7 +89,7 @@ impl Keychain {
 		if self.enable_burn_key {
 			// for tests and burn only, associate the zero fingerprint to a known
 			// dummy private key
-			if *pubkey == Identifier::zero() {
+			if *key_id == Identifier::zero() {
 				return Ok(SecretKey::from_slice(&self.secp, &[1; 32])?);
 			}
 		}

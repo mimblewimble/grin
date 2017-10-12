@@ -42,7 +42,7 @@ use config::GlobalConfig;
 use wallet::WalletConfig;
 use core::global;
 use keychain::Keychain;
-use util::{LOGGER,init_logger};
+use util::{LOGGER, init_logger};
 
 fn start_from_config_file(mut global_config: GlobalConfig) {
 	info!(
@@ -85,7 +85,7 @@ fn main() {
 	});
 
 	if global_config.using_config_file {
-		//initialise the logger
+		// initialise the logger
 		init_logger(global_config.members.as_mut().unwrap().logging.clone());
 		info!(
 			LOGGER,
