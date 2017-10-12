@@ -56,7 +56,7 @@ use api::{self, ApiEndpoint, Operation, ApiResult};
 use keychain::{BlindingFactor, Keychain};
 use types::*;
 use util;
-use log::LOGGER;
+use util::LOGGER;
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
 #[derive(Serialize, Deserialize)]

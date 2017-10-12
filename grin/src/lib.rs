@@ -46,7 +46,6 @@ extern crate grin_util as util;
 extern crate grin_keychain as keychain;
 extern crate grin_wallet as wallet;
 extern crate grin_pow as pow;
-extern crate grin_log as log;
 extern crate secp256k1zkp as secp;
 
 mod adapters;

@@ -31,7 +31,7 @@ use tokio_core::reactor;
 use tokio_timer::Timer;
 
 use p2p;
-use log::LOGGER;
+use util::LOGGER;
 
 const PEER_MAX_COUNT: u32 = 25;
 const PEER_PREFERRED_COUNT: u32 = 8;

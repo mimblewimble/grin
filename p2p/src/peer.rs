@@ -23,7 +23,7 @@ use core::core::hash::Hash;
 use core::core::target::Difficulty;
 use handshake::Handshake;
 use types::*;
-use log::LOGGER;
+use util::LOGGER;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum State {

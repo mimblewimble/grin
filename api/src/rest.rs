@@ -36,7 +36,7 @@ use serde::de::DeserializeOwned;
 use serde_json;
 
 use store;
-use log::LOGGER;
+use util::LOGGER;
 
 /// Errors that can be returned by an ApiEndpoint implementation.
 #[derive(Debug)]
@@ -219,7 +219,7 @@ impl<E> Handler for OpWrapper<E>
 				Ok(Response::with((status::Ok, res_json)))
 			}
 			Err(e) => {
-				error!("API operation: {:?}", e);
+				error!(LOGGER, "API operation: {:?}", e);
 				Err(IronError::from(e))
 			}
 		}

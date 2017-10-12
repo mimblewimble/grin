@@ -34,7 +34,7 @@ use core::ser;
 use msg::*;
 use types::Error;
 use rate_limit::*;
-use log::LOGGER;
+use util::LOGGER;
 
 /// Handler to provide to the connection, will be called back anytime a message
 /// is received. The provided sender can be use to immediately send back

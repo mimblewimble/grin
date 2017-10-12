@@ -24,4 +24,3 @@ num = "^0.1.36"
 grin_core = { path = "../core" }
 grin_store = { path = "../store" }
 grin_util = { path = "../util" }
-grin_log = { path = "../log" }

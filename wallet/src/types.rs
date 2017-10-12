@@ -28,7 +28,7 @@ use core::core::{Transaction, transaction};
 use core::ser;
 use keychain;
 use util;
-use log::LOGGER;
+use util::LOGGER;
 
 const DAT_FILE: &'static str = "wallet.dat";
 const LOCK_FILE: &'static str = "wallet.lock";

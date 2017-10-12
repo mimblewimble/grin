@@ -29,7 +29,7 @@ use libc::{off_t as off64_t, ftruncate as ftruncate64};
 
 use core::core::pmmr::{self, Summable, Backend, HashSum, VecBackend};
 use core::ser;
-use log::LOGGER;
+use util::LOGGER;
 
 const PMMR_DATA_FILE: &'static str = "pmmr_dat.bin";
 const PMMR_RM_LOG_FILE: &'static str = "pmmr_rm_log.bin";

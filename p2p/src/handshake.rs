@@ -26,7 +26,7 @@ use core::ser;
 use msg::*;
 use types::*;
 use protocol::ProtocolV1;
-use log::LOGGER;
+use util::LOGGER;
 
 const NONCES_CAP: usize = 100;
 

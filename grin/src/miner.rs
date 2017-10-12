@@ -35,7 +35,7 @@ use pow::MiningWorker;
 use pow::types::MinerConfig;
 use core::ser;
 use core::ser::AsFixedBytes;
-use log::LOGGER;
+use util::LOGGER;
 
 // use core::genesis;
 

@@ -28,7 +28,7 @@ use pipe;
 use store;
 use sumtree;
 use types::*;
-use log::LOGGER;
+use util::LOGGER;
 
 use core::global::{MiningParameterMode, MINING_PARAMETER_MODE};
 

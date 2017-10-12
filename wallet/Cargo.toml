@@ -19,7 +19,6 @@ serde_json = "~1.0.2"
 
 grin_api = { path = "../api" }
 grin_core = { path = "../core" }
-grin_log = { path = "../log" }
 grin_keychain = { path = "../keychain" }
 grin_util = { path = "../util" }
 secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }

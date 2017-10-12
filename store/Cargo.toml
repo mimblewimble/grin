@@ -13,7 +13,7 @@ memmap = { git = "https://github.com/danburkert/memmap-rs" }
 rocksdb = "^0.7.0"
 
 grin_core = { path = "../core" }
-grin_log = { path = "../log" }
+grin_util = { path = "../util" }
 
 [dev-dependencies]
 time = "^0.1"

@@ -78,7 +78,7 @@ lazy_static! {
 
 /// Initialises the logger with the given configuration
 
-pub fn init(config:Option<LoggingConfig>){
+pub fn init_logger(config:Option<LoggingConfig>){
 	if let Some(c) = config {
 		let mut config_ref=LOGGING_CONFIG.lock().unwrap();
 		*config_ref=c.clone();

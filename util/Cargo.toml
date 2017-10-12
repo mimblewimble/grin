@@ -1,5 +1,15 @@
 [package]
 name = "grin_util"
 version = "0.1.0"
-authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
+authors = ["Ignotus Peverell <igno.peverell@protonmail.com>",
+           "Yeastplume <yeastplume@protonmail.com>"]
 workspace = ".."
+
+[dependencies]
+slog = "^2.0.12"
+slog-term = "^2.2.0"
+slog-async = "^2.1.0"
+lazy_static = "~0.2.8"
+serde = "~1.0.8"
+serde_derive = "~1.0.8"
+

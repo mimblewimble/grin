@@ -24,7 +24,7 @@ use core::ser;
 use conn::TimeoutConnection;
 use msg::*;
 use types::*;
-use log::LOGGER;
+use util::LOGGER;
 use util::OneTime;
 
 #[allow(dead_code)]

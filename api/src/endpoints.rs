@@ -24,7 +24,7 @@ use rest::*;
 use types::*;
 use secp::pedersen::Commitment;
 use util;
-use log::LOGGER;
+use util::LOGGER;
 
 /// ApiEndpoint implementation for the blockchain. Exposes the current chain
 /// state as a simple JSON object.

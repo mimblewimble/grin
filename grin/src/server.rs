@@ -35,7 +35,7 @@ use seed;
 use sync;
 use types::*;
 use pow;
-use log::LOGGER;
+use util::LOGGER;
 
 use core::global;
 

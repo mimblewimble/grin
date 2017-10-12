@@ -40,7 +40,7 @@ extern crate serde;
 extern crate serde_derive;
 
 extern crate grin_core as core;
-extern crate grin_log as log;
+extern crate grin_util as util;
 
 extern crate cuckoo_miner;
 
@@ -96,7 +96,7 @@ pub fn pow20<T: MiningWorker>(miner: &mut T,
 ///
 
 pub fn mine_genesis_block(miner_config: Option<types::MinerConfig>) -> Option<core::core::Block> {
-	info!(log::LOGGER, "Starting miner loop for Genesis Block");
+	info!(util::LOGGER, "Starting miner loop for Genesis Block");
 	let mut gen = genesis::genesis();
 	let diff = gen.header.difficulty.clone();
 

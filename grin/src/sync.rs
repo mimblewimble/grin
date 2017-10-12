@@ -28,7 +28,7 @@ use core::core::hash::{Hash, Hashed};
 use chain;
 use p2p;
 use types::Error;
-use log::LOGGER;
+use util::LOGGER;
 
 pub struct Syncer {
 	chain: Arc<chain::Chain>,

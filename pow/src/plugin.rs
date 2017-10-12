@@ -26,7 +26,7 @@ use core::global;
 
 use core::core::Proof;
 use types::MinerConfig;
-use log::LOGGER;
+use util::LOGGER;
 
 use std::sync::Mutex;
 

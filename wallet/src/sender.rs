@@ -19,7 +19,7 @@ use core::ser;
 use keychain::{BlindingFactor, Keychain, Fingerprint, Identifier};
 use receiver::TxWrapper;
 use types::*;
-use log::LOGGER;
+use util::LOGGER;
 use util;
 
 /// Issue a new transaction to the provided sender by spending some of our

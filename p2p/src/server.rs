@@ -34,7 +34,7 @@ use core::core::target::Difficulty;
 use handshake::Handshake;
 use peer::Peer;
 use types::*;
-use log::LOGGER;
+use util::LOGGER;
 
 /// A no-op network adapter used for testing.
 pub struct DummyAdapter {}

@@ -27,7 +27,7 @@ use types::*;
 use store;
 use sumtree;
 use core::global;
-use log::LOGGER;
+use util::LOGGER;
 
 /// Contextual information required to process a new block and either reject or
 /// accept it.

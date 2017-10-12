@@ -20,7 +20,7 @@ use std::fmt;
 
 use grin::ServerConfig;
 use pow::types::MinerConfig;
-use log::LoggingConfig;
+use util::LoggingConfig;
 
 /// Error type wrapping config errors.
 #[derive(Debug)]

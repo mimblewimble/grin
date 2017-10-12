@@ -28,7 +28,7 @@ extern crate grin_wallet as wallet;
 extern crate grin_keychain as keychain;
 extern crate grin_config as config;
 extern crate grin_core as core;
-extern crate grin_log as log;
+extern crate grin_util as util;
 
 use std::thread;
 use std::io::Read;
@@ -42,11 +42,11 @@ use config::GlobalConfig;
 use wallet::WalletConfig;
 use core::global;
 use keychain::Keychain;
-use log::LOGGER;
+use util::{LOGGER,init_logger};
 
 fn start_from_config_file(mut global_config: GlobalConfig) {
 	info!(
-		log::LOGGER,
+		LOGGER,
 		"Starting the Grin server from configuration file at {}",
 		global_config.config_file_path.unwrap().to_str().unwrap()
 	);
@@ -86,9 +86,9 @@ fn main() {
 
 	if global_config.using_config_file {
 		//initialise the logger
-		log::init(global_config.members.as_mut().unwrap().logging.clone());
+		init_logger(global_config.members.as_mut().unwrap().logging.clone());
 		info!(
-			log::LOGGER,
+			LOGGER,
 			"Using configuration file at: {}",
 			global_config
 				.config_file_path
@@ -355,7 +355,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				wallet::receive_json_tx(&wallet_config, &keychain, contents.as_str()).unwrap();
 			} else {
 				info!(
-					log::LOGGER,
+					LOGGER,
 					"Starting the Grin wallet receiving daemon at {}...",
 					wallet_config.api_http_addr
 				);

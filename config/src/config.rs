@@ -22,7 +22,7 @@ use std::fs::File;
 use toml;
 use grin::ServerConfig;
 use pow::types::MinerConfig;
-use log::LoggingConfig;
+use util::LoggingConfig;
 use types::{ConfigMembers, GlobalConfig, ConfigError};
 
 /// The default file name to use when trying to derive

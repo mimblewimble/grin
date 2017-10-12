@@ -22,7 +22,7 @@
 
 extern crate byteorder;
 extern crate grin_core as core;
-extern crate grin_log as log;
+extern crate grin_util as util;
 extern crate libc;
 #[macro_use]
 extern crate slog;
