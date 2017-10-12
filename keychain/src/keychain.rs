@@ -19,9 +19,8 @@ use secp::{Message, Secp256k1, Signature};
 use secp::key::SecretKey;
 use secp::pedersen::{Commitment, ProofMessage, ProofInfo, RangeProof};
 use blake2;
-
 use blind::{BlindingFactor, BlindSum};
-use extkey::{self, Fingerprint, Identifier};
+use extkey::{self, Identifier};
 
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -55,8 +54,8 @@ pub struct Keychain {
 }
 
 impl Keychain {
-	pub fn fingerprint(&self) -> Fingerprint {
-		self.extkey.fingerprint.clone()
+	pub fn root_key_id(&self) -> Identifier {
+		self.extkey.root_key_id.clone()
 	}
 
 	pub fn from_seed(seed: &[u8]) -> Result<Keychain, Error> {
@@ -90,7 +89,7 @@ impl Keychain {
 		if self.enable_burn_key {
 			// for tests and burn only, associate the zero fingerprint to a known
 			// dummy private key
-			if key_id.fingerprint().to_string() == "00000000" {
+			if *pubkey == Identifier::zero() {
 				return Ok(SecretKey::from_slice(&self.secp, &[1; 32])?);
 			}
 		}
@@ -100,7 +99,7 @@ impl Keychain {
 				return Ok(extkey.key);
 			}
 		}
-		Err(Error::KeyDerivation(format!("cannot find extkey for {}", key_id.fingerprint())))
+		Err(Error::KeyDerivation(format!("cannot find extkey for {:?}", key_id)))
 	}
 
 	// TODO - clean this and derived_key up, rename them?
@@ -112,7 +111,7 @@ impl Keychain {
 				return Ok(extkey.n_child);
 			}
 		}
-		Err(Error::KeyDerivation(format!("cannot find extkey for {}", key_id.fingerprint())))
+		Err(Error::KeyDerivation(format!("cannot find extkey for {:?}", key_id)))
 	}
 
 	pub fn commit(&self, amount: u64, key_id: &Identifier) -> Result<Commitment, Error> {

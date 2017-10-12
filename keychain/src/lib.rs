@@ -28,6 +28,6 @@ mod blind;
 mod extkey;
 
 pub use blind::{BlindSum, BlindingFactor};
-pub use extkey::{Identifier, Fingerprint, ExtendedKey};
+pub use extkey::{Identifier, ExtendedKey, IDENTIFIER_SIZE};
 pub mod keychain;
 pub use keychain::{Error, Keychain};

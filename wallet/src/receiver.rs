@@ -176,7 +176,7 @@ fn receive_coinbase(config: &WalletConfig,
                     keychain: &Keychain,
                     block_fees: &BlockFees)
                     -> Result<(Output, TxKernel, BlockFees), Error> {
-	let fingerprint = keychain.fingerprint();
+	let root_key_id = keychain.root_key_id();
 
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
@@ -187,7 +187,7 @@ fn receive_coinbase(config: &WalletConfig,
 				(key_id.clone(), derivation)
 			},
 			None => {
-				let derivation = wallet_data.next_child(fingerprint.clone());
+				let derivation = wallet_data.next_child(root_key_id.clone());
 				let key_id = keychain.derive_key_id(derivation)?;
 				(key_id, derivation)
 			}
@@ -195,8 +195,8 @@ fn receive_coinbase(config: &WalletConfig,
 
 		// track the new output and return the stuff needed for reward
 		wallet_data.add_output(OutputData {
-			fingerprint: fingerprint.clone(),
-			identifier: key_id.clone(),
+			root_key_id: root_key_id.clone(),
+			key_id: key_id.clone(),
 			n_child: derivation,
 			value: reward(block_fees.fees),
 			status: OutputStatus::Unconfirmed,
@@ -206,10 +206,10 @@ fn receive_coinbase(config: &WalletConfig,
 
 		debug!(
 			LOGGER,
-			"Received coinbase and built candidate output - {}, {}, {}",
-			fingerprint.clone(),
-			key_id.fingerprint(),
-			derivation
+			"Received coinbase and built candidate output - {:?}, {:?}, {}",
+			root_key_id.clone(),
+			key_id.clone(),
+			derivation,
 		);
 
 		debug!(LOGGER, "block_fees - {:?}", block_fees);
@@ -236,18 +236,12 @@ fn receive_transaction(
 	blinding: BlindingFactor,
 	partial: Transaction,
 ) -> Result<Transaction, Error> {
-	let fingerprint = keychain.clone().fingerprint();
+	let root_key_id = keychain.root_key_id();
 
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		let derivation = wallet_data.next_child(fingerprint.clone());
+		let derivation = wallet_data.next_child(root_key_id.clone());
 		let key_id = keychain.derive_key_id(derivation)?;
-
-		// from pool.rs
-		// (-1 * num_inputs) + (4 * num_outputs) + 1
-		// then multiply by accept_fee_base==10
-		// so 80 is basically the minimum fee for a basic transaction
-		// so lets use 100 for now (revisit this)
 
 		let fee_amount = tx_fee(partial.inputs.len(), partial.outputs.len() + 1, None);
 		let out_amount = amount - fee_amount;
@@ -256,7 +250,7 @@ fn receive_transaction(
 			build::initial_tx(partial),
 			build::with_excess(blinding),
 			build::output(out_amount, key_id.clone()),
-			build::with_fee(fee_amount),
+			// build::with_fee(fee_amount),
 		], keychain)?;
 
 		// make sure the resulting transaction is valid (could have been lied to on
@@ -265,8 +259,8 @@ fn receive_transaction(
 
 		// track the new output and return the finalized transaction to broadcast
 		wallet_data.add_output(OutputData {
-			fingerprint: fingerprint.clone(),
-			identifier: key_id.clone(),
+			root_key_id: root_key_id.clone(),
+			key_id: key_id.clone(),
 			n_child: derivation,
 			value: out_amount,
 			status: OutputStatus::Unconfirmed,
@@ -275,10 +269,10 @@ fn receive_transaction(
 		});
 		debug!(
 			LOGGER,
-			"Received txn and built output - {}, {}, {}",
-			fingerprint.clone(),
-			key_id.fingerprint(),
-			derivation
+			"Received txn and built output - {:?}, {:?}, {}",
+			root_key_id.clone(),
+			key_id.clone(),
+			derivation,
 		);
 
 		Ok(tx_final)

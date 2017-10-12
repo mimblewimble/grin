@@ -16,7 +16,7 @@ use api;
 use checker;
 use core::core::{Transaction, build};
 use core::ser;
-use keychain::{BlindingFactor, Keychain, Fingerprint, Identifier};
+use keychain::{BlindingFactor, Keychain, Identifier, IDENTIFIER_SIZE};
 use receiver::TxWrapper;
 use types::*;
 use util::LOGGER;
@@ -66,26 +66,27 @@ fn build_send_tx(
 	amount: u64,
 	lock_height: u64,
 ) -> Result<(Transaction, BlindingFactor), Error> {
-	let fingerprint = keychain.clone().fingerprint();
+	let key_id = keychain.clone().root_key_id();
 
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
 		// select some suitable outputs to spend from our local wallet
-		let (coins, change) = wallet_data.select(fingerprint.clone(), amount);
+		let (coins, change) = wallet_data.select(key_id.clone(), amount);
 		if change < 0 {
 			return Err(Error::NotEnoughFunds((-change) as u64));
 		}
 
 		// build transaction skeleton with inputs and change
-		let mut parts = inputs_and_change(&coins, keychain, fingerprint, wallet_data, amount)?;
+		let mut parts = inputs_and_change(&coins, keychain, key_id, wallet_data, amount)?;
 
 		// This is more proof of concept than anything but here we set a
 		// lock_height on the transaction being sent (based on current chain height via api).
 		parts.push(build::with_lock_height(lock_height));
 
-		let result = build::transaction(parts, &keychain)?;
-		Ok(result)
+		let (tx, blind) = build::transaction(parts, &keychain)?;
+
+		Ok((tx, blind))
 	})?
 }
 
@@ -94,21 +95,20 @@ pub fn issue_burn_tx(
 	keychain: &Keychain,
 	amount: u64,
 ) -> Result<(), Error> {
-
 	let _ = checker::refresh_outputs(config, keychain);
-	let fingerprint = keychain.clone().fingerprint();
+	let key_id = keychain.clone().root_key_id();
 
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |mut wallet_data| {
 
 		// select all suitable outputs by passing largest amount
-		let (coins, _) = wallet_data.select(fingerprint.clone(), u64::max_value());
+		let (coins, _) = wallet_data.select(key_id.clone(), u64::max_value());
 
 		// build transaction skeleton with inputs and change
-		let mut parts = inputs_and_change(&coins, keychain, fingerprint, &mut wallet_data, amount)?;
+		let mut parts = inputs_and_change(&coins, keychain, key_id, &mut wallet_data, amount)?;
 
 		// add burn output and fees
-		parts.push(build::output(amount, Identifier::from_bytes(&[0; 20])));
+		parts.push(build::output(amount, Identifier::from_bytes(&[0; IDENTIFIER_SIZE])));
 
 		// finalize the burn transaction and send
 		let (tx_burn, _) = build::transaction(parts, &keychain)?;
@@ -122,19 +122,27 @@ pub fn issue_burn_tx(
 	})?
 }
 
-fn inputs_and_change(coins: &Vec<OutputData>, keychain: &Keychain, fingerprint: Fingerprint, wallet_data: &mut WalletData, amount: u64) -> Result<Vec<Box<build::Append>>, Error> {
+fn inputs_and_change(coins: &Vec<OutputData>, keychain: &Keychain, root_key_id: Identifier, wallet_data: &mut WalletData, amount: u64) -> Result<Vec<Box<build::Append>>, Error> {
 
 	let mut parts = vec![];
 
-	// calculate the total in inputs, fees and how much is left
+	// calculate the total across all inputs, and how much is left
 	let total: u64 = coins.iter().map(|c| c.value).sum();
-	let fee = tx_fee(coins.len(), 2, None);
-	let shortage = (total as i64) - (amount as i64) - (fee as i64);
+	let shortage = (total as i64) - (amount as i64);
 	if shortage < 0 {
 		return Err(Error::NotEnoughFunds((-shortage) as u64));
 	}
+
+	// sender is responsible for setting the fee on the partial tx
+	// recipient should double check the fee calculation and not blindly trust the sender
+	let fee = tx_fee(coins.len(), 2, None);
 	parts.push(build::with_fee(fee));
-	let change = total - amount - fee;
+
+	// if we are spending 10,000 coins to send 1,000 then our change will be 9,000
+	// the fee will come out of the amount itself
+	// if the fee is 80 then the recipient will only receive 920
+	// but our change will still be 9,000
+	let change = total - amount;
 
 	// build inputs using the appropriate derived key_ids
 	for coin in coins {
@@ -142,16 +150,16 @@ fn inputs_and_change(coins: &Vec<OutputData>, keychain: &Keychain, fingerprint: 
 		parts.push(build::input(coin.value, key_id));
 	}
 
-	// derive an additional key_id for change and build the change output
-	let change_derivation = wallet_data.next_child(fingerprint.clone());
+	// derive an additional pubkey for change and build the change output
+	let change_derivation = wallet_data.next_child(root_key_id.clone());
 	let change_key = keychain.derive_key_id(change_derivation)?;
 	parts.push(build::output(change, change_key.clone()));
 
 	// we got that far, time to start tracking the new output
 	// and lock the outputs used
 	wallet_data.add_output(OutputData {
-		fingerprint: fingerprint.clone(),
-		identifier: change_key.clone(),
+		root_key_id: root_key_id.clone(),
+		key_id: change_key.clone(),
 		n_child: change_derivation,
 		value: change as u64,
 		status: OutputStatus::Unconfirmed,

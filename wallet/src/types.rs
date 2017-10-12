@@ -153,9 +153,10 @@ impl fmt::Display for OutputStatus {
 /// root private key is known.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OutputData {
-	/// Private key fingerprint (in case the wallet tracks multiple)
-	pub fingerprint: keychain::Fingerprint,
-	pub identifier: keychain::Identifier,
+	/// Root key_id that the key for this output is derived from
+	pub root_key_id: keychain::Identifier,
+	/// Derived key for this output
+	pub key_id: keychain::Identifier,
 	/// How many derivations down from the root key
 	pub n_child: u32,
 	/// Value of the output, necessary to rebuild the commitment
@@ -292,13 +293,13 @@ impl WalletData {
 	/// TODO - we should check for overwriting here - only really valid for
 	/// unconfirmed coinbase
 	pub fn add_output(&mut self, out: OutputData) {
-		self.outputs.insert(out.identifier.to_hex(), out.clone());
+		self.outputs.insert(out.key_id.to_hex(), out.clone());
 	}
 
 	/// Lock an output data.
 	/// TODO - we should track identifier on these outputs (not just n_child)
 	pub fn lock_output(&mut self, out: &OutputData) {
-		if let Some(out_to_lock) = self.outputs.get_mut(&out.identifier.to_hex()) {
+		if let Some(out_to_lock) = self.outputs.get_mut(&out.key_id.to_hex()) {
 			if out_to_lock.value == out.value {
 				out_to_lock.lock()
 			}
@@ -307,17 +308,18 @@ impl WalletData {
 
 	/// Select a subset of unspent outputs to spend in a transaction
 	/// transferring the provided amount.
-	pub fn select(&self,
-	              fingerprint: keychain::Fingerprint,
-	              amount: u64)
-	              -> (Vec<OutputData>, i64) {
+	pub fn select(
+		&self,
+		root_key_id: keychain::Identifier,
+		amount: u64,
+	) -> (Vec<OutputData>, i64) {
 		let mut to_spend = vec![];
 		let mut input_total = 0;
 
 		// TODO very naive impl for now - definitely better coin selection
 		// algos available
 		for out in self.outputs.values() {
-			if out.status == OutputStatus::Unspent && out.fingerprint == fingerprint {
+			if out.status == OutputStatus::Unspent && out.root_key_id == root_key_id {
 				to_spend.push(out.clone());
 				input_total += out.value;
 				if input_total >= amount {
@@ -330,10 +332,10 @@ impl WalletData {
 	}
 
 	/// Next child index when we want to create a new output.
-	pub fn next_child(&self, fingerprint: keychain::Fingerprint) -> u32 {
+	pub fn next_child(&self, root_key_id: keychain::Identifier) -> u32 {
 		let mut max_n = 0;
 		for out in self.outputs.values() {
-			if max_n < out.n_child && out.fingerprint == fingerprint {
+			if max_n < out.n_child && out.root_key_id == root_key_id {
 				max_n = out.n_child;
 			}
 		}
