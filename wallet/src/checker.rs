@@ -74,8 +74,8 @@ fn get_output_from_node(
 	derivation: u32,
 ) -> Result<Option<api::Output>, Error> {
 	// do we want to store these commitments in wallet.dat?
-	let pubkey = keychain.derive_pubkey(derivation)?;
-	let commit = keychain.commit(amount, &pubkey)?;
+	let key_id = keychain.derive_key_id(derivation)?;
+	let commit = keychain.commit(amount, &key_id)?;
 
 	let url = format!(
 		"{}/v1/chain/utxo/{}",

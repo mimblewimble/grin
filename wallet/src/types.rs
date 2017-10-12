@@ -399,12 +399,12 @@ pub enum WalletReceiveRequest {
 pub struct BlockFees {
 	pub fees: u64,
 	pub height: u64,
-	pub pubkey: Option<keychain::Identifier>,
+	pub key_id: Option<keychain::Identifier>,
 }
 
 impl BlockFees {
-	pub fn pubkey(&self) -> Option<keychain::Identifier> {
-		self.pubkey.clone()
+	pub fn key_id(&self) -> Option<keychain::Identifier> {
+		self.key_id.clone()
 	}
 }
 
@@ -413,5 +413,5 @@ impl BlockFees {
 pub struct CbData {
 	pub output: String,
 	pub kernel: String,
-	pub pubkey: String,
+	pub key_id: String,
 }

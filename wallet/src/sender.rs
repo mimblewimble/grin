@@ -100,7 +100,7 @@ pub fn issue_burn_tx(
 
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |mut wallet_data| {
-		
+
 		// select all suitable outputs by passing largest amount
 		let (coins, _) = wallet_data.select(fingerprint.clone(), u64::max_value());
 
@@ -136,17 +136,17 @@ fn inputs_and_change(coins: &Vec<OutputData>, keychain: &Keychain, fingerprint: 
 	parts.push(build::with_fee(fee));
 	let change = total - amount - fee;
 
-	// build inputs using the appropriate derived pubkeys
+	// build inputs using the appropriate derived key_ids
 	for coin in coins {
-		let pubkey = keychain.derive_pubkey(coin.n_child)?;
-		parts.push(build::input(coin.value, pubkey));
+		let key_id = keychain.derive_key_id(coin.n_child)?;
+		parts.push(build::input(coin.value, key_id));
 	}
 
-	// derive an additional pubkey for change and build the change output
+	// derive an additional key_id for change and build the change output
 	let change_derivation = wallet_data.next_child(fingerprint.clone());
-	let change_key = keychain.derive_pubkey(change_derivation)?;
+	let change_key = keychain.derive_key_id(change_derivation)?;
 	parts.push(build::output(change, change_key.clone()));
-	
+
 	// we got that far, time to start tracking the new output
 	// and lock the outputs used
 	wallet_data.add_output(OutputData {
@@ -177,12 +177,11 @@ mod test {
 	// based on the public key and amount begin spent
 	fn output_commitment_equals_input_commitment_on_spend() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
 
-		let (tx, _) = transaction(vec![output(105, pk1.clone())], &keychain).unwrap();
+		let (tx1, _) = transaction(vec![output(105, key_id1.clone())], &keychain).unwrap();
+		let (tx2, _) = transaction(vec![input(105, key_id1.clone())], &keychain).unwrap();
 
-		let (tx2, _) = transaction(vec![input(105, pk1.clone())], &keychain).unwrap();
-
-		assert_eq!(tx.outputs[0].commitment(), tx2.inputs[0].commitment());
+		assert_eq!(tx1.outputs[0].commitment(), tx2.inputs[0].commitment());
 	}
 }

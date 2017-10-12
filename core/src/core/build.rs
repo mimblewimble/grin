@@ -43,22 +43,22 @@ pub type Append = for<'a> Fn(&'a mut Context, (Transaction, BlindSum)) -> (Trans
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
-pub fn input(value: u64, pubkey: Identifier) -> Box<Append> {
+pub fn input(value: u64, key_id: Identifier) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
-		let commit = build.keychain.commit(value, &pubkey).unwrap();
-		(tx.with_input(Input(commit)), sum.sub_pubkey(pubkey.clone()))
+		let commit = build.keychain.commit(value, &key_id).unwrap();
+		(tx.with_input(Input(commit)), sum.sub_key_id(key_id.clone()))
 	})
 }
 
 /// Adds an output with the provided value and key identifier from the
 /// keychain.
-pub fn output(value: u64, pubkey: Identifier) -> Box<Append> {
+pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
-		let commit = build.keychain.commit(value, &pubkey).unwrap();
+		let commit = build.keychain.commit(value, &key_id).unwrap();
 		let msg = secp::pedersen::ProofMessage::empty();
 		let rproof = build
 			.keychain
-			.range_proof(value, &pubkey, commit, msg)
+			.range_proof(value, &key_id, commit, msg)
 			.unwrap();
 
 		(
@@ -67,7 +67,7 @@ pub fn output(value: u64, pubkey: Identifier) -> Box<Append> {
 				commit: commit,
 				proof: rproof,
 			}),
-			sum.add_pubkey(pubkey.clone()),
+			sum.add_key_id(key_id.clone()),
 		)
 	})
 }
@@ -136,12 +136,12 @@ mod test {
 	#[test]
 	fn blind_simple_tx() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pk1 = keychain.derive_pubkey(1).unwrap();
-		let pk2 = keychain.derive_pubkey(2).unwrap();
-		let pk3 = keychain.derive_pubkey(3).unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
+		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		let (tx, _) = transaction(
-			vec![input(10, pk1), input(11, pk2), output(20, pk3), with_fee(1)],
+			vec![input(10, key_id1), input(11, key_id2), output(20, key_id3), with_fee(1)],
 			&keychain,
 		).unwrap();
 
@@ -151,10 +151,10 @@ mod test {
 	#[test]
 	fn blind_simpler_tx() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pk1 = keychain.derive_pubkey(1).unwrap();
-		let pk2 = keychain.derive_pubkey(2).unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
 
-		let (tx, _) = transaction(vec![input(6, pk1), output(2, pk2), with_fee(4)], &keychain)
+		let (tx, _) = transaction(vec![input(6, key_id1), output(2, key_id2), with_fee(4)], &keychain)
 			.unwrap();
 
 		tx.verify_sig(&keychain.secp()).unwrap();

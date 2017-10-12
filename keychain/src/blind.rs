@@ -40,8 +40,8 @@ impl BlindingFactor {
 /// Accumulator to compute the sum of blinding factors. Keeps track of each
 /// factor as well as the "sign" with which they should be combined.
 pub struct BlindSum {
-	pub positive_pubkeys: Vec<Identifier>,
-	pub negative_pubkeys: Vec<Identifier>,
+	pub positive_key_ids: Vec<Identifier>,
+	pub negative_key_ids: Vec<Identifier>,
 	pub positive_blinding_factors: Vec<BlindingFactor>,
 	pub negative_blinding_factors: Vec<BlindingFactor>,
 }
@@ -50,20 +50,20 @@ impl BlindSum {
 	/// Creates a new blinding factor sum.
 	pub fn new() -> BlindSum {
 		BlindSum {
-			positive_pubkeys: vec![],
-			negative_pubkeys: vec![],
+			positive_key_ids: vec![],
+			negative_key_ids: vec![],
 			positive_blinding_factors: vec![],
 			negative_blinding_factors: vec![],
 		}
 	}
 
-	pub fn add_pubkey(mut self, pubkey: Identifier) -> BlindSum {
-		self.positive_pubkeys.push(pubkey);
+	pub fn add_key_id(mut self, key_id: Identifier) -> BlindSum {
+		self.positive_key_ids.push(key_id);
 		self
 	}
 
-	pub fn sub_pubkey(mut self, pubkey: Identifier) -> BlindSum {
-		self.negative_pubkeys.push(pubkey);
+	pub fn sub_key_id(mut self, key_id: Identifier) -> BlindSum {
+		self.negative_key_ids.push(key_id);
 		self
 	}
 
