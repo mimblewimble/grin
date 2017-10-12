@@ -32,6 +32,22 @@ use util;
 const DAT_FILE: &'static str = "wallet.dat";
 const LOCK_FILE: &'static str = "wallet.lock";
 
+const DEFAULT_BASE_FEE: u64 = 10;
+
+/// Transaction fee calculation
+pub fn tx_fee(input_len: usize, output_len: usize, base_fee: Option<u64>) -> u64 {
+	let use_base_fee = match base_fee {
+		Some(bf)  => bf,
+		None => DEFAULT_BASE_FEE,
+	};
+	let mut tx_weight = -1 * (input_len as i32) + 4 * (output_len as i32) + 1;
+	if tx_weight < 1 {
+		tx_weight = 1;
+	}
+
+	(tx_weight as u64) * use_base_fee
+}
+
 /// Wallet errors, mostly wrappers around underlying crypto or I/O errors.
 #[derive(Debug)]
 pub enum Error {

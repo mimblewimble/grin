@@ -210,11 +210,19 @@ where
 		let t: E::OP_IN = serde_json::from_reader(req.body.by_ref()).map_err(|e| {
 			IronError::new(e, status::BadRequest)
 		})?;
-		let res = self.endpoint.operation(self.operation.clone(), t)?;
-		let res_json = serde_json::to_string(&res).map_err(|e| {
-			IronError::new(e, status::InternalServerError)
-		})?;
-		Ok(Response::with((status::Ok, res_json)))
+		let res = self.endpoint.operation(self.operation.clone(), t);
+		match res {
+			Ok(resp) => {
+				let res_json = serde_json::to_string(&resp).map_err(|e| {
+					IronError::new(e, status::InternalServerError)
+				})?;
+				Ok(Response::with((status::Ok, res_json)))
+			}
+			Err(e) => {
+				error!("API operation: {:?}", e);
+				Err(IronError::from(e))
+			}
+		}
 	}
 }
 
