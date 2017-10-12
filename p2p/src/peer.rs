@@ -102,9 +102,9 @@ impl Peer {
 					info!(LOGGER, "Client {} corrupted, ban.", addr);
 					Err(Error::Serialization(e))
 				}
-				Err(_) => {
+				Err(e) => {
 					*state = State::Disconnected;
-					info!(LOGGER, "Client {} connection lost.", addr);
+					info!(LOGGER, "Client {} connection lost: {:?}", addr, e);
 					Ok(())
 				}
 			}
