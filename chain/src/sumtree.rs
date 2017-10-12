@@ -284,6 +284,16 @@ impl<'a> Extension<'a> {
 		self.rollback = true;
 	}
 
+	/// Dumps the state of the 3 sum trees to stdout for debugging
+	pub fn dump(&self) {
+		println!("-- outputs --");
+		self.output_pmmr.dump();
+		println!("-- range proofs --");
+		self.rproof_pmmr.dump();
+		println!("-- kernels --");
+		self.kernel_pmmr.dump();
+	}
+
 	// Sizes of the sum trees, used by `extending` on rollback.
 	fn sizes(&self) -> (u64, u64, u64) {
 		(self.output_pmmr.unpruned_size(),

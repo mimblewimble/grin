@@ -265,6 +265,7 @@ fn validate_block(b: &Block,
 	if utxo_root.hash != b.header.utxo_root || rproof_root.hash != b.header.range_proof_root ||
 	   kernel_root.hash != b.header.kernel_root {
 
+		ext.dump();
 		return Err(Error::InvalidRoot);
 	}
 
