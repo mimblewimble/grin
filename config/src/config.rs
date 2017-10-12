@@ -22,6 +22,7 @@ use std::fs::File;
 use toml;
 use grin::ServerConfig;
 use pow::types::MinerConfig;
+use util::LoggingConfig;
 use types::{ConfigMembers, GlobalConfig, ConfigError};
 
 /// The default file name to use when trying to derive
@@ -37,6 +38,7 @@ impl Default for ConfigMembers {
 		ConfigMembers {
 			server: ServerConfig::default(),
 			mining: Some(MinerConfig::default()),
+			logging: Some(LoggingConfig::default()),
 		}
 	}
 }

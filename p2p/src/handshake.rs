@@ -26,6 +26,7 @@ use core::ser;
 use msg::*;
 use types::*;
 use protocol::ProtocolV1;
+use util::LOGGER;
 
 const NONCES_CAP: usize = 100;
 
@@ -47,13 +48,12 @@ impl Handshake {
 	}
 
 	/// Handles connecting to a new remote peer, starting the version handshake.
-	pub fn connect(
-		&self,
-		capab: Capabilities,
-		total_difficulty: Difficulty,
-		self_addr: SocketAddr,
-		conn: TcpStream,
-	) -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
+	pub fn connect(&self,
+	               capab: Capabilities,
+	               total_difficulty: Difficulty,
+	               self_addr: SocketAddr,
+	               conn: TcpStream)
+	               -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
 		// prepare the first part of the hanshake
 		let nonce = self.next_nonce();
 		let hand = Hand {
@@ -85,7 +85,7 @@ impl Handshake {
 							total_difficulty: shake.total_difficulty,
 						};
 
-						info!("Connected to peer {:?}", peer_info);
+						info!(LOGGER, "Connected to peer {:?}", peer_info);
 						// when more than one protocol version is supported, choosing should go here
 						Ok((conn, ProtocolV1::new(), peer_info))
 					}
@@ -95,12 +95,11 @@ impl Handshake {
 
 	/// Handles receiving a connection from a new remote peer that started the
 	/// version handshake.
-	pub fn handshake(
-		&self,
-		capab: Capabilities,
-		total_difficulty: Difficulty,
-		conn: TcpStream,
-	) -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
+	pub fn handshake(&self,
+	                 capab: Capabilities,
+	                 total_difficulty: Difficulty,
+	                 conn: TcpStream)
+	                 -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
 		let nonces = self.nonces.clone();
 		Box::new(
 			read_msg::<Hand>(conn)
@@ -139,7 +138,7 @@ impl Handshake {
 					Ok((conn, shake, peer_info))
 				})
 				.and_then(|(conn, shake, peer_info)| {
-					debug!("Success handshake with {}.", peer_info.addr);
+					debug!(LOGGER, "Success handshake with {}.", peer_info.addr);
 					write_msg(conn, shake, Type::Shake)
 				  // when more than one protocol version is supported, choosing should go here
 					.map(|conn| (conn, ProtocolV1::new(), peer_info))

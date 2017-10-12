@@ -7,13 +7,14 @@ workspace = ".."
 [dependencies]
 bitflags = "^0.7.0"
 byteorder = "^0.5"
-log = "^0.3"
+slog = "^2.0.12"
 serde = "~1.0.8"
 serde_derive = "~1.0.8"
 time = "^0.1"
 
 grin_core = { path = "../core" }
 grin_keychain = { path = "../keychain" }
+grin_util = { path = "../util" }
 grin_store = { path = "../store" }
 secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }
 

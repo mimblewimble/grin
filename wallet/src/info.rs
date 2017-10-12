@@ -16,10 +16,7 @@ use checker;
 use keychain::Keychain;
 use types::{WalletConfig, WalletData};
 
-pub fn show_info(
-	config: &WalletConfig,
-	keychain: &Keychain,
-) {
+pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 	let fingerprint = keychain.clone().fingerprint();
 	let _ = checker::refresh_outputs(&config, &keychain);
 
@@ -30,7 +27,8 @@ pub fn show_info(
 		println!("identifier, height, lock_height, status, value");
 		println!("----------------------------------");
 
-		let mut outputs = wallet_data.outputs
+		let mut outputs = wallet_data
+			.outputs
 			.values()
 			.filter(|out| out.fingerprint == fingerprint)
 			.collect::<Vec<_>>();

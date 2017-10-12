@@ -35,6 +35,7 @@ use seed;
 use sync;
 use types::*;
 use pow;
+use util::LOGGER;
 
 use core::global;
 
@@ -66,7 +67,7 @@ impl Server {
 		let forever = Timer::default()
 			.interval(time::Duration::from_secs(60))
 			.for_each(move |_| {
-				debug!("event loop running");
+				debug!(LOGGER, "event loop running");
 				Ok(())
 			})
 			.map_err(|_| ());
@@ -79,9 +80,10 @@ impl Server {
 	pub fn future(mut config: ServerConfig, evt_handle: &reactor::Handle) -> Result<Server, Error> {
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
-		let tx_pool = Arc::new(RwLock::new(
-			pool::TransactionPool::new(config.pool_config.clone(), pool_adapter.clone()),
-		));
+		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(
+			config.pool_config.clone(),
+			pool_adapter.clone(),
+		)));
 
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));
 
@@ -131,7 +133,7 @@ impl Server {
 
 		evt_handle.spawn(p2p_server.start(evt_handle.clone()).map_err(|_| ()));
 
-		info!("Starting rest apis at: {}", &config.api_http_addr);
+		info!(LOGGER, "Starting rest apis at: {}", &config.api_http_addr);
 
 		api::start_rest_apis(
 			config.api_http_addr.clone(),
@@ -139,7 +141,7 @@ impl Server {
 			tx_pool.clone(),
 		);
 
-		warn!("Grin server started.");
+		warn!(LOGGER, "Grin server started.");
 		Ok(Server {
 			config: config,
 			evt_handle: evt_handle.clone(),
@@ -174,9 +176,7 @@ impl Server {
 
 		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
 		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.unwrap().port));
-		thread::spawn(move || {
-			miner.run_loop(config.clone(), cuckoo_size as u32, proof_size);
-		});
+		thread::spawn(move || { miner.run_loop(config.clone(), cuckoo_size as u32, proof_size); });
 	}
 
 	/// The chain head

@@ -27,6 +27,7 @@ use secp::pedersen::Commitment;
 use util::OneTime;
 use store;
 use sync;
+use util::LOGGER;
 use core::global::{MiningParameterMode, MINING_PARAMETER_MODE};
 
 /// Implementation of the NetAdapter for the blockchain. Gets notified when new
@@ -51,19 +52,23 @@ impl NetAdapter for NetToChainAdapter {
 			identifier: "?.?.?.?".to_string(),
 		};
 		if let Err(e) = self.tx_pool.write().unwrap().add_to_memory_pool(source, tx) {
-			error!("Transaction rejected: {:?}", e);
+			error!(LOGGER, "Transaction rejected: {:?}", e);
 		}
 	}
 
 	fn block_received(&self, b: core::Block) {
 		let bhash = b.hash();
-		debug!("Received block {} from network, going to process.", bhash);
+		debug!(
+			LOGGER,
+			"Received block {} from network, going to process.",
+			bhash
+		);
 
 		// pushing the new block through the chain pipeline
 		let res = self.chain.process_block(b, self.chain_opts());
 
 		if let Err(e) = res {
-			debug!("Block {} refused by chain: {:?}", bhash, e);
+			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
 		}
 
 		if self.syncer.borrow().syncing() {
@@ -82,6 +87,7 @@ impl NetAdapter for NetToChainAdapter {
 				}
 				Err(chain::Error::Unfit(s)) => {
 					info!(
+						LOGGER,
 						"Received unfit block header {} at {}: {}.",
 						bh.hash(),
 						bh.height,
@@ -89,16 +95,25 @@ impl NetAdapter for NetToChainAdapter {
 					);
 				}
 				Err(chain::Error::StoreErr(e)) => {
-					error!("Store error processing block header {}: {:?}", bh.hash(), e);
+					error!(
+						LOGGER,
+						"Store error processing block header {}: {:?}",
+						bh.hash(),
+						e
+					);
 					return;
 				}
 				Err(e) => {
-					info!("Invalid block header {}: {:?}.", bh.hash(), e);
+					info!(LOGGER, "Invalid block header {}: {:?}.", bh.hash(), e);
 					// TODO penalize peer somehow
 				}
 			}
 		}
-		info!("Added {} headers to the header chain.", added_hs.len());
+		info!(
+			LOGGER,
+			"Added {} headers to the header chain.",
+			added_hs.len()
+		);
 
 		if self.syncer.borrow().syncing() {
 			self.syncer.borrow().headers_received(added_hs);
@@ -118,7 +133,7 @@ impl NetAdapter for NetToChainAdapter {
 				return self.locate_headers(locator[1..].to_vec());
 			}
 			Err(e) => {
-				error!("Could not build header locator: {:?}", e);
+				error!(LOGGER, "Could not build header locator: {:?}", e);
 				return vec![];
 			}
 		};
@@ -132,7 +147,7 @@ impl NetAdapter for NetToChainAdapter {
 				Ok(head) => headers.push(head),
 				Err(chain::Error::StoreErr(store::Error::NotFoundErr)) => break,
 				Err(e) => {
-					error!("Could not build header locator: {:?}", e);
+					error!(LOGGER, "Could not build header locator: {:?}", e);
 					return vec![];
 				}
 			}
@@ -152,18 +167,15 @@ impl NetAdapter for NetToChainAdapter {
 	/// Find good peers we know with the provided capability and return their
 	/// addresses.
 	fn find_peer_addrs(&self, capab: p2p::Capabilities) -> Vec<SocketAddr> {
-		let peers = self.peer_store.find_peers(
-			State::Healthy,
-			capab,
-			p2p::MAX_PEER_ADDRS as usize,
-		);
-		debug!("Got {} peer addrs to send.", peers.len());
+		let peers = self.peer_store
+			.find_peers(State::Healthy, capab, p2p::MAX_PEER_ADDRS as usize);
+		debug!(LOGGER, "Got {} peer addrs to send.", peers.len());
 		map_vec!(peers, |p| p.addr)
 	}
 
 	/// A list of peers has been received from one of our peers.
 	fn peer_addrs_received(&self, peer_addrs: Vec<SocketAddr>) {
-		debug!("Received {} peer addrs, saving.", peer_addrs.len());
+		debug!(LOGGER, "Received {} peer addrs, saving.", peer_addrs.len());
 		for pa in peer_addrs {
 			if let Ok(e) = self.peer_store.exists_peer(pa) {
 				if e {
@@ -177,14 +189,14 @@ impl NetAdapter for NetToChainAdapter {
 				flags: State::Healthy,
 			};
 			if let Err(e) = self.peer_store.save_peer(&peer) {
-				error!("Could not save received peer address: {:?}", e);
+				error!(LOGGER, "Could not save received peer address: {:?}", e);
 			}
 		}
 	}
 
 	/// Network successfully connected to a peer.
 	fn peer_connected(&self, pi: &p2p::PeerInfo) {
-		debug!("Saving newly connected peer {}.", pi.addr);
+		debug!(LOGGER, "Saving newly connected peer {}.", pi.addr);
 		let peer = PeerData {
 			addr: pi.addr,
 			capabilities: pi.capabilities,
@@ -192,17 +204,16 @@ impl NetAdapter for NetToChainAdapter {
 			flags: State::Healthy,
 		};
 		if let Err(e) = self.peer_store.save_peer(&peer) {
-			error!("Could not save connected peer: {:?}", e);
+			error!(LOGGER, "Could not save connected peer: {:?}", e);
 		}
 	}
 }
 
 impl NetToChainAdapter {
-	pub fn new(
-		chain_ref: Arc<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-		peer_store: Arc<PeerStore>,
-	) -> NetToChainAdapter {
+	pub fn new(chain_ref: Arc<chain::Chain>,
+	           tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	           peer_store: Arc<PeerStore>)
+	           -> NetToChainAdapter {
 		NetToChainAdapter {
 			chain: chain_ref,
 			peer_store: peer_store,
@@ -216,15 +227,15 @@ impl NetToChainAdapter {
 	pub fn start_sync(&self, sync: sync::Syncer) {
 		let arc_sync = Arc::new(sync);
 		self.syncer.init(arc_sync.clone());
-		let spawn_result = thread::Builder::new().name("syncer".to_string()).spawn(
-			move || {
+		let spawn_result = thread::Builder::new()
+			.name("syncer".to_string())
+			.spawn(move || {
 				let sync_run_result = arc_sync.run();
 				match sync_run_result {
 					Ok(_) => {}
 					Err(_) => {}
 				}
-			},
-		);
+			});
 		match spawn_result {
 			Ok(_) => {}
 			Err(_) => {}
@@ -261,6 +272,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 		{
 			if let Err(e) = self.tx_pool.write().unwrap().reconcile_block(b) {
 				error!(
+					LOGGER,
 					"Pool could not update itself at block {}: {:?}",
 					b.hash(),
 					e
@@ -272,9 +284,8 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 }
 
 impl ChainToPoolAndNetAdapter {
-	pub fn new(
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-	) -> ChainToPoolAndNetAdapter {
+	pub fn new(tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>)
+	           -> ChainToPoolAndNetAdapter {
 		ChainToPoolAndNetAdapter {
 			tx_pool: tx_pool,
 			p2p: OneTime::new(),
@@ -306,19 +317,19 @@ impl PoolToChainAdapter {
 
 impl pool::BlockChain for PoolToChainAdapter {
 	fn get_unspent(&self, output_ref: &Commitment) -> Result<Output, pool::PoolError> {
-		self.chain.borrow().get_unspent(output_ref).map_err(
-			|e| match e {
+		self.chain
+			.borrow()
+			.get_unspent(output_ref)
+			.map_err(|e| match e {
 				chain::types::Error::OutputNotFound => pool::PoolError::OutputNotFound,
 				chain::types::Error::OutputSpent => pool::PoolError::OutputSpent,
 				_ => pool::PoolError::GenericPoolError,
-			},
-		)
+			})
 	}
 
-	fn get_block_header_by_output_commit(
-		&self,
-		commit: &Commitment,
-	) -> Result<BlockHeader, pool::PoolError> {
+	fn get_block_header_by_output_commit(&self,
+	                                     commit: &Commitment)
+	                                     -> Result<BlockHeader, pool::PoolError> {
 		self.chain
 			.borrow()
 			.get_block_header_by_output_commit(commit)
@@ -326,8 +337,9 @@ impl pool::BlockChain for PoolToChainAdapter {
 	}
 
 	fn head_header(&self) -> Result<BlockHeader, pool::PoolError> {
-		self.chain.borrow().head_header().map_err(|_| {
-			pool::PoolError::GenericPoolError
-		})
+		self.chain
+			.borrow()
+			.head_header()
+			.map_err(|_| pool::PoolError::GenericPoolError)
 	}
 }

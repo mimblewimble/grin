@@ -21,7 +21,7 @@ extern crate secp256k1zkp as secp;
 
 extern crate hyper;
 #[macro_use]
-extern crate log;
+extern crate slog;
 extern crate iron;
 extern crate router;
 extern crate serde;

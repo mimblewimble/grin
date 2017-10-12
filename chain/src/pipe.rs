@@ -27,6 +27,7 @@ use types::*;
 use store;
 use sumtree;
 use core::global;
+use util::LOGGER;
 
 /// Contextual information required to process a new block and either reject or
 /// accept it.
@@ -53,6 +54,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 	// spend resources reading the full block when its header is invalid
 
 	info!(
+		LOGGER,
 		"Starting validation pipeline for block {} at {} with {} inputs and {} outputs.",
 		b.hash(),
 		b.header.height,
@@ -74,6 +76,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 
 		validate_block(b, &mut ctx, &mut extension)?;
 		debug!(
+			LOGGER,
 			"Block at {} with hash {} is valid, going to save and append.",
 			b.header.height,
 			b.hash()
@@ -92,6 +95,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
 
 	info!(
+		LOGGER,
 		"Starting validation pipeline for block header {} at {}.",
 		bh.hash(),
 		bh.height
@@ -135,6 +139,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	// check version, enforces scheduled hard fork
 	if !consensus::valid_header_version(header.height, header.version) {
 		error!(
+			LOGGER,
 			"Invalid block header version received ({}), maybe update Grin?",
 			header.version
 		);
@@ -142,8 +147,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	if header.timestamp >
-		time::now_utc() + time::Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
-	{
+	   time::now_utc() + time::Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64)) {
 		// refuse blocks more than 12 blocks intervals in future (as in bitcoin)
 		// TODO add warning in p2p code if local time is too different from peers
 		return Err(Error::InvalidBlockTime);
@@ -155,16 +159,16 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		} else {
 			consensus::DEFAULT_SIZESHIFT
 		};
-		debug!("Validating block with cuckoo size {}", cycle_size);
+		debug!(LOGGER, "Validating block with cuckoo size {}", cycle_size);
 		if !(ctx.pow_verifier)(header, cycle_size as u32) {
 			return Err(Error::InvalidPow);
 		}
 	}
 
 	// first I/O cost, better as late as possible
-	let prev = try!(ctx.store.get_block_header(&header.previous).map_err(
-		&Error::StoreErr,
-	));
+	let prev = try!(ctx.store
+	                    .get_block_header(&header.previous)
+	                    .map_err(&Error::StoreErr));
 
 	if header.height != prev.height + 1 {
 		return Err(Error::InvalidBlockHeight);
@@ -183,9 +187,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		}
 
 		let diff_iter = store::DifficultyIter::from(header.previous, ctx.store.clone());
-		let difficulty = consensus::next_difficulty(diff_iter).map_err(|e| {
-			Error::Other(e.to_string())
-		})?;
+		let difficulty = consensus::next_difficulty(diff_iter)
+			.map_err(|e| Error::Other(e.to_string()))?;
 		if header.difficulty < difficulty {
 			return Err(Error::DifficultyTooLow);
 		}
@@ -195,11 +198,10 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 }
 
 /// Fully validate the block content.
-fn validate_block(
-	b: &Block,
-	ctx: &mut BlockContext,
-	ext: &mut sumtree::Extension,
-) -> Result<(), Error> {
+fn validate_block(b: &Block,
+                  ctx: &mut BlockContext,
+                  ext: &mut sumtree::Extension)
+                  -> Result<(), Error> {
 	if b.header.height > ctx.head.height + 1 {
 		return Err(Error::Orphan);
 	}
@@ -248,11 +250,7 @@ fn validate_block(
 		if forked_block.header.height > 0 {
 			let last_output = &forked_block.outputs[forked_block.outputs.len() - 1];
 			let last_kernel = &forked_block.kernels[forked_block.kernels.len() - 1];
-			ext.rewind(
-				forked_block.header.height,
-				last_output,
-				last_kernel,
-			)?;
+			ext.rewind(forked_block.header.height, last_output, last_kernel)?;
 		}
 
 		// apply all forked blocks, including this new one
@@ -265,8 +263,7 @@ fn validate_block(
 
 	let (utxo_root, rproof_root, kernel_root) = ext.roots();
 	if utxo_root.hash != b.header.utxo_root || rproof_root.hash != b.header.range_proof_root ||
-		kernel_root.hash != b.header.kernel_root
-	{
+	   kernel_root.hash != b.header.kernel_root {
 
 		return Err(Error::InvalidRoot);
 	}
@@ -276,10 +273,8 @@ fn validate_block(
 		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
 			if output.features.contains(transaction::COINBASE_OUTPUT) {
 				if let Ok(output_header) =
-					ctx.store.get_block_header_by_output_commit(
-						&input.commitment(),
-					)
-				{
+					ctx.store
+						.get_block_header_by_output_commit(&input.commitment()) {
 
 					// TODO - make sure we are not off-by-1 here vs. the equivalent tansaction
 					// validation rule
@@ -333,7 +328,12 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 		// TODO if we're switching branch, make sure to backtrack the sum trees
 
 		ctx.head = tip.clone();
-		info!("Updated head to {} at {}.", b.hash(), b.header.height);
+		info!(
+			LOGGER,
+			"Updated head to {} at {}.",
+			b.hash(),
+			b.header.height
+		);
 		Ok(Some(tip))
 	} else {
 		Ok(None)
@@ -352,6 +352,7 @@ fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option
 
 		ctx.head = tip.clone();
 		info!(
+			LOGGER,
 			"Updated block header head to {} at {}.",
 			bh.hash(),
 			bh.height

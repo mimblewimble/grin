@@ -29,6 +29,7 @@ use libc::{off_t as off64_t, ftruncate as ftruncate64};
 
 use core::core::pmmr::{self, Summable, Backend, HashSum, VecBackend};
 use core::ser;
+use util::LOGGER;
 
 const PMMR_DATA_FILE: &'static str = "pmmr_dat.bin";
 const PMMR_RM_LOG_FILE: &'static str = "pmmr_rm_log.bin";
@@ -263,8 +264,7 @@ fn include_tuple(v: &Vec<(u64, u32)>, e: u64) -> bool {
 /// * A remove log tracks the positions that need to be pruned from the
 /// main storage file.
 pub struct PMMRBackend<T>
-where
-	T: Summable + Clone,
+	where T: Summable + Clone
 {
 	data_dir: String,
 	hashsum_file: AppendOnlyFile,
@@ -279,16 +279,13 @@ where
 }
 
 impl<T> Backend<T> for PMMRBackend<T>
-where
-	T: Summable + Clone,
+    where T: Summable + Clone
 {
 	/// Append the provided HashSums to the backend storage.
 	#[allow(unused_variables)]
 	fn append(&mut self, position: u64, data: Vec<HashSum<T>>) -> Result<(), String> {
-		self.buffer.append(
-			position - (self.buffer_index as u64),
-			data.clone(),
-		)?;
+		self.buffer
+			.append(position - (self.buffer_index as u64), data.clone())?;
 		Ok(())
 	}
 
@@ -322,6 +319,7 @@ where
 			Ok(hashsum) => Some(hashsum),
 			Err(e) => {
 				error!(
+					LOGGER,
 					"Corrupted storage, could not read an entry from sum tree store: {:?}",
 					e
 				);
@@ -332,9 +330,9 @@ where
 
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {
 		assert!(self.buffer.len() == 0, "Rewind on non empty buffer.");
-		self.remove_log.truncate(index).map_err(|e| {
-			format!("Could not truncate remove log: {}", e)
-		})?;
+		self.remove_log
+			.truncate(index)
+			.map_err(|e| format!("Could not truncate remove log: {}", e))?;
 		self.rewind = Some((position, index, self.buffer_index));
 		self.buffer_index = position as usize;
 		Ok(())
@@ -346,21 +344,19 @@ where
 			for position in &positions {
 				let pos_sz = *position as usize;
 				if pos_sz > self.buffer_index &&
-					pos_sz - 1 < self.buffer_index + self.buffer.len()
-				{
+				   pos_sz - 1 < self.buffer_index + self.buffer.len() {
 					self.buffer.remove(vec![*position], index).unwrap();
 				}
 			}
 		}
-		self.remove_log.append(positions, index).map_err(|e| {
-			format!("Could not write to log storage, disk full? {:?}", e)
-		})
+		self.remove_log
+			.append(positions, index)
+			.map_err(|e| format!("Could not write to log storage, disk full? {:?}", e))
 	}
 }
 
 impl<T> PMMRBackend<T>
-where
-	T: Summable + Clone,
+    where T: Summable + Clone
 {
 	/// Instantiates a new PMMR backend that will use the provided directly to
 	/// store its files.
@@ -445,8 +441,7 @@ where
 	/// position index in db
 	pub fn check_compact(&mut self, max_len: usize) -> io::Result<()> {
 		if !(max_len > 0 && self.remove_log.len() > max_len ||
-			     max_len == 0 && self.remove_log.len() > RM_LOG_MAX_NODES)
-		{
+		     max_len == 0 && self.remove_log.len() > RM_LOG_MAX_NODES) {
 			return Ok(());
 		}
 
@@ -456,6 +451,7 @@ where
 			if let None = self.pruned_nodes.pruned_pos(pos.0) {
 				// TODO we likely can recover from this by directly jumping to 3
 				error!(
+					LOGGER,
 					"The remove log contains nodes that are already in the pruned \
 							 list, a previous compaction likely failed."
 				);
@@ -475,11 +471,8 @@ where
 				(pos - 1 - shift.unwrap()) * record_len
 			})
 			.collect();
-		self.hashsum_file.save_prune(
-			tmp_prune_file.clone(),
-			to_rm,
-			record_len,
-		)?;
+		self.hashsum_file
+			.save_prune(tmp_prune_file.clone(), to_rm, record_len)?;
 
 		// 2. update the prune list and save it in place
 		for &(rm_pos, _) in &self.remove_log.removed[..] {
@@ -508,8 +501,7 @@ where
 
 // Read an ordered vector of scalars from a file.
 fn read_ordered_vec<T>(path: String) -> io::Result<Vec<T>>
-where
-	T: ser::Readable + cmp::Ord,
+	where T: ser::Readable + cmp::Ord
 {
 
 	let file_path = Path::new(&path);
@@ -551,16 +543,16 @@ where
 }
 
 fn write_vec<T>(path: String, v: &Vec<T>) -> io::Result<()>
-where
-	T: ser::Writeable,
+	where T: ser::Writeable
 {
 
 	let mut file_path = File::create(&path)?;
-	ser::serialize(&mut file_path, v).map_err(|_| {
-		io::Error::new(
-			io::ErrorKind::InvalidInput,
-			format!("Failed to serialize data when writing to {}", path),
-		)
-	})?;
+	ser::serialize(&mut file_path, v)
+		.map_err(|_| {
+			io::Error::new(
+				io::ErrorKind::InvalidInput,
+				format!("Failed to serialize data when writing to {}", path),
+			)
+		})?;
 	Ok(())
 }

@@ -28,6 +28,7 @@ use core::core::{Transaction, transaction};
 use core::ser;
 use keychain;
 use util;
+use util::LOGGER;
 
 const DAT_FILE: &'static str = "wallet.dat";
 const LOCK_FILE: &'static str = "wallet.lock";
@@ -195,12 +196,11 @@ impl WalletData {
 	/// across operating systems, this just creates a lock file with a "should
 	/// not exist" option.
 	pub fn with_wallet<T, F>(data_file_dir: &str, f: F) -> Result<T, Error>
-	where
-		F: FnOnce(&mut WalletData) -> T,
+		where F: FnOnce(&mut WalletData) -> T
 	{
 		// create directory if it doesn't exist
 		fs::create_dir_all(data_file_dir).unwrap_or_else(|why| {
-			info!("! {:?}", why.kind());
+			info!(LOGGER, "! {:?}", why.kind());
 		});
 
 		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
@@ -229,6 +229,7 @@ impl WalletData {
 						return Err(e);
 					}
 					debug!(
+						LOGGER,
 						"failed to obtain wallet.lock, retries - {}, sleeping",
 						retries
 					);
@@ -266,25 +267,25 @@ impl WalletData {
 
 	/// Read the wallet data from disk.
 	fn read(data_file_path: &str) -> Result<WalletData, Error> {
-		let data_file = File::open(data_file_path).map_err(|e| {
-			Error::WalletData(format!("Could not open {}: {}", data_file_path, e))
-		})?;
-		serde_json::from_reader(data_file).map_err(|e| {
-			Error::WalletData(format!("Error reading {}: {}", data_file_path, e))
-		})
+		let data_file =
+			File::open(data_file_path)
+				.map_err(|e| Error::WalletData(format!("Could not open {}: {}", data_file_path, e)))?;
+		serde_json::from_reader(data_file)
+			.map_err(|e| Error::WalletData(format!("Error reading {}: {}", data_file_path, e)))
 	}
 
 	/// Write the wallet data to disk.
 	fn write(&self, data_file_path: &str) -> Result<(), Error> {
-		let mut data_file = File::create(data_file_path).map_err(|e| {
-			Error::WalletData(format!("Could not create {}: {}", data_file_path, e))
-		})?;
-		let res_json = serde_json::to_vec_pretty(self).map_err(|e| {
-			Error::WalletData(format!("Error serializing wallet data: {}", e))
-		})?;
-		data_file.write_all(res_json.as_slice()).map_err(|e| {
-			Error::WalletData(format!("Error writing {}: {}", data_file_path, e))
-		})
+		let mut data_file =
+			File::create(data_file_path)
+				.map_err(|e| {
+					Error::WalletData(format!("Could not create {}: {}", data_file_path, e))
+				})?;
+		let res_json = serde_json::to_vec_pretty(self)
+			.map_err(|e| Error::WalletData(format!("Error serializing wallet data: {}", e)))?;
+		data_file
+			.write_all(res_json.as_slice())
+			.map_err(|e| Error::WalletData(format!("Error writing {}: {}", data_file_path, e)))
 	}
 
 	/// Append a new output data to the wallet data.
@@ -306,11 +307,10 @@ impl WalletData {
 
 	/// Select a subset of unspent outputs to spend in a transaction
 	/// transferring the provided amount.
-	pub fn select(
-		&self,
-		fingerprint: keychain::Fingerprint,
-		amount: u64,
-	) -> (Vec<OutputData>, i64) {
+	pub fn select(&self,
+	              fingerprint: keychain::Fingerprint,
+	              amount: u64)
+	              -> (Vec<OutputData>, i64) {
 		let mut to_spend = vec![];
 		let mut input_total = 0;
 
@@ -352,11 +352,10 @@ struct JSONPartialTx {
 
 /// Encodes the information for a partial transaction (not yet completed by the
 /// receiver) into JSON.
-pub fn partial_tx_to_json(
-	receive_amount: u64,
-	blind_sum: keychain::BlindingFactor,
-	tx: Transaction,
-) -> String {
+pub fn partial_tx_to_json(receive_amount: u64,
+                          blind_sum: keychain::BlindingFactor,
+                          tx: Transaction)
+                          -> String {
 	let partial_tx = JSONPartialTx {
 		amount: receive_amount,
 		blind_sum: util::to_hex(blind_sum.secret_key().as_ref().to_vec()),
@@ -367,10 +366,9 @@ pub fn partial_tx_to_json(
 
 /// Reads a partial transaction encoded as JSON into the amount, sum of blinding
 /// factors and the transaction itself.
-pub fn partial_tx_from_json(
-	keychain: &keychain::Keychain,
-	json_str: &str,
-) -> Result<(u64, keychain::BlindingFactor, Transaction), Error> {
+pub fn partial_tx_from_json(keychain: &keychain::Keychain,
+                            json_str: &str)
+                            -> Result<(u64, keychain::BlindingFactor, Transaction), Error> {
 	let partial_tx: JSONPartialTx = serde_json::from_str(json_str)?;
 
 	let blind_bin = util::from_hex(partial_tx.blind_sum)?;
@@ -380,11 +378,10 @@ pub fn partial_tx_from_json(
 	let blinding = keychain::BlindingFactor::from_slice(keychain.secp(), &blind_bin[..])?;
 
 	let tx_bin = util::from_hex(partial_tx.tx)?;
-	let tx = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
-		Error::Format(
-			"Could not deserialize transaction, invalid format.".to_string(),
-		)
-	})?;
+	let tx = ser::deserialize(&mut &tx_bin[..])
+		.map_err(|_| {
+			Error::Format("Could not deserialize transaction, invalid format.".to_string())
+		})?;
 
 	Ok((partial_tx.amount, blinding, tx))
 }

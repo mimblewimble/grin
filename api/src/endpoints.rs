@@ -24,6 +24,7 @@ use rest::*;
 use types::*;
 use secp::pedersen::Commitment;
 use util;
+use util::LOGGER;
 
 /// ApiEndpoint implementation for the blockchain. Exposes the current chain
 /// state as a simple JSON object.
@@ -69,7 +70,7 @@ impl ApiEndpoint for OutputApi {
 	}
 
 	fn get(&self, id: String) -> ApiResult<Output> {
-		debug!("GET output {}", id);
+		debug!(LOGGER, "GET output {}", id);
 		let c = util::from_hex(id.clone()).map_err(|_| {
 			Error::Argument(format!("Not a valid commitment: {}", id))
 		})?;
@@ -130,6 +131,7 @@ where
 			identifier: "?.?.?.?".to_string(),
 		};
 		info!(
+			LOGGER,
 			"Pushing transaction with {} inputs and {} outputs to pool.",
 			tx.inputs.len(),
 			tx.outputs.len()
@@ -172,7 +174,7 @@ pub fn start_rest_apis<T>(
 		apis.register_endpoint("/pool".to_string(), PoolApi { tx_pool: tx_pool });
 
 		apis.start(&addr[..]).unwrap_or_else(|e| {
-			error!("Failed to start API HTTP server: {}.", e);
+			error!(LOGGER, "Failed to start API HTTP server: {}.", e);
 		});
 	});
 }

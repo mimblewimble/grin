@@ -34,6 +34,7 @@ use core::core::target::Difficulty;
 use handshake::Handshake;
 use peer::Peer;
 use types::*;
+use util::LOGGER;
 
 /// A no-op network adapter used for testing.
 pub struct DummyAdapter {}
@@ -88,7 +89,7 @@ impl Server {
 	pub fn start(&self, h: reactor::Handle) -> Box<Future<Item = (), Error = Error>> {
 		let addr = SocketAddr::new(self.config.host, self.config.port);
 		let socket = TcpListener::bind(&addr, &h.clone()).unwrap();
-		warn!("P2P server started on {}", addr);
+		warn!(LOGGER, "P2P server started on {}", addr);
 
 		let hs = Arc::new(Handshake::new());
 		let peers = self.peers.clone();
@@ -118,7 +119,7 @@ impl Server {
 		let server = peers.for_each(move |peer| {
 			hs.spawn(peer.then(|res| {
 				match res {
-					Err(e) => info!("Client error: {:?}", e),
+					Err(e) => info!(LOGGER, "Client error: {:?}", e),
 					_ => {}
 				}
 				futures::finished(())
@@ -143,11 +144,10 @@ impl Server {
 	}
 
 	/// Asks the server to connect to a new peer.
-	pub fn connect_peer(
-		&self,
-		addr: SocketAddr,
-		h: reactor::Handle,
-	) -> Box<Future<Item = Option<Arc<Peer>>, Error = Error>> {
+	pub fn connect_peer(&self,
+	                    addr: SocketAddr,
+	                    h: reactor::Handle)
+	                    -> Box<Future<Item = Option<Arc<Peer>>, Error = Error>> {
 		if let Some(p) = self.get_peer(addr) {
 			// if we're already connected to the addr, just return the peer
 			return Box::new(future::ok(Some(p)));
@@ -164,7 +164,7 @@ impl Server {
 		let capab = self.capabilities.clone();
 		let self_addr = SocketAddr::new(self.config.host, self.config.port);
 
-		debug!("{} connecting to {}", self_addr, addr);
+		debug!(LOGGER, "{} connecting to {}", self_addr, addr);
 
 		let socket = TcpStream::connect(&addr, &h).map_err(|e| Error::Connection(e));
 		let h2 = h.clone();
@@ -182,7 +182,7 @@ impl Server {
 			})
 			.and_then(move |(socket, peer)| {
 				h2.spawn(peer.run(socket, adapter2).map_err(|e| {
-					error!("Peer error: {:?}", e);
+					error!(LOGGER, "Peer error: {:?}", e);
 					()
 				}));
 				Ok(Some(peer))
@@ -264,7 +264,7 @@ impl Server {
 		for p in peers.deref() {
 			if p.is_connected() {
 				if let Err(e) = p.send_block(b) {
-					debug!("Error sending block to peer: {:?}", e);
+					debug!(LOGGER, "Error sending block to peer: {:?}", e);
 				}
 			}
 		}
@@ -286,13 +286,11 @@ impl Server {
 }
 
 // Adds the peer built by the provided future in the peers map
-fn add_to_peers<A>(
-	peers: Arc<RwLock<Vec<Arc<Peer>>>>,
-	adapter: Arc<NetAdapter>,
-	peer_fut: A,
-) -> Box<Future<Item = Result<(TcpStream, Arc<Peer>), ()>, Error = Error>>
-where
-	A: IntoFuture<Item = (TcpStream, Peer), Error = Error> + 'static,
+fn add_to_peers<A>(peers: Arc<RwLock<Vec<Arc<Peer>>>>,
+                   adapter: Arc<NetAdapter>,
+                   peer_fut: A)
+                   -> Box<Future<Item = Result<(TcpStream, Arc<Peer>), ()>, Error = Error>>
+	where A: IntoFuture<Item = (TcpStream, Peer), Error = Error> + 'static
 {
 	let peer_add = peer_fut.into_future().map(move |(conn, peer)| {
 		adapter.peer_connected(&peer.info);
@@ -305,17 +303,15 @@ where
 }
 
 // Adds a timeout to a future
-fn with_timeout<T: 'static>(
-	fut: Box<Future<Item = Result<T, ()>, Error = Error>>,
-	h: &reactor::Handle,
-) -> Box<Future<Item = T, Error = Error>> {
+fn with_timeout<T: 'static>(fut: Box<Future<Item = Result<T, ()>, Error = Error>>,
+                            h: &reactor::Handle)
+                            -> Box<Future<Item = T, Error = Error>> {
 	let timeout = reactor::Timeout::new(Duration::new(5, 0), h).unwrap();
-	let timed = fut.select(timeout.map(Err).from_err()).then(
-		|res| match res {
+	let timed = fut.select(timeout.map(Err).from_err())
+		.then(|res| match res {
 			Ok((Ok(inner), _timeout)) => Ok(inner),
 			Ok((_, _accept)) => Err(Error::Timeout),
 			Err((e, _other)) => Err(e),
-		},
-	);
+		});
 	Box::new(timed)
 }

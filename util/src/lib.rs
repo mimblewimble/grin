@@ -12,9 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// Various low-level utilities that factor Rust patterns that are frequent
-/// within the grin codebase.
+//! Logging, as well as various low-level utilities that factor Rust 
+//! patterns that are frequent within the grin codebase.
 
+#![deny(non_upper_case_globals)]
+#![deny(non_camel_case_types)]
+#![deny(non_snake_case)]
+#![deny(unused_mut)]
+#![warn(missing_docs)]
+
+#[macro_use]
+extern crate slog;
+extern crate slog_term;
+extern crate slog_async;
+
+#[macro_use]
+extern crate lazy_static;
+
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+
+// Logging related
+pub mod logger;
+pub use logger::{LOGGER, init_logger};
+
+pub mod types;
+pub use types::LoggingConfig;
+
+// other utils
 use std::cell::{RefCell, Ref};
 #[allow(unused_imports)]
 use std::ops::Deref;
@@ -22,12 +48,13 @@ use std::ops::Deref;
 mod hex;
 pub use hex::*;
 
-// Encapsulation of a RefCell<Option<T>> for one-time initialization after
-// construction. This implementation will purposefully fail hard if not used
-// properly, for example if it's not initialized before being first used
-// (borrowed).
+/// Encapsulation of a RefCell<Option<T>> for one-time initialization after
+/// construction. This implementation will purposefully fail hard if not used
+/// properly, for example if it's not initialized before being first used
+/// (borrowed).
 #[derive(Clone)]
 pub struct OneTime<T> {
+	/// inner
 	inner: RefCell<Option<T>>,
 }
 

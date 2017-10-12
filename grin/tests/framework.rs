@@ -23,7 +23,6 @@ extern crate grin_pow as pow;
 extern crate secp256k1zkp as secp;
 
 extern crate blake2_rfc as blake2;
-extern crate env_logger;
 extern crate futures;
 extern crate tokio_core;
 extern crate tokio_timer;

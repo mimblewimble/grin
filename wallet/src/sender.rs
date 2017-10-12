@@ -19,12 +19,14 @@ use core::ser;
 use keychain::{BlindingFactor, Keychain, Fingerprint, Identifier};
 use receiver::TxWrapper;
 use types::*;
+use util::LOGGER;
 use util;
 
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
 /// UTXOs. The destination can be "stdout" (for command line) or a URL to the
 /// recipients wallet receiver (to be implemented).
+
 pub fn issue_send_tx(
 	config: &WalletConfig,
 	keychain: &Keychain,
@@ -43,10 +45,12 @@ pub fn issue_send_tx(
 		println!("{}", json_tx);
 	} else if &dest[..4] == "http" {
 		let url = format!("{}/v1/receive/receive_json_tx", &dest);
-		debug!("Posting partial transaction to {}", url);
+		debug!(LOGGER, "Posting partial transaction to {}", url);
 		let request = WalletReceiveRequest::PartialTransaction(json_tx);
-		let _: CbData = api::client::post(url.as_str(), &request)
-			.expect(&format!("Wallet receiver at {} unreachable, could not send transaction. Is it running?", url));
+		let _: CbData = api::client::post(url.as_str(), &request).expect(&format!(
+			"Wallet receiver at {} unreachable, could not send transaction. Is it running?",
+			url
+		));
 	} else {
 		panic!("dest not in expected format: {}", dest);
 	}
@@ -175,15 +179,9 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let pk1 = keychain.derive_pubkey(1).unwrap();
 
-		let (tx, _) = transaction(
-			vec![output(105, pk1.clone())],
-			&keychain,
-		).unwrap();
+		let (tx, _) = transaction(vec![output(105, pk1.clone())], &keychain).unwrap();
 
-		let (tx2, _) = transaction(
-			vec![input(105, pk1.clone())],
-			&keychain,
-		).unwrap();
+		let (tx2, _) = transaction(vec![input(105, pk1.clone())], &keychain).unwrap();
 
 		assert_eq!(tx.outputs[0].commitment(), tx2.inputs[0].commitment());
 	}

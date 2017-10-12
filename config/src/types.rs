@@ -20,6 +20,7 @@ use std::fmt;
 
 use grin::ServerConfig;
 use pow::types::MinerConfig;
+use util::LoggingConfig;
 
 /// Error type wrapping config errors.
 #[derive(Debug)]
@@ -99,9 +100,12 @@ pub struct ConfigMembers {
 	pub server: ServerConfig,
 	/// Mining config
 	pub mining: Option<MinerConfig>,
-    //removing wallet from here for now,
-    //as its concerns are separate from the server's, really
-    //given it needs to manage keys. It should probably
-    //stay command line only for the time being
-    //pub wallet: Option<WalletConfig>
+	/// Logging config
+	pub logging: Option<LoggingConfig>,
+	
+	//removing wallet from here for now,
+	//as its concerns are separate from the server's, really
+	//given it needs to manage keys. It should probably
+	//stay command line only for the time being
+	//pub wallet: Option<WalletConfig>
 }

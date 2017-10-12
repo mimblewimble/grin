@@ -23,6 +23,7 @@ use core::core::hash::Hash;
 use core::core::target::Difficulty;
 use handshake::Handshake;
 use types::*;
+use util::LOGGER;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum State {
@@ -42,58 +43,48 @@ unsafe impl Send for Peer {}
 
 impl Peer {
 	/// Initiates the handshake with another peer.
-	pub fn connect(
-		conn: TcpStream,
-		capab: Capabilities,
-		total_difficulty: Difficulty,
-		self_addr: SocketAddr,
-		hs: &Handshake,
-	) -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
+	pub fn connect(conn: TcpStream,
+	               capab: Capabilities,
+	               total_difficulty: Difficulty,
+	               self_addr: SocketAddr,
+	               hs: &Handshake)
+	               -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
 		let connect_peer = hs.connect(capab, total_difficulty, self_addr, conn)
 			.and_then(|(conn, proto, info)| {
-				Ok((
-					conn,
-					Peer {
-						info: info,
-						proto: Box::new(proto),
-						state: Arc::new(RwLock::new(State::Connected)),
-					},
-				))
+				Ok((conn,
+				 Peer {
+				     info: info,
+				     proto: Box::new(proto),
+				     state: Arc::new(RwLock::new(State::Connected)),
+				 }))
 			});
 		Box::new(connect_peer)
 	}
 
 	/// Accept a handshake initiated by another peer.
-	pub fn accept(
-		conn: TcpStream,
-		capab: Capabilities,
-		total_difficulty: Difficulty,
-		hs: &Handshake,
-	) -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
-		let hs_peer = hs.handshake(capab, total_difficulty, conn).and_then(
-			|(conn,
-			  proto,
-			  info)| {
-				Ok((
-					conn,
-					Peer {
-						info: info,
-						proto: Box::new(proto),
-						state: Arc::new(RwLock::new(State::Connected)),
-					},
-				))
-			},
-		);
+	pub fn accept(conn: TcpStream,
+	              capab: Capabilities,
+	              total_difficulty: Difficulty,
+	              hs: &Handshake)
+	              -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
+		let hs_peer = hs.handshake(capab, total_difficulty, conn)
+			.and_then(|(conn, proto, info)| {
+				Ok((conn,
+				 Peer {
+				     info: info,
+				     proto: Box::new(proto),
+				     state: Arc::new(RwLock::new(State::Connected)),
+				 }))
+			});
 		Box::new(hs_peer)
 	}
 
 	/// Main peer loop listening for messages and forwarding to the rest of the
 	/// system.
-	pub fn run(
-		&self,
-		conn: TcpStream,
-		na: Arc<NetAdapter>,
-	) -> Box<Future<Item = (), Error = Error>> {
+	pub fn run(&self,
+	           conn: TcpStream,
+	           na: Arc<NetAdapter>)
+	           -> Box<Future<Item = (), Error = Error>> {
 
 		let addr = self.info.addr;
 		let state = self.state.clone();
@@ -103,17 +94,17 @@ impl Peer {
 			match res {
 				Ok(_) => {
 					*state = State::Disconnected;
-					info!("Client {} disconnected.", addr);
+					info!(LOGGER, "Client {} disconnected.", addr);
 					Ok(())
 				}
 				Err(Error::Serialization(e)) => {
 					*state = State::Banned;
-					info!("Client {} corrupted, ban.", addr);
+					info!(LOGGER, "Client {} corrupted, ban.", addr);
 					Err(Error::Serialization(e))
 				}
 				Err(_) => {
 					*state = State::Disconnected;
-					info!("Client {} connection lost.", addr);
+					info!(LOGGER, "Client {} connection lost.", addr);
 					Ok(())
 				}
 			}
@@ -153,12 +144,17 @@ impl Peer {
 	}
 
 	pub fn send_block_request(&self, h: Hash) -> Result<(), Error> {
-		debug!("Requesting block {} from peer {}.", h, self.info.addr);
+		debug!(
+			LOGGER,
+			"Requesting block {} from peer {}.",
+			h,
+			self.info.addr
+		);
 		self.proto.send_block_request(h)
 	}
 
 	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
-		debug!("Asking {} for more peers.", self.info.addr);
+		debug!(LOGGER, "Asking {} for more peers.", self.info.addr);
 		self.proto.send_peer_request(capab)
 	}
 

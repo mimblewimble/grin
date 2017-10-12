@@ -56,6 +56,7 @@ use api::{self, ApiEndpoint, Operation, ApiResult};
 use keychain::{BlindingFactor, Keychain};
 use types::*;
 use util;
+use util::LOGGER;
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
 #[derive(Serialize, Deserialize)]
@@ -66,11 +67,10 @@ pub struct TxWrapper {
 /// Receive an already well formed JSON transaction issuance and finalize the
 /// transaction, adding our receiving output, to broadcast to the rest of the
 /// network.
-pub fn receive_json_tx(
-	config: &WalletConfig,
-	keychain: &Keychain,
-	partial_tx_str: &str,
-) -> Result<(), Error> {
+pub fn receive_json_tx(config: &WalletConfig,
+                       keychain: &Keychain,
+                       partial_tx_str: &str)
+                       -> Result<(), Error> {
 	let (amount, blinding, partial_tx) = partial_tx_from_json(keychain, partial_tx_str)?;
 	let final_tx = receive_transaction(config, keychain, amount, blinding, partial_tx)?;
 	let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
@@ -96,10 +96,8 @@ impl ApiEndpoint for WalletReceiver {
 	type OP_OUT = CbData;
 
 	fn operations(&self) -> Vec<Operation> {
-		vec![
-			Operation::Custom("coinbase".to_string()),
-			Operation::Custom("receive_json_tx".to_string()),
-		]
+		vec![Operation::Custom("coinbase".to_string()),
+		     Operation::Custom("receive_json_tx".to_string())]
 	}
 
 	fn operation(&self, op: String, input: WalletReceiveRequest) -> ApiResult<CbData> {
@@ -107,29 +105,31 @@ impl ApiEndpoint for WalletReceiver {
 			"coinbase" => {
 				match input {
 					WalletReceiveRequest::Coinbase(cb_fees) => {
-						debug!("Operation {} with fees {:?}", op, cb_fees);
-						let (out, kern, block_fees) =
-							receive_coinbase(
-								&self.config,
-								&self.keychain,
-								&cb_fees,
-							).map_err(|e| {
+						debug!(LOGGER, "Operation {} with fees {:?}", op, cb_fees);
+						let (out, kern, block_fees) = receive_coinbase(
+							&self.config,
+							&self.keychain,
+							&cb_fees,
+						).map_err(|e| {
 								api::Error::Internal(format!("Error building coinbase: {:?}", e))
 							})?;
-						let out_bin =
-							ser::ser_vec(&out).map_err(|e| {
+						let out_bin = ser::ser_vec(&out)
+							.map_err(|e| {
 								api::Error::Internal(format!("Error serializing output: {:?}", e))
 							})?;
-						let kern_bin =
-							ser::ser_vec(&kern).map_err(|e| {
+						let kern_bin = ser::ser_vec(&kern)
+							.map_err(|e| {
 								api::Error::Internal(format!("Error serializing kernel: {:?}", e))
 							})?;
 						let pubkey_bin = match block_fees.pubkey {
 							Some(pubkey) => {
-								ser::ser_vec(&pubkey).map_err(|e| {
-									api::Error::Internal(format!("Error serializing kernel: {:?}", e))
-								})?
-							},
+								ser::ser_vec(&pubkey)
+									.map_err(|e| {
+										api::Error::Internal(
+											format!("Error serializing kernel: {:?}", e),
+										)
+									})?
+							}
 							None => vec![],
 						};
 
@@ -139,29 +139,34 @@ impl ApiEndpoint for WalletReceiver {
 							pubkey: util::to_hex(pubkey_bin),
 						})
 					}
-					_ => Err(api::Error::Argument(
-						format!("Incorrect request data: {}", op),
-					)),
+					_ => Err(api::Error::Argument(format!("Incorrect request data: {}", op))),
 				}
 			}
 			"receive_json_tx" => {
 				match input {
 					WalletReceiveRequest::PartialTransaction(partial_tx_str) => {
-						debug!("Operation {} with transaction {}", op, &partial_tx_str);
-						receive_json_tx(&self.config, &self.keychain, &partial_tx_str).map_err(|e| {
-							api::Error::Internal(format!("Error processing partial transaction: {:?}", e))
-						}).unwrap();
+						debug!(
+							LOGGER,
+							"Operation {} with transaction {}",
+							op,
+							&partial_tx_str
+						);
+						receive_json_tx(&self.config, &self.keychain, &partial_tx_str)
+							.map_err(|e| {
+								api::Error::Internal(
+									format!("Error processing partial transaction: {:?}", e),
+								)
+							})
+							.unwrap();
 
-						//TODO: Return emptiness for now, should be a proper enum return type
+						// TODO: Return emptiness for now, should be a proper enum return type
 						Ok(CbData {
 							output: String::from(""),
 							kernel: String::from(""),
 							pubkey: String::from(""),
 						})
 					}
-					_ => Err(api::Error::Argument(
-						format!("Incorrect request data: {}", op),
-					)),
+					_ => Err(api::Error::Argument(format!("Incorrect request data: {}", op))),
 				}
 			}
 			_ => Err(api::Error::Argument(format!("Unknown operation: {}", op))),
@@ -170,11 +175,10 @@ impl ApiEndpoint for WalletReceiver {
 }
 
 /// Build a coinbase output and the corresponding kernel
-fn receive_coinbase(
-	config: &WalletConfig,
-	keychain: &Keychain,
-	block_fees: &BlockFees,
-) -> Result<(Output, TxKernel, BlockFees), Error> {
+fn receive_coinbase(config: &WalletConfig,
+                    keychain: &Keychain,
+                    block_fees: &BlockFees)
+                    -> Result<(Output, TxKernel, BlockFees), Error> {
 	let fingerprint = keychain.fingerprint();
 
 	// operate within a lock on wallet data
@@ -184,7 +188,7 @@ fn receive_coinbase(
 			Some(pubkey) => {
 				let derivation = keychain.derivation_from_pubkey(&pubkey)?;
 				(pubkey.clone(), derivation)
-			},
+			}
 			None => {
 				let derivation = wallet_data.next_child(fingerprint.clone());
 				let pubkey = keychain.derive_pubkey(derivation)?;
@@ -203,15 +207,20 @@ fn receive_coinbase(
 			lock_height: 0,
 		});
 
-		debug!("Received coinbase and built candidate output - {}, {}, {}",
-			fingerprint.clone(), pubkey.fingerprint(), derivation);
+		debug!(
+			LOGGER,
+			"Received coinbase and built candidate output - {}, {}, {}",
+			fingerprint.clone(),
+			pubkey.fingerprint(),
+			derivation
+		);
 
-		debug!("block_fees - {:?}", block_fees);
+		debug!(LOGGER, "block_fees - {:?}", block_fees);
 
 		let mut block_fees = block_fees.clone();
 		block_fees.pubkey = Some(pubkey.clone());
 
-		debug!("block_fees updated - {:?}", block_fees);
+		debug!(LOGGER, "block_fees updated - {:?}", block_fees);
 
 		let (out, kern) = Block::reward_output(
 			&keychain,
@@ -246,14 +255,16 @@ fn receive_transaction(
 		let fee_amount = tx_fee(partial.inputs.len(), partial.outputs.len() + 1, None);
 		let out_amount = amount - fee_amount;
 
-		let (tx_final, _) = build::transaction(vec![
-			build::initial_tx(partial),
-			build::with_excess(blinding),
-			build::output(out_amount, pubkey.clone()),
-			build::with_fee(fee_amount),
-		], keychain)?;
+		let (tx_final, _) = build::transaction(
+			vec![build::initial_tx(partial),
+			     build::with_excess(blinding),
+			     build::output(out_amount, pubkey.clone()),
+			     build::with_fee(fee_amount)],
+			keychain,
+		)?;
 
-		// make sure the resulting transaction is valid (could have been lied to on excess)
+		// make sure the resulting transaction is valid (could have been lied to on
+		// excess)
 		tx_final.validate(&keychain.secp())?;
 
 		// track the new output and return the finalized transaction to broadcast
@@ -266,9 +277,13 @@ fn receive_transaction(
 			height: 0,
 			lock_height: 0,
 		});
-		debug!("Received txn and built output - {}, {}, {}",
-			fingerprint.clone(), pubkey.fingerprint(), derivation);
-
+		debug!(
+			LOGGER,
+			"Received txn and built output  - {}, {}, {}",
+			fingerprint.clone(),
+			pubkey.fingerprint(),
+			derivation
+		);
 		Ok(tx_final)
 	})?
 }

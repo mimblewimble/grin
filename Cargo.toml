@@ -15,15 +15,15 @@ grin_grin = { path = "./grin" }
 grin_config = { path = "./config" }
 grin_core = { path = "./core" }
 grin_pow = { path = "./pow"}
+grin_util = { path = "./util"}
 secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }
 blake2-rfc = "~0.2.17"
 clap = "^2.23.3"
 daemonize = "^0.2.3"
-env_logger="^0.3.5"
-log = "^0.3"
 serde = "~1.0.8"
 serde_derive = "~1.0.8"
 serde_json = "~1.0.2"
+slog = "^2.0.12"
 
 # TODO - once "patch" is available we should be able to clean up the workspace dependencies
 # [patch.crate-io]

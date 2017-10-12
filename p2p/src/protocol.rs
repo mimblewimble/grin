@@ -24,6 +24,7 @@ use core::ser;
 use conn::TimeoutConnection;
 use msg::*;
 use types::*;
+use util::LOGGER;
 use util::OneTime;
 
 #[allow(dead_code)]
@@ -44,11 +45,10 @@ impl ProtocolV1 {
 
 impl Protocol for ProtocolV1 {
 	/// Sets up the protocol reading, writing and closing logic.
-	fn handle(
-		&self,
-		conn: TcpStream,
-		adapter: Arc<NetAdapter>,
-	) -> Box<Future<Item = (), Error = Error>> {
+	fn handle(&self,
+	          conn: TcpStream,
+	          adapter: Arc<NetAdapter>)
+	          -> Box<Future<Item = (), Error = Error>> {
 
 		let (conn, listener) = TimeoutConnection::listen(conn, move |sender, header, data| {
 			let adapt = adapter.as_ref();
@@ -114,23 +114,21 @@ impl ProtocolV1 {
 		self.conn.borrow().send_msg(t, body)
 	}
 
-	fn send_request<W: ser::Writeable>(
-		&self,
-		t: Type,
-		rt: Type,
-		body: &W,
-		expect_resp: Option<Hash>,
-	) -> Result<(), Error> {
+	fn send_request<W: ser::Writeable>(&self,
+	                                   t: Type,
+	                                   rt: Type,
+	                                   body: &W,
+	                                   expect_resp: Option<Hash>)
+	                                   -> Result<(), Error> {
 		self.conn.borrow().send_request(t, rt, body, expect_resp)
 	}
 }
 
-fn handle_payload(
-	adapter: &NetAdapter,
-	sender: UnboundedSender<Vec<u8>>,
-	header: MsgHeader,
-	buf: Vec<u8>,
-) -> Result<Option<Hash>, ser::Error> {
+fn handle_payload(adapter: &NetAdapter,
+                  sender: UnboundedSender<Vec<u8>>,
+                  header: MsgHeader,
+                  buf: Vec<u8>)
+                  -> Result<Option<Hash>, ser::Error> {
 	match header.msg_type {
 		Type::Ping => {
 			let data = ser::ser_vec(&MsgHeader::new(Type::Pong, 0))?;
@@ -173,10 +171,7 @@ fn handle_payload(
 
 			// serialize and send all the headers over
 			let mut body_data = vec![];
-			try!(ser::serialize(
-				&mut body_data,
-				&Headers { headers: headers },
-			));
+			try!(ser::serialize(&mut body_data, &Headers { headers: headers }));
 			let mut data = vec![];
 			try!(ser::serialize(
 				&mut data,
@@ -220,7 +215,7 @@ fn handle_payload(
 			Ok(None)
 		}
 		_ => {
-			debug!("unknown message type {:?}", header.msg_type);
+			debug!(LOGGER, "unknown message type {:?}", header.msg_type);
 			Ok(None)
 		}
 	}

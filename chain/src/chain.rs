@@ -28,6 +28,7 @@ use pipe;
 use store;
 use sumtree;
 use types::*;
+use util::LOGGER;
 
 use core::global::{MiningParameterMode, MINING_PARAMETER_MODE};
 
@@ -69,12 +70,11 @@ impl Chain {
 	/// on the current chain head to make sure it exists and creates one based
 	/// on
 	/// the genesis block if necessary.
-	pub fn init(
-		db_root: String,
-		adapter: Arc<ChainAdapter>,
-		gen_block: Option<Block>,
-		pow_verifier: fn(&BlockHeader, u32) -> bool,
-	) -> Result<Chain, Error> {
+	pub fn init(db_root: String,
+	            adapter: Arc<ChainAdapter>,
+	            gen_block: Option<Block>,
+	            pow_verifier: fn(&BlockHeader, u32) -> bool)
+	            -> Result<Chain, Error> {
 		let chain_store = store::ChainKVStore::new(db_root.clone())?;
 
 		// check if we have a head in store, otherwise the genesis block is it
@@ -92,7 +92,7 @@ impl Chain {
 				// saving a new tip based on genesis
 				let tip = Tip::new(gen.hash());
 				chain_store.save_head(&tip)?;
-				info!("Saved genesis block with hash {}", gen.hash());
+				info!(LOGGER, "Saved genesis block with hash {}", gen.hash());
 				tip
 			}
 			Err(e) => return Err(Error::StoreErr(e)),
@@ -138,6 +138,7 @@ impl Chain {
 			}
 			Err(ref e) => {
 				info!(
+					LOGGER,
 					"Rejected block {} at {} : {:?}",
 					b.hash(),
 					b.header.height,
@@ -151,11 +152,10 @@ impl Chain {
 
 	/// Attempt to add a new header to the header chain. Only necessary during
 	/// sync.
-	pub fn process_block_header(
-		&self,
-		bh: &BlockHeader,
-		opts: Options,
-	) -> Result<Option<Tip>, Error> {
+	pub fn process_block_header(&self,
+	                            bh: &BlockHeader,
+	                            opts: Options)
+	                            -> Result<Option<Tip>, Error> {
 
 		let head = self.store.get_header_head().map_err(&Error::StoreErr)?;
 		let ctx = self.ctx_from_head(head, opts);
@@ -213,9 +213,9 @@ impl Chain {
 		let sumtrees = self.sumtrees.read().unwrap();
 		let is_unspent = sumtrees.is_unspent(output_ref)?;
 		if is_unspent {
-			self.store.get_output_by_commit(output_ref).map_err(
-				&Error::StoreErr,
-			)
+			self.store
+				.get_output_by_commit(output_ref)
+				.map_err(&Error::StoreErr)
 		} else {
 			Err(Error::OutputNotFound)
 		}
@@ -266,16 +266,15 @@ impl Chain {
 
 	/// Gets the block header at the provided height
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
-		self.store.get_header_by_height(height).map_err(
-			&Error::StoreErr,
-		)
+		self.store
+			.get_header_by_height(height)
+			.map_err(&Error::StoreErr)
 	}
 
 	/// Gets the block header by the provided output commitment
-	pub fn get_block_header_by_output_commit(
-		&self,
-		commit: &Commitment,
-	) -> Result<BlockHeader, Error> {
+	pub fn get_block_header_by_output_commit(&self,
+	                                         commit: &Commitment)
+	                                         -> Result<BlockHeader, Error> {
 		self.store
 			.get_block_header_by_output_commit(commit)
 			.map_err(&Error::StoreErr)

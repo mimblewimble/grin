@@ -22,9 +22,10 @@
 
 extern crate byteorder;
 extern crate grin_core as core;
+extern crate grin_util as util;
 extern crate libc;
 #[macro_use]
-extern crate log;
+extern crate slog;
 extern crate env_logger;
 extern crate memmap;
 extern crate rocksdb;
@@ -110,9 +111,9 @@ impl Store {
 	/// Gets a value from the db, provided its key
 	pub fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
 		let db = self.rdb.read().unwrap();
-		db.get(key).map(|r| r.map(|o| o.to_vec())).map_err(
-			From::from,
-		)
+		db.get(key)
+			.map(|r| r.map(|o| o.to_vec()))
+			.map_err(From::from)
 	}
 
 	/// Gets a `Readable` value from the db, provided its key. Encapsulates
@@ -124,11 +125,10 @@ impl Store {
 	/// Gets a `Readable` value from the db, provided its key, allowing to
 	/// extract only partial data. The underlying Readable size must align
 	/// accordingly. Encapsulates serialization.
-	pub fn get_ser_limited<T: ser::Readable>(
-		&self,
-		key: &[u8],
-		len: usize,
-	) -> Result<Option<T>, Error> {
+	pub fn get_ser_limited<T: ser::Readable>(&self,
+	                                         key: &[u8],
+	                                         len: usize)
+	                                         -> Result<Option<T>, Error> {
 		let data = try!(self.get(key));
 		match data {
 			Some(val) => {
@@ -213,16 +213,14 @@ impl<'a> Batch<'a> {
 /// An iterator thad produces Readable instances back. Wraps the lower level
 /// DBIterator and deserializes the returned values.
 pub struct SerIterator<T>
-where
-	T: ser::Readable,
+	where T: ser::Readable
 {
 	iter: DBIterator,
 	_marker: PhantomData<T>,
 }
 
 impl<T> Iterator for SerIterator<T>
-where
-	T: ser::Readable,
+    where T: ser::Readable
 {
 	type Item = T;
 

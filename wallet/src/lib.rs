@@ -17,7 +17,7 @@
 extern crate byteorder;
 extern crate blake2_rfc as blake2;
 #[macro_use]
-extern crate log;
+extern crate slog;
 extern crate rand;
 extern crate serde;
 #[macro_use]

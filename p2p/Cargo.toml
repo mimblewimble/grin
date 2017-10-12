@@ -8,7 +8,7 @@ workspace = ".."
 bitflags = "^0.7.0"
 byteorder = "^0.5"
 futures = "^0.1.15"
-log = "^0.3"
+slog = "^2.0.12"
 net2 = "0.2.0"
 rand = "^0.3"
 serde = "~1.0.8"
@@ -24,6 +24,3 @@ num = "^0.1.36"
 grin_core = { path = "../core" }
 grin_store = { path = "../store" }
 grin_util = { path = "../util" }
-
-[dev-dependencies]
-env_logger = "^0.3"

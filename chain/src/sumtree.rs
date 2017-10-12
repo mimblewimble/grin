@@ -36,16 +36,14 @@ const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
 const KERNEL_SUBDIR: &'static str = "kernel";
 
 struct PMMRHandle<T>
-where
-	T: Summable + Clone,
+	where T: Summable + Clone
 {
 	backend: PMMRBackend<T>,
 	last_pos: u64,
 }
 
 impl<T> PMMRHandle<T>
-where
-	T: Summable + Clone,
+    where T: Summable + Clone
 {
 	fn new(root_dir: String, file_name: &str) -> Result<PMMRHandle<T>, Error> {
 		let path = Path::new(&root_dir).join(SUMTREES_SUBDIR).join(file_name);
@@ -107,8 +105,7 @@ impl SumTrees {
 /// If the closure returns an error, modifications are canceled and the unit
 /// of work is abandoned. Otherwise, the unit of work is permanently applied.
 pub fn extending<'a, F, T>(trees: &'a mut SumTrees, inner: F) -> Result<T, Error>
-where
-	F: FnOnce(&mut Extension) -> Result<T, Error>,
+	where F: FnOnce(&mut Extension) -> Result<T, Error>
 {
 
 	let sizes: (u64, u64, u64);
@@ -229,9 +226,9 @@ impl<'a> Extension<'a> {
 			self.new_output_commits.insert(out.commitment(), pos);
 
 			// push range proofs in their MMR
-			self.rproof_pmmr.push(NoSum(out.proof)).map_err(
-				&Error::SumTreeErr,
-			)?;
+			self.rproof_pmmr
+				.push(NoSum(out.proof))
+				.map_err(&Error::SumTreeErr)?;
 		}
 
 		for kernel in &b.kernels {
@@ -239,9 +236,9 @@ impl<'a> Extension<'a> {
 				return Err(Error::DuplicateKernel(kernel.excess.clone()));
 			}
 			// push kernels in their MMR
-			let pos = self.kernel_pmmr.push(NoSum(kernel.clone())).map_err(
-				&Error::SumTreeErr,
-			)?;
+			let pos = self.kernel_pmmr
+				.push(NoSum(kernel.clone()))
+				.map_err(&Error::SumTreeErr)?;
 			self.new_kernel_excesses.insert(kernel.excess, pos);
 		}
 		Ok(())
@@ -277,14 +274,9 @@ impl<'a> Extension<'a> {
 
 	/// Current root hashes and sums (if applicable) for the UTXO, range proof
 	/// and kernel sum trees.
-	pub fn roots(
-		&self,
-	) -> (HashSum<SumCommit>, HashSum<NoSum<RangeProof>>, HashSum<NoSum<TxKernel>>) {
-		(
-			self.output_pmmr.root(),
-			self.rproof_pmmr.root(),
-			self.kernel_pmmr.root(),
-		)
+	pub fn roots(&self)
+	             -> (HashSum<SumCommit>, HashSum<NoSum<RangeProof>>, HashSum<NoSum<TxKernel>>) {
+		(self.output_pmmr.root(), self.rproof_pmmr.root(), self.kernel_pmmr.root())
 	}
 
 	/// Force the rollback of this extension, no matter the result
@@ -294,10 +286,8 @@ impl<'a> Extension<'a> {
 
 	// Sizes of the sum trees, used by `extending` on rollback.
 	fn sizes(&self) -> (u64, u64, u64) {
-		(
-			self.output_pmmr.unpruned_size(),
-			self.rproof_pmmr.unpruned_size(),
-			self.kernel_pmmr.unpruned_size(),
-		)
+		(self.output_pmmr.unpruned_size(),
+		 self.rproof_pmmr.unpruned_size(),
+		 self.kernel_pmmr.unpruned_size())
 	}
 }

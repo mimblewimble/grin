@@ -14,11 +14,10 @@
 
 //! Main for building the binary of a Grin peer-to-peer node.
 
+#[macro_use]
+extern crate slog;
 extern crate clap;
 extern crate daemonize;
-#[macro_use]
-extern crate log;
-extern crate env_logger;
 extern crate serde;
 extern crate serde_json;
 extern crate blake2_rfc as blake2;
@@ -29,6 +28,7 @@ extern crate grin_wallet as wallet;
 extern crate grin_keychain as keychain;
 extern crate grin_config as config;
 extern crate grin_core as core;
+extern crate grin_util as util;
 
 use std::thread;
 use std::io::Read;
@@ -42,9 +42,11 @@ use config::GlobalConfig;
 use wallet::WalletConfig;
 use core::global;
 use keychain::Keychain;
+use util::{LOGGER,init_logger};
 
 fn start_from_config_file(mut global_config: GlobalConfig) {
 	info!(
+		LOGGER,
 		"Starting the Grin server from configuration file at {}",
 		global_config.config_file_path.unwrap().to_str().unwrap()
 	);
@@ -67,7 +69,6 @@ fn start_from_config_file(mut global_config: GlobalConfig) {
 }
 
 fn main() {
-	env_logger::init().unwrap();
 
 	// First, load a global config object,
 	// then modify that object with any switches
@@ -84,7 +85,10 @@ fn main() {
 	});
 
 	if global_config.using_config_file {
+		//initialise the logger
+		init_logger(global_config.members.as_mut().unwrap().logging.clone());
 		info!(
+			LOGGER,
 			"Using configuration file at: {}",
 			global_config
 				.config_file_path
@@ -255,7 +259,7 @@ fn main() {
 /// arguments
 /// to build a proper configuration and runs Grin with that configuration.
 fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
-	info!("Starting the Grin server...");
+	info!(LOGGER, "Starting the Grin server...");
 
 	// just get defaults from the global config
 	let mut server_config = global_config.members.unwrap().server;
@@ -305,8 +309,8 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 					}
 				});
 			match daemonize.start() {
-				Ok(_) => info!("Grin server succesfully started."),
-				Err(e) => error!("Error starting: {}", e),
+				Ok(_) => info!(LOGGER, "Grin server succesfully started."),
+				Err(e) => error!(LOGGER, "Error starting: {}", e),
 			}
 		}
 		("stop", _) => println!("TODO, just 'kill $pid' for now."),
@@ -351,6 +355,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				wallet::receive_json_tx(&wallet_config, &keychain, contents.as_str()).unwrap();
 			} else {
 				info!(
+					LOGGER,
 					"Starting the Grin wallet receiving daemon at {}...",
 					wallet_config.api_http_addr
 				);
@@ -363,7 +368,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 					},
 				);
 				apis.start(wallet_config.api_http_addr).unwrap_or_else(|e| {
-					error!("Failed to start Grin wallet receiver: {}.", e);
+					error!(LOGGER, "Failed to start Grin wallet receiver: {}.", e);
 				});
 			}
 		}

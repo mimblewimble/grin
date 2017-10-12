@@ -12,8 +12,8 @@ grin_store = { path = "../store" }
 grin_util = { path = "../util" }
 secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }
 hyper = "~0.10.6"
+slog = "^2.0.12"
 iron = "~0.5.1"
-log = "~0.3"
 router = "~0.5.1"
 serde = "~1.0.8"
 serde_derive = "~1.0.8"

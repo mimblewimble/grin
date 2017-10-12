@@ -34,6 +34,7 @@ use core::ser;
 use msg::*;
 use types::Error;
 use rate_limit::*;
+use util::LOGGER;
 
 /// Handler to provide to the connection, will be called back anytime a message
 /// is received. The provided sender can be use to immediately send back
@@ -42,26 +43,22 @@ pub trait Handler: Sync + Send {
 	/// Handle function to implement to process incoming messages. A sender to
 	/// reply immediately as well as the message header and its unparsed body
 	/// are provided.
-	fn handle(
-		&self,
-		sender: UnboundedSender<Vec<u8>>,
-		header: MsgHeader,
-		body: Vec<u8>,
-	) -> Result<Option<Hash>, ser::Error>;
+	fn handle(&self,
+	          sender: UnboundedSender<Vec<u8>>,
+	          header: MsgHeader,
+	          body: Vec<u8>)
+	          -> Result<Option<Hash>, ser::Error>;
 }
 
 impl<F> Handler for F
-where
-	F: Fn(UnboundedSender<Vec<u8>>, MsgHeader, Vec<u8>)
-	   -> Result<Option<Hash>, ser::Error>,
-	F: Sync + Send,
+	where F: Fn(UnboundedSender<Vec<u8>>, MsgHeader, Vec<u8>) -> Result<Option<Hash>, ser::Error>,
+	      F: Sync + Send
 {
-	fn handle(
-		&self,
-		sender: UnboundedSender<Vec<u8>>,
-		header: MsgHeader,
-		body: Vec<u8>,
-	) -> Result<Option<Hash>, ser::Error> {
+	fn handle(&self,
+	          sender: UnboundedSender<Vec<u8>>,
+	          header: MsgHeader,
+	          body: Vec<u8>)
+	          -> Result<Option<Hash>, ser::Error> {
 		self(sender, header, body)
 	}
 }
@@ -91,12 +88,10 @@ impl Connection {
 	/// Start listening on the provided connection and wraps it. Does not hang
 	/// the current thread, instead just returns a future and the Connection
 	/// itself.
-	pub fn listen<F>(
-		conn: TcpStream,
-		handler: F,
-	) -> (Connection, Box<Future<Item = (), Error = Error>>)
-	where
-		F: Handler + 'static,
+	pub fn listen<F>(conn: TcpStream,
+	                 handler: F)
+	                 -> (Connection, Box<Future<Item = (), Error = Error>>)
+		where F: Handler + 'static
 	{
 
 		let (reader, writer) = conn.split();
@@ -111,9 +106,9 @@ impl Connection {
 
 		// same for closing the connection
 		let (close_tx, close_rx) = futures::sync::mpsc::channel(1);
-		let close_conn = close_rx.for_each(|_| Ok(())).map_err(
-			|_| Error::ConnectionClose,
-		);
+		let close_conn = close_rx
+			.for_each(|_| Ok(()))
+			.map_err(|_| Error::ConnectionClose);
 
 		let me = Connection {
 			outbound_chan: tx.clone(),
@@ -143,13 +138,11 @@ impl Connection {
 
 	/// Prepares the future that gets message data produced by our system and
 	/// sends it to the peer connection
-	fn write_msg<W>(
-		&self,
-		rx: UnboundedReceiver<Vec<u8>>,
-		writer: W,
-	) -> Box<Future<Item = W, Error = Error>>
-	where
-		W: AsyncWrite + 'static,
+	fn write_msg<W>(&self,
+	                rx: UnboundedReceiver<Vec<u8>>,
+	                writer: W)
+	                -> Box<Future<Item = W, Error = Error>>
+		where W: AsyncWrite + 'static
 	{
 
 		let sent_bytes = self.sent_bytes.clone();
@@ -170,15 +163,13 @@ impl Connection {
 
 	/// Prepares the future reading from the peer connection, parsing each
 	/// message and forwarding them appropriately based on their type
-	fn read_msg<F, R>(
-		&self,
-		sender: UnboundedSender<Vec<u8>>,
-		reader: R,
-		handler: F,
-	) -> Box<Future<Item = R, Error = Error>>
-	where
-		F: Handler + 'static,
-		R: AsyncRead + 'static,
+	fn read_msg<F, R>(&self,
+	                  sender: UnboundedSender<Vec<u8>>,
+	                  reader: R,
+	                  handler: F)
+	                  -> Box<Future<Item = R, Error = Error>>
+		where F: Handler + 'static,
+		      R: AsyncRead + 'static
 	{
 
 		// infinite iterator stream so we repeat the message reading logic until the
@@ -215,7 +206,7 @@ impl Connection {
 					// and handle the different message types
 					let msg_type = header.msg_type;
 					if let Err(e) = handler.handle(sender_inner.clone(), header, buf) {
-						debug!("Invalid {:?} message: {}", msg_type, e);
+						debug!(LOGGER, "Invalid {:?} message: {}", msg_type, e);
 						return Err(Error::Serialization(e));
 					}
 
@@ -232,15 +223,12 @@ impl Connection {
 		let mut body_data = vec![];
 		try!(ser::serialize(&mut body_data, body));
 		let mut data = vec![];
-		try!(ser::serialize(
-			&mut data,
-			&MsgHeader::new(t, body_data.len() as u64),
-		));
+		try!(ser::serialize(&mut data, &MsgHeader::new(t, body_data.len() as u64)));
 		data.append(&mut body_data);
 
-		self.outbound_chan.unbounded_send(data).map_err(
-			|_| Error::ConnectionClose,
-		)
+		self.outbound_chan
+			.unbounded_send(data)
+			.map_err(|_| Error::ConnectionClose)
 	}
 
 	/// Bytes sent and received by this peer to the remote peer.
@@ -261,12 +249,10 @@ pub struct TimeoutConnection {
 
 impl TimeoutConnection {
 	/// Same as Connection
-	pub fn listen<F>(
-		conn: TcpStream,
-		handler: F,
-	) -> (TimeoutConnection, Box<Future<Item = (), Error = Error>>)
-	where
-		F: Handler + 'static,
+	pub fn listen<F>(conn: TcpStream,
+	                 handler: F)
+	                 -> (TimeoutConnection, Box<Future<Item = (), Error = Error>>)
+		where F: Handler + 'static
 	{
 
 		let expects = Arc::new(Mutex::new(vec![]));
@@ -310,21 +296,17 @@ impl TimeoutConnection {
 			underlying: conn,
 			expected_responses: expects,
 		};
-		(
-			me,
-			Box::new(fut.select(timer).map(|_| ()).map_err(|(e1, _)| e1)),
-		)
+		(me, Box::new(fut.select(timer).map(|_| ()).map_err(|(e1, _)| e1)))
 	}
 
 	/// Sends a request and registers a timer on the provided message type and
 	/// optionally the hash of the sent data.
-	pub fn send_request<W: ser::Writeable>(
-		&self,
-		t: Type,
-		rt: Type,
-		body: &W,
-		expect_h: Option<(Hash)>,
-	) -> Result<(), Error> {
+	pub fn send_request<W: ser::Writeable>(&self,
+	                                       t: Type,
+	                                       rt: Type,
+	                                       body: &W,
+	                                       expect_h: Option<(Hash)>)
+	                                       -> Result<(), Error> {
 		let _sent = try!(self.underlying.send_msg(t, body));
 
 		let mut expects = self.expected_responses.lock().unwrap();

@@ -34,13 +34,13 @@ extern crate time;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
-extern crate log;
-extern crate env_logger;
+extern crate slog;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
 extern crate grin_core as core;
+extern crate grin_util as util;
 
 extern crate cuckoo_miner;
 
@@ -63,9 +63,7 @@ use cuckoo::{Cuckoo, Error};
 
 pub trait MiningWorker {
 	/// This only sets parameters and does initialisation work now
-	fn new(ease: u32, sizeshift: u32, proof_size: usize) -> Self
-	where
-		Self: Sized;
+	fn new(ease: u32, sizeshift: u32, proof_size: usize) -> Self where Self: Sized;
 
 	/// Actually perform a mining attempt on the given input and
 	/// return a proof if found
@@ -85,11 +83,10 @@ pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
 
 /// Uses the much easier Cuckoo20 (mostly for
 /// tests).
-pub fn pow20<T: MiningWorker>(
-	miner: &mut T,
-	bh: &mut BlockHeader,
-	diff: Difficulty,
-) -> Result<(), Error> {
+pub fn pow20<T: MiningWorker>(miner: &mut T,
+                              bh: &mut BlockHeader,
+                              diff: Difficulty)
+                              -> Result<(), Error> {
 	pow_size(miner, bh, diff, 20)
 }
 
@@ -99,7 +96,7 @@ pub fn pow20<T: MiningWorker>(
 ///
 
 pub fn mine_genesis_block(miner_config: Option<types::MinerConfig>) -> Option<core::core::Block> {
-	info!("Starting miner loop for Genesis Block");
+	info!(util::LOGGER, "Starting miner loop for Genesis Block");
 	let mut gen = genesis::genesis();
 	let diff = gen.header.difficulty.clone();
 
@@ -127,12 +124,11 @@ pub fn mine_genesis_block(miner_config: Option<types::MinerConfig>) -> Option<co
 /// Mining Worker,
 /// until the required difficulty target is reached. May take a while for a low
 /// target...
-pub fn pow_size<T: MiningWorker + ?Sized>(
-	miner: &mut T,
-	bh: &mut BlockHeader,
-	diff: Difficulty,
-	_: u32,
-) -> Result<(), Error> {
+pub fn pow_size<T: MiningWorker + ?Sized>(miner: &mut T,
+                                          bh: &mut BlockHeader,
+                                          diff: Difficulty,
+                                          _: u32)
+                                          -> Result<(), Error> {
 	let start_nonce = bh.nonce;
 
 	// if we're in production mode, try the pre-mined solution first

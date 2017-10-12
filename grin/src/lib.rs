@@ -22,8 +22,7 @@
 #![warn(missing_docs)]
 
 #[macro_use]
-extern crate log;
-extern crate env_logger;
+extern crate slog;
 extern crate futures;
 extern crate futures_cpupool as cpupool;
 extern crate hyper;

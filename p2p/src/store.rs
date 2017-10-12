@@ -67,10 +67,10 @@ impl Readable for PeerData {
 	fn read(reader: &mut Reader) -> Result<PeerData, ser::Error> {
 		let addr = SockAddr::read(reader)?;
 		let (capab, ua, fl) = ser_multiread!(reader, read_u32, read_vec, read_u8);
-		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
-		let capabilities = Capabilities::from_bits(capab).ok_or(
-			ser::Error::CorruptedData,
-		)?;
+		let user_agent = String::from_utf8(ua)
+			.map_err(|_| ser::Error::CorruptedData)?;
+		let capabilities = Capabilities::from_bits(capab)
+			.ok_or(ser::Error::CorruptedData)?;
 		match State::from_u8(fl) {
 			Some(flags) => {
 				Ok(PeerData {
@@ -109,22 +109,18 @@ impl PeerStore {
 	}
 
 	pub fn exists_peer(&self, peer_addr: SocketAddr) -> Result<bool, Error> {
-		self.db.exists(
-			&to_key(PEER_PREFIX, &mut format!("{}", peer_addr).into_bytes())[..],
-		)
+		self.db
+			.exists(&to_key(PEER_PREFIX, &mut format!("{}", peer_addr).into_bytes())[..])
 	}
 
 	pub fn delete_peer(&self, peer_addr: SocketAddr) -> Result<(), Error> {
-		self.db.delete(
-			&to_key(PEER_PREFIX, &mut format!("{}", peer_addr).into_bytes())[..],
-		)
+		self.db
+			.delete(&to_key(PEER_PREFIX, &mut format!("{}", peer_addr).into_bytes())[..])
 	}
 
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
-		let peers_iter = self.db.iter::<PeerData>(&to_key(
-			PEER_PREFIX,
-			&mut "".to_string().into_bytes(),
-		));
+		let peers_iter = self.db
+			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()));
 		let mut peers = Vec::with_capacity(count);
 		for p in peers_iter {
 			if p.flags == state && p.capabilities.contains(cap) {

@@ -28,6 +28,7 @@ use core::core::hash::{Hash, Hashed};
 use chain;
 use p2p;
 use types::Error;
+use util::LOGGER;
 
 pub struct Syncer {
 	chain: Arc<chain::Chain>,
@@ -58,7 +59,7 @@ impl Syncer {
 	/// Checks the local chain state, comparing it with our peers and triggers
 	/// syncing if required.
 	pub fn run(&self) -> Result<(), Error> {
-		debug!("Starting syncer.");
+		debug!(LOGGER, "Starting syncer.");
 		let start = Instant::now();
 		loop {
 			let pc = self.p2p.peer_count();
@@ -76,7 +77,7 @@ impl Syncer {
 
 		// main syncing loop, requests more headers and bodies periodically as long
 		// as a peer with higher difficulty exists and we're not fully caught up
-		info!("Starting sync loop.");
+		info!(LOGGER, "Starting sync loop.");
 		loop {
 			let tip = self.chain.get_header_head()?;
 			// TODO do something better (like trying to get more) if we lose peers
@@ -107,7 +108,7 @@ impl Syncer {
 
 			thread::sleep(Duration::from_secs(2));
 		}
-		info!("Sync done.");
+		info!(LOGGER, "Sync done.");
 		Ok(())
 	}
 
@@ -130,6 +131,7 @@ impl Syncer {
 		}
 
 		debug!(
+			LOGGER,
 			"Added {} full block hashes to download.",
 			blocks_to_download.len()
 		);
@@ -162,6 +164,7 @@ impl Syncer {
 				blocks_downloading.push((h, Instant::now()));
 			}
 			debug!(
+				LOGGER,
 				"Requesting more full block hashes to download, total: {}.",
 				blocks_to_download.len()
 			);
@@ -187,6 +190,7 @@ impl Syncer {
 		let locator = self.get_locator(&tip)?;
 		if let Some(p) = peer {
 			debug!(
+				LOGGER,
 				"Asking peer {} for more block headers starting from {} at {}.",
 				p.info.addr,
 				tip.last_block_h,
@@ -194,7 +198,7 @@ impl Syncer {
 			);
 			p.send_header_request(locator)?;
 		} else {
-			warn!("Could not get most worked peer to request headers.");
+			warn!(LOGGER, "Could not get most worked peer to request headers.");
 		}
 		Ok(())
 	}

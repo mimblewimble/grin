@@ -7,13 +7,13 @@ workspace = ".."
 [dependencies]
 byteorder = "^0.5"
 env_logger="^0.3.5"
-log = "^0.3"
+slog = "^2.0.12"
 libc = "^0.2"
 memmap = { git = "https://github.com/danburkert/memmap-rs" }
 rocksdb = "^0.7.0"
 
 grin_core = { path = "../core" }
+grin_util = { path = "../util" }
 
 [dev-dependencies]
-env_logger="^0.3.5"
 time = "^0.1"

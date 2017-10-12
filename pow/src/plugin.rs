@@ -26,6 +26,7 @@ use core::global;
 
 use core::core::Proof;
 use types::MinerConfig;
+use util::LOGGER;
 
 use std::sync::Mutex;
 
@@ -91,7 +92,7 @@ impl PluginMiner {
 
 		// Load from here instead
 		if let Some(ref c) = *loaded_config_ref {
-			debug!("Not re-loading plugin or directory.");
+			debug!(LOGGER, "Not re-loading plugin or directory.");
 			// this will load the associated plugin
 			let result = CuckooMiner::new(c.clone());
 			self.miner = Some(result.unwrap());
@@ -104,6 +105,7 @@ impl PluginMiner {
 
 		if let Err(_) = result {
 			error!(
+				LOGGER,
 				"Unable to load cuckoo-miner plugin directory, either from configuration or [exe_path]/plugins."
 			);
 			panic!("Unable to load plugin directory... Please check configuration values");
@@ -123,7 +125,12 @@ impl PluginMiner {
 
 			let mut config = CuckooMinerConfig::new();
 
-			info!("Mining plugin {} - {}", index, caps[0].full_path.clone());
+			info!(
+				LOGGER,
+				"Mining plugin {} - {}",
+				index,
+				caps[0].full_path.clone()
+			);
 			config.plugin_full_path = caps[0].full_path.clone();
 			if let Some(l) = miner_config.clone().cuckoo_miner_plugin_config {
 				if let Some(lp) = l[index].parameter_list.clone() {
@@ -140,8 +147,8 @@ impl PluginMiner {
 		// this will load the associated plugin
 		let result = CuckooMiner::new(cuckoo_configs.clone());
 		if let Err(e) = result {
-			error!("Error initializing mining plugin: {:?}", e);
-			// error!("Accepted values are: {:?}", caps[0].parameters);
+			error!(LOGGER, "Error initializing mining plugin: {:?}", e);
+			// error!(LOGGER, "Accepted values are: {:?}", caps[0].parameters);
 			panic!("Unable to init mining plugin.");
 		}
 
@@ -155,7 +162,7 @@ impl PluginMiner {
 		// this will load the associated plugin
 		let result = CuckooMiner::new(self.config.clone());
 		if let Err(e) = result {
-			error!("Error initializing mining plugin: {:?}", e);
+			error!(LOGGER, "Error initializing mining plugin: {:?}", e);
 			panic!("Unable to init mining plugin.");
 		}
 		result.unwrap()

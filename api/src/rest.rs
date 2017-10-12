@@ -36,6 +36,7 @@ use serde::de::DeserializeOwned;
 use serde_json;
 
 use store;
+use util::LOGGER;
 
 /// Errors that can be returned by an ApiEndpoint implementation.
 #[derive(Debug)]
@@ -171,13 +172,13 @@ impl<E> Handler for ApiWrapper<E>
 			Method::Get => {
 				let res = self.0.get(extract_param(req, "id")?)?;
 				let res_json = serde_json::to_string(&res)
-          .map_err(|e| IronError::new(e, status::InternalServerError))?;
+					.map_err(|e| IronError::new(e, status::InternalServerError))?;
 				Ok(Response::with((status::Ok, res_json)))
 			}
 			Method::Put => {
 				let id = extract_param(req, "id")?;
 				let t: E::T = serde_json::from_reader(req.body.by_ref())
-          .map_err(|e| IronError::new(e, status::BadRequest))?;
+					.map_err(|e| IronError::new(e, status::BadRequest))?;
 				self.0.update(id, t)?;
 				Ok(Response::with(status::NoContent))
 			}
@@ -188,7 +189,7 @@ impl<E> Handler for ApiWrapper<E>
 			}
 			Method::Post => {
 				let t: E::T = serde_json::from_reader(req.body.by_ref())
-          .map_err(|e| IronError::new(e, status::BadRequest))?;
+					.map_err(|e| IronError::new(e, status::BadRequest))?;
 				let id = self.0.create(t)?;
 				Ok(Response::with((status::Created, id.to_string())))
 			}
@@ -203,8 +204,7 @@ struct OpWrapper<E> {
 }
 
 impl<E> Handler for OpWrapper<E>
-where
-	E: ApiEndpoint,
+    where E: ApiEndpoint
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		let t: E::OP_IN = serde_json::from_reader(req.body.by_ref()).map_err(|e| {
@@ -219,7 +219,7 @@ where
 				Ok(Response::with((status::Ok, res_json)))
 			}
 			Err(e) => {
-				error!("API operation: {:?}", e);
+				error!(LOGGER, "API operation: {:?}", e);
 				Err(IronError::from(e))
 			}
 		}
@@ -227,9 +227,8 @@ where
 }
 
 fn extract_param<ID>(req: &mut Request, param: &'static str) -> IronResult<ID>
-where
-	ID: ToString + FromStr,
-	<ID as FromStr>::Err: Debug + Send + error::Error + 'static,
+	where ID: ToString + FromStr,
+	      <ID as FromStr>::Err: Debug + Send + error::Error + 'static
 {
 
 	let id = req.extensions
@@ -237,9 +236,8 @@ where
 		.unwrap()
 		.find(param)
 		.unwrap_or("");
-	id.parse::<ID>().map_err(
-		|e| IronError::new(e, status::BadRequest),
-	)
+	id.parse::<ID>()
+		.map_err(|e| IronError::new(e, status::BadRequest))
 }
 
 /// HTTP server allowing the registration of ApiEndpoint implementations.
@@ -279,9 +277,8 @@ impl ApiServer {
 	/// Register a new API endpoint, providing a relative URL for the new
 	/// endpoint.
 	pub fn register_endpoint<E>(&mut self, subpath: String, endpoint: E)
-	where
-		E: ApiEndpoint,
-		<<E as ApiEndpoint>::ID as FromStr>::Err: Debug + Send + error::Error,
+		where E: ApiEndpoint,
+		      <<E as ApiEndpoint>::ID as FromStr>::Err: Debug + Send + error::Error
 	{
 
 		assert_eq!(subpath.chars().nth(0).unwrap(), '/');
@@ -299,13 +296,9 @@ impl ApiServer {
 					endpoint: endpoint.clone(),
 				};
 				let full_path = format!("{}/{}", root.clone(), op_s.clone());
-				self.router.route(
-					op.to_method(),
-					full_path.clone(),
-					wrapper,
-					route_name,
-				);
-				info!("route: POST {}", full_path);
+				self.router
+					.route(op.to_method(), full_path.clone(), wrapper, route_name);
+				info!(LOGGER, "route: POST {}", full_path);
 			} else {
 
 				// regular REST operations
@@ -317,21 +310,18 @@ impl ApiServer {
 					_ => panic!("unreachable"),
 				};
 				let wrapper = ApiWrapper(endpoint.clone());
-				self.router.route(
-					op.to_method(),
-					full_path.clone(),
-					wrapper,
-					route_name,
-				);
-				info!("route: {} {}", op.to_method(), full_path);
+				self.router
+					.route(op.to_method(), full_path.clone(), wrapper, route_name);
+				info!(LOGGER, "route: {} {}", op.to_method(), full_path);
 			}
 		}
 
 		// support for the HTTP Options method by differentiating what's on the
 		// root resource vs the id resource
-		let (root_opts, sub_opts) = endpoint.operations().iter().fold(
-			(vec![], vec![]),
-			|mut acc, op| {
+		let (root_opts, sub_opts) = endpoint
+			.operations()
+			.iter()
+			.fold((vec![], vec![]), |mut acc, op| {
 				let m = op.to_method();
 				if m == Method::Post {
 					acc.0.push(m);
@@ -339,23 +329,18 @@ impl ApiServer {
 					acc.1.push(m);
 				}
 				acc
-			},
-		);
+			});
 		self.router.options(
 			root.clone(),
 			move |_: &mut Request| {
-				Ok(Response::with(
-					(status::Ok, Header(headers::Allow(root_opts.clone()))),
-				))
+				Ok(Response::with((status::Ok, Header(headers::Allow(root_opts.clone())))))
 			},
 			"option_".to_string() + route_postfix,
 		);
 		self.router.options(
 			root.clone() + "/:id",
 			move |_: &mut Request| {
-				Ok(Response::with(
-					(status::Ok, Header(headers::Allow(sub_opts.clone()))),
-				))
+				Ok(Response::with((status::Ok, Header(headers::Allow(sub_opts.clone())))))
 			},
 			"option_id_".to_string() + route_postfix,
 		);

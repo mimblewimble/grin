@@ -24,13 +24,14 @@
 extern crate bitflags;
 extern crate byteorder;
 #[macro_use]
-extern crate log;
+extern crate slog;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate time;
 
 extern crate grin_core as core;
+extern crate grin_util as util;
 extern crate grin_store;
 extern crate secp256k1zkp as secp;
 
