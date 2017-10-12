@@ -243,8 +243,15 @@ fn receive_transaction(
 		let derivation = wallet_data.next_child(root_key_id.clone());
 		let key_id = keychain.derive_key_id(derivation)?;
 
-		let fee_amount = tx_fee(partial.inputs.len(), partial.outputs.len() + 1, None);
-		let out_amount = amount - fee_amount;
+		// double check the fee amount included in the partial tx
+		// we don't necessarily want to just trust the sender
+		// we could just overwrite the fee here (but we won't) due to the ecdsa sig
+		let fee = tx_fee(partial.inputs.len(), partial.outputs.len() + 1, None);
+		if fee != partial.fee {
+			return Err(Error::FeeDispute{ sender_fee: partial.fee, recipient_fee: fee });
+		}
+
+		let out_amount = amount - fee;
 
 		let (tx_final, _) = build::transaction(vec![
 			build::initial_tx(partial),
