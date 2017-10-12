@@ -121,22 +121,19 @@ impl ApiEndpoint for WalletReceiver {
 							.map_err(|e| {
 								api::Error::Internal(format!("Error serializing kernel: {:?}", e))
 							})?;
-						let pubkey_bin = match block_fees.pubkey {
-							Some(pubkey) => {
-								ser::ser_vec(&pubkey)
-									.map_err(|e| {
-										api::Error::Internal(
-											format!("Error serializing kernel: {:?}", e),
-										)
-									})?
-							}
+						let key_id_bin = match block_fees.key_id {
+							Some(key_id) => {
+								ser::ser_vec(&key_id).map_err(|e| {
+									api::Error::Internal(format!("Error serializing kernel: {:?}", e))
+								})?
+							},
 							None => vec![],
 						};
 
 						Ok(CbData {
 							output: util::to_hex(out_bin),
 							kernel: util::to_hex(kern_bin),
-							pubkey: util::to_hex(pubkey_bin),
+							key_id: util::to_hex(key_id_bin),
 						})
 					}
 					_ => Err(api::Error::Argument(format!("Incorrect request data: {}", op))),
@@ -163,7 +160,7 @@ impl ApiEndpoint for WalletReceiver {
 						Ok(CbData {
 							output: String::from(""),
 							kernel: String::from(""),
-							pubkey: String::from(""),
+							key_id: String::from(""),
 						})
 					}
 					_ => Err(api::Error::Argument(format!("Incorrect request data: {}", op))),
@@ -183,23 +180,23 @@ fn receive_coinbase(config: &WalletConfig,
 
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		let pubkey = block_fees.pubkey();
-		let (pubkey, derivation) = match pubkey {
-			Some(pubkey) => {
-				let derivation = keychain.derivation_from_pubkey(&pubkey)?;
-				(pubkey.clone(), derivation)
-			}
+		let key_id = block_fees.key_id();
+		let (key_id, derivation) = match key_id {
+			Some(key_id) => {
+				let derivation = keychain.derivation_from_key_id(&key_id)?;
+				(key_id.clone(), derivation)
+			},
 			None => {
 				let derivation = wallet_data.next_child(fingerprint.clone());
-				let pubkey = keychain.derive_pubkey(derivation)?;
-				(pubkey, derivation)
+				let key_id = keychain.derive_key_id(derivation)?;
+				(key_id, derivation)
 			}
 		};
 
 		// track the new output and return the stuff needed for reward
 		wallet_data.add_output(OutputData {
 			fingerprint: fingerprint.clone(),
-			identifier: pubkey.clone(),
+			identifier: key_id.clone(),
 			n_child: derivation,
 			value: reward(block_fees.fees),
 			status: OutputStatus::Unconfirmed,
@@ -211,20 +208,20 @@ fn receive_coinbase(config: &WalletConfig,
 			LOGGER,
 			"Received coinbase and built candidate output - {}, {}, {}",
 			fingerprint.clone(),
-			pubkey.fingerprint(),
+			key_id.fingerprint(),
 			derivation
 		);
 
 		debug!(LOGGER, "block_fees - {:?}", block_fees);
 
 		let mut block_fees = block_fees.clone();
-		block_fees.pubkey = Some(pubkey.clone());
+		block_fees.key_id = Some(key_id.clone());
 
 		debug!(LOGGER, "block_fees updated - {:?}", block_fees);
 
 		let (out, kern) = Block::reward_output(
 			&keychain,
-			&pubkey,
+			&key_id,
 			block_fees.fees,
 		)?;
 		Ok((out, kern, block_fees))
@@ -244,7 +241,7 @@ fn receive_transaction(
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		let derivation = wallet_data.next_child(fingerprint.clone());
-		let pubkey = keychain.derive_pubkey(derivation)?;
+		let key_id = keychain.derive_key_id(derivation)?;
 
 		// from pool.rs
 		// (-1 * num_inputs) + (4 * num_outputs) + 1
@@ -255,13 +252,12 @@ fn receive_transaction(
 		let fee_amount = tx_fee(partial.inputs.len(), partial.outputs.len() + 1, None);
 		let out_amount = amount - fee_amount;
 
-		let (tx_final, _) = build::transaction(
-			vec![build::initial_tx(partial),
-			     build::with_excess(blinding),
-			     build::output(out_amount, pubkey.clone()),
-			     build::with_fee(fee_amount)],
-			keychain,
-		)?;
+		let (tx_final, _) = build::transaction(vec![
+			build::initial_tx(partial),
+			build::with_excess(blinding),
+			build::output(out_amount, key_id.clone()),
+			build::with_fee(fee_amount),
+		], keychain)?;
 
 		// make sure the resulting transaction is valid (could have been lied to on
 		// excess)
@@ -270,7 +266,7 @@ fn receive_transaction(
 		// track the new output and return the finalized transaction to broadcast
 		wallet_data.add_output(OutputData {
 			fingerprint: fingerprint.clone(),
-			identifier: pubkey.clone(),
+			identifier: key_id.clone(),
 			n_child: derivation,
 			value: out_amount,
 			status: OutputStatus::Unconfirmed,
@@ -279,11 +275,12 @@ fn receive_transaction(
 		});
 		debug!(
 			LOGGER,
-			"Received txn and built output  - {}, {}, {}",
+			"Received txn and built output - {}, {}, {}",
 			fingerprint.clone(),
-			pubkey.fingerprint(),
+			key_id.fingerprint(),
 			derivation
 		);
+
 		Ok(tx_final)
 	})?
 }

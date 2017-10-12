@@ -35,11 +35,11 @@ fn test_various_store_indices() {
 	clean_output_dir(".grin");
 
 	let keychain = Keychain::from_random_seed().unwrap();
-	let pubkey = keychain.derive_pubkey(1).unwrap();
+	let key_id = keychain.derive_key_id(1).unwrap();
 
 	let chain_store = &chain::store::ChainKVStore::new(".grin".to_string()).unwrap() as &ChainStore;
 
-	let block = Block::new(&BlockHeader::default(), vec![], &keychain, &pubkey).unwrap();
+	let block = Block::new(&BlockHeader::default(), vec![], &keychain, &key_id).unwrap();
 	let commit = block.outputs[0].commitment();
 	let block_hash = block.hash();
 

@@ -71,12 +71,12 @@ fn test_coinbase_maturity() {
 	let prev = chain.head_header().unwrap();
 
 	let keychain = Keychain::from_random_seed().unwrap();
-	let pk1 = keychain.derive_pubkey(1).unwrap();
-	let pk2 = keychain.derive_pubkey(2).unwrap();
-	let pk3 = keychain.derive_pubkey(3).unwrap();
-	let pk4 = keychain.derive_pubkey(4).unwrap();
+	let key_id1 = keychain.derive_key_id(1).unwrap();
+	let key_id2 = keychain.derive_key_id(2).unwrap();
+	let key_id3 = keychain.derive_key_id(3).unwrap();
+	let key_id4 = keychain.derive_key_id(4).unwrap();
 
-	let mut block = core::core::Block::new(&prev, vec![], &keychain, &pk1).unwrap();
+	let mut block = core::core::Block::new(&prev, vec![], &keychain, &key_id1).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -102,14 +102,14 @@ fn test_coinbase_maturity() {
 	let amount = consensus::REWARD;
 	let (coinbase_txn, _) = build::transaction(
 		vec![
-			build::input(amount, pk1.clone()),
-			build::output(amount - 2, pk2),
+			build::input(amount, key_id1.clone()),
+			build::output(amount - 2, key_id2),
 			build::with_fee(2),
 		],
 		&keychain,
 	).unwrap();
 
-	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &pk3).unwrap();
+	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &key_id3).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -135,7 +135,7 @@ fn test_coinbase_maturity() {
 		let prev = chain.head_header().unwrap();
 
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pk = keychain.derive_pubkey(1).unwrap();
+		let pk = keychain.derive_key_id(1).unwrap();
 
 		let mut block = core::core::Block::new(&prev, vec![], &keychain, &pk).unwrap();
 		block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
@@ -156,7 +156,7 @@ fn test_coinbase_maturity() {
 
 	let prev = chain.head_header().unwrap();
 
-	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &pk4).unwrap();
+	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &key_id4).unwrap();
 
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 

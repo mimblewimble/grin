@@ -254,21 +254,21 @@ mod tests {
 	#[test]
 	fn test_add_entry() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pk1 = keychain.derive_pubkey(1).unwrap();
-		let pk2 = keychain.derive_pubkey(2).unwrap();
-		let pk3 = keychain.derive_pubkey(3).unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
+		let key_id3 = keychain.derive_key_id(3).unwrap();
 
-		let output_commit = keychain.commit(70, &pk1).unwrap();
+		let output_commit = keychain.commit(70, &key_id1).unwrap();
 		let inputs = vec![
-			core::transaction::Input(keychain.commit(50, &pk2).unwrap()),
-			core::transaction::Input(keychain.commit(25, &pk3).unwrap()),
+			core::transaction::Input(keychain.commit(50, &key_id2).unwrap()),
+			core::transaction::Input(keychain.commit(25, &key_id3).unwrap()),
 		];
 		let msg = secp::pedersen::ProofMessage::empty();
 		let outputs = vec![
 			core::transaction::Output {
 				features: core::transaction::DEFAULT_OUTPUT,
 				commit: output_commit,
-				proof: keychain.range_proof(100, &pk1, output_commit, msg).unwrap(),
+				proof: keychain.range_proof(100, &key_id1, output_commit, msg).unwrap(),
 			},
 		];
 		let test_transaction = core::transaction::Transaction::new(inputs, outputs, 5, 0);

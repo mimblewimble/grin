@@ -431,7 +431,7 @@ impl Miner {
 		// to prevent the wallet from generating a new HD key derivation for each
 		// iteration, we keep the returned derivation to provide it back when
 		// nothing has changed
-		let mut pubkey = None;
+		let mut key_id = None;
 
 		loop {
 			debug!(LOGGER, "in miner loop...");
@@ -439,7 +439,7 @@ impl Miner {
 			// get the latest chain state and build a block on top of it
 			let head = self.chain.head_header().unwrap();
 			let mut latest_hash = self.chain.head().unwrap().last_block_h;
-			let (mut b, block_fees) = self.build_block(&head, pubkey);
+			let (mut b, block_fees) = self.build_block(&head, key_id);
 
 			let mut sol = None;
 			let mut use_async = false;
@@ -504,6 +504,7 @@ impl Miner {
 						e
 					);
 				}
+<<<<<<< HEAD
 				debug!(LOGGER, "resetting pubkey in miner to None");
 				pubkey = None;
 			} else {
@@ -513,16 +514,31 @@ impl Miner {
 					block_fees
 				);
 				pubkey = block_fees.pubkey();
+=======
+				debug!("resetting key_id in miner to None");
+				key_id = None;
+			} else {
+				debug!("setting key_id in miner to key_id from block_fees - {:?}", block_fees);
+				key_id = block_fees.key_id();
+>>>>>>> rename pubkey -> key_id
 			}
 		}
 	}
 
 	/// Builds a new block with the chain head as previous and eligible
 	/// transactions from the pool.
+<<<<<<< HEAD
 	fn build_block(&self,
 	               head: &core::BlockHeader,
 	               pubkey: Option<Identifier>)
 	               -> (core::Block, BlockFees) {
+=======
+	fn build_block(
+		&self,
+		head: &core::BlockHeader,
+		key_id: Option<Identifier>,
+	) -> (core::Block, BlockFees) {
+>>>>>>> rename pubkey -> key_id
 		// prepare the block header timestamp
 		let mut now_sec = time::get_time().sec;
 		let head_sec = head.timestamp.to_timespec().sec;
@@ -544,7 +560,7 @@ impl Miner {
 		// build the coinbase and the block itself
 		let fees = txs.iter().map(|tx| tx.fee).sum();
 		let height = head.height + 1;
-		let block_fees = BlockFees { fees, pubkey, height };
+		let block_fees = BlockFees { fees, key_id, height };
 
 		let (output, kernel, block_fees) = self.get_coinbase(block_fees);
 		let mut b = core::Block::with_reward(head, txs, output, kernel).unwrap();
@@ -574,10 +590,10 @@ impl Miner {
 	fn get_coinbase(&self, block_fees: BlockFees) -> (core::Output, core::TxKernel, BlockFees) {
 		if self.config.burn_reward {
 			let keychain = Keychain::from_random_seed().unwrap();
-			let pubkey = keychain.derive_pubkey(1).unwrap();
+			let key_id = keychain.derive_key_id(1).unwrap();
 			let (out, kern) = core::Block::reward_output(
 				&keychain,
-				&pubkey,
+				&key_id,
 				block_fees.fees,
 			).unwrap();
 			(out, kern, block_fees)
@@ -596,13 +612,18 @@ impl Miner {
 			);
 			let out_bin = util::from_hex(res.output).unwrap();
 			let kern_bin = util::from_hex(res.kernel).unwrap();
-			let pubkey_bin = util::from_hex(res.pubkey).unwrap();
+			let key_id_bin = util::from_hex(res.key_id).unwrap();
 			let output = ser::deserialize(&mut &out_bin[..]).unwrap();
 			let kernel = ser::deserialize(&mut &kern_bin[..]).unwrap();
-			let pubkey = ser::deserialize(&mut &pubkey_bin[..]).unwrap();
+			let key_id = ser::deserialize(&mut &key_id_bin[..]).unwrap();
 			let block_fees = BlockFees {
+<<<<<<< HEAD
 				pubkey: Some(pubkey),
 				..block_fees
+=======
+				key_id: Some(key_id),
+				.. block_fees
+>>>>>>> rename pubkey -> key_id
 			};
 
 			debug!(LOGGER, "block_fees here: {:?}", block_fees);

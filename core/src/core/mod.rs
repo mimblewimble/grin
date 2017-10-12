@@ -196,11 +196,11 @@ mod test {
 	#[should_panic(expected = "InvalidSecretKey")]
 	fn test_zero_commit_fails() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pk1 = keychain.derive_pubkey(1).unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
 
 		// blinding should fail as signing with a zero r*G shouldn't work
 		build::transaction(
-			vec![input(10, pk1.clone()), output(9, pk1.clone()), with_fee(1)],
+			vec![input(10, key_id1.clone()), output(9, key_id1.clone()), with_fee(1)],
 			&keychain,
 		).unwrap();
 	}
@@ -246,15 +246,15 @@ mod test {
 	#[test]
 	fn hash_output() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pk1 = keychain.derive_pubkey(1).unwrap();
-		let pk2 = keychain.derive_pubkey(2).unwrap();
-		let pk3 = keychain.derive_pubkey(3).unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
+		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		let (tx, _) = build::transaction(
 			vec![
-				input(75, pk1),
-				output(42, pk2),
-				output(32, pk3),
+				input(75, key_id1),
+				output(42, key_id2),
+				output(32, key_id3),
 				with_fee(1),
 			],
 			&keychain,
@@ -294,10 +294,10 @@ mod test {
 	#[test]
 	fn tx_build_exchange() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pk1 = keychain.derive_pubkey(1).unwrap();
-		let pk2 = keychain.derive_pubkey(2).unwrap();
-		let pk3 = keychain.derive_pubkey(3).unwrap();
-		let pk4 = keychain.derive_pubkey(4).unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
+		let key_id3 = keychain.derive_key_id(3).unwrap();
+		let key_id4 = keychain.derive_key_id(4).unwrap();
 
 		let tx_alice: Transaction;
 		let blind_sum: BlindingFactor;
@@ -305,12 +305,12 @@ mod test {
 		{
 			// Alice gets 2 of her pre-existing outputs to send 5 coins to Bob, they
 			// become inputs in the new transaction
-			let (in1, in2) = (input(4, pk1), input(3, pk2));
+			let (in1, in2) = (input(4, key_id1), input(3, key_id2));
 
 			// Alice builds her transaction, with change, which also produces the sum
 			// of blinding factors before they're obscured.
 			let (tx, sum) =
-				build::transaction(vec![in1, in2, output(1, pk3), with_fee(2)], &keychain).unwrap();
+				build::transaction(vec![in1, in2, output(1, key_id3), with_fee(2)], &keychain).unwrap();
 			tx_alice = tx;
 			blind_sum = sum;
 		}
@@ -319,7 +319,7 @@ mod test {
 		// blinding factors. He adds his output, finalizes the transaction so it's
 		// ready for broadcast.
 		let (tx_final, _) = build::transaction(
-			vec![initial_tx(tx_alice), with_excess(blind_sum), output(4, pk4)],
+			vec![initial_tx(tx_alice), with_excess(blind_sum), output(4, key_id4)],
 			&keychain,
 		).unwrap();
 
@@ -329,28 +329,28 @@ mod test {
 	#[test]
 	fn reward_empty_block() {
 		let keychain = keychain::Keychain::from_random_seed().unwrap();
-		let pubkey = keychain.derive_pubkey(1).unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
 
-		let b = Block::new(&BlockHeader::default(), vec![], &keychain, &pubkey).unwrap();
+		let b = Block::new(&BlockHeader::default(), vec![], &keychain, &key_id).unwrap();
 		b.compact().validate(&keychain.secp()).unwrap();
 	}
 
 	#[test]
 	fn reward_with_tx_block() {
 		let keychain = keychain::Keychain::from_random_seed().unwrap();
-		let pubkey = keychain.derive_pubkey(1).unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let mut tx1 = tx2i1o();
 		tx1.verify_sig(keychain.secp()).unwrap();
 
-		let b = Block::new(&BlockHeader::default(), vec![&mut tx1], &keychain, &pubkey).unwrap();
+		let b = Block::new(&BlockHeader::default(), vec![&mut tx1], &keychain, &key_id).unwrap();
 		b.compact().validate(keychain.secp()).unwrap();
 	}
 
 	#[test]
 	fn simple_block() {
 		let keychain = keychain::Keychain::from_random_seed().unwrap();
-		let pubkey = keychain.derive_pubkey(1).unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let mut tx1 = tx2i1o();
 		let mut tx2 = tx1i1o();
@@ -359,7 +359,7 @@ mod test {
 			&BlockHeader::default(),
 			vec![&mut tx1, &mut tx2],
 			&keychain,
-			&pubkey,
+			&key_id,
 		).unwrap();
 		b.validate(keychain.secp()).unwrap();
 	}
@@ -368,14 +368,14 @@ mod test {
 	fn test_block_with_timelocked_tx() {
 		let keychain = keychain::Keychain::from_random_seed().unwrap();
 
-		let pk1 = keychain.derive_pubkey(1).unwrap();
-		let pk2 = keychain.derive_pubkey(2).unwrap();
-		let pk3 = keychain.derive_pubkey(3).unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
+		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		// first check we can add a timelocked tx where lock height matches current block height
 		// and that the resulting block is valid
 		let tx1 = build::transaction(
-			vec![input(5, pk1.clone()), output(3, pk2.clone()), with_fee(2), with_lock_height(1)],
+			vec![input(5, key_id1.clone()), output(3, key_id2.clone()), with_fee(2), with_lock_height(1)],
 			&keychain,
 		).map(|(tx, _)| tx).unwrap();
 
@@ -383,13 +383,13 @@ mod test {
 			&BlockHeader::default(),
 			vec![&tx1],
 			&keychain,
-			&pk3.clone(),
+			&key_id3.clone(),
 		).unwrap();
 		b.validate(keychain.secp()).unwrap();
 
 		// now try adding a timelocked tx where lock height is greater than current block height
 		let tx1 = build::transaction(
-			vec![input(5, pk1.clone()), output(3, pk2.clone()), with_fee(2), with_lock_height(2)],
+			vec![input(5, key_id1.clone()), output(3, key_id2.clone()), with_fee(2), with_lock_height(2)],
 			&keychain,
 		).map(|(tx, _)| tx).unwrap();
 
@@ -397,7 +397,7 @@ mod test {
 			&BlockHeader::default(),
 			vec![&tx1],
 			&keychain,
-			&pk3.clone(),
+			&key_id3.clone(),
 		).unwrap();
 		match b.validate(keychain.secp()) {
 			Err(KernelLockHeight{ lock_height: height}) => {
@@ -424,12 +424,12 @@ mod test {
 	// utility producing a transaction with 2 inputs and a single outputs
 	pub fn tx2i1o() -> Transaction {
 		let keychain = keychain::Keychain::from_random_seed().unwrap();
-		let pk1 = keychain.derive_pubkey(1).unwrap();
-		let pk2 = keychain.derive_pubkey(2).unwrap();
-		let pk3 = keychain.derive_pubkey(3).unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
+		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		build::transaction(
-			vec![input(10, pk1), input(11, pk2), output(19, pk3), with_fee(2)],
+			vec![input(10, key_id1), input(11, key_id2), output(19, key_id3), with_fee(2)],
 			&keychain,
 		).map(|(tx, _)| tx)
 			.unwrap()
@@ -438,10 +438,10 @@ mod test {
 	// utility producing a transaction with a single input and output
 	pub fn tx1i1o() -> Transaction {
 		let keychain = keychain::Keychain::from_random_seed().unwrap();
-		let pk1 = keychain.derive_pubkey(1).unwrap();
-		let pk2 = keychain.derive_pubkey(2).unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
 
-		build::transaction(vec![input(5, pk1), output(3, pk2), with_fee(2)], &keychain)
+		build::transaction(vec![input(5, key_id1), output(3, key_id2), with_fee(2)], &keychain)
 			.map(|(tx, _)| tx)
 			.unwrap()
 	}

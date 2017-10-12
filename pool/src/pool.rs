@@ -968,13 +968,13 @@ mod tests {
 		let block_transactions = vec![&block_tx_1, &block_tx_2, &block_tx_3, &block_tx_4];
 
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pubkey = keychain.derive_pubkey(1).unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let block = block::Block::new(
 			&block::BlockHeader::default(),
 			block_transactions,
 			&keychain,
-			&pubkey,
+			&key_id,
 		).unwrap();
 
 		chain_ref.apply_block(&block);
@@ -1077,8 +1077,8 @@ mod tests {
 			let tx_refs = block_txs.iter().collect();
 
 			let keychain = Keychain::from_random_seed().unwrap();
-			let pubkey = keychain.derive_pubkey(1).unwrap();
-			block = block::Block::new(&block::BlockHeader::default(), tx_refs, &keychain, &pubkey)
+			let key_id = keychain.derive_key_id(1).unwrap();
+			block = block::Block::new(&block::BlockHeader::default(), tx_refs, &keychain, &key_id)
 				.unwrap();
 		}
 
@@ -1130,13 +1130,13 @@ mod tests {
 		let mut tx_elements = Vec::new();
 
 		for input_value in input_values {
-			let pubkey = keychain.derive_pubkey(input_value as u32).unwrap();
-			tx_elements.push(build::input(input_value, pubkey));
+			let key_id = keychain.derive_key_id(input_value as u32).unwrap();
+			tx_elements.push(build::input(input_value, key_id));
 		}
 
 		for output_value in output_values {
-			let pubkey = keychain.derive_pubkey(output_value as u32).unwrap();
-			tx_elements.push(build::output(output_value, pubkey));
+			let key_id = keychain.derive_key_id(output_value as u32).unwrap();
+			tx_elements.push(build::output(output_value, key_id));
 		}
 		tx_elements.push(build::with_fee(fees as u64));
 
@@ -1158,13 +1158,13 @@ mod tests {
 		let mut tx_elements = Vec::new();
 
 		for input_value in input_values {
-			let pubkey = keychain.derive_pubkey(input_value as u32).unwrap();
-			tx_elements.push(build::input(input_value, pubkey));
+			let key_id = keychain.derive_key_id(input_value as u32).unwrap();
+			tx_elements.push(build::input(input_value, key_id));
 		}
 
 		for output_value in output_values {
-			let pubkey = keychain.derive_pubkey(output_value as u32).unwrap();
-			tx_elements.push(build::output(output_value, pubkey));
+			let key_id = keychain.derive_key_id(output_value as u32).unwrap();
+			tx_elements.push(build::output(output_value, key_id));
 		}
 		tx_elements.push(build::with_fee(fees as u64));
 
@@ -1176,10 +1176,10 @@ mod tests {
 	/// Deterministically generate an output defined by our test scheme
 	fn test_output(value: u64) -> transaction::Output {
 		let keychain = keychain_for_tests();
-		let pubkey = keychain.derive_pubkey(value as u32).unwrap();
-		let commit = keychain.commit(value, &pubkey).unwrap();
+		let key_id = keychain.derive_key_id(value as u32).unwrap();
+		let commit = keychain.commit(value, &key_id).unwrap();
 		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain.range_proof(value, &pubkey, commit, msg).unwrap();
+		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
 
 		transaction::Output {
 			features: transaction::DEFAULT_OUTPUT,
@@ -1191,10 +1191,10 @@ mod tests {
 	/// Deterministically generate a coinbase output defined by our test scheme
 	fn test_coinbase_output(value: u64) -> transaction::Output {
 		let keychain = keychain_for_tests();
-		let pubkey = keychain.derive_pubkey(value as u32).unwrap();
-		let commit = keychain.commit(value, &pubkey).unwrap();
+		let key_id = keychain.derive_key_id(value as u32).unwrap();
+		let commit = keychain.commit(value, &key_id).unwrap();
 		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain.range_proof(value, &pubkey, commit, msg).unwrap();
+		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
 
 		transaction::Output {
 			features: transaction::COINBASE_OUTPUT,
