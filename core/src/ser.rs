@@ -526,6 +526,6 @@ impl AsFixedBytes for ::secp::pedersen::Commitment {
 }
 impl AsFixedBytes for ::keychain::Identifier {
 	fn len(&self) -> usize {
-		return 10;
+		return IDENTIFIER_SIZE;
 	}
 }
