@@ -23,7 +23,7 @@ use core::{Input, Output, Proof, TxKernel, Transaction, COINBASE_KERNEL, COINBAS
 use consensus::{MINIMUM_DIFFICULTY, REWARD, reward, exceeds_weight, VerifySortOrder};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
-use ser::{self, Readable, Reader, Writeable, Writer};
+use ser::{self, Readable, Reader, Writeable, Writer, WriteableSorted};
 use global;
 use keychain;
 
@@ -189,21 +189,14 @@ impl Writeable for Block {
 				[write_u64, self.kernels.len() as u64]
 			);
 
-			let mut sorted_inputs = self.inputs.clone();
-			sorted_inputs.sort_by_key(|input| input.hash());
-			for inp in sorted_inputs.iter() {
-				try!(inp.write(writer));
-			}
-			let mut sorted_outputs = self.outputs.clone();
-			sorted_outputs.sort_by_key(|output| output.hash());
-			for out in sorted_outputs {
-				try!(out.write(writer));
-			}
-			let mut sorted_kernels = self.kernels.clone();
-			sorted_kernels.sort_by_key(|kernel| kernel.hash());
-			for kernel in sorted_kernels {
-				try!(kernel.write(writer));
-			}
+			// Consensus rule that everything is sorted in lexicographical order on the wire.
+			let mut inputs = self.inputs.clone();
+			let mut outputs = self.outputs.clone();
+			let mut kernels = self.kernels.clone();
+
+			try!(inputs.write_sorted(writer));
+			try!(outputs.write_sorted(writer));
+			try!(kernels.write_sorted(writer));
 		}
 		Ok(())
 	}

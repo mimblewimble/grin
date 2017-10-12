@@ -23,6 +23,7 @@ use std::{error, fmt, cmp};
 use std::io::{self, Write, Read};
 use byteorder::{ByteOrder, ReadBytesExt, BigEndian};
 use keychain::{Identifier, IDENTIFIER_SIZE};
+use core::hash::Hashed;
 use secp::pedersen::Commitment;
 use secp::pedersen::RangeProof;
 use secp::constants::{MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE};
@@ -182,6 +183,12 @@ pub trait Reader {
 pub trait Writeable {
 	/// Write the data held by this Writeable to the provided writer
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error>;
+}
+
+/// Trait to allow a collection of Writeables to be written in lexicographical sort order.
+pub trait WriteableSorted {
+	/// Write the data but sort it first.
+	fn write_sorted<W: Writer>(&mut self, writer: &mut W) -> Result<(), Error>;
 }
 
 /// Trait that every type that can be deserialized from binary must implement.
@@ -387,6 +394,19 @@ where
 	T: Writeable,
 {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		for elmt in self {
+			elmt.write(writer)?;
+		}
+		Ok(())
+	}
+}
+
+impl<T> WriteableSorted for Vec<T>
+where
+	T: Writeable + Hashed,
+{
+	fn write_sorted<W: Writer>(&mut self, writer: &mut W) -> Result<(), Error> {
+		self.sort_by_key(|elmt| elmt.hash());
 		for elmt in self {
 			elmt.write(writer)?;
 		}

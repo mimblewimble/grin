@@ -21,10 +21,9 @@ use std::ops;
 
 use consensus::VerifySortOrder;
 use core::Committed;
-use core::hash::Hashed;
 use core::pmmr::Summable;
 use keychain::{Identifier, Keychain};
-use ser::{self, Reader, Writer, Readable, Writeable};
+use ser::{self, Reader, Writer, Readable, Writeable, WriteableSorted};
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -155,16 +154,14 @@ impl Writeable for Transaction {
 			[write_u64, self.inputs.len() as u64],
 			[write_u64, self.outputs.len() as u64]
 		);
-		let mut sorted_inputs = self.inputs.clone();
-		sorted_inputs.sort_by_key(|input| input.hash());
-		for inp in sorted_inputs.iter() {
-			try!(inp.write(writer));
-		}
-		let mut sorted_outputs = self.outputs.clone();
-		sorted_outputs.sort_by_key(|output| output.hash());
-		for out in sorted_outputs.iter() {
-			try!(out.write(writer));
-		}
+
+		// Consensus rule that everything is sorted in lexicographical order on the wire.
+		let mut inputs = self.inputs.clone();
+		let mut outputs = self.outputs.clone();
+
+		try!(inputs.write_sorted(writer));
+		try!(outputs.write_sorted(writer));
+
 		Ok(())
 	}
 }
