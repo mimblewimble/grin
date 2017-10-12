@@ -39,7 +39,7 @@ pub struct Context<'a> {
 
 /// Function type returned by the transaction combinators. Transforms a
 /// (Transaction, BlindSum) pair into another, provided some context.
-type Append = for<'a> Fn(&'a mut Context, (Transaction, BlindSum)) -> (Transaction, BlindSum);
+pub type Append = for<'a> Fn(&'a mut Context, (Transaction, BlindSum)) -> (Transaction, BlindSum);
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
@@ -50,8 +50,8 @@ pub fn input(value: u64, pubkey: Identifier) -> Box<Append> {
 	})
 }
 
-/// Adds an output with the provided value and blinding key to the transaction
-/// being built.
+/// Adds an output with the provided value and key identifier from the
+/// keychain.
 pub fn output(value: u64, pubkey: Identifier) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
 		let commit = build.keychain.commit(value, &pubkey).unwrap();
