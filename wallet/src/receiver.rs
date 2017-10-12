@@ -111,22 +111,22 @@ impl ApiEndpoint for WalletReceiver {
 							&self.keychain,
 							&cb_fees,
 						).map_err(|e| {
-								api::Error::Internal(format!("Error building coinbase: {:?}", e))
-							})?;
-						let out_bin = ser::ser_vec(&out)
-							.map_err(|e| {
-								api::Error::Internal(format!("Error serializing output: {:?}", e))
-							})?;
-						let kern_bin = ser::ser_vec(&kern)
-							.map_err(|e| {
-								api::Error::Internal(format!("Error serializing kernel: {:?}", e))
-							})?;
+							api::Error::Internal(format!("Error building coinbase: {:?}", e))
+						})?;
+						let out_bin = ser::ser_vec(&out).map_err(|e| {
+							api::Error::Internal(format!("Error serializing output: {:?}", e))
+						})?;
+						let kern_bin = ser::ser_vec(&kern).map_err(|e| {
+							api::Error::Internal(format!("Error serializing kernel: {:?}", e))
+						})?;
 						let key_id_bin = match block_fees.key_id {
 							Some(key_id) => {
 								ser::ser_vec(&key_id).map_err(|e| {
-									api::Error::Internal(format!("Error serializing kernel: {:?}", e))
+									api::Error::Internal(
+										format!("Error serializing kernel: {:?}", e),
+									)
 								})?
-							},
+							}
 							None => vec![],
 						};
 
@@ -146,7 +146,7 @@ impl ApiEndpoint for WalletReceiver {
 							LOGGER,
 							"Operation {} with transaction {}",
 							op,
-							&partial_tx_str
+							&partial_tx_str,
 						);
 						receive_json_tx(&self.config, &self.keychain, &partial_tx_str)
 							.map_err(|e| {

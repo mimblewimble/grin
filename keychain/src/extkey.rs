@@ -300,10 +300,7 @@ mod test {
 
 		let json = serde_json::to_string(&has_an_identifier).unwrap();
 
-		assert_eq!(
-			json,
-			"{\"identifier\":\"942b6c0bd43bdcb24f3e\"}"
-		);
+		assert_eq!(json, "{\"identifier\":\"942b6c0bd43bdcb24f3e\"}");
 
 		let deserialized: HasAnIdentifier = serde_json::from_str(&json).unwrap();
 		assert_eq!(deserialized, has_an_identifier);

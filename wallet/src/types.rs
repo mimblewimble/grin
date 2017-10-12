@@ -38,7 +38,7 @@ const DEFAULT_BASE_FEE: u64 = 10;
 /// Transaction fee calculation
 pub fn tx_fee(input_len: usize, output_len: usize, base_fee: Option<u64>) -> u64 {
 	let use_base_fee = match base_fee {
-		Some(bf)  => bf,
+		Some(bf) => bf,
 		None => DEFAULT_BASE_FEE,
 	};
 	let mut tx_weight = -1 * (input_len as i32) + 4 * (output_len as i32) + 1;
@@ -308,11 +308,7 @@ impl WalletData {
 
 	/// Select a subset of unspent outputs to spend in a transaction
 	/// transferring the provided amount.
-	pub fn select(
-		&self,
-		root_key_id: keychain::Identifier,
-		amount: u64,
-	) -> (Vec<OutputData>, i64) {
+	pub fn select(&self, root_key_id: keychain::Identifier, amount: u64) -> (Vec<OutputData>, i64) {
 		let mut to_spend = vec![];
 		let mut input_total = 0;
 

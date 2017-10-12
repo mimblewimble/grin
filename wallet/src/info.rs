@@ -16,10 +16,7 @@ use checker;
 use keychain::Keychain;
 use types::{WalletConfig, WalletData};
 
-pub fn show_info(
-	config: &WalletConfig,
-	keychain: &Keychain,
-) {
+pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 	let root_key_id = keychain.root_key_id();
 	let _ = checker::refresh_outputs(&config, &keychain);
 

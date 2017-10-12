@@ -236,7 +236,8 @@ mod test {
 		assert_eq!(proof_info.success, true);
 		assert_eq!(proof_info.value, 5);
 
-		// now check the recovered message is "empty" (but not truncated) i.e. all zeroes
+		// now check the recovered message is "empty" (but not truncated) i.e. all
+		// zeroes
 		assert_eq!(
 			proof_info.message,
 			secp::pedersen::ProofMessage::from_bytes(&[0; secp::constants::PROOF_MSG_SIZE])

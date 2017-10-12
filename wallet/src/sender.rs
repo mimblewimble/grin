@@ -81,7 +81,8 @@ fn build_send_tx(
 		let mut parts = inputs_and_change(&coins, keychain, key_id, wallet_data, amount)?;
 
 		// This is more proof of concept than anything but here we set a
-		// lock_height on the transaction being sent (based on current chain height via api).
+		// lock_height on the transaction being sent (based on current chain height via
+		// api).
 		parts.push(build::with_lock_height(lock_height));
 
 		let (tx, blind) = build::transaction(parts, &keychain)?;
@@ -90,11 +91,7 @@ fn build_send_tx(
 	})?
 }
 
-pub fn issue_burn_tx(
-	config: &WalletConfig,
-	keychain: &Keychain,
-	amount: u64,
-) -> Result<(), Error> {
+pub fn issue_burn_tx(config: &WalletConfig, keychain: &Keychain, amount: u64) -> Result<(), Error> {
 	let _ = checker::refresh_outputs(config, keychain);
 	let key_id = keychain.clone().root_key_id();
 
@@ -108,7 +105,10 @@ pub fn issue_burn_tx(
 		let mut parts = inputs_and_change(&coins, keychain, key_id, &mut wallet_data, amount)?;
 
 		// add burn output and fees
-		parts.push(build::output(amount, Identifier::from_bytes(&[0; IDENTIFIER_SIZE])));
+		parts.push(build::output(
+			amount,
+			Identifier::from_bytes(&[0; IDENTIFIER_SIZE]),
+		));
 
 		// finalize the burn transaction and send
 		let (tx_burn, _) = build::transaction(parts, &keychain)?;
@@ -122,7 +122,13 @@ pub fn issue_burn_tx(
 	})?
 }
 
-fn inputs_and_change(coins: &Vec<OutputData>, keychain: &Keychain, root_key_id: Identifier, wallet_data: &mut WalletData, amount: u64) -> Result<Vec<Box<build::Append>>, Error> {
+fn inputs_and_change(
+	coins: &Vec<OutputData>,
+	keychain: &Keychain,
+	root_key_id: Identifier,
+	wallet_data: &mut WalletData,
+	amount: u64,
+) -> Result<Vec<Box<build::Append>>, Error> {
 
 	let mut parts = vec![];
 
@@ -134,7 +140,8 @@ fn inputs_and_change(coins: &Vec<OutputData>, keychain: &Keychain, root_key_id: 
 	}
 
 	// sender is responsible for setting the fee on the partial tx
-	// recipient should double check the fee calculation and not blindly trust the sender
+	// recipient should double check the fee calculation and not blindly trust the
+	// sender
 	let fee = tx_fee(coins.len(), 2, None);
 	parts.push(build::with_fee(fee));
 
