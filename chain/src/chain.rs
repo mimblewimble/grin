@@ -226,7 +226,7 @@ impl Chain {
 	pub fn set_sumtree_roots(&self, b: &mut Block) -> Result<(), Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 
-		let roots = sumtree::extending(&mut sumtrees, |mut extension| {
+		let roots = sumtree::extending(&mut sumtrees, |extension| {
 			// apply the block on the sumtrees and check the resulting root
 			extension.apply_block(b)?;
 			extension.force_rollback();
