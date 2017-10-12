@@ -21,6 +21,7 @@
 
 use std::fmt;
 
+use ser;
 use core::target::Difficulty;
 
 /// The block subsidy amount
@@ -204,6 +205,12 @@ where
 	Ok(
 		diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW) / Difficulty::from_num(adj_ts),
 	)
+}
+
+/// Consensus rule that collections of items are sorted lexicographically over the wire.
+pub trait VerifySortOrder<T> {
+	/// Verify a collection of items is sorted as required.
+	fn verify_sort_order(&self) -> Result<(), ser::Error>;
 }
 
 #[cfg(test)]

@@ -20,7 +20,7 @@ use std::collections::HashSet;
 
 use core::Committed;
 use core::{Input, Output, Proof, TxKernel, Transaction, COINBASE_KERNEL, COINBASE_OUTPUT};
-use consensus::{MINIMUM_DIFFICULTY, REWARD, reward, exceeds_weight};
+use consensus::{MINIMUM_DIFFICULTY, REWARD, reward, exceeds_weight, VerifySortOrder};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use ser::{self, Readable, Reader, Writeable, Writer};
@@ -222,23 +222,11 @@ impl Readable for Block {
 		let outputs: Vec<_> = try!((0..output_len).map(|_| Output::read(reader)).collect());
 		let kernels: Vec<_> = try!((0..proof_len).map(|_| TxKernel::read(reader)).collect());
 
-		//
-		// TODO - is this the right place to do this? Is this the right approach?
-		//
-		// Consensus rule that inputs, outputs and kernels are *required* to be sorted on the wire.
-		// Simply reject anything at deserialization time if not sorted as required.
-		// This is to avoid the possibility of "fingerprinting" based on any
-		// information from the order of inputs, outputs or kernels.
-		//
-		let mut sorted_inputs = inputs.clone();
-		sorted_inputs.sort_by_key(|input| input.hash());
-		if sorted_inputs != inputs { return Err(ser::Error::BadlySorted); }
-		let mut sorted_outputs = outputs.clone();
-		sorted_outputs.sort_by_key(|output| output.hash());
-		if sorted_outputs != outputs { return Err(ser::Error::BadlySorted); }
-		let mut sorted_kernels = kernels.clone();
-		sorted_kernels.sort_by_key(|kernel| kernel.hash());
-		if sorted_kernels != kernels { return Err(ser::Error::BadlySorted); }
+		// Consensus rule that everything is sorted lexicographically to avoid
+		// leaking any information through specific ordering of items.
+		inputs.verify_sort_order()?;
+		outputs.verify_sort_order()?;
+		kernels.verify_sort_order()?;
 
 		Ok(Block {
 			header: header,

@@ -19,6 +19,7 @@ use secp::{self, Secp256k1, Message, Signature};
 use secp::pedersen::{RangeProof, Commitment};
 use std::ops;
 
+use consensus::VerifySortOrder;
 use core::Committed;
 use core::hash::Hashed;
 use core::pmmr::Summable;
@@ -178,20 +179,10 @@ impl Readable for Transaction {
 		let inputs: Vec<_> = try!((0..input_len).map(|_| Input::read(reader)).collect());
 		let outputs: Vec<_> = try!((0..output_len).map(|_| Output::read(reader)).collect());
 
-		//
-		// TODO - is this the right place to do this? Is this the right approach?
-		//
-		// Consensus rule that inputs and outputs are *required* to be sorted on the wire.
-		// Simply reject anything at deserialization time if not sorted as required.
-		// This is to avoid the possibility of "fingerprinting" txs based on any
-		// information from the order of inputs or outputs.
-		//
-		let mut sorted_inputs = inputs.clone();
-		sorted_inputs.sort_by_key(|input| input.hash());
-		if sorted_inputs != inputs { return Err(ser::Error::BadlySorted); }
-		let mut sorted_outputs = outputs.clone();
-		sorted_outputs.sort_by_key(|output| output.hash());
-		if sorted_outputs != outputs { return Err(ser::Error::BadlySorted); }
+		// Consensus rule that everything is sorted lexicographically to avoid
+		// leaking any information through specific ordering of items.
+		inputs.verify_sort_order()?;
+		outputs.verify_sort_order()?;
 
 		Ok(Transaction {
 			fee: fee,
