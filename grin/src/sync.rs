@@ -142,33 +142,31 @@ impl Syncer {
 	/// downloading structure.
 	fn request_bodies(&self) {
 		let mut blocks_downloading = self.blocks_downloading.lock().unwrap();
-		if blocks_downloading.len() > MAX_BODY_DOWNLOADS {
-			// clean up potentially dead downloads
-			let twenty_sec_ago = Instant::now() - Duration::from_secs(20);
-			blocks_downloading
-				.iter()
-				.position(|&h| h.1 < twenty_sec_ago)
-				.map(|n| blocks_downloading.remove(n));
-		} else {
-			// consume hashes from blocks to download, place them in downloading and
-			// request them from the network
-			let mut blocks_to_download = self.blocks_to_download.lock().unwrap();
-			while blocks_to_download.len() > 0 && blocks_downloading.len() < MAX_BODY_DOWNLOADS {
-				let h = blocks_to_download.pop().unwrap();
-				let peer = self.p2p.random_peer().unwrap();
-				let send_result = peer.send_block_request(h);
-				match send_result {
-					Ok(_) => {}
-					Err(_) => {}
-				}
-				blocks_downloading.push((h, Instant::now()));
+
+		// clean up potentially dead downloads
+		let twenty_sec_ago = Instant::now() - Duration::from_secs(20);
+		blocks_downloading
+			.iter()
+			.position(|&h| h.1 < twenty_sec_ago)
+			.map(|n| blocks_downloading.remove(n));
+
+		// consume hashes from blocks to download, place them in downloading and
+		// request them from the network
+		let mut blocks_to_download = self.blocks_to_download.lock().unwrap();
+		while blocks_to_download.len() > 0 && blocks_downloading.len() < MAX_BODY_DOWNLOADS {
+			let h = blocks_to_download.pop().unwrap();
+			let peer = self.p2p.random_peer().unwrap();
+			let send_result = peer.send_block_request(h);
+			if let Err(e) = send_result {
+				debug!(LOGGER, "Error requesting block: {:?}", e);
 			}
-			debug!(
-				LOGGER,
-				"Requesting more full block hashes to download, total: {}.",
-				blocks_to_download.len()
-			);
+			blocks_downloading.push((h, Instant::now()));
 		}
+		debug!(
+			LOGGER,
+			"Requesting more full block hashes to download, total: {}.",
+			blocks_to_download.len()
+		);
 	}
 
 	/// We added a block, clean up the downloading structure
