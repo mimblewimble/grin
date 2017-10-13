@@ -486,7 +486,7 @@ impl Miner {
 					);
 				}
 			}
-			if let Some(mut m) = miner.as_mut() {
+			if let Some(m) = miner.as_mut() {
 				sol = self.inner_loop_sync_internal(
 					m,
 					&mut b,
