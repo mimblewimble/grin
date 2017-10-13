@@ -313,6 +313,9 @@ impl WalletData {
 		self.outputs.get(&key_id.to_hex())
 	}
 
+	///
+	/// TODO - this can be simplified significantly if we spend all spendable coins every time
+	///
 	/// Select a subset of unspent outputs to spend in a transaction
 	/// transferring the provided amount.
 	pub fn select(&self, root_key_id: keychain::Identifier, amount: u64) -> (Vec<OutputData>, i64) {
