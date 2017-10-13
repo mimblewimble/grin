@@ -73,12 +73,8 @@ fn build_send_tx(
 
 		// select some suitable outputs to spend from our local wallet
 		let (coins, _) = wallet_data.select(key_id.clone(), u64::max_value());
-		// if change < 0 {
-		// 	return Err(Error::NotEnoughFunds((-change) as u64));
-		// }
 
 		// build transaction skeleton with inputs and change
-		// TODO - inputs_and_change should raise NotEnoughFunds
 		// TODO - should probably also check we are sending enough to cover the fees + non-zero output
 		let mut parts = inputs_and_change(&coins, keychain, key_id, wallet_data, amount)?;
 
