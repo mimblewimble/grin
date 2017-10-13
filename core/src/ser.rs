@@ -22,11 +22,10 @@
 use std::{error, fmt, cmp};
 use std::io::{self, Write, Read};
 use byteorder::{ByteOrder, ReadBytesExt, BigEndian};
-use keychain::Identifier;
+use keychain::{Identifier, IDENTIFIER_SIZE};
 use secp::pedersen::Commitment;
 use secp::pedersen::RangeProof;
-use secp::constants::PEDERSEN_COMMITMENT_SIZE;
-use secp::constants::MAX_PROOF_SIZE;
+use secp::constants::{MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE};
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]
@@ -294,7 +293,7 @@ impl Writeable for Identifier {
 
 impl Readable for Identifier {
 	fn read(reader: &mut Reader) -> Result<Identifier, Error> {
-		let bytes = reader.read_fixed_bytes(20)?;
+		let bytes = reader.read_fixed_bytes(IDENTIFIER_SIZE)?;
 		Ok(Identifier::from_bytes(&bytes))
 	}
 }
@@ -527,6 +526,6 @@ impl AsFixedBytes for ::secp::pedersen::Commitment {
 }
 impl AsFixedBytes for ::keychain::Identifier {
 	fn len(&self) -> usize {
-		return 20;
+		return IDENTIFIER_SIZE;
 	}
 }

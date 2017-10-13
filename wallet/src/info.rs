@@ -17,26 +17,26 @@ use keychain::Keychain;
 use types::{WalletConfig, WalletData};
 
 pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
-	let fingerprint = keychain.clone().fingerprint();
+	let root_key_id = keychain.root_key_id();
 	let _ = checker::refresh_outputs(&config, &keychain);
 
 	// operate within a lock on wallet data
 	let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
 		println!("Outputs - ");
-		println!("identifier, height, lock_height, status, value");
+		println!("key_id, height, lock_height, status, value");
 		println!("----------------------------------");
 
 		let mut outputs = wallet_data
 			.outputs
 			.values()
-			.filter(|out| out.fingerprint == fingerprint)
+			.filter(|out| out.root_key_id == root_key_id)
 			.collect::<Vec<_>>();
 		outputs.sort_by_key(|out| out.n_child);
 		for out in outputs {
 			println!(
-				"{}..., {}, {}, {:?}, {}",
-				out.identifier.fingerprint(),
+				"{}, {}, {}, {:?}, {}",
+				out.key_id,
 				out.height,
 				out.lock_height,
 				out.status,

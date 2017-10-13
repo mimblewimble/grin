@@ -263,10 +263,10 @@ impl Block {
 		prev: &BlockHeader,
 		txs: Vec<&Transaction>,
 		keychain: &keychain::Keychain,
-		pubkey: &keychain::Identifier,
+		key_id: &keychain::Identifier,
 	) -> Result<Block, keychain::Error> {
 		let fees = txs.iter().map(|tx| tx.fee).sum();
-		let (reward_out, reward_proof) = Block::reward_output(keychain, pubkey, fees)?;
+		let (reward_out, reward_proof) = Block::reward_output(keychain, key_id, fees)?;
 		let block = Block::with_reward(prev, txs, reward_out, reward_proof)?;
 		Ok(block)
 	}
@@ -501,15 +501,15 @@ impl Block {
 	/// Builds the blinded output and related signature proof for the block reward.
 	pub fn reward_output(
 		keychain: &keychain::Keychain,
-		pubkey: &keychain::Identifier,
+		key_id: &keychain::Identifier,
 		fees: u64,
 	) -> Result<(Output, TxKernel), keychain::Error> {
 		let secp = keychain.secp();
 
-		let commit = keychain.commit(reward(fees), pubkey)?;
-		// let switch_commit = keychain.switch_commit(pubkey)?;
+		let commit = keychain.commit(reward(fees), key_id)?;
+		// let switch_commit = keychain.switch_commit(key_id)?;
 		let msg = secp::pedersen::ProofMessage::empty();
-		let rproof = keychain.range_proof(reward(fees), pubkey, commit, msg)?;
+		let rproof = keychain.range_proof(reward(fees), key_id, commit, msg)?;
 
 		let output = Output {
 			features: COINBASE_OUTPUT,
@@ -522,7 +522,7 @@ impl Block {
 		let excess = secp.commit_sum(vec![out_commit], vec![over_commit])?;
 
 		let msg = secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE])?;
-		let sig = keychain.sign(&msg, &pubkey)?;
+		let sig = keychain.sign(&msg, &key_id)?;
 
 		let proof = TxKernel {
 			features: COINBASE_KERNEL,
@@ -550,14 +550,14 @@ mod test {
 	// utility to create a block without worrying about the key or previous
 	// header
 	fn new_block(txs: Vec<&Transaction>, keychain: &Keychain) -> Block {
-		let pubkey = keychain.derive_pubkey(1).unwrap();
-		Block::new(&BlockHeader::default(), txs, keychain, &pubkey).unwrap()
+		let key_id = keychain.derive_key_id(1).unwrap();
+		Block::new(&BlockHeader::default(), txs, keychain, &key_id).unwrap()
 	}
 
 	// utility producing a transaction that spends an output with the provided
 	// value and blinding key
-	fn txspend1i1o(v: u64, keychain: &Keychain, pk1: Identifier, pk2: Identifier) -> Transaction {
-		build::transaction(vec![input(v, pk1), output(3, pk2), with_fee(2)], &keychain)
+	fn txspend1i1o(v: u64, keychain: &Keychain, key_id1: Identifier, key_id2: Identifier) -> Transaction {
+		build::transaction(vec![input(v, key_id1), output(3, key_id2), with_fee(2)], &keychain)
 			.map(|(tx, _)| tx)
 			.unwrap()
 	}
@@ -569,7 +569,7 @@ mod test {
 
 		let mut pks = vec![];
 		for n in 0..(max_out + 1) {
-			pks.push(keychain.derive_pubkey(n as u32).unwrap());
+			pks.push(keychain.derive_key_id(n as u32).unwrap());
 		}
 
 		let mut parts = vec![];
@@ -592,19 +592,19 @@ mod test {
 	// builds a block with a tx spending another and check if merging occurred
 	fn compactable_block() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pk1 = keychain.derive_pubkey(1).unwrap();
-		let pk2 = keychain.derive_pubkey(2).unwrap();
-		let pk3 = keychain.derive_pubkey(3).unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
+		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		let mut btx1 = tx2i1o();
 		let (mut btx2, _) = build::transaction(
-			vec![input(7, pk1), output(5, pk2.clone()), with_fee(2)],
+			vec![input(7, key_id1), output(5, key_id2.clone()), with_fee(2)],
 			&keychain,
 		).unwrap();
 
-		// spending tx2 - reuse pk2
+		// spending tx2 - reuse key_id2
 
-		let mut btx3 = txspend1i1o(5, &keychain, pk2.clone(), pk3);
+		let mut btx3 = txspend1i1o(5, &keychain, key_id2.clone(), key_id3);
 		let b = new_block(vec![&mut btx1, &mut btx2, &mut btx3], &keychain);
 
 		// block should have been automatically compacted (including reward
@@ -619,19 +619,19 @@ mod test {
 	// occurs
 	fn mergeable_blocks() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pk1 = keychain.derive_pubkey(1).unwrap();
-		let pk2 = keychain.derive_pubkey(2).unwrap();
-		let pk3 = keychain.derive_pubkey(3).unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
+		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		let mut btx1 = tx2i1o();
 
 		let (mut btx2, _) = build::transaction(
-			vec![input(7, pk1), output(5, pk2.clone()), with_fee(2)],
+			vec![input(7, key_id1), output(5, key_id2.clone()), with_fee(2)],
 			&keychain,
 		).unwrap();
 
-		// spending tx2 - reuse pk2
-		let mut btx3 = txspend1i1o(5, &keychain, pk2.clone(), pk3);
+		// spending tx2 - reuse key_id2
+		let mut btx3 = txspend1i1o(5, &keychain, key_id2.clone(), key_id3);
 
 		let b1 = new_block(vec![&mut btx1, &mut btx2], &keychain);
 		b1.validate(&keychain.secp()).unwrap();

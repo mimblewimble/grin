@@ -282,8 +282,8 @@ impl Transaction {
 		// pretend the sum is a public key (which it is, being of the form r.G) and
 		// verify the transaction sig with it
 		//
-		// we originally converted the commitment to a pubkey here (commitment to zero)
-		// and then passed the pubkey to secp.verify()
+		// we originally converted the commitment to a key_id here (commitment to zero)
+		// and then passed the key_id to secp.verify()
 		// the secp api no longer allows us to do this so we have wrapped the complexity
 		// of generating a public key from a commitment behind verify_from_commit
 		secp.verify_from_commit(&msg, &sig, &rsum)?;
@@ -425,8 +425,8 @@ impl Output {
 
 	/// Given the original blinding factor we can recover the
 	/// value from the range proof and the commitment
-	pub fn recover_value(&self, keychain: &Keychain, pubkey: &Identifier) -> Option<u64> {
-		match keychain.rewind_range_proof(pubkey, self.commit, self.proof) {
+	pub fn recover_value(&self, keychain: &Keychain, key_id: &Identifier) -> Option<u64> {
+		match keychain.rewind_range_proof(key_id, self.commit, self.proof) {
 			Ok(proof_info) => {
 				if proof_info.success {
 					Some(proof_info.value)
@@ -507,8 +507,8 @@ mod test {
 	#[test]
 	fn test_kernel_ser_deser() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pubkey = keychain.derive_pubkey(1).unwrap();
-		let commit = keychain.commit(5, &pubkey).unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
+		let commit = keychain.commit(5, &key_id).unwrap();
 
 		// just some bytes for testing ser/deser
 		let sig = vec![1, 0, 0, 0, 0, 0, 0, 1];
@@ -552,10 +552,10 @@ mod test {
 	#[test]
 	fn test_output_ser_deser() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pubkey = keychain.derive_pubkey(1).unwrap();
-		let commit = keychain.commit(5, &pubkey).unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
+		let commit = keychain.commit(5, &key_id).unwrap();
 		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain.range_proof(5, &pubkey, commit, msg).unwrap();
+		let proof = keychain.range_proof(5, &key_id, commit, msg).unwrap();
 
 		let out = Output {
 			features: DEFAULT_OUTPUT,
@@ -575,11 +575,11 @@ mod test {
 	#[test]
 	fn test_output_value_recovery() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pubkey = keychain.derive_pubkey(1).unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
 
-		let commit = keychain.commit(1003, &pubkey).unwrap();
+		let commit = keychain.commit(1003, &key_id).unwrap();
 		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain.range_proof(1003, &pubkey, commit, msg).unwrap();
+		let proof = keychain.range_proof(1003, &key_id, commit, msg).unwrap();
 
 		let output = Output {
 			features: DEFAULT_OUTPUT,
@@ -588,12 +588,12 @@ mod test {
 		};
 
 		// check we can successfully recover the value with the original blinding factor
-		let recovered_value = output.recover_value(&keychain, &pubkey).unwrap();
+		let recovered_value = output.recover_value(&keychain, &key_id).unwrap();
 		assert_eq!(recovered_value, 1003);
 
 		// check we cannot recover the value without the original blinding factor
-		let pubkey2 = keychain.derive_pubkey(2).unwrap();
-		let not_recoverable = output.recover_value(&keychain, &pubkey2);
+		let key_id2 = keychain.derive_key_id(2).unwrap();
+		let not_recoverable = output.recover_value(&keychain, &key_id2);
 		match not_recoverable {
 			Some(_) => panic!("expected value to be None here"),
 			None => {}

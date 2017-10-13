@@ -44,10 +44,10 @@ pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(),
 
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		// check each output that's not spent
-		for mut out in wallet_data
-		        .outputs
-		        .values_mut()
-		        .filter(|out| out.status != OutputStatus::Spent) {
+		for mut out in wallet_data.outputs.values_mut().filter(|out| {
+			out.status != OutputStatus::Spent
+		})
+		{
 			// TODO check the pool for unconfirmed
 			match get_output_from_node(config, keychain, out.value, out.n_child) {
 				Ok(api_out) => refresh_output(&mut out, api_out, &tip),
@@ -66,7 +66,8 @@ pub fn get_tip_from_node(config: &WalletConfig) -> Result<api::Tip, Error> {
 	api::client::get::<api::Tip>(url.as_str()).map_err(|e| Error::Node(e))
 }
 
-// queries a reachable node for a given output, checking whether it's been confirmed
+// queries a reachable node for a given output, checking whether it's been
+// confirmed
 fn get_output_from_node(
 	config: &WalletConfig,
 	keychain: &Keychain,
@@ -74,8 +75,8 @@ fn get_output_from_node(
 	derivation: u32,
 ) -> Result<Option<api::Output>, Error> {
 	// do we want to store these commitments in wallet.dat?
-	let pubkey = keychain.derive_pubkey(derivation)?;
-	let commit = keychain.commit(amount, &pubkey)?;
+	let key_id = keychain.derive_key_id(derivation)?;
+	let commit = keychain.commit(amount, &key_id)?;
 
 	let url = format!(
 		"{}/v1/chain/utxo/{}",

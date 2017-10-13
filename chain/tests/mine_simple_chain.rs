@@ -22,7 +22,6 @@ extern crate grin_pow as pow;
 
 use std::fs;
 use std::sync::Arc;
-use rand::os::OsRng;
 
 use chain::Chain;
 use chain::types::*;
@@ -59,7 +58,6 @@ fn setup(dir_name: &str) -> Chain {
 
 #[test]
 fn mine_empty_chain() {
-	let mut rng = OsRng::new().unwrap();
 	let chain = setup(".grin");
 
 	let keychain = Keychain::from_random_seed().unwrap();
@@ -79,7 +77,7 @@ fn mine_empty_chain() {
 	);
 	for n in 1..4 {
 		let prev = chain.head_header().unwrap();
-		let pk = keychain.derive_pubkey(n as u32).unwrap();
+		let pk = keychain.derive_key_id(n as u32).unwrap();
 		let mut b = core::core::Block::new(&prev, vec![], &keychain, &pk).unwrap();
 		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
@@ -206,7 +204,6 @@ fn longer_fork() {
 	// add blocks to both chains, 20 on the main one, only the first 5
 	// for the forked chain
 	let mut prev = chain.head_header().unwrap();
-	let forking_header: BlockHeader;
 	for n in 0..10 {
 		let b = prepare_block(&prev, &chain, n + 2);
 		let bh = b.header.clone();
@@ -233,7 +230,6 @@ fn longer_fork() {
 		let bh_fork = b_fork.header.clone();
 
 		let b = b_fork.clone();
-		let bh = b.header.clone();
 		chain.process_block(b, chain::SKIP_POW).unwrap();
 
 		chain_fork.process_block(b_fork, chain::SKIP_POW).unwrap();
@@ -249,9 +245,9 @@ fn prepare_block(prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
 
 fn prepare_block_nosum(prev: &BlockHeader, diff: u64) -> Block {
 	let keychain = Keychain::from_random_seed().unwrap();
-	let pubkey = keychain.derive_pubkey(1).unwrap();
+	let key_id = keychain.derive_key_id(1).unwrap();
 
-	let mut b = core::core::Block::new(prev, vec![], &keychain, &pubkey).unwrap();
+	let mut b = core::core::Block::new(prev, vec![], &keychain, &key_id).unwrap();
 	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 	b.header.total_difficulty = Difficulty::from_num(diff);
 	b

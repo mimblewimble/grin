@@ -82,8 +82,10 @@ impl Default for HeaderPartWriter {
 
 impl HeaderPartWriter {
 	pub fn parts_as_hex_strings(&self) -> (String, String) {
-		(String::from(format!("{:02x}", self.pre_nonce.iter().format(""))),
-		 String::from(format!("{:02x}", self.post_nonce.iter().format(""))))
+		(
+			String::from(format!("{:02x}", self.pre_nonce.iter().format(""))),
+			String::from(format!("{:02x}", self.post_nonce.iter().format(""))),
+		)
 	}
 }
 
@@ -128,10 +130,11 @@ pub struct Miner {
 impl Miner {
 	/// Creates a new Miner. Needs references to the chain state and its
 	/// storage.
-	pub fn new(config: MinerConfig,
-	           chain_ref: Arc<chain::Chain>,
-	           tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>)
-	           -> Miner {
+	pub fn new(
+		config: MinerConfig,
+		chain_ref: Arc<chain::Chain>,
+		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	) -> Miner {
 		Miner {
 			config: config,
 			chain: chain_ref,
@@ -147,15 +150,16 @@ impl Miner {
 	}
 
 	/// Inner part of the mining loop for cuckoo-miner async mode
-	pub fn inner_loop_async(&self,
-	                        plugin_miner: &mut PluginMiner,
-	                        difficulty: Difficulty,
-	                        b: &mut Block,
-	                        cuckoo_size: u32,
-	                        head: &BlockHeader,
-	                        latest_hash: &Hash,
-	                        attempt_time_per_block: u32)
-	                        -> Option<Proof> {
+	pub fn inner_loop_async(
+		&self,
+		plugin_miner: &mut PluginMiner,
+		difficulty: Difficulty,
+		b: &mut Block,
+		cuckoo_size: u32,
+		head: &BlockHeader,
+		latest_hash: &Hash,
+		attempt_time_per_block: u32,
+	) -> Option<Proof> {
 
 		debug!(
 			LOGGER,
@@ -250,14 +254,15 @@ impl Miner {
 	}
 
 	/// The inner part of mining loop for cuckoo miner sync mode
-	pub fn inner_loop_sync_plugin(&self,
-	                              plugin_miner: &mut PluginMiner,
-	                              b: &mut Block,
-	                              cuckoo_size: u32,
-	                              head: &BlockHeader,
-	                              attempt_time_per_block: u32,
-	                              latest_hash: &mut Hash)
-	                              -> Option<Proof> {
+	pub fn inner_loop_sync_plugin(
+		&self,
+		plugin_miner: &mut PluginMiner,
+		b: &mut Block,
+		cuckoo_size: u32,
+		head: &BlockHeader,
+		attempt_time_per_block: u32,
+		latest_hash: &mut Hash,
+	) -> Option<Proof> {
 		// look for a pow for at most attempt_time_per_block sec on the same block (to
 		// give a chance to new
 		// transactions) and as long as the head hasn't changed
@@ -322,7 +327,8 @@ impl Miner {
 
 			// Artificial slow down
 			if self.config.slow_down_in_millis != None &&
-			   self.config.slow_down_in_millis.unwrap() > 0 {
+				self.config.slow_down_in_millis.unwrap() > 0
+			{
 				thread::sleep(std::time::Duration::from_millis(
 					self.config.slow_down_in_millis.unwrap(),
 				));
@@ -342,14 +348,15 @@ impl Miner {
 	}
 
 	/// The inner part of mining loop for the internal miner
-	pub fn inner_loop_sync_internal<T: MiningWorker>(&self,
-	                                                 miner: &mut T,
-	                                                 b: &mut Block,
-	                                                 cuckoo_size: u32,
-	                                                 head: &BlockHeader,
-	                                                 attempt_time_per_block: u32,
-	                                                 latest_hash: &mut Hash)
-	                                                 -> Option<Proof> {
+	pub fn inner_loop_sync_internal<T: MiningWorker>(
+		&self,
+		miner: &mut T,
+		b: &mut Block,
+		cuckoo_size: u32,
+		head: &BlockHeader,
+		attempt_time_per_block: u32,
+		latest_hash: &mut Hash,
+	) -> Option<Proof> {
 		// look for a pow for at most 2 sec on the same block (to give a chance to new
 		// transactions) and as long as the head hasn't changed
 		let deadline = time::get_time().sec + attempt_time_per_block as i64;
@@ -392,7 +399,8 @@ impl Miner {
 
 			// Artificial slow down
 			if self.config.slow_down_in_millis != None &&
-			   self.config.slow_down_in_millis.unwrap() > 0 {
+				self.config.slow_down_in_millis.unwrap() > 0
+			{
 				thread::sleep(std::time::Duration::from_millis(
 					self.config.slow_down_in_millis.unwrap(),
 				));
@@ -422,16 +430,24 @@ impl Miner {
 		let mut plugin_miner = None;
 		let mut miner = None;
 		if miner_config.use_cuckoo_miner {
-			plugin_miner = Some(PluginMiner::new(consensus::EASINESS, cuckoo_size, proof_size));
+			plugin_miner = Some(PluginMiner::new(
+				consensus::EASINESS,
+				cuckoo_size,
+				proof_size,
+			));
 			plugin_miner.as_mut().unwrap().init(miner_config.clone());
 		} else {
-			miner = Some(cuckoo::Miner::new(consensus::EASINESS, cuckoo_size, proof_size));
+			miner = Some(cuckoo::Miner::new(
+				consensus::EASINESS,
+				cuckoo_size,
+				proof_size,
+			));
 		}
 
 		// to prevent the wallet from generating a new HD key derivation for each
 		// iteration, we keep the returned derivation to provide it back when
 		// nothing has changed
-		let mut pubkey = None;
+		let mut key_id = None;
 
 		loop {
 			debug!(LOGGER, "in miner loop...");
@@ -439,7 +455,7 @@ impl Miner {
 			// get the latest chain state and build a block on top of it
 			let head = self.chain.head_header().unwrap();
 			let mut latest_hash = self.chain.head().unwrap().last_block_h;
-			let (mut b, block_fees) = self.build_block(&head, pubkey);
+			let (mut b, block_fees) = self.build_block(&head, key_id);
 
 			let mut sol = None;
 			let mut use_async = false;
@@ -470,7 +486,7 @@ impl Miner {
 					);
 				}
 			}
-			if let Some(mut m) = miner.as_mut() {
+			if let Some(m) = miner.as_mut() {
 				sol = self.inner_loop_sync_internal(
 					m,
 					&mut b,
@@ -504,25 +520,26 @@ impl Miner {
 						e
 					);
 				}
-				debug!(LOGGER, "resetting pubkey in miner to None");
-				pubkey = None;
+				debug!(LOGGER, "resetting key_id in miner to None");
+				key_id = None;
 			} else {
 				debug!(
 					LOGGER,
 					"setting pubkey in miner to pubkey from block_fees - {:?}",
 					block_fees
 				);
-				pubkey = block_fees.pubkey();
+				key_id = block_fees.key_id();
 			}
 		}
 	}
 
 	/// Builds a new block with the chain head as previous and eligible
 	/// transactions from the pool.
-	fn build_block(&self,
-	               head: &core::BlockHeader,
-	               pubkey: Option<Identifier>)
-	               -> (core::Block, BlockFees) {
+	fn build_block(
+		&self,
+		head: &core::BlockHeader,
+		key_id: Option<Identifier>,
+	) -> (core::Block, BlockFees) {
 		// prepare the block header timestamp
 		let mut now_sec = time::get_time().sec;
 		let head_sec = head.timestamp.to_timespec().sec;
@@ -535,16 +552,19 @@ impl Miner {
 		let difficulty = consensus::next_difficulty(diff_iter).unwrap();
 
 		// extract current transaction from the pool
-		let txs_box = self.tx_pool
-			.read()
-			.unwrap()
-			.prepare_mineable_transactions(MAX_TX);
+		let txs_box = self.tx_pool.read().unwrap().prepare_mineable_transactions(
+			MAX_TX,
+		);
 		let txs: Vec<&Transaction> = txs_box.iter().map(|tx| tx.as_ref()).collect();
 
 		// build the coinbase and the block itself
 		let fees = txs.iter().map(|tx| tx.fee).sum();
 		let height = head.height + 1;
-		let block_fees = BlockFees { fees, pubkey, height };
+		let block_fees = BlockFees {
+			fees,
+			key_id,
+			height,
+		};
 
 		let (output, kernel, block_fees) = self.get_coinbase(block_fees);
 		let mut b = core::Block::with_reward(head, txs, output, kernel).unwrap();
@@ -565,21 +585,18 @@ impl Miner {
 		b.header.nonce = rng.gen();
 		b.header.difficulty = difficulty;
 		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
-		self.chain
-			.set_sumtree_roots(&mut b)
-			.expect("Error setting sum tree roots");
+		self.chain.set_sumtree_roots(&mut b).expect(
+			"Error setting sum tree roots",
+		);
 		(b, block_fees)
 	}
 
 	fn get_coinbase(&self, block_fees: BlockFees) -> (core::Output, core::TxKernel, BlockFees) {
 		if self.config.burn_reward {
 			let keychain = Keychain::from_random_seed().unwrap();
-			let pubkey = keychain.derive_pubkey(1).unwrap();
-			let (out, kern) = core::Block::reward_output(
-				&keychain,
-				&pubkey,
-				block_fees.fees,
-			).unwrap();
+			let key_id = keychain.derive_key_id(1).unwrap();
+			let (out, kern) = core::Block::reward_output(&keychain, &key_id, block_fees.fees)
+				.unwrap();
 			(out, kern, block_fees)
 		} else {
 			let url = format!(
@@ -596,12 +613,12 @@ impl Miner {
 			);
 			let out_bin = util::from_hex(res.output).unwrap();
 			let kern_bin = util::from_hex(res.kernel).unwrap();
-			let pubkey_bin = util::from_hex(res.pubkey).unwrap();
+			let key_id_bin = util::from_hex(res.key_id).unwrap();
 			let output = ser::deserialize(&mut &out_bin[..]).unwrap();
 			let kernel = ser::deserialize(&mut &kern_bin[..]).unwrap();
-			let pubkey = ser::deserialize(&mut &pubkey_bin[..]).unwrap();
+			let key_id = ser::deserialize(&mut &key_id_bin[..]).unwrap();
 			let block_fees = BlockFees {
-				pubkey: Some(pubkey),
+				key_id: Some(key_id),
 				..block_fees
 			};
 

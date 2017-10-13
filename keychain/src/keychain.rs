@@ -19,9 +19,8 @@ use secp::{Message, Secp256k1, Signature};
 use secp::key::SecretKey;
 use secp::pedersen::{Commitment, ProofMessage, ProofInfo, RangeProof};
 use blake2;
-
 use blind::{BlindingFactor, BlindSum};
-use extkey::{self, Fingerprint, Identifier};
+use extkey::{self, Identifier};
 
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -55,8 +54,8 @@ pub struct Keychain {
 }
 
 impl Keychain {
-	pub fn fingerprint(&self) -> Fingerprint {
-		self.extkey.fingerprint.clone()
+	pub fn root_key_id(&self) -> Identifier {
+		self.extkey.root_key_id.clone()
 	}
 
 	pub fn from_seed(seed: &[u8]) -> Result<Keychain, Error> {
@@ -77,52 +76,52 @@ impl Keychain {
 		Keychain::from_seed(seed.as_bytes())
 	}
 
-	pub fn derive_pubkey(&self, derivation: u32) -> Result<Identifier, Error> {
+	pub fn derive_key_id(&self, derivation: u32) -> Result<Identifier, Error> {
 		let extkey = self.extkey.derive(&self.secp, derivation)?;
-		let pubkey = extkey.identifier(&self.secp)?;
-		Ok(pubkey)
+		let key_id = extkey.identifier(&self.secp)?;
+		Ok(key_id)
 	}
 
 	// TODO - this is a work in progress
 	// TODO - smarter lookups - can we cache key_id/fingerprint -> derivation
 	// number somehow?
-	fn derived_key(&self, pubkey: &Identifier) -> Result<SecretKey, Error> {
+	fn derived_key(&self, key_id: &Identifier) -> Result<SecretKey, Error> {
 		if self.enable_burn_key {
 			// for tests and burn only, associate the zero fingerprint to a known
 			// dummy private key
-			if pubkey.fingerprint().to_string() == "00000000" {
+			if *key_id == Identifier::zero() {
 				return Ok(SecretKey::from_slice(&self.secp, &[1; 32])?);
 			}
 		}
 		for i in 1..10000 {
 			let extkey = self.extkey.derive(&self.secp, i)?;
-			if extkey.identifier(&self.secp)? == *pubkey {
+			if extkey.identifier(&self.secp)? == *key_id {
 				return Ok(extkey.key);
 			}
 		}
-		Err(Error::KeyDerivation(format!("cannot find extkey for {}", pubkey.fingerprint())))
+		Err(Error::KeyDerivation(format!("cannot find extkey for {:?}", key_id)))
 	}
 
 	// TODO - clean this and derived_key up, rename them?
-	// TODO - maybe wallet deals exclusively with pubkeys and not derivations - this leaks?
-	pub fn derivation_from_pubkey(&self, pubkey: &Identifier) -> Result<u32, Error> {
+	// TODO - maybe wallet deals exclusively with key_ids and not derivations - this leaks?
+	pub fn derivation_from_key_id(&self, key_id: &Identifier) -> Result<u32, Error> {
 		for i in 1..10000 {
 			let extkey = self.extkey.derive(&self.secp, i)?;
-			if extkey.identifier(&self.secp)? == *pubkey {
+			if extkey.identifier(&self.secp)? == *key_id {
 				return Ok(extkey.n_child);
 			}
 		}
-		Err(Error::KeyDerivation(format!("cannot find extkey for {}", pubkey.fingerprint())))
+		Err(Error::KeyDerivation(format!("cannot find extkey for {:?}", key_id)))
 	}
 
-	pub fn commit(&self, amount: u64, pubkey: &Identifier) -> Result<Commitment, Error> {
-		let skey = self.derived_key(pubkey)?;
+	pub fn commit(&self, amount: u64, key_id: &Identifier) -> Result<Commitment, Error> {
+		let skey = self.derived_key(key_id)?;
 		let commit = self.secp.commit(amount, skey)?;
 		Ok(commit)
 	}
 
-	pub fn switch_commit(&self, pubkey: &Identifier) -> Result<Commitment, Error> {
-		let skey = self.derived_key(pubkey)?;
+	pub fn switch_commit(&self, key_id: &Identifier) -> Result<Commitment, Error> {
+		let skey = self.derived_key(key_id)?;
 		let commit = self.secp.switch_commit(skey)?;
 		Ok(commit)
 	}
@@ -130,34 +129,34 @@ impl Keychain {
 	pub fn range_proof(
 		&self,
 		amount: u64,
-		pubkey: &Identifier,
+		key_id: &Identifier,
 		commit: Commitment,
 		msg: ProofMessage,
 	) -> Result<RangeProof, Error> {
-		let skey = self.derived_key(pubkey)?;
+		let skey = self.derived_key(key_id)?;
 		let range_proof = self.secp.range_proof(0, amount, skey, commit, msg);
 		Ok(range_proof)
 	}
 
 	pub fn rewind_range_proof(
 		&self,
-		pubkey: &Identifier,
+		key_id: &Identifier,
 		commit: Commitment,
 		proof: RangeProof,
 	) -> Result<ProofInfo, Error> {
-		let nonce = self.derived_key(pubkey)?;
+		let nonce = self.derived_key(key_id)?;
 		Ok(self.secp.rewind_range_proof(commit, proof, nonce))
 	}
 
 	pub fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error> {
 		let mut pos_keys: Vec<SecretKey> = blind_sum
-			.positive_pubkeys
+			.positive_key_ids
 			.iter()
 			.filter_map(|k| self.derived_key(&k).ok())
 			.collect();
 
 		let mut neg_keys: Vec<SecretKey> = blind_sum
-			.negative_pubkeys
+			.negative_key_ids
 			.iter()
 			.filter_map(|k| self.derived_key(&k).ok())
 			.collect();
@@ -178,8 +177,8 @@ impl Keychain {
 		Ok(BlindingFactor::new(blinding))
 	}
 
-	pub fn sign(&self, msg: &Message, pubkey: &Identifier) -> Result<Signature, Error> {
-		let skey = self.derived_key(pubkey)?;
+	pub fn sign(&self, msg: &Message, key_id: &Identifier) -> Result<Signature, Error> {
+		let skey = self.derived_key(key_id)?;
 		let sig = self.secp.sign(msg, &skey)?;
 		Ok(sig)
 	}
@@ -209,56 +208,57 @@ mod test {
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let keychain = Keychain::from_random_seed().unwrap();
 
-		// use the keychain to derive a "pubkey" based on the underlying seed
-		let pubkey = keychain.derive_pubkey(1).unwrap();
+		// use the keychain to derive a "key_id" based on the underlying seed
+		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let msg_bytes = [0; 32];
 		let msg = secp::Message::from_slice(&msg_bytes[..]).unwrap();
 
 		// now create a zero commitment using the key on the keychain associated with
-		// the pubkey
-		let commit = keychain.commit(0, &pubkey).unwrap();
+		// the key_id
+		let commit = keychain.commit(0, &key_id).unwrap();
 
 		// now check we can use our key to verify a signature from this zero commitment
-		let sig = keychain.sign(&msg, &pubkey).unwrap();
+		let sig = keychain.sign(&msg, &key_id).unwrap();
 		secp.verify_from_commit(&msg, &sig, &commit).unwrap();
 	}
 
 	#[test]
 	fn test_rewind_range_proof() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let pubkey = keychain.derive_pubkey(1).unwrap();
-		let commit = keychain.commit(5, &pubkey).unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
+		let commit = keychain.commit(5, &key_id).unwrap();
 		let msg = ProofMessage::empty();
 
-		let proof = keychain.range_proof(5, &pubkey, commit, msg).unwrap();
-		let proof_info = keychain.rewind_range_proof(&pubkey, commit, proof).unwrap();
+		let proof = keychain.range_proof(5, &key_id, commit, msg).unwrap();
+		let proof_info = keychain.rewind_range_proof(&key_id, commit, proof).unwrap();
 
 		assert_eq!(proof_info.success, true);
 		assert_eq!(proof_info.value, 5);
 
-		// now check the recovered message is "empty" (but not truncated) i.e. all zeroes
+		// now check the recovered message is "empty" (but not truncated) i.e. all
+		// zeroes
 		assert_eq!(
 			proof_info.message,
 			secp::pedersen::ProofMessage::from_bytes(&[0; secp::constants::PROOF_MSG_SIZE])
 		);
 
-		let pubkey2 = keychain.derive_pubkey(2).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
 
 		// cannot rewind with a different nonce
-		let proof_info = keychain.rewind_range_proof(&pubkey2, commit, proof).unwrap();
+		let proof_info = keychain.rewind_range_proof(&key_id2, commit, proof).unwrap();
 		assert_eq!(proof_info.success, false);
 		assert_eq!(proof_info.value, 0);
 
 		// cannot rewind with a commitment to the same value using a different key
-		let commit2 = keychain.commit(5, &pubkey2).unwrap();
-		let proof_info = keychain.rewind_range_proof(&pubkey, commit2, proof).unwrap();
+		let commit2 = keychain.commit(5, &key_id2).unwrap();
+		let proof_info = keychain.rewind_range_proof(&key_id, commit2, proof).unwrap();
 		assert_eq!(proof_info.success, false);
 		assert_eq!(proof_info.value, 0);
 
 		// cannot rewind with a commitment to a different value
-		let commit3 = keychain.commit(4, &pubkey).unwrap();
-		let proof_info = keychain.rewind_range_proof(&pubkey, commit3, proof).unwrap();
+		let commit3 = keychain.commit(4, &key_id).unwrap();
+		let proof_info = keychain.rewind_range_proof(&key_id, commit3, proof).unwrap();
 		assert_eq!(proof_info.success, false);
 		assert_eq!(proof_info.value, 0);
 	}
