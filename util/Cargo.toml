@@ -6,7 +6,7 @@ authors = ["Ignotus Peverell <igno.peverell@protonmail.com>",
 workspace = ".."
 
 [dependencies]
-slog = "^2.0.12"
+slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
 slog-term = "^2.2.0"
 slog-async = "^2.1.0"
 lazy_static = "~0.2.8"

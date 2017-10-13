@@ -20,7 +20,7 @@ use slog_async;
 
 use types::{LogLevel, LoggingConfig};
 
-fn convert_log_level(in_level:&LogLevel)->Level{
+fn convert_log_level(in_level: &LogLevel) -> Level {
 	match *in_level {
 		LogLevel::Info => Level::Info,
 		LogLevel::Critical => Level::Critical,
@@ -32,10 +32,13 @@ fn convert_log_level(in_level:&LogLevel)->Level{
 }
 
 lazy_static! {
+	/// Flag to observe whether logging was explcitly initialised (don't output otherwise)
+	static ref WAS_INIT: Mutex<bool> = Mutex::new(false);
 	/// Static Logging configuration, should only be set once, before first logging call
 	static ref LOGGING_CONFIG: Mutex<LoggingConfig> = Mutex::new(LoggingConfig::default());
 	/// And a static reference to the logger itself, accessible from all crates
 	pub static ref LOGGER: Logger = {
+		let was_init = WAS_INIT.lock().unwrap().clone();
 		let config = LOGGING_CONFIG.lock().unwrap();
 		let slog_level_stdout = convert_log_level(&config.stdout_log_level);
 		let slog_level_file = convert_log_level(&config.file_log_level);
@@ -46,13 +49,13 @@ lazy_static! {
 		let terminal_drain = LevelFilter::new(terminal_drain, slog_level_stdout).fuse();
 		let mut terminal_drain = slog_async::Async::new(terminal_drain).build().fuse();
 
-		if !config.log_to_stdout {
+		if !config.log_to_stdout || !was_init {
 			terminal_drain = slog_async::Async::new(Discard{}).build().fuse();
 		}
 		
 		let mut file_drain_final = slog_async::Async::new(Discard{}).build().fuse();
 
-		if config.log_to_file {
+		if config.log_to_file && was_init {
 			//File drain
 			let file = OpenOptions::new()
 				.create(true)
@@ -73,15 +76,16 @@ lazy_static! {
 
 		let log = Logger::root(composite_drain, o!());
 		log
-  };
+	};
 }
 
 /// Initialises the logger with the given configuration
 
-pub fn init_logger(config:Option<LoggingConfig>){
+pub fn init_logger(config: Option<LoggingConfig>) {
 	if let Some(c) = config {
-		let mut config_ref=LOGGING_CONFIG.lock().unwrap();
-		*config_ref=c.clone();
+		let mut config_ref = LOGGING_CONFIG.lock().unwrap();
+		*config_ref = c.clone();
+		let mut was_init_ref = WAS_INIT.lock().unwrap();
+		*was_init_ref = true;
 	}
-	
 }
