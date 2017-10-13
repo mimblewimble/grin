@@ -55,11 +55,17 @@ impl Keychain {
 		self.extkey.root_key_id.clone()
 	}
 
-	// for tests and burn only, associate the zero fingerprint to a known
-	// dummy private key
-	pub fn burn_enabled(keychain: &Keychain) -> Keychain {
+	//
+	// For tests and burn only, associate a key identifier with a known secret key.
+	//
+	// TODO - does this need to be a "known" key? Or can we just generate one randomly
+	// and *really* burn the coins?
+	//
+	pub fn burn_enabled(keychain: &Keychain, burn_key_id: &Identifier) -> Keychain {
 		let mut key_overrides = HashMap::new();
-		key_overrides.insert(Identifier::zero(), SecretKey::from_slice(&keychain.secp, &[1; 32]).unwrap());
+		key_overrides.insert(
+			burn_key_id.clone(),
+			SecretKey::from_slice(&keychain.secp, &[1; 32]).unwrap());
 		Keychain {
 			key_overrides: key_overrides,
 			..keychain.clone()
@@ -90,30 +96,21 @@ impl Keychain {
 		Ok(key_id)
 	}
 
-	// TODO - this is a work in progress
 	// TODO - smarter lookups - can we cache key_id/fingerprint -> derivation
 	// number somehow?
 	fn derived_key(&self, key_id: &Identifier) -> Result<SecretKey, Error> {
+		// TODO - is this the cache right here? Do we just lazily populate it in normal use?
 		if let Some(key) = self.key_overrides.get(key_id) {
 			return Ok(*key);
 		}
 
 		for i in 1..10000 {
 			let extkey = self.extkey.derive(&self.secp, i)?;
+
+			// TODO - populate the cache here for every derived key here?
+
 			if extkey.identifier(&self.secp)? == *key_id {
 				return Ok(extkey.key);
-			}
-		}
-		Err(Error::KeyDerivation(format!("cannot find extkey for {:?}", key_id)))
-	}
-
-	// TODO - clean this and derived_key up, rename them?
-	// TODO - maybe wallet deals exclusively with key_ids and not derivations - this leaks?
-	pub fn derivation_from_key_id(&self, key_id: &Identifier) -> Result<u32, Error> {
-		for i in 1..10000 {
-			let extkey = self.extkey.derive(&self.secp, i)?;
-			if extkey.identifier(&self.secp)? == *key_id {
-				return Ok(extkey.n_child);
 			}
 		}
 		Err(Error::KeyDerivation(format!("cannot find extkey for {:?}", key_id)))

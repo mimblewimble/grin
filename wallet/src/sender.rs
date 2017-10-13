@@ -72,12 +72,14 @@ fn build_send_tx(
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
 		// select some suitable outputs to spend from our local wallet
-		let (coins, change) = wallet_data.select(key_id.clone(), amount);
-		if change < 0 {
-			return Err(Error::NotEnoughFunds((-change) as u64));
-		}
+		let (coins, _) = wallet_data.select(key_id.clone(), u64::max_value());
+		// if change < 0 {
+		// 	return Err(Error::NotEnoughFunds((-change) as u64));
+		// }
 
 		// build transaction skeleton with inputs and change
+		// TODO - inputs_and_change should raise NotEnoughFunds
+		// TODO - should probably also check we are sending enough to cover the fees + non-zero output
 		let mut parts = inputs_and_change(&coins, keychain, key_id, wallet_data, amount)?;
 
 		// This is more proof of concept than anything but here we set a
@@ -92,7 +94,7 @@ fn build_send_tx(
 }
 
 pub fn issue_burn_tx(config: &WalletConfig, keychain: &Keychain, amount: u64) -> Result<(), Error> {
-	let keychain = &Keychain::burn_enabled(keychain);
+	let keychain = &Keychain::burn_enabled(keychain, &Identifier::zero());
 
 	let _ = checker::refresh_outputs(config, keychain);
 
