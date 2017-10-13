@@ -8,7 +8,7 @@ There are 3 main properties of Grin transactions that make them private:
 2. There are no amounts.
 3. 2 transactions, one spending the other, can be merged in a block to form only one, removing all intermediary information.
 
-The 2 first properties mean that all transactions look the same. Unless you directly participated in the transaction, all inputs and outputs look like random pieces of data (in lingo, they all look like random curve points).
+The 2 first properties mean that all transactions look the same. Unless you directly participated in the transaction, all inputs and outputs look like random pieces of data (in lingo, they're all random curve points).
 
 ## Scalability
 
@@ -31,7 +31,7 @@ Maybe you've heard that MimbleWimble doesn't support scripts. And in some way, t
 
 ### Wait, what!? No address?
 
-Nope, no address. All outputs in Grin are unique and have no common data with any previous output. Instead of relying on a known address to send money, transactions have to be built interactively, with 2 (or more) wallets exchanging data with one another. Practically, this isn't so much of a problem as there are multiple ways for 2 programs to interact privately and securely.
+Nope, no address. All outputs in Grin are unique and have no common data with any previous output. Instead of relying on a known address to send money, transactions have to be built interactively, with 2 (or more) wallets exchanging data with one another. Practically, this isn't so much of a problem as there are multiple ways for 2 programs to interact privately and securely. And this interaction could even take place over email or Signal (or carrier pigeons).
 
 ### If transactions information get removed, can't I just cheat and create money?
 
