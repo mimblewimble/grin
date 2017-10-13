@@ -8,7 +8,7 @@ workspace = ".."
 blake2-rfc = "~0.2.17"
 rand = "^0.3"
 time = "^0.1"
-slog = "^2.0.12"
+slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
 lazy_static = "~0.2.8"
 serde = "~1.0.8"
 serde_derive = "~1.0.8"
