@@ -297,7 +297,7 @@ impl Block {
 		// build vectors with all inputs and all outputs, ordering them by hash
 		// needs to be a fold so we don't end up with a vector of vectors and we
 		// want to fully own the refs (not just a pointer like flat_map).
-		let mut inputs = txs.iter().fold(vec![], |mut acc, ref tx| {
+		let inputs = txs.iter().fold(vec![], |mut acc, ref tx| {
 			let mut inputs = tx.inputs.clone();
 			acc.append(&mut inputs);
 			acc
@@ -308,9 +308,6 @@ impl Block {
 			acc
 		});
 		outputs.push(reward_out);
-
-		inputs.sort_by_key(|inp| inp.hash());
-		outputs.sort_by_key(|out| out.hash());
 
 		// calculate the overall Merkle tree and fees
 
@@ -406,8 +403,8 @@ impl Block {
 		let mut all_kernels = self.kernels.clone();
 		all_kernels.append(&mut other.kernels.clone());
 
-		all_inputs.sort_by_key(|inp| inp.hash());
-		all_outputs.sort_by_key(|out| out.hash());
+		// all_inputs.sort_by_key(|inp| inp.hash());
+		// all_outputs.sort_by_key(|out| out.hash());
 
 		Block {
 			// compact will fix the merkle tree
