@@ -131,6 +131,7 @@ impl Default for WalletConfig {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum OutputStatus {
 	Unconfirmed,
+	UnconfirmedChange,
 	Unspent,
 	Immature,
 	Locked,
@@ -141,6 +142,7 @@ impl fmt::Display for OutputStatus {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match *self {
 			OutputStatus::Unconfirmed => write!(f, "Unconfirmed"),
+			OutputStatus::UnconfirmedChange => write!(f, "UnconfirmedChange"),
 			OutputStatus::Unspent => write!(f, "Unspent"),
 			OutputStatus::Immature => write!(f, "Immature"),
 			OutputStatus::Locked => write!(f, "Locked"),

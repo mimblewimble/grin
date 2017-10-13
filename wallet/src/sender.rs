@@ -170,7 +170,7 @@ fn inputs_and_change(
 		key_id: change_key.clone(),
 		n_child: change_derivation,
 		value: change as u64,
-		status: OutputStatus::Unconfirmed,
+		status: OutputStatus::UnconfirmedChange,
 		height: 0,
 		lock_height: 0,
 	});
