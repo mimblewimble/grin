@@ -102,12 +102,12 @@ Before running your mining server, a wallet server needs to be set up and listen
 
     node1$ grin wallet -p "password" receive
 
-This will create a wallet server listening on the default port 13415 with the password "password". Next, in another terminal window in the 'node1' directory, run a full mining node with the following command:
+This will create a wallet server listening on the default port 13416 with the password "password". Next, in another terminal window in the 'node1' directory, run a full mining node with the following command:
 
     node1$ grin server -m run
 
 This creates a new .grin database directory in the current directory, and begins mining new blocks (with no transactions, for now). Note this starts two services listening on two default ports, 
-port 13414 for the peer-to-peer (P2P) service which keeps all nodes synchronised, and 13415 for the Rest API service used to verify transactions and post new transactions to the pool (for example). These ports can be configured via command line switches, or via a grin.toml file in the working directory.
+port 13414 for the peer-to-peer (P2P) service which keeps all nodes synchronised, and 13413 for the Rest API service used to verify transactions and post new transactions to the pool (for example). These ports can be configured via command line switches, or via a grin.toml file in the working directory.
 
 Let the mining server find a few blocks, then stop (just ctrl-c) the mining server and the wallet server. You'll notice grin has created a database directory (.grin) in which the blockchain and peer data is stored. There should also be a wallet.dat file in the current directory, which contains a few coinbase mining rewards created each time the server mines a new block.
 
