@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use rand::{thread_rng, Rng};
+use std::collections::HashMap;
 
 use secp;
 use secp::{Message, Secp256k1, Signature};
@@ -42,20 +43,27 @@ impl From<extkey::Error> for Error {
 	}
 }
 
-
 #[derive(Clone, Debug)]
 pub struct Keychain {
 	secp: Secp256k1,
 	extkey: extkey::ExtendedKey,
-
-	/// for tests and burn only, associate the zero fingerprint to a known
-	/// dummy private key
-	pub enable_burn_key: bool,
+	key_overrides: HashMap<Identifier, SecretKey>,
 }
 
 impl Keychain {
 	pub fn root_key_id(&self) -> Identifier {
 		self.extkey.root_key_id.clone()
+	}
+
+	// for tests and burn only, associate the zero fingerprint to a known
+	// dummy private key
+	pub fn burn_enabled(keychain: &Keychain) -> Keychain {
+		let mut key_overrides = HashMap::new();
+		key_overrides.insert(Identifier::zero(), SecretKey::from_slice(&keychain.secp, &[1; 32]).unwrap());
+		Keychain {
+			key_overrides: key_overrides,
+			..keychain.clone()
+		}
 	}
 
 	pub fn from_seed(seed: &[u8]) -> Result<Keychain, Error> {
@@ -64,7 +72,7 @@ impl Keychain {
 		let keychain = Keychain {
 			secp: secp,
 			extkey: extkey,
-			enable_burn_key: false,
+			key_overrides: HashMap::new(),
 		};
 		Ok(keychain)
 	}
@@ -86,13 +94,10 @@ impl Keychain {
 	// TODO - smarter lookups - can we cache key_id/fingerprint -> derivation
 	// number somehow?
 	fn derived_key(&self, key_id: &Identifier) -> Result<SecretKey, Error> {
-		if self.enable_burn_key {
-			// for tests and burn only, associate the zero fingerprint to a known
-			// dummy private key
-			if *key_id == Identifier::zero() {
-				return Ok(SecretKey::from_slice(&self.secp, &[1; 32])?);
-			}
+		if let Some(key) = self.key_overrides.get(key_id) {
+			return Ok(*key);
 		}
+
 		for i in 1..10000 {
 			let extkey = self.extkey.derive(&self.secp, i)?;
 			if extkey.identifier(&self.secp)? == *key_id {

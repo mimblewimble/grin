@@ -16,7 +16,7 @@ use api;
 use checker;
 use core::core::{Transaction, build};
 use core::ser;
-use keychain::{BlindingFactor, Keychain, Identifier, IDENTIFIER_SIZE};
+use keychain::{BlindingFactor, Keychain, Identifier};
 use receiver::TxWrapper;
 use types::*;
 use util::LOGGER;
@@ -92,8 +92,11 @@ fn build_send_tx(
 }
 
 pub fn issue_burn_tx(config: &WalletConfig, keychain: &Keychain, amount: u64) -> Result<(), Error> {
+	let keychain = &Keychain::burn_enabled(keychain);
+
 	let _ = checker::refresh_outputs(config, keychain);
-	let key_id = keychain.clone().root_key_id();
+
+	let key_id = keychain.root_key_id();
 
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |mut wallet_data| {
@@ -105,10 +108,8 @@ pub fn issue_burn_tx(config: &WalletConfig, keychain: &Keychain, amount: u64) ->
 		let mut parts = inputs_and_change(&coins, keychain, key_id, &mut wallet_data, amount)?;
 
 		// add burn output and fees
-		parts.push(build::output(
-			amount,
-			Identifier::from_bytes(&[0; IDENTIFIER_SIZE]),
-		));
+		let fee = tx_fee(coins.len(), 2, None);
+		parts.push(build::output(amount - fee, Identifier::zero()));
 
 		// finalize the burn transaction and send
 		let (tx_burn, _) = build::transaction(parts, &keychain)?;
