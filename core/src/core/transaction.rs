@@ -19,11 +19,11 @@ use secp::{self, Secp256k1, Message, Signature};
 use secp::pedersen::{RangeProof, Commitment};
 use std::ops;
 
-use consensus::VerifySortOrder;
 use core::Committed;
 use core::pmmr::Summable;
 use keychain::{Identifier, Keychain};
-use ser::{self, Reader, Writer, Readable, Writeable, WriteableSorted};
+use ser::{self, Reader, Writer, Readable, Writeable, WriteableSorted, read_and_verify_sorted};
+
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -166,6 +166,7 @@ impl Writeable for Transaction {
 	}
 }
 
+
 /// Implementation of Readable for a transaction, defines how to read a full
 /// transaction from a binary stream.
 impl Readable for Transaction {
@@ -173,13 +174,8 @@ impl Readable for Transaction {
 		let (fee, lock_height, excess_sig, input_len, output_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_vec, read_u64, read_u64);
 
-		let inputs: Vec<_> = try!((0..input_len).map(|_| Input::read(reader)).collect());
-		let outputs: Vec<_> = try!((0..output_len).map(|_| Output::read(reader)).collect());
-
-		// Consensus rule that everything is sorted lexicographically to avoid
-		// leaking any information through specific ordering of items.
-		inputs.verify_sort_order()?;
-		outputs.verify_sort_order()?;
+		let inputs = read_and_verify_sorted(reader, input_len)?;
+		let outputs = read_and_verify_sorted(reader, output_len)?;
 
 		Ok(Transaction {
 			fee: fee,

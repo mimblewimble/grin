@@ -20,10 +20,10 @@ use std::collections::HashSet;
 
 use core::Committed;
 use core::{Input, Output, Proof, TxKernel, Transaction, COINBASE_KERNEL, COINBASE_OUTPUT};
-use consensus::{MINIMUM_DIFFICULTY, REWARD, reward, exceeds_weight, VerifySortOrder};
+use consensus::{MINIMUM_DIFFICULTY, REWARD, reward, exceeds_weight};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
-use ser::{self, Readable, Reader, Writeable, Writer, WriteableSorted};
+use ser::{self, Readable, Reader, Writeable, Writer, WriteableSorted, read_and_verify_sorted};
 use global;
 use keychain;
 
@@ -189,11 +189,11 @@ impl Writeable for Block {
 				[write_u64, self.kernels.len() as u64]
 			);
 
-			// Consensus rule that everything is sorted in lexicographical order on the wire.
 			let mut inputs = self.inputs.clone();
 			let mut outputs = self.outputs.clone();
 			let mut kernels = self.kernels.clone();
 
+			// Consensus rule that everything is sorted in lexicographical order on the wire.
 			try!(inputs.write_sorted(writer));
 			try!(outputs.write_sorted(writer));
 			try!(kernels.write_sorted(writer));
@@ -208,18 +208,12 @@ impl Readable for Block {
 	fn read(reader: &mut Reader) -> Result<Block, ser::Error> {
 		let header = try!(BlockHeader::read(reader));
 
-		let (input_len, output_len, proof_len) =
+		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
-		let inputs: Vec<_> = try!((0..input_len).map(|_| Input::read(reader)).collect());
-		let outputs: Vec<_> = try!((0..output_len).map(|_| Output::read(reader)).collect());
-		let kernels: Vec<_> = try!((0..proof_len).map(|_| TxKernel::read(reader)).collect());
-
-		// Consensus rule that everything is sorted lexicographically to avoid
-		// leaking any information through specific ordering of items.
-		inputs.verify_sort_order()?;
-		outputs.verify_sort_order()?;
-		kernels.verify_sort_order()?;
+		let inputs = read_and_verify_sorted(reader, input_len)?;
+		let outputs = read_and_verify_sorted(reader, output_len)?;
+		let kernels = read_and_verify_sorted(reader, kernel_len)?;
 
 		Ok(Block {
 			header: header,
@@ -402,9 +396,6 @@ impl Block {
 
 		let mut all_kernels = self.kernels.clone();
 		all_kernels.append(&mut other.kernels.clone());
-
-		// all_inputs.sort_by_key(|inp| inp.hash());
-		// all_outputs.sort_by_key(|out| out.hash());
 
 		Block {
 			// compact will fix the merkle tree

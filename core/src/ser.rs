@@ -24,6 +24,7 @@ use std::io::{self, Write, Read};
 use byteorder::{ByteOrder, ReadBytesExt, BigEndian};
 use keychain::{Identifier, IDENTIFIER_SIZE};
 use core::hash::Hashed;
+use consensus::VerifySortOrder;
 use secp::pedersen::Commitment;
 use secp::pedersen::RangeProof;
 use secp::constants::{MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE};
@@ -189,6 +190,19 @@ pub trait Writeable {
 pub trait WriteableSorted {
 	/// Write the data but sort it first.
 	fn write_sorted<W: Writer>(&mut self, writer: &mut W) -> Result<(), Error>;
+}
+
+/// Reads a collection of serialized items into a Vec
+/// and verifies they are lexicographically ordered.
+///
+/// A consensus rule requires everything is sorted lexicographically to avoid
+/// leaking any information through specific ordering of items.
+pub fn read_and_verify_sorted<T>(reader: &mut Reader, count: u64) -> Result<Vec<T>, Error>
+	where T: Readable + Hashed
+{
+	let result: Vec<T> = try!((0..count).map(|_| T::read(reader)).collect());
+	result.verify_sort_order()?;
+	Ok(result)
 }
 
 /// Trait that every type that can be deserialized from binary must implement.
