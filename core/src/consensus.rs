@@ -21,6 +21,7 @@
 
 use std::fmt;
 
+use ser;
 use core::target::Difficulty;
 
 /// The block subsidy amount
@@ -76,8 +77,7 @@ pub const MAX_BLOCK_WEIGHT: usize = 80_000;
 
 /// Whether a block exceeds the maximum acceptable weight
 pub fn exceeds_weight(input_len: usize, output_len: usize, kernel_len: usize) -> bool {
-	input_len * BLOCK_INPUT_WEIGHT +
-		output_len * BLOCK_OUTPUT_WEIGHT +
+	input_len * BLOCK_INPUT_WEIGHT + output_len * BLOCK_OUTPUT_WEIGHT +
 		kernel_len * BLOCK_KERNEL_WEIGHT > MAX_BLOCK_WEIGHT
 }
 
@@ -204,6 +204,12 @@ where
 	Ok(
 		diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW) / Difficulty::from_num(adj_ts),
 	)
+}
+
+/// Consensus rule that collections of items are sorted lexicographically over the wire.
+pub trait VerifySortOrder<T> {
+	/// Verify a collection of items is sorted as required.
+	fn verify_sort_order(&self) -> Result<(), ser::Error>;
 }
 
 #[cfg(test)]

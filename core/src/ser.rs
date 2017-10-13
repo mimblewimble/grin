@@ -23,6 +23,8 @@ use std::{error, fmt, cmp};
 use std::io::{self, Write, Read};
 use byteorder::{ByteOrder, ReadBytesExt, BigEndian};
 use keychain::{Identifier, IDENTIFIER_SIZE};
+use core::hash::Hashed;
+use consensus::VerifySortOrder;
 use secp::pedersen::Commitment;
 use secp::pedersen::RangeProof;
 use secp::constants::{MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE};
@@ -43,6 +45,8 @@ pub enum Error {
 	CorruptedData,
 	/// When asked to read too much data
 	TooLargeReadErr,
+	/// Something was not sorted when consensus rules requires it to be sorted
+	BadlySorted,
 }
 
 impl From<io::Error> for Error {
@@ -61,6 +65,7 @@ impl fmt::Display for Error {
 			} => write!(f, "expected {:?}, got {:?}", e, r),
 			Error::CorruptedData => f.write_str("corrupted data"),
 			Error::TooLargeReadErr => f.write_str("too large read"),
+			Error::BadlySorted => f.write_str("badly sorted data"),
 		}
 	}
 }
@@ -82,6 +87,7 @@ impl error::Error for Error {
 			} => "unexpected data",
 			Error::CorruptedData => "corrupted data",
 			Error::TooLargeReadErr => "too large read",
+			Error::BadlySorted => "badly sorted data",
 		}
 	}
 }
@@ -178,6 +184,25 @@ pub trait Reader {
 pub trait Writeable {
 	/// Write the data held by this Writeable to the provided writer
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error>;
+}
+
+/// Trait to allow a collection of Writeables to be written in lexicographical sort order.
+pub trait WriteableSorted {
+	/// Write the data but sort it first.
+	fn write_sorted<W: Writer>(&mut self, writer: &mut W) -> Result<(), Error>;
+}
+
+/// Reads a collection of serialized items into a Vec
+/// and verifies they are lexicographically ordered.
+///
+/// A consensus rule requires everything is sorted lexicographically to avoid
+/// leaking any information through specific ordering of items.
+pub fn read_and_verify_sorted<T>(reader: &mut Reader, count: u64) -> Result<Vec<T>, Error>
+	where T: Readable + Hashed
+{
+	let result: Vec<T> = try!((0..count).map(|_| T::read(reader)).collect());
+	result.verify_sort_order()?;
+	Ok(result)
 }
 
 /// Trait that every type that can be deserialized from binary must implement.
@@ -383,6 +408,19 @@ where
 	T: Writeable,
 {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		for elmt in self {
+			elmt.write(writer)?;
+		}
+		Ok(())
+	}
+}
+
+impl<T> WriteableSorted for Vec<T>
+where
+	T: Writeable + Hashed,
+{
+	fn write_sorted<W: Writer>(&mut self, writer: &mut W) -> Result<(), Error> {
+		self.sort_by_key(|elmt| elmt.hash());
 		for elmt in self {
 			elmt.write(writer)?;
 		}

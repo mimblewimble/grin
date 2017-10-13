@@ -59,7 +59,6 @@ fn setup(dir_name: &str) -> Chain {
 #[test]
 fn mine_empty_chain() {
 	let chain = setup(".grin");
-
 	let keychain = Keychain::from_random_seed().unwrap();
 
 	// mine and add a few blocks

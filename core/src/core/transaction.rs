@@ -22,7 +22,8 @@ use std::ops;
 use core::Committed;
 use core::pmmr::Summable;
 use keychain::{Identifier, Keychain};
-use ser::{self, Reader, Writer, Readable, Writeable};
+use ser::{self, Reader, Writer, Readable, Writeable, WriteableSorted, read_and_verify_sorted};
+
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -153,15 +154,18 @@ impl Writeable for Transaction {
 			[write_u64, self.inputs.len() as u64],
 			[write_u64, self.outputs.len() as u64]
 		);
-		for inp in &self.inputs {
-			try!(inp.write(writer));
-		}
-		for out in &self.outputs {
-			try!(out.write(writer));
-		}
+
+		// Consensus rule that everything is sorted in lexicographical order on the wire.
+		let mut inputs = self.inputs.clone();
+		let mut outputs = self.outputs.clone();
+
+		try!(inputs.write_sorted(writer));
+		try!(outputs.write_sorted(writer));
+
 		Ok(())
 	}
 }
+
 
 /// Implementation of Readable for a transaction, defines how to read a full
 /// transaction from a binary stream.
@@ -170,8 +174,8 @@ impl Readable for Transaction {
 		let (fee, lock_height, excess_sig, input_len, output_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_vec, read_u64, read_u64);
 
-		let inputs = try!((0..input_len).map(|_| Input::read(reader)).collect());
-		let outputs = try!((0..output_len).map(|_| Output::read(reader)).collect());
+		let inputs = read_and_verify_sorted(reader, input_len)?;
+		let outputs = read_and_verify_sorted(reader, output_len)?;
 
 		Ok(Transaction {
 			fee: fee,
@@ -183,7 +187,6 @@ impl Readable for Transaction {
 		})
 	}
 }
-
 
 impl Committed for Transaction {
 	fn inputs_committed(&self) -> &Vec<Input> {

@@ -23,6 +23,7 @@ use std::convert::AsRef;
 
 use blake2::blake2b::Blake2b;
 
+use consensus::VerifySortOrder;
 use ser::{self, Reader, Readable, Writer, Writeable, Error, AsFixedBytes};
 
 /// A hash consisting of all zeroes, used as a sentinel. No known preimage.
@@ -189,5 +190,20 @@ impl Hashed for [u8; 0] {
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
 		Hash(ret)
+	}
+}
+
+impl<T: Hashed> VerifySortOrder<T> for Vec<T> {
+	fn verify_sort_order(&self) -> Result<(), ser::Error> {
+		match self
+			.iter()
+			.map(|item| item.hash())
+			.collect::<Vec<_>>()
+			.windows(2)
+			.any(|pair| pair[0] > pair[1])
+		{
+			true => Err(ser::Error::BadlySorted),
+			false => Ok(()),
+		}
 	}
 }

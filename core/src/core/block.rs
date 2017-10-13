@@ -23,7 +23,7 @@ use core::{Input, Output, Proof, TxKernel, Transaction, COINBASE_KERNEL, COINBAS
 use consensus::{MINIMUM_DIFFICULTY, REWARD, reward, exceeds_weight};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
-use ser::{self, Readable, Reader, Writeable, Writer};
+use ser::{self, Readable, Reader, Writeable, Writer, WriteableSorted, read_and_verify_sorted};
 use global;
 use keychain;
 
@@ -189,15 +189,14 @@ impl Writeable for Block {
 				[write_u64, self.kernels.len() as u64]
 			);
 
-			for inp in &self.inputs {
-				try!(inp.write(writer));
-			}
-			for out in &self.outputs {
-				try!(out.write(writer));
-			}
-			for proof in &self.kernels {
-				try!(proof.write(writer));
-			}
+			let mut inputs = self.inputs.clone();
+			let mut outputs = self.outputs.clone();
+			let mut kernels = self.kernels.clone();
+
+			// Consensus rule that everything is sorted in lexicographical order on the wire.
+			try!(inputs.write_sorted(writer));
+			try!(outputs.write_sorted(writer));
+			try!(kernels.write_sorted(writer));
 		}
 		Ok(())
 	}
@@ -209,12 +208,12 @@ impl Readable for Block {
 	fn read(reader: &mut Reader) -> Result<Block, ser::Error> {
 		let header = try!(BlockHeader::read(reader));
 
-		let (input_len, output_len, proof_len) =
+		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
-		let inputs = try!((0..input_len).map(|_| Input::read(reader)).collect());
-		let outputs = try!((0..output_len).map(|_| Output::read(reader)).collect());
-		let kernels = try!((0..proof_len).map(|_| TxKernel::read(reader)).collect());
+		let inputs = read_and_verify_sorted(reader, input_len)?;
+		let outputs = read_and_verify_sorted(reader, output_len)?;
+		let kernels = read_and_verify_sorted(reader, kernel_len)?;
 
 		Ok(Block {
 			header: header,
@@ -292,7 +291,7 @@ impl Block {
 		// build vectors with all inputs and all outputs, ordering them by hash
 		// needs to be a fold so we don't end up with a vector of vectors and we
 		// want to fully own the refs (not just a pointer like flat_map).
-		let mut inputs = txs.iter().fold(vec![], |mut acc, ref tx| {
+		let inputs = txs.iter().fold(vec![], |mut acc, ref tx| {
 			let mut inputs = tx.inputs.clone();
 			acc.append(&mut inputs);
 			acc
@@ -303,9 +302,6 @@ impl Block {
 			acc
 		});
 		outputs.push(reward_out);
-
-		inputs.sort_by_key(|inp| inp.hash());
-		outputs.sort_by_key(|out| out.hash());
 
 		// calculate the overall Merkle tree and fees
 
@@ -400,9 +396,6 @@ impl Block {
 
 		let mut all_kernels = self.kernels.clone();
 		all_kernels.append(&mut other.kernels.clone());
-
-		all_inputs.sort_by_key(|inp| inp.hash());
-		all_outputs.sort_by_key(|out| out.hash());
 
 		Block {
 			// compact will fix the merkle tree
