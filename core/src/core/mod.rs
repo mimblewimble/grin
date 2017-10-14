@@ -191,6 +191,7 @@ mod test {
 	use ser;
 	use keychain;
 	use keychain::{Keychain, BlindingFactor};
+	use blake2::blake2b::blake2b;
 
 	#[test]
 	#[should_panic(expected = "InvalidSecretKey")]
@@ -210,8 +211,8 @@ mod test {
 		let tx = tx2i1o();
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &tx).expect("serialized failed");
-		assert!(vec.len() > 5340);
-		assert!(vec.len() < 5360);
+		assert!(vec.len() > 5360);
+		assert!(vec.len() < 5380);
 	}
 
 	#[test]

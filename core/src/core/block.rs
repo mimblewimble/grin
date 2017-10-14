@@ -19,11 +19,13 @@ use secp::{self, Secp256k1};
 use std::collections::HashSet;
 
 use core::Committed;
-use core::{Input, Output, Proof, TxKernel, Transaction, COINBASE_KERNEL, COINBASE_OUTPUT};
+use core::{Input, Output, SwitchCommitHash, Proof, TxKernel, Transaction, COINBASE_KERNEL,
+           COINBASE_OUTPUT};
 use consensus::{MINIMUM_DIFFICULTY, REWARD, reward, exceeds_weight};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use ser::{self, Readable, Reader, Writeable, Writer, WriteableSorted, read_and_verify_sorted};
+use util::LOGGER;
 use global;
 use keychain;
 
@@ -500,13 +502,26 @@ impl Block {
 		let secp = keychain.secp();
 
 		let commit = keychain.commit(reward(fees), key_id)?;
-		// let switch_commit = keychain.switch_commit(key_id)?;
+		let switch_commit = keychain.switch_commit(key_id)?;
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		trace!(
+			LOGGER,
+			"Block reward - Pedersen Commit is: {:?}, Switch Commit is: {:?}",
+			commit,
+			switch_commit
+		);
+		trace!(
+			LOGGER,
+			"Block reward - Switch Commit Hash is: {:?}",
+			switch_commit_hash
+		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let rproof = keychain.range_proof(reward(fees), key_id, commit, msg)?;
 
 		let output = Output {
 			features: COINBASE_OUTPUT,
 			commit: commit,
+			switch_commit_hash: switch_commit_hash,
 			proof: rproof,
 		};
 
@@ -549,9 +564,16 @@ mod test {
 
 	// utility producing a transaction that spends an output with the provided
 	// value and blinding key
-	fn txspend1i1o(v: u64, keychain: &Keychain, key_id1: Identifier, key_id2: Identifier) -> Transaction {
-		build::transaction(vec![input(v, key_id1), output(3, key_id2), with_fee(2)], &keychain)
-			.map(|(tx, _)| tx)
+	fn txspend1i1o(
+		v: u64,
+		keychain: &Keychain,
+		key_id1: Identifier,
+		key_id2: Identifier,
+	) -> Transaction {
+		build::transaction(
+			vec![input(v, key_id1), output(3, key_id2), with_fee(2)],
+			&keychain,
+		).map(|(tx, _)| tx)
 			.unwrap()
 	}
 

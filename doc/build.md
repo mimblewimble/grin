@@ -48,7 +48,7 @@ features=["no-plugin-build"]
 This may help when building on 32 bit systems or non x86 architectures. You can still use the internal miner to mine by setting:
 
 ```
-use_cuckoo_miner = true
+use_cuckoo_miner = false
 ```
 
 In `grin.toml`
