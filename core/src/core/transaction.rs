@@ -618,7 +618,7 @@ mod test {
 		let commit = keychain.commit(5, &key_id).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
-			let msg = secp::pedersen::ProofMessage::empty();
+		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(5, &key_id, commit, msg).unwrap();
 
 		let out = Output {

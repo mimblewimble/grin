@@ -195,13 +195,11 @@ impl Hashed for [u8; 0] {
 
 impl<T: Hashed> VerifySortOrder<T> for Vec<T> {
 	fn verify_sort_order(&self) -> Result<(), ser::Error> {
-		match self
-			.iter()
+		match self.iter()
 			.map(|item| item.hash())
 			.collect::<Vec<_>>()
 			.windows(2)
-			.any(|pair| pair[0] > pair[1])
-		{
+			.any(|pair| pair[0] > pair[1]) {
 			true => Err(ser::Error::BadlySorted),
 			false => Ok(()),
 		}
