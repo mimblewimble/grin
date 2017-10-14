@@ -107,6 +107,8 @@ fn main() {
 				.mining_parameter_mode
 				.unwrap(),
 		);
+	} else {
+		init_logger(Some(LoggingConfig::default()));
 	}
 
 	let args = App::new("Grin")
@@ -235,9 +237,6 @@ fn main() {
 
 		// client commands and options
 		("wallet", Some(wallet_args)) => {
-			if !global_config.using_config_file {
-				init_logger(Some(LoggingConfig::default()));
-			}
 			wallet_command(wallet_args);
 		}
 
