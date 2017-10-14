@@ -161,19 +161,19 @@ fn inputs_and_change(
 	let change_key = keychain.derive_key_id(change_derivation)?;
 	parts.push(build::output(change, change_key.clone()));
 
-	// we got that far, time to start tracking the new output
-	// and lock the outputs used
+	// we got that far, time to start tracking the output representing our change
 	wallet_data.add_output(OutputData {
 		root_key_id: root_key_id.clone(),
 		key_id: change_key.clone(),
 		n_child: change_derivation,
 		value: change as u64,
-		status: OutputStatus::UnconfirmedChange,
+		status: OutputStatus::Unconfirmed,
 		height: 0,
 		lock_height: 0,
+		zero_ok: true,
 	});
 
-	// lock the ouputs we're spending
+	// now lock the ouputs we're spending so we avoid accidental double spend attempt
 	for coin in coins {
 		wallet_data.lock_output(coin);
 	}

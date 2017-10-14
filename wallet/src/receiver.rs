@@ -205,6 +205,7 @@ fn receive_coinbase(config: &WalletConfig,
 			status: OutputStatus::Unconfirmed,
 			height: 0,
 			lock_height: 0,
+			zero_ok: false,
 		});
 
 		debug!(
@@ -279,6 +280,7 @@ fn receive_transaction(
 			status: OutputStatus::Unconfirmed,
 			height: 0,
 			lock_height: 0,
+			zero_ok: false,
 		});
 		debug!(
 			LOGGER,

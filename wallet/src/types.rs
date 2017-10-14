@@ -131,7 +131,6 @@ impl Default for WalletConfig {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum OutputStatus {
 	Unconfirmed,
-	UnconfirmedChange,
 	Unspent,
 	Immature,
 	Locked,
@@ -142,7 +141,6 @@ impl fmt::Display for OutputStatus {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match *self {
 			OutputStatus::Unconfirmed => write!(f, "Unconfirmed"),
-			OutputStatus::UnconfirmedChange => write!(f, "UnconfirmedChange"),
 			OutputStatus::Unspent => write!(f, "Unspent"),
 			OutputStatus::Immature => write!(f, "Immature"),
 			OutputStatus::Locked => write!(f, "Locked"),
@@ -170,6 +168,8 @@ pub struct OutputData {
 	pub height: u64,
 	/// Height we are locked until
 	pub lock_height: u64,
+	/// Can we spend with zero confirmations? (Did it originate from us, change output etc.)
+	pub zero_ok: bool,
 }
 
 impl OutputData {
@@ -322,11 +322,11 @@ impl WalletData {
 		let mut to_spend = vec![];
 		let mut input_total = 0;
 
-		// TODO very naive impl for now - definitely better coin selection
-		// algos available
 		for out in self.outputs.values() {
-			if [OutputStatus::Unspent, OutputStatus::UnconfirmedChange].contains(&out.status)
-				&& out.root_key_id == root_key_id
+			if out.root_key_id == root_key_id
+				&& (out.status == OutputStatus::Unspent)
+					// TODO - following line will allow zero confirmation spends on change outputs
+					// || (out.status == OutputStatus::Unconfirmed && out.zero_ok))
 			{
 				to_spend.push(out.clone());
 				input_total += out.value;
