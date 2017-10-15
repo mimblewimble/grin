@@ -10,6 +10,8 @@ There are 3 main properties of Grin transactions that make them private:
 
 The 2 first properties mean that all transactions look the same. Unless you directly participated in the transaction, all inputs and outputs look like random pieces of data (in lingo, they're all random curve points).
 
+Moreover, there are no more transactions in a block. A Grin block looks just like one giant transaction and all original association between inputs and outputs is lost.
+
 ## Scalability
 
 As explained in the previous section, thanks to the MimbleWimble transaction and block format we can merge transactions when an output is directly spent by the input of another. It's as if when Alice gives money to Bob, and then Bob gives it all to Carol, Bob was never involved and his transaction is actually never even seen on the blockchain.
