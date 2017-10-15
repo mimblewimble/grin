@@ -148,7 +148,7 @@ impl ChainStore for ChainKVStore {
 			Some(hash) => {
 				let block_header = self.get_block_header(&hash)?;
 				let header_at_height = self.get_header_by_height(block_header.height)?;
-				if block_header.hash() == header_at_height.hash() {
+				if block_header.hash(None::<BlockHeader>) == header_at_height.hash(None::<BlockHeader>) {
 					Ok(block_header)
 				} else {
 					Err(Error::NotFoundErr)
@@ -160,7 +160,7 @@ impl ChainStore for ChainKVStore {
 
 	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), Error> {
 		self.db.put_ser(
-			&to_key(BLOCK_HEADER_PREFIX, &mut bh.hash().to_vec())[..],
+			&to_key(BLOCK_HEADER_PREFIX, &mut bh.hash(None::<BlockHeader>).to_vec())[..],
 			bh,
 		)
 	}
@@ -221,7 +221,7 @@ impl ChainStore for ChainKVStore {
 		let mut prev_height = bh.height - 1;
 		while prev_height > 0 {
 			let prev = self.get_header_by_height(prev_height)?;
-			if prev.hash() != prev_h {
+			if prev.hash(None::<BlockHeader>) != prev_h {
 				let real_prev = self.get_block_header(&prev_h)?;
 				self.db
 					.put_ser(

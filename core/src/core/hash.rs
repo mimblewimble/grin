@@ -25,6 +25,7 @@ use blake2::blake2b::Blake2b;
 
 use consensus::VerifySortOrder;
 use ser::{self, Reader, Readable, Writer, Writeable, Error, AsFixedBytes};
+use util::LOGGER;
 
 /// A hash consisting of all zeroes, used as a sentinel. No known preimage.
 pub const ZERO_HASH: Hash = Hash([0; 32]);
@@ -170,33 +171,26 @@ impl ser::Writer for HashWriter {
 /// A trait for types that have a canonical hash
 pub trait Hashed {
 	/// Obtain the hash of the object
-	fn hash(&self) -> Hash;
+	fn hash<T: Writeable>(&self, hash_with: Option<T>) -> Hash;
 }
 
 impl<W: ser::Writeable> Hashed for W {
-	fn hash(&self) -> Hash {
+	fn hash<T: Writeable> (&self, hash_with: Option<T>) -> Hash {
 		let mut hasher = HashWriter::default();
-		ser::Writeable::write(self, &mut hasher).unwrap();
+		ser::Writeable::write(self, &mut hasher).unwrap(); if let Some(h) = hash_with {
+			trace!(LOGGER, "Hashing with additional data");
+			ser::Writeable::write(&h, &mut hasher).unwrap();
+		}
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
 		Hash(ret)
 	}
 }
 
-// Convenience for when we need to hash of an empty array.
-impl Hashed for [u8; 0] {
-	fn hash(&self) -> Hash {
-		let hasher = HashWriter::default();
-		let mut ret = [0; 32];
-		hasher.finalize(&mut ret);
-		Hash(ret)
-	}
-}
-
-impl<T: Hashed> VerifySortOrder<T> for Vec<T> {
+impl<T: Writeable> VerifySortOrder<T> for Vec<T> {
 	fn verify_sort_order(&self) -> Result<(), ser::Error> {
 		match self.iter()
-			.map(|item| item.hash())
+			.map(|item| item.hash(None::<T>))
 			.collect::<Vec<_>>()
 			.windows(2)
 			.any(|pair| pair[0] > pair[1]) {

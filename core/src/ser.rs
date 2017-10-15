@@ -199,7 +199,7 @@ pub trait WriteableSorted {
 /// A consensus rule requires everything is sorted lexicographically to avoid
 /// leaking any information through specific ordering of items.
 pub fn read_and_verify_sorted<T>(reader: &mut Reader, count: u64) -> Result<Vec<T>, Error>
-	where T: Readable + Hashed
+	where T: Readable + Hashed + Writeable
 {
 	let result: Vec<T> = try!((0..count).map(|_| T::read(reader)).collect());
 	result.verify_sort_order()?;
@@ -421,7 +421,7 @@ where
 	T: Writeable + Hashed,
 {
 	fn write_sorted<W: Writer>(&mut self, writer: &mut W) -> Result<(), Error> {
-		self.sort_by_key(|elmt| elmt.hash());
+		self.sort_by_key(|elmt| elmt.hash(None::<Vec<T>>));
 		for elmt in self {
 			elmt.write(writer)?;
 		}

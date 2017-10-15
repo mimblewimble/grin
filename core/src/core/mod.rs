@@ -31,7 +31,7 @@ use secp::pedersen::*;
 
 pub use self::block::*;
 pub use self::transaction::*;
-use self::hash::Hashed;
+use self::hash::{Hashed};
 use ser::{Writeable, Writer, Reader, Readable, Error};
 use global;
 // use keychain;
@@ -158,7 +158,7 @@ impl Proof {
 	/// Converts the proof to a proof-of-work Target so they can be compared.
 	/// Hashes the Cuckoo Proof data.
 	pub fn to_difficulty(self) -> target::Difficulty {
-		target::Difficulty::from_hash(&self.hash())
+		target::Difficulty::from_hash(&self.hash(None::<Proof>))
 	}
 }
 
@@ -228,7 +228,7 @@ mod test {
 		assert_eq!(dtx.fee, 2);
 		assert_eq!(dtx.inputs.len(), 2);
 		assert_eq!(dtx.outputs.len(), 1);
-		assert_eq!(tx.hash(), dtx.hash());
+		assert_eq!(tx.hash(None::<Transaction>), dtx.hash(None::<Transaction>));
 	}
 
 	#[test]
@@ -244,8 +244,8 @@ mod test {
 		assert!(ser::serialize(&mut vec2, &btx).is_ok());
 		let dtx2: Transaction = ser::deserialize(&mut &vec2[..]).unwrap();
 
-		assert_eq!(btx.hash(), dtx.hash());
-		assert_eq!(dtx.hash(), dtx2.hash());
+		assert_eq!(btx.hash(None::<Transaction>), dtx.hash(None::<Transaction>));
+		assert_eq!(dtx.hash(None::<Transaction>), dtx2.hash(None::<Transaction>));
 	}
 
 	#[test]
@@ -264,9 +264,9 @@ mod test {
 			],
 			&keychain,
 		).unwrap();
-		let h = tx.outputs[0].hash();
+		let h = tx.outputs[0].hash(None::<Transaction>);
 		assert!(h != ZERO_HASH);
-		let h2 = tx.outputs[1].hash();
+		let h2 = tx.outputs[1].hash(None::<Transaction>);
 		assert!(h != h2);
 	}
 
@@ -289,7 +289,7 @@ mod test {
 		let btx1 = tx2i1o();
 		let btx2 = tx1i1o();
 
-		if btx1.hash() == btx2.hash() {
+		if btx1.hash(None::<Transaction>) == btx2.hash(None::<Transaction>) {
 			panic!("diff txs have same hash")
 		}
 	}

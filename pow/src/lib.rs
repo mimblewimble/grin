@@ -78,7 +78,7 @@ pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
 	if bh.difficulty > bh.pow.clone().to_difficulty() {
 		return false;
 	}
-	Cuckoo::new(&bh.hash()[..], cuckoo_sz).verify(bh.pow.clone(), consensus::EASINESS as u64)
+	Cuckoo::new(&bh.hash(None::<BlockHeader>)[..], cuckoo_sz).verify(bh.pow.clone(), consensus::EASINESS as u64)
 }
 
 /// Uses the much easier Cuckoo20 (mostly for
@@ -144,7 +144,7 @@ pub fn pow_size<T: MiningWorker + ?Sized>(miner: &mut T,
 	loop {
 		// can be trivially optimized by avoiding re-serialization every time but this
 		// is not meant as a fast miner implementation
-		let pow_hash = bh.hash();
+		let pow_hash = bh.hash(None::<BlockHeader>);
 
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good

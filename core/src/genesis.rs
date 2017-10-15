@@ -18,7 +18,6 @@ use time;
 
 use core;
 use consensus::MINIMUM_DIFFICULTY;
-use core::hash::Hashed;
 use core::target::Difficulty;
 use global;
 
@@ -26,7 +25,7 @@ use global;
 /// fees and a height of zero.
 pub fn genesis() -> core::Block {
 	let proof_size = global::proofsize();
-	let empty_hash = [].hash();
+	let empty_hash = core::hash::Hash([0x0; 32]);
 	core::Block {
 		header: core::BlockHeader {
 			version: 1,

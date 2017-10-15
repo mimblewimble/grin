@@ -222,15 +222,15 @@ impl<'a> Extension<'a> {
 			let pos = self.output_pmmr
 				.push(SumCommit {
 					commit: out.commitment(),
-					switch_commit_hash: out.switch_commit_hash(),
 					secp: secp.clone(),
-				})
+				},
+				Some(out.switch_commit_hash()))
 				.map_err(&Error::SumTreeErr)?;
 
 			self.new_output_commits.insert(out.commitment(), pos);
 
 			// push range proofs in their MMR
-			self.rproof_pmmr.push(NoSum(out.proof)).map_err(
+			self.rproof_pmmr.push(NoSum(out.proof), None::<RangeProof>).map_err(
 				&Error::SumTreeErr,
 			)?;
 		}
@@ -240,7 +240,7 @@ impl<'a> Extension<'a> {
 				return Err(Error::DuplicateKernel(kernel.excess.clone()));
 			}
 			// push kernels in their MMR
-			let pos = self.kernel_pmmr.push(NoSum(kernel.clone())).map_err(
+			let pos = self.kernel_pmmr.push(NoSum(kernel.clone()),None::<RangeProof>).map_err(
 				&Error::SumTreeErr,
 			)?;
 			self.new_kernel_excesses.insert(kernel.excess, pos);

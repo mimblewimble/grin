@@ -241,7 +241,7 @@ impl DirectedGraph {
 /// for testing purposes.
 pub fn transaction_identifier(tx: &core::transaction::Transaction) -> core::hash::Hash {
 	// core::transaction::merkle_inputs_outputs(&tx.inputs, &tx.outputs)
-	tx.hash()
+	tx.hash(None::<core::transaction::Transaction>)
 }
 
 #[cfg(test)]

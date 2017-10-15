@@ -511,9 +511,6 @@ impl Output {
 pub struct SumCommit {
 	/// Output commitment
 	pub commit: Commitment,
-	/// Switch commitment hash, which should be included in the hash
-	/// but not the sum
-	pub switch_commit_hash: SwitchCommitHash,
 	/// Secp256k1 used to sum
 	pub secp: Secp256k1,
 }
@@ -525,7 +522,6 @@ impl Summable for SumCommit {
 	fn sum(&self) -> SumCommit {
 		SumCommit {
 			commit: self.commit.clone(),
-			switch_commit_hash: self.switch_commit_hash.clone(),
 			secp: self.secp.clone(),
 		}
 	}
@@ -538,7 +534,6 @@ impl Summable for SumCommit {
 impl Writeable for SumCommit {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.commit.write(writer)?;
-		self.switch_commit_hash.write(writer)?;
 		Ok(())
 	}
 }
@@ -547,11 +542,9 @@ impl Readable for SumCommit {
 	fn read(reader: &mut Reader) -> Result<SumCommit, ser::Error> {
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let commit = Commitment::read(reader)?;
-		let switch_commit_hash = SwitchCommitHash::read(reader)?;
 
 		Ok(SumCommit {
 			commit: commit,
-			switch_commit_hash: switch_commit_hash,
 			secp: secp,
 		})
 	}
@@ -570,7 +563,6 @@ impl ops::Add for SumCommit {
 		};
 		SumCommit {
 			commit: sum,
-			switch_commit_hash: self.switch_commit_hash,
 			secp: self.secp,
 		}
 	}

@@ -133,7 +133,7 @@ impl Tip {
 	pub fn from_block(bh: &BlockHeader) -> Tip {
 		Tip {
 			height: bh.height,
-			last_block_h: bh.hash(),
+			last_block_h: bh.hash(None::<BlockHeader>),
 			prev_block_h: bh.previous,
 			total_difficulty: bh.total_difficulty.clone(),
 		}

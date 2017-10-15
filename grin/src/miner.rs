@@ -199,7 +199,7 @@ impl Miner {
 
 		let mut sol = None;
 
-		while head.hash() == *latest_hash && time::get_time().sec < deadline {
+		while head.hash(None::<BlockHeader>) == *latest_hash && time::get_time().sec < deadline {
 			if let Some(s) = job_handle.get_solution() {
 				sol = Some(Proof::new(s.solution_nonces.to_vec()));
 				b.header.nonce = s.get_nonce_as_u64();
@@ -292,7 +292,7 @@ impl Miner {
 		}
 
 		let mut sol = None;
-		while head.hash() == *latest_hash && time::get_time().sec < deadline {
+		while head.hash(None::<BlockHeader>) == *latest_hash && time::get_time().sec < deadline {
 
 			let pow_hash = b.hash();
 			if let Ok(proof) = plugin_miner.mine(&pow_hash[..]) {
@@ -382,7 +382,7 @@ impl Miner {
 		}
 
 		let mut sol = None;
-		while head.hash() == *latest_hash && time::get_time().sec < deadline {
+		while head.hash(None::<BlockHeader>) == *latest_hash && time::get_time().sec < deadline {
 
 			let pow_hash = b.hash();
 			if let Ok(proof) = miner.mine(&pow_hash[..]) {

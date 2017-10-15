@@ -97,10 +97,10 @@ pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<O
 	info!(
 		LOGGER,
 		"Starting validation pipeline for block header {} at {}.",
-		bh.hash(),
+		bh.hash(None::<BlockHeader>),
 		bh.height
 	);
-	check_known(bh.hash(), &mut ctx)?;
+	check_known(bh.hash(None::<BlockHeader>), &mut ctx)?;
 	validate_header(&bh, &mut ctx)?;
 	add_block_header(bh, &mut ctx)?;
 
@@ -236,8 +236,8 @@ fn validate_block(b: &Block,
 		loop {
 			let curr_header = ctx.store.get_block_header(&current)?;
 			let height_header = ctx.store.get_header_by_height(curr_header.height)?;
-			if curr_header.hash() != height_header.hash() {
-				hashes.insert(0, curr_header.hash());
+			if curr_header.hash(None::<BlockHeader>) != height_header.hash(None::<BlockHeader>) {
+				hashes.insert(0, curr_header.hash(None::<BlockHeader>));
 				current = curr_header.previous;
 			} else {
 				break;
@@ -355,7 +355,7 @@ fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option
 		info!(
 			LOGGER,
 			"Updated block header head to {} at {}.",
-			bh.hash(),
+			bh.hash(None::<BlockHeader>),
 			bh.height
 		);
 		Ok(Some(tip))

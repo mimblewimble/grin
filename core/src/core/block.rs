@@ -315,7 +315,7 @@ impl Block {
 						tm_nsec: 0,
 						..time::now_utc()
 					},
-					previous: prev.hash(),
+					previous: prev.hash(None::<Block>),
 					total_difficulty: prev.pow.clone().to_difficulty() +
 						prev.total_difficulty.clone(),
 					..Default::default()
@@ -330,7 +330,7 @@ impl Block {
 
 	/// Blockhash, computed using only the header
 	pub fn hash(&self) -> Hash {
-		self.header.hash()
+		self.header.hash(None::<Block>)
 	}
 
 	/// Sum of all fees (inputs less outputs) in the block
