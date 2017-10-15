@@ -129,6 +129,13 @@ impl Chain {
 					let mut head = chain_head.lock().unwrap();
 					*head = tip.clone();
 				}
+
+				// notifying other parts of the system of the update
+				if !opts.intersects(SYNC) {
+					// broadcast the block
+					let adapter = self.adapter.clone();
+					adapter.block_accepted(&b);
+				}
 				self.check_orphans();
 			}
 			Ok(None) => {}
@@ -140,7 +147,7 @@ impl Chain {
 			Err(ref e) => {
 				info!(
 					LOGGER,
-					"Rejected block {} at {} : {:?}",
+					"Rejected block {} at {}: {:?}",
 					b.hash(),
 					b.header.height,
 					e
@@ -177,7 +184,6 @@ impl Chain {
 		pipe::BlockContext {
 			opts: opts_in,
 			store: self.store.clone(),
-			adapter: self.adapter.clone(),
 			head: head,
 			pow_verifier: self.pow_verifier,
 			sumtrees: self.sumtrees.clone(),
