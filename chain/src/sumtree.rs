@@ -219,6 +219,7 @@ impl<'a> Extension<'a> {
 			let pos = self.output_pmmr
 				.push(SumCommit {
 					commit: out.commitment(),
+					switch_commit_hash: out.switch_commit_hash(),
 					secp: secp.clone(),
 				})
 				.map_err(&Error::SumTreeErr)?;
