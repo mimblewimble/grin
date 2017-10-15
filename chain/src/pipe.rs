@@ -36,8 +36,6 @@ pub struct BlockContext {
 	pub opts: Options,
 	/// The store
 	pub store: Arc<ChainStore>,
-	/// The adapter
-	pub adapter: Arc<ChainAdapter>,
 	/// The head
 	pub head: Tip,
 	/// The POW verification function
@@ -294,11 +292,6 @@ fn validate_block(b: &Block,
 fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	ctx.store.save_block(b).map_err(&Error::StoreErr)?;
 
-	if !ctx.opts.intersects(SYNC) {
-		// broadcast the block
-		let adapter = ctx.adapter.clone();
-		adapter.block_accepted(b);
-	}
 	Ok(())
 }
 
