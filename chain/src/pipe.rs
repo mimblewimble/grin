@@ -145,7 +145,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	if header.timestamp >
-	   time::now_utc() + time::Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64)) {
+		time::now_utc() + time::Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
+	{
 		// refuse blocks more than 12 blocks intervals in future (as in bitcoin)
 		// TODO add warning in p2p code if local time is too different from peers
 		return Err(Error::InvalidBlockTime);
@@ -164,9 +165,9 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	// first I/O cost, better as late as possible
-	let prev = try!(ctx.store
-	                    .get_block_header(&header.previous)
-	                    .map_err(&Error::StoreErr));
+	let prev = try!(ctx.store.get_block_header(&header.previous).map_err(
+		&Error::StoreErr,
+	));
 
 	if header.height != prev.height + 1 {
 		return Err(Error::InvalidBlockHeight);
@@ -185,8 +186,9 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		}
 
 		let diff_iter = store::DifficultyIter::from(header.previous, ctx.store.clone());
-		let difficulty = consensus::next_difficulty(diff_iter)
-			.map_err(|e| Error::Other(e.to_string()))?;
+		let difficulty = consensus::next_difficulty(diff_iter).map_err(|e| {
+			Error::Other(e.to_string())
+		})?;
 		if header.difficulty < difficulty {
 			return Err(Error::DifficultyTooLow);
 		}
@@ -196,10 +198,11 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 }
 
 /// Fully validate the block content.
-fn validate_block(b: &Block,
-                  ctx: &mut BlockContext,
-                  ext: &mut sumtree::Extension)
-                  -> Result<(), Error> {
+fn validate_block(
+	b: &Block,
+	ctx: &mut BlockContext,
+	ext: &mut sumtree::Extension,
+) -> Result<(), Error> {
 	if b.header.height > ctx.head.height + 1 {
 		return Err(Error::Orphan);
 	}
@@ -248,7 +251,11 @@ fn validate_block(b: &Block,
 		if forked_block.header.height > 0 {
 			let last_output = &forked_block.outputs[forked_block.outputs.len() - 1];
 			let last_kernel = &forked_block.kernels[forked_block.kernels.len() - 1];
-			ext.rewind(forked_block.header.height, last_output, last_kernel)?;
+			ext.rewind(
+				forked_block.header.height,
+				last_output,
+				last_kernel,
+			)?;
 		}
 
 		// apply all forked blocks, including this new one
@@ -261,7 +268,8 @@ fn validate_block(b: &Block,
 
 	let (utxo_root, rproof_root, kernel_root) = ext.roots();
 	if utxo_root.hash != b.header.utxo_root || rproof_root.hash != b.header.range_proof_root ||
-	   kernel_root.hash != b.header.kernel_root {
+		kernel_root.hash != b.header.kernel_root
+	{
 
 		ext.dump();
 		return Err(Error::InvalidRoot);
@@ -272,8 +280,10 @@ fn validate_block(b: &Block,
 		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
 			if output.features.contains(transaction::COINBASE_OUTPUT) {
 				if let Ok(output_header) =
-					ctx.store
-						.get_block_header_by_output_commit(&input.commitment()) {
+					ctx.store.get_block_header_by_output_commit(
+						&input.commitment(),
+					)
+				{
 
 					// TODO - make sure we are not off-by-1 here vs. the equivalent tansaction
 					// validation rule

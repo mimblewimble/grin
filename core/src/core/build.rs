@@ -27,8 +27,9 @@
 
 use secp;
 
-use core::{Transaction, Input, Output, DEFAULT_OUTPUT};
+use core::{Transaction, Input, Output, SwitchCommitHash, DEFAULT_OUTPUT};
 use core::transaction::kernel_sig_msg;
+use util::LOGGER;
 use keychain;
 use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
 
@@ -55,6 +56,19 @@ pub fn input(value: u64, key_id: Identifier) -> Box<Append> {
 pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
 		let commit = build.keychain.commit(value, &key_id).unwrap();
+		let switch_commit = build.keychain.switch_commit(&key_id).unwrap();
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		trace!(
+			LOGGER,
+			"Builder - Pedersen Commit is: {:?}, Switch Commit is: {:?}",
+			commit,
+			switch_commit
+		);
+		trace!(
+			LOGGER,
+			"Builder - Switch Commit Hash is: {:?}",
+			switch_commit_hash
+		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let rproof = build
 			.keychain
@@ -65,6 +79,7 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 			tx.with_output(Output {
 				features: DEFAULT_OUTPUT,
 				commit: commit,
+				switch_commit_hash: switch_commit_hash,
 				proof: rproof,
 			}),
 			sum.add_key_id(key_id.clone()),
@@ -141,7 +156,12 @@ mod test {
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		let (tx, _) = transaction(
-			vec![input(10, key_id1), input(11, key_id2), output(20, key_id3), with_fee(1)],
+			vec![
+				input(10, key_id1),
+				input(11, key_id2),
+				output(20, key_id3),
+				with_fee(1),
+			],
 			&keychain,
 		).unwrap();
 
@@ -154,8 +174,10 @@ mod test {
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
-		let (tx, _) = transaction(vec![input(6, key_id1), output(2, key_id2), with_fee(4)], &keychain)
-			.unwrap();
+		let (tx, _) = transaction(
+			vec![input(6, key_id1), output(2, key_id2), with_fee(4)],
+			&keychain,
+		).unwrap();
 
 		tx.verify_sig(&keychain.secp()).unwrap();
 	}

@@ -604,6 +604,7 @@ mod tests {
 	use std::sync::{Arc, RwLock};
 	use blake2;
 	use core::global::MiningParameterMode;
+	use core::core::SwitchCommitHash;
 
 	macro_rules! expect_output_parent {
 		($pool:expr, $expected:pat, $( $output:expr ),+ ) => {
@@ -1178,12 +1179,15 @@ mod tests {
 		let keychain = keychain_for_tests();
 		let key_id = keychain.derive_key_id(value as u32).unwrap();
 		let commit = keychain.commit(value, &key_id).unwrap();
+		let switch_commit = keychain.switch_commit(&key_id).unwrap();
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
 
 		transaction::Output {
 			features: transaction::DEFAULT_OUTPUT,
 			commit: commit,
+			switch_commit_hash: switch_commit_hash,
 			proof: proof,
 		}
 	}
@@ -1193,12 +1197,15 @@ mod tests {
 		let keychain = keychain_for_tests();
 		let key_id = keychain.derive_key_id(value as u32).unwrap();
 		let commit = keychain.commit(value, &key_id).unwrap();
+		let switch_commit = keychain.switch_commit(&key_id).unwrap();
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
 
 		transaction::Output {
 			features: transaction::COINBASE_OUTPUT,
 			commit: commit,
+			switch_commit_hash: switch_commit_hash,
 			proof: proof,
 		}
 	}

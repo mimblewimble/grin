@@ -15,6 +15,7 @@
 //! Transactions
 
 use byteorder::{ByteOrder, BigEndian};
+use blake2::blake2b::blake2b;
 use secp::{self, Secp256k1, Message, Signature};
 use secp::pedersen::{RangeProof, Commitment};
 use std::ops;
@@ -23,7 +24,10 @@ use core::Committed;
 use core::pmmr::Summable;
 use keychain::{Identifier, Keychain};
 use ser::{self, Reader, Writer, Readable, Writeable, WriteableSorted, read_and_verify_sorted};
+use util::LOGGER;
 
+/// The size to use for the stored blake2 hash of a switch_commitment
+pub const SWITCH_COMMIT_HASH_SIZE: usize = 20;
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -299,6 +303,7 @@ impl Transaction {
 			lock_height: self.lock_height,
 		};
 		debug!(
+			LOGGER,
 			"tx verify_sig: fee - {}, lock_height - {}",
 			kernel.fee,
 			kernel.lock_height
@@ -362,19 +367,71 @@ bitflags! {
 	}
 }
 
+/// Definition of the switch commitment hash
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SwitchCommitHash {
+	hash: [u8; SWITCH_COMMIT_HASH_SIZE],
+}
+
+/// Implementation of Writeable for a switch commitment hash
+impl Writeable for SwitchCommitHash {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_fixed_bytes(&self.hash)?;
+		Ok(())
+	}
+}
+
+/// Implementation of Readable for a switch commitment hash
+/// an Output from a binary stream.
+impl Readable for SwitchCommitHash {
+	fn read(reader: &mut Reader) -> Result<SwitchCommitHash, ser::Error> {
+		let a = try!(reader.read_fixed_bytes(SWITCH_COMMIT_HASH_SIZE));
+		let mut c = [0; SWITCH_COMMIT_HASH_SIZE];
+		for i in 0..SWITCH_COMMIT_HASH_SIZE {
+			c[i] = a[i];
+		}
+		Ok(SwitchCommitHash { hash: c })
+	}
+}
+// As Ref for AsFixedBytes
+impl AsRef<[u8]> for SwitchCommitHash {
+	fn as_ref(&self) -> &[u8] {
+		&self.hash
+	}
+}
+
+impl SwitchCommitHash {
+	/// Builds a switch commitment hash from a switch commit using blake2
+	pub fn from_switch_commit(switch_commit: Commitment) -> SwitchCommitHash {
+		let switch_commit_hash = blake2b(SWITCH_COMMIT_HASH_SIZE, &[], &switch_commit.0);
+		let switch_commit_hash = switch_commit_hash.as_bytes();
+		let mut h = [0; SWITCH_COMMIT_HASH_SIZE];
+		for i in 0..SWITCH_COMMIT_HASH_SIZE {
+			h[i] = switch_commit_hash[i];
+		}
+		SwitchCommitHash { hash: h }
+	}
+}
+
 /// Output for a transaction, defining the new ownership of coins that are being
 /// transferred. The commitment is a blinded value for the output while the
 /// range proof guarantees the commitment includes a positive value without
-/// overflow and the ownership of the private key.
+/// overflow and the ownership of the private key. The switch commitment hash
+/// provides future-proofing against quantum-based attacks, as well as provides
+/// wallet implementations with a way to identify their outputs for wallet
+/// reconstruction
 ///
-/// The hash of an output only covers its features, lock_height and commitment.
-/// The range proof is expected to have its own hash and is stored and committed to separately.
+/// The hash of an output only covers its features, lock_height, commitment,
+/// and switch commitment. The range proof is expected to have its own hash
+/// and is stored and committed to separately.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Output {
 	/// Options for an output's structure or use
 	pub features: OutputFeatures,
 	/// The homomorphic commitment representing the output's amount
 	pub commit: Commitment,
+	/// The switch commitment hash, a 160 bit length blake2 hash of blind*J
+	pub switch_commit_hash: SwitchCommitHash,
 	/// A proof that the commitment is in the right range
 	pub proof: RangeProof,
 }
@@ -385,6 +442,7 @@ impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
 		writer.write_fixed_bytes(&self.commit)?;
+		writer.write_fixed_bytes(&self.switch_commit_hash)?;
 
 		// The hash of an output doesn't include the range proof
 		if writer.serialization_mode() == ser::SerializationMode::Full {
@@ -405,6 +463,7 @@ impl Readable for Output {
 		Ok(Output {
 			features: features,
 			commit: Commitment::read(reader)?,
+			switch_commit_hash: SwitchCommitHash::read(reader)?,
 			proof: RangeProof::read(reader)?,
 		})
 	}
@@ -414,6 +473,11 @@ impl Output {
 	/// Commitment for the output
 	pub fn commitment(&self) -> Commitment {
 		self.commit
+	}
+
+	/// Switch commitment hash for the output
+	pub fn switch_commit_hash(&self) -> SwitchCommitHash {
+		self.switch_commit_hash
 	}
 
 	/// Range proof for the output
@@ -469,15 +533,18 @@ impl Summable for SumCommit {
 
 impl Writeable for SumCommit {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.commit.write(writer)
+		self.commit.write(writer)?;
+		Ok(())
 	}
 }
 
 impl Readable for SumCommit {
 	fn read(reader: &mut Reader) -> Result<SumCommit, ser::Error> {
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
+		let commit = Commitment::read(reader)?;
+
 		Ok(SumCommit {
-			commit: Commitment::read(reader)?,
+			commit: commit,
 			secp: secp,
 		})
 	}
@@ -557,12 +624,15 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
+		let switch_commit = keychain.switch_commit(&key_id).unwrap();
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(5, &key_id, commit, msg).unwrap();
 
 		let out = Output {
 			features: DEFAULT_OUTPUT,
 			commit: commit,
+			switch_commit_hash: switch_commit_hash,
 			proof: proof,
 		};
 
@@ -581,12 +651,15 @@ mod test {
 		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let commit = keychain.commit(1003, &key_id).unwrap();
+		let switch_commit = keychain.switch_commit(&key_id).unwrap();
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(1003, &key_id, commit, msg).unwrap();
 
 		let output = Output {
 			features: DEFAULT_OUTPUT,
 			commit: commit,
+			switch_commit_hash: switch_commit_hash,
 			proof: proof,
 		};
 

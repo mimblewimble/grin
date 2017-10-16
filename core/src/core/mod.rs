@@ -31,7 +31,7 @@ use secp::pedersen::*;
 
 pub use self::block::*;
 pub use self::transaction::*;
-use self::hash::Hashed;
+use self::hash::{Hashed};
 use ser::{Writeable, Writer, Reader, Readable, Error};
 use global;
 // use keychain;
@@ -191,6 +191,7 @@ mod test {
 	use ser;
 	use keychain;
 	use keychain::{Keychain, BlindingFactor};
+	use blake2::blake2b::blake2b;
 
 	#[test]
 	#[should_panic(expected = "InvalidSecretKey")]
@@ -200,7 +201,11 @@ mod test {
 
 		// blinding should fail as signing with a zero r*G shouldn't work
 		build::transaction(
-			vec![input(10, key_id1.clone()), output(9, key_id1.clone()), with_fee(1)],
+			vec![
+				input(10, key_id1.clone()),
+				output(9, key_id1.clone()),
+				with_fee(1),
+			],
 			&keychain,
 		).unwrap();
 	}
@@ -210,8 +215,8 @@ mod test {
 		let tx = tx2i1o();
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &tx).expect("serialized failed");
-		assert!(vec.len() > 5340);
-		assert!(vec.len() < 5360);
+		assert!(vec.len() > 5360);
+		assert!(vec.len() < 5380);
 	}
 
 	#[test]
@@ -310,7 +315,8 @@ mod test {
 			// Alice builds her transaction, with change, which also produces the sum
 			// of blinding factors before they're obscured.
 			let (tx, sum) =
-				build::transaction(vec![in1, in2, output(1, key_id3), with_fee(2)], &keychain).unwrap();
+				build::transaction(vec![in1, in2, output(1, key_id3), with_fee(2)], &keychain)
+					.unwrap();
 			tx_alice = tx;
 			blind_sum = sum;
 		}
@@ -319,7 +325,11 @@ mod test {
 		// blinding factors. He adds his output, finalizes the transaction so it's
 		// ready for broadcast.
 		let (tx_final, _) = build::transaction(
-			vec![initial_tx(tx_alice), with_excess(blind_sum), output(4, key_id4)],
+			vec![
+				initial_tx(tx_alice),
+				with_excess(blind_sum),
+				output(4, key_id4),
+			],
 			&keychain,
 		).unwrap();
 
@@ -375,9 +385,15 @@ mod test {
 		// first check we can add a timelocked tx where lock height matches current block height
 		// and that the resulting block is valid
 		let tx1 = build::transaction(
-			vec![input(5, key_id1.clone()), output(3, key_id2.clone()), with_fee(2), with_lock_height(1)],
+			vec![
+				input(5, key_id1.clone()),
+				output(3, key_id2.clone()),
+				with_fee(2),
+				with_lock_height(1),
+			],
 			&keychain,
-		).map(|(tx, _)| tx).unwrap();
+		).map(|(tx, _)| tx)
+			.unwrap();
 
 		let b = Block::new(
 			&BlockHeader::default(),
@@ -389,9 +405,15 @@ mod test {
 
 		// now try adding a timelocked tx where lock height is greater than current block height
 		let tx1 = build::transaction(
-			vec![input(5, key_id1.clone()), output(3, key_id2.clone()), with_fee(2), with_lock_height(2)],
+			vec![
+				input(5, key_id1.clone()),
+				output(3, key_id2.clone()),
+				with_fee(2),
+				with_lock_height(2),
+			],
 			&keychain,
-		).map(|(tx, _)| tx).unwrap();
+		).map(|(tx, _)| tx)
+			.unwrap();
 
 		let b = Block::new(
 			&BlockHeader::default(),
@@ -400,9 +422,9 @@ mod test {
 			&key_id3.clone(),
 		).unwrap();
 		match b.validate(keychain.secp()) {
-			Err(KernelLockHeight{ lock_height: height}) => {
+			Err(KernelLockHeight { lock_height: height }) => {
 				assert_eq!(height, 2);
-			},
+			}
 			_ => panic!("expecting KernelLockHeight error here"),
 		}
 	}
@@ -429,7 +451,12 @@ mod test {
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		build::transaction(
-			vec![input(10, key_id1), input(11, key_id2), output(19, key_id3), with_fee(2)],
+			vec![
+				input(10, key_id1),
+				input(11, key_id2),
+				output(19, key_id3),
+				with_fee(2),
+			],
 			&keychain,
 		).map(|(tx, _)| tx)
 			.unwrap()
@@ -441,8 +468,10 @@ mod test {
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
-		build::transaction(vec![input(5, key_id1), output(3, key_id2), with_fee(2)], &keychain)
-			.map(|(tx, _)| tx)
+		build::transaction(
+			vec![input(5, key_id1), output(3, key_id2), with_fee(2)],
+			&keychain,
+		).map(|(tx, _)| tx)
 			.unwrap()
 	}
 }

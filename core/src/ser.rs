@@ -25,6 +25,7 @@ use byteorder::{ByteOrder, ReadBytesExt, BigEndian};
 use keychain::{Identifier, IDENTIFIER_SIZE};
 use core::hash::Hashed;
 use consensus::VerifySortOrder;
+use core::transaction::{SWITCH_COMMIT_HASH_SIZE, SwitchCommitHash};
 use secp::pedersen::Commitment;
 use secp::pedersen::RangeProof;
 use secp::constants::{MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE};
@@ -198,7 +199,7 @@ pub trait WriteableSorted {
 /// A consensus rule requires everything is sorted lexicographically to avoid
 /// leaking any information through specific ordering of items.
 pub fn read_and_verify_sorted<T>(reader: &mut Reader, count: u64) -> Result<Vec<T>, Error>
-	where T: Readable + Hashed
+	where T: Readable + Hashed + Writeable
 {
 	let result: Vec<T> = try!((0..count).map(|_| T::read(reader)).collect());
 	result.verify_sort_order()?;
@@ -527,7 +528,11 @@ impl AsFixedBytes for [u8; 8] {
 		return 8;
 	}
 }
-impl AsFixedBytes for [u8; 32] {
+impl AsFixedBytes for [u8; 20] {
+	fn len(&self) -> usize {
+		return 20;
+	}
+}impl AsFixedBytes for [u8; 32] {
 	fn len(&self) -> usize {
 		return 32;
 	}
@@ -560,6 +565,11 @@ impl AsFixedBytes for ::secp::Signature {
 impl AsFixedBytes for ::secp::pedersen::Commitment {
 	fn len(&self) -> usize {
 		return PEDERSEN_COMMITMENT_SIZE;
+	}
+}
+impl AsFixedBytes for SwitchCommitHash {
+	fn len(&self) -> usize {
+		return SWITCH_COMMIT_HASH_SIZE;
 	}
 }
 impl AsFixedBytes for ::keychain::Identifier {

@@ -42,7 +42,7 @@ use config::GlobalConfig;
 use wallet::WalletConfig;
 use core::global;
 use keychain::Keychain;
-use util::{LOGGER, init_logger};
+use util::{LoggingConfig, LOGGER, init_logger};
 
 fn start_from_config_file(mut global_config: GlobalConfig) {
 	info!(
@@ -107,6 +107,8 @@ fn main() {
 				.mining_parameter_mode
 				.unwrap(),
 		);
+	} else {
+		init_logger(Some(LoggingConfig::default()));
 	}
 
 	let args = App::new("Grin")
