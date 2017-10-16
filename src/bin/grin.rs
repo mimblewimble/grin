@@ -325,7 +325,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 
 	// TODO do something closer to BIP39, eazy solution right now
 	let seed = blake2::blake2b::blake2b(32, &[], hd_seed.as_bytes());
-	let mut keychain = Keychain::from_seed(seed.as_bytes()).expect(
+	let keychain = Keychain::from_seed(seed.as_bytes()).expect(
 		"Failed to initialize keychain from the provided seed.",
 	);
 
@@ -390,7 +390,6 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				.expect("Amount to burn required")
 				.parse()
 				.expect("Could not parse amount as a whole number.");
-			keychain.enable_burn_key = true;
 			wallet::issue_burn_tx(&wallet_config, &keychain, amount).unwrap();
 		}
 		("info", Some(_)) => {

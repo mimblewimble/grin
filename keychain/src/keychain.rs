@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use rand::{thread_rng, Rng};
+use std::collections::HashMap;
 
 use secp;
 use secp::{Message, Secp256k1, Signature};
@@ -42,20 +43,30 @@ impl From<extkey::Error> for Error {
 	}
 }
 
-
 #[derive(Clone, Debug)]
 pub struct Keychain {
 	secp: Secp256k1,
 	extkey: extkey::ExtendedKey,
-
-	/// for tests and burn only, associate the zero fingerprint to a known
-	/// dummy private key
-	pub enable_burn_key: bool,
+	key_overrides: HashMap<Identifier, SecretKey>,
 }
 
 impl Keychain {
 	pub fn root_key_id(&self) -> Identifier {
 		self.extkey.root_key_id.clone()
+	}
+
+	// For tests and burn only, associate a key identifier with a known secret key.
+	//
+	pub fn burn_enabled(keychain: &Keychain, burn_key_id: &Identifier) -> Keychain {
+		let mut key_overrides = HashMap::new();
+		key_overrides.insert(
+			burn_key_id.clone(),
+			SecretKey::from_slice(&keychain.secp, &[1; 32]).unwrap(),
+		);
+		Keychain {
+			key_overrides: key_overrides,
+			..keychain.clone()
+		}
 	}
 
 	pub fn from_seed(seed: &[u8]) -> Result<Keychain, Error> {
@@ -64,7 +75,7 @@ impl Keychain {
 		let keychain = Keychain {
 			secp: secp,
 			extkey: extkey,
-			enable_burn_key: false,
+			key_overrides: HashMap::new(),
 		};
 		Ok(keychain)
 	}
@@ -82,36 +93,20 @@ impl Keychain {
 		Ok(key_id)
 	}
 
-	// TODO - this is a work in progress
-	// TODO - smarter lookups - can we cache key_id/fingerprint -> derivation
-	// number somehow?
 	fn derived_key(&self, key_id: &Identifier) -> Result<SecretKey, Error> {
-		if self.enable_burn_key {
-			// for tests and burn only, associate the zero fingerprint to a known
-			// dummy private key
-			if *key_id == Identifier::zero() {
-				return Ok(SecretKey::from_slice(&self.secp, &[1; 32])?);
-			}
+		if let Some(key) = self.key_overrides.get(key_id) {
+			return Ok(*key);
 		}
+
 		for i in 1..10000 {
 			let extkey = self.extkey.derive(&self.secp, i)?;
 			if extkey.identifier(&self.secp)? == *key_id {
 				return Ok(extkey.key);
 			}
 		}
-		Err(Error::KeyDerivation(format!("cannot find extkey for {:?}", key_id)))
-	}
-
-	// TODO - clean this and derived_key up, rename them?
-	// TODO - maybe wallet deals exclusively with key_ids and not derivations - this leaks?
-	pub fn derivation_from_key_id(&self, key_id: &Identifier) -> Result<u32, Error> {
-		for i in 1..10000 {
-			let extkey = self.extkey.derive(&self.secp, i)?;
-			if extkey.identifier(&self.secp)? == *key_id {
-				return Ok(extkey.n_child);
-			}
-		}
-		Err(Error::KeyDerivation(format!("cannot find extkey for {:?}", key_id)))
+		Err(Error::KeyDerivation(
+			format!("cannot find extkey for {:?}", key_id),
+		))
 	}
 
 	pub fn commit(&self, amount: u64, key_id: &Identifier) -> Result<Commitment, Error> {
@@ -246,19 +241,25 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
 		// cannot rewind with a different nonce
-		let proof_info = keychain.rewind_range_proof(&key_id2, commit, proof).unwrap();
+		let proof_info = keychain
+			.rewind_range_proof(&key_id2, commit, proof)
+			.unwrap();
 		assert_eq!(proof_info.success, false);
 		assert_eq!(proof_info.value, 0);
 
 		// cannot rewind with a commitment to the same value using a different key
 		let commit2 = keychain.commit(5, &key_id2).unwrap();
-		let proof_info = keychain.rewind_range_proof(&key_id, commit2, proof).unwrap();
+		let proof_info = keychain
+			.rewind_range_proof(&key_id, commit2, proof)
+			.unwrap();
 		assert_eq!(proof_info.success, false);
 		assert_eq!(proof_info.value, 0);
 
 		// cannot rewind with a commitment to a different value
 		let commit3 = keychain.commit(4, &key_id).unwrap();
-		let proof_info = keychain.rewind_range_proof(&key_id, commit3, proof).unwrap();
+		let proof_info = keychain
+			.rewind_range_proof(&key_id, commit3, proof)
+			.unwrap();
 		assert_eq!(proof_info.success, false);
 		assert_eq!(proof_info.value, 0);
 	}

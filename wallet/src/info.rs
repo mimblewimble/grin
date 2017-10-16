@@ -24,7 +24,7 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 	let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
 		println!("Outputs - ");
-		println!("key_id, height, lock_height, status, value");
+		println!("key_id, height, lock_height, status, zero_ok, value");
 		println!("----------------------------------");
 
 		let mut outputs = wallet_data
@@ -35,11 +35,12 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 		outputs.sort_by_key(|out| out.n_child);
 		for out in outputs {
 			println!(
-				"{}, {}, {}, {:?}, {}",
+				"{}, {}, {}, {:?}, {}, {}",
 				out.key_id,
 				out.height,
 				out.lock_height,
 				out.status,
+				out.zero_ok,
 				out.value
 			);
 		}

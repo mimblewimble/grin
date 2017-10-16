@@ -168,6 +168,8 @@ pub struct OutputData {
 	pub height: u64,
 	/// Height we are locked until
 	pub lock_height: u64,
+	/// Can we spend with zero confirmations? (Did it originate from us, change output etc.)
+	pub zero_ok: bool,
 }
 
 impl OutputData {
@@ -307,16 +309,22 @@ impl WalletData {
 		}
 	}
 
+	pub fn get_output(&self, key_id: &keychain::Identifier) -> Option<&OutputData> {
+		self.outputs.get(&key_id.to_hex())
+	}
+
 	/// Select a subset of unspent outputs to spend in a transaction
 	/// transferring the provided amount.
 	pub fn select(&self, root_key_id: keychain::Identifier, amount: u64) -> (Vec<OutputData>, i64) {
 		let mut to_spend = vec![];
 		let mut input_total = 0;
 
-		// TODO very naive impl for now - definitely better coin selection
-		// algos available
 		for out in self.outputs.values() {
-			if out.status == OutputStatus::Unspent && out.root_key_id == root_key_id {
+			if out.root_key_id == root_key_id
+				&& (out.status == OutputStatus::Unspent)
+					// the following will let us spend zero confirmation change outputs
+					// || (out.status == OutputStatus::Unconfirmed && out.zero_ok))
+			{
 				to_spend.push(out.clone());
 				input_total += out.value;
 				if input_total >= amount {

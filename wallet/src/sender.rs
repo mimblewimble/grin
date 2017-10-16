@@ -16,7 +16,7 @@ use api;
 use checker;
 use core::core::{Transaction, build};
 use core::ser;
-use keychain::{BlindingFactor, Keychain, Identifier, IDENTIFIER_SIZE};
+use keychain::{BlindingFactor, Keychain, Identifier};
 use receiver::TxWrapper;
 use types::*;
 use util::LOGGER;
@@ -72,12 +72,10 @@ fn build_send_tx(
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
 		// select some suitable outputs to spend from our local wallet
-		let (coins, change) = wallet_data.select(key_id.clone(), amount);
-		if change < 0 {
-			return Err(Error::NotEnoughFunds((-change) as u64));
-		}
+		let (coins, _) = wallet_data.select(key_id.clone(), u64::max_value());
 
 		// build transaction skeleton with inputs and change
+		// TODO - should probably also check we are sending enough to cover the fees + non-zero output
 		let mut parts = inputs_and_change(&coins, keychain, key_id, wallet_data, amount)?;
 
 		// This is more proof of concept than anything but here we set a
@@ -92,8 +90,11 @@ fn build_send_tx(
 }
 
 pub fn issue_burn_tx(config: &WalletConfig, keychain: &Keychain, amount: u64) -> Result<(), Error> {
+	let keychain = &Keychain::burn_enabled(keychain, &Identifier::zero());
+
 	let _ = checker::refresh_outputs(config, keychain);
-	let key_id = keychain.clone().root_key_id();
+
+	let key_id = keychain.root_key_id();
 
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |mut wallet_data| {
@@ -105,10 +106,8 @@ pub fn issue_burn_tx(config: &WalletConfig, keychain: &Keychain, amount: u64) ->
 		let mut parts = inputs_and_change(&coins, keychain, key_id, &mut wallet_data, amount)?;
 
 		// add burn output and fees
-		parts.push(build::output(
-			amount,
-			Identifier::from_bytes(&[0; IDENTIFIER_SIZE]),
-		));
+		let fee = tx_fee(coins.len(), 2, None);
+		parts.push(build::output(amount - fee, Identifier::zero()));
 
 		// finalize the burn transaction and send
 		let (tx_burn, _) = build::transaction(parts, &keychain)?;
@@ -162,8 +161,7 @@ fn inputs_and_change(
 	let change_key = keychain.derive_key_id(change_derivation)?;
 	parts.push(build::output(change, change_key.clone()));
 
-	// we got that far, time to start tracking the new output
-	// and lock the outputs used
+	// we got that far, time to start tracking the output representing our change
 	wallet_data.add_output(OutputData {
 		root_key_id: root_key_id.clone(),
 		key_id: change_key.clone(),
@@ -172,9 +170,10 @@ fn inputs_and_change(
 		status: OutputStatus::Unconfirmed,
 		height: 0,
 		lock_height: 0,
+		zero_ok: true,
 	});
 
-	// lock the ouputs we're spending
+	// now lock the ouputs we're spending so we avoid accidental double spend attempt
 	for coin in coins {
 		wallet_data.lock_output(coin);
 	}
