@@ -25,7 +25,6 @@ use std::thread;
 use std::time::{Instant, Duration};
 
 use core::core::hash::{Hash, Hashed};
-use core::core::BlockHeader;
 use chain;
 use p2p;
 use types::Error;
@@ -127,7 +126,7 @@ impl Syncer {
 		let mut prev_h = header_head.last_block_h;
 		while prev_h != full_head.last_block_h {
 			let header = self.chain.get_block_header(&prev_h)?;
-			blocks_to_download.push(header.hash(None::<BlockHeader>));
+			blocks_to_download.push(header.hash());
 			prev_h = header.previous;
 		}
 
@@ -239,7 +238,7 @@ impl Syncer {
 		while heights.len() > 0 {
 			if header.height == heights[0] {
 				heights = heights[1..].to_vec();
-				locator.push(header.hash(None::<BlockHeader>));
+				locator.push(header.hash());
 			}
 			if header.height > 0 {
 				header = self.chain.get_block_header(&header.previous)?;

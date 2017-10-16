@@ -37,9 +37,9 @@ fn sumtree_append() {
 	backend.sync().unwrap();
 
 	// check the resulting backend store and the computation of the root
-	let hash = Hashed::hash(&elems[0].clone(), None::<TestElem>);
+	let hash = Hashed::hash(&elems[0].clone());
 	let sum = elems[0].sum();
-	let node_hash = (1 as u64, &sum, hash).hash(None::<TestElem>);
+	let node_hash = (1 as u64, &sum, hash).hash();
 	assert_eq!(
 		backend.get(1),
 		Some(HashSum {

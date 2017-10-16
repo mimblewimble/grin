@@ -119,9 +119,12 @@ where
 {
 	/// Create a hash sum from a summable
 	pub fn from_summable<W: Writeable>(idx: u64, elmt: &T, hash_with:Option<W>) -> HashSum<T> {
-		let hash = elmt.hash(hash_with);
+		let hash = match hash_with {
+			Some(h) => elmt.hash_with(h),
+			None => elmt.hash(),
+		};
 		let sum = elmt.sum();
-		let node_hash = (idx, &sum, hash).hash(None::<HashSum<T>>);
+		let node_hash = (idx, &sum, hash).hash();
 		HashSum {
 			hash: node_hash,
 			sum: sum,
@@ -158,7 +161,7 @@ where
 	type Output = HashSum<T>;
 	fn add(self, other: HashSum<T>) -> HashSum<T> {
 		HashSum {
-			hash: (self.hash, other.hash).hash(None::<HashSum<T>>),
+			hash: (self.hash, other.hash).hash(),
 			sum: self.sum + other.sum,
 		}
 	}
@@ -832,9 +835,9 @@ mod test {
 
 		// one element
 		pmmr.push(elems[0], None::<TestElem>).unwrap();
-		let hash = Hashed::hash(&elems[0], None::<TestElem>);
+		let hash = Hashed::hash(&elems[0]);
 		let sum = elems[0].sum();
-		let node_hash = (1 as u64, &sum, hash).hash(None::<TestElem>);
+		let node_hash = (1 as u64, &sum, hash).hash();
 		assert_eq!(
 			pmmr.root(),
 			HashSum {

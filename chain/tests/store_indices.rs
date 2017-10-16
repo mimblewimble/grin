@@ -47,13 +47,13 @@ fn test_various_store_indices() {
 	chain_store.setup_height(&block.header).unwrap();
 
 	let block_header = chain_store.get_block_header(&block_hash).unwrap();
-	assert_eq!(block_header.hash(None::<BlockHeader>), block_hash);
+	assert_eq!(block_header.hash(), block_hash);
 
 	let block_header = chain_store.get_header_by_height(1).unwrap();
-	assert_eq!(block_header.hash(None::<BlockHeader>), block_hash);
+	assert_eq!(block_header.hash(), block_hash);
 
 	let block_header = chain_store
 		.get_block_header_by_output_commit(&commit)
 		.unwrap();
-	assert_eq!(block_header.hash(None::<BlockHeader>), block_hash);
+	assert_eq!(block_header.hash(), block_hash);
 }

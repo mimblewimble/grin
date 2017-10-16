@@ -171,16 +171,25 @@ impl ser::Writer for HashWriter {
 /// A trait for types that have a canonical hash
 pub trait Hashed {
 	/// Obtain the hash of the object
-	fn hash<T: Writeable>(&self, hash_with: Option<T>) -> Hash;
+	fn hash(&self) -> Hash;
+	/// Hash the object together with another writeable object
+	fn hash_with<T: Writeable>(&self, other:T) -> Hash;
 }
 
 impl<W: ser::Writeable> Hashed for W {
-	fn hash<T: Writeable> (&self, hash_with: Option<T>) -> Hash {
+	fn hash(&self) -> Hash {
 		let mut hasher = HashWriter::default();
-		ser::Writeable::write(self, &mut hasher).unwrap(); if let Some(h) = hash_with {
-			trace!(LOGGER, "Hashing with additional data");
-			ser::Writeable::write(&h, &mut hasher).unwrap();
-		}
+		ser::Writeable::write(self, &mut hasher).unwrap(); 
+		let mut ret = [0; 32];
+		hasher.finalize(&mut ret);
+		Hash(ret)
+	}
+
+	fn hash_with<T: Writeable>(&self, other:T) -> Hash{
+		let mut hasher = HashWriter::default();
+		ser::Writeable::write(self, &mut hasher).unwrap();
+		trace!(LOGGER, "Hashing with additional data");
+		ser::Writeable::write(&other, &mut hasher).unwrap();
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
 		Hash(ret)
@@ -190,7 +199,7 @@ impl<W: ser::Writeable> Hashed for W {
 impl<T: Writeable> VerifySortOrder<T> for Vec<T> {
 	fn verify_sort_order(&self) -> Result<(), ser::Error> {
 		match self.iter()
-			.map(|item| item.hash(None::<T>))
+			.map(|item| item.hash())
 			.collect::<Vec<_>>()
 			.windows(2)
 			.any(|pair| pair[0] > pair[1]) {

@@ -421,7 +421,7 @@ where
 	T: Writeable + Hashed,
 {
 	fn write_sorted<W: Writer>(&mut self, writer: &mut W) -> Result<(), Error> {
-		self.sort_by_key(|elmt| elmt.hash(None::<Vec<T>>));
+		self.sort_by_key(|elmt| elmt.hash());
 		for elmt in self {
 			elmt.write(writer)?;
 		}

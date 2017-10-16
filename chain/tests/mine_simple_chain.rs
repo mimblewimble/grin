@@ -102,24 +102,24 @@ fn mine_empty_chain() {
 		// now check the block_header of the head
 		let header = chain.head_header().unwrap();
 		assert_eq!(header.height, n);
-		assert_eq!(header.hash(None::<BlockHeader>), bhash);
+		assert_eq!(header.hash(), bhash);
 
 		// now check the block itself
-		let block = chain.get_block(&header.hash(None::<BlockHeader>)).unwrap();
+		let block = chain.get_block(&header.hash()).unwrap();
 		assert_eq!(block.header.height, n);
 		assert_eq!(block.hash(), bhash);
 		assert_eq!(block.outputs.len(), 1);
 
 		// now check the block height index
 		let header_by_height = chain.get_header_by_height(n).unwrap();
-		assert_eq!(header_by_height.hash(None::<BlockHeader>), bhash);
+		assert_eq!(header_by_height.hash(), bhash);
 
 		// now check the header output index
 		let output = block.outputs[0];
 		let header_by_output_commit = chain
 			.get_block_header_by_output_commit(&output.commitment())
 			.unwrap();
-		assert_eq!(header_by_output_commit.hash(None::<BlockHeader>), bhash);
+		assert_eq!(header_by_output_commit.hash(), bhash);
 	}
 }
 
@@ -150,7 +150,7 @@ fn mine_forks() {
 		let head = chain.head().unwrap();
 		assert_eq!(head.height, (n + 1) as u64);
 		assert_eq!(head.last_block_h, bhash);
-		assert_eq!(head.prev_block_h, prev.hash(None::<BlockHeader>));
+		assert_eq!(head.prev_block_h, prev.hash());
 
 		// process the 2nd block to build a fork with more work
 		let bhash = b2.hash();
@@ -160,7 +160,7 @@ fn mine_forks() {
 		let head = chain.head().unwrap();
 		assert_eq!(head.height, (n + 1) as u64);
 		assert_eq!(head.last_block_h, bhash);
-		assert_eq!(head.prev_block_h, prev.hash(None::<BlockHeader>));
+		assert_eq!(head.prev_block_h, prev.hash());
 	}
 }
 
@@ -182,14 +182,14 @@ fn mine_losing_fork() {
 	// add higher difficulty first, prepare its successor, then fork
 	// with lower diff
 	chain.process_block(b2, chain::SKIP_POW).unwrap();
-	assert_eq!(chain.head_header().unwrap().hash(None::<BlockHeader>), b2head.hash(None::<BlockHeader>));
+	assert_eq!(chain.head_header().unwrap().hash(), b2head.hash());
 	let b3 = prepare_block(&b2head, &chain, 5);
 	chain.process_block(bfork, chain::SKIP_POW).unwrap();
 
 	// adding the successor
 	let b3head = b3.header.clone();
 	chain.process_block(b3, chain::SKIP_POW).unwrap();
-	assert_eq!(chain.head_header().unwrap().hash(None::<BlockHeader>), b3head.hash(None::<BlockHeader>));
+	assert_eq!(chain.head_header().unwrap().hash(), b3head.hash());
 }
 
 #[test]
@@ -219,7 +219,7 @@ fn longer_fork() {
 	// check both chains are in the expected state
 	let head = chain.head_header().unwrap();
 	assert_eq!(head.height, 10);
-	assert_eq!(head.hash(None::<BlockHeader>), prev.hash(None::<BlockHeader>));
+	assert_eq!(head.hash(), prev.hash());
 	let head_fork = chain_fork.head_header().unwrap();
 	assert_eq!(head_fork.height, 5);
 

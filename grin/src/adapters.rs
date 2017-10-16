@@ -83,13 +83,13 @@ impl NetAdapter for NetToChainAdapter {
 			let res = self.chain.process_block_header(&bh, self.chain_opts());
 			match res {
 				Ok(_) => {
-					added_hs.push(bh.hash(None::<BlockHeader>));
+					added_hs.push(bh.hash());
 				}
 				Err(chain::Error::Unfit(s)) => {
 					info!(
 						LOGGER,
 						"Received unfit block header {} at {}: {}.",
-						bh.hash(None::<BlockHeader>),
+						bh.hash(),
 						bh.height,
 						s
 					);
@@ -98,13 +98,13 @@ impl NetAdapter for NetToChainAdapter {
 					error!(
 						LOGGER,
 						"Store error processing block header {}: {:?}",
-						bh.hash(None::<BlockHeader>),
+						bh.hash(),
 						e
 					);
 					return;
 				}
 				Err(e) => {
-					info!(LOGGER, "Invalid block header {}: {:?}.", bh.hash(None::<BlockHeader>), e);
+					info!(LOGGER, "Invalid block header {}: {:?}.", bh.hash(), e);
 					// TODO penalize peer somehow
 				}
 			}
