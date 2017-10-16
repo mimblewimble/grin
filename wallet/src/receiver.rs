@@ -183,8 +183,11 @@ fn receive_coinbase(config: &WalletConfig,
 		let key_id = block_fees.key_id();
 		let (key_id, derivation) = match key_id {
 			Some(key_id) => {
-				let derivation = keychain.derivation_from_key_id(&key_id)?;
-				(key_id.clone(), derivation)
+				if let Some(existing) = wallet_data.get_output(&key_id) {
+					(existing.key_id.clone(), existing.n_child)
+				} else {
+					panic!("should never happen");
+				}
 			},
 			None => {
 				let derivation = wallet_data.next_child(root_key_id.clone());
@@ -202,6 +205,7 @@ fn receive_coinbase(config: &WalletConfig,
 			status: OutputStatus::Unconfirmed,
 			height: 0,
 			lock_height: 0,
+			zero_ok: false,
 		});
 
 		debug!(
@@ -276,6 +280,7 @@ fn receive_transaction(
 			status: OutputStatus::Unconfirmed,
 			height: 0,
 			lock_height: 0,
+			zero_ok: false,
 		});
 		debug!(
 			LOGGER,
