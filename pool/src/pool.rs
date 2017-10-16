@@ -868,6 +868,75 @@ mod tests {
 	}
 
 	#[test]
+	fn test_zero_confirmation_reconciliation() {
+		let mut dummy_chain = DummyChainImpl::new();
+		let head_header = block::BlockHeader {
+			height: 1,
+			..block::BlockHeader::default()
+		};
+		dummy_chain.store_head_header(&head_header);
+
+		// single UTXO
+		let new_utxo = DummyUtxoSet::empty()
+			.with_output(test_output(100));
+
+		dummy_chain.update_utxo_set(new_utxo);
+		let chain_ref = Arc::new(dummy_chain);
+		let pool = RwLock::new(test_setup(&chain_ref));
+
+		// now create two txs
+		// tx1 spends the UTXO
+		// tx2 spends output from tx1
+		let tx1 = test_transaction(vec![100], vec![90]);
+		let tx2 = test_transaction(vec![90], vec![80]);
+
+		{
+			let mut write_pool = pool.write().unwrap();
+			assert_eq!(write_pool.total_size(), 0);
+
+			// now add both txs to the pool (tx2 spends tx1 with zero confirmations)
+			// both should be accepted if tx1 added before tx2
+			write_pool.add_to_memory_pool(test_source(), tx1).unwrap();
+			write_pool.add_to_memory_pool(test_source(), tx2).unwrap();
+
+			assert_eq!(write_pool.pool_size(), 2);
+		}
+
+		let txs: Vec<transaction::Transaction>;
+		{
+			let read_pool = pool.read().unwrap();
+			let mut mineable_txs = read_pool.prepare_mineable_transactions(3);
+			txs = mineable_txs.drain(..).map(|x| *x).collect();
+
+			// confirm we are only preparing a single tx for mining here
+			// even though we have 2 txs in the pool
+			assert_eq!(txs.len(), 1);
+		}
+
+		let keychain = Keychain::from_random_seed().unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
+
+		// now "mine" the block passing in the mineable txs from earlier
+		let block = block::Block::new(
+			&block::BlockHeader::default(),
+			txs.iter().collect(),
+			&keychain,
+			&key_id,
+		).unwrap();
+
+		// now reconcile the block
+		{
+			let mut write_pool = pool.write().unwrap();
+			let evicted_transactions = write_pool.reconcile_block(&block).unwrap();
+
+			// *** this fails (we evict more txs than we mine in the block) ***
+			// we evict both the one we mined *and* the 2nd tx that spends it (zero confirmations)
+			// at this point the 2nd tx is lost and will never be included in a subsequent block
+			assert_eq!(evicted_transactions.len(), 1);
+		}
+	}
+
+	#[test]
 	/// Testing block reconciliation
 	fn test_block_reconciliation() {
 		let mut dummy_chain = DummyChainImpl::new();
