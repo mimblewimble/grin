@@ -141,8 +141,10 @@ impl ChainStore for ChainKVStore {
 	// in this index.
 	//
 	fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
-		let block_hash = self.db
-			.get_ser(&to_key(HEADER_BY_OUTPUT_PREFIX, &mut commit.as_ref().to_vec()))?;
+		let block_hash = self.db.get_ser(&to_key(
+			HEADER_BY_OUTPUT_PREFIX,
+			&mut commit.as_ref().to_vec(),
+		))?;
 
 		match block_hash {
 			Some(hash) => {
@@ -211,8 +213,10 @@ impl ChainStore for ChainKVStore {
 	/// that is consistent with its height (everything prior to this will be
 	/// consistent)
 	fn setup_height(&self, bh: &BlockHeader) -> Result<(), Error> {
-		self.db
-			.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height), bh)?;
+		self.db.put_ser(
+			&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height),
+			bh,
+		)?;
 		if bh.height == 0 {
 			return Ok(());
 		}
