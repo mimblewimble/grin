@@ -93,19 +93,13 @@ impl Keychain {
 		Ok(key_id)
 	}
 
-	// TODO - smarter lookups - can we cache key_id/fingerprint -> derivation
-	// number somehow?
 	fn derived_key(&self, key_id: &Identifier) -> Result<SecretKey, Error> {
-		// TODO - is this the cache right here? Do we just lazily populate it in normal use?
 		if let Some(key) = self.key_overrides.get(key_id) {
 			return Ok(*key);
 		}
 
 		for i in 1..10000 {
 			let extkey = self.extkey.derive(&self.secp, i)?;
-
-			// TODO - populate the cache here for every derived key here?
-
 			if extkey.identifier(&self.secp)? == *key_id {
 				return Ok(extkey.key);
 			}
