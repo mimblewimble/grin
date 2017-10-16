@@ -313,9 +313,6 @@ impl WalletData {
 		self.outputs.get(&key_id.to_hex())
 	}
 
-	///
-	/// TODO - this can be simplified significantly if we spend all spendable coins every time
-	///
 	/// Select a subset of unspent outputs to spend in a transaction
 	/// transferring the provided amount.
 	pub fn select(&self, root_key_id: keychain::Identifier, amount: u64) -> (Vec<OutputData>, i64) {
@@ -325,7 +322,7 @@ impl WalletData {
 		for out in self.outputs.values() {
 			if out.root_key_id == root_key_id
 				&& (out.status == OutputStatus::Unspent)
-					// TODO - following line will allow zero confirmation spends on change outputs
+					// the following will let us spend zero confirmation change outputs
 					// || (out.status == OutputStatus::Unconfirmed && out.zero_ok))
 			{
 				to_spend.push(out.clone());

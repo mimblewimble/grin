@@ -58,9 +58,6 @@ impl Keychain {
 	//
 	// For tests and burn only, associate a key identifier with a known secret key.
 	//
-	// TODO - does this need to be a "known" key? Or can we just generate one randomly
-	// and *really* burn the coins?
-	//
 	pub fn burn_enabled(keychain: &Keychain, burn_key_id: &Identifier) -> Keychain {
 		let mut key_overrides = HashMap::new();
 		key_overrides.insert(
