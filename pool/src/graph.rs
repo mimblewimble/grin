@@ -28,6 +28,7 @@ use core::core::hash::Hashed;
 
 /// An entry in the transaction pool.
 /// These are the vertices of both of the graph structures
+#[derive(Debug, PartialEq, Clone)]
 pub struct PoolEntry {
 	// Core data
 	/// Unique identifier of this pool entry and the corresponding transaction
@@ -177,6 +178,31 @@ impl DirectedGraph {
 				}
 			}
 		}
+	}
+
+	/// Promote any non-root vertices to roots based on current edges.
+	/// For a given tx, if there are no edges with that tx as destination then it is a root.
+	pub fn update_roots(&mut self) {
+		let mut new_roots = vec![];
+		for x in &self.vertices {
+			let edges = &self.edges.values().collect::<Vec<_>>();
+			match edges.iter().find(|edge| edge.destination == Some(x.transaction_hash)) {
+				Some(_) => (),
+				None => new_roots.push(x.clone()),
+			}
+		}
+
+		for x in new_roots {
+			self.roots.push(x.clone());
+		}
+
+		let mut new_vertices = vec![];
+		for x in &self.vertices {
+			if !self.roots.contains(&x) {
+				new_vertices.push(x.clone());
+			}
+		}
+		self.vertices = new_vertices;
 	}
 
 	/// Adds a vertex and a set of incoming edges to the graph.

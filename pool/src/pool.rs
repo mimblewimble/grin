@@ -934,16 +934,12 @@ mod tests {
 			assert_eq!(evicted_transactions.len(), 1);
 		}
 
-		// check the pool looks as it should
+		// check the pool is consistent after reconciling the block
 		// we should have 1 tx in the pool and it should
 		// be in the list of roots (will not be mineable otherwise)
 		{
 			let read_pool = pool.write().unwrap();
 			assert_eq!(read_pool.pool.len_vertices(), 1);
-
-			//
-			// this fails - the tx is not in the list of roots (but it should be)
-			//
 			assert_eq!(read_pool.pool.len_roots(), 1);
 		}
 	}
