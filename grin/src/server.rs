@@ -120,7 +120,7 @@ impl Server {
 			Seeding::None => {
 				warn!(
 					LOGGER,
-					"No seed configured, will stay solo unless connected to"
+					"No seed configured, will stay solo until connected to"
 				);
 			}
 			Seeding::List => {

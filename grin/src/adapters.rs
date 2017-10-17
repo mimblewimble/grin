@@ -71,7 +71,7 @@ impl NetAdapter for NetToChainAdapter {
 			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
 		}
 
-		if self.syncer.borrow().syncing() {
+		if self.syncing() {
 			self.syncer.borrow().block_received(bhash);
 		}
 	}
@@ -115,7 +115,7 @@ impl NetAdapter for NetToChainAdapter {
 			added_hs.len()
 		);
 
-		if self.syncer.borrow().syncing() {
+		if self.syncing() {
 			self.syncer.borrow().headers_received(added_hs);
 		}
 	}
