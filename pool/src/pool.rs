@@ -940,6 +940,10 @@ mod tests {
 		{
 			let read_pool = pool.write().unwrap();
 			assert_eq!(read_pool.pool.len_vertices(), 1);
+
+			//
+			// this fails - the tx is not in the list of roots (but it should be)
+			//
 			assert_eq!(read_pool.pool.len_roots(), 1);
 		}
 	}
