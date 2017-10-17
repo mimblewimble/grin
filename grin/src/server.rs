@@ -51,6 +51,7 @@ pub struct Server {
 	chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	net_adapter: Arc<NetToChainAdapter>,
 }
 
 impl Server {
@@ -148,6 +149,7 @@ impl Server {
 			p2p: p2p_server,
 			chain: shared_chain,
 			tx_pool: tx_pool,
+			net_adapter: net_adapter,
 		})
 	}
 
@@ -173,10 +175,17 @@ impl Server {
 	pub fn start_miner(&self, config: pow::types::MinerConfig) {
 		let cuckoo_size = global::sizeshift();
 		let proof_size = global::proofsize();
+		let net_adapter = self.net_adapter.clone();
 
 		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
 		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.unwrap().port));
-		thread::spawn(move || { miner.run_loop(config.clone(), cuckoo_size as u32, proof_size); });
+		thread::spawn(move || {
+			let secs_5 = time::Duration::from_secs(5);
+			while net_adapter.syncing() {
+				thread::sleep(secs_5);
+			}
+			miner.run_loop(config.clone(), cuckoo_size as u32, proof_size);
+		});
 	}
 
 	/// The chain head

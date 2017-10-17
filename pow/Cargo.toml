@@ -21,7 +21,7 @@ git = "https://github.com/mimblewimble/cuckoo-miner"
 tag="grin_integration_14"
 #path = "../../cuckoo-miner"
 #uncomment this feature to turn off plugin builds
-#features=["no-plugin-build"]
+features=["no-plugin-build"]
 #uncomment this feature to enable cuda builds (cuda toolkit must be installed)
 #features=["build-cuda-plugins"]
 

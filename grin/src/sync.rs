@@ -146,12 +146,16 @@ impl Syncer {
 
 		// clean up potentially dead downloads
 		let twenty_sec_ago = Instant::now() - Duration::from_secs(20);
-		let too_old_pos = (0..blocks_downloading.len()).filter(|p| {
-			blocks_downloading[*p].1 < twenty_sec_ago
-		}).collect::<Vec<_>>();
+		let too_old_pos = (0..blocks_downloading.len())
+			.filter(|p| blocks_downloading[*p].1 < twenty_sec_ago)
+			.collect::<Vec<_>>();
 		for too_old in too_old_pos {
 			let block_h = blocks_downloading.remove(too_old);
-			debug!(LOGGER, "Download request expired for {}, will re-issue.", block_h.0);
+			debug!(
+				LOGGER,
+				"Download request expired for {}, will re-issue.",
+				block_h.0
+			);
 			blocks_to_download.insert(0, block_h.0);
 		}
 

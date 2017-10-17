@@ -167,8 +167,11 @@ impl NetAdapter for NetToChainAdapter {
 	/// Find good peers we know with the provided capability and return their
 	/// addresses.
 	fn find_peer_addrs(&self, capab: p2p::Capabilities) -> Vec<SocketAddr> {
-		let peers = self.peer_store
-			.find_peers(State::Healthy, capab, p2p::MAX_PEER_ADDRS as usize);
+		let peers = self.peer_store.find_peers(
+			State::Healthy,
+			capab,
+			p2p::MAX_PEER_ADDRS as usize,
+		);
 		debug!(LOGGER, "Got {} peer addrs to send.", peers.len());
 		map_vec!(peers, |p| p.addr)
 	}
@@ -210,10 +213,11 @@ impl NetAdapter for NetToChainAdapter {
 }
 
 impl NetToChainAdapter {
-	pub fn new(chain_ref: Arc<chain::Chain>,
-	           tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-	           peer_store: Arc<PeerStore>)
-	           -> NetToChainAdapter {
+	pub fn new(
+		chain_ref: Arc<chain::Chain>,
+		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		peer_store: Arc<PeerStore>,
+	) -> NetToChainAdapter {
 		NetToChainAdapter {
 			chain: chain_ref,
 			peer_store: peer_store,
@@ -227,19 +231,15 @@ impl NetToChainAdapter {
 	pub fn start_sync(&self, sync: sync::Syncer) {
 		let arc_sync = Arc::new(sync);
 		self.syncer.init(arc_sync.clone());
-		let spawn_result = thread::Builder::new()
-			.name("syncer".to_string())
-			.spawn(move || {
-				let sync_run_result = arc_sync.run();
-				match sync_run_result {
-					Ok(_) => {}
-					Err(_) => {}
-				}
-			});
-		match spawn_result {
-			Ok(_) => {}
-			Err(_) => {}
-		}
+		let _ = thread::Builder::new().name("syncer".to_string()).spawn(
+			move || {
+				let _ = arc_sync.run();
+			},
+		);
+	}
+
+	pub fn syncing(&self) -> bool {
+		self.syncer.borrow().syncing()
 	}
 
 	/// Prepare options for the chain pipeline
@@ -284,8 +284,9 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 }
 
 impl ChainToPoolAndNetAdapter {
-	pub fn new(tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>)
-	           -> ChainToPoolAndNetAdapter {
+	pub fn new(
+		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	) -> ChainToPoolAndNetAdapter {
 		ChainToPoolAndNetAdapter {
 			tx_pool: tx_pool,
 			p2p: OneTime::new(),
@@ -317,19 +318,19 @@ impl PoolToChainAdapter {
 
 impl pool::BlockChain for PoolToChainAdapter {
 	fn get_unspent(&self, output_ref: &Commitment) -> Result<Output, pool::PoolError> {
-		self.chain
-			.borrow()
-			.get_unspent(output_ref)
-			.map_err(|e| match e {
+		self.chain.borrow().get_unspent(output_ref).map_err(
+			|e| match e {
 				chain::types::Error::OutputNotFound => pool::PoolError::OutputNotFound,
 				chain::types::Error::OutputSpent => pool::PoolError::OutputSpent,
 				_ => pool::PoolError::GenericPoolError,
-			})
+			},
+		)
 	}
 
-	fn get_block_header_by_output_commit(&self,
-	                                     commit: &Commitment)
-	                                     -> Result<BlockHeader, pool::PoolError> {
+	fn get_block_header_by_output_commit(
+		&self,
+		commit: &Commitment,
+	) -> Result<BlockHeader, pool::PoolError> {
 		self.chain
 			.borrow()
 			.get_block_header_by_output_commit(commit)
@@ -337,9 +338,8 @@ impl pool::BlockChain for PoolToChainAdapter {
 	}
 
 	fn head_header(&self) -> Result<BlockHeader, pool::PoolError> {
-		self.chain
-			.borrow()
-			.head_header()
-			.map_err(|_| pool::PoolError::GenericPoolError)
+		self.chain.borrow().head_header().map_err(|_| {
+			pool::PoolError::GenericPoolError
+		})
 	}
 }
