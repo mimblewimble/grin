@@ -244,7 +244,7 @@ impl NetToChainAdapter {
 
 	/// Prepare options for the chain pipeline
 	fn chain_opts(&self) -> chain::Options {
-		let opts = if self.syncer.borrow().syncing() {
+		let opts = if self.syncing() {
 			chain::SYNC
 		} else {
 			chain::NONE
