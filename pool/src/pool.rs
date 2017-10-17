@@ -924,15 +924,23 @@ mod tests {
 			&key_id,
 		).unwrap();
 
+		// now apply the block to ensure the chainstate is updated before we reconcile
+		chain_ref.apply_block(&block);
+
 		// now reconcile the block
 		{
 			let mut write_pool = pool.write().unwrap();
 			let evicted_transactions = write_pool.reconcile_block(&block).unwrap();
-
-			// *** this fails (we evict more txs than we mine in the block) ***
-			// we evict both the one we mined *and* the 2nd tx that spends it (zero confirmations)
-			// at this point the 2nd tx is lost and will never be included in a subsequent block
 			assert_eq!(evicted_transactions.len(), 1);
+		}
+
+		// check the pool looks as it should
+		// we should have 1 tx in the pool and it should
+		// be in the list of roots (will not be mineable otherwise)
+		{
+			let read_pool = pool.write().unwrap();
+			assert_eq!(read_pool.pool.len_vertices(), 1);
+			assert_eq!(read_pool.pool.len_roots(), 1);
 		}
 	}
 

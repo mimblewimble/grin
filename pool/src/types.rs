@@ -206,6 +206,13 @@ impl Pool {
 			.map(|x| x.destination_hash().unwrap())
 	}
 
+	pub fn len_roots(&self) -> usize {
+		self.graph.len_roots()
+	}
+
+	pub fn len_vertices(&self) -> usize {
+		self.graph.len_vertices()
+	}
 
 	pub fn get_blockchain_spent(&self, c: &Commitment) -> Option<&graph::Edge> {
 		self.consumed_blockchain_outputs.get(c)
