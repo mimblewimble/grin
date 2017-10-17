@@ -239,7 +239,7 @@ impl NetToChainAdapter {
 	}
 
 	pub fn syncing(&self) -> bool {
-		self.syncer.borrow().syncing()
+		self.syncer.is_initialized() && self.syncer.borrow().syncing()
 	}
 
 	/// Prepare options for the chain pipeline

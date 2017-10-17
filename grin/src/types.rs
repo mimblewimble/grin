@@ -60,7 +60,7 @@ impl From<api::Error> for Error {
 }
 
 /// Type of seeding the server will use to find other peers on the network.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Seeding {
 	/// No seeding, mostly for tests that programmatically connect
 	None,

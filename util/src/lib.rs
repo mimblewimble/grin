@@ -73,6 +73,11 @@ impl<T> OneTime<T> {
 		*inner_mut = Some(value);
 	}
 
+	pub fn is_initialized(&self) -> bool {
+		let inner = self.inner.borrow();
+		inner.is_some()
+	}
+
 	/// Borrows the OneTime, should only be called after initialization.
 	pub fn borrow(&self) -> Ref<T> {
 		Ref::map(self.inner.borrow(), |o| o.as_ref().unwrap())
