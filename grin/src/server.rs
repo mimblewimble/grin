@@ -117,7 +117,12 @@ impl Server {
 
 		let seed = seed::Seeder::new(config.capabilities, peer_store.clone(), p2p_server.clone());
 		match config.seeding_type.clone() {
-			Seeding::None => {}
+			Seeding::None => {
+				warn!(
+					LOGGER,
+					"No seed configured, will stay solo unless connected to"
+				);
+			}
 			Seeding::List => {
 				seed.connect_and_monitor(
 					evt_handle.clone(),
