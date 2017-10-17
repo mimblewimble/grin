@@ -18,7 +18,7 @@ As explained in the previous section, thanks to the MimbleWimble transaction and
 
 Pushing that further, between blocks, most outputs end up being spent sooner or later by another input. So *all spent outputs can be safely removed*. And the whole blockchain can be stored, downloaded and fully verified in just a few gigabytes or less (assuming a number of transactions similar to bitcoin).
 
-What this all means is the Grin blockchain scales with the number of users (unspent outputs), not the number of transactions.
+What this all means is the Grin blockchain scales with the number of users (unspent outputs), not the number of transactions. At the moment, there is one caveat to that: a small piece of data (called a kernel, over about 100 bytes) needs to stay around for each transaction. But we're working on optimizing that as well.
 
 ## Scripting
 
