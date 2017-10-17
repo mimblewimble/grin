@@ -73,6 +73,7 @@ impl<T> OneTime<T> {
 		*inner_mut = Some(value);
 	}
 
+	/// Whether the OneTime has been initialized
 	pub fn is_initialized(&self) -> bool {
 		let inner = self.inner.borrow();
 		inner.is_some()
