@@ -141,18 +141,22 @@ impl Syncer {
 	/// Asks for the blocks we haven't downloaded yet and place them in the
 	/// downloading structure.
 	fn request_bodies(&self) {
+		let mut blocks_to_download = self.blocks_to_download.lock().unwrap();
 		let mut blocks_downloading = self.blocks_downloading.lock().unwrap();
 
 		// clean up potentially dead downloads
 		let twenty_sec_ago = Instant::now() - Duration::from_secs(20);
-		blocks_downloading
-			.iter()
-			.position(|&h| h.1 < twenty_sec_ago)
-			.map(|n| blocks_downloading.remove(n));
+		let too_old_pos = (0..blocks_downloading.len()).filter(|p| {
+			blocks_downloading[*p].1 < twenty_sec_ago
+		}).collect::<Vec<_>>();
+		for too_old in too_old_pos {
+			let block_h = blocks_downloading.remove(too_old);
+			debug!(LOGGER, "Download request expired for {}, will re-issue.", block_h.0);
+			blocks_to_download.insert(0, block_h.0);
+		}
 
 		// consume hashes from blocks to download, place them in downloading and
 		// request them from the network
-		let mut blocks_to_download = self.blocks_to_download.lock().unwrap();
 		while blocks_to_download.len() > 0 && blocks_downloading.len() < MAX_BODY_DOWNLOADS {
 			let h = blocks_to_download.pop().unwrap();
 			let peer = self.p2p.random_peer().unwrap();
@@ -164,7 +168,7 @@ impl Syncer {
 		}
 		debug!(
 			LOGGER,
-			"Requesting more full block hashes to download, total: {}.",
+			"Requesting full blocks to download, total left: {}.",
 			blocks_to_download.len()
 		);
 	}
