@@ -455,7 +455,8 @@ where
 		//
 		// After the pool has been successfully processed, an orphans
 		// reconciliation job is triggered.
-		let mut marked_transactions: HashMap<hash::Hash, ()> = HashMap::new();
+		let mut marked_transactions: HashSet<hash::Hash> = HashSet::new();
+
 		{
 			// find all conflicting txs based on inputs to the block
 			let conflicting_txs: HashSet<hash::Hash> = block
@@ -477,7 +478,7 @@ where
 				.filter_map(|x| x.source_hash())
 				.collect();
 
-			// now iteratoe over all conflicting hashes from both txs and outputs
+			// now iterate over all conflicting hashes from both txs and outputs
 			// we can just use the union of the two sets here to remove duplicates
 			for &txh in conflicting_txs.union(&conflicting_outputs) {
 				self.mark_transaction(txh, &mut marked_transactions);
@@ -503,10 +504,14 @@ where
 	fn mark_transaction(
 		&self,
 		conflicting_tx: hash::Hash,
-		marked_txs: &mut HashMap<hash::Hash, ()>,
+		marked_txs: &mut HashSet<hash::Hash>,
 	) {
+		// we can stop recursively visiting txs if we have already seen this one
+		if marked_txs.contains(&conflicting_tx) {
+			return;
+		}
 
-		marked_txs.insert(conflicting_tx, ());
+		marked_txs.insert(conflicting_tx);
 
 		let tx_ref = self.transactions.get(&conflicting_tx);
 
@@ -534,13 +539,13 @@ where
 	/// Additional bookkeeping in the mark step could optimize that away.
 	fn sweep_transactions(
 		&mut self,
-		marked_transactions: HashMap<hash::Hash, ()>,
+		marked_transactions: HashSet<hash::Hash>,
 	) -> Vec<Box<transaction::Transaction>> {
 
 		let mut removed_txs = Vec::new();
 
-		for tx_hash in marked_transactions.keys() {
-			let removed_tx = self.transactions.remove(tx_hash).unwrap();
+		for tx_hash in &marked_transactions {
+			let removed_tx = self.transactions.remove(&tx_hash).unwrap();
 
 			self.pool.remove_pool_transaction(
 				&removed_tx,
