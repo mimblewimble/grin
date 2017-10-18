@@ -132,7 +132,6 @@ impl Default for WalletConfig {
 pub enum OutputStatus {
 	Unconfirmed,
 	Unspent,
-	Immature,
 	Locked,
 	Spent,
 }
@@ -142,7 +141,6 @@ impl fmt::Display for OutputStatus {
 		match *self {
 			OutputStatus::Unconfirmed => write!(f, "Unconfirmed"),
 			OutputStatus::Unspent => write!(f, "Unspent"),
-			OutputStatus::Immature => write!(f, "Immature"),
 			OutputStatus::Locked => write!(f, "Locked"),
 			OutputStatus::Spent => write!(f, "Spent"),
 		}
@@ -168,14 +166,37 @@ pub struct OutputData {
 	pub height: u64,
 	/// Height we are locked until
 	pub lock_height: u64,
-	/// Can we spend with zero confirmations? (Did it originate from us, change output etc.)
-	pub zero_ok: bool,
+	/// Is this a coinbase output? Is it subject to coinbase locktime?
+	pub is_coinbase: bool,
 }
 
 impl OutputData {
 	/// Lock a given output to avoid conflicting use
 	fn lock(&mut self) {
 		self.status = OutputStatus::Locked;
+	}
+
+	pub fn eligible_to_spend(
+		&self,
+		current_height: u64,
+		minimum_confirmations: u64
+	) -> bool {
+		if [
+			OutputStatus::Spent,
+			OutputStatus::Locked,
+		].contains(&self.status) {
+			return false;
+		} else if self.status == OutputStatus::Unconfirmed && self.is_coinbase {
+			return false;
+		} else if self.lock_height > current_height {
+			return false;
+		} else if self.status == OutputStatus::Unspent && self.height + minimum_confirmations <= current_height {
+			return true;
+		} else if self.status == OutputStatus::Unconfirmed && minimum_confirmations == 0 {
+			return true;
+		} else {
+			return false;
+		}
 	}
 }
 
@@ -313,27 +334,22 @@ impl WalletData {
 		self.outputs.get(&key_id.to_hex())
 	}
 
-	/// Select a subset of unspent outputs to spend in a transaction
-	/// transferring the provided amount.
-	pub fn select(&self, root_key_id: keychain::Identifier, amount: u64) -> (Vec<OutputData>, i64) {
-		let mut to_spend = vec![];
-		let mut input_total = 0;
+	/// Select spendable coins from the wallet
+	pub fn select(
+		&self,
+		root_key_id: keychain::Identifier,
+		current_height: u64,
+		minimum_confirmations: u64,
+	) -> Vec<OutputData> {
 
-		for out in self.outputs.values() {
-			if out.root_key_id == root_key_id
-				&& (out.status == OutputStatus::Unspent)
-					// the following will let us spend zero confirmation change outputs
-					// || (out.status == OutputStatus::Unconfirmed && out.zero_ok))
-			{
-				to_spend.push(out.clone());
-				input_total += out.value;
-				if input_total >= amount {
-					break;
-				}
-			}
-		}
-		// TODO - clean up our handling of i64 vs u64 so we are consistent
-		(to_spend, (input_total as i64) - (amount as i64))
+		self.outputs
+			.values()
+			.filter(|out| {
+				out.root_key_id == root_key_id
+					&& out.eligible_to_spend(current_height, minimum_confirmations)
+			})
+			.map(|out| out.clone())
+			.collect()
 	}
 
 	/// Next child index when we want to create a new output.

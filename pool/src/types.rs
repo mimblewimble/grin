@@ -304,11 +304,17 @@ impl Pool {
 		}
 	}
 
-	/// Simplest possible implementation: just return the roots
+	/// Currently a single rule for miner preference -
+	/// return all txs if less than num_to_fetch txs in the entire pool
+	/// otherwise return num_to_fetch of just the roots
 	pub fn get_mineable_transactions(&self, num_to_fetch: u32) -> Vec<hash::Hash> {
-		let mut roots = self.graph.get_roots();
-		roots.truncate(num_to_fetch as usize);
-		roots
+		if self.graph.len_vertices() <= num_to_fetch as usize {
+			self.graph.get_vertices()
+		} else {
+			let mut roots = self.graph.get_roots();
+			roots.truncate(num_to_fetch as usize);
+			roots
+		}
 	}
 }
 

@@ -260,6 +260,20 @@ impl DirectedGraph {
 	pub fn get_roots(&self) -> Vec<core::hash::Hash> {
 		self.roots.iter().map(|x| x.transaction_hash).collect()
 	}
+
+	/// Get list of all vertices in this graph including the roots
+	pub fn get_vertices(&self) -> Vec<core::hash::Hash> {
+		let mut hashes = self.roots
+			.iter()
+			.map(|x| x.transaction_hash)
+			.collect::<Vec<_>>();
+		let non_root_hashes = self.vertices
+			.iter()
+			.map(|x| x.transaction_hash)
+			.collect::<Vec<_>>();
+		hashes.extend(&non_root_hashes);
+		return hashes
+	}
 }
 
 /// Using transaction merkle_inputs_outputs to calculate a deterministic hash;

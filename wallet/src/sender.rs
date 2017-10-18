@@ -31,14 +31,25 @@ pub fn issue_send_tx(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
+	minimum_confirmations: u64,
 	dest: String,
 ) -> Result<(), Error> {
 	checker::refresh_outputs(config, keychain)?;
 
 	let chain_tip = checker::get_tip_from_node(config)?;
+	let current_height = chain_tip.height;
+
+	// proof of concept - set lock_height on the tx
 	let lock_height = chain_tip.height;
 
-	let (tx, blind_sum) = build_send_tx(config, keychain, amount, lock_height)?;
+	let (tx, blind_sum) = build_send_tx(
+		config,
+		keychain,
+		amount,
+		current_height,
+		minimum_confirmations,
+		lock_height,
+	)?;
 	let json_tx = partial_tx_to_json(amount, blind_sum, tx);
 
 	if dest == "stdout" {
@@ -64,6 +75,8 @@ fn build_send_tx(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
+	current_height: u64,
+	minimum_confirmations: u64,
 	lock_height: u64,
 ) -> Result<(Transaction, BlindingFactor), Error> {
 	let key_id = keychain.clone().root_key_id();
@@ -71,8 +84,8 @@ fn build_send_tx(
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
-		// select some suitable outputs to spend from our local wallet
-		let (coins, _) = wallet_data.select(key_id.clone(), u64::max_value());
+		// select some spendable coins from our local wallet
+		let coins = wallet_data.select(key_id.clone(), current_height, minimum_confirmations);
 
 		// build transaction skeleton with inputs and change
 		// TODO - should probably also check we are sending enough to cover the fees + non-zero output
@@ -89,8 +102,16 @@ fn build_send_tx(
 	})?
 }
 
-pub fn issue_burn_tx(config: &WalletConfig, keychain: &Keychain, amount: u64) -> Result<(), Error> {
+pub fn issue_burn_tx(
+	config: &WalletConfig,
+	keychain: &Keychain,
+	amount: u64,
+	minimum_confirmations: u64,
+) -> Result<(), Error> {
 	let keychain = &Keychain::burn_enabled(keychain, &Identifier::zero());
+
+	let chain_tip = checker::get_tip_from_node(config)?;
+	let current_height = chain_tip.height;
 
 	let _ = checker::refresh_outputs(config, keychain);
 
@@ -99,8 +120,8 @@ pub fn issue_burn_tx(config: &WalletConfig, keychain: &Keychain, amount: u64) ->
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |mut wallet_data| {
 
-		// select all suitable outputs by passing largest amount
-		let (coins, _) = wallet_data.select(key_id.clone(), u64::max_value());
+		// select some spendable coins from the wallet
+		let coins = wallet_data.select(key_id.clone(), current_height, minimum_confirmations);
 
 		// build transaction skeleton with inputs and change
 		let mut parts = inputs_and_change(&coins, keychain, key_id, &mut wallet_data, amount)?;
@@ -170,7 +191,7 @@ fn inputs_and_change(
 		status: OutputStatus::Unconfirmed,
 		height: 0,
 		lock_height: 0,
-		zero_ok: true,
+		is_coinbase: false,
 	});
 
 	// now lock the ouputs we're spending so we avoid accidental double spend attempt
