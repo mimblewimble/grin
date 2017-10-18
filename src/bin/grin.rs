@@ -200,6 +200,12 @@ fn main() {
 			.arg(Arg::with_name("amount")
 				.help("Amount to send in the smallest denomination")
 				.index(1))
+			.arg(Arg::with_name("minimum_confirmations")
+				.help("Minimum number of confirmations required for an output to be spendable.")
+				.short("c")
+				.long("min_conf")
+				.default_value("1")
+				.takes_value(true))
 			.arg(Arg::with_name("dest")
 				.help("Send the transaction to the provided server")
 				.short("d")
@@ -212,7 +218,13 @@ fn main() {
 				transactions.")
 			.arg(Arg::with_name("amount")
 				.help("Amount to burn in the smallest denomination")
-				.index(1)))
+				.index(1))
+			.arg(Arg::with_name("minimum_confirmations")
+				.help("Minimum number of confirmations required for an output to be spendable.")
+				.short("c")
+				.long("min_conf")
+				.default_value("1")
+				.takes_value(true)))
 
 		.subcommand(SubCommand::with_name("info")
 			.about("basic wallet info (outputs)")))
@@ -380,11 +392,22 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				.expect("Amount to send required")
 				.parse()
 				.expect("Could not parse amount as a whole number.");
+			let minimum_confirmations: u64 = send_args
+				.value_of("minimum_confirmations")
+				.unwrap_or("1")
+				.parse()
+				.expect("Could not parse minimum_confirmations as a whole number.");
 			let mut dest = "stdout";
 			if let Some(d) = send_args.value_of("dest") {
 				dest = d;
 			}
-			wallet::issue_send_tx(&wallet_config, &keychain, amount, dest.to_string()).unwrap();
+			wallet::issue_send_tx(
+				&wallet_config,
+				&keychain,
+				amount,
+				minimum_confirmations,
+				dest.to_string()
+			).unwrap();
 		}
 		("burn", Some(send_args)) => {
 			let amount = send_args
@@ -392,7 +415,17 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				.expect("Amount to burn required")
 				.parse()
 				.expect("Could not parse amount as a whole number.");
-			wallet::issue_burn_tx(&wallet_config, &keychain, amount).unwrap();
+			let minimum_confirmations: u64 = send_args
+				.value_of("minimum_confirmations")
+				.unwrap_or("1")
+				.parse()
+				.expect("Could not parse minimum_confirmations as a whole number.");
+			wallet::issue_burn_tx(
+				&wallet_config,
+				&keychain,
+				amount,
+				minimum_confirmations,
+			).unwrap();
 		}
 		("info", Some(_)) => {
 			wallet::show_info(&wallet_config, &keychain);

@@ -172,10 +172,11 @@ impl ApiEndpoint for WalletReceiver {
 }
 
 /// Build a coinbase output and the corresponding kernel
-fn receive_coinbase(config: &WalletConfig,
-                    keychain: &Keychain,
-                    block_fees: &BlockFees)
-                    -> Result<(Output, TxKernel, BlockFees), Error> {
+fn receive_coinbase(
+	config: &WalletConfig,
+	keychain: &Keychain,
+	block_fees: &BlockFees
+) -> Result<(Output, TxKernel, BlockFees), Error> {
 	let root_key_id = keychain.root_key_id();
 
 	// operate within a lock on wallet data
@@ -205,7 +206,7 @@ fn receive_coinbase(config: &WalletConfig,
 			status: OutputStatus::Unconfirmed,
 			height: 0,
 			lock_height: 0,
-			zero_ok: false,
+			is_coinbase: true,
 		});
 
 		debug!(
@@ -280,7 +281,7 @@ fn receive_transaction(
 			status: OutputStatus::Unconfirmed,
 			height: 0,
 			lock_height: 0,
-			zero_ok: false,
+			is_coinbase: false,
 		});
 		debug!(
 			LOGGER,

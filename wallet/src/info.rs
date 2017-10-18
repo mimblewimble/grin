@@ -23,8 +23,23 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 	// operate within a lock on wallet data
 	let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 
+		// get the current height via the api
+		// if we cannot get the current height use the max height known to the wallet
+		let current_height = match checker::get_tip_from_node(config) {
+			Ok(tip) => tip.height,
+			Err(_) => {
+				match wallet_data.outputs.values().map(|out| out.height).max() {
+					Some(height) => height,
+					None => 0,
+				}
+			}
+		};
+
+		// need to specify a default value here somehow
+		let minimum_confirmations = 1;
+
 		println!("Outputs - ");
-		println!("key_id, height, lock_height, status, zero_ok, value");
+		println!("key_id, height, lock_height, status, spendable?, coinbase?, value");
 		println!("----------------------------------");
 
 		let mut outputs = wallet_data
@@ -35,13 +50,14 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 		outputs.sort_by_key(|out| out.n_child);
 		for out in outputs {
 			println!(
-				"{}, {}, {}, {:?}, {}, {}",
+				"{}, {}, {}, {:?}, {}, {}, {}",
 				out.key_id,
 				out.height,
 				out.lock_height,
 				out.status,
-				out.zero_ok,
-				out.value
+				out.eligible_to_spend(current_height, minimum_confirmations),
+				out.is_coinbase,
+				out.value,
 			);
 		}
 	});

@@ -20,16 +20,12 @@ use types::*;
 use keychain::Keychain;
 use util;
 
-fn refresh_output(out: &mut OutputData, api_out: Option<api::Output>, tip: &api::Tip) {
+fn refresh_output(out: &mut OutputData, api_out: Option<api::Output>) {
 	if let Some(api_out) = api_out {
 		out.height = api_out.height;
 		out.lock_height = api_out.lock_height;
 
-		if out.status == OutputStatus::Locked {
-			// leave it Locked locally for now
-		} else if api_out.lock_height > tip.height {
-			out.status = OutputStatus::Immature;
-		} else {
+		if out.status != OutputStatus::Locked {
 			out.status = OutputStatus::Unspent;
 		}
 	} else if vec![OutputStatus::Unspent, OutputStatus::Locked].contains(&out.status) {
@@ -39,9 +35,10 @@ fn refresh_output(out: &mut OutputData, api_out: Option<api::Output>, tip: &api:
 
 /// Goes through the list of outputs that haven't been spent yet and check
 /// with a node whether their status has changed.
-pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> {
-	let tip = get_tip_from_node(config)?;
-
+pub fn refresh_outputs(
+	config: &WalletConfig,
+	keychain: &Keychain,
+) -> Result<(), Error> {
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		// check each output that's not spent
 		for mut out in wallet_data.outputs.values_mut().filter(|out| {
@@ -50,7 +47,7 @@ pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(),
 		{
 			// TODO check the pool for unconfirmed
 			match get_output_from_node(config, keychain, out.value, out.n_child) {
-				Ok(api_out) => refresh_output(&mut out, api_out, &tip),
+				Ok(api_out) => refresh_output(&mut out, api_out),
 				Err(_) => {
 					// TODO find error with connection and return
 					// error!(LOGGER, "Error contacting server node at {}. Is it running?",
