@@ -26,7 +26,7 @@ use secp;
 use secp::pedersen::Commitment;
 
 use std::sync::Arc;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// The pool itself.
 /// The transactions HashMap holds ownership of all transactions in the pool,
@@ -455,16 +455,19 @@ where
 		//
 		// After the pool has been successfully processed, an orphans
 		// reconciliation job is triggered.
-		let mut marked_transactions: HashMap<hash::Hash, ()> = HashMap::new();
+		let mut marked_transactions: HashSet<hash::Hash> = HashSet::new();
+
 		{
-			let mut conflicting_txs: Vec<hash::Hash> = block
+			// find all conflicting txs based on inputs to the block
+			let conflicting_txs: HashSet<hash::Hash> = block
 				.inputs
 				.iter()
 				.filter_map(|x| self.pool.get_external_spent_output(&x.commitment()))
-				.map(|x| x.destination_hash().unwrap())
+				.filter_map(|x| x.destination_hash())
 				.collect();
 
-			let mut conflicting_outputs: Vec<hash::Hash> = block
+			// find all outputs that conflict - potential for duplicates so use a HashSet here
+			let conflicting_outputs: HashSet<hash::Hash> = block
 				.outputs
 				.iter()
 				.filter_map(|x: &transaction::Output| {
@@ -472,12 +475,12 @@ where
 						self.pool.get_available_output(&x.commitment()),
 					)
 				})
-				.map(|x| x.source_hash().unwrap())
+				.filter_map(|x| x.source_hash())
 				.collect();
 
-			conflicting_txs.append(&mut conflicting_outputs);
-
-			for txh in conflicting_txs {
+			// now iterate over all conflicting hashes from both txs and outputs
+			// we can just use the union of the two sets here to remove duplicates
+			for &txh in conflicting_txs.union(&conflicting_outputs) {
 				self.mark_transaction(txh, &mut marked_transactions);
 			}
 		}
@@ -501,10 +504,14 @@ where
 	fn mark_transaction(
 		&self,
 		conflicting_tx: hash::Hash,
-		marked_txs: &mut HashMap<hash::Hash, ()>,
+		marked_txs: &mut HashSet<hash::Hash>,
 	) {
+		// we can stop recursively visiting txs if we have already seen this one
+		if marked_txs.contains(&conflicting_tx) {
+			return;
+		}
 
-		marked_txs.insert(conflicting_tx, ());
+		marked_txs.insert(conflicting_tx);
 
 		let tx_ref = self.transactions.get(&conflicting_tx);
 
@@ -532,13 +539,13 @@ where
 	/// Additional bookkeeping in the mark step could optimize that away.
 	fn sweep_transactions(
 		&mut self,
-		marked_transactions: HashMap<hash::Hash, ()>,
+		marked_transactions: HashSet<hash::Hash>,
 	) -> Vec<Box<transaction::Transaction>> {
 
 		let mut removed_txs = Vec::new();
 
-		for tx_hash in marked_transactions.keys() {
-			let removed_tx = self.transactions.remove(tx_hash).unwrap();
+		for tx_hash in &marked_transactions {
+			let removed_tx = self.transactions.remove(&tx_hash).unwrap();
 
 			self.pool.remove_pool_transaction(
 				&removed_tx,
@@ -547,6 +554,11 @@ where
 
 			removed_txs.push(removed_tx);
 		}
+
+		// final step is to update the pool to reflect the new set of roots
+		// a tx that was non-root may now be root based on the txs removed
+		self.pool.update_roots();
+
 		removed_txs
 	}
 
@@ -866,6 +878,83 @@ mod tests {
 	/// Testing an expected orphan
 	fn test_add_orphan() {
 		// TODO we need a test here
+	}
+
+	#[test]
+	fn test_zero_confirmation_reconciliation() {
+		let mut dummy_chain = DummyChainImpl::new();
+		let head_header = block::BlockHeader {
+			height: 1,
+			..block::BlockHeader::default()
+		};
+		dummy_chain.store_head_header(&head_header);
+
+		// single UTXO
+		let new_utxo = DummyUtxoSet::empty()
+			.with_output(test_output(100));
+
+		dummy_chain.update_utxo_set(new_utxo);
+		let chain_ref = Arc::new(dummy_chain);
+		let pool = RwLock::new(test_setup(&chain_ref));
+
+		// now create two txs
+		// tx1 spends the UTXO
+		// tx2 spends output from tx1
+		let tx1 = test_transaction(vec![100], vec![90]);
+		let tx2 = test_transaction(vec![90], vec![80]);
+
+		{
+			let mut write_pool = pool.write().unwrap();
+			assert_eq!(write_pool.total_size(), 0);
+
+			// now add both txs to the pool (tx2 spends tx1 with zero confirmations)
+			// both should be accepted if tx1 added before tx2
+			write_pool.add_to_memory_pool(test_source(), tx1).unwrap();
+			write_pool.add_to_memory_pool(test_source(), tx2).unwrap();
+
+			assert_eq!(write_pool.pool_size(), 2);
+		}
+
+		let txs: Vec<transaction::Transaction>;
+		{
+			let read_pool = pool.read().unwrap();
+			let mut mineable_txs = read_pool.prepare_mineable_transactions(3);
+			txs = mineable_txs.drain(..).map(|x| *x).collect();
+
+			// confirm we are only preparing a single tx for mining here
+			// even though we have 2 txs in the pool
+			assert_eq!(txs.len(), 1);
+		}
+
+		let keychain = Keychain::from_random_seed().unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
+
+		// now "mine" the block passing in the mineable txs from earlier
+		let block = block::Block::new(
+			&block::BlockHeader::default(),
+			txs.iter().collect(),
+			&keychain,
+			&key_id,
+		).unwrap();
+
+		// now apply the block to ensure the chainstate is updated before we reconcile
+		chain_ref.apply_block(&block);
+
+		// now reconcile the block
+		{
+			let mut write_pool = pool.write().unwrap();
+			let evicted_transactions = write_pool.reconcile_block(&block).unwrap();
+			assert_eq!(evicted_transactions.len(), 1);
+		}
+
+		// check the pool is consistent after reconciling the block
+		// we should have 1 tx in the pool and it should
+		// be in the list of roots (will not be mineable otherwise)
+		{
+			let read_pool = pool.write().unwrap();
+			assert_eq!(read_pool.pool.len_vertices(), 1);
+			assert_eq!(read_pool.pool.len_roots(), 1);
+		}
 	}
 
 	#[test]

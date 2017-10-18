@@ -15,7 +15,7 @@
 //! Base types for the transaction pool's Directed Acyclic Graphs
 
 use std::vec::Vec;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use secp::pedersen::Commitment;
 
@@ -28,6 +28,7 @@ use core::core::hash::Hashed;
 
 /// An entry in the transaction pool.
 /// These are the vertices of both of the graph structures
+#[derive(Debug, PartialEq, Clone)]
 pub struct PoolEntry {
 	// Core data
 	/// Unique identifier of this pool entry and the corresponding transaction
@@ -177,6 +178,32 @@ impl DirectedGraph {
 				}
 			}
 		}
+	}
+
+	/// Promote any non-root vertices to roots based on current edges.
+	/// For a given tx, if there are no edges with that tx as destination then it is a root.
+	pub fn update_roots(&mut self) {
+		let mut new_vertices: Vec<PoolEntry> = vec![];
+
+		// first find the set of all destinations from the edges in the graph
+		// a root is a vertex that is not a destination of any edge
+		let destinations = self.edges
+			.values()
+			.filter_map(|edge| edge.destination)
+			.collect::<HashSet<_>>();
+
+		// now iterate over the current non-root vertices
+		// and check if it is now a root based on the set of edge destinations
+		for x in &self.vertices {
+			if destinations.contains(&x.transaction_hash) {
+				new_vertices.push(x.clone());
+			} else {
+				self.roots.push(x.clone());
+			}
+		}
+
+		// now update our vertices to reflect the updated list
+		self.vertices = new_vertices;
 	}
 
 	/// Adds a vertex and a set of incoming edges to the graph.

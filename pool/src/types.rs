@@ -16,7 +16,7 @@
 //! and its top-level members.
 
 use std::vec::Vec;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::iter::Iterator;
 use std::fmt;
 
@@ -206,6 +206,13 @@ impl Pool {
 			.map(|x| x.destination_hash().unwrap())
 	}
 
+	pub fn len_roots(&self) -> usize {
+		self.graph.len_roots()
+	}
+
+	pub fn len_vertices(&self) -> usize {
+		self.graph.len_vertices()
+	}
 
 	pub fn get_blockchain_spent(&self, c: &Commitment) -> Option<&graph::Edge> {
 		self.consumed_blockchain_outputs.get(c)
@@ -251,10 +258,14 @@ impl Pool {
 		}
 	}
 
+	pub fn update_roots(&mut self) {
+		self.graph.update_roots()
+	}
+
 	pub fn remove_pool_transaction(
 		&mut self,
 		tx: &transaction::Transaction,
-		marked_txs: &HashMap<hash::Hash, ()>,
+		marked_txs: &HashSet<hash::Hash>,
 	) {
 
 		self.graph.remove_vertex(graph::transaction_identifier(tx));
@@ -262,7 +273,7 @@ impl Pool {
 		for input in tx.inputs.iter().map(|x| x.commitment()) {
 			match self.graph.remove_edge_by_commitment(&input) {
 				Some(x) => {
-					if !marked_txs.contains_key(&x.source_hash().unwrap()) {
+					if !marked_txs.contains(&x.source_hash().unwrap()) {
 						self.available_outputs.insert(
 							x.output_commitment(),
 							x.with_destination(None),
@@ -278,7 +289,7 @@ impl Pool {
 		for output in tx.outputs.iter().map(|x| x.commitment()) {
 			match self.graph.remove_edge_by_commitment(&output) {
 				Some(x) => {
-					if !marked_txs.contains_key(&x.destination_hash().unwrap()) {
+					if !marked_txs.contains(&x.destination_hash().unwrap()) {
 
 						self.consumed_blockchain_outputs.insert(
 							x.output_commitment(),
