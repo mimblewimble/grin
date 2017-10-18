@@ -126,6 +126,9 @@ impl Syncer {
 		let mut prev_h = header_head.last_block_h;
 		while prev_h != full_head.last_block_h {
 			let header = self.chain.get_block_header(&prev_h)?;
+			if header.height < full_head.height {
+				break;
+			}
 			blocks_to_download.push(header.hash());
 			prev_h = header.previous;
 		}

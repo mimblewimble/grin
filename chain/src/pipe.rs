@@ -322,22 +322,9 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 		// update the block height index
 		ctx.store.setup_height(&b.header).map_err(&Error::StoreErr)?;
 
-		// in sync mode, only update the "body chain", otherwise update both the
-		// "header chain" and "body chain"
-		if ctx.opts.intersects(SYNC) {
-			ctx.store.save_body_head(&tip).map_err(&Error::StoreErr)?;
-		} else {
-			ctx.store.save_head(&tip).map_err(&Error::StoreErr)?;
-		}
-		// TODO if we're switching branch, make sure to backtrack the sum trees
-
+		ctx.store.save_head(&tip).map_err(&Error::StoreErr)?;
 		ctx.head = tip.clone();
-		info!(
-			LOGGER,
-			"Updated head to {} at {}.",
-			b.hash(),
-			b.header.height
-		);
+		info!(LOGGER, "Updated head to {} at {}.", b.hash(), b.header.height);
 		Ok(Some(tip))
 	} else {
 		Ok(None)

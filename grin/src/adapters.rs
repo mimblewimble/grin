@@ -60,8 +60,9 @@ impl NetAdapter for NetToChainAdapter {
 		let bhash = b.hash();
 		debug!(
 			LOGGER,
-			"Received block {} from network, going to process.",
-			bhash
+			"Received block {} at {} from network, going to process.",
+			bhash,
+			b.header.height,
 		);
 
 		// pushing the new block through the chain pipeline
