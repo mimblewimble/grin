@@ -154,7 +154,7 @@ impl Syncer {
 			.collect::<Vec<_>>();
 		let mut offs = 0;
 		for too_old in too_old_pos {
-			let block_h = blocks_downloading.remove(too_oldi - offs);
+			let block_h = blocks_downloading.remove(too_old - offs);
 			debug!(
 				LOGGER,
 				"Download request expired for {}, will re-issue.",
