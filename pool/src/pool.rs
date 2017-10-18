@@ -921,9 +921,9 @@ mod tests {
 			let mut mineable_txs = read_pool.prepare_mineable_transactions(3);
 			txs = mineable_txs.drain(..).map(|x| *x).collect();
 
-			// confirm we are only preparing a single tx for mining here
-			// even though we have 2 txs in the pool
-			assert_eq!(txs.len(), 1);
+			// confirm we can preparing both txs for mining here
+			// one root tx in the pool, and one non-root vertex in the pool
+			assert_eq!(txs.len(), 2);
 		}
 
 		let keychain = Keychain::from_random_seed().unwrap();
@@ -941,19 +941,19 @@ mod tests {
 		chain_ref.apply_block(&block);
 
 		// now reconcile the block
+		// we should evict both txs here
 		{
 			let mut write_pool = pool.write().unwrap();
 			let evicted_transactions = write_pool.reconcile_block(&block).unwrap();
-			assert_eq!(evicted_transactions.len(), 1);
+			assert_eq!(evicted_transactions.len(), 2);
 		}
 
 		// check the pool is consistent after reconciling the block
-		// we should have 1 tx in the pool and it should
-		// be in the list of roots (will not be mineable otherwise)
+		// we should have zero txs in the pool (neither roots nor non-roots)
 		{
 			let read_pool = pool.write().unwrap();
-			assert_eq!(read_pool.pool.len_vertices(), 1);
-			assert_eq!(read_pool.pool.len_roots(), 1);
+			assert_eq!(read_pool.pool.len_vertices(), 0);
+			assert_eq!(read_pool.pool.len_roots(), 0);
 		}
 	}
 
