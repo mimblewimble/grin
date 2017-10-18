@@ -547,6 +547,11 @@ where
 
 			removed_txs.push(removed_tx);
 		}
+
+		// final step is to update the pool to reflect the new set of roots
+		// a tx that was non-root may now be root based on the txs removed
+		self.pool.update_roots();
+
 		removed_txs
 	}
 

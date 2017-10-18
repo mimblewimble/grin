@@ -258,6 +258,10 @@ impl Pool {
 		}
 	}
 
+	pub fn update_roots(&mut self) {
+		self.graph.update_roots()
+	}
+
 	pub fn remove_pool_transaction(
 		&mut self,
 		tx: &transaction::Transaction,
@@ -298,10 +302,6 @@ impl Pool {
 				}
 			};
 		}
-
-		// now update the list of roots in the pool to reflect the current state
-		// a non-root vertex may become a root if an adjacent tx was removed
-		self.graph.update_roots()
 	}
 
 	/// Simplest possible implementation: just return the roots
