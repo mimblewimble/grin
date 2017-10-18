@@ -152,14 +152,16 @@ impl Syncer {
 		let too_old_pos = (0..blocks_downloading.len())
 			.filter(|p| blocks_downloading[*p].1 < twenty_sec_ago)
 			.collect::<Vec<_>>();
+		let mut offs = 0;
 		for too_old in too_old_pos {
-			let block_h = blocks_downloading.remove(too_old);
+			let block_h = blocks_downloading.remove(too_oldi - offs);
 			debug!(
 				LOGGER,
 				"Download request expired for {}, will re-issue.",
 				block_h.0
 			);
-			blocks_to_download.insert(0, block_h.0);
+			blocks_to_download.push(block_h.0);
+			offs += 1;
 		}
 
 		// consume hashes from blocks to download, place them in downloading and

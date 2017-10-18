@@ -61,10 +61,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 	);
 	check_known(b.hash(), &mut ctx)?;
 
-	if !ctx.opts.intersects(SYNC) {
-		// in sync mode, the header has already been validated
-		validate_header(&b.header, &mut ctx)?;
-	}
+	validate_header(&b.header, &mut ctx)?;
 
 	// take the lock on the sum trees and start a chain extension unit of work
 	// dependent on the success of the internal validation and saving operations
@@ -321,6 +318,15 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 
 		// update the block height index
 		ctx.store.setup_height(&b.header).map_err(&Error::StoreErr)?;
+
+    // in sync mode, only update the "body chain", otherwise update both the
+    // "header chain" and "body chain", updating the header chain in sync resets
+		// all additional "future" headers we've received
+    if ctx.opts.intersects(SYNC) {
+      ctx.store.save_body_head(&tip).map_err(&Error::StoreErr)?;
+    } else {
+      ctx.store.save_head(&tip).map_err(&Error::StoreErr)?;
+    }      
 
 		ctx.store.save_head(&tip).map_err(&Error::StoreErr)?;
 		ctx.head = tip.clone();
