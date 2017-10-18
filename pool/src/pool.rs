@@ -26,7 +26,7 @@ use secp;
 use secp::pedersen::Commitment;
 
 use std::sync::Arc;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// The pool itself.
 /// The transactions HashMap holds ownership of all transactions in the pool,
@@ -457,14 +457,16 @@ where
 		// reconciliation job is triggered.
 		let mut marked_transactions: HashMap<hash::Hash, ()> = HashMap::new();
 		{
-			let mut conflicting_txs: Vec<hash::Hash> = block
+			// find all conflicting txs based on inputs to the block
+			let conflicting_txs: HashSet<hash::Hash> = block
 				.inputs
 				.iter()
 				.filter_map(|x| self.pool.get_external_spent_output(&x.commitment()))
-				.map(|x| x.destination_hash().unwrap())
+				.filter_map(|x| x.destination_hash())
 				.collect();
 
-			let mut conflicting_outputs: Vec<hash::Hash> = block
+			// find all outputs that conflict - potential for duplicates so use a HashSet here
+			let conflicting_outputs: HashSet<hash::Hash> = block
 				.outputs
 				.iter()
 				.filter_map(|x: &transaction::Output| {
@@ -472,12 +474,12 @@ where
 						self.pool.get_available_output(&x.commitment()),
 					)
 				})
-				.map(|x| x.source_hash().unwrap())
+				.filter_map(|x| x.source_hash())
 				.collect();
 
-			conflicting_txs.append(&mut conflicting_outputs);
-
-			for txh in conflicting_txs {
+			// now iteratoe over all conflicting hashes from both txs and outputs
+			// we can just use the union of the two sets here to remove duplicates
+			for &txh in conflicting_txs.union(&conflicting_outputs) {
 				self.mark_transaction(txh, &mut marked_transactions);
 			}
 		}
