@@ -191,10 +191,8 @@ impl OutputData {
 		} else if self.lock_height > current_height {
 			return false;
 		} else if self.status == OutputStatus::Unspent && self.height + minimum_confirmations <= current_height {
-			println!("************** eligible to spend - {:?}, {}, {}, {}", self.status, self.height, current_height, minimum_confirmations);
 			return true;
 		} else if self.status == OutputStatus::Unconfirmed && minimum_confirmations == 0 {
-			println!("********** zero conf eligible to spend");
 			return true;
 		} else {
 			return false;
