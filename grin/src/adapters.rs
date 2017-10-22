@@ -68,13 +68,17 @@ impl NetAdapter for NetToChainAdapter {
 		// pushing the new block through the chain pipeline
 		let res = self.chain.process_block(b, self.chain_opts());
 
-		if let Err(e) = res {
+		if let &Err(ref e) = &res {
 			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
-		}
-
-		if self.syncing() {
-			self.syncer.borrow().block_received(bhash);
-		}
+    }
+    
+    if self.syncing() {
+      match res {
+        Ok(_) => self.syncer.borrow().block_received(bhash),
+        Err(chain::Error::Unfit(_)) => self.syncer.borrow().block_received(bhash),
+        Err(_) => {},
+      }
+    }
 	}
 
 	fn headers_received(&self, bhs: Vec<core::BlockHeader>) {
@@ -95,11 +99,12 @@ impl NetAdapter for NetToChainAdapter {
 						s
 					);
 				}
-				Err(chain::Error::StoreErr(e)) => {
+				Err(chain::Error::StoreErr(e, explanation)) => {
 					error!(
 						LOGGER,
-						"Store error processing block header {}: {:?}",
+						"Store error processing block header {}: in {} {:?}",
 						bh.hash(),
+            explanation,
 						e
 					);
 					return;
@@ -130,7 +135,7 @@ impl NetAdapter for NetToChainAdapter {
 		let known = self.chain.get_block_header(&locator[0]);
 		let header = match known {
 			Ok(header) => header,
-			Err(chain::Error::StoreErr(store::Error::NotFoundErr)) => {
+			Err(chain::Error::StoreErr(store::Error::NotFoundErr, _)) => {
 				return self.locate_headers(locator[1..].to_vec());
 			}
 			Err(e) => {
@@ -146,7 +151,7 @@ impl NetAdapter for NetToChainAdapter {
 			let header = self.chain.get_header_by_height(h);
 			match header {
 				Ok(head) => headers.push(head),
-				Err(chain::Error::StoreErr(store::Error::NotFoundErr)) => break,
+				Err(chain::Error::StoreErr(store::Error::NotFoundErr, _)) => break,
 				Err(e) => {
 					error!(LOGGER, "Could not build header locator: {:?}", e);
 					return vec![];

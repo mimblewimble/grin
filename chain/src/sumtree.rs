@@ -29,6 +29,7 @@ use grin_store;
 use grin_store::sumtree::PMMRBackend;
 use types::ChainStore;
 use types::Error;
+use util::LOGGER;
 
 const SUMTREES_SUBDIR: &'static str = "sumtrees";
 const UTXO_SUBDIR: &'static str = "utxo";
@@ -94,7 +95,7 @@ impl SumTrees {
 		match rpos {
 			Ok(pos) => Ok(self.output_pmmr_h.backend.get(pos).is_some()),
 			Err(grin_store::Error::NotFoundErr) => Ok(false),
-			Err(e) => Err(Error::StoreErr(e)),
+			Err(e) => Err(Error::StoreErr(e, "sumtree unspent check".to_owned())),
 		}
 	}
 }
@@ -115,6 +116,7 @@ where
 	let res: Result<T, Error>;
 	let rollback: bool;
 	{
+    debug!(LOGGER, "Starting new sumtree extension.");
 		let commit_index = trees.commit_index.clone();
 		let mut extension = Extension::new(trees, commit_index);
 		res = inner(&mut extension);
@@ -126,6 +128,7 @@ where
 	}
 	match res {
 		Err(e) => {
+      debug!(LOGGER, "Error returned, discarding sumtree extension.");
 			trees.output_pmmr_h.backend.discard();
 			trees.rproof_pmmr_h.backend.discard();
 			trees.kernel_pmmr_h.backend.discard();
@@ -133,10 +136,12 @@ where
 		}
 		Ok(r) => {
 			if rollback {
+        debug!(LOGGER, "Rollbacking sumtree extension.");
 				trees.output_pmmr_h.backend.discard();
 				trees.rproof_pmmr_h.backend.discard();
 				trees.kernel_pmmr_h.backend.discard();
 			} else {
+        debug!(LOGGER, "Committing sumtree extension.");
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
@@ -145,6 +150,7 @@ where
 				trees.kernel_pmmr_h.last_pos = sizes.2;
 			}
 
+      debug!(LOGGER, "Sumtree extension done.");
 			Ok(r)
 		}
 	}
@@ -264,6 +270,7 @@ impl<'a> Extension<'a> {
 		let out_pos_rew = self.commit_index.get_output_pos(&output.commitment())?;
 		let kern_pos_rew = self.commit_index.get_kernel_pos(&kernel.excess)?;
 
+    debug!(LOGGER, "Rewind sumtrees to {}", out_pos_rew);
 		self.output_pmmr
 			.rewind(out_pos_rew, height as u32)
 			.map_err(&Error::SumTreeErr)?;
@@ -273,6 +280,7 @@ impl<'a> Extension<'a> {
 		self.kernel_pmmr
 			.rewind(kern_pos_rew, height as u32)
 			.map_err(&Error::SumTreeErr)?;
+    self.dump(true);
 		Ok(())
 	}
 
@@ -293,14 +301,17 @@ impl<'a> Extension<'a> {
 		self.rollback = true;
 	}
 
-	/// Dumps the state of the 3 sum trees to stdout for debugging
-	pub fn dump(&self) {
-		println!("-- outputs --");
-		self.output_pmmr.dump();
-		println!("-- range proofs --");
-		self.rproof_pmmr.dump();
-		println!("-- kernels --");
-		self.kernel_pmmr.dump();
+	/// Dumps the state of the 3 sum trees to stdout for debugging. Short version
+  /// only prints the UTXO tree.
+	pub fn dump(&self, short: bool) {
+		debug!(LOGGER, "-- outputs --");
+		self.output_pmmr.dump(short);
+    if !short {
+      debug!(LOGGER, "-- range proofs --");
+      self.rproof_pmmr.dump(short);
+      debug!(LOGGER, "-- kernels --");
+      self.kernel_pmmr.dump(short);
+    }
 	}
 
 	// Sizes of the sum trees, used by `extending` on rollback.

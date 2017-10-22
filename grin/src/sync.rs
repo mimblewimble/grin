@@ -20,6 +20,7 @@
 /// How many block bodies to download in parallel
 const MAX_BODY_DOWNLOADS: usize = 8;
 
+use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Instant, Duration};
@@ -30,6 +31,16 @@ use p2p;
 use types::Error;
 use util::LOGGER;
 
+#[derive(Debug)]
+struct BlockDownload {
+  hash: Hash,
+  start_time: Instant,
+  retries: u8,
+}
+
+/// Manages syncing the local chain with other peers. Needs both a head chain
+/// and a full block chain to operate. First tries to advance the header
+/// chain as much as possible, then downloads the full blocks by batches.
 pub struct Syncer {
 	chain: Arc<chain::Chain>,
 	p2p: Arc<p2p::Server>,
@@ -37,7 +48,7 @@ pub struct Syncer {
 	sync: Mutex<bool>,
 	last_header_req: Mutex<Instant>,
 	blocks_to_download: Mutex<Vec<Hash>>,
-	blocks_downloading: Mutex<Vec<(Hash, Instant)>>,
+	blocks_downloading: Mutex<Vec<BlockDownload>>,
 }
 
 impl Syncer {
@@ -82,6 +93,7 @@ impl Syncer {
 			let tip = self.chain.get_header_head()?;
 			// TODO do something better (like trying to get more) if we lose peers
 			let peer = self.p2p.most_work_peer().unwrap();
+      debug!(LOGGER, "Sync: peer {} vs us {}", peer.info.total_difficulty, tip.total_difficulty);
 
 			let more_headers = peer.info.total_difficulty > tip.total_difficulty;
 			let more_bodies = {
@@ -92,7 +104,7 @@ impl Syncer {
 
 			{
 				let last_header_req = self.last_header_req.lock().unwrap().clone();
-				if more_headers && (Instant::now() - Duration::from_secs(2) > last_header_req) {
+				if more_headers || (Instant::now() - Duration::from_secs(30) > last_header_req) {
 					self.request_headers()?;
 				}
 			}
@@ -147,46 +159,48 @@ impl Syncer {
 		let mut blocks_to_download = self.blocks_to_download.lock().unwrap();
 		let mut blocks_downloading = self.blocks_downloading.lock().unwrap();
 
-		// clean up potentially dead downloads
-		let twenty_sec_ago = Instant::now() - Duration::from_secs(20);
-		let too_old_pos = (0..blocks_downloading.len())
-			.filter(|p| blocks_downloading[*p].1 < twenty_sec_ago)
-			.collect::<Vec<_>>();
-		let mut offs = 0;
-		for too_old in too_old_pos {
-			let block_h = blocks_downloading.remove(too_old - offs);
-			debug!(
-				LOGGER,
-				"Download request expired for {}, will re-issue.",
-				block_h.0
-			);
-			blocks_to_download.push(block_h.0);
-			offs += 1;
-		}
+    // retry blocks not downloading
+    let now = Instant::now();
+    for mut download in blocks_downloading.deref_mut() {
+      let elapsed = (now - download.start_time).as_secs();
+      if download.retries >= 8 {
+        panic!("Failed to download required block {}", download.hash);
+      }
+      if download.retries < (elapsed / 5) as u8 {
+        debug!(LOGGER, "Retry {} on block {}", download.retries, download.hash);
+        self.request_block(download.hash);
+        download.retries += 1;
+      }
+    }
 
 		// consume hashes from blocks to download, place them in downloading and
 		// request them from the network
+    let mut count = 0;
 		while blocks_to_download.len() > 0 && blocks_downloading.len() < MAX_BODY_DOWNLOADS {
 			let h = blocks_to_download.pop().unwrap();
-			let peer = self.p2p.random_peer().unwrap();
-			let send_result = peer.send_block_request(h);
-			if let Err(e) = send_result {
-				debug!(LOGGER, "Error requesting block: {:?}", e);
-			}
-			blocks_downloading.push((h, Instant::now()));
-		}
-		debug!(
-			LOGGER,
-			"Requesting full blocks to download, total left: {}.",
-			blocks_to_download.len()
-		);
+      self.request_block(h);
+      count += 1;
+			blocks_downloading.push(
+        BlockDownload {
+          hash: h,
+          start_time: Instant::now(),
+          retries: 0
+        });
+ 		}
+ 		debug!(
+ 			LOGGER,
+			"Requested {} full blocks to download, total left: {}. Current list: {:?}.",
+      count,
+			blocks_to_download.len(),
+      blocks_downloading.deref(),
+			);
 	}
 
 	/// We added a block, clean up the downloading structure
 	pub fn block_received(&self, bh: Hash) {
 		// just clean up the downloading list
 		let mut bds = self.blocks_downloading.lock().unwrap();
-		bds.iter().position(|&h| h.0 == bh).map(|n| bds.remove(n));
+		bds.iter().position(|ref h| h.hash == bh).map(|n| bds.remove(n));
 	}
 
 	/// Request some block headers from a peer to advance us
@@ -243,6 +257,7 @@ impl Syncer {
 			})
 			.collect::<Vec<_>>();
 		heights.append(&mut tail);
+    debug!(LOGGER, "Loc heights: {:?}", heights);
 
 		// Iteratively travel the header chain back from our head and retain the
 		// headers at the wanted heights.
@@ -259,4 +274,14 @@ impl Syncer {
 		}
 		Ok(locator)
 	}
+
+  /// Pick a random peer and ask for a block by hash
+  fn request_block(&self, h: Hash) {
+    let peer = self.p2p.random_peer().unwrap();
+    let send_result = peer.send_block_request(h);
+    if let Err(e) = send_result {
+      debug!(LOGGER, "Error requesting block: {:?}", e);
+    }
+  }
+
 }

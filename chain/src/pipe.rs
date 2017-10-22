@@ -63,10 +63,16 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 
 	validate_header(&b.header, &mut ctx)?;
 
-	// take the lock on the sum trees and start a chain extension unit of work
-	// dependent on the success of the internal validation and saving operations
+	// valid header, time to take the lock on the sum trees
 	let local_sumtrees = ctx.sumtrees.clone();
 	let mut sumtrees = local_sumtrees.write().unwrap();
+
+	// update head now that we're in the lock
+	ctx.head = ctx.store.head().
+		map_err(|e| Error::StoreErr(e, "pipe reload head".to_owned()))?;
+
+	// start a chain extension unit of work dependent on the success of the
+	// internal validation and saving operations
 	sumtree::extending(&mut sumtrees, |mut extension| {
 
 		validate_block(b, &mut ctx, &mut extension)?;
@@ -162,8 +168,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	// first I/O cost, better as late as possible
-	let prev = try!(ctx.store.get_block_header(&header.previous).map_err(
-		&Error::StoreErr,
+	let prev = try!(ctx.store.get_block_header(&header.previous).map_err(|e|
+		Error::StoreErr(e, format!("previous block header {}", header.previous)),
 	));
 
 	if header.height != prev.height + 1 {
@@ -207,19 +213,6 @@ fn validate_block(
 	// main isolated block validation, checks all commitment sums and sigs
 	let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 	try!(b.validate(&curve).map_err(&Error::InvalidBlockProof));
-
-	// check that all the outputs of the block are "new" -
-	// that they do not clobber any existing unspent outputs (by their commitment)
-	//
-	// TODO - do we need to do this here (and can we do this here if we need access
-	// to the chain)
-	// see check_duplicate_outputs in pool for the analogous operation on
-	// transaction outputs
-	// for output in &block.outputs {
-	// here we would check that the output is not a duplicate output based on the
-	// current chain
-	// };
-
 
 	// apply the new block to the MMR trees and check the new root hashes
 	if b.header.previous == ctx.head.last_block_h {
@@ -268,7 +261,7 @@ fn validate_block(
 		kernel_root.hash != b.header.kernel_root
 	{
 
-		ext.dump();
+		ext.dump(false);
 		return Err(Error::InvalidRoot);
 	}
 
@@ -297,14 +290,12 @@ fn validate_block(
 
 /// Officially adds the block to our chain.
 fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
-	ctx.store.save_block(b).map_err(&Error::StoreErr)?;
-
-	Ok(())
+	ctx.store.save_block(b).map_err(|e| Error::StoreErr(e, "pipe save block".to_owned()))
 }
 
 /// Officially adds the block header to our header chain.
 fn add_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	ctx.store.save_block_header(bh).map_err(&Error::StoreErr)
+	ctx.store.save_block_header(bh).map_err(|e| Error::StoreErr(e, "pipe save header".to_owned()))
 }
 
 /// Directly updates the head if we've just appended a new block to it or handle
@@ -317,18 +308,16 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 	if tip.total_difficulty > ctx.head.total_difficulty {
 
 		// update the block height index
-		ctx.store.setup_height(&b.header).map_err(&Error::StoreErr)?;
+		ctx.store.setup_height(&b.header).map_err(|e| Error::StoreErr(e, "pipe setup height".to_owned()))?;
 
     // in sync mode, only update the "body chain", otherwise update both the
     // "header chain" and "body chain", updating the header chain in sync resets
 		// all additional "future" headers we've received
     if ctx.opts.intersects(SYNC) {
-      ctx.store.save_body_head(&tip).map_err(&Error::StoreErr)?;
+			ctx.store.save_body_head(&tip).map_err(|e| Error::StoreErr(e, "pipe save body".to_owned()))?;
     } else {
-      ctx.store.save_head(&tip).map_err(&Error::StoreErr)?;
+			ctx.store.save_head(&tip).map_err(|e| Error::StoreErr(e, "pipe save head".to_owned()))?;
     }      
-
-		ctx.store.save_head(&tip).map_err(&Error::StoreErr)?;
 		ctx.head = tip.clone();
 		info!(LOGGER, "Updated head to {} at {}.", b.hash(), b.header.height);
 		Ok(Some(tip))
@@ -345,7 +334,7 @@ fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option
 	// when extending the head), update it
 	let tip = Tip::from_block(bh);
 	if tip.total_difficulty > ctx.head.total_difficulty {
-		ctx.store.save_header_head(&tip).map_err(&Error::StoreErr)?;
+		ctx.store.save_header_head(&tip).map_err(|e| Error::StoreErr(e, "pipe save header head".to_owned()))?;
 
 		ctx.head = tip.clone();
 		info!(

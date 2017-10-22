@@ -30,7 +30,7 @@ use global;
 use keychain;
 
 /// Errors thrown by Block validation
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Error {
 	/// The sum of output minus input commitments does not match the sum of
 	/// kernel commitments

@@ -41,6 +41,7 @@ use std::ops::{self, Deref};
 
 use core::hash::{Hash, Hashed};
 use ser::{self, Readable, Reader, Writeable, Writer};
+use util::LOGGER;
 
 /// Trait for an element of the tree that has a well-defined sum and hash that
 /// the tree can sum over
@@ -355,25 +356,31 @@ where
 		self.last_pos
 	}
 
-	/// Debugging utility to print information about the MMRs.
-	pub fn dump(&self) {
+	/// Debugging utility to print information about the MMRs. Short version
+  /// only prints the last 8 nodes.
+	pub fn dump(&self, short: bool) {
 		let sz = self.unpruned_size();
-		if sz > 25 {
+		if sz > 600 {
 			return;
 		}
-		println!("UXTO set, size: {}", sz);
-		for n in 0..sz {
-			print!("{:>8} ", n + 1);
-		}
-		println!("");
-		for n in 1..(sz + 1) {
-			let ohs = self.get(n);
-			match ohs {
-				Some(hs) => print!("{} ", hs.hash),
-				None => print!("{:>8} ", "??"),
-			}
-		}
-		println!("");
+    let start = if short && sz > 7 { sz/8 - 1 } else { 0 };
+    for n in start..(sz/8+1) {
+      let mut idx = "".to_owned();
+      let mut hashes = "".to_owned();
+      for m in (n*8)..(n+1)*8 {
+        if m >= sz {
+          break;
+        }
+        idx.push_str(&format!("{:>8} ", m + 1));
+        let ohs = self.get(m+1);
+        match ohs {
+          Some(hs) => hashes.push_str(&format!("{} ", hs.hash)),
+          None => hashes.push_str(&format!("{:>8} ", "??")),
+        }
+      }
+      debug!(LOGGER, "{}", idx);
+      debug!(LOGGER, "{}", hashes);
+    }
 	}
 }
 

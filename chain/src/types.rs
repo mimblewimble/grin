@@ -75,7 +75,7 @@ pub enum Error {
 	/// Invalid block version, either a mistake or outdated software
 	InvalidBlockVersion(u16),
 	/// Internal issue when trying to save or load data from store
-	StoreErr(grin_store::Error),
+	StoreErr(grin_store::Error, String),
 	/// Error serializing or deserializing a type
 	SerErr(ser::Error),
 	/// Error while updating the sum trees
@@ -88,7 +88,7 @@ pub enum Error {
 
 impl From<grin_store::Error> for Error {
 	fn from(e: grin_store::Error) -> Error {
-		Error::StoreErr(e)
+		Error::StoreErr(e, "wrapped".to_owned())
 	}
 }
 impl From<ser::Error> for Error {

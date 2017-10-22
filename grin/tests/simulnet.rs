@@ -19,6 +19,7 @@ extern crate grin_chain as chain;
 extern crate grin_api as api;
 extern crate grin_wallet as wallet;
 extern crate grin_pow as pow;
+extern crate grin_util as util;
 extern crate secp256k1zkp as secp;
 
 extern crate futures;
@@ -250,13 +251,11 @@ fn a_simulate_block_propagation() {
 	}));
 }
 
-
-
-
 /// Creates 2 different disconnected servers, mine a few blocks on one, connect
 /// them and check that the 2nd gets all the blocks
 #[test]
 fn simulate_full_sync() {
+	util::init_test_logger();
 	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "grin-sync";
@@ -283,17 +282,18 @@ fn simulate_full_sync() {
 	// instantiates 2 servers on different ports
 	let mut servers = vec![];
 	for n in 0..2 {
-		let s = grin::Server::future(
-			grin::ServerConfig {
-				db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
-				p2p_config: Some(p2p::P2PConfig {
-					port: 11000 + n,
-					..p2p::P2PConfig::default()
-				}),
-				..Default::default()
-			},
-			&handle,
-		).unwrap();
+		let config = grin::ServerConfig {
+			db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
+			p2p_config: Some(p2p::P2PConfig {
+				port: 11000 + n,
+				..p2p::P2PConfig::default()
+			}),
+			..Default::default()
+		};
+		if n == 1 {
+			config.seeding_type = grin::Seeding::Programmatic;
+		}
+		let s = grin::Server::future(config, &handle).unwrap();
 		servers.push(s);
 	}
 

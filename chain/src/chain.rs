@@ -96,7 +96,7 @@ impl Chain {
 				info!(LOGGER, "Saved genesis block with hash {}", gen.hash());
 				tip
 			}
-			Err(e) => return Err(Error::StoreErr(e)),
+			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
 		};
 
 		let store = Arc::new(chain_store);
@@ -116,7 +116,8 @@ impl Chain {
 	/// has been added to the longest chain, None if it's added to an (as of
 	/// now) orphan chain.
 	pub fn process_block(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
-		let head = self.store.head().map_err(&Error::StoreErr)?;
+		let head = self.store.head().map_err(|e| Error::StoreErr(e, "chain load head".to_owned()))?;
+    let height = head.height;
 		let ctx = self.ctx_from_head(head, opts);
 
 		let res = pipe::process_block(&b, ctx);
@@ -140,9 +141,11 @@ impl Chain {
 			}
 			Ok(None) => {}
 			Err(Error::Orphan) => {
-				let mut orphans = self.orphans.lock().unwrap();
-				orphans.push_front((opts, b));
-				orphans.truncate(MAX_ORPHANS);
+        if b.header.height < height + (MAX_ORPHANS as u64) {
+          let mut orphans = self.orphans.lock().unwrap();
+          orphans.push_front((opts, b));
+          orphans.truncate(MAX_ORPHANS);
+        }
 			}
 			Err(ref e) => {
 				info!(
@@ -166,7 +169,7 @@ impl Chain {
 		opts: Options,
 	) -> Result<Option<Tip>, Error> {
 
-		let head = self.store.get_header_head().map_err(&Error::StoreErr)?;
+		let head = self.store.get_header_head().map_err(|e| Error::StoreErr(e, "chain header head".to_owned()))?;
 		let ctx = self.ctx_from_head(head, opts);
 
 		pipe::process_block_header(bh, ctx)
@@ -221,8 +224,8 @@ impl Chain {
 		let sumtrees = self.sumtrees.read().unwrap();
 		let is_unspent = sumtrees.is_unspent(output_ref)?;
 		if is_unspent {
-			self.store.get_output_by_commit(output_ref).map_err(
-				&Error::StoreErr,
+			self.store.get_output_by_commit(output_ref).map_err(|e|
+			  Error::StoreErr(e, "chain get unspent".to_owned())
 			)
 		} else {
 			Err(Error::OutputNotFound)
@@ -259,23 +262,23 @@ impl Chain {
 
 	/// Block header for the chain head
 	pub fn head_header(&self) -> Result<BlockHeader, Error> {
-		self.store.head_header().map_err(&Error::StoreErr)
+		self.store.head_header().map_err(|e| Error::StoreErr(e, "chain head header".to_owned()))
 	}
 
 	/// Gets a block header by hash
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
-		self.store.get_block(h).map_err(&Error::StoreErr)
+		self.store.get_block(h).map_err(|e| Error::StoreErr(e, "chain get block".to_owned()))
 	}
 
 	/// Gets a block header by hash
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		self.store.get_block_header(h).map_err(&Error::StoreErr)
+		self.store.get_block_header(h).map_err(|e| Error::StoreErr(e, "chain get header".to_owned()))
 	}
 
 	/// Gets the block header at the provided height
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
-		self.store.get_header_by_height(height).map_err(
-			&Error::StoreErr,
+		self.store.get_header_by_height(height).map_err(|e|
+			Error::StoreErr(e, "chain get header by height".to_owned()),
 		)
 	}
 
@@ -286,12 +289,12 @@ impl Chain {
 	) -> Result<BlockHeader, Error> {
 		self.store
 			.get_block_header_by_output_commit(commit)
-			.map_err(&Error::StoreErr)
+			.map_err(|e| Error::StoreErr(e, "chain get commitment".to_owned()))
 	}
 
 	/// Get the tip of the header chain
 	pub fn get_header_head(&self) -> Result<Tip, Error> {
-		self.store.get_header_head().map_err(&Error::StoreErr)
+		self.store.get_header_head().map_err(|e |Error::StoreErr(e, "chain get header head".to_owned()))
 	}
 
 	/// Builds an iterator on blocks starting from the current chain head and

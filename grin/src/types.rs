@@ -68,6 +68,8 @@ pub enum Seeding {
 	List,
 	/// Automatically download a text file with a list of server addresses
 	WebStatic,
+	/// Mostly for tests, where connections are initiated programmatically
+	Programmatic,
 }
 
 /// Full server configuration, aggregating configurations required for the
