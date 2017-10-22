@@ -14,6 +14,7 @@
 //! Logging wrapper to be used throughout all crates in the workspace
 use std::fs::OpenOptions;
 use std::sync::Mutex;
+use std::ops::Deref;
 use slog::{Logger, Drain, Level, LevelFilter, Duplicate, Discard};
 use slog_term;
 use slog_async;
@@ -93,7 +94,7 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 /// Initializes the logger for unit and integration tests
 pub fn init_test_logger() {
   let mut was_init_ref = WAS_INIT.lock().unwrap();
-	if was_init_ref {
+	if *was_init_ref.deref() {
 		return;
 	}
   let mut config_ref = LOGGING_CONFIG.lock().unwrap();
