@@ -282,7 +282,7 @@ fn simulate_full_sync() {
 	// instantiates 2 servers on different ports
 	let mut servers = vec![];
 	for n in 0..2 {
-		let config = grin::ServerConfig {
+		let mut config = grin::ServerConfig {
 			db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
 			p2p_config: Some(p2p::P2PConfig {
 				port: 11000 + n,
