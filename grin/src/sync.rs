@@ -161,7 +161,7 @@ impl Syncer {
 
     // retry blocks not downloading
     let now = Instant::now();
-    for mut download in blocks_downloading.deref_mut() {
+    for download in blocks_downloading.deref_mut() {
       let elapsed = (now - download.start_time).as_secs();
       if download.retries >= 8 {
         panic!("Failed to download required block {}", download.hash);
