@@ -24,8 +24,11 @@ use std::fmt;
 use ser;
 use core::target::Difficulty;
 
+/// A grin is divisible to 10^9, a nanogrin
+pub const GRIN_BASE: u64 = 1_000_000_000;
+
 /// The block subsidy amount
-pub const REWARD: u64 = 1_000_000_000;
+pub const REWARD: u64 = 50*GRIN_BASE;
 
 /// Actual block reward for a given total fee amount
 pub fn reward(fee: u64) -> u64 {
