@@ -70,15 +70,15 @@ impl NetAdapter for NetToChainAdapter {
 
 		if let &Err(ref e) = &res {
 			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
-    }
-    
-    if self.syncing() {
-      match res {
-        Ok(_) => self.syncer.borrow().block_received(bhash),
-        Err(chain::Error::Unfit(_)) => self.syncer.borrow().block_received(bhash),
-        Err(_) => {},
-      }
-    }
+		}
+
+		if self.syncing() {
+			match res {
+				Ok(_) => self.syncer.borrow().block_received(bhash),
+				Err(chain::Error::Unfit(_)) => self.syncer.borrow().block_received(bhash),
+				Err(_) => {}
+			}
+		}
 	}
 
 	fn headers_received(&self, bhs: Vec<core::BlockHeader>) {
@@ -104,7 +104,7 @@ impl NetAdapter for NetToChainAdapter {
 						LOGGER,
 						"Store error processing block header {}: in {} {:?}",
 						bh.hash(),
-            explanation,
+						explanation,
 						e
 					);
 					return;
