@@ -89,3 +89,15 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 		*was_init_ref = true;
 	}
 }
+
+/// Initializes the logger for unit and integration tests
+pub fn init_test_logger() {
+  let mut was_init_ref = WAS_INIT.lock().unwrap();
+	if was_init_ref {
+		return;
+	}
+  let mut config_ref = LOGGING_CONFIG.lock().unwrap();
+  *config_ref = LoggingConfig::default();
+  *was_init_ref = true;
+}
+

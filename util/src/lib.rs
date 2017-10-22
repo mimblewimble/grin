@@ -35,7 +35,7 @@ extern crate serde_derive;
 
 // Logging related
 pub mod logger;
-pub use logger::{LOGGER, init_logger};
+pub use logger::{LOGGER, init_logger, init_test_logger};
 
 pub mod types;
 pub use types::LoggingConfig;
