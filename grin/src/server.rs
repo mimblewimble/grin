@@ -132,6 +132,7 @@ impl Server {
 			Seeding::WebStatic => {
 				seed.connect_and_monitor(evt_handle.clone(), seed::web_seeds(evt_handle.clone()));
 			}
+			_ => {},
 		}
 
 		if config.seeding_type != Seeding::None {
