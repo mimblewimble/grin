@@ -134,9 +134,122 @@ support in principle." - Andrew Poelstra
 - https://lists.launchpad.net/mimblewimble/msg00022.html
 
 
-- https://lists.launchpad.net/mimblewimble/msg00029.html
+- https://lists.launchpad.net/mimblewimble/msg00029.html - bunch of replies, nothing super specific
+
+"ecently I've found a different construction that behaves much more like
+a hash preimage challenge, and this can actually be used for Lightning.
+Further, it supports reblinding, so you can learn a preimage but hide
+which one you're looking for. (Ethan, one might actually overlap with
+TumbleBit, sorry :)).
+
+It works like this. We'll treat x -> xG as a hash function, so x is the
+preimage of xG. There are two separate but related things I can do: (a)
+construct a signature which reveals the preimage; or (b) create a
+"pre-signature" which can be turned into a signature with the help of
+the preimage.
+
+Here's how it works: suppose I send xG to Rusty and he wants to send
+me coins conditional on my sending him x. Lets say I have key P1 and
+nonce R1; he has key P2 and nonce R2. Together we're going to make a
+multisignature with key P1 + P2 and Rusty is going to set things up
+so that I can't complete the signature without telling him x.
+
+Here we go.
+
+  0. We agree somehow on R1, R2, P1, P2.
+
+  1. We can both compute a challenge e = H(P1 + P2 || R1 + R2 || tx).
+
+  2. I send s' = k1 - x - x1e, where R1 = k1G and P1 = x1G. Note he
+     can verify I did so with the equation s'G = R1 - xG - eP1.
+
+  3. He now sends me s2 = k2 - x2e, which is his half of the multisig.
+
+  4. I complete the sig by adding s1 = k1 - x1e. The final sig is
+     (s1 + s2, R1 + R2).
+
+Now as soon as this signature gets out, I can compute x = s1 - s'.
+
+* * *
+
+Ok, pretty nifty. But now suppose Rusty wants to receive coins conditioned
+on him revealing x, say, because he's a middle hop in a Lightning channel.
+You might think he could act the same as I did in step (2), computing
+s' = k1 - x - x1e, but actually he can't, because he doesn't know x himself!
+All good. Instead he does the following.
+
+To put names on things, let's say he's taking coins from Tadge. The
+protocol is almost the same as above.
+
+  0. They agree somehow on R1, R2, P1, P2. Tadge's key and nonce are
+     R1 and P1, but there's a catch: P1 = x1G as before, but now
+     R1 - xG = k1G. That is, his nonce is offset by k1G.
+
+  1. They can both compute a challenge e = H(P1 + P2 || R1 + R2 || tx).
+
+  2. Tadge sends the "presignature" s' = k1 - x1e. Rusty can verify this
+     with the equation s'G = R1 - xG - eP1.
+
+  3. Now whenever Rusty obtains x, he can compute s1 = s' - x, which is
+     Tadge's half of the final signature.
+
+  4. Rusty computes s2 himself and completes the signature.
+
+* * *
+
+Ok, even cooler. But the real Rusty complained about these stories, saying
+that it's a privacy leak for him to use the same xG with me as he used with
+Tadge. In a onion-routed Lightning channel, this xG-reuse would let all
+any two participants in a path figure out that they were in one path, if
+they were colluding, even if they weren't directly connected.
+
+No worries, we can fix this very simply. Rusty chooses a reblinding factor
+rG. I give him x, as before, but what Tadge demands from him is (x + r).
+(I give xG to Rusty as a challenge; he forwards this as xG + rG to Tadge.)
+Since Rusty knows r he's able to do the translation. The two challenges
+appear uniformly independently random to any observers.
+
+* * *
+
+Let's put this together into my understanding of how Lightning is supposed
+to work. Suppose Andrew is trying to send coins to Drew, through Bob and
+Carol. He constructs a path
+
+  A --> B --> C --> D
+
+where each arrow is a Lightning channel. Only Andrew knows the complete
+path, and is onion-encrypting his connections to each participant (who
+know the next and previous participants, but that's it).
+
+He obtains a challenge T = xG from D, and reblinding factors U and V
+from B and C. Using the above tricks,
+
+  1. A sends coins to B contingent on him learning the discrete logarithm
+     of T + U + V.
+
+  2. B sends coins to C contingent on him learning the discrete logarithm
+     of T + V. (He knows the discrete log of U, so this is sufficient for
+     him to meet Andrew's challenge.)
+
+  3. C sends to D contingent on him learning the discrete log of T, which
+     is D's original challenge. Again, because C knows the discrete log
+     of V, this is sufficient for her to meet B's challenge.
+
+The resulting path consists of transactions which are signed with single
+uniformly random independent Schnorr signatures. Even though they're all
+part of an atomic Lightning path.
+
+* * *
+
+Note that the s' values need to be re-communicated every time the transaction
+changes (as does the nonce). Because it depends on the other party's nonce,
+this might require an additional round of interaction per channel update.
+
+Note also that nothing I've said depends at all on what's being signed. This
+means this works just as well for MimbleWimble as it would for Bitcoin+Schnorr
+as it would for Monero (with a multisig ring-CT construction) as it would
+for Ethereum+Schnorr. Further, it can link transactions across chains."  - Andrew Poelstra
 - https://lists.launchpad.net/mimblewimble/msg00086.html
-- https://lists.launchpad.net/mimblewimble/msg00090.html
 
 ## Lock-time
 
