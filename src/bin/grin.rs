@@ -283,7 +283,7 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 	}
 
 	if let Some(api_port) = server_args.value_of("api_port") {
-		let default_ip = "127.0.0.1";
+		let default_ip = "0.0.0.0";
 		server_config.api_http_addr = format!("{}:{}", default_ip, api_port);
 	}
 
@@ -345,7 +345,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 
 	let mut wallet_config = WalletConfig::default();
 	if let Some(port) = wallet_args.value_of("port") {
-		let default_ip = "127.0.0.1";
+		let default_ip = "0.0.0.0";
 		wallet_config.api_http_addr = format!("{}:{}", default_ip, port);
 	}
 

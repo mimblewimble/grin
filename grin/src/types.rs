@@ -110,7 +110,7 @@ impl Default for ServerConfig {
 	fn default() -> ServerConfig {
 		ServerConfig {
 			db_root: ".grin".to_string(),
-			api_http_addr: "127.0.0.1:13415".to_string(),
+			api_http_addr: "0.0.0.0:13415".to_string(),
 			capabilities: p2p::FULL_NODE,
 			seeding_type: Seeding::None,
 			seeds: None,
