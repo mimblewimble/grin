@@ -29,7 +29,7 @@ In order to compile and run Grin on your machine, you should have installed:
 
 ### Clone Grin
 
-    git clone https://github.com/ignopeverell/grin.git
+    git clone https://github.com/mimblewimble/grin.git
 
 ### Build Grin
 

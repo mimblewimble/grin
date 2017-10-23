@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/ignopeverell/grin.svg?branch=master)](https://travis-ci.org/ignopeverell/grin) [![Gitter chat](https://badges.gitter.im/grin_community/Lobby.png)](https://gitter.im/grin_community/Lobby)
+[![Build Status](https://travis-ci.org/mimblewimble/grin.svg?branch=master)](https://travis-ci.org/mimblewimble/grin) [![Gitter chat](https://badges.gitter.im/grin_community/Lobby.png)](https://gitter.im/grin_community/Lobby)
 
 # Grin
 
