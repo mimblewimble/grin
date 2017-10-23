@@ -337,10 +337,6 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 fn wallet_command(wallet_args: &ArgMatches) {
 	let mut wallet_config = WalletConfig::default();
 
-	let hd_seed = wallet_args.value_of("pass").expect(
-		"Wallet passphrase required.",
-	);
-
 	if let Some(port) = wallet_args.value_of("port") {
 		let default_ip = "127.0.0.1";
 		wallet_config.api_http_addr = format!("{}:{}", default_ip, port);
@@ -354,17 +350,24 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
-	// Either init the seed file or read the existing seed file.
-	// TODO - error handling, cleanup calls to unwrap()
-	let wallet_seed = match wallet_args.subcommand() {
+	// Derive the keychain based on seed from seed file and specified passphrase.
+	// Generate the initial wallet seed if we are running "wallet init".
+	let keychain = match wallet_args.subcommand() {
 		("init", Some(_)) => {
-			wallet::WalletSeed::init_file(&wallet_config).unwrap()
+			let wallet_seed = wallet::WalletSeed::init_file(&wallet_config)
+				.expect("Failed to init wallet seed file.");
+			wallet_seed.derive_keychain(&"")
+				.expect("Failed to derive keychain from seed file and passphrase.")
 		},
 		_ => {
-			wallet::WalletSeed::from_file(&wallet_config).unwrap()
+			let wallet_seed = wallet::WalletSeed::from_file(&wallet_config)
+				.expect("Failed to read wallet seed file.");
+			let passphrase = wallet_args.value_of("pass")
+				.expect("Wallet passphrase required.");
+			wallet_seed.derive_keychain(&passphrase)
+				.expect("Failed to derive keychain from seed file and passphrase.")
 		},
 	};
-	let keychain = wallet_seed.derive_keychain(&hd_seed).unwrap();
 
 	match wallet_args.subcommand() {
 		("receive", Some(receive_args)) => {

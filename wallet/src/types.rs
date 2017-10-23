@@ -255,6 +255,12 @@ impl WalletSeed {
 			SEED_FILE,
 		);
 
+		debug!(
+			LOGGER,
+			"Generating wallet seed file at: {}",
+			seed_file_path,
+		);
+
 		if Path::new(seed_file_path).exists() {
 			panic!("wallet seed file already exists");
 		} else {
@@ -276,6 +282,12 @@ impl WalletSeed {
 			SEED_FILE,
 		);
 
+		debug!(
+			LOGGER,
+			"Using wallet seed file at: {}",
+			seed_file_path,
+		);
+
 		if Path::new(seed_file_path).exists() {
 			let mut file = File::open(seed_file_path)?;
 			let mut buffer = String::new();
@@ -283,7 +295,11 @@ impl WalletSeed {
 			let wallet_seed = WalletSeed::from_hex(&buffer)?;
 			Ok(wallet_seed)
 		} else {
-			panic!("seed file does not yet exist");
+			error!(
+				LOGGER,
+				"Run: \"grin wallet init\" to initialize a new wallet.",
+			);
+			panic!("wallet seed file does not yet exist (grin wallet init)");
 		}
 	}
 }
