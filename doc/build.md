@@ -17,7 +17,7 @@ The instructions below will assume a Linux system.
 In order to compile and run Grin on your machine, you should have installed:
 
 * <b>Git</b> - to clone the repository
-* <b>cmake</b> - 3.2 or greater should be installed and on your $PATH. Used by the build to compile the mining plugins found in the included [Cuckoo Miner](https://github.com/mimblewimble/cuckoo-miner) 
+* <b>cmake</b> - 3.2 or greater should be installed and on your $PATH. Used by the build to compile the mining plugins found in the included [Cuckoo Miner](https://github.com/mimblewimble/cuckoo-miner)
 * <b>Rust</b> - via [Rustup](https://www.rustup.rs/) - Can be installed via your package manager or manually via the following commands:
 ```
     curl https://sh.rustup.rs -sSf | sh
@@ -61,7 +61,7 @@ Provided all of the prerequisites were installed and there were no issues, there
 
 * A set of mining plugins, which should be in the 'plugins' directory located next to the grin executable
 
-* A configuration file in the root project directory named grin.toml 
+* A configuration file in the root project directory named grin.toml
 
 By default, executing:
 
@@ -98,22 +98,25 @@ At present, the relevant modes of operation are 'server' and 'wallet'. When runn
 
 For a basic example simulating a single node network, create a directory called 'node1' and change your working directory to it. You'll use this directory to run a wallet and create a new blockchain via a server running in mining mode.
 
-Before running your mining server, a wallet server needs to be set up and listening so that the mining server knows where to send mining rewards. Do this from the first node directory with the following command:
+Before running your mining server, a wallet server needs to be set up and listening so that the mining server knows where to send mining rewards. Do this from the first node directory with the following commands:
 
-    node1$ grin wallet -p "password" receive
+	node1$ grin wallet init
+	node1$ grin wallet -p "password" receive
+
+See [wallet](wallet.md) for more info on the various Grin wallet commands and options.
 
 This will create a wallet server listening on the default port 13416 with the password "password". Next, in another terminal window in the 'node1' directory, run a full mining node with the following command:
 
-    node1$ grin server -m run
+	node1$ grin server -m run
 
-This creates a new .grin database directory in the current directory, and begins mining new blocks (with no transactions, for now). Note this starts two services listening on two default ports, 
-port 13414 for the peer-to-peer (P2P) service which keeps all nodes synchronised, and 13413 for the Rest API service used to verify transactions and post new transactions to the pool (for example). These ports can be configured via command line switches, or via a grin.toml file in the working directory.
+This creates a new .grin database directory in the current directory, and begins mining new blocks (with no transactions, for now). Note this starts two services listening on two default ports,
+port 13414 for the peer-to-peer (P2P) service which keeps all nodes synchronized, and 13413 for the Rest API service used to verify transactions and post new transactions to the pool (for example). These ports can be configured via command line switches, or via a grin.toml file in the working directory.
 
 Let the mining server find a few blocks, then stop (just ctrl-c) the mining server and the wallet server. You'll notice grin has created a database directory (.grin) in which the blockchain and peer data is stored. There should also be a wallet.dat file in the current directory, which contains a few coinbase mining rewards created each time the server mines a new block.
 
 ## Advanced Example
 
-The following outlines a more advanced example simulating a multi-server network with transactions being posted. 
+The following outlines a more advanced example simulating a multi-server network with transactions being posted.
 
 For the sake of example, we're going to run three nodes with varying setups. Create two more directories beside your node1 directory, called node2 and node3. If you want to clear data from your previous run (or anytime you want to reset the blockchain and all peer data) just delete the wallet.dat file in the server1 directory and run rm -rf .grin to remove grin's database.
 
@@ -161,7 +164,7 @@ use node 2's API listener to validate our transaction inputs before sending:
 
     node1$ grin wallet -p "password" -a "http://127.0.0.1:20001" send 20000 -d "http://127.0.0.1:35000"
 
-Your terminal windows should all light up now. Node 1 will check its inputs against node 2, and then send a partial transaction to node 3's wallet listener. Node 3 has been configured to 
+Your terminal windows should all light up now. Node 1 will check its inputs against node 2, and then send a partial transaction to node 3's wallet listener. Node 3 has been configured to
 send signed and finalised transactions to the api listener on node 1, which should then add the transaction to the next block and validate it via mining.
 
 You can feel free to try any number of permutations or combinations of the above, just note that grin is very new and under active development, so your mileage may vary. You can also use a separate 'grin.toml' file in each server directory to simplify command line switches.
