@@ -603,7 +603,6 @@ impl Miner {
 				"{}/v1/receive/coinbase",
 				self.config.wallet_receiver_url.as_str()
 			);
-			trace!(LOGGER, "Coinbase receiver URL: {}", url);
 			let request = WalletReceiveRequest::Coinbase(block_fees.clone());
 			let res: CbData = api::client::post(url.as_str(), &request).expect(
 				format!(
