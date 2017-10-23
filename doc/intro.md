@@ -27,7 +27,7 @@ The main goal and characteristics of the Grin project are:
 This document is targeted at readers with a good
 understanding of blockchains and basic cryptography. With that in mind, we attempt
 to explain the technical buildup of MimbleWimble and how it's applied in Grin. We hope
-this document is understandable to most technically minded readers. Our objective is
+this document is understandable to most technically-minded readers. Our objective is
 to encourage you to get interested in Grin and contribute in any way possible.
 
 To achieve this objective, we will introduce the main concepts required for a good
@@ -41,7 +41,7 @@ MimbleWimble blockchain's transactions and blocks.
 We start with a brief primer on Elliptic Curve Cryptography, reviewing just the
 properties necessary to understand how MimbleWimble works and without
 delving too much into the intricacies of ECC. For readers who would want to
-dive deeper into those assumption, there are other opportunities to
+dive deeper into those assumptions, there are other opportunities to
 [learn more](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/).
 
 An Elliptic Curve for the purpose of cryptography is simply a large set of points that
@@ -59,7 +59,7 @@ In ECC, if we pick a very large number _k_ as a private key, `k*H` is
 considered the corresponding public key. Even if one knows the
 value of the public key `k*H`, deducing _k_ is close to impossible (or said
 differently, while multiplication is trivial, "division" by curve points is
-extremely difficult). 
+extremely difficult).
 
 The previous formula `(k+j)*H = k*H + j*H`, with _k_ and _j_ both private
 keys, demonstrates that a public key obtained from the addition of two private
@@ -79,7 +79,7 @@ The validation of MimbleWimble transactions relies on two basic properties:
 proving that the transaction did not create new funds, _without revealing the actual amounts_.
 * **Possession of private keys.** Like with most other cryptocurrencies, ownership of
 transaction outputs is guaranteed by the possession of ECC private keys. However,
-the proof that an entity own those private keys is not achieved by directly signing
+the proof that an entity owns those private keys is not achieved by directly signing
 the transaction.
 
 The next sections on balance, ownership, change and proofs details how those two
@@ -90,7 +90,7 @@ fundamental properties are achieved.
 Building up on the properties of ECC we described above, one can obscure the values
 in a transaction.
 
-If _v_ is the value of a transaction input or output and _H_ an ECC curve, we can simply
+If _v_ is the value of a transaction input or output and _H_ an elliptic curve, we can simply
 embed `v*H` instead of _v_ in a transaction. This works because using the ECC
 operations, we can still validate that the sum of the outputs of a transaction equals the
 sum of inputs:
@@ -102,8 +102,8 @@ transaction doesn't create money out of thin air, without knowing what the actua
 values are. However, there are a finite number of usable values and one could try every single
 one of them to guess the value of your transaction. In addition, knowing v1 (from
 a previous transaction for example) and the resulting `v1*H` reveals all outputs with
-value v1 across the blockchain. For these reasons, we introduce a second ECC curve
-_G_ (practically G is just another generator point on the same curve group as H) and
+value v1 across the blockchain. For these reasons, we introduce a second elliptic curve
+_G_ (practically _G_ is just another generator point on the same curve group as _H_) and
 a private key _r_ used as a *blinding factor*.
 
 An input or output value in a transaction can then be expressed as:
@@ -112,9 +112,9 @@ An input or output value in a transaction can then be expressed as:
 
 Where:
 
-* _r_ is a private key used as a blinding factor, _G_ is an elliptical curve and
+* _r_ is a private key used as a blinding factor, _G_ is an elliptic curve and
   their product `r*G` is the public key for _r_ on _G_.
-* _v_ is the value of an input or output and _H_ is another elliptical curve.
+* _v_ is the value of an input or output and _H_ is another elliptic curve.
 
 Neither _v_ nor _r_ can be deduced, leveraging the fundamental properties of Elliptic
 Curve Cryptography. `r*G + v*H` is called a _Pedersen Commitment_.
@@ -162,9 +162,9 @@ should only be spendable by you:
 _X_, the result of the addition, is visible by everyone. The value 3 is only known to you and Alice,
 and 113 is only known to you.
 
-To transfer those 3 coins again, the protocol needs to require 113 to be known somehow.
+To transfer those 3 coins again, the protocol requires 113 to be known somehow.
 To demonstrate how this works, let's say you want to transfer those 3 same coins to Carol.
-You need build a simple transaction such that:
+You need to build a simple transaction such that:
 
     Xi => Y
 
@@ -280,19 +280,19 @@ outputs plus the fee, minus the inputs) and using it as a private key.
 
 We've explained above how MimbleWimble transactions can provide
 strong anonymity guarantees while maintaining the properties required for a valid
-blockchain, i.e., a transaction does not create money and proof of ownership 
+blockchain, i.e., a transaction does not create money and proof of ownership
 is established through private keys.
 
 The MimbleWimble block format builds on this by introducing one additional
 concept: _cut-through_. With this addition, a MimbleWimble chain gains:
 
 * Extremely good scalability, as the great majority of transaction data can be
-  eliminated over time, without compromising security;
-* Further anonymity by mixing and removing transaction data;
+  eliminated over time, without compromising security.
+* Further anonymity by mixing and removing transaction data.
 * And the ability for new nodes to sync up with the rest of the network very
 efficiently.
 
-### Cut-through 
+### Cut-through
 
 Blocks let miners assemble multiple transactions into a single set that's added
 to the chain. In the following block representations, containing 3 transactions,
@@ -388,4 +388,3 @@ blockchain. By using the addition properties of Elliptic Curve Cryptography, we'
 able to build transactions that are completely opaque but can still be properly
 validated. And by generalizing those properties to blocks, we can eliminate a large
 amount of blockchain data, allowing for great scaling and fast sync of new peers.
-
