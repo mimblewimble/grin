@@ -41,7 +41,6 @@ use daemonize::Daemonize;
 use config::GlobalConfig;
 use wallet::WalletConfig;
 use core::global;
-use keychain::Keychain;
 use util::{LoggingConfig, LOGGER, init_logger};
 
 fn start_from_config_file(mut global_config: GlobalConfig) {
@@ -227,7 +226,10 @@ fn main() {
 				.takes_value(true)))
 
 		.subcommand(SubCommand::with_name("info")
-			.about("basic wallet info (outputs)")))
+			.about("basic wallet info (outputs)"))
+
+		.subcommand(SubCommand::with_name("init")
+			.about("Initialize a new wallet seed file.")))
 
 	.get_matches();
 
@@ -333,17 +335,12 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 }
 
 fn wallet_command(wallet_args: &ArgMatches) {
+	let mut wallet_config = WalletConfig::default();
+
 	let hd_seed = wallet_args.value_of("pass").expect(
 		"Wallet passphrase required.",
 	);
 
-	// TODO do something closer to BIP39, eazy solution right now
-	let seed = blake2::blake2b::blake2b(32, &[], hd_seed.as_bytes());
-	let keychain = Keychain::from_seed(seed.as_bytes()).expect(
-		"Failed to initialize keychain from the provided seed.",
-	);
-
-	let mut wallet_config = WalletConfig::default();
 	if let Some(port) = wallet_args.value_of("port") {
 		let default_ip = "127.0.0.1";
 		wallet_config.api_http_addr = format!("{}:{}", default_ip, port);
@@ -357,8 +354,19 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
-	match wallet_args.subcommand() {
+	// Either init the seed file or read the existing seed file.
+	// TODO - error handling, cleanup calls to unwrap()
+	let wallet_seed = match wallet_args.subcommand() {
+		("init", Some(_)) => {
+			wallet::WalletSeed::init_file(&wallet_config).unwrap()
+		},
+		_ => {
+			wallet::WalletSeed::from_file(&wallet_config).unwrap()
+		},
+	};
+	let keychain = wallet_seed.derive_keychain(&hd_seed).unwrap();
 
+	match wallet_args.subcommand() {
 		("receive", Some(receive_args)) => {
 			if let Some(f) = receive_args.value_of("input") {
 				let mut file = File::open(f).expect("Unable to open transaction file.");
@@ -427,6 +435,9 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		}
 		("info", Some(_)) => {
 			wallet::show_info(&wallet_config, &keychain);
+		}
+		("init", Some(_)) => {
+			// wallet init handled earlier
 		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}
