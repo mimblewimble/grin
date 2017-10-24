@@ -51,6 +51,13 @@ impl NetAdapter for NetToChainAdapter {
 			debug_name: "p2p".to_string(),
 			identifier: "?.?.?.?".to_string(),
 		};
+		debug!(
+			LOGGER,
+			"Received tx {} from {}, going to process.",
+			tx.hash(),
+			source.identifier,
+		);
+
 		if let Err(e) = self.tx_pool.write().unwrap().add_to_memory_pool(source, tx) {
 			error!(LOGGER, "Transaction rejected: {:?}", e);
 		}
