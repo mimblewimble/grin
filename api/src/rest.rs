@@ -295,7 +295,7 @@ impl ApiServer {
 
 		// declare a route for each method actually implemented by the endpoint
 		let route_postfix = &subpath[1..];
-		let root = self.root.clone() + &subpath;
+		let root = &subpath;
 		for op in endpoint.operations() {
 			let route_name = format!("{:?}_{}", op, route_postfix);
 
@@ -308,7 +308,7 @@ impl ApiServer {
 				let full_path = format!("{}/{}", root.clone(), op_s.clone());
 				self.router
 					.route(op.to_method(), full_path.clone(), wrapper, route_name);
-				info!(LOGGER, "route: POST {}", full_path);
+				info!(LOGGER, "route: POST {}{}", self.root, full_path);
 			} else {
 
 				// regular REST operations
@@ -322,7 +322,7 @@ impl ApiServer {
 				let wrapper = ApiWrapper(endpoint.clone());
 				self.router
 					.route(op.to_method(), full_path.clone(), wrapper, route_name);
-				info!(LOGGER, "route: {} {}", op.to_method(), full_path);
+				info!(LOGGER, "route: {} {}{}", op.to_method(), self.root, full_path);
 			}
 		}
 
