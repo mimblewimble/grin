@@ -41,7 +41,6 @@ use daemonize::Daemonize;
 use config::GlobalConfig;
 use wallet::WalletConfig;
 use core::global;
-use keychain::Keychain;
 use util::{LoggingConfig, LOGGER, init_logger};
 
 fn start_from_config_file(mut global_config: GlobalConfig) {
@@ -164,7 +163,8 @@ fn main() {
 			.short("p")
 			.long("pass")
 			.help("Wallet passphrase used to generate the private key seed")
-			.takes_value(true))
+			.takes_value(true)
+			.default_value("mimblewimble"))
 		.arg(Arg::with_name("data_dir")
 			.short("dd")
 			.long("data_dir")
@@ -227,7 +227,10 @@ fn main() {
 				.takes_value(true)))
 
 		.subcommand(SubCommand::with_name("info")
-			.about("basic wallet info (outputs)")))
+			.about("basic wallet info (outputs)"))
+
+		.subcommand(SubCommand::with_name("init")
+			.about("Initialize a new wallet seed file.")))
 
 	.get_matches();
 
@@ -333,17 +336,8 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 }
 
 fn wallet_command(wallet_args: &ArgMatches) {
-	let hd_seed = wallet_args.value_of("pass").expect(
-		"Wallet passphrase required.",
-	);
-
-	// TODO do something closer to BIP39, eazy solution right now
-	let seed = blake2::blake2b::blake2b(32, &[], hd_seed.as_bytes());
-	let keychain = Keychain::from_seed(seed.as_bytes()).expect(
-		"Failed to initialize keychain from the provided seed.",
-	);
-
 	let mut wallet_config = WalletConfig::default();
+
 	if let Some(port) = wallet_args.value_of("port") {
 		let default_ip = "0.0.0.0";
 		wallet_config.api_http_addr = format!("{}:{}", default_ip, port);
@@ -357,8 +351,25 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
-	match wallet_args.subcommand() {
+	// Derive the keychain based on seed from seed file and specified passphrase.
+	// Generate the initial wallet seed if we are running "wallet init".
+	if let ("init", Some(_)) = wallet_args.subcommand() {
+		wallet::WalletSeed::init_file(&wallet_config)
+			.expect("Failed to init wallet seed file.");
 
+		// we are done here with creating the wallet, so just return
+		return;
+	}
+
+	let wallet_seed = wallet::WalletSeed::from_file(&wallet_config)
+		.expect("Failed to read wallet seed file.");
+	let passphrase = wallet_args
+		.value_of("pass")
+		.expect("Failed to read passphrase.");
+	let keychain = wallet_seed.derive_keychain(&passphrase)
+		.expect("Failed to derive keychain from seed file and passphrase.");
+
+	match wallet_args.subcommand() {
 		("receive", Some(receive_args)) => {
 			if let Some(f) = receive_args.value_of("input") {
 				let mut file = File::open(f).expect("Unable to open transaction file.");

@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use blake2;
+use rand::{thread_rng, Rng};
 use std::{fmt, num, thread, time};
 use std::convert::From;
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{self, Read, Write};
 use std::path::Path;
 use std::path::MAIN_SEPARATOR;
 use std::collections::HashMap;
+use std::cmp::min;
 
 use serde_json;
 use secp;
@@ -32,6 +35,7 @@ use util::LOGGER;
 
 const DAT_FILE: &'static str = "wallet.dat";
 const LOCK_FILE: &'static str = "wallet.lock";
+const SEED_FILE: &'static str = "wallet.seed";
 
 const DEFAULT_BASE_FEE: u64 = 10;
 
@@ -60,6 +64,8 @@ pub enum Error {
 	WalletData(String),
 	/// An error in the format of the JSON structures exchanged by the wallet
 	Format(String),
+	/// An IO Error
+	IOError(io::Error),
 	/// Error when contacting a node through its API
 	Node(api::Error),
 }
@@ -97,6 +103,12 @@ impl From<num::ParseIntError> for Error {
 impl From<api::Error> for Error {
 	fn from(e: api::Error) -> Error {
 		Error::Node(e)
+	}
+}
+
+impl From<io::Error> for Error {
+	fn from(e: io::Error) -> Error {
+		Error::IOError(e)
 	}
 }
 
@@ -200,6 +212,98 @@ impl OutputData {
 	}
 }
 
+#[derive(Clone, PartialEq)]
+pub struct WalletSeed([u8; 32]);
+
+impl WalletSeed {
+	pub fn from_bytes(bytes: &[u8]) -> WalletSeed {
+		let mut seed = [0; 32];
+		for i in 0..min(32, bytes.len()) {
+			seed[i] = bytes[i];
+		}
+		WalletSeed(seed)
+	}
+
+	fn from_hex(hex: &str) -> Result<WalletSeed, Error> {
+		let bytes = util::from_hex(hex.to_string())?;
+		Ok(WalletSeed::from_bytes(&bytes))
+	}
+
+	pub fn to_hex(&self) -> String {
+		util::to_hex(self.0.to_vec())
+	}
+
+	pub fn derive_keychain(&self, password: &str) -> Result<keychain::Keychain, Error> {
+		let seed = blake2::blake2b::blake2b(64, &password.as_bytes(), &self.0);
+		let result = keychain::Keychain::from_seed(seed.as_bytes())?;
+		Ok(result)
+	}
+
+	pub fn init_new() -> WalletSeed {
+		let seed: [u8; 32] = thread_rng().gen();
+		WalletSeed(seed)
+	}
+
+	pub fn init_file(wallet_config: &WalletConfig) -> Result<WalletSeed, Error> {
+		// create directory if it doesn't exist
+		fs::create_dir_all(&wallet_config.data_file_dir)?;
+
+		let seed_file_path = &format!(
+			"{}{}{}",
+			wallet_config.data_file_dir,
+			MAIN_SEPARATOR,
+			SEED_FILE,
+		);
+
+		debug!(
+			LOGGER,
+			"Generating wallet seed file at: {}",
+			seed_file_path,
+		);
+
+		if Path::new(seed_file_path).exists() {
+			panic!("wallet seed file already exists");
+		} else {
+			let seed = WalletSeed::init_new();
+			let mut file = File::create(seed_file_path)?;
+			file.write_all(&seed.to_hex().as_bytes())?;
+			Ok(seed)
+		}
+	}
+
+	pub fn from_file(wallet_config: &WalletConfig) -> Result<WalletSeed, Error> {
+		// create directory if it doesn't exist
+		fs::create_dir_all(&wallet_config.data_file_dir)?;
+
+		let seed_file_path = &format!(
+			"{}{}{}",
+			wallet_config.data_file_dir,
+			MAIN_SEPARATOR,
+			SEED_FILE,
+		);
+
+		debug!(
+			LOGGER,
+			"Using wallet seed file at: {}",
+			seed_file_path,
+		);
+
+		if Path::new(seed_file_path).exists() {
+			let mut file = File::open(seed_file_path)?;
+			let mut buffer = String::new();
+			file.read_to_string(&mut buffer)?;
+			let wallet_seed = WalletSeed::from_hex(&buffer)?;
+			Ok(wallet_seed)
+		} else {
+			error!(
+				LOGGER,
+				"Run: \"grin wallet init\" to initialize a new wallet.",
+			);
+			panic!("wallet seed file does not yet exist (grin wallet init)");
+		}
+	}
+}
+
 /// Wallet information tracking all our outputs. Based on HD derivation and
 /// avoids storing any key data, only storing output amounts and child index.
 /// This data structure is directly based on the JSON representation stored
@@ -242,7 +346,7 @@ impl WalletData {
 				.map_err(|_| {
 					Error::WalletData(format!(
 						"Could not create wallet lock file. Either \
-					some other process is using the wallet or there's a write access issue."
+						some other process is using the wallet or there is a write access issue."
 					))
 				});
 			match result {
@@ -250,16 +354,22 @@ impl WalletData {
 					break;
 				}
 				Err(e) => {
-					if retries >= 3 {
+					if retries >= 6 {
+						info!(
+							LOGGER,
+							"failed to obtain wallet.lock after {} retries, \
+							unable to successfully open the wallet",
+							retries
+						);
 						return Err(e);
 					}
 					debug!(
 						LOGGER,
-						"failed to obtain wallet.lock, retries - {}, sleeping",
+						"failed to obtain wallet.lock, retries - {}, sleeping and retrying",
 						retries
 					);
 					retries += 1;
-					thread::sleep(time::Duration::from_millis(500));
+					thread::sleep(time::Duration::from_millis(1000));
 				}
 			}
 		}
