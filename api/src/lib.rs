@@ -23,7 +23,10 @@ extern crate hyper;
 #[macro_use]
 extern crate slog;
 extern crate iron;
+extern crate urlencoded;
+#[macro_use]
 extern crate router;
+extern crate mount;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
@@ -31,6 +34,7 @@ extern crate serde_json;
 
 pub mod client;
 mod endpoints;
+mod handlers;
 mod rest;
 mod types;
 

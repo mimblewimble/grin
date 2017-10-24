@@ -20,9 +20,9 @@ use chain;
 use core::core::Transaction;
 use core::ser;
 use pool;
+use handlers::UtxoHandler;
 use rest::*;
 use types::*;
-use secp::pedersen::Commitment;
 use util;
 use util::LOGGER;
 
@@ -49,40 +49,6 @@ impl ApiEndpoint for ChainApi {
 			Ok(tip) => Ok(Tip::from_tip(tip)),
 			Err(e) => Err(Error::Internal(format!("{:?}", e))),
 		}
-	}
-}
-
-/// ApiEndpoint implementation for outputs that have been included in the chain.
-#[derive(Clone)]
-pub struct OutputApi {
-	/// data store access
-	chain: Arc<chain::Chain>,
-}
-
-impl ApiEndpoint for OutputApi {
-	type ID = String;
-	type T = Output;
-	type OP_IN = ();
-	type OP_OUT = ();
-
-	fn operations(&self) -> Vec<Operation> {
-		vec![Operation::Get]
-	}
-
-	fn get(&self, id: String) -> ApiResult<Output> {
-		debug!(LOGGER, "GET output {}", id);
-		let c = util::from_hex(id.clone()).map_err(|_| {
-			Error::Argument(format!("Not a valid commitment: {}", id))
-		})?;
-		let commit = Commitment::from_vec(c);
-
-		let out = self.chain.get_unspent(&commit).map_err(|_| Error::NotFound)?;
-
-		let header = self.chain
-			.get_block_header_by_output_commit(&commit)
-			.map_err(|_| Error::NotFound)?;
-
-		Ok(Output::from_output(&out, &header))
 	}
 }
 
@@ -166,12 +132,16 @@ pub fn start_rest_apis<T>(
 
 	thread::spawn(move || {
 		let mut apis = ApiServer::new("/v1".to_string());
-		apis.register_endpoint("/chain".to_string(), ChainApi { chain: chain.clone() });
-		apis.register_endpoint(
-			"/chain/utxo".to_string(),
-			OutputApi { chain: chain.clone() },
+		apis.register_endpoint("/chain".to_string(), ChainApi {chain: chain.clone()});
+		apis.register_endpoint("/pool".to_string(), PoolApi {tx_pool: tx_pool});
+
+		// register a nested router at "/v2" for flexibility
+		// so we can experiment with raw iron handlers
+		let utxo_handler = UtxoHandler {chain: chain.clone()};
+		let router = router!(
+			chain_utxos: get "/chain/utxos" => utxo_handler,
 		);
-		apis.register_endpoint("/pool".to_string(), PoolApi { tx_pool: tx_pool });
+		apis.register_handler("/v2", router);
 
 		apis.start(&addr[..]).unwrap_or_else(|e| {
 			error!(LOGGER, "Failed to start API HTTP server: {}.", e);

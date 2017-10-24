@@ -15,44 +15,95 @@
 //! Utilities to check the status of all the outputs we have stored in
 //! the wallet storage and update them.
 
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+
 use api;
 use types::*;
-use keychain::Keychain;
+use keychain::{Identifier, Keychain};
+use secp::pedersen;
 use util;
 
-fn refresh_output(out: &mut OutputData, api_out: Option<api::Output>) {
-	if let Some(api_out) = api_out {
-		out.height = api_out.height;
-		out.lock_height = api_out.lock_height;
+// Transitions a local wallet output from Unconfirmed -> Unspent.
+// Also updates the height and lock_height based on latest from the api.
+fn refresh_output(out: &mut OutputData, api_out: &api::Output) {
+	out.height = api_out.height;
+	out.lock_height = api_out.lock_height;
 
-		if out.status != OutputStatus::Locked {
-			out.status = OutputStatus::Unspent;
-		}
-	} else if vec![OutputStatus::Unspent, OutputStatus::Locked].contains(&out.status) {
+	if out.status == OutputStatus::Unconfirmed {
+		out.status = OutputStatus::Unspent;
+	}
+}
+
+// Transitions a local wallet output (based on it not being in the node utxo set) -
+// Unspent -> Spent
+// Locked -> Spent
+fn mark_spent_output(out: &mut OutputData) {
+	if vec![OutputStatus::Unspent, OutputStatus::Locked].contains(&out.status) {
 		out.status = OutputStatus::Spent;
 	}
 }
 
-/// Goes through the list of outputs that haven't been spent yet and check
-/// with a node whether their status has changed.
+/// Builds a single api query to retrieve the latest output data from the node.
+/// So we can refresh the local wallet outputs.
 pub fn refresh_outputs(
 	config: &WalletConfig,
 	keychain: &Keychain,
 ) -> Result<(), Error> {
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		// check each output that's not spent
-		for mut out in wallet_data.outputs.values_mut().filter(|out| {
-			out.status != OutputStatus::Spent
-		})
-		{
-			// TODO check the pool for unconfirmed
-			match get_output_from_node(config, keychain, out.value, out.n_child) {
-				Ok(api_out) => refresh_output(&mut out, api_out),
-				Err(_) => {
-					// TODO find error with connection and return
-					// error!(LOGGER, "Error contacting server node at {}. Is it running?",
-					// config.check_node_api_http_addr);
+		let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
+		let mut commits: Vec<pedersen::Commitment> = vec![];
+
+		// build a local map of wallet outputs by commits
+		// and a list of outputs we wantot query the node for
+		for out in wallet_data.outputs
+			.values_mut()
+			.filter(|out| out.root_key_id == keychain.root_key_id())
+			.filter(|out| out.status != OutputStatus::Spent) {
+				let key_id = keychain.derive_key_id(out.n_child).unwrap();
+				let commit = keychain.commit(out.value, &key_id).unwrap();
+				commits.push(commit);
+				wallet_outputs.insert(commit, out.key_id.clone());
+			}
+
+		// build the necessary query params -
+		// ?id=xxx&id=yyy&id=zzz
+		let query_params: Vec<String> = commits
+			.iter()
+			.map(|commit| {
+				let id = util::to_hex(commit.as_ref().to_vec());
+				format!("id={}", id)
+			})
+			.collect();
+		let query_string = query_params.join("&");
+
+		let url = format!(
+			"{}/v2/chain/utxos?{}",
+			config.check_node_api_http_addr,
+			query_string,
+		);
+
+		// build a map of api outputs by commit so we can look them up efficiently
+		let mut api_outputs: HashMap<pedersen::Commitment, api::Output> = HashMap::new();
+		match api::client::get::<Vec<api::Output>>(url.as_str()) {
+			Ok(outputs) => {
+				for out in outputs {
+					api_outputs.insert(out.commit, out);
 				}
+			},
+			Err(_) => {},
+		};
+
+		// now for each commit we want to refresh the output for
+		// find the corresponding api output (if it exists)
+		// and refresh it in-place in the wallet
+		for commit in commits {
+			let id = wallet_outputs.get(&commit).unwrap();
+			if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
+				match api_outputs.get(&commit) {
+					Some(api_output) => refresh_output(&mut output.get_mut(), api_output),
+					None => mark_spent_output(&mut output.get_mut()),
+				};
 			}
 		}
 	})
@@ -61,28 +112,4 @@ pub fn refresh_outputs(
 pub fn get_tip_from_node(config: &WalletConfig) -> Result<api::Tip, Error> {
 	let url = format!("{}/v1/chain/1", config.check_node_api_http_addr);
 	api::client::get::<api::Tip>(url.as_str()).map_err(|e| Error::Node(e))
-}
-
-// queries a reachable node for a given output, checking whether it's been
-// confirmed
-fn get_output_from_node(
-	config: &WalletConfig,
-	keychain: &Keychain,
-	amount: u64,
-	derivation: u32,
-) -> Result<Option<api::Output>, Error> {
-	// do we want to store these commitments in wallet.dat?
-	let key_id = keychain.derive_key_id(derivation)?;
-	let commit = keychain.commit(amount, &key_id)?;
-
-	let url = format!(
-		"{}/v1/chain/utxo/{}",
-		config.check_node_api_http_addr,
-		util::to_hex(commit.as_ref().to_vec())
-	);
-	match api::client::get::<api::Output>(url.as_str()) {
-		Ok(out) => Ok(Some(out)),
-		Err(api::Error::NotFound) => Ok(None),
-		Err(e) => Err(Error::Node(e)),
-	}
 }

@@ -191,7 +191,6 @@ mod test {
 	use ser;
 	use keychain;
 	use keychain::{Keychain, BlindingFactor};
-	use blake2::blake2b::blake2b;
 
 	#[test]
 	#[should_panic(expected = "InvalidSecretKey")]

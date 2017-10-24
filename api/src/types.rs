@@ -34,13 +34,13 @@ impl Tip {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum OutputType {
 	Coinbase,
 	Transaction,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Output {
 	/// The type of output Coinbase|Transaction
 	pub output_type: OutputType,

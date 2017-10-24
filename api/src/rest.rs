@@ -26,11 +26,13 @@ use std::string::ToString;
 use std::str::FromStr;
 use std::mem;
 
-use iron::{Iron, Request, Response, IronResult, IronError, status, headers, Listening};
+use iron::prelude::*;
+use iron::{status, headers, Listening};
 use iron::method::Method;
 use iron::modifiers::Header;
 use iron::middleware::Handler;
 use router::Router;
+use mount::Mount;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json;
@@ -244,6 +246,7 @@ fn extract_param<ID>(req: &mut Request, param: &'static str) -> IronResult<ID>
 pub struct ApiServer {
 	root: String,
 	router: Router,
+	mount: Mount,
 	server_listener: Option<Listening>,
 }
 
@@ -254,6 +257,7 @@ impl ApiServer {
 		ApiServer {
 			root: root,
 			router: Router::new(),
+			mount: Mount::new(),
 			server_listener: None,
 		}
 	}
@@ -274,6 +278,11 @@ impl ApiServer {
 		r.unwrap().close().unwrap();
 	}
 
+	/// Registers an iron handler (via mount)
+	pub fn register_handler<H: Handler>(&mut self, route: &str, handler: H) -> &mut Mount {
+		self.mount.mount(route, handler)
+	}
+
 	/// Register a new API endpoint, providing a relative URL for the new
 	/// endpoint.
 	pub fn register_endpoint<E>(&mut self, subpath: String, endpoint: E)
@@ -285,7 +294,7 @@ impl ApiServer {
 
 		// declare a route for each method actually implemented by the endpoint
 		let route_postfix = &subpath[1..];
-		let root = self.root.clone() + &subpath;
+		let root = &subpath;
 		for op in endpoint.operations() {
 			let route_name = format!("{:?}_{}", op, route_postfix);
 
@@ -298,7 +307,7 @@ impl ApiServer {
 				let full_path = format!("{}/{}", root.clone(), op_s.clone());
 				self.router
 					.route(op.to_method(), full_path.clone(), wrapper, route_name);
-				info!(LOGGER, "route: POST {}", full_path);
+				info!(LOGGER, "route: POST {}{}", self.root, full_path);
 			} else {
 
 				// regular REST operations
@@ -312,7 +321,7 @@ impl ApiServer {
 				let wrapper = ApiWrapper(endpoint.clone());
 				self.router
 					.route(op.to_method(), full_path.clone(), wrapper, route_name);
-				info!(LOGGER, "route: {} {}", op.to_method(), full_path);
+				info!(LOGGER, "route: {} {}{}", op.to_method(), self.root, full_path);
 			}
 		}
 
