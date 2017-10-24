@@ -163,7 +163,8 @@ fn main() {
 			.short("p")
 			.long("pass")
 			.help("Wallet passphrase used to generate the private key seed")
-			.takes_value(true))
+			.takes_value(true)
+			.default_value("mimblewimble"))
 		.arg(Arg::with_name("data_dir")
 			.short("dd")
 			.long("data_dir")
@@ -352,22 +353,21 @@ fn wallet_command(wallet_args: &ArgMatches) {
 
 	// Derive the keychain based on seed from seed file and specified passphrase.
 	// Generate the initial wallet seed if we are running "wallet init".
-	let keychain = match wallet_args.subcommand() {
-		("init", Some(_)) => {
-			let wallet_seed = wallet::WalletSeed::init_file(&wallet_config)
-				.expect("Failed to init wallet seed file.");
-			wallet_seed.derive_keychain(&"")
-				.expect("Failed to derive keychain from seed file and passphrase.")
-		},
-		_ => {
-			let wallet_seed = wallet::WalletSeed::from_file(&wallet_config)
-				.expect("Failed to read wallet seed file.");
-			let passphrase = wallet_args.value_of("pass")
-				.expect("Wallet passphrase required.");
-			wallet_seed.derive_keychain(&passphrase)
-				.expect("Failed to derive keychain from seed file and passphrase.")
-		},
-	};
+	if let ("init", Some(_)) = wallet_args.subcommand() {
+		wallet::WalletSeed::init_file(&wallet_config)
+			.expect("Failed to init wallet seed file.");
+
+		// we are done here with creating the wallet, so just return
+		return;
+	}
+
+	let wallet_seed = wallet::WalletSeed::from_file(&wallet_config)
+		.expect("Failed to read wallet seed file.");
+	let passphrase = wallet_args
+		.value_of("pass")
+		.expect("Failed to read passphrase.");
+	let keychain = wallet_seed.derive_keychain(&passphrase)
+		.expect("Failed to derive keychain from seed file and passphrase.");
 
 	match wallet_args.subcommand() {
 		("receive", Some(receive_args)) => {
@@ -438,9 +438,6 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		}
 		("info", Some(_)) => {
 			wallet::show_info(&wallet_config, &keychain);
-		}
-		("init", Some(_)) => {
-			// wallet init handled earlier
 		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}
