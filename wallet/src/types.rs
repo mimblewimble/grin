@@ -328,6 +328,17 @@ pub struct WalletData {
 }
 
 impl WalletData {
+
+	pub fn read_wallet<T, F>(data_file_dir: &str, f: F) -> Result<T, Error>
+		where F: FnOnce(&WalletData) -> T
+	{
+		// open the wallet readonly and so what needs to be done with it
+		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
+		let wdat = WalletData::read(data_file_path)?;
+		let res = f(&wdat);
+		Ok(res)
+	}
+
 	/// Allows the reading and writing of the wallet data within a file lock.
 	/// Just provide a closure taking a mutable WalletData. The lock should
 	/// be held for as short a period as possible to avoid contention.
@@ -364,7 +375,7 @@ impl WalletData {
 					break;
 				}
 				Err(e) => {
-					if retries >= 6 {
+					if retries >= 10 {
 						info!(
 							LOGGER,
 							"failed to obtain wallet.lock after {} retries, \
@@ -379,7 +390,7 @@ impl WalletData {
 						retries
 					);
 					retries += 1;
-					thread::sleep(time::Duration::from_millis(1000));
+					thread::sleep(time::Duration::from_millis(250));
 				}
 			}
 		}

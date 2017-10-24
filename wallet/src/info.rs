@@ -20,8 +20,8 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 	let root_key_id = keychain.root_key_id();
 	let _ = checker::refresh_outputs(&config, &keychain);
 
-	// operate within a lock on wallet data
-	let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+	// just read the wallet here, no need for a write lock
+	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
 
 		// get the current height via the api
 		// if we cannot get the current height use the max height known to the wallet
