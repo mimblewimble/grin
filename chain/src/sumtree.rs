@@ -98,6 +98,29 @@ impl SumTrees {
 			Err(e) => Err(Error::StoreErr(e, "sumtree unspent check".to_owned())),
 		}
 	}
+
+	/// Get sum tree roots
+	pub fn roots(
+		&mut self,
+	) -> (HashSum<SumCommit>, HashSum<NoSum<RangeProof>>, HashSum<NoSum<TxKernel>>) {
+			let output_pmmr = PMMR::at(
+				&mut self.output_pmmr_h.backend,
+				self.output_pmmr_h.last_pos,
+			);
+			let rproof_pmmr = PMMR::at(
+				&mut self.rproof_pmmr_h.backend,
+				self.rproof_pmmr_h.last_pos,
+			);
+			let kernel_pmmr = PMMR::at(
+				&mut self.kernel_pmmr_h.backend,
+				self.kernel_pmmr_h.last_pos,
+			);
+		(
+			output_pmmr.root(),
+			rproof_pmmr.root(),
+			kernel_pmmr.root(),
+		)
+	}
 }
 
 /// Starts a new unit of work to extend the chain with additional blocks,
