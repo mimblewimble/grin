@@ -188,6 +188,16 @@ impl OutputData {
 		self.status = OutputStatus::Locked;
 	}
 
+	/// How many confirmations has this output received?
+	pub fn num_confirmations(&self, current_height: u64) -> u64 {
+		if self.status == OutputStatus::Unconfirmed {
+			0
+		} else {
+			current_height - self.height
+		}
+	}
+
+	/// Check if output is eligible for spending based on state and height.
 	pub fn eligible_to_spend(
 		&self,
 		current_height: u64,
@@ -335,7 +345,7 @@ impl WalletData {
 		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
 		let lock_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, LOCK_FILE);
 
-		// create the lock files, if it already exists, will produce an error
+		// create the lock file, if it already exists, will produce an error
 		// sleep and retry a few times if we cannot get it the first time
 		let mut retries = 0;
 		loop {

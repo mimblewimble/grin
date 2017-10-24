@@ -35,11 +35,8 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 			}
 		};
 
-		// need to specify a default value here somehow
-		let minimum_confirmations = 1;
-
 		println!("Outputs - ");
-		println!("key_id, height, lock_height, status, spendable?, coinbase?, value");
+		println!("key_id, height, lock_height, status, coinbase?, num_confs, value");
 		println!("----------------------------------");
 
 		let mut outputs = wallet_data
@@ -55,8 +52,8 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 				out.height,
 				out.lock_height,
 				out.status,
-				out.eligible_to_spend(current_height, minimum_confirmations),
 				out.is_coinbase,
+				out.num_confirmations(current_height),
 				out.value,
 			);
 		}
