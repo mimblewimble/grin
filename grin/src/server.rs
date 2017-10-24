@@ -81,9 +81,11 @@ impl Server {
 	pub fn future(mut config: ServerConfig, evt_handle: &reactor::Handle) -> Result<Server, Error> {
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
+		let pool_net_adapter = Arc::new(PoolToNetAdapter::new());
 		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(
 			config.pool_config.clone(),
 			pool_adapter.clone(),
+			pool_net_adapter.clone(),
 		)));
 
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));
@@ -114,6 +116,7 @@ impl Server {
 			net_adapter.clone(),
 		));
 		chain_adapter.init(p2p_server.clone());
+		pool_net_adapter.init(p2p_server.clone());
 
 		let seed = seed::Seeder::new(config.capabilities, peer_store.clone(), p2p_server.clone());
 		match config.seeding_type.clone() {

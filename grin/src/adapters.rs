@@ -303,6 +303,30 @@ impl ChainToPoolAndNetAdapter {
 	}
 }
 
+/// Adapter between the transaction pool and the network, to relay
+/// transactions that have been accepted.
+pub struct PoolToNetAdapter {
+	p2p: OneTime<Arc<Server>>,
+}
+
+impl pool::PoolAdapter for PoolToNetAdapter {
+	fn tx_accepted(&self, tx: &core::Transaction) {
+		self.p2p.borrow().broadcast_transaction(tx);
+	}
+}
+
+impl PoolToNetAdapter {
+	/// Create a new pool to net adapter
+	pub fn new() -> PoolToNetAdapter {
+		PoolToNetAdapter { p2p: OneTime::new() }
+	}
+
+	/// Setup the p2p server on the adapter
+	pub fn init(&self, p2p: Arc<Server>) {
+		self.p2p.init(p2p);
+	}
+}
+
 /// Implements the view of the blockchain required by the TransactionPool to
 /// operate. Mostly needed to break any direct lifecycle or implementation
 /// dependency between the pool and the chain.
