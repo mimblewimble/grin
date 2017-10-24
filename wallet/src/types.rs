@@ -189,8 +189,12 @@ impl OutputData {
 	}
 
 	/// How many confirmations has this output received?
+	/// If height == 0 then we are either Unconfirmed or the output was cut-through
+	/// so we do not actually know how many confirmations this output had (and never will).
 	pub fn num_confirmations(&self, current_height: u64) -> u64 {
 		if self.status == OutputStatus::Unconfirmed {
+			0
+		} else if self.status == OutputStatus::Spent && self.height == 0 {
 			0
 		} else {
 			current_height - self.height
