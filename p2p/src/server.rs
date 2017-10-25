@@ -270,6 +270,20 @@ impl Server {
 		}
 	}
 
+	/// Broadcasts the provided transaction to all our peers. A peer
+	/// implementation may drop the broadcast request if it knows the
+	/// remote peer already has the transaction.
+	pub fn broadcast_transaction(&self, tx: &core::Transaction) {
+		let peers = self.peers.write().unwrap();
+		for p in peers.deref() {
+			if p.is_connected() {
+				if let Err(e) = p.send_transaction(tx) {
+					debug!(LOGGER, "Error sending block to peer: {:?}", e);
+				}
+			}
+		}
+	}
+
 	/// Number of peers we're currently connected to.
 	pub fn peer_count(&self) -> u32 {
 		self.peers.read().unwrap().len() as u32

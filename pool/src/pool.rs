@@ -43,6 +43,7 @@ pub struct TransactionPool<T> {
 	// blockchain is a DummyChain, for now, which mimics what the future
 	// chain will offer to the pool
 	blockchain: Arc<T>,
+	adapter: Arc<PoolAdapter>,
 }
 
 impl<T> TransactionPool<T>
@@ -50,13 +51,14 @@ where
 	T: BlockChain,
 {
 	/// Create a new transaction pool
-	pub fn new(config: PoolConfig, chain: Arc<T>) -> TransactionPool<T> {
+	pub fn new(config: PoolConfig, chain: Arc<T>, adapter: Arc<PoolAdapter>) -> TransactionPool<T> {
 		TransactionPool {
 			config: config,
 			transactions: HashMap::new(),
 			pool: Pool::empty(),
 			orphans: Orphans::empty(),
 			blockchain: chain,
+			adapter: adapter,
 		}
 	}
 
@@ -241,6 +243,7 @@ where
 			);
 
 			self.reconcile_orphans().unwrap();
+			self.adapter.tx_accepted(&tx);
 			self.transactions.insert(tx_hash, Box::new(tx));
 			Ok(())
 
@@ -1196,6 +1199,7 @@ mod tests {
 			pool: Pool::empty(),
 			orphans: Orphans::empty(),
 			blockchain: dummy_chain.clone(),
+			adapter: Arc::new(NoopAdapter{}),
 		}
 	}
 

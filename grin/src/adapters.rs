@@ -51,6 +51,13 @@ impl NetAdapter for NetToChainAdapter {
 			debug_name: "p2p".to_string(),
 			identifier: "?.?.?.?".to_string(),
 		};
+		debug!(
+			LOGGER,
+			"Received tx {} from {}, going to process.",
+			tx.hash(),
+			source.identifier,
+		);
+
 		if let Err(e) = self.tx_pool.write().unwrap().add_to_memory_pool(source, tx) {
 			error!(LOGGER, "Transaction rejected: {:?}", e);
 		}
@@ -298,6 +305,30 @@ impl ChainToPoolAndNetAdapter {
 			p2p: OneTime::new(),
 		}
 	}
+	pub fn init(&self, p2p: Arc<Server>) {
+		self.p2p.init(p2p);
+	}
+}
+
+/// Adapter between the transaction pool and the network, to relay
+/// transactions that have been accepted.
+pub struct PoolToNetAdapter {
+	p2p: OneTime<Arc<Server>>,
+}
+
+impl pool::PoolAdapter for PoolToNetAdapter {
+	fn tx_accepted(&self, tx: &core::Transaction) {
+		self.p2p.borrow().broadcast_transaction(tx);
+	}
+}
+
+impl PoolToNetAdapter {
+	/// Create a new pool to net adapter
+	pub fn new() -> PoolToNetAdapter {
+		PoolToNetAdapter { p2p: OneTime::new() }
+	}
+
+	/// Setup the p2p server on the adapter
 	pub fn init(&self, p2p: Arc<Server>) {
 		self.p2p.init(p2p);
 	}

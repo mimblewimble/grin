@@ -139,6 +139,13 @@ impl Peer {
 		self.proto.send_block(b)
 	}
 
+	/// Sends the provided transaction to the remote peer. The request may be
+	/// dropped if the remote peer is known to already have the transaction.
+	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
+		// TODO do not send if the peer sent us the tx in the first place
+		self.proto.send_transaction(tx)
+	}
+
 	pub fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error> {
 		self.proto.send_header_request(locator)
 	}
