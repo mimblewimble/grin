@@ -20,8 +20,8 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 	let root_key_id = keychain.root_key_id();
 	let _ = checker::refresh_outputs(&config, &keychain);
 
-	// operate within a lock on wallet data
-	let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+	// just read the wallet here, no need for a write lock
+	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
 
 		// get the current height via the api
 		// if we cannot get the current height use the max height known to the wallet
@@ -35,11 +35,8 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 			}
 		};
 
-		// need to specify a default value here somehow
-		let minimum_confirmations = 1;
-
 		println!("Outputs - ");
-		println!("key_id, height, lock_height, status, spendable?, coinbase?, value");
+		println!("key_id, height, lock_height, status, coinbase?, num_confs, value");
 		println!("----------------------------------");
 
 		let mut outputs = wallet_data
@@ -55,8 +52,8 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 				out.height,
 				out.lock_height,
 				out.status,
-				out.eligible_to_spend(current_height, minimum_confirmations),
 				out.is_coinbase,
+				out.num_confirmations(current_height),
 				out.value,
 			);
 		}

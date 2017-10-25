@@ -188,6 +188,16 @@ impl OutputData {
 		self.status = OutputStatus::Locked;
 	}
 
+	/// How many confirmations has this output received?
+	pub fn num_confirmations(&self, current_height: u64) -> u64 {
+		if self.status == OutputStatus::Unconfirmed {
+			0
+		} else {
+			current_height - self.height
+		}
+	}
+
+	/// Check if output is eligible for spending based on state and height.
 	pub fn eligible_to_spend(
 		&self,
 		current_height: u64,
@@ -318,6 +328,18 @@ pub struct WalletData {
 }
 
 impl WalletData {
+
+	/// Allows for reading wallet data (without needing to acquire the write lock).
+	pub fn read_wallet<T, F>(data_file_dir: &str, f: F) -> Result<T, Error>
+		where F: FnOnce(&WalletData) -> T
+	{
+		// open the wallet readonly and do what needs to be done with it
+		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
+		let wdat = WalletData::read_or_create(data_file_path)?;
+		let res = f(&wdat);
+		Ok(res)
+	}
+
 	/// Allows the reading and writing of the wallet data within a file lock.
 	/// Just provide a closure taking a mutable WalletData. The lock should
 	/// be held for as short a period as possible to avoid contention.
@@ -335,7 +357,7 @@ impl WalletData {
 		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
 		let lock_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, LOCK_FILE);
 
-		// create the lock files, if it already exists, will produce an error
+		// create the lock file, if it already exists, will produce an error
 		// sleep and retry a few times if we cannot get it the first time
 		let mut retries = 0;
 		loop {
@@ -351,10 +373,11 @@ impl WalletData {
 				});
 			match result {
 				Ok(_) => {
+					info!(LOGGER, "acquired wallet lock ...");
 					break;
 				}
 				Err(e) => {
-					if retries >= 6 {
+					if retries >= 10 {
 						info!(
 							LOGGER,
 							"failed to obtain wallet.lock after {} retries, \
@@ -369,11 +392,10 @@ impl WalletData {
 						retries
 					);
 					retries += 1;
-					thread::sleep(time::Duration::from_millis(1000));
+					thread::sleep(time::Duration::from_millis(250));
 				}
 			}
 		}
-
 
 		// do what needs to be done
 		let mut wdat = WalletData::read_or_create(data_file_path)?;
@@ -386,6 +408,8 @@ impl WalletData {
 				"Could not remove wallet lock file. Maybe insufficient rights?"
 			))
 		})?;
+
+		info!(LOGGER, "... released wallet lock");
 
 		Ok(res)
 	}
