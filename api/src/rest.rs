@@ -26,11 +26,13 @@ use std::string::ToString;
 use std::str::FromStr;
 use std::mem;
 
-use iron::{Iron, Request, Response, IronResult, IronError, status, headers, Listening};
+use iron::prelude::*;
+use iron::{status, headers, Listening};
 use iron::method::Method;
 use iron::modifiers::Header;
 use iron::middleware::Handler;
 use router::Router;
+use mount::Mount;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json;
@@ -244,6 +246,7 @@ fn extract_param<ID>(req: &mut Request, param: &'static str) -> IronResult<ID>
 pub struct ApiServer {
 	root: String,
 	router: Router,
+	mount: Mount,
 	server_listener: Option<Listening>,
 }
 
@@ -254,6 +257,7 @@ impl ApiServer {
 		ApiServer {
 			root: root,
 			router: Router::new(),
+			mount: Mount::new(),
 			server_listener: None,
 		}
 	}
@@ -262,7 +266,9 @@ impl ApiServer {
 	pub fn start<A: ToSocketAddrs>(&mut self, addr: A) -> Result<(), String> {
 		// replace this value to satisfy borrow checker
 		let r = mem::replace(&mut self.router, Router::new());
-		let result = Iron::new(r).http(addr);
+		let mut m = mem::replace(&mut self.mount, Mount::new());
+		m.mount("/", r);
+		let result = Iron::new(m).http(addr);
 		let return_value = result.as_ref().map(|_| ()).map_err(|e| e.to_string());
 		self.server_listener = Some(result.unwrap());
 		return_value
@@ -274,13 +280,17 @@ impl ApiServer {
 		r.unwrap().close().unwrap();
 	}
 
+	/// Registers an iron handler (via mount)
+	pub fn register_handler<H: Handler>(&mut self, route: &str, handler: H) -> &mut Mount {
+		self.mount.mount(route, handler)
+	}
+
 	/// Register a new API endpoint, providing a relative URL for the new
 	/// endpoint.
 	pub fn register_endpoint<E>(&mut self, subpath: String, endpoint: E)
 		where E: ApiEndpoint,
-		      <<E as ApiEndpoint>::ID as FromStr>::Err: Debug + Send + error::Error
+			<<E as ApiEndpoint>::ID as FromStr>::Err: Debug + Send + error::Error
 	{
-
 		assert_eq!(subpath.chars().nth(0).unwrap(), '/');
 
 		// declare a route for each method actually implemented by the endpoint

@@ -24,6 +24,9 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 
+extern crate iron;
+extern crate router;
+
 extern crate grin_api as api;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
@@ -35,6 +38,7 @@ mod info;
 mod receiver;
 mod sender;
 mod types;
+pub mod server;
 
 pub use info::show_info;
 pub use receiver::{WalletReceiver, receive_json_tx};

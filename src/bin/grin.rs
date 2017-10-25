@@ -379,22 +379,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				);
 				wallet::receive_json_tx(&wallet_config, &keychain, contents.as_str()).unwrap();
 			} else {
-				info!(
-					LOGGER,
-					"Starting the Grin wallet receiving daemon at {}...",
-					wallet_config.api_http_addr
-				);
-				let mut apis = api::ApiServer::new("/v1".to_string());
-				apis.register_endpoint(
-					"/receive".to_string(),
-					wallet::WalletReceiver {
-						keychain: keychain,
-						config: wallet_config.clone(),
-					},
-				);
-				apis.start(wallet_config.api_http_addr).unwrap_or_else(|e| {
-					error!(LOGGER, "Failed to start Grin wallet receiver: {}.", e);
-				});
+				wallet::server::start_rest_apis(wallet_config, keychain);
 			}
 		}
 		("send", Some(send_args)) => {
