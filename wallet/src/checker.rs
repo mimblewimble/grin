@@ -23,6 +23,7 @@ use types::*;
 use keychain::{Identifier, Keychain};
 use secp::pedersen;
 use util;
+use util::LOGGER;
 
 // Transitions a local wallet output from Unconfirmed -> Unspent.
 // Also updates the height and lock_height based on latest from the api.
@@ -30,8 +31,11 @@ fn refresh_output(out: &mut OutputData, api_out: &api::Output) {
 	out.height = api_out.height;
 	out.lock_height = api_out.lock_height;
 
-	if out.status == OutputStatus::Unconfirmed {
-		out.status = OutputStatus::Unspent;
+	match out.status {
+		OutputStatus::Unconfirmed => {
+			out.status = OutputStatus::Unspent;
+		},
+		_ => (),
 	}
 }
 
@@ -39,8 +43,11 @@ fn refresh_output(out: &mut OutputData, api_out: &api::Output) {
 // Unspent -> Spent
 // Locked -> Spent
 fn mark_spent_output(out: &mut OutputData) {
-	if vec![OutputStatus::Unspent, OutputStatus::Locked].contains(&out.status) {
-		out.status = OutputStatus::Spent;
+	match out.status {
+		OutputStatus::Unspent | OutputStatus::Locked => {
+			out.status = OutputStatus::Spent
+		},
+		_ => (),
 	}
 }
 
@@ -50,13 +57,13 @@ pub fn refresh_outputs(
 	config: &WalletConfig,
 	keychain: &Keychain,
 ) -> Result<(), Error> {
-
+	debug!(LOGGER, "Refreshing wallet outputs");
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
 	let mut commits: Vec<pedersen::Commitment> = vec![];
 
 	// build a local map of wallet outputs by commits
 	// and a list of outputs we wantot query the node for
-	WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
 		for out in wallet_data.outputs
 			.values()
 			.filter(|out| out.root_key_id == keychain.root_key_id())
@@ -99,7 +106,8 @@ pub fn refresh_outputs(
 
 	// now for each commit, find the output in the wallet and
 	// the corresponding api output (if it exists)
-	// and refresh it in-place in the wallet
+	// and refresh it in-place in the wallet.
+	// Note: minimizing the time we spend holding the wallet lock.
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		for commit in commits {
 			let id = wallet_outputs.get(&commit).unwrap();

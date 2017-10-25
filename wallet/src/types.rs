@@ -329,12 +329,13 @@ pub struct WalletData {
 
 impl WalletData {
 
+	/// Allows for reading wallet data (without needing to acquire the write lock).
 	pub fn read_wallet<T, F>(data_file_dir: &str, f: F) -> Result<T, Error>
 		where F: FnOnce(&WalletData) -> T
 	{
-		// open the wallet readonly and so what needs to be done with it
+		// open the wallet readonly and do what needs to be done with it
 		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
-		let wdat = WalletData::read(data_file_path)?;
+		let wdat = WalletData::read_or_create(data_file_path)?;
 		let res = f(&wdat);
 		Ok(res)
 	}
@@ -372,6 +373,7 @@ impl WalletData {
 				});
 			match result {
 				Ok(_) => {
+					info!(LOGGER, "acquired wallet lock ...");
 					break;
 				}
 				Err(e) => {
@@ -395,7 +397,6 @@ impl WalletData {
 			}
 		}
 
-
 		// do what needs to be done
 		let mut wdat = WalletData::read_or_create(data_file_path)?;
 		let res = f(&mut wdat);
@@ -407,6 +408,8 @@ impl WalletData {
 				"Could not remove wallet lock file. Maybe insufficient rights?"
 			))
 		})?;
+
+		info!(LOGGER, "... released wallet lock");
 
 		Ok(res)
 	}

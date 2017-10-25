@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2017 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -53,7 +53,7 @@ use core::consensus::reward;
 use core::core::{Block, Transaction, TxKernel, Output, build};
 use core::ser;
 use api::{self, ApiEndpoint, Operation, ApiResult};
-use keychain::{BlindingFactor, Keychain};
+use keychain::{BlindingFactor, Identifier, Keychain};
 use types::*;
 use util;
 use util::LOGGER;
@@ -171,6 +171,36 @@ impl ApiEndpoint for WalletReceiver {
 	}
 }
 
+// Read wallet data without acquiring the write lock.
+fn retrieve_existing_key(
+	config: &WalletConfig,
+	key_id: Identifier,
+) -> Result<(Identifier, u32), Error> {
+	let res = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+		if let Some(existing) = wallet_data.get_output(&key_id) {
+			let key_id = existing.key_id.clone();
+			let derivation = existing.n_child;
+			(key_id, derivation)
+		} else {
+			panic!("should never happen");
+		}
+	})?;
+	Ok(res)
+}
+
+fn next_available_key(
+	config: &WalletConfig,
+	keychain: &Keychain,
+) -> Result<(Identifier, u32), Error> {
+	let res = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+		let root_key_id = keychain.root_key_id();
+		let derivation = wallet_data.next_child(root_key_id.clone());
+		let key_id = keychain.derive_key_id(derivation).unwrap();
+		(key_id, derivation)
+	})?;
+	Ok(res)
+}
+
 /// Build a coinbase output and the corresponding kernel
 fn receive_coinbase(
 	config: &WalletConfig,
@@ -178,25 +208,15 @@ fn receive_coinbase(
 	block_fees: &BlockFees
 ) -> Result<(Output, TxKernel, BlockFees), Error> {
 	let root_key_id = keychain.root_key_id();
+	let key_id = block_fees.key_id();
 
-	// operate within a lock on wallet data
+	let (key_id, derivation) = match key_id {
+		Some(key_id) => retrieve_existing_key(config, key_id)?,
+		None => next_available_key(config, keychain)?,
+	};
+
+	// Now acquire the wallet lock and write the new output.
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		let key_id = block_fees.key_id();
-		let (key_id, derivation) = match key_id {
-			Some(key_id) => {
-				if let Some(existing) = wallet_data.get_output(&key_id) {
-					(existing.key_id.clone(), existing.n_child)
-				} else {
-					panic!("should never happen");
-				}
-			},
-			None => {
-				let derivation = wallet_data.next_child(root_key_id.clone());
-				let key_id = keychain.derive_key_id(derivation)?;
-				(key_id, derivation)
-			}
-		};
-
 		// track the new output and return the stuff needed for reward
 		wallet_data.add_output(OutputData {
 			root_key_id: root_key_id.clone(),
@@ -208,29 +228,29 @@ fn receive_coinbase(
 			lock_height: 0,
 			is_coinbase: true,
 		});
+	})?;
 
-		debug!(
-			LOGGER,
-			"Received coinbase and built candidate output - {:?}, {:?}, {}",
-			root_key_id.clone(),
-			key_id.clone(),
-			derivation,
-		);
+	debug!(
+		LOGGER,
+		"Received coinbase and built candidate output - {:?}, {:?}, {}",
+		root_key_id.clone(),
+		key_id.clone(),
+		derivation,
+	);
 
-		debug!(LOGGER, "block_fees - {:?}", block_fees);
+	debug!(LOGGER, "block_fees - {:?}", block_fees);
 
-		let mut block_fees = block_fees.clone();
-		block_fees.key_id = Some(key_id.clone());
+	let mut block_fees = block_fees.clone();
+	block_fees.key_id = Some(key_id.clone());
 
-		debug!(LOGGER, "block_fees updated - {:?}", block_fees);
+	debug!(LOGGER, "block_fees updated - {:?}", block_fees);
 
-		let (out, kern) = Block::reward_output(
-			&keychain,
-			&key_id,
-			block_fees.fees,
-		)?;
-		Ok((out, kern, block_fees))
-	})?
+	let (out, kern) = Block::reward_output(
+		&keychain,
+		&key_id,
+		block_fees.fees,
+	)?;
+	Ok((out, kern, block_fees))
 }
 
 /// Builds a full transaction from the partial one sent to us for transfer
@@ -243,36 +263,33 @@ fn receive_transaction(
 ) -> Result<Transaction, Error> {
 	let root_key_id = keychain.root_key_id();
 
+	let (key_id, derivation) = next_available_key(config, keychain)?;
+
+	// double check the fee amount included in the partial tx
+	// we don't necessarily want to just trust the sender
+	// we could just overwrite the fee here (but we won't) due to the ecdsa sig
+	let fee = tx_fee(partial.inputs.len(), partial.outputs.len() + 1, None);
+	if fee != partial.fee {
+		return Err(Error::FeeDispute {
+			sender_fee: partial.fee,
+			recipient_fee: fee,
+		});
+	}
+
+	let out_amount = amount - fee;
+
+	let (tx_final, _) = build::transaction(vec![
+		build::initial_tx(partial),
+		build::with_excess(blinding),
+		build::output(out_amount, key_id.clone()),
+		// build::with_fee(fee_amount),
+	], keychain)?;
+
+	// make sure the resulting transaction is valid (could have been lied to on excess).
+	tx_final.validate(&keychain.secp())?;
+
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		let derivation = wallet_data.next_child(root_key_id.clone());
-		let key_id = keychain.derive_key_id(derivation)?;
-
-		// double check the fee amount included in the partial tx
-		// we don't necessarily want to just trust the sender
-		// we could just overwrite the fee here (but we won't) due to the ecdsa sig
-		let fee = tx_fee(partial.inputs.len(), partial.outputs.len() + 1, None);
-		if fee != partial.fee {
-			return Err(Error::FeeDispute {
-				sender_fee: partial.fee,
-				recipient_fee: fee,
-			});
-		}
-
-		let out_amount = amount - fee;
-
-		let (tx_final, _) = build::transaction(vec![
-			build::initial_tx(partial),
-			build::with_excess(blinding),
-			build::output(out_amount, key_id.clone()),
-			// build::with_fee(fee_amount),
-		], keychain)?;
-
-		// make sure the resulting transaction is valid (could have been lied to on
-		// excess)
-		tx_final.validate(&keychain.secp())?;
-
-		// track the new output and return the finalized transaction to broadcast
 		wallet_data.add_output(OutputData {
 			root_key_id: root_key_id.clone(),
 			key_id: key_id.clone(),
@@ -283,14 +300,15 @@ fn receive_transaction(
 			lock_height: 0,
 			is_coinbase: false,
 		});
-		debug!(
-			LOGGER,
-			"Received txn and built output - {:?}, {:?}, {}",
-			root_key_id.clone(),
-			key_id.clone(),
-			derivation,
-		);
+	})?;
 
-		Ok(tx_final)
-	})?
+	debug!(
+		LOGGER,
+		"Received txn and built output - {:?}, {:?}, {}",
+		root_key_id.clone(),
+		key_id.clone(),
+		derivation,
+	);
+
+	Ok(tx_final)
 }

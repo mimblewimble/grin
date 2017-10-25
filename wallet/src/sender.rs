@@ -81,25 +81,21 @@ fn build_send_tx(
 ) -> Result<(Transaction, BlindingFactor), Error> {
 	let key_id = keychain.clone().root_key_id();
 
-	// operate within a lock on wallet data
-	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+	// select some spendable coins from the wallet
+	let coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+		wallet_data.select(key_id.clone(), current_height, minimum_confirmations)
+	})?;
 
-		// select some spendable coins from our local wallet
-		let coins = wallet_data.select(key_id.clone(), current_height, minimum_confirmations);
+	// build transaction skeleton with inputs and change
+	let mut parts = inputs_and_change(&coins, config, keychain, key_id, amount)?;
 
-		// build transaction skeleton with inputs and change
-		// TODO - should probably also check we are sending enough to cover the fees + non-zero output
-		let mut parts = inputs_and_change(&coins, keychain, key_id, wallet_data, amount)?;
+	// This is more proof of concept than anything but here we set lock_height
+	// on tx being sent (based on current chain height via api).
+	parts.push(build::with_lock_height(lock_height));
 
-		// This is more proof of concept than anything but here we set a
-		// lock_height on the transaction being sent (based on current chain height via
-		// api).
-		parts.push(build::with_lock_height(lock_height));
+	let (tx, blind) = build::transaction(parts, &keychain)?;
 
-		let (tx, blind) = build::transaction(parts, &keychain)?;
-
-		Ok((tx, blind))
-	})?
+	Ok((tx, blind))
 }
 
 pub fn issue_burn_tx(
@@ -117,39 +113,48 @@ pub fn issue_burn_tx(
 
 	let key_id = keychain.root_key_id();
 
-	// operate within a lock on wallet data
-	WalletData::with_wallet(&config.data_file_dir, |mut wallet_data| {
+	// select some spendable coins from the wallet
+	let coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+		wallet_data.select(key_id.clone(), current_height, minimum_confirmations)
+	})?;
 
-		// select some spendable coins from the wallet
-		let coins = wallet_data.select(key_id.clone(), current_height, minimum_confirmations);
+	let mut parts = inputs_and_change(&coins, config, keychain, key_id, amount)?;
 
-		// build transaction skeleton with inputs and change
-		let mut parts = inputs_and_change(&coins, keychain, key_id, &mut wallet_data, amount)?;
+	// add burn output and fees
+	let fee = tx_fee(coins.len(), 2, None);
+	parts.push(build::output(amount - fee, Identifier::zero()));
 
-		// add burn output and fees
-		let fee = tx_fee(coins.len(), 2, None);
-		parts.push(build::output(amount - fee, Identifier::zero()));
+	// finalize the burn transaction and send
+	let (tx_burn, _) = build::transaction(parts, &keychain)?;
+	tx_burn.validate(&keychain.secp())?;
 
-		// finalize the burn transaction and send
-		let (tx_burn, _) = build::transaction(parts, &keychain)?;
-		tx_burn.validate(&keychain.secp())?;
+	let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
+	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
+	let _: () = api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })
+		.map_err(|e| Error::Node(e))?;
+	Ok(())
+}
 
-		let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
-		let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
-		let _: () = api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })
-			.map_err(|e| Error::Node(e))?;
-		Ok(())
-	})?
+fn next_available_key(
+	config: &WalletConfig,
+	keychain: &Keychain,
+) -> Result<(Identifier, u32), Error> {
+	let res = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+		let root_key_id = keychain.root_key_id();
+		let derivation = wallet_data.next_child(root_key_id.clone());
+		let key_id = keychain.derive_key_id(derivation).unwrap();
+		(key_id, derivation)
+	})?;
+	Ok(res)
 }
 
 fn inputs_and_change(
 	coins: &Vec<OutputData>,
+	config: &WalletConfig,
 	keychain: &Keychain,
 	root_key_id: Identifier,
-	wallet_data: &mut WalletData,
 	amount: u64,
 ) -> Result<Vec<Box<build::Append>>, Error> {
-
 	let mut parts = vec![];
 
 	// calculate the total across all inputs, and how much is left
@@ -177,27 +182,29 @@ fn inputs_and_change(
 		parts.push(build::input(coin.value, key_id));
 	}
 
-	// derive an additional pubkey for change and build the change output
-	let change_derivation = wallet_data.next_child(root_key_id.clone());
-	let change_key = keychain.derive_key_id(change_derivation)?;
+	let (change_key, change_derivation) = next_available_key(config, keychain)?;
+
 	parts.push(build::output(change, change_key.clone()));
 
-	// we got that far, time to start tracking the output representing our change
-	wallet_data.add_output(OutputData {
-		root_key_id: root_key_id.clone(),
-		key_id: change_key.clone(),
-		n_child: change_derivation,
-		value: change as u64,
-		status: OutputStatus::Unconfirmed,
-		height: 0,
-		lock_height: 0,
-		is_coinbase: false,
-	});
+	// Acquire wallet lock, add the new change output and lock coins being spent.
+	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+		// we got that far, time to start tracking the output representing our change
+		wallet_data.add_output(OutputData {
+			root_key_id: root_key_id.clone(),
+			key_id: change_key.clone(),
+			n_child: change_derivation,
+			value: change as u64,
+			status: OutputStatus::Unconfirmed,
+			height: 0,
+			lock_height: 0,
+			is_coinbase: false,
+		});
 
-	// now lock the ouputs we're spending so we avoid accidental double spend attempt
-	for coin in coins {
-		wallet_data.lock_output(coin);
-	}
+		// now lock the ouputs we're spending so we avoid accidental double spend attempt
+		for coin in coins {
+			wallet_data.lock_output(coin);
+		}
+	})?;
 
 	Ok(parts)
 }
