@@ -266,7 +266,9 @@ impl ApiServer {
 	pub fn start<A: ToSocketAddrs>(&mut self, addr: A) -> Result<(), String> {
 		// replace this value to satisfy borrow checker
 		let r = mem::replace(&mut self.router, Router::new());
-		let result = Iron::new(r).http(addr);
+		let mut m = mem::replace(&mut self.mount, Mount::new());
+		m.mount("/", r);
+		let result = Iron::new(m).http(addr);
 		let return_value = result.as_ref().map(|_| ()).map_err(|e| e.to_string());
 		self.server_listener = Some(result.unwrap());
 		return_value
@@ -287,14 +289,13 @@ impl ApiServer {
 	/// endpoint.
 	pub fn register_endpoint<E>(&mut self, subpath: String, endpoint: E)
 		where E: ApiEndpoint,
-		      <<E as ApiEndpoint>::ID as FromStr>::Err: Debug + Send + error::Error
+			<<E as ApiEndpoint>::ID as FromStr>::Err: Debug + Send + error::Error
 	{
-
 		assert_eq!(subpath.chars().nth(0).unwrap(), '/');
 
 		// declare a route for each method actually implemented by the endpoint
 		let route_postfix = &subpath[1..];
-		let root = &subpath;
+		let root = self.root.clone() + &subpath;
 		for op in endpoint.operations() {
 			let route_name = format!("{:?}_{}", op, route_postfix);
 
@@ -307,7 +308,7 @@ impl ApiServer {
 				let full_path = format!("{}/{}", root.clone(), op_s.clone());
 				self.router
 					.route(op.to_method(), full_path.clone(), wrapper, route_name);
-				info!(LOGGER, "route: POST {}{}", self.root, full_path);
+				info!(LOGGER, "route: POST {}", full_path);
 			} else {
 
 				// regular REST operations
@@ -321,7 +322,7 @@ impl ApiServer {
 				let wrapper = ApiWrapper(endpoint.clone());
 				self.router
 					.route(op.to_method(), full_path.clone(), wrapper, route_name);
-				info!(LOGGER, "route: {} {}{}", op.to_method(), self.root, full_path);
+				info!(LOGGER, "route: {} {}", op.to_method(), full_path);
 			}
 		}
 
