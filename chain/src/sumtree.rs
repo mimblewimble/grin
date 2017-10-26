@@ -89,7 +89,7 @@ impl SumTrees {
 		})
 	}
 
-	/// Wether a given commitment exists in the Output MMR and it's unspent
+	/// Whether a given commitment exists in the Output MMR and it's unspent
 	pub fn is_unspent(&self, commit: &Commitment) -> Result<bool, Error> {
 		let rpos = self.commit_index.get_output_pos(commit);
 		match rpos {
@@ -97,6 +97,16 @@ impl SumTrees {
 			Err(grin_store::Error::NotFoundErr) => Ok(false),
 			Err(e) => Err(Error::StoreErr(e, "sumtree unspent check".to_owned())),
 		}
+	}
+
+	/// returns the last N nodes inserted into the tree (i.e. the 'bottom'
+	/// nodes at level 0
+	pub fn last_n_leafs(&mut self, distance: u64) -> Vec<HashSum<SumCommit>> {
+		let output_pmmr = PMMR::at(
+			&mut self.output_pmmr_h.backend,
+			self.output_pmmr_h.last_pos
+		);
+		output_pmmr.get_last_n_leafs(distance)
 	}
 
 	/// Get sum tree roots
