@@ -48,12 +48,13 @@ impl Handshake {
 	}
 
 	/// Handles connecting to a new remote peer, starting the version handshake.
-	pub fn connect(&self,
-	               capab: Capabilities,
-	               total_difficulty: Difficulty,
-	               self_addr: SocketAddr,
-	               conn: TcpStream)
-	               -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
+	pub fn connect(
+		&self,
+		capab: Capabilities,
+		total_difficulty: Difficulty,
+		self_addr: SocketAddr,
+		conn: TcpStream,
+	) -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
 		// prepare the first part of the hanshake
 		let nonce = self.next_nonce();
 		let hand = Hand {
@@ -95,11 +96,12 @@ impl Handshake {
 
 	/// Handles receiving a connection from a new remote peer that started the
 	/// version handshake.
-	pub fn handshake(&self,
-	                 capab: Capabilities,
-	                 total_difficulty: Difficulty,
-	                 conn: TcpStream)
-	                 -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
+	pub fn handshake(
+		&self,
+		capab: Capabilities,
+		total_difficulty: Difficulty,
+		conn: TcpStream,
+	) -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
 		let nonces = self.nonces.clone();
 		Box::new(
 			read_msg::<Hand>(conn)

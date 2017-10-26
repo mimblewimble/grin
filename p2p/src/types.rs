@@ -118,7 +118,7 @@ pub trait Protocol {
 	/// block so needs to be called withing a coroutine. Should also be called
 	/// only once.
 	fn handle(&self, conn: TcpStream, na: Arc<NetAdapter>)
-	          -> Box<Future<Item = (), Error = Error>>;
+		-> Box<Future<Item = (), Error = Error>>;
 
 	/// Sends a ping message to the remote peer.
 	fn send_ping(&self) -> Result<(), Error>;

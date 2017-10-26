@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::{Mutex, Arc};
+use std::sync::Arc;
 
 use futures::Future;
 use futures::sync::mpsc::UnboundedSender;
@@ -30,25 +30,21 @@ use util::OneTime;
 #[allow(dead_code)]
 pub struct ProtocolV1 {
 	conn: OneTime<TimeoutConnection>,
-
-	expected_responses: Mutex<Vec<(Type, Hash)>>,
 }
 
 impl ProtocolV1 {
 	pub fn new() -> ProtocolV1 {
-		ProtocolV1 {
-			conn: OneTime::new(),
-			expected_responses: Mutex::new(vec![]),
-		}
+		ProtocolV1 { conn: OneTime::new() }
 	}
 }
 
 impl Protocol for ProtocolV1 {
 	/// Sets up the protocol reading, writing and closing logic.
-	fn handle(&self,
-	          conn: TcpStream,
-	          adapter: Arc<NetAdapter>)
-	          -> Box<Future<Item = (), Error = Error>> {
+	fn handle(
+		&self,
+		conn: TcpStream,
+		adapter: Arc<NetAdapter>,
+	) -> Box<Future<Item = (), Error = Error>> {
 
 		let (conn, listener) = TimeoutConnection::listen(conn, move |sender, header, data| {
 			let adapt = adapter.as_ref();
@@ -114,21 +110,23 @@ impl ProtocolV1 {
 		self.conn.borrow().send_msg(t, body)
 	}
 
-	fn send_request<W: ser::Writeable>(&self,
-	                                   t: Type,
-	                                   rt: Type,
-	                                   body: &W,
-	                                   expect_resp: Option<Hash>)
-	                                   -> Result<(), Error> {
+	fn send_request<W: ser::Writeable>(
+		&self,
+		t: Type,
+		rt: Type,
+		body: &W,
+		expect_resp: Option<Hash>,
+	) -> Result<(), Error> {
 		self.conn.borrow().send_request(t, rt, body, expect_resp)
 	}
 }
 
-fn handle_payload(adapter: &NetAdapter,
-                  sender: UnboundedSender<Vec<u8>>,
-                  header: MsgHeader,
-                  buf: Vec<u8>)
-                  -> Result<Option<Hash>, ser::Error> {
+fn handle_payload(
+	adapter: &NetAdapter,
+	sender: UnboundedSender<Vec<u8>>,
+	header: MsgHeader,
+	buf: Vec<u8>,
+) -> Result<Option<Hash>, ser::Error> {
 	match header.msg_type {
 		Type::Ping => {
 			let data = ser::ser_vec(&MsgHeader::new(Type::Pong, 0))?;
@@ -171,7 +169,10 @@ fn handle_payload(adapter: &NetAdapter,
 
 			// serialize and send all the headers over
 			let mut body_data = vec![];
-			try!(ser::serialize(&mut body_data, &Headers { headers: headers }));
+			try!(ser::serialize(
+				&mut body_data,
+				&Headers { headers: headers },
+			));
 			let mut data = vec![];
 			try!(ser::serialize(
 				&mut data,
