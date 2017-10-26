@@ -202,7 +202,7 @@ fn next_available_key(
 }
 
 /// Build a coinbase output and the corresponding kernel
-fn receive_coinbase(
+pub fn receive_coinbase(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	block_fees: &BlockFees

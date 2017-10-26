@@ -15,6 +15,7 @@
 
 use api::ApiServer;
 use keychain::Keychain;
+use handlers::CoinbaseHandler;
 use receiver::WalletReceiver;
 use types::WalletConfig;
 use util::LOGGER;
@@ -31,17 +32,20 @@ pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 	apis.register_endpoint(
 		"/receive".to_string(),
 		WalletReceiver {
-			keychain: keychain,
 			config: wallet_config.clone(),
+			keychain: keychain.clone(),
 		},
 	);
 
-	let coinbase_handler = CoinbaseHandler{};
-	let tx_handler = TxHandler{};
+	let coinbase_handler = CoinbaseHandler {
+		config: wallet_config.clone(),
+		keychain: keychain.clone(),
+	};
+	// let tx_handler = TxHandler{};
 
 	let router = router!(
 		receive_coinbase: post "/receive/coinbase" => coinbase_handler,
-		receive_tx: post "/receive/tx" => tx_handler,
+		// receive_tx: post "/receive/tx" => tx_handler,
 	);
 	apis.register_handler("/v2", router);
 

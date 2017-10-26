@@ -30,6 +30,7 @@ extern crate rand;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+extern crate serde_json;
 extern crate time;
 extern crate tokio_core;
 extern crate tokio_timer;
@@ -54,6 +55,7 @@ mod seed;
 mod sync;
 mod types;
 mod miner;
+mod wallet_client;
 
 pub use server::Server;
 pub use types::{ServerConfig, Seeding, ServerStats};

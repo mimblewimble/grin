@@ -14,7 +14,7 @@
 
 use blake2;
 use rand::{thread_rng, Rng};
-use std::{fmt, num, thread, time};
+use std::{fmt, num, thread, time, error};
 use std::convert::From;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -70,6 +70,29 @@ pub enum Error {
 	Node(api::Error),
 }
 
+impl error::Error for Error {
+	fn description(&self) -> &str {
+		match *self {
+			_ => "some kind of wallet error",
+			// Error::Argument(_) => "Bad arguments.",
+			// Error::Internal(_) => "Internal error.",
+			// Error::NotFound => "Not found.",
+		}
+	}
+}
+
+impl fmt::Display for Error {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			_ => write!(f, "some kind of wallet error"),
+			// Error::Argument(ref s) => write!(f, "Bad arguments: {}", s),
+			// Error::Internal(ref s) => write!(f, "Internal error: {}", s),
+			// Error::NotFound => write!(f, "Not found."),
+		}
+	}
+}
+
+
 impl From<keychain::Error> for Error {
 	fn from(e: keychain::Error) -> Error {
 		Error::Keychain(e)
@@ -111,6 +134,7 @@ impl From<io::Error> for Error {
 		Error::IOError(e)
 	}
 }
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletConfig {

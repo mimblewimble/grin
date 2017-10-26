@@ -13,6 +13,10 @@
 // limitations under the License.
 
 use std::convert::From;
+use std::io;
+
+use hyper;
+use serde_json;
 
 use api;
 use chain;
@@ -33,6 +37,14 @@ pub enum Error {
 	P2P(p2p::Error),
 	/// Error originating from HTTP API calls
 	API(api::Error),
+	/// Error originating from low level hyper api calls.
+	Hyper(hyper::Error),
+	/// Error originating from URI parsing.
+	Uri(hyper::error::UriError),
+	/// Error originating from IO operations.
+	IO(io::Error),
+	/// Error originating from JSON serialization/deserialization.
+	JSON(serde_json::Error),
 }
 
 impl From<chain::Error> for Error {
@@ -56,6 +68,30 @@ impl From<store::Error> for Error {
 impl From<api::Error> for Error {
 	fn from(e: api::Error) -> Error {
 		Error::API(e)
+	}
+}
+
+impl From<hyper::Error> for Error {
+	fn from(e: hyper::Error) -> Error {
+		Error::Hyper(e)
+	}
+}
+
+impl From<hyper::error::UriError> for Error {
+	fn from(e: hyper::error::UriError) -> Error {
+		Error::Uri(e)
+	}
+}
+
+impl From<io::Error> for Error {
+	fn from(e: io::Error) -> Error {
+		Error::IO(e)
+	}
+}
+
+impl From<serde_json::Error> for Error {
+	fn from(e: serde_json::Error) -> Error {
+		Error::JSON(e)
 	}
 }
 

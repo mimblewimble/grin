@@ -24,7 +24,9 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 
+extern crate bodyparser;
 extern crate iron;
+#[macro_use]
 extern crate router;
 
 extern crate grin_api as api;
@@ -34,6 +36,7 @@ extern crate grin_util as util;
 extern crate secp256k1zkp as secp;
 
 mod checker;
+mod handlers;
 mod info;
 mod receiver;
 mod sender;
