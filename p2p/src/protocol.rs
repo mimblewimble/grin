@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::{Mutex, Arc};
+use std::sync::Arc;
 
 use futures::Future;
 use futures::sync::mpsc::UnboundedSender;
@@ -30,15 +30,12 @@ use util::OneTime;
 #[allow(dead_code)]
 pub struct ProtocolV1 {
 	conn: OneTime<TimeoutConnection>,
-
-	expected_responses: Mutex<Vec<(Type, Hash)>>,
 }
 
 impl ProtocolV1 {
 	pub fn new() -> ProtocolV1 {
 		ProtocolV1 {
 			conn: OneTime::new(),
-			expected_responses: Mutex::new(vec![]),
 		}
 	}
 }

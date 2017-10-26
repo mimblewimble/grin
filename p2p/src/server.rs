@@ -104,14 +104,14 @@ impl Server {
 			let peers = peers.clone();
 
 			// accept the peer and add it to the server map
-			let accept = Peer::accept(conn, capab, total_diff, &hs.clone());
-			let added = add_to_peers(peers, adapter.clone(), accept);
+			let accept = Peer::accept(conn, capab, total_diff, &hs.clone(), adapter.clone());
+			let added = add_to_peers(peers, adapter, accept);
 
 			// wire in a future to timeout the accept after 5 secs
 			let timed_peer = with_timeout(Box::new(added), &hp);
 
 			// run the main peer protocol
-			timed_peer.and_then(move |(conn, peer)| peer.clone().run(conn, adapter))
+			timed_peer.and_then(move |(conn, peer)| peer.clone().run(conn))
 		});
 
 		// spawn each peer future to its own task
@@ -159,8 +159,7 @@ impl Server {
 
 		// cloneapalooza
 		let peers = self.peers.clone();
-		let adapter1 = self.adapter.clone();
-		let adapter2 = self.adapter.clone();
+		let adapter = self.adapter.clone();
 		let capab = self.capabilities.clone();
 		let self_addr = SocketAddr::new(self.config.host, self.config.port);
 
@@ -171,17 +170,17 @@ impl Server {
 		let request = socket
 			.and_then(move |socket| {
 				let peers = peers.clone();
-				let total_diff = adapter1.clone().total_difficulty();
+				let total_diff = adapter.clone().total_difficulty();
 
 				// connect to the peer and add it to the server map, wiring it a timeout for
 				// the handhake
 				let connect =
-					Peer::connect(socket, capab, total_diff, self_addr, &Handshake::new());
-				let added = add_to_peers(peers, adapter1, connect);
+					Peer::connect(socket, capab, total_diff, self_addr, &Handshake::new(), adapter.clone());
+				let added = add_to_peers(peers, adapter, connect);
 				with_timeout(Box::new(added), &h)
 			})
 			.and_then(move |(socket, peer)| {
-				h2.spawn(peer.run(socket, adapter2).map_err(|e| {
+				h2.spawn(peer.run(socket).map_err(|e| {
 					error!(LOGGER, "Peer error: {:?}", e);
 					()
 				}));
