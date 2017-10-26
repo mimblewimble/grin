@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2017 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,6 +35,15 @@ pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 			config: wallet_config.clone(),
 		},
 	);
+
+	let coinbase_handler = CoinbaseHandler{};
+	let tx_handler = TxHandler{};
+
+	let router = router!(
+		receive_coinbase: post "/receive/coinbase" => coinbase_handler,
+		receive_tx: post "/receive/tx" => tx_handler,
+	);
+	apis.register_handler("/v2", router);
 
 	apis.start(wallet_config.api_http_addr).unwrap_or_else(|e| {
 		error!(LOGGER, "Failed to start Grin wallet receiver: {}.", e);
