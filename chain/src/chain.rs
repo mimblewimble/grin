@@ -18,9 +18,12 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, RwLock};
 
-use secp::pedersen::Commitment;
+use secp::pedersen::{Commitment, RangeProof};
 
-use core::core::{Block, BlockHeader, Output};
+use core::core::{SumCommit};
+use core::core::pmmr::{NoSum, HashSum};
+
+use core::core::{Block, BlockHeader, Output, TxKernel};
 use core::core::target::Difficulty;
 use core::core::hash::Hash;
 use grin_store::Error::NotFoundErr;
@@ -248,6 +251,14 @@ impl Chain {
 		b.header.range_proof_root = roots.1.hash;
 		b.header.kernel_root = roots.2.hash;
 		Ok(())
+	}
+
+	/// returs sumtree roots
+	pub fn get_sumtree_roots(&self) -> (HashSum<SumCommit>,
+		HashSum<NoSum<RangeProof>>,
+		HashSum<NoSum<TxKernel>>) {
+		let mut sumtrees = self.sumtrees.write().unwrap();
+		sumtrees.roots()
 	}
 
 	/// Total difficulty at the head of the chain

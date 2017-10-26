@@ -85,3 +85,56 @@ impl Handler for UtxoHandler {
 		}
 	}
 }
+
+// Sum tree handler
+
+pub struct SumTreeHandler {
+	pub chain: Arc<chain::Chain>,
+}
+
+impl SumTreeHandler {
+	fn get_roots(&self) -> SumTrees {
+		debug!(LOGGER, "getting sumtree roots");
+		SumTrees::from_head(self.chain.clone())
+	}
+}
+
+//
+// Just retrieve the roots
+// GET /v2/chain/roots
+//
+
+impl Handler for SumTreeHandler {
+	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+		match serde_json::to_string_pretty(&self.get_roots()) {
+			Ok(json) => Ok(Response::with((status::Ok, json))),
+			Err(_) => Ok(Response::with((status::BadRequest, ""))),
+		}
+	}
+}
+
+// Chain Handler
+
+pub struct ChainHandler {
+	pub chain: Arc<chain::Chain>,
+}
+
+impl ChainHandler {
+	fn get_tip(&self) -> Tip {
+		Tip::from_tip(self.chain.head().unwrap())
+	}
+}
+
+//
+// Get the head details
+// GET /v2/chain
+//
+
+impl Handler for ChainHandler {
+	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+		match serde_json::to_string_pretty(&self.get_tip()) {
+			Ok(json) => Ok(Response::with((status::Ok, json))),
+			Err(_) => Ok(Response::with((status::BadRequest, ""))),
+		}
+	}
+}

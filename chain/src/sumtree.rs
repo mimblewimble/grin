@@ -23,7 +23,7 @@ use std::sync::Arc;
 use secp;
 use secp::pedersen::{RangeProof, Commitment};
 
-use core::core::{Block, TxKernel, Output, SumCommit};
+use core::core::{Block, Output, SumCommit, TxKernel};
 use core::core::pmmr::{Summable, NoSum, PMMR, HashSum, Backend};
 use grin_store;
 use grin_store::sumtree::PMMRBackend;
