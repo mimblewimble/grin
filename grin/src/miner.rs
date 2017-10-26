@@ -616,7 +616,9 @@ impl Miner {
 				"{}/v2/receive/coinbase",
 				self.config.wallet_receiver_url.as_str());
 
-			let res = wallet_client::create_coinbase(&url, &block_fees)?;
+			let res = wallet_client::with_retry(|| {
+				wallet_client::create_coinbase(&url, &block_fees)
+			})?;
 
 			let out_bin = util::from_hex(res.output).unwrap();
 			let kern_bin = util::from_hex(res.kernel).unwrap();

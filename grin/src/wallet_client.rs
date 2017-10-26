@@ -13,23 +13,38 @@
 // limitations under the License.
 
 use std::io;
+use std::ops::FnMut;
 
 use hyper;
 use hyper::{Method, Request};
 use hyper::header::ContentType;
 use futures::{Future, Stream};
 use tokio_core::reactor;
+use tokio_retry::Retry;
+use tokio_retry::strategy::FibonacciBackoff;
 use serde_json;
 
 use types::Error;
 use wallet::{BlockFees, CbData};
+use util::LOGGER;
+
+/// Runs the specified function wrapped in some basic retry logic.
+/// TODO - Feels like we should be able to pass the reactor handle into the function itself?
+pub fn with_retry<F, R>(f: F) -> Result<R, Error>
+	where F: (FnMut() -> Result<R, Error>)
+{
+	let mut core = reactor::Core::new()?;
+	let retry_strategy = FibonacciBackoff::from_millis(250).take(3);
+	let retry_future = Retry::spawn(core.handle(), retry_strategy, f);
+	let res = core.run(retry_future).unwrap();
+	Ok(res)
+}
 
 ///
 /// Call the wallet API to create a coinbase output for the given block_fees.
 ///
-/// TODO - Investigate if we can pass in the reactor handle here from main server?
-///
 pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
+	debug!(LOGGER, "Calling wallet API to create a new coinbase output");
 	let mut core = reactor::Core::new()?;
 	let client = hyper::Client::new(&core.handle());
 

@@ -33,6 +33,7 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate time;
 extern crate tokio_core;
+extern crate tokio_retry;
 extern crate tokio_timer;
 extern crate itertools;
 
