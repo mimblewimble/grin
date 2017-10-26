@@ -61,10 +61,11 @@ fn peer_handshake() {
 							Difficulty::one(),
 							my_addr,
 							&p2p::handshake::Handshake::new(),
+							net_adapter.clone(),
 						)
 					})
 					.and_then(move |(socket, peer)| {
-						rhandle.spawn(peer.run(socket, net_adapter.clone()).map_err(|e| {
+						rhandle.spawn(peer.run(socket).map_err(|e| {
 							panic!("Client run failed: {:?}", e);
 						}));
 						peer.send_ping().unwrap();

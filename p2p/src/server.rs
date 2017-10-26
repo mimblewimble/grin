@@ -144,10 +144,11 @@ impl Server {
 	}
 
 	/// Asks the server to connect to a new peer.
-	pub fn connect_peer(&self,
-	                    addr: SocketAddr,
-	                    h: reactor::Handle)
-	                    -> Box<Future<Item = Option<Arc<Peer>>, Error = Error>> {
+	pub fn connect_peer(
+		&self,
+		addr: SocketAddr,
+		h: reactor::Handle,
+	) -> Box<Future<Item = Option<Arc<Peer>>, Error = Error>> {
 		if let Some(p) = self.get_peer(addr) {
 			// if we're already connected to the addr, just return the peer
 			return Box::new(future::ok(Some(p)));
@@ -174,8 +175,14 @@ impl Server {
 
 				// connect to the peer and add it to the server map, wiring it a timeout for
 				// the handhake
-				let connect =
-					Peer::connect(socket, capab, total_diff, self_addr, &Handshake::new(), adapter.clone());
+				let connect = Peer::connect(
+					socket,
+					capab,
+					total_diff,
+					self_addr,
+					&Handshake::new(),
+					adapter.clone(),
+				);
 				let added = add_to_peers(peers, adapter, connect);
 				with_timeout(Box::new(added), &h)
 			})
@@ -299,11 +306,13 @@ impl Server {
 }
 
 // Adds the peer built by the provided future in the peers map
-fn add_to_peers<A>(peers: Arc<RwLock<Vec<Arc<Peer>>>>,
-                   adapter: Arc<NetAdapter>,
-                   peer_fut: A)
-                   -> Box<Future<Item = Result<(TcpStream, Arc<Peer>), ()>, Error = Error>>
-	where A: IntoFuture<Item = (TcpStream, Peer), Error = Error> + 'static
+fn add_to_peers<A>(
+	peers: Arc<RwLock<Vec<Arc<Peer>>>>,
+	adapter: Arc<NetAdapter>,
+	peer_fut: A,
+) -> Box<Future<Item = Result<(TcpStream, Arc<Peer>), ()>, Error = Error>>
+where
+	A: IntoFuture<Item = (TcpStream, Peer), Error = Error> + 'static,
 {
 	let peer_add = peer_fut.into_future().map(move |(conn, peer)| {
 		adapter.peer_connected(&peer.info);
@@ -316,15 +325,17 @@ fn add_to_peers<A>(peers: Arc<RwLock<Vec<Arc<Peer>>>>,
 }
 
 // Adds a timeout to a future
-fn with_timeout<T: 'static>(fut: Box<Future<Item = Result<T, ()>, Error = Error>>,
-                            h: &reactor::Handle)
-                            -> Box<Future<Item = T, Error = Error>> {
+fn with_timeout<T: 'static>(
+	fut: Box<Future<Item = Result<T, ()>, Error = Error>>,
+	h: &reactor::Handle,
+) -> Box<Future<Item = T, Error = Error>> {
 	let timeout = reactor::Timeout::new(Duration::new(5, 0), h).unwrap();
-	let timed = fut.select(timeout.map(Err).from_err())
-		.then(|res| match res {
+	let timed = fut.select(timeout.map(Err).from_err()).then(
+		|res| match res {
 			Ok((Ok(inner), _timeout)) => Ok(inner),
 			Ok((_, _accept)) => Err(Error::Timeout),
 			Err((e, _other)) => Err(e),
-		});
+		},
+	);
 	Box::new(timed)
 }

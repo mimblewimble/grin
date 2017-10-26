@@ -57,13 +57,14 @@ impl Peer {
 	}
 
 	/// Initiates the handshake with another peer.
-	pub fn connect(conn: TcpStream,
-	               capab: Capabilities,
-	               total_difficulty: Difficulty,
-	               self_addr: SocketAddr,
-	               hs: &Handshake,
-								 na: Arc<NetAdapter>)
-	               -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
+	pub fn connect(
+		conn: TcpStream,
+		capab: Capabilities,
+		total_difficulty: Difficulty,
+		self_addr: SocketAddr,
+		hs: &Handshake,
+		na: Arc<NetAdapter>,
+	) -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
 		let connect_peer = hs.connect(capab, total_difficulty, self_addr, conn)
 			.and_then(|(conn, proto, info)| {
 				Ok((conn, Peer::new(info, Box::new(proto), na)))
@@ -72,16 +73,20 @@ impl Peer {
 	}
 
 	/// Accept a handshake initiated by another peer.
-	pub fn accept(conn: TcpStream,
-	              capab: Capabilities,
-	              total_difficulty: Difficulty,
-	              hs: &Handshake,
-								na: Arc<NetAdapter>)
-	              -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
-		let hs_peer = hs.handshake(capab, total_difficulty, conn)
-			.and_then(|(conn, proto, info)| {
+	pub fn accept(
+		conn: TcpStream,
+		capab: Capabilities,
+		total_difficulty: Difficulty,
+		hs: &Handshake,
+		na: Arc<NetAdapter>,
+	) -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
+		let hs_peer = hs.handshake(capab, total_difficulty, conn).and_then(
+			|(conn,
+			  proto,
+			  info)| {
 				Ok((conn, Peer::new(info, Box::new(proto), na)))
-			});
+			},
+		);
 		Box::new(hs_peer)
 	}
 
