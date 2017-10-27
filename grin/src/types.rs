@@ -13,10 +13,6 @@
 // limitations under the License.
 
 use std::convert::From;
-use std::io;
-
-use hyper;
-use serde_json;
 
 use api;
 use chain;
@@ -24,6 +20,7 @@ use p2p;
 use pool;
 use store;
 use pow;
+use wallet;
 use core::global::MiningParameterMode;
 
 /// Error type wrapping underlying module errors.
@@ -35,16 +32,10 @@ pub enum Error {
 	Chain(chain::Error),
 	/// Error originating from the peer-to-peer network.
 	P2P(p2p::Error),
-	/// Error originating from HTTP API calls
+	/// Error originating from HTTP API calls.
 	API(api::Error),
-	/// Error originating from low level hyper api calls.
-	Hyper(hyper::Error),
-	/// Error originating from URI parsing.
-	Uri(hyper::error::UriError),
-	/// Error originating from IO operations.
-	IO(io::Error),
-	/// Error originating from JSON serialization/deserialization.
-	JSON(serde_json::Error),
+	/// Error originating from wallet API.
+	Wallet(wallet::Error),
 }
 
 impl From<chain::Error> for Error {
@@ -71,27 +62,9 @@ impl From<api::Error> for Error {
 	}
 }
 
-impl From<hyper::Error> for Error {
-	fn from(e: hyper::Error) -> Error {
-		Error::Hyper(e)
-	}
-}
-
-impl From<hyper::error::UriError> for Error {
-	fn from(e: hyper::error::UriError) -> Error {
-		Error::Uri(e)
-	}
-}
-
-impl From<io::Error> for Error {
-	fn from(e: io::Error) -> Error {
-		Error::IO(e)
-	}
-}
-
-impl From<serde_json::Error> for Error {
-	fn from(e: serde_json::Error) -> Error {
-		Error::JSON(e)
+impl From<wallet::Error> for Error {
+	fn from(e: wallet::Error) -> Error {
+		Error::Wallet(e)
 	}
 }
 

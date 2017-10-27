@@ -12,39 +12,47 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::io;
+use std::{io, time};
 use std::ops::FnMut;
 
+use futures::{Future, Stream};
 use hyper;
 use hyper::{Method, Request};
 use hyper::header::ContentType;
-use futures::{Future, Stream};
 use tokio_core::reactor;
 use tokio_retry::Retry;
 use tokio_retry::strategy::FibonacciBackoff;
 use serde_json;
 
-use types::Error;
-use wallet::{BlockFees, CbData};
+use types::*;
 use util::LOGGER;
 
+/// Call the wallet API to create a coinbase output for the given block_fees.
+/// Will retry based on default "retry forever with backoff" behavior.
+pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
+	retry_backoff_forever(|| {
+		let res = single_create_coinbase(&url, &block_fees);
+		if let Err(_) = res {
+			error!(LOGGER, "Failed to get coinbase via wallet API (will retry)...");
+		}
+		res
+	})
+}
+
 /// Runs the specified function wrapped in some basic retry logic.
-/// TODO - Feels like we should be able to pass the reactor handle into the function itself?
-pub fn with_retry<F, R>(f: F) -> Result<R, Error>
+fn retry_backoff_forever<F, R>(f: F) -> Result<R, Error>
 	where F: (FnMut() -> Result<R, Error>)
 {
 	let mut core = reactor::Core::new()?;
-	let retry_strategy = FibonacciBackoff::from_millis(250).take(3);
+	let retry_strategy = FibonacciBackoff::from_millis(100)
+		.max_delay(time::Duration::from_secs(10));
 	let retry_future = Retry::spawn(core.handle(), retry_strategy, f);
 	let res = core.run(retry_future).unwrap();
 	Ok(res)
 }
 
-///
-/// Call the wallet API to create a coinbase output for the given block_fees.
-///
-pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
-	debug!(LOGGER, "Calling wallet API to create a new coinbase output");
+/// Makes a single request to the wallet API to create a new coinbase output.
+fn single_create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
 	let mut core = reactor::Core::new()?;
 	let client = hyper::Client::new(&core.handle());
 
