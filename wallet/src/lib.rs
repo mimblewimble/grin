@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2017 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,7 +24,13 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 
+extern crate bodyparser;
+extern crate futures;
+extern crate tokio_core;
+extern crate tokio_retry;
+extern crate hyper;
 extern crate iron;
+#[macro_use]
 extern crate router;
 
 extern crate grin_api as api;
@@ -34,13 +40,15 @@ extern crate grin_util as util;
 extern crate secp256k1zkp as secp;
 
 mod checker;
+mod handlers;
 mod info;
 mod receiver;
 mod sender;
 mod types;
+pub mod client;
 pub mod server;
 
 pub use info::show_info;
 pub use receiver::{WalletReceiver, receive_json_tx};
 pub use sender::{issue_send_tx, issue_burn_tx};
-pub use types::{BlockFees, CbData, WalletConfig, WalletReceiveRequest, WalletSeed};
+pub use types::{BlockFees, CbData, Error, WalletConfig, WalletReceiveRequest, WalletSeed};

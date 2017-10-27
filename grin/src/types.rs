@@ -20,6 +20,7 @@ use p2p;
 use pool;
 use store;
 use pow;
+use wallet;
 use core::global::MiningParameterMode;
 
 /// Error type wrapping underlying module errors.
@@ -31,8 +32,10 @@ pub enum Error {
 	Chain(chain::Error),
 	/// Error originating from the peer-to-peer network.
 	P2P(p2p::Error),
-	/// Error originating from HTTP API calls
+	/// Error originating from HTTP API calls.
 	API(api::Error),
+	/// Error originating from wallet API.
+	Wallet(wallet::Error),
 }
 
 impl From<chain::Error> for Error {
@@ -56,6 +59,12 @@ impl From<store::Error> for Error {
 impl From<api::Error> for Error {
 	fn from(e: api::Error) -> Error {
 		Error::API(e)
+	}
+}
+
+impl From<wallet::Error> for Error {
+	fn from(e: wallet::Error) -> Error {
+		Error::Wallet(e)
 	}
 }
 
