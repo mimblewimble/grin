@@ -160,7 +160,12 @@ pub fn receive_coinbase(
 
 	debug!(LOGGER, "block_fees updated - {:?}", block_fees);
 
-	let (out, kern) = Block::reward_output(&keychain, &key_id, block_fees.fees)?;
+	let (out, kern) = Block::reward_output(
+		&keychain,
+		&key_id,
+		block_fees.fees,
+		block_fees.height,
+	)?;
 	Ok((out, kern, block_fees))
 }
 
@@ -173,6 +178,10 @@ fn receive_transaction(
 	partial: Transaction,
 ) -> Result<Transaction, Error> {
 	let root_key_id = keychain.root_key_id();
+
+	let (key_id, derivation) = next_available_key(config, keychain)?;
+
+	let lock_height = partial.lock_height;
 
 	// double check the fee amount included in the partial tx
  // we don't necessarily want to just trust the sender
@@ -198,7 +207,7 @@ fn receive_transaction(
 			value: out_amount,
 			status: OutputStatus::Unconfirmed,
 			height: 0,
-			lock_height: 0,
+			lock_height: lock_height,
 			is_coinbase: false,
 		});
 
@@ -209,8 +218,11 @@ fn receive_transaction(
 		vec![
 			build::initial_tx(partial),
 			build::with_excess(blinding),
-			build::output(out_amount, key_id.clone()),
-		// build::with_fee(fee_amount),
+			build::output(
+				out_amount,
+				lock_height,
+				key_id.clone(),
+			),
 		],
 		keychain,
 	)?;

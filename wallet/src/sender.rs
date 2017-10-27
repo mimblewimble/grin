@@ -44,7 +44,7 @@ pub fn issue_send_tx(
 	let chain_tip = checker::get_tip_from_node(config)?;
 	let current_height = chain_tip.height;
 
-	// proof of concept - set lock_height on the tx
+	// proof of concept - set lock_height on the tx (only valid in a block later than this)
 	let lock_height = chain_tip.height;
 
 	let (tx, blind_sum, coins, change_key) = build_send_tx(
@@ -126,7 +126,7 @@ fn build_send_tx(
 	})?;
 
 	// build transaction skeleton with inputs and change
-	let (mut parts, change_key) = inputs_and_change(&coins, config, keychain, amount)?;
+	let (mut parts, change_key) = inputs_and_change(&coins, config, keychain, key_id, amount, lock_height)?;
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
@@ -165,13 +165,11 @@ pub fn issue_burn_tx(
 		)
 	})?;
 
-	debug!(LOGGER, "selected some coins - {}", coins.len());
-
-	let (mut parts, _) = inputs_and_change(&coins, config, keychain, amount)?;
+	let (mut parts, _) = inputs_and_change(&coins, config, keychain, key_id, amount, current_height)?;
 
 	// add burn output and fees
 	let fee = tx_fee(coins.len(), 2, None);
-	parts.push(build::output(amount - fee, Identifier::zero()));
+	parts.push(build::output(amount - fee, current_height, Identifier::zero()));
 
 	// finalize the burn transaction and send
 	let (tx_burn, _) = build::transaction(parts, &keychain)?;
@@ -189,6 +187,7 @@ fn inputs_and_change(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
+	lock_height: u64,
 ) -> Result<(Vec<Box<build::Append>>, Identifier), Error> {
 	let mut parts = vec![];
 
@@ -213,7 +212,7 @@ fn inputs_and_change(
 	// build inputs using the appropriate derived key_ids
 	for coin in coins {
 		let key_id = keychain.derive_key_id(coin.n_child)?;
-		parts.push(build::input(coin.value, key_id));
+		parts.push(build::input(coin.value, coin.lock_height, key_id));
 	}
 
 	// track the output representing our change
@@ -229,7 +228,7 @@ fn inputs_and_change(
 			value: change as u64,
 			status: OutputStatus::Unconfirmed,
 			height: 0,
-			lock_height: 0,
+			lock_height: lock_height,
 			is_coinbase: false,
 		});
 

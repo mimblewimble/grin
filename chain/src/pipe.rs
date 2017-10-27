@@ -311,9 +311,16 @@ fn validate_block(
 		return Err(Error::InvalidRoot);
 	}
 
-	// check for any outputs with lock_heights greater than current block height
 	for input in &b.inputs {
 		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
+
+			// check for any outputs with lock_heights greater than current block height
+			if output.lock_height > b.header.height {
+				return Err(Error::ImmatureCoinbase);
+			}
+
+			// and check that any coinbase output also lines up correctly
+			// with the lock_height based on the original block header
 			if output.features.contains(transaction::COINBASE_OUTPUT) {
 				if let Ok(output_header) = ctx.store
 					.get_block_header_by_output_commit(&input.commitment())

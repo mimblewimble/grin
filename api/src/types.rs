@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
-use core::{core, global};
-use core::core::hash::Hashed;
+use core::core;
 use chain;
 use util::secp::pedersen;
 use rest::*;
@@ -148,14 +146,16 @@ pub struct Output {
 }
 
 impl Output {
-	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader,
-		include_proof:bool, include_switch: bool) -> Output {
-		let (output_type, lock_height) = match output.features {
-			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
-				OutputType::Coinbase,
-				block_header.height + global::coinbase_maturity(),
-			),
-			_ => (OutputType::Transaction, 0),
+	pub fn from_output(
+		output: &core::Output,
+		block_header: &core::BlockHeader,
+		include_proof: bool,
+		include_switch: bool,
+	) -> Output {
+		let output_type = if output.features.contains(core::transaction::COINBASE_OUTPUT) {
+			OutputType::Coinbase
+		} else {
+			OutputType::Transaction
 		};
 
 		Output {
@@ -170,7 +170,7 @@ impl Output {
 				false => None,
 			},
 			height: block_header.height,
-			lock_height: lock_height,
+			lock_height: output.lock_height,
 		}
 	}
 }

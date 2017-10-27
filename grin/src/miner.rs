@@ -563,8 +563,6 @@ impl Miner {
 			height,
 		};
 
-		// TODO - error handling, things can go wrong with get_coinbase (wallet api
-  // down etc.)
 		let (output, kernel, block_fees) = self.get_coinbase(block_fees).unwrap();
 		let mut b = core::Block::with_reward(head, txs, output, kernel).unwrap();
 
@@ -610,8 +608,12 @@ impl Miner {
 	) -> Result<(core::Output, core::TxKernel, BlockFees), Error> {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
-		let (out, kernel) =
-			core::Block::reward_output(&keychain, &key_id, block_fees.fees).unwrap();
+		let (out, kernel) = core::Block::reward_output(
+			&keychain,
+			&key_id,
+			block_fees.fees,
+			block_fees.height,
+		).unwrap();
 		Ok((out, kernel, block_fees))
 	}
 

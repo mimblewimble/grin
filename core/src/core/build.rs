@@ -29,9 +29,9 @@ use util::{secp, static_secp_instance};
 
 use core::{Input, Output, SwitchCommitHash, Transaction, DEFAULT_OUTPUT};
 use core::transaction::kernel_sig_msg;
-use util::LOGGER;
 use keychain;
-use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
+use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
+use util::LOGGER;
 
 /// Context information available to transaction combinators.
 pub struct Context<'a> {
@@ -53,8 +53,10 @@ pub fn input(value: u64, key_id: Identifier) -> Box<Append> {
 
 /// Adds an output with the provided value and key identifier from the
 /// keychain.
-pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
+pub fn output(value: u64, lock_height: u64, key_id: Identifier) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
+		println!("************* building an output ********** {}, {}", value, lock_height);
+
 		let commit = build.keychain.commit(value, &key_id).unwrap();
 		let switch_commit = build.keychain.switch_commit(&key_id).unwrap();
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
@@ -78,6 +80,7 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 		(
 			tx.with_output(Output {
 				features: DEFAULT_OUTPUT,
+				lock_height: lock_height,
 				commit: commit,
 				switch_commit_hash: switch_commit_hash,
 				proof: rproof,

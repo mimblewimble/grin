@@ -27,6 +27,7 @@ use consensus::VerifySortOrder;
 use core::Committed;
 use core::hash::Hashed;
 use core::pmmr::Summable;
+use global;
 use keychain::{Identifier, Keychain};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 
@@ -160,8 +161,14 @@ impl TxKernel {
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
 	pub fn verify(&self) -> Result<(), secp::Error> {
+		let lock_height = if self.features.contains(COINBASE_KERNEL) {
+			self.lock_height + global::coinbase_maturity()
+		} else {
+			self.lock_height
+		};
+
 		let msg = try!(Message::from_slice(
-			&kernel_sig_msg(self.fee, self.lock_height),
+			&kernel_sig_msg(self.fee, lock_height),
 		));
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
@@ -484,6 +491,8 @@ impl SwitchCommitHash {
 pub struct Output {
 	/// Options for an output's structure or use
 	pub features: OutputFeatures,
+	/// This output cannot be spent earlier than block at lock_height
+	pub lock_height: u64,
 	/// The homomorphic commitment representing the output's amount
 	pub commit: Commitment,
 	/// The switch commitment hash, a 160 bit length blake2 hash of blind*J
@@ -499,6 +508,7 @@ hashable_ord!(Output);
 impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
+		writer.write_u64(self.lock_height)?;
 		writer.write_fixed_bytes(&self.commit)?;
 		writer.write_fixed_bytes(&self.switch_commit_hash)?;
 
@@ -520,6 +530,7 @@ impl Readable for Output {
 
 		Ok(Output {
 			features: features,
+			lock_height: reader.read_u64()?,
 			commit: Commitment::read(reader)?,
 			switch_commit_hash: SwitchCommitHash::read(reader)?,
 			proof: RangeProof::read(reader)?,
@@ -683,6 +694,7 @@ mod test {
 
 		let out = Output {
 			features: DEFAULT_OUTPUT,
+			lock_height: 0,
 			commit: commit,
 			switch_commit_hash: switch_commit_hash,
 			proof: proof,
@@ -710,6 +722,7 @@ mod test {
 
 		let output = Output {
 			features: DEFAULT_OUTPUT,
+			lock_height: 0,
 			commit: commit,
 			switch_commit_hash: switch_commit_hash,
 			proof: proof,

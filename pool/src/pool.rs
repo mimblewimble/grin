@@ -1236,7 +1236,7 @@ mod tests {
 
 		for output_value in output_values {
 			let key_id = keychain.derive_key_id(output_value as u32).unwrap();
-			tx_elements.push(build::output(output_value, key_id));
+			tx_elements.push(build::output(output_value, 0, key_id));
 		}
 		tx_elements.push(build::with_fee(fees as u64));
 
@@ -1264,7 +1264,7 @@ mod tests {
 
 		for output_value in output_values {
 			let key_id = keychain.derive_key_id(output_value as u32).unwrap();
-			tx_elements.push(build::output(output_value, key_id));
+			tx_elements.push(build::output(output_value, 0, key_id));
 		}
 		tx_elements.push(build::with_fee(fees as u64));
 
