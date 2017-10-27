@@ -398,8 +398,10 @@ impl WalletData {
 		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
 		let lock_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, LOCK_FILE);
 
+		info!(LOGGER, "Acquiring wallet lock ...");
+
 		let action = || {
-			debug!(LOGGER, "Attempting to acquire wallet lock file.");
+			debug!(LOGGER, "Attempting to acquire wallet lock");
 			OpenOptions::new()
 				.write(true)
 				.create_new(true)
@@ -417,7 +419,7 @@ impl WalletData {
 			Err(_) => {
 				error!(
 					LOGGER,
-					"Failed to acquire wallet lock file (retried multiple times).",
+					"Failed to acquire wallet lock file (multiple retries)",
 				);
 				return Err(Error::WalletData(format!("Failed to acquire lock file")));
 			}
