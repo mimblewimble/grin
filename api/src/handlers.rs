@@ -85,3 +85,108 @@ impl Handler for UtxoHandler {
 		}
 	}
 }
+
+// Sum tree handler
+
+pub struct SumTreeHandler {
+	pub chain: Arc<chain::Chain>,
+}
+
+impl SumTreeHandler {
+	//gets roots
+	fn get_roots(&self) -> SumTrees {
+		SumTrees::from_head(self.chain.clone())
+	}
+
+	// gets last n utxos inserted in to the tree
+	fn get_last_n_utxo(&self, distance:u64) -> Vec<SumTreeNode> {
+		SumTreeNode::get_last_n_utxo(self.chain.clone(), distance)
+	}
+
+	// gets last n utxos inserted in to the tree
+	fn get_last_n_rangeproof(&self, distance:u64) -> Vec<SumTreeNode> {
+		SumTreeNode::get_last_n_rangeproof(self.chain.clone(), distance)
+	}
+
+	// gets last n utxos inserted in to the tree
+	fn get_last_n_kernel(&self, distance:u64) -> Vec<SumTreeNode> {
+		SumTreeNode::get_last_n_kernel(self.chain.clone(), distance)
+	}
+
+}
+
+//
+// Retrieve the roots:
+// GET /v2/sumtrees/roots
+//
+// Last inserted nodes::
+// GET /v2/sumtrees/lastutxos (gets last 10)
+// GET /v2/sumtrees/lastutxos?n=5
+// GET /v2/sumtrees/lastrangeproofs
+// GET /v2/sumtrees/lastkernels
+//
+
+impl Handler for SumTreeHandler {
+	fn handle(&self, req: &mut Request) -> IronResult<Response> {
+		let url = req.url.clone();
+		let mut path_elems = url.path();
+		if *path_elems.last().unwrap() == "" {
+			path_elems.pop();
+		}
+		//TODO: probably need to set a reasonable max limit here
+		let mut last_n=10;
+		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
+			if let Some(nums) = params.get("n") {
+				for num in nums {
+					if let Ok(n) = str::parse(num) {
+						last_n=n;
+					}
+				}
+			}
+		}
+		match *path_elems.last().unwrap(){
+			"roots" => match serde_json::to_string_pretty(&self.get_roots()) {
+				Ok(json) => Ok(Response::with((status::Ok, json))),
+				Err(_) => Ok(Response::with((status::BadRequest, ""))),
+			},
+			"lastutxos" => match serde_json::to_string_pretty(&self.get_last_n_utxo(last_n)) {
+				Ok(json) => Ok(Response::with((status::Ok, json))),
+				Err(_) => Ok(Response::with((status::BadRequest, ""))),
+			},
+			"lastrangeproofs" => match serde_json::to_string_pretty(&self.get_last_n_rangeproof(last_n)) {
+				Ok(json) => Ok(Response::with((status::Ok, json))),
+				Err(_) => Ok(Response::with((status::BadRequest, ""))),
+			},
+			"lastkernels" => match serde_json::to_string_pretty(&self.get_last_n_kernel(last_n)) {
+				Ok(json) => Ok(Response::with((status::Ok, json))),
+				Err(_) => Ok(Response::with((status::BadRequest, ""))),
+			},_ => Ok(Response::with((status::BadRequest, "")))
+		}
+	}
+}
+
+// Chain Handler
+
+pub struct ChainHandler {
+	pub chain: Arc<chain::Chain>,
+}
+
+impl ChainHandler {
+	fn get_tip(&self) -> Tip {
+		Tip::from_tip(self.chain.head().unwrap())
+	}
+}
+
+//
+// Get the head details
+// GET /v2/chain
+//
+
+impl Handler for ChainHandler {
+	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+		match serde_json::to_string_pretty(&self.get_tip()) {
+			Ok(json) => Ok(Response::with((status::Ok, json))),
+			Err(_) => Ok(Response::with((status::BadRequest, ""))),
+		}
+	}
+}

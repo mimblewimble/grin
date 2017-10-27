@@ -23,7 +23,7 @@ use std::sync::Arc;
 use secp;
 use secp::pedersen::{RangeProof, Commitment};
 
-use core::core::{Block, TxKernel, Output, SumCommit};
+use core::core::{Block, Output, SumCommit, TxKernel};
 use core::core::pmmr::{Summable, NoSum, PMMR, HashSum, Backend};
 use grin_store;
 use grin_store::sumtree::PMMRBackend;
@@ -89,7 +89,7 @@ impl SumTrees {
 		})
 	}
 
-	/// Wether a given commitment exists in the Output MMR and it's unspent
+	/// Whether a given commitment exists in the Output MMR and it's unspent
 	pub fn is_unspent(&self, commit: &Commitment) -> Result<bool, Error> {
 		let rpos = self.commit_index.get_output_pos(commit);
 		match rpos {
@@ -99,27 +99,33 @@ impl SumTrees {
 		}
 	}
 
+	/// returns the last N nodes inserted into the tree (i.e. the 'bottom'
+	/// nodes at level 0
+	pub fn last_n_utxo(&mut self, distance: u64) -> Vec<HashSum<SumCommit>> {
+		let output_pmmr = PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+		output_pmmr.get_last_n_insertions(distance)
+	}
+
+	/// as above, for range proofs
+	pub fn last_n_rangeproof(&mut self, distance: u64) -> Vec<HashSum<NoSum<RangeProof>>> {
+		let rproof_pmmr = PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
+		rproof_pmmr.get_last_n_insertions(distance)
+	}
+
+	/// as above, for kernels
+	pub fn last_n_kernel(&mut self, distance: u64) -> Vec<HashSum<NoSum<TxKernel>>> {
+		let kernel_pmmr = PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
+		kernel_pmmr.get_last_n_insertions(distance)
+	}
+
 	/// Get sum tree roots
 	pub fn roots(
 		&mut self,
 	) -> (HashSum<SumCommit>, HashSum<NoSum<RangeProof>>, HashSum<NoSum<TxKernel>>) {
-			let output_pmmr = PMMR::at(
-				&mut self.output_pmmr_h.backend,
-				self.output_pmmr_h.last_pos,
-			);
-			let rproof_pmmr = PMMR::at(
-				&mut self.rproof_pmmr_h.backend,
-				self.rproof_pmmr_h.last_pos,
-			);
-			let kernel_pmmr = PMMR::at(
-				&mut self.kernel_pmmr_h.backend,
-				self.kernel_pmmr_h.last_pos,
-			);
-		(
-			output_pmmr.root(),
-			rproof_pmmr.root(),
-			kernel_pmmr.root(),
-		)
+		let output_pmmr = PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+		let rproof_pmmr = PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
+		let kernel_pmmr = PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
+		(output_pmmr.root(), rproof_pmmr.root(), kernel_pmmr.root())
 	}
 }
 
@@ -139,7 +145,7 @@ where
 	let res: Result<T, Error>;
 	let rollback: bool;
 	{
-    debug!(LOGGER, "Starting new sumtree extension.");
+		debug!(LOGGER, "Starting new sumtree extension.");
 		let commit_index = trees.commit_index.clone();
 		let mut extension = Extension::new(trees, commit_index);
 		res = inner(&mut extension);
@@ -151,7 +157,7 @@ where
 	}
 	match res {
 		Err(e) => {
-      debug!(LOGGER, "Error returned, discarding sumtree extension.");
+			debug!(LOGGER, "Error returned, discarding sumtree extension.");
 			trees.output_pmmr_h.backend.discard();
 			trees.rproof_pmmr_h.backend.discard();
 			trees.kernel_pmmr_h.backend.discard();
@@ -159,12 +165,12 @@ where
 		}
 		Ok(r) => {
 			if rollback {
-        debug!(LOGGER, "Rollbacking sumtree extension.");
+				debug!(LOGGER, "Rollbacking sumtree extension.");
 				trees.output_pmmr_h.backend.discard();
 				trees.rproof_pmmr_h.backend.discard();
 				trees.kernel_pmmr_h.backend.discard();
 			} else {
-        debug!(LOGGER, "Committing sumtree extension.");
+				debug!(LOGGER, "Committing sumtree extension.");
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
@@ -173,7 +179,7 @@ where
 				trees.kernel_pmmr_h.last_pos = sizes.2;
 			}
 
-      debug!(LOGGER, "Sumtree extension done.");
+			debug!(LOGGER, "Sumtree extension done.");
 			Ok(r)
 		}
 	}
@@ -249,19 +255,21 @@ impl<'a> Extension<'a> {
 			}
 			// push new outputs commitments in their MMR and save them in the index
 			let pos = self.output_pmmr
-				.push(SumCommit {
-					commit: out.commitment(),
-					secp: secp.clone(),
-				},
-				Some(out.switch_commit_hash()))
+				.push(
+					SumCommit {
+						commit: out.commitment(),
+						secp: secp.clone(),
+					},
+					Some(out.switch_commit_hash()),
+				)
 				.map_err(&Error::SumTreeErr)?;
 
 			self.new_output_commits.insert(out.commitment(), pos);
 
 			// push range proofs in their MMR
-			self.rproof_pmmr.push(NoSum(out.proof), None::<RangeProof>).map_err(
-				&Error::SumTreeErr,
-			)?;
+			self.rproof_pmmr
+				.push(NoSum(out.proof), None::<RangeProof>)
+				.map_err(&Error::SumTreeErr)?;
 		}
 
 		for kernel in &b.kernels {
@@ -269,9 +277,9 @@ impl<'a> Extension<'a> {
 				return Err(Error::DuplicateKernel(kernel.excess.clone()));
 			}
 			// push kernels in their MMR
-			let pos = self.kernel_pmmr.push(NoSum(kernel.clone()),None::<RangeProof>).map_err(
-				&Error::SumTreeErr,
-			)?;
+			let pos = self.kernel_pmmr
+				.push(NoSum(kernel.clone()), None::<RangeProof>)
+				.map_err(&Error::SumTreeErr)?;
 			self.new_kernel_excesses.insert(kernel.excess, pos);
 		}
 		Ok(())
@@ -293,7 +301,7 @@ impl<'a> Extension<'a> {
 		let out_pos_rew = self.commit_index.get_output_pos(&output.commitment())?;
 		let kern_pos_rew = self.commit_index.get_kernel_pos(&kernel.excess)?;
 
-    debug!(LOGGER, "Rewind sumtrees to {}", out_pos_rew);
+		debug!(LOGGER, "Rewind sumtrees to {}", out_pos_rew);
 		self.output_pmmr
 			.rewind(out_pos_rew, height as u32)
 			.map_err(&Error::SumTreeErr)?;
@@ -303,7 +311,7 @@ impl<'a> Extension<'a> {
 		self.kernel_pmmr
 			.rewind(kern_pos_rew, height as u32)
 			.map_err(&Error::SumTreeErr)?;
-    self.dump(true);
+		self.dump(true);
 		Ok(())
 	}
 
@@ -324,17 +332,18 @@ impl<'a> Extension<'a> {
 		self.rollback = true;
 	}
 
-	/// Dumps the state of the 3 sum trees to stdout for debugging. Short version
-  /// only prints the UTXO tree.
+	/// Dumps the state of the 3 sum trees to stdout for debugging. Short
+	/// version
+	/// only prints the UTXO tree.
 	pub fn dump(&self, short: bool) {
 		debug!(LOGGER, "-- outputs --");
 		self.output_pmmr.dump(short);
-    if !short {
-      debug!(LOGGER, "-- range proofs --");
-      self.rproof_pmmr.dump(short);
-      debug!(LOGGER, "-- kernels --");
-      self.kernel_pmmr.dump(short);
-    }
+		if !short {
+			debug!(LOGGER, "-- range proofs --");
+			self.rproof_pmmr.dump(short);
+			debug!(LOGGER, "-- kernels --");
+			self.kernel_pmmr.dump(short);
+		}
 	}
 
 	// Sizes of the sum trees, used by `extending` on rollback.

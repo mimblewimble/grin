@@ -20,37 +20,11 @@ use chain;
 use core::core::Transaction;
 use core::ser;
 use pool;
-use handlers::UtxoHandler;
+use handlers::{UtxoHandler, ChainHandler, SumTreeHandler};
 use rest::*;
 use types::*;
 use util;
 use util::LOGGER;
-
-/// ApiEndpoint implementation for the blockchain. Exposes the current chain
-/// state as a simple JSON object.
-#[derive(Clone)]
-pub struct ChainApi {
-	/// data store access
-	chain: Arc<chain::Chain>,
-}
-
-impl ApiEndpoint for ChainApi {
-	type ID = String;
-	type T = Tip;
-	type OP_IN = ();
-	type OP_OUT = ();
-
-	fn operations(&self) -> Vec<Operation> {
-		vec![Operation::Get]
-	}
-
-	fn get(&self, _: String) -> ApiResult<Tip> {
-		match self.chain.head() {
-			Ok(tip) => Ok(Tip::from_tip(tip)),
-			Err(e) => Err(Error::Internal(format!("{:?}", e))),
-		}
-	}
-}
 
 /// ApiEndpoint implementation for the transaction pool, to check its status
 /// and size as well as push new transactions.
@@ -132,14 +106,17 @@ pub fn start_rest_apis<T>(
 
 	thread::spawn(move || {
 		let mut apis = ApiServer::new("/v1".to_string());
-		apis.register_endpoint("/chain".to_string(), ChainApi {chain: chain.clone()});
 		apis.register_endpoint("/pool".to_string(), PoolApi {tx_pool: tx_pool});
 
 		// register a nested router at "/v2" for flexibility
 		// so we can experiment with raw iron handlers
 		let utxo_handler = UtxoHandler {chain: chain.clone()};
+		let chain_tip_handler = ChainHandler {chain: chain.clone()};
+		let sumtree_handler = SumTreeHandler {chain: chain.clone()};
 		let router = router!(
+			chain_tip: get "/chain" => chain_tip_handler,
 			chain_utxos: get "/chain/utxos" => utxo_handler,
+			sumtree_roots: get "/sumtrees/*" => sumtree_handler,
 		);
 		apis.register_handler("/v2", router);
 

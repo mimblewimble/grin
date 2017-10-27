@@ -350,6 +350,37 @@ where
 		self.backend.get(position)
 	}
 
+	/// Helper function to get the last N nodes inserted, i.e. the last
+	/// n nodes along the bottom of the tree
+	pub fn get_last_n_insertions(&self, n: u64) -> Vec<HashSum<T>> {
+		let mut return_vec=Vec::new();
+		let mut last_leaf = self.last_pos;
+		let size=self.unpruned_size();
+		//Special case that causes issues in bintree functions,
+		//just return
+		if size==1 {
+			return_vec.push(self.backend.get(last_leaf).unwrap());
+			return return_vec;
+		}
+		//if size is even, we're already at the bottom, otherwise
+		//we need to traverse down to it (reverse post-order direction)
+		if size % 2 == 1 {
+			last_leaf=bintree_rightmost(self.last_pos);
+		}
+		for _ in 0..n as u64 {
+			if last_leaf==0 {
+				break;
+			}
+			if bintree_postorder_height(last_leaf) > 0 {
+				last_leaf = bintree_rightmost(last_leaf);
+			}
+			return_vec.push(self.backend.get(last_leaf).unwrap());
+			
+			last_leaf=bintree_jump_left_sibling(last_leaf);
+		}
+		return_vec
+	}
+
 	/// Total size of the tree, including intermediary nodes an ignoring any
 	/// pruning.
 	pub fn unpruned_size(&self) -> u64 {
@@ -693,6 +724,15 @@ fn bintree_move_down_left(num: u64) -> Option<u64> {
 	Some(num - (1 << height))
 }
 
+/// Gets the position of the rightmost node (i.e. leaf) relative to the current
+fn bintree_rightmost(num: u64) -> u64 {
+	let height = bintree_postorder_height(num);
+	if height == 0 {
+		return 0;
+	}
+	num - height
+}
+
 /// Calculates the position of the right sibling of a node a subtree in the
 /// postorder traversal of a full binary tree.
 fn bintree_jump_right_sibling(num: u64) -> u64 {
@@ -908,6 +948,56 @@ mod test {
 	}
 
 	#[test]
+	fn pmmr_get_last_n_insertions() {
+
+		let elems = [
+			TestElem([0, 0, 0, 1]),
+			TestElem([0, 0, 0, 2]),
+			TestElem([0, 0, 0, 3]),
+			TestElem([0, 0, 0, 4]),
+			TestElem([0, 0, 0, 5]),
+			TestElem([0, 0, 0, 6]),
+			TestElem([0, 0, 0, 7]),
+			TestElem([0, 0, 0, 8]),
+			TestElem([0, 0, 0, 9]),
+		];
+		let mut ba = VecBackend::new();
+		let mut pmmr = PMMR::new(&mut ba);
+
+		//test when empty
+		let res=pmmr.get_last_n_insertions(19);
+		assert!(res.len()==0);
+
+		pmmr.push(elems[0], None::<TestElem>).unwrap();
+		let res=pmmr.get_last_n_insertions(19);
+		assert!(res.len()==1 && res[0].sum==1);
+
+		pmmr.push(elems[1], None::<TestElem>).unwrap();
+
+		let res = pmmr.get_last_n_insertions(12);
+		assert!(res[0].sum==2 && res[1].sum==1);
+
+		pmmr.push(elems[2], None::<TestElem>).unwrap();
+
+		let res = pmmr.get_last_n_insertions(2);
+		assert!(res[0].sum==3 && res[1].sum==2);
+
+		pmmr.push(elems[3], None::<TestElem>).unwrap();
+
+		let res = pmmr.get_last_n_insertions(19);
+		assert!(res[0].sum==4 && res[1].sum==3 && res[2].sum==2 && res[3].sum==1 && res.len()==4);
+
+		pmmr.push(elems[5], None::<TestElem>).unwrap();
+		pmmr.push(elems[6], None::<TestElem>).unwrap();
+		pmmr.push(elems[7], None::<TestElem>).unwrap();
+		pmmr.push(elems[8], None::<TestElem>).unwrap();
+
+		let res = pmmr.get_last_n_insertions(7);
+		assert!(res[0].sum==9 && res[1].sum==8 && res[2].sum==7 && res[3].sum==6 && res.len()==7);
+
+	}
+
+	#[test]
 	#[allow(unused_variables)]
 	fn pmmr_prune() {
 		let elems = [
@@ -1030,4 +1120,5 @@ mod test {
 		assert_eq!(pl.get_shift(9), Some(8));
 		assert_eq!(pl.get_shift(17), Some(11));
 	}
+
 }
