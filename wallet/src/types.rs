@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2017 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 use blake2;
 use rand::{thread_rng, Rng};
-use std::{fmt, num, thread, time};
+use std::{fmt, num, error};
 use std::convert::From;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -23,8 +23,13 @@ use std::path::MAIN_SEPARATOR;
 use std::collections::HashMap;
 use std::cmp::min;
 
+use hyper;
 use serde_json;
 use secp;
+use tokio_core::reactor;
+use tokio_retry::Retry;
+use tokio_retry::strategy::FibonacciBackoff;
+
 
 use api;
 use core::core::{Transaction, transaction};
@@ -68,6 +73,26 @@ pub enum Error {
 	IOError(io::Error),
 	/// Error when contacting a node through its API
 	Node(api::Error),
+	/// Error originating from hyper.
+	Hyper(hyper::Error),
+	/// Error originating from hyper uri parsing.
+	Uri(hyper::error::UriError),
+}
+
+impl error::Error for Error {
+	fn description(&self) -> &str {
+		match *self {
+			_ => "some kind of wallet error",
+		}
+	}
+}
+
+impl fmt::Display for Error {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			_ => write!(f, "some kind of wallet error"),
+		}
+	}
 }
 
 impl From<keychain::Error> for Error {
@@ -109,6 +134,18 @@ impl From<api::Error> for Error {
 impl From<io::Error> for Error {
 	fn from(e: io::Error) -> Error {
 		Error::IOError(e)
+	}
+}
+
+impl From<hyper::Error> for Error {
+	fn from(e: hyper::Error) -> Error {
+		Error::Hyper(e)
+	}
+}
+
+impl From<hyper::error::UriError> for Error {
+	fn from(e: hyper::error::UriError) -> Error {
+		Error::Uri(e)
 	}
 }
 
@@ -361,47 +398,34 @@ impl WalletData {
 		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
 		let lock_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, LOCK_FILE);
 
-		// create the lock file, if it already exists, will produce an error
-		// sleep and retry a few times if we cannot get it the first time
-		let mut retries = 0;
-		loop {
-			let result = OpenOptions::new()
+		info!(LOGGER, "Acquiring wallet lock ...");
+
+		let action = || {
+			debug!(LOGGER, "Attempting to acquire wallet lock");
+			OpenOptions::new()
 				.write(true)
 				.create_new(true)
 				.open(lock_file_path)
-				.map_err(|_| {
-					Error::WalletData(format!(
-						"Could not create wallet lock file. Either \
-						some other process is using the wallet or there is a write access issue."
-					))
-				});
-			match result {
-				Ok(_) => {
-					info!(LOGGER, "acquired wallet lock ...");
-					break;
-				}
-				Err(e) => {
-					if retries >= 10 {
-						info!(
-							LOGGER,
-							"failed to obtain wallet.lock after {} retries, \
-							unable to successfully open the wallet",
-							retries
-						);
-						return Err(e);
-					}
-					debug!(
-						LOGGER,
-						"failed to obtain wallet.lock, retries - {}, sleeping and retrying",
-						retries
-					);
-					retries += 1;
-					thread::sleep(time::Duration::from_millis(250));
-				}
+		};
+
+		// use tokio_retry to cleanly define some retry logic
+		let mut core = reactor::Core::new().unwrap();
+		let retry_strategy = FibonacciBackoff::from_millis(10).take(10);
+		let retry_future = Retry::spawn(core.handle(), retry_strategy, action);
+		let retry_result = core.run(retry_future);
+
+		match retry_result {
+			Ok(_) => {},
+			Err(_) => {
+				error!(
+					LOGGER,
+					"Failed to acquire wallet lock file (multiple retries)",
+				);
+				return Err(Error::WalletData(format!("Failed to acquire lock file")));
 			}
 		}
 
-		// do what needs to be done
+		// We successfully acquired the lock - so do what needs to be done.
 		let mut wdat = WalletData::read_or_create(data_file_path)?;
 		let res = f(&mut wdat);
 		wdat.write(data_file_path)?;

@@ -67,10 +67,11 @@ pub struct TxWrapper {
 /// Receive an already well formed JSON transaction issuance and finalize the
 /// transaction, adding our receiving output, to broadcast to the rest of the
 /// network.
-pub fn receive_json_tx(config: &WalletConfig,
-                       keychain: &Keychain,
-                       partial_tx_str: &str)
-                       -> Result<(), Error> {
+pub fn receive_json_tx(
+	config: &WalletConfig,
+	keychain: &Keychain,
+	partial_tx_str: &str,
+) -> Result<(), Error> {
 	let (amount, blinding, partial_tx) = partial_tx_from_json(keychain, partial_tx_str)?;
 	let final_tx = receive_transaction(config, keychain, amount, blinding, partial_tx)?;
 	let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
@@ -96,49 +97,11 @@ impl ApiEndpoint for WalletReceiver {
 	type OP_OUT = CbData;
 
 	fn operations(&self) -> Vec<Operation> {
-		vec![Operation::Custom("coinbase".to_string()),
-		     Operation::Custom("receive_json_tx".to_string())]
+		vec![Operation::Custom("receive_json_tx".to_string())]
 	}
 
 	fn operation(&self, op: String, input: WalletReceiveRequest) -> ApiResult<CbData> {
 		match op.as_str() {
-			"coinbase" => {
-				match input {
-					WalletReceiveRequest::Coinbase(cb_fees) => {
-						debug!(LOGGER, "Operation {} with fees {:?}", op, cb_fees);
-						let (out, kern, block_fees) = receive_coinbase(
-							&self.config,
-							&self.keychain,
-							&cb_fees,
-						).map_err(|e| {
-							api::Error::Internal(format!("Error building coinbase: {:?}", e))
-						})?;
-						let out_bin = ser::ser_vec(&out).map_err(|e| {
-							api::Error::Internal(format!("Error serializing output: {:?}", e))
-						})?;
-						let kern_bin = ser::ser_vec(&kern).map_err(|e| {
-							api::Error::Internal(format!("Error serializing kernel: {:?}", e))
-						})?;
-						let key_id_bin = match block_fees.key_id {
-							Some(key_id) => {
-								ser::ser_vec(&key_id).map_err(|e| {
-									api::Error::Internal(
-										format!("Error serializing kernel: {:?}", e),
-									)
-								})?
-							}
-							None => vec![],
-						};
-
-						Ok(CbData {
-							output: util::to_hex(out_bin),
-							kernel: util::to_hex(kern_bin),
-							key_id: util::to_hex(key_id_bin),
-						})
-					}
-					_ => Err(api::Error::Argument(format!("Incorrect request data: {}", op))),
-				}
-			}
 			"receive_json_tx" => {
 				match input {
 					WalletReceiveRequest::PartialTransaction(partial_tx_str) => {
@@ -202,7 +165,7 @@ fn next_available_key(
 }
 
 /// Build a coinbase output and the corresponding kernel
-fn receive_coinbase(
+pub fn receive_coinbase(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	block_fees: &BlockFees

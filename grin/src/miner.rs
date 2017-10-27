@@ -17,13 +17,11 @@
 
 use rand::{self, Rng};
 use std::sync::{Arc, RwLock};
-use std::thread;
+use std::{thread, str};
 use std;
-use std::str;
 use time;
 
 use adapters::PoolToChainAdapter;
-use api;
 use core::consensus;
 use core::core;
 use core::core::Proof;
@@ -36,15 +34,15 @@ use pow::types::MinerConfig;
 use core::ser;
 use core::ser::AsFixedBytes;
 use util::LOGGER;
-
-// use core::genesis;
+use types::Error;
 
 use chain;
 use secp;
 use pool;
 use util;
 use keychain::{Identifier, Keychain};
-use wallet::{BlockFees, WalletReceiveRequest, CbData};
+use wallet;
+use wallet::BlockFees;
 
 use pow::plugin::PluginMiner;
 
@@ -566,8 +564,10 @@ impl Miner {
 			height,
 		};
 
-		let (output, kernel, block_fees) = self.get_coinbase(block_fees);
+		// TODO - error handling, things can go wrong with get_coinbase (wallet api down etc.)
+		let (output, kernel, block_fees) = self.get_coinbase(block_fees).unwrap();
 		let mut b = core::Block::with_reward(head, txs, output, kernel).unwrap();
+
 		debug!(
 			LOGGER,
 			"(Server ID: {}) Built new block with {} inputs and {} outputs, difficulty: {}",
@@ -591,26 +591,33 @@ impl Miner {
 		(b, block_fees)
 	}
 
-	fn get_coinbase(&self, block_fees: BlockFees) -> (core::Output, core::TxKernel, BlockFees) {
+	///
+	/// Probably only want to do this when testing.
+	///
+	fn burn_reward(
+		&self,
+		block_fees: BlockFees,
+	) -> Result<(core::Output, core::TxKernel, BlockFees), Error> {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
+		let (out, kernel) = core::Block::reward_output(&keychain, &key_id, block_fees.fees)
+			.unwrap();
+		Ok((out, kernel, block_fees))
+	}
+
+	fn get_coinbase(
+		&self,
+		block_fees: BlockFees,
+	) -> Result<(core::Output, core::TxKernel, BlockFees), Error> {
 		if self.config.burn_reward {
-			let keychain = Keychain::from_random_seed().unwrap();
-			let key_id = keychain.derive_key_id(1).unwrap();
-			let (out, kern) = core::Block::reward_output(&keychain, &key_id, block_fees.fees)
-				.unwrap();
-			(out, kern, block_fees)
+			self.burn_reward(block_fees)
 		} else {
 			let url = format!(
-				"{}/v1/receive/coinbase",
-				self.config.wallet_receiver_url.as_str()
-			);
-			let request = WalletReceiveRequest::Coinbase(block_fees.clone());
-			let res: CbData = api::client::post(url.as_str(), &request).expect(
-				format!(
-					"(Server ID: {}) Wallet receiver unreachable, could not claim reward. Is it running?",
-					self.debug_output_id
-						.as_str()
-				).as_str(),
-			);
+				"{}/v2/receive/coinbase",
+				self.config.wallet_receiver_url.as_str());
+
+			let res = wallet::client::create_coinbase(&url, &block_fees)?;
+
 			let out_bin = util::from_hex(res.output).unwrap();
 			let kern_bin = util::from_hex(res.kernel).unwrap();
 			let key_id_bin = util::from_hex(res.key_id).unwrap();
@@ -624,7 +631,7 @@ impl Miner {
 
 			debug!(LOGGER, "block_fees here: {:?}", block_fees);
 
-			(output, kernel, block_fees)
+			Ok((output, kernel, block_fees))
 		}
 	}
 }
