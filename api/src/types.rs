@@ -14,8 +14,10 @@
 
 use std::sync::Arc;
 use core::{core, global};
+use core::core::hash::Hashed;
 use chain;
 use secp::pedersen;
+use rest::*;
 use util;
 
 /// The state of the current fork tip
@@ -53,7 +55,6 @@ pub struct SumTrees {
 	pub range_proof_root_hash: String,
 	// Kernel set root hash
 	pub kernel_root_hash: String,
-
 }
 
 impl SumTrees {
@@ -67,6 +68,64 @@ impl SumTrees {
 		}
 	}
 }
+
+/// Wrapper around a list of sumtree nodes, so it can be
+/// presented properly via json
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SumTreeNode {
+	// The hash
+	pub hash: String,
+	// Output (if included)
+	pub output: Option<OutputPrintable>,
+}
+
+impl SumTreeNode {
+
+	pub fn get_last_n_utxo(chain: Arc<chain::Chain>, distance:u64) -> Vec<SumTreeNode> {
+		let mut return_vec = Vec::new();
+		let last_n = chain.get_last_n_utxo(distance);
+		for elem_output in last_n {
+			let header = chain
+			.get_block_header_by_output_commit(&elem_output.1.commit)
+			.map_err(|_| Error::NotFound);
+			// Need to call further method to check if output is spent
+			let mut output = OutputPrintable::from_output(&elem_output.1, &header.unwrap());
+			if let Ok(_) = chain.get_unspent(&elem_output.1.commit) {
+				output.spent = false;
+			}
+			return_vec.push(SumTreeNode {
+				hash: util::to_hex(elem_output.0.to_vec()),
+				output: Some(output),
+			});
+		}
+		return_vec
+	}
+
+	pub fn get_last_n_rangeproof(head: Arc<chain::Chain>, distance:u64) -> Vec<SumTreeNode> {
+		let mut return_vec = Vec::new();
+		let last_n = head.get_last_n_rangeproof(distance);
+		for elem in last_n {
+			return_vec.push(SumTreeNode {
+				hash: util::to_hex(elem.hash.to_vec()),
+				output: None,
+			});
+		}
+		return_vec
+	}
+
+	pub fn get_last_n_kernel(head: Arc<chain::Chain>, distance:u64) -> Vec<SumTreeNode> {
+		let mut return_vec = Vec::new();
+		let last_n = head.get_last_n_kernel(distance);
+		for elem in last_n {
+			return_vec.push(SumTreeNode {
+				hash: util::to_hex(elem.hash.to_vec()),
+				output: None,
+			});
+		}
+		return_vec
+	}
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum OutputType {
 	Coinbase,
@@ -102,6 +161,42 @@ impl Output {
 			proof: output.proof,
 			height: block_header.height,
 			lock_height: lock_height,
+		}
+	}
+}
+
+//As above, except formatted a bit better for human viewing
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OutputPrintable {
+	/// The type of output Coinbase|Transaction
+	pub output_type: OutputType,
+	/// The homomorphic commitment representing the output's amount (as hex string)
+	pub commit: String,
+	/// The height of the block creating this output
+	pub height: u64,
+	/// The lock height (earliest block this output can be spent)
+	pub lock_height: u64,
+	/// Whether the output has been spent
+	pub spent: bool,
+	/// Rangeproof hash  (as hex string)
+	pub proof_hash: String,
+}
+
+impl OutputPrintable {
+	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader) -> OutputPrintable {
+		let (output_type, lock_height) = match output.features {
+			x if x.contains(core::transaction::COINBASE_OUTPUT) => {
+				(OutputType::Coinbase, block_header.height + global::coinbase_maturity())
+			}
+			_ => (OutputType::Transaction, 0),
+		};
+		OutputPrintable {
+			output_type: output_type,
+			commit: util::to_hex(output.commit.0.to_vec()),
+			height: block_header.height,
+			lock_height: lock_height,
+			spent: true,
+			proof_hash: util::to_hex(output.proof.hash().to_vec()),
 		}
 	}
 }

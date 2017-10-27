@@ -116,7 +116,7 @@ pub fn start_rest_apis<T>(
 		let router = router!(
 			chain_tip: get "/chain" => chain_tip_handler,
 			chain_utxos: get "/chain/utxos" => utxo_handler,
-			sumtree_roots: get "/sumtrees/roots" => sumtree_handler,
+			sumtree_roots: get "/sumtrees/*" => sumtree_handler,
 		);
 		apis.register_handler("/v2", router);
 

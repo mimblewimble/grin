@@ -93,22 +93,74 @@ pub struct SumTreeHandler {
 }
 
 impl SumTreeHandler {
+	//gets roots
 	fn get_roots(&self) -> SumTrees {
-		debug!(LOGGER, "getting sumtree roots");
 		SumTrees::from_head(self.chain.clone())
 	}
+
+	// gets last n utxos inserted in to the tree
+	fn get_last_n_utxo(&self, distance:u64) -> Vec<SumTreeNode> {
+		SumTreeNode::get_last_n_utxo(self.chain.clone(), distance)
+	}
+
+	// gets last n utxos inserted in to the tree
+	fn get_last_n_rangeproof(&self, distance:u64) -> Vec<SumTreeNode> {
+		SumTreeNode::get_last_n_rangeproof(self.chain.clone(), distance)
+	}
+
+	// gets last n utxos inserted in to the tree
+	fn get_last_n_kernel(&self, distance:u64) -> Vec<SumTreeNode> {
+		SumTreeNode::get_last_n_kernel(self.chain.clone(), distance)
+	}
+
 }
 
 //
-// Just retrieve the roots
-// GET /v2/chain/roots
+// Retrieve the roots:
+// GET /v2/sumtrees/roots
+//
+// Last inserted nodes::
+// GET /v2/sumtrees/lastutxos (gets last 10)
+// GET /v2/sumtrees/lastutxos?n=5
+// GET /v2/sumtrees/lastrangeproofs
+// GET /v2/sumtrees/lastkernels
 //
 
 impl Handler for SumTreeHandler {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
-		match serde_json::to_string_pretty(&self.get_roots()) {
-			Ok(json) => Ok(Response::with((status::Ok, json))),
-			Err(_) => Ok(Response::with((status::BadRequest, ""))),
+	fn handle(&self, req: &mut Request) -> IronResult<Response> {
+		let url = req.url.clone();
+		let mut path_elems = url.path();
+		if *path_elems.last().unwrap() == "" {
+			path_elems.pop();
+		}
+		//TODO: probably need to set a reasonable max limit here
+		let mut last_n=10;
+		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
+			if let Some(nums) = params.get("n") {
+				for num in nums {
+					if let Ok(n) = str::parse(num) {
+						last_n=n;
+					}
+				}
+			}
+		}
+		match *path_elems.last().unwrap(){
+			"roots" => match serde_json::to_string_pretty(&self.get_roots()) {
+				Ok(json) => Ok(Response::with((status::Ok, json))),
+				Err(_) => Ok(Response::with((status::BadRequest, ""))),
+			},
+			"lastutxos" => match serde_json::to_string_pretty(&self.get_last_n_utxo(last_n)) {
+				Ok(json) => Ok(Response::with((status::Ok, json))),
+				Err(_) => Ok(Response::with((status::BadRequest, ""))),
+			},
+			"lastrangeproofs" => match serde_json::to_string_pretty(&self.get_last_n_rangeproof(last_n)) {
+				Ok(json) => Ok(Response::with((status::Ok, json))),
+				Err(_) => Ok(Response::with((status::BadRequest, ""))),
+			},
+			"lastkernels" => match serde_json::to_string_pretty(&self.get_last_n_kernel(last_n)) {
+				Ok(json) => Ok(Response::with((status::Ok, json))),
+				Err(_) => Ok(Response::with((status::BadRequest, ""))),
+			},_ => Ok(Response::with((status::BadRequest, "")))
 		}
 	}
 }

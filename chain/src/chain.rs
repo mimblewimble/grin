@@ -261,6 +261,32 @@ impl Chain {
 		sumtrees.roots()
 	}
 
+	/// returns the last n nodes inserted into the utxo sum tree
+	/// returns sum tree hash plus output itself (as the sum is contained
+	/// in the output anyhow)
+	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<(Hash, Output)>{
+		let mut sumtrees = self.sumtrees.write().unwrap();
+		let mut return_vec = Vec::new();
+		let sum_nodes=sumtrees.last_n_utxo(distance);
+		for sum_commit in sum_nodes {
+			let output = self.store.get_output_by_commit(&sum_commit.sum.commit);
+			return_vec.push((sum_commit.hash, output.unwrap()));
+		}
+		return_vec
+	}
+
+	/// as above, for rangeproofs
+	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<HashSum<NoSum<RangeProof>>>{
+		let mut sumtrees = self.sumtrees.write().unwrap();
+		sumtrees.last_n_rangeproof(distance)
+	}
+
+	/// as above, for kernels
+	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<HashSum<NoSum<TxKernel>>>{
+		let mut sumtrees = self.sumtrees.write().unwrap();
+		sumtrees.last_n_kernel(distance)
+	}
+
 	/// Total difficulty at the head of the chain
 	pub fn total_difficulty(&self) -> Difficulty {
 		self.head.lock().unwrap().clone().total_difficulty

@@ -101,9 +101,21 @@ impl SumTrees {
 
 	/// returns the last N nodes inserted into the tree (i.e. the 'bottom'
 	/// nodes at level 0
-	pub fn last_n_leafs(&mut self, distance: u64) -> Vec<HashSum<SumCommit>> {
+	pub fn last_n_utxo(&mut self, distance: u64) -> Vec<HashSum<SumCommit>> {
 		let output_pmmr = PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
-		output_pmmr.get_last_n_leafs(distance)
+		output_pmmr.get_last_n_insertions(distance)
+	}
+
+	/// as above, for range proofs
+	pub fn last_n_rangeproof(&mut self, distance: u64) -> Vec<HashSum<NoSum<RangeProof>>> {
+		let rproof_pmmr = PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
+		rproof_pmmr.get_last_n_insertions(distance)
+	}
+
+	/// as above, for kernels
+	pub fn last_n_kernel(&mut self, distance: u64) -> Vec<HashSum<NoSum<TxKernel>>> {
+		let kernel_pmmr = PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
+		kernel_pmmr.get_last_n_insertions(distance)
 	}
 
 	/// Get sum tree roots

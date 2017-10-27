@@ -352,11 +352,11 @@ where
 
 	/// Helper function to get the last N nodes inserted, i.e. the last
 	/// n nodes along the bottom of the tree
-	pub fn get_last_n_leafs(&self, n: u64) -> Vec<HashSum<T>> {
+	pub fn get_last_n_insertions(&self, n: u64) -> Vec<HashSum<T>> {
 		let mut return_vec=Vec::new();
 		let mut last_leaf = self.last_pos;
 		let size=self.unpruned_size();
-		//Special case that causes issues in bintree functions, 
+		//Special case that causes issues in bintree functions,
 		//just return
 		if size==1 {
 			return_vec.push(self.backend.get(last_leaf).unwrap());
@@ -948,7 +948,7 @@ mod test {
 	}
 
 	#[test]
-	fn pmmr_get_last_n_leafs() {
+	fn pmmr_get_last_n_insertions() {
 
 		let elems = [
 			TestElem([0, 0, 0, 1]),
@@ -965,26 +965,26 @@ mod test {
 		let mut pmmr = PMMR::new(&mut ba);
 
 		//test when empty
-		let res=pmmr.get_last_n_leafs(19);
+		let res=pmmr.get_last_n_insertions(19);
 		assert!(res.len()==0);
 
 		pmmr.push(elems[0], None::<TestElem>).unwrap();
-		let res=pmmr.get_last_n_leafs(19);
+		let res=pmmr.get_last_n_insertions(19);
 		assert!(res.len()==1 && res[0].sum==1);
 
 		pmmr.push(elems[1], None::<TestElem>).unwrap();
 
-		let res = pmmr.get_last_n_leafs(12);
+		let res = pmmr.get_last_n_insertions(12);
 		assert!(res[0].sum==2 && res[1].sum==1);
 
 		pmmr.push(elems[2], None::<TestElem>).unwrap();
 
-		let res = pmmr.get_last_n_leafs(2);
+		let res = pmmr.get_last_n_insertions(2);
 		assert!(res[0].sum==3 && res[1].sum==2);
 
 		pmmr.push(elems[3], None::<TestElem>).unwrap();
 
-		let res = pmmr.get_last_n_leafs(19);
+		let res = pmmr.get_last_n_insertions(19);
 		assert!(res[0].sum==4 && res[1].sum==3 && res[2].sum==2 && res[3].sum==1 && res.len()==4);
 
 		pmmr.push(elems[5], None::<TestElem>).unwrap();
@@ -992,7 +992,7 @@ mod test {
 		pmmr.push(elems[7], None::<TestElem>).unwrap();
 		pmmr.push(elems[8], None::<TestElem>).unwrap();
 
-		let res = pmmr.get_last_n_leafs(7);
+		let res = pmmr.get_last_n_insertions(7);
 		assert!(res[0].sum==9 && res[1].sum==8 && res[2].sum==7 && res[3].sum==6 && res.len()==7);
 
 	}
