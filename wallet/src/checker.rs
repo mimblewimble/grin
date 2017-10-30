@@ -29,7 +29,7 @@ use util::LOGGER;
 // Also updates the height and lock_height based on latest from the api.
 fn refresh_output(out: &mut OutputData, api_out: &api::Output) {
 	out.height = api_out.height;
-	out.lock_height = api_out.lock_height;
+	// out.lock_height = api_out.lock_height;
 
 	match out.status {
 		OutputStatus::Unconfirmed => {

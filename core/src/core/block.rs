@@ -19,9 +19,18 @@ use util;
 use util::{secp, static_secp_instance};
 use std::collections::HashSet;
 
-use core::Committed;
-use core::{Input, Output, Proof, SwitchCommitHash, Transaction, TxKernel, COINBASE_KERNEL,
-	COINBASE_OUTPUT};
+use core::{
+	Committed,
+	Input,
+	Output,
+	SwitchCommitKey,
+	SwitchCommitHash,
+	Proof,
+	TxKernel,
+	Transaction,
+	COINBASE_KERNEL,
+	COINBASE_OUTPUT
+};
 use consensus;
 use consensus::{exceeds_weight, reward, MINIMUM_DIFFICULTY, REWARD, VerifySortOrder};
 use core::hash::{Hash, Hashed, ZERO_HASH};
@@ -561,10 +570,41 @@ impl Block {
 		fees: u64,
 		height: u64,
 	) -> Result<(Output, TxKernel), keychain::Error> {
-		let lock_height = height + global::coinbase_maturity();
+		debug!(
+			LOGGER,
+			"Block::reward_output: {}, {}",
+			fees,
+			height,
+		);
 		let commit = keychain.commit(reward(fees), key_id)?;
 		let switch_commit = keychain.switch_commit(key_id)?;
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+
+		debug!(
+			LOGGER,
+			"Block::reward_output: switch_commit: {:?}",
+			switch_commit,
+		);
+
+		let lock_height = height + global::coinbase_maturity();
+		debug!(
+			LOGGER,
+			"Block::reward_output: lock_height: {}, {}",
+			lock_height,
+			key_id,
+		);
+
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			SwitchCommitKey::from_lock_height(lock_height),
+		);
+
+		debug!(
+			LOGGER,
+			"Block::reward_output: switch_commit_hash: {}, {:?}",
+			lock_height,
+			switch_commit_hash,
+		);
+
 		trace!(
 			LOGGER,
 			"Block reward - Pedersen Commit is: {:?}, Switch Commit is: {:?}",
@@ -581,7 +621,6 @@ impl Block {
 
 		let output = Output {
 			features: COINBASE_OUTPUT,
-			lock_height: lock_height,
 			commit: commit,
 			switch_commit_hash: switch_commit_hash,
 			proof: rproof,
@@ -591,7 +630,7 @@ impl Block {
 		let secp = secp.lock().unwrap();
 		let over_commit = secp.commit_value(reward(fees))?;
 		let out_commit = output.commitment();
-		let excess = secp.commit_sum(vec![out_commit], vec![over_commit])?;
+		let excess = keychain.secp().commit_sum(vec![out_commit], vec![over_commit])?;
 
 		// NOTE: Remember we sign the fee *and* the lock_height.
 		// For a coinbase output the fee is 0 and the lock_height is
@@ -609,6 +648,7 @@ impl Block {
 			excess_sig: excess_sig,
 			fee: 0,
 			// lock_height here is the height of the block (tx should be valid immediately)
+			// *not* the lock_height of the coinbase output (only spendable 1,000 blocks later)
 			lock_height: height,
 		};
 		Ok((output, proof))
@@ -643,7 +683,7 @@ mod test {
 		key_id2: Identifier,
 	) -> Transaction {
 		build::transaction(
-			vec![input(v, key_id1), output(3, key_id2), with_fee(2)],
+			vec![input(v, 0, key_id1), output(3, 0, key_id2), with_fee(2)],
 			&keychain,
 		).map(|(tx, _)| tx)
 			.unwrap()
@@ -663,11 +703,11 @@ mod test {
 
 		let mut parts = vec![];
 		for _ in 0..max_out {
-			parts.push(output(5, pks.pop().unwrap()));
+			parts.push(output(5, 0, pks.pop().unwrap()));
 		}
 
 		let now = Instant::now();
-		parts.append(&mut vec![input(500000, pks.pop().unwrap()), with_fee(2)]);
+		parts.append(&mut vec![input(500000, 0, pks.pop().unwrap()), with_fee(2)]);
 		let mut tx = build::transaction(parts, &keychain)
 			.map(|(tx, _)| tx)
 			.unwrap();
@@ -687,7 +727,7 @@ mod test {
 
 		let mut btx1 = tx2i1o();
 		let (mut btx2, _) = build::transaction(
-			vec![input(7, key_id1), output(5, key_id2.clone()), with_fee(2)],
+			vec![input(7, 0, key_id1), output(5, 0, key_id2.clone()), with_fee(2)],
 			&keychain,
 		).unwrap();
 
@@ -715,7 +755,7 @@ mod test {
 		let mut btx1 = tx2i1o();
 
 		let (mut btx2, _) = build::transaction(
-			vec![input(7, key_id1), output(5, key_id2.clone()), with_fee(2)],
+			vec![input(7, 0, key_id1), output(5, 0, key_id2.clone()), with_fee(2)],
 			&keychain,
 		).unwrap();
 

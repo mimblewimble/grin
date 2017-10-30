@@ -27,7 +27,7 @@
 
 use util::{secp, static_secp_instance};
 
-use core::{Input, Output, SwitchCommitHash, Transaction, DEFAULT_OUTPUT};
+use core::{Transaction, Input, Output, SwitchCommitKey, SwitchCommitHash, DEFAULT_OUTPUT};
 use core::transaction::kernel_sig_msg;
 use keychain;
 use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
@@ -44,10 +44,39 @@ pub type Append = for<'a> Fn(&'a mut Context, (Transaction, BlindSum)) -> (Trans
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
-pub fn input(value: u64, key_id: Identifier) -> Box<Append> {
+pub fn input(value: u64, lock_height: u64, key_id: Identifier) -> Box<Append> {
+	debug!(
+		LOGGER,
+		"Building an input: {}, {}, {}",
+		value,
+		lock_height,
+		key_id,
+	);
+
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
 		let commit = build.keychain.commit(value, &key_id).unwrap();
-		(tx.with_input(Input(commit)), sum.sub_key_id(key_id.clone()))
+		let switch_commit = build.keychain.switch_commit(&key_id).unwrap();
+
+		debug!(
+			LOGGER,
+			"built switch_commit for input: {}, {:?}",
+			lock_height,
+			switch_commit,
+		);
+
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			SwitchCommitKey::from_lock_height(lock_height),
+		);
+		debug!(
+			LOGGER,
+			"built temp switch_commit_hash for input: {}, {:?}",
+			lock_height,
+			switch_commit_hash,
+		);
+
+		let input = Input::new(commit, switch_commit, lock_height);
+		(tx.with_input(input), sum.sub_key_id(key_id.clone()))
 	})
 }
 
@@ -55,11 +84,20 @@ pub fn input(value: u64, key_id: Identifier) -> Box<Append> {
 /// keychain.
 pub fn output(value: u64, lock_height: u64, key_id: Identifier) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
-		println!("************* building an output ********** {}, {}", value, lock_height);
+		debug!(
+			LOGGER,
+			"Building an output: {}, {}, {}",
+			value,
+			lock_height,
+			key_id,
+		);
 
 		let commit = build.keychain.commit(value, &key_id).unwrap();
 		let switch_commit = build.keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			SwitchCommitKey::from_lock_height(lock_height),
+		);
 		trace!(
 			LOGGER,
 			"Builder - Pedersen Commit is: {:?}, Switch Commit is: {:?}",
@@ -80,7 +118,6 @@ pub fn output(value: u64, lock_height: u64, key_id: Identifier) -> Box<Append> {
 		(
 			tx.with_output(Output {
 				features: DEFAULT_OUTPUT,
-				lock_height: lock_height,
 				commit: commit,
 				switch_commit_hash: switch_commit_hash,
 				proof: rproof,
@@ -164,9 +201,9 @@ mod test {
 
 		let (tx, _) = transaction(
 			vec![
-				input(10, key_id1),
-				input(11, key_id2),
-				output(20, key_id3),
+				input(10, 0, key_id1),
+				input(11, 0, key_id2),
+				output(20, 0, key_id3),
 				with_fee(1),
 			],
 			&keychain,
@@ -182,7 +219,7 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
 		let (tx, _) = transaction(
-			vec![input(6, key_id1), output(2, key_id2), with_fee(4)],
+			vec![input(6, 0, key_id1), output(2, 0, key_id2), with_fee(4)],
 			&keychain,
 		).unwrap();
 

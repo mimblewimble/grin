@@ -102,7 +102,7 @@ fn test_coinbase_maturity() {
 	let amount = consensus::REWARD;
 	let (coinbase_txn, _) = build::transaction(
 		vec![
-			build::input(amount, key_id1.clone()),
+			build::input(amount, block.header.height, key_id1.clone()),
 			build::output(amount - 2, block.header.height, key_id2),
 			build::with_fee(2),
 		],

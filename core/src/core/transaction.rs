@@ -34,6 +34,8 @@ use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSo
 /// The size to use for the stored blake2 hash of a switch_commitment
 pub const SWITCH_COMMIT_HASH_SIZE: usize = 20;
 
+pub const SWITCH_COMMIT_KEY_SIZE: usize = 20;
+
 bitflags! {
 	/// Options for a kernel's structure or use
 	pub flags KernelFeatures: u8 {
@@ -72,13 +74,14 @@ macro_rules! hashable_ord {
 pub enum Error {
 	/// Transaction fee can't be odd, due to half fee burning
 	OddFee,
-	/// Underlying Secp256k1 error (signature validation or invalid public
-	/// key typically)
+	/// Underlying Secp256k1 error (signature validation or invalid public key typically)
 	Secp(secp::Error),
 	/// Restrict number of incoming inputs
 	TooManyInputs,
 	/// Underlying consensus error (currently for sort order)
 	ConsensusError(consensus::Error),
+	LockHeight(u64),
+	SwitchCommitment,
 }
 
 impl From<secp::Error> for Error {
@@ -388,8 +391,12 @@ impl Transaction {
 
 /// A transaction input, mostly a reference to an output being spent by the
 /// transaction.
-#[derive(Debug, Copy, Clone)]
-pub struct Input(pub Commitment);
+#[derive(Debug, Clone, Copy)]
+pub struct Input{
+	commit: Commitment,
+	switch_commit: Commitment,
+	lock_height: u64,
+}
 
 hashable_ord!(Input);
 
@@ -397,7 +404,10 @@ hashable_ord!(Input);
 /// an Input as binary.
 impl Writeable for Input {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_fixed_bytes(&self.0)
+		writer.write_fixed_bytes(&self.commit)?;
+		writer.write_fixed_bytes(&self.switch_commit)?;
+		writer.write_u64(self.lock_height)?;
+		Ok(())
 	}
 }
 
@@ -405,16 +415,63 @@ impl Writeable for Input {
 /// an Input from a binary stream.
 impl Readable for Input {
 	fn read(reader: &mut Reader) -> Result<Input, ser::Error> {
-		Ok(Input(Commitment::read(reader)?))
+		Ok(Input {
+			commit: Commitment::read(reader)?,
+			switch_commit: Commitment::read(reader)?,
+			lock_height: reader.read_u64()?,
+		})
 	}
 }
 
 /// The input for a transaction, which spends a pre-existing output. The input
 /// commitment is a reproduction of the commitment of the output it's spending.
 impl Input {
+	pub fn new(commit: Commitment, switch_commit: Commitment, lock_height: u64) -> Input {
+		debug!(
+			LOGGER,
+			"building a new input: {:?}, {:?}, {}",
+			commit,
+			switch_commit,
+			lock_height,
+		);
+		Input {
+			commit,
+			switch_commit,
+			lock_height,
+		}
+	}
+
 	/// Extracts the referenced commitment from a transaction output
 	pub fn commitment(&self) -> Commitment {
-		self.0
+		self.commit
+	}
+
+	/// Given the output being spent by this input along with the current chain height
+	/// we can verify the output has sufficiently matured and is spendable.
+	/// We do this by reconstructing the switch_commit_hash from the switch_commit.
+	/// The lock_height is passed in as the secret key to the hash so we can verify
+	/// we are not being lied to about the lock_height.
+	///
+	/// Note: we are only enforcing this for coinbase outputs currently.
+	///
+	pub fn verify_lock_height(
+		&self,
+		output: &Output,
+		height: u64,
+	) -> Result<(), Error> {
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			self.switch_commit,
+			SwitchCommitKey::from_lock_height(self.lock_height),
+		);
+
+		if switch_commit_hash != output.switch_commit_hash {
+			return Err(Error::SwitchCommitment);
+		} else {
+			if height <= self.lock_height {
+				return Err(Error::LockHeight(self.lock_height));
+			}
+		}
+		Ok(())
 	}
 }
 
@@ -429,6 +486,17 @@ bitflags! {
 	}
 }
 
+pub struct SwitchCommitKey ([u8; SWITCH_COMMIT_KEY_SIZE]);
+
+impl SwitchCommitKey {
+	// TODO - pass the output features in here also? How to do this cleanly?
+	pub fn from_lock_height(lock_height: u64) -> SwitchCommitKey {
+		let mut bytes = [0; SWITCH_COMMIT_KEY_SIZE];
+		BigEndian::write_u64(&mut bytes[0..8], lock_height);
+		SwitchCommitKey(bytes)
+	}
+}
+
 /// Definition of the switch commitment hash
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SwitchCommitHash {
@@ -436,10 +504,14 @@ pub struct SwitchCommitHash {
 	pub hash: [u8; SWITCH_COMMIT_HASH_SIZE],
 }
 
+/// Definition of the switch commitment hash
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SwitchCommitHash([u8; SWITCH_COMMIT_HASH_SIZE]);
+
 /// Implementation of Writeable for a switch commitment hash
 impl Writeable for SwitchCommitHash {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_fixed_bytes(&self.hash)?;
+		writer.write_fixed_bytes(&self.0)?;
 		Ok(())
 	}
 }
@@ -453,26 +525,32 @@ impl Readable for SwitchCommitHash {
 		for i in 0..SWITCH_COMMIT_HASH_SIZE {
 			c[i] = a[i];
 		}
-		Ok(SwitchCommitHash { hash: c })
+		Ok(SwitchCommitHash(c))
 	}
 }
 // As Ref for AsFixedBytes
 impl AsRef<[u8]> for SwitchCommitHash {
 	fn as_ref(&self) -> &[u8] {
-		&self.hash
+		&self.0
 	}
 }
 
 impl SwitchCommitHash {
 	/// Builds a switch commitment hash from a switch commit using blake2
-	pub fn from_switch_commit(switch_commit: Commitment) -> SwitchCommitHash {
-		let switch_commit_hash = blake2b(SWITCH_COMMIT_HASH_SIZE, &[], &switch_commit.0);
+	pub fn from_switch_commit(switch_commit: Commitment, key: SwitchCommitKey) -> SwitchCommitHash {
+		debug!(
+			LOGGER,
+			"SwitchCommitHash::from_switch_commit: {:?}, {:?}",
+			switch_commit,
+			key,
+		);
+		let switch_commit_hash = blake2b(SWITCH_COMMIT_HASH_SIZE, &key.0, &switch_commit.0);
 		let switch_commit_hash = switch_commit_hash.as_bytes();
 		let mut h = [0; SWITCH_COMMIT_HASH_SIZE];
 		for i in 0..SWITCH_COMMIT_HASH_SIZE {
 			h[i] = switch_commit_hash[i];
 		}
-		SwitchCommitHash { hash: h }
+		SwitchCommitHash(h)
 	}
 }
 
@@ -480,20 +558,18 @@ impl SwitchCommitHash {
 /// transferred. The commitment is a blinded value for the output while the
 /// range proof guarantees the commitment includes a positive value without
 /// overflow and the ownership of the private key. The switch commitment hash
-/// provides future-proofing against quantum-based attacks, as well as provides
+/// provides future-proofing against quantum-based attacks, as well as providing
 /// wallet implementations with a way to identify their outputs for wallet
-/// reconstruction
+/// reconstruction.
 ///
-/// The hash of an output only covers its features, lock_height, commitment,
+/// The hash of an output only covers its features, commitment,
 /// and switch commitment. The range proof is expected to have its own hash
 /// and is stored and committed to separately.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct Output {
 	/// Options for an output's structure or use
 	pub features: OutputFeatures,
-	/// This output cannot be spent earlier than block at lock_height
-	pub lock_height: u64,
-	/// The homomorphic commitment representing the output's amount
+	/// The homomorphic commitment representing the output amount
 	pub commit: Commitment,
 	/// The switch commitment hash, a 160 bit length blake2 hash of blind*J
 	pub switch_commit_hash: SwitchCommitHash,
@@ -508,7 +584,6 @@ hashable_ord!(Output);
 impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
-		writer.write_u64(self.lock_height)?;
 		writer.write_fixed_bytes(&self.commit)?;
 		writer.write_fixed_bytes(&self.switch_commit_hash)?;
 
@@ -530,7 +605,6 @@ impl Readable for Output {
 
 		Ok(Output {
 			features: features,
-			lock_height: reader.read_u64()?,
 			commit: Commitment::read(reader)?,
 			switch_commit_hash: SwitchCommitHash::read(reader)?,
 			proof: RangeProof::read(reader)?,
@@ -635,6 +709,7 @@ impl ops::Add for SumCommit {
 mod test {
 	use super::*;
 	use keychain::Keychain;
+	use util;
 	use util::secp;
 
 	#[test]
@@ -688,13 +763,15 @@ mod test {
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			SwitchCommitKey::from_lock_height(0),
+		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(5, &key_id, commit, msg).unwrap();
 
 		let out = Output {
 			features: DEFAULT_OUTPUT,
-			lock_height: 0,
 			commit: commit,
 			switch_commit_hash: switch_commit_hash,
 			proof: proof,
@@ -716,13 +793,15 @@ mod test {
 
 		let commit = keychain.commit(1003, &key_id).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			SwitchCommitKey::from_lock_height(0),
+		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(1003, &key_id, commit, msg).unwrap();
 
 		let output = Output {
 			features: DEFAULT_OUTPUT,
-			lock_height: 0,
 			commit: commit,
 			switch_commit_hash: switch_commit_hash,
 			proof: proof,

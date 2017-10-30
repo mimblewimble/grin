@@ -19,7 +19,7 @@ use std::io;
 use util::secp::pedersen::Commitment;
 
 use grin_store as store;
-use core::core::{block, Block, BlockHeader, Output};
+use core::core::{Block, BlockHeader, block, Output, transaction};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::ser;
@@ -58,6 +58,8 @@ pub enum Error {
 	InvalidBlockHeight,
 	/// One of the root hashes in the block is invalid
 	InvalidRoot,
+	/// Something does not look right with the switch commitment
+	InvalidSwitchCommit,
 	/// One of the inputs in the block has already been spent
 	AlreadySpent(Commitment),
 	/// An output with that commitment already exists (should be unique)
@@ -80,6 +82,7 @@ pub enum Error {
 	SumTreeErr(String),
 	/// No chain exists and genesis block is required
 	GenesisBlockRequired,
+	Transaction(transaction::Error),
 	/// Anything else
 	Other(String),
 }
@@ -114,6 +117,12 @@ impl Error {
 				Error::Other(_) => false,
 			_ => true,
 		}
+	}
+}
+
+impl From<transaction::Error> for Error {
+	fn from(e: transaction::Error) -> Error {
+		Error::Transaction(e)
 	}
 }
 

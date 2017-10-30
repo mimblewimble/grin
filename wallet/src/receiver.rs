@@ -25,7 +25,7 @@ use serde_json;
 use api;
 use core::consensus::reward;
 use core::core::{build, Block, Output, Transaction, TxKernel};
-use core::ser;
+use core::{global, ser};
 use keychain::{BlindingFactor, Identifier, Keychain};
 use types::*;
 use util;
@@ -122,6 +122,8 @@ pub fn receive_coinbase(
 ) -> Result<(Output, TxKernel, BlockFees), Error> {
 	let root_key_id = keychain.root_key_id();
 
+	let output_lock_height = block_fees.height + global::coinbase_maturity();
+
 	// Now acquire the wallet lock and write the new output.
 	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		let key_id = block_fees.key_id();
@@ -138,7 +140,7 @@ pub fn receive_coinbase(
 			value: reward(block_fees.fees),
 			status: OutputStatus::Unconfirmed,
 			height: 0,
-			lock_height: 0,
+			lock_height: output_lock_height,
 			is_coinbase: true,
 		});
 

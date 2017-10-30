@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::core;
+use std::sync::Arc;
+
+use core::{core, global};
+use core::core::hash::Hashed;
 use chain;
-use util::secp::pedersen;
 use rest::*;
 use util;
+use util::secp::pedersen;
 
 /// The state of the current fork tip
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -141,8 +144,6 @@ pub struct Output {
 	pub proof: Option<pedersen::RangeProof>,
 	/// The height of the block creating this output
 	pub height: u64,
-	/// The lock height (earliest block this output can be spent)
-	pub lock_height: u64,
 }
 
 impl Output {
@@ -170,7 +171,6 @@ impl Output {
 				false => None,
 			},
 			height: block_header.height,
-			lock_height: output.lock_height,
 		}
 	}
 }
