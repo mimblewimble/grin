@@ -82,11 +82,7 @@ impl AppendOnlyFile {
 	/// written data accessible.
 	fn sync(&mut self) -> io::Result<()> {
 		self.file.sync_data()?;
-		self.mmap = Some(unsafe {
-			memmap::file(&self.file)
-				.protection(memmap::Protection::Read)
-				.map()?
-		});
+		self.mmap = Some(unsafe { memmap::Mmap::map(&self.file)? });
 		Ok(())
 	}
 
@@ -264,7 +260,8 @@ fn include_tuple(v: &Vec<(u64, u32)>, e: u64) -> bool {
 /// * A remove log tracks the positions that need to be pruned from the
 /// main storage file.
 pub struct PMMRBackend<T>
-	where T: Summable + Clone
+where
+	T: Summable + Clone,
 {
 	data_dir: String,
 	hashsum_file: AppendOnlyFile,
@@ -279,13 +276,16 @@ pub struct PMMRBackend<T>
 }
 
 impl<T> Backend<T> for PMMRBackend<T>
-    where T: Summable + Clone
+where
+	T: Summable + Clone,
 {
 	/// Append the provided HashSums to the backend storage.
 	#[allow(unused_variables)]
 	fn append(&mut self, position: u64, data: Vec<HashSum<T>>) -> Result<(), String> {
-		self.buffer
-			.append(position - (self.buffer_index as u64), data.clone())?;
+		self.buffer.append(
+			position - (self.buffer_index as u64),
+			data.clone(),
+		)?;
 		Ok(())
 	}
 
@@ -330,9 +330,9 @@ impl<T> Backend<T> for PMMRBackend<T>
 
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {
 		assert!(self.buffer.len() == 0, "Rewind on non empty buffer.");
-		self.remove_log
-			.truncate(index)
-			.map_err(|e| format!("Could not truncate remove log: {}", e))?;
+		self.remove_log.truncate(index).map_err(|e| {
+			format!("Could not truncate remove log: {}", e)
+		})?;
 		self.rewind = Some((position, index, self.buffer_index));
 		self.buffer_index = position as usize;
 		Ok(())
@@ -344,19 +344,21 @@ impl<T> Backend<T> for PMMRBackend<T>
 			for position in &positions {
 				let pos_sz = *position as usize;
 				if pos_sz > self.buffer_index &&
-				   pos_sz - 1 < self.buffer_index + self.buffer.len() {
+					pos_sz - 1 < self.buffer_index + self.buffer.len()
+				{
 					self.buffer.remove(vec![*position], index).unwrap();
 				}
 			}
 		}
-		self.remove_log
-			.append(positions, index)
-			.map_err(|e| format!("Could not write to log storage, disk full? {:?}", e))
+		self.remove_log.append(positions, index).map_err(|e| {
+			format!("Could not write to log storage, disk full? {:?}", e)
+		})
 	}
 }
 
 impl<T> PMMRBackend<T>
-    where T: Summable + Clone
+where
+	T: Summable + Clone,
 {
 	/// Instantiates a new PMMR backend that will use the provided directly to
 	/// store its files.
@@ -441,7 +443,8 @@ impl<T> PMMRBackend<T>
 	/// position index in db
 	pub fn check_compact(&mut self, max_len: usize) -> io::Result<()> {
 		if !(max_len > 0 && self.remove_log.len() > max_len ||
-		     max_len == 0 && self.remove_log.len() > RM_LOG_MAX_NODES) {
+			     max_len == 0 && self.remove_log.len() > RM_LOG_MAX_NODES)
+		{
 			return Ok(());
 		}
 
@@ -471,8 +474,11 @@ impl<T> PMMRBackend<T>
 				(pos - 1 - shift.unwrap()) * record_len
 			})
 			.collect();
-		self.hashsum_file
-			.save_prune(tmp_prune_file.clone(), to_rm, record_len)?;
+		self.hashsum_file.save_prune(
+			tmp_prune_file.clone(),
+			to_rm,
+			record_len,
+		)?;
 
 		// 2. update the prune list and save it in place
 		for &(rm_pos, _) in &self.remove_log.removed[..] {
@@ -501,7 +507,8 @@ impl<T> PMMRBackend<T>
 
 // Read an ordered vector of scalars from a file.
 fn read_ordered_vec<T>(path: String) -> io::Result<Vec<T>>
-	where T: ser::Readable + cmp::Ord
+where
+	T: ser::Readable + cmp::Ord,
 {
 
 	let file_path = Path::new(&path);
@@ -543,16 +550,16 @@ fn read_ordered_vec<T>(path: String) -> io::Result<Vec<T>>
 }
 
 fn write_vec<T>(path: String, v: &Vec<T>) -> io::Result<()>
-	where T: ser::Writeable
+where
+	T: ser::Writeable,
 {
 
 	let mut file_path = File::create(&path)?;
-	ser::serialize(&mut file_path, v)
-		.map_err(|_| {
-			io::Error::new(
-				io::ErrorKind::InvalidInput,
-				format!("Failed to serialize data when writing to {}", path),
-			)
-		})?;
+	ser::serialize(&mut file_path, v).map_err(|_| {
+		io::Error::new(
+			io::ErrorKind::InvalidInput,
+			format!("Failed to serialize data when writing to {}", path),
+		)
+	})?;
 	Ok(())
 }
