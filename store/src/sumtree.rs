@@ -83,9 +83,7 @@ impl AppendOnlyFile {
 	fn sync(&mut self) -> io::Result<()> {
 		self.file.sync_data()?;
 		self.mmap = Some(unsafe {
-			memmap::file(&self.file)
-				.protection(memmap::Protection::Read)
-				.map()?
+			memmap::Mmap::map(&self.file)?
 		});
 		Ok(())
 	}
