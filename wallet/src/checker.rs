@@ -122,6 +122,6 @@ pub fn refresh_outputs(
 }
 
 pub fn get_tip_from_node(config: &WalletConfig) -> Result<api::Tip, Error> {
-	let url = format!("{}/v1/chain/1", config.check_node_api_http_addr);
+	let url = format!("{}/v2/chain", config.check_node_api_http_addr);
 	api::client::get::<api::Tip>(url.as_str()).map_err(|e| Error::Node(e))
 }
