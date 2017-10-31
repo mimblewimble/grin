@@ -12,31 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate grin_core as core;
 extern crate grin_chain as chain;
+extern crate grin_core as core;
 extern crate grin_pool as pool;
 extern crate grin_store as store;
 extern crate grin_util as util;
 
 extern crate hyper;
-#[macro_use]
-extern crate slog;
 extern crate iron;
-extern crate urlencoded;
+extern crate mount;
 #[macro_use]
 extern crate router;
-extern crate mount;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
+#[macro_use]
+extern crate slog;
+extern crate urlencoded;
 
 pub mod client;
-mod endpoints;
 mod handlers;
 mod rest;
 mod types;
 
-pub use endpoints::start_rest_apis;
+pub use handlers::start_rest_apis;
 pub use types::*;
 pub use rest::*;

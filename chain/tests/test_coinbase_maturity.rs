@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate grin_core as core;
+extern crate env_logger;
 extern crate grin_chain as chain;
+extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_pow as pow;
-extern crate env_logger;
-extern crate time;
 extern crate rand;
+extern crate time;
 
 use std::fs;
 use std::sync::Arc;
@@ -32,7 +32,7 @@ use core::global::MiningParameterMode;
 
 use keychain::Keychain;
 
-use pow::{types, cuckoo, MiningWorker};
+use pow::{cuckoo, types, MiningWorker};
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -91,9 +91,11 @@ fn test_coinbase_maturity() {
 	).unwrap();
 
 	assert_eq!(block.outputs.len(), 1);
-	assert!(block.outputs[0].features.contains(
-		transaction::COINBASE_OUTPUT,
-	));
+	assert!(
+		block.outputs[0]
+			.features
+			.contains(transaction::COINBASE_OUTPUT,)
+	);
 
 	chain.process_block(block, chain::EASY_POW).unwrap();
 
@@ -109,7 +111,8 @@ fn test_coinbase_maturity() {
 		&keychain,
 	).unwrap();
 
-	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &key_id3).unwrap();
+	let mut block =
+		core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &key_id3).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -130,7 +133,7 @@ fn test_coinbase_maturity() {
 	};
 
 	// mine enough blocks to increase the height sufficiently for
-	// coinbase to reach maturity and be spendable in the next block
+ // coinbase to reach maturity and be spendable in the next block
 	for _ in 0..3 {
 		let prev = chain.head_header().unwrap();
 
@@ -156,7 +159,8 @@ fn test_coinbase_maturity() {
 
 	let prev = chain.head_header().unwrap();
 
-	let mut block = core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &key_id4).unwrap();
+	let mut block =
+		core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &key_id4).unwrap();
 
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 

@@ -22,17 +22,14 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 
 	// just read the wallet here, no need for a write lock
 	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-
 		// get the current height via the api
-		// if we cannot get the current height use the max height known to the wallet
+  // if we cannot get the current height use the max height known to the wallet
 		let current_height = match checker::get_tip_from_node(config) {
 			Ok(tip) => tip.height,
-			Err(_) => {
-				match wallet_data.outputs.values().map(|out| out.height).max() {
-					Some(height) => height,
-					None => 0,
-				}
-			}
+			Err(_) => match wallet_data.outputs.values().map(|out| out.height).max() {
+				Some(height) => height,
+				None => 0,
+			},
 		};
 
 		println!("Outputs - ");

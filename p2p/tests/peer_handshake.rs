@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate futures;
 extern crate grin_core as core;
 extern crate grin_p2p as p2p;
-extern crate futures;
 extern crate tokio_core;
 
 use std::net::SocketAddr;
@@ -32,7 +32,6 @@ use p2p::Peer;
 // followed by a ping/pong exchange to make sure the connection is live.
 #[test]
 fn peer_handshake() {
-
 	let mut evtlp = Core::new().unwrap();
 	let handle = evtlp.handle();
 	let p2p_conf = p2p::P2PConfig::default();
@@ -89,5 +88,4 @@ fn peer_handshake() {
 	);
 
 	evtlp.run(run_server).unwrap();
-
 }

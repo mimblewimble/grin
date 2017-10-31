@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate grin_core as core;
-extern crate grin_chain as chain;
-extern crate grin_keychain as keychain;
 extern crate env_logger;
-extern crate time;
-extern crate rand;
+extern crate grin_chain as chain;
+extern crate grin_core as core;
+extern crate grin_keychain as keychain;
 extern crate grin_pow as pow;
+extern crate rand;
+extern crate time;
 
 use std::fs;
 use std::sync::Arc;
@@ -34,7 +34,7 @@ use core::global::MiningParameterMode;
 
 use keychain::Keychain;
 
-use pow::{types, cuckoo, MiningWorker};
+use pow::{cuckoo, types, MiningWorker};
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -180,7 +180,7 @@ fn mine_losing_fork() {
 	let bfork = prepare_block(&b1head, &chain, 3);
 
 	// add higher difficulty first, prepare its successor, then fork
-	// with lower diff
+ // with lower diff
 	chain.process_block(b2, chain::SKIP_POW).unwrap();
 	assert_eq!(chain.head_header().unwrap().hash(), b2head.hash());
 	let b3 = prepare_block(&b2head, &chain, 5);
@@ -195,13 +195,13 @@ fn mine_losing_fork() {
 #[test]
 fn longer_fork() {
 	// to make it easier to compute the sumtree roots in the test, we
-	// prepare 2 chains, the 2nd will be have the forked blocks we can
-	// then send back on the 1st
+ // prepare 2 chains, the 2nd will be have the forked blocks we can
+ // then send back on the 1st
 	let chain = setup(".grin4");
 	let chain_fork = setup(".grin5");
 
 	// add blocks to both chains, 20 on the main one, only the first 5
-	// for the forked chain
+ // for the forked chain
 	let mut prev = chain.head_header().unwrap();
 	for n in 0..10 {
 		let b = prepare_block(&prev, &chain, n + 2);

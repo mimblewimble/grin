@@ -28,11 +28,11 @@ extern crate toml;
 
 extern crate grin_grin as grin;
 extern crate grin_p2p as p2p;
-extern crate grin_wallet as wallet;
 extern crate grin_pow as pow;
 extern crate grin_util as util;
+extern crate grin_wallet as wallet;
 
 pub mod config;
 pub mod types;
 
-pub use types::{GlobalConfig, ConfigMembers, ConfigError};
+pub use types::{ConfigError, ConfigMembers, GlobalConfig};

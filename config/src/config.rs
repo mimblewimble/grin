@@ -23,7 +23,7 @@ use toml;
 use grin::ServerConfig;
 use pow::types::MinerConfig;
 use util::LoggingConfig;
-use types::{ConfigMembers, GlobalConfig, ConfigError};
+use types::{ConfigError, ConfigMembers, GlobalConfig};
 
 /// The default file name to use when trying to derive
 /// the config file location
@@ -86,7 +86,6 @@ impl GlobalConfig {
 
 		// Give up
 		Err(ConfigError::FileNotFoundError(String::from("")))
-
 	}
 
 	/// Takes the path to a config file, or if NONE, tries
@@ -98,7 +97,7 @@ impl GlobalConfig {
 		if let Some(fp) = file_path {
 			return_value.config_file_path = Some(PathBuf::from(&fp));
 		} else {
-			let _result=return_value.derive_config_location();
+			let _result = return_value.derive_config_location();
 		}
 
 		// No attempt at a config file, just return defaults
@@ -120,8 +119,8 @@ impl GlobalConfig {
 		}
 
 		// Try to parse the config file if it exists
-		// explode if it does exist but something's wrong
-		// with it
+  // explode if it does exist but something's wrong
+  // with it
 		return_value.read_config()
 	}
 
@@ -134,7 +133,7 @@ impl GlobalConfig {
 		match decoded {
 			Ok(mut gc) => {
 				// Put the struct back together, because the config
-				// file was flattened a bit
+	// file was flattened a bit
 				gc.server.mining_config = gc.mining.clone();
 				self.using_config_file = true;
 				self.members = Some(gc);

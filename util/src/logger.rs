@@ -15,7 +15,7 @@
 use std::fs::OpenOptions;
 use std::sync::Mutex;
 use std::ops::Deref;
-use slog::{Logger, Drain, Level, LevelFilter, Duplicate, Discard};
+use slog::{Discard, Drain, Duplicate, Level, LevelFilter, Logger};
 use slog_term;
 use slog_async;
 
@@ -53,7 +53,7 @@ lazy_static! {
 		if !config.log_to_stdout || !was_init {
 			terminal_drain = slog_async::Async::new(Discard{}).build().fuse();
 		}
-		
+
 		let mut file_drain_final = slog_async::Async::new(Discard{}).build().fuse();
 
 		if config.log_to_file && was_init {
@@ -93,12 +93,11 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 
 /// Initializes the logger for unit and integration tests
 pub fn init_test_logger() {
-  let mut was_init_ref = WAS_INIT.lock().unwrap();
+	let mut was_init_ref = WAS_INIT.lock().unwrap();
 	if *was_init_ref.deref() {
 		return;
 	}
-  let mut config_ref = LOGGING_CONFIG.lock().unwrap();
-  *config_ref = LoggingConfig::default();
-  *was_init_ref = true;
+	let mut config_ref = LOGGING_CONFIG.lock().unwrap();
+	*config_ref = LoggingConfig::default();
+	*was_init_ref = true;
 }
-

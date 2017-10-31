@@ -14,9 +14,9 @@
 
 use api;
 use checker;
-use core::core::{Transaction, build};
+use core::core::{build, Transaction};
 use core::ser;
-use keychain::{BlindingFactor, Keychain, Identifier};
+use keychain::{BlindingFactor, Identifier, Keychain};
 use receiver::TxWrapper;
 use types::*;
 use util::LOGGER;
@@ -55,7 +55,7 @@ pub fn issue_send_tx(
 	if dest == "stdout" {
 		println!("{}", json_tx);
 	} else if &dest[..4] == "http" {
-		let url = format!("{}/v1/receive/receive_json_tx", &dest);
+		let url = format!("{}/v1/receive/transaction", &dest);
 		debug!(LOGGER, "Posting partial transaction to {}", url);
 		let request = WalletReceiveRequest::PartialTransaction(json_tx);
 		let _: CbData = api::client::post(url.as_str(), &request).expect(&format!(
@@ -90,7 +90,7 @@ fn build_send_tx(
 	let mut parts = inputs_and_change(&coins, config, keychain, key_id, amount)?;
 
 	// This is more proof of concept than anything but here we set lock_height
-	// on tx being sent (based on current chain height via api).
+ // on tx being sent (based on current chain height via api).
 	parts.push(build::with_lock_height(lock_height));
 
 	let (tx, blind) = build::transaction(parts, &keychain)?;
@@ -130,8 +130,8 @@ pub fn issue_burn_tx(
 
 	let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
 	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
-	let _: () = api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })
-		.map_err(|e| Error::Node(e))?;
+	let _: () =
+		api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).map_err(|e| Error::Node(e))?;
 	Ok(())
 }
 
@@ -165,15 +165,15 @@ fn inputs_and_change(
 	}
 
 	// sender is responsible for setting the fee on the partial tx
-	// recipient should double check the fee calculation and not blindly trust the
-	// sender
+ // recipient should double check the fee calculation and not blindly trust the
+ // sender
 	let fee = tx_fee(coins.len(), 2, None);
 	parts.push(build::with_fee(fee));
 
 	// if we are spending 10,000 coins to send 1,000 then our change will be 9,000
-	// the fee will come out of the amount itself
-	// if the fee is 80 then the recipient will only receive 920
-	// but our change will still be 9,000
+ // the fee will come out of the amount itself
+ // if the fee is 80 then the recipient will only receive 920
+ // but our change will still be 9,000
 	let change = total - amount;
 
 	// build inputs using the appropriate derived key_ids
@@ -200,7 +200,8 @@ fn inputs_and_change(
 			is_coinbase: false,
 		});
 
-		// now lock the ouputs we're spending so we avoid accidental double spend attempt
+		// now lock the ouputs we're spending so we avoid accidental double spend
+  // attempt
 		for coin in coins {
 			wallet_data.lock_output(coin);
 		}
@@ -216,7 +217,7 @@ mod test {
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment
-	// based on the public key and amount begin spent
+ // based on the public key and amount begin spent
 	fn output_commitment_equals_input_commitment_on_spend() {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id1 = keychain.derive_key_id(1).unwrap();

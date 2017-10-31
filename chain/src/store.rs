@@ -23,7 +23,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader, Output};
 use core::consensus::TargetError;
 use core::core::target::Difficulty;
-use grin_store::{self, Error, to_key, u64_to_key, option_to_not_found};
+use grin_store::{self, option_to_not_found, to_key, Error, u64_to_key};
 
 const STORE_SUBPATH: &'static str = "chain";
 
@@ -85,9 +85,10 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		option_to_not_found(self.db.get_ser(
-			&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec()),
-		))
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
+		)
 	}
 
 	fn check_block_exists(&self, h: &Hash) -> Result<bool, Error> {
@@ -111,16 +112,14 @@ impl ChainStore for ChainKVStore {
 					&to_key(
 						OUTPUT_COMMIT_PREFIX,
 						&mut out.commitment().as_ref().to_vec(),
-					)
-						[..],
+					)[..],
 					out,
 				)?
 				.put_ser(
 					&to_key(
 						HEADER_BY_OUTPUT_PREFIX,
 						&mut out.commitment().as_ref().to_vec(),
-					)
-						[..],
+					)[..],
 					&b.hash(),
 				)?;
 		}
@@ -128,18 +127,18 @@ impl ChainStore for ChainKVStore {
 	}
 
 	// lookup the block header hash by output commitment
-	// lookup the block header based on this hash
-	// to check the chain is correct compare this block header to
-	// the block header currently indexed at the relevant block height (tbd if
-	// actually necessary)
-	//
-	// NOTE: This index is not exhaustive.
-	// This node may not have seen this full block, so may not have populated the
-	// index.
-	// Block headers older than some threshold (2 months?) will not necessarily be
-	// included
-	// in this index.
-	//
+ // lookup the block header based on this hash
+ // to check the chain is correct compare this block header to
+ // the block header currently indexed at the relevant block height (tbd if
+ // actually necessary)
+ //
+ // NOTE: This index is not exhaustive.
+ // This node may not have seen this full block, so may not have populated the
+ // index.
+ // Block headers older than some threshold (2 months?) will not necessarily be
+ // included
+ // in this index.
+ //
 	fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
 		let block_hash = self.db.get_ser(&to_key(
 			HEADER_BY_OUTPUT_PREFIX,
@@ -172,10 +171,10 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(
-			OUTPUT_COMMIT_PREFIX,
-			&mut commit.as_ref().to_vec(),
-		)))
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut commit.as_ref().to_vec())),
+		)
 	}
 
 	fn save_output_pos(&self, commit: &Commitment, pos: u64) -> Result<(), Error> {
@@ -186,10 +185,10 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(
-			COMMIT_POS_PREFIX,
-			&mut commit.as_ref().to_vec(),
-		)))
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())),
+		)
 	}
 
 	fn save_kernel_pos(&self, excess: &Commitment, pos: u64) -> Result<(), Error> {
@@ -200,10 +199,10 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_kernel_pos(&self, excess: &Commitment) -> Result<u64, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(
-			KERNEL_POS_PREFIX,
-			&mut excess.as_ref().to_vec(),
-		)))
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())),
+		)
 	}
 
 	/// Maintain consistency of the "header_by_height" index by traversing back
@@ -213,10 +212,8 @@ impl ChainStore for ChainKVStore {
 	/// that is consistent with its height (everything prior to this will be
 	/// consistent)
 	fn setup_height(&self, bh: &BlockHeader) -> Result<(), Error> {
-		self.db.put_ser(
-			&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height),
-			bh,
-		)?;
+		self.db
+			.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height), bh)?;
 		if bh.height == 0 {
 			return Ok(());
 		}

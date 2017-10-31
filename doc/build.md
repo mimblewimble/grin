@@ -105,7 +105,7 @@ Before running your mining server, a wallet server needs to be set up and listen
 
 See [wallet](wallet.md) for more info on the various Grin wallet commands and options.
 
-This will create a wallet server listening on the default port 13416 with the password "password". Next, in another terminal window in the 'node1' directory, run a full mining node with the following command:
+This will create a wallet server listening on the default port 13415 with the password "password". Next, in another terminal window in the 'node1' directory, run a full mining node with the following command:
 
 	node1$ grin server -m run
 

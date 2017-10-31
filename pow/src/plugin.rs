@@ -30,8 +30,8 @@ use util::LOGGER;
 
 use std::sync::Mutex;
 
-use cuckoo_miner::{CuckooMiner, CuckooPluginManager, CuckooMinerConfig, CuckooMinerSolution,
-                   CuckooMinerDeviceStats, CuckooMinerError};
+use cuckoo_miner::{CuckooMiner, CuckooMinerConfig, CuckooMinerDeviceStats, CuckooMinerError,
+                   CuckooMinerSolution, CuckooPluginManager};
 
 // For now, we're just going to keep a static reference around to the loaded
 // config
@@ -41,7 +41,7 @@ use cuckoo_miner::{CuckooMiner, CuckooPluginManager, CuckooMinerConfig, CuckooMi
 // testing threads don't try to load/unload the library while another thread is
 // using it.
 lazy_static!{
-    static ref LOADED_CONFIG: Mutex<Option<Vec<CuckooMinerConfig>>> = Mutex::new(None);
+	static ref LOADED_CONFIG: Mutex<Option<Vec<CuckooMinerConfig>>> = Mutex::new(None);
 }
 
 /// plugin miner
@@ -84,9 +84,9 @@ impl PluginMiner {
 		}
 
 		// First, load and query the plugins in the given directory
-		// These should all be stored in 'plugins' at the moment relative
-		// to the executable path, though they should appear somewhere else
-		// when packaging is more//thought out
+  // These should all be stored in 'plugins' at the moment relative
+  // to the executable path, though they should appear somewhere else
+  // when packaging is more//thought out
 
 		let mut loaded_config_ref = LOADED_CONFIG.lock().unwrap();
 
@@ -117,7 +117,7 @@ impl PluginMiner {
 		let mut index = 0;
 		for f in plugin_vec_filters {
 			// So this is built dynamically based on the plugin implementation
-			// type and the consensus sizeshift
+   // type and the consensus sizeshift
 			let filter = format!("{}_{}", f, sz);
 
 			let caps = plugin_manager.get_available_plugins(&filter).unwrap();
@@ -141,7 +141,7 @@ impl PluginMiner {
 			index += 1;
 		}
 		// Store this config now, because we just want one instance
-		// of the plugin lib per invocation now
+  // of the plugin lib per invocation now
 		*loaded_config_ref = Some(cuckoo_configs.clone());
 
 		// this will load the associated plugin
@@ -158,7 +158,6 @@ impl PluginMiner {
 
 	/// Get the miner
 	pub fn get_consumable(&mut self) -> CuckooMiner {
-
 		// this will load the associated plugin
 		let result = CuckooMiner::new(self.config.clone());
 		if let Err(e) = result {

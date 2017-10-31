@@ -27,28 +27,22 @@ pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 		wallet_config.api_http_addr
 	);
 
-	let mut apis = ApiServer::new("/v1".to_string());
-
-	apis.register_endpoint(
-		"/receive".to_string(),
-		WalletReceiver {
-			config: wallet_config.clone(),
-			keychain: keychain.clone(),
-		},
-	);
-
+	let receive_tx_handler = WalletReceiver {
+		config: wallet_config.clone(),
+		keychain: keychain.clone(),
+	};
 	let coinbase_handler = CoinbaseHandler {
 		config: wallet_config.clone(),
 		keychain: keychain.clone(),
 	};
-	// let tx_handler = TxHandler{};
 
 	let router = router!(
+    receive_tx: get "/receive/transaction" => receive_tx_handler,
 		receive_coinbase: post "/receive/coinbase" => coinbase_handler,
-		// receive_tx: post "/receive/tx" => tx_handler,
-	);
-	apis.register_handler("/v2", router);
+  );
 
+	let mut apis = ApiServer::new("/v1".to_string());
+	apis.register_handler(router);
 	apis.start(wallet_config.api_http_addr).unwrap_or_else(|e| {
 		error!(LOGGER, "Failed to start Grin wallet receiver: {}.", e);
 	});

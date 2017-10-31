@@ -20,8 +20,8 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use util::secp::pedersen::{Commitment, RangeProof};
 
-use core::core::{SumCommit};
-use core::core::pmmr::{NoSum, HashSum};
+use core::core::SumCommit;
+use core::core::pmmr::{HashSum, NoSum};
 
 use core::core::{Block, BlockHeader, Output, TxKernel};
 use core::core::target::Difficulty;
@@ -119,8 +119,10 @@ impl Chain {
 	/// has been added to the longest chain, None if it's added to an (as of
 	/// now) orphan chain.
 	pub fn process_block(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
-		let head = self.store.head().map_err(|e| Error::StoreErr(e, "chain load head".to_owned()))?;
-    let height = head.height;
+		let head = self.store
+			.head()
+			.map_err(|e| Error::StoreErr(e, "chain load head".to_owned()))?;
+		let height = head.height;
 		let ctx = self.ctx_from_head(head, opts);
 
 		let res = pipe::process_block(&b, ctx);
@@ -143,13 +145,11 @@ impl Chain {
 				self.check_orphans();
 			}
 			Ok(None) => {}
-			Err(Error::Orphan) => {
-        if b.header.height < height + (MAX_ORPHANS as u64) {
-          let mut orphans = self.orphans.lock().unwrap();
-          orphans.push_front((opts, b));
-          orphans.truncate(MAX_ORPHANS);
-        }
-			}
+			Err(Error::Orphan) => if b.header.height < height + (MAX_ORPHANS as u64) {
+				let mut orphans = self.orphans.lock().unwrap();
+				orphans.push_front((opts, b));
+				orphans.truncate(MAX_ORPHANS);
+			},
 			Err(ref e) => {
 				info!(
 					LOGGER,
@@ -171,8 +171,9 @@ impl Chain {
 		bh: &BlockHeader,
 		opts: Options,
 	) -> Result<Option<Tip>, Error> {
-
-		let head = self.store.get_header_head().map_err(|e| Error::StoreErr(e, "chain header head".to_owned()))?;
+		let head = self.store
+			.get_header_head()
+			.map_err(|e| Error::StoreErr(e, "chain header head".to_owned()))?;
 		let ctx = self.ctx_from_head(head, opts);
 
 		pipe::process_block_header(bh, ctx)
@@ -199,7 +200,7 @@ impl Chain {
 	/// Pop orphans out of the queue and check if we can now accept them.
 	fn check_orphans(&self) {
 		// first check how many we have to retry, unfort. we can't extend the lock
-		// in the loop as it needs to be freed before going in process_block
+  // in the loop as it needs to be freed before going in process_block
 		let orphan_count;
 		{
 			let orphans = self.orphans.lock().unwrap();
@@ -227,9 +228,9 @@ impl Chain {
 		let sumtrees = self.sumtrees.read().unwrap();
 		let is_unspent = sumtrees.is_unspent(output_ref)?;
 		if is_unspent {
-			self.store.get_output_by_commit(output_ref).map_err(|e|
-			  Error::StoreErr(e, "chain get unspent".to_owned())
-			)
+			self.store
+				.get_output_by_commit(output_ref)
+				.map_err(|e| Error::StoreErr(e, "chain get unspent".to_owned()))
 		} else {
 			Err(Error::OutputNotFound)
 		}
@@ -254,9 +255,13 @@ impl Chain {
 	}
 
 	/// returs sumtree roots
-	pub fn get_sumtree_roots(&self) -> (HashSum<SumCommit>,
+	pub fn get_sumtree_roots(
+		&self,
+	) -> (
+		HashSum<SumCommit>,
 		HashSum<NoSum<RangeProof>>,
-		HashSum<NoSum<TxKernel>>) {
+		HashSum<NoSum<TxKernel>>,
+	) {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.roots()
 	}
@@ -264,10 +269,10 @@ impl Chain {
 	/// returns the last n nodes inserted into the utxo sum tree
 	/// returns sum tree hash plus output itself (as the sum is contained
 	/// in the output anyhow)
-	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<(Hash, Output)>{
+	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<(Hash, Output)> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		let mut return_vec = Vec::new();
-		let sum_nodes=sumtrees.last_n_utxo(distance);
+		let sum_nodes = sumtrees.last_n_utxo(distance);
 		for sum_commit in sum_nodes {
 			let output = self.store.get_output_by_commit(&sum_commit.sum.commit);
 			return_vec.push((sum_commit.hash, output.unwrap()));
@@ -276,13 +281,13 @@ impl Chain {
 	}
 
 	/// as above, for rangeproofs
-	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<HashSum<NoSum<RangeProof>>>{
+	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<HashSum<NoSum<RangeProof>>> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.last_n_rangeproof(distance)
 	}
 
 	/// as above, for kernels
-	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<HashSum<NoSum<TxKernel>>>{
+	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<HashSum<NoSum<TxKernel>>> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.last_n_kernel(distance)
 	}
@@ -299,24 +304,30 @@ impl Chain {
 
 	/// Block header for the chain head
 	pub fn head_header(&self) -> Result<BlockHeader, Error> {
-		self.store.head_header().map_err(|e| Error::StoreErr(e, "chain head header".to_owned()))
+		self.store
+			.head_header()
+			.map_err(|e| Error::StoreErr(e, "chain head header".to_owned()))
 	}
 
 	/// Gets a block header by hash
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
-		self.store.get_block(h).map_err(|e| Error::StoreErr(e, "chain get block".to_owned()))
+		self.store
+			.get_block(h)
+			.map_err(|e| Error::StoreErr(e, "chain get block".to_owned()))
 	}
 
 	/// Gets a block header by hash
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		self.store.get_block_header(h).map_err(|e| Error::StoreErr(e, "chain get header".to_owned()))
+		self.store
+			.get_block_header(h)
+			.map_err(|e| Error::StoreErr(e, "chain get header".to_owned()))
 	}
 
 	/// Gets the block header at the provided height
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
-		self.store.get_header_by_height(height).map_err(|e|
-			Error::StoreErr(e, "chain get header by height".to_owned()),
-		)
+		self.store.get_header_by_height(height).map_err(|e| {
+			Error::StoreErr(e, "chain get header by height".to_owned())
+		})
 	}
 
 	/// Gets the block header by the provided output commitment
@@ -331,7 +342,9 @@ impl Chain {
 
 	/// Get the tip of the header chain
 	pub fn get_header_head(&self) -> Result<Tip, Error> {
-		self.store.get_header_head().map_err(|e |Error::StoreErr(e, "chain get header head".to_owned()))
+		self.store
+			.get_header_head()
+			.map_err(|e| Error::StoreErr(e, "chain get header head".to_owned()))
 	}
 
 	/// Builds an iterator on blocks starting from the current chain head and

@@ -44,7 +44,9 @@ unsafe impl Send for Handshake {}
 impl Handshake {
 	/// Creates a new handshake handler
 	pub fn new() -> Handshake {
-		Handshake { nonces: Arc::new(RwLock::new(VecDeque::with_capacity(NONCES_CAP))) }
+		Handshake {
+			nonces: Arc::new(RwLock::new(VecDeque::with_capacity(NONCES_CAP))),
+		}
 	}
 
 	/// Handles connecting to a new remote peer, starting the version handshake.

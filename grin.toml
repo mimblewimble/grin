@@ -111,11 +111,11 @@ attempt_time_per_block = 90
 
 #the wallet reciever to which coinbase rewards will be sent
 
-wallet_receiver_url = "http://127.0.0.1:13416"
+wallet_receiver_url = "http://127.0.0.1:13415"
 
 #whether to ignore the reward (mostly for testing)
 
-burn_reward = false
+burn_reward = true
 
 #testing value, optional
 #slow_down_in_millis = 30

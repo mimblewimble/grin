@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::net::SocketAddr;
-use std::sync::{RwLock, Arc};
+use std::sync::{Arc, RwLock};
 
 use futures::Future;
 use tokio_core::net::TcpStream;
@@ -80,20 +80,16 @@ impl Peer {
 		hs: &Handshake,
 		na: Arc<NetAdapter>,
 	) -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
-		let hs_peer = hs.handshake(capab, total_difficulty, conn).and_then(
-			|(conn,
-			  proto,
-			  info)| {
+		let hs_peer = hs.handshake(capab, total_difficulty, conn)
+			.and_then(|(conn, proto, info)| {
 				Ok((conn, Peer::new(info, Box::new(proto), na)))
-			},
-		);
+			});
 		Box::new(hs_peer)
 	}
 
 	/// Main peer loop listening for messages and forwarding to the rest of the
 	/// system.
 	pub fn run(&self, conn: TcpStream) -> Box<Future<Item = (), Error = Error>> {
-
 		let addr = self.info.addr;
 		let state = self.state.clone();
 		let adapter = Arc::new(self.tracking_adapter.clone());
@@ -204,7 +200,7 @@ impl TrackingAdapter {
 	fn has(&self, hash: Hash) -> bool {
 		let known = self.known.read().unwrap();
 		// may become too slow, an ordered set (by timestamp for eviction) may
-		// end up being a better choice
+  // end up being a better choice
 		known.contains(&hash)
 	}
 

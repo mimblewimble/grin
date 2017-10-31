@@ -33,7 +33,10 @@ pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Erro
 	retry_backoff_forever(|| {
 		let res = single_create_coinbase(&url, &block_fees);
 		if let Err(_) = res {
-			error!(LOGGER, "Failed to get coinbase via wallet API (will retry)...");
+			error!(
+				LOGGER,
+				"Failed to get coinbase via wallet API (will retry)..."
+			);
 		}
 		res
 	})
@@ -41,11 +44,12 @@ pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Erro
 
 /// Runs the specified function wrapped in some basic retry logic.
 fn retry_backoff_forever<F, R>(f: F) -> Result<R, Error>
-	where F: (FnMut() -> Result<R, Error>)
+where
+	F: FnMut() -> Result<R, Error>,
 {
 	let mut core = reactor::Core::new()?;
-	let retry_strategy = FibonacciBackoff::from_millis(100)
-		.max_delay(time::Duration::from_secs(10));
+	let retry_strategy =
+		FibonacciBackoff::from_millis(100).max_delay(time::Duration::from_secs(10));
 	let retry_future = Retry::spawn(core.handle(), retry_strategy, f);
 	let res = core.run(retry_future).unwrap();
 	Ok(res)
@@ -63,8 +67,8 @@ fn single_create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, E
 
 	let work = client.request(req).and_then(|res| {
 		res.body().concat2().and_then(move |body| {
-			let coinbase: CbData = serde_json::from_slice(&body)
-				.map_err(|e| {io::Error::new(io::ErrorKind::Other, e)})?;
+			let coinbase: CbData =
+				serde_json::from_slice(&body).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 			Ok(coinbase)
 		})
 	});

@@ -34,7 +34,9 @@ pub struct ProtocolV1 {
 
 impl ProtocolV1 {
 	pub fn new() -> ProtocolV1 {
-		ProtocolV1 { conn: OneTime::new() }
+		ProtocolV1 {
+			conn: OneTime::new(),
+		}
 	}
 }
 
@@ -45,7 +47,6 @@ impl Protocol for ProtocolV1 {
 		conn: TcpStream,
 		adapter: Arc<NetAdapter>,
 	) -> Box<Future<Item = (), Error = Error>> {
-
 		let (conn, listener) = TimeoutConnection::listen(conn, move |sender, header, data| {
 			let adapt = adapter.as_ref();
 			handle_payload(adapt, sender, header, data)
@@ -94,7 +95,9 @@ impl Protocol for ProtocolV1 {
 		self.send_request(
 			Type::GetPeerAddrs,
 			Type::PeerAddrs,
-			&GetPeerAddrs { capabilities: capab },
+			&GetPeerAddrs {
+				capabilities: capab,
+			},
 			None,
 		)
 	}

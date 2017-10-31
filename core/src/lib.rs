@@ -25,8 +25,10 @@
 extern crate bitflags;
 extern crate blake2_rfc as blake2;
 extern crate byteorder;
+extern crate grin_keychain as keychain;
+extern crate grin_util as util;
 #[macro_use]
-extern crate slog;
+extern crate lazy_static;
 extern crate num_bigint as bigint;
 extern crate rand;
 extern crate grin_keychain as keychain;
@@ -34,9 +36,9 @@ extern crate grin_util as util;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate time;
 #[macro_use]
-extern crate lazy_static;
+extern crate slog;
+extern crate time;
 
 #[macro_use]
 pub mod macros;

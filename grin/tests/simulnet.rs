@@ -12,14 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate grin_grin as grin;
-extern crate grin_core as core;
-extern crate grin_p2p as p2p;
-extern crate grin_chain as chain;
+#[macro_use]
+extern crate router;
+
 extern crate grin_api as api;
-extern crate grin_wallet as wallet;
+extern crate grin_chain as chain;
+extern crate grin_core as core;
+extern crate grin_grin as grin;
+extern crate grin_p2p as p2p;
 extern crate grin_pow as pow;
 extern crate grin_util as util;
+extern crate grin_wallet as wallet;
 
 extern crate futures;
 extern crate tokio_core;
@@ -31,7 +34,7 @@ use std::thread;
 use std::time;
 use std::default::Default;
 
-use futures::{Future, Poll, Async};
+use futures::{Async, Future, Poll};
 use futures::task::current;
 use tokio_core::reactor;
 use tokio_timer::Timer;
@@ -41,8 +44,8 @@ use core::global;
 use core::global::{MiningParameterMode, MINING_PARAMETER_MODE};
 use wallet::WalletConfig;
 
-use framework::{LocalServerContainer, LocalServerContainerConfig, LocalServerContainerPoolConfig,
-                LocalServerContainerPool};
+use framework::{LocalServerContainer, LocalServerContainerConfig, LocalServerContainerPool,
+                LocalServerContainerPoolConfig};
 
 /// Testing the frameworks by starting a fresh server, creating a genesis
 /// Block and mining into a wallet for a bit
@@ -71,7 +74,6 @@ fn basic_genesis_mine() {
 
 	pool.create_server(&mut server_config);
 	pool.run_all_servers();
-
 }
 
 /// Creates 5 servers, first being a seed and check that through peer address
@@ -175,10 +177,8 @@ fn simulate_parallel_mining() {
 	let _ = pool.run_all_servers();
 
 	// Check mining difficulty here?, though I'd think it's more valuable
-	// to simply output it. Can at least see the evolution of the difficulty target
-	// in the debug log output for now
-
-
+ // to simply output it. Can at least see the evolution of the difficulty target
+ // in the debug log output for now
 }
 
 // TODO: Convert these tests to newer framework format
@@ -186,6 +186,7 @@ fn simulate_parallel_mining() {
 /// gets propagated to all.
 #[test]
 fn a_simulate_block_propagation() {
+	util::init_test_logger();
 	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
 
 	let test_name_dir = "grin-prop";
@@ -243,7 +244,7 @@ fn a_simulate_block_propagation() {
 	let original_height = servers[0].head().height;
 
 	// monitor for a change of head on a different server and check whether
-	// chain height has changed
+ // chain height has changed
 	evtlp.run(change(&servers[4]).and_then(|tip| {
 		assert!(tip.height == original_height + 1);
 		Ok(())

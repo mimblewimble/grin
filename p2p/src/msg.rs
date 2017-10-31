@@ -14,10 +14,10 @@
 
 //! Message types that transit over the network and related serialization code.
 
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use num::FromPrimitive;
 
-use futures::future::{Future, ok};
+use futures::future::{ok, Future};
 use tokio_core::net::TcpStream;
 use tokio_io::io::{read_exact, write_all};
 
@@ -25,7 +25,7 @@ use core::consensus::MAX_MSG_LEN;
 use core::core::BlockHeader;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
-use core::ser::{self, Writeable, Readable, Writer, Reader};
+use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::*;
 
@@ -51,18 +51,18 @@ pub enum ErrCodes {
 enum_from_primitive! {
   #[derive(Debug, Clone, Copy, PartialEq)]
   pub enum Type {
-    Error,
-    Hand,
-    Shake,
-    Ping,
-    Pong,
-    GetPeerAddrs,
-    PeerAddrs,
-    GetHeaders,
-    Headers,
-    GetBlock,
-    Block,
-    Transaction,
+	Error,
+	Hand,
+	Shake,
+	Ping,
+	Pong,
+	GetPeerAddrs,
+	PeerAddrs,
+	GetHeaders,
+	Headers,
+	GetBlock,
+	Block,
+	Transaction,
   }
 }
 
@@ -79,7 +79,7 @@ where
 			let header = try!(ser::deserialize::<MsgHeader>(&mut &buf[..]));
 			if header.msg_len > MAX_MSG_LEN {
 				// TODO add additional restrictions on a per-message-type basis to avoid 20MB
-				// pings
+	// pings
 				return Err(Error::Serialization(ser::Error::TooLargeReadErr));
 			}
 			Ok((reader, header))
@@ -170,13 +170,11 @@ impl Readable for MsgHeader {
 		try!(reader.expect_u8(MAGIC[1]));
 		let (t, len) = ser_multiread!(reader, read_u8, read_u64);
 		match Type::from_u8(t) {
-			Some(ty) => {
-				Ok(MsgHeader {
-					magic: MAGIC,
-					msg_type: ty,
-					msg_len: len,
-				})
-			}
+			Some(ty) => Ok(MsgHeader {
+				magic: MAGIC,
+				msg_type: ty,
+				msg_len: len,
+			}),
 			None => Err(ser::Error::CorruptedData),
 		}
 	}
@@ -226,9 +224,7 @@ impl Readable for Hand {
 		let receiver_addr = try!(SockAddr::read(reader));
 		let ua = try!(reader.read_vec());
 		let user_agent = try!(String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData));
-		let capabilities = try!(Capabilities::from_bits(capab).ok_or(
-			ser::Error::CorruptedData,
-		));
+		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData,));
 		Ok(Hand {
 			version: version,
 			capabilities: capabilities,
@@ -275,9 +271,7 @@ impl Readable for Shake {
 		let total_diff = try!(Difficulty::read(reader));
 		let ua = try!(reader.read_vec());
 		let user_agent = try!(String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData));
-		let capabilities = try!(Capabilities::from_bits(capab).ok_or(
-			ser::Error::CorruptedData,
-		));
+		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData,));
 		Ok(Shake {
 			version: version,
 			capabilities: capabilities,
@@ -302,10 +296,10 @@ impl Writeable for GetPeerAddrs {
 impl Readable for GetPeerAddrs {
 	fn read(reader: &mut Reader) -> Result<GetPeerAddrs, ser::Error> {
 		let capab = try!(reader.read_u32());
-		let capabilities = try!(Capabilities::from_bits(capab).ok_or(
-			ser::Error::CorruptedData,
-		));
-		Ok(GetPeerAddrs { capabilities: capabilities })
+		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData,));
+		Ok(GetPeerAddrs {
+			capabilities: capabilities,
+		})
 	}
 }
 
@@ -361,9 +355,7 @@ impl Writeable for PeerError {
 impl Readable for PeerError {
 	fn read(reader: &mut Reader) -> Result<PeerError, ser::Error> {
 		let (code, msg) = ser_multiread!(reader, read_u32, read_vec);
-		let message = try!(String::from_utf8(msg).map_err(
-			|_| ser::Error::CorruptedData,
-		));
+		let message = try!(String::from_utf8(msg).map_err(|_| ser::Error::CorruptedData,));
 		Ok(PeerError {
 			code: code,
 			message: message,
@@ -413,16 +405,7 @@ impl Readable for SockAddr {
 			let ip = try_map_vec!([0..8], |_| reader.read_u16());
 			let port = try!(reader.read_u16());
 			Ok(SockAddr(SocketAddr::V6(SocketAddrV6::new(
-				Ipv6Addr::new(
-					ip[0],
-					ip[1],
-					ip[2],
-					ip[3],
-					ip[4],
-					ip[5],
-					ip[6],
-					ip[7],
-				),
+				Ipv6Addr::new(ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7]),
 				port,
 				0,
 				0,

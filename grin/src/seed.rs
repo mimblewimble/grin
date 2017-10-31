@@ -63,14 +63,13 @@ impl Seeder {
 		seed_list: Box<Future<Item = Vec<SocketAddr>, Error = String>>,
 	) {
 		// open a channel with a listener that connects every peer address sent below
-		// max peer count
+  // max peer count
 		let (tx, rx) = futures::sync::mpsc::unbounded();
 		h.spawn(self.listen_for_addrs(h.clone(), rx));
 
 		// check seeds and start monitoring connections
-		let seeder = self.connect_to_seeds(tx.clone(), seed_list).join(
-			self.monitor_peers(tx.clone()),
-		);
+		let seeder = self.connect_to_seeds(tx.clone(), seed_list)
+			.join(self.monitor_peers(tx.clone()));
 
 		h.spawn(seeder.map(|_| ()).map_err(|e| {
 			error!(LOGGER, "Seeding or peer monitoring error: {}", e);
@@ -86,13 +85,12 @@ impl Seeder {
 		let p2p_server = self.p2p.clone();
 
 		// now spawn a new future to regularly check if we need to acquire more peers
-		// and if so, gets them from db
+  // and if so, gets them from db
 		let mon_loop = Timer::default()
 			.interval(time::Duration::from_secs(10))
 			.for_each(move |_| {
-
 				// maintenance step first, clean up p2p server peers and mark bans
-				// if needed
+	// if needed
 				let disconnected = p2p_server.clean_peers();
 				for p in disconnected {
 					if p.is_banned() {
@@ -135,7 +133,7 @@ impl Seeder {
 	}
 
 	// Check if we have any pre-existing peer in db. If so, start with those,
-	// otherwise use the seeds provided.
+ // otherwise use the seeds provided.
 	fn connect_to_seeds(
 		&self,
 		tx: mpsc::UnboundedSender<SocketAddr>,
@@ -144,7 +142,7 @@ impl Seeder {
 		let peer_store = self.peer_store.clone();
 
 		// a thread pool is required so we don't block the event loop with a
-		// db query
+  // db query
 		let thread_pool = cpupool::CpuPool::new(1);
 		let seeder = thread_pool
 			.spawn_fn(move || {
@@ -231,8 +229,10 @@ pub fn web_seeds(h: reactor::Handle) -> Box<Future<Item = Vec<SocketAddr>, Error
 			})
 			.and_then(|res| {
 				// collect all chunks and split around whitespace to get a list of SocketAddr
-				res.body().collect().map_err(|e| e.to_string()).and_then(
-					|chunks| {
+				res.body()
+					.collect()
+					.map_err(|e| e.to_string())
+					.and_then(|chunks| {
 						let res = chunks.iter().fold("".to_string(), |acc, ref chunk| {
 							acc + str::from_utf8(&chunk[..]).unwrap()
 						});
@@ -240,8 +240,7 @@ pub fn web_seeds(h: reactor::Handle) -> Box<Future<Item = Vec<SocketAddr>, Error
 							.map(|s| s.parse().unwrap())
 							.collect::<Vec<_>>();
 						Ok(addrs)
-					},
-				)
+					})
 			})
 	});
 	Box::new(seeds)

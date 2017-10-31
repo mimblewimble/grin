@@ -14,24 +14,24 @@
 
 //! Library module for the main wallet functionalities provided by Grin.
 
-extern crate byteorder;
 extern crate blake2_rfc as blake2;
-#[macro_use]
-extern crate slog;
+extern crate byteorder;
 extern crate rand;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
+#[macro_use]
+extern crate slog;
 
 extern crate bodyparser;
 extern crate futures;
-extern crate tokio_core;
-extern crate tokio_retry;
 extern crate hyper;
 extern crate iron;
 #[macro_use]
 extern crate router;
+extern crate tokio_core;
+extern crate tokio_retry;
 
 extern crate grin_api as api;
 extern crate grin_core as core;
@@ -48,6 +48,6 @@ pub mod client;
 pub mod server;
 
 pub use info::show_info;
-pub use receiver::{WalletReceiver, receive_json_tx};
-pub use sender::{issue_send_tx, issue_burn_tx};
+pub use receiver::{receive_json_tx, WalletReceiver};
+pub use sender::{issue_burn_tx, issue_send_tx};
 pub use types::{BlockFees, CbData, Error, WalletConfig, WalletReceiveRequest, WalletSeed};

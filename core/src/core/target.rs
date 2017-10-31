@@ -20,13 +20,13 @@
 //! wrapper in case the internal representation needs to change again
 
 use std::fmt;
-use std::ops::{Add, Mul, Div, Sub};
+use std::ops::{Add, Div, Mul, Sub};
 
-use serde::{Serialize, Serializer, Deserialize, Deserializer, de};
-use byteorder::{ByteOrder, BigEndian};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use byteorder::{BigEndian, ByteOrder};
 
 use core::hash::Hash;
-use ser::{self, Reader, Writer, Writeable, Readable};
+use ser::{self, Readable, Reader, Writeable, Writer};
 
 /// The target is the 32-bytes hash block hashes must be lower than.
 pub const MAX_TARGET: [u8; 8] = [0xf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
@@ -63,7 +63,9 @@ impl Difficulty {
 		let mut in_vec = h.to_vec();
 		in_vec.truncate(8);
 		let num = BigEndian::read_u64(&in_vec);
-		Difficulty { num: max_target / num }
+		Difficulty {
+			num: max_target / num,
+		}
 	}
 
 	/// Converts the difficulty into a u64
@@ -81,28 +83,36 @@ impl fmt::Display for Difficulty {
 impl Add<Difficulty> for Difficulty {
 	type Output = Difficulty;
 	fn add(self, other: Difficulty) -> Difficulty {
-		Difficulty { num: self.num + other.num }
+		Difficulty {
+			num: self.num + other.num,
+		}
 	}
 }
 
 impl Sub<Difficulty> for Difficulty {
 	type Output = Difficulty;
 	fn sub(self, other: Difficulty) -> Difficulty {
-		Difficulty { num: self.num - other.num }
+		Difficulty {
+			num: self.num - other.num,
+		}
 	}
 }
 
 impl Mul<Difficulty> for Difficulty {
 	type Output = Difficulty;
 	fn mul(self, other: Difficulty) -> Difficulty {
-		Difficulty { num: self.num * other.num }
+		Difficulty {
+			num: self.num * other.num,
+		}
 	}
 }
 
 impl Div<Difficulty> for Difficulty {
 	type Output = Difficulty;
 	fn div(self, other: Difficulty) -> Difficulty {
-		Difficulty { num: self.num / other.num }
+		Difficulty {
+			num: self.num / other.num,
+		}
 	}
 }
 
@@ -157,6 +167,8 @@ impl<'de> de::Visitor<'de> for DiffVisitor {
 				&"a value number",
 			));
 		};
-		Ok(Difficulty { num: num_in.unwrap() })
+		Ok(Difficulty {
+			num: num_in.unwrap(),
+		})
 	}
 }

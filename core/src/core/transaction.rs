@@ -14,7 +14,7 @@
 
 //! Transactions
 
-use byteorder::{ByteOrder, BigEndian};
+use byteorder::{BigEndian, ByteOrder};
 use blake2::blake2b::blake2b;
 use util::secp::{self, Secp256k1, Message, Signature};
 use util::secp::pedersen::{RangeProof, Commitment};
@@ -23,7 +23,7 @@ use std::ops;
 use core::Committed;
 use core::pmmr::Summable;
 use keychain::{Identifier, Keychain};
-use ser::{self, Reader, Writer, Readable, Writeable, WriteableSorted, read_and_verify_sorted};
+use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 use util::LOGGER;
 
 /// The size to use for the stored blake2 hash of a switch_commitment
@@ -102,9 +102,8 @@ impl Writeable for TxKernel {
 
 impl Readable for TxKernel {
 	fn read(reader: &mut Reader) -> Result<TxKernel, ser::Error> {
-		let features = KernelFeatures::from_bits(reader.read_u8()?).ok_or(
-			ser::Error::CorruptedData,
-		)?;
+		let features =
+			KernelFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 
 		Ok(TxKernel {
 			features: features,
@@ -287,12 +286,12 @@ impl Transaction {
 		let sig = Signature::from_der(secp, &self.excess_sig)?;
 
 		// pretend the sum is a public key (which it is, being of the form r.G) and
-		// verify the transaction sig with it
-		//
-		// we originally converted the commitment to a key_id here (commitment to zero)
-		// and then passed the key_id to secp.verify()
-		// the secp api no longer allows us to do this so we have wrapped the complexity
-		// of generating a public key from a commitment behind verify_from_commit
+  // verify the transaction sig with it
+  //
+  // we originally converted the commitment to a key_id here (commitment to zero)
+  // and then passed the key_id to secp.verify()
+  // the secp api no longer allows us to do this so we have wrapped the complexity
+  // of generating a public key from a commitment behind verify_from_commit
 		secp.verify_from_commit(&msg, &sig, &rsum)?;
 
 		let kernel = TxKernel {
@@ -456,9 +455,8 @@ impl Writeable for Output {
 /// an Output from a binary stream.
 impl Readable for Output {
 	fn read(reader: &mut Reader) -> Result<Output, ser::Error> {
-		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
-			ser::Error::CorruptedData,
-		)?;
+		let features =
+			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 
 		Ok(Output {
 			features: features,
@@ -494,13 +492,11 @@ impl Output {
 	/// value from the range proof and the commitment
 	pub fn recover_value(&self, keychain: &Keychain, key_id: &Identifier) -> Option<u64> {
 		match keychain.rewind_range_proof(key_id, self.commit, self.proof) {
-			Ok(proof_info) => {
-				if proof_info.success {
-					Some(proof_info.value)
-				} else {
-					None
-				}
-			}
+			Ok(proof_info) => if proof_info.success {
+				Some(proof_info.value)
+			} else {
+				None
+			},
 			Err(_) => None,
 		}
 	}
@@ -554,10 +550,9 @@ impl ops::Add for SumCommit {
 	type Output = SumCommit;
 
 	fn add(self, other: SumCommit) -> SumCommit {
-		let sum = match self.secp.commit_sum(
-			vec![self.commit.clone(), other.commit.clone()],
-			vec![],
-		) {
+		let sum = match self.secp
+			.commit_sum(vec![self.commit.clone(), other.commit.clone()], vec![])
+		{
 			Ok(s) => s,
 			Err(_) => Commitment::from_vec(vec![1; 33]),
 		};

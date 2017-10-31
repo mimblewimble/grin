@@ -21,7 +21,7 @@ use core::core::{self, Output};
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use p2p::{self, NetAdapter, Server, PeerStore, PeerData, State};
+use p2p::{self, NetAdapter, PeerData, PeerStore, Server, State};
 use pool;
 use util::secp::pedersen::Commitment;
 use util::OneTime;
@@ -180,11 +180,8 @@ impl NetAdapter for NetToChainAdapter {
 	/// Find good peers we know with the provided capability and return their
 	/// addresses.
 	fn find_peer_addrs(&self, capab: p2p::Capabilities) -> Vec<SocketAddr> {
-		let peers = self.peer_store.find_peers(
-			State::Healthy,
-			capab,
-			p2p::MAX_PEER_ADDRS as usize,
-		);
+		let peers = self.peer_store
+			.find_peers(State::Healthy, capab, p2p::MAX_PEER_ADDRS as usize);
 		debug!(LOGGER, "Got {} peer addrs to send.", peers.len());
 		map_vec!(peers, |p| p.addr)
 	}
@@ -244,11 +241,11 @@ impl NetToChainAdapter {
 	pub fn start_sync(&self, sync: sync::Syncer) {
 		let arc_sync = Arc::new(sync);
 		self.syncer.init(arc_sync.clone());
-		let _ = thread::Builder::new().name("syncer".to_string()).spawn(
-			move || {
+		let _ = thread::Builder::new()
+			.name("syncer".to_string())
+			.spawn(move || {
 				let _ = arc_sync.run();
-			},
-		);
+			});
 	}
 
 	pub fn syncing(&self) -> bool {
@@ -325,7 +322,9 @@ impl pool::PoolAdapter for PoolToNetAdapter {
 impl PoolToNetAdapter {
 	/// Create a new pool to net adapter
 	pub fn new() -> PoolToNetAdapter {
-		PoolToNetAdapter { p2p: OneTime::new() }
+		PoolToNetAdapter {
+			p2p: OneTime::new(),
+		}
 	}
 
 	/// Setup the p2p server on the adapter
@@ -345,7 +344,9 @@ pub struct PoolToChainAdapter {
 impl PoolToChainAdapter {
 	/// Create a new pool adapter
 	pub fn new() -> PoolToChainAdapter {
-		PoolToChainAdapter { chain: OneTime::new() }
+		PoolToChainAdapter {
+			chain: OneTime::new(),
+		}
 	}
 
 	pub fn set_chain(&self, chain_ref: Arc<chain::Chain>) {
@@ -355,13 +356,14 @@ impl PoolToChainAdapter {
 
 impl pool::BlockChain for PoolToChainAdapter {
 	fn get_unspent(&self, output_ref: &Commitment) -> Result<Output, pool::PoolError> {
-		self.chain.borrow().get_unspent(output_ref).map_err(
-			|e| match e {
+		self.chain
+			.borrow()
+			.get_unspent(output_ref)
+			.map_err(|e| match e {
 				chain::types::Error::OutputNotFound => pool::PoolError::OutputNotFound,
 				chain::types::Error::OutputSpent => pool::PoolError::OutputSpent,
 				_ => pool::PoolError::GenericPoolError,
-			},
-		)
+			})
 	}
 
 	fn get_block_header_by_output_commit(
@@ -375,8 +377,9 @@ impl pool::BlockChain for PoolToChainAdapter {
 	}
 
 	fn head_header(&self) -> Result<BlockHeader, pool::PoolError> {
-		self.chain.borrow().head_header().map_err(|_| {
-			pool::PoolError::GenericPoolError
-		})
+		self.chain
+			.borrow()
+			.head_header()
+			.map_err(|_| pool::PoolError::GenericPoolError)
 	}
 }

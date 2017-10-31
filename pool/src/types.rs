@@ -34,11 +34,11 @@ pub struct PoolConfig {
 	/// Base fee for a transaction to be accepted by the pool. The transaction
 	/// weight is computed from its number of inputs, outputs and kernels and
 	/// multipled by the base fee to compare to the actual transaction fee.
-	#[serde="default_accept_fee_base"]
+	#[serde = "default_accept_fee_base"]
 	pub accept_fee_base: u64,
 
 	/// Maximum capacity of the pool in number of transactions
-	#[serde="default_max_pool_size"]
+	#[serde = "default_max_pool_size"]
 	pub max_pool_size: usize,
 }
 
@@ -51,8 +51,12 @@ impl Default for PoolConfig {
 	}
 }
 
-fn default_accept_fee_base() -> u64 { 10 }
-fn default_max_pool_size() -> usize { 50_000 }
+fn default_accept_fee_base() -> u64 {
+	10
+}
+fn default_max_pool_size() -> usize {
+	50_000
+}
 
 /// Placeholder: the data representing where we heard about a tx from.
 ///
@@ -240,7 +244,6 @@ impl Pool {
 		pool_refs: Vec<graph::Edge>,
 		mut new_unspents: Vec<graph::Edge>,
 	) {
-
 		// Removing consumed available_outputs
 		for new_edge in &pool_refs {
 			// All of these should correspond to an existing unspent
@@ -253,23 +256,18 @@ impl Pool {
 
 		// Accounting for consumed blockchain outputs
 		for new_blockchain_edge in blockchain_refs.drain(..) {
-			self.consumed_blockchain_outputs.insert(
-				new_blockchain_edge
-					.output_commitment(),
-				new_blockchain_edge,
-			);
+			self.consumed_blockchain_outputs
+				.insert(new_blockchain_edge.output_commitment(), new_blockchain_edge);
 		}
 
 		// Adding the transaction to the vertices list along with internal
-		// pool edges
+  // pool edges
 		self.graph.add_entry(pool_entry, pool_refs);
 
 		// Adding the new unspents to the unspent map
 		for unspent_output in new_unspents.drain(..) {
-			self.available_outputs.insert(
-				unspent_output.output_commitment(),
-				unspent_output,
-			);
+			self.available_outputs
+				.insert(unspent_output.output_commitment(), unspent_output);
 		}
 	}
 
@@ -282,19 +280,14 @@ impl Pool {
 		tx: &transaction::Transaction,
 		marked_txs: &HashSet<hash::Hash>,
 	) {
-
 		self.graph.remove_vertex(graph::transaction_identifier(tx));
 
 		for input in tx.inputs.iter().map(|x| x.commitment()) {
 			match self.graph.remove_edge_by_commitment(&input) {
-				Some(x) => {
-					if !marked_txs.contains(&x.source_hash().unwrap()) {
-						self.available_outputs.insert(
-							x.output_commitment(),
-							x.with_destination(None),
-						);
-					}
-				}
+				Some(x) => if !marked_txs.contains(&x.source_hash().unwrap()) {
+					self.available_outputs
+						.insert(x.output_commitment(), x.with_destination(None));
+				},
 				None => {
 					self.consumed_blockchain_outputs.remove(&input);
 				}
@@ -303,15 +296,10 @@ impl Pool {
 
 		for output in tx.outputs.iter().map(|x| x.commitment()) {
 			match self.graph.remove_edge_by_commitment(&output) {
-				Some(x) => {
-					if !marked_txs.contains(&x.destination_hash().unwrap()) {
-
-						self.consumed_blockchain_outputs.insert(
-							x.output_commitment(),
-							x.with_source(None),
-						);
-					}
-				}
+				Some(x) => if !marked_txs.contains(&x.destination_hash().unwrap()) {
+					self.consumed_blockchain_outputs
+						.insert(x.output_commitment(), x.with_source(None));
+				},
 				None => {
 					self.available_outputs.remove(&output);
 				}
@@ -413,14 +401,11 @@ impl Orphans {
 		is_missing: HashMap<usize, ()>,
 		mut new_unspents: Vec<graph::Edge>,
 	) {
-
 		// Removing consumed available_outputs
 		for (i, new_edge) in orphan_refs.drain(..).enumerate() {
 			if is_missing.contains_key(&i) {
-				self.missing_outputs.insert(
-					new_edge.output_commitment(),
-					new_edge,
-				);
+				self.missing_outputs
+					.insert(new_edge.output_commitment(), new_edge);
 			} else {
 				assert!(
 					self.available_outputs
@@ -433,27 +418,21 @@ impl Orphans {
 
 		// Accounting for consumed blockchain and pool outputs
 		for external_edge in pool_refs.drain(..) {
-			self.pool_connections.insert(
-				external_edge.output_commitment(),
-				external_edge,
-			);
+			self.pool_connections
+				.insert(external_edge.output_commitment(), external_edge);
 		}
 
 		// if missing_refs is the same length as orphan_refs, we have
-		// no orphan-orphan links for this transaction and it is a
-		// root transaction of the orphans set
-		self.graph.add_vertex_only(
-			orphan_entry,
-			is_missing.len() == orphan_refs.len(),
-		);
+  // no orphan-orphan links for this transaction and it is a
+  // root transaction of the orphans set
+		self.graph
+			.add_vertex_only(orphan_entry, is_missing.len() == orphan_refs.len());
 
 
 		// Adding the new unspents to the unspent map
 		for unspent_output in new_unspents.drain(..) {
-			self.available_outputs.insert(
-				unspent_output.output_commitment(),
-				unspent_output,
-			);
+			self.available_outputs
+				.insert(unspent_output.output_commitment(), unspent_output);
 		}
 	}
 }

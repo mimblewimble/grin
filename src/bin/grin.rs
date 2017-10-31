@@ -14,34 +14,34 @@
 
 //! Main for building the binary of a Grin peer-to-peer node.
 
-#[macro_use]
-extern crate slog;
+extern crate blake2_rfc as blake2;
 extern crate clap;
 extern crate daemonize;
 extern crate serde;
 extern crate serde_json;
-extern crate blake2_rfc as blake2;
+#[macro_use]
+extern crate slog;
 
 extern crate grin_api as api;
-extern crate grin_grin as grin;
-extern crate grin_wallet as wallet;
-extern crate grin_keychain as keychain;
 extern crate grin_config as config;
 extern crate grin_core as core;
+extern crate grin_grin as grin;
+extern crate grin_keychain as keychain;
 extern crate grin_util as util;
+extern crate grin_wallet as wallet;
 
 use std::thread;
 use std::io::Read;
 use std::fs::File;
 use std::time::Duration;
 
-use clap::{Arg, App, SubCommand, ArgMatches};
+use clap::{App, Arg, ArgMatches, SubCommand};
 use daemonize::Daemonize;
 
 use config::GlobalConfig;
 use wallet::WalletConfig;
 use core::global;
-use util::{LoggingConfig, LOGGER, init_logger};
+use util::{init_logger, LoggingConfig, LOGGER};
 
 fn start_from_config_file(mut global_config: GlobalConfig) {
 	info!(
@@ -68,16 +68,15 @@ fn start_from_config_file(mut global_config: GlobalConfig) {
 }
 
 fn main() {
-
 	// First, load a global config object,
-	// then modify that object with any switches
-	// found so that the switches override the
-	// global config file
+ // then modify that object with any switches
+ // found so that the switches override the
+ // global config file
 
 	// This will return a global config object,
-	// which will either contain defaults for all // of the config structures or a
-	// configuration
-	// read from a config file
+ // which will either contain defaults for all // of the config structures or a
+ // configuration
+ // read from a config file
 
 	let mut global_config = GlobalConfig::new(None).unwrap_or_else(|e| {
 		panic!("Error parsing config file: {}", e);
@@ -241,14 +240,12 @@ fn main() {
 		}
 
 		// client commands and options
-		("client", Some(client_args)) => {
-			match client_args.subcommand() {
-				("status", _) => {
-					println!("status info...");
-				}
-				_ => panic!("Unknown client command, use 'grin help client' for details"),
+		("client", Some(client_args)) => match client_args.subcommand() {
+			("status", _) => {
+				println!("status info...");
 			}
-		}
+			_ => panic!("Unknown client command, use 'grin help client' for details"),
+		},
 
 		// client commands and options
 		("wallet", Some(wallet_args)) => {
@@ -263,7 +260,7 @@ fn main() {
 				start_from_config_file(global_config);
 			} else {
 				// won't attempt to just start with defaults,
-				// and will reject
+	// and will reject
 				println!("Unknown command, and no configuration file was found.");
 				println!("Use 'grin help' for a list of all commands.");
 			}
@@ -352,48 +349,44 @@ fn wallet_command(wallet_args: &ArgMatches) {
 	}
 
 	// Derive the keychain based on seed from seed file and specified passphrase.
-	// Generate the initial wallet seed if we are running "wallet init".
+ // Generate the initial wallet seed if we are running "wallet init".
 	if let ("init", Some(_)) = wallet_args.subcommand() {
-		wallet::WalletSeed::init_file(&wallet_config)
-			.expect("Failed to init wallet seed file.");
+		wallet::WalletSeed::init_file(&wallet_config).expect("Failed to init wallet seed file.");
 
 		// we are done here with creating the wallet, so just return
 		return;
 	}
 
-	let wallet_seed = wallet::WalletSeed::from_file(&wallet_config)
-		.expect("Failed to read wallet seed file.");
+	let wallet_seed =
+		wallet::WalletSeed::from_file(&wallet_config).expect("Failed to read wallet seed file.");
 	let passphrase = wallet_args
 		.value_of("pass")
 		.expect("Failed to read passphrase.");
-	let keychain = wallet_seed.derive_keychain(&passphrase)
+	let keychain = wallet_seed
+		.derive_keychain(&passphrase)
 		.expect("Failed to derive keychain from seed file and passphrase.");
 
 	match wallet_args.subcommand() {
-		("receive", Some(receive_args)) => {
-			if let Some(f) = receive_args.value_of("input") {
-				let mut file = File::open(f).expect("Unable to open transaction file.");
-				let mut contents = String::new();
-				file.read_to_string(&mut contents).expect(
-					"Unable to read transaction file.",
-				);
-				wallet::receive_json_tx(&wallet_config, &keychain, contents.as_str()).unwrap();
-			} else {
-				wallet::server::start_rest_apis(wallet_config, keychain);
-			}
-		}
+		("receive", Some(receive_args)) => if let Some(f) = receive_args.value_of("input") {
+			let mut file = File::open(f).expect("Unable to open transaction file.");
+			let mut contents = String::new();
+			file.read_to_string(&mut contents)
+				.expect("Unable to read transaction file.");
+			wallet::receive_json_tx(&wallet_config, &keychain, contents.as_str()).unwrap();
+		} else {
+			wallet::server::start_rest_apis(wallet_config, keychain);
+		},
 		("send", Some(send_args)) => {
 			let amount = send_args
 				.value_of("amount")
 				.expect("Amount to send required")
 				.parse()
 				.expect("Could not parse amount as a whole number.");
-			let minimum_confirmations: u64 =
-				send_args
-					.value_of("minimum_confirmations")
-					.unwrap_or("1")
-					.parse()
-					.expect("Could not parse minimum_confirmations as a whole number.");
+			let minimum_confirmations: u64 = send_args
+				.value_of("minimum_confirmations")
+				.unwrap_or("1")
+				.parse()
+				.expect("Could not parse minimum_confirmations as a whole number.");
 			let mut dest = "stdout";
 			if let Some(d) = send_args.value_of("dest") {
 				dest = d;
@@ -412,12 +405,11 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				.expect("Amount to burn required")
 				.parse()
 				.expect("Could not parse amount as a whole number.");
-			let minimum_confirmations: u64 =
-				send_args
-					.value_of("minimum_confirmations")
-					.unwrap_or("1")
-					.parse()
-					.expect("Could not parse minimum_confirmations as a whole number.");
+			let minimum_confirmations: u64 = send_args
+				.value_of("minimum_confirmations")
+				.unwrap_or("1")
+				.parse()
+				.expect("Could not parse minimum_confirmations as a whole number.");
 			wallet::issue_burn_tx(&wallet_config, &keychain, amount, minimum_confirmations)
 				.unwrap();
 		}

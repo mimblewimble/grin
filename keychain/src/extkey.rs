@@ -17,7 +17,7 @@ use std::cmp::min;
 
 use serde::{de, ser};
 
-use byteorder::{ByteOrder, BigEndian};
+use byteorder::{BigEndian, ByteOrder};
 use blake2::blake2b::blake2b;
 use util::secp;
 use util::secp::Secp256k1;
@@ -253,11 +253,11 @@ impl ExtendedKey {
 
 		let derived = blake2b(64, &self.chaincode[..], &seed[..]);
 
-		let mut secret_key = SecretKey::from_slice(&secp, &derived.as_bytes()[0..32])
+		let mut secret_key =
+			SecretKey::from_slice(&secp, &derived.as_bytes()[0..32]).expect("Error deriving key");
+		secret_key
+			.add_assign(secp, &self.key)
 			.expect("Error deriving key");
-		secret_key.add_assign(secp, &self.key).expect(
-			"Error deriving key",
-		);
 		// TODO check if key != 0 ?
 
 		let mut chain_code: [u8; 32] = [0; 32];
@@ -312,13 +312,10 @@ mod test {
 		let s = Secp256k1::new();
 		let seed = from_hex("000102030405060708090a0b0c0d0e0f");
 		let extk = ExtendedKey::from_seed(&s, &seed.as_slice()).unwrap();
-		let sec = from_hex(
-			"c3f5ae520f474b390a637de4669c84d0ed9bbc21742577fac930834d3c3083dd",
-		);
+		let sec = from_hex("c3f5ae520f474b390a637de4669c84d0ed9bbc21742577fac930834d3c3083dd");
 		let secret_key = SecretKey::from_slice(&s, sec.as_slice()).unwrap();
-		let chaincode = from_hex(
-			"e7298e68452b0c6d54837670896e1aee76b118075150d90d4ee416ece106ae72",
-		);
+		let chaincode =
+			from_hex("e7298e68452b0c6d54837670896e1aee76b118075150d90d4ee416ece106ae72");
 		let identifier = from_hex("83e59c48297b78b34b73");
 		let depth = 0;
 		let n_child = 0;
@@ -343,13 +340,10 @@ mod test {
 		let seed = from_hex("000102030405060708090a0b0c0d0e0f");
 		let extk = ExtendedKey::from_seed(&s, &seed.as_slice()).unwrap();
 		let derived = extk.derive(&s, 0).unwrap();
-		let sec = from_hex(
-			"d75f70beb2bd3b56f9b064087934bdedee98e4b5aae6280c58b4eff38847888f",
-		);
+		let sec = from_hex("d75f70beb2bd3b56f9b064087934bdedee98e4b5aae6280c58b4eff38847888f");
 		let secret_key = SecretKey::from_slice(&s, sec.as_slice()).unwrap();
-		let chaincode = from_hex(
-			"243cb881e1549e714db31d23af45540b13ad07941f64a786bbf3313b4de1df52",
-		);
+		let chaincode =
+			from_hex("243cb881e1549e714db31d23af45540b13ad07941f64a786bbf3313b4de1df52");
 		let root_key_id = from_hex("83e59c48297b78b34b73");
 		let identifier = from_hex("0185adb4d8b730099c93");
 		let depth = 1;

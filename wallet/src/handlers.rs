@@ -33,13 +33,10 @@ pub struct CoinbaseHandler {
 
 impl CoinbaseHandler {
 	fn build_coinbase(&self, block_fees: &BlockFees) -> Result<CbData, Error> {
-		let (out, kern, block_fees) = receive_coinbase(
-			&self.config,
-			&self.keychain,
-			block_fees,
-		).map_err(|e| {
-			api::Error::Internal(format!("Error building coinbase: {:?}", e))
-		})?;
+		let (out, kern, block_fees) = receive_coinbase(&self.config, &self.keychain, block_fees)
+			.map_err(|e| {
+				api::Error::Internal(format!("Error building coinbase: {:?}", e))
+			})?;
 
 		let out_bin = ser::ser_vec(&out).map_err(|e| {
 			api::Error::Internal(format!("Error serializing output: {:?}", e))
@@ -50,13 +47,9 @@ impl CoinbaseHandler {
 		})?;
 
 		let key_id_bin = match block_fees.key_id {
-			Some(key_id) => {
-				ser::ser_vec(&key_id).map_err(|e| {
-					api::Error::Internal(
-						format!("Error serializing kernel: {:?}", e),
-					)
-				})?
-			}
+			Some(key_id) => ser::ser_vec(&key_id).map_err(|e| {
+				api::Error::Internal(format!("Error serializing kernel: {:?}", e))
+			})?,
 			None => vec![],
 		};
 
@@ -68,7 +61,8 @@ impl CoinbaseHandler {
 	}
 }
 
-// TODO - error handling - what to return if we fail to get the wallet lock for some reason...
+// TODO - error handling - what to return if we fail to get the wallet lock for
+// some reason...
 impl Handler for CoinbaseHandler {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		let struct_body = req.get::<bodyparser::Struct<BlockFees>>();

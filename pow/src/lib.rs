@@ -29,15 +29,15 @@
 #![warn(missing_docs)]
 
 extern crate blake2_rfc as blake2;
-extern crate rand;
-extern crate time;
 #[macro_use]
 extern crate lazy_static;
-#[macro_use]
-extern crate slog;
+extern crate rand;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate slog;
+extern crate time;
 
 extern crate grin_core as core;
 extern crate grin_util as util;
@@ -63,7 +63,9 @@ use cuckoo::{Cuckoo, Error};
 
 pub trait MiningWorker {
 	/// This only sets parameters and does initialisation work now
-	fn new(ease: u32, sizeshift: u32, proof_size: usize) -> Self where Self: Sized;
+	fn new(ease: u32, sizeshift: u32, proof_size: usize) -> Self
+	where
+		Self: Sized;
 
 	/// Actually perform a mining attempt on the given input and
 	/// return a proof if found
@@ -74,7 +76,7 @@ pub trait MiningWorker {
 /// satisfies the requirements of the header.
 pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
 	// make sure the pow hash shows a difficulty at least as large as the target
-	// difficulty
+ // difficulty
 	if bh.difficulty > bh.pow.clone().to_difficulty() {
 		return false;
 	}
@@ -83,10 +85,11 @@ pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
 
 /// Uses the much easier Cuckoo20 (mostly for
 /// tests).
-pub fn pow20<T: MiningWorker>(miner: &mut T,
-                              bh: &mut BlockHeader,
-                              diff: Difficulty)
-                              -> Result<(), Error> {
+pub fn pow20<T: MiningWorker>(
+	miner: &mut T,
+	bh: &mut BlockHeader,
+	diff: Difficulty,
+) -> Result<(), Error> {
 	pow_size(miner, bh, diff, 20)
 }
 
@@ -104,16 +107,13 @@ pub fn mine_genesis_block(miner_config: Option<types::MinerConfig>) -> Option<co
 	let proof_size = global::proofsize();
 
 	let mut miner: Box<MiningWorker> = match miner_config {
-		Some(c) => {
-			if c.use_cuckoo_miner {
-				let mut p = plugin::PluginMiner::new(consensus::EASINESS, sz, proof_size);
-				p.init(c.clone());
-				Box::new(p)
-
-			} else {
-				Box::new(cuckoo::Miner::new(consensus::EASINESS, sz, proof_size))
-			}
-		}
+		Some(c) => if c.use_cuckoo_miner {
+			let mut p = plugin::PluginMiner::new(consensus::EASINESS, sz, proof_size);
+			p.init(c.clone());
+			Box::new(p)
+		} else {
+			Box::new(cuckoo::Miner::new(consensus::EASINESS, sz, proof_size))
+		},
 		None => Box::new(cuckoo::Miner::new(consensus::EASINESS, sz, proof_size)),
 	};
 	pow_size(&mut *miner, &mut gen.header, diff, sz as u32).unwrap();
@@ -124,11 +124,12 @@ pub fn mine_genesis_block(miner_config: Option<types::MinerConfig>) -> Option<co
 /// Mining Worker,
 /// until the required difficulty target is reached. May take a while for a low
 /// target...
-pub fn pow_size<T: MiningWorker + ?Sized>(miner: &mut T,
-                                          bh: &mut BlockHeader,
-                                          diff: Difficulty,
-                                          _: u32)
-                                          -> Result<(), Error> {
+pub fn pow_size<T: MiningWorker + ?Sized>(
+	miner: &mut T,
+	bh: &mut BlockHeader,
+	diff: Difficulty,
+	_: u32,
+) -> Result<(), Error> {
 	let start_nonce = bh.nonce;
 
 	// if we're in production mode, try the pre-mined solution first
@@ -143,11 +144,11 @@ pub fn pow_size<T: MiningWorker + ?Sized>(miner: &mut T,
 	// try to find a cuckoo cycle on that header hash
 	loop {
 		// can be trivially optimized by avoiding re-serialization every time but this
-		// is not meant as a fast miner implementation
+  // is not meant as a fast miner implementation
 		let pow_hash = bh.hash();
 
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
-		// diff, we're all good
+  // diff, we're all good
 
 		if let Ok(proof) = miner.mine(&pow_hash[..]) {
 			if proof.clone().to_difficulty() >= diff {
@@ -160,7 +161,7 @@ pub fn pow_size<T: MiningWorker + ?Sized>(miner: &mut T,
 		bh.nonce += 1;
 
 		// and if we're back where we started, update the time (changes the hash as
-		// well)
+  // well)
 		if bh.nonce == start_nonce {
 			bh.timestamp = time::at_utc(time::Timespec { sec: 0, nsec: 0 });
 		}

@@ -12,21 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate grin_grin as grin;
-extern crate grin_core as core;
-extern crate grin_p2p as p2p;
-extern crate grin_chain as chain;
 extern crate grin_api as api;
-extern crate grin_wallet as wallet;
+extern crate grin_chain as chain;
+extern crate grin_core as core;
+extern crate grin_grin as grin;
 extern crate grin_keychain as keychain;
+extern crate grin_p2p as p2p;
 extern crate grin_pow as pow;
 extern crate grin_util as util;
+extern crate grin_wallet as wallet;
 
 extern crate blake2_rfc as blake2;
 extern crate futures;
+extern crate futures_cpupool;
 extern crate tokio_core;
 extern crate tokio_timer;
-extern crate futures_cpupool;
 
 use std::thread;
 use std::time;
@@ -42,9 +42,7 @@ use util::secp::Secp256k1;
 use self::keychain::Keychain;
 use wallet::WalletConfig;
 
-
 /// Just removes all results from previous runs
-
 pub fn clean_all_output(test_name_dir: &str) {
 	let target_dir = format!("target/test_servers/{}", test_name_dir);
 	let result = fs::remove_dir_all(target_dir);
@@ -116,9 +114,9 @@ impl Default for LocalServerContainerConfig {
 		LocalServerContainerConfig {
 			name: String::from("test_host"),
 			base_addr: String::from("127.0.0.1"),
+			api_server_port: 13413,
 			p2p_server_port: 13414,
-			api_server_port: 13415,
-			wallet_port: 13416,
+			wallet_port: 13415,
 			seed_addr: String::from(""),
 			is_seeding: false,
 			start_miner: false,
@@ -172,15 +170,15 @@ impl LocalServerContainer {
 		let working_dir = format!("target/test_servers/{}", config.name);
 		Ok(
 			(LocalServerContainer {
-			     config: config,
-			     p2p_server_stats: None,
-			     api_server: None,
-			     server_is_running: false,
-			     server_is_mining: false,
-			     wallet_is_running: false,
-			     working_dir: working_dir,
-			     peer_list: Vec::new(),
-			 }),
+				config: config,
+				p2p_server_stats: None,
+				api_server: None,
+				server_is_running: false,
+				server_is_mining: false,
+				wallet_is_running: false,
+				working_dir: working_dir,
+				peer_list: Vec::new(),
+			}),
 		)
 	}
 
@@ -256,14 +254,12 @@ impl LocalServerContainer {
 		}
 
 		s.get_server_stats().unwrap()
-
 	}
 
 	/// Starts a wallet daemon to receive and returns the
 	/// listening server url
 
 	pub fn run_wallet(&mut self, _duration_in_seconds: u64) {
-
 		// URL on which to start the wallet listener (i.e. api server)
 		let url = format!("{}:{}", self.config.base_addr, self.config.wallet_port);
 
@@ -287,23 +283,22 @@ impl LocalServerContainer {
 		wallet_config.check_node_api_http_addr = self.config.wallet_validating_node_url.clone();
 		wallet_config.data_file_dir = self.working_dir.clone();
 
+		let receive_tx_handler = wallet::WalletReceiver {
+			config: wallet_config.clone(),
+			keychain: keychain.clone(),
+		};
+		let router = router!(
+      receive_tx: get "/receive/transaction" => receive_tx_handler,
+    );
+
 		let mut api_server = api::ApiServer::new("/v1".to_string());
-
-		api_server.register_endpoint(
-			"/receive".to_string(),
-			wallet::WalletReceiver {
-				keychain: keychain,
-				config: wallet_config,
-			},
-		);
-
+		api_server.register_handler(router);
 		api_server.start(url).unwrap_or_else(|e| {
 			println!("Failed to start Grin wallet receiver: {}.", e);
 		});
 
 		self.api_server = Some(api_server);
 		self.wallet_is_running = true;
-
 	}
 
 	/// Stops the running wallet server
@@ -384,13 +379,13 @@ pub struct LocalServerContainerPool {
 impl LocalServerContainerPool {
 	pub fn new(config: LocalServerContainerPoolConfig) -> LocalServerContainerPool {
 		(LocalServerContainerPool {
-		     next_api_port: config.base_api_port,
-		     next_p2p_port: config.base_p2p_port,
-		     next_wallet_port: config.base_wallet_port,
-		     config: config,
-		     server_containers: Vec::new(),
-		     is_seeding: false,
-		 })
+			next_api_port: config.base_api_port,
+			next_p2p_port: config.base_p2p_port,
+			next_wallet_port: config.base_wallet_port,
+			config: config,
+			server_containers: Vec::new(),
+			is_seeding: false,
+		})
 	}
 
 	/// adds a single server on the next available port
@@ -400,7 +395,6 @@ impl LocalServerContainerPool {
 	///
 
 	pub fn create_server(&mut self, server_config: &mut LocalServerContainerConfig) {
-
 		// If we're calling it this way, need to override these
 		server_config.p2p_server_port = self.next_p2p_port;
 		server_config.api_server_port = self.next_api_port;
@@ -440,12 +434,10 @@ impl LocalServerContainerPool {
 		// self.server_containers.push(server_arc);
 
 		// Create a future that runs the server for however many seconds
-		// collect them all and run them in the run_all_servers
+  // collect them all and run them in the run_all_servers
 		let _run_time = self.config.run_length_in_seconds;
 
 		self.server_containers.push(server_container);
-
-
 	}
 
 	/// adds n servers, ready to run
@@ -463,7 +455,6 @@ impl LocalServerContainerPool {
 	///
 
 	pub fn run_all_servers(self) -> Vec<grin::ServerStats> {
-
 		let run_length = self.config.run_length_in_seconds;
 		let mut handles = vec![];
 
@@ -477,18 +468,17 @@ impl LocalServerContainerPool {
 			let handle = thread::spawn(move || {
 				if is_seeding && !s.config.is_seeding {
 					// there's a seed and we're not it, so hang around longer and give the seed
-					// a chance to start
+	 // a chance to start
 					thread::sleep(time::Duration::from_millis(2000));
 				}
 				let server_ref = s.run_server(run_length);
 				return_container_ref.lock().unwrap().push(server_ref);
 			});
 			// Not a big fan of sleeping hack here, but there appears to be a
-			// concurrency issue when creating files in rocksdb that causes
-			// failure if we don't pause a bit before starting the next server
+   // concurrency issue when creating files in rocksdb that causes
+   // failure if we don't pause a bit before starting the next server
 			thread::sleep(time::Duration::from_millis(500));
 			handles.push(handle);
-
 		}
 
 		for handle in handles {
@@ -508,7 +498,6 @@ impl LocalServerContainerPool {
 	pub fn connect_all_peers(&mut self) {
 		/// just pull out all currently active servers, build a list,
 		/// and feed into all servers
-
 		let mut server_addresses: Vec<String> = Vec::new();
 		for s in &self.server_containers {
 			let server_address = format!("{}:{}", s.config.base_addr, s.config.p2p_server_port);

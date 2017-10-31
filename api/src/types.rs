@@ -44,7 +44,7 @@ impl Tip {
 	}
 }
 
-/// Sumtrees 
+/// Sumtrees
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SumTrees {
 	/// UTXO Root Hash
@@ -59,7 +59,7 @@ pub struct SumTrees {
 
 impl SumTrees {
 	pub fn from_head(head: Arc<chain::Chain>) -> SumTrees {
-		let roots=head.get_sumtree_roots();
+		let roots = head.get_sumtree_roots();
 		SumTrees {
 			utxo_root_hash: util::to_hex(roots.0.hash.to_vec()),
 			utxo_root_sum: util::to_hex(roots.0.sum.commit.0.to_vec()),
@@ -80,14 +80,13 @@ pub struct SumTreeNode {
 }
 
 impl SumTreeNode {
-
-	pub fn get_last_n_utxo(chain: Arc<chain::Chain>, distance:u64) -> Vec<SumTreeNode> {
+	pub fn get_last_n_utxo(chain: Arc<chain::Chain>, distance: u64) -> Vec<SumTreeNode> {
 		let mut return_vec = Vec::new();
 		let last_n = chain.get_last_n_utxo(distance);
 		for elem_output in last_n {
 			let header = chain
-			.get_block_header_by_output_commit(&elem_output.1.commit)
-			.map_err(|_| Error::NotFound);
+				.get_block_header_by_output_commit(&elem_output.1.commit)
+				.map_err(|_| Error::NotFound);
 			// Need to call further method to check if output is spent
 			let mut output = OutputPrintable::from_output(&elem_output.1, &header.unwrap());
 			if let Ok(_) = chain.get_unspent(&elem_output.1.commit) {
@@ -101,7 +100,7 @@ impl SumTreeNode {
 		return_vec
 	}
 
-	pub fn get_last_n_rangeproof(head: Arc<chain::Chain>, distance:u64) -> Vec<SumTreeNode> {
+	pub fn get_last_n_rangeproof(head: Arc<chain::Chain>, distance: u64) -> Vec<SumTreeNode> {
 		let mut return_vec = Vec::new();
 		let last_n = head.get_last_n_rangeproof(distance);
 		for elem in last_n {
@@ -113,7 +112,7 @@ impl SumTreeNode {
 		return_vec
 	}
 
-	pub fn get_last_n_kernel(head: Arc<chain::Chain>, distance:u64) -> Vec<SumTreeNode> {
+	pub fn get_last_n_kernel(head: Arc<chain::Chain>, distance: u64) -> Vec<SumTreeNode> {
 		let mut return_vec = Vec::new();
 		let last_n = head.get_last_n_kernel(distance);
 		for elem in last_n {
@@ -149,9 +148,10 @@ pub struct Output {
 impl Output {
 	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader) -> Output {
 		let (output_type, lock_height) = match output.features {
-			x if x.contains(core::transaction::COINBASE_OUTPUT) => {
-				(OutputType::Coinbase, block_header.height + global::coinbase_maturity())
-			}
+			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
+				OutputType::Coinbase,
+				block_header.height + global::coinbase_maturity(),
+			),
 			_ => (OutputType::Transaction, 0),
 		};
 
@@ -165,12 +165,13 @@ impl Output {
 	}
 }
 
-//As above, except formatted a bit better for human viewing
+// As above, except formatted a bit better for human viewing
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OutputPrintable {
 	/// The type of output Coinbase|Transaction
 	pub output_type: OutputType,
-	/// The homomorphic commitment representing the output's amount (as hex string)
+	/// The homomorphic commitment representing the output's amount (as hex
+	/// string)
 	pub commit: String,
 	/// The height of the block creating this output
 	pub height: u64,
@@ -185,9 +186,10 @@ pub struct OutputPrintable {
 impl OutputPrintable {
 	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader) -> OutputPrintable {
 		let (output_type, lock_height) = match output.features {
-			x if x.contains(core::transaction::COINBASE_OUTPUT) => {
-				(OutputType::Coinbase, block_header.height + global::coinbase_maturity())
-			}
+			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
+				OutputType::Coinbase,
+				block_header.height + global::coinbase_maturity(),
+			),
 			_ => (OutputType::Transaction, 0),
 		};
 		OutputPrintable {

@@ -61,8 +61,8 @@ pub enum MiningParameterMode {
 }
 
 lazy_static!{
-    /// The mining parameter mode
-    pub static ref MINING_PARAMETER_MODE: RwLock<MiningParameterMode> =
+	/// The mining parameter mode
+	pub static ref MINING_PARAMETER_MODE: RwLock<MiningParameterMode> =
 			RwLock::new(MiningParameterMode::Production);
 }
 

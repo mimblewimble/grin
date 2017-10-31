@@ -31,8 +31,8 @@ use util::secp::pedersen::*;
 
 pub use self::block::*;
 pub use self::transaction::*;
-use self::hash::{Hashed};
-use ser::{Writeable, Writer, Reader, Readable, Error};
+use self::hash::Hashed;
+use ser::{Error, Readable, Reader, Writeable, Writer};
 use global;
 // use keychain;
 
@@ -53,7 +53,7 @@ pub trait Committed {
 		let mut output_commits = map_vec!(self.outputs_committed(), |out| out.commitment());
 
 		// add the overage as output commitment if positive, as an input commitment if
-		// negative
+  // negative
 		let overage = self.overage();
 		if overage != 0 {
 			let over_commit = secp.commit_value(overage.abs() as u64).unwrap();
@@ -186,11 +186,11 @@ impl Writeable for Proof {
 mod test {
 	use super::*;
 	use core::hash::ZERO_HASH;
-	use core::build::{input, output, with_fee, initial_tx, with_excess, with_lock_height};
+	use core::build::{initial_tx, input, output, with_excess, with_fee, with_lock_height};
 	use core::block::Error::KernelLockHeight;
 	use ser;
 	use keychain;
-	use keychain::{Keychain, BlindingFactor};
+	use keychain::{BlindingFactor, Keychain};
 
 	#[test]
 	#[should_panic(expected = "InvalidSecretKey")]
@@ -308,11 +308,11 @@ mod test {
 
 		{
 			// Alice gets 2 of her pre-existing outputs to send 5 coins to Bob, they
-			// become inputs in the new transaction
+   // become inputs in the new transaction
 			let (in1, in2) = (input(4, key_id1), input(3, key_id2));
 
 			// Alice builds her transaction, with change, which also produces the sum
-			// of blinding factors before they're obscured.
+   // of blinding factors before they're obscured.
 			let (tx, sum) =
 				build::transaction(vec![in1, in2, output(1, key_id3), with_fee(2)], &keychain)
 					.unwrap();
@@ -321,8 +321,8 @@ mod test {
 		}
 
 		// From now on, Bob only has the obscured transaction and the sum of
-		// blinding factors. He adds his output, finalizes the transaction so it's
-		// ready for broadcast.
+  // blinding factors. He adds his output, finalizes the transaction so it's
+  // ready for broadcast.
 		let (tx_final, _) = build::transaction(
 			vec![
 				initial_tx(tx_alice),
@@ -382,7 +382,7 @@ mod test {
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		// first check we can add a timelocked tx where lock height matches current block height
-		// and that the resulting block is valid
+  // and that the resulting block is valid
 		let tx1 = build::transaction(
 			vec![
 				input(5, key_id1.clone()),
@@ -421,7 +421,9 @@ mod test {
 			&key_id3.clone(),
 		).unwrap();
 		match b.validate(keychain.secp()) {
-			Err(KernelLockHeight { lock_height: height }) => {
+			Err(KernelLockHeight {
+				lock_height: height,
+			}) => {
 				assert_eq!(height, 2);
 			}
 			_ => panic!("expecting KernelLockHeight error here"),

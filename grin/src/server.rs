@@ -79,7 +79,6 @@ impl Server {
 
 	/// Instantiates a new server associated with the provided future reactor.
 	pub fn future(mut config: ServerConfig, evt_handle: &reactor::Handle) -> Result<Server, Error> {
-
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
 		let pool_net_adapter = Arc::new(PoolToNetAdapter::new());
 		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(

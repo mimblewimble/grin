@@ -165,35 +165,36 @@ impl DirectedGraph {
 
 	/// Remove a vertex by its hash
 	pub fn remove_vertex(&mut self, tx_hash: core::hash::Hash) -> Option<PoolEntry> {
-		match self.roots.iter().position(
-			|x| x.transaction_hash == tx_hash,
-		) {
+		match self.roots
+			.iter()
+			.position(|x| x.transaction_hash == tx_hash)
+		{
 			Some(i) => Some(self.roots.swap_remove(i)),
-			None => {
-				match self.vertices.iter().position(
-					|x| x.transaction_hash == tx_hash,
-				) {
-					Some(i) => Some(self.vertices.swap_remove(i)),
-					None => None,
-				}
-			}
+			None => match self.vertices
+				.iter()
+				.position(|x| x.transaction_hash == tx_hash)
+			{
+				Some(i) => Some(self.vertices.swap_remove(i)),
+				None => None,
+			},
 		}
 	}
 
 	/// Promote any non-root vertices to roots based on current edges.
-	/// For a given tx, if there are no edges with that tx as destination then it is a root.
+	/// For a given tx, if there are no edges with that tx as destination then
+	/// it is a root.
 	pub fn update_roots(&mut self) {
 		let mut new_vertices: Vec<PoolEntry> = vec![];
 
 		// first find the set of all destinations from the edges in the graph
-		// a root is a vertex that is not a destination of any edge
+  // a root is a vertex that is not a destination of any edge
 		let destinations = self.edges
 			.values()
 			.filter_map(|edge| edge.destination)
 			.collect::<HashSet<_>>();
 
 		// now iterate over the current non-root vertices
-		// and check if it is now a root based on the set of edge destinations
+  // and check if it is now a root based on the set of edge destinations
 		for x in &self.vertices {
 			if destinations.contains(&x.transaction_hash) {
 				new_vertices.push(x.clone());
@@ -272,7 +273,7 @@ impl DirectedGraph {
 			.map(|x| x.transaction_hash)
 			.collect::<Vec<_>>();
 		hashes.extend(&non_root_hashes);
-		return hashes
+		return hashes;
 	}
 }
 
@@ -313,7 +314,9 @@ mod tests {
 				features: core::transaction::DEFAULT_OUTPUT,
 				commit: output_commit,
 				switch_commit_hash: switch_commit_hash,
-				proof: keychain.range_proof(100, &key_id1, output_commit, msg).unwrap(),
+				proof: keychain
+					.range_proof(100, &key_id1, output_commit, msg)
+					.unwrap(),
 			},
 		];
 		let test_transaction = core::transaction::Transaction::new(inputs, outputs, 5, 0);

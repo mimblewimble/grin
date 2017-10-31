@@ -28,7 +28,7 @@ use core::target::Difficulty;
 pub const GRIN_BASE: u64 = 1_000_000_000;
 
 /// The block subsidy amount
-pub const REWARD: u64 = 50*GRIN_BASE;
+pub const REWARD: u64 = 50 * GRIN_BASE;
 
 /// Actual block reward for a given total fee amount
 pub fn reward(fee: u64) -> u64 {
@@ -80,8 +80,8 @@ pub const MAX_BLOCK_WEIGHT: usize = 80_000;
 
 /// Whether a block exceeds the maximum acceptable weight
 pub fn exceeds_weight(input_len: usize, output_len: usize, kernel_len: usize) -> bool {
-	input_len * BLOCK_INPUT_WEIGHT + output_len * BLOCK_OUTPUT_WEIGHT +
-		kernel_len * BLOCK_KERNEL_WEIGHT > MAX_BLOCK_WEIGHT
+	input_len * BLOCK_INPUT_WEIGHT + output_len * BLOCK_OUTPUT_WEIGHT
+		+ kernel_len * BLOCK_KERNEL_WEIGHT > MAX_BLOCK_WEIGHT
 }
 
 /// Fork every 250,000 blocks for first 2 years, simple number and just a
@@ -150,9 +150,8 @@ pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
 where
 	T: IntoIterator<Item = Result<(u64, Difficulty), TargetError>>,
 {
-
 	// Block times at the begining and end of the adjustment window, used to
-	// calculate medians later.
+ // calculate medians later.
 	let mut window_begin = vec![];
 	let mut window_end = vec![];
 
@@ -165,8 +164,8 @@ where
 		let (ts, diff) = head_info?;
 
 		// Sum each element in the adjustment window. In addition, retain
-		// timestamps within median windows (at ]start;start-11] and ]end;end-11]
-		// to later calculate medians.
+  // timestamps within median windows (at ]start;start-11] and ]end;end-11]
+  // to later calculate medians.
 		if m < DIFFICULTY_ADJUST_WINDOW {
 			diff_sum = diff_sum + diff;
 
@@ -204,9 +203,7 @@ where
 		ts_damp
 	};
 
-	Ok(
-		diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW) / Difficulty::from_num(adj_ts),
-	)
+	Ok(diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW) / Difficulty::from_num(adj_ts))
 }
 
 /// Consensus rule that collections of items are sorted lexicographically over the wire.
@@ -225,7 +222,7 @@ mod test {
 	use super::*;
 
 	// Builds an iterator for next difficulty calculation with the provided
-	// constant time interval, difficulty and total length.
+ // constant time interval, difficulty and total length.
 	fn repeat(interval: u64, diff: u64, len: u64) -> Vec<Result<(u64, Difficulty), TargetError>> {
 		// watch overflow here, length shouldn't be ridiculous anyhow
 		assert!(len < std::usize::MAX as u64);
@@ -336,15 +333,15 @@ mod test {
 	}
 
 	// #[test]
-	// fn hard_fork_2() {
-	// 	assert!(valid_header_version(0, 1));
-	// 	assert!(valid_header_version(10, 1));
-	// 	assert!(valid_header_version(10, 2));
-	// 	assert!(valid_header_version(250_000, 1));
-	// 	assert!(!valid_header_version(250_001, 1));
-	// 	assert!(!valid_header_version(500_000, 1));
-	// 	assert!(valid_header_version(250_001, 2));
-	// 	assert!(valid_header_version(500_000, 2));
-	// 	assert!(!valid_header_version(500_001, 2));
-	// }
+ // fn hard_fork_2() {
+ // 	assert!(valid_header_version(0, 1));
+ // 	assert!(valid_header_version(10, 1));
+ // 	assert!(valid_header_version(10, 2));
+ // 	assert!(valid_header_version(250_000, 1));
+ // 	assert!(!valid_header_version(250_001, 1));
+ // 	assert!(!valid_header_version(500_000, 1));
+ // 	assert!(valid_header_version(250_001, 2));
+ // 	assert!(valid_header_version(500_000, 2));
+ // 	assert!(!valid_header_version(500_001, 2));
+ // }
 }

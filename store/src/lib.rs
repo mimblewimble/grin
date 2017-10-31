@@ -21,14 +21,14 @@
 #![warn(missing_docs)]
 
 extern crate byteorder;
+extern crate env_logger;
 extern crate grin_core as core;
 extern crate grin_util as util;
 extern crate libc;
-#[macro_use]
-extern crate slog;
-extern crate env_logger;
 extern crate memmap;
 extern crate rocksdb;
+#[macro_use]
+extern crate slog;
 
 pub mod sumtree;
 
@@ -39,8 +39,8 @@ use std::iter::Iterator;
 use std::marker::PhantomData;
 use std::sync::RwLock;
 
-use byteorder::{WriteBytesExt, BigEndian};
-use rocksdb::{DB, WriteBatch, DBCompactionStyle, DBIterator, IteratorMode, Direction};
+use byteorder::{BigEndian, WriteBytesExt};
+use rocksdb::{DBCompactionStyle, DBIterator, Direction, IteratorMode, WriteBatch, DB};
 
 use core::ser;
 
@@ -89,7 +89,9 @@ impl Store {
 		opts.set_max_open_files(256);
 		opts.set_use_fsync(false);
 		let db = try!(DB::open(&opts, &path));
-		Ok(Store { rdb: RwLock::new(db) })
+		Ok(Store {
+			rdb: RwLock::new(db),
+		})
 	}
 
 	/// Writes a single key/value pair to the db
@@ -125,10 +127,11 @@ impl Store {
 	/// Gets a `Readable` value from the db, provided its key, allowing to
 	/// extract only partial data. The underlying Readable size must align
 	/// accordingly. Encapsulates serialization.
-	pub fn get_ser_limited<T: ser::Readable>(&self,
-	                                         key: &[u8],
-	                                         len: usize)
-	                                         -> Result<Option<T>, Error> {
+	pub fn get_ser_limited<T: ser::Readable>(
+		&self,
+		key: &[u8],
+		len: usize,
+	) -> Result<Option<T>, Error> {
 		let data = try!(self.get(key));
 		match data {
 			Some(val) => {
@@ -213,14 +216,16 @@ impl<'a> Batch<'a> {
 /// An iterator thad produces Readable instances back. Wraps the lower level
 /// DBIterator and deserializes the returned values.
 pub struct SerIterator<T>
-	where T: ser::Readable
+where
+	T: ser::Readable,
 {
 	iter: DBIterator,
 	_marker: PhantomData<T>,
 }
 
 impl<T> Iterator for SerIterator<T>
-    where T: ser::Readable
+where
+	T: ser::Readable,
 {
 	type Item = T;
 

@@ -17,7 +17,7 @@
 
 use rand::{self, Rng};
 use std::sync::{Arc, RwLock};
-use std::{thread, str};
+use std::{str, thread};
 use std;
 use time;
 
@@ -97,7 +97,6 @@ impl ser::Writer for HeaderPartWriter {
 			for i in 0..bytes_in.len() {
 				self.pre_nonce.push(bytes_in.as_ref()[i])
 			}
-
 		} else if self.bytes_written != 0 {
 			for i in 0..bytes_in.len() {
 				self.post_nonce.push(bytes_in.as_ref()[i])
@@ -158,7 +157,6 @@ impl Miner {
 		latest_hash: &Hash,
 		attempt_time_per_block: u32,
 	) -> Option<Proof> {
-
 		debug!(
 			LOGGER,
 			"(Server ID: {}) Mining at Cuckoo{} for at most {} secs at height {} and difficulty {}.",
@@ -170,9 +168,9 @@ impl Miner {
 		);
 
 		// look for a pow for at most attempt_time_per_block sec on the
-		// same block (to give a chance to new
-		// transactions) and as long as the head hasn't changed
-		// Will change this to something else at some point
+  // same block (to give a chance to new
+  // transactions) and as long as the head hasn't changed
+  // Will change this to something else at some point
 		let deadline = time::get_time().sec + attempt_time_per_block as i64;
 
 		// how often to output stats
@@ -215,7 +213,7 @@ impl Miner {
 							debug!(
 								LOGGER,
 								"Mining: Plugin {} - Device {} ({}): Last Solution time: {}s; \
-								Solutions per second: {:.*} - Total Attempts: {}",
+								 Solutions per second: {:.*} - Total Attempts: {}",
 								i,
 								s.device_id,
 								s.device_name,
@@ -248,7 +246,6 @@ impl Miner {
 
 		job_handle.stop_jobs();
 		sol
-
 	}
 
 	/// The inner part of mining loop for cuckoo miner sync mode
@@ -262,8 +259,8 @@ impl Miner {
 		latest_hash: &mut Hash,
 	) -> Option<Proof> {
 		// look for a pow for at most attempt_time_per_block sec on the same block (to
-		// give a chance to new
-		// transactions) and as long as the head hasn't changed
+  // give a chance to new
+  // transactions) and as long as the head hasn't changed
 		let deadline = time::get_time().sec + attempt_time_per_block as i64;
 		let stat_check_interval = 3;
 		let mut next_stat_check = time::get_time().sec + stat_check_interval;
@@ -271,7 +268,7 @@ impl Miner {
 		debug!(
 			LOGGER,
 			"(Server ID: {}) Mining at Cuckoo{} for {} secs (will wait for last solution) \
-				on block {} at difficulty {}.",
+			 on block {} at difficulty {}.",
 			self.debug_output_id,
 			cuckoo_size,
 			attempt_time_per_block,
@@ -291,7 +288,6 @@ impl Miner {
 
 		let mut sol = None;
 		while head.hash() == *latest_hash && time::get_time().sec < deadline {
-
 			let pow_hash = b.hash();
 			if let Ok(proof) = plugin_miner.mine(&pow_hash[..]) {
 				let proof_diff = proof.clone().to_difficulty();
@@ -324,8 +320,8 @@ impl Miner {
 			iter_count += 1;
 
 			// Artificial slow down
-			if self.config.slow_down_in_millis != None &&
-				self.config.slow_down_in_millis.unwrap() > 0
+			if self.config.slow_down_in_millis != None
+				&& self.config.slow_down_in_millis.unwrap() > 0
 			{
 				thread::sleep(std::time::Duration::from_millis(
 					self.config.slow_down_in_millis.unwrap(),
@@ -356,7 +352,7 @@ impl Miner {
 		latest_hash: &mut Hash,
 	) -> Option<Proof> {
 		// look for a pow for at most 2 sec on the same block (to give a chance to new
-		// transactions) and as long as the head hasn't changed
+  // transactions) and as long as the head hasn't changed
 		let deadline = time::get_time().sec + attempt_time_per_block as i64;
 
 		debug!(
@@ -381,7 +377,6 @@ impl Miner {
 
 		let mut sol = None;
 		while head.hash() == *latest_hash && time::get_time().sec < deadline {
-
 			let pow_hash = b.hash();
 			if let Ok(proof) = miner.mine(&pow_hash[..]) {
 				let proof_diff = proof.clone().to_difficulty();
@@ -396,8 +391,8 @@ impl Miner {
 			iter_count += 1;
 
 			// Artificial slow down
-			if self.config.slow_down_in_millis != None &&
-				self.config.slow_down_in_millis.unwrap() > 0
+			if self.config.slow_down_in_millis != None
+				&& self.config.slow_down_in_millis.unwrap() > 0
 			{
 				thread::sleep(std::time::Duration::from_millis(
 					self.config.slow_down_in_millis.unwrap(),
@@ -419,7 +414,6 @@ impl Miner {
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
 	pub fn run_loop(&self, miner_config: MinerConfig, cuckoo_size: u32, proof_size: usize) {
-
 		info!(
 			LOGGER,
 			"(Server ID: {}) Starting miner loop.",
@@ -443,8 +437,8 @@ impl Miner {
 		}
 
 		// to prevent the wallet from generating a new HD key derivation for each
-		// iteration, we keep the returned derivation to provide it back when
-		// nothing has changed
+  // iteration, we keep the returned derivation to provide it back when
+  // nothing has changed
 		let mut key_id = None;
 
 		loop {
@@ -550,9 +544,10 @@ impl Miner {
 		let difficulty = consensus::next_difficulty(diff_iter).unwrap();
 
 		// extract current transaction from the pool
-		let txs_box = self.tx_pool.read().unwrap().prepare_mineable_transactions(
-			MAX_TX,
-		);
+		let txs_box = self.tx_pool
+			.read()
+			.unwrap()
+			.prepare_mineable_transactions(MAX_TX);
 		let txs: Vec<&Transaction> = txs_box.iter().map(|tx| tx.as_ref()).collect();
 
 		// build the coinbase and the block itself
@@ -564,7 +559,8 @@ impl Miner {
 			height,
 		};
 
-		// TODO - error handling, things can go wrong with get_coinbase (wallet api down etc.)
+		// TODO - error handling, things can go wrong with get_coinbase (wallet api
+  // down etc.)
 		let (output, kernel, block_fees) = self.get_coinbase(block_fees).unwrap();
 		let mut b = core::Block::with_reward(head, txs, output, kernel).unwrap();
 
@@ -585,9 +581,9 @@ impl Miner {
 		b.header.nonce = rng.gen();
 		b.header.difficulty = difficulty;
 		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
-		self.chain.set_sumtree_roots(&mut b).expect(
-			"Error setting sum tree roots",
-		);
+		self.chain
+			.set_sumtree_roots(&mut b)
+			.expect("Error setting sum tree roots");
 		(b, block_fees)
 	}
 
@@ -600,8 +596,8 @@ impl Miner {
 	) -> Result<(core::Output, core::TxKernel, BlockFees), Error> {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
-		let (out, kernel) = core::Block::reward_output(&keychain, &key_id, block_fees.fees)
-			.unwrap();
+		let (out, kernel) =
+			core::Block::reward_output(&keychain, &key_id, block_fees.fees).unwrap();
 		Ok((out, kernel, block_fees))
 	}
 
@@ -613,8 +609,9 @@ impl Miner {
 			self.burn_reward(block_fees)
 		} else {
 			let url = format!(
-				"{}/v2/receive/coinbase",
-				self.config.wallet_receiver_url.as_str());
+				"{}/v1/receive/coinbase",
+				self.config.wallet_receiver_url.as_str()
+			);
 
 			let res = wallet::client::create_coinbase(&url, &block_fees)?;
 

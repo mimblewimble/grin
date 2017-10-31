@@ -15,45 +15,18 @@
 //! Provides the JSON/HTTP API for wallets to receive payments. Because
 //! receiving money in MimbleWimble requires an interactive exchange, a
 //! wallet server that's running at all time is required in many cases.
-//!
-//! The API looks like this:
-//!
-//! POST /v1/wallet/receive
-//! > {
-//! >   "amount": 10,
-//! >   "blind_sum": "a12b7f...",
-//! >   "tx": "f083de...",
-//! > }
-//!
-//! < {
-//! <   "tx": "f083de...",
-//! <   "status": "ok"
-//! < }
-//!
-//! POST /v1/wallet/finalize
-//! > {
-//! >   "tx": "f083de...",
-//! > }
-//!
-//! POST /v1/wallet/receive_coinbase
-//! > {
-//! >   "amount": 1,
-//! > }
-//!
-//! < {
-//! <   "output": "8a90bc...",
-//! <   "kernel": "f083de...",
-//! < }
-//!
-//! Note that while at this point the finalize call is completely unecessary, a
-//! double-exchange will be required as soon as we support Schnorr signatures.
-//! So we may as well have it in place already.
+
+use std::io::Read;
 
 use core::consensus::reward;
-use core::core::{Block, Transaction, TxKernel, Output, build};
+use core::core::{build, Block, Output, Transaction, TxKernel};
 use core::ser;
-use api::{self, ApiEndpoint, Operation, ApiResult};
+use api;
+use iron::prelude::*;
+use iron::Handler;
+use iron::status;
 use keychain::{BlindingFactor, Identifier, Keychain};
+use serde_json;
 use types::*;
 use util;
 use util::LOGGER;
@@ -77,8 +50,8 @@ pub fn receive_json_tx(
 	let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
 
 	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
-	let _: () = api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })
-		.map_err(|e| Error::Node(e))?;
+	let _: () =
+		api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).map_err(|e| Error::Node(e))?;
 	Ok(())
 }
 
@@ -90,46 +63,27 @@ pub struct WalletReceiver {
 	pub config: WalletConfig,
 }
 
-impl ApiEndpoint for WalletReceiver {
-	type ID = String;
-	type T = String;
-	type OP_IN = WalletReceiveRequest;
-	type OP_OUT = CbData;
+impl Handler for WalletReceiver {
+	fn handle(&self, req: &mut Request) -> IronResult<Response> {
+		let receive: WalletReceiveRequest = serde_json::from_reader(req.body.by_ref())
+			.map_err(|e| IronError::new(e, status::BadRequest))?;
 
-	fn operations(&self) -> Vec<Operation> {
-		vec![Operation::Custom("receive_json_tx".to_string())]
-	}
+		match receive {
+			WalletReceiveRequest::PartialTransaction(partial_tx_str) => {
+				debug!(LOGGER, "Receive with transaction {}", &partial_tx_str,);
+				receive_json_tx(&self.config, &self.keychain, &partial_tx_str)
+					.map_err(|e| {
+						api::Error::Internal(
+							format!("Error processing partial transaction: {:?}", e),
+						)
+					})
+					.unwrap();
 
-	fn operation(&self, op: String, input: WalletReceiveRequest) -> ApiResult<CbData> {
-		match op.as_str() {
-			"receive_json_tx" => {
-				match input {
-					WalletReceiveRequest::PartialTransaction(partial_tx_str) => {
-						debug!(
-							LOGGER,
-							"Operation {} with transaction {}",
-							op,
-							&partial_tx_str,
-						);
-						receive_json_tx(&self.config, &self.keychain, &partial_tx_str)
-							.map_err(|e| {
-								api::Error::Internal(
-									format!("Error processing partial transaction: {:?}", e),
-								)
-							})
-							.unwrap();
-
-						// TODO: Return emptiness for now, should be a proper enum return type
-						Ok(CbData {
-							output: String::from(""),
-							kernel: String::from(""),
-							key_id: String::from(""),
-						})
-					}
-					_ => Err(api::Error::Argument(format!("Incorrect request data: {}", op))),
-				}
+				Ok(Response::with(status::Ok))
 			}
-			_ => Err(api::Error::Argument(format!("Unknown operation: {}", op))),
+			_ => Ok(Response::with(
+				(status::BadRequest, format!("Incorrect request data.")),
+			)),
 		}
 	}
 }
@@ -168,7 +122,7 @@ fn next_available_key(
 pub fn receive_coinbase(
 	config: &WalletConfig,
 	keychain: &Keychain,
-	block_fees: &BlockFees
+	block_fees: &BlockFees,
 ) -> Result<(Output, TxKernel, BlockFees), Error> {
 	let root_key_id = keychain.root_key_id();
 	let key_id = block_fees.key_id();
@@ -208,11 +162,7 @@ pub fn receive_coinbase(
 
 	debug!(LOGGER, "block_fees updated - {:?}", block_fees);
 
-	let (out, kern) = Block::reward_output(
-		&keychain,
-		&key_id,
-		block_fees.fees,
-	)?;
+	let (out, kern) = Block::reward_output(&keychain, &key_id, block_fees.fees)?;
 	Ok((out, kern, block_fees))
 }
 
@@ -229,8 +179,8 @@ fn receive_transaction(
 	let (key_id, derivation) = next_available_key(config, keychain)?;
 
 	// double check the fee amount included in the partial tx
-	// we don't necessarily want to just trust the sender
-	// we could just overwrite the fee here (but we won't) due to the ecdsa sig
+ // we don't necessarily want to just trust the sender
+ // we could just overwrite the fee here (but we won't) due to the ecdsa sig
 	let fee = tx_fee(partial.inputs.len(), partial.outputs.len() + 1, None);
 	if fee != partial.fee {
 		return Err(Error::FeeDispute {
@@ -241,14 +191,18 @@ fn receive_transaction(
 
 	let out_amount = amount - fee;
 
-	let (tx_final, _) = build::transaction(vec![
-		build::initial_tx(partial),
-		build::with_excess(blinding),
-		build::output(out_amount, key_id.clone()),
+	let (tx_final, _) = build::transaction(
+		vec![
+			build::initial_tx(partial),
+			build::with_excess(blinding),
+			build::output(out_amount, key_id.clone()),
 		// build::with_fee(fee_amount),
-	], keychain)?;
+		],
+		keychain,
+	)?;
 
-	// make sure the resulting transaction is valid (could have been lied to on excess).
+	// make sure the resulting transaction is valid (could have been lied to on
+ // excess).
 	tx_final.validate(&keychain.secp())?;
 
 	// operate within a lock on wallet data

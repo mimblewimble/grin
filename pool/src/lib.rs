@@ -26,15 +26,15 @@ mod types;
 mod blockchain;
 mod pool;
 
-extern crate time;
-extern crate rand;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
 extern crate blake2_rfc as blake2;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
+extern crate rand;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+extern crate time;
 
 pub use pool::TransactionPool;
-pub use types::{BlockChain, PoolAdapter, TxSource, PoolError, PoolConfig};
+pub use types::{BlockChain, PoolAdapter, PoolConfig, PoolError, TxSource};

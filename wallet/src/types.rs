@@ -14,7 +14,7 @@
 
 use blake2;
 use rand::{thread_rng, Rng};
-use std::{fmt, num, error};
+use std::{error, fmt, num};
 use std::convert::From;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -32,7 +32,7 @@ use tokio_retry::strategy::FibonacciBackoff;
 
 
 use api;
-use core::core::{Transaction, transaction};
+use core::core::{transaction, Transaction};
 use core::ser;
 use keychain;
 use util;
@@ -62,7 +62,7 @@ pub fn tx_fee(input_len: usize, output_len: usize, base_fee: Option<u64>) -> u64
 #[derive(Debug)]
 pub enum Error {
 	NotEnoughFunds(u64),
-	FeeDispute{sender_fee: u64, recipient_fee: u64},
+	FeeDispute { sender_fee: u64, recipient_fee: u64 },
 	Keychain(keychain::Error),
 	Transaction(transaction::Error),
 	Secp(secp::Error),
@@ -166,7 +166,7 @@ impl Default for WalletConfig {
 	fn default() -> WalletConfig {
 		WalletConfig {
 			enable_wallet: false,
-			api_http_addr: "0.0.0.0:13416".to_string(),
+			api_http_addr: "0.0.0.0:13415".to_string(),
 			check_node_api_http_addr: "http://127.0.0.1:13413".to_string(),
 			data_file_dir: ".".to_string(),
 		}
@@ -226,8 +226,10 @@ impl OutputData {
 	}
 
 	/// How many confirmations has this output received?
-	/// If height == 0 then we are either Unconfirmed or the output was cut-through
-	/// so we do not actually know how many confirmations this output had (and never will).
+	/// If height == 0 then we are either Unconfirmed or the output was
+	/// cut-through
+	/// so we do not actually know how many confirmations this output had (and
+	/// never will).
 	pub fn num_confirmations(&self, current_height: u64) -> u64 {
 		if self.status == OutputStatus::Unconfirmed {
 			0
@@ -239,21 +241,16 @@ impl OutputData {
 	}
 
 	/// Check if output is eligible for spending based on state and height.
-	pub fn eligible_to_spend(
-		&self,
-		current_height: u64,
-		minimum_confirmations: u64
-	) -> bool {
-		if [
-			OutputStatus::Spent,
-			OutputStatus::Locked,
-		].contains(&self.status) {
+	pub fn eligible_to_spend(&self, current_height: u64, minimum_confirmations: u64) -> bool {
+		if [OutputStatus::Spent, OutputStatus::Locked].contains(&self.status) {
 			return false;
 		} else if self.status == OutputStatus::Unconfirmed && self.is_coinbase {
 			return false;
 		} else if self.lock_height > current_height {
 			return false;
-		} else if self.status == OutputStatus::Unspent && self.height + minimum_confirmations <= current_height {
+		} else if self.status == OutputStatus::Unspent
+			&& self.height + minimum_confirmations <= current_height
+		{
 			return true;
 		} else if self.status == OutputStatus::Unconfirmed && minimum_confirmations == 0 {
 			return true;
@@ -306,11 +303,7 @@ impl WalletSeed {
 			SEED_FILE,
 		);
 
-		debug!(
-			LOGGER,
-			"Generating wallet seed file at: {}",
-			seed_file_path,
-		);
+		debug!(LOGGER, "Generating wallet seed file at: {}", seed_file_path,);
 
 		if Path::new(seed_file_path).exists() {
 			panic!("wallet seed file already exists");
@@ -333,11 +326,7 @@ impl WalletSeed {
 			SEED_FILE,
 		);
 
-		debug!(
-			LOGGER,
-			"Using wallet seed file at: {}",
-			seed_file_path,
-		);
+		debug!(LOGGER, "Using wallet seed file at: {}", seed_file_path,);
 
 		if Path::new(seed_file_path).exists() {
 			let mut file = File::open(seed_file_path)?;
@@ -369,10 +358,11 @@ pub struct WalletData {
 }
 
 impl WalletData {
-
-	/// Allows for reading wallet data (without needing to acquire the write lock).
+	/// Allows for reading wallet data (without needing to acquire the write
+	/// lock).
 	pub fn read_wallet<T, F>(data_file_dir: &str, f: F) -> Result<T, Error>
-		where F: FnOnce(&WalletData) -> T
+	where
+		F: FnOnce(&WalletData) -> T,
 	{
 		// open the wallet readonly and do what needs to be done with it
 		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
@@ -388,7 +378,8 @@ impl WalletData {
 	/// across operating systems, this just creates a lock file with a "should
 	/// not exist" option.
 	pub fn with_wallet<T, F>(data_file_dir: &str, f: F) -> Result<T, Error>
-		where F: FnOnce(&mut WalletData) -> T
+	where
+		F: FnOnce(&mut WalletData) -> T,
 	{
 		// create directory if it doesn't exist
 		fs::create_dir_all(data_file_dir).unwrap_or_else(|why| {
@@ -415,7 +406,7 @@ impl WalletData {
 		let retry_result = core.run(retry_future);
 
 		match retry_result {
-			Ok(_) => {},
+			Ok(_) => {}
 			Err(_) => {
 				error!(
 					LOGGER,
@@ -448,31 +439,33 @@ impl WalletData {
 			WalletData::read(data_file_path)
 		} else {
 			// just create a new instance, it will get written afterward
-			Ok(WalletData { outputs: HashMap::new() })
+			Ok(WalletData {
+				outputs: HashMap::new(),
+			})
 		}
 	}
 
 	/// Read the wallet data from disk.
 	fn read(data_file_path: &str) -> Result<WalletData, Error> {
-		let data_file =
-			File::open(data_file_path)
-				.map_err(|e| Error::WalletData(format!("Could not open {}: {}", data_file_path, e)))?;
-		serde_json::from_reader(data_file)
-			.map_err(|e| Error::WalletData(format!("Error reading {}: {}", data_file_path, e)))
+		let data_file = File::open(data_file_path).map_err(|e| {
+			Error::WalletData(format!("Could not open {}: {}", data_file_path, e))
+		})?;
+		serde_json::from_reader(data_file).map_err(|e| {
+			Error::WalletData(format!("Error reading {}: {}", data_file_path, e))
+		})
 	}
 
 	/// Write the wallet data to disk.
 	fn write(&self, data_file_path: &str) -> Result<(), Error> {
-		let mut data_file =
-			File::create(data_file_path)
-				.map_err(|e| {
-					Error::WalletData(format!("Could not create {}: {}", data_file_path, e))
-				})?;
-		let res_json = serde_json::to_vec_pretty(self)
-			.map_err(|e| Error::WalletData(format!("Error serializing wallet data: {}", e)))?;
-		data_file
-			.write_all(res_json.as_slice())
-			.map_err(|e| Error::WalletData(format!("Error writing {}: {}", data_file_path, e)))
+		let mut data_file = File::create(data_file_path).map_err(|e| {
+			Error::WalletData(format!("Could not create {}: {}", data_file_path, e))
+		})?;
+		let res_json = serde_json::to_vec_pretty(self).map_err(|e| {
+			Error::WalletData(format!("Error serializing wallet data: {}", e))
+		})?;
+		data_file.write_all(res_json.as_slice()).map_err(|e| {
+			Error::WalletData(format!("Error writing {}: {}", data_file_path, e))
+		})
 	}
 
 	/// Append a new output data to the wallet data.
@@ -503,7 +496,6 @@ impl WalletData {
 		current_height: u64,
 		minimum_confirmations: u64,
 	) -> Vec<OutputData> {
-
 		self.outputs
 			.values()
 			.filter(|out| {
@@ -537,10 +529,11 @@ struct JSONPartialTx {
 
 /// Encodes the information for a partial transaction (not yet completed by the
 /// receiver) into JSON.
-pub fn partial_tx_to_json(receive_amount: u64,
-                          blind_sum: keychain::BlindingFactor,
-                          tx: Transaction)
-                          -> String {
+pub fn partial_tx_to_json(
+	receive_amount: u64,
+	blind_sum: keychain::BlindingFactor,
+	tx: Transaction,
+) -> String {
 	let partial_tx = JSONPartialTx {
 		amount: receive_amount,
 		blind_sum: util::to_hex(blind_sum.secret_key().as_ref().to_vec()),
@@ -551,22 +544,22 @@ pub fn partial_tx_to_json(receive_amount: u64,
 
 /// Reads a partial transaction encoded as JSON into the amount, sum of blinding
 /// factors and the transaction itself.
-pub fn partial_tx_from_json(keychain: &keychain::Keychain,
-                            json_str: &str)
-                            -> Result<(u64, keychain::BlindingFactor, Transaction), Error> {
+pub fn partial_tx_from_json(
+	keychain: &keychain::Keychain,
+	json_str: &str,
+) -> Result<(u64, keychain::BlindingFactor, Transaction), Error> {
 	let partial_tx: JSONPartialTx = serde_json::from_str(json_str)?;
 
 	let blind_bin = util::from_hex(partial_tx.blind_sum)?;
 
 	// TODO - turn some data into a blinding factor here somehow
-	// let blinding = SecretKey::from_slice(&secp, &blind_bin[..])?;
+ // let blinding = SecretKey::from_slice(&secp, &blind_bin[..])?;
 	let blinding = keychain::BlindingFactor::from_slice(keychain.secp(), &blind_bin[..])?;
 
 	let tx_bin = util::from_hex(partial_tx.tx)?;
-	let tx = ser::deserialize(&mut &tx_bin[..])
-		.map_err(|_| {
-			Error::Format("Could not deserialize transaction, invalid format.".to_string())
-		})?;
+	let tx = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
+		Error::Format("Could not deserialize transaction, invalid format.".to_string())
+	})?;
 
 	Ok((partial_tx.amount, blinding, tx))
 }

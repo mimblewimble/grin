@@ -24,7 +24,7 @@ use std::convert::AsRef;
 use blake2::blake2b::Blake2b;
 
 use consensus::VerifySortOrder;
-use ser::{self, Reader, Readable, Writer, Writeable, Error, AsFixedBytes};
+use ser::{self, AsFixedBytes, Error, Readable, Reader, Writeable, Writer};
 use util::LOGGER;
 
 /// A hash consisting of all zeroes, used as a sentinel. No known preimage.
@@ -153,7 +153,9 @@ impl HashWriter {
 
 impl Default for HashWriter {
 	fn default() -> HashWriter {
-		HashWriter { state: Blake2b::new(32) }
+		HashWriter {
+			state: Blake2b::new(32),
+		}
 	}
 }
 
@@ -173,19 +175,19 @@ pub trait Hashed {
 	/// Obtain the hash of the object
 	fn hash(&self) -> Hash;
 	/// Hash the object together with another writeable object
-	fn hash_with<T: Writeable>(&self, other:T) -> Hash;
+	fn hash_with<T: Writeable>(&self, other: T) -> Hash;
 }
 
 impl<W: ser::Writeable> Hashed for W {
 	fn hash(&self) -> Hash {
 		let mut hasher = HashWriter::default();
-		ser::Writeable::write(self, &mut hasher).unwrap(); 
+		ser::Writeable::write(self, &mut hasher).unwrap();
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
 		Hash(ret)
 	}
 
-	fn hash_with<T: Writeable>(&self, other:T) -> Hash{
+	fn hash_with<T: Writeable>(&self, other: T) -> Hash {
 		let mut hasher = HashWriter::default();
 		ser::Writeable::write(self, &mut hasher).unwrap();
 		trace!(LOGGER, "Hashing with additional data");
@@ -202,7 +204,8 @@ impl<T: Writeable> VerifySortOrder<T> for Vec<T> {
 			.map(|item| item.hash())
 			.collect::<Vec<_>>()
 			.windows(2)
-			.any(|pair| pair[0] > pair[1]) {
+			.any(|pair| pair[0] > pair[1])
+		{
 			true => Err(ser::Error::BadlySorted),
 			false => Ok(()),
 		}

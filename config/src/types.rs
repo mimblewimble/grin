@@ -41,14 +41,12 @@ pub enum ConfigError {
 impl fmt::Display for ConfigError {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match *self {
-			ConfigError::ParseError(ref file_name, ref message) => {
-				write!(
-					f,
-					"Error parsing configuration file at {} - {}",
-					file_name,
-					message
-				)
-			}
+			ConfigError::ParseError(ref file_name, ref message) => write!(
+				f,
+				"Error parsing configuration file at {} - {}",
+				file_name,
+				message
+			),
 			ConfigError::FileIOError(ref file_name, ref message) => {
 				write!(f, "{} {}", message, file_name)
 			}
@@ -102,7 +100,7 @@ pub struct ConfigMembers {
 	pub mining: Option<MinerConfig>,
 	/// Logging config
 	pub logging: Option<LoggingConfig>,
-	
+
 	//removing wallet from here for now,
 	//as its concerns are separate from the server's, really
 	//given it needs to manage keys. It should probably

@@ -27,11 +27,11 @@
 
 use util::secp;
 
-use core::{Transaction, Input, Output, SwitchCommitHash, DEFAULT_OUTPUT};
+use core::{Input, Output, SwitchCommitHash, Transaction, DEFAULT_OUTPUT};
 use core::transaction::kernel_sig_msg;
 use util::LOGGER;
 use keychain;
-use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
+use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 
 /// Context information available to transaction combinators.
 pub struct Context<'a> {
@@ -40,7 +40,8 @@ pub struct Context<'a> {
 
 /// Function type returned by the transaction combinators. Transforms a
 /// (Transaction, BlindSum) pair into another, provided some context.
-pub type Append = for<'a> Fn(&'a mut Context, (Transaction, BlindSum)) -> (Transaction, BlindSum);
+pub type Append = for<'a> Fn(&'a mut Context, (Transaction, BlindSum))
+	-> (Transaction, BlindSum);
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
@@ -132,10 +133,11 @@ pub fn transaction(
 	keychain: &keychain::Keychain,
 ) -> Result<(Transaction, BlindingFactor), keychain::Error> {
 	let mut ctx = Context { keychain };
-	let (mut tx, sum) = elems.iter().fold(
-		(Transaction::empty(), BlindSum::new()),
-		|acc, elem| elem(&mut ctx, acc),
-	);
+	let (mut tx, sum) = elems
+		.iter()
+		.fold((Transaction::empty(), BlindSum::new()), |acc, elem| {
+			elem(&mut ctx, acc)
+		});
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
 	let msg = secp::Message::from_slice(&kernel_sig_msg(tx.fee, tx.lock_height))?;
 	let sig = ctx.keychain.sign_with_blinding(&msg, &blind_sum)?;

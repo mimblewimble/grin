@@ -17,13 +17,13 @@
 
 use std::iter;
 use std::ops::Deref;
-use std::sync::{Mutex, Arc};
-use std::time::{Instant, Duration};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use futures;
-use futures::{Stream, Future};
+use futures::{Future, Stream};
 use futures::stream;
-use futures::sync::mpsc::{Sender, UnboundedSender, UnboundedReceiver};
+use futures::sync::mpsc::{Sender, UnboundedReceiver, UnboundedSender};
 use tokio_core::net::TcpStream;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::io::{read_exact, write_all};
@@ -54,7 +54,7 @@ pub trait Handler: Sync + Send {
 impl<F> Handler for F
 where
 	F: Fn(UnboundedSender<Vec<u8>>, MsgHeader, Vec<u8>)
-	   -> Result<Option<Hash>, ser::Error>,
+		-> Result<Option<Hash>, ser::Error>,
 	F: Sync + Send,
 {
 	fn handle(
@@ -99,7 +99,6 @@ impl Connection {
 	where
 		F: Handler + 'static,
 	{
-
 		let (reader, writer) = conn.split();
 
 		// Set Max Read to 12 Mb/s
@@ -112,9 +111,9 @@ impl Connection {
 
 		// same for closing the connection
 		let (close_tx, close_rx) = futures::sync::mpsc::channel(1);
-		let close_conn = close_rx.for_each(|_| Ok(())).map_err(
-			|_| Error::ConnectionClose,
-		);
+		let close_conn = close_rx
+			.for_each(|_| Ok(()))
+			.map_err(|_| Error::ConnectionClose);
 
 		let me = Connection {
 			outbound_chan: tx.clone(),
@@ -128,7 +127,7 @@ impl Connection {
 		let read_msg = me.read_msg(tx, reader, handler).map(|_| ());
 
 		// setting the writing future, getting messages from our system and sending
-		// them out
+  // them out
 		let write_msg = me.write_msg(rx, writer).map(|_| ());
 
 		// select between our different futures and return them
@@ -152,7 +151,6 @@ impl Connection {
 	where
 		W: AsyncWrite + 'static,
 	{
-
 		let sent_bytes = self.sent_bytes.clone();
 		let send_data = rx
 			.map_err(|_| Error::ConnectionClose)
@@ -181,9 +179,8 @@ impl Connection {
 		F: Handler + 'static,
 		R: AsyncRead + 'static,
 	{
-
 		// infinite iterator stream so we repeat the message reading logic until the
-		// peer is stopped
+  // peer is stopped
 		let iter = stream::iter_ok(iter::repeat(()).map(Ok::<(), Error>));
 
 		// setup the reading future, getting messages from the peer and processing them
@@ -229,7 +226,6 @@ impl Connection {
 	/// Utility function to send any Writeable. Handles adding the header and
 	/// serialization.
 	pub fn send_msg<W: ser::Writeable>(&self, t: Type, body: &W) -> Result<(), Error> {
-
 		let mut body_data = vec![];
 		try!(ser::serialize(&mut body_data, body));
 		let mut data = vec![];
@@ -239,9 +235,9 @@ impl Connection {
 		));
 		data.append(&mut body_data);
 
-		self.outbound_chan.unbounded_send(data).map_err(|_| {
-			Error::ConnectionClose
-		})
+		self.outbound_chan
+			.unbounded_send(data)
+			.map_err(|_| Error::ConnectionClose)
 	}
 
 	/// Bytes sent and received by this peer to the remote peer.
@@ -269,11 +265,10 @@ impl TimeoutConnection {
 	where
 		F: Handler + 'static,
 	{
-
 		let expects = Arc::new(Mutex::new(vec![]));
 
 		// Decorates the handler to remove the "subscription" from the expected
-		// responses. We got our replies, so no timeout should occur.
+  // responses. We got our replies, so no timeout should occur.
 		let exp = expects.clone();
 		let (conn, fut) = Connection::listen(conn, move |sender, header: MsgHeader, data| {
 			let msg_type = header.msg_type;

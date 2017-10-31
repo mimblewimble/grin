@@ -19,9 +19,9 @@
 //! To use it simply implement `Writeable` or `Readable` and then use the
 //! `serialize` or `deserialize` functions on them as appropriate.
 
-use std::{error, fmt, cmp};
-use std::io::{self, Write, Read};
-use byteorder::{ByteOrder, ReadBytesExt, BigEndian};
+use std::{cmp, error, fmt};
+use std::io::{self, Read, Write};
+use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use keychain::{Identifier, IDENTIFIER_SIZE};
 use core::hash::Hashed;
 use consensus::VerifySortOrder;
@@ -199,7 +199,8 @@ pub trait WriteableSorted {
 /// A consensus rule requires everything is sorted lexicographically to avoid
 /// leaking any information through specific ordering of items.
 pub fn read_and_verify_sorted<T>(reader: &mut Reader, count: u64) -> Result<Vec<T>, Error>
-	where T: Readable + Hashed + Writeable
+where
+	T: Readable + Hashed + Writeable,
 {
 	let result: Vec<T> = try!((0..count).map(|_| T::read(reader)).collect());
 	result.verify_sort_order()?;
@@ -276,9 +277,10 @@ impl<'a> Reader for BinReader<'a> {
 			return Err(Error::TooLargeReadErr);
 		}
 		let mut buf = vec![0; length];
-		self.source.read_exact(&mut buf).map(move |_| buf).map_err(
-			Error::IOErr,
-		)
+		self.source
+			.read_exact(&mut buf)
+			.map(move |_| buf)
+			.map_err(Error::IOErr)
 	}
 
 	fn expect_u8(&mut self, val: u8) -> Result<u8, Error> {
@@ -532,7 +534,8 @@ impl AsFixedBytes for [u8; 20] {
 	fn len(&self) -> usize {
 		return 20;
 	}
-}impl AsFixedBytes for [u8; 32] {
+}
+impl AsFixedBytes for [u8; 32] {
 	fn len(&self) -> usize {
 		return 32;
 	}

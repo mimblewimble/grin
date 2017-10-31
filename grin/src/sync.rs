@@ -23,7 +23,7 @@ const MAX_BODY_DOWNLOADS: usize = 8;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
 use core::core::hash::{Hash, Hashed};
 use chain;
@@ -87,7 +87,7 @@ impl Syncer {
 		self.init_download()?;
 
 		// main syncing loop, requests more headers and bodies periodically as long
-		// as a peer with higher difficulty exists and we're not fully caught up
+  // as a peer with higher difficulty exists and we're not fully caught up
 		info!(LOGGER, "Starting sync loop.");
 		loop {
 			let tip = self.chain.get_header_head()?;
@@ -139,7 +139,7 @@ impl Syncer {
 		let mut blocks_to_download = self.blocks_to_download.lock().unwrap();
 
 		// go back the chain and insert for download all blocks we only have the
-		// head for
+  // head for
 		let mut prev_h = header_head.last_block_h;
 		while prev_h != full_head.last_block_h {
 			let header = self.chain.get_block_header(&prev_h)?;
@@ -184,7 +184,7 @@ impl Syncer {
 		}
 
 		// consume hashes from blocks to download, place them in downloading and
-		// request them from the network
+  // request them from the network
 		let mut count = 0;
 		while blocks_to_download.len() > 0 && blocks_downloading.len() < MAX_BODY_DOWNLOADS {
 			let h = blocks_to_download.pop().unwrap();
@@ -197,21 +197,21 @@ impl Syncer {
 			});
 		}
 		debug!(
- 			LOGGER,
+			LOGGER,
 			"Requested {} full blocks to download, total left: {}. Current list: {:?}.",
-      count,
+			count,
 			blocks_to_download.len(),
-      blocks_downloading.deref(),
-			);
+			blocks_downloading.deref(),
+		);
 	}
 
 	/// We added a block, clean up the downloading structure
 	pub fn block_received(&self, bh: Hash) {
 		// just clean up the downloading list
 		let mut bds = self.blocks_downloading.lock().unwrap();
-		bds.iter().position(|ref h| h.hash == bh).map(
-			|n| bds.remove(n),
-		);
+		bds.iter()
+			.position(|ref h| h.hash == bh)
+			.map(|n| bds.remove(n));
 	}
 
 	/// Request some block headers from a peer to advance us
@@ -257,7 +257,7 @@ impl Syncer {
 	/// us the right block headers.
 	fn get_locator(&self, tip: &chain::Tip) -> Result<Vec<Hash>, Error> {
 		// Prepare the heights we want as the latests height minus increasing powers
-		// of 2 up to max.
+  // of 2 up to max.
 		let mut heights = vec![tip.height];
 		let mut tail = (1..p2p::MAX_LOCATORS)
 			.map(|n| 2u64.pow(n))
@@ -271,7 +271,7 @@ impl Syncer {
 		debug!(LOGGER, "Loc heights: {:?}", heights);
 
 		// Iteratively travel the header chain back from our head and retain the
-		// headers at the wanted heights.
+  // headers at the wanted heights.
 		let mut header = self.chain.get_block_header(&tip.last_block_h)?;
 		let mut locator = vec![];
 		while heights.len() > 0 {

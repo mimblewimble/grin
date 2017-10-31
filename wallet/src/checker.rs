@@ -34,37 +34,34 @@ fn refresh_output(out: &mut OutputData, api_out: &api::Output) {
 	match out.status {
 		OutputStatus::Unconfirmed => {
 			out.status = OutputStatus::Unspent;
-		},
+		}
 		_ => (),
 	}
 }
 
-// Transitions a local wallet output (based on it not being in the node utxo set) -
+// Transitions a local wallet output (based on it not being in the node utxo
+// set) -
 // Unspent -> Spent
 // Locked -> Spent
 fn mark_spent_output(out: &mut OutputData) {
 	match out.status {
-		OutputStatus::Unspent | OutputStatus::Locked => {
-			out.status = OutputStatus::Spent
-		},
+		OutputStatus::Unspent | OutputStatus::Locked => out.status = OutputStatus::Spent,
 		_ => (),
 	}
 }
 
 /// Builds a single api query to retrieve the latest output data from the node.
 /// So we can refresh the local wallet outputs.
-pub fn refresh_outputs(
-	config: &WalletConfig,
-	keychain: &Keychain,
-) -> Result<(), Error> {
+pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> {
 	debug!(LOGGER, "Refreshing wallet outputs");
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
 	let mut commits: Vec<pedersen::Commitment> = vec![];
 
 	// build a local map of wallet outputs by commits
-	// and a list of outputs we wantot query the node for
+ // and a list of outputs we wantot query the node for
 	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		for out in wallet_data.outputs
+		for out in wallet_data
+			.outputs
 			.values()
 			.filter(|out| out.root_key_id == keychain.root_key_id())
 			.filter(|out| out.status != OutputStatus::Spent)
@@ -77,7 +74,7 @@ pub fn refresh_outputs(
 	});
 
 	// build the necessary query params -
-	// ?id=xxx&id=yyy&id=zzz
+ // ?id=xxx&id=yyy&id=zzz
 	let query_params: Vec<String> = commits
 		.iter()
 		.map(|commit| {
@@ -88,7 +85,7 @@ pub fn refresh_outputs(
 	let query_string = query_params.join("&");
 
 	let url = format!(
-		"{}/v2/chain/utxos?{}",
+		"{}/v1/chain/utxos?{}",
 		config.check_node_api_http_addr,
 		query_string,
 	);
@@ -96,32 +93,28 @@ pub fn refresh_outputs(
 	// build a map of api outputs by commit so we can look them up efficiently
 	let mut api_outputs: HashMap<pedersen::Commitment, api::Output> = HashMap::new();
 	match api::client::get::<Vec<api::Output>>(url.as_str()) {
-		Ok(outputs) => {
-			for out in outputs {
-				api_outputs.insert(out.commit, out);
-			}
+		Ok(outputs) => for out in outputs {
+			api_outputs.insert(out.commit, out);
 		},
-		Err(_) => {},
+		Err(_) => {}
 	};
 
 	// now for each commit, find the output in the wallet and
-	// the corresponding api output (if it exists)
-	// and refresh it in-place in the wallet.
-	// Note: minimizing the time we spend holding the wallet lock.
-	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		for commit in commits {
-			let id = wallet_outputs.get(&commit).unwrap();
-			if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
-				match api_outputs.get(&commit) {
-					Some(api_output) => refresh_output(&mut output.get_mut(), api_output),
-					None => mark_spent_output(&mut output.get_mut()),
-				};
-			}
+ // the corresponding api output (if it exists)
+ // and refresh it in-place in the wallet.
+ // Note: minimizing the time we spend holding the wallet lock.
+	WalletData::with_wallet(&config.data_file_dir, |wallet_data| for commit in commits {
+		let id = wallet_outputs.get(&commit).unwrap();
+		if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
+			match api_outputs.get(&commit) {
+				Some(api_output) => refresh_output(&mut output.get_mut(), api_output),
+				None => mark_spent_output(&mut output.get_mut()),
+			};
 		}
 	})
 }
 
 pub fn get_tip_from_node(config: &WalletConfig) -> Result<api::Tip, Error> {
-	let url = format!("{}/v2/chain", config.check_node_api_http_addr);
+	let url = format!("{}/v1/chain", config.check_node_api_http_addr);
 	api::client::get::<api::Tip>(url.as_str()).map_err(|e| Error::Node(e))
 }

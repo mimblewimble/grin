@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Logging, as well as various low-level utilities that factor Rust 
+//! Logging, as well as various low-level utilities that factor Rust
 //! patterns that are frequent within the grin codebase.
 
 #![deny(non_upper_case_globals)]
@@ -23,8 +23,8 @@
 
 #[macro_use]
 extern crate slog;
-extern crate slog_term;
 extern crate slog_async;
+extern crate slog_term;
 
 #[macro_use]
 extern crate lazy_static;
@@ -39,13 +39,13 @@ pub use secp_ as secp;
 
 // Logging related
 pub mod logger;
-pub use logger::{LOGGER, init_logger, init_test_logger};
+pub use logger::{init_logger, init_test_logger, LOGGER};
 
 pub mod types;
 pub use types::LoggingConfig;
 
 // other utils
-use std::cell::{RefCell, Ref};
+use std::cell::{Ref, RefCell};
 #[allow(unused_imports)]
 use std::ops::Deref;
 
@@ -68,7 +68,9 @@ unsafe impl<T> Send for OneTime<T> {}
 impl<T> OneTime<T> {
 	/// Builds a new uninitialized OneTime.
 	pub fn new() -> OneTime<T> {
-		OneTime { inner: RefCell::new(None) }
+		OneTime {
+			inner: RefCell::new(None),
+		}
 	}
 
 	/// Initializes the OneTime, should only be called once after construction.

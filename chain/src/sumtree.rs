@@ -24,7 +24,7 @@ use util::secp;
 use util::secp::pedersen::{RangeProof, Commitment};
 
 use core::core::{Block, Output, SumCommit, TxKernel};
-use core::core::pmmr::{Summable, NoSum, PMMR, HashSum, Backend};
+use core::core::pmmr::{Backend, HashSum, NoSum, Summable, PMMR};
 use grin_store;
 use grin_store::sumtree::PMMRBackend;
 use types::ChainStore;
@@ -121,7 +121,11 @@ impl SumTrees {
 	/// Get sum tree roots
 	pub fn roots(
 		&mut self,
-	) -> (HashSum<SumCommit>, HashSum<NoSum<RangeProof>>, HashSum<NoSum<TxKernel>>) {
+	) -> (
+		HashSum<SumCommit>,
+		HashSum<NoSum<RangeProof>>,
+		HashSum<NoSum<TxKernel>>,
+	) {
 		let output_pmmr = PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		let rproof_pmmr = PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
 		let kernel_pmmr = PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
@@ -140,7 +144,6 @@ pub fn extending<'a, F, T>(trees: &'a mut SumTrees, inner: F) -> Result<T, Error
 where
 	F: FnOnce(&mut Extension) -> Result<T, Error>,
 {
-
 	let sizes: (u64, u64, u64);
 	let res: Result<T, Error>;
 	let rollback: bool;
@@ -229,7 +232,7 @@ impl<'a> Extension<'a> {
 		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 
 		// doing inputs first guarantees an input can't spend an output in the
-		// same block, enforcing block cut-through
+  // same block, enforcing block cut-through
 		for input in &b.inputs {
 			let pos_res = self.commit_index.get_output_pos(&input.commitment());
 			if let Ok(pos) = pos_res {
@@ -319,7 +322,11 @@ impl<'a> Extension<'a> {
 	/// and kernel sum trees.
 	pub fn roots(
 		&self,
-	) -> (HashSum<SumCommit>, HashSum<NoSum<RangeProof>>, HashSum<NoSum<TxKernel>>) {
+	) -> (
+		HashSum<SumCommit>,
+		HashSum<NoSum<RangeProof>>,
+		HashSum<NoSum<TxKernel>>,
+	) {
 		(
 			self.output_pmmr.root(),
 			self.rproof_pmmr.root(),

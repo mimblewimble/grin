@@ -49,7 +49,9 @@ pub struct DummyUtxoSet {
 #[allow(dead_code)]
 impl DummyUtxoSet {
 	pub fn empty() -> DummyUtxoSet {
-		DummyUtxoSet { outputs: HashMap::new() }
+		DummyUtxoSet {
+			outputs: HashMap::new(),
+		}
 	}
 	pub fn root(&self) -> hash::Hash {
 		hash::ZERO_HASH
@@ -62,7 +64,9 @@ impl DummyUtxoSet {
 		for output in &b.outputs {
 			new_hashmap.insert(output.commitment(), output.clone());
 		}
-		DummyUtxoSet { outputs: new_hashmap }
+		DummyUtxoSet {
+			outputs: new_hashmap,
+		}
 	}
 	pub fn with_block(&mut self, b: &block::Block) {
 		for input in &b.inputs {
@@ -73,14 +77,18 @@ impl DummyUtxoSet {
 		}
 	}
 	pub fn rewind(&self, _: &block::Block) -> DummyUtxoSet {
-		DummyUtxoSet { outputs: HashMap::new() }
+		DummyUtxoSet {
+			outputs: HashMap::new(),
+		}
 	}
 	pub fn get_output(&self, output_ref: &Commitment) -> Option<&transaction::Output> {
 		self.outputs.get(output_ref)
 	}
 
 	fn clone(&self) -> DummyUtxoSet {
-		DummyUtxoSet { outputs: self.outputs.clone() }
+		DummyUtxoSet {
+			outputs: self.outputs.clone(),
+		}
 	}
 
 	// only for testing: add an output to the map
@@ -108,8 +116,12 @@ pub struct DummyChainImpl {
 impl DummyChainImpl {
 	pub fn new() -> DummyChainImpl {
 		DummyChainImpl {
-			utxo: RwLock::new(DummyUtxoSet { outputs: HashMap::new() }),
-			block_headers: RwLock::new(DummyBlockHeaderIndex { block_headers: HashMap::new() }),
+			utxo: RwLock::new(DummyUtxoSet {
+				outputs: HashMap::new(),
+			}),
+			block_headers: RwLock::new(DummyBlockHeaderIndex {
+				block_headers: HashMap::new(),
+			}),
 			head_header: RwLock::new(vec![]),
 		}
 	}
@@ -131,7 +143,8 @@ impl BlockChain for DummyChainImpl {
 		match self.block_headers
 			.read()
 			.unwrap()
-			.get_block_header_by_output_commit(*commit) {
+			.get_block_header_by_output_commit(*commit)
+		{
 			Ok(h) => Ok(h.clone()),
 			Err(e) => Err(e),
 		}
@@ -159,10 +172,10 @@ impl DummyChain for DummyChainImpl {
 		commitment: Commitment,
 		block_header: &block::BlockHeader,
 	) {
-		self.block_headers.write().unwrap().insert(
-			commitment,
-			block_header.clone(),
-		);
+		self.block_headers
+			.write()
+			.unwrap()
+			.insert(commitment, block_header.clone());
 	}
 	fn store_head_header(&self, block_header: &block::BlockHeader) {
 		let mut h = self.head_header.write().unwrap();

@@ -14,7 +14,7 @@
 
 use std::convert::From;
 use std::io;
-use std::net::{SocketAddr, IpAddr};
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use futures::Future;
@@ -85,17 +85,17 @@ bitflags! {
   /// Options for what type of interaction a peer supports
   #[derive(Serialize, Deserialize)]
   pub flags Capabilities: u32 {
-    /// We don't know (yet) what the peer can do.
-    const UNKNOWN = 0b00000000,
-    /// Full archival node, has the whole history without any pruning.
-    const FULL_HIST = 0b00000001,
-    /// Can provide block headers and the UTXO set for some recent-enough
-    /// height.
-    const UTXO_HIST = 0b00000010,
-    /// Can provide a list of healthy peers
-    const PEER_LIST = 0b00000100,
+	/// We don't know (yet) what the peer can do.
+	const UNKNOWN = 0b00000000,
+	/// Full archival node, has the whole history without any pruning.
+	const FULL_HIST = 0b00000001,
+	/// Can provide block headers and the UTXO set for some recent-enough
+	/// height.
+	const UTXO_HIST = 0b00000010,
+	/// Can provide a list of healthy peers
+	const PEER_LIST = 0b00000100,
 
-    const FULL_NODE = FULL_HIST.bits | UTXO_HIST.bits | PEER_LIST.bits,
+	const FULL_NODE = FULL_HIST.bits | UTXO_HIST.bits | PEER_LIST.bits,
   }
 }
 

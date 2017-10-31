@@ -20,7 +20,7 @@ extern crate time;
 use std::fs;
 
 use core::ser::*;
-use core::core::pmmr::{PMMR, Summable, HashSum, Backend};
+use core::core::pmmr::{Backend, HashSum, Summable, PMMR};
 use core::core::hash::Hashed;
 
 #[test]
@@ -48,11 +48,16 @@ fn sumtree_append() {
 		})
 	);
 
-	let sum2 = HashSum::from_summable(1, &elems[0], None::<TestElem>) + HashSum::from_summable(2, &elems[1], None::<TestElem>);
-	let sum4 = sum2 + (HashSum::from_summable(4, &elems[2], None::<TestElem>) + HashSum::from_summable(5, &elems[3], None::<TestElem>));
-	let sum8 = sum4 +
-		((HashSum::from_summable(8, &elems[4], None::<TestElem>) + HashSum::from_summable(9, &elems[5], None::<TestElem>)) +
-			 (HashSum::from_summable(11, &elems[6], None::<TestElem>) + HashSum::from_summable(12, &elems[7], None::<TestElem>)));
+	let sum2 = HashSum::from_summable(1, &elems[0], None::<TestElem>)
+		+ HashSum::from_summable(2, &elems[1], None::<TestElem>);
+	let sum4 = sum2
+		+ (HashSum::from_summable(4, &elems[2], None::<TestElem>)
+			+ HashSum::from_summable(5, &elems[3], None::<TestElem>));
+	let sum8 = sum4
+		+ ((HashSum::from_summable(8, &elems[4], None::<TestElem>)
+			+ HashSum::from_summable(9, &elems[5], None::<TestElem>))
+			+ (HashSum::from_summable(11, &elems[6], None::<TestElem>)
+				+ HashSum::from_summable(12, &elems[7], None::<TestElem>)));
 	let sum9 = sum8 + HashSum::from_summable(16, &elems[8], None::<TestElem>);
 
 	{
@@ -177,7 +182,7 @@ fn sumtree_rewind() {
 	}
 	backend.check_compact(1).unwrap();
 	backend.sync().unwrap();
-	
+
 	// rewind and check the roots still match
 	{
 		let mut pmmr = PMMR::at(&mut backend, mmr_size);
@@ -223,7 +228,6 @@ fn setup() -> (String, Vec<TestElem>) {
 }
 
 fn load(pos: u64, elems: &[TestElem], backend: &mut store::sumtree::PMMRBackend<TestElem>) -> u64 {
-
 	let mut pmmr = PMMR::at(backend, pos);
 	for elem in elems {
 		pmmr.push(elem.clone(), None::<TestElem>).unwrap();
@@ -237,9 +241,9 @@ impl Summable for TestElem {
 	type Sum = u64;
 	fn sum(&self) -> u64 {
 		// sums are not allowed to overflow, so we use this simple
-		// non-injective "sum" function that will still be homomorphic
-		self.0[0] as u64 * 0x1000 + self.0[1] as u64 * 0x100 + self.0[2] as u64 * 0x10 +
-			self.0[3] as u64
+  // non-injective "sum" function that will still be homomorphic
+		self.0[0] as u64 * 0x1000 + self.0[1] as u64 * 0x100 + self.0[2] as u64 * 0x10
+			+ self.0[3] as u64
 	}
 	fn sum_len() -> usize {
 		8

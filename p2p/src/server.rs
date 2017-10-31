@@ -174,7 +174,7 @@ impl Server {
 				let total_diff = adapter.clone().total_difficulty();
 
 				// connect to the peer and add it to the server map, wiring it a timeout for
-				// the handhake
+	// the handhake
 				let connect = Peer::connect(
 					socket,
 					capab,
@@ -330,12 +330,11 @@ fn with_timeout<T: 'static>(
 	h: &reactor::Handle,
 ) -> Box<Future<Item = T, Error = Error>> {
 	let timeout = reactor::Timeout::new(Duration::new(5, 0), h).unwrap();
-	let timed = fut.select(timeout.map(Err).from_err()).then(
-		|res| match res {
+	let timed = fut.select(timeout.map(Err).from_err())
+		.then(|res| match res {
 			Ok((Ok(inner), _timeout)) => Ok(inner),
 			Ok((_, _accept)) => Err(Error::Timeout),
 			Err((e, _other)) => Err(e),
-		},
-	);
+		});
 	Box::new(timed)
 }

@@ -77,7 +77,7 @@ impl Default for MinerConfig {
 			cuckoo_miner_async_mode: None,
 			cuckoo_miner_plugin_dir: None,
 			cuckoo_miner_plugin_config: None,
-			wallet_receiver_url: "http://localhost:13416".to_string(),
+			wallet_receiver_url: "http://localhost:13415".to_string(),
 			burn_reward: false,
 			slow_down_in_millis: Some(0),
 			attempt_time_per_block: 2,

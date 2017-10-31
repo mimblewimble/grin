@@ -20,7 +20,7 @@ use util::secp::{Message, Secp256k1, Signature};
 use util::secp::key::SecretKey;
 use util::secp::pedersen::{Commitment, ProofMessage, ProofInfo, RangeProof};
 use blake2;
-use blind::{BlindingFactor, BlindSum};
+use blind::{BlindSum, BlindingFactor};
 use extkey::{self, Identifier};
 
 
@@ -56,7 +56,7 @@ impl Keychain {
 	}
 
 	// For tests and burn only, associate a key identifier with a known secret key.
-	//
+ //
 	pub fn burn_enabled(keychain: &Keychain, burn_key_id: &Identifier) -> Keychain {
 		let mut key_overrides = HashMap::new();
 		key_overrides.insert(
@@ -210,7 +210,7 @@ mod test {
 		let msg = secp::Message::from_slice(&msg_bytes[..]).unwrap();
 
 		// now create a zero commitment using the key on the keychain associated with
-		// the key_id
+  // the key_id
 		let commit = keychain.commit(0, &key_id).unwrap();
 
 		// now check we can use our key to verify a signature from this zero commitment
@@ -232,7 +232,7 @@ mod test {
 		assert_eq!(proof_info.value, 5);
 
 		// now check the recovered message is "empty" (but not truncated) i.e. all
-		// zeroes
+  // zeroes
 		assert_eq!(
 			proof_info.message,
 			secp::pedersen::ProofMessage::from_bytes(&[0; secp::constants::PROOF_MSG_SIZE])

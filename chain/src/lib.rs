@@ -23,16 +23,16 @@
 #[macro_use]
 extern crate bitflags;
 extern crate byteorder;
-#[macro_use]
-extern crate slog;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate slog;
 extern crate time;
 
 extern crate grin_core as core;
-extern crate grin_util as util;
 extern crate grin_store;
+extern crate grin_util as util;
 
 mod chain;
 pub mod pipe;
@@ -43,4 +43,4 @@ pub mod types;
 // Re-export the base interface
 
 pub use chain::Chain;
-pub use types::{ChainStore, Tip, ChainAdapter, SYNC, NONE, SKIP_POW, EASY_POW, Options, Error};
+pub use types::{ChainAdapter, ChainStore, Error, Options, Tip, EASY_POW, NONE, SKIP_POW, SYNC};
