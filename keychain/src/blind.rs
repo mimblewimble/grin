@@ -14,7 +14,7 @@
 /// Encapsulate a secret key for the blind_sum operation
 
 
-use secp::{self, Secp256k1};
+use util::secp::{self, Secp256k1};
 use extkey::Identifier;
 use keychain::Error;
 

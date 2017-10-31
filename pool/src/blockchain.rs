@@ -14,7 +14,7 @@ use core::core::transaction;
 use std::collections::HashMap;
 use std::clone::Clone;
 
-use secp::pedersen::Commitment;
+use util::secp::pedersen::Commitment;
 
 use std::sync::RwLock;
 

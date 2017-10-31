@@ -17,7 +17,7 @@
 use std::vec::Vec;
 use std::collections::{HashMap, HashSet};
 
-use secp::pedersen::Commitment;
+use util::secp::pedersen::Commitment;
 
 use time;
 
@@ -288,7 +288,7 @@ pub fn transaction_identifier(tx: &core::transaction::Transaction) -> core::hash
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use secp;
+	use util::secp;
 	use keychain::Keychain;
 	use rand;
 	use core::core::SwitchCommitHash;

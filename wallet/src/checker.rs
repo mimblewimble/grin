@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use api;
 use types::*;
 use keychain::{Identifier, Keychain};
-use secp::pedersen;
+use util::secp::pedersen;
 use util;
 use util::LOGGER;
 

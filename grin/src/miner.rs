@@ -37,7 +37,7 @@ use util::LOGGER;
 use types::Error;
 
 use chain;
-use secp;
+use util::secp;
 use pool;
 use util;
 use keychain::{Identifier, Keychain};

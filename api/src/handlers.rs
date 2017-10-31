@@ -24,7 +24,7 @@ use serde_json;
 use chain;
 use rest::*;
 use types::*;
-use secp::pedersen::Commitment;
+use util::secp::pedersen::Commitment;
 use util;
 use util::LOGGER;
 

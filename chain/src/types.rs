@@ -16,7 +16,7 @@
 
 use std::io;
 
-use secp::pedersen::Commitment;
+use util::secp::pedersen::Commitment;
 
 use grin_store as store;
 use core::core::{Block, BlockHeader, block, Output};

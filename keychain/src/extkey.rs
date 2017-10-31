@@ -19,9 +19,9 @@ use serde::{de, ser};
 
 use byteorder::{ByteOrder, BigEndian};
 use blake2::blake2b::blake2b;
-use secp;
-use secp::Secp256k1;
-use secp::key::{PublicKey, SecretKey};
+use util::secp;
+use util::secp::Secp256k1;
+use util::secp::key::{PublicKey, SecretKey};
 use util;
 
 // Size of an identifier in bytes
@@ -277,8 +277,8 @@ impl ExtendedKey {
 mod test {
 	use serde_json;
 
-	use secp::Secp256k1;
-	use secp::key::SecretKey;
+	use util::secp::Secp256k1;
+	use util::secp::key::SecretKey;
 	use super::{ExtendedKey, Identifier};
 	use util;
 

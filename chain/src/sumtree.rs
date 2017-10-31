@@ -20,8 +20,8 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use secp;
-use secp::pedersen::{RangeProof, Commitment};
+use util::secp;
+use util::secp::pedersen::{RangeProof, Commitment};
 
 use core::core::{Block, Output, SumCommit, TxKernel};
 use core::core::pmmr::{Summable, NoSum, PMMR, HashSum, Backend};

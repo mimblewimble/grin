@@ -23,7 +23,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use p2p::{self, NetAdapter, Server, PeerStore, PeerData, State};
 use pool;
-use secp::pedersen::Commitment;
+use util::secp::pedersen::Commitment;
 use util::OneTime;
 use store;
 use sync;

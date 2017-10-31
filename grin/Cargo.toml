@@ -15,7 +15,6 @@ grin_util = { path = "../util" }
 grin_keychain = { path = "../keychain" }
 grin_wallet = { path = "../wallet" }
 grin_pow = { path = "../pow" }
-secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }
 
 futures = "^0.1.15"
 futures-cpupool = "^0.1.3"

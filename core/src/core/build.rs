@@ -25,7 +25,7 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use secp;
+use util::secp;
 
 use core::{Transaction, Input, Output, SwitchCommitHash, DEFAULT_OUTPUT};
 use core::transaction::kernel_sig_msg;

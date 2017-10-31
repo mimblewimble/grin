@@ -25,7 +25,7 @@ use std::cmp::min;
 
 use hyper;
 use serde_json;
-use secp;
+use util::secp;
 use tokio_core::reactor;
 use tokio_retry::Retry;
 use tokio_retry::strategy::FibonacciBackoff;

@@ -16,7 +16,7 @@ use std::sync::Arc;
 use core::{core, global};
 use core::core::hash::Hashed;
 use chain;
-use secp::pedersen;
+use util::secp::pedersen;
 use rest::*;
 use util;
 

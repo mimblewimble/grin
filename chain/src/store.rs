@@ -16,7 +16,7 @@
 
 use std::sync::Arc;
 
-use secp::pedersen::Commitment;
+use util::secp::pedersen::Commitment;
 
 use types::*;
 use core::core::hash::{Hash, Hashed};

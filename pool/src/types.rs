@@ -20,7 +20,7 @@ use std::collections::{HashMap, HashSet};
 use std::iter::Iterator;
 use std::fmt;
 
-use secp::pedersen::Commitment;
+use util::secp::pedersen::Commitment;
 
 pub use graph;
 

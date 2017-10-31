@@ -29,7 +29,6 @@ extern crate byteorder;
 extern crate slog;
 extern crate num_bigint as bigint;
 extern crate rand;
-extern crate secp256k1zkp as secp;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 extern crate serde;
