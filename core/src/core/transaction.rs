@@ -675,4 +675,24 @@ mod test {
 			None => {}
 		}
 	}
+
+	#[test]
+	fn commit_consistency(){
+		let keychain = Keychain::from_seed(&[0;32]).unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
+
+		let commit = keychain.commit(1003, &key_id).unwrap();
+		let switch_commit = keychain.switch_commit(&key_id).unwrap();
+		println!("Switch commit: {:?}", switch_commit);
+		println!("commit: {:?}", commit);
+		let key_id = keychain.derive_key_id(1).unwrap();
+
+		let switch_commit_2 = keychain.switch_commit(&key_id).unwrap();
+		let commit_2 = keychain.commit(1003, &key_id).unwrap();
+		println!("Switch commit 2: {:?}", switch_commit_2);
+		println!("commit2 : {:?}", commit_2);
+
+		assert!(commit==commit_2);
+		assert!(switch_commit==switch_commit_2);
+	}
 }
