@@ -26,9 +26,9 @@ use keychain::{Identifier, IDENTIFIER_SIZE};
 use core::hash::Hashed;
 use consensus::VerifySortOrder;
 use core::transaction::{SWITCH_COMMIT_HASH_SIZE, SwitchCommitHash};
-use secp::pedersen::Commitment;
-use secp::pedersen::RangeProof;
-use secp::constants::{MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE};
+use util::secp::pedersen::Commitment;
+use util::secp::pedersen::RangeProof;
+use util::secp::constants::{MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE};
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]
@@ -547,22 +547,22 @@ impl AsFixedBytes for ::core::hash::Hash {
 		return 32;
 	}
 }
-impl AsFixedBytes for ::secp::pedersen::RangeProof {
+impl AsFixedBytes for ::util::secp::pedersen::RangeProof {
 	fn len(&self) -> usize {
 		return self.plen;
 	}
 }
-impl AsFixedBytes for ::secp::key::SecretKey {
+impl AsFixedBytes for ::util::secp::key::SecretKey {
 	fn len(&self) -> usize {
 		return 1;
 	}
 }
-impl AsFixedBytes for ::secp::Signature {
+impl AsFixedBytes for ::util::secp::Signature {
 	fn len(&self) -> usize {
 		return 64;
 	}
 }
-impl AsFixedBytes for ::secp::pedersen::Commitment {
+impl AsFixedBytes for ::util::secp::pedersen::Commitment {
 	fn len(&self) -> usize {
 		return PEDERSEN_COMMITMENT_SIZE;
 	}

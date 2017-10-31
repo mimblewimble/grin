@@ -34,7 +34,7 @@ extern crate serde_derive;
 extern crate blake2_rfc as blake2;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
-extern crate secp256k1zkp as secp;
+extern crate grin_util as util;
 
 pub use pool::TransactionPool;
 pub use types::{BlockChain, PoolAdapter, TxSource, PoolError, PoolConfig};

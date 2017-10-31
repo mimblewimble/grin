@@ -15,10 +15,10 @@
 use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 
-use secp;
-use secp::{Message, Secp256k1, Signature};
-use secp::key::SecretKey;
-use secp::pedersen::{Commitment, ProofMessage, ProofInfo, RangeProof};
+use util::secp;
+use util::secp::{Message, Secp256k1, Signature};
+use util::secp::key::SecretKey;
+use util::secp::pedersen::{Commitment, ProofMessage, ProofInfo, RangeProof};
 use blake2;
 use blind::{BlindingFactor, BlindSum};
 use extkey::{self, Identifier};
@@ -195,8 +195,8 @@ impl Keychain {
 #[cfg(test)]
 mod test {
 	use keychain::Keychain;
-	use secp;
-	use secp::pedersen::ProofMessage;
+	use util::secp;
+	use util::secp::pedersen::ProofMessage;
 
 	#[test]
 	fn test_key_derivation() {

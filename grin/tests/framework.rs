@@ -20,7 +20,7 @@ extern crate grin_api as api;
 extern crate grin_wallet as wallet;
 extern crate grin_keychain as keychain;
 extern crate grin_pow as pow;
-extern crate secp256k1zkp as secp;
+extern crate grin_util as util;
 
 extern crate blake2_rfc as blake2;
 extern crate futures;
@@ -37,7 +37,7 @@ use std::sync::{Arc, Mutex};
 use tokio_core::reactor;
 use tokio_timer::Timer;
 
-use secp::Secp256k1;
+use util::secp::Secp256k1;
 // TODO - why does this need self here? Missing something somewhere.
 use self::keychain::Keychain;
 use wallet::WalletConfig;

@@ -16,7 +16,7 @@
 
 use std::sync::{Arc, RwLock};
 
-use secp;
+use util::secp;
 use time;
 
 use core::consensus;

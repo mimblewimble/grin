@@ -33,6 +33,10 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
+// Re-export so only has to be included once
+pub extern crate secp256k1zkp as secp_;
+pub use secp_ as secp;
+
 // Logging related
 pub mod logger;
 pub use logger::{LOGGER, init_logger, init_test_logger};

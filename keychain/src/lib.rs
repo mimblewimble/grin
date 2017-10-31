@@ -17,7 +17,6 @@
 extern crate blake2_rfc as blake2;
 extern crate byteorder;
 extern crate rand;
-extern crate secp256k1zkp as secp;
 extern crate grin_util as util;
 extern crate serde;
 #[macro_use]

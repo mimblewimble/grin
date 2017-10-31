@@ -22,8 +22,8 @@ use core::core::block;
 use core::core::hash;
 use core::global;
 
-use secp;
-use secp::pedersen::Commitment;
+use util::secp;
+use util::secp::pedersen::Commitment;
 
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
@@ -614,7 +614,7 @@ mod tests {
 	use super::*;
 	use core::core::build;
 	use blockchain::{DummyChain, DummyChainImpl, DummyUtxoSet};
-	use secp;
+	use util::secp;
 	use keychain::Keychain;
 	use std::sync::{Arc, RwLock};
 	use blake2;

@@ -18,7 +18,7 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, RwLock};
 
-use secp::pedersen::{Commitment, RangeProof};
+use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::core::{SumCommit};
 use core::core::pmmr::{NoSum, HashSum};

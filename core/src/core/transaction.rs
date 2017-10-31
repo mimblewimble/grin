@@ -16,8 +16,8 @@
 
 use byteorder::{ByteOrder, BigEndian};
 use blake2::blake2b::blake2b;
-use secp::{self, Secp256k1, Message, Signature};
-use secp::pedersen::{RangeProof, Commitment};
+use util::secp::{self, Secp256k1, Message, Signature};
+use util::secp::pedersen::{RangeProof, Commitment};
 use std::ops;
 
 use core::Committed;
@@ -572,7 +572,7 @@ impl ops::Add for SumCommit {
 mod test {
 	use super::*;
 	use keychain::Keychain;
-	use secp;
+	use util::secp;
 
 	#[test]
 	fn test_kernel_ser_deser() {

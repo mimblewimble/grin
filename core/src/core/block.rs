@@ -15,7 +15,8 @@
 //! Blocks and blockheaders
 
 use time;
-use secp::{self, Secp256k1};
+use util;
+use util::secp::{self, Secp256k1};
 use std::collections::HashSet;
 
 use core::Committed;
@@ -515,7 +516,7 @@ impl Block {
 			"Block reward - Switch Commit Hash is: {:?}",
 			switch_commit_hash
 		);
-		let msg = secp::pedersen::ProofMessage::empty();
+		let msg = util::secp::pedersen::ProofMessage::empty();
 		let rproof = keychain.range_proof(reward(fees), key_id, commit, msg)?;
 
 		let output = Output {
@@ -529,7 +530,7 @@ impl Block {
 		let out_commit = output.commitment();
 		let excess = secp.commit_sum(vec![out_commit], vec![over_commit])?;
 
-		let msg = secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE])?;
+		let msg = util::secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE])?;
 		let sig = keychain.sign(&msg, &key_id)?;
 
 		let proof = TxKernel {
@@ -553,7 +554,7 @@ mod test {
 	use consensus::*;
 	use std::time::Instant;
 
-	use secp;
+	use util::secp;
 
 	// utility to create a block without worrying about the key or previous
 	// header

@@ -26,8 +26,8 @@ pub mod transaction;
 use std::fmt;
 use std::cmp::Ordering;
 
-use secp::{self, Secp256k1};
-use secp::pedersen::*;
+use util::secp::{self, Secp256k1};
+use util::secp::pedersen::*;
 
 pub use self::block::*;
 pub use self::transaction::*;
