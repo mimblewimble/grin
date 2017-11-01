@@ -31,8 +31,6 @@ extern crate grin_util as util;
 extern crate lazy_static;
 extern crate num_bigint as bigint;
 extern crate rand;
-extern crate grin_keychain as keychain;
-extern crate grin_util as util;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;

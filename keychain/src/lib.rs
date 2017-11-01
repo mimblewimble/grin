@@ -18,7 +18,6 @@ extern crate blake2_rfc as blake2;
 extern crate byteorder;
 extern crate grin_util as util;
 extern crate rand;
-extern crate grin_util as util;
 extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
