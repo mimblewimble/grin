@@ -115,7 +115,7 @@ wallet_receiver_url = "http://127.0.0.1:13415"
 
 #whether to ignore the reward (mostly for testing)
 
-burn_reward = true
+burn_reward = false
 
 #testing value, optional
 #slow_down_in_millis = 30
