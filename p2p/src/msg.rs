@@ -190,8 +190,7 @@ pub struct Hand {
 	/// randomly generated for each handshake, helps detect self
 	pub nonce: u64,
 	/// total difficulty accumulated by the sender, used to check whether sync
-	/// may
-	/// be needed
+	/// may be needed
 	pub total_difficulty: Difficulty,
 	/// network address of the sender
 	pub sender_addr: SockAddr,
@@ -245,8 +244,7 @@ pub struct Shake {
 	/// sender capabilities
 	pub capabilities: Capabilities,
 	/// total difficulty accumulated by the sender, used to check whether sync
-	/// may
-	/// be needed
+	/// may be needed
 	pub total_difficulty: Difficulty,
 	/// name of version of the software
 	pub user_agent: String,

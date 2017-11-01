@@ -124,11 +124,12 @@ impl Handshake {
 							}));
 						}
 					}
+
 					// all good, keep peer info
 					let peer_info = PeerInfo {
 						capabilities: hand.capabilities,
 						user_agent: hand.user_agent,
-						addr: hand.sender_addr.0,
+						addr: extract_ip(&hand.sender_addr.0, &conn),
 						version: hand.version,
 						total_difficulty: hand.total_difficulty,
 					};
@@ -162,4 +163,28 @@ impl Handshake {
 		}
 		nonce
 	}
+}
+
+// Attempts to make a best guess at the correct remote IP by checking if the
+// advertised address is the loopback and our TCP connection. Note that the
+// port reported by the connection is always incorrect for receiving
+// connections as it's dynamically allocated by the server.
+fn extract_ip(advertised: &SocketAddr, conn: &TcpStream) -> SocketAddr {
+  match advertised {
+    &SocketAddr::V4(v4sock) => {
+      if v4sock.ip().is_loopback() {
+        if let Ok(addr) =  conn.peer_addr() {
+          return SocketAddr::new(addr.ip(), advertised.port());
+        }
+      }
+    }
+    &SocketAddr::V6(v6sock) => {
+      if v6sock.ip().is_loopback() {
+        if let Ok(addr) =  conn.peer_addr() {
+          return SocketAddr::new(addr.ip(), advertised.port());
+        }
+      }
+    }
+  }
+  advertised.clone()
 }
