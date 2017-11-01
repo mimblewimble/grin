@@ -27,6 +27,7 @@ use chain;
 use core::core::Transaction;
 use core::ser;
 use pool;
+use p2p;
 use rest::*;
 use util::secp::pedersen::Commitment;
 use types::*;
@@ -146,6 +147,16 @@ impl Handler for SumTreeHandler {
 	}
 }
 
+pub struct PeersHandler {
+	pub peer_store: Arc<p2p::PeerStore>,
+}
+
+impl Handler for PeersHandler {
+	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+		json_response(&self.peer_store.all_peers())
+	}
+}
+
 // Chain handler. Get the head details.
 // GET /v1/chain
 pub struct ChainHandler {
@@ -251,6 +262,7 @@ pub fn start_rest_apis<T>(
 	addr: String,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<T>>>,
+	peer_store: Arc<p2p::PeerStore>,
 ) where
 	T: pool::BlockChain + Send + Sync + 'static,
 {
@@ -271,13 +283,17 @@ pub fn start_rest_apis<T>(
 		let pool_push_handler = PoolPushHandler {
 			tx_pool: tx_pool.clone(),
 		};
+		let peers_handler = PeersHandler {
+			peer_store: peer_store.clone(),
+		};
 
 		let router = router!(
 			chain_tip: get "/chain" => chain_tip_handler,
 			chain_utxos: get "/chain/utxos" => utxo_handler,
 			sumtree_roots: get "/sumtrees/*" => sumtree_handler,
-      pool_info: get "/pool" => pool_info_handler,
-      pool_push: post "/pool/push" => pool_push_handler,
+			pool_info: get "/pool" => pool_info_handler,
+			pool_push: post "/pool/push" => pool_push_handler,
+			connected_peers: get "/peers" => peers_handler,
 		);
 
 		let mut apis = ApiServer::new("/v1".to_string());

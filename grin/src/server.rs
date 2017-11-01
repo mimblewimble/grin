@@ -150,6 +150,7 @@ impl Server {
 			config.api_http_addr.clone(),
 			shared_chain.clone(),
 			tx_pool.clone(),
+			peer_store.clone(),
 		);
 
 		warn!(LOGGER, "Grin server started.");
