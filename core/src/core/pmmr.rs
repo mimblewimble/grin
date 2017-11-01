@@ -391,7 +391,7 @@ where
 	/// only prints the last 8 nodes.
 	pub fn dump(&self, short: bool) {
 		let sz = self.unpruned_size();
-		if sz > 600 {
+		if sz > 2000 && !short {
 			return;
 		}
 		let start = if short && sz > 7 { sz / 8 - 1 } else { 0 };
