@@ -40,19 +40,16 @@ where
 /// object as body on a given URL that returns a JSON object. Handles request
 /// building, JSON serialization and deserialization, and response code
 /// checking.
-pub fn post<'a, IN, OUT>(url: &'a str, input: &IN) -> Result<OUT, Error>
+pub fn post<'a, IN>(url: &'a str, input: &IN) -> Result<(), Error>
 where
 	IN: Serialize,
-	for<'de> OUT: Deserialize<'de>,
 {
 	let in_json = serde_json::to_string(input).map_err(|e| {
 		Error::Internal(format!("Could not serialize data to JSON: {}", e))
 	})?;
 	let client = hyper::Client::new();
-	let res = check_error(client.post(url).body(&mut in_json.as_bytes()).send())?;
-	serde_json::from_reader(res).map_err(|e| {
-		Error::Internal(format!("Server returned invalid JSON: {}", e))
-	})
+	let _res = check_error(client.post(url).body(&mut in_json.as_bytes()).send())?;
+	Ok(())
 }
 
 // convert hyper error and check for non success response codes

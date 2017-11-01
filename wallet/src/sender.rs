@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use serde_json;
+
 use api;
+use client;
 use checker;
 use core::core::{build, Transaction};
 use core::ser;
@@ -50,18 +53,16 @@ pub fn issue_send_tx(
 		minimum_confirmations,
 		lock_height,
 	)?;
-	let json_tx = partial_tx_to_json(amount, blind_sum, tx);
+
+	let partial_tx = build_partial_tx(amount, blind_sum, tx);
 
 	if dest == "stdout" {
+		let json_tx = serde_json::to_string_pretty(&partial_tx).unwrap();
 		println!("{}", json_tx);
 	} else if &dest[..4] == "http" {
 		let url = format!("{}/v1/receive/transaction", &dest);
 		debug!(LOGGER, "Posting partial transaction to {}", url);
-		let request = WalletReceiveRequest::PartialTransaction(json_tx);
-		let _: CbData = api::client::post(url.as_str(), &request).expect(&format!(
-			"Wallet receiver at {} unreachable, could not send transaction. Is it running?",
-			url
-		));
+		client::send_partial_tx(&url, &partial_tx)?;
 	} else {
 		panic!("dest not in expected format: {}", dest);
 	}
@@ -201,7 +202,7 @@ fn inputs_and_change(
 		});
 
 		// now lock the ouputs we're spending so we avoid accidental double spend
-  // attempt
+		// attempt
 		for coin in coins {
 			wallet_data.lock_output(coin);
 		}
@@ -217,7 +218,7 @@ mod test {
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment
- // based on the public key and amount begin spent
+	// based on the public key and amount begin spent
 	fn output_commitment_equals_input_commitment_on_spend() {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id1 = keychain.derive_key_id(1).unwrap();

@@ -48,6 +48,6 @@ pub mod client;
 pub mod server;
 
 pub use info::show_info;
-pub use receiver::{receive_json_tx, WalletReceiver};
+pub use receiver::{receive_json_tx, receive_json_tx_str, WalletReceiver};
 pub use sender::{issue_burn_tx, issue_send_tx};
 pub use types::{BlockFees, CbData, Error, WalletConfig, WalletReceiveRequest, WalletSeed};
