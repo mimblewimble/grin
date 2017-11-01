@@ -131,8 +131,7 @@ fn main() {
                      .short("s")
                      .long("seed")
                      .help("Override seed node(s) to connect to")
-                     .takes_value(true)
-                     .multiple(true))
+                     .takes_value(true))
                 .arg(Arg::with_name("mine")
                      .short("m")
                      .long("mine")
@@ -328,7 +327,10 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 			}
 		}
 		("stop", _) => println!("TODO, just 'kill $pid' for now."),
-		_ => panic!("Unknown server command, use 'grin help server' for details"),
+		(cmd, _) => {
+      println!(":: {:?}", server_args);
+      panic!("Unknown server command '{}', use 'grin help server' for details", cmd);
+    }
 	}
 }
 
