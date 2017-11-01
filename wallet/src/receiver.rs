@@ -16,17 +16,17 @@
 //! receiving money in MimbleWimble requires an interactive exchange, a
 //! wallet server that's running at all time is required in many cases.
 
-use std::io::Read;
-
-use core::consensus::reward;
-use core::core::{build, Block, Output, Transaction, TxKernel};
-use core::ser;
-use api;
+use bodyparser;
 use iron::prelude::*;
 use iron::Handler;
 use iron::status;
-use keychain::{BlindingFactor, Identifier, Keychain};
 use serde_json;
+
+use api;
+use core::consensus::reward;
+use core::core::{build, Block, Output, Transaction, TxKernel};
+use core::ser;
+use keychain::{BlindingFactor, Identifier, Keychain};
 use types::*;
 use util;
 use util::LOGGER;
@@ -37,21 +37,30 @@ pub struct TxWrapper {
 	pub tx_hex: String,
 }
 
+pub fn receive_json_tx_str(
+	config: &WalletConfig,
+	keychain: &Keychain,
+	json_tx: &str,
+) -> Result<(), Error> {
+	let partial_tx = serde_json::from_str(json_tx).unwrap();
+	receive_json_tx(config, keychain, &partial_tx)
+}
+
 /// Receive an already well formed JSON transaction issuance and finalize the
 /// transaction, adding our receiving output, to broadcast to the rest of the
 /// network.
 pub fn receive_json_tx(
 	config: &WalletConfig,
 	keychain: &Keychain,
-	partial_tx_str: &str,
+	partial_tx: &JSONPartialTx,
 ) -> Result<(), Error> {
-	let (amount, blinding, partial_tx) = partial_tx_from_json(keychain, partial_tx_str)?;
-	let final_tx = receive_transaction(config, keychain, amount, blinding, partial_tx)?;
+	let (amount, blinding, tx) = read_partial_tx(keychain, partial_tx)?;
+	let final_tx = receive_transaction(config, keychain, amount, blinding, tx)?;
 	let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
 
 	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
-	let _: () =
-		api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).map_err(|e| Error::Node(e))?;
+	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })
+		.map_err(|e| Error::Node(e))?;
 	Ok(())
 }
 
@@ -65,25 +74,18 @@ pub struct WalletReceiver {
 
 impl Handler for WalletReceiver {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let receive: WalletReceiveRequest = serde_json::from_reader(req.body.by_ref())
-			.map_err(|e| IronError::new(e, status::BadRequest))?;
+		let struct_body = req.get::<bodyparser::Struct<JSONPartialTx>>();
 
-		match receive {
-			WalletReceiveRequest::PartialTransaction(partial_tx_str) => {
-				debug!(LOGGER, "Receive with transaction {}", &partial_tx_str,);
-				receive_json_tx(&self.config, &self.keychain, &partial_tx_str)
-					.map_err(|e| {
-						api::Error::Internal(
-							format!("Error processing partial transaction: {:?}", e),
-						)
-					})
-					.unwrap();
-
-				Ok(Response::with(status::Ok))
-			}
-			_ => Ok(Response::with(
-				(status::BadRequest, format!("Incorrect request data.")),
-			)),
+		if let Ok(Some(partial_tx)) = struct_body {
+			receive_json_tx(&self.config, &self.keychain, &partial_tx)
+				.map_err(|e| {
+					api::Error::Internal(
+						format!("Error processing partial transaction: {:?}", e),
+					)})
+				.unwrap();
+			Ok(Response::with(status::Ok))
+		} else {
+			Ok(Response::with((status::BadRequest, "")))
 		}
 	}
 }

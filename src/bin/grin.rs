@@ -372,7 +372,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 			let mut contents = String::new();
 			file.read_to_string(&mut contents)
 				.expect("Unable to read transaction file.");
-			wallet::receive_json_tx(&wallet_config, &keychain, contents.as_str()).unwrap();
+			wallet::receive_json_tx_str(&wallet_config, &keychain, contents.as_str()).unwrap();
 		} else {
 			wallet::server::start_rest_apis(wallet_config, keychain);
 		},

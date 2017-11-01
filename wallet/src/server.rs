@@ -37,9 +37,9 @@ pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 	};
 
 	let router = router!(
-    receive_tx: get "/receive/transaction" => receive_tx_handler,
+		receive_tx: post "/receive/transaction" => receive_tx_handler,
 		receive_coinbase: post "/receive/coinbase" => coinbase_handler,
-  );
+	);
 
 	let mut apis = ApiServer::new("/v1".to_string());
 	apis.register_handler(router);

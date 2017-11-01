@@ -55,6 +55,24 @@ where
 	Ok(res)
 }
 
+pub fn send_partial_tx(url: &str, partial_tx: &JSONPartialTx) -> Result<(), Error> {
+	single_send_partial_tx(url, partial_tx)
+}
+
+fn single_send_partial_tx(url: &str, partial_tx: &JSONPartialTx) -> Result<(), Error> {
+	let mut core = reactor::Core::new()?;
+	let client = hyper::Client::new(&core.handle());
+
+	let mut req = Request::new(Method::Post, url.parse()?);
+	req.headers_mut().set(ContentType::json());
+	let json = serde_json::to_string(&partial_tx)?;
+	req.set_body(json);
+
+	let work = client.request(req);
+	let _ = core.run(work)?;
+	Ok(())
+}
+
 /// Makes a single request to the wallet API to create a new coinbase output.
 fn single_create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
 	let mut core = reactor::Core::new()?;
