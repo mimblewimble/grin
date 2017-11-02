@@ -293,7 +293,7 @@ impl Block {
 		// build vectors with all inputs and all outputs, ordering them by hash
   // needs to be a fold so we don't end up with a vector of vectors and we
   // want to fully own the refs (not just a pointer like flat_map).
-		let inputs = txs.iter().fold(vec![], |mut acc, ref tx| {
+		let mut inputs = txs.iter().fold(vec![], |mut acc, ref tx| {
 			let mut inputs = tx.inputs.clone();
 			acc.append(&mut inputs);
 			acc
@@ -304,6 +304,10 @@ impl Block {
 			acc
 		});
 		outputs.push(reward_out);
+
+		inputs.sort();
+		outputs.sort();
+		kernels.sort();
 
 		// calculate the overall Merkle tree and fees
 

@@ -16,11 +16,13 @@
 
 use byteorder::{BigEndian, ByteOrder};
 use blake2::blake2b::blake2b;
-use util::secp::{self, Secp256k1, Message, Signature};
-use util::secp::pedersen::{RangeProof, Commitment};
+use util::secp::{self, Message, Secp256k1, Signature};
+use util::secp::pedersen::{Commitment, RangeProof};
+use std::cmp::Ordering;
 use std::ops;
 
 use core::Committed;
+use core::hash::Hashed;
 use core::pmmr::Summable;
 use keychain::{Identifier, Keychain};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
@@ -37,6 +39,29 @@ bitflags! {
 		/// Kernel matching a coinbase output
 		const COINBASE_KERNEL = 0b00000001,
 	}
+}
+
+// don't seem to be able to define an Ord implementation for Hash due to
+// Ord being defined on all pointers, resorting to a macro instead
+macro_rules! hashable_ord {
+  ($hashable: ident) => {
+    impl Ord for $hashable {
+      fn cmp(&self, other: &$hashable) -> Ordering {
+        self.hash().cmp(&other.hash())
+      }
+    }
+    impl PartialOrd for $hashable {
+      fn partial_cmp(&self, other: &$hashable) -> Option<Ordering> {
+        Some(self.hash().cmp(&other.hash()))
+      }
+    }
+    impl PartialEq for $hashable {
+      fn eq(&self, other: &$hashable) -> bool {
+        self.hash() == other.hash()
+      }
+    }
+    impl Eq for $hashable {}
+  }
 }
 
 /// Errors thrown by Block validation
@@ -68,7 +93,7 @@ pub fn kernel_sig_msg(fee: u64, lock_height: u64) -> [u8; 32] {
 /// amount to zero.
 /// The signature signs the fee and the lock_height, which are retained for
 /// signature validation.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct TxKernel {
 	/// Options for a kernel's structure or use
 	pub features: KernelFeatures,
@@ -85,6 +110,8 @@ pub struct TxKernel {
 	/// the transaction fee.
 	pub excess_sig: Vec<u8>,
 }
+
+hashable_ord!(TxKernel);
 
 impl Writeable for TxKernel {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
@@ -168,7 +195,6 @@ impl Writeable for Transaction {
 		Ok(())
 	}
 }
-
 
 /// Implementation of Readable for a transaction, defines how to read a full
 /// transaction from a binary stream.
@@ -327,8 +353,10 @@ impl Transaction {
 
 /// A transaction input, mostly a reference to an output being spent by the
 /// transaction.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone)]
 pub struct Input(pub Commitment);
+
+hashable_ord!(Input);
 
 /// Implementation of Writeable for a transaction Input, defines how to write
 /// an Input as binary.
@@ -423,7 +451,7 @@ impl SwitchCommitHash {
 /// The hash of an output only covers its features, lock_height, commitment,
 /// and switch commitment. The range proof is expected to have its own hash
 /// and is stored and committed to separately.
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct Output {
 	/// Options for an output's structure or use
 	pub features: OutputFeatures,
@@ -434,6 +462,8 @@ pub struct Output {
 	/// A proof that the commitment is in the right range
 	pub proof: RangeProof,
 }
+
+hashable_ord!(Output);
 
 /// Implementation of Writeable for a transaction Output, defines how to write
 /// an Output as binary.
@@ -672,8 +702,8 @@ mod test {
 	}
 
 	#[test]
-	fn commit_consistency(){
-		let keychain = Keychain::from_seed(&[0;32]).unwrap();
+	fn commit_consistency() {
+		let keychain = Keychain::from_seed(&[0; 32]).unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let commit = keychain.commit(1003, &key_id).unwrap();
@@ -687,7 +717,7 @@ mod test {
 		println!("Switch commit 2: {:?}", switch_commit_2);
 		println!("commit2 : {:?}", commit_2);
 
-		assert!(commit==commit_2);
-		assert!(switch_commit==switch_commit_2);
+		assert!(commit == commit_2);
+		assert!(switch_commit == switch_commit_2);
 	}
 }
