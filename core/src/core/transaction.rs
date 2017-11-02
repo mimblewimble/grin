@@ -461,7 +461,7 @@ impl Input {
 	) -> Result<(), Error> {
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			self.switch_commit,
-			SwitchCommitKey::from_lock_height(self.lock_height),
+			SwitchCommitKey::from_features_and_lock_height(output.features, self.lock_height),
 		);
 
 		if switch_commit_hash != output.switch_commit_hash {
@@ -489,10 +489,10 @@ bitflags! {
 pub struct SwitchCommitKey ([u8; SWITCH_COMMIT_KEY_SIZE]);
 
 impl SwitchCommitKey {
-	// TODO - pass the output features in here also? How to do this cleanly?
-	pub fn from_lock_height(lock_height: u64) -> SwitchCommitKey {
+	pub fn from_features_and_lock_height(features: OutputFeatures, lock_height: u64) -> SwitchCommitKey {
 		let mut bytes = [0; SWITCH_COMMIT_KEY_SIZE];
-		BigEndian::write_u64(&mut bytes[0..8], lock_height);
+		bytes[0] = features.bits();
+		BigEndian::write_u64(&mut bytes[1..9], lock_height);
 		SwitchCommitKey(bytes)
 	}
 }
@@ -765,7 +765,7 @@ mod test {
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			switch_commit,
-			SwitchCommitKey::from_lock_height(0),
+			SwitchCommitKey::from_features_and_lock_height(DEFAULT_OUTPUT, 0),
 		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(5, &key_id, commit, msg).unwrap();
@@ -795,7 +795,7 @@ mod test {
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			switch_commit,
-			SwitchCommitKey::from_lock_height(0),
+			SwitchCommitKey::from_features_and_lock_height(DEFAULT_OUTPUT, 0),
 		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(1003, &key_id, commit, msg).unwrap();

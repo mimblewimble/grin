@@ -44,7 +44,11 @@ pub type Append = for<'a> Fn(&'a mut Context, (Transaction, BlindSum)) -> (Trans
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
-pub fn input(value: u64, lock_height: u64, key_id: Identifier) -> Box<Append> {
+pub fn input(
+	value: u64,
+	lock_height: u64,
+	key_id: Identifier
+) -> Box<Append> {
 	debug!(
 		LOGGER,
 		"Building an input: {}, {}, {}",
@@ -56,25 +60,6 @@ pub fn input(value: u64, lock_height: u64, key_id: Identifier) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
 		let commit = build.keychain.commit(value, &key_id).unwrap();
 		let switch_commit = build.keychain.switch_commit(&key_id).unwrap();
-
-		debug!(
-			LOGGER,
-			"built switch_commit for input: {}, {:?}",
-			lock_height,
-			switch_commit,
-		);
-
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
-			switch_commit,
-			SwitchCommitKey::from_lock_height(lock_height),
-		);
-		debug!(
-			LOGGER,
-			"built temp switch_commit_hash for input: {}, {:?}",
-			lock_height,
-			switch_commit_hash,
-		);
-
 		let input = Input::new(commit, switch_commit, lock_height);
 		(tx.with_input(input), sum.sub_key_id(key_id.clone()))
 	})
@@ -96,7 +81,7 @@ pub fn output(value: u64, lock_height: u64, key_id: Identifier) -> Box<Append> {
 		let switch_commit = build.keychain.switch_commit(&key_id).unwrap();
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			switch_commit,
-			SwitchCommitKey::from_lock_height(lock_height),
+			SwitchCommitKey::from_features_and_lock_height(DEFAULT_OUTPUT, lock_height),
 		);
 		trace!(
 			LOGGER,
