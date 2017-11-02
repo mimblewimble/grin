@@ -29,6 +29,10 @@ Maybe you've heard that MimbleWimble doesn't support scripts. And in some way, t
 * Time-locked transaction and outputs.
 * Lightning Network
 
+## Emmission Rate
+
+Bitcoin's 10 minute block time has its intitial 50 btc reward cut in half every 4 years until there are 21 million Bitcoin in circulation. Grin's emission rate is linear, meaning it never drops. The block reward is currently set at 50 grin with a block goal of 60 seconds.    
+
 ## FAQ
 
 ### Wait, what!? No address?
