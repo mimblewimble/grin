@@ -570,39 +570,14 @@ impl Block {
 		fees: u64,
 		height: u64,
 	) -> Result<(Output, TxKernel), keychain::Error> {
-		debug!(
-			LOGGER,
-			"Block::reward_output: {}, {}",
-			fees,
-			height,
-		);
 		let commit = keychain.commit(reward(fees), key_id)?;
 		let switch_commit = keychain.switch_commit(key_id)?;
 
-		debug!(
-			LOGGER,
-			"Block::reward_output: switch_commit: {:?}",
-			switch_commit,
-		);
-
 		let lock_height = height + global::coinbase_maturity();
-		debug!(
-			LOGGER,
-			"Block::reward_output: lock_height: {}, {}",
-			lock_height,
-			key_id,
-		);
 
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			switch_commit,
 			SwitchCommitKey::from_lock_height(lock_height),
-		);
-
-		debug!(
-			LOGGER,
-			"Block::reward_output: switch_commit_hash: {}, {:?}",
-			lock_height,
-			switch_commit_hash,
 		);
 
 		trace!(
