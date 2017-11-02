@@ -27,6 +27,7 @@ use chain;
 use core::core::Transaction;
 use core::ser;
 use pool;
+use p2p;
 use rest::*;
 use util::secp::pedersen::Commitment;
 use types::*;
@@ -146,6 +147,32 @@ impl Handler for SumTreeHandler {
 	}
 }
 
+pub struct PeersAllHandler {
+	pub peer_store: Arc<p2p::PeerStore>,
+}
+
+impl Handler for PeersAllHandler {
+	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+		let peers = &self.peer_store.all_peers();
+		json_response(&peers)
+	}
+}
+
+pub struct PeersConnectedHandler {
+	pub p2p_server: Arc<p2p::Server>,
+}
+
+impl Handler for PeersConnectedHandler {
+	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+		let mut peers = vec![];
+		for p in &self.p2p_server.all_peers() {
+			let peer_info = p.info.clone();
+			peers.push(peer_info);
+		}
+		json_response(&peers)
+	}
+}
+
 // Chain handler. Get the head details.
 // GET /v1/chain
 pub struct ChainHandler {
@@ -251,6 +278,8 @@ pub fn start_rest_apis<T>(
 	addr: String,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<T>>>,
+	p2p_server: Arc<p2p::Server>,
+	peer_store: Arc<p2p::PeerStore>,
 ) where
 	T: pool::BlockChain + Send + Sync + 'static,
 {
@@ -271,13 +300,21 @@ pub fn start_rest_apis<T>(
 		let pool_push_handler = PoolPushHandler {
 			tx_pool: tx_pool.clone(),
 		};
+		let peers_all_handler = PeersAllHandler {
+			peer_store: peer_store.clone(),
+		};
+		let peers_connected_handler = PeersConnectedHandler {
+			p2p_server: p2p_server.clone(),
+		};
 
 		let router = router!(
 			chain_tip: get "/chain" => chain_tip_handler,
 			chain_utxos: get "/chain/utxos" => utxo_handler,
 			sumtree_roots: get "/sumtrees/*" => sumtree_handler,
-      pool_info: get "/pool" => pool_info_handler,
-      pool_push: post "/pool/push" => pool_push_handler,
+			pool_info: get "/pool" => pool_info_handler,
+			pool_push: post "/pool/push" => pool_push_handler,
+			peers_all: get "/peers/all" => peers_all_handler,
+			peers_connected: get "/peers/connected" => peers_connected_handler,
 		);
 
 		let mut apis = ApiServer::new("/v1".to_string());

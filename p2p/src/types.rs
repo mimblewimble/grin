@@ -100,7 +100,7 @@ bitflags! {
 }
 
 /// General information about a connected peer that's useful to other modules.
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct PeerInfo {
 	pub capabilities: Capabilities,
 	pub user_agent: String,

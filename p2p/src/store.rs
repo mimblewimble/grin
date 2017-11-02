@@ -28,16 +28,16 @@ const PEER_PREFIX: u8 = 'p' as u8;
 
 /// Types of messages
 enum_from_primitive! {
-  #[derive(Debug, Clone, Copy, PartialEq)]
-  pub enum State {
-	Healthy,
-	Banned,
-	Defunct,
-  }
+	#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+	pub enum State {
+		Healthy,
+		Banned,
+		Defunct,
+	}
 }
 
 /// Data stored for any given peer we've encountered.
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct PeerData {
 	/// Network address of the peer.
 	pub addr: SocketAddr,
@@ -127,6 +127,17 @@ impl PeerStore {
 			}
 		}
 		peers
+	}
+
+	/// List all known peers (for the /v1/peers api endpoint)
+	pub fn all_peers(&self) -> Vec<PeerData> {
+		let peers_iter = self.db
+			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()));
+			let mut peers = vec![];
+			for p in peers_iter {
+				peers.push(p);
+			}
+			peers
 	}
 
 	/// Convenience method to load a peer data, update its status and save it

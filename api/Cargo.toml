@@ -10,6 +10,7 @@ grin_chain = { path = "../chain" }
 grin_pool = { path = "../pool" }
 grin_store = { path = "../store" }
 grin_util = { path = "../util" }
+grin_p2p = { path = "../p2p" }
 hyper = "~0.10.6"
 slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
 iron = "~0.5.1"
