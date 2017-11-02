@@ -150,6 +150,7 @@ impl Server {
 			config.api_http_addr.clone(),
 			shared_chain.clone(),
 			tx_pool.clone(),
+			p2p_server.clone(),
 			peer_store.clone(),
 		);
 

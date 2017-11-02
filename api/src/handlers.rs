@@ -147,13 +147,29 @@ impl Handler for SumTreeHandler {
 	}
 }
 
-pub struct PeersHandler {
+pub struct PeersAllHandler {
 	pub peer_store: Arc<p2p::PeerStore>,
 }
 
-impl Handler for PeersHandler {
+impl Handler for PeersAllHandler {
 	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
-		json_response(&self.peer_store.all_peers())
+		let peers = &self.peer_store.all_peers();
+		json_response(&peers)
+	}
+}
+
+pub struct PeersConnectedHandler {
+	pub p2p_server: Arc<p2p::Server>,
+}
+
+impl Handler for PeersConnectedHandler {
+	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+		let mut peers = vec![];
+		for p in &self.p2p_server.all_peers() {
+			let peer_info = p.info.clone();
+			peers.push(peer_info);
+		}
+		json_response(&peers)
 	}
 }
 
@@ -262,6 +278,7 @@ pub fn start_rest_apis<T>(
 	addr: String,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<T>>>,
+	p2p_server: Arc<p2p::Server>,
 	peer_store: Arc<p2p::PeerStore>,
 ) where
 	T: pool::BlockChain + Send + Sync + 'static,
@@ -283,8 +300,11 @@ pub fn start_rest_apis<T>(
 		let pool_push_handler = PoolPushHandler {
 			tx_pool: tx_pool.clone(),
 		};
-		let peers_handler = PeersHandler {
+		let peers_all_handler = PeersAllHandler {
 			peer_store: peer_store.clone(),
+		};
+		let peers_connected_handler = PeersConnectedHandler {
+			p2p_server: p2p_server.clone(),
 		};
 
 		let router = router!(
@@ -293,7 +313,8 @@ pub fn start_rest_apis<T>(
 			sumtree_roots: get "/sumtrees/*" => sumtree_handler,
 			pool_info: get "/pool" => pool_info_handler,
 			pool_push: post "/pool/push" => pool_push_handler,
-			connected_peers: get "/peers" => peers_handler,
+			peers_all: get "/peers/all" => peers_all_handler,
+			peers_connected: get "/peers/connected" => peers_connected_handler,
 		);
 
 		let mut apis = ApiServer::new("/v1".to_string());

@@ -207,6 +207,10 @@ impl Server {
 		addr.ip() == self.config.host && addr.port() == self.config.port
 	}
 
+	pub fn all_peers(&self) -> Vec<Arc<Peer>> {
+		self.peers.read().unwrap().clone()
+	}
+
 	/// Get a peer we're connected to by address.
 	pub fn get_peer(&self, addr: SocketAddr) -> Option<Arc<Peer>> {
 		for p in self.peers.read().unwrap().deref() {
