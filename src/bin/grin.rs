@@ -174,6 +174,11 @@ fn main() {
 			.long("port")
 			.help("Port on which to run the wallet receiver when in receiver mode")
 			.takes_value(true))
+		.arg(Arg::with_name("external")
+			.short("e")
+			.long("external")
+			.help("Listen on 0.0.0.0 interface to allow external connections (default is 127.0.0.1)")
+			.takes_value(false))
 		.arg(Arg::with_name("api_server_address")
 			.short("a")
 			.long("api_server_address")
@@ -338,8 +343,11 @@ fn wallet_command(wallet_args: &ArgMatches) {
 	let mut wallet_config = WalletConfig::default();
 
 	if let Some(port) = wallet_args.value_of("port") {
-		let default_ip = "0.0.0.0";
-		wallet_config.api_http_addr = format!("{}:{}", default_ip, port);
+		wallet_config.api_listen_port = port.to_string();
+	}
+
+	if wallet_args.is_present("external") {
+		wallet_config.api_listen_interface = "0.0.0.0".to_string();
 	}
 
 	if let Some(dir) = wallet_args.value_of("dir") {
@@ -351,7 +359,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 	}
 
 	// Derive the keychain based on seed from seed file and specified passphrase.
- // Generate the initial wallet seed if we are running "wallet init".
+	// Generate the initial wallet seed if we are running "wallet init".
 	if let ("init", Some(_)) = wallet_args.subcommand() {
 		wallet::WalletSeed::init_file(&wallet_config).expect("Failed to init wallet seed file.");
 
