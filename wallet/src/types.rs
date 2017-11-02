@@ -153,10 +153,13 @@ impl From<hyper::error::UriError> for Error {
 pub struct WalletConfig {
 	// Whether to run a wallet
 	pub enable_wallet: bool,
-	// The api address that this api server (i.e. this wallet) will run
-	pub api_http_addr: String,
-	// The api address of a running server node, against which transaction inputs will be checked
-	// during send
+	// The api interface/ip_address that this api server (i.e. this wallet) will run
+	// by default this is 127.0.0.1 (and will not accept connections from external clients)
+	pub api_listen_interface: String,
+	// The port this wallet will run on
+	pub api_listen_port: String,
+	// The api address of a running server node against which transaction inputs
+	// will be checked during send
 	pub check_node_api_http_addr: String,
 	// The directory in which wallet files are stored
 	pub data_file_dir: String,
@@ -166,10 +169,17 @@ impl Default for WalletConfig {
 	fn default() -> WalletConfig {
 		WalletConfig {
 			enable_wallet: false,
-			api_http_addr: "0.0.0.0:13415".to_string(),
+			api_listen_interface: "127.0.0.1".to_string(),
+			api_listen_port: "13415".to_string(),
 			check_node_api_http_addr: "http://127.0.0.1:13413".to_string(),
 			data_file_dir: ".".to_string(),
 		}
+	}
+}
+
+impl WalletConfig {
+	pub fn api_listen_addr(&self) -> String {
+		format!("{}:{}", self.api_listen_interface, self.api_listen_port)
 	}
 }
 

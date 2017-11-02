@@ -24,7 +24,7 @@ pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 	info!(
 		LOGGER,
 		"Starting the Grin wallet receiving daemon at {}...",
-		wallet_config.api_http_addr
+		wallet_config.api_listen_addr()
 	);
 
 	let receive_tx_handler = WalletReceiver {
@@ -43,7 +43,7 @@ pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 
 	let mut apis = ApiServer::new("/v1".to_string());
 	apis.register_handler(router);
-	apis.start(wallet_config.api_http_addr).unwrap_or_else(|e| {
+	apis.start(wallet_config.api_listen_addr()).unwrap_or_else(|e| {
 		error!(LOGGER, "Failed to start Grin wallet receiver: {}.", e);
 	});
 }
