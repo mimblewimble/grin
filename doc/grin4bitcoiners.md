@@ -31,7 +31,7 @@ Maybe you've heard that MimbleWimble doesn't support scripts. And in some way, t
 
 ## Emmission Rate
 
-Compared to Bitcoin's emmission rate of 50 BTC divided in half every 4 years until there are 21 million BTC in circulation. Grin's emission rate is linear, meaning it never drops. The reward is currently set at 50,000,000,000 units with a block goal of 60 seconds.    
+Bitcoin's 10 minute block time has it's intital 50 btc reward cut in half every 4 years until there are 21 million Bitcoin in circulation. Grin's emission rate is linear, meaning it never drops. The block reward is currently set at 50,000,000,000 units with a block goal of 60 seconds.    
 
 ## FAQ
 
