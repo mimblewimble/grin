@@ -98,6 +98,8 @@ At present, the relevant modes of operation are 'server' and 'wallet'. When runn
 
 For a basic example simulating a single node network, create a directory called 'node1' and change your working directory to it. You'll use this directory to run a wallet and create a new blockchain via a server running in mining mode.
 
+You'll need a config file - the easiest is to copy over the grin.toml file from the root grin directory into the node1 directory you just made.
+
 Before running your mining server, a wallet server needs to be set up and listening so that the mining server knows where to send mining rewards. Do this from the first node directory with the following commands:
 
 	node1$ grin wallet init
