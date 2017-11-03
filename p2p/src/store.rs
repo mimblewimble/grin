@@ -94,6 +94,11 @@ impl PeerStore {
 	}
 
 	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
+		// we want to ignore any peer without a well-defined ip
+		let ip = p.addr.ip();
+		if ip.is_unspecified() || ip.is_loopback() {
+			return Ok(());
+		}
 		self.db.put_ser(
 			&to_key(PEER_PREFIX, &mut format!("{}", p.addr).into_bytes())[..],
 			p,
@@ -133,11 +138,11 @@ impl PeerStore {
 	pub fn all_peers(&self) -> Vec<PeerData> {
 		let peers_iter = self.db
 			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()));
-			let mut peers = vec![];
-			for p in peers_iter {
-				peers.push(p);
-			}
-			peers
+		let mut peers = vec![];
+		for p in peers_iter {
+			peers.push(p);
+		}
+		peers
 	}
 
 	/// Convenience method to load a peer data, update its status and save it
