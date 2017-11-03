@@ -172,14 +172,16 @@ impl Handshake {
 fn extract_ip(advertised: &SocketAddr, conn: &TcpStream) -> SocketAddr {
   match advertised {
     &SocketAddr::V4(v4sock) => {
-      if v4sock.ip().is_loopback() {
+      let ip = v4sock.ip();
+      if ip.is_loopback() || ip.is_unspecified() {
         if let Ok(addr) =  conn.peer_addr() {
           return SocketAddr::new(addr.ip(), advertised.port());
         }
       }
     }
     &SocketAddr::V6(v6sock) => {
-      if v6sock.ip().is_loopback() {
+      let ip = v6sock.ip();
+      if ip.is_loopback() || ip.is_unspecified() {
         if let Ok(addr) =  conn.peer_addr() {
           return SocketAddr::new(addr.ip(), advertised.port());
         }
