@@ -25,6 +25,7 @@ use core::{Input, Output, Proof, SwitchCommitHash, Transaction, TxKernel, COINBA
 use consensus::{exceeds_weight, reward, MINIMUM_DIFFICULTY, REWARD};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
+use core::transaction;
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 use util::LOGGER;
 use global;
@@ -47,13 +48,29 @@ pub enum Error {
 		/// The lock_height causing this validation error
 		lock_height: u64,
 	},
+	/// Underlying tx related error
+	Transaction(transaction::Error),
 	/// Underlying Secp256k1 error (signature validation or invalid public key typically)
 	Secp(secp::Error),
+	/// Underlying keychain related error
+	Keychain(keychain::Error),
+}
+
+impl From<transaction::Error> for Error {
+	fn from(e: transaction::Error) -> Error {
+		Error::Transaction(e)
+	}
 }
 
 impl From<secp::Error> for Error {
 	fn from(e: secp::Error) -> Error {
 		Error::Secp(e)
+	}
+}
+
+impl From<keychain::Error> for Error {
+	fn from(e: keychain::Error) -> Error {
+		Error::Keychain(e)
 	}
 }
 
@@ -266,7 +283,7 @@ impl Block {
 		txs: Vec<&Transaction>,
 		keychain: &keychain::Keychain,
 		key_id: &keychain::Identifier,
-	) -> Result<Block, keychain::Error> {
+	) -> Result<Block, Error> {
 		let fees = txs.iter().map(|tx| tx.fee).sum();
 		let (reward_out, reward_proof) = Block::reward_output(keychain, key_id, fees)?;
 		let block = Block::with_reward(prev, txs, reward_out, reward_proof)?;
@@ -281,30 +298,37 @@ impl Block {
 		txs: Vec<&Transaction>,
 		reward_out: Output,
 		reward_kern: TxKernel,
-	) -> Result<Block, secp::Error> {
-		// note: the following reads easily but may not be the most efficient due to
-  // repeated iterations, revisit if a problem
+	) -> Result<Block, Error> {
 		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
 
-		// validate each transaction and gather their kernels
-		let mut kernels = try_map_vec!(txs, |tx| tx.verify_sig(&secp));
-		kernels.push(reward_kern);
+		let mut kernels = vec![];
+		let mut inputs = vec![];
+		let mut outputs = vec![];
 
-		// build vectors with all inputs and all outputs, ordering them by hash
-  // needs to be a fold so we don't end up with a vector of vectors and we
-  // want to fully own the refs (not just a pointer like flat_map).
-		let mut inputs = txs.iter().fold(vec![], |mut acc, ref tx| {
-			let mut inputs = tx.inputs.clone();
-			acc.append(&mut inputs);
-			acc
-		});
-		let mut outputs = txs.iter().fold(vec![], |mut acc, ref tx| {
-			let mut outputs = tx.outputs.clone();
-			acc.append(&mut outputs);
-			acc
-		});
+		// iterate over the all the txs
+		// build the kernel for each
+		// and collect all the kernels, inputs and outputs
+		// to build the block (which we can sort of think of as one big tx?)
+		for tx in txs {
+			// validate each transaction and gather their kernels
+			let excess = tx.validate(&secp)?;
+			let kernel = tx.build_kernel(excess);
+			kernels.push(kernel);
+
+			for input in tx.inputs.clone() {
+				inputs.push(input);
+			}
+
+			for output in tx.outputs.clone() {
+				outputs.push(output);
+			}
+		}
+
+		// also include the reward kernel and output
+		kernels.push(reward_kern);
 		outputs.push(reward_out);
 
+		// now sort everything to the block is built deterministically
 		inputs.sort();
 		outputs.sort();
 		kernels.sort();
