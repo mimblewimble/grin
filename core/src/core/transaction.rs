@@ -189,8 +189,7 @@ pub struct Transaction {
 	pub outputs: Vec<Output>,
 	/// Fee paid by the transaction.
 	pub fee: u64,
-	/// Transaction is not valid before this block height.
-	/// It is invalid for this to be less than the lock_height of any UTXO being spent.
+	/// Transaction is not valid before this chain height.
 	pub lock_height: u64,
 	/// The signature proving the excess is a valid public key, which signs
 	/// the transaction fee.
@@ -461,7 +460,7 @@ impl Input {
 	) -> Result<(), Error> {
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			self.switch_commit,
-			SwitchCommitKey::from_features_and_lock_height(output.features, self.lock_height),
+			SwitchCommitHashKey::from_features_and_lock_height(output.features, self.lock_height),
 		);
 
 		if switch_commit_hash != output.switch_commit_hash {
@@ -486,14 +485,18 @@ bitflags! {
 	}
 }
 
-pub struct SwitchCommitKey ([u8; SWITCH_COMMIT_KEY_SIZE]);
+/// Definition of the switch commitment hash
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SwitchCommitHashKey ([u8; SWITCH_COMMIT_KEY_SIZE]);
 
-impl SwitchCommitKey {
-	pub fn from_features_and_lock_height(features: OutputFeatures, lock_height: u64) -> SwitchCommitKey {
+impl SwitchCommitHashKey {
+	pub fn from_features_and_lock_height(features: OutputFeatures, lock_height: u64) -> SwitchCommitHashKey {
 		let mut bytes = [0; SWITCH_COMMIT_KEY_SIZE];
 		bytes[0] = features.bits();
-		BigEndian::write_u64(&mut bytes[1..9], lock_height);
-		SwitchCommitKey(bytes)
+		// seems wasteful to take up a full 8 bytes (of 20 bytes) to store the lock_height
+		// 4 bytes will give us approx 4,000 years with 1 min blocks (unless my math is way off)
+		BigEndian::write_u32(&mut bytes[1..5], lock_height as u32);
+		SwitchCommitHashKey(bytes)
 	}
 }
 
@@ -537,13 +540,7 @@ impl AsRef<[u8]> for SwitchCommitHash {
 
 impl SwitchCommitHash {
 	/// Builds a switch commitment hash from a switch commit using blake2
-	pub fn from_switch_commit(switch_commit: Commitment, key: SwitchCommitKey) -> SwitchCommitHash {
-		debug!(
-			LOGGER,
-			"SwitchCommitHash::from_switch_commit: {:?}, {:?}",
-			switch_commit,
-			key,
-		);
+	pub fn from_switch_commit(switch_commit: Commitment, key: SwitchCommitHashKey) -> SwitchCommitHash {
 		let switch_commit_hash = blake2b(SWITCH_COMMIT_HASH_SIZE, &key.0, &switch_commit.0);
 		let switch_commit_hash = switch_commit_hash.as_bytes();
 		let mut h = [0; SWITCH_COMMIT_HASH_SIZE];
@@ -765,7 +762,7 @@ mod test {
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			switch_commit,
-			SwitchCommitKey::from_features_and_lock_height(DEFAULT_OUTPUT, 0),
+			SwitchCommitHashKey::from_features_and_lock_height(DEFAULT_OUTPUT, 0),
 		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(5, &key_id, commit, msg).unwrap();
@@ -795,7 +792,7 @@ mod test {
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			switch_commit,
-			SwitchCommitKey::from_features_and_lock_height(DEFAULT_OUTPUT, 0),
+			SwitchCommitHashKey::from_features_and_lock_height(DEFAULT_OUTPUT, 0),
 		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(1003, &key_id, commit, msg).unwrap();

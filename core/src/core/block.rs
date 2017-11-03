@@ -23,7 +23,7 @@ use core::{
 	Committed,
 	Input,
 	Output,
-	SwitchCommitKey,
+	SwitchCommitHashKey,
 	SwitchCommitHash,
 	Proof,
 	TxKernel,
@@ -577,7 +577,7 @@ impl Block {
 
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			switch_commit,
-			SwitchCommitKey::from_features_and_lock_height(COINBASE_OUTPUT, lock_height),
+			SwitchCommitHashKey::from_features_and_lock_height(COINBASE_OUTPUT, lock_height),
 		);
 
 		trace!(

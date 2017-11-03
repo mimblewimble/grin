@@ -27,7 +27,7 @@
 
 use util::{secp, static_secp_instance};
 
-use core::{Transaction, Input, Output, SwitchCommitKey, SwitchCommitHash, DEFAULT_OUTPUT};
+use core::{Transaction, Input, Output, SwitchCommitHashKey, SwitchCommitHash, DEFAULT_OUTPUT};
 use core::transaction::kernel_sig_msg;
 use keychain;
 use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
@@ -81,7 +81,7 @@ pub fn output(value: u64, lock_height: u64, key_id: Identifier) -> Box<Append> {
 		let switch_commit = build.keychain.switch_commit(&key_id).unwrap();
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			switch_commit,
-			SwitchCommitKey::from_features_and_lock_height(DEFAULT_OUTPUT, lock_height),
+			SwitchCommitHashKey::from_features_and_lock_height(DEFAULT_OUTPUT, lock_height),
 		);
 		trace!(
 			LOGGER,

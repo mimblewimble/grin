@@ -160,7 +160,7 @@ pub fn receive_coinbase(
 	let mut block_fees = block_fees.clone();
 	block_fees.key_id = Some(key_id.clone());
 
-	debug!(LOGGER, "block_fees updated - {:?}", block_fees);
+	debug!(LOGGER, "block_fees updated key_id - {:?}", block_fees.key_id);
 
 	let (out, kern) = Block::reward_output(
 		&keychain,
