@@ -26,7 +26,6 @@ use core::hash::Hashed;
 use core::pmmr::Summable;
 use keychain::{Identifier, Keychain};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
-use util::LOGGER;
 
 /// The size to use for the stored blake2 hash of a switch_commitment
 pub const SWITCH_COMMIT_HASH_SIZE: usize = 20;
@@ -65,7 +64,7 @@ macro_rules! hashable_ord {
 }
 
 /// Errors thrown by Block validation
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Error {
 	/// Transaction fee can't be odd, due to half fee burning
 	OddFee,
@@ -305,49 +304,46 @@ impl Transaction {
 	/// sum to zero as they should in r.G + v.H then only k.G the excess
 	/// of the sum of r.G should be left. And r.G is the definition of a
 	/// public key generated using r as a private key.
-	pub fn verify_sig(&self, secp: &Secp256k1) -> Result<TxKernel, secp::Error> {
+	pub fn verify_sig(&self, secp: &Secp256k1) -> Result<Commitment, secp::Error> {
 		let rsum = self.sum_commitments(secp)?;
 
 		let msg = Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height))?;
 		let sig = Signature::from_der(secp, &self.excess_sig)?;
 
 		// pretend the sum is a public key (which it is, being of the form r.G) and
-  // verify the transaction sig with it
-  //
-  // we originally converted the commitment to a key_id here (commitment to zero)
-  // and then passed the key_id to secp.verify()
-  // the secp api no longer allows us to do this so we have wrapped the complexity
-  // of generating a public key from a commitment behind verify_from_commit
+		// verify the transaction sig with it
+		//
+		// we originally converted the commitment to a key_id here (commitment to zero)
+		// and then passed the key_id to secp.verify()
+		// the secp api no longer allows us to do this so we have wrapped the complexity
+		// of generating a public key from a commitment behind verify_from_commit
 		secp.verify_from_commit(&msg, &sig, &rsum)?;
 
-		let kernel = TxKernel {
+		Ok(rsum)
+	}
+
+	pub fn build_kernel(&self, excess: Commitment) -> TxKernel {
+		TxKernel {
 			features: DEFAULT_KERNEL,
-			excess: rsum,
+			excess: excess,
 			excess_sig: self.excess_sig.clone(),
 			fee: self.fee,
 			lock_height: self.lock_height,
-		};
-		debug!(
-			LOGGER,
-			"tx verify_sig: fee - {}, lock_height - {}",
-			kernel.fee,
-			kernel.lock_height
-		);
-
-		Ok(kernel)
+		}
 	}
 
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(&self, secp: &Secp256k1) -> Result<TxKernel, Error> {
+	pub fn validate(&self, secp: &Secp256k1) -> Result<Commitment, Error> {
 		if self.fee & 1 != 0 {
 			return Err(Error::OddFee);
 		}
 		for out in &self.outputs {
 			out.verify_proof(secp)?;
 		}
-		self.verify_sig(secp).map_err(&From::from)
+		let excess = self.verify_sig(secp)?;
+		Ok(excess)
 	}
 }
 
