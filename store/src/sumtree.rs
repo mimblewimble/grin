@@ -383,10 +383,9 @@ where
 	/// sync'd size.
 	pub fn unpruned_size(&self) -> io::Result<u64> {
 		let total_shift = self.pruned_nodes.get_shift(::std::u64::MAX).unwrap();
-		let rm_len = self.remove_log.len() as u64;
 		let record_len = 32 + T::sum_len() as u64;
 		let sz = self.hashsum_file.size()?;
-		Ok(sz / record_len + rm_len + total_shift)
+		Ok(sz / record_len + total_shift)
 	}
 
 	/// Syncs all files to disk. A call to sync is required to ensure all the
