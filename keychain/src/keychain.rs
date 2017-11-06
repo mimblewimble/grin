@@ -94,14 +94,14 @@ impl Keychain {
 		Ok(key_id)
 	}
 
-	fn derived_key_search(&self, key_id: &Identifier, n_size: Option<u32>) -> Result<SecretKey, Error> {
+	fn derived_key_search(&self, key_id: &Identifier, n_child: Option<u32>) -> Result<SecretKey, Error> {
 		if let Some(key) = self.key_overrides.get(key_id) {
 			return Ok(*key);
 		}
 
 		trace!(LOGGER, "Derived Key key_id: {}", key_id);
 		
-		if let Some(n) = n_size {
+		if let Some(n) = n_child{
 			let extkey = self.extkey.derive(&self.secp, n)?;
 			return Ok(extkey.key);
 		};
