@@ -201,7 +201,7 @@ fn main() {
 				provided, the command will attempt to contact the receiver at that \
 				address and send the transaction directly.")
 			.arg(Arg::with_name("amount")
-				.help("Amount to send in the smallest denomination")
+				.help("Number of coins to send with optional fraction, e.g. 12.423")
 				.index(1))
 			.arg(Arg::with_name("minimum_confirmations")
 				.help("Minimum number of confirmations required for an output to be spendable.")
@@ -220,7 +220,7 @@ fn main() {
 				key. Similar to send but burns an output to allow single-party \
 				transactions.")
 			.arg(Arg::with_name("amount")
-				.help("Amount to burn in the smallest denomination")
+				.help("Number of coins to burn")
 				.index(1))
 			.arg(Arg::with_name("minimum_confirmations")
 				.help("Minimum number of confirmations required for an output to be spendable.")
@@ -389,9 +389,9 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		("send", Some(send_args)) => {
 			let amount = send_args
 				.value_of("amount")
-				.expect("Amount to send required")
-				.parse()
-				.expect("Could not parse amount as a whole number.");
+				.expect("Amount to send required");
+			let amount = core::core::amount_from_hr_string(amount)
+				.expect("Could not parse amount as a number with optional decimal point.");
 			let minimum_confirmations: u64 = send_args
 				.value_of("minimum_confirmations")
 				.unwrap_or("1")
@@ -401,20 +401,25 @@ fn wallet_command(wallet_args: &ArgMatches) {
 			if let Some(d) = send_args.value_of("dest") {
 				dest = d;
 			}
-			wallet::issue_send_tx(
+			let result=wallet::issue_send_tx(
 				&wallet_config,
 				&keychain,
 				amount,
 				minimum_confirmations,
 				dest.to_string(),
-			).unwrap();
+			);
+			match result {
+				Ok(_) => {}, //success messaged logged internally
+				Err(wallet::Error::NotEnoughFunds(_)) => {},
+				Err(e) => panic!(e),
+			};
 		}
 		("burn", Some(send_args)) => {
 			let amount = send_args
 				.value_of("amount")
-				.expect("Amount to burn required")
-				.parse()
-				.expect("Could not parse amount as a whole number.");
+				.expect("Amount to burn required");
+			let amount = core::core::amount_from_hr_string(amount)
+				.expect("Could not parse amount as number with optional decimal point.");
 			let minimum_confirmations: u64 = send_args
 				.value_of("minimum_confirmations")
 				.unwrap_or("1")

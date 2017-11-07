@@ -63,9 +63,7 @@ impl Difficulty {
 		let mut in_vec = h.to_vec();
 		in_vec.truncate(8);
 		let num = BigEndian::read_u64(&in_vec);
-		Difficulty {
-			num: max_target / num,
-		}
+		Difficulty { num: max_target / num }
 	}
 
 	/// Converts the difficulty into a u64
@@ -83,36 +81,28 @@ impl fmt::Display for Difficulty {
 impl Add<Difficulty> for Difficulty {
 	type Output = Difficulty;
 	fn add(self, other: Difficulty) -> Difficulty {
-		Difficulty {
-			num: self.num + other.num,
-		}
+		Difficulty { num: self.num + other.num }
 	}
 }
 
 impl Sub<Difficulty> for Difficulty {
 	type Output = Difficulty;
 	fn sub(self, other: Difficulty) -> Difficulty {
-		Difficulty {
-			num: self.num - other.num,
-		}
+		Difficulty { num: self.num - other.num }
 	}
 }
 
 impl Mul<Difficulty> for Difficulty {
 	type Output = Difficulty;
 	fn mul(self, other: Difficulty) -> Difficulty {
-		Difficulty {
-			num: self.num * other.num,
-		}
+		Difficulty { num: self.num * other.num }
 	}
 }
 
 impl Div<Difficulty> for Difficulty {
 	type Output = Difficulty;
 	fn div(self, other: Difficulty) -> Difficulty {
-		Difficulty {
-			num: self.num / other.num,
-		}
+		Difficulty { num: self.num / other.num }
 	}
 }
 
@@ -167,8 +157,6 @@ impl<'de> de::Visitor<'de> for DiffVisitor {
 				&"a value number",
 			));
 		};
-		Ok(Difficulty {
-			num: num_in.unwrap(),
-		})
+		Ok(Difficulty { num: num_in.unwrap() })
 	}
 }

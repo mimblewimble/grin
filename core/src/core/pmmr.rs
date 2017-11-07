@@ -267,14 +267,14 @@ where
 		let mut pos = elmt_pos;
 
 		// we look ahead one position in the MMR, if the expected node has a higher
-  // height it means we have to build a higher peak by summing with a previous
-  // sibling. we do it iteratively in case the new peak itself allows the
-  // creation of another parent.
+		// height it means we have to build a higher peak by summing with a previous
+		// sibling. we do it iteratively in case the new peak itself allows the
+		// creation of another parent.
 		while bintree_postorder_height(pos + 1) > height {
 			let left_sibling = bintree_jump_left_sibling(pos);
-			let left_hashsum = self.backend
-				.get(left_sibling)
-				.expect("missing left sibling in tree, should not have been pruned");
+			let left_hashsum = self.backend.get(left_sibling).expect(
+				"missing left sibling in tree, should not have been pruned",
+			);
 			current_hashsum = left_hashsum + current_hashsum;
 
 			to_append.push(current_hashsum.clone());
@@ -293,8 +293,8 @@ where
 	/// well as the consumer-provided index of when the change occurred.
 	pub fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {
 		// identify which actual position we should rewind to as the provided
-  // position is a leaf, which may had some parent that needs to exist
-  // afterward for the MMR to be valid
+		// position is a leaf, which may had some parent that needs to exist
+		// afterward for the MMR to be valid
 		let mut pos = position;
 		while bintree_postorder_height(pos + 1) > 0 {
 			pos += 1;
@@ -320,7 +320,7 @@ where
 		}
 
 		// loop going up the tree, from node to parent, as long as we stay inside
-  // the tree.
+		// the tree.
 		let mut to_prune = vec![];
 		let mut current = position;
 		while current + 1 < self.last_pos {
@@ -332,7 +332,7 @@ where
 			to_prune.push(current);
 
 			// if we have a pruned sibling, we can continue up the tree
-   // otherwise we're done
+			// otherwise we're done
 			if let None = self.backend.get(sibling) {
 				current = parent;
 			} else {
@@ -357,13 +357,13 @@ where
 		let mut last_leaf = self.last_pos;
 		let size = self.unpruned_size();
 		// Special case that causes issues in bintree functions,
-  // just return
+		// just return
 		if size == 1 {
 			return_vec.push(self.backend.get(last_leaf).unwrap());
 			return return_vec;
 		}
 		// if size is even, we're already at the bottom, otherwise
-  // we need to traverse down to it (reverse post-order direction)
+		// we need to traverse down to it (reverse post-order direction)
 		if size % 2 == 1 {
 			last_leaf = bintree_rightmost(self.last_pos);
 		}
@@ -503,21 +503,19 @@ pub struct PruneList {
 impl PruneList {
 	/// Instantiate a new empty prune list
 	pub fn new() -> PruneList {
-		PruneList {
-			pruned_nodes: vec![],
-		}
+		PruneList { pruned_nodes: vec![] }
 	}
 
 	/// Computes by how many positions a node at pos should be shifted given the
 	/// number of nodes that have already been pruned before it.
 	pub fn get_shift(&self, pos: u64) -> Option<u64> {
 		// get the position where the node at pos would fit in the pruned list, if
-  // it's already pruned, nothing to skip
+		// it's already pruned, nothing to skip
 		match self.pruned_pos(pos) {
 			None => None,
 			Some(idx) => {
 				// skip by the number of elements pruned in the preceding subtrees,
-	// which is the sum of the size of each subtree
+				// which is the sum of the size of each subtree
 				Some(
 					self.pruned_nodes[0..(idx as usize)]
 						.iter()
@@ -559,8 +557,8 @@ impl PruneList {
 			Err(idx) => {
 				if self.pruned_nodes.len() > idx {
 					// the node at pos can't be a child of lower position nodes by MMR
-	 // construction but can be a child of the next node, going up parents
-	 // from pos to make sure it's not the case
+					// construction but can be a child of the next node, going up parents
+					// from pos to make sure it's not the case
 					let next_peak_pos = self.pruned_nodes[idx];
 					let mut cursor = pos;
 					loop {
@@ -586,13 +584,13 @@ impl PruneList {
 /// of the range.
 fn peaks(num: u64) -> Vec<u64> {
 	// detecting an invalid mountain range, when siblings exist but no parent
- // exists
+	// exists
 	if bintree_postorder_height(num + 1) > bintree_postorder_height(num) {
 		return vec![];
 	}
 
 	// our top peak is always on the leftmost side of the tree and leftmost trees
- // have for index a binary values with all 1s (i.e. 11, 111, 1111, etc.)
+	// have for index a binary values with all 1s (i.e. 11, 111, 1111, etc.)
 	let mut top = 1;
 	while (top - 1) <= num {
 		top = top << 1;
@@ -605,7 +603,7 @@ fn peaks(num: u64) -> Vec<u64> {
 	let mut peaks = vec![top];
 
 	// going down the range, next peaks are right neighbors of the top. if one
- // doesn't exist yet, we go down to a smaller peak to the left
+	// doesn't exist yet, we go down to a smaller peak to the left
 	let mut peak = top;
 	'outer: loop {
 		peak = bintree_jump_right_sibling(peak);
@@ -845,9 +843,9 @@ mod test {
 		type Sum = u64;
 		fn sum(&self) -> u64 {
 			// sums are not allowed to overflow, so we use this simple
-   // non-injective "sum" function that will still be homomorphic
-			self.0[0] as u64 * 0x1000 + self.0[1] as u64 * 0x100 + self.0[2] as u64 * 0x10
-				+ self.0[3] as u64
+			// non-injective "sum" function that will still be homomorphic
+			self.0[0] as u64 * 0x1000 + self.0[1] as u64 * 0x100 + self.0[2] as u64 * 0x10 +
+				self.0[3] as u64
 		}
 		fn sum_len() -> usize {
 			8
@@ -897,8 +895,8 @@ mod test {
 
 		// two elements
 		pmmr.push(elems[1], None::<TestElem>).unwrap();
-		let sum2 = HashSum::from_summable(1, &elems[0], None::<TestElem>)
-			+ HashSum::from_summable(2, &elems[1], None::<TestElem>);
+		let sum2 = HashSum::from_summable(1, &elems[0], None::<TestElem>) +
+			HashSum::from_summable(2, &elems[1], None::<TestElem>);
 		assert_eq!(pmmr.root(), sum2);
 		assert_eq!(pmmr.unpruned_size(), 3);
 
@@ -910,9 +908,9 @@ mod test {
 
 		// four elements
 		pmmr.push(elems[3], None::<TestElem>).unwrap();
-		let sum4 = sum2
-			+ (HashSum::from_summable(4, &elems[2], None::<TestElem>)
-				+ HashSum::from_summable(5, &elems[3], None::<TestElem>));
+		let sum4 = sum2 +
+			(HashSum::from_summable(4, &elems[2], None::<TestElem>) +
+				 HashSum::from_summable(5, &elems[3], None::<TestElem>));
 		assert_eq!(pmmr.root(), sum4);
 		assert_eq!(pmmr.unpruned_size(), 7);
 
@@ -924,9 +922,9 @@ mod test {
 
 		// six elements
 		pmmr.push(elems[5], None::<TestElem>).unwrap();
-		let sum6 = sum4.clone()
-			+ (HashSum::from_summable(8, &elems[4], None::<TestElem>)
-				+ HashSum::from_summable(9, &elems[5], None::<TestElem>));
+		let sum6 = sum4.clone() +
+			(HashSum::from_summable(8, &elems[4], None::<TestElem>) +
+				 HashSum::from_summable(9, &elems[5], None::<TestElem>));
 		assert_eq!(pmmr.root(), sum6.clone());
 		assert_eq!(pmmr.unpruned_size(), 10);
 
@@ -938,11 +936,11 @@ mod test {
 
 		// eight elements
 		pmmr.push(elems[7], None::<TestElem>).unwrap();
-		let sum8 = sum4
-			+ ((HashSum::from_summable(8, &elems[4], None::<TestElem>)
-				+ HashSum::from_summable(9, &elems[5], None::<TestElem>))
-				+ (HashSum::from_summable(11, &elems[6], None::<TestElem>)
-					+ HashSum::from_summable(12, &elems[7], None::<TestElem>)));
+		let sum8 = sum4 +
+			((HashSum::from_summable(8, &elems[4], None::<TestElem>) +
+				  HashSum::from_summable(9, &elems[5], None::<TestElem>)) +
+				 (HashSum::from_summable(11, &elems[6], None::<TestElem>) +
+					  HashSum::from_summable(12, &elems[7], None::<TestElem>)));
 		assert_eq!(pmmr.root(), sum8);
 		assert_eq!(pmmr.unpruned_size(), 15);
 
@@ -991,8 +989,7 @@ mod test {
 
 		let res = pmmr.get_last_n_insertions(19);
 		assert!(
-			res[0].sum == 4 && res[1].sum == 3 && res[2].sum == 2 && res[3].sum == 1
-				&& res.len() == 4
+			res[0].sum == 4 && res[1].sum == 3 && res[2].sum == 2 && res[3].sum == 1 && res.len() == 4
 		);
 
 		pmmr.push(elems[5], None::<TestElem>).unwrap();
@@ -1002,8 +999,7 @@ mod test {
 
 		let res = pmmr.get_last_n_insertions(7);
 		assert!(
-			res[0].sum == 9 && res[1].sum == 8 && res[2].sum == 7 && res[3].sum == 6
-				&& res.len() == 7
+			res[0].sum == 9 && res[1].sum == 8 && res[2].sum == 7 && res[3].sum == 6 && res.len() == 7
 		);
 	}
 

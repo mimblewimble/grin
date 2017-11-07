@@ -17,7 +17,7 @@ use serde_json;
 use api;
 use client;
 use checker;
-use core::core::{build, Transaction};
+use core::core::{build, Transaction, amount_to_hr_string};
 use core::ser;
 use keychain::{BlindingFactor, Identifier, Keychain};
 use receiver::TxWrapper;
@@ -88,10 +88,18 @@ fn build_send_tx(
 	})?;
 
 	// build transaction skeleton with inputs and change
-	let mut parts = inputs_and_change(&coins, config, keychain, key_id, amount)?;
+	let parts = inputs_and_change(&coins, config, keychain, key_id, amount);
+
+	if let Err(p) = parts {
+		let total: u64 = coins.iter().map(|c| c.value).sum();
+		error!(LOGGER, "Transaction not sent - Not enough funds (Max: {})", amount_to_hr_string(total));
+		return Err(p);
+	}
+
+	let mut parts=parts.unwrap();
 
 	// This is more proof of concept than anything but here we set lock_height
- // on tx being sent (based on current chain height via api).
+	// on tx being sent (based on current chain height via api).
 	parts.push(build::with_lock_height(lock_height));
 
 	let (tx, blind) = build::transaction(parts, &keychain)?;

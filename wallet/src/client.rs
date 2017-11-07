@@ -69,7 +69,14 @@ fn single_send_partial_tx(url: &str, partial_tx: &JSONPartialTx) -> Result<(), E
 	req.set_body(json);
 
 	let work = client.request(req);
-	let _ = core.run(work)?;
+	let _ = core.run(work).and_then(|res|{
+		if res.status()==hyper::StatusCode::Ok {
+			info!(LOGGER, "Transaction sent successfully");
+		} else {
+			error!(LOGGER, "Error sending transaction - status: {}", res.status());
+		}
+		Ok(())
+	})?;
 	Ok(())
 }
 

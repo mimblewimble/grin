@@ -153,9 +153,7 @@ impl HashWriter {
 
 impl Default for HashWriter {
 	fn default() -> HashWriter {
-		HashWriter {
-			state: Blake2b::new(32),
-		}
+		HashWriter { state: Blake2b::new(32) }
 	}
 }
 
@@ -204,8 +202,7 @@ impl<T: Writeable> VerifySortOrder<T> for Vec<T> {
 			.map(|item| item.hash())
 			.collect::<Vec<_>>()
 			.windows(2)
-			.any(|pair| pair[0] > pair[1])
-		{
+			.any(|pair| pair[0] > pair[1]) {
 			true => Err(ser::Error::BadlySorted),
 			false => Ok(()),
 		}
