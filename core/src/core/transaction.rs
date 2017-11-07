@@ -129,8 +129,9 @@ impl Writeable for TxKernel {
 
 impl Readable for TxKernel {
 	fn read(reader: &mut Reader) -> Result<TxKernel, ser::Error> {
-		let features =
-			KernelFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
+		let features = KernelFeatures::from_bits(reader.read_u8()?).ok_or(
+			ser::Error::CorruptedData,
+		)?;
 
 		Ok(TxKernel {
 			features: features,
@@ -483,8 +484,9 @@ impl Writeable for Output {
 /// an Output from a binary stream.
 impl Readable for Output {
 	fn read(reader: &mut Reader) -> Result<Output, ser::Error> {
-		let features =
-			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
+		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
+			ser::Error::CorruptedData,
+		)?;
 
 		Ok(Output {
 			features: features,
@@ -520,11 +522,13 @@ impl Output {
 	/// value from the range proof and the commitment
 	pub fn recover_value(&self, keychain: &Keychain, key_id: &Identifier) -> Option<u64> {
 		match keychain.rewind_range_proof(key_id, self.commit, self.proof) {
-			Ok(proof_info) => if proof_info.success {
-				Some(proof_info.value)
-			} else {
-				None
-			},
+			Ok(proof_info) => {
+				if proof_info.success {
+					Some(proof_info.value)
+				} else {
+					None
+				}
+			}
 			Err(_) => None,
 		}
 	}
@@ -542,9 +546,7 @@ impl Summable for SumCommit {
 	type Sum = SumCommit;
 
 	fn sum(&self) -> SumCommit {
-		SumCommit {
-			commit: self.commit.clone(),
-		}
+		SumCommit { commit: self.commit.clone() }
 	}
 
 	fn sum_len() -> usize {
@@ -563,9 +565,7 @@ impl Readable for SumCommit {
 	fn read(reader: &mut Reader) -> Result<SumCommit, ser::Error> {
 		let commit = Commitment::read(reader)?;
 
-		Ok(SumCommit {
-			commit: commit,
-		})
+		Ok(SumCommit { commit: commit })
 	}
 }
 
@@ -574,15 +574,17 @@ impl ops::Add for SumCommit {
 
 	fn add(self, other: SumCommit) -> SumCommit {
 		let secp = static_secp_instance();
-		let sum = match secp.lock().unwrap()
-			.commit_sum(vec![self.commit.clone(), other.commit.clone()], vec![])
-		{
+		let sum = match secp.lock().unwrap().commit_sum(
+			vec![
+				self.commit.clone(),
+				other.commit.clone(),
+			],
+			vec![],
+		) {
 			Ok(s) => s,
 			Err(_) => Commitment::from_vec(vec![1; 33]),
 		};
-		SumCommit {
-			commit: sum,
-		}
+		SumCommit { commit: sum }
 	}
 }
 
