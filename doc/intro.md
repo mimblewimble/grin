@@ -87,7 +87,7 @@ fundamental properties are achieved.
 
 ### Balance
 
-Building up on the properties of ECC we described above, one can obscure the values
+Building upon the properties of ECC we described above, one can obscure the values
 in a transaction.
 
 If _v_ is the value of a transaction input or output and _H_ an elliptic curve, we can simply
