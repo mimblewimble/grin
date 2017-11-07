@@ -19,7 +19,7 @@ use types::{WalletConfig, WalletData};
 
 pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 	let root_key_id = keychain.root_key_id();
-	let _ = checker::refresh_outputs(&config, &keychain);
+	let result = checker::refresh_outputs(&config, &keychain);
 
 	// just read the wallet here, no need for a write lock
 	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
@@ -56,4 +56,8 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 			);
 		}
 	});
+
+	if let Err(e) = result {
+		println!("WARNING - Showing local data only - Wallet was unable to contact a node to update and verify the outputs shown here.");
+	}
 }
