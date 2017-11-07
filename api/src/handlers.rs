@@ -58,7 +58,7 @@ impl UtxoHandler {
 			.get_block_header_by_output_commit(&commit)
 			.map_err(|_| Error::NotFound)?;
 
-		Ok(Output::from_output(&out, &header))
+		Ok(Output::from_output(&out, &header, false))
 	}
 }
 
@@ -138,10 +138,10 @@ impl Handler for SumTreeHandler {
 			}
 		}
 		match *path_elems.last().unwrap() {
-			"roots" => json_response(&self.get_roots()),
-			"lastutxos" => json_response(&self.get_last_n_utxo(last_n)),
-			"lastrangeproofs" => json_response(&self.get_last_n_rangeproof(last_n)),
-			"lastkernels" => json_response(&self.get_last_n_kernel(last_n)),
+			"roots" => json_response_pretty(&self.get_roots()),
+			"lastutxos" => json_response_pretty(&self.get_last_n_utxo(last_n)),
+			"lastrangeproofs" => json_response_pretty(&self.get_last_n_rangeproof(last_n)),
+			"lastkernels" => json_response_pretty(&self.get_last_n_kernel(last_n)),
 			_ => Ok(Response::with((status::BadRequest, ""))),
 		}
 	}
@@ -154,7 +154,7 @@ pub struct PeersAllHandler {
 impl Handler for PeersAllHandler {
 	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
 		let peers = &self.peer_store.all_peers();
-		json_response(&peers)
+		json_response_pretty(&peers)
 	}
 }
 
@@ -266,12 +266,22 @@ fn json_response<T>(s: &T) -> IronResult<Response>
 where
 	T: Serialize,
 {
-	match serde_json::to_string_pretty(s) {
+	match serde_json::to_string(s) {
 		Ok(json) => Ok(Response::with((status::Ok, json))),
 		Err(_) => Ok(Response::with((status::InternalServerError, ""))),
 	}
 }
 
+// pretty-printed version of above
+fn json_response_pretty<T>(s: &T) -> IronResult<Response>
+where
+	T: Serialize,
+{
+	match serde_json::to_string_pretty(s) {
+		Ok(json) => Ok(Response::with((status::Ok, json))),
+		Err(_) => Ok(Response::with((status::InternalServerError, ""))),
+	}
+}
 /// Start all server HTTP handlers. Register all of them with Iron
 /// and runs the corresponding HTTP server.
 pub fn start_rest_apis<T>(

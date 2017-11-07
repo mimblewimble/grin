@@ -19,6 +19,7 @@ use util::secp;
 use util::secp::{Message, Secp256k1, Signature};
 use util::secp::key::SecretKey;
 use util::secp::pedersen::{Commitment, ProofMessage, ProofInfo, RangeProof};
+use util::logger::LOGGER;
 use blake2;
 use blind::{BlindSum, BlindingFactor};
 use extkey::{self, Identifier};
@@ -93,10 +94,17 @@ impl Keychain {
 		Ok(key_id)
 	}
 
-	fn derived_key(&self, key_id: &Identifier) -> Result<SecretKey, Error> {
+	fn derived_key_search(&self, key_id: &Identifier, n_child: Option<u32>) -> Result<SecretKey, Error> {
 		if let Some(key) = self.key_overrides.get(key_id) {
 			return Ok(*key);
 		}
+
+		trace!(LOGGER, "Derived Key key_id: {}", key_id);
+		
+		if let Some(n) = n_child{
+			let extkey = self.extkey.derive(&self.secp, n)?;
+			return Ok(extkey.key);
+		};
 
 		for i in 1..10000 {
 			let extkey = self.extkey.derive(&self.secp, i)?;
@@ -109,8 +117,22 @@ impl Keychain {
 		))
 	}
 
+	fn derived_key(&self, key_id: &Identifier) -> Result<SecretKey, Error> {
+		self.derived_key_search(key_id, None)
+	}
+
+	fn derived_key_from_index(&self, key_id: &Identifier, n_child:u32) -> Result<SecretKey, Error> {
+		self.derived_key_search(key_id, Some(n_child))
+	}
+
 	pub fn commit(&self, amount: u64, key_id: &Identifier) -> Result<Commitment, Error> {
 		let skey = self.derived_key(key_id)?;
+		let commit = self.secp.commit(amount, skey)?;
+		Ok(commit)
+	}
+
+	pub fn commit_with_key_index(&self, amount: u64, key_id: &Identifier, n_child: u32) -> Result<Commitment, Error> {
+		let skey = self.derived_key_from_index(key_id, n_child)?;
 		let commit = self.secp.commit(amount, skey)?;
 		Ok(commit)
 	}

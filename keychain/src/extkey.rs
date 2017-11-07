@@ -134,7 +134,7 @@ impl Identifier {
 	}
 
 	fn from_hex(hex: &str) -> Result<Identifier, Error> {
-		let bytes = util::from_hex(hex.to_string())?;
+		let bytes = util::from_hex(hex.to_string()).unwrap();
 		Ok(Identifier::from_bytes(&bytes))
 	}
 

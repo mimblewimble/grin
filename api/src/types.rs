@@ -138,7 +138,7 @@ pub struct Output {
 	/// The homomorphic commitment representing the output's amount
 	pub commit: pedersen::Commitment,
 	/// A proof that the commitment is in the right range
-	pub proof: pedersen::RangeProof,
+	pub proof: Option<pedersen::RangeProof>,
 	/// The height of the block creating this output
 	pub height: u64,
 	/// The lock height (earliest block this output can be spent)
@@ -146,7 +146,7 @@ pub struct Output {
 }
 
 impl Output {
-	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader) -> Output {
+	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader, include_proof:bool) -> Output {
 		let (output_type, lock_height) = match output.features {
 			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
 				OutputType::Coinbase,
@@ -158,7 +158,10 @@ impl Output {
 		Output {
 			output_type: output_type,
 			commit: output.commit,
-			proof: output.proof,
+			proof: match include_proof {
+				true => Some(output.proof),
+				false => None,
+			},
 			height: block_header.height,
 			lock_height: lock_height,
 		}

@@ -67,7 +67,7 @@ pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(),
 			.filter(|out| out.status != OutputStatus::Spent)
 		{
 			let key_id = keychain.derive_key_id(out.n_child).unwrap();
-			let commit = keychain.commit(out.value, &key_id).unwrap();
+			let commit = keychain.commit_with_key_index(out.value, &key_id, out.n_child).unwrap();
 			commits.push(commit);
 			wallet_outputs.insert(commit, out.key_id.clone());
 		}
