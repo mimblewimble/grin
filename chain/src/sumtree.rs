@@ -20,7 +20,6 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use util::secp;
 use util::secp::pedersen::{RangeProof, Commitment};
 
 use core::core::{Block, Output, SumCommit, TxKernel};
@@ -229,7 +228,6 @@ impl<'a> Extension<'a> {
 	/// applied in order of the provided Vec. If pruning is enabled, inputs also
 	/// prune MMR data.
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
-		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 
 		// doing inputs first guarantees an input can't spend an output in the
   // same block, enforcing block cut-through
@@ -261,7 +259,6 @@ impl<'a> Extension<'a> {
 				.push(
 					SumCommit {
 						commit: out.commitment(),
-						secp: secp.clone(),
 					},
 					Some(out.switch_commit_hash()),
 				)

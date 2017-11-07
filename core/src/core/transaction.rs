@@ -17,6 +17,7 @@
 use byteorder::{BigEndian, ByteOrder};
 use blake2::blake2b::blake2b;
 use util::secp::{self, Message, Secp256k1, Signature};
+use util::static_secp_instance;
 use util::secp::pedersen::{Commitment, RangeProof};
 use std::cmp::Ordering;
 use std::ops;
@@ -322,6 +323,7 @@ impl Transaction {
 		Ok(rsum)
 	}
 
+	/// Builds a transaction kernel
 	pub fn build_kernel(&self, excess: Commitment) -> TxKernel {
 		TxKernel {
 			features: DEFAULT_KERNEL,
@@ -533,8 +535,6 @@ impl Output {
 pub struct SumCommit {
 	/// Output commitment
 	pub commit: Commitment,
-	/// Secp256k1 used to sum
-	pub secp: Secp256k1,
 }
 
 /// Outputs get summed through their commitments.
@@ -544,7 +544,6 @@ impl Summable for SumCommit {
 	fn sum(&self) -> SumCommit {
 		SumCommit {
 			commit: self.commit.clone(),
-			secp: self.secp.clone(),
 		}
 	}
 
@@ -562,12 +561,10 @@ impl Writeable for SumCommit {
 
 impl Readable for SumCommit {
 	fn read(reader: &mut Reader) -> Result<SumCommit, ser::Error> {
-		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let commit = Commitment::read(reader)?;
 
 		Ok(SumCommit {
 			commit: commit,
-			secp: secp,
 		})
 	}
 }
@@ -576,7 +573,8 @@ impl ops::Add for SumCommit {
 	type Output = SumCommit;
 
 	fn add(self, other: SumCommit) -> SumCommit {
-		let sum = match self.secp
+		let secp = static_secp_instance();
+		let sum = match secp.lock().unwrap()
 			.commit_sum(vec![self.commit.clone(), other.commit.clone()], vec![])
 		{
 			Ok(s) => s,
@@ -584,7 +582,6 @@ impl ops::Add for SumCommit {
 		};
 		SumCommit {
 			commit: sum,
-			secp: self.secp,
 		}
 	}
 }

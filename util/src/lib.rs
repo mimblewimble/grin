@@ -26,6 +26,8 @@ extern crate slog;
 extern crate slog_async;
 extern crate slog_term;
 
+extern crate rand;
+
 #[macro_use]
 extern crate lazy_static;
 
@@ -40,6 +42,10 @@ pub use secp_ as secp;
 // Logging related
 pub mod logger;
 pub use logger::{init_logger, init_test_logger, LOGGER};
+
+// Static secp instance
+pub mod secp_static;
+pub use secp_static::static_secp_instance;
 
 pub mod types;
 pub use types::LoggingConfig;
