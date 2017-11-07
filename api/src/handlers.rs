@@ -58,7 +58,7 @@ impl UtxoHandler {
 			.get_block_header_by_output_commit(&commit)
 			.map_err(|_| Error::NotFound)?;
 
-		Ok(Output::from_output(&out, &header))
+		Ok(Output::from_output(&out, &header, false))
 	}
 }
 
