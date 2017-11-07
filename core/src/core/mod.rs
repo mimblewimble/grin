@@ -25,6 +25,8 @@ pub mod transaction;
 
 use std::fmt;
 use std::cmp::Ordering;
+use std::num::ParseFloatError;
+use consensus::GRIN_BASE;
 
 use util::secp::{self, Secp256k1};
 use util::secp::pedersen::*;
@@ -182,6 +184,22 @@ impl Writeable for Proof {
 	}
 }
 
+/// Common method for parsing an amount from human-readable, and converting
+/// to internally-compatible u64
+
+pub fn amount_from_hr_string(amount:&str) -> Result<u64, ParseFloatError> {
+	let amount = amount.parse::<f64>()?;
+	Ok((amount*GRIN_BASE as f64) as u64)
+}
+
+/// Common method for converting an amount to a human-readable string
+
+pub fn amount_to_hr_string(amount: u64) -> String {
+	let amount = (amount as f64 / GRIN_BASE as f64) as f64;
+	let places = (GRIN_BASE as f64).log(10.0) as usize + 1;
+	String::from(format!("{:.*}", places, amount))
+}
+
 #[cfg(test)]
 mod test {
 	use super::*;
@@ -191,6 +209,25 @@ mod test {
 	use ser;
 	use keychain;
 	use keychain::{BlindingFactor, Keychain};
+
+	#[test]
+	pub fn test_amount_to_hr() {
+		assert!(50123456789 == amount_from_hr_string("50.123456789").unwrap());
+		assert!(50 == amount_from_hr_string(".000000050").unwrap());
+		assert!(1 ==  amount_from_hr_string(".000000001").unwrap());
+		assert!(0 ==  amount_from_hr_string(".0000000009").unwrap());
+		assert!(500_000_000_000 ==  amount_from_hr_string("500").unwrap());
+		assert!(5_000_000_000_000_000_000 ==  amount_from_hr_string("5000000000.00000000000").unwrap());
+	}
+
+	#[test]
+	pub fn test_hr_to_amount() {
+		assert!("50.123456789" == amount_to_hr_string(50123456789));
+		assert!( "0.000000050" == amount_to_hr_string(50));
+		assert!( "0.000000001" ==  amount_to_hr_string(1));
+		assert!("500.000000000" ==  amount_to_hr_string(500_000_000_000));
+		assert!("5000000000.000000000"  ==  amount_to_hr_string(5_000_000_000_000_000_000));
+	}
 
 	#[test]
 	#[should_panic(expected = "InvalidSecretKey")]

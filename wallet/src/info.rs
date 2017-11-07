@@ -14,6 +14,7 @@
 
 use checker;
 use keychain::Keychain;
+use core::core;
 use types::{WalletConfig, WalletData};
 
 pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
@@ -51,7 +52,7 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 				out.status,
 				out.is_coinbase,
 				out.num_confirmations(current_height),
-				out.value,
+				core::amount_to_hr_string(out.value),
 			);
 		}
 	});
