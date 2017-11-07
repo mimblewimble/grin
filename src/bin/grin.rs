@@ -409,7 +409,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				dest.to_string(),
 			);
 			match result {
-				Ok(_) => info!(LOGGER, "Transaction sent"),
+				Ok(_) => {}, //success messaged logged internally
 				Err(wallet::Error::NotEnoughFunds(_)) => {},
 				Err(e) => panic!(e),
 			};
