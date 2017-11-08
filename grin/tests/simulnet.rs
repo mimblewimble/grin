@@ -273,16 +273,16 @@ fn simulate_full_sync() {
 	let mut servers = vec![];
 	for n in 0..2 {
 		let mut config = grin::ServerConfig {
+			api_http_addr: format!("127.0.0.1:{}", 19000 + n),
 			db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
 			p2p_config: Some(p2p::P2PConfig {
 				port: 11000 + n,
 				..p2p::P2PConfig::default()
 			}),
+			seeding_type: grin::Seeding::List,
+			seeds: Some(vec!["127.0.0.1:11000".to_string()]),
 			..Default::default()
 		};
-		if n == 1 {
-			config.seeding_type = grin::Seeding::Programmatic;
-		}
 		let s = grin::Server::future(config, &handle).unwrap();
 		servers.push(s);
 	}
@@ -290,10 +290,6 @@ fn simulate_full_sync() {
 	// mine a few blocks on server 1
 	servers[0].start_miner(miner_config);
 	thread::sleep(time::Duration::from_secs(5));
-
-	// connect 1 and 2
-	let addr = format!("{}:{}", "127.0.0.1", 11001);
-	servers[0].connect_peer(addr.parse().unwrap()).unwrap();
 
 	// 2 should get blocks
 	evtlp.run(change(&servers[1]));
