@@ -122,9 +122,12 @@ impl Server {
 			Seeding::None => {
 				warn!(
 					LOGGER,
-					"No seed configured, will stay solo until connected to"
+					"No seed(s) configured, will stay solo until connected to"
 				);
-				seed.monitor_only(evt_handle.clone());
+				seed.connect_and_monitor(
+					evt_handle.clone(),
+					seed::predefined_seeds(vec![]),
+				);
 			}
 			Seeding::List => {
 				seed.connect_and_monitor(
@@ -133,7 +136,10 @@ impl Server {
 				);
 			}
 			Seeding::WebStatic => {
-				seed.connect_and_monitor(evt_handle.clone(), seed::web_seeds(evt_handle.clone()));
+				seed.connect_and_monitor(
+					evt_handle.clone(),
+					seed::web_seeds(evt_handle.clone()),
+				);
 			}
 			_ => {}
 		}

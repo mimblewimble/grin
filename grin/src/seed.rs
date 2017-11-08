@@ -57,21 +57,6 @@ impl Seeder {
 		}
 	}
 
-	pub fn monitor_only(&self, h: reactor::Handle) {
-		// open a channel with a listener that connects every peer address sent below
-		// max peer count
-		let (tx, rx) = futures::sync::mpsc::unbounded();
-		h.spawn(self.listen_for_addrs(h.clone(), rx));
-
-		// start monitoring connections
-		let seeder = self.monitor_peers(tx.clone());
-
-		h.spawn(seeder.map(|_| ()).map_err(|e| {
-			error!(LOGGER, "Seeding or peer monitoring error: {}", e);
-			()
-		}));
-	}
-
 	pub fn connect_and_monitor(
 		&self,
 		h: reactor::Handle,
@@ -105,7 +90,7 @@ impl Seeder {
 			.interval(time::Duration::from_secs(10))
 			.for_each(move |_| {
 				debug!(LOGGER, "monitoring peers");
-				
+
 				// maintenance step first, clean up p2p server peers and mark bans
 				// if needed
 				let disconnected = p2p_server.clean_peers();
