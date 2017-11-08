@@ -96,7 +96,11 @@ pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(),
 		Ok(outputs) => for out in outputs {
 			api_outputs.insert(out.commit, out);
 		},
-		Err(_) => {}
+		Err(e) => {
+			// if we got anything other than 200 back from server, don't attempt to refresh the wallet
+			// data after
+			return Err(Error::Node(e));
+		}
 	};
 
 	// now for each commit, find the output in the wallet and
