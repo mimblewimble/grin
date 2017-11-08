@@ -57,7 +57,7 @@ impl Handshake {
 		self_addr: SocketAddr,
 		conn: TcpStream,
 	) -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
-		// prepare the first part of the hanshake
+		// prepare the first part of the handshake
 		let nonce = self.next_nonce();
 		let hand = Hand {
 			version: PROTOCOL_VERSION,
@@ -118,6 +118,7 @@ impl Handshake {
 						// check the nonce to see if we could be trying to connect to ourselves
 						let nonces = nonces.read().unwrap();
 						if nonces.contains(&hand.nonce) {
+							debug!(LOGGER, "***** nonce matches! Avoiding connecting to ourselves");
 							return Err(Error::Serialization(ser::Error::UnexpectedData {
 								expected: vec![],
 								received: vec![],
@@ -173,6 +174,8 @@ fn extract_ip(advertised: &SocketAddr, conn: &TcpStream) -> SocketAddr {
   match advertised {
     &SocketAddr::V4(v4sock) => {
       let ip = v4sock.ip();
+	  debug!(LOGGER, "extract_ip - {:?}, {:?}", ip, conn.peer_addr());
+
       if ip.is_loopback() || ip.is_unspecified() {
         if let Ok(addr) =  conn.peer_addr() {
           return SocketAddr::new(addr.ip(), advertised.port());
