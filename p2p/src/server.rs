@@ -214,8 +214,6 @@ impl Server {
 	/// lost connection to or have been deemed problematic. The removed peers
 	/// are returned.
 	pub fn clean_peers(&self) -> Vec<Arc<Peer>> {
-		debug!(LOGGER, "clean_peers running");
-		
 		let mut rm = vec![];
 
 		// build a list of peers to be cleaned up

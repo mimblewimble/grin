@@ -100,12 +100,14 @@ impl Seeder {
 		let p2p_server = self.p2p.clone();
 
 		// now spawn a new future to regularly check if we need to acquire more peers
-  // and if so, gets them from db
+		// and if so, gets them from db
 		let mon_loop = Timer::default()
 			.interval(time::Duration::from_secs(10))
 			.for_each(move |_| {
+				debug!(LOGGER, "monitoring peers");
+				
 				// maintenance step first, clean up p2p server peers and mark bans
-	// if needed
+				// if needed
 				let disconnected = p2p_server.clean_peers();
 				for p in disconnected {
 					if p.is_banned() {
