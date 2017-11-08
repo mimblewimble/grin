@@ -65,6 +65,7 @@ pub struct Server {
 	config: P2PConfig,
 	capabilities: Capabilities,
 	peers: Arc<RwLock<HashMap<SocketAddr, Arc<Peer>>>>,
+	handshake: Arc<Handshake>,
 	adapter: Arc<NetAdapter>,
 	stop: RefCell<Option<futures::sync::oneshot::Sender<()>>>,
 }
@@ -80,6 +81,7 @@ impl Server {
 			config: config,
 			capabilities: capab,
 			peers: Arc::new(RwLock::new(HashMap::new())),
+			handshake: Arc::new(Handshake::new()),
 			adapter: adapter,
 			stop: RefCell::new(None),
 		}
@@ -92,7 +94,7 @@ impl Server {
 		let socket = TcpListener::bind(&addr, &h.clone()).unwrap();
 		warn!(LOGGER, "P2P server started on {}", addr);
 
-		let hs = Arc::new(Handshake::new());
+		let handshake = self.handshake.clone();
 		let peers = self.peers.clone();
 		let adapter = self.adapter.clone();
 		let capab = self.capabilities.clone();
@@ -105,7 +107,7 @@ impl Server {
 			let peers = peers.clone();
 
 			// accept the peer and add it to the server map
-			let accept = Peer::accept(conn, capab, total_diff, &hs.clone(), adapter.clone());
+			let accept = Peer::accept(conn, capab, total_diff, &handshake.clone(), adapter.clone());
 			let added = add_to_peers(peers, adapter, accept);
 
 			// wire in a future to timeout the accept after 5 secs
@@ -161,6 +163,7 @@ impl Server {
 
 		// cloneapalooza
 		let peers = self.peers.clone();
+		let handshake = self.handshake.clone();
 		let adapter = self.adapter.clone();
 		let capab = self.capabilities.clone();
 		let self_addr = SocketAddr::new(self.config.host, self.config.port);
@@ -175,13 +178,13 @@ impl Server {
 				let total_diff = adapter.clone().total_difficulty();
 
 				// connect to the peer and add it to the server map, wiring it a timeout for
-	// the handhake
+				// the handshake
 				let connect = Peer::connect(
 					socket,
 					capab,
 					total_diff,
 					self_addr,
-					&Handshake::new(),
+					handshake.clone(),
 					adapter.clone(),
 				);
 				let added = add_to_peers(peers, adapter, connect);

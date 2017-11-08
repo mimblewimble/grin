@@ -59,6 +59,14 @@ impl Handshake {
 	) -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
 		// prepare the first part of the handshake
 		let nonce = self.next_nonce();
+		debug!(
+			LOGGER,
+			"handshake connect with nonce - {}, sender - {:?}, receiver - {:?}",
+			nonce,
+			self_addr,
+			conn.peer_addr().unwrap(),
+		);
+
 		let hand = Hand {
 			version: PROTOCOL_VERSION,
 			capabilities: capab,
@@ -117,6 +125,12 @@ impl Handshake {
 					{
 						// check the nonce to see if we could be trying to connect to ourselves
 						let nonces = nonces.read().unwrap();
+						debug!(
+							LOGGER,
+							"checking the nonce - {}, {:?}",
+							&hand.nonce,
+							nonces,
+						);
 						if nonces.contains(&hand.nonce) {
 							debug!(LOGGER, "***** nonce matches! Avoiding connecting to ourselves");
 							return Err(Error::Serialization(ser::Error::UnexpectedData {
