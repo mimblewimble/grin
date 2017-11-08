@@ -124,6 +124,7 @@ impl Server {
 					LOGGER,
 					"No seed configured, will stay solo until connected to"
 				);
+				seed.monitor_only(evt_handle.clone());
 			}
 			Seeding::List => {
 				seed.connect_and_monitor(

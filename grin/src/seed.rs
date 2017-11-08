@@ -57,13 +57,28 @@ impl Seeder {
 		}
 	}
 
+	pub fn monitor_only(&self, h: reactor::Handle) {
+		// open a channel with a listener that connects every peer address sent below
+		// max peer count
+		let (tx, rx) = futures::sync::mpsc::unbounded();
+		h.spawn(self.listen_for_addrs(h.clone(), rx));
+
+		// start monitoring connections
+		let seeder = self.monitor_peers(tx.clone());
+
+		h.spawn(seeder.map(|_| ()).map_err(|e| {
+			error!(LOGGER, "Seeding or peer monitoring error: {}", e);
+			()
+		}));
+	}
+
 	pub fn connect_and_monitor(
 		&self,
 		h: reactor::Handle,
 		seed_list: Box<Future<Item = Vec<SocketAddr>, Error = String>>,
 	) {
 		// open a channel with a listener that connects every peer address sent below
-  // max peer count
+		// max peer count
 		let (tx, rx) = futures::sync::mpsc::unbounded();
 		h.spawn(self.listen_for_addrs(h.clone(), rx));
 

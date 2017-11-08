@@ -156,10 +156,6 @@ impl Server {
 			// if we're already connected to the addr, just return the peer
 			return Box::new(future::ok(Some(p)));
 		}
-		if self.is_self(addr) {
-			// asked to connect to ourselves
-			return Box::new(future::ok(None));
-		}
 
 		// cloneapalooza
 		let peers = self.peers.clone();
@@ -200,15 +196,9 @@ impl Server {
 		Box::new(request)
 	}
 
-	/// Check if the server already knows this peer (is already connected). In
-	/// addition we consider to know ourselves.
+	/// Check if the server already knows this peer (is already connected).
 	pub fn is_known(&self, addr: SocketAddr) -> bool {
-		self.get_peer(addr).is_some() || self.is_self(addr)
-	}
-
-	/// Whether the provided address is ourselves.
-	pub fn is_self(&self, addr: SocketAddr) -> bool {
-		addr.ip() == self.config.host && addr.port() == self.config.port
+		self.get_peer(addr).is_some()
 	}
 
 	pub fn all_peers(&self) -> Vec<Arc<Peer>> {
@@ -224,6 +214,8 @@ impl Server {
 	/// lost connection to or have been deemed problematic. The removed peers
 	/// are returned.
 	pub fn clean_peers(&self) -> Vec<Arc<Peer>> {
+		debug!(LOGGER, "clean_peers running");
+		
 		let mut rm = vec![];
 
 		// build a list of peers to be cleaned up
