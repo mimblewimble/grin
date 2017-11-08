@@ -44,7 +44,7 @@ use wallet::WalletConfig;
 
 /// Just removes all results from previous runs
 pub fn clean_all_output(test_name_dir: &str) {
-	let target_dir = format!("target/test_servers/{}", test_name_dir);
+	let target_dir = format!("target/{}", test_name_dir);
 	let result = fs::remove_dir_all(target_dir);
 	if let Err(e) = result {
 		println!("{}", e);
