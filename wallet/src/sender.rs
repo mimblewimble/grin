@@ -135,7 +135,7 @@ pub fn issue_burn_tx(
 
 	// finalize the burn transaction and send
 	let (tx_burn, _) = build::transaction(parts, &keychain)?;
-	tx_burn.validate(&keychain.secp())?;
+	tx_burn.validate()?;
 
 	let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
 	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());

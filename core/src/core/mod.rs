@@ -28,7 +28,7 @@ use std::cmp::Ordering;
 use std::num::ParseFloatError;
 use consensus::GRIN_BASE;
 
-use util::secp::{self, Secp256k1};
+use util::{secp, static_secp_instance};
 use util::secp::pedersen::*;
 
 pub use self::block::*;
@@ -36,18 +36,17 @@ pub use self::transaction::*;
 use self::hash::Hashed;
 use ser::{Error, Readable, Reader, Writeable, Writer};
 use global;
-// use keychain;
 
 /// Implemented by types that hold inputs and outputs including Pedersen
 /// commitments. Handles the collection of the commitments as well as their
 /// summing, taking potential explicit overages of fees into account.
 pub trait Committed {
 	/// Gathers commitments and sum them.
-	fn sum_commitments(&self, secp: &Secp256k1) -> Result<Commitment, secp::Error> {
+	fn sum_commitments(&self) -> Result<Commitment, secp::Error> {
 		// first, verify each range proof
 		let ref outputs = self.outputs_committed();
 		for output in *outputs {
-			try!(output.verify_proof(secp))
+			try!(output.verify_proof())
 		}
 
 		// then gather the commitments
@@ -58,7 +57,11 @@ pub trait Committed {
 		// negative
 		let overage = self.overage();
 		if overage != 0 {
-			let over_commit = secp.commit_value(overage.abs() as u64).unwrap();
+			let over_commit = {
+				let secp = static_secp_instance();
+				let secp = secp.lock().unwrap();
+				secp.commit_value(overage.abs() as u64).unwrap()
+			};
 			if overage < 0 {
 				input_commits.push(over_commit);
 			} else {
@@ -67,7 +70,11 @@ pub trait Committed {
 		}
 
 		// sum all that stuff
-		secp.commit_sum(output_commits, input_commits)
+		{
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			secp.commit_sum(output_commits, input_commits)
+		}
 	}
 
 	/// Vector of committed inputs to verify
@@ -310,14 +317,16 @@ mod test {
 
 	#[test]
 	fn blind_tx() {
-		let keychain = Keychain::from_random_seed().unwrap();
-
 		let btx = tx2i1o();
-		btx.verify_sig(&keychain.secp()).unwrap(); // unwrap will panic if invalid
+		btx.verify_sig().unwrap(); // unwrap will panic if invalid
 
 		// checks that the range proof on our blind output is sufficiently hiding
 		let Output { proof, .. } = btx.outputs[0];
-		let info = &keychain.secp().range_proof_info(proof);
+
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
+		let info = secp.range_proof_info(proof);
+
 		assert!(info.min == 0);
 		assert!(info.max == u64::max_value());
 	}
@@ -371,7 +380,7 @@ mod test {
 			&keychain,
 		).unwrap();
 
-		tx_final.validate(&keychain.secp()).unwrap();
+		tx_final.validate().unwrap();
 	}
 
 	#[test]
@@ -380,7 +389,7 @@ mod test {
 		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let b = Block::new(&BlockHeader::default(), vec![], &keychain, &key_id).unwrap();
-		b.compact().validate(&keychain.secp()).unwrap();
+		b.compact().validate().unwrap();
 	}
 
 	#[test]
@@ -389,10 +398,10 @@ mod test {
 		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let mut tx1 = tx2i1o();
-		tx1.verify_sig(keychain.secp()).unwrap();
+		tx1.verify_sig().unwrap();
 
 		let b = Block::new(&BlockHeader::default(), vec![&mut tx1], &keychain, &key_id).unwrap();
-		b.compact().validate(keychain.secp()).unwrap();
+		b.compact().validate().unwrap();
 	}
 
 	#[test]
@@ -409,7 +418,7 @@ mod test {
 			&keychain,
 			&key_id,
 		).unwrap();
-		b.validate(keychain.secp()).unwrap();
+		b.validate().unwrap();
 	}
 
 	#[test]
@@ -439,7 +448,7 @@ mod test {
 			&keychain,
 			&key_id3.clone(),
 		).unwrap();
-		b.validate(keychain.secp()).unwrap();
+		b.validate().unwrap();
 
 		// now try adding a timelocked tx where lock height is greater than current block height
 		let tx1 = build::transaction(
@@ -459,7 +468,7 @@ mod test {
 			&keychain,
 			&key_id3.clone(),
 		).unwrap();
-		match b.validate(keychain.secp()) {
+		match b.validate() {
 			Err(KernelLockHeight { lock_height: height }) => {
 				assert_eq!(height, 2);
 			}
@@ -469,16 +478,14 @@ mod test {
 
 	#[test]
 	pub fn test_verify_1i1o_sig() {
-		let keychain = keychain::Keychain::from_random_seed().unwrap();
 		let tx = tx1i1o();
-		tx.verify_sig(keychain.secp()).unwrap();
+		tx.verify_sig().unwrap();
 	}
 
 	#[test]
 	pub fn test_verify_2i1o_sig() {
-		let keychain = keychain::Keychain::from_random_seed().unwrap();
 		let tx = tx2i1o();
-		tx.verify_sig(keychain.secp()).unwrap();
+		tx.verify_sig().unwrap();
 	}
 
 	// utility producing a transaction with 2 inputs and a single outputs

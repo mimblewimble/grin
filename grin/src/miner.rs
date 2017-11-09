@@ -37,7 +37,6 @@ use util::LOGGER;
 use types::Error;
 
 use chain;
-use util::secp;
 use pool;
 use util;
 use keychain::{Identifier, Keychain};
@@ -574,8 +573,7 @@ impl Miner {
 		);
 
 		// making sure we're not spending time mining a useless block
-		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-		b.validate(&secp).expect("Built an invalid block!");
+		b.validate().expect("Built an invalid block!");
 
 		let mut rng = rand::OsRng::new().unwrap();
 		b.header.nonce = rng.gen();

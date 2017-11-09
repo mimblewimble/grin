@@ -16,7 +16,7 @@
 
 use byteorder::{BigEndian, ByteOrder};
 use blake2::blake2b::blake2b;
-use util::secp::{self, Message, Secp256k1, Signature};
+use util::secp::{self, Message, Signature};
 use util::static_secp_instance;
 use util::secp::pedersen::{Commitment, RangeProof};
 use std::cmp::Ordering;
@@ -147,11 +147,13 @@ impl TxKernel {
 	/// Verify the transaction proof validity. Entails handling the commitment
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
-	pub fn verify(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
+	pub fn verify(&self) -> Result<(), secp::Error> {
 		let msg = try!(Message::from_slice(
 			&kernel_sig_msg(self.fee, self.lock_height),
 		));
-		let sig = try!(Signature::from_der(secp, &self.excess_sig));
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
+		let sig = try!(Signature::from_der(&secp, &self.excess_sig));
 		secp.verify_from_commit(&msg, &sig, &self.excess)
 	}
 }
@@ -306,11 +308,14 @@ impl Transaction {
 	/// sum to zero as they should in r.G + v.H then only k.G the excess
 	/// of the sum of r.G should be left. And r.G is the definition of a
 	/// public key generated using r as a private key.
-	pub fn verify_sig(&self, secp: &Secp256k1) -> Result<Commitment, secp::Error> {
-		let rsum = self.sum_commitments(secp)?;
+	pub fn verify_sig(&self) -> Result<Commitment, secp::Error> {
+		let rsum = self.sum_commitments()?;
 
 		let msg = Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height))?;
-		let sig = Signature::from_der(secp, &self.excess_sig)?;
+
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
+		let sig = Signature::from_der(&secp, &self.excess_sig)?;
 
 		// pretend the sum is a public key (which it is, being of the form r.G) and
 		// verify the transaction sig with it
@@ -338,14 +343,14 @@ impl Transaction {
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(&self, secp: &Secp256k1) -> Result<Commitment, Error> {
+	pub fn validate(&self) -> Result<Commitment, Error> {
 		if self.fee & 1 != 0 {
 			return Err(Error::OddFee);
 		}
 		for out in &self.outputs {
-			out.verify_proof(secp)?;
+			out.verify_proof()?;
 		}
-		let excess = self.verify_sig(secp)?;
+		let excess = self.verify_sig()?;
 		Ok(excess)
 	}
 }
@@ -514,7 +519,9 @@ impl Output {
 	}
 
 	/// Validates the range proof using the commitment
-	pub fn verify_proof(&self, secp: &Secp256k1) -> Result<(), secp::Error> {
+	pub fn verify_proof(&self) -> Result<(), secp::Error> {
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
 		secp.verify_range_proof(self.commit, self.proof).map(|_| ())
 	}
 
