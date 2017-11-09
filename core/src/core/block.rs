@@ -16,7 +16,7 @@
 
 use time;
 use util;
-use util::secp::{self, Secp256k1};
+use util::{secp, static_secp_instance};
 use std::collections::HashSet;
 
 use core::Committed;
@@ -299,8 +299,6 @@ impl Block {
 		reward_out: Output,
 		reward_kern: TxKernel,
 	) -> Result<Block, Error> {
-		let secp = Secp256k1::with_caps(secp::ContextFlag::Commit);
-
 		let mut kernels = vec![];
 		let mut inputs = vec![];
 		let mut outputs = vec![];
@@ -311,7 +309,7 @@ impl Block {
 		// to build the block (which we can sort of think of as one big tx?)
 		for tx in txs {
 			// validate each transaction and gather their kernels
-			let excess = tx.validate(&secp)?;
+			let excess = tx.validate()?;
 			let kernel = tx.build_kernel(excess);
 			kernels.push(kernel);
 
@@ -333,7 +331,7 @@ impl Block {
 		outputs.sort();
 		kernels.sort();
 
-		// calculate the overall Merkle tree and fees
+		// calculate the overall Merkle tree and fees (todo?)
 
 		Ok(
 			Block {
@@ -447,19 +445,19 @@ impl Block {
 	///
 	/// TODO - performs various verification steps - discuss renaming this to "verify"
 	///
-	pub fn validate(&self, secp: &Secp256k1) -> Result<(), Error> {
+	pub fn validate(&self) -> Result<(), Error> {
 		if exceeds_weight(self.inputs.len(), self.outputs.len(), self.kernels.len()) {
 			return Err(Error::WeightExceeded);
 		}
-		self.verify_coinbase(secp)?;
-		self.verify_kernels(secp, false)?;
+		self.verify_coinbase()?;
+		self.verify_kernels(false)?;
 		Ok(())
 	}
 
 	/// Verifies the sum of input/output commitments match the sum in kernels
 	/// and that all kernel signatures are valid.
 	/// TODO - when would we skip_sig? Is this needed or used anywhere?
-	fn verify_kernels(&self, secp: &Secp256k1, skip_sig: bool) -> Result<(), Error> {
+	fn verify_kernels(&self, skip_sig: bool) -> Result<(), Error> {
 		for k in &self.kernels {
 			if k.fee & 1 != 0 {
 				return Err(Error::OddKernelFee);
@@ -471,11 +469,16 @@ impl Block {
 		}
 
 		// sum all inputs and outs commitments
-		let io_sum = self.sum_commitments(secp)?;
+		let io_sum = self.sum_commitments()?;
 
 		// sum all kernels commitments
 		let proof_commits = map_vec!(self.kernels, |proof| proof.excess);
-		let proof_sum = secp.commit_sum(proof_commits, vec![])?;
+
+		let proof_sum = {
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			secp.commit_sum(proof_commits, vec![])?
+		};
 
 		// both should be the same
 		if proof_sum != io_sum {
@@ -485,7 +488,7 @@ impl Block {
 		// verify all signatures with the commitment as pk
 		if !skip_sig {
 			for proof in &self.kernels {
-				proof.verify(secp)?;
+				proof.verify()?;
 			}
 		}
 		Ok(())
@@ -496,7 +499,7 @@ impl Block {
 	// * That the sum of all coinbase-marked outputs equal the supply.
 	// * That the sum of blinding factors for all coinbase-marked outputs match
 	//   the coinbase-marked kernels.
-	fn verify_coinbase(&self, secp: &Secp256k1) -> Result<(), Error> {
+	fn verify_coinbase(&self) -> Result<(), Error> {
 		let cb_outs = filter_map_vec!(self.outputs, |out| if out.features.contains(
 			COINBASE_OUTPUT,
 		)
@@ -511,10 +514,17 @@ impl Block {
 			None
 		});
 
-		let over_commit = secp.commit_value(reward(self.total_fees()))?;
-		let out_adjust_sum = secp.commit_sum(cb_outs, vec![over_commit])?;
+		let over_commit;
+		let out_adjust_sum;
+		let kerns_sum;
+		{
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			over_commit = secp.commit_value(reward(self.total_fees()))?;
+			out_adjust_sum = secp.commit_sum(cb_outs, vec![over_commit])?;
+			kerns_sum = secp.commit_sum(cb_kerns, vec![])?;
+		}
 
-		let kerns_sum = secp.commit_sum(cb_kerns, vec![])?;
 		if kerns_sum != out_adjust_sum {
 			return Err(Error::CoinbaseSumMismatch);
 		}
@@ -527,8 +537,6 @@ impl Block {
 		key_id: &keychain::Identifier,
 		fees: u64,
 	) -> Result<(Output, TxKernel), keychain::Error> {
-		let secp = keychain.secp();
-
 		let commit = keychain.commit(reward(fees), key_id)?;
 		let switch_commit = keychain.switch_commit(key_id)?;
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
@@ -553,6 +561,8 @@ impl Block {
 			proof: rproof,
 		};
 
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
 		let over_commit = secp.commit_value(reward(fees))?;
 		let out_commit = output.commitment();
 		let excess = secp.commit_sum(vec![out_commit], vec![over_commit])?;
@@ -560,10 +570,12 @@ impl Block {
 		let msg = util::secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE])?;
 		let sig = keychain.sign(&msg, &key_id)?;
 
+		let excess_sig = sig.serialize_der(&secp);
+
 		let proof = TxKernel {
 			features: COINBASE_KERNEL,
 			excess: excess,
-			excess_sig: sig.serialize_der(&secp),
+			excess_sig: excess_sig,
 			fee: 0,
 			lock_height: 0,
 		};
@@ -628,7 +640,7 @@ mod test {
 		println!("Build tx: {}", now.elapsed().as_secs());
 
 		let b = new_block(vec![&mut tx], &keychain);
-		assert!(b.validate(&keychain.secp()).is_err());
+		assert!(b.validate().is_err());
 	}
 
 	#[test]
@@ -652,7 +664,7 @@ mod test {
 
 		// block should have been automatically compacted (including reward
 		// output) and should still be valid
-		b.validate(&keychain.secp()).unwrap();
+		b.validate().unwrap();
 		assert_eq!(b.inputs.len(), 3);
 		assert_eq!(b.outputs.len(), 3);
 	}
@@ -677,10 +689,10 @@ mod test {
 		let mut btx3 = txspend1i1o(5, &keychain, key_id2.clone(), key_id3);
 
 		let b1 = new_block(vec![&mut btx1, &mut btx2], &keychain);
-		b1.validate(&keychain.secp()).unwrap();
+		b1.validate().unwrap();
 
 		let b2 = new_block(vec![&mut btx3], &keychain);
-		b2.validate(&keychain.secp()).unwrap();
+		b2.validate().unwrap();
 
 		// block should have been automatically compacted and should still be valid
 		let b3 = b1.merge(b2);
@@ -713,7 +725,7 @@ mod test {
 
 		// the block should be valid here (single coinbase output with corresponding
 		// txn kernel)
-		assert_eq!(b.validate(&keychain.secp()), Ok(()));
+		assert_eq!(b.validate(), Ok(()));
 	}
 
 	#[test]
@@ -728,13 +740,13 @@ mod test {
 		b.outputs[0].features.remove(COINBASE_OUTPUT);
 
 		assert_eq!(
-			b.verify_coinbase(&keychain.secp()),
+			b.verify_coinbase(),
 			Err(Error::CoinbaseSumMismatch)
 		);
-		assert_eq!(b.verify_kernels(&keychain.secp(), false), Ok(()));
+		assert_eq!(b.verify_kernels(false), Ok(()));
 
 		assert_eq!(
-			b.validate(&keychain.secp()),
+			b.validate(),
 			Err(Error::CoinbaseSumMismatch)
 		);
 	}
@@ -750,13 +762,13 @@ mod test {
 		b.kernels[0].features.remove(COINBASE_KERNEL);
 
 		assert_eq!(
-			b.verify_coinbase(&keychain.secp()),
+			b.verify_coinbase(),
 			Err(Error::Secp(secp::Error::IncorrectCommitSum))
 		);
-		assert_eq!(b.verify_kernels(&keychain.secp(), true), Ok(()));
+		assert_eq!(b.verify_kernels(true), Ok(()));
 
 		assert_eq!(
-			b.validate(&keychain.secp()),
+			b.validate(),
 			Err(Error::Secp(secp::Error::IncorrectCommitSum))
 		);
 	}

@@ -100,7 +100,7 @@ impl Keychain {
 		}
 
 		trace!(LOGGER, "Derived Key key_id: {}", key_id);
-		
+
 		if let Some(n) = n_child{
 			let extkey = self.extkey.derive(&self.secp, n)?;
 			return Ok(extkey.key);
@@ -222,8 +222,8 @@ mod test {
 
 	#[test]
 	fn test_key_derivation() {
-		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
 		let keychain = Keychain::from_random_seed().unwrap();
+		let secp = keychain.secp();
 
 		// use the keychain to derive a "key_id" based on the underlying seed
 		let key_id = keychain.derive_key_id(1).unwrap();

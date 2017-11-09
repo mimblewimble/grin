@@ -16,7 +16,6 @@
 
 use std::sync::{Arc, RwLock};
 
-use util::secp;
 use time;
 
 use core::consensus;
@@ -209,8 +208,7 @@ fn validate_block(
 	}
 
 	// main isolated block validation, checks all commitment sums and sigs
-	let curve = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-	try!(b.validate(&curve).map_err(&Error::InvalidBlockProof));
+	try!(b.validate().map_err(&Error::InvalidBlockProof));
 
 	// apply the new block to the MMR trees and check the new root hashes
 	if b.header.previous == ctx.head.last_block_h {

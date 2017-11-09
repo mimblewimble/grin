@@ -205,7 +205,7 @@ fn receive_transaction(
 
 	// make sure the resulting transaction is valid (could have been lied to on
  // excess).
-	tx_final.validate(&keychain.secp())?;
+	tx_final.validate()?;
 
 	// operate within a lock on wallet data
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {

@@ -22,7 +22,6 @@ use core::core::block;
 use core::core::hash;
 use core::global;
 
-use util::secp;
 use util::secp::pedersen::Commitment;
 
 use std::sync::Arc;
@@ -145,8 +144,7 @@ where
 		}
 
 		// Making sure the transaction is valid before anything else.
-		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-		tx.validate(&secp).map_err(|_e| PoolError::Invalid)?;
+		tx.validate().map_err(|_e| PoolError::Invalid)?;
 
 		// The first check involves ensuring that an identical transaction is
   // not already in the pool's transaction set.

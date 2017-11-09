@@ -25,7 +25,7 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use util::secp;
+use util::{secp, static_secp_instance};
 
 use core::{Input, Output, SwitchCommitHash, Transaction, DEFAULT_OUTPUT};
 use core::transaction::kernel_sig_msg;
@@ -139,7 +139,11 @@ pub fn transaction(
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
 	let msg = secp::Message::from_slice(&kernel_sig_msg(tx.fee, tx.lock_height))?;
 	let sig = ctx.keychain.sign_with_blinding(&msg, &blind_sum)?;
-	tx.excess_sig = sig.serialize_der(&ctx.keychain.secp());
+
+	let secp = static_secp_instance();
+	let secp = secp.lock().unwrap();
+	tx.excess_sig = sig.serialize_der(&secp);
+
 	Ok((tx, blind_sum))
 }
 
@@ -165,7 +169,7 @@ mod test {
 			&keychain,
 		).unwrap();
 
-		tx.verify_sig(&keychain.secp()).unwrap();
+		tx.verify_sig().unwrap();
 	}
 
 	#[test]
@@ -179,6 +183,6 @@ mod test {
 			&keychain,
 		).unwrap();
 
-		tx.verify_sig(&keychain.secp()).unwrap();
+		tx.verify_sig().unwrap();
 	}
 }
