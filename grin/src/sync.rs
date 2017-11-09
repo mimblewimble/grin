@@ -87,7 +87,7 @@ impl Syncer {
 		self.init_download()?;
 
 		// main syncing loop, requests more headers and bodies periodically as long
-  // as a peer with higher difficulty exists and we're not fully caught up
+		// as a peer with higher difficulty exists and we're not fully caught up
 		info!(LOGGER, "Starting sync loop.");
 		loop {
 			let tip = self.chain.get_header_head()?;
