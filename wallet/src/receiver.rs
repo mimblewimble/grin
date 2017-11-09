@@ -52,7 +52,7 @@ pub fn receive_json_tx_str(
 pub fn receive_json_tx(
 	config: &WalletConfig,
 	keychain: &Keychain,
-	partial_tx: &JSONPartialTx,
+	partial_tx: &PartialTx,
 ) -> Result<(), Error> {
 	let (amount, blinding, tx) = read_partial_tx(keychain, partial_tx)?;
 	let final_tx = receive_transaction(config, keychain, amount, blinding, tx)?;
@@ -74,7 +74,7 @@ pub struct WalletReceiver {
 
 impl Handler for WalletReceiver {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let struct_body = req.get::<bodyparser::Struct<JSONPartialTx>>();
+		let struct_body = req.get::<bodyparser::Struct<PartialTx>>();
 
 		if let Ok(Some(partial_tx)) = struct_body {
 			receive_json_tx(&self.config, &self.keychain, &partial_tx)
