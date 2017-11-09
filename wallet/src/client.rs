@@ -55,11 +55,11 @@ where
 	Ok(res)
 }
 
-pub fn send_partial_tx(url: &str, partial_tx: &JSONPartialTx) -> Result<(), Error> {
+pub fn send_partial_tx(url: &str, partial_tx: &PartialTx) -> Result<(), Error> {
 	single_send_partial_tx(url, partial_tx)
 }
 
-fn single_send_partial_tx(url: &str, partial_tx: &JSONPartialTx) -> Result<(), Error> {
+fn single_send_partial_tx(url: &str, partial_tx: &PartialTx) -> Result<(), Error> {
 	let mut core = reactor::Core::new()?;
 	let client = hyper::Client::new(&core.handle());
 

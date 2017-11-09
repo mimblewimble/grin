@@ -531,20 +531,19 @@ impl WalletData {
 /// Helper in serializing the information a receiver requires to build a
 /// transaction.
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct JSONPartialTx {
+pub struct PartialTx {
 	amount: u64,
 	blind_sum: String,
 	tx: String,
 }
 
-/// Encodes the information for a partial transaction (not yet completed by the
-/// receiver) into JSON.
+/// Builds a PartialTx from data sent by a sender (not yet completed by the receiver).
 pub fn build_partial_tx(
 	receive_amount: u64,
 	blind_sum: keychain::BlindingFactor,
 	tx: Transaction,
-) -> JSONPartialTx {
-	JSONPartialTx {
+) -> PartialTx {
+	PartialTx {
 		amount: receive_amount,
 		blind_sum: util::to_hex(blind_sum.secret_key().as_ref().to_vec()),
 		tx: util::to_hex(ser::ser_vec(&tx).unwrap()),
@@ -555,19 +554,14 @@ pub fn build_partial_tx(
 /// factors and the transaction itself.
 pub fn read_partial_tx(
 	keychain: &keychain::Keychain,
-	partial_tx: &JSONPartialTx,
+	partial_tx: &PartialTx,
 ) -> Result<(u64, keychain::BlindingFactor, Transaction), Error> {
-	// let partial_tx: JSONPartialTx = serde_json::from_str(json_str)?;
-
 	let blind_bin = util::from_hex(partial_tx.blind_sum.clone())?;
-
 	let blinding = keychain::BlindingFactor::from_slice(keychain.secp(), &blind_bin[..])?;
-
 	let tx_bin = util::from_hex(partial_tx.tx.clone())?;
 	let tx = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
 		Error::Format("Could not deserialize transaction, invalid format.".to_string())
 	})?;
-
 	Ok((partial_tx.amount, blinding, tx))
 }
 
