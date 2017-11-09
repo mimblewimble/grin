@@ -212,8 +212,8 @@ impl Miner {
 							let last_hashes_per_sec = 1.0 / last_solution_time_secs;
 							debug!(
 								LOGGER,
-								"Mining: Plugin {} - Device {} ({}): Last Solution time: {}s; \
-								 Solutions per second: {:.*} - Total Attempts: {}",
+								"Mining: Plugin {} - Device {} ({}): Last Graph time: {}s; \
+								 Graphs per second: {:.*} - Total Attempts: {}",
 								i,
 								s.device_id,
 								s.device_name,
@@ -304,7 +304,7 @@ impl Miner {
 					let last_hashes_per_sec = 1.0 / last_solution_time_secs;
 					debug!(
 						LOGGER,
-						"Plugin 0 - Device {} ({}) - Last Solution time: {}; Solutions per second: {:.*}",
+						"Plugin 0 - Device {} ({}) - Last Graph time: {}; Graphs per second: {:.*}",
 						s.device_id,
 						s.device_name,
 						last_solution_time_secs,
