@@ -14,17 +14,17 @@
 
 use checker;
 use keychain::Keychain;
-use core::core;
-use types::{WalletConfig, WalletData};
+use core::core::amount_to_hr_string;
+use types::{WalletConfig, WalletData, OutputStatus};
+use prettytable;
+use term;
+use std::io::prelude::*;
 
 pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
-	let root_key_id = keychain.root_key_id();
 	let result = checker::refresh_outputs(&config, &keychain);
 
-	// just read the wallet here, no need for a write lock
+
 	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		// get the current height via the api
-  // if we cannot get the current height use the max height known to the wallet
 		let current_height = match checker::get_tip_from_node(config) {
 			Ok(tip) => tip.height,
 			Err(_) => match wallet_data.outputs.values().map(|out| out.height).max() {
@@ -32,32 +32,52 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 				None => 0,
 			},
 		};
-
-		println!("Outputs - ");
-		println!("key_id, height, lock_height, status, coinbase?, num_confs, value");
-		println!("----------------------------------");
-
-		let mut outputs = wallet_data
+		let mut unspent_total=0;
+		let mut unspent_but_locked_total=0;
+		let mut unconfirmed_total=0;
+		let mut locked_total=0;
+		for out in wallet_data
 			.outputs
 			.values()
-			.filter(|out| out.root_key_id == root_key_id)
-			.collect::<Vec<_>>();
-		outputs.sort_by_key(|out| out.n_child);
-		for out in outputs {
-			println!(
-				"{}, {}, {}, {:?}, {}, {}, {}",
-				out.key_id,
-				out.height,
-				out.lock_height,
-				out.status,
-				out.is_coinbase,
-				out.num_confirmations(current_height),
-				core::amount_to_hr_string(out.value),
-			);
-		}
+			.filter(|out| out.root_key_id == keychain.root_key_id())
+		{
+			if out.status == OutputStatus::Unspent {
+				unspent_total+=out.value;
+				if out.lock_height > current_height {
+						unspent_but_locked_total+=out.value;
+				}
+			}
+			if out.status == OutputStatus::Unconfirmed && !out.is_coinbase {
+				unconfirmed_total+=out.value;
+			}
+			if out.status == OutputStatus::Locked {
+				locked_total+=out.value;
+			}
+		};
+
+
+		println!();
+		let title=format!("Wallet Summary Info - Block Height: {}", current_height);
+		let mut t = term::stdout().unwrap();
+		t.fg(term::color::MAGENTA).unwrap();
+		writeln!(t, "{}", title).unwrap();
+		writeln!(t, "--------------------------").unwrap();
+		t.reset().unwrap();
+		
+		let mut table = table!(
+			[bFG->"Total", FG->amount_to_hr_string(unspent_total+unconfirmed_total)],
+			[bFY->"Awaiting Confirmation", FY->amount_to_hr_string(unconfirmed_total)],
+			[bFY->"Confirmed but Still Locked", FY->amount_to_hr_string(unspent_but_locked_total)],
+			[bFG->"Currently Spendable", FG->amount_to_hr_string(unspent_total-unspent_but_locked_total)],
+			[Fw->"---------", Fw->"---------"],
+			[Fr->"(Locked by previous transaction)", Fr->amount_to_hr_string(locked_total)]
+		);
+		table.set_format(*prettytable::format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
+		table.printstd();
+		println!();
 	});
 
-	if let Err(e) = result {
-		println!("WARNING - Showing local data only - Wallet was unable to contact a node to update and verify the outputs shown here.");
+	if let Err(_) = result {
+		println!("WARNING - Showing local data only - Wallet was unable to contact a node to update and verify the info shown here.");
 	}
 }
