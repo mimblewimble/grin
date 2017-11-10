@@ -33,6 +33,7 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 			},
 		};
 		let mut unspent_total=0;
+		let mut unspent_but_locked_total=0;
 		let mut unconfirmed_total=0;
 		let mut locked_total=0;
 		for out in wallet_data
@@ -42,6 +43,9 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 		{
 			if out.status == OutputStatus::Unspent {
 				unspent_total+=out.value;
+				if out.lock_height > current_height {
+						unspent_but_locked_total+=out.value;
+				}
 			}
 			if out.status == OutputStatus::Unconfirmed && !out.is_coinbase {
 				unconfirmed_total+=out.value;
@@ -61,11 +65,12 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 		t.reset().unwrap();
 		
 		let mut table = table!(
-			[bFG->"Total: ", FG->amount_to_hr_string(unspent_total+unconfirmed_total)],
-			[bFY->"Awaiting Confirmation: ", FY->amount_to_hr_string(unconfirmed_total)],
-			[bFG->"Currently Spendable: ", FG->amount_to_hr_string(unspent_total)],
+			[bFG->"Total", FG->amount_to_hr_string(unspent_total+unconfirmed_total)],
+			[bFY->"Awaiting Confirmation", FY->amount_to_hr_string(unconfirmed_total)],
+			[bFY->"Confirmed but Still Locked", FY->amount_to_hr_string(unspent_but_locked_total)],
+			[bFG->"Currently Spendable", FG->amount_to_hr_string(unspent_total-unspent_but_locked_total)],
 			[Fw->"---------", Fw->"---------"],
-			[Fr->"(Locked by previous transaction): ", Fr->amount_to_hr_string(locked_total)]
+			[Fr->"(Locked by previous transaction)", Fr->amount_to_hr_string(locked_total)]
 		);
 		table.set_format(*prettytable::format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
 		table.printstd();
