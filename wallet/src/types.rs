@@ -499,8 +499,67 @@ impl WalletData {
 		self.outputs.get(&key_id.to_hex())
 	}
 
-	/// Select spendable coins from the wallet
+	/// Select spendable coins from the wallet.
+	/// Default strategy is "aggressive".
+	/// Non-default strategy is "smallest_first".
+	/// When we introduce additional strategies we should pass something other than a bool in.
 	pub fn select(
+		&self,
+		root_key_id: keychain::Identifier,
+		amount: u64,
+		current_height: u64,
+		minimum_confirmations: u64,
+		default_strategy: bool,
+	) -> Vec<OutputData> {
+		if default_strategy {
+			self.select_aggressive(
+				root_key_id,
+				current_height,
+				minimum_confirmations,
+			)
+		} else {
+			self.select_smallest_first(
+				root_key_id,
+				amount,
+				current_height,
+				minimum_confirmations,
+			)
+		}
+	}
+
+	// Selects the smallest number of outputs after ordering them by value.
+	// Reduces "dust" but leaves larger outputs unspent if possible.
+	fn select_smallest_first(
+		&self,
+		root_key_id: keychain::Identifier,
+		amount: u64,
+		current_height: u64,
+		minimum_confirmations: u64,
+	) -> Vec<OutputData> {
+		let mut eligible = self.outputs
+			.values()
+			.filter(|out| {
+				out.root_key_id == root_key_id
+					&& out.eligible_to_spend(current_height, minimum_confirmations)
+			})
+			.cloned()
+			.collect::<Vec<OutputData>>();
+
+		eligible.sort_by_key(|out| out.value);
+
+		let mut total_amount = 0;
+		eligible.iter()
+			.take_while(|out| {
+				let res = total_amount < amount;
+				total_amount += out.value;
+				res
+			})
+			.cloned()
+			.collect::<Vec<_>>()
+	}
+
+	// Selects all eligible outputs to spend to reduce UTXO set as much as possible (the default).
+	fn select_aggressive(
 		&self,
 		root_key_id: keychain::Identifier,
 		current_height: u64,
@@ -512,7 +571,7 @@ impl WalletData {
 				out.root_key_id == root_key_id
 					&& out.eligible_to_spend(current_height, minimum_confirmations)
 			})
-			.map(|out| out.clone())
+			.cloned()
 			.collect()
 	}
 

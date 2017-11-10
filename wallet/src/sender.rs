@@ -36,6 +36,7 @@ pub fn issue_send_tx(
 	amount: u64,
 	minimum_confirmations: u64,
 	dest: String,
+	selection_strategy: bool,
 ) -> Result<(), Error> {
 	checker::refresh_outputs(config, keychain)?;
 
@@ -52,6 +53,7 @@ pub fn issue_send_tx(
 		current_height,
 		minimum_confirmations,
 		lock_height,
+		selection_strategy,
 	)?;
 
 	let partial_tx = build_partial_tx(amount, blind_sum, tx);
@@ -79,12 +81,19 @@ fn build_send_tx(
 	current_height: u64,
 	minimum_confirmations: u64,
 	lock_height: u64,
+	default_strategy: bool,
 ) -> Result<(Transaction, BlindingFactor), Error> {
 	let key_id = keychain.clone().root_key_id();
 
 	// select some spendable coins from the wallet
 	let coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		wallet_data.select(key_id.clone(), current_height, minimum_confirmations)
+		wallet_data.select(
+			key_id.clone(),
+			amount,
+			current_height,
+			minimum_confirmations,
+			default_strategy,
+		)
 	})?;
 
 	// build transaction skeleton with inputs and change
@@ -124,8 +133,10 @@ pub fn issue_burn_tx(
 
 	// select some spendable coins from the wallet
 	let coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		wallet_data.select(key_id.clone(), current_height, minimum_confirmations)
+		wallet_data.select(key_id.clone(), amount, current_height, minimum_confirmations, false)
 	})?;
+
+	debug!(LOGGER, "selected some coins - {}", coins.len());
 
 	let mut parts = inputs_and_change(&coins, config, keychain, key_id, amount)?;
 
