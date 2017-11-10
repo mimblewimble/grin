@@ -58,7 +58,7 @@ pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(),
 	let mut commits: Vec<pedersen::Commitment> = vec![];
 
 	// build a local map of wallet outputs by commits
- // and a list of outputs we wantot query the node for
+	// and a list of outputs we want to query the node for
 	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
 		for out in wallet_data
 			.outputs
@@ -66,8 +66,7 @@ pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(),
 			.filter(|out| out.root_key_id == keychain.root_key_id())
 			.filter(|out| out.status != OutputStatus::Spent)
 		{
-			let key_id = keychain.derive_key_id(out.n_child).unwrap();
-			let commit = keychain.commit_with_key_index(out.value, &key_id, out.n_child).unwrap();
+			let commit = keychain.commit_with_key_index(out.value, out.n_child).unwrap();
 			commits.push(commit);
 			wallet_outputs.insert(commit, out.key_id.clone());
 		}
