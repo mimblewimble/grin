@@ -229,8 +229,11 @@ fn main() {
 				.default_value("1")
 				.takes_value(true)))
 
+		.subcommand(SubCommand::with_name("outputs")
+			.about("raw wallet info (list of outputs)"))
+
 		.subcommand(SubCommand::with_name("info")
-			.about("basic wallet info (outputs)"))
+			.about("basic wallet contents summary"))
 
 		.subcommand(SubCommand::with_name("init")
 			.about("Initialize a new wallet seed file.")))
@@ -430,6 +433,9 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		}
 		("info", Some(_)) => {
 			wallet::show_info(&wallet_config, &keychain);
+		}
+		("outputs", Some(_)) => {
+			wallet::show_outputs(&wallet_config, &keychain);
 		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}

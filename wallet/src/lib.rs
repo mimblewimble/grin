@@ -23,6 +23,9 @@ extern crate serde_derive;
 extern crate serde_json;
 #[macro_use]
 extern crate slog;
+#[macro_use]
+extern crate prettytable;
+extern crate term;
 
 extern crate bodyparser;
 extern crate futures;
@@ -40,6 +43,7 @@ extern crate grin_util as util;
 
 mod checker;
 mod handlers;
+mod outputs;
 mod info;
 mod receiver;
 mod sender;
@@ -47,6 +51,7 @@ mod types;
 pub mod client;
 pub mod server;
 
+pub use outputs::show_outputs;
 pub use info::show_info;
 pub use receiver::{receive_json_tx, receive_json_tx_str, WalletReceiver};
 pub use sender::{issue_burn_tx, issue_send_tx};
