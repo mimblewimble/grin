@@ -209,6 +209,13 @@ fn main() {
 				.long("min_conf")
 				.default_value("1")
 				.takes_value(true))
+			.arg(Arg::with_name("selection_strategy")
+				.help("Coin/Output selection strategy.")
+				.short("s")
+				.long("selection")
+				.possible_values(&["default", "smallest"])
+				.default_value("default")
+				.takes_value(true))
 			.arg(Arg::with_name("dest")
 				.help("Send the transaction to the provided server")
 				.short("d")
@@ -397,9 +404,12 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				.expect("Could not parse amount as a number with optional decimal point.");
 			let minimum_confirmations: u64 = send_args
 				.value_of("minimum_confirmations")
-				.unwrap_or("1")
+				.unwrap()
 				.parse()
 				.expect("Could not parse minimum_confirmations as a whole number.");
+			let selection_strategy = send_args
+				.value_of("selection_strategy")
+				.expect("Selection strategy required");
 			let mut dest = "stdout";
 			if let Some(d) = send_args.value_of("dest") {
 				dest = d;
@@ -410,6 +420,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				amount,
 				minimum_confirmations,
 				dest.to_string(),
+				(selection_strategy == "default"),
 			);
 			match result {
 				Ok(_) => {}, //success messaged logged internally
@@ -425,7 +436,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				.expect("Could not parse amount as number with optional decimal point.");
 			let minimum_confirmations: u64 = send_args
 				.value_of("minimum_confirmations")
-				.unwrap_or("1")
+				.unwrap()
 				.parse()
 				.expect("Could not parse minimum_confirmations as a whole number.");
 			wallet::issue_burn_tx(&wallet_config, &keychain, amount, minimum_confirmations)
