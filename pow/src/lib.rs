@@ -131,13 +131,14 @@ pub fn pow_size<T: MiningWorker + ?Sized>(
 ) -> Result<(), Error> {
 	let start_nonce = bh.nonce;
 
-	// TODO - this feels awkward - we try this every time, not just for the genesis block...
-	// if we're in production mode, try the pre-mined solution first
-	if global::is_production_mode() || global::is_user_testing_mode() {
-		let p = Proof::new(global::get_genesis_pow().to_vec());
-		if p.clone().to_difficulty() >= diff {
-			bh.pow = p;
-			return Ok(());
+	// try the pre-mined solution first for the genesis block (height 0)
+	if bh.height == 0 {
+		if global::is_production_mode() || global::is_user_testing_mode() {
+			let p = Proof::new(global::get_genesis_pow().to_vec());
+			if p.clone().to_difficulty() >= diff {
+				bh.pow = p;
+				return Ok(());
+			}
 		}
 	}
 
