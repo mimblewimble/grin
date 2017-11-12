@@ -68,11 +68,9 @@ impl Chain {
 		}
 	}
 
-	/// Initializes the blockchain and returns a new Chain instance. Does a
-	/// check
+	/// Initializes the blockchain and returns a new Chain instance. Does a check
 	/// on the current chain head to make sure it exists and creates one based
-	/// on
-	/// the genesis block if necessary.
+	/// on the genesis block if necessary.
 	pub fn init(
 		db_root: String,
 		adapter: Arc<ChainAdapter>,
@@ -96,7 +94,13 @@ impl Chain {
 				// saving a new tip based on genesis
 				let tip = Tip::new(gen.hash());
 				chain_store.save_head(&tip)?;
-				info!(LOGGER, "Saved genesis block with hash {}", gen.hash());
+				info!(
+					LOGGER,
+					"Saved genesis block with hash: {:?}, nonce: {:?}, pow: {:?}",
+					gen.hash(),
+					gen.header.nonce,
+					gen.header.pow,
+				);
 				tip
 			}
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
