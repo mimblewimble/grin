@@ -252,8 +252,8 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 
-		let (tx1, _) = transaction(vec![output(105, key_id1.clone())], &keychain).unwrap();
-		let (tx2, _) = transaction(vec![input(105, key_id1.clone())], &keychain).unwrap();
+		let (tx1, _) = transaction(vec![output(105, 0, key_id1.clone())], &keychain).unwrap();
+		let (tx2, _) = transaction(vec![input(105, 0, key_id1.clone())], &keychain).unwrap();
 
 		assert_eq!(tx1.outputs[0].commitment(), tx2.inputs[0].commitment());
 	}
