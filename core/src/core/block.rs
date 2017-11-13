@@ -54,10 +54,7 @@ pub enum Error {
 	/// Too many inputs, outputs or kernels in the block
 	WeightExceeded,
 	/// Kernel not valid due to lock_height exceeding block header height
-	KernelLockHeight {
-		/// The lock_height causing this validation error
-		lock_height: u64,
-	},
+	KernelLockHeight(u64),
 	/// Underlying tx related error
 	Transaction(transaction::Error),
 	/// Underlying Secp256k1 error (signature validation or invalid public key typically)
@@ -470,12 +467,17 @@ impl Block {
 	/// as all the steps within are verify steps.
 	///
 	pub fn validate(&self) -> Result<(), Error> {
-		if exceeds_weight(self.inputs.len(), self.outputs.len(), self.kernels.len()) {
-			return Err(Error::WeightExceeded);
-		}
+		self.verify_weight()?;
 		self.verify_sorted()?;
 		self.verify_coinbase()?;
 		self.verify_kernels(false)?;
+		Ok(())
+	}
+
+	fn verify_weight(&self) -> Result<(), Error> {
+		if exceeds_weight(self.inputs.len(), self.outputs.len(), self.kernels.len()) {
+			return Err(Error::WeightExceeded);
+		}
 		Ok(())
 	}
 
@@ -495,8 +497,10 @@ impl Block {
 				return Err(Error::OddKernelFee);
 			}
 
+			// check we have no kernels with lock_heights greater than current height
+			// no tx can be included in a block earlier than its lock_height
 			if k.lock_height > self.header.height {
-				return Err(Error::KernelLockHeight { lock_height: k.lock_height });
+				return Err(Error::KernelLockHeight(k.lock_height));
 			}
 		}
 
@@ -532,19 +536,17 @@ impl Block {
 	// * That the sum of blinding factors for all coinbase-marked outputs match
 	//   the coinbase-marked kernels.
 	fn verify_coinbase(&self) -> Result<(), Error> {
-		let cb_outs = filter_map_vec!(self.outputs, |out| if out.features.contains(
-			COINBASE_OUTPUT,
-		)
-		{
-			Some(out.commitment())
-		} else {
-			None
-		});
-		let cb_kerns = filter_map_vec!(self.kernels, |k| if k.features.contains(COINBASE_KERNEL) {
-			Some(k.excess)
-		} else {
-			None
-		});
+		let cb_outs = self.outputs
+			.iter()
+			.filter(|out| out.features.contains(COINBASE_OUTPUT))
+			.cloned()
+			.collect::<Vec<Output>>();
+
+		let cb_kerns = self.kernels
+			.iter()
+			.filter(|kernel| kernel.features.contains(COINBASE_KERNEL))
+			.cloned()
+			.collect::<Vec<TxKernel>>();
 
 		let over_commit;
 		let out_adjust_sum;
@@ -553,8 +555,14 @@ impl Block {
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
 			over_commit = secp.commit_value(reward(self.total_fees()))?;
-			out_adjust_sum = secp.commit_sum(cb_outs, vec![over_commit])?;
-			kerns_sum = secp.commit_sum(cb_kerns, vec![])?;
+			out_adjust_sum = secp.commit_sum(
+				cb_outs.iter().map(|x| x.commitment()).collect(),
+				vec![over_commit],
+			)?;
+			kerns_sum = secp.commit_sum(
+				cb_kerns.iter().map(|x| x.excess).collect(),
+				vec![],
+			)?;
 		}
 
 		if kerns_sum != out_adjust_sum {

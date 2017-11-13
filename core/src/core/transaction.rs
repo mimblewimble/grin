@@ -738,7 +738,6 @@ impl ops::Add for SumCommit {
 mod test {
 	use super::*;
 	use keychain::Keychain;
-	use util;
 	use util::secp;
 
 	#[test]

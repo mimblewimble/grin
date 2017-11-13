@@ -469,7 +469,7 @@ mod test {
 			&key_id3.clone(),
 		).unwrap();
 		match b.validate() {
-			Err(KernelLockHeight { lock_height: height }) => {
+			Err(KernelLockHeight(height)) => {
 				assert_eq!(height, 2);
 			}
 			_ => panic!("expecting KernelLockHeight error here"),
