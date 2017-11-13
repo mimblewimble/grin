@@ -30,6 +30,7 @@ use core::pmmr::Summable;
 use global;
 use keychain::{Identifier, Keychain};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
+use util::LOGGER;
 
 /// The size to use for the stored blake2 hash of a switch_commitment
 pub const SWITCH_COMMIT_HASH_SIZE: usize = 20;
@@ -490,12 +491,17 @@ bitflags! {
 pub struct SwitchCommitHashKey ([u8; SWITCH_COMMIT_KEY_SIZE]);
 
 impl SwitchCommitHashKey {
-	pub fn from_features_and_lock_height(features: OutputFeatures, lock_height: u64) -> SwitchCommitHashKey {
+	pub fn from_features_and_lock_height(
+		features: OutputFeatures,
+		lock_height: u64
+	) -> SwitchCommitHashKey {
 		let mut bytes = [0; SWITCH_COMMIT_KEY_SIZE];
-		bytes[0] = features.bits();
-		// seems wasteful to take up a full 8 bytes (of 20 bytes) to store the lock_height
-		// 4 bytes will give us approx 4,000 years with 1 min blocks (unless my math is way off)
-		BigEndian::write_u32(&mut bytes[1..5], lock_height as u32);
+		if features.contains(COINBASE_OUTPUT) {
+			bytes[0] = features.bits();
+			// seems wasteful to take up a full 8 bytes (of 20 bytes) to store the lock_height
+			// 4 bytes will give us approx 4,000 years with 1 min blocks (unless my math is way off)
+			BigEndian::write_u32(&mut bytes[1..5], lock_height as u32);
+		}
 		SwitchCommitHashKey(bytes)
 	}
 }
