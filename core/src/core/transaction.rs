@@ -30,6 +30,7 @@ use core::pmmr::Summable;
 use global;
 use keychain::{Identifier, Keychain};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
+use util;
 use util::LOGGER;
 
 /// The size to use for the stored blake2 hash of a switch_commitment
@@ -514,7 +515,7 @@ pub struct SwitchCommitHash {
 }
 
 /// Definition of the switch commitment hash
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SwitchCommitHash([u8; SWITCH_COMMIT_HASH_SIZE]);
 
 /// Implementation of Writeable for a switch commitment hash
@@ -544,6 +545,14 @@ impl AsRef<[u8]> for SwitchCommitHash {
 	}
 }
 
+impl ::std::fmt::Debug for SwitchCommitHash {
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+		try!(write!(f, "{}(", stringify!(SwitchCommitHash)));
+		try!(write!(f, "{}", self.to_hex()));
+		write!(f, ")")
+	}
+}
+
 impl SwitchCommitHash {
 	/// Builds a switch commitment hash from a switch commit using blake2
 	pub fn from_switch_commit(switch_commit: Commitment, key: SwitchCommitHashKey) -> SwitchCommitHash {
@@ -554,6 +563,10 @@ impl SwitchCommitHash {
 			h[i] = switch_commit_hash[i];
 		}
 		SwitchCommitHash(h)
+	}
+
+	pub fn to_hex(&self) -> String {
+		util::to_hex(self.0.to_vec())
 	}
 }
 
