@@ -82,6 +82,7 @@ pub enum Error {
 	SumTreeErr(String),
 	/// No chain exists and genesis block is required
 	GenesisBlockRequired,
+	/// Error from underlying tx handling
 	Transaction(transaction::Error),
 	/// Anything else
 	Other(String),
