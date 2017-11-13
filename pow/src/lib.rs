@@ -97,9 +97,8 @@ pub fn pow20<T: MiningWorker>(
 /// Otherwise,
 /// uses the internal miner
 ///
-
 pub fn mine_genesis_block(miner_config: Option<types::MinerConfig>) -> Option<core::core::Block> {
-	info!(util::LOGGER, "Starting miner loop for Genesis Block");
+	info!(util::LOGGER, "Genesis block not found, initializing...");
 	let mut gen = genesis::genesis();
 	let diff = gen.header.difficulty.clone();
 
@@ -132,12 +131,14 @@ pub fn pow_size<T: MiningWorker + ?Sized>(
 ) -> Result<(), Error> {
 	let start_nonce = bh.nonce;
 
-	// if we're in production mode, try the pre-mined solution first
-	if global::is_production_mode() {
-		let p = Proof::new(global::get_genesis_pow().to_vec());
-		if p.clone().to_difficulty() >= diff {
-			bh.pow = p;
-			return Ok(());
+	// try the pre-mined solution first for the genesis block (height 0)
+	if bh.height == 0 {
+		if global::is_production_mode() || global::is_user_testing_mode() {
+			let p = Proof::new(global::get_genesis_pow().to_vec());
+			if p.clone().to_difficulty() >= diff {
+				bh.pow = p;
+				return Ok(());
+			}
 		}
 	}
 
