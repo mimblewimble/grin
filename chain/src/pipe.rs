@@ -314,9 +314,23 @@ fn validate_block(
 	for input in &b.inputs {
 		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
 			if output.features.contains(transaction::COINBASE_OUTPUT) {
-				input.verify_lock_height(&output, b.header.height).map_err(|_| Error::ImmatureCoinbase)?;
-			};
-		};
+				// check the lock_height of the output being spent by this input
+				// is not greater than the current height
+				input.verify_lock_height(&output, b.header.height)
+					.map_err(|_| Error::ImmatureCoinbase)?;
+
+				// This input is spending an output that has sufficiently matured.
+				// For a coinbase output we need to verify it
+				// was originally created with a valid lock_height
+				// based on the coinbase maturity consensus rule.
+				let out_header = ctx.store.get_block_header_by_output_commit(&input.commitment());
+				if let Ok(out_header) = out_header {
+					if input.lock_height() > out_header.height + global::coinbase_maturity() {
+						return Err(Error::ImmatureCoinbase);
+					}
+				}
+			}
+		}
 	}
 
 	Ok(())

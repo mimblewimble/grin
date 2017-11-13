@@ -451,6 +451,11 @@ impl Input {
 		self.commit
 	}
 
+	/// The lock_height of this input (only relevant for an input spending a coinbase output).
+	pub fn lock_height(&self) -> u64 {
+		self.lock_height
+	}
+
 	/// Given the output being spent by this input along with the current chain height
 	/// we can verify the output has sufficiently matured and is spendable.
 	/// We do this by reconstructing the switch_commit_hash from the switch_commit.
@@ -476,6 +481,7 @@ impl Input {
 				return Err(Error::LockHeight(self.lock_height));
 			}
 		}
+
 		Ok(())
 	}
 }
