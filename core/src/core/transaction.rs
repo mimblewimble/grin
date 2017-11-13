@@ -36,6 +36,7 @@ use util::LOGGER;
 /// The size to use for the stored blake2 hash of a switch_commitment
 pub const SWITCH_COMMIT_HASH_SIZE: usize = 20;
 
+/// The size of the secret key used to generate the switch commitment hash (blake2)
 pub const SWITCH_COMMIT_KEY_SIZE: usize = 20;
 
 bitflags! {
@@ -82,7 +83,9 @@ pub enum Error {
 	TooManyInputs,
 	/// Underlying consensus error (currently for sort order)
 	ConsensusError(consensus::Error),
+	/// Error originating from an invalid lock-height
 	LockHeight(u64),
+	/// Error originating from an invalid switch commitment (coinbase lock_height related)
 	SwitchCommitment,
 }
 
@@ -427,6 +430,7 @@ impl Readable for Input {
 /// The input for a transaction, which spends a pre-existing output. The input
 /// commitment is a reproduction of the commitment of the output it's spending.
 impl Input {
+	/// Build a new Input from a commit, switch_commit and lock_height
 	pub fn new(commit: Commitment, switch_commit: Commitment, lock_height: u64) -> Input {
 		debug!(
 			LOGGER,
@@ -505,6 +509,12 @@ impl SwitchCommitHashKey {
 			// 4 bytes will give us approx 4,000 years with 1 min blocks (unless my math is way off)
 			BigEndian::write_u32(&mut bytes[1..5], lock_height as u32);
 		}
+		SwitchCommitHashKey(bytes)
+	}
+
+	/// We use a zero value key for regular transactions.
+	pub fn zero() -> SwitchCommitHashKey {
+		let bytes = [0; SWITCH_COMMIT_KEY_SIZE];
 		SwitchCommitHashKey(bytes)
 	}
 }
@@ -784,7 +794,7 @@ mod test {
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			switch_commit,
-			SwitchCommitHashKey::from_features_and_lock_height(DEFAULT_OUTPUT, 0),
+			SwitchCommitHashKey::zero(),
 		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(5, &key_id, commit, msg).unwrap();
@@ -814,7 +824,7 @@ mod test {
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			switch_commit,
-			SwitchCommitHashKey::from_features_and_lock_height(DEFAULT_OUTPUT, 0),
+			SwitchCommitHashKey::zero(),
 		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(1003, &key_id, commit, msg).unwrap();

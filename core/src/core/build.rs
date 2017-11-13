@@ -81,7 +81,7 @@ pub fn output(value: u64, lock_height: u64, key_id: Identifier) -> Box<Append> {
 		let switch_commit = build.keychain.switch_commit(&key_id).unwrap();
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			switch_commit,
-			SwitchCommitHashKey::from_features_and_lock_height(DEFAULT_OUTPUT, lock_height),
+			SwitchCommitHashKey::zero(),
 		);
 		trace!(
 			LOGGER,

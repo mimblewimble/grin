@@ -609,7 +609,8 @@ mod tests {
 	use std::sync::{Arc, RwLock};
 	use blake2;
 	use core::global::ChainTypes;
-	use core::core::SwitchCommitHash;
+	use core::core::{SwitchCommitHash, SwitchCommitHashKey};
+
 
 	macro_rules! expect_output_parent {
 		($pool:expr, $expected:pat, $( $output:expr ),+ ) => {
@@ -1231,7 +1232,7 @@ mod tests {
 
 		for input_value in input_values {
 			let key_id = keychain.derive_key_id(input_value as u32).unwrap();
-			tx_elements.push(build::input(input_value, key_id));
+			tx_elements.push(build::input(input_value, 0, key_id));
 		}
 
 		for output_value in output_values {
@@ -1259,7 +1260,7 @@ mod tests {
 
 		for input_value in input_values {
 			let key_id = keychain.derive_key_id(input_value as u32).unwrap();
-			tx_elements.push(build::input(input_value, key_id));
+			tx_elements.push(build::input(input_value, 0, key_id));
 		}
 
 		for output_value in output_values {
@@ -1279,7 +1280,10 @@ mod tests {
 		let key_id = keychain.derive_key_id(value as u32).unwrap();
 		let commit = keychain.commit(value, &key_id).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			SwitchCommitHashKey::zero(),
+		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
 
@@ -1297,7 +1301,10 @@ mod tests {
 		let key_id = keychain.derive_key_id(value as u32).unwrap();
 		let commit = keychain.commit(value, &key_id).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			SwitchCommitHashKey::zero(),
+		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
 
