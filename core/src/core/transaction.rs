@@ -492,9 +492,11 @@ bitflags! {
 pub struct SwitchCommitHashKey ([u8; SWITCH_COMMIT_KEY_SIZE]);
 
 impl SwitchCommitHashKey {
+	/// For a coinbase output use (output_features || lock_height) as the key.
+	/// For regular tx outputs use the zero value as the key.
 	pub fn from_features_and_lock_height(
 		features: OutputFeatures,
-		lock_height: u64
+		lock_height: u64,
 	) -> SwitchCommitHashKey {
 		let mut bytes = [0; SWITCH_COMMIT_KEY_SIZE];
 		if features.contains(COINBASE_OUTPUT) {
@@ -565,6 +567,7 @@ impl SwitchCommitHash {
 		SwitchCommitHash(h)
 	}
 
+	/// Hex string represenation of a switch commitment hash.
 	pub fn to_hex(&self) -> String {
 		util::to_hex(self.0.to_vec())
 	}

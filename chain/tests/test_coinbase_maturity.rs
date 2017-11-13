@@ -99,18 +99,28 @@ fn test_coinbase_maturity() {
 
 	let prev = chain.head_header().unwrap();
 
+	let height = prev.height;
+	assert_eq!(height, 1);
+
 	let amount = consensus::REWARD;
+
+	// here we build a tx that attempts to spend the earlier coinbase output
+	// this is not a valid tx as the coinbase output cannot be spent yet
 	let (coinbase_txn, _) = build::transaction(
 		vec![
-			build::input(amount, block.header.height, key_id1.clone()),
-			build::output(amount - 2, block.header.height, key_id2),
+			build::input(amount, height, key_id1.clone()),
+			build::output(amount - 2, height, key_id2.clone()),
 			build::with_fee(2),
 		],
 		&keychain,
 	).unwrap();
 
-	let mut block =
-		core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &key_id3).unwrap();
+	let mut block = core::core::Block::new(
+		&prev,
+		vec![&coinbase_txn],
+		&keychain,
+		&key_id3,
+	).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -124,14 +134,16 @@ fn test_coinbase_maturity() {
 		global::sizeshift() as u32,
 	).unwrap();
 
-	let result = chain.process_block(block, chain::NONE);
+	// confirm the block fails validation due to the invalid tx attempting to spend
+	// the immature coinbase
+	let result = chain.process_block(block, chain::EASY_POW);
 	match result {
 		Err(Error::ImmatureCoinbase) => (),
 		_ => panic!("expected ImmatureCoinbase error here"),
 	};
 
 	// mine enough blocks to increase the height sufficiently for
- // coinbase to reach maturity and be spendable in the next block
+	// coinbase to reach maturity and be spendable in the next block
 	for _ in 0..3 {
 		let prev = chain.head_header().unwrap();
 
@@ -157,8 +169,24 @@ fn test_coinbase_maturity() {
 
 	let prev = chain.head_header().unwrap();
 
-	let mut block =
-		core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &key_id4).unwrap();
+	let height = prev.height;
+	assert_eq!(height, 4);
+
+	let (coinbase_txn, _) = build::transaction(
+		vec![
+			build::input(amount, height, key_id1.clone()),
+			build::output(amount - 2, height, key_id2.clone()),
+			build::with_fee(2),
+		],
+		&keychain,
+	).unwrap();
+
+	let mut block = core::core::Block::new(
+		&prev,
+		vec![&coinbase_txn],
+		&keychain,
+		&key_id4,
+	).unwrap();
 
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 

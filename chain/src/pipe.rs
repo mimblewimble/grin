@@ -314,7 +314,7 @@ fn validate_block(
 	for input in &b.inputs {
 		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
 			if output.features.contains(transaction::COINBASE_OUTPUT) {
-				input.verify_lock_height(&output, b.header.height)?;
+				input.verify_lock_height(&output, b.header.height).map_err(|_| Error::ImmatureCoinbase)?;
 			};
 		};
 	}
