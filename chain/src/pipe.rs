@@ -313,23 +313,8 @@ fn validate_block(
 
 	for input in &b.inputs {
 		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
-			// and check that any coinbase output also lines up correctly
-			// with the lock_height based on the original block header
 			if output.features.contains(transaction::COINBASE_OUTPUT) {
 				input.verify_lock_height(&output, b.header.height)?;
-
-				//
-				// falling back to dealing with coinbase explicitly here
-				//
-				// if let Ok(output_header) = ctx.store
-				// 	.get_block_header_by_output_commit(
-				// 		&input.commitment(),
-				// 	)
-				// {
-				// 	if b.header.height <= output_header.height + global::coinbase_maturity() {
-				// 		return Err(Error::ImmatureCoinbase);
-				// 	}
-				// };
 			};
 		};
 	}
