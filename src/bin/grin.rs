@@ -179,6 +179,11 @@ fn main() {
 			.long("external")
 			.help("Listen on 0.0.0.0 interface to allow external connections (default is 127.0.0.1)")
 			.takes_value(false))
+		.arg(Arg::with_name("show_spent")
+			.short("s")
+			.long("show_spent")
+			.help("Show spent outputs on wallet output command")
+			.takes_value(false))
 		.arg(Arg::with_name("api_server_address")
 			.short("a")
 			.long("api_server_address")
@@ -368,6 +373,11 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
+	let mut show_spent=false;
+	if wallet_args.is_present("show_spent") {
+		show_spent=true;
+	}
+
 	// Derive the keychain based on seed from seed file and specified passphrase.
 	// Generate the initial wallet seed if we are running "wallet init".
 	if let ("init", Some(_)) = wallet_args.subcommand() {
@@ -446,7 +456,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 			wallet::show_info(&wallet_config, &keychain);
 		}
 		("outputs", Some(_)) => {
-			wallet::show_outputs(&wallet_config, &keychain);
+			wallet::show_outputs(&wallet_config, &keychain, show_spent);
 		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}
