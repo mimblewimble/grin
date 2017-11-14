@@ -15,12 +15,12 @@
 use checker;
 use keychain::Keychain;
 use core::core;
-use types::{WalletConfig, WalletData};
+use types::{WalletConfig, WalletData, OutputStatus};
 use prettytable;
 use term;
 use std::io::prelude::*;
 
-pub fn show_outputs(config: &WalletConfig, keychain: &Keychain) {
+pub fn show_outputs(config: &WalletConfig, keychain: &Keychain, show_spent:bool) {
 	let root_key_id = keychain.root_key_id();
 	let result = checker::refresh_outputs(&config, &keychain);
 
@@ -40,6 +40,12 @@ pub fn show_outputs(config: &WalletConfig, keychain: &Keychain) {
 			.outputs
 			.values()
 			.filter(|out| out.root_key_id == root_key_id)
+			.filter(|out|
+				if show_spent {
+					true
+				} else {
+					out.status != OutputStatus::Spent
+				})
 			.collect::<Vec<_>>();
 		outputs.sort_by_key(|out| out.n_child);
 
