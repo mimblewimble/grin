@@ -140,11 +140,19 @@ impl NetAdapter for NetToChainAdapter {
 	}
 
 	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
+		debug!(
+			LOGGER,
+			"locate_headers: {:?}",
+			locator,
+		);
+
 		if locator.len() == 0 {
 			return vec![];
 		}
 
-		// go through the locator vector and check if we know any of these headers
+		// recursively go back through the locator vector
+		// and stop when we find a header that we recognize
+		// this will be a header shared in common between us and the peer
 		let known = self.chain.get_block_header(&locator[0]);
 		let header = match known {
 			Ok(header) => header,
@@ -156,6 +164,12 @@ impl NetAdapter for NetToChainAdapter {
 				return vec![];
 			}
 		};
+
+		debug!(
+			LOGGER,
+			"locate_headers: {:?}",
+			header,
+		);
 
 		// looks like we know one, getting as many following headers as allowed
 		let hh = header.height;
@@ -171,6 +185,13 @@ impl NetAdapter for NetToChainAdapter {
 				}
 			}
 		}
+
+		debug!(
+			LOGGER,
+			"locate_headers: returning headers: {}",
+			headers.len(),
+		);
+
 		headers
 	}
 
