@@ -442,11 +442,21 @@ impl Miner {
 
 		loop {
 			debug!(LOGGER, "in miner loop...");
+			trace!(LOGGER, "key_id: {:?}", key_id);
 
 			// get the latest chain state and build a block on top of it
 			let head = self.chain.head_header().unwrap();
 			let mut latest_hash = self.chain.head().unwrap().last_block_h;
-			let (mut b, block_fees) = self.build_block(&head, key_id);
+			let mut result = self.build_block(&head, key_id.clone());
+			while let Err(e) = result {
+				result = self.build_block(&head, key_id.clone());
+				if let self::Error::Chain(chain::Error::DuplicateCommitment(_)) = e {
+					warn!(LOGGER, "Duplicate commit for potential coinbase detected. Trying next derivation.");
+				} else {
+					break;
+				}
+			}
+			let (mut b, block_fees) = result.unwrap();
 
 			let mut sol = None;
 			let mut use_async = false;
@@ -530,7 +540,7 @@ impl Miner {
 		&self,
 		head: &core::BlockHeader,
 		key_id: Option<Identifier>,
-	) -> (core::Block, BlockFees) {
+	) -> Result<(core::Block, BlockFees), Error> {
 		// prepare the block header timestamp
 		let mut now_sec = time::get_time().sec;
 		let head_sec = head.timestamp.to_timespec().sec;
@@ -579,10 +589,18 @@ impl Miner {
 		b.header.nonce = rng.gen();
 		b.header.difficulty = difficulty;
 		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
-		self.chain
-			.set_sumtree_roots(&mut b)
-			.expect("Error setting sum tree roots");
-		(b, block_fees)
+		trace!(LOGGER, "Block: {:?}", b);
+		let result=self.chain.set_sumtree_roots(&mut b);
+		match result {
+			Ok(_) => Ok((b, block_fees)),
+			//If it's a duplicate commitment, it's likely trying to use 
+			//a key that's already been derived but not in the wallet
+			//for some reason, allow caller to retry
+			Err(chain::Error::DuplicateCommitment(e)) =>
+				Err(Error::Chain(chain::Error::DuplicateCommitment(e))),
+			//Some other issue is worth a panic
+			Err(e) => panic!(e),
+		}
 	}
 
 	///
