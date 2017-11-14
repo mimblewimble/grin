@@ -120,7 +120,7 @@ Let the mining server find a few blocks, then stop (just ctrl-c) the mining serv
 
 The following outlines a more advanced example simulating a multi-server network with transactions being posted.
 
-For the sake of example, we're going to run three nodes with varying setups. Create two more directories beside your node1 directory, called node2 and node3. If you want to clear data from your previous run (or anytime you want to reset the blockchain and all peer data) just delete the wallet.dat file in the server1 directory and run rm -rf .grin to remove grin's database.
+For the sake of example, we're going to run three nodes with varying setups. Create two more directories beside your node1 directory, called node2 and node3. If you want to clear data from your previous run (or anytime you want to reset the blockchain and all peer data) just delete the wallet.dat file in the node1 directory and run rm -rf .grin to remove grin's database.
 
 ### Node 1: Genesis and Miner
 
@@ -138,7 +138,7 @@ Then we start node 1 mining with its P2P server bound to port 10000 and its api 
 
 We'll set up Node 2 as a simple validating node (i.e. it won't mine,) but we'll pass in the address of node 1 as a seed. Node 2 will join the network founded by node 1 and then sync its blockchain and peer data.
 
-In a new terminal, tell node 2 to run a sever using node 1's P2P address as a seed.  Node 2's P2P server will run on port 20000 and its API server will run on port 20001.
+In a new terminal, tell node 2 to run a server using node 1's P2P address as a seed.  Node 2's P2P server will run on port 20000 and its API server will run on port 20001.
 
     node2$ grin server -s "127.0.0.1:10000" -p 20000 -a 20001 run
 
