@@ -25,6 +25,7 @@ use std::ops::{Add, Div, Mul, Sub};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use byteorder::{BigEndian, ByteOrder};
 
+use consensus;
 use core::hash::Hash;
 use ser::{self, Readable, Reader, Writeable, Writer};
 
@@ -38,7 +39,7 @@ pub struct Difficulty {
 }
 
 impl Difficulty {
-	/// Difficulty of zero, which is practically invalid (not target can be
+	/// Difficulty of zero, which is invalid (no target can be
 	/// calculated from it) but very useful as a start for additions.
 	pub fn zero() -> Difficulty {
 		Difficulty { num: 0 }
@@ -46,8 +47,14 @@ impl Difficulty {
 
 	/// Difficulty of one, which is the minumum difficulty (when the hash
 	/// equals the max target)
+	/// TODO - is this the minimum dificulty or is consensus::MINIMUM_DIFFICULTY the minimum?
 	pub fn one() -> Difficulty {
 		Difficulty { num: 1 }
+	}
+
+	/// Minimum difficulty according to our consensus rules.
+	pub fn minimum() -> Difficulty {
+		Difficulty { num: consensus::MINIMUM_DIFFICULTY }
 	}
 
 	/// Convert a `u32` into a `Difficulty`

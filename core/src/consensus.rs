@@ -20,6 +20,7 @@
 //! here.
 
 use std::fmt;
+use std::cmp::max;
 
 use ser;
 use core::target::Difficulty;
@@ -119,10 +120,10 @@ pub const DIFFICULTY_ADJUST_WINDOW: u64 = 23;
 /// Average time span of the difficulty adjustment window
 pub const BLOCK_TIME_WINDOW: u64 = DIFFICULTY_ADJUST_WINDOW * BLOCK_TIME_SEC;
 
-/// Maximum size time window used for difficutly adjustments
+/// Maximum size time window used for difficulty adjustments
 pub const UPPER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW * 4 / 3;
 
-/// Minimum size time window used for difficutly adjustments
+/// Minimum size time window used for difficulty adjustments
 pub const LOWER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW * 5 / 6;
 
 /// Error when computing the next difficulty adjustment.
@@ -181,7 +182,7 @@ where
 
 	// Check we have enough blocks
 	if window_end.len() < (MEDIAN_TIME_WINDOW as usize) {
-		return Ok(Difficulty::from_num(MINIMUM_DIFFICULTY));
+		return Ok(Difficulty::minimum());
 	}
 
 	// Calculating time medians at the beginning and end of the window.
@@ -203,7 +204,10 @@ where
 		ts_damp
 	};
 
-	Ok(diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW) / Difficulty::from_num(adj_ts))
+	let difficulty =
+		diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW) / Difficulty::from_num(adj_ts);
+
+	Ok(max(difficulty, Difficulty::minimum()))
 }
 
 /// Consensus rule that collections of items are sorted lexicographically over the wire.
@@ -318,6 +322,12 @@ mod test {
 		assert_eq!(
 			next_difficulty(repeat(200, 1000, just_enough)).unwrap(),
 			Difficulty::from_num(750)
+		);
+
+		// We should never drop below MINIMUM_DIFFICULTY (10)
+		assert_eq!(
+			next_difficulty(repeat(90, 10, just_enough)).unwrap(),
+			Difficulty::from_num(10)
 		);
 	}
 

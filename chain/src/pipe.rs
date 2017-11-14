@@ -21,6 +21,7 @@ use time;
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader};
+use core::core::target::Difficulty;
 use core::core::transaction;
 use types::*;
 use store;
@@ -181,6 +182,12 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 
 	if !ctx.opts.intersects(SKIP_POW) {
 		// verify the proof of work and related parameters
+
+		// explicit check to ensure we are not below the minimum difficulty
+		// we will also check difficulty based on next_difficulty later on
+		if header.difficulty < Difficulty::minimum() {
+			return Err(Error::DifficultyTooLow);
+		}
 
 		if header.total_difficulty != prev.total_difficulty.clone() + prev.pow.to_difficulty() {
 			return Err(Error::WrongTotalDifficulty);
