@@ -71,19 +71,22 @@ impl Syncer {
 	/// syncing if required.
 	pub fn run(&self) -> Result<(), Error> {
 		info!(LOGGER, "Sync: starting sync");
+
+		// Loop for 10s waiting for some peers to potentially sync from.
 		let start = Instant::now();
 		loop {
 			let pc = self.p2p.peer_count();
 			if pc > 3 {
 				break;
 			}
-			// if pc > 0 && (Instant::now() - start > Duration::from_secs(10)) {
 			if Instant::now() - start > Duration::from_secs(10) {
 				break;
 			}
 			thread::sleep(Duration::from_millis(200));
 		}
 
+		// Now check we actually have at least one peer to sync from.
+		// If not then end the sync cleanly.
 		if self.p2p.peer_count() == 0 {
 			info!(LOGGER, "Sync: no peers to sync with, done.");
 
