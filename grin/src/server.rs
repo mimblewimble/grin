@@ -144,8 +144,7 @@ impl Server {
 			_ => {}
 		}
 
-
-		// now attempt to sync unless we have no known seeds and no known peers
+		// If we have any known seeds or peers then attempt to sync.
 		if config.seeding_type != Seeding::None || peer_store.all_peers().len() > 0 {
 			let sync = sync::Syncer::new(shared_chain.clone(), p2p_server.clone());
 			net_adapter.start_sync(sync);

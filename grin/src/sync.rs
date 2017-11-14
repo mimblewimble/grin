@@ -70,17 +70,27 @@ impl Syncer {
 	/// Checks the local chain state, comparing it with our peers and triggers
 	/// syncing if required.
 	pub fn run(&self) -> Result<(), Error> {
-		debug!(LOGGER, "Starting syncer.");
+		info!(LOGGER, "Sync: starting sync");
 		let start = Instant::now();
 		loop {
 			let pc = self.p2p.peer_count();
 			if pc > 3 {
 				break;
 			}
-			if pc > 0 && (Instant::now() - start > Duration::from_secs(10)) {
+			// if pc > 0 && (Instant::now() - start > Duration::from_secs(10)) {
+			if Instant::now() - start > Duration::from_secs(10) {
 				break;
 			}
 			thread::sleep(Duration::from_millis(200));
+		}
+
+		if self.p2p.peer_count() == 0 {
+			info!(LOGGER, "Sync: no peers to sync with, done.");
+
+			let mut sync = self.sync.lock().unwrap();
+			*sync = false;
+
+			return Ok(())
 		}
 
 		// check if we have missing full blocks for which we already have a header
@@ -91,6 +101,7 @@ impl Syncer {
 		info!(LOGGER, "Starting sync loop.");
 		loop {
 			let tip = self.chain.get_header_head()?;
+
 			// TODO do something better (like trying to get more) if we lose peers
 			let peer = self.p2p.most_work_peer().unwrap();
 			debug!(
@@ -104,6 +115,12 @@ impl Syncer {
 			let more_bodies = {
 				let blocks_to_download = self.blocks_to_download.lock().unwrap();
 				let blocks_downloading = self.blocks_downloading.lock().unwrap();
+				debug!(
+					LOGGER,
+					"Sync: blocks to download {}, block downloading {}",
+					blocks_to_download.len(),
+					blocks_downloading.len(),
+				);
 				blocks_to_download.len() > 0 || blocks_downloading.len() > 0
 			};
 
@@ -125,7 +142,7 @@ impl Syncer {
 
 			thread::sleep(Duration::from_secs(2));
 		}
-		info!(LOGGER, "Sync done.");
+		info!(LOGGER, "Sync: done.");
 		Ok(())
 	}
 

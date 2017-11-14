@@ -89,6 +89,12 @@ impl NetAdapter for NetToChainAdapter {
 	}
 
 	fn headers_received(&self, bhs: Vec<core::BlockHeader>) {
+		info!(
+			LOGGER,
+			"Received {} block headers",
+			bhs.len(),
+		);
+
 		// try to add each header to our header chain
 		let mut added_hs = vec![];
 		for bh in bhs {
