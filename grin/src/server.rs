@@ -144,8 +144,12 @@ impl Server {
 			_ => {}
 		}
 
-		let sync = sync::Syncer::new(shared_chain.clone(), p2p_server.clone());
-		net_adapter.start_sync(sync);
+
+		// now attempt to sync unless we have no known seeds and no known peers
+		if config.seeding_type != Seeding::None || peer_store.all_peers().len() > 0 {
+			let sync = sync::Syncer::new(shared_chain.clone(), p2p_server.clone());
+			net_adapter.start_sync(sync);
+		}
 
 		evt_handle.spawn(p2p_server.start(evt_handle.clone()).map_err(|_| ()));
 
