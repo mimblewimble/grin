@@ -21,6 +21,7 @@ use core::ser::{self, Readable, Reader, Writeable, Writer};
 use grin_store::{self, option_to_not_found, to_key, Error};
 use msg::SockAddr;
 use types::Capabilities;
+use util::LOGGER;
 
 const STORE_SUBPATH: &'static str = "peers";
 
@@ -94,11 +95,8 @@ impl PeerStore {
 	}
 
 	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
-		// we want to ignore any peer without a well-defined ip
-		let ip = p.addr.ip();
-		if ip.is_unspecified() || ip.is_loopback() {
-			return Ok(());
-		}
+		debug!(LOGGER, "saving peer to store {:?}", p);
+
 		self.db.put_ser(
 			&to_key(PEER_PREFIX, &mut format!("{}", p.addr).into_bytes())[..],
 			p,

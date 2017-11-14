@@ -62,7 +62,7 @@ impl Peer {
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		self_addr: SocketAddr,
-		hs: &Handshake,
+		hs: Arc<Handshake>,
 		na: Arc<NetAdapter>,
 	) -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
 		let connect_peer = hs.connect(capab, total_difficulty, self_addr, conn)

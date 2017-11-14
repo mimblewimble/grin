@@ -191,7 +191,6 @@ fn a_simulate_block_propagation() {
 
 	let test_name_dir = "grin-prop";
 	framework::clean_all_output(test_name_dir);
-
 	let mut evtlp = reactor::Core::new().unwrap();
 	let handle = evtlp.handle();
 
@@ -221,6 +220,8 @@ fn a_simulate_block_propagation() {
 					port: 18000 + n,
 					..p2p::P2PConfig::default()
 				}),
+				seeding_type: grin::Seeding::List,
+				seeds: Some(vec!["127.0.0.1:18000".to_string()]),
 				..Default::default()
 			},
 			&handle,
@@ -228,23 +229,12 @@ fn a_simulate_block_propagation() {
 		servers.push(s);
 	}
 
-	// everyone connects to everyone else
-	for n in 0..5 {
-		for m in 0..5 {
-			if m == n {
-				continue;
-			}
-			let addr = format!("{}:{}", "127.0.0.1", 18000 + m);
-			servers[n].connect_peer(addr.parse().unwrap()).unwrap();
-		}
-	}
-
 	// start mining
 	servers[0].start_miner(miner_config);
 	let original_height = servers[0].head().height;
 
 	// monitor for a change of head on a different server and check whether
- // chain height has changed
+	// chain height has changed
 	evtlp.run(change(&servers[4]).and_then(|tip| {
 		assert!(tip.height == original_height + 1);
 		Ok(())
@@ -283,16 +273,16 @@ fn simulate_full_sync() {
 	let mut servers = vec![];
 	for n in 0..2 {
 		let mut config = grin::ServerConfig {
+			api_http_addr: format!("127.0.0.1:{}", 19000 + n),
 			db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
 			p2p_config: Some(p2p::P2PConfig {
 				port: 11000 + n,
 				..p2p::P2PConfig::default()
 			}),
+			seeding_type: grin::Seeding::List,
+			seeds: Some(vec!["127.0.0.1:11000".to_string()]),
 			..Default::default()
 		};
-		if n == 1 {
-			config.seeding_type = grin::Seeding::Programmatic;
-		}
 		let s = grin::Server::future(config, &handle).unwrap();
 		servers.push(s);
 	}
@@ -300,10 +290,6 @@ fn simulate_full_sync() {
 	// mine a few blocks on server 1
 	servers[0].start_miner(miner_config);
 	thread::sleep(time::Duration::from_secs(5));
-
-	// connect 1 and 2
-	let addr = format!("{}:{}", "127.0.0.1", 11001);
-	servers[0].connect_peer(addr.parse().unwrap()).unwrap();
 
 	// 2 should get blocks
 	evtlp.run(change(&servers[1]));

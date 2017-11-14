@@ -63,7 +63,7 @@ impl Seeder {
 		seed_list: Box<Future<Item = Vec<SocketAddr>, Error = String>>,
 	) {
 		// open a channel with a listener that connects every peer address sent below
-  // max peer count
+		// max peer count
 		let (tx, rx) = futures::sync::mpsc::unbounded();
 		h.spawn(self.listen_for_addrs(h.clone(), rx));
 
@@ -85,12 +85,14 @@ impl Seeder {
 		let p2p_server = self.p2p.clone();
 
 		// now spawn a new future to regularly check if we need to acquire more peers
-  // and if so, gets them from db
+		// and if so, gets them from db
 		let mon_loop = Timer::default()
 			.interval(time::Duration::from_secs(10))
 			.for_each(move |_| {
+				debug!(LOGGER, "monitoring peers ({})", p2p_server.all_peers().len());
+
 				// maintenance step first, clean up p2p server peers and mark bans
-	// if needed
+				// if needed
 				let disconnected = p2p_server.clean_peers();
 				for p in disconnected {
 					if p.is_banned() {

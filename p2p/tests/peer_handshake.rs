@@ -59,7 +59,7 @@ fn peer_handshake() {
 							p2p::UNKNOWN,
 							Difficulty::one(),
 							my_addr,
-							&p2p::handshake::Handshake::new(),
+							Arc::new(p2p::handshake::Handshake::new()),
 							net_adapter.clone(),
 						)
 					})
