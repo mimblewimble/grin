@@ -32,13 +32,13 @@ seeding_type = "None"
 #if seeding_type = List, the list of peers to connect to.
 #seeds = ["192.168.0.1:8080","192.168.0.2:8080"]
 
-#The mining parameter mode, which defines the set of cuckoo parameters
-#used for mining. Can be:
+#The chain type, which defines the genesis block and the set of cuckoo
+#parameters used for mining. Can be:
 #AutomatedTesting - For CI builds and instant blockchain creation
 #UserTesting - For regular user testing (cuckoo 16)
-#Production - Full production cuckoo parameter (cuckoo 30)
+#Testnet1 - Full production cuckoo parameter (cuckoo 30)
 
-mining_parameter_mode = "UserTesting"
+chain_type = "UserTesting"
 
 #7 = Bit flags for FULL_NODE, this structure needs to be changed
 #internally to make it more configurable

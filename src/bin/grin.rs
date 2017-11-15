@@ -57,7 +57,7 @@ fn start_from_config_file(mut global_config: GlobalConfig) {
 			.unwrap()
 			.server
 			.clone()
-			.mining_parameter_mode
+			.chain_type
 			.unwrap(),
 	);
 
@@ -102,7 +102,7 @@ fn main() {
 				.unwrap()
 				.server
 				.clone()
-				.mining_parameter_mode
+				.chain_type
 				.unwrap(),
 		);
 	} else {

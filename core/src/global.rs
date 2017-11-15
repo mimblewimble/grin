@@ -47,77 +47,85 @@ pub const AUTOMATED_TESTING_COINBASE_MATURITY: u64 = 3;
 /// User testing coinbase maturity
 pub const USER_TESTING_COINBASE_MATURITY: u64 = 3;
 
-/// Mining parameter modes
+/// Types of chain a server can run with, dictates the genesis block and
+/// and mining parameters used.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum MiningParameterMode {
+pub enum ChainTypes {
 	/// For CI testing
 	AutomatedTesting,
 
 	/// For User testing
 	UserTesting,
 
-	/// For production, use the values in consensus.rs
-	Production,
+  /// First test network
+	Testnet1,
+
+  /// Main production network
+	Mainnet,
 }
 
 lazy_static!{
 	/// The mining parameter mode
-	pub static ref MINING_PARAMETER_MODE: RwLock<MiningParameterMode> =
-			RwLock::new(MiningParameterMode::Production);
+	pub static ref CHAIN_TYPE: RwLock<ChainTypes> =
+			RwLock::new(ChainTypes::Mainnet);
 }
 
 /// Set the mining mode
-pub fn set_mining_mode(mode: MiningParameterMode) {
-	let mut param_ref = MINING_PARAMETER_MODE.write().unwrap();
+pub fn set_mining_mode(mode: ChainTypes) {
+	let mut param_ref = CHAIN_TYPE.write().unwrap();
 	*param_ref = mode;
 }
 
 /// The sizeshift
 pub fn sizeshift() -> u8 {
-	let param_ref = MINING_PARAMETER_MODE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read().unwrap();
 	match *param_ref {
-		MiningParameterMode::AutomatedTesting => AUTOMATED_TESTING_SIZESHIFT,
-		MiningParameterMode::UserTesting => USER_TESTING_SIZESHIFT,
-		MiningParameterMode::Production => DEFAULT_SIZESHIFT,
+		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_SIZESHIFT,
+		ChainTypes::UserTesting => USER_TESTING_SIZESHIFT,
+		ChainTypes::Testnet1 => DEFAULT_SIZESHIFT,
+		ChainTypes::Mainnet => DEFAULT_SIZESHIFT,
 	}
 }
 
 /// The proofsize
 pub fn proofsize() -> usize {
-	let param_ref = MINING_PARAMETER_MODE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read().unwrap();
 	match *param_ref {
-		MiningParameterMode::AutomatedTesting => AUTOMATED_TESTING_PROOF_SIZE,
-		MiningParameterMode::UserTesting => USER_TESTING_PROOF_SIZE,
-		MiningParameterMode::Production => PROOFSIZE,
+		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_PROOF_SIZE,
+		ChainTypes::UserTesting => USER_TESTING_PROOF_SIZE,
+		ChainTypes::Testnet1 => PROOFSIZE,
+		ChainTypes::Mainnet => PROOFSIZE,
 	}
 }
 
 /// Coinbase maturity
 pub fn coinbase_maturity() -> u64 {
-	let param_ref = MINING_PARAMETER_MODE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read().unwrap();
 	match *param_ref {
-		MiningParameterMode::AutomatedTesting => AUTOMATED_TESTING_COINBASE_MATURITY,
-		MiningParameterMode::UserTesting => USER_TESTING_COINBASE_MATURITY,
-		MiningParameterMode::Production => COINBASE_MATURITY,
+		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_COINBASE_MATURITY,
+		ChainTypes::UserTesting => USER_TESTING_COINBASE_MATURITY,
+		ChainTypes::Testnet1 => COINBASE_MATURITY,
+		ChainTypes::Mainnet => COINBASE_MATURITY,
 	}
 }
 
 /// Are we in automated testing mode?
 pub fn is_automated_testing_mode() -> bool {
-	let param_ref = MINING_PARAMETER_MODE.read().unwrap();
-	MiningParameterMode::AutomatedTesting == *param_ref
+	let param_ref = CHAIN_TYPE.read().unwrap();
+	ChainTypes::AutomatedTesting == *param_ref
 }
 
 /// Are we in user testing mode?
 pub fn is_user_testing_mode() -> bool {
-	let param_ref = MINING_PARAMETER_MODE.read().unwrap();
-	MiningParameterMode::UserTesting == *param_ref
+	let param_ref = CHAIN_TYPE.read().unwrap();
+	ChainTypes::UserTesting == *param_ref
 }
 
-/// Are we in production mode?
+/// Are we in production mode (a live public network)?
 pub fn is_production_mode() -> bool {
-	let param_ref = MINING_PARAMETER_MODE.read().unwrap();
-	MiningParameterMode::Production == *param_ref
+	let param_ref = CHAIN_TYPE.read().unwrap();
+	ChainTypes::Testnet1 == *param_ref ||
+    ChainTypes::Mainnet == *param_ref
 }
 
 
@@ -126,78 +134,14 @@ pub fn is_production_mode() -> bool {
 /// as the genesis block POW solution turns out to be the same for every new
 /// block chain
 /// at the moment
-
 pub fn get_genesis_nonce() -> u64 {
-	let param_ref = MINING_PARAMETER_MODE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read().unwrap();
 	match *param_ref {
 		// won't make a difference
-		MiningParameterMode::AutomatedTesting => 0,
+		ChainTypes::AutomatedTesting => 0,
 		// Magic nonce for current genesis block at cuckoo16
-		MiningParameterMode::UserTesting => 27944,
-		// Magic nonce for current genesis at cuckoo30
-		MiningParameterMode::Production => 1429942738856787200,
-	}
-}
+		ChainTypes::UserTesting => 27944,
 
-/// Returns the genesis POW for cuckoo16 (UserTesting) and cuckoo30 (Production)
-pub fn get_genesis_pow() -> [u32; 42] {
-	let param_ref = MINING_PARAMETER_MODE.read().unwrap();
-	match *param_ref {
-		// pow solution for genesis block at cuckoo16
-		MiningParameterMode::UserTesting => [
-			0x37f, 0x9f6, 0x136d, 0x13d3, 0x155e, 0x16dd, 0x186b, 0x1b11, 0x208e, 0x23cd,
-			0x24d1, 0x278f, 0x2a1b, 0x2a28, 0x2a44, 0x2ae2, 0x2c37, 0x36af, 0x391d, 0x3c2e,
-			0x3d9a, 0x3f00, 0x429f, 0x45b2, 0x47ce, 0x47f1, 0x492f, 0x4bd8, 0x4fee, 0x51f0,
-			0x5207, 0x58e5, 0x5905, 0x5aca, 0x5dfb, 0x628d, 0x7310, 0x75e5, 0x76d4, 0x76df,
-			0x77bd, 0x7ab9
-		],
-		// pow solution for genesis block at cuckoo30
-		// TODO - likely this is no longer correct (block header changes)
-		MiningParameterMode::Production => [
-			7444824,
-			11926557,
-			28520390,
-			30594072,
-			50854023,
-			52797085,
-			57882033,
-			59816511,
-			61404804,
-			84947619,
-			87779345,
-			115270337,
-			162618676,
-			166860710,
-			178656003,
-			178971372,
-			200454733,
-			209197630,
-			221231015,
-			228598741,
-			241012783,
-			245401183,
-			279080304,
-			295848517,
-			327300943,
-			329741709,
-			366394532,
-			382493153,
-			389329248,
-			404353381,
-			406012911,
-			418813499,
-			426573907,
-			452566575,
-			456930760,
-			463021458,
-			474340589,
-			476248039,
-			478197093,
-			487576917,
-			495653489,
-			501862896,
-		],
-		// TODO - for completeness do we provide one here for AutomatedTesting?
-		_ => panic!("unexpected"),
+		_ => panic!("Pre-set"),
 	}
 }

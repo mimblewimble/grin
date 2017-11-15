@@ -28,6 +28,7 @@ use tokio_timer::Timer;
 use adapters::*;
 use api;
 use chain;
+use core::{global, genesis};
 use miner;
 use p2p;
 use pool;
@@ -37,7 +38,6 @@ use types::*;
 use pow;
 use util::LOGGER;
 
-use core::global;
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -91,7 +91,12 @@ impl Server {
 
 		let mut genesis_block = None;
 		if !chain::Chain::chain_exists(config.db_root.clone()) {
-			genesis_block = pow::mine_genesis_block(config.mining_config.clone());
+      let chain_type = config.chain_type.clone().unwrap();
+      if chain_type == global::ChainTypes::Testnet1 {
+        genesis_block = Some(genesis::genesis_testnet1());
+      } else {
+			  genesis_block = pow::mine_genesis_block(config.mining_config.clone());
+      }
 		}
 
 		let shared_chain = Arc::new(chain::Chain::init(

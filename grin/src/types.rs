@@ -21,7 +21,7 @@ use pool;
 use store;
 use pow;
 use wallet;
-use core::global::MiningParameterMode;
+use core::global::ChainTypes;
 
 /// Error type wrapping underlying module errors.
 #[derive(Debug)]
@@ -91,8 +91,8 @@ pub struct ServerConfig {
 	/// Network address for the Rest API HTTP server.
 	pub api_http_addr: String,
 
-	/// Setup the server for tests and testnet
-	pub mining_parameter_mode: Option<MiningParameterMode>,
+	/// Setup the server for tests, testnet or mainnet
+	pub chain_type: Option<ChainTypes>,
 
 	/// Method used to get the list of seed nodes for initial bootstrap.
 	pub seeding_type: Seeding,
@@ -125,7 +125,7 @@ impl Default for ServerConfig {
 			seeds: None,
 			p2p_config: Some(p2p::P2PConfig::default()),
 			mining_config: Some(pow::types::MinerConfig::default()),
-			mining_parameter_mode: Some(MiningParameterMode::Production),
+			chain_type: Some(ChainTypes::Testnet1),
 			pool_config: pool::PoolConfig::default(),
 		}
 	}

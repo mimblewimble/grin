@@ -41,7 +41,7 @@ use tokio_timer::Timer;
 
 use core::consensus;
 use core::global;
-use core::global::{MiningParameterMode, MINING_PARAMETER_MODE};
+use core::global::ChainTypes;
 use wallet::WalletConfig;
 
 use framework::{LocalServerContainer, LocalServerContainerConfig, LocalServerContainerPool,
@@ -51,7 +51,7 @@ use framework::{LocalServerContainer, LocalServerContainerConfig, LocalServerCon
 /// Block and mining into a wallet for a bit
 #[test]
 fn basic_genesis_mine() {
-	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "genesis_mine";
 	framework::clean_all_output(test_name_dir);
@@ -80,7 +80,7 @@ fn basic_genesis_mine() {
 /// messages they all end up connected.
 #[test]
 fn simulate_seeding() {
-	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "simulate_seeding";
 	framework::clean_all_output(test_name_dir);
@@ -133,7 +133,7 @@ fn simulate_seeding() {
 //#[test]
 #[allow(dead_code)]
 fn simulate_parallel_mining() {
-	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "simulate_parallel_mining";
 	// framework::clean_all_output(test_name_dir);
@@ -187,7 +187,7 @@ fn simulate_parallel_mining() {
 #[test]
 fn a_simulate_block_propagation() {
 	util::init_test_logger();
-	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "grin-prop";
 	framework::clean_all_output(test_name_dir);
@@ -246,7 +246,7 @@ fn a_simulate_block_propagation() {
 #[test]
 fn simulate_full_sync() {
 	util::init_test_logger();
-	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "grin-sync";
 	framework::clean_all_output(test_name_dir);
