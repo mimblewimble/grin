@@ -167,8 +167,8 @@ impl NetAdapter for NetToChainAdapter {
 
 		debug!(
 			LOGGER,
-			"locate_headers: {:?}",
-			header,
+			"locate_headers: common header: {:?}",
+			header.hash(),
 		);
 
 		// looks like we know one, getting as many following headers as allowed
