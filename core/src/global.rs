@@ -64,6 +64,12 @@ pub enum ChainTypes {
 	Mainnet,
 }
 
+impl Default for ChainTypes {
+	fn default() -> ChainTypes {
+		ChainTypes::UserTesting
+	}
+}
+
 lazy_static!{
 	/// The mining parameter mode
 	pub static ref CHAIN_TYPE: RwLock<ChainTypes> =

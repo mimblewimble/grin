@@ -92,7 +92,8 @@ pub struct ServerConfig {
 	pub api_http_addr: String,
 
 	/// Setup the server for tests, testnet or mainnet
-	pub chain_type: Option<ChainTypes>,
+	#[serde(default)]
+	pub chain_type: ChainTypes,
 
 	/// Method used to get the list of seed nodes for initial bootstrap.
 	pub seeding_type: Seeding,
@@ -125,7 +126,7 @@ impl Default for ServerConfig {
 			seeds: None,
 			p2p_config: Some(p2p::P2PConfig::default()),
 			mining_config: Some(pow::types::MinerConfig::default()),
-			chain_type: Some(ChainTypes::Testnet1),
+			chain_type: ChainTypes::default(),
 			pool_config: pool::PoolConfig::default(),
 		}
 	}
