@@ -247,11 +247,13 @@ impl OutputData {
 		} else if self.status == OutputStatus::Spent && self.height == 0 {
 			0
 		} else {
-			current_height - self.height
+			// if an output has height n and we are at block n
+			// then we have a single confirmation (the block it originated in)
+			1 + (current_height - self.height)
 		}
 	}
 
-	/// Check if output is eligible for spending based on state and height.
+	/// Check if output is eligible to spend based on state and height and confirmations
 	pub fn eligible_to_spend(&self, current_height: u64, minimum_confirmations: u64) -> bool {
 		if [OutputStatus::Spent, OutputStatus::Locked].contains(&self.status) {
 			return false;
@@ -260,7 +262,7 @@ impl OutputData {
 		} else if self.lock_height > current_height {
 			return false;
 		} else if self.status == OutputStatus::Unspent
-			&& self.height + minimum_confirmations <= current_height
+			&& self.num_confirmations(current_height) >= minimum_confirmations
 		{
 			return true;
 		} else if self.status == OutputStatus::Unconfirmed && minimum_confirmations == 0 {
