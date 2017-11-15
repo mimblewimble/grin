@@ -295,13 +295,44 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	pub fn rewind_to_genesis(&mut self) -> Result<(), Error> {
+		debug!(
+			LOGGER,
+			"Rewind sumtrees to genesis (hold onto your wizard hat)",
+		);
+
+		self.output_pmmr
+			.rewind(0, 0)
+			.map_err(&Error::SumTreeErr)?;
+		self.rproof_pmmr
+			.rewind(0, 0)
+			.map_err(&Error::SumTreeErr)?;
+		self.kernel_pmmr
+			.rewind(0, 0)
+			.map_err(&Error::SumTreeErr)?;
+
+		self.dump(true);
+		Ok(())
+	}
+
 	/// Rewinds the MMRs to the provided position, given the last output and
 	/// last kernel of the block we want to rewind to.
 	pub fn rewind(&mut self, height: u64, output: &Output, kernel: &TxKernel) -> Result<(), Error> {
+		debug!(
+			LOGGER,
+			"Rewind sumtrees to height: {}",
+			height,
+		);
+
 		let out_pos_rew = self.commit_index.get_output_pos(&output.commitment())?;
 		let kern_pos_rew = self.commit_index.get_kernel_pos(&kernel.excess)?;
 
-		debug!(LOGGER, "Rewind sumtrees to {}", out_pos_rew);
+		debug!(
+			LOGGER,
+			"Rewind sumtrees to output pos: {}, kernel pos: {}",
+			out_pos_rew,
+			kern_pos_rew,
+		);
 		self.output_pmmr
 			.rewind(out_pos_rew, height as u32)
 			.map_err(&Error::SumTreeErr)?;
@@ -311,6 +342,7 @@ impl<'a> Extension<'a> {
 		self.kernel_pmmr
 			.rewind(kern_pos_rew, height as u32)
 			.map_err(&Error::SumTreeErr)?;
+
 		self.dump(true);
 		Ok(())
 	}

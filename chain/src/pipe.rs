@@ -249,13 +249,11 @@ fn validate_block(
 		);
 
 		if forked_block.header.height > 0 {
-			let last_output = &forked_block.outputs[forked_block.outputs.len() - 1];
-			let last_kernel = &forked_block.kernels[forked_block.kernels.len() - 1];
+			let last_output = &forked_block.outputs.last().unwrap();
+			let last_kernel = &forked_block.kernels.last().unwrap();
 			ext.rewind(forked_block.header.height, last_output, last_kernel)?;
 		} else {
-			// TODO - what needs to happen here?
-			// here we need to rewind all the way to the genesis block - is this possible?
-			// there is no last_output and no last_kernel
+			ext.rewind_to_genesis()?;
 		}
 
 		// apply all forked blocks, including this new one

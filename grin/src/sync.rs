@@ -288,7 +288,7 @@ impl Syncer {
 			.collect::<Vec<_>>();
 		heights.append(&mut tail);
 
-		// Include the genesis block (height 0) here as a fallback to guarentee
+		// Include the genesis block (height 0) here as a fallback to guarantee
 		// both nodes share at least one common header hash in the locator
 		heights.push(0);
 
