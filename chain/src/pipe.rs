@@ -237,8 +237,6 @@ fn validate_block(
 			}
 		}
 
-		// rewind the sum trees up to the forking block, providing the height of the
-		// forked block and the last commitment we want to rewind to
 		let forked_block = ctx.store.get_block(&current)?;
 
 		debug!(
@@ -248,13 +246,8 @@ fn validate_block(
 			forked_block.header.height,
 		);
 
-		if forked_block.header.height > 0 {
-			let last_output = &forked_block.outputs.last().unwrap();
-			let last_kernel = &forked_block.kernels.last().unwrap();
-			ext.rewind(forked_block.header.height, last_output, last_kernel)?;
-		} else {
-			ext.rewind_to_genesis()?;
-		}
+		// rewind the sum trees up to the forking block
+		ext.rewind(&forked_block)?;
 
 		// apply all forked blocks, including this new one
 		for h in hashes {
