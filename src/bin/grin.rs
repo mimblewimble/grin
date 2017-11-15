@@ -57,8 +57,7 @@ fn start_from_config_file(mut global_config: GlobalConfig) {
 			.unwrap()
 			.server
 			.clone()
-			.chain_type
-			.unwrap(),
+			.chain_type,
 	);
 
 	grin::Server::start(global_config.members.as_mut().unwrap().server.clone()).unwrap();
@@ -102,8 +101,7 @@ fn main() {
 				.unwrap()
 				.server
 				.clone()
-				.chain_type
-				.unwrap(),
+				.chain_type,
 		);
 	} else {
 		init_logger(Some(LoggingConfig::default()));
