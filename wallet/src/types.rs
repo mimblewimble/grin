@@ -32,6 +32,7 @@ use tokio_retry::strategy::FibonacciBackoff;
 
 
 use api;
+use core::consensus;
 use core::core::{transaction, Transaction};
 use core::ser;
 use keychain;
@@ -42,7 +43,7 @@ const DAT_FILE: &'static str = "wallet.dat";
 const LOCK_FILE: &'static str = "wallet.lock";
 const SEED_FILE: &'static str = "wallet.seed";
 
-const DEFAULT_BASE_FEE: u64 = 10;
+const DEFAULT_BASE_FEE: u64 = consensus::MILLI_GRIN;
 
 /// Transaction fee calculation
 pub fn tx_fee(input_len: usize, output_len: usize, base_fee: Option<u64>) -> u64 {

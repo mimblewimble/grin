@@ -582,10 +582,9 @@ where
 			return Err(PoolError::OverCapacity);
 		}
 
-		// for a basic transaction (1 input, 2 outputs) -
-  // (-1 * 1) + (4 * 2) + 1 = 8
-  // 8 * 10 = 80
-  //
+    // for a basic transaction (1 input, 2 outputs) -
+    // (-1 * 1) + (4 * 2) + 1 = 8
+    // 8 * 10 = 80
 		if self.config.accept_fee_base > 0 {
 			let mut tx_weight = -1 * (tx.inputs.len() as i32) + (4 * tx.outputs.len() as i32) + 1;
 			if tx_weight < 1 {

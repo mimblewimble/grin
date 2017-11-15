@@ -24,6 +24,7 @@ use util::secp::pedersen::Commitment;
 
 pub use graph;
 
+use core::consensus;
 use core::core::block;
 use core::core::transaction;
 use core::core::hash;
@@ -52,7 +53,7 @@ impl Default for PoolConfig {
 }
 
 fn default_accept_fee_base() -> u64 {
-	10
+  consensus::MILLI_GRIN
 }
 fn default_max_pool_size() -> usize {
 	50_000

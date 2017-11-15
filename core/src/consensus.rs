@@ -25,8 +25,14 @@ use std::cmp::max;
 use ser;
 use core::target::Difficulty;
 
-/// A grin is divisible to 10^9, a nanogrin
+/// A grin is divisible to 10^9, following the SI prefixes
 pub const GRIN_BASE: u64 = 1_000_000_000;
+/// Milligrin, a thousand of a grin
+pub const MILLI_GRIN: u64 = GRIN_BASE / 1_000;
+/// Microgrin, a thousand of a milligrin
+pub const MICRO_GRIN: u64 = MILLI_GRIN / 1_000;
+/// Nanogrin, smallest unit, takes a billion to make a grin
+pub const NANO_GRIN: u64 = 1;
 
 /// The block subsidy amount
 pub const REWARD: u64 = 50 * GRIN_BASE;
