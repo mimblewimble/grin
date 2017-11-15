@@ -512,9 +512,9 @@ impl WalletData {
 		amount: u64,
 		current_height: u64,
 		minimum_confirmations: u64,
+		max_outputs: usize,
 		default_strategy: bool,
 	) -> Vec<OutputData> {
-		let max_outputs = 500;
 
 		// first find all eligible outputs based on number of confirmations
 		let mut eligible = self.outputs
