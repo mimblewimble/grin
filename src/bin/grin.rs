@@ -424,12 +424,14 @@ fn wallet_command(wallet_args: &ArgMatches) {
 			if let Some(d) = send_args.value_of("dest") {
 				dest = d;
 			}
+			let max_outputs = 500;
 			let result=wallet::issue_send_tx(
 				&wallet_config,
 				&keychain,
 				amount,
 				minimum_confirmations,
 				dest.to_string(),
+				max_outputs,
 				(selection_strategy == "all"),
 			);
 			match result {
@@ -449,8 +451,14 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				.unwrap()
 				.parse()
 				.expect("Could not parse minimum_confirmations as a whole number.");
-			wallet::issue_burn_tx(&wallet_config, &keychain, amount, minimum_confirmations)
-				.unwrap();
+			let max_outputs = 500;
+			wallet::issue_burn_tx(
+				&wallet_config,
+				&keychain,
+				amount,
+				minimum_confirmations,
+				max_outputs,
+			).unwrap();
 		}
 		("info", Some(_)) => {
 			wallet::show_info(&wallet_config, &keychain);
