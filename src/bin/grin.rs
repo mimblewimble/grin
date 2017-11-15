@@ -430,7 +430,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				amount,
 				minimum_confirmations,
 				dest.to_string(),
-				(selection_strategy == "default"),
+				(selection_strategy == "all"),
 			);
 			match result {
 				Ok(_) => {}, //success messaged logged internally
