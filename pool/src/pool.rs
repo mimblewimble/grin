@@ -608,7 +608,7 @@ mod tests {
 	use keychain::Keychain;
 	use std::sync::{Arc, RwLock};
 	use blake2;
-	use core::global::MiningParameterMode;
+	use core::global::ChainTypes;
 	use core::core::SwitchCommitHash;
 
 	macro_rules! expect_output_parent {
@@ -795,7 +795,7 @@ mod tests {
 
 	#[test]
 	fn test_immature_coinbase() {
-		global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+		global::set_mining_mode(ChainTypes::AutomatedTesting);
 		let mut dummy_chain = DummyChainImpl::new();
 		let coinbase_output = test_coinbase_output(15);
 		dummy_chain.update_utxo_set(DummyUtxoSet::empty().with_output(coinbase_output));

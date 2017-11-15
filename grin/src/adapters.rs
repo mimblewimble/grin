@@ -21,6 +21,7 @@ use core::core::{self, Output};
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
+use core::global;
 use p2p::{self, NetAdapter, PeerData, PeerStore, Server, State};
 use pool;
 use util::secp::pedersen::Commitment;
@@ -28,7 +29,6 @@ use util::OneTime;
 use store;
 use sync;
 use util::LOGGER;
-use core::global::{MiningParameterMode, MINING_PARAMETER_MODE};
 
 /// Implementation of the NetAdapter for the blockchain. Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
@@ -286,12 +286,11 @@ impl NetToChainAdapter {
 		} else {
 			chain::NONE
 		};
-		let param_ref = MINING_PARAMETER_MODE.read().unwrap();
-		let opts = match *param_ref {
-			MiningParameterMode::AutomatedTesting => opts | chain::EASY_POW,
-			MiningParameterMode::UserTesting => opts | chain::EASY_POW,
-			MiningParameterMode::Production => opts,
-		};
+		let opts = if global::is_production_mode() {
+      opts
+    } else {
+      opts | chain::EASY_POW
+    };
 		opts
 	}
 }

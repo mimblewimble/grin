@@ -33,7 +33,7 @@ use sumtree;
 use types::*;
 use util::LOGGER;
 
-use core::global::{MiningParameterMode, MINING_PARAMETER_MODE};
+use core::global;
 
 const MAX_ORPHANS: usize = 20;
 
@@ -184,16 +184,14 @@ impl Chain {
 	}
 
 	fn ctx_from_head(&self, head: Tip, opts: Options) -> pipe::BlockContext {
-		let opts_in = opts;
-		let param_ref = MINING_PARAMETER_MODE.read().unwrap();
-		let opts_in = match *param_ref {
-			MiningParameterMode::AutomatedTesting => opts_in | EASY_POW,
-			MiningParameterMode::UserTesting => opts_in | EASY_POW,
-			MiningParameterMode::Production => opts_in,
-		};
+		let opts = if global::is_production_mode() {
+      opts
+    } else {
+      opts | EASY_POW
+    };
 
 		pipe::BlockContext {
-			opts: opts_in,
+			opts: opts,
 			store: self.store.clone(),
 			head: head,
 			pow_verifier: self.pow_verifier,
