@@ -53,12 +53,19 @@ pub fn genesis_testnet1() -> core::Block {
 			previous: core::hash::Hash([0xff; 32]),
 			timestamp: time::Tm {
 				tm_year: 2017 - 1900,
-				tm_mon: 12,
-				tm_mday: 25,
+				tm_mon: 10,
+				tm_mday: 16,
+				tm_hour: 20,
 				..time::empty_tm()
 			},
-			nonce: 1,
-			pow: core::Proof::zero(consensus::PROOFSIZE),
+			nonce: 28205,
+			pow: core::Proof::new(vec![0x21e, 0x7a2, 0xeae, 0x144e, 0x1b1c, 0x1fbd,
+														0x203a, 0x214b, 0x293b, 0x2b74, 0x2bfa, 0x2c26,
+														0x32bb, 0x346a, 0x34c7, 0x37c5, 0x4164, 0x42cc,
+														0x4cc3, 0x55af, 0x5a70, 0x5b14, 0x5e1c, 0x5f76,
+														0x6061, 0x60f9, 0x61d7, 0x6318, 0x63a1, 0x63fb,
+														0x649b, 0x64e5, 0x65a1, 0x6b69, 0x70f8, 0x71c7,
+														0x71cd, 0x7492, 0x7b11, 0x7db8, 0x7f29, 0x7ff8]),
 			..Default::default()
 		},
 		inputs: vec![],
