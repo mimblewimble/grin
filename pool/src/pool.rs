@@ -582,10 +582,9 @@ where
 			return Err(PoolError::OverCapacity);
 		}
 
-		// for a basic transaction (1 input, 2 outputs) -
-  // (-1 * 1) + (4 * 2) + 1 = 8
-  // 8 * 10 = 80
-  //
+    // for a basic transaction (1 input, 2 outputs) -
+    // (-1 * 1) + (4 * 2) + 1 = 8
+    // 8 * 10 = 80
 		if self.config.accept_fee_base > 0 {
 			let mut tx_weight = -1 * (tx.inputs.len() as i32) + (4 * tx.outputs.len() as i32) + 1;
 			if tx_weight < 1 {
@@ -609,7 +608,7 @@ mod tests {
 	use keychain::Keychain;
 	use std::sync::{Arc, RwLock};
 	use blake2;
-	use core::global::MiningParameterMode;
+	use core::global::ChainTypes;
 	use core::core::SwitchCommitHash;
 
 	macro_rules! expect_output_parent {
@@ -796,7 +795,7 @@ mod tests {
 
 	#[test]
 	fn test_immature_coinbase() {
-		global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+		global::set_mining_mode(ChainTypes::AutomatedTesting);
 		let mut dummy_chain = DummyChainImpl::new();
 		let coinbase_output = test_coinbase_output(15);
 		dummy_chain.update_utxo_set(DummyUtxoSet::empty().with_output(coinbase_output));

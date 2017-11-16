@@ -36,6 +36,7 @@ pub fn issue_send_tx(
 	amount: u64,
 	minimum_confirmations: u64,
 	dest: String,
+	max_outputs: usize,
 	selection_strategy: bool,
 ) -> Result<(), Error> {
 	checker::refresh_outputs(config, keychain)?;
@@ -53,6 +54,7 @@ pub fn issue_send_tx(
 		current_height,
 		minimum_confirmations,
 		lock_height,
+		max_outputs,
 		selection_strategy,
 	)?;
 
@@ -81,6 +83,7 @@ fn build_send_tx(
 	current_height: u64,
 	minimum_confirmations: u64,
 	lock_height: u64,
+	max_outputs: usize,
 	default_strategy: bool,
 ) -> Result<(Transaction, BlindingFactor), Error> {
 	let key_id = keychain.clone().root_key_id();
@@ -92,6 +95,7 @@ fn build_send_tx(
 			amount,
 			current_height,
 			minimum_confirmations,
+			max_outputs,
 			default_strategy,
 		)
 	})?;
@@ -121,6 +125,7 @@ pub fn issue_burn_tx(
 	keychain: &Keychain,
 	amount: u64,
 	minimum_confirmations: u64,
+	max_outputs: usize,
 ) -> Result<(), Error> {
 	let keychain = &Keychain::burn_enabled(keychain, &Identifier::zero());
 
@@ -133,7 +138,14 @@ pub fn issue_burn_tx(
 
 	// select some spendable coins from the wallet
 	let coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		wallet_data.select(key_id.clone(), amount, current_height, minimum_confirmations, false)
+		wallet_data.select(
+			key_id.clone(),
+			amount,
+			current_height,
+			minimum_confirmations,
+			max_outputs,
+			false,
+		)
 	})?;
 
 	debug!(LOGGER, "selected some coins - {}", coins.len());

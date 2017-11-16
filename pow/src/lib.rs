@@ -94,12 +94,10 @@ pub fn pow20<T: MiningWorker>(
 }
 
 /// Mines a genesis block, using the config specified miner if specified.
-/// Otherwise,
-/// uses the internal miner
-///
+/// Otherwise, uses the internal miner
 pub fn mine_genesis_block(miner_config: Option<types::MinerConfig>) -> Option<core::core::Block> {
 	info!(util::LOGGER, "Genesis block not found, initializing...");
-	let mut gen = genesis::genesis();
+	let mut gen = genesis::genesis_dev();
 	let diff = gen.header.difficulty.clone();
 
 	let sz = global::sizeshift() as u32;
@@ -120,9 +118,8 @@ pub fn mine_genesis_block(miner_config: Option<types::MinerConfig>) -> Option<co
 }
 
 /// Runs a proof of work computation over the provided block using the provided
-/// Mining Worker,
-/// until the required difficulty target is reached. May take a while for a low
-/// target...
+/// Mining Worker, until the required difficulty target is reached. May take a
+/// while for a low target...
 pub fn pow_size<T: MiningWorker + ?Sized>(
 	miner: &mut T,
 	bh: &mut BlockHeader,
@@ -131,42 +128,36 @@ pub fn pow_size<T: MiningWorker + ?Sized>(
 ) -> Result<(), Error> {
 	let start_nonce = bh.nonce;
 
-	// try the pre-mined solution first for the genesis block (height 0)
-	if bh.height == 0 {
-		if global::is_production_mode() || global::is_user_testing_mode() {
-			let p = Proof::new(global::get_genesis_pow().to_vec());
-			if p.clone().to_difficulty() >= diff {
-				bh.pow = p;
-				return Ok(());
-			}
-		}
+  // set the nonce for faster solution finding in user testing
+	if bh.height == 0 &&  global::is_user_testing_mode() {
+    bh.nonce = global::get_genesis_nonce();
 	}
 
-	// try to find a cuckoo cycle on that header hash
-	loop {
-		// can be trivially optimized by avoiding re-serialization every time but this
-  // is not meant as a fast miner implementation
-		let pow_hash = bh.hash();
+  // try to find a cuckoo cycle on that header hash
+  loop {
+    // can be trivially optimized by avoiding re-serialization every time but this
+    // is not meant as a fast miner implementation
+    let pow_hash = bh.hash();
 
-		// if we found a cycle (not guaranteed) and the proof hash is higher that the
-  // diff, we're all good
+    // if we found a cycle (not guaranteed) and the proof hash is higher that the
+    // diff, we're all good
 
-		if let Ok(proof) = miner.mine(&pow_hash[..]) {
-			if proof.clone().to_difficulty() >= diff {
-				bh.pow = proof;
-				return Ok(());
-			}
-		}
+    if let Ok(proof) = miner.mine(&pow_hash[..]) {
+      if proof.clone().to_difficulty() >= diff {
+        bh.pow = proof;
+        return Ok(());
+      }
+    }
 
-		// otherwise increment the nonce
-		bh.nonce += 1;
+    // otherwise increment the nonce
+    bh.nonce += 1;
 
-		// and if we're back where we started, update the time (changes the hash as
-  // well)
-		if bh.nonce == start_nonce {
-			bh.timestamp = time::at_utc(time::Timespec { sec: 0, nsec: 0 });
-		}
-	}
+    // and if we're back where we started, update the time (changes the hash as
+    // well)
+    if bh.nonce == start_nonce {
+      bh.timestamp = time::at_utc(time::Timespec { sec: 0, nsec: 0 });
+    }
+  }
 }
 
 #[cfg(test)]
@@ -176,14 +167,13 @@ mod test {
 	use core::core::target::Difficulty;
 	use core::genesis;
 	use core::consensus::MINIMUM_DIFFICULTY;
-	use core::global::MiningParameterMode;
-
+	use core::global::ChainTypes;
 
 	#[test]
 	fn genesis_pow() {
-		global::set_mining_mode(MiningParameterMode::AutomatedTesting);
-		let mut b = genesis::genesis();
-		b.header.nonce = 310;
+		global::set_mining_mode(ChainTypes::AutomatedTesting);
+		let mut b = genesis::genesis_dev();
+		b.header.nonce = 485;
 		let mut internal_miner = cuckoo::Miner::new(
 			consensus::EASINESS,
 			global::sizeshift() as u32,

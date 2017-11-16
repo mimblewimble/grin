@@ -22,8 +22,9 @@ use std::sync::Arc;
 
 use util::secp::pedersen::{RangeProof, Commitment};
 
-use core::core::{Block, Output, SumCommit, TxKernel};
+use core::core::{Block, SumCommit, TxKernel};
 use core::core::pmmr::{Backend, HashSum, NoSum, Summable, PMMR};
+use core::core::hash::Hashed;
 use grin_store;
 use grin_store::sumtree::PMMRBackend;
 use types::ChainStore;
@@ -297,11 +298,33 @@ impl<'a> Extension<'a> {
 
 	/// Rewinds the MMRs to the provided position, given the last output and
 	/// last kernel of the block we want to rewind to.
-	pub fn rewind(&mut self, height: u64, output: &Output, kernel: &TxKernel) -> Result<(), Error> {
-		let out_pos_rew = self.commit_index.get_output_pos(&output.commitment())?;
-		let kern_pos_rew = self.commit_index.get_kernel_pos(&kernel.excess)?;
+	pub fn rewind(&mut self, block: &Block) -> Result<(), Error> {
+		debug!(
+			LOGGER,
+			"Rewind sumtrees to header {} at {}",
+			block.header.hash(),
+			block.header.height,
+		);
 
-		debug!(LOGGER, "Rewind sumtrees to {}", out_pos_rew);
+		let out_pos_rew = match block.outputs.last() {
+			Some(output) => self.commit_index.get_output_pos(&output.commitment())?,
+			None => 0,
+		};
+
+		let kern_pos_rew = match block.kernels.last() {
+			Some(kernel) => self.commit_index.get_kernel_pos(&kernel.excess)?,
+			None => 0,
+		};
+
+		debug!(
+			LOGGER,
+			"Rewind sumtrees to output pos: {}, kernel pos: {}",
+			out_pos_rew,
+			kern_pos_rew,
+		);
+
+		let height = block.header.height;
+
 		self.output_pmmr
 			.rewind(out_pos_rew, height as u32)
 			.map_err(&Error::SumTreeErr)?;
@@ -311,6 +334,7 @@ impl<'a> Extension<'a> {
 		self.kernel_pmmr
 			.rewind(kern_pos_rew, height as u32)
 			.map_err(&Error::SumTreeErr)?;
+
 		self.dump(true);
 		Ok(())
 	}

@@ -32,6 +32,7 @@ use tokio_retry::strategy::FibonacciBackoff;
 
 
 use api;
+use core::consensus;
 use core::core::{transaction, Transaction};
 use core::ser;
 use keychain;
@@ -42,7 +43,7 @@ const DAT_FILE: &'static str = "wallet.dat";
 const LOCK_FILE: &'static str = "wallet.lock";
 const SEED_FILE: &'static str = "wallet.seed";
 
-const DEFAULT_BASE_FEE: u64 = 10;
+const DEFAULT_BASE_FEE: u64 = consensus::MILLI_GRIN;
 
 /// Transaction fee calculation
 pub fn tx_fee(input_len: usize, output_len: usize, base_fee: Option<u64>) -> u64 {
@@ -246,11 +247,13 @@ impl OutputData {
 		} else if self.status == OutputStatus::Spent && self.height == 0 {
 			0
 		} else {
-			current_height - self.height
+			// if an output has height n and we are at block n
+			// then we have a single confirmation (the block it originated in)
+			1 + (current_height - self.height)
 		}
 	}
 
-	/// Check if output is eligible for spending based on state and height.
+	/// Check if output is eligible to spend based on state and height and confirmations
 	pub fn eligible_to_spend(&self, current_height: u64, minimum_confirmations: u64) -> bool {
 		if [OutputStatus::Spent, OutputStatus::Locked].contains(&self.status) {
 			return false;
@@ -259,7 +262,7 @@ impl OutputData {
 		} else if self.lock_height > current_height {
 			return false;
 		} else if self.status == OutputStatus::Unspent
-			&& self.height + minimum_confirmations <= current_height
+			&& self.num_confirmations(current_height) >= minimum_confirmations
 		{
 			return true;
 		} else if self.status == OutputStatus::Unconfirmed && minimum_confirmations == 0 {
@@ -500,8 +503,8 @@ impl WalletData {
 	}
 
 	/// Select spendable coins from the wallet.
-	/// Default strategy is "aggressive".
-	/// Non-default strategy is "smallest_first".
+	/// Default strategy is to spend the maximum number of outputs (up to max_outputs).
+	/// Alternative strategy is to spend smallest outputs first but only as many as necessary.
 	/// When we introduce additional strategies we should pass something other than a bool in.
 	pub fn select(
 		&self,
@@ -509,33 +512,11 @@ impl WalletData {
 		amount: u64,
 		current_height: u64,
 		minimum_confirmations: u64,
+		max_outputs: usize,
 		default_strategy: bool,
 	) -> Vec<OutputData> {
-		if default_strategy {
-			self.select_aggressive(
-				root_key_id,
-				current_height,
-				minimum_confirmations,
-			)
-		} else {
-			self.select_smallest_first(
-				root_key_id,
-				amount,
-				current_height,
-				minimum_confirmations,
-			)
-		}
-	}
 
-	// Selects the smallest number of outputs after ordering them by value.
-	// Reduces "dust" but leaves larger outputs unspent if possible.
-	fn select_smallest_first(
-		&self,
-		root_key_id: keychain::Identifier,
-		amount: u64,
-		current_height: u64,
-		minimum_confirmations: u64,
-	) -> Vec<OutputData> {
+		// first find all eligible outputs based on number of confirmations
 		let mut eligible = self.outputs
 			.values()
 			.filter(|out| {
@@ -545,34 +526,57 @@ impl WalletData {
 			.cloned()
 			.collect::<Vec<OutputData>>();
 
+		// sort eligible outputs by increasing value
 		eligible.sort_by_key(|out| out.value);
 
-		let mut total_amount = 0;
-		eligible.iter()
-			.take_while(|out| {
-				let res = total_amount < amount;
-				total_amount += out.value;
-				res
-			})
-			.cloned()
-			.collect::<Vec<_>>()
+		// use a sliding window to identify potential sets of possible outputs to spend
+		if eligible.len() > max_outputs {
+			for window in eligible.windows(max_outputs) {
+				let eligible = window.iter().cloned().collect::<Vec<_>>();
+				if let Some(outputs) = self.select_from(amount, default_strategy, eligible) {
+					return outputs;
+				}
+			}
+		} else {
+			if let Some(outputs) = self.select_from(amount, default_strategy, eligible.clone()) {
+				return outputs;
+			}
+		}
+
+		// we failed to find a suitable set of outputs to spend,
+		// so return the largest amount we can so we can provide guidance on what is possible
+		eligible.reverse();
+		eligible.iter().take(max_outputs).cloned().collect()
 	}
 
-	// Selects all eligible outputs to spend to reduce UTXO set as much as possible (the default).
-	fn select_aggressive(
+	// Select the full list of outputs if we are using the default strategy.
+	// Otherwise select just enough outputs to cover the desired amount.
+	fn select_from(
 		&self,
-		root_key_id: keychain::Identifier,
-		current_height: u64,
-		minimum_confirmations: u64,
-	) -> Vec<OutputData> {
-		self.outputs
-			.values()
-			.filter(|out| {
-				out.root_key_id == root_key_id
-					&& out.eligible_to_spend(current_height, minimum_confirmations)
-			})
-			.cloned()
-			.collect()
+		amount: u64,
+		select_all: bool,
+		outputs: Vec<OutputData>,
+	) -> Option<Vec<OutputData>> {
+		let total = outputs.iter().fold(0, |acc, x| acc + x.value);
+		if total >= amount {
+			if select_all {
+				return Some(outputs.iter().cloned().collect());
+			} else {
+				let mut selected_amount = 0;
+				return Some(
+					outputs.iter()
+						.take_while(|out| {
+							let res = selected_amount < amount;
+							selected_amount += out.value;
+							res
+						})
+						.cloned()
+						.collect()
+				);
+			}
+		} else {
+			None
+		}
 	}
 
 	/// Next child index when we want to create a new output.

@@ -57,8 +57,7 @@ fn start_from_config_file(mut global_config: GlobalConfig) {
 			.unwrap()
 			.server
 			.clone()
-			.mining_parameter_mode
-			.unwrap(),
+			.chain_type,
 	);
 
 	grin::Server::start(global_config.members.as_mut().unwrap().server.clone()).unwrap();
@@ -102,8 +101,7 @@ fn main() {
 				.unwrap()
 				.server
 				.clone()
-				.mining_parameter_mode
-				.unwrap(),
+				.chain_type,
 		);
 	} else {
 		init_logger(Some(LoggingConfig::default()));
@@ -218,8 +216,8 @@ fn main() {
 				.help("Coin/Output selection strategy.")
 				.short("s")
 				.long("selection")
-				.possible_values(&["default", "smallest"])
-				.default_value("default")
+				.possible_values(&["all", "smallest"])
+				.default_value("all")
 				.takes_value(true))
 			.arg(Arg::with_name("dest")
 				.help("Send the transaction to the provided server")
@@ -424,13 +422,15 @@ fn wallet_command(wallet_args: &ArgMatches) {
 			if let Some(d) = send_args.value_of("dest") {
 				dest = d;
 			}
+			let max_outputs = 500;
 			let result=wallet::issue_send_tx(
 				&wallet_config,
 				&keychain,
 				amount,
 				minimum_confirmations,
 				dest.to_string(),
-				(selection_strategy == "default"),
+				max_outputs,
+				(selection_strategy == "all"),
 			);
 			match result {
 				Ok(_) => {}, //success messaged logged internally
@@ -449,8 +449,14 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				.unwrap()
 				.parse()
 				.expect("Could not parse minimum_confirmations as a whole number.");
-			wallet::issue_burn_tx(&wallet_config, &keychain, amount, minimum_confirmations)
-				.unwrap();
+			let max_outputs = 500;
+			wallet::issue_burn_tx(
+				&wallet_config,
+				&keychain,
+				amount,
+				minimum_confirmations,
+				max_outputs,
+			).unwrap();
 		}
 		("info", Some(_)) => {
 			wallet::show_info(&wallet_config, &keychain);

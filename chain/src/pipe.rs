@@ -237,14 +237,17 @@ fn validate_block(
 			}
 		}
 
-		// rewind the sum trees up the forking block, providing the height of the
-  // forked block and the last commitment we want to rewind to
 		let forked_block = ctx.store.get_block(&current)?;
-		if forked_block.header.height > 0 {
-			let last_output = &forked_block.outputs[forked_block.outputs.len() - 1];
-			let last_kernel = &forked_block.kernels[forked_block.kernels.len() - 1];
-			ext.rewind(forked_block.header.height, last_output, last_kernel)?;
-		}
+
+		debug!(
+			LOGGER,
+			"validate_block: forked_block: {} at {}",
+			forked_block.header.hash(),
+			forked_block.header.height,
+		);
+
+		// rewind the sum trees up to the forking block
+		ext.rewind(&forked_block)?;
 
 		// apply all forked blocks, including this new one
 		for h in hashes {
@@ -259,6 +262,26 @@ fn validate_block(
 		|| kernel_root.hash != b.header.kernel_root
 	{
 		ext.dump(false);
+
+		debug!(
+			LOGGER,
+			"validate_block: utxo roots - {:?}, {:?}",
+			utxo_root.hash,
+			b.header.utxo_root,
+		);
+		debug!(
+			LOGGER,
+			"validate_block: rproof roots - {:?}, {:?}",
+			rproof_root.hash,
+			b.header.range_proof_root,
+		);
+		debug!(
+			LOGGER,
+			"validate_block: kernel roots - {:?}, {:?}",
+			kernel_root.hash,
+			b.header.kernel_root,
+		);
+
 		return Err(Error::InvalidRoot);
 	}
 

@@ -247,10 +247,9 @@ impl Syncer {
 		if let Some(p) = peer {
 			debug!(
 				LOGGER,
-				"Asking peer {} for more block headers starting from {} at {}.",
+				"Asking peer {} for more block headers, locator: {:?}",
 				p.info.addr,
-				tip.last_block_h,
-				tip.height
+				locator,
 			);
 			p.send_header_request(locator)?;
 		} else {
@@ -277,7 +276,7 @@ impl Syncer {
 	/// us the right block headers.
 	fn get_locator(&self, tip: &chain::Tip) -> Result<Vec<Hash>, Error> {
 		// Prepare the heights we want as the latests height minus increasing powers
-  // of 2 up to max.
+		// of 2 up to max.
 		let mut heights = vec![tip.height];
 		let mut tail = (1..p2p::MAX_LOCATORS)
 			.map(|n| 2u64.pow(n))
@@ -288,10 +287,15 @@ impl Syncer {
 			})
 			.collect::<Vec<_>>();
 		heights.append(&mut tail);
+
+		// Include the genesis block (height 0) here as a fallback to guarantee
+		// both nodes share at least one common header hash in the locator
+		heights.push(0);
+
 		debug!(LOGGER, "Loc heights: {:?}", heights);
 
 		// Iteratively travel the header chain back from our head and retain the
-  // headers at the wanted heights.
+		// headers at the wanted heights.
 		let mut header = self.chain.get_block_header(&tip.last_block_h)?;
 		let mut locator = vec![];
 		while heights.len() > 0 {

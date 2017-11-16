@@ -28,7 +28,7 @@ use core::core::build;
 use core::core::transaction;
 use core::consensus;
 use core::global;
-use core::global::MiningParameterMode;
+use core::global::ChainTypes;
 
 use keychain::Keychain;
 
@@ -42,7 +42,7 @@ fn clean_output_dir(dir_name: &str) {
 fn test_coinbase_maturity() {
 	let _ = env_logger::init();
 	clean_output_dir(".grin");
-	global::set_mining_mode(MiningParameterMode::AutomatedTesting);
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let mut genesis_block = None;
 	if !chain::Chain::chain_exists(".grin".to_string()) {
