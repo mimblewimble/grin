@@ -21,7 +21,6 @@ use core::core::{self, Output};
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use core::global;
 use p2p::{self, NetAdapter, PeerData, PeerStore, Server, State};
 use pool;
 use util::secp::pedersen::Commitment;
@@ -286,11 +285,6 @@ impl NetToChainAdapter {
 		} else {
 			chain::NONE
 		};
-		let opts = if global::is_production_mode() {
-      opts
-    } else {
-      opts | chain::EASY_POW
-    };
 		opts
 	}
 }

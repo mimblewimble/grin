@@ -88,7 +88,7 @@ pub fn sizeshift() -> u8 {
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_SIZESHIFT,
 		ChainTypes::UserTesting => USER_TESTING_SIZESHIFT,
-		ChainTypes::Testnet1 => DEFAULT_SIZESHIFT,
+		ChainTypes::Testnet1 => USER_TESTING_SIZESHIFT,
 		ChainTypes::Mainnet => DEFAULT_SIZESHIFT,
 	}
 }
@@ -133,7 +133,6 @@ pub fn is_production_mode() -> bool {
 	ChainTypes::Testnet1 == *param_ref ||
     ChainTypes::Mainnet == *param_ref
 }
-
 
 /// Helper function to get a nonce known to create a valid POW on
 /// the genesis block, to prevent it taking ages. Should be fine for now

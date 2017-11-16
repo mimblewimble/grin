@@ -155,11 +155,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	if !ctx.opts.intersects(SKIP_POW) {
-		let cycle_size = if ctx.opts.intersects(EASY_POW) {
-			global::sizeshift()
-		} else {
-			consensus::DEFAULT_SIZESHIFT
-		};
+		let cycle_size = global::sizeshift();
+
 		debug!(LOGGER, "Validating block with cuckoo size {}", cycle_size);
 		if !(ctx.pow_verifier)(header, cycle_size as u32) {
 			return Err(Error::InvalidPow);

@@ -35,7 +35,7 @@ use util::LOGGER;
 
 const PEER_MAX_COUNT: u32 = 25;
 const PEER_PREFERRED_COUNT: u32 = 8;
-const SEEDS_URL: &'static str = "http://www.mimwim.org/seeds.txt";
+const SEEDS_URL: &'static str = "http://grin-tech.org/seeds.txt";
 
 pub struct Seeder {
 	peer_store: Arc<p2p::PeerStore>,
@@ -158,7 +158,7 @@ impl Seeder {
 			})
 			.and_then(|mut peers| {
 				// if so, get their addresses, otherwise use our seeds
-				if peers.len() > 0 {
+				if peers.len() > 3 {
 					thread_rng().shuffle(&mut peers[..]);
 					Box::new(future::ok(peers.iter().map(|p| p.addr).collect::<Vec<_>>()))
 				} else {
@@ -218,6 +218,7 @@ pub fn web_seeds(h: reactor::Handle) -> Box<Future<Item = Vec<SocketAddr>, Error
 	let url = hyper::Uri::from_str(&SEEDS_URL).unwrap();
 	let seeds = future::ok(()).and_then(move |_| {
 		let client = hyper::Client::new(&h);
+		debug!(LOGGER, "Retrieving seed nodes from {}", &SEEDS_URL);
 
 		// http get, filtering out non 200 results
 		client
@@ -241,6 +242,7 @@ pub fn web_seeds(h: reactor::Handle) -> Box<Future<Item = Vec<SocketAddr>, Error
 						let addrs = res.split_whitespace()
 							.map(|s| s.parse().unwrap())
 							.collect::<Vec<_>>();
+						debug!(LOGGER, "Retrieved seed addresses: {:?}", addrs);
 						Ok(addrs)
 					})
 			})

@@ -81,6 +81,12 @@ pub enum Seeding {
 	Programmatic,
 }
 
+impl Default for Seeding {
+	fn default() -> Seeding {
+		Seeding::None
+	}
+}
+
 /// Full server configuration, aggregating configurations required for the
 /// different components.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,6 +102,7 @@ pub struct ServerConfig {
 	pub chain_type: ChainTypes,
 
 	/// Method used to get the list of seed nodes for initial bootstrap.
+	#[serde(default)]
 	pub seeding_type: Seeding,
 
 	/// The list of seed nodes, if using Seeding as a seed type
@@ -122,7 +129,7 @@ impl Default for ServerConfig {
 			db_root: ".grin".to_string(),
 			api_http_addr: "0.0.0.0:13413".to_string(),
 			capabilities: p2p::FULL_NODE,
-			seeding_type: Seeding::None,
+			seeding_type: Seeding::default(),
 			seeds: None,
 			p2p_config: Some(p2p::P2PConfig::default()),
 			mining_config: Some(pow::types::MinerConfig::default()),

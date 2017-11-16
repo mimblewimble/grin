@@ -43,4 +43,4 @@ pub mod types;
 // Re-export the base interface
 
 pub use chain::Chain;
-pub use types::{ChainAdapter, ChainStore, Error, Options, Tip, EASY_POW, NONE, SKIP_POW, SYNC};
+pub use types::{ChainAdapter, ChainStore, Error, Options, Tip, NONE, SKIP_POW, SYNC};
