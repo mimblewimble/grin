@@ -285,7 +285,11 @@ impl Block {
 		key_id: &keychain::Identifier,
 	) -> Result<Block, Error> {
 		let fees = txs.iter().map(|tx| tx.fee).sum();
-		let (reward_out, reward_proof) = Block::reward_output(keychain, key_id, fees)?;
+		let (reward_out, reward_proof) = Block::reward_output(
+			keychain,
+			key_id,
+			fees,
+		)?;
 		let block = Block::with_reward(prev, txs, reward_out, reward_proof)?;
 		Ok(block)
 	}
@@ -309,8 +313,10 @@ impl Block {
 		// to build the block (which we can sort of think of as one big tx?)
 		for tx in txs {
 			// validate each transaction and gather their kernels
-			let excess = tx.validate()?;
-			let kernel = tx.build_kernel(excess);
+			// We require all kernels to have already been built here
+			// tx validation checks this here
+			tx.validate()?;
+			let kernel = tx.kernels.first().unwrap().clone();
 			kernels.push(kernel);
 
 			for input in tx.inputs.clone() {
@@ -326,12 +332,12 @@ impl Block {
 		kernels.push(reward_kern);
 		outputs.push(reward_out);
 
-		// now sort everything to the block is built deterministically
+		// now sort everything to ensure the block is built deterministically
 		inputs.sort();
 		outputs.sort();
 		kernels.sort();
 
-		// calculate the overall Merkle tree and fees (todo?)
+		// TODO? calculate the overall Merkle tree and fees
 
 		Ok(
 			Block {
@@ -613,8 +619,7 @@ mod test {
 		build::transaction(
 			vec![input(v, key_id1), output(3, key_id2), with_fee(2)],
 			&keychain,
-		).map(|(tx, _)| tx)
-			.unwrap()
+		).unwrap()
 	}
 
 	// Too slow for now #[test]
@@ -634,9 +639,7 @@ mod test {
 
 		let now = Instant::now();
 		parts.append(&mut vec![input(500000, pks.pop().unwrap()), with_fee(2)]);
-		let mut tx = build::transaction(parts, &keychain)
-			.map(|(tx, _)| tx)
-			.unwrap();
+		let mut tx = build::transaction(parts, &keychain).unwrap();
 		println!("Build tx: {}", now.elapsed().as_secs());
 
 		let b = new_block(vec![&mut tx], &keychain);
@@ -652,7 +655,7 @@ mod test {
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		let mut btx1 = tx2i1o();
-		let (mut btx2, _) = build::transaction(
+		let mut btx2 = build::transaction(
 			vec![input(7, key_id1), output(5, key_id2.clone()), with_fee(2)],
 			&keychain,
 		).unwrap();
@@ -680,7 +683,7 @@ mod test {
 
 		let mut btx1 = tx2i1o();
 
-		let (mut btx2, _) = build::transaction(
+		let mut btx2 = build::transaction(
 			vec![input(7, key_id1), output(5, key_id2.clone()), with_fee(2)],
 			&keychain,
 		).unwrap();

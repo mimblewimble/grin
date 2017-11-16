@@ -1240,8 +1240,7 @@ mod tests {
 		}
 		tx_elements.push(build::with_fee(fees as u64));
 
-		let (tx, _) = build::transaction(tx_elements, &keychain).unwrap();
-		tx
+		build::transaction(tx_elements, &keychain).unwrap()
 	}
 
 	fn timelocked_transaction(
@@ -1269,8 +1268,8 @@ mod tests {
 		tx_elements.push(build::with_fee(fees as u64));
 
 		tx_elements.push(build::with_lock_height(lock_height));
-		let (tx, _) = build::transaction(tx_elements, &keychain).unwrap();
-		tx
+
+		build::transaction(tx_elements, &keychain).unwrap()
 	}
 
 	/// Deterministically generate an output defined by our test scheme

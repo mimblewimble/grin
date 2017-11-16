@@ -115,7 +115,7 @@ fn build_send_tx(
 	// on tx being sent (based on current chain height via api).
 	parts.push(build::with_lock_height(lock_height));
 
-	let (tx, blind) = build::transaction(parts, &keychain)?;
+	let (tx, blind) = build::partial_transaction(parts, &keychain)?;
 
 	Ok((tx, blind))
 }
@@ -157,7 +157,7 @@ pub fn issue_burn_tx(
 	parts.push(build::output(amount - fee, Identifier::zero()));
 
 	// finalize the burn transaction and send
-	let (tx_burn, _) = build::transaction(parts, &keychain)?;
+	let tx_burn = build::transaction(parts, &keychain)?;
 	tx_burn.validate()?;
 
 	let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
@@ -254,8 +254,8 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 
-		let (tx1, _) = transaction(vec![output(105, key_id1.clone())], &keychain).unwrap();
-		let (tx2, _) = transaction(vec![input(105, key_id1.clone())], &keychain).unwrap();
+		let tx1 = transaction(vec![output(105, key_id1.clone())], &keychain).unwrap();
+		let tx2 = transaction(vec![input(105, key_id1.clone())], &keychain).unwrap();
 
 		assert_eq!(tx1.outputs[0].commitment(), tx2.inputs[0].commitment());
 	}
