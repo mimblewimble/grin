@@ -355,17 +355,21 @@ impl Transaction {
 		}
 
 		// fee and lock_height must match between tx and the single kernel
+		// TODO - tx fee should equal the sum of kernel fees
+		// TODO - tx lock_height should equal the max kernel lock_height?
 		let kernel = self.kernels.first().unwrap();
 		if self.fee != kernel.fee || self.lock_height != kernel.lock_height {
 			return Err(Error::Kernel);
 		}
 
 		// the excess_sig should match between tx and single kernel
+		// TODO - what to do here with multiple kernels?
 		if kernel.excess_sig != self.excess_sig {
 			return Err(Error::Kernel);
 		}
 
 		// the excess itself should match between tx and single kernel
+		// TODO - sum them the same way we do for block validation
 		let excess = self.sum_commitments()?;
 		if excess != kernel.excess {
 			return Err(Error::Kernel);
@@ -379,7 +383,7 @@ impl Transaction {
 			out.verify_proof()?;
 		}
 
-		// Verify all our kernels (currently just a single kernel)
+		// Verify all our kernels individually (currently just a single kernel)
 		for kernel in &self.kernels {
 			kernel.verify()?;
 		}
