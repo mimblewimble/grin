@@ -49,7 +49,7 @@ capabilities = [7]
 #grin server nodes
 
 [server.p2p_config]
-host = "127.0.0.1"
+host = "0.0.0.0"
 port = 13414
 
 #########################################
