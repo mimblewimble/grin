@@ -97,7 +97,7 @@ fn test_coinbase_maturity() {
 			.contains(transaction::COINBASE_OUTPUT,)
 	);
 
-	chain.process_block(block, chain::EASY_POW).unwrap();
+	chain.process_block(block, chain::NONE).unwrap();
 
 	let prev = chain.head_header().unwrap();
 
@@ -126,7 +126,7 @@ fn test_coinbase_maturity() {
 		global::sizeshift() as u32,
 	).unwrap();
 
-	let result = chain.process_block(block, chain::EASY_POW);
+	let result = chain.process_block(block, chain::NONE);
 	match result {
 		Err(Error::ImmatureCoinbase) => (),
 		_ => panic!("expected ImmatureCoinbase error here"),
@@ -154,7 +154,7 @@ fn test_coinbase_maturity() {
 			global::sizeshift() as u32,
 		).unwrap();
 
-		chain.process_block(block, chain::EASY_POW).unwrap();
+		chain.process_block(block, chain::NONE).unwrap();
 	}
 
 	let prev = chain.head_header().unwrap();
@@ -175,7 +175,7 @@ fn test_coinbase_maturity() {
 		global::sizeshift() as u32,
 	).unwrap();
 
-	let result = chain.process_block(block, chain::EASY_POW);
+	let result = chain.process_block(block, chain::NONE);
 	match result {
 		Ok(_) => (),
 		Err(Error::ImmatureCoinbase) => panic!("we should not get an ImmatureCoinbase here"),

@@ -32,8 +32,6 @@ bitflags! {
 		const NONE = 0b00000001,
 		/// Runs without checking the Proof of Work, mostly to make testing easier.
 		const SKIP_POW = 0b00000010,
-		/// Runs PoW verification with a lower cycle size.
-		const EASY_POW = 0b00000100,
 		/// Adds block while in syncing mode.
 		const SYNC = 0b00001000,
 	}

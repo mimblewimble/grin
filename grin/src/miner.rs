@@ -507,12 +507,7 @@ impl Miner {
 					b.hash()
 				);
 				b.header.pow = proof;
-				let opts = if cuckoo_size < consensus::DEFAULT_SIZESHIFT as u32 {
-					chain::EASY_POW
-				} else {
-					chain::NONE
-				};
-				let res = self.chain.process_block(b, opts);
+				let res = self.chain.process_block(b, chain::NONE);
 				if let Err(e) = res {
 					error!(
 						LOGGER,

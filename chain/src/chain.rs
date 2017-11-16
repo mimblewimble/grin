@@ -33,8 +33,6 @@ use sumtree;
 use types::*;
 use util::LOGGER;
 
-use core::global;
-
 const MAX_ORPHANS: usize = 20;
 
 /// Facade to the blockchain block processing pipeline and storage. Provides
@@ -154,6 +152,15 @@ impl Chain {
 				orphans.push_front((opts, b));
 				orphans.truncate(MAX_ORPHANS);
 			},
+			Err(Error::Unfit(ref msg)) => {
+				debug!(
+					LOGGER,
+					"Block {} at {} is unfit at this time: {}",
+					b.hash(),
+					b.header.height,
+					msg
+				);
+			}
 			Err(ref e) => {
 				info!(
 					LOGGER,
@@ -184,12 +191,6 @@ impl Chain {
 	}
 
 	fn ctx_from_head(&self, head: Tip, opts: Options) -> pipe::BlockContext {
-		let opts = if global::is_production_mode() {
-      opts
-    } else {
-      opts | EASY_POW
-    };
-
 		pipe::BlockContext {
 			opts: opts,
 			store: self.store.clone(),

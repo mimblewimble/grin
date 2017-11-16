@@ -26,10 +26,11 @@ api_http_addr = "127.0.0.1:13413"
 db_root = ".grin"
 
 #How to seed this server, can be None, List or WebStatic
+#
+#seeding_type = "None"
 
-seeding_type = "None"
-
-#if seeding_type = List, the list of peers to connect to.
+#If seeding_type = List, the list of peers to connect to.
+#
 #seeds = ["192.168.0.1:8080","192.168.0.2:8080"]
 
 #The chain type, which defines the genesis block and the set of cuckoo
@@ -37,8 +38,8 @@ seeding_type = "None"
 #AutomatedTesting - For CI builds and instant blockchain creation
 #UserTesting - For regular user testing (cuckoo 16)
 #Testnet1 - Full production cuckoo parameter (cuckoo 30)
-
-chain_type = "UserTesting"
+#
+#chain_type = "UserTesting"
 
 #7 = Bit flags for FULL_NODE, this structure needs to be changed
 #internally to make it more configurable
