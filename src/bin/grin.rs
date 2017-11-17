@@ -34,6 +34,7 @@ use std::thread;
 use std::io::Read;
 use std::fs::File;
 use std::time::Duration;
+use std::env::current_dir;
 
 use clap::{App, Arg, ArgMatches, SubCommand};
 use daemonize::Daemonize;
@@ -333,6 +334,7 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 			let daemonize = Daemonize::new()
 				.pid_file("/tmp/grin.pid")
 				.chown_pid_file(true)
+				.working_directory(current_dir().unwrap())
 				.privileged_action(move || {
 					grin::Server::start(server_config.clone()).unwrap();
 					loop {
