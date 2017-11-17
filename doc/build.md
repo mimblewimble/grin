@@ -38,7 +38,7 @@ In order to compile and run Grin on your machine, you should have installed:
     cd grin
     #if running a testnet1 node, check out the correct branch:
     git checkout milestone/testnet1 
-    cargo build
+    cargo build --release
 ```
 
 ### Cuckoo-Miner considerations
