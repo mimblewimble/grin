@@ -13,9 +13,9 @@
 - Q: Microtransactions? A: On Testnet1, fees are 0.8% on a transaction of 1.0 coins.
 - Q: Could grin ever support or make use of:
   ☑ Probably, or ☐ Probably not
-  A: ☑ Contracts, ☑ [Pruning](pruning.md), ☐ Identity, like bitauth, ☑ SNARKs, ☑ [Cross chain atomic swaps, multisig, time locks, lightning network](grin4bitcoiners.md#scripting), ☑ Payment channels, ☑ hidden nodes / onion routing
+  A: ☑ Contracts, ☑ [Pruning](pruning.md), ☐ Identity, like bitauth, ☑ SNARKs, [☑ Cross chain atomic swaps, ☑ multisig, ☑ time locks, ☑ lightning network](grin4bitcoiners.md#scripting), ☑ Payment channels, ☑ hidden nodes / onion routing, ☑ [Scripting - clean & native w/ tiny limits](https://lists.launchpad.net/mimblewimble/msg00029.html)
 - Q: HW requirements for mining? A: Not much. Don't invest in equipment yet, there's not even a final beta released, and a lot can change before any official blockchain is launched.
-- Q: Quantum safe?  A: Should be. In every Grin output, we also include a bit of hashed data, which is quantum safe. If quantum computing was to become a reality, we can safely introduce additional verification that would protect existing coins from being hacked. [Read more](https://github.com/mimblewimble/grin/blob/master/doc/grin4bitcoiners.md)
+- Q: Quantum safe?  A: No. Given sufficient warning, some QC resistance can be introduced through softforks.
 
 # Troubleshooting
 
