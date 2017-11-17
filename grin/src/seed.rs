@@ -197,16 +197,17 @@ impl Seeder {
 			debug!(LOGGER, "New peer address to connect to: {}.", peer_addr);
 			let inner_h = h.clone();
 			if p2p_server.peer_count() < PEER_MAX_COUNT {
-				connect_and_req(
-					capab,
-					p2p_store.clone(),
-					p2p_server.clone(),
-					inner_h,
-					peer_addr,
+				h.spawn(
+					connect_and_req(
+						capab,
+						p2p_store.clone(),
+						p2p_server.clone(),
+						inner_h,
+						peer_addr,
+					)
 				)
-			} else {
-				Box::new(future::ok(()))
-			}
+			};
+			Box::new(future::ok(()))
 		});
 		Box::new(listener)
 	}
