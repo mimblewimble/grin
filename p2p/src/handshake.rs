@@ -16,7 +16,7 @@ use std::collections::VecDeque;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
-use futures::Future;
+use futures::{self, Future};
 use rand::Rng;
 use rand::os::OsRng;
 use tokio_core::net::TcpStream;
@@ -57,14 +57,19 @@ impl Handshake {
 		self_addr: SocketAddr,
 		conn: TcpStream,
 	) -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
+
 		// prepare the first part of the handshake
 		let nonce = self.next_nonce();
+		let peer_addr = match conn.peer_addr() {
+			Ok(pa) => pa,
+			Err(e) => return Box::new(futures::future::err(Error::Connection(e))),
+		};
 		debug!(
 			LOGGER,
 			"handshake connect with nonce - {}, sender - {:?}, receiver - {:?}",
 			nonce,
 			self_addr,
-			conn.peer_addr().unwrap(),
+			peer_addr,
 		);
 
 		let hand = Hand {
@@ -73,7 +78,7 @@ impl Handshake {
 			nonce: nonce,
 			total_difficulty: total_difficulty,
 			sender_addr: SockAddr(self_addr),
-			receiver_addr: SockAddr(conn.peer_addr().unwrap()),
+			receiver_addr: SockAddr(peer_addr),
 			user_agent: USER_AGENT.to_string(),
 		};
 
@@ -81,7 +86,7 @@ impl Handshake {
 		Box::new(
 			write_msg(conn, hand, Type::Hand)
 				.and_then(|conn| read_msg::<Shake>(conn))
-				.and_then(|(conn, shake)| {
+				.and_then(move |(conn, shake)| {
 					if shake.version != 1 {
 						Err(Error::Serialization(ser::Error::UnexpectedData {
 							expected: vec![PROTOCOL_VERSION as u8],
@@ -91,7 +96,7 @@ impl Handshake {
 						let peer_info = PeerInfo {
 							capabilities: shake.capabilities,
 							user_agent: shake.user_agent,
-							addr: conn.peer_addr().unwrap(),
+							addr: peer_addr,
 							version: shake.version,
 							total_difficulty: shake.total_difficulty,
 						};
