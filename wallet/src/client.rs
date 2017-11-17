@@ -74,6 +74,7 @@ fn single_send_partial_tx(url: &str, partial_tx: &PartialTx) -> Result<(), Error
 			info!(LOGGER, "Transaction sent successfully");
 		} else {
 			error!(LOGGER, "Error sending transaction - status: {}", res.status());
+			return Err(hyper::Error::Status);
 		}
 		Ok(())
 	})?;
