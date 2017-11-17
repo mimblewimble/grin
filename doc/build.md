@@ -18,7 +18,7 @@ In order to compile and run Grin on your machine, you should have installed:
 
 * <b>Git</b> - to clone the repository
 * <b>cmake</b> - 3.2 or greater should be installed and on your $PATH. Used by the build to compile the mining plugins found in the included [Cuckoo Miner](https://github.com/mimblewimble/cuckoo-miner)
-* <b>Rust</b> - via [Rustup](https://www.rustup.rs/) - Can be installed via your package manager or manually via the following commands:
+* <b>Rust</b> - 1.21.0 or greater via [Rustup](https://www.rustup.rs/) - Can be installed via your package manager or manually via the following commands:
 ```
     curl https://sh.rustup.rs -sSf | sh
     source $HOME/.cargo/env
@@ -98,8 +98,6 @@ The following are minimal instructions to get a testnet1 node up and running.
 
 After following the instructions above to build a testnet executable and ensuring it's on your system path, create two directories wherever you prefer. Call one 'wallet' and one 'server'.
 
-Copy the 'grin.toml' file from the project root into the 'server' directory.
-
 In the 'wallet' directory (preferably in a separate terminal window), run the following command to create a wallet seed:
 
 ```
@@ -112,8 +110,13 @@ Then, to run a publicly listening wallet receiver, run the following command:
 grin wallet -p password -e receive
 ```
 
-Next, in the 'server' directory in another terminal window, start the server node:
+Next, in the 'server' directory in another terminal window, copy the grin.toml file from the project root:
 
+```
+cp /path/to/project/root/grin.toml .
+```
+
+Then, to start the server node:
 ```
 grin server --mine run
 ```
