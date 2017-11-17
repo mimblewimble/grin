@@ -118,7 +118,7 @@ impl Seeder {
 					if peers.len() > 0 {
 						debug!(
 							LOGGER,
-							"Got {} more peers from db, trying to connect.",
+							"Got {} peers from db, trying to connect.",
 							peers.len()
 						);
 						thread_rng().shuffle(&mut peers[..]);
