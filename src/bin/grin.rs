@@ -348,9 +348,9 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 		}
 		("stop", _) => println!("TODO, just 'kill $pid' for now."),
 		(cmd, _) => {
-      println!(":: {:?}", server_args);
-      panic!("Unknown server command '{}', use 'grin help server' for details", cmd);
-    }
+			println!(":: {:?}", server_args);
+			panic!("Unknown server command '{}', use 'grin help server' for details", cmd);
+		}
 	}
 }
 
@@ -373,9 +373,9 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
-	let mut show_spent=false;
+	let mut show_spent = false;
 	if wallet_args.is_present("show_spent") {
-		show_spent=true;
+		show_spent = true;
 	}
 
 	// Derive the keychain based on seed from seed file and specified passphrase.
@@ -425,7 +425,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				dest = d;
 			}
 			let max_outputs = 500;
-			let result=wallet::issue_send_tx(
+			let result = wallet::issue_send_tx(
 				&wallet_config,
 				&keychain,
 				amount,

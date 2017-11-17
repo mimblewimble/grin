@@ -91,12 +91,12 @@ impl Server {
 
 		let mut genesis_block = None;
 		if !chain::Chain::chain_exists(config.db_root.clone()) {
-      let chain_type = config.chain_type.clone();
-      if chain_type == global::ChainTypes::Testnet1 {
-        genesis_block = Some(genesis::genesis_testnet1());
-      } else {
-			  genesis_block = pow::mine_genesis_block(config.mining_config.clone());
-      }
+			let chain_type = config.chain_type.clone();
+			if chain_type == global::ChainTypes::Testnet1 {
+				genesis_block = Some(genesis::genesis_testnet1());
+			} else {
+				genesis_block = pow::mine_genesis_block(config.mining_config.clone());
+			}
 		}
 
 		let shared_chain = Arc::new(chain::Chain::init(
