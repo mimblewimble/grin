@@ -28,6 +28,7 @@
 use util::{secp, static_secp_instance};
 
 use core::{Input, Output, SwitchCommitHash, Transaction, DEFAULT_OUTPUT};
+use core::transaction;
 use core::transaction::kernel_sig_msg;
 use util::LOGGER;
 use keychain;
@@ -117,9 +118,9 @@ pub fn initial_tx(tx: Transaction) -> Box<Append> {
 	})
 }
 
-/// Builds a new transaction by combining all the combinators provided in a
-/// Vector. Transactions can either be built "from scratch" with a list of
-/// inputs or outputs or from a pre-existing transaction that gets added to.
+/// Builds a new transaction by combining all the provided combinators.
+/// Transactions can either be built "from scratch" with a list of inputs and outputs
+/// or from a pre-existing partial transaction that gets added to.
 ///
 /// Example:
 /// let (tx1, sum) = build::transaction(vec![input_rand(4), output_rand(1),
@@ -127,10 +128,10 @@ pub fn initial_tx(tx: Transaction) -> Box<Append> {
 /// let (tx2, _) = build::transaction(vec![initial_tx(tx1), with_excess(sum),
 ///   output_rand(2)], keychain).unwrap();
 ///
-pub fn transaction(
+pub fn partial_transaction(
 	elems: Vec<Box<Append>>,
 	keychain: &keychain::Keychain,
-) -> Result<(Transaction, BlindingFactor), keychain::Error> {
+) -> Result<(Transaction, BlindingFactor), transaction::Error> {
 	let mut ctx = Context { keychain };
 	let (mut tx, sum) = elems.iter().fold(
 		(Transaction::empty(), BlindSum::new()),
@@ -147,6 +148,16 @@ pub fn transaction(
 	Ok((tx, blind_sum))
 }
 
+/// Builds a complete transaction including the single associated kernel.
+pub fn transaction(
+	elems: Vec<Box<Append>>,
+	keychain: &keychain::Keychain,
+) -> Result<Transaction, transaction::Error> {
+	let (mut tx, _) = partial_transaction(elems, keychain)?;
+	tx.build_kernel()?;
+	Ok(tx)
+}
+
 // Just a simple test, most exhaustive tests in the core mod.rs.
 #[cfg(test)]
 mod test {
@@ -159,17 +170,16 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
-		let (tx, _) = transaction(
+		let tx = transaction(
 			vec![
 				input(10, key_id1),
-				input(11, key_id2),
+				input(12, key_id2),
 				output(20, key_id3),
-				with_fee(1),
+				with_fee(2),
 			],
 			&keychain,
 		).unwrap();
-
-		tx.verify_sig().unwrap();
+		tx.validate().unwrap();
 	}
 
 	#[test]
@@ -178,11 +188,10 @@ mod test {
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
-		let (tx, _) = transaction(
+		let tx = transaction(
 			vec![input(6, key_id1), output(2, key_id2), with_fee(4)],
 			&keychain,
 		).unwrap();
-
-		tx.verify_sig().unwrap();
+		tx.validate().unwrap();
 	}
 }

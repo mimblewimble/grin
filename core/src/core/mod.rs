@@ -216,6 +216,7 @@ mod test {
 	use ser;
 	use keychain;
 	use keychain::{BlindingFactor, Keychain};
+	use util::LOGGER;
 
 	#[test]
 	pub fn test_amount_to_hr() {
@@ -260,8 +261,9 @@ mod test {
 		let tx = tx2i1o();
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &tx).expect("serialized failed");
-		assert!(vec.len() > 5360);
-		assert!(vec.len() < 5380);
+		error!(LOGGER, "Tx ser len: {}", vec.len());
+		assert!(vec.len() > 5490);
+		assert!(vec.len() < 5510);
 	}
 
 	#[test]
@@ -300,7 +302,7 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
-		let (tx, _) = build::transaction(
+		let tx = build::transaction(
 			vec![
 				input(75, key_id1),
 				output(42, key_id2),
@@ -318,7 +320,7 @@ mod test {
 	#[test]
 	fn blind_tx() {
 		let btx = tx2i1o();
-		btx.verify_sig().unwrap(); // unwrap will panic if invalid
+		btx.validate().unwrap(); // unwrap will panic if invalid
 
 		// checks that the range proof on our blind output is sufficiently hiding
 		let Output { proof, .. } = btx.outputs[0];
@@ -361,9 +363,11 @@ mod test {
 
 			// Alice builds her transaction, with change, which also produces the sum
 			// of blinding factors before they're obscured.
-			let (tx, sum) =
-				build::transaction(vec![in1, in2, output(1, key_id3), with_fee(2)], &keychain)
-					.unwrap();
+			let (tx, sum) = build::partial_transaction(
+				vec![in1, in2, output(1, key_id3),
+				with_fee(2)],
+				&keychain,
+			).unwrap();
 			tx_alice = tx;
 			blind_sum = sum;
 		}
@@ -371,7 +375,7 @@ mod test {
 		// From now on, Bob only has the obscured transaction and the sum of
 		// blinding factors. He adds his output, finalizes the transaction so it's
 		// ready for broadcast.
-		let (tx_final, _) = build::transaction(
+		let tx_final = build::transaction(
 			vec![
 				initial_tx(tx_alice),
 				with_excess(blind_sum),
@@ -398,7 +402,7 @@ mod test {
 		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let mut tx1 = tx2i1o();
-		tx1.verify_sig().unwrap();
+		tx1.validate().unwrap();
 
 		let b = Block::new(&BlockHeader::default(), vec![&mut tx1], &keychain, &key_id).unwrap();
 		b.compact().validate().unwrap();
@@ -439,8 +443,7 @@ mod test {
 				with_lock_height(1),
 			],
 			&keychain,
-		).map(|(tx, _)| tx)
-			.unwrap();
+		).unwrap();
 
 		let b = Block::new(
 			&BlockHeader::default(),
@@ -459,8 +462,7 @@ mod test {
 				with_lock_height(2),
 			],
 			&keychain,
-		).map(|(tx, _)| tx)
-			.unwrap();
+		).unwrap();
 
 		let b = Block::new(
 			&BlockHeader::default(),
@@ -479,13 +481,13 @@ mod test {
 	#[test]
 	pub fn test_verify_1i1o_sig() {
 		let tx = tx1i1o();
-		tx.verify_sig().unwrap();
+		tx.validate().unwrap();
 	}
 
 	#[test]
 	pub fn test_verify_2i1o_sig() {
 		let tx = tx2i1o();
-		tx.verify_sig().unwrap();
+		tx.validate().unwrap();
 	}
 
 	// utility producing a transaction with 2 inputs and a single outputs
@@ -503,8 +505,7 @@ mod test {
 				with_fee(2),
 			],
 			&keychain,
-		).map(|(tx, _)| tx)
-			.unwrap()
+		).unwrap()
 	}
 
 	// utility producing a transaction with a single input and output
@@ -516,7 +517,6 @@ mod test {
 		build::transaction(
 			vec![input(5, key_id1), output(3, key_id2), with_fee(2)],
 			&keychain,
-		).map(|(tx, _)| tx)
-			.unwrap()
+		).unwrap()
 	}
 }

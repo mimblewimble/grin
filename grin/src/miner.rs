@@ -588,7 +588,7 @@ impl Miner {
 		let result=self.chain.set_sumtree_roots(&mut b);
 		match result {
 			Ok(_) => Ok((b, block_fees)),
-			//If it's a duplicate commitment, it's likely trying to use 
+			//If it's a duplicate commitment, it's likely trying to use
 			//a key that's already been derived but not in the wallet
 			//for some reason, allow caller to retry
 			Err(chain::Error::DuplicateCommitment(e)) =>
@@ -608,7 +608,11 @@ impl Miner {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let (out, kernel) =
-			core::Block::reward_output(&keychain, &key_id, block_fees.fees).unwrap();
+			core::Block::reward_output(
+				&keychain,
+				&key_id,
+				block_fees.fees,
+			).unwrap();
 		Ok((out, kernel, block_fees))
 	}
 

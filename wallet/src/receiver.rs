@@ -164,7 +164,11 @@ pub fn receive_coinbase(
 
 	debug!(LOGGER, "block_fees updated - {:?}", block_fees);
 
-	let (out, kern) = Block::reward_output(&keychain, &key_id, block_fees.fees)?;
+	let (out, kern) = Block::reward_output(
+		&keychain,
+		&key_id,
+		block_fees.fees,
+	)?;
 	Ok((out, kern, block_fees))
 }
 
@@ -193,12 +197,11 @@ fn receive_transaction(
 
 	let out_amount = amount - fee;
 
-	let (tx_final, _) = build::transaction(
+	let tx_final = build::transaction(
 		vec![
 			build::initial_tx(partial),
 			build::with_excess(blinding),
 			build::output(out_amount, key_id.clone()),
-		// build::with_fee(fee_amount),
 		],
 		keychain,
 	)?;

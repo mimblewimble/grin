@@ -25,6 +25,7 @@ use std::ops;
 use core::Committed;
 use core::hash::Hashed;
 use core::pmmr::Summable;
+use keychain;
 use keychain::{Identifier, Keychain};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 
@@ -64,19 +65,29 @@ macro_rules! hashable_ord {
   }
 }
 
-/// Errors thrown by Block validation
+/// Errors thrown by tx validation
 #[derive(Clone, Debug, PartialEq)]
 pub enum Error {
 	/// Transaction fee can't be odd, due to half fee burning
-	OddFee,
+	OddFee(u64),
 	/// Underlying Secp256k1 error (signature validation or invalid public
 	/// key typically)
 	Secp(secp::Error),
+	Keychain(keychain::Error),
+	Kernel,
+	ZeroKernels,
+	MultipleKernels,
 }
 
 impl From<secp::Error> for Error {
 	fn from(e: secp::Error) -> Error {
 		Error::Secp(e)
+	}
+}
+
+impl From<keychain::Error> for Error {
+	fn from(e: keychain::Error) -> Error {
+		Error::Keychain(e)
 	}
 }
 
@@ -108,6 +119,7 @@ pub struct TxKernel {
 	pub excess: Commitment,
 	/// The signature proving the excess is a valid public key, which signs
 	/// the transaction fee.
+	/// TODO - make this a struct wrapping the Vec<u8> for safety
 	pub excess_sig: Vec<u8>,
 }
 
@@ -144,16 +156,17 @@ impl Readable for TxKernel {
 }
 
 impl TxKernel {
-	/// Verify the transaction proof validity. Entails handling the commitment
-	/// as a public key and checking the signature verifies with the fee as
-	/// message.
+	/// The verification for a MimbleWimble transaction involves getting the
+	/// excess of summing all commitments and using it as a public key
+	/// to verify the embedded signature. The rational is that if the values
+	/// sum to zero as they should in r.G + v.H then only k.G the excess
+	/// of the sum of r.G should be left. And r.G is the definition of a
+	/// public key generated using r as a private key.
 	pub fn verify(&self) -> Result<(), secp::Error> {
-		let msg = try!(Message::from_slice(
-			&kernel_sig_msg(self.fee, self.lock_height),
-		));
+		let msg = Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height))?;
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		let sig = try!(Signature::from_der(&secp, &self.excess_sig));
+		let sig = Signature::from_der(&secp, &self.excess_sig)?;
 		secp.verify_from_commit(&msg, &sig, &self.excess)
 	}
 }
@@ -165,6 +178,8 @@ pub struct Transaction {
 	pub inputs: Vec<Input>,
 	/// Set of outputs the transaction produces.
 	pub outputs: Vec<Output>,
+	/// Experimental - tx will only have a single kernel initially
+	pub kernels: Vec<TxKernel>,
 	/// Fee paid by the transaction.
 	pub fee: u64,
 	/// Transaction is not valid before this block height.
@@ -185,15 +200,18 @@ impl Writeable for Transaction {
 			[write_u64, self.lock_height],
 			[write_bytes, &self.excess_sig],
 			[write_u64, self.inputs.len() as u64],
-			[write_u64, self.outputs.len() as u64]
+			[write_u64, self.outputs.len() as u64],
+			[write_u64, self.kernels.len() as u64]
 		);
 
 		// Consensus rule that everything is sorted in lexicographical order on the wire.
 		let mut inputs = self.inputs.clone();
 		let mut outputs = self.outputs.clone();
+		let mut kernels = self.kernels.clone();
 
 		try!(inputs.write_sorted(writer));
 		try!(outputs.write_sorted(writer));
+		try!(kernels.write_sorted(writer));
 
 		Ok(())
 	}
@@ -203,11 +221,12 @@ impl Writeable for Transaction {
 /// transaction from a binary stream.
 impl Readable for Transaction {
 	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
-		let (fee, lock_height, excess_sig, input_len, output_len) =
-			ser_multiread!(reader, read_u64, read_u64, read_vec, read_u64, read_u64);
+		let (fee, lock_height, excess_sig, input_len, output_len, kernel_len) =
+			ser_multiread!(reader, read_u64, read_u64, read_vec, read_u64, read_u64, read_u64);
 
 		let inputs = read_and_verify_sorted(reader, input_len)?;
 		let outputs = read_and_verify_sorted(reader, output_len)?;
+		let kernels = read_and_verify_sorted(reader, kernel_len)?;
 
 		Ok(Transaction {
 			fee: fee,
@@ -215,6 +234,7 @@ impl Readable for Transaction {
 			excess_sig: excess_sig,
 			inputs: inputs,
 			outputs: outputs,
+			kernels: kernels,
 			..Default::default()
 		})
 	}
@@ -247,6 +267,7 @@ impl Transaction {
 			excess_sig: vec![],
 			inputs: vec![],
 			outputs: vec![],
+			kernels: vec![],
 		}
 	}
 
@@ -261,9 +282,9 @@ impl Transaction {
 		Transaction {
 			fee: fee,
 			lock_height: lock_height,
-			excess_sig: vec![],
 			inputs: inputs,
 			outputs: outputs,
+			..Transaction::empty()
 		}
 	}
 
@@ -302,56 +323,71 @@ impl Transaction {
 		}
 	}
 
-	/// The verification for a MimbleWimble transaction involves getting the
-	/// excess of summing all commitments and using it as a public key
-	/// to verify the embedded signature. The rational is that if the values
-	/// sum to zero as they should in r.G + v.H then only k.G the excess
-	/// of the sum of r.G should be left. And r.G is the definition of a
-	/// public key generated using r as a private key.
-	pub fn verify_sig(&self) -> Result<Commitment, secp::Error> {
-		let rsum = self.sum_commitments()?;
-
-		let msg = Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height))?;
-
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
-		let sig = Signature::from_der(&secp, &self.excess_sig)?;
-
-		// pretend the sum is a public key (which it is, being of the form r.G) and
-		// verify the transaction sig with it
-		//
-		// we originally converted the commitment to a key_id here (commitment to zero)
-		// and then passed the key_id to secp.verify()
-		// the secp api no longer allows us to do this so we have wrapped the complexity
-		// of generating a public key from a commitment behind verify_from_commit
-		secp.verify_from_commit(&msg, &sig, &rsum)?;
-
-		Ok(rsum)
-	}
-
 	/// Builds a transaction kernel
-	pub fn build_kernel(&self, excess: Commitment) -> TxKernel {
-		TxKernel {
-			features: DEFAULT_KERNEL,
-			excess: excess,
-			excess_sig: self.excess_sig.clone(),
-			fee: self.fee,
-			lock_height: self.lock_height,
+	pub fn build_kernel(&mut self) -> Result<(), Error>{
+		if self.kernels.is_empty() {
+			let excess = self.sum_commitments()?;
+			self.kernels.push(
+				TxKernel {
+					features: DEFAULT_KERNEL,
+					excess: excess,
+					excess_sig: self.excess_sig.clone(),
+					fee: self.fee,
+					lock_height: self.lock_height,
+				}
+			);
+			Ok(())
+		} else {
+			panic!("should not build the kernel a 2nd time - we already have one");
 		}
 	}
 
-	/// Validates all relevant parts of a fully built transaction. Checks the
-	/// excess value against the signature as well as range proofs for each
-	/// output.
-	pub fn validate(&self) -> Result<Commitment, Error> {
-		if self.fee & 1 != 0 {
-			return Err(Error::OddFee);
+	/// Validates all relevant parts of a fully built transaction.
+	/// Checks the excess value against the signature
+	/// as well as rangeproofs for each output.
+	/// Currently only supports a tx with a single pre-built kernel
+	pub fn validate(&self) -> Result<(), Error> {
+		if self.kernels.is_empty() {
+			return Err(Error::ZeroKernels);
 		}
+		if self.kernels.len() > 1 {
+			return Err(Error::MultipleKernels);
+		}
+
+		// fee and lock_height must match between tx and the single kernel
+		// TODO - tx fee should equal the sum of kernel fees
+		// TODO - tx lock_height should equal the max kernel lock_height?
+		let kernel = self.kernels.first().unwrap();
+		if self.fee != kernel.fee || self.lock_height != kernel.lock_height {
+			return Err(Error::Kernel);
+		}
+
+		// the excess_sig should match between tx and single kernel
+		// TODO - what to do here with multiple kernels?
+		if kernel.excess_sig != self.excess_sig {
+			return Err(Error::Kernel);
+		}
+
+		// the excess itself should match between tx and single kernel
+		// TODO - sum them the same way we do for block validation
+		let excess = self.sum_commitments()?;
+		if excess != kernel.excess {
+			return Err(Error::Kernel);
+		}
+
+		if self.fee & 1 != 0 {
+			return Err(Error::OddFee(self.fee));
+		}
+
 		for out in &self.outputs {
 			out.verify_proof()?;
 		}
-		let excess = self.verify_sig()?;
-		Ok(excess)
+
+		// Verify all our kernels individually (currently just a single kernel)
+		for kernel in &self.kernels {
+			kernel.verify()?;
+		}
+		Ok(())
 	}
 }
 
