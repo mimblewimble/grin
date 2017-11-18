@@ -189,8 +189,8 @@ fn main() {
 			.help("Api address of running node on which to check inputs and post transactions")
 			.takes_value(true))
 
-		.subcommand(SubCommand::with_name("receive")
-			.about("Run the wallet in receiving mode. If an input file is \
+		.subcommand(SubCommand::with_name("listen")
+			.about("Run the wallet in listening mode. If an input file is \
 				provided, will process it, otherwise runs in server mode waiting \
 				for send requests.")
 			.arg(Arg::with_name("input")
@@ -314,7 +314,7 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 			.mining_config
 			.as_mut()
 			.unwrap()
-			.wallet_receiver_url = wallet_url.to_string();
+			.wallet_listener_url = wallet_url.to_string();
 	}
 
 	if let Some(seeds) = server_args.values_of("seed") {
@@ -397,7 +397,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		.expect("Failed to derive keychain from seed file and passphrase.");
 
 	match wallet_args.subcommand() {
-		("receive", Some(receive_args)) => if let Some(f) = receive_args.value_of("input") {
+		("listen", Some(receive_args)) => if let Some(f) = receive_args.value_of("input") {
 			let mut file = File::open(f).expect("Unable to open transaction file.");
 			let mut contents = String::new();
 			file.read_to_string(&mut contents)
