@@ -594,7 +594,10 @@ impl Miner {
 			Err(chain::Error::DuplicateCommitment(e)) =>
 				Err(Error::Chain(chain::Error::DuplicateCommitment(e))),
 			//Some other issue is worth a panic
-			Err(e) => panic!(e),
+			Err(e) => {
+				error!(LOGGER, "Error setting sumtree root to build a block: {:?}", e);
+				panic!(e);
+			}
 		}
 	}
 
