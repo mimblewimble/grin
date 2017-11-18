@@ -277,7 +277,7 @@ fn connect_and_req(
 ) -> Box<Future<Item = (), Error = ()>> {
 	let connect_peer = p2p.connect_peer(addr, h).map_err(|_| ());
 	let timer = Timer::default();
-	let timeout = timer.timeout(connect_peer, Duration::from_millis(500));
+	let timeout = timer.timeout(connect_peer, Duration::from_secs(5));
 
 	let fut = timeout.then(move |p| {
 		match p {
