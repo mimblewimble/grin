@@ -1,7 +1,7 @@
-# How grin is structured
+# Project structure
 grin is built in [rust](https://www.rust-lang.org/), a memory safe, compiled language. Performance critical parts like the Cuckoo mining algorithm are built as plugins, making it easy to swap between algorithm implementations for various hardware. Grin comes with CPU and experimental GPU support.
 
-## Files under doc/
+## Documentation structure
 - [FAQ][faq.md] - Frequently Asked Questions
 - [build](build.md) - Explaining how to build and run the Grin binaries
 - [chainsync](chainsync.md) - About how grin's blockchain is synchronized
@@ -66,7 +66,7 @@ List of folders in the grin git repo, and the `wallet` and `server` folders whic
   - wallet.dat - your "outputs", that once confirmed and matured, can be spent with the [`grin wallet send`](wallet.md) command. (locally created, _not_ in git)
   - wallet.seed - your secret wallet seed. (locally created, _not_ in git)
 
-## Dependencies
+## grin dependencies
 - [secp256k1](https://github.com/mimblewimble/rust-secp256k1-zkp)
   Integration and rust bindings for libsecp256l1, and some changes waiting to be upstreamed. Imported in util/Cargo.toml.
 
