@@ -22,6 +22,7 @@ use std::net::SocketAddr;
 use std::str::{self, FromStr};
 use std::sync::Arc;
 use std::time;
+use std::time::Duration;
 
 use cpupool;
 use futures::{self, future, Future, Stream};
@@ -117,7 +118,7 @@ impl Seeder {
 					if peers.len() > 0 {
 						debug!(
 							LOGGER,
-							"Got {} more peers from db, trying to connect.",
+							"Got {} peers from db, trying to connect.",
 							peers.len()
 						);
 						thread_rng().shuffle(&mut peers[..]);
@@ -274,7 +275,11 @@ fn connect_and_req(
 	h: reactor::Handle,
 	addr: SocketAddr,
 ) -> Box<Future<Item = (), Error = ()>> {
-	let fut = p2p.connect_peer(addr, h).then(move |p| {
+	let connect_peer = p2p.connect_peer(addr, h).map_err(|_| ());
+	let timer = Timer::default();
+	let timeout = timer.timeout(connect_peer, Duration::from_secs(5));
+
+	let fut = timeout.then(move |p| {
 		match p {
 			Ok(Some(p)) => {
 				let peer_result = p.send_peer_request(capab);
@@ -283,8 +288,7 @@ fn connect_and_req(
 					Err(_) => {}
 				}
 			}
-			Err(e) => {
-				error!(LOGGER, "Peer request error: {:?}", e);
+			Err(_) => {
 				let update_result = peer_store.update_state(addr, p2p::State::Defunct);
 				match update_result {
 					Ok(()) => {}
