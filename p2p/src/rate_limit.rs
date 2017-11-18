@@ -15,7 +15,7 @@
 //! Provides wrappers for throttling readers and writers
 
 use std::time::Instant;
-use std::io;
+use std::{cmp, io};
 
 use futures::*;
 use tokio_io::*;
@@ -106,9 +106,9 @@ impl<R: AsyncRead> AsyncRead for ThrottledReader<R> {}
 pub struct ThrottledWriter<W: AsyncWrite> {
 	writer: W,
 	/// Max Bytes per second
-	max: u32,
+	max: u64,
 	/// Stores a count of last request and last request time
-	allowed: usize,
+	allowed: u64,
 	last_check: Instant,
 }
 
@@ -116,11 +116,11 @@ pub struct ThrottledWriter<W: AsyncWrite> {
 impl<W: AsyncWrite> ThrottledWriter<W> {
 	/// Adds throttling to a writer.
 	/// The resulting writer will write at most `max` amount of bytes per second
-	pub fn new(writer: W, max: u32) -> Self {
+	pub fn new(writer: W, max: u64) -> Self {
 		ThrottledWriter {
 			writer: writer,
 			max: max,
-			allowed: max as usize,
+			allowed: max,
 			last_check: Instant::now(),
 		}
 	}
@@ -149,11 +149,11 @@ impl<W: AsyncWrite> io::Write for ThrottledWriter<W> {
 		// Check passed Time
 		let time_passed = self.last_check.elapsed();
 		self.last_check = Instant::now();
-		self.allowed += time_passed.as_secs() as usize * self.max as usize;
+		self.allowed += time_passed.as_secs() * self.max;
 
 		// Throttle
-		if self.allowed > self.max as usize {
-			self.allowed = self.max as usize;
+		if self.allowed > self.max {
+			self.allowed = cmp::min(self.max, u32::max_value() as u64);
 		}
 
 		// Check if Allowed
@@ -165,8 +165,8 @@ impl<W: AsyncWrite> io::Write for ThrottledWriter<W> {
 		}
 
 		// Write max allowed
-		let buf = if buf.len() > self.allowed {
-			&buf[0..self.allowed]
+		let buf = if buf.len() > self.allowed as usize {
+			&buf[0..self.allowed as usize]
 		} else {
 			buf
 		};
@@ -174,7 +174,7 @@ impl<W: AsyncWrite> io::Write for ThrottledWriter<W> {
 
 		// Decrement Allowed amount written
 		if let Ok(n) = res {
-			self.allowed -= n;
+			self.allowed -= n as u64;
 		}
 		res
 	}
