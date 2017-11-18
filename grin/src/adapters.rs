@@ -58,7 +58,11 @@ impl NetAdapter for NetToChainAdapter {
 		);
 
 		if let Err(e) = self.tx_pool.write().unwrap().add_to_memory_pool(source, tx) {
-			error!(LOGGER, "Transaction rejected: {:?}", e);
+			if e.kind() == PoolError::AlreadyInPool {
+				info!(LOGGER, "Transaction rejected: {:?}", e);
+			} else {
+				error!(LOGGER, "Transaction rejected: {:?}", e);
+			}
 		}
 	}
 
