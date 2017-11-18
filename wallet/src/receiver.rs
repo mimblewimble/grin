@@ -90,34 +90,27 @@ impl Handler for WalletReceiver {
 	}
 }
 
-// Read wallet data without acquiring the write lock.
 fn retrieve_existing_key(
-	config: &WalletConfig,
+	wallet_data: &WalletData,
 	key_id: Identifier,
-) -> Result<(Identifier, u32), Error> {
-	let res = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		if let Some(existing) = wallet_data.get_output(&key_id) {
-			let key_id = existing.key_id.clone();
-			let derivation = existing.n_child;
-			(key_id, derivation)
-		} else {
-			panic!("should never happen");
-		}
-	})?;
-	Ok(res)
+) -> (Identifier, u32) {
+	if let Some(existing) = wallet_data.get_output(&key_id) {
+		let key_id = existing.key_id.clone();
+		let derivation = existing.n_child;
+		(key_id, derivation)
+	} else {
+		panic!("should never happen");
+	}
 }
 
 fn next_available_key(
-	config: &WalletConfig,
+	wallet_data: &WalletData,
 	keychain: &Keychain,
-) -> Result<(Identifier, u32), Error> {
-	let res = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		let root_key_id = keychain.root_key_id();
-		let derivation = wallet_data.next_child(root_key_id.clone());
-		let key_id = keychain.derive_key_id(derivation).unwrap();
-		(key_id, derivation)
-	})?;
-	Ok(res)
+) -> (Identifier, u32) {
+	let root_key_id = keychain.root_key_id();
+	let derivation = wallet_data.next_child(root_key_id.clone());
+	let key_id = keychain.derive_key_id(derivation).unwrap();
+	(key_id, derivation)
 }
 
 /// Build a coinbase output and the corresponding kernel
@@ -127,15 +120,15 @@ pub fn receive_coinbase(
 	block_fees: &BlockFees,
 ) -> Result<(Output, TxKernel, BlockFees), Error> {
 	let root_key_id = keychain.root_key_id();
-	let key_id = block_fees.key_id();
-
-	let (key_id, derivation) = match key_id {
-		Some(key_id) => retrieve_existing_key(config, key_id)?,
-		None => next_available_key(config, keychain)?,
-	};
 
 	// Now acquire the wallet lock and write the new output.
-	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+		let key_id = block_fees.key_id();
+		let (key_id, derivation) = match key_id {
+			Some(key_id) => retrieve_existing_key(&wallet_data, key_id),
+			None => next_available_key(&wallet_data, keychain),
+		};
+
 		// track the new output and return the stuff needed for reward
 		wallet_data.add_output(OutputData {
 			root_key_id: root_key_id.clone(),
@@ -147,6 +140,8 @@ pub fn receive_coinbase(
 			lock_height: 0,
 			is_coinbase: true,
 		});
+
+		(key_id, derivation)
 	})?;
 
 	debug!(
@@ -178,8 +173,6 @@ fn receive_transaction(
 ) -> Result<Transaction, Error> {
 	let root_key_id = keychain.root_key_id();
 
-	let (key_id, derivation) = next_available_key(config, keychain)?;
-
 	// double check the fee amount included in the partial tx
  // we don't necessarily want to just trust the sender
  // we could just overwrite the fee here (but we won't) due to the ecdsa sig
@@ -192,6 +185,24 @@ fn receive_transaction(
 	}
 
 	let out_amount = amount - fee;
+
+	// operate within a lock on wallet data
+	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+		let (key_id, derivation) = next_available_key(&wallet_data, keychain);
+
+		wallet_data.add_output(OutputData {
+			root_key_id: root_key_id.clone(),
+			key_id: key_id.clone(),
+			n_child: derivation,
+			value: out_amount,
+			status: OutputStatus::Unconfirmed,
+			height: 0,
+			lock_height: 0,
+			is_coinbase: false,
+		});
+
+		(key_id, derivation)
+	})?;
 
 	let (tx_final, _) = build::transaction(
 		vec![
@@ -206,20 +217,6 @@ fn receive_transaction(
 	// make sure the resulting transaction is valid (could have been lied to on
  // excess).
 	tx_final.validate()?;
-
-	// operate within a lock on wallet data
-	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		wallet_data.add_output(OutputData {
-			root_key_id: root_key_id.clone(),
-			key_id: key_id.clone(),
-			n_child: derivation,
-			value: out_amount,
-			status: OutputStatus::Unconfirmed,
-			height: 0,
-			lock_height: 0,
-			is_coinbase: false,
-		});
-	})?;
 
 	debug!(
 		LOGGER,
