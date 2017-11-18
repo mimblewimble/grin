@@ -247,7 +247,10 @@ fn main() {
 			.about("basic wallet contents summary"))
 
 		.subcommand(SubCommand::with_name("init")
-			.about("Initialize a new wallet seed file.")))
+			.about("Initialize a new wallet seed file."))
+
+		.subcommand(SubCommand::with_name("restore")
+			.about("Attempt to restore wallet contents from the chain using seed and password.")))
 
 	.get_matches();
 
@@ -465,6 +468,9 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		}
 		("outputs", Some(_)) => {
 			wallet::show_outputs(&wallet_config, &keychain, show_spent);
+		}
+		("restore", Some(_)) => {
+			wallet::restore(&wallet_config, &keychain);
 		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}
