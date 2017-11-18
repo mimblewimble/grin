@@ -23,6 +23,7 @@ In order to compile and run Grin on your machine, you should have installed:
     curl https://sh.rustup.rs -sSf | sh
     source $HOME/.cargo/env
 ```
+Note that the compiler also requires up to 2Gb of available memory.  
 
 ## Build Instructions (Linux/Unix)
 
