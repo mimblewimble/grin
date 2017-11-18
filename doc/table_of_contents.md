@@ -1,6 +1,20 @@
 # How grin is structured
 grin is built in [rust](https://www.rust-lang.org/), a memory safe, compiled language. Performance critical parts like the Cuckoo mining algorithm are built as plugins, making it easy to swap between algorithm implementations for various hardware. Grin comes with CPU and experimental GPU support.
 
+## Files under doc/
+- [FAQ][faq.md] - Frequently Asked Questions
+- [build](build.md) - Explaining how to build and run the Grin binaries
+- [chainsync](chainsync.md) - About how grin's blockchain is synchronized
+- [contractideas](contractideas.md) - Ideas on how to implement contracts
+- [grin4bitcoiners](grin4bitcoiners.md) - Explaining grin from a bitcoiner's perspective
+- [internal/pool](internal/pool.md) - Technical explanation of the transaction pool
+- [intro](intro.md) - Technical introduciton to grin
+- [local_net](local_net.md) - Technical explanation of how to test Grin locally, simulating several peers, for full integration testing and network simulations
+- [merkle](merkle.md) - Technical explanation of grin's favorite kind of merkle trees
+- [pruning](pruning.md) - Technical explanation of pruning
+- [rangeproofs](rangeproofs.md) - Technical explanation of range proofs
+- [style](style.md) - About code formatting
+- [wallet](wallet.md) - Explains the wallet design and `grin wallet` sub-commands
 
 ## Files in project root
 List of files tracked in `git` and some files you'll create when you use grin.
