@@ -16,6 +16,7 @@
 
 use std::net::SocketAddr;
 use num::FromPrimitive;
+use rand::{thread_rng, Rng};
 
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 use grin_store::{self, option_to_not_found, to_key, Error};
@@ -38,7 +39,7 @@ enum_from_primitive! {
 }
 
 /// Data stored for any given peer we've encountered.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PeerData {
 	/// Network address of the peer.
 	pub addr: SocketAddr,
@@ -118,18 +119,12 @@ impl PeerStore {
 	}
 
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
-		let peers_iter = self.db
-			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()));
-		let mut peers = Vec::with_capacity(count);
-		for p in peers_iter {
-			if p.flags == state && p.capabilities.contains(cap) {
-				peers.push(p);
-			}
-			if peers.len() >= count {
-				break;
-			}
-		}
-		peers
+		let mut peers = self.db
+			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()))
+			.filter(|p| p.flags == state && p.capabilities.contains(cap))
+			.collect::<Vec<_>>();
+		thread_rng().shuffle(&mut peers[..]);
+		peers.iter().take(count).cloned().collect()
 	}
 
 	/// List all known peers (for the /v1/peers api endpoint)

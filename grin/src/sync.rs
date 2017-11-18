@@ -106,7 +106,7 @@ impl Syncer {
 			let tip = self.chain.get_header_head()?;
 
 			// TODO do something better (like trying to get more) if we lose peers
-			let peer = self.p2p.most_work_peer().unwrap();
+			let peer = self.p2p.most_work_peer().expect("No peers available for sync.");
 			debug!(
 				LOGGER,
 				"Sync: peer {} vs us {}",
