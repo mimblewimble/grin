@@ -25,6 +25,7 @@ use serde_json;
 
 use chain;
 use core::core::Transaction;
+use core::core::hash::Hashed;
 use core::ser;
 use pool;
 use p2p;
@@ -36,8 +37,9 @@ use util::LOGGER;
 
 
 // Supports retrieval of multiple outputs in a single request -
-// GET /v1/chain/utxos?id=xxx,yyy,zzz
-// GET /v1/chain/utxos?id=xxx&id=yyy&id=zzz
+// GET /v1/chain/utxos/byids?id=xxx,yyy,zzz
+// GET /v1/chain/utxos/byids?id=xxx&id=yyy&id=zzz
+// GET /v1/chain/utxos/byheight?height=n
 struct UtxoHandler {
 	chain: Arc<chain::Chain>,
 }
@@ -60,10 +62,8 @@ impl UtxoHandler {
 
 		Ok(Output::from_output(&out, &header, false))
 	}
-}
 
-impl Handler for UtxoHandler {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
+	fn utxos_by_ids(&self, req: &mut Request)->Vec<Output> {
 		let mut commitments: Vec<&str> = vec![];
 		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
 			if let Some(ids) = params.get("id") {
@@ -74,14 +74,64 @@ impl Handler for UtxoHandler {
 				}
 			}
 		}
-
 		let mut utxos: Vec<Output> = vec![];
 		for commit in commitments {
 			if let Ok(out) = self.get_utxo(commit) {
 				utxos.push(out);
 			}
 		}
-		json_response(&utxos)
+		utxos
+	}
+
+	fn utxos_at_height(&self, block_height: u64)->BlockOutputs{
+		let header=self.chain.clone().get_header_by_height(block_height).unwrap();
+		let block=self.chain.clone().get_block(&header.hash()).unwrap();
+		let outputs=block.outputs
+			.iter()
+			.map(|k| OutputSwitch::from_output(k, &header))
+			.collect();
+		BlockOutputs{
+			header : BlockHeaderInfo::from_header(&header),
+			outputs: outputs
+		}
+	}
+
+	//returns utxos for a specified range of blocks
+	fn utxo_block_batch(&self, req: &mut Request) -> Vec<BlockOutputs> {
+		let mut start_height = 1;
+		let mut end_height = 1;
+		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
+			if let Some(heights) = params.get("start_height") {
+				for height in heights {
+					start_height=height.parse().unwrap();
+				}
+			}
+			if let Some(heights) = params.get("end_height") {
+				for height in heights {
+					end_height=height.parse().unwrap();
+				}
+			}
+		}
+		let mut return_vec = vec![];
+		for i in start_height..end_height+1 {
+			return_vec.push(self.utxos_at_height(i));
+		}
+		return_vec
+	}
+}
+
+impl Handler for UtxoHandler {
+	fn handle(&self, req: &mut Request) -> IronResult<Response> {
+		let url = req.url.clone();
+		let mut path_elems = url.path();
+		if *path_elems.last().unwrap() == "" {
+			path_elems.pop();
+		}
+	match *path_elems.last().unwrap() {
+			"byids" => json_response(&self.utxos_by_ids(req)),
+			"atheight" => json_response(&self.utxo_block_batch(req)),
+			_ => Ok(Response::with((status::BadRequest, ""))),
+		}
 	}
 }
 
@@ -319,7 +369,7 @@ pub fn start_rest_apis<T>(
 
 		let router = router!(
 			chain_tip: get "/chain" => chain_tip_handler,
-			chain_utxos: get "/chain/utxos" => utxo_handler,
+			chain_utxos: get "/chain/utxos/*" => utxo_handler,
 			sumtree_roots: get "/sumtrees/*" => sumtree_handler,
 			pool_info: get "/pool" => pool_info_handler,
 			pool_push: post "/pool/push" => pool_push_handler,

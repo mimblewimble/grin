@@ -250,7 +250,10 @@ fn main() {
 			.about("basic wallet contents summary"))
 
 		.subcommand(SubCommand::with_name("init")
-			.about("Initialize a new wallet seed file.")))
+			.about("Initialize a new wallet seed file."))
+
+		.subcommand(SubCommand::with_name("restore")
+			.about("Attempt to restore wallet contents from the chain using seed and password.")))
 
 	.get_matches();
 
@@ -471,6 +474,9 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		}
 		("receive", Some(_)) => {
 			panic!("Command 'receive' is depreciated, use 'listen' instead");
+		}
+		("restore", Some(_)) => {
+			let _=wallet::restore(&wallet_config, &keychain);
 		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}
