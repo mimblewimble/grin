@@ -1,10 +1,11 @@
-# How Grin is structured
-Grin is built in [rust](https://www.rust-lang.org/), a memory safe, compiled language. Performance critical parts like the Cuckoo mining algorithm is built as plugins, making it easy to swap between algorithm implementations for various hardware. Grin comes with CPU and experimental GPU support.
+# How grin is structured
+grin is built in [rust](https://www.rust-lang.org/), a memory safe, compiled language. Performance critical parts like the Cuckoo mining algorithm are built as plugins, making it easy to swap between algorithm implementations for various hardware. Grin comes with CPU and experimental GPU support.
+
 
 ## Files in project root
 List of files tracked in `git` and some files you'll create when you use grin.
 - [CODE_OF_CONDUCT](../CODE_OF_CONDUCT.md) - How to behave if you want to participate. Taken from rust. Slightly modified.
-- [CONTRIBUTING](../CONTRIBUTING.md) - How to help and become part of Grin.
+- [CONTRIBUTING](../CONTRIBUTING.md) - How to help and become part of grin.
 - [Cargo.toml](../Cargo.toml) and Cargo.lock (locally created, _not_ in git) - defines how to the project code is to be compiled and built
 - [LICENSE](../LICENSE) - Apache 2.0 license
 - [README](../README.md) - The first document you should read, with pointers to find more detail.
