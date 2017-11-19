@@ -26,6 +26,7 @@ use tokio_core::net::TcpStream;
 use tokio_core::reactor::{self, Core};
 
 use core::core::target::Difficulty;
+use core::core::hash::Hash;
 use p2p::Peer;
 
 // Starts a server and connects a client peer to it to check handshake,
@@ -36,7 +37,12 @@ fn peer_handshake() {
 	let handle = evtlp.handle();
 	let p2p_conf = p2p::P2PConfig::default();
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
-	let server = p2p::Server::new(p2p::UNKNOWN, p2p_conf, net_adapter.clone());
+	let server = p2p::Server::new(
+		p2p::UNKNOWN,
+		p2p_conf,
+		net_adapter.clone(),
+		Hash::from_vec(vec![]),
+	);
 	let run_server = server.start(handle.clone());
 	let my_addr = "127.0.0.1:5000".parse().unwrap();
 
@@ -59,7 +65,7 @@ fn peer_handshake() {
 							p2p::UNKNOWN,
 							Difficulty::one(),
 							my_addr,
-							Arc::new(p2p::handshake::Handshake::new()),
+							Arc::new(p2p::handshake::Handshake::new(Hash::from_vec(vec![]))),
 							net_adapter.clone(),
 						)
 					})
