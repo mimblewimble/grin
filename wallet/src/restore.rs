@@ -16,7 +16,8 @@ use keychain::{Keychain, Identifier};
 use util::{LOGGER, to_hex, from_hex};
 use util::secp::pedersen;
 use api;
-use core::core::SwitchCommitHash;
+use core::core::{Output,SwitchCommitHash};
+use core::core::transaction::{COINBASE_OUTPUT, DEFAULT_OUTPUT};
 use types::{WalletConfig, WalletData, OutputData, OutputStatus, Error};
 use byteorder::{BigEndian, ByteOrder};
 
@@ -37,6 +38,42 @@ pub fn get_chain_height(config: &WalletConfig)->
 			Err(Error::Node(e))
 		}
 	}
+}
+
+fn output_with_range_proof(config:&WalletConfig, commit_id: &str) ->
+	Result<api::Output, Error>{
+
+	let url = format!(
+		"{}/v1/chain/utxos/byids?id={}&include_rp&include_switch",
+		config.check_node_api_http_addr,
+		commit_id,
+	);
+
+	match api::client::get::<Vec<api::Output>>(url.as_str()) {
+		Ok(outputs) => {
+			Ok(outputs[0].clone())
+		},
+		Err(e) => {
+			// if we got anything other than 200 back from server, don't attempt to refresh the wallet
+			// data after
+			Err(Error::Node(e))
+		}
+	}
+}
+
+fn retrieve_amount(config:&WalletConfig, keychain: &Keychain, key_id: Identifier, commit_id: &str) -> u64 {
+	let output = output_with_range_proof(config, commit_id).unwrap();
+	let core_output = Output {
+		features : match output.output_type {
+			api::OutputType::Coinbase => COINBASE_OUTPUT,
+			api::OutputType::Transaction => DEFAULT_OUTPUT,
+		},
+		proof: output.proof.unwrap(),
+		switch_commit_hash: output.switch_commit_hash.unwrap(),
+		commit: output.commit,
+	};
+	let amount=core_output.recover_value(keychain, &key_id).unwrap();
+	amount
 }
 
 pub fn utxos_batch_block(config: &WalletConfig, start_height: u64, end_height:u64)->
@@ -61,11 +98,11 @@ pub fn utxos_batch_block(config: &WalletConfig, start_height: u64, end_height:u6
 	}
 }
 
-fn find_utxos_with_key(keychain: &Keychain,
+fn find_utxos_with_key(config:&WalletConfig, keychain: &Keychain,
 	block_outputs:api::BlockOutputs, key_iterations: u64) 
-	-> Vec<(pedersen::Commitment, Identifier, u32)> {
+	-> Vec<(pedersen::Commitment, Identifier, u32, u64, u64) > {
 	//let key_id = keychain.clone().root_key_id();
-	let mut wallet_outputs: Vec<(pedersen::Commitment, Identifier, u32)> = Vec::new();
+	let mut wallet_outputs: Vec<(pedersen::Commitment, Identifier, u32, u64, u64)> = Vec::new();
 
 	info!(LOGGER, "Scanning block {}", block_outputs.header.height);
 	for output in block_outputs.outputs {
@@ -78,8 +115,11 @@ fn find_utxos_with_key(keychain: &Keychain,
 			if compare_string==output.switch_commit_hash {
 				info!(LOGGER, "Output found: {:?}", output.switch_commit_hash);
 				//add it to result set here
-				let commit = keychain.commit_with_key_index(BigEndian::read_u64(&from_hex(output.commit).unwrap()), i as u32).unwrap();
-				wallet_outputs.push((commit, key_id.clone(), i as u32));
+				let commit_id = from_hex(output.commit.clone()).unwrap();
+				let amount = retrieve_amount(config, keychain, key_id.clone(), &output.commit);
+				info!(LOGGER, "Amount: {}", amount);
+				let commit = keychain.commit_with_key_index(BigEndian::read_u64(&commit_id), i as u32).unwrap();
+				wallet_outputs.push((commit, key_id.clone(), i as u32, amount, output.height));
 				break;
 			}
 		}
@@ -113,20 +153,19 @@ pub fn restore(config: &WalletConfig, keychain: &Keychain) ->
 		}
 		let blocks = utxos_batch_block(config, h-batch_size+1, h)?;
 		for block in blocks{
-			let result_vec=find_utxos_with_key(keychain, block, key_iterations);
+			let result_vec=find_utxos_with_key(config, keychain, block, key_iterations);
 			if result_vec.len() > 0 {
 				for output in result_vec.clone() {
 					let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 						let root_key_id = keychain.root_key_id();
-						debug!(LOGGER, "{:?}", result_vec);
 						//Just plonk it in for now, and refresh actual values via wallet info command later 
 						wallet_data.add_output(OutputData {
 							root_key_id: root_key_id.clone(),
 							key_id: output.1.clone(),
 							n_child: output.2,
-							value: 0,
+							value: output.3,
 							status: OutputStatus::Unconfirmed,
-							height: 0,
+							height: output.4,
 							lock_height: 0,
 							is_coinbase: false,
 						});

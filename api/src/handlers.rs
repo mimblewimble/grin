@@ -45,7 +45,7 @@ struct UtxoHandler {
 }
 
 impl UtxoHandler {
-	fn get_utxo(&self, id: &str) -> Result<Output, Error> {
+	fn get_utxo(&self, id: &str, include_rp: bool, include_switch: bool) -> Result<Output, Error> {
 		debug!(LOGGER, "getting utxo: {}", id);
 		let c = util::from_hex(String::from(id)).map_err(|_| {
 			Error::Argument(format!("Not a valid commitment: {}", id))
@@ -60,11 +60,13 @@ impl UtxoHandler {
 			.get_block_header_by_output_commit(&commit)
 			.map_err(|_| Error::NotFound)?;
 
-		Ok(Output::from_output(&out, &header, false))
+		Ok(Output::from_output(&out, &header, include_rp, include_switch))
 	}
 
 	fn utxos_by_ids(&self, req: &mut Request)->Vec<Output> {
 		let mut commitments: Vec<&str> = vec![];
+		let mut rp=false;
+		let mut switch=false;
 		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
 			if let Some(ids) = params.get("id") {
 				for id in ids {
@@ -73,10 +75,16 @@ impl UtxoHandler {
 					}
 				}
 			}
+			if let Some(_) = params.get("include_rp") {
+				rp=true;
+			}
+			if let Some(_) = params.get("include_switch") {
+				switch=true;
+			}
 		}
 		let mut utxos: Vec<Output> = vec![];
 		for commit in commitments {
-			if let Ok(out) = self.get_utxo(commit) {
+			if let Ok(out) = self.get_utxo(commit, rp, switch) {
 				utxos.push(out);
 			}
 		}
