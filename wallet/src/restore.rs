@@ -13,11 +13,11 @@
 // limitations under the License.
 
 use keychain::{Keychain, Identifier};
-use util::{LOGGER, to_hex, from_hex};
+use util::{LOGGER, from_hex};
 use util::secp::pedersen;
 use api;
 use core::core::{Output,SwitchCommitHash};
-use core::core::transaction::{COINBASE_OUTPUT, DEFAULT_OUTPUT};
+use core::core::transaction::{COINBASE_OUTPUT, DEFAULT_OUTPUT, SWITCH_COMMIT_HASH_SIZE};
 use types::{WalletConfig, WalletData, OutputData, OutputStatus, Error};
 use byteorder::{BigEndian, ByteOrder};
 
@@ -98,28 +98,31 @@ pub fn utxos_batch_block(config: &WalletConfig, start_height: u64, end_height:u6
 	}
 }
 
-fn find_utxos_with_key(config:&WalletConfig, keychain: &Keychain,
-	block_outputs:api::BlockOutputs, key_iterations: u64) 
+fn find_utxos_with_key(config:&WalletConfig, keychain: &Keychain, 
+	switch_commit_cache : &Vec<[u8;SWITCH_COMMIT_HASH_SIZE]>,
+	block_outputs:api::BlockOutputs, key_iterations: &mut usize, padding: &mut usize) 
 	-> Vec<(pedersen::Commitment, Identifier, u32, u64, u64) > {
 	//let key_id = keychain.clone().root_key_id();
 	let mut wallet_outputs: Vec<(pedersen::Commitment, Identifier, u32, u64, u64)> = Vec::new();
 
-	info!(LOGGER, "Scanning block {}", block_outputs.header.height);
+	info!(LOGGER, "Scanning block {} over {} key derivation possibilities.", block_outputs.header.height, *key_iterations);
 	for output in block_outputs.outputs {
-		for i in 1..key_iterations+1 {
-			let key_id = keychain.derive_key_id(i as u32).unwrap();
-			let switch_commit = keychain.switch_commit(&key_id).unwrap();
-			let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
-			//println!("switch commit hash: {:?}", switch_commit_hash);
-			let compare_string=to_hex(switch_commit_hash.hash.to_vec());
-			if compare_string==output.switch_commit_hash {
-				info!(LOGGER, "Output found: {:?}", output.switch_commit_hash);
+		for i in 0..*key_iterations {
+			if switch_commit_cache[i as usize]==output.switch_commit_hash {
+				info!(LOGGER, "Output found: {:?}, key_index: {:?}", output.switch_commit_hash,i);
 				//add it to result set here
 				let commit_id = from_hex(output.commit.clone()).unwrap();
+				let key_id = keychain.derive_key_id(i as u32).unwrap();
 				let amount = retrieve_amount(config, keychain, key_id.clone(), &output.commit);
 				info!(LOGGER, "Amount: {}", amount);
 				let commit = keychain.commit_with_key_index(BigEndian::read_u64(&commit_id), i as u32).unwrap();
 				wallet_outputs.push((commit, key_id.clone(), i as u32, amount, output.height));
+				//probably don't have to look for indexes greater than this now
+				*key_iterations=i+*padding;
+				if *key_iterations > switch_commit_cache.len() {
+					*key_iterations = switch_commit_cache.len();
+				}
+				info!(LOGGER, "Setting max key index to: {}", *key_iterations);
 				break;
 			}
 		}
@@ -127,7 +130,7 @@ fn find_utxos_with_key(config:&WalletConfig, keychain: &Keychain,
 	wallet_outputs
 }
 
-pub fn restore(config: &WalletConfig, keychain: &Keychain) ->
+pub fn restore(config: &WalletConfig, keychain: &Keychain, key_derivations:u32) ->
 	Result<(), Error>{
 	// Don't proceed if wallet.dat has anything in it
 	let is_empty = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
@@ -140,20 +143,34 @@ pub fn restore(config: &WalletConfig, keychain: &Keychain) ->
 
 // Get height of chain from node (we'll check again when done)
 	let chain_height = get_chain_height(config)?;
-	debug!(LOGGER, "Restore: Chain height is {}", chain_height);
+	info!(LOGGER, "Starting restore: Chain height is {}.", chain_height);
 
-	let mut batch_size=100;
-	let key_iterations=1000;
-	for h in 1..chain_height+1 {
-		if h % batch_size != 0 && h!=chain_height{
-			continue;
+	let mut switch_commit_cache : Vec<[u8;SWITCH_COMMIT_HASH_SIZE]> = vec![];
+	info!(LOGGER, "Building key derivation cache to index {}.", key_derivations);
+	for i in 0..key_derivations {
+		let switch_commit = keychain.switch_commit_from_index(i as u32).unwrap();
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		switch_commit_cache.push(switch_commit_hash.hash);
+	}
+
+	let batch_size=100;
+	//this will start here, then lower as outputs are found, moving backwards on the chain
+	let mut key_iterations=key_derivations as usize;
+	//set to a percentage of the key_derivation value
+	let mut padding = (key_iterations as f64 *0.25) as usize;
+	let mut h = chain_height;
+	while {
+		let end_batch=h;
+		if h >= batch_size {
+			h-=batch_size;
+		} else {
+			h=0;
 		}
-		if h==chain_height {
-			batch_size=h%batch_size;
-		}
-		let blocks = utxos_batch_block(config, h-batch_size+1, h)?;
-		for block in blocks{
-			let result_vec=find_utxos_with_key(config, keychain, block, key_iterations);
+		let mut blocks = utxos_batch_block(config, h+1, end_batch)?;
+		blocks.reverse();
+		for block in blocks {
+			let result_vec=find_utxos_with_key(config, keychain, &switch_commit_cache,
+				block, &mut key_iterations, &mut padding);
 			if result_vec.len() > 0 {
 				for output in result_vec.clone() {
 					let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
@@ -173,6 +190,7 @@ pub fn restore(config: &WalletConfig, keychain: &Keychain) ->
 				}
 			}
 		}
-	}
+		h > 0
+	}{} 
 	Ok(())
 }

@@ -225,7 +225,7 @@ pub struct OutputSwitch {
 	/// the commit 
 	pub commit: String,
 	/// switch commit hash
-	pub switch_commit_hash: String,
+	pub switch_commit_hash: [u8; core::SWITCH_COMMIT_HASH_SIZE],
 	/// The height of the block creating this output
 	pub height: u64,
 }
@@ -234,7 +234,7 @@ impl OutputSwitch {
 	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader) -> OutputSwitch {
 		OutputSwitch {
 			commit: util::to_hex(output.commit.0.to_vec()),
-			switch_commit_hash: util::to_hex(output.switch_commit_hash.hash.to_vec()),
+			switch_commit_hash: output.switch_commit_hash.hash,
 			height: block_header.height,
 		}
 	}
