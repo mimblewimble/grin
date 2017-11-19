@@ -57,8 +57,9 @@ impl NetAdapter for NetToChainAdapter {
 			source.identifier,
 		);
 
+		let h = tx.hash();
 		if let Err(e) = self.tx_pool.write().unwrap().add_to_memory_pool(source, tx) {
-			error!(LOGGER, "Transaction rejected: {:?}", e);
+			debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
 		}
 	}
 
