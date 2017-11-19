@@ -51,6 +51,10 @@ key_id, height, lock_height, status, spendable?, coinbase?, value
 
 (tbd)
 
+### grin wallet file
+
+(tbd)
+
 ### grin wallet burn
 
 [tbd]
