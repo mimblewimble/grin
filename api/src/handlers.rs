@@ -36,6 +36,21 @@ use util;
 use util::LOGGER;
 
 
+// RESTful index of available api endpoints
+// GET /v1/
+struct IndexHandler {
+	list: Vec<String>,
+}
+
+impl IndexHandler {
+}
+
+impl Handler for IndexHandler {
+	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+		json_response_pretty(&self.list)
+	}
+}
+
 // Supports retrieval of multiple outputs in a single request -
 // GET /v1/chain/utxos/byids?id=xxx,yyy,zzz
 // GET /v1/chain/utxos/byids?id=xxx&id=yyy&id=zzz
@@ -363,16 +378,44 @@ pub fn start_rest_apis<T>(
 {
 	thread::spawn(move || {
 		// build handlers and register them under the appropriate endpoint
-		let utxo_handler = UtxoHandler { chain: chain.clone() };
-		let chain_tip_handler = ChainHandler { chain: chain.clone() };
-		let sumtree_handler = SumTreeHandler { chain: chain.clone() };
-		let pool_info_handler = PoolInfoHandler { tx_pool: tx_pool.clone() };
-		let pool_push_handler = PoolPushHandler { tx_pool: tx_pool.clone() };
-		let peers_all_handler = PeersAllHandler { peer_store: peer_store.clone() };
-		let peers_connected_handler = PeersConnectedHandler { p2p_server: p2p_server.clone() };
+		let utxo_handler = UtxoHandler {
+			chain: chain.clone(),
+		};
+		let chain_tip_handler = ChainHandler {
+			chain: chain.clone(),
+		};
+		let sumtree_handler = SumTreeHandler {
+			chain: chain.clone(),
+		};
+		let pool_info_handler = PoolInfoHandler {
+			tx_pool: tx_pool.clone(),
+		};
+		let pool_push_handler = PoolPushHandler {
+			tx_pool: tx_pool.clone(),
+		};
+		let peers_all_handler = PeersAllHandler {
+			peer_store: peer_store.clone(),
+		};
+		let peers_connected_handler = PeersConnectedHandler {
+			p2p_server: p2p_server.clone(),
+		};
 
-		let router =
-			router!(
+		let route_list = vec!(
+			"get /".to_string(),
+			"get /chain".to_string(),
+			"get /chain/utxos".to_string(),
+			"get /sumtrees/roots".to_string(),
+			"get /sumtrees/lastutxos?n=10".to_string(),
+			"get /sumtrees/lastrangeproofs".to_string(),
+			"get /sumtrees/lastkernels".to_string(),
+			"get /pool".to_string(),
+			"post /pool/push".to_string(),
+			"get /peers/all".to_string(),
+			"get /peers/connected".to_string(),
+		);
+		let index_handler = IndexHandler { list: route_list };
+		let router = router!(
+			index: get "/" => index_handler,
 			chain_tip: get "/chain" => chain_tip_handler,
 			chain_utxos: get "/chain/utxos/*" => utxo_handler,
 			sumtree_roots: get "/sumtrees/*" => sumtree_handler,
