@@ -52,21 +52,24 @@ impl UtxoHandler {
 		})?;
 		let commit = Commitment::from_vec(c);
 
-		let out = self.chain
-			.get_unspent(&commit)
-			.map_err(|_| Error::NotFound)?;
+		let out = self.chain.get_unspent(&commit).map_err(|_| Error::NotFound)?;
 
 		let header = self.chain
 			.get_block_header_by_output_commit(&commit)
 			.map_err(|_| Error::NotFound)?;
 
-		Ok(Output::from_output(&out, &header, include_rp, include_switch))
+		Ok(Output::from_output(
+			&out,
+			&header,
+			include_rp,
+			include_switch,
+		))
 	}
 
-	fn utxos_by_ids(&self, req: &mut Request)->Vec<Output> {
+	fn utxos_by_ids(&self, req: &mut Request) -> Vec<Output> {
 		let mut commitments: Vec<&str> = vec![];
-		let mut rp=false;
-		let mut switch=false;
+		let mut rp = false;
+		let mut switch = false;
 		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
 			if let Some(ids) = params.get("id") {
 				for id in ids {
@@ -76,10 +79,10 @@ impl UtxoHandler {
 				}
 			}
 			if let Some(_) = params.get("include_rp") {
-				rp=true;
+				rp = true;
 			}
 			if let Some(_) = params.get("include_switch") {
-				switch=true;
+				switch = true;
 			}
 		}
 		let mut utxos: Vec<Output> = vec![];
@@ -91,37 +94,41 @@ impl UtxoHandler {
 		utxos
 	}
 
-	fn utxos_at_height(&self, block_height: u64)->BlockOutputs{
-		let header=self.chain.clone().get_header_by_height(block_height).unwrap();
-		let block=self.chain.clone().get_block(&header.hash()).unwrap();
-		let outputs=block.outputs
+	fn utxos_at_height(&self, block_height: u64) -> BlockOutputs {
+		let header = self.chain
+			.clone()
+			.get_header_by_height(block_height)
+			.unwrap();
+		let block = self.chain.clone().get_block(&header.hash()).unwrap();
+		let outputs = block
+			.outputs
 			.iter()
 			.map(|k| OutputSwitch::from_output(k, &header))
 			.collect();
-		BlockOutputs{
-			header : BlockHeaderInfo::from_header(&header),
-			outputs: outputs
+		BlockOutputs {
+			header: BlockHeaderInfo::from_header(&header),
+			outputs: outputs,
 		}
 	}
 
-	//returns utxos for a specified range of blocks
+	// returns utxos for a specified range of blocks
 	fn utxo_block_batch(&self, req: &mut Request) -> Vec<BlockOutputs> {
 		let mut start_height = 1;
 		let mut end_height = 1;
 		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
 			if let Some(heights) = params.get("start_height") {
 				for height in heights {
-					start_height=height.parse().unwrap();
+					start_height = height.parse().unwrap();
 				}
 			}
 			if let Some(heights) = params.get("end_height") {
 				for height in heights {
-					end_height=height.parse().unwrap();
+					end_height = height.parse().unwrap();
 				}
 			}
 		}
 		let mut return_vec = vec![];
-		for i in start_height..end_height+1 {
+		for i in start_height..end_height + 1 {
 			return_vec.push(self.utxos_at_height(i));
 		}
 		return_vec
@@ -135,7 +142,7 @@ impl Handler for UtxoHandler {
 		if *path_elems.last().unwrap() == "" {
 			path_elems.pop();
 		}
-	match *path_elems.last().unwrap() {
+		match *path_elems.last().unwrap() {
 			"byids" => json_response(&self.utxos_by_ids(req)),
 			"atheight" => json_response(&self.utxo_block_batch(req)),
 			_ => Ok(Response::with((status::BadRequest, ""))),
@@ -285,15 +292,18 @@ where
 	T: pool::BlockChain + Send + Sync + 'static,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let wrapper: TxWrapper = serde_json::from_reader(req.body.by_ref())
-			.map_err(|e| IronError::new(e, status::BadRequest))?;
+		let wrapper: TxWrapper = serde_json::from_reader(req.body.by_ref()).map_err(|e| {
+			IronError::new(e, status::BadRequest)
+		})?;
 
 		let tx_bin = util::from_hex(wrapper.tx_hex).map_err(|_| {
 			Error::Argument(format!("Invalid hex in transaction wrapper."))
 		})?;
 
 		let tx: Transaction = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
-			Error::Argument("Could not deserialize transaction, invalid format.".to_string())
+			Error::Argument(
+				"Could not deserialize transaction, invalid format.".to_string(),
+			)
 		})?;
 
 		let source = pool::TxSource {
@@ -353,29 +363,16 @@ pub fn start_rest_apis<T>(
 {
 	thread::spawn(move || {
 		// build handlers and register them under the appropriate endpoint
-		let utxo_handler = UtxoHandler {
-			chain: chain.clone(),
-		};
-		let chain_tip_handler = ChainHandler {
-			chain: chain.clone(),
-		};
-		let sumtree_handler = SumTreeHandler {
-			chain: chain.clone(),
-		};
-		let pool_info_handler = PoolInfoHandler {
-			tx_pool: tx_pool.clone(),
-		};
-		let pool_push_handler = PoolPushHandler {
-			tx_pool: tx_pool.clone(),
-		};
-		let peers_all_handler = PeersAllHandler {
-			peer_store: peer_store.clone(),
-		};
-		let peers_connected_handler = PeersConnectedHandler {
-			p2p_server: p2p_server.clone(),
-		};
+		let utxo_handler = UtxoHandler { chain: chain.clone() };
+		let chain_tip_handler = ChainHandler { chain: chain.clone() };
+		let sumtree_handler = SumTreeHandler { chain: chain.clone() };
+		let pool_info_handler = PoolInfoHandler { tx_pool: tx_pool.clone() };
+		let pool_push_handler = PoolPushHandler { tx_pool: tx_pool.clone() };
+		let peers_all_handler = PeersAllHandler { peer_store: peer_store.clone() };
+		let peers_connected_handler = PeersConnectedHandler { p2p_server: p2p_server.clone() };
 
-		let router = router!(
+		let router =
+			router!(
 			chain_tip: get "/chain" => chain_tip_handler,
 			chain_utxos: get "/chain/utxos/*" => utxo_handler,
 			sumtree_roots: get "/sumtrees/*" => sumtree_handler,
