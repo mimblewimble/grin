@@ -87,7 +87,7 @@ pub const MAX_BLOCK_WEIGHT: usize = 80_000;
 
 /// Maximum inputs for a block (issue#261)
 /// Hundreds of inputs + 1 output might be slow to validate (issue#258)
-pub const MAX_BLOCK_INPUTS: usize = 40_000; // soft fork down when too_high
+pub const MAX_BLOCK_INPUTS: usize = 300_000; // soft fork down when too_high
 
 /// Whether a block exceeds the maximum acceptable weight
 pub fn exceeds_weight(input_len: usize, output_len: usize, kernel_len: usize) -> bool {
