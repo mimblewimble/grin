@@ -138,8 +138,7 @@ pub struct Output {
 	/// The homomorphic commitment representing the output's amount
 	pub commit: pedersen::Commitment,
 	/// switch commit hash
-	//leave out for now, to optimise wallet info time
-	//pub switch_commit_hash: core::SwitchCommitHash,
+	pub switch_commit_hash: Option<core::SwitchCommitHash>,
 	/// A proof that the commitment is in the right range
 	pub proof: Option<pedersen::RangeProof>,
 	/// The height of the block creating this output
@@ -149,7 +148,8 @@ pub struct Output {
 }
 
 impl Output {
-	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader, include_proof:bool) -> Output {
+	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader, 
+		include_proof:bool, include_switch: bool) -> Output {
 		let (output_type, lock_height) = match output.features {
 			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
 				OutputType::Coinbase,
@@ -161,7 +161,10 @@ impl Output {
 		Output {
 			output_type: output_type,
 			commit: output.commit,
-			//switch_commit_hash: output.switch_commit_hash,
+			switch_commit_hash: match include_switch {
+				true => Some(output.switch_commit_hash),
+				false => None,
+			},
 			proof: match include_proof {
 				true => Some(output.proof),
 				false => None,
