@@ -93,6 +93,31 @@ If no configuration file is found, command line switches must be given to grin i
 
 At present, the relevant modes of operation are 'server' and 'wallet'. When running in server mode, any command line switches provided will override the values found in the configuration file. Running in wallet mode does not currently use any values from the configuration file other than logging output parameters.
 
+# Basic Execution
+
+For a basic example simulating a single node network, create a directory called 'node1' and change your working directory to it. You'll use this directory to run a wallet and create a new blockchain via a server running in mining mode.
+
+You'll need a config file - the easiest is to copy over the grin.toml file from the root grin directory into the node1 directory you just made.
+
+Before running your mining server, a wallet server needs to be set up and listening so that the mining server knows where to send mining rewards. Do this from the first node directory with the following commands:
+
+	node1$ grin wallet init
+	node1$ grin wallet -p "password" listen
+
+See [wallet](wallet.md) for more info on the various Grin wallet commands and options.
+
+This will create a wallet server listening on the default port 13415 with the password "password". Next, in another terminal window in the 'node1' directory, run a full mining node with the following command:
+
+	node1$ grin server -m run
+
+This creates a new .grin database directory in the current directory, and begins mining new blocks (with no transactions, for now). Note this starts two services listening on two default ports,
+port 13414 for the peer-to-peer (P2P) service which keeps all nodes synchronized, and 13413 for the Rest API service used to verify transactions and post new transactions to the pool (for example). These ports can be configured via command line switches, or via a grin.toml file in the working directory.
+
+Let the mining server find a few blocks, then stop (just ctrl-c) the mining server and the wallet server. You'll notice grin has created a database directory (.grin) in which the blockchain and peer data is stored. There should also be a wallet.dat file in the current directory, which contains a few coinbase mining rewards created each time the server mines a new block.
+
+## Advanced Example
+>>>>>>> 8d692d2... Fix for issue #318 (#323)
+
 # Running a Node
 
 The following are minimal instructions to get a testnet1 node up and running.
@@ -117,10 +142,7 @@ Next, in the 'server' directory in another terminal window, copy the grin.toml f
 cp /path/to/project/root/grin.toml .
 ```
 
-Then, to start the server node:
-```
-grin server --mine run
-```
+    node3$ grin wallet -p "password" -a "http://127.0.0.1:30001" -l 35000 listen
 
 The server should start, connect to the seed and any available peers, and place mining rewards into your running wallet listener.
 

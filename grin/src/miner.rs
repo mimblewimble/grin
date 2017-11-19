@@ -594,7 +594,10 @@ impl Miner {
 			Err(chain::Error::DuplicateCommitment(e)) =>
 				Err(Error::Chain(chain::Error::DuplicateCommitment(e))),
 			//Some other issue is worth a panic
-			Err(e) => panic!(e),
+			Err(e) => {
+				error!(LOGGER, "Error setting sumtree root to build a block: {:?}", e);
+				panic!(e);
+			}
 		}
 	}
 
@@ -621,7 +624,7 @@ impl Miner {
 		} else {
 			let url = format!(
 				"{}/v1/receive/coinbase",
-				self.config.wallet_receiver_url.as_str()
+				self.config.wallet_listener_url.as_str()
 			);
 
 			let res = wallet::client::create_coinbase(&url, &block_fees)?;
