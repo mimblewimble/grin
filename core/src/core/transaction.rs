@@ -346,7 +346,6 @@ impl Transaction {
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	// TODO: this is Consensus critical code. Move to consensus.rs ?
 	pub fn validate(&self) -> Result<Commitment, Error> {
 		if self.fee & 1 != 0 {
 			return Err(Error::OddFee);
