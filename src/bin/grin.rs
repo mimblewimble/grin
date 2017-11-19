@@ -438,7 +438,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				(selection_strategy == "all"),
 			);
 			match result {
-				Ok(_) => {}, //success messaged logged internally
+				Ok(_) => { debug!(LOGGER, "{} coins sent using strategy {} to {}", amount.to_string(), selection_strategy, dest) }, //success messaged logged internally
 				Err(wallet::Error::NotEnoughFunds(_)) => {},
 				Err(e) => panic!(e),
 			};

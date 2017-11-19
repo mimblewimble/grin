@@ -33,10 +33,11 @@ fn convert_log_level(in_level: &LogLevel) -> Level {
 }
 
 lazy_static! {
-	/// Flag to observe whether logging was explcitly initialised (don't output otherwise)
+	/// Flag to observe whether logging was explicitly initialised (don't output otherwise)
 	static ref WAS_INIT: Mutex<bool> = Mutex::new(false);
 	/// Static Logging configuration, should only be set once, before first logging call
 	static ref LOGGING_CONFIG: Mutex<LoggingConfig> = Mutex::new(LoggingConfig::default());
+
 	/// And a static reference to the logger itself, accessible from all crates
 	pub static ref LOGGER: Logger = {
 		let was_init = WAS_INIT.lock().unwrap().clone();
@@ -49,15 +50,13 @@ lazy_static! {
 		let terminal_drain = slog_term::FullFormat::new(terminal_decorator).build().fuse();
 		let terminal_drain = LevelFilter::new(terminal_drain, slog_level_stdout).fuse();
 		let mut terminal_drain = slog_async::Async::new(terminal_drain).build().fuse();
-
 		if !config.log_to_stdout || !was_init {
 			terminal_drain = slog_async::Async::new(Discard{}).build().fuse();
 		}
 
+		//File drain
 		let mut file_drain_final = slog_async::Async::new(Discard{}).build().fuse();
-
 		if config.log_to_file && was_init {
-			//File drain
 			let file = OpenOptions::new()
 				.create(true)
 				.write(true)
@@ -81,13 +80,14 @@ lazy_static! {
 }
 
 /// Initialises the logger with the given configuration
-
 pub fn init_logger(config: Option<LoggingConfig>) {
 	if let Some(c) = config {
 		let mut config_ref = LOGGING_CONFIG.lock().unwrap();
 		*config_ref = c.clone();
+		// Logger configuration successfully injected into LOGGING_CONFIG...
 		let mut was_init_ref = WAS_INIT.lock().unwrap();
 		*was_init_ref = true;
+		// .. allow logging, having ensured that paths etc are immutable
 	}
 }
 
