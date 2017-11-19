@@ -46,6 +46,14 @@ pub enum Error {
 	ConnectionClose,
 	Timeout,
 	PeerWithSelf,
+	ProtocolMismatch {
+		us: u32,
+		peer: u32,
+	},
+	GenesisMismatch {
+		us: Hash,
+		peer: Hash,
+	},
 }
 
 impl From<ser::Error> for Error {

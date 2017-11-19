@@ -23,7 +23,6 @@ use tokio_core::net::TcpStream;
 
 use core::core::target::Difficulty;
 use core::core::hash::Hash;
-use core::ser;
 use msg::*;
 use types::*;
 use protocol::ProtocolV1;
@@ -69,14 +68,6 @@ impl Handshake {
 			Ok(pa) => pa,
 			Err(e) => return Box::new(futures::future::err(Error::Connection(e))),
 		};
-		debug!(
-			LOGGER,
-			"handshake connect: nonce - {}, genesis - {}, sender - {:?}, receiver - {:?}",
-			nonce,
-			self.genesis,
-			self_addr,
-			peer_addr,
-		);
 
 		let hand = Hand {
 			version: PROTOCOL_VERSION,
@@ -89,16 +80,23 @@ impl Handshake {
 			user_agent: USER_AGENT.to_string(),
 		};
 
+		let genesis = self.genesis;
+
 		// write and read the handshake response
 		Box::new(
 			write_msg(conn, hand, Type::Hand)
 				.and_then(|conn| read_msg::<Shake>(conn))
 				.and_then(move |(conn, shake)| {
-					if shake.version != 1 {
-						Err(Error::Serialization(ser::Error::UnexpectedData {
-							expected: vec![PROTOCOL_VERSION as u8],
-							received: vec![shake.version as u8],
-						}))
+					if shake.version != PROTOCOL_VERSION {
+						Err(Error::ProtocolMismatch {
+							us: PROTOCOL_VERSION,
+							peer: shake.version,
+						})
+					} else if shake.genesis != genesis {
+						Err(Error::GenesisMismatch {
+							us: genesis,
+							peer: shake.genesis,
+						})
 					} else {
 						let peer_info = PeerInfo {
 							capabilities: shake.capabilities,
@@ -129,16 +127,18 @@ impl Handshake {
 		Box::new(
 			read_msg::<Hand>(conn)
 				.and_then(move |(conn, hand)| {
-					if hand.version != 1 {
-						// TODO - specific error here for protocol mismatch
-						return Err(Error::Serialization(ser::Error::UnexpectedData {
-							expected: vec![PROTOCOL_VERSION as u8],
-							received: vec![hand.version as u8],
-						}));
-					}
-					// TODO - check for genesis mismatch
-					{
-						// check the nonce to see if we could be trying to connect to ourselves
+					if hand.version != PROTOCOL_VERSION {
+						return Err(Error::ProtocolMismatch {
+							us: PROTOCOL_VERSION,
+							peer: hand.version,
+						});
+					} else if hand.genesis != genesis {
+						return Err(Error::GenesisMismatch {
+							us: genesis,
+							peer: hand.genesis,
+						});
+					} else {
+						// check the nonce to see if we are trying to connect to ourselves
 						let nonces = nonces.read().unwrap();
 						if nonces.contains(&hand.nonce) {
 							return Err(Error::PeerWithSelf);
@@ -194,8 +194,6 @@ fn extract_ip(advertised: &SocketAddr, conn: &TcpStream) -> SocketAddr {
   match advertised {
     &SocketAddr::V4(v4sock) => {
       let ip = v4sock.ip();
-	  debug!(LOGGER, "extract_ip - {:?}, {:?}", ip, conn.peer_addr());
-
       if ip.is_loopback() || ip.is_unspecified() {
         if let Ok(addr) =  conn.peer_addr() {
           return SocketAddr::new(addr.ip(), advertised.port());

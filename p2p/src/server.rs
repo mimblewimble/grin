@@ -169,8 +169,6 @@ impl Server {
 		let capab = self.capabilities.clone();
 		let self_addr = SocketAddr::new(self.config.host, self.config.port);
 
-		debug!(LOGGER, "{} connecting to {}", self_addr, addr);
-
 		let socket = TcpStream::connect(&addr, &h).map_err(|e| Error::Connection(e));
 		let h2 = h.clone();
 		let request = socket
