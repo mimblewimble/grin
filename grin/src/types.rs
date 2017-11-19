@@ -36,6 +36,7 @@ pub enum Error {
 	API(api::Error),
 	/// Error originating from wallet API.
 	Wallet(wallet::Error),
+	Cuckoo(pow::cuckoo::Error),
 }
 
 impl From<chain::Error> for Error {
@@ -47,6 +48,12 @@ impl From<chain::Error> for Error {
 impl From<p2p::Error> for Error {
 	fn from(e: p2p::Error) -> Error {
 		Error::P2P(e)
+	}
+}
+
+impl From<pow::cuckoo::Error> for Error {
+	fn from(e: pow::cuckoo::Error) -> Error {
+		Error::Cuckoo(e)
 	}
 }
 

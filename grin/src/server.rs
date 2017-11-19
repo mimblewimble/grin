@@ -89,20 +89,20 @@ impl Server {
 
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));
 
-		let mut genesis_block = None;
-		if !chain::Chain::chain_exists(config.db_root.clone()) {
-      let chain_type = config.chain_type.clone();
-      if chain_type == global::ChainTypes::Testnet1 {
-        genesis_block = Some(genesis::genesis_testnet1());
-      } else {
-			  genesis_block = pow::mine_genesis_block(config.mining_config.clone());
-      }
-		}
+		let genesis = match config.chain_type {
+			global::ChainTypes::Testnet1 => genesis::genesis_testnet1(),
+			_ => pow::mine_genesis_block(config.mining_config.clone())?,
+		};
+		info!(
+			LOGGER,
+			"Starting server, genesis block: {}",
+			genesis.hash(),
+		);
 
 		let shared_chain = Arc::new(chain::Chain::init(
 			config.db_root.clone(),
 			chain_adapter.clone(),
-			genesis_block,
+			genesis.clone(),
 			pow::verify_size,
 		)?);
 
@@ -114,11 +114,14 @@ impl Server {
 			tx_pool.clone(),
 			peer_store.clone(),
 		));
+
 		let p2p_server = Arc::new(p2p::Server::new(
 			config.capabilities,
 			config.p2p_config.unwrap(),
 			net_adapter.clone(),
+			genesis.hash(),
 		));
+
 		chain_adapter.init(p2p_server.clone());
 		pool_net_adapter.init(p2p_server.clone());
 

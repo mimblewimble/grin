@@ -45,6 +45,7 @@ pub enum Error {
 	Connection(io::Error),
 	ConnectionClose,
 	Timeout,
+	PeerWithSelf,
 }
 
 impl From<ser::Error> for Error {

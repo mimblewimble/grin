@@ -22,6 +22,7 @@ use rand::os::OsRng;
 use tokio_core::net::TcpStream;
 
 use core::core::target::Difficulty;
+use core::core::hash::Hash;
 use core::ser;
 use msg::*;
 use types::*;
@@ -36,6 +37,9 @@ pub struct Handshake {
 	/// Ring buffer of nonces sent to detect self connections without requiring
 	/// a node id.
 	nonces: Arc<RwLock<VecDeque<u64>>>,
+	/// The genesis block header of the chain seen by this node.
+	/// We only want to connect to other nodes seeing the same chain (forks are ok).
+	genesis: Hash,
 }
 
 unsafe impl Sync for Handshake {}
@@ -43,9 +47,10 @@ unsafe impl Send for Handshake {}
 
 impl Handshake {
 	/// Creates a new handshake handler
-	pub fn new() -> Handshake {
+	pub fn new(genesis: Hash) -> Handshake {
 		Handshake {
 			nonces: Arc::new(RwLock::new(VecDeque::with_capacity(NONCES_CAP))),
+			genesis: genesis,
 		}
 	}
 
@@ -66,8 +71,9 @@ impl Handshake {
 		};
 		debug!(
 			LOGGER,
-			"handshake connect with nonce - {}, sender - {:?}, receiver - {:?}",
+			"handshake connect: nonce - {}, genesis - {}, sender - {:?}, receiver - {:?}",
 			nonce,
+			self.genesis,
 			self_addr,
 			peer_addr,
 		);
@@ -76,6 +82,7 @@ impl Handshake {
 			version: PROTOCOL_VERSION,
 			capabilities: capab,
 			nonce: nonce,
+			genesis: self.genesis,
 			total_difficulty: total_difficulty,
 			sender_addr: SockAddr(self_addr),
 			receiver_addr: SockAddr(peer_addr),
@@ -118,30 +125,23 @@ impl Handshake {
 		conn: TcpStream,
 	) -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
 		let nonces = self.nonces.clone();
+		let genesis = self.genesis.clone();
 		Box::new(
 			read_msg::<Hand>(conn)
 				.and_then(move |(conn, hand)| {
 					if hand.version != 1 {
+						// TODO - specific error here for protocol mismatch
 						return Err(Error::Serialization(ser::Error::UnexpectedData {
 							expected: vec![PROTOCOL_VERSION as u8],
 							received: vec![hand.version as u8],
 						}));
 					}
+					// TODO - check for genesis mismatch
 					{
 						// check the nonce to see if we could be trying to connect to ourselves
 						let nonces = nonces.read().unwrap();
-						debug!(
-							LOGGER,
-							"checking the nonce - {}, {:?}",
-							&hand.nonce,
-							nonces,
-						);
 						if nonces.contains(&hand.nonce) {
-							debug!(LOGGER, "***** nonce matches! Avoiding connecting to ourselves");
-							return Err(Error::Serialization(ser::Error::UnexpectedData {
-								expected: vec![],
-								received: vec![],
-							}));
+							return Err(Error::PeerWithSelf);
 						}
 					}
 
@@ -157,6 +157,7 @@ impl Handshake {
 					let shake = Shake {
 						version: PROTOCOL_VERSION,
 						capabilities: capab,
+						genesis: genesis,
 						total_difficulty: total_difficulty,
 						user_agent: USER_AGENT.to_string(),
 					};

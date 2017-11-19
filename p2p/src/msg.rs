@@ -189,6 +189,8 @@ pub struct Hand {
 	pub capabilities: Capabilities,
 	/// randomly generated for each handshake, helps detect self
 	pub nonce: u64,
+	/// genesis block of our chain, only connect to peers on the same chain
+	pub genesis: Hash,
 	/// total difficulty accumulated by the sender, used to check whether sync
 	/// may be needed
 	pub total_difficulty: Difficulty,
@@ -208,6 +210,7 @@ impl Writeable for Hand {
 			[write_u32, self.capabilities.bits()],
 			[write_u64, self.nonce]
 		);
+		self.genesis.write(writer).unwrap();
 		self.total_difficulty.write(writer).unwrap();
 		self.sender_addr.write(writer).unwrap();
 		self.receiver_addr.write(writer).unwrap();
@@ -218,6 +221,7 @@ impl Writeable for Hand {
 impl Readable for Hand {
 	fn read(reader: &mut Reader) -> Result<Hand, ser::Error> {
 		let (version, capab, nonce) = ser_multiread!(reader, read_u32, read_u32, read_u64);
+		let genesis = try!(Hash::read(reader));
 		let total_diff = try!(Difficulty::read(reader));
 		let sender_addr = try!(SockAddr::read(reader));
 		let receiver_addr = try!(SockAddr::read(reader));
@@ -228,6 +232,7 @@ impl Readable for Hand {
 			version: version,
 			capabilities: capabilities,
 			nonce: nonce,
+			genesis: genesis,
 			total_difficulty: total_diff,
 			sender_addr: sender_addr,
 			receiver_addr: receiver_addr,
@@ -243,6 +248,8 @@ pub struct Shake {
 	pub version: u32,
 	/// sender capabilities
 	pub capabilities: Capabilities,
+	/// genesis block of our chain, only connect to peers on the same chain
+	pub genesis: Hash,
 	/// total difficulty accumulated by the sender, used to check whether sync
 	/// may be needed
 	pub total_difficulty: Difficulty,
@@ -257,6 +264,7 @@ impl Writeable for Shake {
 			[write_u32, self.version],
 			[write_u32, self.capabilities.bits()]
 		);
+		self.genesis.write(writer).unwrap();
 		self.total_difficulty.write(writer).unwrap();
 		writer.write_bytes(&self.user_agent).unwrap();
 		Ok(())
@@ -266,6 +274,7 @@ impl Writeable for Shake {
 impl Readable for Shake {
 	fn read(reader: &mut Reader) -> Result<Shake, ser::Error> {
 		let (version, capab) = ser_multiread!(reader, read_u32, read_u32);
+		let genesis = try!(Hash::read(reader));
 		let total_diff = try!(Difficulty::read(reader));
 		let ua = try!(reader.read_vec());
 		let user_agent = try!(String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData));
@@ -273,6 +282,7 @@ impl Readable for Shake {
 		Ok(Shake {
 			version: version,
 			capabilities: capabilities,
+			genesis: genesis,
 			total_difficulty: total_diff,
 			user_agent: user_agent,
 		})

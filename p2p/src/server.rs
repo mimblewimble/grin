@@ -76,12 +76,17 @@ unsafe impl Send for Server {}
 // TODO TLS
 impl Server {
 	/// Creates a new idle p2p server with no peers
-	pub fn new(capab: Capabilities, config: P2PConfig, adapter: Arc<NetAdapter>) -> Server {
+	pub fn new(
+		capab: Capabilities,
+		config: P2PConfig,
+		adapter: Arc<NetAdapter>,
+		genesis: Hash,
+	) -> Server {
 		Server {
 			config: config,
 			capabilities: capab,
 			peers: Arc::new(RwLock::new(HashMap::new())),
-			handshake: Arc::new(Handshake::new()),
+			handshake: Arc::new(Handshake::new(genesis)),
 			adapter: adapter,
 			stop: RefCell::new(None),
 		}
