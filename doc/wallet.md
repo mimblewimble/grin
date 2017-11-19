@@ -39,11 +39,15 @@ key_id, height, lock_height, status, spendable?, coinbase?, value
 ...
 ```
 
-### grin wallet receive
+### grin wallet listen
 
 (tbd)
 
 ### grin wallet send
+
+(tbd)
+
+### grin wallet receive
 
 (tbd)
 

@@ -230,7 +230,7 @@ impl LocalServerContainer {
 			cuckoo_miner_async_mode: Some(false),
 			cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
 			cuckoo_miner_plugin_config: Some(plugin_config_vec),
-			wallet_receiver_url: self.config.coinbase_wallet_address.clone(),
+			wallet_listener_url: self.config.coinbase_wallet_address.clone(),
 			slow_down_in_millis: Some(self.config.miner_slowdown_in_millis.clone()),
 			..Default::default()
 		};
