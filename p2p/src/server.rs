@@ -265,13 +265,17 @@ impl Server {
 	/// the block.
 	pub fn broadcast_block(&self, b: &core::Block) {
 		let peers = self.all_peers();
+		let mut count = 0;
 		for p in peers.deref() {
 			if p.is_connected() {
 				if let Err(e) = p.send_block(b) {
 					debug!(LOGGER, "Error sending block to peer: {:?}", e);
+				} else {
+					count += 1;
 				}
 			}
 		}
+		debug!(LOGGER, "Bardcasted block {} to {} peers.", b.header.height, count);
 	}
 
 	/// Broadcasts the provided transaction to all our peers. A peer
