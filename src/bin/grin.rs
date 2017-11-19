@@ -189,7 +189,7 @@ fn main() {
 			.arg(Arg::with_name("port")
 				.short("l")
 				.long("port")
-				.help("Port on which to run the wallet listener when in listen mode")
+				.help("Port on which to run the wallet listener")
 				.takes_value(true)))
 
 		.subcommand(SubCommand::with_name("file")
