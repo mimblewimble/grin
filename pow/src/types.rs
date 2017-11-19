@@ -58,7 +58,7 @@ pub struct MinerConfig {
 	pub attempt_time_per_block: u32,
 
 	/// Base address to the HTTP wallet receiver
-	pub wallet_receiver_url: String,
+	pub wallet_listener_url: String,
 
 	/// Attributes the reward to a random private key instead of contacting the
 	/// wallet receiver. Mostly used for tests.
@@ -77,7 +77,7 @@ impl Default for MinerConfig {
 			cuckoo_miner_async_mode: None,
 			cuckoo_miner_plugin_dir: None,
 			cuckoo_miner_plugin_config: None,
-			wallet_receiver_url: "http://localhost:13415".to_string(),
+			wallet_listener_url: "http://localhost:13415".to_string(),
 			burn_reward: false,
 			slow_down_in_millis: Some(0),
 			attempt_time_per_block: 2,

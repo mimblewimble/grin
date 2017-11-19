@@ -624,7 +624,7 @@ impl Miner {
 		} else {
 			let url = format!(
 				"{}/v1/receive/coinbase",
-				self.config.wallet_receiver_url.as_str()
+				self.config.wallet_listener_url.as_str()
 			);
 
 			let res = wallet::client::create_coinbase(&url, &block_fees)?;

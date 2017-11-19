@@ -205,7 +205,7 @@ fn test_read_config() {
         #Mining section is optional, if it's not here it will default to not mining
         [mining]
         enable_mining = true
-        wallet_receiver_url = "http://127.0.0.1:13415"
+        wallet_listener_url = "http://127.0.0.1:13415"
         burn_reward = false
         #testing value, optional
         #slow_down_in_millis = 30

@@ -138,7 +138,7 @@ fn main() {
                 .arg(Arg::with_name("wallet_url")
                      .short("w")
                      .long("wallet_url")
-                     .help("A listening wallet receiver to which mining rewards will be sent")
+                     .help("The wallet listener to which mining rewards will be sent")
                 .takes_value(true))
                 .subcommand(SubCommand::with_name("start")
                             .about("Start the Grin server as a daemon"))
@@ -169,9 +169,9 @@ fn main() {
 			directory)")
 			.takes_value(true))
 		.arg(Arg::with_name("port")
-			.short("r")
+			.short("l")
 			.long("port")
-			.help("Port on which to run the wallet receiver when in receiver mode")
+			.help("Port on which to run the wallet listener when in listen mode")
 			.takes_value(true))
 		.arg(Arg::with_name("external")
 			.short("e")
@@ -189,8 +189,8 @@ fn main() {
 			.help("Api address of running node on which to check inputs and post transactions")
 			.takes_value(true))
 
-		.subcommand(SubCommand::with_name("receive")
-			.about("Run the wallet in receiving mode. If an input file is \
+		.subcommand(SubCommand::with_name("listen")
+			.about("Run the wallet in listening mode. If an input file is \
 				provided, will process it, otherwise runs in server mode waiting \
 				for send requests.")
 			.arg(Arg::with_name("input")
@@ -198,6 +198,9 @@ fn main() {
 				.short("i")
 				.long("input")
 				.takes_value(true)))
+
+		.subcommand(SubCommand::with_name("receive")
+			.about("Depreciated, use 'listen' instead"))
 
 		.subcommand(SubCommand::with_name("send")
 			.about("Builds a transaction to send someone some coins. By default, \
@@ -314,7 +317,7 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 			.mining_config
 			.as_mut()
 			.unwrap()
-			.wallet_receiver_url = wallet_url.to_string();
+			.wallet_listener_url = wallet_url.to_string();
 	}
 
 	if let Some(seeds) = server_args.values_of("seed") {
@@ -397,7 +400,7 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		.expect("Failed to derive keychain from seed file and passphrase.");
 
 	match wallet_args.subcommand() {
-		("receive", Some(receive_args)) => if let Some(f) = receive_args.value_of("input") {
+		("listen", Some(listen_args)) => if let Some(f) = listen_args.value_of("input") {
 			let mut file = File::open(f).expect("Unable to open transaction file.");
 			let mut contents = String::new();
 			file.read_to_string(&mut contents)
@@ -465,6 +468,9 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		}
 		("outputs", Some(_)) => {
 			wallet::show_outputs(&wallet_config, &keychain, show_spent);
+		}
+		("receive", Some(_)) => {
+			panic!("Command 'receive' is depreciated, use 'listen' instead");
 		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}
