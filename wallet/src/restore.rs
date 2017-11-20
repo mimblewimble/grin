@@ -61,7 +61,8 @@ fn output_with_range_proof(config:&WalletConfig, commit_id: &str) ->
 	}
 }
 
-fn retrieve_amount(config:&WalletConfig, keychain: &Keychain, key_id: Identifier, commit_id: &str) -> u64 {
+fn retrieve_amount_and_coinbase_status(config:&WalletConfig, keychain: &Keychain,
+	key_id: Identifier, commit_id: &str) -> (u64, bool) {
 	let output = output_with_range_proof(config, commit_id).unwrap();
 	let core_output = Output {
 		features : match output.output_type {
@@ -73,7 +74,11 @@ fn retrieve_amount(config:&WalletConfig, keychain: &Keychain, key_id: Identifier
 		commit: output.commit,
 	};
 	let amount=core_output.recover_value(keychain, &key_id).unwrap();
-	amount
+	let is_coinbase = match output.output_type {
+		api::OutputType::Coinbase => true,
+		api::OutputType::Transaction => false,
+	};
+	(amount, is_coinbase)
 }
 
 pub fn utxos_batch_block(config: &WalletConfig, start_height: u64, end_height:u64)->
@@ -101,9 +106,9 @@ pub fn utxos_batch_block(config: &WalletConfig, start_height: u64, end_height:u6
 fn find_utxos_with_key(config:&WalletConfig, keychain: &Keychain, 
 	switch_commit_cache : &Vec<[u8;SWITCH_COMMIT_HASH_SIZE]>,
 	block_outputs:api::BlockOutputs, key_iterations: &mut usize, padding: &mut usize) 
-	-> Vec<(pedersen::Commitment, Identifier, u32, u64, u64) > {
+	-> Vec<(pedersen::Commitment, Identifier, u32, u64, u64, bool) > {
 	//let key_id = keychain.clone().root_key_id();
-	let mut wallet_outputs: Vec<(pedersen::Commitment, Identifier, u32, u64, u64)> = Vec::new();
+	let mut wallet_outputs: Vec<(pedersen::Commitment, Identifier, u32, u64, u64, bool)> = Vec::new();
 
 	info!(LOGGER, "Scanning block {} over {} key derivation possibilities.", block_outputs.header.height, *key_iterations);
 	for output in block_outputs.outputs {
@@ -113,10 +118,11 @@ fn find_utxos_with_key(config:&WalletConfig, keychain: &Keychain,
 				//add it to result set here
 				let commit_id = from_hex(output.commit.clone()).unwrap();
 				let key_id = keychain.derive_key_id(i as u32).unwrap();
-				let amount = retrieve_amount(config, keychain, key_id.clone(), &output.commit);
+				let (amount, is_coinbase) = retrieve_amount_and_coinbase_status(config,
+					keychain, key_id.clone(), &output.commit);
 				info!(LOGGER, "Amount: {}", amount);
 				let commit = keychain.commit_with_key_index(BigEndian::read_u64(&commit_id), i as u32).unwrap();
-				wallet_outputs.push((commit, key_id.clone(), i as u32, amount, output.height));
+				wallet_outputs.push((commit, key_id.clone(), i as u32, amount, output.height, is_coinbase));
 				//probably don't have to look for indexes greater than this now
 				*key_iterations=i+*padding;
 				if *key_iterations > switch_commit_cache.len() {
@@ -184,7 +190,7 @@ pub fn restore(config: &WalletConfig, keychain: &Keychain, key_derivations:u32) 
 							status: OutputStatus::Unconfirmed,
 							height: output.4,
 							lock_height: 0,
-							is_coinbase: false,
+							is_coinbase: output.5,
 						});
 					});
 				}
