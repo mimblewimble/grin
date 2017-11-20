@@ -188,7 +188,14 @@ fn main() {
 			.long("api_server_address")
 			.help("Api address of running node on which to check inputs and post transactions")
 			.takes_value(true))
-
+		.arg(Arg::with_name("key_derivations")
+				.help("The number of keys possiblities to search for each output. \
+				Ideally, set this to a number greater than the number of outputs \
+				you believe should belong to this seed/password. (Default 500)")
+				.short("k")
+				.long("key_derivations")
+				.default_value("1000")
+				.takes_value(true))
 		.subcommand(SubCommand::with_name("listen")
 			.about("Run the wallet in listening mode. If an input file is \
 				provided, will process it, otherwise runs in server mode waiting \
@@ -250,8 +257,11 @@ fn main() {
 			.about("basic wallet contents summary"))
 
 		.subcommand(SubCommand::with_name("init")
-			.about("Initialize a new wallet seed file.")))
+			.about("Initialize a new wallet seed file."))
 
+		.subcommand(SubCommand::with_name("restore")
+			.about("Attempt to restore wallet contents from the chain using seed and password.")))
+			
 	.get_matches();
 
 	match args.subcommand() {
@@ -376,6 +386,11 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
+	let mut key_derivations:u32=1000;
+	if let Some(kd) = wallet_args.value_of("key_derivations") {
+		key_derivations=kd.parse().unwrap();
+	}
+
 	let mut show_spent=false;
 	if wallet_args.is_present("show_spent") {
 		show_spent=true;
@@ -468,6 +483,9 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		}
 		("outputs", Some(_)) => {
 			wallet::show_outputs(&wallet_config, &keychain, show_spent);
+		}
+		("restore", Some(_)) => {
+			let _=wallet::restore(&wallet_config, &keychain, key_derivations);
 		}
 		("receive", Some(_)) => {
 			panic!("Command 'receive' is depreciated, use 'listen' instead");

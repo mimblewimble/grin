@@ -401,7 +401,8 @@ bitflags! {
 /// Definition of the switch commitment hash
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SwitchCommitHash {
-	hash: [u8; SWITCH_COMMIT_HASH_SIZE],
+	/// simple hash
+	pub hash: [u8; SWITCH_COMMIT_HASH_SIZE],
 }
 
 /// Implementation of Writeable for a switch commitment hash
