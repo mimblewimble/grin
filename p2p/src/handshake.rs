@@ -107,6 +107,7 @@ impl Handshake {
 						};
 
 						info!(LOGGER, "Connected to peer {:?}", peer_info);
+
 						// when more than one protocol version is supported, choosing should go here
 						Ok((conn, ProtocolV1::new(), peer_info))
 					}
@@ -166,7 +167,7 @@ impl Handshake {
 				.and_then(|(conn, shake, peer_info)| {
 					debug!(LOGGER, "Success handshake with {}.", peer_info.addr);
 					write_msg(conn, shake, Type::Shake)
-				  // when more than one protocol version is supported, choosing should go here
+					// when more than one protocol version is supported, choosing should go here
 					.map(|conn| (conn, ProtocolV1::new(), peer_info))
 				}),
 		)
