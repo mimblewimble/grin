@@ -44,6 +44,6 @@ pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 	let mut apis = ApiServer::new("/v1".to_string());
 	apis.register_handler(router);
 	apis.start(wallet_config.api_listen_addr()).unwrap_or_else(|e| {
-		error!(LOGGER, "Failed to start Grin wallet receiver: {}.", e);
+		error!(LOGGER, "Failed to start Grin wallet listener: {}.", e);
 	});
 }
