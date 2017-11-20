@@ -46,8 +46,6 @@ fn peer_handshake() {
 	let run_server = server.start(handle.clone());
 	let my_addr = "127.0.0.1:5000".parse().unwrap();
 
-	let total_difficulty = 0;
-
 	let phandle = handle.clone();
 	let rhandle = handle.clone();
 	let timeout = reactor::Timeout::new(time::Duration::new(1, 0), &handle).unwrap();
@@ -75,7 +73,7 @@ fn peer_handshake() {
 						rhandle.spawn(peer.run(socket).map_err(|e| {
 							panic!("Client run failed: {:?}", e);
 						}));
-						peer.send_ping(total_difficulty.clone()).unwrap();
+						peer.send_ping(Difficulty::one()).unwrap();
 						timeout_send.from_err().map(|_| peer)
 					})
 					.and_then(|peer| {
