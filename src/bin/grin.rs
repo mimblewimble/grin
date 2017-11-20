@@ -195,7 +195,7 @@ fn main() {
 		.subcommand(SubCommand::with_name("file")
 			.about("Processes a JSON transaction file.")
 			.arg(Arg::with_name("file")
-				.help("Partial transaction to receive, expects as a JSON file.")
+				.help("Partial transaction to process, expects a JSON file.")
 				.short("f")
 				.long("file")
 				.takes_value(true)))
