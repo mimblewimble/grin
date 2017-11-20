@@ -47,7 +47,7 @@ key_id, height, lock_height, status, spendable?, coinbase?, value
 
 (tbd)
 
-### grin wallet receive
+### grin wallet request
 
 (tbd)
 
