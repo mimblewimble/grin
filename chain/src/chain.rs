@@ -72,7 +72,7 @@ impl Chain {
 	pub fn init(
 		db_root: String,
 		adapter: Arc<ChainAdapter>,
-		gen_block: Option<Block>,
+		genesis: Block,
 		pow_verifier: fn(&BlockHeader, u32) -> bool,
 	) -> Result<Chain, Error> {
 		let chain_store = store::ChainKVStore::new(db_root.clone())?;
@@ -81,28 +81,29 @@ impl Chain {
 		let head = match chain_store.head() {
 			Ok(tip) => tip,
 			Err(NotFoundErr) => {
-				if let None = gen_block {
-					return Err(Error::GenesisBlockRequired);
-				}
-
-				let gen = gen_block.unwrap();
-				chain_store.save_block(&gen)?;
-				chain_store.setup_height(&gen.header)?;
+				chain_store.save_block(&genesis)?;
+				chain_store.setup_height(&genesis.header)?;
 
 				// saving a new tip based on genesis
-				let tip = Tip::new(gen.hash());
+				let tip = Tip::new(genesis.hash());
 				chain_store.save_head(&tip)?;
 				info!(
 					LOGGER,
-					"Saved genesis block with hash: {:?}, nonce: {:?}, pow: {:?}",
-					gen.hash(),
-					gen.header.nonce,
-					gen.header.pow,
+					"Saved genesis block: {:?}, nonce: {:?}, pow: {:?}",
+					genesis.hash(),
+					genesis.header.nonce,
+					genesis.header.pow,
 				);
 				tip
 			}
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
 		};
+
+		info!(
+			LOGGER,
+			"Chain init: {:?}",
+			head,
+		);
 
 		let store = Arc::new(chain_store);
 		let sumtrees = sumtree::SumTrees::open(db_root, store.clone())?;

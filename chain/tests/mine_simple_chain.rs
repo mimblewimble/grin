@@ -44,10 +44,7 @@ fn setup(dir_name: &str) -> Chain {
 	let _ = env_logger::init();
 	clean_output_dir(dir_name);
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let mut genesis_block = None;
-	if !chain::Chain::chain_exists(dir_name.to_string()) {
-		genesis_block = pow::mine_genesis_block(None);
-	}
+	let genesis_block = pow::mine_genesis_block(None).unwrap();
 	chain::Chain::init(
 		dir_name.to_string(),
 		Arc::new(NoopAdapter {}),

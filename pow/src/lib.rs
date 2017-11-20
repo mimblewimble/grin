@@ -95,8 +95,9 @@ pub fn pow20<T: MiningWorker>(
 
 /// Mines a genesis block, using the config specified miner if specified.
 /// Otherwise, uses the internal miner
-pub fn mine_genesis_block(miner_config: Option<types::MinerConfig>) -> Option<core::core::Block> {
-	info!(util::LOGGER, "Genesis block not found, initializing...");
+pub fn mine_genesis_block(
+	miner_config: Option<types::MinerConfig>,
+) -> Result<core::core::Block, Error> {
 	let mut gen = genesis::genesis_dev();
 	let diff = gen.header.difficulty.clone();
 
@@ -114,7 +115,7 @@ pub fn mine_genesis_block(miner_config: Option<types::MinerConfig>) -> Option<co
 		None => Box::new(cuckoo::Miner::new(consensus::EASINESS, sz, proof_size)),
 	};
 	pow_size(&mut *miner, &mut gen.header, diff, sz as u32).unwrap();
-	Some(gen)
+	Ok(gen)
 }
 
 /// Runs a proof of work computation over the provided block using the provided

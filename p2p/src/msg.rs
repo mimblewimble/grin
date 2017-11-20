@@ -131,7 +131,7 @@ pub struct MsgHeader {
 	magic: [u8; 2],
 	/// Type of the message.
 	pub msg_type: Type,
-	/// Tota length of the message in bytes.
+	/// Total length of the message in bytes.
 	pub msg_len: u64,
 }
 
@@ -189,6 +189,8 @@ pub struct Hand {
 	pub capabilities: Capabilities,
 	/// randomly generated for each handshake, helps detect self
 	pub nonce: u64,
+	/// genesis block of our chain, only connect to peers on the same chain
+	pub genesis: Hash,
 	/// total difficulty accumulated by the sender, used to check whether sync
 	/// may be needed
 	pub total_difficulty: Difficulty,
@@ -211,23 +213,27 @@ impl Writeable for Hand {
 		self.total_difficulty.write(writer).unwrap();
 		self.sender_addr.write(writer).unwrap();
 		self.receiver_addr.write(writer).unwrap();
-		writer.write_bytes(&self.user_agent)
+		writer.write_bytes(&self.user_agent).unwrap();
+		self.genesis.write(writer).unwrap();
+		Ok(())
 	}
 }
 
 impl Readable for Hand {
 	fn read(reader: &mut Reader) -> Result<Hand, ser::Error> {
 		let (version, capab, nonce) = ser_multiread!(reader, read_u32, read_u32, read_u64);
+		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData,));
 		let total_diff = try!(Difficulty::read(reader));
 		let sender_addr = try!(SockAddr::read(reader));
 		let receiver_addr = try!(SockAddr::read(reader));
 		let ua = try!(reader.read_vec());
 		let user_agent = try!(String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData));
-		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData,));
+		let genesis = try!(Hash::read(reader));
 		Ok(Hand {
 			version: version,
 			capabilities: capabilities,
 			nonce: nonce,
+			genesis: genesis,
 			total_difficulty: total_diff,
 			sender_addr: sender_addr,
 			receiver_addr: receiver_addr,
@@ -243,6 +249,8 @@ pub struct Shake {
 	pub version: u32,
 	/// sender capabilities
 	pub capabilities: Capabilities,
+	/// genesis block of our chain, only connect to peers on the same chain
+	pub genesis: Hash,
 	/// total difficulty accumulated by the sender, used to check whether sync
 	/// may be needed
 	pub total_difficulty: Difficulty,
@@ -259,6 +267,7 @@ impl Writeable for Shake {
 		);
 		self.total_difficulty.write(writer).unwrap();
 		writer.write_bytes(&self.user_agent).unwrap();
+		self.genesis.write(writer).unwrap();
 		Ok(())
 	}
 }
@@ -266,13 +275,15 @@ impl Writeable for Shake {
 impl Readable for Shake {
 	fn read(reader: &mut Reader) -> Result<Shake, ser::Error> {
 		let (version, capab) = ser_multiread!(reader, read_u32, read_u32);
+		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData,));
 		let total_diff = try!(Difficulty::read(reader));
 		let ua = try!(reader.read_vec());
 		let user_agent = try!(String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData));
-		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData,));
+		let genesis = try!(Hash::read(reader));
 		Ok(Shake {
 			version: version,
 			capabilities: capabilities,
+			genesis: genesis,
 			total_difficulty: total_diff,
 			user_agent: user_agent,
 		})

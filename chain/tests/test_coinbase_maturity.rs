@@ -44,10 +44,8 @@ fn test_coinbase_maturity() {
 	clean_output_dir(".grin");
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
-	let mut genesis_block = None;
-	if !chain::Chain::chain_exists(".grin".to_string()) {
-		genesis_block = pow::mine_genesis_block(None);
-	}
+	let genesis_block = pow::mine_genesis_block(None).unwrap();
+
 	let chain = chain::Chain::init(
 		".grin".to_string(),
 		Arc::new(NoopAdapter {}),
