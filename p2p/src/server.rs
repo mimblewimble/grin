@@ -85,11 +85,12 @@ impl Server {
 		capab: Capabilities,
 		config: P2PConfig,
 		adapter: Arc<ChainAdapter>,
+		genesis: Hash,
 	) -> Result<Server, Error> {
 		Ok(Server {
 			config: config,
 			capabilities: capab,
-			handshake: Arc::new(Handshake::new()),
+			handshake: Arc::new(Handshake::new(genesis)),
 			peers: Peers::new(PeerStore::new(db_root)?, adapter),
 			stop: RefCell::new(None),
 		})
