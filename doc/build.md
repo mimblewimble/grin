@@ -20,8 +20,8 @@ In order to compile and run Grin on your machine, you should have installed:
 * <b>cmake</b> - 3.2 or greater should be installed and on your $PATH. Used by the build to compile the mining plugins found in the included [Cuckoo Miner](https://github.com/mimblewimble/cuckoo-miner)
 * <b>Rust</b> - 1.21.0 or greater via [Rustup](https://www.rustup.rs/) - Can be installed via your package manager or manually via the following commands:
 ```
-    curl https://sh.rustup.rs -sSf | sh
-    source $HOME/.cargo/env
+curl https://sh.rustup.rs -sSf | sh
+source $HOME/.cargo/env
 ```
 Note that the compiler also requires up to 2Gb of available memory.  
 
@@ -31,29 +31,29 @@ Note that the compiler also requires up to 2Gb of available memory.
 ### Clone Grin
 
 ```
-    git clone https://github.com/mimblewimble/grin.git
+git clone https://github.com/mimblewimble/grin.git
 ```
 
 ### Build Grin
-```
-    cd grin
-    #if running a testnet1 node, check out the correct branch:
-    git checkout milestone/testnet1 
-    cargo build
+```sh
+cd grin
+# if running a testnet1 node, check out the correct branch:
+git checkout milestone/testnet1
+cargo build
 ```
 
 ### Cuckoo-Miner considerations
 
 If you're having issues with building cuckoo-miner plugins (which will usually manifest as a lot of C errors when building the `grin_pow` crate, you can turn mining plugin builds off by editing the file `pow/Cargo.toml' as follows:
 
-```
-#uncomment this feature to turn off plugin builds
+```toml
+# uncomment this feature to turn off plugin builds
 features=["no-plugin-build"]
 ```
 
 This may help when building on 32 bit systems or non x86 architectures. You can still use the internal miner to mine by setting:
 
-```
+```toml
 use_cuckoo_miner = false
 ```
 
@@ -101,22 +101,23 @@ You'll need a config file - the easiest is to copy over the grin.toml file from 
 
 Before running your mining server, a wallet server needs to be set up and listening so that the mining server knows where to send mining rewards. Do this from the first node directory with the following commands:
 
-	node1$ grin wallet init
-	node1$ grin wallet -p "password" listen
+```
+node1$ grin wallet init
+node1$ grin wallet -p "password" listen
+```
 
 See [wallet](wallet.md) for more info on the various Grin wallet commands and options.
 
 This will create a wallet server listening on the default port 13415 with the password "password". Next, in another terminal window in the 'node1' directory, run a full mining node with the following command:
 
-	node1$ grin server -m run
+```
+node1$ grin server -m run
+```
 
 This creates a new .grin database directory in the current directory, and begins mining new blocks (with no transactions, for now). Note this starts two services listening on two default ports,
 port 13414 for the peer-to-peer (P2P) service which keeps all nodes synchronized, and 13413 for the Rest API service used to verify transactions and post new transactions to the pool (for example). These ports can be configured via command line switches, or via a grin.toml file in the working directory.
 
 Let the mining server find a few blocks, then stop (just ctrl-c) the mining server and the wallet server. You'll notice grin has created a database directory (.grin) in which the blockchain and peer data is stored. There should also be a wallet.dat file in the current directory, which contains a few coinbase mining rewards created each time the server mines a new block.
-
-## Advanced Example
->>>>>>> 8d692d2... Fix for issue #318 (#323)
 
 # Running a Node
 
@@ -133,16 +134,15 @@ grin wallet init
 Then, to run a publicly listening wallet receiver, run the following command:
 
 ```
-grin wallet -p password -e receive
+grin wallet -p password -e listen
 ```
 
 Next, in the 'server' directory in another terminal window, copy the grin.toml file from the project root:
 
 ```
-cp /path/to/project/root/grin.toml .
+server$ cp /path/to/project/root/grin.toml .
+server$ grin server -m run
 ```
-
-    node3$ grin wallet -p "password" -a "http://127.0.0.1:30001" -l 35000 listen
 
 The server should start, connect to the seed and any available peers, and place mining rewards into your running wallet listener.
 
