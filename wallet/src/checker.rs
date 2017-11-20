@@ -84,7 +84,7 @@ pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(),
 	let query_string = query_params.join("&");
 
 	let url = format!(
-		"{}/v1/chain/utxos?{}",
+		"{}/v1/chain/utxos/byids?{}",
 		config.check_node_api_http_addr,
 		query_string,
 	);

@@ -131,7 +131,7 @@ impl Default for LocalServerContainerConfig {
 
 
 /// A top-level container to hold everything that might be running
-/// on a server, i.e. server, wallet in send or receive mode
+/// on a server, i.e. server, wallet in send or listen mode
 
 pub struct LocalServerContainer {
 	// Configuration
@@ -256,7 +256,7 @@ impl LocalServerContainer {
 		s.get_server_stats().unwrap()
 	}
 
-	/// Starts a wallet daemon to receive and returns the
+	/// Starts a wallet daemon to listen and returns the
 	/// listening server url
 
 	pub fn run_wallet(&mut self, _duration_in_seconds: u64) {
@@ -294,7 +294,7 @@ impl LocalServerContainer {
 		let mut api_server = api::ApiServer::new("/v1".to_string());
 		api_server.register_handler(router);
 		api_server.start(url).unwrap_or_else(|e| {
-			println!("Failed to start Grin wallet receiver: {}.", e);
+			println!("Failed to start Grin wallet listener: {}.", e);
 		});
 
 		self.api_server = Some(api_server);

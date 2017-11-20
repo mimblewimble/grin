@@ -93,6 +93,7 @@ impl Peer {
 		let addr = self.info.addr;
 		let state = self.state.clone();
 		let adapter = Arc::new(self.tracking_adapter.clone());
+
 		Box::new(self.proto.handle(conn, adapter).then(move |res| {
 			// handle disconnection, standard disconnections aren't considered an error
 			let mut state = state.write().unwrap();

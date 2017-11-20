@@ -172,6 +172,14 @@ impl Keychain {
 		Ok(commit)
 	}
 
+	pub fn switch_commit_from_index(&self, index:u32) -> Result<Commitment, Error> {
+		//just do this directly, because cache seems really slow for wallet reconstruct
+		let skey = self.extkey.derive(&self.secp, index)?;
+		let skey = skey.key;
+		let commit = self.secp.switch_commit(skey)?;
+		Ok(commit)
+	}
+
 	pub fn range_proof(
 		&self,
 		amount: u64,

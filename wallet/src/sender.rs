@@ -28,7 +28,7 @@ use util;
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
 /// UTXOs. The destination can be "stdout" (for command line) or a URL to the
-/// recipients wallet receiver (to be implemented).
+/// recipients wallet listener (to be implemented).
 
 pub fn issue_send_tx(
 	config: &WalletConfig,
