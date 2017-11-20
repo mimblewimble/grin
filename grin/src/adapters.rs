@@ -248,10 +248,11 @@ impl NetAdapter for NetToChainAdapter {
 		}
 	}
 
-	fn peer_difficulty(&self, diff: Difficulty) {
+	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty) {
 		debug!(
 			LOGGER,
-			"peer total_diff (ping/pong): {} vs us {}",
+			"peer total_diff (ping/pong): {}, {} vs us {}",
+			addr,
 			diff,
 			self.total_difficulty(),
 		);

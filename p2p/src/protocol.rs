@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::sync::Arc;
+use std::net::SocketAddr;
 
 use futures::Future;
 use futures::sync::mpsc::UnboundedSender;
@@ -47,10 +48,11 @@ impl Protocol for ProtocolV1 {
 		&self,
 		conn: TcpStream,
 		adapter: Arc<NetAdapter>,
+		addr: SocketAddr,
 	) -> Box<Future<Item = (), Error = Error>> {
 		let (conn, listener) = TimeoutConnection::listen(conn, move |sender, header, data| {
 			let adapt = adapter.as_ref();
-			handle_payload(adapt, sender, header, data)
+			handle_payload(adapt, sender, header, data, addr)
 		});
 
 		self.conn.init(conn);
@@ -69,7 +71,7 @@ impl Protocol for ProtocolV1 {
 		self.send_request(
 			Type::Ping,
 			Type::Pong,
-			&Ping { total_difficulty: total_difficulty },
+			&Ping { total_difficulty },
 			None,
 		)
 	}
@@ -135,11 +137,12 @@ fn handle_payload(
 	sender: UnboundedSender<Vec<u8>>,
 	header: MsgHeader,
 	buf: Vec<u8>,
+	addr: SocketAddr,
 ) -> Result<Option<Hash>, ser::Error> {
 	match header.msg_type {
 		Type::Ping => {
 			let ping = ser::deserialize::<Ping>(&mut &buf[..])?;
-			adapter.peer_difficulty(ping.total_difficulty);
+			adapter.peer_difficulty(addr, ping.total_difficulty);
 			let pong = Pong { total_difficulty: adapter.total_difficulty() };
 			let mut body_data = vec![];
 			try!(ser::serialize(&mut body_data, &pong));
@@ -154,7 +157,7 @@ fn handle_payload(
 		}
 		Type::Pong => {
 			let pong = ser::deserialize::<Pong>(&mut &buf[..])?;
-			adapter.peer_difficulty(pong.total_difficulty);
+			adapter.peer_difficulty(addr, pong.total_difficulty);
 			Ok(None)
 		},
 		Type::Transaction => {

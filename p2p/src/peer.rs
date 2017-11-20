@@ -94,7 +94,7 @@ impl Peer {
 		let state = self.state.clone();
 		let adapter = Arc::new(self.tracking_adapter.clone());
 
-		Box::new(self.proto.handle(conn, adapter).then(move |res| {
+		Box::new(self.proto.handle(conn, adapter, addr).then(move |res| {
 			// handle disconnection, standard disconnections aren't considered an error
 			let mut state = state.write().unwrap();
 			match res {
@@ -253,7 +253,7 @@ impl NetAdapter for TrackingAdapter {
 		self.adapter.peer_connected(pi)
 	}
 
-	fn peer_difficulty(&self, diff: Difficulty) {
-		self.adapter.peer_difficulty(diff)
+	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty) {
+		self.adapter.peer_difficulty(addr, diff)
 	}
 }

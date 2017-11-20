@@ -58,7 +58,7 @@ impl NetAdapter for DummyAdapter {
 	}
 	fn peer_addrs_received(&self, _: Vec<SocketAddr>) {}
 	fn peer_connected(&self, _: &PeerInfo) {}
-	fn peer_difficulty(&self, _: Difficulty) {}
+	fn peer_difficulty(&self, _: SocketAddr, _: Difficulty) {}
 }
 
 /// P2P server implementation, handling bootstrapping to find and connect to
