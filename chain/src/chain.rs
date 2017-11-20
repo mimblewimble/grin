@@ -239,6 +239,12 @@ impl Chain {
 		}
 	}
 
+	/// Checks whether an output is unspent
+	pub fn is_unspent(&self, output_ref: &Commitment) -> Result<bool, Error> {
+		let sumtrees = self.sumtrees.read().unwrap();
+		sumtrees.is_unspent(output_ref)
+	}
+
 	/// Sets the sumtree roots on a brand new block by applying the block on the
 	/// current sumtree state.
 	pub fn set_sumtree_roots(&self, b: &mut Block) -> Result<(), Error> {
