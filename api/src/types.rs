@@ -88,7 +88,7 @@ impl SumTreeNode {
 				.get_block_header_by_output_commit(&elem_output.1.commit)
 				.map_err(|_| Error::NotFound);
 			// Need to call further method to check if output is spent
-			let mut output = OutputPrintable::from_output(&elem_output.1, &header.unwrap());
+			let mut output = OutputPrintable::from_output(&elem_output.1, &header.unwrap(),true);
 			if let Ok(_) = chain.get_unspent(&elem_output.1.commit) {
 				output.spent = false;
 			}
@@ -137,6 +137,8 @@ pub struct Output {
 	pub output_type: OutputType,
 	/// The homomorphic commitment representing the output's amount
 	pub commit: pedersen::Commitment,
+	/// switch commit hash
+	pub switch_commit_hash: Option<core::SwitchCommitHash>,
 	/// A proof that the commitment is in the right range
 	pub proof: Option<pedersen::RangeProof>,
 	/// The height of the block creating this output
@@ -146,7 +148,8 @@ pub struct Output {
 }
 
 impl Output {
-	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader, include_proof:bool) -> Output {
+	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader, 
+		include_proof:bool, include_switch: bool) -> Output {
 		let (output_type, lock_height) = match output.features {
 			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
 				OutputType::Coinbase,
@@ -158,6 +161,10 @@ impl Output {
 		Output {
 			output_type: output_type,
 			commit: output.commit,
+			switch_commit_hash: match include_switch {
+				true => Some(output.switch_commit_hash),
+				false => None,
+			},
 			proof: match include_proof {
 				true => Some(output.proof),
 				false => None,
@@ -176,6 +183,8 @@ pub struct OutputPrintable {
 	/// The homomorphic commitment representing the output's amount (as hex
 	/// string)
 	pub commit: String,
+	/// switch commit hash
+	pub switch_commit_hash: String,
 	/// The height of the block creating this output
 	pub height: u64,
 	/// The lock height (earliest block this output can be spent)
@@ -183,11 +192,11 @@ pub struct OutputPrintable {
 	/// Whether the output has been spent
 	pub spent: bool,
 	/// Rangeproof hash  (as hex string)
-	pub proof_hash: String,
+	pub proof_hash: Option<String>,
 }
 
 impl OutputPrintable {
-	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader) -> OutputPrintable {
+	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader, include_proof_hash:bool) -> OutputPrintable {
 		let (output_type, lock_height) = match output.features {
 			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
 				OutputType::Coinbase,
@@ -198,12 +207,66 @@ impl OutputPrintable {
 		OutputPrintable {
 			output_type: output_type,
 			commit: util::to_hex(output.commit.0.to_vec()),
+			switch_commit_hash: util::to_hex(output.switch_commit_hash.hash.to_vec()),
 			height: block_header.height,
 			lock_height: lock_height,
 			spent: true,
-			proof_hash: util::to_hex(output.proof.hash().to_vec()),
+			proof_hash: match include_proof_hash {
+				true => Some(util::to_hex(output.proof.hash().to_vec())),
+				false => None,
+			}
 		}
 	}
+}
+
+// As above, except just the info needed for wallet reconstruction
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OutputSwitch {
+	/// the commit 
+	pub commit: String,
+	/// switch commit hash
+	pub switch_commit_hash: [u8; core::SWITCH_COMMIT_HASH_SIZE],
+	/// The height of the block creating this output
+	pub height: u64,
+}
+
+impl OutputSwitch {
+	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader) -> OutputSwitch {
+		OutputSwitch {
+			commit: util::to_hex(output.commit.0.to_vec()),
+			switch_commit_hash: output.switch_commit_hash.hash,
+			height: block_header.height,
+		}
+	}
+}
+// Just the information required for wallet reconstruction
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BlockHeaderInfo {
+	/// Hash
+	pub hash: String,
+	/// Previous block hash
+	pub previous: String,
+	/// Height
+	pub height: u64
+}
+
+impl BlockHeaderInfo {
+	pub fn from_header(block_header: &core::BlockHeader) -> BlockHeaderInfo{
+		BlockHeaderInfo {
+			hash: util::to_hex(block_header.hash().to_vec()),
+			previous: util::to_hex(block_header.previous.to_vec()),
+			height: block_header.height,
+		}
+	}
+}
+// For wallet reconstruction, include the header info along with the
+// transactions in the block
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BlockOutputs {
+	/// The block header
+	pub header: BlockHeaderInfo,
+	/// A printable version of the outputs
+	pub outputs: Vec<OutputSwitch>,
 }
 
 #[derive(Serialize, Deserialize)]
