@@ -22,6 +22,7 @@ use util::secp::pedersen::{Commitment, RangeProof};
 use std::cmp::Ordering;
 use std::ops;
 
+use consensus;
 use core::Committed;
 use core::hash::Hashed;
 use core::pmmr::Summable;
@@ -72,6 +73,8 @@ pub enum Error {
 	/// Underlying Secp256k1 error (signature validation or invalid public
 	/// key typically)
 	Secp(secp::Error),
+	/// Restrict number of incoming inputs
+	TooManyInputs,
 }
 
 impl From<secp::Error> for Error {
@@ -346,6 +349,9 @@ impl Transaction {
 	pub fn validate(&self) -> Result<Commitment, Error> {
 		if self.fee & 1 != 0 {
 			return Err(Error::OddFee);
+		}
+		if self.inputs.len() > consensus::MAX_BLOCK_INPUTS {
+			return Err(Error::TooManyInputs);
 		}
 		for out in &self.outputs {
 			out.verify_proof()?;
