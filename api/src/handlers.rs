@@ -118,7 +118,8 @@ impl UtxoHandler {
 		let outputs = block
 			.outputs
 			.iter()
-			.map(|k| OutputSwitch::from_output(k, &header))
+			.filter(|c|self.chain.is_unspent(&c.commit).unwrap())
+			.map(|k|OutputSwitch::from_output(k, &header))
 			.collect();
 		BlockOutputs {
 			header: BlockHeaderInfo::from_header(&header),
