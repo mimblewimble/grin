@@ -268,7 +268,7 @@ impl TimeoutConnection {
 		let expects = Arc::new(Mutex::new(vec![]));
 
 		// Decorates the handler to remove the "subscription" from the expected
-  // responses. We got our replies, so no timeout should occur.
+		// responses. We got our replies, so no timeout should occur.
 		let exp = expects.clone();
 		let (conn, fut) = Connection::listen(conn, move |sender, header: MsgHeader, data| {
 			let msg_type = header.msg_type;
@@ -293,8 +293,9 @@ impl TimeoutConnection {
 			.interval(Duration::new(2, 0))
 			.fold((), move |_, _| {
 				let exp = exp.lock().unwrap();
-				for &(_, _, t) in exp.deref() {
-					if Instant::now() - t > Duration::new(2, 0) {
+				for &(ty, h, t) in exp.deref() {
+					if Instant::now() - t > Duration::new(5, 0) {
+						trace!(LOGGER, "Too long: {:?} {:?}", ty, h);
 						return Err(TimerError::TooLong);
 					}
 				}

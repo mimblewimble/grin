@@ -51,9 +51,9 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 	// TODO should just take a promise for a block with a full header so we don't
  // spend resources reading the full block when its header is invalid
 
-	info!(
+	debug!(
 		LOGGER,
-		"Starting validation pipeline for block {} at {} with {} inputs and {} outputs.",
+		"Processing block {} at {} with {} inputs and {} outputs.",
 		b.hash(),
 		b.header.height,
 		b.inputs.len(),
@@ -94,9 +94,9 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 
 /// Process the block header
 pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
-	info!(
+	debug!(
 		LOGGER,
-		"Starting validation pipeline for block header {} at {}.",
+		"Processing header {} at {}.",
 		bh.hash(),
 		bh.height
 	);

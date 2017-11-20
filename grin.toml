@@ -63,7 +63,7 @@ port = 13414
 log_to_stdout = true
 
 # Log level for stdout: Critical, Error, Warning, Info, Debug, Trace
-stdout_log_level = "Debug"
+stdout_log_level = "Warning"
 
 # Whether to log to a file
 log_to_file = true
