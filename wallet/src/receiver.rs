@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Provides the JSON/HTTP API for wallets to receive payments. Because
-//! receiving money in MimbleWimble requires an interactive exchange, a
+//! Provides the JSON/HTTP API for wallets to listen for and receive payments.
+//! Because receiving money in MimbleWimble requires an interactive exchange, a
 //! wallet server that's running at all time is required in many cases.
 
 use bodyparser;
