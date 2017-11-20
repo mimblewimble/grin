@@ -42,6 +42,7 @@ use daemonize::Daemonize;
 use config::GlobalConfig;
 use wallet::WalletConfig;
 use core::global;
+use core::core::amount_to_hr_string;
 use util::{init_logger, LoggingConfig, LOGGER};
 
 fn start_from_config_file(mut global_config: GlobalConfig) {
@@ -261,7 +262,7 @@ fn main() {
 
 		.subcommand(SubCommand::with_name("restore")
 			.about("Attempt to restore wallet contents from the chain using seed and password.")))
-			
+
 	.get_matches();
 
 	match args.subcommand() {
@@ -453,9 +454,28 @@ fn wallet_command(wallet_args: &ArgMatches) {
 				(selection_strategy == "all"),
 			);
 			match result {
-				Ok(_) => { debug!(LOGGER, "{} coins sent using strategy {} to {}", amount.to_string(), selection_strategy, dest) }, //success messaged logged internally
-				Err(wallet::Error::NotEnoughFunds(_)) => {},
-				Err(e) => panic!(e),
+				Ok(_) => {
+					info!(
+						LOGGER,
+						"Tx sent: {} grin to {} (strategy '{}')",
+						amount_to_hr_string(amount),
+						dest,
+						selection_strategy,
+					)},
+				Err(wallet::Error::NotEnoughFunds(available)) => {
+					error!(
+						LOGGER,
+						"Tx not sent: insufficient funds (max: {})",
+						amount_to_hr_string(available),
+					);
+				},
+				Err(e) => {
+					error!(
+						LOGGER,
+						"Tx not sent: {:?}",
+						e
+					);
+				},
 			};
 		}
 		("burn", Some(send_args)) => {
