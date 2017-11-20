@@ -28,6 +28,7 @@ use futures::future::{self, IntoFuture};
 use rand::{self, Rng};
 use tokio_core::net::{TcpListener, TcpStream};
 use tokio_core::reactor;
+use tokio_timer::Timer;
 
 use core::core;
 use core::core::hash::Hash;
@@ -101,7 +102,7 @@ impl Server {
 
 		// main peer acceptance future handling handshake
 		let hp = h.clone();
-		let peers = socket.incoming().map_err(From::from).map(move |(conn, _)| {
+		let peers_listen = socket.incoming().map_err(From::from).map(move |(conn, _)| {
 			let adapter = adapter.clone();
 			let total_diff = adapter.total_difficulty();
 			let peers = peers.clone();
@@ -119,7 +120,7 @@ impl Server {
 
 		// spawn each peer future to its own task
 		let hs = h.clone();
-		let server = peers.for_each(move |peer| {
+		let server = peers_listen.for_each(move |peer| {
 			hs.spawn(peer.then(|res| {
 				match res {
 					Err(e) => info!(LOGGER, "Client error: {:?}", e),
@@ -136,9 +137,24 @@ impl Server {
 			let mut stop_mut = self.stop.borrow_mut();
 			*stop_mut = Some(stop);
 		}
+
+		// timer to regularly check on our peers by pinging them
+		let peers_inner = self.peers.clone();
+		let peers_timer = Timer::default()
+			.interval(Duration::new(20, 0))
+			.fold((), move |_, _| {
+				check_peers(peers_inner.clone());
+				Ok(())
+			});
+
 		Box::new(
 			server
 				.select(stop_rx.map_err(|_| Error::ConnectionClose))
+				.then(|res| match res {
+					Ok((_, _)) => Ok(()),
+					Err((e, _)) => Err(e),
+				})
+				.select(peers_timer.map_err(|_| Error::Timeout))
 				.then(|res| match res {
 					Ok((_, _)) => Ok(()),
 					Err((e, _)) => Err(e),
@@ -326,6 +342,17 @@ where
 		Ok((conn, apeer))
 	});
 	Box::new(peer_add)
+}
+
+// Ping all our connected peers. Always automatically expects a pong back or
+// disconnects. This acts as a liveness test.
+fn check_peers(peers: Arc<RwLock<HashMap<SocketAddr, Arc<Peer>>>>) {
+	let peers_map = peers.read().unwrap();
+	for p in peers_map.values() {
+		if p.is_connected() {
+			let _ = p.send_ping();
+		}
+	}
 }
 
 // Adds a timeout to a future
