@@ -191,25 +191,23 @@ fn main() {
 				.long("key_derivations")
 				.default_value("1000")
 				.takes_value(true))
+		
 		.subcommand(SubCommand::with_name("listen")
-			.about("Run the wallet in listening mode waiting for send requests.")
+			.about("Runs the wallet in listening mode waiting for transactions.")
 			.arg(Arg::with_name("port")
 				.short("l")
 				.long("port")
 				.help("Port on which to run the wallet listener")
 				.takes_value(true)))
-
-		.subcommand(SubCommand::with_name("file")
-			.about("Processes a JSON transaction file.")
-			.arg(Arg::with_name("file")
-				.help("Partial transaction to process, expects a JSON file.")
-				.short("f")
-				.long("file")
-				.takes_value(true)))
-
+		
 		.subcommand(SubCommand::with_name("receive")
-			.about("Depreciated, use 'listen' instead"))
-
+			.about("Processes a JSON transaction file.")
+			.arg(Arg::with_name("input")
+				.help("Partial transaction to process, expects a JSON file.")
+				.short("i")
+				.long("input")
+				.takes_value(true)))
+		
 		.subcommand(SubCommand::with_name("send")
 			.about("Builds a transaction to send someone some coins. By default, \
 				the transaction will just be printed to stdout. If a destination is \
@@ -418,8 +416,12 @@ fn wallet_command(wallet_args: &ArgMatches) {
 			}
 			wallet::server::start_rest_apis(wallet_config, keychain);
 		},
-		("file", Some(file_args)) => if let Some(f) = file_args.value_of("file") {
-			let mut file = File::open(f).expect("Unable to open transaction file.");
+		("receive", Some(receive_args)) => {
+			let input = receive_args
+				.value_of("input")
+				.expect("Input file required");
+			let mut file = File::open(input)
+				.expect("Unable to open transaction file.");
 			let mut contents = String::new();
 			file.read_to_string(&mut contents)
 				.expect("Unable to read transaction file.");
@@ -484,9 +486,6 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		}
 		("outputs", Some(_)) => {
 			wallet::show_outputs(&wallet_config, &keychain, show_spent);
-		}
-		("receive", Some(_)) => {
-			panic!("Command 'receive' is depreciated, use 'listen' instead");
 		}
 		("restore", Some(_)) => {
 			let _=wallet::restore(&wallet_config, &keychain, key_derivations);
