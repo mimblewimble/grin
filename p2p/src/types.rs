@@ -130,7 +130,7 @@ pub trait Protocol {
 		-> Box<Future<Item = (), Error = Error>>;
 
 	/// Sends a ping message to the remote peer.
-	fn send_ping(&self) -> Result<(), Error>;
+	fn send_ping(&self, total_difficulty: Difficulty) -> Result<(), Error>;
 
 	/// Relays a block to the remote peer.
 	fn send_block(&self, b: &core::Block) -> Result<(), Error>;
@@ -189,4 +189,7 @@ pub trait NetAdapter: Sync + Send {
 
 	/// Network successfully connected to a peer.
 	fn peer_connected(&self, &PeerInfo);
+
+	/// Heard total_difficulty from a connected peer (via ping/pong).
+	fn peer_difficulty(&self, Difficulty);
 }

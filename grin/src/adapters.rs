@@ -247,6 +247,15 @@ impl NetAdapter for NetToChainAdapter {
 			error!(LOGGER, "Could not save connected peer: {:?}", e);
 		}
 	}
+
+	fn peer_difficulty(&self, diff: Difficulty) {
+		debug!(
+			LOGGER,
+			"peer total_diff (ping/pong): {} vs us {}",
+			diff,
+			self.total_difficulty(),
+		);
+	}
 }
 
 impl NetToChainAdapter {

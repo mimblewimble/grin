@@ -58,6 +58,7 @@ impl NetAdapter for DummyAdapter {
 	}
 	fn peer_addrs_received(&self, _: Vec<SocketAddr>) {}
 	fn peer_connected(&self, _: &PeerInfo) {}
+	fn peer_difficulty(&self, _: Difficulty) {}
 }
 
 /// P2P server implementation, handling bootstrapping to find and connect to
@@ -105,16 +106,22 @@ impl Server {
 		let adapter = self.adapter.clone();
 		let capab = self.capabilities.clone();
 
+
 		// main peer acceptance future handling handshake
 		let hp = h.clone();
 		let peers_listen = socket.incoming().map_err(From::from).map(move |(conn, _)| {
-			let adapter = adapter.clone();
-			let total_diff = adapter.total_difficulty();
 			let peers = peers.clone();
+			let total_diff = adapter.total_difficulty();
 
 			// accept the peer and add it to the server map
-			let accept = Peer::accept(conn, capab, total_diff, &handshake.clone(), adapter.clone());
-			let added = add_to_peers(peers, adapter, accept);
+			let accept = Peer::accept(
+				conn,
+				capab,
+				total_diff,
+				&handshake.clone(),
+				adapter.clone(),
+			);
+			let added = add_to_peers(peers, adapter.clone(), accept);
 
 			// wire in a future to timeout the accept after 5 secs
 			let timed_peer = with_timeout(Box::new(added), &hp);
@@ -143,12 +150,15 @@ impl Server {
 			*stop_mut = Some(stop);
 		}
 
+
 		// timer to regularly check on our peers by pinging them
+		let adapter = self.adapter.clone();
 		let peers_inner = self.peers.clone();
 		let peers_timer = Timer::default()
 			.interval(Duration::new(20, 0))
 			.fold((), move |_, _| {
-				check_peers(peers_inner.clone());
+				let total_diff = adapter.total_difficulty();
+				check_peers(peers_inner.clone(), total_diff);
 				Ok(())
 			});
 
@@ -294,7 +304,7 @@ impl Server {
 				}
 			}
 		}
-		debug!(LOGGER, "Bardcasted block {} to {} peers.", b.header.height, count);
+		debug!(LOGGER, "Broadcasted block {} to {} peers.", b.header.height, count);
 	}
 
 	/// Broadcasts the provided transaction to all our peers. A peer
@@ -349,11 +359,14 @@ where
 
 // Ping all our connected peers. Always automatically expects a pong back or
 // disconnects. This acts as a liveness test.
-fn check_peers(peers: Arc<RwLock<HashMap<SocketAddr, Arc<Peer>>>>) {
+fn check_peers(
+	peers: Arc<RwLock<HashMap<SocketAddr, Arc<Peer>>>>,
+	total_difficulty: Difficulty,
+) {
 	let peers_map = peers.read().unwrap();
 	for p in peers_map.values() {
 		if p.is_connected() {
-			let _ = p.send_ping();
+			let _ = p.send_ping(total_difficulty.clone());
 		}
 	}
 }

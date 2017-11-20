@@ -134,8 +134,8 @@ impl Peer {
 		self.proto.transmitted_bytes()
 	}
 
-	pub fn send_ping(&self) -> Result<(), Error> {
-		self.proto.send_ping()
+	pub fn send_ping(&self, total_difficulty: Difficulty) -> Result<(), Error> {
+		self.proto.send_ping(total_difficulty)
 	}
 
 	/// Sends the provided block to the remote peer. The request may be dropped
@@ -251,5 +251,9 @@ impl NetAdapter for TrackingAdapter {
 
 	fn peer_connected(&self, pi: &PeerInfo) {
 		self.adapter.peer_connected(pi)
+	}
+
+	fn peer_difficulty(&self, diff: Difficulty) {
+		self.adapter.peer_difficulty(diff)
 	}
 }

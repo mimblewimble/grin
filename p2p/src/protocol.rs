@@ -20,6 +20,7 @@ use tokio_core::net::TcpStream;
 
 use core::core;
 use core::core::hash::Hash;
+use core::core::target::Difficulty;
 use core::ser;
 use conn::TimeoutConnection;
 use msg::*;
@@ -64,8 +65,13 @@ impl Protocol for ProtocolV1 {
 
 	/// Sends a ping message to the remote peer. Will panic if handle has never
 	/// been called on this protocol.
-	fn send_ping(&self) -> Result<(), Error> {
-		self.send_request(Type::Ping, Type::Pong, &Empty {}, None)
+	fn send_ping(&self, total_difficulty: Difficulty) -> Result<(), Error> {
+		self.send_request(
+			Type::Ping,
+			Type::Pong,
+			&Ping { total_difficulty: total_difficulty },
+			None,
+		)
 	}
 
 	/// Serializes and sends a block to our remote peer
@@ -132,11 +138,25 @@ fn handle_payload(
 ) -> Result<Option<Hash>, ser::Error> {
 	match header.msg_type {
 		Type::Ping => {
-			let data = ser::ser_vec(&MsgHeader::new(Type::Pong, 0))?;
+			let ping = ser::deserialize::<Ping>(&mut &buf[..])?;
+			adapter.peer_difficulty(ping.total_difficulty);
+			let pong = Pong { total_difficulty: adapter.total_difficulty() };
+			let mut body_data = vec![];
+			try!(ser::serialize(&mut body_data, &pong));
+			let mut data = vec![];
+			try!(ser::serialize(
+				&mut data,
+				&MsgHeader::new(Type::Pong, body_data.len() as u64),
+			));
+			data.append(&mut body_data);
 			sender.unbounded_send(data).unwrap();
 			Ok(None)
 		}
-		Type::Pong => Ok(None),
+		Type::Pong => {
+			let pong = ser::deserialize::<Pong>(&mut &buf[..])?;
+			adapter.peer_difficulty(pong.total_difficulty);
+			Ok(None)
+		},
 		Type::Transaction => {
 			let tx = ser::deserialize::<core::Transaction>(&mut &buf[..])?;
 			adapter.transaction_received(tx);

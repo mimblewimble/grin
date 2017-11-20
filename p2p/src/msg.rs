@@ -475,18 +475,42 @@ impl Readable for Headers {
 	}
 }
 
-/// Placeholder for messages like Ping and Pong that don't send anything but
-/// the header.
-pub struct Empty {}
+pub struct Ping {
+	/// total difficulty accumulated by the sender, used to check whether sync
+	/// may be needed
+	pub total_difficulty: Difficulty,
+}
 
-impl Writeable for Empty {
-	fn write<W: Writer>(&self, _: &mut W) -> Result<(), ser::Error> {
+impl Writeable for Ping {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.total_difficulty.write(writer).unwrap();
 		Ok(())
 	}
 }
 
-impl Readable for Empty {
-	fn read(_: &mut Reader) -> Result<Empty, ser::Error> {
-		Ok(Empty {})
+impl Readable for Ping {
+	fn read(reader: &mut Reader) -> Result<Ping, ser::Error> {
+		let total_difficulty = try!(Difficulty::read(reader));
+		Ok(Ping { total_difficulty })
+	}
+}
+
+pub struct Pong {
+	/// total difficulty accumulated by the sender, used to check whether sync
+	/// may be needed
+	pub total_difficulty: Difficulty,
+}
+
+impl Writeable for Pong {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.total_difficulty.write(writer).unwrap();
+		Ok(())
+	}
+}
+
+impl Readable for Pong {
+	fn read(reader: &mut Reader) -> Result<Pong, ser::Error> {
+		let total_difficulty = try!(Difficulty::read(reader));
+		Ok(Pong { total_difficulty })
 	}
 }
