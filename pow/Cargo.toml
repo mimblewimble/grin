@@ -18,7 +18,7 @@ grin_util = { path = "../util" }
 
 [dependencies.cuckoo_miner]
 git = "https://github.com/mimblewimble/cuckoo-miner"
-tag="grin_integration_15"
+tag="grin_integration_16"
 #path = "../../cuckoo-miner"
 #uncomment this feature to turn off plugin builds
 #features=["no-plugin-build"]

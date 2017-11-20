@@ -207,7 +207,7 @@ impl Miner {
 					let stats = job_handle.get_stats(i);
 					if let Ok(stat_vec) = stats {
 						for s in stat_vec {
-							let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
+							let last_solution_time_secs = s.last_solution_time as f64 / 1000000000.0;
 							let last_hashes_per_sec = 1.0 / last_solution_time_secs;
 							debug!(
 								LOGGER,
@@ -299,7 +299,7 @@ impl Miner {
 			if time::get_time().sec >= next_stat_check {
 				let stats_vec = plugin_miner.get_stats(0).unwrap();
 				for s in stats_vec.into_iter() {
-					let last_solution_time_secs = s.last_solution_time as f64 / 1000.0;
+					let last_solution_time_secs = s.last_solution_time as f64 / 1000000000.0;
 					let last_hashes_per_sec = 1.0 / last_solution_time_secs;
 					debug!(
 						LOGGER,
