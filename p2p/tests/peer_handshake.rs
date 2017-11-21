@@ -17,8 +17,9 @@ extern crate grin_core as core;
 extern crate grin_p2p as p2p;
 extern crate tokio_core;
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time;
 
 use futures::future::Future;
@@ -37,9 +38,11 @@ fn peer_handshake() {
 	let handle = evtlp.handle();
 	let p2p_conf = p2p::P2PConfig::default();
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
+	let connected_peers = Arc::new(RwLock::new(HashMap::new()));
 	let server = p2p::Server::new(
 		p2p::UNKNOWN,
 		p2p_conf,
+		connected_peers,
 		net_adapter.clone(),
 		Hash::from_vec(vec![]),
 	);

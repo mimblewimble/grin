@@ -18,7 +18,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
