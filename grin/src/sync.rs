@@ -45,7 +45,7 @@ pub struct Syncer {
 	chain: Arc<chain::Chain>,
 	p2p: Arc<p2p::Server>,
 	initial_sync: Mutex<bool>,
-	last_header_req: Mutex<Instant>,
+	// last_header_req: Mutex<Instant>,
 	blocks_to_download: Mutex<Vec<Hash>>,
 	blocks_downloading: Mutex<Vec<BlockDownload>>,
 }
@@ -56,7 +56,7 @@ impl Syncer {
 			chain: chain_ref,
 			p2p: p2p,
 			initial_sync: Mutex::new(true),
-			last_header_req: Mutex::new(Instant::now() - Duration::from_secs(2)),
+			// last_header_req: Mutex::new(Instant::now() - Duration::from_secs(2)),
 			blocks_to_download: Mutex::new(vec![]),
 			blocks_downloading: Mutex::new(vec![]),
 		}
@@ -96,6 +96,10 @@ impl Syncer {
 		// 	return Ok(())
 		// }
 
+		// if let Some(_) = self.p2p.most_work_peer() {
+		// 	self.init_download()?;
+		// }
+
 		// main syncing loop, requests more headers and bodies periodically as long
 		// as a peer with higher difficulty exists and we're not fully caught up
 		info!(LOGGER, "Starting sync loop.");
@@ -104,7 +108,7 @@ impl Syncer {
 
 			if let Some(peer) = self.p2p.most_work_peer() {
 				// TODO - is it a bad idea to do this within the loop?
-				self.init_download()?;
+				// self.init_download()?;
 
 				let peer = peer.read().unwrap();
 				debug!(
@@ -132,7 +136,7 @@ impl Syncer {
 
 				{
 					// TODO - do we need this timing complexity?
-					let last_header_req = self.last_header_req.lock().unwrap().clone();
+					// let last_header_req = self.last_header_req.lock().unwrap().clone();
 					// if more_headers || (Instant::now() - Duration::from_secs(30) > last_header_req) {
 					if more_headers {
 						self.request_headers()?;
@@ -255,10 +259,10 @@ impl Syncer {
 
 	/// Request some block headers from a peer to advance us
 	fn request_headers(&self) -> Result<(), Error> {
-		{
-			let mut last_header_req = self.last_header_req.lock().unwrap();
-			*last_header_req = Instant::now();
-		}
+		// {
+		// 	let mut last_header_req = self.last_header_req.lock().unwrap();
+		// 	*last_header_req = Instant::now();
+		// }
 
 		let tip = self.chain.get_header_head()?;
 		let peer = self.p2p.most_work_peer();

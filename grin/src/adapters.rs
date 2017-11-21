@@ -81,13 +81,13 @@ impl NetAdapter for NetToChainAdapter {
 		}
 
 		// TODO - revisit the logic here around initial sync
-		if self.initial_syncing() {
+		// if self.initial_syncing() {
 			match res {
 				Ok(_) => self.syncer.borrow().block_received(bhash),
 				Err(chain::Error::Unfit(_)) => self.syncer.borrow().block_received(bhash),
 				Err(_) => {}
 			}
-		}
+		// }
 	}
 
 	fn headers_received(&self, bhs: Vec<core::BlockHeader>) {
@@ -136,9 +136,9 @@ impl NetAdapter for NetToChainAdapter {
 			added_hs.len()
 		);
 
-		if self.initial_syncing() {
+		// if self.initial_syncing() {
 			self.syncer.borrow().headers_received(added_hs);
-		}
+		// }
 	}
 
 	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
@@ -302,16 +302,15 @@ impl NetToChainAdapter {
 		self.syncer.borrow().initial_syncing()
 	}
 
+	/// TODO - Right now SYNC is for initial sync (but sync always runs)
 	/// Prepare options for the chain pipeline
 	fn chain_opts(&self) -> chain::Options {
-		chain::SYNC
-
-		// let opts = if self.syncing() {
-		// 	chain::SYNC
-		// } else {
-		// 	chain::NONE
-		// };
-		// opts
+		let opts = if self.initial_syncing() {
+			chain::SYNC
+		} else {
+			chain::NONE
+		};
+		opts
 	}
 }
 
