@@ -292,7 +292,10 @@ impl NetToChainAdapter {
 		let _ = thread::Builder::new()
 			.name("syncer".to_string())
 			.spawn(move || {
-				let _ = arc_sync.run();
+				let res = arc_sync.run();
+				if let Err(e) = arc_sync.run() {
+					panic!("Error during sync, aborting: {:?}", e);
+				}
 			});
 	}
 
