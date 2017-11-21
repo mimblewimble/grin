@@ -101,7 +101,7 @@ impl Syncer {
 
 		// main syncing loop, requests more headers and bodies periodically as long
 		// as a peer with higher difficulty exists and we're not fully caught up
-		info!(LOGGER, "Starting sync loop.");
+		info!(LOGGER, "Sync: Starting loop.");
 		loop {
 			let tip = self.chain.get_header_head()?;
 
@@ -160,7 +160,7 @@ impl Syncer {
 		let mut blocks_to_download = self.blocks_to_download.lock().unwrap();
 
 		// go back the chain and insert for download all blocks we only have the
-  // head for
+		// head for
 		let mut prev_h = header_head.last_block_h;
 		while prev_h != full_head.last_block_h {
 			let header = self.chain.get_block_header(&prev_h)?;
@@ -173,7 +173,7 @@ impl Syncer {
 
 		debug!(
 			LOGGER,
-			"Added {} full block hashes to download.",
+			"Sync: Added {} full block hashes to download.",
 			blocks_to_download.len()
 		);
 		Ok(())
@@ -195,7 +195,7 @@ impl Syncer {
 			if download.retries < (elapsed / 5) as u8 {
 				debug!(
 					LOGGER,
-					"Retry {} on block {}",
+					"Sync: Retry {} on block {}",
 					download.retries,
 					download.hash
 				);
@@ -205,7 +205,7 @@ impl Syncer {
 		}
 
 		// consume hashes from blocks to download, place them in downloading and
-  // request them from the network
+		// request them from the network
 		let mut count = 0;
 		while blocks_to_download.len() > 0 && blocks_downloading.len() < MAX_BODY_DOWNLOADS {
 			let h = blocks_to_download.pop().unwrap();
@@ -219,7 +219,7 @@ impl Syncer {
 		}
 		debug!(
 			LOGGER,
-			"Requested {} full blocks to download, total left: {}. Current list: {:?}.",
+			"Sync: Requested {} full blocks to download, total left: {}. Current list: {:?}.",
 			count,
 			blocks_to_download.len(),
 			blocks_downloading.deref(),
@@ -249,13 +249,15 @@ impl Syncer {
 			let p = p.read().unwrap();
 			debug!(
 				LOGGER,
-				"Asking peer {} for more block headers, locator: {:?}",
+				"Sync: Asking peer {} for more block headers, locator: {:?}",
 				p.info.addr,
 				locator,
 			);
-			p.send_header_request(locator)?;
+			if let Err(e) = p.send_header_request(locator) {
+				debug!(LOGGER, "Sync: peer error, will retry");
+			}
 		} else {
-			warn!(LOGGER, "Could not get most worked peer to request headers.");
+			warn!(LOGGER, "Sync: Could not get most worked peer to request headers.");
 		}
 		Ok(())
 	}
@@ -294,7 +296,7 @@ impl Syncer {
 		// both nodes share at least one common header hash in the locator
 		heights.push(0);
 
-		debug!(LOGGER, "Loc heights: {:?}", heights);
+		debug!(LOGGER, "Sync: Loc heights: {:?}", heights);
 
 		// Iteratively travel the header chain back from our head and retain the
 		// headers at the wanted heights.
@@ -316,9 +318,8 @@ impl Syncer {
 	fn request_block(&self, h: Hash) {
 		let peer = self.p2p.random_peer().unwrap();
 		let peer = peer.read().unwrap();
-		let send_result = peer.send_block_request(h);
-		if let Err(e) = send_result {
-			debug!(LOGGER, "Error requesting block: {:?}", e);
+		if let Err(e) = peer.send_block_request(h) {
+			debug!(LOGGER, "Sync: Error requesting block: {:?}", e);
 		}
 	}
 }
