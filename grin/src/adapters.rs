@@ -22,7 +22,7 @@ use core::core::{self, Output};
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use p2p::{self, NetAdapter, Peer, PeerData, PeerInfo, PeerStore, Server, State};
+use p2p::{self, NetAdapter, Peer, PeerData, PeerStore, Server, State};
 use pool;
 use util::secp::pedersen::Commitment;
 use util::OneTime;
@@ -259,8 +259,8 @@ impl NetAdapter for NetToChainAdapter {
 		);
 
 		if diff.into_num() > 0 {
-			let mut peers = self.connected_peers.write().unwrap();
-			if let Some(mut peer) = peers.get_mut(&addr) {
+			let peers = self.connected_peers.write().unwrap();
+			if let Some(peer) = peers.get(&addr) {
 				let mut peer = peer.write().unwrap();
 				peer.info.total_difficulty = diff;
 			}
