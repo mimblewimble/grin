@@ -490,7 +490,11 @@ impl Writeable for Ping {
 
 impl Readable for Ping {
 	fn read(reader: &mut Reader) -> Result<Ping, ser::Error> {
-		let total_difficulty = try!(Difficulty::read(reader));
+		// TODO - once everyone is sending total_difficulty we can clean this up
+		let total_difficulty = match Difficulty::read(reader) {
+			Ok(diff) => diff,
+			Err(_) => Difficulty::zero(),
+		};
 		Ok(Ping { total_difficulty })
 	}
 }
@@ -510,7 +514,11 @@ impl Writeable for Pong {
 
 impl Readable for Pong {
 	fn read(reader: &mut Reader) -> Result<Pong, ser::Error> {
-		let total_difficulty = try!(Difficulty::read(reader));
+		// TODO - once everyone is sending total_difficulty we can clean this up
+		let total_difficulty = match Difficulty::read(reader) {
+			Ok(diff) => diff,
+			Err(_) => Difficulty::zero(),
+		};
 		Ok(Pong { total_difficulty })
 	}
 }
