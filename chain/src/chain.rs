@@ -120,7 +120,9 @@ impl Chain {
 	/// Attempt to add a new block to the chain. Returns the new chain tip if it
 	/// has been added to the longest chain, None if it's added to an (as of
 	/// now) orphan chain.
-	pub fn process_block(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
+	pub fn process_block(&self, b: Block, opts: Options)
+		-> Result<(Option<Tip>, Vec<Hash>), Error> {
+
 		let head = self.store
 			.head()
 			.map_err(|e| Error::StoreErr(e, "chain load head".to_owned()))?;
@@ -129,6 +131,7 @@ impl Chain {
 
 		let res = pipe::process_block(&b, ctx);
 
+		let mut accepted_orphans = vec![];
 		match res {
 			Ok(Some(ref tip)) => {
 				// block got accepted and extended the head, updating our head
@@ -144,7 +147,7 @@ impl Chain {
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b);
 				}
-				self.check_orphans();
+				accepted_orphans = self.check_orphans();
 			}
 			Ok(None) => {}
 			Err(Error::Orphan) => if b.header.height < height + (MAX_ORPHANS as u64) {
@@ -172,7 +175,7 @@ impl Chain {
 			}
 		}
 
-		res
+		res.map(|tip| (tip, accepted_orphans))
 	}
 
 	/// Attempt to add a new header to the header chain. Only necessary during
@@ -201,9 +204,9 @@ impl Chain {
 	}
 
 	/// Pop orphans out of the queue and check if we can now accept them.
-	fn check_orphans(&self) {
+	fn check_orphans(&self) -> Vec<Hash> {
 		// first check how many we have to retry, unfort. we can't extend the lock
-  // in the loop as it needs to be freed before going in process_block
+		// in the loop as it needs to be freed before going in process_block
 		let orphan_count;
 		{
 			let orphans = self.orphans.lock().unwrap();
@@ -211,6 +214,7 @@ impl Chain {
 		}
 
 		// pop each orphan and retry, if still orphaned, will be pushed again
+		let mut processed = vec![];
 		for _ in 0..orphan_count {
 			let popped;
 			{
@@ -218,9 +222,13 @@ impl Chain {
 				popped = orphans.pop_back();
 			}
 			if let Some((opts, orphan)) = popped {
-				let _process_result = self.process_block(orphan, opts);
+				let o_hash = orphan.hash();
+				if let Ok(_) = self.process_block(orphan, opts) {
+					processed.push(o_hash);
+				}
 			}
 		}
+		processed
 	}
 
 	/// Gets an unspent output from its commitment. With return None if the
