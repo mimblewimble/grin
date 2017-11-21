@@ -80,7 +80,8 @@ impl NetAdapter for NetToChainAdapter {
 			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
 		}
 
-		if self.syncing() {
+		// TODO - revisit the logic here around initial sync
+		if self.initial_syncing() {
 			match res {
 				Ok(_) => self.syncer.borrow().block_received(bhash),
 				Err(chain::Error::Unfit(_)) => self.syncer.borrow().block_received(bhash),
@@ -135,7 +136,7 @@ impl NetAdapter for NetToChainAdapter {
 			added_hs.len()
 		);
 
-		if self.syncing() {
+		if self.initial_syncing() {
 			self.syncer.borrow().headers_received(added_hs);
 		}
 	}
@@ -296,18 +297,21 @@ impl NetToChainAdapter {
 			});
 	}
 
-	pub fn syncing(&self) -> bool {
-		self.syncer.is_initialized() && self.syncer.borrow().syncing()
+	pub fn initial_syncing(&self) -> bool {
+		// self.syncer.is_initialized() && self.syncer.borrow().initial_syncing()
+		self.syncer.borrow().initial_syncing()
 	}
 
 	/// Prepare options for the chain pipeline
 	fn chain_opts(&self) -> chain::Options {
-		let opts = if self.syncing() {
-			chain::SYNC
-		} else {
-			chain::NONE
-		};
-		opts
+		chain::SYNC
+
+		// let opts = if self.syncing() {
+		// 	chain::SYNC
+		// } else {
+		// 	chain::NONE
+		// };
+		// opts
 	}
 }
 

@@ -44,8 +44,7 @@ struct BlockDownload {
 pub struct Syncer {
 	chain: Arc<chain::Chain>,
 	p2p: Arc<p2p::Server>,
-
-	sync: Mutex<bool>,
+	initial_sync: Mutex<bool>,
 	last_header_req: Mutex<Instant>,
 	blocks_to_download: Mutex<Vec<Hash>>,
 	blocks_downloading: Mutex<Vec<BlockDownload>>,
@@ -56,19 +55,20 @@ impl Syncer {
 		Syncer {
 			chain: chain_ref,
 			p2p: p2p,
-			sync: Mutex::new(true),
+			initial_sync: Mutex::new(true),
 			last_header_req: Mutex::new(Instant::now() - Duration::from_secs(2)),
 			blocks_to_download: Mutex::new(vec![]),
 			blocks_downloading: Mutex::new(vec![]),
 		}
 	}
 
-	pub fn syncing(&self) -> bool {
-		*self.sync.lock().unwrap()
+	pub fn initial_syncing(&self) -> bool {
+		*self.initial_sync.lock().unwrap()
 	}
 
 	/// Checks the local chain state, comparing it with our peers and triggers
 	/// syncing if required.
+	/// TODO - does not return
 	pub fn run(&self) -> Result<(), Error> {
 		info!(LOGGER, "Sync: starting sync");
 
@@ -85,19 +85,16 @@ impl Syncer {
 			thread::sleep(Duration::from_millis(200));
 		}
 
-		// Now check we actually have at least one peer to sync from.
-		// If not then end the sync cleanly.
-		if self.p2p.peer_count() == 0 {
-			info!(LOGGER, "Sync: no peers to sync with, done.");
-
-			let mut sync = self.sync.lock().unwrap();
-			*sync = false;
-
-			return Ok(())
-		}
-
-		// check if we have missing full blocks for which we already have a header
-		self.init_download()?;
+		// // Now check we actually have at least one peer to sync from.
+		// // If not then end the sync cleanly.
+		// if self.p2p.peer_count() == 0 {
+		// 	info!(LOGGER, "Sync: no peers to sync with, done.");
+        //
+		// 	let mut sync = self.sync.lock().unwrap();
+		// 	*sync = false;
+        //
+		// 	return Ok(())
+		// }
 
 		// main syncing loop, requests more headers and bodies periodically as long
 		// as a peer with higher difficulty exists and we're not fully caught up
@@ -105,48 +102,67 @@ impl Syncer {
 		loop {
 			let tip = self.chain.get_header_head()?;
 
-			// TODO do something better (like trying to get more) if we lose peers
-			let peer = self.p2p.most_work_peer().expect("No peers available for sync.");
-			let peer = peer.read().unwrap();
-			debug!(
-				LOGGER,
-				"Sync: peer {} vs us {}",
-				peer.info.total_difficulty,
-				tip.total_difficulty
-			);
+			if let Some(peer) = self.p2p.most_work_peer() {
+				// TODO - is it a bad idea to do this within the loop?
+				self.init_download()?;
 
-			let more_headers = peer.info.total_difficulty > tip.total_difficulty;
-			let more_bodies = {
-				let blocks_to_download = self.blocks_to_download.lock().unwrap();
-				let blocks_downloading = self.blocks_downloading.lock().unwrap();
+				let peer = peer.read().unwrap();
 				debug!(
 					LOGGER,
-					"Sync: blocks to download {}, block downloading {}",
-					blocks_to_download.len(),
-					blocks_downloading.len(),
+					"Sync: in loop: peer {} vs us {}",
+					peer.info.total_difficulty,
+					tip.total_difficulty
 				);
-				blocks_to_download.len() > 0 || blocks_downloading.len() > 0
-			};
 
-			{
-				let last_header_req = self.last_header_req.lock().unwrap().clone();
-				if more_headers || (Instant::now() - Duration::from_secs(30) > last_header_req) {
-					self.request_headers()?;
+				let more_headers = peer.info.total_difficulty > tip.total_difficulty;
+
+				let more_bodies = {
+					let blocks_to_download = self.blocks_to_download.lock().unwrap();
+					let blocks_downloading = self.blocks_downloading.lock().unwrap();
+
+					debug!(
+						LOGGER,
+						"Sync: blocks to download {}, block downloading {}",
+						blocks_to_download.len(),
+						blocks_downloading.len(),
+					);
+
+					blocks_to_download.len() > 0 || blocks_downloading.len() > 0
+				};
+
+				{
+					// TODO - do we need this timing complexity?
+					let last_header_req = self.last_header_req.lock().unwrap().clone();
+					// if more_headers || (Instant::now() - Duration::from_secs(30) > last_header_req) {
+					if more_headers {
+						self.request_headers()?;
+					}
 				}
-			}
-			if more_bodies {
-				self.request_bodies();
-			}
-			if !more_headers && !more_bodies {
-				// TODO check we haven't been lied to on the total work
-				let mut sync = self.sync.lock().unwrap();
-				*sync = false;
-				break;
+				if more_bodies {
+					self.request_bodies();
+				}
+
+				// The first time we get through to this point we can clear then
+				// initial_sync flag and let the miner start mining
+				if !more_headers && !more_bodies {
+					let mut initial_sync = self.initial_sync.lock().unwrap();
+					*initial_sync = false;
+				}
+			} else {
+				debug!(LOGGER, "Sync: no peer to sync from");
+				let mut initial_sync = self.initial_sync.lock().unwrap();
+				*initial_sync = false;
 			}
 
-			thread::sleep(Duration::from_secs(2));
+			if self.initial_syncing() {
+				debug!(LOGGER, "Sync: loop done, sleeping for a bit (2)");
+				thread::sleep(Duration::from_secs(2));
+			} else {
+				debug!(LOGGER, "Sync: loop done, sleeping for a bit (10)");
+				thread::sleep(Duration::from_secs(10));
+			}
 		}
-		info!(LOGGER, "Sync: done.");
+		info!(LOGGER, "Sync: done (never done)");
 		Ok(())
 	}
 
@@ -154,6 +170,8 @@ impl Syncer {
 	/// initializes the blocks_to_download structure with the missing full
 	/// blocks
 	fn init_download(&self) -> Result<(), Error> {
+		debug!(LOGGER, "Sync: init_download");
+
 		// compare the header's head to the full one to see what we're missing
 		let header_head = self.chain.get_header_head()?;
 		let full_head = self.chain.head()?;
@@ -164,7 +182,7 @@ impl Syncer {
 		let mut prev_h = header_head.last_block_h;
 		while prev_h != full_head.last_block_h {
 			let header = self.chain.get_block_header(&prev_h)?;
-			if header.height < full_head.height {
+			if header.height <= full_head.height {
 				break;
 			}
 			blocks_to_download.push(header.hash());
@@ -173,8 +191,8 @@ impl Syncer {
 
 		debug!(
 			LOGGER,
-			"Added {} full block hashes to download.",
-			blocks_to_download.len()
+			"Sync: init_download: blocks_to_download {} (***** is this growing like crazy? *****)",
+			blocks_to_download.len(),
 		);
 		Ok(())
 	}

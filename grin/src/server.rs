@@ -215,7 +215,8 @@ impl Server {
 		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.unwrap().port));
 		thread::spawn(move || {
 			let secs_5 = time::Duration::from_secs(5);
-			while net_adapter.syncing() {
+			while net_adapter.initial_syncing() {
+				debug!(LOGGER, "miner waiting for initial sync to complete");
 				thread::sleep(secs_5);
 			}
 			miner.run_loop(config.clone(), cuckoo_size as u32, proof_size);
