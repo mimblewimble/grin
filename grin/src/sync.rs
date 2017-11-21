@@ -85,21 +85,6 @@ impl Syncer {
 			thread::sleep(Duration::from_millis(200));
 		}
 
-		// // Now check we actually have at least one peer to sync from.
-		// // If not then end the sync cleanly.
-		// if self.p2p.peer_count() == 0 {
-		// 	info!(LOGGER, "Sync: no peers to sync with, done.");
-        //
-		// 	let mut sync = self.sync.lock().unwrap();
-		// 	*sync = false;
-        //
-		// 	return Ok(())
-		// }
-
-		// if let Some(_) = self.p2p.most_work_peer() {
-		// 	self.init_download()?;
-		// }
-
 		// main syncing loop, requests more headers and bodies periodically as long
 		// as a peer with higher difficulty exists and we're not fully caught up
 		info!(LOGGER, "Starting sync loop.");
@@ -108,7 +93,7 @@ impl Syncer {
 
 			if let Some(peer) = self.p2p.most_work_peer() {
 				// TODO - is it a bad idea to do this within the loop?
-				// self.init_download()?;
+				self.init_download()?;
 
 				let peer = peer.read().unwrap();
 				debug!(
