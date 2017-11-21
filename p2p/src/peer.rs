@@ -94,7 +94,7 @@ impl Peer {
 		let state = self.state.clone();
 		let adapter = Arc::new(self.tracking_adapter.clone());
 
-		Box::new(self.proto.handle(conn, adapter).then(move |res| {
+		Box::new(self.proto.handle(conn, adapter, addr).then(move |res| {
 			// handle disconnection, standard disconnections aren't considered an error
 			let mut state = state.write().unwrap();
 			match res {
@@ -134,8 +134,8 @@ impl Peer {
 		self.proto.transmitted_bytes()
 	}
 
-	pub fn send_ping(&self) -> Result<(), Error> {
-		self.proto.send_ping()
+	pub fn send_ping(&self, total_difficulty: Difficulty) -> Result<(), Error> {
+		self.proto.send_ping(total_difficulty)
 	}
 
 	/// Sends the provided block to the remote peer. The request may be dropped
@@ -251,5 +251,9 @@ impl NetAdapter for TrackingAdapter {
 
 	fn peer_connected(&self, pi: &PeerInfo) {
 		self.adapter.peer_connected(pi)
+	}
+
+	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty) {
+		self.adapter.peer_difficulty(addr, diff)
 	}
 }

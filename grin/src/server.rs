@@ -16,6 +16,7 @@
 //! the peer-to-peer server, the blockchain and the transaction pool) and acts
 //! as a facade.
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -108,16 +109,21 @@ impl Server {
 
 		pool_adapter.set_chain(shared_chain.clone());
 
+		// Currently connected peers. Used by both the net_adapter and the p2p_server.
+		let connected_peers = Arc::new(RwLock::new(HashMap::new()));
+
 		let peer_store = Arc::new(p2p::PeerStore::new(config.db_root.clone())?);
 		let net_adapter = Arc::new(NetToChainAdapter::new(
 			shared_chain.clone(),
 			tx_pool.clone(),
 			peer_store.clone(),
+			connected_peers.clone(),
 		));
 
 		let p2p_server = Arc::new(p2p::Server::new(
 			config.capabilities,
 			config.p2p_config.unwrap(),
+			connected_peers.clone(),
 			net_adapter.clone(),
 			genesis.hash(),
 		));

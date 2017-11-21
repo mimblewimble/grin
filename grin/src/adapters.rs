@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -21,7 +22,7 @@ use core::core::{self, Output};
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use p2p::{self, NetAdapter, PeerData, PeerStore, Server, State};
+use p2p::{self, NetAdapter, Peer, PeerData, PeerStore, Server, State};
 use pool;
 use util::secp::pedersen::Commitment;
 use util::OneTime;
@@ -35,8 +36,8 @@ use util::LOGGER;
 pub struct NetToChainAdapter {
 	chain: Arc<chain::Chain>,
 	peer_store: Arc<PeerStore>,
+	connected_peers: Arc<RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-
 	syncer: OneTime<Arc<sync::Syncer>>,
 }
 
@@ -247,6 +248,24 @@ impl NetAdapter for NetToChainAdapter {
 			error!(LOGGER, "Could not save connected peer: {:?}", e);
 		}
 	}
+
+	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty) {
+		debug!(
+			LOGGER,
+			"peer total_diff (ping/pong): {}, {} vs us {}",
+			addr,
+			diff,
+			self.total_difficulty(),
+		);
+
+		if diff.into_num() > 0 {
+			let peers = self.connected_peers.write().unwrap();
+			if let Some(peer) = peers.get(&addr) {
+				let mut peer = peer.write().unwrap();
+				peer.info.total_difficulty = diff;
+			}
+		}
+	}
 }
 
 impl NetToChainAdapter {
@@ -254,10 +273,12 @@ impl NetToChainAdapter {
 		chain_ref: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 		peer_store: Arc<PeerStore>,
+		connected_peers: Arc<RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>>,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
 			chain: chain_ref,
 			peer_store: peer_store,
+			connected_peers: connected_peers,
 			tx_pool: tx_pool,
 			syncer: OneTime::new(),
 		}

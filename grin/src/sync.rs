@@ -107,6 +107,7 @@ impl Syncer {
 
 			// TODO do something better (like trying to get more) if we lose peers
 			let peer = self.p2p.most_work_peer().expect("No peers available for sync.");
+			let peer = peer.read().unwrap();
 			debug!(
 				LOGGER,
 				"Sync: peer {} vs us {}",
@@ -245,6 +246,7 @@ impl Syncer {
 		let peer = self.p2p.most_work_peer();
 		let locator = self.get_locator(&tip)?;
 		if let Some(p) = peer {
+			let p = p.read().unwrap();
 			debug!(
 				LOGGER,
 				"Asking peer {} for more block headers, locator: {:?}",
@@ -313,6 +315,7 @@ impl Syncer {
 	/// Pick a random peer and ask for a block by hash
 	fn request_block(&self, h: Hash) {
 		let peer = self.p2p.random_peer().unwrap();
+		let peer = peer.read().unwrap();
 		let send_result = peer.send_block_request(h);
 		if let Err(e) = send_result {
 			debug!(LOGGER, "Error requesting block: {:?}", e);
