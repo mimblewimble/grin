@@ -247,6 +247,7 @@ impl Handler for PeersConnectedHandler {
 	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
 		let mut peers = vec![];
 		for p in &self.p2p_server.all_peers() {
+			let p = p.read().unwrap();
 			let peer_info = p.info.clone();
 			peers.push(peer_info);
 		}

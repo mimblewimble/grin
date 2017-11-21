@@ -66,7 +66,7 @@ impl NetAdapter for DummyAdapter {
 pub struct Server {
 	config: P2PConfig,
 	capabilities: Capabilities,
-	peers: Arc<RwLock<HashMap<SocketAddr, Arc<Peer>>>>,
+	peers: Arc<RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>>,
 	handshake: Arc<Handshake>,
 	adapter: Arc<NetAdapter>,
 	stop: RefCell<Option<futures::sync::oneshot::Sender<()>>>,
@@ -81,13 +81,14 @@ impl Server {
 	pub fn new(
 		capab: Capabilities,
 		config: P2PConfig,
+		peers: Arc<RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>>,
 		adapter: Arc<NetAdapter>,
 		genesis: Hash,
 	) -> Server {
 		Server {
 			config: config,
 			capabilities: capab,
-			peers: Arc::new(RwLock::new(HashMap::new())),
+			peers: peers,
 			handshake: Arc::new(Handshake::new(genesis)),
 			adapter: adapter,
 			stop: RefCell::new(None),
@@ -105,7 +106,6 @@ impl Server {
 		let peers = self.peers.clone();
 		let adapter = self.adapter.clone();
 		let capab = self.capabilities.clone();
-
 
 		// main peer acceptance future handling handshake
 		let hp = h.clone();
@@ -127,7 +127,10 @@ impl Server {
 			let timed_peer = with_timeout(Box::new(added), &hp);
 
 			// run the main peer protocol
-			timed_peer.and_then(move |(conn, peer)| peer.clone().run(conn))
+			timed_peer.and_then(move |(conn, peer)| {
+				let peer = peer.read().unwrap();
+				peer.run(conn)
+			})
 		});
 
 		// spawn each peer future to its own task
@@ -182,7 +185,7 @@ impl Server {
 		&self,
 		addr: SocketAddr,
 		h: reactor::Handle,
-	) -> Box<Future<Item = Option<Arc<Peer>>, Error = Error>> {
+	) -> Box<Future<Item = Option<Arc<RwLock<Peer>>>, Error = Error>> {
 		if let Some(p) = self.get_peer(addr) {
 			// if we're already connected to the addr, just return the peer
 			return Box::new(future::ok(Some(p)));
@@ -216,11 +219,12 @@ impl Server {
 				with_timeout(Box::new(added), &h)
 			})
 			.and_then(move |(socket, peer)| {
-				h2.spawn(peer.run(socket).map_err(|e| {
+				let peer_inner = peer.read().unwrap();
+				h2.spawn(peer_inner.run(socket).map_err(|e| {
 					error!(LOGGER, "Peer error: {:?}", e);
 					()
 				}));
-				Ok(Some(peer))
+				Ok(Some(peer.clone()))
 			});
 		Box::new(request)
 	}
@@ -230,32 +234,34 @@ impl Server {
 		self.get_peer(addr).is_some()
 	}
 
-	pub fn all_peers(&self) -> Vec<Arc<Peer>> {
+	pub fn all_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
 		self.peers.read().unwrap().values().map(|p| p.clone()).collect()
 	}
 
 	/// Get a peer we're connected to by address.
-	pub fn get_peer(&self, addr: SocketAddr) -> Option<Arc<Peer>> {
+	pub fn get_peer(&self, addr: SocketAddr) -> Option<Arc<RwLock<Peer>>> {
 		self.peers.read().unwrap().get(&addr).map(|p| p.clone())
 	}
 
 	/// Have the server iterate over its peer list and prune all peers we have
 	/// lost connection to or have been deemed problematic. The removed peers
 	/// are returned.
-	pub fn clean_peers(&self) -> Vec<Arc<Peer>> {
+	pub fn clean_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
 		let mut rm = vec![];
 
 		// build a list of peers to be cleaned up
 		for peer in self.all_peers() {
-			if !peer.is_connected() {
-				debug!(LOGGER, "cleaning {:?}, not connected", peer.info.addr);
-				rm.push(peer);
+			let peer_inner = peer.read().unwrap();
+			if !peer_inner.is_connected() {
+				debug!(LOGGER, "cleaning {:?}, not connected", peer_inner.info.addr);
+				rm.push(peer.clone());
 			}
 		}
 
 		// now clean up peer map based on the list to remove
 		let mut peers = self.peers.write().unwrap();
 		for p in rm.clone() {
+			let p = p.read().unwrap();
 			peers.remove(&p.info.addr);
 		}
 
@@ -264,22 +270,21 @@ impl Server {
 
 	/// Returns the peer with the most worked branch, showing the highest total
 	/// difficulty.
-	pub fn most_work_peer(&self) -> Option<Arc<Peer>> {
-		let peers = self.all_peers();
+	pub fn most_work_peer(&self) -> Option<Arc<RwLock<Peer>>> {
+		let mut peers = self.all_peers();
 		if peers.len() == 0 {
 			return None;
 		}
-		let mut res = peers[0].clone();
-		for p in peers.deref() {
-			if p.is_connected() && res.info.total_difficulty < p.info.total_difficulty {
-				res = (*p).clone();
-			}
-		}
-		Some(res)
+		peers.sort_by_key(|p| {
+			let p = p.read().unwrap();
+			p.info.total_difficulty.clone()
+		});
+		let peer = peers.last().unwrap();
+		Some(peer.clone())
 	}
 
 	/// Returns a random peer we're connected to.
-	pub fn random_peer(&self) -> Option<Arc<Peer>> {
+	pub fn random_peer(&self) -> Option<Arc<RwLock<Peer>>> {
 		let peers = self.all_peers();
 		if peers.len() == 0 {
 			None
@@ -295,7 +300,8 @@ impl Server {
 	pub fn broadcast_block(&self, b: &core::Block) {
 		let peers = self.all_peers();
 		let mut count = 0;
-		for p in peers.deref() {
+		for p in peers {
+			let p = p.read().unwrap();
 			if p.is_connected() {
 				if let Err(e) = p.send_block(b) {
 					debug!(LOGGER, "Error sending block to peer: {:?}", e);
@@ -312,7 +318,8 @@ impl Server {
 	/// remote peer already has the transaction.
 	pub fn broadcast_transaction(&self, tx: &core::Transaction) {
 		let peers = self.all_peers();
-		for p in peers.deref() {
+		for p in peers {
+			let p = p.read().unwrap();
 			if p.is_connected() {
 				if let Err(e) = p.send_transaction(tx) {
 					debug!(LOGGER, "Error sending block to peer: {:?}", e);
@@ -330,7 +337,8 @@ impl Server {
 	pub fn stop(self) {
 		info!(LOGGER, "calling stop on server");
 		let peers = self.all_peers();
-		for p in peers.deref() {
+		for p in peers {
+			let p = p.write().unwrap();
 			p.stop();
 		}
 		self.stop.into_inner().unwrap().send(()).unwrap();
@@ -339,17 +347,17 @@ impl Server {
 
 // Adds the peer built by the provided future in the peers map
 fn add_to_peers<A>(
-	peers: Arc<RwLock<HashMap<SocketAddr, Arc<Peer>>>>,
+	peers: Arc<RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>>,
 	adapter: Arc<NetAdapter>,
 	peer_fut: A,
-) -> Box<Future<Item = Result<(TcpStream, Arc<Peer>), ()>, Error = Error>>
+) -> Box<Future<Item = Result<(TcpStream, Arc<RwLock<Peer>>), ()>, Error = Error>>
 where
 	A: IntoFuture<Item = (TcpStream, Peer), Error = Error> + 'static,
 {
 	let peer_add = peer_fut.into_future().map(move |(conn, peer)| {
 		adapter.peer_connected(&peer.info);
 		let addr = peer.info.addr.clone();
-		let apeer = Arc::new(peer);
+		let apeer = Arc::new(RwLock::new(peer));
 		let mut peers = peers.write().unwrap();
 		peers.insert(addr, apeer.clone());
 		Ok((conn, apeer))
@@ -360,11 +368,12 @@ where
 // Ping all our connected peers. Always automatically expects a pong back or
 // disconnects. This acts as a liveness test.
 fn check_peers(
-	peers: Arc<RwLock<HashMap<SocketAddr, Arc<Peer>>>>,
+	peers: Arc<RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>>,
 	total_difficulty: Difficulty,
 ) {
 	let peers_map = peers.read().unwrap();
 	for p in peers_map.values() {
+		let p = p.read().unwrap();
 		if p.is_connected() {
 			let _ = p.send_ping(total_difficulty.clone());
 		}
