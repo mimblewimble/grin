@@ -81,7 +81,12 @@ impl NetAdapter for NetToChainAdapter {
 
 		if self.syncing() {
 			match res {
-				Ok(_) => self.syncer.borrow().block_received(bhash),
+				Ok((_, orphans)) => {
+					self.syncer.borrow().block_received(bhash);
+					for o in orphans {
+						self.syncer.borrow().block_received(o);
+					}
+				}
 				Err(chain::Error::Unfit(_)) => self.syncer.borrow().block_received(bhash),
 				Err(_) => {}
 			}
