@@ -38,7 +38,7 @@ pub struct NetToChainAdapter {
 	peer_store: Arc<PeerStore>,
 	connected_peers: Arc<RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-	pub syncer: Option<Arc<RwLock<sync::Syncer>>>,
+	syncer: OneTime<Arc<sync::Syncer>>,
 }
 
 impl NetAdapter for NetToChainAdapter {
@@ -83,18 +83,8 @@ impl NetAdapter for NetToChainAdapter {
 		// TODO - revisit the logic here around initial sync
 		if self.initial_syncing() {
 			match res {
-				Ok(_) => {
-					if let Some(ref syncer) = self.syncer {
-						let syncer = syncer.read().unwrap();
-						syncer.block_received(bhash)
-					}
-				},
-				Err(chain::Error::Unfit(_)) => {
-					if let Some(ref syncer) = self.syncer {
-						let syncer = syncer.read().unwrap();
-						syncer.block_received(bhash)
-					}
-				},
+				Ok(_) => self.syncer.borrow().block_received(bhash),
+				Err(chain::Error::Unfit(_)) => self.syncer.borrow().block_received(bhash),
 				Err(_) => {}
 			}
 		}
@@ -147,10 +137,7 @@ impl NetAdapter for NetToChainAdapter {
 		);
 
 		if self.initial_syncing() {
-			if let Some(ref syncer) = self.syncer {
-				let syncer = syncer.read().unwrap();
-				syncer.headers_received(added_hs);
-			}
+			self.syncer.borrow().headers_received(added_hs);
 		}
 	}
 
@@ -294,34 +281,25 @@ impl NetToChainAdapter {
 			peer_store: peer_store,
 			connected_peers: connected_peers,
 			tx_pool: tx_pool,
-			syncer: None,
+			syncer: OneTime::new(),
 		}
 	}
 
 	/// Start syncing the chain by instantiating and running the Syncer in the
 	/// background (a new thread is created).
-	pub fn start_sync(&self) {
-		if let Some(ref syncer) = self.syncer {
-			let syncer = syncer.clone();
-
-			let _ = thread::Builder::new()
-				.name("syncer".to_string())
-				.spawn(move || {
-					let _ = syncer.read().unwrap().run();
-				});
-		}
+	pub fn start_sync(&self, sync: sync::Syncer) {
+		let arc_sync = Arc::new(sync);
+		self.syncer.init(arc_sync.clone());
+		let _ = thread::Builder::new()
+			.name("syncer".to_string())
+			.spawn(move || {
+				let _ = arc_sync.run();
+			});
 	}
 
 	pub fn initial_syncing(&self) -> bool {
 		// self.syncer.is_initialized() && self.syncer.borrow().initial_syncing()
-		// self.syncer.borrow().initial_syncing()
-
-		if let Some(ref syncer) = self.syncer {
-			let syncer = syncer.read().unwrap();
-			syncer.initial_syncing()
-		} else {
-			false
-		}
+		self.syncer.borrow().initial_syncing()
 	}
 
 	/// Prepare options for the chain pipeline
