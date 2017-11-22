@@ -278,6 +278,10 @@ impl Server {
 			let p = p.read().unwrap();
 			p.info.total_difficulty.clone()
 		});
+
+		// TODO we should shuffle here
+		// we want a random peer with highest total_difficulty
+
 		let peer = peers.last().unwrap();
 		Some(peer.clone())
 	}
@@ -329,16 +333,16 @@ impl Server {
 
 	/// Number of peers we're currently connected to.
 	pub fn peer_count(&self) -> u32 {
-		self.peers.read().unwrap().len() as u32
+		self.all_peers().len() as u32
 	}
 
 	/// Stops the server. Disconnect from all peers at the same time.
 	pub fn stop(self) {
 		info!(LOGGER, "calling stop on server");
 		let peers = self.all_peers();
-		for p in peers {
-			let p = p.write().unwrap();
-			p.stop();
+		for peer in peers {
+			let peer = peer.read().unwrap();
+			peer.stop();
 		}
 		self.stop.into_inner().unwrap().send(()).unwrap();
 	}
@@ -357,8 +361,10 @@ where
 		adapter.peer_connected(&peer.info);
 		let addr = peer.info.addr.clone();
 		let apeer = Arc::new(RwLock::new(peer));
-		let mut peers = peers.write().unwrap();
-		peers.insert(addr, apeer.clone());
+		{
+			let mut peers = peers.write().unwrap();
+			peers.insert(addr, apeer.clone());
+		}
 		Ok((conn, apeer))
 	});
 	Box::new(peer_add)
