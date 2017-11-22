@@ -94,6 +94,8 @@ impl SumTrees {
 		let rpos = self.commit_index.get_output_pos(commit);
 		match rpos {
 			Ok(pos) => {
+				// checking the position is within the MMR, the commit index could be
+				// returning rewound data
 				if pos > self.output_pmmr_h.last_pos {
 					Ok(false)
 				} else {
@@ -259,6 +261,8 @@ impl<'a> Extension<'a> {
 
 		for out in &b.outputs {
 			if let Ok(pos) = self.commit_index.get_output_pos(&out.commitment()) {
+				// checking the position is within the MMR, the commit index could be
+				// returning rewound data
 				if pos <= self.output_pmmr.unpruned_size() {
 					return Err(Error::DuplicateCommitment(out.commitment()));
 				}
@@ -284,6 +288,8 @@ impl<'a> Extension<'a> {
 		for kernel in &b.kernels {
 			if let Ok(pos) = self.commit_index.get_kernel_pos(&kernel.excess) {
 				if pos <= self.kernel_pmmr.unpruned_size() {
+					// checking the position is within the MMR, the commit index could be
+					// returning rewound data
 					return Err(Error::DuplicateKernel(kernel.excess.clone()));
 				}
 			}
