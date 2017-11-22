@@ -259,7 +259,7 @@ impl NetAdapter for NetToChainAdapter {
 		);
 
 		if diff.into_num() > 0 {
-			let peers = self.connected_peers.write().unwrap();
+			let peers = self.connected_peers.read().unwrap();
 			if let Some(peer) = peers.get(&addr) {
 				let mut peer = peer.write().unwrap();
 				peer.info.total_difficulty = diff;
@@ -293,7 +293,7 @@ impl NetToChainAdapter {
 			.name("syncer".to_string())
 			.spawn(move || {
 				let res = arc_sync.run();
-				if let Err(e) = arc_sync.run() {
+				if let Err(e) = res {
 					panic!("Error during sync, aborting: {:?}", e);
 				}
 			});
