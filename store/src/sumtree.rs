@@ -307,7 +307,7 @@ where
 		}
 
 		if let Some(rewind) = self.rewind {
-			println!("sumtree backed get: rewind exists {:?}, position {}", rewind, position);
+			println!("***** sumtree backed get: rewind exists {:?}, position {}", rewind, position);
 			if rewind.0 < position {
 				return None
 			}
