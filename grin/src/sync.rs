@@ -316,7 +316,7 @@ impl Syncer {
 
 	/// Pick a random peer and ask for a block by hash
 	fn request_block(&self, h: Hash) {
-		let peer = self.p2p.random_peer().unwrap();
+		let peer = self.p2p.random_peer().expect("No connected peer.");
 		let peer = peer.read().unwrap();
 		if let Err(e) = peer.send_block_request(h) {
 			debug!(LOGGER, "Sync: Error requesting block: {:?}", e);
