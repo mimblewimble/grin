@@ -488,6 +488,11 @@ impl WalletData {
 		self.outputs.insert(out.key_id.to_hex(), out.clone());
 	}
 
+	// TODO - careful with this, only for Unconfirmed (maybe Locked)?
+	pub fn delete_output(&mut self, id: &keychain::Identifier) {
+		self.outputs.remove(&id.to_hex());
+	}
+
 	/// Lock an output data.
 	/// TODO - we should track identifier on these outputs (not just n_child)
 	pub fn lock_output(&mut self, out: &OutputData) {

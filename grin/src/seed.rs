@@ -96,6 +96,7 @@ impl Seeder {
 				// if needed
 				let disconnected = p2p_server.clean_peers();
 				for p in disconnected {
+					let p = p.read().unwrap();
 					if p.is_banned() {
 						debug!(LOGGER, "Marking peer {} as banned.", p.info.addr);
 						let update_result =
@@ -282,6 +283,7 @@ fn connect_and_req(
 	let fut = timeout.then(move |p| {
 		match p {
 			Ok(Some(p)) => {
+				let p = p.read().unwrap();
 				let peer_result = p.send_peer_request(capab);
 				match peer_result {
 					Ok(()) => {}

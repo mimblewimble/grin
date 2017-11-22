@@ -17,7 +17,7 @@ use serde_json;
 use api;
 use client;
 use checker;
-use core::core::{build, Transaction, amount_to_hr_string};
+use core::core::{build, Transaction};
 use core::ser;
 use keychain::{BlindingFactor, Identifier, Keychain};
 use receiver::TxWrapper;
@@ -47,7 +47,7 @@ pub fn issue_send_tx(
 	// proof of concept - set lock_height on the tx
 	let lock_height = chain_tip.height;
 
-	let (tx, blind_sum, coins) = build_send_tx(
+	let (tx, blind_sum, coins, change_key) = build_send_tx(
 		config,
 		keychain,
 		amount,
@@ -60,12 +60,18 @@ pub fn issue_send_tx(
 
 	let partial_tx = build_partial_tx(amount, blind_sum, tx);
 
-	// Acquire wallet lock and lock the coins being spent
-	// so we avoid accidental double spend attempt
+	// Closure to acquire wallet lock and lock the coins being spent
+	// so we avoid accidental double spend attempt.
 	let update_wallet = || WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		for coin in coins {
 			wallet_data.lock_output(&coin);
 		}
+	});
+
+	// Closure to acquire wallet lock and delete the change output in case of tx failure.
+	let rollback_wallet = || WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+		info!(LOGGER, "cleaning up unused change output from wallet");
+		wallet_data.delete_output(&change_key);
 	});
 
 	if dest == "stdout" {
@@ -75,13 +81,14 @@ pub fn issue_send_tx(
 	} else if &dest[..4] == "http" {
 		let url = format!("{}/v1/receive/transaction", &dest);
 		debug!(LOGGER, "Posting partial transaction to {}", url);
-		let result=client::send_partial_tx(&url, &partial_tx);
-		match result {
-			Err(_)=> {
+		let res = client::send_partial_tx(&url, &partial_tx);
+		match res {
+			Err(_) => {
 				error!(LOGGER, "Communication with receiver failed. Aborting transaction");
-				return Ok(());
+				rollback_wallet()?;
+				return res;
 			}
-			Ok(_)=> {
+			Ok(_) => {
 				update_wallet()?;
 			}
 		}
@@ -103,7 +110,7 @@ fn build_send_tx(
 	lock_height: u64,
 	max_outputs: usize,
 	default_strategy: bool,
-) -> Result<(Transaction, BlindingFactor, Vec<OutputData>), Error> {
+) -> Result<(Transaction, BlindingFactor, Vec<OutputData>, Identifier), Error> {
 	let key_id = keychain.clone().root_key_id();
 
 	// select some spendable coins from the wallet
@@ -119,23 +126,15 @@ fn build_send_tx(
 	})?;
 
 	// build transaction skeleton with inputs and change
-	let parts = inputs_and_change(&coins, config, keychain, amount);
-
-	if let Err(p) = parts {
-		let total: u64 = coins.iter().map(|c| c.value).sum();
-		error!(LOGGER, "Transaction not sent - Not enough funds (Max: {})", amount_to_hr_string(total));
-		return Err(p);
-	}
-
-	let mut parts=parts.unwrap();
+	let (mut parts, change_key) = inputs_and_change(&coins, config, keychain, amount)?;
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
-	parts.0.push(build::with_lock_height(lock_height));
+	parts.push(build::with_lock_height(lock_height));
 
-	let (tx, blind) = build::transaction(parts.0, &keychain)?;
+	let (tx, blind) = build::transaction(parts, &keychain)?;
 
-	Ok((tx, blind, coins))
+	Ok((tx, blind, coins, change_key))
 }
 
 pub fn issue_burn_tx(
@@ -168,14 +167,14 @@ pub fn issue_burn_tx(
 
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
-	let mut parts = inputs_and_change(&coins, config, keychain, amount)?;
+	let (mut parts, _) = inputs_and_change(&coins, config, keychain, amount)?;
 
 	// add burn output and fees
 	let fee = tx_fee(coins.len(), 2, None);
-	parts.0.push(build::output(amount - fee, Identifier::zero()));
+	parts.push(build::output(amount - fee, Identifier::zero()));
 
 	// finalize the burn transaction and send
-	let (tx_burn, _) = build::transaction(parts.0, &keychain)?;
+	let (tx_burn, _) = build::transaction(parts, &keychain)?;
 	tx_burn.validate()?;
 
 	let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
@@ -190,14 +189,13 @@ fn inputs_and_change(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
-) -> Result<(Vec<Box<build::Append>>,Identifier, u32, u64), Error> {
+) -> Result<(Vec<Box<build::Append>>, Identifier), Error> {
 	let mut parts = vec![];
 
 	// calculate the total across all inputs, and how much is left
 	let total: u64 = coins.iter().map(|c| c.value).sum();
-	let shortage = (total as i64) - (amount as i64);
-	if shortage < 0 {
-		return Err(Error::NotEnoughFunds((-shortage) as u64));
+	if total < amount {
+		return Err(Error::NotEnoughFunds(total as u64));
 	}
 
 	// sender is responsible for setting the fee on the partial tx
@@ -219,7 +217,7 @@ fn inputs_and_change(
 	}
 
 	// track the output representing our change
-	let (change_key, change_derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+	let change_key = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		let root_key_id = keychain.root_key_id();
 		let change_derivation = wallet_data.next_child(root_key_id.clone());
 		let change_key = keychain.derive_key_id(change_derivation).unwrap();
@@ -235,12 +233,12 @@ fn inputs_and_change(
 			is_coinbase: false,
 		});
 
-		(change_key, change_derivation)
+		change_key
 	})?;
 
 	parts.push(build::output(change, change_key.clone()));
 
-	Ok((parts, change_key, change_derivation, change))
+	Ok((parts, change_key))
 }
 
 #[cfg(test)]
