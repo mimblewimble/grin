@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -93,7 +93,13 @@ impl SumTrees {
 	pub fn is_unspent(&self, commit: &Commitment) -> Result<bool, Error> {
 		let rpos = self.commit_index.get_output_pos(commit);
 		match rpos {
-			Ok(pos) => Ok(self.output_pmmr_h.backend.get(pos).is_some()),
+			Ok(pos) => {
+				if pos > self.output_pmmr_h.last_pos {
+					Ok(false)
+				} else {
+					Ok(self.output_pmmr_h.backend.get(pos).is_some())
+				}
+			}
 			Err(grin_store::Error::NotFoundErr) => Ok(false),
 			Err(e) => Err(Error::StoreErr(e, "sumtree unspent check".to_owned())),
 		}
@@ -252,8 +258,10 @@ impl<'a> Extension<'a> {
 		}
 
 		for out in &b.outputs {
-			if let Ok(_) = self.commit_index.get_output_pos(&out.commitment()) {
-				return Err(Error::DuplicateCommitment(out.commitment()));
+			if let Ok(pos) = self.commit_index.get_output_pos(&out.commitment()) {
+				if pos <= self.output_pmmr.unpruned_size() {
+					return Err(Error::DuplicateCommitment(out.commitment()));
+				}
 			}
 			// push new outputs commitments in their MMR and save them in the index
 			let pos = self.output_pmmr
@@ -274,8 +282,10 @@ impl<'a> Extension<'a> {
 		}
 
 		for kernel in &b.kernels {
-			if let Ok(_) = self.commit_index.get_kernel_pos(&kernel.excess) {
-				return Err(Error::DuplicateKernel(kernel.excess.clone()));
+			if let Ok(pos) = self.commit_index.get_kernel_pos(&kernel.excess) {
+				if pos <= self.kernel_pmmr.unpruned_size() {
+					return Err(Error::DuplicateKernel(kernel.excess.clone()));
+				}
 			}
 			// push kernels in their MMR
 			let pos = self.kernel_pmmr
