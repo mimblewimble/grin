@@ -89,6 +89,8 @@ impl SumTrees {
 		})
 	}
 
+	// TODO - is it enough to just get the hashsum from the pmmt backend?
+	// TODO - or do we actually need to check the hash in the hashsum?
 	/// Whether a given commitment exists in the Output MMR and it's unspent
 	pub fn is_unspent(&self, commit: &Commitment) -> Result<bool, Error> {
 		let rpos = self.commit_index.get_output_pos(commit);
@@ -225,6 +227,39 @@ impl<'a> Extension<'a> {
 		}
 	}
 
+	fn is_duplicate_output(&self, commit: &Commitment) -> Result<bool, Error> {
+		let rpos = self.commit_index.get_output_pos(commit);
+		match rpos {
+			Ok(pos) => {
+				debug!(
+					LOGGER,
+					"found it in the index, checking the pmmr, {}, {:?}, {:?}",
+					pos,
+					commit.hash(),
+					commit,
+				);
+
+				self.output_pmmr.dump(false);
+
+				let insertions: Vec<HashSum<SumCommit>> = self.output_pmmr.get_last_n_insertions(5);
+				println!("{:?}", insertions);
+
+				if let Some(hashsum) = self.output_pmmr.get(pos) {
+					debug!(LOGGER, "hashsum from pmmr {:?}", hashsum);
+					debug!(LOGGER, "commit from hashsum {:?}", hashsum.sum.commit);
+					let res = commit.hash() == hashsum.sum.commit.hash();
+					debug!(LOGGER, "do the commits match? {}", res);
+					Ok(res)
+				} else {
+					Ok(false)
+				}
+			},
+			Err(grin_store::Error::NotFoundErr) => Ok(false),
+			Err(e) => Err(Error::StoreErr(e, "extension duplicate check".to_owned())),
+		}
+	}
+
+
 	/// Apply a new set of blocks on top the existing sum trees. Blocks are
 	/// applied in order of the provided Vec. If pruning is enabled, inputs also
 	/// prune MMR data.
@@ -252,7 +287,8 @@ impl<'a> Extension<'a> {
 		}
 
 		for out in &b.outputs {
-			if let Ok(_) = self.commit_index.get_output_pos(&out.commitment()) {
+			// if let Ok(_) = self.commit_index.get_output_pos(&out.commitment()) {
+			if let Ok(true) = self.is_duplicate_output(&out.commitment()) {
 				return Err(Error::DuplicateCommitment(out.commitment()));
 			}
 			// push new outputs commitments in their MMR and save them in the index
@@ -336,6 +372,13 @@ impl<'a> Extension<'a> {
 			.map_err(&Error::SumTreeErr)?;
 
 		self.dump(true);
+
+		debug!(
+			LOGGER,
+			"rewind, block has outputs - {}",
+			block.outputs.len();
+		);
+
 		Ok(())
 	}
 
