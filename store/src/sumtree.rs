@@ -306,6 +306,13 @@ where
 			return None;
 		}
 
+		if let Some(rewind) = self.rewind {
+			println!("***** sumtree backed get: rewind exists {:?}, position {}", rewind, position);
+			if rewind.0 < position {
+				return None
+			}
+		}
+
 		// The MMR starts at 1, our binary backend starts at 0
 		let pos = position - 1;
 

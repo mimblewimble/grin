@@ -93,7 +93,25 @@ impl SumTrees {
 	pub fn is_unspent(&self, commit: &Commitment) -> Result<bool, Error> {
 		let rpos = self.commit_index.get_output_pos(commit);
 		match rpos {
-			Ok(pos) => Ok(self.output_pmmr_h.backend.get(pos).is_some()),
+			Ok(pos) => {
+				debug!(
+					LOGGER,
+					"found it in the index, checking the pmmr, {}, {:?}, {:?}",
+					pos,
+					commit.hash(),
+					commit,
+				);
+
+				if let Some(hashsum) = self.output_pmmr_h.backend.get(pos) {
+					debug!(LOGGER, "hashsum from pmmr {:?}", hashsum);
+					debug!(LOGGER, "commit from hashsum {:?}", hashsum.sum.commit);
+					let res = commit.hash() == hashsum.sum.commit.hash();
+					debug!(LOGGER, "do the commits match? {}", res);
+					Ok(res)
+				} else {
+					Ok(false)
+				}
+			},
 			Err(grin_store::Error::NotFoundErr) => Ok(false),
 			Err(e) => Err(Error::StoreErr(e, "sumtree unspent check".to_owned())),
 		}
@@ -225,6 +243,67 @@ impl<'a> Extension<'a> {
 		}
 	}
 
+	fn is_duplicate_output(&self, commit: &Commitment) -> Result<bool, Error> {
+		let rpos = self.commit_index.get_output_pos(commit);
+		match rpos {
+			Ok(pos) => {
+				debug!(
+					LOGGER,
+					"found it in the index, checking the pmmr, {}, {:?}, {:?}",
+					pos,
+					commit.hash(),
+					commit,
+				);
+
+				if let Some(hashsum) = self.output_pmmr.get(pos) {
+					debug!(LOGGER, "hashsum from pmmr {:?}", hashsum);
+					debug!(LOGGER, "commit from hashsum {:?}", hashsum.sum.commit);
+					let res = commit.hash() == hashsum.sum.commit.hash();
+					debug!(LOGGER, "do the commits match? {}", res);
+					Ok(res)
+				} else {
+					Ok(false)
+				}
+			},
+			Err(grin_store::Error::NotFoundErr) => Ok(false),
+			Err(e) => Err(Error::StoreErr(e, "extension duplicate check".to_owned())),
+		}
+	}
+
+	fn is_duplicate_kernel(&self, kernel: &TxKernel) -> Result<bool, Error> {
+		debug!(
+			LOGGER,
+			"is_duplicate_kernel {:?}",
+			kernel,
+		);
+
+		let rpos = self.commit_index.get_kernel_pos(&kernel.excess);
+		match rpos {
+			Ok(pos) => {
+				debug!(
+					LOGGER,
+					"found it in the index, checking the pmmr, {}, {:?}, {:?}",
+					pos,
+					kernel.hash(),
+					kernel,
+				);
+
+				if let Some(hashsum) = self.kernel_pmmr.get(pos) {
+					debug!(LOGGER, "hashsum from pmmr {:?}", hashsum);
+
+					let res = hashsum.hash == kernel.hash();
+					debug!(LOGGER, "do the kernels match? {}", res);
+
+					Ok(res)
+				} else {
+					Ok(false)
+				}
+			},
+			Err(grin_store::Error::NotFoundErr) => Ok(false),
+			Err(e) => Err(Error::StoreErr(e, "extension duplicate check".to_owned())),
+		}
+	}
+
 	/// Apply a new set of blocks on top the existing sum trees. Blocks are
 	/// applied in order of the provided Vec. If pruning is enabled, inputs also
 	/// prune MMR data.
@@ -252,7 +331,8 @@ impl<'a> Extension<'a> {
 		}
 
 		for out in &b.outputs {
-			if let Ok(_) = self.commit_index.get_output_pos(&out.commitment()) {
+			// if let Ok(_) = self.commit_index.get_output_pos(&out.commitment()) {
+			if let Ok(true) = self.is_duplicate_output(&out.commitment()) {
 				return Err(Error::DuplicateCommitment(out.commitment()));
 			}
 			// push new outputs commitments in their MMR and save them in the index
@@ -274,7 +354,8 @@ impl<'a> Extension<'a> {
 		}
 
 		for kernel in &b.kernels {
-			if let Ok(_) = self.commit_index.get_kernel_pos(&kernel.excess) {
+			// if let Ok(_) = self.commit_index.get_kernel_pos(&kernel.excess) {
+			if let Ok(true) = self.is_duplicate_kernel(&kernel) {
 				return Err(Error::DuplicateKernel(kernel.excess.clone()));
 			}
 			// push kernels in their MMR
@@ -336,6 +417,13 @@ impl<'a> Extension<'a> {
 			.map_err(&Error::SumTreeErr)?;
 
 		self.dump(true);
+
+		debug!(
+			LOGGER,
+			"rewind, block has outputs - {}",
+			block.outputs.len();
+		);
+
 		Ok(())
 	}
 
