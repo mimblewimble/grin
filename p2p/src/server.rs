@@ -24,7 +24,7 @@ use std::time::Duration;
 use futures;
 use futures::{Future, Stream};
 use futures::future::{self, IntoFuture};
-use rand::{self, Rng};
+use rand::{thread_rng, Rng};
 use tokio_core::net::{TcpListener, TcpStream};
 use tokio_core::reactor;
 use tokio_timer::Timer;
@@ -274,13 +274,14 @@ impl Server {
 		if peers.len() == 0 {
 			return None;
 		}
+
+		// we want to randomize which "most_work_peer" we select
+		thread_rng().shuffle(&mut peers[..]);
+
 		peers.sort_by_key(|p| {
 			let p = p.read().unwrap();
 			p.info.total_difficulty.clone()
 		});
-
-		// TODO we should shuffle here
-		// we want a random peer with highest total_difficulty
 
 		let peer = peers.last().unwrap();
 		Some(peer.clone())
@@ -290,11 +291,9 @@ impl Server {
 	pub fn random_peer(&self) -> Option<Arc<RwLock<Peer>>> {
 		let peers = self.all_peers();
 		if peers.len() == 0 {
-			None
-		} else {
-			let idx = rand::thread_rng().gen_range(0, peers.len());
-			Some(peers[idx].clone())
+			return None;
 		}
+		Some(thread_rng().choose(&peers).unwrap().clone())
 	}
 
 	/// Broadcasts the provided block to all our peers. A peer implementation
