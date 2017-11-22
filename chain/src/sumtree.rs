@@ -252,12 +252,8 @@ impl<'a> Extension<'a> {
 		}
 
 		for out in &b.outputs {
-			if let Ok(rpos) = self.commit_index.get_output_pos(&out.commitment()) {
-				if let Some(c) = self.output_pmmr.get(rpos){
-					if c.sum.commit == out.commitment() {
-						return Err(Error::DuplicateCommitment(out.commitment()));
-					}
-				}
+			if let Ok(_) = self.commit_index.get_output_pos(&out.commitment()) {
+				return Err(Error::DuplicateCommitment(out.commitment()));
 			}
 			// push new outputs commitments in their MMR and save them in the index
 			let pos = self.output_pmmr
@@ -278,12 +274,8 @@ impl<'a> Extension<'a> {
 		}
 
 		for kernel in &b.kernels {
-			if let Ok(kpos) = self.commit_index.get_kernel_pos(&kernel.excess) {
-				if let Some(k) = self.kernel_pmmr.get(kpos){
-					if k.hash == kernel.hash() {
-						return Err(Error::DuplicateKernel(kernel.excess.clone()));
-					}
-				}
+			if let Ok(_) = self.commit_index.get_kernel_pos(&kernel.excess) {
+				return Err(Error::DuplicateKernel(kernel.excess.clone()));
 			}
 			// push kernels in their MMR
 			let pos = self.kernel_pmmr
