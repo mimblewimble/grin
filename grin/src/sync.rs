@@ -281,29 +281,14 @@ impl Syncer {
 
 		debug!(LOGGER, "Sync: locator heights: {:?}", heights);
 
-		let locator:Vec<Option<Hash>> = heights
+		let locator = heights
 			.into_iter()
-			.map(|h| {
-				trace!(LOGGER, "sync getting header: {}", h);
-				let mut header = self.chain.get_header_by_height(h);
-				if let Err(e) = header.as_mut() {
-					trace!(LOGGER, "Sync: no header in local chain \
-						at height {}, {:?}", h, e);
-					return None;
-				}
-				Some(header.unwrap().hash())
-			})
+			.map(|h| self.chain.get_header_by_height(h))
+			.filter(|h| h.is_ok())
+			.map(|h| h.unwrap().hash())
 			.collect();
-
-		let return_loc:Vec<Hash> = locator
-			.into_iter()
-			.filter(|l| l.is_some())
-			.map(|l|{
-				l.unwrap()
-			})
-			.collect();
-		debug!(LOGGER, "Sync: locator: {:?}", return_loc);
-		Ok(return_loc)
+		debug!(LOGGER, "Sync: locator: {:?}", locator);
+		Ok(locator)
 	}
 
 	/// Pick a random peer and ask for a block by hash
