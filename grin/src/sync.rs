@@ -283,14 +283,11 @@ impl Syncer {
 
 		let locator = heights
 			.into_iter()
-			.map(|h| {
-				let header = self.chain.get_header_by_height(h).unwrap();
-				header.hash()
-			})
+			.map(|h| self.chain.get_header_by_height(h))
+			.filter(|h| h.is_ok())
+			.map(|h| h.unwrap().hash())
 			.collect();
-
 		debug!(LOGGER, "Sync: locator: {:?}", locator);
-
 		Ok(locator)
 	}
 
