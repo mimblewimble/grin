@@ -265,15 +265,13 @@ impl Syncer {
 	/// We added a header, add it to the full block download list
 	pub fn headers_received(&self, bhs: Vec<Hash>) {
 		let mut blocks_to_download = self.blocks_to_download.lock().unwrap();
-		let hs_len = bhs.len();
 		for h in bhs {
 			// enlist for full block download
 			blocks_to_download.insert(0, h);
 		}
-		// ask for more headers if we got as many as required
-		if hs_len == (p2p::MAX_BLOCK_HEADERS as usize) {
-			self.request_headers().unwrap();
-		}
+
+		// we may still have more headers to retrieve but the main loop
+		// will take care of this for us
 	}
 
 	/// Builds a vector of block hashes that should help the remote peer sending
@@ -298,10 +296,11 @@ impl Syncer {
 
 	/// Pick a random peer and ask for a block by hash
 	fn request_block(&self, h: Hash) {
-		let peer = self.p2p.random_peer().expect("No connected peer.");
-		let peer = peer.read().unwrap();
-		if let Err(e) = peer.send_block_request(h) {
-			debug!(LOGGER, "Sync: Error requesting block: {:?}", e);
+		if let Some(peer) = self.p2p.random_peer() {
+			let peer = peer.read().unwrap();
+			if let Err(e) = peer.send_block_request(h) {
+				debug!(LOGGER, "Sync: Error requesting block: {:?}", e);
+			}
 		}
 	}
 }
