@@ -279,38 +279,20 @@ impl Syncer {
 	/// Builds a vector of block hashes that should help the remote peer sending
 	/// us the right block headers.
 	fn get_locator(&self, tip: &chain::Tip) -> Result<Vec<Hash>, Error> {
-		// Prepare the heights we want as the latests height minus increasing powers
-		// of 2 up to max.
-		let mut heights = vec![tip.height];
-		let mut tail = (1..p2p::MAX_LOCATORS)
-			.map(|n| 2u64.pow(n))
-			.filter_map(|n| if n > tip.height {
-				None
-			} else {
-				Some(tip.height - n)
+		let heights = get_locator_heights(tip.height);
+
+		debug!(LOGGER, "Sync: locator heights: {:?}", heights);
+
+		let locator = heights
+			.into_iter()
+			.map(|h| {
+				let header = self.chain.get_header_by_height(h).unwrap();
+				header.hash()
 			})
-			.collect::<Vec<_>>();
-		heights.append(&mut tail);
+			.collect();
 
-		// Include the genesis block (height 0) here as a fallback to guarantee
-		// both nodes share at least one common header hash in the locator
-		heights.push(0);
+		debug!(LOGGER, "Sync: locator: {:?}", locator);
 
-		debug!(LOGGER, "Sync: Loc heights: {:?}", heights);
-
-		// Iteratively travel the header chain back from our head and retain the
-		// headers at the wanted heights.
-		let mut header = self.chain.get_block_header(&tip.last_block_h)?;
-		let mut locator = vec![];
-		while heights.len() > 0 {
-			if header.height == heights[0] {
-				heights = heights[1..].to_vec();
-				locator.push(header.hash());
-			}
-			if header.height > 0 {
-				header = self.chain.get_block_header(&header.previous)?;
-			}
-		}
 		Ok(locator)
 	}
 
@@ -321,5 +303,46 @@ impl Syncer {
 		if let Err(e) = peer.send_block_request(h) {
 			debug!(LOGGER, "Sync: Error requesting block: {:?}", e);
 		}
+	}
+}
+
+// current height back to 0 decreasing in powers of 2
+fn get_locator_heights(height: u64) -> Vec<u64> {
+	let mut current = height.clone();
+	let mut heights = vec![];
+	while current > 0 {
+		heights.push(current);
+		let next = 2u64.pow(heights.len() as u32);
+		current = if current > next {
+			current - next
+		} else {
+			0
+		}
+	}
+	heights.push(0);
+	heights
+}
+
+#[cfg(test)]
+mod test {
+	use super::*;
+
+	#[test]
+	fn test_get_locator_heights() {
+		assert_eq!(get_locator_heights(0), vec![0]);
+		assert_eq!(get_locator_heights(1), vec![1, 0]);
+		assert_eq!(get_locator_heights(2), vec![2, 0]);
+		assert_eq!(get_locator_heights(3), vec![3, 1, 0]);
+		assert_eq!(get_locator_heights(10), vec![10, 8, 4, 0]);
+		assert_eq!(get_locator_heights(100), vec![100, 98, 94, 86, 70, 38, 0]);
+		assert_eq!(
+			get_locator_heights(1000),
+			vec![1000, 998, 994, 986, 970, 938, 874, 746, 490, 0]
+		);
+		// check the locator is still a manageable length, even for large numbers of headers
+		assert_eq!(
+			get_locator_heights(10000),
+			vec![10000, 9998, 9994, 9986, 9970, 9938, 9874, 9746, 9490, 8978, 7954, 5906, 1810, 0]
+		);
 	}
 }
