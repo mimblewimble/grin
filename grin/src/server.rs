@@ -34,7 +34,7 @@ use miner;
 use p2p;
 use pool;
 use seed;
-use sync;
+use simple_sync;
 use types::*;
 use pow;
 use util::LOGGER;
@@ -158,11 +158,17 @@ impl Server {
 			_ => {}
 		}
 
-		// If we have any known seeds or peers then attempt to sync.
-		if config.seeding_type != Seeding::None || peer_store.all_peers().len() > 0 {
-			let sync = sync::Syncer::new(shared_chain.clone(), p2p_server.clone());
-			net_adapter.start_sync(sync);
-		}
+		simple_sync::run_header_sync(
+			net_adapter.clone(),
+			p2p_server.clone(),
+			shared_chain.clone(),
+		);
+
+		simple_sync::run_block_sync(
+			net_adapter.clone(),
+			p2p_server.clone(),
+			shared_chain.clone(),
+		);
 
 		evt_handle.spawn(p2p_server.start(evt_handle.clone()).map_err(|_| ()));
 
@@ -209,15 +215,11 @@ impl Server {
 	pub fn start_miner(&self, config: pow::types::MinerConfig) {
 		let cuckoo_size = global::sizeshift();
 		let proof_size = global::proofsize();
-		let net_adapter = self.net_adapter.clone();
 
 		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
 		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.unwrap().port));
 		thread::spawn(move || {
-			let secs_5 = time::Duration::from_secs(5);
-			while net_adapter.syncing() {
-				thread::sleep(secs_5);
-			}
+			// TODO - sync always runs, so need to consider how the miner interacts with the sync process
 			miner.run_loop(config.clone(), cuckoo_size as u32, proof_size);
 		});
 	}

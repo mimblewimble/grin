@@ -53,7 +53,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 
 	debug!(
 		LOGGER,
-		"Processing block {} at {} with {} inputs and {} outputs.",
+		"pipe: process_block: {}, {}: {} inputs, {} outputs.",
 		b.hash(),
 		b.header.height,
 		b.inputs.len(),
@@ -73,12 +73,12 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		.map_err(|e| Error::StoreErr(e, "pipe reload head".to_owned()))?;
 
 	// start a chain extension unit of work dependent on the success of the
- // internal validation and saving operations
+	// internal validation and saving operations
 	sumtree::extending(&mut sumtrees, |mut extension| {
 		validate_block(b, &mut ctx, &mut extension)?;
 		debug!(
 			LOGGER,
-			"Block at {} with hash {} is valid, going to save and append.",
+			"pipe: process_block: {}, {}: valid, save and append.",
 			b.header.height,
 			b.hash()
 		);
@@ -96,7 +96,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
 	debug!(
 		LOGGER,
-		"Processing header {} at {}.",
+		"pipe: process_header: {}, {}.",
 		bh.hash(),
 		bh.height
 	);
@@ -119,7 +119,7 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 	}
 	if let Ok(b) = ctx.store.get_block(&bh) {
 		// there is a window where a block can be saved but the chain head not
-  // updated yet, we plug that window here by re-accepting the block
+		// updated yet, we plug that window here by re-accepting the block
 		if b.header.total_difficulty <= ctx.head.total_difficulty {
 			return Err(Error::Unfit("already in store".to_string()));
 		}
@@ -157,7 +157,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	if !ctx.opts.intersects(SKIP_POW) {
 		let cycle_size = global::sizeshift();
 
-		debug!(LOGGER, "Validating block with cuckoo size {}", cycle_size);
+		debug!(LOGGER, "Validating block header with cuckoo size {}", cycle_size);
 		if !(ctx.pow_verifier)(header, cycle_size as u32) {
 			return Err(Error::InvalidPow);
 		}
@@ -220,7 +220,7 @@ fn validate_block(
 		ext.apply_block(b)?;
 	} else {
 		// extending a fork, first identify the block where forking occurred
-  // keeping the hashes of blocks along the fork
+		// keeping the hashes of blocks along the fork
 		let mut current = b.header.previous;
 		let mut hashes = vec![];
 		loop {
@@ -238,9 +238,9 @@ fn validate_block(
 
 		debug!(
 			LOGGER,
-			"validate_block: forked_block: {} at {}",
-			forked_block.header.hash(),
+			"pipe: validate_block: forked_block: {}, {}",
 			forked_block.header.height,
+			forked_block.header.hash(),
 		);
 
 		// rewind the sum trees up to the forking block
@@ -290,7 +290,7 @@ fn validate_block(
 					.get_block_header_by_output_commit(&input.commitment())
 				{
 					// TODO - make sure we are not off-by-1 here vs. the equivalent tansaction
-	 // validation rule
+					// validation rule
 					if b.header.height <= output_header.height + global::coinbase_maturity() {
 						return Err(Error::ImmatureCoinbase);
 					}
@@ -317,39 +317,82 @@ fn add_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Erro
 }
 
 /// Directly updates the head if we've just appended a new block to it or handle
-/// the situation where we've just added enough work to have a fork with more
+/// the situation where we have added enough work to have a fork with more
 /// work than the head.
 fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
-	// if we made a fork with more work than the head (which should also be true
- // when extending the head), update it
+	// We got this far, 3 scenarios -
+	// 1) block chain and header chain are consistent
+	//    and we are simply extending it with more work, so update both heads and setup height
+	// 2) block chain and header chain are consistent, but
+	//    this new block is a fork (with more work), so update both heads and setup height
+	// 3) block chain and header chain are not consistent
+	//    we are syncing with a peer that had advertised more work,
+	//    we have (some of) the new header chain and do not want to update
+	//    the head of the header chain (or heights) until we are caught up
+
 	let tip = Tip::from_block(&b.header);
-	if tip.total_difficulty > ctx.head.total_difficulty {
-		// update the block height index
+
+	let block_chain_tip: Tip = ctx.store.head()?;
+	let header_chain_tip: Tip = ctx.store.get_header_head()?;
+
+	// compare the heads of the two chains to see if they are consistent
+	// we may have already received the latest header via sync so account for that
+	let consistent_chains = block_chain_tip.last_block_h == header_chain_tip.last_block_h
+		|| block_chain_tip.last_block_h == header_chain_tip.prev_block_h;
+
+	// this block increases overall work if it is greater than current head of block chain
+	let more_work = tip.total_difficulty > block_chain_tip.total_difficulty;
+
+	let msg = format!(
+		"tip - {}, {}, block  - {}, {}, header - {}, {}",
+		tip.height,
+		tip.last_block_h,
+		block_chain_tip.height,
+		block_chain_tip.last_block_h,
+		header_chain_tip.height,
+		header_chain_tip.last_block_h,
+	);
+
+	if more_work {
+		if consistent_chains {
+			// either we are simply extending the chain with a new block here
+			// or we want to switch immediately to a fork with greater work
+
+			debug!(LOGGER, "pipe: update_head:  >>>>: {}", msg);
+
+			ctx.store
+				.save_head(&tip)
+				.map_err(|e| Error::StoreErr(e, "pipe save head".to_owned()))?;
+		} else {
+			// we are catching up (syncing) to the header chain
+			// so update the body head (but not the header head)
+			// even if the block chain has more work than the header chain
+			// as we may not have received all headers yet from most_work_peer
+
+			debug!(LOGGER, "pipe: update_head:  sync: {}", msg);
+
+			ctx.store
+				.save_body_head(&tip)
+				.map_err(|e| Error::StoreErr(e, "pipe save body".to_owned()))?;
+		}
+
+		// TODO - do we always want to setup heights here?
 		ctx.store
 			.setup_height(&b.header)
 			.map_err(|e| Error::StoreErr(e, "pipe setup height".to_owned()))?;
 
-		// in sync mode, only update the "body chain", otherwise update both the
-  // "header chain" and "body chain", updating the header chain in sync resets
-  // all additional "future" headers we've received
-		if ctx.opts.intersects(SYNC) {
-			ctx.store
-				.save_body_head(&tip)
-				.map_err(|e| Error::StoreErr(e, "pipe save body".to_owned()))?;
-		} else {
-			ctx.store
-				.save_head(&tip)
-				.map_err(|e| Error::StoreErr(e, "pipe save head".to_owned()))?;
-		}
 		ctx.head = tip.clone();
+
 		info!(
 			LOGGER,
 			"Updated head to {} at {}.",
-			b.hash(),
-			b.header.height
+			tip.last_block_h,
+			tip.height,
 		);
 		Ok(Some(tip))
+
 	} else {
+		// work did not increase, don't update heads or heights (probably never happens)
 		Ok(None)
 	}
 }
@@ -361,6 +404,18 @@ fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option
 	// if we made a fork with more work than the head (which should also be true
  // when extending the head), update it
 	let tip = Tip::from_block(bh);
+
+	let msg = format!(
+		"tip - {}, {}, header - {}, {}",
+		tip.height,
+		tip.last_block_h,
+		ctx.head.height,
+		ctx.head.last_block_h,
+	);
+
+	debug!(LOGGER, "pipe: update_header_head: {}", msg);
+
+
 	if tip.total_difficulty > ctx.head.total_difficulty {
 		ctx.store
 			.save_header_head(&tip)

@@ -145,6 +145,7 @@ impl Chain {
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b);
 				}
+
 				self.check_orphans();
 			}
 			Ok(None) => {}

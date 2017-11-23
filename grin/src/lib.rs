@@ -51,7 +51,7 @@ extern crate grin_wallet as wallet;
 mod adapters;
 mod server;
 mod seed;
-mod sync;
+mod simple_sync;
 mod types;
 mod miner;
 
