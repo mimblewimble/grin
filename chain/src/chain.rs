@@ -343,6 +343,7 @@ impl Chain {
 	/// Gets the block header at the provided height
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		self.store.get_header_by_height(height).map_err(|e| {
+			trace!(LOGGER, "no header in local chain at height {}, {:?}", height, e);
 			Error::StoreErr(e, "chain get header by height".to_owned())
 		})
 	}
