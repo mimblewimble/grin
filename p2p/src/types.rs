@@ -26,9 +26,6 @@ use core::core::hash::Hash;
 use core::core::target::Difficulty;
 use core::ser;
 
-/// Maximum number of hashes in a block header locator request
-pub const MAX_LOCATORS: u32 = 10;
-
 /// Maximum number of block headers a peer should ever send
 pub const MAX_BLOCK_HEADERS: u32 = 512;
 
