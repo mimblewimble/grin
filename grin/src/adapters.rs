@@ -81,16 +81,10 @@ impl NetAdapter for NetToChainAdapter {
 		}
 
 		if self.syncing() {
-			match res {
-				Ok((_, orphans)) => {
-					self.syncer.borrow().block_received(bhash);
-					for o in orphans {
-						self.syncer.borrow().block_received(o);
-					}
-				}
-				Err(chain::Error::Unfit(_)) => self.syncer.borrow().block_received(bhash),
-				Err(_) => {}
-			}
+			// always notify the syncer we received a block
+			// otherwise we jam up the 8 download slots with orphans
+			debug!(LOGGER, "adapter: notifying syncer: received block {:?}", bhash);
+			self.syncer.borrow().block_received(bhash);
 		}
 	}
 
