@@ -287,9 +287,21 @@ impl Server {
 		Some(peer.clone())
 	}
 
-	/// Returns a random peer we're connected to.
+	/// Returns a random connected peer.
+	/// Only considers peers with at least our total_difficulty (ignores out of sync peers).
 	pub fn random_peer(&self) -> Option<Arc<RwLock<Peer>>> {
-		let peers = self.all_peers();
+		let difficulty = self.adapter.total_difficulty();
+
+		let peers = self
+			.all_peers()
+			.iter()
+			.filter(|x| {
+				let peer = x.read().unwrap();
+				peer.is_connected() && peer.info.total_difficulty >= difficulty
+			})
+			.cloned()
+			.collect::<Vec<_>>();
+
 		if peers.len() == 0 {
 			return None;
 		}
