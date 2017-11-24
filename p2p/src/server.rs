@@ -45,7 +45,7 @@ impl NetAdapter for DummyAdapter {
 	}
 	fn transaction_received(&self, _: core::Transaction) {}
 	fn block_received(&self, _: core::Block) {}
-	fn headers_received(&self, _: Vec<core::BlockHeader>) {}
+	fn headers_received(&self, _: Vec<core::BlockHeader>, _:SocketAddr) {}
 	fn locate_headers(&self, _: Vec<Hash>) -> Vec<core::BlockHeader> {
 		vec![]
 	}

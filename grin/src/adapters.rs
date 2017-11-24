@@ -88,12 +88,15 @@ impl NetAdapter for NetToChainAdapter {
 		}
 	}
 
-	fn headers_received(&self, bhs: Vec<core::BlockHeader>) {
-		info!(
+	fn headers_received(&self, bhs: Vec<core::BlockHeader>, addr: SocketAddr) {
+		debug!(
 			LOGGER,
-			"Received {} block headers",
+			"Received {} block headers from {}",
 			bhs.len(),
+			addr
 		);
+
+		let last_received_height=bhs.last().unwrap().height;
 
 		// try to add each header to our header chain
 		let mut added_hs = vec![];
@@ -101,10 +104,10 @@ impl NetAdapter for NetToChainAdapter {
 			let res = self.chain.process_block_header(&bh, self.chain_opts());
 			match res {
 				Ok(_) => {
-					added_hs.push(bh.hash());
+					added_hs.push(bh);
 				}
 				Err(chain::Error::Unfit(s)) => {
-					info!(
+					debug!(
 						LOGGER,
 						"Received unfit block header {} at {}: {}.",
 						bh.hash(),
@@ -128,14 +131,14 @@ impl NetAdapter for NetToChainAdapter {
 				}
 			}
 		}
-		info!(
+		debug!(
 			LOGGER,
-			"Added {} headers to the header chain.",
+			"Recieved {} headers for the header chain.",
 			added_hs.len()
 		);
 
 		if self.syncing() {
-			self.syncer.borrow().headers_received(added_hs);
+			self.syncer.borrow().headers_received(added_hs, last_received_height, addr);
 		}
 	}
 

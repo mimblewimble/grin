@@ -211,7 +211,7 @@ fn handle_payload(
 		}
 		Type::Headers => {
 			let headers = ser::deserialize::<Headers>(&mut &buf[..])?;
-			adapter.headers_received(headers.headers);
+			adapter.headers_received(headers.headers, addr);
 			Ok(None)
 		}
 		Type::GetPeerAddrs => {

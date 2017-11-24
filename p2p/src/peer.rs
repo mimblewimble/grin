@@ -229,8 +229,8 @@ impl NetAdapter for TrackingAdapter {
 		self.adapter.block_received(b)
 	}
 
-	fn headers_received(&self, bh: Vec<core::BlockHeader>) {
-		self.adapter.headers_received(bh)
+	fn headers_received(&self, bh: Vec<core::BlockHeader>, addr: SocketAddr) {
+		self.adapter.headers_received(bh, addr)
 	}
 
 	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
