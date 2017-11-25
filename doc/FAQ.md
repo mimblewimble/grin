@@ -1,17 +1,17 @@
 # FAQ
 
-- Q: What is Grin?  A: An implementation of [MimbleWimble](https://download.wpsoftware.net/bitcoin/wizardry/mimblewimble.txt)
+- Q: What is grin?  A: An implementation of [MimbleWimble](https://download.wpsoftware.net/bitcoin/wizardry/mimblewimble.txt)
 - Q: Similar to Bitcoin?  A: Both are outputs-based, PoW. Read [Grin for Bitcoiners](grin4bitcoiners.md)
-- Q: mining? A: Testnet only. CPU, synchronous. GPU or asynchronous is not yet supported.
-- Q: block height? A: HTTP GET /v1/chain on a public peer node, for example http://testnet1.yeastplume.com:13413/v1/chain
+- Q: Mining? A: Testnet only. CPU, synchronous. GPU or asynchronous is not yet supported.
+- Q: Block height? A: HTTP GET /v1/chain on a public peer node, for example http://testnet1.yeastplume.com:13413/v1/chain
 - Q: Store of value? A: please don't. We delete testnet coins randomly. And the wallet likes to crash. Developers wecome!
 - Q: grin wallet / grin server hangs? A: Yes. Be your own watchdog. Watchdog code for capturing debug log and restarting the hung process - pull reqs welcome.
 - Q: Block size limit? Target mean block time?
 - Q: Fees? Monetary policy? A: https://github.com/mimblewimble/grin/wiki/fees-mining
 - Q: Roadmap? A: Moving fast, changing things. Maybe look at [issues and milestones](https://github.com/mimblewimble/grin/milestones)
-- Q: Proof of payment? A: Planned. Maybe in testnet2
-- Q: Microtransactions? A: On testnet1, fees are 0.8% on a transaction of 1.0 coins.
-- Q: Could Grin ever support or make use of:
+- Q: Proof of payment? A: Planned. Maybe in Testnet2
+- Q: Microtransactions? A: On Testnet1, fees are 0.8% on a transaction of 1.0 coins.
+- Q: Could grin ever support or make use of:
   ☑ Probably, or ☐ Probably not
   A: ☑ Contracts, ☑ [Pruning](pruning.md), ☐ Identity, like bitauth, ☑ SNARKs, ☑ [Cross chain atomic swaps, multisig, time locks, lightning network](grin4bitcoiners.md#scripting), ☑ Payment channels, ☑ hidden nodes / onion routing
 - Q: HW requirements for mining? A: Not much. Don't invest in equipment yet, there's not even a final beta released, and a lot can change before any official blockchain is launched.
@@ -32,4 +32,3 @@ You need the latest rust. rustup, or [reinstall rust as described](build.md)
 ## Transaction types
 - (DONE) A temporary simple transaction exchange. Temporary - will be deprecated.
 - (months) Maybe in testnet2 Full transaction; an exchange which involves a full roundtrip between sender and receiver using aggregate (Schnorr) signatures. Usable as proof of payment and for multisig.
-
