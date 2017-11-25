@@ -14,7 +14,7 @@ By default Grin will look for these in the current working directory.
 
 ## Basic Wallet Commands
 
-`grin wallet --help` will display usage info about the following. 
+`grin wallet --help` will display usage info about the following.
 
 ### grin wallet init
 
@@ -41,16 +41,19 @@ key_id, height, lock_height, status, spendable?, coinbase?, value
 
 ### grin wallet listen
 
-(tbd)
+Starts a listening wallet server. This is needed for the `grin wallet send -d <destination wallet server>` command to work.
 
 ### grin wallet send
 
-(tbd)
+Builds a transaction to send someone some coins. Creates and outputs a transaction.
+- add -d <destination server> to request a destination wallet from the given server address and port, and then push the transaction to the network
+- add -s <strategy> to choose between selection strategies. If you're experimenting, or the destination is not reliable, it is currently recommendable to use the strategy `smallest`
 
 ### grin wallet receive
 
-(tbd)
+Replaced by `listen` (see above). The `receive` command might later be recycled to actively accept one or several specific transactions.
 
 ### grin wallet burn
 
-[tbd]
+*TESTING ONLY*: Burns the provided amount to a known key. Similar to send but burns an output to allow single-party
+transactions.
