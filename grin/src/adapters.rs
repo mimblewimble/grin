@@ -95,8 +95,10 @@ impl NetAdapter for NetToChainAdapter {
 			bhs.len(),
 			addr
 		);
-
-		let last_received_height=bhs.last().unwrap().height;
+		let mut last_received_height = 0;
+		if bhs.len() > 0 {
+			last_received_height=bhs.last().unwrap().height;
+		}
 
 		// try to add each header to our header chain
 		let mut added_hs = vec![];
