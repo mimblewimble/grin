@@ -131,11 +131,11 @@ impl NetAdapter for NetToChainAdapter {
 		}
 		debug!(
 			LOGGER,
-			"Recieved {} headers for the header chain.",
+			"Received {} headers for the header chain.",
 			added_hs.len()
 		);
 
-		if self.syncing() {
+		if self.syncing() && bhs.len() > 0 {
 			self.syncer.borrow().headers_received(added_hs, bhs.last().unwrap(), addr);
 		}
 	}
