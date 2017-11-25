@@ -21,11 +21,15 @@
 const MAX_BODY_DOWNLOADS: usize = 8;
 
 use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
+use std::collections::HashMap;
+use std::net::SocketAddr;
 
 use core::core::hash::{Hash, Hashed};
+use core::core::BlockHeader;
+use core::core::target::Difficulty;
 use chain;
 use p2p;
 use types::Error;
@@ -36,6 +40,18 @@ struct BlockDownload {
 	hash: Hash,
 	start_time: Instant,
 	retries: u8,
+}
+
+/// Hold information about peers we've chosen to pair with for sync
+/// Mostly ubset of block header with hash included
+#[derive(Debug)]
+struct BuddyInfo {
+	/// Height of header
+	pub height: u64,
+	/// Hash of header
+	pub hash: Hash,
+	/// Total reported accumulated difficulty
+	pub difficulty: Difficulty,
 }
 
 /// Manages syncing the local chain with other peers. Needs both a head chain
@@ -49,6 +65,10 @@ pub struct Syncer {
 	last_header_req: Mutex<Instant>,
 	blocks_to_download: Mutex<Vec<Hash>>,
 	blocks_downloading: Mutex<Vec<BlockDownload>>,
+
+	//keep a map of the last header successfully received
+	//from each peerj
+	last_headers_from_peers: Mutex<HashMap<SocketAddr, BuddyInfo>>,
 }
 
 impl Syncer {
@@ -60,11 +80,46 @@ impl Syncer {
 			last_header_req: Mutex::new(Instant::now() - Duration::from_secs(2)),
 			blocks_to_download: Mutex::new(vec![]),
 			blocks_downloading: Mutex::new(vec![]),
+			last_headers_from_peers: Mutex::new(HashMap::new()),
 		}
 	}
 
 	pub fn syncing(&self) -> bool {
 		*self.sync.lock().unwrap()
+	}
+
+
+	// Tries to select the preferred peer to request headers
+	//from
+	fn select_buddy(&self, current_sync_buddy: Option<Arc<RwLock<p2p::Peer>>>)
+	-> Option<Arc<RwLock<p2p::Peer>>> {
+		//how much the work on another node should differ before we consider
+		//swapping sync buddies
+		let buddy_swap_threshold = 10_000;
+
+		//No peers at all.. problem
+		let most_work_peer = self.p2p.most_work_peer();
+		if let None = most_work_peer {
+			return None;
+		};
+
+		//If no current buddy, simply select peer with longest TD
+		if let None = current_sync_buddy {
+			return most_work_peer;
+		}
+		
+		let current_buddy_raw = current_sync_buddy.as_ref().unwrap().read().unwrap();
+		let most_work_raw = most_work_peer.as_ref().unwrap().read().unwrap();
+		let current_buddy_td = current_buddy_raw.info.total_difficulty.into_num();
+		let most_work_td = most_work_raw.info.total_difficulty.into_num();
+
+		let td_difference = most_work_td-current_buddy_td;
+		if td_difference > buddy_swap_threshold {
+			info!(LOGGER, "Swapping sync buddy to: {}", most_work_raw.info.addr);
+			most_work_peer.clone()
+		} else {
+			current_sync_buddy.clone()
+		}
 	}
 
 	/// Checks the local chain state, comparing it with our peers and triggers
@@ -99,18 +154,33 @@ impl Syncer {
 		// check if we have missing full blocks for which we already have a header
 		self.init_download()?;
 
-		// main syncing loop, requests more headers and bodies periodically as long
+		//Keep track of which peer we're currently syncing with
+		let current_sync_buddy = None; 
+
+		//keep a map of the latest header each peer has given us
+		//(so we can swap from one to the next while still
+		//providing a relevant set of locators
+		//let last_headers_from_peers = HashMap::new();
+
 		// as a peer with higher difficulty exists and we're not fully caught up
 		info!(LOGGER, "Sync: Starting loop.");
 		loop {
 			let tip = self.chain.get_header_head()?;
 
-			// TODO do something better (like trying to get more) if we lose peers
-			let peer = self.p2p.most_work_peer().expect("No peers available for sync.");
-			let peer = peer.read().unwrap();
+			// select the best peer to be peering with
+			let current_sync_buddy = self.select_buddy(current_sync_buddy.clone());
+			if let None = current_sync_buddy.clone(){
+				error!(LOGGER, "No peers to sync headers with. Done.");
+				break;
+			}
+
+			let current_sync_buddy = current_sync_buddy.unwrap();
+			let peer = current_sync_buddy.read().unwrap();
+
+			trace!(LOGGER, "Buddy peer is: {:?}",peer.info);
 			debug!(
 				LOGGER,
-				"Sync: peer {} vs us {}",
+				"Sync: buddy peer {} vs us {}",
 				peer.info.total_difficulty,
 				tip.total_difficulty
 			);
@@ -127,13 +197,14 @@ impl Syncer {
 				);
 				blocks_to_download.len() > 0 || blocks_downloading.len() > 0
 			};
-
+			trace!(LOGGER, "Requesting headers.");
 			{
 				let last_header_req = self.last_header_req.lock().unwrap().clone();
 				if more_headers || (Instant::now() - Duration::from_secs(30) > last_header_req) {
-					self.request_headers()?;
+					self.request_headers(&peer)?;
 				}
 			}
+			trace!(LOGGER, "Requesting bodies.");
 			if more_bodies {
 				self.request_bodies();
 			}
@@ -236,38 +307,54 @@ impl Syncer {
 	}
 
 	/// Request some block headers from a peer to advance us
-	fn request_headers(&self) -> Result<(), Error> {
+	fn request_headers(&self, peer: &p2p::Peer) -> Result<(), Error> {
 		{
 			let mut last_header_req = self.last_header_req.lock().unwrap();
 			*last_header_req = Instant::now();
 		}
-
-		let tip = self.chain.get_header_head()?;
-		let peer = self.p2p.most_work_peer();
-		let locator = self.get_locator(&tip)?;
-		if let Some(p) = peer {
-			let p = p.read().unwrap();
+		//Get the last header sent by current sync buddy, which we'll use to build locators
+		{
+			let last_headers_from_peers = self.last_headers_from_peers.lock().unwrap();
+			let buddy_info = last_headers_from_peers.get(&peer.info.addr);
+			
+			let locator = self.get_locator(buddy_info)?;
 			debug!(
 				LOGGER,
 				"Sync: Asking peer {} for more block headers, locator: {:?}",
-				p.info.addr,
+				peer.info.addr,
 				locator,
 			);
-			if let Err(e) = p.send_header_request(locator) {
+			if let Err(_) = peer.send_header_request(locator) {
 				debug!(LOGGER, "Sync: peer error, will retry");
 			}
-		} else {
-			warn!(LOGGER, "Sync: Could not get most worked peer to request headers.");
 		}
 		Ok(())
 	}
 
 	/// We added a header, add it to the full block download list
-	pub fn headers_received(&self, bhs: Vec<Hash>) {
+	pub fn headers_received(&self, bhs: Vec<BlockHeader>, last_block_sent: &BlockHeader, addr: SocketAddr) {
+		debug!(LOGGER, "Headers received from : {}", addr);
 		let mut blocks_to_download = self.blocks_to_download.lock().unwrap();
-		for h in bhs {
+		for h in &bhs {
 			// enlist for full block download
-			blocks_to_download.insert(0, h);
+			blocks_to_download.insert(0, h.hash());
+		}
+		
+		let last_stored_height = {
+			let last_headers_from_peers = self.last_headers_from_peers.lock().unwrap();
+			let last_stored_info = last_headers_from_peers.get(&addr);
+			 match last_stored_info {
+				None => 0,
+				Some(h) => h.height,
+			}
+		};
+		if last_block_sent.height > last_stored_height {
+			let mut last_headers_from_peers = self.last_headers_from_peers.lock().unwrap();
+			last_headers_from_peers.insert(addr, BuddyInfo {
+				hash: last_block_sent.hash(),
+				difficulty: last_block_sent.difficulty.clone(),
+				height: last_block_sent.height,
+			});
 		}
 
 		// we may still have more headers to retrieve but the main loop
@@ -276,16 +363,22 @@ impl Syncer {
 
 	/// Builds a vector of block hashes that should help the remote peer sending
 	/// us the right block headers.
-	fn get_locator(&self, tip: &chain::Tip) -> Result<Vec<Hash>, Error> {
+	/// Note height isn't necessarily our height, it can be the height reported
+	/// by a peer
+	fn get_locator(&self, buddy_tip: Option<&BuddyInfo>) -> Result<Vec<Hash>, Error> {
 		// Prepare the heights we want as the latests height minus increasing powers
 		// of 2 up to max.
-		let mut heights = vec![tip.height];
+		let buddy_tip_height = match buddy_tip {
+			Some(t) => t.height,
+			None => 0,
+		};
+		let mut heights = vec![buddy_tip_height];
 		let mut tail = (1..p2p::MAX_LOCATORS)
 			.map(|n| 2u64.pow(n))
-			.filter_map(|n| if n > tip.height {
+			.filter_map(|n| if n > buddy_tip_height {
 				None
 			} else {
-				Some(tip.height - n)
+				Some(buddy_tip_height - n)
 			})
 			.collect::<Vec<_>>();
 		heights.append(&mut tail);
@@ -294,11 +387,25 @@ impl Syncer {
 		// both nodes share at least one common header hash in the locator
 		heights.push(0);
 
-		debug!(LOGGER, "Sync: Loc heights: {:?}", heights);
+		debug!(LOGGER, "Sync: Locator heights (from sync buddy): {:?}", heights);
+		if !buddy_tip.is_some() {
+			//just return genesis (cause we have no buddy)
+			return Ok(vec![self.chain.get_header_by_height(0).unwrap().hash()]);
+		}
 
-		// Iteratively travel the header chain back from our head and retain the
+		// Iteratively travel the header chain back from head and retain the
 		// headers at the wanted heights.
-		let mut header = self.chain.get_block_header(&tip.last_block_h)?;
+		let header = self.chain.get_block_header(&buddy_tip.unwrap().hash);
+		if let Err(_) = header.as_ref()  {
+			//Whatever we have from our buddy doesn't match what we're expecting
+			//So start over again to find a common block
+			return Ok(vec![self.chain.get_header_by_height(0).unwrap().hash()]);
+			//TODO: Check if below is what we should be doing, starting from our
+			//own expectation of what the header should be
+			/*header = self.chain.get_block_header(
+				&self.chain.get_header_head().unwrap().last_block_h);*/
+		}
+		let mut header = header.unwrap();
 		let mut locator = vec![];
 		while heights.len() > 0 {
 			if header.height == heights[0] {
