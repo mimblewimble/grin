@@ -332,14 +332,14 @@ impl Syncer {
 	}
 
 	/// We added a header, add it to the full block download list
-	pub fn headers_received(&self, bhs: Vec<BlockHeader>, last_received_height: u64, addr: SocketAddr) {
+	pub fn headers_received(&self, bhs: Vec<BlockHeader>, last_block_sent: &BlockHeader, addr: SocketAddr) {
 		debug!(LOGGER, "Headers received from : {}", addr);
 		let mut blocks_to_download = self.blocks_to_download.lock().unwrap();
 		for h in &bhs {
 			// enlist for full block download
 			blocks_to_download.insert(0, h.hash());
 		}
-
+		
 		let last_stored_height = {
 			let last_headers_from_peers = self.last_headers_from_peers.lock().unwrap();
 			let last_stored_info = last_headers_from_peers.get(&addr);
@@ -348,16 +348,12 @@ impl Syncer {
 				Some(h) => h.height,
 			}
 		};
-		if bhs.len()==0 {
-			return;
-		}
-		let mut last_headers_from_peers = self.last_headers_from_peers.lock().unwrap();
-		if last_received_height > last_stored_height {
-			let new_header = bhs.last().unwrap();
+		if last_block_sent.height > last_stored_height {
+			let mut last_headers_from_peers = self.last_headers_from_peers.lock().unwrap();
 			last_headers_from_peers.insert(addr, BuddyInfo {
-				hash: new_header.hash(),
-				difficulty: new_header.difficulty.clone(),
-				height: last_received_height
+				hash: last_block_sent.hash(),
+				difficulty: last_block_sent.difficulty.clone(),
+				height: last_block_sent.height,
 			});
 		}
 

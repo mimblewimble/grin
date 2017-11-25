@@ -95,14 +95,10 @@ impl NetAdapter for NetToChainAdapter {
 			bhs.len(),
 			addr
 		);
-		let mut last_received_height = 0;
-		if bhs.len() > 0 {
-			last_received_height=bhs.last().unwrap().height;
-		}
 
 		// try to add each header to our header chain
 		let mut added_hs = vec![];
-		for bh in bhs {
+		for bh in bhs.clone() {
 			let res = self.chain.process_block_header(&bh, self.chain_opts());
 			match res {
 				Ok(_) => {
@@ -140,7 +136,7 @@ impl NetAdapter for NetToChainAdapter {
 		);
 
 		if self.syncing() {
-			self.syncer.borrow().headers_received(added_hs, last_received_height, addr);
+			self.syncer.borrow().headers_received(added_hs, bhs.last().unwrap(), addr);
 		}
 	}
 
