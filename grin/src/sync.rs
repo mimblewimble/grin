@@ -201,7 +201,7 @@ impl Syncer {
 			{
 				let last_header_req = self.last_header_req.lock().unwrap().clone();
 				if more_headers || (Instant::now() - Duration::from_secs(30) > last_header_req) {
-					self.request_headers(&peer)?;
+					self.request_headers(&peer, tip.height)?;
 				}
 			}
 			trace!(LOGGER, "Requesting bodies.");
@@ -307,7 +307,7 @@ impl Syncer {
 	}
 
 	/// Request some block headers from a peer to advance us
-	fn request_headers(&self, peer: &p2p::Peer) -> Result<(), Error> {
+	fn request_headers(&self, peer: &p2p::Peer, current_height: u64) -> Result<(), Error> {
 		{
 			let mut last_header_req = self.last_header_req.lock().unwrap();
 			*last_header_req = Instant::now();
@@ -317,7 +317,7 @@ impl Syncer {
 			let last_headers_from_peers = self.last_headers_from_peers.lock().unwrap();
 			let buddy_info = last_headers_from_peers.get(&peer.info.addr);
 			
-			let locator = self.get_locator(buddy_info)?;
+			let locator = self.get_locator(buddy_info, current_height)?;
 			debug!(
 				LOGGER,
 				"Sync: Asking peer {} for more block headers, locator: {:?}",
@@ -365,12 +365,12 @@ impl Syncer {
 	/// us the right block headers.
 	/// Note height isn't necessarily our height, it can be the height reported
 	/// by a peer
-	fn get_locator(&self, buddy_tip: Option<&BuddyInfo>) -> Result<Vec<Hash>, Error> {
+	fn get_locator(&self, buddy_tip: Option<&BuddyInfo>, current_height: u64) -> Result<Vec<Hash>, Error> {
 		// Prepare the heights we want as the latests height minus increasing powers
 		// of 2 up to max.
 		let buddy_tip_height = match buddy_tip {
 			Some(t) => t.height,
-			None => 0,
+			None => current_height,
 		};
 		let mut heights = vec![buddy_tip_height];
 		let mut tail = (1..p2p::MAX_LOCATORS)
