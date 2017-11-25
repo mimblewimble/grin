@@ -5,7 +5,8 @@
 - Q: Mining? A: Testnet only. CPU, synchronous. GPU or asynchronous is not yet supported.
 - Q: Block height? A: HTTP GET /v1/chain on a public peer node, for example http://testnet1.yeastplume.com:13413/v1/chain
 - Q: Store of value? A: Not yet. Wait for Mainnet. Testnet1 can still disappear and reappear unexpectedly.
-- Q: Block size limit? Target mean block time?
+- Q: Block size limit? Target mean block time?  A: Target mean block time is 1 block per 60 seconds. The size is limited by transaction "weight", though there is also a hard cap on the order of tens of MB.
+- Q: Does grin scale?  A: Yes, it might eventually do, thanks to transaction cut-through and possible level 2 solutions.
 - Q: Fees? Monetary policy? A: https://github.com/mimblewimble/grin/wiki/fees-mining
 - Q: Roadmap? A: Moving fast, changing things. Maybe look at [issues and milestones](https://github.com/mimblewimble/grin/milestones)
 - Q: Proof of payment? A: Planned. Maybe in Testnet2
