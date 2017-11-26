@@ -215,10 +215,12 @@ impl RemoveLog {
 			match self.removed.binary_search(&elmt) {
 				Ok(_) => continue,
 				Err(idx) => {
-					file.write_all(&ser::ser_vec(&elmt).unwrap()[..])?;
 					self.removed.insert(idx, *elmt);
 				}
 			}
+		}
+		for elmt in &self.removed {
+			file.write_all(&ser::ser_vec(&elmt).unwrap()[..])?;
 		}
 		self.removed_tmp = vec![];
 		file.sync_data()
