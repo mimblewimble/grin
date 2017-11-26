@@ -27,7 +27,6 @@ use pool;
 use util::secp::pedersen::Commitment;
 use util::OneTime;
 use store;
-use sync;
 use util::LOGGER;
 
 /// Implementation of the NetAdapter for the blockchain. Gets notified when new
@@ -38,7 +37,6 @@ pub struct NetToChainAdapter {
 	peer_store: Arc<PeerStore>,
 	connected_peers: Arc<RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-	syncer: OneTime<Arc<sync::Syncer>>,
 }
 
 impl NetAdapter for NetToChainAdapter {
@@ -79,13 +77,6 @@ impl NetAdapter for NetToChainAdapter {
 		if let &Err(ref e) = &res {
 			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
 		}
-
-		if self.syncing() {
-			// always notify the syncer we received a block
-			// otherwise we jam up the 8 download slots with orphans
-			debug!(LOGGER, "adapter: notifying syncer: received block {:?}", bhash);
-			self.syncer.borrow().block_received(bhash);
-		}
 	}
 
 	fn headers_received(&self, bhs: Vec<core::BlockHeader>) {
@@ -94,7 +85,11 @@ impl NetAdapter for NetToChainAdapter {
 			"Received {} block headers",
 			bhs.len(),
 		);
-
+		debug!(
+			LOGGER,
+			"Received block headers - {:?}",
+			bhs.iter().map(|x| x.hash()).collect::<Vec<_>>(),
+		);
 		// try to add each header to our header chain
 		let mut added_hs = vec![];
 		for bh in bhs {
@@ -120,7 +115,6 @@ impl NetAdapter for NetToChainAdapter {
 						explanation,
 						e
 					);
-					return;
 				}
 				Err(e) => {
 					info!(LOGGER, "Invalid block header {}: {:?}.", bh.hash(), e);
@@ -133,10 +127,6 @@ impl NetAdapter for NetToChainAdapter {
 			"Added {} headers to the header chain.",
 			added_hs.len()
 		);
-
-		if self.syncing() {
-			self.syncer.borrow().headers_received(added_hs);
-		}
 	}
 
 	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
@@ -279,37 +269,23 @@ impl NetToChainAdapter {
 			peer_store: peer_store,
 			connected_peers: connected_peers,
 			tx_pool: tx_pool,
-			syncer: OneTime::new(),
 		}
 	}
 
-	/// Start syncing the chain by instantiating and running the Syncer in the
-	/// background (a new thread is created).
-	pub fn start_sync(&self, sync: sync::Syncer) {
-		let arc_sync = Arc::new(sync);
-		self.syncer.init(arc_sync.clone());
-		let _ = thread::Builder::new()
-			.name("syncer".to_string())
-			.spawn(move || {
-				let res = arc_sync.run();
-				if let Err(e) = res {
-					panic!("Error during sync, aborting: {:?}", e);
-				}
-			});
-	}
-
-	pub fn syncing(&self) -> bool {
-		self.syncer.is_initialized() && self.syncer.borrow().syncing()
-	}
-
 	/// Prepare options for the chain pipeline
+	/// SYNC: do not broadcast block out to all our peers (we want to sync quietly)
+	/// NONE: regular block so broadcast it out and keep the network up to date
 	fn chain_opts(&self) -> chain::Options {
-		let opts = if self.syncing() {
-			chain::SYNC
-		} else {
-			chain::NONE
-		};
-		opts
+		let header_head = self.chain.get_header_head();
+		let block_header = self.chain.head_header();
+		if let Ok(header) = header_head {
+			if let Ok(block_header) = block_header {
+				if header.height > block_header.height + 100 {
+					return chain::SYNC;
+				}
+			}
+		}
+		chain::NONE
 	}
 }
 
