@@ -25,6 +25,7 @@ use core::core;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
 use core::ser;
+use grin_store;
 
 /// Maximum number of hashes in a block header locator request
 pub const MAX_LOCATORS: u32 = 14;
@@ -45,11 +46,17 @@ pub enum Error {
 	Connection(io::Error),
 	ConnectionClose,
 	Timeout,
+	Store(grin_store::Error)
 }
 
 impl From<ser::Error> for Error {
 	fn from(e: ser::Error) -> Error {
 		Error::Serialization(e)
+	}
+}
+impl From<grin_store::Error> for Error {
+	fn from(e: grin_store::Error) -> Error {
+		Error::Store(e)
 	}
 }
 impl From<io::Error> for Error {
