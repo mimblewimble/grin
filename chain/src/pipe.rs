@@ -53,7 +53,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 
 	debug!(
 		LOGGER,
-		"Processing block {} at {} with {} inputs and {} outputs.",
+		"pipe: process_block {} at {} with {} inputs and {} outputs.",
 		b.hash(),
 		b.header.height,
 		b.inputs.len(),
@@ -78,9 +78,9 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		validate_block(b, &mut ctx, &mut extension)?;
 		debug!(
 			LOGGER,
-			"Block at {} with hash {} is valid, going to save and append.",
+			"pipe: proces_block {} at {} is valid, save and append.",
+			b.hash(),
 			b.header.height,
-			b.hash()
 		);
 
 		add_block(b, &mut ctx)?;
@@ -96,7 +96,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
 	debug!(
 		LOGGER,
-		"Processing header {} at {}.",
+		"pipe: process_header {} at {}",
 		bh.hash(),
 		bh.height
 	);
@@ -119,7 +119,7 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 	}
 	if let Ok(b) = ctx.store.get_block(&bh) {
 		// there is a window where a block can be saved but the chain head not
-  // updated yet, we plug that window here by re-accepting the block
+		// updated yet, we plug that window here by re-accepting the block
 		if b.header.total_difficulty <= ctx.head.total_difficulty {
 			return Err(Error::Unfit("already in store".to_string()));
 		}
@@ -157,7 +157,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	if !ctx.opts.intersects(SKIP_POW) {
 		let cycle_size = global::sizeshift();
 
-		debug!(LOGGER, "Validating block with cuckoo size {}", cycle_size);
+		debug!(LOGGER, "pipe: validate_header cuckoo size {}", cycle_size);
 		if !(ctx.pow_verifier)(header, cycle_size as u32) {
 			return Err(Error::InvalidPow);
 		}
@@ -220,7 +220,7 @@ fn validate_block(
 		ext.apply_block(b)?;
 	} else {
 		// extending a fork, first identify the block where forking occurred
-  // keeping the hashes of blocks along the fork
+		// keeping the hashes of blocks along the fork
 		let mut current = b.header.previous;
 		let mut hashes = vec![];
 		loop {
@@ -290,7 +290,7 @@ fn validate_block(
 					.get_block_header_by_output_commit(&input.commitment())
 				{
 					// TODO - make sure we are not off-by-1 here vs. the equivalent tansaction
-	 // validation rule
+					// validation rule
 					if b.header.height <= output_header.height + global::coinbase_maturity() {
 						return Err(Error::ImmatureCoinbase);
 					}
@@ -321,7 +321,7 @@ fn add_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Erro
 /// work than the head.
 fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
 	// if we made a fork with more work than the head (which should also be true
- // when extending the head), update it
+	// when extending the head), update it
 	let tip = Tip::from_block(&b.header);
 	if tip.total_difficulty > ctx.head.total_difficulty {
 		// update the block height index
@@ -330,8 +330,8 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 			.map_err(|e| Error::StoreErr(e, "pipe setup height".to_owned()))?;
 
 		// in sync mode, only update the "body chain", otherwise update both the
-  // "header chain" and "body chain", updating the header chain in sync resets
-  // all additional "future" headers we've received
+		// "header chain" and "body chain", updating the header chain in sync resets
+		// all additional "future" headers we've received
 		if ctx.opts.intersects(SYNC) {
 			ctx.store
 				.save_body_head(&tip)
@@ -359,7 +359,7 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 /// work than the head.
 fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
 	// if we made a fork with more work than the head (which should also be true
- // when extending the head), update it
+	// when extending the head), update it
 	let tip = Tip::from_block(bh);
 	if tip.total_difficulty > ctx.head.total_difficulty {
 		ctx.store
@@ -372,7 +372,7 @@ fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option
 			"Updated block header head to {} at {}.",
 			bh.hash(),
 			bh.height
-		);
+			);
 		Ok(Some(tip))
 	} else {
 		Ok(None)

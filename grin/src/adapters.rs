@@ -15,7 +15,7 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
-use std::thread;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use chain::{self, ChainAdapter};
 use core::core::{self, Output};
@@ -27,7 +27,6 @@ use pool;
 use util::secp::pedersen::Commitment;
 use util::OneTime;
 use store;
-use sync;
 use util::LOGGER;
 
 /// Implementation of the NetAdapter for the blockchain. Gets notified when new
@@ -38,7 +37,7 @@ pub struct NetToChainAdapter {
 	peer_store: Arc<PeerStore>,
 	connected_peers: Arc<RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-	syncer: OneTime<Arc<sync::Syncer>>,
+	syncing: AtomicBool,
 }
 
 impl NetAdapter for NetToChainAdapter {
@@ -79,20 +78,13 @@ impl NetAdapter for NetToChainAdapter {
 		if let &Err(ref e) = &res {
 			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
 		}
-
-		if self.syncing() {
-			// always notify the syncer we received a block
-			// otherwise we jam up the 8 download slots with orphans
-			debug!(LOGGER, "adapter: notifying syncer: received block {:?}", bhash);
-			self.syncer.borrow().block_received(bhash);
-		}
 	}
 
 	fn headers_received(&self, bhs: Vec<core::BlockHeader>, addr: SocketAddr) {
 		debug!(
 			LOGGER,
-			"Received {} block headers from {}",
-			bhs.len(),
+			"Received block headers {:?} from {}",
+			bhs.iter().map(|x| x.hash()).collect::<Vec<_>>(),
 			addr
 		);
 
@@ -134,10 +126,6 @@ impl NetAdapter for NetToChainAdapter {
 			"Received {} headers for the header chain.",
 			added_hs.len()
 		);
-
-		if self.syncing() && bhs.len() > 0 {
-			self.syncer.borrow().headers_received(added_hs, bhs.last().unwrap(), addr);
-		}
 	}
 
 	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
@@ -280,32 +268,42 @@ impl NetToChainAdapter {
 			peer_store: peer_store,
 			connected_peers: connected_peers,
 			tx_pool: tx_pool,
-			syncer: OneTime::new(),
+			syncing: AtomicBool::new(true),
 		}
 	}
 
-	/// Start syncing the chain by instantiating and running the Syncer in the
-	/// background (a new thread is created).
-	pub fn start_sync(&self, sync: sync::Syncer) {
-		let arc_sync = Arc::new(sync);
-		self.syncer.init(arc_sync.clone());
-		let _ = thread::Builder::new()
-			.name("syncer".to_string())
-			.spawn(move || {
-				let res = arc_sync.run();
-				if let Err(e) = res {
-					panic!("Error during sync, aborting: {:?}", e);
-				}
-			});
-	}
+	/// Whether we're currently syncing the chain or we're fully caught up and
+	/// just receiving blocks through gossip.
+	pub fn is_syncing(&self) -> bool {
+		let local_diff = self.total_difficulty();
+		let peers = self.connected_peers.read().unwrap();
 
-	pub fn syncing(&self) -> bool {
-		self.syncer.is_initialized() && self.syncer.borrow().syncing()
+		// if we're already syncing, we're caught up if no peer has a higher
+		// difficulty than us
+		if self.syncing.load(Ordering::Relaxed) {
+			let higher_diff = peers.values().any(|p| {
+				let p = p.read().unwrap();
+				p.info.total_difficulty > local_diff
+			});
+			if !higher_diff {
+				self.syncing.store(false, Ordering::Relaxed);
+			}
+		} else {
+			// if we're not syncing, we need to if our difficulty is much too low
+			let higher_diff_padded = peers.values().any(|p| {
+				let p = p.read().unwrap();
+				p.info.total_difficulty > local_diff.clone() + Difficulty::from_num(1000)
+			});
+			if higher_diff_padded {
+				self.syncing.store(true, Ordering::Relaxed);
+			}
+		}
+		self.syncing.load(Ordering::Relaxed)
 	}
 
 	/// Prepare options for the chain pipeline
 	fn chain_opts(&self) -> chain::Options {
-		let opts = if self.syncing() {
+		let opts = if self.is_syncing() {
 			chain::SYNC
 		} else {
 			chain::NONE

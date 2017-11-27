@@ -155,11 +155,11 @@ impl Server {
 			_ => {}
 		}
 
-		// If we have any known seeds or peers then attempt to sync.
-		if config.seeding_type != Seeding::None || peer_store.all_peers().len() > 0 {
-			let sync = sync::Syncer::new(shared_chain.clone(), p2p_server.clone());
-			net_adapter.start_sync(sync);
-		}
+		sync::run_sync(
+			net_adapter.clone(),
+			p2p_server.clone(),
+			shared_chain.clone(),
+			);
 
 		evt_handle.spawn(p2p_server.start(evt_handle.clone()).map_err(|_| ()));
 
@@ -211,8 +211,10 @@ impl Server {
 		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
 		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.unwrap().port));
 		thread::spawn(move || {
+			// TODO push this down in the run loop so miner gets paused anytime we
+			// decide to sync again
 			let secs_5 = time::Duration::from_secs(5);
-			while net_adapter.syncing() {
+			while net_adapter.is_syncing() {
 				thread::sleep(secs_5);
 			}
 			miner.run_loop(config.clone(), cuckoo_size as u32, proof_size);
