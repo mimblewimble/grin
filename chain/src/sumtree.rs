@@ -239,9 +239,13 @@ impl<'a> Extension<'a> {
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
 
 		// doing inputs first guarantees an input can't spend an output in the
-  // same block, enforcing block cut-through
+		// same block, enforcing block cut-through
 		for input in &b.inputs {
 			let pos_res = self.commit_index.get_output_pos(&input.commitment());
+			if b.hash().to_string() == "f697a877" {
+				debug!(LOGGER, "input pos: {:?}, commit: {} {:?}",
+							 pos_res, input.commitment().hash(), input.commitment());
+			}
 			if let Ok(pos) = pos_res {
 				match self.output_pmmr.prune(pos, b.header.height as u32) {
 					Ok(true) => {
