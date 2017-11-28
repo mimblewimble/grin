@@ -287,6 +287,17 @@ impl Chain {
 		sumtrees.roots()
 	}
 
+	/// Reset the header head to the same as the main head. When sync is running,
+	/// the header head will go ahead to try to download as many as possible.
+	/// However if a block, when fully received, is found invalid, the header
+	/// head need to backtrack to the last known valid position.
+	pub fn reset_header_head(&self) -> Result<(), Error> {
+		let head = self.head.lock().unwrap();
+		debug!(LOGGER, "Reset header head to {} at {}",
+					head.last_block_h, head.height);
+		self.store.save_header_head(&head).map_err(From::from)
+	}
+
 	/// returns the last n nodes inserted into the utxo sum tree
 	/// returns sum tree hash plus output itself (as the sum is contained
 	/// in the output anyhow)

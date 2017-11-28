@@ -41,6 +41,7 @@ pub const MAX_PEER_ADDRS: u32 = 256;
 pub enum Error {
 	Serialization(ser::Error),
 	Connection(io::Error),
+	Banned,
 	ConnectionClose,
 	Timeout,
 	Store(grin_store::Error),
@@ -169,7 +170,7 @@ pub trait NetAdapter: Sync + Send {
 	fn transaction_received(&self, tx: core::Transaction);
 
 	/// A block has been received from one of our peers
-	fn block_received(&self, b: core::Block);
+	fn block_received(&self, b: core::Block, addr: SocketAddr);
 
 	/// A set of block header has been received, typically in response to a
 	/// block

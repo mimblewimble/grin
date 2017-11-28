@@ -17,7 +17,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{SocketAddr, Shutdown};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -45,8 +45,8 @@ impl NetAdapter for DummyAdapter {
 		Difficulty::one()
 	}
 	fn transaction_received(&self, _: core::Transaction) {}
-	fn block_received(&self, _: core::Block) {}
-	fn headers_received(&self, _: Vec<core::BlockHeader>, _: SocketAddr) {}
+	fn block_received(&self, _: core::Block, _: SocketAddr) {}
+	fn headers_received(&self, _: Vec<core::BlockHeader>, _:SocketAddr) {}
 	fn locate_headers(&self, _: Vec<Hash>) -> Vec<core::BlockHeader> {
 		vec![]
 	}
@@ -108,30 +108,56 @@ impl Server {
 		let peers = self.peers.clone();
 		let adapter = self.adapter.clone();
 		let capab = self.capabilities.clone();
+		let store = self.store.clone();
 
 		// main peer acceptance future handling handshake
 		let hp = h.clone();
 		let peers_listen = socket.incoming().map_err(From::from).map(move |(conn, _)| {
+	
+			// aaaand.. reclone for the internal closures
+			let adapter = adapter.clone();
+			let store = store.clone();
 			let peers = peers.clone();
-			let total_diff = adapter.total_difficulty();
+			let handshake = handshake.clone();
+			let hp = hp.clone();
 
-			// accept the peer and add it to the server map
-			let accept = Peer::accept(
-				conn,
-				capab,
-				total_diff,
-				&handshake.clone(),
-				adapter.clone(),
-			);
-			let added = add_to_peers(peers, adapter.clone(), accept);
+			future::ok(conn).and_then(move |conn| {
+				// Refuse banned peers connection
+				if let Ok(peer_addr) = conn.peer_addr() {
+					if let Ok(peer_data) = store.get_peer(peer_addr) {
+						if peer_data.flags == State::Banned {
+							debug!(LOGGER, "Peer {} banned, refusing connection.", peer_addr);
+							if let Err(e) = conn.shutdown(Shutdown::Both) {
+								debug!(LOGGER, "Error shutting down conn: {:?}", e);
+							}
+							return Err(Error::Banned)
+						}
+					}
+				}
+				Ok(conn)
+			}).and_then(move |conn| {
 
-			// wire in a future to timeout the accept after 5 secs
-			let timed_peer = with_timeout(Box::new(added), &hp);
+				let peers = peers.clone();
+				let total_diff = adapter.total_difficulty();
 
-			// run the main peer protocol
-			timed_peer.and_then(move |(conn, peer)| {
-				let peer = peer.read().unwrap();
-				peer.run(conn)
+				// accept the peer and add it to the server map
+				let accept = Peer::accept(
+					conn,
+					capab,
+					total_diff,
+					&handshake.clone(),
+					adapter.clone(),
+				);
+				let added = add_to_peers(peers, adapter.clone(), accept);
+
+				// wire in a future to timeout the accept after 5 secs
+				let timed_peer = with_timeout(Box::new(added), &hp);
+
+				// run the main peer protocol
+				timed_peer.and_then(move |(conn, peer)| {
+					let peer = peer.read().unwrap();
+					peer.run(conn)
+				})
 			})
 		});
 
@@ -254,7 +280,7 @@ impl Server {
 		// build a list of peers to be cleaned up
 		for peer in self.connected_peers() {
 			let peer_inner = peer.read().unwrap();
-			if !peer_inner.is_connected() {
+			if peer_inner.is_banned() || !peer_inner.is_connected() {
 				debug!(LOGGER, "cleaning {:?}, not connected", peer_inner.info.addr);
 				rm.push(peer.clone());
 			}
@@ -348,6 +374,21 @@ impl Server {
 	/// Number of peers we're currently connected to.
 	pub fn peer_count(&self) -> u32 {
 		self.connected_peers().len() as u32
+	}
+
+	/// Bans a peer, disconnecting it if we're currently connected
+	pub fn ban_peer(&self, peer_addr: &SocketAddr) {
+		if let Err(e) = self.update_state(peer_addr.clone(), State::Banned) {
+			error!(LOGGER, "Couldn't ban {}: {:?}", peer_addr, e);
+		}
+
+		if let Some(peer) = self.get_peer(peer_addr) {
+			debug!(LOGGER, "Banning peer {}", peer_addr);
+			// setting peer status will get it removed at the next clean_peer
+			let peer = peer.write().unwrap();
+			peer.set_banned();
+			peer.stop();
+		}
 	}
 
 	/// Stops the server. Disconnect from all peers at the same time.

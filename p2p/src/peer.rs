@@ -129,6 +129,12 @@ impl Peer {
 		*state == State::Banned
 	}
 
+	/// Set this peer status to banned
+	pub fn set_banned(&self) {
+		let mut state = self.state.write().unwrap();
+		*state = State::Banned;
+	}
+
 	/// Bytes sent and received by this peer to the remote peer.
 	pub fn transmitted_bytes(&self) -> (u64, u64) {
 		self.proto.transmitted_bytes()
@@ -224,9 +230,9 @@ impl NetAdapter for TrackingAdapter {
 		self.adapter.transaction_received(tx)
 	}
 
-	fn block_received(&self, b: core::Block) {
+	fn block_received(&self, b: core::Block, addr: SocketAddr) {
 		self.push(b.hash());
-		self.adapter.block_received(b)
+		self.adapter.block_received(b, addr)
 	}
 
 	fn headers_received(&self, bh: Vec<core::BlockHeader>, addr: SocketAddr) {

@@ -93,21 +93,8 @@ impl Seeder {
 					p2p_server.all_peers().len(),
 				);
 
-				// maintenance step first, clean up p2p server peers and mark bans
-				// if needed
-				let disconnected = p2p_server.clean_peers();
-				for p in disconnected {
-					let p = p.read().unwrap();
-					if p.is_banned() {
-						debug!(LOGGER, "Marking peer {} as banned.", p.info.addr);
-						let update_result =
-							p2p_server.update_state(p.info.addr, p2p::State::Banned);
-						match update_result {
-							Ok(()) => {}
-							Err(_) => {}
-						}
-					}
-				}
+				// maintenance step first, clean up p2p server peers
+				let _ = p2p_server.clean_peers();
 
 				// we don't have enough peers, getting more from db
 				if p2p_server.peer_count() < PEER_PREFERRED_COUNT {
