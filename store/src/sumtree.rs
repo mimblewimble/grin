@@ -163,6 +163,8 @@ struct RemoveLog {
 	removed: Vec<(u64, u32)>,
 	// Holds positions temporarily until flush is called.
 	removed_tmp: Vec<(u64, u32)>,
+	// Holds truncated removed temporarily until discarded or committed
+	removed_bak: Vec<(u64, u32)>,
 }
 
 impl RemoveLog {
@@ -174,6 +176,7 @@ impl RemoveLog {
 			path: path,
 			removed: removed,
 			removed_tmp: vec![],
+			removed_bak: vec![],
 		})
 	}
 
@@ -181,10 +184,14 @@ impl RemoveLog {
 	fn truncate(&mut self, last_offs: u32) -> io::Result<()> {
 		// simplifying assumption: we always remove older than what's in tmp
 		self.removed_tmp = vec![];
+		// DEBUG
+		let _ = self.flush_truncate(last_offs);
 
 		if last_offs == 0 {
 			self.removed = vec![];
 		} else {
+			// backing it up before truncating
+			self.removed_bak = self.removed.clone();
 			self.removed = self.removed
 				.iter()
 				.filter(|&&(_, idx)| idx < last_offs)
@@ -192,6 +199,15 @@ impl RemoveLog {
 				.collect();
 		}
 		Ok(())
+	}
+
+	// DEBUG: saves the remove log to the side before each truncate
+	fn flush_truncate(&mut self, last_offs: u32) -> io::Result<()> {
+		let mut file = File::create(format!("{}.{}", self.path.clone(), last_offs))?;
+		for elmt in &self.removed {
+			file.write_all(&ser::ser_vec(&elmt).unwrap()[..])?;
+		}
+		file.sync_data()
 	}
 
 	/// Append a set of new positions to the remove log. Both adds those
@@ -223,11 +239,16 @@ impl RemoveLog {
 			file.write_all(&ser::ser_vec(&elmt).unwrap()[..])?;
 		}
 		self.removed_tmp = vec![];
+		self.removed_bak = vec![];
 		file.sync_data()
 	}
 
 	/// Discard pending changes
 	fn discard(&mut self) {
+		if self.removed_bak.len() > 0 {
+			self.removed = self.removed_bak.clone();
+			self.removed_bak = vec![];
+		}
 		self.removed_tmp = vec![];
 	}
 
