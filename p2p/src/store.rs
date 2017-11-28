@@ -98,24 +98,19 @@ impl PeerStore {
 	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
 		debug!(LOGGER, "saving peer to store {:?}", p);
 
-		self.db.put_ser(
-			&to_key(PEER_PREFIX, &mut format!("{}", p.addr).into_bytes())[..],
-			p,
-		)
+		self.db.put_ser(&peer_key(p.addr)[..], p)
 	}
 
-	fn get_peer(&self, peer_addr: SocketAddr) -> Result<PeerData, Error> {
+	pub fn get_peer(&self, peer_addr: SocketAddr) -> Result<PeerData, Error> {
 		option_to_not_found(self.db.get_ser(&peer_key(peer_addr)[..]))
 	}
 
 	pub fn exists_peer(&self, peer_addr: SocketAddr) -> Result<bool, Error> {
-		self.db
-			.exists(&to_key(PEER_PREFIX, &mut format!("{}", peer_addr).into_bytes())[..])
+		self.db.exists(&peer_key(peer_addr)[..])
 	}
 
 	pub fn delete_peer(&self, peer_addr: SocketAddr) -> Result<(), Error> {
-		self.db
-			.delete(&to_key(PEER_PREFIX, &mut format!("{}", peer_addr).into_bytes())[..])
+		self.db.delete(&peer_key(peer_addr)[..])
 	}
 
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
@@ -148,5 +143,5 @@ impl PeerStore {
 }
 
 fn peer_key(peer_addr: SocketAddr) -> Vec<u8> {
-	to_key(PEER_PREFIX, &mut format!("{}", peer_addr).into_bytes())
+	to_key(PEER_PREFIX, &mut format!("{}", peer_addr.ip()).into_bytes())
 }

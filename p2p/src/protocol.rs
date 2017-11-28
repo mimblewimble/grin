@@ -185,7 +185,7 @@ fn handle_payload(
 		Type::Block => {
 			let b = ser::deserialize::<core::Block>(&mut &buf[..])?;
 			let bh = b.hash();
-			adapter.block_received(b);
+			adapter.block_received(b, addr);
 			Ok(Some(bh))
 		}
 		Type::GetHeaders => {

@@ -61,7 +61,7 @@ impl NetAdapter for NetToChainAdapter {
 		}
 	}
 
-	fn block_received(&self, b: core::Block) {
+	fn block_received(&self, b: core::Block, addr: SocketAddr) {
 		let bhash = b.hash();
 		debug!(
 			LOGGER,
@@ -75,6 +75,18 @@ impl NetAdapter for NetToChainAdapter {
 
 		if let &Err(ref e) = &res {
 			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
+
+			// if the peer sent us a block that's intrinsically bad, they're either
+			// mistaken or manevolent, both of which require a ban
+			if e.is_bad_block() {
+				self.p2p_server.borrow().ban_peer(&addr);
+
+				// and if we're currently syncing, our header chain is now wrong, it
+				// needs to be reset
+				if self.is_syncing() {
+					self.chain.reset_header_head();
+				}
+			}
 		}
 	}
 

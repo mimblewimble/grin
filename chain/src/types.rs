@@ -100,6 +100,23 @@ impl From<io::Error> for Error {
 	}
 }
 
+impl Error {
+	/// Whether the error is due to a block that was intrinsically wrong
+	pub fn is_bad_block(&self) -> bool {
+		// shorter to match on all the "not the block's fault" errors
+		match *self {
+			Error::Unfit(_) |
+				Error::Orphan |
+				Error::StoreErr(_, _) |
+				Error::SerErr(_) |
+				Error::SumTreeErr(_)|
+				Error::GenesisBlockRequired |
+				Error::Other(_) => false,
+			_ => true,
+		}
+	}
+}
+
 /// The tip of a fork. A handle to the fork ancestry from its leaf in the
 /// blockchain tree. References the max height and the latest and previous
 /// blocks
