@@ -20,6 +20,11 @@ The node will then request each "missing" block by comparing the header chain (b
 
 ![Simple Sync](images/simple_sync.svg)
 
+## Node falls significantly behind (>500 blocks)
+
+Currently we limit header retrieval to batches of approx 500 headers (512?). We need to describe (and think through) exactly what happens when after we receive the first batch of 500 headers such that we have a new header chain but the total_difficulty of this new chain is not sufficient to overtake the existing chain.
+What happens here?
+
 ## Node successfully mines a block
 
 [tbd]
@@ -30,4 +35,5 @@ The node will then request each "missing" block by comparing the header chain (b
 
 ## A new peer connects with a previously unknown longest fork
 
+Is this the same as the "falls significantly behind" case above?
 [tbd]
