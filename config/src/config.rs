@@ -186,37 +186,3 @@ impl GlobalConfig {
 			.enable_mining;
 	}
 }
-
-#[test]
-fn test_read_config() {
-	let toml_str = r#"
-        #Section is optional, if not here or enable_server is false, will only run wallet
-        [server]
-        enable_server = true
-        api_http_addr = "127.0.0.1"
-        db_root = "."
-        seeding_type = "None"
-        test_mode = false
-        #7 = FULL_NODE, not sure how to serialise this properly to use constants
-        capabilities = [7]
-
-        [server.p2p_config]
-        host = "127.0.0.1"
-        port = 13414
-
-        #Mining section is optional, if it's not here it will default to not mining
-        [mining]
-        enable_mining = true
-        wallet_listener_url = "http://127.0.0.1:13415"
-        burn_reward = false
-        #testing value, optional
-        #slow_down_in_millis = 30
-
-    "#;
-
-	let mut decoded: GlobalConfig = toml::from_str(toml_str).unwrap();
-	decoded.server.as_mut().unwrap().mining_config = decoded.mining;
-	println!("Decoded.server: {:?}", decoded.server);
-	println!("Decoded wallet: {:?}", decoded.wallet);
-	panic!("panic");
-}
