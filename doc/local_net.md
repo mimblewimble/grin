@@ -9,7 +9,7 @@ You'll need a config file - the easiest is to copy over the grin.toml file from 
 Before running your mining server, a wallet server needs to be set up and listening so that the mining server knows where to send mining rewards. Do this from the first node directory with the following commands:
 
 	node1$ grin wallet init
-	node1$ grin wallet -p "password" receive
+	node1$ grin wallet -p "password" listen
 
 See [wallet](wallet.md) for more info on the various Grin wallet commands and options.
 
@@ -34,7 +34,7 @@ As before, node 1 will create the blockchain and begin mining. As we'll be runni
 
 First, we run a wallet server to receive rewards on port 15000 (we'll log in debug mode for more information about what's happening)
 
-    node1$ grin wallet -p "password" -a "http://127.0.0.1:10001" -r 15000 receive
+    node1$ grin wallet -p "password" -a "http://127.0.0.1:10001" -r 15000 listen
 
 Then we start node 1 mining with its P2P server bound to port 10000 and its api server at 10001. We also provide our wallet address where we'll receive mining rewards. In another terminal:
 
@@ -58,7 +58,7 @@ Similar to Node 2, we'll set up node 3 as a non-mining node seeded with node 2 (
 
 Node 3 is now running it's P2P service on port 30000 and its API server on 30001. You should be able to see it syncing its blockchain and peer data with nodes 1 and 2. Now start up a wallet listener.
 
-    node3$ grin wallet -p "password" -a "http://127.0.0.1:30001" -r 35000 receive
+    node3$ grin wallet -p "password" -a "http://127.0.0.1:30001" -r 35000 listen
 
 In contrast to other blockchains, a feature of a MimbleWimble is that a transaction cannot just be directly posted to the blockchain. It first needs to be sent from the sender to the receiver,
 who will add a blinding factor before posting it to the blockchain. The above command tells the wallet server to listen for transactions on port 35000, and, after applying it's own blinding factor to the transaction, forward them on to the listening API server on node 1. (NB: we should theoretically be able to post transactions to node 3 or 2, but for some reason transactions posted to peers don't seem to propagate properly at present)
