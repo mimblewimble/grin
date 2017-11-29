@@ -148,6 +148,7 @@ impl Peer {
 	/// if the remote peer is known to already have the block.
 	pub fn send_block(&self, b: &core::Block) -> Result<(), Error> {
 		if !self.tracking_adapter.has(b.hash()) {
+			debug!(LOGGER, "Send block {} to {}", b.hash(), self.info.addr);
 			self.proto.send_block(b)
 		} else {
 			Ok(())
