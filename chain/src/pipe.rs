@@ -92,22 +92,25 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 	})
 }
 
-/// Process the block header
-pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
+/// Process the block header.
+/// This is only ever used during sync and uses a context based on sync_head.
+pub fn sync_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
 	debug!(
 		LOGGER,
-		"pipe: process_header {} at {}",
+		"pipe: sync_block_header {} at {}",
 		bh.hash(),
 		bh.height
 	);
+
 	check_known(bh.hash(), &mut ctx)?;
 	validate_header(&bh, &mut ctx)?;
 	add_block_header(bh, &mut ctx)?;
 
+	// TODO - confirm this is not needed during sync process (I don't see how it is)
 	// just taking the shared lock
-	let _ = ctx.sumtrees.write().unwrap();
+	// let _ = ctx.sumtrees.write().unwrap();
 
-	update_header_head(bh, &mut ctx)
+	update_sync_head(bh, &mut ctx)
 }
 
 /// Quick in-memory check to fast-reject any block we've already handled
@@ -354,27 +357,18 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 	}
 }
 
-/// Directly updates the head if we've just appended a new block to it or handle
-/// the situation where we've just added enough work to have a fork with more
-/// work than the head.
-fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
-	// if we made a fork with more work than the head (which should also be true
-	// when extending the head), update it
+/// Update the sync head so we can keep syncing from where we left off.
+fn update_sync_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
 	let tip = Tip::from_block(bh);
-	if tip.total_difficulty > ctx.head.total_difficulty {
-		ctx.store
-			.save_header_head(&tip)
-			.map_err(|e| Error::StoreErr(e, "pipe save header head".to_owned()))?;
-
-		ctx.head = tip.clone();
-		info!(
-			LOGGER,
-			"Updated block header head to {} at {}.",
-			bh.hash(),
-			bh.height
-			);
-		Ok(Some(tip))
-	} else {
-		Ok(None)
-	}
+	ctx.store
+		.save_sync_head(&tip)
+		.map_err(|e| Error::StoreErr(e, "pipe save sync head".to_owned()))?;
+	ctx.head = tip.clone();
+	info!(
+		LOGGER,
+		"pipe: updated sync head to {} at {}.",
+		bh.hash(),
+		bh.height,
+	);
+	Ok(Some(tip))
 }
