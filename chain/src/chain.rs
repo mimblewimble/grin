@@ -25,7 +25,7 @@ use core::core::pmmr::{HashSum, NoSum};
 
 use core::core::{Block, BlockHeader, Output, TxKernel};
 use core::core::target::Difficulty;
-use core::core::hash::Hash;
+use core::core::hash::{Hash, Hashed};
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
@@ -108,7 +108,8 @@ impl Chain {
 		let _ = match chain_store.get_sync_head() {
 			Ok(tip) => tip,
 			Err(NotFoundErr) => {
-				let tip = Tip::new(genesis.hash());
+				let gen = chain_store.get_header_by_height(0).unwrap();
+				let tip = Tip::new(gen.hash());
 				chain_store.save_sync_head(&tip)?;
 				tip
 			},
