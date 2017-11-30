@@ -74,7 +74,7 @@ fn peer_handshake() {
 						rhandle.spawn(peer.run(socket).map_err(|e| {
 							panic!("Client run failed: {:?}", e);
 						}));
-						peer.send_ping(Difficulty::one()).unwrap();
+						peer.send_ping(Difficulty::one(), 0).unwrap();
 						timeout_send.from_err().map(|_| peer)
 					})
 					.and_then(|peer| {
