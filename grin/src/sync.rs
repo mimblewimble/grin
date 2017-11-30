@@ -60,18 +60,29 @@ fn body_sync(
 	p2p_server: Arc<p2p::Server>,
 	chain: Arc<chain::Chain>,
 ) {
-	debug!(LOGGER, "body_sync: loop");
+	let body_head: chain::Tip = chain.head().unwrap();
+	let header_head: chain::Tip = chain.get_header_head().unwrap();
+	let sync_head: chain::Tip = chain.get_sync_head().unwrap();
 
-	let header_head = chain.get_header_head().unwrap();
-	let sync_head = chain.get_sync_head().unwrap();
+	debug!(
+		LOGGER,
+		"body_sync: body_head - {}, {}, header_head - {}, {}, sync_head - {}, {}",
+		body_head.last_block_h,
+		body_head.height,
+		header_head.last_block_h,
+		header_head.height,
+		sync_head.last_block_h,
+		sync_head.height,
+	);
+
 	let mut hashes = vec![];
 
-	if sync_head.total_difficulty > header_head.total_difficulty {
+	if sync_head.total_difficulty > body_head.total_difficulty {
 		let mut current = chain.get_block_header(&sync_head.last_block_h);
 		while let Ok(header) = current {
 			// TODO we need a smarter condition here (this only works on a non-fork sync)
 			// although I think it still works (just inefficient as we go all the way back to genesis block...)
-			if header.hash() == header_head.hash() {
+			if header.hash() == body_head.hash() {
 				break;
 			}
 			hashes.push(header.hash());
@@ -91,7 +102,7 @@ fn body_sync(
 		debug!(
 			LOGGER,
 			"block_sync: requesting blocks ({}/{}), {:?}",
-			header_head.height,
+			body_head.height,
 			sync_head.height,
 			hashes_to_get,
 			);
