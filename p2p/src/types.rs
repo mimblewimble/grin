@@ -135,7 +135,7 @@ pub trait Protocol {
 		-> Box<Future<Item = (), Error = Error>>;
 
 	/// Sends a ping message to the remote peer.
-	fn send_ping(&self, total_difficulty: Difficulty) -> Result<(), Error>;
+	fn send_ping(&self, total_difficulty: Difficulty, height: u64) -> Result<(), Error>;
 
 	/// Relays a block to the remote peer.
 	fn send_block(&self, b: &core::Block) -> Result<(), Error>;
@@ -163,8 +163,11 @@ pub trait Protocol {
 /// forwarding or querying of blocks and transactions from the network among
 /// other things.
 pub trait NetAdapter: Sync + Send {
-	/// Current height of our chain.
+	/// Current total difficulty on our chain
 	fn total_difficulty(&self) -> Difficulty;
+
+	/// Current total height
+	fn total_height(&self) -> u64;
 
 	/// A valid transaction has been received from one of our peers
 	fn transaction_received(&self, tx: core::Transaction);
@@ -196,5 +199,5 @@ pub trait NetAdapter: Sync + Send {
 	fn peer_connected(&self, &PeerInfo);
 
 	/// Heard total_difficulty from a connected peer (via ping/pong).
-	fn peer_difficulty(&self, SocketAddr, Difficulty);
+	fn peer_difficulty(&self, SocketAddr, Difficulty, u64);
 }
