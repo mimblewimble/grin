@@ -240,7 +240,8 @@ impl NetAdapter for NetToChainAdapter {
 	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty, height: u64) {
 		debug!(
 			LOGGER,
-			"peer total_diff/height (ping/pong): {} , {}@{} vs us {}@{}",
+			"peer total_diff @ height (ping/pong): {}: {} @ {} \
+				 vs us: {} @ {}",
 			addr,
 			diff,
 			height,
