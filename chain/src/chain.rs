@@ -194,9 +194,11 @@ impl Chain {
 		bh: &BlockHeader,
 		opts: Options,
 	) -> Result<Option<Tip>, Error> {
-		let head = self.get_sync_head()?;
-		let ctx = self.ctx_from_head(head, opts);
-		pipe::sync_block_header(bh, ctx)
+		let sync_head = self.get_sync_head()?;
+		let header_head = self.get_header_head()?;
+		let sync_ctx = self.ctx_from_head(sync_head, opts);
+		let header_ctx = self.ctx_from_head(header_head, opts);
+		pipe::sync_block_header(bh, sync_ctx, header_ctx)
 	}
 
 	fn ctx_from_head(&self, head: Tip, opts: Options) -> pipe::BlockContext {
