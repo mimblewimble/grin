@@ -107,7 +107,7 @@ pub fn sync_block_header(
 		bh.height
 	);
 
-	check_known(bh.hash(), &mut sync_ctx)?;
+	// check_known(bh.hash(), &mut sync_ctx)?;
 	validate_header(&bh, &mut sync_ctx)?;
 	add_block_header(bh, &mut sync_ctx)?;
 
