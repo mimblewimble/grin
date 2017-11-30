@@ -263,7 +263,7 @@ impl NetAdapter for NetToChainAdapter {
 			self.total_height()
 		);
 
-		if diff.into_num() > 0 && self.p2p_server.is_initialized() {
+		if self.p2p_server.is_initialized() {
 			if let Some(peer) = self.p2p_server.borrow().get_peer(&addr) {
 				let mut peer = peer.write().unwrap();
 				peer.info.total_difficulty = diff;
