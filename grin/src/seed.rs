@@ -39,7 +39,6 @@ const PEER_PREFERRED_COUNT: u32 = 8;
 const SEEDS_URL: &'static str = "http://grin-tech.org/seeds.txt";
 
 pub struct Seeder {
-	peer_store: Arc<p2p::PeerStore>,
 	p2p: Arc<p2p::Server>,
 
 	capabilities: p2p::Capabilities,
@@ -48,11 +47,9 @@ pub struct Seeder {
 impl Seeder {
 	pub fn new(
 		capabilities: p2p::Capabilities,
-		peer_store: Arc<p2p::PeerStore>,
 		p2p: Arc<p2p::Server>,
 	) -> Seeder {
 		Seeder {
-			peer_store: peer_store,
 			p2p: p2p,
 			capabilities: capabilities,
 		}
@@ -82,7 +79,6 @@ impl Seeder {
 		&self,
 		tx: mpsc::UnboundedSender<SocketAddr>,
 	) -> Box<Future<Item = (), Error = String>> {
-		let peer_store = self.peer_store.clone();
 		let p2p_server = self.p2p.clone();
 
 		// now spawn a new future to regularly check if we need to acquire more peers
@@ -90,7 +86,7 @@ impl Seeder {
 		let mon_loop = Timer::default()
 			.interval(time::Duration::from_secs(10))
 			.for_each(move |_| {
-				debug!(LOGGER, "monitoring peers ({})", p2p_server.all_peers().len());
+				debug!(LOGGER, "monitoring peers ({})", p2p_server.connected_peers().len());
 
 				// maintenance step first, clean up p2p server peers and mark bans
 				// if needed
@@ -100,7 +96,7 @@ impl Seeder {
 					if p.is_banned() {
 						debug!(LOGGER, "Marking peer {} as banned.", p.info.addr);
 						let update_result =
-							peer_store.update_state(p.info.addr, p2p::State::Banned);
+							p2p_server.update_state(p.info.addr, p2p::State::Banned);
 						match update_result {
 							Ok(()) => {}
 							Err(_) => {}
@@ -110,12 +106,12 @@ impl Seeder {
 
 				// we don't have enough peers, getting more from db
 				if p2p_server.peer_count() < PEER_PREFERRED_COUNT {
-					let mut peers = peer_store.find_peers(
+					let mut peers = p2p_server.find_peers(
 						p2p::State::Healthy,
 						p2p::UNKNOWN,
 						(2 * PEER_MAX_COUNT) as usize,
 					);
-					peers.retain(|p| !p2p_server.is_known(p.addr));
+					peers.retain(|p| !p2p_server.is_known(&p.addr));
 					if peers.len() > 0 {
 						debug!(
 							LOGGER,
@@ -137,21 +133,21 @@ impl Seeder {
 	}
 
 	// Check if we have any pre-existing peer in db. If so, start with those,
- // otherwise use the seeds provided.
+	// otherwise use the seeds provided.
 	fn connect_to_seeds(
 		&self,
 		tx: mpsc::UnboundedSender<SocketAddr>,
 		seed_list: Box<Future<Item = Vec<SocketAddr>, Error = String>>,
 	) -> Box<Future<Item = (), Error = String>> {
-		let peer_store = self.peer_store.clone();
 
 		// a thread pool is required so we don't block the event loop with a
-  // db query
+		// db query
 		let thread_pool = cpupool::CpuPool::new(1);
+		let p2p_server = self.p2p.clone();
 		let seeder = thread_pool
 			.spawn_fn(move || {
 				// check if we have some peers in db
-				let peers = peer_store.find_peers(
+				let peers = p2p_server.find_peers(
 					p2p::State::Healthy,
 					p2p::FULL_HIST,
 					(2 * PEER_MAX_COUNT) as usize,
@@ -192,7 +188,6 @@ impl Seeder {
 		rx: mpsc::UnboundedReceiver<SocketAddr>,
 	) -> Box<Future<Item = (), Error = ()>> {
 		let capab = self.capabilities;
-		let p2p_store = self.peer_store.clone();
 		let p2p_server = self.p2p.clone();
 
 		let listener = rx.for_each(move |peer_addr| {
@@ -202,7 +197,6 @@ impl Seeder {
 				h.spawn(
 					connect_and_req(
 						capab,
-						p2p_store.clone(),
 						p2p_server.clone(),
 						inner_h,
 						peer_addr,
@@ -271,7 +265,6 @@ pub fn predefined_seeds(
 
 fn connect_and_req(
 	capab: p2p::Capabilities,
-	peer_store: Arc<p2p::PeerStore>,
 	p2p: Arc<p2p::Server>,
 	h: reactor::Handle,
 	addr: SocketAddr,
@@ -279,6 +272,7 @@ fn connect_and_req(
 	let connect_peer = p2p.connect_peer(addr, h).map_err(|_| ());
 	let timer = Timer::default();
 	let timeout = timer.timeout(connect_peer, Duration::from_secs(5));
+	let p2p_server = p2p.clone();
 
 	let fut = timeout.then(move |p| {
 		match p {
@@ -291,7 +285,7 @@ fn connect_and_req(
 				}
 			}
 			Err(_) => {
-				let update_result = peer_store.update_state(addr, p2p::State::Defunct);
+				let update_result = p2p_server.update_state(addr, p2p::State::Defunct);
 				match update_result {
 					Ok(()) => {}
 					Err(_) => {}

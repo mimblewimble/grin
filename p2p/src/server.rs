@@ -34,6 +34,7 @@ use core::core::hash::Hash;
 use core::core::target::Difficulty;
 use handshake::Handshake;
 use peer::Peer;
+use store::{PeerStore, PeerData, State};
 use types::*;
 use util::LOGGER;
 
@@ -45,7 +46,7 @@ impl NetAdapter for DummyAdapter {
 	}
 	fn transaction_received(&self, _: core::Transaction) {}
 	fn block_received(&self, _: core::Block) {}
-	fn headers_received(&self, _: Vec<core::BlockHeader>) {}
+	fn headers_received(&self, _: Vec<core::BlockHeader>, _: SocketAddr) {}
 	fn locate_headers(&self, _: Vec<Hash>) -> Vec<core::BlockHeader> {
 		vec![]
 	}
@@ -65,6 +66,7 @@ impl NetAdapter for DummyAdapter {
 pub struct Server {
 	config: P2PConfig,
 	capabilities: Capabilities,
+	store: Arc<PeerStore>,
 	peers: Arc<RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>>,
 	handshake: Arc<Handshake>,
 	adapter: Arc<NetAdapter>,
@@ -78,20 +80,21 @@ unsafe impl Send for Server {}
 impl Server {
 	/// Creates a new idle p2p server with no peers
 	pub fn new(
+		db_root: String,
 		capab: Capabilities,
 		config: P2PConfig,
-		peers: Arc<RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>>,
 		adapter: Arc<NetAdapter>,
 		genesis: Hash,
-	) -> Server {
-		Server {
+	) -> Result<Server, Error> {
+		Ok(Server {
 			config: config,
 			capabilities: capab,
-			peers: peers,
+			store: Arc::new(PeerStore::new(db_root)?),
+			peers: Arc::new(RwLock::new(HashMap::new())),
 			handshake: Arc::new(Handshake::new(genesis)),
 			adapter: adapter,
 			stop: RefCell::new(None),
-		}
+		})
 	}
 
 	/// Starts the p2p server. Opens a TCP port to allow incoming
@@ -185,7 +188,7 @@ impl Server {
 		addr: SocketAddr,
 		h: reactor::Handle,
 	) -> Box<Future<Item = Option<Arc<RwLock<Peer>>>, Error = Error>> {
-		if let Some(p) = self.get_peer(addr) {
+		if let Some(p) = self.get_peer(&addr) {
 			// if we're already connected to the addr, just return the peer
 			return Box::new(future::ok(Some(p)));
 		}
@@ -229,17 +232,17 @@ impl Server {
 	}
 
 	/// Check if the server already knows this peer (is already connected).
-	pub fn is_known(&self, addr: SocketAddr) -> bool {
+	pub fn is_known(&self, addr: &SocketAddr) -> bool {
 		self.get_peer(addr).is_some()
 	}
 
-	pub fn all_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
+	pub fn connected_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
 		self.peers.read().unwrap().values().map(|p| p.clone()).collect()
 	}
 
 	/// Get a peer we're connected to by address.
-	pub fn get_peer(&self, addr: SocketAddr) -> Option<Arc<RwLock<Peer>>> {
-		self.peers.read().unwrap().get(&addr).map(|p| p.clone())
+	pub fn get_peer(&self, addr: &SocketAddr) -> Option<Arc<RwLock<Peer>>> {
+		self.peers.read().unwrap().get(addr).map(|p| p.clone())
 	}
 
 	/// Have the server iterate over its peer list and prune all peers we have
@@ -249,7 +252,7 @@ impl Server {
 		let mut rm = vec![];
 
 		// build a list of peers to be cleaned up
-		for peer in self.all_peers() {
+		for peer in self.connected_peers() {
 			let peer_inner = peer.read().unwrap();
 			if !peer_inner.is_connected() {
 				debug!(LOGGER, "cleaning {:?}, not connected", peer_inner.info.addr);
@@ -270,7 +273,7 @@ impl Server {
 	/// Returns the peer with the most worked branch, showing the highest total
 	/// difficulty.
 	pub fn most_work_peer(&self) -> Option<Arc<RwLock<Peer>>> {
-		let mut peers = self.all_peers();
+		let mut peers = self.connected_peers();
 		if peers.len() == 0 {
 			return None;
 		}
@@ -293,7 +296,7 @@ impl Server {
 		let difficulty = self.adapter.total_difficulty();
 
 		let peers = self
-			.all_peers()
+			.connected_peers()
 			.iter()
 			.filter(|x| {
 				let peer = x.read().unwrap();
@@ -312,7 +315,7 @@ impl Server {
 	/// may drop the broadcast request if it knows the remote peer already has
 	/// the block.
 	pub fn broadcast_block(&self, b: &core::Block) {
-		let peers = self.all_peers();
+		let peers = self.connected_peers();
 		let mut count = 0;
 		for p in peers {
 			let p = p.read().unwrap();
@@ -331,7 +334,7 @@ impl Server {
 	/// implementation may drop the broadcast request if it knows the
 	/// remote peer already has the transaction.
 	pub fn broadcast_transaction(&self, tx: &core::Transaction) {
-		let peers = self.all_peers();
+		let peers = self.connected_peers();
 		for p in peers {
 			let p = p.read().unwrap();
 			if p.is_connected() {
@@ -344,18 +347,43 @@ impl Server {
 
 	/// Number of peers we're currently connected to.
 	pub fn peer_count(&self) -> u32 {
-		self.all_peers().len() as u32
+		self.connected_peers().len() as u32
 	}
 
 	/// Stops the server. Disconnect from all peers at the same time.
 	pub fn stop(self) {
 		info!(LOGGER, "calling stop on server");
-		let peers = self.all_peers();
+		let peers = self.connected_peers();
 		for peer in peers {
 			let peer = peer.read().unwrap();
 			peer.stop();
 		}
 		self.stop.into_inner().unwrap().send(()).unwrap();
+	}
+
+	/// All peer information we have in storage
+	pub fn all_peers(&self) -> Vec<PeerData> {
+		self.store.all_peers()
+	}
+
+	/// Find peers in store (not necessarily connected) and return their data
+	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
+		self.store.find_peers(state, cap, count)
+	}
+
+	/// Whether we've already seen a peer with the provided address
+	pub fn exists_peer(&self, peer_addr: SocketAddr) -> Result<bool, Error> {
+		self.store.exists_peer(peer_addr).map_err(From::from)
+	}
+
+	/// Saves updated information about a peer
+	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
+		self.store.save_peer(p).map_err(From::from)
+	}
+
+	/// Updates the state of a peer in store
+	pub fn update_state(&self, peer_addr: SocketAddr, new_state: State) -> Result<(), Error> {
+		self.store.update_state(peer_addr, new_state).map_err(From::from)
 	}
 }
 
