@@ -43,6 +43,10 @@ impl NetAdapter for NetToChainAdapter {
 		self.chain.total_difficulty()
 	}
 
+	fn total_height(&self) -> u64 {
+		self.chain.head().unwrap().height
+	}
+
 	fn transaction_received(&self, tx: core::Transaction) {
 		let source = pool::TxSource {
 			debug_name: "p2p".to_string(),
@@ -84,7 +88,7 @@ impl NetAdapter for NetToChainAdapter {
 				// and if we're currently syncing, our header chain is now wrong, it
 				// needs to be reset
 				if self.is_syncing() {
-					self.chain.reset_header_head();
+					let _ = self.chain.reset_header_head();
 				}
 			}
 		}
@@ -233,13 +237,15 @@ impl NetAdapter for NetToChainAdapter {
 		}
 	}
 
-	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty) {
+	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty, height: u64) {
 		debug!(
 			LOGGER,
-			"peer total_diff (ping/pong): {}, {} vs us {}",
+			"peer total_diff/height (ping/pong): {} , {}@{} vs us {}@{}",
 			addr,
 			diff,
+			height,
 			self.total_difficulty(),
+			self.total_height()
 		);
 
 		if self.p2p_server.is_initialized() {

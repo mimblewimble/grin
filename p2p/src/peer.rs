@@ -140,8 +140,8 @@ impl Peer {
 		self.proto.transmitted_bytes()
 	}
 
-	pub fn send_ping(&self, total_difficulty: Difficulty) -> Result<(), Error> {
-		self.proto.send_ping(total_difficulty)
+	pub fn send_ping(&self, total_difficulty: Difficulty, height: u64) -> Result<(), Error> {
+		self.proto.send_ping(total_difficulty, height)
 	}
 
 	/// Sends the provided block to the remote peer. The request may be dropped
@@ -226,6 +226,10 @@ impl NetAdapter for TrackingAdapter {
 		self.adapter.total_difficulty()
 	}
 
+	fn total_height(&self) -> u64 {
+		self.adapter.total_height()
+	}
+
 	fn transaction_received(&self, tx: core::Transaction) {
 		self.push(tx.hash());
 		self.adapter.transaction_received(tx)
@@ -260,7 +264,7 @@ impl NetAdapter for TrackingAdapter {
 		self.adapter.peer_connected(pi)
 	}
 
-	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty) {
-		self.adapter.peer_difficulty(addr, diff)
+	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty, height:u64) {
+		self.adapter.peer_difficulty(addr, diff, height)
 	}
 }
