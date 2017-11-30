@@ -31,6 +31,7 @@ const BLOCK_HEADER_PREFIX: u8 = 'h' as u8;
 const BLOCK_PREFIX: u8 = 'b' as u8;
 const HEAD_PREFIX: u8 = 'H' as u8;
 const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
+const SYNC_HEAD_PREFIX: u8 = 's' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const OUTPUT_COMMIT_PREFIX: u8 = 'o' as u8;
 const HEADER_BY_OUTPUT_PREFIX: u8 = 'p' as u8;
@@ -80,14 +81,21 @@ impl ChainStore for ChainKVStore {
 		self.db.put_ser(&vec![HEADER_HEAD_PREFIX], t)
 	}
 
+	fn get_sync_head(&self) -> Result<Tip, Error> {
+		option_to_not_found(self.db.get_ser(&vec![SYNC_HEAD_PREFIX]))
+	}
+
+	fn save_sync_head(&self, t: &Tip) -> Result<(), Error> {
+		self.db.put_ser(&vec![SYNC_HEAD_PREFIX], t)
+	}
+
 	fn get_block(&self, h: &Hash) -> Result<Block, Error> {
 		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, &mut h.to_vec())))
 	}
 
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(
-			self.db
-				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
+			self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
 		)
 	}
 

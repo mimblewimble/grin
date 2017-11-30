@@ -97,7 +97,7 @@ impl NetAdapter for NetToChainAdapter {
 	fn headers_received(&self, bhs: Vec<core::BlockHeader>, addr: SocketAddr) {
 		debug!(
 			LOGGER,
-			"Received block headers {:?} from {}",
+			"adapter: received block headers {:?} from {}",
 			bhs.iter().map(|x| x.hash()).collect::<Vec<_>>(),
 			addr
 		);
@@ -105,7 +105,7 @@ impl NetAdapter for NetToChainAdapter {
 		// try to add each header to our header chain
 		let mut added_hs = vec![];
 		for bh in bhs.clone() {
-			let res = self.chain.process_block_header(&bh, self.chain_opts());
+			let res = self.chain.sync_block_header(&bh, self.chain_opts());
 			match res {
 				Ok(_) => {
 					added_hs.push(bh);
@@ -306,7 +306,7 @@ impl NetToChainAdapter {
 		}
 		self.syncing.load(Ordering::Relaxed)
 	}
-	
+
 	// recursively go back through the locator vector and stop when we find
 	// a header that we recognize this will be a header shared in common
 	// between us and the peer
