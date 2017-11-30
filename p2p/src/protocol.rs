@@ -67,11 +67,11 @@ impl Protocol for ProtocolV1 {
 
 	/// Sends a ping message to the remote peer. Will panic if handle has never
 	/// been called on this protocol.
-	fn send_ping(&self, total_difficulty: Difficulty) -> Result<(), Error> {
+	fn send_ping(&self, total_difficulty: Difficulty, height: u64) -> Result<(), Error> {
 		self.send_request(
 			Type::Ping,
 			Type::Pong,
-			&Ping { total_difficulty },
+			&Ping { total_difficulty, height },
 			None,
 		)
 	}
@@ -142,8 +142,8 @@ fn handle_payload(
 	match header.msg_type {
 		Type::Ping => {
 			let ping = ser::deserialize::<Ping>(&mut &buf[..])?;
-			adapter.peer_difficulty(addr, ping.total_difficulty);
-			let pong = Pong { total_difficulty: adapter.total_difficulty() };
+			adapter.peer_difficulty(addr, ping.total_difficulty, ping.height);
+			let pong = Pong { total_difficulty: adapter.total_difficulty(), height: adapter.total_height() };
 			let mut body_data = vec![];
 			try!(ser::serialize(&mut body_data, &pong));
 			let mut data = vec![];
@@ -157,7 +157,7 @@ fn handle_payload(
 		}
 		Type::Pong => {
 			let pong = ser::deserialize::<Pong>(&mut &buf[..])?;
-			adapter.peer_difficulty(addr, pong.total_difficulty);
+			adapter.peer_difficulty(addr, pong.total_difficulty, pong.height);
 			Ok(None)
 		},
 		Type::Transaction => {
