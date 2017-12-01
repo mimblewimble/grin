@@ -189,8 +189,8 @@ fn a_simulate_block_propagation() {
 	util::init_test_logger();
 
 	// we actually set the chain_type in the ServerConfig below
-	// the global mining mode is effectively ignored
-	// global::set_mining_mode(ChainTypes::AutomatedTesting);
+	// TODO - avoid needing to set it in two places?
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "grin-prop";
 	framework::clean_all_output(test_name_dir);
@@ -252,8 +252,8 @@ fn simulate_full_sync() {
 	util::init_test_logger();
 
 	// we actually set the chain_type in the ServerConfig below
-	// the global mining mode is effectively ignored
-	// global::set_mining_mode(ChainTypes::AutomatedTesting);
+	// TODO - avoid needing to set it in two places?
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "grin-sync";
 	framework::clean_all_output(test_name_dir);
