@@ -156,9 +156,6 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 /// arranged by order of cost to have as little DoS surface as possible.
 /// TODO require only the block header (with length information)
 fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	if header.height > ctx.head.height + 1 {
-		return Err(Error::Orphan);
-	}
 
 	// check version, enforces scheduled hard fork
 	if !consensus::valid_header_version(header.height, header.version) {
@@ -188,16 +185,20 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	// first I/O cost, better as late as possible
-	let prev = try!(ctx.store.get_block_header(&header.previous,).map_err(|e| {
-		Error::StoreErr(e, format!("previous block header {}", header.previous))
-	},));
+	let prev = match ctx.store.get_block_header(&header.previous) {
+		Ok(prev) => Ok(prev),
+		Err(grin_store::Error::NotFoundErr) => Err(Error::Orphan),
+		Err(e) =>{
+			Err(Error::StoreErr(e, format!("previous header {}", header.previous)))
+		}
+	}?;
 
 	if header.height != prev.height + 1 {
 		return Err(Error::InvalidBlockHeight);
 	}
 	if header.timestamp <= prev.timestamp && !global::is_automated_testing_mode() {
 		// prevent time warp attacks and some timestamp manipulations by forcing strict
-  // time progression (but not in CI mode)
+		// time progression (but not in CI mode)
 		return Err(Error::InvalidBlockTime);
 	}
 
