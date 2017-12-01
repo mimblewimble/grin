@@ -200,6 +200,12 @@ pub trait ChainStore: Send + Sync {
 	/// Save the provided tip as the current head of the block header chain
 	fn save_header_head(&self, t: &Tip) -> Result<(), store::Error>;
 
+	/// Get the tip of the current sync header chain
+	fn get_sync_head(&self) -> Result<Tip, store::Error>;
+
+	/// Save the provided tip as the current head of the sync header chain
+	fn save_sync_head(&self, t: &Tip) -> Result<(), store::Error>;
+
 	/// Gets the block header at the provided height
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, store::Error>;
 
