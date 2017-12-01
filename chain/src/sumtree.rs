@@ -262,11 +262,25 @@ impl<'a> Extension<'a> {
 		}
 
 		for out in &b.outputs {
-			if let Ok(pos) = self.commit_index.get_output_pos(&out.commitment()) {
-				if pos <= self.output_pmmr.unpruned_size() {
+			let commit = out.commitment();
+			if let Ok(pos) = self.commit_index.get_output_pos(&commit) {
+				// we need to check whether the commitment is in the current MMR view
+				// as well as the index doesn't support rewind and is non-authoritative
+				// (non-historical node will have a much smaller one)
+				// note that this doesn't show the commitment *never* existed, just
+				// that this is not an existing unspent commitment right now
+				if let Some(c) = self.output_pmmr.get(pos) {
+					let hashsum = HashSum::from_summable(
+						pos, &SumCommit{commit}, Some(out.switch_commit_hash));
+					if c.hash != hashsum.hash {
+						warn!(LOGGER,
+									"Non matching hash at {}: {} vs {}. Should not happen.",
+									pos, c.hash, hashsum.hash);
+					}
 					return Err(Error::DuplicateCommitment(out.commitment()));
 				}
 			}
+	
 			// push new outputs commitments in their MMR and save them in the index
 			let pos = self.output_pmmr
 				.push(
