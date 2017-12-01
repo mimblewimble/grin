@@ -77,8 +77,8 @@ fn body_sync(
 
 	let mut hashes = vec![];
 
-	if sync_head.total_difficulty > body_head.total_difficulty {
-		let mut current = chain.get_block_header(&sync_head.last_block_h);
+	if header_head.total_difficulty > body_head.total_difficulty {
+		let mut current = chain.get_block_header(&header_head.last_block_h);
 		while let Ok(header) = current {
 
 			// look back through the sync chain until we find a header
@@ -110,7 +110,7 @@ fn body_sync(
 			LOGGER,
 			"block_sync: requesting blocks ({}/{}), {:?}",
 			body_head.height,
-			sync_head.height,
+			header_head.height,
 			hashes_to_get,
 			);
 
@@ -156,7 +156,7 @@ pub fn header_sync(
 		}
 	}
 
-	thread::sleep(Duration::from_secs(30));
+	thread::sleep(Duration::from_secs(5));
 }
 
 /// Request some block headers from a peer to advance us.
