@@ -218,10 +218,6 @@ fn validate_block(
 	ctx: &mut BlockContext,
 	ext: &mut sumtree::Extension,
 ) -> Result<(), Error> {
-	if b.header.height > ctx.head.height + 1 {
-		return Err(Error::Orphan);
-	}
-
 	// main isolated block validation, checks all commitment sums and sigs
 	try!(b.validate().map_err(&Error::InvalidBlockProof));
 
@@ -236,12 +232,22 @@ fn validate_block(
 		let mut hashes = vec![];
 		loop {
 			let curr_header = ctx.store.get_block_header(&current)?;
-			let height_header = ctx.store.get_header_by_height(curr_header.height)?;
-			if curr_header.hash() != height_header.hash() {
-				hashes.insert(0, curr_header.hash());
-				current = curr_header.previous;
-			} else {
-				break;
+			match ctx.store.get_header_by_height(curr_header.height) {
+				Ok(height_header) => {
+					if curr_header.hash() != height_header.hash() {
+						hashes.insert(0, curr_header.hash());
+						current = curr_header.previous;
+					} else {
+						break;
+					}
+				},
+				Err(grin_store::Error::NotFoundErr) => {
+					hashes.insert(0, curr_header.hash());
+					current = curr_header.previous;
+				},
+				Err(e) => {
+					return Err(Error::StoreErr(e, format!("header by height lookup failed")));
+				}
 			}
 		}
 

@@ -218,7 +218,10 @@ impl ChainStore for ChainKVStore {
 	/// current chain and updating "header_by_height" until we reach a
 	/// block_header
 	/// that is consistent with its height (everything prior to this will be
-	/// consistent)
+	/// consistent).
+	/// We need to handle the case where we have no index entry for a given height to
+	/// account for the case where we just switched to a new fork and the height jumped
+	/// beyond current chain height.
 	fn setup_height(&self, bh: &BlockHeader) -> Result<(), Error> {
 		self.db
 			.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height), bh)?;
@@ -226,25 +229,23 @@ impl ChainStore for ChainKVStore {
 			return Ok(());
 		}
 
-		let mut prev_h = bh.previous;
-		let mut prev_height = bh.height - 1;
-		while prev_height > 0 {
-			let prev = self.get_header_by_height(prev_height)?;
-			if prev.hash() != prev_h {
+		let prev_h = bh.previous;
+		let prev_height = bh.height - 1;
+		match self.get_header_by_height(prev_height) {
+			Ok(prev) => {
+				if prev.hash() != prev_h {
+					let real_prev = self.get_block_header(&prev_h)?;
+					self.setup_height(&real_prev)
+				} else {
+					Ok(())
+				}
+			},
+			Err(Error::NotFoundErr) => {
 				let real_prev = self.get_block_header(&prev_h)?;
-				self.db
-					.put_ser(
-						&u64_to_key(HEADER_HEIGHT_PREFIX, real_prev.height),
-						&real_prev,
-					)
-					.unwrap();
-				prev_h = real_prev.previous;
-				prev_height = real_prev.height - 1;
-			} else {
-				break;
-			}
+				self.setup_height(&real_prev)
+			},
+			Err(e) => Err(e)
 		}
-		Ok(())
 	}
 }
 
