@@ -301,8 +301,13 @@ impl<'a> Extension<'a> {
 
 		for kernel in &b.kernels {
 			if let Ok(pos) = self.commit_index.get_kernel_pos(&kernel.excess) {
-				if pos <= self.kernel_pmmr.unpruned_size() {
-					return Err(Error::DuplicateKernel(kernel.excess.clone()));
+				// same as outputs
+				if let Some(k) = self.kernel_pmmr.get(pos) {
+					let hashsum = HashSum::from_summable(
+						pos, &NoSum(kernel), None::<RangeProof>);
+					if k.hash == hashsum.hash {
+						return Err(Error::DuplicateKernel(kernel.excess.clone()));
+					}
 				}
 			}
 			// push kernels in their MMR
