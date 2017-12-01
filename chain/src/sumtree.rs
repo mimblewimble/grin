@@ -272,12 +272,12 @@ impl<'a> Extension<'a> {
 				if let Some(c) = self.output_pmmr.get(pos) {
 					let hashsum = HashSum::from_summable(
 						pos, &SumCommit{commit}, Some(out.switch_commit_hash));
-					if c.hash != hashsum.hash {
-						warn!(LOGGER,
-									"Non matching hash at {}: {} vs {}. Should not happen.",
-									pos, c.hash, hashsum.hash);
+					// as we're processing a new fork, we may get a position on the old
+					// fork that exists but matches a different node, filtering that
+					// case out
+					if c.hash == hashsum.hash {
+						return Err(Error::DuplicateCommitment(out.commitment()));
 					}
-					return Err(Error::DuplicateCommitment(out.commitment()));
 				}
 			}
 	
