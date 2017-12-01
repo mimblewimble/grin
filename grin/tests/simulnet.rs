@@ -187,7 +187,10 @@ fn simulate_parallel_mining() {
 #[test]
 fn a_simulate_block_propagation() {
 	util::init_test_logger();
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
+
+	// we actually set the chain_type in the ServerConfig below
+	// the global mining mode is effectively ignored
+	// global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "grin-prop";
 	framework::clean_all_output(test_name_dir);
@@ -222,6 +225,7 @@ fn a_simulate_block_propagation() {
 				}),
 				seeding_type: grin::Seeding::List,
 				seeds: Some(vec!["127.0.0.1:18000".to_string()]),
+				chain_type: core::global::ChainTypes::AutomatedTesting,
 				..Default::default()
 			},
 			&handle,
@@ -246,7 +250,10 @@ fn a_simulate_block_propagation() {
 #[test]
 fn simulate_full_sync() {
 	util::init_test_logger();
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
+
+	// we actually set the chain_type in the ServerConfig below
+	// the global mining mode is effectively ignored
+	// global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "grin-sync";
 	framework::clean_all_output(test_name_dir);
@@ -281,6 +288,7 @@ fn simulate_full_sync() {
 			}),
 			seeding_type: grin::Seeding::List,
 			seeds: Some(vec!["127.0.0.1:11000".to_string()]),
+			chain_type: core::global::ChainTypes::AutomatedTesting,
 			..Default::default()
 		};
 		let s = grin::Server::future(config, &handle).unwrap();

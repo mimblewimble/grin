@@ -205,6 +205,7 @@ impl LocalServerContainer {
 				}),
 				seeds: Some(seeds),
 				seeding_type: seeding_type,
+				chain_type: core::global::ChainTypes::AutomatedTesting,
 				..Default::default()
 			},
 			&event_loop.handle(),
