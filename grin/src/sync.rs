@@ -80,11 +80,18 @@ fn body_sync(
 	if sync_head.total_difficulty > body_head.total_difficulty {
 		let mut current = chain.get_block_header(&sync_head.last_block_h);
 		while let Ok(header) = current {
-			// TODO we need a smarter condition here (this only works on a non-fork sync)
-			// although I think it still works (just inefficient as we go all the way back to genesis block...)
-			if header.hash() == body_head.hash() {
-				break;
+
+			// look back through the sync chain until we find a header
+			// that is consistent with the height index (we know this is in the real chain)
+			match chain.get_header_by_height(header.height) {
+				Ok(height_header) => {
+					if header.hash() == height_header.hash() {
+						break;
+					}
+				},
+				Err(_) => {},
 			}
+
 			hashes.push(header.hash());
 			current = chain.get_block_header(&header.previous);
 		}
