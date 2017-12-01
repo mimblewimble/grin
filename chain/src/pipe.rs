@@ -107,13 +107,13 @@ pub fn sync_block_header(
 		bh.height
 	);
 
-	// check_known(bh.hash(), &mut sync_ctx)?;
 	validate_header(&bh, &mut sync_ctx)?;
 	add_block_header(bh, &mut sync_ctx)?;
 
-	// TODO - confirm this is not needed during sync process (I don't see how it is)
+	// TODO - confirm this is needed during sync process (I don't see how it is)
+	// we do not touch the sumtrees when syncing headers
 	// just taking the shared lock
-	// let _ = ctx.sumtrees.write().unwrap();
+	let _ = header_ctx.sumtrees.write().unwrap();
 
 	// now update the header_head (if new header with most work) and the sync_head (always)
 	update_header_head(bh, &mut header_ctx);
