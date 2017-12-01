@@ -95,23 +95,23 @@ impl NetAdapter for NetToChainAdapter {
 	}
 
 	fn headers_received(&self, bhs: Vec<core::BlockHeader>, addr: SocketAddr) {
-		debug!(
+		info!(
 			LOGGER,
 			"Received block headers {:?} from {}",
 			bhs.iter().map(|x| x.hash()).collect::<Vec<_>>(),
-			addr
+			addr,
 		);
 
 		// try to add each header to our header chain
 		let mut added_hs = vec![];
-		for bh in bhs.clone() {
-			let res = self.chain.process_block_header(&bh, self.chain_opts());
+		for bh in bhs {
+			let res = self.chain.sync_block_header(&bh, self.chain_opts());
 			match res {
 				Ok(_) => {
-					added_hs.push(bh);
+					added_hs.push(bh.hash());
 				}
 				Err(chain::Error::Unfit(s)) => {
-					debug!(
+					info!(
 						LOGGER,
 						"Received unfit block header {} at {}: {}.",
 						bh.hash(),
@@ -135,9 +135,9 @@ impl NetAdapter for NetToChainAdapter {
 				}
 			}
 		}
-		debug!(
+		info!(
 			LOGGER,
-			"Received {} headers for the header chain.",
+			"Added {} headers to the header chain.",
 			added_hs.len()
 		);
 	}
@@ -149,9 +149,23 @@ impl NetAdapter for NetToChainAdapter {
 			locator,
 		);
 
-		let header = match self.find_common_header(locator) {
-			Some(header) => header,
-			None => return vec![],
+		if locator.len() == 0 {
+			return vec![];
+		}
+
+		// recursively go back through the locator vector
+		// and stop when we find a header that we recognize
+		// this will be a header shared in common between us and the peer
+		let known = self.chain.get_block_header(&locator[0]);
+		let header = match known {
+			Ok(header) => header,
+			Err(chain::Error::StoreErr(store::Error::NotFoundErr, _)) => {
+				return self.locate_headers(locator[1..].to_vec());
+			}
+			Err(e) => {
+				error!(LOGGER, "Could not build header locator: {:?}", e);
+				return vec![];
+			}
 		};
 
 		debug!(
@@ -241,7 +255,7 @@ impl NetAdapter for NetToChainAdapter {
 		debug!(
 			LOGGER,
 			"peer total_diff @ height (ping/pong): {}: {} @ {} \
-				 vs us: {} @ {}",
+			vs us: {} @ {}",
 			addr,
 			diff,
 			height,
@@ -249,7 +263,7 @@ impl NetAdapter for NetToChainAdapter {
 			self.total_height()
 		);
 
-		if self.p2p_server.is_initialized() {
+		if diff.into_num() > 0 {
 			if let Some(peer) = self.p2p_server.borrow().get_peer(&addr) {
 				let mut peer = peer.write().unwrap();
 				peer.info.total_difficulty = diff;
@@ -305,40 +319,6 @@ impl NetToChainAdapter {
 			}
 		}
 		self.syncing.load(Ordering::Relaxed)
-	}
-	
-	// recursively go back through the locator vector and stop when we find
-	// a header that we recognize this will be a header shared in common
-	// between us and the peer
-	fn find_common_header(&self, locator: Vec<Hash>) -> Option<BlockHeader> {
-		if locator.len() == 0 {
-			return None;
-		}
-
-		let known = self.chain.get_block_header(&locator[0]);
-
-		match known {
-			Ok(header) => {
-				// even if we know the block, it may not be on our winning chain
-				let known_winning = self.chain.get_header_by_height(header.height);
-				if let Ok(known_winning) = known_winning {
-					if known_winning.hash() != header.hash() {
-						self.find_common_header(locator[1..].to_vec())
-					} else {
-						Some(header)
-					}
-				} else {
-					self.find_common_header(locator[1..].to_vec())
-				}
-			},
-			Err(chain::Error::StoreErr(store::Error::NotFoundErr, _)) => {
-				self.find_common_header(locator[1..].to_vec())
-			},
-			Err(e) => {
-				error!(LOGGER, "Could not build header locator: {:?}", e);
-				None
-			}
-		}
 	}
 
 	/// Prepare options for the chain pipeline

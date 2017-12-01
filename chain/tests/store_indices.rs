@@ -16,14 +16,17 @@ extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_pow as pow;
 extern crate rand;
 
 use std::fs;
 
 use chain::ChainStore;
 use core::core::hash::Hashed;
-use core::core::{Block, BlockHeader};
+use core::core::Block;
 use keychain::Keychain;
+use core::global;
+use core::global::ChainTypes;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -39,7 +42,12 @@ fn test_various_store_indices() {
 
 	let chain_store = &chain::store::ChainKVStore::new(".grin".to_string()).unwrap() as &ChainStore;
 
-	let block = Block::new(&BlockHeader::default(), vec![], &keychain, &key_id).unwrap();
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	let genesis = pow::mine_genesis_block(None).unwrap();
+	chain_store.save_block(&genesis).unwrap();
+	chain_store.setup_height(&genesis.header).unwrap();
+
+	let block = Block::new(&genesis.header, vec![], &keychain, &key_id).unwrap();
 	let commit = block.outputs[0].commitment();
 	let block_hash = block.hash();
 
