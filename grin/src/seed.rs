@@ -169,7 +169,8 @@ impl Seeder {
 
 		// a thread pool is required so we don't block the event loop with a
 		// db query
-		let thread_pool = cpupool::CpuPool::new(1);
+		let thread_pool = cpupool::Builder::new()
+			.pool_size(1).name_prefix("seed").create();
 		let p2p_server = self.p2p.clone();
 		let seeder = thread_pool
 			.spawn_fn(move || {

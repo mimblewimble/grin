@@ -231,24 +231,24 @@ impl Handler for SumTreeHandler {
 }
 
 pub struct PeersAllHandler {
-	pub p2p_server: Arc<p2p::Server>,
+	pub peers: p2p::Peers,
 }
 
 impl Handler for PeersAllHandler {
 	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
-		let peers = &self.p2p_server.all_peers();
+		let peers = &self.peers.all_peers();
 		json_response_pretty(&peers)
 	}
 }
 
 pub struct PeersConnectedHandler {
-	pub p2p_server: Arc<p2p::Server>,
+	pub peers: p2p::Peers,
 }
 
 impl Handler for PeersConnectedHandler {
 	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
 		let mut peers = vec![];
-		for p in &self.p2p_server.connected_peers() {
+		for p in &self.peers.connected_peers() {
 			let p = p.read().unwrap();
 			let peer_info = p.info.clone();
 			peers.push(peer_info);
@@ -262,7 +262,7 @@ impl Handler for PeersConnectedHandler {
 /// POST /v1/peers/10.12.12.13/ban
 /// TODO POST /v1/peers/10.12.12.13/unban
 pub struct PeerHandler {
-	pub p2p_server: Arc<p2p::Server>,
+	pub peers: p2p::Peers,
 }
 
 impl Handler for PeerHandler {
@@ -276,7 +276,7 @@ impl Handler for PeerHandler {
       "ban" => {
         path_elems.pop();
         if let Ok(addr) = path_elems.last().unwrap().parse() {
-          self.p2p_server.ban_peer(&addr);
+          self.peers.ban_peer(&addr);
           Ok(Response::with((status::Ok, "")))
         } else {
           Ok(Response::with((status::BadRequest, "")))
@@ -459,74 +459,76 @@ pub fn start_rest_apis<T>(
 	addr: String,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<T>>>,
-	p2p_server: Arc<p2p::Server>,
+	peers: p2p::Peers,
 ) where
 	T: pool::BlockChain + Send + Sync + 'static,
 {
-	thread::spawn(move || {
-		// build handlers and register them under the appropriate endpoint
-		let utxo_handler = UtxoHandler {
-			chain: chain.clone(),
-		};
-		let block_handler = BlockHandler {
-			chain: chain.clone(),
-		};
-		let chain_tip_handler = ChainHandler {
-			chain: chain.clone(),
-		};
-		let sumtree_handler = SumTreeHandler {
-			chain: chain.clone(),
-		};
-		let pool_info_handler = PoolInfoHandler {
-			tx_pool: tx_pool.clone(),
-		};
-		let pool_push_handler = PoolPushHandler {
-			tx_pool: tx_pool.clone(),
-		};
-		let peers_all_handler = PeersAllHandler {
-			p2p_server: p2p_server.clone(),
-		};
-		let peers_connected_handler = PeersConnectedHandler {
-			p2p_server: p2p_server.clone(),
-		};
-		let peer_handler = PeerHandler {
-			p2p_server: p2p_server.clone(),
-		};
+let _ = thread::Builder::new()
+	.name("apis".to_string())
+	.spawn(move || {
+			// build handlers and register them under the appropriate endpoint
+			let utxo_handler = UtxoHandler {
+				chain: chain.clone(),
+			};
+			let block_handler = BlockHandler {
+				chain: chain.clone(),
+			};
+			let chain_tip_handler = ChainHandler {
+				chain: chain.clone(),
+			};
+			let sumtree_handler = SumTreeHandler {
+				chain: chain.clone(),
+			};
+			let pool_info_handler = PoolInfoHandler {
+				tx_pool: tx_pool.clone(),
+			};
+			let pool_push_handler = PoolPushHandler {
+				tx_pool: tx_pool.clone(),
+			};
+			let peers_all_handler = PeersAllHandler {
+				p2p_server: p2p_server.clone(),
+			};
+			let peers_connected_handler = PeersConnectedHandler {
+				p2p_server: p2p_server.clone(),
+			};
+			let peer_handler = PeerHandler {
+				p2p_server: p2p_server.clone(),
+			};
 
-		let route_list = vec!(
-			"get /".to_string(),
-			"get /blocks".to_string(),
-			"get /chain".to_string(),
-			"get /chain/utxos".to_string(),
-			"get /sumtrees/roots".to_string(),
-			"get /sumtrees/lastutxos?n=10".to_string(),
-			"get /sumtrees/lastrangeproofs".to_string(),
-			"get /sumtrees/lastkernels".to_string(),
-			"get /pool".to_string(),
-			"post /pool/push".to_string(),
-			"get /peers/all".to_string(),
-			"get /peers/connected".to_string(),
-		);
-		let index_handler = IndexHandler { list: route_list };
-		let router = router!(
-			index: get "/" => index_handler,
-			blocks: get "/blocks/*" => block_handler,
-			chain_tip: get "/chain" => chain_tip_handler,
-			chain_utxos: get "/chain/utxos/*" => utxo_handler,
-			sumtree_roots: get "/sumtrees/*" => sumtree_handler,
-			pool_info: get "/pool" => pool_info_handler,
-			pool_push: post "/pool/push" => pool_push_handler,
-			peers_all: get "/peers/all" => peers_all_handler,
-			peers_connected: get "/peers/connected" => peers_connected_handler,
-			peer: post "/peers/*" => peer_handler,
-		);
+			let route_list = vec!(
+				"get /".to_string(),
+				"get /blocks".to_string(),
+				"get /chain".to_string(),
+				"get /chain/utxos".to_string(),
+				"get /sumtrees/roots".to_string(),
+				"get /sumtrees/lastutxos?n=10".to_string(),
+				"get /sumtrees/lastrangeproofs".to_string(),
+				"get /sumtrees/lastkernels".to_string(),
+				"get /pool".to_string(),
+				"post /pool/push".to_string(),
+				"get /peers/all".to_string(),
+				"get /peers/connected".to_string(),
+			);
+			let index_handler = IndexHandler { list: route_list };
+			let router = router!(
+				index: get "/" => index_handler,
+				blocks: get "/blocks/*" => block_handler,
+				chain_tip: get "/chain" => chain_tip_handler,
+				chain_utxos: get "/chain/utxos/*" => utxo_handler,
+				sumtree_roots: get "/sumtrees/*" => sumtree_handler,
+				pool_info: get "/pool" => pool_info_handler,
+				pool_push: post "/pool/push" => pool_push_handler,
+				peers_all: get "/peers/all" => peers_all_handler,
+				peers_connected: get "/peers/connected" => peers_connected_handler,
+				peer: post "/peers/*" => peer_handler,
+			);
 
-		let mut apis = ApiServer::new("/v1".to_string());
-		apis.register_handler(router);
+			let mut apis = ApiServer::new("/v1".to_string());
+			apis.register_handler(router);
 
-		info!(LOGGER, "Starting HTTP API server at {}.", addr);
-		apis.start(&addr[..]).unwrap_or_else(|e| {
-			error!(LOGGER, "Failed to start API HTTP server: {}.", e);
-		});
+			info!(LOGGER, "Starting HTTP API server at {}.", addr);
+			apis.start(&addr[..]).unwrap_or_else(|e| {
+				error!(LOGGER, "Failed to start API HTTP server: {}.", e);
+			});
 	});
 }
