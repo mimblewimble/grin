@@ -414,65 +414,67 @@ pub fn start_rest_apis<T>(
 ) where
 	T: pool::BlockChain + Send + Sync + 'static,
 {
-	thread::spawn(move || {
-		// build handlers and register them under the appropriate endpoint
-		let utxo_handler = UtxoHandler {
-			chain: chain.clone(),
-		};
-		let chain_tip_handler = ChainHandler {
-			chain: chain.clone(),
-		};
-		let sumtree_handler = SumTreeHandler {
-			chain: chain.clone(),
-		};
-		let pool_info_handler = PoolInfoHandler {
-			tx_pool: tx_pool.clone(),
-		};
-		let pool_push_handler = PoolPushHandler {
-			tx_pool: tx_pool.clone(),
-		};
-		let peers_all_handler = PeersAllHandler {
-			p2p_server: p2p_server.clone(),
-		};
-		let peers_connected_handler = PeersConnectedHandler {
-			p2p_server: p2p_server.clone(),
-		};
-		let peer_handler = PeerHandler {
-			p2p_server: p2p_server.clone(),
-		};
+	let _ = thread::Builder::new()
+		.name("apis".to_string())
+		.spawn(move || {
+			// build handlers and register them under the appropriate endpoint
+			let utxo_handler = UtxoHandler {
+				chain: chain.clone(),
+			};
+			let chain_tip_handler = ChainHandler {
+				chain: chain.clone(),
+			};
+			let sumtree_handler = SumTreeHandler {
+				chain: chain.clone(),
+			};
+			let pool_info_handler = PoolInfoHandler {
+				tx_pool: tx_pool.clone(),
+			};
+			let pool_push_handler = PoolPushHandler {
+				tx_pool: tx_pool.clone(),
+			};
+			let peers_all_handler = PeersAllHandler {
+				p2p_server: p2p_server.clone(),
+			};
+			let peers_connected_handler = PeersConnectedHandler {
+				p2p_server: p2p_server.clone(),
+			};
+			let peer_handler = PeerHandler {
+				p2p_server: p2p_server.clone(),
+			};
 
-		let route_list = vec!(
-			"get /".to_string(),
-			"get /chain".to_string(),
-			"get /chain/utxos".to_string(),
-			"get /sumtrees/roots".to_string(),
-			"get /sumtrees/lastutxos?n=10".to_string(),
-			"get /sumtrees/lastrangeproofs".to_string(),
-			"get /sumtrees/lastkernels".to_string(),
-			"get /pool".to_string(),
-			"post /pool/push".to_string(),
-			"get /peers/all".to_string(),
-			"get /peers/connected".to_string(),
-		);
-		let index_handler = IndexHandler { list: route_list };
-		let router = router!(
-			index: get "/" => index_handler,
-			chain_tip: get "/chain" => chain_tip_handler,
-			chain_utxos: get "/chain/utxos/*" => utxo_handler,
-			sumtree_roots: get "/sumtrees/*" => sumtree_handler,
-			pool_info: get "/pool" => pool_info_handler,
-			pool_push: post "/pool/push" => pool_push_handler,
-			peers_all: get "/peers/all" => peers_all_handler,
-			peers_connected: get "/peers/connected" => peers_connected_handler,
-			peer: post "/peers/*" => peer_handler,
-		);
+			let route_list = vec!(
+				"get /".to_string(),
+				"get /chain".to_string(),
+				"get /chain/utxos".to_string(),
+				"get /sumtrees/roots".to_string(),
+				"get /sumtrees/lastutxos?n=10".to_string(),
+				"get /sumtrees/lastrangeproofs".to_string(),
+				"get /sumtrees/lastkernels".to_string(),
+				"get /pool".to_string(),
+				"post /pool/push".to_string(),
+				"get /peers/all".to_string(),
+				"get /peers/connected".to_string(),
+			);
+			let index_handler = IndexHandler { list: route_list };
+			let router = router!(
+				index: get "/" => index_handler,
+				chain_tip: get "/chain" => chain_tip_handler,
+				chain_utxos: get "/chain/utxos/*" => utxo_handler,
+				sumtree_roots: get "/sumtrees/*" => sumtree_handler,
+				pool_info: get "/pool" => pool_info_handler,
+				pool_push: post "/pool/push" => pool_push_handler,
+				peers_all: get "/peers/all" => peers_all_handler,
+				peers_connected: get "/peers/connected" => peers_connected_handler,
+				peer: post "/peers/*" => peer_handler,
+			);
 
-		let mut apis = ApiServer::new("/v1".to_string());
-		apis.register_handler(router);
+			let mut apis = ApiServer::new("/v1".to_string());
+			apis.register_handler(router);
 
-		info!(LOGGER, "Starting HTTP API server at {}.", addr);
-		apis.start(&addr[..]).unwrap_or_else(|e| {
-			error!(LOGGER, "Failed to start API HTTP server: {}.", e);
-		});
+			info!(LOGGER, "Starting HTTP API server at {}.", addr);
+			apis.start(&addr[..]).unwrap_or_else(|e| {
+				error!(LOGGER, "Failed to start API HTTP server: {}.", e);
+			});
 	});
 }
