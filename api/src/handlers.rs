@@ -282,17 +282,9 @@ pub struct BlockHandler {
 }
 
 impl BlockHandler {
-	fn get_block(&self, h: &Hash) -> BlockOutputsPrintable {
+	fn get_block(&self, h: &Hash) -> BlockPrintable {
 		let block = self.chain.clone().get_block(h).unwrap();
-		let outputs = block
-			.outputs
-			.iter()
-			.map(|k|OutputPrintable::from_output(k, &block.header, true))
-			.collect();
-		BlockOutputsPrintable {
-			header: BlockHeaderInfo::from_header(&block.header),
-			outputs: outputs,
-		}
+		BlockPrintable::from_block(&block)
 	}
 
 	// Try to decode the string as a height or a hash address.

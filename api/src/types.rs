@@ -239,6 +239,21 @@ impl OutputSwitch {
 		}
 	}
 }
+
+// Printable representation of a block
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TxKernelPrintable {
+	pub excess: String,
+}
+
+impl TxKernelPrintable {
+	pub fn from_txkernel(kernel: &core::TxKernel) -> TxKernelPrintable {
+		TxKernelPrintable {
+			excess: util::to_hex(kernel.excess.0.to_vec()),
+		}
+	}
+}
+
 // Just the information required for wallet reconstruction
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BlockHeaderInfo {
@@ -251,11 +266,47 @@ pub struct BlockHeaderInfo {
 }
 
 impl BlockHeaderInfo {
-	pub fn from_header(block_header: &core::BlockHeader) -> BlockHeaderInfo{
+	pub fn from_header(block_header: &core::BlockHeader) -> BlockHeaderInfo {
 		BlockHeaderInfo {
 			hash: util::to_hex(block_header.hash().to_vec()),
 			previous: util::to_hex(block_header.previous.to_vec()),
 			height: block_header.height,
+		}
+	}
+}
+
+// Printable representation of a block
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BlockPrintable {
+	/// The block header
+	pub header: BlockHeaderInfo,
+	// Input transactions
+	pub inputs: Vec<String>,
+	/// A printable version of the outputs
+	pub outputs: Vec<OutputPrintable>,
+	/// A printable version of the transaction kernels
+	pub kernels: Vec<TxKernelPrintable>,
+}
+
+impl BlockPrintable {
+	pub fn from_block(block: &core::Block) -> BlockPrintable {
+		let inputs = block.inputs
+			.iter()
+			.map(|input| util::to_hex((input.0).0.to_vec()))
+			.collect();
+		let outputs = block.outputs
+			.iter()
+			.map(|output| OutputPrintable::from_output(output, &block.header, true))
+			.collect();
+		let kernels = block.kernels
+			.iter()
+			.map(|kernel| TxKernelPrintable::from_txkernel(kernel))
+			.collect();
+		BlockPrintable {
+			header: BlockHeaderInfo::from_header(&block.header),
+			inputs: inputs,
+			outputs: outputs,
+			kernels: kernels,
 		}
 	}
 }
