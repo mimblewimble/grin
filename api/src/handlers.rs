@@ -25,6 +25,7 @@ use serde_json;
 
 use chain;
 use core::core::Transaction;
+use core::core::hash::Hash;
 use core::core::hash::Hashed;
 use core::ser;
 use pool;
@@ -273,6 +274,54 @@ impl Handler for ChainHandler {
 	}
 }
 
+// Gets block details given either a hex address or height.
+// GET /v1/block/<address>
+// GET /v1/block/<height>
+pub struct BlockHandler {
+	pub chain: Arc<chain::Chain>,
+}
+
+impl BlockHandler {
+	fn get_block(&self, h: &Hash) -> BlockOutputsPrintable {
+		let block = self.chain.clone().get_block(h).unwrap();
+		let outputs = block
+			.outputs
+			.iter()
+			.map(|k|OutputPrintable::from_output(k, &block.header, true))
+			.collect();
+		BlockOutputsPrintable {
+			header: BlockHeaderInfo::from_header(&block.header),
+			outputs: outputs,
+		}
+	}
+
+	// Try to decode the string as a height or a hash address.
+	fn parse_input(&self, input: String) -> Hash {
+		if let Ok(height) = input.parse() {
+			return self.chain
+				.clone()
+				.get_header_by_height(height)
+				.unwrap()
+				.hash();
+		}
+		let vec = util::from_hex(input).unwrap();
+		Hash::from_vec(vec)
+	}
+}
+
+impl Handler for BlockHandler {
+	fn handle(&self, req: &mut Request) -> IronResult<Response> {
+		let url = req.url.clone();
+		let mut path_elems = url.path();
+		if *path_elems.last().unwrap() == "" {
+			path_elems.pop();
+		}
+		let el = *path_elems.last().unwrap();
+		let h = self.parse_input(el.to_string());
+		json_response(&self.get_block(&h))
+	}
+}
+
 // Get basic information about the transaction pool.
 struct PoolInfoHandler<T> {
 	tx_pool: Arc<RwLock<pool::TransactionPool<T>>>,
@@ -382,6 +431,9 @@ pub fn start_rest_apis<T>(
 		let utxo_handler = UtxoHandler {
 			chain: chain.clone(),
 		};
+		let block_handler = BlockHandler {
+			chain: chain.clone(),
+		};
 		let chain_tip_handler = ChainHandler {
 			chain: chain.clone(),
 		};
@@ -403,6 +455,7 @@ pub fn start_rest_apis<T>(
 
 		let route_list = vec!(
 			"get /".to_string(),
+			"get /block".to_string(),
 			"get /chain".to_string(),
 			"get /chain/utxos".to_string(),
 			"get /sumtrees/roots".to_string(),
@@ -417,6 +470,7 @@ pub fn start_rest_apis<T>(
 		let index_handler = IndexHandler { list: route_list };
 		let router = router!(
 			index: get "/" => index_handler,
+			block: get "/block/*" => block_handler,
 			chain_tip: get "/chain" => chain_tip_handler,
 			chain_utxos: get "/chain/utxos/*" => utxo_handler,
 			sumtree_roots: get "/sumtrees/*" => sumtree_handler,

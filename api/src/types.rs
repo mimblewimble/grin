@@ -148,7 +148,7 @@ pub struct Output {
 }
 
 impl Output {
-	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader, 
+	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader,
 		include_proof:bool, include_switch: bool) -> Output {
 		let (output_type, lock_height) = match output.features {
 			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
@@ -222,7 +222,7 @@ impl OutputPrintable {
 // As above, except just the info needed for wallet reconstruction
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OutputSwitch {
-	/// the commit 
+	/// the commit
 	pub commit: String,
 	/// switch commit hash
 	pub switch_commit_hash: [u8; core::SWITCH_COMMIT_HASH_SIZE],
@@ -259,6 +259,16 @@ impl BlockHeaderInfo {
 		}
 	}
 }
+
+// Block header info with printable outputs
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BlockOutputsPrintable {
+	/// The block header
+	pub header: BlockHeaderInfo,
+	/// A printable version of the outputs
+	pub outputs: Vec<OutputPrintable>,
+}
+
 // For wallet reconstruction, include the header info along with the
 // transactions in the block
 #[derive(Debug, Serialize, Deserialize, Clone)]
