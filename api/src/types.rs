@@ -25,10 +25,10 @@ use util;
 pub struct Tip {
 	/// Height of the tip (max height of the fork)
 	pub height: u64,
-	// Last block pushed to the fork
-	pub last_block_pushed: String,
-	// Block previous to last
-	pub prev_block_to_last: String,
+	// Last block hash added to the chain
+	pub hash: String,
+	// Previous block hash
+	pub previous: String,
 	// Total difficulty accumulated on that fork
 	pub total_difficulty: u64,
 }
@@ -37,8 +37,8 @@ impl Tip {
 	pub fn from_tip(tip: chain::Tip) -> Tip {
 		Tip {
 			height: tip.height,
-			last_block_pushed: util::to_hex(tip.last_block_h.to_vec()),
-			prev_block_to_last: util::to_hex(tip.prev_block_h.to_vec()),
+			hash: util::to_hex(tip.last_block_h.to_vec()),
+			previous: util::to_hex(tip.prev_block_h.to_vec()),
 			total_difficulty: tip.total_difficulty.into_num(),
 		}
 	}
@@ -248,7 +248,7 @@ pub struct BlockHeaderInfo {
 	pub previous: String,
 	/// Height
 	pub height: u64,
-	/// Difficulty
+	/// Total Difficulty
 	pub total_difficulty: u64
 }
 
