@@ -249,7 +249,7 @@ impl NetAdapter for NetToChainAdapter {
 			self.total_height()
 		);
 
-		if self.p2p_server.is_initialized() {
+		if diff.into_num() > 0 && self.p2p_server.is_initialized() {
 			if let Some(peer) = self.p2p_server.borrow().get_peer(&addr) {
 				let mut peer = peer.write().unwrap();
 				peer.info.total_difficulty = diff;
@@ -321,7 +321,7 @@ impl NetToChainAdapter {
 		}
 		self.syncing.load(Ordering::Relaxed)
 	}
-	
+
 	// recursively go back through the locator vector and stop when we find
 	// a header that we recognize this will be a header shared in common
 	// between us and the peer
