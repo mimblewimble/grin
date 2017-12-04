@@ -25,7 +25,7 @@ use core::core::pmmr::{HashSum, NoSum};
 
 use core::core::{Block, BlockHeader, Output, TxKernel};
 use core::core::target::Difficulty;
-use core::core::hash::Hash;
+use core::core::hash::{Hash, Hashed};
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
@@ -97,6 +97,18 @@ impl Chain {
 				tip
 			}
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
+		};
+
+		// make sure sync_head is available for later use
+		let _ = match chain_store.get_sync_head() {
+			Ok(tip) => tip,
+			Err(NotFoundErr) => {
+				let gen = chain_store.get_header_by_height(0).unwrap();
+				let tip = Tip::new(gen.hash());
+				chain_store.save_sync_head(&tip)?;
+				tip
+			},
+			Err(e) => return Err(Error::StoreErr(e, "chain init sync head".to_owned())),
 		};
 
 		info!(
@@ -176,19 +188,18 @@ impl Chain {
 		res
 	}
 
-	/// Attempt to add a new header to the header chain. Only necessary during
-	/// sync.
-	pub fn process_block_header(
+	/// Attempt to add a new header to the header chain.
+	/// This is only ever used during sync and uses sync_head.
+	pub fn sync_block_header(
 		&self,
 		bh: &BlockHeader,
 		opts: Options,
 	) -> Result<Option<Tip>, Error> {
-		let head = self.store
-			.get_header_head()
-			.map_err(|e| Error::StoreErr(e, "chain header head".to_owned()))?;
-		let ctx = self.ctx_from_head(head, opts);
-
-		pipe::process_block_header(bh, ctx)
+		let sync_head = self.get_sync_head()?;
+		let header_head = self.get_header_head()?;
+		let sync_ctx = self.ctx_from_head(sync_head, opts);
+		let header_ctx = self.ctx_from_head(header_head, opts);
+		pipe::sync_block_header(bh, sync_ctx, header_ctx)
 	}
 
 	fn ctx_from_head(&self, head: Tip, opts: Options) -> pipe::BlockContext {
@@ -350,7 +361,15 @@ impl Chain {
 			.map_err(|e| Error::StoreErr(e, "chain get commitment".to_owned()))
 	}
 
-	/// Get the tip of the header chain
+	/// Get the tip of the current "sync" header chain.
+	/// This may be significantly different to current header chain.
+	pub fn get_sync_head(&self) -> Result<Tip, Error> {
+		self.store
+			.get_sync_head()
+			.map_err(|e| Error::StoreErr(e, "chain get sync head".to_owned()))
+	}
+
+	/// Get the tip of the header chain.
 	pub fn get_header_head(&self) -> Result<Tip, Error> {
 		self.store
 			.get_header_head()

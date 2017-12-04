@@ -23,6 +23,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader};
 use core::core::target::Difficulty;
 use core::core::transaction;
+use grin_store;
 use types::*;
 use store;
 use sumtree;
@@ -63,7 +64,21 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 
 	validate_header(&b.header, &mut ctx)?;
 
-	// valid header, time to take the lock on the sum trees
+	// valid header, now check we actually have the previous block in the store
+	// not just the header but the block itself
+	// we cannot assume we can use the chain head for this as we may be dealing with a fork
+	// we cannot use heights here as the fork may have jumped in height
+	match ctx.store.get_block(&b.header.previous) {
+		Ok(_) => {},
+		Err(grin_store::Error::NotFoundErr) => {
+			return Err(Error::Orphan);
+		},
+		Err(e) => {
+			return Err(Error::StoreErr(e, "pipe get previous".to_owned()));
+		}
+	};
+
+	// valid header and we have a previous block, time to take the lock on the sum trees
 	let local_sumtrees = ctx.sumtrees.clone();
 	let mut sumtrees = local_sumtrees.write().unwrap();
 
@@ -92,22 +107,31 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 	})
 }
 
-/// Process the block header
-pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
+/// Process the block header.
+/// This is only ever used during sync and uses a context based on sync_head.
+pub fn sync_block_header(
+	bh: &BlockHeader,
+	mut sync_ctx: BlockContext,
+	mut header_ctx: BlockContext,
+) -> Result<Option<Tip>, Error> {
 	debug!(
 		LOGGER,
-		"pipe: process_header {} at {}",
+		"pipe: sync_block_header {} at {}",
 		bh.hash(),
 		bh.height
 	);
-	check_known(bh.hash(), &mut ctx)?;
-	validate_header(&bh, &mut ctx)?;
-	add_block_header(bh, &mut ctx)?;
 
+	validate_header(&bh, &mut sync_ctx)?;
+	add_block_header(bh, &mut sync_ctx)?;
+
+	// TODO - confirm this is needed during sync process (I don't see how it is)
+	// we do not touch the sumtrees when syncing headers
 	// just taking the shared lock
-	let _ = ctx.sumtrees.write().unwrap();
+	let _ = header_ctx.sumtrees.write().unwrap();
 
-	update_header_head(bh, &mut ctx)
+	// now update the header_head (if new header with most work) and the sync_head (always)
+	update_header_head(bh, &mut header_ctx);
+	update_sync_head(bh, &mut sync_ctx)
 }
 
 /// Quick in-memory check to fast-reject any block we've already handled
@@ -207,10 +231,6 @@ fn validate_block(
 	ctx: &mut BlockContext,
 	ext: &mut sumtree::Extension,
 ) -> Result<(), Error> {
-	if b.header.height > ctx.head.height + 1 {
-		return Err(Error::Orphan);
-	}
-
 	// main isolated block validation, checks all commitment sums and sigs
 	try!(b.validate().map_err(&Error::InvalidBlockProof));
 
@@ -225,12 +245,22 @@ fn validate_block(
 		let mut hashes = vec![];
 		loop {
 			let curr_header = ctx.store.get_block_header(&current)?;
-			let height_header = ctx.store.get_header_by_height(curr_header.height)?;
-			if curr_header.hash() != height_header.hash() {
-				hashes.insert(0, curr_header.hash());
-				current = curr_header.previous;
-			} else {
-				break;
+			match ctx.store.get_header_by_height(curr_header.height) {
+				Ok(height_header) => {
+					if curr_header.hash() != height_header.hash() {
+						hashes.insert(0, curr_header.hash());
+						current = curr_header.previous;
+					} else {
+						break;
+					}
+				},
+				Err(grin_store::Error::NotFoundErr) => {
+					hashes.insert(0, curr_header.hash());
+					current = curr_header.previous;
+				},
+				Err(e) => {
+					return Err(Error::StoreErr(e, format!("header by height lookup failed")));
+				}
 			}
 		}
 
@@ -354,25 +384,36 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 	}
 }
 
-/// Directly updates the head if we've just appended a new block to it or handle
-/// the situation where we've just added enough work to have a fork with more
-/// work than the head.
-fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
-	// if we made a fork with more work than the head (which should also be true
-	// when extending the head), update it
+/// Update the sync head so we can keep syncing from where we left off.
+fn update_sync_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
 	let tip = Tip::from_block(bh);
+	ctx.store
+		.save_sync_head(&tip)
+		.map_err(|e| Error::StoreErr(e, "pipe save sync head".to_owned()))?;
+	ctx.head = tip.clone();
+	info!(
+		LOGGER,
+		"pipe: updated sync head to {} at {}.",
+		bh.hash(),
+		bh.height,
+	);
+	Ok(Some(tip))
+}
+
+fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
+	let tip = Tip::from_block(bh);
+	debug!(LOGGER, "pipe: update_header_head {},{}", tip.total_difficulty, ctx.head.total_difficulty);
 	if tip.total_difficulty > ctx.head.total_difficulty {
 		ctx.store
 			.save_header_head(&tip)
 			.map_err(|e| Error::StoreErr(e, "pipe save header head".to_owned()))?;
-
 		ctx.head = tip.clone();
 		info!(
 			LOGGER,
-			"Updated block header head to {} at {}.",
+			"pipe: updated header head to {} at {}.",
 			bh.hash(),
-			bh.height
-			);
+			bh.height,
+		);
 		Ok(Some(tip))
 	} else {
 		Ok(None)
