@@ -1,7 +1,8 @@
 # Documentation structure
 - [FAQ][faq.md] - Frequently Asked Questions
 - [build](build.md) - Explaining how to build and run the Grin binaries
-- [chainsync](chainsync.md) - About how grin's blockchain is synchronized
+- [chain_sync](chain/chain_sync.md) - About how Grin's blockchain is synchronized
+- [blocks_and_headers](chain/blocks_and_headers.md) - How Grin tracks blocks and headers on the chain
 - [contractideas](contractideas.md) - Ideas on how to implement contracts
 - [grin4bitcoiners](grin4bitcoiners.md) - Explaining grin from a bitcoiner's perspective
 - [internal/pool](internal/pool.md) - Technical explanation of the transaction pool
