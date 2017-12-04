@@ -345,7 +345,7 @@ where
 				let pos_sz = *position as usize;
 				if pos_sz > self.buffer_index && pos_sz - 1 < self.buffer_index + self.buffer.len()
 				{
-					self.buffer.remove(vec![*position], index).unwrap();
+					self.buffer.remove(vec![*position - self.buffer_index as u64], index).unwrap();
 				}
 			}
 		}
