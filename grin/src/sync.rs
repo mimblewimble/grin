@@ -60,16 +60,29 @@ fn body_sync(
 	p2p_server: Arc<p2p::Server>,
 	chain: Arc<chain::Chain>,
 ) {
-	debug!(LOGGER, "block_sync: loop");
+	let body_head: chain::Tip = chain.head().unwrap();
+	let header_head: chain::Tip = chain.get_header_head().unwrap();
+	let sync_head: chain::Tip = chain.get_sync_head().unwrap();
 
-	let header_head = chain.get_header_head().unwrap();
-	let block_header = chain.head_header().unwrap();
+	debug!(
+		LOGGER,
+		"body_sync: body_head - {}, {}, header_head - {}, {}, sync_head - {}, {}",
+		body_head.last_block_h,
+		body_head.height,
+		header_head.last_block_h,
+		header_head.height,
+		sync_head.last_block_h,
+		sync_head.height,
+	);
+
 	let mut hashes = vec![];
 
-	if header_head.total_difficulty > block_header.total_difficulty {
-		let mut current = chain.get_block_header(&header_head.last_block_h);
+	if sync_head.total_difficulty > body_head.total_difficulty {
+		let mut current = chain.get_block_header(&sync_head.last_block_h);
 		while let Ok(header) = current {
-			if header.hash() == block_header.hash() {
+			// TODO we need a smarter condition here (this only works on a non-fork sync)
+			// although I think it still works (just inefficient as we go all the way back to genesis block...)
+			if header.hash() == body_head.hash() {
 				break;
 			}
 			hashes.push(header.hash());
@@ -89,12 +102,13 @@ fn body_sync(
 		debug!(
 			LOGGER,
 			"block_sync: requesting blocks ({}/{}), {:?}",
-			block_header.height,
-			header_head.height,
+			body_head.height,
+			sync_head.height,
 			hashes_to_get,
 			);
 
 		for hash in hashes_to_get.clone() {
+			// TODO - what condition should we choose most_work_peer v random_peer (if any?)
 			let peer = if hashes_to_get.len() < 100 {
 				p2p_server.most_work_peer()
 			} else {
@@ -128,24 +142,17 @@ pub fn header_sync(
 		let peer_difficulty = p.info.total_difficulty.clone();
 
 		if peer_difficulty > difficulty {
-			debug!(
-				LOGGER,
-				"header_sync: difficulty {} vs {}",
-				peer_difficulty,
-				difficulty,
-				);
-
 			let _ = request_headers(
 				peer.clone(),
 				chain.clone(),
-				);
+			);
 		}
 	}
 
 	thread::sleep(Duration::from_secs(30));
 }
 
-/// Request some block headers from a peer to advance us
+/// Request some block headers from a peer to advance us.
 fn request_headers(
 	peer: Arc<RwLock<Peer>>,
 	chain: Arc<chain::Chain>,
@@ -154,7 +161,7 @@ fn request_headers(
 	let peer = peer.read().unwrap();
 	debug!(
 		LOGGER,
-		"Sync: Asking peer {} for more block headers, locator: {:?}",
+		"sync: asking {} for headers, locator: {:?}",
 		peer.info.addr,
 		locator,
 	);
@@ -162,19 +169,14 @@ fn request_headers(
 	Ok(())
 }
 
+/// We build a locator based on sync_head.
+/// Even if sync_head is significantly out of date we will "reset" it once we start getting
+/// headers back from a peer.
 fn get_locator(chain: Arc<chain::Chain>) -> Result<Vec<Hash>, Error> {
-	let tip = chain.get_header_head()?;
+	let tip = chain.get_sync_head()?;
+	let heights = get_locator_heights(tip.height);
 
-	// TODO - is this necessary?
-	// go back to earlier header height to ensure we do not miss a header
-	let height = if tip.height > 5 {
-		tip.height - 5
-	} else {
-		0
-	};
-	let heights = get_locator_heights(height);
-
-	debug!(LOGGER, "Sync: locator heights: {:?}", heights);
+	debug!(LOGGER, "sync: locator heights: {:?}", heights);
 
 	let mut locator = vec![];
 	let mut current = chain.get_block_header(&tip.last_block_h);
@@ -185,7 +187,7 @@ fn get_locator(chain: Arc<chain::Chain>) -> Result<Vec<Hash>, Error> {
 		current = chain.get_block_header(&header.previous);
 	}
 
-	debug!(LOGGER, "Sync: locator: {:?}", locator);
+	debug!(LOGGER, "sync: locator: {:?}", locator);
 
 	Ok(locator)
 }

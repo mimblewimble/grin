@@ -81,7 +81,7 @@ impl NetAdapter for NetToChainAdapter {
 	fn headers_received(&self, bhs: Vec<core::BlockHeader>, addr: SocketAddr) {
 		info!(
 			LOGGER,
-			"Received block headers {:?} from {}",
+			"adapter: received block headers {:?} from {}",
 			bhs.iter().map(|x| x.hash()).collect::<Vec<_>>(),
 			addr,
 		);
@@ -89,7 +89,7 @@ impl NetAdapter for NetToChainAdapter {
 		// try to add each header to our header chain
 		let mut added_hs = vec![];
 		for bh in bhs {
-			let res = self.chain.process_block_header(&bh, self.chain_opts());
+			let res = self.chain.sync_block_header(&bh, self.chain_opts());
 			match res {
 				Ok(_) => {
 					added_hs.push(bh.hash());
