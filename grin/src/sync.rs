@@ -20,7 +20,7 @@ use time;
 use adapters::NetToChainAdapter;
 use chain;
 use core::core::hash::{Hash, Hashed};
-use p2p::{self, Peer, NetAdapter};
+use p2p::{self, Peer};
 use types::Error;
 use util::LOGGER;
 
@@ -45,13 +45,19 @@ pub fn run_sync(
 
 					// run the header sync every 5s
 					if current_time - prev_header_sync > time::Duration::seconds(5) {
-						header_sync(adapter.clone(), p2p_server.clone(), chain.clone());
+						header_sync(
+							p2p_server.clone(),
+							chain.clone(),
+						);
 						prev_header_sync = current_time;
 					}
 
 					// run the body_sync every iteration (1s)
 					if current_time - prev_body_sync > time::Duration::seconds(1) {
-						body_sync(p2p_inner.clone(), c_inner.clone());
+						body_sync(
+							p2p_inner.clone(),
+							c_inner.clone(),
+						);
 						prev_body_sync = current_time;
 					}
 
@@ -105,11 +111,12 @@ fn body_sync(
 	}
 	hashes.reverse();
 
-	let peer_count = p2p_server.connected_peers().len();
+	// let peer_count = p2p_server.most_work_peers().len();
 	let hashes_to_get = hashes
 		.iter()
 		.filter(|x| !chain.get_block(&x).is_ok())
-		.take(peer_count * 2)
+		.take(10)
+		// .take(peer_count * 2)
 		.cloned()
 		.collect::<Vec<_>>();
 
@@ -134,7 +141,6 @@ fn body_sync(
 }
 
 pub fn header_sync(
-	adapter: Arc<NetToChainAdapter>,
 	p2p_server: Arc<p2p::Server>,
 	chain: Arc<chain::Chain>,
 ) {
@@ -172,7 +178,7 @@ fn request_headers(
 			let _ = peer.send_header_request(locator);
 			Ok(())
 		},
-		Err(e) => {
+		Err(_) => {
 			// not much we can do here, log and try again next time
 			warn!(
 				LOGGER,
