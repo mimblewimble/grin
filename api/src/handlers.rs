@@ -447,7 +447,7 @@ pub fn start_rest_apis<T>(
 
 		let route_list = vec!(
 			"get /".to_string(),
-			"get /block".to_string(),
+			"get /blocks".to_string(),
 			"get /chain".to_string(),
 			"get /chain/utxos".to_string(),
 			"get /sumtrees/roots".to_string(),
@@ -462,7 +462,7 @@ pub fn start_rest_apis<T>(
 		let index_handler = IndexHandler { list: route_list };
 		let router = router!(
 			index: get "/" => index_handler,
-			block: get "/block/*" => block_handler,
+			blocks: get "/blocks/*" => block_handler,
 			chain_tip: get "/chain" => chain_tip_handler,
 			chain_utxos: get "/chain/utxos/*" => utxo_handler,
 			sumtree_roots: get "/sumtrees/*" => sumtree_handler,
