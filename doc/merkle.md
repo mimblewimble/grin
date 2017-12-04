@@ -58,7 +58,7 @@ a sum-tree over the commitments of outputs, and the negatives of the commitments
 of inputs.
 
 Input references are hashes of old commitments. It is a consensus rule that
-there never are two identical unspent outputs.
+all unspent outputs must be unique.
 
 The root sum should be equal to the sum of excesses for this block. See the
 next section.

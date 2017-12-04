@@ -1,6 +1,6 @@
 # Grin Style Guide
 
-Grin uses [rustfmt](https://github.com/rust-lang-nursery/rustfmt) to maintain consistant formatting.
+Grin uses [rustfmt](https://github.com/rust-lang-nursery/rustfmt) to maintain consistent formatting.
 
 ## Install rustfmt (nightly)
 
