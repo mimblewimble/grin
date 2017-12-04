@@ -80,12 +80,12 @@ impl NetAdapter for NetToChainAdapter {
 			// mistaken or manevolent, both of which require a ban
 			if e.is_bad_block() {
 				self.p2p_server.borrow().ban_peer(&addr);
-
-				// and if we're currently syncing, our header chain is now wrong, it
-				// needs to be reset
-				if self.is_syncing() {
-					self.chain.reset_header_head();
-				}
+			//
+			// 	// header chain should be consistent with the sync head here
+			// 	// we just banned the peer that sent a bad block so
+			// 	// sync head should resolve itself if/when we find an alternative peer
+			// 	// with more work than ourselves
+			// 	// we should not need to reset the header head here
 			}
 		}
 	}

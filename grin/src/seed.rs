@@ -88,7 +88,8 @@ impl Seeder {
 			.for_each(move |_| {
 				debug!(
 					LOGGER,
-					"monitoring peers ({} of {})",
+					"monitoring peers ({} / {} / {})",
+					p2p_server.most_work_peers().len(),
 					p2p_server.connected_peers().len(),
 					p2p_server.all_peers().len(),
 				);
