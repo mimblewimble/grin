@@ -163,7 +163,7 @@ parameter_list = {NUM_THREADS=1, NUM_TRIMS=68}
 #Can currently be used only in Production (30) Mode
 #This plugin is not built by default. To build:
 #1) Ensure the latest cuda toolkit is installed
-#   (nvcc should be on the pat)
+#   (nvcc should be in your PATH)
 #2) Uncomment the 'build-cuda-plugin' feature
 #   in pow/Cargo.toml
 
