@@ -241,15 +241,10 @@ impl OutputSwitch {
 	}
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum KernelFeature {
-	Coinbase,
-}
-
 // Printable representation of a block
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TxKernelPrintable {
-	//pub features: String,
+	pub features: String,
 	pub fee: u64,
 	pub lock_height: u64,
 	pub excess: String,
@@ -257,12 +252,13 @@ pub struct TxKernelPrintable {
 }
 
 impl TxKernelPrintable {
-	pub fn from_txkernel(kernel: &core::TxKernel) -> TxKernelPrintable {
+	pub fn from_txkernel(k: &core::TxKernel) -> TxKernelPrintable {
 		TxKernelPrintable {
-			fee: kernel.fee,
-			lock_height: kernel.lock_height,
-			excess: util::to_hex(kernel.excess.0.to_vec()),
-			excess_sig: util::to_hex(kernel.excess_sig.to_vec())
+			features: format!("{:?}", k.features),
+			fee: k.fee,
+			lock_height: k.lock_height,
+			excess: util::to_hex(k.excess.0.to_vec()),
+			excess_sig: util::to_hex(k.excess_sig.to_vec())
 		}
 	}
 }
