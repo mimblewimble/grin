@@ -23,6 +23,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader};
 use core::core::target::Difficulty;
 use core::core::transaction;
+use grin_store;
 use types::*;
 use store;
 use sumtree;
