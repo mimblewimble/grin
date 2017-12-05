@@ -94,15 +94,10 @@ fn body_sync(
 		let mut current = chain.get_block_header(&header_head.last_block_h);
 		while let Ok(header) = current {
 
-			// look back through the sync chain until we find a header
-			// that is consistent with the height index (we know this is in the real chain)
-			match chain.get_header_by_height(header.height) {
-				Ok(height_header) => {
-					if header.hash() == height_header.hash() {
-						break;
-					}
-				},
-				Err(_) => {},
+			// break out of the while loop when we find a header common
+			// between the this chain and the current chain
+			if let Ok(_) = chain.is_on_current_chain(&header) {
+				break;
 			}
 
 			hashes.push(header.hash());

@@ -25,7 +25,7 @@ use core::core::pmmr::{HashSum, NoSum};
 
 use core::core::{Block, BlockHeader, Output, TxKernel};
 use core::core::target::Difficulty;
-use core::core::hash::{Hash, Hashed};
+use core::core::hash::Hash;
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
@@ -103,8 +103,7 @@ impl Chain {
 		let _ = match chain_store.get_sync_head() {
 			Ok(tip) => tip,
 			Err(NotFoundErr) => {
-				let gen = chain_store.get_header_by_height(0).unwrap();
-				let tip = Tip::new(gen.hash());
+				let tip = chain_store.head().unwrap();
 				chain_store.save_sync_head(&tip)?;
 				tip
 			},
@@ -359,6 +358,14 @@ impl Chain {
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		self.store.get_header_by_height(height).map_err(|e| {
 			Error::StoreErr(e, "chain get header by height".to_owned())
+		})
+	}
+
+	/// Verifies the given block header is actually on the current chain.
+	/// Checks the header_by_height index to verify the header is where we say it is
+	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
+		self.store.is_on_current_chain(header).map_err(|e| {
+			Error::StoreErr(e, "chain is_on_current_chain".to_owned())
 		})
 	}
 

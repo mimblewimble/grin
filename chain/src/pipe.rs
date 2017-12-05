@@ -245,22 +245,12 @@ fn validate_block(
 		let mut hashes = vec![];
 		loop {
 			let curr_header = ctx.store.get_block_header(&current)?;
-			match ctx.store.get_header_by_height(curr_header.height) {
-				Ok(height_header) => {
-					if curr_header.hash() != height_header.hash() {
-						hashes.insert(0, curr_header.hash());
-						current = curr_header.previous;
-					} else {
-						break;
-					}
-				},
-				Err(grin_store::Error::NotFoundErr) => {
-					hashes.insert(0, curr_header.hash());
-					current = curr_header.previous;
-				},
-				Err(e) => {
-					return Err(Error::StoreErr(e, format!("header by height lookup failed")));
-				}
+
+			if let Ok(_) = ctx.store.is_on_current_chain(&curr_header) {
+				break;
+			} else {
+				hashes.insert(0, curr_header.hash());
+				current = curr_header.previous;
 			}
 		}
 
