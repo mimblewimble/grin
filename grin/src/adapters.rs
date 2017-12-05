@@ -149,23 +149,12 @@ impl NetAdapter for NetToChainAdapter {
 			locator,
 		);
 
-		if locator.len() == 0 {
-			return vec![];
-		}
-
 		// recursively go back through the locator vector
 		// and stop when we find a header that we recognize
 		// this will be a header shared in common between us and the peer
-		let known = self.chain.get_block_header(&locator[0]);
-		let header = match known {
-			Ok(header) => header,
-			Err(chain::Error::StoreErr(store::Error::NotFoundErr, _)) => {
-				return self.locate_headers(locator[1..].to_vec());
-			}
-			Err(e) => {
-				error!(LOGGER, "Could not build header locator: {:?}", e);
-				return vec![];
-			}
+		let header = match self.locate_common(locator) {
+			Some(header) => header,
+			None => return vec![],
 		};
 
 		debug!(
@@ -320,6 +309,37 @@ impl NetToChainAdapter {
 		}
 		self.syncing.load(Ordering::Relaxed)
 	}
+
+	// finds the latest header on our main chain in common with the locator
+	fn locate_common(&self, locator: Vec<Hash>) -> Option<BlockHeader> {
+		if locator.len() == 0 {
+			return None;
+		}
+		// recursively go back through the locator vector
+		// and stop when we find a header that we recognize
+		// this will be a header shared in common between us and the peer
+		let known = self.chain.get_block_header(&locator[0]);
+		match known {
+			Ok(header) => {
+				// checking that the header is really on our main chain
+				let at_height = self.chain.get_header_by_height(header.height);
+				if let Ok(known_at_height) = at_height {
+					if known_at_height.hash() == header.hash() {
+						return Some(header)
+					}
+				}
+				self.locate_common(locator[1..].to_vec())
+			}
+			Err(chain::Error::StoreErr(store::Error::NotFoundErr, _)) => {
+				self.locate_common(locator[1..].to_vec())
+			}
+			Err(e) => {
+				error!(LOGGER, "Could not build header locator: {:?}", e);
+				None
+			}
+		}
+	}
+
 
 	/// Prepare options for the chain pipeline
 	fn chain_opts(&self) -> chain::Options {
