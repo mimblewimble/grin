@@ -296,14 +296,13 @@ impl BlockHandler {
 				Err(_) => return Err(Error::NotFound),
 			}
 		}
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r"[0-9a-fA-F]{64}").unwrap();
-    }
-    if !RE.is_match(&input) {
-    	return Err(Error::Argument(
-    			String::from("Not a valid hex address or height.")))
-    }
-		let vec = util::from_hex(input).unwrap();
+		lazy_static! {
+			static ref RE: Regex = Regex::new(r"[0-9a-fA-F]{64}").unwrap();
+		}
+		if !RE.is_match(&input) {
+			return Err(Error::Argument(
+					String::from("Not a valid hex address or height.")))
+		}
 		Ok(Hash::from_vec(vec))
 	}
 }
