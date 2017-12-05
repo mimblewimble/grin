@@ -25,10 +25,12 @@ use serde_json;
 
 use chain;
 use core::core::Transaction;
+use core::core::hash::Hash;
 use core::core::hash::Hashed;
 use core::ser;
 use pool;
 use p2p;
+use regex::Regex;
 use rest::*;
 use util::secp::pedersen::Commitment;
 use types::*;
@@ -273,6 +275,53 @@ impl Handler for ChainHandler {
 	}
 }
 
+// Gets block details given either a hex address or height.
+// GET /v1/block/<address>
+// GET /v1/block/<height>
+pub struct BlockHandler {
+	pub chain: Arc<chain::Chain>,
+}
+
+impl BlockHandler {
+	fn get_block(&self, h: &Hash) -> Result<BlockPrintable, Error> {
+		let block = self.chain.clone().get_block(h).map_err(|_| Error::NotFound)?;
+		Ok(BlockPrintable::from_block(&block))
+	}
+
+	// Try to decode the string as a height or a hash address.
+	fn parse_input(&self, input: String) -> Result<Hash, Error> {
+		if let Ok(height) = input.parse() {
+			match self.chain.clone().get_header_by_height(height) {
+				Ok(header) => return Ok(header.hash()),
+				Err(_) => return Err(Error::NotFound),
+			}
+		}
+		lazy_static! {
+			static ref RE: Regex = Regex::new(r"[0-9a-fA-F]{64}").unwrap();
+		}
+		if !RE.is_match(&input) {
+			return Err(Error::Argument(
+					String::from("Not a valid hex address or height.")))
+		}
+		let vec = util::from_hex(input).unwrap();
+		Ok(Hash::from_vec(vec))
+	}
+}
+
+impl Handler for BlockHandler {
+	fn handle(&self, req: &mut Request) -> IronResult<Response> {
+		let url = req.url.clone();
+		let mut path_elems = url.path();
+		if *path_elems.last().unwrap() == "" {
+			path_elems.pop();
+		}
+		let el = *path_elems.last().unwrap();
+		let h = try!(self.parse_input(el.to_string()));
+		let b = try!(self.get_block(&h));
+		json_response(&b)
+	}
+}
+
 // Get basic information about the transaction pool.
 struct PoolInfoHandler<T> {
 	tx_pool: Arc<RwLock<pool::TransactionPool<T>>>,
@@ -382,6 +431,9 @@ pub fn start_rest_apis<T>(
 		let utxo_handler = UtxoHandler {
 			chain: chain.clone(),
 		};
+		let block_handler = BlockHandler {
+			chain: chain.clone(),
+		};
 		let chain_tip_handler = ChainHandler {
 			chain: chain.clone(),
 		};
@@ -403,6 +455,7 @@ pub fn start_rest_apis<T>(
 
 		let route_list = vec!(
 			"get /".to_string(),
+			"get /blocks".to_string(),
 			"get /chain".to_string(),
 			"get /chain/utxos".to_string(),
 			"get /sumtrees/roots".to_string(),
@@ -417,6 +470,7 @@ pub fn start_rest_apis<T>(
 		let index_handler = IndexHandler { list: route_list };
 		let router = router!(
 			index: get "/" => index_handler,
+			blocks: get "/blocks/*" => block_handler,
 			chain_tip: get "/chain" => chain_tip_handler,
 			chain_utxos: get "/chain/utxos/*" => utxo_handler,
 			sumtree_roots: get "/sumtrees/*" => sumtree_handler,

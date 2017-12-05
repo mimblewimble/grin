@@ -15,6 +15,7 @@
 use std::sync::Arc;
 use core::{core, global};
 use core::core::hash::Hashed;
+use core::core::target::Difficulty;
 use chain;
 use util::secp::pedersen;
 use rest::*;
@@ -148,7 +149,7 @@ pub struct Output {
 }
 
 impl Output {
-	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader, 
+	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader,
 		include_proof:bool, include_switch: bool) -> Output {
 		let (output_type, lock_height) = match output.features {
 			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
@@ -222,7 +223,7 @@ impl OutputPrintable {
 // As above, except just the info needed for wallet reconstruction
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OutputSwitch {
-	/// the commit 
+	/// the commit
 	pub commit: String,
 	/// switch commit hash
 	pub switch_commit_hash: [u8; core::SWITCH_COMMIT_HASH_SIZE],
@@ -239,26 +240,110 @@ impl OutputSwitch {
 		}
 	}
 }
-// Just the information required for wallet reconstruction
+
+// Printable representation of a block
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct BlockHeaderInfo {
-	/// Hash
-	pub hash: String,
-	/// Previous block hash
-	pub previous: String,
-	/// Height
-	pub height: u64
+pub struct TxKernelPrintable {
+	pub features: String,
+	pub fee: u64,
+	pub lock_height: u64,
+	pub excess: String,
+	pub excess_sig: String,
 }
 
-impl BlockHeaderInfo {
-	pub fn from_header(block_header: &core::BlockHeader) -> BlockHeaderInfo{
-		BlockHeaderInfo {
-			hash: util::to_hex(block_header.hash().to_vec()),
-			previous: util::to_hex(block_header.previous.to_vec()),
-			height: block_header.height,
+impl TxKernelPrintable {
+	pub fn from_txkernel(k: &core::TxKernel) -> TxKernelPrintable {
+		TxKernelPrintable {
+			features: format!("{:?}", k.features),
+			fee: k.fee,
+			lock_height: k.lock_height,
+			excess: util::to_hex(k.excess.0.to_vec()),
+			excess_sig: util::to_hex(k.excess_sig.to_vec())
 		}
 	}
 }
+
+// Just the information required for wallet reconstruction
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BlockHeaderInfo {
+	// Hash
+	pub hash: String,
+	/// Version of the block
+	pub version: u16,
+	/// Height of this block since the genesis block (height 0)
+	pub height: u64,
+	/// Hash of the block previous to this in the chain.
+	pub previous: String,
+	/// rfc3339 timestamp at which the block was built.
+	pub timestamp: String,
+	/// Merklish root of all the commitments in the UTXO set
+	pub utxo_root: String,
+	/// Merklish root of all range proofs in the UTXO set
+	pub range_proof_root: String,
+	/// Merklish root of all transaction kernels in the UTXO set
+	pub kernel_root: String,
+	/// Nonce increment used to mine this block.
+	pub nonce: u64,
+	/// Difficulty used to mine the block.
+	pub difficulty: Difficulty,
+	/// Total accumulated difficulty since genesis block
+	pub total_difficulty: Difficulty,
+}
+
+impl BlockHeaderInfo {
+	pub fn from_header(h: &core::BlockHeader) -> BlockHeaderInfo {
+		BlockHeaderInfo {
+			hash: util::to_hex(h.hash().to_vec()),
+			version: h.version,
+			height: h.height,
+			previous: util::to_hex(h.previous.to_vec()),
+			timestamp: h.timestamp.rfc3339().to_string(),
+			utxo_root: util::to_hex(h.utxo_root.to_vec()),
+			range_proof_root: util::to_hex(h.range_proof_root.to_vec()),
+			kernel_root: util::to_hex(h.kernel_root.to_vec()),
+			nonce: h.nonce,
+			difficulty: h.difficulty.clone(),
+			total_difficulty: h.total_difficulty.clone(),
+		}
+	}
+}
+
+// Printable representation of a block
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BlockPrintable {
+	/// The block header
+	pub header: BlockHeaderInfo,
+	// Input transactions
+	pub inputs: Vec<String>,
+	/// A printable version of the outputs
+	pub outputs: Vec<OutputPrintable>,
+	/// A printable version of the transaction kernels
+	pub kernels: Vec<TxKernelPrintable>,
+}
+
+impl BlockPrintable {
+	pub fn from_block(block: &core::Block) -> BlockPrintable {
+		let inputs = block.inputs
+			.iter()
+			.map(|input| util::to_hex((input.0).0.to_vec()))
+			.collect();
+		let outputs = block.outputs
+			.iter()
+			.map(|output| OutputPrintable::from_output(output, &block.header, true))
+			.collect();
+		let kernels = block.kernels
+			.iter()
+			.map(|kernel| TxKernelPrintable::from_txkernel(kernel))
+			.collect();
+		BlockPrintable {
+			header: BlockHeaderInfo::from_header(&block.header),
+			inputs: inputs,
+			outputs: outputs,
+			kernels: kernels,
+		}
+	}
+}
+
 // For wallet reconstruction, include the header info along with the
 // transactions in the block
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -20,8 +20,11 @@ extern crate grin_store as store;
 extern crate grin_util as util;
 
 extern crate hyper;
+#[macro_use]
+extern crate lazy_static;
 extern crate iron;
 extern crate mount;
+extern crate regex;
 #[macro_use]
 extern crate router;
 extern crate serde;
