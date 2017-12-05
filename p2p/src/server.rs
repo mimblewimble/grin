@@ -296,24 +296,49 @@ impl Server {
 		rm
 	}
 
-	/// Returns the peer with the most worked branch, showing the highest total
-	/// difficulty.
-	pub fn most_work_peer(&self) -> Option<Arc<RwLock<Peer>>> {
-		let mut peers = self.connected_peers();
+	/// Return vec of all peers that currently have the most worked branch,
+	/// showing the highest total difficulty.
+	pub fn most_work_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
+		let peers = self.connected_peers();
 		if peers.len() == 0 {
-			return None;
+			return vec![];
 		}
 
-		// we want to randomize which "most_work_peer" we select
-		thread_rng().shuffle(&mut peers[..]);
+		let max_total_difficulty = peers
+			.iter()
+			.map(|x| {
+				match x.try_read() {
+					Ok(peer) => peer.info.total_difficulty.clone(),
+					Err(_) => Difficulty::zero(),
+				}
+			})
+			.max()
+			.unwrap();
 
-		peers.sort_by_key(|p| {
-			let p = p.read().unwrap();
-			p.info.total_difficulty.clone()
-		});
+		let mut max_peers = peers
+			.iter()
+			.filter(|x| {
+				match x.try_read() {
+					Ok(peer) => {
+						peer.info.total_difficulty == max_total_difficulty
+					},
+					Err(_) => false,
+				}
+			})
+			.cloned()
+			.collect::<Vec<_>>();
 
-		let peer = peers.last().unwrap();
-		Some(peer.clone())
+		thread_rng().shuffle(&mut max_peers);
+		max_peers
+	}
+
+	/// Returns single random peer with the most worked branch, showing the highest total
+	/// difficulty.
+	pub fn most_work_peer(&self) -> Option<Arc<RwLock<Peer>>> {
+		match self.most_work_peers().first() {
+			Some(x) => Some(x.clone()),
+			None => None
+		}
 	}
 
 	/// Returns a random connected peer.

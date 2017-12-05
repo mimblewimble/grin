@@ -15,11 +15,12 @@
 use std::thread;
 use std::time::Duration;
 use std::sync::{Arc, RwLock};
+use time;
 
 use adapters::NetToChainAdapter;
 use chain;
 use core::core::hash::{Hash, Hashed};
-use p2p::{self, Peer, NetAdapter};
+use p2p::{self, Peer};
 use types::Error;
 use util::LOGGER;
 
@@ -33,22 +34,34 @@ pub fn run_sync(
 	let p2p_inner = p2p_server.clone();
 	let c_inner = chain.clone();
 	let _ = thread::Builder::new()
-		.name("body_sync".to_string())
+		.name("sync".to_string())
 		.spawn(move || {
+			let mut prev_body_sync = time::now_utc();
+			let mut prev_header_sync = prev_body_sync.clone();
+
 			loop {
 				if a_inner.is_syncing() {
-					body_sync(p2p_inner.clone(), c_inner.clone());
-				} else {
-					thread::sleep(Duration::from_secs(5));
-				}
-			}
-		});
-	let _ = thread::Builder::new()
-		.name("header_sync".to_string())
-		.spawn(move || {
-			loop {
-				if adapter.is_syncing() {
-					header_sync(adapter.clone(), p2p_server.clone(), chain.clone());
+					let current_time = time::now_utc();
+
+					// run the header sync every 5s
+					if current_time - prev_header_sync > time::Duration::seconds(5) {
+						header_sync(
+							p2p_server.clone(),
+							chain.clone(),
+						);
+						prev_header_sync = current_time;
+					}
+
+					// run the body_sync every iteration (1s)
+					if current_time - prev_body_sync > time::Duration::seconds(1) {
+						body_sync(
+							p2p_inner.clone(),
+							c_inner.clone(),
+						);
+						prev_body_sync = current_time;
+					}
+
+					thread::sleep(Duration::from_millis(250));
 				} else {
 					thread::sleep(Duration::from_secs(5));
 				}
@@ -98,10 +111,12 @@ fn body_sync(
 	}
 	hashes.reverse();
 
+	// let peer_count = p2p_server.most_work_peers().len();
 	let hashes_to_get = hashes
 		.iter()
 		.filter(|x| !chain.get_block(&x).is_ok())
 		.take(10)
+		// .take(peer_count * 2)
 		.cloned()
 		.collect::<Vec<_>>();
 
@@ -115,48 +130,35 @@ fn body_sync(
 			);
 
 		for hash in hashes_to_get.clone() {
-			// TODO - what condition should we choose most_work_peer v random_peer (if any?)
-			let peer = if hashes_to_get.len() < 100 {
-				p2p_server.most_work_peer()
-			} else {
-				p2p_server.random_peer()
-			};
+			let peer = p2p_server.most_work_peer();
 			if let Some(peer) = peer {
-				let peer = peer.read().unwrap();
-				if let Err(e) = peer.send_block_request(hash) {
-					debug!(LOGGER, "block_sync: error requesting block: {:?}, {:?}", hash, e);
+				if let Ok(peer) = peer.try_read() {
+					let _ = peer.send_block_request(hash);
 				}
 			}
 		}
-		thread::sleep(Duration::from_secs(1));
-	} else {
-		thread::sleep(Duration::from_secs(5));
 	}
 }
 
 pub fn header_sync(
-	adapter: Arc<NetToChainAdapter>,
 	p2p_server: Arc<p2p::Server>,
 	chain: Arc<chain::Chain>,
-	) {
-	debug!(LOGGER, "header_sync: loop");
+) {
+	if let Ok(header_head) = chain.get_header_head() {
+		let difficulty = header_head.total_difficulty;
 
-	let difficulty = adapter.total_difficulty();
-
-	if let Some(peer) = p2p_server.most_work_peer() {
-		let peer = peer.clone();
-		let p = peer.read().unwrap();
-		let peer_difficulty = p.info.total_difficulty.clone();
-
-		if peer_difficulty > difficulty {
-			let _ = request_headers(
-				peer.clone(),
-				chain.clone(),
-			);
+		if let Some(peer) = p2p_server.most_work_peer() {
+			if let Ok(p) = peer.try_read() {
+				let peer_difficulty = p.info.total_difficulty.clone();
+				if peer_difficulty > difficulty {
+					let _ = request_headers(
+						peer.clone(),
+						chain.clone(),
+					);
+				}
+			}
 		}
 	}
-
-	thread::sleep(Duration::from_secs(5));
 }
 
 /// Request some block headers from a peer to advance us.
@@ -165,15 +167,26 @@ fn request_headers(
 	chain: Arc<chain::Chain>,
 ) -> Result<(), Error> {
 	let locator = get_locator(chain)?;
-	let peer = peer.read().unwrap();
-	debug!(
-		LOGGER,
-		"sync: asking {} for headers, locator: {:?}",
-		peer.info.addr,
-		locator,
-	);
-	let _ = peer.send_header_request(locator);
-	Ok(())
+	match peer.try_read() {
+		Ok(peer) => {
+			debug!(
+				LOGGER,
+				"sync: request_headers: asking {} for headers, {:?}",
+				peer.info.addr,
+				locator,
+			);
+			let _ = peer.send_header_request(locator);
+			Ok(())
+		},
+		Err(_) => {
+			// not much we can do here, log and try again next time
+			warn!(
+				LOGGER,
+				"sync: request_headers: failed to get read lock on peer",
+			);
+			Ok(())
+		},
+	}
 }
 
 /// We build a locator based on sync_head.
