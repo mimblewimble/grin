@@ -37,8 +37,7 @@ Design requirements:
 4. Efficient tree storage even with missing data, even with millions of entries.
 5. If a node commits to NULL, it has no unspent children and its data should
    eventually be able to be dropped forever.
-6. Support serializating and efficient merging of pruned trees from partial
-   archival nodes.
+6. Support for serialization and efficient merging of pruned trees from partial archival nodes.
 
 ### Output witnesses
 
@@ -49,8 +48,7 @@ than deleting it.
 
 Design requirements:
 
-1. Support serializating and efficient merging of pruned trees from partial
-   archival nodes.
+1. Support for serialization and efficient merging of pruned trees from partial archival nodes.
 
 ### Inputs and Outputs
 
@@ -60,7 +58,7 @@ a sum-tree over the commitments of outputs, and the negatives of the commitments
 of inputs.
 
 Input references are hashes of old commitments. It is a consensus rule that
-there are never two identical unspent outputs.
+all unspent outputs must be unique.
 
 The root sum should be equal to the sum of excesses for this block. See the
 next section.
@@ -81,8 +79,7 @@ archival nodes in the future we want to support efficient pruning.
 
 Design requirements:
 
-1. Support serializating and efficient merging of pruned trees from partial
-   archival nodes.
+1. Support for serialization and efficient merging of pruned trees from partial archival nodes.
 
 
 ## Proposed Merkle Structure
@@ -160,7 +157,7 @@ not this sum on a pruned node is zero.
 The sum tree data structure allows the efficient storage of the output set and
 output witnesses while allowing immediate retrieval of a root hash or root sum
 (when applicable). However, the tree must contain every output commitment and
-witness hash in the system. This data too big to be permanently stored in
+witness hash in the system. This data is too big to be permanently stored in
 memory and too costly to be rebuilt from scratch at every restart, even if we
 consider pruning (at this time, Bitcoin has over 50M UTXOs which would require
 at least 3.2GB, assuming a couple hashes per UTXO). So we need an efficient way
