@@ -253,9 +253,7 @@ impl<'a> Extension<'a> {
 					Err(s) => return Err(Error::SumTreeErr(s)),
 				}
 			} else {
-				return Err(Error::SumTreeErr(
-					format!("Missing index for {:?}", input.commitment()),
-				));
+				return Err(Error::AlreadySpent);
 			}
 		}
 
