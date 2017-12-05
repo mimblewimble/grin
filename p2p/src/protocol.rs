@@ -128,7 +128,11 @@ impl ProtocolV1 {
 		body: &W,
 		expect_resp: Option<Hash>,
 	) -> Result<(), Error> {
-		self.conn.borrow().send_request(t, rt, body, expect_resp)
+		if self.conn.is_initialized() {
+			self.conn.borrow().send_request(t, rt, body, expect_resp)
+		} else {
+			Ok(())
+		}
 	}
 }
 
