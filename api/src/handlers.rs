@@ -30,6 +30,7 @@ use core::core::hash::Hashed;
 use core::ser;
 use pool;
 use p2p;
+use regex::Regex;
 use rest::*;
 use util::secp::pedersen::Commitment;
 use types::*;
@@ -282,22 +283,27 @@ pub struct BlockHandler {
 }
 
 impl BlockHandler {
-	fn get_block(&self, h: &Hash) -> BlockPrintable {
-		let block = self.chain.clone().get_block(h).unwrap();
-		BlockPrintable::from_block(&block)
+	fn get_block(&self, h: &Hash) -> Result<BlockPrintable, Error> {
+		let block = self.chain.clone().get_block(h).map_err(|_| Error::NotFound)?;
+		Ok(BlockPrintable::from_block(&block))
 	}
 
 	// Try to decode the string as a height or a hash address.
-	fn parse_input(&self, input: String) -> Hash {
+	fn parse_input(&self, input: String) -> Result<Hash, Error> {
 		if let Ok(height) = input.parse() {
-			return self.chain
-				.clone()
-				.get_header_by_height(height)
-				.unwrap()
-				.hash();
+			if let Ok(header) = self.chain.clone().get_header_by_height(height) {
+				return Ok(header.hash())
+			}
 		}
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r"[0-9a-fA-F]{64}").unwrap();
+    }
+    if !RE.is_match(&input) {
+    	return Err(Error::Argument(
+    			String::from("Not a valid hex address or height.")))
+    }
 		let vec = util::from_hex(input).unwrap();
-		Hash::from_vec(vec)
+		Ok(Hash::from_vec(vec))
 	}
 }
 
@@ -309,8 +315,9 @@ impl Handler for BlockHandler {
 			path_elems.pop();
 		}
 		let el = *path_elems.last().unwrap();
-		let h = self.parse_input(el.to_string());
-		json_response(&self.get_block(&h))
+		let h = try!(self.parse_input(el.to_string()));
+		let b = try!(self.get_block(&h));
+		json_response(&b)
 	}
 }
 
