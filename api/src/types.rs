@@ -266,6 +266,8 @@ impl TxKernelPrintable {
 // Just the information required for wallet reconstruction
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BlockHeaderInfo {
+	// Hash
+	pub hash: String,
 	/// Version of the block
 	pub version: u16,
 	/// Height of this block since the genesis block (height 0)
@@ -291,6 +293,7 @@ pub struct BlockHeaderInfo {
 impl BlockHeaderInfo {
 	pub fn from_header(h: &core::BlockHeader) -> BlockHeaderInfo {
 		BlockHeaderInfo {
+			hash: util::to_hex(h.hash().to_vec()),
 			version: h.version,
 			height: h.height,
 			previous: util::to_hex(h.previous.to_vec()),
