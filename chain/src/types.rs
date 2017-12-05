@@ -226,6 +226,10 @@ pub trait ChainStore: Send + Sync {
 	/// Gets the block header at the provided height
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, store::Error>;
 
+	/// Is the block header on the current chain?
+	/// Use the header_by_height index to verify the block header is where we think it is.
+	fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), store::Error>;
+
 	/// Gets an output by its commitment
 	fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, store::Error>;
 

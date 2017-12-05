@@ -156,14 +156,19 @@ impl ChainStore for ChainKVStore {
 		match block_hash {
 			Some(hash) => {
 				let block_header = self.get_block_header(&hash)?;
-				let header_at_height = self.get_header_by_height(block_header.height)?;
-				if block_header.hash() == header_at_height.hash() {
-					Ok(block_header)
-				} else {
-					Err(Error::NotFoundErr)
-				}
+				self.is_on_current_chain(&block_header)?;
+				Ok(block_header)
 			}
 			None => Err(Error::NotFoundErr),
+		}
+	}
+
+	fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
+		let header_at_height = self.get_header_by_height(header.height)?;
+		if header.hash() == header_at_height.hash() {
+			Ok(())
+		} else {
+			Err(Error::NotFoundErr)
 		}
 	}
 
@@ -222,29 +227,19 @@ impl ChainStore for ChainKVStore {
 	/// We need to handle the case where we have no index entry for a given height to
 	/// account for the case where we just switched to a new fork and the height jumped
 	/// beyond current chain height.
-	fn setup_height(&self, bh: &BlockHeader) -> Result<(), Error> {
+	fn setup_height(&self, header: &BlockHeader) -> Result<(), Error> {
 		self.db
-			.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height), bh)?;
-		if bh.height == 0 {
+			.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, header.height), header)?;
+
+		if header.height == 0 {
 			return Ok(());
 		}
 
-		let prev_h = bh.previous;
-		let prev_height = bh.height - 1;
-		match self.get_header_by_height(prev_height) {
-			Ok(prev) => {
-				if prev.hash() != prev_h {
-					let real_prev = self.get_block_header(&prev_h)?;
-					self.setup_height(&real_prev)
-				} else {
-					Ok(())
-				}
-			},
-			Err(Error::NotFoundErr) => {
-				let real_prev = self.get_block_header(&prev_h)?;
-				self.setup_height(&real_prev)
-			},
-			Err(e) => Err(e)
+		let prev_header = self.get_block_header(&header.previous)?;
+		if let Ok(_) = self.is_on_current_chain(&prev_header) {
+			Ok(())
+		} else {
+			self.setup_height(&prev_header)
 		}
 	}
 }
