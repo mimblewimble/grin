@@ -303,6 +303,7 @@ impl BlockHandler {
 			return Err(Error::Argument(
 					String::from("Not a valid hex address or height.")))
 		}
+		let vec = util::from_hex(input).unwrap();
 		Ok(Hash::from_vec(vec))
 	}
 }
