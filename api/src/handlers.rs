@@ -291,8 +291,9 @@ impl BlockHandler {
 	// Try to decode the string as a height or a hash address.
 	fn parse_input(&self, input: String) -> Result<Hash, Error> {
 		if let Ok(height) = input.parse() {
-			if let Ok(header) = self.chain.clone().get_header_by_height(height) {
-				return Ok(header.hash())
+			match self.chain.clone().get_header_by_height(height) {
+				Ok(header) => return Ok(header.hash()),
+				Err(_) => return Err(Error::NotFound),
 			}
 		}
     lazy_static! {
