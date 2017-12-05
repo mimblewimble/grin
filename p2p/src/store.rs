@@ -109,10 +109,6 @@ impl PeerStore {
 		self.db.exists(&peer_key(peer_addr)[..])
 	}
 
-	pub fn delete_peer(&self, peer_addr: SocketAddr) -> Result<(), Error> {
-		self.db.delete(&peer_key(peer_addr)[..])
-	}
-
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
 		let mut peers = self.db
 			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()))

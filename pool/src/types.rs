@@ -177,12 +177,6 @@ pub trait PoolAdapter: Send + Sync {
 	fn tx_accepted(&self, tx: &transaction::Transaction);
 }
 
-/// Dummy adapter used as a placeholder for real implementations
-pub struct NoopAdapter {}
-impl PoolAdapter for NoopAdapter {
-	fn tx_accepted(&self, _: &transaction::Transaction) {}
-}
-
 /// Pool contains the elements of the graph that are connected, in full, to
 /// the blockchain.
 /// Reservations of outputs by orphan transactions (not fully connected) are
