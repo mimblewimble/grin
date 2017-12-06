@@ -88,10 +88,33 @@ impl Seeder {
 			.for_each(move |_| {
 				debug!(
 					LOGGER,
-					"monitoring peers ({} / {} / {})",
+					"monitoring_peers: {} / {} / {}",
 					p2p_server.most_work_peers().len(),
 					p2p_server.connected_peers().len(),
 					p2p_server.all_peers().len(),
+				);
+
+				let all_peers = p2p_server.all_peers();
+				let healthy_count = all_peers
+					.iter()
+					.filter(|x| x.flags == p2p::State::Healthy)
+					.count();
+				let banned_count = all_peers
+					.iter()
+					.filter(|x| x.flags == p2p::State::Banned)
+					.count();
+				let defunct_count = all_peers
+					.iter()
+					.filter(|x| x.flags == p2p::State::Defunct)
+					.count();
+
+				debug!(
+					LOGGER,
+					"monitoring_peers: all - {}, healthy - {}, banned - {}, defunct - {}",
+					all_peers.len(),
+					healthy_count,
+					banned_count,
+					defunct_count,
 				);
 
 				// maintenance step first, clean up p2p server peers
