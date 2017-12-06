@@ -259,12 +259,30 @@ impl<'a> Extension<'a> {
 			}
 		}
 
+		// checking any position after the MMR size is useless, catches rewind
+		// edge cases
+		let output_max_index = self.output_pmmr.unpruned_size();
+		let kernel_max_index = self.kernel_pmmr.unpruned_size();
+
 		for out in &b.outputs {
-			if let Ok(pos) = self.commit_index.get_output_pos(&out.commitment()) {
-				// checking the position is within the MMR, the commit index could be
-				// returning rewound data
-				if pos <= self.output_pmmr.unpruned_size() {
-					return Err(Error::DuplicateCommitment(out.commitment()));
+			let commit = out.commitment();
+			if let Ok(pos) = self.commit_index.get_output_pos(&commit) {
+				if pos <= output_max_index {
+					// we need to check whether the commitment is in the current MMR view
+					// as well as the index doesn't support rewind and is non-authoritative
+					// (non-historical node will have a much smaller one)
+					// note that this doesn't show the commitment *never* existed, just
+					// that this is not an existing unspent commitment right now
+					if let Some(c) = self.output_pmmr.get(pos) {
+						let hashsum = HashSum::from_summable(
+							pos, &SumCommit{commit}, Some(out.switch_commit_hash));
+						// as we're processing a new fork, we may get a position on the old
+						// fork that exists but matches a different node, filtering that
+						// case out
+						if c.hash == hashsum.hash {
+							return Err(Error::DuplicateCommitment(out.commitment()));
+						}
+					}
 				}
 			}
 			// push new outputs commitments in their MMR and save them in the index
@@ -287,10 +305,15 @@ impl<'a> Extension<'a> {
 
 		for kernel in &b.kernels {
 			if let Ok(pos) = self.commit_index.get_kernel_pos(&kernel.excess) {
-				if pos <= self.kernel_pmmr.unpruned_size() {
-					// checking the position is within the MMR, the commit index could be
-					// returning rewound data
-					return Err(Error::DuplicateKernel(kernel.excess.clone()));
+				if pos <= kernel_max_index {
+					// same as outputs
+					if let Some(k) = self.kernel_pmmr.get(pos) {
+						let hashsum = HashSum::from_summable(
+							pos, &NoSum(kernel), None::<RangeProof>);
+						if k.hash == hashsum.hash {
+							return Err(Error::DuplicateKernel(kernel.excess.clone()));
+						}
+					}
 				}
 			}
 			// push kernels in their MMR
