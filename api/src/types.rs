@@ -15,7 +15,6 @@
 use std::sync::Arc;
 use core::{core, global};
 use core::core::hash::Hashed;
-use core::core::target::Difficulty;
 use chain;
 use util::secp::pedersen;
 use rest::*;
@@ -285,9 +284,9 @@ pub struct BlockHeaderInfo {
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
 	/// Difficulty used to mine the block.
-	pub difficulty: Difficulty,
+	pub difficulty: u64,
 	/// Total accumulated difficulty since genesis block
-	pub total_difficulty: Difficulty,
+	pub total_difficulty: u64,
 }
 
 impl BlockHeaderInfo {
@@ -302,8 +301,8 @@ impl BlockHeaderInfo {
 			range_proof_root: util::to_hex(h.range_proof_root.to_vec()),
 			kernel_root: util::to_hex(h.kernel_root.to_vec()),
 			nonce: h.nonce,
-			difficulty: h.difficulty.clone(),
-			total_difficulty: h.total_difficulty.clone(),
+			difficulty: h.difficulty.into_num(),
+			total_difficulty: h.total_difficulty.into_num()
 		}
 	}
 }
