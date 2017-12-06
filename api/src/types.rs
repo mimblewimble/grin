@@ -274,8 +274,6 @@ pub struct BlockHeaderInfo {
 	pub height: u64,
 	/// Hash of the block previous to this in the chain.
 	pub previous: String,
-	/// Height
-	pub height: u64,
 	/// rfc3339 timestamp at which the block was built.
 	pub timestamp: String,
 	/// Merklish root of all the commitments in the UTXO set

@@ -347,7 +347,11 @@ where
 	/// Helper function to get the HashSum of a node at a given position from
 	/// the backend.
 	pub fn get(&self, position: u64) -> Option<HashSum<T>> {
-		self.backend.get(position)
+		if position > self.last_pos {
+			None
+		} else {
+			self.backend.get(position)
+		}
 	}
 
 	/// Helper function to get the last N nodes inserted, i.e. the last
