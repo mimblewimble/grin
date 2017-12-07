@@ -275,8 +275,8 @@ impl Handler for ChainHandler {
 	}
 }
 
-// Gets block details given either a hex address or height.
-// GET /v1/block/<address>
+// Gets block details given either a hash or height.
+// GET /v1/block/<hash>
 // GET /v1/block/<height>
 pub struct BlockHandler {
 	pub chain: Arc<chain::Chain>,
@@ -288,7 +288,7 @@ impl BlockHandler {
 		Ok(BlockPrintable::from_block(&block))
 	}
 
-	// Try to decode the string as a height or a hash address.
+	// Try to decode the string as a height or a hash.
 	fn parse_input(&self, input: String) -> Result<Hash, Error> {
 		if let Ok(height) = input.parse() {
 			match self.chain.clone().get_header_by_height(height) {
@@ -301,7 +301,7 @@ impl BlockHandler {
 		}
 		if !RE.is_match(&input) {
 			return Err(Error::Argument(
-					String::from("Not a valid hex address or height.")))
+					String::from("Not a valid hash or height.")))
 		}
 		let vec = util::from_hex(input).unwrap();
 		Ok(Hash::from_vec(vec))

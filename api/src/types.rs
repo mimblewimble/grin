@@ -267,6 +267,26 @@ impl TxKernelPrintable {
 pub struct BlockHeaderInfo {
 	// Hash
 	pub hash: String,
+	/// Height of this block since the genesis block (height 0)
+	pub height: u64,
+	/// Hash of the block previous to this in the chain.
+	pub previous: String,
+}
+
+impl BlockHeaderInfo {
+	pub fn from_header(h: &core::BlockHeader) -> BlockHeaderInfo {
+		BlockHeaderInfo {
+			hash: util::to_hex(h.hash().to_vec()),
+			height: h.height,
+			previous: util::to_hex(h.previous.to_vec()),
+		}
+	}
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BlockHeaderPrintable {
+	// Hash
+	pub hash: String,
 	/// Version of the block
 	pub version: u16,
 	/// Height of this block since the genesis block (height 0)
@@ -289,9 +309,9 @@ pub struct BlockHeaderInfo {
 	pub total_difficulty: u64,
 }
 
-impl BlockHeaderInfo {
-	pub fn from_header(h: &core::BlockHeader) -> BlockHeaderInfo {
-		BlockHeaderInfo {
+impl BlockHeaderPrintable {
+	pub fn from_header(h: &core::BlockHeader) -> BlockHeaderPrintable {
+		BlockHeaderPrintable {
 			hash: util::to_hex(h.hash().to_vec()),
 			version: h.version,
 			height: h.height,
@@ -311,7 +331,7 @@ impl BlockHeaderInfo {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BlockPrintable {
 	/// The block header
-	pub header: BlockHeaderInfo,
+	pub header: BlockHeaderPrintable,
 	// Input transactions
 	pub inputs: Vec<String>,
 	/// A printable version of the outputs
@@ -335,7 +355,7 @@ impl BlockPrintable {
 			.map(|kernel| TxKernelPrintable::from_txkernel(kernel))
 			.collect();
 		BlockPrintable {
-			header: BlockHeaderInfo::from_header(&block.header),
+			header: BlockHeaderPrintable::from_header(&block.header),
 			inputs: inputs,
 			outputs: outputs,
 			kernels: kernels,
