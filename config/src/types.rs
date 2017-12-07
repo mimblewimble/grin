@@ -21,6 +21,7 @@ use std::fmt;
 use grin::ServerConfig;
 use pow::types::MinerConfig;
 use util::LoggingConfig;
+use wallet::WalletConfig;
 
 /// Error type wrapping config errors.
 #[derive(Debug)]
@@ -101,9 +102,9 @@ pub struct ConfigMembers {
 	/// Logging config
 	pub logging: Option<LoggingConfig>,
 
-	//removing wallet from here for now,
-	//as its concerns are separate from the server's, really
-	//given it needs to manage keys. It should probably
-	//stay command line only for the time being
-	//pub wallet: Option<WalletConfig>
+	/// Wallet config. May eventually need to be moved to its own thing. Or not.
+	/// Depends on whether we end up starting the wallet in its own process but
+	/// with the same lifecycle as the server.
+	#[serde(default)]
+	pub wallet: WalletConfig,
 }
