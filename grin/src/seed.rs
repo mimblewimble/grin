@@ -132,6 +132,11 @@ impl Seeder {
 								p.info.addr,
 							);
 							let _ = p.send_peer_request(capabilities);
+						} else {
+							warn!(
+								LOGGER,
+								"monitor_peers: failed to get read lock on peer",
+							);
 						}
 					}
 

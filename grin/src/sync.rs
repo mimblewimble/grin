@@ -162,26 +162,22 @@ fn request_headers(
 	chain: Arc<chain::Chain>,
 ) -> Result<(), Error> {
 	let locator = get_locator(chain)?;
-	match peer.try_read() {
-		Ok(peer) => {
-			debug!(
-				LOGGER,
-				"sync: request_headers: asking {} for headers, {:?}",
-				peer.info.addr,
-				locator,
-			);
-			let _ = peer.send_header_request(locator);
-			Ok(())
-		},
-		Err(_) => {
-			// not much we can do here, log and try again next time
-			warn!(
-				LOGGER,
-				"sync: request_headers: failed to get read lock on peer",
-			);
-			Ok(())
-		},
+	if let Ok(peer) = peer.try_read() {
+		debug!(
+			LOGGER,
+			"sync: request_headers: asking {} for headers, {:?}",
+			peer.info.addr,
+			locator,
+		);
+		let _ = peer.send_header_request(locator);
+	} else {
+		// not much we can do here, log and try again next time
+		warn!(
+			LOGGER,
+			"sync: request_headers: failed to get read lock on peer",
+		);
 	}
+	Ok(())
 }
 
 /// We build a locator based on sync_head.
