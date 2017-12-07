@@ -130,14 +130,7 @@ impl Handshake {
 					{
 						// check the nonce to see if we could be trying to connect to ourselves
 						let nonces = nonces.read().unwrap();
-						debug!(
-							LOGGER,
-							"checking the nonce - {}, {:?}",
-							&hand.nonce,
-							nonces,
-						);
 						if nonces.contains(&hand.nonce) {
-							debug!(LOGGER, "***** nonce matches! Avoiding connecting to ourselves");
 							return Err(Error::Serialization(ser::Error::UnexpectedData {
 								expected: vec![],
 								received: vec![],
