@@ -219,8 +219,11 @@ impl Server {
 	) -> Box<Future<Item = Option<Arc<RwLock<Peer>>>, Error = Error>> {
 		if let Some(p) = self.get_peer(&addr) {
 			// if we're already connected to the addr, just return the peer
+			debug!(LOGGER, "connect_peer: already connected {}", addr);
 			return Box::new(future::ok(Some(p)));
 		}
+
+		debug!(LOGGER, "connect_peer: connecting to {}", addr);
 
 		// cloneapalooza
 		let peers = self.peers.clone();
@@ -229,11 +232,17 @@ impl Server {
 		let capab = self.capabilities.clone();
 		let self_addr = SocketAddr::new(self.config.host, self.config.port);
 
-		debug!(LOGGER, "{} connecting to {}", self_addr, addr);
+		let timer = Timer::default();
+		let socket_connect = timer.timeout(
+			TcpStream::connect(&addr, &h),
+			Duration::from_secs(5),
+		).map_err(|e| {
+			error!(LOGGER, "connect_peer: socket connect error - {:?}", e);
+			Error::Connection(e)
+		});
 
-		let socket = TcpStream::connect(&addr, &h).map_err(|e| Error::Connection(e));
 		let h2 = h.clone();
-		let request = socket
+		let request = socket_connect
 			.and_then(move |socket| {
 				let peers = peers.clone();
 				let total_diff = adapter.clone().total_difficulty();
@@ -277,28 +286,59 @@ impl Server {
 	}
 
 	/// Have the server iterate over its peer list and prune all peers we have
-	/// lost connection to or have been deemed problematic. The removed peers
-	/// are returned.
-	pub fn clean_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
+	/// lost connection to or have been deemed problematic.
+	/// Also avoid connected peer count getting too high.
+	pub fn clean_peers(&self, desired_count: usize) {
 		let mut rm = vec![];
 
 		// build a list of peers to be cleaned up
 		for peer in self.connected_peers() {
 			let peer_inner = peer.read().unwrap();
-			if peer_inner.is_banned() || !peer_inner.is_connected() {
+			if peer_inner.is_banned() {
+				debug!(LOGGER, "cleaning {:?}, peer banned", peer_inner.info.addr);
+				rm.push(peer.clone());
+			} else if !peer_inner.is_connected() {
 				debug!(LOGGER, "cleaning {:?}, not connected", peer_inner.info.addr);
 				rm.push(peer.clone());
 			}
 		}
 
 		// now clean up peer map based on the list to remove
-		let mut peers = self.peers.write().unwrap();
-		for p in rm.clone() {
-			let p = p.read().unwrap();
-			peers.remove(&p.info.addr);
+		{
+			let mut peers = self.peers.write().unwrap();
+			for p in rm.clone() {
+				let p = p.read().unwrap();
+				peers.remove(&p.info.addr);
+			}
 		}
 
-		rm
+		// ensure we do not have too many connected peers
+		// really fighting with the double layer of rwlocks here...
+		let excess_count = {
+			let peer_count = self.peer_count().clone() as usize;
+			if peer_count > desired_count {
+				peer_count - desired_count
+			} else {
+				0
+			}
+		};
+
+		// map peers to addrs in a block to bound how long we keep the read lock for
+		let addrs = {
+			self.connected_peers().iter().map(|x| {
+				let p = x.read().unwrap();
+				p.info.addr.clone()
+			}).collect::<Vec<_>>()
+		};
+
+		// now remove them taking a short-lived write lock each time
+		// maybe better to take write lock once and remove them all?
+		for x in addrs
+			.iter()
+			.take(excess_count) {
+				let mut peers = self.peers.write().unwrap();
+				peers.remove(x);
+			}
 	}
 
 	/// Return vec of all peers that currently have the most worked branch,
@@ -347,23 +387,8 @@ impl Server {
 	}
 
 	/// Returns a random connected peer.
-	/// Only considers peers with at least our total_difficulty (ignores out of sync peers).
 	pub fn random_peer(&self) -> Option<Arc<RwLock<Peer>>> {
-		let difficulty = self.adapter.total_difficulty();
-
-		let peers = self
-			.connected_peers()
-			.iter()
-			.filter(|x| {
-				let peer = x.read().unwrap();
-				peer.is_connected() && peer.info.total_difficulty >= difficulty
-			})
-			.cloned()
-			.collect::<Vec<_>>();
-
-		if peers.len() == 0 {
-			return None;
-		}
+		let peers = self.connected_peers();
 		Some(thread_rng().choose(&peers).unwrap().clone())
 	}
 
@@ -501,12 +526,20 @@ fn with_timeout<T: 'static>(
 	fut: Box<Future<Item = Result<T, ()>, Error = Error>>,
 	h: &reactor::Handle,
 ) -> Box<Future<Item = T, Error = Error>> {
-	let timeout = reactor::Timeout::new(Duration::new(5, 0), h).unwrap();
+	let timeout = reactor::Timeout::new(Duration::from_secs(5), h).unwrap();
 	let timed = fut.select(timeout.map(Err).from_err())
 		.then(|res| match res {
-			Ok((Ok(inner), _timeout)) => Ok(inner),
-			Ok((_, _accept)) => Err(Error::Timeout),
-			Err((e, _other)) => Err(e),
+			Ok((Ok(inner), _timeout)) => {
+				Ok(inner)
+			},
+			Ok((Err(inner), _accept)) => {
+				error!(LOGGER, "with_timeout: ok but nested - {:?} (treating this as timeout)", inner);
+				Err(Error::Timeout)
+			},
+			Err((e, _other)) => {
+				error!(LOGGER, "with_timeout: err - {:?} (treating this as an error)", e);
+				Err(e)
+			},
 		});
 	Box::new(timed)
 }

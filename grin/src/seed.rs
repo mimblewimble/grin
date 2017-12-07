@@ -16,8 +16,6 @@
 //! a mining worker implementation
 //!
 
-use rand::{thread_rng, Rng};
-use std::cmp::min;
 use std::net::SocketAddr;
 use std::str::{self, FromStr};
 use std::sync::Arc;
@@ -118,27 +116,17 @@ impl Seeder {
 				);
 
 				// maintenance step first, clean up p2p server peers
-				let _ = p2p_server.clean_peers();
+				p2p_server.clean_peers(PEER_PREFERRED_COUNT as usize);
 
-				// we don't have enough peers, getting more from db
+				// not enough peers, getting more from db
 				if p2p_server.peer_count() < PEER_PREFERRED_COUNT {
-					let mut peers = p2p_server.find_peers(
+					let peers = p2p_server.find_peers(
 						p2p::State::Healthy,
 						p2p::UNKNOWN,
-						(2 * PEER_MAX_COUNT) as usize,
+						100,
 					);
-					peers.retain(|p| !p2p_server.is_known(&p.addr));
-					if peers.len() > 0 {
-						debug!(
-							LOGGER,
-							"Got {} peers from db, trying to connect.",
-							peers.len()
-						);
-						thread_rng().shuffle(&mut peers[..]);
-						let sz = min(PEER_PREFERRED_COUNT as usize, peers.len());
-						for p in &peers[0..sz] {
-							tx.unbounded_send(p.addr).unwrap();
-						}
+					for p in peers {
+						tx.unbounded_send(p.addr).unwrap();
 					}
 				}
 				Ok(())
@@ -167,29 +155,28 @@ impl Seeder {
 				let peers = p2p_server.find_peers(
 					p2p::State::Healthy,
 					p2p::FULL_HIST,
-					(2 * PEER_MAX_COUNT) as usize,
+					100,
 				);
 				Ok(peers)
 			})
-			.and_then(|mut peers| {
+			.and_then(|peers| {
 				// if so, get their addresses, otherwise use our seeds
 				if peers.len() > 3 {
-					thread_rng().shuffle(&mut peers[..]);
 					Box::new(future::ok(peers.iter().map(|p| p.addr).collect::<Vec<_>>()))
 				} else {
 					seed_list
 				}
 			})
 			.and_then(move |peer_addrs| {
-				// connect to this first set of addresses
-				let sz = min(PEER_PREFERRED_COUNT as usize, peer_addrs.len());
-				for addr in &peer_addrs[0..sz] {
-					debug!(LOGGER, "Connecting to seed: {}.", addr);
-					tx.unbounded_send(*addr).unwrap();
-				}
 				if peer_addrs.len() == 0 {
 					warn!(LOGGER, "No seeds were retrieved.");
 				}
+
+				// connect to this first set of addresses
+				for addr in peer_addrs {
+					tx.unbounded_send(addr).unwrap();
+				}
+
 				Ok(())
 			});
 		Box::new(seeder)
@@ -286,29 +273,23 @@ fn connect_and_req(
 	h: reactor::Handle,
 	addr: SocketAddr,
 ) -> Box<Future<Item = (), Error = ()>> {
-	let connect_peer = p2p.connect_peer(addr, h).map_err(|_| ());
-	let timer = Timer::default();
-	let timeout = timer.timeout(connect_peer, Duration::from_secs(5));
+	let connect_peer = p2p.connect_peer(addr, h);
 	let p2p_server = p2p.clone();
-
-	let fut = timeout.then(move |p| {
+	let fut = connect_peer.then(move |p| {
 		match p {
 			Ok(Some(p)) => {
-				let p = p.read().unwrap();
-				let peer_result = p.send_peer_request(capab);
-				match peer_result {
-					Ok(()) => {}
-					Err(_) => {}
+				debug!(LOGGER, "connect_and_req: ok, will attempt send_peer_request");
+				if let Ok(p) = p.try_read() {
+					let _ = p.send_peer_request(capab);
 				}
-			}
-			Err(_) => {
-				let update_result = p2p_server.update_state(addr, p2p::State::Defunct);
-				match update_result {
-					Ok(()) => {}
-					Err(_) => {}
-				}
-			}
-			_ => {}
+			},
+			Ok(None) => {
+				error!(LOGGER, "connect_and_req: ok but none inner (what does this mean?), {}", addr);
+			},
+			Err(e) => {
+				error!(LOGGER, "connect_and_req: err - {:?}, {}, flagging as defunct", e, addr);
+				let _ = p2p_server.update_state(addr, p2p::State::Defunct);
+			},
 		}
 		Ok(())
 	});
