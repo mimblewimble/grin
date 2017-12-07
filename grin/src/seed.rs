@@ -311,10 +311,10 @@ fn connect_and_req(
 				}
 			},
 			Ok(None) => {
-				error!(LOGGER, "connect_and_req: ok but none inner (what does this mean?), {}", addr);
+				debug!(LOGGER, "connect_and_req: ok but none inner (what does this mean?), {}", addr);
 			},
 			Err(e) => {
-				error!(LOGGER, "connect_and_req: err - {:?}, {}, flagging as defunct", e, addr);
+				debug!(LOGGER, "connect_and_req: err - {:?}, {}, flagging as defunct", e, addr);
 				let _ = p2p_server.update_state(addr, p2p::State::Defunct);
 			},
 		}

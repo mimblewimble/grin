@@ -237,7 +237,7 @@ impl Server {
 			TcpStream::connect(&addr, &h),
 			Duration::from_secs(5),
 		).map_err(|e| {
-			error!(LOGGER, "connect_peer: socket connect error - {:?}", e);
+			debug!(LOGGER, "connect_peer: socket connect error - {:?}", e);
 			Error::Connection(e)
 		});
 
@@ -533,11 +533,11 @@ fn with_timeout<T: 'static>(
 				Ok(inner)
 			},
 			Ok((Err(inner), _accept)) => {
-				error!(LOGGER, "with_timeout: ok but nested - {:?} (treating this as timeout)", inner);
+				debug!(LOGGER, "with_timeout: ok but nested - {:?} (treating this as timeout)", inner);
 				Err(Error::Timeout)
 			},
 			Err((e, _other)) => {
-				error!(LOGGER, "with_timeout: err - {:?} (treating this as an error)", e);
+				debug!(LOGGER, "with_timeout: err - {:?} (treating this as an error)", e);
 				Err(e)
 			},
 		});

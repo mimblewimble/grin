@@ -106,12 +106,14 @@ fn body_sync(
 	}
 	hashes.reverse();
 
-	// let peer_count = p2p_server.most_work_peers().len();
+	let peer_count = {
+		p2p_server.most_work_peers().len()
+	};
+
 	let hashes_to_get = hashes
 		.iter()
 		.filter(|x| !chain.get_block(&x).is_ok())
-		.take(10)
-		// .take(peer_count * 2)
+		.take(peer_count * 2)
 		.cloned()
 		.collect::<Vec<_>>();
 
@@ -172,7 +174,7 @@ fn request_headers(
 		let _ = peer.send_header_request(locator);
 	} else {
 		// not much we can do here, log and try again next time
-		warn!(
+		debug!(
 			LOGGER,
 			"sync: request_headers: failed to get read lock on peer",
 		);
