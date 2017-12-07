@@ -24,6 +24,7 @@ use grin::ServerConfig;
 use pow::types::MinerConfig;
 use util::LoggingConfig;
 use types::{ConfigError, ConfigMembers, GlobalConfig};
+use wallet::WalletConfig;
 
 /// The default file name to use when trying to derive
 /// the config file location
@@ -39,6 +40,7 @@ impl Default for ConfigMembers {
 			server: ServerConfig::default(),
 			mining: Some(MinerConfig::default()),
 			logging: Some(LoggingConfig::default()),
+			wallet: WalletConfig::default(),
 		}
 	}
 }
@@ -133,7 +135,7 @@ impl GlobalConfig {
 		match decoded {
 			Ok(mut gc) => {
 				// Put the struct back together, because the config
-	// file was flattened a bit
+				// file was flattened a bit
 				gc.server.mining_config = gc.mining.clone();
 				self.using_config_file = true;
 				self.members = Some(gc);

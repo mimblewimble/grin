@@ -280,7 +280,7 @@ fn main() {
 
 		// client commands and options
 		("wallet", Some(wallet_args)) => {
-			wallet_command(wallet_args);
+			wallet_command(wallet_args, global_config);
 		}
 
 		// If nothing is specified, try to just use the config file instead
@@ -364,8 +364,9 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 	}
 }
 
-fn wallet_command(wallet_args: &ArgMatches) {
-	let mut wallet_config = WalletConfig::default();
+fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
+	// just get defaults from the global config
+	let mut wallet_config = global_config.members.unwrap().wallet;
 
 	if wallet_args.is_present("external") {
 		wallet_config.api_listen_interface = "0.0.0.0".to_string();
