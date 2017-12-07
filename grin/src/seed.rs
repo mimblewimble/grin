@@ -20,7 +20,6 @@ use std::net::SocketAddr;
 use std::str::{self, FromStr};
 use std::sync::Arc;
 use std::time;
-use std::time::Duration;
 
 use cpupool;
 use futures::{self, future, Future, Stream};
@@ -78,15 +77,16 @@ impl Seeder {
 		tx: mpsc::UnboundedSender<SocketAddr>,
 	) -> Box<Future<Item = (), Error = String>> {
 		let p2p_server = self.p2p.clone();
+		let capabilities = self.capabilities.clone();
 
 		// now spawn a new future to regularly check if we need to acquire more peers
 		// and if so, gets them from db
 		let mon_loop = Timer::default()
-			.interval(time::Duration::from_secs(10))
+			.interval(time::Duration::from_secs(30))
 			.for_each(move |_| {
 				debug!(
 					LOGGER,
-					"monitoring_peers: {} / {} / {}",
+					"monitor_peers: {} / {} / {}",
 					p2p_server.most_work_peers().len(),
 					p2p_server.connected_peers().len(),
 					p2p_server.all_peers().len(),
@@ -108,7 +108,7 @@ impl Seeder {
 
 				debug!(
 					LOGGER,
-					"monitoring_peers: all - {}, healthy - {}, banned - {}, defunct - {}",
+					"monitor_peers: all - {}, healthy - {}, banned - {}, defunct - {}",
 					all_peers.len(),
 					healthy_count,
 					banned_count,
@@ -116,16 +116,38 @@ impl Seeder {
 				);
 
 				// maintenance step first, clean up p2p server peers
-				p2p_server.clean_peers(PEER_PREFERRED_COUNT as usize);
+				{
+					p2p_server.clean_peers(PEER_PREFERRED_COUNT as usize);
+				}
 
 				// not enough peers, getting more from db
 				if p2p_server.peer_count() < PEER_PREFERRED_COUNT {
+					// loop over connected peers
+					// ask them for their list of peers
+					for p in p2p_server.connected_peers() {
+						if let Ok(p) = p.try_read() {
+							debug!(
+								LOGGER,
+								"monitor_peers: asking {} for more peers",
+								p.info.addr,
+							);
+							let _ = p.send_peer_request(capabilities);
+						}
+					}
+
+					// find some peers from our db
+					// and queue them up for a connection attempt
 					let peers = p2p_server.find_peers(
 						p2p::State::Healthy,
 						p2p::UNKNOWN,
 						100,
 					);
 					for p in peers {
+						debug!(
+							LOGGER,
+							"monitor_peers: queueing up {} for connection (may be already connected)",
+							p.addr,
+						);
 						tx.unbounded_send(p.addr).unwrap();
 					}
 				}
