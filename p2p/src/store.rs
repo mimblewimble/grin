@@ -14,6 +14,7 @@
 
 //! Storage implementation for peer data.
 
+use std::cell::RefCell;
 use std::net::SocketAddr;
 use num::FromPrimitive;
 use rand::{thread_rng, Rng};
@@ -21,6 +22,7 @@ use rand::{thread_rng, Rng};
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 use grin_store::{self, option_to_not_found, to_key, Error};
 use msg::SockAddr;
+use peer::Peer;
 use types::Capabilities;
 use util::LOGGER;
 
@@ -50,6 +52,8 @@ pub struct PeerData {
 	pub user_agent: String,
 	/// State the peer has been detected with.
 	pub flags: State,
+	/// Zero, or peer is banned until timestamp < time::now_utc
+	pub banned_until: RefCell<i64>,
 }
 
 impl Writeable for PeerData {
@@ -59,7 +63,8 @@ impl Writeable for PeerData {
 			writer,
 			[write_u32, self.capabilities.bits()],
 			[write_bytes, &self.user_agent],
-			[write_u8, self.flags as u8]
+			[write_u8, self.flags as u8],
+			[write_i64, *self.banned_until.borrow()]
 		);
 		Ok(())
 	}
@@ -68,7 +73,7 @@ impl Writeable for PeerData {
 impl Readable for PeerData {
 	fn read(reader: &mut Reader) -> Result<PeerData, ser::Error> {
 		let addr = SockAddr::read(reader)?;
-		let (capab, ua, fl) = ser_multiread!(reader, read_u32, read_vec, read_u8);
+		let (capab, ua, fl, bu) = ser_multiread!(reader, read_u32, read_vec, read_u8, read_i64);
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
 		match State::from_u8(fl) {
@@ -77,6 +82,7 @@ impl Readable for PeerData {
 				capabilities: capabilities,
 				user_agent: user_agent,
 				flags: flags,
+				banned_until: RefCell::new(bu),
 			}),
 			None => Err(ser::Error::CorruptedData),
 		}
@@ -97,6 +103,9 @@ impl PeerStore {
 
 	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
 		debug!(LOGGER, "save_peer: {:?} marked {:?}", p.addr, p.flags);
+		if p.flags == State::Banned && *p.banned_until.borrow() < 999 {
+			warn!(LOGGER, "save_peer: banned, but banned_until not correct!")
+		}
 
 		self.db.put_ser(&peer_key(p.addr)[..], p)
 	}
@@ -137,6 +146,10 @@ impl PeerStore {
 	pub fn update_state(&self, peer_addr: SocketAddr, new_state: State) -> Result<(), Error> {
 		let mut peer = self.get_peer(peer_addr)?;
 		peer.flags = new_state;
+		if new_state == State::Banned {
+			let t = Peer::make_ban_timestamp(1, 8);
+			*peer.banned_until.borrow_mut() = t.to_timespec().sec;
+		}
 		self.save_peer(&peer)
 	}
 }

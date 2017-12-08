@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::cell::RefCell;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
@@ -23,6 +24,7 @@ use core::core;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use handshake::Handshake;
+use time;
 use types::*;
 use util::LOGGER;
 
@@ -39,6 +41,7 @@ pub struct Peer {
 	pub info: PeerInfo,
 	proto: Box<Protocol>,
 	state: Arc<RwLock<State>>,
+	banned_until: RefCell<i64>,
 	// set of all hashes known to this peer (so no need to send)
 	tracking_adapter: TrackingAdapter,
 }
@@ -53,6 +56,7 @@ impl Peer {
 			info: info,
 			proto: proto,
 			state: Arc::new(RwLock::new(State::Connected)),
+			banned_until: RefCell::new(1),
 			tracking_adapter: TrackingAdapter::new(na),
 		}
 	}
@@ -93,6 +97,7 @@ impl Peer {
 	pub fn run(&self, conn: TcpStream, pool: CpuPool) -> Box<Future<Item = (), Error = Error>> {
 		let addr = self.info.addr;
 		let state = self.state.clone();
+		let banned_until = self.banned_until.clone();
 		let adapter = Arc::new(self.tracking_adapter.clone());
 
 		Box::new(self.proto.handle(conn, adapter, addr, pool).then(move |res| {
@@ -106,6 +111,8 @@ impl Peer {
 				}
 				Err(Error::Serialization(e)) => {
 					*state = State::Banned;
+					let t = Peer::make_ban_timestamp(1, 7);
+					*banned_until.borrow_mut() = t.to_timespec().sec;
 					info!(LOGGER, "Client {} corrupted, ban.", addr);
 					Err(Error::Serialization(e))
 				}
@@ -124,16 +131,51 @@ impl Peer {
 		*state == State::Connected
 	}
 
+	/// Unban if ban has timed out
+	pub fn recheck_ban_timeout(&self) -> bool {
+		if time::now_utc().to_timespec().sec > *self.banned_until.borrow() {
+			let mut state = self.state.write().unwrap();
+			*state = State::Disconnected;
+			true
+		} else {
+			false
+		}
+	}
+
+	/// create a timestamp with appropriate ban time length. (Maybe add jitter?)
+	/// use last two digits of the timestamp (as unix epoch seconds) as a tag
+	pub fn make_ban_timestamp(level: u8, two_digit_tag: u8) -> time::Tm {
+		let mut t = time::now_utc() + time::Duration::minutes(42 * level as i64);
+
+		// zero out last two in seconds mark...
+		t = t - time::Duration::seconds(t.to_timespec().sec % 100);
+
+		// ...and use that space as a tag. Can track where a ban came from
+		t = t + time::Duration::seconds(two_digit_tag as i64);
+
+		t
+	}
+
 	/// Whether this peer has been banned.
 	pub fn is_banned(&self) -> bool {
 		let state = self.state.read().unwrap();
-		*state == State::Banned
+		*state == State::Banned && self.recheck_ban_timeout()
 	}
 
 	/// Set this peer status to banned
 	pub fn set_banned(&self) {
 		let mut state = self.state.write().unwrap();
 		*state = State::Banned;
+		let t = Peer::make_ban_timestamp(1, 6);
+		let sec = t.to_timespec().sec;
+		*self.banned_until.borrow_mut() = sec;
+		info!(
+			LOGGER,
+			"set_banned on {}. banned_until = {} ({:?})",
+			self.info.addr,
+			sec,
+			t
+		);
 	}
 
 	/// Bytes sent and received by this peer to the remote peer.
