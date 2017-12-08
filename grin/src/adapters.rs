@@ -306,17 +306,12 @@ impl NetToChainAdapter {
 		} else {
 			if let Some(peer) = peer {
 				if let Ok(peer) = peer.try_read() {
-					let mut threshold = Difficulty::zero();
-					let last_diffs = self.chain
+					// sum the last 5 difficulties to give us the threshold
+					let threshold = self.chain
 						.difficulty_iter()
+						.filter_map(|x| x.map(|(_, x)| x).ok())
 						.take(5)
-						.collect::<Vec<_>>();
-
-					for diff in last_diffs {
-						if let Ok((_, diff)) = diff {
-							threshold = threshold + diff;
-						}
-					}
+						.fold(Difficulty::zero(), |sum, val| sum + val);
 
 					if peer.info.total_difficulty > local_diff.clone() + threshold.clone() {
 						info!(
