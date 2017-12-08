@@ -39,6 +39,9 @@ pub fn run_sync(
 			let mut prev_body_sync = time::now_utc();
 			let mut prev_header_sync = prev_body_sync.clone();
 
+			// initial sleep to give us time to peer with some nodes
+			thread::sleep(Duration::from_secs(30));
+
 			loop {
 				if a_inner.is_syncing() {
 					let current_time = time::now_utc();

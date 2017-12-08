@@ -287,28 +287,43 @@ impl NetToChainAdapter {
 	/// just receiving blocks through gossip.
 	pub fn is_syncing(&self) -> bool {
 		let local_diff = self.total_difficulty();
-		let peers = self.p2p_server.borrow().connected_peers();
+		let peer = self.p2p_server.borrow().most_work_peer();
 
 		// if we're already syncing, we're caught up if no peer has a higher
 		// difficulty than us
 		if self.syncing.load(Ordering::Relaxed) {
-			let higher_diff = peers.iter().any(|p| {
-				let p = p.read().unwrap();
-				p.info.total_difficulty > local_diff
-			});
-			if !higher_diff {
-				info!(LOGGER, "sync: caught up on the most worked chain, disabling sync");
+			if let Some(peer) = peer {
+				if let Ok(peer) = peer.try_read() {
+					if peer.info.total_difficulty <= local_diff {
+						info!(LOGGER, "sync: caught up on most worked chain, disabling sync");
+						self.syncing.store(false, Ordering::Relaxed);
+					}
+				}
+			} else {
+				info!(LOGGER, "sync: no peers available, disabling sync");
 				self.syncing.store(false, Ordering::Relaxed);
 			}
 		} else {
-			// if we're not syncing, we need to if our difficulty is much too low
-			let higher_diff_padded = peers.iter().any(|p| {
-				let p = p.read().unwrap();
-				p.info.total_difficulty > local_diff.clone() + Difficulty::from_num(1000)
-			});
-			if higher_diff_padded {
-				info!(LOGGER, "sync: late on the most worked chain, enabling sync");
-				self.syncing.store(true, Ordering::Relaxed);
+			if let Some(peer) = peer {
+				if let Ok(peer) = peer.try_read() {
+					// sum the last 5 difficulties to give us the threshold
+					let threshold = self.chain
+						.difficulty_iter()
+						.filter_map(|x| x.map(|(_, x)| x).ok())
+						.take(5)
+						.fold(Difficulty::zero(), |sum, val| sum + val);
+
+					if peer.info.total_difficulty > local_diff.clone() + threshold.clone() {
+						info!(
+							LOGGER,
+							"sync: total_difficulty {}, peer_difficulty {}, threshold {} (last 5 blocks), enabling sync",
+							local_diff,
+							peer.info.total_difficulty,
+							threshold,
+						);
+						self.syncing.store(true, Ordering::Relaxed);
+					}
+				}
 			}
 		}
 		self.syncing.load(Ordering::Relaxed)
