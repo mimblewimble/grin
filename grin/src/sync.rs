@@ -46,8 +46,8 @@ pub fn run_sync(
 				if a_inner.is_syncing() {
 					let current_time = time::now_utc();
 
-					// run the header sync every 5s
-					if current_time - prev_header_sync > time::Duration::seconds(5) {
+					// run the header sync every 10s
+					if current_time - prev_header_sync > time::Duration::seconds(10) {
 						header_sync(
 							p2p_server.clone(),
 							chain.clone(),
@@ -55,8 +55,8 @@ pub fn run_sync(
 						prev_header_sync = current_time;
 					}
 
-					// run the body_sync every iteration (1s)
-					if current_time - prev_body_sync > time::Duration::seconds(1) {
+					// run the body_sync every 5s
+					if current_time - prev_body_sync > time::Duration::seconds(5) {
 						body_sync(
 							p2p_inner.clone(),
 							c_inner.clone(),
@@ -64,9 +64,9 @@ pub fn run_sync(
 						prev_body_sync = current_time;
 					}
 
-					thread::sleep(Duration::from_millis(250));
+					thread::sleep(Duration::from_secs(1));
 				} else {
-					thread::sleep(Duration::from_secs(5));
+					thread::sleep(Duration::from_secs(10));
 				}
 			}
 		});
@@ -109,24 +109,28 @@ fn body_sync(
 	}
 	hashes.reverse();
 
+	// if we have 5 most_work_peers then ask for 50 blocks total (peer_count * 10)
+	// max will be 80 if all 8 peers are advertising most_work
 	let peer_count = {
 		p2p_server.most_work_peers().len()
 	};
+	let block_count = peer_count * 10;
 
 	let hashes_to_get = hashes
 		.iter()
 		.filter(|x| !chain.get_block(&x).is_ok())
-		.take(peer_count * 2)
+		.take(block_count)
 		.cloned()
 		.collect::<Vec<_>>();
 
 	if hashes_to_get.len() > 0 {
 		debug!(
 			LOGGER,
-			"block_sync: requesting blocks ({}/{}), {:?}",
+			"block_sync: {}/{} requesting blocks {:?} from {} peers",
 			body_head.height,
 			header_head.height,
 			hashes_to_get,
+			peer_count,
 			);
 
 		for hash in hashes_to_get.clone() {
