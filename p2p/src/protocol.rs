@@ -167,6 +167,8 @@ fn handle_payload(
 		}
 		Type::GetBlock => {
 			let h = ser::deserialize::<Hash>(&mut &buf[..])?;
+			debug!(LOGGER, "handle_payload: GetBlock, getting block for {}", h);
+
 			let bo = adapter.get_block(h);
 			if let Some(b) = bo {
 				// serialize and send the block over
