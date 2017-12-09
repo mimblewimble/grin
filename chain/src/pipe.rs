@@ -268,7 +268,9 @@ fn validate_block(
 
 		// apply all forked blocks, including this new one
 		for h in hashes {
-			let fb = ctx.store.get_block(&h)?;
+			let fb = ctx.store.get_block(&h).map_err(|e| {
+				Error::StoreErr(e, format!("getting forked blocks"))
+			})?;
 			ext.apply_block(&fb)?;
 		}
 		ext.apply_block(&b)?;
