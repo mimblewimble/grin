@@ -23,7 +23,7 @@ slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_
 time = "^0.1"
 serde = "~1.0.8"
 serde_derive = "~1.0.8"
-serde_json = "~1.0.2"
+serde_json = "=1.0.7"
 tokio-core="~0.1.1"
 tokio-timer="~0.1.0"
 rand = "^0.3"
