@@ -93,19 +93,14 @@ impl Seeder {
 					total_count,
 				);
 
-				let all_peers = p2p_server.all_peers();
-				let healthy_count = all_peers
-					.iter()
-					.filter(|x| x.flags == p2p::State::Healthy)
-					.count();
-				let banned_count = all_peers
-					.iter()
-					.filter(|x| x.flags == p2p::State::Banned)
-					.count();
-				let defunct_count = all_peers
-					.iter()
-					.filter(|x| x.flags == p2p::State::Defunct)
-					.count();
+				let mut healthy_count = 0;
+				let mut banned_count = 0;
+				let mut defunct_count = 0;
+				for x in p2p_server.all_peers() {
+					if x.flags == p2p::State::Healthy { healthy_count += 1 }
+					else if x.flags == p2p::State::Banned { banned_count += 1 }
+					else if x.flags == p2p::State::Defunct { defunct_count += 1 };
+				}
 
 				debug!(
 					LOGGER,
