@@ -95,7 +95,7 @@ use_cuckoo_miner = true
 
 #Whether to use async mode for cuckoo miner, if the plugin supports it.
 #this allows for many searches to be run in parallel, e.g. if the system
-#has multiple GPUs, or if you want to mine using multiple plugins 
+#has multiple GPUs, or if you want to mine using multiple plugins
 
 cuckoo_miner_async_mode = false
 
