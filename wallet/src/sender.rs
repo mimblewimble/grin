@@ -115,7 +115,7 @@ fn build_send_tx(
 
 	// select some spendable coins from the wallet
 	let coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		wallet_data.select(
+		wallet_data.select_coins(
 			key_id.clone(),
 			amount,
 			current_height,
@@ -155,7 +155,7 @@ pub fn issue_burn_tx(
 
 	// select some spendable coins from the wallet
 	let coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		wallet_data.select(
+		wallet_data.select_coins(
 			key_id.clone(),
 			amount,
 			current_height,
