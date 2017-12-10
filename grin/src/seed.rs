@@ -84,12 +84,13 @@ impl Seeder {
 		let mon_loop = Timer::default()
 			.interval(time::Duration::from_secs(30))
 			.for_each(move |_| {
+				let total_count = p2p_server.all_peers().len();
 				debug!(
 					LOGGER,
 					"monitor_peers: {} / {} / {}",
 					p2p_server.most_work_peers().len(),
 					p2p_server.connected_peers().len(),
-					p2p_server.all_peers().len(),
+					total_count,
 				);
 
 				let all_peers = p2p_server.all_peers();
@@ -109,7 +110,7 @@ impl Seeder {
 				debug!(
 					LOGGER,
 					"monitor_peers: all - {}, healthy - {}, banned - {}, defunct - {}",
-					all_peers.len(),
+					total_count,
 					healthy_count,
 					banned_count,
 					defunct_count,
