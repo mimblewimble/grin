@@ -87,7 +87,7 @@ impl Seeder {
 				let total_count = p2p_server.all_peers().len();
 				debug!(
 					LOGGER,
-					"monitor_peers: {} / {} / {}",
+					"monitor_peers: {} most_work_peers, {} connected, {} total known",
 					p2p_server.most_work_peers().len(),
 					p2p_server.connected_peers().len(),
 					total_count,
@@ -104,7 +104,7 @@ impl Seeder {
 
 				debug!(
 					LOGGER,
-					"monitor_peers: all - {}, healthy - {}, banned - {}, defunct - {}",
+					"monitor_peers: all {} = {} healthy + {} banned + {} defunct",
 					total_count,
 					healthy_count,
 					banned_count,
