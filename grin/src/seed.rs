@@ -146,7 +146,7 @@ impl Seeder {
 					for p in peers {
 						debug!(
 							LOGGER,
-							"monitor_peers: queueing up {} for connection (may be already connected)",
+							"monitor_peers: queue to soon try {}",
 							p.addr,
 						);
 						tx.unbounded_send(p.addr).unwrap();
