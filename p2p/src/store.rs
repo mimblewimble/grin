@@ -96,7 +96,7 @@ impl PeerStore {
 	}
 
 	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
-		debug!(LOGGER, "saving peer to store {:?}", p);
+		debug!(LOGGER, "save_peer: {:?} marked {:?}", p.addr, p.flags);
 
 		self.db.put_ser(&peer_key(p.addr)[..], p)
 	}
