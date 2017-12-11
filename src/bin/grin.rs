@@ -360,7 +360,7 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 				Err(e) => error!(LOGGER, "Error starting: {}", e),
 			}
 		}
-		("stop", _) => println!("TODO, just 'kill $pid' for now."),
+		("stop", _) => println!("TODO. Just 'kill $pid' for now. Maybe /tmp/grin.pid is $pid"),
 		(cmd, _) => {
 			println!(":: {:?}", server_args);
 			panic!(
