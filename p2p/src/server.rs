@@ -529,11 +529,11 @@ fn with_timeout<T: 'static>(
 				Ok(inner)
 			},
 			Ok((Err(inner), _accept)) => {
-				debug!(LOGGER, "with_timeout: ok but nested - {:?} (treating this as timeout)", inner);
+				debug!(LOGGER, "with_timeout: ok, timeout. nested={:?}", inner);
 				Err(Error::Timeout)
 			},
 			Err((e, _other)) => {
-				debug!(LOGGER, "with_timeout: err - {:?} (treating this as an error)", e);
+				debug!(LOGGER, "with_timeout: err. {:?}", e);
 				Err(e)
 			},
 		});

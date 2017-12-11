@@ -300,7 +300,7 @@ fn connect_and_req(
 	let fut = connect_peer.then(move |p| {
 		match p {
 			Ok(Some(p)) => {
-				debug!(LOGGER, "connect_and_req: ok, will attempt send_peer_request");
+				debug!(LOGGER, "connect_and_req: ok. attempting send_peer_request");
 				if let Ok(p) = p.try_read() {
 					let _ = p.send_peer_request(capab);
 				}
@@ -309,7 +309,7 @@ fn connect_and_req(
 				debug!(LOGGER, "connect_and_req: ok but none inner (what does this mean?), {}", addr);
 			},
 			Err(e) => {
-				debug!(LOGGER, "connect_and_req: err - {:?}, {}, flagging as defunct", e, addr);
+				debug!(LOGGER, "connect_and_req: {} is Defunct; {:?}", addr, e);
 				let _ = p2p_server.update_state(addr, p2p::State::Defunct);
 			},
 		}
