@@ -122,15 +122,12 @@ impl PeerStore {
 		peers.iter().take(count).cloned().collect()
 	}
 
-	/// List all known peers (for the /v1/peers api endpoint)
+	/// List all known peers
+	/// Used for /v1/peers, for seed / sync (debug & if too few peers connected)
 	pub fn all_peers(&self) -> Vec<PeerData> {
-		let peers_iter = self.db
-			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()));
-		let mut peers = vec![];
-		for p in peers_iter {
-			peers.push(p);
-		}
-		peers
+		self.db
+			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()))
+			.collect::<Vec<_>>()
 	}
 
 	/// Convenience method to load a peer data, update its status and save it
