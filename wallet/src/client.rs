@@ -35,7 +35,8 @@ pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Erro
 		if let Err(_) = res {
 			error!(
 				LOGGER,
-				"Failed to get coinbase via wallet API (will retry)..."
+				"Failed to get coinbase from {}. Run grin wallet listen",
+				url
 			);
 		}
 		res
