@@ -108,9 +108,14 @@ impl Server {
 
 		pool_adapter.set_chain(shared_chain.clone());
 
+		let syncer = Arc::new(sync::Syncer::new(
+			shared_chain.clone(),
+		));
+
 		let net_adapter = Arc::new(NetToChainAdapter::new(
 			shared_chain.clone(),
 			tx_pool.clone(),
+			syncer.clone(),
 		));
 
 		let p2p_server = Arc::new(p2p::Server::new(
@@ -120,9 +125,11 @@ impl Server {
 			net_adapter.clone(),
 			genesis.hash(),
 		)?);
+
 		chain_adapter.init(p2p_server.clone());
 		pool_net_adapter.init(p2p_server.clone());
 		net_adapter.init(p2p_server.clone());
+		syncer.init(p2p_server.clone());
 
 		let seed = seed::Seeder::new(config.capabilities, p2p_server.clone());
 		match config.seeding_type.clone() {
@@ -151,11 +158,7 @@ impl Server {
 			_ => {}
 		}
 
-		sync::run_sync(
-			net_adapter.clone(),
-			p2p_server.clone(),
-			shared_chain.clone(),
-			);
+		syncer.run_sync();
 
 		evt_handle.spawn(p2p_server.start(evt_handle.clone()).map_err(|_| ()));
 
