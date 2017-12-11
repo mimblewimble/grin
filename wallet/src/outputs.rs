@@ -93,6 +93,10 @@ pub fn show_outputs(config: &WalletConfig, keychain: &Keychain, show_spent:bool)
 	});
 
 	if let Err(_) = result {
-		println!("WARNING - Showing local data only - Wallet was unable to contact a node to update and verify the outputs shown here.");
+		println!(
+			"\nWARNING: Wallet failed to verify data. \
+			 The above is from local cache and possibly invalid! \
+			 (is your `grin server` offline or broken?)"
+		);
 	}
 }
