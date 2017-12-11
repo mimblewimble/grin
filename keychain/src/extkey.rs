@@ -91,7 +91,7 @@ impl<'de> de::Deserialize<'de> for Identifier {
 	where
 		D: de::Deserializer<'de>,
 	{
-		deserializer.deserialize_u64(IdentifierVisitor)
+		deserializer.deserialize_str(IdentifierVisitor)
 	}
 }
 
@@ -108,7 +108,6 @@ impl<'de> de::Visitor<'de> for IdentifierVisitor {
 	where
 		E: de::Error,
 	{
-		// TODO - error handling here
 		let identifier = Identifier::from_hex(s).unwrap();
 		Ok(identifier)
 	}
@@ -299,7 +298,6 @@ mod test {
 		let has_an_identifier = HasAnIdentifier { identifier };
 
 		let json = serde_json::to_string(&has_an_identifier).unwrap();
-
 		assert_eq!(json, "{\"identifier\":\"942b6c0bd43bdcb24f3e\"}");
 
 		let deserialized: HasAnIdentifier = serde_json::from_str(&json).unwrap();
