@@ -84,32 +84,28 @@ impl Seeder {
 		let mon_loop = Timer::default()
 			.interval(time::Duration::from_secs(30))
 			.for_each(move |_| {
+				let total_count = p2p_server.all_peers().len();
 				debug!(
 					LOGGER,
-					"monitor_peers: {} / {} / {}",
+					"monitor_peers: {} most_work_peers, {} connected, {} total known",
 					p2p_server.most_work_peers().len(),
 					p2p_server.connected_peers().len(),
-					p2p_server.all_peers().len(),
+					total_count,
 				);
 
-				let all_peers = p2p_server.all_peers();
-				let healthy_count = all_peers
-					.iter()
-					.filter(|x| x.flags == p2p::State::Healthy)
-					.count();
-				let banned_count = all_peers
-					.iter()
-					.filter(|x| x.flags == p2p::State::Banned)
-					.count();
-				let defunct_count = all_peers
-					.iter()
-					.filter(|x| x.flags == p2p::State::Defunct)
-					.count();
+				let mut healthy_count = 0;
+				let mut banned_count = 0;
+				let mut defunct_count = 0;
+				for x in p2p_server.all_peers() {
+					if x.flags == p2p::State::Healthy { healthy_count += 1 }
+					else if x.flags == p2p::State::Banned { banned_count += 1 }
+					else if x.flags == p2p::State::Defunct { defunct_count += 1 };
+				}
 
 				debug!(
 					LOGGER,
-					"monitor_peers: all - {}, healthy - {}, banned - {}, defunct - {}",
-					all_peers.len(),
+					"monitor_peers: all {} = {} healthy + {} banned + {} defunct",
+					total_count,
 					healthy_count,
 					banned_count,
 					defunct_count,
@@ -150,7 +146,7 @@ impl Seeder {
 					for p in peers {
 						debug!(
 							LOGGER,
-							"monitor_peers: queueing up {} for connection (may be already connected)",
+							"monitor_peers: queue to soon try {}",
 							p.addr,
 						);
 						tx.unbounded_send(p.addr).unwrap();
