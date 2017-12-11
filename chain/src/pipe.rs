@@ -130,7 +130,7 @@ pub fn sync_block_header(
 	let _ = header_ctx.sumtrees.write().unwrap();
 
 	// now update the header_head (if new header with most work) and the sync_head (always)
-	update_header_head(bh, &mut header_ctx);
+	update_header_head(bh, &mut header_ctx)?;
 	update_sync_head(bh, &mut sync_ctx)
 }
 
