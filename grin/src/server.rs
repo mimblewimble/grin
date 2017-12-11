@@ -158,7 +158,7 @@ impl Server {
 			_ => {}
 		}
 
-		syncer.run_sync();
+		sync::run_sync(syncer);
 
 		evt_handle.spawn(p2p_server.start(evt_handle.clone()).map_err(|_| ()));
 

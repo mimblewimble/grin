@@ -95,57 +95,50 @@ impl Syncer {
 		}
 		self.syncing.load(Ordering::Relaxed)
 	}
+}
 
-	/// Starts the syncing loop, just spawns two threads that loop forever
-	pub fn run_sync(&self) {
-		let p2p_inner = self.p2p_server.clone();
-		let c_inner = self.chain.clone();
-		let _ = thread::Builder::new()
-			.name("sync".to_string())
-			.spawn(move || {
-				let mut prev_body_sync = time::now_utc();
-				let mut prev_header_sync = prev_body_sync.clone();
+/// Starts the syncing loop, just spawns two threads that loop forever
+pub fn run_sync(syncer: Arc<Syncer>) {
+	// let p2p_inner = syncer.p2p_server.clone();
+	// let c_inner = syncer.chain.clone();
+	let _ = thread::Builder::new()
+		.name("sync".to_string())
+		.spawn(move || {
+			let mut prev_body_sync = time::now_utc();
+			let mut prev_header_sync = prev_body_sync.clone();
 
-				// initial sleep to give us time to peer with some nodes
-				thread::sleep(Duration::from_secs(30));
+			// initial sleep to give us time to peer with some nodes
+			thread::sleep(Duration::from_secs(30));
 
-				loop {
-					if self.is_syncing() {
-						let current_time = time::now_utc();
+			loop {
+				if syncer.is_syncing() {
+					let current_time = time::now_utc();
 
-						// run the header sync every 10s
-						if current_time - prev_header_sync > time::Duration::seconds(10) {
-							header_sync(
-								p2p_inner.borrow().clone(),
-								c_inner.clone(),
-							);
-							prev_header_sync = current_time;
-						}
-
-						// run the body_sync every 5s
-						if current_time - prev_body_sync > time::Duration::seconds(5) {
-							body_sync(
-								p2p_inner.borrow().clone(),
-								c_inner.clone(),
-							);
-							prev_body_sync = current_time;
-						}
-
-						thread::sleep(Duration::from_secs(1));
-					} else {
-						thread::sleep(Duration::from_secs(10));
+					// run the header sync every 10s
+					if current_time - prev_header_sync > time::Duration::seconds(10) {
+						header_sync(syncer.clone());
+						prev_header_sync = current_time;
 					}
+
+					// run the body_sync every 5s
+					if current_time - prev_body_sync > time::Duration::seconds(5) {
+						body_sync(syncer.clone());
+						prev_body_sync = current_time;
+					}
+
+					thread::sleep(Duration::from_secs(1));
+				} else {
+					thread::sleep(Duration::from_secs(10));
 				}
-			});
-	}
+			};
+		});
 }
 
 
+fn body_sync(syncer: Arc<Syncer>) {
+	let chain = syncer.chain.clone();
+	let p2p_server = syncer.p2p_server.borrow().clone();
 
-fn body_sync(
-	p2p_server: Arc<p2p::Server>,
-	chain: Arc<chain::Chain>,
-) {
 	let body_head: chain::Tip = chain.head().unwrap();
 	let header_head: chain::Tip = chain.get_header_head().unwrap();
 	let sync_head: chain::Tip = chain.get_sync_head().unwrap();
@@ -214,10 +207,10 @@ fn body_sync(
 	}
 }
 
-pub fn header_sync(
-	p2p_server: Arc<p2p::Server>,
-	chain: Arc<chain::Chain>,
-) {
+pub fn header_sync(syncer: Arc<Syncer>) {
+	let chain = syncer.chain.clone();
+	let p2p_server = syncer.p2p_server.borrow().clone();
+
 	if let Ok(header_head) = chain.get_header_head() {
 		let difficulty = header_head.total_difficulty;
 

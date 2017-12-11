@@ -286,7 +286,7 @@ impl NetToChainAdapter {
 	/// Whether we're currently syncing the chain or we're fully caught up and
 	/// just receiving blocks through gossip.
 	pub fn is_syncing(&self) -> bool {
-		syncer.is_syncing()
+		self.syncer.is_syncing()
 	}
 
 	/// Prepare options for the chain pipeline
