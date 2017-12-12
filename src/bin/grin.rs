@@ -356,15 +356,18 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 					}
 				});
 			match daemonize.start() {
-				Ok(_) => info!(LOGGER, "Grin server succesfully started."),
+				Ok(_) => info!(LOGGER, "Grin server successfully started."),
 				Err(e) => error!(LOGGER, "Error starting: {}", e),
 			}
 		}
-		("stop", _) => println!("TODO, just 'kill $pid' for now."),
+		("stop", _) => println!("TODO. Just 'kill $pid' for now. Maybe /tmp/grin.pid is $pid"),
 		(cmd, _) => {
-      println!(":: {:?}", server_args);
-      panic!("Unknown server command '{}', use 'grin help server' for details", cmd);
-    }
+			println!(":: {:?}", server_args);
+			panic!(
+				"Unknown server command '{}', use 'grin help server' for details",
+				cmd
+			);
+		}
 	}
 }
 

@@ -63,7 +63,7 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 		writeln!(t, "{}", title).unwrap();
 		writeln!(t, "--------------------------").unwrap();
 		t.reset().unwrap();
-		
+
 		let mut table = table!(
 			[bFG->"Total", FG->amount_to_hr_string(unspent_total+unconfirmed_total)],
 			[bFY->"Awaiting Confirmation", FY->amount_to_hr_string(unconfirmed_total)],
@@ -78,6 +78,10 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 	});
 
 	if let Err(_) = result {
-		println!("WARNING - Showing local data only - Wallet was unable to contact a node to update and verify the info shown here.");
+		println!(
+		"\nWARNING: Wallet failed to verify data. \
+		 The above is from local cache and possibly invalid! \
+		 (is your `grin server` offline or broken?)"
+		);
 	}
 }

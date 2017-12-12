@@ -354,7 +354,10 @@ impl WalletSeed {
 				LOGGER,
 				"Run: \"grin wallet init\" to initialize a new wallet.",
 			);
-			panic!("wallet seed file does not yet exist (grin wallet init)");
+			panic!(format!(
+				"wallet seed file {} could not be opened (grin wallet init)",
+				seed_file_path
+			));
 		}
 	}
 }
@@ -522,7 +525,6 @@ impl WalletData {
 		max_outputs: usize,
 		default_strategy: bool,
 	) -> Vec<OutputData> {
-
 		// first find all eligible outputs based on number of confirmations
 		let mut eligible = self.outputs
 			.values()
