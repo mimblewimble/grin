@@ -109,6 +109,8 @@ impl PeerStore {
 		self.db.exists(&peer_key(peer_addr)[..])
 	}
 
+	/// TODO - allow below added to avoid github issue reports
+	#[allow(dead_code)]
 	pub fn delete_peer(&self, peer_addr: SocketAddr) -> Result<(), Error> {
 		self.db.delete(&peer_key(peer_addr)[..])
 	}
