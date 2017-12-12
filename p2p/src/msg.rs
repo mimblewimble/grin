@@ -33,7 +33,7 @@ use types::*;
 pub const PROTOCOL_VERSION: u32 = 1;
 
 /// Grin's user agent with current version (TODO externalize)
-pub const USER_AGENT: &'static str = "MW/Grin 0.1.20171204";
+pub const USER_AGENT: &'static str = "MW/Grin 0.1.20171212";
 
 /// Magic number expected in the header of every message
 const MAGIC: [u8; 2] = [0x1e, 0xc5];
