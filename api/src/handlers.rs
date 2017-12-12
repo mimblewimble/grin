@@ -486,13 +486,13 @@ let _ = thread::Builder::new()
 				tx_pool: tx_pool.clone(),
 			};
 			let peers_all_handler = PeersAllHandler {
-				p2p_server: p2p_server.clone(),
+				peers: peers.clone(),
 			};
 			let peers_connected_handler = PeersConnectedHandler {
-				p2p_server: p2p_server.clone(),
+				peers: peers.clone(),
 			};
 			let peer_handler = PeerHandler {
-				p2p_server: p2p_server.clone(),
+				peers: peers.clone(),
 			};
 
 			let route_list = vec!(
