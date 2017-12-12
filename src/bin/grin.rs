@@ -40,7 +40,6 @@ use clap::{App, Arg, ArgMatches, SubCommand};
 use daemonize::Daemonize;
 
 use config::GlobalConfig;
-use wallet::WalletConfig;
 use core::global;
 use core::core::amount_to_hr_string;
 use util::{init_logger, LoggingConfig, LOGGER};

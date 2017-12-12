@@ -220,7 +220,7 @@ impl TrackingAdapter {
 	}
 }
 
-impl NetAdapter for TrackingAdapter {
+impl ChainAdapter for TrackingAdapter {
 	fn total_difficulty(&self) -> Difficulty {
 		self.adapter.total_difficulty()
 	}
@@ -230,7 +230,7 @@ impl NetAdapter for TrackingAdapter {
 		self.adapter.transaction_received(tx)
 	}
 
-	fn block_received(&self, b: core::Block, addr: SocketAddr) {
+	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {
 		self.push(b.hash());
 		self.adapter.block_received(b, addr)
 	}
@@ -246,7 +246,9 @@ impl NetAdapter for TrackingAdapter {
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
 	}
+}
 
+impl NetAdapter for TrackingAdapter {
 	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr> {
 		self.adapter.find_peer_addrs(capab)
 	}
@@ -259,7 +261,7 @@ impl NetAdapter for TrackingAdapter {
 		self.adapter.peer_connected(pi)
 	}
 
-	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty) {
-		self.adapter.peer_difficulty(addr, diff)
+	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty, height:u64) {
+		self.adapter.peer_difficulty(addr, diff, height)
 	}
 }
