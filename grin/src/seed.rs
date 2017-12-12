@@ -36,18 +36,20 @@ const PEER_PREFERRED_COUNT: u32 = 8;
 const SEEDS_URL: &'static str = "http://grin-tech.org/seeds.txt";
 
 pub struct Seeder {
-	p2p: Arc<p2p::Server>,
-
+	peers: p2p::Peers,
+	p2p_server: Arc<p2p::Server>,
 	capabilities: p2p::Capabilities,
 }
 
 impl Seeder {
 	pub fn new(
 		capabilities: p2p::Capabilities,
-		p2p: Arc<p2p::Server>,
+		p2p_server: Arc<p2p::Server>,
+		peers: p2p::Peers,
 	) -> Seeder {
 		Seeder {
-			p2p: p2p,
+			peers: peers,
+			p2p_server: p2p_server,
 			capabilities: capabilities,
 		}
 	}
@@ -76,7 +78,7 @@ impl Seeder {
 		&self,
 		tx: mpsc::UnboundedSender<SocketAddr>,
 	) -> Box<Future<Item = (), Error = String>> {
-		let p2p_server = self.p2p.clone();
+		let peers = self.peers.clone();
 		let capabilities = self.capabilities.clone();
 
 		// now spawn a new future to regularly check if we need to acquire more peers
@@ -84,19 +86,19 @@ impl Seeder {
 		let mon_loop = Timer::default()
 			.interval(time::Duration::from_secs(30))
 			.for_each(move |_| {
-				let total_count = p2p_server.all_peers().len();
+				let total_count = peers.all_peers().len();
 				debug!(
 					LOGGER,
 					"monitor_peers: {} most_work_peers, {} connected, {} total known",
-					p2p_server.most_work_peers().len(),
-					p2p_server.connected_peers().len(),
+					peers.most_work_peers().len(),
+					peers.connected_peers().len(),
 					total_count,
 				);
 
 				let mut healthy_count = 0;
 				let mut banned_count = 0;
 				let mut defunct_count = 0;
-				for x in p2p_server.all_peers() {
+				for x in peers.all_peers() {
 					if x.flags == p2p::State::Healthy { healthy_count += 1 }
 					else if x.flags == p2p::State::Banned { banned_count += 1 }
 					else if x.flags == p2p::State::Defunct { defunct_count += 1 };
@@ -113,14 +115,14 @@ impl Seeder {
 
 				// maintenance step first, clean up p2p server peers
 				{
-					p2p_server.clean_peers(PEER_PREFERRED_COUNT as usize);
+					peers.clean_peers(PEER_PREFERRED_COUNT as usize);
 				}
 
 				// not enough peers, getting more from db
-				if p2p_server.peer_count() < PEER_PREFERRED_COUNT {
+				if peers.peer_count() < PEER_PREFERRED_COUNT {
 					// loop over connected peers
 					// ask them for their list of peers
-					for p in p2p_server.connected_peers() {
+					for p in peers.connected_peers() {
 						if let Ok(p) = p.try_read() {
 							debug!(
 								LOGGER,
@@ -138,7 +140,7 @@ impl Seeder {
 
 					// find some peers from our db
 					// and queue them up for a connection attempt
-					let peers = p2p_server.find_peers(
+					let peers = peers.find_peers(
 						p2p::State::Healthy,
 						p2p::UNKNOWN,
 						100,
@@ -171,11 +173,11 @@ impl Seeder {
 		// db query
 		let thread_pool = cpupool::Builder::new()
 			.pool_size(1).name_prefix("seed").create();
-		let p2p_server = self.p2p.clone();
+		let peers = self.peers.clone();
 		let seeder = thread_pool
 			.spawn_fn(move || {
 				// check if we have some peers in db
-				let peers = p2p_server.find_peers(
+				let peers = peers.find_peers(
 					p2p::State::Healthy,
 					p2p::FULL_HIST,
 					100,
@@ -215,21 +217,15 @@ impl Seeder {
 		rx: mpsc::UnboundedReceiver<SocketAddr>,
 	) -> Box<Future<Item = (), Error = ()>> {
 		let capab = self.capabilities;
-		let p2p_server = self.p2p.clone();
+		let peers = self.peers.clone();
+		let p2p_server = self.p2p_server.clone();
 
 		let listener = rx.for_each(move |peer_addr| {
 			debug!(LOGGER, "New peer address to connect to: {}.", peer_addr);
 			let inner_h = h.clone();
-			if p2p_server.peer_count() < PEER_MAX_COUNT {
-				h.spawn(
-					connect_and_req(
-						capab,
-						p2p_server.clone(),
-						inner_h,
-						peer_addr,
-					)
-				)
-			};
+			if peers.peer_count() < PEER_MAX_COUNT {
+				h.spawn(connect_and_req(capab, p2p_server.clone(), peers.clone(), inner_h, peer_addr))
+			}
 			Box::new(future::ok(()))
 		});
 		Box::new(listener)
@@ -293,11 +289,12 @@ pub fn predefined_seeds(
 fn connect_and_req(
 	capab: p2p::Capabilities,
 	p2p: Arc<p2p::Server>,
+	peers: p2p::Peers,
 	h: reactor::Handle,
 	addr: SocketAddr,
 ) -> Box<Future<Item = (), Error = ()>> {
 	let connect_peer = p2p.connect_peer(addr, h);
-	let p2p_server = p2p.clone();
+	let peers = peers.clone();
 	let fut = connect_peer.then(move |p| {
 		match p {
 			Ok(Some(p)) => {
@@ -311,7 +308,7 @@ fn connect_and_req(
 			},
 			Err(e) => {
 				debug!(LOGGER, "connect_and_req: {} is Defunct; {:?}", addr, e);
-				let _ = p2p_server.update_state(addr, p2p::State::Defunct);
+				let _ = peers.update_state(addr, p2p::State::Defunct);
 			},
 		}
 		Ok(())

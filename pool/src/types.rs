@@ -178,6 +178,7 @@ pub trait PoolAdapter: Send + Sync {
 }
 
 /// Dummy adapter used as a placeholder for real implementations
+#[allow(dead_code)]
 pub struct NoopAdapter {}
 impl PoolAdapter for NoopAdapter {
 	fn tx_accepted(&self, _: &transaction::Transaction) {}

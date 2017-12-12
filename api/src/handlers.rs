@@ -231,24 +231,24 @@ impl Handler for SumTreeHandler {
 }
 
 pub struct PeersAllHandler {
-	pub p2p_server: Arc<p2p::Server>,
+	pub peers: p2p::Peers,
 }
 
 impl Handler for PeersAllHandler {
 	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
-		let peers = &self.p2p_server.all_peers();
+		let peers = &self.peers.all_peers();
 		json_response_pretty(&peers)
 	}
 }
 
 pub struct PeersConnectedHandler {
-	pub p2p_server: Arc<p2p::Server>,
+	pub peers: p2p::Peers,
 }
 
 impl Handler for PeersConnectedHandler {
 	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
 		let mut peers = vec![];
-		for p in &self.p2p_server.connected_peers() {
+		for p in &self.peers.connected_peers() {
 			let p = p.read().unwrap();
 			let peer_info = p.info.clone();
 			peers.push(peer_info);
@@ -262,7 +262,7 @@ impl Handler for PeersConnectedHandler {
 /// POST /v1/peers/10.12.12.13/ban
 /// TODO POST /v1/peers/10.12.12.13/unban
 pub struct PeerHandler {
-	pub p2p_server: Arc<p2p::Server>,
+	pub peers: p2p::Peers,
 }
 
 impl Handler for PeerHandler {
@@ -276,7 +276,7 @@ impl Handler for PeerHandler {
       "ban" => {
         path_elems.pop();
         if let Ok(addr) = path_elems.last().unwrap().parse() {
-          self.p2p_server.ban_peer(&addr);
+          self.peers.ban_peer(&addr);
           Ok(Response::with((status::Ok, "")))
         } else {
           Ok(Response::with((status::BadRequest, "")))
@@ -459,7 +459,7 @@ pub fn start_rest_apis<T>(
 	addr: String,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<T>>>,
-	p2p_server: Arc<p2p::Server>,
+	peers: p2p::Peers,
 ) where
 	T: pool::BlockChain + Send + Sync + 'static,
 {
@@ -486,13 +486,13 @@ pub fn start_rest_apis<T>(
 				tx_pool: tx_pool.clone(),
 			};
 			let peers_all_handler = PeersAllHandler {
-				p2p_server: p2p_server.clone(),
+				peers: peers.clone(),
 			};
 			let peers_connected_handler = PeersConnectedHandler {
-				p2p_server: p2p_server.clone(),
+				peers: peers.clone(),
 			};
 			let peer_handler = PeerHandler {
-				p2p_server: p2p_server.clone(),
+				peers: peers.clone(),
 			};
 
 			let route_list = vec!(
