@@ -169,7 +169,7 @@ impl RemoveLog {
 	/// Open the remove log file. The content of the file will be read in memory
 	/// for fast checking.
 	fn open(path: String) -> io::Result<RemoveLog> {
-		let removed = read_ordered_vec(path.clone())?;
+		let removed = read_ordered_vec(path.clone(), 12)?;
 		Ok(RemoveLog {
 			path: path,
 			removed: removed,
@@ -366,7 +366,7 @@ where
 		let sz = hs_file.size()?;
 		let record_len = 32 + T::sum_len();
 		let rm_log = RemoveLog::open(format!("{}/{}", data_dir, PMMR_RM_LOG_FILE))?;
-		let prune_list = read_ordered_vec(format!("{}/{}", data_dir, PMMR_PRUNED_FILE))?;
+		let prune_list = read_ordered_vec(format!("{}/{}", data_dir, PMMR_PRUNED_FILE), 8)?;
 
 		Ok(PMMRBackend {
 			data_dir: data_dir,
@@ -507,14 +507,14 @@ where
 }
 
 // Read an ordered vector of scalars from a file.
-fn read_ordered_vec<T>(path: String) -> io::Result<Vec<T>>
+fn read_ordered_vec<T>(path: String, elmt_len: usize) -> io::Result<Vec<T>>
 where
 	T: ser::Readable + cmp::Ord,
 {
 	let file_path = Path::new(&path);
 	let mut ovec = Vec::with_capacity(1000);
 	if file_path.exists() {
-		let mut file = BufReader::with_capacity(8 * 1000, File::open(path.clone())?);
+		let mut file = BufReader::with_capacity(elmt_len * 1000, File::open(path.clone())?);
 		loop {
 			// need a block to end mutable borrow before consume
 			let buf_len = {
