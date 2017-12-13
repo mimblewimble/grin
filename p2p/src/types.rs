@@ -199,7 +199,4 @@ pub trait NetAdapter: ChainAdapter {
 
 	/// Heard total_difficulty from a connected peer (via ping/pong).
 	fn peer_difficulty(&self, SocketAddr, Difficulty, u64);
-
-	// Central threadpool that we can use to handle requests from all our peers.
-	// fn cpu_pool(&self) -> CpuPool;
 }

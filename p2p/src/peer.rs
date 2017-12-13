@@ -90,12 +90,11 @@ impl Peer {
 
 	/// Main peer loop listening for messages and forwarding to the rest of the
 	/// system.
-	pub fn run(&self, conn: TcpStream) -> Box<Future<Item = (), Error = Error>> {
+	pub fn run(&self, conn: TcpStream, pool: CpuPool) -> Box<Future<Item = (), Error = Error>> {
 		let addr = self.info.addr;
 		let state = self.state.clone();
 		let adapter = Arc::new(self.tracking_adapter.clone());
-		let pool = CpuPool::new(1);
-		
+
 		Box::new(self.proto.handle(conn, adapter, addr, pool).then(move |res| {
 			// handle disconnection, standard disconnections aren't considered an error
 			let mut state = state.write().unwrap();
@@ -256,10 +255,6 @@ impl ChainAdapter for TrackingAdapter {
 }
 
 impl NetAdapter for TrackingAdapter {
-	// fn cpu_pool(&self) -> CpuPool {
-	// 	self.adapter.cpu_pool()
-	// }
-
 	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr> {
 		self.adapter.find_peer_addrs(capab)
 	}

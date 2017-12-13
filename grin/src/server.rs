@@ -23,6 +23,7 @@ use std::thread;
 use std::time;
 
 use futures::{Future, Stream};
+use cpupool::CpuPool;
 use tokio_core::reactor;
 use tokio_timer::Timer;
 
@@ -110,18 +111,23 @@ impl Server {
 		pool_adapter.set_chain(shared_chain.clone());
 
 		let currently_syncing = Arc::new(AtomicBool::new(true));
-	
+
 		let net_adapter = Arc::new(NetToChainAdapter::new(
 			currently_syncing.clone(),
 			shared_chain.clone(),
 			tx_pool.clone(),
 		));
-	
+
+		// thread pool (single thread) for offloading handler.handle()
+		// work from the main run loop in p2p_server
+		let cpu_pool = CpuPool::new(1);
+
 		let p2p_server = Arc::new(p2p::Server::new(
 			config.db_root.clone(),
 			config.capabilities,
 			config.p2p_config.unwrap(),
 			net_adapter.clone(),
+			cpu_pool.clone(),
 		)?);
 		chain_adapter.init(p2p_server.peers.clone());
 		pool_net_adapter.init(p2p_server.peers.clone());
