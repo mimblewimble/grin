@@ -43,6 +43,15 @@ use util::LOGGER;
 pub struct DummyAdapter {
 	cpu_pool: CpuPool,
 }
+
+impl DummyAdapter {
+	pub fn new() -> DummyAdapter {
+		DummyAdapter {
+			cpu_pool: CpuPool::new(1),
+		}
+	}
+}
+
 impl NetAdapter for DummyAdapter {
 	fn cpu_pool(&self) -> CpuPool {
 		self.cpu_pool.clone()
