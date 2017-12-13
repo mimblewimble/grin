@@ -22,6 +22,7 @@ use std::sync::Arc;
 use std::time;
 
 use futures::future::Future;
+use futures_cpupool::CpuPool;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::{self, Core};
 
@@ -36,7 +37,9 @@ fn peer_handshake() {
 	let mut evtlp = Core::new().unwrap();
 	let handle = evtlp.handle();
 	let p2p_conf = p2p::P2PConfig::default();
-	let net_adapter = Arc::new(p2p::DummyAdapter {});
+	let net_adapter = Arc::new(p2p::DummyAdapter {
+		cpu_pool: CpuPool::new(1),
+	});
 	let server = p2p::Server::new(
 		".grin".to_owned(),
 		p2p::UNKNOWN,

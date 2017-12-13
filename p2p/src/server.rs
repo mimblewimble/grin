@@ -40,10 +40,12 @@ use types::*;
 use util::LOGGER;
 
 /// A no-op network adapter used for testing.
-pub struct DummyAdapter {}
+pub struct DummyAdapter {
+	cpu_pool: CpuPool,
+}
 impl NetAdapter for DummyAdapter {
 	fn cpu_pool(&self) -> CpuPool {
-		panic!("not implemented in dummy adapter");
+		self.cpu_pool.clone()
 	}
 	fn total_difficulty(&self) -> Difficulty {
 		Difficulty::one()
