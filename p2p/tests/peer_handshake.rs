@@ -84,7 +84,7 @@ fn peer_handshake() {
 						Ok(())
 					})
 					.and_then(|_| {
-						assert!(server.peer_count() > 0);
+						assert!(server.peers.peer_count() > 0);
 						server.stop();
 						Ok(())
 					})
