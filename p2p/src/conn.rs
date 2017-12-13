@@ -94,6 +94,7 @@ impl Connection {
 	/// itself.
 	pub fn listen<F>(
 		conn: TcpStream,
+		pool: CpuPool,
 		handler: F,
 	) -> (Connection, Box<Future<Item = (), Error = Error>>)
 	where
@@ -124,7 +125,7 @@ impl Connection {
 		};
 
 		// setup the reading future, getting messages from the peer and processing them
-		let read_msg = me.read_msg(tx, reader, handler).map(|_| ());
+		let read_msg = me.read_msg(tx, reader, handler, pool).map(|_| ());
 
 		// setting the writing future
 		// getting messages from our system and sending them out
@@ -178,6 +179,7 @@ impl Connection {
 		sender: UnboundedSender<Vec<u8>>,
 		reader: R,
 		handler: F,
+		pool: CpuPool,
 	) -> Box<Future<Item = R, Error = Error>>
 	where
 		F: Handler + 'static,
@@ -191,10 +193,6 @@ impl Connection {
 		let recv_bytes = self.received_bytes.clone();
 		let handler = Arc::new(handler);
 
-		// Thread pool (single thread) for doing the handler.handle() heavy lifting
-		// to keep this off the main event loop
-		let cpu_pool = CpuPool::new(1);
-
 		let mut count = 0;
 
 		let read_msg = iter.buffered(1).fold(reader, move |reader, _| {
@@ -204,7 +202,7 @@ impl Connection {
 			let recv_bytes = recv_bytes.clone();
 			let handler = handler.clone();
 			let sender_inner = sender.clone();
-			let cpu_pool = cpu_pool.clone();
+			let pool = pool.clone();
 
 			// first read the message header
 			read_exact(reader, vec![0u8; HEADER_LEN as usize])
@@ -226,7 +224,7 @@ impl Connection {
 					let mut recv_bytes = recv_bytes.lock().unwrap();
 					*recv_bytes += header.serialized_len() + header.msg_len;
 
-					cpu_pool.spawn_fn(move || {
+					pool.spawn_fn(move || {
 						let msg_type = header.msg_type;
 						if let Err(e) = handler.handle(sender_inner.clone(), header, buf) {
 							debug!(LOGGER, "Invalid {:?} message: {}", msg_type, e);
@@ -278,6 +276,7 @@ impl TimeoutConnection {
 	/// Same as Connection
 	pub fn listen<F>(
 		conn: TcpStream,
+		pool: CpuPool,
 		handler: F,
 	) -> (TimeoutConnection, Box<Future<Item = (), Error = Error>>)
 	where
@@ -288,7 +287,7 @@ impl TimeoutConnection {
 		// Decorates the handler to remove the "subscription" from the expected
 		// responses. We got our replies, so no timeout should occur.
 		let exp = expects.clone();
-		let (conn, fut) = Connection::listen(conn, move |sender, header: MsgHeader, data| {
+		let (conn, fut) = Connection::listen(conn, pool, move |sender, header: MsgHeader, data| {
 			let msg_type = header.msg_type;
 			let recv_h = try!(handler.handle(sender, header, data));
 

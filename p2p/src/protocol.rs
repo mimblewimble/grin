@@ -50,7 +50,8 @@ impl Protocol for ProtocolV1 {
 		adapter: Arc<NetAdapter>,
 		addr: SocketAddr,
 	) -> Box<Future<Item = (), Error = Error>> {
-		let (conn, listener) = TimeoutConnection::listen(conn, move |sender, header, data| {
+		let pool = adapter.cpu_pool();
+		let (conn, listener) = TimeoutConnection::listen(conn, pool, move |sender, header, data| {
 			let adapt = adapter.as_ref();
 			handle_payload(adapt, sender, header, data, addr)
 		});
