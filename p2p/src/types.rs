@@ -18,7 +18,6 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use futures::Future;
-use futures_cpupool::CpuPool;
 use tokio_core::net::TcpStream;
 use tokio_timer::TimerError;
 
@@ -198,7 +197,4 @@ pub trait NetAdapter: Sync + Send {
 
 	/// Heard total_difficulty from a connected peer (via ping/pong).
 	fn peer_difficulty(&self, SocketAddr, Difficulty);
-
-	/// Central threadpool that we can use to handle requests from all our peers.
-	fn cpu_pool(&self) -> CpuPool;
 }

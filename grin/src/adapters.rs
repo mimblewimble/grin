@@ -16,8 +16,6 @@ use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use cpupool::CpuPool;
-
 use chain::{self, ChainAdapter};
 use core::core::{self, Output};
 use core::core::block::BlockHeader;
@@ -38,14 +36,9 @@ pub struct NetToChainAdapter {
 	p2p_server: OneTime<Arc<p2p::Server>>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	syncing: AtomicBool,
-	cpu_pool: CpuPool,
 }
 
 impl NetAdapter for NetToChainAdapter {
-	fn cpu_pool(&self) -> CpuPool {
-		self.cpu_pool.clone()
-	}
-
 	fn total_difficulty(&self) -> Difficulty {
 		self.chain.total_difficulty()
 	}
@@ -282,7 +275,6 @@ impl NetToChainAdapter {
 			p2p_server: OneTime::new(),
 			tx_pool: tx_pool,
 			syncing: AtomicBool::new(true),
-			cpu_pool: CpuPool::new(1),
 		}
 	}
 

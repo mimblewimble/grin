@@ -24,7 +24,6 @@ use std::time::Duration;
 use futures;
 use futures::{Future, Stream};
 use futures::future::{self, IntoFuture};
-use futures_cpupool::CpuPool;
 use rand::{thread_rng, Rng};
 use tokio_core::net::{TcpListener, TcpStream};
 use tokio_core::reactor;
@@ -40,22 +39,8 @@ use types::*;
 use util::LOGGER;
 
 /// A no-op network adapter used for testing.
-pub struct DummyAdapter {
-	cpu_pool: CpuPool,
-}
-
-impl DummyAdapter {
-	pub fn new() -> DummyAdapter {
-		DummyAdapter {
-			cpu_pool: CpuPool::new(1),
-		}
-	}
-}
-
+pub struct DummyAdapter {}
 impl NetAdapter for DummyAdapter {
-	fn cpu_pool(&self) -> CpuPool {
-		self.cpu_pool.clone()
-	}
 	fn total_difficulty(&self) -> Difficulty {
 		Difficulty::one()
 	}

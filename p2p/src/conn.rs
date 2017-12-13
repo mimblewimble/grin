@@ -21,9 +21,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use futures;
-use futures::{Future, Stream, stream};
+use futures::{Future, Stream};
+use futures::stream;
 use futures::sync::mpsc::{Sender, UnboundedReceiver, UnboundedSender};
-use futures_cpupool::CpuPool;
 use tokio_core::net::TcpStream;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::io::{read_exact, write_all};
@@ -94,7 +94,6 @@ impl Connection {
 	/// itself.
 	pub fn listen<F>(
 		conn: TcpStream,
-		pool: CpuPool,
 		handler: F,
 	) -> (Connection, Box<Future<Item = (), Error = Error>>)
 	where
@@ -125,10 +124,10 @@ impl Connection {
 		};
 
 		// setup the reading future, getting messages from the peer and processing them
-		let read_msg = me.read_msg(tx, reader, handler, pool).map(|_| ());
+		let read_msg = me.read_msg(tx, reader, handler).map(|_| ());
 
-		// setting the writing future
-		// getting messages from our system and sending them out
+		// setting the writing future, getting messages from our system and sending
+  // them out
 		let write_msg = me.write_msg(rx, writer).map(|_| ());
 
 		// select between our different futures and return them
@@ -155,20 +154,16 @@ impl Connection {
 		let sent_bytes = self.sent_bytes.clone();
 		let send_data = rx
 			.map_err(|_| Error::ConnectionClose)
-			.map(move |data| {
-				trace!(LOGGER, "write_msg: start");
-				// add the count of bytes sent
+      .map(move |data| {
+        // add the count of bytes sent
 				let mut sent_bytes = sent_bytes.lock().unwrap();
 				*sent_bytes += data.len() as u64;
 				data
 			})
-			// write the data and make sure the future returns the right types
+      // write the data and make sure the future returns the right types
 			.fold(writer, |writer, data| {
-				write_all(writer, data).map_err(|e| Error::Connection(e)).map(|(writer, _)| {
-					trace!(LOGGER, "write_msg: done");
-					writer
-				})
-			});
+        write_all(writer, data).map_err(|e| Error::Connection(e)).map(|(writer, _)| writer)
+      });
 		Box::new(send_data)
 	}
 
@@ -179,37 +174,28 @@ impl Connection {
 		sender: UnboundedSender<Vec<u8>>,
 		reader: R,
 		handler: F,
-		pool: CpuPool,
 	) -> Box<Future<Item = R, Error = Error>>
 	where
 		F: Handler + 'static,
-		R: AsyncRead + Send + 'static,
+		R: AsyncRead + 'static,
 	{
 		// infinite iterator stream so we repeat the message reading logic until the
-		// peer is stopped
+  // peer is stopped
 		let iter = stream::iter_ok(iter::repeat(()).map(Ok::<(), Error>));
 
 		// setup the reading future, getting messages from the peer and processing them
 		let recv_bytes = self.received_bytes.clone();
 		let handler = Arc::new(handler);
 
-		let mut count = 0;
-
-		let read_msg = iter.buffered(1).fold(reader, move |reader, _| {
-			count += 1;
-			trace!(LOGGER, "read_msg: count (per buffered fold): {}", count);
-
+		let read_msg = iter.fold(reader, move |reader, _| {
 			let recv_bytes = recv_bytes.clone();
 			let handler = handler.clone();
 			let sender_inner = sender.clone();
-			let pool = pool.clone();
 
 			// first read the message header
 			read_exact(reader, vec![0u8; HEADER_LEN as usize])
 				.from_err()
 				.and_then(move |(reader, buf)| {
-					trace!(LOGGER, "read_msg: start");
-
 					let header = try!(ser::deserialize::<MsgHeader>(&mut &buf[..]));
 					Ok((reader, header))
 				})
@@ -224,16 +210,14 @@ impl Connection {
 					let mut recv_bytes = recv_bytes.lock().unwrap();
 					*recv_bytes += header.serialized_len() + header.msg_len;
 
-					pool.spawn_fn(move || {
-						let msg_type = header.msg_type;
-						if let Err(e) = handler.handle(sender_inner.clone(), header, buf) {
-							debug!(LOGGER, "Invalid {:?} message: {}", msg_type, e);
-							return Err(Error::Serialization(e));
-						}
+					// and handle the different message types
+					let msg_type = header.msg_type;
+					if let Err(e) = handler.handle(sender_inner.clone(), header, buf) {
+						debug!(LOGGER, "Invalid {:?} message: {}", msg_type, e);
+						return Err(Error::Serialization(e));
+					}
 
-						trace!(LOGGER, "read_msg: done (via cpu_pool)");
-						Ok(reader)
-					})
+					Ok(reader)
 				})
 		});
 		Box::new(read_msg)
@@ -276,7 +260,6 @@ impl TimeoutConnection {
 	/// Same as Connection
 	pub fn listen<F>(
 		conn: TcpStream,
-		pool: CpuPool,
 		handler: F,
 	) -> (TimeoutConnection, Box<Future<Item = (), Error = Error>>)
 	where
@@ -287,7 +270,7 @@ impl TimeoutConnection {
 		// Decorates the handler to remove the "subscription" from the expected
 		// responses. We got our replies, so no timeout should occur.
 		let exp = expects.clone();
-		let (conn, fut) = Connection::listen(conn, pool, move |sender, header: MsgHeader, data| {
+		let (conn, fut) = Connection::listen(conn, move |sender, header: MsgHeader, data| {
 			let msg_type = header.msg_type;
 			let recv_h = try!(handler.handle(sender, header, data));
 
