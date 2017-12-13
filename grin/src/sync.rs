@@ -12,27 +12,95 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
 use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicBool, Ordering};
 use time;
 
-use adapters::NetToChainAdapter;
 use chain;
 use core::core::hash::{Hash, Hashed};
+use core::core::target::Difficulty;
 use p2p::{self, Peer};
 use types::Error;
-use util::LOGGER;
+use util::{LOGGER, OneTime};
+
+
+pub struct Syncer {
+	p2p_server: OneTime<Arc<p2p::Server>>,
+	chain: Arc<chain::Chain>,
+	syncing: AtomicBool,
+	in_flight: Arc<RwLock<HashMap<Hash, i32>>>,
+}
+
+impl Syncer {
+	pub fn new(
+		chain: Arc<chain::Chain>,
+	) -> Syncer {
+		Syncer {
+			p2p_server: OneTime::new(),
+			chain: chain,
+			syncing: AtomicBool::new(true),
+			in_flight: Arc::new(RwLock::new(HashMap::new())),
+		}
+	}
+
+	pub fn init(&self, p2p_server: Arc<p2p::Server>) {
+		self.p2p_server.init(p2p_server);
+	}
+
+	/// Whether we're currently syncing the chain or we're fully caught up and
+	/// just receiving blocks through gossip.
+	pub fn is_syncing(&self) -> bool {
+		let local_diff = self.chain.total_difficulty();
+		let peer = self.p2p_server.borrow().most_work_peer();
+
+		// if we're already syncing, we're caught up if no peer has a higher
+		// difficulty than us
+		if self.syncing.load(Ordering::Relaxed) {
+			if let Some(peer) = peer {
+				if let Ok(peer) = peer.try_read() {
+					if peer.info.total_difficulty <= local_diff {
+						info!(LOGGER, "sync: caught up on most worked chain, disabling sync");
+						self.syncing.store(false, Ordering::Relaxed);
+					}
+				}
+			} else {
+				info!(LOGGER, "sync: no peers available, disabling sync");
+				self.syncing.store(false, Ordering::Relaxed);
+			}
+		} else {
+			if let Some(peer) = peer {
+				if let Ok(peer) = peer.try_read() {
+					// sum the last 5 difficulties to give us the threshold
+					let threshold = self.chain
+						.difficulty_iter()
+						.filter_map(|x| x.map(|(_, x)| x).ok())
+						.take(5)
+						.fold(Difficulty::zero(), |sum, val| sum + val);
+
+					if peer.info.total_difficulty > local_diff.clone() + threshold.clone() {
+						info!(
+							LOGGER,
+							"sync: total_difficulty {}, peer_difficulty {}, threshold {} (last 5 blocks), enabling sync",
+							local_diff,
+							peer.info.total_difficulty,
+							threshold,
+						);
+						self.syncing.store(true, Ordering::Relaxed);
+					}
+				}
+			}
+		}
+		self.syncing.load(Ordering::Relaxed)
+	}
+}
 
 /// Starts the syncing loop, just spawns two threads that loop forever
-pub fn run_sync(
-	adapter: Arc<NetToChainAdapter>,
-	p2p_server: Arc<p2p::Server>,
-	chain: Arc<chain::Chain>,
-) {
-	let a_inner = adapter.clone();
-	let p2p_inner = p2p_server.clone();
-	let c_inner = chain.clone();
+pub fn run_sync(syncer: Arc<Syncer>) {
+	// let p2p_inner = syncer.p2p_server.clone();
+	// let c_inner = syncer.chain.clone();
 	let _ = thread::Builder::new()
 		.name("sync".to_string())
 		.spawn(move || {
@@ -43,24 +111,18 @@ pub fn run_sync(
 			thread::sleep(Duration::from_secs(30));
 
 			loop {
-				if a_inner.is_syncing() {
+				if syncer.is_syncing() {
 					let current_time = time::now_utc();
 
 					// run the header sync every 10s
 					if current_time - prev_header_sync > time::Duration::seconds(10) {
-						header_sync(
-							p2p_server.clone(),
-							chain.clone(),
-						);
+						header_sync(syncer.clone());
 						prev_header_sync = current_time;
 					}
 
 					// run the body_sync every 5s
 					if current_time - prev_body_sync > time::Duration::seconds(5) {
-						body_sync(
-							p2p_inner.clone(),
-							c_inner.clone(),
-						);
+						body_sync(syncer.clone());
 						prev_body_sync = current_time;
 					}
 
@@ -68,14 +130,15 @@ pub fn run_sync(
 				} else {
 					thread::sleep(Duration::from_secs(10));
 				}
-			}
+			};
 		});
 }
 
-fn body_sync(
-	p2p_server: Arc<p2p::Server>,
-	chain: Arc<chain::Chain>,
-) {
+
+fn body_sync(syncer: Arc<Syncer>) {
+	let chain = syncer.chain.clone();
+	let p2p_server = syncer.p2p_server.borrow().clone();
+
 	let body_head: chain::Tip = chain.head().unwrap();
 	let header_head: chain::Tip = chain.get_header_head().unwrap();
 	let sync_head: chain::Tip = chain.get_sync_head().unwrap();
@@ -144,10 +207,10 @@ fn body_sync(
 	}
 }
 
-pub fn header_sync(
-	p2p_server: Arc<p2p::Server>,
-	chain: Arc<chain::Chain>,
-) {
+pub fn header_sync(syncer: Arc<Syncer>) {
+	let chain = syncer.chain.clone();
+	let p2p_server = syncer.p2p_server.borrow().clone();
+
 	if let Ok(header_head) = chain.get_header_head() {
 		let difficulty = header_head.total_difficulty;
 

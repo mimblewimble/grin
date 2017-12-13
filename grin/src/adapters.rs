@@ -14,7 +14,6 @@
 
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use chain::{self, ChainAdapter};
 use core::core::{self, Output};
@@ -23,10 +22,10 @@ use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use p2p::{self, NetAdapter, PeerData, State};
 use pool;
-use util::secp::pedersen::Commitment;
-use util::OneTime;
 use store;
-use util::LOGGER;
+use sync;
+use util::secp::pedersen::Commitment;
+use util::{LOGGER, OneTime};
 
 /// Implementation of the NetAdapter for the blockchain. Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
@@ -35,7 +34,7 @@ pub struct NetToChainAdapter {
 	chain: Arc<chain::Chain>,
 	p2p_server: OneTime<Arc<p2p::Server>>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-	syncing: AtomicBool,
+	syncer: Arc<sync::Syncer>,
 }
 
 impl NetAdapter for NetToChainAdapter {
@@ -269,12 +268,13 @@ impl NetToChainAdapter {
 	pub fn new(
 		chain_ref: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		syncer: Arc<sync::Syncer>,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
 			chain: chain_ref,
 			p2p_server: OneTime::new(),
 			tx_pool: tx_pool,
-			syncing: AtomicBool::new(true),
+			syncer: syncer,
 		}
 	}
 
@@ -286,47 +286,7 @@ impl NetToChainAdapter {
 	/// Whether we're currently syncing the chain or we're fully caught up and
 	/// just receiving blocks through gossip.
 	pub fn is_syncing(&self) -> bool {
-		let local_diff = self.total_difficulty();
-		let peer = self.p2p_server.borrow().most_work_peer();
-
-		// if we're already syncing, we're caught up if no peer has a higher
-		// difficulty than us
-		if self.syncing.load(Ordering::Relaxed) {
-			if let Some(peer) = peer {
-				if let Ok(peer) = peer.try_read() {
-					if peer.info.total_difficulty <= local_diff {
-						info!(LOGGER, "sync: caught up on most worked chain, disabling sync");
-						self.syncing.store(false, Ordering::Relaxed);
-					}
-				}
-			} else {
-				info!(LOGGER, "sync: no peers available, disabling sync");
-				self.syncing.store(false, Ordering::Relaxed);
-			}
-		} else {
-			if let Some(peer) = peer {
-				if let Ok(peer) = peer.try_read() {
-					// sum the last 5 difficulties to give us the threshold
-					let threshold = self.chain
-						.difficulty_iter()
-						.filter_map(|x| x.map(|(_, x)| x).ok())
-						.take(5)
-						.fold(Difficulty::zero(), |sum, val| sum + val);
-
-					if peer.info.total_difficulty > local_diff.clone() + threshold.clone() {
-						info!(
-							LOGGER,
-							"sync: total_difficulty {}, peer_difficulty {}, threshold {} (last 5 blocks), enabling sync",
-							local_diff,
-							peer.info.total_difficulty,
-							threshold,
-						);
-						self.syncing.store(true, Ordering::Relaxed);
-					}
-				}
-			}
-		}
-		self.syncing.load(Ordering::Relaxed)
+		self.syncer.is_syncing()
 	}
 
 	/// Prepare options for the chain pipeline
