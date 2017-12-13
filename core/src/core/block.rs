@@ -618,6 +618,8 @@ mod test {
 	}
 
 	// Too slow for now #[test]
+	// TODO: make this fast enough or add similar but faster test?
+	#[allow(dead_code)]
 	fn too_large_block() {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let max_out = MAX_BLOCK_WEIGHT / BLOCK_OUTPUT_WEIGHT;
