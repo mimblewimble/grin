@@ -39,6 +39,7 @@ use util::LOGGER;
 
 /// A no-op network adapter used for testing.
 pub struct DummyAdapter {}
+
 impl ChainAdapter for DummyAdapter {
 	fn total_difficulty(&self) -> Difficulty {
 		Difficulty::one()
@@ -56,7 +57,11 @@ impl ChainAdapter for DummyAdapter {
 		None
 	}
 }
+
 impl NetAdapter for DummyAdapter {
+	// fn cpu_pool(&self) -> CpuPool {
+	// 	self.cpu_pool.clone()
+	// }
 	fn find_peer_addrs(&self, _: Capabilities) -> Vec<SocketAddr> {
 		vec![]
 	}
@@ -268,7 +273,7 @@ impl Server {
 }
 
 // Adds the peer built by the provided future in the peers map
-fn add_to_peers<A>(peers: Peers, peer_fut: A) 
+fn add_to_peers<A>(peers: Peers, peer_fut: A)
 	-> Box<Future<Item = Result<(TcpStream, Arc<RwLock<Peer>>), ()>, Error = Error>>
 	where A: IntoFuture<Item = (TcpStream, Peer), Error = Error> + 'static {
 
@@ -301,4 +306,3 @@ fn with_timeout<T: 'static>(
 		});
 	Box::new(timed)
 }
-

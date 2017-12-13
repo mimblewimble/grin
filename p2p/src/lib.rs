@@ -26,6 +26,8 @@ extern crate bytes;
 #[macro_use]
 extern crate enum_primitive;
 extern crate futures;
+extern crate futures_cpupool;
+
 #[macro_use]
 extern crate grin_core as core;
 extern crate grin_store;

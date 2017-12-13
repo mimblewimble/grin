@@ -330,6 +330,10 @@ impl ChainAdapter for Peers {
 }
 
 impl NetAdapter for Peers {
+	// fn cpu_pool(&self) -> CpuPool {
+	// 	self.adapter.cpu_pool()
+	// }
+
 	/// Find good peers we know with the provided capability and return their
 	/// addresses.
 	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr> {

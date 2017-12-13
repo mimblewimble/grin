@@ -16,6 +16,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
 use futures::Future;
+use futures_cpupool::CpuPool;
 use tokio_core::net::TcpStream;
 
 use core::core;
@@ -93,8 +94,9 @@ impl Peer {
 		let addr = self.info.addr;
 		let state = self.state.clone();
 		let adapter = Arc::new(self.tracking_adapter.clone());
-
-		Box::new(self.proto.handle(conn, adapter, addr).then(move |res| {
+		let pool = CpuPool::new(1);
+		
+		Box::new(self.proto.handle(conn, adapter, addr, pool).then(move |res| {
 			// handle disconnection, standard disconnections aren't considered an error
 			let mut state = state.write().unwrap();
 			match res {
@@ -254,6 +256,10 @@ impl ChainAdapter for TrackingAdapter {
 }
 
 impl NetAdapter for TrackingAdapter {
+	// fn cpu_pool(&self) -> CpuPool {
+	// 	self.adapter.cpu_pool()
+	// }
+
 	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr> {
 		self.adapter.find_peer_addrs(capab)
 	}
