@@ -13,6 +13,7 @@
 // limitations under the License.
 
 extern crate futures;
+extern crate futures_cpupool;
 extern crate grin_core as core;
 extern crate grin_p2p as p2p;
 extern crate tokio_core;
@@ -36,7 +37,7 @@ fn peer_handshake() {
 	let mut evtlp = Core::new().unwrap();
 	let handle = evtlp.handle();
 	let p2p_conf = p2p::P2PConfig::default();
-	let net_adapter = Arc::new(p2p::DummyAdapter {});
+	let net_adapter = Arc::new(p2p::DummyAdapter::new());
 	let server = p2p::Server::new(
 		".grin".to_owned(),
 		p2p::UNKNOWN,

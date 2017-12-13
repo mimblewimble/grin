@@ -16,6 +16,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
 use futures::Future;
+use futures_cpupool::CpuPool;
 use tokio_core::net::TcpStream;
 
 use core::core;
@@ -221,6 +222,10 @@ impl TrackingAdapter {
 }
 
 impl NetAdapter for TrackingAdapter {
+	fn cpu_pool(&self) -> CpuPool {
+		self.adapter.cpu_pool()
+	}
+
 	fn total_difficulty(&self) -> Difficulty {
 		self.adapter.total_difficulty()
 	}
