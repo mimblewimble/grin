@@ -50,8 +50,7 @@ impl Protocol for ProtocolV1 {
 		adapter: Arc<NetAdapter>,
 		addr: SocketAddr,
 	) -> Box<Future<Item = (), Error = Error>> {
-		let pool = adapter.cpu_pool();
-		let (conn, listener) = TimeoutConnection::listen(conn, pool, move |sender, header, data| {
+		let (conn, listener) = TimeoutConnection::listen(conn, move |sender, header, data| {
 			let adapt = adapter.as_ref();
 			handle_payload(adapt, sender, header, data, addr)
 		});
@@ -153,11 +152,7 @@ fn handle_payload(
 				&MsgHeader::new(Type::Pong, body_data.len() as u64),
 			));
 			data.append(&mut body_data);
-
-			if let Err(e) = sender.unbounded_send(data) {
-				debug!(LOGGER, "handle_payload: Ping, error sending: {:?}", e);
-			}
-
+			sender.unbounded_send(data).unwrap();
 			Ok(None)
 		}
 		Type::Pong => {
@@ -185,18 +180,13 @@ fn handle_payload(
 					&MsgHeader::new(Type::Block, body_data.len() as u64),
 				));
 				data.append(&mut body_data);
-				if let Err(e) = sender.unbounded_send(data) {
-					debug!(LOGGER, "handle_payload: GetBlock, error sending: {:?}", e);
-				}
+				sender.unbounded_send(data).unwrap();
 			}
 			Ok(None)
 		}
 		Type::Block => {
 			let b = ser::deserialize::<core::Block>(&mut &buf[..])?;
 			let bh = b.hash();
-
-			debug!(LOGGER, "handle_payload: Block {}", bh);
-
 			adapter.block_received(b, addr);
 			Ok(Some(bh))
 		}
@@ -217,9 +207,7 @@ fn handle_payload(
 				&MsgHeader::new(Type::Headers, body_data.len() as u64),
 			));
 			data.append(&mut body_data);
-			if let Err(e) = sender.unbounded_send(data) {
-				debug!(LOGGER, "handle_payload: GetHeaders, error sending: {:?}", e);
-			}
+			sender.unbounded_send(data).unwrap();
 
 			Ok(None)
 		}
@@ -246,9 +234,7 @@ fn handle_payload(
 				&MsgHeader::new(Type::PeerAddrs, body_data.len() as u64),
 			));
 			data.append(&mut body_data);
-			if let Err(e) = sender.unbounded_send(data) {
-				debug!(LOGGER, "handle_payload: GetPeerAddrs, error sending: {:?}", e);
-			}
+			sender.unbounded_send(data).unwrap();
 
 			Ok(None)
 		}
