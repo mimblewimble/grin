@@ -253,9 +253,7 @@ impl<'a> Extension<'a> {
 					Err(s) => return Err(Error::SumTreeErr(s)),
 				}
 			} else {
-				return Err(Error::SumTreeErr(
-					format!("Missing index for {:?}", input.commitment()),
-				));
+				return Err(Error::AlreadySpent);
 			}
 		}
 
@@ -346,12 +344,18 @@ impl<'a> Extension<'a> {
 		);
 
 		let out_pos_rew = match block.outputs.last() {
-			Some(output) => self.commit_index.get_output_pos(&output.commitment())?,
+			Some(output) => self.commit_index.get_output_pos(&output.commitment())
+				.map_err(|e| {
+					Error::StoreErr(e, format!("missing output pos for known block"))
+				})?,
 			None => 0,
 		};
 
 		let kern_pos_rew = match block.kernels.last() {
-			Some(kernel) => self.commit_index.get_kernel_pos(&kernel.excess)?,
+			Some(kernel) => self.commit_index.get_kernel_pos(&kernel.excess)
+				.map_err(|e| {
+					Error::StoreErr(e, format!("missing kernel pos for known block"))
+				})?,
 			None => 0,
 		};
 

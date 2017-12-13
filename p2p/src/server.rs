@@ -44,6 +44,9 @@ impl NetAdapter for DummyAdapter {
 	fn total_difficulty(&self) -> Difficulty {
 		Difficulty::one()
 	}
+	fn total_height(&self) -> u64 {
+		0
+	}
 	fn transaction_received(&self, _: core::Transaction) {}
 	fn block_received(&self, _: core::Block, _: SocketAddr) {}
 	fn headers_received(&self, _: Vec<core::BlockHeader>, _:SocketAddr) {}
@@ -58,7 +61,7 @@ impl NetAdapter for DummyAdapter {
 	}
 	fn peer_addrs_received(&self, _: Vec<SocketAddr>) {}
 	fn peer_connected(&self, _: &PeerInfo) {}
-	fn peer_difficulty(&self, _: SocketAddr, _: Difficulty) {}
+	fn peer_difficulty(&self, _: SocketAddr, _: Difficulty, _:u64) {}
 }
 
 /// P2P server implementation, handling bootstrapping to find and connect to
@@ -189,7 +192,8 @@ impl Server {
 			.interval(Duration::new(20, 0))
 			.fold((), move |_, _| {
 				let total_diff = adapter.total_difficulty();
-				check_peers(peers_inner.clone(), total_diff);
+				let total_height = adapter.total_height();
+				check_peers(peers_inner.clone(), total_diff, total_height);
 				Ok(())
 			});
 
@@ -507,12 +511,13 @@ where
 fn check_peers(
 	peers: Arc<RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>>,
 	total_difficulty: Difficulty,
+	height: u64
 ) {
 	let peers_map = peers.read().unwrap();
 	for p in peers_map.values() {
 		let p = p.read().unwrap();
 		if p.is_connected() {
-			let _ = p.send_ping(total_difficulty.clone());
+			let _ = p.send_ping(total_difficulty.clone(), height);
 		}
 	}
 }

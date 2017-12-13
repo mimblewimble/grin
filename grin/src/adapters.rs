@@ -43,6 +43,10 @@ impl NetAdapter for NetToChainAdapter {
 		self.chain.total_difficulty()
 	}
 
+	fn total_height(&self) -> u64 {
+		self.chain.head().unwrap().height
+	}
+
 	fn transaction_received(&self, tx: core::Transaction) {
 		let source = pool::TxSource {
 			debug_name: "p2p".to_string(),
@@ -247,16 +251,19 @@ impl NetAdapter for NetToChainAdapter {
 		}
 	}
 
-	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty) {
+	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty, height: u64) {
 		debug!(
 			LOGGER,
-			"peer total_diff (ping/pong): {}, {} vs us {}",
+			"peer total_diff @ height (ping/pong): {}: {} @ {} \
+				 vs us: {} @ {}",
 			addr,
 			diff,
+			height,
 			self.total_difficulty(),
+			self.total_height()
 		);
 
-		if diff.into_num() > 0 {
+		if self.p2p_server.is_initialized() {
 			if let Some(peer) = self.p2p_server.borrow().get_peer(&addr) {
 				let mut peer = peer.write().unwrap();
 				peer.info.total_difficulty = diff;

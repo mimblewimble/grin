@@ -340,9 +340,6 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 	match server_args.subcommand() {
 		("run", _) => {
 			grin::Server::start(server_config).unwrap();
-			loop {
-				thread::sleep(Duration::from_secs(60));
-			}
 		}
 		("start", _) => {
 			let daemonize = Daemonize::new()

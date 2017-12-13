@@ -257,6 +257,43 @@ impl Handler for PeersConnectedHandler {
 	}
 }
 
+/// Get details about a given peer and peer operations
+/// TODO GET /v1/peers/10.12.12.13
+/// POST /v1/peers/10.12.12.13/ban
+/// TODO POST /v1/peers/10.12.12.13/unban
+pub struct PeerHandler {
+	pub p2p_server: Arc<p2p::Server>,
+}
+
+impl Handler for PeerHandler {
+	fn handle(&self, req: &mut Request) -> IronResult<Response> {
+		let url = req.url.clone();
+		let mut path_elems = url.path();
+		if *path_elems.last().unwrap() == "" {
+			path_elems.pop();
+		}
+		match *path_elems.last().unwrap() {
+      "ban" => {
+        path_elems.pop();
+        if let Ok(addr) = path_elems.last().unwrap().parse() {
+          self.p2p_server.ban_peer(&addr);
+          Ok(Response::with((status::Ok, "")))
+        } else {
+          Ok(Response::with((status::BadRequest, "")))
+        }
+      }
+      "unban" => {
+        // TODO
+        Ok(Response::with((status::BadRequest, "")))
+      }
+      _ => {
+        // TODO peer details
+        Ok(Response::with((status::BadRequest, "")))
+      }
+    }
+	}
+}
+
 // Chain handler. Get the head details.
 // GET /v1/chain
 pub struct ChainHandler {
@@ -452,6 +489,9 @@ pub fn start_rest_apis<T>(
 		let peers_connected_handler = PeersConnectedHandler {
 			p2p_server: p2p_server.clone(),
 		};
+		let peer_handler = PeerHandler {
+			p2p_server: p2p_server.clone(),
+		};
 
 		let route_list = vec!(
 			"get /".to_string(),
@@ -478,6 +518,7 @@ pub fn start_rest_apis<T>(
 			pool_push: post "/pool/push" => pool_push_handler,
 			peers_all: get "/peers/all" => peers_all_handler,
 			peers_connected: get "/peers/connected" => peers_connected_handler,
+			peer: post "/peers/*" => peer_handler,
 		);
 
 		let mut apis = ApiServer::new("/v1".to_string());

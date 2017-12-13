@@ -479,11 +479,14 @@ pub struct Ping {
 	/// total difficulty accumulated by the sender, used to check whether sync
 	/// may be needed
 	pub total_difficulty: Difficulty,
+	/// total height
+	pub height: u64,
 }
 
 impl Writeable for Ping {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.total_difficulty.write(writer).unwrap();
+		self.height.write(writer).unwrap();
 		Ok(())
 	}
 }
@@ -495,7 +498,11 @@ impl Readable for Ping {
 			Ok(diff) => diff,
 			Err(_) => Difficulty::zero(),
 		};
-		Ok(Ping { total_difficulty })
+		let height = match reader.read_u64(){
+			Ok(h) => h,
+			Err(_) => 0,
+		};
+Ok(Ping { total_difficulty, height })
 	}
 }
 
@@ -503,11 +510,14 @@ pub struct Pong {
 	/// total difficulty accumulated by the sender, used to check whether sync
 	/// may be needed
 	pub total_difficulty: Difficulty,
+	/// height accumulated by sender
+	pub height: u64
 }
 
 impl Writeable for Pong {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.total_difficulty.write(writer).unwrap();
+		self.height.write(writer).unwrap();
 		Ok(())
 	}
 }
@@ -519,6 +529,10 @@ impl Readable for Pong {
 			Ok(diff) => diff,
 			Err(_) => Difficulty::zero(),
 		};
-		Ok(Pong { total_difficulty })
+		let height = match reader.read_u64() {
+			Ok(h) => h,
+			Err(_) => 0,
+		};
+		Ok(Pong { total_difficulty, height })
 	}
 }
