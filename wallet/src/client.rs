@@ -35,7 +35,8 @@ pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Erro
 		if let Err(_) = res {
 			error!(
 				LOGGER,
-				"Failed to get coinbase via wallet API (will retry)..."
+				"Failed to get coinbase from {}. Run grin wallet listen",
+				url
 			);
 		}
 		res
@@ -69,11 +70,15 @@ fn single_send_partial_tx(url: &str, partial_tx: &PartialTx) -> Result<(), Error
 	req.set_body(json);
 
 	let work = client.request(req);
-	let _ = core.run(work).and_then(|res|{
-		if res.status()==hyper::StatusCode::Ok {
+	let _ = core.run(work).and_then(|res| {
+		if res.status() == hyper::StatusCode::Ok {
 			info!(LOGGER, "Transaction sent successfully");
 		} else {
-			error!(LOGGER, "Error sending transaction - status: {}", res.status());
+			error!(
+				LOGGER,
+				"Error sending transaction - status: {}",
+				res.status()
+			);
 			return Err(hyper::Error::Status);
 		}
 		Ok(())
