@@ -23,6 +23,7 @@ use std::time::Duration;
 use futures;
 use futures::{Future, Stream};
 use futures::future::{self, IntoFuture};
+use futures_cpupool::CpuPool;
 use tokio_core::net::{TcpListener, TcpStream};
 use tokio_core::reactor;
 use tokio_timer::Timer;
@@ -39,6 +40,7 @@ use util::LOGGER;
 
 /// A no-op network adapter used for testing.
 pub struct DummyAdapter {}
+
 impl ChainAdapter for DummyAdapter {
 	fn total_difficulty(&self) -> Difficulty {
 		Difficulty::one()
@@ -56,6 +58,7 @@ impl ChainAdapter for DummyAdapter {
 		None
 	}
 }
+
 impl NetAdapter for DummyAdapter {
 	fn find_peer_addrs(&self, _: Capabilities) -> Vec<SocketAddr> {
 		vec![]
@@ -71,6 +74,7 @@ pub struct Server {
 	capabilities: Capabilities,
 	handshake: Arc<Handshake>,
 	pub peers: Peers,
+	pool: CpuPool,
 	stop: RefCell<Option<futures::sync::oneshot::Sender<()>>>,
 }
 
@@ -85,12 +89,14 @@ impl Server {
 		capab: Capabilities,
 		config: P2PConfig,
 		adapter: Arc<ChainAdapter>,
+		pool: CpuPool,
 	) -> Result<Server, Error> {
 		Ok(Server {
 			config: config,
 			capabilities: capab,
 			handshake: Arc::new(Handshake::new()),
 			peers: Peers::new(PeerStore::new(db_root)?, adapter),
+			pool: pool,
 			stop: RefCell::new(None),
 		})
 	}
@@ -105,6 +111,7 @@ impl Server {
 		let handshake = self.handshake.clone();
 		let peers = self.peers.clone();
 		let capab = self.capabilities.clone();
+		let pool = self.pool.clone();
 
 		// main peer acceptance future handling handshake
 		let hp = h.clone();
@@ -115,6 +122,7 @@ impl Server {
 			let peers2 = peers.clone();
 			let handshake = handshake.clone();
 			let hp = hp.clone();
+			let pool = pool.clone();
 
 			future::ok(conn).and_then(move |conn| {
 				// Refuse banned peers connection
@@ -148,7 +156,7 @@ impl Server {
 				// run the main peer protocol
 				timed_peer.and_then(move |(conn, peer)| {
 					let peer = peer.read().unwrap();
-					peer.run(conn)
+					peer.run(conn, pool)
 				})
 			})
 		});
@@ -219,6 +227,8 @@ impl Server {
 		let peers = self.peers.clone();
 		let handshake = self.handshake.clone();
 		let capab = self.capabilities.clone();
+		let pool = self.pool.clone();
+
 		let self_addr = SocketAddr::new(self.config.host, self.config.port);
 
 		let timer = Timer::default();
@@ -250,7 +260,7 @@ impl Server {
 			})
 			.and_then(move |(socket, peer)| {
 				let peer_inner = peer.read().unwrap();
-				h2.spawn(peer_inner.run(socket).map_err(|e| {
+				h2.spawn(peer_inner.run(socket, pool).map_err(|e| {
 					error!(LOGGER, "Peer error: {:?}", e);
 					()
 				}));
@@ -268,7 +278,7 @@ impl Server {
 }
 
 // Adds the peer built by the provided future in the peers map
-fn add_to_peers<A>(peers: Peers, peer_fut: A) 
+fn add_to_peers<A>(peers: Peers, peer_fut: A)
 	-> Box<Future<Item = Result<(TcpStream, Arc<RwLock<Peer>>), ()>, Error = Error>>
 	where A: IntoFuture<Item = (TcpStream, Peer), Error = Error> + 'static {
 
@@ -301,4 +311,3 @@ fn with_timeout<T: 'static>(
 		});
 	Box::new(timed)
 }
-
