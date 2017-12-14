@@ -53,6 +53,10 @@ Builds a transaction to send someone some coins. Creates and outputs a transacti
 
 Replaced by `listen` (see above). The `receive` command might later be recycled to actively accept one or several specific transactions.
 
+### grin wallet request
+
+(tbd)
+
 ### grin wallet burn
 
 *TESTING ONLY*: Burns the provided amount to a known key. Similar to send but burns an output to allow single-party

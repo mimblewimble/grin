@@ -239,9 +239,13 @@ impl<'a> Extension<'a> {
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
 
 		// doing inputs first guarantees an input can't spend an output in the
-  // same block, enforcing block cut-through
+		// same block, enforcing block cut-through
 		for input in &b.inputs {
 			let pos_res = self.commit_index.get_output_pos(&input.commitment());
+			if b.hash().to_string() == "f697a877" {
+				debug!(LOGGER, "input pos: {:?}, commit: {} {:?}",
+							 pos_res, input.commitment().hash(), input.commitment());
+			}
 			if let Ok(pos) = pos_res {
 				match self.output_pmmr.prune(pos, b.header.height as u32) {
 					Ok(true) => {
@@ -257,29 +261,22 @@ impl<'a> Extension<'a> {
 			}
 		}
 
-		// checking any position after the MMR size is useless, catches rewind
-		// edge cases
-		let output_max_index = self.output_pmmr.unpruned_size();
-		let kernel_max_index = self.kernel_pmmr.unpruned_size();
-
 		for out in &b.outputs {
 			let commit = out.commitment();
 			if let Ok(pos) = self.commit_index.get_output_pos(&commit) {
-				if pos <= output_max_index {
-					// we need to check whether the commitment is in the current MMR view
-					// as well as the index doesn't support rewind and is non-authoritative
-					// (non-historical node will have a much smaller one)
-					// note that this doesn't show the commitment *never* existed, just
-					// that this is not an existing unspent commitment right now
-					if let Some(c) = self.output_pmmr.get(pos) {
-						let hashsum = HashSum::from_summable(
-							pos, &SumCommit{commit}, Some(out.switch_commit_hash));
-						// as we're processing a new fork, we may get a position on the old
-						// fork that exists but matches a different node, filtering that
-						// case out
-						if c.hash == hashsum.hash {
-							return Err(Error::DuplicateCommitment(out.commitment()));
-						}
+				// we need to check whether the commitment is in the current MMR view
+				// as well as the index doesn't support rewind and is non-authoritative
+				// (non-historical node will have a much smaller one)
+				// note that this doesn't show the commitment *never* existed, just
+				// that this is not an existing unspent commitment right now
+				if let Some(c) = self.output_pmmr.get(pos) {
+					let hashsum = HashSum::from_summable(
+						pos, &SumCommit{commit}, Some(out.switch_commit_hash));
+					// as we're processing a new fork, we may get a position on the old
+					// fork that exists but matches a different node, filtering that
+					// case out
+					if c.hash == hashsum.hash {
+						return Err(Error::DuplicateCommitment(out.commitment()));
 					}
 				}
 			}
@@ -303,14 +300,12 @@ impl<'a> Extension<'a> {
 
 		for kernel in &b.kernels {
 			if let Ok(pos) = self.commit_index.get_kernel_pos(&kernel.excess) {
-				if pos <= kernel_max_index {
-					// same as outputs
-					if let Some(k) = self.kernel_pmmr.get(pos) {
-						let hashsum = HashSum::from_summable(
-							pos, &NoSum(kernel), None::<RangeProof>);
-						if k.hash == hashsum.hash {
-							return Err(Error::DuplicateKernel(kernel.excess.clone()));
-						}
+				// same as outputs
+				if let Some(k) = self.kernel_pmmr.get(pos) {
+					let hashsum = HashSum::from_summable(
+						pos, &NoSum(kernel), None::<RangeProof>);
+					if k.hash == hashsum.hash {
+						return Err(Error::DuplicateKernel(kernel.excess.clone()));
 					}
 				}
 			}

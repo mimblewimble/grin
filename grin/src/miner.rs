@@ -17,7 +17,7 @@
 
 use rand::{self, Rng};
 use std::sync::{Arc, RwLock};
-use std::{str, thread};
+use std::thread;
 use std;
 use time;
 
@@ -588,7 +588,7 @@ impl Miner {
 		let result=self.chain.set_sumtree_roots(&mut b);
 		match result {
 			Ok(_) => Ok((b, block_fees)),
-			//If it's a duplicate commitment, it's likely trying to use 
+			//If it's a duplicate commitment, it's likely trying to use
 			//a key that's already been derived but not in the wallet
 			//for some reason, allow caller to retry
 			Err(chain::Error::DuplicateCommitment(e)) =>
