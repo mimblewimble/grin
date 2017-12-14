@@ -73,8 +73,11 @@ impl Peers {
 		self.get_peer(addr).is_some()
 	}
 
+	/// Get vec of peers we are currently connected to.
 	pub fn connected_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
-		self.peers.read().unwrap().values().map(|p| p.clone()).collect()
+		let mut res = self.peers.read().unwrap().values().cloned().collect::<Vec<_>>();
+		thread_rng().shuffle(&mut res);
+		res
 	}
 
 	/// Get a peer we're connected to by address.
@@ -133,10 +136,10 @@ impl Peers {
 	}
 
 	/// Returns a random connected peer.
-	pub fn random_peer(&self) -> Option<Arc<RwLock<Peer>>> {
-		let peers = self.connected_peers();
-		Some(thread_rng().choose(&peers).unwrap().clone())
-	}
+	// pub fn random_peer(&self) -> Option<Arc<RwLock<Peer>>> {
+	// 	let peers = self.connected_peers();
+	// 	Some(thread_rng().choose(&peers).unwrap().clone())
+	// }
 
 	pub fn is_banned(&self, peer_addr: SocketAddr) -> bool {
 		if let Ok(peer_data) = self.store.get_peer(peer_addr) {
@@ -162,13 +165,15 @@ impl Peers {
 		}
 	}
 
-	/// Broadcasts the provided block to all our peers. A peer implementation
-	/// may drop the broadcast request if it knows the remote peer already has
-	/// the block.
+	/// Broadcasts the provided block to PEER_PREFERRED_COUNT of our peers.
+	/// We may be connected to PEER_MAX_COUNT peers so we only
+	/// want to broadcast to a random subset of peers.
+	/// A peer implementation may drop the broadcast request
+	/// if it knows the remote peer already has the block.
 	pub fn broadcast_block(&self, b: &core::Block) {
 		let peers = self.connected_peers();
 		let mut count = 0;
-		for p in peers {
+		for p in peers.iter().take(8) {
 			let p = p.read().unwrap();
 			if p.is_connected() {
 				if let Err(e) = p.send_block(b) {
@@ -181,12 +186,14 @@ impl Peers {
 		debug!(LOGGER, "Broadcasted block {} to {} peers.", b.header.height, count);
 	}
 
-	/// Broadcasts the provided transaction to all our peers. A peer
-	/// implementation may drop the broadcast request if it knows the
-	/// remote peer already has the transaction.
+	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our peers.
+	/// We may be connected to PEER_MAX_COUNT peers so we only
+	/// want to broadcast to a random subset of peers.
+	/// A peer implementation may drop the broadcast request
+	/// if it knows the remote peer already has the transaction.
 	pub fn broadcast_transaction(&self, tx: &core::Transaction) {
 		let peers = self.connected_peers();
-		for p in peers {
+		for p in peers.iter().take(8) {
 			let p = p.read().unwrap();
 			if p.is_connected() {
 				if let Err(e) = p.send_transaction(tx) {
