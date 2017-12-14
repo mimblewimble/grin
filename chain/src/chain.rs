@@ -211,6 +211,11 @@ impl Chain {
 		}
 	}
 
+	pub fn is_orphan(&self, hash: &Hash) -> bool {
+		let orphans = self.orphans.lock().unwrap();
+		orphans.iter().any(|&(_, ref x)| x.hash() == hash.clone())
+	}
+
 	/// Pop orphans out of the queue and check if we can now accept them.
 	fn check_orphans(&self) {
 		// first check how many we have to retry, unfort. we can't extend the lock
