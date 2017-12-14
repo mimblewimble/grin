@@ -17,6 +17,7 @@ use std::net::SocketAddr;
 
 use futures::Future;
 use futures::sync::mpsc::UnboundedSender;
+use futures_cpupool::CpuPool;
 use tokio_core::net::TcpStream;
 
 use core::core;
@@ -49,8 +50,9 @@ impl Protocol for ProtocolV1 {
 		conn: TcpStream,
 		adapter: Arc<NetAdapter>,
 		addr: SocketAddr,
+		pool: CpuPool,
 	) -> Box<Future<Item = (), Error = Error>> {
-		let (conn, listener) = TimeoutConnection::listen(conn, move |sender, header, data| {
+		let (conn, listener) = TimeoutConnection::listen(conn, pool, move |sender, header, data| {
 			let adapt = adapter.as_ref();
 			handle_payload(adapt, sender, header, data, addr)
 		});
@@ -67,11 +69,11 @@ impl Protocol for ProtocolV1 {
 
 	/// Sends a ping message to the remote peer. Will panic if handle has never
 	/// been called on this protocol.
-	fn send_ping(&self, total_difficulty: Difficulty) -> Result<(), Error> {
+	fn send_ping(&self, total_difficulty: Difficulty, height: u64) -> Result<(), Error> {
 		self.send_request(
 			Type::Ping,
 			Type::Pong,
-			&Ping { total_difficulty },
+			&Ping { total_difficulty, height },
 			None,
 		)
 	}
@@ -128,7 +130,11 @@ impl ProtocolV1 {
 		body: &W,
 		expect_resp: Option<Hash>,
 	) -> Result<(), Error> {
-		self.conn.borrow().send_request(t, rt, body, expect_resp)
+		if self.conn.is_initialized() {
+			self.conn.borrow().send_request(t, rt, body, expect_resp)
+		} else {
+			Ok(())
+		}
 	}
 }
 
@@ -142,8 +148,8 @@ fn handle_payload(
 	match header.msg_type {
 		Type::Ping => {
 			let ping = ser::deserialize::<Ping>(&mut &buf[..])?;
-			adapter.peer_difficulty(addr, ping.total_difficulty);
-			let pong = Pong { total_difficulty: adapter.total_difficulty() };
+			adapter.peer_difficulty(addr, ping.total_difficulty, ping.height);
+			let pong = Pong { total_difficulty: adapter.total_difficulty(), height: adapter.total_height() };
 			let mut body_data = vec![];
 			try!(ser::serialize(&mut body_data, &pong));
 			let mut data = vec![];
@@ -152,12 +158,16 @@ fn handle_payload(
 				&MsgHeader::new(Type::Pong, body_data.len() as u64),
 			));
 			data.append(&mut body_data);
-			sender.unbounded_send(data).unwrap();
+
+			if let Err(e) = sender.unbounded_send(data) {
+				debug!(LOGGER, "handle_payload: Ping, error sending: {:?}", e);
+			}
+
 			Ok(None)
 		}
 		Type::Pong => {
 			let pong = ser::deserialize::<Pong>(&mut &buf[..])?;
-			adapter.peer_difficulty(addr, pong.total_difficulty);
+			adapter.peer_difficulty(addr, pong.total_difficulty, pong.height);
 			Ok(None)
 		},
 		Type::Transaction => {
@@ -167,6 +177,8 @@ fn handle_payload(
 		}
 		Type::GetBlock => {
 			let h = ser::deserialize::<Hash>(&mut &buf[..])?;
+			debug!(LOGGER, "handle_payload: GetBlock {}", h);
+
 			let bo = adapter.get_block(h);
 			if let Some(b) = bo {
 				// serialize and send the block over
@@ -178,13 +190,18 @@ fn handle_payload(
 					&MsgHeader::new(Type::Block, body_data.len() as u64),
 				));
 				data.append(&mut body_data);
-				sender.unbounded_send(data).unwrap();
+				if let Err(e) = sender.unbounded_send(data) {
+					debug!(LOGGER, "handle_payload: GetBlock, error sending: {:?}", e);
+				}
 			}
 			Ok(None)
 		}
 		Type::Block => {
 			let b = ser::deserialize::<core::Block>(&mut &buf[..])?;
 			let bh = b.hash();
+
+			debug!(LOGGER, "handle_payload: Block {}", bh);
+
 			adapter.block_received(b, addr);
 			Ok(Some(bh))
 		}
@@ -205,7 +222,9 @@ fn handle_payload(
 				&MsgHeader::new(Type::Headers, body_data.len() as u64),
 			));
 			data.append(&mut body_data);
-			sender.unbounded_send(data).unwrap();
+			if let Err(e) = sender.unbounded_send(data) {
+				debug!(LOGGER, "handle_payload: GetHeaders, error sending: {:?}", e);
+			}
 
 			Ok(None)
 		}
@@ -232,7 +251,9 @@ fn handle_payload(
 				&MsgHeader::new(Type::PeerAddrs, body_data.len() as u64),
 			));
 			data.append(&mut body_data);
-			sender.unbounded_send(data).unwrap();
+			if let Err(e) = sender.unbounded_send(data) {
+				debug!(LOGGER, "handle_payload: GetPeerAddrs, error sending: {:?}", e);
+			}
 
 			Ok(None)
 		}

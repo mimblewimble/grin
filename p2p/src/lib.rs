@@ -26,6 +26,8 @@ extern crate bytes;
 #[macro_use]
 extern crate enum_primitive;
 extern crate futures;
+extern crate futures_cpupool;
+
 #[macro_use]
 extern crate grin_core as core;
 extern crate grin_store;
@@ -47,13 +49,15 @@ pub mod handshake;
 mod rate_limit;
 mod msg;
 mod peer;
+mod peers;
 mod protocol;
 mod server;
 mod store;
 mod types;
 
 pub use server::{DummyAdapter, Server};
+pub use peers::Peers;
 pub use peer::Peer;
-pub use types::{Capabilities, Error, NetAdapter, P2PConfig, PeerInfo, FULL_HIST, FULL_NODE,
-				MAX_BLOCK_HEADERS, MAX_PEER_ADDRS, UNKNOWN};
+pub use types::{Capabilities, Error, ChainAdapter, P2PConfig, PeerInfo, FULL_HIST, FULL_NODE,
+                MAX_BLOCK_HEADERS, MAX_PEER_ADDRS, UNKNOWN};
 pub use store::{PeerData, State};

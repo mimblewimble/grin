@@ -18,10 +18,12 @@
 
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time;
 
 use futures::{Future, Stream};
+use cpupool::CpuPool;
 use tokio_core::reactor;
 use tokio_timer::Timer;
 
@@ -51,7 +53,7 @@ pub struct Server {
 	chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-	net_adapter: Arc<NetToChainAdapter>,
+	currently_syncing: Arc<AtomicBool>,
 }
 
 impl Server {
@@ -108,10 +110,17 @@ impl Server {
 
 		pool_adapter.set_chain(shared_chain.clone());
 
+		let currently_syncing = Arc::new(AtomicBool::new(true));
+
 		let net_adapter = Arc::new(NetToChainAdapter::new(
+			currently_syncing.clone(),
 			shared_chain.clone(),
 			tx_pool.clone(),
 		));
+
+		// thread pool (single thread) for offloading handler.handle()
+		// work from the main run loop in p2p_server
+		let cpu_pool = CpuPool::new(1);
 
 		let p2p_server = Arc::new(p2p::Server::new(
 			config.db_root.clone(),
@@ -119,12 +128,13 @@ impl Server {
 			config.p2p_config.unwrap(),
 			net_adapter.clone(),
 			genesis.hash(),
+			cpu_pool.clone(),
 		)?);
-		chain_adapter.init(p2p_server.clone());
-		pool_net_adapter.init(p2p_server.clone());
-		net_adapter.init(p2p_server.clone());
+		chain_adapter.init(p2p_server.peers.clone());
+		pool_net_adapter.init(p2p_server.peers.clone());
 
-		let seed = seed::Seeder::new(config.capabilities, p2p_server.clone());
+		let seed = seed::Seeder::new(
+			config.capabilities, p2p_server.clone(), p2p_server.peers.clone());
 		match config.seeding_type.clone() {
 			Seeding::None => {
 				warn!(
@@ -152,8 +162,8 @@ impl Server {
 		}
 
 		sync::run_sync(
-			net_adapter.clone(),
-			p2p_server.clone(),
+			currently_syncing.clone(),
+			p2p_server.peers.clone(),
 			shared_chain.clone(),
 			);
 
@@ -165,7 +175,7 @@ impl Server {
 			config.api_http_addr.clone(),
 			shared_chain.clone(),
 			tx_pool.clone(),
-			p2p_server.clone(),
+			p2p_server.peers.clone(),
 		);
 
 		warn!(LOGGER, "Grin server started.");
@@ -175,7 +185,7 @@ impl Server {
 			p2p: p2p_server,
 			chain: shared_chain,
 			tx_pool: tx_pool,
-			net_adapter: net_adapter,
+			currently_syncing: currently_syncing,
 		})
 	}
 
@@ -193,7 +203,7 @@ impl Server {
 
 	/// Number of peers
 	pub fn peer_count(&self) -> u32 {
-		self.p2p.peer_count()
+		self.p2p.peers.peer_count()
 	}
 
 	/// Start mining for blocks on a separate thread. Uses toy miner by default,
@@ -201,19 +211,21 @@ impl Server {
 	pub fn start_miner(&self, config: pow::types::MinerConfig) {
 		let cuckoo_size = global::sizeshift();
 		let proof_size = global::proofsize();
-		let net_adapter = self.net_adapter.clone();
+		let currently_syncing = self.currently_syncing.clone();
 
 		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
 		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.unwrap().port));
-		thread::spawn(move || {
-			// TODO push this down in the run loop so miner gets paused anytime we
-			// decide to sync again
-			let secs_5 = time::Duration::from_secs(5);
-			while net_adapter.is_syncing() {
-				thread::sleep(secs_5);
-			}
-			miner.run_loop(config.clone(), cuckoo_size as u32, proof_size);
-		});
+		let _ = thread::Builder::new()
+			.name("miner".to_string())
+			.spawn(move || {
+				// TODO push this down in the run loop so miner gets paused anytime we
+				// decide to sync again
+				let secs_5 = time::Duration::from_secs(5);
+				while currently_syncing.load(Ordering::Relaxed) {
+					thread::sleep(secs_5);
+				}
+				miner.run_loop(config.clone(), cuckoo_size as u32, proof_size);
+			});
 	}
 
 	/// The chain head

@@ -2,9 +2,9 @@
 
 This document is intended to give the reader a high level conceptual overview of what range proofs are and how they're constructed. It's assumed that the reader has read and is familiar with more basic MimbleWimble concepts, in particular Pedersen commitments and MimbleWimble outputs as outlined in the [Introduction to MimbleWimble](intro.md). 
 
-While understanding range proofs is not 100% necessary in order to understand Mimblewimble, a few points about them should be noted, even if just from a 'black box' perspective:
+While understanding range proofs is not 100% necessary in order to understand MimbleWimble, a few points about them should be noted, even if just from a 'black box' perspective:
 
-* Range Proofs are used to prove, with zero-knowledge (i.e. without revealing the amount or the blinding factor), that the value committed to in a given commitment falls within a certain range. The inclusion of a range proof in a Mimblewimble commitment demonstrates that the amount committed to is positive, and therefore doesn't create any new money.
+* Range Proofs are used to prove, with zero-knowledge (i.e. without revealing the amount or the blinding factor), that the value committed to in a given commitment falls within a certain range. The inclusion of a range proof in a MimbleWimble commitment demonstrates that the amount committed to is positive, and therefore doesn't create any new money.
 
 * The blinding factor used to create an output on the block chain must be known in order to create a valid range proof. The existence of a valid range proof therefore also proves that the signer has knowledge of the blinding factor and therefore all of the private keys used in the creation of a new output. 
 

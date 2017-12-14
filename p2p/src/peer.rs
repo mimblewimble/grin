@@ -16,6 +16,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
 use futures::Future;
+use futures_cpupool::CpuPool;
 use tokio_core::net::TcpStream;
 
 use core::core;
@@ -89,12 +90,12 @@ impl Peer {
 
 	/// Main peer loop listening for messages and forwarding to the rest of the
 	/// system.
-	pub fn run(&self, conn: TcpStream) -> Box<Future<Item = (), Error = Error>> {
+	pub fn run(&self, conn: TcpStream, pool: CpuPool) -> Box<Future<Item = (), Error = Error>> {
 		let addr = self.info.addr;
 		let state = self.state.clone();
 		let adapter = Arc::new(self.tracking_adapter.clone());
 
-		Box::new(self.proto.handle(conn, adapter, addr).then(move |res| {
+		Box::new(self.proto.handle(conn, adapter, addr, pool).then(move |res| {
 			// handle disconnection, standard disconnections aren't considered an error
 			let mut state = state.write().unwrap();
 			match res {
@@ -140,14 +141,15 @@ impl Peer {
 		self.proto.transmitted_bytes()
 	}
 
-	pub fn send_ping(&self, total_difficulty: Difficulty) -> Result<(), Error> {
-		self.proto.send_ping(total_difficulty)
+	pub fn send_ping(&self, total_difficulty: Difficulty, height: u64) -> Result<(), Error> {
+		self.proto.send_ping(total_difficulty, height)
 	}
 
 	/// Sends the provided block to the remote peer. The request may be dropped
 	/// if the remote peer is known to already have the block.
 	pub fn send_block(&self, b: &core::Block) -> Result<(), Error> {
 		if !self.tracking_adapter.has(b.hash()) {
+			debug!(LOGGER, "Send block {} to {}", b.hash(), self.info.addr);
 			self.proto.send_block(b)
 		} else {
 			Ok(())
@@ -220,9 +222,13 @@ impl TrackingAdapter {
 	}
 }
 
-impl NetAdapter for TrackingAdapter {
+impl ChainAdapter for TrackingAdapter {
 	fn total_difficulty(&self) -> Difficulty {
 		self.adapter.total_difficulty()
+	}
+
+	fn total_height(&self) -> u64 {
+		self.adapter.total_height()
 	}
 
 	fn transaction_received(&self, tx: core::Transaction) {
@@ -230,7 +236,7 @@ impl NetAdapter for TrackingAdapter {
 		self.adapter.transaction_received(tx)
 	}
 
-	fn block_received(&self, b: core::Block, addr: SocketAddr) {
+	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {
 		self.push(b.hash());
 		self.adapter.block_received(b, addr)
 	}
@@ -246,7 +252,9 @@ impl NetAdapter for TrackingAdapter {
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
 	}
+}
 
+impl NetAdapter for TrackingAdapter {
 	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr> {
 		self.adapter.find_peer_addrs(capab)
 	}
@@ -255,11 +263,7 @@ impl NetAdapter for TrackingAdapter {
 		self.adapter.peer_addrs_received(addrs)
 	}
 
-	fn peer_connected(&self, pi: &PeerInfo) {
-		self.adapter.peer_connected(pi)
-	}
-
-	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty) {
-		self.adapter.peer_difficulty(addr, diff)
+	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty, height:u64) {
+		self.adapter.peer_difficulty(addr, diff, height)
 	}
 }

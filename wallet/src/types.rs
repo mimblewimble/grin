@@ -152,8 +152,10 @@ impl From<hyper::error::UriError> for Error {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletConfig {
-	// Whether to run a wallet
-	pub enable_wallet: bool,
+	// Right now the decision to run or not a wallet is based on the command.
+	// This may change in the near-future.
+	// pub enable_wallet: bool,
+
 	// The api interface/ip_address that this api server (i.e. this wallet) will run
 	// by default this is 127.0.0.1 (and will not accept connections from external clients)
 	pub api_listen_interface: String,
@@ -169,7 +171,7 @@ pub struct WalletConfig {
 impl Default for WalletConfig {
 	fn default() -> WalletConfig {
 		WalletConfig {
-			enable_wallet: false,
+			// enable_wallet: false,
 			api_listen_interface: "127.0.0.1".to_string(),
 			api_listen_port: "13415".to_string(),
 			check_node_api_http_addr: "http://127.0.0.1:13413".to_string(),
@@ -352,7 +354,10 @@ impl WalletSeed {
 				LOGGER,
 				"Run: \"grin wallet init\" to initialize a new wallet.",
 			);
-			panic!("wallet seed file does not yet exist (grin wallet init)");
+			panic!(format!(
+				"wallet seed file {} could not be opened (grin wallet init)",
+				seed_file_path
+			));
 		}
 	}
 }
@@ -520,7 +525,6 @@ impl WalletData {
 		max_outputs: usize,
 		default_strategy: bool,
 	) -> Vec<OutputData> {
-
 		// first find all eligible outputs based on number of confirmations
 		let mut eligible = self.outputs
 			.values()

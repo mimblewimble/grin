@@ -163,17 +163,20 @@ struct RemoveLog {
 	removed: Vec<(u64, u32)>,
 	// Holds positions temporarily until flush is called.
 	removed_tmp: Vec<(u64, u32)>,
+	// Holds truncated removed temporarily until discarded or committed
+	removed_bak: Vec<(u64, u32)>,
 }
 
 impl RemoveLog {
 	/// Open the remove log file. The content of the file will be read in memory
 	/// for fast checking.
 	fn open(path: String) -> io::Result<RemoveLog> {
-		let removed = read_ordered_vec(path.clone())?;
+		let removed = read_ordered_vec(path.clone(), 12)?;
 		Ok(RemoveLog {
 			path: path,
 			removed: removed,
 			removed_tmp: vec![],
+			removed_bak: vec![],
 		})
 	}
 
@@ -181,10 +184,14 @@ impl RemoveLog {
 	fn truncate(&mut self, last_offs: u32) -> io::Result<()> {
 		// simplifying assumption: we always remove older than what's in tmp
 		self.removed_tmp = vec![];
+		// DEBUG
+		let _ = self.flush_truncate(last_offs);
 
 		if last_offs == 0 {
 			self.removed = vec![];
 		} else {
+			// backing it up before truncating
+			self.removed_bak = self.removed.clone();
 			self.removed = self.removed
 				.iter()
 				.filter(|&&(_, idx)| idx < last_offs)
@@ -192,6 +199,15 @@ impl RemoveLog {
 				.collect();
 		}
 		Ok(())
+	}
+
+	// DEBUG: saves the remove log to the side before each truncate
+	fn flush_truncate(&mut self, last_offs: u32) -> io::Result<()> {
+		let mut file = File::create(format!("{}.{}", self.path.clone(), last_offs))?;
+		for elmt in &self.removed {
+			file.write_all(&ser::ser_vec(&elmt).unwrap()[..])?;
+		}
+		file.sync_data()
 	}
 
 	/// Append a set of new positions to the remove log. Both adds those
@@ -223,11 +239,16 @@ impl RemoveLog {
 			file.write_all(&ser::ser_vec(&elmt).unwrap()[..])?;
 		}
 		self.removed_tmp = vec![];
+		self.removed_bak = vec![];
 		file.sync_data()
 	}
 
 	/// Discard pending changes
 	fn discard(&mut self) {
+		if self.removed_bak.len() > 0 {
+			self.removed = self.removed_bak.clone();
+			self.removed_bak = vec![];
+		}
 		self.removed_tmp = vec![];
 	}
 
@@ -366,7 +387,7 @@ where
 		let sz = hs_file.size()?;
 		let record_len = 32 + T::sum_len();
 		let rm_log = RemoveLog::open(format!("{}/{}", data_dir, PMMR_RM_LOG_FILE))?;
-		let prune_list = read_ordered_vec(format!("{}/{}", data_dir, PMMR_PRUNED_FILE))?;
+		let prune_list = read_ordered_vec(format!("{}/{}", data_dir, PMMR_PRUNED_FILE), 8)?;
 
 		Ok(PMMRBackend {
 			data_dir: data_dir,
@@ -394,18 +415,25 @@ where
 	/// data has been successfully written to disk.
 	pub fn sync(&mut self) -> io::Result<()> {
 		// truncating the storage file if a rewind occurred
+		let record_len = 32 + T::sum_len() as u64;
 		if let Some((pos, _, _)) = self.rewind {
-			let record_len = 32 + T::sum_len() as u64;
 			self.hashsum_file.truncate(pos * record_len)?;
 		}
+
 		for elem in &self.buffer.elems {
-			if let Some(ref hs) = *elem {
-				if let Err(e) = self.hashsum_file.append(&ser::ser_vec(&hs).unwrap()[..]) {
-					return Err(io::Error::new(
-						io::ErrorKind::Interrupted,
-						format!("Could not write to log storage, disk full? {:?}", e),
-					));
-				}
+			let res = if let Some(ref hs) = *elem {
+				self.hashsum_file.append(&ser::ser_vec(&hs).unwrap()[..])
+			} else {
+				// the element has alredy been pruned in the buffer, we just insert
+				// zeros until compaction to avoid wrong hashum store offsets 
+				self.hashsum_file.append(&vec![0; record_len as usize])
+			};
+
+			if let Err(e) = res {
+				return Err(io::Error::new(
+					io::ErrorKind::Interrupted,
+					format!("Could not write to log storage, disk full? {:?}", e),
+				));
 			}
 		}
 
@@ -422,7 +450,7 @@ where
 		if let Some((_, _, bi)) = self.rewind {
 			self.buffer_index = bi;
 		}
-		self.buffer = VecBackend::new();
+		self.buffer.clear();
 		self.remove_log.discard();
 		self.rewind = None;
 	}
@@ -500,14 +528,14 @@ where
 }
 
 // Read an ordered vector of scalars from a file.
-fn read_ordered_vec<T>(path: String) -> io::Result<Vec<T>>
+fn read_ordered_vec<T>(path: String, elmt_len: usize) -> io::Result<Vec<T>>
 where
 	T: ser::Readable + cmp::Ord,
 {
 	let file_path = Path::new(&path);
 	let mut ovec = Vec::with_capacity(1000);
 	if file_path.exists() {
-		let mut file = BufReader::with_capacity(8 * 1000, File::open(path.clone())?);
+		let mut file = BufReader::with_capacity(elmt_len * 1000, File::open(path.clone())?);
 		loop {
 			// need a block to end mutable borrow before consume
 			let buf_len = {

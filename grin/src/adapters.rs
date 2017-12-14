@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2017 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ use core::core::{self, Output};
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use p2p::{self, NetAdapter, PeerData, State};
+use p2p;
 use pool;
 use util::secp::pedersen::Commitment;
 use util::OneTime;
@@ -32,15 +32,18 @@ use util::LOGGER;
 /// blocks and transactions are received and forwards to the chain and pool
 /// implementations.
 pub struct NetToChainAdapter {
+	currently_syncing: Arc<AtomicBool>,
 	chain: Arc<chain::Chain>,
-	p2p_server: OneTime<Arc<p2p::Server>>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-	syncing: AtomicBool,
 }
 
-impl NetAdapter for NetToChainAdapter {
+impl p2p::ChainAdapter for NetToChainAdapter {
 	fn total_difficulty(&self) -> Difficulty {
 		self.chain.total_difficulty()
+	}
+
+	fn total_height(&self) -> u64 {
+		self.chain.head().unwrap().height
 	}
 
 	fn transaction_received(&self, tx: core::Transaction) {
@@ -61,7 +64,7 @@ impl NetAdapter for NetToChainAdapter {
 		}
 	}
 
-	fn block_received(&self, b: core::Block, addr: SocketAddr) {
+	fn block_received(&self, b: core::Block, _: SocketAddr) -> bool {
 		let bhash = b.hash();
 		debug!(
 			LOGGER,
@@ -75,19 +78,16 @@ impl NetAdapter for NetToChainAdapter {
 
 		if let &Err(ref e) = &res {
 			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
-
-			// if the peer sent us a block that's intrinsically bad, they're either
-			// mistaken or manevolent, both of which require a ban
 			if e.is_bad_block() {
-				self.p2p_server.borrow().ban_peer(&addr);
-			//
-			// 	// header chain should be consistent with the sync head here
-			// 	// we just banned the peer that sent a bad block so
-			// 	// sync head should resolve itself if/when we find an alternative peer
-			// 	// with more work than ourselves
-			// 	// we should not need to reset the header head here
+			 	// header chain should be consistent with the sync head here
+			 	// we just banned the peer that sent a bad block so
+			 	// sync head should resolve itself if/when we find an alternative peer
+			 	// with more work than ourselves
+			 	// we should not need to reset the header head here
+				return false;
 			}
 		}
+		true
 	}
 
 	fn headers_received(&self, bhs: Vec<core::BlockHeader>, addr: SocketAddr) {
@@ -145,23 +145,9 @@ impl NetAdapter for NetToChainAdapter {
 			locator,
 		);
 
-		if locator.len() == 0 {
-			return vec![];
-		}
-
-		// recursively go back through the locator vector
-		// and stop when we find a header that we recognize
-		// this will be a header shared in common between us and the peer
-		let known = self.chain.get_block_header(&locator[0]);
-		let header = match known {
-			Ok(header) => header,
-			Err(chain::Error::StoreErr(store::Error::NotFoundErr, _)) => {
-				return self.locate_headers(locator[1..].to_vec());
-			}
-			Err(e) => {
-				error!(LOGGER, "Could not build header locator: {:?}", e);
-				return vec![];
-			}
+		let header = match self.find_common_header(locator) {
+			Some(header) => header,
+			None => return vec![],
 		};
 
 		debug!(
@@ -203,120 +189,58 @@ impl NetAdapter for NetToChainAdapter {
 		}
 	}
 
-	/// Find good peers we know with the provided capability and return their
-	/// addresses.
-	fn find_peer_addrs(&self, capab: p2p::Capabilities) -> Vec<SocketAddr> {
-		let peers = self.p2p_server.borrow()
-			.find_peers(State::Healthy, capab, p2p::MAX_PEER_ADDRS as usize);
-		debug!(LOGGER, "Got {} peer addrs to send.", peers.len());
-		map_vec!(peers, |p| p.addr)
-	}
-
-	/// A list of peers has been received from one of our peers.
-	fn peer_addrs_received(&self, peer_addrs: Vec<SocketAddr>) {
-		debug!(LOGGER, "Received {} peer addrs, saving.", peer_addrs.len());
-		for pa in peer_addrs {
-			if let Ok(e) = self.p2p_server.borrow().exists_peer(pa) {
-				if e {
-					continue;
-				}
-			}
-			let peer = PeerData {
-				addr: pa,
-				capabilities: p2p::UNKNOWN,
-				user_agent: "".to_string(),
-				flags: State::Healthy,
-			};
-			if let Err(e) = self.p2p_server.borrow().save_peer(&peer) {
-				error!(LOGGER, "Could not save received peer address: {:?}", e);
-			}
-		}
-	}
-
-	/// Network successfully connected to a peer.
-	fn peer_connected(&self, pi: &p2p::PeerInfo) {
-		debug!(LOGGER, "Saving newly connected peer {}.", pi.addr);
-		let peer = PeerData {
-			addr: pi.addr,
-			capabilities: pi.capabilities,
-			user_agent: pi.user_agent.clone(),
-			flags: State::Healthy,
-		};
-		if let Err(e) = self.p2p_server.borrow().save_peer(&peer) {
-			error!(LOGGER, "Could not save connected peer: {:?}", e);
-		}
-	}
-
-	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty) {
-		debug!(
-			LOGGER,
-			"peer total_diff (ping/pong): {}, {} vs us {}",
-			addr,
-			diff,
-			self.total_difficulty(),
-		);
-
-		if diff.into_num() > 0 {
-			if let Some(peer) = self.p2p_server.borrow().get_peer(&addr) {
-				let mut peer = peer.write().unwrap();
-				peer.info.total_difficulty = diff;
-			}
-		}
-	}
 }
 
 impl NetToChainAdapter {
 	pub fn new(
+		currently_syncing: Arc<AtomicBool>,
 		chain_ref: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
+			currently_syncing: currently_syncing,
 			chain: chain_ref,
-			p2p_server: OneTime::new(),
 			tx_pool: tx_pool,
-			syncing: AtomicBool::new(true),
 		}
 	}
 
-	/// Setup the p2p server on the adapter
-	pub fn init(&self, p2p: Arc<p2p::Server>) {
-		self.p2p_server.init(p2p);
-	}
+	// recursively go back through the locator vector and stop when we find
+	// a header that we recognize this will be a header shared in common
+	// between us and the peer
+	fn find_common_header(&self, locator: Vec<Hash>) -> Option<BlockHeader> {
+		if locator.len() == 0 {
+			return None;
+		}
 
-	/// Whether we're currently syncing the chain or we're fully caught up and
-	/// just receiving blocks through gossip.
-	pub fn is_syncing(&self) -> bool {
-		let local_diff = self.total_difficulty();
-		let peers = self.p2p_server.borrow().connected_peers();
+		let known = self.chain.get_block_header(&locator[0]);
 
-		// if we're already syncing, we're caught up if no peer has a higher
-		// difficulty than us
-		if self.syncing.load(Ordering::Relaxed) {
-			let higher_diff = peers.iter().any(|p| {
-				let p = p.read().unwrap();
-				p.info.total_difficulty > local_diff
-			});
-			if !higher_diff {
-				info!(LOGGER, "sync: caught up on the most worked chain, disabling sync");
-				self.syncing.store(false, Ordering::Relaxed);
-			}
-		} else {
-			// if we're not syncing, we need to if our difficulty is much too low
-			let higher_diff_padded = peers.iter().any(|p| {
-				let p = p.read().unwrap();
-				p.info.total_difficulty > local_diff.clone() + Difficulty::from_num(1000)
-			});
-			if higher_diff_padded {
-				info!(LOGGER, "sync: late on the most worked chain, enabling sync");
-				self.syncing.store(true, Ordering::Relaxed);
+		match known {
+			Ok(header) => {
+				// even if we know the block, it may not be on our winning chain
+				let known_winning = self.chain.get_header_by_height(header.height);
+				if let Ok(known_winning) = known_winning {
+					if known_winning.hash() != header.hash() {
+						self.find_common_header(locator[1..].to_vec())
+					} else {
+						Some(header)
+					}
+				} else {
+					self.find_common_header(locator[1..].to_vec())
+				}
+			},
+			Err(chain::Error::StoreErr(store::Error::NotFoundErr, _)) => {
+				self.find_common_header(locator[1..].to_vec())
+			},
+			Err(e) => {
+				error!(LOGGER, "Could not build header locator: {:?}", e);
+				None
 			}
 		}
-		self.syncing.load(Ordering::Relaxed)
 	}
 
 	/// Prepare options for the chain pipeline
 	fn chain_opts(&self) -> chain::Options {
-		let opts = if self.is_syncing() {
+		let opts = if self.currently_syncing.load(Ordering::Relaxed) {
 			chain::SYNC
 		} else {
 			chain::NONE
@@ -330,7 +254,7 @@ impl NetToChainAdapter {
 /// the network to broadcast the block
 pub struct ChainToPoolAndNetAdapter {
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-	p2p: OneTime<Arc<p2p::Server>>,
+	peers: OneTime<p2p::Peers>,
 }
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
@@ -345,7 +269,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 				);
 			}
 		}
-		self.p2p.borrow().broadcast_block(b);
+		self.peers.borrow().broadcast_block(b);
 	}
 }
 
@@ -355,23 +279,23 @@ impl ChainToPoolAndNetAdapter {
 	) -> ChainToPoolAndNetAdapter {
 		ChainToPoolAndNetAdapter {
 			tx_pool: tx_pool,
-			p2p: OneTime::new(),
+			peers: OneTime::new(),
 		}
 	}
-	pub fn init(&self, p2p: Arc<p2p::Server>) {
-		self.p2p.init(p2p);
+	pub fn init(&self, peers: p2p::Peers) {
+		self.peers.init(peers);
 	}
 }
 
 /// Adapter between the transaction pool and the network, to relay
 /// transactions that have been accepted.
 pub struct PoolToNetAdapter {
-	p2p: OneTime<Arc<p2p::Server>>,
+	peers: OneTime<p2p::Peers>,
 }
 
 impl pool::PoolAdapter for PoolToNetAdapter {
 	fn tx_accepted(&self, tx: &core::Transaction) {
-		self.p2p.borrow().broadcast_transaction(tx);
+		self.peers.borrow().broadcast_transaction(tx);
 	}
 }
 
@@ -379,13 +303,13 @@ impl PoolToNetAdapter {
 	/// Create a new pool to net adapter
 	pub fn new() -> PoolToNetAdapter {
 		PoolToNetAdapter {
-			p2p: OneTime::new(),
+			peers: OneTime::new(),
 		}
 	}
 
 	/// Setup the p2p server on the adapter
-	pub fn init(&self, p2p: Arc<p2p::Server>) {
-		self.p2p.init(p2p);
+	pub fn init(&self, peers: p2p::Peers) {
+		self.peers.init(peers);
 	}
 }
 

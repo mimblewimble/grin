@@ -16,14 +16,13 @@
 //! or receiving data from the TCP socket, as well as dealing with timeouts.
 
 use std::iter;
-use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use futures;
-use futures::{Future, Stream};
-use futures::stream;
+use futures::{Future, Stream, stream};
 use futures::sync::mpsc::{Sender, UnboundedReceiver, UnboundedSender};
+use futures_cpupool::CpuPool;
 use tokio_core::net::TcpStream;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::io::{read_exact, write_all};
@@ -94,6 +93,7 @@ impl Connection {
 	/// itself.
 	pub fn listen<F>(
 		conn: TcpStream,
+		pool: CpuPool,
 		handler: F,
 	) -> (Connection, Box<Future<Item = (), Error = Error>>)
 	where
@@ -124,10 +124,10 @@ impl Connection {
 		};
 
 		// setup the reading future, getting messages from the peer and processing them
-		let read_msg = me.read_msg(tx, reader, handler).map(|_| ());
+		let read_msg = me.read_msg(tx, reader, handler, pool).map(|_| ());
 
-		// setting the writing future, getting messages from our system and sending
-  // them out
+		// setting the writing future
+		// getting messages from our system and sending them out
 		let write_msg = me.write_msg(rx, writer).map(|_| ());
 
 		// select between our different futures and return them
@@ -154,16 +154,20 @@ impl Connection {
 		let sent_bytes = self.sent_bytes.clone();
 		let send_data = rx
 			.map_err(|_| Error::ConnectionClose)
-      .map(move |data| {
-        // add the count of bytes sent
+			.map(move |data| {
+				trace!(LOGGER, "write_msg: start");
+				// add the count of bytes sent
 				let mut sent_bytes = sent_bytes.lock().unwrap();
 				*sent_bytes += data.len() as u64;
 				data
 			})
-      // write the data and make sure the future returns the right types
+			// write the data and make sure the future returns the right types
 			.fold(writer, |writer, data| {
-        write_all(writer, data).map_err(|e| Error::Connection(e)).map(|(writer, _)| writer)
-      });
+				write_all(writer, data).map_err(|e| Error::Connection(e)).map(|(writer, _)| {
+					trace!(LOGGER, "write_msg: done");
+					writer
+				})
+			});
 		Box::new(send_data)
 	}
 
@@ -174,28 +178,37 @@ impl Connection {
 		sender: UnboundedSender<Vec<u8>>,
 		reader: R,
 		handler: F,
+		pool: CpuPool,
 	) -> Box<Future<Item = R, Error = Error>>
 	where
 		F: Handler + 'static,
-		R: AsyncRead + 'static,
+		R: AsyncRead + Send + 'static,
 	{
 		// infinite iterator stream so we repeat the message reading logic until the
-  // peer is stopped
+		// peer is stopped
 		let iter = stream::iter_ok(iter::repeat(()).map(Ok::<(), Error>));
 
 		// setup the reading future, getting messages from the peer and processing them
 		let recv_bytes = self.received_bytes.clone();
 		let handler = Arc::new(handler);
 
-		let read_msg = iter.fold(reader, move |reader, _| {
+		let mut count = 0;
+
+		let read_msg = iter.buffered(1).fold(reader, move |reader, _| {
+			count += 1;
+			trace!(LOGGER, "read_msg: count (per buffered fold): {}", count);
+
 			let recv_bytes = recv_bytes.clone();
 			let handler = handler.clone();
 			let sender_inner = sender.clone();
+			let pool = pool.clone();
 
 			// first read the message header
 			read_exact(reader, vec![0u8; HEADER_LEN as usize])
 				.from_err()
 				.and_then(move |(reader, buf)| {
+					trace!(LOGGER, "read_msg: start");
+
 					let header = try!(ser::deserialize::<MsgHeader>(&mut &buf[..]));
 					Ok((reader, header))
 				})
@@ -210,14 +223,16 @@ impl Connection {
 					let mut recv_bytes = recv_bytes.lock().unwrap();
 					*recv_bytes += header.serialized_len() + header.msg_len;
 
-					// and handle the different message types
-					let msg_type = header.msg_type;
-					if let Err(e) = handler.handle(sender_inner.clone(), header, buf) {
-						debug!(LOGGER, "Invalid {:?} message: {}", msg_type, e);
-						return Err(Error::Serialization(e));
-					}
+					pool.spawn_fn(move || {
+						let msg_type = header.msg_type;
+						if let Err(e) = handler.handle(sender_inner.clone(), header, buf) {
+							debug!(LOGGER, "Invalid {:?} message: {}", msg_type, e);
+							return Err(Error::Serialization(e));
+						}
 
-					Ok(reader)
+						trace!(LOGGER, "read_msg: done (via cpu_pool)");
+						Ok(reader)
+					})
 				})
 		});
 		Box::new(read_msg)
@@ -252,35 +267,46 @@ impl Connection {
 /// a timeout.
 pub struct TimeoutConnection {
 	underlying: Connection,
+	expected_responses: Arc<Mutex<Vec<InFlightRequest>>>,
+}
 
-	expected_responses: Arc<Mutex<Vec<(Type, Option<Hash>, Instant)>>>,
+#[derive(Debug, Clone)]
+struct InFlightRequest {
+	msg_type: Type,
+	hash: Option<Hash>,
+	time: Instant,
 }
 
 impl TimeoutConnection {
 	/// Same as Connection
 	pub fn listen<F>(
 		conn: TcpStream,
+		pool: CpuPool,
 		handler: F,
 	) -> (TimeoutConnection, Box<Future<Item = (), Error = Error>>)
 	where
 		F: Handler + 'static,
 	{
-		let expects = Arc::new(Mutex::new(vec![]));
+		let expects: Arc<Mutex<Vec<InFlightRequest>>> = Arc::new(Mutex::new(vec![]));
 
 		// Decorates the handler to remove the "subscription" from the expected
 		// responses. We got our replies, so no timeout should occur.
 		let exp = expects.clone();
-		let (conn, fut) = Connection::listen(conn, move |sender, header: MsgHeader, data| {
+		let (conn, fut) = Connection::listen(conn, pool, move |sender, header: MsgHeader, data| {
 			let msg_type = header.msg_type;
 			let recv_h = try!(handler.handle(sender, header, data));
 
 			let mut expects = exp.lock().unwrap();
 			let filtered = expects
 				.iter()
-				.filter(|&&(typ, h, _): &&(Type, Option<Hash>, Instant)| {
-					msg_type != typ || h.is_some() && recv_h != h
+				.filter(|x| {
+					let res = x.msg_type != msg_type || x.hash.is_some() && x.hash != recv_h;
+					if res {
+						trace!(LOGGER, "timeout_conn: received: {:?}, {:?}", x.msg_type, x.hash);
+					}
+					res
 				})
-				.map(|&x| x)
+				.cloned()
 				.collect::<Vec<_>>();
 			*expects = filtered;
 
@@ -293,9 +319,11 @@ impl TimeoutConnection {
 			.interval(Duration::new(2, 0))
 			.fold((), move |_, _| {
 				let exp = exp.lock().unwrap();
-				for &(ty, h, t) in exp.deref() {
-					if Instant::now() - t > Duration::new(5, 0) {
-						trace!(LOGGER, "Too long: {:?} {:?}", ty, h);
+				trace!(LOGGER, "timeout_conn: currently registered: {:?}", exp.len());
+
+				for x in exp.iter() {
+					if Instant::now() - x.time > Duration::new(5, 0) {
+						trace!(LOGGER, "timeout_conn: timeout: {:?}, {:?}", x.msg_type, x.hash);
 						return Err(TimerError::TooLong);
 					}
 				}
@@ -315,6 +343,8 @@ impl TimeoutConnection {
 
 	/// Sends a request and registers a timer on the provided message type and
 	/// optionally the hash of the sent data.
+	/// Skips the request if we have already sent the same response and
+	/// we are still waiting for a response (not yet timed out).
 	pub fn send_request<W: ser::Writeable>(
 		&self,
 		t: Type,
@@ -322,10 +352,40 @@ impl TimeoutConnection {
 		body: &W,
 		expect_h: Option<(Hash)>,
 	) -> Result<(), Error> {
+		{
+			let expects = self.expected_responses.lock().unwrap();
+			let existing = expects.iter().find(|x| {
+				x.msg_type == rt && x.hash == expect_h
+			});
+			if let Some(x) = existing {
+				trace!(
+					LOGGER,
+					"timeout_conn: in_flight: {:?}, {:?} (skipping)",
+					x.msg_type,
+					x.hash,
+				);
+				return Ok(())
+			}
+		}
+
 		let _sent = try!(self.underlying.send_msg(t, body));
 
-		let mut expects = self.expected_responses.lock().unwrap();
-		expects.push((rt, expect_h, Instant::now()));
+		{
+			let mut expects = self.expected_responses.lock().unwrap();
+			let req = InFlightRequest {
+				msg_type: rt,
+				hash: expect_h,
+				time: Instant::now(),
+			};
+			trace!(
+				LOGGER,
+				"timeout_conn: registering: {:?}, {:?}",
+				req.msg_type,
+				req.hash,
+			);
+			expects.push(req);
+		}
+
 		Ok(())
 	}
 

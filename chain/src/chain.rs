@@ -33,7 +33,7 @@ use sumtree;
 use types::*;
 use util::LOGGER;
 
-const MAX_ORPHANS: usize = 20;
+const MAX_ORPHANS: usize = 50;
 
 /// Facade to the blockchain block processing pipeline and storage. Provides
 /// the current view of the UTXO set according to the chain state. Also
@@ -209,6 +209,11 @@ impl Chain {
 			pow_verifier: self.pow_verifier,
 			sumtrees: self.sumtrees.clone(),
 		}
+	}
+
+	pub fn is_orphan(&self, hash: &Hash) -> bool {
+		let orphans = self.orphans.lock().unwrap();
+		orphans.iter().any(|&(_, ref x)| x.hash() == hash.clone())
 	}
 
 	/// Pop orphans out of the queue and check if we can now accept them.

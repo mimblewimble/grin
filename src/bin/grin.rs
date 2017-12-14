@@ -40,7 +40,6 @@ use clap::{App, Arg, ArgMatches, SubCommand};
 use daemonize::Daemonize;
 
 use config::GlobalConfig;
-use wallet::WalletConfig;
 use core::global;
 use core::core::amount_to_hr_string;
 use util::{init_logger, LoggingConfig, LOGGER};
@@ -169,11 +168,6 @@ fn main() {
 			.help("Directory in which to store wallet files (defaults to current \
 			directory)")
 			.takes_value(true))
-		.arg(Arg::with_name("port")
-			.short("l")
-			.long("port")
-			.help("Port on which to run the wallet listener when in listen mode")
-			.takes_value(true))
 		.arg(Arg::with_name("external")
 			.short("e")
 			.long("external")
@@ -197,19 +191,23 @@ fn main() {
 				.long("key_derivations")
 				.default_value("1000")
 				.takes_value(true))
+		
 		.subcommand(SubCommand::with_name("listen")
-			.about("Run the wallet in listening mode. If an input file is \
-				provided, will process it, otherwise runs in server mode waiting \
-				for send requests.")
+			.about("Runs the wallet in listening mode waiting for transactions.")
+			.arg(Arg::with_name("port")
+				.short("l")
+				.long("port")
+				.help("Port on which to run the wallet listener")
+				.takes_value(true)))
+		
+		.subcommand(SubCommand::with_name("receive")
+			.about("Processes a JSON transaction file.")
 			.arg(Arg::with_name("input")
-				.help("Partial transaction to receive, expects as a JSON file.")
+				.help("Partial transaction to process, expects a JSON file.")
 				.short("i")
 				.long("input")
 				.takes_value(true)))
-
-		.subcommand(SubCommand::with_name("receive")
-			.about("Depreciated, use 'listen' instead"))
-
+		
 		.subcommand(SubCommand::with_name("send")
 			.about("Builds a transaction to send someone some coins. By default, \
 				the transaction will just be printed to stdout. If a destination is \
@@ -281,7 +279,7 @@ fn main() {
 
 		// client commands and options
 		("wallet", Some(wallet_args)) => {
-			wallet_command(wallet_args);
+			wallet_command(wallet_args, global_config);
 		}
 
 		// If nothing is specified, try to just use the config file instead
@@ -340,9 +338,6 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 	match server_args.subcommand() {
 		("run", _) => {
 			grin::Server::start(server_config).unwrap();
-			loop {
-				thread::sleep(Duration::from_secs(60));
-			}
 		}
 		("start", _) => {
 			let daemonize = Daemonize::new()
@@ -356,24 +351,24 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 					}
 				});
 			match daemonize.start() {
-				Ok(_) => info!(LOGGER, "Grin server succesfully started."),
+				Ok(_) => info!(LOGGER, "Grin server successfully started."),
 				Err(e) => error!(LOGGER, "Error starting: {}", e),
 			}
 		}
-		("stop", _) => println!("TODO, just 'kill $pid' for now."),
+		("stop", _) => println!("TODO. Just 'kill $pid' for now. Maybe /tmp/grin.pid is $pid"),
 		(cmd, _) => {
-      println!(":: {:?}", server_args);
-      panic!("Unknown server command '{}', use 'grin help server' for details", cmd);
-    }
+			println!(":: {:?}", server_args);
+			panic!(
+				"Unknown server command '{}', use 'grin help server' for details",
+				cmd
+			);
+		}
 	}
 }
 
-fn wallet_command(wallet_args: &ArgMatches) {
-	let mut wallet_config = WalletConfig::default();
-
-	if let Some(port) = wallet_args.value_of("port") {
-		wallet_config.api_listen_port = port.to_string();
-	}
+fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
+	// just get defaults from the global config
+	let mut wallet_config = global_config.members.unwrap().wallet;
 
 	if wallet_args.is_present("external") {
 		wallet_config.api_listen_interface = "0.0.0.0".to_string();
@@ -416,14 +411,22 @@ fn wallet_command(wallet_args: &ArgMatches) {
 		.expect("Failed to derive keychain from seed file and passphrase.");
 
 	match wallet_args.subcommand() {
-		("listen", Some(listen_args)) => if let Some(f) = listen_args.value_of("input") {
-			let mut file = File::open(f).expect("Unable to open transaction file.");
+		("listen", Some(listen_args)) => {
+			if let Some(port) = listen_args.value_of("port") {
+				wallet_config.api_listen_port = port.to_string();
+			}
+			wallet::server::start_rest_apis(wallet_config, keychain);
+		},
+		("receive", Some(receive_args)) => {
+			let input = receive_args
+				.value_of("input")
+				.expect("Input file required");
+			let mut file = File::open(input)
+				.expect("Unable to open transaction file.");
 			let mut contents = String::new();
 			file.read_to_string(&mut contents)
 				.expect("Unable to read transaction file.");
 			wallet::receive_json_tx_str(&wallet_config, &keychain, contents.as_str()).unwrap();
-		} else {
-			wallet::server::start_rest_apis(wallet_config, keychain);
 		},
 		("send", Some(send_args)) => {
 			let amount = send_args

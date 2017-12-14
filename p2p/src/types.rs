@@ -18,6 +18,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use futures::Future;
+use futures_cpupool::CpuPool;
 use tokio_core::net::TcpStream;
 use tokio_timer::TimerError;
 
@@ -131,11 +132,11 @@ pub trait Protocol {
 	/// be  known already, usually passed during construction. Will typically
 	/// block so needs to be called withing a coroutine. Should also be called
 	/// only once.
-	fn handle(&self, conn: TcpStream, na: Arc<NetAdapter>, addr: SocketAddr)
+	fn handle(&self, conn: TcpStream, na: Arc<NetAdapter>, addr: SocketAddr, pool: CpuPool)
 		-> Box<Future<Item = (), Error = Error>>;
 
 	/// Sends a ping message to the remote peer.
-	fn send_ping(&self, total_difficulty: Difficulty) -> Result<(), Error>;
+	fn send_ping(&self, total_difficulty: Difficulty, height: u64) -> Result<(), Error>;
 
 	/// Relays a block to the remote peer.
 	fn send_block(&self, b: &core::Block) -> Result<(), Error>;
@@ -162,15 +163,21 @@ pub trait Protocol {
 /// Bridge between the networking layer and the rest of the system. Handles the
 /// forwarding or querying of blocks and transactions from the network among
 /// other things.
-pub trait NetAdapter: Sync + Send {
-	/// Current height of our chain.
+pub trait ChainAdapter: Sync + Send {
+	/// Current total difficulty on our chain
 	fn total_difficulty(&self) -> Difficulty;
+
+	/// Current total height
+	fn total_height(&self) -> u64;
 
 	/// A valid transaction has been received from one of our peers
 	fn transaction_received(&self, tx: core::Transaction);
 
-	/// A block has been received from one of our peers
-	fn block_received(&self, b: core::Block, addr: SocketAddr);
+	/// A block has been received from one of our peers. Returns true if the
+	/// block could be handled properly and is not deemed defective by the
+	/// chain. Returning false means the block will nenver be valid and
+	/// may result in the peer being banned.
+	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool;
 
 	/// A set of block header has been received, typically in response to a
 	/// block
@@ -184,7 +191,11 @@ pub trait NetAdapter: Sync + Send {
 
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
+}
 
+/// Additional methods required by the protocol that don't need to be
+/// externally implemented.
+pub trait NetAdapter: ChainAdapter {
 	/// Find good peers we know with the provided capability and return their
 	/// addresses.
 	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr>;
@@ -192,9 +203,6 @@ pub trait NetAdapter: Sync + Send {
 	/// A list of peers has been received from one of our peers.
 	fn peer_addrs_received(&self, Vec<SocketAddr>);
 
-	/// Network successfully connected to a peer.
-	fn peer_connected(&self, &PeerInfo);
-
 	/// Heard total_difficulty from a connected peer (via ping/pong).
-	fn peer_difficulty(&self, SocketAddr, Difficulty);
+	fn peer_difficulty(&self, SocketAddr, Difficulty, u64);
 }
