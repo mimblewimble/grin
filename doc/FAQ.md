@@ -33,6 +33,9 @@ grin in case of trouble.
 ## Build error: Could not compile `tokio-retry`.
 You need the latest rust. rustup, or [reinstall rust as described](build.md)
 
+## Build error: `failed to select a version for 'serde_json'`
+Run `cargo update? to fix this
+
 # Short term plans
 ## Transaction types
 - (DONE) A temporary simple transaction exchange. Temporary - will be deprecated.

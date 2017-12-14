@@ -41,6 +41,8 @@ cd grin
 git checkout milestone/testnet1
 cargo build
 ```
+## Build errors
+See [Troubleshooting](faq.md#troubleshooting)
 
 #### Cross-compiling
 
@@ -167,4 +169,3 @@ See [wallet](wallet.md) for more info on the various Grin wallet commands and op
 For further information on a more complicated internal setup for testing, see the [local net documentation](local_net.md)
 
 The [grin.toml](../grin.toml) configuration file has further information about the various options available.
-
