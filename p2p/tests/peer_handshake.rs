@@ -13,6 +13,7 @@
 // limitations under the License.
 
 extern crate futures;
+extern crate futures_cpupool;
 extern crate grin_core as core;
 extern crate grin_p2p as p2p;
 extern crate tokio_core;
@@ -22,6 +23,7 @@ use std::sync::Arc;
 use std::time;
 
 use futures::future::Future;
+use futures_cpupool::CpuPool;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::{self, Core};
 
@@ -37,12 +39,14 @@ fn peer_handshake() {
 	let handle = evtlp.handle();
 	let p2p_conf = p2p::P2PConfig::default();
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
+	let pool = CpuPool::new(1);
 	let server = p2p::Server::new(
 		".grin".to_owned(),
 		p2p::UNKNOWN,
 		p2p_conf,
 		net_adapter.clone(),
 		Hash::from_vec(vec![]),
+		pool.clone(),
 	).unwrap();
 	let run_server = server.start(handle.clone());
 	let my_addr = "127.0.0.1:5000".parse().unwrap();
@@ -71,7 +75,7 @@ fn peer_handshake() {
 						)
 					})
 					.and_then(move |(socket, peer)| {
-						rhandle.spawn(peer.run(socket).map_err(|e| {
+						rhandle.spawn(peer.run(socket, pool).map_err(|e| {
 							panic!("Client run failed: {:?}", e);
 						}));
 						peer.send_ping(Difficulty::one(), 0).unwrap();

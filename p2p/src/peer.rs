@@ -16,6 +16,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
 use futures::Future;
+use futures_cpupool::CpuPool;
 use tokio_core::net::TcpStream;
 
 use core::core;
@@ -89,12 +90,12 @@ impl Peer {
 
 	/// Main peer loop listening for messages and forwarding to the rest of the
 	/// system.
-	pub fn run(&self, conn: TcpStream) -> Box<Future<Item = (), Error = Error>> {
+	pub fn run(&self, conn: TcpStream, pool: CpuPool) -> Box<Future<Item = (), Error = Error>> {
 		let addr = self.info.addr;
 		let state = self.state.clone();
 		let adapter = Arc::new(self.tracking_adapter.clone());
 
-		Box::new(self.proto.handle(conn, adapter, addr).then(move |res| {
+		Box::new(self.proto.handle(conn, adapter, addr, pool).then(move |res| {
 			// handle disconnection, standard disconnections aren't considered an error
 			let mut state = state.write().unwrap();
 			match res {

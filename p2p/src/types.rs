@@ -18,6 +18,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use futures::Future;
+use futures_cpupool::CpuPool;
 use tokio_core::net::TcpStream;
 use tokio_timer::TimerError;
 
@@ -131,7 +132,7 @@ pub trait Protocol {
 	/// be  known already, usually passed during construction. Will typically
 	/// block so needs to be called withing a coroutine. Should also be called
 	/// only once.
-	fn handle(&self, conn: TcpStream, na: Arc<NetAdapter>, addr: SocketAddr)
+	fn handle(&self, conn: TcpStream, na: Arc<NetAdapter>, addr: SocketAddr, pool: CpuPool)
 		-> Box<Future<Item = (), Error = Error>>;
 
 	/// Sends a ping message to the remote peer.
