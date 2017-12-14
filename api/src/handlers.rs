@@ -496,19 +496,21 @@ let _ = thread::Builder::new()
 			};
 
 			let route_list = vec!(
-				"get /".to_string(),
-				"get /blocks".to_string(),
-				"get /chain".to_string(),
-				"get /chain/utxos".to_string(),
-				"get /sumtrees/roots".to_string(),
-				"get /sumtrees/lastutxos?n=10".to_string(),
-				"get /sumtrees/lastrangeproofs".to_string(),
-				"get /sumtrees/lastkernels".to_string(),
-				"get /pool".to_string(),
-				"post /pool/push".to_string(),
-				"get /peers/all".to_string(),
-				"get /peers/connected".to_string(),
+				"get blocks".to_string(),
+				"get chain".to_string(),
+				"get chain/utxos".to_string(),
+				"get sumtrees/roots".to_string(),
+				"get sumtrees/lastutxos?n=10".to_string(),
+				"get sumtrees/lastrangeproofs".to_string(),
+				"get sumtrees/lastkernels".to_string(),
+				"get pool".to_string(),
+				"post pool/push".to_string(),
+				"post peers/a.b.c.d:p/ban".to_string(),
+				"get peers/all".to_string(),
+				"get peers/connected".to_string(),
 			);
+			// We allow manually banning, like this:
+			// curl -v -X POST http://127.0.0.1:13413/v1/peers/88.99.251.87:13414/ban
 			let index_handler = IndexHandler { list: route_list };
 			let router = router!(
 				index: get "/" => index_handler,
