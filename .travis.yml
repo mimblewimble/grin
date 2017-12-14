@@ -1,7 +1,7 @@
 language: rust
 cache: cargo
 dist: trusty
-sudo: true
+sudo: false
 rust:
   - stable
 
@@ -17,16 +17,16 @@ env:
   global:
     - RUST_BACKTRACE="1"
   matrix:
-    - TEST_DIR=core
+    - RUST_TEST_THREADS=1 TEST_DIR=grin
     - TEST_DIR=store
     - TEST_DIR=chain
+    - TEST_DIR=pool
+    - TEST_DIR=wallet
     - TEST_DIR=p2p
     - TEST_DIR=api
-    - TEST_DIR=pool
     - TEST_DIR=pow
-    - TEST_DIR=wallet
-    - TEST_DIR=util
     - TEST_DIR=keychain
-    - RUST_TEST_THREADS=1 TEST_DIR=grin
+    - TEST_DIR=core
+    - TEST_DIR=util
 
 script: cd $TEST_DIR && cargo test --verbose
