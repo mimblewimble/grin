@@ -119,7 +119,11 @@ fn body_sync(peers: Peers, chain: Arc<chain::Chain>) {
 
 	let hashes_to_get = hashes
 		.iter()
-		.filter(|x| !chain.get_block(&x).is_ok())
+		.filter(|x| {
+			// only ask for blocks that we have not yet processed
+			// either successfully stored or in our orphan list
+			!chain.get_block(x).is_ok() && !chain.is_orphan(x)
+		})
 		.take(block_count)
 		.cloned()
 		.collect::<Vec<_>>();
