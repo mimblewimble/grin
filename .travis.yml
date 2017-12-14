@@ -17,7 +17,7 @@ env:
   global:
     - RUST_BACKTRACE="1"
   matrix:
-    - TEST_DIR=core
+    - RUST_TEST_THREADS=1 TEST_DIR=grin
     - TEST_DIR=store
     - TEST_DIR=chain
     - TEST_DIR=p2p
@@ -27,6 +27,6 @@ env:
     - TEST_DIR=wallet
     - TEST_DIR=util
     - TEST_DIR=keychain
-    - RUST_TEST_THREADS=1 TEST_DIR=grin
+    - TEST_DIR=core
 
 script: cd $TEST_DIR && cargo test --verbose
