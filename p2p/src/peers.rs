@@ -236,7 +236,7 @@ impl Peers {
 	/// Iterate over the peer list and prune all peers we have
 	/// lost connection to or have been deemed problematic.
 	/// Also avoid connected peer count getting too high.
-	pub fn clean_peers(&self, desired_count: usize) {
+	pub fn clean_peers(&self, max_count: usize) {
 		let mut rm = vec![];
 
 		// build a list of peers to be cleaned up
@@ -261,11 +261,10 @@ impl Peers {
 		}
 
 		// ensure we do not have too many connected peers
-		// really fighting with the double layer of rwlocks here...
 		let excess_count = {
 			let peer_count = self.peer_count().clone() as usize;
-			if peer_count > desired_count {
-				peer_count - desired_count
+			if peer_count > max_count {
+				peer_count - max_count
 			} else {
 				0
 			}

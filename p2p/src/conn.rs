@@ -16,7 +16,6 @@
 //! or receiving data from the TCP socket, as well as dealing with timeouts.
 
 use std::iter;
-use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -268,8 +267,14 @@ impl Connection {
 /// a timeout.
 pub struct TimeoutConnection {
 	underlying: Connection,
+	expected_responses: Arc<Mutex<Vec<InFlightRequest>>>,
+}
 
-	expected_responses: Arc<Mutex<Vec<(Type, Option<Hash>, Instant)>>>,
+#[derive(Debug, Clone)]
+struct InFlightRequest {
+	msg_type: Type,
+	hash: Option<Hash>,
+	time: Instant,
 }
 
 impl TimeoutConnection {
@@ -282,7 +287,7 @@ impl TimeoutConnection {
 	where
 		F: Handler + 'static,
 	{
-		let expects = Arc::new(Mutex::new(vec![]));
+		let expects: Arc<Mutex<Vec<InFlightRequest>>> = Arc::new(Mutex::new(vec![]));
 
 		// Decorates the handler to remove the "subscription" from the expected
 		// responses. We got our replies, so no timeout should occur.
@@ -294,10 +299,14 @@ impl TimeoutConnection {
 			let mut expects = exp.lock().unwrap();
 			let filtered = expects
 				.iter()
-				.filter(|&&(typ, h, _): &&(Type, Option<Hash>, Instant)| {
-					msg_type != typ || h.is_some() && recv_h != h
+				.filter(|x| {
+					let res = x.msg_type != msg_type || x.hash.is_some() && x.hash != recv_h;
+					if res {
+						trace!(LOGGER, "timeout_conn: received: {:?}, {:?}", x.msg_type, x.hash);
+					}
+					res
 				})
-				.map(|&x| x)
+				.cloned()
 				.collect::<Vec<_>>();
 			*expects = filtered;
 
@@ -310,9 +319,11 @@ impl TimeoutConnection {
 			.interval(Duration::new(2, 0))
 			.fold((), move |_, _| {
 				let exp = exp.lock().unwrap();
-				for &(ty, h, t) in exp.deref() {
-					if Instant::now() - t > Duration::new(5, 0) {
-						trace!(LOGGER, "Too long: {:?} {:?}", ty, h);
+				trace!(LOGGER, "timeout_conn: currently registered: {:?}", exp.len());
+
+				for x in exp.iter() {
+					if Instant::now() - x.time > Duration::new(5, 0) {
+						trace!(LOGGER, "timeout_conn: timeout: {:?}, {:?}", x.msg_type, x.hash);
 						return Err(TimerError::TooLong);
 					}
 				}
@@ -332,6 +343,8 @@ impl TimeoutConnection {
 
 	/// Sends a request and registers a timer on the provided message type and
 	/// optionally the hash of the sent data.
+	/// Skips the request if we have already sent the same response and
+	/// we are still waiting for a response (not yet timed out).
 	pub fn send_request<W: ser::Writeable>(
 		&self,
 		t: Type,
@@ -339,10 +352,40 @@ impl TimeoutConnection {
 		body: &W,
 		expect_h: Option<(Hash)>,
 	) -> Result<(), Error> {
+		{
+			let expects = self.expected_responses.lock().unwrap();
+			let existing = expects.iter().find(|x| {
+				x.msg_type == rt && x.hash == expect_h
+			});
+			if let Some(x) = existing {
+				trace!(
+					LOGGER,
+					"timeout_conn: in_flight: {:?}, {:?} (skipping)",
+					x.msg_type,
+					x.hash,
+				);
+				return Ok(())
+			}
+		}
+
 		let _sent = try!(self.underlying.send_msg(t, body));
 
-		let mut expects = self.expected_responses.lock().unwrap();
-		expects.push((rt, expect_h, Instant::now()));
+		{
+			let mut expects = self.expected_responses.lock().unwrap();
+			let req = InFlightRequest {
+				msg_type: rt,
+				hash: expect_h,
+				time: Instant::now(),
+			};
+			trace!(
+				LOGGER,
+				"timeout_conn: registering: {:?}, {:?}",
+				req.msg_type,
+				req.hash,
+			);
+			expects.push(req);
+		}
+
 		Ok(())
 	}
 
