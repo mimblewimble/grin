@@ -115,7 +115,7 @@ impl Seeder {
 
 				// maintenance step first, clean up p2p server peers
 				{
-					peers.clean_peers(PEER_PREFERRED_COUNT as usize);
+					peers.clean_peers(PEER_MAX_COUNT as usize);
 				}
 
 				// not enough peers, getting more from db
