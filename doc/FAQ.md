@@ -34,7 +34,7 @@ grin in case of trouble.
 You need the latest rust. rustup, or [reinstall rust as described](build.md)
 
 ## Build error: `failed to select a version for 'serde_json'`
-Run `cargo update? to fix this
+Run `cargo update` to fix this
 
 # Short term plans
 ## Transaction types
