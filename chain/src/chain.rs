@@ -81,11 +81,11 @@ impl Chain {
 		let head = match chain_store.head() {
 			Ok(tip) => tip,
 			Err(NotFoundErr) => {
+				let tip = Tip::new(genesis.hash());
 				chain_store.save_block(&genesis)?;
-				chain_store.setup_height(&genesis.header)?;
+				chain_store.setup_height(&genesis.header, tip)?;
 
 				// saving a new tip based on genesis
-				let tip = Tip::new(genesis.hash());
 				chain_store.save_head(&tip)?;
 				info!(
 					LOGGER,
