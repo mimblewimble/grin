@@ -167,10 +167,29 @@ impl Chain {
 				accepted_orphans = self.check_orphans();
 			}
 			Ok(None) => {}
-			Err(Error::Orphan) => if b.header.height < height + (MAX_ORPHANS as u64) {
-				let mut orphans = self.orphans.lock().unwrap();
-				orphans.push_front((opts, b));
-				orphans.truncate(MAX_ORPHANS);
+			Err(Error::Orphan) => {
+				// TODO - Do we want to check that orphan height is > current height?
+				// TODO - Just check heights here? Or should we be checking total_difficulty as well?
+				let block_hash = b.hash();
+				if b.header.height < height + (MAX_ORPHANS as u64) {
+					let mut orphans = self.orphans.lock().unwrap();
+					orphans.push_front((opts, b));
+					orphans.truncate(MAX_ORPHANS);
+					debug!(
+						LOGGER,
+						"process_block: orphan: {:?}, # orphans {}",
+						block_hash,
+						orphans.len(),
+					);
+				} else {
+					debug!(
+						LOGGER,
+						"process_block: orphan: {:?}, (dropping, height {} vs {})",
+						block_hash,
+						b.header.height,
+						height,
+					);
+				}
 			},
 			Err(Error::Unfit(ref msg)) => {
 				debug!(
@@ -219,6 +238,7 @@ impl Chain {
 		}
 	}
 
+	/// Check if hash is for a known orphan.
 	pub fn is_orphan(&self, hash: &Hash) -> bool {
 		let orphans = self.orphans.lock().unwrap();
 		orphans.iter().any(|&(_, ref x)| x.hash() == hash.clone())
@@ -233,6 +253,7 @@ impl Chain {
 			let orphans = self.orphans.lock().unwrap();
 			orphan_count = orphans.len();
 		}
+		debug!(LOGGER, "check_orphans: # orphans {}", orphan_count);
 
 		// pop each orphan and retry, if still orphaned, will be pushed again
 		let mut processed = vec![];

@@ -151,7 +151,7 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 	Ok(())
 }
 
-/// First level of black validation that only needs to act on the block header
+/// First level of block validation that only needs to act on the block header
 /// to make it as cheap as possible. The different validations are also
 /// arranged by order of cost to have as little DoS surface as possible.
 /// TODO require only the block header (with length information)
@@ -171,7 +171,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		> time::now_utc() + time::Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
 	{
 		// refuse blocks more than 12 blocks intervals in future (as in bitcoin)
-  // TODO add warning in p2p code if local time is too different from peers
+		// TODO add warning in p2p code if local time is too different from peers
 		return Err(Error::InvalidBlockTime);
 	}
 
@@ -196,6 +196,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	if header.height != prev.height + 1 {
 		return Err(Error::InvalidBlockHeight);
 	}
+
+	// TODO - get rid of the automated testing mode check here somehow
 	if header.timestamp <= prev.timestamp && !global::is_automated_testing_mode() {
 		// prevent time warp attacks and some timestamp manipulations by forcing strict
 		// time progression (but not in CI mode)
@@ -211,10 +213,14 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 			return Err(Error::DifficultyTooLow);
 		}
 
+		// explicit check to ensure total_difficulty has increased by exactly
+		// the difficulty of the previous block
 		if header.total_difficulty != prev.total_difficulty.clone() + prev.pow.to_difficulty() {
 			return Err(Error::WrongTotalDifficulty);
 		}
 
+		// now check that the difficulty is not less than that calculated by the
+		// difficulty iterator based on the previous block
 		let diff_iter = store::DifficultyIter::from(header.previous, ctx.store.clone());
 		let difficulty =
 			consensus::next_difficulty(diff_iter).map_err(|e| Error::Other(e.to_string()))?;
@@ -312,8 +318,6 @@ fn validate_block(
 				if let Ok(output_header) = ctx.store
 					.get_block_header_by_output_commit(&input.commitment())
 				{
-					// TODO - make sure we are not off-by-1 here vs. the equivalent tansaction
-					// validation rule
 					if b.header.height <= output_header.height + global::coinbase_maturity() {
 						return Err(Error::ImmatureCoinbase);
 					}
