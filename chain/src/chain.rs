@@ -83,7 +83,7 @@ impl Chain {
 			Err(NotFoundErr) => {
 				let tip = Tip::new(genesis.hash());
 				chain_store.save_block(&genesis)?;
-				chain_store.setup_height(&genesis.header, tip)?;
+				chain_store.setup_height(&genesis.header, &tip)?;
 
 				// saving a new tip based on genesis
 				chain_store.save_head(&tip)?;
