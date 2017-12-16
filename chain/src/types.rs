@@ -226,6 +226,9 @@ pub trait ChainStore: Send + Sync {
 	/// Gets the block header at the provided height
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, store::Error>;
 
+	/// Delete the block header at the height
+	fn delete_header_by_height(&self, height: u64) -> Result<(), store::Error>;
+
 	/// Is the block header on the current chain?
 	/// Use the header_by_height index to verify the block header is where we think it is.
 	fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), store::Error>;
@@ -258,7 +261,7 @@ pub trait ChainStore: Send + Sync {
 	/// Saves the provided block header at the corresponding height. Also check
 	/// the consistency of the height chain in store by assuring previous
 	/// headers are also at their respective heights.
-	fn setup_height(&self, bh: &BlockHeader) -> Result<(), store::Error>;
+	fn setup_height(&self, bh: &BlockHeader, old_tip: &Tip) -> Result<(), store::Error>;
 }
 
 /// Bridge between the chain pipeline and the rest of the system. Handles

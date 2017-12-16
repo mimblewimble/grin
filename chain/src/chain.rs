@@ -86,11 +86,11 @@ impl Chain {
 				}
 
 				let gen = gen_block.unwrap();
+				let tip = Tip::new(gen.hash());
 				chain_store.save_block(&gen)?;
-				chain_store.setup_height(&gen.header)?;
+				chain_store.setup_height(&gen.header, &tip)?;
 
 				// saving a new tip based on genesis
-				let tip = Tip::new(gen.hash());
 				chain_store.save_head(&tip)?;
 				info!(
 					LOGGER,

@@ -135,18 +135,18 @@ impl ChainStore for ChainKVStore {
 	}
 
 	// lookup the block header hash by output commitment
- // lookup the block header based on this hash
- // to check the chain is correct compare this block header to
- // the block header currently indexed at the relevant block height (tbd if
- // actually necessary)
- //
- // NOTE: This index is not exhaustive.
- // This node may not have seen this full block, so may not have populated the
- // index.
- // Block headers older than some threshold (2 months?) will not necessarily be
- // included
- // in this index.
- //
+	// lookup the block header based on this hash
+	// to check the chain is correct compare this block header to
+	// the block header currently indexed at the relevant block height (tbd if
+	// actually necessary)
+	//
+	// NOTE: This index is not exhaustive.
+	// This node may not have seen this full block, so may not have populated the
+	// index.
+	// Block headers older than some threshold (2 months?) will not necessarily be
+	// included
+	// in this index.
+	//
 	fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
 		let block_hash = self.db.get_ser(&to_key(
 			HEADER_BY_OUTPUT_PREFIX,
@@ -181,6 +181,10 @@ impl ChainStore for ChainKVStore {
 
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		option_to_not_found(self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)))
+	}
+
+	fn delete_header_by_height(&self, height: u64) -> Result<(), Error> {
+		self.db.delete(&u64_to_key(HEADER_HEIGHT_PREFIX, height))
 	}
 
 	fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, Error> {
@@ -219,28 +223,36 @@ impl ChainStore for ChainKVStore {
 	}
 
 	/// Maintain consistency of the "header_by_height" index by traversing back
-	/// through the
-	/// current chain and updating "header_by_height" until we reach a
-	/// block_header
-	/// that is consistent with its height (everything prior to this will be
-	/// consistent).
-	/// We need to handle the case where we have no index entry for a given height to
-	/// account for the case where we just switched to a new fork and the height jumped
-	/// beyond current chain height.
-	fn setup_height(&self, header: &BlockHeader) -> Result<(), Error> {
+	/// through the current chain and updating "header_by_height" until we reach
+	/// a block_header that is consistent with its height (everything prior to
+	/// this will be consistent).
+	/// We need to handle the case where we have no index entry for a given
+	/// height to account for the case where we just switched to a new fork and
+	/// the height jumped beyond current chain height.
+	fn setup_height(&self, header: &BlockHeader, old_tip: &Tip)
+		-> Result<(), Error> {
+
+		// remove headers ahead if we backtracked
+		for n in header.height..old_tip.height {
+			self.delete_header_by_height(n)?;
+		}
+
 		self.db
 			.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, header.height), header)?;
 
-		if header.height == 0 {
-			return Ok(());
-		}
+		if header.height > 0 {
+			let mut prev_header = self.get_block_header(&header.previous)?;
+			while prev_header.height > 0 {
+				if let Ok(_) = self.is_on_current_chain(&prev_header) {
+					break;
+				}
+				self.db
+					.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, prev_header.height), &prev_header)?;
 
-		let prev_header = self.get_block_header(&header.previous)?;
-		if let Ok(_) = self.is_on_current_chain(&prev_header) {
-			Ok(())
-		} else {
-			self.setup_height(&prev_header)
+				prev_header = self.get_block_header(&prev_header.previous)?;
+			}
 		}
+		Ok(())
 	}
 }
 

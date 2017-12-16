@@ -349,7 +349,7 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 	if tip.total_difficulty > ctx.head.total_difficulty {
 		// update the block height index
 		ctx.store
-			.setup_height(&b.header)
+			.setup_height(&b.header, &ctx.head)
 			.map_err(|e| Error::StoreErr(e, "pipe setup height".to_owned()))?;
 
 		// in sync mode, only update the "body chain", otherwise update both the
