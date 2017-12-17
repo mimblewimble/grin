@@ -93,7 +93,7 @@ pub fn issue_send_tx(
 			}
 		}
 	} else {
-		panic!("dest not in expected format: {}", dest);
+		panic!("dest formatted as {} but send -d expected stdout or http://IP:port", dest);
 	}
 	Ok(())
 }
