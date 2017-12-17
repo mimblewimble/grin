@@ -15,6 +15,7 @@
 //! Provides a connection wrapper that handles the lower level tasks in sending
 //! or receiving data from the TCP socket, as well as dealing with timeouts.
 
+use std::io::Read;
 use std::iter;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -39,6 +40,7 @@ use util::LOGGER;
 /// is received. The provided sender can be use to immediately send back
 /// another message.
 pub trait Handler: Sync + Send {
+
 	/// Handle function to implement to process incoming messages. A sender to
 	/// reply immediately as well as the message header and its unparsed body
 	/// are provided.
@@ -47,23 +49,9 @@ pub trait Handler: Sync + Send {
 		sender: UnboundedSender<Vec<u8>>,
 		header: MsgHeader,
 		body: Vec<u8>,
-	) -> Result<Option<Hash>, ser::Error>;
-}
+		reader: &mut Read,
 
-impl<F> Handler for F
-where
-	F: Fn(UnboundedSender<Vec<u8>>, MsgHeader, Vec<u8>)
-		-> Result<Option<Hash>, ser::Error>,
-	F: Sync + Send,
-{
-	fn handle(
-		&self,
-		sender: UnboundedSender<Vec<u8>>,
-		header: MsgHeader,
-		body: Vec<u8>,
-	) -> Result<Option<Hash>, ser::Error> {
-		self(sender, header, body)
-	}
+	) -> Result<Option<Hash>, ser::Error>;
 }
 
 /// A higher level connection wrapping the TcpStream. Maintains the amount of
@@ -218,14 +206,14 @@ impl Connection {
 						.map(|(reader, buf)| (reader, header, buf))
 						.from_err()
 				})
-				.and_then(move |(reader, header, buf)| {
+				.and_then(move |(mut reader, header, buf)| {
 					// add the count of bytes received
 					let mut recv_bytes = recv_bytes.lock().unwrap();
 					*recv_bytes += header.serialized_len() + header.msg_len;
 
 					pool.spawn_fn(move || {
 						let msg_type = header.msg_type;
-						if let Err(e) = handler.handle(sender_inner.clone(), header, buf) {
+						if let Err(e) = handler.handle(sender_inner.clone(), header, buf, &mut reader) {
 							debug!(LOGGER, "Invalid {:?} message: {}", msg_type, e);
 							return Err(Error::Serialization(e));
 						}
@@ -291,27 +279,8 @@ impl TimeoutConnection {
 
 		// Decorates the handler to remove the "subscription" from the expected
 		// responses. We got our replies, so no timeout should occur.
-		let exp = expects.clone();
-		let (conn, fut) = Connection::listen(conn, pool, move |sender, header: MsgHeader, data| {
-			let msg_type = header.msg_type;
-			let recv_h = try!(handler.handle(sender, header, data));
-
-			let mut expects = exp.lock().unwrap();
-			let filtered = expects
-				.iter()
-				.filter(|x| {
-					let res = x.msg_type != msg_type || x.hash.is_some() && x.hash != recv_h;
-					if res {
-						trace!(LOGGER, "timeout_conn: received: {:?}, {:?}", x.msg_type, x.hash);
-					}
-					res
-				})
-				.cloned()
-				.collect::<Vec<_>>();
-			*expects = filtered;
-
-			Ok(recv_h)
-		});
+		let handler = TimeoutHandler{handler: handler, expected_responses: expects.clone()};
+		let (conn, fut) = Connection::listen(conn, pool, handler);
 
 		// Registers a timer with the event loop to regularly check for timeouts.
 		let exp = expects.clone();
@@ -397,5 +366,39 @@ impl TimeoutConnection {
 	/// Same as Connection
 	pub fn transmitted_bytes(&self) -> (u64, u64) {
 		self.underlying.transmitted_bytes()
+	}
+}
+
+struct TimeoutHandler<H> where H: Handler {
+	expected_responses: Arc<Mutex<Vec<InFlightRequest>>>,
+	handler: H,
+}
+
+impl<H> Handler for TimeoutHandler<H> where H: Handler {
+	fn handle(
+		&self,
+		sender: UnboundedSender<Vec<u8>>,
+		header: MsgHeader,
+		body: Vec<u8>,
+		reader: &mut Read,
+	) -> Result<Option<Hash>, ser::Error> {
+		let msg_type = header.msg_type;
+		let recv_h = self.handler.handle(sender, header, body, reader)?;
+
+		let mut expects = self.expected_responses.lock().unwrap();
+		let filtered = expects
+			.iter()
+			.filter(|x| {
+				let res = x.msg_type != msg_type || x.hash.is_some() && x.hash != recv_h;
+				if res {
+					trace!(LOGGER, "timeout_conn: received: {:?}, {:?}", x.msg_type, x.hash);
+				}
+				res
+			})
+			.cloned()
+			.collect::<Vec<_>>();
+		*expects = filtered;
+
+		Ok(recv_h)
 	}
 }

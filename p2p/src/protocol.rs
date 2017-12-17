@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::io::Read;
 use std::sync::Arc;
 use std::net::SocketAddr;
 
@@ -24,7 +25,7 @@ use core::core;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
 use core::ser;
-use conn::TimeoutConnection;
+use conn::{Handler, TimeoutConnection};
 use msg::*;
 use types::*;
 use util::LOGGER;
@@ -52,11 +53,9 @@ impl Protocol for ProtocolV1 {
 		addr: SocketAddr,
 		pool: CpuPool,
 	) -> Box<Future<Item = (), Error = Error>> {
-		let (conn, listener) = TimeoutConnection::listen(conn, pool, move |sender, header, data| {
-			let adapt = adapter.as_ref();
-			handle_payload(adapt, sender, header, data, addr)
-		});
 
+		let handler = ProtocolHandler{adapter, addr};
+		let (conn, listener) = TimeoutConnection::listen(conn, pool, handler);
 		self.conn.init(conn);
 
 		listener
@@ -138,133 +137,143 @@ impl ProtocolV1 {
 	}
 }
 
-fn handle_payload(
-	adapter: &NetAdapter,
-	sender: UnboundedSender<Vec<u8>>,
-	header: MsgHeader,
-	buf: Vec<u8>,
+struct ProtocolHandler {
+	adapter: Arc<NetAdapter>,
 	addr: SocketAddr,
-) -> Result<Option<Hash>, ser::Error> {
-	match header.msg_type {
-		Type::Ping => {
-			let ping = ser::deserialize::<Ping>(&mut &buf[..])?;
-			adapter.peer_difficulty(addr, ping.total_difficulty, ping.height);
-			let pong = Pong { total_difficulty: adapter.total_difficulty(), height: adapter.total_height() };
-			let mut body_data = vec![];
-			try!(ser::serialize(&mut body_data, &pong));
-			let mut data = vec![];
-			try!(ser::serialize(
-				&mut data,
-				&MsgHeader::new(Type::Pong, body_data.len() as u64),
-			));
-			data.append(&mut body_data);
+}
 
-			if let Err(e) = sender.unbounded_send(data) {
-				debug!(LOGGER, "handle_payload: Ping, error sending: {:?}", e);
-			}
-
-			Ok(None)
-		}
-		Type::Pong => {
-			let pong = ser::deserialize::<Pong>(&mut &buf[..])?;
-			adapter.peer_difficulty(addr, pong.total_difficulty, pong.height);
-			Ok(None)
-		},
-		Type::Transaction => {
-			let tx = ser::deserialize::<core::Transaction>(&mut &buf[..])?;
-			adapter.transaction_received(tx);
-			Ok(None)
-		}
-		Type::GetBlock => {
-			let h = ser::deserialize::<Hash>(&mut &buf[..])?;
-			debug!(LOGGER, "handle_payload: GetBlock {}", h);
-
-			let bo = adapter.get_block(h);
-			if let Some(b) = bo {
-				// serialize and send the block over
+impl Handler for ProtocolHandler {
+	fn handle(
+		&self,
+		sender: UnboundedSender<Vec<u8>>,
+		header: MsgHeader,
+		buf: Vec<u8>,
+		reader: &mut Read,
+	) -> Result<Option<Hash>, ser::Error> {
+		match header.msg_type {
+			Type::Ping => {
+				let ping = ser::deserialize::<Ping>(&mut &buf[..])?;
+				self.adapter.peer_difficulty(self.addr, ping.total_difficulty, ping.height);
+				let pong = Pong {
+					total_difficulty: self.adapter.total_difficulty(),
+					height: self.adapter.total_height()
+				};
 				let mut body_data = vec![];
-				try!(ser::serialize(&mut body_data, &b));
+				try!(ser::serialize(&mut body_data, &pong));
 				let mut data = vec![];
 				try!(ser::serialize(
 					&mut data,
-					&MsgHeader::new(Type::Block, body_data.len() as u64),
+					&MsgHeader::new(Type::Pong, body_data.len() as u64),
+				));
+				data.append(&mut body_data);
+
+				if let Err(e) = sender.unbounded_send(data) {
+					debug!(LOGGER, "handle_payload: Ping, error sending: {:?}", e);
+				}
+
+				Ok(None)
+			}
+			Type::Pong => {
+				let pong = ser::deserialize::<Pong>(&mut &buf[..])?;
+				self.adapter.peer_difficulty(self.addr, pong.total_difficulty, pong.height);
+				Ok(None)
+			},
+			Type::Transaction => {
+				let tx = ser::deserialize::<core::Transaction>(&mut &buf[..])?;
+				self.adapter.transaction_received(tx);
+				Ok(None)
+			}
+			Type::GetBlock => {
+				let h = ser::deserialize::<Hash>(&mut &buf[..])?;
+				debug!(LOGGER, "handle_payload: GetBlock {}", h);
+
+				let bo = self.adapter.get_block(h);
+				if let Some(b) = bo {
+					// serialize and send the block over
+					let mut body_data = vec![];
+					try!(ser::serialize(&mut body_data, &b));
+					let mut data = vec![];
+					try!(ser::serialize(
+						&mut data,
+						&MsgHeader::new(Type::Block, body_data.len() as u64),
+					));
+					data.append(&mut body_data);
+					if let Err(e) = sender.unbounded_send(data) {
+						debug!(LOGGER, "handle_payload: GetBlock, error sending: {:?}", e);
+					}
+				}
+				Ok(None)
+			}
+			Type::Block => {
+				let b = ser::deserialize::<core::Block>(&mut &buf[..])?;
+				let bh = b.hash();
+
+				debug!(LOGGER, "handle_payload: Block {}", bh);
+
+				self.adapter.block_received(b, self.addr);
+				Ok(Some(bh))
+			}
+			Type::GetHeaders => {
+				// load headers from the locator
+				let loc = ser::deserialize::<Locator>(&mut &buf[..])?;
+				let headers = self.adapter.locate_headers(loc.hashes);
+
+				// serialize and send all the headers over
+				let mut body_data = vec![];
+				try!(ser::serialize(
+					&mut body_data,
+					&Headers { headers: headers },
+				));
+				let mut data = vec![];
+				try!(ser::serialize(
+					&mut data,
+					&MsgHeader::new(Type::Headers, body_data.len() as u64),
 				));
 				data.append(&mut body_data);
 				if let Err(e) = sender.unbounded_send(data) {
-					debug!(LOGGER, "handle_payload: GetBlock, error sending: {:?}", e);
+					debug!(LOGGER, "handle_payload: GetHeaders, error sending: {:?}", e);
 				}
+
+				Ok(None)
 			}
-			Ok(None)
-		}
-		Type::Block => {
-			let b = ser::deserialize::<core::Block>(&mut &buf[..])?;
-			let bh = b.hash();
-
-			debug!(LOGGER, "handle_payload: Block {}", bh);
-
-			adapter.block_received(b, addr);
-			Ok(Some(bh))
-		}
-		Type::GetHeaders => {
-			// load headers from the locator
-			let loc = ser::deserialize::<Locator>(&mut &buf[..])?;
-			let headers = adapter.locate_headers(loc.hashes);
-
-			// serialize and send all the headers over
-			let mut body_data = vec![];
-			try!(ser::serialize(
-				&mut body_data,
-				&Headers { headers: headers },
-			));
-			let mut data = vec![];
-			try!(ser::serialize(
-				&mut data,
-				&MsgHeader::new(Type::Headers, body_data.len() as u64),
-			));
-			data.append(&mut body_data);
-			if let Err(e) = sender.unbounded_send(data) {
-				debug!(LOGGER, "handle_payload: GetHeaders, error sending: {:?}", e);
+			Type::Headers => {
+				let headers = ser::deserialize::<Headers>(&mut &buf[..])?;
+				self.adapter.headers_received(headers.headers, self.addr);
+				Ok(None)
 			}
+			Type::GetPeerAddrs => {
+				let get_peers = ser::deserialize::<GetPeerAddrs>(&mut &buf[..])?;
+				let peer_addrs = self.adapter.find_peer_addrs(get_peers.capabilities);
 
-			Ok(None)
-		}
-		Type::Headers => {
-			let headers = ser::deserialize::<Headers>(&mut &buf[..])?;
-			adapter.headers_received(headers.headers, addr);
-			Ok(None)
-		}
-		Type::GetPeerAddrs => {
-			let get_peers = ser::deserialize::<GetPeerAddrs>(&mut &buf[..])?;
-			let peer_addrs = adapter.find_peer_addrs(get_peers.capabilities);
+				// serialize and send all the headers over
+				let mut body_data = vec![];
+				try!(ser::serialize(
+					&mut body_data,
+					&PeerAddrs {
+						peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
+					},
+				));
+				let mut data = vec![];
+				try!(ser::serialize(
+					&mut data,
+					&MsgHeader::new(Type::PeerAddrs, body_data.len() as u64),
+				));
+				data.append(&mut body_data);
+				if let Err(e) = sender.unbounded_send(data) {
+					debug!(LOGGER, "handle_payload: GetPeerAddrs, error sending: {:?}", e);
+				}
 
-			// serialize and send all the headers over
-			let mut body_data = vec![];
-			try!(ser::serialize(
-				&mut body_data,
-				&PeerAddrs {
-					peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
-				},
-			));
-			let mut data = vec![];
-			try!(ser::serialize(
-				&mut data,
-				&MsgHeader::new(Type::PeerAddrs, body_data.len() as u64),
-			));
-			data.append(&mut body_data);
-			if let Err(e) = sender.unbounded_send(data) {
-				debug!(LOGGER, "handle_payload: GetPeerAddrs, error sending: {:?}", e);
+				Ok(None)
 			}
-
-			Ok(None)
-		}
-		Type::PeerAddrs => {
-			let peer_addrs = ser::deserialize::<PeerAddrs>(&mut &buf[..])?;
-			adapter.peer_addrs_received(peer_addrs.peers.iter().map(|pa| pa.0).collect());
-			Ok(None)
-		}
-		_ => {
-			debug!(LOGGER, "unknown message type {:?}", header.msg_type);
-			Ok(None)
+			Type::PeerAddrs => {
+				let peer_addrs = ser::deserialize::<PeerAddrs>(&mut &buf[..])?;
+				self.adapter.peer_addrs_received(peer_addrs.peers.iter().map(|pa| pa.0).collect());
+				Ok(None)
+			}
+			_ => {
+				debug!(LOGGER, "unknown message type {:?}", header.msg_type);
+				Ok(None)
+			}
 		}
 	}
 }
