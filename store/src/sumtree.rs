@@ -187,11 +187,12 @@ impl RemoveLog {
 		// DEBUG
 		let _ = self.flush_truncate(last_offs);
 
+		// backing it up before truncating
+		self.removed_bak = self.removed.clone();
+
 		if last_offs == 0 {
 			self.removed = vec![];
 		} else {
-			// backing it up before truncating
-			self.removed_bak = self.removed.clone();
 			self.removed = self.removed
 				.iter()
 				.filter(|&&(_, idx)| idx < last_offs)
