@@ -63,13 +63,13 @@ port = 13414
 log_to_stdout = true
 
 # Log level for stdout: Critical, Error, Warning, Info, Debug, Trace
-stdout_log_level = "Warning"
+stdout_log_level = "Info"
 
 # Whether to log to a file
 log_to_file = true
 
 # Log level for file: Critical, Error, Warning, Info, Debug, Trace
-file_log_level = "Trace"
+file_log_level = "Debug"
 
 # Log file path
 log_file_path = "grin.log"
