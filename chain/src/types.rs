@@ -59,7 +59,7 @@ pub enum Error {
 	/// One of the root hashes in the block is invalid
 	InvalidRoot,
 	/// One of the inputs in the block has already been spent
-	AlreadySpent,
+	AlreadySpent(Commitment),
 	/// An output with that commitment already exists (should be unique)
 	DuplicateCommitment(Commitment),
 	/// A kernel with that excess commitment already exists (should be unique)
