@@ -385,8 +385,9 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 		ctx.head = tip.clone();
 		info!(
 			LOGGER,
-			"pipe: update_head: updated to {} at {}",
+			"pipe: update_head: updated to {} {} at {}",
 			b.hash(),
+			b.header.total_difficulty,
 			b.header.height
 		);
 		Ok(Some(tip))
