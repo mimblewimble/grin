@@ -90,7 +90,7 @@ fn simulate_seeding() {
 	pool_config.base_name = String::from(test_name_dir);
 	pool_config.run_length_in_seconds = 30;
 
-	// have to select different ports because of tests being run in parallel
+	// have to use different ports because of tests being run in parallel
 	pool_config.base_api_port = 30020;
 	pool_config.base_p2p_port = 31020;
 	pool_config.base_wallet_port = 32020;
@@ -142,7 +142,7 @@ fn simulate_parallel_mining() {
 	let mut pool_config = LocalServerContainerPoolConfig::default();
 	pool_config.base_name = String::from(test_name_dir);
 	pool_config.run_length_in_seconds = 60;
-	// have to select different ports because of tests being run in parallel
+	// have to use different ports because of tests being run in parallel
 	pool_config.base_api_port = 30040;
 	pool_config.base_p2p_port = 31040;
 	pool_config.base_wallet_port = 32040;

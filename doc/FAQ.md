@@ -31,10 +31,15 @@ Very welcome any solutions to give grin a "watchdog" solution that can restart
 grin in case of trouble.
 
 ## Build error: Could not compile `tokio-retry`.
-You need the latest rust. rustup, or [reinstall rust as described](build.md)
+You might want to remove any previous rust installations to avoid conflicts.
+Use `rustup` to [reinstall rust and cargo as described](build.md).
+
+NOTE: If you install rust or cargo with your package manager (most Linuxes
+anno 2017) you'll get too old versions. On Debian, you might have to manually
+compile cmake or get it from non-detault repositories.
 
 ## Build error: `failed to select a version for 'serde_json'`
-Run `cargo update? to fix this
+Run `cargo update` to fix this
 
 # Short term plans
 ## Transaction types

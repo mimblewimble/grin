@@ -369,12 +369,16 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 				.map_err(|e| Error::StoreErr(e, "pipe save head".to_owned()))?;
 		}
 		ctx.head = tip.clone();
-		info!(
+		debug!(
 			LOGGER,
 			"Updated head to {} at {}.",
 			b.hash(),
 			b.header.height
 		);
+		if b.header.height % 500 == 0 {
+			info!(LOGGER, "pipe: chain head reached {} @ {} [{}]",
+				b.header.height, b.header.difficulty, b.hash());
+		}
 		Ok(Some(tip))
 	} else {
 		Ok(None)
@@ -388,12 +392,15 @@ fn update_sync_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<T
 		.save_sync_head(&tip)
 		.map_err(|e| Error::StoreErr(e, "pipe save sync head".to_owned()))?;
 	ctx.head = tip.clone();
-	info!(
+	debug!(
 		LOGGER,
 		"pipe: updated sync head to {} at {}.",
 		bh.hash(),
 		bh.height,
 	);
+	if bh.height % 1000 == 0 {
+		info!(LOGGER, "pipe: sync head reached {} [{}]", bh.height, bh.hash());
+	}
 	Ok(Some(tip))
 }
 
@@ -405,7 +412,7 @@ fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option
 			.save_header_head(&tip)
 			.map_err(|e| Error::StoreErr(e, "pipe save header head".to_owned()))?;
 		ctx.head = tip.clone();
-		info!(
+		debug!(
 			LOGGER,
 			"pipe: updated header head to {} at {}.",
 			bh.hash(),

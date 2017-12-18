@@ -516,7 +516,7 @@ impl WalletData {
 	/// Default strategy is to spend the maximum number of outputs (up to max_outputs).
 	/// Alternative strategy is to spend smallest outputs first but only as many as necessary.
 	/// When we introduce additional strategies we should pass something other than a bool in.
-	pub fn select(
+	pub fn select_coins(
 		&self,
 		root_key_id: keychain::Identifier,
 		amount: u64,

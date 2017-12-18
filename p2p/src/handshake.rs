@@ -106,8 +106,7 @@ impl Handshake {
 							total_difficulty: shake.total_difficulty,
 						};
 
-						info!(LOGGER, "Connected to peer {:?}", peer_info);
-
+						debug!(LOGGER, "Connected to peer {:?}", peer_info);
 						// when more than one protocol version is supported, choosing should go here
 						Ok((conn, ProtocolV1::new(), peer_info))
 					}

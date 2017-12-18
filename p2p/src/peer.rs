@@ -111,7 +111,7 @@ impl Peer {
 				}
 				Err(e) => {
 					*state = State::Disconnected;
-					info!(LOGGER, "Client {} connection lost: {:?}", addr, e);
+					debug!(LOGGER, "Client {} connection lost: {:?}", addr, e);
 					Ok(())
 				}
 			}
