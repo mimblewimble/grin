@@ -355,7 +355,7 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 		if tip.total_difficulty == ctx.head.total_difficulty {
 			debug!(
 				LOGGER,
-				"pipe: update_head: total_difficulty matches {:?} {:?} at {:?} vs. {:?} {:?} at {:?}",
+				"pipe: update_head: total_difficulty matches {}, {} at {} vs. {}, {} at {}",
 				tip.last_block_h,
 				tip.total_difficulty,
 				tip.height,
@@ -385,7 +385,7 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 		ctx.head = tip.clone();
 		info!(
 			LOGGER,
-			"pipe: update_head: updated to {} {} at {}",
+			"pipe: update_head: updated to {}, {} at {}",
 			b.hash(),
 			b.header.total_difficulty,
 			b.header.height
