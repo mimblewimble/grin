@@ -50,7 +50,7 @@ pub struct BlockContext {
 /// chain head if updated.
 pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
- // spend resources reading the full block when its header is invalid
+	// spend resources reading the full block when its header is invalid
 
 	debug!(
 		LOGGER,
@@ -88,7 +88,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		.map_err(|e| Error::StoreErr(e, "pipe reload head".to_owned()))?;
 
 	// start a chain extension unit of work dependent on the success of the
- // internal validation and saving operations
+	// internal validation and saving operations
 	sumtree::extending(&mut sumtrees, |mut extension| {
 		validate_block(b, &mut ctx, &mut extension)?;
 		debug!(
@@ -350,7 +350,21 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 	// if we made a fork with more work than the head (which should also be true
 	// when extending the head), update it
 	let tip = Tip::from_block(&b.header);
-	if tip.total_difficulty > ctx.head.total_difficulty {
+
+	if tip.total_difficulty >= ctx.head.total_difficulty {
+		if tip.total_difficulty == ctx.head.total_difficulty {
+			debug!(
+				LOGGER,
+				"pipe: update_head: total_difficulty matches {:?} {:?} at {:?} vs. {:?} {:?} at {:?}",
+				tip.last_block_h,
+				tip.total_difficulty,
+				tip.height,
+				ctx.head.last_block_h,
+				ctx.head.total_difficulty,
+				ctx.head.height,
+			);
+		}
+
 		// update the block height index
 		ctx.store
 			.setup_height(&b.header, &ctx.head)
@@ -371,7 +385,7 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 		ctx.head = tip.clone();
 		info!(
 			LOGGER,
-			"Updated head to {} at {}.",
+			"pipe: update_head: updated to {} at {}",
 			b.hash(),
 			b.header.height
 		);
