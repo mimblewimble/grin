@@ -117,10 +117,11 @@ impl Keychain {
 
 		// otherwise iterate over a large number of derivations looking for our key
 		// cache the resulting derivations by key_id for faster lookup later
-		// TODO - remove the 10k hard limit and be smarter about batching somehow
+		// TODO - remove hard limit (within reason)
+		// TODO - do we benefit here if we track our max known n_child?
 		{
 			let mut cache = self.key_derivation_cache.write().unwrap();
-			for i in 1..10_000 {
+			for i in 1..100_000 {
 				let extkey = self.extkey.derive(&self.secp, i)?;
 				let extkey_id = extkey.identifier(&self.secp)?;
 
