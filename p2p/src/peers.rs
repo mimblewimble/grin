@@ -172,8 +172,9 @@ impl Peers {
 	/// if it knows the remote peer already has the block.
 	pub fn broadcast_block(&self, b: &core::Block) {
 		let peers = self.connected_peers();
+		let preferred_peers = 8;
 		let mut count = 0;
-		for p in peers.iter().take(8) {
+		for p in peers.iter().take(preferred_peers) {
 			let p = p.read().unwrap();
 			if p.is_connected() {
 				if let Err(e) = p.send_block(b) {
@@ -183,7 +184,14 @@ impl Peers {
 				}
 			}
 		}
-		debug!(LOGGER, "Broadcasted block {} to {} peers.", b.header.height, count);
+		debug!(
+			LOGGER,
+			"broadcast_block: {}, {} at {}, to {} peers",
+			b.hash(),
+			b.header.total_difficulty,
+			b.header.height,
+			count,
+		);
 	}
 
 	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our peers.
