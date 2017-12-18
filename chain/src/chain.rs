@@ -157,8 +157,26 @@ impl Chain {
 					adapter.block_accepted(&b);
 				}
 				self.check_orphans();
-			}
-			Ok(None) => {}
+			},
+			Ok(None) => {
+				// block got accepted but we did not extend the head
+				// so its on a fork (or is the start of a new fork)
+				// broadcast the block out so everyone knows about the fork
+				//
+				// TODO - This opens us to an amplification attack on blocks
+				// mined at a low difficulty. We should suppress really old blocks
+				// or less relevant blocks somehow.
+				// We should also probably consider banning nodes that send us really old blocks.
+				//
+				if !opts.intersects(SYNC) {
+					// broadcast the block
+					let adapter = self.adapter.clone();
+					adapter.block_accepted(&b);
+				}
+				// We accepted a block here so there is a chance we can now accept
+				// one or more orphans.
+				self.check_orphans();
+			},
 			Err(Error::Orphan) => {
 				// TODO - Do we want to check that orphan height is > current height?
 				// TODO - Just check heights here? Or should we be checking total_difficulty as well?

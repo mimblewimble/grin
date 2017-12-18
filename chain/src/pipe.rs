@@ -50,7 +50,7 @@ pub struct BlockContext {
 /// chain head if updated.
 pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
- // spend resources reading the full block when its header is invalid
+	// spend resources reading the full block when its header is invalid
 
 	debug!(
 		LOGGER,
@@ -88,7 +88,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		.map_err(|e| Error::StoreErr(e, "pipe reload head".to_owned()))?;
 
 	// start a chain extension unit of work dependent on the success of the
- // internal validation and saving operations
+	// internal validation and saving operations
 	sumtree::extending(&mut sumtrees, |mut extension| {
 		validate_block(b, &mut ctx, &mut extension)?;
 		debug!(
@@ -371,8 +371,9 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 		ctx.head = tip.clone();
 		debug!(
 			LOGGER,
-			"Updated head to {} at {}.",
+			"pipe: update_head: {}, {} at {}",
 			b.hash(),
+			b.header.total_difficulty,
 			b.header.height
 		);
 		if b.header.height % 500 == 0 {
@@ -394,8 +395,9 @@ fn update_sync_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<T
 	ctx.head = tip.clone();
 	debug!(
 		LOGGER,
-		"pipe: updated sync head to {} at {}.",
+		"pipe: update_sync_head: {}, {} at {}",
 		bh.hash(),
+		bh.total_difficulty,
 		bh.height,
 	);
 	if bh.height % 1000 == 0 {
@@ -406,7 +408,7 @@ fn update_sync_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<T
 
 fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
 	let tip = Tip::from_block(bh);
-	debug!(LOGGER, "pipe: update_header_head {},{}", tip.total_difficulty, ctx.head.total_difficulty);
+	debug!(LOGGER, "pipe: update_header_head: {}, {}", tip.total_difficulty, ctx.head.total_difficulty);
 	if tip.total_difficulty > ctx.head.total_difficulty {
 		ctx.store
 			.save_header_head(&tip)
@@ -414,8 +416,9 @@ fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option
 		ctx.head = tip.clone();
 		debug!(
 			LOGGER,
-			"pipe: updated header head to {} at {}.",
+			"pipe: update_header_head: {}, {} at {}",
 			bh.hash(),
+			bh.total_difficulty,
 			bh.height,
 		);
 		Ok(Some(tip))
