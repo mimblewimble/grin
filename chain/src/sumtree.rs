@@ -239,7 +239,8 @@ impl<'a> Extension<'a> {
 		// doing inputs first guarantees an input can't spend an output in the
 		// same block, enforcing block cut-through
 		for input in &b.inputs {
-			let pos_res = self.commit_index.get_output_pos(&input.commitment());
+			let commit = input.commitment();
+			let pos_res = self.commit_index.get_output_pos(&commit);
 			if let Ok(pos) = pos_res {
 				match self.output_pmmr.prune(pos, b.header.height as u32) {
 					Ok(true) => {
@@ -247,11 +248,11 @@ impl<'a> Extension<'a> {
 							.prune(pos, b.header.height as u32)
 							.map_err(|s| Error::SumTreeErr(s))?;
 					}
-					Ok(false) => return Err(Error::AlreadySpent),
+					Ok(false) => return Err(Error::AlreadySpent(commit)),
 					Err(s) => return Err(Error::SumTreeErr(s)),
 				}
 			} else {
-				return Err(Error::AlreadySpent);
+				return Err(Error::AlreadySpent(commit));
 			}
 		}
 
@@ -270,11 +271,11 @@ impl<'a> Extension<'a> {
 					// fork that exists but matches a different node, filtering that
 					// case out
 					if c.hash == hashsum.hash {
-						return Err(Error::DuplicateCommitment(out.commitment()));
+						return Err(Error::DuplicateCommitment(commit));
 					}
 				}
 			}
-	
+
 			// push new outputs commitments in their MMR and save them in the index
 			let pos = self.output_pmmr
 				.push(
