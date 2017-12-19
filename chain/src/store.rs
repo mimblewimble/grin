@@ -234,7 +234,7 @@ impl ChainStore for ChainKVStore {
 
 		// remove headers ahead if we backtracked
 		for n in header.height..old_tip.height {
-			self.delete_header_by_height(n)?;
+			self.delete_header_by_height(n + 1)?;
 		}
 
 		self.db
