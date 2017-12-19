@@ -191,7 +191,7 @@ fn main() {
 				.long("key_derivations")
 				.default_value("1000")
 				.takes_value(true))
-		
+
 		.subcommand(SubCommand::with_name("listen")
 			.about("Runs the wallet in listening mode waiting for transactions.")
 			.arg(Arg::with_name("port")
@@ -199,7 +199,7 @@ fn main() {
 				.long("port")
 				.help("Port on which to run the wallet listener")
 				.takes_value(true)))
-		
+
 		.subcommand(SubCommand::with_name("receive")
 			.about("Processes a JSON transaction file.")
 			.arg(Arg::with_name("input")
@@ -207,7 +207,7 @@ fn main() {
 				.short("i")
 				.long("input")
 				.takes_value(true)))
-		
+
 		.subcommand(SubCommand::with_name("send")
 			.about("Builds a transaction to send someone some coins. By default, \
 				the transaction will just be printed to stdout. If a destination is \
@@ -509,9 +509,6 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 		}
 		("restore", Some(_)) => {
 			let _=wallet::restore(&wallet_config, &keychain, key_derivations);
-		}
-		("receive", Some(_)) => {
-			panic!("Command 'receive' is depreciated, use 'listen' instead");
 		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}
