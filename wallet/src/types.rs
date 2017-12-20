@@ -78,6 +78,7 @@ pub enum Error {
 	Hyper(hyper::Error),
 	/// Error originating from hyper uri parsing.
 	Uri(hyper::error::UriError),
+	GenericError(String,)
 }
 
 impl error::Error for Error {
