@@ -33,44 +33,88 @@ use sumtree;
 use types::*;
 use util::LOGGER;
 
-const MAX_ORPHANS: usize = 50;
+const MAX_ORPHANS: usize = 150;
+
+#[derive(Debug, Clone)]
+struct Orphan {
+	block: Block,
+	opts: Options,
+}
 
 struct OrphanBlockPool {
 	// blocks indexed by their hash
-	orphans: RwLock<HashMap<Hash, (Options, Block)>>,
+	orphans: RwLock<HashMap<Hash, Orphan>>,
 	// additional index of previous -> hash
 	// so we can efficiently identify a child block (ex-orphan) after processing a block
 	prev_idx: RwLock<HashMap<Hash, Hash>>,
 }
 
 impl OrphanBlockPool {
-	// API here could take previous accepted block
-	// and remove and return the now non-orphan, ready for processing
-	// or None if nothing we can do
-	fn foo() {
-
+	fn new() -> OrphanBlockPool {
+		OrphanBlockPool {
+			orphans: RwLock::new(HashMap::new()),
+			prev_idx: RwLock::new(HashMap::new()),
+		}
 	}
 
-	fn add(block: &Block) {
-
+	fn len(&self) -> usize {
+		let orphans = self.orphans.read().unwrap();
+		orphans.len()
 	}
 
-	fn remove(hash: &Hash) -> Option<Block> {
+	fn add(&self, orphan: Orphan) {
+		{
+			let mut orphans = self.orphans.write().unwrap();
+			let mut prev_idx = self.prev_idx.write().unwrap();
+			orphans.insert(orphan.block.hash(), orphan.clone());
+			prev_idx.insert(orphan.block.header.previous, orphan.block.hash());
+		}
 
+		if self.len() > MAX_ORPHANS {
+			let max = {
+				let orphans = self.orphans.read().unwrap();
+				orphans.values().max_by_key(|x| x.block.header.height).cloned()
+			};
+
+			if let Some(x) = max {
+				let mut orphans = self.orphans.write().unwrap();
+				let mut prev_idx = self.prev_idx.write().unwrap();
+				orphans.remove(&x.block.hash());
+				prev_idx.remove(&x.block.header.previous);
+			}
+		}
+	}
+
+	fn remove(&self, hash: &Hash) -> Option<Orphan> {
+		let mut orphans = self.orphans.write().unwrap();
+		let mut prev_idx = self.prev_idx.write().unwrap();
+		let orphan = orphans.remove(hash);
+		if let Some(x) = orphan.clone() {
+			prev_idx.remove(&x.block.header.previous);
+		}
+		orphan
 	}
 
 	/// Get an orphan from the pool
-	fn get(hash: &Hash) -> Option<&Block> {
-
+	fn get(&self, hash: &Hash) -> Option<Orphan> {
+		let orphans = self.orphans.read().unwrap();
+		orphans.get(hash).cloned()
 	}
 
 	/// Get an orphan from the pool indexed by the hash of its parent
-	fn get_by_previous(hash: &Hash) -> Option<&Block> {
-
+	fn get_by_previous(&self, hash: &Hash) -> Option<Orphan> {
+		let orphans = self.orphans.read().unwrap();
+		let prev_idx = self.prev_idx.read().unwrap();
+		if let Some(hash) = prev_idx.get(hash) {
+			orphans.get(hash).cloned()
+		} else {
+			None
+		}
 	}
 
-	fn contains(hash: &Hash) -> bool {
-
+	fn contains(&self, hash: &Hash) -> bool {
+		let orphans = self.orphans.read().unwrap();
+		orphans.contains_key(hash)
 	}
 }
 
@@ -223,22 +267,22 @@ impl Chain {
 				// TODO - Just check heights here? Or should we be checking total_difficulty as well?
 				let block_hash = b.hash();
 				if b.header.height < height + (MAX_ORPHANS as u64) {
-					let mut orphans = self.orphans.write().unwrap();
+					let orphan = Orphan {
+						block: b.clone(),
+						opts: opts,
+					};
 
 					// In the case of a fork - it is possible to have multiple blocks
 					// that are children of a given block.
 					// We do not handle this currently for orphans (future enhancement?).
 					// We just assume "last one wins" for now.
-					orphans.insert(b.header.previous, (opts, b));
-
-					// TODO - how to "truncate" orphans here
-					// orphans.truncate(MAX_ORPHANS);
+					&self.orphans.add(orphan);
 
 					debug!(
 						LOGGER,
 						"process_block: orphan: {:?}, # orphans {}",
 						block_hash,
-						orphans.len(),
+						self.orphans.len(),
 					);
 				} else {
 					debug!(
@@ -304,20 +348,25 @@ impl Chain {
 	}
 
 	fn check_orphans(&self, block: &Block) {
-		let hash = block.hash();
+		debug!(
+			LOGGER,
+			"chain: check_orphans: # orphans {}",
+			self.orphans.len(),
+		);
 
 		// Is there an orphan in our orphans that we can now process?
 		// We just processed the given block, are there any orphans that have this block
 		// as their "previous" block?
-		if self.is_orphan(&hash) {
-			{
-				let mut orphans = self.orphans
-					.write()
-					.expect("attempting to get write lock on orphans");
-				orphans.remove(&hash);
-			}
-			self.process_block(candidate, opts);
+		if let Some(orphan) = self.orphans.get_by_previous(&block.hash()) {
+			self.orphans.remove(&orphan.block.hash());
+			self.process_block(orphan.block, orphan.opts);
 		}
+
+		// if self.is_orphan(&hash) {
+		// 	if let Some(orphan) = self.orphans.remove(&hash) {
+		// 		self.process_block(orphan.block, orphan.opts);
+		// 	}
+		// }
 
 
 		// first check how many we have to retry, unfort. we can't extend the lock
