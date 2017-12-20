@@ -346,8 +346,6 @@ impl Chain {
 	}
 
 	/// Check if hash is for a known orphan.
-	/// Note: orphans are indexed by previous hash
-	/// so we need to actually look at the values here
 	pub fn is_orphan(&self, hash: &Hash) -> bool {
 		self.orphans.contains(hash)
 	}
@@ -366,43 +364,6 @@ impl Chain {
 			self.orphans.remove(&orphan.block.hash());
 			self.process_block(orphan.block, orphan.opts);
 		}
-
-		// if self.is_orphan(&hash) {
-		// 	if let Some(orphan) = self.orphans.remove(&hash) {
-		// 		self.process_block(orphan.block, orphan.opts);
-		// 	}
-		// }
-
-
-		// first check how many we have to retry, unfort. we can't extend the lock
-		// in the loop as it needs to be freed before going in process_block
-
-
-
-        //
-		// let orphan_count;
-		// {
-		// 	let orphans = self.orphans.lock().unwrap();
-		// 	orphan_count = orphans.len();
-		// }
-		// debug!(LOGGER, "check_orphans: # orphans {}", orphan_count);
-        //
-		// // pop each orphan and retry, if still orphaned, will be pushed again
-		// let mut processed = vec![];
-		// for _ in 0..orphan_count {
-		// 	let popped;
-		// 	{
-		// 		let mut orphans = self.orphans.lock().unwrap();
-		// 		popped = orphans.pop_back();
-		// 	}
-		// 	if let Some((opts, orphan)) = popped {
-		// 		let o_hash = orphan.hash();
-		// 		if let Ok(_) = self.process_block(orphan, opts) {
-		// 			processed.push(o_hash);
-		// 		}
-		// 	}
-		// }
-		// processed
 	}
 
 	/// Gets an unspent output from its commitment. With return None if the
