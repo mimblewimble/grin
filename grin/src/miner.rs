@@ -571,15 +571,16 @@ impl Miner {
 		};
 
 		let (output, kernel, block_fees) = self.get_coinbase(block_fees)?;
-		let mut b = core::Block::with_reward(head, txs, output, kernel)?;
+		let mut b = core::Block::with_reward(head, txs, output, kernel, difficulty.clone())?;
 
 		debug!(
 			LOGGER,
-			"(Server ID: {}) Built new block with {} inputs and {} outputs, difficulty: {}",
+			"(Server ID: {}) Built new block with {} inputs and {} outputs, network difficulty: {}, block cumulative difficulty {}",
 			self.debug_output_id,
 			b.inputs.len(),
 			b.outputs.len(),
-			difficulty
+			difficulty.clone().into_num(),
+			b.header.clone().difficulty.clone().into_num(),
 		);
 
 		// making sure we're not spending time mining a useless block
