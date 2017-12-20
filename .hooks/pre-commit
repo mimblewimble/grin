@@ -38,7 +38,7 @@ if [ $result != 0 ]; then
 	printf "\033[0;31mfail\033[0m \n"
 	printf "[pre_commit] the following files need formatting: \n"
 
-	for file in $problem_files; do
+	for file in ${problem_files[@]}; do
 		printf "    cargo +nightly fmt -- $file\n"
 	done
 else
