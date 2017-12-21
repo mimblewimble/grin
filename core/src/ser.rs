@@ -420,10 +420,10 @@ where
 
 impl<T> WriteableSorted for Vec<T>
 where
-	T: Writeable + Hashed,
+	T: Writeable + Ord,
 {
 	fn write_sorted<W: Writer>(&mut self, writer: &mut W) -> Result<(), Error> {
-		self.sort_by_key(|elmt| elmt.hash());
+		self.sort();
 		for elmt in self {
 			elmt.write(writer)?;
 		}

@@ -203,8 +203,8 @@ impl<T: Writeable> VerifySortOrder<T> for Vec<T> {
 			.collect::<Vec<_>>()
 			.windows(2)
 			.any(|pair| pair[0] > pair[1]) {
-			true => Err(ser::Error::BadlySorted),
-			false => Ok(()),
-		}
+				true => Err(ser::Error::BadlySorted),
+				false => Ok(()),
+			}
 	}
 }
