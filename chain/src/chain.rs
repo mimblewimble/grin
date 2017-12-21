@@ -33,7 +33,7 @@ use sumtree;
 use types::*;
 use util::LOGGER;
 
-const MAX_ORPHANS: usize = 150;
+const MAX_ORPHANS: usize = 100;
 
 #[derive(Debug, Clone)]
 struct Orphan {
@@ -93,12 +93,6 @@ impl OrphanBlockPool {
 			prev_idx.remove(&x.block.header.previous);
 		}
 		orphan
-	}
-
-	/// Get an orphan from the pool
-	fn get(&self, hash: &Hash) -> Option<Orphan> {
-		let orphans = self.orphans.read().unwrap();
-		orphans.get(hash).cloned()
 	}
 
 	/// Get an orphan from the pool indexed by the hash of its parent
@@ -362,7 +356,7 @@ impl Chain {
 		// as their "previous" block?
 		if let Some(orphan) = self.orphans.get_by_previous(&block.hash()) {
 			self.orphans.remove(&orphan.block.hash());
-			self.process_block(orphan.block, orphan.opts);
+			let _ = self.process_block(orphan.block, orphan.opts);
 		}
 	}
 
