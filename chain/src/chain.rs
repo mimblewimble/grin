@@ -16,6 +16,7 @@
 //! and mostly the chain pipeline.
 
 use std::collections::VecDeque;
+use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 
 use util::secp::pedersen::{Commitment, RangeProof};
@@ -39,6 +40,7 @@ const MAX_ORPHANS: usize = 50;
 /// the current view of the UTXO set according to the chain state. Also
 /// maintains locking for the pipeline to avoid conflicting processing.
 pub struct Chain {
+	db_root: String,
 	store: Arc<ChainStore>,
 	adapter: Arc<ChainAdapter>,
 
@@ -117,9 +119,10 @@ impl Chain {
 		);
 
 		let store = Arc::new(chain_store);
-		let sumtrees = sumtree::SumTrees::open(db_root, store.clone())?;
+		let sumtrees = sumtree::SumTrees::open(db_root.clone(), store.clone())?;
 
 		Ok(Chain {
+			db_root: db_root,
 			store: store,
 			adapter: adapter,
 			head: Arc::new(Mutex::new(head)),
@@ -279,7 +282,7 @@ impl Chain {
 		Ok(())
 	}
 
-	/// returs sumtree roots
+	/// returns sumtree roots
 	pub fn get_sumtree_roots(
 		&self,
 	) -> (
@@ -289,6 +292,27 @@ impl Chain {
 	) {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.roots()
+	}
+
+	/// Provides a reading view into the current sumtree state as well as
+	/// the required indexes for a consumer to rewind to a consistent state
+	/// at the provided block hash.
+	pub fn sumtrees_read(&self, h: Hash) -> Result<(u64, u64, File), Error> {
+		let b = self.get_block(&h)?;
+
+		// get the indexes for the block
+		let out_index: u64;
+		let kernel_index: u64;
+		{
+			let sumtrees = self.sumtrees.read().unwrap();
+			let (oi, ki) = sumtrees.indexes_at(&b)?;
+			out_index = oi;
+			kernel_index = ki;
+		}
+
+		// prepares the zip and return the corresponding Read
+		let sumtree_reader = sumtree::zip_read(self.db_root.clone())?;
+		Ok((out_index, kernel_index, sumtree_reader))
 	}
 
 	/// Reset the header head to the same as the main head. When sync is running,

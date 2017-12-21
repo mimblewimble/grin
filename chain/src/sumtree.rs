@@ -17,6 +17,8 @@
 
 use std::fs;
 use std::collections::HashMap;
+use std::fs::File;
+use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -29,12 +31,13 @@ use grin_store;
 use grin_store::sumtree::PMMRBackend;
 use types::ChainStore;
 use types::Error;
-use util::LOGGER;
+use util::{LOGGER, zip};
 
 const SUMTREES_SUBDIR: &'static str = "sumtrees";
 const UTXO_SUBDIR: &'static str = "utxo";
 const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
 const KERNEL_SUBDIR: &'static str = "kernel";
+const SUMTREES_ZIP: &'static str = "sumtrees_snapshot.zip";
 
 struct PMMRHandle<T>
 where
@@ -124,6 +127,11 @@ impl SumTrees {
 	pub fn last_n_kernel(&mut self, distance: u64) -> Vec<HashSum<NoSum<TxKernel>>> {
 		let kernel_pmmr = PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
 		kernel_pmmr.get_last_n_insertions(distance)
+	}
+
+	/// Output and kernel MMR indexes at the end of the provided block
+	pub fn indexes_at(&self, block: &Block) -> Result<(u64, u64), Error> {
+		indexes_at(block, self.commit_index.deref())
 	}
 
 	/// Get sum tree roots
@@ -338,21 +346,7 @@ impl<'a> Extension<'a> {
 			block.header.height,
 		);
 
-		let out_pos_rew = match block.outputs.last() {
-			Some(output) => self.commit_index.get_output_pos(&output.commitment())
-				.map_err(|e| {
-					Error::StoreErr(e, format!("missing output pos for known block"))
-				})?,
-			None => 0,
-		};
-
-		let kern_pos_rew = match block.kernels.last() {
-			Some(kernel) => self.commit_index.get_kernel_pos(&kernel.excess)
-				.map_err(|e| {
-					Error::StoreErr(e, format!("missing kernel pos for known block"))
-				})?,
-			None => 0,
-		};
+		let (out_pos_rew, kern_pos_rew) = indexes_at(block, self.commit_index.deref())?;
 
 		debug!(
 			LOGGER,
@@ -420,4 +414,41 @@ impl<'a> Extension<'a> {
 			self.kernel_pmmr.unpruned_size(),
 		)
 	}
+}
+
+/// Output and kernel MMR indexes at the end of the provided block
+fn indexes_at(block: &Block, commit_index: &ChainStore) -> Result<(u64, u64), Error> {
+	let out_idx = match block.outputs.last() {
+		Some(output) => commit_index.get_output_pos(&output.commitment())
+			.map_err(|e| {
+				Error::StoreErr(e, format!("missing output pos for known block"))
+			})?,
+		None => 0,
+	};
+
+	let kern_idx = match block.kernels.last() {
+		Some(kernel) => commit_index.get_kernel_pos(&kernel.excess)
+			.map_err(|e| {
+				Error::StoreErr(e, format!("missing kernel pos for known block"))
+			})?,
+		None => 0,
+	};
+	Ok((out_idx, kern_idx))
+}
+
+/// Packages the sumtree data files into a zip and returns a Read to the
+/// resulting file
+pub fn zip_read(root_dir: String) -> Result<File, Error> {
+	let sumtrees_path = Path::new(&root_dir).join(SUMTREES_SUBDIR);
+	let zip_path = Path::new(&root_dir).join(SUMTREES_ZIP);
+
+	// create the zip archive
+	{
+		zip::compress(&sumtrees_path, &File::create(zip_path.clone())?)
+			.map_err(|ze| Error::Other(ze.to_string()))?;
+	}
+
+	// open it again to read it back
+	let zip_file = File::open(zip_path)?;
+	Ok(zip_file)
 }

@@ -111,6 +111,15 @@ impl Protocol for ProtocolV1 {
 		)
 	}
 
+	fn send_sumtrees_request(&self, height: u64, hash: Hash) -> Result<(), Error> {
+		self.send_request(
+			Type::SumtreesRequest,
+			Type::SumtreesArchive,
+			&SumtreesRequest { hash, height },
+			None,
+		)
+	}
+
 	/// Close the connection to the remote peer
 	fn close(&self) {
 		// TODO some kind of shutdown signal
@@ -241,23 +250,20 @@ impl Handler for ProtocolHandler {
 				self.adapter.headers_received(headers.headers, self.addr);
 				Ok(None)
 			}
+
 			Type::GetPeerAddrs => {
 				let get_peers = ser::deserialize::<GetPeerAddrs>(&mut &buf[..])?;
 				let peer_addrs = self.adapter.find_peer_addrs(get_peers.capabilities);
 
 				// serialize and send all the headers over
 				let mut body_data = vec![];
-				try!(ser::serialize(
-					&mut body_data,
+				ser::serialize(&mut body_data,
 					&PeerAddrs {
 						peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
-					},
-				));
+					})?;
 				let mut data = vec![];
-				try!(ser::serialize(
-					&mut data,
-					&MsgHeader::new(Type::PeerAddrs, body_data.len() as u64),
-				));
+				ser::serialize(&mut data,
+					&MsgHeader::new(Type::PeerAddrs, body_data.len() as u64))?;
 				data.append(&mut body_data);
 				if let Err(e) = sender.unbounded_send(data) {
 					debug!(LOGGER, "handle_payload: GetPeerAddrs, error sending: {:?}", e);
@@ -265,11 +271,53 @@ impl Handler for ProtocolHandler {
 
 				Ok(None)
 			}
+
 			Type::PeerAddrs => {
 				let peer_addrs = ser::deserialize::<PeerAddrs>(&mut &buf[..])?;
 				self.adapter.peer_addrs_received(peer_addrs.peers.iter().map(|pa| pa.0).collect());
 				Ok(None)
 			}
+
+			Type::SumtreesRequest => {
+				let sm_req = ser::deserialize::<SumtreesRequest>(&mut &buf[..])?;
+				debug!(LOGGER, "handle_payload: sumtree req for {} at {}",
+							sm_req.hash, sm_req.height);
+
+				let sumtrees = self.adapter.sumtrees_read(sm_req.hash);
+
+				if let Some(mut sumtrees) = sumtrees {
+					// first send the sumtree archive information
+					let mut data = vec![];
+					ser::serialize(&mut data,
+						&SumtreesArchive {
+							height: sm_req.height as u64,
+							hash: sm_req.hash,
+							rewind_to_output: sumtrees.output_index,
+							rewind_to_kernel: sumtrees.kernel_index,
+						})?;
+					if let Err(e) = sender.unbounded_send(data) {
+						debug!(LOGGER, "handle_payload: error sending sumtrees info: {:?}", e);
+					}
+
+					// second, send the archive byte stream
+					loop {
+						let mut buf = Vec::with_capacity(8000);
+						let len = sumtrees.reader.read(&mut buf)?;
+						if let Err(e) = sender.unbounded_send(buf) {
+							debug!(LOGGER, "handle_payload: error sending sumtrees: {:?}", e);
+						}
+						if len < 8000 {
+							break;
+						}
+					}
+				}
+				Ok(None)
+			}
+
+			Type::SumtreesArchive => {
+				// TODO write, unzip and notify adapter
+			}
+
 			_ => {
 				debug!(LOGGER, "unknown message type {:?}", header.msg_type);
 				Ok(None)

@@ -16,6 +16,7 @@
 //! other peers in the network.
 
 use std::cell::RefCell;
+use std::io;
 use std::net::{SocketAddr, Shutdown};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -56,6 +57,9 @@ impl ChainAdapter for DummyAdapter {
 	}
 	fn get_block(&self, _: Hash) -> Option<core::Block> {
 		None
+	}
+	fn sumtrees_read(&self, _h: Hash) -> Option<SumtreesRead> {
+		unimplemented!()
 	}
 }
 

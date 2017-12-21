@@ -189,6 +189,23 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
+	/// Provides a reading view into the current sumtree state as well as
+	/// the required indexes for a consumer to rewind to a consistant state
+	/// at the provided block hash.
+	fn sumtrees_read(&self, h: Hash) -> Option<p2p::SumtreesRead> {
+		match self.chain.sumtrees_read(h.clone()) {
+			Ok((out_index, kernel_index, read)) => Some(p2p::SumtreesRead {
+				output_index: out_index,
+				kernel_index: kernel_index,
+				reader: read,
+			}),
+			Err(e) => {
+				warn!(LOGGER, "Couldn't produce sumtrees data for block {}: {:?}",
+							h, e);
+				None
+			}
+		}
+	}
 }
 
 impl NetToChainAdapter {

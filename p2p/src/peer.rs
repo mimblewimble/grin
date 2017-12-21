@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::net::SocketAddr;
+use std::io;
 use std::sync::{Arc, RwLock};
 
 use futures::Future;
@@ -185,6 +186,12 @@ impl Peer {
 		self.proto.send_peer_request(capab)
 	}
 
+	pub fn send_sumtrees_request(&self, height: u64, hash: Hash) -> Result<(), Error> {
+		debug!(LOGGER, "Asking {} for sumtree archive at {} {}.",
+					 self.info.addr, height, hash);
+		self.proto.send_sumtrees_request(height, hash)
+	}
+
 	pub fn stop(&self) {
 		self.proto.close();
 	}
@@ -251,6 +258,10 @@ impl ChainAdapter for TrackingAdapter {
 
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
+	}
+
+	fn sumtrees_read(&self, h: Hash) -> Option<SumtreesRead> {
+		self.adapter.sumtrees_read(h)
 	}
 }
 

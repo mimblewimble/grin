@@ -63,6 +63,8 @@ enum_from_primitive! {
 	GetBlock,
 	Block,
 	Transaction,
+	SumtreesRequest,
+	SumtreesArchive
   }
 }
 
@@ -502,7 +504,7 @@ impl Readable for Ping {
 			Ok(h) => h,
 			Err(_) => 0,
 		};
-Ok(Ping { total_difficulty, height })
+		Ok(Ping { total_difficulty, height })
 	}
 }
 
@@ -534,5 +536,65 @@ impl Readable for Pong {
 			Err(_) => 0,
 		};
 		Ok(Pong { total_difficulty, height })
+	}
+}
+
+/// Request to get an archive of the full sumtree store, required to sync
+/// a new node.
+pub struct SumtreesRequest {
+	/// Hash of the block for which the sumtrees should be provided
+	pub hash: Hash,
+	/// Height of the corresponding block	
+	pub height: u64
+}
+
+impl Writeable for SumtreesRequest {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.hash.write(writer)?;
+		writer.write_u64(self.height)?;
+		Ok(())
+	}
+}
+
+impl Readable for SumtreesRequest {
+	fn read(reader: &mut Reader) -> Result<SumtreesRequest, ser::Error> {
+		Ok(SumtreesRequest {
+			hash: Hash::read(reader)?,
+			height: reader.read_u64()?,
+		})
+	}
+}
+
+/// Response to a sumtree archive request, must include a zip stream of the
+/// archive after the message body.
+pub struct SumtreesArchive {
+	/// Hash of the block for which the sumtrees are provided
+	pub hash: Hash,
+	/// Height of the corresponding block	
+	pub height: u64,
+	/// Output tree index the receiver should rewind to
+	pub rewind_to_output: u64,
+	/// Kernel tree index the receiver should rewind to
+	pub rewind_to_kernel: u64,
+}
+
+impl Writeable for SumtreesArchive {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.hash.write(writer)?;
+		ser_multiwrite!(writer, [write_u64, self.height],
+										[write_u64, self.rewind_to_output],
+										[write_u64, self.rewind_to_kernel]);
+		writer.write_u64(self.height)?;
+		Ok(())
+	}
+}
+
+impl Readable for SumtreesArchive {
+	fn read(reader: &mut Reader) -> Result<SumtreesArchive, ser::Error> {
+		let hash = Hash::read(reader)?;
+		let (height, rewind_to_output, rewind_to_kernel) =
+			ser_multiread!(reader, read_u64, read_u64, read_u64);
+
+		Ok(SumtreesArchive {hash, height, rewind_to_output, rewind_to_kernel})
 	}
 }

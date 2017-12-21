@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::convert::From;
+use std::fs::File;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
@@ -153,11 +154,25 @@ pub trait Protocol {
 	/// Sends a request for some peer addresses.
 	fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error>;
 
+	/// Send a request for a full sumtree archive for fast sync
+	fn send_sumtrees_request(&self, height: u64, hash: Hash) -> Result<(), Error>;
+
 	/// How many bytes have been sent/received to/from the remote peer.
 	fn transmitted_bytes(&self) -> (u64, u64);
 
 	/// Close the connection to the remote peer.
 	fn close(&self);
+}
+
+/// The full sumtree data along with indexes required for a consumer to
+/// rewind to a consistant requested state.
+pub struct SumtreesRead {
+	/// Output tree index the receiver should rewind to
+	pub output_index: u64,
+	/// Kernel tree index the receiver should rewind to
+	pub kernel_index: u64,
+	/// Binary stream for the sumtree zipped data
+	pub reader: File,
 }
 
 /// Bridge between the networking layer and the rest of the system. Handles the
@@ -191,6 +206,11 @@ pub trait ChainAdapter: Sync + Send {
 
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
+
+	/// Provides a reading view into the current sumtree state as well as
+	/// the required indexes for a consumer to rewind to a consistant state
+	/// at the provided block hash.
+	fn sumtrees_read(&self, h: Hash) -> Option<SumtreesRead>;
 }
 
 /// Additional methods required by the protocol that don't need to be
