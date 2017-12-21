@@ -326,7 +326,7 @@ impl Block {
 		kernels.push(reward_kern);
 		outputs.push(reward_out);
 
-		// now sort everything to the block is built deterministically
+		// now sort everything so the block is built deterministically
 		inputs.sort();
 		outputs.sort();
 		kernels.sort();

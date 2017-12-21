@@ -272,6 +272,7 @@ impl Transaction {
 	pub fn with_input(self, input: Input) -> Transaction {
 		let mut new_ins = self.inputs;
 		new_ins.push(input);
+		new_ins.sort();
 		Transaction {
 			inputs: new_ins,
 			..self
@@ -283,6 +284,7 @@ impl Transaction {
 	pub fn with_output(self, output: Output) -> Transaction {
 		let mut new_outs = self.outputs;
 		new_outs.push(output);
+		new_outs.sort();
 		Transaction {
 			outputs: new_outs,
 			..self

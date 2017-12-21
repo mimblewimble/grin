@@ -319,7 +319,7 @@ impl<'a> Extension<'a> {
 			LOGGER,
 			"sumtree: save_pos_index: outputs: {}, {:?}",
 			self.new_output_commits.len(),
-			self.new_output_commits,
+			self.new_output_commits.values().collect::<Vec<_>>(),
 		);
 
 		for (commit, pos) in &self.new_output_commits {
@@ -330,7 +330,7 @@ impl<'a> Extension<'a> {
 			LOGGER,
 			"sumtree: save_pos_index: kernels: {}, {:?}",
 			self.new_kernel_excesses.len(),
-			self.new_kernel_excesses,
+			self.new_kernel_excesses.values().collect::<Vec<_>>(),
 		);
 
 		for (excess, pos) in &self.new_kernel_excesses {
