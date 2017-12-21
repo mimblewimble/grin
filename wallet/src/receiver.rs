@@ -54,8 +54,8 @@ pub fn receive_json_tx(
 	keychain: &Keychain,
 	partial_tx: &PartialTx,
 ) -> Result<(), Error> {
-	let (amount, blinding, tx) = read_partial_tx(keychain, partial_tx)?;
-	let final_tx = receive_transaction(config, keychain, amount, blinding, tx)?;
+	let (amount, sender_pub_blinding, _sender_pub_nonce, tx) = read_partial_tx(keychain, partial_tx)?;
+	let final_tx = receive_transaction(config, keychain, amount, sender_pub_blinding, tx)?;
 	let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
 
 	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());

@@ -25,7 +25,6 @@ use std::cmp::min;
 
 use hyper;
 use serde_json;
-use util::secp;
 use tokio_core::reactor;
 use tokio_retry::Retry;
 use tokio_retry::strategy::FibonacciBackoff;
@@ -37,6 +36,8 @@ use core::core::{transaction, Transaction};
 use core::ser;
 use keychain;
 use util;
+use util::secp;
+use util::secp::key::PublicKey;
 use util::LOGGER;
 
 const DAT_FILE: &'static str = "wallet.dat";
@@ -601,24 +602,50 @@ impl WalletData {
 	}
 }
 
-/// Helper in serializing the information a receiver requires to build a
-/// transaction.
+/// Define the stages of a transaction
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum PartialTxPhase {
+	SenderInitiation,
+	ReceiverInitiation,
+	SenderConfirmation,
+	ReceiverConfirmation
+}
+
+/// Helper in serializing the information required during an interactive aggsig
+/// transaction
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PartialTx {
+	phase:  PartialTxPhase,
 	amount: u64,
-	blind_sum: String,
+	public_blind_excess: String,
+	public_nonce: String,
 	tx: String,
 }
 
 /// Builds a PartialTx from data sent by a sender (not yet completed by the receiver).
-pub fn build_partial_tx(
+/// aggsig_tx_context should contain the private key/nonce pair
+/// the resulting partial tx will contain the corresponding public keys
+pub fn build_partial_tx_sender_initiation(
+	keychain: &keychain::Keychain,
 	receive_amount: u64,
-	blind_sum: keychain::BlindingFactor,
 	tx: Transaction,
 ) -> PartialTx {
+
+	let pub_excess = PublicKey::from_secret_key(keychain.secp(), &keychain.aggsig_context.as_ref().unwrap().sec_key).unwrap();
+	let mut pub_excess = pub_excess.serialize_vec(keychain.secp(), true).clone();
+	let len = pub_excess.clone().len();
+	let pub_excess: Vec<_> = pub_excess.drain(0..len).collect();
+
+	let pub_nonce = PublicKey::from_secret_key(keychain.secp(), &keychain.aggsig_context.as_ref().unwrap().sec_nonce).unwrap();
+	let mut pub_nonce = pub_nonce.serialize_vec(keychain.secp(), true);
+	let len = pub_nonce.clone().len();
+	let pub_nonce: Vec<_> = pub_nonce.drain(0..len).collect();
+	
 	PartialTx {
+		phase: PartialTxPhase::SenderInitiation,
 		amount: receive_amount,
-		blind_sum: util::to_hex(blind_sum.secret_key().as_ref().to_vec()),
+		public_blind_excess: util::to_hex(pub_excess),
+		public_nonce: util::to_hex(pub_nonce),
 		tx: util::to_hex(ser::ser_vec(&tx).unwrap()),
 	}
 }
@@ -628,14 +655,16 @@ pub fn build_partial_tx(
 pub fn read_partial_tx(
 	keychain: &keychain::Keychain,
 	partial_tx: &PartialTx,
-) -> Result<(u64, keychain::BlindingFactor, Transaction), Error> {
-	let blind_bin = util::from_hex(partial_tx.blind_sum.clone())?;
+) -> Result<(u64, keychain::BlindingFactor, PublicKey, Transaction), Error> {
+	let blind_bin = util::from_hex(partial_tx.public_blind_excess.clone())?;
 	let blinding = keychain::BlindingFactor::from_slice(keychain.secp(), &blind_bin[..])?;
+	let nonce_bin = util::from_hex(partial_tx.public_nonce.clone())?;
+	let nonce = PublicKey::from_slice(keychain.secp(), &blind_bin[..])?;
 	let tx_bin = util::from_hex(partial_tx.tx.clone())?;
 	let tx = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
 		Error::Format("Could not deserialize transaction, invalid format.".to_string())
 	})?;
-	Ok((partial_tx.amount, blinding, tx))
+	Ok((partial_tx.amount, blinding, nonce, tx))
 }
 
 /// Amount in request to build a coinbase output.

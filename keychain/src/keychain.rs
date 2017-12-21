@@ -20,6 +20,7 @@ use util::secp;
 use util::secp::{Message, Secp256k1, Signature};
 use util::secp::key::SecretKey;
 use util::secp::pedersen::{Commitment, ProofMessage, ProofInfo, RangeProof};
+use util::secp::aggsig;
 use util::logger::LOGGER;
 use blake2;
 use blind::{BlindSum, BlindingFactor};
@@ -45,10 +46,21 @@ impl From<extkey::Error> for Error {
 	}
 }
 
+/// Holds internal information about an aggsig operation
+#[derive(Clone, Debug)]
+pub struct AggSigTxContext {
+	// Secret key (of which public is shared)
+	pub sec_key: SecretKey,
+	// Secret nonce (of which public is shared)
+	// (basically a SecretKey)
+	pub sec_nonce: SecretKey,
+}
+
 #[derive(Clone, Debug)]
 pub struct Keychain {
 	secp: Secp256k1,
 	extkey: extkey::ExtendedKey,
+	pub aggsig_context: Option<AggSigTxContext>,
 	key_overrides: HashMap<Identifier, SecretKey>,
 	key_derivation_cache: Arc<RwLock<HashMap<Identifier, u32>>>,
 }
@@ -77,6 +89,7 @@ impl Keychain {
 		let keychain = Keychain {
 			secp: secp,
 			extkey: extkey,
+			aggsig_context: None,
 			key_overrides: HashMap::new(),
 			key_derivation_cache: Arc::new(RwLock::new(HashMap::new())),
 		};
@@ -230,6 +243,14 @@ impl Keychain {
 
 		let blinding = self.secp.blind_sum(pos_keys, neg_keys)?;
 		Ok(BlindingFactor::new(blinding))
+	}
+
+	pub fn create_aggsig_context(&mut self, sec_key:SecretKey) {
+		self.aggsig_context=Some(AggSigTxContext{
+			sec_key: sec_key,
+			sec_nonce: aggsig::export_secnonce_single(&self.secp).unwrap(),
+		});
+
 	}
 
 	pub fn sign(&self, msg: &Message, key_id: &Identifier) -> Result<Signature, Error> {

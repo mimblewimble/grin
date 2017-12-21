@@ -408,7 +408,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 	let passphrase = wallet_args.value_of("pass").expect(
 		"Failed to read passphrase.",
 	);
-	let keychain = wallet_seed.derive_keychain(&passphrase).expect(
+	let mut keychain = wallet_seed.derive_keychain(&passphrase).expect(
 		"Failed to derive keychain from seed file and passphrase.",
 	);
 
@@ -451,7 +451,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			let max_outputs = 500;
 			let result = wallet::issue_send_tx(
 				&wallet_config,
-				&keychain,
+				&mut keychain,
 				amount,
 				minimum_confirmations,
 				dest.to_string(),

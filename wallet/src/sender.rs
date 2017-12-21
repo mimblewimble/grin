@@ -32,7 +32,7 @@ use util;
 
 pub fn issue_send_tx(
 	config: &WalletConfig,
-	keychain: &Keychain,
+	keychain: &mut Keychain,
 	amount: u64,
 	minimum_confirmations: u64,
 	dest: String,
@@ -58,7 +58,10 @@ pub fn issue_send_tx(
 		selection_strategy,
 	)?;
 
-	let partial_tx = build_partial_tx(amount, blind_sum, tx);
+	// Create a new aggsig context (that we'll have to hold onto somehow throughout the transaction)
+	keychain.create_aggsig_context(blind_sum.secret_key());
+
+	let partial_tx = build_partial_tx_sender_initiation(keychain, amount, tx);
 
 	// Closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
@@ -199,15 +202,15 @@ fn inputs_and_change(
 	}
 
 	// sender is responsible for setting the fee on the partial tx
- // recipient should double check the fee calculation and not blindly trust the
- // sender
+	// recipient should double check the fee calculation and not blindly trust the
+	// sender
 	let fee = tx_fee(coins.len(), 2, None);
 	parts.push(build::with_fee(fee));
 
 	// if we are spending 10,000 coins to send 1,000 then our change will be 9,000
- // the fee will come out of the amount itself
- // if the fee is 80 then the recipient will only receive 920
- // but our change will still be 9,000
+	// the fee will come out of the amount itself
+	// if the fee is 80 then the recipient will only receive 920
+	// but our change will still be 9,000
 	let change = total - amount;
 
 	// build inputs using the appropriate derived key_ids

@@ -31,4 +31,4 @@ mod extkey;
 pub use blind::{BlindSum, BlindingFactor};
 pub use extkey::{ExtendedKey, Identifier, IDENTIFIER_SIZE};
 pub mod keychain;
-pub use keychain::{Error, Keychain};
+pub use keychain::{Error, Keychain, AggSigTxContext};
