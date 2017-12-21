@@ -25,6 +25,7 @@ extern crate slog;
 extern crate grin_api as api;
 extern crate grin_config as config;
 extern crate grin_core as core;
+extern crate grin_client as client;
 extern crate grin_grin as grin;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
@@ -271,12 +272,7 @@ fn main() {
 
 		// client commands and options
 		("client", Some(client_args)) => {
-			match client_args.subcommand() {
-				("status", _) => {
-					println!("status info...");
-				}
-				_ => panic!("Unknown client command, use 'grin help client' for details"),
-			}
+			client_command(client_args);
 		}
 
 		// client commands and options
@@ -365,6 +361,15 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 				cmd
 			);
 		}
+	}
+}
+
+fn client_command(client_args: &ArgMatches) {
+	match client_args.subcommand() {
+		("status", Some(_)) => {
+			client::show_status();
+		}
+		_ => panic!("Unknown client command, use 'grin help client' for details"),
 	}
 }
 
