@@ -3,3 +3,7 @@ name = "grin_client"
 version = "0.1.0"
 authors = ["Quentin Le Sceller <q.lesceller@gmail.com>"]
 workspace = ".."
+
+[dependencies]
+term = "~0.4.6"
+grin_p2p = { path = "../p2p" }

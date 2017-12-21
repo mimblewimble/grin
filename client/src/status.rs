@@ -12,6 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use p2p::msg::{PROTOCOL_VERSION, USER_AGENT};
+use term;
+
 pub fn show_status() {
-    println!("status info...");
+    println!();
+    let title=format!("Grin Server Status ");
+    let mut t = term::stdout().unwrap();
+    let mut e = term::stdout().unwrap();
+    t.fg(term::color::MAGENTA).unwrap();
+    writeln!(t, "{}", title).unwrap();
+    writeln!(t, "--------------------------").unwrap();
+    t.reset().unwrap();
+    writeln!(e, "Protocol version: {}", PROTOCOL_VERSION).unwrap();
+    writeln!(e, "User agent: {}", USER_AGENT).unwrap();
+    e.reset().unwrap();
+    println!();
 }

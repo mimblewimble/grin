@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate grin_p2p as p2p;
+
+extern crate term;
+
 mod status;
 
 pub use status::show_status;
