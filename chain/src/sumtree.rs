@@ -315,12 +315,26 @@ impl<'a> Extension<'a> {
 	}
 
 	fn save_pos_index(&self) -> Result<(), Error> {
+		debug!(
+			LOGGER,
+			"sumtree: save_pos_index: outputs: {:?}",
+			self.new_output_commits,
+		);
+
 		for (commit, pos) in &self.new_output_commits {
 			self.commit_index.save_output_pos(commit, *pos)?;
 		}
+
+		debug!(
+			LOGGER,
+			"sumtree: save_pos_index: kernels: {:?}",
+			self.new_kernel_excesses,
+		);
+
 		for (excess, pos) in &self.new_kernel_excesses {
 			self.commit_index.save_kernel_pos(excess, *pos)?;
 		}
+
 		Ok(())
 	}
 
