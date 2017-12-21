@@ -317,7 +317,8 @@ impl<'a> Extension<'a> {
 	fn save_pos_index(&self) -> Result<(), Error> {
 		debug!(
 			LOGGER,
-			"sumtree: save_pos_index: outputs: {:?}",
+			"sumtree: save_pos_index: outputs: {}, {:?}",
+			self.new_output_commits.len(),
 			self.new_output_commits,
 		);
 
@@ -327,7 +328,8 @@ impl<'a> Extension<'a> {
 
 		debug!(
 			LOGGER,
-			"sumtree: save_pos_index: kernels: {:?}",
+			"sumtree: save_pos_index: kernels: {}, {:?}",
+			self.new_kernel_excesses.len(),
 			self.new_kernel_excesses,
 		);
 
