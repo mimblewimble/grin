@@ -615,28 +615,27 @@ pub enum PartialTxPhase {
 /// transaction
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PartialTx {
-	phase:  PartialTxPhase,
-	amount: u64,
-	public_blind_excess: String,
-	public_nonce: String,
-	tx: String,
+	pub phase:  PartialTxPhase,
+	pub amount: u64,
+	pub public_blind_excess: String,
+	pub public_nonce: String,
+	pub tx: String,
 }
 
-/// Builds a PartialTx from data sent by a sender (not yet completed by the receiver).
+/// Builds a PartialTx 
 /// aggsig_tx_context should contain the private key/nonce pair
 /// the resulting partial tx will contain the corresponding public keys
-pub fn build_partial_tx_sender_initiation(
+pub fn build_partial_tx(
 	keychain: &keychain::Keychain,
 	receive_amount: u64,
 	tx: Transaction,
 ) -> PartialTx {
 
-	let pub_excess = PublicKey::from_secret_key(keychain.secp(), &keychain.aggsig_context.as_ref().unwrap().sec_key).unwrap();
+	let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys();
 	let mut pub_excess = pub_excess.serialize_vec(keychain.secp(), true).clone();
 	let len = pub_excess.clone().len();
 	let pub_excess: Vec<_> = pub_excess.drain(0..len).collect();
 
-	let pub_nonce = PublicKey::from_secret_key(keychain.secp(), &keychain.aggsig_context.as_ref().unwrap().sec_nonce).unwrap();
 	let mut pub_nonce = pub_nonce.serialize_vec(keychain.secp(), true);
 	let len = pub_nonce.clone().len();
 	let pub_nonce: Vec<_> = pub_nonce.drain(0..len).collect();
@@ -659,7 +658,7 @@ pub fn read_partial_tx(
 	let blind_bin = util::from_hex(partial_tx.public_blind_excess.clone())?;
 	let blinding = keychain::BlindingFactor::from_slice(keychain.secp(), &blind_bin[..])?;
 	let nonce_bin = util::from_hex(partial_tx.public_nonce.clone())?;
-	let nonce = PublicKey::from_slice(keychain.secp(), &blind_bin[..])?;
+	let nonce = PublicKey::from_slice(keychain.secp(), &nonce_bin[..])?;
 	let tx_bin = util::from_hex(partial_tx.tx.clone())?;
 	let tx = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
 		Error::Format("Could not deserialize transaction, invalid format.".to_string())

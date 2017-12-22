@@ -18,7 +18,7 @@ use std::sync::{Arc, RwLock};
 
 use util::secp;
 use util::secp::{Message, Secp256k1, Signature};
-use util::secp::key::SecretKey;
+use util::secp::key::{SecretKey, PublicKey};
 use util::secp::pedersen::{Commitment, ProofMessage, ProofInfo, RangeProof};
 use util::secp::aggsig;
 use util::logger::LOGGER;
@@ -60,7 +60,7 @@ pub struct AggSigTxContext {
 pub struct Keychain {
 	secp: Secp256k1,
 	extkey: extkey::ExtendedKey,
-	pub aggsig_context: Option<AggSigTxContext>,
+	pub aggsig_context: Arc<RwLock<Option<AggSigTxContext>>>,
 	key_overrides: HashMap<Identifier, SecretKey>,
 	key_derivation_cache: Arc<RwLock<HashMap<Identifier, u32>>>,
 }
@@ -89,7 +89,7 @@ impl Keychain {
 		let keychain = Keychain {
 			secp: secp,
 			extkey: extkey,
-			aggsig_context: None,
+			aggsig_context: Arc::new(RwLock::new(None)),
 			key_overrides: HashMap::new(),
 			key_derivation_cache: Arc::new(RwLock::new(HashMap::new())),
 		};
@@ -245,12 +245,38 @@ impl Keychain {
 		Ok(BlindingFactor::new(blinding))
 	}
 
-	pub fn create_aggsig_context(&mut self, sec_key:SecretKey) {
-		self.aggsig_context=Some(AggSigTxContext{
+	pub fn aggsig_create_context(&self, sec_key:SecretKey) {
+		let mut context = self.aggsig_context.write().unwrap();
+		*context = Some(AggSigTxContext{
 			sec_key: sec_key,
 			sec_nonce: aggsig::export_secnonce_single(&self.secp).unwrap(),
 		});
+	}
 
+	/// Returns private key, private nonce
+	pub fn aggsig_get_private_keys(&self) -> (SecretKey, SecretKey) {
+		let context = self.aggsig_context.clone();
+		let context_read=context.read().unwrap();
+		let agg_context=context_read.as_ref().unwrap();
+		(agg_context.sec_key.clone(),
+		agg_context.sec_nonce.clone())
+	}
+
+	/// Returns public key, public nonce
+	pub fn aggsig_get_public_keys(&self) -> (PublicKey, PublicKey) {
+		let context = self.aggsig_context.clone();
+		let context_read=context.read().unwrap();
+		let agg_context=context_read.as_ref().unwrap();
+		(PublicKey::from_secret_key(&self.secp, &agg_context.sec_key).unwrap(),
+		PublicKey::from_secret_key(&self.secp, &agg_context.sec_nonce).unwrap())
+	}
+
+	pub fn aggsig_sign_single(&self, msg: &Message, nonce:SecretKey) -> Result<Signature, Error> {
+		let context = self.aggsig_context.clone();
+		let context_read=context.read().unwrap();
+		let agg_context=context_read.as_ref().unwrap();
+		let sig = aggsig::sign_single(&self.secp, *msg, agg_context.sec_key)?;
+		Ok(sig)
 	}
 
 	pub fn sign(&self, msg: &Message, key_id: &Identifier) -> Result<Signature, Error> {

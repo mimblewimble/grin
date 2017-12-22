@@ -32,7 +32,7 @@ use util;
 
 pub fn issue_send_tx(
 	config: &WalletConfig,
-	keychain: &mut Keychain,
+	keychain: &Keychain,
 	amount: u64,
 	minimum_confirmations: u64,
 	dest: String,
@@ -58,10 +58,10 @@ pub fn issue_send_tx(
 		selection_strategy,
 	)?;
 
-	// Create a new aggsig context (that we'll have to hold onto somehow throughout the transaction)
-	keychain.create_aggsig_context(blind_sum.secret_key());
+	// Create a new aggsig context
+	keychain.aggsig_create_context(blind_sum.secret_key());
 
-	let partial_tx = build_partial_tx_sender_initiation(keychain, amount, tx);
+	let partial_tx = build_partial_tx(keychain, amount, tx);
 
 	// Closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.

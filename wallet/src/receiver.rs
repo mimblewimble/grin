@@ -26,7 +26,7 @@ use api;
 use core::consensus::reward;
 use core::core::{build, Block, Output, Transaction, TxKernel};
 use core::ser;
-use keychain::{BlindingFactor, Identifier, Keychain};
+use keychain::{BlindingFactor, BlindSum, Identifier, Keychain};
 use types::*;
 use util;
 use util::LOGGER;
@@ -44,6 +44,83 @@ pub fn receive_json_tx_str(
 ) -> Result<(), Error> {
 	let partial_tx = serde_json::from_str(json_tx).unwrap();
 	receive_json_tx(config, keychain, &partial_tx)
+}
+
+/// Receive Part 1 of interactive transactions from sender, Sender Initiation
+/// Return result of part 2, Recipient Initation, to sender
+/// -Receiver receives inputs, outputs xS * G and kS * G
+/// -Receiver picks random blinding factors for all outputs being received, computes total blinding
+///     excess xR
+/// -Receiver picks random nonce kR
+/// -Receiver computes Schnorr challenge e = H(M | kR * G + kS * G)
+/// -Receiver computes their part of signature, sR = kR + e * xR
+/// -Receiver responds with sR, blinding excess xR * G, public nonce kR * G
+
+fn handle_sender_initiation(
+	config: &WalletConfig,
+	keychain: &Keychain,
+	partial_tx: &PartialTx
+) -> Result<(), Error> {
+	let (amount, sender_pub_blinding, sender_pub_nonce, tx) = read_partial_tx(keychain, partial_tx)?;
+
+	let root_key_id = keychain.root_key_id();
+
+	// double check the fee amount included in the partial tx
+	// we don't necessarily want to just trust the sender
+	// we could just overwrite the fee here (but we won't) due to the ecdsa sig
+	let fee = tx_fee(tx.inputs.len(), tx.outputs.len() + 1, None);
+	if fee != tx.fee {
+		return Err(Error::FeeDispute {
+			sender_fee: tx.fee,
+			recipient_fee: fee,
+		});
+	}
+
+	let out_amount = amount - fee;
+
+	//First step is just to get the excess sum of the outputs we're participating in
+	//Output and key needs to be stored until transaction finalisation time, somehow
+
+	let key_id = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+		let (key_id, derivation) = next_available_key(&wallet_data, keychain);
+
+		wallet_data.add_output(OutputData {
+			root_key_id: root_key_id.clone(),
+			key_id: key_id.clone(),
+			n_child: derivation,
+			value: out_amount,
+			status: OutputStatus::Unconfirmed,
+			height: 0,
+			lock_height: 0,
+			is_coinbase: false,
+		});
+
+		key_id
+	})?;
+
+	let sum=BlindSum::new();
+	let sum = sum.add_key_id(key_id);
+	let blind_sum = keychain.blind_sum(&sum)?;
+
+	// Create a new aggsig context
+	// this will create a new blinding sum and nonce, and store them
+	keychain.aggsig_create_context(blind_sum.secret_key());
+
+	// Add public nonces kR*G + kS*G 
+	let (pub_excess, _) = keychain.aggsig_get_public_keys();
+	let (_, sec_nonce) = keychain.aggsig_get_private_keys();
+	let mut nonce_sum = sender_pub_nonce.clone();
+  let _ = nonce_sum.add_exp_assign(keychain.secp(), &sec_nonce);
+
+	//Now calculate signature using message M=fee, nonce=nonce_sum
+
+
+	// Calculate sR
+	//keychain.aggsig_sign_single();
+
+	//let final_tx = receive_transaction(config, keychain, amount, sender_pub_blinding, tx)?;
+	//let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
+	Ok(())
 }
 
 /// Receive an already well formed JSON transaction issuance and finalize the
@@ -77,14 +154,22 @@ impl Handler for WalletReceiver {
 		let struct_body = req.get::<bodyparser::Struct<PartialTx>>();
 
 		if let Ok(Some(partial_tx)) = struct_body {
-			receive_json_tx(&self.config, &self.keychain, &partial_tx)
-				.map_err(|e| {
-					error!(LOGGER, "Problematic partial tx, looks like this: {:?}", partial_tx);
-					api::Error::Internal(
-						format!("Error processing partial transaction: {:?}", e),
-					)})
-				.unwrap();
-			Ok(Response::with(status::Ok))
+			match partial_tx.phase {
+				PartialTxPhase::SenderInitiation => {
+					handle_sender_initiation(&self.config, &self.keychain, &partial_tx)
+					.map_err(|e| {
+						error!(LOGGER, "Phase 1 Sender Initiation -> Problematic partial tx, looks like this: {:?}", partial_tx);
+						api::Error::Internal(
+							format!("Error processing partial transaction: {:?}", e),
+						)})
+					.unwrap();
+					Ok(Response::with(status::Ok))
+				},
+				_=> {
+					error!(LOGGER, "Phase 1 Sender Initiation -> Unhandled Phase: {:?}", partial_tx);
+					Ok(Response::with((status::BadRequest, "Unhandled Phase")))
+				}
+			}
 		} else {
 			Ok(Response::with((status::BadRequest, "")))
 		}
