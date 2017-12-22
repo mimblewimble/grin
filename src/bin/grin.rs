@@ -30,6 +30,8 @@ extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
+mod client;
+
 use std::thread;
 use std::io::Read;
 use std::fs::File;
@@ -271,12 +273,7 @@ fn main() {
 
 		// client commands and options
 		("client", Some(client_args)) => {
-			match client_args.subcommand() {
-				("status", _) => {
-					println!("status info...");
-				}
-				_ => panic!("Unknown client command, use 'grin help client' for details"),
-			}
+			client_command(client_args, global_config);
 		}
 
 		// client commands and options
@@ -365,6 +362,18 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 				cmd
 			);
 		}
+	}
+}
+
+fn client_command(client_args: &ArgMatches, global_config: GlobalConfig) {
+	// just get defaults from the global config
+	let server_config = global_config.members.unwrap().server;
+
+	match client_args.subcommand() {
+		("status", Some(_)) => {
+			client::show_status(&server_config);
+		}
+		_ => panic!("Unknown client command, use 'grin help client' for details"),
 	}
 }
 
