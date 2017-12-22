@@ -23,6 +23,7 @@ use std::cmp::Ordering;
 use std::ops;
 
 use consensus;
+use consensus::VerifySortOrder;
 use core::Committed;
 use core::hash::Hashed;
 use core::pmmr::Summable;
@@ -75,11 +76,19 @@ pub enum Error {
 	Secp(secp::Error),
 	/// Restrict number of incoming inputs
 	TooManyInputs,
+	/// Underlying consensus error (currently for sort order)
+	ConsensusError(consensus::Error),
 }
 
 impl From<secp::Error> for Error {
 	fn from(e: secp::Error) -> Error {
 		Error::Secp(e)
+	}
+}
+
+impl From<consensus::Error> for Error {
+	fn from(e: consensus::Error) -> Error {
+		Error::ConsensusError(e)
 	}
 }
 
@@ -275,6 +284,7 @@ impl Transaction {
 	pub fn with_input(self, input: Input) -> Transaction {
 		let mut new_ins = self.inputs;
 		new_ins.push(input);
+		new_ins.sort();
 		Transaction {
 			inputs: new_ins,
 			..self
@@ -286,6 +296,7 @@ impl Transaction {
 	pub fn with_output(self, output: Output) -> Transaction {
 		let mut new_outs = self.outputs;
 		new_outs.push(output);
+		new_outs.sort();
 		Transaction {
 			outputs: new_outs,
 			..self
@@ -353,11 +364,18 @@ impl Transaction {
 		if self.inputs.len() > consensus::MAX_BLOCK_INPUTS {
 			return Err(Error::TooManyInputs);
 		}
+		self.verify_sorted()?;
 		for out in &self.outputs {
 			out.verify_proof()?;
 		}
 		let excess = self.verify_sig()?;
 		Ok(excess)
+	}
+
+	fn verify_sorted(&self) -> Result<(), Error> {
+		self.inputs.verify_sort_order()?;
+		self.outputs.verify_sort_order()?;
+		Ok(())
 	}
 }
 

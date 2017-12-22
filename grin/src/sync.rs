@@ -112,9 +112,8 @@ fn body_sync(peers: Peers, chain: Arc<chain::Chain>) {
 
 	// if we have 5 most_work_peers then ask for 50 blocks total (peer_count * 10)
 	// max will be 80 if all 8 peers are advertising most_work
-	let peer_count = cmp::max(peers.most_work_peers().len(), 10);
+	let peer_count = cmp::min(peers.most_work_peers().len(), 10);
 	let block_count = peer_count * 10;
-
 
 	let hashes_to_get = hashes
 		.iter()
