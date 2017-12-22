@@ -449,8 +449,14 @@ impl Block {
 		if exceeds_weight(self.inputs.len(), self.outputs.len(), self.kernels.len()) {
 			return Err(Error::WeightExceeded);
 		}
+		self.verify_sorted()?;
 		self.verify_coinbase()?;
 		self.verify_kernels(false)?;
+		Ok(())
+	}
+
+	fn verify_sorted(&self) -> Result<(), Error> {
+		// TODO - implement me
 		Ok(())
 	}
 
