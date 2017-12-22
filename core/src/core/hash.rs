@@ -23,7 +23,7 @@ use std::convert::AsRef;
 
 use blake2::blake2b::Blake2b;
 
-use consensus::VerifySortOrder;
+use consensus;
 use ser::{self, AsFixedBytes, Error, Readable, Reader, Writeable, Writer};
 use util::LOGGER;
 
@@ -196,15 +196,15 @@ impl<W: ser::Writeable> Hashed for W {
 	}
 }
 
-impl<T: Writeable> VerifySortOrder<T> for Vec<T> {
-	fn verify_sort_order(&self) -> Result<(), ser::Error> {
+impl<T: Writeable> consensus::VerifySortOrder<T> for Vec<T> {
+	fn verify_sort_order(&self) -> Result<(), consensus::Error> {
 		match self.iter()
 			.map(|item| item.hash())
 			.collect::<Vec<_>>()
 			.windows(2)
 			.any(|pair| pair[0] > pair[1]) {
-			true => Err(ser::Error::BadlySorted),
-			false => Ok(()),
-		}
+				true => Err(consensus::Error::SortError),
+				false => Ok(()),
+			}
 	}
 }
