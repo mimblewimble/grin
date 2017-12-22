@@ -273,7 +273,7 @@ fn main() {
 
 		// client commands and options
 		("client", Some(client_args)) => {
-			client_command(client_args);
+			client_command(client_args, global_config);
 		}
 
 		// client commands and options
@@ -365,10 +365,13 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 	}
 }
 
-fn client_command(client_args: &ArgMatches) {
+fn client_command(client_args: &ArgMatches, global_config: GlobalConfig) {
+	// just get defaults from the global config
+	let server_config = global_config.members.unwrap().server;
+
 	match client_args.subcommand() {
 		("status", Some(_)) => {
-			client::show_status();
+			client::show_status(&server_config);
 		}
 		_ => panic!("Unknown client command, use 'grin help client' for details"),
 	}
