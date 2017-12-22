@@ -21,8 +21,9 @@ use std::collections::HashSet;
 
 use core::Committed;
 use core::{Input, Output, Proof, SwitchCommitHash, Transaction, TxKernel, COINBASE_KERNEL,
-           COINBASE_OUTPUT};
-use consensus::{exceeds_weight, reward, MINIMUM_DIFFICULTY, REWARD};
+	COINBASE_OUTPUT};
+use consensus;
+use consensus::{exceeds_weight, reward, MINIMUM_DIFFICULTY, REWARD, VerifySortOrder};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use core::transaction;
@@ -54,6 +55,8 @@ pub enum Error {
 	Secp(secp::Error),
 	/// Underlying keychain related error
 	Keychain(keychain::Error),
+	/// Underlying consensus error (sort order currently)
+	Consensus(consensus::Error),
 }
 
 impl From<transaction::Error> for Error {
@@ -71,6 +74,12 @@ impl From<secp::Error> for Error {
 impl From<keychain::Error> for Error {
 	fn from(e: keychain::Error) -> Error {
 		Error::Keychain(e)
+	}
+}
+
+impl From<consensus::Error> for Error {
+	fn from(e: consensus::Error) -> Error {
+		Error::Consensus(e)
 	}
 }
 
@@ -456,7 +465,9 @@ impl Block {
 	}
 
 	fn verify_sorted(&self) -> Result<(), Error> {
-		// TODO - implement me
+		self.inputs.verify_sort_order()?;
+		self.outputs.verify_sort_order()?;
+		self.kernels.verify_sort_order()?;
 		Ok(())
 	}
 
