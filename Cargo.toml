@@ -21,7 +21,6 @@ grin_core = { path = "./core" }
 grin_pow = { path = "./pow"}
 grin_p2p = { path = "./p2p"}
 grin_util = { path = "./util"}
-secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }
 blake2-rfc = "~0.2.17"
 clap = "^2.23.3"
 daemonize = "^0.2.3"
