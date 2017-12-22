@@ -7,6 +7,10 @@ exclude = ["**/*.grin", "**/*.grin2"]
 [workspace]
 members = ["api", "chain", "config", "core", "grin", "keychain", "p2p", "store", "util", "pool", "wallet"]
 
+[[bin]]
+name = "grin"
+path = "src/bin/grin.rs"
+
 [dependencies]
 grin_api = { path = "./api" }
 grin_wallet = { path = "./wallet" }
