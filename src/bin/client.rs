@@ -30,7 +30,11 @@ pub fn show_status(config: &ServerConfig) {
     writeln!(e, "Protocol version: {}", p2p::msg::PROTOCOL_VERSION).unwrap();
     writeln!(e, "User agent: {}", p2p::msg::USER_AGENT).unwrap();
     match get_tip_from_node(config) {
-        Ok(tip) => writeln!(e, "Chain height: {}", tip.height).unwrap(),
+        Ok(tip) => {
+            writeln!(e, "Chain height: {}", tip.height).unwrap();
+            writeln!(e, "Total difficulty: {}", tip.total_difficulty).unwrap();
+            writeln!(e, "Last block pushed: {}", tip.last_block_pushed).unwrap()
+        }
         Err(_) => writeln!(e, "WARNING: Client failed to get data. Is your `grin server` offline or broken?").unwrap()
     };
     e.reset().unwrap();
