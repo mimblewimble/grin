@@ -38,6 +38,12 @@ pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Erro
 				"Failed to get coinbase from {}. Run grin wallet listen",
 				url
 			);
+		} else {
+			info!(
+				LOGGER,
+				"Successfully received coinbase from {}",
+				url
+			)
 		}
 		res
 	})
