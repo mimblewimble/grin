@@ -607,7 +607,7 @@ mod test {
 	use core::build::{self, input, output, with_fee};
 	use core::test::tx2i1o;
 	use keychain::{Identifier, Keychain};
-	use consensus::*;
+	use consensus::{MAX_BLOCK_WEIGHT, BLOCK_OUTPUT_WEIGHT};
 	use std::time::Instant;
 
 	use util::secp;
