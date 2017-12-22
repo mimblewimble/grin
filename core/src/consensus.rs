@@ -22,7 +22,6 @@
 use std::fmt;
 use std::cmp::max;
 
-use ser;
 use core::target::Difficulty;
 
 /// A grin is divisible to 10^9, following the SI prefixes
@@ -137,6 +136,13 @@ pub const UPPER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW * 4 / 3;
 /// Minimum size time window used for difficulty adjustments
 pub const LOWER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW * 5 / 6;
 
+/// Consensus errors
+#[derive(Clone, Debug, PartialEq)]
+pub enum Error {
+	/// Inputs/outputs/kernels must be sorted lexicographically.
+	SortError,
+}
+
 /// Error when computing the next difficulty adjustment.
 #[derive(Debug, Clone)]
 pub struct TargetError(pub String);
@@ -221,10 +227,10 @@ where
 	Ok(max(difficulty, Difficulty::minimum()))
 }
 
-/// Consensus rule that collections of items are sorted lexicographically over the wire.
+/// Consensus rule that collections of items are sorted lexicographically.
 pub trait VerifySortOrder<T> {
 	/// Verify a collection of items is sorted as required.
-	fn verify_sort_order(&self) -> Result<(), ser::Error>;
+	fn verify_sort_order(&self) -> Result<(), Error>;
 }
 
 #[cfg(test)]
