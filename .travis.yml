@@ -37,7 +37,7 @@ env:
 after_success: |
   pwd &&
   echo "HERE" &&
-  wget https://github.com/percytheprefect/kcov/archive/master.tar.gz &&
+  wget https://github.com/mimblewimble/kcov/archive/master.tar.gz &&
   tar xzf master.tar.gz &&
   cd kcov-master &&
   mkdir build &&
