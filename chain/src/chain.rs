@@ -23,7 +23,7 @@ use util::secp::pedersen::{Commitment, RangeProof};
 use core::core::SumCommit;
 use core::core::pmmr::{HashSum, NoSum};
 
-use core::core::{Block, BlockHeader, Output, TxKernel};
+use core::core::{Block, BlockHeader, Output, TxKernel, SwitchCommitHash};
 use core::core::target::Difficulty;
 use core::core::hash::Hash;
 use grin_store::Error::NotFoundErr;
@@ -360,21 +360,26 @@ impl Chain {
 	/// way that's consistent with the current chain state and more
 	/// specifically the current winning fork.
 	pub fn get_unspent(&self, output_ref: &Commitment) -> Result<Output, Error> {
-		let sumtrees = self.sumtrees.read().unwrap();
-		let is_unspent = sumtrees.is_unspent(output_ref)?;
-		if is_unspent {
-			self.store
-				.get_output_by_commit(output_ref)
-				.map_err(|e| Error::StoreErr(e, "chain get unspent".to_owned()))
-		} else {
-			Err(Error::OutputNotFound)
+		match self.store.get_output_by_commit(output_ref) {
+			Ok(out) => {
+				let mut sumtrees = self.sumtrees.write().unwrap();
+				if sumtrees.is_unspent(output_ref, &out.switch_commit_hash())? {
+					Ok(out)
+				} else {
+					Err(Error::OutputNotFound)
+				}
+			}
+			Err(NotFoundErr) => Err(Error::OutputNotFound),
+			Err(e) => Err(Error::StoreErr(e, "chain get unspent".to_owned())),
 		}
 	}
 
 	/// Checks whether an output is unspent
-	pub fn is_unspent(&self, output_ref: &Commitment) -> Result<bool, Error> {
-		let sumtrees = self.sumtrees.read().unwrap();
-		sumtrees.is_unspent(output_ref)
+	pub fn is_unspent(&self, output_ref: &Commitment, switch: &SwitchCommitHash)
+		-> Result<bool, Error> {
+
+		let mut sumtrees = self.sumtrees.write().unwrap();
+		sumtrees.is_unspent(output_ref, switch)
 	}
 
 	/// Sets the sumtree roots on a brand new block by applying the block on the

@@ -22,8 +22,8 @@ use std::sync::Arc;
 
 use util::secp::pedersen::{RangeProof, Commitment};
 
-use core::core::{Block, SumCommit, TxKernel};
-use core::core::pmmr::{Backend, HashSum, NoSum, Summable, PMMR};
+use core::core::{Block, SumCommit, SwitchCommitHash, TxKernel};
+use core::core::pmmr::{HashSum, NoSum, Summable, PMMR};
 use core::core::hash::Hashed;
 use grin_store;
 use grin_store::sumtree::PMMRBackend;
@@ -90,16 +90,22 @@ impl SumTrees {
 	}
 
 	/// Whether a given commitment exists in the Output MMR and it's unspent
-	pub fn is_unspent(&self, commit: &Commitment) -> Result<bool, Error> {
+	pub fn is_unspent(&mut self, commit: &Commitment, switch: &SwitchCommitHash)
+		-> Result<bool, Error> {
+
 		let rpos = self.commit_index.get_output_pos(commit);
 		match rpos {
 			Ok(pos) => {
-				// checking the position is within the MMR, the commit index could be
-				// returning rewound data
-				if pos > self.output_pmmr_h.last_pos {
-					Ok(false)
+				let output_pmmr = PMMR::at(
+					&mut self.output_pmmr_h.backend,
+					self.output_pmmr_h.last_pos
+				);
+				if let Some(hs) = output_pmmr.get(pos) {
+					let hashsum = HashSum::from_summable(
+						pos, &SumCommit{commit: commit.clone()}, Some(switch));
+					Ok(hs.hash == hashsum.hash)
 				} else {
-					Ok(self.output_pmmr_h.backend.get(pos).is_some())
+					Ok(false)
 				}
 			}
 			Err(grin_store::Error::NotFoundErr) => Ok(false),
