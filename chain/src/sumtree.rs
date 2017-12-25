@@ -248,7 +248,7 @@ impl<'a> Extension<'a> {
 		// same block, enforcing block cut-through
 		for input in &b.inputs {
 			let commit = input.commitment();
-			let pos_res = self.commit_index.get_output_pos(&commit);
+			let pos_res = self.get_output_pos(&commit);
 			if let Ok(pos) = pos_res {
 				match self.output_pmmr.prune(pos, b.header.height as u32) {
 					Ok(true) => {
@@ -266,7 +266,7 @@ impl<'a> Extension<'a> {
 
 		for out in &b.outputs {
 			let commit = out.commitment();
-			if let Ok(pos) = self.commit_index.get_output_pos(&commit) {
+			if let Ok(pos) = self.get_output_pos(&commit) {
 				// we need to check whether the commitment is in the current MMR view
 				// as well as the index doesn't support rewind and is non-authoritative
 				// (non-historical node will have a much smaller one)
@@ -303,7 +303,7 @@ impl<'a> Extension<'a> {
 		}
 
 		for kernel in &b.kernels {
-			if let Ok(pos) = self.commit_index.get_kernel_pos(&kernel.excess) {
+			if let Ok(pos) = self.get_kernel_pos(&kernel.excess) {
 				// same as outputs
 				if let Some(k) = self.kernel_pmmr.get(pos) {
 					let hashsum = HashSum::from_summable(
@@ -359,7 +359,7 @@ impl<'a> Extension<'a> {
 		);
 
 		let out_pos_rew = match block.outputs.last() {
-			Some(output) => self.commit_index.get_output_pos(&output.commitment())
+			Some(output) => self.get_output_pos(&output.commitment())
 				.map_err(|e| {
 					Error::StoreErr(e, format!("missing output pos for known block"))
 				})?,
@@ -367,7 +367,7 @@ impl<'a> Extension<'a> {
 		};
 
 		let kern_pos_rew = match block.kernels.last() {
-			Some(kernel) => self.commit_index.get_kernel_pos(&kernel.excess)
+			Some(kernel) => self.get_kernel_pos(&kernel.excess)
 				.map_err(|e| {
 					Error::StoreErr(e, format!("missing kernel pos for known block"))
 				})?,
@@ -395,6 +395,22 @@ impl<'a> Extension<'a> {
 
 		self.dump(true);
 		Ok(())
+	}
+
+	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, grin_store::Error> {
+		if let Some(pos) = self.new_output_commits.get(commit) {
+			Ok(*pos)
+		} else {
+			self.commit_index.get_output_pos(commit)
+		}
+	}
+
+	fn get_kernel_pos(&self, excess: &Commitment) -> Result<u64, grin_store::Error> {
+		if let Some(pos) = self.new_kernel_excesses.get(excess) {
+			Ok(*pos)
+		} else {
+			self.commit_index.get_kernel_pos(excess)
+		}
 	}
 
 	/// Current root hashes and sums (if applicable) for the UTXO, range proof
