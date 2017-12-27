@@ -183,9 +183,10 @@ impl Chain {
 
 		// Make sure we have a sync_head available for later use.
 		// We may have been tracking an invalid chain on a now banned peer
-		// so we want to reset the sync_head on restart to handle this.
-		// TODO - handle sync_head and peer banning in a more effective way.
+		// so we want to reset the both sync_head and header_head on restart to handle this.
+		// TODO - handle sync_head/header_head and peer banning in a more effective way.
 		let tip = chain_store.head().unwrap();
+		chain_store.save_header_head(&tip)?;
 		chain_store.save_sync_head(&tip)?;
 
 		info!(
