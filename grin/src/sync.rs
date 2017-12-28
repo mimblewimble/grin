@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::thread;
+use std::{cmp, thread};
 use std::time::Duration;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -112,9 +112,7 @@ fn body_sync(peers: Peers, chain: Arc<chain::Chain>) {
 
 	// if we have 5 most_work_peers then ask for 50 blocks total (peer_count * 10)
 	// max will be 80 if all 8 peers are advertising most_work
-	let peer_count = {
-		peers.most_work_peers().len()
-	};
+	let peer_count = cmp::min(peers.most_work_peers().len(), 10);
 	let block_count = peer_count * 10;
 
 	let hashes_to_get = hashes
@@ -156,6 +154,7 @@ pub fn header_sync(peers: Peers, chain: Arc<chain::Chain>) {
 		if let Some(peer) = peers.most_work_peer() {
 			if let Ok(p) = peer.try_read() {
 				let peer_difficulty = p.info.total_difficulty.clone();
+				debug!(LOGGER, "sync: header_sync: {}, {}", difficulty, peer_difficulty);
 				if peer_difficulty > difficulty {
 					let _ = request_headers(
 						peer.clone(),

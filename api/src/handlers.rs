@@ -120,7 +120,7 @@ impl UtxoHandler {
 		let outputs = block
 			.outputs
 			.iter()
-			.filter(|c|self.chain.is_unspent(&c.commit).unwrap())
+			.filter(|c|self.chain.is_unspent(&c.commit, &c.switch_commit_hash).unwrap())
 			.map(|k|OutputSwitch::from_output(k, &header))
 			.collect();
 		BlockOutputs {

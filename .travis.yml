@@ -12,7 +12,12 @@ addons:
     packages:
       - g++-5
       - cmake
-
+      - libcurl4-openssl-dev
+      - libelf-dev
+      - libdw-dev
+      - cmake
+      - gcc
+      - binutils-dev 
 env:
   global:
     - RUST_BACKTRACE="1"
@@ -28,5 +33,30 @@ env:
     - TEST_DIR=keychain
     - TEST_DIR=core
     - TEST_DIR=util
+
+after_success: |
+  pwd &&
+  echo "HERE" &&
+  wget https://github.com/mimblewimble/kcov/archive/master.tar.gz &&
+  tar xzf master.tar.gz &&
+  cd kcov-master &&
+  mkdir build &&
+  cd build &&
+  cmake .. &&
+  make &&
+  sudo make install &&
+  cd ../.. &&
+  rm -rf kcov-master &&
+  cargo test --no-run &&
+  cd ../
+  pwd &&
+  kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/grin_core* && 
+  echo "Finished coverage for grin_core"
+  kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/grin_chain* && 
+  echo "Finished coverage for grin_chain"
+  kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/mine_simple_* &&
+  echo "Finished coverage for mine_simple"
+  bash <(curl -s https://codecov.io/bash) &&
+  echo "Uploaded code coverage"
 
 script: cd $TEST_DIR && cargo test --verbose
