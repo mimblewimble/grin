@@ -79,6 +79,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		if let &Err(ref e) = &res {
 			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
 			if e.is_bad_block() {
+				debug!(LOGGER, "block_received: {} is a bad block, resetting head", bhash);
+				let _ = self.chain.reset_head();
 				return false;
 			}
 		}
