@@ -176,16 +176,13 @@ impl Chain {
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
 		};
 
-		// make sure sync_head is available for later use
-		let _ = match chain_store.get_sync_head() {
-			Ok(tip) => tip,
-			Err(NotFoundErr) => {
-				let tip = chain_store.head().unwrap();
-				chain_store.save_sync_head(&tip)?;
-				tip
-			},
-			Err(e) => return Err(Error::StoreErr(e, "chain init sync head".to_owned())),
-		};
+		// Make sure we have a sync_head available for later use.
+		// We may have been tracking an invalid chain on a now banned peer
+		// so we want to reset the both sync_head and header_head on restart to handle this.
+		// TODO - handle sync_head/header_head and peer banning in a more effective way.
+		let tip = chain_store.head().unwrap();
+		chain_store.save_header_head(&tip)?;
+		chain_store.save_sync_head(&tip)?;
 
 		info!(
 			LOGGER,
