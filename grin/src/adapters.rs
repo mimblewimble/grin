@@ -79,11 +79,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		if let &Err(ref e) = &res {
 			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
 			if e.is_bad_block() {
-			 	// header chain should be consistent with the sync head here
-			 	// we just banned the peer that sent a bad block so
-			 	// sync head should resolve itself if/when we find an alternative peer
-			 	// with more work than ourselves
-			 	// we should not need to reset the header head here
+				debug!(LOGGER, "block_received: {} is a bad block, resetting head", bhash);
+				let _ = self.chain.reset_head();
 				return false;
 			}
 		}
