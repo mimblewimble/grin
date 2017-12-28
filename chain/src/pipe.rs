@@ -93,7 +93,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		validate_block(b, &mut ctx, &mut extension)?;
 		debug!(
 			LOGGER,
-			"pipe: proces_block {} at {} is valid, save and append.",
+			"pipe: process_block {} at {} is valid, save and append.",
 			b.hash(),
 			b.header.height,
 		);
