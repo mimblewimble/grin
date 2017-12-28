@@ -13,11 +13,9 @@
 // limitations under the License.
 
 //! Transactions
-
-use byteorder::{BigEndian, ByteOrder};
 use blake2::blake2b::blake2b;
 use util::secp::{self, Message, Signature};
-use util::static_secp_instance;
+use util::{static_secp_instance, kernel_sig_msg};
 use util::secp::pedersen::{Commitment, RangeProof};
 use std::cmp::Ordering;
 use std::ops;
@@ -90,14 +88,6 @@ impl From<consensus::Error> for Error {
 	fn from(e: consensus::Error) -> Error {
 		Error::ConsensusError(e)
 	}
-}
-
-/// Construct msg bytes from tx fee and lock_height
-pub fn kernel_sig_msg(fee: u64, lock_height: u64) -> [u8; 32] {
-	let mut bytes = [0; 32];
-	BigEndian::write_u64(&mut bytes[16..24], fee);
-	BigEndian::write_u64(&mut bytes[24..], lock_height);
-	bytes
 }
 
 /// A proof that a transaction sums to zero. Includes both the transaction's

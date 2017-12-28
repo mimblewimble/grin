@@ -25,10 +25,9 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use util::{secp, static_secp_instance};
+use util::{secp, static_secp_instance, kernel_sig_msg};
 
 use core::{Input, Output, SwitchCommitHash, Transaction, DEFAULT_OUTPUT};
-use core::transaction::kernel_sig_msg;
 use util::LOGGER;
 use keychain;
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};

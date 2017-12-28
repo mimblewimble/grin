@@ -25,7 +25,7 @@
 extern crate slog;
 extern crate slog_async;
 extern crate slog_term;
-
+extern crate byteorder;
 extern crate rand;
 
 #[macro_use]
@@ -54,6 +54,7 @@ pub use types::LoggingConfig;
 use std::cell::{Ref, RefCell};
 #[allow(unused_imports)]
 use std::ops::Deref;
+use byteorder::{BigEndian, ByteOrder};
 
 mod hex;
 pub use hex::*;
@@ -97,4 +98,12 @@ impl<T> OneTime<T> {
 	pub fn borrow(&self) -> Ref<T> {
 		Ref::map(self.inner.borrow(), |o| o.as_ref().unwrap())
 	}
+}
+
+/// Construct msg bytes from tx fee and lock_height
+pub fn kernel_sig_msg(fee: u64, lock_height: u64) -> [u8; 32] {
+	let mut bytes = [0; 32];
+	BigEndian::write_u64(&mut bytes[16..24], fee);
+	BigEndian::write_u64(&mut bytes[24..], lock_height);
+	bytes
 }

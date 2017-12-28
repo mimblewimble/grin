@@ -22,10 +22,10 @@ use util::secp::key::{SecretKey, PublicKey};
 use util::secp::pedersen::{Commitment, ProofMessage, ProofInfo, RangeProof};
 use util::secp::aggsig;
 use util::logger::LOGGER;
+use util::kernel_sig_msg;
 use blake2;
 use blind::{BlindSum, BlindingFactor};
 use extkey::{self, Identifier};
-
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Error {
@@ -271,12 +271,34 @@ impl Keychain {
 		PublicKey::from_secret_key(&self.secp, &agg_context.sec_nonce).unwrap())
 	}
 
-	pub fn aggsig_sign_single(&self, msg: &Message, nonce:SecretKey) -> Result<Signature, Error> {
+	/// Note 'secnonce' here is used to perform the signature, while 'pubnonce' just allows you to
+	/// provide a custom public nonce to include while calculating e
+	pub fn aggsig_sign_single(&self, msg: &Message, secnonce:Option<&SecretKey>, pubnonce:Option<&PublicKey>) -> Result<Signature, Error> {
 		let context = self.aggsig_context.clone();
 		let context_read=context.read().unwrap();
 		let agg_context=context_read.as_ref().unwrap();
-		let sig = aggsig::sign_single(&self.secp, *msg, agg_context.sec_key)?;
+		let sig = aggsig::sign_single(&self.secp, msg, &agg_context.sec_key, secnonce, pubnonce)?;
 		Ok(sig)
+	}
+
+	//Verifies an aggsig signature
+	pub fn aggsig_verify_single(&self, sig: &Signature, msg: &Message, pubnonce:Option<&PublicKey>, pubkey:&PublicKey) -> bool {
+		aggsig::verify_single(&self.secp, sig, msg, pubnonce, pubkey)
+	}
+
+	pub fn aggsig_calculate_partial_sig(&self, sender_pub_nonce:&PublicKey, fee:u64, lock_height:u64) -> Result<Signature, Error>{
+		// Add public nonces kR*G + kS*G
+		let (pub_excess, _) = self.aggsig_get_public_keys();
+		let (_, sec_nonce) = self.aggsig_get_private_keys();
+		let mut nonce_sum = sender_pub_nonce.clone();
+		let _ = nonce_sum.add_exp_assign(&self.secp, &sec_nonce);
+
+		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
+
+		//Now calculate signature using message M=fee, nonce in e=nonce_sum
+		self.aggsig_sign_single(&msg, Some(&sec_nonce), Some(&nonce_sum))
+
+
 	}
 
 	pub fn sign(&self, msg: &Message, key_id: &Identifier) -> Result<Signature, Error> {

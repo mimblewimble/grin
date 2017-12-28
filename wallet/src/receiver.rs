@@ -106,17 +106,7 @@ fn handle_sender_initiation(
 	// this will create a new blinding sum and nonce, and store them
 	keychain.aggsig_create_context(blind_sum.secret_key());
 
-	// Add public nonces kR*G + kS*G 
-	let (pub_excess, _) = keychain.aggsig_get_public_keys();
-	let (_, sec_nonce) = keychain.aggsig_get_private_keys();
-	let mut nonce_sum = sender_pub_nonce.clone();
-  let _ = nonce_sum.add_exp_assign(keychain.secp(), &sec_nonce);
-
-	//Now calculate signature using message M=fee, nonce=nonce_sum
-
-
-	// Calculate sR
-	//keychain.aggsig_sign_single();
+	let sig_part=keychain.aggsig_calculate_partial_sig(&sender_pub_nonce, fee, tx.lock_height).unwrap();
 
 	//let final_tx = receive_transaction(config, keychain, amount, sender_pub_blinding, tx)?;
 	//let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
