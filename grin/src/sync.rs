@@ -110,9 +110,9 @@ fn body_sync(peers: Peers, chain: Arc<chain::Chain>) {
 	}
 	hashes.reverse();
 
-	// if we have 5 most_work_peers then ask for 50 blocks total (peer_count * 10)
-	// max will be 80 if all 8 peers are advertising most_work
-	let peer_count = cmp::min(peers.most_work_peers().len(), 10);
+	// if we have 5 peers to sync from then ask for 50 blocks total (peer_count * 10)
+	// max will be 80 if all 8 peers are advertising more work
+	let peer_count = cmp::min(peers.more_work_peers().len(), 10);
 	let block_count = peer_count * 10;
 
 	let hashes_to_get = hashes
@@ -137,7 +137,8 @@ fn body_sync(peers: Peers, chain: Arc<chain::Chain>) {
 			);
 
 		for hash in hashes_to_get.clone() {
-			let peer = peers.most_work_peer();
+			// TODO - Is there a threshold where we sync from most_work_peer (not more_work_peer)?
+			let peer = peers.more_work_peer();
 			if let Some(peer) = peer {
 				if let Ok(peer) = peer.try_read() {
 					let _ = peer.send_block_request(hash);
@@ -209,6 +210,7 @@ pub fn needs_syncing(
 				if peer.info.total_difficulty <= local_diff {
 					info!(LOGGER, "synchronize stopped, at {:?} @ {:?}", local_diff, chain.head().unwrap().height);
 					currently_syncing.store(false, Ordering::Relaxed);
+					let _ = chain.reset_head();
 				}
 			}
 		} else {

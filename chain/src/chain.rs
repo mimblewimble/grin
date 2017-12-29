@@ -17,6 +17,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 
 use util::secp::pedersen::{Commitment, RangeProof};
 
@@ -33,12 +34,13 @@ use sumtree;
 use types::*;
 use util::LOGGER;
 
-const MAX_ORPHANS: usize = 100;
+const MAX_ORPHAN_AGE_SECS: u64 = 30;
 
 #[derive(Debug, Clone)]
 struct Orphan {
 	block: Block,
 	opts: Options,
+	added: Instant,
 }
 
 struct OrphanBlockPool {
@@ -70,18 +72,11 @@ impl OrphanBlockPool {
 			prev_idx.insert(orphan.block.header.previous, orphan.block.hash());
 		}
 
-		if self.len() > MAX_ORPHANS {
-			let max = {
-				let orphans = self.orphans.read().unwrap();
-				orphans.values().max_by_key(|x| x.block.header.height).cloned()
-			};
-
-			if let Some(x) = max {
-				let mut orphans = self.orphans.write().unwrap();
-				let mut prev_idx = self.prev_idx.write().unwrap();
-				orphans.remove(&x.block.hash());
-				prev_idx.remove(&x.block.header.previous);
-			}
+		{
+			let mut orphans = self.orphans.write().unwrap();
+			let mut prev_idx = self.prev_idx.write().unwrap();
+			orphans.retain(|_, ref mut x| x.added.elapsed() < Duration::from_secs(MAX_ORPHAN_AGE_SECS));
+			prev_idx.retain(|_, &mut x| orphans.contains_key(&x));
 		}
 	}
 
@@ -176,13 +171,9 @@ impl Chain {
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
 		};
 
-		// Make sure we have a sync_head available for later use.
-		// We may have been tracking an invalid chain on a now banned peer
-		// so we want to reset the both sync_head and header_head on restart to handle this.
-		// TODO - handle sync_head/header_head and peer banning in a more effective way.
-		let tip = chain_store.head().unwrap();
-		chain_store.save_header_head(&tip)?;
-		chain_store.save_sync_head(&tip)?;
+		// Reset sync_head and header_head to head of current chain.
+		// Make sure sync_head is available for later use when needed.
+		chain_store.reset_head()?;
 
 		info!(
 			LOGGER,
@@ -212,7 +203,6 @@ impl Chain {
 		let head = self.store
 			.head()
 			.map_err(|e| Error::StoreErr(e, "chain load head".to_owned()))?;
-		let height = head.height;
 		let ctx = self.ctx_from_head(head, opts);
 
 		let res = pipe::process_block(&b, ctx);
@@ -254,36 +244,25 @@ impl Chain {
 				self.check_orphans(&b);
 			},
 			Err(Error::Orphan) => {
-				// TODO - Do we want to check that orphan height is > current height?
-				// TODO - Just check heights here? Or should we be checking total_difficulty as well?
 				let block_hash = b.hash();
-				if b.header.height < height + (MAX_ORPHANS as u64) {
-					let orphan = Orphan {
-						block: b.clone(),
-						opts: opts,
-					};
+				let orphan = Orphan {
+					block: b.clone(),
+					opts: opts,
+					added: Instant::now(),
+				};
 
-					// In the case of a fork - it is possible to have multiple blocks
-					// that are children of a given block.
-					// We do not handle this currently for orphans (future enhancement?).
-					// We just assume "last one wins" for now.
-					&self.orphans.add(orphan);
+				// In the case of a fork - it is possible to have multiple blocks
+				// that are children of a given block.
+				// We do not handle this currently for orphans (future enhancement?).
+				// We just assume "last one wins" for now.
+				&self.orphans.add(orphan);
 
-					debug!(
-						LOGGER,
-						"process_block: orphan: {:?}, # orphans {}",
-						block_hash,
-						self.orphans.len(),
-					);
-				} else {
-					debug!(
-						LOGGER,
-						"process_block: orphan: {:?}, (dropping, height {} vs {})",
-						block_hash,
-						b.header.height,
-						height,
-					);
-				}
+				debug!(
+					LOGGER,
+					"process_block: orphan: {:?}, # orphans {}",
+					block_hash,
+					self.orphans.len(),
+				);
 			},
 			Err(Error::Unfit(ref msg)) => {
 				debug!(
@@ -409,17 +388,6 @@ impl Chain {
 		sumtrees.roots()
 	}
 
-	/// Reset the header head to the same as the main head. When sync is running,
-	/// the header head will go ahead to try to download as many as possible.
-	/// However if a block, when fully received, is found invalid, the header
-	/// head need to backtrack to the last known valid position.
-	pub fn reset_header_head(&self) -> Result<(), Error> {
-		let head = self.head.lock().unwrap();
-		debug!(LOGGER, "Reset header head to {} at {}",
-					head.last_block_h, head.height);
-		self.store.save_header_head(&head).map_err(From::from)
-	}
-
 	/// returns the last n nodes inserted into the utxo sum tree
 	/// returns sum tree hash plus output itself (as the sum is contained
 	/// in the output anyhow)
@@ -449,6 +417,13 @@ impl Chain {
 	/// Total difficulty at the head of the chain
 	pub fn total_difficulty(&self) -> Difficulty {
 		self.head.lock().unwrap().clone().total_difficulty
+	}
+
+	/// Reset header_head and sync_head to head of current body chain
+	pub fn reset_head(&self) -> Result<(), Error> {
+		self.store
+			.reset_head()
+			.map_err(|e| Error::StoreErr(e, "chain reset_head".to_owned()))
 	}
 
 	/// Get the tip that's also the head of the chain
