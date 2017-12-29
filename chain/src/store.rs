@@ -24,6 +24,7 @@ use core::core::{Block, BlockHeader, Output};
 use core::consensus::TargetError;
 use core::core::target::Difficulty;
 use grin_store::{self, option_to_not_found, to_key, Error, u64_to_key};
+use util::LOGGER;
 
 const STORE_SUBPATH: &'static str = "chain";
 
@@ -202,6 +203,7 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn save_output_pos(&self, commit: &Commitment, pos: u64) -> Result<(), Error> {
+		debug!(LOGGER, "chain_store: save_output_pos: {:?}, {}", commit, pos);
 		self.db.put_ser(
 			&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())[..],
 			&pos,
@@ -209,13 +211,16 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
-		option_to_not_found(
+		let res = option_to_not_found(
 			self.db
 				.get_ser(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())),
-		)
+		);
+		debug!(LOGGER, "chain_store: get_output_pos: {:?}, {:?}", commit, res);
+		res
 	}
 
 	fn save_kernel_pos(&self, excess: &Commitment, pos: u64) -> Result<(), Error> {
+		debug!(LOGGER, "chain_store: save_kernel_pos: {:?}, {}", excess, pos);
 		self.db.put_ser(
 			&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())[..],
 			&pos,
@@ -223,10 +228,12 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_kernel_pos(&self, excess: &Commitment) -> Result<u64, Error> {
-		option_to_not_found(
+		let res = option_to_not_found(
 			self.db
 				.get_ser(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())),
-		)
+		);
+		debug!(LOGGER, "chain_store: get_kernel_pos: {:?}, {:?}", excess, res);
+		res
 	}
 
 	/// Maintain consistency of the "header_by_height" index by traversing back
