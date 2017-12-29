@@ -399,17 +399,25 @@ impl<'a> Extension<'a> {
 
 	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, grin_store::Error> {
 		if let Some(pos) = self.new_output_commits.get(commit) {
-			Ok(*pos)
+			let res = Ok(*pos);
+			debug!(LOGGER, "sumtree: get_output_pos (mem): {:?}, {:?}", commit, res);
+			res
 		} else {
-			self.commit_index.get_output_pos(commit)
+			let res = self.commit_index.get_output_pos(commit);
+			debug!(LOGGER, "sumtree: get_output_pos (idx): {:?}, {:?}", commit, res);
+			res
 		}
 	}
 
 	fn get_kernel_pos(&self, excess: &Commitment) -> Result<u64, grin_store::Error> {
 		if let Some(pos) = self.new_kernel_excesses.get(excess) {
-			Ok(*pos)
+			let res = Ok(*pos);
+			debug!(LOGGER, "sumtree: get_kernel_pos (mem): {:?}, {:?}", excess, res);
+			res
 		} else {
-			self.commit_index.get_kernel_pos(excess)
+			let res = self.commit_index.get_kernel_pos(excess);
+			debug!(LOGGER, "sumtree: get_kernel_pos (idx): {:?}, {:?}", excess, res);
+			res
 		}
 	}
 
