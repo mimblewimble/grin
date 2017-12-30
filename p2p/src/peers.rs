@@ -90,7 +90,42 @@ impl Peers {
 		self.connected_peers().len() as u32
 	}
 
-	/// Return vec of all peers that currently have the most worked branch,
+	// Return vec of connected peers that currently advertise more work (total_difficulty)
+	// than we do.
+	pub fn more_work_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
+		let peers = self.connected_peers();
+		if peers.len() == 0 {
+			return vec![];
+		}
+
+		let total_difficulty = self.total_difficulty();
+
+		let mut max_peers = peers
+			.iter()
+			.filter(|x| {
+				match x.try_read() {
+					Ok(peer) => {
+						peer.info.total_difficulty > total_difficulty
+					},
+					Err(_) => false,
+				}
+			})
+			.cloned()
+			.collect::<Vec<_>>();
+
+		thread_rng().shuffle(&mut max_peers);
+		max_peers
+	}
+
+	/// Returns single random peer with more work than us.
+	pub fn more_work_peer(&self) -> Option<Arc<RwLock<Peer>>> {
+		match self.more_work_peers().first() {
+			Some(x) => Some(x.clone()),
+			None => None
+		}
+	}
+
+	/// Return vec of connected peers that currently have the most worked branch,
 	/// showing the highest total difficulty.
 	pub fn most_work_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
 		let peers = self.connected_peers();
@@ -134,12 +169,6 @@ impl Peers {
 			None => None
 		}
 	}
-
-	/// Returns a random connected peer.
-	// pub fn random_peer(&self) -> Option<Arc<RwLock<Peer>>> {
-	// 	let peers = self.connected_peers();
-	// 	Some(thread_rng().choose(&peers).unwrap().clone())
-	// }
 
 	pub fn is_banned(&self, peer_addr: SocketAddr) -> bool {
 		if let Ok(peer_data) = self.store.get_peer(peer_addr) {
