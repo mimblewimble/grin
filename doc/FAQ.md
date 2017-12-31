@@ -23,7 +23,7 @@
 Like other cryptocurrencies, newly mined coins are time locked, so mined coins can't be spent immediately.
 
 ## "Peer request error" or other peer/network issues after restarting grin server
-Possible workaround is rm -rf .grin/peers/*  then restart.
+Possible workaround is `rm -rf .grin/peers/*`  then restart.
 
 ## grin server or waller crashes or hangs
 Yes, this still happens quite often. You'll need to babysit grin.
@@ -36,10 +36,14 @@ Use `rustup` to [reinstall rust and cargo as described](build.md).
 
 NOTE: If you install rust or cargo with your package manager (most Linuxes
 anno 2017) you'll get too old versions. On Debian, you might have to manually
-compile cmake or get it from non-detault repositories.
+compile cmake or get it from non-default repositories.
 
 ## Build error: `failed to select a version for 'serde_json'`
 Run `cargo update` to fix this
+
+## Build error: Panic during rocksdb compilation.
+This is caused by missing Linux headers. Install the development headers with
+your favorite package manager (usually they are called `linux-headers`).
 
 # Short term plans
 ## Transaction types
