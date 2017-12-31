@@ -42,7 +42,7 @@ git checkout milestone/testnet1
 cargo build
 ```
 ## Build errors
-See [Troubleshooting](faq.md#troubleshooting)
+See [Troubleshooting](FAQ.md#troubleshooting)
 
 #### Cross-compiling
 
