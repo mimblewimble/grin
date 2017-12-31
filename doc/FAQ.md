@@ -41,6 +41,10 @@ compile cmake or get it from non-default repositories.
 ## Build error: `failed to select a version for 'serde_json'`
 Run `cargo update` to fix this
 
+## Build error: Panic during rocksdb compilation.
+This is caused by missing Linux headers. Install the development headers with
+your favorite package manager (usually they are called `linux-headers`).
+
 # Short term plans
 ## Transaction types
 - (DONE) A temporary simple transaction exchange. Temporary - will be deprecated.
