@@ -257,15 +257,14 @@ impl Handler for PeersConnectedHandler {
 	}
 }
 
-/// Get details about a given peer and peer operations
-/// TODO GET /v1/peers/10.12.12.13
+/// Peer operations
 /// POST /v1/peers/10.12.12.13/ban
 /// TODO POST /v1/peers/10.12.12.13/unban
-pub struct PeerHandler {
+pub struct PeerPostHandler {
 	pub peers: p2p::Peers,
 }
 
-impl Handler for PeerHandler {
+impl Handler for PeerPostHandler {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		let url = req.url.clone();
 		let mut path_elems = url.path();
@@ -291,6 +290,29 @@ impl Handler for PeerHandler {
         Ok(Response::with((status::BadRequest, "")))
       }
     }
+	}
+}
+
+/// Get details about a given peer
+pub struct PeerGetHandler {
+	pub peers: p2p::Peers,
+}
+
+impl Handler for PeerGetHandler {
+	fn handle(&self, req: &mut Request) -> IronResult<Response> {
+		let url = req.url.clone();
+		let mut path_elems = url.path();
+		if *path_elems.last().unwrap() == "" {
+			path_elems.pop();
+		}
+		if let Ok(addr) = path_elems.last().unwrap().parse() {
+			match self.peers.get_peer(addr) {
+				Ok(peer) => json_response(&peer),
+				Err(_) => Ok(Response::with((status::BadRequest, ""))),
+			}
+		} else {
+			Ok(Response::with((status::BadRequest, "")))
+		}
 	}
 }
 
@@ -491,7 +513,10 @@ let _ = thread::Builder::new()
 			let peers_connected_handler = PeersConnectedHandler {
 				peers: peers.clone(),
 			};
-			let peer_handler = PeerHandler {
+			let peer_post_handler = PeerPostHandler {
+				peers: peers.clone(),
+			};
+			let peer_get_handler = PeerGetHandler {
 				peers: peers.clone(),
 			};
 
@@ -508,6 +533,7 @@ let _ = thread::Builder::new()
 				"post peers/a.b.c.d:p/ban".to_string(),
 				"get peers/all".to_string(),
 				"get peers/connected".to_string(),
+				"get peers/a.b.c.d".to_string(),
 			);
 			// We allow manually banning, like this:
 			// curl -v -X POST http://127.0.0.1:13413/v1/peers/88.99.251.87:13414/ban
@@ -522,7 +548,8 @@ let _ = thread::Builder::new()
 				pool_push: post "/pool/push" => pool_push_handler,
 				peers_all: get "/peers/all" => peers_all_handler,
 				peers_connected: get "/peers/connected" => peers_connected_handler,
-				peer: post "/peers/*" => peer_handler,
+				peer: post "/peers/*" => peer_post_handler,
+				peer: get "/peers/*" => peer_get_handler
 			);
 
 			let mut apis = ApiServer::new("/v1".to_string());
