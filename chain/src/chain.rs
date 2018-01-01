@@ -343,15 +343,22 @@ impl Chain {
 	pub fn get_unspent(&self, output_ref: &Commitment) -> Result<Output, Error> {
 		match self.store.get_output_by_commit(output_ref) {
 			Ok(out) => {
-				let mut sumtrees = self.sumtrees.write().unwrap();
-				if sumtrees.is_unspent(output_ref, &out.switch_commit_hash())? {
+				if self.is_unspent(output_ref, &out.switch_commit_hash())? {
+					debug!(LOGGER, "chain: get_unspent: {:?} found and not spent", output_ref);
 					Ok(out)
 				} else {
-					Err(Error::OutputNotFound)
+					debug!(LOGGER, "chain: get_unspent: {:?} found but spent", output_ref);
+					Err(Error::OutputSpent)
 				}
 			}
-			Err(NotFoundErr) => Err(Error::OutputNotFound),
-			Err(e) => Err(Error::StoreErr(e, "chain get unspent".to_owned())),
+			Err(NotFoundErr) => {
+				debug!(LOGGER, "chain: get_unspent: {:?} not found", output_ref);
+				Err(Error::OutputNotFound)
+			}
+			Err(e) => {
+				debug!(LOGGER, "chain: get_unspent: {:?} lookup failed, {:?}", output_ref, e);
+				Err(Error::StoreErr(e, "chain get unspent".to_owned()))
+			}
 		}
 	}
 

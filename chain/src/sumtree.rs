@@ -103,13 +103,22 @@ impl SumTrees {
 				if let Some(hs) = output_pmmr.get(pos) {
 					let hashsum = HashSum::from_summable(
 						pos, &SumCommit{commit: commit.clone()}, Some(switch));
-					Ok(hs.hash == hashsum.hash)
+					let res = hs.hash == hashsum.hash;
+					debug!(LOGGER, "sumtree: is_unspent: {:?}, pos: {}, match: {}", commit, pos, res);
+					Ok(res)
 				} else {
+					debug!(LOGGER, "sumtree: is_unspent: {:?}, pos: {}, did not find in pmmr", commit, pos);
 					Ok(false)
 				}
 			}
-			Err(grin_store::Error::NotFoundErr) => Ok(false),
-			Err(e) => Err(Error::StoreErr(e, "sumtree unspent check".to_owned())),
+			Err(grin_store::Error::NotFoundErr) => {
+				debug!(LOGGER, "sumtree: is_unspent: {:?}, did not find in commit_index", commit);
+				Ok(false)
+			}
+			Err(e) => {
+				debug!(LOGGER, "sumtree: is_unspent: {:?}, commit_index lookup failed, {:?}", commit, e);
+				Err(Error::StoreErr(e, "sumtree unspent check".to_owned()))
+			}
 		}
 	}
 
