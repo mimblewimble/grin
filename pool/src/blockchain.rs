@@ -32,9 +32,10 @@ impl DummyBlockHeaderIndex {
 
 	pub fn get_block_header_by_output_commit(
 		&self,
-		commit: Commitment,
+		commit: &Commitment,
+		_: &hash::Hash,
 	) -> Result<&block::BlockHeader, PoolError> {
-		match self.block_headers.get(&commit) {
+		match self.block_headers.get(commit) {
 			Some(h) => Ok(h),
 			None => Err(PoolError::GenericPoolError),
 		}
@@ -139,11 +140,12 @@ impl BlockChain for DummyChainImpl {
 	fn get_block_header_by_output_commit(
 		&self,
 		commit: &Commitment,
+		bhash: &hash::Hash,
 	) -> Result<block::BlockHeader, PoolError> {
 		match self.block_headers
 			.read()
 			.unwrap()
-			.get_block_header_by_output_commit(*commit)
+			.get_block_header_by_output_commit(commit, bhash)
 		{
 			Ok(h) => Ok(h.clone()),
 			Err(e) => Err(e),

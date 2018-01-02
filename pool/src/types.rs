@@ -162,6 +162,7 @@ pub trait BlockChain {
 	fn get_block_header_by_output_commit(
 		&self,
 		commit: &Commitment,
+		bhash: &hash::Hash,
 	) -> Result<block::BlockHeader, PoolError>;
 
 	/// Get the block header at the head

@@ -62,7 +62,12 @@ struct UtxoHandler {
 }
 
 impl UtxoHandler {
-	fn get_utxo(&self, id: &str, include_rp: bool, include_switch: bool) -> Result<Output, Error> {
+	fn get_utxo(
+		&self,
+		id: &str,
+		include_rp: bool,
+		include_switch: bool,
+	) -> Result<Output, Error> {
 		debug!(LOGGER, "getting utxo: {}", id);
 		let c = util::from_hex(String::from(id)).map_err(|_| {
 			Error::Argument(format!("Not a valid commitment: {}", id))
@@ -71,9 +76,15 @@ impl UtxoHandler {
 
 		let out = self.chain.get_unspent(&commit).map_err(|_| Error::NotFound)?;
 
+		let tip = self.chain
+			.head()
+			.map_err(|_| Error::Internal(format!("failed to get chain head")))?;
+
+		// TODO - this is going to be **slow**
+		// if we need to retrieve many utxos (wallet refresh)
 		let header = self.chain
-			.get_block_header_by_output_commit(&commit)
-			.map_err(|_| Error::NotFound)?;
+			.get_block_header_by_output_commit(&commit, &tip.last_block_h)
+			.map_err(|_| Error::Internal(format!("failed to get block header for output")))?;
 
 		Ok(Output::from_output(
 			&out,

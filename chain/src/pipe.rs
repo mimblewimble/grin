@@ -312,11 +312,15 @@ fn validate_block(
 	}
 
 	// check for any outputs with lock_heights greater than current block height
+	let bhash = b.header.previous;
 	for input in &b.inputs {
 		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
 			if output.features.contains(transaction::COINBASE_OUTPUT) {
 				if let Ok(output_header) = ctx.store
-					.get_block_header_by_output_commit(&input.commitment())
+					.get_block_header_by_output_commit(
+						&input.commitment(),
+						&bhash,
+					)
 				{
 					if b.header.height <= output_header.height + global::coinbase_maturity() {
 						return Err(Error::ImmatureCoinbase);
