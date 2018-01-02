@@ -19,6 +19,7 @@ extern crate grin_p2p as p2p;
 extern crate tokio_core;
 
 use std::net::SocketAddr;
+use std::net::TcpListener;
 use std::sync::Arc;
 use std::time;
 
@@ -31,13 +32,24 @@ use core::core::target::Difficulty;
 use core::core::hash::Hash;
 use p2p::Peer;
 
+fn open_port() -> u16 {
+	// use port 0 to allow the OS to assign an open port
+	// TcpListener's Drop impl will unbind the port as soon as
+	// listener goes out of scope
+	let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+	listener.local_addr().unwrap().port()
+}
+
 // Starts a server and connects a client peer to it to check handshake,
 // followed by a ping/pong exchange to make sure the connection is live.
 #[test]
 fn peer_handshake() {
 	let mut evtlp = Core::new().unwrap();
 	let handle = evtlp.handle();
-	let p2p_conf = p2p::P2PConfig::default();
+	let p2p_conf = p2p::P2PConfig {
+		host: "0.0.0.0".parse().unwrap(),
+		port: open_port()
+	};
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
 	let pool = CpuPool::new(1);
 	let server = p2p::Server::new(
@@ -59,7 +71,6 @@ fn peer_handshake() {
 		timeout
 			.from_err()
 			.and_then(move |_| {
-				let p2p_conf = p2p::P2PConfig::default();
 				let addr = SocketAddr::new(p2p_conf.host, p2p_conf.port);
 				let socket =
 					TcpStream::connect(&addr, &phandle).map_err(|e| p2p::Error::Connection(e));
