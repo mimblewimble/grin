@@ -48,7 +48,7 @@ pub mod secp_static;
 pub use secp_static::static_secp_instance;
 
 pub mod types;
-pub use types::LoggingConfig;
+pub use types::{LoggingConfig, LogLevel};
 
 // other utils
 use std::cell::{Ref, RefCell};

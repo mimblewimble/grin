@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[macro_use]
-extern crate router;
-
 extern crate grin_api as api;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
@@ -37,14 +34,11 @@ use std::default::Default;
 use futures::{Async, Future, Poll};
 use futures::task::current;
 use tokio_core::reactor;
-use tokio_timer::Timer;
 
-use core::consensus;
 use core::global;
 use core::global::ChainTypes;
-use wallet::WalletConfig;
 
-use framework::{LocalServerContainer, LocalServerContainerConfig, LocalServerContainerPool,
+use framework::{LocalServerContainerConfig, LocalServerContainerPool,
                 LocalServerContainerPoolConfig};
 
 /// Testing the frameworks by starting a fresh server, creating a genesis

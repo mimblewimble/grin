@@ -61,7 +61,7 @@ pub fn issue_send_tx(
 	// Create a new aggsig context
 	keychain.aggsig_create_context(blind_sum.secret_key());
 
-	let partial_tx = build_partial_tx(keychain, amount, tx);
+	let partial_tx = build_partial_tx(keychain, amount, None, tx);
 
 	// Closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
@@ -84,15 +84,16 @@ pub fn issue_send_tx(
 	} else if &dest[..4] == "http" {
 		let url = format!("{}/v1/receive/transaction", &dest);
 		debug!(LOGGER, "Posting partial transaction to {}", url);
+		println!("Sender init partial tx: {:?}", partial_tx);
 		let res = client::send_partial_tx(&url, &partial_tx);
 		match res {
 			Err(_) => {
 				error!(LOGGER, "Communication with receiver failed. Aborting transaction");
 				rollback_wallet()?;
-				return res;
 			}
-			Ok(_) => {
-				update_wallet()?;
+			Ok(r) => {
+				println!("Partial response: {:?}", r);
+				//update_wallet()?;
 			}
 		}
 	} else {

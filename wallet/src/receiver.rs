@@ -25,10 +25,8 @@ use serde_json;
 use api;
 use core::consensus::reward;
 use core::core::{build, Block, Output, Transaction, TxKernel};
-use core::ser;
 use keychain::{BlindingFactor, BlindSum, Identifier, Keychain};
 use types::*;
-use util;
 use util::LOGGER;
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
@@ -60,7 +58,7 @@ fn handle_sender_initiation(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	partial_tx: &PartialTx
-) -> Result<(), Error> {
+) -> Result<PartialTx, Error> {
 	let (amount, sender_pub_blinding, sender_pub_nonce, tx) = read_partial_tx(keychain, partial_tx)?;
 
 	let root_key_id = keychain.root_key_id();
@@ -102,15 +100,18 @@ fn handle_sender_initiation(
 	let sum = sum.add_key_id(key_id);
 	let blind_sum = keychain.blind_sum(&sum)?;
 
+	warn!(LOGGER, "Creating new aggsig context");
 	// Create a new aggsig context
 	// this will create a new blinding sum and nonce, and store them
 	keychain.aggsig_create_context(blind_sum.secret_key());
 
 	let sig_part=keychain.aggsig_calculate_partial_sig(&sender_pub_nonce, fee, tx.lock_height).unwrap();
 
-	//let final_tx = receive_transaction(config, keychain, amount, sender_pub_blinding, tx)?;
-	//let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
-	Ok(())
+	// Build the response, which should contain sR, blinding excess xR * G, public nonce kR * G
+	let mut partial_tx = build_partial_tx(keychain, amount, Some(sig_part), tx);
+	partial_tx.phase = PartialTxPhase::ReceiverInitiation;
+
+	Ok(partial_tx)
 }
 
 /// Receive an already well formed JSON transaction issuance and finalize the
@@ -122,12 +123,12 @@ pub fn receive_json_tx(
 	partial_tx: &PartialTx,
 ) -> Result<(), Error> {
 	let (amount, sender_pub_blinding, _sender_pub_nonce, tx) = read_partial_tx(keychain, partial_tx)?;
-	let final_tx = receive_transaction(config, keychain, amount, sender_pub_blinding, tx)?;
+	/*let final_tx = receive_transaction(config, keychain, amount, sender_pub_blinding, tx)?;
 	let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
 
 	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
 	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })
-		.map_err(|e| Error::Node(e))?;
+		.map_err(|e| Error::Node(e))?;*/
 	Ok(())
 }
 
@@ -146,14 +147,15 @@ impl Handler for WalletReceiver {
 		if let Ok(Some(partial_tx)) = struct_body {
 			match partial_tx.phase {
 				PartialTxPhase::SenderInitiation => {
-					handle_sender_initiation(&self.config, &self.keychain, &partial_tx)
+					let resp_tx=handle_sender_initiation(&self.config, &self.keychain, &partial_tx)
 					.map_err(|e| {
 						error!(LOGGER, "Phase 1 Sender Initiation -> Problematic partial tx, looks like this: {:?}", partial_tx);
 						api::Error::Internal(
 							format!("Error processing partial transaction: {:?}", e),
 						)})
 					.unwrap();
-					Ok(Response::with(status::Ok))
+					let json = serde_json::to_string(&resp_tx).unwrap();
+					Ok(Response::with((status::Ok, json)))
 				},
 				_=> {
 					error!(LOGGER, "Phase 1 Sender Initiation -> Unhandled Phase: {:?}", partial_tx);

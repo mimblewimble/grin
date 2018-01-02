@@ -619,6 +619,7 @@ pub struct PartialTx {
 	pub amount: u64,
 	pub public_blind_excess: String,
 	pub public_nonce: String,
+	pub part_sig: String,
 	pub tx: String,
 }
 
@@ -628,6 +629,7 @@ pub struct PartialTx {
 pub fn build_partial_tx(
 	keychain: &keychain::Keychain,
 	receive_amount: u64,
+	part_sig: Option<secp::Signature>,
 	tx: Transaction,
 ) -> PartialTx {
 
@@ -645,6 +647,10 @@ pub fn build_partial_tx(
 		amount: receive_amount,
 		public_blind_excess: util::to_hex(pub_excess),
 		public_nonce: util::to_hex(pub_nonce),
+		part_sig: match part_sig {
+			None => String::from(""),
+			Some(p) => util::to_hex(p.serialize_der(&keychain.secp())),
+		},
 		tx: util::to_hex(ser::ser_vec(&tx).unwrap()),
 	}
 }
@@ -654,9 +660,9 @@ pub fn build_partial_tx(
 pub fn read_partial_tx(
 	keychain: &keychain::Keychain,
 	partial_tx: &PartialTx,
-) -> Result<(u64, keychain::BlindingFactor, PublicKey, Transaction), Error> {
+) -> Result<(u64, PublicKey, PublicKey, Transaction), Error> {
 	let blind_bin = util::from_hex(partial_tx.public_blind_excess.clone())?;
-	let blinding = keychain::BlindingFactor::from_slice(keychain.secp(), &blind_bin[..])?;
+	let blinding = PublicKey::from_slice(keychain.secp(), &blind_bin[..])?;
 	let nonce_bin = util::from_hex(partial_tx.public_nonce.clone())?;
 	let nonce = PublicKey::from_slice(keychain.secp(), &nonce_bin[..])?;
 	let tx_bin = util::from_hex(partial_tx.tx.clone())?;
