@@ -144,7 +144,7 @@ impl Tip {
 		}
 	}
 
-	/// Append a new block to this tip, returning a new updated tip.
+	/// Convert a block_header to a chain "tip".
 	pub fn from_block(bh: &BlockHeader) -> Tip {
 		Tip {
 			height: bh.height,
@@ -240,9 +240,11 @@ pub trait ChainStore: Send + Sync {
 	fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, store::Error>;
 
 	/// Gets a block_header for the given input commit
+	/// looking back through the chain from the given chain tip (may be a fork).
 	fn get_block_header_by_output_commit(
 		&self,
 		commit: &Commitment,
+		bhash: &Hash,
 	) -> Result<BlockHeader, store::Error>;
 
 	/// Saves the position of an output, represented by its commitment, in the

@@ -20,6 +20,7 @@ pub use graph;
 use core::core::transaction;
 use core::core::block;
 use core::core::hash;
+use core::core::hash::Hashed;
 use core::global;
 
 use util::secp::pedersen::Commitment;
@@ -186,7 +187,10 @@ where
 					// TODO - pull this out into a separate function?
 					if output.features.contains(transaction::COINBASE_OUTPUT) {
 						if let Ok(out_header) = self.blockchain
-							.get_block_header_by_output_commit(&output.commitment())
+							.get_block_header_by_output_commit(
+								&output.commitment(),
+								&head_header.hash(),
+							)
 						{
 							let lock_height = out_header.height + global::coinbase_maturity();
 							if head_header.height < lock_height {

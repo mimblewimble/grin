@@ -233,8 +233,8 @@ impl Chain {
 			Ok(None) => {
 				// block got accepted but we did not extend the head
 				// so its on a fork (or is the start of a new fork)
-				// broadcast the block out so everyone knows about the fork
-				//
+
+				// Broadcast the block out so everyone knows about the fork.
 				// TODO - This opens us to an amplification attack on blocks
 				// mined at a low difficulty. We should suppress really old blocks
 				// or less relevant blocks somehow.
@@ -245,6 +245,7 @@ impl Chain {
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b);
 				}
+
 				// We just accepted a block so see if we can now accept any orphan(s)
 				self.check_orphans(&b);
 			},
@@ -483,10 +484,11 @@ impl Chain {
 	pub fn get_block_header_by_output_commit(
 		&self,
 		commit: &Commitment,
+		bhash: &Hash,
 	) -> Result<BlockHeader, Error> {
 		self.store
-			.get_block_header_by_output_commit(commit)
-			.map_err(|e| Error::StoreErr(e, "chain get commitment".to_owned()))
+			.get_block_header_by_output_commit(commit, bhash)
+			.map_err(|e| Error::StoreErr(e, "chain get header by commitment".to_owned()))
 	}
 
 	/// Get the tip of the current "sync" header chain.

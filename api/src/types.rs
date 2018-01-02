@@ -81,14 +81,23 @@ pub struct SumTreeNode {
 
 impl SumTreeNode {
 	pub fn get_last_n_utxo(chain: Arc<chain::Chain>, distance: u64) -> Vec<SumTreeNode> {
+		let tip = chain.head().unwrap();
 		let mut return_vec = Vec::new();
 		let last_n = chain.get_last_n_utxo(distance);
 		for elem_output in last_n {
 			let header = chain
-				.get_block_header_by_output_commit(&elem_output.1.commit)
-				.map_err(|_| Error::NotFound);
+				.get_block_header_by_output_commit(
+					&elem_output.1.commit,
+					&tip.last_block_h,
+				)
+				.map_err(|_| Error::Internal(format!("failed to get block header for output")));
+
 			// Need to call further method to check if output is spent
-			let mut output = OutputPrintable::from_output(&elem_output.1, &header.unwrap(),true);
+			let mut output = OutputPrintable::from_output(
+				&elem_output.1,
+				&header.unwrap(),
+				true,
+			);
 			if let Ok(_) = chain.get_unspent(&elem_output.1.commit) {
 				output.spent = false;
 			}

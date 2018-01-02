@@ -346,10 +346,11 @@ impl pool::BlockChain for PoolToChainAdapter {
 	fn get_block_header_by_output_commit(
 		&self,
 		commit: &Commitment,
+		bhash: &Hash,
 	) -> Result<BlockHeader, pool::PoolError> {
 		self.chain
 			.borrow()
-			.get_block_header_by_output_commit(commit)
+			.get_block_header_by_output_commit(commit, bhash)
 			.map_err(|_| pool::PoolError::GenericPoolError)
 	}
 
