@@ -259,7 +259,7 @@ impl Handler for PeersConnectedHandler {
 
 /// Peer operations
 /// POST /v1/peers/10.12.12.13/ban
-/// TODO POST /v1/peers/10.12.12.13/unban
+/// POST /v1/peers/10.12.12.13/unban
 pub struct PeerPostHandler {
 	pub peers: p2p::Peers,
 }
@@ -282,11 +282,15 @@ impl Handler for PeerPostHandler {
         }
       }
       "unban" => {
-        // TODO
-        Ok(Response::with((status::BadRequest, "")))
+        path_elems.pop();
+		if let Ok(addr) = path_elems.last().unwrap().parse() {
+		  self.peers.unban_peer(&addr);
+		  Ok(Response::with((status::Ok, "")))
+	    } else {
+		  Ok(Response::with((status::BadRequest, "")))
+	    }
       }
       _ => {
-        // TODO peer details
         Ok(Response::with((status::BadRequest, "")))
       }
     }
@@ -531,6 +535,7 @@ let _ = thread::Builder::new()
 				"get pool".to_string(),
 				"post pool/push".to_string(),
 				"post peers/a.b.c.d:p/ban".to_string(),
+				"post peers/a.b.c.d:p/unban".to_string(),
 				"get peers/all".to_string(),
 				"get peers/connected".to_string(),
 				"get peers/a.b.c.d".to_string(),
