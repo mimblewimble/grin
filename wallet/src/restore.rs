@@ -146,10 +146,7 @@ fn find_utxos_with_key(
 				api::OutputType::Transaction => {
 					SwitchCommitHash::from_switch_commit(
 						switch_commit_cache[i as usize],
-						SwitchCommitHashKey::from_features_and_lock_height(
-							DEFAULT_OUTPUT,
-							output.lock_height,
-						),
+						SwitchCommitHashKey::zero(),
 					)
 				}
 			};
