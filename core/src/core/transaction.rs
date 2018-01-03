@@ -19,6 +19,7 @@ use blake2::blake2b::blake2b;
 use util::secp::{self, Message, Signature};
 use util::static_secp_instance;
 use util::secp::pedersen::{Commitment, RangeProof};
+use std::cmp::min;
 use std::cmp::Ordering;
 use std::ops;
 
@@ -526,13 +527,6 @@ impl SwitchCommitHashKey {
 }
 
 /// Definition of the switch commitment hash
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SwitchCommitHash {
-	/// simple hash
-	pub hash: [u8; SWITCH_COMMIT_HASH_SIZE],
-}
-
-/// Definition of the switch commitment hash
 #[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SwitchCommitHash([u8; SWITCH_COMMIT_HASH_SIZE]);
 
@@ -583,9 +577,22 @@ impl SwitchCommitHash {
 		SwitchCommitHash(h)
 	}
 
+	pub fn from_bytes(bytes: &[u8]) -> SwitchCommitHash {
+		let mut hash = [0; SWITCH_COMMIT_HASH_SIZE];
+		for i in 0..min(SWITCH_COMMIT_HASH_SIZE, bytes.len()) {
+			hash[i] = bytes[i];
+		}
+		SwitchCommitHash(hash)
+	}
+
 	/// Hex string represenation of a switch commitment hash.
 	pub fn to_hex(&self) -> String {
 		util::to_hex(self.0.to_vec())
+	}
+
+	pub fn from_hex(hex: &str) -> Result<SwitchCommitHash, Error> {
+		let bytes = util::from_hex(hex.to_string()).unwrap();
+		Ok(SwitchCommitHash::from_bytes(&bytes))
 	}
 }
 

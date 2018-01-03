@@ -212,9 +212,6 @@ pub trait ChainStore: Send + Sync {
 	/// Gets a block header by hash
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, store::Error>;
 
-	/// Checks whether a block has been been processed and saved
-	fn check_block_exists(&self, h: &Hash) -> Result<bool, store::Error>;
-
 	/// Save the provided block in store
 	fn save_block(&self, b: &Block) -> Result<(), store::Error>;
 

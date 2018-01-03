@@ -44,7 +44,7 @@ pub fn issue_send_tx(
 	let chain_tip = checker::get_tip_from_node(config)?;
 	let current_height = chain_tip.height;
 
-	// proof of concept - set lock_height on the tx (only valid in a block later than this)
+	// proof of concept - set lock_height on the tx
 	let lock_height = chain_tip.height;
 
 	let (tx, blind_sum, coins, change_key) = build_send_tx(
@@ -126,7 +126,7 @@ fn build_send_tx(
 	})?;
 
 	// build transaction skeleton with inputs and change
-	let (mut parts, change_key) = inputs_and_change(&coins, config, keychain, key_id, amount, lock_height)?;
+	let (mut parts, change_key) = inputs_and_change(&coins, config, keychain, amount, lock_height)?;
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
@@ -165,7 +165,10 @@ pub fn issue_burn_tx(
 		)
 	})?;
 
-	let (mut parts, _) = inputs_and_change(&coins, config, keychain, key_id, amount, current_height)?;
+	debug!(LOGGER, "selected some coins - {}", coins.len());
+
+	let lock_height = current_height;
+	let (mut parts, _) = inputs_and_change(&coins, config, keychain, amount, lock_height)?;
 
 	// add burn output and fees
 	let fee = tx_fee(coins.len(), 2, None);
@@ -235,7 +238,7 @@ fn inputs_and_change(
 		change_key
 	})?;
 
-	parts.push(build::output(change, change_key.clone()));
+	parts.push(build::output(change, lock_height, change_key.clone()));
 
 	Ok((parts, change_key))
 }
@@ -252,8 +255,8 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 
-		let (tx1, _) = transaction(vec![output(105, 0, key_id1.clone())], &keychain).unwrap();
-		let (tx2, _) = transaction(vec![input(105, 0, key_id1.clone())], &keychain).unwrap();
+		let (tx1, _) = transaction(vec![output(105, key_id1.clone())], &keychain).unwrap();
+		let (tx2, _) = transaction(vec![input(105, key_id1.clone())], &keychain).unwrap();
 
 		assert_eq!(tx1.outputs[0].commitment(), tx2.inputs[0].commitment());
 	}

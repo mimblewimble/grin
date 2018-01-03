@@ -106,10 +106,6 @@ impl ChainStore for ChainKVStore {
 		)
 	}
 
-	fn check_block_exists(&self, h: &Hash) -> Result<bool, Error> {
-		self.db.exists(&to_key(BLOCK_PREFIX, &mut h.to_vec()))
-	}
-
 	fn save_block(&self, b: &Block) -> Result<(), Error> {
 		// saving the block and its header
 		let mut batch = self.db

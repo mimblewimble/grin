@@ -16,8 +16,8 @@ use keychain::{Keychain, Identifier};
 use util::{LOGGER, from_hex};
 use util::secp::pedersen;
 use api;
-use core::core::{Output, SwitchCommitHash};
-use core::core::transaction::{COINBASE_OUTPUT, DEFAULT_OUTPUT, SWITCH_COMMIT_HASH_SIZE};
+use core::core::{Output, SwitchCommitHash, SwitchCommitHashKey};
+use core::core::transaction::{COINBASE_OUTPUT, DEFAULT_OUTPUT};
 use types::{WalletConfig, WalletData, OutputData, OutputStatus, Error};
 use byteorder::{BigEndian, ByteOrder};
 
@@ -115,7 +115,7 @@ pub fn utxos_batch_block(
 fn find_utxos_with_key(
 	config: &WalletConfig,
 	keychain: &Keychain,
-	switch_commit_cache: &Vec<[u8; SWITCH_COMMIT_HASH_SIZE]>,
+	switch_commit_cache: &Vec<pedersen::Commitment>,
 	block_outputs: api::BlockOutputs,
 	key_iterations: &mut usize,
 	padding: &mut usize,
@@ -133,11 +133,31 @@ fn find_utxos_with_key(
 
 	for output in block_outputs.outputs {
 		for i in 0..*key_iterations {
-			if switch_commit_cache[i as usize] == output.switch_commit_hash {
+			let expected_hash = match output.output_type {
+				api::OutputType::Coinbase => {
+					SwitchCommitHash::from_switch_commit(
+						switch_commit_cache[i as usize],
+						SwitchCommitHashKey::from_features_and_lock_height(
+							COINBASE_OUTPUT,
+							output.lock_height,
+						),
+					)
+				}
+				api::OutputType::Transaction => {
+					SwitchCommitHash::from_switch_commit(
+						switch_commit_cache[i as usize],
+						SwitchCommitHashKey::from_features_and_lock_height(
+							DEFAULT_OUTPUT,
+							output.lock_height,
+						),
+					)
+				}
+			};
+			if expected_hash == output.switch_commit_hash() {
 				info!(
 					LOGGER,
 					"Output found: {:?}, key_index: {:?}",
-					output.switch_commit_hash,
+					output,
 					i,
 				);
 
@@ -179,7 +199,6 @@ fn find_utxos_with_key(
 						LOGGER,
 						"Unable to retrieve the amount (needs investigating)",
 					);
-
 				}
 			}
 		}
@@ -219,7 +238,7 @@ pub fn restore(
 		chain_height
 	);
 
-	let mut switch_commit_cache: Vec<[u8; SWITCH_COMMIT_HASH_SIZE]> = vec![];
+	let mut switch_commit_cache: Vec<pedersen::Commitment> = vec![];
 	info!(
 		LOGGER,
 		"Building key derivation cache ({}) ...",
@@ -227,8 +246,7 @@ pub fn restore(
 	);
 	for i in 0..key_derivations {
 		let switch_commit = keychain.switch_commit_from_index(i as u32).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
-		switch_commit_cache.push(switch_commit_hash.hash);
+		switch_commit_cache.push(switch_commit);
 	}
 	debug!(LOGGER, "... done");
 

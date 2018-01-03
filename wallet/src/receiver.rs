@@ -122,7 +122,7 @@ pub fn receive_coinbase(
 ) -> Result<(Output, TxKernel, BlockFees), Error> {
 	let root_key_id = keychain.root_key_id();
 
-	let output_lock_height = block_fees.height + global::coinbase_maturity();
+	let lock_height = block_fees.height + global::coinbase_maturity();
 
 	// Now acquire the wallet lock and write the new output.
 	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
@@ -140,7 +140,7 @@ pub fn receive_coinbase(
 			value: reward(block_fees.fees),
 			status: OutputStatus::Unconfirmed,
 			height: 0,
-			lock_height: output_lock_height,
+			lock_height: lock_height,
 			is_coinbase: true,
 		});
 
@@ -160,13 +160,13 @@ pub fn receive_coinbase(
 	let mut block_fees = block_fees.clone();
 	block_fees.key_id = Some(key_id.clone());
 
-	debug!(LOGGER, "block_fees updated key_id - {:?}", block_fees.key_id);
+	debug!(LOGGER, "block_fees updated - {:?}", block_fees);
 
 	let (out, kern) = Block::reward_output(
 		&keychain,
 		&key_id,
-		block_fees.fees,
 		block_fees.height,
+		block_fees.fees,
 	)?;
 	Ok((out, kern, block_fees))
 }
@@ -180,8 +180,6 @@ fn receive_transaction(
 	partial: Transaction,
 ) -> Result<Transaction, Error> {
 	let root_key_id = keychain.root_key_id();
-
-	let (key_id, derivation) = next_available_key(config, keychain)?;
 
 	let lock_height = partial.lock_height;
 
@@ -220,11 +218,7 @@ fn receive_transaction(
 		vec![
 			build::initial_tx(partial),
 			build::with_excess(blinding),
-			build::output(
-				out_amount,
-				lock_height,
-				key_id.clone(),
-			),
+			build::output(out_amount, lock_height, key_id.clone()),
 		],
 		keychain,
 	)?;

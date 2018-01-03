@@ -207,7 +207,7 @@ impl OutputPrintable {
 		OutputPrintable {
 			output_type: output_type,
 			commit: util::to_hex(output.commit.0.to_vec()),
-			switch_commit_hash: util::to_hex(output.switch_commit_hash.hash.to_vec()),
+			switch_commit_hash: output.switch_commit_hash.to_hex(),
 			height: block_header.height,
 			lock_height: lock_height,
 			spent: true,
@@ -222,21 +222,39 @@ impl OutputPrintable {
 // As above, except just the info needed for wallet reconstruction
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OutputSwitch {
+	/// The type of output Coinbase|Transaction
+	pub output_type: OutputType,
 	/// the commit
 	pub commit: String,
 	/// switch commit hash
-	pub switch_commit_hash: [u8; core::SWITCH_COMMIT_HASH_SIZE],
+	pub switch_commit_hash: String,
 	/// The height of the block creating this output
 	pub height: u64,
+	/// The lock height (earliest block this output can be spent)
+	pub lock_height: u64,
 }
 
 impl OutputSwitch {
 	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader) -> OutputSwitch {
+		let (output_type, lock_height) = match output.features {
+			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
+				OutputType::Coinbase,
+				block_header.height + global::coinbase_maturity(),
+			),
+			_ => (OutputType::Transaction, 0),
+		};
+
 		OutputSwitch {
+			output_type: output_type,
 			commit: util::to_hex(output.commit.0.to_vec()),
-			switch_commit_hash: output.switch_commit_hash.hash,
+			switch_commit_hash: output.switch_commit_hash.to_hex(),
 			height: block_header.height,
+			lock_height: lock_height,
 		}
+	}
+
+	pub fn switch_commit_hash(&self) -> core::SwitchCommitHash {
+		core::SwitchCommitHash::from_hex(&self.switch_commit_hash).unwrap()
 	}
 }
 
@@ -344,7 +362,7 @@ impl BlockPrintable {
 	pub fn from_block(block: &core::Block) -> BlockPrintable {
 		let inputs = block.inputs
 			.iter()
-			.map(|input| util::to_hex((input.0).0.to_vec()))
+			.map(|x| util::to_hex(x.commitment().0.to_vec()))
 			.collect();
 		let outputs = block.outputs
 			.iter()
