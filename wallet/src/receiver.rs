@@ -165,8 +165,8 @@ pub fn receive_coinbase(
 	let (out, kern) = Block::reward_output(
 		&keychain,
 		&key_id,
-		block_fees.height,
 		block_fees.fees,
+		block_fees.height,
 	)?;
 	Ok((out, kern, block_fees))
 }

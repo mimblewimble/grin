@@ -470,7 +470,7 @@ impl Block {
 		self.verify_weight()?;
 		self.verify_sorted()?;
 		self.verify_coinbase()?;
-		self.verify_kernels(false)?;
+		self.verify_kernels()?;
 		Ok(())
 	}
 
@@ -490,8 +490,7 @@ impl Block {
 
 	/// Verifies the sum of input/output commitments match the sum in kernels
 	/// and that all kernel signatures are valid.
-	/// TODO - when would we skip_sig? Is this needed or used anywhere?
-	fn verify_kernels(&self, skip_sig: bool) -> Result<(), Error> {
+	fn verify_kernels(&self) -> Result<(), Error> {
 		for k in &self.kernels {
 			if k.fee & 1 != 0 {
 				return Err(Error::OddKernelFee);
@@ -522,11 +521,10 @@ impl Block {
 		}
 
 		// verify all signatures with the commitment as pk
-		if !skip_sig {
-			for proof in &self.kernels {
-				proof.verify()?;
-			}
+		for proof in &self.kernels {
+			proof.verify()?;
 		}
+
 		Ok(())
 	}
 
@@ -800,7 +798,7 @@ mod test {
 			b.verify_coinbase(),
 			Err(Error::CoinbaseSumMismatch)
 		);
-		assert_eq!(b.verify_kernels(false), Ok(()));
+		assert_eq!(b.verify_kernels(), Ok(()));
 
 		assert_eq!(
 			b.validate(),
@@ -822,7 +820,6 @@ mod test {
 			b.verify_coinbase(),
 			Err(Error::Secp(secp::Error::IncorrectCommitSum))
 		);
-		assert_eq!(b.verify_kernels(true), Ok(()));
 
 		assert_eq!(
 			b.validate(),
