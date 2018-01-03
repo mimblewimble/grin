@@ -95,7 +95,7 @@ fn basic_wallet_transactions() {
 	});
 
 	//Wait for chain to build
-	thread::sleep(time::Duration::from_millis(3000));
+	thread::sleep(time::Duration::from_millis(5000));
 	warn!(LOGGER, "Sending 50 Grins to recipient wallet");
 	LocalServerContainer::send_amount_to(&coinbase_wallet_config, "50.00", 1, "all", "http://127.0.0.1:20002");
 

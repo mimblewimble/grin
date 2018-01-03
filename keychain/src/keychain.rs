@@ -286,19 +286,46 @@ impl Keychain {
 		aggsig::verify_single(&self.secp, sig, msg, pubnonce, pubkey)
 	}
 
-	pub fn aggsig_calculate_partial_sig(&self, sender_pub_nonce:&PublicKey, fee:u64, lock_height:u64) -> Result<Signature, Error>{
-		// Add public nonces kR*G + kS*G
-		let (pub_excess, _) = self.aggsig_get_public_keys();
-		let (_, sec_nonce) = self.aggsig_get_private_keys();
-		let mut nonce_sum = sender_pub_nonce.clone();
-		let _ = nonce_sum.add_exp_assign(&self.secp, &sec_nonce);
+	//Verifies other party's sig corresponds with what we're expecting
+	pub fn aggsig_verify_partial_sig_build_msg(&self, sig: &Signature, pubkey: &PublicKey, fee: u64, lock_height:u64) -> bool {
+		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height)).unwrap();
+		self.aggsig_verify_single(sig, &msg, None, pubkey)
+	}
 
+	//Verifies other party's sig corresponds with what we're expecting
+	pub fn aggsig_verify_partial_sig(&self, sig: &Signature, other_pub_nonce:&PublicKey, pubkey:&PublicKey, fee: u64, lock_height:u64) -> bool {
+		let (_, sec_nonce) = self.aggsig_get_private_keys();
+		let mut nonce_sum = other_pub_nonce.clone();
+		let _ = nonce_sum.add_exp_assign(&self.secp, &sec_nonce);
+		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height)).unwrap();
+
+		self.aggsig_verify_single(sig, &msg, Some(&nonce_sum), pubkey)
+	}
+
+	pub fn aggsig_calculate_partial_sig(&self, other_pub_nonce:&PublicKey, fee:u64, lock_height:u64) -> Result<Signature, Error>{
+		// Add public nonces kR*G + kS*G
+		let (_, sec_nonce) = self.aggsig_get_private_keys();
+		let mut nonce_sum = other_pub_nonce.clone();
+		let _ = nonce_sum.add_exp_assign(&self.secp, &sec_nonce);
 		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
 
 		//Now calculate signature using message M=fee, nonce in e=nonce_sum
 		self.aggsig_sign_single(&msg, Some(&sec_nonce), Some(&nonce_sum))
+	}
 
+	/// Helper function to calculate final singature
+	pub fn aggsig_calculate_final_sig(&self, their_sig: &Signature, our_sig: &Signature, their_pub_nonce: &PublicKey) -> Result<Signature, Error> {
+		let (_, our_pub_nonce) = self.aggsig_get_public_keys();
+		let sig = aggsig::add_signatures_single(&self.secp, their_sig, our_sig, their_pub_nonce, &our_pub_nonce)?;
+		Ok(sig)
+	}
 
+	/// Helper function to calculate final public key 
+	pub fn aggsig_calculate_final_pubkey(&self, their_public_key: &PublicKey) -> Result<PublicKey, Error> {
+		let (our_sec_key, _) = self.aggsig_get_private_keys();
+		let mut pk_sum = their_public_key.clone();
+		let _ = pk_sum.add_exp_assign(&self.secp, &our_sec_key);
+		Ok(pk_sum)
 	}
 
 	pub fn sign(&self, msg: &Message, key_id: &Identifier) -> Result<Signature, Error> {

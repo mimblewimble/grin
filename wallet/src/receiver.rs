@@ -59,7 +59,7 @@ fn handle_sender_initiation(
 	keychain: &Keychain,
 	partial_tx: &PartialTx
 ) -> Result<PartialTx, Error> {
-	let (amount, sender_pub_blinding, sender_pub_nonce, tx) = read_partial_tx(keychain, partial_tx)?;
+	let (amount, sender_pub_blinding, sender_pub_nonce, sig, tx) = read_partial_tx(keychain, partial_tx)?;
 
 	let root_key_id = keychain.root_key_id();
 
@@ -114,6 +114,59 @@ fn handle_sender_initiation(
 	Ok(partial_tx)
 }
 
+/// Receive Part 3 of interactive transactions from sender, Sender Confirmation
+/// Return Ok/Error
+/// -Receiver receives sS
+/// -Receiver verifies sender's sig, by verifying that kS * G + e *xS * G = sS * G
+/// -Receiver calculates final sig as s=(sS+sR, kS * G+kR * G)
+/// -Receiver puts into TX kernel:
+///
+/// Signature S
+/// pubkey xR * G+xS * G
+/// fee (= M)
+/// -Receiver sends completed TX to mempool. responds OK to sender
+
+fn handle_sender_confirmation(
+	config: &WalletConfig,
+	keychain: &Keychain,
+	partial_tx: &PartialTx
+) -> Result<PartialTx, Error> {
+	let (amount, sender_pub_blinding, sender_pub_nonce, sender_sig_part, tx) = read_partial_tx(keychain, partial_tx)?;
+	let sender_sig_part=sender_sig_part.unwrap();
+	let res = keychain.aggsig_verify_partial_sig(&sender_sig_part, &sender_pub_nonce, &sender_pub_blinding, tx.fee, tx.lock_height);
+
+	if !res {
+		error!(LOGGER, "Partial Sig from sender invalid.");
+		return Err(Error::Signature(String::from("Partial Sig from sender invalid.")));
+	}
+
+	//Just calculate our sig part again instead of storing
+	let our_sig_part=keychain.aggsig_calculate_partial_sig(&sender_pub_nonce, tx.fee, tx.lock_height).unwrap();
+
+	// And the final signature
+	let final_sig=keychain.aggsig_calculate_final_sig(&sender_sig_part, &our_sig_part, &sender_pub_nonce).unwrap();
+
+	// And the final Public Key
+	let final_pubkey=keychain.aggsig_calculate_final_pubkey(&sender_pub_blinding).unwrap();
+
+	println!("Final Sig: {:?}", final_sig);
+	println!("Final Pubkey: {:?}", final_pubkey);
+
+	//Check our final transaction verifies
+	let res = keychain.aggsig_verify_partial_sig_build_msg(&final_sig, &final_pubkey, tx.fee, tx.lock_height);
+
+	println!("Final result.....: {}", res);
+	if !res {
+		error!(LOGGER, "Final sig invalid.");
+		return Err(Error::Signature(String::from("Final sig invalid.")));
+	}
+
+	// Return what we've actually posted
+	let mut partial_tx = build_partial_tx(keychain, amount, Some(final_sig), tx);
+	partial_tx.phase = PartialTxPhase::ReceiverConfirmation;
+	Ok(partial_tx)
+}
+
 /// Receive an already well formed JSON transaction issuance and finalize the
 /// transaction, adding our receiving output, to broadcast to the rest of the
 /// network.
@@ -122,7 +175,7 @@ pub fn receive_json_tx(
 	keychain: &Keychain,
 	partial_tx: &PartialTx,
 ) -> Result<(), Error> {
-	let (amount, sender_pub_blinding, _sender_pub_nonce, tx) = read_partial_tx(keychain, partial_tx)?;
+	let (amount, sender_pub_blinding, _sender_pub_nonce, sig, tx) = read_partial_tx(keychain, partial_tx)?;
 	/*let final_tx = receive_transaction(config, keychain, amount, sender_pub_blinding, tx)?;
 	let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
 
@@ -157,8 +210,19 @@ impl Handler for WalletReceiver {
 					let json = serde_json::to_string(&resp_tx).unwrap();
 					Ok(Response::with((status::Ok, json)))
 				},
+				PartialTxPhase::SenderConfirmation => {
+					let resp_tx=handle_sender_confirmation(&self.config, &self.keychain, &partial_tx)
+					.map_err(|e| {
+						error!(LOGGER, "Phase 3 Sender Confirmation -> Problematic partial tx, looks like this: {:?}", partial_tx);
+						api::Error::Internal(
+							format!("Error processing partial transaction: {:?}", e),
+						)})
+					.unwrap();
+					let json = serde_json::to_string(&resp_tx).unwrap();
+					Ok(Response::with((status::Ok, json)))
+				},
 				_=> {
-					error!(LOGGER, "Phase 1 Sender Initiation -> Unhandled Phase: {:?}", partial_tx);
+					error!(LOGGER, "Unhandled Phase: {:?}", partial_tx);
 					Ok(Response::with((status::BadRequest, "Unhandled Phase")))
 				}
 			}

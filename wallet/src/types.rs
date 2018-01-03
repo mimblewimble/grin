@@ -37,6 +37,7 @@ use core::ser;
 use keychain;
 use util;
 use util::secp;
+use util::secp::Signature;
 use util::secp::key::PublicKey;
 use util::LOGGER;
 
@@ -79,6 +80,8 @@ pub enum Error {
 	Hyper(hyper::Error),
 	/// Error originating from hyper uri parsing.
 	Uri(hyper::error::UriError),
+	/// Error with signatures during exchange
+	Signature(String),
 	GenericError(String,)
 }
 
@@ -648,7 +651,7 @@ pub fn build_partial_tx(
 		public_blind_excess: util::to_hex(pub_excess),
 		public_nonce: util::to_hex(pub_nonce),
 		part_sig: match part_sig {
-			None => String::from(""),
+			None => String::from("00"),
 			Some(p) => util::to_hex(p.serialize_der(&keychain.secp())),
 		},
 		tx: util::to_hex(ser::ser_vec(&tx).unwrap()),
@@ -660,16 +663,21 @@ pub fn build_partial_tx(
 pub fn read_partial_tx(
 	keychain: &keychain::Keychain,
 	partial_tx: &PartialTx,
-) -> Result<(u64, PublicKey, PublicKey, Transaction), Error> {
+) -> Result<(u64, PublicKey, PublicKey, Option<Signature>, Transaction), Error> {
 	let blind_bin = util::from_hex(partial_tx.public_blind_excess.clone())?;
 	let blinding = PublicKey::from_slice(keychain.secp(), &blind_bin[..])?;
 	let nonce_bin = util::from_hex(partial_tx.public_nonce.clone())?;
 	let nonce = PublicKey::from_slice(keychain.secp(), &nonce_bin[..])?;
+	let sig_bin = util::from_hex(partial_tx.part_sig.clone())?;
+	let sig = match sig_bin.len() {
+		1 => None,
+		_ => Some(Signature::from_der(keychain.secp(), &sig_bin[..])?),
+	};
 	let tx_bin = util::from_hex(partial_tx.tx.clone())?;
 	let tx = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
 		Error::Format("Could not deserialize transaction, invalid format.".to_string())
 	})?;
-	Ok((partial_tx.amount, blinding, nonce, tx))
+	Ok((partial_tx.amount, blinding, nonce, sig, tx))
 }
 
 /// Amount in request to build a coinbase output.
