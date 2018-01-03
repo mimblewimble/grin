@@ -216,7 +216,7 @@ impl Server {
 		h: reactor::Handle,
 	) -> Box<Future<Item = Option<Arc<RwLock<Peer>>>, Error = Error>> {
 
-		if let Some(p) = self.peers.get_peer(&addr) {
+		if let Some(p) = self.peers.get_connected_peer(&addr) {
 			// if we're already connected to the addr, just return the peer
 			debug!(LOGGER, "connect_peer: already connected {}", addr);
 			return Box::new(future::ok(Some(p)));
