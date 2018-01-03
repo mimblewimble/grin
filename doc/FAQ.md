@@ -44,6 +44,7 @@ Run `cargo update` to fix this
 ## Build error: Panic during rocksdb compilation.
 This is caused by missing Linux headers. Install the development headers with
 your favorite package manager (usually they are called `linux-headers`).
+On some platforms, installing `clang` is also required.
 
 # Short term plans
 ## Transaction types
