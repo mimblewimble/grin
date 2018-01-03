@@ -247,7 +247,7 @@ impl OutputData {
 	pub fn num_confirmations(&self, current_height: u64) -> u64 {
 		if self.status == OutputStatus::Unconfirmed {
 			0
-		} else if self.status == OutputStatus::Spent && self.height == 0 {
+		} else if self.height == 0 {
 			0
 		} else {
 			// if an output has height n and we are at block n

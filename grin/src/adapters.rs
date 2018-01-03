@@ -343,16 +343,6 @@ impl pool::BlockChain for PoolToChainAdapter {
 			})
 	}
 
-	fn get_block_header_by_output_commit(
-		&self,
-		commit: &Commitment,
-	) -> Result<BlockHeader, pool::PoolError> {
-		self.chain
-			.borrow()
-			.get_block_header_by_output_commit(commit)
-			.map_err(|_| pool::PoolError::GenericPoolError)
-	}
-
 	fn head_header(&self) -> Result<BlockHeader, pool::PoolError> {
 		self.chain
 			.borrow()

@@ -16,6 +16,7 @@ use keychain::{Keychain, Identifier};
 use util::{LOGGER, from_hex};
 use util::secp::pedersen;
 use api;
+use core::global;
 use core::core::{Output, SwitchCommitHash, SwitchCommitHashKey};
 use core::core::transaction::{COINBASE_OUTPUT, DEFAULT_OUTPUT};
 use types::{WalletConfig, WalletData, OutputData, OutputStatus, Error};
@@ -37,7 +38,7 @@ pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 fn output_with_range_proof(config: &WalletConfig, commit_id: &str) -> Result<api::Output, Error> {
 	let url =
 		format!(
-		"{}/v1/chain/utxos/byids?id={}&include_rp&include_switch",
+		"{}/v1/chain/utxos/byids?id={}&include_rp",
 		config.check_node_api_http_addr,
 		commit_id,
 	);
@@ -72,7 +73,7 @@ fn retrieve_amount_and_coinbase_status(
 			api::OutputType::Transaction => DEFAULT_OUTPUT,
 		},
 		proof: output.proof.expect("output with proof"),
-		switch_commit_hash: output.switch_commit_hash.expect("output with switch_commit_hash"),
+		switch_commit_hash: output.switch_commit_hash,
 		commit: output.commit,
 	};
 	if let Some(amount) = core_output.recover_value(keychain, &key_id) {
@@ -92,7 +93,6 @@ pub fn utxos_batch_block(
 	end_height: u64,
 ) -> Result<Vec<api::BlockOutputs>, Error> {
 	// build the necessary query param -
-	// ?height=x
 	let query_param = format!("start_height={}&end_height={}", start_height, end_height);
 
 	let url =
@@ -135,11 +135,12 @@ fn find_utxos_with_key(
 		for i in 0..*key_iterations {
 			let expected_hash = match output.output_type {
 				api::OutputType::Coinbase => {
+					let lock_height = block_outputs.header.height + global::coinbase_maturity();
 					SwitchCommitHash::from_switch_commit(
 						switch_commit_cache[i as usize],
 						SwitchCommitHashKey::from_features_and_lock_height(
 							COINBASE_OUTPUT,
-							output.lock_height,
+							lock_height,
 						),
 					)
 				}
@@ -175,13 +176,20 @@ fn find_utxos_with_key(
 						.commit_with_key_index(BigEndian::read_u64(&commit_id), i as u32)
 						.expect("commit with key index");
 
+					let height = block_outputs.header.height;
+					let lock_height = if is_coinbase {
+						height + global::coinbase_maturity()
+					} else {
+						0
+					};
+
 					wallet_outputs.push((
 						commit,
 						key_id.clone(),
 						i as u32,
 						amount,
-						output.height,
-						output.lock_height,
+						height,
+						lock_height,
 						is_coinbase,
 					));
 

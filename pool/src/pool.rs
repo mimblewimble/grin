@@ -20,7 +20,6 @@ pub use graph;
 use core::core::transaction;
 use core::core::block;
 use core::core::hash;
-use core::global;
 
 use util::secp::pedersen::Commitment;
 
@@ -168,7 +167,7 @@ where
 		}
 
 		// The next issue is to identify all unspent outputs that
-  // this transaction will consume and make sure they exist in the set.
+		// this transaction will consume and make sure they exist in the set.
 		let mut pool_refs: Vec<graph::Edge> = Vec::new();
 		let mut orphan_refs: Vec<graph::Edge> = Vec::new();
 		let mut blockchain_refs: Vec<graph::Edge> = Vec::new();
@@ -177,25 +176,22 @@ where
 			let base = graph::Edge::new(None, Some(tx_hash), input.commitment());
 
 			// Note that search_for_best_output does not examine orphans, by
-   // design. If an incoming transaction consumes pool outputs already
-   // spent by the orphans set, this does not preclude its inclusion
-   // into the pool.
+			// design. If an incoming transaction consumes pool outputs already
+			// spent by the orphans set, this does not preclude its inclusion
+			// into the pool.
 			match self.search_for_best_output(&input.commitment()) {
 				Parent::PoolTransaction { tx_ref: x } => pool_refs.push(base.with_source(Some(x))),
 				Parent::BlockTransaction { output } => {
-					// TODO - pull this out into a separate function?
+					// TODO - pull this out into a separate function
+					// TODO - or wrap it up in search_for_best_output?
 					if output.features.contains(transaction::COINBASE_OUTPUT) {
-						if let Ok(out_header) = self.blockchain
-							.get_block_header_by_output_commit(&output.commitment())
-						{
-							let lock_height = out_header.height + global::coinbase_maturity();
-							if head_header.height < lock_height {
-								return Err(PoolError::ImmatureCoinbase {
-									header: out_header,
-									output: output.commitment(),
-								});
-							};
-						};
+						let height = head_header.height + 1;
+						input.verify_lock_height(&output, height)
+							.map_err(|_| PoolError::ImmatureCoinbase {
+								height: height,
+								lock_height: input.lock_height(),
+								output: output.commitment(),
+							})?;
 					};
 					blockchain_refs.push(base);
 				}

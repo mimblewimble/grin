@@ -465,16 +465,6 @@ impl Chain {
 		})
 	}
 
-	/// Gets the block header by the provided output commitment
-	pub fn get_block_header_by_output_commit(
-		&self,
-		commit: &Commitment,
-	) -> Result<BlockHeader, Error> {
-		self.store
-			.get_block_header_by_output_commit(commit)
-			.map_err(|e| Error::StoreErr(e, "chain get commitment".to_owned()))
-	}
-
 	/// Get the tip of the current "sync" header chain.
 	/// This may be significantly different to current header chain.
 	pub fn get_sync_head(&self) -> Result<Tip, Error> {

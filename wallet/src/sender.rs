@@ -231,7 +231,7 @@ fn inputs_and_change(
 			value: change as u64,
 			status: OutputStatus::Unconfirmed,
 			height: 0,
-			lock_height: lock_height,
+			lock_height: 0,
 			is_coinbase: false,
 		});
 

@@ -14,10 +14,9 @@
 
 use std::sync::Arc;
 
-use core::{core, global};
+use core::core;
 use core::core::hash::Hashed;
 use chain;
-use rest::*;
 use util;
 use util::secp::pedersen;
 
@@ -85,11 +84,8 @@ impl SumTreeNode {
 		let mut return_vec = Vec::new();
 		let last_n = chain.get_last_n_utxo(distance);
 		for elem_output in last_n {
-			let header = chain
-				.get_block_header_by_output_commit(&elem_output.1.commit)
-				.map_err(|_| Error::NotFound);
 			// Need to call further method to check if output is spent
-			let mut output = OutputPrintable::from_output(&elem_output.1, &header.unwrap(),true);
+			let mut output = OutputPrintable::from_output(&elem_output.1);
 			if let Ok(_) = chain.get_unspent(&elem_output.1.commit) {
 				output.spent = false;
 			}
@@ -136,46 +132,34 @@ pub enum OutputType {
 pub struct Output {
 	/// The type of output Coinbase|Transaction
 	pub output_type: OutputType,
-	/// The homomorphic commitment representing the output's amount
+	/// The homomorphic commitment representing the output amount
 	pub commit: pedersen::Commitment,
 	/// switch commit hash
-	pub switch_commit_hash: Option<core::SwitchCommitHash>,
+	pub switch_commit_hash: core::SwitchCommitHash,
 	/// A proof that the commitment is in the right range
 	pub proof: Option<pedersen::RangeProof>,
-	/// The height of the block creating this output
-	pub height: u64,
-	/// The lock height (earliest block this output can be spent)
-	pub lock_height: u64,
 }
 
 impl Output {
 	pub fn from_output(
 		output: &core::Output,
-		block_header: &core::BlockHeader,
 		include_proof: bool,
-		include_switch: bool,
 	) -> Output {
-		let (output_type, lock_height) = match output.features {
-			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
-				OutputType::Coinbase,
-				block_header.height + global::coinbase_maturity(),
-			),
-			_ => (OutputType::Transaction, 0),
-		};
+		let output_type =
+			if output.features.contains(core::transaction::COINBASE_OUTPUT) {
+				OutputType::Coinbase
+			} else {
+				OutputType::Transaction
+			};
 
 		Output {
 			output_type: output_type,
 			commit: output.commit,
-			switch_commit_hash: match include_switch {
-				true => Some(output.switch_commit_hash),
-				false => None,
-			},
+			switch_commit_hash: output.switch_commit_hash,
 			proof: match include_proof {
 				true => Some(output.proof),
 				false => None,
 			},
-			height: block_header.height,
-			lock_height: lock_height,
 		}
 	}
 }
@@ -185,76 +169,32 @@ impl Output {
 pub struct OutputPrintable {
 	/// The type of output Coinbase|Transaction
 	pub output_type: OutputType,
-	/// The homomorphic commitment representing the output's amount (as hex
-	/// string)
+	/// The homomorphic commitment representing the output's amount
+	/// (as hex string)
 	pub commit: String,
 	/// switch commit hash
 	pub switch_commit_hash: String,
-	/// The height of the block creating this output
-	pub height: u64,
-	/// The lock height (earliest block this output can be spent)
-	pub lock_height: u64,
 	/// Whether the output has been spent
 	pub spent: bool,
-	/// Rangeproof hash  (as hex string)
-	pub proof_hash: Option<String>,
+	/// Rangeproof hash (as hex string)
+	pub proof_hash: String,
 }
 
 impl OutputPrintable {
-	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader, include_proof_hash:bool) -> OutputPrintable {
-		let (output_type, lock_height) = match output.features {
-			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
-				OutputType::Coinbase,
-				block_header.height + global::coinbase_maturity(),
-			),
-			_ => (OutputType::Transaction, 0),
-		};
+	pub fn from_output(output: &core::Output) -> OutputPrintable {
+		let output_type =
+			if output.features.contains(core::transaction::COINBASE_OUTPUT) {
+				OutputType::Coinbase
+			} else {
+				OutputType::Transaction
+			};
+
 		OutputPrintable {
 			output_type: output_type,
 			commit: util::to_hex(output.commit.0.to_vec()),
 			switch_commit_hash: output.switch_commit_hash.to_hex(),
-			height: block_header.height,
-			lock_height: lock_height,
 			spent: true,
-			proof_hash: match include_proof_hash {
-				true => Some(util::to_hex(output.proof.hash().to_vec())),
-				false => None,
-			}
-		}
-	}
-}
-
-// As above, except just the info needed for wallet reconstruction
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct OutputSwitch {
-	/// The type of output Coinbase|Transaction
-	pub output_type: OutputType,
-	/// the commit
-	pub commit: String,
-	/// switch commit hash
-	pub switch_commit_hash: String,
-	/// The height of the block creating this output
-	pub height: u64,
-	/// The lock height (earliest block this output can be spent)
-	pub lock_height: u64,
-}
-
-impl OutputSwitch {
-	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader) -> OutputSwitch {
-		let (output_type, lock_height) = match output.features {
-			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
-				OutputType::Coinbase,
-				block_header.height + global::coinbase_maturity(),
-			),
-			_ => (OutputType::Transaction, 0),
-		};
-
-		OutputSwitch {
-			output_type: output_type,
-			commit: util::to_hex(output.commit.0.to_vec()),
-			switch_commit_hash: output.switch_commit_hash.to_hex(),
-			height: block_header.height,
-			lock_height: lock_height,
+			proof_hash: util::to_hex(output.proof.hash().to_vec()),
 		}
 	}
 
@@ -371,7 +311,7 @@ impl BlockPrintable {
 			.collect();
 		let outputs = block.outputs
 			.iter()
-			.map(|output| OutputPrintable::from_output(output, &block.header, true))
+			.map(|output| OutputPrintable::from_output(output))
 			.collect();
 		let kernels = block.kernels
 			.iter()
@@ -393,7 +333,7 @@ pub struct BlockOutputs {
 	/// The block header
 	pub header: BlockHeaderInfo,
 	/// A printable version of the outputs
-	pub outputs: Vec<OutputSwitch>,
+	pub outputs: Vec<OutputPrintable>,
 }
 
 #[derive(Serialize, Deserialize)]

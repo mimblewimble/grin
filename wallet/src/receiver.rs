@@ -122,7 +122,8 @@ pub fn receive_coinbase(
 ) -> Result<(Output, TxKernel, BlockFees), Error> {
 	let root_key_id = keychain.root_key_id();
 
-	let lock_height = block_fees.height + global::coinbase_maturity();
+	let height = block_fees.height;
+	let lock_height = height + global::coinbase_maturity();
 
 	// Now acquire the wallet lock and write the new output.
 	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
@@ -139,7 +140,7 @@ pub fn receive_coinbase(
 			n_child: derivation,
 			value: reward(block_fees.fees),
 			status: OutputStatus::Unconfirmed,
-			height: 0,
+			height: height,
 			lock_height: lock_height,
 			is_coinbase: true,
 		});
@@ -207,7 +208,7 @@ fn receive_transaction(
 			value: out_amount,
 			status: OutputStatus::Unconfirmed,
 			height: 0,
-			lock_height: lock_height,
+			lock_height: 0,
 			is_coinbase: false,
 		});
 

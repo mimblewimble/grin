@@ -29,16 +29,6 @@ impl DummyBlockHeaderIndex {
 	pub fn insert(&mut self, commit: Commitment, block_header: block::BlockHeader) {
 		self.block_headers.insert(commit, block_header);
 	}
-
-	pub fn get_block_header_by_output_commit(
-		&self,
-		commit: Commitment,
-	) -> Result<&block::BlockHeader, PoolError> {
-		match self.block_headers.get(&commit) {
-			Some(h) => Ok(h),
-			None => Err(PoolError::GenericPoolError),
-		}
-	}
 }
 
 /// A DummyUtxoSet for mocking up the chain
@@ -133,20 +123,6 @@ impl BlockChain for DummyChainImpl {
 		match output {
 			Some(o) => Ok(o),
 			None => Err(PoolError::GenericPoolError),
-		}
-	}
-
-	fn get_block_header_by_output_commit(
-		&self,
-		commit: &Commitment,
-	) -> Result<block::BlockHeader, PoolError> {
-		match self.block_headers
-			.read()
-			.unwrap()
-			.get_block_header_by_output_commit(*commit)
-		{
-			Ok(h) => Ok(h.clone()),
-			Err(e) => Err(e),
 		}
 	}
 

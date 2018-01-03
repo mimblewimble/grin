@@ -123,8 +123,10 @@ pub enum PoolError {
 	/// Attempt to spend an output before it matures
 	/// lock_height must not exceed current block height
 	ImmatureCoinbase {
-		/// The block header of the block containing the output
-		header: block::BlockHeader,
+		/// The height of the block we are attempting to spend the coinbase output
+		height: u64,
+		/// The lock_height of the coinbase output
+		lock_height: u64,
 		/// The unspent output
 		output: Commitment,
 	},
@@ -156,13 +158,6 @@ pub trait BlockChain {
 	/// a result with its current view of the most worked chain, ignoring
 	/// orphans, etc.
 	fn get_unspent(&self, output_ref: &Commitment) -> Result<transaction::Output, PoolError>;
-
-	/// Get the block header by output commitment (needed for spending coinbase
-	/// after n blocks)
-	fn get_block_header_by_output_commit(
-		&self,
-		commit: &Commitment,
-	) -> Result<block::BlockHeader, PoolError>;
 
 	/// Get the block header at the head
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError>;
