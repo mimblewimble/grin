@@ -144,6 +144,8 @@ pub struct Output {
 	pub proof: Option<pedersen::RangeProof>,
 	/// The height of the block creating this output
 	pub height: u64,
+	/// The lock height (earliest block this output can be spent)
+	pub lock_height: u64,
 }
 
 impl Output {
@@ -153,10 +155,12 @@ impl Output {
 		include_proof: bool,
 		include_switch: bool,
 	) -> Output {
-		let output_type = if output.features.contains(core::transaction::COINBASE_OUTPUT) {
-			OutputType::Coinbase
-		} else {
-			OutputType::Transaction
+		let (output_type, lock_height) = match output.features {
+			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
+				OutputType::Coinbase,
+				block_header.height + global::coinbase_maturity(),
+			),
+			_ => (OutputType::Transaction, 0),
 		};
 
 		Output {
@@ -171,6 +175,7 @@ impl Output {
 				false => None,
 			},
 			height: block_header.height,
+			lock_height: lock_height,
 		}
 	}
 }

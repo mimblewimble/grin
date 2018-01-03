@@ -119,8 +119,8 @@ fn find_utxos_with_key(
 	block_outputs: api::BlockOutputs,
 	key_iterations: &mut usize,
 	padding: &mut usize,
-) -> Vec<(pedersen::Commitment, Identifier, u32, u64, u64, bool)> {
-	let mut wallet_outputs: Vec<(pedersen::Commitment, Identifier, u32, u64, u64, bool)> =
+) -> Vec<(pedersen::Commitment, Identifier, u32, u64, u64, u64, bool)> {
+	let mut wallet_outputs: Vec<(pedersen::Commitment, Identifier, u32, u64, u64, u64, bool)> =
 		Vec::new();
 
 	info!(
@@ -181,6 +181,7 @@ fn find_utxos_with_key(
 						i as u32,
 						amount,
 						output.height,
+						output.lock_height,
 						is_coinbase,
 					));
 
@@ -286,8 +287,8 @@ pub fn restore(
 							value: output.3,
 							status: OutputStatus::Unconfirmed,
 							height: output.4,
-							lock_height: 0,
-							is_coinbase: output.5,
+							lock_height: output.5,
+							is_coinbase: output.6,
 						});
 					};
 				}
