@@ -283,12 +283,12 @@ impl Handler for PeerPostHandler {
       }
       "unban" => {
         path_elems.pop();
-		if let Ok(addr) = path_elems.last().unwrap().parse() {
-		  self.peers.unban_peer(&addr);
-		  Ok(Response::with((status::Ok, "")))
-	    } else {
-		  Ok(Response::with((status::BadRequest, "")))
-	    }
+	if let Ok(addr) = path_elems.last().unwrap().parse() {
+	   self.peers.unban_peer(&addr);
+	   Ok(Response::with((status::Ok, "")))
+	} else {
+	   Ok(Response::with((status::BadRequest, "")))
+	}
       }
       _ => {
         Ok(Response::with((status::BadRequest, "")))
