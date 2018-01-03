@@ -18,6 +18,7 @@ In order to compile and run Grin on your machine, you should have installed:
 
 * <b>Git</b> - to clone the repository
 * <b>cmake</b> - 3.2 or greater should be installed and on your $PATH. Used by the build to compile the mining plugins found in the included [Cuckoo Miner](https://github.com/mimblewimble/cuckoo-miner)
+* <b>clang</b> - required by rocksdb dependency, used by grin as a datastore
 * <b>Rust</b> - 1.21.0 or greater via [Rustup](https://www.rustup.rs/) - Can be installed via your package manager or manually via the following commands:
 ```
 curl https://sh.rustup.rs -sSf | sh

@@ -70,7 +70,7 @@ impl Peers {
 	}
 
 	pub fn is_known(&self, addr: &SocketAddr) -> bool {
-		self.get_peer(addr).is_some()
+		self.get_connected_peer(addr).is_some()
 	}
 
 	/// Get vec of peers we are currently connected to.
@@ -81,7 +81,7 @@ impl Peers {
 	}
 
 	/// Get a peer we're connected to by address.
-	pub fn get_peer(&self, addr: &SocketAddr) -> Option<Arc<RwLock<Peer>>> {
+	pub fn get_connected_peer(&self, addr: &SocketAddr) -> Option<Arc<RwLock<Peer>>> {
 		self.peers.read().unwrap().get(addr).map(|p| p.clone())
 	}
 
@@ -185,7 +185,7 @@ impl Peers {
 			error!(LOGGER, "Couldn't ban {}: {:?}", peer_addr, e);
 		}
 
-		if let Some(peer) = self.get_peer(peer_addr) {
+		if let Some(peer) = self.get_connected_peer(peer_addr) {
 			debug!(LOGGER, "Banning peer {}", peer_addr);
 			// setting peer status will get it removed at the next clean_peer
 			let peer = peer.write().unwrap();
@@ -260,6 +260,11 @@ impl Peers {
 	/// Find peers in store (not necessarily connected) and return their data
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
 		self.store.find_peers(state, cap, count)
+	}
+
+	/// Get peer in store by address
+	pub fn get_peer(&self, peer_addr: SocketAddr) -> Result<PeerData, Error> {
+		self.store.get_peer(peer_addr).map_err(From::from)
 	}
 
 	/// Whether we've already seen a peer with the provided address
@@ -415,7 +420,7 @@ impl NetAdapter for Peers {
 		);
 
 		if diff.into_num() > 0 {
-			if let Some(peer) = self.get_peer(&addr) {
+			if let Some(peer) = self.get_connected_peer(&addr) {
 				let mut peer = peer.write().unwrap();
 				peer.info.total_difficulty = diff;
 			}
