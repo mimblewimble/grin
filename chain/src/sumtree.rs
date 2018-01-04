@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use util::secp::pedersen::{RangeProof, Commitment};
 
-use core::core::{Block, SumCommit, SwitchCommitHash, TxKernel};
+use core::core::{Block, SumCommit, TxKernel};
 use core::core::pmmr::{HashSum, NoSum, Summable, PMMR};
 use core::core::hash::Hashed;
 use grin_store;
@@ -90,9 +90,7 @@ impl SumTrees {
 	}
 
 	/// Whether a given commitment exists in the Output MMR and it's unspent
-	pub fn is_unspent(&mut self, commit: &Commitment, switch: &SwitchCommitHash)
-		-> Result<bool, Error> {
-
+	pub fn is_unspent(&mut self, commit: &Commitment) -> Result<bool, Error> {
 		let rpos = self.commit_index.get_output_pos(commit);
 		match rpos {
 			Ok(pos) => {
@@ -102,7 +100,7 @@ impl SumTrees {
 				);
 				if let Some(hs) = output_pmmr.get(pos) {
 					let hashsum = HashSum::from_summable(
-						pos, &SumCommit{commit: commit.clone()}, Some(switch));
+						pos, &SumCommit{commit: commit.clone()});
 					Ok(hs.hash == hashsum.hash)
 				} else {
 					Ok(false)
@@ -273,11 +271,10 @@ impl<'a> Extension<'a> {
 				// note that this doesn't show the commitment *never* existed, just
 				// that this is not an existing unspent commitment right now
 				if let Some(c) = self.output_pmmr.get(pos) {
-					let hashsum = HashSum::from_summable(
-						pos, &SumCommit{commit}, Some(out.switch_commit_hash));
-					// as we're processing a new fork, we may get a position on the old
-					// fork that exists but matches a different node, filtering that
-					// case out
+					let hashsum = HashSum::from_summable(pos, &SumCommit{commit});
+					// processing a new fork so we may get a position on the old
+					// fork that exists but matches a different node
+					// filtering that case out
 					if c.hash == hashsum.hash {
 						return Err(Error::DuplicateCommitment(commit));
 					}
@@ -289,7 +286,6 @@ impl<'a> Extension<'a> {
 					SumCommit {
 						commit: out.commitment(),
 					},
-					Some(out.switch_commit_hash()),
 				)
 				.map_err(&Error::SumTreeErr)?;
 
@@ -297,7 +293,7 @@ impl<'a> Extension<'a> {
 
 			// push range proofs in their MMR
 			self.rproof_pmmr
-				.push(NoSum(out.proof), None::<RangeProof>)
+				.push(NoSum(out.proof))
 				.map_err(&Error::SumTreeErr)?;
 		}
 
@@ -305,8 +301,7 @@ impl<'a> Extension<'a> {
 			if let Ok(pos) = self.get_kernel_pos(&kernel.excess) {
 				// same as outputs
 				if let Some(k) = self.kernel_pmmr.get(pos) {
-					let hashsum = HashSum::from_summable(
-						pos, &NoSum(kernel), None::<RangeProof>);
+					let hashsum = HashSum::from_summable(pos, &NoSum(kernel));
 					if k.hash == hashsum.hash {
 						return Err(Error::DuplicateKernel(kernel.excess.clone()));
 					}
@@ -314,7 +309,7 @@ impl<'a> Extension<'a> {
 			}
 			// push kernels in their MMR
 			let pos = self.kernel_pmmr
-				.push(NoSum(kernel.clone()), None::<RangeProof>)
+				.push(NoSum(kernel.clone()))
 				.map_err(&Error::SumTreeErr)?;
 			self.new_kernel_excesses.insert(kernel.excess, pos);
 		}

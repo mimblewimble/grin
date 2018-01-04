@@ -119,11 +119,8 @@ where
 	T: Summable + Hashed,
 {
 	/// Create a hash sum from a summable
-	pub fn from_summable<W: Writeable>(idx: u64, elmt: &T, hash_with: Option<W>) -> HashSum<T> {
-		let hash = match hash_with {
-			Some(h) => elmt.hash_with(h),
-			None => elmt.hash(),
-		};
+	pub fn from_summable(idx: u64, elmt: &T) -> HashSum<T> {
+		let hash = elmt.hash();
 		let sum = elmt.sum();
 		let node_hash = (idx, &sum, hash).hash();
 		HashSum {
@@ -259,9 +256,9 @@ where
 
 	/// Push a new Summable element in the MMR. Computes new related peaks at
 	/// the same time if applicable.
-	pub fn push<W: Writeable>(&mut self, elmt: T, hash_with: Option<W>) -> Result<u64, String> {
+	pub fn push(&mut self, elmt: T) -> Result<u64, String> {
 		let elmt_pos = self.last_pos + 1;
-		let mut current_hashsum = HashSum::from_summable(elmt_pos, &elmt, hash_with);
+		let mut current_hashsum = HashSum::from_summable(elmt_pos, &elmt);
 		let mut to_append = vec![current_hashsum.clone()];
 		let mut height = 0;
 		let mut pos = elmt_pos;
@@ -884,7 +881,7 @@ mod test {
 		let mut pmmr = PMMR::new(&mut ba);
 
 		// one element
-		pmmr.push(elems[0], None::<TestElem>).unwrap();
+		pmmr.push(elems[0]).unwrap();
 		let hash = Hashed::hash(&elems[0]);
 		let sum = elems[0].sum();
 		let node_hash = (1 as u64, &sum, hash).hash();
@@ -898,59 +895,59 @@ mod test {
 		assert_eq!(pmmr.unpruned_size(), 1);
 
 		// two elements
-		pmmr.push(elems[1], None::<TestElem>).unwrap();
-		let sum2 = HashSum::from_summable(1, &elems[0], None::<TestElem>) +
-			HashSum::from_summable(2, &elems[1], None::<TestElem>);
+		pmmr.push(elems[1]).unwrap();
+		let sum2 = HashSum::from_summable(1, &elems[0]) +
+			HashSum::from_summable(2, &elems[1]);
 		assert_eq!(pmmr.root(), sum2);
 		assert_eq!(pmmr.unpruned_size(), 3);
 
 		// three elements
-		pmmr.push(elems[2], None::<TestElem>).unwrap();
-		let sum3 = sum2.clone() + HashSum::from_summable(4, &elems[2], None::<TestElem>);
+		pmmr.push(elems[2]).unwrap();
+		let sum3 = sum2.clone() + HashSum::from_summable(4, &elems[2]);
 		assert_eq!(pmmr.root(), sum3);
 		assert_eq!(pmmr.unpruned_size(), 4);
 
 		// four elements
-		pmmr.push(elems[3], None::<TestElem>).unwrap();
+		pmmr.push(elems[3]).unwrap();
 		let sum4 = sum2 +
-			(HashSum::from_summable(4, &elems[2], None::<TestElem>) +
-				 HashSum::from_summable(5, &elems[3], None::<TestElem>));
+			(HashSum::from_summable(4, &elems[2]) +
+				 HashSum::from_summable(5, &elems[3]));
 		assert_eq!(pmmr.root(), sum4);
 		assert_eq!(pmmr.unpruned_size(), 7);
 
 		// five elements
-		pmmr.push(elems[4], None::<TestElem>).unwrap();
-		let sum5 = sum4.clone() + HashSum::from_summable(8, &elems[4], None::<TestElem>);
+		pmmr.push(elems[4]).unwrap();
+		let sum5 = sum4.clone() + HashSum::from_summable(8, &elems[4]);
 		assert_eq!(pmmr.root(), sum5);
 		assert_eq!(pmmr.unpruned_size(), 8);
 
 		// six elements
-		pmmr.push(elems[5], None::<TestElem>).unwrap();
+		pmmr.push(elems[5]).unwrap();
 		let sum6 = sum4.clone() +
-			(HashSum::from_summable(8, &elems[4], None::<TestElem>) +
-				 HashSum::from_summable(9, &elems[5], None::<TestElem>));
+			(HashSum::from_summable(8, &elems[4]) +
+				 HashSum::from_summable(9, &elems[5]));
 		assert_eq!(pmmr.root(), sum6.clone());
 		assert_eq!(pmmr.unpruned_size(), 10);
 
 		// seven elements
-		pmmr.push(elems[6], None::<TestElem>).unwrap();
-		let sum7 = sum6 + HashSum::from_summable(11, &elems[6], None::<TestElem>);
+		pmmr.push(elems[6]).unwrap();
+		let sum7 = sum6 + HashSum::from_summable(11, &elems[6]);
 		assert_eq!(pmmr.root(), sum7);
 		assert_eq!(pmmr.unpruned_size(), 11);
 
 		// eight elements
-		pmmr.push(elems[7], None::<TestElem>).unwrap();
+		pmmr.push(elems[7]).unwrap();
 		let sum8 = sum4 +
-			((HashSum::from_summable(8, &elems[4], None::<TestElem>) +
-				  HashSum::from_summable(9, &elems[5], None::<TestElem>)) +
-				 (HashSum::from_summable(11, &elems[6], None::<TestElem>) +
-					  HashSum::from_summable(12, &elems[7], None::<TestElem>)));
+			((HashSum::from_summable(8, &elems[4]) +
+				  HashSum::from_summable(9, &elems[5])) +
+				 (HashSum::from_summable(11, &elems[6]) +
+					  HashSum::from_summable(12, &elems[7])));
 		assert_eq!(pmmr.root(), sum8);
 		assert_eq!(pmmr.unpruned_size(), 15);
 
 		// nine elements
-		pmmr.push(elems[8], None::<TestElem>).unwrap();
-		let sum9 = sum8 + HashSum::from_summable(16, &elems[8], None::<TestElem>);
+		pmmr.push(elems[8]).unwrap();
+		let sum9 = sum8 + HashSum::from_summable(16, &elems[8]);
 		assert_eq!(pmmr.root(), sum9);
 		assert_eq!(pmmr.unpruned_size(), 16);
 	}
@@ -975,31 +972,31 @@ mod test {
 		let res = pmmr.get_last_n_insertions(19);
 		assert!(res.len() == 0);
 
-		pmmr.push(elems[0], None::<TestElem>).unwrap();
+		pmmr.push(elems[0]).unwrap();
 		let res = pmmr.get_last_n_insertions(19);
 		assert!(res.len() == 1 && res[0].sum == 1);
 
-		pmmr.push(elems[1], None::<TestElem>).unwrap();
+		pmmr.push(elems[1]).unwrap();
 
 		let res = pmmr.get_last_n_insertions(12);
 		assert!(res[0].sum == 2 && res[1].sum == 1);
 
-		pmmr.push(elems[2], None::<TestElem>).unwrap();
+		pmmr.push(elems[2]).unwrap();
 
 		let res = pmmr.get_last_n_insertions(2);
 		assert!(res[0].sum == 3 && res[1].sum == 2);
 
-		pmmr.push(elems[3], None::<TestElem>).unwrap();
+		pmmr.push(elems[3]).unwrap();
 
 		let res = pmmr.get_last_n_insertions(19);
 		assert!(
 			res[0].sum == 4 && res[1].sum == 3 && res[2].sum == 2 && res[3].sum == 1 && res.len() == 4
 		);
 
-		pmmr.push(elems[5], None::<TestElem>).unwrap();
-		pmmr.push(elems[6], None::<TestElem>).unwrap();
-		pmmr.push(elems[7], None::<TestElem>).unwrap();
-		pmmr.push(elems[8], None::<TestElem>).unwrap();
+		pmmr.push(elems[5]).unwrap();
+		pmmr.push(elems[6]).unwrap();
+		pmmr.push(elems[7]).unwrap();
+		pmmr.push(elems[8]).unwrap();
 
 		let res = pmmr.get_last_n_insertions(7);
 		assert!(
@@ -1028,7 +1025,7 @@ mod test {
 		{
 			let mut pmmr = PMMR::new(&mut ba);
 			for elem in &elems[..] {
-				pmmr.push(*elem, None::<TestElem>).unwrap();
+				pmmr.push(*elem).unwrap();
 			}
 			orig_root = pmmr.root();
 			sz = pmmr.unpruned_size();
