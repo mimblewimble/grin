@@ -58,7 +58,7 @@ pub fn issue_send_tx(
 		selection_strategy,
 	)?;
 
-	let partial_tx = build_partial_tx(amount, blind_sum, tx);
+	let partial_tx = build_partial_tx(amount, blind_sum, &tx);
 
 	// Closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
@@ -95,6 +95,25 @@ pub fn issue_send_tx(
 	} else {
 		panic!("dest not in expected format: {}", dest);
 	}
+
+	// Append "Sent" transfer record into stats.dat
+	// only if the transaction is completed.
+	StatsData::append(&config.data_file_dir, |stats_data| {
+		let current_time_sec = get_transfer_timestamp();
+		let (ins, outs) = get_transfer_inouts(&tx);
+		let addr = dest.replace("http://", "");
+		stats_data.add_transfer(
+			StatsTransferData {
+				amount: amount,
+				receiving_wallet_address: addr,
+				tx_type: StatsTransferType::Sent,
+				inputs: ins,
+				outputs: outs,
+				sent_or_received_at: current_time_sec,
+			}
+		);
+	})?;
+	
 	Ok(())
 }
 

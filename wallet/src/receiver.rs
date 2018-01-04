@@ -226,5 +226,24 @@ fn receive_transaction(
 		derivation,
 	);
 
+	// append transfer record of received coins into stats.dat
+	// only if the transaction is completed.
+	StatsData::append(&config.data_file_dir, |stats_data| {
+		let current_time_sec = get_transfer_timestamp();
+		let (ins, outs) = get_transfer_inouts(&tx_final);
+		let port = config.api_listen_port.to_string();
+		let addr = format!("{}:{}", "localhost".to_string(), port);
+		stats_data.add_transfer(
+			StatsTransferData {
+				amount: amount,
+				receiving_wallet_address: addr,
+				tx_type: StatsTransferType::Received,
+				inputs: ins,
+				outputs: outs,
+				sent_or_received_at: current_time_sec,
+			}
+		);
+	})?;
+
 	Ok(tx_final)
 }
