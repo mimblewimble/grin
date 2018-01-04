@@ -53,6 +53,7 @@ pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(),
 	Ok(())
 }
 
+// TODO - this might be slow if we have really old outputs that have never been refreshed
 fn refresh_missing_heights(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> {
 	// build a local map of wallet outputs keyed by commit
 	// and a list of outputs we want to query the node for
