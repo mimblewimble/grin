@@ -257,7 +257,8 @@ fn main() {
 			.about("Initialize a new wallet seed file."))
 
 		.subcommand(SubCommand::with_name("restore")
-			.about("Attempt to restore wallet contents from the chain using seed and password.")))
+			.about("Attempt to restore wallet contents from the chain using seed and password. \
+				NOTE: Backup wallet.* and run `wallet listen` before running restore.")))
 
 	.get_matches();
 
