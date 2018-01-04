@@ -34,7 +34,6 @@ const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
 const SYNC_HEAD_PREFIX: u8 = 's' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const OUTPUT_COMMIT_PREFIX: u8 = 'o' as u8;
-const HEADER_BY_OUTPUT_PREFIX: u8 = 'p' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
 const KERNEL_POS_PREFIX: u8 = 'k' as u8;
 
@@ -116,22 +115,12 @@ impl ChainStore for ChainKVStore {
 				&b.header,
 			)?;
 
-		// saving the full output under its hash, as well as a commitment to hash index
+		// saving the full output under its commitment
 		for out in &b.outputs {
 			batch = batch
 				.put_ser(
-					&to_key(
-						OUTPUT_COMMIT_PREFIX,
-						&mut out.commitment().as_ref().to_vec(),
-					)[..],
+					&to_key(OUTPUT_COMMIT_PREFIX, &mut out.commitment().as_ref().to_vec())[..],
 					out,
-				)?
-				.put_ser(
-					&to_key(
-						HEADER_BY_OUTPUT_PREFIX,
-						&mut out.commitment().as_ref().to_vec(),
-					)[..],
-					&b.hash(),
 				)?;
 		}
 		batch.write()
