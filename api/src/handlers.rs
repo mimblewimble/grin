@@ -37,15 +37,13 @@ use types::*;
 use util;
 use util::LOGGER;
 
-
 // RESTful index of available api endpoints
 // GET /v1/
 struct IndexHandler {
 	list: Vec<String>,
 }
 
-impl IndexHandler {
-}
+impl IndexHandler {}
 
 impl Handler for IndexHandler {
 	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
@@ -64,12 +62,13 @@ struct UtxoHandler {
 impl UtxoHandler {
 	fn get_utxo(&self, id: &str, include_rp: bool, include_switch: bool) -> Result<Output, Error> {
 		debug!(LOGGER, "getting utxo: {}", id);
-		let c = util::from_hex(String::from(id)).map_err(|_| {
-			Error::Argument(format!("Not a valid commitment: {}", id))
-		})?;
+		let c = util::from_hex(String::from(id))
+			.map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
 		let commit = Commitment::from_vec(c);
 
-		let out = self.chain.get_unspent(&commit).map_err(|_| Error::NotFound)?;
+		let out = self.chain
+			.get_unspent(&commit)
+			.map_err(|_| Error::NotFound)?;
 
 		let header = self.chain
 			.get_block_header_by_output_commit(&commit)
@@ -120,8 +119,12 @@ impl UtxoHandler {
 		let outputs = block
 			.outputs
 			.iter()
-			.filter(|c|self.chain.is_unspent(&c.commit, &c.switch_commit_hash).unwrap())
-			.map(|k|OutputSwitch::from_output(k, &header))
+			.filter(|c| {
+				self.chain
+					.is_unspent(&c.commit, &c.switch_commit_hash)
+					.unwrap()
+			})
+			.map(|k| OutputSwitch::from_output(k, &header))
 			.collect();
 		BlockOutputs {
 			header: BlockHeaderInfo::from_header(&header),
@@ -259,7 +262,7 @@ impl Handler for PeersConnectedHandler {
 
 /// Peer operations
 /// POST /v1/peers/10.12.12.13/ban
-/// TODO POST /v1/peers/10.12.12.13/unban
+/// POST /v1/peers/10.12.12.13/unban
 pub struct PeerPostHandler {
 	pub peers: p2p::Peers,
 }
@@ -272,24 +275,26 @@ impl Handler for PeerPostHandler {
 			path_elems.pop();
 		}
 		match *path_elems.last().unwrap() {
-      "ban" => {
-        path_elems.pop();
-        if let Ok(addr) = path_elems.last().unwrap().parse() {
-          self.peers.ban_peer(&addr);
-          Ok(Response::with((status::Ok, "")))
-        } else {
-          Ok(Response::with((status::BadRequest, "")))
-        }
-      }
-      "unban" => {
-        // TODO
-        Ok(Response::with((status::BadRequest, "")))
-      }
-      _ => {
-        // TODO peer details
-        Ok(Response::with((status::BadRequest, "")))
-      }
-    }
+			"ban" => {
+				path_elems.pop();
+				if let Ok(addr) = path_elems.last().unwrap().parse() {
+					self.peers.ban_peer(&addr);
+					Ok(Response::with((status::Ok, "")))
+				} else {
+					Ok(Response::with((status::BadRequest, "")))
+				}
+			}
+			"unban" => {
+				path_elems.pop();
+				if let Ok(addr) = path_elems.last().unwrap().parse() {
+					self.peers.unban_peer(&addr);
+					Ok(Response::with((status::Ok, "")))
+				} else {
+					Ok(Response::with((status::BadRequest, "")))
+				}
+			}
+			_ => Ok(Response::with((status::BadRequest, ""))),
+		}
 	}
 }
 
@@ -343,7 +348,10 @@ pub struct BlockHandler {
 
 impl BlockHandler {
 	fn get_block(&self, h: &Hash) -> Result<BlockPrintable, Error> {
-		let block = self.chain.clone().get_block(h).map_err(|_| Error::NotFound)?;
+		let block = self.chain
+			.clone()
+			.get_block(h)
+			.map_err(|_| Error::NotFound)?;
 		Ok(BlockPrintable::from_block(&block))
 	}
 
@@ -359,8 +367,7 @@ impl BlockHandler {
 			static ref RE: Regex = Regex::new(r"[0-9a-fA-F]{64}").unwrap();
 		}
 		if !RE.is_match(&input) {
-			return Err(Error::Argument(
-					String::from("Not a valid hash or height.")))
+			return Err(Error::Argument(String::from("Not a valid hash or height.")));
 		}
 		let vec = util::from_hex(input).unwrap();
 		Ok(Hash::from_vec(vec))
@@ -417,18 +424,14 @@ where
 	T: pool::BlockChain + Send + Sync + 'static,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let wrapper: TxWrapper = serde_json::from_reader(req.body.by_ref()).map_err(|e| {
-			IronError::new(e, status::BadRequest)
-		})?;
+		let wrapper: TxWrapper = serde_json::from_reader(req.body.by_ref())
+			.map_err(|e| IronError::new(e, status::BadRequest))?;
 
-		let tx_bin = util::from_hex(wrapper.tx_hex).map_err(|_| {
-			Error::Argument(format!("Invalid hex in transaction wrapper."))
-		})?;
+		let tx_bin = util::from_hex(wrapper.tx_hex)
+			.map_err(|_| Error::Argument(format!("Invalid hex in transaction wrapper.")))?;
 
 		let tx: Transaction = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
-			Error::Argument(
-				"Could not deserialize transaction, invalid format.".to_string(),
-			)
+			Error::Argument("Could not deserialize transaction, invalid format.".to_string())
 		})?;
 
 		let source = pool::TxSource {
@@ -445,9 +448,7 @@ where
 			.write()
 			.unwrap()
 			.add_to_memory_pool(source, tx)
-			.map_err(|e| {
-				Error::Internal(format!("Addition to transaction pool failed: {:?}", e))
-			})?;
+			.map_err(|e| Error::Internal(format!("Addition to transaction pool failed: {:?}", e)))?;
 
 		Ok(Response::with(status::Ok))
 	}
@@ -485,9 +486,9 @@ pub fn start_rest_apis<T>(
 ) where
 	T: pool::BlockChain + Send + Sync + 'static,
 {
-let _ = thread::Builder::new()
-	.name("apis".to_string())
-	.spawn(move || {
+	let _ = thread::Builder::new()
+		.name("apis".to_string())
+		.spawn(move || {
 			// build handlers and register them under the appropriate endpoint
 			let utxo_handler = UtxoHandler {
 				chain: chain.clone(),
@@ -520,7 +521,7 @@ let _ = thread::Builder::new()
 				peers: peers.clone(),
 			};
 
-			let route_list = vec!(
+			let route_list = vec![
 				"get blocks".to_string(),
 				"get chain".to_string(),
 				"get chain/utxos".to_string(),
@@ -531,10 +532,11 @@ let _ = thread::Builder::new()
 				"get pool".to_string(),
 				"post pool/push".to_string(),
 				"post peers/a.b.c.d:p/ban".to_string(),
+				"post peers/a.b.c.d:p/unban".to_string(),
 				"get peers/all".to_string(),
 				"get peers/connected".to_string(),
 				"get peers/a.b.c.d".to_string(),
-			);
+			];
 			// We allow manually banning, like this:
 			// curl -v -X POST http://127.0.0.1:13413/v1/peers/88.99.251.87:13414/ban
 			let index_handler = IndexHandler { list: route_list };
@@ -559,5 +561,5 @@ let _ = thread::Builder::new()
 			apis.start(&addr[..]).unwrap_or_else(|e| {
 				error!(LOGGER, "Failed to start API HTTP server: {}.", e);
 			});
-	});
+		});
 }
