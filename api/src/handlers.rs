@@ -54,7 +54,7 @@ impl Handler for IndexHandler {
 // Supports retrieval of multiple outputs in a single request -
 // GET /v1/chain/utxos/byids?id=xxx,yyy,zzz
 // GET /v1/chain/utxos/byids?id=xxx&id=yyy&id=zzz
-// GET /v1/chain/utxos/byheight?height=n
+// GET /v1/chain/utxos/atheight?start_height=101&end_height=200
 struct UtxoHandler {
 	chain: Arc<chain::Chain>,
 }
@@ -107,7 +107,9 @@ impl UtxoHandler {
 			.outputs
 			.iter()
 			.filter(|c| self.chain.is_unspent(&c.commit).unwrap())
-			.map(|k| OutputPrintable::from_output(k))
+			.map(|k| {
+				OutputPrintable::from_output(k, self.chain.clone())
+			})
 			.collect();
 		BlockOutputs {
 			header: BlockHeaderInfo::from_header(&header),
@@ -117,9 +119,17 @@ impl UtxoHandler {
 
 	// returns utxos for a specified range of blocks
 	fn utxo_block_batch(&self, req: &mut Request) -> Vec<BlockOutputs> {
+		let mut commitments: Vec<&str> = vec![];
 		let mut start_height = 1;
 		let mut end_height = 1;
 		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
+			if let Some(ids) = params.get("id") {
+				for id in ids {
+					for id in id.split(",") {
+						commitments.push(id.clone());
+					}
+				}
+			}
 			if let Some(heights) = params.get("start_height") {
 				for height in heights {
 					start_height = height.parse().unwrap();
@@ -133,7 +143,17 @@ impl UtxoHandler {
 		}
 		let mut return_vec = vec![];
 		for i in start_height..end_height + 1 {
-			return_vec.push(self.utxos_at_height(i));
+			let res = self.utxos_at_height(i);
+			if commitments.is_empty() {
+				return_vec.push(res);
+			} else {
+				for x in &res.outputs {
+					if commitments.contains(&x.commit.as_str()) {
+						return_vec.push(res.clone());
+						break;
+					}
+				}
+			}
 		}
 		return_vec
 	}
@@ -331,11 +351,8 @@ pub struct BlockHandler {
 
 impl BlockHandler {
 	fn get_block(&self, h: &Hash) -> Result<BlockPrintable, Error> {
-		let block = self.chain
-			.clone()
-			.get_block(h)
-			.map_err(|_| Error::NotFound)?;
-		Ok(BlockPrintable::from_block(&block))
+		let block = self.chain.clone().get_block(h).map_err(|_| Error::NotFound)?;
+		Ok(BlockPrintable::from_block(&block, self.chain.clone()))
 	}
 
 	// Try to decode the string as a height or a hash.

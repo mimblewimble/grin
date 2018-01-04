@@ -84,11 +84,7 @@ impl SumTreeNode {
 		let mut return_vec = Vec::new();
 		let last_n = chain.get_last_n_utxo(distance);
 		for elem_output in last_n {
-			// Need to call further method to check if output is spent
-			let mut output = OutputPrintable::from_output(&elem_output.1);
-			if let Ok(_) = chain.get_unspent(&elem_output.1.commit) {
-				output.spent = false;
-			}
+			let output = OutputPrintable::from_output(&elem_output.1, chain.clone());
 			return_vec.push(SumTreeNode {
 				hash: util::to_hex(elem_output.0.to_vec()),
 				output: Some(output),
@@ -181,7 +177,7 @@ pub struct OutputPrintable {
 }
 
 impl OutputPrintable {
-	pub fn from_output(output: &core::Output) -> OutputPrintable {
+	pub fn from_output(output: &core::Output, chain: Arc<chain::Chain>) -> OutputPrintable {
 		let output_type =
 			if output.features.contains(core::transaction::COINBASE_OUTPUT) {
 				OutputType::Coinbase
@@ -189,11 +185,16 @@ impl OutputPrintable {
 				OutputType::Transaction
 			};
 
+		let spent = match chain.get_unspent(&output.commit) {
+			Ok(_) => false,
+			Err(_) => true,
+		};
+
 		OutputPrintable {
 			output_type: output_type,
 			commit: util::to_hex(output.commit.0.to_vec()),
 			switch_commit_hash: output.switch_commit_hash.to_hex(),
-			spent: true,
+			spent: spent,
 			proof_hash: util::to_hex(output.proof.hash().to_vec()),
 		}
 	}
@@ -304,14 +305,14 @@ pub struct BlockPrintable {
 }
 
 impl BlockPrintable {
-	pub fn from_block(block: &core::Block) -> BlockPrintable {
+	pub fn from_block(block: &core::Block, chain: Arc<chain::Chain>) -> BlockPrintable {
 		let inputs = block.inputs
 			.iter()
 			.map(|x| util::to_hex(x.commitment().0.to_vec()))
 			.collect();
 		let outputs = block.outputs
 			.iter()
-			.map(|output| OutputPrintable::from_output(output))
+			.map(|output| OutputPrintable::from_output(output, chain.clone()))
 			.collect();
 		let kernels = block.kernels
 			.iter()

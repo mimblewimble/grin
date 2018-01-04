@@ -112,6 +112,7 @@ pub fn utxos_batch_block(
 	}
 }
 
+// TODO - wrap the many return values in a struct
 fn find_utxos_with_key(
 	config: &WalletConfig,
 	keychain: &Keychain,

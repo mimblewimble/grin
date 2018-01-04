@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2017 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ use keychain::{Identifier, Keychain};
 use util::secp::pedersen;
 use util;
 use util::LOGGER;
+
 
 // Transitions a local wallet output from Unconfirmed -> Unspent.
 fn refresh_output(out: &mut OutputData, _api_out: &api::Output) {
@@ -53,42 +54,119 @@ pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(),
 }
 
 fn refresh_missing_heights(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> {
-	debug!(LOGGER, "Refreshing missing heights (to be implemented)");
+	// build a local map of wallet outputs keyed by commit
+	// and a list of outputs we want to query the node for
+	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
+	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+		for out in wallet_data
+			.outputs
+			.values()
+			.filter(|x| {
+				x.root_key_id == keychain.root_key_id() &&
+				x.height == 0 &&
+				x.status == OutputStatus::Unspent
 
-	// TODO - implement this -
-	// * compile list of Unspent outputs with height 0
-	// * hit the utxos by height api (all of the block chain?)
-	// * fill heights in based on block headers and their contained outputs
+			})
+		{
+			let commit = keychain.commit_with_key_index(out.value, out.n_child).unwrap();
+			wallet_outputs.insert(commit, out.key_id.clone());
+		}
+	});
 
-	Ok(())
+	// nothing to do so return (otherwise we hit the api with a monster query...)
+	if wallet_outputs.is_empty() {
+		return Ok(());
+	}
+
+	debug!(LOGGER, "Refreshing missing heights for {} outputs", wallet_outputs.len());
+
+	let mut id_params: Vec<String> = wallet_outputs
+		.keys()
+		.map(|commit| {
+			let id = util::to_hex(commit.as_ref().to_vec());
+			format!("id={}", id)
+		})
+		.collect();
+
+	let tip = get_tip_from_node(config)?;
+
+	let height_params = format!(
+		"start_height={}&end_height={}",
+		0,
+		tip.height,
+	);
+	let mut query_params = vec![height_params];
+	query_params.append(&mut id_params);
+
+	let url =
+		format!(
+		"{}/v1/chain/utxos/atheight?{}",
+		config.check_node_api_http_addr,
+		query_params.join("&"),
+	);
+	debug!(LOGGER, "{:?}", url);
+
+	let mut api_heights: HashMap<pedersen::Commitment, u64> = HashMap::new();
+	match api::client::get::<Vec<api::BlockOutputs>>(url.as_str()) {
+		Ok(blocks) => {
+			for block in blocks {
+				for out in block.outputs {
+					if let Ok(c) = util::from_hex(String::from(out.commit)) {
+						let commit = pedersen::Commitment::from_vec(c);
+						api_heights.insert(commit, block.header.height);
+					}
+				}
+			}
+		}
+		Err(e) => {
+			// if we got anything other than 200 back from server, bye
+			error!(LOGGER, "Refresh failed... unable to contact node: {}", e);
+			return Err(Error::Node(e));
+		}
+	}
+
+	// now for each commit, find the output in the wallet and
+	// the corresponding api output (if it exists)
+	// and refresh it in-place in the wallet.
+	// Note: minimizing the time we spend holding the wallet lock.
+	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+		for commit in wallet_outputs.keys() {
+			let id = wallet_outputs.get(&commit).unwrap();
+			if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
+				if let Some(height) = api_heights.get(&commit) {
+					output.get_mut().height = *height;
+				}
+			}
+		}
+	})
 }
 
 /// Builds a single api query to retrieve the latest output data from the node.
 /// So we can refresh the local wallet outputs.
 fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> {
 	debug!(LOGGER, "Refreshing wallet outputs");
-	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
-	let mut commits: Vec<pedersen::Commitment> = vec![];
 
-	// build a local map of wallet outputs by commits
+	// build a local map of wallet outputs keyed by commit
 	// and a list of outputs we want to query the node for
+	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
 	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
 		for out in wallet_data
 			.outputs
 			.values()
-			.filter(|out| out.root_key_id == keychain.root_key_id())
-			.filter(|out| out.status != OutputStatus::Spent)
+			.filter(|x| {
+				x.root_key_id == keychain.root_key_id() &&
+				x.status != OutputStatus::Spent
+			})
 		{
 			let commit = keychain.commit_with_key_index(out.value, out.n_child).unwrap();
-			commits.push(commit);
 			wallet_outputs.insert(commit, out.key_id.clone());
 		}
 	});
 
 	// build the necessary query params -
 	// ?id=xxx&id=yyy&id=zzz
-	let query_params: Vec<String> = commits
-		.iter()
+	let query_params: Vec<String> = wallet_outputs
+		.keys()
 		.map(|commit| {
 			let id = util::to_hex(commit.as_ref().to_vec());
 			format!("id={}", id)
@@ -105,8 +183,10 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<()
 	// build a map of api outputs by commit so we can look them up efficiently
 	let mut api_outputs: HashMap<pedersen::Commitment, api::Output> = HashMap::new();
 	match api::client::get::<Vec<api::Output>>(url.as_str()) {
-		Ok(outputs) => for out in outputs {
-			api_outputs.insert(out.commit, out);
+		Ok(outputs) => {
+			for out in outputs {
+				api_outputs.insert(out.commit, out);
+			}
 		},
 		Err(e) => {
 			// if we got anything other than 200 back from server, don't attempt to refresh the wallet
@@ -119,7 +199,7 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<()
 	// the corresponding api output (if it exists)
 	// and refresh it in-place in the wallet.
 	// Note: minimizing the time we spend holding the wallet lock.
-	WalletData::with_wallet(&config.data_file_dir, |wallet_data| for commit in commits {
+	WalletData::with_wallet(&config.data_file_dir, |wallet_data| for commit in wallet_outputs.keys() {
 		let id = wallet_outputs.get(&commit).unwrap();
 		if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
 			match api_outputs.get(&commit) {
