@@ -97,7 +97,7 @@ pub fn utxos_batch_block(
 
 	let url =
 		format!(
-		"{}/v1/chain/utxos/atheight?{}",
+		"{}/v1/chain/utxos/byheight?{}",
 		config.check_node_api_http_addr,
 		query_param,
 	);

@@ -165,7 +165,7 @@ impl Handler for UtxoHandler {
 		}
 		match *path_elems.last().unwrap() {
 			"byids" => json_response(&self.utxos_by_ids(req)),
-			"atheight" => json_response(&self.utxo_block_batch(req)),
+			"byheight" => json_response(&self.utxo_block_batch(req)),
 			_ => Ok(Response::with((status::BadRequest, ""))),
 		}
 	}
