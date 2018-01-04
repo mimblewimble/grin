@@ -126,7 +126,7 @@ fn build_send_tx(
 	})?;
 
 	// build transaction skeleton with inputs and change
-	let (mut parts, change_key) = inputs_and_change(&coins, config, keychain, amount, lock_height)?;
+	let (mut parts, change_key) = inputs_and_change(&coins, config, keychain, amount)?;
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
@@ -167,12 +167,11 @@ pub fn issue_burn_tx(
 
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
-	let lock_height = current_height;
-	let (mut parts, _) = inputs_and_change(&coins, config, keychain, amount, lock_height)?;
+	let (mut parts, _) = inputs_and_change(&coins, config, keychain, amount)?;
 
 	// add burn output and fees
 	let fee = tx_fee(coins.len(), 2, None);
-	parts.push(build::output(amount - fee, current_height, Identifier::zero()));
+	parts.push(build::output(amount - fee, Identifier::zero()));
 
 	// finalize the burn transaction and send
 	let (tx_burn, _) = build::transaction(parts, &keychain)?;
@@ -190,7 +189,6 @@ fn inputs_and_change(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
-	lock_height: u64,
 ) -> Result<(Vec<Box<build::Append>>, Identifier), Error> {
 	let mut parts = vec![];
 
@@ -201,15 +199,15 @@ fn inputs_and_change(
 	}
 
 	// sender is responsible for setting the fee on the partial tx
- // recipient should double check the fee calculation and not blindly trust the
- // sender
+	// recipient should double check the fee calculation and not blindly trust the
+	// sender
 	let fee = tx_fee(coins.len(), 2, None);
 	parts.push(build::with_fee(fee));
 
 	// if we are spending 10,000 coins to send 1,000 then our change will be 9,000
- // the fee will come out of the amount itself
- // if the fee is 80 then the recipient will only receive 920
- // but our change will still be 9,000
+	// the fee will come out of the amount itself
+	// if the fee is 80 then the recipient will only receive 920
+	// but our change will still be 9,000
 	let change = total - amount;
 
 	// build inputs using the appropriate derived key_ids
@@ -238,7 +236,7 @@ fn inputs_and_change(
 		change_key
 	})?;
 
-	parts.push(build::output(change, lock_height, change_key.clone()));
+	parts.push(build::output(change, change_key.clone()));
 
 	Ok((parts, change_key))
 }

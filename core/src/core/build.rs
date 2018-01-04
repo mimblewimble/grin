@@ -67,13 +67,12 @@ pub fn input(
 
 /// Adds an output with the provided value and key identifier from the
 /// keychain.
-pub fn output(value: u64, lock_height: u64, key_id: Identifier) -> Box<Append> {
+pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
 		debug!(
 			LOGGER,
-			"Building an output: {}, {}, {}",
+			"Building an output: {}, {}",
 			value,
-			lock_height,
 			key_id,
 		);
 
@@ -87,7 +86,7 @@ pub fn output(value: u64, lock_height: u64, key_id: Identifier) -> Box<Append> {
 			LOGGER,
 			"Builder - Pedersen Commit is: {:?}, Switch Commit is: {:?}",
 			commit,
-			switch_commit
+			switch_commit,
 		);
 		trace!(
 			LOGGER,

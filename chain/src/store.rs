@@ -162,6 +162,11 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, Error> {
+		// TODO - how to handle multiple "versions" of an output (multiple forks)
+		// * retrieve list of outputs from the db
+		// * then identify which one is actually valid based on what?
+		// * suspect we need to encode height in the output (based on the block itself?)
+		// * then check the "block at height" for consistency?
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut commit.as_ref().to_vec())),

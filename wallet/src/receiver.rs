@@ -182,11 +182,9 @@ fn receive_transaction(
 ) -> Result<Transaction, Error> {
 	let root_key_id = keychain.root_key_id();
 
-	let lock_height = partial.lock_height;
-
 	// double check the fee amount included in the partial tx
- // we don't necessarily want to just trust the sender
- // we could just overwrite the fee here (but we won't) due to the ecdsa sig
+	// we don't necessarily want to just trust the sender
+	// we could just overwrite the fee here (but we won't) due to the ecdsa sig
 	let fee = tx_fee(partial.inputs.len(), partial.outputs.len() + 1, None);
 	if fee != partial.fee {
 		return Err(Error::FeeDispute {
@@ -219,7 +217,7 @@ fn receive_transaction(
 		vec![
 			build::initial_tx(partial),
 			build::with_excess(blinding),
-			build::output(out_amount, lock_height, key_id.clone()),
+			build::output(out_amount, key_id.clone()),
 		],
 		keychain,
 	)?;
