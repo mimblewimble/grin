@@ -1,4 +1,4 @@
-
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,8 +27,7 @@ use core::core::pmmr::{HashSum, NoSum, Summable, PMMR};
 use core::core::hash::Hashed;
 use grin_store;
 use grin_store::sumtree::PMMRBackend;
-use types::ChainStore;
-use types::Error;
+use types::{ChainStore, Error, WitnessData};
 use util::LOGGER;
 
 const SUMTREES_SUBDIR: &'static str = "sumtrees";
@@ -71,7 +70,7 @@ where
 /// pruning enabled.
 pub struct SumTrees {
 	output_pmmr_h: PMMRHandle<SumCommit>,
-	rproof_pmmr_h: PMMRHandle<NoSum<RangeProof>>,
+	rproof_pmmr_h: PMMRHandle<NoSum<WitnessData>>,
 	kernel_pmmr_h: PMMRHandle<NoSum<TxKernel>>,
 
 	// chain store used as index of commitments to MMR positions
@@ -87,6 +86,12 @@ impl SumTrees {
 			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR)?,
 			commit_index: commit_index,
 		})
+	}
+
+	pub fn block_height(&mut self, commit: &Commitment) -> Result<u64, Error> {
+		let rpos = self.commit_index.get_output_pos(commit);
+
+		panic!("can we get witness data back out of the sumtree???");
 	}
 
 	/// Whether a given commitment exists in the Output MMR and it's unspent
@@ -119,7 +124,7 @@ impl SumTrees {
 	}
 
 	/// as above, for range proofs
-	pub fn last_n_rangeproof(&mut self, distance: u64) -> Vec<HashSum<NoSum<RangeProof>>> {
+	pub fn last_n_rangeproof(&mut self, distance: u64) -> Vec<HashSum<NoSum<WitnessData>>> {
 		let rproof_pmmr = PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
 		rproof_pmmr.get_last_n_insertions(distance)
 	}
@@ -135,7 +140,7 @@ impl SumTrees {
 		&mut self,
 	) -> (
 		HashSum<SumCommit>,
-		HashSum<NoSum<RangeProof>>,
+		HashSum<NoSum<WitnessData>>,
 		HashSum<NoSum<TxKernel>>,
 	) {
 		let output_pmmr = PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
@@ -205,7 +210,7 @@ where
 /// function.
 pub struct Extension<'a> {
 	output_pmmr: PMMR<'a, SumCommit, PMMRBackend<SumCommit>>,
-	rproof_pmmr: PMMR<'a, NoSum<RangeProof>, PMMRBackend<NoSum<RangeProof>>>,
+	rproof_pmmr: PMMR<'a, NoSum<WitnessData>, PMMRBackend<NoSum<WitnessData>>>,
 	kernel_pmmr: PMMR<'a, NoSum<TxKernel>, PMMRBackend<NoSum<TxKernel>>>,
 
 	commit_index: Arc<ChainStore>,
@@ -292,8 +297,12 @@ impl<'a> Extension<'a> {
 			self.new_output_commits.insert(out.commitment(), pos);
 
 			// push range proofs in their MMR
+			let witness_data = WitnessData {
+				range_proof: out.proof,
+				block_height: b.header.height,
+			};
 			self.rproof_pmmr
-				.push(NoSum(out.proof))
+				.push(NoSum(witness_data))
 				.map_err(&Error::SumTreeErr)?;
 		}
 
@@ -413,7 +422,7 @@ impl<'a> Extension<'a> {
 		&self,
 	) -> (
 		HashSum<SumCommit>,
-		HashSum<NoSum<RangeProof>>,
+		HashSum<NoSum<WitnessData>>,
 		HashSum<NoSum<TxKernel>>,
 	) {
 		(

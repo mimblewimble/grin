@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 use std::io;
 
-use util::secp::pedersen::Commitment;
+use util::secp::pedersen::{Commitment, RangeProof};
 
 use grin_store as store;
 use core::core::{block, Block, BlockHeader, Output};
@@ -177,6 +177,19 @@ impl ser::Readable for Tip {
 			prev_block_h: prev,
 			total_difficulty: diff,
 		})
+	}
+}
+
+#[derive(Clone, Debug)]
+pub struct WitnessData {
+	pub range_proof: RangeProof,
+	pub block_height: u64,
+}
+
+impl ser::Writeable for WitnessData {
+	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.range_proof.write(writer)?;
+		writer.write_u64(self.block_height)
 	}
 }
 

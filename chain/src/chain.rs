@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use util::secp::pedersen::{Commitment, RangeProof};
+use util::secp::pedersen::Commitment;
 
 use core::core::SumCommit;
 use core::core::pmmr::{HashSum, NoSum};
@@ -379,7 +379,7 @@ impl Chain {
 		&self,
 	) -> (
 		HashSum<SumCommit>,
-		HashSum<NoSum<RangeProof>>,
+		HashSum<NoSum<WitnessData>>,
 		HashSum<NoSum<TxKernel>>,
 	) {
 		let mut sumtrees = self.sumtrees.write().unwrap();
@@ -401,7 +401,7 @@ impl Chain {
 	}
 
 	/// as above, for rangeproofs
-	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<HashSum<NoSum<RangeProof>>> {
+	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<HashSum<NoSum<WitnessData>>> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.last_n_rangeproof(distance)
 	}
