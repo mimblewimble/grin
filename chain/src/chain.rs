@@ -24,7 +24,7 @@ use util::secp::pedersen::{Commitment, RangeProof};
 use core::core::SumCommit;
 use core::core::pmmr::{HashSum, NoSum};
 
-use core::core::{Block, BlockHeader, Output, TxKernel, SwitchCommitHash};
+use core::core::{Block, BlockHeader, Output, TxKernel};
 use core::core::target::Difficulty;
 use core::core::hash::Hash;
 use grin_store::Error::NotFoundErr;
@@ -339,7 +339,7 @@ impl Chain {
 		match self.store.get_output_by_commit(output_ref) {
 			Ok(out) => {
 				let mut sumtrees = self.sumtrees.write().unwrap();
-				if sumtrees.is_unspent(output_ref, &out.switch_commit_hash())? {
+				if sumtrees.is_unspent(output_ref)? {
 					Ok(out)
 				} else {
 					Err(Error::OutputNotFound)
@@ -351,11 +351,9 @@ impl Chain {
 	}
 
 	/// Checks whether an output is unspent
-	pub fn is_unspent(&self, output_ref: &Commitment, switch: &SwitchCommitHash)
-		-> Result<bool, Error> {
-
+	pub fn is_unspent(&self, output_ref: &Commitment) -> Result<bool, Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
-		sumtrees.is_unspent(output_ref, switch)
+		sumtrees.is_unspent(output_ref)
 	}
 
 	/// Sets the sumtree roots on a brand new block by applying the block on the
