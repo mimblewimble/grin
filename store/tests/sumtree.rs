@@ -48,17 +48,17 @@ fn sumtree_append() {
 		})
 	);
 
-	let sum2 = HashSum::from_summable(1, &elems[0], None::<TestElem>)
-		+ HashSum::from_summable(2, &elems[1], None::<TestElem>);
+	let sum2 = HashSum::from_summable(1, &elems[0])
+		+ HashSum::from_summable(2, &elems[1]);
 	let sum4 = sum2
-		+ (HashSum::from_summable(4, &elems[2], None::<TestElem>)
-			+ HashSum::from_summable(5, &elems[3], None::<TestElem>));
+		+ (HashSum::from_summable(4, &elems[2])
+			+ HashSum::from_summable(5, &elems[3]));
 	let sum8 = sum4
-		+ ((HashSum::from_summable(8, &elems[4], None::<TestElem>)
-			+ HashSum::from_summable(9, &elems[5], None::<TestElem>))
-			+ (HashSum::from_summable(11, &elems[6], None::<TestElem>)
-				+ HashSum::from_summable(12, &elems[7], None::<TestElem>)));
-	let sum9 = sum8 + HashSum::from_summable(16, &elems[8], None::<TestElem>);
+		+ ((HashSum::from_summable(8, &elems[4])
+			+ HashSum::from_summable(9, &elems[5]))
+			+ (HashSum::from_summable(11, &elems[6])
+				+ HashSum::from_summable(12, &elems[7])));
+	let sum9 = sum8 + HashSum::from_summable(16, &elems[8]);
 
 	{
 		let pmmr = PMMR::at(&mut backend, mmr_size);
@@ -233,7 +233,7 @@ fn setup() -> (String, Vec<TestElem>) {
 fn load(pos: u64, elems: &[TestElem], backend: &mut store::sumtree::PMMRBackend<TestElem>) -> u64 {
 	let mut pmmr = PMMR::at(backend, pos);
 	for elem in elems {
-		pmmr.push(elem.clone(), None::<TestElem>).unwrap();
+		pmmr.push(elem.clone()).unwrap();
 	}
 	pmmr.unpruned_size()
 }
