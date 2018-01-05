@@ -638,10 +638,10 @@ mod tests {
 		let parent_transaction = test_transaction(vec![5, 6, 7], vec![11, 3]);
 		// We want this transaction to be rooted in the blockchain.
 		let new_utxo = DummyUtxoSet::empty()
-			.with_output(test_output(5))
-			.with_output(test_output(6))
-			.with_output(test_output(7))
-			.with_output(test_output(8));
+			.with_output(test_output(5), 1)
+			.with_output(test_output(6), 1)
+			.with_output(test_output(7), 1)
+			.with_output(test_output(8), 1);
 
 		// Prepare a second transaction, connected to the first.
 		let child_transaction = test_transaction(vec![11, 3], vec![12]);
@@ -697,9 +697,9 @@ mod tests {
 		dummy_chain.store_head_header(&head_header);
 
 		let new_utxo = DummyUtxoSet::empty()
-			.with_output(test_output(5))
-			.with_output(test_output(6))
-			.with_output(test_output(7));
+			.with_output(test_output(5), 1)
+			.with_output(test_output(6), 1)
+			.with_output(test_output(7), 1);
 
 		dummy_chain.update_utxo_set(new_utxo);
 
@@ -797,7 +797,7 @@ mod tests {
 		global::set_mining_mode(ChainTypes::AutomatedTesting);
 		let mut dummy_chain = DummyChainImpl::new();
 		let coinbase_output = test_coinbase_output(15);
-		dummy_chain.update_utxo_set(DummyUtxoSet::empty().with_output(coinbase_output));
+		dummy_chain.update_utxo_set(DummyUtxoSet::empty().with_output(coinbase_output, 1));
 
 		let chain_ref = Arc::new(dummy_chain);
 		let pool = RwLock::new(test_setup(&chain_ref));
@@ -809,6 +809,8 @@ mod tests {
 				height: 1,
 				..block::BlockHeader::default()
 			};
+			chain_ref.store_head_header(&coinbase_header);
+
 			let head_header = block::BlockHeader {
 				height: 2,
 				..block::BlockHeader::default()
@@ -819,7 +821,8 @@ mod tests {
 			let result = write_pool.add_to_memory_pool(test_source(), txn);
 			match result {
 				Err(PoolError::ImmatureCoinbase {
-					header: _,
+					height: _,
+					lock_height: _,
 					output: out,
 				}) => {
 					assert_eq!(out, coinbase_output.commitment());
@@ -837,7 +840,8 @@ mod tests {
 			let result = write_pool.add_to_memory_pool(test_source(), txn);
 			match result {
 				Err(PoolError::ImmatureCoinbase {
-					header: _,
+					height: _,
+					lock_height: _,
 					output: out,
 				}) => {
 					assert_eq!(out, coinbase_output.commitment());
@@ -876,7 +880,7 @@ mod tests {
 		dummy_chain.store_head_header(&head_header);
 
 		// single UTXO
-		let new_utxo = DummyUtxoSet::empty().with_output(test_output(100));
+		let new_utxo = DummyUtxoSet::empty().with_output(test_output(100), 1);
 
 		dummy_chain.update_utxo_set(new_utxo);
 		let chain_ref = Arc::new(dummy_chain);
@@ -953,10 +957,10 @@ mod tests {
 		dummy_chain.store_head_header(&head_header);
 
 		let new_utxo = DummyUtxoSet::empty()
-			.with_output(test_output(10))
-			.with_output(test_output(20))
-			.with_output(test_output(30))
-			.with_output(test_output(40));
+			.with_output(test_output(10), 1)
+			.with_output(test_output(20), 1)
+			.with_output(test_output(30), 1)
+			.with_output(test_output(40), 1);
 
 		dummy_chain.update_utxo_set(new_utxo);
 
@@ -1107,10 +1111,10 @@ mod tests {
 		dummy_chain.store_head_header(&head_header);
 
 		let new_utxo = DummyUtxoSet::empty()
-			.with_output(test_output(10))
-			.with_output(test_output(20))
-			.with_output(test_output(30))
-			.with_output(test_output(40));
+			.with_output(test_output(10), 1)
+			.with_output(test_output(20), 1)
+			.with_output(test_output(30), 1)
+			.with_output(test_output(40), 1);
 
 		dummy_chain.update_utxo_set(new_utxo);
 

@@ -92,7 +92,7 @@ fn test_coinbase_maturity() {
 	assert!(
 		block.outputs[0]
 			.features
-			.contains(transaction::COINBASE_OUTPUT,)
+			.contains(transaction::COINBASE_OUTPUT)
 	);
 
 	chain.process_block(block, chain::NONE).unwrap();
@@ -109,13 +109,23 @@ fn test_coinbase_maturity() {
 		&keychain,
 	).unwrap();
 
-	let mut block =
-		core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &key_id3).unwrap();
+	let mut block = core::core::Block::new(
+		&prev,
+		vec![&coinbase_txn],
+		&keychain,
+		&key_id3,
+	).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 	block.header.difficulty = difficulty.clone();
-	chain.set_sumtree_roots(&mut block).unwrap();
+
+	// set_sumtree_roots will fail here as the block is invalid
+	// due to an immature coinbase spend attempt
+	match chain.set_sumtree_roots(&mut block) {
+		Err(Error::ImmatureCoinbase) => (),
+		_ => panic!("expected ImmatureCoinbase error here"),
+	};
 
 	pow::pow_size(
 		&mut cuckoo_miner,
@@ -124,14 +134,8 @@ fn test_coinbase_maturity() {
 		global::sizeshift() as u32,
 	).unwrap();
 
-	let result = chain.process_block(block, chain::NONE);
-	match result {
-		Err(Error::ImmatureCoinbase) => (),
-		_ => panic!("expected ImmatureCoinbase error here"),
-	};
-
 	// mine enough blocks to increase the height sufficiently for
- // coinbase to reach maturity and be spendable in the next block
+	// coinbase to reach maturity and be spendable in the next block
 	for _ in 0..3 {
 		let prev = chain.head_header().unwrap();
 
@@ -157,8 +161,12 @@ fn test_coinbase_maturity() {
 
 	let prev = chain.head_header().unwrap();
 
-	let mut block =
-		core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &key_id4).unwrap();
+	let mut block = core::core::Block::new(
+		&prev,
+		vec![&coinbase_txn],
+		&keychain,
+		&key_id4,
+	).unwrap();
 
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
