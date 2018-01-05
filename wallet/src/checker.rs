@@ -50,7 +50,7 @@ fn mark_spent_output(out: &mut OutputData) {
 	}
 }
 
-/// Builds a single api query to retrieve the latest output data from the node.
+/// Builds multiple api queries to retrieve the latest output data from the node.
 /// So we can refresh the local wallet outputs.
 pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> {
 	debug!(LOGGER, "Refreshing wallet outputs");
