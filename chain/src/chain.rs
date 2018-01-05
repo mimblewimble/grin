@@ -338,8 +338,7 @@ impl Chain {
 	pub fn get_unspent(&self, output_ref: &Commitment) -> Result<Output, Error> {
 		match self.store.get_output_by_commit(output_ref) {
 			Ok(out) => {
-				let mut sumtrees = self.sumtrees.write().unwrap();
-				if sumtrees.is_unspent(output_ref)? {
+				if self.is_unspent(output_ref)? {
 					Ok(out)
 				} else {
 					Err(Error::OutputNotFound)
@@ -354,6 +353,11 @@ impl Chain {
 	pub fn is_unspent(&self, output_ref: &Commitment) -> Result<bool, Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.is_unspent(output_ref)
+	}
+
+	pub fn block_height(&self, output_ref: &Commitment) -> Result<u64, Error> {
+		let mut sumtrees = self.sumtrees.write().unwrap();
+		sumtrees.block_height(output_ref)
 	}
 
 	/// Sets the sumtree roots on a brand new block by applying the block on the
@@ -379,7 +383,7 @@ impl Chain {
 		&self,
 	) -> (
 		HashSum<SumCommit>,
-		HashSum<NoSum<WitnessData>>,
+		HashSum<WitnessData>,
 		HashSum<NoSum<TxKernel>>,
 	) {
 		let mut sumtrees = self.sumtrees.write().unwrap();
@@ -401,7 +405,7 @@ impl Chain {
 	}
 
 	/// as above, for rangeproofs
-	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<HashSum<NoSum<WitnessData>>> {
+	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<HashSum<WitnessData>> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.last_n_rangeproof(distance)
 	}
@@ -463,16 +467,6 @@ impl Chain {
 		self.store.is_on_current_chain(header).map_err(|e| {
 			Error::StoreErr(e, "chain is_on_current_chain".to_owned())
 		})
-	}
-
-	/// Gets the block header by the provided output commitment
-	pub fn get_block_header_by_output_commit(
-		&self,
-		commit: &Commitment,
-	) -> Result<BlockHeader, Error> {
-		self.store
-			.get_block_header_by_output_commit(commit)
-			.map_err(|e| Error::StoreErr(e, "chain get commitment".to_owned()))
 	}
 
 	/// Get the tip of the current "sync" header chain.

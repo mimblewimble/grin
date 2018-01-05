@@ -14,16 +14,17 @@
 
 //! Base types that the block chain pipeline requires.
 
-use std::io;
+use std::{cmp, io, ops};
 
 use util::secp::pedersen::{Commitment, RangeProof};
-
 use grin_store as store;
 use core::core::{block, Block, BlockHeader, Output};
 use core::core::hash::{Hash, Hashed};
+use core::core::pmmr::Summable;
 use core::core::target::Difficulty;
 use core::ser;
 use grin_store;
+use util::LOGGER;
 
 bitflags! {
 /// Options for block validation
@@ -181,15 +182,85 @@ impl ser::Readable for Tip {
 }
 
 #[derive(Clone, Debug)]
+pub struct BlockHeight {
+	pub lower_height: u64,
+	pub upper_height: u64,
+}
+
+impl BlockHeight {
+	pub fn new(height: u64) -> BlockHeight {
+		BlockHeight {
+			lower_height: height,
+			upper_height: height,
+		}
+	}
+
+	pub fn height(&self) -> Result<u64, Error> {
+		if self.lower_height == self.upper_height {
+			Ok(self.lower_height)
+		} else {
+			Err(Error::Other(format!(
+				"not a single height {}, {}",
+				self.lower_height,
+				self.upper_height
+			)))
+		}
+	}
+}
+
+impl ser::Readable for BlockHeight {
+	fn read(reader: &mut ser::Reader) -> Result<BlockHeight, ser::Error> {
+		let lower_height = reader.read_u64()?;
+		let upper_height = reader.read_u64()?;
+
+		Ok(BlockHeight {
+			lower_height: lower_height,
+			upper_height: upper_height,
+		})
+	}
+}
+
+impl ser::Writeable for BlockHeight {
+	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.lower_height)?;
+		writer.write_u64(self.upper_height)?;
+		Ok(())
+	}
+}
+
+impl ops::Add for BlockHeight {
+	type Output = BlockHeight;
+
+	fn add(self, other: BlockHeight) -> BlockHeight {
+		BlockHeight {
+			lower_height: cmp::min(self.lower_height, other.lower_height),
+			upper_height: cmp::max(self.upper_height, other.upper_height),
+		}
+	}
+}
+
+#[derive(Clone, Debug)]
 pub struct WitnessData {
 	pub range_proof: RangeProof,
-	pub block_height: u64,
+	pub block_height: BlockHeight,
 }
 
 impl ser::Writeable for WitnessData {
 	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.range_proof.write(writer)?;
-		writer.write_u64(self.block_height)
+		self.block_height.write(writer)
+	}
+}
+
+impl Summable for WitnessData {
+	type Sum = BlockHeight;
+
+	fn sum(&self) -> BlockHeight {
+		self.block_height.clone()
+	}
+
+	fn sum_len() -> usize {
+		16
 	}
 }
 
@@ -251,12 +322,6 @@ pub trait ChainStore: Send + Sync {
 
 	/// Gets an output by its commitment
 	fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, store::Error>;
-
-	/// Gets a block_header for the given input commit
-	fn get_block_header_by_output_commit(
-		&self,
-		commit: &Commitment,
-	) -> Result<BlockHeader, store::Error>;
 
 	/// Saves the position of an output, represented by its commitment, in the
 	/// UTXO MMR. Used as an index for spending and pruning.

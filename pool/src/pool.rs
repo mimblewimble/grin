@@ -185,13 +185,12 @@ where
 				Parent::BlockTransaction { output } => {
 					// TODO - pull this out into a separate function?
 					if output.features.contains(transaction::COINBASE_OUTPUT) {
-						if let Ok(out_header) = self.blockchain
-							.get_block_header_by_output_commit(&output.commitment())
-						{
-							let lock_height = out_header.height + global::coinbase_maturity();
+						if let Ok(h) = self.blockchain.block_height(&output.commitment()) {
+							let lock_height = h + global::coinbase_maturity();
 							if head_header.height < lock_height {
 								return Err(PoolError::ImmatureCoinbase {
-									header: out_header,
+									height: head_header.height,
+									lock_height: lock_height,
 									output: output.commitment(),
 								});
 							};
@@ -810,9 +809,6 @@ mod tests {
 				height: 1,
 				..block::BlockHeader::default()
 			};
-			chain_ref
-				.store_header_by_output_commitment(coinbase_output.commitment(), &coinbase_header);
-
 			let head_header = block::BlockHeader {
 				height: 2,
 				..block::BlockHeader::default()

@@ -22,12 +22,13 @@ use std::sync::Arc;
 
 use util::secp::pedersen::{RangeProof, Commitment};
 
-use core::core::{Block, SumCommit, TxKernel};
+use core::global;
+use core::core::{transaction, Block, Output, SumCommit, TxKernel};
 use core::core::pmmr::{HashSum, NoSum, Summable, PMMR};
 use core::core::hash::Hashed;
 use grin_store;
 use grin_store::sumtree::PMMRBackend;
-use types::{ChainStore, Error, WitnessData};
+use types::{BlockHeight, ChainStore, Error, WitnessData};
 use util::LOGGER;
 
 const SUMTREES_SUBDIR: &'static str = "sumtrees";
@@ -70,7 +71,7 @@ where
 /// pruning enabled.
 pub struct SumTrees {
 	output_pmmr_h: PMMRHandle<SumCommit>,
-	rproof_pmmr_h: PMMRHandle<NoSum<WitnessData>>,
+	rproof_pmmr_h: PMMRHandle<WitnessData>,
 	kernel_pmmr_h: PMMRHandle<NoSum<TxKernel>>,
 
 	// chain store used as index of commitments to MMR positions
@@ -90,8 +91,21 @@ impl SumTrees {
 
 	pub fn block_height(&mut self, commit: &Commitment) -> Result<u64, Error> {
 		let rpos = self.commit_index.get_output_pos(commit);
-
-		panic!("can we get witness data back out of the sumtree???");
+		match rpos {
+			Ok(pos) => {
+				let rproof_pmmr = PMMR::at(
+					&mut self.rproof_pmmr_h.backend,
+					self.rproof_pmmr_h.last_pos
+				);
+				if let Some(HashSum { hash: _, sum: sum }) = rproof_pmmr.get(pos) {
+					sum.height()
+				} else {
+					Err(Error::OutputNotFound)
+				}
+			}
+			Err(grin_store::Error::NotFoundErr) => Err(Error::OutputNotFound),
+			Err(e) => Err(Error::StoreErr(e, "sumtree block height".to_owned())),
+		}
 	}
 
 	/// Whether a given commitment exists in the Output MMR and it's unspent
@@ -124,7 +138,7 @@ impl SumTrees {
 	}
 
 	/// as above, for range proofs
-	pub fn last_n_rangeproof(&mut self, distance: u64) -> Vec<HashSum<NoSum<WitnessData>>> {
+	pub fn last_n_rangeproof(&mut self, distance: u64) -> Vec<HashSum<WitnessData>> {
 		let rproof_pmmr = PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
 		rproof_pmmr.get_last_n_insertions(distance)
 	}
@@ -140,7 +154,7 @@ impl SumTrees {
 		&mut self,
 	) -> (
 		HashSum<SumCommit>,
-		HashSum<NoSum<WitnessData>>,
+		HashSum<WitnessData>,
 		HashSum<NoSum<TxKernel>>,
 	) {
 		let output_pmmr = PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
@@ -210,7 +224,7 @@ where
 /// function.
 pub struct Extension<'a> {
 	output_pmmr: PMMR<'a, SumCommit, PMMRBackend<SumCommit>>,
-	rproof_pmmr: PMMR<'a, NoSum<WitnessData>, PMMRBackend<NoSum<WitnessData>>>,
+	rproof_pmmr: PMMR<'a, WitnessData, PMMRBackend<WitnessData>>,
 	kernel_pmmr: PMMR<'a, NoSum<TxKernel>, PMMRBackend<NoSum<TxKernel>>>,
 
 	commit_index: Arc<ChainStore>,
@@ -242,16 +256,27 @@ impl<'a> Extension<'a> {
 		}
 	}
 
-	/// Apply a new set of blocks on top the existing sum trees. Blocks are
-	/// applied in order of the provided Vec. If pruning is enabled, inputs also
-	/// prune MMR data.
+	/// Apply a new block on top the existing sum trees.
+	/// If pruning is enabled, inputs also prune MMR data.
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
-
 		// doing inputs first guarantees an input can't spend an output in the
 		// same block, enforcing block cut-through
 		for input in &b.inputs {
 			let commit = input.commitment();
 			let pos_res = self.get_output_pos(&commit);
+
+			// First check any inputs spending coinbase outputs
+			// to make sure they have matured sufficiently.
+			if let Ok(output) = self.get_output(&commit) {
+				if output.features.contains(transaction::COINBASE_OUTPUT) {
+					if let Ok(h) = self.block_height(&commit) {
+						if b.header.height <= h + global::coinbase_maturity() {
+							return Err(Error::ImmatureCoinbase);
+						}
+					};
+				};
+			};
+
 			if let Ok(pos) = pos_res {
 				match self.output_pmmr.prune(pos, b.header.height as u32) {
 					Ok(true) => {
@@ -299,10 +324,10 @@ impl<'a> Extension<'a> {
 			// push range proofs in their MMR
 			let witness_data = WitnessData {
 				range_proof: out.proof,
-				block_height: b.header.height,
+				block_height: BlockHeight::new(b.header.height),
 			};
 			self.rproof_pmmr
-				.push(NoSum(witness_data))
+				.push(witness_data)
 				.map_err(&Error::SumTreeErr)?;
 		}
 
@@ -323,6 +348,25 @@ impl<'a> Extension<'a> {
 			self.new_kernel_excesses.insert(kernel.excess, pos);
 		}
 		Ok(())
+	}
+
+	fn block_height(&mut self, commit: &Commitment) -> Result<u64, Error> {
+		debug!(LOGGER, "sumtree_ext: block_height - {:?}", commit);
+		let rpos = self.commit_index.get_output_pos(commit);
+		match rpos {
+			Ok(pos) => {
+				debug!(LOGGER, "sumtree_ext: got a pos - {}", pos);
+				debug!(LOGGER, "sumtree_ext: {:?}", self.rproof_pmmr.get(pos));
+				if let Some(HashSum { hash: _, sum: sum }) = self.rproof_pmmr.get(pos) {
+					debug!(LOGGER, "sumtree_ext: got a sum - {:?}", sum);
+					sum.height()
+				} else {
+					Err(Error::OutputNotFound)
+				}
+			}
+			Err(grin_store::Error::NotFoundErr) => Err(Error::OutputNotFound),
+			Err(e) => Err(Error::StoreErr(e, "sumtree block height".to_owned())),
+		}
 	}
 
 	fn save_pos_index(&self) -> Result<(), Error> {
@@ -400,6 +444,13 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	/// Can we rely on the index containing the output when we call this?
+	/// We need access to the coinbase output to know if it has matured when
+	/// trying to spend it.
+	fn get_output(&self, commit: &Commitment) -> Result<Output, grin_store::Error> {
+		self.commit_index.get_output_by_commit(commit)
+	}
+
 	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, grin_store::Error> {
 		if let Some(pos) = self.new_output_commits.get(commit) {
 			Ok(*pos)
@@ -422,7 +473,7 @@ impl<'a> Extension<'a> {
 		&self,
 	) -> (
 		HashSum<SumCommit>,
-		HashSum<NoSum<WitnessData>>,
+		HashSum<WitnessData>,
 		HashSum<NoSum<TxKernel>>,
 	) {
 		(

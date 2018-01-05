@@ -110,13 +110,6 @@ fn mine_empty_chain() {
 		// now check the block height index
 		let header_by_height = chain.get_header_by_height(n).unwrap();
 		assert_eq!(header_by_height.hash(), bhash);
-
-		// now check the header output index
-		let output = block.outputs[0];
-		let header_by_output_commit = chain
-			.get_block_header_by_output_commit(&output.commitment())
-			.unwrap();
-		assert_eq!(header_by_output_commit.hash(), bhash);
 	}
 }
 
