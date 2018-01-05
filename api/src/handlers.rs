@@ -70,13 +70,13 @@ impl UtxoHandler {
 			.get_unspent(&commit)
 			.map_err(|_| Error::NotFound)?;
 
-		let header = self.chain
-			.get_block_header_by_output_commit(&commit)
+		let height = self.chain
+			.block_height(&commit)
 			.map_err(|_| Error::NotFound)?;
 
 		Ok(Output::from_output(
 			&out,
-			&header,
+			height,
 			include_rp,
 			include_switch,
 		))

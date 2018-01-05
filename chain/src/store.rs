@@ -34,7 +34,6 @@ const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
 const SYNC_HEAD_PREFIX: u8 = 's' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const OUTPUT_COMMIT_PREFIX: u8 = 'o' as u8;
-const HEADER_BY_OUTPUT_PREFIX: u8 = 'p' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
 const KERNEL_POS_PREFIX: u8 = 'k' as u8;
 
@@ -129,45 +128,9 @@ impl ChainStore for ChainKVStore {
 						&mut out.commitment().as_ref().to_vec(),
 					)[..],
 					out,
-				)?
-				.put_ser(
-					&to_key(
-						HEADER_BY_OUTPUT_PREFIX,
-						&mut out.commitment().as_ref().to_vec(),
-					)[..],
-					&b.hash(),
 				)?;
 		}
 		batch.write()
-	}
-
-	// lookup the block header hash by output commitment
-	// lookup the block header based on this hash
-	// to check the chain is correct compare this block header to
-	// the block header currently indexed at the relevant block height (tbd if
-	// actually necessary)
-	//
-	// NOTE: This index is not exhaustive.
-	// This node may not have seen this full block, so may not have populated the
-	// index.
-	// Block headers older than some threshold (2 months?) will not necessarily be
-	// included
-	// in this index.
-	//
-	fn get_block_header_by_output_commit(&self, commit: &Commitment) -> Result<BlockHeader, Error> {
-		let block_hash = self.db.get_ser(&to_key(
-			HEADER_BY_OUTPUT_PREFIX,
-			&mut commit.as_ref().to_vec(),
-		))?;
-
-		match block_hash {
-			Some(hash) => {
-				let block_header = self.get_block_header(&hash)?;
-				self.is_on_current_chain(&block_header)?;
-				Ok(block_header)
-			}
-			None => Err(Error::NotFoundErr),
-		}
 	}
 
 	fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {

@@ -343,14 +343,15 @@ impl pool::BlockChain for PoolToChainAdapter {
 			})
 	}
 
-	fn get_block_header_by_output_commit(
-		&self,
-		commit: &Commitment,
-	) -> Result<BlockHeader, pool::PoolError> {
+	fn block_height(&self, output_ref: &Commitment) -> Result<u64, pool::PoolError> {
 		self.chain
 			.borrow()
-			.get_block_header_by_output_commit(commit)
-			.map_err(|_| pool::PoolError::GenericPoolError)
+			.block_height(output_ref)
+			.map_err(|e| match e {
+				chain::types::Error::OutputNotFound => pool::PoolError::OutputNotFound,
+				chain::types::Error::OutputSpent => pool::PoolError::OutputSpent,
+				_ => pool::PoolError::GenericPoolError,
+			})
 	}
 
 	fn head_header(&self) -> Result<BlockHeader, pool::PoolError> {

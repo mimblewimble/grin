@@ -585,7 +585,7 @@ impl Miner {
 		b.header.difficulty = difficulty;
 		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
 		trace!(LOGGER, "Block: {:?}", b);
-		let result=self.chain.set_sumtree_roots(&mut b);
+		let result = self.chain.set_sumtree_roots(&mut b);
 		match result {
 			Ok(_) => Ok((b, block_fees)),
 			//If it's a duplicate commitment, it's likely trying to use

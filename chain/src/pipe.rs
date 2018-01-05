@@ -284,8 +284,9 @@ fn validate_block(
 	}
 
 	let (utxo_root, rproof_root, kernel_root) = ext.roots();
-	if utxo_root.hash != b.header.utxo_root || rproof_root.hash != b.header.range_proof_root
-		|| kernel_root.hash != b.header.kernel_root
+	if utxo_root.hash != b.header.utxo_root ||
+		rproof_root.hash != b.header.range_proof_root ||
+		kernel_root.hash != b.header.kernel_root
 	{
 		ext.dump(false);
 
@@ -309,21 +310,6 @@ fn validate_block(
 		);
 
 		return Err(Error::InvalidRoot);
-	}
-
-	// check for any outputs with lock_heights greater than current block height
-	for input in &b.inputs {
-		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
-			if output.features.contains(transaction::COINBASE_OUTPUT) {
-				if let Ok(output_header) = ctx.store
-					.get_block_header_by_output_commit(&input.commitment())
-				{
-					if b.header.height <= output_header.height + global::coinbase_maturity() {
-						return Err(Error::ImmatureCoinbase);
-					}
-				};
-			};
-		};
 	}
 
 	Ok(())

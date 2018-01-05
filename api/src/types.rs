@@ -84,18 +84,25 @@ impl SumTreeNode {
 		let mut return_vec = Vec::new();
 		let last_n = chain.get_last_n_utxo(distance);
 		for elem_output in last_n {
-			let header = chain
-				.get_block_header_by_output_commit(&elem_output.1.commit)
-				.map_err(|_| Error::NotFound);
-			// Need to call further method to check if output is spent
-			let mut output = OutputPrintable::from_output(&elem_output.1, &header.unwrap(),true);
-			if let Ok(_) = chain.get_unspent(&elem_output.1.commit) {
-				output.spent = false;
+			let commit = &elem_output.1.commit;
+
+			// TODO - rework this, maybe height is returned in chain.get_last_n_utxo
+			// for convenience?
+			if let Ok(height) = chain.block_height(&commit) {
+				// Need to call further method to check if output is spent
+				let mut output = OutputPrintable::from_output(
+					&elem_output.1,
+					height,
+					true,
+				);
+				if let Ok(_) = chain.get_unspent(commit) {
+					output.spent = false;
+				}
+				return_vec.push(SumTreeNode {
+					hash: util::to_hex(elem_output.0.to_vec()),
+					output: Some(output),
+				});
 			}
-			return_vec.push(SumTreeNode {
-				hash: util::to_hex(elem_output.0.to_vec()),
-				output: Some(output),
-			});
 		}
 		return_vec
 	}
@@ -148,12 +155,16 @@ pub struct Output {
 }
 
 impl Output {
-	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader,
-		include_proof:bool, include_switch: bool) -> Output {
+	pub fn from_output(
+		output: &core::Output,
+		height: u64,
+		include_proof:bool,
+		include_switch: bool,
+	) -> Output {
 		let (output_type, lock_height) = match output.features {
 			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
 				OutputType::Coinbase,
-				block_header.height + global::coinbase_maturity(),
+				height + global::coinbase_maturity(),
 			),
 			_ => (OutputType::Transaction, 0),
 		};
@@ -169,7 +180,7 @@ impl Output {
 				true => Some(output.proof),
 				false => None,
 			},
-			height: block_header.height,
+			height: height,
 			lock_height: lock_height,
 		}
 	}
@@ -196,11 +207,15 @@ pub struct OutputPrintable {
 }
 
 impl OutputPrintable {
-	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader, include_proof_hash:bool) -> OutputPrintable {
+	pub fn from_output(
+		output: &core::Output,
+		height: u64,
+		include_proof_hash: bool,
+	) -> OutputPrintable {
 		let (output_type, lock_height) = match output.features {
 			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
 				OutputType::Coinbase,
-				block_header.height + global::coinbase_maturity(),
+				height + global::coinbase_maturity(),
 			),
 			_ => (OutputType::Transaction, 0),
 		};
@@ -208,7 +223,7 @@ impl OutputPrintable {
 			output_type: output_type,
 			commit: util::to_hex(output.commit.0.to_vec()),
 			switch_commit_hash: util::to_hex(output.switch_commit_hash.hash.to_vec()),
-			height: block_header.height,
+			height: height,
 			lock_height: lock_height,
 			spent: true,
 			proof_hash: match include_proof_hash {
@@ -348,7 +363,7 @@ impl BlockPrintable {
 			.collect();
 		let outputs = block.outputs
 			.iter()
-			.map(|output| OutputPrintable::from_output(output, &block.header, true))
+			.map(|output| OutputPrintable::from_output(output, block.header.height, true))
 			.collect();
 		let kernels = block.kernels
 			.iter()
