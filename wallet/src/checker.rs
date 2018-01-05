@@ -66,14 +66,16 @@ pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(),
 			.filter(|out| out.root_key_id == keychain.root_key_id())
 			.filter(|out| out.status != OutputStatus::Spent)
 		{
-			let commit = keychain.commit_with_key_index(out.value, out.n_child).unwrap();
+			let commit = keychain
+				.commit_with_key_index(out.value, out.n_child)
+				.unwrap();
 			commits.push(commit);
 			wallet_outputs.insert(commit, out.key_id.clone());
 		}
 	});
 
 	// build the necessary query params -
- // ?id=xxx&id=yyy&id=zzz
+	// ?id=xxx&id=yyy&id=zzz
 	let query_params: Vec<String> = commits
 		.iter()
 		.map(|commit| {
@@ -103,8 +105,7 @@ pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(),
 
 		let url = format!(
 			"{}/v1/chain/utxos/byids?{}",
-			config.check_node_api_http_addr,
-			query_string,
+			config.check_node_api_http_addr, query_string,
 		);
 
 		match api::client::get::<Vec<api::Output>>(url.as_str()) {
@@ -112,25 +113,26 @@ pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(),
 				api_outputs.insert(out.commit, out);
 			},
 			Err(e) => {
-				// if we got anything other than 200 back from server, don't attempt to refresh the wallet
-				// data after
+				// if we got anything other than 200 back from server, don't attempt to refresh
+				// the wallet data after
 				return Err(Error::Node(e));
 			}
 		};
 	}
 
-
 	// now for each commit, find the output in the wallet and
- // the corresponding api output (if it exists)
- // and refresh it in-place in the wallet.
- // Note: minimizing the time we spend holding the wallet lock.
-	WalletData::with_wallet(&config.data_file_dir, |wallet_data| for commit in commits {
-		let id = wallet_outputs.get(&commit).unwrap();
-		if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
-			match api_outputs.get(&commit) {
-				Some(api_output) => refresh_output(&mut output.get_mut(), api_output),
-				None => mark_spent_output(&mut output.get_mut()),
-			};
+	// the corresponding api output (if it exists)
+	// and refresh it in-place in the wallet.
+	// Note: minimizing the time we spend holding the wallet lock.
+	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+		for commit in commits {
+			let id = wallet_outputs.get(&commit).unwrap();
+			if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
+				match api_outputs.get(&commit) {
+					Some(api_output) => refresh_output(&mut output.get_mut(), api_output),
+					None => mark_spent_output(&mut output.get_mut()),
+				};
+			}
 		}
 	})
 }
