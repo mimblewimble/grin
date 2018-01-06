@@ -195,11 +195,16 @@ fn main() {
 				.takes_value(true))
 
 		.subcommand(SubCommand::with_name("listen")
-			.about("Runs the wallet in listening mode waiting for transactions.")
-			.arg(Arg::with_name("port")
+			.about("Runs the wallet in listening mode waiting for transactions and operations.")
+			.arg(Arg::with_name("receiver_port")
 				.short("l")
-				.long("port")
-				.help("Port on which to run the wallet listener")
+				.long("receiver_port")
+				.help("Port on which to run the wallet receiver listener")
+				.takes_value(true))
+			.arg(Arg::with_name("operator_port")
+				.short("o")
+				.long("operator_port")
+				.help("Port on which to run the wallet operator listener")
 				.takes_value(true)))
 
 		.subcommand(SubCommand::with_name("receive")
@@ -382,7 +387,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 	let mut wallet_config = global_config.members.unwrap().wallet;
 
 	if wallet_args.is_present("external") {
-		wallet_config.api_listen_interface = "0.0.0.0".to_string();
+		wallet_config.api_receiver_listen_interface = "0.0.0.0".to_string();
 	}
 
 	if let Some(dir) = wallet_args.value_of("dir") {
@@ -423,8 +428,11 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 
 	match wallet_args.subcommand() {
 		("listen", Some(listen_args)) => {
-			if let Some(port) = listen_args.value_of("port") {
-				wallet_config.api_listen_port = port.to_string();
+			if let Some(port) = listen_args.value_of("receiver_port") {
+				wallet_config.api_receiver_listen_port = port.to_string();
+			}
+			if let Some(port) = listen_args.value_of("operator_port") {
+				wallet_config.api_operator_listen_port = port.to_string();
 			}
 			wallet::server::start_rest_apis(wallet_config, keychain);
 		}

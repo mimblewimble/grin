@@ -159,9 +159,14 @@ pub struct WalletConfig {
 
 	// The api interface/ip_address that this api server (i.e. this wallet) will run
 	// by default this is 127.0.0.1 (and will not accept connections from external clients)
-	pub api_listen_interface: String,
-	// The port this wallet will run on
-	pub api_listen_port: String,
+	pub api_receiver_listen_interface: String,
+	// The port this wallet receiver will run on
+	pub api_receiver_listen_port: String,
+    // The api interface/ip_address that this api server (i.e. this wallet) will run
+    // by default this is 127.0.0.1 (and will not accept connections from external clients)
+    pub api_operator_listen_interface: String,
+    // The port this wallet operator will run on
+    pub api_operator_listen_port: String,
 	// The api address of a running server node against which transaction inputs
 	// will be checked during send
 	pub check_node_api_http_addr: String,
@@ -173,8 +178,10 @@ impl Default for WalletConfig {
 	fn default() -> WalletConfig {
 		WalletConfig {
 			// enable_wallet: false,
-			api_listen_interface: "127.0.0.1".to_string(),
-			api_listen_port: "13415".to_string(),
+			api_receiver_listen_interface: "127.0.0.1".to_string(),
+			api_receiver_listen_port: "13415".to_string(),
+            api_operator_listen_interface: "127.0.0.1".to_string(),
+            api_operator_listen_port: "13416".to_string(),
 			check_node_api_http_addr: "http://127.0.0.1:13413".to_string(),
 			data_file_dir: ".".to_string(),
 		}
@@ -182,9 +189,12 @@ impl Default for WalletConfig {
 }
 
 impl WalletConfig {
-	pub fn api_listen_addr(&self) -> String {
-		format!("{}:{}", self.api_listen_interface, self.api_listen_port)
+	pub fn api_receiver_listen_addr(&self) -> String {
+		format!("{}:{}", self.api_receiver_listen_interface, self.api_receiver_listen_port)
 	}
+    pub fn api_operator_listen_addr(&self) -> String {
+        format!("{}:{}", "127.0.0.1", self.api_operator_listen_port)
+    }
 }
 
 /// Status of an output that's being tracked by the wallet. Can either be
