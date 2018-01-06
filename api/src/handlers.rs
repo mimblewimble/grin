@@ -440,13 +440,16 @@ where
 			tx.inputs.len(),
 			tx.outputs.len()
 		);
-		self.tx_pool
+	
+		let res = self.tx_pool
 			.write()
 			.unwrap()
-			.add_to_memory_pool(source, tx)
-			.map_err(|e| Error::Internal(format!("Addition to transaction pool failed: {:?}", e)))?;
+			.add_to_memory_pool(source, tx);
 
-		Ok(Response::with(status::Ok))
+		match res {
+			Ok(()) => Ok(Response::with(status::Ok)),
+			Err(e) => Err(IronError::from(Error::Argument(format!("{:?}", e))))
+		}
 	}
 }
 
