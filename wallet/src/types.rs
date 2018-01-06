@@ -620,6 +620,12 @@ pub struct PartialTx {
 	tx: String,
 }
 
+/// Helper in serializing the information required to retrieve wallet information.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct InfoRequest {
+    pub passphrase: String,
+}
+
 /// Helper in serializing the information a sender requires to build a
 /// transaction.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -627,7 +633,8 @@ pub struct SendTx {
 	pub amount: String,
     pub minimum_confirmations: u64,
     pub dest: String,
-    pub selection_strategy: String
+    pub selection_strategy: String,
+    pub passphrase: String,
 }
 
 /// Builds a PartialTx from data sent by a sender (not yet completed by the receiver).
