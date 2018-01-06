@@ -16,10 +16,6 @@
 //! receiving money in MimbleWimble requires an interactive exchange, a
 //! wallet server that's running at all time is required in many cases.
 
-use bodyparser;
-use iron::prelude::*;
-use iron::Handler;
-use iron::status;
 use serde_json;
 
 use api;
@@ -62,33 +58,6 @@ pub fn receive_json_tx(
 	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })
 		.map_err(|e| Error::Node(e))?;
 	Ok(())
-}
-
-/// Component used to receive coins, implements all the receiving end of the
-/// wallet REST API as well as some of the command-line operations.
-#[derive(Clone)]
-pub struct WalletReceiver {
-	pub keychain: Keychain,
-	pub config: WalletConfig,
-}
-
-impl Handler for WalletReceiver {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let struct_body = req.get::<bodyparser::Struct<PartialTx>>();
-
-		if let Ok(Some(partial_tx)) = struct_body {
-			receive_json_tx(&self.config, &self.keychain, &partial_tx)
-				.map_err(|e| {
-					error!(LOGGER, "Problematic partial tx, looks like this: {:?}", partial_tx);
-					api::Error::Internal(
-						format!("Error processing partial transaction: {:?}", e),
-					)})
-				.unwrap();
-			Ok(Response::with(status::Ok))
-		} else {
-			Ok(Response::with((status::BadRequest, "")))
-		}
-	}
 }
 
 fn retrieve_existing_key(
