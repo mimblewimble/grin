@@ -113,11 +113,17 @@ impl Handler for WalletReceiverHandler {
 
 pub struct InfoHandler {
     pub config: WalletConfig,
-    pub keychain: Keychain,
 }
 
 impl InfoHandler {
-    fn get_info(&self) -> Result<WalletInfoData, Error> {
+    fn get_info(&self, info_request: &InfoRequest) -> Result<WalletInfoData, Error> {
+
+        let wallet_seed =
+            WalletSeed::from_file(&self.config).expect("Failed to read wallet seed file.");
+
+        let keychain = wallet_seed.derive_keychain(&info_request.passphrase).expect(
+            "Failed to derive keychain from seed file and passphrase.",
+        );
 
         let mut unspent_total=0;
         let mut unspent_but_locked_total=0;
@@ -136,7 +142,7 @@ impl InfoHandler {
             for out in wallet_data
                 .outputs
                 .values()
-                .filter(|out| out.root_key_id == self.keychain.root_key_id())
+                .filter(|out| out.root_key_id == keychain.root_key_id())
                 {
                     if out.status == OutputStatus::Unspent {
                         unspent_total+=out.value;
@@ -164,26 +170,40 @@ impl InfoHandler {
 }
 
 impl Handler for InfoHandler {
-    fn handle(&self, _req: &mut Request) -> IronResult<Response> {
-        let info = self.get_info()
-            .map_err(|e| IronError::new(e, status::BadRequest))?;
-        if let Ok(json) = serde_json::to_string(&info) {
-            Ok(Response::with((status::Ok, json)))
-        } else {
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        let struct_body = req.get::<bodyparser::Struct<InfoRequest>>();
+
+        if let Ok(Some(info_request)) = struct_body {
+            let info = self.get_info(&info_request)
+                .map_err(|e| IronError::new(e, status::BadRequest))?;
+            if let Ok(json) = serde_json::to_string(&info) {
+                Ok(Response::with((status::Ok, json)))
+            } else {
+                Ok(Response::with((status::BadRequest, "")))
+            }
+        }
+        else
+        {
             Ok(Response::with((status::BadRequest, "")))
         }
     }
 }
 
 pub struct WalletSenderHandler {
-    pub keychain: Keychain,
     pub config: WalletConfig,
 }
 
 impl WalletSenderHandler {
     fn send_tx(&self, send_tx: &SendTx) -> Result<WalletSendResult, Error> {
 
-        send_json_tx_str(&self.config, &self.keychain, &send_tx)
+        let wallet_seed =
+            WalletSeed::from_file(&self.config).expect("Failed to read wallet seed file.");
+
+        let keychain = wallet_seed.derive_keychain(&send_tx.passphrase).expect(
+            "Failed to derive keychain from seed file and passphrase.",
+        );
+
+        send_json_tx_str(&self.config, &keychain, &send_tx)
         .map_err(|e| {
         api::Error::Internal(
             format!("Error sending transaction : {:?}", e),
