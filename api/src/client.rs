@@ -19,6 +19,7 @@ use hyper::client::Response;
 use hyper::status::{StatusClass, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json;
+use std::io::Read;
 
 use rest::Error;
 
@@ -57,15 +58,26 @@ fn check_error(res: hyper::Result<Response>) -> Result<Response, Error> {
 	if let Err(e) = res {
 		return Err(Error::Internal(format!("Error during request: {}", e)));
 	}
-	let response = res.unwrap();
+	let mut response = res.unwrap();
 	match response.status.class() {
 		StatusClass::Success => Ok(response),
-		StatusClass::ServerError => Err(Error::Internal(format!("Server error."))),
+		StatusClass::ServerError => {
+			Err(Error::Internal(format!("Server error: {}", err_msg(&mut response))))
+		}
 		StatusClass::ClientError => if response.status == StatusCode::NotFound {
 			Err(Error::NotFound)
 		} else {
-			Err(Error::Argument(format!("Argument error")))
+			Err(Error::Argument(format!("Argument error: {}", err_msg(&mut response))))
 		},
 		_ => Err(Error::Internal(format!("Unrecognized error."))),
+	}
+}
+
+fn err_msg(resp: &mut Response) -> String {
+	let mut msg = String::new();
+	if let Err(_) = resp.read_to_string(&mut msg) {
+		"<no message>".to_owned()
+	} else {
+		msg
 	}
 }
