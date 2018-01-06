@@ -18,7 +18,7 @@
 use rand::{self, Rng};
 use std::sync::{Arc, RwLock};
 use std::thread;
-use std;
+use std::time::Duration;
 use time;
 
 use adapters::PoolToChainAdapter;
@@ -231,8 +231,7 @@ impl Miner {
 				}
 			}
 			// avoid busy wait
-			let sleep_dur = std::time::Duration::from_millis(100);
-			thread::sleep(sleep_dur);
+			thread::sleep(Duration::from_millis(100));
 		}
 		if sol == None {
 			debug!(
@@ -322,7 +321,7 @@ impl Miner {
 			if self.config.slow_down_in_millis != None
 				&& self.config.slow_down_in_millis.unwrap() > 0
 			{
-				thread::sleep(std::time::Duration::from_millis(
+				thread::sleep(Duration::from_millis(
 					self.config.slow_down_in_millis.unwrap(),
 				));
 			}
@@ -351,7 +350,7 @@ impl Miner {
 		latest_hash: &mut Hash,
 	) -> Option<Proof> {
 		// look for a pow for at most 2 sec on the same block (to give a chance to new
-  // transactions) and as long as the head hasn't changed
+		// transactions) and as long as the head hasn't changed
 		let deadline = time::get_time().sec + attempt_time_per_block as i64;
 
 		debug!(
@@ -393,7 +392,7 @@ impl Miner {
 			if self.config.slow_down_in_millis != None
 				&& self.config.slow_down_in_millis.unwrap() > 0
 			{
-				thread::sleep(std::time::Duration::from_millis(
+				thread::sleep(Duration::from_millis(
 					self.config.slow_down_in_millis.unwrap(),
 				));
 			}
@@ -410,6 +409,7 @@ impl Miner {
 
 		sol
 	}
+
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
 	pub fn run_loop(&self, miner_config: MinerConfig, cuckoo_size: u32, proof_size: usize) {
@@ -436,8 +436,8 @@ impl Miner {
 		}
 
 		// to prevent the wallet from generating a new HD key derivation for each
-  // iteration, we keep the returned derivation to provide it back when
-  // nothing has changed
+		// iteration, we keep the returned derivation to provide it back when
+		// nothing has changed
 		let mut key_id = None;
 
 		loop {
@@ -447,15 +447,21 @@ impl Miner {
 			// get the latest chain state and build a block on top of it
 			let head = self.chain.head_header().unwrap();
 			let mut latest_hash = self.chain.head().unwrap().last_block_h;
+
 			let mut result = self.build_block(&head, key_id.clone());
 			while let Err(e) = result {
-				result = self.build_block(&head, key_id.clone());
-				if let self::Error::Chain(chain::Error::DuplicateCommitment(_)) = e {
-					warn!(LOGGER, "Duplicate commit for potential coinbase detected. Trying next derivation.");
-				} else {
-					break;
+				match e {
+					self::Error::Chain(chain::Error::DuplicateCommitment(_)) => {
+						debug!(LOGGER, "Duplicate commit for potential coinbase detected. Trying next derivation.");
+					}
+					ae => {
+						warn!(LOGGER, "Error building new block: {:?}. Retrying.", ae);
+					}
 				}
+				thread::sleep(Duration::from_millis(100));
+				result = self.build_block(&head, key_id.clone());
 			}
+
 			let (mut b, block_fees) = result.unwrap();
 
 			let mut sol = None;
@@ -536,6 +542,7 @@ impl Miner {
 		head: &core::BlockHeader,
 		key_id: Option<Identifier>,
 	) -> Result<(core::Block, BlockFees), Error> {
+	
 		// prepare the block header timestamp
 		let mut now_sec = time::get_time().sec;
 		let head_sec = head.timestamp.to_timespec().sec;
@@ -563,10 +570,8 @@ impl Miner {
 			height,
 		};
 
-		// TODO - error handling, things can go wrong with get_coinbase (wallet api
-  // down etc.)
-		let (output, kernel, block_fees) = self.get_coinbase(block_fees).unwrap();
-		let mut b = core::Block::with_reward(head, txs, output, kernel).unwrap();
+		let (output, kernel, block_fees) = self.get_coinbase(block_fees)?;
+		let mut b = core::Block::with_reward(head, txs, output, kernel)?;
 
 		debug!(
 			LOGGER,
@@ -578,25 +583,29 @@ impl Miner {
 		);
 
 		// making sure we're not spending time mining a useless block
-		b.validate().expect("Built an invalid block!");
+		b.validate()?;
 
 		let mut rng = rand::OsRng::new().unwrap();
 		b.header.nonce = rng.gen();
 		b.header.difficulty = difficulty;
 		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
 		trace!(LOGGER, "Block: {:?}", b);
-		let result=self.chain.set_sumtree_roots(&mut b);
-		match result {
+	
+		let roots_result = self.chain.set_sumtree_roots(&mut b);
+		match roots_result {
 			Ok(_) => Ok((b, block_fees)),
-			//If it's a duplicate commitment, it's likely trying to use
-			//a key that's already been derived but not in the wallet
-			//for some reason, allow caller to retry
-			Err(chain::Error::DuplicateCommitment(e)) =>
-				Err(Error::Chain(chain::Error::DuplicateCommitment(e))),
-			//Some other issue is worth a panic
+	
+			// If it's a duplicate commitment, it's likely trying to use
+			// a key that's already been derived but not in the wallet
+			// for some reason, allow caller to retry
+			Err(chain::Error::DuplicateCommitment(e)) => {
+				Err(Error::Chain(chain::Error::DuplicateCommitment(e)))
+			}
+	
+			//Some other issue, possibly duplicate kernel
 			Err(e) => {
 				error!(LOGGER, "Error setting sumtree root to build a block: {:?}", e);
-				panic!(e);
+				Err(Error::Chain(chain::Error::Other(format!("{:?}", e))))
 			}
 		}
 	}
