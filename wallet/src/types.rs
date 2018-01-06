@@ -610,6 +610,16 @@ pub struct PartialTx {
 	tx: String,
 }
 
+/// Helper in serializing the information a sender requires to build a
+/// transaction.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SendTx {
+	pub amount: String,
+    pub minimum_confirmations: u64,
+    pub dest: String,
+    pub selection_strategy: String
+}
+
 /// Builds a PartialTx from data sent by a sender (not yet completed by the receiver).
 pub fn build_partial_tx(
 	receive_amount: u64,
@@ -666,4 +676,19 @@ pub struct CbData {
 	pub output: String,
 	pub kernel: String,
 	pub key_id: String,
+}
+
+/// Response to a wallet info query
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WalletInfoData {
+	pub unspent_total: String,
+	pub unspent_but_locked_total: String,
+	pub unconfirmed_total: String,
+	pub locked_total: String,
+}
+
+/// Response to a wallet send request
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WalletSendResult {
+    pub confirmed: bool,
 }

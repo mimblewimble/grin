@@ -25,6 +25,10 @@ use keychain::Keychain;
 use types::*;
 use util;
 
+use checker;
+use receiver::receive_json_tx;
+use core::core::amount_to_hr_string;
+use sender::send_json_tx_str;
 
 pub struct CoinbaseHandler {
 	pub config: WalletConfig,
@@ -79,4 +83,134 @@ impl Handler for CoinbaseHandler {
 			Ok(Response::with((status::BadRequest, "")))
 		}
 	}
+}
+
+/// Component used to receive coins, implements all the receiving end of the
+/// wallet REST API as well as some of the command-line operations.
+#[derive(Clone)]
+pub struct WalletReceiverHandler {
+    pub keychain: Keychain,
+    pub config: WalletConfig,
+}
+
+impl Handler for WalletReceiverHandler {
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        let struct_body = req.get::<bodyparser::Struct<PartialTx>>();
+
+        if let Ok(Some(partial_tx)) = struct_body {
+            receive_json_tx(&self.config, &self.keychain, &partial_tx)
+                .map_err(|e| {
+                    api::Error::Internal(
+                        format!("Error processing partial transaction: {:?}", e),
+                    )})
+                .unwrap();
+            Ok(Response::with(status::Ok))
+        } else {
+            Ok(Response::with((status::BadRequest, "")))
+        }
+    }
+}
+
+pub struct InfoHandler {
+    pub config: WalletConfig,
+    pub keychain: Keychain,
+}
+
+impl InfoHandler {
+    fn get_info(&self) -> Result<WalletInfoData, Error> {
+
+        let mut unspent_total=0;
+        let mut unspent_but_locked_total=0;
+        let mut unconfirmed_total=0;
+        let mut locked_total=0;
+
+        let _ = WalletData::read_wallet(&self.config.data_file_dir, |wallet_data| {
+            let current_height = match checker::get_tip_from_node(&self.config) {
+                Ok(tip) => tip.height,
+                Err(_) => match wallet_data.outputs.values().map(|out| out.height).max() {
+                    Some(height) => height,
+                    None => 0,
+                },
+            };
+
+            for out in wallet_data
+                .outputs
+                .values()
+                .filter(|out| out.root_key_id == self.keychain.root_key_id())
+                {
+                    if out.status == OutputStatus::Unspent {
+                        unspent_total+=out.value;
+                        if out.lock_height > current_height {
+                            unspent_but_locked_total+=out.value;
+                        }
+                    }
+                    if out.status == OutputStatus::Unconfirmed && !out.is_coinbase {
+                        unconfirmed_total+=out.value;
+                    }
+                    if out.status == OutputStatus::Locked {
+                        locked_total+=out.value;
+                    }
+                };
+
+        });
+
+        Ok(WalletInfoData {
+            unspent_total: amount_to_hr_string(unspent_total),
+            unspent_but_locked_total: amount_to_hr_string(unspent_but_locked_total),
+            unconfirmed_total: amount_to_hr_string(unconfirmed_total),
+            locked_total: amount_to_hr_string(locked_total),
+        })
+    }
+}
+
+impl Handler for InfoHandler {
+    fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+        let info = self.get_info()
+            .map_err(|e| IronError::new(e, status::BadRequest))?;
+        if let Ok(json) = serde_json::to_string(&info) {
+            Ok(Response::with((status::Ok, json)))
+        } else {
+            Ok(Response::with((status::BadRequest, "")))
+        }
+    }
+}
+
+pub struct WalletSenderHandler {
+    pub keychain: Keychain,
+    pub config: WalletConfig,
+}
+
+impl WalletSenderHandler {
+    fn send_tx(&self, send_tx: &SendTx) -> Result<WalletSendResult, Error> {
+
+        send_json_tx_str(&self.config, &self.keychain, &send_tx)
+        .map_err(|e| {
+        api::Error::Internal(
+            format!("Error sending transaction : {:?}", e),
+        )})
+        .unwrap();
+
+        Ok(WalletSendResult {
+            confirmed: true,
+        })
+
+    }
+}
+
+impl Handler for WalletSenderHandler {
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        let struct_body = req.get::<bodyparser::Struct<SendTx>>();
+
+        if let Ok(Some(send_tx)) = struct_body {
+            let result = self.send_tx(&send_tx)
+                .map_err(|e| { IronError::new(e, status::BadRequest) })?;
+            if let Ok(json) = serde_json::to_string(&result) {
+                Ok(Response::with((status::Ok, json)))
+            } else {
+                Ok(Response::with((status::BadRequest, "")))
+            }
+        } else {
+            Ok(Response::with((status::BadRequest, "")))
+        }
+    }
 }

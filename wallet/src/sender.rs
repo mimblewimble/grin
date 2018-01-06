@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::core::amount_from_hr_string;
 use serde_json;
 
 use api;
@@ -25,10 +26,47 @@ use types::*;
 use util::LOGGER;
 use util;
 
+pub fn send_json_tx_str(
+	wallet_config: &WalletConfig,
+	keychain: &Keychain,
+	send_tx: &SendTx,
+) -> Result<(), Error> {
+
+    let amount = send_tx.amount.clone();
+
+    let amount = amount_from_hr_string(&amount)
+        .map_err(|e| {
+            Error::Format(e.to_string())
+        })?;
+
+	let minimum_confirmations = send_tx.minimum_confirmations.clone();
+
+	let selection_strategy = send_tx.selection_strategy.clone();
+
+	let dest = send_tx.dest.clone();
+
+    if dest == "stdout" {
+        return Err(Error::Format("Cannot use stdout as destination when using the wallet Api to send funds.".to_string()));
+    }
+
+	let max_outputs = 500;
+	let result = issue_send_tx(
+		&wallet_config,
+		&keychain,
+		amount,
+		minimum_confirmations,
+		dest.to_string(),
+		max_outputs,
+		(selection_strategy == "all"),
+	);
+
+    return result;
+}
+
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
 /// UTXOs. The destination can be "stdout" (for command line) or a URL to the
-/// recipients wallet receiver (to be implemented).
+/// recipients wallet listener (to be implemented).
 
 pub fn issue_send_tx(
 	config: &WalletConfig,

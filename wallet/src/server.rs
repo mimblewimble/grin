@@ -15,8 +15,7 @@
 
 use api::ApiServer;
 use keychain::Keychain;
-use handlers::CoinbaseHandler;
-use receiver::WalletReceiver;
+use handlers::{ CoinbaseHandler, InfoHandler, WalletSenderHandler, WalletReceiverHandler };
 use types::WalletConfig;
 use util::LOGGER;
 
@@ -27,7 +26,11 @@ pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 		wallet_config.api_listen_addr()
 	);
 
-	let receive_tx_handler = WalletReceiver {
+	let receive_tx_handler = WalletReceiverHandler {
+		config: wallet_config.clone(),
+		keychain: keychain.clone(),
+	};
+	let send_tx_handler = WalletSenderHandler {
 		config: wallet_config.clone(),
 		keychain: keychain.clone(),
 	};
@@ -35,15 +38,21 @@ pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 		config: wallet_config.clone(),
 		keychain: keychain.clone(),
 	};
+	let info_handler = InfoHandler {
+		config: wallet_config.clone(),
+		keychain: keychain.clone(),
+	};
 
 	let router = router!(
 		receive_tx: post "/receive/transaction" => receive_tx_handler,
 		receive_coinbase: post "/receive/coinbase" => coinbase_handler,
+		send_tx: post "/send/transaction" => send_tx_handler,
+		retrieve_info: get "/info" => info_handler,
 	);
 
 	let mut apis = ApiServer::new("/v1".to_string());
 	apis.register_handler(router);
 	apis.start(wallet_config.api_listen_addr()).unwrap_or_else(|e| {
-		error!(LOGGER, "Failed to start Grin wallet receiver: {}.", e);
+		error!(LOGGER, "Failed to start Grin wallet listener: {}.", e);
 	});
 }
