@@ -54,16 +54,14 @@ pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 
     let send_tx_handler = WalletSenderHandler {
         config: wallet_config.clone(),
-        keychain: keychain.clone(),
     };
     let info_handler = InfoHandler {
         config: wallet_config.clone(),
-        keychain: keychain.clone(),
     };
 
     let router_wallet_operator = router!(
         send_tx: post "/send/transaction" => send_tx_handler,
-		retrieve_info: get "/info" => info_handler,
+		retrieve_info: post "/info" => info_handler,
     );
 
     let mut apis_operator = ApiServer::new("/v1".to_string());
