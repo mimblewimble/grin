@@ -193,7 +193,7 @@ impl WalletConfig {
 		format!("{}:{}", self.api_receiver_listen_interface, self.api_receiver_listen_port)
 	}
     pub fn api_operator_listen_addr(&self) -> String {
-        format!("{}:{}", "127.0.0.1", self.api_operator_listen_port)
+        format!("{}:{}", self.api_operator_listen_interface, self.api_operator_listen_port)
     }
 }
 
