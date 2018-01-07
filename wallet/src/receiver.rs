@@ -54,14 +54,24 @@ pub fn receive_json_tx(
 	keychain: &Keychain,
 	partial_tx: &PartialTx,
 ) -> Result<(), Error> {
+
+	// reading the partial transaction and finalizing it, adding our output
 	let (amount, blinding, tx) = read_partial_tx(keychain, partial_tx)?;
-	let final_tx = receive_transaction(config, keychain, amount, blinding, tx)?;
+	let (final_tx, key_id) = receive_transaction(config, keychain, amount, blinding, tx)?;
 	let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
 
+	// pushing to the transaction pool, in case of error the output that was
+	// reserved needs to be removed
 	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
-	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })
-		.map_err(|e| Error::Node(e))?;
-	Ok(())
+	let res = api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex });
+	if let Err(e) = res {
+		WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+			wallet_data.delete_output(&key_id);
+		})?;
+		Err(Error::Node(e))
+	} else {
+		Ok(())
+	}
 }
 
 /// Component used to receive coins, implements all the receiving end of the
@@ -171,7 +181,8 @@ fn receive_transaction(
 	amount: u64,
 	blinding: BlindingFactor,
 	partial: Transaction,
-) -> Result<Transaction, Error> {
+) -> Result<(Transaction, Identifier), Error> {
+
 	let root_key_id = keychain.root_key_id();
 
 	// double check the fee amount included in the partial tx
@@ -227,5 +238,5 @@ fn receive_transaction(
 		derivation,
 	);
 
-	Ok(tx_final)
+	Ok((tx_final, key_id))
 }
