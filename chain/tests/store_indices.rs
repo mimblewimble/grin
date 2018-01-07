@@ -48,7 +48,6 @@ fn test_various_store_indices() {
 	chain_store.setup_height(&genesis.header, &Tip::new(genesis.hash())).unwrap();
 
 	let block = Block::new(&genesis.header, vec![], &keychain, &key_id).unwrap();
-	let commit = block.outputs[0].commitment();
 	let block_hash = block.hash();
 
 	chain_store.save_block(&block).unwrap();

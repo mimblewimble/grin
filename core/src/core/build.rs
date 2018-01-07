@@ -187,7 +187,7 @@ mod test {
 			vec![
 				input(10, 0, key_id1),
 				input(11, 0, key_id2),
-				output(20, 0, key_id3),
+				output(20, key_id3),
 				with_fee(1),
 			],
 			&keychain,
@@ -203,7 +203,7 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
 		let (tx, _) = transaction(
-			vec![input(6, 0, key_id1), output(2, 0, key_id2), with_fee(4)],
+			vec![input(6, 0, key_id1), output(2, key_id2), with_fee(4)],
 			&keychain,
 		).unwrap();
 

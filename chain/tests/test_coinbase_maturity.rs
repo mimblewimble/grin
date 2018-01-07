@@ -109,7 +109,7 @@ fn test_coinbase_maturity() {
 	let (coinbase_txn, _) = build::transaction(
 		vec![
 			build::input(amount, height, key_id1.clone()),
-			build::output(amount - 2, height, key_id2.clone()),
+			build::output(amount - 2, key_id2.clone()),
 			build::with_fee(2),
 		],
 		&keychain,
@@ -136,7 +136,7 @@ fn test_coinbase_maturity() {
 
 	// confirm the block fails validation due to the invalid tx attempting to spend
 	// the immature coinbase
-	let result = chain.process_block(block, chain::EASY_POW);
+	let result = chain.process_block(block, chain::SKIP_POW);
 	match result {
 		Err(Error::ImmatureCoinbase) => (),
 		_ => panic!("expected ImmatureCoinbase error here"),
@@ -175,7 +175,7 @@ fn test_coinbase_maturity() {
 	let (coinbase_txn, _) = build::transaction(
 		vec![
 			build::input(amount, height, key_id1.clone()),
-			build::output(amount - 2, height, key_id2.clone()),
+			build::output(amount - 2, key_id2.clone()),
 			build::with_fee(2),
 		],
 		&keychain,

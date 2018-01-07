@@ -248,7 +248,7 @@ mod test {
 		build::transaction(
 			vec![
 				input(10, 0, key_id1.clone()),
-				output(9, 0, key_id1.clone()),
+				output(9, key_id1.clone()),
 				with_fee(1),
 			],
 			&keychain,
@@ -303,8 +303,8 @@ mod test {
 		let (tx, _) = build::transaction(
 			vec![
 				input(75, 0, key_id1),
-				output(42, 0, key_id2),
-				output(32, 0, key_id3),
+				output(42, key_id2),
+				output(32, key_id3),
 				with_fee(1),
 			],
 			&keychain,
@@ -362,7 +362,7 @@ mod test {
 			// Alice builds her transaction, with change, which also produces the sum
 			// of blinding factors before they're obscured.
 			let (tx, sum) =
-				build::transaction(vec![in1, in2, output(1, 0, key_id3), with_fee(2)], &keychain)
+				build::transaction(vec![in1, in2, output(1, key_id3), with_fee(2)], &keychain)
 					.unwrap();
 			tx_alice = tx;
 			blind_sum = sum;
@@ -375,7 +375,7 @@ mod test {
 			vec![
 				initial_tx(tx_alice),
 				with_excess(blind_sum),
-				output(4, 0, key_id4),
+				output(4, key_id4),
 			],
 			&keychain,
 		).unwrap();
@@ -434,7 +434,7 @@ mod test {
 		let tx1 = build::transaction(
 			vec![
 				input(5, 0, key_id1.clone()),
-				output(3, 0, key_id2.clone()),
+				output(3, key_id2.clone()),
 				with_fee(2),
 				with_lock_height(1),
 			],
@@ -454,7 +454,7 @@ mod test {
 		let tx1 = build::transaction(
 			vec![
 				input(5, 0, key_id1.clone()),
-				output(3, 0, key_id2.clone()),
+				output(3, key_id2.clone()),
 				with_fee(2),
 				with_lock_height(2),
 			],
@@ -499,7 +499,7 @@ mod test {
 			vec![
 				input(10, 0, key_id1),
 				input(11, 0, key_id2),
-				output(19, 0, key_id3),
+				output(19, key_id3),
 				with_fee(2),
 			],
 			&keychain,
@@ -514,7 +514,7 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
 		build::transaction(
-			vec![input(5, 0, key_id1), output(3, 0, key_id2), with_fee(2)],
+			vec![input(5, 0, key_id1), output(3, key_id2), with_fee(2)],
 			&keychain,
 		).map(|(tx, _)| tx)
 			.unwrap()

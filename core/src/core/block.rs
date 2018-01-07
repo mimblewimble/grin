@@ -664,7 +664,7 @@ mod test {
 		key_id2: Identifier,
 	) -> Transaction {
 		build::transaction(
-			vec![input(v, 0, key_id1), output(3, 0, key_id2), with_fee(2)],
+			vec![input(v, 0, key_id1), output(3, key_id2), with_fee(2)],
 			&keychain,
 		).map(|(tx, _)| tx)
 			.unwrap()
@@ -684,7 +684,7 @@ mod test {
 
 		let mut parts = vec![];
 		for _ in 0..max_out {
-			parts.push(output(5, 0, pks.pop().unwrap()));
+			parts.push(output(5, pks.pop().unwrap()));
 		}
 
 		let now = Instant::now();
@@ -708,7 +708,7 @@ mod test {
 
 		let mut btx1 = tx2i1o();
 		let (mut btx2, _) = build::transaction(
-			vec![input(7, 0, key_id1), output(5, 0, key_id2.clone()), with_fee(2)],
+			vec![input(7, 0, key_id1), output(5, key_id2.clone()), with_fee(2)],
 			&keychain,
 		).unwrap();
 
@@ -736,7 +736,7 @@ mod test {
 		let mut btx1 = tx2i1o();
 
 		let (mut btx2, _) = build::transaction(
-			vec![input(7, 0, key_id1), output(5, 0, key_id2.clone()), with_fee(2)],
+			vec![input(7, 0, key_id1), output(5, key_id2.clone()), with_fee(2)],
 			&keychain,
 		).unwrap();
 
