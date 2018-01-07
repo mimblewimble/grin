@@ -173,25 +173,24 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<()
 			format!("id={}", id)
 		})
 		.collect();
+
+	// build a map of api outputs by commit so we can look them up efficiently
+	let mut api_outputs: HashMap<pedersen::Commitment, api::Output> = HashMap::new();
+
 	let query_string = query_params.join("&");
 
 	let url = format!(
 		"{}/v1/chain/utxos/byids?{}",
-		config.check_node_api_http_addr,
-		query_string,
+		config.check_node_api_http_addr, query_string,
 	);
 
-	// build a map of api outputs by commit so we can look them up efficiently
-	let mut api_outputs: HashMap<pedersen::Commitment, api::Output> = HashMap::new();
 	match api::client::get::<Vec<api::Output>>(url.as_str()) {
-		Ok(outputs) => {
-			for out in outputs {
-				api_outputs.insert(out.commit, out);
-			}
+		Ok(outputs) => for out in outputs {
+			api_outputs.insert(out.commit, out);
 		},
 		Err(e) => {
-			// if we got anything other than 200 back from server, don't attempt to refresh the wallet
-			// data after
+			// if we got anything other than 200 back from server, don't attempt to refresh
+			// the wallet data after
 			return Err(Error::Node(e));
 		}
 	};

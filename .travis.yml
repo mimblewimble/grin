@@ -36,26 +36,46 @@ env:
 
 after_success: |
   pwd &&
-  echo "HERE" &&
   wget https://github.com/mimblewimble/kcov/archive/master.tar.gz &&
   tar xzf master.tar.gz &&
   cd kcov-master &&
-  mkdir build &&
-  cd build &&
-  cmake .. &&
-  make &&
-  sudo make install &&
+  mkdir build && cd build &&
+  cmake .. && make && mv src/kcov ../.. &&
   cd ../.. &&
   rm -rf kcov-master &&
-  cargo test --no-run &&
   cd ../
-  pwd &&
-  kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/grin_core* && 
+  cd api && cargo test --no-run && cd .. && rm target/debug/*.d &&
+  ./kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/grin_api* &&
+  echo "Finished coverage for grin_api"
+  cd core && cargo test --no-run && cd .. && rm target/debug/*.d &&
+  ./kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/grin_core* &&
   echo "Finished coverage for grin_core"
-  kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/grin_chain* && 
+  cd chain && cargo test --no-run && cd .. && rm target/debug/*.d &&
+  ./kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/grin_chain* &&
+  ./kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/mine_simple_chain* &&
+  ./kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/store_indices* &&
+  ./kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/test_coinbase_maturity* &&
   echo "Finished coverage for grin_chain"
-  kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/mine_simple_* &&
-  echo "Finished coverage for mine_simple"
+  cd keychain && cargo test --no-run && cd .. && rm target/debug/*.d &&
+  ./kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/grin_keychain* &&
+  echo "Finished coverage for grin_keychain"
+  cd p2p && cargo test --no-run && cd .. && rm target/debug/*.d &&
+  ./kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/grin_p2p* &&
+  ./kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/peer_handshake* &&
+  echo "Finished coverage for grin_p2p"
+  cd pow && cargo test --no-run && cd .. && rm target/debug/*.d &&
+  ./kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/grin_pow* &&
+  echo "Finished coverage for grin_pow"
+  cd store && cargo test --no-run && cd .. && rm target/debug/*.d &&
+  ./kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/grin_store* &&
+  ./kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/sumtree* &&
+  echo "Finished coverage for grin_store"
+  cd wallet && cargo test --no-run && cd .. && rm target/debug/*.d &&
+  ./kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/grin_wallet* &&
+  echo "Finished coverage for grin_wallet"
+  cd util && cargo test --no-run && cd .. && rm target/debug/*.d &&
+  ./kcov --exclude-pattern=/.cargo,/usr/lib --verify target/cov target/debug/grin_util* &&
+  echo "Finished coverage for grin_util"
   bash <(curl -s https://codecov.io/bash) &&
   echo "Uploaded code coverage"
 
