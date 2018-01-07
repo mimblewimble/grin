@@ -25,6 +25,7 @@ use std::sync::Arc;
 
 use chain::types::*;
 use core::core::build;
+use core::core::target::Difficulty;
 use core::core::transaction;
 use core::consensus;
 use core::global;
@@ -74,7 +75,13 @@ fn test_coinbase_maturity() {
 	let key_id3 = keychain.derive_key_id(3).unwrap();
 	let key_id4 = keychain.derive_key_id(4).unwrap();
 
-	let mut block = core::core::Block::new(&prev, vec![], &keychain, &key_id1).unwrap();
+	let mut block = core::core::Block::new(
+		&prev,
+		vec![],
+		&keychain,
+		&key_id1,
+		Difficulty::minimum()
+	).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -110,7 +117,13 @@ fn test_coinbase_maturity() {
 	).unwrap();
 
 	let mut block =
-		core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &key_id3).unwrap();
+		core::core::Block::new(
+			&prev,
+			vec![&coinbase_txn],
+			&keychain,
+			&key_id3,
+			Difficulty::minimum()
+		).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -138,7 +151,13 @@ fn test_coinbase_maturity() {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let pk = keychain.derive_key_id(1).unwrap();
 
-		let mut block = core::core::Block::new(&prev, vec![], &keychain, &pk).unwrap();
+		let mut block = core::core::Block::new(
+			&prev,
+			vec![],
+			&keychain,
+			&pk,
+			Difficulty::minimum()
+		).unwrap();
 		block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -158,7 +177,13 @@ fn test_coinbase_maturity() {
 	let prev = chain.head_header().unwrap();
 
 	let mut block =
-		core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &key_id4).unwrap();
+		core::core::Block::new(
+			&prev,
+			vec![&coinbase_txn],
+			&keychain,
+			&key_id4,
+			Difficulty::minimum()
+		).unwrap();
 
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
