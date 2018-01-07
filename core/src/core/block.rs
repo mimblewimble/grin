@@ -617,7 +617,13 @@ mod test {
 	// header
 	fn new_block(txs: Vec<&Transaction>, keychain: &Keychain) -> Block {
 		let key_id = keychain.derive_key_id(1).unwrap();
-		Block::new(&BlockHeader::default(), txs, keychain, &key_id).unwrap()
+		Block::new(
+			&BlockHeader::default(),
+			txs,
+			keychain,
+			&key_id,
+			Difficulty::minimum()
+		).unwrap()
 	}
 
 	// utility producing a transaction that spends an output with the provided
