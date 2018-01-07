@@ -33,8 +33,8 @@ pub const MICRO_GRIN: u64 = MILLI_GRIN / 1_000;
 /// Nanogrin, smallest unit, takes a billion to make a grin
 pub const NANO_GRIN: u64 = 1;
 
-/// The block subsidy amount
-pub const REWARD: u64 = 50 * GRIN_BASE;
+/// The block subsidy amount, one grin per second on average
+pub const REWARD: u64 = 60 * GRIN_BASE;
 
 /// Actual block reward for a given total fee amount
 pub fn reward(fee: u64) -> u64 {
