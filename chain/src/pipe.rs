@@ -238,50 +238,16 @@ fn validate_block(
 	ctx: &mut BlockContext,
 	ext: &mut sumtree::Extension,
 ) -> Result<(), Error> {
+
 	// main isolated block validation, checks all commitment sums and sigs
-	try!(b.validate().map_err(&Error::InvalidBlockProof));
+	b.validate().map_err(&Error::InvalidBlockProof)?;
+
+	if b.header.previous != ctx.head.last_block_h {
+		rewind_and_apply_fork(b, ctx.store.clone(), ext)?;
+	}
 
 	// apply the new block to the MMR trees and check the new root hashes
-	if b.header.previous == ctx.head.last_block_h {
-		// standard head extension
-		ext.apply_block(b)?;
-	} else {
-		// extending a fork, first identify the block where forking occurred
-		// keeping the hashes of blocks along the fork
-		let mut current = b.header.previous;
-		let mut hashes = vec![];
-		loop {
-			let curr_header = ctx.store.get_block_header(&current)?;
-
-			if let Ok(_) = ctx.store.is_on_current_chain(&curr_header) {
-				break;
-			} else {
-				hashes.insert(0, curr_header.hash());
-				current = curr_header.previous;
-			}
-		}
-
-		let forked_block = ctx.store.get_block(&current)?;
-
-		debug!(
-			LOGGER,
-			"validate_block: forked_block: {} at {}",
-			forked_block.header.hash(),
-			forked_block.header.height,
-		);
-
-		// rewind the sum trees up to the forking block
-		ext.rewind(&forked_block)?;
-
-		// apply all forked blocks, including this new one
-		for h in hashes {
-			let fb = ctx.store.get_block(&h).map_err(|e| {
-				Error::StoreErr(e, format!("getting forked blocks"))
-			})?;
-			ext.apply_block(&fb)?;
-		}
-		ext.apply_block(&b)?;
-	}
+	ext.apply_block(&b)?;
 
 	let (utxo_root, rproof_root, kernel_root) = ext.roots();
 	if utxo_root.hash != b.header.utxo_root || rproof_root.hash != b.header.range_proof_root
@@ -425,4 +391,51 @@ fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option
 	} else {
 		Ok(None)
 	}
+}
+
+// Utility function to handle forks. From the forked block, jump backward
+// to find to fork root. Rewind the sumtrees to the root and apply all the
+// forked blocks prior to the one being processed to set the sumtrees in
+// the expected state.
+fn rewind_and_apply_fork(
+	b: &Block,
+	store: Arc<ChainStore>,
+	ext: &mut sumtree::Extension,
+) -> Result<(), Error> {
+
+	// extending a fork, first identify the block where forking occurred
+	// keeping the hashes of blocks along the fork
+	let mut current = b.header.previous;
+	let mut hashes = vec![];
+	loop {
+		let curr_header = store.get_block_header(&current)?;
+
+		if let Ok(_) = store.is_on_current_chain(&curr_header) {
+			break;
+		} else {
+			hashes.insert(0, curr_header.hash());
+			current = curr_header.previous;
+		}
+	}
+
+	let forked_block = store.get_block(&current)?;
+
+	debug!(
+		LOGGER,
+		"validate_block: forked_block: {} at {}",
+		forked_block.header.hash(),
+		forked_block.header.height,
+		);
+
+	// rewind the sum trees up to the forking block
+	ext.rewind(&forked_block)?;
+
+	// apply all forked blocks, including this new one
+	for h in hashes {
+		let fb = store.get_block(&h).map_err(|e| {
+			Error::StoreErr(e, format!("getting forked blocks"))
+		})?;
+		ext.apply_block(&fb)?;
+	}
+	Ok(())
 }
