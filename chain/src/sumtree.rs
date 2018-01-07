@@ -100,7 +100,9 @@ impl SumTrees {
 				);
 				if let Some(hs) = output_pmmr.get(pos) {
 					let hashsum = HashSum::from_summable(
-						pos, &SumCommit{commit: commit.clone()});
+						pos,
+						&SumCommit::from_commit(&commit),
+					);
 					Ok(hs.hash == hashsum.hash)
 				} else {
 					Ok(false)
@@ -264,6 +266,12 @@ impl<'a> Extension<'a> {
 
 		for out in &b.outputs {
 			let commit = out.commitment();
+			let switch_commit_hash = out.switch_commit_hash();
+			let sum_commit = SumCommit {
+				commit,
+				switch_commit_hash,
+			};
+
 			if let Ok(pos) = self.get_output_pos(&commit) {
 				// we need to check whether the commitment is in the current MMR view
 				// as well as the index doesn't support rewind and is non-authoritative
@@ -271,7 +279,8 @@ impl<'a> Extension<'a> {
 				// note that this doesn't show the commitment *never* existed, just
 				// that this is not an existing unspent commitment right now
 				if let Some(c) = self.output_pmmr.get(pos) {
-					let hashsum = HashSum::from_summable(pos, &SumCommit{commit});
+					let hashsum = HashSum::from_summable(pos, &sum_commit);
+
 					// processing a new fork so we may get a position on the old
 					// fork that exists but matches a different node
 					// filtering that case out
@@ -282,11 +291,7 @@ impl<'a> Extension<'a> {
 			}
 			// push new outputs commitments in their MMR and save them in the index
 			let pos = self.output_pmmr
-				.push(
-					SumCommit {
-						commit: out.commitment(),
-					},
-				)
+				.push(sum_commit)
 				.map_err(&Error::SumTreeErr)?;
 
 			self.new_output_commits.insert(out.commitment(), pos);
