@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 
 use util::secp::pedersen::{Commitment, RangeProof};
 
-use core::core::SumCommit;
+use core::core::{SumCommit, SwitchCommitHash};
 use core::core::pmmr::{HashSum, NoSum};
 
 use core::core::{Block, BlockHeader, Output, TxKernel};
@@ -331,37 +331,14 @@ impl Chain {
 		}
 	}
 
-	/// Gets an unspent output from its commitment. With return None if the
-	/// output doesn't exist or has been spent. This querying is done in a
-	/// way that's consistent with the current chain state and more
-	/// specifically the current winning fork.
-	pub fn get_unspent(&self, output_ref: &Commitment) -> Result<Output, Error> {
-		// TODO - get output_pos from index
-		// TODO - lookup output in output_pmmr
-		// TODO - do something with it...
-
-		// TODO - what do we return here if we have no outputs in the index???
-
-		panic!("not yet implemented...");
-
-		match self.store.get_output_by_commit(output_ref) {
-			Ok(out) => {
-				let mut sumtrees = self.sumtrees.write().unwrap();
-				if sumtrees.is_unspent(output_ref)? {
-					Ok(out)
-				} else {
-					Err(Error::OutputNotFound)
-				}
-			}
-			Err(NotFoundErr) => Err(Error::OutputNotFound),
-			Err(e) => Err(Error::StoreErr(e, "chain get unspent".to_owned())),
-		}
-	}
-
-	/// Checks whether an output is unspent
-	pub fn is_unspent(&self, output_ref: &Commitment) -> Result<bool, Error> {
+	/// For the given commitment find the unspent output and return the associated
+	/// switch_commit_hash.
+	/// Return an error if the output does not exist or has been spent.
+	/// This querying is done in a way that is consistent with the current chain state,
+	/// specifically the current winning (valid, most work) fork.
+	pub fn get_unspent(&self, output_ref: &Commitment) -> Result<SwitchCommitHash, Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
-		sumtrees.is_unspent(output_ref)
+		sumtrees.get_unspent(output_ref)
 	}
 
 	/// Sets the sumtree roots on a brand new block by applying the block on the
@@ -398,14 +375,16 @@ impl Chain {
 	/// returns sum tree hash plus output itself (as the sum is contained
 	/// in the output anyhow)
 	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<(Hash, Output)> {
-		let mut sumtrees = self.sumtrees.write().unwrap();
-		let mut return_vec = Vec::new();
-		let sum_nodes = sumtrees.last_n_utxo(distance);
-		for sum_commit in sum_nodes {
-			let output = self.store.get_output_by_commit(&sum_commit.sum.commit);
-			return_vec.push((sum_commit.hash, output.unwrap()));
-		}
-		return_vec
+		panic!("we do not store outputs in the index any more... how to implement this???");
+
+		// let mut sumtrees = self.sumtrees.write().unwrap();
+		// let mut return_vec = Vec::new();
+		// let sum_nodes = sumtrees.last_n_utxo(distance);
+		// for sum_commit in sum_nodes {
+		// 	let output = self.store.get_output_by_commit(&sum_commit.sum.commit);
+		// 	return_vec.push((sum_commit.hash, output.unwrap()));
+		// }
+		// return_vec
 	}
 
 	/// as above, for rangeproofs

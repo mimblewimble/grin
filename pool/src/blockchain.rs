@@ -71,8 +71,15 @@ impl DummyUtxoSet {
 			outputs: HashMap::new(),
 		}
 	}
-	pub fn get_output(&self, output_ref: &Commitment) -> Option<&transaction::Output> {
-		self.outputs.get(output_ref)
+	pub fn get_unspent(
+		&self,
+		output_ref: &Commitment,
+	) -> Option<transaction::SwitchCommitHash> {
+		if let Some(x) = self.outputs.get(output_ref) {
+			Some(x.switch_commit_hash())
+		} else {
+			None
+		}
 	}
 
 	fn clone(&self) -> DummyUtxoSet {
@@ -118,10 +125,12 @@ impl DummyChainImpl {
 }
 
 impl BlockChain for DummyChainImpl {
-	fn get_unspent(&self, commitment: &Commitment) -> Result<transaction::Output, PoolError> {
-		let output = self.utxo.read().unwrap().get_output(commitment).cloned();
-		match output {
-			Some(o) => Ok(o),
+	fn get_unspent(
+		&self,
+		commitment: &Commitment,
+	) -> Result<transaction::SwitchCommitHash, PoolError> {
+		match self.utxo.read().unwrap().get_unspent(commitment) {
+			Some(x) => Ok(x),
 			None => Err(PoolError::GenericPoolError),
 		}
 	}

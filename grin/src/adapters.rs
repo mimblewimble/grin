@@ -332,7 +332,10 @@ impl PoolToChainAdapter {
 }
 
 impl pool::BlockChain for PoolToChainAdapter {
-	fn get_unspent(&self, output_ref: &Commitment) -> Result<Output, pool::PoolError> {
+	fn get_unspent(
+		&self,
+		output_ref: &Commitment,
+	) -> Result<transaction::SwitchCommitHash, pool::PoolError> {
 		self.chain
 			.borrow()
 			.get_unspent(output_ref)

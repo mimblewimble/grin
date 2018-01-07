@@ -106,7 +106,7 @@ impl UtxoHandler {
 		let outputs = block
 			.outputs
 			.iter()
-			.filter(|c| self.chain.is_unspent(&c.commit).unwrap())
+			.filter(|c| self.chain.get_unspent(&c.commit).is_ok())
 			.map(|k| {
 				OutputPrintable::from_output(k, self.chain.clone())
 			})
@@ -444,7 +444,7 @@ where
 			tx.inputs.len(),
 			tx.outputs.len()
 		);
-	
+
 		let res = self.tx_pool
 			.write()
 			.unwrap()

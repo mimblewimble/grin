@@ -311,22 +311,6 @@ fn validate_block(
 		return Err(Error::InvalidRoot);
 	}
 
-	for input in &b.inputs {
-		// TODO - get output_pos from index
-		// TODO - lookup switch_commit_hash from output_pmmr
-		// TODO - do something with the switch_commit_hash
-		panic!("not yet implemented... working on it");
-
-		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
-			// check the lock_height of the output being spent by this input
-			// is not greater than the current height
-			if output.features.contains(transaction::COINBASE_OUTPUT) {
-				input.verify_lock_height(&output, b.header.height)
-					.map_err(|_| Error::ImmatureCoinbase)?;
-			}
-		}
-	}
-
 	Ok(())
 }
 

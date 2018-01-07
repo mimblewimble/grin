@@ -90,12 +90,14 @@ where
 		self.blockchain
 			.get_unspent(output_commitment)
 			.ok()
-			.map(|output| {
+			.map(|switch_commit_hash| {
 				match self.pool.get_blockchain_spent(output_commitment) {
 					Some(x) => Parent::AlreadySpent {
 						other_tx: x.destination_hash().unwrap(),
 					},
-					None => Parent::BlockTransaction { output },
+					None => Parent::BlockTransaction {
+						switch_commit_hash,
+					},
 				}
 			})
 	}
@@ -181,18 +183,16 @@ where
 			// into the pool.
 			match self.search_for_best_output(&input.commitment()) {
 				Parent::PoolTransaction { tx_ref: x } => pool_refs.push(base.with_source(Some(x))),
-				Parent::BlockTransaction { output } => {
-					// TODO - pull this out into a separate function
-					// TODO - or wrap it up in search_for_best_output?
-					if output.features.contains(transaction::COINBASE_OUTPUT) {
-						let height = head_header.height + 1;
-						input.verify_lock_height(&output, height)
-							.map_err(|_| PoolError::ImmatureCoinbase {
-								height: height,
-								lock_height: input.lock_height(),
-								output: output.commitment(),
-							})?;
-					};
+				Parent::BlockTransaction { switch_commit_hash } => {
+					// TODO - wrap lock_height verification up in search_for_best_output?
+					let height = head_header.height + 1;
+					input.verify_lock_height(&switch_commit_hash, height)
+						.map_err(|_| PoolError::ImmatureCoinbase {
+							height: height,
+							lock_height: input.lock_height(),
+							output: input.commitment(),
+						})?;
+
 					blockchain_refs.push(base);
 				}
 				Parent::Unknown => orphan_refs.push(base),
@@ -677,9 +677,9 @@ mod tests {
 		{
 			let read_pool = pool.read().unwrap();
 			assert_eq!(read_pool.total_size(), 2);
-			expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 12);
-			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 11, 5);
-			expect_output_parent!(read_pool, Parent::BlockTransaction{output: _}, 8);
+			expect_output_parent!(read_pool, Parent::PoolTransaction{_}, 12);
+			expect_output_parent!(read_pool, Parent::AlreadySpent{_}, 11, 5);
+			expect_output_parent!(read_pool, Parent::BlockTransaction{_}, 8);
 			expect_output_parent!(read_pool, Parent::Unknown, 20);
 		}
 	}

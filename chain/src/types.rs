@@ -78,7 +78,7 @@ pub enum Error {
 	StoreErr(grin_store::Error, String),
 	/// Error serializing or deserializing a type
 	SerErr(ser::Error),
-	/// Error while updating the sum trees
+	/// Error with the sumtrees
 	SumTreeErr(String),
 	/// No chain exists and genesis block is required
 	GenesisBlockRequired,

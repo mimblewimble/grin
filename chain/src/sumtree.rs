@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use util::secp::pedersen::{RangeProof, Commitment};
 
-use core::core::{Block, SumCommit, TxKernel};
+use core::core::{Block, SumCommit, SwitchCommitHash, TxKernel};
 use core::core::pmmr::{HashSum, NoSum, Summable, PMMR};
 use core::core::hash::Hashed;
 use grin_store;
@@ -89,10 +89,11 @@ impl SumTrees {
 		})
 	}
 
-	/// Whether a given commitment exists in the Output MMR and it's unspent
-	pub fn is_unspent(&mut self, commit: &Commitment) -> Result<bool, Error> {
-		let rpos = self.commit_index.get_output_pos(commit);
-		match rpos {
+	/// Check if the given commitment exists in the output_pmmr.
+	/// If it does and everything looks good then return the
+	/// switch_commit_hash for the unspent output, otherwise return an error.
+	pub fn get_unspent(&mut self, commit: &Commitment) -> Result<SwitchCommitHash, Error> {
+		match self.commit_index.get_output_pos(commit) {
 			Ok(pos) => {
 				let output_pmmr = PMMR::at(
 					&mut self.output_pmmr_h.backend,
@@ -103,13 +104,17 @@ impl SumTrees {
 						pos,
 						&SumCommit::from_commit(&commit),
 					);
-					Ok(hs.hash == hashsum.hash)
+					if hs.hash == hashsum.hash {
+						Ok(hs.sum.switch_commit_hash)
+					} else {
+						Err(Error::SumTreeErr(format!("sumtree hash mismatch")))
+					}
 				} else {
-					Ok(false)
+					Err(Error::OutputNotFound)
 				}
 			}
-			Err(grin_store::Error::NotFoundErr) => Ok(false),
-			Err(e) => Err(Error::StoreErr(e, "sumtree unspent check".to_owned())),
+			Err(grin_store::Error::NotFoundErr) => Err(Error::OutputNotFound),
+			Err(e) => Err(Error::StoreErr(e, format!("sumtree unspent check"))),
 		}
 	}
 
@@ -248,19 +253,28 @@ impl<'a> Extension<'a> {
 		// same block, enforcing block cut-through
 		for input in &b.inputs {
 			let commit = input.commitment();
-			let pos_res = self.get_output_pos(&commit);
-			if let Ok(pos) = pos_res {
-				match self.output_pmmr.prune(pos, b.header.height as u32) {
-					Ok(true) => {
-						self.rproof_pmmr
-							.prune(pos, b.header.height as u32)
-							.map_err(|s| Error::SumTreeErr(s))?;
+			match self.get_output_pos(&commit) {
+				Ok(pos) => {
+					// First verify the lock_height (coinbase maturity)
+					if let Some(HashSum{hash: _, sum: sum}) = self.output_pmmr.get(pos) {
+						input.verify_lock_height(&sum.switch_commit_hash, b.header.height)
+							.map_err(|_| Error::ImmatureCoinbase)?;
 					}
-					Ok(false) => return Err(Error::AlreadySpent(commit)),
-					Err(s) => return Err(Error::SumTreeErr(s)),
+
+					// Now attempt to prune the entry from the output_pmmr
+					match self.output_pmmr.prune(pos, b.header.height as u32) {
+						Ok(true) => {
+							self.rproof_pmmr
+								.prune(pos, b.header.height as u32)
+								.map_err(|s| Error::SumTreeErr(s))?;
+						}
+						Ok(false) => return Err(Error::AlreadySpent(commit)),
+						Err(s) => return Err(Error::SumTreeErr(s)),
+					}
 				}
-			} else {
-				return Err(Error::AlreadySpent(commit));
+				Err(_) => {
+					return Err(Error::AlreadySpent(commit));
+				}
 			}
 		}
 

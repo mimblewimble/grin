@@ -107,7 +107,7 @@ impl ChainStore for ChainKVStore {
 
 	fn save_block(&self, b: &Block) -> Result<(), Error> {
 		// saving the block and its header
-		let mut batch = self.db
+		let batch = self.db
 			.batch()
 			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?
 			.put_ser(
