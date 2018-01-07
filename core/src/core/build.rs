@@ -44,25 +44,38 @@ pub type Append = for<'a> Fn(&'a mut Context, (Transaction, BlindSum)) -> (Trans
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
-pub fn input(
+fn input_with_lock_height(
 	value: u64,
 	lock_height: u64,
-	key_id: Identifier
+	key_id: Identifier,
 ) -> Box<Append> {
-	debug!(
-		LOGGER,
-		"Building an input: {}, {}, {}",
-		value,
-		lock_height,
-		key_id,
-	);
-
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
 		let commit = build.keychain.commit(value, &key_id).unwrap();
 		let switch_commit = build.keychain.switch_commit(&key_id).unwrap();
-		let input = Input::new(commit, switch_commit, lock_height);
+		let input = Input::new(
+			commit,
+			switch_commit,
+			lock_height,
+		);
 		(tx.with_input(input), sum.sub_key_id(key_id.clone()))
 	})
+}
+
+pub fn input(
+	value: u64,
+	key_id: Identifier,
+) -> Box<Append> {
+	debug!(LOGGER, "Building an input: {}, {}", value, key_id);
+	input_with_lock_height(value, 0, key_id)
+}
+
+pub fn coinbase_input(
+	value: u64,
+	lock_height: u64,
+	key_id: Identifier,
+) -> Box<Append> {
+	debug!(LOGGER, "Building a coinbase input: {}, {}", value, key_id);
+	input_with_lock_height(value, lock_height, key_id)
 }
 
 /// Adds an output with the provided value and key identifier from the

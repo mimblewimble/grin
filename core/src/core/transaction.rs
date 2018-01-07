@@ -394,12 +394,18 @@ impl Transaction {
 	}
 }
 
-/// A transaction input, mostly a reference to an output being spent by the
-/// transaction.
+/// A transaction input.
+///
+/// Primarily a reference to an output being spent by the transaction.
+/// But also information required to verify coinbase maturity through
+/// the lock_height hashed in the switch_commit_hash.
 #[derive(Debug, Clone, Copy)]
 pub struct Input{
 	commit: Commitment,
+	// We need to provide the switch_commit (switch_commit_hash preimage)
+	// to verify coinbase maturity.
 	switch_commit: Commitment,
+	// We need to provide lock_height to verify coinbase maturity.
 	lock_height: u64,
 }
 
@@ -432,10 +438,14 @@ impl Readable for Input {
 /// commitment is a reproduction of the commitment of the output it's spending.
 impl Input {
 	/// Build a new Input from a commit, switch_commit and lock_height
-	pub fn new(commit: Commitment, switch_commit: Commitment, lock_height: u64) -> Input {
+	pub fn new(
+		commit: Commitment,
+		switch_commit: Commitment,
+		lock_height: u64,
+	) -> Input {
 		debug!(
 			LOGGER,
-			"building a new input: {:?}, {:?}, {}",
+			"building a new input: {:?}, {:?}, {:?}",
 			commit,
 			switch_commit,
 			lock_height,
@@ -467,15 +477,15 @@ impl Input {
 	///
 	pub fn verify_lock_height(
 		&self,
-		output: &Output,
+		output_switch_commit_hash: &SwitchCommitHash,
 		height: u64,
 	) -> Result<(), Error> {
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			self.switch_commit,
-			SwitchCommitHashKey::from_features_and_lock_height(output.features, self.lock_height),
+			SwitchCommitHashKey::from_lock_height(self.lock_height),
 		);
 
-		if switch_commit_hash != output.switch_commit_hash {
+		if switch_commit_hash != *output_switch_commit_hash {
 			return Err(Error::SwitchCommitment);
 		} else {
 			if height <= self.lock_height {
@@ -505,24 +515,17 @@ pub struct SwitchCommitHashKey ([u8; SWITCH_COMMIT_KEY_SIZE]);
 impl SwitchCommitHashKey {
 	/// For a coinbase output use (output_features || lock_height) as the key.
 	/// For regular tx outputs use the zero value as the key.
-	pub fn from_features_and_lock_height(
-		features: OutputFeatures,
+	pub fn from_lock_height(
 		lock_height: u64,
 	) -> SwitchCommitHashKey {
 		let mut bytes = [0; SWITCH_COMMIT_KEY_SIZE];
-		if features.contains(COINBASE_OUTPUT) {
-			bytes[0] = features.bits();
-			// seems wasteful to take up a full 8 bytes (of 20 bytes) to store the lock_height
-			// 4 bytes will give us approx 4,000 years with 1 min blocks (unless my math is way off)
-			BigEndian::write_u32(&mut bytes[1..5], lock_height as u32);
-		}
+		BigEndian::write_u64(&mut bytes[..], lock_height);
 		SwitchCommitHashKey(bytes)
 	}
 
 	/// We use a zero value key for regular transactions.
 	pub fn zero() -> SwitchCommitHashKey {
-		let bytes = [0; SWITCH_COMMIT_KEY_SIZE];
-		SwitchCommitHashKey(bytes)
+		SwitchCommitHashKey::from_lock_height(0)
 	}
 }
 

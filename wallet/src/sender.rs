@@ -213,7 +213,11 @@ fn inputs_and_change(
 	// build inputs using the appropriate derived key_ids
 	for coin in coins {
 		let key_id = keychain.derive_key_id(coin.n_child)?;
-		parts.push(build::input(coin.value, coin.lock_height, key_id));
+		if coin.is_coinbase {
+			parts.push(build::coinbase_input(coin.value, coin.lock_height, key_id));
+		} else {
+			parts.push(build::input(coin.value, key_id));
+		}
 	}
 
 	// track the output representing our change

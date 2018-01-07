@@ -336,6 +336,14 @@ impl Chain {
 	/// way that's consistent with the current chain state and more
 	/// specifically the current winning fork.
 	pub fn get_unspent(&self, output_ref: &Commitment) -> Result<Output, Error> {
+		// TODO - get output_pos from index
+		// TODO - lookup output in output_pmmr
+		// TODO - do something with it...
+
+		// TODO - what do we return here if we have no outputs in the index???
+
+		panic!("not yet implemented...");
+
 		match self.store.get_output_by_commit(output_ref) {
 			Ok(out) => {
 				let mut sumtrees = self.sumtrees.write().unwrap();

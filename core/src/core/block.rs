@@ -583,7 +583,7 @@ impl Block {
 
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			switch_commit,
-			SwitchCommitHashKey::from_features_and_lock_height(COINBASE_OUTPUT, lock_height),
+			SwitchCommitHashKey::from_lock_height(lock_height),
 		);
 
 		trace!(

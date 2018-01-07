@@ -244,7 +244,7 @@ pub trait ChainStore: Send + Sync {
 	fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), store::Error>;
 
 	/// Gets an output by its commitment
-	fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, store::Error>;
+	// fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, store::Error>;
 
 	/// Saves the position of an output, represented by its commitment, in the
 	/// UTXO MMR. Used as an index for spending and pruning.
