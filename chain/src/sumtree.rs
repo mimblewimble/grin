@@ -97,7 +97,7 @@ impl SumTrees {
 			Ok(pos) => {
 				let output_pmmr = PMMR::at(
 					&mut self.output_pmmr_h.backend,
-					self.output_pmmr_h.last_pos
+					self.output_pmmr_h.last_pos,
 				);
 				if let Some(hs) = output_pmmr.get(pos) {
 					let hashsum = HashSum::from_summable(

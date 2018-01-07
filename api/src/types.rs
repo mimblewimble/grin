@@ -125,37 +125,21 @@ pub enum OutputType {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Output {
-	/// The type of output Coinbase|Transaction
-	pub output_type: OutputType,
+pub struct Utxo {
 	/// The homomorphic commitment representing the output amount
 	pub commit: pedersen::Commitment,
 	/// switch commit hash
 	pub switch_commit_hash: core::SwitchCommitHash,
-	/// A proof that the commitment is in the right range
-	pub proof: Option<pedersen::RangeProof>,
 }
 
-impl Output {
-	pub fn from_output(
-		output: &core::Output,
-		include_proof: bool,
-	) -> Output {
-		let output_type =
-			if output.features.contains(core::transaction::COINBASE_OUTPUT) {
-				OutputType::Coinbase
-			} else {
-				OutputType::Transaction
-			};
-
-		Output {
-			output_type: output_type,
-			commit: output.commit,
-			switch_commit_hash: output.switch_commit_hash,
-			proof: match include_proof {
-				true => Some(output.proof),
-				false => None,
-			},
+impl Utxo {
+	pub fn new (
+		commit: &pedersen::Commitment,
+		switch_commit_hash: &core::SwitchCommitHash,
+	) -> Utxo {
+		Utxo {
+			commit: commit.clone(),
+			switch_commit_hash: switch_commit_hash.clone(),
 		}
 	}
 }

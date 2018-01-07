@@ -60,22 +60,21 @@ struct UtxoHandler {
 }
 
 impl UtxoHandler {
-	fn get_utxo(&self, id: &str, include_rp: bool) -> Result<Output, Error> {
+	fn get_utxo(&self, id: &str) -> Result<Utxo, Error> {
 		debug!(LOGGER, "getting utxo: {}", id);
 		let c = util::from_hex(String::from(id))
 			.map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
 		let commit = Commitment::from_vec(c);
 
-		let out = self.chain
+		let switch_commit_hash = self.chain
 			.get_unspent(&commit)
 			.map_err(|_| Error::NotFound)?;
 
-		Ok(Output::from_output(&out, include_rp))
+		Ok(Utxo::new(&commit, &switch_commit_hash))
 	}
 
-	fn utxos_by_ids(&self, req: &mut Request) -> Vec<Output> {
+	fn utxos_by_ids(&self, req: &mut Request) -> Vec<Utxo> {
 		let mut commitments: Vec<&str> = vec![];
-		let mut include_rp = false;
 		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
 			if let Some(ids) = params.get("id") {
 				for id in ids {
@@ -84,20 +83,17 @@ impl UtxoHandler {
 					}
 				}
 			}
-			if let Some(_) = params.get("include_rp") {
-				include_rp = true;
-			}
 		}
-		let mut utxos: Vec<Output> = vec![];
-		for commit in commitments {
-			if let Ok(out) = self.get_utxo(commit, include_rp) {
-				utxos.push(out);
+		let mut utxos: Vec<Utxo> = vec![];
+		for x in commitments {
+			if let Ok(utxo) = self.get_utxo(x) {
+				utxos.push(utxo);
 			}
 		}
 		utxos
 	}
 
-	fn utxos_at_height(&self, block_height: u64) -> BlockOutputs {
+	fn outputs_at_height(&self, block_height: u64) -> BlockOutputs {
 		let header = self.chain
 			.clone()
 			.get_header_by_height(block_height)
@@ -117,8 +113,8 @@ impl UtxoHandler {
 		}
 	}
 
-	// returns utxos for a specified range of blocks
-	fn utxo_block_batch(&self, req: &mut Request) -> Vec<BlockOutputs> {
+	// returns outputs for a specified range of blocks
+	fn outputs_block_batch(&self, req: &mut Request) -> Vec<BlockOutputs> {
 		let mut commitments: Vec<&str> = vec![];
 		let mut start_height = 1;
 		let mut end_height = 1;
@@ -143,7 +139,7 @@ impl UtxoHandler {
 		}
 		let mut return_vec = vec![];
 		for i in start_height..end_height + 1 {
-			let res = self.utxos_at_height(i);
+			let res = self.outputs_at_height(i);
 			if commitments.is_empty() {
 				return_vec.push(res);
 			} else {
@@ -168,7 +164,7 @@ impl Handler for UtxoHandler {
 		}
 		match *path_elems.last().unwrap() {
 			"byids" => json_response(&self.utxos_by_ids(req)),
-			"byheight" => json_response(&self.utxo_block_batch(req)),
+			"byheight" => json_response(&self.outputs_block_batch(req)),
 			_ => Ok(Response::with((status::BadRequest, ""))),
 		}
 	}
