@@ -33,7 +33,6 @@ const HEAD_PREFIX: u8 = 'H' as u8;
 const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
 const SYNC_HEAD_PREFIX: u8 = 's' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
-// const OUTPUT_COMMIT_PREFIX: u8 = 'o' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
 const KERNEL_POS_PREFIX: u8 = 'k' as u8;
 
@@ -105,25 +104,18 @@ impl ChainStore for ChainKVStore {
 		)
 	}
 
+	/// Save the block and its header
 	fn save_block(&self, b: &Block) -> Result<(), Error> {
-		// saving the block and its header
 		let batch = self.db
 			.batch()
-			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?
+			.put_ser(
+				&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..],
+				b,
+			)?
 			.put_ser(
 				&to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..],
 				&b.header,
 			)?;
-
-		// // saving the full output under its commitment
-		// for out in &b.outputs {
-		// 	batch = batch
-		// 		.put_ser(
-		// 			&to_key(OUTPUT_COMMIT_PREFIX, &mut out.commitment().as_ref().to_vec())[..],
-		// 			out,
-		// 		)?;
-		// }
-
 		batch.write()
 	}
 
@@ -150,18 +142,6 @@ impl ChainStore for ChainKVStore {
 	fn delete_header_by_height(&self, height: u64) -> Result<(), Error> {
 		self.db.delete(&u64_to_key(HEADER_HEIGHT_PREFIX, height))
 	}
-
-	// fn get_output_by_commit(&self, commit: &Commitment) -> Result<Output, Error> {
-	// 	// TODO - how to handle multiple "versions" of an output (multiple forks)
-	// 	// * retrieve list of outputs from the db
-	// 	// * then identify which one is actually valid based on what?
-	// 	// * suspect we need to encode height in the output (based on the block itself?)
-	// 	// * then check the "block at height" for consistency?
-	// 	option_to_not_found(
-	// 		self.db
-	// 			.get_ser(&to_key(OUTPUT_COMMIT_PREFIX, &mut commit.as_ref().to_vec())),
-	// 	)
-	// }
 
 	fn save_output_pos(&self, commit: &Commitment, pos: u64) -> Result<(), Error> {
 		self.db.put_ser(
