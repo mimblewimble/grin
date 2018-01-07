@@ -15,10 +15,11 @@
 use checker;
 use keychain::Keychain;
 use core::core::amount_to_hr_string;
-use types::{WalletConfig, WalletData, OutputStatus};
+use types::{WalletConfig, WalletData, OutputStatus, StatsData, format_transfer_timestamp};
 use prettytable;
 use term;
 use std::io::prelude::*;
+use std::cmp::Reverse;
 
 pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 	let result = checker::refresh_outputs(&config, &keychain);
@@ -83,5 +84,55 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 		 The above is from local cache and possibly invalid! \
 		 (is your `grin server` offline or broken?)"
 		);
+	} else {
+		show_stats(config);
 	}
+}
+
+/// Display the history of transfers of sending and receiving.
+/// Each row shows transfer type (Sent, Received), amount, Sent or Received at and receiving wallet address.
+fn show_stats(config: &WalletConfig) {
+	let _ = StatsData::read_stats(&config.data_file_dir, |stats_data| {
+		let total_transfers = stats_data.transfers.len();
+		let title=format!("Grin Coin Transfer List - Total Transfers: {}", total_transfers);
+
+		println!();
+		let mut t = term::stdout().unwrap();
+		t.fg(term::color::MAGENTA).unwrap();
+		writeln!(t, "{}", title).unwrap();
+		t.reset().unwrap();
+		println!("Please note that 'sent or received at' indicates the date & time\n your wallet sent or received grin coins at.");
+
+		let mut stats = stats_data
+			.transfers
+			.values()
+			.collect::<Vec<_>>();
+		stats.sort_by_key(|stat| Reverse(stat.sent_or_received_at));
+
+		let mut table = table!();
+		// Set table titles.
+		table.add_row(row![
+			bFB->"Transfer",
+			bFB->"Amount",
+			bFB->"Sent or Received at",
+			bFB->"Receiving Wallet Address"
+		]);
+   
+		// Add a row per time
+		for txr in stats {
+			let tx_type = format!("{:?}", txr.tx_type);
+			let amount = format!("{}", amount_to_hr_string(txr.amount));
+			let sent_or_received_at = format_transfer_timestamp(txr.sent_or_received_at);
+			table.add_row(row![
+				bFG->tx_type,
+				bFM->amount,
+				bFd->sent_or_received_at,
+				bFd->txr.receiving_wallet_address
+			]);
+		};
+
+		table.printstd();
+		println!();
+	});
+
 }

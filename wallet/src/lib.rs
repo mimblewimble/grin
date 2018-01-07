@@ -23,6 +23,7 @@ extern crate serde_derive;
 extern crate serde_json;
 #[macro_use]
 extern crate slog;
+extern crate time;
 #[macro_use]
 extern crate prettytable;
 extern crate term;

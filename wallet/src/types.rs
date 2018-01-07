@@ -30,18 +30,20 @@ use tokio_core::reactor;
 use tokio_retry::Retry;
 use tokio_retry::strategy::FibonacciBackoff;
 
-
 use api;
 use core::consensus;
 use core::core::{transaction, Transaction};
 use core::ser;
 use keychain;
+use time;
+use time::Timespec;
 use util;
 use util::LOGGER;
 
 const DAT_FILE: &'static str = "wallet.dat";
 const LOCK_FILE: &'static str = "wallet.lock";
 const SEED_FILE: &'static str = "wallet.seed";
+const STATS_FILE: &'static str = "wallet.stats";
 
 const DEFAULT_BASE_FEE: u64 = consensus::MILLI_GRIN;
 
@@ -274,6 +276,40 @@ impl OutputData {
 			return false;
 		}
 	}
+}
+
+/// Types of a transfer that's being tracked by the wallet.
+/// Can either be Sent, or Received.
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
+pub enum StatsTransferType {
+	Sent,
+	Received,
+}
+
+impl fmt::Display for StatsTransferType {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			StatsTransferType::Sent => write!(f, "Sent"),
+			StatsTransferType::Received => write!(f, "Received"),
+		}
+	}
+}
+
+/// Minimum information about coin transfer that's being tracked by the wallet.
+#[derive(Serialize, Deserialize, Hash, Eq, PartialEq, Debug, Clone)]
+pub struct StatsTransferData {
+	/// Amount sent or received
+	pub amount: u64,
+	/// Recipient's wallet address
+	pub receiving_wallet_address: String,
+	/// Transfer type of current transaction
+	pub tx_type: StatsTransferType,
+	/// Set of inputs spent by the transaction.
+	pub inputs: Vec<String>,
+	/// Set of outputs the transaction produces.
+	pub outputs: Vec<String>,
+	/// Time in seconds after epoch at which fund transfer is sent or received.
+	pub sent_or_received_at: i64,
 }
 
 #[derive(Clone, PartialEq)]
@@ -601,6 +637,91 @@ impl WalletData {
 	}
 }
 
+/// Wallet stats information tracking all transfers.
+/// This data structure is directly based on the JSON representation stored
+/// on disk.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct StatsData {
+	pub transfers: HashMap<String, StatsTransferData>,
+}
+
+impl StatsData {
+	/// Allows for reading stats data (without needing to acquire the write
+	/// lock).
+	pub fn read_stats<T, F>(stats_file_dir: &str, f: F) -> Result<T, Error>
+	where
+		F: FnOnce(&StatsData) -> T,
+	{
+		// open the wallet readonly and do what needs to be done with it
+		let stats_file_path = &format!("{}{}{}", stats_file_dir, MAIN_SEPARATOR, STATS_FILE);
+		let sdat = StatsData::read_or_create(stats_file_path)?;
+		let res = f(&sdat);
+		Ok(res)
+	}
+
+	/// Read the stats data or created a brand new one if it doesn't exist yet
+	fn read_or_create(stats_file_path: &str) -> Result<StatsData, Error> {
+		if Path::new(stats_file_path).exists() {
+			StatsData::read(stats_file_path)
+		} else {
+			// just create a new instance, it will get written afterward
+			Ok(StatsData {
+				transfers: HashMap::new(),
+			})
+		}
+	}
+
+	/// Read the stats data from disk.
+	fn read(stats_file_path: &str) -> Result<StatsData, Error> {
+		let stats_file = File::open(stats_file_path).map_err(|e| {
+			Error::WalletData(format!("Could not open {}: {}", stats_file_path, e))
+		})?;
+		serde_json::from_reader(stats_file).map_err(|e| {
+			Error::WalletData(format!("Error reading {}: {}", stats_file_path, e))
+		})
+	}
+
+	/// Append a new transfer record to the stats data.
+	pub fn add_transfer(&mut self, tx: StatsTransferData) {
+		let k = tx.sent_or_received_at.to_string();
+		self.transfers.insert(k, tx.clone());
+	}
+
+	pub fn append<F>(data_file_dir: &str, f: F) -> Result<(), Error>
+	where
+		F: FnOnce(&mut StatsData),
+	{
+		// create directory if it doesn't exist
+		fs::create_dir_all(data_file_dir).unwrap_or_else(|why| {
+			info!(LOGGER, "! {:?}", why.kind());
+		});
+
+		let stats_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, STATS_FILE);
+		// Need read the existing json data from wallet.stats to append new transfer record.
+		let mut stats = StatsData::read_or_create(stats_file_path)?;
+		f(&mut stats);
+		stats.write(stats_file_path)
+	}
+
+	/// Write the wallet data to disk.
+	fn write(&self, stats_file_path: &str) -> Result<(), Error> {
+		let mut stats_file = OpenOptions::new()
+			.write(true)
+			.create(true)
+			.open(stats_file_path)
+			.map_err(|e| {
+				Error::WalletData(format!("Could not create {}: {}", stats_file_path, e))
+			})?;
+		let res_json = serde_json::to_vec_pretty(self).map_err(|e| {
+			Error::WalletData(format!("Error serializing stats data: {}", e))
+		})?;
+		stats_file.write_all(res_json.as_slice()).map_err(|e| {
+			Error::WalletData(format!("Error writing {}: {}", stats_file_path, e))
+		})
+	}
+
+}
+
 /// Helper in serializing the information a receiver requires to build a
 /// transaction.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -614,12 +735,12 @@ pub struct PartialTx {
 pub fn build_partial_tx(
 	receive_amount: u64,
 	blind_sum: keychain::BlindingFactor,
-	tx: Transaction,
+	tx: &Transaction,
 ) -> PartialTx {
 	PartialTx {
 		amount: receive_amount,
 		blind_sum: util::to_hex(blind_sum.secret_key().as_ref().to_vec()),
-		tx: util::to_hex(ser::ser_vec(&tx).unwrap()),
+		tx: util::to_hex(ser::ser_vec(tx).unwrap()),
 	}
 }
 
@@ -666,4 +787,30 @@ pub struct CbData {
 	pub output: String,
 	pub kernel: String,
 	pub key_id: String,
+}
+
+/// Get the date and time in seconds after the beginning of epoch.
+pub fn get_transfer_timestamp() -> i64 {
+	let current_utc = time::now_utc();
+	current_utc.to_timespec().sec
+}
+
+/// Format transferred_at in seconds after the beginning of epock into rfc 822 format.
+/// Example: "Thu, 22 Mar 2012 14:53:18 GMT"
+pub fn format_transfer_timestamp(timestamp_sec: i64) -> String {
+	let transfer_tm = time::at(Timespec::new(timestamp_sec, 0));
+	transfer_tm.rfc822().to_string()
+}
+
+/// Retrieve commitments of inputs and outputs of transaction.
+pub fn get_transfer_inouts(tx: &Transaction) -> (Vec<String>, Vec<String>) {
+	let ins = tx.inputs
+		.iter()
+		.map(|input| util::to_hex((input.0).0.to_vec()))
+		.collect();
+	let outs = tx.outputs
+		.iter()
+		.map(|output| util::to_hex(output.commit.0.to_vec()))
+		.collect();
+	(ins, outs)
 }
