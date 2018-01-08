@@ -553,7 +553,7 @@ pub fn start_rest_apis<T>(
 				peer: get "/peers/*" => peer_get_handler
 			);
 
-			let mut apis = ApiServer::new("/v1".to_string());
+			let mut apis = ApiServer::new("/v1".to_string(), false);
 			apis.register_handler(router);
 
 			info!(LOGGER, "Starting HTTP API server at {}.", addr);
