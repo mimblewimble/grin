@@ -24,7 +24,7 @@ use util::secp::pedersen::{Commitment, RangeProof};
 use core::core::{SumCommit, SwitchCommitHash};
 use core::core::pmmr::{HashSum, NoSum};
 
-use core::core::{Block, BlockHeader, Output, TxKernel};
+use core::core::{Block, BlockHeader, TxKernel};
 use core::core::target::Difficulty;
 use core::core::hash::Hash;
 use grin_store::Error::NotFoundErr;
@@ -343,11 +343,15 @@ impl Chain {
 
 	/// Sets the sumtree roots on a brand new block by applying the block on the
 	/// current sumtree state.
-	pub fn set_sumtree_roots(&self, b: &mut Block) -> Result<(), Error> {
+	pub fn set_sumtree_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
+		let store = self.store.clone();
 
 		let roots = sumtree::extending(&mut sumtrees, |extension| {
 			// apply the block on the sumtrees and check the resulting root
+			if is_fork {
+				pipe::rewind_and_apply_fork(b, store, extension)?;
+			}
 			extension.apply_block(b)?;
 			extension.force_rollback();
 			Ok(extension.roots())
@@ -359,7 +363,7 @@ impl Chain {
 		Ok(())
 	}
 
-	/// returs sumtree roots
+	/// Returns current sumtree roots
 	pub fn get_sumtree_roots(
 		&self,
 	) -> (
@@ -372,19 +376,9 @@ impl Chain {
 	}
 
 	/// returns the last n nodes inserted into the utxo sum tree
-	/// returns sum tree hash plus output itself (as the sum is contained
-	/// in the output anyhow)
-	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<(Hash, Output)> {
-		panic!("we do not store outputs in the index any more... how to implement this???");
-
-		// let mut sumtrees = self.sumtrees.write().unwrap();
-		// let mut return_vec = Vec::new();
-		// let sum_nodes = sumtrees.last_n_utxo(distance);
-		// for sum_commit in sum_nodes {
-		// 	let output = self.store.get_output_by_commit(&sum_commit.sum.commit);
-		// 	return_vec.push((sum_commit.hash, output.unwrap()));
-		// }
-		// return_vec
+	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<HashSum<SumCommit>> {
+		let mut sumtrees = self.sumtrees.write().unwrap();
+		sumtrees.last_n_utxo(distance)
 	}
 
 	/// as above, for rangeproofs

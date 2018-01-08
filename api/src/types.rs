@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use core::{core, ser};
 use core::core::hash::Hashed;
+use core::core::SumCommit;
 use chain;
 use util;
 use util::secp::pedersen;
@@ -76,19 +77,18 @@ impl SumTrees {
 pub struct SumTreeNode {
 	// The hash
 	pub hash: String,
-	// Output (if included)
-	pub output: Option<OutputPrintable>,
+	// SumCommit (commitment + switch_commit_hash), optional (only for utxos)
+	pub sum: Option<SumCommit>,
 }
 
 impl SumTreeNode {
 	pub fn get_last_n_utxo(chain: Arc<chain::Chain>, distance: u64) -> Vec<SumTreeNode> {
 		let mut return_vec = Vec::new();
 		let last_n = chain.get_last_n_utxo(distance);
-		for elem_output in last_n {
-			let output = OutputPrintable::from_output(&elem_output.1, chain.clone(), false);
+		for x in last_n {
 			return_vec.push(SumTreeNode {
-				hash: util::to_hex(elem_output.0.to_vec()),
-				output: Some(output),
+				hash: util::to_hex(x.hash.to_vec()),
+				sum: Some(x.sum),
 			});
 		}
 		return_vec
@@ -100,7 +100,7 @@ impl SumTreeNode {
 		for elem in last_n {
 			return_vec.push(SumTreeNode {
 				hash: util::to_hex(elem.hash.to_vec()),
-				output: None,
+				sum: None,
 			});
 		}
 		return_vec
@@ -112,7 +112,7 @@ impl SumTreeNode {
 		for elem in last_n {
 			return_vec.push(SumTreeNode {
 				hash: util::to_hex(elem.hash.to_vec()),
-				output: None,
+				sum: None,
 			});
 		}
 		return_vec

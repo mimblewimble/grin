@@ -703,7 +703,7 @@ impl Output {
 }
 
 /// Wrapper to Output commitments to provide the Summable trait.
-#[derive(Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SumCommit {
 	/// Output commitment
 	pub commit: Commitment,
