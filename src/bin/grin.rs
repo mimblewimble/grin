@@ -435,7 +435,15 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			file.read_to_string(&mut contents).expect(
 				"Unable to read transaction file.",
 			);
-			wallet::receive_json_tx_str(&wallet_config, &keychain, contents.as_str()).unwrap();
+			if let Err(e) =
+				wallet::receive_json_tx_str(
+					&wallet_config, &keychain, contents.as_str()) {
+
+				println!("Error receiving transaction, the most likely reasons are:");
+				println!(" * the transaction has already been sent");
+				println!(" * your node isn't running or can't be reached");
+				println!("\nDetailed error: {:?}", e);
+			}
 		}
 		("send", Some(send_args)) => {
 			let amount = send_args.value_of("amount").expect(

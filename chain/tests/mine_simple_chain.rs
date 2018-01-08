@@ -17,6 +17,7 @@ extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_pow as pow;
+extern crate grin_util as util;
 extern crate rand;
 extern crate time;
 
@@ -25,7 +26,7 @@ use std::sync::Arc;
 
 use chain::Chain;
 use chain::types::*;
-use core::core::{Block, BlockHeader};
+use core::core::{Block, BlockHeader, Transaction, build};
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::consensus;
@@ -79,7 +80,7 @@ fn mine_empty_chain() {
 
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 		b.header.difficulty = difficulty.clone();
-		chain.set_sumtree_roots(&mut b).unwrap();
+		chain.set_sumtree_roots(&mut b, false).unwrap();
 
 		pow::pow_size(
 			&mut cuckoo_miner,
@@ -123,10 +124,11 @@ fn mine_empty_chain() {
 #[test]
 fn mine_forks() {
 	let chain = setup(".grin2");
+	let kc = Keychain::from_random_seed().unwrap();
 
 	// add a first block to not fork genesis
 	let prev = chain.head_header().unwrap();
-	let b = prepare_block(&prev, &chain, 2);
+	let b = prepare_block(&kc, &prev, &chain, 2);
 	chain.process_block(b, chain::SKIP_POW).unwrap();
 
 	// mine and add a few blocks
@@ -134,10 +136,10 @@ fn mine_forks() {
 	for n in 1..4 {
 		// first block for one branch
 		let prev = chain.head_header().unwrap();
-		let b1 = prepare_block(&prev, &chain, 3 * n);
+		let b1 = prepare_block(&kc, &prev, &chain, 3 * n);
 
 		// 2nd block with higher difficulty for other branch
-		let b2 = prepare_block(&prev, &chain, 3 * n + 1);
+		let b2 = prepare_block(&kc, &prev, &chain, 3 * n + 1);
 
 		// process the first block to extend the chain
 		let bhash = b1.hash();
@@ -163,24 +165,25 @@ fn mine_forks() {
 
 #[test]
 fn mine_losing_fork() {
+	let kc = Keychain::from_random_seed().unwrap();
 	let chain = setup(".grin3");
 
 	// add a first block we'll be forking from
 	let prev = chain.head_header().unwrap();
-	let b1 = prepare_block(&prev, &chain, 2);
+	let b1 = prepare_block(&kc, &prev, &chain, 2);
 	let b1head = b1.header.clone();
 	chain.process_block(b1, chain::SKIP_POW).unwrap();
 
 	// prepare the 2 successor, sibling blocks, one with lower diff
-	let b2 = prepare_block(&b1head, &chain, 4);
+	let b2 = prepare_block(&kc, &b1head, &chain, 4);
 	let b2head = b2.header.clone();
-	let bfork = prepare_block(&b1head, &chain, 3);
+	let bfork = prepare_block(&kc, &b1head, &chain, 3);
 
 	// add higher difficulty first, prepare its successor, then fork
  // with lower diff
 	chain.process_block(b2, chain::SKIP_POW).unwrap();
 	assert_eq!(chain.head_header().unwrap().hash(), b2head.hash());
-	let b3 = prepare_block(&b2head, &chain, 5);
+	let b3 = prepare_block(&kc, &b2head, &chain, 5);
 	chain.process_block(bfork, chain::SKIP_POW).unwrap();
 
 	// adding the successor
@@ -191,17 +194,18 @@ fn mine_losing_fork() {
 
 #[test]
 fn longer_fork() {
+	let kc = Keychain::from_random_seed().unwrap();
 	// to make it easier to compute the sumtree roots in the test, we
- // prepare 2 chains, the 2nd will be have the forked blocks we can
- // then send back on the 1st
+	// prepare 2 chains, the 2nd will be have the forked blocks we can
+	// then send back on the 1st
 	let chain = setup(".grin4");
 	let chain_fork = setup(".grin5");
 
 	// add blocks to both chains, 20 on the main one, only the first 5
- // for the forked chain
+	// for the forked chain
 	let mut prev = chain.head_header().unwrap();
 	for n in 0..10 {
-		let b = prepare_block(&prev, &chain, n + 2);
+		let b = prepare_block(&kc, &prev, &chain, 2*n + 2);
 		let bh = b.header.clone();
 
 		if n < 5 {
@@ -222,7 +226,7 @@ fn longer_fork() {
 
 	let mut prev_fork = head_fork.clone();
 	for n in 0..7 {
-		let b_fork = prepare_block(&prev_fork, &chain_fork, n + 7);
+		let b_fork = prepare_block(&kc, &prev_fork, &chain_fork, 2*n + 11);
 		let bh_fork = b_fork.header.clone();
 
 		let b = b_fork.clone();
@@ -233,17 +237,105 @@ fn longer_fork() {
 	}
 }
 
-fn prepare_block(prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
-	let mut b = prepare_block_nosum(prev, diff);
-	chain.set_sumtree_roots(&mut b).unwrap();
+#[test]
+fn spend_in_fork() {
+	util::init_test_logger();
+	let chain = setup(".grin6");
+	let prev = chain.head_header().unwrap();
+	let kc = Keychain::from_random_seed().unwrap();
+
+	// mine 4 blocks, the 4th will be the root of the fork
+	let mut fork_head = prev;
+	for n in 2..6 {
+		let b = prepare_block(&kc, &fork_head, &chain, n);
+		fork_head = b.header.clone();
+		chain.process_block(b, chain::SKIP_POW).unwrap();
+	}
+
+	let (tx1, _) = build::transaction(
+		vec![
+			build::input(consensus::REWARD, kc.derive_key_id(2).unwrap()),
+			build::output(consensus::REWARD - 20000, kc.derive_key_id(30).unwrap()),
+			build::with_fee(20000),
+		],
+		&kc,
+	).unwrap();
+
+	let next = prepare_block_tx(&kc, &fork_head, &chain, 7, vec![&tx1]);
+	let prev_main = next.header.clone();
+	chain.process_block(next, chain::SKIP_POW).unwrap();
+
+	let (tx2, _) = build::transaction(
+		vec![
+			build::input(consensus::REWARD - 20000, kc.derive_key_id(30).unwrap()),
+			build::output(consensus::REWARD - 40000, kc.derive_key_id(31).unwrap()),
+			build::with_fee(20000),
+		],
+		&kc,
+	).unwrap();
+
+	let next = prepare_block_tx(&kc, &prev_main, &chain, 9, vec![&tx2]);
+	let prev_main = next.header.clone();
+	chain.process_block(next, chain::SKIP_POW).unwrap();
+
+	// mine 2 forked blocks from the first
+	let fork = prepare_fork_block_tx(&kc, &fork_head, &chain, 6, vec![&tx1]);
+	let prev_fork = fork.header.clone();
+	chain.process_block(fork, chain::SKIP_POW).unwrap();
+
+	let fork_next = prepare_fork_block_tx(&kc, &prev_fork, &chain, 8, vec![&tx2]);
+	let prev_fork = fork_next.header.clone();
+	chain.process_block(fork_next, chain::SKIP_POW).unwrap();
+
+	// check state
+	let head = chain.head_header().unwrap();
+	assert_eq!(head.height, 6);
+	assert_eq!(head.hash(), prev_main.hash());
+	assert!(chain.is_unspent(&tx2.outputs[0].commitment()).unwrap());
+	let res = chain.is_unspent(&tx1.outputs[0].commitment());
+	assert!(!res.unwrap());
+
+	// make the fork win
+	let fork_next = prepare_fork_block(&kc, &prev_fork, &chain, 10);
+	let prev_fork = fork_next.header.clone();
+	chain.process_block(fork_next, chain::SKIP_POW).unwrap();
+
+	// check state
+	let head = chain.head_header().unwrap();
+	assert_eq!(head.height, 7);
+	assert_eq!(head.hash(), prev_fork.hash());
+	assert!(chain.is_unspent(&tx2.outputs[0].commitment()).unwrap());
+	assert!(!chain.is_unspent(&tx1.outputs[0].commitment()).unwrap());
+}
+
+fn prepare_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
+	let mut b = prepare_block_nosum(kc, prev, diff, vec![]);
+	chain.set_sumtree_roots(&mut b, false).unwrap();
 	b
 }
 
-fn prepare_block_nosum(prev: &BlockHeader, diff: u64) -> Block {
-	let keychain = Keychain::from_random_seed().unwrap();
-	let key_id = keychain.derive_key_id(1).unwrap();
+fn prepare_block_tx(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64, txs: Vec<&Transaction>) -> Block {
+	let mut b = prepare_block_nosum(kc, prev, diff, txs);
+	chain.set_sumtree_roots(&mut b, false).unwrap();
+	b
+}
 
-	let mut b = core::core::Block::new(prev, vec![], &keychain, &key_id).unwrap();
+fn prepare_fork_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
+	let mut b = prepare_block_nosum(kc, prev, diff, vec![]);
+	chain.set_sumtree_roots(&mut b, true).unwrap();
+	b
+}
+
+fn prepare_fork_block_tx(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64, txs: Vec<&Transaction>) -> Block {
+	let mut b = prepare_block_nosum(kc, prev, diff, txs);
+	chain.set_sumtree_roots(&mut b, true).unwrap();
+	b
+}
+
+fn prepare_block_nosum(kc: &Keychain, prev: &BlockHeader, diff: u64, txs: Vec<&Transaction>) -> Block {
+	let key_id = kc.derive_key_id(diff as u32).unwrap();
+
+	let mut b = core::core::Block::new(prev, txs, kc, &key_id).unwrap();
 	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 	b.header.total_difficulty = Difficulty::from_num(diff);
 	b

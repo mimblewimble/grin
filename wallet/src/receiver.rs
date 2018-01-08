@@ -312,7 +312,8 @@ fn receive_transaction(
 	amount: u64,
 	blinding: BlindingFactor,
 	partial: Transaction,
-) -> Result<Transaction, Error> {
+) -> Result<(Transaction, Identifier), Error> {
+
 	let root_key_id = keychain.root_key_id();
 
 	// double check the fee amount included in the partial tx
@@ -368,5 +369,5 @@ fn receive_transaction(
 		derivation,
 	);
 
-	Ok(tx_final)
+	Ok((tx_final, key_id))
 }

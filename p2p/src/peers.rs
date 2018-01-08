@@ -194,6 +194,22 @@ impl Peers {
 		}
 	}
 
+	/// Unbans a peer, checks if it exists and banned then unban
+	pub fn unban_peer(&self, peer_addr: &SocketAddr) {
+		match self.get_peer(peer_addr.clone()) {
+			Ok(_) => {
+				if self.is_banned(peer_addr.clone()) {
+					if let Err(e) = self.update_state(peer_addr.clone(), State::Healthy) {
+						error!(LOGGER, "Couldn't unban {}: {:?}", peer_addr, e)
+					}
+				} else {
+					error!(LOGGER, "Couldn't unban {}: peer is not banned", peer_addr)
+				}
+			},
+			Err(e) => error!(LOGGER, "Couldn't unban {}: {:?}", peer_addr, e)
+		};
+	}
+
 	/// Broadcasts the provided block to PEER_PREFERRED_COUNT of our peers.
 	/// We may be connected to PEER_MAX_COUNT peers so we only
 	/// want to broadcast to a random subset of peers.
