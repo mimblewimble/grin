@@ -569,7 +569,7 @@ impl ::std::fmt::Debug for SwitchCommitHash {
 }
 
 impl SwitchCommitHash {
-	/// Builds a switch commitment hash from a switch commit using blake2
+	/// Builds a switch commit hash from a switch commit using blake2
 	pub fn from_switch_commit(switch_commit: Commitment, key: SwitchCommitHashKey) -> SwitchCommitHash {
 		let switch_commit_hash = blake2b(SWITCH_COMMIT_HASH_SIZE, &key.0, &switch_commit.0);
 		let switch_commit_hash = switch_commit_hash.as_bytes();
@@ -580,6 +580,7 @@ impl SwitchCommitHash {
 		SwitchCommitHash(h)
 	}
 
+	/// Reconstructs a switch commit hash from an array of bytes.
 	pub fn from_bytes(bytes: &[u8]) -> SwitchCommitHash {
 		let mut hash = [0; SWITCH_COMMIT_HASH_SIZE];
 		for i in 0..min(SWITCH_COMMIT_HASH_SIZE, bytes.len()) {
@@ -593,6 +594,7 @@ impl SwitchCommitHash {
 		util::to_hex(self.0.to_vec())
 	}
 
+	/// Reconstrcuts a switch commit hash from a hex string.
 	pub fn from_hex(hex: &str) -> Result<SwitchCommitHash, ser::Error> {
 		let bytes = util::from_hex(hex.to_string())
 			.map_err(|_| ser::Error::HexError(format!("switch_commit_hash from_hex error")))?;

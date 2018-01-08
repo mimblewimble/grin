@@ -61,6 +61,8 @@ fn input_with_lock_height(
 	})
 }
 
+/// Adds an input with the provided value and blinding key to the transaction
+/// being built.
 pub fn input(
 	value: u64,
 	key_id: Identifier,
@@ -69,6 +71,8 @@ pub fn input(
 	input_with_lock_height(value, 0, key_id)
 }
 
+/// Adds a coinbase input with the provided value and blinding key to the transaction
+/// being built, with an additional lock_height specified.
 pub fn coinbase_input(
 	value: u64,
 	lock_height: u64,
@@ -198,8 +202,8 @@ mod test {
 
 		let (tx, _) = transaction(
 			vec![
-				input(10, 0, key_id1),
-				input(11, 0, key_id2),
+				input(10, key_id1),
+				input(11, key_id2),
 				output(20, key_id3),
 				with_fee(1),
 			],
@@ -216,7 +220,7 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
 		let (tx, _) = transaction(
-			vec![input(6, 0, key_id1), output(2, key_id2), with_fee(4)],
+			vec![input(6, key_id1), output(2, key_id2), with_fee(4)],
 			&keychain,
 		).unwrap();
 
