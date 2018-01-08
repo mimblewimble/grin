@@ -25,9 +25,12 @@ use serde_json;
 use api;
 use core::consensus::reward;
 use core::core::{build, Block, Output, Transaction, TxKernel};
+use core::ser;
 use keychain::{BlindingFactor, BlindSum, Identifier, Keychain};
 use types::*;
-use util::LOGGER;
+use util::{LOGGER, to_hex};
+
+
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
 #[derive(Serialize, Deserialize)]
@@ -157,9 +160,18 @@ fn handle_sender_confirmation(
 
 	println!("Final result.....: {}", res);
 	if !res {
-		error!(LOGGER, "Final sig invalid.");
-		return Err(Error::Signature(String::from("Final sig invalid.")));
+		error!(LOGGER, "Final aggregated signature invalid.");
+		return Err(Error::Signature(String::from("Final aggregated signature invalid.")));
 	}
+
+	//TODO: Next up, fill out the final transaction properly
+
+	/*let final_tx = complete_transaction(config, keychain, amount, BlindingFactor::new(sender_pub_blinding), tx.clone())?;
+	let tx_hex = to_hex(ser::ser_vec(&final_tx).unwrap());
+
+	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
+	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })
+		.map_err(|e| Error::Node(e))?;*/
 
 	// Return what we've actually posted
 	let mut partial_tx = build_partial_tx(keychain, amount, Some(final_sig), tx);
@@ -305,8 +317,8 @@ pub fn receive_coinbase(
 	Ok((out, kern, block_fees))
 }
 
-/// Builds a full transaction from the partial one sent to us for transfer
-fn receive_transaction(
+/// completes a transaction after the aggregated sig exchange
+fn complete_transaction(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
@@ -363,7 +375,7 @@ fn receive_transaction(
 
 	debug!(
 		LOGGER,
-		"Received txn and built output - {:?}, {:?}, {}",
+		"Finalized transaction and built output - {:?}, {:?}, {}",
 		root_key_id.clone(),
 		key_id.clone(),
 		derivation,

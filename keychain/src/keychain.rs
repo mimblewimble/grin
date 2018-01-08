@@ -273,23 +273,24 @@ impl Keychain {
 
 	/// Note 'secnonce' here is used to perform the signature, while 'pubnonce' just allows you to
 	/// provide a custom public nonce to include while calculating e
-	pub fn aggsig_sign_single(&self, msg: &Message, secnonce:Option<&SecretKey>, pubnonce:Option<&PublicKey>) -> Result<Signature, Error> {
+	/// nonce_sum is the sum used to decide whether secnonce should be inverted during sig time
+	pub fn aggsig_sign_single(&self, msg: &Message, secnonce:Option<&SecretKey>, pubnonce: Option<&PublicKey>, nonce_sum: Option<&PublicKey>) -> Result<Signature, Error> {
 		let context = self.aggsig_context.clone();
 		let context_read=context.read().unwrap();
 		let agg_context=context_read.as_ref().unwrap();
-		let sig = aggsig::sign_single(&self.secp, msg, &agg_context.sec_key, secnonce, pubnonce, None)?;
+		let sig = aggsig::sign_single(&self.secp, msg, &agg_context.sec_key, secnonce, pubnonce, nonce_sum)?;
 		Ok(sig)
 	}
 
 	//Verifies an aggsig signature
-	pub fn aggsig_verify_single(&self, sig: &Signature, msg: &Message, pubnonce:Option<&PublicKey>, pubkey:&PublicKey) -> bool {
-		aggsig::verify_single(&self.secp, sig, msg, pubnonce, pubkey)
+	pub fn aggsig_verify_single(&self, sig: &Signature, msg: &Message, pubnonce:Option<&PublicKey>, pubkey:&PublicKey, is_partial:bool) -> bool {
+		aggsig::verify_single(&self.secp, sig, msg, pubnonce, pubkey, is_partial)
 	}
 
-	//Verifies other party's sig corresponds with what we're expecting
+	//Verifies other final sig corresponds with what we're expecting
 	pub fn aggsig_verify_final_sig_build_msg(&self, sig: &Signature, pubkey: &PublicKey, fee: u64, lock_height:u64) -> bool {
 		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height)).unwrap();
-		self.aggsig_verify_single(sig, &msg, None, pubkey)
+		self.aggsig_verify_single(sig, &msg, None, pubkey, true)
 	}
 
 	//Verifies other party's sig corresponds with what we're expecting
@@ -299,7 +300,7 @@ impl Keychain {
 		let _ = nonce_sum.add_exp_assign(&self.secp, &sec_nonce);
 		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height)).unwrap();
 
-		self.aggsig_verify_single(sig, &msg, Some(&nonce_sum), pubkey)
+		self.aggsig_verify_single(sig, &msg, Some(&nonce_sum), pubkey, true)
 	}
 
 	pub fn aggsig_calculate_partial_sig(&self, other_pub_nonce:&PublicKey, fee:u64, lock_height:u64) -> Result<Signature, Error>{
@@ -310,13 +311,16 @@ impl Keychain {
 		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
 
 		//Now calculate signature using message M=fee, nonce in e=nonce_sum
-		self.aggsig_sign_single(&msg, Some(&sec_nonce), Some(&nonce_sum))
+		self.aggsig_sign_single(&msg, Some(&sec_nonce), Some(&nonce_sum), Some(&nonce_sum))
 	}
 
 	/// Helper function to calculate final singature
 	pub fn aggsig_calculate_final_sig(&self, their_sig: &Signature, our_sig: &Signature, their_pub_nonce: &PublicKey) -> Result<Signature, Error> {
-		let (_, our_pub_nonce) = self.aggsig_get_public_keys();
-		let sig = aggsig::add_signatures_single(&self.secp, their_sig, our_sig, their_pub_nonce, &our_pub_nonce)?;
+		// Add public nonces kR*G + kS*G
+		let (_, sec_nonce) = self.aggsig_get_private_keys();
+		let mut nonce_sum = their_pub_nonce.clone();
+		let _ = nonce_sum.add_exp_assign(&self.secp, &sec_nonce);
+		let sig = aggsig::add_signatures_single(&self.secp, their_sig, our_sig, &nonce_sum)?;
 		Ok(sig)
 	}
 
