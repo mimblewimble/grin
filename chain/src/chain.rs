@@ -358,11 +358,15 @@ impl Chain {
 
 	/// Sets the sumtree roots on a brand new block by applying the block on the
 	/// current sumtree state.
-	pub fn set_sumtree_roots(&self, b: &mut Block) -> Result<(), Error> {
+	pub fn set_sumtree_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
+		let store = self.store.clone();
 
 		let roots = sumtree::extending(&mut sumtrees, |extension| {
 			// apply the block on the sumtrees and check the resulting root
+			if is_fork {
+				pipe::rewind_and_apply_fork(b, store, extension)?;
+			}
 			extension.apply_block(b)?;
 			extension.force_rollback();
 			Ok(extension.roots())
@@ -374,7 +378,7 @@ impl Chain {
 		Ok(())
 	}
 
-	/// returs sumtree roots
+	/// Returns current sumtree roots
 	pub fn get_sumtree_roots(
 		&self,
 	) -> (

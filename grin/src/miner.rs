@@ -591,7 +591,7 @@ impl Miner {
 		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
 		trace!(LOGGER, "Block: {:?}", b);
 	
-		let roots_result = self.chain.set_sumtree_roots(&mut b);
+		let roots_result = self.chain.set_sumtree_roots(&mut b, false);
 		match roots_result {
 			Ok(_) => Ok((b, block_fees)),
 	

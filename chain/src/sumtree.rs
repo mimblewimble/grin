@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use util::secp::pedersen::{RangeProof, Commitment};
 
-use core::core::{Block, SumCommit, TxKernel};
+use core::core::{Block, SumCommit, Input, Output, TxKernel, COINBASE_OUTPUT};
 use core::core::pmmr::{HashSum, NoSum, Summable, PMMR};
 use core::core::hash::Hashed;
 use grin_store;
@@ -244,79 +244,32 @@ impl<'a> Extension<'a> {
 	/// prune MMR data.
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
 
-		// doing inputs first guarantees an input can't spend an output in the
+		// first applying coinbase outputs. due to the construction of PMMRs the
+		// last element, when its a leaf, can never be pruned as it has no parent
+		// yet and it will be needed to calculate that hash. to work around this,
+		// we insert coinbase outputs first to add at least one output of padding
+		for out in &b.outputs {
+			if out.features.contains(COINBASE_OUTPUT) {
+				self.apply_output(out)?;
+			}
+		}
+	
+		// then doing inputsm guarantees an input can't spend an output in the
 		// same block, enforcing block cut-through
 		for input in &b.inputs {
-			let commit = input.commitment();
-			let pos_res = self.get_output_pos(&commit);
-			if let Ok(pos) = pos_res {
-				match self.output_pmmr.prune(pos, b.header.height as u32) {
-					Ok(true) => {
-						self.rproof_pmmr
-							.prune(pos, b.header.height as u32)
-							.map_err(|s| Error::SumTreeErr(s))?;
-					}
-					Ok(false) => return Err(Error::AlreadySpent(commit)),
-					Err(s) => return Err(Error::SumTreeErr(s)),
-				}
-			} else {
-				return Err(Error::AlreadySpent(commit));
-			}
+			self.apply_input(input, b.header.height)?;
 		}
 
+		// now all regular, non coinbase outputs
 		for out in &b.outputs {
-			let commit = out.commitment();
-			let switch_commit_hash = out.switch_commit_hash();
-			let sum_commit = SumCommit {
-				commit,
-				switch_commit_hash,
-			};
-
-			if let Ok(pos) = self.get_output_pos(&commit) {
-				// we need to check whether the commitment is in the current MMR view
-				// as well as the index doesn't support rewind and is non-authoritative
-				// (non-historical node will have a much smaller one)
-				// note that this doesn't show the commitment *never* existed, just
-				// that this is not an existing unspent commitment right now
-				if let Some(c) = self.output_pmmr.get(pos) {
-					let hashsum = HashSum::from_summable(pos, &sum_commit);
-
-					// processing a new fork so we may get a position on the old
-					// fork that exists but matches a different node
-					// filtering that case out
-					if c.hash == hashsum.hash {
-						return Err(Error::DuplicateCommitment(commit));
-					}
-				}
+			if !out.features.contains(COINBASE_OUTPUT) {
+				self.apply_output(out)?;
 			}
-			// push new outputs commitments in their MMR and save them in the index
-			let pos = self.output_pmmr
-				.push(sum_commit)
-				.map_err(&Error::SumTreeErr)?;
-
-			self.new_output_commits.insert(out.commitment(), pos);
-
-			// push range proofs in their MMR
-			self.rproof_pmmr
-				.push(NoSum(out.proof))
-				.map_err(&Error::SumTreeErr)?;
 		}
-
+	
+		// finally, applying all kernels
 		for kernel in &b.kernels {
-			if let Ok(pos) = self.get_kernel_pos(&kernel.excess) {
-				// same as outputs
-				if let Some(k) = self.kernel_pmmr.get(pos) {
-					let hashsum = HashSum::from_summable(pos, &NoSum(kernel));
-					if k.hash == hashsum.hash {
-						return Err(Error::DuplicateKernel(kernel.excess.clone()));
-					}
-				}
-			}
-			// push kernels in their MMR
-			let pos = self.kernel_pmmr
-				.push(NoSum(kernel.clone()))
-				.map_err(&Error::SumTreeErr)?;
-			self.new_kernel_excesses.insert(kernel.excess, pos);
+			self.apply_kernel(kernel)?;
 		}
 		Ok(())
 	}
@@ -344,6 +297,82 @@ impl<'a> Extension<'a> {
 			self.commit_index.save_kernel_pos(excess, *pos)?;
 		}
 
+		Ok(())
+	}
+
+	fn apply_input(&mut self, input: &Input, height: u64) -> Result<(), Error> {
+		let commit = input.commitment();
+		let pos_res = self.get_output_pos(&commit);
+		if let Ok(pos) = pos_res {
+			match self.output_pmmr.prune(pos, height as u32) {
+				Ok(true) => {
+					self.rproof_pmmr
+						.prune(pos, height as u32)
+						.map_err(|s| Error::SumTreeErr(s))?;
+				}
+				Ok(false) => return Err(Error::AlreadySpent(commit)),
+				Err(s) => return Err(Error::SumTreeErr(s)),
+			}
+		} else {
+			return Err(Error::AlreadySpent(commit));
+		}
+		Ok(())
+	}
+
+	fn apply_output(&mut self, out: &Output) -> Result<(), Error> {
+		let commit = out.commitment();
+		let switch_commit_hash = out.switch_commit_hash();
+		let sum_commit = SumCommit {
+			commit,
+			switch_commit_hash,
+		};
+
+		if let Ok(pos) = self.get_output_pos(&commit) {
+			// we need to check whether the commitment is in the current MMR view
+			// as well as the index doesn't support rewind and is non-authoritative
+			// (non-historical node will have a much smaller one)
+			// note that this doesn't show the commitment *never* existed, just
+			// that this is not an existing unspent commitment right now
+			if let Some(c) = self.output_pmmr.get(pos) {
+				let hashsum = HashSum::from_summable(pos, &sum_commit);
+
+				// processing a new fork so we may get a position on the old
+				// fork that exists but matches a different node
+				// filtering that case out
+				if c.hash == hashsum.hash {
+					return Err(Error::DuplicateCommitment(commit));
+				}
+			}
+		}
+		// push new outputs commitments in their MMR and save them in the index
+		let pos = self.output_pmmr
+			.push(sum_commit)
+			.map_err(&Error::SumTreeErr)?;
+
+		self.new_output_commits.insert(out.commitment(), pos);
+
+		// push range proofs in their MMR
+		self.rproof_pmmr
+			.push(NoSum(out.proof))
+			.map_err(&Error::SumTreeErr)?;
+		Ok(())
+	}
+
+	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
+		if let Ok(pos) = self.get_kernel_pos(&kernel.excess) {
+			// same as outputs
+			if let Some(k) = self.kernel_pmmr.get(pos) {
+				let hashsum = HashSum::from_summable(pos, &NoSum(kernel));
+				if k.hash == hashsum.hash {
+					return Err(Error::DuplicateKernel(kernel.excess.clone()));
+				}
+			}
+		}
+		// push kernels in their MMR
+		let pos = self.kernel_pmmr
+			.push(NoSum(kernel.clone()))
+			.map_err(&Error::SumTreeErr)?;
+		self.new_kernel_excesses.insert(kernel.excess, pos);
 		Ok(())
 	}
 

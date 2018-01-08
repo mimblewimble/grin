@@ -79,7 +79,7 @@ fn test_coinbase_maturity() {
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 	block.header.difficulty = difficulty.clone();
-	chain.set_sumtree_roots(&mut block).unwrap();
+	chain.set_sumtree_roots(&mut block, false).unwrap();
 
 	pow::pow_size(
 		&mut cuckoo_miner,
@@ -115,7 +115,7 @@ fn test_coinbase_maturity() {
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 	block.header.difficulty = difficulty.clone();
-	chain.set_sumtree_roots(&mut block).unwrap();
+	chain.set_sumtree_roots(&mut block, false).unwrap();
 
 	pow::pow_size(
 		&mut cuckoo_miner,
@@ -143,7 +143,7 @@ fn test_coinbase_maturity() {
 
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 		block.header.difficulty = difficulty.clone();
-		chain.set_sumtree_roots(&mut block).unwrap();
+		chain.set_sumtree_roots(&mut block, false).unwrap();
 
 		pow::pow_size(
 			&mut cuckoo_miner,
@@ -164,7 +164,7 @@ fn test_coinbase_maturity() {
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 	block.header.difficulty = difficulty.clone();
-	chain.set_sumtree_roots(&mut block).unwrap();
+	chain.set_sumtree_roots(&mut block, false).unwrap();
 
 	pow::pow_size(
 		&mut cuckoo_miner,

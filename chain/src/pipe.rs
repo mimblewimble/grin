@@ -393,11 +393,11 @@ fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option
 	}
 }
 
-// Utility function to handle forks. From the forked block, jump backward
-// to find to fork root. Rewind the sumtrees to the root and apply all the
-// forked blocks prior to the one being processed to set the sumtrees in
-// the expected state.
-fn rewind_and_apply_fork(
+/// Utility function to handle forks. From the forked block, jump backward
+/// to find to fork root. Rewind the sumtrees to the root and apply all the
+/// forked blocks prior to the one being processed to set the sumtrees in
+/// the expected state.
+pub fn rewind_and_apply_fork(
 	b: &Block,
 	store: Arc<ChainStore>,
 	ext: &mut sumtree::Extension,
