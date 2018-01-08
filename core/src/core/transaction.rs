@@ -593,8 +593,9 @@ impl SwitchCommitHash {
 		util::to_hex(self.0.to_vec())
 	}
 
-	pub fn from_hex(hex: &str) -> Result<SwitchCommitHash, Error> {
-		let bytes = util::from_hex(hex.to_string()).unwrap();
+	pub fn from_hex(hex: &str) -> Result<SwitchCommitHash, ser::Error> {
+		let bytes = util::from_hex(hex.to_string())
+			.map_err(|_| ser::Error::HexError(format!("switch_commit_hash from_hex error")))?;
 		Ok(SwitchCommitHash::from_bytes(&bytes))
 	}
 

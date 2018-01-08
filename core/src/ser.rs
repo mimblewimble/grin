@@ -49,6 +49,8 @@ pub enum Error {
 	TooLargeReadErr,
 	/// Consensus rule failure (currently sort order)
 	ConsensusError(consensus::Error),
+	/// Error from from_hex deserialization
+	HexError(String),
 }
 
 impl From<io::Error> for Error {
@@ -74,6 +76,7 @@ impl fmt::Display for Error {
 			Error::CorruptedData => f.write_str("corrupted data"),
 			Error::TooLargeReadErr => f.write_str("too large read"),
 			Error::ConsensusError(ref e) => write!(f, "consensus error {:?}", e),
+			Error::HexError(ref e) => write!(f, "hex error {:?}", e),
 		}
 	}
 }
@@ -96,6 +99,7 @@ impl error::Error for Error {
 			Error::CorruptedData => "corrupted data",
 			Error::TooLargeReadErr => "too large read",
 			Error::ConsensusError(_) => "consensus error (sort order)",
+			Error::HexError(_) => "hex error",
 		}
 	}
 }

@@ -121,9 +121,17 @@ impl From<serde_json::Error> for Error {
 	}
 }
 
+// TODO - rethink this, would be nice not to have to worry about
+// low level hex conversion errors like this
 impl From<num::ParseIntError> for Error {
 	fn from(_: num::ParseIntError) -> Error {
 		Error::Format("Invalid hex".to_string())
+	}
+}
+
+impl From<ser::Error> for Error {
+	fn from(e: ser::Error) -> Error {
+		Error::Format(e.to_string())
 	}
 }
 

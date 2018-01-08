@@ -100,7 +100,7 @@ fn refresh_missing_heights(config: &WalletConfig, keychain: &Keychain) -> Result
 
 	let url =
 		format!(
-		"{}/v1/chain/utxos/atheight?{}",
+		"{}/v1/chain/utxos/byheight?{}",
 		config.check_node_api_http_addr,
 		query_params.join("&"),
 	);

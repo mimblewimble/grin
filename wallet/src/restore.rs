@@ -21,6 +21,10 @@ use core::core::{Output, SwitchCommitHash, SwitchCommitHashKey};
 use core::core::transaction::{COINBASE_OUTPUT, DEFAULT_OUTPUT};
 use types::{WalletConfig, WalletData, OutputData, OutputStatus, Error};
 use byteorder::{BigEndian, ByteOrder};
+use util;
+use util::secp::constants::MAX_PROOF_SIZE;
+use util::secp::pedersen::{Commitment, RangeProof};
+
 
 pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 	let url = format!("{}/v1/chain", config.check_node_api_http_addr);
@@ -79,19 +83,14 @@ fn retrieve_amount_and_coinbase_status(
 ) -> Result<(u64, bool), Error> {
 	let output = output_with_range_proof(config, commit_id, height)?;
 
-	let proof = {
-		let vec = util::from_hex(input)?;
-		RangeProof { proof: vec, len: vec.len() }
-	};
-
 	let core_output = Output {
 		features: match output.output_type {
 			api::OutputType::Coinbase => COINBASE_OUTPUT,
 			api::OutputType::Transaction => DEFAULT_OUTPUT,
 		},
-		proof: proof,
-		switch_commit_hash: output.switch_commit_hash,
-		commit: output.commit,
+		proof: output.range_proof()?,
+		switch_commit_hash: output.switch_commit_hash()?,
+		commit: output.commit()?,
 	};
 	if let Some(amount) = core_output.recover_value(keychain, &key_id) {
 		let is_coinbase = match output.output_type {
@@ -167,61 +166,66 @@ fn find_utxos_with_key(
 					)
 				}
 			};
-			if expected_hash == output.switch_commit_hash() {
-				info!(
-					LOGGER,
-					"Output found: {:?}, key_index: {:?}",
-					output,
-					i,
-				);
 
-				// add it to result set here
-				let commit_id = from_hex(output.commit.clone()).unwrap();
-				let key_id = keychain.derive_key_id(i as u32).unwrap();
-				let res = retrieve_amount_and_coinbase_status(
-					config,
-					keychain,
-					key_id.clone(),
-					&output.commit,
-					block_outputs.header.height,
-				);
-
-				if let Ok((amount, is_coinbase)) = res {
-					info!(LOGGER, "Amount: {}", amount);
-
-					let commit = keychain
-						.commit_with_key_index(BigEndian::read_u64(&commit_id), i as u32)
-						.expect("commit with key index");
-
-					let height = block_outputs.header.height;
-					let lock_height = if is_coinbase {
-						height + global::coinbase_maturity()
-					} else {
-						0
-					};
-
-					wallet_outputs.push((
-						commit,
-						key_id.clone(),
-						i as u32,
-						amount,
-						height,
-						lock_height,
-						is_coinbase,
-					));
-
-					// probably don't have to look for indexes greater than this now
-					*key_iterations = i + *padding;
-					if *key_iterations > switch_commit_cache.len() {
-						*key_iterations = switch_commit_cache.len();
-					}
-					info!(LOGGER, "Setting max key index to: {}", *key_iterations);
-					break;
-				} else {
+			// TODO - can we reduce the nesting here of the let/if/if ?
+			let switch_commit_hash = output.switch_commit_hash();
+				if let Ok(x) = output.switch_commit_hash() {
+					if x == expected_hash {
 					info!(
 						LOGGER,
-						"Unable to retrieve the amount (needs investigating)",
+						"Output found: {:?}, key_index: {:?}",
+						output,
+						i,
 					);
+
+					// add it to result set here
+					let commit_id = from_hex(output.commit.clone()).unwrap();
+					let key_id = keychain.derive_key_id(i as u32).unwrap();
+					let res = retrieve_amount_and_coinbase_status(
+						config,
+						keychain,
+						key_id.clone(),
+						&output.commit,
+						block_outputs.header.height,
+					);
+
+					if let Ok((amount, is_coinbase)) = res {
+						info!(LOGGER, "Amount: {}", amount);
+
+						let commit = keychain
+							.commit_with_key_index(BigEndian::read_u64(&commit_id), i as u32)
+							.expect("commit with key index");
+
+						let height = block_outputs.header.height;
+						let lock_height = if is_coinbase {
+							height + global::coinbase_maturity()
+						} else {
+							0
+						};
+
+						wallet_outputs.push((
+							commit,
+							key_id.clone(),
+							i as u32,
+							amount,
+							height,
+							lock_height,
+							is_coinbase,
+						));
+
+						// probably don't have to look for indexes greater than this now
+						*key_iterations = i + *padding;
+						if *key_iterations > switch_commit_cache.len() {
+							*key_iterations = switch_commit_cache.len();
+						}
+						info!(LOGGER, "Setting max key index to: {}", *key_iterations);
+						break;
+					} else {
+						info!(
+							LOGGER,
+							"Unable to retrieve the amount (needs investigating)",
+						);
+					}
 				}
 			}
 		}

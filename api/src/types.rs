@@ -14,11 +14,12 @@
 
 use std::sync::Arc;
 
-use core::core;
+use core::{core, ser};
 use core::core::hash::Hashed;
 use chain;
 use util;
 use util::secp::pedersen;
+use util::secp::constants::MAX_PROOF_SIZE;
 
 /// The state of the current fork tip
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -196,8 +197,29 @@ impl OutputPrintable {
 		}
 	}
 
-	pub fn switch_commit_hash(&self) -> core::SwitchCommitHash {
-		core::SwitchCommitHash::from_hex(&self.switch_commit_hash).unwrap()
+	// Convert the hex string back into a switch_commit_hash instance
+	pub fn switch_commit_hash(&self) -> Result<core::SwitchCommitHash, ser::Error> {
+		core::SwitchCommitHash::from_hex(&self.switch_commit_hash)
+	}
+
+	pub fn commit(&self) -> Result<pedersen::Commitment, ser::Error> {
+		let vec = util::from_hex(self.commit.clone())
+			.map_err(|_| ser::Error::HexError(format!("output commit hex_error")))?;
+		Ok(pedersen::Commitment::from_vec(vec))
+	}
+
+	pub fn range_proof(&self) -> Result<pedersen::RangeProof, ser::Error> {
+		if let Some(ref proof) = self.proof {
+			let vec = util::from_hex(proof.clone())
+				.map_err(|_| ser::Error::HexError(format!("output range_proof hex_error")))?;
+			let mut bytes = [0; MAX_PROOF_SIZE];
+			for i in 0..vec.len() {
+				bytes[i] = vec[i];
+			}
+			Ok(pedersen::RangeProof { proof: bytes, plen: vec.len() })
+		} else {
+			Err(ser::Error::HexError(format!("output range_proof missing")))
+		}
 	}
 }
 

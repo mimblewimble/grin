@@ -61,7 +61,6 @@ struct UtxoHandler {
 
 impl UtxoHandler {
 	fn get_utxo(&self, id: &str) -> Result<Utxo, Error> {
-		debug!(LOGGER, "getting utxo: {}", id);
 		let c = util::from_hex(String::from(id))
 			.map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
 		let commit = Commitment::from_vec(c);
@@ -84,6 +83,9 @@ impl UtxoHandler {
 				}
 			}
 		}
+
+		debug!(LOGGER, "utxos_by_ids: {:?}", commitments);
+
 		let mut utxos: Vec<Utxo> = vec![];
 		for x in commitments {
 			if let Ok(utxo) = self.get_utxo(x) {
@@ -152,6 +154,16 @@ impl UtxoHandler {
 				include_rp = true;
 			}
 		}
+
+		debug!(
+			LOGGER,
+			"outputs_block_batch: {:?}, {:?}, {:?}, {:?}", 
+			start_height,
+			end_height,
+			commitments,
+			include_rp,
+		);
+
 		let mut return_vec = vec![];
 		for i in start_height..end_height + 1 {
 			let res = self.outputs_at_height(i, commitments.clone(), include_rp);
