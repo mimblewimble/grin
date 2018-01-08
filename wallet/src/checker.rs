@@ -202,7 +202,7 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<()
 		let id = wallet_outputs.get(&commit).unwrap();
 		if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
 			match api_utxos.get(&commit) {
-				Some(api_output) => mark_unspent_output(&mut output.get_mut()),
+				Some(_) => mark_unspent_output(&mut output.get_mut()),
 				None => mark_spent_output(&mut output.get_mut()),
 			};
 		}

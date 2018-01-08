@@ -182,7 +182,7 @@ impl OutputPrintable {
 		};
 
 		let proof = if include_proof {
-			Some(util::to_hex(output.proof.proof.to_vec()))
+			Some(util::to_hex(output.proof.bytes().to_vec()))
 		} else {
 			None
 		};

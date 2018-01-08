@@ -157,7 +157,7 @@ impl UtxoHandler {
 
 		debug!(
 			LOGGER,
-			"outputs_block_batch: {:?}, {:?}, {:?}, {:?}", 
+			"outputs_block_batch: {}-{}, {:?}, {:?}",
 			start_height,
 			end_height,
 			commitments,
@@ -171,6 +171,7 @@ impl UtxoHandler {
 				return_vec.push(res);
 			}
 		}
+
 		return_vec
 	}
 }

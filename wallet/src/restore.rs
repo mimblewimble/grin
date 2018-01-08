@@ -21,9 +21,6 @@ use core::core::{Output, SwitchCommitHash, SwitchCommitHashKey};
 use core::core::transaction::{COINBASE_OUTPUT, DEFAULT_OUTPUT};
 use types::{WalletConfig, WalletData, OutputData, OutputStatus, Error};
 use byteorder::{BigEndian, ByteOrder};
-use util;
-use util::secp::constants::MAX_PROOF_SIZE;
-use util::secp::pedersen::{Commitment, RangeProof};
 
 
 pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
@@ -92,6 +89,7 @@ fn retrieve_amount_and_coinbase_status(
 		switch_commit_hash: output.switch_commit_hash()?,
 		commit: output.commit()?,
 	};
+
 	if let Some(amount) = core_output.recover_value(keychain, &key_id) {
 		let is_coinbase = match output.output_type {
 			api::OutputType::Coinbase => true,
@@ -108,7 +106,6 @@ pub fn utxos_batch_block(
 	start_height: u64,
 	end_height: u64,
 ) -> Result<Vec<api::BlockOutputs>, Error> {
-	// build the necessary query param -
 	let query_param = format!("start_height={}&end_height={}", start_height, end_height);
 
 	let url =
@@ -167,10 +164,8 @@ fn find_utxos_with_key(
 				}
 			};
 
-			// TODO - can we reduce the nesting here of the let/if/if ?
-			let switch_commit_hash = output.switch_commit_hash();
-				if let Ok(x) = output.switch_commit_hash() {
-					if x == expected_hash {
+			if let Ok(x) = output.switch_commit_hash() {
+				if x == expected_hash {
 					info!(
 						LOGGER,
 						"Output found: {:?}, key_index: {:?}",
@@ -181,6 +176,7 @@ fn find_utxos_with_key(
 					// add it to result set here
 					let commit_id = from_hex(output.commit.clone()).unwrap();
 					let key_id = keychain.derive_key_id(i as u32).unwrap();
+
 					let res = retrieve_amount_and_coinbase_status(
 						config,
 						keychain,
@@ -223,7 +219,8 @@ fn find_utxos_with_key(
 					} else {
 						info!(
 							LOGGER,
-							"Unable to retrieve the amount (needs investigating)",
+							"Unable to retrieve the amount (needs investigating) {:?}",
+							res,
 						);
 					}
 				}
