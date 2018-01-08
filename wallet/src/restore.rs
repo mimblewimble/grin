@@ -35,18 +35,28 @@ pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 	}
 }
 
-fn output_with_range_proof(config: &WalletConfig, commit_id: &str) -> Result<api::Output, Error> {
+fn output_with_range_proof(
+	config: &WalletConfig,
+	commit_id: &str,
+	height: u64,
+) -> Result<api::OutputPrintable, Error> {
 	let url =
 		format!(
-		"{}/v1/chain/utxos/byids?id={}&include_rp",
+		"{}/v1/chain/utxos/byheight?start_height={}&end_height={}&id={}&include_rp",
 		config.check_node_api_http_addr,
+		height,
+		height,
 		commit_id,
 	);
 
-	match api::client::get::<Vec<api::Output>>(url.as_str()) {
-		Ok(outputs) => {
-			if let Some(output) = outputs.first() {
-				Ok(output.clone())
+	match api::client::get::<Vec<api::BlockOutputs>>(url.as_str()) {
+		Ok(block_outputs) => {
+			if let Some(block_output) = block_outputs.first() {
+				if let Some(output) = block_output.outputs.first() {
+					Ok(output.clone())
+				} else {
+					Err(Error::Node(api::Error::NotFound))
+				}
 			} else {
 				Err(Error::Node(api::Error::NotFound))
 			}
@@ -65,14 +75,21 @@ fn retrieve_amount_and_coinbase_status(
 	keychain: &Keychain,
 	key_id: Identifier,
 	commit_id: &str,
+	height: u64,
 ) -> Result<(u64, bool), Error> {
-	let output = output_with_range_proof(config, commit_id)?;
+	let output = output_with_range_proof(config, commit_id, height)?;
+
+	let proof = {
+		let vec = util::from_hex(input)?;
+		RangeProof { proof: vec, len: vec.len() }
+	};
+
 	let core_output = Output {
 		features: match output.output_type {
 			api::OutputType::Coinbase => COINBASE_OUTPUT,
 			api::OutputType::Transaction => DEFAULT_OUTPUT,
 		},
-		proof: output.proof.expect("output with proof"),
+		proof: proof,
 		switch_commit_hash: output.switch_commit_hash,
 		commit: output.commit,
 	};
@@ -166,6 +183,7 @@ fn find_utxos_with_key(
 					keychain,
 					key_id.clone(),
 					&output.commit,
+					block_outputs.header.height,
 				);
 
 				if let Ok((amount, is_coinbase)) = res {

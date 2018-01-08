@@ -84,7 +84,7 @@ impl SumTreeNode {
 		let mut return_vec = Vec::new();
 		let last_n = chain.get_last_n_utxo(distance);
 		for elem_output in last_n {
-			let output = OutputPrintable::from_output(&elem_output.1, chain.clone());
+			let output = OutputPrintable::from_output(&elem_output.1, chain.clone(), false);
 			return_vec.push(SumTreeNode {
 				hash: util::to_hex(elem_output.0.to_vec()),
 				output: Some(output),
@@ -126,9 +126,9 @@ pub enum OutputType {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Utxo {
-	/// The homomorphic commitment representing the output amount
+	/// The output commitment representing the amount
 	pub commit: pedersen::Commitment,
-	/// switch commit hash
+	/// The corresponding switch commit hash (can be used to verify lock height)
 	pub switch_commit_hash: core::SwitchCommitHash,
 }
 
@@ -156,12 +156,18 @@ pub struct OutputPrintable {
 	pub switch_commit_hash: String,
 	/// Whether the output has been spent
 	pub spent: bool,
+	/// Rangeproof (as hex string)
+	pub proof: Option<String>,
 	/// Rangeproof hash (as hex string)
 	pub proof_hash: String,
 }
 
 impl OutputPrintable {
-	pub fn from_output(output: &core::Output, chain: Arc<chain::Chain>) -> OutputPrintable {
+	pub fn from_output(
+		output: &core::Output,
+		chain: Arc<chain::Chain>,
+		include_proof: bool,
+	) -> OutputPrintable {
 		let output_type =
 			if output.features.contains(core::transaction::COINBASE_OUTPUT) {
 				OutputType::Coinbase
@@ -174,11 +180,18 @@ impl OutputPrintable {
 			Err(_) => true,
 		};
 
+		let proof = if include_proof {
+			Some(util::to_hex(output.proof.proof.to_vec()))
+		} else {
+			None
+		};
+
 		OutputPrintable {
 			output_type: output_type,
 			commit: util::to_hex(output.commit.0.to_vec()),
 			switch_commit_hash: output.switch_commit_hash.to_hex(),
 			spent: spent,
+			proof: proof,
 			proof_hash: util::to_hex(output.proof.hash().to_vec()),
 		}
 	}
@@ -289,14 +302,18 @@ pub struct BlockPrintable {
 }
 
 impl BlockPrintable {
-	pub fn from_block(block: &core::Block, chain: Arc<chain::Chain>) -> BlockPrintable {
+	pub fn from_block(
+		block: &core::Block,
+		chain: Arc<chain::Chain>,
+		include_proof: bool,
+	) -> BlockPrintable {
 		let inputs = block.inputs
 			.iter()
 			.map(|x| util::to_hex(x.commitment().0.to_vec()))
 			.collect();
 		let outputs = block.outputs
 			.iter()
-			.map(|output| OutputPrintable::from_output(output, chain.clone()))
+			.map(|output| OutputPrintable::from_output(output, chain.clone(), include_proof))
 			.collect();
 		let kernels = block.kernels
 			.iter()

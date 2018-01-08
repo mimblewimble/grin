@@ -54,7 +54,7 @@ impl Handler for IndexHandler {
 // Supports retrieval of multiple outputs in a single request -
 // GET /v1/chain/utxos/byids?id=xxx,yyy,zzz
 // GET /v1/chain/utxos/byids?id=xxx&id=yyy&id=zzz
-// GET /v1/chain/utxos/atheight?start_height=101&end_height=200
+// GET /v1/chain/utxos/byheight?start_height=101&end_height=200
 struct UtxoHandler {
 	chain: Arc<chain::Chain>,
 }
@@ -93,7 +93,12 @@ impl UtxoHandler {
 		utxos
 	}
 
-	fn outputs_at_height(&self, block_height: u64) -> BlockOutputs {
+	fn outputs_at_height(
+		&self,
+		block_height: u64,
+		commitments: Vec<Commitment>,
+		include_proof: bool,
+	) -> BlockOutputs {
 		let header = self.chain
 			.clone()
 			.get_header_by_height(block_height)
@@ -102,9 +107,12 @@ impl UtxoHandler {
 		let outputs = block
 			.outputs
 			.iter()
-			.filter(|c| self.chain.get_unspent(&c.commit).is_ok())
+			.filter(|c| {
+				(commitments.is_empty() || commitments.contains(&c.commit)) &&
+				self.chain.get_unspent(&c.commit).is_ok()
+			})
 			.map(|k| {
-				OutputPrintable::from_output(k, self.chain.clone())
+				OutputPrintable::from_output(k, self.chain.clone(), include_proof)
 			})
 			.collect();
 		BlockOutputs {
@@ -115,14 +123,18 @@ impl UtxoHandler {
 
 	// returns outputs for a specified range of blocks
 	fn outputs_block_batch(&self, req: &mut Request) -> Vec<BlockOutputs> {
-		let mut commitments: Vec<&str> = vec![];
+		let mut commitments: Vec<Commitment> = vec![];
 		let mut start_height = 1;
 		let mut end_height = 1;
+		let mut include_rp = false;
+
 		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
 			if let Some(ids) = params.get("id") {
 				for id in ids {
 					for id in id.split(",") {
-						commitments.push(id.clone());
+						if let Ok(x) = util::from_hex(String::from(id)) {
+							commitments.push(Commitment::from_vec(x));
+						}
 					}
 				}
 			}
@@ -136,19 +148,15 @@ impl UtxoHandler {
 					end_height = height.parse().unwrap();
 				}
 			}
+			if let Some(_) = params.get("include_rp") {
+				include_rp = true;
+			}
 		}
 		let mut return_vec = vec![];
 		for i in start_height..end_height + 1 {
-			let res = self.outputs_at_height(i);
-			if commitments.is_empty() {
+			let res = self.outputs_at_height(i, commitments.clone(), include_rp);
+			if res.outputs.len() > 0 {
 				return_vec.push(res);
-			} else {
-				for x in &res.outputs {
-					if commitments.contains(&x.commit.as_str()) {
-						return_vec.push(res.clone());
-						break;
-					}
-				}
 			}
 		}
 		return_vec
@@ -348,7 +356,7 @@ pub struct BlockHandler {
 impl BlockHandler {
 	fn get_block(&self, h: &Hash) -> Result<BlockPrintable, Error> {
 		let block = self.chain.clone().get_block(h).map_err(|_| Error::NotFound)?;
-		Ok(BlockPrintable::from_block(&block, self.chain.clone()))
+		Ok(BlockPrintable::from_block(&block, self.chain.clone(), false))
 	}
 
 	// Try to decode the string as a height or a hash.

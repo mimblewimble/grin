@@ -27,11 +27,9 @@ use util::LOGGER;
 
 
 // Transitions a local wallet output from Unconfirmed -> Unspent.
-fn refresh_output(out: &mut OutputData, _api_out: &api::Output) {
+fn mark_unspent_output(out: &mut OutputData) {
 	match out.status {
-		OutputStatus::Unconfirmed => {
-			out.status = OutputStatus::Unspent;
-		}
+		OutputStatus::Unconfirmed => out.status = OutputStatus::Unspent,
 		_ => (),
 	}
 }
@@ -42,7 +40,8 @@ fn refresh_output(out: &mut OutputData, _api_out: &api::Output) {
 // Locked -> Spent
 fn mark_spent_output(out: &mut OutputData) {
 	match out.status {
-		OutputStatus::Unspent | OutputStatus::Locked => out.status = OutputStatus::Spent,
+		OutputStatus::Unspent => out.status = OutputStatus::Spent,
+		OutputStatus::Locked => out.status = OutputStatus::Spent,
 		_ => (),
 	}
 }
@@ -175,7 +174,7 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<()
 		.collect();
 
 	// build a map of api outputs by commit so we can look them up efficiently
-	let mut api_outputs: HashMap<pedersen::Commitment, api::Output> = HashMap::new();
+	let mut api_utxos: HashMap<pedersen::Commitment, api::Utxo> = HashMap::new();
 
 	let query_string = query_params.join("&");
 
@@ -184,9 +183,9 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<()
 		config.check_node_api_http_addr, query_string,
 	);
 
-	match api::client::get::<Vec<api::Output>>(url.as_str()) {
+	match api::client::get::<Vec<api::Utxo>>(url.as_str()) {
 		Ok(outputs) => for out in outputs {
-			api_outputs.insert(out.commit, out);
+			api_utxos.insert(out.commit, out);
 		},
 		Err(e) => {
 			// if we got anything other than 200 back from server, don't attempt to refresh
@@ -202,8 +201,8 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<()
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| for commit in wallet_outputs.keys() {
 		let id = wallet_outputs.get(&commit).unwrap();
 		if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
-			match api_outputs.get(&commit) {
-				Some(api_output) => refresh_output(&mut output.get_mut(), api_output),
+			match api_utxos.get(&commit) {
+				Some(api_output) => mark_unspent_output(&mut output.get_mut()),
 				None => mark_spent_output(&mut output.get_mut()),
 			};
 		}
