@@ -153,7 +153,7 @@ fn handle_sender_confirmation(
 	println!("Final Pubkey: {:?}", final_pubkey);
 
 	//Check our final transaction verifies
-	let res = keychain.aggsig_verify_partial_sig_build_msg(&final_sig, &final_pubkey, tx.fee, tx.lock_height);
+	let res = keychain.aggsig_verify_final_sig_build_msg(&final_sig, &final_pubkey, tx.fee, tx.lock_height);
 
 	println!("Final result.....: {}", res);
 	if !res {

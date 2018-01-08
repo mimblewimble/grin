@@ -277,7 +277,7 @@ impl Keychain {
 		let context = self.aggsig_context.clone();
 		let context_read=context.read().unwrap();
 		let agg_context=context_read.as_ref().unwrap();
-		let sig = aggsig::sign_single(&self.secp, msg, &agg_context.sec_key, secnonce, pubnonce)?;
+		let sig = aggsig::sign_single(&self.secp, msg, &agg_context.sec_key, secnonce, pubnonce, None)?;
 		Ok(sig)
 	}
 
@@ -287,7 +287,7 @@ impl Keychain {
 	}
 
 	//Verifies other party's sig corresponds with what we're expecting
-	pub fn aggsig_verify_partial_sig_build_msg(&self, sig: &Signature, pubkey: &PublicKey, fee: u64, lock_height:u64) -> bool {
+	pub fn aggsig_verify_final_sig_build_msg(&self, sig: &Signature, pubkey: &PublicKey, fee: u64, lock_height:u64) -> bool {
 		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height)).unwrap();
 		self.aggsig_verify_single(sig, &msg, None, pubkey)
 	}
