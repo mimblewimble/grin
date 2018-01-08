@@ -39,8 +39,7 @@ pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 		receive_tx: post "/receive/transaction" => receive_tx_handler,
 		receive_coinbase: post "/receive/coinbase" => coinbase_handler,
 	);
-
-	let mut apis_receiver = ApiServer::new("/v1".to_string());
+	let mut apis_receiver = ApiServer::new("/v1".to_string(), false);
 	apis_receiver.register_handler(router_receiver);
 	apis_receiver.start(wallet_config.api_receiver_listen_addr()).unwrap_or_else(|e| {
 		error!(LOGGER, "Failed to start Grin wallet receiver listener: {}.", e);
@@ -64,7 +63,7 @@ pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 		retrieve_info: post "/info" => info_handler,
     );
 
-    let mut apis_operator = ApiServer::new("/v1".to_string());
+    let mut apis_operator = ApiServer::new("/v1".to_string(), true);
     apis_operator.register_handler(router_wallet_operator);
     apis_operator.start(wallet_config.api_operator_listen_addr()).unwrap_or_else(|e| {
         error!(LOGGER, "Failed to start Grin wallet operator listener: {}.", e);
