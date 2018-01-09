@@ -50,7 +50,6 @@ pub fn receive_json_tx(
 	keychain: &Keychain,
 	partial_tx: &PartialTx,
 ) -> Result<(), Error> {
-
 	// reading the partial transaction and finalizing it, adding our output
 	let (amount, blinding, tx) = read_partial_tx(keychain, partial_tx)?;
 	let (final_tx, key_id) = receive_transaction(config, keychain, amount, blinding, tx)?;
@@ -70,10 +69,7 @@ pub fn receive_json_tx(
 	}
 }
 
-fn retrieve_existing_key(
-	wallet_data: &WalletData,
-	key_id: Identifier,
-) -> (Identifier, u32) {
+fn retrieve_existing_key(wallet_data: &WalletData, key_id: Identifier) -> (Identifier, u32) {
 	if let Some(existing) = wallet_data.get_output(&key_id) {
 		let key_id = existing.key_id.clone();
 		let derivation = existing.n_child;
@@ -83,10 +79,7 @@ fn retrieve_existing_key(
 	}
 }
 
-fn next_available_key(
-	wallet_data: &WalletData,
-	keychain: &Keychain,
-) -> (Identifier, u32) {
+fn next_available_key(wallet_data: &WalletData, keychain: &Keychain) -> (Identifier, u32) {
 	let root_key_id = keychain.root_key_id();
 	let derivation = wallet_data.next_child(root_key_id.clone());
 	let key_id = keychain.derive_key_id(derivation).unwrap();
@@ -151,12 +144,11 @@ fn receive_transaction(
 	blinding: BlindingFactor,
 	partial: Transaction,
 ) -> Result<(Transaction, Identifier), Error> {
-
 	let root_key_id = keychain.root_key_id();
 
 	// double check the fee amount included in the partial tx
- // we don't necessarily want to just trust the sender
- // we could just overwrite the fee here (but we won't) due to the ecdsa sig
+	// we don't necessarily want to just trust the sender
+	// we could just overwrite the fee here (but we won't) due to the ecdsa sig
 	let fee = tx_fee(partial.inputs.len(), partial.outputs.len() + 1, None);
 	if fee != partial.fee {
 		return Err(Error::FeeDispute {
@@ -190,13 +182,13 @@ fn receive_transaction(
 			build::initial_tx(partial),
 			build::with_excess(blinding),
 			build::output(out_amount, key_id.clone()),
-		// build::with_fee(fee_amount),
+			// build::with_fee(fee_amount),
 		],
 		keychain,
 	)?;
 
 	// make sure the resulting transaction is valid (could have been lied to on
- // excess).
+	// excess).
 	tx_final.validate()?;
 
 	debug!(

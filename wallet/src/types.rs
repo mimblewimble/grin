@@ -30,7 +30,6 @@ use tokio_core::reactor;
 use tokio_retry::Retry;
 use tokio_retry::strategy::FibonacciBackoff;
 
-
 use api;
 use core::consensus;
 use core::core::{transaction, Transaction};
@@ -63,7 +62,10 @@ pub fn tx_fee(input_len: usize, output_len: usize, base_fee: Option<u64>) -> u64
 #[derive(Debug)]
 pub enum Error {
 	NotEnoughFunds(u64),
-	FeeDispute { sender_fee: u64, recipient_fee: u64 },
+	FeeDispute {
+		sender_fee: u64,
+		recipient_fee: u64,
+	},
 	Keychain(keychain::Error),
 	Transaction(transaction::Error),
 	Secp(secp::Error),
@@ -78,7 +80,7 @@ pub enum Error {
 	Hyper(hyper::Error),
 	/// Error originating from hyper uri parsing.
 	Uri(hyper::error::UriError),
-	GenericError(String,)
+	GenericError(String),
 }
 
 impl error::Error for Error {
@@ -162,11 +164,11 @@ pub struct WalletConfig {
 	pub api_receiver_listen_interface: String,
 	// The port this wallet receiver will run on
 	pub api_receiver_listen_port: String,
-    // The api interface/ip_address that this api server (i.e. this wallet) will run
-    // by default this is 127.0.0.1 (and will not accept connections from external clients)
-    pub api_operator_listen_interface: String,
-    // The port this wallet operator will run on
-    pub api_operator_listen_port: String,
+	// The api interface/ip_address that this api server (i.e. this wallet) will run
+	// by default this is 127.0.0.1 (and will not accept connections from external clients)
+	pub api_operator_listen_interface: String,
+	// The port this wallet operator will run on
+	pub api_operator_listen_port: String,
 	// The api address of a running server node against which transaction inputs
 	// will be checked during send
 	pub check_node_api_http_addr: String,
@@ -180,8 +182,8 @@ impl Default for WalletConfig {
 			// enable_wallet: false,
 			api_receiver_listen_interface: "127.0.0.1".to_string(),
 			api_receiver_listen_port: "13415".to_string(),
-            api_operator_listen_interface: "127.0.0.1".to_string(),
-            api_operator_listen_port: "13416".to_string(),
+			api_operator_listen_interface: "127.0.0.1".to_string(),
+			api_operator_listen_port: "13416".to_string(),
 			check_node_api_http_addr: "http://127.0.0.1:13413".to_string(),
 			data_file_dir: ".".to_string(),
 		}
@@ -190,11 +192,17 @@ impl Default for WalletConfig {
 
 impl WalletConfig {
 	pub fn api_receiver_listen_addr(&self) -> String {
-		format!("{}:{}", self.api_receiver_listen_interface, self.api_receiver_listen_port)
+		format!(
+			"{}:{}",
+			self.api_receiver_listen_interface, self.api_receiver_listen_port
+		)
 	}
-    pub fn api_operator_listen_addr(&self) -> String {
-        format!("{}:{}", self.api_operator_listen_interface, self.api_operator_listen_port)
-    }
+	pub fn api_operator_listen_addr(&self) -> String {
+		format!(
+			"{}:{}",
+			self.api_operator_listen_interface, self.api_operator_listen_port
+		)
+	}
 }
 
 /// Status of an output that's being tracked by the wallet. Can either be
@@ -266,7 +274,8 @@ impl OutputData {
 		}
 	}
 
-	/// Check if output is eligible to spend based on state and height and confirmations
+	/// Check if output is eligible to spend based on state and height and
+	/// confirmations
 	pub fn eligible_to_spend(&self, current_height: u64, minimum_confirmations: u64) -> bool {
 		if [OutputStatus::Spent, OutputStatus::Locked].contains(&self.status) {
 			return false;
@@ -324,9 +333,7 @@ impl WalletSeed {
 
 		let seed_file_path = &format!(
 			"{}{}{}",
-			wallet_config.data_file_dir,
-			MAIN_SEPARATOR,
-			SEED_FILE,
+			wallet_config.data_file_dir, MAIN_SEPARATOR, SEED_FILE,
 		);
 
 		debug!(LOGGER, "Generating wallet seed file at: {}", seed_file_path,);
@@ -347,9 +354,7 @@ impl WalletSeed {
 
 		let seed_file_path = &format!(
 			"{}{}{}",
-			wallet_config.data_file_dir,
-			MAIN_SEPARATOR,
-			SEED_FILE,
+			wallet_config.data_file_dir, MAIN_SEPARATOR, SEED_FILE,
 		);
 
 		debug!(LOGGER, "Using wallet seed file at: {}", seed_file_path,);
@@ -476,25 +481,21 @@ impl WalletData {
 
 	/// Read the wallet data from disk.
 	fn read(data_file_path: &str) -> Result<WalletData, Error> {
-		let data_file = File::open(data_file_path).map_err(|e| {
-			Error::WalletData(format!("Could not open {}: {}", data_file_path, e))
-		})?;
-		serde_json::from_reader(data_file).map_err(|e| {
-			Error::WalletData(format!("Error reading {}: {}", data_file_path, e))
-		})
+		let data_file = File::open(data_file_path)
+			.map_err(|e| Error::WalletData(format!("Could not open {}: {}", data_file_path, e)))?;
+		serde_json::from_reader(data_file)
+			.map_err(|e| Error::WalletData(format!("Error reading {}: {}", data_file_path, e)))
 	}
 
 	/// Write the wallet data to disk.
 	fn write(&self, data_file_path: &str) -> Result<(), Error> {
-		let mut data_file = File::create(data_file_path).map_err(|e| {
-			Error::WalletData(format!("Could not create {}: {}", data_file_path, e))
-		})?;
-		let res_json = serde_json::to_vec_pretty(self).map_err(|e| {
-			Error::WalletData(format!("Error serializing wallet data: {}", e))
-		})?;
-		data_file.write_all(res_json.as_slice()).map_err(|e| {
-			Error::WalletData(format!("Error writing {}: {}", data_file_path, e))
-		})
+		let mut data_file = File::create(data_file_path)
+			.map_err(|e| Error::WalletData(format!("Could not create {}: {}", data_file_path, e)))?;
+		let res_json = serde_json::to_vec_pretty(self)
+			.map_err(|e| Error::WalletData(format!("Error serializing wallet data: {}", e)))?;
+		data_file
+			.write_all(res_json.as_slice())
+			.map_err(|e| Error::WalletData(format!("Error writing {}: {}", data_file_path, e)))
 	}
 
 	/// Append a new output data to the wallet data.
@@ -564,7 +565,8 @@ impl WalletData {
 		}
 
 		// we failed to find a suitable set of outputs to spend,
-		// so return the largest amount we can so we can provide guidance on what is possible
+		// so return the largest amount we can so we can provide guidance on what is
+		// possible
 		eligible.reverse();
 		eligible.iter().take(max_outputs).cloned().collect()
 	}
@@ -584,14 +586,15 @@ impl WalletData {
 			} else {
 				let mut selected_amount = 0;
 				return Some(
-					outputs.iter()
+					outputs
+						.iter()
 						.take_while(|out| {
 							let res = selected_amount < amount;
 							selected_amount += out.value;
 							res
 						})
 						.cloned()
-						.collect()
+						.collect(),
 				);
 			}
 		} else {
@@ -620,10 +623,11 @@ pub struct PartialTx {
 	tx: String,
 }
 
-/// Helper in serializing the information required to retrieve wallet information.
+/// Helper in serializing the information required to retrieve wallet
+/// information.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InfoRequest {
-    pub passphrase: String,
+	pub passphrase: String,
 }
 
 /// Helper in serializing the information a sender requires to build a
@@ -631,13 +635,14 @@ pub struct InfoRequest {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SendTx {
 	pub amount: String,
-    pub minimum_confirmations: u64,
-    pub dest: String,
-    pub selection_strategy: String,
-    pub passphrase: String,
+	pub minimum_confirmations: u64,
+	pub dest: String,
+	pub selection_strategy: String,
+	pub passphrase: String,
 }
 
-/// Builds a PartialTx from data sent by a sender (not yet completed by the receiver).
+/// Builds a PartialTx from data sent by a sender (not yet completed by the
+/// receiver).
 pub fn build_partial_tx(
 	receive_amount: u64,
 	blind_sum: keychain::BlindingFactor,
@@ -707,5 +712,5 @@ pub struct WalletInfoData {
 /// Response to a wallet send request
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WalletSendResult {
-    pub confirmed: bool,
+	pub confirmed: bool,
 }
