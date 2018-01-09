@@ -30,8 +30,6 @@ use iron::middleware::Handler;
 use router::Router;
 use mount::Mount;
 
-use hyper_native_tls::NativeTlsServer;
-
 use store;
 
 /// Errors that can be returned by an ApiEndpoint implementation.
@@ -87,19 +85,17 @@ pub struct ApiServer {
 	router: Router,
 	mount: Mount,
 	server_listener: Option<Listening>,
-	ssl: bool,
 }
 
 impl ApiServer {
 	/// Creates a new ApiServer that will serve ApiEndpoint implementations
 	/// under the root URL.
-	pub fn new(root: String, ssl: bool) -> ApiServer {
+	pub fn new(root: String) -> ApiServer {
 		ApiServer {
 			root: root,
 			router: Router::new(),
 			mount: Mount::new(),
 			server_listener: None,
-			ssl: ssl,
 		}
 	}
 
@@ -109,15 +105,7 @@ impl ApiServer {
 		let r = mem::replace(&mut self.router, Router::new());
 		let mut m = mem::replace(&mut self.mount, Mount::new());
 		m.mount("/", r);
-
-		let result = match self.ssl {
-			true => {
-				let ssl = NativeTlsServer::new("grin.p12", "").unwrap();
-				Iron::new(m).https(addr, ssl)
-			}
-			false => { Iron::new(m).http(addr) }
-		};
-
+		let result = Iron::new(m).http(addr);
 		let return_value = result.as_ref().map(|_| ()).map_err(|e| e.to_string());
 		self.server_listener = Some(result.unwrap());
 		return_value

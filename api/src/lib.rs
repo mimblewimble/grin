@@ -35,8 +35,6 @@ extern crate serde_json;
 extern crate slog;
 extern crate urlencoded;
 
-extern crate hyper_native_tls;
-
 pub mod client;
 mod handlers;
 mod rest;
