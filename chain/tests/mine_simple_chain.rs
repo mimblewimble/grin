@@ -284,9 +284,8 @@ fn spend_in_fork() {
 	let head = chain.head_header().unwrap();
 	assert_eq!(head.height, 6);
 	assert_eq!(head.hash(), prev_main.hash());
-	assert!(chain.is_unspent(&tx2.outputs[0].commitment()).unwrap());
-	let res = chain.is_unspent(&tx1.outputs[0].commitment());
-	assert!(!res.unwrap());
+	assert!(chain.get_unspent(&tx2.outputs[0].commitment()).is_ok());
+	assert!(chain.get_unspent(&tx1.outputs[0].commitment()).is_err());
 
 	// make the fork win
 	let fork_next = prepare_fork_block(&kc, &prev_fork, &chain, 10);
@@ -297,8 +296,8 @@ fn spend_in_fork() {
 	let head = chain.head_header().unwrap();
 	assert_eq!(head.height, 7);
 	assert_eq!(head.hash(), prev_fork.hash());
-	assert!(chain.is_unspent(&tx2.outputs[0].commitment()).unwrap());
-	assert!(!chain.is_unspent(&tx1.outputs[0].commitment()).unwrap());
+	assert!(chain.get_unspent(&tx2.outputs[0].commitment()).is_ok());
+	assert!(chain.get_unspent(&tx1.outputs[0].commitment()).is_err());
 }
 
 fn prepare_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
