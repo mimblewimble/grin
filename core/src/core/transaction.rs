@@ -480,6 +480,8 @@ impl Input {
 		output_switch_commit_hash: &SwitchCommitHash,
 		height: u64,
 	) -> Result<(), Error> {
+		debug!(LOGGER, "verify_lock_height: {}, {}", self.lock_height, height);
+		
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			self.switch_commit,
 			SwitchCommitHashKey::from_lock_height(self.lock_height),

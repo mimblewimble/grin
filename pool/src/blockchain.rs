@@ -20,21 +20,11 @@ use std::sync::RwLock;
 
 use types::{BlockChain, PoolError};
 
-#[derive(Debug)]
-pub struct DummyBlockHeaderIndex {
-	block_headers: HashMap<Commitment, block::BlockHeader>,
-}
-
-impl DummyBlockHeaderIndex {
-	pub fn insert(&mut self, commit: Commitment, block_header: block::BlockHeader) {
-		self.block_headers.insert(commit, block_header);
-	}
-}
-
 /// A DummyUtxoSet for mocking up the chain
 pub struct DummyUtxoSet {
 	outputs: HashMap<Commitment, transaction::Output>,
 }
+
 
 #[allow(dead_code)]
 impl DummyUtxoSet {
@@ -43,21 +33,25 @@ impl DummyUtxoSet {
 			outputs: HashMap::new(),
 		}
 	}
+
 	pub fn root(&self) -> hash::Hash {
 		hash::ZERO_HASH
 	}
+
 	pub fn apply(&self, b: &block::Block) -> DummyUtxoSet {
-		let mut new_hashmap = self.outputs.clone();
+		let mut new_outputs = self.outputs.clone();
+
 		for input in &b.inputs {
-			new_hashmap.remove(&input.commitment());
+			new_outputs.remove(&input.commitment());
 		}
 		for output in &b.outputs {
-			new_hashmap.insert(output.commitment(), output.clone());
+			new_outputs.insert(output.commitment(), output.clone());
 		}
 		DummyUtxoSet {
-			outputs: new_hashmap,
+			outputs: new_outputs,
 		}
 	}
+
 	pub fn with_block(&mut self, b: &block::Block) {
 		for input in &b.inputs {
 			self.outputs.remove(&input.commitment());
@@ -66,20 +60,15 @@ impl DummyUtxoSet {
 			self.outputs.insert(output.commitment(), output.clone());
 		}
 	}
+
 	pub fn rewind(&self, _: &block::Block) -> DummyUtxoSet {
 		DummyUtxoSet {
 			outputs: HashMap::new(),
 		}
 	}
-	pub fn get_unspent(
-		&self,
-		output_ref: &Commitment,
-	) -> Option<transaction::SwitchCommitHash> {
-		if let Some(x) = self.outputs.get(output_ref) {
-			Some(x.switch_commit_hash())
-		} else {
-			None
-		}
+
+	pub fn get_output(&self, output_ref: &Commitment) -> Option<&transaction::Output> {
+		self.outputs.get(output_ref)
 	}
 
 	fn clone(&self) -> DummyUtxoSet {
@@ -89,14 +78,12 @@ impl DummyUtxoSet {
 	}
 
 	// only for testing: add an output to the map
-	pub fn add_output(&mut self, output: transaction::Output) {
-		self.outputs.insert(output.commitment(), output);
-	}
-	// like above, but doesn't modify in-place so no mut ref needed
 	pub fn with_output(&self, output: transaction::Output) -> DummyUtxoSet {
-		let mut new_map = self.outputs.clone();
-		new_map.insert(output.commitment(), output);
-		DummyUtxoSet { outputs: new_map }
+		let mut new_outputs = self.outputs.clone();
+		new_outputs.insert(output.commitment(), output);
+		DummyUtxoSet {
+			outputs: new_outputs,
+		}
 	}
 }
 
@@ -105,7 +92,6 @@ impl DummyUtxoSet {
 #[allow(dead_code)]
 pub struct DummyChainImpl {
 	utxo: RwLock<DummyUtxoSet>,
-	block_headers: RwLock<DummyBlockHeaderIndex>,
 	head_header: RwLock<Vec<block::BlockHeader>>,
 }
 
@@ -115,9 +101,6 @@ impl DummyChainImpl {
 		DummyChainImpl {
 			utxo: RwLock::new(DummyUtxoSet {
 				outputs: HashMap::new(),
-			}),
-			block_headers: RwLock::new(DummyBlockHeaderIndex {
-				block_headers: HashMap::new(),
 			}),
 			head_header: RwLock::new(vec![]),
 		}
@@ -129,8 +112,8 @@ impl BlockChain for DummyChainImpl {
 		&self,
 		commitment: &Commitment,
 	) -> Result<transaction::SwitchCommitHash, PoolError> {
-		match self.utxo.read().unwrap().get_unspent(commitment) {
-			Some(x) => Ok(x),
+		match self.utxo.read().unwrap().get_output(commitment) {
+			Some(x) => Ok(x.switch_commit_hash),
 			None => Err(PoolError::GenericPoolError),
 		}
 	}
@@ -152,16 +135,6 @@ impl DummyChain for DummyChainImpl {
 	fn apply_block(&self, b: &block::Block) {
 		self.utxo.write().unwrap().with_block(b);
 	}
-	fn store_header_by_output_commitment(
-		&self,
-		commitment: Commitment,
-		block_header: &block::BlockHeader,
-	) {
-		self.block_headers
-			.write()
-			.unwrap()
-			.insert(commitment, block_header.clone());
-	}
 	fn store_head_header(&self, block_header: &block::BlockHeader) {
 		let mut h = self.head_header.write().unwrap();
 		h.clear();
@@ -172,10 +145,5 @@ impl DummyChain for DummyChainImpl {
 pub trait DummyChain: BlockChain {
 	fn update_utxo_set(&mut self, new_utxo: DummyUtxoSet);
 	fn apply_block(&self, b: &block::Block);
-	fn store_header_by_output_commitment(
-		&self,
-		commitment: Commitment,
-		block_header: &block::BlockHeader,
-	);
 	fn store_head_header(&self, block_header: &block::BlockHeader);
 }

@@ -22,6 +22,7 @@ use core::core::block;
 use core::core::hash;
 
 use util::secp::pedersen::Commitment;
+use util::LOGGER;
 
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
@@ -139,6 +140,8 @@ where
 		_: TxSource,
 		tx: transaction::Transaction,
 	) -> Result<(), PoolError> {
+		debug!(LOGGER, "add_to_memory_pool");
+
 		// Do we have the capacity to accept this transaction?
 		if let Err(e) = self.is_acceptable(&tx) {
 			return Err(e);
@@ -599,6 +602,7 @@ where
 mod tests {
 	use super::*;
 	use core::core::build;
+	use core::global;
 	use blockchain::{DummyChain, DummyChainImpl, DummyUtxoSet};
 	use util::secp;
 	use keychain::Keychain;
@@ -606,7 +610,6 @@ mod tests {
 	use blake2;
 	use core::global::ChainTypes;
 	use core::core::{SwitchCommitHash, SwitchCommitHashKey};
-
 
 	macro_rules! expect_output_parent {
 		($pool:expr, $expected:pat, $( $output:expr ),+ ) => {
@@ -672,14 +675,13 @@ mod tests {
 			}
 		}
 
-		// Now take the read lock and use a few exposed methods to check
-  // consistency
+		// Now take the read lock and use a few exposed methods to check consistency
 		{
 			let read_pool = pool.read().unwrap();
 			assert_eq!(read_pool.total_size(), 2);
-			expect_output_parent!(read_pool, Parent::PoolTransaction{_}, 12);
-			expect_output_parent!(read_pool, Parent::AlreadySpent{_}, 11, 5);
-			expect_output_parent!(read_pool, Parent::BlockTransaction{_}, 8);
+			expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 12);
+			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 11, 5);
+			expect_output_parent!(read_pool, Parent::BlockTransaction{switch_commit_hash: _}, 8);
 			expect_output_parent!(read_pool, Parent::Unknown, 20);
 		}
 	}
@@ -794,7 +796,11 @@ mod tests {
 	fn test_immature_coinbase() {
 		global::set_mining_mode(ChainTypes::AutomatedTesting);
 		let mut dummy_chain = DummyChainImpl::new();
-		let coinbase_output = test_coinbase_output(15);
+
+		let lock_height = 1 + global::coinbase_maturity();
+		assert_eq!(lock_height, 4);
+
+		let coinbase_output = test_coinbase_output(15, lock_height);
 		dummy_chain.update_utxo_set(DummyUtxoSet::empty().with_output(coinbase_output));
 
 		let chain_ref = Arc::new(dummy_chain);
@@ -807,8 +813,7 @@ mod tests {
 				height: 1,
 				..block::BlockHeader::default()
 			};
-			chain_ref
-				.store_header_by_output_commitment(coinbase_output.commitment(), &coinbase_header);
+			chain_ref.store_head_header(&coinbase_header);
 
 			let head_header = block::BlockHeader {
 				height: 2,
@@ -816,11 +821,12 @@ mod tests {
 			};
 			chain_ref.store_head_header(&head_header);
 
-			let txn = test_transaction(vec![15], vec![10, 3]);
+			let txn = test_transaction_with_coinbase_input(15, 4, vec![10, 3]);
 			let result = write_pool.add_to_memory_pool(test_source(), txn);
 			match result {
 				Err(PoolError::ImmatureCoinbase {
-					header: _,
+					height: _,
+					lock_height: _,
 					output: out,
 				}) => {
 					assert_eq!(out, coinbase_output.commitment());
@@ -829,30 +835,12 @@ mod tests {
 			};
 
 			let head_header = block::BlockHeader {
-				height: 3,
+				height: 4,
 				..block::BlockHeader::default()
 			};
 			chain_ref.store_head_header(&head_header);
 
-			let txn = test_transaction(vec![15], vec![10, 3]);
-			let result = write_pool.add_to_memory_pool(test_source(), txn);
-			match result {
-				Err(PoolError::ImmatureCoinbase {
-					header: _,
-					output: out,
-				}) => {
-					assert_eq!(out, coinbase_output.commitment());
-				}
-				_ => panic!("expected ImmatureCoinbase error here"),
-			};
-
-			let head_header = block::BlockHeader {
-				height: 5,
-				..block::BlockHeader::default()
-			};
-			chain_ref.store_head_header(&head_header);
-
-			let txn = test_transaction(vec![15], vec![10, 3]);
+			let txn = test_transaction_with_coinbase_input(15, 4, vec![10, 3]);
 			let result = write_pool.add_to_memory_pool(test_source(), txn);
 			match result {
 				Ok(_) => {}
@@ -1077,7 +1065,7 @@ mod tests {
 			assert_eq!(read_pool.total_size(), 4);
 
 			// We should have available blockchain outputs
-			expect_output_parent!(read_pool, Parent::BlockTransaction{output: _}, 9, 1);
+			expect_output_parent!(read_pool, Parent::BlockTransaction{switch_commit_hash: _}, 9, 1);
 
 			// We should have spent blockchain outputs
 			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 5, 6);
@@ -1212,16 +1200,22 @@ mod tests {
 	/// Every output is given a blinding key equal to its value, so that the
 	/// entire commitment can be derived deterministically from just the value.
 	///
-	/// Fees are the remainder between input and output values, so the numbers
-	/// should make sense.
+	/// Fees are the remainder between input and output values,
+	/// so the numbers should make sense.
 	fn test_transaction(
 		input_values: Vec<u64>,
 		output_values: Vec<u64>,
 	) -> transaction::Transaction {
 		let keychain = keychain_for_tests();
 
-		let fees: i64 =
-			input_values.iter().sum::<u64>() as i64 - output_values.iter().sum::<u64>() as i64;
+		let input_sum = input_values
+			.iter()
+			.sum::<u64>() as i64;
+		let output_sum = output_values
+			.iter()
+			.sum::<u64>() as i64;
+
+		let fees: i64 = input_sum - output_sum;
 		assert!(fees >= 0);
 
 		let mut tx_elements = Vec::new();
@@ -1233,7 +1227,7 @@ mod tests {
 
 		for output_value in output_values {
 			let key_id = keychain.derive_key_id(output_value as u32).unwrap();
-			tx_elements.push(build::output(output_value, 0, key_id));
+			tx_elements.push(build::output(output_value, key_id));
 		}
 		tx_elements.push(build::with_fee(fees as u64));
 
@@ -1241,6 +1235,40 @@ mod tests {
 		tx
 	}
 
+	/// Very un-dry way of building a tx with a coinbase input (with lock_height).
+	/// TODO - rethink this.
+	fn test_transaction_with_coinbase_input(
+		input_value: u64,
+		input_lock_height: u64,
+		output_values: Vec<u64>,
+	) -> transaction::Transaction {
+		let keychain = keychain_for_tests();
+
+		let output_sum = output_values
+			.iter()
+			.sum::<u64>() as i64;
+
+		let fees: i64 = input_value as i64 - output_sum;
+		assert!(fees >= 0);
+
+		let mut tx_elements = Vec::new();
+
+		// for input_value in input_values {
+		let key_id = keychain.derive_key_id(input_value as u32).unwrap();
+		tx_elements.push(build::coinbase_input(input_value, input_lock_height, key_id));
+
+		for output_value in output_values {
+			let key_id = keychain.derive_key_id(output_value as u32).unwrap();
+			tx_elements.push(build::output(output_value, key_id));
+		}
+		tx_elements.push(build::with_fee(fees as u64));
+
+		let (tx, _) = build::transaction(tx_elements, &keychain).unwrap();
+		tx
+	}
+
+	/// Very un-dry way of building a vanilla tx and adding a lock_height to it.
+	/// TODO - rethink this.
 	fn timelocked_transaction(
 		input_values: Vec<u64>,
 		output_values: Vec<u64>,
@@ -1261,7 +1289,7 @@ mod tests {
 
 		for output_value in output_values {
 			let key_id = keychain.derive_key_id(output_value as u32).unwrap();
-			tx_elements.push(build::output(output_value, 0, key_id));
+			tx_elements.push(build::output(output_value, key_id));
 		}
 		tx_elements.push(build::with_fee(fees as u64));
 
@@ -1292,14 +1320,14 @@ mod tests {
 	}
 
 	/// Deterministically generate a coinbase output defined by our test scheme
-	fn test_coinbase_output(value: u64) -> transaction::Output {
+	fn test_coinbase_output(value: u64, lock_height: u64) -> transaction::Output {
 		let keychain = keychain_for_tests();
 		let key_id = keychain.derive_key_id(value as u32).unwrap();
 		let commit = keychain.commit(value, &key_id).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			switch_commit,
-			SwitchCommitHashKey::zero(),
+			SwitchCommitHashKey::from_lock_height(lock_height),
 		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
