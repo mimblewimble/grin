@@ -54,7 +54,7 @@ pub mod server;
 
 pub use outputs::show_outputs;
 pub use info::show_info;
-pub use receiver::{receive_json_tx, receive_json_tx_str, WalletReceiver};
+pub use receiver::{WalletReceiver};
 pub use sender::{issue_burn_tx, issue_send_tx};
 pub use types::{BlockFees, CbData, Error, WalletConfig, WalletReceiveRequest, WalletSeed};
 pub use restore::restore;

@@ -47,7 +47,8 @@ fn basic_wallet_transactions() {
 	let mut log_config = util::LoggingConfig::default();
 	//log_config.stdout_log_level = util::LogLevel::Trace;
 	log_config.stdout_log_level = util::LogLevel::Info;
-	init_logger(Some(log_config));
+	//init_logger(Some(log_config));
+	util::init_test_logger();
 
 	// Run a separate coinbase wallet for coinbase transactions
 	let mut coinbase_config = LocalServerContainerConfig::default();

@@ -26,25 +26,14 @@ use api;
 use core::consensus::reward;
 use core::core::{build, Block, Output, Transaction, TxKernel};
 use core::ser;
-use keychain::{BlindingFactor, BlindSum, Identifier, Keychain};
+use keychain::{Identifier, Keychain};
 use types::*;
 use util::{LOGGER, to_hex, secp};
-
-
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
 #[derive(Serialize, Deserialize)]
 pub struct TxWrapper {
 	pub tx_hex: String,
-}
-
-pub fn receive_json_tx_str(
-	config: &WalletConfig,
-	keychain: &Keychain,
-	json_tx: &str,
-) -> Result<(), Error> {
-	let partial_tx = serde_json::from_str(json_tx).unwrap();
-	receive_json_tx(config, keychain, &partial_tx)
 }
 
 /// Receive Part 1 of interactive transactions from sender, Sender Initiation
@@ -62,7 +51,7 @@ fn handle_sender_initiation(
 	keychain: &Keychain,
 	partial_tx: &PartialTx
 ) -> Result<PartialTx, Error> {
-	let (amount, sender_pub_blinding, sender_pub_nonce, sig, tx) = read_partial_tx(keychain, partial_tx)?;
+	let (amount, _sender_pub_blinding, sender_pub_nonce, _sig, tx) = read_partial_tx(keychain, partial_tx)?;
 
 	let root_key_id = keychain.root_key_id();
 
@@ -177,24 +166,6 @@ fn handle_sender_confirmation(
 	let mut partial_tx = build_partial_tx(keychain, amount, Some(final_sig), tx);
 	partial_tx.phase = PartialTxPhase::ReceiverConfirmation;
 	Ok(partial_tx)
-}
-
-/// Receive an already well formed JSON transaction issuance and finalize the
-/// transaction, adding our receiving output, to broadcast to the rest of the
-/// network.
-pub fn receive_json_tx(
-	config: &WalletConfig,
-	keychain: &Keychain,
-	partial_tx: &PartialTx,
-) -> Result<(), Error> {
-	let (amount, sender_pub_blinding, _sender_pub_nonce, sig, tx) = read_partial_tx(keychain, partial_tx)?;
-	/*let final_tx = receive_transaction(config, keychain, amount, sender_pub_blinding, tx)?;
-	let tx_hex = util::to_hex(ser::ser_vec(&final_tx).unwrap());
-
-	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
-	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })
-		.map_err(|e| Error::Node(e))?;*/
-	Ok(())
 }
 
 /// Component used to receive coins, implements all the receiving end of the
@@ -377,7 +348,7 @@ fn build_final_transaction(
 
 	// make sure the resulting transaction is valid (could have been lied to on
  // excess).
-	let result = final_tx.validate()?;
+	let _ = final_tx.validate()?;
 
 	debug!(
 		LOGGER,
