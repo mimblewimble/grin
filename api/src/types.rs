@@ -176,8 +176,13 @@ impl OutputPrintable {
 				OutputType::Transaction
 			};
 
+		// output for commitment is spent if -
+		// * not found in the pmmr (via the chain)
+		// * or commitment is a duplicate (found in pmmr but switch commit hash differs)
 		let spent = match chain.get_unspent(&output.commit) {
-			Ok(_) => false,
+			Ok(switch_commit_hash) => {
+				switch_commit_hash != output.switch_commit_hash
+			},
 			Err(_) => true,
 		};
 

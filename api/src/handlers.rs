@@ -111,7 +111,12 @@ impl UtxoHandler {
 			.iter()
 			.filter(|c| {
 				(commitments.is_empty() || commitments.contains(&c.commit)) &&
-				self.chain.get_unspent(&c.commit).is_ok()
+				match self.chain.get_unspent(&c.commit) {
+					Ok(switch_commit_hash) => {
+						switch_commit_hash == c.switch_commit_hash
+					}
+					Err(_) => false,
+				}
 			})
 			.map(|k| {
 				OutputPrintable::from_output(k, self.chain.clone(), include_proof)
@@ -469,7 +474,10 @@ where
 
 		match res {
 			Ok(()) => Ok(Response::with(status::Ok)),
-			Err(e) => Err(IronError::from(Error::Argument(format!("{:?}", e))))
+			Err(e) => {
+				debug!(LOGGER, "error - {:?}", e);
+				Err(IronError::from(Error::Argument(format!("{:?}", e))))
+			}
 		}
 	}
 }

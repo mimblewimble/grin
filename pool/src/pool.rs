@@ -22,7 +22,6 @@ use core::core::block;
 use core::core::hash;
 
 use util::secp::pedersen::Commitment;
-use util::LOGGER;
 
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
@@ -140,8 +139,6 @@ where
 		_: TxSource,
 		tx: transaction::Transaction,
 	) -> Result<(), PoolError> {
-		debug!(LOGGER, "add_to_memory_pool");
-
 		// Do we have the capacity to accept this transaction?
 		if let Err(e) = self.is_acceptable(&tx) {
 			return Err(e);

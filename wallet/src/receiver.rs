@@ -89,7 +89,7 @@ impl Handler for WalletReceiver {
 		if let Ok(Some(partial_tx)) = struct_body {
 			receive_json_tx(&self.config, &self.keychain, &partial_tx)
 				.map_err(|e| {
-					error!(LOGGER, "Problematic partial tx, looks like this: {:?}", partial_tx);
+					error!(LOGGER, "Problematic partial tx, looks like this: {:?}, {:?}", partial_tx, e);
 					api::Error::Internal(
 						format!("Error processing partial transaction: {:?}", e),
 					)})
