@@ -16,10 +16,6 @@
 //! receiving money in MimbleWimble requires an interactive exchange, a
 //! wallet server that's running at all time is required in many cases.
 
-use bodyparser;
-use iron::prelude::*;
-use iron::Handler;
-use iron::status;
 use serde_json;
 
 use api;
@@ -54,7 +50,6 @@ pub fn receive_json_tx(
 	keychain: &Keychain,
 	partial_tx: &PartialTx,
 ) -> Result<(), Error> {
-
 	// reading the partial transaction and finalizing it, adding our output
 	let (amount, blinding, tx) = read_partial_tx(keychain, partial_tx)?;
 	let (final_tx, key_id) = receive_transaction(config, keychain, amount, blinding, tx)?;
@@ -74,37 +69,7 @@ pub fn receive_json_tx(
 	}
 }
 
-/// Component used to receive coins, implements all the receiving end of the
-/// wallet REST API as well as some of the command-line operations.
-#[derive(Clone)]
-pub struct WalletReceiver {
-	pub keychain: Keychain,
-	pub config: WalletConfig,
-}
-
-impl Handler for WalletReceiver {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let struct_body = req.get::<bodyparser::Struct<PartialTx>>();
-
-		if let Ok(Some(partial_tx)) = struct_body {
-			receive_json_tx(&self.config, &self.keychain, &partial_tx)
-				.map_err(|e| {
-					error!(LOGGER, "Problematic partial tx, looks like this: {:?}", partial_tx);
-					api::Error::Internal(
-						format!("Error processing partial transaction: {:?}", e),
-					)})
-				.unwrap();
-			Ok(Response::with(status::Ok))
-		} else {
-			Ok(Response::with((status::BadRequest, "")))
-		}
-	}
-}
-
-fn retrieve_existing_key(
-	wallet_data: &WalletData,
-	key_id: Identifier,
-) -> (Identifier, u32) {
+fn retrieve_existing_key(wallet_data: &WalletData, key_id: Identifier) -> (Identifier, u32) {
 	if let Some(existing) = wallet_data.get_output(&key_id) {
 		let key_id = existing.key_id.clone();
 		let derivation = existing.n_child;
@@ -114,10 +79,7 @@ fn retrieve_existing_key(
 	}
 }
 
-fn next_available_key(
-	wallet_data: &WalletData,
-	keychain: &Keychain,
-) -> (Identifier, u32) {
+fn next_available_key(wallet_data: &WalletData, keychain: &Keychain) -> (Identifier, u32) {
 	let root_key_id = keychain.root_key_id();
 	let derivation = wallet_data.next_child(root_key_id.clone());
 	let key_id = keychain.derive_key_id(derivation).unwrap();
@@ -182,12 +144,11 @@ fn receive_transaction(
 	blinding: BlindingFactor,
 	partial: Transaction,
 ) -> Result<(Transaction, Identifier), Error> {
-
 	let root_key_id = keychain.root_key_id();
 
 	// double check the fee amount included in the partial tx
- // we don't necessarily want to just trust the sender
- // we could just overwrite the fee here (but we won't) due to the ecdsa sig
+	// we don't necessarily want to just trust the sender
+	// we could just overwrite the fee here (but we won't) due to the ecdsa sig
 	let fee = tx_fee(partial.inputs.len(), partial.outputs.len() + 1, None);
 	if fee != partial.fee {
 		return Err(Error::FeeDispute {
@@ -221,13 +182,13 @@ fn receive_transaction(
 			build::initial_tx(partial),
 			build::with_excess(blinding),
 			build::output(out_amount, key_id.clone()),
-		// build::with_fee(fee_amount),
+			// build::with_fee(fee_amount),
 		],
 		keychain,
 	)?;
 
 	// make sure the resulting transaction is valid (could have been lied to on
- // excess).
+	// excess).
 	tx_final.validate()?;
 
 	debug!(

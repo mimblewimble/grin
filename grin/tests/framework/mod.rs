@@ -280,11 +280,11 @@ impl LocalServerContainer {
 
 		let mut wallet_config = WalletConfig::default();
 
-		wallet_config.api_listen_port = format!("{}", self.config.wallet_port);
+		wallet_config.api_receiver_listen_port = format!("{}", self.config.wallet_port);
 		wallet_config.check_node_api_http_addr = self.config.wallet_validating_node_url.clone();
 		wallet_config.data_file_dir = self.working_dir.clone();
 
-		let receive_tx_handler = wallet::WalletReceiver {
+		let receive_tx_handler = wallet::WalletReceiverHandler {
 			config: wallet_config.clone(),
 			keychain: keychain.clone(),
 		};

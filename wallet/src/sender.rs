@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::core::amount_from_hr_string;
 use serde_json;
 
 use api;
@@ -25,10 +26,45 @@ use types::*;
 use util::LOGGER;
 use util;
 
+pub fn send_json_tx_str(
+	wallet_config: &WalletConfig,
+	keychain: &Keychain,
+	send_tx: &SendTx,
+) -> Result<(), Error> {
+	let amount = send_tx.amount.clone();
+
+	let amount = amount_from_hr_string(&amount).map_err(|e| Error::Format(e.to_string()))?;
+
+	let minimum_confirmations = send_tx.minimum_confirmations.clone();
+
+	let selection_strategy = send_tx.selection_strategy.clone();
+
+	let dest = send_tx.dest.clone();
+
+	if dest == "stdout" {
+		return Err(Error::Format(
+			"Cannot use stdout as destination when using the wallet Api to send funds.".to_string(),
+		));
+	}
+
+	let max_outputs = 500;
+	let result = issue_send_tx(
+		&wallet_config,
+		&keychain,
+		amount,
+		minimum_confirmations,
+		dest.to_string(),
+		max_outputs,
+		(selection_strategy == "all"),
+	);
+
+	return result;
+}
+
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
 /// UTXOs. The destination can be "stdout" (for command line) or a URL to the
-/// recipients wallet receiver (to be implemented).
+/// recipients wallet listener (to be implemented).
 
 pub fn issue_send_tx(
 	config: &WalletConfig,
@@ -62,17 +98,22 @@ pub fn issue_send_tx(
 
 	// Closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
-	let update_wallet = || WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		for coin in coins {
-			wallet_data.lock_output(&coin);
-		}
-	});
+	let update_wallet = || {
+		WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+			for coin in coins {
+				wallet_data.lock_output(&coin);
+			}
+		})
+	};
 
-	// Closure to acquire wallet lock and delete the change output in case of tx failure.
-	let rollback_wallet = || WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		info!(LOGGER, "cleaning up unused change output from wallet");
-		wallet_data.delete_output(&change_key);
-	});
+	// Closure to acquire wallet lock and delete the change output in case of tx
+	// failure.
+	let rollback_wallet = || {
+		WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+			info!(LOGGER, "cleaning up unused change output from wallet");
+			wallet_data.delete_output(&change_key);
+		})
+	};
 
 	if dest == "stdout" {
 		let json_tx = serde_json::to_string_pretty(&partial_tx).unwrap();
@@ -84,7 +125,10 @@ pub fn issue_send_tx(
 		let res = client::send_partial_tx(&url, &partial_tx);
 		match res {
 			Err(_) => {
-				error!(LOGGER, "Communication with receiver failed. Aborting transaction");
+				error!(
+					LOGGER,
+					"Communication with receiver failed. Aborting transaction"
+				);
 				rollback_wallet()?;
 				return res;
 			}
@@ -93,7 +137,10 @@ pub fn issue_send_tx(
 			}
 		}
 	} else {
-		panic!("dest formatted as {} but send -d expected stdout or http://IP:port", dest);
+		panic!(
+			"dest formatted as {} but send -d expected stdout or http://IP:port",
+			dest
+		);
 	}
 	Ok(())
 }
@@ -199,15 +246,15 @@ fn inputs_and_change(
 	}
 
 	// sender is responsible for setting the fee on the partial tx
- // recipient should double check the fee calculation and not blindly trust the
- // sender
+	// recipient should double check the fee calculation and not blindly trust the
+	// sender
 	let fee = tx_fee(coins.len(), 2, None);
 	parts.push(build::with_fee(fee));
 
 	// if we are spending 10,000 coins to send 1,000 then our change will be 9,000
- // the fee will come out of the amount itself
- // if the fee is 80 then the recipient will only receive 920
- // but our change will still be 9,000
+	// the fee will come out of the amount itself
+	// if the fee is 80 then the recipient will only receive 920
+	// but our change will still be 9,000
 	let change = total - amount;
 
 	// build inputs using the appropriate derived key_ids
