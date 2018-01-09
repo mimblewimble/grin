@@ -292,7 +292,7 @@ impl LocalServerContainer {
 			receive_tx: get "/receive/transaction" => receive_tx_handler,
 		);
 
-		let mut api_server = api::ApiServer::new("/v1".to_string(), false);
+		let mut api_server = api::ApiServer::new("/v1".to_string());
 		api_server.register_handler(router);
 		api_server.start(url).unwrap_or_else(|e| {
 			println!("Failed to start Grin wallet receiver: {}.", e);
