@@ -70,6 +70,9 @@ fn basic_wallet_transactions() {
 	recp_config.wallet_port = 20002;
 	let target_wallet = Arc::new(Mutex::new(LocalServerContainer::new(recp_config).unwrap()));
 	let target_wallet_cloned = target_wallet.clone();
+	let mut recp_wallet_config = {
+		target_wallet.lock().unwrap().wallet_config.clone()
+	};
 
 	//Start up a second wallet, to receive
 	let _ = thread::spawn(move || {
@@ -99,7 +102,11 @@ fn basic_wallet_transactions() {
 	warn!(LOGGER, "Sending 50 Grins to recipient wallet");
 	LocalServerContainer::send_amount_to(&coinbase_wallet_config, "50.00", 1, "all", "http://127.0.0.1:20002");
 
-	//Wait for request to finish
-	//thread::sleep(time::Duration::from_millis(1000));
+	//let some more mining happen, make sure nothing pukes
+	thread::sleep(time::Duration::from_millis(5000));
+
+	//send some cash right back
+	LocalServerContainer::send_amount_to(&recp_wallet_config, "25.00", 1, "all", "http://127.0.0.1:10002");
+	thread::sleep(time::Duration::from_millis(5000));
 }
 

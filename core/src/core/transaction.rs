@@ -156,7 +156,20 @@ impl TxKernel {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 		let sig = try!(Signature::from_der(&secp, &self.excess_sig));
-		secp.verify_from_commit(&msg, &sig, &self.excess)
+		// Extract the pubkey, unfortunately we need this hack for now, (we just hope one is valid)
+		// TODO: Create better secp256k1 API to do this
+		let pubkeys = self.excess.to_two_pubkeys(&secp);
+		let mut valid=false;
+		for i in 0..pubkeys.len() {
+			valid=secp::aggsig::verify_single(&secp, &sig, &msg, None, &pubkeys[i], false);
+			if valid {
+				break;
+			}
+		}
+		if !valid{
+			return Err(secp::Error::IncorrectSignature);
+		}
+		Ok(())
 	}
 }
 
@@ -320,16 +333,22 @@ impl Transaction {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 		let sig = Signature::from_der(&secp, &self.excess_sig)?;
+		// Extract the pubkey, unfortunately we need this hack for now, (we just hope one is valid)
+		// TODO: Create better secp256k1 API to do this
+		let pubkeys = rsum.to_two_pubkeys(&secp);
 
 		// pretend the sum is a public key (which it is, being of the form r.G) and
 		// verify the transaction sig with it
-		//
-		// we originally converted the commitment to a key_id here (commitment to zero)
-		// and then passed the key_id to secp.verify()
-		// the secp api no longer allows us to do this so we have wrapped the complexity
-		// of generating a public key from a commitment behind verify_from_commit
-		secp.verify_from_commit(&msg, &sig, &rsum)?;
-
+		let mut valid=false;
+		for i in 0..pubkeys.len() {
+			valid=secp::aggsig::verify_single(&secp, &sig, &msg, None, &pubkeys[i], false);
+			if valid {
+				break;
+			}
+		}
+		if !valid{
+			return Err(secp::Error::IncorrectSignature);
+		}
 		Ok(rsum)
 	}
 

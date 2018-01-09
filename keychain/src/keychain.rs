@@ -54,6 +54,8 @@ pub struct AggSigTxContext {
 	// Secret nonce (of which public is shared)
 	// (basically a SecretKey)
 	pub sec_nonce: SecretKey,
+	// If I'm the recipient, store my outputs between invocations (that I need to sum)
+	pub output_ids: Vec<Identifier>,
 }
 
 #[derive(Clone, Debug)]
@@ -250,7 +252,24 @@ impl Keychain {
 		*context = Some(AggSigTxContext{
 			sec_key: sec_key,
 			sec_nonce: aggsig::export_secnonce_single(&self.secp).unwrap(),
+			output_ids: vec![],
 		});
+	}
+
+	/// Tracks an output contributing to my excess value (if it needs to
+	/// be kept between invocations
+	pub fn aggsig_add_output(&self, id: &Identifier){
+		let mut agg_context=self.aggsig_context.write().unwrap();
+		let agg_context_write=agg_context.as_mut().unwrap();
+		agg_context_write.output_ids.push(id.clone());
+	}
+
+	/// Returns all stored outputs
+	pub fn aggsig_get_outputs(&self) -> Vec<Identifier> {
+		let context = self.aggsig_context.clone();
+		let context_read=context.read().unwrap();
+		let agg_context=context_read.as_ref().unwrap();
+		agg_context.output_ids.clone()
 	}
 
 	/// Returns private key, private nonce
@@ -330,6 +349,13 @@ impl Keychain {
 		let mut pk_sum = their_public_key.clone();
 		let _ = pk_sum.add_exp_assign(&self.secp, &our_sec_key);
 		Ok(pk_sum)
+	}
+
+	/// Just a simple sig, creates its own nonce, etc
+	pub fn aggsig_sign_from_key_id(&self, msg: &Message, key_id: &Identifier) -> Result<Signature, Error> {
+		let skey = self.derived_key(key_id)?;
+		let sig = aggsig::sign_single(&self.secp, &msg, &skey, None, None, None)?;
+		Ok(sig)
 	}
 
 	pub fn sign(&self, msg: &Message, key_id: &Identifier) -> Result<Signature, Error> {

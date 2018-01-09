@@ -28,7 +28,7 @@ use core::core::{build, Block, Output, Transaction, TxKernel};
 use core::ser;
 use keychain::{BlindingFactor, BlindSum, Identifier, Keychain};
 use types::*;
-use util::{LOGGER, to_hex};
+use util::{LOGGER, to_hex, secp};
 
 
 
@@ -99,14 +99,19 @@ fn handle_sender_initiation(
 		key_id
 	})?;
 
-	let sum=BlindSum::new();
-	let sum = sum.add_key_id(key_id);
-	let blind_sum = keychain.blind_sum(&sum)?;
+	// Still handy for getting the blinding sum
+	let (_, blind_sum) = build::transaction(
+		vec![
+			build::output(out_amount, key_id.clone()),
+		],
+		keychain,
+	)?;
 
 	warn!(LOGGER, "Creating new aggsig context");
 	// Create a new aggsig context
 	// this will create a new blinding sum and nonce, and store them
 	keychain.aggsig_create_context(blind_sum.secret_key());
+	keychain.aggsig_add_output(&key_id);
 
 	let sig_part=keychain.aggsig_calculate_partial_sig(&sender_pub_nonce, fee, tx.lock_height).unwrap();
 
@@ -149,29 +154,24 @@ fn handle_sender_confirmation(
 	// And the final signature
 	let final_sig=keychain.aggsig_calculate_final_sig(&sender_sig_part, &our_sig_part, &sender_pub_nonce).unwrap();
 
-	// And the final Public Key
+	// Calculate the final public key (for our own sanity check)
 	let final_pubkey=keychain.aggsig_calculate_final_pubkey(&sender_pub_blinding).unwrap();
 
-	println!("Final Sig: {:?}", final_sig);
-	println!("Final Pubkey: {:?}", final_pubkey);
-
-	//Check our final transaction verifies
+	//Check our final sig verifies
 	let res = keychain.aggsig_verify_final_sig_build_msg(&final_sig, &final_pubkey, tx.fee, tx.lock_height);
 
-	println!("Final result.....: {}", res);
 	if !res {
 		error!(LOGGER, "Final aggregated signature invalid.");
 		return Err(Error::Signature(String::from("Final aggregated signature invalid.")));
 	}
 
-	//TODO: Next up, fill out the final transaction properly
 
-	/*let final_tx = complete_transaction(config, keychain, amount, BlindingFactor::new(sender_pub_blinding), tx.clone())?;
+	let final_tx = build_final_transaction(config, keychain, amount, &final_sig, tx.clone())?;
 	let tx_hex = to_hex(ser::ser_vec(&final_tx).unwrap());
 
 	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
 	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })
-		.map_err(|e| Error::Node(e))?;*/
+		.map_err(|e| Error::Node(e))?;
 
 	// Return what we've actually posted
 	let mut partial_tx = build_partial_tx(keychain, amount, Some(final_sig), tx);
@@ -317,33 +317,37 @@ pub fn receive_coinbase(
 	Ok((out, kern, block_fees))
 }
 
-/// completes a transaction after the aggregated sig exchange
-fn complete_transaction(
+/// builds a final transaction after the aggregated sig exchange
+fn build_final_transaction(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
-	blinding: BlindingFactor,
-	partial: Transaction,
-) -> Result<(Transaction, Identifier), Error> {
+	excess_sig: &secp::Signature,
+	tx: Transaction,
+) -> Result<Transaction, Error> {
 
 	let root_key_id = keychain.root_key_id();
 
 	// double check the fee amount included in the partial tx
  // we don't necessarily want to just trust the sender
  // we could just overwrite the fee here (but we won't) due to the ecdsa sig
-	let fee = tx_fee(partial.inputs.len(), partial.outputs.len() + 1, None);
-	if fee != partial.fee {
+	let fee = tx_fee(tx.inputs.len(), tx.outputs.len() + 1, None);
+	if fee != tx.fee {
 		return Err(Error::FeeDispute {
-			sender_fee: partial.fee,
+			sender_fee: tx.fee,
 			recipient_fee: fee,
 		});
 	}
 
 	let out_amount = amount - fee;
 
+	// Get output we created in earlier step
+	// TODO: will just be one for now, support multiple later
+	let output_vec = keychain.aggsig_get_outputs();
+
 	// operate within a lock on wallet data
 	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		let (key_id, derivation) = next_available_key(&wallet_data, keychain);
+		let (key_id, derivation) = retrieve_existing_key(&wallet_data, output_vec[0].clone());
 
 		wallet_data.add_output(OutputData {
 			root_key_id: root_key_id.clone(),
@@ -359,19 +363,21 @@ fn complete_transaction(
 		(key_id, derivation)
 	})?;
 
-	let (tx_final, _) = build::transaction(
+	// Build final transaction, the sum of which should
+	// be the same as the exchanged excess values
+	let (mut final_tx, _) = build::transaction(
 		vec![
-			build::initial_tx(partial),
-			build::with_excess(blinding),
+			build::initial_tx(tx),
 			build::output(out_amount, key_id.clone()),
-		// build::with_fee(fee_amount),
 		],
 		keychain,
 	)?;
 
+	final_tx.excess_sig = excess_sig.serialize_der(&keychain.secp());
+
 	// make sure the resulting transaction is valid (could have been lied to on
  // excess).
-	tx_final.validate()?;
+	let result = final_tx.validate()?;
 
 	debug!(
 		LOGGER,
@@ -381,5 +387,5 @@ fn complete_transaction(
 		derivation,
 	);
 
-	Ok((tx_final, key_id))
+	Ok(final_tx)
 }

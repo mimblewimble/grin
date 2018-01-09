@@ -341,7 +341,6 @@ impl Block {
 		kernels.sort();
 
 		// calculate the overall Merkle tree and fees (todo?)
-
 		Ok(
 			Block {
 				header: BlockHeader {
@@ -585,7 +584,7 @@ impl Block {
 		let excess = secp.commit_sum(vec![out_commit], vec![over_commit])?;
 
 		let msg = util::secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE])?;
-		let sig = keychain.sign(&msg, &key_id)?;
+		let sig = keychain.aggsig_sign_from_key_id(&msg, &key_id).unwrap();
 
 		let excess_sig = sig.serialize_der(&secp);
 
