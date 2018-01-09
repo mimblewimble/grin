@@ -99,16 +99,16 @@ fn test_coinbase_maturity() {
 
 	let prev = chain.head_header().unwrap();
 
-	let height = prev.height;
-	assert_eq!(height, 1);
-
 	let amount = consensus::REWARD;
+
+	let lock_height = 1 + global::coinbase_maturity();
+	assert_eq!(lock_height, 4);
 
 	// here we build a tx that attempts to spend the earlier coinbase output
 	// this is not a valid tx as the coinbase output cannot be spent yet
 	let (coinbase_txn, _) = build::transaction(
 		vec![
-			build::coinbase_input(amount, height, key_id1.clone()),
+			build::coinbase_input(amount, lock_height, key_id1.clone()),
 			build::output(amount - 2, key_id2.clone()),
 			build::with_fee(2),
 		],
@@ -125,7 +125,11 @@ fn test_coinbase_maturity() {
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 	block.header.difficulty = difficulty.clone();
-	chain.set_sumtree_roots(&mut block, false).unwrap();
+
+	match chain.set_sumtree_roots(&mut block, false) {
+		Err(Error::ImmatureCoinbase) => (),
+		_ => panic!("expected ImmatureCoinbase error here"),
+	}
 
 	pow::pow_size(
 		&mut cuckoo_miner,
@@ -133,14 +137,6 @@ fn test_coinbase_maturity() {
 		difficulty,
 		global::sizeshift() as u32,
 	).unwrap();
-
-	// confirm the block fails validation due to the invalid tx attempting to spend
-	// the immature coinbase
-	let result = chain.process_block(block, chain::SKIP_POW);
-	match result {
-		Err(Error::ImmatureCoinbase) => (),
-		_ => panic!("expected ImmatureCoinbase error here"),
-	};
 
 	// mine enough blocks to increase the height sufficiently for
 	// coinbase to reach maturity and be spendable in the next block
@@ -169,12 +165,9 @@ fn test_coinbase_maturity() {
 
 	let prev = chain.head_header().unwrap();
 
-	let height = prev.height;
-	assert_eq!(height, 4);
-
 	let (coinbase_txn, _) = build::transaction(
 		vec![
-			build::coinbase_input(amount, height, key_id1.clone()),
+			build::coinbase_input(amount, lock_height, key_id1.clone()),
 			build::output(amount - 2, key_id2.clone()),
 			build::with_fee(2),
 		],

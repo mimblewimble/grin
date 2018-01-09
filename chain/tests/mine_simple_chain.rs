@@ -245,9 +245,12 @@ fn spend_in_fork() {
 		chain.process_block(b, chain::SKIP_POW).unwrap();
 	}
 
+	let lock_height = 1 + global::coinbase_maturity();
+	assert_eq!(lock_height, 4);
+
 	let (tx1, _) = build::transaction(
 		vec![
-			build::input(consensus::REWARD, kc.derive_key_id(2).unwrap()),
+			build::coinbase_input(consensus::REWARD, lock_height, kc.derive_key_id(2).unwrap()),
 			build::output(consensus::REWARD - 20000, kc.derive_key_id(30).unwrap()),
 			build::with_fee(20000),
 		],
