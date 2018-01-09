@@ -17,10 +17,11 @@ use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use chain::{self, ChainAdapter};
-use core::core::{self, Output};
+use core::core;
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
+use core::core::transaction::SwitchCommitHash;
 use p2p;
 use pool;
 use util::secp::pedersen::Commitment;
@@ -332,7 +333,10 @@ impl PoolToChainAdapter {
 }
 
 impl pool::BlockChain for PoolToChainAdapter {
-	fn get_unspent(&self, output_ref: &Commitment) -> Result<Output, pool::PoolError> {
+	fn get_unspent(
+		&self,
+		output_ref: &Commitment,
+	) -> Result<SwitchCommitHash, pool::PoolError> {
 		self.chain
 			.borrow()
 			.get_unspent(output_ref)
@@ -341,16 +345,6 @@ impl pool::BlockChain for PoolToChainAdapter {
 				chain::types::Error::OutputSpent => pool::PoolError::OutputSpent,
 				_ => pool::PoolError::GenericPoolError,
 			})
-	}
-
-	fn get_block_header_by_output_commit(
-		&self,
-		commit: &Commitment,
-	) -> Result<BlockHeader, pool::PoolError> {
-		self.chain
-			.borrow()
-			.get_block_header_by_output_commit(commit)
-			.map_err(|_| pool::PoolError::GenericPoolError)
 	}
 
 	fn head_header(&self) -> Result<BlockHeader, pool::PoolError> {

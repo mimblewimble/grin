@@ -121,9 +121,17 @@ impl From<serde_json::Error> for Error {
 	}
 }
 
+// TODO - rethink this, would be nice not to have to worry about
+// low level hex conversion errors like this
 impl From<num::ParseIntError> for Error {
 	fn from(_: num::ParseIntError) -> Error {
 		Error::Format("Invalid hex".to_string())
+	}
+}
+
+impl From<ser::Error> for Error {
+	fn from(e: ser::Error) -> Error {
+		Error::Format(e.to_string())
 	}
 }
 
@@ -247,7 +255,7 @@ impl OutputData {
 	pub fn num_confirmations(&self, current_height: u64) -> u64 {
 		if self.status == OutputStatus::Unconfirmed {
 			0
-		} else if self.status == OutputStatus::Spent && self.height == 0 {
+		} else if self.height == 0 {
 			0
 		} else {
 			// if an output has height n and we are at block n

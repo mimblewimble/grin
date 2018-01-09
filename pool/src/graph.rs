@@ -292,7 +292,7 @@ mod tests {
 	use util::secp;
 	use keychain::Keychain;
 	use rand;
-	use core::core::SwitchCommitHash;
+	use core::core::{SwitchCommitHash, SwitchCommitHashKey};
 
 	#[test]
 	fn test_add_entry() {
@@ -303,10 +303,22 @@ mod tests {
 
 		let output_commit = keychain.commit(70, &key_id1).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id1).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			SwitchCommitHashKey::zero(),
+		);
+
 		let inputs = vec![
-			core::transaction::Input(keychain.commit(50, &key_id2).unwrap()),
-			core::transaction::Input(keychain.commit(25, &key_id3).unwrap()),
+			core::transaction::Input::new(
+				keychain.commit(50, &key_id2).unwrap(),
+				keychain.switch_commit(&key_id2).unwrap(),
+				0,
+			),
+			core::transaction::Input::new(
+				keychain.commit(25, &key_id3).unwrap(),
+				keychain.switch_commit(&key_id2).unwrap(),
+				0,
+			),
 		];
 		let msg = secp::pedersen::ProofMessage::empty();
 		let outputs = vec![

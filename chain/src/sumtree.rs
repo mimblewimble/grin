@@ -20,9 +20,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use util::secp::pedersen::{RangeProof, Commitment};
-
-use core::core::{Block, SumCommit, Input, Output, TxKernel, COINBASE_OUTPUT};
+use core::core::{Block, SumCommit, Input, Output, SwitchCommitHash, TxKernel, COINBASE_OUTPUT};
 use core::core::pmmr::{HashSum, NoSum, Summable, PMMR};
 use core::core::hash::Hashed;
 use grin_store;
@@ -30,6 +28,7 @@ use grin_store::sumtree::PMMRBackend;
 use types::ChainStore;
 use types::Error;
 use util::LOGGER;
+use util::secp::pedersen::{RangeProof, Commitment};
 
 const SUMTREES_SUBDIR: &'static str = "sumtrees";
 const UTXO_SUBDIR: &'static str = "utxo";
@@ -89,27 +88,32 @@ impl SumTrees {
 		})
 	}
 
-	/// Whether a given commitment exists in the Output MMR and it's unspent
-	pub fn is_unspent(&mut self, commit: &Commitment) -> Result<bool, Error> {
-		let rpos = self.commit_index.get_output_pos(commit);
-		match rpos {
+	/// Check if the given commitment exists in the output_pmmr.
+	/// If it does and everything looks good then return the
+	/// switch_commit_hash for the unspent output, otherwise return an error.
+	pub fn get_unspent(&mut self, commit: &Commitment) -> Result<SwitchCommitHash, Error> {
+		match self.commit_index.get_output_pos(commit) {
 			Ok(pos) => {
 				let output_pmmr = PMMR::at(
 					&mut self.output_pmmr_h.backend,
-					self.output_pmmr_h.last_pos
+					self.output_pmmr_h.last_pos,
 				);
 				if let Some(hs) = output_pmmr.get(pos) {
 					let hashsum = HashSum::from_summable(
 						pos,
 						&SumCommit::from_commit(&commit),
 					);
-					Ok(hs.hash == hashsum.hash)
+					if hs.hash == hashsum.hash {
+						Ok(hs.sum.switch_commit_hash)
+					} else {
+						Err(Error::SumTreeErr(format!("sumtree hash mismatch")))
+					}
 				} else {
-					Ok(false)
+					Err(Error::OutputNotFound)
 				}
 			}
-			Err(grin_store::Error::NotFoundErr) => Ok(false),
-			Err(e) => Err(Error::StoreErr(e, "sumtree unspent check".to_owned())),
+			Err(grin_store::Error::NotFoundErr) => Err(Error::OutputNotFound),
+			Err(e) => Err(Error::StoreErr(e, format!("sumtree unspent check"))),
 		}
 	}
 
@@ -253,7 +257,7 @@ impl<'a> Extension<'a> {
 				self.apply_output(out)?;
 			}
 		}
-	
+
 		// then doing inputsm guarantees an input can't spend an output in the
 		// same block, enforcing block cut-through
 		for input in &b.inputs {
@@ -266,7 +270,7 @@ impl<'a> Extension<'a> {
 				self.apply_output(out)?;
 			}
 		}
-	
+
 		// finally, applying all kernels
 		for kernel in &b.kernels {
 			self.apply_kernel(kernel)?;
@@ -304,6 +308,15 @@ impl<'a> Extension<'a> {
 		let commit = input.commitment();
 		let pos_res = self.get_output_pos(&commit);
 		if let Ok(pos) = pos_res {
+			// First verify the lock_height to ensure coinbase maturity rules are met.
+			// We do this before we prune the output_pmmr.
+			if let Some(HashSum{hash: _, sum}) = self.output_pmmr.get(pos) {
+				input.verify_lock_height(&sum.switch_commit_hash, height)
+					.map_err(|_| Error::ImmatureCoinbase)?;
+			}
+
+			// Now prune the output_pmmr and rproof_pmmr.
+			// Input is not valid if we cannot prune successfully (to spend an unspent output).
 			match self.output_pmmr.prune(pos, height as u32) {
 				Ok(true) => {
 					self.rproof_pmmr

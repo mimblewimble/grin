@@ -54,38 +54,26 @@ impl Handler for IndexHandler {
 // Supports retrieval of multiple outputs in a single request -
 // GET /v1/chain/utxos/byids?id=xxx,yyy,zzz
 // GET /v1/chain/utxos/byids?id=xxx&id=yyy&id=zzz
-// GET /v1/chain/utxos/byheight?height=n
+// GET /v1/chain/utxos/byheight?start_height=101&end_height=200
 struct UtxoHandler {
 	chain: Arc<chain::Chain>,
 }
 
 impl UtxoHandler {
-	fn get_utxo(&self, id: &str, include_rp: bool, include_switch: bool) -> Result<Output, Error> {
-		debug!(LOGGER, "getting utxo: {}", id);
+	fn get_utxo(&self, id: &str) -> Result<Utxo, Error> {
 		let c = util::from_hex(String::from(id))
 			.map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
 		let commit = Commitment::from_vec(c);
 
-		let out = self.chain
+		let switch_commit_hash = self.chain
 			.get_unspent(&commit)
 			.map_err(|_| Error::NotFound)?;
 
-		let header = self.chain
-			.get_block_header_by_output_commit(&commit)
-			.map_err(|_| Error::NotFound)?;
-
-		Ok(Output::from_output(
-			&out,
-			&header,
-			include_rp,
-			include_switch,
-		))
+		Ok(Utxo::new(&commit, &switch_commit_hash))
 	}
 
-	fn utxos_by_ids(&self, req: &mut Request) -> Vec<Output> {
+	fn utxos_by_ids(&self, req: &mut Request) -> Vec<Utxo> {
 		let mut commitments: Vec<&str> = vec![];
-		let mut rp = false;
-		let mut switch = false;
 		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
 			if let Some(ids) = params.get("id") {
 				for id in ids {
@@ -94,23 +82,25 @@ impl UtxoHandler {
 					}
 				}
 			}
-			if let Some(_) = params.get("include_rp") {
-				rp = true;
-			}
-			if let Some(_) = params.get("include_switch") {
-				switch = true;
-			}
 		}
-		let mut utxos: Vec<Output> = vec![];
-		for commit in commitments {
-			if let Ok(out) = self.get_utxo(commit, rp, switch) {
-				utxos.push(out);
+
+		debug!(LOGGER, "utxos_by_ids: {:?}", commitments);
+
+		let mut utxos: Vec<Utxo> = vec![];
+		for x in commitments {
+			if let Ok(utxo) = self.get_utxo(x) {
+				utxos.push(utxo);
 			}
 		}
 		utxos
 	}
 
-	fn utxos_at_height(&self, block_height: u64) -> BlockOutputs {
+	fn outputs_at_height(
+		&self,
+		block_height: u64,
+		commitments: Vec<Commitment>,
+		include_proof: bool,
+	) -> BlockOutputs {
 		let header = self.chain
 			.clone()
 			.get_header_by_height(block_height)
@@ -119,8 +109,18 @@ impl UtxoHandler {
 		let outputs = block
 			.outputs
 			.iter()
-			.filter(|c| self.chain.is_unspent(&c.commit).unwrap())
-			.map(|k| OutputSwitch::from_output(k, &header))
+			.filter(|c| {
+				(commitments.is_empty() || commitments.contains(&c.commit)) &&
+				match self.chain.get_unspent(&c.commit) {
+					Ok(switch_commit_hash) => {
+						switch_commit_hash == c.switch_commit_hash
+					}
+					Err(_) => false,
+				}
+			})
+			.map(|k| {
+				OutputPrintable::from_output(k, self.chain.clone(), include_proof)
+			})
 			.collect();
 		BlockOutputs {
 			header: BlockHeaderInfo::from_header(&header),
@@ -128,11 +128,23 @@ impl UtxoHandler {
 		}
 	}
 
-	// returns utxos for a specified range of blocks
-	fn utxo_block_batch(&self, req: &mut Request) -> Vec<BlockOutputs> {
+	// returns outputs for a specified range of blocks
+	fn outputs_block_batch(&self, req: &mut Request) -> Vec<BlockOutputs> {
+		let mut commitments: Vec<Commitment> = vec![];
 		let mut start_height = 1;
 		let mut end_height = 1;
+		let mut include_rp = false;
+
 		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
+			if let Some(ids) = params.get("id") {
+				for id in ids {
+					for id in id.split(",") {
+						if let Ok(x) = util::from_hex(String::from(id)) {
+							commitments.push(Commitment::from_vec(x));
+						}
+					}
+				}
+			}
 			if let Some(heights) = params.get("start_height") {
 				for height in heights {
 					start_height = height.parse().unwrap();
@@ -143,11 +155,28 @@ impl UtxoHandler {
 					end_height = height.parse().unwrap();
 				}
 			}
+			if let Some(_) = params.get("include_rp") {
+				include_rp = true;
+			}
 		}
+
+		debug!(
+			LOGGER,
+			"outputs_block_batch: {}-{}, {:?}, {:?}",
+			start_height,
+			end_height,
+			commitments,
+			include_rp,
+		);
+
 		let mut return_vec = vec![];
 		for i in start_height..end_height + 1 {
-			return_vec.push(self.utxos_at_height(i));
+			let res = self.outputs_at_height(i, commitments.clone(), include_rp);
+			if res.outputs.len() > 0 {
+				return_vec.push(res);
+			}
 		}
+
 		return_vec
 	}
 }
@@ -161,7 +190,7 @@ impl Handler for UtxoHandler {
 		}
 		match *path_elems.last().unwrap() {
 			"byids" => json_response(&self.utxos_by_ids(req)),
-			"byheight" => json_response(&self.utxo_block_batch(req)),
+			"byheight" => json_response(&self.outputs_block_batch(req)),
 			_ => Ok(Response::with((status::BadRequest, ""))),
 		}
 	}
@@ -344,11 +373,8 @@ pub struct BlockHandler {
 
 impl BlockHandler {
 	fn get_block(&self, h: &Hash) -> Result<BlockPrintable, Error> {
-		let block = self.chain
-			.clone()
-			.get_block(h)
-			.map_err(|_| Error::NotFound)?;
-		Ok(BlockPrintable::from_block(&block))
+		let block = self.chain.clone().get_block(h).map_err(|_| Error::NotFound)?;
+		Ok(BlockPrintable::from_block(&block, self.chain.clone(), false))
 	}
 
 	// Try to decode the string as a height or a hash.
@@ -440,7 +466,7 @@ where
 			tx.inputs.len(),
 			tx.outputs.len()
 		);
-	
+
 		let res = self.tx_pool
 			.write()
 			.unwrap()
@@ -448,7 +474,10 @@ where
 
 		match res {
 			Ok(()) => Ok(Response::with(status::Ok)),
-			Err(e) => Err(IronError::from(Error::Argument(format!("{:?}", e))))
+			Err(e) => {
+				debug!(LOGGER, "error - {:?}", e);
+				Err(IronError::from(Error::Argument(format!("{:?}", e))))
+			}
 		}
 	}
 }

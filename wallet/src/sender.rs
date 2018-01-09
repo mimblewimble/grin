@@ -199,21 +199,25 @@ fn inputs_and_change(
 	}
 
 	// sender is responsible for setting the fee on the partial tx
- // recipient should double check the fee calculation and not blindly trust the
- // sender
+	// recipient should double check the fee calculation and not blindly trust the
+	// sender
 	let fee = tx_fee(coins.len(), 2, None);
 	parts.push(build::with_fee(fee));
 
 	// if we are spending 10,000 coins to send 1,000 then our change will be 9,000
- // the fee will come out of the amount itself
- // if the fee is 80 then the recipient will only receive 920
- // but our change will still be 9,000
+	// the fee will come out of the amount itself
+	// if the fee is 80 then the recipient will only receive 920
+	// but our change will still be 9,000
 	let change = total - amount;
 
 	// build inputs using the appropriate derived key_ids
 	for coin in coins {
 		let key_id = keychain.derive_key_id(coin.n_child)?;
-		parts.push(build::input(coin.value, key_id));
+		if coin.is_coinbase {
+			parts.push(build::coinbase_input(coin.value, coin.lock_height, key_id));
+		} else {
+			parts.push(build::input(coin.value, key_id));
+		}
 	}
 
 	// track the output representing our change

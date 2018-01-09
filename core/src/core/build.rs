@@ -27,11 +27,11 @@
 
 use util::{secp, static_secp_instance};
 
-use core::{Input, Output, SwitchCommitHash, Transaction, DEFAULT_OUTPUT};
+use core::{Transaction, Input, Output, SwitchCommitHashKey, SwitchCommitHash, DEFAULT_OUTPUT};
 use core::transaction::kernel_sig_msg;
-use util::LOGGER;
 use keychain;
-use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
+use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
+use util::LOGGER;
 
 /// Context information available to transaction combinators.
 pub struct Context<'a> {
@@ -44,25 +44,66 @@ pub type Append = for<'a> Fn(&'a mut Context, (Transaction, BlindSum)) -> (Trans
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
-pub fn input(value: u64, key_id: Identifier) -> Box<Append> {
+fn input_with_lock_height(
+	value: u64,
+	lock_height: u64,
+	key_id: Identifier,
+) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
 		let commit = build.keychain.commit(value, &key_id).unwrap();
-		(tx.with_input(Input(commit)), sum.sub_key_id(key_id.clone()))
+		let switch_commit = build.keychain.switch_commit(&key_id).unwrap();
+		let input = Input::new(
+			commit,
+			switch_commit,
+			lock_height,
+		);
+		(tx.with_input(input), sum.sub_key_id(key_id.clone()))
 	})
+}
+
+/// Adds an input with the provided value and blinding key to the transaction
+/// being built.
+pub fn input(
+	value: u64,
+	key_id: Identifier,
+) -> Box<Append> {
+	debug!(LOGGER, "Building an input: {}, {}", value, key_id);
+	input_with_lock_height(value, 0, key_id)
+}
+
+/// Adds a coinbase input with the provided value and blinding key to the transaction
+/// being built, with an additional lock_height specified.
+pub fn coinbase_input(
+	value: u64,
+	lock_height: u64,
+	key_id: Identifier,
+) -> Box<Append> {
+	debug!(LOGGER, "Building a coinbase input: {}, {}", value, key_id);
+	input_with_lock_height(value, lock_height, key_id)
 }
 
 /// Adds an output with the provided value and key identifier from the
 /// keychain.
 pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
+		debug!(
+			LOGGER,
+			"Building an output: {}, {}",
+			value,
+			key_id,
+		);
+
 		let commit = build.keychain.commit(value, &key_id).unwrap();
 		let switch_commit = build.keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			SwitchCommitHashKey::zero(),
+		);
 		trace!(
 			LOGGER,
 			"Builder - Pedersen Commit is: {:?}, Switch Commit is: {:?}",
 			commit,
-			switch_commit
+			switch_commit,
 		);
 		trace!(
 			LOGGER,

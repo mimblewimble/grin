@@ -78,7 +78,9 @@ pub struct TxSource {
 #[derive(Clone)]
 pub enum Parent {
 	Unknown,
-	BlockTransaction { output: transaction::Output },
+	/// We no longer maintain outputs in the index, we only have the
+	/// switch_commit_hash from the output_pmmr sumtree.
+	BlockTransaction { switch_commit_hash: transaction::SwitchCommitHash },
 	PoolTransaction { tx_ref: hash::Hash },
 	AlreadySpent { other_tx: hash::Hash },
 }
@@ -87,7 +89,7 @@ impl fmt::Debug for Parent {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			&Parent::Unknown => write!(f, "Parent: Unknown"),
-			&Parent::BlockTransaction { output: _ } => write!(f, "Parent: Block Transaction"),
+			&Parent::BlockTransaction { switch_commit_hash: _ } => write!(f, "Parent: Block Transaction"),
 			&Parent::PoolTransaction { tx_ref: x } => {
 				write!(f, "Parent: Pool Transaction ({:?})", x)
 			}
@@ -123,8 +125,10 @@ pub enum PoolError {
 	/// Attempt to spend an output before it matures
 	/// lock_height must not exceed current block height
 	ImmatureCoinbase {
-		/// The block header of the block containing the output
-		header: block::BlockHeader,
+		/// The height of the block we are attempting to spend the coinbase output
+		height: u64,
+		/// The lock_height of the coinbase output
+		lock_height: u64,
 		/// The unspent output
 		output: Commitment,
 	},
@@ -155,14 +159,12 @@ pub trait BlockChain {
 	/// is spent or if it doesn't exist. The blockchain is expected to produce
 	/// a result with its current view of the most worked chain, ignoring
 	/// orphans, etc.
-	fn get_unspent(&self, output_ref: &Commitment) -> Result<transaction::Output, PoolError>;
-
-	/// Get the block header by output commitment (needed for spending coinbase
-	/// after n blocks)
-	fn get_block_header_by_output_commit(
+	/// We do not maintain outputs themselves. The only information we have is the
+	/// switch_commit_hash from the output_pmmr sumtree.
+	fn get_unspent(
 		&self,
-		commit: &Commitment,
-	) -> Result<block::BlockHeader, PoolError>;
+		output_ref: &Commitment,
+	) -> Result<transaction::SwitchCommitHash, PoolError>;
 
 	/// Get the block header at the head
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError>;

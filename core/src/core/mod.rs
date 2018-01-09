@@ -260,8 +260,8 @@ mod test {
 		let tx = tx2i1o();
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &tx).expect("serialized failed");
-		assert!(vec.len() > 5360);
-		assert!(vec.len() < 5380);
+		assert!(vec.len() > 5440);
+		assert!(vec.len() < 5450);
 	}
 
 	#[test]
@@ -469,7 +469,7 @@ mod test {
 			&key_id3.clone(),
 		).unwrap();
 		match b.validate() {
-			Err(KernelLockHeight { lock_height: height }) => {
+			Err(KernelLockHeight(height)) => {
 				assert_eq!(height, 2);
 			}
 			_ => panic!("expecting KernelLockHeight error here"),

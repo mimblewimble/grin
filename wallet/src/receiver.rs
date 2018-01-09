@@ -25,7 +25,7 @@ use serde_json;
 use api;
 use core::consensus::reward;
 use core::core::{build, Block, Output, Transaction, TxKernel};
-use core::ser;
+use core::{global, ser};
 use keychain::{BlindingFactor, Identifier, Keychain};
 use types::*;
 use util;
@@ -89,7 +89,7 @@ impl Handler for WalletReceiver {
 		if let Ok(Some(partial_tx)) = struct_body {
 			receive_json_tx(&self.config, &self.keychain, &partial_tx)
 				.map_err(|e| {
-					error!(LOGGER, "Problematic partial tx, looks like this: {:?}", partial_tx);
+					error!(LOGGER, "Problematic partial tx, looks like this: {:?}, {:?}", partial_tx, e);
 					api::Error::Internal(
 						format!("Error processing partial transaction: {:?}", e),
 					)})
@@ -132,6 +132,9 @@ pub fn receive_coinbase(
 ) -> Result<(Output, TxKernel, BlockFees), Error> {
 	let root_key_id = keychain.root_key_id();
 
+	let height = block_fees.height;
+	let lock_height = height + global::coinbase_maturity();
+
 	// Now acquire the wallet lock and write the new output.
 	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		let key_id = block_fees.key_id();
@@ -147,8 +150,8 @@ pub fn receive_coinbase(
 			n_child: derivation,
 			value: reward(block_fees.fees),
 			status: OutputStatus::Unconfirmed,
-			height: 0,
-			lock_height: 0,
+			height: height,
+			lock_height: lock_height,
 			is_coinbase: true,
 		});
 
@@ -170,7 +173,12 @@ pub fn receive_coinbase(
 
 	debug!(LOGGER, "block_fees updated - {:?}", block_fees);
 
-	let (out, kern) = Block::reward_output(&keychain, &key_id, block_fees.fees)?;
+	let (out, kern) = Block::reward_output(
+		&keychain,
+		&key_id,
+		block_fees.fees,
+		block_fees.height,
+	)?;
 	Ok((out, kern, block_fees))
 }
 
@@ -186,8 +194,8 @@ fn receive_transaction(
 	let root_key_id = keychain.root_key_id();
 
 	// double check the fee amount included in the partial tx
- // we don't necessarily want to just trust the sender
- // we could just overwrite the fee here (but we won't) due to the ecdsa sig
+	// we don't necessarily want to just trust the sender
+	// we could just overwrite the fee here (but we won't) due to the ecdsa sig
 	let fee = tx_fee(partial.inputs.len(), partial.outputs.len() + 1, None);
 	if fee != partial.fee {
 		return Err(Error::FeeDispute {
@@ -221,7 +229,6 @@ fn receive_transaction(
 			build::initial_tx(partial),
 			build::with_excess(blinding),
 			build::output(out_amount, key_id.clone()),
-		// build::with_fee(fee_amount),
 		],
 		keychain,
 	)?;
