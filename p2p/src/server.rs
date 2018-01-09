@@ -17,6 +17,7 @@
 
 use std::cell::RefCell;
 use std::io;
+use std::fs::File;
 use std::net::{SocketAddr, Shutdown};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -60,6 +61,9 @@ impl ChainAdapter for DummyAdapter {
 	}
 	fn sumtrees_read(&self, _h: Hash) -> Option<SumtreesRead> {
 		unimplemented!()
+	}
+	fn sumtrees_write(&self, _h: Hash, _rewind_to_output: u64,
+										_rewind_to_kernel: u64, _sumtree_data: File) {
 	}
 }
 

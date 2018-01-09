@@ -60,7 +60,7 @@ pub fn compress(src_dir: &Path, dst_file: &File) -> ZipResult<()> {
 }
 
 /// Decompress a source file into the provided destination path.
-pub fn decompress(src_file: File, dest: &Path) -> ZipResult<()> {
+pub fn decompress<R>(src_file: R, dest: &Path) -> ZipResult<()> where R: io::Read + io::Seek {
 	let mut archive = zip_rs::ZipArchive::new(src_file)?;
 
 	for i in 0..archive.len() {

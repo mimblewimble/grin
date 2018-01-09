@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::io::Read;
+use std::io::{self, Read};
+use std::env;
+use std::fs::File;
 use std::sync::Arc;
 use std::net::SocketAddr;
 
@@ -159,6 +161,7 @@ impl Handler for ProtocolHandler {
 		buf: Vec<u8>,
 		reader: &mut Read,
 	) -> Result<Option<Hash>, ser::Error> {
+
 		match header.msg_type {
 			Type::Ping => {
 				let ping = ser::deserialize::<Ping>(&mut &buf[..])?;
@@ -315,7 +318,22 @@ impl Handler for ProtocolHandler {
 			}
 
 			Type::SumtreesArchive => {
-				// TODO write, unzip and notify adapter
+				let sm_arch = ser::deserialize::<SumtreesArchive>(&mut &buf[..])?;
+				debug!(LOGGER, "handle_payload: sumtree archive for {} at {} rewind to {}/{}",
+							sm_arch.hash, sm_arch.height,
+							sm_arch.rewind_to_output, sm_arch.rewind_to_kernel);
+
+				let mut tmp = env::temp_dir();
+				tmp.push("sumtree.zip");
+				{
+					let mut tmp_zip = File::create(tmp.clone())?;
+					io::copy(reader, &mut tmp_zip)?;
+				}
+
+				let tmp_zip = File::open(tmp)?;
+				self.adapter.sumtrees_write(
+					sm_arch.hash, sm_arch.rewind_to_output, sm_arch.rewind_to_kernel, tmp_zip);
+				Ok(None)
 			}
 
 			_ => {

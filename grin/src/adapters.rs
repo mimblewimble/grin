@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -204,6 +205,18 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 							h, e);
 				None
 			}
+		}
+	}
+
+	/// Writes a reading view on a sumtree state that's been provided to us.
+	/// If we're willing to accept that new state, the data stream will be
+	/// read as a zip file, unzipped and the resulting state files should be
+	/// rewound to the provided indexes.
+	fn sumtrees_write(&self, h: Hash, rewind_to_output: u64,
+										rewind_to_kernel: u64, sumtree_data: File) {
+		// TODO check whether we should accept any sumtree now
+		if let Err(e) = self.chain.sumtrees_write(h, rewind_to_output, rewind_to_kernel, sumtree_data) {
+			error!(LOGGER, "Failed to save sumtree archive: {:?}", e);
 		}
 	}
 }

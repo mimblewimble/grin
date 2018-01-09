@@ -211,6 +211,13 @@ pub trait ChainAdapter: Sync + Send {
 	/// the required indexes for a consumer to rewind to a consistant state
 	/// at the provided block hash.
 	fn sumtrees_read(&self, h: Hash) -> Option<SumtreesRead>;
+
+	/// Writes a reading view on a sumtree state that's been provided to us.
+	/// If we're willing to accept that new state, the data stream will be
+	/// read as a zip file, unzipped and the resulting state files should be
+	/// rewound to the provided indexes.
+	fn sumtrees_write(&self, h: Hash, rewind_to_output: u64,
+													rewind_to_kernel: u64, sumtree_data: File);
 }
 
 /// Additional methods required by the protocol that don't need to be

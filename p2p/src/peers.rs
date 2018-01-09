@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::collections::HashMap;
+use std::fs::File;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
@@ -336,6 +337,11 @@ impl ChainAdapter for Peers {
 	}
 	fn sumtrees_read(&self, h: Hash) -> Option<SumtreesRead> {
 		self.adapter.sumtrees_read(h)
+	}
+	fn sumtrees_write(&self, h: Hash, rewind_to_output: u64,
+																	rewind_to_kernel: u64, sumtree_data: File) {
+		self.adapter.sumtrees_write(h, rewind_to_output,
+																rewind_to_kernel, sumtree_data);
 	}
 }
 

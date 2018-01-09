@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fs::File;
 use std::net::SocketAddr;
 use std::io;
 use std::sync::{Arc, RwLock};
@@ -262,6 +263,12 @@ impl ChainAdapter for TrackingAdapter {
 
 	fn sumtrees_read(&self, h: Hash) -> Option<SumtreesRead> {
 		self.adapter.sumtrees_read(h)
+	}
+
+	fn sumtrees_write(&self, h: Hash, rewind_to_output: u64,
+										rewind_to_kernel: u64, sumtree_data: File) {
+		self.adapter.sumtrees_write(h, rewind_to_output,
+																rewind_to_kernel, sumtree_data);
 	}
 }
 

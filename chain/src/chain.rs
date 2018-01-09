@@ -315,6 +315,38 @@ impl Chain {
 		Ok((out_index, kernel_index, sumtree_reader))
 	}
 
+	/// Writes a reading view on a sumtree state that's been provided to us.
+	/// If we're willing to accept that new state, the data stream will be
+	/// read as a zip file, unzipped and the resulting state files should be
+	/// rewound to the provided indexes.
+	pub fn sumtrees_write(
+		&self,
+		h: Hash,
+		rewind_to_output: u64,
+		rewind_to_kernel: u64,
+		sumtree_data: File
+	) -> Result<(), Error> {
+
+		// TODO maybe validate the hash is on our header chain? or we could enforce
+		// at the p2p layer that it's what we asked
+
+		let header = self.store.get_block_header(&h)?;
+		sumtree::zip_write(self.db_root.clone(), sumtree_data)?;
+
+		let mut sumtrees = sumtree::SumTrees::open(self.db_root.clone(), self.store.clone())?;
+		sumtree::extending(&mut sumtrees, |extension| {
+			extension.rewind_pos(header.height, rewind_to_output, rewind_to_kernel)
+		})?;
+
+		let mut sumtrees_ref = self.sumtrees.write().unwrap();
+		*sumtrees_ref = sumtrees;
+
+		let mut head = self.head.lock().unwrap();
+		*head = Tip::from_block(&header);
+
+		Ok(())
+	}
+
 	/// Reset the header head to the same as the main head. When sync is running,
 	/// the header head will go ahead to try to download as many as possible.
 	/// However if a block, when fully received, is found invalid, the header

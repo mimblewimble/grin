@@ -336,7 +336,7 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	/// Rewinds the MMRs to the provided position, given the last output and
+	/// Rewinds the MMRs to the provided block, using the last output and
 	/// last kernel of the block we want to rewind to.
 	pub fn rewind(&mut self, block: &Block) -> Result<(), Error> {
 		debug!(
@@ -347,15 +347,18 @@ impl<'a> Extension<'a> {
 		);
 
 		let (out_pos_rew, kern_pos_rew) = indexes_at(block, self.commit_index.deref())?;
+		self.rewind_pos(block.header.height, out_pos_rew, kern_pos_rew)
+	}
 
+	/// Rewinds the MMRs to the provided positions, given the output and
+	/// kernel we want to rewind to.
+	pub fn rewind_pos(&mut self, height: u64, out_pos_rew: u64, kern_pos_rew: u64) -> Result<(), Error> {
 		debug!(
 			LOGGER,
 			"Rewind sumtrees to output pos: {}, kernel pos: {}",
 			out_pos_rew,
 			kern_pos_rew,
 		);
-
-		let height = block.header.height;
 
 		self.output_pmmr
 			.rewind(out_pos_rew, height as u32)
@@ -451,4 +454,18 @@ pub fn zip_read(root_dir: String) -> Result<File, Error> {
 	// open it again to read it back
 	let zip_file = File::open(zip_path)?;
 	Ok(zip_file)
+}
+
+/// Extract the sumtree data from a zip file and writes the content into the
+/// sumtree storage dir
+pub fn zip_write(root_dir: String, sumtree_data: File) -> Result<(), Error> {
+	let sumtrees_path = Path::new(&root_dir).join(SUMTREES_SUBDIR);
+	if sumtrees_path.exists() {
+		return Err(Error::SumTreeErr(
+				"Sumtree data already exists, can't overwrite.".to_owned()));
+	}
+	fs::create_dir_all(sumtrees_path.clone())?;
+
+	zip::decompress(sumtree_data, &sumtrees_path)
+			.map_err(|ze| Error::Other(ze.to_string()))
 }
