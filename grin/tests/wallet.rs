@@ -55,7 +55,7 @@ fn basic_wallet_transactions() {
 	coinbase_config.wallet_validating_node_url=String::from("http://127.0.0.1:30001");
 	coinbase_config.wallet_port = 10002;
 	let coinbase_wallet = Arc::new(Mutex::new(LocalServerContainer::new(coinbase_config).unwrap()));
-	let mut coinbase_wallet_config = {
+	let coinbase_wallet_config = {
 		coinbase_wallet.lock().unwrap().wallet_config.clone()
 	};
 
@@ -70,7 +70,7 @@ fn basic_wallet_transactions() {
 	recp_config.wallet_port = 20002;
 	let target_wallet = Arc::new(Mutex::new(LocalServerContainer::new(recp_config).unwrap()));
 	let target_wallet_cloned = target_wallet.clone();
-	let mut recp_wallet_config = {
+	let recp_wallet_config = {
 		target_wallet.lock().unwrap().wallet_config.clone()
 	};
 

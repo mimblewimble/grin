@@ -156,16 +156,7 @@ impl TxKernel {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 		let sig = try!(Signature::from_der(&secp, &self.excess_sig));
-		// Extract the pubkey, unfortunately we need this hack for now, (we just hope one is valid)
-		// TODO: Create better secp256k1 API to do this
-		let pubkeys = self.excess.to_two_pubkeys(&secp);
-		let mut valid=false;
-		for i in 0..pubkeys.len() {
-			valid=secp::aggsig::verify_single(&secp, &sig, &msg, None, &pubkeys[i], false);
-			if valid {
-				break;
-			}
-		}
+		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &self.excess);
 		if !valid{
 			return Err(secp::Error::IncorrectSignature);
 		}
@@ -333,19 +324,9 @@ impl Transaction {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 		let sig = Signature::from_der(&secp, &self.excess_sig)?;
-		// Extract the pubkey, unfortunately we need this hack for now, (we just hope one is valid)
-		// TODO: Create better secp256k1 API to do this
-		let pubkeys = rsum.to_two_pubkeys(&secp);
-
 		// pretend the sum is a public key (which it is, being of the form r.G) and
 		// verify the transaction sig with it
-		let mut valid=false;
-		for i in 0..pubkeys.len() {
-			valid=secp::aggsig::verify_single(&secp, &sig, &msg, None, &pubkeys[i], false);
-			if valid {
-				break;
-			}
-		}
+		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &rsum);
 		if !valid{
 			return Err(secp::Error::IncorrectSignature);
 		}

@@ -358,6 +358,27 @@ impl Keychain {
 		Ok(sig)
 	}
 
+	/// Verifies a sig given a commitment
+	pub fn aggsig_verify_single_from_commit(secp:&Secp256k1, sig: &Signature, msg: &Message, commit:&Commitment) -> bool {
+		// Extract the pubkey, unfortunately we need this hack for now, (we just hope one is valid)
+		// TODO: Create better secp256k1 API to do this
+		let pubkeys = commit.to_two_pubkeys(secp);
+		let mut valid=false;
+		for i in 0..pubkeys.len() {
+			valid=aggsig::verify_single(secp, &sig, &msg, None, &pubkeys[i], false);
+			if valid {
+				break;
+			}
+		}
+		valid
+	}
+
+	/// Just a simple sig, creates its own nonce, etc
+	pub fn aggsig_sign_with_blinding(secp:&Secp256k1, msg: &Message, blinding:&BlindingFactor) -> Result<Signature, Error> {
+		let sig = aggsig::sign_single(secp, &msg, &blinding.secret_key(), None, None, None)?;
+		Ok(sig)
+	}
+
 	pub fn sign(&self, msg: &Message, key_id: &Identifier) -> Result<Signature, Error> {
 		let skey = self.derived_key(key_id)?;
 		let sig = self.secp.sign(msg, &skey)?;

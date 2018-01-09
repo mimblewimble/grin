@@ -335,7 +335,10 @@ fn prepare_fork_block_tx(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff:
 fn prepare_block_nosum(kc: &Keychain, prev: &BlockHeader, diff: u64, txs: Vec<&Transaction>) -> Block {
 	let key_id = kc.derive_key_id(diff as u32).unwrap();
 
-	let mut b = core::core::Block::new(prev, txs, kc, &key_id).unwrap();
+	let mut b = match core::core::Block::new(prev, txs, kc, &key_id) {
+		Err(e) => panic!("{:?}",e),
+		Ok(b) => b
+	};
 	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 	b.header.total_difficulty = Difficulty::from_num(diff);
 	b

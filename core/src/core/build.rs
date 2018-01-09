@@ -137,7 +137,7 @@ pub fn transaction(
 	);
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
 	let msg = secp::Message::from_slice(&kernel_sig_msg(tx.fee, tx.lock_height))?;
-	let sig = ctx.keychain.sign_with_blinding(&msg, &blind_sum)?;
+	let sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &blind_sum)?;
 
 	let secp = static_secp_instance();
 	let secp = secp.lock().unwrap();
