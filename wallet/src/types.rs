@@ -546,7 +546,7 @@ impl WalletData {
 
 		// use a sliding window to identify potential sets of possible outputs to spend
 		// Case of amount > total amount of max_outputs(500):
-		// The limit exists because by default, we always select as many inputs as possible in a transaction, 
+		// The limit exists because by default, we always select as many inputs as possible in a transaction,
 		// to reduce both the UTXO set and the fees.
 		// But that only makes sense up to a point, hence the limit to avoid being too greedy.
 		// But if max_outputs(500) is actually not enought to cover the whole amount,
@@ -564,7 +564,7 @@ impl WalletData {
 			if let Some(outputs) = self.select_from(amount, false, eligible.clone()) {
 				debug!(LOGGER, "Extending maximum number of outputs. {} outputs selected.", outputs.len());
 				return outputs;
-			}			
+			}
 		} else {
 			if let Some(outputs) = self.select_from(amount, default_strategy, eligible.clone()) {
 				return outputs;
@@ -640,7 +640,7 @@ pub struct PartialTx {
 	pub tx: String,
 }
 
-/// Builds a PartialTx 
+/// Builds a PartialTx
 /// aggsig_tx_context should contain the private key/nonce pair
 /// the resulting partial tx will contain the corresponding public keys
 pub fn build_partial_tx(
@@ -658,7 +658,7 @@ pub fn build_partial_tx(
 	let mut pub_nonce = pub_nonce.serialize_vec(keychain.secp(), true);
 	let len = pub_nonce.clone().len();
 	let pub_nonce: Vec<_> = pub_nonce.drain(0..len).collect();
-	
+
 	PartialTx {
 		phase: PartialTxPhase::SenderInitiation,
 		amount: receive_amount,
