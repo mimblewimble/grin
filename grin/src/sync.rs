@@ -30,6 +30,7 @@ pub fn run_sync(
 	currently_syncing: Arc<AtomicBool>,
 	peers: p2p::Peers,
 	chain: Arc<chain::Chain>,
+	skip_sync_wait: bool,
 ) {
 
 	let chain = chain.clone();
@@ -40,7 +41,9 @@ pub fn run_sync(
 			let mut prev_header_sync = prev_body_sync.clone();
 
 			// initial sleep to give us time to peer with some nodes
-			thread::sleep(Duration::from_secs(30));
+			if !skip_sync_wait {
+				thread::sleep(Duration::from_secs(30));
+			}
 
 			loop {
 				let syncing = needs_syncing(

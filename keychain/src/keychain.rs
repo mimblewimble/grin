@@ -18,13 +18,14 @@ use std::sync::{Arc, RwLock};
 
 use util::secp;
 use util::secp::{Message, Secp256k1, Signature};
-use util::secp::key::SecretKey;
+use util::secp::key::{SecretKey, PublicKey};
 use util::secp::pedersen::{Commitment, ProofMessage, ProofInfo, RangeProof};
+use util::secp::aggsig;
 use util::logger::LOGGER;
+use util::kernel_sig_msg;
 use blake2;
 use blind::{BlindSum, BlindingFactor};
 use extkey::{self, Identifier};
-
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Error {
@@ -45,10 +46,23 @@ impl From<extkey::Error> for Error {
 	}
 }
 
+/// Holds internal information about an aggsig operation
+#[derive(Clone, Debug)]
+pub struct AggSigTxContext {
+	// Secret key (of which public is shared)
+	pub sec_key: SecretKey,
+	// Secret nonce (of which public is shared)
+	// (basically a SecretKey)
+	pub sec_nonce: SecretKey,
+	// If I'm the recipient, store my outputs between invocations (that I need to sum)
+	pub output_ids: Vec<Identifier>,
+}
+
 #[derive(Clone, Debug)]
 pub struct Keychain {
 	secp: Secp256k1,
 	extkey: extkey::ExtendedKey,
+	pub aggsig_context: Arc<RwLock<Option<AggSigTxContext>>>,
 	key_overrides: HashMap<Identifier, SecretKey>,
 	key_derivation_cache: Arc<RwLock<HashMap<Identifier, u32>>>,
 }
@@ -77,6 +91,7 @@ impl Keychain {
 		let keychain = Keychain {
 			secp: secp,
 			extkey: extkey,
+			aggsig_context: Arc::new(RwLock::new(None)),
 			key_overrides: HashMap::new(),
 			key_derivation_cache: Arc::new(RwLock::new(HashMap::new())),
 		};
@@ -230,6 +245,138 @@ impl Keychain {
 
 		let blinding = self.secp.blind_sum(pos_keys, neg_keys)?;
 		Ok(BlindingFactor::new(blinding))
+	}
+
+	pub fn aggsig_create_context(&self, sec_key:SecretKey) {
+		let mut context = self.aggsig_context.write().unwrap();
+		*context = Some(AggSigTxContext{
+			sec_key: sec_key,
+			sec_nonce: aggsig::export_secnonce_single(&self.secp).unwrap(),
+			output_ids: vec![],
+		});
+	}
+
+	/// Tracks an output contributing to my excess value (if it needs to
+	/// be kept between invocations
+	pub fn aggsig_add_output(&self, id: &Identifier){
+		let mut agg_context=self.aggsig_context.write().unwrap();
+		let agg_context_write=agg_context.as_mut().unwrap();
+		agg_context_write.output_ids.push(id.clone());
+	}
+
+	/// Returns all stored outputs
+	pub fn aggsig_get_outputs(&self) -> Vec<Identifier> {
+		let context = self.aggsig_context.clone();
+		let context_read=context.read().unwrap();
+		let agg_context=context_read.as_ref().unwrap();
+		agg_context.output_ids.clone()
+	}
+
+	/// Returns private key, private nonce
+	pub fn aggsig_get_private_keys(&self) -> (SecretKey, SecretKey) {
+		let context = self.aggsig_context.clone();
+		let context_read=context.read().unwrap();
+		let agg_context=context_read.as_ref().unwrap();
+		(agg_context.sec_key.clone(),
+		agg_context.sec_nonce.clone())
+	}
+
+	/// Returns public key, public nonce
+	pub fn aggsig_get_public_keys(&self) -> (PublicKey, PublicKey) {
+		let context = self.aggsig_context.clone();
+		let context_read=context.read().unwrap();
+		let agg_context=context_read.as_ref().unwrap();
+		(PublicKey::from_secret_key(&self.secp, &agg_context.sec_key).unwrap(),
+		PublicKey::from_secret_key(&self.secp, &agg_context.sec_nonce).unwrap())
+	}
+
+	/// Note 'secnonce' here is used to perform the signature, while 'pubnonce' just allows you to
+	/// provide a custom public nonce to include while calculating e
+	/// nonce_sum is the sum used to decide whether secnonce should be inverted during sig time
+	pub fn aggsig_sign_single(&self, msg: &Message, secnonce:Option<&SecretKey>, pubnonce: Option<&PublicKey>, nonce_sum: Option<&PublicKey>) -> Result<Signature, Error> {
+		let context = self.aggsig_context.clone();
+		let context_read=context.read().unwrap();
+		let agg_context=context_read.as_ref().unwrap();
+		let sig = aggsig::sign_single(&self.secp, msg, &agg_context.sec_key, secnonce, pubnonce, nonce_sum)?;
+		Ok(sig)
+	}
+
+	//Verifies an aggsig signature
+	pub fn aggsig_verify_single(&self, sig: &Signature, msg: &Message, pubnonce:Option<&PublicKey>, pubkey:&PublicKey, is_partial:bool) -> bool {
+		aggsig::verify_single(&self.secp, sig, msg, pubnonce, pubkey, is_partial)
+	}
+
+	//Verifies other final sig corresponds with what we're expecting
+	pub fn aggsig_verify_final_sig_build_msg(&self, sig: &Signature, pubkey: &PublicKey, fee: u64, lock_height:u64) -> bool {
+		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height)).unwrap();
+		self.aggsig_verify_single(sig, &msg, None, pubkey, true)
+	}
+
+	//Verifies other party's sig corresponds with what we're expecting
+	pub fn aggsig_verify_partial_sig(&self, sig: &Signature, other_pub_nonce:&PublicKey, pubkey:&PublicKey, fee: u64, lock_height:u64) -> bool {
+		let (_, sec_nonce) = self.aggsig_get_private_keys();
+		let mut nonce_sum = other_pub_nonce.clone();
+		let _ = nonce_sum.add_exp_assign(&self.secp, &sec_nonce);
+		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height)).unwrap();
+
+		self.aggsig_verify_single(sig, &msg, Some(&nonce_sum), pubkey, true)
+	}
+
+	pub fn aggsig_calculate_partial_sig(&self, other_pub_nonce:&PublicKey, fee:u64, lock_height:u64) -> Result<Signature, Error>{
+		// Add public nonces kR*G + kS*G
+		let (_, sec_nonce) = self.aggsig_get_private_keys();
+		let mut nonce_sum = other_pub_nonce.clone();
+		let _ = nonce_sum.add_exp_assign(&self.secp, &sec_nonce);
+		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
+
+		//Now calculate signature using message M=fee, nonce in e=nonce_sum
+		self.aggsig_sign_single(&msg, Some(&sec_nonce), Some(&nonce_sum), Some(&nonce_sum))
+	}
+
+	/// Helper function to calculate final singature
+	pub fn aggsig_calculate_final_sig(&self, their_sig: &Signature, our_sig: &Signature, their_pub_nonce: &PublicKey) -> Result<Signature, Error> {
+		// Add public nonces kR*G + kS*G
+		let (_, sec_nonce) = self.aggsig_get_private_keys();
+		let mut nonce_sum = their_pub_nonce.clone();
+		let _ = nonce_sum.add_exp_assign(&self.secp, &sec_nonce);
+		let sig = aggsig::add_signatures_single(&self.secp, their_sig, our_sig, &nonce_sum)?;
+		Ok(sig)
+	}
+
+	/// Helper function to calculate final public key 
+	pub fn aggsig_calculate_final_pubkey(&self, their_public_key: &PublicKey) -> Result<PublicKey, Error> {
+		let (our_sec_key, _) = self.aggsig_get_private_keys();
+		let mut pk_sum = their_public_key.clone();
+		let _ = pk_sum.add_exp_assign(&self.secp, &our_sec_key);
+		Ok(pk_sum)
+	}
+
+	/// Just a simple sig, creates its own nonce, etc
+	pub fn aggsig_sign_from_key_id(&self, msg: &Message, key_id: &Identifier) -> Result<Signature, Error> {
+		let skey = self.derived_key(key_id)?;
+		let sig = aggsig::sign_single(&self.secp, &msg, &skey, None, None, None)?;
+		Ok(sig)
+	}
+
+	/// Verifies a sig given a commitment
+	pub fn aggsig_verify_single_from_commit(secp:&Secp256k1, sig: &Signature, msg: &Message, commit:&Commitment) -> bool {
+		// Extract the pubkey, unfortunately we need this hack for now, (we just hope one is valid)
+		// TODO: Create better secp256k1 API to do this
+		let pubkeys = commit.to_two_pubkeys(secp);
+		let mut valid=false;
+		for i in 0..pubkeys.len() {
+			valid=aggsig::verify_single(secp, &sig, &msg, None, &pubkeys[i], false);
+			if valid {
+				break;
+			}
+		}
+		valid
+	}
+
+	/// Just a simple sig, creates its own nonce, etc
+	pub fn aggsig_sign_with_blinding(secp:&Secp256k1, msg: &Message, blinding:&BlindingFactor) -> Result<Signature, Error> {
+		let sig = aggsig::sign_single(secp, &msg, &blinding.secret_key(), None, None, None)?;
+		Ok(sig)
 	}
 
 	pub fn sign(&self, msg: &Message, key_id: &Identifier) -> Result<Signature, Error> {
