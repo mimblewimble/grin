@@ -35,7 +35,7 @@ pub fn issue_send_tx(
 	minimum_confirmations: u64,
 	dest: String,
 	max_outputs: usize,
-	selection_strategy: bool,
+	selection_strategy_is_use_all: bool,
 ) -> Result<(), Error> {
 	checker::refresh_outputs(config, keychain)?;
 
@@ -53,7 +53,7 @@ pub fn issue_send_tx(
 		minimum_confirmations,
 		lock_height,
 		max_outputs,
-		selection_strategy,
+		selection_strategy_is_use_all,
 	)?;
 	/*
 	 * -Sender picks random blinding factors for all outputs it participates in, computes total blinding excess xS
@@ -162,7 +162,7 @@ fn build_send_tx(
 	minimum_confirmations: u64,
 	lock_height: u64,
 	max_outputs: usize,
-	default_strategy: bool,
+	selection_strategy_is_use_all: bool,
 ) -> Result<(Transaction, BlindingFactor, Vec<OutputData>, Identifier), Error> {
 	let key_id = keychain.clone().root_key_id();
 
@@ -174,7 +174,7 @@ fn build_send_tx(
 			current_height,
 			minimum_confirmations,
 			max_outputs,
-			default_strategy,
+			selection_strategy_is_use_all,
 		)
 	})?;
 

@@ -529,7 +529,7 @@ impl WalletData {
 		current_height: u64,
 		minimum_confirmations: u64,
 		max_outputs: usize,
-		default_strategy: bool,
+		select_all: bool,
 	) -> Vec<OutputData> {
 		// first find all eligible outputs based on number of confirmations
 		let mut eligible = self.outputs
@@ -554,8 +554,8 @@ impl WalletData {
 		// So the wallet considers max_outputs more of a soft limit.
 		if eligible.len() > max_outputs {
 			for window in eligible.windows(max_outputs) {
-				let eligible = window.iter().cloned().collect::<Vec<_>>();
-				if let Some(outputs) = self.select_from(amount, default_strategy, eligible) {
+				let windowed_eligibles = window.iter().cloned().collect::<Vec<_>>();
+				if let Some(outputs) = self.select_from(amount, select_all, windowed_eligibles) {
 					return outputs;
 				}
 			}
@@ -566,7 +566,7 @@ impl WalletData {
 				return outputs;
 			}
 		} else {
-			if let Some(outputs) = self.select_from(amount, default_strategy, eligible.clone()) {
+			if let Some(outputs) = self.select_from(amount, select_all, eligible.clone()) {
 				return outputs;
 			}
 		}
@@ -577,7 +577,7 @@ impl WalletData {
 		eligible.iter().take(max_outputs).cloned().collect()
 	}
 
-	// Select the full list of outputs if we are using the default strategy.
+	// Select the full list of outputs if we are using the select_all strategy.
 	// Otherwise select just enough outputs to cover the desired amount.
 	fn select_from(
 		&self,
