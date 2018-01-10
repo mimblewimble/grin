@@ -352,6 +352,7 @@ impl LocalServerContainer {
  
 	/// Stops the running wallet server
 	pub fn stop_wallet(&mut self) {
+		println!("Stop wallet!");
 		let api_server = self.api_server.as_mut().unwrap();
 		api_server.stop();
 	}

@@ -45,6 +45,7 @@ use framework::{LocalServerContainerConfig, LocalServerContainerPool,
 /// Block and mining into a wallet for a bit
 #[test]
 fn basic_genesis_mine() {
+	util::init_test_logger();
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "genesis_mine";
@@ -64,7 +65,8 @@ fn basic_genesis_mine() {
 	// Create a server to add into the pool
 	let mut server_config = LocalServerContainerConfig::default();
 	server_config.start_miner = true;
-	server_config.start_wallet = true;
+	server_config.start_wallet = false;
+	server_config.burn_mining_rewards = true;
 
 	pool.create_server(&mut server_config);
 	pool.run_all_servers();
