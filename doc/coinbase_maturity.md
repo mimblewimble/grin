@@ -16,6 +16,9 @@ An output consists of -
 An input consists of -
   * commitment (reference to output being spent)
 
+[tbd - describe what is required to spend an output]
+
+
 Grin does not permit duplicate commitments to exist in the UTXO set at the same time.
 But once an output is spent it is removed from the UTXO set and a duplicate commitment can be added back into the UTXO set.
 This is not necessarily recommended but Grin must handle this situation in a way that does not break consensus across the network.
