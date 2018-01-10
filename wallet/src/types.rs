@@ -544,6 +544,13 @@ impl WalletData {
 		eligible.sort_by_key(|out| out.value);
 
 		// use a sliding window to identify potential sets of possible outputs to spend
+		// Case of amount > total amount of max_outputs(500):
+		// The limit exists because by default, we always select as many inputs as possible in a transaction, 
+		// to reduce both the UTXO set and the fees.
+		// But that only makes sense up to a point, hence the limit to avoid being too greedy.
+		// But if max_outputs(500) is actually not enought to cover the whole amount,
+		// the wallet should allow going over it to satisfy what the user wants to send.
+		// So the wallet considers max_outputs more of a soft limit.
 		if eligible.len() > max_outputs {
 			for window in eligible.windows(max_outputs) {
 				let eligible = window.iter().cloned().collect::<Vec<_>>();
@@ -551,6 +558,12 @@ impl WalletData {
 					return outputs;
 				}
 			}
+			// Not exist in any window of which total amount >= amount.
+			// Then take coins from the smallest one up to the total amount of selected coins = the amount.
+			if let Some(outputs) = self.select_from(amount, false, eligible.clone()) {
+				debug!(LOGGER, "Extending maximum number of outputs. {} outputs selected.", outputs.len());
+				return outputs;
+			}			
 		} else {
 			if let Some(outputs) = self.select_from(amount, default_strategy, eligible.clone()) {
 				return outputs;
