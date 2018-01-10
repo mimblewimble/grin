@@ -32,8 +32,8 @@ mod framework;
 use std::{thread, time};
 use std::sync::{Arc, Mutex};
 use framework::{LocalServerContainer,
-								LocalServerContainerConfig,
-								LocalServerContainerPoolConfig};
+	LocalServerContainerConfig,
+	LocalServerContainerPoolConfig};
 
 use util::{init_logger, LOGGER};
 

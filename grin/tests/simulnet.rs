@@ -96,7 +96,8 @@ fn simulate_seeding() {
 	// Create a first seed server to add into the pool
 	let mut server_config = LocalServerContainerConfig::default();
 	// server_config.start_miner = true;
-	server_config.start_wallet = true;
+	server_config.start_wallet = false;
+	server_config.burn_mining_rewards = true;
 	server_config.is_seeding = true;
 
 	pool.create_server(&mut server_config);
