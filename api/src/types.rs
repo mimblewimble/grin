@@ -16,6 +16,7 @@ use std::sync::Arc;
 use core::{core, global};
 use core::core::hash::Hashed;
 use chain;
+use p2p;
 use util::secp::pedersen;
 use rest::*;
 use util;
@@ -40,6 +41,30 @@ impl Tip {
 			last_block_pushed: util::to_hex(tip.last_block_h.to_vec()),
 			prev_block_to_last: util::to_hex(tip.prev_block_h.to_vec()),
 			total_difficulty: tip.total_difficulty.into_num(),
+		}
+	}
+}
+
+/// Status page containing different server information
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Status {
+	// The protocol version
+	pub protocol_version: u32,
+	// The user user agent
+	pub user_agent: String,
+	// The current number of connections
+	pub connections: u32,
+	// The state of the current fork Tip
+	pub tip: Tip,
+}
+
+impl Status {
+	pub fn from_tip_and_peers(current_tip: chain::Tip, connections: u32) -> Status {
+		Status {
+			protocol_version: p2p::msg::PROTOCOL_VERSION,
+			user_agent: p2p::msg::USER_AGENT.to_string(),
+			connections: connections,
+			tip: Tip::from_tip(current_tip),
 		}
 	}
 }
