@@ -18,28 +18,31 @@ use api;
 use grin::ServerConfig;
 
 pub fn show_status(config: &ServerConfig) {
-    println!();
-    let title=format!("Grin Server Status ");
-    let mut t = term::stdout().unwrap();
-    let mut e = term::stdout().unwrap();
-    t.fg(term::color::MAGENTA).unwrap();
-    writeln!(t, "{}", title).unwrap();
-    writeln!(t, "--------------------------").unwrap();
-    t.reset().unwrap();
-    match get_status_from_node(config) {
-        Ok(status) => {
-            writeln!(e, "Protocol version: {}", status.protocol_version).unwrap();
-            writeln!(e, "Connections: {}", status.connections).unwrap();
-            writeln!(e, "User agent: {}", status.user_agent).unwrap();
-            writeln!(e, "Chain height: {}", status.tip.height).unwrap();
-            writeln!(e, "Last block hash: {}", status.tip.last_block_pushed).unwrap();
-            writeln!(e, "Previous block hash: {}", status.tip.prev_block_to_last).unwrap();
-            writeln!(e, "Total difficulty: {}", status.tip.total_difficulty).unwrap()
-        }
-        Err(_) => writeln!(e, "WARNING: Client failed to get data. Is your `grin server` offline or broken?").unwrap()
-    };
-    e.reset().unwrap();
-    println!();
+	println!();
+	let title = format!("Grin Server Status ");
+	let mut t = term::stdout().unwrap();
+	let mut e = term::stdout().unwrap();
+	t.fg(term::color::MAGENTA).unwrap();
+	writeln!(t, "{}", title).unwrap();
+	writeln!(t, "--------------------------").unwrap();
+	t.reset().unwrap();
+	match get_status_from_node(config) {
+		Ok(status) => {
+			writeln!(e, "Protocol version: {}", status.protocol_version).unwrap();
+			writeln!(e, "Connections: {}", status.connections).unwrap();
+			writeln!(e, "User agent: {}", status.user_agent).unwrap();
+			writeln!(e, "Chain height: {}", status.tip.height).unwrap();
+			writeln!(e, "Last block hash: {}", status.tip.last_block_pushed).unwrap();
+			writeln!(e, "Previous block hash: {}", status.tip.prev_block_to_last).unwrap();
+			writeln!(e, "Total difficulty: {}", status.tip.total_difficulty).unwrap()
+		}
+		Err(_) => writeln!(
+			e,
+			"WARNING: Client failed to get data. Is your `grin server` offline or broken?"
+		).unwrap(),
+	};
+	e.reset().unwrap();
+	println!();
 }
 
 fn get_status_from_node(config: &ServerConfig) -> Result<api::Status, Error> {
@@ -51,5 +54,5 @@ fn get_status_from_node(config: &ServerConfig) -> Result<api::Status, Error> {
 #[derive(Debug)]
 enum Error {
 	/// Error originating from HTTP API calls.
-	API(api::Error)
+	API(api::Error),
 }

@@ -113,7 +113,7 @@ impl SumTreeNode {
 				.get_block_header_by_output_commit(&elem_output.1.commit)
 				.map_err(|_| Error::NotFound);
 			// Need to call further method to check if output is spent
-			let mut output = OutputPrintable::from_output(&elem_output.1, &header.unwrap(),true);
+			let mut output = OutputPrintable::from_output(&elem_output.1, &header.unwrap(), true);
 			if let Ok(_) = chain.get_unspent(&elem_output.1.commit) {
 				output.spent = false;
 			}
@@ -173,8 +173,12 @@ pub struct Output {
 }
 
 impl Output {
-	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader,
-		include_proof:bool, include_switch: bool) -> Output {
+	pub fn from_output(
+		output: &core::Output,
+		block_header: &core::BlockHeader,
+		include_proof: bool,
+		include_switch: bool,
+	) -> Output {
 		let (output_type, lock_height) = match output.features {
 			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
 				OutputType::Coinbase,
@@ -221,7 +225,11 @@ pub struct OutputPrintable {
 }
 
 impl OutputPrintable {
-	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader, include_proof_hash:bool) -> OutputPrintable {
+	pub fn from_output(
+		output: &core::Output,
+		block_header: &core::BlockHeader,
+		include_proof_hash: bool,
+	) -> OutputPrintable {
 		let (output_type, lock_height) = match output.features {
 			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
 				OutputType::Coinbase,
@@ -239,7 +247,7 @@ impl OutputPrintable {
 			proof_hash: match include_proof_hash {
 				true => Some(util::to_hex(output.proof.hash().to_vec())),
 				false => None,
-			}
+			},
 		}
 	}
 }
@@ -282,7 +290,7 @@ impl TxKernelPrintable {
 			fee: k.fee,
 			lock_height: k.lock_height,
 			excess: util::to_hex(k.excess.0.to_vec()),
-			excess_sig: util::to_hex(k.excess_sig.to_vec())
+			excess_sig: util::to_hex(k.excess_sig.to_vec()),
 		}
 	}
 }
@@ -347,7 +355,7 @@ impl BlockHeaderPrintable {
 			kernel_root: util::to_hex(h.kernel_root.to_vec()),
 			nonce: h.nonce,
 			difficulty: h.difficulty.into_num(),
-			total_difficulty: h.total_difficulty.into_num()
+			total_difficulty: h.total_difficulty.into_num(),
 		}
 	}
 }
@@ -367,15 +375,18 @@ pub struct BlockPrintable {
 
 impl BlockPrintable {
 	pub fn from_block(block: &core::Block) -> BlockPrintable {
-		let inputs = block.inputs
+		let inputs = block
+			.inputs
 			.iter()
 			.map(|input| util::to_hex((input.0).0.to_vec()))
 			.collect();
-		let outputs = block.outputs
+		let outputs = block
+			.outputs
 			.iter()
 			.map(|output| OutputPrintable::from_output(output, &block.header, true))
 			.collect();
-		let kernels = block.kernels
+		let kernels = block
+			.kernels
 			.iter()
 			.map(|kernel| TxKernelPrintable::from_txkernel(kernel))
 			.collect();

@@ -460,14 +460,11 @@ where
 			tx.outputs.len()
 		);
 
-		let res = self.tx_pool
-			.write()
-			.unwrap()
-			.add_to_memory_pool(source, tx);
+		let res = self.tx_pool.write().unwrap().add_to_memory_pool(source, tx);
 
 		match res {
 			Ok(()) => Ok(Response::with(status::Ok)),
-			Err(e) => Err(IronError::from(Error::Argument(format!("{:?}", e))))
+			Err(e) => Err(IronError::from(Error::Argument(format!("{:?}", e)))),
 		}
 	}
 }
