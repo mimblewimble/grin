@@ -29,8 +29,8 @@ pub fn show_status(config: &ServerConfig) {
 	match get_status_from_node(config) {
 		Ok(status) => {
 			writeln!(e, "Protocol version: {}", status.protocol_version).unwrap();
+            writeln!(e, "User agent: {}", status.user_agent).unwrap();
 			writeln!(e, "Connections: {}", status.connections).unwrap();
-			writeln!(e, "User agent: {}", status.user_agent).unwrap();
 			writeln!(e, "Chain height: {}", status.tip.height).unwrap();
 			writeln!(e, "Last block hash: {}", status.tip.last_block_pushed).unwrap();
 			writeln!(e, "Previous block hash: {}", status.tip.prev_block_to_last).unwrap();
