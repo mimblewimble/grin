@@ -13,11 +13,24 @@ An output consists of -
   * switch commitment hash `blake2(rJ)`
   * rangeproof
 
-An input consists of -
-  * commitment (reference to output being spent)
+To spend a regular transaction output two conditions must be met -
+* the output needs to be unspent
+* we need to prove ownership of the output
 
-[tbd - describe what is required to spend an output]
+Recall that a Grin transaction consists of the following -
 
+* A set of inputs, each referencing a previous output being spent.
+* A set of new outputs that include -
+  * A value `v` and a blinding factor (private key) `r` multiplied on a curve and summed to be `rG+vH`
+  * A range proof that shows that v is non-negative.
+* An explicit transaction fee in the clear.
+* A signature, computed by taking the excess blinding value (the sum of all outputs plus the fee, minus the inputs) and using it as the private key.
+
+We can show the output is unspent by looking for the commitment in the current UTXO set.
+
+And to prove ownership we need to be able to recreate the excess value to verify the transaction signature. We can _only_ do this if the transaction sums to zero _and_ we know both `v` and `r`.
+
+All of this is to say that a regular transaction output can be uniquely identified by its commitment (and to prove we can spend it we need to know the constituent values of `r` and `v`).
 
 Grin does not permit duplicate commitments to exist in the UTXO set at the same time.
 But once an output is spent it is removed from the UTXO set and a duplicate commitment can be added back into the UTXO set.
@@ -39,3 +52,13 @@ And these duplicate commitments may have different "lock heights" at which they 
 The complication here is that input I<sub>1</sub> will spend either O<sub>1</sub> or O<sub>1</sub>' depending on which fork the block containing I<sub>1</sub> exists on. And crucially I<sub>1</sub> may be valid at a particular block height on one fork but not the other.
 
 Said another way - a commitment may refer to multiple outputs, all of which may have different lock heights. And we _must_ ensure we correctly identify which output is actually being spent and that the coinbase maturity rules are correctly enforced based on the current chain state.
+
+A coinbase output, locked with the coinbase maturity rule at a specific lock height, _cannot_ be uniquely identified, and _cannot_ be safely spent by their commitment alone. To spend a coinbase output we need to know one additional piece of information -
+
+*  The block the coinbase output originated from
+
+Given this, we can verify the height of the block and derive the "lock height" of the output (+ 1,000 blocks).
+
+[tbd - explain how we can do this on a full archival node (easy)]
+
+[tbd - explain how we propose doing this for a non-archival node, without full block data]
