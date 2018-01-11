@@ -99,16 +99,16 @@ If no entry in the index exists or no entry in the output MMR exists for a given
 
 If we find an entry in the output MMR then we know a spendable output exists in the UTXO set _but_ we do not know if this is the correct one. We do not if it is a coinbase output or not and we do not know the height of the block it originated from.
 
-If we extend an input to require full output data to be included (not just the commitment) and store the hash of the full output in the output MMR then we can do a further validation step -
+If the hash stored in the output MMR covers both the commitment and the output features and we require an input to provide both the commitment and the feature then we can do a further validation step -
 * output exists in the output MMR (based on commitment), and
 * the hash in the MMR matches the output data included in the input
 
-With this additional step we know if the output was a coinbase output or a regular transaction output based on the output features.
-The hash will not match unless the features provided in the input match the features in the original output.
+With this additional step we know if the output was a coinbase output or a regular transaction output based on the provided features.
+The hash will not match unless the features in the input match the original output features.
 
-If it is a regular non-coinbase output then we are done, we know the output is currently spendable and do not need to check the lock height.
+For a regular non-coinbase output we are finished. We know the output is currently spendable and we do not need to check the lock height.
 
-If it is a coinbase output then we can proceed - we now need to identify the block where the output originated.
+For a coinbase output we can proceed to verify the lock height and maturity. For this we need to identify the block where the output originated.
 We cannot determine the block itself, but we can require the input to specify the block (hash) and we can then prove this is actually correct based on the merkle roots in the block header (without needing full block data).
 
 [tbd - overview of merkle proofs and how we will use these to prove inclusion based on merkle root in the block header]
