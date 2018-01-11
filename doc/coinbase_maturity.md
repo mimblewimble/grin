@@ -1,11 +1,13 @@
-# Coinbase Maturity
+# The Coinbase Maturity Rule (aka Output Lock Heights)
 
-Coinbase (block reward + fees) outputs are "locked" and require 1,000 confirmations (blocks added to the current chain) before they mature sufficiently to be spendable. This is to avoid subsequent txs from being at risk of being reversed if a chain reorganization occurs.
-Bitcoin does something very similar, requiring 100 confirmations (Bitcoin blocks are every 10 minutes, Grin blocks every 60 seconds).
+Coinbase outputs (block rewards & fees) are "locked" and require 1,000 confirmations (blocks added to the current chain) before they mature sufficiently to be spendable. This is to reduce the risk of later txs being reversed if a chain reorganization occurs.
+
+Bitcoin does something very similar, requiring 100 confirmations (Bitcoin blocks are every 10 minutes, Grin blocks every 60 seconds) before mining rewards can be spent.
+
 Grin enforces coinbase maturity in both the transaction pool and the block validation pipeline. A transaction containing an input spending a coinbase output cannot be added to the transaction pool until it has sufficiently matured (based on current chain height and the height of the block producing the coinbase output).
-Similarly a block is not valid if it contains an input spending a coinbase output before it has sufficiently matured (based on the height of the new block and the height of the block producing the coinbase output).
+Similarly a block is invalid if it contains an input spending a coinbase output before it has sufficiently matured, based on the height of the block containing the input and the height of the block that originally produced the coinbase output.
 
-The maturity rule only applies to coinbase outputs, regular transaction outputs have an effective lock height of zero.
+The maturity rule _only_ applies to coinbase outputs, regular transaction outputs have an effective lock height of zero.
 
 An output consists of -
   * features (currently coinbase vs. non-coinbase)
@@ -13,11 +15,9 @@ An output consists of -
   * switch commitment hash `blake2(rJ)`
   * rangeproof
 
-To spend a regular transaction output two conditions must be met -
-* the output needs to be unspent
-* we need to prove ownership of the output
+To spend a regular transaction output two conditions must be met. We need to show the output has not been previously spent and we need to prove ownership of the output.
 
-Recall that a Grin transaction consists of the following -
+A Grin transaction consists of the following -
 
 * A set of inputs, each referencing a previous output being spent.
 * A set of new outputs that include -
@@ -26,11 +26,11 @@ Recall that a Grin transaction consists of the following -
 * An explicit transaction fee in the clear.
 * A signature, computed by taking the excess blinding value (the sum of all outputs plus the fee, minus the inputs) and using it as the private key.
 
-We can show the output is unspent by looking for the commitment in the current UTXO set.
+We can show the output is unspent by looking for the commitment in the current UTXO set. The UTXO set is authoritative; if the output exists in the UTXO set we know it has not yet been spent. If an output does not exist in the UTXO set we know it has either never existed, or that it previously existed and has been spent (we will not necessarily know which).
 
-And to prove ownership we need to be able to recreate the excess value to verify the transaction signature. We can _only_ do this if the transaction sums to zero _and_ we know both `v` and `r`.
+To prove ownership we can verify the transaction signature. We can _only_ have signed the transaction if the transaction sums to zero _and_ we know both `v` and `r`.
 
-All of this is to say that a regular transaction output can be uniquely identified by its commitment (and to prove we can spend it we need to know the constituent values of `r` and `v`).
+Knowing `v` and `r` we can uniquely identify the output (via its commitment) _and_ we can prove ownership of the output by validating the signature on the original coinbase transaction.
 
 Grin does not permit duplicate commitments to exist in the UTXO set at the same time.
 But once an output is spent it is removed from the UTXO set and a duplicate commitment can be added back into the UTXO set.
@@ -59,6 +59,78 @@ A coinbase output, locked with the coinbase maturity rule at a specific lock hei
 
 Given this, we can verify the height of the block and derive the "lock height" of the output (+ 1,000 blocks).
 
-[tbd - explain how we can do this on a full archival node (easy)]
+## Full Archival Node
 
-[tbd - explain how we propose doing this for a non-archival node, without full block data]
+Given a full archival node it is a simple task to identify which block the output originated from.
+A full archival node stores the following -
+* full block data of all blocks in the chain
+* full output data for all outputs in these blocks
+
+We can simply look back though all the blocks on the chain and find the block containing the output we care about.
+
+The problem is when we need to account nodes that may not have full block data (pruned nodes, non-archival nodes).
+[what kind of nodes?]
+
+How do we verify coinbase maturity if we do not have full block data?
+
+## Non-Archival Node
+
+[terminology? what are these nodes called?]
+
+A node may not have full block data.
+A pruned node may only store the following (refer to pruning doc) -
+
+* Block headers chain.
+* All transaction kernels.
+* All unspent outputs.
+* The output MMR and the range proof MMR
+
+Given this minimal set of data how do we know which block an output originated from?
+
+And given we now know multiple outputs (multiple forks, potentially different lock heights) can all have the _same_ commitment, what additional information do we need to provide in the input to uniquely identify the output being spent?
+
+And to take it a step further - can we do all this without relying on having access to full output data? Can we use just the output MMR?
+
+### Proposed Approach
+
+We maintain an index mapping commitment to position in the output MMR.
+
+If no entry in the index exists or no entry in the output MMR exists for a given commitment then we now the output is not spendable (either it was spent previously or it never existed).
+
+If we find an entry in the output MMR then we know a spendable output exists in the UTXO set _but_ we do not know if this is the correct one. We do not if it is a coinbase output or not and we do not know the height of the block it originated from.
+
+If we extend an input to require full output data to be included (not just the commitment) and store the hash of the full output in the output MMR then we can do a further validation step -
+* output exists in the output MMR (based on commitment), and
+* the hash in the MMR matches the output data included in the input
+
+With this additional step we know if the output was a coinbase output or a regular transaction output based on the output features.
+The hash will not match unless the features provided in the input match the features in the original output.
+
+If it is a regular non-coinbase output then we are done, we know the output is currently spendable and do not need to check the lock height.
+
+If it is a coinbase output then we can proceed - we now need to identify the block where the output originated.
+We cannot determine the block itself, but we can require the input to specify the block (hash) and we can then prove this is actually correct based on the merkle roots in the block header (without needing full block data).
+
+[tbd - overview of merkle proofs and how we will use these to prove inclusion based on merkle root in the block header]
+
+
+To summarize -
+
+Output MMR stores output hashes based on `commitment|features` (the commitment itself is not sufficient).
+
+We do not need to include the range proof or the switch commitment hash in the generation of the output hash.
+
+We do not need to encode the lock height in the switch commitment hash.
+
+To spend an output we continue to need -
+  * `r` and `v` to build the commitment and to prove ownership
+
+An input must provide -
+  * the commitment (to lookup the output in the MMR)
+  * the output features (hash in output MMR dependent on features|commitment)
+  * a merkle proof showing inclusion of the output in the originating block
+  * the block hash of originating blocks
+    * [tbd - maintain index based on merkle proof?]
+
+From the commitment and the features we can determine if the correct output is currently unspent.
+From the block and the output features we can determine the lock height (if any).
