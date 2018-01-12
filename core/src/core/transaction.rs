@@ -549,7 +549,7 @@ impl Output {
 }
 
 /// Wrapper to Output commitments to provide the Summable trait.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SumCommit {
 	/// Output commitment
 	pub commit: Commitment,

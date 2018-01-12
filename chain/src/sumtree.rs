@@ -390,6 +390,20 @@ impl<'a> Extension<'a> {
 		)
 	}
 
+	/// Validate the current sumtree state against a block header
+	pub fn validate(&self) -> Result<(), Error> {
+		if let Err(e) = self.output_pmmr.validate() {
+			return Err(Error::SumTreeErr(e));
+		}
+		if let Err(e) = self.rproof_pmmr.validate() {
+			return Err(Error::SumTreeErr(e));
+		}
+		if let Err(e) = self.kernel_pmmr.validate() {
+			return Err(Error::SumTreeErr(e));
+		}
+		Ok(())
+	}
+
 	/// Force the rollback of this extension, no matter the result
 	pub fn force_rollback(&mut self) {
 		self.rollback = true;
