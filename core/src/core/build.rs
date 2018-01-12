@@ -27,7 +27,7 @@
 
 use util::{secp, static_secp_instance};
 
-use core::{Transaction, Input, Output, OutputFeatures, SwitchCommitHashKey, SwitchCommitHash, COINBASE_OUTPUT, DEFAULT_OUTPUT};
+use core::{Transaction, Input, Output, OutputFeatures, SwitchCommitHash, COINBASE_OUTPUT, DEFAULT_OUTPUT};
 use core::hash::{Hash, ZERO_HASH};
 use core::transaction::kernel_sig_msg;
 use keychain;

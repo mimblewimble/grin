@@ -17,7 +17,8 @@ use util::{LOGGER, from_hex};
 use util::secp::pedersen;
 use api;
 use core::global;
-use core::core::{Output, SwitchCommitHash, SwitchCommitHashKey};
+use core::core::{Output, SwitchCommitHash};
+use core::core::hash::Hash;
 use core::core::transaction::{COINBASE_OUTPUT, DEFAULT_OUTPUT};
 use types::{WalletConfig, WalletData, OutputData, OutputStatus, Error};
 use byteorder::{BigEndian, ByteOrder};
@@ -301,6 +302,7 @@ pub fn restore(
 							height: output.4,
 							lock_height: output.5,
 							is_coinbase: output.6,
+							block_hash: Hash::zero(),
 						});
 					};
 				}

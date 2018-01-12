@@ -313,11 +313,18 @@ impl<'a> Extension<'a> {
 		let commit = input.commitment();
 		let pos_res = self.get_output_pos(&commit);
 		if let Ok(pos) = pos_res {
-			// First verify the lock_height to ensure coinbase maturity rules are met.
-			// We do this before we prune the output_pmmr.
-			if let Some(HashSum { hash: output_hash, sum: _ }) = self.output_pmmr.get(pos) {
-				let output_block = self.commit_index.get_block(&input.out_block)?;
-				input.verify_lock_height(&output_block, output_hash, height)
+			if let Some(HashSum { hash, sum: _ }) = self.output_pmmr.get(pos) {
+				let out = OutputIdentifier::from_input(&input);
+
+				// check hash from pmmr matches hash from input
+				// if not then the input is not being honest about
+				// what it is attempting to spend...
+				if hash != out.hash() {
+					return Err(Error::SumTreeErr(format!("output pmmr hash mismatch")));
+				}
+
+				let block = self.commit_index.get_block(&input.out_block)?;
+				block.verify_coinbase_maturity(&out, height)
 					.map_err(|_| Error::ImmatureCoinbase)?;
 			}
 

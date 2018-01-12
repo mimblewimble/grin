@@ -23,7 +23,7 @@ use core::{
 	Committed,
 	Input,
 	Output,
-	SwitchCommitHashKey,
+	OutputIdentifier,
 	SwitchCommitHash,
 	Proof,
 	TxKernel,
@@ -63,6 +63,11 @@ pub enum Error {
 	Keychain(keychain::Error),
 	/// Underlying consensus error (sort order currently)
 	Consensus(consensus::Error),
+	ImmatureCoinbase {
+		height: u64,
+		lock_height: u64,
+	},
+	Other(String)
 }
 
 impl From<transaction::Error> for Error {
@@ -567,6 +572,45 @@ impl Block {
 			return Err(Error::CoinbaseSumMismatch);
 		}
 		Ok(())
+	}
+
+	/// NOTE: this happens during apply_block
+	/// and is run on the block containing the coinbase output.
+	/// TODO - consider renaming this (not a regular block verification step)
+	///
+	/// TODO - move this to block_header
+	///
+	/// Confirm output is from the block we say it is
+	/// Calculate lock_height as block_height + 1,000
+	/// Confirm height <= lock_height
+	pub fn verify_coinbase_maturity(
+		&self,
+		output: &OutputIdentifier,
+		height: u64,
+	) -> Result<(), Error> {
+
+		if let Some(out) = self.outputs
+			.iter()
+			.find(|x| {
+				x.hash() == output.hash()
+			})
+		{
+			if !output.features.contains(COINBASE_OUTPUT) {
+				return Ok(());
+			}
+
+			let lock_height = self.header.height + global::coinbase_maturity();
+			if lock_height <= height {
+				Err(Error::ImmatureCoinbase{
+					height: height,
+					lock_height: lock_height,
+				})
+			} else {
+				Ok(())
+			}
+		} else {
+			Err(Error::Other(format!("output not found in block")))
+		}
 	}
 
 	/// Builds the blinded output and related signature proof for the block reward.

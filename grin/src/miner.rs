@@ -564,10 +564,12 @@ impl Miner {
 		// build the coinbase and the block itself
 		let fees = txs.iter().map(|tx| tx.fee).sum();
 		let height = head.height + 1;
+		// TODO - wrap this up in a constructor
 		let block_fees = BlockFees {
 			fees,
 			key_id,
 			height,
+			block_hash: Hash::zero(),
 		};
 
 		let (output, kernel, block_fees) = self.get_coinbase(block_fees)?;
@@ -593,7 +595,13 @@ impl Miner {
 
 		let roots_result = self.chain.set_sumtree_roots(&mut b, false);
 		match roots_result {
-			Ok(_) => Ok((b, block_fees)),
+			Ok(_) => {
+				let block_fees = BlockFees {
+					block_hash: b.hash(),
+					..block_fees
+				};
+				Ok((b, block_fees))
+			}
 
 			// If it's a duplicate commitment, it's likely trying to use
 			// a key that's already been derived but not in the wallet

@@ -25,9 +25,7 @@ use util::secp::pedersen::Commitment;
 pub use graph;
 
 use core::consensus;
-use core::core::block;
-use core::core::transaction;
-use core::core::hash;
+use core::core::{block, hash, transaction};
 
 /// Tranasction pool configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -128,12 +126,7 @@ pub enum PoolError {
 	},
 	/// Attempt to spend an output before it matures
 	/// lock_height must not exceed current block height
-	ImmatureCoinbase {
-		/// The height of the block we are attempting to spend the coinbase output
-		height: u64,
-		/// The output
-		output: Commitment,
-	},
+	ImmatureCoinbase,
 	/// Attempt to add a transaction to the pool with lock_height
 	/// greater than height of current block
 	ImmatureTransaction {
@@ -168,7 +161,11 @@ pub trait BlockChain {
 	/// Get the block header at the head
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError>;
 
-	fn get_block(&self, hash: hash::Hash) -> Result<block::Block, PoolError>;
+	fn verify_coinbase_maturity(
+		&self,
+		input: &transaction::Input,
+		height: u64,
+	) -> Result<(), PoolError>;
 }
 
 /// Bridge between the transaction pool and the rest of the system. Handles

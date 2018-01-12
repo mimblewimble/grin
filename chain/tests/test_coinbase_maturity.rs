@@ -95,6 +95,9 @@ fn test_coinbase_maturity() {
 			.contains(transaction::COINBASE_OUTPUT)
 	);
 
+	// we will need this later when we want to spend the coinbase output
+	let block_hash = block.hash();
+
 	chain.process_block(block, chain::NONE).unwrap();
 
 	let prev = chain.head_header().unwrap();
@@ -108,7 +111,7 @@ fn test_coinbase_maturity() {
 	// this is not a valid tx as the coinbase output cannot be spent yet
 	let (coinbase_txn, _) = build::transaction(
 		vec![
-			build::coinbase_input(amount, lock_height, key_id1.clone()),
+			build::coinbase_input(amount, block_hash, key_id1.clone()),
 			build::output(amount - 2, key_id2.clone()),
 			build::with_fee(2),
 		],
@@ -167,7 +170,7 @@ fn test_coinbase_maturity() {
 
 	let (coinbase_txn, _) = build::transaction(
 		vec![
-			build::coinbase_input(amount, lock_height, key_id1.clone()),
+			build::coinbase_input(amount, block_hash, key_id1.clone()),
 			build::output(amount - 2, key_id2.clone()),
 			build::with_fee(2),
 		],

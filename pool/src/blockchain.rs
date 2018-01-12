@@ -121,6 +121,20 @@ impl BlockChain for DummyChainImpl {
 			Err(PoolError::GenericPoolError)
 		}
 	}
+
+	fn verify_coinbase_maturity(
+		&self,
+		input: &transaction::Input,
+		height: u64,
+	) -> Result<(), PoolError> {
+		panic!("where are we calling this from???");
+		
+		// let out = OutputIdentifier::from_input(&input);
+		// let block = self.get_block(&input.out_block)?;
+		// block.verify_coinbase_maturity(&out, height)
+		// 	.map_err(|x| Error::ImmatureCoinbase);
+
+	}
 }
 
 impl DummyChain for DummyChainImpl {

@@ -403,15 +403,15 @@ impl Transaction {
 #[derive(Debug, Clone, Copy)]
 pub struct Input{
 	/// The commit referencing the output being spent.
-	commit: Commitment,
+	pub commit: Commitment,
 	/// The features of the output being spent.
 	/// We will check maturity for coinbase output.
-	features: OutputFeatures,
+	pub features: OutputFeatures,
 	/// The hash of the block the output originated from.
 	/// Currently we only care about this for coinbase outputs.
 	/// TODO - include the merkle proof here once we support these.
 	/// TODO - how do we handle regular outputs (wallet does not know which block)
-	out_block: Hash,
+	pub out_block: Hash,
 }
 
 hashable_ord!(Input);
@@ -458,27 +458,8 @@ impl Input {
 		}
 	}
 
-	/// Extracts the referenced commitment from a transaction output
 	pub fn commitment(&self) -> Commitment {
 		self.commit
-	}
-
-	// TODO - move this out of input (we have a dependency on Block here)
-	pub fn verify_lock_height(
-		&self,
-		output_block: &core::Block,
-		output_hash: Hash,
-		input_height: u64,
-	) -> Result<(), Error> {
-		if self.features.contains(COINBASE_OUTPUT) {
-			panic!("tbd - we need the lock_height based on the block here");
-
-			// if height <= self.lock_height {
-			// 	return Err(Error::LockHeight(self.lock_height));
-			// }
-		} else {
-			Ok(())
-		}
 	}
 }
 
@@ -590,6 +571,22 @@ pub struct OutputIdentifier {
 	pub features: OutputFeatures,
 	/// The homomorphic commitment representing the output amount
 	pub commit: Commitment,
+}
+
+impl OutputIdentifier {
+	pub fn from_input(input: &Input) -> OutputIdentifier {
+		OutputIdentifier {
+			features: input.features,
+			commit: input.commit,
+		}
+	}
+
+	pub fn from_output(output: &Output) -> OutputIdentifier {
+		OutputIdentifier {
+			features: output.features,
+			commit: output.commit,
+		}
+	}
 }
 
 /// Implementation of Writeable for an OutputIdentifier.
@@ -722,6 +719,14 @@ impl SumCommit {
 			commit: output.commit,
 			features: output.features,
 		}
+	}
+
+	pub fn to_hex(&self) -> String {
+		format!(
+			"{:b}{}",
+			self.features.bits(),
+			util::to_hex(self.commit.0.to_vec()),
+		)
 	}
 }
 

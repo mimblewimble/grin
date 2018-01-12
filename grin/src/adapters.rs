@@ -21,7 +21,7 @@ use core::core;
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use core::core::transaction::SwitchCommitHash;
+use core::core::transaction::{Input, OutputIdentifier, SwitchCommitHash};
 use p2p;
 use pool;
 use util::secp::pedersen::Commitment;
@@ -336,7 +336,7 @@ impl pool::BlockChain for PoolToChainAdapter {
 	fn get_unspent(
 		&self,
 		output_ref: &Commitment,
-	) -> Result<SwitchCommitHash, pool::PoolError> {
+	) -> Result<Hash, pool::PoolError> {
 		self.chain
 			.borrow()
 			.get_unspent(output_ref)
@@ -352,5 +352,20 @@ impl pool::BlockChain for PoolToChainAdapter {
 			.borrow()
 			.head_header()
 			.map_err(|_| pool::PoolError::GenericPoolError)
+	}
+
+	fn verify_coinbase_maturity(
+		&self,
+		input: &Input,
+		height: u64,
+	) -> Result<(), pool::PoolError> {
+		let out = OutputIdentifier::from_input(&input);
+		let block = self.chain
+			.borrow()
+			.get_block(&input.out_block)
+			.map_err(|_| pool::PoolError::GenericPoolError)?;
+
+		block.verify_coinbase_maturity(&out, height)
+			.map_err(|_| pool::PoolError::ImmatureCoinbase)
 	}
 }

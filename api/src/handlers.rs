@@ -25,8 +25,7 @@ use serde_json;
 
 use chain;
 use core::core::Transaction;
-use core::core::hash::Hash;
-use core::core::hash::Hashed;
+use core::core::hash::{Hash, Hashed};
 use core::ser;
 use pool;
 use p2p;
@@ -109,14 +108,12 @@ impl UtxoHandler {
 		let outputs = block
 			.outputs
 			.iter()
-			.filter(|c| {
-				(commitments.is_empty() || commitments.contains(&c.commit)) &&
-				match self.chain.get_unspent(&c.commit) {
-					Ok(switch_commit_hash) => {
-						switch_commit_hash == c.switch_commit_hash
+			.filter(|x| {
+				(commitments.is_empty() || commitments.contains(&x.commit)) &&
+					match self.chain.get_unspent(&x.commit) {
+						Ok(hash) => hash == x.hash(),
+						Err(_) => false,
 					}
-					Err(_) => false,
-				}
 			})
 			.map(|k| {
 				OutputPrintable::from_output(k, self.chain.clone(), include_proof)

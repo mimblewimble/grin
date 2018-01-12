@@ -182,14 +182,8 @@ where
 			match self.search_for_best_output(&input.commitment()) {
 				Parent::PoolTransaction { tx_ref: x } => pool_refs.push(base.with_source(Some(x))),
 				Parent::BlockTransaction { output: output_hash } => {
-					let output_block = self.blockchain.get_block(input.out_block)?;
 					let height = head_header.height + 1;
-					input.verify_lock_height(output_block, output_hash, height)
-						.map_err(|_| PoolError::ImmatureCoinbase {
-							height: height,
-							output: input.commitment(),
-						})?;
-
+					self.blockchain.verify_coinbase_maturity(&input, height)?;
 					blockchain_refs.push(base);
 				}
 				Parent::Unknown => orphan_refs.push(base),

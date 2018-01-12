@@ -237,9 +237,17 @@ fn spend_in_fork() {
 	let prev = chain.head_header().unwrap();
 	let kc = Keychain::from_random_seed().unwrap();
 
-	// mine 4 blocks, the 4th will be the root of the fork
 	let mut fork_head = prev;
-	for n in 2..6 {
+
+	// mine the 1st block and keep track of thw block_hash
+	// so we can spend the coinbase later
+	let b = prepare_block(&kc, &fork_head, &chain, 1);
+	let block_hash = b.hash();
+	fork_head = b.header.clone();
+	chain.process_block(b, chain::SKIP_POW).unwrap();
+
+	// now mine 3 further blocks
+	for n in 2..5 {
 		let b = prepare_block(&kc, &fork_head, &chain, n);
 		fork_head = b.header.clone();
 		chain.process_block(b, chain::SKIP_POW).unwrap();
@@ -250,7 +258,7 @@ fn spend_in_fork() {
 
 	let (tx1, _) = build::transaction(
 		vec![
-			build::coinbase_input(consensus::REWARD, lock_height, kc.derive_key_id(2).unwrap()),
+			build::coinbase_input(consensus::REWARD, block_hash, kc.derive_key_id(1).unwrap()),
 			build::output(consensus::REWARD - 20000, kc.derive_key_id(30).unwrap()),
 			build::with_fee(20000),
 		],

@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 
 use util::secp::pedersen::{Commitment, RangeProof};
 
-use core::core::{SumCommit, SwitchCommitHash};
+use core::core::SumCommit;
 use core::core::pmmr::{HashSum, NoSum};
 
 use core::core::{Block, BlockHeader, TxKernel};

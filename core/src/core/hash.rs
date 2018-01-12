@@ -25,6 +25,7 @@ use blake2::blake2b::Blake2b;
 
 use consensus;
 use ser::{self, AsFixedBytes, Error, Readable, Reader, Writeable, Writer};
+use util;
 use util::LOGGER;
 
 /// A hash consisting of all zeroes, used as a sentinel. No known preimage.
@@ -69,6 +70,10 @@ impl Hash {
 	/// The "zero" hash. No known preimage.
 	pub fn zero() -> Hash {
 		ZERO_HASH
+	}
+
+	pub fn to_hex(&self) -> String {
+		util::to_hex(self.to_vec())
 	}
 }
 

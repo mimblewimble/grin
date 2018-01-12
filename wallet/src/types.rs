@@ -34,6 +34,7 @@ use tokio_retry::strategy::FibonacciBackoff;
 use api;
 use core::consensus;
 use core::core::{transaction, Transaction};
+use core::core::hash::Hash;
 use core::ser;
 use keychain;
 use util;
@@ -239,6 +240,8 @@ pub struct OutputData {
 	pub lock_height: u64,
 	/// Is this a coinbase output? Is it subject to coinbase locktime?
 	pub is_coinbase: bool,
+	/// Hash of the block this output originated from.
+	pub block_hash: Hash,
 }
 
 impl OutputData {
@@ -660,6 +663,7 @@ pub struct BlockFees {
 	pub fees: u64,
 	pub height: u64,
 	pub key_id: Option<keychain::Identifier>,
+	pub block_hash: Hash,
 }
 
 impl BlockFees {

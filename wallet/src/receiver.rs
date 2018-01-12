@@ -25,6 +25,7 @@ use serde_json;
 use api;
 use core::consensus::reward;
 use core::core::{build, Block, Output, Transaction, TxKernel};
+use core::core::hash::Hash;
 use core::{global, ser};
 use keychain::{BlindingFactor, Identifier, Keychain};
 use types::*;
@@ -153,6 +154,7 @@ pub fn receive_coinbase(
 			height: height,
 			lock_height: lock_height,
 			is_coinbase: true,
+			block_hash: block_fees.block_hash,
 		});
 
 		(key_id, derivation)
@@ -219,6 +221,7 @@ fn receive_transaction(
 			height: 0,
 			lock_height: 0,
 			is_coinbase: false,
+			block_hash: Hash::zero(),
 		});
 
 		(key_id, derivation)

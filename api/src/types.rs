@@ -63,10 +63,10 @@ impl SumTrees {
 	pub fn from_head(head: Arc<chain::Chain>) -> SumTrees {
 		let roots = head.get_sumtree_roots();
 		SumTrees {
-			utxo_root_hash: util::to_hex(roots.0.hash.to_vec()),
-			utxo_root_sum: util::to_hex(roots.0.sum.commit.0.to_vec()),
-			range_proof_root_hash: util::to_hex(roots.1.hash.to_vec()),
-			kernel_root_hash: util::to_hex(roots.2.hash.to_vec()),
+			utxo_root_hash: roots.0.hash.to_hex(),
+			utxo_root_sum: roots.0.sum.to_hex(),
+			range_proof_root_hash: roots.1.hash.to_hex(),
+			kernel_root_hash: roots.2.hash.to_hex(),
 		}
 	}
 }
@@ -180,8 +180,9 @@ impl OutputPrintable {
 		// * not found in the pmmr (via the chain)
 		// * or commitment is a duplicate (found in pmmr but switch commit hash differs)
 		let spent = match chain.get_unspent(&output.commit) {
-			Ok(switch_commit_hash) => {
-				switch_commit_hash != output.switch_commit_hash
+			Ok(hash) => {
+				let out = core::OutputIdentifier::from_output(&output);
+				hash != out.hash()
 			},
 			Err(_) => true,
 		};
