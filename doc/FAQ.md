@@ -25,7 +25,7 @@ Like other cryptocurrencies, newly mined coins are time locked, so mined coins c
 ## "Peer request error" or other peer/network issues after restarting grin server
 Possible workaround is `rm -rf .grin/peers/*`  then restart.
 
-## grin server or waller crashes or hangs
+## grin server or wallet crashes or hangs
 Yes, this still happens quite often. You'll need to babysit grin.
 Very welcome any solutions to give grin a "watchdog" solution that can restart
 grin in case of trouble.
