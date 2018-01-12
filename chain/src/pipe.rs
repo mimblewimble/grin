@@ -213,18 +213,32 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 			return Err(Error::DifficultyTooLow);
 		}
 
+		let diff_iter = store::DifficultyIter::from(header.previous, ctx.store.clone());
+		let difficulty =
+			consensus::next_difficulty(diff_iter).map_err(|e| Error::Other(e.to_string()))?;
+
 		// explicit check to ensure total_difficulty has increased by exactly
-		// the difficulty of the previous block
-		if header.total_difficulty != prev.total_difficulty.clone() + prev.pow.to_difficulty() {
+		// the _network_ difficulty of the previous block
+		// (during testnet1 we use _block_ difficulty here)
+		if header.total_difficulty != prev.total_difficulty.clone() + difficulty.clone() {
+			error!(
+				LOGGER,
+				"validate_header: BANNABLE OFFENCE: header cumulative difficulty {} != {}",
+				header.difficulty.into_num(),
+				prev.total_difficulty.into_num() + difficulty.into_num()
+			);
 			return Err(Error::WrongTotalDifficulty);
 		}
 
 		// now check that the difficulty is not less than that calculated by the
 		// difficulty iterator based on the previous block
-		let diff_iter = store::DifficultyIter::from(header.previous, ctx.store.clone());
-		let difficulty =
-			consensus::next_difficulty(diff_iter).map_err(|e| Error::Other(e.to_string()))?;
 		if header.difficulty < difficulty {
+			error!(
+				LOGGER,
+				"validate_header: BANNABLE OFFENCE: header difficulty {} < {}",
+				header.difficulty.into_num(),
+				difficulty.into_num()
+			);
 			return Err(Error::DifficultyTooLow);
 		}
 	}

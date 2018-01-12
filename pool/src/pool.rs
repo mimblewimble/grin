@@ -20,6 +20,7 @@ pub use graph;
 use core::core::transaction;
 use core::core::block;
 use core::core::hash;
+use core::core::target::Difficulty;
 use core::global;
 
 use util::secp::pedersen::Commitment;
@@ -930,6 +931,7 @@ mod tests {
 			txs.iter().collect(),
 			&keychain,
 			&key_id,
+			Difficulty::minimum(),
 		).unwrap();
 
 		// now apply the block to ensure the chainstate is updated before we reconcile
@@ -1060,6 +1062,7 @@ mod tests {
 			block_transactions,
 			&keychain,
 			&key_id,
+			Difficulty::minimum(),
 		).unwrap();
 
 		chain_ref.apply_block(&block);
@@ -1183,8 +1186,13 @@ mod tests {
 
 			let keychain = Keychain::from_random_seed().unwrap();
 			let key_id = keychain.derive_key_id(1).unwrap();
-			block = block::Block::new(&block::BlockHeader::default(), tx_refs, &keychain, &key_id)
-				.unwrap();
+			block = block::Block::new(
+				&block::BlockHeader::default(),
+				tx_refs,
+				&keychain,
+				&key_id,
+				Difficulty::minimum()
+			).unwrap();
 		}
 
 		chain_ref.apply_block(&block);

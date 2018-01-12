@@ -28,6 +28,7 @@ use std::cmp::Ordering;
 use std::num::ParseFloatError;
 use consensus::GRIN_BASE;
 
+use core::target::Difficulty;
 use util::{secp, static_secp_instance};
 use util::secp::pedersen::*;
 
@@ -388,7 +389,13 @@ mod test {
 		let keychain = keychain::Keychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 
-		let b = Block::new(&BlockHeader::default(), vec![], &keychain, &key_id).unwrap();
+		let b = Block::new(
+			&BlockHeader::default(),
+			vec![],
+			&keychain,
+			&key_id,
+			Difficulty::minimum(),
+		).unwrap();
 		b.compact().validate().unwrap();
 	}
 
@@ -400,7 +407,13 @@ mod test {
 		let mut tx1 = tx2i1o();
 		tx1.verify_sig().unwrap();
 
-		let b = Block::new(&BlockHeader::default(), vec![&mut tx1], &keychain, &key_id).unwrap();
+		let b = Block::new(
+			&BlockHeader::default(),
+			vec![&mut tx1],
+			&keychain,
+			&key_id,
+			Difficulty::minimum(),
+		).unwrap();
 		b.compact().validate().unwrap();
 	}
 
@@ -417,6 +430,7 @@ mod test {
 			vec![&mut tx1, &mut tx2],
 			&keychain,
 			&key_id,
+			Difficulty::minimum(),
 		).unwrap();
 		b.validate().unwrap();
 	}
@@ -447,6 +461,7 @@ mod test {
 			vec![&tx1],
 			&keychain,
 			&key_id3.clone(),
+			Difficulty::minimum(),
 		).unwrap();
 		b.validate().unwrap();
 
@@ -467,6 +482,7 @@ mod test {
 			vec![&tx1],
 			&keychain,
 			&key_id3.clone(),
+			Difficulty::minimum(),
 		).unwrap();
 		match b.validate() {
 			Err(KernelLockHeight { lock_height: height }) => {

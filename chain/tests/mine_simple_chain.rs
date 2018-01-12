@@ -74,12 +74,18 @@ fn mine_empty_chain() {
 	);
 	for n in 1..4 {
 		let prev = chain.head_header().unwrap();
+		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 		let pk = keychain.derive_key_id(n as u32).unwrap();
-		let mut b = core::core::Block::new(&prev, vec![], &keychain, &pk).unwrap();
+		let mut b = core::core::Block::new(
+			&prev,
+			vec![],
+			&keychain,
+			&pk,
+			difficulty.clone()
+		).unwrap();
 		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
-		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
-		b.header.difficulty = difficulty.clone();
+		b.header.difficulty = difficulty.clone(); // TODO: overwrite here? really?
 		chain.set_sumtree_roots(&mut b, false).unwrap();
 
 		pow::pow_size(
@@ -335,7 +341,7 @@ fn prepare_fork_block_tx(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff:
 fn prepare_block_nosum(kc: &Keychain, prev: &BlockHeader, diff: u64, txs: Vec<&Transaction>) -> Block {
 	let key_id = kc.derive_key_id(diff as u32).unwrap();
 
-	let mut b = match core::core::Block::new(prev, txs, kc, &key_id) {
+	let mut b = match core::core::Block::new(prev, txs, kc, &key_id, Difficulty::from_num(diff)) {
 		Err(e) => panic!("{:?}",e),
 		Ok(b) => b
 	};

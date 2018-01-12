@@ -24,6 +24,7 @@ use std::fs;
 use chain::{ChainStore, Tip};
 use core::core::hash::Hashed;
 use core::core::Block;
+use core::core::target::Difficulty;
 use keychain::Keychain;
 use core::global;
 use core::global::ChainTypes;
@@ -47,7 +48,13 @@ fn test_various_store_indices() {
 	chain_store.save_block(&genesis).unwrap();
 	chain_store.setup_height(&genesis.header, &Tip::new(genesis.hash())).unwrap();
 
-	let block = Block::new(&genesis.header, vec![], &keychain, &key_id).unwrap();
+	let block = Block::new(
+		&genesis.header,
+		vec![],
+		&keychain,
+		&key_id,
+		Difficulty::minimum()
+	).unwrap();
 	let commit = block.outputs[0].commitment();
 	let block_hash = block.hash();
 

@@ -292,10 +292,11 @@ impl Block {
 		txs: Vec<&Transaction>,
 		keychain: &keychain::Keychain,
 		key_id: &keychain::Identifier,
+		difficulty: Difficulty,
 	) -> Result<Block, Error> {
 		let fees = txs.iter().map(|tx| tx.fee).sum();
 		let (reward_out, reward_proof) = Block::reward_output(keychain, key_id, fees)?;
-		let block = Block::with_reward(prev, txs, reward_out, reward_proof)?;
+		let block = Block::with_reward(prev, txs, reward_out, reward_proof, difficulty)?;
 		Ok(block)
 	}
 
@@ -307,6 +308,7 @@ impl Block {
 		txs: Vec<&Transaction>,
 		reward_out: Output,
 		reward_kern: TxKernel,
+		difficulty: Difficulty,
 	) -> Result<Block, Error> {
 		let mut kernels = vec![];
 		let mut inputs = vec![];
@@ -350,7 +352,7 @@ impl Block {
 						..time::now_utc()
 					},
 					previous: prev.hash(),
-					total_difficulty: prev.pow.clone().to_difficulty() +
+					total_difficulty: difficulty +
 						prev.total_difficulty.clone(),
 					..Default::default()
 				},
@@ -615,7 +617,13 @@ mod test {
 	// header
 	fn new_block(txs: Vec<&Transaction>, keychain: &Keychain) -> Block {
 		let key_id = keychain.derive_key_id(1).unwrap();
-		Block::new(&BlockHeader::default(), txs, keychain, &key_id).unwrap()
+		Block::new(
+			&BlockHeader::default(),
+			txs,
+			keychain,
+			&key_id,
+			Difficulty::minimum()
+		).unwrap()
 	}
 
 	// utility producing a transaction that spends an output with the provided
