@@ -83,10 +83,13 @@ pub fn issue_send_tx(
 		debug!(LOGGER, "Posting partial transaction to {}", url);
 		let res = client::send_partial_tx(&url, &partial_tx);
 		match res {
-			Err(_) => {
-				error!(LOGGER, "Communication with receiver failed. Aborting transaction");
+			Err(e) => {
+				match e {
+					Error::FeeMoreThanAmount {sender_amount, recipient_fee} => error!(LOGGER, "Recipient could not process the transaction."),
+					_ => error!(LOGGER, "Communication with receiver failed. Aborting transaction"),
+				}
 				rollback_wallet()?;
-				return res;
+				return Err(e);
 			}
 			Ok(_) => {
 				update_wallet()?;
