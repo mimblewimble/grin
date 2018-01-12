@@ -19,6 +19,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
 use api;
+use core::core::hash::Hash;
 use types::*;
 use keychain::{Identifier, Keychain};
 use util::secp::pedersen;
@@ -48,12 +49,12 @@ fn mark_spent_output(out: &mut OutputData) {
 
 pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> {
 	refresh_output_state(config, keychain)?;
-	refresh_missing_heights(config, keychain)?;
+	refresh_missing_block_hashes(config, keychain)?;
 	Ok(())
 }
 
 // TODO - this might be slow if we have really old outputs that have never been refreshed
-fn refresh_missing_heights(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> {
+fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> {
 	// build a local map of wallet outputs keyed by commit
 	// and a list of outputs we want to query the node for
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
@@ -63,9 +64,8 @@ fn refresh_missing_heights(config: &WalletConfig, keychain: &Keychain) -> Result
 			.values()
 			.filter(|x| {
 				x.root_key_id == keychain.root_key_id() &&
-				x.height == 0 &&
+				x.block_hash == Hash::zero() &&
 				x.status == OutputStatus::Unspent
-
 			})
 		{
 			let commit = keychain.commit_with_key_index(out.value, out.n_child).unwrap();
@@ -78,7 +78,11 @@ fn refresh_missing_heights(config: &WalletConfig, keychain: &Keychain) -> Result
 		return Ok(());
 	}
 
-	debug!(LOGGER, "Refreshing missing heights for {} outputs", wallet_outputs.len());
+	debug!(
+		LOGGER,
+		"Refreshing missing block hashes (and heights) for {} outputs",
+		wallet_outputs.len(),
+	);
 
 	let mut id_params: Vec<String> = wallet_outputs
 		.keys()
@@ -106,14 +110,16 @@ fn refresh_missing_heights(config: &WalletConfig, keychain: &Keychain) -> Result
 	);
 	debug!(LOGGER, "{:?}", url);
 
-	let mut api_heights: HashMap<pedersen::Commitment, u64> = HashMap::new();
+	let mut api_blocks: HashMap<pedersen::Commitment, api::BlockHeaderInfo> = HashMap::new();
 	match api::client::get::<Vec<api::BlockOutputs>>(url.as_str()) {
 		Ok(blocks) => {
+			debug!(LOGGER, "blocks here - {:?}", blocks);
 			for block in blocks {
 				for out in block.outputs {
 					if let Ok(c) = util::from_hex(String::from(out.commit)) {
 						let commit = pedersen::Commitment::from_vec(c);
-						api_heights.insert(commit, block.header.height);
+						debug!(LOGGER, "{:?}", block.header.clone());
+						api_blocks.insert(commit, block.header.clone());
 					}
 				}
 			}
@@ -133,8 +139,10 @@ fn refresh_missing_heights(config: &WalletConfig, keychain: &Keychain) -> Result
 		for commit in wallet_outputs.keys() {
 			let id = wallet_outputs.get(&commit).unwrap();
 			if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
-				if let Some(height) = api_heights.get(&commit) {
-					output.get_mut().height = *height;
+				if let Some(b) = api_blocks.get(&commit) {
+					let output = output.get_mut();
+					output.block_hash = Hash::from_hex(&b.hash).unwrap();
+					output.height = b.height;
 				}
 			}
 		}

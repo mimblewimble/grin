@@ -154,7 +154,7 @@ pub fn receive_coinbase(
 			height: height,
 			lock_height: lock_height,
 			is_coinbase: true,
-			block_hash: block_fees.block_hash,
+			block_hash: Hash::zero(),
 		});
 
 		(key_id, derivation)

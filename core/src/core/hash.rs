@@ -75,6 +75,11 @@ impl Hash {
 	pub fn to_hex(&self) -> String {
 		util::to_hex(self.to_vec())
 	}
+
+	pub fn from_hex(hex: &str) -> Result<Hash, Error> {
+		let bytes = util::from_hex(hex.to_string()).unwrap();
+		Ok(Hash::from_vec(bytes))
+	}
 }
 
 impl ops::Index<usize> for Hash {

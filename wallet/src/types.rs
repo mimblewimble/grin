@@ -663,7 +663,6 @@ pub struct BlockFees {
 	pub fees: u64,
 	pub height: u64,
 	pub key_id: Option<keychain::Identifier>,
-	pub block_hash: Hash,
 }
 
 impl BlockFees {

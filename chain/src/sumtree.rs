@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use core::core::{Block, SumCommit, Input, Output, OutputIdentifier, TxKernel, COINBASE_OUTPUT};
+use core::core::{Block, SumCommit, Input, Output, TxKernel, COINBASE_OUTPUT};
 use core::core::pmmr::{HashSum, NoSum, Summable, PMMR};
 use core::core::hash::{Hash, Hashed};
 use grin_store;
@@ -88,18 +88,15 @@ impl SumTrees {
 		})
 	}
 
-	/// Check if the given commitment exists in the output_pmmr.
-	/// Return the hash from the output_pmmr if we find it.
-	/// Remember to check the hash to be sure this is the expected output.
-	pub fn get_unspent(&mut self, commit: &Commitment) -> Result<Hash, Error> {
-		match self.commit_index.get_output_pos(commit) {
+	pub fn is_unspent_lite(&mut self, commit: &Commitment) -> Result<(), Error> {
+		match self.commit_index.get_output_pos(&commit) {
 			Ok(pos) => {
 				let output_pmmr = PMMR::at(
 					&mut self.output_pmmr_h.backend,
 					self.output_pmmr_h.last_pos,
 				);
 				if let Some(hs) = output_pmmr.get(pos) {
-					Ok(hs.hash)
+					Ok(())
 				} else {
 					Err(Error::OutputNotFound)
 				}
@@ -109,16 +106,26 @@ impl SumTrees {
 		}
 	}
 
-	pub fn is_unspent(
-		&mut self,
-		commit: &Commitment,
-		out: &OutputIdentifier,
-	) -> Result<(), Error> {
-		let hash = self.get_unspent(commit)?;
-		if hash == out.hash() {
-			Ok(())
-		} else {
-			Err(Error::SumTreeErr(format!("sumtree hash mismatch")))
+	pub fn is_unspent_full(&mut self, sum_commit: &SumCommit) -> Result<(), Error> {
+		match self.commit_index.get_output_pos(&sum_commit.commit) {
+			Ok(pos) => {
+				let output_pmmr = PMMR::at(
+					&mut self.output_pmmr_h.backend,
+					self.output_pmmr_h.last_pos,
+				);
+				if let Some(hs) = output_pmmr.get(pos) {
+					let hash_sum = HashSum::from_summable(pos, sum_commit);
+					if hs.hash == hash_sum.hash {
+						Ok(())
+					} else {
+						Err(Error::SumTreeErr(format!("sumtree hash mismatch")))
+					}
+				} else {
+					Err(Error::OutputNotFound)
+				}
+			}
+			Err(grin_store::Error::NotFoundErr) => Err(Error::OutputNotFound),
+			Err(e) => Err(Error::StoreErr(e, format!("sumtree unspent check"))),
 		}
 	}
 
@@ -314,17 +321,18 @@ impl<'a> Extension<'a> {
 		let pos_res = self.get_output_pos(&commit);
 		if let Ok(pos) = pos_res {
 			if let Some(HashSum { hash, sum: _ }) = self.output_pmmr.get(pos) {
-				let out = OutputIdentifier::from_input(&input);
+				let sum_commit = SumCommit::from_input(&input);
 
 				// check hash from pmmr matches hash from input
 				// if not then the input is not being honest about
 				// what it is attempting to spend...
-				if hash != out.hash() {
+				let hash_sum = HashSum::from_summable(pos, &sum_commit);
+				if hash != hash_sum.hash {
 					return Err(Error::SumTreeErr(format!("output pmmr hash mismatch")));
 				}
 
 				let block = self.commit_index.get_block(&input.out_block)?;
-				block.verify_coinbase_maturity(&out, height)
+				block.verify_coinbase_maturity(&sum_commit, height)
 					.map_err(|_| Error::ImmatureCoinbase)?;
 			}
 
@@ -356,12 +364,12 @@ impl<'a> Extension<'a> {
 			// note that this doesn't show the commitment *never* existed, just
 			// that this is not an existing unspent commitment right now
 			if let Some(c) = self.output_pmmr.get(pos) {
-				let hashsum = HashSum::from_summable(pos, &sum_commit);
+				let hash_sum = HashSum::from_summable(pos, &sum_commit);
 
 				// processing a new fork so we may get a position on the old
 				// fork that exists but matches a different node
 				// filtering that case out
-				if c.hash == hashsum.hash {
+				if c.hash == hash_sum.hash {
 					return Err(Error::DuplicateCommitment(commit));
 				}
 			}

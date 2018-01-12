@@ -19,6 +19,7 @@ use core::core::hash::Hashed;
 use core::core::SumCommit;
 use chain;
 use util;
+use util::LOGGER;
 use util::secp::pedersen;
 use util::secp::constants::MAX_PROOF_SIZE;
 
@@ -129,19 +130,11 @@ pub enum OutputType {
 pub struct Utxo {
 	/// The output commitment representing the amount
 	pub commit: pedersen::Commitment,
-	/// The hash from the output_pmmr
-	pub hash: core::hash::Hash,
 }
 
 impl Utxo {
-	pub fn new (
-		commit: &pedersen::Commitment,
-		hash: &core::hash::Hash,
-	) -> Utxo {
-		Utxo {
-			commit: commit.clone(),
-			hash: hash.clone(),
-		}
+	pub fn new(commit: &pedersen::Commitment) -> Utxo {
+		Utxo { commit: commit.clone() }
 	}
 }
 
@@ -176,15 +169,11 @@ impl OutputPrintable {
 				OutputType::Transaction
 			};
 
-		// output for commitment is spent if -
-		// * not found in the pmmr (via the chain)
-		// * or commitment is a duplicate (found in pmmr but switch commit hash differs)
-		let spent = match chain.get_unspent(&output.commit) {
-			Ok(hash) => {
-				let out = core::OutputIdentifier::from_output(&output);
-				hash != out.hash()
-			},
-			Err(_) => true,
+		// TODO - clean this up
+		let sum_commit = core::SumCommit::from_output(&output);
+		let spent = match chain.is_unspent(&sum_commit) {
+			Ok(_) => true,
+			Err(_) => false,
 		};
 
 		let proof = if include_proof {

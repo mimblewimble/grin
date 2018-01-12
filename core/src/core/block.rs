@@ -23,7 +23,7 @@ use core::{
 	Committed,
 	Input,
 	Output,
-	OutputIdentifier,
+	SumCommit,
 	SwitchCommitHash,
 	Proof,
 	TxKernel,
@@ -585,17 +585,17 @@ impl Block {
 	/// Confirm height <= lock_height
 	pub fn verify_coinbase_maturity(
 		&self,
-		output: &OutputIdentifier,
+		sum_commit: &SumCommit,
 		height: u64,
 	) -> Result<(), Error> {
 
 		if let Some(out) = self.outputs
 			.iter()
 			.find(|x| {
-				x.hash() == output.hash()
+				x.hash() == sum_commit.hash()
 			})
 		{
-			if !output.features.contains(COINBASE_OUTPUT) {
+			if !sum_commit.features.contains(COINBASE_OUTPUT) {
 				return Ok(());
 			}
 

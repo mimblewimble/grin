@@ -565,40 +565,6 @@ impl SwitchCommitHash {
 	}
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-pub struct OutputIdentifier {
-	/// Options for an output's structure or use
-	pub features: OutputFeatures,
-	/// The homomorphic commitment representing the output amount
-	pub commit: Commitment,
-}
-
-impl OutputIdentifier {
-	pub fn from_input(input: &Input) -> OutputIdentifier {
-		OutputIdentifier {
-			features: input.features,
-			commit: input.commit,
-		}
-	}
-
-	pub fn from_output(output: &Output) -> OutputIdentifier {
-		OutputIdentifier {
-			features: output.features,
-			commit: output.commit,
-		}
-	}
-}
-
-/// Implementation of Writeable for an OutputIdentifier.
-/// Will generate an _identical_ hash as an Output with the same features and commitment.
-impl Writeable for OutputIdentifier {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u8(self.features.bits())?;
-		writer.write_fixed_bytes(&self.commit)?;
-		Ok(())
-	}
-}
-
 /// Output for a transaction, defining the new ownership of coins that are being
 /// transferred. The commitment is a blinded value for the output while the
 /// range proof guarantees the commitment includes a positive value without
@@ -699,25 +665,32 @@ impl Output {
 /// Wrapper to Output commitments to provide the Summable trait.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SumCommit {
-	/// Output commitment
-	commit: Commitment,
 	/// Output features (coinbase vs. regular transaction output)
 	/// We need to include this when hashing to ensure coinbase maturity can be enforced.
-	features: OutputFeatures,
+	pub features: OutputFeatures,
+	/// Output commitment
+	pub commit: Commitment,
 }
 
 impl SumCommit {
-	pub fn new(commit: &Commitment, features: OutputFeatures) -> SumCommit {
+	pub fn new(features: OutputFeatures, commit: &Commitment) -> SumCommit {
 		SumCommit {
-			commit: commit.clone(),
 			features: features.clone(),
+			commit: commit.clone(),
 		}
 	}
 
 	pub fn from_output(output: &Output) -> SumCommit {
 		SumCommit {
-			commit: output.commit,
 			features: output.features,
+			commit: output.commit,
+		}
+	}
+
+	pub fn from_input(input: &Input) -> SumCommit {
+		SumCommit {
+			features: input.features,
+			commit: input.commit,
 		}
 	}
 
@@ -782,8 +755,8 @@ impl ops::Add for SumCommit {
 			Err(_) => Commitment::from_vec(vec![1; 33]),
 		};
 		SumCommit::new(
-			&sum,
 			self.features | other.features,
+			&sum,
 		)
 	}
 }

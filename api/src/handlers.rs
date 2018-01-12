@@ -24,7 +24,7 @@ use serde::Serialize;
 use serde_json;
 
 use chain;
-use core::core::Transaction;
+use core::core::{SumCommit, Transaction};
 use core::core::hash::{Hash, Hashed};
 use core::ser;
 use pool;
@@ -63,12 +63,13 @@ impl UtxoHandler {
 		let c = util::from_hex(String::from(id))
 			.map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
 		let commit = Commitment::from_vec(c);
-
-		let switch_commit_hash = self.chain
-			.get_unspent(&commit)
+		panic!("we have no features here...");
+		let sum_commit = SumCommit::new();
+		let _ = self.chain
+			.is_unspent(&commit)
 			.map_err(|_| Error::NotFound)?;
 
-		Ok(Utxo::new(&commit, &switch_commit_hash))
+		Ok(Utxo::new(&commit))
 	}
 
 	fn utxos_by_ids(&self, req: &mut Request) -> Vec<Utxo> {
@@ -108,17 +109,16 @@ impl UtxoHandler {
 		let outputs = block
 			.outputs
 			.iter()
-			.filter(|x| {
-				(commitments.is_empty() || commitments.contains(&x.commit)) &&
-					match self.chain.get_unspent(&x.commit) {
-						Ok(hash) => hash == x.hash(),
-						Err(_) => false,
-					}
+			.filter(|output| {
+				commitments.is_empty() || commitments.contains(&output.commit)
 			})
-			.map(|k| {
-				OutputPrintable::from_output(k, self.chain.clone(), include_proof)
+			.map(|output| {
+				OutputPrintable::from_output(output, self.chain.clone(), include_proof)
 			})
 			.collect();
+
+		debug!(LOGGER, "outputs_at_height: {:?}", header);
+		debug!(LOGGER, "outputs_at_height: {:?}", outputs);
 		BlockOutputs {
 			header: BlockHeaderInfo::from_header(&header),
 			outputs: outputs,
