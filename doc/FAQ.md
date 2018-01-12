@@ -3,10 +3,10 @@
 - Q: What is grin?  A: An implementation of [MimbleWimble](https://download.wpsoftware.net/bitcoin/wizardry/mimblewimble.txt)
 - Q: Similar to Bitcoin?  A: Both are outputs-based, PoW. See also [Grin for Bitcoiners](grin4bitcoiners.md)
 - Q: Mining? A: Testnet only. CPU, synchronous. GPU or asynchronous is not yet supported.
-- Q: Block height? A: HTTP GET /v1/chain on a public peer node, for example http://testnet1.yeastplume.com:13413/v1/chain or (grintest.net)[https://grintest.net/]
+- Q: Block height? A: HTTP GET /v1/chain on a public peer node, for example http://testnet1.yeastplume.com:13413/v1/chain or [grintest.net](https://grintest.net/)
 - Q: Store of value? A: Not yet. Wait for Mainnet. Testnet1 can still disappear and reappear unexpectedly.
 - Q: Block size limit? Target mean block time?  A: Target mean block time is 1 block per 60 seconds. The size is limited by transaction "weight", though there is also a hard cap on the order of tens of MB.
-- Q: Does grin scale?  A: Yes, it might eventually do, thanks to transaction cut-through and possible level 2 solutions.
+- Q: Does grin scale?  A: Yes, it might eventually do, thanks to transaction cut-through and possible layer 2 solutions.
 - Q: Fees? Monetary policy? A: https://github.com/mimblewimble/grin/wiki/fees-mining
 - Q: Roadmap? A: Moving fast, changing things. Maybe look at [issues and milestones](https://github.com/mimblewimble/grin/milestones)
 - Q: Proof of payment? A: Planned. Maybe in Testnet2
@@ -25,7 +25,7 @@ Like other cryptocurrencies, newly mined coins are time locked, so mined coins c
 ## "Peer request error" or other peer/network issues after restarting grin server
 Possible workaround is `rm -rf .grin/peers/*`  then restart.
 
-## grin server or waller crashes or hangs
+## grin server or wallet crashes or hangs
 Yes, this still happens quite often. You'll need to babysit grin.
 Very welcome any solutions to give grin a "watchdog" solution that can restart
 grin in case of trouble.
