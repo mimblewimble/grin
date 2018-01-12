@@ -15,7 +15,7 @@
 use api;
 use client;
 use checker;
-use core::core::{build, Transaction};
+use core::core::{build, Transaction, amount_to_hr_string};
 use core::ser;
 use keychain::{BlindingFactor, Identifier, Keychain};
 use receiver::TxWrapper;
@@ -97,7 +97,16 @@ pub fn issue_send_tx(
 	debug!(LOGGER, "Posting partial transaction to {}", url);
 	let res = client::send_partial_tx(&url, &partial_tx);
 	if let Err(e) = res {
-		error!(LOGGER, "Communication with receiver failed on SenderInitiation send. Aborting transaction");
+		match e {
+			Error::FeeExceedsAmount {sender_amount, recipient_fee} => 
+				error!(
+					LOGGER, 
+					"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
+					amount_to_hr_string(recipient_fee),
+					amount_to_hr_string(sender_amount)
+				),
+			_ => error!(LOGGER, "Communication with receiver failed on SenderInitiation send. Aborting transaction"),
+		}
 		rollback_wallet()?;
 		return Err(e);
 	}
@@ -124,7 +133,16 @@ pub fn issue_send_tx(
 	// And send again
 	let res = client::send_partial_tx(&url, &partial_tx);
 	if let Err(e) = res {
-		error!(LOGGER, "Communication with receiver failed on SenderConfirmation send. Aborting transaction");
+		match e {
+			Error::FeeExceedsAmount {sender_amount, recipient_fee} => 
+				error!(
+					LOGGER, 
+					"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
+					amount_to_hr_string(recipient_fee),
+					amount_to_hr_string(sender_amount)
+				),
+			_ => error!(LOGGER, "Communication with receiver failed on SenderConfirmation send. Aborting transaction"),
+		}
 		rollback_wallet()?;
 		return Err(e);
 	}
