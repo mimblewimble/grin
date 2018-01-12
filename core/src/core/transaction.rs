@@ -13,11 +13,9 @@
 // limitations under the License.
 
 //! Transactions
-
-use byteorder::{BigEndian, ByteOrder};
 use blake2::blake2b::blake2b;
 use util::secp::{self, Message, Signature};
-use util::static_secp_instance;
+use util::{static_secp_instance, kernel_sig_msg};
 use util::secp::pedersen::{Commitment, RangeProof};
 use std::cmp::Ordering;
 use std::ops;
@@ -92,14 +90,6 @@ impl From<consensus::Error> for Error {
 	}
 }
 
-/// Construct msg bytes from tx fee and lock_height
-pub fn kernel_sig_msg(fee: u64, lock_height: u64) -> [u8; 32] {
-	let mut bytes = [0; 32];
-	BigEndian::write_u64(&mut bytes[16..24], fee);
-	BigEndian::write_u64(&mut bytes[24..], lock_height);
-	bytes
-}
-
 /// A proof that a transaction sums to zero. Includes both the transaction's
 /// Pedersen commitment and the signature, that guarantees that the commitments
 /// amount to zero.
@@ -166,7 +156,11 @@ impl TxKernel {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 		let sig = try!(Signature::from_der(&secp, &self.excess_sig));
-		secp.verify_from_commit(&msg, &sig, &self.excess)
+		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &self.excess);
+		if !valid{
+			return Err(secp::Error::IncorrectSignature);
+		}
+		Ok(())
 	}
 }
 
@@ -330,16 +324,12 @@ impl Transaction {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 		let sig = Signature::from_der(&secp, &self.excess_sig)?;
-
 		// pretend the sum is a public key (which it is, being of the form r.G) and
 		// verify the transaction sig with it
-		//
-		// we originally converted the commitment to a key_id here (commitment to zero)
-		// and then passed the key_id to secp.verify()
-		// the secp api no longer allows us to do this so we have wrapped the complexity
-		// of generating a public key from a commitment behind verify_from_commit
-		secp.verify_from_commit(&msg, &sig, &rsum)?;
-
+		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &rsum);
+		if !valid{
+			return Err(secp::Error::IncorrectSignature);
+		}
 		Ok(rsum)
 	}
 

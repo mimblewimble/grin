@@ -56,11 +56,11 @@ where
 	Ok(res)
 }
 
-pub fn send_partial_tx(url: &str, partial_tx: &PartialTx) -> Result<(), Error> {
+pub fn send_partial_tx(url: &str, partial_tx: &PartialTx) -> Result<PartialTx, Error> {
 	single_send_partial_tx(url, partial_tx)
 }
 
-fn single_send_partial_tx(url: &str, partial_tx: &PartialTx) -> Result<(), Error> {
+fn single_send_partial_tx(url: &str, partial_tx: &PartialTx) -> Result<PartialTx, Error> {
 	let mut core = reactor::Core::new()?;
 	let client = hyper::Client::new(&core.handle());
 
@@ -69,21 +69,15 @@ fn single_send_partial_tx(url: &str, partial_tx: &PartialTx) -> Result<(), Error
 	let json = serde_json::to_string(&partial_tx)?;
 	req.set_body(json);
 
-	let work = client.request(req);
-	let _ = core.run(work).and_then(|res| {
-		if res.status() == hyper::StatusCode::Ok {
-			info!(LOGGER, "Transaction sent successfully");
-		} else {
-			error!(
-				LOGGER,
-				"Error sending transaction - status: {}",
-				res.status()
-			);
-			return Err(hyper::Error::Status);
-		}
-		Ok(())
-	})?;
-	Ok(())
+	let work = client.request(req).and_then(|res| {
+		res.body().concat2().and_then(move |body| {
+			let partial_tx: PartialTx =
+				serde_json::from_slice(&body).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+			Ok(partial_tx)
+		})
+	});
+	let res = core.run(work)?;
+	Ok(res)
 }
 
 /// Makes a single request to the wallet API to create a new coinbase output.

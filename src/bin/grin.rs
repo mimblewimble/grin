@@ -33,8 +33,6 @@ extern crate grin_wallet as wallet;
 mod client;
 
 use std::thread;
-use std::io::Read;
-use std::fs::File;
 use std::time::Duration;
 use std::env::current_dir;
 
@@ -211,10 +209,8 @@ fn main() {
 				.takes_value(true)))
 
 		.subcommand(SubCommand::with_name("send")
-			.about("Builds a transaction to send someone some coins. By default, \
-				the transaction will just be printed to stdout. If a destination is \
-				provided, the command will attempt to contact the receiver at that \
-				address and send the transaction directly.")
+			.about("Builds a transaction to send coins and sends it to the specified \
+			 listener directly.")
 			.arg(Arg::with_name("amount")
 				.help("Number of coins to send with optional fraction, e.g. 12.423")
 				.index(1))
@@ -417,7 +413,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 	let passphrase = wallet_args.value_of("pass").expect(
 		"Failed to read passphrase.",
 	);
-	let keychain = wallet_seed.derive_keychain(&passphrase).expect(
+	let mut keychain = wallet_seed.derive_keychain(&passphrase).expect(
 		"Failed to derive keychain from seed file and passphrase.",
 	);
 
@@ -428,7 +424,9 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			}
 			wallet::server::start_rest_apis(wallet_config, keychain);
 		}
-		("receive", Some(receive_args)) => {
+		// The following is gone for now, as a result of aggsig transactions
+		// being implemented
+		/*("receive", Some(receive_args)) => {
 			let input = receive_args.value_of("input").expect("Input file required");
 			let mut file = File::open(input).expect("Unable to open transaction file.");
 			let mut contents = String::new();
@@ -444,7 +442,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				println!(" * your node isn't running or can't be reached");
 				println!("\nDetailed error: {:?}", e);
 			}
-		}
+		}*/
 		("send", Some(send_args)) => {
 			let amount = send_args.value_of("amount").expect(
 				"Amount to send required",
@@ -461,14 +459,13 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			let selection_strategy = send_args.value_of("selection_strategy").expect(
 				"Selection strategy required",
 			);
-			let mut dest = "stdout";
-			if let Some(d) = send_args.value_of("dest") {
-				dest = d;
-			}
+			let dest =  send_args.value_of("dest").expect(
+				"Destination wallet address required",
+			);
 			let max_outputs = 500;
 			let result = wallet::issue_send_tx(
 				&wallet_config,
-				&keychain,
+				&mut keychain,
 				amount,
 				minimum_confirmations,
 				dest.to_string(),

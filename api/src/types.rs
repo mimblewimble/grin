@@ -16,6 +16,7 @@ use std::sync::Arc;
 use core::{core, global};
 use core::core::hash::Hashed;
 use chain;
+use p2p;
 use util::secp::pedersen;
 use rest::*;
 use util;
@@ -40,6 +41,30 @@ impl Tip {
 			last_block_pushed: util::to_hex(tip.last_block_h.to_vec()),
 			prev_block_to_last: util::to_hex(tip.prev_block_h.to_vec()),
 			total_difficulty: tip.total_difficulty.into_num(),
+		}
+	}
+}
+
+/// Status page containing different server information
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Status {
+	// The protocol version
+	pub protocol_version: u32,
+	// The user user agent
+	pub user_agent: String,
+	// The current number of connections
+	pub connections: u32,
+	// The state of the current fork Tip
+	pub tip: Tip,
+}
+
+impl Status {
+	pub fn from_tip_and_peers(current_tip: chain::Tip, connections: u32) -> Status {
+		Status {
+			protocol_version: p2p::msg::PROTOCOL_VERSION,
+			user_agent: p2p::msg::USER_AGENT.to_string(),
+			connections: connections,
+			tip: Tip::from_tip(current_tip),
 		}
 	}
 }
@@ -88,7 +113,7 @@ impl SumTreeNode {
 				.get_block_header_by_output_commit(&elem_output.1.commit)
 				.map_err(|_| Error::NotFound);
 			// Need to call further method to check if output is spent
-			let mut output = OutputPrintable::from_output(&elem_output.1, &header.unwrap(),true);
+			let mut output = OutputPrintable::from_output(&elem_output.1, &header.unwrap(), true);
 			if let Ok(_) = chain.get_unspent(&elem_output.1.commit) {
 				output.spent = false;
 			}
@@ -148,8 +173,12 @@ pub struct Output {
 }
 
 impl Output {
-	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader,
-		include_proof:bool, include_switch: bool) -> Output {
+	pub fn from_output(
+		output: &core::Output,
+		block_header: &core::BlockHeader,
+		include_proof: bool,
+		include_switch: bool,
+	) -> Output {
 		let (output_type, lock_height) = match output.features {
 			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
 				OutputType::Coinbase,
@@ -196,7 +225,11 @@ pub struct OutputPrintable {
 }
 
 impl OutputPrintable {
-	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader, include_proof_hash:bool) -> OutputPrintable {
+	pub fn from_output(
+		output: &core::Output,
+		block_header: &core::BlockHeader,
+		include_proof_hash: bool,
+	) -> OutputPrintable {
 		let (output_type, lock_height) = match output.features {
 			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
 				OutputType::Coinbase,
@@ -214,7 +247,7 @@ impl OutputPrintable {
 			proof_hash: match include_proof_hash {
 				true => Some(util::to_hex(output.proof.hash().to_vec())),
 				false => None,
-			}
+			},
 		}
 	}
 }
@@ -257,7 +290,7 @@ impl TxKernelPrintable {
 			fee: k.fee,
 			lock_height: k.lock_height,
 			excess: util::to_hex(k.excess.0.to_vec()),
-			excess_sig: util::to_hex(k.excess_sig.to_vec())
+			excess_sig: util::to_hex(k.excess_sig.to_vec()),
 		}
 	}
 }
@@ -322,7 +355,7 @@ impl BlockHeaderPrintable {
 			kernel_root: util::to_hex(h.kernel_root.to_vec()),
 			nonce: h.nonce,
 			difficulty: h.difficulty.into_num(),
-			total_difficulty: h.total_difficulty.into_num()
+			total_difficulty: h.total_difficulty.into_num(),
 		}
 	}
 }
@@ -342,15 +375,18 @@ pub struct BlockPrintable {
 
 impl BlockPrintable {
 	pub fn from_block(block: &core::Block) -> BlockPrintable {
-		let inputs = block.inputs
+		let inputs = block
+			.inputs
 			.iter()
 			.map(|input| util::to_hex((input.0).0.to_vec()))
 			.collect();
-		let outputs = block.outputs
+		let outputs = block
+			.outputs
 			.iter()
 			.map(|output| OutputPrintable::from_output(output, &block.header, true))
 			.collect();
-		let kernels = block.kernels
+		let kernels = block
+			.kernels
 			.iter()
 			.map(|kernel| TxKernelPrintable::from_txkernel(kernel))
 			.collect();

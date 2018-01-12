@@ -317,6 +317,25 @@ impl Handler for PeerGetHandler {
 	}
 }
 
+// Status handler. Post a summary of the server status
+// GET /v1/status
+pub struct StatusHandler {
+	pub chain: Arc<chain::Chain>,
+	pub peers: p2p::Peers,
+}
+
+impl StatusHandler {
+	fn get_status(&self) -> Status {
+		Status::from_tip_and_peers(self.chain.head().unwrap(), self.peers.peer_count())
+	}
+}
+
+impl Handler for StatusHandler {
+	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+		json_response(&self.get_status())
+	}
+}
+
 // Chain handler. Get the head details.
 // GET /v1/chain
 pub struct ChainHandler {
@@ -440,15 +459,12 @@ where
 			tx.inputs.len(),
 			tx.outputs.len()
 		);
-	
-		let res = self.tx_pool
-			.write()
-			.unwrap()
-			.add_to_memory_pool(source, tx);
+
+		let res = self.tx_pool.write().unwrap().add_to_memory_pool(source, tx);
 
 		match res {
 			Ok(()) => Ok(Response::with(status::Ok)),
-			Err(e) => Err(IronError::from(Error::Argument(format!("{:?}", e))))
+			Err(e) => Err(IronError::from(Error::Argument(format!("{:?}", e)))),
 		}
 	}
 }
@@ -498,6 +514,10 @@ pub fn start_rest_apis<T>(
 			let chain_tip_handler = ChainHandler {
 				chain: chain.clone(),
 			};
+			let status_handler = StatusHandler {
+				chain: chain.clone(),
+				peers: peers.clone(),
+			};
 			let sumtree_handler = SumTreeHandler {
 				chain: chain.clone(),
 			};
@@ -524,6 +544,7 @@ pub fn start_rest_apis<T>(
 				"get blocks".to_string(),
 				"get chain".to_string(),
 				"get chain/utxos".to_string(),
+				"get status".to_string(),
 				"get sumtrees/roots".to_string(),
 				"get sumtrees/lastutxos?n=10".to_string(),
 				"get sumtrees/lastrangeproofs".to_string(),
@@ -544,6 +565,7 @@ pub fn start_rest_apis<T>(
 				blocks: get "/blocks/*" => block_handler,
 				chain_tip: get "/chain" => chain_tip_handler,
 				chain_utxos: get "/chain/utxos/*" => utxo_handler,
+				status: get "/status" => status_handler,
 				sumtree_roots: get "/sumtrees/*" => sumtree_handler,
 				pool_info: get "/pool" => pool_info_handler,
 				pool_push: post "/pool/push" => pool_push_handler,
