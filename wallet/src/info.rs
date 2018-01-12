@@ -79,9 +79,9 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 
 	if let Err(_) = result {
 		println!(
-		"\nWARNING: Wallet failed to verify data. \
-		 The above is from local cache and possibly invalid! \
-		 (is your `grin server` offline or broken?)"
+		"\nWARNING: Failed to verify wallet contents with grin server. \
+		 Above info is maybe not fully updated or invalid! \
+		 Check that your `grin server` is OK, or see `wallet help restore`"
 		);
 	}
 }
