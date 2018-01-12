@@ -227,8 +227,6 @@ impl Chain {
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b);
 				}
-				// We just accepted a block so see if we can now accept any orphan(s)
-				self.check_orphans(&b);
 				Ok((Some(tip.clone()), Some(b.clone())))
 			},
 			Ok(None) => {
@@ -246,8 +244,6 @@ impl Chain {
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b);
 				}
-				// We just accepted a block so see if we can now accept any orphan(s)
-				self.check_orphans(&b);
 				Ok((None, Some(b.clone())))
 			},
 			Err(Error::Orphan) => {
@@ -333,12 +329,29 @@ impl Chain {
 			self.orphans.len(),
 		);
 
+		let mut check_more_orphans=true;
+
 		// Is there an orphan in our orphans that we can now process?
 		// We just processed the given block, are there any orphans that have this block
 		// as their "previous" block?
-		if let Some(orphan) = self.orphans.get_by_previous(&block.hash()) {
-			self.orphans.remove(&orphan.block.hash());
-			let _ = self.process_block(orphan.block, orphan.opts);
+		while check_more_orphans {
+			if let Some(orphan) = self.orphans.get_by_previous(&block.hash()) {
+				self.orphans.remove(&orphan.block.hash());
+				let res = self.process_block(orphan.block, orphan.opts);
+				match res {
+					Ok((_, b)) => {
+						// We accepted a block, so see if we can accept any orphans
+						if !b.is_some() {
+							check_more_orphans=false;
+						}
+					},
+					Err(_) => {
+						check_more_orphans=false;
+					},
+				};
+			} else {
+				check_more_orphans=false;
+			}
 		}
 	}
 
