@@ -221,12 +221,24 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		// the _network_ difficulty of the previous block
 		// (during testnet1 we use _block_ difficulty here)
 		if header.total_difficulty != prev.total_difficulty.clone() + difficulty.clone() {
+			error!(
+				LOGGER,
+				"validate_header: BANNABLE OFFENCE: header cumulative difficulty {} != {}",
+				header.difficulty.into_num(),
+				prev.total_difficulty.into_num() + difficulty.into_num()
+			);
 			return Err(Error::WrongTotalDifficulty);
 		}
 
 		// now check that the difficulty is not less than that calculated by the
 		// difficulty iterator based on the previous block
 		if header.difficulty < difficulty {
+			error!(
+				LOGGER,
+				"validate_header: BANNABLE OFFENCE: header difficulty {} < {}",
+				header.difficulty.into_num(),
+				difficulty.into_num()
+			);
 			return Err(Error::DifficultyTooLow);
 		}
 	}
