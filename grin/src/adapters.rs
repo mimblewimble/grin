@@ -77,8 +77,9 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		let res = self.chain.process_block(b, self.chain_opts());
 		match res {
 			Ok((_, b)) => {
+				// We accepted a block, so see if we can accept any orphans
 				if b.is_some() {
-				self.chain.check_orphans(&b.unwrap());
+					self.chain.check_orphans(&b.unwrap());
 				}
 			},
 			Err(ref e) => {
