@@ -328,29 +328,29 @@ impl Chain {
 			"chain: check_orphans: # orphans {}",
 			self.orphans.len(),
 		);
-
-		let mut check_more_orphans=true;
-
+		let mut last_block_hash = block.hash();
 		// Is there an orphan in our orphans that we can now process?
 		// We just processed the given block, are there any orphans that have this block
 		// as their "previous" block?
-		while check_more_orphans {
-			if let Some(orphan) = self.orphans.get_by_previous(&block.hash()) {
+		loop {
+			if let Some(orphan) = self.orphans.get_by_previous(&last_block_hash) {
 				self.orphans.remove(&orphan.block.hash());
 				let res = self.process_block(orphan.block, orphan.opts);
 				match res {
 					Ok((_, b)) => {
 						// We accepted a block, so see if we can accept any orphans
-						if !b.is_some() {
-							check_more_orphans=false;
+						if b.is_some() {
+							last_block_hash = b.unwrap().hash();
+						} else {
+							break;
 						}
 					},
 					Err(_) => {
-						check_more_orphans=false;
+						break;
 					},
 				};
 			} else {
-				check_more_orphans=false;
+				break;
 			}
 		}
 	}
