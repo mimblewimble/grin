@@ -69,8 +69,8 @@ where
 	/// be accounted for separately, if relevant.
 	pub fn search_for_best_output(&self, output_commitment: &Commitment) -> Parent {
 		// The current best unspent set is:
-  //   Pool unspent + (blockchain unspent - pool->blockchain spent)
-  // Pool unspents are unconditional so we check those first
+		//   Pool unspent + (blockchain unspent - pool->blockchain spent)
+		//   Pool unspents are unconditional so we check those first
 		self.pool
 			.get_available_output(output_commitment)
 			.map(|x| {
@@ -84,20 +84,18 @@ where
 	}
 
 	// search_blockchain_unspents searches the current view of the blockchain
- // unspent set, represented by blockchain unspents - pool spents, for an
- // output designated by output_commitment.
+	// unspent set, represented by blockchain unspents - pool spents, for an
+	// output designated by output_commitment.
 	fn search_blockchain_unspents(&self, output_commitment: &Commitment) -> Option<Parent> {
 		self.blockchain
 			.get_unspent(output_commitment)
 			.ok()
-			.map(|switch_commit_hash| {
+			.map(|hash| {
 				match self.pool.get_blockchain_spent(output_commitment) {
 					Some(x) => Parent::AlreadySpent {
 						other_tx: x.destination_hash().unwrap(),
 					},
-					None => Parent::BlockTransaction {
-						switch_commit_hash,
-					},
+					None => Parent::BlockTransaction { output: hash },
 				}
 			})
 	}
@@ -183,13 +181,12 @@ where
 			// into the pool.
 			match self.search_for_best_output(&input.commitment()) {
 				Parent::PoolTransaction { tx_ref: x } => pool_refs.push(base.with_source(Some(x))),
-				Parent::BlockTransaction { switch_commit_hash } => {
-					// TODO - wrap lock_height verification up in search_for_best_output?
+				Parent::BlockTransaction { output: output_hash } => {
+					let output_block = self.blockchain.get_block(input.out_block)?;
 					let height = head_header.height + 1;
-					input.verify_lock_height(&switch_commit_hash, height)
+					input.verify_lock_height(output_block, output_hash, height)
 						.map_err(|_| PoolError::ImmatureCoinbase {
 							height: height,
-							lock_height: input.lock_height(),
 							output: input.commitment(),
 						})?;
 
@@ -1301,10 +1298,7 @@ mod tests {
 		let key_id = keychain.derive_key_id(value as u32).unwrap();
 		let commit = keychain.commit(value, &key_id).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
-			switch_commit,
-			SwitchCommitHashKey::zero(),
-		);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
 
@@ -1322,10 +1316,7 @@ mod tests {
 		let key_id = keychain.derive_key_id(value as u32).unwrap();
 		let commit = keychain.commit(value, &key_id).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
-			switch_commit,
-			SwitchCommitHashKey::from_lock_height(lock_height),
-		);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
 

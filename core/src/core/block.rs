@@ -581,10 +581,7 @@ impl Block {
 
 		let lock_height = height + global::coinbase_maturity();
 
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
-			switch_commit,
-			SwitchCommitHashKey::from_lock_height(lock_height),
-		);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
 
 		trace!(
 			LOGGER,

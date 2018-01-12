@@ -148,21 +148,7 @@ fn find_utxos_with_key(
 	for output in block_outputs.outputs {
 		for i in 0..*key_iterations {
 			// TODO - these are very similar, factor out duplicate code
-			let expected_hash = match output.output_type {
-				api::OutputType::Coinbase => {
-					let lock_height = block_outputs.header.height + global::coinbase_maturity();
-					SwitchCommitHash::from_switch_commit(
-						switch_commit_cache[i as usize],
-						SwitchCommitHashKey::from_lock_height(lock_height),
-					)
-				}
-				api::OutputType::Transaction => {
-					SwitchCommitHash::from_switch_commit(
-						switch_commit_cache[i as usize],
-						SwitchCommitHashKey::zero(),
-					)
-				}
-			};
+			let expected_hash = SwitchCommitHash::from_switch_commit(switch_commit_cache[i as usize]);
 
 			if let Ok(x) = output.switch_commit_hash() {
 				if x == expected_hash {

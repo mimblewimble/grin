@@ -65,6 +65,11 @@ impl Hash {
 	pub fn to_vec(&self) -> Vec<u8> {
 		self.0.to_vec()
 	}
+
+	/// The "zero" hash. No known preimage.
+	pub fn zero() -> Hash {
+		ZERO_HASH
+	}
 }
 
 impl ops::Index<usize> for Hash {

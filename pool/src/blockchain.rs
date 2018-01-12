@@ -7,24 +7,22 @@
 // Notably, UtxoDiff has been left off, and the question of how to handle
 // abstract return types has been deferred.
 
-use core::core::hash;
-use core::core::block;
-use core::core::transaction;
-
 use std::collections::HashMap;
 use std::clone::Clone;
-
-use util::secp::pedersen::Commitment;
-
 use std::sync::RwLock;
 
+use core::core::hash;
+use core::core::hash::Hashed;
+use core::core::block;
+use core::core::transaction;
 use types::{BlockChain, PoolError};
+use util::secp::pedersen::Commitment;
+
 
 /// A DummyUtxoSet for mocking up the chain
 pub struct DummyUtxoSet {
 	outputs: HashMap<Commitment, transaction::Output>,
 }
-
 
 #[allow(dead_code)]
 impl DummyUtxoSet {
@@ -108,12 +106,9 @@ impl DummyChainImpl {
 }
 
 impl BlockChain for DummyChainImpl {
-	fn get_unspent(
-		&self,
-		commitment: &Commitment,
-	) -> Result<transaction::SwitchCommitHash, PoolError> {
+	fn get_unspent(&self, commitment: &Commitment) -> Result<hash::Hash, PoolError> {
 		match self.utxo.read().unwrap().get_output(commitment) {
-			Some(x) => Ok(x.switch_commit_hash),
+			Some(x) => Ok(x.hash()),
 			None => Err(PoolError::GenericPoolError),
 		}
 	}

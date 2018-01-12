@@ -129,18 +129,18 @@ pub enum OutputType {
 pub struct Utxo {
 	/// The output commitment representing the amount
 	pub commit: pedersen::Commitment,
-	/// The corresponding switch commit hash (can be used to verify lock height)
-	pub switch_commit_hash: core::SwitchCommitHash,
+	/// The hash from the output_pmmr
+	pub hash: core::hash::Hash,
 }
 
 impl Utxo {
 	pub fn new (
 		commit: &pedersen::Commitment,
-		switch_commit_hash: &core::SwitchCommitHash,
+		hash: &core::hash::Hash,
 	) -> Utxo {
 		Utxo {
 			commit: commit.clone(),
-			switch_commit_hash: switch_commit_hash.clone(),
+			hash: hash.clone(),
 		}
 	}
 }

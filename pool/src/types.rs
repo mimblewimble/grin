@@ -80,7 +80,7 @@ pub enum Parent {
 	Unknown,
 	/// We no longer maintain outputs in the index, we only have the
 	/// switch_commit_hash from the output_pmmr sumtree.
-	BlockTransaction { switch_commit_hash: transaction::SwitchCommitHash },
+	BlockTransaction { output: hash::Hash },
 	PoolTransaction { tx_ref: hash::Hash },
 	AlreadySpent { other_tx: hash::Hash },
 }
@@ -89,11 +89,15 @@ impl fmt::Debug for Parent {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			&Parent::Unknown => write!(f, "Parent: Unknown"),
-			&Parent::BlockTransaction { switch_commit_hash: _ } => write!(f, "Parent: Block Transaction"),
+			&Parent::BlockTransaction { output: x } => {
+				write!(f, "Parent: Block Transaction, Output ({:?})", x)
+			}
 			&Parent::PoolTransaction { tx_ref: x } => {
 				write!(f, "Parent: Pool Transaction ({:?})", x)
 			}
-			&Parent::AlreadySpent { other_tx: x } => write!(f, "Parent: Already Spent By {:?}", x),
+			&Parent::AlreadySpent { other_tx: x } => {
+				write!(f, "Parent: Already Spent By {:?}", x)
+			}
 		}
 	}
 }
@@ -127,9 +131,7 @@ pub enum PoolError {
 	ImmatureCoinbase {
 		/// The height of the block we are attempting to spend the coinbase output
 		height: u64,
-		/// The lock_height of the coinbase output
-		lock_height: u64,
-		/// The unspent output
+		/// The output
 		output: Commitment,
 	},
 	/// Attempt to add a transaction to the pool with lock_height
@@ -160,14 +162,13 @@ pub trait BlockChain {
 	/// a result with its current view of the most worked chain, ignoring
 	/// orphans, etc.
 	/// We do not maintain outputs themselves. The only information we have is the
-	/// switch_commit_hash from the output_pmmr sumtree.
-	fn get_unspent(
-		&self,
-		output_ref: &Commitment,
-	) -> Result<transaction::SwitchCommitHash, PoolError>;
+	/// hash from the output_pmmr sumtree.
+	fn get_unspent(&self, output_ref: &Commitment) -> Result<hash::Hash, PoolError>;
 
 	/// Get the block header at the head
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError>;
+
+	fn get_block(&self, hash: hash::Hash) -> Result<block::Block, PoolError>;
 }
 
 /// Bridge between the transaction pool and the rest of the system. Handles
