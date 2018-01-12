@@ -198,11 +198,11 @@ fn receive_transaction(
     if fee > amount {
 		info!(
 			LOGGER, 
-			"Rejected the transfer because transaction fee ({}) is more than received amount ({}).",
+			"Rejected the transfer because transaction fee ({}) exceeds received amount ({}).",
 			amount_to_hr_string(fee),
 			amount_to_hr_string(amount)
 		);
-        return Err(Error::FeeMoreThanAmount {
+        return Err(Error::FeeExceedsAmount {
             sender_amount: amount,
             recipient_fee: fee,
         });

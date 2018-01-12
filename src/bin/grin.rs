@@ -428,10 +428,10 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			);
 			if let Err(e) = wallet::receive_json_tx_str(&wallet_config, &keychain, contents.as_str()) {
 					match e {
-						wallet::Error::FeeMoreThanAmount {sender_amount, recipient_fee} => {
+						wallet::Error::FeeExceedsAmount {sender_amount, recipient_fee} => {
 							error!(
 								LOGGER, 
-								"Cannot process because transaction fee ({}) is more than received amount ({}).",
+								"Cannot process because transaction fee ({}) exceeded received amount ({}).",
 								amount_to_hr_string(recipient_fee),
 								amount_to_hr_string(sender_amount)
 							);
@@ -492,10 +492,10 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 						amount_to_hr_string(available),
 					);
 				}
-				Err(wallet::Error::FeeMoreThanAmount {sender_amount, recipient_fee}) => {
+				Err(wallet::Error::FeeExceedsAmount {sender_amount, recipient_fee}) => {
 					error!(
 						LOGGER, 
-						"Recipient rejected the transfer because transaction fee ({}) was more than amount ({}).",
+						"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
 						amount_to_hr_string(recipient_fee),
 						amount_to_hr_string(sender_amount)
 					);

@@ -17,7 +17,7 @@ use serde_json;
 use api;
 use client;
 use checker;
-use core::core::{build, Transaction};
+use core::core::{build, Transaction, amount_to_hr_string};
 use core::ser;
 use keychain::{BlindingFactor, Identifier, Keychain};
 use receiver::TxWrapper;
@@ -85,7 +85,13 @@ pub fn issue_send_tx(
 		match res {
 			Err(e) => {
 				match e {
-					Error::FeeMoreThanAmount {sender_amount, recipient_fee} => error!(LOGGER, "Recipient could not process the transaction."),
+					Error::FeeExceedsAmount {sender_amount, recipient_fee} => 
+						error!(
+							LOGGER, 
+							"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
+							amount_to_hr_string(recipient_fee),
+							amount_to_hr_string(sender_amount)
+						),
 					_ => error!(LOGGER, "Communication with receiver failed. Aborting transaction"),
 				}
 				rollback_wallet()?;
