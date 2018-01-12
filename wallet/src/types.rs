@@ -66,6 +66,7 @@ pub fn tx_fee(input_len: usize, output_len: usize, base_fee: Option<u64>) -> u64
 pub enum Error {
 	NotEnoughFunds(u64),
 	FeeDispute { sender_fee: u64, recipient_fee: u64 },
+	FeeExceedsAmount { sender_amount: u64, recipient_fee: u64 },
 	Keychain(keychain::Error),
 	Transaction(transaction::Error),
 	Secp(secp::Error),

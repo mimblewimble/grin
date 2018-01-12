@@ -489,6 +489,14 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 						amount_to_hr_string(available),
 					);
 				}
+				Err(wallet::Error::FeeExceedsAmount {sender_amount, recipient_fee}) => {
+					error!(
+						LOGGER, 
+						"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
+						amount_to_hr_string(recipient_fee),
+						amount_to_hr_string(sender_amount)
+					);
+				}
 				Err(e) => {
 					error!(LOGGER, "Tx not sent: {:?}", e);
 				}
