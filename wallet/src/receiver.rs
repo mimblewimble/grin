@@ -24,7 +24,7 @@ use serde_json;
 
 use api;
 use core::consensus::reward;
-use core::core::{build, Block, Output, Transaction, TxKernel};
+use core::core::{build, Block, Output, Transaction, TxKernel, amount_to_hr_string};
 use core::ser;
 use keychain::{BlindingFactor, Identifier, Keychain};
 use types::*;
@@ -194,6 +194,19 @@ fn receive_transaction(
 			recipient_fee: fee,
 		});
 	}
+
+    if fee > amount {
+		info!(
+			LOGGER, 
+			"Rejected the transfer because transaction fee ({}) exceeds received amount ({}).",
+			amount_to_hr_string(fee),
+			amount_to_hr_string(amount)
+		);
+        return Err(Error::FeeExceedsAmount {
+            sender_amount: amount,
+            recipient_fee: fee,
+        });
+    }
 
 	let out_amount = amount - fee;
 
