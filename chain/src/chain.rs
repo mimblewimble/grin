@@ -198,7 +198,7 @@ impl Chain {
 	/// has been added to the longest chain, None if it's added to an (as of
 	/// now) orphan chain.
 	pub fn process_block(&self, b: Block, opts: Options)
-		-> Result<Option<Tip>, Error>
+		-> Result<(Option<Tip>, Option<Block>), Error>
 	{
 		let head = self.store
 			.head()
@@ -222,8 +222,7 @@ impl Chain {
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b);
 				}
-				// We just accepted a block so see if we can now accept any orphan(s)
-				self.check_orphans(&b);
+				Ok((Some(tip.clone()), Some(b.clone())))
 			},
 			Ok(None) => {
 				// block got accepted but we did not extend the head
@@ -240,8 +239,7 @@ impl Chain {
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b);
 				}
-				// We just accepted a block so see if we can now accept any orphan(s)
-				self.check_orphans(&b);
+				Ok((None, Some(b.clone())))
 			},
 			Err(Error::Orphan) => {
 				let block_hash = b.hash();
@@ -263,6 +261,7 @@ impl Chain {
 					block_hash,
 					self.orphans.len(),
 				);
+				Err(Error::Orphan)
 			},
 			Err(Error::Unfit(ref msg)) => {
 				debug!(
@@ -272,8 +271,9 @@ impl Chain {
 					b.header.height,
 					msg
 				);
+				Err(Error::Unfit(msg.clone()))
 			}
-			Err(ref e) => {
+			Err(e) => {
 				info!(
 					LOGGER,
 					"Rejected block {} at {}: {:?}",
@@ -281,9 +281,9 @@ impl Chain {
 					b.header.height,
 					e
 				);
+				Err(e)
 			}
 		}
-		res
 	}
 
 	/// Attempt to add a new header to the header chain.
@@ -315,19 +315,38 @@ impl Chain {
 		self.orphans.contains(hash)
 	}
 
-	fn check_orphans(&self, block: &Block) {
+
+	/// Check for orphans, once a block is successfully added
+	pub fn check_orphans(&self, block: &Block) {
 		debug!(
 			LOGGER,
 			"chain: check_orphans: # orphans {}",
 			self.orphans.len(),
 		);
-
+		let mut last_block_hash = block.hash();
 		// Is there an orphan in our orphans that we can now process?
 		// We just processed the given block, are there any orphans that have this block
 		// as their "previous" block?
-		if let Some(orphan) = self.orphans.get_by_previous(&block.hash()) {
-			self.orphans.remove(&orphan.block.hash());
-			let _ = self.process_block(orphan.block, orphan.opts);
+		loop {
+			if let Some(orphan) = self.orphans.get_by_previous(&last_block_hash) {
+				self.orphans.remove(&orphan.block.hash());
+				let res = self.process_block(orphan.block, orphan.opts);
+				match res {
+					Ok((_, b)) => {
+						// We accepted a block, so see if we can accept any orphans
+						if b.is_some() {
+							last_block_hash = b.unwrap().hash();
+						} else {
+							break;
+						}
+					},
+					Err(_) => {
+						break;
+					},
+				};
+			} else {
+				break;
+			}
 		}
 	}
 
