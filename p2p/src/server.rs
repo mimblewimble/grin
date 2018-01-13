@@ -16,7 +16,6 @@
 //! other peers in the network.
 
 use std::cell::RefCell;
-use std::io;
 use std::fs::File;
 use std::net::{SocketAddr, Shutdown};
 use std::sync::{Arc, RwLock};

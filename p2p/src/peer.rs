@@ -14,7 +14,6 @@
 
 use std::fs::File;
 use std::net::SocketAddr;
-use std::io;
 use std::sync::{Arc, RwLock};
 
 use futures::Future;

@@ -20,7 +20,6 @@ pub use graph;
 use core::core::transaction;
 use core::core::block;
 use core::core::hash;
-use core::core::target::Difficulty;
 use core::global;
 
 use util::secp::pedersen::Commitment;

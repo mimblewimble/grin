@@ -28,7 +28,6 @@ use std::cmp::Ordering;
 use std::num::ParseFloatError;
 use consensus::GRIN_BASE;
 
-use core::target::Difficulty;
 use util::{secp, static_secp_instance};
 use util::secp::pedersen::*;
 
