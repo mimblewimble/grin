@@ -28,7 +28,12 @@ pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 		Ok(tip) => Ok(tip.height),
 		Err(e) => {
 			// if we got anything other than 200 back from server, bye
-			error!(LOGGER, "Restore failed... unable to contact node: {}", e);
+			error!(
+				LOGGER,
+				"get_chain_height: Restore failed... unable to contact API {}. Error: {}",
+				config.check_node_api_http_addr,
+				e
+			);
 			Err(Error::Node(e))
 		}
 	}
@@ -106,7 +111,12 @@ pub fn utxos_batch_block(
 		Ok(outputs) => Ok(outputs),
 		Err(e) => {
 			// if we got anything other than 200 back from server, bye
-			error!(LOGGER, "Restore failed... unable to contact node: {}", e);
+			error!(
+				LOGGER,
+				"utxos_batch_block: Restore failed... unable to contact API {}. Error: {}",
+				config.check_node_api_http_addr,
+				e
+			);
 			Err(Error::Node(e))
 		}
 	}
