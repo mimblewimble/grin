@@ -15,7 +15,7 @@
 use api;
 use client;
 use checker;
-use core::core::{build, Transaction, amount_to_hr_string};
+use core::core::{build, Transaction, amount_from_hr_string, amount_to_hr_string};
 use core::core::hash::Hash;
 use core::ser;
 use keychain::{BlindingFactor, Identifier, Keychain};
@@ -23,6 +23,41 @@ use receiver::TxWrapper;
 use types::*;
 use util::LOGGER;
 use util;
+
+pub fn send_json_tx_str(
+	wallet_config: &WalletConfig,
+	keychain: &Keychain,
+	send_tx: &SendTx,
+) -> Result<(), Error> {
+	let amount = send_tx.amount.clone();
+
+	let amount = amount_from_hr_string(&amount).map_err(|e| Error::Format(e.to_string()))?;
+
+	let minimum_confirmations = send_tx.minimum_confirmations.clone();
+
+	let selection_strategy = send_tx.selection_strategy.clone();
+
+	let dest = send_tx.dest.clone();
+
+	if dest == "stdout" {
+		return Err(Error::Format(
+			"Cannot use stdout as destination when using the wallet Api to send funds.".to_string(),
+		));
+	}
+
+	let max_outputs = 500;
+	let result = issue_send_tx(
+		&wallet_config,
+		&keychain,
+		amount,
+		minimum_confirmations,
+		dest.to_string(),
+		max_outputs,
+		(selection_strategy == "all"),
+	);
+
+	return result;
+}
 
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet

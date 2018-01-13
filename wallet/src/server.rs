@@ -17,6 +17,7 @@ use api::ApiServer;
 use keychain::Keychain;
 use handlers::CoinbaseHandler;
 use receiver::WalletReceiver;
+use handlers::{InfoHandler, WalletSenderHandler};
 use types::WalletConfig;
 use util::LOGGER;
 
@@ -47,4 +48,33 @@ pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 		Err(e) => error!(LOGGER, "Failed to start Grin wallet listener: {}.", e),
 		Ok(_) => info!(LOGGER, "Wallet listener started"),
 	};
+
+	info!(
+		LOGGER,
+		"Starting the Grin wallet operator daemon at {}...",
+		wallet_config.api_operator_listen_addr()
+	);
+
+	let send_tx_handler = WalletSenderHandler {
+		config: wallet_config.clone(),
+	};
+	let info_handler = InfoHandler {
+		config: wallet_config.clone(),
+	};
+
+	let router_wallet_operator = router!(
+        send_tx: post "/send/transaction" => send_tx_handler,
+		retrieve_info: post "/info" => info_handler,
+    );
+
+	let mut apis_operator = ApiServer::new("/v1".to_string());
+	apis_operator.register_handler(router_wallet_operator);
+	apis_operator
+		.start(wallet_config.api_operator_listen_addr())
+		.unwrap_or_else(|e| {
+			error!(
+				LOGGER,
+				"Failed to start Grin wallet operator listener: {}.", e
+			);
+		});
 }
