@@ -18,9 +18,12 @@ use types::*;
 pub use graph;
 
 use core::core::transaction;
+use core::core::SumCommit;
+
 use core::core::block;
 use core::core::hash;
 
+use util::LOGGER;
 use util::secp::pedersen::Commitment;
 
 use std::sync::Arc;
@@ -67,35 +70,35 @@ where
 	/// Detects double spends and unknown references from the pool and
 	/// blockchain only; any conflicts with entries in the orphans set must
 	/// be accounted for separately, if relevant.
-	pub fn search_for_best_output(&self, output_commitment: &Commitment) -> Parent {
+	pub fn search_for_best_output(&self, output_ref: &SumCommit) -> Parent {
 		// The current best unspent set is:
 		//   Pool unspent + (blockchain unspent - pool->blockchain spent)
 		//   Pool unspents are unconditional so we check those first
 		self.pool
-			.get_available_output(output_commitment)
+			.get_available_output(&output_ref.commit)
 			.map(|x| {
-				Parent::PoolTransaction {
-					tx_ref: x.source_hash().unwrap(),
-				}
+				let tx_ref = x.source_hash().unwrap();
+				Parent::PoolTransaction { tx_ref }
 			})
-			.or(self.search_blockchain_unspents(output_commitment))
-			.or(self.search_pool_spents(output_commitment))
+			.or(self.search_blockchain_unspents(output_ref))
+			.or(self.search_pool_spents(&output_ref.commit))
 			.unwrap_or(Parent::Unknown)
 	}
 
 	// search_blockchain_unspents searches the current view of the blockchain
 	// unspent set, represented by blockchain unspents - pool spents, for an
 	// output designated by output_commitment.
-	fn search_blockchain_unspents(&self, output_commitment: &Commitment) -> Option<Parent> {
+	fn search_blockchain_unspents(&self, output_ref: &SumCommit) -> Option<Parent> {
 		self.blockchain
-			.get_unspent(output_commitment)
+			.is_unspent(output_ref)
 			.ok()
-			.map(|hash| {
-				match self.pool.get_blockchain_spent(output_commitment) {
-					Some(x) => Parent::AlreadySpent {
-						other_tx: x.destination_hash().unwrap(),
-					},
-					None => Parent::BlockTransaction { output: hash },
+			.map(|_| {
+				match self.pool.get_blockchain_spent(&output_ref.commit) {
+					Some(x) => {
+						let other_tx = x.destination_hash().unwrap();
+						Parent::AlreadySpent { other_tx }
+					}
+					None => Parent::BlockTransaction,
 				}
 			})
 	}
@@ -172,16 +175,19 @@ where
 		let mut orphan_refs: Vec<graph::Edge> = Vec::new();
 		let mut blockchain_refs: Vec<graph::Edge> = Vec::new();
 
+		debug!(LOGGER, "add_to_memory_pool: {:?}", &tx.inputs);
+
 		for input in &tx.inputs {
-			let base = graph::Edge::new(None, Some(tx_hash), input.commitment());
+			let sum_commit = SumCommit::from_input(&input);
+			let base = graph::Edge::new(None, Some(tx_hash), sum_commit.clone());
 
 			// Note that search_for_best_output does not examine orphans, by
 			// design. If an incoming transaction consumes pool outputs already
 			// spent by the orphans set, this does not preclude its inclusion
 			// into the pool.
-			match self.search_for_best_output(&input.commitment()) {
+			match self.search_for_best_output(&sum_commit) {
 				Parent::PoolTransaction { tx_ref: x } => pool_refs.push(base.with_source(Some(x))),
-				Parent::BlockTransaction { output: output_hash } => {
+				Parent::BlockTransaction => {
 					let height = head_header.height + 1;
 					self.blockchain.verify_coinbase_maturity(&input, height)?;
 					blockchain_refs.push(base);
@@ -220,7 +226,10 @@ where
 		let pool_entry = graph::PoolEntry::new(&tx);
 		let new_unspents = tx.outputs
 			.iter()
-			.map(|x| graph::Edge::new(Some(tx_hash), None, x.commitment()))
+			.map(|x| {
+				let sum_commit = SumCommit::from_output(&x);
+				graph::Edge::new(Some(tx_hash), None, sum_commit)
+			})
 			.collect();
 
 		if !is_orphan {
@@ -289,9 +298,10 @@ where
 		is_orphan: bool,
 	) -> Result<(), PoolError> {
 		// Checking against current blockchain unspent outputs
-  // We want outputs even if they're spent by pool txs, so we ignore
-  // consumed_blockchain_outputs
-		if self.blockchain.get_unspent(&output.commitment()).is_ok() {
+		// We want outputs even if they're spent by pool txs, so we ignore
+		// consumed_blockchain_outputs
+		let sum_commit = SumCommit::from_output(&output);
+		if self.blockchain.is_unspent(&sum_commit).is_ok() {
 			return Err(PoolError::DuplicateOutput {
 				other_tx: None,
 				in_chain: true,
@@ -503,7 +513,7 @@ where
 
 		for output in &tx_ref.unwrap().outputs {
 			match self.pool.get_internal_spent_output(&output.commitment()) {
-				Some(x) => if self.blockchain.get_unspent(&x.output_commitment()).is_err() {
+				Some(x) => if self.blockchain.is_unspent(&x.output()).is_err() {
 					self.mark_transaction(x.destination_hash().unwrap(), marked_txs);
 				},
 				None => {}

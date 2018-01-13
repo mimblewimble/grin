@@ -88,25 +88,8 @@ impl SumTrees {
 		})
 	}
 
-	pub fn is_unspent_lite(&mut self, commit: &Commitment) -> Result<(), Error> {
-		match self.commit_index.get_output_pos(&commit) {
-			Ok(pos) => {
-				let output_pmmr = PMMR::at(
-					&mut self.output_pmmr_h.backend,
-					self.output_pmmr_h.last_pos,
-				);
-				if let Some(hs) = output_pmmr.get(pos) {
-					Ok(())
-				} else {
-					Err(Error::OutputNotFound)
-				}
-			}
-			Err(grin_store::Error::NotFoundErr) => Err(Error::OutputNotFound),
-			Err(e) => Err(Error::StoreErr(e, format!("sumtree unspent check"))),
-		}
-	}
-
-	pub fn is_unspent_full(&mut self, sum_commit: &SumCommit) -> Result<(), Error> {
+	// TODO - Do we want to pass a SumCommit around here or is this leaking an abstraction?
+	pub fn is_unspent(&mut self, sum_commit: &SumCommit) -> Result<(), Error> {
 		match self.commit_index.get_output_pos(&sum_commit.commit) {
 			Ok(pos) => {
 				let output_pmmr = PMMR::at(

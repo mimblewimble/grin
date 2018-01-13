@@ -402,15 +402,14 @@ impl Transaction {
 /// the lock_height hashed in the switch_commit_hash.
 #[derive(Debug, Clone, Copy)]
 pub struct Input{
-	/// The commit referencing the output being spent.
-	pub commit: Commitment,
 	/// The features of the output being spent.
 	/// We will check maturity for coinbase output.
 	pub features: OutputFeatures,
+	/// The commit referencing the output being spent.
+	pub commit: Commitment,
 	/// The hash of the block the output originated from.
 	/// Currently we only care about this for coinbase outputs.
 	/// TODO - include the merkle proof here once we support these.
-	/// TODO - how do we handle regular outputs (wallet does not know which block)
 	pub out_block: Hash,
 }
 

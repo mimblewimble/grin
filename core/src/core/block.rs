@@ -588,11 +588,11 @@ impl Block {
 		sum_commit: &SumCommit,
 		height: u64,
 	) -> Result<(), Error> {
-
+		debug!(LOGGER, "block: verify_coinbase_maturity: {}, {}", self.header.height, height);
 		if let Some(out) = self.outputs
 			.iter()
 			.find(|x| {
-				x.hash() == sum_commit.hash()
+				SumCommit::from_output(&x).hash() == sum_commit.hash()
 			})
 		{
 			if !sum_commit.features.contains(COINBASE_OUTPUT) {
@@ -600,7 +600,7 @@ impl Block {
 			}
 
 			let lock_height = self.header.height + global::coinbase_maturity();
-			if lock_height <= height {
+			if lock_height > height {
 				Err(Error::ImmatureCoinbase{
 					height: height,
 					lock_height: lock_height,

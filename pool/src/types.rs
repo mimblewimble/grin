@@ -26,6 +26,7 @@ pub use graph;
 
 use core::consensus;
 use core::core::{block, hash, transaction};
+use core::core::transaction::SumCommit;
 
 /// Tranasction pool configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -76,9 +77,7 @@ pub struct TxSource {
 #[derive(Clone)]
 pub enum Parent {
 	Unknown,
-	/// We no longer maintain outputs in the index, we only have the
-	/// switch_commit_hash from the output_pmmr sumtree.
-	BlockTransaction { output: hash::Hash },
+	BlockTransaction,
 	PoolTransaction { tx_ref: hash::Hash },
 	AlreadySpent { other_tx: hash::Hash },
 }
@@ -87,8 +86,8 @@ impl fmt::Debug for Parent {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			&Parent::Unknown => write!(f, "Parent: Unknown"),
-			&Parent::BlockTransaction { output: x } => {
-				write!(f, "Parent: Block Transaction, Output ({:?})", x)
+			&Parent::BlockTransaction => {
+				write!(f, "Parent: Block Transaction")
 			}
 			&Parent::PoolTransaction { tx_ref: x } => {
 				write!(f, "Parent: Pool Transaction ({:?})", x)
@@ -150,13 +149,13 @@ pub enum PoolError {
 
 /// Interface that the pool requires from a blockchain implementation.
 pub trait BlockChain {
-	/// Get an unspent output by its commitment. Will return None if the output
+	/// Get an unspent output by its commitment. Will return an error if the output
 	/// is spent or if it doesn't exist. The blockchain is expected to produce
 	/// a result with its current view of the most worked chain, ignoring
 	/// orphans, etc.
 	/// We do not maintain outputs themselves. The only information we have is the
-	/// hash from the output_pmmr sumtree.
-	fn get_unspent(&self, output_ref: &Commitment) -> Result<hash::Hash, PoolError>;
+	/// hash from the output MMR.
+	fn is_unspent(&self, output_ref: &SumCommit) -> Result<(), PoolError>;
 
 	/// Get the block header at the head
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError>;

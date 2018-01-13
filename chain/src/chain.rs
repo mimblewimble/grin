@@ -335,14 +335,9 @@ impl Chain {
 	/// Return an error if the output does not exist or has been spent.
 	/// This querying is done in a way that is consistent with the current chain state,
 	/// specifically the current winning (valid, most work) fork.
-	pub fn is_unspent_full(&self, output_ref: &SumCommit) -> Result<(), Error> {
+	pub fn is_unspent(&self, output_ref: &SumCommit) -> Result<(), Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
-		sumtrees.is_unspent_full(output_ref)
-	}
-
-	pub fn is_unspent_lite(&self, output_ref: &Commitment) -> Result<(), Error> {
-		let mut sumtrees = self.sumtrees.write().unwrap();
-		sumtrees.is_unspent_lite(output_ref)
+		sumtrees.is_unspent(output_ref)
 	}
 
 	/// Sets the sumtree roots on a brand new block by applying the block on the

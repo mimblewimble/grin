@@ -169,12 +169,8 @@ impl OutputPrintable {
 				OutputType::Transaction
 			};
 
-		// TODO - clean this up
 		let sum_commit = core::SumCommit::from_output(&output);
-		let spent = match chain.is_unspent(&sum_commit) {
-			Ok(_) => true,
-			Err(_) => false,
-		};
+		let spent = chain.is_unspent(&sum_commit).is_err();
 
 		let proof = if include_proof {
 			Some(util::to_hex(output.proof.bytes().to_vec()))

@@ -67,10 +67,11 @@ fn build_input(
 /// being built.
 pub fn input(
 	value: u64,
+	out_block: Hash,
 	key_id: Identifier,
 ) -> Box<Append> {
 	debug!(LOGGER, "Building an input (regular output): {}, {}", value, key_id);
-	build_input(value, DEFAULT_OUTPUT, ZERO_HASH, key_id)
+	build_input(value, DEFAULT_OUTPUT, out_block, key_id)
 }
 
 /// Adds a coinbase input with the provided value and blinding key to the transaction

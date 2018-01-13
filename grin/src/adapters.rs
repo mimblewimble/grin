@@ -21,7 +21,7 @@ use core::core;
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use core::core::transaction::{Input, OutputIdentifier, SwitchCommitHash};
+use core::core::transaction::{Input, SumCommit, SwitchCommitHash};
 use p2p;
 use pool;
 use util::secp::pedersen::Commitment;
@@ -333,13 +333,13 @@ impl PoolToChainAdapter {
 }
 
 impl pool::BlockChain for PoolToChainAdapter {
-	fn get_unspent(
+	fn is_unspent(
 		&self,
-		output_ref: &Commitment,
-	) -> Result<Hash, pool::PoolError> {
+		output_ref: &SumCommit,
+	) -> Result<(), pool::PoolError> {
 		self.chain
 			.borrow()
-			.get_unspent(output_ref)
+			.is_unspent(output_ref)
 			.map_err(|e| match e {
 				chain::types::Error::OutputNotFound => pool::PoolError::OutputNotFound,
 				chain::types::Error::OutputSpent => pool::PoolError::OutputSpent,
@@ -359,13 +359,18 @@ impl pool::BlockChain for PoolToChainAdapter {
 		input: &Input,
 		height: u64,
 	) -> Result<(), pool::PoolError> {
-		let out = OutputIdentifier::from_input(&input);
+		debug!(LOGGER, "adapter: verify_coinbase_maturity: {:?}, {}", input, height);
+		
 		let block = self.chain
 			.borrow()
 			.get_block(&input.out_block)
 			.map_err(|_| pool::PoolError::GenericPoolError)?;
 
-		block.verify_coinbase_maturity(&out, height)
-			.map_err(|_| pool::PoolError::ImmatureCoinbase)
+		let sum_commit = SumCommit::from_input(&input);
+		block.verify_coinbase_maturity(&sum_commit, height)
+			.map_err(|e| {
+				debug!(LOGGER, "{:?}", e);
+				pool::PoolError::ImmatureCoinbase
+			})
 	}
 }

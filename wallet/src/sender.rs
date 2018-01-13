@@ -217,7 +217,7 @@ fn inputs_and_change(
 		if coin.is_coinbase {
 			parts.push(build::coinbase_input(coin.value, coin.block_hash, key_id));
 		} else {
-			parts.push(build::input(coin.value, key_id));
+			parts.push(build::input(coin.value, coin.block_hash, key_id));
 		}
 	}
 
