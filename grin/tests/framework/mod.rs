@@ -34,12 +34,9 @@ use std::default::Default;
 use std::fs;
 use std::sync::{Arc, Mutex};
 
-use tokio_core::reactor;
-use tokio_timer::Timer;
+use self::tokio_core::reactor;
+use self::tokio_timer::Timer;
 
-use util::secp::Secp256k1;
-// TODO - why does this need self here? Missing something somewhere.
-use self::keychain::Keychain;
 use wallet::WalletConfig;
 
 /// Just removes all results from previous runs
@@ -158,7 +155,10 @@ pub struct LocalServerContainer {
 	pub peer_list: Vec<String>,
 
 	// base directory for the server instance
-	working_dir: String,
+	pub working_dir: String,
+
+	// Wallet configuration
+	pub wallet_config:WalletConfig,
 }
 
 impl LocalServerContainer {
@@ -168,6 +168,11 @@ impl LocalServerContainer {
 
 	pub fn new(config: LocalServerContainerConfig) -> Result<LocalServerContainer, Error> {
 		let working_dir = format!("target/test_servers/{}", config.name);
+		let mut wallet_config = WalletConfig::default();
+
+		wallet_config.api_listen_port = format!("{}", config.wallet_port);
+		wallet_config.check_node_api_http_addr = config.wallet_validating_node_url.clone();
+		wallet_config.data_file_dir = working_dir.clone();
 		Ok(
 			(LocalServerContainer {
 				config: config,
@@ -178,6 +183,7 @@ impl LocalServerContainer {
 				wallet_is_running: false,
 				working_dir: working_dir,
 				peer_list: Vec::new(),
+				wallet_config:wallet_config,
 			}),
 		)
 	}
@@ -206,6 +212,7 @@ impl LocalServerContainer {
 				seeds: Some(seeds),
 				seeding_type: seeding_type,
 				chain_type: core::global::ChainTypes::AutomatedTesting,
+				skip_sync_wait:Some(true),
 				..Default::default()
 			},
 			&event_loop.handle(),
@@ -260,52 +267,93 @@ impl LocalServerContainer {
 	/// Starts a wallet daemon to receive and returns the
 	/// listening server url
 
-	pub fn run_wallet(&mut self, _duration_in_seconds: u64) {
+	pub fn run_wallet(&mut self, _duration_in_mills: u64) {
 		// URL on which to start the wallet listener (i.e. api server)
-		let url = format!("{}:{}", self.config.base_addr, self.config.wallet_port);
+		let _url = format!("{}:{}", self.config.base_addr, self.config.wallet_port);
 
 		// Just use the name of the server for a seed for now
 		let seed = format!("{}", self.config.name);
 
-		let seed = blake2::blake2b::blake2b(32, &[], seed.as_bytes());
+		let _seed = blake2::blake2b::blake2b(32, &[], seed.as_bytes());
 
-		// TODO - just use from_random_seed here?
-		let keychain =
-			Keychain::from_seed(seed.as_bytes()).expect("Error initializing keychain from seed");
 
 		println!(
 			"Starting the Grin wallet receiving daemon on {} ",
 			self.config.wallet_port
 		);
 
-		let mut wallet_config = WalletConfig::default();
+		self.wallet_config = WalletConfig::default();
 
-		wallet_config.api_listen_port = format!("{}", self.config.wallet_port);
-		wallet_config.check_node_api_http_addr = self.config.wallet_validating_node_url.clone();
-		wallet_config.data_file_dir = self.working_dir.clone();
+		self.wallet_config.api_listen_port = format!("{}", self.config.wallet_port);
+		self.wallet_config.check_node_api_http_addr = self.config.wallet_validating_node_url.clone();
+		self.wallet_config.data_file_dir = self.working_dir.clone();
 
-		let receive_tx_handler = wallet::WalletReceiver {
-			config: wallet_config.clone(),
-			keychain: keychain.clone(),
-		};
-		let router = router!(
-			receive_tx: get "/receive/transaction" => receive_tx_handler,
+		let _=fs::create_dir_all(self.wallet_config.clone().data_file_dir);
+		wallet::WalletSeed::init_file(&self.wallet_config);
+
+		let wallet_seed =
+			wallet::WalletSeed::from_file(&self.wallet_config).expect("Failed to read wallet seed file.");
+
+		let keychain = wallet_seed.derive_keychain("grin_test").expect(
+			"Failed to derive keychain from seed file and passphrase.",
 		);
 
-		let mut api_server = api::ApiServer::new("/v1".to_string());
-		api_server.register_handler(router);
-		api_server.start(url).unwrap_or_else(|e| {
-			println!("Failed to start Grin wallet receiver: {}.", e);
-		});
-
-		self.api_server = Some(api_server);
+		wallet::server::start_rest_apis(self.wallet_config.clone(), keychain);
 		self.wallet_is_running = true;
 	}
 
-	/// Stops the running wallet server
 
+	pub fn send_amount_to(config: &WalletConfig,
+		amount:&str,
+		minimum_confirmations: u64,
+		selection_strategy:&str,
+		dest: &str){
+
+		let amount = core::core::amount_from_hr_string(amount).expect(
+			"Could not parse amount as a number with optional decimal point.",
+		);
+
+		let wallet_seed =
+			wallet::WalletSeed::from_file(config).expect("Failed to read wallet seed file.");
+
+		let mut keychain = wallet_seed.derive_keychain("grin_test").expect(
+			"Failed to derive keychain from seed file and passphrase.",
+		);
+		let max_outputs = 500;
+		let result = wallet::issue_send_tx(
+			config,
+			&mut keychain,
+			amount,
+			minimum_confirmations,
+			dest.to_string(),
+			max_outputs,
+			(selection_strategy == "all"),
+			);
+		match result {
+			Ok(_) => {
+				println!(
+					"Tx sent: {} grin to {} (strategy '{}')",
+					core::core::amount_to_hr_string(amount),
+					dest,
+					selection_strategy,
+				)
+			}
+			Err(wallet::Error::NotEnoughFunds(available)) => {
+				println!(
+					"Tx not sent: insufficient funds (max: {})",
+					core::core::amount_to_hr_string(available),
+				);
+			}
+			Err(e) => {
+				println!("Tx not sent to {}: {:?}", dest, e);
+			}
+		};
+	}
+ 
+	/// Stops the running wallet server
 	pub fn stop_wallet(&mut self) {
-		let mut api_server = self.api_server.as_mut().unwrap();
+		println!("Stop wallet!");
+		let api_server = self.api_server.as_mut().unwrap();
 		api_server.stop();
 	}
 
@@ -497,8 +545,8 @@ impl LocalServerContainerPool {
 	}
 
 	pub fn connect_all_peers(&mut self) {
-		/// just pull out all currently active servers, build a list,
-		/// and feed into all servers
+		// just pull out all currently active servers, build a list,
+		// and feed into all servers
 		let mut server_addresses: Vec<String> = Vec::new();
 		for s in &self.server_containers {
 			let server_address = format!("{}:{}", s.config.base_addr, s.config.p2p_server_port);

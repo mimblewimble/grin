@@ -21,8 +21,9 @@ use std::collections::HashSet;
 
 use core::Committed;
 use core::{Input, Output, Proof, SwitchCommitHash, Transaction, TxKernel, COINBASE_KERNEL,
-           COINBASE_OUTPUT};
-use consensus::{exceeds_weight, reward, MINIMUM_DIFFICULTY, REWARD};
+	COINBASE_OUTPUT};
+use consensus;
+use consensus::{exceeds_weight, reward, MINIMUM_DIFFICULTY, REWARD, VerifySortOrder};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use core::transaction;
@@ -54,6 +55,8 @@ pub enum Error {
 	Secp(secp::Error),
 	/// Underlying keychain related error
 	Keychain(keychain::Error),
+	/// Underlying consensus error (sort order currently)
+	Consensus(consensus::Error),
 }
 
 impl From<transaction::Error> for Error {
@@ -71,6 +74,12 @@ impl From<secp::Error> for Error {
 impl From<keychain::Error> for Error {
 	fn from(e: keychain::Error) -> Error {
 		Error::Keychain(e)
+	}
+}
+
+impl From<consensus::Error> for Error {
+	fn from(e: consensus::Error) -> Error {
+		Error::Consensus(e)
 	}
 }
 
@@ -283,10 +292,11 @@ impl Block {
 		txs: Vec<&Transaction>,
 		keychain: &keychain::Keychain,
 		key_id: &keychain::Identifier,
+		difficulty: Difficulty,
 	) -> Result<Block, Error> {
 		let fees = txs.iter().map(|tx| tx.fee).sum();
 		let (reward_out, reward_proof) = Block::reward_output(keychain, key_id, fees)?;
-		let block = Block::with_reward(prev, txs, reward_out, reward_proof)?;
+		let block = Block::with_reward(prev, txs, reward_out, reward_proof, difficulty)?;
 		Ok(block)
 	}
 
@@ -298,6 +308,7 @@ impl Block {
 		txs: Vec<&Transaction>,
 		reward_out: Output,
 		reward_kern: TxKernel,
+		difficulty: Difficulty,
 	) -> Result<Block, Error> {
 		let mut kernels = vec![];
 		let mut inputs = vec![];
@@ -326,13 +337,12 @@ impl Block {
 		kernels.push(reward_kern);
 		outputs.push(reward_out);
 
-		// now sort everything to the block is built deterministically
+		// now sort everything so the block is built deterministically
 		inputs.sort();
 		outputs.sort();
 		kernels.sort();
 
 		// calculate the overall Merkle tree and fees (todo?)
-
 		Ok(
 			Block {
 				header: BlockHeader {
@@ -342,7 +352,7 @@ impl Block {
 						..time::now_utc()
 					},
 					previous: prev.hash(),
-					total_difficulty: prev.pow.clone().to_difficulty() +
+					total_difficulty: difficulty +
 						prev.total_difficulty.clone(),
 					..Default::default()
 				},
@@ -449,8 +459,16 @@ impl Block {
 		if exceeds_weight(self.inputs.len(), self.outputs.len(), self.kernels.len()) {
 			return Err(Error::WeightExceeded);
 		}
+		self.verify_sorted()?;
 		self.verify_coinbase()?;
 		self.verify_kernels(false)?;
+		Ok(())
+	}
+
+	fn verify_sorted(&self) -> Result<(), Error> {
+		self.inputs.verify_sort_order()?;
+		self.outputs.verify_sort_order()?;
+		self.kernels.verify_sort_order()?;
 		Ok(())
 	}
 
@@ -568,7 +586,7 @@ impl Block {
 		let excess = secp.commit_sum(vec![out_commit], vec![over_commit])?;
 
 		let msg = util::secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE])?;
-		let sig = keychain.sign(&msg, &key_id)?;
+		let sig = keychain.aggsig_sign_from_key_id(&msg, &key_id).unwrap();
 
 		let excess_sig = sig.serialize_der(&secp);
 
@@ -590,7 +608,7 @@ mod test {
 	use core::build::{self, input, output, with_fee};
 	use core::test::tx2i1o;
 	use keychain::{Identifier, Keychain};
-	use consensus::*;
+	use consensus::{MAX_BLOCK_WEIGHT, BLOCK_OUTPUT_WEIGHT};
 	use std::time::Instant;
 
 	use util::secp;
@@ -599,7 +617,13 @@ mod test {
 	// header
 	fn new_block(txs: Vec<&Transaction>, keychain: &Keychain) -> Block {
 		let key_id = keychain.derive_key_id(1).unwrap();
-		Block::new(&BlockHeader::default(), txs, keychain, &key_id).unwrap()
+		Block::new(
+			&BlockHeader::default(),
+			txs,
+			keychain,
+			&key_id,
+			Difficulty::minimum()
+		).unwrap()
 	}
 
 	// utility producing a transaction that spends an output with the provided

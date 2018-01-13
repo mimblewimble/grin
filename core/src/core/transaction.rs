@@ -13,16 +13,15 @@
 // limitations under the License.
 
 //! Transactions
-
-use byteorder::{BigEndian, ByteOrder};
 use blake2::blake2b::blake2b;
 use util::secp::{self, Message, Signature};
-use util::static_secp_instance;
+use util::{static_secp_instance, kernel_sig_msg};
 use util::secp::pedersen::{Commitment, RangeProof};
 use std::cmp::Ordering;
 use std::ops;
 
 use consensus;
+use consensus::VerifySortOrder;
 use core::Committed;
 use core::hash::Hashed;
 use core::pmmr::Summable;
@@ -75,6 +74,8 @@ pub enum Error {
 	Secp(secp::Error),
 	/// Restrict number of incoming inputs
 	TooManyInputs,
+	/// Underlying consensus error (currently for sort order)
+	ConsensusError(consensus::Error),
 }
 
 impl From<secp::Error> for Error {
@@ -83,12 +84,10 @@ impl From<secp::Error> for Error {
 	}
 }
 
-/// Construct msg bytes from tx fee and lock_height
-pub fn kernel_sig_msg(fee: u64, lock_height: u64) -> [u8; 32] {
-	let mut bytes = [0; 32];
-	BigEndian::write_u64(&mut bytes[16..24], fee);
-	BigEndian::write_u64(&mut bytes[24..], lock_height);
-	bytes
+impl From<consensus::Error> for Error {
+	fn from(e: consensus::Error) -> Error {
+		Error::ConsensusError(e)
+	}
 }
 
 /// A proof that a transaction sums to zero. Includes both the transaction's
@@ -157,7 +156,11 @@ impl TxKernel {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 		let sig = try!(Signature::from_der(&secp, &self.excess_sig));
-		secp.verify_from_commit(&msg, &sig, &self.excess)
+		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &self.excess);
+		if !valid{
+			return Err(secp::Error::IncorrectSignature);
+		}
+		Ok(())
 	}
 }
 
@@ -275,6 +278,7 @@ impl Transaction {
 	pub fn with_input(self, input: Input) -> Transaction {
 		let mut new_ins = self.inputs;
 		new_ins.push(input);
+		new_ins.sort();
 		Transaction {
 			inputs: new_ins,
 			..self
@@ -286,6 +290,7 @@ impl Transaction {
 	pub fn with_output(self, output: Output) -> Transaction {
 		let mut new_outs = self.outputs;
 		new_outs.push(output);
+		new_outs.sort();
 		Transaction {
 			outputs: new_outs,
 			..self
@@ -319,16 +324,12 @@ impl Transaction {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 		let sig = Signature::from_der(&secp, &self.excess_sig)?;
-
 		// pretend the sum is a public key (which it is, being of the form r.G) and
 		// verify the transaction sig with it
-		//
-		// we originally converted the commitment to a key_id here (commitment to zero)
-		// and then passed the key_id to secp.verify()
-		// the secp api no longer allows us to do this so we have wrapped the complexity
-		// of generating a public key from a commitment behind verify_from_commit
-		secp.verify_from_commit(&msg, &sig, &rsum)?;
-
+		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &rsum);
+		if !valid{
+			return Err(secp::Error::IncorrectSignature);
+		}
 		Ok(rsum)
 	}
 
@@ -353,11 +354,18 @@ impl Transaction {
 		if self.inputs.len() > consensus::MAX_BLOCK_INPUTS {
 			return Err(Error::TooManyInputs);
 		}
+		self.verify_sorted()?;
 		for out in &self.outputs {
 			out.verify_proof()?;
 		}
 		let excess = self.verify_sig()?;
 		Ok(excess)
+	}
+
+	fn verify_sorted(&self) -> Result<(), Error> {
+		self.inputs.verify_sort_order()?;
+		self.outputs.verify_sort_order()?;
+		Ok(())
 	}
 }
 
@@ -448,6 +456,11 @@ impl SwitchCommitHash {
 			h[i] = switch_commit_hash[i];
 		}
 		SwitchCommitHash { hash: h }
+	}
+
+	/// Build an "zero" switch commitment hash
+	pub fn zero() -> SwitchCommitHash {
+		SwitchCommitHash { hash: [0; SWITCH_COMMIT_HASH_SIZE] }
 	}
 }
 
@@ -553,6 +566,19 @@ impl Output {
 pub struct SumCommit {
 	/// Output commitment
 	pub commit: Commitment,
+	/// The corresponding "switch commit hash"
+	pub switch_commit_hash: SwitchCommitHash,
+}
+
+impl SumCommit {
+	/// For when we do not care about the switch_commit_hash
+	/// for example when comparing sum_commit hashes
+	pub fn from_commit(commit: &Commitment) -> SumCommit {
+		SumCommit {
+			commit: commit.clone(),
+			switch_commit_hash: SwitchCommitHash::zero(),
+		}
+	}
 }
 
 /// Outputs get summed through their commitments.
@@ -560,17 +586,23 @@ impl Summable for SumCommit {
 	type Sum = SumCommit;
 
 	fn sum(&self) -> SumCommit {
-		SumCommit { commit: self.commit.clone() }
+		SumCommit {
+			commit: self.commit.clone(),
+			switch_commit_hash: self.switch_commit_hash.clone(),
+		}
 	}
 
 	fn sum_len() -> usize {
-		secp::constants::PEDERSEN_COMMITMENT_SIZE
+		secp::constants::PEDERSEN_COMMITMENT_SIZE + SWITCH_COMMIT_HASH_SIZE
 	}
 }
 
 impl Writeable for SumCommit {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.commit.write(writer)?;
+		if writer.serialization_mode() == ser::SerializationMode::Full {
+			self.switch_commit_hash.write(writer)?;
+		}
 		Ok(())
 	}
 }
@@ -578,8 +610,12 @@ impl Writeable for SumCommit {
 impl Readable for SumCommit {
 	fn read(reader: &mut Reader) -> Result<SumCommit, ser::Error> {
 		let commit = Commitment::read(reader)?;
+		let switch_commit_hash = SwitchCommitHash::read(reader)?;
 
-		Ok(SumCommit { commit: commit })
+		Ok(SumCommit {
+			commit: commit,
+			switch_commit_hash: switch_commit_hash,
+		})
 	}
 }
 
@@ -598,7 +634,7 @@ impl ops::Add for SumCommit {
 			Ok(s) => s,
 			Err(_) => Commitment::from_vec(vec![1; 33]),
 		};
-		SumCommit { commit: sum }
+		SumCommit::from_commit(&sum)
 	}
 }
 

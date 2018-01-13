@@ -59,7 +59,7 @@ pub enum Error {
 	/// One of the root hashes in the block is invalid
 	InvalidRoot,
 	/// One of the inputs in the block has already been spent
-	AlreadySpent,
+	AlreadySpent(Commitment),
 	/// An output with that commitment already exists (should be unique)
 	DuplicateCommitment(Commitment),
 	/// A kernel with that excess commitment already exists (should be unique)
@@ -223,8 +223,14 @@ pub trait ChainStore: Send + Sync {
 	/// Save the provided tip as the current head of the sync header chain
 	fn save_sync_head(&self, t: &Tip) -> Result<(), store::Error>;
 
+	/// Reset header_head and sync_head to head of current body chain
+	fn reset_head(&self) -> Result<(), store::Error>;
+
 	/// Gets the block header at the provided height
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, store::Error>;
+
+	/// Delete the block header at the height
+	fn delete_header_by_height(&self, height: u64) -> Result<(), store::Error>;
 
 	/// Is the block header on the current chain?
 	/// Use the header_by_height index to verify the block header is where we think it is.
@@ -258,7 +264,7 @@ pub trait ChainStore: Send + Sync {
 	/// Saves the provided block header at the corresponding height. Also check
 	/// the consistency of the height chain in store by assuring previous
 	/// headers are also at their respective heights.
-	fn setup_height(&self, bh: &BlockHeader) -> Result<(), store::Error>;
+	fn setup_height(&self, bh: &BlockHeader, old_tip: &Tip) -> Result<(), store::Error>;
 }
 
 /// Bridge between the chain pipeline and the rest of the system. Handles

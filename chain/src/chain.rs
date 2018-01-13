@@ -15,9 +15,10 @@
 //! Facade and handler for the rest of the blockchain implementation
 //! and mostly the chain pipeline.
 
-use std::collections::VecDeque;
+use std::collections::HashMap;
 use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 
 use util::secp::pedersen::{Commitment, RangeProof};
 
@@ -34,7 +35,78 @@ use sumtree;
 use types::*;
 use util::LOGGER;
 
-const MAX_ORPHANS: usize = 50;
+const MAX_ORPHAN_AGE_SECS: u64 = 30;
+
+#[derive(Debug, Clone)]
+struct Orphan {
+	block: Block,
+	opts: Options,
+	added: Instant,
+}
+
+struct OrphanBlockPool {
+	// blocks indexed by their hash
+	orphans: RwLock<HashMap<Hash, Orphan>>,
+	// additional index of previous -> hash
+	// so we can efficiently identify a child block (ex-orphan) after processing a block
+	prev_idx: RwLock<HashMap<Hash, Hash>>,
+}
+
+impl OrphanBlockPool {
+	fn new() -> OrphanBlockPool {
+		OrphanBlockPool {
+			orphans: RwLock::new(HashMap::new()),
+			prev_idx: RwLock::new(HashMap::new()),
+		}
+	}
+
+	fn len(&self) -> usize {
+		let orphans = self.orphans.read().unwrap();
+		orphans.len()
+	}
+
+	fn add(&self, orphan: Orphan) {
+		{
+			let mut orphans = self.orphans.write().unwrap();
+			let mut prev_idx = self.prev_idx.write().unwrap();
+			orphans.insert(orphan.block.hash(), orphan.clone());
+			prev_idx.insert(orphan.block.header.previous, orphan.block.hash());
+		}
+
+		{
+			let mut orphans = self.orphans.write().unwrap();
+			let mut prev_idx = self.prev_idx.write().unwrap();
+			orphans.retain(|_, ref mut x| x.added.elapsed() < Duration::from_secs(MAX_ORPHAN_AGE_SECS));
+			prev_idx.retain(|_, &mut x| orphans.contains_key(&x));
+		}
+	}
+
+	fn remove(&self, hash: &Hash) -> Option<Orphan> {
+		let mut orphans = self.orphans.write().unwrap();
+		let mut prev_idx = self.prev_idx.write().unwrap();
+		let orphan = orphans.remove(hash);
+		if let Some(x) = orphan.clone() {
+			prev_idx.remove(&x.block.header.previous);
+		}
+		orphan
+	}
+
+	/// Get an orphan from the pool indexed by the hash of its parent
+	fn get_by_previous(&self, hash: &Hash) -> Option<Orphan> {
+		let orphans = self.orphans.read().unwrap();
+		let prev_idx = self.prev_idx.read().unwrap();
+		if let Some(hash) = prev_idx.get(hash) {
+			orphans.get(hash).cloned()
+		} else {
+			None
+		}
+	}
+
+	fn contains(&self, hash: &Hash) -> bool {
+		let orphans = self.orphans.read().unwrap();
+		orphans.contains_key(hash)
+	}
+}
 
 /// Facade to the blockchain block processing pipeline and storage. Provides
 /// the current view of the UTXO set according to the chain state. Also
@@ -45,7 +117,7 @@ pub struct Chain {
 	adapter: Arc<ChainAdapter>,
 
 	head: Arc<Mutex<Tip>>,
-	orphans: Arc<Mutex<VecDeque<(Options, Block)>>>,
+	orphans: Arc<OrphanBlockPool>,
 	sumtrees: Arc<RwLock<sumtree::SumTrees>>,
 
 	// POW verification function
@@ -83,11 +155,11 @@ impl Chain {
 		let head = match chain_store.head() {
 			Ok(tip) => tip,
 			Err(NotFoundErr) => {
+				let tip = Tip::new(genesis.hash());
 				chain_store.save_block(&genesis)?;
-				chain_store.setup_height(&genesis.header)?;
+				chain_store.setup_height(&genesis.header, &tip)?;
 
 				// saving a new tip based on genesis
-				let tip = Tip::new(genesis.hash());
 				chain_store.save_head(&tip)?;
 				info!(
 					LOGGER,
@@ -101,16 +173,9 @@ impl Chain {
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
 		};
 
-		// make sure sync_head is available for later use
-		let _ = match chain_store.get_sync_head() {
-			Ok(tip) => tip,
-			Err(NotFoundErr) => {
-				let tip = chain_store.head().unwrap();
-				chain_store.save_sync_head(&tip)?;
-				tip
-			},
-			Err(e) => return Err(Error::StoreErr(e, "chain init sync head".to_owned())),
-		};
+		// Reset sync_head and header_head to head of current chain.
+		// Make sure sync_head is available for later use when needed.
+		chain_store.reset_head()?;
 
 		info!(
 			LOGGER,
@@ -126,7 +191,7 @@ impl Chain {
 			store: store,
 			adapter: adapter,
 			head: Arc::new(Mutex::new(head)),
-			orphans: Arc::new(Mutex::new(VecDeque::with_capacity(MAX_ORPHANS + 1))),
+			orphans: Arc::new(OrphanBlockPool::new()),
 			sumtrees: Arc::new(RwLock::new(sumtrees)),
 			pow_verifier: pow_verifier,
 		})
@@ -135,11 +200,12 @@ impl Chain {
 	/// Attempt to add a new block to the chain. Returns the new chain tip if it
 	/// has been added to the longest chain, None if it's added to an (as of
 	/// now) orphan chain.
-	pub fn process_block(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
+	pub fn process_block(&self, b: Block, opts: Options)
+		-> Result<Option<Tip>, Error>
+	{
 		let head = self.store
 			.head()
 			.map_err(|e| Error::StoreErr(e, "chain load head".to_owned()))?;
-		let height = head.height;
 		let ctx = self.ctx_from_head(head, opts);
 
 		let res = pipe::process_block(&b, ctx);
@@ -159,13 +225,47 @@ impl Chain {
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b);
 				}
-				self.check_orphans();
-			}
-			Ok(None) => {}
-			Err(Error::Orphan) => if b.header.height < height + (MAX_ORPHANS as u64) {
-				let mut orphans = self.orphans.lock().unwrap();
-				orphans.push_front((opts, b));
-				orphans.truncate(MAX_ORPHANS);
+				// We just accepted a block so see if we can now accept any orphan(s)
+				self.check_orphans(&b);
+			},
+			Ok(None) => {
+				// block got accepted but we did not extend the head
+				// so its on a fork (or is the start of a new fork)
+				// broadcast the block out so everyone knows about the fork
+				//
+				// TODO - This opens us to an amplification attack on blocks
+				// mined at a low difficulty. We should suppress really old blocks
+				// or less relevant blocks somehow.
+				// We should also probably consider banning nodes that send us really old blocks.
+				//
+				if !opts.intersects(SYNC) {
+					// broadcast the block
+					let adapter = self.adapter.clone();
+					adapter.block_accepted(&b);
+				}
+				// We just accepted a block so see if we can now accept any orphan(s)
+				self.check_orphans(&b);
+			},
+			Err(Error::Orphan) => {
+				let block_hash = b.hash();
+				let orphan = Orphan {
+					block: b.clone(),
+					opts: opts,
+					added: Instant::now(),
+				};
+
+				// In the case of a fork - it is possible to have multiple blocks
+				// that are children of a given block.
+				// We do not handle this currently for orphans (future enhancement?).
+				// We just assume "last one wins" for now.
+				&self.orphans.add(orphan);
+
+				debug!(
+					LOGGER,
+					"process_block: orphan: {:?}, # orphans {}",
+					block_hash,
+					self.orphans.len(),
+				);
 			},
 			Err(Error::Unfit(ref msg)) => {
 				debug!(
@@ -186,7 +286,6 @@ impl Chain {
 				);
 			}
 		}
-
 		res
 	}
 
@@ -214,31 +313,24 @@ impl Chain {
 		}
 	}
 
+	/// Check if hash is for a known orphan.
 	pub fn is_orphan(&self, hash: &Hash) -> bool {
-		let orphans = self.orphans.lock().unwrap();
-		orphans.iter().any(|&(_, ref x)| x.hash() == hash.clone())
+		self.orphans.contains(hash)
 	}
 
-	/// Pop orphans out of the queue and check if we can now accept them.
-	fn check_orphans(&self) {
-		// first check how many we have to retry, unfort. we can't extend the lock
-  // in the loop as it needs to be freed before going in process_block
-		let orphan_count;
-		{
-			let orphans = self.orphans.lock().unwrap();
-			orphan_count = orphans.len();
-		}
+	fn check_orphans(&self, block: &Block) {
+		debug!(
+			LOGGER,
+			"chain: check_orphans: # orphans {}",
+			self.orphans.len(),
+		);
 
-		// pop each orphan and retry, if still orphaned, will be pushed again
-		for _ in 0..orphan_count {
-			let popped;
-			{
-				let mut orphans = self.orphans.lock().unwrap();
-				popped = orphans.pop_back();
-			}
-			if let Some((opts, orphan)) = popped {
-				let _process_result = self.process_block(orphan, opts);
-			}
+		// Is there an orphan in our orphans that we can now process?
+		// We just processed the given block, are there any orphans that have this block
+		// as their "previous" block?
+		if let Some(orphan) = self.orphans.get_by_previous(&block.hash()) {
+			self.orphans.remove(&orphan.block.hash());
+			let _ = self.process_block(orphan.block, orphan.opts);
 		}
 	}
 
@@ -247,30 +339,37 @@ impl Chain {
 	/// way that's consistent with the current chain state and more
 	/// specifically the current winning fork.
 	pub fn get_unspent(&self, output_ref: &Commitment) -> Result<Output, Error> {
-		let sumtrees = self.sumtrees.read().unwrap();
-		let is_unspent = sumtrees.is_unspent(output_ref)?;
-		if is_unspent {
-			self.store
-				.get_output_by_commit(output_ref)
-				.map_err(|e| Error::StoreErr(e, "chain get unspent".to_owned()))
-		} else {
-			Err(Error::OutputNotFound)
+		match self.store.get_output_by_commit(output_ref) {
+			Ok(out) => {
+				let mut sumtrees = self.sumtrees.write().unwrap();
+				if sumtrees.is_unspent(output_ref)? {
+					Ok(out)
+				} else {
+					Err(Error::OutputNotFound)
+				}
+			}
+			Err(NotFoundErr) => Err(Error::OutputNotFound),
+			Err(e) => Err(Error::StoreErr(e, "chain get unspent".to_owned())),
 		}
 	}
 
 	/// Checks whether an output is unspent
 	pub fn is_unspent(&self, output_ref: &Commitment) -> Result<bool, Error> {
-		let sumtrees = self.sumtrees.read().unwrap();
+		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.is_unspent(output_ref)
 	}
 
 	/// Sets the sumtree roots on a brand new block by applying the block on the
 	/// current sumtree state.
-	pub fn set_sumtree_roots(&self, b: &mut Block) -> Result<(), Error> {
+	pub fn set_sumtree_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
+		let store = self.store.clone();
 
 		let roots = sumtree::extending(&mut sumtrees, |extension| {
 			// apply the block on the sumtrees and check the resulting root
+			if is_fork {
+				pipe::rewind_and_apply_fork(b, store, extension)?;
+			}
 			extension.apply_block(b)?;
 			extension.force_rollback();
 			Ok(extension.roots())
@@ -282,7 +381,7 @@ impl Chain {
 		Ok(())
 	}
 
-	/// returns sumtree roots
+	/// Returns current sumtree roots
 	pub fn get_sumtree_roots(
 		&self,
 	) -> (
@@ -347,17 +446,6 @@ impl Chain {
 		Ok(())
 	}
 
-	/// Reset the header head to the same as the main head. When sync is running,
-	/// the header head will go ahead to try to download as many as possible.
-	/// However if a block, when fully received, is found invalid, the header
-	/// head need to backtrack to the last known valid position.
-	pub fn reset_header_head(&self) -> Result<(), Error> {
-		let head = self.head.lock().unwrap();
-		debug!(LOGGER, "Reset header head to {} at {}",
-					head.last_block_h, head.height);
-		self.store.save_header_head(&head).map_err(From::from)
-	}
-
 	/// returns the last n nodes inserted into the utxo sum tree
 	/// returns sum tree hash plus output itself (as the sum is contained
 	/// in the output anyhow)
@@ -387,6 +475,13 @@ impl Chain {
 	/// Total difficulty at the head of the chain
 	pub fn total_difficulty(&self) -> Difficulty {
 		self.head.lock().unwrap().clone().total_difficulty
+	}
+
+	/// Reset header_head and sync_head to head of current body chain
+	pub fn reset_head(&self) -> Result<(), Error> {
+		self.store
+			.reset_head()
+			.map_err(|e| Error::StoreErr(e, "chain reset_head".to_owned()))
 	}
 
 	/// Get the tip that's also the head of the chain

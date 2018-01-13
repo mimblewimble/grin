@@ -63,13 +63,13 @@ port = 13414
 log_to_stdout = true
 
 # Log level for stdout: Critical, Error, Warning, Info, Debug, Trace
-stdout_log_level = "Warning"
+stdout_log_level = "Info"
 
 # Whether to log to a file
 log_to_file = true
 
 # Log level for file: Critical, Error, Warning, Info, Debug, Trace
-file_log_level = "Trace"
+file_log_level = "Debug"
 
 # Log file path
 log_file_path = "grin.log"
@@ -95,7 +95,7 @@ use_cuckoo_miner = true
 
 #Whether to use async mode for cuckoo miner, if the plugin supports it.
 #this allows for many searches to be run in parallel, e.g. if the system
-#has multiple GPUs, or if you want to mine using multiple plugins 
+#has multiple GPUs, or if you want to mine using multiple plugins
 
 cuckoo_miner_async_mode = false
 

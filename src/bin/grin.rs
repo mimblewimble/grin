@@ -30,9 +30,9 @@ extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
+mod client;
+
 use std::thread;
-use std::io::Read;
-use std::fs::File;
 use std::time::Duration;
 use std::env::current_dir;
 
@@ -69,14 +69,14 @@ fn start_from_config_file(mut global_config: GlobalConfig) {
 
 fn main() {
 	// First, load a global config object,
- // then modify that object with any switches
- // found so that the switches override the
- // global config file
+	// then modify that object with any switches
+	// found so that the switches override the
+	// global config file
 
 	// This will return a global config object,
- // which will either contain defaults for all // of the config structures or a
- // configuration
- // read from a config file
+	// which will either contain defaults for all // of the config structures or a
+	// configuration
+	// read from a config file
 
 	let mut global_config = GlobalConfig::new(None).unwrap_or_else(|e| {
 		panic!("Error parsing config file: {}", e);
@@ -191,7 +191,7 @@ fn main() {
 				.long("key_derivations")
 				.default_value("1000")
 				.takes_value(true))
-		
+
 		.subcommand(SubCommand::with_name("listen")
 			.about("Runs the wallet in listening mode waiting for transactions.")
 			.arg(Arg::with_name("port")
@@ -199,7 +199,7 @@ fn main() {
 				.long("port")
 				.help("Port on which to run the wallet listener")
 				.takes_value(true)))
-		
+
 		.subcommand(SubCommand::with_name("receive")
 			.about("Processes a JSON transaction file.")
 			.arg(Arg::with_name("input")
@@ -207,12 +207,10 @@ fn main() {
 				.short("i")
 				.long("input")
 				.takes_value(true)))
-		
+
 		.subcommand(SubCommand::with_name("send")
-			.about("Builds a transaction to send someone some coins. By default, \
-				the transaction will just be printed to stdout. If a destination is \
-				provided, the command will attempt to contact the receiver at that \
-				address and send the transaction directly.")
+			.about("Builds a transaction to send coins and sends it to the specified \
+			 listener directly.")
 			.arg(Arg::with_name("amount")
 				.help("Number of coins to send with optional fraction, e.g. 12.423")
 				.index(1))
@@ -259,7 +257,8 @@ fn main() {
 			.about("Initialize a new wallet seed file."))
 
 		.subcommand(SubCommand::with_name("restore")
-			.about("Attempt to restore wallet contents from the chain using seed and password.")))
+			.about("Attempt to restore wallet contents from the chain using seed and password. \
+				NOTE: Backup wallet.* and run `wallet listen` before running restore.")))
 
 	.get_matches();
 
@@ -270,12 +269,9 @@ fn main() {
 		}
 
 		// client commands and options
-		("client", Some(client_args)) => match client_args.subcommand() {
-			("status", _) => {
-				println!("status info...");
-			}
-			_ => panic!("Unknown client command, use 'grin help client' for details"),
-		},
+		("client", Some(client_args)) => {
+			client_command(client_args, global_config);
+		}
 
 		// client commands and options
 		("wallet", Some(wallet_args)) => {
@@ -290,7 +286,7 @@ fn main() {
 				start_from_config_file(global_config);
 			} else {
 				// won't attempt to just start with defaults,
-	// and will reject
+				// and will reject
 				println!("Unknown command, and no configuration file was found.");
 				println!("Use 'grin help' for a list of all commands.");
 			}
@@ -366,6 +362,18 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 	}
 }
 
+fn client_command(client_args: &ArgMatches, global_config: GlobalConfig) {
+	// just get defaults from the global config
+	let server_config = global_config.members.unwrap().server;
+
+	match client_args.subcommand() {
+		("status", Some(_)) => {
+			client::show_status(&server_config);
+		}
+		_ => panic!("Unknown client command, use 'grin help client' for details"),
+	}
+}
+
 fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 	// just get defaults from the global config
 	let mut wallet_config = global_config.members.unwrap().wallet;
@@ -382,14 +390,14 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
-	let mut key_derivations:u32=1000;
+	let mut key_derivations: u32 = 1000;
 	if let Some(kd) = wallet_args.value_of("key_derivations") {
-		key_derivations=kd.parse().unwrap();
+		key_derivations = kd.parse().unwrap();
 	}
 
-	let mut show_spent=false;
+	let mut show_spent = false;
 	if wallet_args.is_present("show_spent") {
-		show_spent=true;
+		show_spent = true;
 	}
 
 	// Derive the keychain based on seed from seed file and specified passphrase.
@@ -403,12 +411,12 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 
 	let wallet_seed =
 		wallet::WalletSeed::from_file(&wallet_config).expect("Failed to read wallet seed file.");
-	let passphrase = wallet_args
-		.value_of("pass")
-		.expect("Failed to read passphrase.");
-	let keychain = wallet_seed
-		.derive_keychain(&passphrase)
-		.expect("Failed to derive keychain from seed file and passphrase.");
+	let passphrase = wallet_args.value_of("pass").expect(
+		"Failed to read passphrase.",
+	);
+	let mut keychain = wallet_seed.derive_keychain(&passphrase).expect(
+		"Failed to derive keychain from seed file and passphrase.",
+	);
 
 	match wallet_args.subcommand() {
 		("listen", Some(listen_args)) => {
@@ -416,40 +424,49 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				wallet_config.api_listen_port = port.to_string();
 			}
 			wallet::server::start_rest_apis(wallet_config, keychain);
-		},
-		("receive", Some(receive_args)) => {
-			let input = receive_args
-				.value_of("input")
-				.expect("Input file required");
-			let mut file = File::open(input)
-				.expect("Unable to open transaction file.");
+		}
+		// The following is gone for now, as a result of aggsig transactions
+		// being implemented
+		/*("receive", Some(receive_args)) => {
+			let input = receive_args.value_of("input").expect("Input file required");
+			let mut file = File::open(input).expect("Unable to open transaction file.");
 			let mut contents = String::new();
-			file.read_to_string(&mut contents)
-				.expect("Unable to read transaction file.");
-			wallet::receive_json_tx_str(&wallet_config, &keychain, contents.as_str()).unwrap();
-		},
-		("send", Some(send_args)) => {
-			let amount = send_args
-				.value_of("amount")
-				.expect("Amount to send required");
-			let amount = core::core::amount_from_hr_string(amount)
-				.expect("Could not parse amount as a number with optional decimal point.");
-			let minimum_confirmations: u64 = send_args
-				.value_of("minimum_confirmations")
-				.unwrap()
-				.parse()
-				.expect("Could not parse minimum_confirmations as a whole number.");
-			let selection_strategy = send_args
-				.value_of("selection_strategy")
-				.expect("Selection strategy required");
-			let mut dest = "stdout";
-			if let Some(d) = send_args.value_of("dest") {
-				dest = d;
+			file.read_to_string(&mut contents).expect(
+				"Unable to read transaction file.",
+			);
+			if let Err(e) =
+				wallet::receive_json_tx_str(
+					&wallet_config, &keychain, contents.as_str()) {
+
+				println!("Error receiving transaction, the most likely reasons are:");
+				println!(" * the transaction has already been sent");
+				println!(" * your node isn't running or can't be reached");
+				println!("\nDetailed error: {:?}", e);
 			}
+		}*/
+		("send", Some(send_args)) => {
+			let amount = send_args.value_of("amount").expect(
+				"Amount to send required",
+			);
+			let amount = core::core::amount_from_hr_string(amount).expect(
+				"Could not parse amount as a number with optional decimal point.",
+			);
+			let minimum_confirmations: u64 =
+				send_args
+					.value_of("minimum_confirmations")
+					.unwrap()
+					.parse()
+					.expect("Could not parse minimum_confirmations as a whole number.");
+			let selection_strategy = send_args.value_of("selection_strategy").expect(
+				"Selection strategy required",
+			);
+			let dest =  send_args.value_of("dest").expect(
+				"Destination wallet address required",
+			);
 			let max_outputs = 500;
-			let result=wallet::issue_send_tx(
+			let result = wallet::issue_send_tx(
 				&wallet_config,
-				&keychain,
+				&mut keychain,
 				amount,
 				minimum_confirmations,
 				dest.to_string(),
@@ -464,34 +481,41 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 						amount_to_hr_string(amount),
 						dest,
 						selection_strategy,
-					)},
+					)
+				}
 				Err(wallet::Error::NotEnoughFunds(available)) => {
 					error!(
 						LOGGER,
 						"Tx not sent: insufficient funds (max: {})",
 						amount_to_hr_string(available),
 					);
-				},
-				Err(e) => {
+				}
+				Err(wallet::Error::FeeExceedsAmount {sender_amount, recipient_fee}) => {
 					error!(
-						LOGGER,
-						"Tx not sent: {:?}",
-						e
+						LOGGER, 
+						"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
+						amount_to_hr_string(recipient_fee),
+						amount_to_hr_string(sender_amount)
 					);
-				},
+				}
+				Err(e) => {
+					error!(LOGGER, "Tx not sent: {:?}", e);
+				}
 			};
 		}
 		("burn", Some(send_args)) => {
-			let amount = send_args
-				.value_of("amount")
-				.expect("Amount to burn required");
-			let amount = core::core::amount_from_hr_string(amount)
-				.expect("Could not parse amount as number with optional decimal point.");
-			let minimum_confirmations: u64 = send_args
-				.value_of("minimum_confirmations")
-				.unwrap()
-				.parse()
-				.expect("Could not parse minimum_confirmations as a whole number.");
+			let amount = send_args.value_of("amount").expect(
+				"Amount to burn required",
+			);
+			let amount = core::core::amount_from_hr_string(amount).expect(
+				"Could not parse amount as number with optional decimal point.",
+			);
+			let minimum_confirmations: u64 =
+				send_args
+					.value_of("minimum_confirmations")
+					.unwrap()
+					.parse()
+					.expect("Could not parse minimum_confirmations as a whole number.");
 			let max_outputs = 500;
 			wallet::issue_burn_tx(
 				&wallet_config,
@@ -508,10 +532,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			wallet::show_outputs(&wallet_config, &keychain, show_spent);
 		}
 		("restore", Some(_)) => {
-			let _=wallet::restore(&wallet_config, &keychain, key_derivations);
-		}
-		("receive", Some(_)) => {
-			panic!("Command 'receive' is depreciated, use 'listen' instead");
+			let _ = wallet::restore(&wallet_config, &keychain, key_derivations);
 		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}

@@ -72,7 +72,7 @@ impl Peers {
 	}
 
 	pub fn is_known(&self, addr: &SocketAddr) -> bool {
-		self.get_peer(addr).is_some()
+		self.get_connected_peer(addr).is_some()
 	}
 
 	/// Get vec of peers we are currently connected to.
@@ -83,7 +83,7 @@ impl Peers {
 	}
 
 	/// Get a peer we're connected to by address.
-	pub fn get_peer(&self, addr: &SocketAddr) -> Option<Arc<RwLock<Peer>>> {
+	pub fn get_connected_peer(&self, addr: &SocketAddr) -> Option<Arc<RwLock<Peer>>> {
 		self.peers.read().unwrap().get(addr).map(|p| p.clone())
 	}
 
@@ -92,7 +92,42 @@ impl Peers {
 		self.connected_peers().len() as u32
 	}
 
-	/// Return vec of all peers that currently have the most worked branch,
+	// Return vec of connected peers that currently advertise more work (total_difficulty)
+	// than we do.
+	pub fn more_work_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
+		let peers = self.connected_peers();
+		if peers.len() == 0 {
+			return vec![];
+		}
+
+		let total_difficulty = self.total_difficulty();
+
+		let mut max_peers = peers
+			.iter()
+			.filter(|x| {
+				match x.try_read() {
+					Ok(peer) => {
+						peer.info.total_difficulty > total_difficulty
+					},
+					Err(_) => false,
+				}
+			})
+			.cloned()
+			.collect::<Vec<_>>();
+
+		thread_rng().shuffle(&mut max_peers);
+		max_peers
+	}
+
+	/// Returns single random peer with more work than us.
+	pub fn more_work_peer(&self) -> Option<Arc<RwLock<Peer>>> {
+		match self.more_work_peers().first() {
+			Some(x) => Some(x.clone()),
+			None => None
+		}
+	}
+
+	/// Return vec of connected peers that currently have the most worked branch,
 	/// showing the highest total difficulty.
 	pub fn most_work_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
 		let peers = self.connected_peers();
@@ -137,12 +172,6 @@ impl Peers {
 		}
 	}
 
-	/// Returns a random connected peer.
-	// pub fn random_peer(&self) -> Option<Arc<RwLock<Peer>>> {
-	// 	let peers = self.connected_peers();
-	// 	Some(thread_rng().choose(&peers).unwrap().clone())
-	// }
-
 	pub fn is_banned(&self, peer_addr: SocketAddr) -> bool {
 		if let Ok(peer_data) = self.store.get_peer(peer_addr) {
 			if peer_data.flags == State::Banned {
@@ -158,13 +187,29 @@ impl Peers {
 			error!(LOGGER, "Couldn't ban {}: {:?}", peer_addr, e);
 		}
 
-		if let Some(peer) = self.get_peer(peer_addr) {
+		if let Some(peer) = self.get_connected_peer(peer_addr) {
 			debug!(LOGGER, "Banning peer {}", peer_addr);
 			// setting peer status will get it removed at the next clean_peer
 			let peer = peer.write().unwrap();
 			peer.set_banned();
 			peer.stop();
 		}
+	}
+
+	/// Unbans a peer, checks if it exists and banned then unban
+	pub fn unban_peer(&self, peer_addr: &SocketAddr) {
+		match self.get_peer(peer_addr.clone()) {
+			Ok(_) => {
+				if self.is_banned(peer_addr.clone()) {
+					if let Err(e) = self.update_state(peer_addr.clone(), State::Healthy) {
+						error!(LOGGER, "Couldn't unban {}: {:?}", peer_addr, e)
+					}
+				} else {
+					error!(LOGGER, "Couldn't unban {}: peer is not banned", peer_addr)
+				}
+			},
+			Err(e) => error!(LOGGER, "Couldn't unban {}: {:?}", peer_addr, e)
+		};
 	}
 
 	/// Broadcasts the provided block to PEER_PREFERRED_COUNT of our peers.
@@ -174,8 +219,9 @@ impl Peers {
 	/// if it knows the remote peer already has the block.
 	pub fn broadcast_block(&self, b: &core::Block) {
 		let peers = self.connected_peers();
+		let preferred_peers = 8;
 		let mut count = 0;
-		for p in peers.iter().take(8) {
+		for p in peers.iter().take(preferred_peers) {
 			let p = p.read().unwrap();
 			if p.is_connected() {
 				if let Err(e) = p.send_block(b) {
@@ -185,7 +231,14 @@ impl Peers {
 				}
 			}
 		}
-		debug!(LOGGER, "Broadcasted block {} to {} peers.", b.header.height, count);
+		debug!(
+			LOGGER,
+			"broadcast_block: {}, {} at {}, to {} peers",
+			b.hash(),
+			b.header.total_difficulty,
+			b.header.height,
+			count,
+		);
 	}
 
 	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our peers.
@@ -225,6 +278,11 @@ impl Peers {
 	/// Find peers in store (not necessarily connected) and return their data
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
 		self.store.find_peers(state, cap, count)
+	}
+
+	/// Get peer in store by address
+	pub fn get_peer(&self, peer_addr: SocketAddr) -> Result<PeerData, Error> {
+		self.store.get_peer(peer_addr).map_err(From::from)
 	}
 
 	/// Whether we've already seen a peer with the provided address
@@ -388,7 +446,7 @@ impl NetAdapter for Peers {
 		);
 
 		if diff.into_num() > 0 {
-			if let Some(peer) = self.get_peer(&addr) {
+			if let Some(peer) = self.get_connected_peer(&addr) {
 				let mut peer = peer.write().unwrap();
 				peer.info.total_difficulty = diff;
 			}

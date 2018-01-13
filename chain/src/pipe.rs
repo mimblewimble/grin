@@ -50,7 +50,7 @@ pub struct BlockContext {
 /// chain head if updated.
 pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
- // spend resources reading the full block when its header is invalid
+	// spend resources reading the full block when its header is invalid
 
 	debug!(
 		LOGGER,
@@ -88,12 +88,12 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		.map_err(|e| Error::StoreErr(e, "pipe reload head".to_owned()))?;
 
 	// start a chain extension unit of work dependent on the success of the
- // internal validation and saving operations
+	// internal validation and saving operations
 	sumtree::extending(&mut sumtrees, |mut extension| {
 		validate_block(b, &mut ctx, &mut extension)?;
 		debug!(
 			LOGGER,
-			"pipe: proces_block {} at {} is valid, save and append.",
+			"pipe: process_block {} at {} is valid, save and append.",
 			b.hash(),
 			b.header.height,
 		);
@@ -151,7 +151,7 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 	Ok(())
 }
 
-/// First level of black validation that only needs to act on the block header
+/// First level of block validation that only needs to act on the block header
 /// to make it as cheap as possible. The different validations are also
 /// arranged by order of cost to have as little DoS surface as possible.
 /// TODO require only the block header (with length information)
@@ -171,7 +171,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		> time::now_utc() + time::Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
 	{
 		// refuse blocks more than 12 blocks intervals in future (as in bitcoin)
-  // TODO add warning in p2p code if local time is too different from peers
+		// TODO add warning in p2p code if local time is too different from peers
 		return Err(Error::InvalidBlockTime);
 	}
 
@@ -196,6 +196,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	if header.height != prev.height + 1 {
 		return Err(Error::InvalidBlockHeight);
 	}
+
+	// TODO - get rid of the automated testing mode check here somehow
 	if header.timestamp <= prev.timestamp && !global::is_automated_testing_mode() {
 		// prevent time warp attacks and some timestamp manipulations by forcing strict
 		// time progression (but not in CI mode)
@@ -211,14 +213,32 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 			return Err(Error::DifficultyTooLow);
 		}
 
-		if header.total_difficulty != prev.total_difficulty.clone() + prev.pow.to_difficulty() {
-			return Err(Error::WrongTotalDifficulty);
-		}
-
 		let diff_iter = store::DifficultyIter::from(header.previous, ctx.store.clone());
 		let difficulty =
 			consensus::next_difficulty(diff_iter).map_err(|e| Error::Other(e.to_string()))?;
+
+		// explicit check to ensure total_difficulty has increased by exactly
+		// the _network_ difficulty of the previous block
+		// (during testnet1 we use _block_ difficulty here)
+		if header.total_difficulty != prev.total_difficulty.clone() + difficulty.clone() {
+			error!(
+				LOGGER,
+				"validate_header: BANNABLE OFFENCE: header cumulative difficulty {} != {}",
+				header.difficulty.into_num(),
+				prev.total_difficulty.into_num() + difficulty.into_num()
+			);
+			return Err(Error::WrongTotalDifficulty);
+		}
+
+		// now check that the difficulty is not less than that calculated by the
+		// difficulty iterator based on the previous block
 		if header.difficulty < difficulty {
+			error!(
+				LOGGER,
+				"validate_header: BANNABLE OFFENCE: header difficulty {} < {}",
+				header.difficulty.into_num(),
+				difficulty.into_num()
+			);
 			return Err(Error::DifficultyTooLow);
 		}
 	}
@@ -232,50 +252,16 @@ fn validate_block(
 	ctx: &mut BlockContext,
 	ext: &mut sumtree::Extension,
 ) -> Result<(), Error> {
+
 	// main isolated block validation, checks all commitment sums and sigs
-	try!(b.validate().map_err(&Error::InvalidBlockProof));
+	b.validate().map_err(&Error::InvalidBlockProof)?;
+
+	if b.header.previous != ctx.head.last_block_h {
+		rewind_and_apply_fork(b, ctx.store.clone(), ext)?;
+	}
 
 	// apply the new block to the MMR trees and check the new root hashes
-	if b.header.previous == ctx.head.last_block_h {
-		// standard head extension
-		ext.apply_block(b)?;
-	} else {
-		// extending a fork, first identify the block where forking occurred
-		// keeping the hashes of blocks along the fork
-		let mut current = b.header.previous;
-		let mut hashes = vec![];
-		loop {
-			let curr_header = ctx.store.get_block_header(&current)?;
-
-			if let Ok(_) = ctx.store.is_on_current_chain(&curr_header) {
-				break;
-			} else {
-				hashes.insert(0, curr_header.hash());
-				current = curr_header.previous;
-			}
-		}
-
-		let forked_block = ctx.store.get_block(&current)?;
-
-		debug!(
-			LOGGER,
-			"validate_block: forked_block: {} at {}",
-			forked_block.header.hash(),
-			forked_block.header.height,
-		);
-
-		// rewind the sum trees up to the forking block
-		ext.rewind(&forked_block)?;
-
-		// apply all forked blocks, including this new one
-		for h in hashes {
-			let fb = ctx.store.get_block(&h).map_err(|e| {
-				Error::StoreErr(e, format!("getting forked blocks"))
-			})?;
-			ext.apply_block(&fb)?;
-		}
-		ext.apply_block(&b)?;
-	}
+	ext.apply_block(&b)?;
 
 	let (utxo_root, rproof_root, kernel_root) = ext.roots();
 	if utxo_root.hash != b.header.utxo_root || rproof_root.hash != b.header.range_proof_root
@@ -312,8 +298,6 @@ fn validate_block(
 				if let Ok(output_header) = ctx.store
 					.get_block_header_by_output_commit(&input.commitment())
 				{
-					// TODO - make sure we are not off-by-1 here vs. the equivalent tansaction
-					// validation rule
 					if b.header.height <= output_header.height + global::coinbase_maturity() {
 						return Err(Error::ImmatureCoinbase);
 					}
@@ -349,7 +333,7 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 	if tip.total_difficulty > ctx.head.total_difficulty {
 		// update the block height index
 		ctx.store
-			.setup_height(&b.header)
+			.setup_height(&b.header, &ctx.head)
 			.map_err(|e| Error::StoreErr(e, "pipe setup height".to_owned()))?;
 
 		// in sync mode, only update the "body chain", otherwise update both the
@@ -365,12 +349,17 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 				.map_err(|e| Error::StoreErr(e, "pipe save head".to_owned()))?;
 		}
 		ctx.head = tip.clone();
-		info!(
+		debug!(
 			LOGGER,
-			"Updated head to {} at {}.",
+			"pipe: update_head: {}, {} at {}",
 			b.hash(),
+			b.header.total_difficulty,
 			b.header.height
 		);
+		if b.header.height % 500 == 0 {
+			info!(LOGGER, "pipe: chain head reached {} @ {} [{}]",
+				b.header.height, b.header.difficulty, b.hash());
+		}
 		Ok(Some(tip))
 	} else {
 		Ok(None)
@@ -384,31 +373,83 @@ fn update_sync_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<T
 		.save_sync_head(&tip)
 		.map_err(|e| Error::StoreErr(e, "pipe save sync head".to_owned()))?;
 	ctx.head = tip.clone();
-	info!(
+	debug!(
 		LOGGER,
-		"pipe: updated sync head to {} at {}.",
+		"pipe: update_sync_head: {}, {} at {}",
 		bh.hash(),
+		bh.total_difficulty,
 		bh.height,
 	);
+	if bh.height % 1000 == 0 {
+		info!(LOGGER, "pipe: sync head reached {} [{}]", bh.height, bh.hash());
+	}
 	Ok(Some(tip))
 }
 
 fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
 	let tip = Tip::from_block(bh);
-	debug!(LOGGER, "pipe: update_header_head {},{}", tip.total_difficulty, ctx.head.total_difficulty);
+	debug!(LOGGER, "pipe: update_header_head: {}, {}", tip.total_difficulty, ctx.head.total_difficulty);
 	if tip.total_difficulty > ctx.head.total_difficulty {
 		ctx.store
 			.save_header_head(&tip)
 			.map_err(|e| Error::StoreErr(e, "pipe save header head".to_owned()))?;
 		ctx.head = tip.clone();
-		info!(
+		debug!(
 			LOGGER,
-			"pipe: updated header head to {} at {}.",
+			"pipe: update_header_head: {}, {} at {}",
 			bh.hash(),
+			bh.total_difficulty,
 			bh.height,
 		);
 		Ok(Some(tip))
 	} else {
 		Ok(None)
 	}
+}
+
+/// Utility function to handle forks. From the forked block, jump backward
+/// to find to fork root. Rewind the sumtrees to the root and apply all the
+/// forked blocks prior to the one being processed to set the sumtrees in
+/// the expected state.
+pub fn rewind_and_apply_fork(
+	b: &Block,
+	store: Arc<ChainStore>,
+	ext: &mut sumtree::Extension,
+) -> Result<(), Error> {
+
+	// extending a fork, first identify the block where forking occurred
+	// keeping the hashes of blocks along the fork
+	let mut current = b.header.previous;
+	let mut hashes = vec![];
+	loop {
+		let curr_header = store.get_block_header(&current)?;
+
+		if let Ok(_) = store.is_on_current_chain(&curr_header) {
+			break;
+		} else {
+			hashes.insert(0, curr_header.hash());
+			current = curr_header.previous;
+		}
+	}
+
+	let forked_block = store.get_block(&current)?;
+
+	debug!(
+		LOGGER,
+		"validate_block: forked_block: {} at {}",
+		forked_block.header.hash(),
+		forked_block.header.height,
+		);
+
+	// rewind the sum trees up to the forking block
+	ext.rewind(&forked_block)?;
+
+	// apply all forked blocks, including this new one
+	for h in hashes {
+		let fb = store.get_block(&h).map_err(|e| {
+			Error::StoreErr(e, format!("getting forked blocks"))
+		})?;
+		ext.apply_block(&fb)?;
+	}
+	Ok(())
 }

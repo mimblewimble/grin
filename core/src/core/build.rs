@@ -25,10 +25,9 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use util::{secp, static_secp_instance};
+use util::{secp, static_secp_instance, kernel_sig_msg};
 
 use core::{Input, Output, SwitchCommitHash, Transaction, DEFAULT_OUTPUT};
-use core::transaction::kernel_sig_msg;
 use util::LOGGER;
 use keychain;
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
@@ -138,7 +137,7 @@ pub fn transaction(
 	);
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
 	let msg = secp::Message::from_slice(&kernel_sig_msg(tx.fee, tx.lock_height))?;
-	let sig = ctx.keychain.sign_with_blinding(&msg, &blind_sum)?;
+	let sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &blind_sum)?;
 
 	let secp = static_secp_instance();
 	let secp = secp.lock().unwrap();

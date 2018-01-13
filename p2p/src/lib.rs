@@ -47,7 +47,7 @@ extern crate tokio_timer;
 mod conn;
 pub mod handshake;
 mod rate_limit;
-mod msg;
+pub mod msg;
 mod peer;
 mod peers;
 mod protocol;

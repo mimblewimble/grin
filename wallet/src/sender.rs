@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use serde_json;
-
 use api;
 use client;
 use checker;
-use core::core::{build, Transaction};
+use core::core::{build, Transaction, amount_to_hr_string};
 use core::ser;
 use keychain::{BlindingFactor, Identifier, Keychain};
 use receiver::TxWrapper;
@@ -27,7 +25,7 @@ use util;
 
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
-/// UTXOs. The destination can be "stdout" (for command line) or a URL to the
+/// UTXOs. The destination can be "stdout" (for command line) (currently disabled) or a URL to the
 /// recipients wallet receiver (to be implemented).
 
 pub fn issue_send_tx(
@@ -37,7 +35,7 @@ pub fn issue_send_tx(
 	minimum_confirmations: u64,
 	dest: String,
 	max_outputs: usize,
-	selection_strategy: bool,
+	selection_strategy_is_use_all: bool,
 ) -> Result<(), Error> {
 	checker::refresh_outputs(config, keychain)?;
 
@@ -55,10 +53,18 @@ pub fn issue_send_tx(
 		minimum_confirmations,
 		lock_height,
 		max_outputs,
-		selection_strategy,
+		selection_strategy_is_use_all,
 	)?;
+	/*
+	 * -Sender picks random blinding factors for all outputs it participates in, computes total blinding excess xS
+	 * -Sender picks random nonce kS
+	 * -Sender posts inputs, outputs, Message M=fee, xS * G and kS * G to Receiver
+	*/
 
-	let partial_tx = build_partial_tx(amount, blind_sum, tx);
+// Create a new aggsig context
+	keychain.aggsig_create_context(blind_sum.secret_key());
+
+	let partial_tx = build_partial_tx(keychain, amount, None, tx);
 
 	// Closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
@@ -74,27 +80,74 @@ pub fn issue_send_tx(
 		wallet_data.delete_output(&change_key);
 	});
 
-	if dest == "stdout" {
+	// TODO: stdout option removed for now, as it won't work very will with this version of
+	// aggsig exchange
+
+	/*if dest == "stdout" {
 		let json_tx = serde_json::to_string_pretty(&partial_tx).unwrap();
 		update_wallet()?;
 		println!("{}", json_tx);
-	} else if &dest[..4] == "http" {
-		let url = format!("{}/v1/receive/transaction", &dest);
-		debug!(LOGGER, "Posting partial transaction to {}", url);
-		let res = client::send_partial_tx(&url, &partial_tx);
-		match res {
-			Err(_) => {
-				error!(LOGGER, "Communication with receiver failed. Aborting transaction");
-				rollback_wallet()?;
-				return res;
-			}
-			Ok(_) => {
-				update_wallet()?;
-			}
-		}
-	} else {
-		panic!("dest not in expected format: {}", dest);
+	} else */
+
+	if &dest[..4] != "http" {
+		panic!("dest formatted as {} but send -d expected stdout or http://IP:port", dest);
 	}
+
+	let url = format!("{}/v1/receive/transaction", &dest);
+	debug!(LOGGER, "Posting partial transaction to {}", url);
+	let res = client::send_partial_tx(&url, &partial_tx);
+	if let Err(e) = res {
+		match e {
+			Error::FeeExceedsAmount {sender_amount, recipient_fee} => 
+				error!(
+					LOGGER, 
+					"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
+					amount_to_hr_string(recipient_fee),
+					amount_to_hr_string(sender_amount)
+				),
+			_ => error!(LOGGER, "Communication with receiver failed on SenderInitiation send. Aborting transaction"),
+		}
+		rollback_wallet()?;
+		return Err(e);
+	}
+
+	/* -Sender receives xR * G, kR * G, sR
+	 * -Sender computes Schnorr challenge e = H(M | kR * G + kS * G)
+	 * -Sender verifies receivers sig, by verifying that kR * G + e * xR * G = sR * G·
+	 * -Sender computes their part of signature, sS = kS + e * xS
+	 * -Sender posts sS to receiver
+	*/
+	let (_amount, recp_pub_blinding, recp_pub_nonce, sig, tx) = read_partial_tx(keychain, &res.unwrap())?;
+	let res = keychain.aggsig_verify_partial_sig(&sig.unwrap(), &recp_pub_nonce, &recp_pub_blinding, tx.fee, lock_height);
+	if !res {
+		error!(LOGGER, "Partial Sig from recipient invalid.");
+		return Err(Error::Signature(String::from("Partial Sig from recipient invalid.")));
+	}
+
+	let sig_part=keychain.aggsig_calculate_partial_sig(&recp_pub_nonce, tx.fee, tx.lock_height).unwrap();
+
+	// Build the next stage, containing sS (and our pubkeys again, for the recipient's convenience) 
+	let mut partial_tx = build_partial_tx(keychain, amount, Some(sig_part), tx);
+	partial_tx.phase = PartialTxPhase::SenderConfirmation;
+
+	// And send again
+	let res = client::send_partial_tx(&url, &partial_tx);
+	if let Err(e) = res {
+		match e {
+			Error::FeeExceedsAmount {sender_amount, recipient_fee} => 
+				error!(
+					LOGGER, 
+					"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
+					amount_to_hr_string(recipient_fee),
+					amount_to_hr_string(sender_amount)
+				),
+			_ => error!(LOGGER, "Communication with receiver failed on SenderConfirmation send. Aborting transaction"),
+		}
+		rollback_wallet()?;
+		return Err(e);
+	}
+	//All good so
+	update_wallet()?;
 	Ok(())
 }
 
@@ -109,19 +162,19 @@ fn build_send_tx(
 	minimum_confirmations: u64,
 	lock_height: u64,
 	max_outputs: usize,
-	default_strategy: bool,
+	selection_strategy_is_use_all: bool,
 ) -> Result<(Transaction, BlindingFactor, Vec<OutputData>, Identifier), Error> {
 	let key_id = keychain.clone().root_key_id();
 
 	// select some spendable coins from the wallet
 	let coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		wallet_data.select(
+		wallet_data.select_coins(
 			key_id.clone(),
 			amount,
 			current_height,
 			minimum_confirmations,
 			max_outputs,
-			default_strategy,
+			selection_strategy_is_use_all,
 		)
 	})?;
 
@@ -155,7 +208,7 @@ pub fn issue_burn_tx(
 
 	// select some spendable coins from the wallet
 	let coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		wallet_data.select(
+		wallet_data.select_coins(
 			key_id.clone(),
 			amount,
 			current_height,
@@ -199,15 +252,15 @@ fn inputs_and_change(
 	}
 
 	// sender is responsible for setting the fee on the partial tx
- // recipient should double check the fee calculation and not blindly trust the
- // sender
+	// recipient should double check the fee calculation and not blindly trust the
+	// sender
 	let fee = tx_fee(coins.len(), 2, None);
 	parts.push(build::with_fee(fee));
 
 	// if we are spending 10,000 coins to send 1,000 then our change will be 9,000
- // the fee will come out of the amount itself
- // if the fee is 80 then the recipient will only receive 920
- // but our change will still be 9,000
+	// the fee will come out of the amount itself
+	// if the fee is 80 then the recipient will only receive 920
+	// but our change will still be 9,000
 	let change = total - amount;
 
 	// build inputs using the appropriate derived key_ids

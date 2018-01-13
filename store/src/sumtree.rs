@@ -229,6 +229,9 @@ impl RemoveLog {
 		// backing it up before truncating
 		self.removed_bak = self.removed.clone();
 
+		// backing it up before truncating
+		self.removed_bak = self.removed.clone();
+
 		if last_offs == 0 {
 			self.removed = vec![];
 		} else {

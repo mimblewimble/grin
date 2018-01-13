@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::thread;
+use std::{cmp, thread};
 use std::time::Duration;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -30,6 +30,7 @@ pub fn run_sync(
 	currently_syncing: Arc<AtomicBool>,
 	peers: p2p::Peers,
 	chain: Arc<chain::Chain>,
+	skip_sync_wait: bool,
 ) {
 
 	let chain = chain.clone();
@@ -40,7 +41,9 @@ pub fn run_sync(
 			let mut prev_header_sync = prev_body_sync.clone();
 
 			// initial sleep to give us time to peer with some nodes
-			thread::sleep(Duration::from_secs(30));
+			if !skip_sync_wait {
+				thread::sleep(Duration::from_secs(30));
+			}
 
 			loop {
 				let syncing = needs_syncing(
@@ -110,11 +113,9 @@ fn body_sync(peers: Peers, chain: Arc<chain::Chain>) {
 	}
 	hashes.reverse();
 
-	// if we have 5 most_work_peers then ask for 50 blocks total (peer_count * 10)
-	// max will be 80 if all 8 peers are advertising most_work
-	let peer_count = {
-		peers.most_work_peers().len()
-	};
+	// if we have 5 peers to sync from then ask for 50 blocks total (peer_count * 10)
+	// max will be 80 if all 8 peers are advertising more work
+	let peer_count = cmp::min(peers.more_work_peers().len(), 10);
 	let block_count = peer_count * 10;
 
 	let hashes_to_get = hashes
@@ -139,7 +140,8 @@ fn body_sync(peers: Peers, chain: Arc<chain::Chain>) {
 			);
 
 		for hash in hashes_to_get.clone() {
-			let peer = peers.most_work_peer();
+			// TODO - Is there a threshold where we sync from most_work_peer (not more_work_peer)?
+			let peer = peers.more_work_peer();
 			if let Some(peer) = peer {
 				if let Ok(peer) = peer.try_read() {
 					let _ = peer.send_block_request(hash);
@@ -156,6 +158,7 @@ pub fn header_sync(peers: Peers, chain: Arc<chain::Chain>) {
 		if let Some(peer) = peers.most_work_peer() {
 			if let Ok(p) = peer.try_read() {
 				let peer_difficulty = p.info.total_difficulty.clone();
+				debug!(LOGGER, "sync: header_sync: {}, {}", difficulty, peer_difficulty);
 				if peer_difficulty > difficulty {
 					let _ = request_headers(
 						peer.clone(),
@@ -208,8 +211,9 @@ pub fn needs_syncing(
 		if let Some(peer) = peer {
 			if let Ok(peer) = peer.try_read() {
 				if peer.info.total_difficulty <= local_diff {
-					info!(LOGGER, "sync: caught up on most worked chain, disabling sync");
+					info!(LOGGER, "synchronize stopped, at {:?} @ {:?}", local_diff, chain.head().unwrap().height);
 					currently_syncing.store(false, Ordering::Relaxed);
+					let _ = chain.reset_head();
 				}
 			}
 		} else {

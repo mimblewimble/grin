@@ -1,5 +1,5 @@
 # Documentation structure
-- [FAQ][faq.md] - Frequently Asked Questions
+- [FAQ](faq.md) - Frequently Asked Questions
 - [build](build.md) - Explaining how to build and run the Grin binaries
 - [chain_sync](chain/chain_sync.md) - About how Grin's blockchain is synchronized
 - [blocks_and_headers](chain/blocks_and_headers.md) - How Grin tracks blocks and headers on the chain

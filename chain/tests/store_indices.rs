@@ -21,9 +21,10 @@ extern crate rand;
 
 use std::fs;
 
-use chain::ChainStore;
+use chain::{ChainStore, Tip};
 use core::core::hash::Hashed;
 use core::core::Block;
+use core::core::target::Difficulty;
 use keychain::Keychain;
 use core::global;
 use core::global::ChainTypes;
@@ -45,14 +46,20 @@ fn test_various_store_indices() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis = pow::mine_genesis_block(None).unwrap();
 	chain_store.save_block(&genesis).unwrap();
-	chain_store.setup_height(&genesis.header).unwrap();
+	chain_store.setup_height(&genesis.header, &Tip::new(genesis.hash())).unwrap();
 
-	let block = Block::new(&genesis.header, vec![], &keychain, &key_id).unwrap();
+	let block = Block::new(
+		&genesis.header,
+		vec![],
+		&keychain,
+		&key_id,
+		Difficulty::minimum()
+	).unwrap();
 	let commit = block.outputs[0].commitment();
 	let block_hash = block.hash();
 
 	chain_store.save_block(&block).unwrap();
-	chain_store.setup_height(&block.header).unwrap();
+	chain_store.setup_height(&block.header, &Tip::from_block(&block.header)).unwrap();
 
 	let block_header = chain_store.get_block_header(&block_hash).unwrap();
 	assert_eq!(block_header.hash(), block_hash);

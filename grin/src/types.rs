@@ -16,6 +16,7 @@ use std::convert::From;
 
 use api;
 use chain;
+use core::core;
 use p2p;
 use pool;
 use store;
@@ -26,6 +27,8 @@ use core::global::ChainTypes;
 /// Error type wrapping underlying module errors.
 #[derive(Debug)]
 pub enum Error {
+	/// Error originating from the core implementation.
+	Core(core::block::Error),
 	/// Error originating from the db storage.
 	Store(store::Error),
 	/// Error originating from the blockchain implementation.
@@ -39,6 +42,11 @@ pub enum Error {
 	Cuckoo(pow::cuckoo::Error),
 }
 
+impl From<core::block::Error> for Error {
+	fn from(e: core::block::Error) -> Error {
+		Error::Core(e)
+	}
+}
 impl From<chain::Error> for Error {
 	fn from(e: chain::Error) -> Error {
 		Error::Chain(e)
@@ -128,6 +136,10 @@ pub struct ServerConfig {
 	/// Transaction pool configuration
 	#[serde(default)]
 	pub pool_config: pool::PoolConfig,
+
+	/// Whether to skip the sync timeout on startup
+	/// (To assist testing on solo chains)
+	pub skip_sync_wait: Option<bool>,
 }
 
 impl Default for ServerConfig {
@@ -142,6 +154,7 @@ impl Default for ServerConfig {
 			mining_config: Some(pow::types::MinerConfig::default()),
 			chain_type: ChainTypes::default(),
 			pool_config: pool::PoolConfig::default(),
+			skip_sync_wait: Some(true),
 		}
 	}
 }

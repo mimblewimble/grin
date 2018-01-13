@@ -37,15 +37,13 @@ use types::*;
 use util;
 use util::LOGGER;
 
-
 // RESTful index of available api endpoints
 // GET /v1/
 struct IndexHandler {
 	list: Vec<String>,
 }
 
-impl IndexHandler {
-}
+impl IndexHandler {}
 
 impl Handler for IndexHandler {
 	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
@@ -64,12 +62,13 @@ struct UtxoHandler {
 impl UtxoHandler {
 	fn get_utxo(&self, id: &str, include_rp: bool, include_switch: bool) -> Result<Output, Error> {
 		debug!(LOGGER, "getting utxo: {}", id);
-		let c = util::from_hex(String::from(id)).map_err(|_| {
-			Error::Argument(format!("Not a valid commitment: {}", id))
-		})?;
+		let c = util::from_hex(String::from(id))
+			.map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
 		let commit = Commitment::from_vec(c);
 
-		let out = self.chain.get_unspent(&commit).map_err(|_| Error::NotFound)?;
+		let out = self.chain
+			.get_unspent(&commit)
+			.map_err(|_| Error::NotFound)?;
 
 		let header = self.chain
 			.get_block_header_by_output_commit(&commit)
@@ -120,8 +119,8 @@ impl UtxoHandler {
 		let outputs = block
 			.outputs
 			.iter()
-			.filter(|c|self.chain.is_unspent(&c.commit).unwrap())
-			.map(|k|OutputSwitch::from_output(k, &header))
+			.filter(|c| self.chain.is_unspent(&c.commit).unwrap())
+			.map(|k| OutputSwitch::from_output(k, &header))
 			.collect();
 		BlockOutputs {
 			header: BlockHeaderInfo::from_header(&header),
@@ -162,7 +161,7 @@ impl Handler for UtxoHandler {
 		}
 		match *path_elems.last().unwrap() {
 			"byids" => json_response(&self.utxos_by_ids(req)),
-			"atheight" => json_response(&self.utxo_block_batch(req)),
+			"byheight" => json_response(&self.utxo_block_batch(req)),
 			_ => Ok(Response::with((status::BadRequest, ""))),
 		}
 	}
@@ -257,15 +256,14 @@ impl Handler for PeersConnectedHandler {
 	}
 }
 
-/// Get details about a given peer and peer operations
-/// TODO GET /v1/peers/10.12.12.13
+/// Peer operations
 /// POST /v1/peers/10.12.12.13/ban
-/// TODO POST /v1/peers/10.12.12.13/unban
-pub struct PeerHandler {
+/// POST /v1/peers/10.12.12.13/unban
+pub struct PeerPostHandler {
 	pub peers: p2p::Peers,
 }
 
-impl Handler for PeerHandler {
+impl Handler for PeerPostHandler {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		let url = req.url.clone();
 		let mut path_elems = url.path();
@@ -273,24 +271,68 @@ impl Handler for PeerHandler {
 			path_elems.pop();
 		}
 		match *path_elems.last().unwrap() {
-      "ban" => {
-        path_elems.pop();
-        if let Ok(addr) = path_elems.last().unwrap().parse() {
-          self.peers.ban_peer(&addr);
-          Ok(Response::with((status::Ok, "")))
-        } else {
-          Ok(Response::with((status::BadRequest, "")))
-        }
-      }
-      "unban" => {
-        // TODO
-        Ok(Response::with((status::BadRequest, "")))
-      }
-      _ => {
-        // TODO peer details
-        Ok(Response::with((status::BadRequest, "")))
-      }
-    }
+			"ban" => {
+				path_elems.pop();
+				if let Ok(addr) = path_elems.last().unwrap().parse() {
+					self.peers.ban_peer(&addr);
+					Ok(Response::with((status::Ok, "")))
+				} else {
+					Ok(Response::with((status::BadRequest, "")))
+				}
+			}
+			"unban" => {
+				path_elems.pop();
+				if let Ok(addr) = path_elems.last().unwrap().parse() {
+					self.peers.unban_peer(&addr);
+					Ok(Response::with((status::Ok, "")))
+				} else {
+					Ok(Response::with((status::BadRequest, "")))
+				}
+			}
+			_ => Ok(Response::with((status::BadRequest, ""))),
+		}
+	}
+}
+
+/// Get details about a given peer
+pub struct PeerGetHandler {
+	pub peers: p2p::Peers,
+}
+
+impl Handler for PeerGetHandler {
+	fn handle(&self, req: &mut Request) -> IronResult<Response> {
+		let url = req.url.clone();
+		let mut path_elems = url.path();
+		if *path_elems.last().unwrap() == "" {
+			path_elems.pop();
+		}
+		if let Ok(addr) = path_elems.last().unwrap().parse() {
+			match self.peers.get_peer(addr) {
+				Ok(peer) => json_response(&peer),
+				Err(_) => Ok(Response::with((status::BadRequest, ""))),
+			}
+		} else {
+			Ok(Response::with((status::BadRequest, "")))
+		}
+	}
+}
+
+// Status handler. Post a summary of the server status
+// GET /v1/status
+pub struct StatusHandler {
+	pub chain: Arc<chain::Chain>,
+	pub peers: p2p::Peers,
+}
+
+impl StatusHandler {
+	fn get_status(&self) -> Status {
+		Status::from_tip_and_peers(self.chain.head().unwrap(), self.peers.peer_count())
+	}
+}
+
+impl Handler for StatusHandler {
+	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+		json_response(&self.get_status())
 	}
 }
 
@@ -321,7 +363,10 @@ pub struct BlockHandler {
 
 impl BlockHandler {
 	fn get_block(&self, h: &Hash) -> Result<BlockPrintable, Error> {
-		let block = self.chain.clone().get_block(h).map_err(|_| Error::NotFound)?;
+		let block = self.chain
+			.clone()
+			.get_block(h)
+			.map_err(|_| Error::NotFound)?;
 		Ok(BlockPrintable::from_block(&block))
 	}
 
@@ -337,8 +382,7 @@ impl BlockHandler {
 			static ref RE: Regex = Regex::new(r"[0-9a-fA-F]{64}").unwrap();
 		}
 		if !RE.is_match(&input) {
-			return Err(Error::Argument(
-					String::from("Not a valid hash or height.")))
+			return Err(Error::Argument(String::from("Not a valid hash or height.")));
 		}
 		let vec = util::from_hex(input).unwrap();
 		Ok(Hash::from_vec(vec))
@@ -395,18 +439,14 @@ where
 	T: pool::BlockChain + Send + Sync + 'static,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let wrapper: TxWrapper = serde_json::from_reader(req.body.by_ref()).map_err(|e| {
-			IronError::new(e, status::BadRequest)
-		})?;
+		let wrapper: TxWrapper = serde_json::from_reader(req.body.by_ref())
+			.map_err(|e| IronError::new(e, status::BadRequest))?;
 
-		let tx_bin = util::from_hex(wrapper.tx_hex).map_err(|_| {
-			Error::Argument(format!("Invalid hex in transaction wrapper."))
-		})?;
+		let tx_bin = util::from_hex(wrapper.tx_hex)
+			.map_err(|_| Error::Argument(format!("Invalid hex in transaction wrapper.")))?;
 
 		let tx: Transaction = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
-			Error::Argument(
-				"Could not deserialize transaction, invalid format.".to_string(),
-			)
+			Error::Argument("Could not deserialize transaction, invalid format.".to_string())
 		})?;
 
 		let source = pool::TxSource {
@@ -419,15 +459,13 @@ where
 			tx.inputs.len(),
 			tx.outputs.len()
 		);
-		self.tx_pool
-			.write()
-			.unwrap()
-			.add_to_memory_pool(source, tx)
-			.map_err(|e| {
-				Error::Internal(format!("Addition to transaction pool failed: {:?}", e))
-			})?;
 
-		Ok(Response::with(status::Ok))
+		let res = self.tx_pool.write().unwrap().add_to_memory_pool(source, tx);
+
+		match res {
+			Ok(()) => Ok(Response::with(status::Ok)),
+			Err(e) => Err(IronError::from(Error::Argument(format!("{:?}", e)))),
+		}
 	}
 }
 
@@ -463,9 +501,9 @@ pub fn start_rest_apis<T>(
 ) where
 	T: pool::BlockChain + Send + Sync + 'static,
 {
-let _ = thread::Builder::new()
-	.name("apis".to_string())
-	.spawn(move || {
+	let _ = thread::Builder::new()
+		.name("apis".to_string())
+		.spawn(move || {
 			// build handlers and register them under the appropriate endpoint
 			let utxo_handler = UtxoHandler {
 				chain: chain.clone(),
@@ -475,6 +513,10 @@ let _ = thread::Builder::new()
 			};
 			let chain_tip_handler = ChainHandler {
 				chain: chain.clone(),
+			};
+			let status_handler = StatusHandler {
+				chain: chain.clone(),
+				peers: peers.clone(),
 			};
 			let sumtree_handler = SumTreeHandler {
 				chain: chain.clone(),
@@ -491,14 +533,18 @@ let _ = thread::Builder::new()
 			let peers_connected_handler = PeersConnectedHandler {
 				peers: peers.clone(),
 			};
-			let peer_handler = PeerHandler {
+			let peer_post_handler = PeerPostHandler {
+				peers: peers.clone(),
+			};
+			let peer_get_handler = PeerGetHandler {
 				peers: peers.clone(),
 			};
 
-			let route_list = vec!(
+			let route_list = vec![
 				"get blocks".to_string(),
 				"get chain".to_string(),
 				"get chain/utxos".to_string(),
+				"get status".to_string(),
 				"get sumtrees/roots".to_string(),
 				"get sumtrees/lastutxos?n=10".to_string(),
 				"get sumtrees/lastrangeproofs".to_string(),
@@ -506,9 +552,11 @@ let _ = thread::Builder::new()
 				"get pool".to_string(),
 				"post pool/push".to_string(),
 				"post peers/a.b.c.d:p/ban".to_string(),
+				"post peers/a.b.c.d:p/unban".to_string(),
 				"get peers/all".to_string(),
 				"get peers/connected".to_string(),
-			);
+				"get peers/a.b.c.d".to_string(),
+			];
 			// We allow manually banning, like this:
 			// curl -v -X POST http://127.0.0.1:13413/v1/peers/88.99.251.87:13414/ban
 			let index_handler = IndexHandler { list: route_list };
@@ -517,12 +565,14 @@ let _ = thread::Builder::new()
 				blocks: get "/blocks/*" => block_handler,
 				chain_tip: get "/chain" => chain_tip_handler,
 				chain_utxos: get "/chain/utxos/*" => utxo_handler,
+				status: get "/status" => status_handler,
 				sumtree_roots: get "/sumtrees/*" => sumtree_handler,
 				pool_info: get "/pool" => pool_info_handler,
 				pool_push: post "/pool/push" => pool_push_handler,
 				peers_all: get "/peers/all" => peers_all_handler,
 				peers_connected: get "/peers/connected" => peers_connected_handler,
-				peer: post "/peers/*" => peer_handler,
+				peer: post "/peers/*" => peer_post_handler,
+				peer: get "/peers/*" => peer_get_handler
 			);
 
 			let mut apis = ApiServer::new("/v1".to_string());
@@ -532,5 +582,5 @@ let _ = thread::Builder::new()
 			apis.start(&addr[..]).unwrap_or_else(|e| {
 				error!(LOGGER, "Failed to start API HTTP server: {}.", e);
 			});
-	});
+		});
 }

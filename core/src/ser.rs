@@ -23,8 +23,9 @@ use std::{cmp, error, fmt};
 use std::io::{self, Read, Write};
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use keychain::{Identifier, IDENTIFIER_SIZE};
-use core::hash::Hashed;
+use consensus;
 use consensus::VerifySortOrder;
+use core::hash::Hashed;
 use core::transaction::{SWITCH_COMMIT_HASH_SIZE, SwitchCommitHash};
 use util::secp::pedersen::Commitment;
 use util::secp::pedersen::RangeProof;
@@ -46,13 +47,19 @@ pub enum Error {
 	CorruptedData,
 	/// When asked to read too much data
 	TooLargeReadErr,
-	/// Something was not sorted when consensus rules requires it to be sorted
-	BadlySorted,
+	/// Consensus rule failure (currently sort order)
+	ConsensusError(consensus::Error),
 }
 
 impl From<io::Error> for Error {
 	fn from(e: io::Error) -> Error {
 		Error::IOErr(e)
+	}
+}
+
+impl From<consensus::Error> for Error {
+	fn from(e: consensus::Error) -> Error {
+		Error::ConsensusError(e)
 	}
 }
 
@@ -66,7 +73,7 @@ impl fmt::Display for Error {
 			} => write!(f, "expected {:?}, got {:?}", e, r),
 			Error::CorruptedData => f.write_str("corrupted data"),
 			Error::TooLargeReadErr => f.write_str("too large read"),
-			Error::BadlySorted => f.write_str("badly sorted data"),
+			Error::ConsensusError(ref e) => write!(f, "consensus error {:?}", e),
 		}
 	}
 }
@@ -88,7 +95,7 @@ impl error::Error for Error {
 			} => "unexpected data",
 			Error::CorruptedData => "corrupted data",
 			Error::TooLargeReadErr => "too large read",
-			Error::BadlySorted => "badly sorted data",
+			Error::ConsensusError(_) => "consensus error (sort order)",
 		}
 	}
 }
@@ -420,10 +427,10 @@ where
 
 impl<T> WriteableSorted for Vec<T>
 where
-	T: Writeable + Hashed,
+	T: Writeable + Ord,
 {
 	fn write_sorted<W: Writer>(&mut self, writer: &mut W) -> Result<(), Error> {
-		self.sort_by_key(|elmt| elmt.hash());
+		self.sort();
 		for elmt in self {
 			elmt.write(writer)?;
 		}

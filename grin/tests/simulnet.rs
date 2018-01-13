@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[macro_use]
-extern crate router;
-
 extern crate grin_api as api;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
@@ -37,20 +34,18 @@ use std::default::Default;
 use futures::{Async, Future, Poll};
 use futures::task::current;
 use tokio_core::reactor;
-use tokio_timer::Timer;
 
-use core::consensus;
 use core::global;
 use core::global::ChainTypes;
-use wallet::WalletConfig;
 
-use framework::{LocalServerContainer, LocalServerContainerConfig, LocalServerContainerPool,
+use framework::{LocalServerContainerConfig, LocalServerContainerPool,
                 LocalServerContainerPoolConfig};
 
 /// Testing the frameworks by starting a fresh server, creating a genesis
 /// Block and mining into a wallet for a bit
 #[test]
 fn basic_genesis_mine() {
+	util::init_test_logger();
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "genesis_mine";
@@ -70,7 +65,8 @@ fn basic_genesis_mine() {
 	// Create a server to add into the pool
 	let mut server_config = LocalServerContainerConfig::default();
 	server_config.start_miner = true;
-	server_config.start_wallet = true;
+	server_config.start_wallet = false;
+	server_config.burn_mining_rewards = true;
 
 	pool.create_server(&mut server_config);
 	pool.run_all_servers();
@@ -90,7 +86,7 @@ fn simulate_seeding() {
 	pool_config.base_name = String::from(test_name_dir);
 	pool_config.run_length_in_seconds = 30;
 
-	// have to select different ports because of tests being run in parallel
+	// have to use different ports because of tests being run in parallel
 	pool_config.base_api_port = 30020;
 	pool_config.base_p2p_port = 31020;
 	pool_config.base_wallet_port = 32020;
@@ -100,7 +96,8 @@ fn simulate_seeding() {
 	// Create a first seed server to add into the pool
 	let mut server_config = LocalServerContainerConfig::default();
 	// server_config.start_miner = true;
-	server_config.start_wallet = true;
+	server_config.start_wallet = false;
+	server_config.burn_mining_rewards = true;
 	server_config.is_seeding = true;
 
 	pool.create_server(&mut server_config);
@@ -142,7 +139,7 @@ fn simulate_parallel_mining() {
 	let mut pool_config = LocalServerContainerPoolConfig::default();
 	pool_config.base_name = String::from(test_name_dir);
 	pool_config.run_length_in_seconds = 60;
-	// have to select different ports because of tests being run in parallel
+	// have to use different ports because of tests being run in parallel
 	pool_config.base_api_port = 30040;
 	pool_config.base_p2p_port = 31040;
 	pool_config.base_wallet_port = 32040;
@@ -279,7 +276,7 @@ fn simulate_full_sync() {
 	// instantiates 2 servers on different ports
 	let mut servers = vec![];
 	for n in 0..2 {
-		let mut config = grin::ServerConfig {
+		let config = grin::ServerConfig {
 			api_http_addr: format!("127.0.0.1:{}", 19000 + n),
 			db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
 			p2p_config: Some(p2p::P2PConfig {

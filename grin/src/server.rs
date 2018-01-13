@@ -161,10 +161,16 @@ impl Server {
 			_ => {}
 		}
 
+		let skip_sync_wait = match config.skip_sync_wait {
+			None => false,
+			Some(b) => b,
+		};
+
 		sync::run_sync(
 			currently_syncing.clone(),
 			p2p_server.peers.clone(),
 			shared_chain.clone(),
+			skip_sync_wait,
 			);
 
 		evt_handle.spawn(p2p_server.start(evt_handle.clone()).map_err(|_| ()));
