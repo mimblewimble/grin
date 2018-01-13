@@ -61,8 +61,8 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 		let title=format!("Wallet Summary Info - Block Height: {}", current_height);
 		let mut t = term::stdout().unwrap();
 		t.fg(term::color::MAGENTA).unwrap();
-		writeln!(t, "{}", title).unwrap();
-		writeln!(t, "--------------------------").unwrap();
+		writeln!(t, "--------------------------").unwrap(); // separator above, to avoid bug font
+		writeln!(t, "{}\n", title).unwrap(); // when pasted in gitter.
 		t.reset().unwrap();
 
 		let mut table = table!(
@@ -117,7 +117,7 @@ fn show_stats(config: &WalletConfig) {
 			bFB->"Sent or Received at",
 			bFB->"Receiving Wallet Address"
 		]);
-   
+
 		// Add a row per time
 		for txr in stats {
 			let tx_type = format!("{:?}", txr.tx_type);
