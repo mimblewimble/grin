@@ -17,19 +17,17 @@ use keychain::Keychain;
 use core::core::amount_to_hr_string;
 use types::{WalletConfig, WalletData, OutputStatus};
 use prettytable;
-use term;
-use std::io::prelude::*;
 
 pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 	let result = checker::refresh_outputs(&config, &keychain);
 
 
 	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		let current_height = match checker::get_tip_from_node(config) {
-			Ok(tip) => tip.height,
+		let (current_height, from) = match checker::get_tip_from_node(config) {
+			Ok(tip) => (tip.height, "from server node"),
 			Err(_) => match wallet_data.outputs.values().map(|out| out.height).max() {
-				Some(height) => height,
-				None => 0,
+				Some(height) => (height, "from wallet"),
+				None => (0, "node/wallet unavailable"),
 			},
 		};
 		let mut unspent_total=0;
@@ -55,15 +53,7 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 			}
 		};
 
-
-		println!();
-		let title=format!("Wallet Summary Info - Block Height: {}", current_height);
-		let mut t = term::stdout().unwrap();
-		t.fg(term::color::MAGENTA).unwrap();
-		writeln!(t, "{}", title).unwrap();
-		writeln!(t, "--------------------------").unwrap();
-		t.reset().unwrap();
-
+		println!("\n____ Wallet Summary Info at {} ({}) ____\n", current_height, from);
 		let mut table = table!(
 			[bFG->"Total", FG->amount_to_hr_string(unspent_total+unconfirmed_total)],
 			[bFY->"Awaiting Confirmation", FY->amount_to_hr_string(unconfirmed_total)],
