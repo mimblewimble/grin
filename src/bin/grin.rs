@@ -198,6 +198,11 @@ fn main() {
 				.short("l")
 				.long("port")
 				.help("Port on which to run the wallet listener")
+				.takes_value(true))
+			.arg(Arg::with_name("operator_port")
+				.short("o")
+				.long("operator_port")
+				.help("Port on which to run the wallet operator listener")
 				.takes_value(true)))
 
 		.subcommand(SubCommand::with_name("receive")
@@ -422,6 +427,9 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 		("listen", Some(listen_args)) => {
 			if let Some(port) = listen_args.value_of("port") {
 				wallet_config.api_listen_port = port.to_string();
+			}
+			if let Some(port) = listen_args.value_of("operator_port") {
+				wallet_config.api_operator_listen_port = port.to_string();
 			}
 			wallet::server::start_rest_apis(wallet_config, keychain);
 		}
