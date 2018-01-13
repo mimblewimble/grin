@@ -582,6 +582,8 @@ impl Miner {
 			difficulty
 		);
 
+		debug!(LOGGER, "{:?}", b.inputs.clone());
+
 		// making sure we're not spending time mining a useless block
 		b.validate()?;
 

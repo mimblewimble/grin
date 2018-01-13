@@ -314,7 +314,16 @@ impl<'a> Extension<'a> {
 					return Err(Error::SumTreeErr(format!("output pmmr hash mismatch")));
 				}
 
-				let block = self.commit_index.get_block(&input.out_block)?;
+				// edge case here - we me be spending an output with zero-confirmations
+				// so we do now know what block it originates from
+				// but it might have just been included in the latest block
+				let block = if input.out_block == Hash::zero() {
+					let head = self.commit_index.head()?;
+					self.commit_index.get_block(&head.last_block_h)?
+				} else {
+					self.commit_index.get_block(&input.out_block)?
+				};
+
 				block.verify_coinbase_maturity(&sum_commit, height)
 					.map_err(|_| Error::ImmatureCoinbase)?;
 			}
