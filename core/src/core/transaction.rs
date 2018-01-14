@@ -162,6 +162,13 @@ impl TxKernel {
 		}
 		Ok(())
 	}
+
+	/// Size in bytes of a kernel, necessary for binary storage
+	pub fn size() -> usize {
+		17 + // features plus fee and lock_height
+			secp::constants::PEDERSEN_COMMITMENT_SIZE +
+			secp::constants::COMPACT_SIGNATURE_SIZE
+	}
 }
 
 /// A transaction

@@ -624,7 +624,7 @@ impl PruneList {
 /// node's position. Starts with the top peak, which is always on the left
 /// side of the range, and navigates toward lower siblings toward the right
 /// of the range.
-fn peaks(num: u64) -> Vec<u64> {
+pub fn peaks(num: u64) -> Vec<u64> {
 	// detecting an invalid mountain range, when siblings exist but no parent
 	// exists
 	if bintree_postorder_height(num + 1) > bintree_postorder_height(num) {

@@ -47,7 +47,7 @@ pub const RM_LOG_MAX_NODES: usize = 10000;
 /// Despite being append-only, the file can still be pruned and truncated. The
 /// former simply happens by rewriting it, ignoring some of the data. The
 /// latter by truncating the underlying file and re-creating the mmap.
-struct AppendOnlyFile {
+pub struct AppendOnlyFile {
 	path: String,
 	file: File,
 	mmap: Option<memmap::Mmap>,
@@ -58,7 +58,7 @@ struct AppendOnlyFile {
 
 impl AppendOnlyFile {
 	/// Open a file (existing or not) as append-only, backed by a mmap.
-	fn open(path: String) -> io::Result<AppendOnlyFile> {
+	pub fn open(path: String) -> io::Result<AppendOnlyFile> {
 		let file = OpenOptions::new()
 			.read(true)
 			.append(true)
@@ -83,13 +83,13 @@ impl AppendOnlyFile {
 
 	/// Append data to the file. Until the append-only file is synced, data is
 	/// only written to memory.
-	fn append(&mut self, buf: &mut Vec<u8>) {
+	pub fn append(&mut self, buf: &mut Vec<u8>) {
 		self.buffer.append(buf);
 	}
 
 	/// Rewinds the data file back to a lower position. The new position needs
 	/// to be the one of the first byte the next time data is appended.
-	fn rewind(&mut self, pos: u64) {
+	pub fn rewind(&mut self, pos: u64) {
 		if self.buffer_start_bak > 0 || self.buffer.len() > 0 {
 			panic!("Can't rewind on a dirty state.");
 		}
@@ -99,7 +99,7 @@ impl AppendOnlyFile {
 
 	/// Syncs all writes (fsync), reallocating the memory map to make the newly
 	/// written data accessible.
-	fn flush(&mut self) -> io::Result<()> {
+	pub fn flush(&mut self) -> io::Result<()> {
 		if self.buffer_start_bak > 0 {
 			// flushing a rewound state, we need to truncate before applying
 			self.truncate(self.buffer_start)?;
@@ -111,6 +111,16 @@ impl AppendOnlyFile {
 		self.buffer = vec![];
 		self.mmap = Some(unsafe { memmap::Mmap::map(&self.file)? });
 		Ok(())
+	}
+
+	/// Discard the current non-flushed data.
+	pub fn discard(&mut self) {
+		if self.buffer_start_bak > 0 {
+			// discarding a rewound state, restore the buffer start
+			self.buffer_start = self.buffer_start_bak;
+			self.buffer_start_bak = 0;
+		}
+		self.buffer = vec![];
 	}
 
 	/// Read length bytes of data at offset from the file. Leverages the memory
@@ -125,16 +135,6 @@ impl AppendOnlyFile {
 		}
 		let mmap = self.mmap.as_ref().unwrap();
 		(&mmap[offset..(offset + length)]).to_vec()
-	}
-
-	/// Discard the current non-flushed data.
-	fn discard(&mut self) {
-		if self.buffer_start_bak > 0 {
-			// discarding a rewound state, restore the buffer start
-			self.buffer_start = self.buffer_start_bak;
-			self.buffer_start_bak = 0;
-		}
-		self.buffer = vec![];
 	}
 
 	/// Truncates the underlying file to the provided offset

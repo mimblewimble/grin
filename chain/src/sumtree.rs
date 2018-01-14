@@ -19,16 +19,17 @@ use std::fs;
 use std::collections::HashMap;
 use std::fs::File;
 use std::ops::Deref;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use util::secp::pedersen::{RangeProof, Commitment};
 
 use core::core::{Block, SumCommit, Input, Output, TxKernel, COINBASE_OUTPUT};
-use core::core::pmmr::{HashSum, NoSum, Summable, PMMR};
+use core::core::pmmr::{HashSum, NoSum, Summable, PMMR, peaks};
 use core::core::hash::Hashed;
+use core::ser;
 use grin_store;
-use grin_store::sumtree::PMMRBackend;
+use grin_store::sumtree::{PMMRBackend, AppendOnlyFile};
 use types::ChainStore;
 use types::Error;
 use util::{LOGGER, zip};
@@ -37,6 +38,7 @@ const SUMTREES_SUBDIR: &'static str = "sumtrees";
 const UTXO_SUBDIR: &'static str = "utxo";
 const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
 const KERNEL_SUBDIR: &'static str = "kernel";
+const KERNEL_FILE: &'static str = "kernel_full_data.bin";
 const SUMTREES_ZIP: &'static str = "sumtrees_snapshot.zip";
 
 struct PMMRHandle<T>
@@ -72,10 +74,14 @@ where
 /// guaranteed to indicate whether an output is spent or not. The index
 /// may have commitments that have already been spent, even with
 /// pruning enabled.
+///
+/// In addition of the sumtrees, this maintains the full list of kernel
+/// data so it can be easily packaged for sync or validation.
 pub struct SumTrees {
 	output_pmmr_h: PMMRHandle<SumCommit>,
 	rproof_pmmr_h: PMMRHandle<NoSum<RangeProof>>,
 	kernel_pmmr_h: PMMRHandle<NoSum<TxKernel>>,
+	kernel_file: AppendOnlyFile,
 
 	// chain store used as index of commitments to MMR positions
 	commit_index: Arc<ChainStore>,
@@ -84,10 +90,16 @@ pub struct SumTrees {
 impl SumTrees {
 	/// Open an existing or new set of backends for the SumTrees
 	pub fn open(root_dir: String, commit_index: Arc<ChainStore>) -> Result<SumTrees, Error> {
+		let mut kernel_file_path: PathBuf = [&root_dir, SUMTREES_SUBDIR, KERNEL_SUBDIR].iter().collect();
+		fs::create_dir_all(kernel_file_path.clone())?;
+		kernel_file_path.push(KERNEL_FILE);
+		let kernel_file = AppendOnlyFile::open(kernel_file_path.to_str().unwrap().to_owned())?;
+
 		Ok(SumTrees {
 			output_pmmr_h: PMMRHandle::new(root_dir.clone(), UTXO_SUBDIR)?,
 			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR)?,
 			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR)?,
+			kernel_file: kernel_file,
 			commit_index: commit_index,
 		})
 	}
@@ -170,10 +182,12 @@ where
 	let res: Result<T, Error>;
 	let rollback: bool;
 	{
-		debug!(LOGGER, "Starting new sumtree extension.");
 		let commit_index = trees.commit_index.clone();
+
+		debug!(LOGGER, "Starting new sumtree extension.");
 		let mut extension = Extension::new(trees, commit_index);
 		res = inner(&mut extension);
+
 		rollback = extension.rollback;
 		if res.is_ok() && !rollback {
 			extension.save_pos_index()?;
@@ -186,6 +200,7 @@ where
 			trees.output_pmmr_h.backend.discard();
 			trees.rproof_pmmr_h.backend.discard();
 			trees.kernel_pmmr_h.backend.discard();
+			trees.kernel_file.discard();
 			Err(e)
 		}
 		Ok(r) => {
@@ -194,11 +209,13 @@ where
 				trees.output_pmmr_h.backend.discard();
 				trees.rproof_pmmr_h.backend.discard();
 				trees.kernel_pmmr_h.backend.discard();
+				trees.kernel_file.discard();
 			} else {
 				debug!(LOGGER, "Committing sumtree extension.");
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
+				trees.kernel_file.flush()?;
 				trees.output_pmmr_h.last_pos = sizes.0;
 				trees.rproof_pmmr_h.last_pos = sizes.1;
 				trees.kernel_pmmr_h.last_pos = sizes.2;
@@ -218,6 +235,7 @@ pub struct Extension<'a> {
 	rproof_pmmr: PMMR<'a, NoSum<RangeProof>, PMMRBackend<NoSum<RangeProof>>>,
 	kernel_pmmr: PMMR<'a, NoSum<TxKernel>, PMMRBackend<NoSum<TxKernel>>>,
 
+	kernel_file: &'a mut AppendOnlyFile,
 	commit_index: Arc<ChainStore>,
 	new_output_commits: HashMap<Commitment, u64>,
 	new_kernel_excesses: HashMap<Commitment, u64>,
@@ -226,7 +244,11 @@ pub struct Extension<'a> {
 
 impl<'a> Extension<'a> {
 	// constructor
-	fn new(trees: &'a mut SumTrees, commit_index: Arc<ChainStore>) -> Extension<'a> {
+	fn new(
+		trees: &'a mut SumTrees,
+		commit_index: Arc<ChainStore>,
+	) -> Extension<'a> {
+
 		Extension {
 			output_pmmr: PMMR::at(
 				&mut trees.output_pmmr_h.backend,
@@ -240,6 +262,7 @@ impl<'a> Extension<'a> {
 				&mut trees.kernel_pmmr_h.backend,
 				trees.kernel_pmmr_h.last_pos,
 			),
+			kernel_file: &mut trees.kernel_file,
 			commit_index: commit_index,
 			new_output_commits: HashMap::new(),
 			new_kernel_excesses: HashMap::new(),
@@ -376,11 +399,14 @@ impl<'a> Extension<'a> {
 				}
 			}
 		}
-		// push kernels in their MMR
+
+		// push kernels in their MMR and file
 		let pos = self.kernel_pmmr
 			.push(NoSum(kernel.clone()))
 			.map_err(&Error::SumTreeErr)?;
 		self.new_kernel_excesses.insert(kernel.excess, pos);
+		self.kernel_file.append(&mut ser::ser_vec(&kernel).unwrap());
+
 		Ok(())
 	}
 
@@ -394,8 +420,18 @@ impl<'a> Extension<'a> {
 			block.header.height,
 		);
 
+		// rewind each MMR
 		let (out_pos_rew, kern_pos_rew) = indexes_at(block, self.commit_index.deref())?;
-		self.rewind_pos(block.header.height, out_pos_rew, kern_pos_rew)
+		self.rewind_pos(block.header.height, out_pos_rew, kern_pos_rew)?;
+		
+		// rewind the kernel file store, the position is the number of kernels
+		// multiplied by their size
+		// the number of kernels is the number of leaves in the MMR, which is the
+		// sum of the number of leaf nodes under each peak in the MMR
+		let pos: u64 = peaks(kern_pos_rew).iter().map(|n| (1 << n) as u64).sum();
+		self.kernel_file.rewind(pos * (TxKernel::size() as u64));
+
+		Ok(())
 	}
 
 	/// Rewinds the MMRs to the provided positions, given the output and
