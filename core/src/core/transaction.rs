@@ -122,9 +122,9 @@ impl Writeable for TxKernel {
 			[write_u8, self.features.bits()],
 			[write_u64, self.fee],
 			[write_u64, self.lock_height],
-			[write_fixed_bytes, &self.excess],
-			[write_bytes, &self.excess_sig]
+			[write_fixed_bytes, &self.excess]
 		);
+		self.excess_sig.write(writer)?;
 		Ok(())
 	}
 }
@@ -134,19 +134,12 @@ impl Readable for TxKernel {
 		let features = KernelFeatures::from_bits(reader.read_u8()?).ok_or(
 			ser::Error::CorruptedData,
 		)?;
-
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
-
 		Ok(TxKernel {
 			features: features,
 			fee: reader.read_u64()?,
 			lock_height: reader.read_u64()?,
 			excess: Commitment::read(reader)?,
-			excess_sig: {
-				let b = reader.read_fixed_bytes(64)?;
-				Signature::from_compact(&secp, &b).unwrap()
-			},
+			excess_sig: Signature::read(reader)?,
 		})
 	}
 }
@@ -191,11 +184,15 @@ pub struct Transaction {
 /// write the transaction as binary.
 impl Writeable for Transaction {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		println!("Excess sig write: {:?}", self.excess_sig);
 		ser_multiwrite!(
 			writer,
 			[write_u64, self.fee],
-			[write_u64, self.lock_height],
-			[write_bytes, &self.excess_sig],
+			[write_u64, self.lock_height]
+		);
+		self.excess_sig.write(writer)?;
+		ser_multiwrite!(
+			writer,
 			[write_u64, self.inputs.len() as u64],
 			[write_u64, self.outputs.len() as u64]
 		);
@@ -215,11 +212,13 @@ impl Writeable for Transaction {
 /// transaction from a binary stream.
 impl Readable for Transaction {
 	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
-		let (fee, lock_height, excess_sig, input_len, output_len) =
-			ser_multiread!(reader, read_u64, read_u64, read_fixed_bytes(64), read_u64, read_u64);
+		let (fee, lock_height) =
+			ser_multiread!(reader, read_u64, read_u64);
 
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
+		let excess_sig = Signature::read(reader)?;
+
+		let (input_len, output_len) =
+			ser_multiread!(reader, read_u64, read_u64);
 
 		let inputs = read_and_verify_sorted(reader, input_len)?;
 		let outputs = read_and_verify_sorted(reader, output_len)?;
@@ -227,7 +226,7 @@ impl Readable for Transaction {
 		Ok(Transaction {
 			fee: fee,
 			lock_height: lock_height,
-			excess_sig: Signature::from_compact(&secp, &excess_sig).unwrap(),
+			excess_sig: excess_sig,
 			inputs: inputs,
 			outputs: outputs,
 			..Default::default()
@@ -664,7 +663,7 @@ mod test {
 		let commit = keychain.commit(5, &key_id).unwrap();
 
 		// just some bytes for testing ser/deser
-		let sig = vec![1, 0, 0, 0, 0, 0, 0, 1];
+		let sig = secp::Signature::from_compact(&keychain.secp(), &[0;64]).unwrap();
 
 		let kernel = TxKernel {
 			features: DEFAULT_KERNEL,
