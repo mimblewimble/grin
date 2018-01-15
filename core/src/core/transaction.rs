@@ -110,7 +110,7 @@ pub struct TxKernel {
 	pub excess: Commitment,
 	/// The signature proving the excess is a valid public key, which signs
 	/// the transaction fee.
-	pub excess_sig: Vec<u8>,
+	pub excess_sig: Signature,
 }
 
 hashable_ord!(TxKernel);
@@ -135,12 +135,18 @@ impl Readable for TxKernel {
 			ser::Error::CorruptedData,
 		)?;
 
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
+
 		Ok(TxKernel {
 			features: features,
 			fee: reader.read_u64()?,
 			lock_height: reader.read_u64()?,
 			excess: Commitment::read(reader)?,
-			excess_sig: reader.read_vec()?,
+			excess_sig: {
+				let b = reader.read_fixed_bytes(64)?;
+				Signature::from_compact(&secp, &b).unwrap()
+			},
 		})
 	}
 }
@@ -155,7 +161,7 @@ impl TxKernel {
 		));
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		let sig = try!(Signature::from_der(&secp, &self.excess_sig));
+		let sig = &self.excess_sig;
 		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &self.excess);
 		if !valid{
 			return Err(secp::Error::IncorrectSignature);
@@ -178,7 +184,7 @@ pub struct Transaction {
 	pub lock_height: u64,
 	/// The signature proving the excess is a valid public key, which signs
 	/// the transaction fee.
-	pub excess_sig: Vec<u8>,
+	pub excess_sig: Signature,
 }
 
 /// Implementation of Writeable for a fully blinded transaction, defines how to
@@ -210,7 +216,10 @@ impl Writeable for Transaction {
 impl Readable for Transaction {
 	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
 		let (fee, lock_height, excess_sig, input_len, output_len) =
-			ser_multiread!(reader, read_u64, read_u64, read_vec, read_u64, read_u64);
+			ser_multiread!(reader, read_u64, read_u64, read_fixed_bytes(64), read_u64, read_u64);
+
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
 
 		let inputs = read_and_verify_sorted(reader, input_len)?;
 		let outputs = read_and_verify_sorted(reader, output_len)?;
@@ -218,7 +227,7 @@ impl Readable for Transaction {
 		Ok(Transaction {
 			fee: fee,
 			lock_height: lock_height,
-			excess_sig: excess_sig,
+			excess_sig: Signature::from_compact(&secp, &excess_sig).unwrap(),
 			inputs: inputs,
 			outputs: outputs,
 			..Default::default()
@@ -247,10 +256,12 @@ impl Default for Transaction {
 impl Transaction {
 	/// Creates a new empty transaction (no inputs or outputs, zero fee).
 	pub fn empty() -> Transaction {
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
 		Transaction {
 			fee: 0,
 			lock_height: 0,
-			excess_sig: vec![],
+			excess_sig: Signature::from_compact(&secp, &[0;64]).unwrap(),
 			inputs: vec![],
 			outputs: vec![],
 		}
@@ -264,10 +275,12 @@ impl Transaction {
 		fee: u64,
 		lock_height: u64,
 	) -> Transaction {
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
 		Transaction {
 			fee: fee,
 			lock_height: lock_height,
-			excess_sig: vec![],
+			excess_sig: Signature::from_compact(&secp, &[0;64]).unwrap(),
 			inputs: inputs,
 			outputs: outputs,
 		}
@@ -323,7 +336,7 @@ impl Transaction {
 
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		let sig = Signature::from_der(&secp, &self.excess_sig)?;
+		let sig = self.excess_sig;
 		// pretend the sum is a public key (which it is, being of the form r.G) and
 		// verify the transaction sig with it
 		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &rsum);
