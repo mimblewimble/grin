@@ -23,7 +23,7 @@ use core::{
 	Committed,
 	Input,
 	Output,
-	SumCommit,
+	OutputIdentifier,
 	SwitchCommitHash,
 	Proof,
 	TxKernel,
@@ -580,22 +580,26 @@ impl Block {
 	///
 	/// TODO - move this to block_header
 	///
+	/// TODO - need to do this for non-coinbase? Have we already checked the output is what it says it it?
+	///
 	/// Confirm output is from the block we say it is
 	/// Calculate lock_height as block_height + 1,000
 	/// Confirm height <= lock_height
 	pub fn verify_coinbase_maturity(
 		&self,
-		sum_commit: &SumCommit,
+		output: &OutputIdentifier,
 		height: u64,
 	) -> Result<(), Error> {
-		debug!(LOGGER, "block: verify_coinbase_maturity: {}, {}", self.header.height, height);
+		debug!(LOGGER, "block: verify_coinbase_maturity: {:?}, {}, {}", output, height, self.header.height);
+
 		if let Some(out) = self.outputs
 			.iter()
 			.find(|x| {
-				SumCommit::from_output(&x).hash() == sum_commit.hash()
+				// OutputIdentifier::from_output(&x).hash() == output.hash()
+				OutputIdentifier::from_output(&x) == *output
 			})
 		{
-			if !sum_commit.features.contains(COINBASE_OUTPUT) {
+			if !output.features.contains(COINBASE_OUTPUT) {
 				return Ok(());
 			}
 

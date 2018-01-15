@@ -146,9 +146,8 @@ fn find_utxos_with_key(
 		*key_iterations,
 	);
 
-	for output in block_outputs.outputs {
+	for output in block_outputs.outputs.iter().filter(|x| !x.spent) {
 		for i in 0..*key_iterations {
-			// TODO - these are very similar, factor out duplicate code
 			let expected_hash = SwitchCommitHash::from_switch_commit(switch_commit_cache[i as usize]);
 
 			if let Ok(x) = output.switch_commit_hash() {

@@ -15,7 +15,7 @@ use core::core::hash;
 use core::core::hash::Hashed;
 use core::core::block;
 use core::core::transaction;
-use core::core::transaction::SumCommit;
+use core::core::transaction::OutputIdentifier;
 use types::{BlockChain, PoolError};
 use util::secp::pedersen::Commitment;
 
@@ -107,7 +107,7 @@ impl DummyChainImpl {
 }
 
 impl BlockChain for DummyChainImpl {
-	fn is_unspent(&self, output_ref: &SumCommit) -> Result<(), PoolError> {
+	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), PoolError> {
 		match self.utxo.read().unwrap().get_output(&output_ref.commit) {
 			Some(x) => Ok(()),
 			None => Err(PoolError::GenericPoolError),

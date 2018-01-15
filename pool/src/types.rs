@@ -26,7 +26,7 @@ pub use graph;
 
 use core::consensus;
 use core::core::{block, hash, transaction};
-use core::core::transaction::SumCommit;
+use core::core::transaction::OutputIdentifier;
 
 /// Tranasction pool configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -155,7 +155,7 @@ pub trait BlockChain {
 	/// orphans, etc.
 	/// We do not maintain outputs themselves. The only information we have is the
 	/// hash from the output MMR.
-	fn is_unspent(&self, output_ref: &SumCommit) -> Result<(), PoolError>;
+	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), PoolError>;
 
 	/// Get the block header at the head
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError>;

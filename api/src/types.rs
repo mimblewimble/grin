@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use core::{core, ser};
 use core::core::hash::Hashed;
-use core::core::SumCommit;
+use core::core::{OutputIdentifier, SumCommit};
 use chain;
 use util;
 use util::LOGGER;
@@ -78,7 +78,7 @@ impl SumTrees {
 pub struct SumTreeNode {
 	// The hash
 	pub hash: String,
-	// SumCommit (commitment + switch_commit_hash), optional (only for utxos)
+	// SumCommit (features|commitment), optional (only for utxos)
 	pub sum: Option<SumCommit>,
 }
 
@@ -169,8 +169,8 @@ impl OutputPrintable {
 				OutputType::Transaction
 			};
 
-		let sum_commit = core::SumCommit::from_output(&output);
-		let spent = chain.is_unspent(&sum_commit).is_err();
+		let out_id = core::OutputIdentifier::from_output(&output);
+		let spent = chain.is_unspent(&out_id).is_err();
 
 		let proof = if include_proof {
 			Some(util::to_hex(output.proof.bytes().to_vec()))

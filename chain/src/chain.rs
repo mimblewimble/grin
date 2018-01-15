@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 
 use util::secp::pedersen::{Commitment, RangeProof};
 
-use core::core::SumCommit;
+use core::core::{OutputIdentifier, SumCommit};
 use core::core::pmmr::{HashSum, NoSum};
 
 use core::core::{Block, BlockHeader, TxKernel};
@@ -335,7 +335,7 @@ impl Chain {
 	/// Return an error if the output does not exist or has been spent.
 	/// This querying is done in a way that is consistent with the current chain state,
 	/// specifically the current winning (valid, most work) fork.
-	pub fn is_unspent(&self, output_ref: &SumCommit) -> Result<(), Error> {
+	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.is_unspent(output_ref)
 	}

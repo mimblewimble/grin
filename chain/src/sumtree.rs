@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use core::core::{Block, SumCommit, Input, Output, TxKernel, COINBASE_OUTPUT};
+use core::core::{Block, SumCommit, Input, Output, OutputIdentifier, TxKernel, COINBASE_OUTPUT};
 use core::core::pmmr::{HashSum, NoSum, Summable, PMMR};
 use core::core::hash::{Hash, Hashed};
 use grin_store;
@@ -88,16 +88,16 @@ impl SumTrees {
 		})
 	}
 
-	// TODO - Do we want to pass a SumCommit around here or is this leaking an abstraction?
-	pub fn is_unspent(&mut self, sum_commit: &SumCommit) -> Result<(), Error> {
-		match self.commit_index.get_output_pos(&sum_commit.commit) {
+	pub fn is_unspent(&mut self, output: &OutputIdentifier) -> Result<(), Error> {
+		match self.commit_index.get_output_pos(&output.commit) {
 			Ok(pos) => {
 				let output_pmmr = PMMR::at(
 					&mut self.output_pmmr_h.backend,
 					self.output_pmmr_h.last_pos,
 				);
 				if let Some(hs) = output_pmmr.get(pos) {
-					let hash_sum = HashSum::from_summable(pos, sum_commit);
+					let sum_commit = output.as_sum_commit();
+					let hash_sum = HashSum::from_summable(pos, &sum_commit);
 					if hs.hash == hash_sum.hash {
 						Ok(())
 					} else {
@@ -314,9 +314,10 @@ impl<'a> Extension<'a> {
 					return Err(Error::SumTreeErr(format!("output pmmr hash mismatch")));
 				}
 
-				// edge case here - we me be spending an output with zero-confirmations
-				// so we do now know what block it originates from
-				// but it might have just been included in the latest block
+				// edge case here - we may be spending an output with zero-confirmations
+				// and it just got included in a block, but our wallet does not know yet
+				// so we do now know what block the output originates from
+				// assume included in the latest block?
 				let block = if input.out_block == Hash::zero() {
 					let head = self.commit_index.head()?;
 					self.commit_index.get_block(&head.last_block_h)?
@@ -324,7 +325,8 @@ impl<'a> Extension<'a> {
 					self.commit_index.get_block(&input.out_block)?
 				};
 
-				block.verify_coinbase_maturity(&sum_commit, height)
+				let output = OutputIdentifier::from_input(&input);
+				block.verify_coinbase_maturity(&output, height)
 					.map_err(|_| Error::ImmatureCoinbase)?;
 			}
 

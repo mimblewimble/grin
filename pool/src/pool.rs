@@ -18,7 +18,7 @@ use types::*;
 pub use graph;
 
 use core::core::transaction;
-use core::core::SumCommit;
+use core::core::OutputIdentifier;
 
 use core::core::block;
 use core::core::hash;
@@ -70,7 +70,7 @@ where
 	/// Detects double spends and unknown references from the pool and
 	/// blockchain only; any conflicts with entries in the orphans set must
 	/// be accounted for separately, if relevant.
-	pub fn search_for_best_output(&self, output_ref: &SumCommit) -> Parent {
+	pub fn search_for_best_output(&self, output_ref: &OutputIdentifier) -> Parent {
 		// The current best unspent set is:
 		//   Pool unspent + (blockchain unspent - pool->blockchain spent)
 		//   Pool unspents are unconditional so we check those first
@@ -88,7 +88,7 @@ where
 	// search_blockchain_unspents searches the current view of the blockchain
 	// unspent set, represented by blockchain unspents - pool spents, for an
 	// output designated by output_commitment.
-	fn search_blockchain_unspents(&self, output_ref: &SumCommit) -> Option<Parent> {
+	fn search_blockchain_unspents(&self, output_ref: &OutputIdentifier) -> Option<Parent> {
 		self.blockchain
 			.is_unspent(output_ref)
 			.ok()
@@ -178,14 +178,14 @@ where
 		debug!(LOGGER, "add_to_memory_pool: {:?}", &tx.inputs);
 
 		for input in &tx.inputs {
-			let sum_commit = SumCommit::from_input(&input);
-			let base = graph::Edge::new(None, Some(tx_hash), sum_commit.clone());
+			let output = OutputIdentifier::from_input(&input);
+			let base = graph::Edge::new(None, Some(tx_hash), output.clone());
 
 			// Note that search_for_best_output does not examine orphans, by
 			// design. If an incoming transaction consumes pool outputs already
 			// spent by the orphans set, this does not preclude its inclusion
 			// into the pool.
-			match self.search_for_best_output(&sum_commit) {
+			match self.search_for_best_output(&output) {
 				Parent::PoolTransaction { tx_ref: x } => pool_refs.push(base.with_source(Some(x))),
 				Parent::BlockTransaction => {
 					let height = head_header.height + 1;
@@ -215,27 +215,27 @@ where
 		}
 
 		// Assertion: we have exactly as many resolved spending references as
-  // inputs to the transaction.
+		// inputs to the transaction.
 		assert_eq!(
 			tx.inputs.len(),
 			blockchain_refs.len() + pool_refs.len() + orphan_refs.len()
 		);
 
 		// At this point we know if we're spending all known unspents and not
-  // creating any duplicate unspents.
+		// creating any duplicate unspents.
 		let pool_entry = graph::PoolEntry::new(&tx);
 		let new_unspents = tx.outputs
 			.iter()
 			.map(|x| {
-				let sum_commit = SumCommit::from_output(&x);
-				graph::Edge::new(Some(tx_hash), None, sum_commit)
+				let output = OutputIdentifier::from_output(&x);
+				graph::Edge::new(Some(tx_hash), None, output)
 			})
 			.collect();
 
 		if !is_orphan {
 			// In the non-orphan (pool) case, we've ensured that every input
-   // maps one-to-one with an unspent (available) output, and each
-   // output is unique. No further checks are necessary.
+			// maps one-to-one with an unspent (available) output, and each
+			// output is unique. No further checks are necessary.
 			self.pool
 				.add_pool_transaction(pool_entry, blockchain_refs, pool_refs, new_unspents);
 
@@ -300,12 +300,12 @@ where
 		// Checking against current blockchain unspent outputs
 		// We want outputs even if they're spent by pool txs, so we ignore
 		// consumed_blockchain_outputs
-		let sum_commit = SumCommit::from_output(&output);
-		if self.blockchain.is_unspent(&sum_commit).is_ok() {
+		let out = OutputIdentifier::from_output(&output);
+		if self.blockchain.is_unspent(&out).is_ok() {
 			return Err(PoolError::DuplicateOutput {
 				other_tx: None,
 				in_chain: true,
-				output: output.commitment(),
+				output: out.commit,
 			});
 		}
 
@@ -316,7 +316,7 @@ where
 				return Err(PoolError::DuplicateOutput {
 					other_tx: Some(x),
 					in_chain: false,
-					output: output.commitment(),
+					output: output.commit,
 				})
 			}
 			None => {}

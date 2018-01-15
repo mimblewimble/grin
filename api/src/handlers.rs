@@ -24,7 +24,7 @@ use serde::Serialize;
 use serde_json;
 
 use chain;
-use core::core::{SumCommit, Transaction, DEFAULT_OUTPUT, COINBASE_OUTPUT};
+use core::core::{OutputIdentifier, Transaction, DEFAULT_OUTPUT, COINBASE_OUTPUT};
 use core::core::hash::{Hash, Hashed};
 use core::ser;
 use pool;
@@ -67,12 +67,12 @@ impl UtxoHandler {
 		// We need the features here to be able to generate the necessary hash
 		// to compare against the hash in the output MMR.
 		// For now we can just try both (but this probably needs to be part of the api params)
-		let sum_commits = [
-			SumCommit::new(DEFAULT_OUTPUT, &commit),
-			SumCommit::new(COINBASE_OUTPUT, &commit)
+		let outputs = [
+			OutputIdentifier::new(DEFAULT_OUTPUT, &commit),
+			OutputIdentifier::new(COINBASE_OUTPUT, &commit)
 		];
 
-		for x in sum_commits.iter() {
+		for x in outputs.iter() {
 			if let Ok(_) = self.chain.is_unspent(&x) {
 				return Ok(Utxo::new(&commit))
 			}

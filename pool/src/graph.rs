@@ -25,7 +25,7 @@ use std::fmt;
 
 use core::core;
 use core::core::hash::Hashed;
-use core::core::SumCommit;
+use core::core::OutputIdentifier;
 
 /// An entry in the transaction pool.
 /// These are the vertices of both of the graph structures
@@ -69,7 +69,7 @@ pub struct Edge {
 
 	// Output is the output hash which this input/output pairing corresponds
 	// to.
-	output: SumCommit,
+	output: OutputIdentifier,
 }
 
 impl Edge {
@@ -77,7 +77,7 @@ impl Edge {
 	pub fn new(
 		source: Option<core::hash::Hash>,
 		destination: Option<core::hash::Hash>,
-		output: SumCommit,
+		output: OutputIdentifier,
 	) -> Edge {
 		Edge {
 			source: source,
@@ -104,7 +104,7 @@ impl Edge {
 		}
 	}
 
-	pub fn output(&self) -> SumCommit {
+	pub fn output(&self) -> OutputIdentifier {
 		self.output.clone()
 	}
 

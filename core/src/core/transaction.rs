@@ -661,6 +661,74 @@ impl Output {
 	}
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct OutputIdentifier {
+	/// Output features (coinbase vs. regular transaction output)
+	/// We need to include this when hashing to ensure coinbase maturity can be enforced.
+	pub features: OutputFeatures,
+	/// Output commitment
+	pub commit: Commitment,
+}
+
+impl OutputIdentifier {
+	pub fn new(features: OutputFeatures, commit: &Commitment) -> OutputIdentifier {
+		OutputIdentifier {
+			features: features.clone(),
+			commit: commit.clone(),
+		}
+	}
+
+	pub fn from_output(output: &Output) -> OutputIdentifier {
+		OutputIdentifier {
+			features: output.features,
+			commit: output.commit,
+		}
+	}
+
+	pub fn from_input(input: &Input) -> OutputIdentifier {
+		OutputIdentifier {
+			features: input.features,
+			commit: input.commit,
+		}
+	}
+
+	pub fn to_hex(&self) -> String {
+		format!(
+			"{:b}{}",
+			self.features.bits(),
+			util::to_hex(self.commit.0.to_vec()),
+		)
+	}
+
+	pub fn as_sum_commit(&self) -> SumCommit {
+		SumCommit::new(self.features, &self.commit)
+	}
+
+	pub fn from_sum_commit(sum_commit: &SumCommit) -> OutputIdentifier {
+		OutputIdentifier::new(sum_commit.features, &sum_commit.commit)
+	}
+}
+
+impl Writeable for OutputIdentifier {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u8(self.features.bits())?;
+		self.commit.write(writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for OutputIdentifier {
+	fn read(reader: &mut Reader) -> Result<OutputIdentifier, ser::Error> {
+		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
+			ser::Error::CorruptedData,
+		)?;
+		Ok(OutputIdentifier {
+			commit: Commitment::read(reader)?,
+			features: features,
+		})
+	}
+}
+
 /// Wrapper to Output commitments to provide the Summable trait.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SumCommit {
