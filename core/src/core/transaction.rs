@@ -255,12 +255,10 @@ impl Default for Transaction {
 impl Transaction {
 	/// Creates a new empty transaction (no inputs or outputs, zero fee).
 	pub fn empty() -> Transaction {
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
 		Transaction {
 			fee: 0,
 			lock_height: 0,
-			excess_sig: Signature::from_compact(&secp, &[0;64]).unwrap(),
+			excess_sig: Signature::from_raw_data(&[0;64]).unwrap(),
 			inputs: vec![],
 			outputs: vec![],
 		}
@@ -274,12 +272,10 @@ impl Transaction {
 		fee: u64,
 		lock_height: u64,
 	) -> Transaction {
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
 		Transaction {
 			fee: fee,
 			lock_height: lock_height,
-			excess_sig: Signature::from_compact(&secp, &[0;64]).unwrap(),
+			excess_sig: Signature::from_raw_data(&[0;64]).unwrap(),
 			inputs: inputs,
 			outputs: outputs,
 		}
@@ -663,7 +659,7 @@ mod test {
 		let commit = keychain.commit(5, &key_id).unwrap();
 
 		// just some bytes for testing ser/deser
-		let sig = secp::Signature::from_compact(&keychain.secp(), &[0;64]).unwrap();
+		let sig = secp::Signature::from_raw_data(&[0;64]).unwrap();
 
 		let kernel = TxKernel {
 			features: DEFAULT_KERNEL,
