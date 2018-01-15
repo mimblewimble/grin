@@ -14,12 +14,13 @@
 
 extern crate term;
 
+use std::net::SocketAddr;
 use api;
 use grin::ServerConfig;
 
 pub fn show_status(config: &ServerConfig) {
 	println!();
-	let title = format!("Grin Server Status ");
+	let title = format!("Grin Server Status");
 	let mut t = term::stdout().unwrap();
 	let mut e = term::stdout().unwrap();
 	t.fg(term::color::MAGENTA).unwrap();
@@ -43,6 +44,27 @@ pub fn show_status(config: &ServerConfig) {
 	};
 	e.reset().unwrap();
 	println!();
+}
+
+pub fn ban_peer(config: &ServerConfig, peer_addr: &SocketAddr) {
+	let params = "";
+	let mut e = term::stdout().unwrap();
+	let url = format!("http://{}/v1/peers/{}/ban", config.api_http_addr, peer_addr.to_string());
+	match api::client::post(url.as_str(), &params).map_err(|e| Error::API(e)) {
+		Ok(_) => writeln!(e, "Successfully banned peer {}", peer_addr.to_string()).unwrap(),
+		Err(_) => writeln!(e, "Failed to ban peer {}", peer_addr).unwrap(),
+	};
+	e.reset().unwrap();
+}
+
+pub fn unban_peer(config: &ServerConfig, peer_addr: &SocketAddr) {
+	let params = "";
+	let mut e = term::stdout().unwrap();
+	let url = format!("http://{}/v1/peers/{}/unban", config.api_http_addr, peer_addr.to_string());
+	match api::client::post(url.as_str(), &params).map_err(|e| Error::API(e)) {
+		Ok(_) => writeln!(e, "Successfully unbanned peer {}", peer_addr).unwrap(),
+		Err(_) => writeln!(e, "Failed to unban peer {}", peer_addr).unwrap(),
+	};
 }
 
 fn get_status_from_node(config: &ServerConfig) -> Result<api::Status, Error> {

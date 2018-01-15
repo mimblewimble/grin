@@ -139,7 +139,7 @@ fn main() {
                      .short("w")
                      .long("wallet_url")
                      .help("The wallet listener to which mining rewards will be sent")
-                .takes_value(true))
+                	.takes_value(true))
                 .subcommand(SubCommand::with_name("start")
                             .about("Start the Grin server as a daemon"))
                 .subcommand(SubCommand::with_name("stop")
@@ -151,7 +151,22 @@ fn main() {
     .subcommand(SubCommand::with_name("client")
                 .about("Communicates with the Grin server")
                 .subcommand(SubCommand::with_name("status")
-                            .about("current status of the Grin chain")))
+                            .about("current status of the Grin chain"))
+				.subcommand(SubCommand::with_name("ban")
+							.about("Ban peer")
+							.arg(Arg::with_name("peer")
+								.short("p")
+								.long("peer")
+								.help("Peer ip and port (e.g. 10.12.12.13:13414)")
+								.takes_value(true)))
+				.subcommand(SubCommand::with_name("unban")
+							.about("Unban peer")
+							.arg(Arg::with_name("peer")
+								.short("p")
+								.long("peer")
+								.help("Peer ip and port (e.g. 10.12.12.13:13414)")
+								.takes_value(true))))
+
 
 	// specification of the wallet commands and options
 	.subcommand(SubCommand::with_name("wallet")
@@ -370,6 +385,24 @@ fn client_command(client_args: &ArgMatches, global_config: GlobalConfig) {
 		("status", Some(_)) => {
 			client::show_status(&server_config);
 		}
+		("ban", Some(peer_args)) => {
+			if let Some(peer) = peer_args.value_of("peer") {
+				if let Ok(addr) = peer.parse() {
+					client::ban_peer(&server_config, &addr);
+				} else {
+					panic!("Invalid peer address format");
+				}
+			}
+		}
+		("unban", Some(peer_args)) => {
+			if let Some(peer) = peer_args.value_of("peer") {
+				if let Ok(addr) = peer.parse() {
+					client::unban_peer(&server_config, &addr);
+				} else {
+					panic!("Invalid peer address format");
+				}
+			}
+		}
 		_ => panic!("Unknown client command, use 'grin help client' for details"),
 	}
 }
@@ -492,7 +525,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				}
 				Err(wallet::Error::FeeExceedsAmount {sender_amount, recipient_fee}) => {
 					error!(
-						LOGGER, 
+						LOGGER,
 						"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
 						amount_to_hr_string(recipient_fee),
 						amount_to_hr_string(sender_amount)
