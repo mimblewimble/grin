@@ -290,7 +290,7 @@ impl TxKernelPrintable {
 			fee: k.fee,
 			lock_height: k.lock_height,
 			excess: util::to_hex(k.excess.0.to_vec()),
-			excess_sig: util::to_hex(k.excess_sig.to_vec()),
+			excess_sig: util::to_hex(k.excess_sig.to_raw_data().to_vec()),
 		}
 	}
 }
