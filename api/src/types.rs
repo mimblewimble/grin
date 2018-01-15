@@ -286,14 +286,12 @@ pub struct TxKernelPrintable {
 
 impl TxKernelPrintable {
 	pub fn from_txkernel(k: &core::TxKernel) -> TxKernelPrintable {
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
 		TxKernelPrintable {
 			features: format!("{:?}", k.features),
 			fee: k.fee,
 			lock_height: k.lock_height,
 			excess: util::to_hex(k.excess.0.to_vec()),
-			excess_sig: util::to_hex(k.excess_sig.serialize_compact(&secp).to_vec()),
+			excess_sig: util::to_hex(k.excess_sig.to_raw_data().to_vec()),
 		}
 	}
 }
