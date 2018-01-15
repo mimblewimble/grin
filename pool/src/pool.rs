@@ -22,6 +22,8 @@ use core::core::OutputIdentifier;
 
 use core::core::block;
 use core::core::hash;
+use core::core::target::Difficulty;
+use core::global;
 
 use util::LOGGER;
 use util::secp::pedersen::Commitment;
@@ -734,7 +736,7 @@ mod tests {
    // a valid transaction.
 			let valid_transaction = test_transaction(vec![5, 6], vec![9]);
 
-			match write_pool.add_to_memory_pool(test_source(), valid_transaction) {
+			match write_pool.add_to_memory_pool(test_source(), valid_transaction.clone()) {
 				Ok(_) => {}
 				Err(x) => panic!("Unexpected error while adding a valid transaction: {:?}", x),
 			};
@@ -761,9 +763,15 @@ mod tests {
 				}
 			};
 
-			let already_in_pool = test_transaction(vec![5, 6], vec![9]);
+			// Note, this used to work as expected, but after aggsig implementation
+			// creating another transaction with the same inputs/outputs doesn't create
+			// the same hash ID due to the random nonces in an aggsig. This
+			// will instead throw a (correct as well) Already spent error. An AlreadyInPool
+			// error can only come up in the case of the exact same transaction being
+			// added
+			//let already_in_pool = test_transaction(vec![5, 6], vec![9]);
 
-			match write_pool.add_to_memory_pool(test_source(), already_in_pool) {
+			match write_pool.add_to_memory_pool(test_source(), valid_transaction) {
 				Ok(_) => panic!("Expected error when adding already in pool, got Ok"),
 				Err(x) => {
 					match x {
@@ -907,6 +915,7 @@ mod tests {
 			txs.iter().collect(),
 			&keychain,
 			&key_id,
+			Difficulty::minimum(),
 		).unwrap();
 
 		// now apply the block to ensure the chainstate is updated before we reconcile
@@ -1037,6 +1046,7 @@ mod tests {
 			block_transactions,
 			&keychain,
 			&key_id,
+			Difficulty::minimum(),
 		).unwrap();
 
 		chain_ref.apply_block(&block);
@@ -1160,8 +1170,13 @@ mod tests {
 
 			let keychain = Keychain::from_random_seed().unwrap();
 			let key_id = keychain.derive_key_id(1).unwrap();
-			block = block::Block::new(&block::BlockHeader::default(), tx_refs, &keychain, &key_id)
-				.unwrap();
+			block = block::Block::new(
+				&block::BlockHeader::default(),
+				tx_refs,
+				&keychain,
+				&key_id,
+				Difficulty::minimum()
+			).unwrap();
 		}
 
 		chain_ref.apply_block(&block);

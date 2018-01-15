@@ -35,8 +35,9 @@ use consensus;
 use consensus::{exceeds_weight, reward, MINIMUM_DIFFICULTY, REWARD, VerifySortOrder};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
-use core::transaction::{self, kernel_sig_msg};
+use core::transaction;
 use ser::{self, Readable, Reader, Writeable, Writer, WriteableSorted, read_and_verify_sorted};
+use util::kernel_sig_msg;
 use util::LOGGER;
 use global;
 use keychain;
@@ -303,6 +304,7 @@ impl Block {
 		txs: Vec<&Transaction>,
 		keychain: &keychain::Keychain,
 		key_id: &keychain::Identifier,
+		difficulty: Difficulty,
 	) -> Result<Block, Error> {
 		let fees = txs.iter().map(|tx| tx.fee).sum();
 		let (reward_out, reward_proof) = Block::reward_output(
@@ -311,7 +313,7 @@ impl Block {
 			fees,
 			prev.height + 1,
 		)?;
-		let block = Block::with_reward(prev, txs, reward_out, reward_proof)?;
+		let block = Block::with_reward(prev, txs, reward_out, reward_proof, difficulty)?;
 		Ok(block)
 	}
 
@@ -323,6 +325,7 @@ impl Block {
 		txs: Vec<&Transaction>,
 		reward_out: Output,
 		reward_kern: TxKernel,
+		difficulty: Difficulty,
 	) -> Result<Block, Error> {
 		let mut kernels = vec![];
 		let mut inputs = vec![];
@@ -357,7 +360,6 @@ impl Block {
 		kernels.sort();
 
 		// calculate the overall Merkle tree and fees (todo?)
-
 		Ok(
 			Block {
 				header: BlockHeader {
@@ -367,7 +369,7 @@ impl Block {
 						..time::now_utc()
 					},
 					previous: prev.hash(),
-					total_difficulty: prev.pow.clone().to_difficulty() +
+					total_difficulty: difficulty +
 						prev.total_difficulty.clone(),
 					..Default::default()
 				},
@@ -656,7 +658,7 @@ impl Block {
 		let secp = secp.lock().unwrap();
 		let over_commit = secp.commit_value(reward(fees))?;
 		let out_commit = output.commitment();
-		let excess = keychain.secp().commit_sum(vec![out_commit], vec![over_commit])?;
+		let excess = secp.commit_sum(vec![out_commit], vec![over_commit])?;
 
 		// NOTE: Remember we sign the fee *and* the lock_height.
 		// For a coinbase output the fee is 0 and the lock_height is
@@ -697,7 +699,13 @@ mod test {
 	// header
 	fn new_block(txs: Vec<&Transaction>, keychain: &Keychain) -> Block {
 		let key_id = keychain.derive_key_id(1).unwrap();
-		Block::new(&BlockHeader::default(), txs, keychain, &key_id).unwrap()
+		Block::new(
+			&BlockHeader::default(),
+			txs,
+			keychain,
+			&key_id,
+			Difficulty::minimum()
+		).unwrap()
 	}
 
 	// utility producing a transaction that spends an output with the provided

@@ -32,3 +32,4 @@ itertools = "~0.6.0"
 
 [dev_dependencies]
 blake2-rfc = "~0.2.17"
+grin_config = { path = "../config" }
