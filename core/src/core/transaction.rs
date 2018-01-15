@@ -161,20 +161,15 @@ impl TxKernel {
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
 	pub fn verify(&self) -> Result<(), secp::Error> {
-		let lock_height = if self.features.contains(COINBASE_KERNEL) {
-			self.lock_height + global::coinbase_maturity()
-		} else {
-			self.lock_height
-		};
+		debug!(LOGGER, "tx_kernel: verify: {:?}", self);
 
-		let msg = try!(Message::from_slice(
-			&kernel_sig_msg(self.fee, lock_height),
-		));
+		let msg = Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height))?;
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 		let sig = try!(Signature::from_der(&secp, &self.excess_sig));
+
 		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &self.excess);
-		if !valid{
+		if !valid {
 			return Err(secp::Error::IncorrectSignature);
 		}
 		Ok(())
@@ -343,7 +338,7 @@ impl Transaction {
 		// pretend the sum is a public key (which it is, being of the form r.G) and
 		// verify the transaction sig with it
 		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &rsum);
-		if !valid{
+		if !valid {
 			return Err(secp::Error::IncorrectSignature);
 		}
 		Ok(rsum)

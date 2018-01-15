@@ -628,9 +628,6 @@ impl Block {
 	) -> Result<(Output, TxKernel), keychain::Error> {
 		let commit = keychain.commit(reward(fees), key_id)?;
 		let switch_commit = keychain.switch_commit(key_id)?;
-
-		let lock_height = height + global::coinbase_maturity();
-
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
 
 		trace!(
@@ -665,10 +662,18 @@ impl Block {
 		// the lock_height of the coinbase output itself,
 		// not the lock_height of the tx (there is no tx for a coinbase output).
 		// This output will not be spendable earlier than lock_height (and we sign this here).
-		let msg = secp::Message::from_slice(&kernel_sig_msg(0, lock_height))?;
-		let sig = keychain.sign(&msg, &key_id)?;
+		let msg = secp::Message::from_slice(&kernel_sig_msg(0, height))?;
+		let sig = keychain.aggsig_sign_from_key_id(&msg, &key_id)?;
 
 		let excess_sig = sig.serialize_der(&secp);
+
+		// debug only
+		{
+			let valid = keychain::Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &excess);
+			debug!(LOGGER, "*** sig valid? {}", valid);
+		}
+
+		debug!(LOGGER, "block: reward_output: {:?}, {:?}, {}", excess, excess_sig, height);
 
 		let proof = TxKernel {
 			features: COINBASE_KERNEL,
