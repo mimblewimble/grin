@@ -444,12 +444,12 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 
 	let wallet_seed =
 		wallet::WalletSeed::from_file(&wallet_config).expect("Failed to read wallet seed file.");
-	let passphrase = wallet_args.value_of("pass").expect(
-		"Failed to read passphrase.",
-	);
-	let mut keychain = wallet_seed.derive_keychain(&passphrase).expect(
-		"Failed to derive keychain from seed file and passphrase.",
-	);
+	let passphrase = wallet_args
+		.value_of("pass")
+		.expect("Failed to read passphrase.");
+	let mut keychain = wallet_seed
+		.derive_keychain(&passphrase)
+		.expect("Failed to derive keychain from seed file and passphrase.");
 
 	match wallet_args.subcommand() {
 		("listen", Some(listen_args)) => {
@@ -478,24 +478,22 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			}
 		}*/
 		("send", Some(send_args)) => {
-			let amount = send_args.value_of("amount").expect(
-				"Amount to send required",
-			);
-			let amount = core::core::amount_from_hr_string(amount).expect(
-				"Could not parse amount as a number with optional decimal point.",
-			);
-			let minimum_confirmations: u64 =
-				send_args
-					.value_of("minimum_confirmations")
-					.unwrap()
-					.parse()
-					.expect("Could not parse minimum_confirmations as a whole number.");
-			let selection_strategy = send_args.value_of("selection_strategy").expect(
-				"Selection strategy required",
-			);
-			let dest =  send_args.value_of("dest").expect(
-				"Destination wallet address required",
-			);
+			let amount = send_args
+				.value_of("amount")
+				.expect("Amount to send required");
+			let amount = core::core::amount_from_hr_string(amount)
+				.expect("Could not parse amount as a number with optional decimal point.");
+			let minimum_confirmations: u64 = send_args
+				.value_of("minimum_confirmations")
+				.unwrap()
+				.parse()
+				.expect("Could not parse minimum_confirmations as a whole number.");
+			let selection_strategy = send_args
+				.value_of("selection_strategy")
+				.expect("Selection strategy required");
+			let dest = send_args
+				.value_of("dest")
+				.expect("Destination wallet address required");
 			let max_outputs = 500;
 			let result = wallet::issue_send_tx(
 				&wallet_config,
@@ -507,15 +505,13 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				(selection_strategy == "all"),
 			);
 			match result {
-				Ok(_) => {
-					info!(
-						LOGGER,
-						"Tx sent: {} grin to {} (strategy '{}')",
-						amount_to_hr_string(amount),
-						dest,
-						selection_strategy,
-					)
-				}
+				Ok(_) => info!(
+					LOGGER,
+					"Tx sent: {} grin to {} (strategy '{}')",
+					amount_to_hr_string(amount),
+					dest,
+					selection_strategy,
+				),
 				Err(wallet::Error::NotEnoughFunds(available)) => {
 					error!(
 						LOGGER,
@@ -523,7 +519,10 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 						amount_to_hr_string(available),
 					);
 				}
-				Err(wallet::Error::FeeExceedsAmount {sender_amount, recipient_fee}) => {
+				Err(wallet::Error::FeeExceedsAmount {
+					sender_amount,
+					recipient_fee,
+				}) => {
 					error!(
 						LOGGER,
 						"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
@@ -537,18 +536,16 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			};
 		}
 		("burn", Some(send_args)) => {
-			let amount = send_args.value_of("amount").expect(
-				"Amount to burn required",
-			);
-			let amount = core::core::amount_from_hr_string(amount).expect(
-				"Could not parse amount as number with optional decimal point.",
-			);
-			let minimum_confirmations: u64 =
-				send_args
-					.value_of("minimum_confirmations")
-					.unwrap()
-					.parse()
-					.expect("Could not parse minimum_confirmations as a whole number.");
+			let amount = send_args
+				.value_of("amount")
+				.expect("Amount to burn required");
+			let amount = core::core::amount_from_hr_string(amount)
+				.expect("Could not parse amount as number with optional decimal point.");
+			let minimum_confirmations: u64 = send_args
+				.value_of("minimum_confirmations")
+				.unwrap()
+				.parse()
+				.expect("Could not parse minimum_confirmations as a whole number.");
 			let max_outputs = 500;
 			wallet::issue_burn_tx(
 				&wallet_config,
