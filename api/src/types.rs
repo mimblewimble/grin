@@ -20,7 +20,6 @@ use p2p;
 use util::secp::pedersen;
 use rest::*;
 use util;
-use util::static_secp_instance;
 
 /// The state of the current fork tip
 #[derive(Serialize, Deserialize, Debug, Clone)]
