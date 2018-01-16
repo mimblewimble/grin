@@ -117,11 +117,11 @@ impl BlockChain for DummyChainImpl {
 		if !input.features.contains(COINBASE_OUTPUT) {
 			return Ok(());
 		}
-
+		let block_hash = input.out_block.expect("requires a block hash");
 		let headers = self.block_headers.read().unwrap();
 		if let Some(h) = headers
 			.iter()
-			.find(|x| x.hash() == input.out_block)
+			.find(|x| x.hash() == block_hash)
 		{
 			if h.height + global::coinbase_maturity() < height {
 				return Ok(());

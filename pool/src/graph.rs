@@ -299,7 +299,6 @@ mod tests {
 	use keychain::Keychain;
 	use rand;
 	use core::core::{DEFAULT_OUTPUT, SwitchCommitHash};
-	use core::core::hash::ZERO_HASH;
 
 	#[test]
 	fn test_add_entry() {
@@ -316,12 +315,12 @@ mod tests {
 			core::transaction::Input::new(
 				DEFAULT_OUTPUT,
 				keychain.commit(50, &key_id2).unwrap(),
-				ZERO_HASH,
+				None,
 			),
 			core::transaction::Input::new(
 				DEFAULT_OUTPUT,
 				keychain.commit(25, &key_id3).unwrap(),
-				ZERO_HASH,
+				None,
 			),
 		];
 		let msg = secp::pedersen::ProofMessage::empty();

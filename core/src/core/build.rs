@@ -47,12 +47,11 @@ pub type Append = for<'a> Fn(&'a mut Context, (Transaction, BlindSum)) -> (Trans
 fn build_input(
 	value: u64,
 	features: OutputFeatures,
-	out_block: Hash,
+	out_block: Option<Hash>,
 	key_id: Identifier,
 ) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
 		let commit = build.keychain.commit(value, &key_id).unwrap();
-		// let switch_commit = build.keychain.switch_commit(&key_id).unwrap();
 		let input = Input::new(
 			features,
 			commit,
@@ -70,7 +69,7 @@ pub fn input(
 	key_id: Identifier,
 ) -> Box<Append> {
 	debug!(LOGGER, "Building input (spending regular output): {}, {}", value, key_id);
-	build_input(value, DEFAULT_OUTPUT, out_block, key_id)
+	build_input(value, DEFAULT_OUTPUT, Some(out_block), key_id)
 }
 
 /// Adds a coinbase input spending a coinbase output.
@@ -81,7 +80,7 @@ pub fn coinbase_input(
 	key_id: Identifier,
 ) -> Box<Append> {
 	debug!(LOGGER, "Building input (spending coinbase): {}, {}", value, key_id);
-	build_input(value, COINBASE_OUTPUT, out_block, key_id)
+	build_input(value, COINBASE_OUTPUT, Some(out_block), key_id)
 }
 
 /// Adds an output with the provided value and key identifier from the

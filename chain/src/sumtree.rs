@@ -135,7 +135,9 @@ impl SumTrees {
 		// If we are spending a coinbase output then go find the block
 		// and check the coinbase maturity rule is being met.
 		if input.features.contains(COINBASE_OUTPUT) {
-			let block = self.commit_index.get_block(&input.out_block)?;
+			let block_hash = &input.out_block
+				.expect("input spending coinbase output must have a block hash");
+			let block = self.commit_index.get_block(&block_hash)?;
 			block.verify_coinbase_maturity(&input, height)
 				.map_err(|_| Error::ImmatureCoinbase)?;
 		}
@@ -335,7 +337,9 @@ impl<'a> Extension<'a> {
 				// If we are spending a coinbase output then go find the block
 				// and check the coinbase maturity rule is being met.
 				if input.features.contains(COINBASE_OUTPUT) {
-					let block = self.commit_index.get_block(&input.out_block)?;
+					let block_hash = &input.out_block
+						.expect("input spending coinbase output must have a block hash");
+					let block = self.commit_index.get_block(&block_hash)?;
 					block.verify_coinbase_maturity(&input, height)
 						.map_err(|_| Error::ImmatureCoinbase)?;
 				}

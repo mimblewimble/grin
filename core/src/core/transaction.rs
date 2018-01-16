@@ -24,7 +24,7 @@ use std::ops;
 use consensus;
 use consensus::VerifySortOrder;
 use core::Committed;
-use core::hash::{Hash, Hashed};
+use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::Summable;
 use keychain::{Identifier, Keychain};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
@@ -396,7 +396,7 @@ pub struct Input{
 	/// The hash of the block the output originated from.
 	/// Currently we only care about this for coinbase outputs.
 	/// TODO - include the merkle proof here once we support these.
-	pub out_block: Hash,
+	pub out_block: Option<Hash>,
 }
 
 hashable_ord!(Input);
@@ -407,7 +407,11 @@ impl Writeable for Input {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
 		writer.write_fixed_bytes(&self.commit)?;
-		writer.write_fixed_bytes(&self.out_block)?;
+
+		if self.features.contains(COINBASE_OUTPUT) {
+			writer.write_fixed_bytes(&self.out_block.unwrap_or(ZERO_HASH))?;
+		}
+
 		Ok(())
 	}
 }
@@ -420,10 +424,18 @@ impl Readable for Input {
 			ser::Error::CorruptedData,
 		)?;
 
+		let commit = Commitment::read(reader)?;
+
+		let out_block = if features.contains(COINBASE_OUTPUT) {
+			Some(Hash::read(reader)?)
+		} else {
+			None
+		};
+
 		Ok(Input::new(
 			features,
-			Commitment::read(reader)?,
-			Hash::read(reader)?,
+			commit,
+			out_block,
 		))
 	}
 }
@@ -437,7 +449,7 @@ impl Input {
 	pub fn new(
 		features: OutputFeatures,
 		commit: Commitment,
-		out_block: Hash,
+		out_block: Option<Hash>,
 	) -> Input {
 		Input {
 			features,
