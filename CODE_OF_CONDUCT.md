@@ -36,4 +36,4 @@ And if someone takes issue with something you said or did, resist the urge to be
 
 The enforcement policies listed above apply to all official Grin venues; including Gitter, mailing lists and IRC. For other projects adopting the Grin Code of Conduct, please contact the maintainers of those projects for enforcement. If you wish to use this code of conduct for your own project, consider explicitly mentioning your moderation policy or making a copy with your own moderation policy so as to avoid confusion.
 
-Adapted from the Rust Code of Conduct, itself adapter from the Node.js Policy on Trolling as well as the Contributor Covenant v1.3.0.
+Adapted from the Rust Code of Conduct, itself adapted from the Node.js Policy on Trolling as well as the Contributor Covenant v1.3.0.

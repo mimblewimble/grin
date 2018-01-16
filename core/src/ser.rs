@@ -29,7 +29,8 @@ use core::hash::Hashed;
 use core::transaction::{SWITCH_COMMIT_HASH_SIZE, SwitchCommitHash};
 use util::secp::pedersen::Commitment;
 use util::secp::pedersen::RangeProof;
-use util::secp::constants::{MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE};
+use util::secp::Signature;
+use util::secp::constants::{MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE, AGG_SIGNATURE_SIZE};
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]
@@ -352,6 +353,24 @@ impl Readable for RangeProof {
 		})
 	}
 }
+
+impl Readable for Signature {
+	fn read(reader: &mut Reader) -> Result<Signature, Error> {
+		let a = try!(reader.read_fixed_bytes(AGG_SIGNATURE_SIZE));
+		let mut c = [0; AGG_SIGNATURE_SIZE];
+		for i in 0..AGG_SIGNATURE_SIZE {
+			c[i] = a[i];
+		}
+		Ok(Signature::from_raw_data(&c).unwrap())
+	}
+}
+
+impl Writeable for Signature {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_fixed_bytes(self)
+	}
+}
+
 
 /// Utility wrapper for an underlying byte Writer. Defines higher level methods
 /// to write numbers, byte vectors, hashes, etc.

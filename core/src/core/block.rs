@@ -588,12 +588,10 @@ impl Block {
 		let msg = util::secp::Message::from_slice(&[0; secp::constants::MESSAGE_SIZE])?;
 		let sig = keychain.aggsig_sign_from_key_id(&msg, &key_id).unwrap();
 
-		let excess_sig = sig.serialize_der(&secp);
-
 		let proof = TxKernel {
 			features: COINBASE_KERNEL,
 			excess: excess,
-			excess_sig: excess_sig,
+			excess_sig: sig,
 			fee: 0,
 			lock_height: 0,
 		};

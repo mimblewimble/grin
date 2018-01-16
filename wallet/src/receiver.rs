@@ -370,7 +370,7 @@ fn build_final_transaction(
 		keychain,
 	)?;
 
-	final_tx.excess_sig = excess_sig.serialize_der(&keychain.secp());
+	final_tx.excess_sig = excess_sig.clone();
 
 	// make sure the resulting transaction is valid (could have been lied to on
  // excess).
