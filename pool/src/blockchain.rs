@@ -12,7 +12,9 @@ use std::clone::Clone;
 use std::sync::RwLock;
 
 use core::core::{block, hash, transaction};
-use core::core::transaction::{Input, OutputIdentifier};
+use core::core::{COINBASE_OUTPUT, Input, OutputIdentifier};
+use core::global;
+use core::core::hash::Hashed;
 use types::{BlockChain, PoolError};
 use util::secp::pedersen::Commitment;
 
@@ -88,7 +90,7 @@ impl DummyUtxoSet {
 #[allow(dead_code)]
 pub struct DummyChainImpl {
 	utxo: RwLock<DummyUtxoSet>,
-	head_header: RwLock<Vec<block::BlockHeader>>,
+	block_headers: RwLock<Vec<block::BlockHeader>>,
 }
 
 #[allow(dead_code)]
@@ -98,7 +100,7 @@ impl DummyChainImpl {
 			utxo: RwLock::new(DummyUtxoSet {
 				outputs: HashMap::new(),
 			}),
-			head_header: RwLock::new(vec![]),
+			block_headers: RwLock::new(vec![]),
 		}
 	}
 }
@@ -112,11 +114,24 @@ impl BlockChain for DummyChainImpl {
 	}
 
 	fn is_matured(&self, input: &Input, height: u64) -> Result<(), PoolError> {
-		panic!("where are we calling this from???");
+		if !input.features.contains(COINBASE_OUTPUT) {
+			return Ok(());
+		}
+
+		let headers = self.block_headers.read().unwrap();
+		if let Some(h) = headers
+			.iter()
+			.find(|x| x.hash() == input.out_block)
+		{
+			if h.height + global::coinbase_maturity() < height {
+				return Ok(());
+			}
+		}
+		Err(PoolError::ImmatureCoinbase)
 	}
 
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError> {
-		let headers = self.head_header.read().unwrap();
+		let headers = self.block_headers.read().unwrap();
 		if headers.len() > 0 {
 			Ok(headers[0].clone())
 		} else {
@@ -129,13 +144,15 @@ impl DummyChain for DummyChainImpl {
 	fn update_utxo_set(&mut self, new_utxo: DummyUtxoSet) {
 		self.utxo = RwLock::new(new_utxo);
 	}
+
 	fn apply_block(&self, b: &block::Block) {
 		self.utxo.write().unwrap().with_block(b);
+		self.store_head_header(&b.header)
 	}
+
 	fn store_head_header(&self, block_header: &block::BlockHeader) {
-		let mut h = self.head_header.write().unwrap();
-		h.clear();
-		h.insert(0, block_header.clone());
+		let mut headers = self.block_headers.write().unwrap();
+		headers.insert(0, block_header.clone());
 	}
 }
 

@@ -298,7 +298,8 @@ mod tests {
 	use util::secp;
 	use keychain::Keychain;
 	use rand;
-	use core::core::{SwitchCommitHash, SwitchCommitHashKey};
+	use core::core::{DEFAULT_OUTPUT, SwitchCommitHash};
+	use core::core::hash::ZERO_HASH;
 
 	#[test]
 	fn test_add_entry() {
@@ -313,27 +314,27 @@ mod tests {
 
 		let inputs = vec![
 			core::transaction::Input::new(
+				DEFAULT_OUTPUT,
 				keychain.commit(50, &key_id2).unwrap(),
-				keychain.switch_commit(&key_id2).unwrap(),
-				0,
+				ZERO_HASH,
 			),
 			core::transaction::Input::new(
+				DEFAULT_OUTPUT,
 				keychain.commit(25, &key_id3).unwrap(),
-				keychain.switch_commit(&key_id2).unwrap(),
-				0,
+				ZERO_HASH,
 			),
 		];
 		let msg = secp::pedersen::ProofMessage::empty();
-		let outputs = vec![
-			core::transaction::Output {
-				features: core::transaction::DEFAULT_OUTPUT,
-				commit: output_commit,
-				switch_commit_hash: switch_commit_hash,
-				proof: keychain
-					.range_proof(100, &key_id1, output_commit, msg)
-					.unwrap(),
-			},
-		];
+
+		let output = core::transaction::Output {
+			features: DEFAULT_OUTPUT,
+			commit: output_commit,
+			switch_commit_hash: switch_commit_hash,
+			proof: keychain
+				.range_proof(100, &key_id1, output_commit, msg)
+				.unwrap(),
+		};
+		let outputs = vec![output];
 		let test_transaction = core::transaction::Transaction::new(inputs, outputs, 5, 0);
 
 		let test_pool_entry = PoolEntry::new(&test_transaction);
@@ -341,7 +342,7 @@ mod tests {
 		let incoming_edge_1 = Edge::new(
 			Some(random_hash()),
 			Some(core::hash::ZERO_HASH),
-			output_commit,
+			OutputIdentifier::from_output(&output),
 		);
 
 		let mut test_graph = DirectedGraph::empty();
