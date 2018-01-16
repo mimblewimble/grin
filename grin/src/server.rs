@@ -166,12 +166,21 @@ impl Server {
 			Some(b) => b,
 		};
 
-		sync::run_sync(
-			currently_syncing.clone(),
-			p2p_server.peers.clone(),
-			shared_chain.clone(),
-			skip_sync_wait,
+		if config.archive_mode {
+			sync::run_full_sync(
+				currently_syncing.clone(),
+				p2p_server.peers.clone(),
+				shared_chain.clone(),
+				skip_sync_wait,
 			);
+		} else {
+			sync::run_fast_sync(
+				currently_syncing.clone(),
+				p2p_server.peers.clone(),
+				shared_chain.clone(),
+				skip_sync_wait,
+			);
+		}
 
 		evt_handle.spawn(p2p_server.start(evt_handle.clone()).map_err(|_| ()));
 

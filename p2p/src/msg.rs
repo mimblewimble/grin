@@ -576,6 +576,8 @@ pub struct SumtreesArchive {
 	pub rewind_to_output: u64,
 	/// Kernel tree index the receiver should rewind to
 	pub rewind_to_kernel: u64,
+	/// Size in bytes of the archive
+	pub bytes: u64,
 }
 
 impl Writeable for SumtreesArchive {
@@ -583,8 +585,8 @@ impl Writeable for SumtreesArchive {
 		self.hash.write(writer)?;
 		ser_multiwrite!(writer, [write_u64, self.height],
 										[write_u64, self.rewind_to_output],
-										[write_u64, self.rewind_to_kernel]);
-		writer.write_u64(self.height)?;
+										[write_u64, self.rewind_to_kernel],
+										[write_u64, self.bytes]);
 		Ok(())
 	}
 }
@@ -592,9 +594,9 @@ impl Writeable for SumtreesArchive {
 impl Readable for SumtreesArchive {
 	fn read(reader: &mut Reader) -> Result<SumtreesArchive, ser::Error> {
 		let hash = Hash::read(reader)?;
-		let (height, rewind_to_output, rewind_to_kernel) =
-			ser_multiread!(reader, read_u64, read_u64, read_u64);
+		let (height, rewind_to_output, rewind_to_kernel, bytes) =
+			ser_multiread!(reader, read_u64, read_u64, read_u64, read_u64);
 
-		Ok(SumtreesArchive {hash, height, rewind_to_output, rewind_to_kernel})
+		Ok(SumtreesArchive {hash, height, rewind_to_output, rewind_to_kernel, bytes})
 	}
 }

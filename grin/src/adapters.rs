@@ -214,6 +214,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		// TODO check whether we should accept any sumtree now
 		if let Err(e) = self.chain.sumtrees_write(h, rewind_to_output, rewind_to_kernel, sumtree_data) {
 			error!(LOGGER, "Failed to save sumtree archive: {:?}", e);
+		} else {
+			info!(LOGGER, "Received valid sumtree data for {}.", h);
 		}
 	}
 }

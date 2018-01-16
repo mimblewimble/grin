@@ -24,8 +24,8 @@ use std::sync::Arc;
 
 use util::secp::pedersen::{RangeProof, Commitment};
 
-use core::core::{Block, SumCommit, Input, Output, TxKernel, COINBASE_OUTPUT};
-use core::core::pmmr::{HashSum, NoSum, Summable, PMMR, peaks};
+use core::core::{Block, BlockHeader, SumCommit, Input, Output, TxKernel, COINBASE_OUTPUT};
+use core::core::pmmr::{self, HashSum, NoSum, Summable, PMMR};
 use core::core::hash::Hashed;
 use core::ser;
 use grin_store;
@@ -428,7 +428,7 @@ impl<'a> Extension<'a> {
 		// multiplied by their size
 		// the number of kernels is the number of leaves in the MMR, which is the
 		// sum of the number of leaf nodes under each peak in the MMR
-		let pos: u64 = peaks(kern_pos_rew).iter().map(|n| (1 << n) as u64).sum();
+		let pos: u64 = pmmr::peaks(kern_pos_rew).iter().map(|n| (1 << n) as u64).sum();
 		self.kernel_file.rewind(pos * (TxKernel::size() as u64));
 
 		Ok(())
@@ -491,7 +491,8 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Validate the current sumtree state against a block header
-	pub fn validate(&self) -> Result<(), Error> {
+	pub fn validate(&self, header: &BlockHeader) -> Result<(), Error> {
+		// validate all hashes and sums within the trees
 		if let Err(e) = self.output_pmmr.validate() {
 			return Err(Error::SumTreeErr(e));
 		}
@@ -500,6 +501,28 @@ impl<'a> Extension<'a> {
 		}
 		if let Err(e) = self.kernel_pmmr.validate() {
 			return Err(Error::SumTreeErr(e));
+		}
+
+		let (utxo_root, rproof_root, kernel_root) = self.roots();
+		if utxo_root.hash != header.utxo_root || rproof_root.hash != header.range_proof_root
+			|| kernel_root.hash != header.kernel_root
+		{
+			return Err(Error::InvalidRoot);
+		}
+		Ok(())
+	}
+
+	/// Rebuild the index of MMR positions to the corresponding UTXO and kernel
+	/// by iterating over the whole MMR data. This is a costly operation
+	/// performed only when we receive a full new chain state.
+	pub fn rebuild_index(&self) -> Result<(), Error> {
+		for n in 1..self.output_pmmr.unpruned_size()+1 {
+			// non-pruned leaves only
+			if pmmr::bintree_postorder_height(n) == 0 {
+				if let Some(hs) = self.output_pmmr.get(n) {
+					self.commit_index.save_output_pos(&hs.sum.commit, n)?;
+				}
+			}
 		}
 		Ok(())
 	}
@@ -510,8 +533,7 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Dumps the state of the 3 sum trees to stdout for debugging. Short
-	/// version
-	/// only prints the UTXO tree.
+	/// version only prints the UTXO tree.
 	pub fn dump(&self, short: bool) {
 		debug!(LOGGER, "-- outputs --");
 		self.output_pmmr.dump(short);
@@ -574,12 +596,8 @@ pub fn zip_read(root_dir: String) -> Result<File, Error> {
 /// sumtree storage dir
 pub fn zip_write(root_dir: String, sumtree_data: File) -> Result<(), Error> {
 	let sumtrees_path = Path::new(&root_dir).join(SUMTREES_SUBDIR);
-	if sumtrees_path.exists() {
-		return Err(Error::SumTreeErr(
-				"Sumtree data already exists, can't overwrite.".to_owned()));
-	}
-	fs::create_dir_all(sumtrees_path.clone())?;
 
+	fs::create_dir_all(sumtrees_path.clone())?;
 	zip::decompress(sumtree_data, &sumtrees_path)
 			.map_err(|ze| Error::Other(ze.to_string()))
 }

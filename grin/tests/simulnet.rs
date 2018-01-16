@@ -33,6 +33,7 @@ use std::default::Default;
 
 use futures::{Async, Future, Poll};
 use futures::task::current;
+use futures::Stream;
 use tokio_core::reactor;
 
 use core::global;
@@ -283,6 +284,7 @@ fn simulate_full_sync() {
 				port: 11000 + n,
 				..p2p::P2PConfig::default()
 			}),
+			archive_mode: true,
 			seeding_type: grin::Seeding::List,
 			seeds: Some(vec!["127.0.0.1:11000".to_string()]),
 			chain_type: core::global::ChainTypes::AutomatedTesting,
@@ -298,6 +300,79 @@ fn simulate_full_sync() {
 
 	// 2 should get blocks
 	evtlp.run(change(&servers[1]));
+}
+
+/// Creates 2 different disconnected servers, mine a few blocks on one, connect
+/// them and check that the 2nd gets all using fast sync algo
+#[test]
+fn simulate_fast_sync() {
+	util::init_test_logger();
+
+	// we actually set the chain_type in the ServerConfig below
+	// TODO - avoid needing to set it in two places?
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+
+	let test_name_dir = "grin-fast";
+	framework::clean_all_output(test_name_dir);
+
+	let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
+	let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();
+	plugin_config.type_filter = String::from("mean_cpu");
+	plugin_config_vec.push(plugin_config);
+
+	let miner_config = pow::types::MinerConfig {
+		enable_mining: true,
+		burn_reward: true,
+		use_cuckoo_miner: false,
+		cuckoo_miner_async_mode: Some(false),
+		cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
+		cuckoo_miner_plugin_config: Some(plugin_config_vec),
+		..Default::default()
+	};
+
+	// instantiates 2 servers on different ports
+	for n in 0..2 {
+		let config = grin::ServerConfig {
+			api_http_addr: format!("127.0.0.1:{}", 19000 + n),
+			db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
+			p2p_config: Some(p2p::P2PConfig {
+				port: 11000 + n,
+				..p2p::P2PConfig::default()
+			}),
+			seeding_type: grin::Seeding::List,
+			seeds: Some(vec!["127.0.0.1:11000".to_string()]),
+			chain_type: core::global::ChainTypes::AutomatedTesting,
+			..Default::default()
+		};
+		let m = n;
+		let miner_config_inner = miner_config.clone();
+		thread::spawn(move || {
+			let mut evtlp = reactor::Core::new().unwrap();
+			let handle = evtlp.handle();
+
+			let s = grin::Server::future(config, &handle).unwrap();
+
+			if m == 0 {
+				// mine a few blocks on server 1
+				s.start_miner(miner_config_inner);
+				let forever = tokio_timer::Timer::default()
+					.interval(time::Duration::from_secs(60))
+					.for_each(move |_| {
+						println!("event loop running");
+						Ok(())
+					})
+					.map_err(|_| ());
+				evtlp.run(forever);
+				thread::sleep(time::Duration::from_secs(35));
+			} else {
+				// 2 should get blocks
+				evtlp.run(change(&s));
+				thread::sleep(time::Duration::from_secs(30));
+			}
+		});
+		thread::sleep(time::Duration::from_secs(5));
+	}
+	thread::sleep(time::Duration::from_secs(60));
 }
 
 // Builds the change future, monitoring for a change of head on the provided

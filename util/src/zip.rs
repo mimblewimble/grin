@@ -56,6 +56,7 @@ pub fn compress(src_dir: &Path, dst_file: &File) -> ZipResult<()> {
 	}
 
 	zip.finish()?;
+	dst_file.sync_all()?;
 	Ok(())
 }
 

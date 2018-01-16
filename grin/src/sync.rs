@@ -19,14 +19,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use time;
 
 use chain;
-use core::core::hash::{Hash, Hashed};
+use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::core::target::Difficulty;
 use p2p::{self, Peer, Peers, ChainAdapter};
 use types::Error;
 use util::LOGGER;
 
 /// Starts the syncing loop, just spawns two threads that loop forever
-pub fn run_sync(
+pub fn run_full_sync(
 	currently_syncing: Arc<AtomicBool>,
 	peers: p2p::Peers,
 	chain: Arc<chain::Chain>,
@@ -74,6 +74,53 @@ pub fn run_sync(
 				} else {
 					thread::sleep(Duration::from_secs(10));
 				}
+			}
+		});
+}
+
+pub fn run_fast_sync(
+	currently_syncing: Arc<AtomicBool>,
+	peers: p2p::Peers,
+	chain: Arc<chain::Chain>,
+	skip_sync_wait: bool,
+) {
+
+	let _ = thread::Builder::new()
+		.name("sync".to_string())
+		.spawn(move || {
+			let mut prev_header_sync = time::now_utc();
+
+			// initial sleep to give us time to peer with some nodes
+			if !skip_sync_wait {
+				thread::sleep(Duration::from_secs(30));
+			}
+			loop {
+				let syncing = needs_syncing(
+					currently_syncing.clone(), peers.clone(), chain.clone());
+
+				if syncing {
+					let current_time = time::now_utc();
+
+					// run the header sync every 10s
+					if current_time - prev_header_sync > time::Duration::seconds(10) {
+						header_sync(
+							peers.clone(),
+							chain.clone(),
+						);
+						prev_header_sync = current_time;
+					}
+				}
+
+				if let Some(peer) = peers.most_work_peer() {
+					if let Ok(p) = peer.try_read() {
+						let header_head = chain.get_header_head().unwrap();
+						if header_head.height > 1 {
+							p.send_sumtrees_request(header_head.height, header_head.last_block_h);
+							break;
+						}
+					}
+				}
+				thread::sleep(Duration::from_secs(1));
 			}
 		});
 }

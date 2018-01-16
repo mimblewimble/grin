@@ -434,7 +434,11 @@ impl Chain {
 
 		let mut sumtrees = sumtree::SumTrees::open(self.db_root.clone(), self.store.clone())?;
 		sumtree::extending(&mut sumtrees, |extension| {
-			extension.rewind_pos(header.height, rewind_to_output, rewind_to_kernel)
+			extension.rewind_pos(header.height, rewind_to_output, rewind_to_kernel)?;
+			extension.validate(&header)?;
+			// TODO validate kernels and their sums with UTXOs
+			extension.rebuild_index()?;
+			Ok(())
 		})?;
 
 		let mut sumtrees_ref = self.sumtrees.write().unwrap();
