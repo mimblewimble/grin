@@ -582,10 +582,12 @@ impl Block {
 	/// Confirm height <= lock_height
 	pub fn verify_coinbase_maturity(
 		&self,
-		output: &OutputIdentifier,
+		input: &Input,
 		height: u64,
 	) -> Result<(), Error> {
-		debug!(LOGGER, "block: verify_coinbase_maturity: {:?}, {}, {}", output, height, self.header.height);
+		debug!(LOGGER, "block: verify_coinbase_maturity: {:?}, {}, {}", input, height, self.header.height);
+
+		let output = OutputIdentifier::from_input(&input);
 
 		// We should only be calling verify_coinbase_maturity
 		// if we both claim we are spending a coinbase output
@@ -596,10 +598,7 @@ impl Block {
 
 		if let Some(out) = self.outputs
 			.iter()
-			.find(|x| {
-				// OutputIdentifier::from_output(&x).hash() == output.hash()
-				OutputIdentifier::from_output(&x) == *output
-			})
+			.find(|x| OutputIdentifier::from_output(&x) == output)
 		{
 			let lock_height = self.header.height + global::coinbase_maturity();
 			if lock_height > height {

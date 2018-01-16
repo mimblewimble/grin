@@ -117,46 +117,21 @@ impl SumTrees {
 		input: &Input,
 		height: u64,
 	) -> Result<(), Error> {
-		match self.commit_index.get_output_pos(&input.commit) {
-			Ok(pos) => {
-				let output_pmmr = PMMR::at(
-					&mut self.output_pmmr_h.backend,
-					self.output_pmmr_h.last_pos,
-				);
-				if let Some(HashSum { hash, sum: _ }) = output_pmmr.get(pos) {
-					let sum_commit = SumCommit::from_input(&input);
-					let hash_sum = HashSum::from_summable(pos, &sum_commit);
-					if hash != hash_sum.hash {
-						return Err(Error::SumTreeErr(format!("sumtree hash mismatch")));
-					}
+		// We should never be in a situation where we are checking maturity rules
+		// if the output is already spent (this should have already been checked).
+		let output = OutputIdentifier::from_input(&input);
+		assert!(self.is_unspent(&output).is_ok());
 
-					// At this point we can be sure the input is spending the output
-					// it claims to be spending, and it is coinbase or non-coinbase.
-					// If we are spending a coinbase output then go find the block
-					// and check the coinbase maturity rule is being met.
-					if input.features.contains(COINBASE_OUTPUT) {
-						// edge case here - we may be spending an output with zero-confirmations
-						// and it just got included in a block.
-						// The wallet may not know about this new block yet (not yet refreshed).
-						// Is it safe to assume this the tx was included in the latest block?
-						let block = if input.out_block == Hash::zero() {
-							let head = self.commit_index.head()?;
-							self.commit_index.get_block(&head.last_block_h)?
-						} else {
-							self.commit_index.get_block(&input.out_block)?
-						};
-
-						let output = OutputIdentifier::from_input(&input);
-						block.verify_coinbase_maturity(&output, height)
-							.map_err(|_| Error::ImmatureCoinbase)?;
-					}
-					Ok(())
-				} else {
-					Err(Error::OutputNotFound)
-				}
-			}
-			Err(_) => return Err(Error::OutputNotFound),
+		// At this point we can be sure the input is spending the output
+		// it claims to be spending, and that it is coinbase or non-coinbase.
+		// If we are spending a coinbase output then go find the block
+		// and check the coinbase maturity rule is being met.
+		if input.features.contains(COINBASE_OUTPUT) {
+			let block = self.commit_index.get_block(&input.out_block)?;
+			block.verify_coinbase_maturity(&input, height)
+				.map_err(|_| Error::ImmatureCoinbase)?;
 		}
+		Ok(())
 	}
 
 	/// returns the last N nodes inserted into the tree (i.e. the 'bottom'
@@ -366,19 +341,8 @@ impl<'a> Extension<'a> {
 				// If we are spending a coinbase output then go find the block
 				// and check the coinbase maturity rule is being met.
 				if input.features.contains(COINBASE_OUTPUT) {
-					// edge case here - we may be spending an output with zero-confirmations
-					// and it just got included in a block.
-					// The wallet may not know about this new block yet (not yet refreshed).
-					// Is it safe to assume this the tx was included in the latest block?
-					let block = if input.out_block == Hash::zero() {
-						let head = self.commit_index.head()?;
-						self.commit_index.get_block(&head.last_block_h)?
-					} else {
-						self.commit_index.get_block(&input.out_block)?
-					};
-
-					let output = OutputIdentifier::from_input(&input);
-					block.verify_coinbase_maturity(&output, height)
+					let block = self.commit_index.get_block(&input.out_block)?;
+					block.verify_coinbase_maturity(&input, height)
 						.map_err(|_| Error::ImmatureCoinbase)?;
 				}
 			}
