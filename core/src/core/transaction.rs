@@ -29,7 +29,6 @@ use core::pmmr::Summable;
 use keychain::{Identifier, Keychain};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 use util;
-use util::LOGGER;
 
 /// The size to use for the stored blake2 hash of a switch_commitment
 pub const SWITCH_COMMIT_HASH_SIZE: usize = 20;
@@ -158,8 +157,6 @@ impl TxKernel {
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
 	pub fn verify(&self) -> Result<(), secp::Error> {
-		debug!(LOGGER, "tx_kernel: verify: {:?}", self);
-
 		let msg = Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height))?;
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
@@ -192,7 +189,6 @@ pub struct Transaction {
 /// write the transaction as binary.
 impl Writeable for Transaction {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		println!("Excess sig write: {:?}", self.excess_sig);
 		ser_multiwrite!(
 			writer,
 			[write_u64, self.fee],

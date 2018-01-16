@@ -20,7 +20,6 @@ use std::collections::{HashMap, HashSet};
 use core::core::transaction;
 use core::core::OutputIdentifier;
 use core::core::{block, hash};
-use util::LOGGER;
 use util::secp::pedersen::Commitment;
 
 use types::*;
@@ -171,8 +170,6 @@ where
 		let mut pool_refs: Vec<graph::Edge> = Vec::new();
 		let mut orphan_refs: Vec<graph::Edge> = Vec::new();
 		let mut blockchain_refs: Vec<graph::Edge> = Vec::new();
-
-		debug!(LOGGER, "add_to_memory_pool: {:?}", &tx.inputs);
 
 		for input in &tx.inputs {
 			let output = OutputIdentifier::from_input(&input);

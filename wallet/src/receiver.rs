@@ -290,18 +290,15 @@ pub fn receive_coinbase(
 
 	debug!(
 		LOGGER,
-		"Received coinbase and built candidate output - {:?}, {:?}, {}",
-		root_key_id.clone(),
+		"receive_coinbase: built candidate output - {:?}, {}",
 		key_id.clone(),
 		derivation,
 	);
 
-	debug!(LOGGER, "block_fees - {:?}", block_fees);
-
 	let mut block_fees = block_fees.clone();
 	block_fees.key_id = Some(key_id.clone());
 
-	debug!(LOGGER, "block_fees updated - {:?}", block_fees);
+	debug!(LOGGER, "receive_coinbase: {:?}", block_fees);
 
 	let (out, kern) = Block::reward_output(
 		&keychain,

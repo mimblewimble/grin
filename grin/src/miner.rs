@@ -583,8 +583,6 @@ impl Miner {
 			b.header.clone().difficulty.clone().into_num(),
 		);
 
-		debug!(LOGGER, "{:?}", b.inputs.clone());
-
 		// making sure we're not spending time mining a useless block
 		b.validate()?;
 
@@ -592,7 +590,6 @@ impl Miner {
 		b.header.nonce = rng.gen();
 		b.header.difficulty = difficulty;
 		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
-		trace!(LOGGER, "Block: {:?}", b);
 
 		let roots_result = self.chain.set_sumtree_roots(&mut b, false);
 
@@ -657,7 +654,7 @@ impl Miner {
 				..block_fees
 			};
 
-			debug!(LOGGER, "block_fees here: {:?}", block_fees);
+			debug!(LOGGER, "get_coinbase: {:?}", block_fees);
 
 			Ok((output, kernel, block_fees))
 		}

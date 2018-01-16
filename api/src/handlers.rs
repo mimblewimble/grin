@@ -124,9 +124,6 @@ impl UtxoHandler {
 				OutputPrintable::from_output(output, self.chain.clone(), include_proof)
 			})
 			.collect();
-
-		debug!(LOGGER, "outputs_at_height: {:?}", header);
-		debug!(LOGGER, "outputs_at_height: {:?}", outputs);
 		BlockOutputs {
 			header: BlockHeaderInfo::from_header(&header),
 			outputs: outputs,

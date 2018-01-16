@@ -589,8 +589,6 @@ impl Block {
 		input: &Input,
 		height: u64,
 	) -> Result<(), Error> {
-		debug!(LOGGER, "block: verify_coinbase_maturity: {:?}, {}, {}", input, height, self.header.height);
-
 		let output = OutputIdentifier::from_input(&input);
 
 		// We should only be calling verify_coinbase_maturity

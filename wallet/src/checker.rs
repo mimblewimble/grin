@@ -113,12 +113,10 @@ fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain) -> R
 	let mut api_blocks: HashMap<pedersen::Commitment, api::BlockHeaderInfo> = HashMap::new();
 	match api::client::get::<Vec<api::BlockOutputs>>(url.as_str()) {
 		Ok(blocks) => {
-			debug!(LOGGER, "blocks here - {:?}", blocks);
 			for block in blocks {
 				for out in block.outputs {
 					if let Ok(c) = util::from_hex(String::from(out.commit)) {
 						let commit = pedersen::Commitment::from_vec(c);
-						debug!(LOGGER, "{:?}", block.header.clone());
 						api_blocks.insert(commit, block.header.clone());
 					}
 				}

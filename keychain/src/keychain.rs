@@ -372,8 +372,6 @@ impl Keychain {
 		msg: &Message,
 		commit: &Commitment,
 	) -> bool {
-		debug!(LOGGER, "aggsig_verify_single_from_commit: {:?}, {:?}, {:?}", sig, msg, commit);
-
 		// Extract the pubkey, unfortunately we need this hack for now, (we just hope one is valid)
 		// TODO: Create better secp256k1 API to do this
 		let pubkeys = commit.to_two_pubkeys(secp);
