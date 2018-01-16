@@ -255,7 +255,6 @@ fn validate_block(
 	// main isolated block validation, checks all commitment sums and sigs
 	b.validate().map_err(&Error::InvalidBlockProof)?;
 
-	debug!(LOGGER, "validate_block: {:?}, {:?}", b.header.previous, ctx.head.last_block_h,);
 	if b.header.previous != ctx.head.last_block_h {
 		rewind_and_apply_fork(b, ctx.store.clone(), ext)?;
 	}
