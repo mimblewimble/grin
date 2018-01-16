@@ -26,7 +26,7 @@ pub use graph;
 
 use core::consensus;
 use core::core::{block, hash, transaction};
-use core::core::transaction::OutputIdentifier;
+use core::core::transaction::{Input, OutputIdentifier};
 
 /// Tranasction pool configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -157,14 +157,10 @@ pub trait BlockChain {
 	/// hash from the output MMR.
 	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), PoolError>;
 
+	fn is_matured(&self, input: &Input, height: u64) -> Result<(), PoolError>;
+
 	/// Get the block header at the head
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError>;
-
-	fn verify_coinbase_maturity(
-		&self,
-		input: &transaction::Input,
-		height: u64,
-	) -> Result<(), PoolError>;
 }
 
 /// Bridge between the transaction pool and the rest of the system. Handles

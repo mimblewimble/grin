@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 
 use util::secp::pedersen::{Commitment, RangeProof};
 
-use core::core::{OutputIdentifier, SumCommit};
+use core::core::{Input, OutputIdentifier, SumCommit};
 use core::core::pmmr::{HashSum, NoSum};
 
 use core::core::{Block, BlockHeader, TxKernel};
@@ -338,6 +338,11 @@ impl Chain {
 	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.is_unspent(output_ref)
+	}
+
+	pub fn is_matured(&self, input: &Input, height: u64) -> Result<(), Error> {
+		let mut sumtrees = self.sumtrees.write().unwrap();
+		sumtrees.is_matured(input, height)
 	}
 
 	/// Sets the sumtree roots on a brand new block by applying the block on the

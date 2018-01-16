@@ -576,15 +576,8 @@ impl Block {
 		Ok(())
 	}
 
-	/// NOTE: this happens during apply_block
-	/// and is run on the block containing the coinbase output.
-	/// TODO - consider renaming this (not a regular block verification step)
+	/// NOTE: this happens during apply_block (not the earlier validate_block)
 	///
-	/// TODO - move this to block_header
-	///
-	/// TODO - need to do this for non-coinbase? Have we already checked the output is what it says it it?
-	///
-	/// Confirm output is from the block we say it is
 	/// Calculate lock_height as block_height + 1,000
 	/// Confirm height <= lock_height
 	pub fn verify_coinbase_maturity(
@@ -594,6 +587,13 @@ impl Block {
 	) -> Result<(), Error> {
 		debug!(LOGGER, "block: verify_coinbase_maturity: {:?}, {}, {}", output, height, self.header.height);
 
+		// We should only be calling verify_coinbase_maturity
+		// if we both claim we are spending a coinbase output
+		// _and_ that we trust this claim.
+		// We should have already confirmed the entry from the MMR exists
+		// and has the expected hash.
+		assert!(output.features.contains(COINBASE_OUTPUT));
+
 		if let Some(out) = self.outputs
 			.iter()
 			.find(|x| {
@@ -601,10 +601,6 @@ impl Block {
 				OutputIdentifier::from_output(&x) == *output
 			})
 		{
-			if !output.features.contains(COINBASE_OUTPUT) {
-				return Ok(());
-			}
-
 			let lock_height = self.header.height + global::coinbase_maturity();
 			if lock_height > height {
 				Err(Error::ImmatureCoinbase{

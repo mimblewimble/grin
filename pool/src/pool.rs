@@ -191,7 +191,7 @@ where
 				Parent::PoolTransaction { tx_ref: x } => pool_refs.push(base.with_source(Some(x))),
 				Parent::BlockTransaction => {
 					let height = head_header.height + 1;
-					self.blockchain.verify_coinbase_maturity(&input, height)?;
+					self.blockchain.is_matured(&input, height)?;
 					blockchain_refs.push(base);
 				}
 				Parent::Unknown => orphan_refs.push(base),

@@ -69,18 +69,18 @@ pub fn input(
 	out_block: Hash,
 	key_id: Identifier,
 ) -> Box<Append> {
-	debug!(LOGGER, "Building an input (regular output): {}, {}", value, key_id);
+	debug!(LOGGER, "Building input (spending regular output): {}, {}", value, key_id);
 	build_input(value, DEFAULT_OUTPUT, out_block, key_id)
 }
 
-/// Adds a coinbase input with the provided value and blinding key to the transaction
-/// being built, with an additional lock_height specified.
+/// Adds a coinbase input spending a coinbase output.
+/// We will use the block hash to verify coinbase maturity.
 pub fn coinbase_input(
 	value: u64,
 	out_block: Hash,
 	key_id: Identifier,
 ) -> Box<Append> {
-	debug!(LOGGER, "Building a input (coinbase output): {}, {}", value, key_id);
+	debug!(LOGGER, "Building input (spending coinbase): {}, {}", value, key_id);
 	build_input(value, COINBASE_OUTPUT, out_block, key_id)
 }
 

@@ -95,10 +95,10 @@ impl SumTrees {
 					&mut self.output_pmmr_h.backend,
 					self.output_pmmr_h.last_pos,
 				);
-				if let Some(hs) = output_pmmr.get(pos) {
+				if let Some(HashSum { hash, sum: _ }) = output_pmmr.get(pos) {
 					let sum_commit = output.as_sum_commit();
 					let hash_sum = HashSum::from_summable(pos, &sum_commit);
-					if hs.hash == hash_sum.hash {
+					if hash == hash_sum.hash {
 						Ok(())
 					} else {
 						Err(Error::SumTreeErr(format!("sumtree hash mismatch")))
@@ -109,6 +109,53 @@ impl SumTrees {
 			}
 			Err(grin_store::Error::NotFoundErr) => Err(Error::OutputNotFound),
 			Err(e) => Err(Error::StoreErr(e, format!("sumtree unspent check"))),
+		}
+	}
+
+	pub fn is_matured(
+		&mut self,
+		input: &Input,
+		height: u64,
+	) -> Result<(), Error> {
+		match self.commit_index.get_output_pos(&input.commit) {
+			Ok(pos) => {
+				let output_pmmr = PMMR::at(
+					&mut self.output_pmmr_h.backend,
+					self.output_pmmr_h.last_pos,
+				);
+				if let Some(HashSum { hash, sum: _ }) = output_pmmr.get(pos) {
+					let sum_commit = SumCommit::from_input(&input);
+					let hash_sum = HashSum::from_summable(pos, &sum_commit);
+					if hash != hash_sum.hash {
+						return Err(Error::SumTreeErr(format!("sumtree hash mismatch")));
+					}
+
+					// At this point we can be sure the input is spending the output
+					// it claims to be spending, and it is coinbase or non-coinbase.
+					// If we are spending a coinbase output then go find the block
+					// and check the coinbase maturity rule is being met.
+					if input.features.contains(COINBASE_OUTPUT) {
+						// edge case here - we may be spending an output with zero-confirmations
+						// and it just got included in a block.
+						// The wallet may not know about this new block yet (not yet refreshed).
+						// Is it safe to assume this the tx was included in the latest block?
+						let block = if input.out_block == Hash::zero() {
+							let head = self.commit_index.head()?;
+							self.commit_index.get_block(&head.last_block_h)?
+						} else {
+							self.commit_index.get_block(&input.out_block)?
+						};
+
+						let output = OutputIdentifier::from_input(&input);
+						block.verify_coinbase_maturity(&output, height)
+							.map_err(|_| Error::ImmatureCoinbase)?;
+					}
+					Ok(())
+				} else {
+					Err(Error::OutputNotFound)
+				}
+			}
+			Err(_) => return Err(Error::OutputNotFound),
 		}
 	}
 
@@ -314,20 +361,26 @@ impl<'a> Extension<'a> {
 					return Err(Error::SumTreeErr(format!("output pmmr hash mismatch")));
 				}
 
-				// edge case here - we may be spending an output with zero-confirmations
-				// and it just got included in a block, but our wallet does not know yet
-				// so we do now know what block the output originates from
-				// assume included in the latest block?
-				let block = if input.out_block == Hash::zero() {
-					let head = self.commit_index.head()?;
-					self.commit_index.get_block(&head.last_block_h)?
-				} else {
-					self.commit_index.get_block(&input.out_block)?
-				};
+				// At this point we can be sure the input is spending the output
+				// it claims to be spending, and it is coinbase or non-coinbase.
+				// If we are spending a coinbase output then go find the block
+				// and check the coinbase maturity rule is being met.
+				if input.features.contains(COINBASE_OUTPUT) {
+					// edge case here - we may be spending an output with zero-confirmations
+					// and it just got included in a block.
+					// The wallet may not know about this new block yet (not yet refreshed).
+					// Is it safe to assume this the tx was included in the latest block?
+					let block = if input.out_block == Hash::zero() {
+						let head = self.commit_index.head()?;
+						self.commit_index.get_block(&head.last_block_h)?
+					} else {
+						self.commit_index.get_block(&input.out_block)?
+					};
 
-				let output = OutputIdentifier::from_input(&input);
-				block.verify_coinbase_maturity(&output, height)
-					.map_err(|_| Error::ImmatureCoinbase)?;
+					let output = OutputIdentifier::from_input(&input);
+					block.verify_coinbase_maturity(&output, height)
+						.map_err(|_| Error::ImmatureCoinbase)?;
+				}
 			}
 
 			// Now prune the output_pmmr and rproof_pmmr.

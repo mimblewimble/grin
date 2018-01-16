@@ -333,10 +333,7 @@ impl PoolToChainAdapter {
 }
 
 impl pool::BlockChain for PoolToChainAdapter {
-	fn is_unspent(
-		&self,
-		output_ref: &OutputIdentifier,
-	) -> Result<(), pool::PoolError> {
+	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), pool::PoolError> {
 		self.chain
 			.borrow()
 			.is_unspent(output_ref)
@@ -347,30 +344,20 @@ impl pool::BlockChain for PoolToChainAdapter {
 			})
 	}
 
+	fn is_matured(&self, input: &Input, height: u64) -> Result<(), pool::PoolError> {
+		self.chain
+			.borrow()
+			.is_matured(input, height)
+			.map_err(|e| match e {
+				chain::types::Error::OutputNotFound => pool::PoolError::OutputNotFound,
+				_ => pool::PoolError::GenericPoolError,
+			})
+		}
+
 	fn head_header(&self) -> Result<BlockHeader, pool::PoolError> {
 		self.chain
 			.borrow()
 			.head_header()
 			.map_err(|_| pool::PoolError::GenericPoolError)
-	}
-
-	fn verify_coinbase_maturity(
-		&self,
-		input: &Input,
-		height: u64,
-	) -> Result<(), pool::PoolError> {
-		debug!(LOGGER, "adapter: verify_coinbase_maturity: {:?}, {}", input, height);
-
-		let block = self.chain
-			.borrow()
-			.get_block(&input.out_block)
-			.map_err(|_| pool::PoolError::GenericPoolError)?;
-
-		let output = OutputIdentifier::from_input(&input);
-		block.verify_coinbase_maturity(&output, height)
-			.map_err(|e| {
-				debug!(LOGGER, "{:?}", e);
-				pool::PoolError::ImmatureCoinbase
-			})
 	}
 }

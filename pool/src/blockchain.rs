@@ -15,7 +15,7 @@ use core::core::hash;
 use core::core::hash::Hashed;
 use core::core::block;
 use core::core::transaction;
-use core::core::transaction::OutputIdentifier;
+use core::core::transaction::{Input, OutputIdentifier};
 use types::{BlockChain, PoolError};
 use util::secp::pedersen::Commitment;
 
@@ -114,6 +114,10 @@ impl BlockChain for DummyChainImpl {
 		}
 	}
 
+	fn is_matured(&self, input: &Input, height: u64) -> Result<(), PoolError> {
+		panic!("where are we calling this from???");
+	}
+
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError> {
 		let headers = self.head_header.read().unwrap();
 		if headers.len() > 0 {
@@ -121,20 +125,6 @@ impl BlockChain for DummyChainImpl {
 		} else {
 			Err(PoolError::GenericPoolError)
 		}
-	}
-
-	fn verify_coinbase_maturity(
-		&self,
-		input: &transaction::Input,
-		height: u64,
-	) -> Result<(), PoolError> {
-		panic!("where are we calling this from???");
-
-		// let out = OutputIdentifier::from_input(&input);
-		// let block = self.get_block(&input.out_block)?;
-		// block.verify_coinbase_maturity(&out, height)
-		// 	.map_err(|x| Error::ImmatureCoinbase);
-
 	}
 }
 
