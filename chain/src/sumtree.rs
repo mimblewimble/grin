@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use core::core::{Block, SumCommit, Input, Output, OutputIdentifier, TxKernel, COINBASE_OUTPUT};
 use core::core::pmmr::{HashSum, NoSum, Summable, PMMR};
-use core::core::hash::{Hash, Hashed};
+use core::core::hash::Hashed;
 use grin_store;
 use grin_store::sumtree::PMMRBackend;
 use types::ChainStore;
@@ -88,6 +88,9 @@ impl SumTrees {
 		})
 	}
 
+	/// Check is an output is unspent.
+	/// We look in the index to find the output MMR pos.
+	/// Then we check the entry in the output MMR and confirm the hash matches.
 	pub fn is_unspent(&mut self, output: &OutputIdentifier) -> Result<(), Error> {
 		match self.commit_index.get_output_pos(&output.commit) {
 			Ok(pos) => {
@@ -112,6 +115,11 @@ impl SumTrees {
 		}
 	}
 
+	/// Check the output being spent by the input has sufficiently matured.
+	/// This only applies for coinbase outputs being spent (1,000 blocks).
+	/// Non-coinbase outputs will always pass this check.
+	/// For a coinbase output we find the block by the block hash provided in the input
+	/// and check coinbase maturty based on the height of this block.
 	pub fn is_matured(
 		&mut self,
 		input: &Input,

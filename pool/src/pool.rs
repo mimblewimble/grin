@@ -14,22 +14,17 @@
 
 //! Top-level Pool type, methods, and tests
 
-use types::*;
-pub use graph;
+use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
 
 use core::core::transaction;
 use core::core::OutputIdentifier;
-
-use core::core::block;
-use core::core::hash;
-use core::core::target::Difficulty;
-use core::global;
-
+use core::core::{block, hash};
 use util::LOGGER;
 use util::secp::pedersen::Commitment;
 
-use std::sync::Arc;
-use std::collections::{HashMap, HashSet};
+use types::*;
+pub use graph;
 
 /// The pool itself.
 /// The transactions HashMap holds ownership of all transactions in the pool,

@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use util::secp::pedersen::{Commitment, RangeProof};
+use util::secp::pedersen::RangeProof;
 
 use core::core::{Input, OutputIdentifier, SumCommit};
 use core::core::pmmr::{HashSum, NoSum};
@@ -340,6 +340,9 @@ impl Chain {
 		sumtrees.is_unspent(output_ref)
 	}
 
+	/// Check if the input has matured sufficiently for the given block height.
+	/// This only applies to inputs spending coinbase outputs.
+	/// An input spending a non-coinbase output will always pass this check.
 	pub fn is_matured(&self, input: &Input, height: u64) -> Result<(), Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.is_matured(input, height)

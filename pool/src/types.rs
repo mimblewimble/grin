@@ -157,6 +157,9 @@ pub trait BlockChain {
 	/// hash from the output MMR.
 	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), PoolError>;
 
+	/// Check if an output being spent by the input has sufficiently matured.
+	/// This is only applicable for coinbase outputs (1,000 blocks).
+	/// Non-coinbase outputs will always pass this check.
 	fn is_matured(&self, input: &Input, height: u64) -> Result<(), PoolError>;
 
 	/// Get the block header at the head

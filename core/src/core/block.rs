@@ -64,10 +64,14 @@ pub enum Error {
 	Keychain(keychain::Error),
 	/// Underlying consensus error (sort order currently)
 	Consensus(consensus::Error),
+	/// Coinbase has not yet matured and cannot be spent (1,000 blocks)
 	ImmatureCoinbase {
+		/// The height of the block containing the input spending the coinbase output
 		height: u64,
+		/// The lock_height needed to be reached for the coinbase output to mature
 		lock_height: u64,
 	},
+	/// Other unspecified error condition
 	Other(String)
 }
 
@@ -590,13 +594,13 @@ impl Block {
 		let output = OutputIdentifier::from_input(&input);
 
 		// We should only be calling verify_coinbase_maturity
-		// if we both claim we are spending a coinbase output
+		// if the sender claims we are spending a coinbase output
 		// _and_ that we trust this claim.
 		// We should have already confirmed the entry from the MMR exists
 		// and has the expected hash.
 		assert!(output.features.contains(COINBASE_OUTPUT));
 
-		if let Some(out) = self.outputs
+		if let Some(_) = self.outputs
 			.iter()
 			.find(|x| OutputIdentifier::from_output(&x) == output)
 		{

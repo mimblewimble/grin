@@ -23,11 +23,9 @@ use std::ops;
 
 use consensus;
 use consensus::VerifySortOrder;
-use core;
 use core::Committed;
 use core::hash::{Hash, Hashed};
 use core::pmmr::Summable;
-use global;
 use keychain::{Identifier, Keychain};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 use util;
@@ -427,9 +425,12 @@ impl Readable for Input {
 	}
 }
 
-/// The input for a transaction, which spends a pre-existing output.
+/// The input for a transaction, which spends a pre-existing unspent output.
 /// The input commitment is a reproduction of the commitment of the output being spent.
+/// Input must also provide the original output features and the hash of the block
+/// the output originated from.
 impl Input {
+	/// Build a new input from the data required to identify and verify an output beng spent.
 	pub fn new(
 		features: OutputFeatures,
 		commit: Commitment,
@@ -442,6 +443,9 @@ impl Input {
 		}
 	}
 
+	/// The input commitment which _partially_ identifies the output being spent.
+	/// In the presence of a fork we need additional info to uniquely identify the output.
+	/// Specifically the block hash (so correctly calculate lock_height for coinbase outputs).
 	pub fn commitment(&self) -> Commitment {
 		self.commit
 	}
@@ -646,6 +650,9 @@ impl Output {
 	}
 }
 
+/// An output_identifier can be build from either an input _or_ and output and
+/// contains everything we need to uniquely identify an output being spent.
+/// Needed because it is not sufficient to pass a commitment around.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct OutputIdentifier {
 	/// Output features (coinbase vs. regular transaction output)
@@ -656,6 +663,7 @@ pub struct OutputIdentifier {
 }
 
 impl OutputIdentifier {
+	/// Build a new output_identifier.
 	pub fn new(features: OutputFeatures, commit: &Commitment) -> OutputIdentifier {
 		OutputIdentifier {
 			features: features.clone(),
@@ -663,6 +671,7 @@ impl OutputIdentifier {
 		}
 	}
 
+	/// Build an output_identifier from an existing output.
 	pub fn from_output(output: &Output) -> OutputIdentifier {
 		OutputIdentifier {
 			features: output.features,
@@ -670,6 +679,7 @@ impl OutputIdentifier {
 		}
 	}
 
+	/// Build an output_identifier from an existing input.
 	pub fn from_input(input: &Input) -> OutputIdentifier {
 		OutputIdentifier {
 			features: input.features,
@@ -677,6 +687,7 @@ impl OutputIdentifier {
 		}
 	}
 
+	/// convert an output_identifier to hex string format.
 	pub fn to_hex(&self) -> String {
 		format!(
 			"{:b}{}",
@@ -685,10 +696,13 @@ impl OutputIdentifier {
 		)
 	}
 
+	/// Convert an output_indentifier to a sum_commit representation
+	/// so we can use it to query the the output MMR
 	pub fn as_sum_commit(&self) -> SumCommit {
 		SumCommit::new(self.features, &self.commit)
 	}
 
+	/// Convert a sum_commit back to an output_identifier.
 	pub fn from_sum_commit(sum_commit: &SumCommit) -> OutputIdentifier {
 		OutputIdentifier::new(sum_commit.features, &sum_commit.commit)
 	}
@@ -725,6 +739,7 @@ pub struct SumCommit {
 }
 
 impl SumCommit {
+	/// Build a new sum_commit.
 	pub fn new(features: OutputFeatures, commit: &Commitment) -> SumCommit {
 		SumCommit {
 			features: features.clone(),
@@ -732,6 +747,7 @@ impl SumCommit {
 		}
 	}
 
+	/// Build a new sum_commit from an existing output.
 	pub fn from_output(output: &Output) -> SumCommit {
 		SumCommit {
 			features: output.features,
@@ -739,6 +755,7 @@ impl SumCommit {
 		}
 	}
 
+	/// Build a new sum_commit from an existing input.
 	pub fn from_input(input: &Input) -> SumCommit {
 		SumCommit {
 			features: input.features,
@@ -746,6 +763,7 @@ impl SumCommit {
 		}
 	}
 
+	/// Convert a sum_commit to hex string.
 	pub fn to_hex(&self) -> String {
 		format!(
 			"{:b}{}",

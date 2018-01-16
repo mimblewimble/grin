@@ -28,7 +28,7 @@
 use util::{secp, static_secp_instance, kernel_sig_msg};
 
 use core::{Transaction, Input, Output, OutputFeatures, SwitchCommitHash, COINBASE_OUTPUT, DEFAULT_OUTPUT};
-use core::hash::{Hash, ZERO_HASH};
+use core::hash::Hash;
 use keychain;
 use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
 use util::LOGGER;

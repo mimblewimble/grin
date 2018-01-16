@@ -16,11 +16,10 @@ use std::sync::Arc;
 
 use core::{core, ser};
 use core::core::hash::Hashed;
-use core::core::{OutputIdentifier, SumCommit};
+use core::core::SumCommit;
 use chain;
 use p2p;
 use util;
-use util::LOGGER;
 use util::secp::pedersen;
 use util::secp::constants::MAX_PROOF_SIZE;
 

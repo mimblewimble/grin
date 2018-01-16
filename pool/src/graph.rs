@@ -104,6 +104,7 @@ impl Edge {
 		}
 	}
 
+	/// The output_identifier of the edge.
 	pub fn output(&self) -> OutputIdentifier {
 		self.output.clone()
 	}

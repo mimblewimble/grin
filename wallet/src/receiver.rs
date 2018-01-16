@@ -27,7 +27,7 @@ use core::consensus::reward;
 use core::core::{build, Block, Output, Transaction, TxKernel, amount_to_hr_string};
 use core::core::hash::Hash;
 use core::{global, ser};
-use keychain::{BlindingFactor, Identifier, Keychain};
+use keychain::{Identifier, Keychain};
 use types::*;
 use util::{LOGGER, to_hex, secp};
 

@@ -72,10 +72,12 @@ impl Hash {
 		ZERO_HASH
 	}
 
+	/// Convert a hash to hex string format.
 	pub fn to_hex(&self) -> String {
 		util::to_hex(self.to_vec())
 	}
 
+	/// Convert hex string back to hash.
 	pub fn from_hex(hex: &str) -> Result<Hash, Error> {
 		let bytes = util::from_hex(hex.to_string()).unwrap();
 		Ok(Hash::from_vec(bytes))
