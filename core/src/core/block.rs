@@ -690,6 +690,7 @@ impl Block {
 #[cfg(test)]
 mod test {
 	use super::*;
+	use core::hash::ZERO_HASH;
 	use core::Transaction;
 	use core::build::{self, input, output, with_fee};
 	use core::test::tx2i1o;
@@ -721,7 +722,7 @@ mod test {
 		key_id2: Identifier,
 	) -> Transaction {
 		build::transaction(
-			vec![input(v, key_id1), output(3, key_id2), with_fee(2)],
+			vec![input(v, ZERO_HASH, key_id1), output(3, key_id2), with_fee(2)],
 			&keychain,
 		).map(|(tx, _)| tx)
 			.unwrap()
@@ -745,7 +746,7 @@ mod test {
 		}
 
 		let now = Instant::now();
-		parts.append(&mut vec![input(500000, pks.pop().unwrap()), with_fee(2)]);
+		parts.append(&mut vec![input(500000, ZERO_HASH, pks.pop().unwrap()), with_fee(2)]);
 		let mut tx = build::transaction(parts, &keychain)
 			.map(|(tx, _)| tx)
 			.unwrap();
@@ -765,7 +766,7 @@ mod test {
 
 		let mut btx1 = tx2i1o();
 		let (mut btx2, _) = build::transaction(
-			vec![input(7, key_id1), output(5, key_id2.clone()), with_fee(2)],
+			vec![input(7, ZERO_HASH, key_id1), output(5, key_id2.clone()), with_fee(2)],
 			&keychain,
 		).unwrap();
 
@@ -793,7 +794,7 @@ mod test {
 		let mut btx1 = tx2i1o();
 
 		let (mut btx2, _) = build::transaction(
-			vec![input(7, key_id1), output(5, key_id2.clone()), with_fee(2)],
+			vec![input(7, ZERO_HASH, key_id1), output(5, key_id2.clone()), with_fee(2)],
 			&keychain,
 		).unwrap();
 
