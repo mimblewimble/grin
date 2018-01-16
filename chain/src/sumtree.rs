@@ -22,12 +22,14 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use util::{secp, static_secp_instance};
 use util::secp::pedersen::{RangeProof, Commitment};
 
+use core::consensus::reward;
 use core::core::{Block, BlockHeader, SumCommit, Input, Output, TxKernel, COINBASE_OUTPUT};
 use core::core::pmmr::{self, HashSum, NoSum, Summable, PMMR};
 use core::core::hash::Hashed;
-use core::ser;
+use core::ser::{self, Readable};
 use grin_store;
 use grin_store::sumtree::{PMMRBackend, AppendOnlyFile};
 use types::ChainStore;
@@ -503,12 +505,29 @@ impl<'a> Extension<'a> {
 			return Err(Error::SumTreeErr(e));
 		}
 
+		// validate the tree roots against the block header
 		let (utxo_root, rproof_root, kernel_root) = self.roots();
 		if utxo_root.hash != header.utxo_root || rproof_root.hash != header.range_proof_root
 			|| kernel_root.hash != header.kernel_root
 		{
 			return Err(Error::InvalidRoot);
 		}
+
+		// the real magicking: the sum of all kernel excess should equal the sum
+		// of all UTXO commitments, minus the total supply
+		// TODO fee burning
+		let kernels_sum = self.sum_kernels()?;
+		let utxo_sum = self.sum_utxos()?;
+		{
+			let secp = secp.lock().unwrap();
+			let over_commit = secp.commit_value(header.height * reward(0))?;
+			let adjusted_sum_utxo = secp.commit_sum(vec![sum_utxo.unwrap()], vec![over_commit])?;
+
+			if adjusted_sum_utxo != sum_kernel {
+				return Err(Error::SumTreeErr("Differing UTXO commitment and kernel excess sums.".to_owned()));
+			}
+		}
+
 		Ok(())
 	}
 
@@ -552,6 +571,61 @@ impl<'a> Extension<'a> {
 			self.rproof_pmmr.unpruned_size(),
 			self.kernel_pmmr.unpruned_size(),
 		)
+	}
+
+	/// Sums the excess of all our kernels, validating their signatures on the way
+	fn sum_kernels(&self) -> Result<Commitment, Error> {
+		// make sure we have the right count of kernels using the MMR, the storage
+		// file may have a few more
+		let mmr_sz = self.kernel_pmmr.unpruned_size();
+		let count: u64 = pmmr::peaks(mmr_sz).iter().map(|n| {
+			(1 << pmmr::bintree_postorder_height(*n)) as u64
+		}).sum();
+
+		let mut kernel_file = File::open(self.kernel_file.path())?;
+		let first: TxKernel = ser::deserialize(&mut kernel_file)?;
+		first.verify()?;
+		let mut sum_kernel = first.excess;
+
+		let secp = static_secp_instance();
+		let mut kern_count = 1;
+		loop {
+			match ser::deserialize::<TxKernel>(&mut kernel_file) {
+				Ok(kernel) => {
+					kernel.verify()?;
+					let secp = secp.lock().unwrap();
+					sum_kernel = secp.commit_sum(vec![sum_kernel, kernel.excess], vec![])?;
+					kern_count += 1;
+					if kern_count == count {
+						break;
+					}
+				}
+				Err(_) => break,
+			}
+		}
+		debug!(LOGGER, "Validated and summed {} kernels", kern_count);
+		Ok(sum_kernel)
+	}
+
+	/// Sums all our UTXO commitments
+	fn sum_utxos(&self) -> Result<Commitment, Error> {
+		let mut sum_utxo = None;
+		let mut utxo_count = 0;
+		for n in 1..self.output_pmmr.unpruned_size()+1 {
+			if pmmr::bintree_postorder_height(n) == 0 {
+				if let Some(hs) = self.output_pmmr.get(n) {
+					if n == 1 {
+						sum_utxo = Some(hs.sum.commit);
+					} else {
+						let secp = secp.lock().unwrap();
+						sum_utxo = Some(secp.commit_sum(vec![sum_utxo.unwrap(), hs.sum.commit], vec![])?);
+					}
+					utxo_count += 1;
+				}
+			}
+		}
+		debug!(LOGGER, "Summed {} UTXOs", utxo_count);
+		Ok(sum_txo.unwrap())
 	}
 }
 

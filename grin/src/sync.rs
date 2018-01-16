@@ -115,6 +115,7 @@ pub fn run_fast_sync(
 					if let Ok(p) = peer.try_read() {
 						let header_head = chain.get_header_head().unwrap();
 						if header_head.height > 1 {
+							error!(LOGGER, "sync request");
 							p.send_sumtrees_request(header_head.height, header_head.last_block_h);
 							break;
 						}

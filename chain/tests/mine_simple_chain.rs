@@ -125,6 +125,7 @@ fn mine_empty_chain() {
 			.unwrap();
 		assert_eq!(header_by_output_commit.hash(), bhash);
 	}
+	chain.validate().unwrap();
 }
 
 #[test]

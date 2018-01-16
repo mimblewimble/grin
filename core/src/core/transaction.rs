@@ -166,7 +166,7 @@ impl TxKernel {
 	pub fn size() -> usize {
 		17 + // features plus fee and lock_height
 			secp::constants::PEDERSEN_COMMITMENT_SIZE +
-			secp::constants::COMPACT_SIGNATURE_SIZE
+			secp::constants::AGG_SIGNATURE_SIZE
 	}
 }
 

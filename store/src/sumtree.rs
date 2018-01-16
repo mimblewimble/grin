@@ -191,6 +191,11 @@ impl AppendOnlyFile {
 	fn size(&self) -> io::Result<u64> {
 		fs::metadata(&self.path).map(|md| md.len())
 	}
+
+	/// Path of the underlying file
+	pub fn path(&self) -> String {
+		self.path.clone()
+	}
 }
 
 /// Log file fully cached in memory containing all positions that should be

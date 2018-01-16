@@ -114,12 +114,7 @@ impl Protocol for ProtocolV1 {
 	}
 
 	fn send_sumtrees_request(&self, height: u64, hash: Hash) -> Result<(), Error> {
-		self.send_request(
-			Type::SumtreesRequest,
-			Type::SumtreesArchive,
-			&SumtreesRequest { hash, height },
-			None,
-		)
+		self.send_msg(Type::SumtreesRequest, &SumtreesRequest { hash, height })
 	}
 
 	/// Close the connection to the remote peer

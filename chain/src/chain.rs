@@ -359,6 +359,14 @@ impl Chain {
 		sumtrees.is_unspent(output_ref)
 	}
 
+	pub fn validate(&self) -> Result<(), Error> {
+		let header = self.store.head_header()?;
+		let mut sumtrees = self.sumtrees.write().unwrap();
+		sumtree::extending(&mut sumtrees, |extension| {
+			extension.validate(&header)
+		})
+	}
+
 	/// Sets the sumtree roots on a brand new block by applying the block on the
 	/// current sumtree state.
 	pub fn set_sumtree_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Error> {

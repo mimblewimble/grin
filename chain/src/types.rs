@@ -16,6 +16,7 @@
 
 use std::io;
 
+use util::secp;
 use util::secp::pedersen::Commitment;
 
 use grin_store as store;
@@ -97,6 +98,11 @@ impl From<ser::Error> for Error {
 impl From<io::Error> for Error {
 	fn from(e: io::Error) -> Error {
 		Error::SumTreeErr(e.to_string())
+	}
+}
+impl From<secp::Error> for Error {
+	fn from(e: secp::Error) -> Error {
+		Error::SumTreeErr(format!("Sum validation error: {}", e.to_string()))
 	}
 }
 
