@@ -664,14 +664,10 @@ impl Block {
 		let msg = secp::Message::from_slice(&kernel_sig_msg(0, height))?;
 		let sig = keychain.aggsig_sign_from_key_id(&msg, &key_id)?;
 
-		let excess_sig = sig.serialize_der(&secp);
-
-		debug!(LOGGER, "block: reward_output: {:?}, {:?}, {}", excess, excess_sig, height);
-
 		let proof = TxKernel {
 			features: COINBASE_KERNEL,
 			excess: excess,
-			excess_sig: excess_sig,
+			excess_sig: sig,
 			fee: 0,
 			// lock_height here is the height of the block (tx should be valid immediately)
 			// *not* the lock_height of the coinbase output (only spendable 1,000 blocks later)
