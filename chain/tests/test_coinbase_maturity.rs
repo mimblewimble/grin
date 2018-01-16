@@ -183,7 +183,6 @@ fn test_coinbase_maturity() {
 
 	let prev = chain.head_header().unwrap();
 
-<<<<<<< HEAD
 	let (coinbase_txn, _) = build::transaction(
 		vec![
 			build::coinbase_input(amount, block_hash, key_id1.clone()),
@@ -198,17 +197,8 @@ fn test_coinbase_maturity() {
 		vec![&coinbase_txn],
 		&keychain,
 		&key_id4,
+		Difficulty::minimum(),
 	).unwrap();
-=======
-	let mut block =
-		core::core::Block::new(
-			&prev,
-			vec![&coinbase_txn],
-			&keychain,
-			&key_id4,
-			Difficulty::minimum()
-		).unwrap();
->>>>>>> master
 
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 

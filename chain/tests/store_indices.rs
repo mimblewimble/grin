@@ -55,7 +55,6 @@ fn test_various_store_indices() {
 		&key_id,
 		Difficulty::minimum()
 	).unwrap();
-	let commit = block.outputs[0].commitment();
 	let block_hash = block.hash();
 
 	chain_store.save_block(&block).unwrap();

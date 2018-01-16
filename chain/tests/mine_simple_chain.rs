@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use chain::Chain;
 use chain::types::*;
-use core::core::{Block, BlockHeader, Transaction, build};
+use core::core::{Block, BlockHeader, Transaction, OutputIdentifier, build};
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::consensus;
@@ -245,15 +245,15 @@ fn spend_in_fork() {
 
 	let mut fork_head = prev;
 
-	// mine the 1st block and keep track of thw block_hash
+	// mine the first block and keep track of the block_hash
 	// so we can spend the coinbase later
-	let b = prepare_block(&kc, &fork_head, &chain, 1);
+	let b = prepare_block(&kc, &fork_head, &chain, 2);
 	let block_hash = b.hash();
 	fork_head = b.header.clone();
 	chain.process_block(b, chain::SKIP_POW).unwrap();
 
-	// now mine 3 further blocks
-	for n in 2..5 {
+	// now mine three further blocks
+	for n in 3..6 {
 		let b = prepare_block(&kc, &fork_head, &chain, n);
 		fork_head = b.header.clone();
 		chain.process_block(b, chain::SKIP_POW).unwrap();
@@ -264,7 +264,7 @@ fn spend_in_fork() {
 
 	let (tx1, _) = build::transaction(
 		vec![
-			build::coinbase_input(consensus::REWARD, block_hash, kc.derive_key_id(1).unwrap()),
+			build::coinbase_input(consensus::REWARD, block_hash, kc.derive_key_id(2).unwrap()),
 			build::output(consensus::REWARD - 20000, kc.derive_key_id(30).unwrap()),
 			build::with_fee(20000),
 		],
@@ -273,11 +273,11 @@ fn spend_in_fork() {
 
 	let next = prepare_block_tx(&kc, &fork_head, &chain, 7, vec![&tx1]);
 	let prev_main = next.header.clone();
-	chain.process_block(next, chain::SKIP_POW).unwrap();
+	chain.process_block(next.clone(), chain::SKIP_POW).unwrap();
 
 	let (tx2, _) = build::transaction(
 		vec![
-			build::input(consensus::REWARD - 20000, kc.derive_key_id(30).unwrap()),
+			build::input(consensus::REWARD - 20000, next.hash(), kc.derive_key_id(30).unwrap()),
 			build::output(consensus::REWARD - 40000, kc.derive_key_id(31).unwrap()),
 			build::with_fee(20000),
 		],
@@ -301,8 +301,8 @@ fn spend_in_fork() {
 	let head = chain.head_header().unwrap();
 	assert_eq!(head.height, 6);
 	assert_eq!(head.hash(), prev_main.hash());
-	assert!(chain.get_unspent(&tx2.outputs[0].commitment()).is_ok());
-	assert!(chain.get_unspent(&tx1.outputs[0].commitment()).is_err());
+	assert!(chain.is_unspent(&OutputIdentifier::from_output(&tx2.outputs[0])).is_ok());
+	assert!(chain.is_unspent(&OutputIdentifier::from_output(&tx1.outputs[0])).is_err());
 
 	// make the fork win
 	let fork_next = prepare_fork_block(&kc, &prev_fork, &chain, 10);
@@ -313,8 +313,8 @@ fn spend_in_fork() {
 	let head = chain.head_header().unwrap();
 	assert_eq!(head.height, 7);
 	assert_eq!(head.hash(), prev_fork.hash());
-	assert!(chain.get_unspent(&tx2.outputs[0].commitment()).is_ok());
-	assert!(chain.get_unspent(&tx1.outputs[0].commitment()).is_err());
+	assert!(chain.is_unspent(&OutputIdentifier::from_output(&tx2.outputs[0])).is_ok());
+	assert!(chain.is_unspent(&OutputIdentifier::from_output(&tx1.outputs[0])).is_err());
 }
 
 fn prepare_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {

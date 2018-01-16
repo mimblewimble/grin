@@ -666,12 +666,6 @@ impl Block {
 
 		let excess_sig = sig.serialize_der(&secp);
 
-		// debug only
-		{
-			let valid = keychain::Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &excess);
-			debug!(LOGGER, "*** sig valid? {}", valid);
-		}
-
 		debug!(LOGGER, "block: reward_output: {:?}, {:?}, {}", excess, excess_sig, height);
 
 		let proof = TxKernel {

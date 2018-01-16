@@ -302,7 +302,9 @@ fn inputs_and_change(
 #[cfg(test)]
 mod test {
 	use core::core::build::{input, output, transaction};
+	use core::core::hash::ZERO_HASH;
 	use keychain::Keychain;
+
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment
@@ -312,8 +314,9 @@ mod test {
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 
 		let (tx1, _) = transaction(vec![output(105, key_id1.clone())], &keychain).unwrap();
-		let (tx2, _) = transaction(vec![input(105, key_id1.clone())], &keychain).unwrap();
+		let (tx2, _) = transaction(vec![input(105, ZERO_HASH, key_id1.clone())], &keychain).unwrap();
 
+		assert_eq!(tx1.outputs[0].features, tx2.inputs[0].features);
 		assert_eq!(tx1.outputs[0].commitment(), tx2.inputs[0].commitment());
 	}
 }
