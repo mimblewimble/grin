@@ -63,6 +63,7 @@ pub fn send_json_tx_str(
 /// wallet
 /// UTXOs. The destination can be "stdout" (for command line) (currently disabled) or a URL to the
 /// recipients wallet receiver (to be implemented).
+
 pub fn issue_send_tx(
 	config: &WalletConfig,
 	keychain: &Keychain,
