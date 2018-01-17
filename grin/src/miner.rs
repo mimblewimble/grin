@@ -167,9 +167,9 @@ impl Miner {
 		);
 
 		// look for a pow for at most attempt_time_per_block sec on the
-  // same block (to give a chance to new
-  // transactions) and as long as the head hasn't changed
-  // Will change this to something else at some point
+		// same block (to give a chance to new
+		// transactions) and as long as the head hasn't changed
+		// Will change this to something else at some point
 		let deadline = time::get_time().sec + attempt_time_per_block as i64;
 
 		// how often to output stats
@@ -542,7 +542,7 @@ impl Miner {
 		head: &core::BlockHeader,
 		key_id: Option<Identifier>,
 	) -> Result<(core::Block, BlockFees), Error> {
-	
+
 		// prepare the block header timestamp
 		let mut now_sec = time::get_time().sec;
 		let head_sec = head.timestamp.to_timespec().sec;
@@ -590,18 +590,18 @@ impl Miner {
 		b.header.difficulty = difficulty;
 		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
 		trace!(LOGGER, "Block: {:?}", b);
-	
+
 		let roots_result = self.chain.set_sumtree_roots(&mut b);
 		match roots_result {
 			Ok(_) => Ok((b, block_fees)),
-	
+
 			// If it's a duplicate commitment, it's likely trying to use
 			// a key that's already been derived but not in the wallet
 			// for some reason, allow caller to retry
 			Err(chain::Error::DuplicateCommitment(e)) => {
 				Err(Error::Chain(chain::Error::DuplicateCommitment(e)))
 			}
-	
+
 			//Some other issue, possibly duplicate kernel
 			Err(e) => {
 				error!(LOGGER, "Error setting sumtree root to build a block: {:?}", e);
