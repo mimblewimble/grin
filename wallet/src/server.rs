@@ -14,6 +14,7 @@
 
 
 use api::ApiServer;
+use tlsapi::TlsApiServer;
 use keychain::Keychain;
 use handlers::CoinbaseHandler;
 use receiver::WalletReceiver;
@@ -67,7 +68,7 @@ pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 		retrieve_info: post "/info" => info_handler,
     );
 
-	let mut apis_operator = ApiServer::new("/v1".to_string());
+	let mut apis_operator = TlsApiServer::new("/v1".to_string());
 	apis_operator.register_handler(router_wallet_operator);
 	match apis_operator.start(wallet_config.api_operator_listen_addr()) {
 		Err(e) => error!(LOGGER, "Failed to start Grin wallet operator listener: {}.", e),

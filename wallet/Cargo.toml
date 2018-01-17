@@ -28,4 +28,5 @@ term = "~0.4.6"
 grin_api = { path = "../api" }
 grin_core = { path = "../core" }
 grin_keychain = { path = "../keychain" }
+grin_tlsapi = { path = "../tlsapi" }
 grin_util = { path = "../util" }

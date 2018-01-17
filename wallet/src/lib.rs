@@ -39,6 +39,7 @@ extern crate tokio_retry;
 extern crate grin_api as api;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_tlsapi as tlsapi;
 extern crate grin_util as util;
 
 mod checker;

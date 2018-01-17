@@ -1,0 +1,23 @@
+[package]
+name = "grin_tlsapi"
+version = "0.1.0"
+authors = ["Laurent Camarasa <camalolo@gmail.com>"]
+workspace = ".."
+
+[dependencies]
+
+slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
+lazy_static = "1.0"
+iron = "~0.5.1"
+router = "~0.5.1"
+regex = "^0.2"
+mount = "~0.3.0"
+urlencoded = "~0.5.0"
+serde = "~1.0.8"
+serde_derive = "~1.0.8"
+serde_json = "~1.0.7"
+hyper = "~0.10.6"
+hyper-native-tls = "~0.2.4"
+openssl = "0.9.3"
+
+grin_store = { path = "../store" }

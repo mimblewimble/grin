@@ -5,7 +5,7 @@ authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
 exclude = ["**/*.grin", "**/*.grin2"]
 
 [workspace]
-members = ["api", "chain", "config", "core", "grin", "keychain", "p2p", "store", "util", "pool", "wallet"]
+members = ["api", "chain", "config", "core", "grin", "keychain", "p2p", "store", "util", "pool", "tlsapi", "wallet"]
 
 [[bin]]
 name = "grin"
