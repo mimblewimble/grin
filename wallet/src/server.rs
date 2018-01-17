@@ -69,12 +69,8 @@ pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 
 	let mut apis_operator = ApiServer::new("/v1".to_string());
 	apis_operator.register_handler(router_wallet_operator);
-	apis_operator
-		.start(wallet_config.api_operator_listen_addr())
-		.unwrap_or_else(|e| {
-			error!(
-				LOGGER,
-				"Failed to start Grin wallet operator listener: {}.", e
-			);
-		});
+	match apis_operator.start(wallet_config.api_operator_listen_addr()) {
+		Err(e) => error!(LOGGER, "Failed to start Grin wallet operator listener: {}.", e),
+		Ok(_) => info!(LOGGER, "Wallet operator listener started"),
+	};
 }
