@@ -59,6 +59,9 @@ struct UtxoHandler {
 }
 
 impl UtxoHandler {
+	// TODO - these are now broken - we _require_ the block hash to find unspent outputs
+	// TODO - rework api endpoint as utxo/:block_hash/:out_commit so we know the block?
+	// TODO - or rework wallet refresh to use the "full" outputs by block api (cleaner?)
 	fn get_utxo(&self, id: &str) -> Result<Utxo, Error> {
 		let c = util::from_hex(String::from(id))
 			.map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
@@ -67,9 +70,15 @@ impl UtxoHandler {
 		// We need the features here to be able to generate the necessary hash
 		// to compare against the hash in the output MMR.
 		// For now we can just try both (but this probably needs to be part of the api params)
+
+		// TODO - we need to rethink how we do this (we have no block hash)
+		// TODO - though to be fair this endpoint is not hugely useful now anyway...
+		panic!("no block hash, unable to check if output is spent or not via chain...");
+
+		let missing_hash = Hash::zero();
 		let outputs = [
-			OutputIdentifier::new(DEFAULT_OUTPUT, &commit),
-			OutputIdentifier::new(COINBASE_OUTPUT, &commit)
+			OutputIdentifier::new(DEFAULT_OUTPUT, &commit, &missing_hash),
+			OutputIdentifier::new(COINBASE_OUTPUT, &commit, &missing_hash)
 		];
 
 		for x in outputs.iter() {
@@ -121,7 +130,12 @@ impl UtxoHandler {
 				commitments.is_empty() || commitments.contains(&output.commit)
 			})
 			.map(|output| {
-				OutputPrintable::from_output(output, self.chain.clone(), include_proof)
+				OutputPrintable::from_output(
+					output,
+					block.hash(),
+					self.chain.clone(),
+					include_proof,
+				)
 			})
 			.collect();
 		BlockOutputs {

@@ -24,7 +24,7 @@ use std::ops;
 use consensus;
 use consensus::VerifySortOrder;
 use core::Committed;
-use core::hash::{Hash, Hashed, ZERO_HASH};
+use core::hash::{Hash, Hashed};
 use core::pmmr::Summable;
 use keychain::{Identifier, Keychain};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
@@ -394,9 +394,8 @@ pub struct Input{
 	/// The commit referencing the output being spent.
 	pub commit: Commitment,
 	/// The hash of the block the output originated from.
-	/// Currently we only care about this for coinbase outputs.
 	/// TODO - include the merkle proof here once we support these.
-	pub out_block: Option<Hash>,
+	pub out_block: Hash,
 }
 
 hashable_ord!(Input);
@@ -407,11 +406,7 @@ impl Writeable for Input {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
 		writer.write_fixed_bytes(&self.commit)?;
-
-		if self.features.contains(COINBASE_OUTPUT) {
-			writer.write_fixed_bytes(&self.out_block.unwrap_or(ZERO_HASH))?;
-		}
-
+		writer.write_fixed_bytes(&self.out_block)?;
 		Ok(())
 	}
 }
@@ -423,14 +418,8 @@ impl Readable for Input {
 		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
 			ser::Error::CorruptedData,
 		)?;
-
 		let commit = Commitment::read(reader)?;
-
-		let out_block = if features.contains(COINBASE_OUTPUT) {
-			Some(Hash::read(reader)?)
-		} else {
-			None
-		};
+		let out_block = Hash::read(reader)?;
 
 		Ok(Input::new(
 			features,
@@ -449,7 +438,7 @@ impl Input {
 	pub fn new(
 		features: OutputFeatures,
 		commit: Commitment,
-		out_block: Option<Hash>,
+		out_block: Hash,
 	) -> Input {
 		Input {
 			features,
@@ -668,29 +657,37 @@ impl Output {
 /// An output_identifier can be build from either an input _or_ and output and
 /// contains everything we need to uniquely identify an output being spent.
 /// Needed because it is not sufficient to pass a commitment around.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Hash, Eq, Debug, Clone, PartialEq)]
 pub struct OutputIdentifier {
 	/// Output features (coinbase vs. regular transaction output)
 	/// We need to include this when hashing to ensure coinbase maturity can be enforced.
 	pub features: OutputFeatures,
 	/// Output commitment
 	pub commit: Commitment,
+	/// The block this output originated from
+	pub block: Hash,
 }
 
 impl OutputIdentifier {
 	/// Build a new output_identifier.
-	pub fn new(features: OutputFeatures, commit: &Commitment) -> OutputIdentifier {
+	pub fn new(
+		features: OutputFeatures,
+		commit: &Commitment,
+		block: &Hash,
+	) -> OutputIdentifier {
 		OutputIdentifier {
 			features: features.clone(),
 			commit: commit.clone(),
+			block: block.clone(),
 		}
 	}
 
 	/// Build an output_identifier from an existing output.
-	pub fn from_output(output: &Output) -> OutputIdentifier {
+	pub fn from_output(output: &Output, block: &Hash) -> OutputIdentifier {
 		OutputIdentifier {
 			features: output.features,
 			commit: output.commit,
+			block: block.clone(),
 		}
 	}
 
@@ -699,6 +696,7 @@ impl OutputIdentifier {
 		OutputIdentifier {
 			features: input.features,
 			commit: input.commit,
+			block: input.out_block,
 		}
 	}
 
@@ -716,11 +714,6 @@ impl OutputIdentifier {
 	pub fn as_sum_commit(&self) -> SumCommit {
 		SumCommit::new(self.features, &self.commit)
 	}
-
-	/// Convert a sum_commit back to an output_identifier.
-	pub fn from_sum_commit(sum_commit: &SumCommit) -> OutputIdentifier {
-		OutputIdentifier::new(sum_commit.features, &sum_commit.commit)
-	}
 }
 
 impl Writeable for OutputIdentifier {
@@ -728,18 +721,6 @@ impl Writeable for OutputIdentifier {
 		writer.write_u8(self.features.bits())?;
 		self.commit.write(writer)?;
 		Ok(())
-	}
-}
-
-impl Readable for OutputIdentifier {
-	fn read(reader: &mut Reader) -> Result<OutputIdentifier, ser::Error> {
-		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
-			ser::Error::CorruptedData,
-		)?;
-		Ok(OutputIdentifier {
-			commit: Commitment::read(reader)?,
-			features: features,
-		})
 	}
 }
 

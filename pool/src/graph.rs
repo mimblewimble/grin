@@ -67,8 +67,7 @@ pub struct Edge {
 	source: Option<core::hash::Hash>,
 	destination: Option<core::hash::Hash>,
 
-	// Output is the output hash which this input/output pairing corresponds
-	// to.
+	// Output that this input/output pairing corresponds to.
 	output: OutputIdentifier,
 }
 

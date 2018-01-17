@@ -15,7 +15,7 @@
 use std::sync::Arc;
 
 use core::{core, ser};
-use core::core::hash::Hashed;
+use core::core::hash::{Hash, Hashed};
 use core::core::SumCommit;
 use chain;
 use p2p;
@@ -183,6 +183,7 @@ pub struct OutputPrintable {
 impl OutputPrintable {
 	pub fn from_output(
 		output: &core::Output,
+		block: Hash,
 		chain: Arc<chain::Chain>,
 		include_proof: bool,
 	) -> OutputPrintable {
@@ -193,7 +194,7 @@ impl OutputPrintable {
 				OutputType::Transaction
 			};
 
-		let out_id = core::OutputIdentifier::from_output(&output);
+		let out_id = core::OutputIdentifier::from_output(&output, &block);
 		let spent = chain.is_unspent(&out_id).is_err();
 
 		let proof = if include_proof {
@@ -351,7 +352,12 @@ impl BlockPrintable {
 		let outputs = block
 			.outputs
 			.iter()
-			.map(|output| OutputPrintable::from_output(output, chain.clone(), include_proof))
+			.map(|output| OutputPrintable::from_output(
+				output,
+				block.hash(),
+				chain.clone(),
+				include_proof,
+			))
 			.collect();
 		let kernels = block
 			.kernels

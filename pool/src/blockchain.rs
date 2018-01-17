@@ -117,7 +117,7 @@ impl BlockChain for DummyChainImpl {
 		if !input.features.contains(COINBASE_OUTPUT) {
 			return Ok(());
 		}
-		let block_hash = input.out_block.expect("requires a block hash");
+		let block_hash = input.out_block;
 		let headers = self.block_headers.read().unwrap();
 		if let Some(h) = headers
 			.iter()

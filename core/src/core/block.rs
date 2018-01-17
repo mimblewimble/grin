@@ -600,7 +600,7 @@ impl Block {
 
 		if let Some(_) = self.outputs
 			.iter()
-			.find(|x| OutputIdentifier::from_output(&x) == output)
+			.find(|x| OutputIdentifier::from_output(&x, &self.hash()) == output)
 		{
 			let lock_height = self.header.height + global::coinbase_maturity();
 			if lock_height > height {

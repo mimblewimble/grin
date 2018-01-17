@@ -19,7 +19,7 @@ use std::io;
 use util::secp::pedersen::Commitment;
 
 use grin_store as store;
-use core::core::{Block, BlockHeader, block, transaction};
+use core::core::{Block, BlockHeader, OutputIdentifier, block, transaction};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::ser;
@@ -245,11 +245,11 @@ pub trait ChainStore: Send + Sync {
 
 	/// Saves the position of an output, represented by its commitment, in the
 	/// UTXO MMR. Used as an index for spending and pruning.
-	fn save_output_pos(&self, commit: &Commitment, pos: u64) -> Result<(), store::Error>;
+	fn save_output_pos(&self, output: &OutputIdentifier, pos: u64) -> Result<(), store::Error>;
 
 	/// Gets the position of an output, represented by its commitment, in the
 	/// UTXO MMR. Used as an index for spending and pruning.
-	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, store::Error>;
+	fn get_output_pos(&self, output: &OutputIdentifier) -> Result<u64, store::Error>;
 
 	/// Saves the position of a kernel, represented by its excess, in the
 	/// UTXO MMR. Used as an index for spending and pruning.
