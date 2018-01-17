@@ -97,7 +97,7 @@ impl InfoHandler {
 			.derive_keychain(&info_request.passphrase)
 			.expect("Failed to derive keychain from seed file and passphrase.");
 
-		let result = checker::refresh_outputs(&self.config, &keychain);
+		let _result = checker::refresh_outputs(&self.config, &keychain);
 
 		let mut unspent_total = 0;
 		let mut unspent_but_locked_total = 0;
