@@ -64,7 +64,7 @@ fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain) -> R
 			.values()
 			.filter(|x| {
 				x.root_key_id == keychain.root_key_id() &&
-				x.block_hash == Hash::zero() &&
+				x.block.hash() == Hash::zero() &&
 				x.status == OutputStatus::Unspent
 			})
 		{
@@ -139,7 +139,7 @@ fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain) -> R
 			if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
 				if let Some(b) = api_blocks.get(&commit) {
 					let output = output.get_mut();
-					output.block_hash = Hash::from_hex(&b.hash).unwrap();
+					output.block = BlockIdentifier::from_str(&b.hash).unwrap();
 					output.height = b.height;
 				}
 			}
