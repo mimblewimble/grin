@@ -145,7 +145,7 @@ impl ChainStore for ChainKVStore {
 
 	fn save_output_pos(&self, output: &OutputIdentifier, pos: u64) -> Result<(), Error> {
 		self.db.put_ser(
-			&to_key(COMMIT_POS_PREFIX, &mut output.commit.as_ref().to_vec())[..],
+			&to_key(COMMIT_POS_PREFIX, &mut output.hash().to_vec()),
 			&pos,
 		)
 	}
@@ -153,7 +153,7 @@ impl ChainStore for ChainKVStore {
 	fn get_output_pos(&self, output: &OutputIdentifier) -> Result<u64, Error> {
 		option_to_not_found(
 			self.db
-				.get_ser(&to_key(COMMIT_POS_PREFIX, &mut output.commit.as_ref().to_vec())),
+				.get_ser(&to_key(COMMIT_POS_PREFIX, &mut output.hash().to_vec())),
 		)
 	}
 
