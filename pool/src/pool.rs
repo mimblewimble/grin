@@ -20,7 +20,9 @@ use std::collections::{HashMap, HashSet};
 use core::core::transaction;
 use core::core::OutputIdentifier;
 use core::core::{block, hash};
+use core::core::hash::ZERO_HASH;
 use util::secp::pedersen::Commitment;
+use util::LOGGER;
 
 use types::*;
 pub use graph;
@@ -199,11 +201,11 @@ where
 		let is_orphan = orphan_refs.len() > 0;
 
 		// Next we examine the outputs this transaction creates and ensure
-  // that they do not already exist.
-  // I believe its worth preventing duplicate outputs from being
-  // accepted, even though it is possible for them to be mined
-  // with strict ordering. In the future, if desirable, this could
-  // be node policy config or more intelligent.
+		// that they do not already exist.
+		// I believe its worth preventing duplicate outputs from being
+		// accepted, even though it is possible for them to be mined
+		// with strict ordering. In the future, if desirable, this could
+		// be node policy config or more intelligent.
 		for output in &tx.outputs {
 			self.check_duplicate_outputs(output, is_orphan)?
 		}
@@ -221,7 +223,8 @@ where
 		let new_unspents = tx.outputs
 			.iter()
 			.map(|x| {
-				let output = OutputIdentifier::from_output(&x);
+				// no block yet for this output so use zero hash
+				let output = OutputIdentifier::from_output(&x, &ZERO_HASH);
 				graph::Edge::new(Some(tx_hash), None, output)
 			})
 			.collect();
@@ -294,14 +297,16 @@ where
 		// Checking against current blockchain unspent outputs
 		// We want outputs even if they're spent by pool txs, so we ignore
 		// consumed_blockchain_outputs
-		let out = OutputIdentifier::from_output(&output);
-		if self.blockchain.is_unspent(&out).is_ok() {
-			return Err(PoolError::DuplicateOutput {
-				other_tx: None,
-				in_chain: true,
-				output: out.commit,
-			});
-		}
+
+		debug!(LOGGER, "***** we cannot actually check is_unspent from the pool here (no block hash...)");
+		// let out = OutputIdentifier::from_output(&output);
+		// if self.blockchain.is_unspent(&out).is_ok() {
+		// 	return Err(PoolError::DuplicateOutput {
+		// 		other_tx: None,
+		// 		in_chain: true,
+		// 		output: out.commit,
+		// 	});
+		// }
 
 
 		// Check for existence of this output in the pool

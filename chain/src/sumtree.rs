@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use core::core::{Block, SumCommit, Input, Output, OutputIdentifier, TxKernel, COINBASE_OUTPUT};
 use core::core::pmmr::{HashSum, NoSum, Summable, PMMR};
-use core::core::hash::Hashed;
+use core::core::hash::{Hash, Hashed};
 use grin_store;
 use grin_store::sumtree::PMMRBackend;
 use types::ChainStore;
@@ -92,7 +92,7 @@ impl SumTrees {
 	/// We look in the index to find the output MMR pos.
 	/// Then we check the entry in the output MMR and confirm the hash matches.
 	pub fn is_unspent(&mut self, output: &OutputIdentifier) -> Result<(), Error> {
-		match self.commit_index.get_output_pos(&output.commit) {
+		match self.commit_index.get_output_pos(&output) {
 			Ok(pos) => {
 				let output_pmmr = PMMR::at(
 					&mut self.output_pmmr_h.backend,
@@ -135,8 +135,7 @@ impl SumTrees {
 		// If we are spending a coinbase output then go find the block
 		// and check the coinbase maturity rule is being met.
 		if input.features.contains(COINBASE_OUTPUT) {
-			let block_hash = &input.out_block
-				.expect("input spending coinbase output must have a block hash");
+			let block_hash = &input.out_block;
 			let block = self.commit_index.get_block(&block_hash)?;
 			block.verify_coinbase_maturity(&input, height)
 				.map_err(|_| Error::ImmatureCoinbase)?;
@@ -242,7 +241,7 @@ pub struct Extension<'a> {
 	kernel_pmmr: PMMR<'a, NoSum<TxKernel>, PMMRBackend<NoSum<TxKernel>>>,
 
 	commit_index: Arc<ChainStore>,
-	new_output_commits: HashMap<Commitment, u64>,
+	new_output_commits: HashMap<OutputIdentifier, u64>,
 	new_kernel_excesses: HashMap<Commitment, u64>,
 	rollback: bool,
 }
@@ -273,41 +272,41 @@ impl<'a> Extension<'a> {
 	/// Apply a new set of blocks on top the existing sum trees. Blocks are
 	/// applied in order of the provided Vec. If pruning is enabled, inputs also
 	/// prune MMR data.
-	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
+	pub fn apply_block(&mut self, block: &Block) -> Result<(), Error> {
 
 		// first applying coinbase outputs. due to the construction of PMMRs the
 		// last element, when its a leaf, can never be pruned as it has no parent
 		// yet and it will be needed to calculate that hash. to work around this,
 		// we insert coinbase outputs first to add at least one output of padding
-		for out in &b.outputs {
+		for out in &block.outputs {
 			if out.features.contains(COINBASE_OUTPUT) {
-				self.apply_output(out)?;
+				self.apply_output(&out, &block.hash())?;
 			}
 		}
 
 		// then doing inputs guarantees an input can't spend an output in the
 		// same block, enforcing block cut-through
-		for input in &b.inputs {
-			self.apply_input(input, b.header.height)?;
+		for input in &block.inputs {
+			self.apply_input(&input, block.header.height)?;
 		}
 
 		// now all regular, non coinbase outputs
-		for out in &b.outputs {
+		for out in &block.outputs {
 			if !out.features.contains(COINBASE_OUTPUT) {
-				self.apply_output(out)?;
+				self.apply_output(&out, &block.hash())?;
 			}
 		}
 
 		// finally, applying all kernels
-		for kernel in &b.kernels {
-			self.apply_kernel(kernel)?;
+		for kernel in &block.kernels {
+			self.apply_kernel(&kernel)?;
 		}
 		Ok(())
 	}
 
 	fn save_pos_index(&self) -> Result<(), Error> {
-		for (commit, pos) in &self.new_output_commits {
-			self.commit_index.save_output_pos(commit, *pos)?;
+		for (out, pos) in &self.new_output_commits {
+			self.commit_index.save_output_pos(out, *pos)?;
 		}
 
 		for (excess, pos) in &self.new_kernel_excesses {
@@ -318,8 +317,8 @@ impl<'a> Extension<'a> {
 	}
 
 	fn apply_input(&mut self, input: &Input, height: u64) -> Result<(), Error> {
-		let commit = input.commitment();
-		let pos_res = self.get_output_pos(&commit);
+		let out = OutputIdentifier::from_input(&input);
+		let pos_res = self.get_output_pos(&out);
 		if let Ok(pos) = pos_res {
 			if let Some(HashSum { hash, sum: _ }) = self.output_pmmr.get(pos) {
 				let sum_commit = SumCommit::from_input(&input);
@@ -337,8 +336,7 @@ impl<'a> Extension<'a> {
 				// If we are spending a coinbase output then go find the block
 				// and check the coinbase maturity rule is being met.
 				if input.features.contains(COINBASE_OUTPUT) {
-					let block_hash = &input.out_block
-						.expect("input spending coinbase output must have a block hash");
+					let block_hash = &input.out_block;
 					let block = self.commit_index.get_block(&block_hash)?;
 					block.verify_coinbase_maturity(&input, height)
 						.map_err(|_| Error::ImmatureCoinbase)?;
@@ -353,20 +351,20 @@ impl<'a> Extension<'a> {
 						.prune(pos, height as u32)
 						.map_err(|s| Error::SumTreeErr(s))?;
 				}
-				Ok(false) => return Err(Error::AlreadySpent(commit)),
+				Ok(false) => return Err(Error::AlreadySpent(out.commit)),
 				Err(s) => return Err(Error::SumTreeErr(s)),
 			}
 		} else {
-			return Err(Error::AlreadySpent(commit));
+			return Err(Error::AlreadySpent(out.commit));
 		}
 		Ok(())
 	}
 
-	fn apply_output(&mut self, out: &Output) -> Result<(), Error> {
-		let commit = out.commitment();
-		let sum_commit = SumCommit::from_output(out);
+	fn apply_output(&mut self, output: &Output, block: &Hash) -> Result<(), Error> {
+		let out = OutputIdentifier::from_output(output, block);
+		let sum_commit = SumCommit::from_output(output);
 
-		if let Ok(pos) = self.get_output_pos(&commit) {
+		if let Ok(pos) = self.get_output_pos(&out) {
 			// we need to check whether the commitment is in the current MMR view
 			// as well as the index doesn't support rewind and is non-authoritative
 			// (non-historical node will have a much smaller one)
@@ -379,7 +377,7 @@ impl<'a> Extension<'a> {
 				// fork that exists but matches a different node
 				// filtering that case out
 				if c.hash == hash_sum.hash {
-					return Err(Error::DuplicateCommitment(commit));
+					return Err(Error::DuplicateCommitment(out.commit));
 				}
 			}
 		}
@@ -388,11 +386,11 @@ impl<'a> Extension<'a> {
 			.push(sum_commit)
 			.map_err(&Error::SumTreeErr)?;
 
-		self.new_output_commits.insert(out.commitment(), pos);
+		self.new_output_commits.insert(out, pos);
 
 		// push range proofs in their MMR
 		self.rproof_pmmr
-			.push(NoSum(out.proof))
+			.push(NoSum(output.proof))
 			.map_err(&Error::SumTreeErr)?;
 		Ok(())
 	}
@@ -426,10 +424,13 @@ impl<'a> Extension<'a> {
 		);
 
 		let out_pos_rew = match block.outputs.last() {
-			Some(output) => self.get_output_pos(&output.commitment())
-				.map_err(|e| {
-					Error::StoreErr(e, format!("missing output pos for known block"))
-				})?,
+			Some(x) => {
+				let out = OutputIdentifier::from_output(&x, &block.hash());
+				self.get_output_pos(&out)
+					.map_err(|e| {
+						Error::StoreErr(e, format!("missing output pos for known block"))
+					})?
+			}
 			None => 0,
 		};
 
@@ -464,11 +465,11 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, grin_store::Error> {
-		if let Some(pos) = self.new_output_commits.get(commit) {
+	fn get_output_pos(&self, output: &OutputIdentifier) -> Result<u64, grin_store::Error> {
+		if let Some(pos) = self.new_output_commits.get(output) {
 			Ok(*pos)
 		} else {
-			self.commit_index.get_output_pos(commit)
+			self.commit_index.get_output_pos(output)
 		}
 	}
 

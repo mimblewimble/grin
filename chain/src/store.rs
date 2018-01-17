@@ -20,7 +20,7 @@ use util::secp::pedersen::Commitment;
 
 use types::*;
 use core::core::hash::{Hash, Hashed};
-use core::core::{Block, BlockHeader};
+use core::core::{Block, BlockHeader, OutputIdentifier};
 use core::consensus::TargetError;
 use core::core::target::Difficulty;
 use grin_store::{self, option_to_not_found, to_key, Error, u64_to_key};
@@ -143,17 +143,17 @@ impl ChainStore for ChainKVStore {
 		self.db.delete(&u64_to_key(HEADER_HEIGHT_PREFIX, height))
 	}
 
-	fn save_output_pos(&self, commit: &Commitment, pos: u64) -> Result<(), Error> {
+	fn save_output_pos(&self, output: &OutputIdentifier, pos: u64) -> Result<(), Error> {
 		self.db.put_ser(
-			&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())[..],
+			&to_key(COMMIT_POS_PREFIX, &mut output.commit.as_ref().to_vec())[..],
 			&pos,
 		)
 	}
 
-	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
+	fn get_output_pos(&self, output: &OutputIdentifier) -> Result<u64, Error> {
 		option_to_not_found(
 			self.db
-				.get_ser(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())),
+				.get_ser(&to_key(COMMIT_POS_PREFIX, &mut output.commit.as_ref().to_vec())),
 		)
 	}
 
