@@ -24,6 +24,7 @@ use std::collections::HashMap;
 use std::cmp::min;
 
 use hyper;
+use serde;
 use serde_json;
 use tokio_core::reactor;
 use tokio_retry::Retry;
@@ -205,7 +206,7 @@ impl WalletConfig {
 /// unconfirmed, spent, unspent, or locked (when it's been used to generate
 /// a transaction but we don't have confirmation that the transaction was
 /// broadcasted or mined).
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub enum OutputStatus {
 	Unconfirmed,
 	Unspent,
@@ -224,10 +225,64 @@ impl fmt::Display for OutputStatus {
 	}
 }
 
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+pub struct BlockIdentifier(Hash);
+
+impl BlockIdentifier {
+	pub fn hash(&self) -> Hash {
+		self.0
+	}
+
+	pub fn from_str(hex: &str) -> Result<BlockIdentifier, Error> {
+		let hash = Hash::from_hex(hex)?;
+		Ok(BlockIdentifier(hash))
+	}
+
+	pub fn zero() -> BlockIdentifier {
+		BlockIdentifier(Hash::zero())
+	}
+}
+
+impl serde::ser::Serialize for BlockIdentifier {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::ser::Serializer,
+	{
+		serializer.serialize_str(&self.0.to_hex())
+	}
+}
+
+impl<'de> serde::de::Deserialize<'de> for BlockIdentifier {
+	fn deserialize<D>(deserializer: D) -> Result<BlockIdentifier, D::Error>
+	where
+		D: serde::de::Deserializer<'de>,
+	{
+		deserializer.deserialize_str(BlockIdentifierVisitor)
+	}
+}
+
+struct BlockIdentifierVisitor;
+
+impl<'de> serde::de::Visitor<'de> for BlockIdentifierVisitor {
+	type Value = BlockIdentifier;
+
+	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+		formatter.write_str("a block hash")
+	}
+
+	fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+	where
+		E: serde::de::Error,
+	{
+		let block_hash = Hash::from_hex(s).unwrap();
+		Ok(BlockIdentifier(block_hash))
+	}
+}
+
 /// Information about an output that's being tracked by the wallet. Must be
 /// enough to reconstruct the commitment associated with the ouput when the
 /// root private key is known.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct OutputData {
 	/// Root key_id that the key for this output is derived from
 	pub root_key_id: keychain::Identifier,
@@ -246,7 +301,7 @@ pub struct OutputData {
 	/// Is this a coinbase output? Is it subject to coinbase locktime?
 	pub is_coinbase: bool,
 	/// Hash of the block this output originated from.
-	pub block_hash: Hash,
+	pub block: BlockIdentifier,
 }
 
 impl OutputData {
@@ -381,12 +436,6 @@ impl WalletSeed {
 
 /// Wallet information tracking all our outputs. Based on HD derivation and
 /// avoids storing any key data, only storing output amounts and child index.
-/// This data structure is directly based on the JSON representation stored
-/// on disk, so selection algorithms are fairly primitive and non optimized.
-///
-/// TODO optimization so everything isn't O(n) or even O(n^2)
-/// TODO account for fees
-/// TODO write locks so files don't get overwritten
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WalletData {
 	pub outputs: HashMap<String, OutputData>,
@@ -480,8 +529,8 @@ impl WalletData {
 		}
 	}
 
-	/// Read the wallet data from disk.
-	fn read(data_file_path: &str) -> Result<WalletData, Error> {
+	/// Read output_data vec from disk.
+	fn read_outputs(data_file_path: &str) -> Result<Vec<OutputData>, Error> {
 		let data_file = File::open(data_file_path).map_err(|e| {
 			Error::WalletData(format!("Could not open {}: {}", data_file_path, e))
 		})?;
@@ -490,12 +539,26 @@ impl WalletData {
 		})
 	}
 
+	/// Populate wallet_data with output_data from disk.
+	fn read(data_file_path: &str) -> Result<WalletData, Error> {
+		let outputs = WalletData::read_outputs(data_file_path)?;
+		let mut wallet_data = WalletData {
+			outputs: HashMap::new(),
+		};
+		for out in outputs {
+			wallet_data.add_output(out);
+		}
+		Ok(wallet_data)
+	}
+
 	/// Write the wallet data to disk.
 	fn write(&self, data_file_path: &str) -> Result<(), Error> {
 		let mut data_file = File::create(data_file_path).map_err(|e| {
 			Error::WalletData(format!("Could not create {}: {}", data_file_path, e))
 		})?;
-		let res_json = serde_json::to_vec_pretty(self).map_err(|e| {
+		let mut outputs = self.outputs.values().collect::<Vec<_>>();
+		outputs.sort();
+		let res_json = serde_json::to_vec_pretty(&outputs).map_err(|e| {
 			Error::WalletData(format!("Error serializing wallet data: {}", e))
 		})?;
 		data_file.write_all(res_json.as_slice()).map_err(|e| {

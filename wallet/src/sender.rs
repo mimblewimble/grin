@@ -16,7 +16,6 @@ use api;
 use client;
 use checker;
 use core::core::{build, Transaction, amount_to_hr_string};
-use core::core::hash::Hash;
 use core::ser;
 use keychain::{BlindingFactor, Identifier, Keychain};
 use receiver::TxWrapper;
@@ -267,9 +266,9 @@ fn inputs_and_change(
 	for coin in coins {
 		let key_id = keychain.derive_key_id(coin.n_child)?;
 		if coin.is_coinbase {
-			parts.push(build::coinbase_input(coin.value, coin.block_hash, key_id));
+			parts.push(build::coinbase_input(coin.value, coin.block.hash(), key_id));
 		} else {
-			parts.push(build::input(coin.value, coin.block_hash, key_id));
+			parts.push(build::input(coin.value, coin.block.hash(), key_id));
 		}
 	}
 
@@ -288,7 +287,7 @@ fn inputs_and_change(
 			height: 0,
 			lock_height: 0,
 			is_coinbase: false,
-			block_hash: Hash::zero(),
+			block: BlockIdentifier::zero(),
 		});
 
 		change_key

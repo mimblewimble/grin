@@ -74,7 +74,7 @@ impl error::Error for Error {
 	}
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Ord, Hash, PartialOrd)]
 pub struct Identifier([u8; IDENTIFIER_SIZE]);
 
 impl ser::Serialize for Identifier {
