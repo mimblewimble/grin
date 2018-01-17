@@ -489,6 +489,11 @@ impl Chain {
 		self.head.lock().unwrap().clone().total_difficulty
 	}
 
+	/// Total difficulty at the head of the header chain
+	pub fn total_header_difficulty(&self) -> Result<Difficulty, Error> {
+		Ok(self.store.get_header_head()?.total_difficulty)
+	}
+
 	/// Reset header_head and sync_head to head of current body chain
 	pub fn reset_head(&self) -> Result<(), Error> {
 		self.store

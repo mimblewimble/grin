@@ -515,15 +515,15 @@ impl<'a> Extension<'a> {
 
 		// the real magicking: the sum of all kernel excess should equal the sum
 		// of all UTXO commitments, minus the total supply
-		// TODO fee burning
-		let kernels_sum = self.sum_kernels()?;
+		let (kernel_sum, fees) = self.sum_kernels()?;
 		let utxo_sum = self.sum_utxos()?;
 		{
+			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
-			let over_commit = secp.commit_value(header.height * reward(0))?;
-			let adjusted_sum_utxo = secp.commit_sum(vec![sum_utxo.unwrap()], vec![over_commit])?;
+			let over_commit = secp.commit_value(header.height * reward(0) - fees / 2)?;
+			let adjusted_sum_utxo = secp.commit_sum(vec![utxo_sum], vec![over_commit])?;
 
-			if adjusted_sum_utxo != sum_kernel {
+			if adjusted_sum_utxo != kernel_sum {
 				return Err(Error::SumTreeErr("Differing UTXO commitment and kernel excess sums.".to_owned()));
 			}
 		}
@@ -574,7 +574,7 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Sums the excess of all our kernels, validating their signatures on the way
-	fn sum_kernels(&self) -> Result<Commitment, Error> {
+	fn sum_kernels(&self) -> Result<(Commitment, u64), Error> {
 		// make sure we have the right count of kernels using the MMR, the storage
 		// file may have a few more
 		let mmr_sz = self.kernel_pmmr.unpruned_size();
@@ -586,6 +586,7 @@ impl<'a> Extension<'a> {
 		let first: TxKernel = ser::deserialize(&mut kernel_file)?;
 		first.verify()?;
 		let mut sum_kernel = first.excess;
+		let mut fees = first.fee;
 
 		let secp = static_secp_instance();
 		let mut kern_count = 1;
@@ -595,6 +596,7 @@ impl<'a> Extension<'a> {
 					kernel.verify()?;
 					let secp = secp.lock().unwrap();
 					sum_kernel = secp.commit_sum(vec![sum_kernel, kernel.excess], vec![])?;
+					fees += kernel.fee;
 					kern_count += 1;
 					if kern_count == count {
 						break;
@@ -604,13 +606,14 @@ impl<'a> Extension<'a> {
 			}
 		}
 		debug!(LOGGER, "Validated and summed {} kernels", kern_count);
-		Ok(sum_kernel)
+		Ok((sum_kernel, fees))
 	}
 
 	/// Sums all our UTXO commitments
 	fn sum_utxos(&self) -> Result<Commitment, Error> {
 		let mut sum_utxo = None;
 		let mut utxo_count = 0;
+		let secp = static_secp_instance();
 		for n in 1..self.output_pmmr.unpruned_size()+1 {
 			if pmmr::bintree_postorder_height(n) == 0 {
 				if let Some(hs) = self.output_pmmr.get(n) {
@@ -625,7 +628,7 @@ impl<'a> Extension<'a> {
 			}
 		}
 		debug!(LOGGER, "Summed {} UTXOs", utxo_count);
-		Ok(sum_txo.unwrap())
+		Ok(sum_utxo.unwrap())
 	}
 }
 

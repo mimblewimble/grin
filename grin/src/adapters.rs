@@ -129,10 +129,14 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				}
 			}
 		}
+
+		let header_head = self.chain.get_header_head().unwrap();
 		info!(
 			LOGGER,
-			"Added {} headers to the header chain.",
-			added_hs.len()
+			"Added {} headers to the header chain. Last: {} at {}.",
+			added_hs.len(),
+			header_head.last_block_h,
+			header_head.height,
 		);
 	}
 
@@ -216,6 +220,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			error!(LOGGER, "Failed to save sumtree archive: {:?}", e);
 		} else {
 			info!(LOGGER, "Received valid sumtree data for {}.", h);
+			self.currently_syncing.store(true, Ordering::Relaxed);
 		}
 	}
 }

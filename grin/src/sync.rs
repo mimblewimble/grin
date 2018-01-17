@@ -47,7 +47,7 @@ pub fn run_full_sync(
 
 			loop {
 				let syncing = needs_syncing(
-					currently_syncing.clone(), peers.clone(), chain.clone());
+					currently_syncing.clone(), peers.clone(), chain.clone(), false);
 				if syncing {
 
 					let current_time = time::now_utc();
@@ -88,18 +88,30 @@ pub fn run_fast_sync(
 	let _ = thread::Builder::new()
 		.name("sync".to_string())
 		.spawn(move || {
-			let mut prev_header_sync = time::now_utc();
+			let mut prev_body_sync = time::now_utc();
+			let mut prev_header_sync = prev_body_sync.clone();
+			let mut prev_state_sync = prev_body_sync.clone() - time::Duration::seconds(120);
 
 			// initial sleep to give us time to peer with some nodes
 			if !skip_sync_wait {
 				thread::sleep(Duration::from_secs(30));
 			}
 			loop {
-				let syncing = needs_syncing(
-					currently_syncing.clone(), peers.clone(), chain.clone());
+				// fast sync has 3 states:
+				// * syncing headers
+				// * once all headers are sync'd, requesting the sumtree state
+				// * once we have the state, get blocks after that
 
+				let have_sumtrees = chain.head().unwrap().height > 0;
+				let syncing = needs_syncing(
+					currently_syncing.clone(), peers.clone(), chain.clone(), !have_sumtrees);
+
+				let header_head = chain.get_header_head().unwrap();
+
+				warn!(LOGGER, "status: {} {} {}", syncing, have_sumtrees, header_head.height);
+
+				let current_time = time::now_utc();
 				if syncing {
-					let current_time = time::now_utc();
 
 					// run the header sync every 10s
 					if current_time - prev_header_sync > time::Duration::seconds(10) {
@@ -109,18 +121,40 @@ pub fn run_fast_sync(
 						);
 						prev_header_sync = current_time;
 					}
-				}
 
-				if let Some(peer) = peers.most_work_peer() {
-					if let Ok(p) = peer.try_read() {
-						let header_head = chain.get_header_head().unwrap();
-						if header_head.height > 1 {
-							error!(LOGGER, "sync request");
-							p.send_sumtrees_request(header_head.height, header_head.last_block_h);
-							break;
+					// run the body_sync every 5s
+					if have_sumtrees && current_time - prev_body_sync > time::Duration::seconds(5) {
+						body_sync(
+							peers.clone(),
+							chain.clone(),
+						);
+						prev_body_sync = current_time;
+					}
+
+				} else {
+					// TODO if no peer have more than sumtree_depth blocks, do normal sync
+					if !have_sumtrees && current_time - prev_state_sync > time::Duration::seconds(120) {
+						if let Some(peer) = peers.most_work_peer() {
+							if let Ok(p) = peer.try_read() {
+								error!(LOGGER, "sync request");
+								let header_head = chain.get_header_head().unwrap();
+								debug!(LOGGER, "Header head before sumtree request: {} / {}",
+											 header_head.height, header_head.last_block_h);
+								// TODO parameterize
+								let sumtree_depth = 20;
+								if header_head.height > sumtree_depth + 5 {
+									let mut sumtree_head = chain.get_block_header(&header_head.prev_block_h).unwrap();
+									for _ in 0..sumtree_depth-1 {
+										sumtree_head = chain.get_block_header(&sumtree_head.previous).unwrap();
+									}
+									p.send_sumtrees_request(sumtree_head.height, sumtree_head.hash());
+									prev_state_sync = current_time;
+								}
+							}
 						}
 					}
 				}
+
 				thread::sleep(Duration::from_secs(1));
 			}
 		});
@@ -248,20 +282,29 @@ fn request_headers(
 pub fn needs_syncing(
 	currently_syncing: Arc<AtomicBool>,
 	peers: Peers,
-	chain: Arc<chain::Chain>) -> bool {
+	chain: Arc<chain::Chain>,
+	header_only: bool) -> bool {
 
-	let local_diff = peers.total_difficulty();
+	let local_diff = if header_only {
+		chain.total_header_difficulty().unwrap()
+	} else {
+		chain.total_difficulty()
+	};
 	let peer = peers.most_work_peer();
+
 
 	// if we're already syncing, we're caught up if no peer has a higher
 	// difficulty than us
 	if currently_syncing.load(Ordering::Relaxed) {
 		if let Some(peer) = peer {
 			if let Ok(peer) = peer.try_read() {
+				debug!(LOGGER, "needs_syncing {} {} {}", local_diff, peer.info.total_difficulty, header_only);
 				if peer.info.total_difficulty <= local_diff {
 					info!(LOGGER, "synchronize stopped, at {:?} @ {:?}", local_diff, chain.head().unwrap().height);
 					currently_syncing.store(false, Ordering::Relaxed);
-					let _ = chain.reset_head();
+					if !header_only {
+						let _ = chain.reset_head();
+					}
 				}
 			}
 		} else {

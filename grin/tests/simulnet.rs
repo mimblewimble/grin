@@ -342,6 +342,7 @@ fn simulate_fast_sync() {
 			seeding_type: grin::Seeding::List,
 			seeds: Some(vec!["127.0.0.1:11000".to_string()]),
 			chain_type: core::global::ChainTypes::AutomatedTesting,
+			skip_sync_wait: Some(true),
 			..Default::default()
 		};
 		let m = n;

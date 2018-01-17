@@ -157,6 +157,7 @@ impl Handler for ProtocolHandler {
 		reader: &mut Read,
 	) -> Result<Option<Hash>, ser::Error> {
 
+		error!(LOGGER, "handle_payload: {:?}", header.msg_type);
 		match header.msg_type {
 			Type::Ping => {
 				let ping = ser::deserialize::<Ping>(&mut &buf[..])?;
@@ -321,6 +322,7 @@ impl Handler for ProtocolHandler {
 							break;
 						}
 					}
+					debug!(LOGGER, "handle_payload: stream sent");
 				}
 				Ok(None)
 			}
