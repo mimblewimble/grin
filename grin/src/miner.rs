@@ -590,7 +590,6 @@ impl Miner {
 		b.header.nonce = rng.gen();
 		b.header.difficulty = difficulty;
 		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
-		trace!(LOGGER, "Block: {:?}", b);
 
 		let roots_result = self.chain.set_sumtree_roots(&mut b, false);
 
@@ -621,8 +620,12 @@ impl Miner {
 	) -> Result<(core::Output, core::TxKernel, BlockFees), Error> {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
-		let (out, kernel) =
-			core::Block::reward_output(&keychain, &key_id, block_fees.fees).unwrap();
+		let (out, kernel) = core::Block::reward_output(
+			&keychain,
+			&key_id,
+			block_fees.fees,
+			block_fees.height,
+		).unwrap();
 		Ok((out, kernel, block_fees))
 	}
 
@@ -651,7 +654,7 @@ impl Miner {
 				..block_fees
 			};
 
-			debug!(LOGGER, "block_fees here: {:?}", block_fees);
+			debug!(LOGGER, "get_coinbase: {:?}", block_fees);
 
 			Ok((output, kernel, block_fees))
 		}

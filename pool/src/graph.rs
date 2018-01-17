@@ -25,6 +25,7 @@ use std::fmt;
 
 use core::core;
 use core::core::hash::Hashed;
+use core::core::OutputIdentifier;
 
 /// An entry in the transaction pool.
 /// These are the vertices of both of the graph structures
@@ -68,7 +69,7 @@ pub struct Edge {
 
 	// Output is the output hash which this input/output pairing corresponds
 	// to.
-	output: Commitment,
+	output: OutputIdentifier,
 }
 
 impl Edge {
@@ -76,7 +77,7 @@ impl Edge {
 	pub fn new(
 		source: Option<core::hash::Hash>,
 		destination: Option<core::hash::Hash>,
-		output: Commitment,
+		output: OutputIdentifier,
 	) -> Edge {
 		Edge {
 			source: source,
@@ -90,7 +91,7 @@ impl Edge {
 		Edge {
 			source: src,
 			destination: self.destination,
-			output: self.output,
+			output: self.output.clone(),
 		}
 	}
 
@@ -99,13 +100,18 @@ impl Edge {
 		Edge {
 			source: self.source,
 			destination: dst,
-			output: self.output,
+			output: self.output.clone(),
 		}
+	}
+
+	/// The output_identifier of the edge.
+	pub fn output(&self) -> OutputIdentifier {
+		self.output.clone()
 	}
 
 	/// The output commitment of the edge
 	pub fn output_commitment(&self) -> Commitment {
-		self.output
+		self.output.commit
 	}
 
 	/// The destination hash of the edge
@@ -292,7 +298,7 @@ mod tests {
 	use util::secp;
 	use keychain::Keychain;
 	use rand;
-	use core::core::SwitchCommitHash;
+	use core::core::{DEFAULT_OUTPUT, SwitchCommitHash};
 
 	#[test]
 	fn test_add_entry() {
@@ -304,21 +310,30 @@ mod tests {
 		let output_commit = keychain.commit(70, &key_id1).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id1).unwrap();
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+
 		let inputs = vec![
-			core::transaction::Input(keychain.commit(50, &key_id2).unwrap()),
-			core::transaction::Input(keychain.commit(25, &key_id3).unwrap()),
+			core::transaction::Input::new(
+				DEFAULT_OUTPUT,
+				keychain.commit(50, &key_id2).unwrap(),
+				None,
+			),
+			core::transaction::Input::new(
+				DEFAULT_OUTPUT,
+				keychain.commit(25, &key_id3).unwrap(),
+				None,
+			),
 		];
 		let msg = secp::pedersen::ProofMessage::empty();
-		let outputs = vec![
-			core::transaction::Output {
-				features: core::transaction::DEFAULT_OUTPUT,
-				commit: output_commit,
-				switch_commit_hash: switch_commit_hash,
-				proof: keychain
-					.range_proof(100, &key_id1, output_commit, msg)
-					.unwrap(),
-			},
-		];
+
+		let output = core::transaction::Output {
+			features: DEFAULT_OUTPUT,
+			commit: output_commit,
+			switch_commit_hash: switch_commit_hash,
+			proof: keychain
+				.range_proof(100, &key_id1, output_commit, msg)
+				.unwrap(),
+		};
+		let outputs = vec![output];
 		let test_transaction = core::transaction::Transaction::new(inputs, outputs, 5, 0);
 
 		let test_pool_entry = PoolEntry::new(&test_transaction);
@@ -326,7 +341,7 @@ mod tests {
 		let incoming_edge_1 = Edge::new(
 			Some(random_hash()),
 			Some(core::hash::ZERO_HASH),
-			output_commit,
+			OutputIdentifier::from_output(&output),
 		);
 
 		let mut test_graph = DirectedGraph::empty();

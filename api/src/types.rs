@@ -13,13 +13,15 @@
 // limitations under the License.
 
 use std::sync::Arc;
-use core::{core, global};
+
+use core::{core, ser};
 use core::core::hash::Hashed;
+use core::core::SumCommit;
 use chain;
 use p2p;
-use util::secp::pedersen;
-use rest::*;
 use util;
+use util::secp::pedersen;
+use util::secp::constants::MAX_PROOF_SIZE;
 
 /// The state of the current fork tip
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -86,10 +88,10 @@ impl SumTrees {
 	pub fn from_head(head: Arc<chain::Chain>) -> SumTrees {
 		let roots = head.get_sumtree_roots();
 		SumTrees {
-			utxo_root_hash: util::to_hex(roots.0.hash.to_vec()),
-			utxo_root_sum: util::to_hex(roots.0.sum.commit.0.to_vec()),
-			range_proof_root_hash: util::to_hex(roots.1.hash.to_vec()),
-			kernel_root_hash: util::to_hex(roots.2.hash.to_vec()),
+			utxo_root_hash: roots.0.hash.to_hex(),
+			utxo_root_sum: roots.0.sum.to_hex(),
+			range_proof_root_hash: roots.1.hash.to_hex(),
+			kernel_root_hash: roots.2.hash.to_hex(),
 		}
 	}
 }
@@ -100,26 +102,18 @@ impl SumTrees {
 pub struct SumTreeNode {
 	// The hash
 	pub hash: String,
-	// Output (if included)
-	pub output: Option<OutputPrintable>,
+	// SumCommit (features|commitment), optional (only for utxos)
+	pub sum: Option<SumCommit>,
 }
 
 impl SumTreeNode {
 	pub fn get_last_n_utxo(chain: Arc<chain::Chain>, distance: u64) -> Vec<SumTreeNode> {
 		let mut return_vec = Vec::new();
 		let last_n = chain.get_last_n_utxo(distance);
-		for elem_output in last_n {
-			let header = chain
-				.get_block_header_by_output_commit(&elem_output.1.commit)
-				.map_err(|_| Error::NotFound);
-			// Need to call further method to check if output is spent
-			let mut output = OutputPrintable::from_output(&elem_output.1, &header.unwrap(), true);
-			if let Ok(_) = chain.get_unspent(&elem_output.1.commit) {
-				output.spent = false;
-			}
+		for x in last_n {
 			return_vec.push(SumTreeNode {
-				hash: util::to_hex(elem_output.0.to_vec()),
-				output: Some(output),
+				hash: util::to_hex(x.hash.to_vec()),
+				sum: Some(x.sum),
 			});
 		}
 		return_vec
@@ -131,7 +125,7 @@ impl SumTreeNode {
 		for elem in last_n {
 			return_vec.push(SumTreeNode {
 				hash: util::to_hex(elem.hash.to_vec()),
-				output: None,
+				sum: None,
 			});
 		}
 		return_vec
@@ -143,7 +137,7 @@ impl SumTreeNode {
 		for elem in last_n {
 			return_vec.push(SumTreeNode {
 				hash: util::to_hex(elem.hash.to_vec()),
-				output: None,
+				sum: None,
 			});
 		}
 		return_vec
@@ -157,50 +151,14 @@ pub enum OutputType {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Output {
-	/// The type of output Coinbase|Transaction
-	pub output_type: OutputType,
-	/// The homomorphic commitment representing the output's amount
+pub struct Utxo {
+	/// The output commitment representing the amount
 	pub commit: pedersen::Commitment,
-	/// switch commit hash
-	pub switch_commit_hash: Option<core::SwitchCommitHash>,
-	/// A proof that the commitment is in the right range
-	pub proof: Option<pedersen::RangeProof>,
-	/// The height of the block creating this output
-	pub height: u64,
-	/// The lock height (earliest block this output can be spent)
-	pub lock_height: u64,
 }
 
-impl Output {
-	pub fn from_output(
-		output: &core::Output,
-		block_header: &core::BlockHeader,
-		include_proof: bool,
-		include_switch: bool,
-	) -> Output {
-		let (output_type, lock_height) = match output.features {
-			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
-				OutputType::Coinbase,
-				block_header.height + global::coinbase_maturity(),
-			),
-			_ => (OutputType::Transaction, 0),
-		};
-
-		Output {
-			output_type: output_type,
-			commit: output.commit,
-			switch_commit_hash: match include_switch {
-				true => Some(output.switch_commit_hash),
-				false => None,
-			},
-			proof: match include_proof {
-				true => Some(output.proof),
-				false => None,
-			},
-			height: block_header.height,
-			lock_height: lock_height,
-		}
+impl Utxo {
+	pub fn new(commit: &pedersen::Commitment) -> Utxo {
+		Utxo { commit: commit.clone() }
 	}
 }
 
@@ -209,66 +167,73 @@ impl Output {
 pub struct OutputPrintable {
 	/// The type of output Coinbase|Transaction
 	pub output_type: OutputType,
-	/// The homomorphic commitment representing the output's amount (as hex
-	/// string)
+	/// The homomorphic commitment representing the output's amount
+	/// (as hex string)
 	pub commit: String,
 	/// switch commit hash
 	pub switch_commit_hash: String,
-	/// The height of the block creating this output
-	pub height: u64,
-	/// The lock height (earliest block this output can be spent)
-	pub lock_height: u64,
 	/// Whether the output has been spent
 	pub spent: bool,
-	/// Rangeproof hash  (as hex string)
-	pub proof_hash: Option<String>,
+	/// Rangeproof (as hex string)
+	pub proof: Option<String>,
+	/// Rangeproof hash (as hex string)
+	pub proof_hash: String,
 }
 
 impl OutputPrintable {
 	pub fn from_output(
 		output: &core::Output,
-		block_header: &core::BlockHeader,
-		include_proof_hash: bool,
+		chain: Arc<chain::Chain>,
+		include_proof: bool,
 	) -> OutputPrintable {
-		let (output_type, lock_height) = match output.features {
-			x if x.contains(core::transaction::COINBASE_OUTPUT) => (
-				OutputType::Coinbase,
-				block_header.height + global::coinbase_maturity(),
-			),
-			_ => (OutputType::Transaction, 0),
+		let output_type =
+			if output.features.contains(core::transaction::COINBASE_OUTPUT) {
+				OutputType::Coinbase
+			} else {
+				OutputType::Transaction
+			};
+
+		let out_id = core::OutputIdentifier::from_output(&output);
+		let spent = chain.is_unspent(&out_id).is_err();
+
+		let proof = if include_proof {
+			Some(util::to_hex(output.proof.bytes().to_vec()))
+		} else {
+			None
 		};
+
 		OutputPrintable {
 			output_type: output_type,
 			commit: util::to_hex(output.commit.0.to_vec()),
-			switch_commit_hash: util::to_hex(output.switch_commit_hash.hash.to_vec()),
-			height: block_header.height,
-			lock_height: lock_height,
-			spent: true,
-			proof_hash: match include_proof_hash {
-				true => Some(util::to_hex(output.proof.hash().to_vec())),
-				false => None,
-			},
+			switch_commit_hash: output.switch_commit_hash.to_hex(),
+			spent: spent,
+			proof: proof,
+			proof_hash: util::to_hex(output.proof.hash().to_vec()),
 		}
 	}
-}
 
-// As above, except just the info needed for wallet reconstruction
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct OutputSwitch {
-	/// the commit
-	pub commit: String,
-	/// switch commit hash
-	pub switch_commit_hash: [u8; core::SWITCH_COMMIT_HASH_SIZE],
-	/// The height of the block creating this output
-	pub height: u64,
-}
+	// Convert the hex string back into a switch_commit_hash instance
+	pub fn switch_commit_hash(&self) -> Result<core::SwitchCommitHash, ser::Error> {
+		core::SwitchCommitHash::from_hex(&self.switch_commit_hash)
+	}
 
-impl OutputSwitch {
-	pub fn from_output(output: &core::Output, block_header: &core::BlockHeader) -> OutputSwitch {
-		OutputSwitch {
-			commit: util::to_hex(output.commit.0.to_vec()),
-			switch_commit_hash: output.switch_commit_hash.hash,
-			height: block_header.height,
+	pub fn commit(&self) -> Result<pedersen::Commitment, ser::Error> {
+		let vec = util::from_hex(self.commit.clone())
+			.map_err(|_| ser::Error::HexError(format!("output commit hex_error")))?;
+		Ok(pedersen::Commitment::from_vec(vec))
+	}
+
+	pub fn range_proof(&self) -> Result<pedersen::RangeProof, ser::Error> {
+		if let Some(ref proof) = self.proof {
+			let vec = util::from_hex(proof.clone())
+				.map_err(|_| ser::Error::HexError(format!("output range_proof hex_error")))?;
+			let mut bytes = [0; MAX_PROOF_SIZE];
+			for i in 0..vec.len() {
+				bytes[i] = vec[i];
+			}
+			Ok(pedersen::RangeProof { proof: bytes, plen: vec.len() })
+		} else {
+			Err(ser::Error::HexError(format!("output range_proof missing")))
 		}
 	}
 }
@@ -374,16 +339,19 @@ pub struct BlockPrintable {
 }
 
 impl BlockPrintable {
-	pub fn from_block(block: &core::Block) -> BlockPrintable {
-		let inputs = block
-			.inputs
+	pub fn from_block(
+		block: &core::Block,
+		chain: Arc<chain::Chain>,
+		include_proof: bool,
+	) -> BlockPrintable {
+		let inputs = block.inputs
 			.iter()
-			.map(|input| util::to_hex((input.0).0.to_vec()))
+			.map(|x| util::to_hex(x.commitment().0.to_vec()))
 			.collect();
 		let outputs = block
 			.outputs
 			.iter()
-			.map(|output| OutputPrintable::from_output(output, &block.header, true))
+			.map(|output| OutputPrintable::from_output(output, chain.clone(), include_proof))
 			.collect();
 		let kernels = block
 			.kernels
@@ -406,7 +374,7 @@ pub struct BlockOutputs {
 	/// The block header
 	pub header: BlockHeaderInfo,
 	/// A printable version of the outputs
-	pub outputs: Vec<OutputSwitch>,
+	pub outputs: Vec<OutputPrintable>,
 }
 
 #[derive(Serialize, Deserialize)]

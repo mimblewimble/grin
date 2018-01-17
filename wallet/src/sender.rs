@@ -16,6 +16,7 @@ use api;
 use client;
 use checker;
 use core::core::{build, Transaction, amount_to_hr_string};
+use core::core::hash::Hash;
 use core::ser;
 use keychain::{BlindingFactor, Identifier, Keychain};
 use receiver::TxWrapper;
@@ -27,7 +28,6 @@ use util;
 /// wallet
 /// UTXOs. The destination can be "stdout" (for command line) (currently disabled) or a URL to the
 /// recipients wallet receiver (to be implemented).
-
 pub fn issue_send_tx(
 	config: &WalletConfig,
 	keychain: &Keychain,
@@ -98,9 +98,9 @@ pub fn issue_send_tx(
 	let res = client::send_partial_tx(&url, &partial_tx);
 	if let Err(e) = res {
 		match e {
-			Error::FeeExceedsAmount {sender_amount, recipient_fee} => 
+			Error::FeeExceedsAmount {sender_amount, recipient_fee} =>
 				error!(
-					LOGGER, 
+					LOGGER,
 					"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
 					amount_to_hr_string(recipient_fee),
 					amount_to_hr_string(sender_amount)
@@ -126,7 +126,7 @@ pub fn issue_send_tx(
 
 	let sig_part=keychain.aggsig_calculate_partial_sig(&recp_pub_nonce, tx.fee, tx.lock_height).unwrap();
 
-	// Build the next stage, containing sS (and our pubkeys again, for the recipient's convenience) 
+	// Build the next stage, containing sS (and our pubkeys again, for the recipient's convenience)
 	let mut partial_tx = build_partial_tx(keychain, amount, Some(sig_part), tx);
 	partial_tx.phase = PartialTxPhase::SenderConfirmation;
 
@@ -134,9 +134,9 @@ pub fn issue_send_tx(
 	let res = client::send_partial_tx(&url, &partial_tx);
 	if let Err(e) = res {
 		match e {
-			Error::FeeExceedsAmount {sender_amount, recipient_fee} => 
+			Error::FeeExceedsAmount {sender_amount, recipient_fee} =>
 				error!(
-					LOGGER, 
+					LOGGER,
 					"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
 					amount_to_hr_string(recipient_fee),
 					amount_to_hr_string(sender_amount)
@@ -266,7 +266,11 @@ fn inputs_and_change(
 	// build inputs using the appropriate derived key_ids
 	for coin in coins {
 		let key_id = keychain.derive_key_id(coin.n_child)?;
-		parts.push(build::input(coin.value, key_id));
+		if coin.is_coinbase {
+			parts.push(build::coinbase_input(coin.value, coin.block_hash, key_id));
+		} else {
+			parts.push(build::input(coin.value, coin.block_hash, key_id));
+		}
 	}
 
 	// track the output representing our change
@@ -284,6 +288,7 @@ fn inputs_and_change(
 			height: 0,
 			lock_height: 0,
 			is_coinbase: false,
+			block_hash: Hash::zero(),
 		});
 
 		change_key
@@ -297,7 +302,9 @@ fn inputs_and_change(
 #[cfg(test)]
 mod test {
 	use core::core::build::{input, output, transaction};
+	use core::core::hash::ZERO_HASH;
 	use keychain::Keychain;
+
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment
@@ -307,8 +314,9 @@ mod test {
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 
 		let (tx1, _) = transaction(vec![output(105, key_id1.clone())], &keychain).unwrap();
-		let (tx2, _) = transaction(vec![input(105, key_id1.clone())], &keychain).unwrap();
+		let (tx2, _) = transaction(vec![input(105, ZERO_HASH, key_id1.clone())], &keychain).unwrap();
 
+		assert_eq!(tx1.outputs[0].features, tx2.inputs[0].features);
 		assert_eq!(tx1.outputs[0].commitment(), tx2.inputs[0].commitment());
 	}
 }

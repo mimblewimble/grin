@@ -25,7 +25,8 @@ use serde_json;
 use api;
 use core::consensus::reward;
 use core::core::{build, Block, Output, Transaction, TxKernel, amount_to_hr_string};
-use core::ser;
+use core::core::hash::Hash;
+use core::{global, ser};
 use keychain::{Identifier, Keychain};
 use types::*;
 use util::{LOGGER, to_hex, secp};
@@ -68,7 +69,7 @@ fn handle_sender_initiation(
 
     if fee > amount {
 		info!(
-			LOGGER, 
+			LOGGER,
 			"Rejected the transfer because transaction fee ({}) exceeds received amount ({}).",
 			amount_to_hr_string(fee),
 			amount_to_hr_string(amount)
@@ -96,6 +97,7 @@ fn handle_sender_initiation(
 			height: 0,
 			lock_height: 0,
 			is_coinbase: false,
+			block_hash: Hash::zero(),
 		});
 
 		key_id
@@ -259,6 +261,9 @@ pub fn receive_coinbase(
 ) -> Result<(Output, TxKernel, BlockFees), Error> {
 	let root_key_id = keychain.root_key_id();
 
+	let height = block_fees.height;
+	let lock_height = height + global::coinbase_maturity();
+
 	// Now acquire the wallet lock and write the new output.
 	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		let key_id = block_fees.key_id();
@@ -274,9 +279,10 @@ pub fn receive_coinbase(
 			n_child: derivation,
 			value: reward(block_fees.fees),
 			status: OutputStatus::Unconfirmed,
-			height: 0,
-			lock_height: 0,
+			height: height,
+			lock_height: lock_height,
 			is_coinbase: true,
+			block_hash: Hash::zero(),
 		});
 
 		(key_id, derivation)
@@ -284,20 +290,22 @@ pub fn receive_coinbase(
 
 	debug!(
 		LOGGER,
-		"Received coinbase and built candidate output - {:?}, {:?}, {}",
-		root_key_id.clone(),
+		"receive_coinbase: built candidate output - {:?}, {}",
 		key_id.clone(),
 		derivation,
 	);
 
-	debug!(LOGGER, "block_fees - {:?}", block_fees);
-
 	let mut block_fees = block_fees.clone();
 	block_fees.key_id = Some(key_id.clone());
 
-	debug!(LOGGER, "block_fees updated - {:?}", block_fees);
+	debug!(LOGGER, "receive_coinbase: {:?}", block_fees);
 
-	let (out, kern) = Block::reward_output(&keychain, &key_id, block_fees.fees)?;
+	let (out, kern) = Block::reward_output(
+		&keychain,
+		&key_id,
+		block_fees.fees,
+		block_fees.height,
+	)?;
 	Ok((out, kern, block_fees))
 }
 
@@ -313,8 +321,8 @@ fn build_final_transaction(
 	let root_key_id = keychain.root_key_id();
 
 	// double check the fee amount included in the partial tx
- // we don't necessarily want to just trust the sender
- // we could just overwrite the fee here (but we won't) due to the ecdsa sig
+	// we don't necessarily want to just trust the sender
+	// we could just overwrite the fee here (but we won't) due to the ecdsa sig
 	let fee = tx_fee(tx.inputs.len(), tx.outputs.len() + 1, None);
 	if fee != tx.fee {
 		return Err(Error::FeeDispute {
@@ -325,7 +333,7 @@ fn build_final_transaction(
 
     if fee > amount {
 		info!(
-			LOGGER, 
+			LOGGER,
 			"Rejected the transfer because transaction fee ({}) exceeds received amount ({}).",
 			amount_to_hr_string(fee),
 			amount_to_hr_string(amount)
@@ -355,6 +363,7 @@ fn build_final_transaction(
 			height: 0,
 			lock_height: 0,
 			is_coinbase: false,
+			block_hash: Hash::zero(),
 		});
 
 		(key_id, derivation)

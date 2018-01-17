@@ -19,12 +19,12 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use util::secp::pedersen::{Commitment, RangeProof};
+use util::secp::pedersen::RangeProof;
 
-use core::core::SumCommit;
+use core::core::{Input, OutputIdentifier, SumCommit};
 use core::core::pmmr::{HashSum, NoSum};
 
-use core::core::{Block, BlockHeader, Output, TxKernel};
+use core::core::{Block, BlockHeader, TxKernel};
 use core::core::target::Difficulty;
 use core::core::hash::Hash;
 use grin_store::Error::NotFoundErr;
@@ -33,6 +33,7 @@ use store;
 use sumtree;
 use types::*;
 use util::LOGGER;
+
 
 const MAX_ORPHAN_AGE_SECS: u64 = 30;
 
@@ -331,29 +332,21 @@ impl Chain {
 		}
 	}
 
-	/// Gets an unspent output from its commitment. With return None if the
-	/// output doesn't exist or has been spent. This querying is done in a
-	/// way that's consistent with the current chain state and more
-	/// specifically the current winning fork.
-	pub fn get_unspent(&self, output_ref: &Commitment) -> Result<Output, Error> {
-		match self.store.get_output_by_commit(output_ref) {
-			Ok(out) => {
-				let mut sumtrees = self.sumtrees.write().unwrap();
-				if sumtrees.is_unspent(output_ref)? {
-					Ok(out)
-				} else {
-					Err(Error::OutputNotFound)
-				}
-			}
-			Err(NotFoundErr) => Err(Error::OutputNotFound),
-			Err(e) => Err(Error::StoreErr(e, "chain get unspent".to_owned())),
-		}
-	}
-
-	/// Checks whether an output is unspent
-	pub fn is_unspent(&self, output_ref: &Commitment) -> Result<bool, Error> {
+	/// For the given commitment find the unspent output and return the associated
+	/// Return an error if the output does not exist or has been spent.
+	/// This querying is done in a way that is consistent with the current chain state,
+	/// specifically the current winning (valid, most work) fork.
+	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.is_unspent(output_ref)
+	}
+
+	/// Check if the input has matured sufficiently for the given block height.
+	/// This only applies to inputs spending coinbase outputs.
+	/// An input spending a non-coinbase output will always pass this check.
+	pub fn is_matured(&self, input: &Input, height: u64) -> Result<(), Error> {
+		let mut sumtrees = self.sumtrees.write().unwrap();
+		sumtrees.is_matured(input, height)
 	}
 
 	/// Sets the sumtree roots on a brand new block by applying the block on the
@@ -391,17 +384,9 @@ impl Chain {
 	}
 
 	/// returns the last n nodes inserted into the utxo sum tree
-	/// returns sum tree hash plus output itself (as the sum is contained
-	/// in the output anyhow)
-	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<(Hash, Output)> {
+	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<HashSum<SumCommit>> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
-		let mut return_vec = Vec::new();
-		let sum_nodes = sumtrees.last_n_utxo(distance);
-		for sum_commit in sum_nodes {
-			let output = self.store.get_output_by_commit(&sum_commit.sum.commit);
-			return_vec.push((sum_commit.hash, output.unwrap()));
-		}
-		return_vec
+		sumtrees.last_n_utxo(distance)
 	}
 
 	/// as above, for rangeproofs
@@ -467,16 +452,6 @@ impl Chain {
 		self.store.is_on_current_chain(header).map_err(|e| {
 			Error::StoreErr(e, "chain is_on_current_chain".to_owned())
 		})
-	}
-
-	/// Gets the block header by the provided output commitment
-	pub fn get_block_header_by_output_commit(
-		&self,
-		commit: &Commitment,
-	) -> Result<BlockHeader, Error> {
-		self.store
-			.get_block_header_by_output_commit(commit)
-			.map_err(|e| Error::StoreErr(e, "chain get commitment".to_owned()))
 	}
 
 	/// Get the tip of the current "sync" header chain.

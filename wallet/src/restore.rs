@@ -16,10 +16,13 @@ use keychain::{Keychain, Identifier};
 use util::{LOGGER, from_hex};
 use util::secp::pedersen;
 use api;
+use core::global;
 use core::core::{Output, SwitchCommitHash};
-use core::core::transaction::{COINBASE_OUTPUT, DEFAULT_OUTPUT, SWITCH_COMMIT_HASH_SIZE};
+use core::core::hash::Hash;
+use core::core::transaction::{COINBASE_OUTPUT, DEFAULT_OUTPUT};
 use types::{WalletConfig, WalletData, OutputData, OutputStatus, Error};
 use byteorder::{BigEndian, ByteOrder};
+
 
 pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 	let url = format!("{}/v1/chain", config.check_node_api_http_addr);
@@ -39,18 +42,28 @@ pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 	}
 }
 
-fn output_with_range_proof(config: &WalletConfig, commit_id: &str) -> Result<api::Output, Error> {
+fn output_with_range_proof(
+	config: &WalletConfig,
+	commit_id: &str,
+	height: u64,
+) -> Result<api::OutputPrintable, Error> {
 	let url =
 		format!(
-		"{}/v1/chain/utxos/byids?id={}&include_rp&include_switch",
+		"{}/v1/chain/utxos/byheight?start_height={}&end_height={}&id={}&include_rp",
 		config.check_node_api_http_addr,
+		height,
+		height,
 		commit_id,
 	);
 
-	match api::client::get::<Vec<api::Output>>(url.as_str()) {
-		Ok(outputs) => {
-			if let Some(output) = outputs.first() {
-				Ok(output.clone())
+	match api::client::get::<Vec<api::BlockOutputs>>(url.as_str()) {
+		Ok(block_outputs) => {
+			if let Some(block_output) = block_outputs.first() {
+				if let Some(output) = block_output.outputs.first() {
+					Ok(output.clone())
+				} else {
+					Err(Error::Node(api::Error::NotFound))
+				}
 			} else {
 				Err(Error::Node(api::Error::NotFound))
 			}
@@ -69,17 +82,20 @@ fn retrieve_amount_and_coinbase_status(
 	keychain: &Keychain,
 	key_id: Identifier,
 	commit_id: &str,
+	height: u64,
 ) -> Result<(u64, bool), Error> {
-	let output = output_with_range_proof(config, commit_id)?;
+	let output = output_with_range_proof(config, commit_id, height)?;
+
 	let core_output = Output {
 		features: match output.output_type {
 			api::OutputType::Coinbase => COINBASE_OUTPUT,
 			api::OutputType::Transaction => DEFAULT_OUTPUT,
 		},
-		proof: output.proof.expect("output with proof"),
-		switch_commit_hash: output.switch_commit_hash.expect("output with switch_commit_hash"),
-		commit: output.commit,
+		proof: output.range_proof()?,
+		switch_commit_hash: output.switch_commit_hash()?,
+		commit: output.commit()?,
 	};
+
 	if let Some(amount) = core_output.recover_value(keychain, &key_id) {
 		let is_coinbase = match output.output_type {
 			api::OutputType::Coinbase => true,
@@ -96,8 +112,6 @@ pub fn utxos_batch_block(
 	start_height: u64,
 	end_height: u64,
 ) -> Result<Vec<api::BlockOutputs>, Error> {
-	// build the necessary query param -
-	// ?height=x
 	let query_param = format!("start_height={}&end_height={}", start_height, end_height);
 
 	let url =
@@ -122,15 +136,16 @@ pub fn utxos_batch_block(
 	}
 }
 
+// TODO - wrap the many return values in a struct
 fn find_utxos_with_key(
 	config: &WalletConfig,
 	keychain: &Keychain,
-	switch_commit_cache: &Vec<[u8; SWITCH_COMMIT_HASH_SIZE]>,
+	switch_commit_cache: &Vec<pedersen::Commitment>,
 	block_outputs: api::BlockOutputs,
 	key_iterations: &mut usize,
 	padding: &mut usize,
-) -> Vec<(pedersen::Commitment, Identifier, u32, u64, u64, bool)> {
-	let mut wallet_outputs: Vec<(pedersen::Commitment, Identifier, u32, u64, u64, bool)> =
+) -> Vec<(pedersen::Commitment, Identifier, u32, u64, u64, u64, bool)> {
+	let mut wallet_outputs: Vec<(pedersen::Commitment, Identifier, u32, u64, u64, u64, bool)> =
 		Vec::new();
 
 	info!(
@@ -141,55 +156,69 @@ fn find_utxos_with_key(
 		*key_iterations,
 	);
 
-	for output in block_outputs.outputs {
+	for output in block_outputs.outputs.iter().filter(|x| !x.spent) {
 		for i in 0..*key_iterations {
-			if switch_commit_cache[i as usize] == output.switch_commit_hash {
-				info!(
-					LOGGER,
-					"Output found: {:?}, key_index: {:?}",
-					output.switch_commit_hash,
-					i,
-				);
+			let expected_hash = SwitchCommitHash::from_switch_commit(switch_commit_cache[i as usize]);
 
-				// add it to result set here
-				let commit_id = from_hex(output.commit.clone()).unwrap();
-				let key_id = keychain.derive_key_id(i as u32).unwrap();
-				let res = retrieve_amount_and_coinbase_status(
-					config,
-					keychain,
-					key_id.clone(),
-					&output.commit,
-				);
-
-				if let Ok((amount, is_coinbase)) = res {
-					info!(LOGGER, "Amount: {}", amount);
-
-					let commit = keychain
-						.commit_with_key_index(BigEndian::read_u64(&commit_id), i as u32)
-						.expect("commit with key index");
-
-					wallet_outputs.push((
-						commit,
-						key_id.clone(),
-						i as u32,
-						amount,
-						output.height,
-						is_coinbase,
-					));
-
-					// probably don't have to look for indexes greater than this now
-					*key_iterations = i + *padding;
-					if *key_iterations > switch_commit_cache.len() {
-						*key_iterations = switch_commit_cache.len();
-					}
-					info!(LOGGER, "Setting max key index to: {}", *key_iterations);
-					break;
-				} else {
+			if let Ok(x) = output.switch_commit_hash() {
+				if x == expected_hash {
 					info!(
 						LOGGER,
-						"Unable to retrieve the amount (needs investigating)",
+						"Output found: {:?}, key_index: {:?}",
+						output,
+						i,
 					);
 
+					// add it to result set here
+					let commit_id = from_hex(output.commit.clone()).unwrap();
+					let key_id = keychain.derive_key_id(i as u32).unwrap();
+
+					let res = retrieve_amount_and_coinbase_status(
+						config,
+						keychain,
+						key_id.clone(),
+						&output.commit,
+						block_outputs.header.height,
+					);
+
+					if let Ok((amount, is_coinbase)) = res {
+						info!(LOGGER, "Amount: {}", amount);
+
+						let commit = keychain
+							.commit_with_key_index(BigEndian::read_u64(&commit_id), i as u32)
+							.expect("commit with key index");
+
+						let height = block_outputs.header.height;
+						let lock_height = if is_coinbase {
+							height + global::coinbase_maturity()
+						} else {
+							0
+						};
+
+						wallet_outputs.push((
+							commit,
+							key_id.clone(),
+							i as u32,
+							amount,
+							height,
+							lock_height,
+							is_coinbase,
+						));
+
+						// probably don't have to look for indexes greater than this now
+						*key_iterations = i + *padding;
+						if *key_iterations > switch_commit_cache.len() {
+							*key_iterations = switch_commit_cache.len();
+						}
+						info!(LOGGER, "Setting max key index to: {}", *key_iterations);
+						break;
+					} else {
+						info!(
+							LOGGER,
+							"Unable to retrieve the amount (needs investigating) {:?}",
+							res,
+						);
+					}
 				}
 			}
 		}
@@ -229,7 +258,7 @@ pub fn restore(
 		chain_height
 	);
 
-	let mut switch_commit_cache: Vec<[u8; SWITCH_COMMIT_HASH_SIZE]> = vec![];
+	let mut switch_commit_cache: Vec<pedersen::Commitment> = vec![];
 	info!(
 		LOGGER,
 		"Building key derivation cache ({}) ...",
@@ -237,8 +266,7 @@ pub fn restore(
 	);
 	for i in 0..key_derivations {
 		let switch_commit = keychain.switch_commit_from_index(i as u32).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
-		switch_commit_cache.push(switch_commit_hash.hash);
+		switch_commit_cache.push(switch_commit);
 	}
 	debug!(LOGGER, "... done");
 
@@ -281,8 +309,9 @@ pub fn restore(
 							value: output.3,
 							status: OutputStatus::Unconfirmed,
 							height: output.4,
-							lock_height: 0,
-							is_coinbase: output.5,
+							lock_height: output.5,
+							is_coinbase: output.6,
+							block_hash: Hash::zero(),
 						});
 					};
 				}

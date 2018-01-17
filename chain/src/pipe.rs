@@ -22,7 +22,6 @@ use core::consensus;
 use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader};
 use core::core::target::Difficulty;
-use core::core::transaction;
 use grin_store;
 use types::*;
 use store;
@@ -289,21 +288,6 @@ fn validate_block(
 		);
 
 		return Err(Error::InvalidRoot);
-	}
-
-	// check for any outputs with lock_heights greater than current block height
-	for input in &b.inputs {
-		if let Ok(output) = ctx.store.get_output_by_commit(&input.commitment()) {
-			if output.features.contains(transaction::COINBASE_OUTPUT) {
-				if let Ok(output_header) = ctx.store
-					.get_block_header_by_output_commit(&input.commitment())
-				{
-					if b.header.height <= output_header.height + global::coinbase_maturity() {
-						return Err(Error::ImmatureCoinbase);
-					}
-				};
-			};
-		};
 	}
 
 	Ok(())

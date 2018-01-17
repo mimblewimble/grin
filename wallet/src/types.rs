@@ -33,6 +33,7 @@ use tokio_retry::strategy::FibonacciBackoff;
 use api;
 use core::consensus;
 use core::core::{transaction, Transaction};
+use core::core::hash::Hash;
 use core::ser;
 use keychain;
 use util;
@@ -126,9 +127,17 @@ impl From<serde_json::Error> for Error {
 	}
 }
 
+// TODO - rethink this, would be nice not to have to worry about
+// low level hex conversion errors like this
 impl From<num::ParseIntError> for Error {
 	fn from(_: num::ParseIntError) -> Error {
 		Error::Format("Invalid hex".to_string())
+	}
+}
+
+impl From<ser::Error> for Error {
+	fn from(e: ser::Error) -> Error {
+		Error::Format(e.to_string())
 	}
 }
 
@@ -236,6 +245,8 @@ pub struct OutputData {
 	pub lock_height: u64,
 	/// Is this a coinbase output? Is it subject to coinbase locktime?
 	pub is_coinbase: bool,
+	/// Hash of the block this output originated from.
+	pub block_hash: Hash,
 }
 
 impl OutputData {
@@ -252,7 +263,7 @@ impl OutputData {
 	pub fn num_confirmations(&self, current_height: u64) -> u64 {
 		if self.status == OutputStatus::Unconfirmed {
 			0
-		} else if self.status == OutputStatus::Spent && self.height == 0 {
+		} else if self.height == 0 {
 			0
 		} else {
 			// if an output has height n and we are at block n

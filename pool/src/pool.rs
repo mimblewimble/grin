@@ -14,19 +14,16 @@
 
 //! Top-level Pool type, methods, and tests
 
-use types::*;
-pub use graph;
-
-use core::core::transaction;
-use core::core::block;
-use core::core::hash;
-use core::core::target::Difficulty;
-use core::global;
-
-use util::secp::pedersen::Commitment;
-
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
+
+use core::core::transaction;
+use core::core::OutputIdentifier;
+use core::core::{block, hash};
+use util::secp::pedersen::Commitment;
+
+use types::*;
+pub use graph;
 
 /// The pool itself.
 /// The transactions HashMap holds ownership of all transactions in the pool,
@@ -69,35 +66,35 @@ where
 	/// Detects double spends and unknown references from the pool and
 	/// blockchain only; any conflicts with entries in the orphans set must
 	/// be accounted for separately, if relevant.
-	pub fn search_for_best_output(&self, output_commitment: &Commitment) -> Parent {
+	pub fn search_for_best_output(&self, output_ref: &OutputIdentifier) -> Parent {
 		// The current best unspent set is:
-  //   Pool unspent + (blockchain unspent - pool->blockchain spent)
-  // Pool unspents are unconditional so we check those first
+		//   Pool unspent + (blockchain unspent - pool->blockchain spent)
+		//   Pool unspents are unconditional so we check those first
 		self.pool
-			.get_available_output(output_commitment)
+			.get_available_output(&output_ref.commit)
 			.map(|x| {
-				Parent::PoolTransaction {
-					tx_ref: x.source_hash().unwrap(),
-				}
+				let tx_ref = x.source_hash().unwrap();
+				Parent::PoolTransaction { tx_ref }
 			})
-			.or(self.search_blockchain_unspents(output_commitment))
-			.or(self.search_pool_spents(output_commitment))
+			.or(self.search_blockchain_unspents(output_ref))
+			.or(self.search_pool_spents(&output_ref.commit))
 			.unwrap_or(Parent::Unknown)
 	}
 
 	// search_blockchain_unspents searches the current view of the blockchain
- // unspent set, represented by blockchain unspents - pool spents, for an
- // output designated by output_commitment.
-	fn search_blockchain_unspents(&self, output_commitment: &Commitment) -> Option<Parent> {
+	// unspent set, represented by blockchain unspents - pool spents, for an
+	// output designated by output_commitment.
+	fn search_blockchain_unspents(&self, output_ref: &OutputIdentifier) -> Option<Parent> {
 		self.blockchain
-			.get_unspent(output_commitment)
+			.is_unspent(output_ref)
 			.ok()
-			.map(|output| {
-				match self.pool.get_blockchain_spent(output_commitment) {
-					Some(x) => Parent::AlreadySpent {
-						other_tx: x.destination_hash().unwrap(),
-					},
-					None => Parent::BlockTransaction { output },
+			.map(|_| {
+				match self.pool.get_blockchain_spent(&output_ref.commit) {
+					Some(x) => {
+						let other_tx = x.destination_hash().unwrap();
+						Parent::AlreadySpent { other_tx }
+					}
+					None => Parent::BlockTransaction,
 				}
 			})
 	}
@@ -169,35 +166,24 @@ where
 		}
 
 		// The next issue is to identify all unspent outputs that
-  // this transaction will consume and make sure they exist in the set.
+		// this transaction will consume and make sure they exist in the set.
 		let mut pool_refs: Vec<graph::Edge> = Vec::new();
 		let mut orphan_refs: Vec<graph::Edge> = Vec::new();
 		let mut blockchain_refs: Vec<graph::Edge> = Vec::new();
 
 		for input in &tx.inputs {
-			let base = graph::Edge::new(None, Some(tx_hash), input.commitment());
+			let output = OutputIdentifier::from_input(&input);
+			let base = graph::Edge::new(None, Some(tx_hash), output.clone());
 
 			// Note that search_for_best_output does not examine orphans, by
-   // design. If an incoming transaction consumes pool outputs already
-   // spent by the orphans set, this does not preclude its inclusion
-   // into the pool.
-			match self.search_for_best_output(&input.commitment()) {
+			// design. If an incoming transaction consumes pool outputs already
+			// spent by the orphans set, this does not preclude its inclusion
+			// into the pool.
+			match self.search_for_best_output(&output) {
 				Parent::PoolTransaction { tx_ref: x } => pool_refs.push(base.with_source(Some(x))),
-				Parent::BlockTransaction { output } => {
-					// TODO - pull this out into a separate function?
-					if output.features.contains(transaction::COINBASE_OUTPUT) {
-						if let Ok(out_header) = self.blockchain
-							.get_block_header_by_output_commit(&output.commitment())
-						{
-							let lock_height = out_header.height + global::coinbase_maturity();
-							if head_header.height < lock_height {
-								return Err(PoolError::ImmatureCoinbase {
-									header: out_header,
-									output: output.commitment(),
-								});
-							};
-						};
-					};
+				Parent::BlockTransaction => {
+					let height = head_header.height + 1;
+					self.blockchain.is_matured(&input, height)?;
 					blockchain_refs.push(base);
 				}
 				Parent::Unknown => orphan_refs.push(base),
@@ -223,24 +209,27 @@ where
 		}
 
 		// Assertion: we have exactly as many resolved spending references as
-  // inputs to the transaction.
+		// inputs to the transaction.
 		assert_eq!(
 			tx.inputs.len(),
 			blockchain_refs.len() + pool_refs.len() + orphan_refs.len()
 		);
 
 		// At this point we know if we're spending all known unspents and not
-  // creating any duplicate unspents.
+		// creating any duplicate unspents.
 		let pool_entry = graph::PoolEntry::new(&tx);
 		let new_unspents = tx.outputs
 			.iter()
-			.map(|x| graph::Edge::new(Some(tx_hash), None, x.commitment()))
+			.map(|x| {
+				let output = OutputIdentifier::from_output(&x);
+				graph::Edge::new(Some(tx_hash), None, output)
+			})
 			.collect();
 
 		if !is_orphan {
 			// In the non-orphan (pool) case, we've ensured that every input
-   // maps one-to-one with an unspent (available) output, and each
-   // output is unique. No further checks are necessary.
+			// maps one-to-one with an unspent (available) output, and each
+			// output is unique. No further checks are necessary.
 			self.pool
 				.add_pool_transaction(pool_entry, blockchain_refs, pool_refs, new_unspents);
 
@@ -303,13 +292,14 @@ where
 		is_orphan: bool,
 	) -> Result<(), PoolError> {
 		// Checking against current blockchain unspent outputs
-  // We want outputs even if they're spent by pool txs, so we ignore
-  // consumed_blockchain_outputs
-		if self.blockchain.get_unspent(&output.commitment()).is_ok() {
+		// We want outputs even if they're spent by pool txs, so we ignore
+		// consumed_blockchain_outputs
+		let out = OutputIdentifier::from_output(&output);
+		if self.blockchain.is_unspent(&out).is_ok() {
 			return Err(PoolError::DuplicateOutput {
 				other_tx: None,
 				in_chain: true,
-				output: output.commitment(),
+				output: out.commit,
 			});
 		}
 
@@ -320,7 +310,7 @@ where
 				return Err(PoolError::DuplicateOutput {
 					other_tx: Some(x),
 					in_chain: false,
-					output: output.commitment(),
+					output: output.commit,
 				})
 			}
 			None => {}
@@ -517,7 +507,7 @@ where
 
 		for output in &tx_ref.unwrap().outputs {
 			match self.pool.get_internal_spent_output(&output.commitment()) {
-				Some(x) => if self.blockchain.get_unspent(&x.output_commitment()).is_err() {
+				Some(x) => if self.blockchain.is_unspent(&x.output()).is_err() {
 					self.mark_transaction(x.destination_hash().unwrap(), marked_txs);
 				},
 				None => {}
@@ -604,6 +594,7 @@ where
 mod tests {
 	use super::*;
 	use core::core::build;
+	use core::global;
 	use blockchain::{DummyChain, DummyChainImpl, DummyUtxoSet};
 	use util::secp;
 	use keychain::Keychain;
@@ -611,11 +602,14 @@ mod tests {
 	use blake2;
 	use core::global::ChainTypes;
 	use core::core::SwitchCommitHash;
+	use core::core::hash::ZERO_HASH;
+	use core::core::hash::{Hash, Hashed};
+	use core::core::target::Difficulty;
 
 	macro_rules! expect_output_parent {
 		($pool:expr, $expected:pat, $( $output:expr ),+ ) => {
 			$(
-				match $pool.search_for_best_output(&test_output($output).commitment()) {
+				match $pool.search_for_best_output(&OutputIdentifier::from_output(&test_output($output))) {
 					$expected => {},
 					x => panic!(
 						"Unexpected result from output search for {:?}, got {:?}",
@@ -651,7 +645,7 @@ mod tests {
 		dummy_chain.update_utxo_set(new_utxo);
 
 		// To mirror how this construction is intended to be used, the pool
-  // is placed inside a RwLock.
+		// is placed inside a RwLock.
 		let pool = RwLock::new(test_setup(&Arc::new(dummy_chain)));
 
 		// Take the write lock and add a pool entry
@@ -676,14 +670,13 @@ mod tests {
 			}
 		}
 
-		// Now take the read lock and use a few exposed methods to check
-  // consistency
+		// Now take the read lock and use a few exposed methods to check consistency
 		{
 			let read_pool = pool.read().unwrap();
 			assert_eq!(read_pool.total_size(), 2);
 			expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 12);
 			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 11, 5);
-			expect_output_parent!(read_pool, Parent::BlockTransaction{output: _}, 8);
+			expect_output_parent!(read_pool, Parent::BlockTransaction, 8);
 			expect_output_parent!(read_pool, Parent::Unknown, 20);
 		}
 	}
@@ -804,6 +797,10 @@ mod tests {
 	fn test_immature_coinbase() {
 		global::set_mining_mode(ChainTypes::AutomatedTesting);
 		let mut dummy_chain = DummyChainImpl::new();
+
+		let lock_height = 1 + global::coinbase_maturity();
+		assert_eq!(lock_height, 4);
+
 		let coinbase_output = test_coinbase_output(15);
 		dummy_chain.update_utxo_set(DummyUtxoSet::empty().with_output(coinbase_output));
 
@@ -817,8 +814,7 @@ mod tests {
 				height: 1,
 				..block::BlockHeader::default()
 			};
-			chain_ref
-				.store_header_by_output_commitment(coinbase_output.commitment(), &coinbase_header);
+			chain_ref.store_head_header(&coinbase_header);
 
 			let head_header = block::BlockHeader {
 				height: 2,
@@ -826,43 +822,28 @@ mod tests {
 			};
 			chain_ref.store_head_header(&head_header);
 
-			let txn = test_transaction(vec![15], vec![10, 3]);
+			let txn = test_transaction_with_coinbase_input(
+				15,
+				coinbase_header.hash(),
+				vec![10, 3],
+			);
 			let result = write_pool.add_to_memory_pool(test_source(), txn);
 			match result {
-				Err(PoolError::ImmatureCoinbase {
-					header: _,
-					output: out,
-				}) => {
-					assert_eq!(out, coinbase_output.commitment());
-				}
+				Err(PoolError::ImmatureCoinbase) => {},
 				_ => panic!("expected ImmatureCoinbase error here"),
 			};
 
 			let head_header = block::BlockHeader {
-				height: 3,
+				height: 4,
 				..block::BlockHeader::default()
 			};
 			chain_ref.store_head_header(&head_header);
 
-			let txn = test_transaction(vec![15], vec![10, 3]);
-			let result = write_pool.add_to_memory_pool(test_source(), txn);
-			match result {
-				Err(PoolError::ImmatureCoinbase {
-					header: _,
-					output: out,
-				}) => {
-					assert_eq!(out, coinbase_output.commitment());
-				}
-				_ => panic!("expected ImmatureCoinbase error here"),
-			};
-
-			let head_header = block::BlockHeader {
-				height: 5,
-				..block::BlockHeader::default()
-			};
-			chain_ref.store_head_header(&head_header);
-
-			let txn = test_transaction(vec![15], vec![10, 3]);
+			let txn = test_transaction_with_coinbase_input(
+				15,
+				coinbase_header.hash(),
+				vec![10, 3],
+			);
 			let result = write_pool.add_to_memory_pool(test_source(), txn);
 			match result {
 				Ok(_) => {}
@@ -1089,7 +1070,7 @@ mod tests {
 			assert_eq!(read_pool.total_size(), 4);
 
 			// We should have available blockchain outputs
-			expect_output_parent!(read_pool, Parent::BlockTransaction{output: _}, 9, 1);
+			expect_output_parent!(read_pool, Parent::BlockTransaction, 9, 1);
 
 			// We should have spent blockchain outputs
 			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 5, 6);
@@ -1229,23 +1210,29 @@ mod tests {
 	/// Every output is given a blinding key equal to its value, so that the
 	/// entire commitment can be derived deterministically from just the value.
 	///
-	/// Fees are the remainder between input and output values, so the numbers
-	/// should make sense.
+	/// Fees are the remainder between input and output values,
+	/// so the numbers should make sense.
 	fn test_transaction(
 		input_values: Vec<u64>,
 		output_values: Vec<u64>,
 	) -> transaction::Transaction {
 		let keychain = keychain_for_tests();
 
-		let fees: i64 =
-			input_values.iter().sum::<u64>() as i64 - output_values.iter().sum::<u64>() as i64;
+		let input_sum = input_values
+			.iter()
+			.sum::<u64>() as i64;
+		let output_sum = output_values
+			.iter()
+			.sum::<u64>() as i64;
+
+		let fees: i64 = input_sum - output_sum;
 		assert!(fees >= 0);
 
 		let mut tx_elements = Vec::new();
 
 		for input_value in input_values {
 			let key_id = keychain.derive_key_id(input_value as u32).unwrap();
-			tx_elements.push(build::input(input_value, key_id));
+			tx_elements.push(build::input(input_value, ZERO_HASH, key_id));
 		}
 
 		for output_value in output_values {
@@ -1258,6 +1245,38 @@ mod tests {
 		tx
 	}
 
+	fn test_transaction_with_coinbase_input(
+		input_value: u64,
+		input_block_hash: Hash,
+		output_values: Vec<u64>,
+	) -> transaction::Transaction {
+		let keychain = keychain_for_tests();
+
+		let output_sum = output_values
+			.iter()
+			.sum::<u64>() as i64;
+
+		let fees: i64 = input_value as i64 - output_sum;
+		assert!(fees >= 0);
+
+		let mut tx_elements = Vec::new();
+
+		// for input_value in input_values {
+		let key_id = keychain.derive_key_id(input_value as u32).unwrap();
+		tx_elements.push(build::coinbase_input(input_value, input_block_hash, key_id));
+
+		for output_value in output_values {
+			let key_id = keychain.derive_key_id(output_value as u32).unwrap();
+			tx_elements.push(build::output(output_value, key_id));
+		}
+		tx_elements.push(build::with_fee(fees as u64));
+
+		let (tx, _) = build::transaction(tx_elements, &keychain).unwrap();
+		tx
+	}
+
+	/// Very un-dry way of building a vanilla tx and adding a lock_height to it.
+	/// TODO - rethink this.
 	fn timelocked_transaction(
 		input_values: Vec<u64>,
 		output_values: Vec<u64>,
@@ -1273,7 +1292,7 @@ mod tests {
 
 		for input_value in input_values {
 			let key_id = keychain.derive_key_id(input_value as u32).unwrap();
-			tx_elements.push(build::input(input_value, key_id));
+			tx_elements.push(build::input(input_value, ZERO_HASH, key_id));
 		}
 
 		for output_value in output_values {

@@ -55,7 +55,6 @@ fn test_various_store_indices() {
 		&key_id,
 		Difficulty::minimum()
 	).unwrap();
-	let commit = block.outputs[0].commitment();
 	let block_hash = block.hash();
 
 	chain_store.save_block(&block).unwrap();
@@ -65,10 +64,5 @@ fn test_various_store_indices() {
 	assert_eq!(block_header.hash(), block_hash);
 
 	let block_header = chain_store.get_header_by_height(1).unwrap();
-	assert_eq!(block_header.hash(), block_hash);
-
-	let block_header = chain_store
-		.get_block_header_by_output_commit(&commit)
-		.unwrap();
 	assert_eq!(block_header.hash(), block_hash);
 }

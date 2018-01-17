@@ -17,19 +17,24 @@ use blake2::blake2b::blake2b;
 use util::secp::{self, Message, Signature};
 use util::{static_secp_instance, kernel_sig_msg};
 use util::secp::pedersen::{Commitment, RangeProof};
+use std::cmp::min;
 use std::cmp::Ordering;
 use std::ops;
 
 use consensus;
 use consensus::VerifySortOrder;
 use core::Committed;
-use core::hash::Hashed;
+use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::Summable;
 use keychain::{Identifier, Keychain};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
+use util;
 
 /// The size to use for the stored blake2 hash of a switch_commitment
 pub const SWITCH_COMMIT_HASH_SIZE: usize = 20;
+
+/// The size of the secret key used to generate the switch commitment hash (blake2)
+pub const SWITCH_COMMIT_KEY_SIZE: usize = 20;
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -69,13 +74,16 @@ macro_rules! hashable_ord {
 pub enum Error {
 	/// Transaction fee can't be odd, due to half fee burning
 	OddFee,
-	/// Underlying Secp256k1 error (signature validation or invalid public
-	/// key typically)
+	/// Underlying Secp256k1 error (signature validation or invalid public key typically)
 	Secp(secp::Error),
 	/// Restrict number of incoming inputs
 	TooManyInputs,
 	/// Underlying consensus error (currently for sort order)
 	ConsensusError(consensus::Error),
+	/// Error originating from an invalid lock-height
+	LockHeight(u64),
+	/// Error originating from an invalid switch commitment (coinbase lock_height related)
+	SwitchCommitment,
 }
 
 impl From<secp::Error> for Error {
@@ -149,14 +157,12 @@ impl TxKernel {
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
 	pub fn verify(&self) -> Result<(), secp::Error> {
-		let msg = try!(Message::from_slice(
-			&kernel_sig_msg(self.fee, self.lock_height),
-		));
+		let msg = Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height))?;
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 		let sig = &self.excess_sig;
 		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &self.excess);
-		if !valid{
+		if !valid {
 			return Err(secp::Error::IncorrectSignature);
 		}
 		Ok(())
@@ -172,8 +178,7 @@ pub struct Transaction {
 	pub outputs: Vec<Output>,
 	/// Fee paid by the transaction.
 	pub fee: u64,
-	/// Transaction is not valid before this block height.
-	/// It is invalid for this to be less than the lock_height of any UTXO being spent.
+	/// Transaction is not valid before this chain height.
 	pub lock_height: u64,
 	/// The signature proving the excess is a valid public key, which signs
 	/// the transaction fee.
@@ -184,7 +189,6 @@ pub struct Transaction {
 /// write the transaction as binary.
 impl Writeable for Transaction {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		println!("Excess sig write: {:?}", self.excess_sig);
 		ser_multiwrite!(
 			writer,
 			[write_u64, self.fee],
@@ -335,7 +339,7 @@ impl Transaction {
 		// pretend the sum is a public key (which it is, being of the form r.G) and
 		// verify the transaction sig with it
 		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &rsum);
-		if !valid{
+		if !valid {
 			return Err(secp::Error::IncorrectSignature);
 		}
 		Ok(rsum)
@@ -377,10 +381,23 @@ impl Transaction {
 	}
 }
 
-/// A transaction input, mostly a reference to an output being spent by the
-/// transaction.
-#[derive(Debug, Copy, Clone)]
-pub struct Input(pub Commitment);
+/// A transaction input.
+///
+/// Primarily a reference to an output being spent by the transaction.
+/// But also information required to verify coinbase maturity through
+/// the lock_height hashed in the switch_commit_hash.
+#[derive(Debug, Clone, Copy)]
+pub struct Input{
+	/// The features of the output being spent.
+	/// We will check maturity for coinbase output.
+	pub features: OutputFeatures,
+	/// The commit referencing the output being spent.
+	pub commit: Commitment,
+	/// The hash of the block the output originated from.
+	/// Currently we only care about this for coinbase outputs.
+	/// TODO - include the merkle proof here once we support these.
+	pub out_block: Option<Hash>,
+}
 
 hashable_ord!(Input);
 
@@ -388,7 +405,14 @@ hashable_ord!(Input);
 /// an Input as binary.
 impl Writeable for Input {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_fixed_bytes(&self.0)
+		writer.write_u8(self.features.bits())?;
+		writer.write_fixed_bytes(&self.commit)?;
+
+		if self.features.contains(COINBASE_OUTPUT) {
+			writer.write_fixed_bytes(&self.out_block.unwrap_or(ZERO_HASH))?;
+		}
+
+		Ok(())
 	}
 }
 
@@ -396,16 +420,49 @@ impl Writeable for Input {
 /// an Input from a binary stream.
 impl Readable for Input {
 	fn read(reader: &mut Reader) -> Result<Input, ser::Error> {
-		Ok(Input(Commitment::read(reader)?))
+		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
+			ser::Error::CorruptedData,
+		)?;
+
+		let commit = Commitment::read(reader)?;
+
+		let out_block = if features.contains(COINBASE_OUTPUT) {
+			Some(Hash::read(reader)?)
+		} else {
+			None
+		};
+
+		Ok(Input::new(
+			features,
+			commit,
+			out_block,
+		))
 	}
 }
 
-/// The input for a transaction, which spends a pre-existing output. The input
-/// commitment is a reproduction of the commitment of the output it's spending.
+/// The input for a transaction, which spends a pre-existing unspent output.
+/// The input commitment is a reproduction of the commitment of the output being spent.
+/// Input must also provide the original output features and the hash of the block
+/// the output originated from.
 impl Input {
-	/// Extracts the referenced commitment from a transaction output
+	/// Build a new input from the data required to identify and verify an output beng spent.
+	pub fn new(
+		features: OutputFeatures,
+		commit: Commitment,
+		out_block: Option<Hash>,
+	) -> Input {
+		Input {
+			features,
+			commit,
+			out_block,
+		}
+	}
+
+	/// The input commitment which _partially_ identifies the output being spent.
+	/// In the presence of a fork we need additional info to uniquely identify the output.
+	/// Specifically the block hash (so correctly calculate lock_height for coinbase outputs).
 	pub fn commitment(&self) -> Commitment {
-		self.0
+		self.commit
 	}
 }
 
@@ -422,15 +479,23 @@ bitflags! {
 
 /// Definition of the switch commitment hash
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SwitchCommitHash {
-	/// simple hash
-	pub hash: [u8; SWITCH_COMMIT_HASH_SIZE],
+pub struct SwitchCommitHashKey ([u8; SWITCH_COMMIT_KEY_SIZE]);
+
+impl SwitchCommitHashKey {
+	/// We use a zero value key for regular transactions.
+	pub fn zero() -> SwitchCommitHashKey {
+		SwitchCommitHashKey([0; SWITCH_COMMIT_KEY_SIZE])
+	}
 }
+
+/// Definition of the switch commitment hash
+#[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SwitchCommitHash([u8; SWITCH_COMMIT_HASH_SIZE]);
 
 /// Implementation of Writeable for a switch commitment hash
 impl Writeable for SwitchCommitHash {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_fixed_bytes(&self.hash)?;
+		writer.write_fixed_bytes(&self.0)?;
 		Ok(())
 	}
 }
@@ -444,31 +509,62 @@ impl Readable for SwitchCommitHash {
 		for i in 0..SWITCH_COMMIT_HASH_SIZE {
 			c[i] = a[i];
 		}
-		Ok(SwitchCommitHash { hash: c })
+		Ok(SwitchCommitHash(c))
 	}
 }
 // As Ref for AsFixedBytes
 impl AsRef<[u8]> for SwitchCommitHash {
 	fn as_ref(&self) -> &[u8] {
-		&self.hash
+		&self.0
+	}
+}
+
+impl ::std::fmt::Debug for SwitchCommitHash {
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+		try!(write!(f, "{}(", stringify!(SwitchCommitHash)));
+		try!(write!(f, "{}", self.to_hex()));
+		write!(f, ")")
 	}
 }
 
 impl SwitchCommitHash {
-	/// Builds a switch commitment hash from a switch commit using blake2
+	/// Builds a switch commit hash from a switch commit using blake2
 	pub fn from_switch_commit(switch_commit: Commitment) -> SwitchCommitHash {
-		let switch_commit_hash = blake2b(SWITCH_COMMIT_HASH_SIZE, &[], &switch_commit.0);
+		// always use the "zero" key for now
+		let key = SwitchCommitHashKey::zero();
+		let switch_commit_hash = blake2b(SWITCH_COMMIT_HASH_SIZE, &key.0, &switch_commit.0);
 		let switch_commit_hash = switch_commit_hash.as_bytes();
 		let mut h = [0; SWITCH_COMMIT_HASH_SIZE];
 		for i in 0..SWITCH_COMMIT_HASH_SIZE {
 			h[i] = switch_commit_hash[i];
 		}
-		SwitchCommitHash { hash: h }
+		SwitchCommitHash(h)
+	}
+
+	/// Reconstructs a switch commit hash from an array of bytes.
+	pub fn from_bytes(bytes: &[u8]) -> SwitchCommitHash {
+		let mut hash = [0; SWITCH_COMMIT_HASH_SIZE];
+		for i in 0..min(SWITCH_COMMIT_HASH_SIZE, bytes.len()) {
+			hash[i] = bytes[i];
+		}
+		SwitchCommitHash(hash)
+	}
+
+	/// Hex string represenation of a switch commitment hash.
+	pub fn to_hex(&self) -> String {
+		util::to_hex(self.0.to_vec())
+	}
+
+	/// Reconstrcuts a switch commit hash from a hex string.
+	pub fn from_hex(hex: &str) -> Result<SwitchCommitHash, ser::Error> {
+		let bytes = util::from_hex(hex.to_string())
+			.map_err(|_| ser::Error::HexError(format!("switch_commit_hash from_hex error")))?;
+		Ok(SwitchCommitHash::from_bytes(&bytes))
 	}
 
 	/// Build an "zero" switch commitment hash
 	pub fn zero() -> SwitchCommitHash {
-		SwitchCommitHash { hash: [0; SWITCH_COMMIT_HASH_SIZE] }
+		SwitchCommitHash([0; SWITCH_COMMIT_HASH_SIZE])
 	}
 }
 
@@ -476,18 +572,18 @@ impl SwitchCommitHash {
 /// transferred. The commitment is a blinded value for the output while the
 /// range proof guarantees the commitment includes a positive value without
 /// overflow and the ownership of the private key. The switch commitment hash
-/// provides future-proofing against quantum-based attacks, as well as provides
+/// provides future-proofing against quantum-based attacks, as well as providing
 /// wallet implementations with a way to identify their outputs for wallet
-/// reconstruction
+/// reconstruction.
 ///
-/// The hash of an output only covers its features, lock_height, commitment,
+/// The hash of an output only covers its features, commitment,
 /// and switch commitment. The range proof is expected to have its own hash
 /// and is stored and committed to separately.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct Output {
 	/// Options for an output's structure or use
 	pub features: OutputFeatures,
-	/// The homomorphic commitment representing the output's amount
+	/// The homomorphic commitment representing the output amount
 	pub commit: Commitment,
 	/// The switch commitment hash, a 160 bit length blake2 hash of blind*J
 	pub switch_commit_hash: SwitchCommitHash,
@@ -569,23 +665,126 @@ impl Output {
 	}
 }
 
-/// Wrapper to Output commitments to provide the Summable trait.
-#[derive(Clone, Debug)]
-pub struct SumCommit {
+/// An output_identifier can be build from either an input _or_ and output and
+/// contains everything we need to uniquely identify an output being spent.
+/// Needed because it is not sufficient to pass a commitment around.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct OutputIdentifier {
+	/// Output features (coinbase vs. regular transaction output)
+	/// We need to include this when hashing to ensure coinbase maturity can be enforced.
+	pub features: OutputFeatures,
 	/// Output commitment
 	pub commit: Commitment,
-	/// The corresponding "switch commit hash"
-	pub switch_commit_hash: SwitchCommitHash,
+}
+
+impl OutputIdentifier {
+	/// Build a new output_identifier.
+	pub fn new(features: OutputFeatures, commit: &Commitment) -> OutputIdentifier {
+		OutputIdentifier {
+			features: features.clone(),
+			commit: commit.clone(),
+		}
+	}
+
+	/// Build an output_identifier from an existing output.
+	pub fn from_output(output: &Output) -> OutputIdentifier {
+		OutputIdentifier {
+			features: output.features,
+			commit: output.commit,
+		}
+	}
+
+	/// Build an output_identifier from an existing input.
+	pub fn from_input(input: &Input) -> OutputIdentifier {
+		OutputIdentifier {
+			features: input.features,
+			commit: input.commit,
+		}
+	}
+
+	/// convert an output_identifier to hex string format.
+	pub fn to_hex(&self) -> String {
+		format!(
+			"{:b}{}",
+			self.features.bits(),
+			util::to_hex(self.commit.0.to_vec()),
+		)
+	}
+
+	/// Convert an output_indentifier to a sum_commit representation
+	/// so we can use it to query the the output MMR
+	pub fn as_sum_commit(&self) -> SumCommit {
+		SumCommit::new(self.features, &self.commit)
+	}
+
+	/// Convert a sum_commit back to an output_identifier.
+	pub fn from_sum_commit(sum_commit: &SumCommit) -> OutputIdentifier {
+		OutputIdentifier::new(sum_commit.features, &sum_commit.commit)
+	}
+}
+
+impl Writeable for OutputIdentifier {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u8(self.features.bits())?;
+		self.commit.write(writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for OutputIdentifier {
+	fn read(reader: &mut Reader) -> Result<OutputIdentifier, ser::Error> {
+		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
+			ser::Error::CorruptedData,
+		)?;
+		Ok(OutputIdentifier {
+			commit: Commitment::read(reader)?,
+			features: features,
+		})
+	}
+}
+
+/// Wrapper to Output commitments to provide the Summable trait.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SumCommit {
+	/// Output features (coinbase vs. regular transaction output)
+	/// We need to include this when hashing to ensure coinbase maturity can be enforced.
+	pub features: OutputFeatures,
+	/// Output commitment
+	pub commit: Commitment,
 }
 
 impl SumCommit {
-	/// For when we do not care about the switch_commit_hash
-	/// for example when comparing sum_commit hashes
-	pub fn from_commit(commit: &Commitment) -> SumCommit {
+	/// Build a new sum_commit.
+	pub fn new(features: OutputFeatures, commit: &Commitment) -> SumCommit {
 		SumCommit {
+			features: features.clone(),
 			commit: commit.clone(),
-			switch_commit_hash: SwitchCommitHash::zero(),
 		}
+	}
+
+	/// Build a new sum_commit from an existing output.
+	pub fn from_output(output: &Output) -> SumCommit {
+		SumCommit {
+			features: output.features,
+			commit: output.commit,
+		}
+	}
+
+	/// Build a new sum_commit from an existing input.
+	pub fn from_input(input: &Input) -> SumCommit {
+		SumCommit {
+			features: input.features,
+			commit: input.commit,
+		}
+	}
+
+	/// Convert a sum_commit to hex string.
+	pub fn to_hex(&self) -> String {
+		format!(
+			"{:b}{}",
+			self.features.bits(),
+			util::to_hex(self.commit.0.to_vec()),
+		)
 	}
 }
 
@@ -596,33 +795,31 @@ impl Summable for SumCommit {
 	fn sum(&self) -> SumCommit {
 		SumCommit {
 			commit: self.commit.clone(),
-			switch_commit_hash: self.switch_commit_hash.clone(),
+			features: self.features.clone(),
 		}
 	}
 
 	fn sum_len() -> usize {
-		secp::constants::PEDERSEN_COMMITMENT_SIZE + SWITCH_COMMIT_HASH_SIZE
+		secp::constants::PEDERSEN_COMMITMENT_SIZE + 1
 	}
 }
 
 impl Writeable for SumCommit {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u8(self.features.bits())?;
 		self.commit.write(writer)?;
-		if writer.serialization_mode() == ser::SerializationMode::Full {
-			self.switch_commit_hash.write(writer)?;
-		}
 		Ok(())
 	}
 }
 
 impl Readable for SumCommit {
 	fn read(reader: &mut Reader) -> Result<SumCommit, ser::Error> {
-		let commit = Commitment::read(reader)?;
-		let switch_commit_hash = SwitchCommitHash::read(reader)?;
-
+		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
+			ser::Error::CorruptedData,
+		)?;
 		Ok(SumCommit {
-			commit: commit,
-			switch_commit_hash: switch_commit_hash,
+			commit: Commitment::read(reader)?,
+			features: features,
 		})
 	}
 }
@@ -642,7 +839,10 @@ impl ops::Add for SumCommit {
 			Ok(s) => s,
 			Err(_) => Commitment::from_vec(vec![1; 33]),
 		};
-		SumCommit::from_commit(&sum)
+		SumCommit::new(
+			self.features | other.features,
+			&sum,
+		)
 	}
 }
 
