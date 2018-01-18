@@ -145,7 +145,8 @@ impl PeerStore {
 		self.save_peer(&peer)
 	}
 
-	/// Convenience method to load a peer data, update its last banned time and save it back.
+	/// Convenience method to load a peer data, update its last banned time and
+	/// save it back.
 	pub fn update_last_banned(&self, peer_addr: SocketAddr, last_banned: i64) -> Result<(), Error> {
 		let mut peer = self.get_peer(peer_addr)?;
 		peer.last_banned = last_banned;

@@ -25,7 +25,7 @@ use util::LOGGER;
 use time;
 
 use peer::Peer;
-use store::{PeerStore, PeerData, State};
+use store::{PeerData, PeerStore, State};
 use types::*;
 
 #[derive(Clone)]
@@ -77,7 +77,12 @@ impl Peers {
 
 	/// Get vec of peers we are currently connected to.
 	pub fn connected_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
-		let mut res = self.peers.read().unwrap().values().cloned().collect::<Vec<_>>();
+		let mut res = self.peers
+			.read()
+			.unwrap()
+			.values()
+			.cloned()
+			.collect::<Vec<_>>();
 		thread_rng().shuffle(&mut res);
 		res
 	}
@@ -92,8 +97,8 @@ impl Peers {
 		self.connected_peers().len() as u32
 	}
 
-	// Return vec of connected peers that currently advertise more work (total_difficulty)
-	// than we do.
+	// Return vec of connected peers that currently advertise more work
+	// (total_difficulty) than we do.
 	pub fn more_work_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
 		let peers = self.connected_peers();
 		if peers.len() == 0 {
@@ -104,13 +109,9 @@ impl Peers {
 
 		let mut max_peers = peers
 			.iter()
-			.filter(|x| {
-				match x.try_read() {
-					Ok(peer) => {
-						peer.info.total_difficulty > total_difficulty
-					},
-					Err(_) => false,
-				}
+			.filter(|x| match x.try_read() {
+				Ok(peer) => peer.info.total_difficulty > total_difficulty,
+				Err(_) => false,
 			})
 			.cloned()
 			.collect::<Vec<_>>();
@@ -123,7 +124,7 @@ impl Peers {
 	pub fn more_work_peer(&self) -> Option<Arc<RwLock<Peer>>> {
 		match self.more_work_peers().first() {
 			Some(x) => Some(x.clone()),
-			None => None
+			None => None,
 		}
 	}
 
@@ -137,24 +138,18 @@ impl Peers {
 
 		let max_total_difficulty = peers
 			.iter()
-			.map(|x| {
-				match x.try_read() {
-					Ok(peer) => peer.info.total_difficulty.clone(),
-					Err(_) => Difficulty::zero(),
-				}
+			.map(|x| match x.try_read() {
+				Ok(peer) => peer.info.total_difficulty.clone(),
+				Err(_) => Difficulty::zero(),
 			})
 			.max()
 			.unwrap();
 
 		let mut max_peers = peers
 			.iter()
-			.filter(|x| {
-				match x.try_read() {
-					Ok(peer) => {
-						peer.info.total_difficulty == max_total_difficulty
-					},
-					Err(_) => false,
-				}
+			.filter(|x| match x.try_read() {
+				Ok(peer) => peer.info.total_difficulty == max_total_difficulty,
+				Err(_) => false,
 			})
 			.cloned()
 			.collect::<Vec<_>>();
@@ -168,7 +163,7 @@ impl Peers {
 	pub fn most_work_peer(&self) -> Option<Arc<RwLock<Peer>>> {
 		match self.most_work_peers().first() {
 			Some(x) => Some(x.clone()),
-			None => None
+			None => None,
 		}
 	}
 
@@ -187,8 +182,13 @@ impl Peers {
 			error!(LOGGER, "Couldn't ban {}: {:?}", peer_addr, e);
 		}
 
-		if let Err(e) = self.update_last_banned(peer_addr.clone(), time::now_utc().to_timespec().sec) {
-			error!(LOGGER, "Couldn't update last_banned time {}: {:?}", peer_addr, e);
+		if let Err(e) =
+			self.update_last_banned(peer_addr.clone(), time::now_utc().to_timespec().sec)
+		{
+			error!(
+				LOGGER,
+				"Couldn't update last_banned time {}: {:?}", peer_addr, e
+			);
 		}
 
 		if let Some(peer) = self.get_connected_peer(peer_addr) {
@@ -211,8 +211,8 @@ impl Peers {
 				} else {
 					error!(LOGGER, "Couldn't unban {}: peer is not banned", peer_addr)
 				}
-			},
-			Err(e) => error!(LOGGER, "Couldn't unban {}: {:?}", peer_addr, e)
+			}
+			Err(e) => error!(LOGGER, "Couldn't unban {}: {:?}", peer_addr, e),
 		};
 	}
 
@@ -301,12 +301,16 @@ impl Peers {
 
 	/// Updates the state of a peer in store
 	pub fn update_state(&self, peer_addr: SocketAddr, new_state: State) -> Result<(), Error> {
-		self.store.update_state(peer_addr, new_state).map_err(From::from)
+		self.store
+			.update_state(peer_addr, new_state)
+			.map_err(From::from)
 	}
 
 	/// Updates the last banned time of a peer in store
 	pub fn update_last_banned(&self, peer_addr: SocketAddr, last_banned: i64) -> Result<(), Error> {
-		self.store.update_last_banned(peer_addr, last_banned).map_err(From::from)
+		self.store
+			.update_last_banned(peer_addr, last_banned)
+			.map_err(From::from)
 	}
 
 	/// Iterate over the peer list and prune all peers we have
@@ -348,20 +352,21 @@ impl Peers {
 
 		// map peers to addrs in a block to bound how long we keep the read lock for
 		let addrs = {
-			self.connected_peers().iter().map(|x| {
-				let p = x.read().unwrap();
-				p.info.addr.clone()
-			}).collect::<Vec<_>>()
+			self.connected_peers()
+				.iter()
+				.map(|x| {
+					let p = x.read().unwrap();
+					p.info.addr.clone()
+				})
+				.collect::<Vec<_>>()
 		};
 
 		// now remove them taking a short-lived write lock each time
 		// maybe better to take write lock once and remove them all?
-		for x in addrs
-			.iter()
-			.take(excess_count) {
-				let mut peers = self.peers.write().unwrap();
-				peers.remove(x);
-			}
+		for x in addrs.iter().take(excess_count) {
+			let mut peers = self.peers.write().unwrap();
+			peers.remove(x);
+		}
 	}
 
 	pub fn stop(self) {
@@ -393,7 +398,7 @@ impl ChainAdapter for Peers {
 			true
 		}
 	}
-	fn headers_received(&self, headers: Vec<core::BlockHeader>, peer_addr:SocketAddr) {
+	fn headers_received(&self, headers: Vec<core::BlockHeader>, peer_addr: SocketAddr) {
 		self.adapter.headers_received(headers, peer_addr)
 	}
 	fn locate_headers(&self, hs: Vec<Hash>) -> Vec<core::BlockHeader> {
@@ -439,7 +444,7 @@ impl NetAdapter for Peers {
 		debug!(
 			LOGGER,
 			"peer total_diff @ height (ping/pong): {}: {} @ {} \
-			vs us: {} @ {}",
+			 vs us: {} @ {}",
 			addr,
 			diff,
 			height,
