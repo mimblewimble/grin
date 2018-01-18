@@ -167,9 +167,9 @@ impl Miner {
 		);
 
 		// look for a pow for at most attempt_time_per_block sec on the
-  // same block (to give a chance to new
-  // transactions) and as long as the head hasn't changed
-  // Will change this to something else at some point
+		// same block (to give a chance to new
+		// transactions) and as long as the head hasn't changed
+		// Will change this to something else at some point
 		let deadline = time::get_time().sec + attempt_time_per_block as i64;
 
 		// how often to output stats
