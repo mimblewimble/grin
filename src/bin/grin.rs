@@ -423,10 +423,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
-	let mut key_derivations: u32 = 1000;
-	if let Some(kd) = wallet_args.value_of("key_derivations") {
-		key_derivations = kd.parse().unwrap();
-	}
+	let key_derivations: u32 = wallet_args.value_of("key_derivations").unwrap().parse().unwrap();
 
 	let mut show_spent = false;
 	if wallet_args.is_present("show_spent") {
