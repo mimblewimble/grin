@@ -201,7 +201,7 @@ fn main() {
 		.arg(Arg::with_name("key_derivations")
 				.help("The number of keys possiblities to search for each output. \
 				Ideally, set this to a number greater than the number of outputs \
-				you believe should belong to this seed/password. (Default 500)")
+				you believe should belong to this seed/password. (Default 1000)")
 				.short("k")
 				.long("key_derivations")
 				.default_value("1000")
