@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
@@ -55,6 +56,7 @@ impl Peers {
 			capabilities: p.info.capabilities,
 			user_agent: p.info.user_agent.clone(),
 			flags: State::Healthy,
+			banned_until: RefCell::new(0),
 		};
 		if let Err(e) = self.save_peer(&peer_data) {
 			error!(LOGGER, "Could not save connected peer: {:?}", e);
@@ -416,6 +418,7 @@ impl NetAdapter for Peers {
 				capabilities: UNKNOWN,
 				user_agent: "".to_string(),
 				flags: State::Healthy,
+				banned_until: RefCell::new(0),
 			};
 			if let Err(e) = self.save_peer(&peer) {
 				error!(LOGGER, "Could not save received peer address: {:?}", e);
