@@ -27,6 +27,7 @@ use futures::sync::mpsc;
 use hyper;
 use tokio_core::reactor;
 use tokio_timer::Timer;
+use time::now_utc;
 
 use p2p;
 use util::LOGGER;
@@ -81,8 +82,11 @@ impl Seeder {
 		let peers = self.peers.clone();
 		let capabilities = self.capabilities.clone();
 
+		// Unban peer after 3 hours
+		let ban_windows: i64 = 10800;
+
 		// now spawn a new future to regularly check if we need to acquire more peers
-		// and if so, gets them from db
+		// and if so, gets them from db and unban the banned peers after the ban is expired
 		let mon_loop = Timer::default()
 			.interval(time::Duration::from_secs(30))
 			.for_each(move |_| {
@@ -100,7 +104,21 @@ impl Seeder {
 				let mut defunct_count = 0;
 				for x in peers.all_peers() {
 					if x.flags == p2p::State::Healthy { healthy_count += 1 }
-					else if x.flags == p2p::State::Banned { banned_count += 1 }
+					else if x.flags == p2p::State::Banned {
+						let interval = now_utc().to_timespec().sec - x.last_banned;
+						if interval >= ban_windows {
+							// Unban peer
+							peers.unban_peer(&x.addr);
+							debug!(
+								LOGGER,
+								"monitor_peers: unbanned {} after {} seconds",
+								x.addr,
+								interval
+							);
+						} else {
+						 banned_count += 1;
+					 }
+					}
 					else if x.flags == p2p::State::Defunct { defunct_count += 1 };
 				}
 

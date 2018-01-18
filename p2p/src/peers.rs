@@ -22,6 +22,7 @@ use core::core;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
 use util::LOGGER;
+use time;
 
 use peer::Peer;
 use store::{PeerStore, PeerData, State};
@@ -55,6 +56,7 @@ impl Peers {
 			capabilities: p.info.capabilities,
 			user_agent: p.info.user_agent.clone(),
 			flags: State::Healthy,
+			last_banned: 0,
 		};
 		if let Err(e) = self.save_peer(&peer_data) {
 			error!(LOGGER, "Could not save connected peer: {:?}", e);
@@ -185,6 +187,10 @@ impl Peers {
 			error!(LOGGER, "Couldn't ban {}: {:?}", peer_addr, e);
 		}
 
+		if let Err(e) = self.update_last_banned(peer_addr.clone(), time::now_utc().to_timespec().sec) {
+			error!(LOGGER, "Couldn't update last_banned time {}: {:?}", peer_addr, e);
+		}
+
 		if let Some(peer) = self.get_connected_peer(peer_addr) {
 			debug!(LOGGER, "Banning peer {}", peer_addr);
 			// setting peer status will get it removed at the next clean_peer
@@ -296,6 +302,11 @@ impl Peers {
 	/// Updates the state of a peer in store
 	pub fn update_state(&self, peer_addr: SocketAddr, new_state: State) -> Result<(), Error> {
 		self.store.update_state(peer_addr, new_state).map_err(From::from)
+	}
+
+	/// Updates the last banned time of a peer in store
+	pub fn update_last_banned(&self, peer_addr: SocketAddr, last_banned: i64) -> Result<(), Error> {
+		self.store.update_last_banned(peer_addr, last_banned).map_err(From::from)
 	}
 
 	/// Iterate over the peer list and prune all peers we have
@@ -416,6 +427,7 @@ impl NetAdapter for Peers {
 				capabilities: UNKNOWN,
 				user_agent: "".to_string(),
 				flags: State::Healthy,
+				last_banned: 0,
 			};
 			if let Err(e) = self.save_peer(&peer) {
 				error!(LOGGER, "Could not save received peer address: {:?}", e);
