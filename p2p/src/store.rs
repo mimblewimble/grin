@@ -50,6 +50,8 @@ pub struct PeerData {
 	pub user_agent: String,
 	/// State the peer has been detected with.
 	pub flags: State,
+	/// The time the peer was last banned
+	pub last_banned: i64,
 }
 
 impl Writeable for PeerData {
@@ -59,7 +61,8 @@ impl Writeable for PeerData {
 			writer,
 			[write_u32, self.capabilities.bits()],
 			[write_bytes, &self.user_agent],
-			[write_u8, self.flags as u8]
+			[write_u8, self.flags as u8],
+			[write_i64, self.last_banned]
 		);
 		Ok(())
 	}
@@ -68,15 +71,17 @@ impl Writeable for PeerData {
 impl Readable for PeerData {
 	fn read(reader: &mut Reader) -> Result<PeerData, ser::Error> {
 		let addr = SockAddr::read(reader)?;
-		let (capab, ua, fl) = ser_multiread!(reader, read_u32, read_vec, read_u8);
+		let (capab, ua, fl, lb) = ser_multiread!(reader, read_u32, read_vec, read_u8, read_i64);
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
+		let last_banned = lb;
 		match State::from_u8(fl) {
 			Some(flags) => Ok(PeerData {
 				addr: addr.0,
 				capabilities: capabilities,
 				user_agent: user_agent,
 				flags: flags,
+				last_banned: last_banned,
 			}),
 			None => Err(ser::Error::CorruptedData),
 		}
@@ -137,6 +142,14 @@ impl PeerStore {
 	pub fn update_state(&self, peer_addr: SocketAddr, new_state: State) -> Result<(), Error> {
 		let mut peer = self.get_peer(peer_addr)?;
 		peer.flags = new_state;
+		self.save_peer(&peer)
+	}
+
+	/// Convenience method to load a peer data, update its last banned time and
+	/// save it back.
+	pub fn update_last_banned(&self, peer_addr: SocketAddr, last_banned: i64) -> Result<(), Error> {
+		let mut peer = self.get_peer(peer_addr)?;
+		peer.last_banned = last_banned;
 		self.save_peer(&peer)
 	}
 }
