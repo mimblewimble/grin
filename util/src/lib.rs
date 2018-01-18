@@ -50,6 +50,8 @@ pub use secp_static::static_secp_instance;
 pub mod types;
 pub use types::{LoggingConfig, LogLevel};
 
+pub mod siphash;
+
 // other utils
 use std::cell::{Ref, RefCell};
 #[allow(unused_imports)]
