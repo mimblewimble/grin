@@ -44,7 +44,6 @@ extern crate grin_util as util;
 
 extern crate cuckoo_miner;
 
-mod siphash;
 pub mod plugin;
 pub mod cuckoo;
 pub mod types;

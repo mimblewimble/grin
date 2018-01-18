@@ -23,7 +23,7 @@ use std::cmp;
 use blake2;
 
 use core::core::Proof;
-use siphash::siphash24;
+use util::siphash::siphash24;
 use MiningWorker;
 
 const MAXPATHLEN: usize = 8192;
