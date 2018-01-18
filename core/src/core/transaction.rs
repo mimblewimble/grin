@@ -847,6 +847,7 @@ impl ops::Add for SumCommit {
 	type Output = SumCommit;
 
 	fn add(self, other: SumCommit) -> SumCommit {
+		// Build a new commitment by summing the two commitments.
 		let secp = static_secp_instance();
 		let sum = match secp.lock().unwrap().commit_sum(
 			vec![
@@ -858,10 +859,24 @@ impl ops::Add for SumCommit {
 			Ok(s) => s,
 			Err(_) => Commitment::from_vec(vec![1; 33]),
 		};
+
+		// Now build a new switch_commit_hash by concatenating the two switch_commit_hash value
+		// and hashing the result.
+		let mut bytes = self.switch_commit_hash.0.to_vec();
+		bytes.extend(other.switch_commit_hash.0.iter().cloned());
+		let key = SwitchCommitHashKey::zero();
+		let hash = blake2b(SWITCH_COMMIT_HASH_SIZE, &key.0, &bytes);
+		let hash = hash.as_bytes();
+		let mut h = [0; SWITCH_COMMIT_HASH_SIZE];
+		for i in 0..SWITCH_COMMIT_HASH_SIZE {
+			h[i] = hash[i];
+		}
+		let switch_commit_hash_sum = SwitchCommitHash(h);
+
 		SumCommit {
 			features: self.features | other.features,
 			commit: sum,
-			switch_commit_hash: SwitchCommitHash::zero(),
+			switch_commit_hash: switch_commit_hash_sum,
 		}
 	}
 }
