@@ -714,7 +714,11 @@ impl OutputIdentifier {
 	/// Convert an output_indentifier to a sum_commit representation
 	/// so we can use it to query the the output MMR
 	pub fn as_sum_commit(&self) -> SumCommit {
-		SumCommit::new(self.features, &self.commit)
+		SumCommit {
+			features: self.features,
+			commit: self.commit,
+			switch_commit_hash: SwitchCommitHash::zero(),
+		}
 	}
 
 	/// Convert a sum_commit back to an output_identifier.
@@ -751,14 +755,21 @@ pub struct SumCommit {
 	pub features: OutputFeatures,
 	/// Output commitment
 	pub commit: Commitment,
+	/// The corresponding switch commit hash
+	pub switch_commit_hash: SwitchCommitHash,
 }
 
 impl SumCommit {
 	/// Build a new sum_commit.
-	pub fn new(features: OutputFeatures, commit: &Commitment) -> SumCommit {
+	pub fn new(
+		features: OutputFeatures,
+		commit: &Commitment,
+		switch_commit_hash: &SwitchCommitHash,
+	) -> SumCommit {
 		SumCommit {
 			features: features.clone(),
 			commit: commit.clone(),
+			switch_commit_hash: switch_commit_hash.clone(),
 		}
 	}
 
@@ -767,6 +778,7 @@ impl SumCommit {
 		SumCommit {
 			features: output.features,
 			commit: output.commit,
+			switch_commit_hash: output.switch_commit_hash,
 		}
 	}
 
@@ -775,15 +787,17 @@ impl SumCommit {
 		SumCommit {
 			features: input.features,
 			commit: input.commit,
+			switch_commit_hash: SwitchCommitHash::zero(),
 		}
 	}
 
-	/// Convert a sum_commit to hex string.
+	/// Hex string representation of a sum_commit.
 	pub fn to_hex(&self) -> String {
 		format!(
-			"{:b}{}",
+			"{:b}{}{}",
 			self.features.bits(),
 			util::to_hex(self.commit.0.to_vec()),
+			self.switch_commit_hash.to_hex(),
 		)
 	}
 }
@@ -796,11 +810,12 @@ impl Summable for SumCommit {
 		SumCommit {
 			commit: self.commit.clone(),
 			features: self.features.clone(),
+			switch_commit_hash: self.switch_commit_hash.clone(),
 		}
 	}
 
 	fn sum_len() -> usize {
-		secp::constants::PEDERSEN_COMMITMENT_SIZE + 1
+		secp::constants::PEDERSEN_COMMITMENT_SIZE + SWITCH_COMMIT_HASH_SIZE + 1
 	}
 }
 
@@ -808,6 +823,9 @@ impl Writeable for SumCommit {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
 		self.commit.write(writer)?;
+		if writer.serialization_mode() == ser::SerializationMode::Full {
+			self.switch_commit_hash.write(writer)?;
+		}
 		Ok(())
 	}
 }
@@ -818,8 +836,9 @@ impl Readable for SumCommit {
 			ser::Error::CorruptedData,
 		)?;
 		Ok(SumCommit {
-			commit: Commitment::read(reader)?,
 			features: features,
+			commit: Commitment::read(reader)?,
+			switch_commit_hash: SwitchCommitHash::read(reader)?,
 		})
 	}
 }
@@ -839,10 +858,11 @@ impl ops::Add for SumCommit {
 			Ok(s) => s,
 			Err(_) => Commitment::from_vec(vec![1; 33]),
 		};
-		SumCommit::new(
-			self.features | other.features,
-			&sum,
-		)
+		SumCommit {
+			features: self.features | other.features,
+			commit: sum,
+			switch_commit_hash: SwitchCommitHash::zero(),
+		}
 	}
 }
 
