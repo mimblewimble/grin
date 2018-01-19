@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -541,7 +541,7 @@ impl SwitchCommitHash {
 		SwitchCommitHash(h)
 	}
 
-	/// Reconstructs a switch commit hash from an array of bytes.
+	/// Reconstructs a switch commit hash from a byte slice.
 	pub fn from_bytes(bytes: &[u8]) -> SwitchCommitHash {
 		let mut hash = [0; SWITCH_COMMIT_HASH_SIZE];
 		for i in 0..min(SWITCH_COMMIT_HASH_SIZE, bytes.len()) {
@@ -550,12 +550,12 @@ impl SwitchCommitHash {
 		SwitchCommitHash(hash)
 	}
 
-	/// Hex string represenation of a switch commitment hash.
+	/// Hex string representation of a switch commitment hash.
 	pub fn to_hex(&self) -> String {
 		util::to_hex(self.0.to_vec())
 	}
 
-	/// Reconstrcuts a switch commit hash from a hex string.
+	/// Reconstructs a switch commit hash from a hex string.
 	pub fn from_hex(hex: &str) -> Result<SwitchCommitHash, ser::Error> {
 		let bytes = util::from_hex(hex.to_string())
 			.map_err(|_| ser::Error::HexError(format!("switch_commit_hash from_hex error")))?;
@@ -884,6 +884,7 @@ impl ops::Add for SumCommit {
 #[cfg(test)]
 mod test {
 	use super::*;
+	use core::id::{ShortId, ShortIdentifiable};
 	use keychain::Keychain;
 	use util::secp;
 
@@ -1007,5 +1008,40 @@ mod test {
 
 		assert!(commit == commit_2);
 		assert!(switch_commit == switch_commit_2);
+	}
+
+	#[test]
+	fn input_short_id() {
+		let keychain = Keychain::from_seed(&[0; 32]).unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
+		let commit = keychain.commit(5, &key_id).unwrap();
+
+		let input = Input {
+			features: DEFAULT_OUTPUT,
+			commit: commit,
+			out_block: None,
+		};
+
+		let block_hash = Hash::from_hex(
+			"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
+		).unwrap();
+
+		let short_id = input.short_id(&block_hash);
+		assert_eq!(short_id, ShortId::from_hex("ff2c91d85fcd").unwrap());
+
+		// now generate the short_id for a *very* similar output (single feature flag different)
+		// and check it generates a different short_id
+		let input = Input {
+			features: COINBASE_OUTPUT,
+			commit: commit,
+			out_block: None,
+		};
+
+		let block_hash = Hash::from_hex(
+			"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
+		).unwrap();
+
+		let short_id = input.short_id(&block_hash);
+		assert_eq!(short_id, ShortId::from_hex("b91a8d669bf9").unwrap());
 	}
 }

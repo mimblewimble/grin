@@ -367,6 +367,30 @@ impl BlockPrintable {
 	}
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CompactBlockPrintable {
+	/// The block header
+	pub header: BlockHeaderPrintable,
+	/// Inputs (hex short_ids)
+	pub inputs: Vec<String>,
+	/// Outputs (hex short_ids)
+	pub outputs: Vec<String>,
+	/// Kernels (hex short_ids)
+	pub kernels: Vec<String>,
+}
+
+impl CompactBlockPrintable {
+	/// Convert a compact block into a printable representation suitable for api response
+	pub fn from_compact_block(cb: &core::CompactBlock) -> CompactBlockPrintable {
+		CompactBlockPrintable {
+			header: BlockHeaderPrintable::from_header(&cb.header),
+			inputs: cb.inputs.iter().map(|x| x.to_hex()).collect(),
+			outputs: cb.outputs.iter().map(|x| x.to_hex()).collect(),
+			kernels: cb.kernels.iter().map(|x| x.to_hex()).collect(),
+		}
+	}
+}
+
 // For wallet reconstruction, include the header info along with the
 // transactions in the block
 #[derive(Debug, Serialize, Deserialize, Clone)]
