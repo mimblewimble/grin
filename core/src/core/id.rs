@@ -66,7 +66,7 @@ impl<H: Hashed> ShortIdentifiable for H {
 }
 
 /// Short id for identifying inputs/outputs/kernels
-#[derive(PartialEq, Clone, PartialOrd, Ord, Eq)]
+#[derive(PartialEq, Clone, PartialOrd, Ord, Eq, Serialize, Deserialize)]
 pub struct ShortId([u8; 6]);
 
 impl ::std::fmt::Debug for ShortId {

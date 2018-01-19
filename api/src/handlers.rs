@@ -385,9 +385,13 @@ impl Handler for ChainHandler {
 	}
 }
 
-// Gets block details given either a hash or height.
-// GET /v1/block/<hash>
-// GET /v1/block/<height>
+/// Gets block details given either a hash or height.
+/// GET /v1/blocks/<hash>
+/// GET /v1/blocks/<height>
+///
+/// Optionally return results as "compact blocks" by passing "?compact" query param
+/// GET /v1/blocks/<hash>?compact
+///
 pub struct BlockHandler {
 	pub chain: Arc<chain::Chain>,
 }
@@ -396,6 +400,11 @@ impl BlockHandler {
 	fn get_block(&self, h: &Hash) -> Result<BlockPrintable, Error> {
 		let block = self.chain.clone().get_block(h).map_err(|_| Error::NotFound)?;
 		Ok(BlockPrintable::from_block(&block, self.chain.clone(), false))
+	}
+
+	fn get_compact_block(&self, h: &Hash) -> Result<CompactBlockPrintable, Error> {
+		let block = self.chain.clone().get_block(h).map_err(|_| Error::NotFound)?;
+		Ok(CompactBlockPrintable::from_compact_block(&block.as_compact_block()))
 	}
 
 	// Try to decode the string as a height or a hash.
@@ -426,8 +435,21 @@ impl Handler for BlockHandler {
 		}
 		let el = *path_elems.last().unwrap();
 		let h = try!(self.parse_input(el.to_string()));
-		let b = try!(self.get_block(&h));
-		json_response(&b)
+
+		let mut compact = false;
+		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
+			if let Some(_) = params.get("compact") {
+				compact = true;
+			}
+		}
+
+		if compact {
+			let b = try!(self.get_compact_block(&h));
+			json_response(&b)
+		} else {
+			let b = try!(self.get_block(&h));
+			json_response(&b)
+		}
 	}
 }
 
