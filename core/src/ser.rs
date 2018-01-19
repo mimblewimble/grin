@@ -555,6 +555,11 @@ impl AsFixedBytes for [u8; 4] {
 		return 4;
 	}
 }
+impl AsFixedBytes for [u8; 6] {
+	fn len(&self) -> usize {
+		return 6;
+	}
+}
 impl AsFixedBytes for [u8; 8] {
 	fn len(&self) -> usize {
 		return 8;

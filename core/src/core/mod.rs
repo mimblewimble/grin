@@ -34,6 +34,7 @@ use util::secp::pedersen::*;
 
 pub use self::block::*;
 pub use self::transaction::*;
+pub use self::id::ShortId;
 use self::hash::Hashed;
 use ser::{Error, Readable, Reader, Writeable, Writer};
 use global;
@@ -397,7 +398,7 @@ mod test {
 			&key_id,
 			Difficulty::minimum(),
 		).unwrap();
-		b.compact().validate().unwrap();
+		b.cut_through().validate().unwrap();
 	}
 
 	#[test]
@@ -415,7 +416,7 @@ mod test {
 			&key_id,
 			Difficulty::minimum(),
 		).unwrap();
-		b.compact().validate().unwrap();
+		b.cut_through().validate().unwrap();
 	}
 
 	#[test]

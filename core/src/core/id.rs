@@ -21,6 +21,7 @@ use siphasher::sip::SipHasher24;
 
 use core::hash::{Hash, Hashed};
 use ser;
+use ser::{Reader, Readable, Writer, Writeable};
 use util;
 
 
@@ -65,7 +66,7 @@ impl<H: Hashed> ShortIdentifiable for H {
 }
 
 /// Short id for identifying inputs/outputs/kernels
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, PartialOrd, Ord, Eq)]
 pub struct ShortId([u8; 6]);
 
 impl ::std::fmt::Debug for ShortId {
@@ -73,6 +74,23 @@ impl ::std::fmt::Debug for ShortId {
 		try!(write!(f, "{}(", stringify!(ShortId)));
 		try!(write!(f, "{}", self.to_hex()));
 		write!(f, ")")
+	}
+}
+
+impl Readable for ShortId {
+	fn read(reader: &mut Reader) -> Result<ShortId, ser::Error> {
+		let v = try!(reader.read_fixed_bytes(SHORT_ID_SIZE));
+		let mut a = [0; SHORT_ID_SIZE];
+		for i in 0..a.len() {
+			a[i] = v[i];
+		}
+		Ok(ShortId(a))
+	}
+}
+
+impl Writeable for ShortId {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_fixed_bytes(&self.0)
 	}
 }
 
@@ -96,6 +114,11 @@ impl ShortId {
 		let bytes = util::from_hex(hex.to_string())
 			.map_err(|_| ser::Error::HexError(format!("short_id from_hex error")))?;
 		Ok(ShortId::from_bytes(&bytes))
+	}
+
+	/// The zero short_id, convenient for generating a short_id for testing.
+	pub fn zero() -> ShortId {
+		ShortId::from_bytes(&[0])
 	}
 }
 

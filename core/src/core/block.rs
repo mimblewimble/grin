@@ -24,6 +24,7 @@ use core::{
 	Input,
 	Output,
 	OutputIdentifier,
+	ShortId,
 	SwitchCommitHash,
 	Proof,
 	TxKernel,
@@ -34,6 +35,7 @@ use core::{
 use consensus;
 use consensus::{exceeds_weight, reward, MINIMUM_DIFFICULTY, REWARD, VerifySortOrder};
 use core::hash::{Hash, Hashed, ZERO_HASH};
+use core::id::ShortIdentifiable;
 use core::target::Difficulty;
 use core::transaction;
 use ser::{self, Readable, Reader, Writeable, Writer, WriteableSorted, read_and_verify_sorted};
@@ -203,6 +205,73 @@ impl Readable for BlockHeader {
 	}
 }
 
+/// Compact representation of a full block.
+/// Each input/output/kernel is represented as a short_id.
+/// A node is reasonably likely to have already seen all tx data (tx broadcast before block)
+/// and can go request missing tx data from peers if necessary to hydrate a compact block
+/// into a full block.
+#[derive(Debug, Clone)]
+pub struct CompactBlock {
+	/// The header with metadata and commitments to the rest of the data
+	pub header: BlockHeader,
+	/// List of transaction inputs (short_ids)
+	pub inputs: Vec<ShortId>,
+	/// List of transaction outputs (short_ids)
+	pub outputs: Vec<ShortId>,
+	/// List of transaction kernels (short_ids)
+	pub kernels: Vec<ShortId>,
+}
+
+/// Implementation of Writeable for a compact block, defines how to write the block to a
+/// binary writer. Differentiates between writing the block for the purpose of
+/// full serialization and the one of just extracting a hash.
+impl Writeable for CompactBlock {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		try!(self.header.write(writer));
+
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			ser_multiwrite!(
+				writer,
+				[write_u64, self.inputs.len() as u64],
+				[write_u64, self.outputs.len() as u64],
+				[write_u64, self.kernels.len() as u64]
+			);
+
+			let mut inputs = self.inputs.clone();
+			let mut outputs = self.outputs.clone();
+			let mut kernels = self.kernels.clone();
+
+			// Consensus rule that everything is sorted in lexicographical order on the wire.
+			try!(inputs.write_sorted(writer));
+			try!(outputs.write_sorted(writer));
+			try!(kernels.write_sorted(writer));
+		}
+		Ok(())
+	}
+}
+
+/// Implementation of Readable for a compact block, defines how to read a compact block
+/// from a binary stream.
+impl Readable for CompactBlock {
+	fn read(reader: &mut Reader) -> Result<CompactBlock, ser::Error> {
+		let header = try!(BlockHeader::read(reader));
+
+		let (input_len, output_len, kernel_len) =
+			ser_multiread!(reader, read_u64, read_u64, read_u64);
+
+		let inputs = read_and_verify_sorted(reader, input_len)?;
+		let outputs = read_and_verify_sorted(reader, output_len)?;
+		let kernels = read_and_verify_sorted(reader, kernel_len)?;
+
+		Ok(CompactBlock {
+			header,
+			inputs,
+			outputs,
+			kernels,
+		})
+	}
+}
+
 /// A block as expressed in the MimbleWimble protocol. The reward is
 /// non-explicit, assumed to be deducible from block height (similar to
 /// bitcoin's schedule) and expressed as a global transaction fee (added v.H),
@@ -321,6 +390,37 @@ impl Block {
 		Ok(block)
 	}
 
+	/// Generate the compact block representation.
+	pub fn as_compact_block(&self) -> CompactBlock {
+		let header = self.header.clone();
+		let block_hash = self.hash();
+
+		let mut inputs = self.inputs
+			.iter()
+			.map(|x| x.short_id(&block_hash))
+			.collect::<Vec<_>>();
+		let mut outputs = self.outputs
+			.iter()
+			.map(|x| x.short_id(&block_hash))
+			.collect::<Vec<_>>();
+		let mut kernels = self.kernels
+			.iter()
+			.map(|x| x.short_id(&block_hash))
+			.collect::<Vec<_>>();
+
+		// sort all the lists of short_ids
+		inputs.sort();
+		outputs.sort();
+		kernels.sort();
+
+		CompactBlock {
+			header,
+			inputs,
+			outputs,
+			kernels,
+		}
+	}
+
 	/// Builds a new block ready to mine from the header of the previous block,
 	/// a vector of transactions and the reward information. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
@@ -380,10 +480,9 @@ impl Block {
 				inputs: inputs,
 				outputs: outputs,
 				kernels: kernels,
-			}.compact(),
+			}.cut_through(),
 		)
 	}
-
 
 	/// Blockhash, computed using only the header
 	pub fn hash(&self) -> Hash {
@@ -396,15 +495,15 @@ impl Block {
 	}
 
 	/// Matches any output with a potential spending input, eliminating them
-	/// from the block. Provides a simple way to compact the block. The
-	/// elimination is stable with respect to inputs and outputs order.
+	/// from the block. Provides a simple way to cut-through the block. The
+	/// elimination is stable with respect to the order of inputs and outputs.
 	///
-	/// NOTE: exclude coinbase from compaction process
+	/// NOTE: exclude coinbase from cut-through process
 	/// if a block contains a new coinbase output and
 	/// is a transaction spending a previous coinbase
-	/// we do not want to compact these away
+	/// we do not want to cut-through (all coinbase must be preserved)
 	///
-	pub fn compact(&self) -> Block {
+	pub fn cut_through(&self) -> Block {
 		let in_set = self.inputs
 			.iter()
 			.map(|inp| inp.commitment())
@@ -416,17 +515,17 @@ impl Block {
 			.map(|out| out.commitment())
 			.collect::<HashSet<_>>();
 
-		let commitments_to_compact = in_set.intersection(&out_set).collect::<HashSet<_>>();
+		let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
 
 		let new_inputs = self.inputs
 			.iter()
-			.filter(|inp| !commitments_to_compact.contains(&inp.commitment()))
+			.filter(|inp| !to_cut_through.contains(&inp.commitment()))
 			.map(|&inp| inp)
 			.collect::<Vec<_>>();
 
 		let new_outputs = self.outputs
 			.iter()
-			.filter(|out| !commitments_to_compact.contains(&out.commitment()))
+			.filter(|out| !to_cut_through.contains(&out.commitment()))
 			.map(|&out| out)
 			.collect::<Vec<_>>();
 
@@ -467,7 +566,7 @@ impl Block {
 			inputs: all_inputs,
 			outputs: all_outputs,
 			kernels: all_kernels,
-		}.compact()
+		}.cut_through()
 	}
 
 	/// Validates all the elements in a block that can be checked without
@@ -745,8 +844,8 @@ mod test {
 	}
 
 	#[test]
-	// builds a block with a tx spending another and check if merging occurred
-	fn compactable_block() {
+	// builds a block with a tx spending another and check that cut_through occurred
+	fn block_with_cut_through() {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
@@ -882,9 +981,37 @@ mod test {
 		ser::serialize(&mut vec, &b).expect("serialization failed");
 		let b2: Block = ser::deserialize(&mut &vec[..]).unwrap();
 
+		assert_eq!(b.header, b2.header);
 		assert_eq!(b.inputs, b2.inputs);
 		assert_eq!(b.outputs, b2.outputs);
 		assert_eq!(b.kernels, b2.kernels);
+	}
+
+	#[test]
+	fn convert_block_to_compact_block() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let b = new_block(vec![], &keychain);
+		let cb = b.as_compact_block();
+		assert_eq!(cb.kernels.len(), 1);
+		assert_eq!(cb.kernels[0], b.kernels[0].short_id(&b.hash()));
+	}
+
+	#[test]
+	fn serialize_deserialize_compact_block() {
+		let b = CompactBlock {
+			header: BlockHeader::default(),
+			inputs: vec![ShortId::zero(), ShortId::zero()],
+			outputs: vec![ShortId::zero(), ShortId::zero(), ShortId::zero()],
+			kernels: vec![ShortId::zero()],
+		};
+
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b).expect("serialization failed");
+		let b2: CompactBlock = ser::deserialize(&mut &vec[..]).unwrap();
+
 		assert_eq!(b.header, b2.header);
+		assert_eq!(b.inputs, b2.inputs);
+		assert_eq!(b.outputs, b2.outputs);
+		assert_eq!(b.kernels, b2.kernels);
 	}
 }

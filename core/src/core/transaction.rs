@@ -884,6 +884,7 @@ impl ops::Add for SumCommit {
 #[cfg(test)]
 mod test {
 	use super::*;
+	use core::id::{ShortId, ShortIdentifiable};
 	use keychain::Keychain;
 	use util::secp;
 
@@ -1007,5 +1008,40 @@ mod test {
 
 		assert!(commit == commit_2);
 		assert!(switch_commit == switch_commit_2);
+	}
+
+	#[test]
+	fn input_short_id() {
+		let keychain = Keychain::from_seed(&[0; 32]).unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
+		let commit = keychain.commit(5, &key_id).unwrap();
+
+		let input = Input {
+			features: DEFAULT_OUTPUT,
+			commit: commit,
+			out_block: None,
+		};
+
+		let block_hash = Hash::from_hex(
+			"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
+		).unwrap();
+
+		let short_id = input.short_id(&block_hash);
+		assert_eq!(short_id, ShortId::from_hex("ff2c91d85fcd").unwrap());
+
+		// now generate the short_id for a *very* similar output (single feature flag different)
+		// and check it generates a different short_id
+		let input = Input {
+			features: COINBASE_OUTPUT,
+			commit: commit,
+			out_block: None,
+		};
+
+		let block_hash = Hash::from_hex(
+			"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
+		).unwrap();
+
+		let short_id = input.short_id(&block_hash);
+		assert_eq!(short_id, ShortId::from_hex("b91a8d669bf9").unwrap());
 	}
 }
