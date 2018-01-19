@@ -27,6 +27,7 @@ use futures::sync::mpsc;
 use hyper;
 use tokio_core::reactor;
 use tokio_timer::Timer;
+use time::now_utc;
 
 use p2p;
 use util::LOGGER;
@@ -81,8 +82,12 @@ impl Seeder {
 		let peers = self.peers.clone();
 		let capabilities = self.capabilities.clone();
 
+		// Unban peer after 3 hours
+		let ban_windows: i64 = 10800;
+
 		// now spawn a new future to regularly check if we need to acquire more peers
-		// and if so, gets them from db
+		// and if so, gets them from db and unban the banned peers after the ban is
+		// expired
 		let mon_loop = Timer::default()
 			.interval(time::Duration::from_secs(30))
 			.for_each(move |_| {
@@ -99,9 +104,23 @@ impl Seeder {
 				let mut banned_count = 0;
 				let mut defunct_count = 0;
 				for x in peers.all_peers() {
-					if x.flags == p2p::State::Healthy { healthy_count += 1 }
-					else if x.flags == p2p::State::Banned { banned_count += 1 }
-					else if x.flags == p2p::State::Defunct { defunct_count += 1 };
+					if x.flags == p2p::State::Healthy {
+						healthy_count += 1
+					} else if x.flags == p2p::State::Banned {
+						let interval = now_utc().to_timespec().sec - x.last_banned;
+						if interval >= ban_windows {
+							// Unban peer
+							peers.unban_peer(&x.addr);
+							debug!(
+								LOGGER,
+								"monitor_peers: unbanned {} after {} seconds", x.addr, interval
+							);
+						} else {
+							banned_count += 1;
+						}
+					} else if x.flags == p2p::State::Defunct {
+						defunct_count += 1
+					};
 				}
 
 				debug!(
@@ -126,31 +145,19 @@ impl Seeder {
 						if let Ok(p) = p.try_read() {
 							debug!(
 								LOGGER,
-								"monitor_peers: asking {} for more peers",
-								p.info.addr,
+								"monitor_peers: asking {} for more peers", p.info.addr,
 							);
 							let _ = p.send_peer_request(capabilities);
 						} else {
-							warn!(
-								LOGGER,
-								"monitor_peers: failed to get read lock on peer",
-							);
+							warn!(LOGGER, "monitor_peers: failed to get read lock on peer",);
 						}
 					}
 
 					// find some peers from our db
 					// and queue them up for a connection attempt
-					let peers = peers.find_peers(
-						p2p::State::Healthy,
-						p2p::UNKNOWN,
-						100,
-					);
+					let peers = peers.find_peers(p2p::State::Healthy, p2p::UNKNOWN, 100);
 					for p in peers {
-						debug!(
-							LOGGER,
-							"monitor_peers: queue to soon try {}",
-							p.addr,
-						);
+						debug!(LOGGER, "monitor_peers: queue to soon try {}", p.addr,);
 						tx.unbounded_send(p.addr).unwrap();
 					}
 				}
@@ -168,20 +175,17 @@ impl Seeder {
 		tx: mpsc::UnboundedSender<SocketAddr>,
 		seed_list: Box<Future<Item = Vec<SocketAddr>, Error = String>>,
 	) -> Box<Future<Item = (), Error = String>> {
-
 		// a thread pool is required so we don't block the event loop with a
 		// db query
 		let thread_pool = cpupool::Builder::new()
-			.pool_size(1).name_prefix("seed").create();
+			.pool_size(1)
+			.name_prefix("seed")
+			.create();
 		let peers = self.peers.clone();
 		let seeder = thread_pool
 			.spawn_fn(move || {
 				// check if we have some peers in db
-				let peers = peers.find_peers(
-					p2p::State::Healthy,
-					p2p::FULL_HIST,
-					100,
-				);
+				let peers = peers.find_peers(p2p::State::Healthy, p2p::FULL_HIST, 100);
 				Ok(peers)
 			})
 			.and_then(|peers| {
@@ -224,7 +228,13 @@ impl Seeder {
 			debug!(LOGGER, "New peer address to connect to: {}.", peer_addr);
 			let inner_h = h.clone();
 			if peers.peer_count() < PEER_MAX_COUNT {
-				h.spawn(connect_and_req(capab, p2p_server.clone(), peers.clone(), inner_h, peer_addr))
+				h.spawn(connect_and_req(
+					capab,
+					p2p_server.clone(),
+					peers.clone(),
+					inner_h,
+					peer_addr,
+				))
 			}
 			Box::new(future::ok(()))
 		});
@@ -276,12 +286,10 @@ pub fn predefined_seeds(
 	addrs_str: Vec<String>,
 ) -> Box<Future<Item = Vec<SocketAddr>, Error = String>> {
 	let seeds = future::ok(()).and_then(move |_| {
-		Ok(
-			addrs_str
-				.iter()
-				.map(|s| s.parse().unwrap())
-				.collect::<Vec<_>>(),
-		)
+		Ok(addrs_str
+			.iter()
+			.map(|s| s.parse().unwrap())
+			.collect::<Vec<_>>())
 	});
 	Box::new(seeds)
 }
@@ -302,14 +310,17 @@ fn connect_and_req(
 				if let Ok(p) = p.try_read() {
 					let _ = p.send_peer_request(capab);
 				}
-			},
+			}
 			Ok(None) => {
-				debug!(LOGGER, "connect_and_req: ok but none inner (what does this mean?), {}", addr);
-			},
+				debug!(
+					LOGGER,
+					"connect_and_req: ok but none inner (what does this mean?), {}", addr
+				);
+			}
 			Err(e) => {
 				debug!(LOGGER, "connect_and_req: {} is Defunct; {:?}", addr, e);
 				let _ = peers.update_state(addr, p2p::State::Defunct);
-			},
+			}
 		}
 		Ok(())
 	});

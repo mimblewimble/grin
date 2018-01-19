@@ -106,7 +106,14 @@ impl Handshake {
 							total_difficulty: shake.total_difficulty,
 						};
 
-						debug!(LOGGER, "Connected to peer {:?}", peer_info);
+						debug!(
+							LOGGER,
+							"Connected! Cumulative {} offered from {:?} {:?} {:?}",
+							peer_info.total_difficulty.into_num(),
+							peer_info.addr,
+							peer_info.user_agent,
+							peer_info.capabilities
+						);
 						// when more than one protocol version is supported, choosing should go here
 						Ok((conn, ProtocolV1::new(), peer_info))
 					}

@@ -201,7 +201,7 @@ fn main() {
 		.arg(Arg::with_name("key_derivations")
 				.help("The number of keys possiblities to search for each output. \
 				Ideally, set this to a number greater than the number of outputs \
-				you believe should belong to this seed/password. (Default 500)")
+				you believe should belong to this seed/password. (Default 1000)")
 				.short("k")
 				.long("key_derivations")
 				.default_value("1000")
@@ -423,10 +423,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
-	let mut key_derivations: u32 = 1000;
-	if let Some(kd) = wallet_args.value_of("key_derivations") {
-		key_derivations = kd.parse().unwrap();
-	}
+	let key_derivations: u32 = wallet_args.value_of("key_derivations").unwrap().parse().unwrap();
 
 	let mut show_spent = false;
 	if wallet_args.is_present("show_spent") {
