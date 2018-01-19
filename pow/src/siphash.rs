@@ -1,4 +1,4 @@
-// Copyright 2018 The Grin Developers
+// Copyright 2016 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,30 +24,30 @@ pub fn siphash24(v: [u64; 4], nonce: u64) -> u64 {
 
 	// macro for left rotation
 	macro_rules! rotl {
-		($num:ident, $shift:expr) => {
-			$num = ($num << $shift) | ($num >> (64 - $shift));
-		}
-	}
+    ($num:ident, $shift:expr) => {
+      $num = ($num << $shift) | ($num >> (64 - $shift));
+    }
+  }
 
 	// macro for a single siphash round
 	macro_rules! round {
-		() => {
-			v0 = v0.wrapping_add(v1);
-			v2 = v2.wrapping_add(v3);
-			rotl!(v1, 13);
-			rotl!(v3, 16);
-			v1 ^= v0;
-			v3 ^= v2;
-			rotl!(v0, 32);
-			v2 = v2.wrapping_add(v1);
-			v0 = v0.wrapping_add(v3);
-			rotl!(v1, 17);
-			rotl!(v3, 21);
-			v1 ^= v2;
-			v3 ^= v0;
-			rotl!(v2, 32);
-		}
-	}
+    () => {
+      v0 = v0.wrapping_add(v1);
+      v2 = v2.wrapping_add(v3);
+      rotl!(v1, 13);
+      rotl!(v3, 16);
+      v1 ^= v0;
+      v3 ^= v2;
+      rotl!(v0, 32);
+      v2 = v2.wrapping_add(v1);
+      v0 = v0.wrapping_add(v3);
+      rotl!(v1, 17);
+      rotl!(v3, 21);
+      v1 ^= v2;
+      v3 ^= v0;
+      rotl!(v2, 32);
+    }
+  }
 
 	// 2 rounds
 	round!();
