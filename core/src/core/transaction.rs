@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,8 +14,6 @@
 
 //! Transactions
 use blake2::blake2b::blake2b;
-use byteorder::{LittleEndian, ByteOrder};
-use siphasher::sip::SipHasher24;
 use util::secp::{self, Message, Signature};
 use util::{static_secp_instance, kernel_sig_msg};
 use util::secp::pedersen::{Commitment, RangeProof};
@@ -37,9 +35,6 @@ pub const SWITCH_COMMIT_HASH_SIZE: usize = 20;
 
 /// The size of the secret key used to generate the switch commitment hash (blake2)
 pub const SWITCH_COMMIT_KEY_SIZE: usize = 20;
-
-/// The size of a short id used to identify inputs|outputs|kernels (6 bytes)
-pub const SHORT_ID_SIZE: usize = 6;
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -546,7 +541,7 @@ impl SwitchCommitHash {
 		SwitchCommitHash(h)
 	}
 
-	/// Reconstructs a switch commit hash from an array of bytes.
+	/// Reconstructs a switch commit hash from a byte slice.
 	pub fn from_bytes(bytes: &[u8]) -> SwitchCommitHash {
 		let mut hash = [0; SWITCH_COMMIT_HASH_SIZE];
 		for i in 0..min(SWITCH_COMMIT_HASH_SIZE, bytes.len()) {
@@ -555,12 +550,12 @@ impl SwitchCommitHash {
 		SwitchCommitHash(hash)
 	}
 
-	/// Hex string represenation of a switch commitment hash.
+	/// Hex string representation of a switch commitment hash.
 	pub fn to_hex(&self) -> String {
 		util::to_hex(self.0.to_vec())
 	}
 
-	/// Reconstrcuts a switch commit hash from a hex string.
+	/// Reconstructs a switch commit hash from a hex string.
 	pub fn from_hex(hex: &str) -> Result<SwitchCommitHash, ser::Error> {
 		let bytes = util::from_hex(hex.to_string())
 			.map_err(|_| ser::Error::HexError(format!("switch_commit_hash from_hex error")))?;
@@ -667,49 +662,6 @@ impl Output {
 			}
 			Err(_) => None,
 		}
-	}
-
-	/// Generate a short_id via the following -
-	///
-	///   * extract k0/k1 from block_hash (first two u64 values)
-	///   * initialize a siphasher24 with k0/k1
-	///   * self.hash() passing in the siphasher24 instance
-	///   * drop the 2 most significant bytes (to return a 6 byte short_id)
-	///
-	pub fn short_id(&self, block_hash: &Hash) -> ShortId {
-		// we "use" core::hash::Hash in the outer namespace
-		// so doing this here in the fn to minimize collateral damage/confusion
-		use std::hash::Hasher;
-
-		// extract k0/k1 from the block_hash
-		let k0 = LittleEndian::read_u64(&block_hash.0[0..8]);
-		let k1 = LittleEndian::read_u64(&block_hash.0[8..16]);
-
-		// initialize a siphasher24 with k0/k1
-		let mut sip_hasher = SipHasher24::new_with_keys(k0, k1);
-
-		// hash our id (self.hash()) using the siphasher24 instance
-		sip_hasher.write(&self.hash().to_vec()[..]);
-		let res = sip_hasher.finish();
-
-		// construct a short_id from the resulting bytes (dropping the 2 most significant bytes)
-		let mut buf = [0; 8];
-		LittleEndian::write_u64(&mut buf, res);
-		ShortId::from_bytes(&buf[0..6])
-	}
-}
-
-/// Short id for identifying inputs/outputs/kernels
-pub struct ShortId([u8; 6]);
-
-impl ShortId {
-	/// Build a new short_id from a byte slice
-	pub fn from_bytes(bytes: &[u8]) -> ShortId {
-		let mut hash = [0; SHORT_ID_SIZE];
-		for i in 0..min(SHORT_ID_SIZE, bytes.len()) {
-			hash[i] = bytes[i];
-		}
-		ShortId(hash)
 	}
 }
 
