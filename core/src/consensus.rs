@@ -302,12 +302,12 @@ mod test {
 		let mut s1 = repeat(60, 500, sec);
 		let mut s2 = repeat_offs((sec * 60) as u64, 60, 1545, DIFFICULTY_ADJUST_WINDOW / 2);
 		s2.append(&mut s1);
-		assert_eq!(next_difficulty(s2).unwrap(), Difficulty::from_num(999));
+		assert_eq!(next_difficulty(s2).unwrap(), Difficulty::from_num(1000));
 
 		// too slow, diff goes down
 		assert_eq!(
 			next_difficulty(repeat(90, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(889)
+			Difficulty::from_num(890)
 		);
 		assert_eq!(
 			next_difficulty(repeat(120, 1000, just_enough)).unwrap(),
@@ -317,11 +317,11 @@ mod test {
 		// too fast, diff goes up
 		assert_eq!(
 			next_difficulty(repeat(55, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(1021)
+			Difficulty::from_num(1022)
 		);
 		assert_eq!(
 			next_difficulty(repeat(45, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(1067)
+			Difficulty::from_num(1068)
 		);
 
 		// hitting lower time bound, should always get the same result below
@@ -344,10 +344,10 @@ mod test {
 			Difficulty::from_num(750)
 		);
 
-		// We should never drop below MINIMUM_DIFFICULTY (10)
+		// We should never drop below MINIMUM_DIFFICULTY (1)
 		assert_eq!(
-			next_difficulty(repeat(90, 10, just_enough)).unwrap(),
-			Difficulty::from_num(10)
+			next_difficulty(repeat(90, 0, just_enough)).unwrap(),
+			Difficulty::from_num(1)
 		);
 	}
 

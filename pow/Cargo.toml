@@ -23,7 +23,7 @@ tag = "grin_integration_18"
 #uncomment this feature to turn off plugin builds
 #features=["no-plugin-build"]
 #uncomment this feature to enable cuda builds (cuda toolkit must be installed)
-features=["build-cuda-plugins"]
+#features=["build-cuda-plugins"]
 
 [dev_dependencies]
 grin_chain = { path = "../chain"}
