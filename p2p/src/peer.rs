@@ -88,6 +88,18 @@ impl Peer {
 		Box::new(hs_peer)
 	}
 
+	pub fn accept_new(
+		conn: &mut TcpStream,
+		capab: Capabilities,
+		total_difficulty: Difficulty,
+		hs: &Handshake,
+		na: Arc<NetAdapter>,
+	) -> Result<Peer, Error> {
+
+		let (proto, info) = hs.accept(capab, total_difficulty, conn)?;
+		Ok(Peer::new(info, Box::new(proto), na))
+	}
+
 	/// Main peer loop listening for messages and forwarding to the rest of the
 	/// system.
 	pub fn run(&self, conn: TcpStream, pool: CpuPool) -> Box<Future<Item = (), Error = Error>> {

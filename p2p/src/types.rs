@@ -42,6 +42,8 @@ pub const MAX_PEER_ADDRS: u32 = 256;
 pub enum Error {
 	Serialization(ser::Error),
 	Connection(io::Error),
+	/// Header type does not match the expected message type
+	BadMessage,
 	Banned,
 	ConnectionClose,
 	Timeout,

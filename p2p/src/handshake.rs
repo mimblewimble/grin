@@ -53,6 +53,110 @@ impl Handshake {
 		}
 	}
 
+	pub fn initiate(
+		&self,
+		capab: Capabilities,
+		total_difficulty: Difficulty,
+		self_addr: SocketAddr,
+		conn: &mut TcpStream,
+	) -> Result<(ProtocolV1, PeerInfo), Error> {
+
+		// prepare the first part of the handshake
+		let nonce = self.next_nonce();
+		let peer_addr = match conn.peer_addr() {
+			Ok(pa) => pa,
+			Err(e) => return Error::Connection(e),
+		};
+
+		let hand = Hand {
+			version: PROTOCOL_VERSION,
+			capabilities: capab,
+			nonce: nonce,
+			genesis: self.genesis,
+			total_difficulty: total_difficulty,
+			sender_addr: SockAddr(self_addr),
+			receiver_addr: SockAddr(peer_addr),
+			user_agent: USER_AGENT.to_string(),
+		};
+
+		// write and read the handshake response
+		write_message(conn, hand, Type::Hand)?;
+		let shake = read_message(conn, Type::Shake)?;
+		if shake.version != PROTOCOL_VERSION {
+			return Err(Error::ProtocolMismatch {
+				us: PROTOCOL_VERSION,
+				peer: shake.version,
+			});
+		} else if shake.genesis != genesis {
+			return Err(Error::GenesisMismatch {
+				us: self.genesis,
+				peer: shake.genesis,
+			});
+		}
+		let peer_info = PeerInfo {
+			capabilities: shake.capabilities,
+			user_agent: shake.user_agent,
+			addr: peer_addr,
+			version: shake.version,
+			total_difficulty: shake.total_difficulty,
+		};
+		
+		debug!(LOGGER, "Connected to peer {:?}", peer_info);
+		// when more than one protocol version is supported, choosing should go here
+		Ok((ProtocolV1::new(), peer_info))
+	}
+
+	pub fn accept(
+		&self,
+		capab: Capabilities,
+		total_difficulty: Difficulty,
+		self_addr: SocketAddr,
+		conn: &mut TcpStream,
+	) -> Result<(ProtocolV1, PeerInfo), Error> {
+	
+		// all the reasons we could refuse this connection for
+		if hand.version != PROTOCOL_VERSION {
+			return Err(Error::ProtocolMismatch {
+				us: PROTOCOL_VERSION,
+				peer: hand.version,
+			});
+		} else if hand.genesis != genesis {
+			return Err(Error::GenesisMismatch {
+				us: genesis,
+				peer: hand.genesis,
+			});
+		} else {
+			// check the nonce to see if we are trying to connect to ourselves
+			let nonces = nonces.read().unwrap();
+			if nonces.contains(&hand.nonce) {
+				return Err(Error::PeerWithSelf);
+			}
+		}
+
+		// all good, keep peer info
+		let peer_info = PeerInfo {
+			capabilities: hand.capabilities,
+			user_agent: hand.user_agent,
+			addr: extract_ip(&hand.sender_addr.0, &conn),
+			version: hand.version,
+			total_difficulty: hand.total_difficulty,
+		};
+		// send our reply with our info
+		let shake = Shake {
+			version: PROTOCOL_VERSION,
+			capabilities: capab,
+			genesis: genesis,
+			total_difficulty: total_difficulty,
+			user_agent: USER_AGENT.to_string(),
+		};
+
+		write_message(conn, shake, Type::Shake)?;
+		debug!(LOGGER, "Success handshake with {}.", peer_info.addr);
+
+		// when more than one protocol version is supported, choosing should go here
+		Ok((ProtocolV1::new(), peer_info))
+	}
+
 	/// Handles connecting to a new remote peer, starting the version handshake.
 	pub fn connect(
 		&self,

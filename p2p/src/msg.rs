@@ -126,6 +126,58 @@ where
 	Box::new(write_msg)
 }
 
+pub fn read_header(conn: &mut TcpStream) -> Result<MsgHeader, Error> {
+
+	let mut head = [0u8; HEADER_LEN as usize];
+	conn.read_exact(&mut head)?;
+	let header = ser::deserialize::<MsgHeader>(&mut buf[..])?;
+	if header.msg_len > MAX_MSG_LEN {
+		// TODO additional restrictions for each msg type to avoid 20MB pings...
+		return Err(Error::Serialization(ser::Error::TooLargeReadErr));
+	}
+	Ok(header)
+}
+
+pub fn read_body<T>(h: MsgHeader, conn: &mut TcpStream) -> Result<T, Error>
+where
+	T: Readable + 'static,
+{
+	let mut bod = [0u8; header.msg_len as usize];
+	conn.read_exact(&mut body)?;
+	ser::deserialize(&mut &buf[..])?
+}
+
+pub fn read_message(conn: &mut TcpStream, msg_type: Type) -> Result<T, Error> {
+	let header = read_header(conn);
+	if header.msg_type != msg_type {
+		return Err(Error::BadMessage);
+	}
+	read_body(conn)
+}
+
+pub fn write_message<T>(
+	conn: &mut TcpStream,
+	msg: T,
+	msg_type: Type,
+) -> Result<(), Error>
+where
+	T: Writeable + 'static,
+{
+	// prepare the body first so we know its serialized length
+	let mut body_buf = vec![];
+	ser::serialize(&mut body_buf, &msg).unwrap();
+
+	// build and serialize the header using the body size
+	let mut header_buf = vec![];
+	let blen = body_buf.len() as u64;
+	ser::serialize(&mut header_buf, &MsgHeader::new(msg_type, blen)).unwrap();
+
+	// send the whole thing
+	conn.write_all(header_buf)?;
+	conn.write_all(body_buf)?;
+	Ok(())
+}
+
 /// Header of any protocol message, used to identify incoming messages.
 pub struct MsgHeader {
 	magic: [u8; 2],
