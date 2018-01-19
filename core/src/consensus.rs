@@ -119,7 +119,7 @@ pub fn valid_header_version(height: u64, version: u16) -> bool {
 }
 
 /// The minimum mining difficulty we'll allow
-pub const MINIMUM_DIFFICULTY: u64 = 10;
+pub const MINIMUM_DIFFICULTY: u64 = 1;
 
 /// Time window in blocks to calculate block time median
 pub const MEDIAN_TIME_WINDOW: u64 = 11;
@@ -209,7 +209,8 @@ where
 	let end_ts = window_end[window_end.len() / 2];
 
 	// Average difficulty and dampened average time
-	let diff_avg = diff_sum.clone() / Difficulty::from_num(DIFFICULTY_ADJUST_WINDOW);
+	let diff_avg = diff_sum.into_num() as f64 / 
+		Difficulty::from_num(DIFFICULTY_ADJUST_WINDOW).into_num() as f64;
 	let ts_damp = (3 * BLOCK_TIME_WINDOW + (begin_ts - end_ts)) / 4;
 
 	// Apply time bounds
@@ -222,9 +223,11 @@ where
 	};
 
 	let difficulty =
-		diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW) / Difficulty::from_num(adj_ts);
-
-	Ok(max(difficulty, Difficulty::minimum()))
+		diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW).into_num() as f64 
+		/ Difficulty::from_num(adj_ts).into_num() as f64;
+	// All this ceil and f64 business is so that difficulty can always adjust
+	// for smaller numbers < 10
+	Ok(max(Difficulty::from_num(difficulty.ceil() as u64), Difficulty::minimum()))
 }
 
 /// Consensus rule that collections of items are sorted lexicographically.

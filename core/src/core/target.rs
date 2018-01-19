@@ -28,9 +28,9 @@ use byteorder::{BigEndian, ByteOrder};
 use consensus;
 use core::hash::Hash;
 use ser::{self, Readable, Reader, Writeable, Writer};
+use util::logger::LOGGER;
+use core::global;
 
-/// The target is the 32-bytes hash block hashes must be lower than.
-pub const MAX_TARGET: [u8; 8] = [0xf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
 
 /// The difficulty is defined as the maximum target divided by the block hash.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
@@ -65,11 +65,12 @@ impl Difficulty {
 	/// Computes the difficulty from a hash. Divides the maximum target by the
 	/// provided hash.
 	pub fn from_hash(h: &Hash) -> Difficulty {
-		let max_target = BigEndian::read_u64(&MAX_TARGET);
+		let max_target = BigEndian::read_u64(&global::max_proof_target());
 		// Use the first 64 bits of the given hash
 		let mut in_vec = h.to_vec();
 		in_vec.truncate(8);
 		let num = BigEndian::read_u64(&in_vec);
+		trace!(LOGGER, "Calculated difficulty: {}", max_target as f64 / num as f64);
 		Difficulty { num: max_target / num }
 	}
 

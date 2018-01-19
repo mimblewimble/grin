@@ -37,14 +37,17 @@ db_root = ".grin"
 #parameters used for mining. Can be:
 #AutomatedTesting - For CI builds and instant blockchain creation
 #UserTesting - For regular user testing (cuckoo 16)
-#Testnet1 - Full production cuckoo parameter (cuckoo 30)
+#Testnet1 - Testnet1 genesis block (cuckoo 16)
 #
-#chain_type = "UserTesting"
+chain_type = "Testnet2"
 
 #7 = Bit flags for FULL_NODE, this structure needs to be changed
 #internally to make it more configurable
 
 capabilities = [7]
+
+#skip waiting for sync on startup, mostly for testing
+skip_sync_wait = true
 
 #The P2P server details (i.e. the server that communicates with other
 #grin server nodes
@@ -63,13 +66,13 @@ port = 13414
 log_to_stdout = true
 
 # Log level for stdout: Critical, Error, Warning, Info, Debug, Trace
-stdout_log_level = "Info"
+stdout_log_level = "Debug"
 
 # Whether to log to a file
-log_to_file = true
+log_to_file = false
 
 # Log level for file: Critical, Error, Warning, Info, Debug, Trace
-file_log_level = "Debug"
+file_log_level = "Trace"
 
 # Log file path
 log_file_path = "grin.log"
@@ -87,7 +90,7 @@ log_file_append = true
 
 #flag whether mining is enabled
 
-enable_mining = false
+enable_mining = true 
 
 #Whether to use cuckoo-miner,  and related parameters
 
@@ -97,7 +100,7 @@ use_cuckoo_miner = true
 #this allows for many searches to be run in parallel, e.g. if the system
 #has multiple GPUs, or if you want to mine using multiple plugins
 
-cuckoo_miner_async_mode = false
+cuckoo_miner_async_mode = true
 
 #If using cuckoo_miner, the directory in which plugins are installed
 #if not specified, grin will look in the directory /deps relative
@@ -116,10 +119,11 @@ wallet_listener_url = "http://127.0.0.1:13415"
 
 #whether to ignore the reward (mostly for testing)
 
-burn_reward = false
+burn_reward = true 
 
 #testing value, optional
 #slow_down_in_millis = 30
+
 
 #########################################
 ### CUCKOO MINER PLUGIN CONFIGURATION ###
@@ -136,30 +140,37 @@ burn_reward = false
 # in single-threaded mode
 
 # You'll likely get the best performance using a
-# single GPU and single CPU plugin in parallel
+# single GPU plugin and single CPU plugin in parallel
+
+# Parameters can be set per-device. On CPU plugins
+# you'll likely only be using device 0 (for now),
+# but in CUDA plugins the device number corresponds
+# to the device ID. (use nvidia-smi to find this)
 
 #The fastest cpu algorithm, but consumes the most memory
 #Also requires instructions that aren't available on
 #older processors. In this case, use mean_compat_cpu
 #instead
-#[[mining.cuckoo_miner_plugin_config]]
-#type_filter = "mean_cpu"
-#parameter_list = {NUM_THREADS=4, NUM_TRIMS=68}
-
-#Same as above, but for older processors. Will be slightly
-#slower.
 [[mining.cuckoo_miner_plugin_config]]
-type_filter = "mean_compat_cpu"
-parameter_list = {NUM_THREADS=1, NUM_TRIMS=68}
+type_filter = "mean_cpu"
+[mining.cuckoo_miner_plugin_config.device_parameters.0]
+NUM_THREADS = 8
+
+#As above, but for older processors
+#[[mining.cuckoo_miner_plugin_config]]
+#type_filter = "mean_compat_cpu"
+#[mining.cuckoo_miner_plugin_config.device_parameters.0]
+#NUM_THREADS = 1
 
 #note lean_cpu currently has a bug which prevents it from
 #working with threads > 1
 
 #[[mining.cuckoo_miner_plugin_config]]
 #type_filter = "lean_cpu"
-#parameter_list = {NUM_THREADS=1, NUM_TRIMS=7}
+#[mining.cuckoo_miner_plugin_config.device_parameters.0]
+#NUM_THREADS = 1
 
-#CUDA verion of lean miner
+#CUDA Miner (Included here for integration only, Not ready for use)
 #Can currently be used only in Production (30) Mode
 #This plugin is not built by default. To build:
 #1) Ensure the latest cuda toolkit is installed
@@ -167,6 +178,16 @@ parameter_list = {NUM_THREADS=1, NUM_TRIMS=68}
 #2) Uncomment the 'build-cuda-plugin' feature
 #   in pow/Cargo.toml
 
-#[[mining.cuckoo_miner_plugin_config]]
-#type_filter = "lean_cuda"
-#parameter_list = {}
+[[mining.cuckoo_miner_plugin_config]]
+type_filter = "cuda"
+[mining.cuckoo_miner_plugin_config.device_parameters.0]
+NUM_BLOCKS = 128 
+#THREADS_PER_BLOCK = 32
+[mining.cuckoo_miner_plugin_config.device_parameters.1]
+USE_DEVICE=1
+#NUM_BLOCKS = 64
+#THREADS_PER_BLOCK = 32
+[mining.cuckoo_miner_plugin_config.device_parameters.2]
+USE_DEVICE=1
+#NUM_BLOCKS = 64 
+#THREADS_PER_BLOCK = 32

@@ -47,6 +47,12 @@ pub const AUTOMATED_TESTING_COINBASE_MATURITY: u64 = 3;
 /// User testing coinbase maturity
 pub const USER_TESTING_COINBASE_MATURITY: u64 = 3;
 
+/// The target is the 32-bytes hash block hashes must be lower than.
+pub const MAX_PROOF_TARGET: [u8; 8] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+ 
+/// We want to slow this right down for user testing at cuckoo 16, so pick a smaller max
+pub const MAX_PROOF_TARGET_TESTING: [u8; 8] = [0x05, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -59,6 +65,9 @@ pub enum ChainTypes {
 
   /// First test network
 	Testnet1,
+
+	/// Second test network
+	Testnet2,
 
   /// Main production network
 	Mainnet,
@@ -89,6 +98,7 @@ pub fn sizeshift() -> u8 {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_SIZESHIFT,
 		ChainTypes::UserTesting => USER_TESTING_SIZESHIFT,
 		ChainTypes::Testnet1 => USER_TESTING_SIZESHIFT,
+		ChainTypes::Testnet2 => DEFAULT_SIZESHIFT,
 		ChainTypes::Mainnet => DEFAULT_SIZESHIFT,
 	}
 }
@@ -100,6 +110,7 @@ pub fn proofsize() -> usize {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_PROOF_SIZE,
 		ChainTypes::UserTesting => USER_TESTING_PROOF_SIZE,
 		ChainTypes::Testnet1 => PROOFSIZE,
+		ChainTypes::Testnet2 => PROOFSIZE,
 		ChainTypes::Mainnet => PROOFSIZE,
 	}
 }
@@ -111,7 +122,20 @@ pub fn coinbase_maturity() -> u64 {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_COINBASE_MATURITY,
 		ChainTypes::UserTesting => USER_TESTING_COINBASE_MATURITY,
 		ChainTypes::Testnet1 => COINBASE_MATURITY,
+		ChainTypes::Testnet2 => COINBASE_MATURITY,
 		ChainTypes::Mainnet => COINBASE_MATURITY,
+	}
+}
+
+/// Max Proof Target
+pub fn max_proof_target() -> [u8; 8] {
+	let param_ref = CHAIN_TYPE.read().unwrap();
+	match *param_ref {
+		ChainTypes::AutomatedTesting => MAX_PROOF_TARGET_TESTING,
+		ChainTypes::UserTesting => MAX_PROOF_TARGET_TESTING,
+		ChainTypes::Testnet1 => MAX_PROOF_TARGET_TESTING,
+		ChainTypes::Testnet2 => MAX_PROOF_TARGET,
+		ChainTypes::Mainnet => MAX_PROOF_TARGET,
 	}
 }
 
@@ -131,6 +155,7 @@ pub fn is_user_testing_mode() -> bool {
 pub fn is_production_mode() -> bool {
 	let param_ref = CHAIN_TYPE.read().unwrap();
 	ChainTypes::Testnet1 == *param_ref ||
+    ChainTypes::Testnet2 == *param_ref ||
     ChainTypes::Mainnet == *param_ref
 }
 
@@ -146,6 +171,7 @@ pub fn get_genesis_nonce() -> u64 {
 		ChainTypes::AutomatedTesting => 0,
 		// Magic nonce for current genesis block at cuckoo16
 		ChainTypes::UserTesting => 27944,
+		// Magic nonce for genesis block for testnet2 (cuckoo30)
 
 		_ => panic!("Pre-set"),
 	}

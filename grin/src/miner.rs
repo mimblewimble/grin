@@ -51,7 +51,7 @@ use itertools::Itertools;
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
 
-const PRE_NONCE_SIZE: usize = 113;
+const PRE_NONCE_SIZE: usize = 146;
 
 /// Serializer that outputs pre and post nonce portions of a block header
 /// which can then be sent off to miner to mutate at will
@@ -190,16 +190,23 @@ impl Miner {
 
 		// Start the miner working
 		let miner = plugin_miner.get_consumable();
-		let job_handle = miner.notify(1, &pre, &post, difficulty.into_num()).unwrap();
+		let job_handle = miner.notify(1, &pre, &post, 0).unwrap();
 
 		let mut sol = None;
 
 		while head.hash() == *latest_hash && time::get_time().sec < deadline {
 			if let Some(s) = job_handle.get_solution() {
-				sol = Some(Proof::new(s.solution_nonces.to_vec()));
-				b.header.nonce = s.get_nonce_as_u64();
-				// debug!(LOGGER, "Nonce: {}", b.header.nonce);
-				break;
+				let proof = Proof::new(s.solution_nonces.to_vec());
+				let proof_diff = proof.clone().to_difficulty();
+				trace!(LOGGER, "Found cuckoo solution for nonce {} of difficulty {} (difficulty target {})", 
+					s.get_nonce_as_u64(),
+					proof_diff.into_num(),
+					difficulty.into_num());
+				if proof_diff >= b.header.difficulty {
+					sol = Some(proof);
+					b.header.nonce = s.get_nonce_as_u64();
+					break;
+				}
 			}
 			if time::get_time().sec > next_stat_output {
 				let mut sps_total = 0.0;
@@ -207,15 +214,21 @@ impl Miner {
 					let stats = job_handle.get_stats(i);
 					if let Ok(stat_vec) = stats {
 						for s in stat_vec {
+							if s.in_use == 0 {continue;}
 							let last_solution_time_secs = s.last_solution_time as f64 / 1000000000.0;
 							let last_hashes_per_sec = 1.0 / last_solution_time_secs;
+							let status = match s.has_errored {
+								0 => "OK",
+								_ => "ERRORED",
+							};
 							debug!(
 								LOGGER,
-								"Mining: Plugin {} - Device {} ({}): Last Graph time: {}s; \
+								"Mining: Plugin {} - Device {} ({}) Status: {} : Last Graph time: {}s; \
 								 Graphs per second: {:.*} - Total Attempts: {}",
 								i,
 								s.device_id,
 								s.device_name,
+								status,
 								last_solution_time_secs,
 								3,
 								last_hashes_per_sec,
@@ -226,9 +239,9 @@ impl Miner {
 							}
 						}
 					}
-					debug!(LOGGER, "Total solutions per second: {}", sps_total);
-					next_stat_output = time::get_time().sec + stat_output_interval;
 				}
+				info!(LOGGER, "Mining at {} graphs per second", sps_total);
+				next_stat_output = time::get_time().sec + stat_output_interval;
 			}
 			// avoid busy wait
 			thread::sleep(Duration::from_millis(100));
@@ -289,6 +302,10 @@ impl Miner {
 			let pow_hash = b.hash();
 			if let Ok(proof) = plugin_miner.mine(&pow_hash[..]) {
 				let proof_diff = proof.clone().to_difficulty();
+				trace!(LOGGER, "Found cuckoo solution for nonce {} of difficulty {} (difficulty target {})", 
+					b.header.nonce,
+					proof_diff.into_num(),
+					b.header.difficulty.into_num());
 				if proof_diff >= b.header.difficulty {
 					sol = Some(proof);
 					break;
@@ -298,17 +315,24 @@ impl Miner {
 			if time::get_time().sec >= next_stat_check {
 				let stats_vec = plugin_miner.get_stats(0).unwrap();
 				for s in stats_vec.into_iter() {
+					if s.in_use == 0 {continue;}
 					let last_solution_time_secs = s.last_solution_time as f64 / 1000000000.0;
 					let last_hashes_per_sec = 1.0 / last_solution_time_secs;
+					let status = match s.has_errored {
+						0 => "OK",
+						_ => "ERRORED",
+					};
 					debug!(
 						LOGGER,
-						"Plugin 0 - Device {} ({}) - Last Graph time: {}; Graphs per second: {:.*}",
+						"Plugin 0 - Device {} ({}) Status: {} - Last Graph time: {}; Graphs per second: {:.*}",
 						s.device_id,
 						s.device_name,
+						status,
 						last_solution_time_secs,
 						3,
 						last_hashes_per_sec
 					);
+					info!(LOGGER, "Mining at {} graphs per second", last_hashes_per_sec);
 				}
 				next_stat_check = time::get_time().sec + stat_check_interval;
 			}
