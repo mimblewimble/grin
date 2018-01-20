@@ -399,12 +399,19 @@ pub struct BlockHandler {
 impl BlockHandler {
 	fn get_block(&self, h: &Hash) -> Result<BlockPrintable, Error> {
 		let block = self.chain.clone().get_block(h).map_err(|_| Error::NotFound)?;
-		Ok(BlockPrintable::from_block(&block, self.chain.clone(), false))
+		Ok(BlockPrintable::from_block(
+			&block,
+			self.chain.clone(),
+			false,
+		))
 	}
 
 	fn get_compact_block(&self, h: &Hash) -> Result<CompactBlockPrintable, Error> {
 		let block = self.chain.clone().get_block(h).map_err(|_| Error::NotFound)?;
-		Ok(CompactBlockPrintable::from_compact_block(&block.as_compact_block()))
+		Ok(CompactBlockPrintable::from_compact_block(
+			&block.as_compact_block(),
+			self.chain.clone(),
+		))
 	}
 
 	// Try to decode the string as a height or a hash.
