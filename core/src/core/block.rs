@@ -214,12 +214,16 @@ impl Readable for BlockHeader {
 pub struct CompactBlock {
 	/// The header with metadata and commitments to the rest of the data
 	pub header: BlockHeader,
+	/// List of full outputs - specifically the coinbase output(s)
+	pub out_full: Vec<Output>,
+	/// List of full kernels - specifically the coinbase kernel(s)
+	pub kern_full: Vec<TxKernel>,
 	/// List of transaction inputs (short_ids)
-	pub inputs: Vec<ShortId>,
-	/// List of transaction outputs (short_ids)
-	pub outputs: Vec<ShortId>,
-	/// List of transaction kernels (short_ids)
-	pub kernels: Vec<ShortId>,
+	pub in_ids: Vec<ShortId>,
+	/// List of transaction outputs, excluding those in the full list (short_ids)
+	pub out_ids: Vec<ShortId>,
+	/// List of transaction kernels, excluding those in the full list (short_ids)
+	pub kern_ids: Vec<ShortId>,
 }
 
 /// Implementation of Writeable for a compact block, defines how to write the block to a
@@ -230,21 +234,32 @@ impl Writeable for CompactBlock {
 		try!(self.header.write(writer));
 
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			// TODO - make these constants and put them somewhere reusable?
+			assert!(self.out_full.len() < 16);
+			assert!(self.kern_full.len() < 16);
+
 			ser_multiwrite!(
 				writer,
-				[write_u64, self.inputs.len() as u64],
-				[write_u64, self.outputs.len() as u64],
-				[write_u64, self.kernels.len() as u64]
+				[write_u8, self.out_full.len() as u8],
+				[write_u8, self.kern_full.len() as u8],
+				[write_u64, self.in_ids.len() as u64],
+				[write_u64, self.out_ids.len() as u64],
+				[write_u64, self.kern_ids.len() as u64]
 			);
 
-			let mut inputs = self.inputs.clone();
-			let mut outputs = self.outputs.clone();
-			let mut kernels = self.kernels.clone();
+			let mut out_full = self.out_full.clone();
+			let mut kern_full = self.kern_full.clone();
+
+			let mut in_ids = self.in_ids.clone();
+			let mut out_ids = self.out_ids.clone();
+			let mut kern_ids = self.kern_ids.clone();
 
 			// Consensus rule that everything is sorted in lexicographical order on the wire.
-			try!(inputs.write_sorted(writer));
-			try!(outputs.write_sorted(writer));
-			try!(kernels.write_sorted(writer));
+			try!(out_full.write_sorted(writer));
+			try!(kern_full.write_sorted(writer));
+			try!(in_ids.write_sorted(writer));
+			try!(out_ids.write_sorted(writer));
+			try!(kern_ids.write_sorted(writer));
 		}
 		Ok(())
 	}
@@ -256,18 +271,22 @@ impl Readable for CompactBlock {
 	fn read(reader: &mut Reader) -> Result<CompactBlock, ser::Error> {
 		let header = try!(BlockHeader::read(reader));
 
-		let (input_len, output_len, kernel_len) =
-			ser_multiread!(reader, read_u64, read_u64, read_u64);
+		let (out_full_len, kern_full_len, in_id_len, out_id_len, kern_id_len) =
+			ser_multiread!(reader, read_u8, read_u8, read_u64, read_u64, read_u64);
 
-		let inputs = read_and_verify_sorted(reader, input_len)?;
-		let outputs = read_and_verify_sorted(reader, output_len)?;
-		let kernels = read_and_verify_sorted(reader, kernel_len)?;
+		let out_full = read_and_verify_sorted(reader, out_full_len as u64)?;
+		let kern_full = read_and_verify_sorted(reader, kern_full_len as u64)?;
+		let in_ids = read_and_verify_sorted(reader, in_id_len)?;
+		let out_ids = read_and_verify_sorted(reader, out_id_len)?;
+		let kern_ids = read_and_verify_sorted(reader, kern_id_len)?;
 
 		Ok(CompactBlock {
 			header,
-			inputs,
-			outputs,
-			kernels,
+			out_full,
+			kern_full,
+			in_ids,
+			out_ids,
+			kern_ids,
 		})
 	}
 }
@@ -395,29 +414,46 @@ impl Block {
 		let header = self.header.clone();
 		let block_hash = self.hash();
 
-		let mut inputs = self.inputs
+		let mut out_full = self.outputs
+			.iter()
+			.filter(|x| x.features.contains(COINBASE_OUTPUT))
+			.cloned()
+			.collect::<Vec<_>>();
+		let mut kern_full = self.kernels
+			.iter()
+			.filter(|x| x.features.contains(COINBASE_KERNEL))
+			.cloned()
+			.collect::<Vec<_>>();
+
+		let mut in_ids = self.inputs
 			.iter()
 			.map(|x| x.short_id(&block_hash))
 			.collect::<Vec<_>>();
-		let mut outputs = self.outputs
+		let mut out_ids = self.outputs
 			.iter()
+			.filter(|x| !x.features.contains(COINBASE_OUTPUT))
 			.map(|x| x.short_id(&block_hash))
 			.collect::<Vec<_>>();
-		let mut kernels = self.kernels
+		let mut kern_ids = self.kernels
 			.iter()
+			.filter(|x| !x.features.contains(COINBASE_KERNEL))
 			.map(|x| x.short_id(&block_hash))
 			.collect::<Vec<_>>();
 
-		// sort all the lists of short_ids
-		inputs.sort();
-		outputs.sort();
-		kernels.sort();
+		// sort all the lists
+		out_full.sort();
+		kern_full.sort();
+		in_ids.sort();
+		out_ids.sort();
+		kern_ids.sort();
 
 		CompactBlock {
 			header,
-			inputs,
-			outputs,
-			kernels,
+			out_full,
+			kern_full,
+			in_ids,
+			out_ids,
+			kern_ids,
 		}
 	}
 
@@ -990,19 +1026,43 @@ mod test {
 	#[test]
 	fn convert_block_to_compact_block() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let b = new_block(vec![], &keychain);
+		let tx1 = tx2i1o();
+		let b = new_block(vec![&tx1], &keychain);
+
 		let cb = b.as_compact_block();
-		assert_eq!(cb.kernels.len(), 1);
-		assert_eq!(cb.kernels[0], b.kernels[0].short_id(&b.hash()));
+
+		assert_eq!(cb.kern_full.len(), 1);
+		assert_eq!(cb.kern_ids.len(), 1);
+		assert_eq!(cb.out_full.len(), 1);
+		assert_eq!(cb.out_ids.len(), 1);
+		assert_eq!(cb.in_ids.len(), 2);
+		assert_eq!(
+			cb.out_ids[0],
+			b.outputs
+				.iter()
+				.find(|x| !x.features.contains(COINBASE_OUTPUT))
+				.unwrap()
+				.short_id(&b.hash())
+		);
+		assert_eq!(
+			cb.kern_ids[0],
+			b.kernels
+				.iter()
+				.find(|x| !x.features.contains(COINBASE_KERNEL))
+				.unwrap()
+				.short_id(&b.hash())
+		);
 	}
 
 	#[test]
 	fn serialize_deserialize_compact_block() {
 		let b = CompactBlock {
 			header: BlockHeader::default(),
-			inputs: vec![ShortId::zero(), ShortId::zero()],
-			outputs: vec![ShortId::zero(), ShortId::zero(), ShortId::zero()],
-			kernels: vec![ShortId::zero()],
+			out_full: vec![],
+			kern_full: vec![],
+			in_ids: vec![ShortId::zero(), ShortId::zero()],
+			out_ids: vec![ShortId::zero(), ShortId::zero(), ShortId::zero()],
+			kern_ids: vec![ShortId::zero()],
 		};
 
 		let mut vec = Vec::new();
@@ -1010,8 +1070,8 @@ mod test {
 		let b2: CompactBlock = ser::deserialize(&mut &vec[..]).unwrap();
 
 		assert_eq!(b.header, b2.header);
-		assert_eq!(b.inputs, b2.inputs);
-		assert_eq!(b.outputs, b2.outputs);
-		assert_eq!(b.kernels, b2.kernels);
+		assert_eq!(b.in_ids, b2.in_ids);
+		assert_eq!(b.out_ids, b2.out_ids);
+		assert_eq!(b.kern_ids, b2.kern_ids);
 	}
 }
