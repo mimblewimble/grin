@@ -427,7 +427,10 @@ where
 
 		match res {
 			Ok(()) => Ok(Response::with(status::Ok)),
-			Err(e) => Err(IronError::from(Error::Argument(format!("{:?}", e))))
+			Err(e) => {
+				debug!(LOGGER, "error - {:?}", e);
+				Err(IronError::from(Error::Argument(format!("{:?}", e))))
+			}
 		}
 	}
 }
