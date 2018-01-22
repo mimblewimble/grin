@@ -44,6 +44,16 @@ pub fn reward(fee: u64) -> u64 {
 /// Number of blocks before a coinbase matures and can be spent
 pub const COINBASE_MATURITY: u64 = 1_000;
 
+/// Max number of coinbase outputs in a valid block.
+/// This is to prevent a miner generating an excessively large "compact block".
+/// But we do techincally support blocks with multiple coinbase outputs/kernels.
+pub const MAX_BLOCK_COINBASE_OUTPUTS: u64 = 1;
+
+/// Max number of coinbase kernels in a valid block.
+/// This is to prevent a miner generating an excessively large "compact block".
+/// But we do techincally support blocks with multiple coinbase outputs/kernels.
+pub const MAX_BLOCK_COINBASE_KERNELS: u64 = 1;
+
 /// Block interval, in seconds, the network will tune its next_target for. Note
 /// that we may reduce this value in the future as we get more data on mining
 /// with Cuckoo Cycle, networks improve and block propagation is optimized
@@ -209,7 +219,7 @@ where
 	let end_ts = window_end[window_end.len() / 2];
 
 	// Average difficulty and dampened average time
-	let diff_avg = diff_sum.into_num() as f64 / 
+	let diff_avg = diff_sum.into_num() as f64 /
 		Difficulty::from_num(DIFFICULTY_ADJUST_WINDOW).into_num() as f64;
 	let ts_damp = (3 * BLOCK_TIME_WINDOW + (begin_ts - end_ts)) / 4;
 
@@ -223,7 +233,7 @@ where
 	};
 
 	let difficulty =
-		diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW).into_num() as f64 
+		diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW).into_num() as f64
 		/ Difficulty::from_num(adj_ts).into_num() as f64;
 	// All this ceil and f64 business is so that difficulty can always adjust
 	// for smaller numbers < 10
