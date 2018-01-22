@@ -30,11 +30,11 @@ use keychain::{Identifier, Keychain};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 use util;
 
-/// The size to use for the stored blake2 hash of a switch_commitment
-pub const SWITCH_COMMIT_HASH_SIZE: usize = 20;
+/// The size of the blake2 hash of a switch commitment (256 bits)
+pub const SWITCH_COMMIT_HASH_SIZE: usize = 32;
 
-/// The size of the secret key used to generate the switch commitment hash (blake2)
-pub const SWITCH_COMMIT_KEY_SIZE: usize = 20;
+/// The size of the secret key used in to generate blake2 switch commitment hash (256 bits)
+pub const SWITCH_COMMIT_KEY_SIZE: usize = 32;
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -485,6 +485,15 @@ impl SwitchCommitHashKey {
 	/// We use a zero value key for regular transactions.
 	pub fn zero() -> SwitchCommitHashKey {
 		SwitchCommitHashKey([0; SWITCH_COMMIT_KEY_SIZE])
+	}
+
+	/// Reconstructs a switch commit hash key from a byte slice.
+	pub fn from_bytes(bytes: &[u8]) -> SwitchCommitHashKey {
+		let mut key = [0; SWITCH_COMMIT_KEY_SIZE];
+		for i in 0..min(SWITCH_COMMIT_KEY_SIZE, bytes.len()) {
+			key[i] = bytes[i];
+		}
+		SwitchCommitHashKey(key)
 	}
 }
 

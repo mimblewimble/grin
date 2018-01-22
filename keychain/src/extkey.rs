@@ -243,6 +243,16 @@ impl ExtendedKey {
 		Ok(Identifier::from_key_id(secp, &key_id))
 	}
 
+	/// Construct a switch commit hash key for an extended key
+	pub fn switch_commit_hash_key(&self) -> SwitchCommitHashKey {
+		let mut n_bytes: [u8; 4] = [0; 4];
+		BigEndian::write_u32(&mut n_bytes, self.n_child);
+		let mut seed = self.key[..].to_vec();
+		seed.extend_from_slice(&n_bytes);
+		let bytes = blake2b(32, &self.chaincode[..], &seed[..]).as_bytes();
+		SwitchCommitHashKey::from_bytes(&bytes)
+	}
+
 	/// Derive an extended key from an extended key
 	pub fn derive(&self, secp: &Secp256k1, n: u32) -> Result<ExtendedKey, Error> {
 		let mut n_bytes: [u8; 4] = [0; 4];
