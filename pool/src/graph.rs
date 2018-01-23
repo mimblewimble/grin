@@ -309,7 +309,11 @@ mod tests {
 
 		let output_commit = keychain.commit(70, &key_id1).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id1).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			&keychain,
+			&key_id1,
+		);
 
 		let inputs = vec![
 			core::transaction::Input::new(

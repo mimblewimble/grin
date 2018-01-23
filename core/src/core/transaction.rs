@@ -30,11 +30,11 @@ use keychain::{Identifier, Keychain};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 use util;
 
-/// The size to use for the stored blake2 hash of a switch_commitment
-pub const SWITCH_COMMIT_HASH_SIZE: usize = 20;
+/// The size of the blake2 hash of a switch commitment (256 bits)
+pub const SWITCH_COMMIT_HASH_SIZE: usize = 32;
 
-/// The size of the secret key used to generate the switch commitment hash (blake2)
-pub const SWITCH_COMMIT_KEY_SIZE: usize = 20;
+/// The size of the secret key used in to generate blake2 switch commitment hash (256 bits)
+pub const SWITCH_COMMIT_KEY_SIZE: usize = 32;
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -486,6 +486,25 @@ impl SwitchCommitHashKey {
 	pub fn zero() -> SwitchCommitHashKey {
 		SwitchCommitHashKey([0; SWITCH_COMMIT_KEY_SIZE])
 	}
+
+	/// Generate a switch commit hash key from the provided keychain and key id.
+	pub fn from_keychain(keychain: &Keychain, key_id: &Identifier) -> SwitchCommitHashKey {
+		SwitchCommitHashKey(
+			keychain.switch_commit_hash_key(key_id)
+				.expect("failed to derive switch commit hash key")
+		)
+	}
+
+	/// Reconstructs a switch commit hash key from a byte slice.
+	pub fn from_bytes(bytes: &[u8]) -> SwitchCommitHashKey {
+		assert!(bytes.len() == 32, "switch_commit_hash_key requires 32 bytes");
+
+		let mut key = [0; SWITCH_COMMIT_KEY_SIZE];
+		for i in 0..min(SWITCH_COMMIT_KEY_SIZE, bytes.len()) {
+			key[i] = bytes[i];
+		}
+		SwitchCommitHashKey(key)
+	}
 }
 
 /// Definition of the switch commitment hash
@@ -529,14 +548,17 @@ impl ::std::fmt::Debug for SwitchCommitHash {
 
 impl SwitchCommitHash {
 	/// Builds a switch commit hash from a switch commit using blake2
-	pub fn from_switch_commit(switch_commit: Commitment) -> SwitchCommitHash {
-		// always use the "zero" key for now
-		let key = SwitchCommitHashKey::zero();
+	pub fn from_switch_commit(
+		switch_commit: Commitment,
+		keychain: &Keychain,
+		key_id: &Identifier,
+	) -> SwitchCommitHash {
+		let key = SwitchCommitHashKey::from_keychain(keychain, key_id);
 		let switch_commit_hash = blake2b(SWITCH_COMMIT_HASH_SIZE, &key.0, &switch_commit.0);
-		let switch_commit_hash = switch_commit_hash.as_bytes();
+		let switch_commit_hash_bytes = switch_commit_hash.as_bytes();
 		let mut h = [0; SWITCH_COMMIT_HASH_SIZE];
 		for i in 0..SWITCH_COMMIT_HASH_SIZE {
-			h[i] = switch_commit_hash[i];
+			h[i] = switch_commit_hash_bytes[i];
 		}
 		SwitchCommitHash(h)
 	}
@@ -939,7 +961,11 @@ mod test {
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			&keychain,
+			&key_id,
+		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(5, &key_id, commit, msg).unwrap();
 
@@ -966,7 +992,11 @@ mod test {
 
 		let commit = keychain.commit(1003, &key_id).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			&keychain,
+			&key_id,
+		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(1003, &key_id, commit, msg).unwrap();
 
@@ -1027,7 +1057,7 @@ mod test {
 		).unwrap();
 
 		let short_id = input.short_id(&block_hash);
-		assert_eq!(short_id, ShortId::from_hex("ff2c91d85fcd").unwrap());
+		assert_eq!(short_id, ShortId::from_hex("102864956811").unwrap());
 
 		// now generate the short_id for a *very* similar output (single feature flag different)
 		// and check it generates a different short_id
@@ -1042,6 +1072,6 @@ mod test {
 		).unwrap();
 
 		let short_id = input.short_id(&block_hash);
-		assert_eq!(short_id, ShortId::from_hex("b91a8d669bf9").unwrap());
+		assert_eq!(short_id, ShortId::from_hex("b8c189165df1").unwrap());
 	}
 }

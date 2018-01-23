@@ -775,7 +775,11 @@ impl Block {
 	) -> Result<(Output, TxKernel), keychain::Error> {
 		let commit = keychain.commit(reward(fees), key_id)?;
 		let switch_commit = keychain.switch_commit(key_id)?;
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			keychain,
+			key_id,
+		);
 
 		trace!(
 			LOGGER,

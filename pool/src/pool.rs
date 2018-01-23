@@ -1312,7 +1312,11 @@ mod tests {
 		let key_id = keychain.derive_key_id(value as u32).unwrap();
 		let commit = keychain.commit(value, &key_id).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			&keychain,
+			&key_id,
+		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
 
@@ -1330,7 +1334,11 @@ mod tests {
 		let key_id = keychain.derive_key_id(value as u32).unwrap();
 		let commit = keychain.commit(value, &key_id).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			&keychain,
+			&key_id,
+		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
 
