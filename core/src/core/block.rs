@@ -851,7 +851,7 @@ mod test {
 			txs,
 			keychain,
 			&key_id,
-			Difficulty::minimum()
+			Difficulty::one()
 		).unwrap()
 	}
 

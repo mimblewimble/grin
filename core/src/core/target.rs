@@ -63,7 +63,6 @@ impl Difficulty {
 		let mut in_vec = h.to_vec();
 		in_vec.truncate(8);
 		let num = BigEndian::read_u64(&in_vec);
-		trace!(LOGGER, "Calculated difficulty: {}", max_target as f64 / num as f64);
 		Difficulty { num: max_target / num }
 	}
 

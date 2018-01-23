@@ -396,7 +396,7 @@ mod test {
 			vec![],
 			&keychain,
 			&key_id,
-			Difficulty::minimum(),
+			Difficulty::one(),
 		).unwrap();
 		b.cut_through().validate().unwrap();
 	}
@@ -414,7 +414,7 @@ mod test {
 			vec![&mut tx1],
 			&keychain,
 			&key_id,
-			Difficulty::minimum(),
+			Difficulty::one(),
 		).unwrap();
 		b.cut_through().validate().unwrap();
 	}
@@ -432,7 +432,7 @@ mod test {
 			vec![&mut tx1, &mut tx2],
 			&keychain,
 			&key_id,
-			Difficulty::minimum(),
+			Difficulty::one(),
 		).unwrap();
 		b.validate().unwrap();
 	}
@@ -463,7 +463,7 @@ mod test {
 			vec![&tx1],
 			&keychain,
 			&key_id3.clone(),
-			Difficulty::minimum(),
+			Difficulty::one(),
 		).unwrap();
 		b.validate().unwrap();
 
@@ -484,7 +484,7 @@ mod test {
 			vec![&tx1],
 			&keychain,
 			&key_id3.clone(),
-			Difficulty::minimum(),
+			Difficulty::one(),
 		).unwrap();
 		match b.validate() {
 			Err(KernelLockHeight(height)) => {

@@ -912,7 +912,7 @@ mod tests {
 			txs.iter().collect(),
 			&keychain,
 			&key_id,
-			Difficulty::minimum(),
+			Difficulty::one(),
 		).unwrap();
 
 		// now apply the block to ensure the chainstate is updated before we reconcile
@@ -1043,7 +1043,7 @@ mod tests {
 			block_transactions,
 			&keychain,
 			&key_id,
-			Difficulty::minimum(),
+			Difficulty::one(),
 		).unwrap();
 
 		chain_ref.apply_block(&block);
@@ -1172,7 +1172,7 @@ mod tests {
 				tx_refs,
 				&keychain,
 				&key_id,
-				Difficulty::minimum()
+				Difficulty::one(),
 			).unwrap();
 		}
 

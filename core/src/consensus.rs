@@ -1,5 +1,4 @@
 // Copyright 2016 The Grin Developers
-//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -130,7 +129,7 @@ pub fn valid_header_version(height: u64, version: u16) -> bool {
 }
 
 /// Time window in blocks to calculate block time median
-pub const MEDIAN_TIME_WINDOW: u64 = 11;
+pub const MEDIAN_TIME_WINDOW: u64 = 30;
 
 /// Number of blocks used to calculate difficulty adjustments
 pub const DIFFICULTY_ADJUST_WINDOW: u64 = 60;
@@ -142,14 +141,17 @@ pub const BLOCK_TIME_WINDOW: u64 = DIFFICULTY_ADJUST_WINDOW * BLOCK_TIME_SEC;
 pub const UPPER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW * 2;
 
 /// Minimum size time window used for difficulty adjustments
-pub const LOWER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW / 2;
+pub const LOWER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW * 4/5;
 
 /// Dampening factor to use for difficulty adjustment
-pub const DAMP_FACTOR: u64 = 2;
+pub const DAMP_FACTOR: u64 = 4;
 
 /// The initial difficulty at launch. This should be over-estimated
 /// and difficulty should come down at launch rather than up
-pub const INITIAL_DIFFICULTY: u64 = 10000;
+/// Currently grossly over-estimated at 10% of current
+/// ethereum GPUs (assuming 1GPU can solve a block at diff 1
+/// in one block interval)
+pub const INITIAL_DIFFICULTY: u64 = 1_000_000;
 
 /// Consensus errors
 #[derive(Clone, Debug, PartialEq)]
@@ -233,6 +235,10 @@ where
 		_ => ts_undamp,
 	};
 
+		println!("DIFF AVG: {}", diff_avg);
+		println!("ts_damp: {}", ts_damp);
+		println!("LOWER TIME BOUND: {}", LOWER_TIME_BOUND);
+		println!("UPPER TIME BOUND: {}", UPPER_TIME_BOUND);
 	// Apply time bounds
 	let adj_ts = if ts_damp < LOWER_TIME_BOUND {
 		LOWER_TIME_BOUND
@@ -241,6 +247,7 @@ where
 	} else {
 		ts_damp
 	};
+		println!("adj_ts: {}", adj_ts);
 
 	let difficulty =
 		diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW).into_num()
@@ -292,20 +299,21 @@ mod test {
 	/// Checks different next_target adjustments and difficulty boundaries
 	#[test]
 	fn next_target_adjustment() {
+		global::set_mining_mode(global::ChainTypes::AutomatedTesting);
 		// not enough data
 		assert_eq!(
 			next_difficulty(vec![]).unwrap(),
-			Difficulty::one();
+			Difficulty::one()
 		);
 
 		assert_eq!(
 			next_difficulty(vec![Ok((60, Difficulty::one()))]).unwrap(),
-			Difficulty::one();
+			Difficulty::one()
 		);
 
 		assert_eq!(
 			next_difficulty(repeat(60, 10, DIFFICULTY_ADJUST_WINDOW)).unwrap(),
-			Difficulty::one();
+			Difficulty::one()
 		);
 
 		// just enough data, right interval, should stay constant
@@ -316,17 +324,17 @@ mod test {
 			Difficulty::from_num(1000)
 		);
 
-		// checking averaging works, window length is odd so need to compensate a little
-		let sec = DIFFICULTY_ADJUST_WINDOW / 2 + 1 + MEDIAN_TIME_WINDOW;
+		// checking averaging works
+		let sec = DIFFICULTY_ADJUST_WINDOW / 2 + MEDIAN_TIME_WINDOW;
 		let mut s1 = repeat(60, 500, sec);
-		let mut s2 = repeat_offs((sec * 60) as u64, 60, 1545, DIFFICULTY_ADJUST_WINDOW / 2);
+		let mut s2 = repeat_offs((sec * 60) as u64, 60, 1500, DIFFICULTY_ADJUST_WINDOW / 2);
 		s2.append(&mut s1);
 		assert_eq!(next_difficulty(s2).unwrap(), Difficulty::from_num(1000));
 
 		// too slow, diff goes down
 		assert_eq!(
 			next_difficulty(repeat(90, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(890)
+			Difficulty::from_num(888)
 		);
 		assert_eq!(
 			next_difficulty(repeat(120, 1000, just_enough)).unwrap(),
@@ -336,31 +344,32 @@ mod test {
 		// too fast, diff goes up
 		assert_eq!(
 			next_difficulty(repeat(55, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(1022)
+			Difficulty::from_num(1021)
 		);
 		assert_eq!(
 			next_difficulty(repeat(45, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(1068)
+			Difficulty::from_num(1066)
 		);
 
+println!("Just enough: {}", just_enough);
 		// hitting lower time bound, should always get the same result below
 		assert_eq!(
-			next_difficulty(repeat(20, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(1200)
+			next_difficulty(repeat(1, 1000, just_enough)).unwrap(),
+			Difficulty::from_num(1250)
 		);
 		assert_eq!(
 			next_difficulty(repeat(10, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(1200)
+			Difficulty::from_num(1250)
 		);
 
 		// hitting higher time bound, should always get the same result above
 		assert_eq!(
-			next_difficulty(repeat(160, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(750)
+			next_difficulty(repeat(300, 1000, just_enough)).unwrap(),
+			Difficulty::from_num(500)
 		);
 		assert_eq!(
-			next_difficulty(repeat(200, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(750)
+			next_difficulty(repeat(400, 1000, just_enough)).unwrap(),
+			Difficulty::from_num(500)
 		);
 
 		// We should never drop below 1
