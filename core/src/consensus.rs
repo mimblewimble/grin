@@ -141,10 +141,10 @@ pub const BLOCK_TIME_WINDOW: u64 = DIFFICULTY_ADJUST_WINDOW * BLOCK_TIME_SEC;
 pub const UPPER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW * 2;
 
 /// Minimum size time window used for difficulty adjustments
-pub const LOWER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW * 4/5;
+pub const LOWER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW / 2;
 
 /// Dampening factor to use for difficulty adjustment
-pub const DAMP_FACTOR: u64 = 4;
+pub const DAMP_FACTOR: u64 = 2;
 
 /// The initial difficulty at launch. This should be over-estimated
 /// and difficulty should come down at launch rather than up
@@ -235,10 +235,6 @@ where
 		_ => ts_undamp,
 	};
 
-		println!("DIFF AVG: {}", diff_avg);
-		println!("ts_damp: {}", ts_damp);
-		println!("LOWER TIME BOUND: {}", LOWER_TIME_BOUND);
-		println!("UPPER TIME BOUND: {}", UPPER_TIME_BOUND);
 	// Apply time bounds
 	let adj_ts = if ts_damp < LOWER_TIME_BOUND {
 		LOWER_TIME_BOUND
@@ -247,7 +243,6 @@ where
 	} else {
 		ts_damp
 	};
-		println!("adj_ts: {}", adj_ts);
 
 	let difficulty =
 		diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW).into_num()
@@ -334,33 +329,34 @@ mod test {
 		// too slow, diff goes down
 		assert_eq!(
 			next_difficulty(repeat(90, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(888)
+			Difficulty::from_num(800)
 		);
 		assert_eq!(
 			next_difficulty(repeat(120, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(800)
+			Difficulty::from_num(666)
 		);
 
 		// too fast, diff goes up
 		assert_eq!(
 			next_difficulty(repeat(55, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(1021)
+			Difficulty::from_num(1043)
 		);
 		assert_eq!(
 			next_difficulty(repeat(45, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(1066)
+			Difficulty::from_num(1142)
 		);
 
-println!("Just enough: {}", just_enough);
 		// hitting lower time bound, should always get the same result below
-		assert_eq!(
+		// note with the current param values, even a 1 second block interval
+		// isn't enough to hit the lower bound (it comes in just above it)
+		/*assert_eq!(
 			next_difficulty(repeat(1, 1000, just_enough)).unwrap(),
 			Difficulty::from_num(1250)
 		);
 		assert_eq!(
 			next_difficulty(repeat(10, 1000, just_enough)).unwrap(),
 			Difficulty::from_num(1250)
-		);
+		);*/
 
 		// hitting higher time bound, should always get the same result above
 		assert_eq!(
