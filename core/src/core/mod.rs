@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 pub mod block;
 pub mod build;
 pub mod hash;
+pub mod id;
 pub mod pmmr;
 pub mod target;
 pub mod transaction;
@@ -33,6 +34,7 @@ use util::secp::pedersen::*;
 
 pub use self::block::*;
 pub use self::transaction::*;
+pub use self::id::ShortId;
 use self::hash::Hashed;
 use ser::{Error, Readable, Reader, Writeable, Writer};
 use global;
@@ -262,7 +264,7 @@ mod test {
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &tx).expect("serialization failed");
 		println!("{}", vec.len());
-		assert!(vec.len() == 5352);
+		assert!(vec.len() == 5364);
 	}
 
 	#[test]
@@ -396,7 +398,7 @@ mod test {
 			&key_id,
 			Difficulty::minimum(),
 		).unwrap();
-		b.compact().validate().unwrap();
+		b.cut_through().validate().unwrap();
 	}
 
 	#[test]
@@ -414,7 +416,7 @@ mod test {
 			&key_id,
 			Difficulty::minimum(),
 		).unwrap();
-		b.compact().validate().unwrap();
+		b.cut_through().validate().unwrap();
 	}
 
 	#[test]

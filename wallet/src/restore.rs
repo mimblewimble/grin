@@ -156,10 +156,16 @@ fn find_utxos_with_key(
 	);
 
 	for output in block_outputs.outputs.iter().filter(|x| !x.spent) {
-		for i in 0..*key_iterations {
-			let expected_hash = SwitchCommitHash::from_switch_commit(switch_commit_cache[i as usize]);
+		for i in 1..*key_iterations {
+			let key_id = &keychain.derive_key_id(i as u32).unwrap();
 
 			if let Ok(x) = output.switch_commit_hash() {
+				let expected_hash = SwitchCommitHash::from_switch_commit(
+					switch_commit_cache[i as usize],
+					&keychain,
+					&key_id,
+				);
+
 				if x == expected_hash {
 					info!(
 						LOGGER,
@@ -170,7 +176,6 @@ fn find_utxos_with_key(
 
 					// add it to result set here
 					let commit_id = from_hex(output.commit.clone()).unwrap();
-					let key_id = keychain.derive_key_id(i as u32).unwrap();
 
 					let res = retrieve_amount_and_coinbase_status(
 						config,

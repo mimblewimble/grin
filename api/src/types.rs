@@ -367,6 +367,49 @@ impl BlockPrintable {
 	}
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CompactBlockPrintable {
+	/// The block header
+	pub header: BlockHeaderPrintable,
+	/// Full outputs, specifically coinbase output(s)
+	pub out_full: Vec<OutputPrintable>,
+	/// Full kernels, specifically coinbase kernel(s)
+	pub kern_full: Vec<TxKernelPrintable>,
+	/// Inputs (hex short_ids)
+	pub in_ids: Vec<String>,
+	/// Outputs (hex short_ids)
+	pub out_ids: Vec<String>,
+	/// Kernels (hex short_ids)
+	pub kern_ids: Vec<String>,
+}
+
+impl CompactBlockPrintable {
+	/// Convert a compact block into a printable representation suitable for api response
+	pub fn from_compact_block(
+		cb: &core::CompactBlock,
+		chain: Arc<chain::Chain>,
+	) -> CompactBlockPrintable {
+		let out_full = cb
+			.out_full
+			.iter()
+			.map(|x| OutputPrintable::from_output(x, chain.clone(), false))
+			.collect();
+		let kern_full = cb
+			.kern_full
+			.iter()
+			.map(|x| TxKernelPrintable::from_txkernel(x))
+			.collect();
+		CompactBlockPrintable {
+			header: BlockHeaderPrintable::from_header(&cb.header),
+			out_full,
+			kern_full,
+			in_ids: cb.in_ids.iter().map(|x| x.to_hex()).collect(),
+			out_ids: cb.out_ids.iter().map(|x| x.to_hex()).collect(),
+			kern_ids: cb.kern_ids.iter().map(|x| x.to_hex()).collect(),
+		}
+	}
+}
+
 // For wallet reconstruction, include the header info along with the
 // transactions in the block
 #[derive(Debug, Serialize, Deserialize, Clone)]

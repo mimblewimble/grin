@@ -34,6 +34,7 @@ extern crate rand;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+extern crate siphasher;
 #[macro_use]
 extern crate slog;
 extern crate time;

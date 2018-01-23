@@ -45,6 +45,16 @@ pub fn reward(fee: u64) -> u64 {
 /// Number of blocks before a coinbase matures and can be spent
 pub const COINBASE_MATURITY: u64 = 1_000;
 
+/// Max number of coinbase outputs in a valid block.
+/// This is to prevent a miner generating an excessively large "compact block".
+/// But we do techincally support blocks with multiple coinbase outputs/kernels.
+pub const MAX_BLOCK_COINBASE_OUTPUTS: u64 = 1;
+
+/// Max number of coinbase kernels in a valid block.
+/// This is to prevent a miner generating an excessively large "compact block".
+/// But we do techincally support blocks with multiple coinbase outputs/kernels.
+pub const MAX_BLOCK_COINBASE_KERNELS: u64 = 1;
+
 /// Block interval, in seconds, the network will tune its next_target for. Note
 /// that we may reduce this value in the future as we get more data on mining
 /// with Cuckoo Cycle, networks improve and block propagation is optimized

@@ -175,38 +175,17 @@ pub struct ExtendedKey {
 	pub n_child: u32,
 	/// Root key identifier
 	pub root_key_id: Identifier,
-	/// Code of the derivation chain
-	pub chaincode: [u8; 32],
 	/// Actual private key
 	pub key: SecretKey,
+	/// Code of the derivation chain
+	pub chaincode: [u8; 32],
+	/// The bytes of the key used for generating the associated switch_commit_hash
+	pub switch_key: [u8; 32],
+	/// Code of the derivation chain for the switch_commit_hash key
+	pub switch_chaincode: [u8; 32],
 }
 
 impl ExtendedKey {
-	/// Creates a new extended key from a serialized one
-	pub fn from_slice(secp: &Secp256k1, slice: &[u8]) -> Result<ExtendedKey, Error> {
-		// TODO change when ser. ext. size is fixed
-		if slice.len() != 79 {
-			return Err(Error::InvalidSliceSize);
-		}
-		let depth: u8 = slice[0];
-		let root_key_id = Identifier::from_bytes(&slice[1..11]);
-		let n_child = BigEndian::read_u32(&slice[11..15]);
-		let mut chaincode: [u8; 32] = [0; 32];
-		(&mut chaincode).copy_from_slice(&slice[15..47]);
-		let key = match SecretKey::from_slice(secp, &slice[47..79]) {
-			Ok(key) => key,
-			Err(_) => return Err(Error::InvalidExtendedKey),
-		};
-
-		Ok(ExtendedKey {
-			depth,
-			root_key_id,
-			n_child,
-			chaincode,
-			key,
-		})
-	}
-
 	/// Creates a new extended master key from a seed
 	pub fn from_seed(secp: &Secp256k1, seed: &[u8]) -> Result<ExtendedKey, Error> {
 		match seed.len() {
@@ -214,20 +193,36 @@ impl ExtendedKey {
 			_ => return Err(Error::InvalidSeedSize),
 		}
 
-		let derived = blake2b(64, b"Mimble seed", seed);
+		let derived = blake2b(64, b"Grin/MW Seed", seed);
+		let slice = derived.as_bytes();
 
-		let mut chaincode: [u8; 32] = [0; 32];
-		(&mut chaincode).copy_from_slice(&derived.as_bytes()[32..]);
 		// TODO Error handling
-		let secret_key = SecretKey::from_slice(&secp, &derived.as_bytes()[0..32])
+		let key = SecretKey::from_slice(&secp, &slice[0..32])
 			.expect("Error generating from seed");
+
+		let mut chaincode: [u8; 32] = Default::default();
+		(&mut chaincode).copy_from_slice(&slice[32..64]);
+
+		// Now derive the switch_key and switch_chaincode in a similar fashion
+		// but using a different key to ensure there is nothing linking
+		// the secret key and the switch commit hash key for any extended key
+		// we subsequently derive
+		let switch_derived = blake2b(64, b"Grin/MW Switch Seed", seed);
+		let switch_slice = switch_derived.as_bytes();
+
+		let mut switch_key: [u8; 32] = Default::default();
+		(&mut switch_key).copy_from_slice(&switch_slice[0..32]);
+		let mut switch_chaincode: [u8; 32] = Default::default();
+		(&mut switch_chaincode).copy_from_slice(&switch_slice[32..64]);
 
 		let mut ext_key = ExtendedKey {
 			depth: 0,
 			root_key_id: Identifier::zero(),
 			n_child: 0,
-			chaincode: chaincode,
-			key: secret_key,
+			key,
+			chaincode,
+			switch_key,
+			switch_chaincode,
 		};
 
 		ext_key.root_key_id = ext_key.identifier(secp)?;
@@ -247,27 +242,41 @@ impl ExtendedKey {
 	pub fn derive(&self, secp: &Secp256k1, n: u32) -> Result<ExtendedKey, Error> {
 		let mut n_bytes: [u8; 4] = [0; 4];
 		BigEndian::write_u32(&mut n_bytes, n);
+
 		let mut seed = self.key[..].to_vec();
 		seed.extend_from_slice(&n_bytes);
 
 		let derived = blake2b(64, &self.chaincode[..], &seed[..]);
+		let slice = derived.as_bytes();
 
-		let mut secret_key =
-			SecretKey::from_slice(&secp, &derived.as_bytes()[0..32]).expect("Error deriving key");
-		secret_key
-			.add_assign(secp, &self.key)
+		let mut key = SecretKey::from_slice(&secp, &slice[0..32])
 			.expect("Error deriving key");
-		// TODO check if key != 0 ?
+		key.add_assign(secp, &self.key)
+			.expect("Error deriving key");
 
-		let mut chain_code: [u8; 32] = [0; 32];
-		(&mut chain_code).clone_from_slice(&derived.as_bytes()[32..]);
+		let mut chaincode: [u8; 32] = Default::default();
+		(&mut chaincode).copy_from_slice(&slice[32..64]);
+
+		// Now derive the switch_key and switch_chaincode in a similar fashion
+		let mut switch_seed = self.switch_key[..].to_vec();
+		switch_seed.extend_from_slice(&n_bytes);
+		let switch_derived = blake2b(64, &self.switch_chaincode[..], &switch_seed[..]);
+		let switch_slice = switch_derived.as_bytes();
+		let mut switch_key: [u8; 32] = Default::default();
+		(&mut switch_key).copy_from_slice(&switch_slice[0..32]);
+		let mut switch_chaincode: [u8; 32] = Default::default();
+		(&mut switch_chaincode).copy_from_slice(&switch_slice[32..64]);
+
+		// TODO check if key != 0 ?
 
 		Ok(ExtendedKey {
 			depth: self.depth + 1,
 			root_key_id: self.identifier(&secp)?,
 			n_child: n,
-			chaincode: chain_code,
-			key: secret_key,
+			key,
+			chaincode,
+			switch_key,
+			switch_chaincode,
 		})
 	}
 }
@@ -310,11 +319,11 @@ mod test {
 		let s = Secp256k1::new();
 		let seed = from_hex("000102030405060708090a0b0c0d0e0f");
 		let extk = ExtendedKey::from_seed(&s, &seed.as_slice()).unwrap();
-		let sec = from_hex("c3f5ae520f474b390a637de4669c84d0ed9bbc21742577fac930834d3c3083dd");
+		let sec = from_hex("2878a92133b0a7c2fbfb0bd4520ed2e55ea3fa2913200f05c30077d30b193480");
 		let secret_key = SecretKey::from_slice(&s, sec.as_slice()).unwrap();
 		let chaincode =
-			from_hex("e7298e68452b0c6d54837670896e1aee76b118075150d90d4ee416ece106ae72");
-		let identifier = from_hex("83e59c48297b78b34b73");
+			from_hex("3ad40dd836c5ce25dfcbdee5044d92cf6b65bd5475717fa7a56dd4a032cca7c0");
+		let identifier = from_hex("6f7c1a053ca54592e783");
 		let depth = 0;
 		let n_child = 0;
 		assert_eq!(extk.key, secret_key);
@@ -333,17 +342,16 @@ mod test {
 
 	#[test]
 	fn extkey_derivation() {
-		// TODO More test vectors
 		let s = Secp256k1::new();
 		let seed = from_hex("000102030405060708090a0b0c0d0e0f");
 		let extk = ExtendedKey::from_seed(&s, &seed.as_slice()).unwrap();
 		let derived = extk.derive(&s, 0).unwrap();
-		let sec = from_hex("d75f70beb2bd3b56f9b064087934bdedee98e4b5aae6280c58b4eff38847888f");
+		let sec = from_hex("2676a3ab2ded7c79cbd0bd26d448698de5da5af8e809080d3cacfa2ee31a9aa7");
 		let secret_key = SecretKey::from_slice(&s, sec.as_slice()).unwrap();
 		let chaincode =
-			from_hex("243cb881e1549e714db31d23af45540b13ad07941f64a786bbf3313b4de1df52");
-		let root_key_id = from_hex("83e59c48297b78b34b73");
-		let identifier = from_hex("0185adb4d8b730099c93");
+			from_hex("9bc90b148f4c9478205d6ca72c58bbda2902be1e5082de05d56339a74a5314a3");
+		let root_key_id = from_hex("6f7c1a053ca54592e783");
+		let identifier = from_hex("5f2ec8ee00e8bca002fa");
 		let depth = 1;
 		let n_child = 0;
 		assert_eq!(derived.key, secret_key);
