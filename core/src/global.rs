@@ -25,6 +25,7 @@ use std::sync::RwLock;
 use consensus::PROOFSIZE;
 use consensus::DEFAULT_SIZESHIFT;
 use consensus::COINBASE_MATURITY;
+use consensus::INITIAL_DIFFICULTY;
 
 /// Define these here, as they should be developer-set, not really tweakable
 /// by users
@@ -46,6 +47,9 @@ pub const AUTOMATED_TESTING_COINBASE_MATURITY: u64 = 3;
 
 /// User testing coinbase maturity
 pub const USER_TESTING_COINBASE_MATURITY: u64 = 3;
+
+/// Testing initial block difficulty
+pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
 
 /// The target is the 32-bytes hash block hashes must be lower than.
 pub const MAX_PROOF_TARGET: [u8; 8] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
@@ -136,6 +140,18 @@ pub fn max_proof_target() -> [u8; 8] {
 		ChainTypes::Testnet1 => MAX_PROOF_TARGET_TESTING,
 		ChainTypes::Testnet2 => MAX_PROOF_TARGET,
 		ChainTypes::Mainnet => MAX_PROOF_TARGET,
+	}
+}
+
+/// Initial mining difficulty
+pub fn initial_block_difficulty() -> u64 {
+	let param_ref = CHAIN_TYPE.read().unwrap();
+	match *param_ref {
+		ChainTypes::AutomatedTesting => TESTING_INITIAL_DIFFICULTY,
+		ChainTypes::UserTesting => TESTING_INITIAL_DIFFICULTY,
+		ChainTypes::Testnet1 => TESTING_INITIAL_DIFFICULTY,
+		ChainTypes::Testnet2 => TESTING_INITIAL_DIFFICULTY,
+		ChainTypes::Mainnet => INITIAL_DIFFICULTY,
 	}
 }
 

@@ -23,6 +23,7 @@ use std::fmt;
 use std::cmp::max;
 
 use core::target::Difficulty;
+use global;
 
 /// A grin is divisible to 10^9, following the SI prefixes
 pub const GRIN_BASE: u64 = 1_000_000_000;
@@ -118,23 +119,27 @@ pub fn valid_header_version(height: u64, version: u16) -> bool {
 	}
 }
 
-/// The minimum mining difficulty we'll allow
-pub const MINIMUM_DIFFICULTY: u64 = 1;
-
 /// Time window in blocks to calculate block time median
 pub const MEDIAN_TIME_WINDOW: u64 = 11;
 
 /// Number of blocks used to calculate difficulty adjustments
-pub const DIFFICULTY_ADJUST_WINDOW: u64 = 23;
+pub const DIFFICULTY_ADJUST_WINDOW: u64 = 60;
 
 /// Average time span of the difficulty adjustment window
 pub const BLOCK_TIME_WINDOW: u64 = DIFFICULTY_ADJUST_WINDOW * BLOCK_TIME_SEC;
 
 /// Maximum size time window used for difficulty adjustments
-pub const UPPER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW * 4 / 3;
+pub const UPPER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW * 2;
 
 /// Minimum size time window used for difficulty adjustments
-pub const LOWER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW * 5 / 6;
+pub const LOWER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW / 2;
+
+/// Dampening factor to use for difficulty adjustment
+pub const DAMP_FACTOR: u64 = 2;
+
+/// The initial difficulty at launch. This should be over-estimated
+/// and difficulty should come down at launch rather than up
+pub const INITIAL_DIFFICULTY: u64 = 10000;
 
 /// Consensus errors
 #[derive(Clone, Debug, PartialEq)]
@@ -199,7 +204,7 @@ where
 
 	// Check we have enough blocks
 	if window_end.len() < (MEDIAN_TIME_WINDOW as usize) {
-		return Ok(Difficulty::minimum());
+		return Ok(Difficulty::from_num(global::initial_block_difficulty()));
 	}
 
 	// Calculating time medians at the beginning and end of the window.
@@ -209,9 +214,14 @@ where
 	let end_ts = window_end[window_end.len() / 2];
 
 	// Average difficulty and dampened average time
-	let diff_avg = diff_sum.into_num() as f64 / 
-		Difficulty::from_num(DIFFICULTY_ADJUST_WINDOW).into_num() as f64;
-	let ts_damp = (3 * BLOCK_TIME_WINDOW + (begin_ts - end_ts)) / 4;
+	let diff_avg = diff_sum.into_num()  /
+		Difficulty::from_num(DIFFICULTY_ADJUST_WINDOW).into_num();
+
+	let ts_undamp = begin_ts - end_ts;
+	let ts_damp = match diff_avg {
+		n if n >= DAMP_FACTOR => ((DAMP_FACTOR-1) * BLOCK_TIME_WINDOW + ts_undamp) / DAMP_FACTOR,
+		_ => ts_undamp,
+	};
 
 	// Apply time bounds
 	let adj_ts = if ts_damp < LOWER_TIME_BOUND {
@@ -223,11 +233,10 @@ where
 	};
 
 	let difficulty =
-		diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW).into_num() as f64 
-		/ Difficulty::from_num(adj_ts).into_num() as f64;
-	// All this ceil and f64 business is so that difficulty can always adjust
-	// for smaller numbers < 10
-	Ok(max(Difficulty::from_num(difficulty.ceil() as u64), Difficulty::minimum()))
+		diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW).into_num()
+		/ Difficulty::from_num(adj_ts).into_num();
+
+	Ok(max(Difficulty::from_num(difficulty), Difficulty::one()))
 }
 
 /// Consensus rule that collections of items are sorted lexicographically.
@@ -276,17 +285,17 @@ mod test {
 		// not enough data
 		assert_eq!(
 			next_difficulty(vec![]).unwrap(),
-			Difficulty::from_num(MINIMUM_DIFFICULTY)
+			Difficulty::one();
 		);
 
 		assert_eq!(
 			next_difficulty(vec![Ok((60, Difficulty::one()))]).unwrap(),
-			Difficulty::from_num(MINIMUM_DIFFICULTY)
+			Difficulty::one();
 		);
 
 		assert_eq!(
 			next_difficulty(repeat(60, 10, DIFFICULTY_ADJUST_WINDOW)).unwrap(),
-			Difficulty::from_num(MINIMUM_DIFFICULTY)
+			Difficulty::one();
 		);
 
 		// just enough data, right interval, should stay constant
@@ -344,7 +353,7 @@ mod test {
 			Difficulty::from_num(750)
 		);
 
-		// We should never drop below MINIMUM_DIFFICULTY (1)
+		// We should never drop below 1
 		assert_eq!(
 			next_difficulty(repeat(90, 0, just_enough)).unwrap(),
 			Difficulty::from_num(1)

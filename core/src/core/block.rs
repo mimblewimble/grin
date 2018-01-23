@@ -32,7 +32,7 @@ use core::{
 	COINBASE_OUTPUT
 };
 use consensus;
-use consensus::{exceeds_weight, reward, MINIMUM_DIFFICULTY, REWARD, VerifySortOrder};
+use consensus::{exceeds_weight, reward, REWARD, VerifySortOrder};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use core::transaction;
@@ -134,8 +134,8 @@ impl Default for BlockHeader {
 			height: 0,
 			previous: ZERO_HASH,
 			timestamp: time::at_utc(time::Timespec { sec: 0, nsec: 0 }),
-			difficulty: Difficulty::from_num(MINIMUM_DIFFICULTY),
-			total_difficulty: Difficulty::from_num(MINIMUM_DIFFICULTY),
+			difficulty: Difficulty::one(),
+			total_difficulty: Difficulty::one(),
 			utxo_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
 			kernel_root: ZERO_HASH,

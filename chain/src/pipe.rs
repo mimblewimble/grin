@@ -210,7 +210,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 
 		// explicit check to ensure we are not below the minimum difficulty
 		// we will also check difficulty based on next_difficulty later on
-		if header.difficulty < Difficulty::minimum() {
+		if header.difficulty < Difficulty::one() {
 			return Err(Error::DifficultyTooLow);
 		}
 

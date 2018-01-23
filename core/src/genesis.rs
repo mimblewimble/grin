@@ -118,8 +118,8 @@ pub fn genesis_main() -> core::Block {
 				tm_mday: 14,
 				..time::empty_tm()
 			},
-			difficulty: Difficulty::from_num(1000),
-			total_difficulty: Difficulty::from_num(1000),
+			difficulty: Difficulty::from_num(global::initial_block_difficulty()),
+			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
 			nonce: global::get_genesis_nonce(),
 			pow: core::Proof::zero(consensus::PROOFSIZE),
 			..Default::default()
