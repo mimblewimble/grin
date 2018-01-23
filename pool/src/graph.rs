@@ -312,7 +312,7 @@ mod tests {
 		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
 			switch_commit,
 			&keychain,
-			&key_id,
+			&key_id1,
 		);
 
 		let inputs = vec![
