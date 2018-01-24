@@ -25,12 +25,13 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use util::{secp, static_secp_instance, kernel_sig_msg};
+use util::{secp, kernel_sig_msg};
 
-use core::{Input, Output, SwitchCommitHash, Transaction, DEFAULT_OUTPUT};
-use util::LOGGER;
+use core::{Transaction, Input, Output, OutputFeatures, SwitchCommitHash, COINBASE_OUTPUT, DEFAULT_OUTPUT};
+use core::hash::Hash;
 use keychain;
-use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
+use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
+use util::LOGGER;
 
 /// Context information available to transaction combinators.
 pub struct Context<'a> {
@@ -43,25 +44,68 @@ pub type Append = for<'a> Fn(&'a mut Context, (Transaction, BlindSum)) -> (Trans
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
-pub fn input(value: u64, key_id: Identifier) -> Box<Append> {
+fn build_input(
+	value: u64,
+	features: OutputFeatures,
+	out_block: Option<Hash>,
+	key_id: Identifier,
+) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
 		let commit = build.keychain.commit(value, &key_id).unwrap();
-		(tx.with_input(Input(commit)), sum.sub_key_id(key_id.clone()))
+		let input = Input::new(
+			features,
+			commit,
+			out_block,
+		);
+		(tx.with_input(input), sum.sub_key_id(key_id.clone()))
 	})
+}
+
+/// Adds an input with the provided value and blinding key to the transaction
+/// being built.
+pub fn input(
+	value: u64,
+	out_block: Hash,
+	key_id: Identifier,
+) -> Box<Append> {
+	debug!(LOGGER, "Building input (spending regular output): {}, {}", value, key_id);
+	build_input(value, DEFAULT_OUTPUT, Some(out_block), key_id)
+}
+
+/// Adds a coinbase input spending a coinbase output.
+/// We will use the block hash to verify coinbase maturity.
+pub fn coinbase_input(
+	value: u64,
+	out_block: Hash,
+	key_id: Identifier,
+) -> Box<Append> {
+	debug!(LOGGER, "Building input (spending coinbase): {}, {}", value, key_id);
+	build_input(value, COINBASE_OUTPUT, Some(out_block), key_id)
 }
 
 /// Adds an output with the provided value and key identifier from the
 /// keychain.
 pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
+		debug!(
+			LOGGER,
+			"Building an output: {}, {}",
+			value,
+			key_id,
+		);
+
 		let commit = build.keychain.commit(value, &key_id).unwrap();
 		let switch_commit = build.keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			build.keychain,
+			&key_id,
+		);
 		trace!(
 			LOGGER,
 			"Builder - Pedersen Commit is: {:?}, Switch Commit is: {:?}",
 			commit,
-			switch_commit
+			switch_commit,
 		);
 		trace!(
 			LOGGER,
@@ -137,12 +181,7 @@ pub fn transaction(
 	);
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
 	let msg = secp::Message::from_slice(&kernel_sig_msg(tx.fee, tx.lock_height))?;
-	let sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &blind_sum)?;
-
-	let secp = static_secp_instance();
-	let secp = secp.lock().unwrap();
-	tx.excess_sig = sig.serialize_der(&secp);
-
+	tx.excess_sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &blind_sum)?;
 	Ok((tx, blind_sum))
 }
 
@@ -150,6 +189,7 @@ pub fn transaction(
 #[cfg(test)]
 mod test {
 	use super::*;
+	use core::hash::ZERO_HASH;
 
 	#[test]
 	fn blind_simple_tx() {
@@ -160,8 +200,8 @@ mod test {
 
 		let (tx, _) = transaction(
 			vec![
-				input(10, key_id1),
-				input(11, key_id2),
+				input(10, ZERO_HASH, key_id1),
+				input(11, ZERO_HASH, key_id2),
 				output(20, key_id3),
 				with_fee(1),
 			],
@@ -178,7 +218,7 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
 		let (tx, _) = transaction(
-			vec![input(6, key_id1), output(2, key_id2), with_fee(4)],
+			vec![input(6, ZERO_HASH, key_id1), output(2, key_id2), with_fee(4)],
 			&keychain,
 		).unwrap();
 

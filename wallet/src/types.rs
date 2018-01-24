@@ -24,6 +24,7 @@ use std::collections::HashMap;
 use std::cmp::min;
 
 use hyper;
+use serde;
 use serde_json;
 use tokio_core::reactor;
 use tokio_retry::Retry;
@@ -33,6 +34,7 @@ use tokio_retry::strategy::FibonacciBackoff;
 use api;
 use core::consensus;
 use core::core::{transaction, Transaction};
+use core::core::hash::Hash;
 use core::ser;
 use keychain;
 use util;
@@ -66,6 +68,7 @@ pub fn tx_fee(input_len: usize, output_len: usize, base_fee: Option<u64>) -> u64
 pub enum Error {
 	NotEnoughFunds(u64),
 	FeeDispute { sender_fee: u64, recipient_fee: u64 },
+	FeeExceedsAmount { sender_amount: u64, recipient_fee: u64 },
 	Keychain(keychain::Error),
 	Transaction(transaction::Error),
 	Secp(secp::Error),
@@ -125,9 +128,17 @@ impl From<serde_json::Error> for Error {
 	}
 }
 
+// TODO - rethink this, would be nice not to have to worry about
+// low level hex conversion errors like this
 impl From<num::ParseIntError> for Error {
 	fn from(_: num::ParseIntError) -> Error {
 		Error::Format("Invalid hex".to_string())
+	}
+}
+
+impl From<ser::Error> for Error {
+	fn from(e: ser::Error) -> Error {
+		Error::Format(e.to_string())
 	}
 }
 
@@ -195,7 +206,7 @@ impl WalletConfig {
 /// unconfirmed, spent, unspent, or locked (when it's been used to generate
 /// a transaction but we don't have confirmation that the transaction was
 /// broadcasted or mined).
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub enum OutputStatus {
 	Unconfirmed,
 	Unspent,
@@ -214,10 +225,64 @@ impl fmt::Display for OutputStatus {
 	}
 }
 
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+pub struct BlockIdentifier(Hash);
+
+impl BlockIdentifier {
+	pub fn hash(&self) -> Hash {
+		self.0
+	}
+
+	pub fn from_str(hex: &str) -> Result<BlockIdentifier, Error> {
+		let hash = Hash::from_hex(hex)?;
+		Ok(BlockIdentifier(hash))
+	}
+
+	pub fn zero() -> BlockIdentifier {
+		BlockIdentifier(Hash::zero())
+	}
+}
+
+impl serde::ser::Serialize for BlockIdentifier {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::ser::Serializer,
+	{
+		serializer.serialize_str(&self.0.to_hex())
+	}
+}
+
+impl<'de> serde::de::Deserialize<'de> for BlockIdentifier {
+	fn deserialize<D>(deserializer: D) -> Result<BlockIdentifier, D::Error>
+	where
+		D: serde::de::Deserializer<'de>,
+	{
+		deserializer.deserialize_str(BlockIdentifierVisitor)
+	}
+}
+
+struct BlockIdentifierVisitor;
+
+impl<'de> serde::de::Visitor<'de> for BlockIdentifierVisitor {
+	type Value = BlockIdentifier;
+
+	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+		formatter.write_str("a block hash")
+	}
+
+	fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+	where
+		E: serde::de::Error,
+	{
+		let block_hash = Hash::from_hex(s).unwrap();
+		Ok(BlockIdentifier(block_hash))
+	}
+}
+
 /// Information about an output that's being tracked by the wallet. Must be
 /// enough to reconstruct the commitment associated with the ouput when the
 /// root private key is known.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct OutputData {
 	/// Root key_id that the key for this output is derived from
 	pub root_key_id: keychain::Identifier,
@@ -235,6 +300,8 @@ pub struct OutputData {
 	pub lock_height: u64,
 	/// Is this a coinbase output? Is it subject to coinbase locktime?
 	pub is_coinbase: bool,
+	/// Hash of the block this output originated from.
+	pub block: BlockIdentifier,
 }
 
 impl OutputData {
@@ -251,7 +318,7 @@ impl OutputData {
 	pub fn num_confirmations(&self, current_height: u64) -> u64 {
 		if self.status == OutputStatus::Unconfirmed {
 			0
-		} else if self.status == OutputStatus::Spent && self.height == 0 {
+		} else if self.height == 0 {
 			0
 		} else {
 			// if an output has height n and we are at block n
@@ -369,12 +436,6 @@ impl WalletSeed {
 
 /// Wallet information tracking all our outputs. Based on HD derivation and
 /// avoids storing any key data, only storing output amounts and child index.
-/// This data structure is directly based on the JSON representation stored
-/// on disk, so selection algorithms are fairly primitive and non optimized.
-///
-/// TODO optimization so everything isn't O(n) or even O(n^2)
-/// TODO account for fees
-/// TODO write locks so files don't get overwritten
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WalletData {
 	pub outputs: HashMap<String, OutputData>,
@@ -468,8 +529,8 @@ impl WalletData {
 		}
 	}
 
-	/// Read the wallet data from disk.
-	fn read(data_file_path: &str) -> Result<WalletData, Error> {
+	/// Read output_data vec from disk.
+	fn read_outputs(data_file_path: &str) -> Result<Vec<OutputData>, Error> {
 		let data_file = File::open(data_file_path).map_err(|e| {
 			Error::WalletData(format!("Could not open {}: {}", data_file_path, e))
 		})?;
@@ -478,12 +539,26 @@ impl WalletData {
 		})
 	}
 
+	/// Populate wallet_data with output_data from disk.
+	fn read(data_file_path: &str) -> Result<WalletData, Error> {
+		let outputs = WalletData::read_outputs(data_file_path)?;
+		let mut wallet_data = WalletData {
+			outputs: HashMap::new(),
+		};
+		for out in outputs {
+			wallet_data.add_output(out);
+		}
+		Ok(wallet_data)
+	}
+
 	/// Write the wallet data to disk.
 	fn write(&self, data_file_path: &str) -> Result<(), Error> {
 		let mut data_file = File::create(data_file_path).map_err(|e| {
 			Error::WalletData(format!("Could not create {}: {}", data_file_path, e))
 		})?;
-		let res_json = serde_json::to_vec_pretty(self).map_err(|e| {
+		let mut outputs = self.outputs.values().collect::<Vec<_>>();
+		outputs.sort();
+		let res_json = serde_json::to_vec_pretty(&outputs).map_err(|e| {
 			Error::WalletData(format!("Error serializing wallet data: {}", e))
 		})?;
 		data_file.write_all(res_json.as_slice()).map_err(|e| {
@@ -528,7 +603,7 @@ impl WalletData {
 		current_height: u64,
 		minimum_confirmations: u64,
 		max_outputs: usize,
-		default_strategy: bool,
+		select_all: bool,
 	) -> Vec<OutputData> {
 		// first find all eligible outputs based on number of confirmations
 		let mut eligible = self.outputs
@@ -545,7 +620,7 @@ impl WalletData {
 
 		// use a sliding window to identify potential sets of possible outputs to spend
 		// Case of amount > total amount of max_outputs(500):
-		// The limit exists because by default, we always select as many inputs as possible in a transaction, 
+		// The limit exists because by default, we always select as many inputs as possible in a transaction,
 		// to reduce both the UTXO set and the fees.
 		// But that only makes sense up to a point, hence the limit to avoid being too greedy.
 		// But if max_outputs(500) is actually not enought to cover the whole amount,
@@ -553,8 +628,8 @@ impl WalletData {
 		// So the wallet considers max_outputs more of a soft limit.
 		if eligible.len() > max_outputs {
 			for window in eligible.windows(max_outputs) {
-				let eligible = window.iter().cloned().collect::<Vec<_>>();
-				if let Some(outputs) = self.select_from(amount, default_strategy, eligible) {
+				let windowed_eligibles = window.iter().cloned().collect::<Vec<_>>();
+				if let Some(outputs) = self.select_from(amount, select_all, windowed_eligibles) {
 					return outputs;
 				}
 			}
@@ -563,9 +638,9 @@ impl WalletData {
 			if let Some(outputs) = self.select_from(amount, false, eligible.clone()) {
 				debug!(LOGGER, "Extending maximum number of outputs. {} outputs selected.", outputs.len());
 				return outputs;
-			}			
+			}
 		} else {
-			if let Some(outputs) = self.select_from(amount, default_strategy, eligible.clone()) {
+			if let Some(outputs) = self.select_from(amount, select_all, eligible.clone()) {
 				return outputs;
 			}
 		}
@@ -576,7 +651,7 @@ impl WalletData {
 		eligible.iter().take(max_outputs).cloned().collect()
 	}
 
-	// Select the full list of outputs if we are using the default strategy.
+	// Select the full list of outputs if we are using the select_all strategy.
 	// Otherwise select just enough outputs to cover the desired amount.
 	fn select_from(
 		&self,
@@ -639,7 +714,7 @@ pub struct PartialTx {
 	pub tx: String,
 }
 
-/// Builds a PartialTx 
+/// Builds a PartialTx
 /// aggsig_tx_context should contain the private key/nonce pair
 /// the resulting partial tx will contain the corresponding public keys
 pub fn build_partial_tx(
@@ -657,7 +732,7 @@ pub fn build_partial_tx(
 	let mut pub_nonce = pub_nonce.serialize_vec(keychain.secp(), true);
 	let len = pub_nonce.clone().len();
 	let pub_nonce: Vec<_> = pub_nonce.drain(0..len).collect();
-	
+
 	PartialTx {
 		phase: PartialTxPhase::SenderInitiation,
 		amount: receive_amount,

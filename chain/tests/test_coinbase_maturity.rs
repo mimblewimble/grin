@@ -25,6 +25,7 @@ use std::sync::Arc;
 
 use chain::types::*;
 use core::core::build;
+use core::core::target::Difficulty;
 use core::core::transaction;
 use core::consensus;
 use core::global;
@@ -74,7 +75,13 @@ fn test_coinbase_maturity() {
 	let key_id3 = keychain.derive_key_id(3).unwrap();
 	let key_id4 = keychain.derive_key_id(4).unwrap();
 
-	let mut block = core::core::Block::new(&prev, vec![], &keychain, &key_id1).unwrap();
+	let mut block = core::core::Block::new(
+		&prev,
+		vec![],
+		&keychain,
+		&key_id1,
+		Difficulty::minimum()
+	).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -92,30 +99,49 @@ fn test_coinbase_maturity() {
 	assert!(
 		block.outputs[0]
 			.features
-			.contains(transaction::COINBASE_OUTPUT,)
+			.contains(transaction::COINBASE_OUTPUT)
 	);
+
+	// we will need this later when we want to spend the coinbase output
+	let block_hash = block.hash();
 
 	chain.process_block(block, chain::NONE).unwrap();
 
 	let prev = chain.head_header().unwrap();
 
 	let amount = consensus::REWARD;
+
+	let lock_height = 1 + global::coinbase_maturity();
+	assert_eq!(lock_height, 4);
+
+	// here we build a tx that attempts to spend the earlier coinbase output
+	// this is not a valid tx as the coinbase output cannot be spent yet
 	let (coinbase_txn, _) = build::transaction(
 		vec![
-			build::input(amount, key_id1.clone()),
-			build::output(amount - 2, key_id2),
+			build::coinbase_input(amount, block_hash, key_id1.clone()),
+			build::output(amount - 2, key_id2.clone()),
 			build::with_fee(2),
 		],
 		&keychain,
 	).unwrap();
 
 	let mut block =
-		core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &key_id3).unwrap();
+		core::core::Block::new(
+			&prev,
+			vec![&coinbase_txn],
+			&keychain,
+			&key_id3,
+			Difficulty::minimum(),
+		).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 	block.header.difficulty = difficulty.clone();
-	chain.set_sumtree_roots(&mut block, false).unwrap();
+
+	match chain.set_sumtree_roots(&mut block, false) {
+		Err(Error::ImmatureCoinbase) => (),
+		_ => panic!("expected ImmatureCoinbase error here"),
+	}
 
 	pow::pow_size(
 		&mut cuckoo_miner,
@@ -124,21 +150,21 @@ fn test_coinbase_maturity() {
 		global::sizeshift() as u32,
 	).unwrap();
 
-	let result = chain.process_block(block, chain::NONE);
-	match result {
-		Err(Error::ImmatureCoinbase) => (),
-		_ => panic!("expected ImmatureCoinbase error here"),
-	};
-
 	// mine enough blocks to increase the height sufficiently for
- // coinbase to reach maturity and be spendable in the next block
+	// coinbase to reach maturity and be spendable in the next block
 	for _ in 0..3 {
 		let prev = chain.head_header().unwrap();
 
 		let keychain = Keychain::from_random_seed().unwrap();
 		let pk = keychain.derive_key_id(1).unwrap();
 
-		let mut block = core::core::Block::new(&prev, vec![], &keychain, &pk).unwrap();
+		let mut block = core::core::Block::new(
+			&prev,
+			vec![],
+			&keychain,
+			&pk,
+			Difficulty::minimum()
+		).unwrap();
 		block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -157,8 +183,22 @@ fn test_coinbase_maturity() {
 
 	let prev = chain.head_header().unwrap();
 
-	let mut block =
-		core::core::Block::new(&prev, vec![&coinbase_txn], &keychain, &key_id4).unwrap();
+	let (coinbase_txn, _) = build::transaction(
+		vec![
+			build::coinbase_input(amount, block_hash, key_id1.clone()),
+			build::output(amount - 2, key_id2.clone()),
+			build::with_fee(2),
+		],
+		&keychain,
+	).unwrap();
+
+	let mut block = core::core::Block::new(
+		&prev,
+		vec![&coinbase_txn],
+		&keychain,
+		&key_id4,
+		Difficulty::minimum(),
+	).unwrap();
 
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 

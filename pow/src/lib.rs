@@ -98,7 +98,7 @@ pub fn pow20<T: MiningWorker>(
 pub fn mine_genesis_block(
 	miner_config: Option<types::MinerConfig>,
 ) -> Result<core::core::Block, Error> {
-	let mut gen = genesis::genesis_dev();
+	let mut gen = genesis::genesis_testnet2();
 	let diff = gen.header.difficulty.clone();
 
 	let sz = global::sizeshift() as u32;
@@ -142,10 +142,9 @@ pub fn pow_size<T: MiningWorker + ?Sized>(
 
     // if we found a cycle (not guaranteed) and the proof hash is higher that the
     // diff, we're all good
-
     if let Ok(proof) = miner.mine(&pow_hash[..]) {
       if proof.clone().to_difficulty() >= diff {
-        bh.pow = proof;
+        bh.pow = proof.clone();
         return Ok(());
       }
     }

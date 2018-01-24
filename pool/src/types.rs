@@ -25,9 +25,8 @@ use util::secp::pedersen::Commitment;
 pub use graph;
 
 use core::consensus;
-use core::core::block;
-use core::core::transaction;
-use core::core::hash;
+use core::core::{block, hash, transaction};
+use core::core::transaction::{Input, OutputIdentifier};
 
 /// Tranasction pool configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -78,7 +77,7 @@ pub struct TxSource {
 #[derive(Clone)]
 pub enum Parent {
 	Unknown,
-	BlockTransaction { output: transaction::Output },
+	BlockTransaction,
 	PoolTransaction { tx_ref: hash::Hash },
 	AlreadySpent { other_tx: hash::Hash },
 }
@@ -87,11 +86,15 @@ impl fmt::Debug for Parent {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			&Parent::Unknown => write!(f, "Parent: Unknown"),
-			&Parent::BlockTransaction { output: _ } => write!(f, "Parent: Block Transaction"),
+			&Parent::BlockTransaction => {
+				write!(f, "Parent: Block Transaction")
+			}
 			&Parent::PoolTransaction { tx_ref: x } => {
 				write!(f, "Parent: Pool Transaction ({:?})", x)
 			}
-			&Parent::AlreadySpent { other_tx: x } => write!(f, "Parent: Already Spent By {:?}", x),
+			&Parent::AlreadySpent { other_tx: x } => {
+				write!(f, "Parent: Already Spent By {:?}", x)
+			}
 		}
 	}
 }
@@ -122,12 +125,7 @@ pub enum PoolError {
 	},
 	/// Attempt to spend an output before it matures
 	/// lock_height must not exceed current block height
-	ImmatureCoinbase {
-		/// The block header of the block containing the output
-		header: block::BlockHeader,
-		/// The unspent output
-		output: Commitment,
-	},
+	ImmatureCoinbase,
 	/// Attempt to add a transaction to the pool with lock_height
 	/// greater than height of current block
 	ImmatureTransaction {
@@ -151,18 +149,18 @@ pub enum PoolError {
 
 /// Interface that the pool requires from a blockchain implementation.
 pub trait BlockChain {
-	/// Get an unspent output by its commitment. Will return None if the output
+	/// Get an unspent output by its commitment. Will return an error if the output
 	/// is spent or if it doesn't exist. The blockchain is expected to produce
 	/// a result with its current view of the most worked chain, ignoring
 	/// orphans, etc.
-	fn get_unspent(&self, output_ref: &Commitment) -> Result<transaction::Output, PoolError>;
+	/// We do not maintain outputs themselves. The only information we have is the
+	/// hash from the output MMR.
+	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), PoolError>;
 
-	/// Get the block header by output commitment (needed for spending coinbase
-	/// after n blocks)
-	fn get_block_header_by_output_commit(
-		&self,
-		commit: &Commitment,
-	) -> Result<block::BlockHeader, PoolError>;
+	/// Check if an output being spent by the input has sufficiently matured.
+	/// This is only applicable for coinbase outputs (1,000 blocks).
+	/// Non-coinbase outputs will always pass this check.
+	fn is_matured(&self, input: &Input, height: u64) -> Result<(), PoolError>;
 
 	/// Get the block header at the head
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError>;

@@ -112,13 +112,18 @@ impl Keychain {
 	}
 
 	fn derived_key(&self, key_id: &Identifier) -> Result<SecretKey, Error> {
-		trace!(LOGGER, "Derived Key by key_id: {}", key_id);
-
 		// first check our overrides and just return the key if we have one in there
 		if let Some(key) = self.key_overrides.get(key_id) {
 			trace!(LOGGER, "... Derived Key (using override) key_id: {}", key_id);
 			return Ok(*key);
 		}
+
+		let extkey = self.derived_extended_key(key_id)?;
+		Ok(extkey.key)
+	}
+
+	fn derived_extended_key(&self, key_id: &Identifier) -> Result<extkey::ExtendedKey, Error> {
+		trace!(LOGGER, "Derived Key by key_id: {}", key_id);
 
 		// then check the derivation cache to see if we have previously derived this key
 		// if so use the derivation from the cache to derive the key
@@ -146,7 +151,7 @@ impl Keychain {
 				}
 
 				if extkey_id == *key_id {
-					return Ok(extkey.key);
+					return Ok(extkey);
 				}
 			}
 		}
@@ -160,10 +165,10 @@ impl Keychain {
 	fn derived_key_from_index(
 		&self,
 		derivation: u32,
-	) -> Result<SecretKey, Error> {
+	) -> Result<extkey::ExtendedKey, Error> {
 		trace!(LOGGER, "Derived Key (fast) by derivation: {}", derivation);
 		let extkey = self.extkey.derive(&self.secp, derivation)?;
-		return Ok(extkey.key)
+		return Ok(extkey)
 	}
 
 	pub fn commit(&self, amount: u64, key_id: &Identifier) -> Result<Commitment, Error> {
@@ -177,8 +182,8 @@ impl Keychain {
 		amount: u64,
 		derivation: u32,
 	) -> Result<Commitment, Error> {
-		let skey = self.derived_key_from_index(derivation)?;
-		let commit = self.secp.commit(amount, skey)?;
+		let extkey = self.derived_key_from_index(derivation)?;
+		let commit = self.secp.commit(amount, extkey.key)?;
 		Ok(commit)
 	}
 
@@ -189,11 +194,24 @@ impl Keychain {
 	}
 
 	pub fn switch_commit_from_index(&self, index:u32) -> Result<Commitment, Error> {
-		//just do this directly, because cache seems really slow for wallet reconstruct
+		// just do this directly, because cache seems really slow for wallet reconstruct
 		let skey = self.extkey.derive(&self.secp, index)?;
 		let skey = skey.key;
 		let commit = self.secp.switch_commit(skey)?;
 		Ok(commit)
+	}
+
+	pub fn switch_commit_hash_key(&self, key_id: &Identifier) -> Result<[u8; 32], Error> {
+		// first check our overrides and just return zero key if we have an override
+		// we allow keys to be overridden for testing
+		// and do not care about switch_commit_hash_keys in this case
+		if let Some(_) = self.key_overrides.get(key_id) {
+			let key: [u8; 32] = Default::default();
+			return Ok(key);
+		}
+
+		let extkey = self.derived_extended_key(key_id)?;
+		Ok(extkey.switch_key)
 	}
 
 	pub fn range_proof(
@@ -343,8 +361,11 @@ impl Keychain {
 		Ok(sig)
 	}
 
-	/// Helper function to calculate final public key 
-	pub fn aggsig_calculate_final_pubkey(&self, their_public_key: &PublicKey) -> Result<PublicKey, Error> {
+	/// Helper function to calculate final public key
+	pub fn aggsig_calculate_final_pubkey(
+		&self,
+		their_public_key: &PublicKey,
+	) -> Result<PublicKey, Error> {
 		let (our_sec_key, _) = self.aggsig_get_private_keys();
 		let mut pk_sum = their_public_key.clone();
 		let _ = pk_sum.add_exp_assign(&self.secp, &our_sec_key);
@@ -352,20 +373,29 @@ impl Keychain {
 	}
 
 	/// Just a simple sig, creates its own nonce, etc
-	pub fn aggsig_sign_from_key_id(&self, msg: &Message, key_id: &Identifier) -> Result<Signature, Error> {
+	pub fn aggsig_sign_from_key_id(
+		&self,
+		msg: &Message,
+		key_id: &Identifier,
+	) -> Result<Signature, Error> {
 		let skey = self.derived_key(key_id)?;
 		let sig = aggsig::sign_single(&self.secp, &msg, &skey, None, None, None)?;
 		Ok(sig)
 	}
 
 	/// Verifies a sig given a commitment
-	pub fn aggsig_verify_single_from_commit(secp:&Secp256k1, sig: &Signature, msg: &Message, commit:&Commitment) -> bool {
+	pub fn aggsig_verify_single_from_commit(
+		secp:&Secp256k1,
+		sig: &Signature,
+		msg: &Message,
+		commit: &Commitment,
+	) -> bool {
 		// Extract the pubkey, unfortunately we need this hack for now, (we just hope one is valid)
 		// TODO: Create better secp256k1 API to do this
 		let pubkeys = commit.to_two_pubkeys(secp);
-		let mut valid=false;
+		let mut valid = false;
 		for i in 0..pubkeys.len() {
-			valid=aggsig::verify_single(secp, &sig, &msg, None, &pubkeys[i], false);
+			valid = aggsig::verify_single(secp, &sig, &msg, None, &pubkeys[i], false);
 			if valid {
 				break;
 			}
@@ -374,7 +404,11 @@ impl Keychain {
 	}
 
 	/// Just a simple sig, creates its own nonce, etc
-	pub fn aggsig_sign_with_blinding(secp:&Secp256k1, msg: &Message, blinding:&BlindingFactor) -> Result<Signature, Error> {
+	pub fn aggsig_sign_with_blinding(
+		secp: &Secp256k1,
+		msg: &Message,
+		blinding: &BlindingFactor,
+	) -> Result<Signature, Error> {
 		let sig = aggsig::sign_single(secp, &msg, &blinding.secret_key(), None, None, None)?;
 		Ok(sig)
 	}
@@ -417,7 +451,7 @@ mod test {
 		let msg = secp::Message::from_slice(&msg_bytes[..]).unwrap();
 
 		// now create a zero commitment using the key on the keychain associated with
-  // the key_id
+		// the key_id
 		let commit = keychain.commit(0, &key_id).unwrap();
 
 		// now check we can use our key to verify a signature from this zero commitment
@@ -439,7 +473,7 @@ mod test {
 		assert_eq!(proof_info.value, 5);
 
 		// now check the recovered message is "empty" (but not truncated) i.e. all
-  // zeroes
+		// zeroes
 		assert_eq!(
 			proof_info.message,
 			secp::pedersen::ProofMessage::from_bytes(&[0; secp::constants::PROOF_MSG_SIZE])
