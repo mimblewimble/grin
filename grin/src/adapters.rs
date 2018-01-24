@@ -75,15 +75,14 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		// pushing the new block through the chain pipeline
 		let res = self.chain.process_block(b, self.chain_opts());
-
-		if let &Err(ref e) = &res {
+		if let Err(ref e) = res {
 			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
 			if e.is_bad_block() {
 				debug!(LOGGER, "block_received: {} is a bad block, resetting head", bhash);
 				let _ = self.chain.reset_head();
 				return false;
 			}
-		}
+		};
 		true
 	}
 
