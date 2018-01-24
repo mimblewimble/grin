@@ -194,11 +194,30 @@ impl Chain {
 			pow_verifier: pow_verifier,
 		})
 	}
+/// Processes a single block, then checks for orphans, processing
+/// those as well if they're found
+pub fn process_block(&self, b: Block, opts: Options)
+-> Result<(Option<Tip>, Option<Block>), Error>
+{
+	let res = self.process_block_no_orphans(b, opts);
+	match res {
+		Ok((t, b)) => {
+			// We accepted a block, so see if we can accept any orphans
+			if b.is_some() {
+				self.check_orphans(&b.clone().unwrap());
+			}
+			Ok((t, b))
+		},
+		Err(e) => {
+			Err(e)
+		}
+	}
+}
 
 	/// Attempt to add a new block to the chain. Returns the new chain tip if it
 	/// has been added to the longest chain, None if it's added to an (as of
 	/// now) orphan chain.
-	pub fn process_block(&self, b: Block, opts: Options)
+	pub fn process_block_no_orphans(&self, b: Block, opts: Options)
 		-> Result<(Option<Tip>, Option<Block>), Error>
 	{
 		let head = self.store
@@ -331,7 +350,7 @@ impl Chain {
 		loop {
 			if let Some(orphan) = self.orphans.get_by_previous(&last_block_hash) {
 				self.orphans.remove(&orphan.block.hash());
-				let res = self.process_block(orphan.block, orphan.opts);
+				let res = self.process_block_no_orphans(orphan.block, orphan.opts);
 				match res {
 					Ok((_, b)) => {
 						// We accepted a block, so see if we can accept any orphans
