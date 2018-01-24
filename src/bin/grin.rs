@@ -259,7 +259,8 @@ fn main() {
 			.about("Initialize a new wallet seed file."))
 
 		.subcommand(SubCommand::with_name("restore")
-			.about("Attempt to restore wallet contents from the chain using seed and password.")))
+			.about("Attempt to restore wallet contents from the chain using seed and password. \
+				NOTE: Backup wallet.* and run `wallet listen` before running restore.")))
 
 	.get_matches();
 
@@ -426,15 +427,24 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			file.read_to_string(&mut contents).expect(
 				"Unable to read transaction file.",
 			);
-			if let Err(e) =
-				wallet::receive_json_tx_str(
-					&wallet_config, &keychain, contents.as_str()) {
-
-				println!("Error receiving transaction, the most likely reasons are:");
-				println!(" * the transaction has already been sent");
-				println!(" * your node isn't running or can't be reached");
-				println!("\nDetailed error: {:?}", e);
-			}
+			if let Err(e) = wallet::receive_json_tx_str(&wallet_config, &keychain, contents.as_str()) {
+					match e {
+						wallet::Error::FeeExceedsAmount {sender_amount, recipient_fee} => {
+							error!(
+								LOGGER, 
+								"Cannot process because transaction fee ({}) exceeded received amount ({}).",
+								amount_to_hr_string(recipient_fee),
+								amount_to_hr_string(sender_amount)
+							);
+						}
+						_ => {
+							println!("Error receiving transaction, the most likely reasons are:");
+							println!(" * the transaction has already been sent");
+							println!(" * your node isn't running or can't be reached");
+							println!("\nDetailed error: {:?}", e);
+						}
+					}
+				}
 		}
 		("send", Some(send_args)) => {
 			let amount = send_args.value_of("amount").expect(
@@ -481,6 +491,14 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 						LOGGER,
 						"Tx not sent: insufficient funds (max: {})",
 						amount_to_hr_string(available),
+					);
+				}
+				Err(wallet::Error::FeeExceedsAmount {sender_amount, recipient_fee}) => {
+					error!(
+						LOGGER, 
+						"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
+						amount_to_hr_string(recipient_fee),
+						amount_to_hr_string(sender_amount)
 					);
 				}
 				Err(e) => {

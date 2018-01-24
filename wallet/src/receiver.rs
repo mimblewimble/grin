@@ -24,7 +24,7 @@ use serde_json;
 
 use api;
 use core::consensus::reward;
-use core::core::{build, Block, Output, Transaction, TxKernel};
+use core::core::{build, Block, Output, Transaction, TxKernel, amount_to_hr_string};
 use core::ser;
 use keychain::{BlindingFactor, Identifier, Keychain};
 use types::*;
@@ -70,6 +70,25 @@ pub fn receive_json_tx(
 		})?;
 		Err(Error::Node(e))
 	} else {
+		// append transfer record of received coins into stats.dat
+		// only if the transaction is completed.
+		StatsData::append(&config.data_file_dir, |stats_data| {
+			let current_time_sec = get_transfer_timestamp();
+			let (ins, outs) = get_transfer_inouts(&final_tx);
+			let port = config.api_listen_port.to_string();
+			let addr = format!("{}:{}", "localhost".to_string(), port);
+			stats_data.add_transfer(
+				StatsTransferData {
+					amount: amount,
+					receiving_wallet_address: addr,
+					tx_type: StatsTransferType::Received,
+					inputs: ins,
+					outputs: outs,
+					sent_or_received_at: current_time_sec,
+				}
+			);
+		})?;
+
 		Ok(())
 	}
 }
@@ -195,6 +214,19 @@ fn receive_transaction(
 		});
 	}
 
+    if fee > amount {
+		info!(
+			LOGGER, 
+			"Rejected the transfer because transaction fee ({}) exceeds received amount ({}).",
+			amount_to_hr_string(fee),
+			amount_to_hr_string(amount)
+		);
+        return Err(Error::FeeExceedsAmount {
+            sender_amount: amount,
+            recipient_fee: fee,
+        });
+    }
+
 	let out_amount = amount - fee;
 
 	// operate within a lock on wallet data
@@ -236,25 +268,6 @@ fn receive_transaction(
 		key_id.clone(),
 		derivation,
 	);
-
-	// append transfer record of received coins into stats.dat
-	// only if the transaction is completed.
-	StatsData::append(&config.data_file_dir, |stats_data| {
-		let current_time_sec = get_transfer_timestamp();
-		let (ins, outs) = get_transfer_inouts(&tx_final);
-		let port = config.api_listen_port.to_string();
-		let addr = format!("{}:{}", "localhost".to_string(), port);
-		stats_data.add_transfer(
-			StatsTransferData {
-				amount: amount,
-				receiving_wallet_address: addr,
-				tx_type: StatsTransferType::Received,
-				inputs: ins,
-				outputs: outs,
-				sent_or_received_at: current_time_sec,
-			}
-		);
-	})?;
 
 	Ok((tx_final, key_id))
 }
