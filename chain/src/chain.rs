@@ -237,10 +237,10 @@ pub fn process_block(&self, b: Block, opts: Options)
 				}
 
 				// notifying other parts of the system of the update
-				if !opts.intersects(SYNC) {
+				if !opts.contains(SYNC) {
 					// broadcast the block
 					let adapter = self.adapter.clone();
-					adapter.block_accepted(&b);
+					adapter.block_accepted(&b, opts);
 				}
 				Ok((Some(tip.clone()), Some(b.clone())))
 			},
@@ -254,10 +254,10 @@ pub fn process_block(&self, b: Block, opts: Options)
 				// or less relevant blocks somehow.
 				// We should also probably consider banning nodes that send us really old blocks.
 				//
-				if !opts.intersects(SYNC) {
+				if !opts.contains(SYNC) {
 					// broadcast the block
 					let adapter = self.adapter.clone();
-					adapter.block_accepted(&b);
+					adapter.block_accepted(&b, opts);
 				}
 				Ok((None, Some(b.clone())))
 			},
@@ -304,6 +304,21 @@ pub fn process_block(&self, b: Block, opts: Options)
 				Err(e)
 			}
 		}
+	}
+
+	pub fn process_block_header(
+		&self,
+		bh: &BlockHeader,
+		opts: Options,
+	) -> Result<Option<Tip>, Error> {
+		let header_head = self.get_header_head()?;
+		let ctx = self.ctx_from_head(header_head, opts);
+		let res = pipe::process_block_header(bh, ctx);
+
+		// TODO - whatever we need to do to go check if we have everything we need to process the block
+		// TODO - and either process it or go ask for our peers for it
+
+		res
 	}
 
 	/// Attempt to add a new header to the header chain.

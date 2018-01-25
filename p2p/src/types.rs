@@ -141,6 +141,9 @@ pub trait Protocol {
 	/// Relays a block to the remote peer.
 	fn send_block(&self, b: &core::Block) -> Result<(), Error>;
 
+	/// Relays a block header to the remote peer ("header first" propagation).
+	fn send_header(&self, bh: &core::BlockHeader) -> Result<(), Error>;
+
 	/// Relays a transaction to the remote peer.
 	fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error>;
 
@@ -175,9 +178,11 @@ pub trait ChainAdapter: Sync + Send {
 
 	/// A block has been received from one of our peers. Returns true if the
 	/// block could be handled properly and is not deemed defective by the
-	/// chain. Returning false means the block will nenver be valid and
+	/// chain. Returning false means the block will never be valid and
 	/// may result in the peer being banned.
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool;
+
+	fn header_received(&self, b: core::BlockHeader, addr: SocketAddr) -> bool;
 
 	/// A set of block header has been received, typically in response to a
 	/// block

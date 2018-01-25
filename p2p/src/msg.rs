@@ -59,6 +59,7 @@ enum_from_primitive! {
 	GetPeerAddrs,
 	PeerAddrs,
 	GetHeaders,
+	Header,
 	Headers,
 	GetBlock,
 	Block,
@@ -426,6 +427,7 @@ impl Readable for SockAddr {
 }
 
 /// Serializable wrapper for the block locator.
+#[derive(Debug)]
 pub struct Locator {
 	pub hashes: Vec<Hash>,
 }

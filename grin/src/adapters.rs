@@ -16,7 +16,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use chain::{self, ChainAdapter};
+use chain::{self, ChainAdapter, Options, MINE};
 use core::core;
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
@@ -64,13 +64,14 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
-	fn block_received(&self, b: core::Block, _: SocketAddr) -> bool {
+	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {
 		let bhash = b.hash();
 		debug!(
 			LOGGER,
-			"Received block {} at {} from network, going to process.",
+			"Received block {} at {} from {}, going to process.",
 			bhash,
 			b.header.height,
+			addr,
 		);
 
 		// pushing the new block through the chain pipeline
@@ -83,6 +84,31 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				return false;
 			}
 		};
+		true
+	}
+
+	fn header_received(&self, bh: core::BlockHeader, addr: SocketAddr) -> bool {
+		let bhash = bh.hash();
+		debug!(
+			LOGGER,
+			"Received block header {} at {} from {}, going to process.",
+			bhash,
+			bh.height,
+			addr,
+		);
+
+		// pushing the new block header through the header chain pipeline
+		// we will go ask for the block if this is a new header
+		let res = self.chain.process_block_header(&bh, self.chain_opts());
+
+		if let &Err(ref e) = &res {
+			debug!(LOGGER, "Block header {} refused by chain: {:?}", bhash, e);
+			if e.is_bad_block() {
+				debug!(LOGGER, "header_received: {} is a bad header, resetting header head", bhash);
+				let _ = self.chain.reset_head();
+				return false;
+			}
+		}
 		true
 	}
 
@@ -254,7 +280,7 @@ pub struct ChainToPoolAndNetAdapter {
 }
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
-	fn block_accepted(&self, b: &core::Block) {
+	fn block_accepted(&self, b: &core::Block, opts: Options) {
 		{
 			if let Err(e) = self.tx_pool.write().unwrap().reconcile_block(b) {
 				error!(
@@ -265,7 +291,11 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 				);
 			}
 		}
-		self.peers.borrow().broadcast_block(b);
+		if opts.contains(MINE) {
+			self.peers.borrow().broadcast_block(b);
+		} else {
+			self.peers.borrow().broadcast_header(&b.header);
+		}
 	}
 }
 
