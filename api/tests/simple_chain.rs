@@ -116,8 +116,8 @@ fn simple_server_wallet() {
 	assert!(roots.is_ok());
 	let last_10_utxos = get_sumtree_lastutxos(&base_addr, api_server_port, 0);
 	assert!(last_10_utxos.is_ok());
-	let last_5__utxos = get_sumtree_lastutxos(&base_addr, api_server_port, 5);
-	assert!(last_5__utxos.is_ok());
+	let last_5_utxos = get_sumtree_lastutxos(&base_addr, api_server_port, 5);
+	assert!(last_5_utxos.is_ok());
 	let last_10_rangeproofs = get_sumtree_lastrangeproofs(&base_addr, api_server_port, 0);
 	assert!(last_10_rangeproofs.is_ok());
 	let last_5_rangeproofs = get_sumtree_lastrangeproofs(&base_addr, api_server_port, 5);
