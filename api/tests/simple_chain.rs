@@ -100,24 +100,34 @@ fn simple_server_wallet() {
 	let last_block_by_hash_compact = get_block_by_hash_compact(&base_addr, api_server_port, &block_hash);
 	assert!(last_block_by_hash_compact.is_ok());
 
-
-
+	warn!(LOGGER, "Testing chain utxo handler");
+	let start_height = 0;
+	let end_height = height;
+	let utxos_by_height = get_utxos_by_height(&base_addr, api_server_port, start_height, end_height);
+	assert!(utxos_by_height.is_ok());
+	let ids = get_ids_from_block_outputs(utxos_by_height.unwrap());
+	let utxos_by_ids1 = get_utxos_by_ids1(&base_addr, api_server_port, ids.clone());
+	assert!(utxos_by_ids1.is_ok());
+	let utxos_by_ids2 = get_utxos_by_ids2(&base_addr, api_server_port, ids.clone());
+	assert!(utxos_by_ids2.is_ok());
 
 	//let some more mining happen, make sure nothing pukes
 	thread::sleep(time::Duration::from_millis(5000));
 }
 
-
+// Tip handler function
 fn get_tip(base_addr: &String, api_server_port: u16) -> Result<api::Tip, Error> {
 	let url = format!("http://{}:{}/v1/chain", base_addr, api_server_port);
 	api::client::get::<api::Tip>(url.as_str()).map_err(|e| Error::API(e))
 }
 
+// Status handler function
 fn get_status(base_addr: &String, api_server_port: u16) -> Result<api::Status, Error> {
 	let url = format!("http://{}:{}/v1/status", base_addr, api_server_port);
 	api::client::get::<api::Status>(url.as_str()).map_err(|e| Error::API(e))
 }
 
+// Block handler functions
 fn get_block_by_height(base_addr: &String, api_server_port: u16, height: u64) -> Result<api::BlockPrintable, Error> {
 	let url = format!("http://{}:{}/v1/blocks/{}", base_addr, api_server_port, height);
 	api::client::get::<api::BlockPrintable>(url.as_str()).map_err(|e| Error::API(e))
@@ -138,10 +148,38 @@ fn get_block_by_hash_compact(base_addr: &String, api_server_port: u16, block_has
 	api::client::get::<api::CompactBlockPrintable>(url.as_str()).map_err(|e| Error::API(e))
 }
 
-#[allow(unused)]
-fn get_all_peers(base_addr: String, api_server_port: u16) -> Result<api::Status, Error> {
-	let url = format!("http://{}:{}/v1/status", base_addr, api_server_port);
-	api::client::get::<api::Status>(url.as_str()).map_err(|e| Error::API(e))
+// Chain utxo handler functions
+fn get_utxos_by_ids1(base_addr: &String, api_server_port: u16, ids: Vec<String>) -> Result<Vec<api::Utxo>, Error> {
+	let url = format!("http://{}:{}/v1/chain/utxos/byids?id={}", base_addr, api_server_port, ids.join(","));
+	api::client::get::<Vec<api::Utxo>>(url.as_str()).map_err(|e| Error::API(e))
+}
+
+fn get_utxos_by_ids2(base_addr: &String, api_server_port: u16, ids: Vec<String>) -> Result<Vec<api::Utxo>, Error>  {
+	let mut ids_string: String = String::from("");
+	for id in ids {
+		ids_string = ids_string + "?id=" + &id;
+	}
+	let ids_string = String::from(&ids_string[1..ids_string.len()]);
+	println!("{}", ids_string);
+	let url = format!("http://{}:{}/v1/chain/utxos/byids?{}", base_addr, api_server_port, ids_string);
+	api::client::get::<Vec<api::Utxo>>(url.as_str()).map_err(|e| Error::API(e))
+}
+
+fn get_utxos_by_height(base_addr: &String, api_server_port: u16, start_height: u64, end_height: u64) -> Result<Vec<api::BlockOutputs>, Error> {
+	let url = format!("http://{}:{}/v1/chain/utxos/byheight?start_height={}&end_height={}", base_addr, api_server_port, start_height, end_height);
+	api::client::get::<Vec<api::BlockOutputs>>(url.as_str()).map_err(|e| Error::API(e))
+}
+
+// Helper function to get a vec of commitment output ids from a vec of block outputs
+fn get_ids_from_block_outputs(block_outputs: Vec<api::BlockOutputs>) -> Vec<String> {
+	let mut ids: Vec<String> = Vec::new();
+	for block_output in block_outputs {
+		let outputs = &block_output.outputs;
+		for output in outputs {
+				ids.push(output.clone().commit)
+		}
+	}
+	ids
 }
 
 /// Error type wrapping underlying module errors.
