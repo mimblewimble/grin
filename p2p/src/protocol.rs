@@ -241,7 +241,11 @@ fn handle_payload(
 		Type::Header => {
 			let header = ser::deserialize::<core::BlockHeader>(&mut &buf[..])?;
 			debug!(LOGGER, "handle_payload: Header: {}", header.hash());
+
 			adapter.header_received(header, addr);
+
+			// we do not return a hash here as we never request a single header
+			// a header will always arrive unsolicited
 			Ok(None)
 		}
 		// receive headers as part of the sync process

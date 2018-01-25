@@ -15,6 +15,7 @@
 //! Base types that the block chain pipeline requires.
 
 use std::io;
+use std::net::SocketAddr;
 
 use util::secp::pedersen::Commitment;
 

@@ -211,7 +211,7 @@ pub fn needs_syncing(
 		if let Some(peer) = peer {
 			if let Ok(peer) = peer.try_read() {
 				if peer.info.total_difficulty <= local_diff {
-					info!(LOGGER, "synchronize stopped, at {:?} @ {:?}", local_diff, chain.head().unwrap().height);
+					info!(LOGGER, "synchronized at {:?} @ {:?}", local_diff, chain.head().unwrap().height);
 					currently_syncing.store(false, Ordering::Relaxed);
 					let _ = chain.reset_head();
 				}

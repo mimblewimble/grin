@@ -437,6 +437,9 @@ impl ChainAdapter for Peers {
 			true
 		}
 	}
+	fn request_block(&self, h: Hash, addr: &SocketAddr) {
+		self.adapter.request_block(h, addr)
+	}
 	fn headers_received(&self, headers: Vec<core::BlockHeader>, peer_addr: SocketAddr) {
 		self.adapter.headers_received(headers, peer_addr)
 	}

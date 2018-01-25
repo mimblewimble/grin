@@ -393,7 +393,6 @@ fn update_sync_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<T
 
 fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
 	let tip = Tip::from_block(bh);
-	debug!(LOGGER, "pipe: update_header_head: {}, {}", tip.total_difficulty, ctx.head.total_difficulty);
 	if tip.total_difficulty > ctx.head.total_difficulty {
 		ctx.store
 			.save_header_head(&tip)

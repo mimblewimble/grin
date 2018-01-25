@@ -275,6 +275,10 @@ impl ChainAdapter for TrackingAdapter {
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
 	}
+
+	fn request_block(&self, h: Hash, addr: &SocketAddr) {
+		self.adapter.request_block(h, addr)
+	}
 }
 
 impl NetAdapter for TrackingAdapter {

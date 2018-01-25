@@ -313,12 +313,7 @@ pub fn process_block(&self, b: Block, opts: Options)
 	) -> Result<Option<Tip>, Error> {
 		let header_head = self.get_header_head()?;
 		let ctx = self.ctx_from_head(header_head, opts);
-		let res = pipe::process_block_header(bh, ctx);
-
-		// TODO - whatever we need to do to go check if we have everything we need to process the block
-		// TODO - and either process it or go ask for our peers for it
-
-		res
+		pipe::process_block_header(bh, ctx)
 	}
 
 	/// Attempt to add a new header to the header chain.

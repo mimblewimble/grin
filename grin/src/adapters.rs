@@ -35,6 +35,7 @@ pub struct NetToChainAdapter {
 	currently_syncing: Arc<AtomicBool>,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	peers: OneTime<p2p::Peers>,
 }
 
 impl p2p::ChainAdapter for NetToChainAdapter {
@@ -109,7 +110,25 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				return false;
 			}
 		}
+
+		// we have successfully processed a block header
+		// so now we can go request the block itself
+		self.request_block(bh.hash(), &addr);
+
 		true
+	}
+
+	// After we have received a block header in "header first" propagation
+	// we need to go request the block from the same peer that gave us the header
+	// (unless we have already accepted the block)
+	fn request_block(&self, bh: Hash, addr: &SocketAddr) {
+		if let None = self.peers.borrow().adapter.get_block(bh) {
+			if let Some(peer) = self.peers.borrow().get_connected_peer(addr) {
+				if let Ok(peer) = peer.read() {
+					peer.send_block_request(bh);
+				}
+			}
+		}
 	}
 
 	fn headers_received(&self, bhs: Vec<core::BlockHeader>, addr: SocketAddr) {
@@ -223,7 +242,12 @@ impl NetToChainAdapter {
 			currently_syncing: currently_syncing,
 			chain: chain_ref,
 			tx_pool: tx_pool,
+			peers: OneTime::new(),
 		}
+	}
+
+	pub fn init(&self, peers: p2p::Peers) {
+		self.peers.init(peers);
 	}
 
 	// recursively go back through the locator vector and stop when we find
@@ -291,9 +315,14 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 				);
 			}
 		}
+
+		// If we mined the block then we want to broadcast the block itself.
+		// But if we received the block from another node then broadcast "header first"
+		// to minimize network traffic.
 		if opts.contains(MINE) {
 			self.peers.borrow().broadcast_block(b);
 		} else {
+			// "header first" propagation if we are not the originator of this block
 			self.peers.borrow().broadcast_header(&b.header);
 		}
 	}
