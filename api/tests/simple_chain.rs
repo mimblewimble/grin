@@ -111,6 +111,22 @@ fn simple_server_wallet() {
 	let utxos_by_ids2 = get_utxos_by_ids2(&base_addr, api_server_port, ids.clone());
 	assert!(utxos_by_ids2.is_ok());
 
+	warn!(LOGGER, "Testing sumtree handler");
+	let roots = get_sumtree_roots(&base_addr, api_server_port);
+	assert!(roots.is_ok());
+	let last_10_utxos = get_sumtree_lastutxos(&base_addr, api_server_port, 0);
+	assert!(last_10_utxos.is_ok());
+	let last_5__utxos = get_sumtree_lastutxos(&base_addr, api_server_port, 5);
+	assert!(last_5__utxos.is_ok());
+	let last_10_rangeproofs = get_sumtree_lastrangeproofs(&base_addr, api_server_port, 0);
+	assert!(last_10_rangeproofs.is_ok());
+	let last_5_rangeproofs = get_sumtree_lastrangeproofs(&base_addr, api_server_port, 5);
+	assert!(last_5_rangeproofs.is_ok());
+	let last_10_kernels = getsumtree_lastkernels(&base_addr, api_server_port, 0);
+	assert!(last_10_kernels.is_ok());
+	let last_5_kernels = getsumtree_lastkernels(&base_addr, api_server_port, 5);
+	assert!(last_5_kernels.is_ok());
+
 	//let some more mining happen, make sure nothing pukes
 	thread::sleep(time::Duration::from_millis(5000));
 }
@@ -168,6 +184,42 @@ fn get_utxos_by_ids2(base_addr: &String, api_server_port: u16, ids: Vec<String>)
 fn get_utxos_by_height(base_addr: &String, api_server_port: u16, start_height: u64, end_height: u64) -> Result<Vec<api::BlockOutputs>, Error> {
 	let url = format!("http://{}:{}/v1/chain/utxos/byheight?start_height={}&end_height={}", base_addr, api_server_port, start_height, end_height);
 	api::client::get::<Vec<api::BlockOutputs>>(url.as_str()).map_err(|e| Error::API(e))
+}
+
+// Sumtree handler functions
+fn get_sumtree_roots(base_addr: &String, api_server_port: u16)  -> Result<api::SumTrees, Error> {
+	let url = format!("http://{}:{}/v1/sumtrees/roots", base_addr, api_server_port);
+	api::client::get::<api::SumTrees>(url.as_str()).map_err(|e| Error::API(e))
+}
+
+fn get_sumtree_lastutxos(base_addr: &String, api_server_port: u16, n: u64) -> Result<Vec<api::SumTreeNode>, Error> {
+	let url: String;
+	if n == 0 {
+		url = format!("http://{}:{}/v1/sumtrees/lastutxos", base_addr, api_server_port);
+	} else {
+		url = format!("http://{}:{}/v1/sumtrees/lastutxos?n={}", base_addr, api_server_port, n);
+	}
+	api::client::get::<Vec<api::SumTreeNode>>(url.as_str()).map_err(|e| Error::API(e))
+}
+
+fn get_sumtree_lastrangeproofs(base_addr: &String, api_server_port: u16, n: u64) -> Result<Vec<api::SumTreeNode>, Error> {
+	let url: String;
+	if n == 0 {
+		url = format!("http://{}:{}/v1/sumtrees/lastrangeproofs", base_addr, api_server_port);
+	} else {
+		url = format!("http://{}:{}/v1/sumtrees/lastrangeproofs?n={}", base_addr, api_server_port, n);
+	}
+	api::client::get::<Vec<api::SumTreeNode>>(url.as_str()).map_err(|e| Error::API(e))
+}
+
+fn getsumtree_lastkernels(base_addr: &String, api_server_port: u16, n: u64) -> Result<Vec<api::SumTreeNode>, Error> {
+	let url: String;
+	if n == 0 {
+		url = format!("http://{}:{}/v1/sumtrees/lastkernels", base_addr, api_server_port);
+	} else {
+		url = format!("http://{}:{}/v1/sumtrees/lastkernels?n={}", base_addr, api_server_port, n);
+	}
+	api::client::get::<Vec<api::SumTreeNode>>(url.as_str()).map_err(|e| Error::API(e))
 }
 
 // Helper function to get a vec of commitment output ids from a vec of block outputs
