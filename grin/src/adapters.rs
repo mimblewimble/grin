@@ -108,13 +108,18 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				debug!(LOGGER, "header_received: {} is a bad header, resetting header head", bhash);
 				let _ = self.chain.reset_head();
 				return false;
+			} else {
+				// we got an error when trying to process the block header
+				// but nothing serious enough to need to ban the peer upstream
+				return true;
 			}
 		}
 
 		// we have successfully processed a block header
-		// so now we can go request the block itself
+		// so we can go request the block itself
 		self.request_block(&bh, &addr);
 
+		// done receiving the header
 		true
 	}
 
