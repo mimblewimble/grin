@@ -196,10 +196,6 @@ pub trait ChainAdapter: Sync + Send {
 
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
-
-	/// After we process a header in "header first" propagation
-	/// we want to request the block from the peer that gave us the header
-	fn request_block(&self, h: Hash, addr: &SocketAddr);
 }
 
 /// Additional methods required by the protocol that don't need to be

@@ -113,22 +113,9 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		// we have successfully processed a block header
 		// so now we can go request the block itself
-		self.request_block(bh.hash(), &addr);
+		self.request_block(&bh, &addr);
 
 		true
-	}
-
-	// After we have received a block header in "header first" propagation
-	// we need to go request the block from the same peer that gave us the header
-	// (unless we have already accepted the block)
-	fn request_block(&self, bh: Hash, addr: &SocketAddr) {
-		if let None = self.peers.borrow().adapter.get_block(bh) {
-			if let Some(peer) = self.peers.borrow().get_connected_peer(addr) {
-				if let Ok(peer) = peer.read() {
-					peer.send_block_request(bh);
-				}
-			}
-		}
 	}
 
 	fn headers_received(&self, bhs: Vec<core::BlockHeader>, addr: SocketAddr) {
@@ -281,6 +268,28 @@ impl NetToChainAdapter {
 				error!(LOGGER, "Could not build header locator: {:?}", e);
 				None
 			}
+		}
+	}
+
+	// After we have received a block header in "header first" propagation
+	// we need to go request the block from the same peer that gave us the header
+	// (unless we have already accepted the block)
+	//
+	// TODO - currently only request block from a single peer
+	// consider additional peers for redundancy?
+	fn request_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
+		if let None = self.peers.borrow().adapter.get_block(bh.hash()) {
+			if let Some(_) = self.peers.borrow().adapter.get_block(bh.previous) {
+				if let Some(peer) = self.peers.borrow().get_connected_peer(addr) {
+					if let Ok(peer) = peer.read() {
+						let _ = peer.send_block_request(bh.hash());
+					}
+				}
+			} else {
+				debug!(LOGGER, "request_block: prev block {} missing, skipping", bh.previous);
+			}
+		} else {
+			debug!(LOGGER, "request_block: block {} already known", bh.hash());
 		}
 	}
 

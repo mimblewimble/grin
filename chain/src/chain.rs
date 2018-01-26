@@ -306,6 +306,7 @@ pub fn process_block(&self, b: Block, opts: Options)
 		}
 	}
 
+	/// Process a block header received during "header first" propagation.
 	pub fn process_block_header(
 		&self,
 		bh: &BlockHeader,

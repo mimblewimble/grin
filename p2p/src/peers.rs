@@ -237,7 +237,7 @@ impl Peers {
 		}
 		debug!(
 			LOGGER,
-			"broadcast_block: {}, {} at {}, to {} peers",
+			"broadcast_block: {}, {} at {}, to {} peers, done.",
 			b.hash(),
 			b.header.total_difficulty,
 			b.header.height,
@@ -266,7 +266,7 @@ impl Peers {
 		}
 		debug!(
 			LOGGER,
-			"broadcast_header: {}, {} at {}, to {} peers",
+			"broadcast_header: {}, {} at {}, to {} peers, done.",
 			bh.hash(),
 			bh.total_difficulty,
 			bh.height,
@@ -436,9 +436,6 @@ impl ChainAdapter for Peers {
 		} else {
 			true
 		}
-	}
-	fn request_block(&self, h: Hash, addr: &SocketAddr) {
-		self.adapter.request_block(h, addr)
 	}
 	fn headers_received(&self, headers: Vec<core::BlockHeader>, peer_addr: SocketAddr) {
 		self.adapter.headers_received(headers, peer_addr)

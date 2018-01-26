@@ -154,7 +154,7 @@ impl Peer {
 		} else {
 			debug!(
 				LOGGER,
-				"Not sending block {} to {} (already seen)",
+				"Suppress block send {} to {} (already seen)",
 				b.hash(),
 				self.info.addr,
 			);
@@ -169,7 +169,7 @@ impl Peer {
 		} else {
 			debug!(
 				LOGGER,
-				"Not sending header {} to {} (already seen)",
+				"Suppress header send {} to {} (already seen)",
 				bh.hash(),
 				self.info.addr,
 			);
@@ -274,10 +274,6 @@ impl ChainAdapter for TrackingAdapter {
 
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
-	}
-
-	fn request_block(&self, h: Hash, addr: &SocketAddr) {
-		self.adapter.request_block(h, addr)
 	}
 }
 

@@ -92,7 +92,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		validate_block(b, &mut ctx, &mut extension)?;
 		debug!(
 			LOGGER,
-			"pipe: process_block {} at {} is valid, save and append.",
+			"pipe: process_block: {} at {} is valid, save and append.",
 			b.hash(),
 			b.header.height,
 		);
@@ -137,6 +137,14 @@ pub fn process_block_header(
 
 	check_header_known(bh.hash(), &mut ctx)?;
 	validate_header(&bh, &mut ctx)?;
+
+	debug!(
+		LOGGER,
+		"pipe: process_block_header: {} at {} is valid, saving.",
+		bh.hash(),
+		bh.height,
+	);
+
 	add_block_header(bh, &mut ctx)?;
 
 	// now update the header_head (if new header with most work)
