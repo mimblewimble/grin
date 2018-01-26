@@ -25,7 +25,10 @@ use std::sync::RwLock;
 use consensus::PROOFSIZE;
 use consensus::DEFAULT_SIZESHIFT;
 use consensus::COINBASE_MATURITY;
-use consensus::INITIAL_DIFFICULTY;
+use consensus::{MEDIAN_TIME_WINDOW, INITIAL_DIFFICULTY, DIFFICULTY_ADJUST_WINDOW,
+	BLOCK_TIME_SEC};
+use core::target::Difficulty;
+use consensus::TargetError;
 
 /// Define these here, as they should be developer-set, not really tweakable
 /// by users
@@ -183,8 +186,7 @@ pub fn is_production_mode() -> bool {
 /// Helper function to get a nonce known to create a valid POW on
 /// the genesis block, to prevent it taking ages. Should be fine for now
 /// as the genesis block POW solution turns out to be the same for every new
-/// block chain
-/// at the moment
+/// block chain at the moment
 pub fn get_genesis_nonce() -> u64 {
 	let param_ref = CHAIN_TYPE.read().unwrap();
 	match *param_ref {
@@ -196,4 +198,32 @@ pub fn get_genesis_nonce() -> u64 {
 
 		_ => panic!("Pre-set"),
 	}
+}
+
+/// Converts an iterator of block difficulty data to more a more mangeable vector and pads 
+/// if needed (which will) only be needed for the first few blocks after genesis
+
+pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<Result<(u64, Difficulty), TargetError>>
+	where
+	T: IntoIterator<Item = Result<(u64, Difficulty), TargetError>> {
+	// Convert iterator to vector, so we can append to it if necessary
+	let needed_block_count = (MEDIAN_TIME_WINDOW + DIFFICULTY_ADJUST_WINDOW) as usize;
+	let mut last_n: Vec<Result<(u64, Difficulty), TargetError>> = cursor.into_iter()
+		.take(needed_block_count)
+		.collect();
+
+	// Sort blocks from earliest to latest (to keep conceptually easier)
+	last_n.reverse();
+
+	// Only needed just after blockchain launch... basically ensures there's
+	// always enough data by simulating perfectly timed pre-genesis
+	// blocks at the genesis difficulty as needed.
+	let block_count_difference = needed_block_count - last_n.len();
+	let earliest_ts = last_n.first().as_ref().unwrap().as_ref().unwrap().0;
+	for i in 0..block_count_difference {
+		last_n.insert(0, Ok((earliest_ts - (i+1) as u64 * BLOCK_TIME_SEC, 
+			Difficulty::from_num(initial_block_difficulty()))));
+	}
+
+	last_n
 }

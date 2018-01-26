@@ -129,7 +129,10 @@ pub fn valid_header_version(height: u64, version: u16) -> bool {
 }
 
 /// Time window in blocks to calculate block time median
-pub const MEDIAN_TIME_WINDOW: u64 = 12;
+pub const MEDIAN_TIME_WINDOW: u64 = 11;
+
+/// Index at half the desired median 
+pub const MEDIAN_TIME_INDEX: u64 = MEDIAN_TIME_WINDOW / 2;
 
 /// Number of blocks used to calculate difficulty adjustments
 pub const DIFFICULTY_ADJUST_WINDOW: u64 = 60;
@@ -144,7 +147,7 @@ pub const UPPER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW * 2;
 pub const LOWER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW / 2;
 
 /// Dampening factor to use for difficulty adjustment
-pub const DAMP_FACTOR: u64 = 2;
+pub const DAMP_FACTOR: u64 = 3;
 
 /// The initial difficulty at launch. This should be over-estimated
 /// and difficulty should come down at launch rather than up
@@ -178,77 +181,58 @@ impl fmt::Display for TargetError {
 /// The difficulty calculation is based on both Digishield and GravityWave
 /// family of difficulty computation, coming to something very close to Zcash.
 /// The refence difficulty is an average of the difficulty over a window of
-/// 23 blocks. The corresponding timespan is calculated by using the
-/// difference between the median timestamps at the beginning and the end
-/// of the window.
+/// DIFFICULTY_ADJUST_WINDOW blocks. The corresponding timespan is calculated 
+/// by using the difference between the median timestamps at the beginning 
+/// and the end of the window.
 pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
 where
 	T: IntoIterator<Item = Result<(u64, Difficulty), TargetError>>,
 {
-	// Block times at the begining and end of the adjustment window, used to
- // calculate medians later.
-	let mut window_begin = vec![];
-	let mut window_end = vec![];
+	// Create vector of difficulty data running from earliest
+	// to latest, and pad with simulated pre-genesis data to allow earlier
+	// adjustment if there isn't enough window data
+	// length will be DIFFICULTY_ADJUST_WINDOW+MEDIAN_TIME_WINDOW
+	let diff_data = global::difficulty_data_to_vector(cursor);
 
-	// Sum of difficulties in the window, used to calculate the average later.
-	let mut diff_sum = Difficulty::zero();
-	
-	// Convert iterator to vector, so we can append to it if necessary
-	let needed_block_count = (MEDIAN_TIME_WINDOW + DIFFICULTY_ADJUST_WINDOW) as usize;
-	let mut last_n: Vec<Result<(u64, Difficulty), TargetError>> = cursor.into_iter()
-		.take(needed_block_count)
+	// Get the difficulty sum for averaging later
+	// Which in this case is the sum of the last
+	// DIFFICULTY_ADJUST_WINDOW elements
+	let diff_sum = diff_data.iter()
+		.skip(MEDIAN_TIME_WINDOW as usize)
+		.take(DIFFICULTY_ADJUST_WINDOW as usize)
+		.fold(Difficulty::zero(), |sum, d| sum + d.clone().unwrap().1);
+
+	// Obtain the median window for the earlier time period
+	// which is just the first MEDIAN_TIME_WINDOW elements 
+	let mut window_earliest: Vec<u64> = diff_data.iter()
+		.take(MEDIAN_TIME_WINDOW as usize)
+		.map(|n| n.clone().unwrap().0)
 		.collect();
 
-	if last_n.len() == 0 {
-		return Err(TargetError(String::from("Difficulty data is empty.")));
-	}
+	// Obtain the median window for the latest time period
+	// i.e. the last MEDIAN_TIME_WINDOW elements
+	let mut window_latest: Vec<u64> = diff_data.iter()
+		.skip(DIFFICULTY_ADJUST_WINDOW as usize)
+		.map(|n| n.clone().unwrap().0)
+		.collect();
 
-	// Only needed after blockchain launch... basically ensures there's
-	// always enough data by simulating perfectly timed pre-genesis
-	// blocks at the genesis difficulty as needed.
-	let block_count_difference = needed_block_count - last_n.len();
-	let earliest_ts = last_n.last().as_ref().unwrap().as_ref().unwrap().0;
-	for i in 1..block_count_difference {
-		last_n.push(Ok((earliest_ts - i as u64 * BLOCK_TIME_SEC, 
-			Difficulty::from_num(global::initial_block_difficulty()))));
-	}
+	// And obtain our median values
+	window_earliest.sort();
+	window_latest.sort();
+	let latest_ts = window_latest[MEDIAN_TIME_INDEX as usize];
+	let earliest_ts = window_earliest[MEDIAN_TIME_INDEX as usize];
 
-	// Enumerating backward over blocks
-	for (n, head_info) in last_n.into_iter().enumerate() {
-		let m = n as u64;
-		let (ts, diff) = head_info?;
-
-	// Sum each element in the adjustment window. In addition, retain
-	// timestamps within median windows (at ]start;start-MEDIAN_TIME_WINDOW] 
-	// and ]end;end-MEDIAN_TIME_WINDOW] to later calculate medians.
-		if m < DIFFICULTY_ADJUST_WINDOW {
-			diff_sum = diff_sum + diff;
-
-			if m < MEDIAN_TIME_WINDOW {
-				window_begin.push(ts);
-			}
-		} else if m < DIFFICULTY_ADJUST_WINDOW + MEDIAN_TIME_WINDOW {
-			window_end.push(ts);
-		} else {
-			break;
-		}
-	}
-
-	// Calculating time medians at the beginning and end of the window.
-	window_begin.sort();
-	window_end.sort();
-
-	let begin_ts = window_begin[window_begin.len() / 2];
-	let end_ts = window_end[window_end.len() / 2];
-
-	// Average difficulty and dampened average time
+	// Calculate the average difficulty
 	let diff_avg = diff_sum.into_num()  /
 		Difficulty::from_num(DIFFICULTY_ADJUST_WINDOW).into_num();
 
-	let ts_undamp = begin_ts - end_ts;
+	// Actual undampened time delta
+	let ts_delta = latest_ts - earliest_ts;
+
+	// Apply dampening
 	let ts_damp = match diff_avg {
-		n if n >= DAMP_FACTOR => ((DAMP_FACTOR-1) * BLOCK_TIME_WINDOW + ts_undamp) / DAMP_FACTOR,
-		_ => ts_undamp,
+		n if n >= DAMP_FACTOR => ((DAMP_FACTOR-1) * BLOCK_TIME_WINDOW + ts_delta) / DAMP_FACTOR,
+		_ => ts_delta,
 	};
 
 	// Apply time bounds
@@ -360,8 +344,8 @@ mod test {
 		// Genesis block with initial diff
 		let chain_sim = create_chain_sim(global::initial_block_difficulty());
 		// Scenario 1) Hash power is massively over estimated, first block takes an hour
-		let chain_sim = add_block_repeated(3600, chain_sim, 10);
-		let chain_sim = add_block_repeated(1800, chain_sim, 1);
+		let chain_sim = add_block_repeated(3600, chain_sim, 7);
+		let chain_sim = add_block_repeated(1800, chain_sim, 5);
 
 		println!("*********************************************************");
 		println!("Scenario 1) Grossly over-estimated genesis difficulty ");
@@ -369,16 +353,26 @@ mod test {
 		print_chain_sim(&chain_sim);
 		println!("*********************************************************");
 
+		// Under-estimated difficulty
+		let chain_sim = create_chain_sim(global::initial_block_difficulty());
+		let chain_sim = add_block_repeated(1, chain_sim, 7);
+		let chain_sim = add_block_repeated(20, chain_sim, 5);
+
+		println!("*********************************************************");
+		println!("Scenario 2) Grossly under-estimated genesis difficulty ");
+		println!("*********************************************************");
+		print_chain_sim(&chain_sim);
+		println!("*********************************************************");
 		let just_enough = (DIFFICULTY_ADJUST_WINDOW + MEDIAN_TIME_WINDOW) as usize;
 
 	// Steady difficulty for a good while, then a sudden drop 
 		let chain_sim = create_chain_sim(global::initial_block_difficulty());
-		let chain_sim = add_block_repeated(60, chain_sim, just_enough as usize);
+		let chain_sim = add_block_repeated(10, chain_sim, just_enough as usize);
 		let chain_sim = add_block_repeated(600, chain_sim, 10);
 
 		println!("");
 		println!("*********************************************************");
-		println!("Scenario 2) Sudden drop in hashpower");
+		println!("Scenario 3) Sudden drop in hashpower");
 		println!("*********************************************************");
 		print_chain_sim(&chain_sim);
 		println!("*********************************************************");
@@ -390,7 +384,7 @@ mod test {
 
 		println!("");
 		println!("*********************************************************");
-		println!("Scenario 3) Sudden increase in hashpower");
+		println!("Scenario 4) Sudden increase in hashpower");
 		println!("*********************************************************");
 		print_chain_sim(&chain_sim);
 		println!("*********************************************************");
@@ -399,13 +393,12 @@ mod test {
 		let chain_sim = create_chain_sim(global::initial_block_difficulty());
 		let chain_sim = add_block_repeated(60, chain_sim, just_enough as usize);
 		let chain_sim = add_block_repeated(10, chain_sim, 10);
-		let chain_sim = add_block_repeated(60, chain_sim, 10);
+		let chain_sim = add_block_repeated(60, chain_sim, 20);
 		let chain_sim = add_block_repeated(10, chain_sim, 10);
-		let chain_sim = add_block_repeated(60, chain_sim, 10);
 
 		println!("");
 		println!("*********************************************************");
-		println!("Scenario 4) Oscillations in hashpower");
+		println!("Scenario 5) Oscillations in hashpower");
 		println!("*********************************************************");
 		print_chain_sim(&chain_sim);
 		println!("*********************************************************");
@@ -451,34 +444,32 @@ mod test {
 		// too slow, diff goes down
 		assert_eq!(
 			next_difficulty(repeat(90, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(800)
+			Difficulty::from_num(857)
 		);
 		assert_eq!(
 			next_difficulty(repeat(120, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(666)
+			Difficulty::from_num(750)
 		);
 
 		// too fast, diff goes up
 		assert_eq!(
 			next_difficulty(repeat(55, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(1043)
+			Difficulty::from_num(1028)
 		);
 		assert_eq!(
 			next_difficulty(repeat(45, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(1142)
+			Difficulty::from_num(1090)
 		);
 
 		// hitting lower time bound, should always get the same result below
-		// note with the current param values, even a 1 second block interval
-		// isn't enough to hit the lower bound (it comes in just above it)
-		/*assert_eq!(
-			next_difficulty(repeat(1, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(1250)
+		assert_eq!(
+			next_difficulty(repeat(0, 1000, just_enough)).unwrap(),
+			Difficulty::from_num(1500)
 		);
 		assert_eq!(
-			next_difficulty(repeat(10, 1000, just_enough)).unwrap(),
-			Difficulty::from_num(1250)
-		);*/
+			next_difficulty(repeat(0, 1000, just_enough)).unwrap(),
+			Difficulty::from_num(1500)
+		);
 
 		// hitting higher time bound, should always get the same result above
 		assert_eq!(
