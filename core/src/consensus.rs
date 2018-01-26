@@ -193,7 +193,6 @@ where
 	// adjustment if there isn't enough window data
 	// length will be DIFFICULTY_ADJUST_WINDOW+MEDIAN_TIME_WINDOW
 	let diff_data = global::difficulty_data_to_vector(cursor);
-
 	// Get the difficulty sum for averaging later
 	// Which in this case is the sum of the last
 	// DIFFICULTY_ADJUST_WINDOW elements

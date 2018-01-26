@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,8 +25,8 @@ use std::sync::RwLock;
 use consensus::PROOFSIZE;
 use consensus::DEFAULT_SIZESHIFT;
 use consensus::COINBASE_MATURITY;
-use consensus::{MEDIAN_TIME_WINDOW, INITIAL_DIFFICULTY, DIFFICULTY_ADJUST_WINDOW,
-	BLOCK_TIME_SEC};
+use consensus::{MEDIAN_TIME_WINDOW, INITIAL_DIFFICULTY, 
+	BLOCK_TIME_SEC, DIFFICULTY_ADJUST_WINDOW};
 use core::target::Difficulty;
 use consensus::TargetError;
 
@@ -214,16 +214,42 @@ pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<Result<(u64, Difficulty), 
 
 	// Sort blocks from earliest to latest (to keep conceptually easier)
 	last_n.reverse();
-
 	// Only needed just after blockchain launch... basically ensures there's
 	// always enough data by simulating perfectly timed pre-genesis
 	// blocks at the genesis difficulty as needed.
 	let block_count_difference = needed_block_count - last_n.len();
-	let earliest_ts = last_n.first().as_ref().unwrap().as_ref().unwrap().0;
-	for i in 0..block_count_difference {
-		last_n.insert(0, Ok((earliest_ts - (i+1) as u64 * BLOCK_TIME_SEC, 
-			Difficulty::from_num(initial_block_difficulty()))));
+	if block_count_difference > 0 {
+		// Collect any real data we have
+		let mut live_intervals:Vec<(u64, Difficulty)> = last_n.iter()
+			.map(|b| (b.clone().unwrap().0, b.clone().unwrap().1))
+			.collect();
+		for i in (1..live_intervals.len()).rev() {
+			live_intervals[i].0=live_intervals[i].0-live_intervals[i-1].0;
+		}
+		// 
+		// Remove genesis "interval"
+		if live_intervals.len() > 1 {
+			live_intervals.remove(0);
+		} else {
+			//if it's just genesis, adjust the interval
+			live_intervals[0].0 = BLOCK_TIME_SEC;
+		}
+		let mut interval_index = live_intervals.len() - 1;
+		let mut last_ts = last_n.first().as_ref().unwrap().as_ref().unwrap().0;
+		// fill in simulated blocks, repeating whatever pattern we've obtained from
+		// real data
+		// if we have, say, 15 blocks so far with intervals of I1..I15, then
+		// the 71-15=56 pre genesis blocks will have
+		// intervals/difficulties I1..I15 I1..I15 I1..I15 I1..I11
+		for _ in 0..block_count_difference {
+			last_ts = last_ts - live_intervals[interval_index].0;
+			let last_diff = &live_intervals[interval_index].1;
+			last_n.insert(0, Ok((last_ts, last_diff.clone())));
+			interval_index = match interval_index {
+				0 => live_intervals.len()-1,
+				_ => interval_index - 1,
+			};
+		}
 	}
-
 	last_n
 }
