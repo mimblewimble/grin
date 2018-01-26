@@ -899,6 +899,24 @@ mod test {
 	}
 
 	#[test]
+	// block with no inputs/outputs/kernels
+	// no fees, no reward, no coinbase
+	fn very_empty_block() {
+		let b = Block {
+			header: BlockHeader::default(),
+			inputs: vec![],
+			outputs: vec![],
+			kernels: vec![],
+		};
+
+		assert_eq!(
+			b.verify_coinbase(),
+			Err(Error::Secp(secp::Error::IncorrectCommitSum))
+		);
+
+	}
+
+	#[test]
 	// builds a block with a tx spending another and check that cut_through occurred
 	fn block_with_cut_through() {
 		let keychain = Keychain::from_random_seed().unwrap();
@@ -953,6 +971,18 @@ mod test {
 		let b3 = b1.merge(b2);
 		assert_eq!(b3.inputs.len(), 3);
 		assert_eq!(b3.outputs.len(), 4);
+		assert_eq!(b3.kernels.len(), 5);
+
+		// The merged block will actually fail validation (>1 coinbase kernels)
+		// Technically we support blocks with multiple coinbase kernels but we are
+		// artificially limiting it to 1 for now
+		assert!(b3.validate().is_err());
+		assert_eq!(
+			b3.kernels
+				.iter()
+				.filter(|x| x.features.contains(COINBASE_KERNEL))
+				.count(),
+			2);
 	}
 
 	#[test]
