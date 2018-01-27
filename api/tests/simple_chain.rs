@@ -37,10 +37,7 @@ fn simple_server_wallet() {
 	let test_name_dir = "test_servers";
 	core::global::set_mining_mode(core::global::ChainTypes::AutomatedTesting);
 	framework::clean_all_output(test_name_dir);
-	let mut log_config = util::LoggingConfig::default();
-	//log_config.stdout_log_level = util::LogLevel::Trace;
-	log_config.stdout_log_level = util::LogLevel::Info;
-	//init_logger(Some(log_config));
+	
 	init_test_logger();
 
 	// Run a separate coinbase wallet for coinbase transactions
