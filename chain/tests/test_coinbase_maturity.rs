@@ -80,7 +80,7 @@ fn test_coinbase_maturity() {
 		vec![],
 		&keychain,
 		&key_id1,
-		Difficulty::minimum()
+		Difficulty::one()
 	).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
@@ -131,7 +131,7 @@ fn test_coinbase_maturity() {
 			vec![&coinbase_txn],
 			&keychain,
 			&key_id3,
-			Difficulty::minimum(),
+			Difficulty::one(),
 		).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
@@ -163,7 +163,7 @@ fn test_coinbase_maturity() {
 			vec![],
 			&keychain,
 			&pk,
-			Difficulty::minimum()
+			Difficulty::one()
 		).unwrap();
 		block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
@@ -197,7 +197,7 @@ fn test_coinbase_maturity() {
 		vec![&coinbase_txn],
 		&keychain,
 		&key_id4,
-		Difficulty::minimum(),
+		Difficulty::one(),
 	).unwrap();
 
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
