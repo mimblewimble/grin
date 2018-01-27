@@ -107,7 +107,7 @@ pub fn write_msg<T>(
 where
 	T: Writeable + 'static,
 {
-	let write_msg = ok((conn)).and_then(move |conn| {
+	let write_msg = ok(conn).and_then(move |conn| {
 		// prepare the body first so we know its serialized length
 		let mut body_buf = vec![];
 		ser::serialize(&mut body_buf, &msg).unwrap();

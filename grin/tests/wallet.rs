@@ -31,11 +31,9 @@ mod framework;
 
 use std::{thread, time};
 use std::sync::{Arc, Mutex};
-use framework::{LocalServerContainer,
-	LocalServerContainerConfig,
-	LocalServerContainerPoolConfig};
+use framework::{LocalServerContainer,LocalServerContainerConfig};
 
-use util::{init_logger, LOGGER};
+use util::LOGGER;
 
 /// Start 1 node mining and two wallets, then send a few
 /// transactions from one to the other
@@ -110,4 +108,3 @@ fn basic_wallet_transactions() {
 	LocalServerContainer::send_amount_to(&recp_wallet_config, "25.00", 1, "all", "http://127.0.0.1:10002");
 	thread::sleep(time::Duration::from_millis(5000));
 }
-

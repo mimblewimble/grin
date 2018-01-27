@@ -174,7 +174,7 @@ impl LocalServerContainer {
 		wallet_config.check_node_api_http_addr = config.wallet_validating_node_url.clone();
 		wallet_config.data_file_dir = working_dir.clone();
 		Ok(
-			(LocalServerContainer {
+			LocalServerContainer {
 				config: config,
 				p2p_server_stats: None,
 				api_server: None,
@@ -184,7 +184,7 @@ impl LocalServerContainer {
 				working_dir: working_dir,
 				peer_list: Vec::new(),
 				wallet_config:wallet_config,
-			}),
+			},
 		)
 	}
 
@@ -327,7 +327,7 @@ impl LocalServerContainer {
 			minimum_confirmations,
 			dest.to_string(),
 			max_outputs,
-			(selection_strategy == "all"),
+			selection_strategy == "all",
 			);
 		match result {
 			Ok(_) => {
