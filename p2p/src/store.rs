@@ -130,7 +130,7 @@ impl PeerStore {
 	}
 
 	/// List all known peers
-	/// Used for /v1/peers, for seed / sync (debug & if too few peers connected)
+	/// Used for /v1/peers/all api endpoint
 	pub fn all_peers(&self) -> Vec<PeerData> {
 		self.db
 			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()))
@@ -155,5 +155,5 @@ impl PeerStore {
 }
 
 fn peer_key(peer_addr: SocketAddr) -> Vec<u8> {
-	to_key(PEER_PREFIX, &mut format!("{}", peer_addr.ip()).into_bytes())
+	to_key(PEER_PREFIX, &mut format!("{}:{}", peer_addr.ip(), peer_addr.port()).into_bytes())
 }
