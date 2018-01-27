@@ -431,7 +431,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 					match e {
 						wallet::Error::FeeExceedsAmount {sender_amount, recipient_fee} => {
 							error!(
-								LOGGER, 
+								LOGGER,
 								"Cannot process because transaction fee ({}) exceeded received amount ({}).",
 								amount_to_hr_string(recipient_fee),
 								amount_to_hr_string(sender_amount)
@@ -474,7 +474,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				minimum_confirmations,
 				dest.to_string(),
 				max_outputs,
-				(selection_strategy == "all"),
+				selection_strategy == "all",
 			);
 			match result {
 				Ok(_) => {
@@ -495,7 +495,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				}
 				Err(wallet::Error::FeeExceedsAmount {sender_amount, recipient_fee}) => {
 					error!(
-						LOGGER, 
+						LOGGER,
 						"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
 						amount_to_hr_string(recipient_fee),
 						amount_to_hr_string(sender_amount)

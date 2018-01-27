@@ -19,8 +19,10 @@ extern crate byteorder;
 extern crate grin_util as util;
 extern crate rand;
 extern crate serde;
-// #[macro_use]
-// extern crate serde_derive;
+// #[allow(unused_imports)]
+#[cfg(test)]
+#[macro_use]
+extern crate serde_derive;
 extern crate serde_json;
 #[macro_use]
 extern crate slog;
