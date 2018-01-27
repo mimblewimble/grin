@@ -129,7 +129,7 @@ fn sumtree_reload() {
 		backend.sync().unwrap();
 		backend.check_compact(1).unwrap();
 		backend.sync().unwrap();
-    assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
+		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
 
 		// prune some more to get rm log data
 		{
@@ -137,7 +137,7 @@ fn sumtree_reload() {
 			pmmr.prune(5, 1).unwrap();
 		}
 		backend.sync().unwrap();
-    assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
+		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
 	}
 
 	// create a new backend and check everything is kosher
