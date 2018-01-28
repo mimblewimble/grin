@@ -188,7 +188,7 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<()
 
 	match api::client::get::<Vec<api::Utxo>>(url.as_str()) {
 		Ok(outputs) => for out in outputs {
-			api_utxos.insert(out.commit, out);
+			api_utxos.insert(out.commit.commit(), out);
 		},
 		Err(e) => {
 			// if we got anything other than 200 back from server, don't attempt to refresh

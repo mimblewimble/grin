@@ -167,12 +167,55 @@ pub enum OutputType {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Utxo {
 	/// The output commitment representing the amount
-	pub commit: pedersen::Commitment,
+	pub commit: PrintableCommitment,
 }
 
 impl Utxo {
 	pub fn new(commit: &pedersen::Commitment) -> Utxo {
-		Utxo { commit: commit.clone() }
+		Utxo { commit: PrintableCommitment(commit.clone()) }
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct PrintableCommitment(pedersen::Commitment);
+
+impl PrintableCommitment {
+	pub fn commit(&self) -> pedersen::Commitment {
+		self.0.clone()
+	}
+
+	pub fn to_vec(&self) -> Vec<u8> {
+		let commit = self.0;
+		commit.0.to_vec()
+	}
+}
+
+impl serde::ser::Serialize for PrintableCommitment {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where
+		S: serde::ser::Serializer {
+		serializer.serialize_str(&util::to_hex(self.to_vec()))
+	}
+}
+
+impl<'de> serde::de::Deserialize<'de> for PrintableCommitment {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where
+		D: serde::de::Deserializer<'de> {
+		deserializer.deserialize_str(PrintableCommitmentVisitor)
+	}
+}
+
+struct PrintableCommitmentVisitor;
+
+impl<'de> serde::de::Visitor<'de> for PrintableCommitmentVisitor {
+	type Value = PrintableCommitment;
+
+	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+		formatter.write_str("a Pedersen commitment")
+	}
+
+	fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where
+		E: serde::de::Error, {
+		Ok(PrintableCommitment(pedersen::Commitment::from_vec(util::from_hex(String::from(v)).unwrap())))
 	}
 }
 
@@ -544,7 +587,7 @@ pub struct PoolInfo {
 }
 
 #[test]
-fn serialize_printable_commitment() {
+fn serialize_output() {
 	let hex_output = "{\
         \"output_type\":\"Coinbase\",\
         \"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\",\
@@ -556,4 +599,12 @@ fn serialize_printable_commitment() {
 	let deserialized: OutputPrintable = serde_json::from_str(&hex_output).unwrap();
 	let serialized = serde_json::to_string(&deserialized).unwrap();
 	assert_eq!(serialized, hex_output);
+}
+
+#[test]
+fn serialize_utxo() {
+	let hex_commit = "{\"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\"}";
+	let deserialized: Utxo = serde_json::from_str(&hex_commit).unwrap();
+	let serialized = serde_json::to_string(&deserialized).unwrap();
+	assert_eq!(serialized, hex_commit);
 }
