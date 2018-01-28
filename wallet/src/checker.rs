@@ -115,10 +115,7 @@ fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain) -> R
 		Ok(blocks) => {
 			for block in blocks {
 				for out in block.outputs {
-					if let Ok(c) = util::from_hex(String::from(out.commit)) {
-						let commit = pedersen::Commitment::from_vec(c);
-						api_blocks.insert(commit, block.header.clone());
-					}
+					api_blocks.insert(out.commit, block.header.clone());
 				}
 			}
 		}
