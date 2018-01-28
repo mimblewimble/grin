@@ -30,7 +30,7 @@ use util::LOGGER;
 /// Call the wallet API to create a coinbase output for the given block_fees.
 /// Will retry based on default "retry forever with backoff" behavior.
 pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
-    let mut has_error = false;
+	let mut has_error = false;
 
 	retry_backoff_forever(|| {
 		let res = single_create_coinbase(&url, &block_fees);
@@ -40,16 +40,10 @@ pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Erro
 				"Failed to get coinbase from {}. Run grin wallet listen",
 				url
 			);
-            has_error = true;
+			has_error = true;
 		}
-        if (has_error == true)
-        {
-            error!(
-                LOGGER,
-                "Successfully received coinbase from {}",
-                url
-                )
-        }
+		if has_error
+			error!(LOGGER, "Successfully received coinbase from {}", url)
 		res
 	})
 }
