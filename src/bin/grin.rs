@@ -499,7 +499,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				minimum_confirmations,
 				dest.to_string(),
 				max_outputs,
-				(selection_strategy == "all"),
+				selection_strategy == "all",
 			);
 			match result {
 				Ok(_) => info!(
