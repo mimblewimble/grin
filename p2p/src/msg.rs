@@ -314,6 +314,7 @@ impl Readable for GetPeerAddrs {
 
 /// Peer addresses we know of that are fresh enough, in response to
 /// GetPeerAddrs.
+#[derive(Debug)]
 pub struct PeerAddrs {
 	pub peers: Vec<SockAddr>,
 }
@@ -375,6 +376,7 @@ impl Readable for PeerError {
 /// Only necessary so we can implement Readable and Writeable. Rust disallows
 /// implementing traits when both types are outside of this crate (which is the
 /// case for SocketAddr and Readable/Writeable).
+#[derive(Debug)]
 pub struct SockAddr(pub SocketAddr);
 
 impl Writeable for SockAddr {
