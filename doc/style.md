@@ -15,6 +15,8 @@ rustup install nightly
 rustup run nightly cargo install rustfmt-nightly
 ```
 
+If you still get problems with running `cargo +nightly fmt`, you might need to also do `rustup component add rustfmt-preview` (see [more info](https://github.com/rust-lang-nursery/rustfmt/issues/2304))
+
 ## Install git pre-commit hook
 
 There is a basic git [pre-commit](../.hooks/pre-commit) hook in the repo.
