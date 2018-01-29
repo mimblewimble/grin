@@ -94,10 +94,10 @@ impl Server {
 		pool: CpuPool,
 	) -> Result<Server, Error> {
 		Ok(Server {
-			config: config,
+			config: config.clone(),
 			capabilities: capab,
-			handshake: Arc::new(Handshake::new(genesis)),
-			peers: Peers::new(PeerStore::new(db_root)?, adapter),
+			handshake: Arc::new(Handshake::new(genesis, config.clone())),
+			peers: Peers::new(PeerStore::new(db_root)?, adapter, config.clone()),
 			pool: pool,
 			stop: RefCell::new(None),
 		})
@@ -127,7 +127,7 @@ impl Server {
 			let pool = pool.clone();
 
 			future::ok(conn).and_then(move |conn| {
-				// Refuse banned peers connection
+				// Refuse connection from banned peers
 				if let Ok(peer_addr) = conn.peer_addr() {
 					if peers.is_banned(peer_addr) {
 						debug!(LOGGER, "Peer {} banned, refusing connection.", peer_addr);
@@ -139,7 +139,6 @@ impl Server {
 				}
 				Ok(conn)
 			}).and_then(move |conn| {
-
 				let total_diff = peers2.total_difficulty();
 
 				// accept the peer and add it to the server map
@@ -216,6 +215,11 @@ impl Server {
 		addr: SocketAddr,
 		h: reactor::Handle,
 	) -> Box<Future<Item = Option<Arc<RwLock<Peer>>>, Error = Error>> {
+
+		if Peer::is_denied(self.config.clone(), addr) {
+			debug!(LOGGER, "Peer {} denied, not connecting.", addr);
+			return Box::new(future::err(Error::ConnectionClose));
+		}
 
 		if let Some(p) = self.peers.get_connected_peer(&addr) {
 			// if we're already connected to the addr, just return the peer

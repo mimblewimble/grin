@@ -33,17 +33,19 @@ pub struct Peers {
 	pub adapter: Arc<ChainAdapter>,
 	store: Arc<PeerStore>,
 	peers: Arc<RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>>,
+	config: P2PConfig,
 }
 
 unsafe impl Send for Peers {}
 unsafe impl Sync for Peers {}
 
 impl Peers {
-	pub fn new(store: PeerStore, adapter: Arc<ChainAdapter>) -> Peers {
+	pub fn new(store: PeerStore, adapter: Arc<ChainAdapter>, config: P2PConfig) -> Peers {
 		Peers {
-			adapter: adapter,
+			adapter,
 			store: Arc::new(store),
 			peers: Arc::new(RwLock::new(HashMap::new())),
+			config,
 		}
 	}
 
