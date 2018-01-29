@@ -30,7 +30,7 @@ const PEER_PREFIX: u8 = 'p' as u8;
 
 /// Types of messages
 enum_from_primitive! {
-	#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 	pub enum State {
 		Healthy,
 		Banned,
@@ -39,7 +39,7 @@ enum_from_primitive! {
 }
 
 /// Data stored for any given peer we've encountered.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PeerData {
 	/// Network address of the peer.
 	pub addr: SocketAddr,
