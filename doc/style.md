@@ -33,8 +33,10 @@ ln -s -f ../../.hooks/pre-commit
 
 ## Running rustfmt
 
-To run rustfmt against a single file in grin -
+To run rustfmt against a single file, this __new__ command works with latest rust and after having done `rustup component add rustfmt-preview` and by setting --write-mode it doesn't overwrite files.
 
-```
-cargo +nightly fmt -- ./core/src/lib.rs
-```
+`rustfmt --write-mode diff -- client.rs`
+
+The old method, which always overwrote almost every file in the grin repo, was written like this:
+
+`cargo +nightly fmt -- ./core/src/lib.rs`
