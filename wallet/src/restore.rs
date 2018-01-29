@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use keychain::{Keychain, Identifier};
-use util::{LOGGER, from_hex};
+use util::{LOGGER, to_hex};
 use util::secp::pedersen;
 use api;
 use core::global;
@@ -175,13 +175,13 @@ fn find_utxos_with_key(
 					);
 
 					// add it to result set here
-					let commit_id = from_hex(output.commit.clone()).unwrap();
+					let commit_id = output.commit.0;
 
 					let res = retrieve_amount_and_coinbase_status(
 						config,
 						keychain,
 						key_id.clone(),
-						&output.commit,
+						&to_hex(output.commit.0.to_vec()),
 						block_outputs.header.height,
 					);
 

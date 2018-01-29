@@ -17,11 +17,25 @@ use std::sync::Arc;
 use core::{core, ser};
 use core::core::hash::Hashed;
 use core::core::SumCommit;
+use core::core::SwitchCommitHash;
 use chain;
 use p2p;
 use util;
 use util::secp::pedersen;
 use util::secp::constants::MAX_PROOF_SIZE;
+use serde;
+use serde::ser::SerializeStruct;
+use serde::de::MapAccess;
+use std::fmt;
+use serde_json;
+
+macro_rules! no_dup {
+	($field: ident) => {
+		if $field.is_some() {
+        	return Err(serde::de::Error::duplicate_field("$field"));
+		}
+	};
+}
 
 /// The state of the current fork tip
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -153,29 +167,72 @@ pub enum OutputType {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Utxo {
 	/// The output commitment representing the amount
-	pub commit: pedersen::Commitment,
+	pub commit: PrintableCommitment,
 }
 
 impl Utxo {
 	pub fn new(commit: &pedersen::Commitment) -> Utxo {
-		Utxo { commit: commit.clone() }
+		Utxo { commit: PrintableCommitment(commit.clone()) }
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct PrintableCommitment(pedersen::Commitment);
+
+impl PrintableCommitment {
+	pub fn commit(&self) -> pedersen::Commitment {
+		self.0.clone()
+	}
+
+	pub fn to_vec(&self) -> Vec<u8> {
+		let commit = self.0;
+		commit.0.to_vec()
+	}
+}
+
+impl serde::ser::Serialize for PrintableCommitment {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where
+		S: serde::ser::Serializer {
+		serializer.serialize_str(&util::to_hex(self.to_vec()))
+	}
+}
+
+impl<'de> serde::de::Deserialize<'de> for PrintableCommitment {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where
+		D: serde::de::Deserializer<'de> {
+		deserializer.deserialize_str(PrintableCommitmentVisitor)
+	}
+}
+
+struct PrintableCommitmentVisitor;
+
+impl<'de> serde::de::Visitor<'de> for PrintableCommitmentVisitor {
+	type Value = PrintableCommitment;
+
+	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+		formatter.write_str("a Pedersen commitment")
+	}
+
+	fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where
+		E: serde::de::Error, {
+		Ok(PrintableCommitment(pedersen::Commitment::from_vec(util::from_hex(String::from(v)).unwrap())))
 	}
 }
 
 // As above, except formatted a bit better for human viewing
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone)]
 pub struct OutputPrintable {
 	/// The type of output Coinbase|Transaction
 	pub output_type: OutputType,
 	/// The homomorphic commitment representing the output's amount
 	/// (as hex string)
-	pub commit: String,
+	pub commit: pedersen::Commitment,
 	/// switch commit hash
-	pub switch_commit_hash: String,
+	pub switch_commit_hash: SwitchCommitHash,
 	/// Whether the output has been spent
 	pub spent: bool,
 	/// Rangeproof (as hex string)
-	pub proof: Option<String>,
+	pub proof: Option<pedersen::RangeProof>,
 	/// Rangeproof hash (as hex string)
 	pub proof_hash: String,
 }
@@ -197,44 +254,143 @@ impl OutputPrintable {
 		let spent = chain.is_unspent(&out_id).is_err();
 
 		let proof = if include_proof {
-			Some(util::to_hex(output.proof.bytes().to_vec()))
+			Some(output.proof)
 		} else {
 			None
 		};
 
 		OutputPrintable {
-			output_type: output_type,
-			commit: util::to_hex(output.commit.0.to_vec()),
-			switch_commit_hash: output.switch_commit_hash.to_hex(),
-			spent: spent,
-			proof: proof,
+			output_type,
+			commit: output.commit,
+			switch_commit_hash: output.switch_commit_hash,
+			spent,
+			proof,
 			proof_hash: util::to_hex(output.proof.hash().to_vec()),
 		}
 	}
 
 	// Convert the hex string back into a switch_commit_hash instance
 	pub fn switch_commit_hash(&self) -> Result<core::SwitchCommitHash, ser::Error> {
-		core::SwitchCommitHash::from_hex(&self.switch_commit_hash)
+		Ok(self.switch_commit_hash.clone())
 	}
 
 	pub fn commit(&self) -> Result<pedersen::Commitment, ser::Error> {
-		let vec = util::from_hex(self.commit.clone())
-			.map_err(|_| ser::Error::HexError(format!("output commit hex_error")))?;
-		Ok(pedersen::Commitment::from_vec(vec))
+		Ok(self.commit.clone())
 	}
 
 	pub fn range_proof(&self) -> Result<pedersen::RangeProof, ser::Error> {
-		if let Some(ref proof) = self.proof {
-			let vec = util::from_hex(proof.clone())
-				.map_err(|_| ser::Error::HexError(format!("output range_proof hex_error")))?;
-			let mut bytes = [0; MAX_PROOF_SIZE];
-			for i in 0..vec.len() {
-				bytes[i] = vec[i];
-			}
-			Ok(pedersen::RangeProof { proof: bytes, plen: vec.len() })
-		} else {
-			Err(ser::Error::HexError(format!("output range_proof missing")))
+		self.proof.clone().ok_or_else(|| ser::Error::HexError(format!("output range_proof missing")))
+	}
+}
+
+impl serde::ser::Serialize for OutputPrintable {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where
+		S: serde::ser::Serializer {
+		let mut state = serializer.serialize_struct("OutputPrintable", 6)?;
+		state.serialize_field("output_type", &self.output_type)?;
+		state.serialize_field("commit", &util::to_hex(self.commit.0.to_vec()))?;
+		state.serialize_field("switch_commit_hash", &self.switch_commit_hash.to_hex())?;
+		state.serialize_field("spent", &self.spent)?;
+		state.serialize_field("proof", &self.proof)?;
+		state.serialize_field("proof_hash", &self.proof_hash)?;
+		state.end()
+	}
+}
+
+impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where
+		D: serde::de::Deserializer<'de> {
+		#[derive(Deserialize)]
+		#[serde(field_identifier, rename_all = "snake_case")]
+		enum Field {
+			OutputType,
+			Commit,
+			SwitchCommitHash,
+			Spent,
+			Proof,
+			ProofHash
 		}
+
+		struct OutputPrintableVisitor;
+
+		impl<'de> serde::de::Visitor<'de> for OutputPrintableVisitor {
+			type Value = OutputPrintable;
+
+			fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+				formatter.write_str("a print able Output")
+			}
+
+			fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error> where
+				A: MapAccess<'de>, {
+				let mut output_type = None;
+				let mut commit = None;
+				let mut switch_commit_hash = None;
+				let mut spent = None;
+				let mut proof = None;
+				let mut proof_hash = None;
+
+				while let Some(key) = map.next_key()? {
+					match key {
+						Field::OutputType => {
+							no_dup!(output_type);
+							output_type = Some(map.next_value()?)
+						},
+						Field::Commit => {
+							no_dup!(commit);
+
+							let val: String = map.next_value()?;
+							let vec = util::from_hex(val.clone())
+								.map_err(serde::de::Error::custom)?;
+							commit = Some(pedersen::Commitment::from_vec(vec));
+						},
+						Field::SwitchCommitHash => {
+							no_dup!(switch_commit_hash);
+
+							let val: &str = map.next_value()?;
+							let hash = core::SwitchCommitHash::from_hex(val.clone())
+								.map_err(serde::de::Error::custom)?;
+							switch_commit_hash = Some(hash)
+						},
+						Field::Spent => {
+							no_dup!(spent);
+							spent = Some(map.next_value()?)
+						},
+						Field::Proof => {
+							no_dup!(proof);
+
+							let val: Option<String> = map.next_value()?;
+
+							if val.is_some() {
+								let vec = util::from_hex(val.unwrap().clone())
+									.map_err(serde::de::Error::custom)?;
+								let mut bytes = [0; MAX_PROOF_SIZE];
+								for i in 0..vec.len() {
+									bytes[i] = vec[i];
+								}
+
+								proof = Some(pedersen::RangeProof { proof: bytes, plen: vec.len() })
+							}
+						},
+						Field::ProofHash => {
+							no_dup!(proof_hash);
+							proof_hash = Some(map.next_value()?)
+						}
+					}
+				}
+
+				Ok(OutputPrintable {
+					output_type: output_type.unwrap(),
+					commit: commit.unwrap(),
+					switch_commit_hash: switch_commit_hash.unwrap(),
+					spent: spent.unwrap(),
+					proof: proof,
+					proof_hash: proof_hash.unwrap()
+				})
+			}
+		}
+
+		const FIELDS: &'static [&'static str] = &["output_type", "commit", "switch_commit_hash", "spent", "proof", "proof_hash"];
+		deserializer.deserialize_struct("OutputPrintable", FIELDS, OutputPrintableVisitor)
 	}
 }
 
@@ -428,4 +584,27 @@ pub struct PoolInfo {
 	pub orphans_size: usize,
 	/// Total size of pool + orphans
 	pub total_size: usize,
+}
+
+#[test]
+fn serialize_output() {
+	let hex_output = "{\
+        \"output_type\":\"Coinbase\",\
+        \"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\",\
+        \"switch_commit_hash\":\"85daaf11011dc11e52af84ebe78e2f2d19cbdc76000000000000000000000000\",\
+        \"spent\":false,\
+        \"proof\":null,\
+        \"proof_hash\":\"ed6ba96009b86173bade6a9227ed60422916593fa32dd6d78b25b7a4eeef4946\"\
+      }";
+	let deserialized: OutputPrintable = serde_json::from_str(&hex_output).unwrap();
+	let serialized = serde_json::to_string(&deserialized).unwrap();
+	assert_eq!(serialized, hex_output);
+}
+
+#[test]
+fn serialize_utxo() {
+	let hex_commit = "{\"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\"}";
+	let deserialized: Utxo = serde_json::from_str(&hex_commit).unwrap();
+	let serialized = serde_json::to_string(&deserialized).unwrap();
+	assert_eq!(serialized, hex_commit);
 }
