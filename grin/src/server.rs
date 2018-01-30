@@ -133,6 +133,7 @@ impl Server {
 		)?);
 		chain_adapter.init(p2p_server.peers.clone());
 		pool_net_adapter.init(p2p_server.peers.clone());
+		net_adapter.init(p2p_server.peers.clone());
 
 		let seed = seed::Seeder::new(
 			config.capabilities, p2p_server.clone(), p2p_server.peers.clone());

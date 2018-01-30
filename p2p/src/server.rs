@@ -48,10 +48,11 @@ impl ChainAdapter for DummyAdapter {
 	fn total_height(&self) -> u64 {
 		0
 	}
-	fn transaction_received(&self, _: core::Transaction) {}
-	fn block_received(&self, _: core::Block, _: SocketAddr) -> bool { true }
-	fn headers_received(&self, _: Vec<core::BlockHeader>, _:SocketAddr) {}
-	fn locate_headers(&self, _: Vec<Hash>) -> Vec<core::BlockHeader> {
+	fn transaction_received(&self, _tx: core::Transaction) {}
+	fn block_received(&self, _b: core::Block, _addr: SocketAddr) -> bool { true }
+	fn header_received(&self, _bh: core::BlockHeader, _addr: SocketAddr) -> bool { true }
+	fn headers_received(&self, _bh: Vec<core::BlockHeader>, _addr:SocketAddr) {}
+	fn locate_headers(&self, _loc: Vec<Hash>) -> Vec<core::BlockHeader> {
 		vec![]
 	}
 	fn get_block(&self, _: Hash) -> Option<core::Block> {

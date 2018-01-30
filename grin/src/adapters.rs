@@ -16,7 +16,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use chain::{self, ChainAdapter};
+use chain::{self, ChainAdapter, Options, MINE};
 use core::core;
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
@@ -35,6 +35,7 @@ pub struct NetToChainAdapter {
 	currently_syncing: Arc<AtomicBool>,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	peers: OneTime<p2p::Peers>,
 }
 
 impl p2p::ChainAdapter for NetToChainAdapter {
@@ -64,13 +65,14 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
-	fn block_received(&self, b: core::Block, _: SocketAddr) -> bool {
+	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {
 		let bhash = b.hash();
 		debug!(
 			LOGGER,
-			"Received block {} at {} from network, going to process.",
+			"Received block {} at {} from {}, going to process.",
 			bhash,
 			b.header.height,
+			addr,
 		);
 
 		// pushing the new block through the chain pipeline
@@ -83,6 +85,41 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				return false;
 			}
 		};
+		true
+	}
+
+	fn header_received(&self, bh: core::BlockHeader, addr: SocketAddr) -> bool {
+		let bhash = bh.hash();
+		debug!(
+			LOGGER,
+			"Received block header {} at {} from {}, going to process.",
+			bhash,
+			bh.height,
+			addr,
+		);
+
+		// pushing the new block header through the header chain pipeline
+		// we will go ask for the block if this is a new header
+		let res = self.chain.process_block_header(&bh, self.chain_opts());
+
+		if let &Err(ref e) = &res {
+			debug!(LOGGER, "Block header {} refused by chain: {:?}", bhash, e);
+			if e.is_bad_block() {
+				debug!(LOGGER, "header_received: {} is a bad header, resetting header head", bhash);
+				let _ = self.chain.reset_head();
+				return false;
+			} else {
+				// we got an error when trying to process the block header
+				// but nothing serious enough to need to ban the peer upstream
+				return true;
+			}
+		}
+
+		// we have successfully processed a block header
+		// so we can go request the block itself
+		self.request_block(&bh, &addr);
+
+		// done receiving the header
 		true
 	}
 
@@ -197,7 +234,12 @@ impl NetToChainAdapter {
 			currently_syncing: currently_syncing,
 			chain: chain_ref,
 			tx_pool: tx_pool,
+			peers: OneTime::new(),
 		}
+	}
+
+	pub fn init(&self, peers: p2p::Peers) {
+		self.peers.init(peers);
 	}
 
 	// recursively go back through the locator vector and stop when we find
@@ -234,6 +276,28 @@ impl NetToChainAdapter {
 		}
 	}
 
+	// After we have received a block header in "header first" propagation
+	// we need to go request the block from the same peer that gave us the header
+	// (unless we have already accepted the block)
+	//
+	// TODO - currently only request block from a single peer
+	// consider additional peers for redundancy?
+	fn request_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
+		if let None = self.peers.borrow().adapter.get_block(bh.hash()) {
+			if let Some(_) = self.peers.borrow().adapter.get_block(bh.previous) {
+				if let Some(peer) = self.peers.borrow().get_connected_peer(addr) {
+					if let Ok(peer) = peer.read() {
+						let _ = peer.send_block_request(bh.hash());
+					}
+				}
+			} else {
+				debug!(LOGGER, "request_block: prev block {} missing, skipping", bh.previous);
+			}
+		} else {
+			debug!(LOGGER, "request_block: block {} already known", bh.hash());
+		}
+	}
+
 	/// Prepare options for the chain pipeline
 	fn chain_opts(&self) -> chain::Options {
 		let opts = if self.currently_syncing.load(Ordering::Relaxed) {
@@ -254,7 +318,7 @@ pub struct ChainToPoolAndNetAdapter {
 }
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
-	fn block_accepted(&self, b: &core::Block) {
+	fn block_accepted(&self, b: &core::Block, opts: Options) {
 		{
 			if let Err(e) = self.tx_pool.write().unwrap().reconcile_block(b) {
 				error!(
@@ -265,7 +329,16 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 				);
 			}
 		}
-		self.peers.borrow().broadcast_block(b);
+
+		// If we mined the block then we want to broadcast the block itself.
+		// But if we received the block from another node then broadcast "header first"
+		// to minimize network traffic.
+		if opts.contains(MINE) {
+			self.peers.borrow().broadcast_block(b);
+		} else {
+			// "header first" propagation if we are not the originator of this block
+			self.peers.borrow().broadcast_header(&b.header);
+		}
 	}
 }
 
