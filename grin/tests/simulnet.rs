@@ -216,10 +216,10 @@ fn a_simulate_block_propagation() {
 			grin::ServerConfig {
 				api_http_addr: format!("127.0.0.1:{}", 19000 + n),
 				db_root: format!("target/{}/grin-prop-{}", test_name_dir, n),
-				p2p_config: Some(p2p::P2PConfig {
+				p2p_config: p2p::P2PConfig {
 					port: 18000 + n,
 					..p2p::P2PConfig::default()
-				}),
+				},
 				seeding_type: grin::Seeding::List,
 				seeds: Some(vec!["127.0.0.1:18000".to_string()]),
 				chain_type: core::global::ChainTypes::AutomatedTesting,
@@ -279,10 +279,10 @@ fn simulate_full_sync() {
 		let config = grin::ServerConfig {
 			api_http_addr: format!("127.0.0.1:{}", 19000 + n),
 			db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
-			p2p_config: Some(p2p::P2PConfig {
+			p2p_config: p2p::P2PConfig {
 				port: 11000 + n,
 				..p2p::P2PConfig::default()
-			}),
+			},
 			seeding_type: grin::Seeding::List,
 			seeds: Some(vec!["127.0.0.1:11000".to_string()]),
 			chain_type: core::global::ChainTypes::AutomatedTesting,

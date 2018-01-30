@@ -205,10 +205,10 @@ impl LocalServerContainer {
 			grin::ServerConfig {
 				api_http_addr: api_addr,
 				db_root: format!("{}/.grin", self.working_dir),
-				p2p_config: Some(p2p::P2PConfig {
+				p2p_config: p2p::P2PConfig {
 					port: self.config.p2p_server_port,
 					..p2p::P2PConfig::default()
-				}),
+				},
 				seeds: Some(seeds),
 				seeding_type: seeding_type,
 				chain_type: core::global::ChainTypes::AutomatedTesting,

@@ -118,6 +118,28 @@ impl Peer {
 		}))
 	}
 
+	pub fn is_denied(config: P2PConfig, peer_addr: SocketAddr) -> bool {
+		let peer = format!("{}:{}", peer_addr.ip(), peer_addr.port());
+		if let Some(ref denied) = config.peers_deny {
+			if denied.contains(&peer) {
+				debug!(LOGGER, "checking peer allowed/denied: {:?} explicitly denied", peer_addr);
+				return true;
+			}
+		}
+		if let Some(ref allowed) = config.peers_allow {
+			if allowed.contains(&peer) {
+				debug!(LOGGER, "checking peer allowed/denied: {:?} explicitly allowed", peer_addr);
+				return false;
+			} else {
+				debug!(LOGGER, "checking peer allowed/denied: {:?} not explicitly allowed, denying", peer_addr);
+				return true;
+			}
+		}
+
+		// default to allowing peer connection if we do not explicitly allow or deny the peer
+		false
+	}
+
 	/// Whether this peer is still connected.
 	pub fn is_connected(&self) -> bool {
 		let state = self.state.read().unwrap();

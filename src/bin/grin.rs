@@ -320,7 +320,7 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 	let mut server_config = global_config.members.unwrap().server;
 
 	if let Some(port) = server_args.value_of("port") {
-		server_config.p2p_config.as_mut().unwrap().port = port.parse().unwrap();
+		server_config.p2p_config.port = port.parse().unwrap();
 	}
 
 	if let Some(api_port) = server_args.value_of("api_port") {

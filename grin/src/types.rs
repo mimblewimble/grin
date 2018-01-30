@@ -120,15 +120,17 @@ pub struct ServerConfig {
 	#[serde(default)]
 	pub seeding_type: Seeding,
 
+	/// TODO - move this into p2p_config?
 	/// The list of seed nodes, if using Seeding as a seed type
 	pub seeds: Option<Vec<String>>,
 
+	/// TODO - move this into p2p_config?
 	/// Capabilities expose by this node, also conditions which other peers this
 	/// node will have an affinity toward when connection.
 	pub capabilities: p2p::Capabilities,
 
 	/// Configuration for the peer-to-peer server
-	pub p2p_config: Option<p2p::P2PConfig>,
+	pub p2p_config: p2p::P2PConfig,
 
 	/// Configuration for the mining daemon
 	pub mining_config: Option<pow::types::MinerConfig>,
@@ -150,7 +152,7 @@ impl Default for ServerConfig {
 			capabilities: p2p::FULL_NODE,
 			seeding_type: Seeding::default(),
 			seeds: None,
-			p2p_config: Some(p2p::P2PConfig::default()),
+			p2p_config: p2p::P2PConfig::default(),
 			mining_config: Some(pow::types::MinerConfig::default()),
 			chain_type: ChainTypes::default(),
 			pool_config: pool::PoolConfig::default(),
@@ -159,7 +161,7 @@ impl Default for ServerConfig {
 	}
 }
 
-/// Thread-safe container to return all sever related stats that other
+/// Thread-safe container to return all server related stats that other
 /// consumers might be interested in, such as test results
 ///
 ///
