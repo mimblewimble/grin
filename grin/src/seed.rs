@@ -22,12 +22,14 @@ use std::str;
 use std::sync::{Arc, mpsc};
 use std::time;
 use std::thread;
+use time::now_utc;
 
 use hyper;
 
 use p2p;
 use util::LOGGER;
 
+const BAN_WINDOW: i64 = 10800;
 const PEER_MAX_COUNT: u32 = 25;
 const PEER_PREFERRED_COUNT: u32 = 8;
 const SEEDS_URL: &'static str = "http://grin-tech.org/seeds.txt";
@@ -82,9 +84,23 @@ fn monitor_peers(
 	let mut banned_count = 0;
 	let mut defunct_count = 0;
 	for x in peers.all_peers() {
-		if x.flags == p2p::State::Healthy { healthy_count += 1 }
-		else if x.flags == p2p::State::Banned { banned_count += 1 }
-		else if x.flags == p2p::State::Defunct { defunct_count += 1 };
+		match x.flags {
+			p2p::State::Banned => {
+				let interval = now_utc().to_timespec().sec - x.last_banned;
+				// Unban peer
+				if interval >= BAN_WINDOW {
+					peers.unban_peer(&x.addr);
+					debug!(
+						LOGGER,
+						"monitor_peers: unbanned {} after {} seconds", x.addr, interval
+						);
+				} else {
+					banned_count += 1;
+				}
+			}
+			p2p::State::Healthy => healthy_count += 1,
+			p2p::State::Defunct => defunct_count += 1,
+		}
 	}
 
 	debug!(

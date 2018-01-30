@@ -174,7 +174,7 @@ impl LocalServerContainer {
 		wallet_config.check_node_api_http_addr = config.wallet_validating_node_url.clone();
 		wallet_config.data_file_dir = working_dir.clone();
 		Ok(
-			(LocalServerContainer {
+			LocalServerContainer {
 				config: config,
 				p2p_server_stats: None,
 				api_server: None,
@@ -184,7 +184,7 @@ impl LocalServerContainer {
 				working_dir: working_dir,
 				peer_list: Vec::new(),
 				wallet_config:wallet_config,
-			}),
+			},
 		)
 	}
 
@@ -327,7 +327,7 @@ impl LocalServerContainer {
 			minimum_confirmations,
 			dest.to_string(),
 			max_outputs,
-			(selection_strategy == "all"),
+			selection_strategy == "all",
 			);
 		match result {
 			Ok(_) => {
@@ -349,7 +349,7 @@ impl LocalServerContainer {
 			}
 		};
 	}
- 
+
 	/// Stops the running wallet server
 	pub fn stop_wallet(&mut self) {
 		println!("Stop wallet!");
@@ -483,7 +483,7 @@ impl LocalServerContainerPool {
 		// self.server_containers.push(server_arc);
 
 		// Create a future that runs the server for however many seconds
-  // collect them all and run them in the run_all_servers
+		// collect them all and run them in the run_all_servers
 		let _run_time = self.config.run_length_in_seconds;
 
 		self.server_containers.push(server_container);
@@ -517,15 +517,15 @@ impl LocalServerContainerPool {
 			let handle = thread::spawn(move || {
 				if is_seeding && !s.config.is_seeding {
 					// there's a seed and we're not it, so hang around longer and give the seed
-	 // a chance to start
+	 				// a chance to start
 					thread::sleep(time::Duration::from_millis(2000));
 				}
 				let server_ref = s.run_server(run_length);
 				return_container_ref.lock().unwrap().push(server_ref);
 			});
 			// Not a big fan of sleeping hack here, but there appears to be a
-   // concurrency issue when creating files in rocksdb that causes
-   // failure if we don't pause a bit before starting the next server
+			// concurrency issue when creating files in rocksdb that causes
+			// failure if we don't pause a bit before starting the next server
 			thread::sleep(time::Duration::from_millis(500));
 			handles.push(handle);
 		}

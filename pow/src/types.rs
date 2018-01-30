@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 //! Mining configuration type
 
 use std::collections::HashMap;
@@ -22,15 +21,15 @@ pub struct CuckooMinerPluginConfig {
 	/// The type of plugin to load (i.e. filters on filename)
 	pub type_filter: String,
 
-	/// Parameters for this plugin
-	pub parameter_list: Option<HashMap<String, u32>>,
+	/// device params
+	pub device_parameters: Option<HashMap<String, HashMap<String, u32>>>
 }
 
 impl Default for CuckooMinerPluginConfig {
 	fn default() -> CuckooMinerPluginConfig {
 		CuckooMinerPluginConfig {
 			type_filter: String::new(),
-			parameter_list: None,
+			device_parameters: None,
 		}
 	}
 }

@@ -115,10 +115,7 @@ fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain) -> R
 		Ok(blocks) => {
 			for block in blocks {
 				for out in block.outputs {
-					if let Ok(c) = util::from_hex(String::from(out.commit)) {
-						let commit = pedersen::Commitment::from_vec(c);
-						api_blocks.insert(commit, block.header.clone());
-					}
+					api_blocks.insert(out.commit, block.header.clone());
 				}
 			}
 		}
@@ -191,7 +188,7 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<()
 
 	match api::client::get::<Vec<api::Utxo>>(url.as_str()) {
 		Ok(outputs) => for out in outputs {
-			api_utxos.insert(out.commit, out);
+			api_utxos.insert(out.commit.commit(), out);
 		},
 		Err(e) => {
 			// if we got anything other than 200 back from server, don't attempt to refresh

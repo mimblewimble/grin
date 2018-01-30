@@ -53,7 +53,7 @@ fn test_various_store_indices() {
 		vec![],
 		&keychain,
 		&key_id,
-		Difficulty::minimum()
+		Difficulty::one()
 	).unwrap();
 	let block_hash = block.hash();
 
