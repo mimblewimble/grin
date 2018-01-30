@@ -14,12 +14,9 @@
 
 //! Message types that transit over the network and related serialization code.
 
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::io::{Read, Write};
+use std::net::{TcpStream, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use num::FromPrimitive;
-
-use futures::future::{ok, Future};
-use tokio_core::net::TcpStream;
-use tokio_io::io::{read_exact, write_all};
 
 use core::consensus::MAX_MSG_LEN;
 use core::core::BlockHeader;
@@ -59,6 +56,7 @@ enum_from_primitive! {
 	GetPeerAddrs,
 	PeerAddrs,
 	GetHeaders,
+	Header,
 	Headers,
 	GetBlock,
 	Block,
@@ -66,71 +64,11 @@ enum_from_primitive! {
   }
 }
 
-/// Future combinator to read any message where the body is a Readable. Reads
-/// the  header first, handles its validation and then reads the Readable body,
-/// allocating buffers of the right size.
-pub fn read_msg<T>(conn: TcpStream) -> Box<Future<Item = (TcpStream, T), Error = Error>>
-where
-	T: Readable + 'static,
-{
-	let read_header = read_exact(conn, vec![0u8; HEADER_LEN as usize])
-		.from_err()
-		.and_then(|(reader, buf)| {
-			let header = try!(ser::deserialize::<MsgHeader>(&mut &buf[..]));
-			if header.msg_len > MAX_MSG_LEN {
-				// TODO add additional restrictions on a per-message-type basis to avoid 20MB
-	// pings
-				return Err(Error::Serialization(ser::Error::TooLargeReadErr));
-			}
-			Ok((reader, header))
-		});
-
-	let read_msg = read_header
-		.and_then(|(reader, header)| {
-			read_exact(reader, vec![0u8; header.msg_len as usize]).from_err()
-		})
-		.and_then(|(reader, buf)| {
-			let body = try!(ser::deserialize(&mut &buf[..]));
-			Ok((reader, body))
-		});
-	Box::new(read_msg)
-}
-
-/// Future combinator to write a full message from a Writeable payload.
-/// Serializes the payload first and then sends the message header and that
-/// payload.
-pub fn write_msg<T>(
-	conn: TcpStream,
-	msg: T,
-	msg_type: Type,
-) -> Box<Future<Item = TcpStream, Error = Error>>
-where
-	T: Writeable + 'static,
-{
-	let write_msg = ok((conn)).and_then(move |conn| {
-		// prepare the body first so we know its serialized length
-		let mut body_buf = vec![];
-		ser::serialize(&mut body_buf, &msg).unwrap();
-
-		// build and serialize the header using the body size
-		let mut header_buf = vec![];
-		let blen = body_buf.len() as u64;
-		ser::serialize(&mut header_buf, &MsgHeader::new(msg_type, blen)).unwrap();
-
-		// send the whole thing
-		write_all(conn, header_buf)
-			.and_then(|(conn, _)| write_all(conn, body_buf))
-			.map(|(conn, _)| conn)
-			.from_err()
-	});
-	Box::new(write_msg)
-}
-
 pub fn read_header(conn: &mut TcpStream) -> Result<MsgHeader, Error> {
 
-	let mut head = [0u8; HEADER_LEN as usize];
+	let mut head = vec![0u8; HEADER_LEN as usize];
 	conn.read_exact(&mut head)?;
-	let header = ser::deserialize::<MsgHeader>(&mut buf[..])?;
+	let header = ser::deserialize::<MsgHeader>(&mut &head[..])?;
 	if header.msg_len > MAX_MSG_LEN {
 		// TODO additional restrictions for each msg type to avoid 20MB pings...
 		return Err(Error::Serialization(ser::Error::TooLargeReadErr));
@@ -138,30 +76,32 @@ pub fn read_header(conn: &mut TcpStream) -> Result<MsgHeader, Error> {
 	Ok(header)
 }
 
-pub fn read_body<T>(h: MsgHeader, conn: &mut TcpStream) -> Result<T, Error>
+pub fn read_body<T>(h: &MsgHeader, conn: &mut TcpStream) -> Result<T, Error>
 where
-	T: Readable + 'static,
+	T: Readable,
 {
-	let mut bod = [0u8; header.msg_len as usize];
+	let mut body = vec![0u8; h.msg_len as usize];
 	conn.read_exact(&mut body)?;
-	ser::deserialize(&mut &buf[..])?
+	ser::deserialize(&mut &body[..]).map_err(From::from)
 }
 
-pub fn read_message(conn: &mut TcpStream, msg_type: Type) -> Result<T, Error> {
-	let header = read_header(conn);
+pub fn read_message<T>(conn: &mut TcpStream, msg_type: Type) -> Result<T, Error>
+where
+	T: Readable,
+{
+	let header = read_header(conn)?;
 	if header.msg_type != msg_type {
 		return Err(Error::BadMessage);
 	}
-	read_body(conn)
+	read_body(&header, conn)
 }
 
-pub fn write_message<T>(
-	conn: &mut TcpStream,
+pub fn write_to_bufs<T>(
 	msg: T,
 	msg_type: Type,
-) -> Result<(), Error>
+) -> (Vec<u8>, Vec<u8>)
 where
-	T: Writeable + 'static,
+	T: Writeable,
 {
 	// prepare the body first so we know its serialized length
 	let mut body_buf = vec![];
@@ -172,9 +112,21 @@ where
 	let blen = body_buf.len() as u64;
 	ser::serialize(&mut header_buf, &MsgHeader::new(msg_type, blen)).unwrap();
 
+	(header_buf, body_buf)
+}
+
+pub fn write_message<T>(
+	conn: &mut TcpStream,
+	msg: T,
+	msg_type: Type,
+) -> Result<(), Error>
+where
+	T: Writeable + 'static,
+{
+	let (header_buf, body_buf) = write_to_bufs(msg, msg_type);
 	// send the whole thing
-	conn.write_all(header_buf)?;
-	conn.write_all(body_buf)?;
+	conn.write_all(&header_buf[..])?;
+	conn.write_all(&body_buf[..])?;
 	Ok(())
 }
 

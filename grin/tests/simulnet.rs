@@ -21,19 +21,11 @@ extern crate grin_pow as pow;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
-extern crate futures;
-extern crate tokio_core;
-extern crate tokio_timer;
-
 mod framework;
 
 use std::thread;
 use std::time;
 use std::default::Default;
-
-use futures::{Async, Future, Poll};
-use futures::task::current;
-use tokio_core::reactor;
 
 use core::global;
 use core::global::ChainTypes;
@@ -191,8 +183,6 @@ fn a_simulate_block_propagation() {
 
 	let test_name_dir = "grin-prop";
 	framework::clean_all_output(test_name_dir);
-	let mut evtlp = reactor::Core::new().unwrap();
-	let handle = evtlp.handle();
 
 	let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
 	let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();

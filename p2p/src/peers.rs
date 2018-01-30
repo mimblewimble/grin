@@ -24,6 +24,7 @@ use core::core::target::Difficulty;
 use util::LOGGER;
 
 use peer::Peer;
+use protocol::Protocol;
 use store::{PeerStore, PeerData, State};
 use types::*;
 
