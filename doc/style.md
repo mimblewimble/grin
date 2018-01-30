@@ -35,8 +35,18 @@ ln -s -f ../../.hooks/pre-commit
 
 To run rustfmt against a single file, this __new__ command works with latest rust and after having done `rustup component add rustfmt-preview` and by setting --write-mode it doesn't overwrite files.
 
+First maybe try a dry-run to see what changes would be made:
 `rustfmt --write-mode diff -- client.rs`
 
-The old method, which always overwrote almost every file in the grin repo, was written like this:
+Then if you don't want to do any other cleanups manually, make rustfmt make the changes 
+
+`rustfmt -- client.rs`
+
+and add that as a separate commit at the end of your Pull Request.
+
+
+The old method would typically change formatting in _nearly every file_ in the grin repo. If you feel adventurous, try this:
 
 `cargo +nightly fmt -- ./core/src/lib.rs`
+
+(and please take care, since the ending `-- file/names.rs` actually doesn't have any effect)
