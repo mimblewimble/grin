@@ -105,7 +105,7 @@ fn test_coinbase_maturity() {
 	// we will need this later when we want to spend the coinbase output
 	let block_hash = block.hash();
 
-	chain.process_block(block, chain::NONE).unwrap();
+	chain.process_block(block, chain::MINE).unwrap();
 
 	let prev = chain.head_header().unwrap();
 
@@ -178,7 +178,7 @@ fn test_coinbase_maturity() {
 			global::sizeshift() as u32,
 		).unwrap();
 
-		chain.process_block(block, chain::NONE).unwrap();
+		chain.process_block(block, chain::MINE).unwrap();
 	}
 
 	let prev = chain.head_header().unwrap();
@@ -213,7 +213,7 @@ fn test_coinbase_maturity() {
 		global::sizeshift() as u32,
 	).unwrap();
 
-	let result = chain.process_block(block, chain::NONE);
+	let result = chain.process_block(block, chain::MINE);
 	match result {
 		Ok(_) => (),
 		Err(Error::ImmatureCoinbase) => panic!("we should not get an ImmatureCoinbase here"),

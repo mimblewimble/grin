@@ -96,7 +96,7 @@ fn mine_empty_chain() {
 		).unwrap();
 
 		let bhash = b.hash();
-		chain.process_block(b, chain::NONE).unwrap();
+		chain.process_block(b, chain::MINE).unwrap();
 
 		// checking our new head
 		let head = chain.head().unwrap();

@@ -152,6 +152,27 @@ impl Peer {
 			debug!(LOGGER, "Send block {} to {}", b.hash(), self.info.addr);
 			self.proto.send_block(b)
 		} else {
+			debug!(
+				LOGGER,
+				"Suppress block send {} to {} (already seen)",
+				b.hash(),
+				self.info.addr,
+			);
+			Ok(())
+		}
+	}
+
+	pub fn send_header(&self, bh: &core::BlockHeader) -> Result<(), Error> {
+		if !self.tracking_adapter.has(bh.hash()) {
+			debug!(LOGGER, "Send header {} to {}", bh.hash(), self.info.addr);
+			self.proto.send_header(bh)
+		} else {
+			debug!(
+				LOGGER,
+				"Suppress header send {} to {} (already seen)",
+				bh.hash(),
+				self.info.addr,
+			);
 			Ok(())
 		}
 	}
@@ -160,8 +181,10 @@ impl Peer {
 	/// dropped if the remote peer is known to already have the transaction.
 	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		if !self.tracking_adapter.has(tx.hash()) {
+			debug!(LOGGER, "Send tx {} to {}", tx.hash(), self.info.addr);
 			self.proto.send_transaction(tx)
 		} else {
+			debug!(LOGGER, "Not sending tx {} to {} (already seen)", tx.hash(), self.info.addr);
 			Ok(())
 		}
 	}
@@ -171,12 +194,7 @@ impl Peer {
 	}
 
 	pub fn send_block_request(&self, h: Hash) -> Result<(), Error> {
-		debug!(
-			LOGGER,
-			"Requesting block {} from peer {}.",
-			h,
-			self.info.addr
-		);
+		debug!(LOGGER, "Requesting block {} from {}", h, self.info.addr);
 		self.proto.send_block_request(h)
 	}
 
@@ -209,7 +227,7 @@ impl TrackingAdapter {
 	fn has(&self, hash: Hash) -> bool {
 		let known = self.known.read().unwrap();
 		// may become too slow, an ordered set (by timestamp for eviction) may
-  // end up being a better choice
+		// end up being a better choice
 		known.contains(&hash)
 	}
 
@@ -239,6 +257,11 @@ impl ChainAdapter for TrackingAdapter {
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {
 		self.push(b.hash());
 		self.adapter.block_received(b, addr)
+	}
+
+	fn header_received(&self, bh: core::BlockHeader, addr: SocketAddr) -> bool {
+		self.push(bh.hash());
+		self.adapter.header_received(bh, addr)
 	}
 
 	fn headers_received(&self, bh: Vec<core::BlockHeader>, addr: SocketAddr) {

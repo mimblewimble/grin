@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ use futures_cpupool::CpuPool;
 use tokio_core::net::TcpStream;
 
 use core::core;
-use core::core::hash::Hash;
+use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::ser;
 use conn::TimeoutConnection;
@@ -81,6 +81,11 @@ impl Protocol for ProtocolV1 {
 	/// Serializes and sends a block to our remote peer
 	fn send_block(&self, b: &core::Block) -> Result<(), Error> {
 		self.send_msg(Type::Block, b)
+	}
+
+	/// Serializes and sends a block header to our remote peer ("header first" propagation)
+	fn send_header(&self, bh: &core::BlockHeader) -> Result<(), Error> {
+		self.send_msg(Type::Header, bh)
 	}
 
 	/// Serializes and sends a transaction to our remote peer
@@ -172,12 +177,14 @@ fn handle_payload(
 		},
 		Type::Transaction => {
 			let tx = ser::deserialize::<core::Transaction>(&mut &buf[..])?;
+			debug!(LOGGER, "handle_payload: Transaction: {}", tx.hash());
+
 			adapter.transaction_received(tx);
 			Ok(None)
 		}
 		Type::GetBlock => {
 			let h = ser::deserialize::<Hash>(&mut &buf[..])?;
-			debug!(LOGGER, "handle_payload: GetBlock {}", h);
+			debug!(LOGGER, "handle_payload: GetBlock: {}", h);
 
 			let bo = adapter.get_block(h);
 			if let Some(b) = bo {
@@ -199,15 +206,16 @@ fn handle_payload(
 		Type::Block => {
 			let b = ser::deserialize::<core::Block>(&mut &buf[..])?;
 			let bh = b.hash();
-
-			debug!(LOGGER, "handle_payload: Block {}", bh);
+			debug!(LOGGER, "handle_payload: Block: {}", bh);
 
 			adapter.block_received(b, addr);
 			Ok(Some(bh))
 		}
+		// A peer is asking us for some headers via a locator
 		Type::GetHeaders => {
-			// load headers from the locator
 			let loc = ser::deserialize::<Locator>(&mut &buf[..])?;
+			debug!(LOGGER, "handle_payload: GetHeaders: {:?}", loc);
+
 			let headers = adapter.locate_headers(loc.hashes);
 
 			// serialize and send all the headers over
@@ -228,8 +236,23 @@ fn handle_payload(
 
 			Ok(None)
 		}
+		// "header first" block propagation - if we have not yet seen this block
+		// we can go request it from some of our peers
+		Type::Header => {
+			let header = ser::deserialize::<core::BlockHeader>(&mut &buf[..])?;
+			debug!(LOGGER, "handle_payload: Header: {}", header.hash());
+
+			adapter.header_received(header, addr);
+
+			// we do not return a hash here as we never request a single header
+			// a header will always arrive unsolicited
+			Ok(None)
+		}
+		// receive headers as part of the sync process
 		Type::Headers => {
 			let headers = ser::deserialize::<Headers>(&mut &buf[..])?;
+			debug!(LOGGER, "handle_payload: Headers: {}", headers.headers.len());
+
 			adapter.headers_received(headers.headers, addr);
 			Ok(None)
 		}
