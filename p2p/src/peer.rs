@@ -184,6 +184,21 @@ impl Peer {
 		}
 	}
 
+	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<(), Error> {
+		if !self.tracking_adapter.has(b.hash()) {
+			debug!(LOGGER, "Send compact block {} to {}", b.hash(), self.info.addr);
+			self.proto.send_compact_block(b)
+		} else {
+			debug!(
+				LOGGER,
+				"Suppress compact block send {} to {} (already seen)",
+				b.hash(),
+				self.info.addr,
+			);
+			Ok(())
+		}
+	}
+
 	pub fn send_header(&self, bh: &core::BlockHeader) -> Result<(), Error> {
 		if !self.tracking_adapter.has(bh.hash()) {
 			debug!(LOGGER, "Send header {} to {}", bh.hash(), self.info.addr);
@@ -218,6 +233,11 @@ impl Peer {
 	pub fn send_block_request(&self, h: Hash) -> Result<(), Error> {
 		debug!(LOGGER, "Requesting block {} from {}", h, self.info.addr);
 		self.proto.send_block_request(h)
+	}
+
+	pub fn send_compact_block_request(&self, h: Hash) -> Result<(), Error> {
+		debug!(LOGGER, "Requesting compact block {} from {}", h, self.info.addr);
+		self.proto.send_compact_block_request(h)
 	}
 
 	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
@@ -279,6 +299,11 @@ impl ChainAdapter for TrackingAdapter {
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {
 		self.push(b.hash());
 		self.adapter.block_received(b, addr)
+	}
+
+	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
+		self.push(cb.hash());
+		self.adapter.compact_block_received(cb, addr)
 	}
 
 	fn header_received(&self, bh: core::BlockHeader, addr: SocketAddr) -> bool {

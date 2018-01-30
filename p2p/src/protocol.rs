@@ -83,6 +83,10 @@ impl Protocol for ProtocolV1 {
 		self.send_msg(Type::Block, b)
 	}
 
+	fn send_compact_block(&self, cb: &core::CompactBlock) -> Result<(), Error> {
+		self.send_msg(Type::CompactBlock, cb)
+	}
+
 	/// Serializes and sends a block header to our remote peer ("header first" propagation)
 	fn send_header(&self, bh: &core::BlockHeader) -> Result<(), Error> {
 		self.send_msg(Type::Header, bh)
@@ -104,6 +108,10 @@ impl Protocol for ProtocolV1 {
 
 	fn send_block_request(&self, h: Hash) -> Result<(), Error> {
 		self.send_request(Type::GetBlock, Type::Block, &h, Some(h))
+	}
+
+	fn send_compact_block_request(&self, h: Hash) -> Result<(), Error> {
+		self.send_request(Type::GetCompactBlock, Type::CompactBlock, &h, Some(h))
 	}
 
 	fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
@@ -209,6 +217,36 @@ fn handle_payload(
 			debug!(LOGGER, "handle_payload: Block: {}", bh);
 
 			adapter.block_received(b, addr);
+			Ok(Some(bh))
+		}
+		Type::GetCompactBlock => {
+			let h = ser::deserialize::<Hash>(&mut &buf[..])?;
+			debug!(LOGGER, "handle_payload: GetCompactBlock: {}", h);
+
+			if let Some(b) = adapter.get_block(h) {
+				let cb = b.as_compact_block();
+
+				// serialize and send the block over in compact representation
+				let mut body_data = vec![];
+				try!(ser::serialize(&mut body_data, &cb));
+				let mut data = vec![];
+				try!(ser::serialize(
+					&mut data,
+					&MsgHeader::new(Type::CompactBlock, body_data.len() as u64),
+				));
+				data.append(&mut body_data);
+				if let Err(e) = sender.unbounded_send(data) {
+					debug!(LOGGER, "handle_payload: GetCompactBlock, error sending: {:?}", e);
+				}
+			}
+			Ok(None)
+		}
+		Type::CompactBlock => {
+			let b = ser::deserialize::<core::CompactBlock>(&mut &buf[..])?;
+			let bh = b.hash();
+			debug!(LOGGER, "handle_payload: CompactBlock: {}", bh);
+
+			adapter.compact_block_received(b, addr);
 			Ok(Some(bh))
 		}
 		// A peer is asking us for some headers via a locator
