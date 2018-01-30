@@ -83,7 +83,8 @@ impl Handshake {
 			user_agent: USER_AGENT.to_string(),
 		};
 
-		let genesis = self.genesis;
+		let genesis = self.genesis.clone();
+		let config = self.config.clone();
 
 		// write and read the handshake response
 		Box::new(
@@ -108,6 +109,12 @@ impl Handshake {
 							version: shake.version,
 							total_difficulty: shake.total_difficulty,
 						};
+
+						// If denied then we want to close the connection
+						// (without providing our peer with any details why).
+						if Peer::is_denied(config, peer_info.addr) {
+							return Err(Error::ConnectionClose);
+						}
 
 						debug!(
 							LOGGER,
