@@ -33,7 +33,7 @@ use core::{
 	COINBASE_OUTPUT
 };
 use consensus;
-use consensus::{exceeds_weight, reward, MINIMUM_DIFFICULTY, REWARD, VerifySortOrder};
+use consensus::{exceeds_weight, reward, REWARD, VerifySortOrder};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::id::ShortIdentifiable;
 use core::target::Difficulty;
@@ -140,8 +140,8 @@ impl Default for BlockHeader {
 			height: 0,
 			previous: ZERO_HASH,
 			timestamp: time::at_utc(time::Timespec { sec: 0, nsec: 0 }),
-			difficulty: Difficulty::from_num(MINIMUM_DIFFICULTY),
-			total_difficulty: Difficulty::from_num(MINIMUM_DIFFICULTY),
+			difficulty: Difficulty::one(),
+			total_difficulty: Difficulty::one(),
 			utxo_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
 			kernel_root: ZERO_HASH,
@@ -775,7 +775,11 @@ impl Block {
 	) -> Result<(Output, TxKernel), keychain::Error> {
 		let commit = keychain.commit(reward(fees), key_id)?;
 		let switch_commit = keychain.switch_commit(key_id)?;
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			keychain,
+			key_id,
+		);
 
 		trace!(
 			LOGGER,
@@ -847,7 +851,7 @@ mod test {
 			txs,
 			keychain,
 			&key_id,
-			Difficulty::minimum()
+			Difficulty::one()
 		).unwrap()
 	}
 
@@ -892,6 +896,24 @@ mod test {
 
 		let b = new_block(vec![&mut tx], &keychain);
 		assert!(b.validate().is_err());
+	}
+
+	#[test]
+	// block with no inputs/outputs/kernels
+	// no fees, no reward, no coinbase
+	fn very_empty_block() {
+		let b = Block {
+			header: BlockHeader::default(),
+			inputs: vec![],
+			outputs: vec![],
+			kernels: vec![],
+		};
+
+		assert_eq!(
+			b.verify_coinbase(),
+			Err(Error::Secp(secp::Error::IncorrectCommitSum))
+		);
+
 	}
 
 	#[test]
@@ -949,6 +971,18 @@ mod test {
 		let b3 = b1.merge(b2);
 		assert_eq!(b3.inputs.len(), 3);
 		assert_eq!(b3.outputs.len(), 4);
+		assert_eq!(b3.kernels.len(), 5);
+
+		// The merged block will actually fail validation (>1 coinbase kernels)
+		// Technically we support blocks with multiple coinbase kernels but we are
+		// artificially limiting it to 1 for now
+		assert!(b3.validate().is_err());
+		assert_eq!(
+			b3.kernels
+				.iter()
+				.filter(|x| x.features.contains(COINBASE_KERNEL))
+				.count(),
+			2);
 	}
 
 	#[test]

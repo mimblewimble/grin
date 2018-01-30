@@ -166,7 +166,6 @@ mod test {
 	use global;
 	use core::core::target::Difficulty;
 	use core::genesis;
-	use core::consensus::MINIMUM_DIFFICULTY;
 	use core::global::ChainTypes;
 
 	#[test]
@@ -182,11 +181,11 @@ mod test {
 		pow_size(
 			&mut internal_miner,
 			&mut b.header,
-			Difficulty::from_num(MINIMUM_DIFFICULTY),
+			Difficulty::one(),
 			global::sizeshift() as u32,
 		).unwrap();
 		assert!(b.header.nonce != 310);
-		assert!(b.header.pow.clone().to_difficulty() >= Difficulty::from_num(MINIMUM_DIFFICULTY));
+		assert!(b.header.pow.clone().to_difficulty() >= Difficulty::one());
 		assert!(verify_size(&b.header, global::sizeshift() as u32));
 	}
 }

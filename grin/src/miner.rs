@@ -604,7 +604,7 @@ impl Miner {
 			b.inputs.len(),
 			b.outputs.len(),
 			difficulty.clone().into_num(),
-			b.header.clone().difficulty.clone().into_num(),
+			b.header.clone().total_difficulty.clone().into_num(),
 		);
 
 		// making sure we're not spending time mining a useless block

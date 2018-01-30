@@ -231,11 +231,8 @@ impl Iterator for DifficultyIter {
 	fn next(&mut self) -> Option<Self::Item> {
 		let bhe = self.store.get_block_header(&self.next);
 		match bhe {
-			Err(e) => Some(Err(TargetError(e.to_string()))),
+			Err(_) => None,
 			Ok(bh) => {
-				if bh.height == 0 {
-					return None;
-				}
 				self.next = bh.previous;
 				Some(Ok((bh.timestamp.to_timespec().sec as u64, bh.difficulty)))
 			}

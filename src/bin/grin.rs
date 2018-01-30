@@ -201,7 +201,7 @@ fn main() {
 		.arg(Arg::with_name("key_derivations")
 				.help("The number of keys possiblities to search for each output. \
 				Ideally, set this to a number greater than the number of outputs \
-				you believe should belong to this seed/password. (Default 1000)")
+				you believe should belong to this seed/password.")
 				.short("k")
 				.long("key_derivations")
 				.default_value("1000")
@@ -499,7 +499,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				minimum_confirmations,
 				dest.to_string(),
 				max_outputs,
-				(selection_strategy == "all"),
+				selection_strategy == "all",
 			);
 			match result {
 				Ok(_) => info!(

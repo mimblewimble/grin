@@ -912,7 +912,7 @@ mod tests {
 			txs.iter().collect(),
 			&keychain,
 			&key_id,
-			Difficulty::minimum(),
+			Difficulty::one(),
 		).unwrap();
 
 		// now apply the block to ensure the chainstate is updated before we reconcile
@@ -1043,7 +1043,7 @@ mod tests {
 			block_transactions,
 			&keychain,
 			&key_id,
-			Difficulty::minimum(),
+			Difficulty::one(),
 		).unwrap();
 
 		chain_ref.apply_block(&block);
@@ -1172,7 +1172,7 @@ mod tests {
 				tx_refs,
 				&keychain,
 				&key_id,
-				Difficulty::minimum()
+				Difficulty::one(),
 			).unwrap();
 		}
 
@@ -1312,7 +1312,11 @@ mod tests {
 		let key_id = keychain.derive_key_id(value as u32).unwrap();
 		let commit = keychain.commit(value, &key_id).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			&keychain,
+			&key_id,
+		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
 
@@ -1330,7 +1334,11 @@ mod tests {
 		let key_id = keychain.derive_key_id(value as u32).unwrap();
 		let commit = keychain.commit(value, &key_id).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(switch_commit);
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			&keychain,
+			&key_id,
+		);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
 

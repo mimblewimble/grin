@@ -107,7 +107,7 @@ pub fn write_msg<T>(
 where
 	T: Writeable + 'static,
 {
-	let write_msg = ok((conn)).and_then(move |conn| {
+	let write_msg = ok(conn).and_then(move |conn| {
 		// prepare the body first so we know its serialized length
 		let mut body_buf = vec![];
 		ser::serialize(&mut body_buf, &msg).unwrap();
@@ -314,6 +314,7 @@ impl Readable for GetPeerAddrs {
 
 /// Peer addresses we know of that are fresh enough, in response to
 /// GetPeerAddrs.
+#[derive(Debug)]
 pub struct PeerAddrs {
 	pub peers: Vec<SockAddr>,
 }
@@ -375,6 +376,7 @@ impl Readable for PeerError {
 /// Only necessary so we can implement Readable and Writeable. Rust disallows
 /// implementing traits when both types are outside of this crate (which is the
 /// case for SocketAddr and Readable/Writeable).
+#[derive(Debug)]
 pub struct SockAddr(pub SocketAddr);
 
 impl Writeable for SockAddr {

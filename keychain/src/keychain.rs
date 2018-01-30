@@ -106,19 +106,23 @@ impl Keychain {
 	}
 
 	pub fn derive_key_id(&self, derivation: u32) -> Result<Identifier, Error> {
-		let extkey = self.extkey.derive(&self.secp, derivation)?;
-		let key_id = extkey.identifier(&self.secp)?;
-		Ok(key_id)
+		let child_key = self.extkey.derive(&self.secp, derivation)?;
+		Ok(child_key.key_id)
 	}
 
 	fn derived_key(&self, key_id: &Identifier) -> Result<SecretKey, Error> {
-		trace!(LOGGER, "Derived Key by key_id: {}", key_id);
-
 		// first check our overrides and just return the key if we have one in there
 		if let Some(key) = self.key_overrides.get(key_id) {
 			trace!(LOGGER, "... Derived Key (using override) key_id: {}", key_id);
 			return Ok(*key);
 		}
+
+		let child_key = self.derived_child_key(key_id)?;
+		Ok(child_key.key)
+	}
+
+	fn derived_child_key(&self, key_id: &Identifier) -> Result<extkey::ChildKey, Error> {
+		trace!(LOGGER, "Derived Key by key_id: {}", key_id);
 
 		// then check the derivation cache to see if we have previously derived this key
 		// if so use the derivation from the cache to derive the key
@@ -137,22 +141,27 @@ impl Keychain {
 		{
 			let mut cache = self.key_derivation_cache.write().unwrap();
 			for i in 1..100_000 {
-				let extkey = self.extkey.derive(&self.secp, i)?;
-				let extkey_id = extkey.identifier(&self.secp)?;
+				let child_key = self.extkey.derive(&self.secp, i)?;
+				// let child_key_id = extkey.identifier(&self.secp)?;
 
-				if !cache.contains_key(&extkey_id) {
-					trace!(LOGGER, "... Derived Key (cache miss) key_id: {}, derivation: {}", extkey_id, extkey.n_child);
-					cache.insert(extkey_id.clone(), extkey.n_child);
+				if !cache.contains_key(&child_key.key_id) {
+					trace!(
+						LOGGER,
+						"... Derived Key (cache miss) key_id: {}, derivation: {}",
+						child_key.key_id,
+						child_key.n_child,
+					);
+					cache.insert(child_key.key_id.clone(), child_key.n_child);
 				}
 
-				if extkey_id == *key_id {
-					return Ok(extkey.key);
+				if child_key.key_id == *key_id {
+					return Ok(child_key);
 				}
 			}
 		}
 
 		Err(Error::KeyDerivation(
-			format!("cannot find extkey for {:?}", key_id),
+			format!("failed to derive child_key for {:?}", key_id),
 		))
 	}
 
@@ -160,10 +169,10 @@ impl Keychain {
 	fn derived_key_from_index(
 		&self,
 		derivation: u32,
-	) -> Result<SecretKey, Error> {
+	) -> Result<extkey::ChildKey, Error> {
 		trace!(LOGGER, "Derived Key (fast) by derivation: {}", derivation);
-		let extkey = self.extkey.derive(&self.secp, derivation)?;
-		return Ok(extkey.key)
+		let child_key = self.extkey.derive(&self.secp, derivation)?;
+		return Ok(child_key)
 	}
 
 	pub fn commit(&self, amount: u64, key_id: &Identifier) -> Result<Commitment, Error> {
@@ -177,8 +186,8 @@ impl Keychain {
 		amount: u64,
 		derivation: u32,
 	) -> Result<Commitment, Error> {
-		let skey = self.derived_key_from_index(derivation)?;
-		let commit = self.secp.commit(amount, skey)?;
+		let child_key = self.derived_key_from_index(derivation)?;
+		let commit = self.secp.commit(amount, child_key.key)?;
 		Ok(commit)
 	}
 
@@ -189,11 +198,24 @@ impl Keychain {
 	}
 
 	pub fn switch_commit_from_index(&self, index:u32) -> Result<Commitment, Error> {
-		//just do this directly, because cache seems really slow for wallet reconstruct
+		// just do this directly, because cache seems really slow for wallet reconstruct
 		let skey = self.extkey.derive(&self.secp, index)?;
 		let skey = skey.key;
 		let commit = self.secp.switch_commit(skey)?;
 		Ok(commit)
+	}
+
+	pub fn switch_commit_hash_key(&self, key_id: &Identifier) -> Result<[u8; 32], Error> {
+		// first check our overrides and just return zero key if we have an override
+		// we allow keys to be overridden for testing
+		// and do not care about switch_commit_hash_keys in this case
+		if let Some(_) = self.key_overrides.get(key_id) {
+			let key: [u8; 32] = Default::default();
+			return Ok(key);
+		}
+
+		let child_key = self.derived_child_key(key_id)?;
+		Ok(child_key.switch_key)
 	}
 
 	pub fn range_proof(

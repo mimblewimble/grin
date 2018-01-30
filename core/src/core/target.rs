@@ -25,10 +25,8 @@ use std::ops::{Add, Div, Mul, Sub};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use byteorder::{BigEndian, ByteOrder};
 
-use consensus;
 use core::hash::Hash;
 use ser::{self, Readable, Reader, Writeable, Writer};
-use util::logger::LOGGER;
 use core::global;
 
 
@@ -52,11 +50,6 @@ impl Difficulty {
 		Difficulty { num: 1 }
 	}
 
-	/// Minimum difficulty according to our consensus rules.
-	pub fn minimum() -> Difficulty {
-		Difficulty { num: consensus::MINIMUM_DIFFICULTY }
-	}
-
 	/// Convert a `u32` into a `Difficulty`
 	pub fn from_num(num: u64) -> Difficulty {
 		Difficulty { num: num }
@@ -70,7 +63,6 @@ impl Difficulty {
 		let mut in_vec = h.to_vec();
 		in_vec.truncate(8);
 		let num = BigEndian::read_u64(&in_vec);
-		trace!(LOGGER, "Calculated difficulty: {}", max_target as f64 / num as f64);
 		Difficulty { num: max_target / num }
 	}
 
