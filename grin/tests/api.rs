@@ -145,8 +145,8 @@ fn test_p2p() {
 	// Spawn server and let it run for a bit
 	let mut server_config_one = LocalServerContainerConfig::default();
 	server_config_one.name = String::from("server_one");
-	server_config_one.p2p_server_port = 30000;
-	server_config_one.api_server_port = 30001;
+	server_config_one.p2p_server_port = 30002;
+	server_config_one.api_server_port = 30003;
 	server_config_one.start_miner = false;
 	server_config_one.start_wallet = false;
 	server_config_one.is_seeding = true;
@@ -158,8 +158,8 @@ fn test_p2p() {
 	// Spawn server and let it run for a bit
 	let mut server_config_two = LocalServerContainerConfig::default();
 	server_config_two.name = String::from("server_two");
-	server_config_two.p2p_server_port = 30003;
-	server_config_two.api_server_port = 30004;
+	server_config_two.p2p_server_port = 30004;
+	server_config_two.api_server_port = 30005;
 	server_config_two.start_miner = false;
 	server_config_two.start_wallet = false;
 	server_config_two.is_seeding = false;
@@ -318,7 +318,7 @@ fn get_ids_from_block_outputs(block_outputs: Vec<api::BlockOutputs>) -> Vec<Stri
 	for block_output in block_outputs {
 		let outputs = &block_output.outputs;
 		for output in outputs {
-				ids.push(output.clone().commit)
+			ids.push(util::to_hex(output.clone().commit.0.to_vec()));
 		}
 	}
 	ids
