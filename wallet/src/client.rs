@@ -35,15 +35,16 @@ pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Erro
 	retry_backoff_forever(|| {
 		let res = single_create_coinbase(&url, &block_fees);
 		if let Err(_) = res {
+			has_error = true;
 			error!(
 				LOGGER,
 				"Failed to get coinbase from {}. Run grin wallet listen",
 				url
 			);
-			has_error = true;
 		}
-		if has_error
-			error!(LOGGER, "Successfully received coinbase from {}", url)
+		if has_error {
+			error!(LOGGER, "Successfully received coinbase from {}", url);
+		}
 		res
 	})
 }
