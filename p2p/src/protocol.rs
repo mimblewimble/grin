@@ -18,6 +18,8 @@ use std::net::SocketAddr;
 use futures::Future;
 use futures::sync::mpsc::UnboundedSender;
 use futures_cpupool::CpuPool;
+use rand;
+use rand::Rng;
 use tokio_core::net::TcpStream;
 
 use core::core;
@@ -231,8 +233,12 @@ fn handle_payload(
 				let mut data = vec![];
 
 				// if we have txs in the block send a compact block
-				// but if block is empty then send the full block
-				if cb.kern_ids.is_empty() {
+				// but if block is empty -
+				// to allow us to test all code paths, randomly choose to send
+				// either the block or the compact block
+				let mut rng = rand::thread_rng();
+
+				if cb.kern_ids.is_empty() && rng.gen() {
 					debug!(
 						LOGGER,
 						"handle_payload: GetCompactBlock: empty block, sending full block",

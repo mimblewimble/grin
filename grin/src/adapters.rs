@@ -15,6 +15,8 @@
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
+use rand;
+use rand::Rng;
 
 use chain::{self, ChainAdapter, Options, MINE};
 use core::core;
@@ -374,7 +376,17 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			// but broadcast full block if we have no txs
 			let cb = b.as_compact_block();
 			if cb.kern_ids.is_empty() {
-				self.peers.borrow().broadcast_block(&b);
+
+				// in the interest of testing all code paths
+				// randomly decide how we send an empty block out
+				// TODO - lock this down once we are comfortable it works...
+
+				let mut rng = rand::thread_rng();
+				if rng.gen() {
+					self.peers.borrow().broadcast_block(&b);
+				} else {
+					self.peers.borrow().broadcast_compact_block(&cb);
+				}
 			} else {
 				self.peers.borrow().broadcast_compact_block(&cb);
 			}
