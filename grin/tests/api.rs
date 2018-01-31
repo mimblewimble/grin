@@ -46,9 +46,9 @@ fn simple_server_wallet() {
 
 	// Run a separate coinbase wallet for coinbase transactions
 	let mut coinbase_config = LocalServerContainerConfig::default();
-	coinbase_config.name = String::from("coinbase_wallet");
-	coinbase_config.wallet_validating_node_url=String::from("http://127.0.0.1:30001");
-	coinbase_config.wallet_port = 10002;
+	coinbase_config.name = String::from("coinbase_wallet_api");
+	coinbase_config.wallet_validating_node_url=String::from("http://127.0.0.1:40001");
+	coinbase_config.wallet_port = 50002;
 	let coinbase_wallet = Arc::new(Mutex::new(LocalServerContainer::new(coinbase_config).unwrap()));
 
 	let _ = thread::spawn(move || {
@@ -58,14 +58,14 @@ fn simple_server_wallet() {
 
 	let mut server_config = LocalServerContainerConfig::default();
 	server_config.name = String::from("server_one");
-	server_config.p2p_server_port = 30000;
-	server_config.api_server_port = 30001;
+	server_config.p2p_server_port = 40000;
+	server_config.api_server_port = 40001;
 	server_config.start_miner = true;
 	server_config.start_wallet = false;
 	server_config.coinbase_wallet_address = String::from(format!(
 		"http://{}:{}",
 		server_config.base_addr,
-		10002
+		50002
 	));
 	let mut server_one = LocalServerContainer::new(server_config.clone()).unwrap();
 
@@ -145,8 +145,8 @@ fn test_p2p() {
 	// Spawn server and let it run for a bit
 	let mut server_config_one = LocalServerContainerConfig::default();
 	server_config_one.name = String::from("server_one");
-	server_config_one.p2p_server_port = 30002;
-	server_config_one.api_server_port = 30003;
+	server_config_one.p2p_server_port = 40002;
+	server_config_one.api_server_port = 40003;
 	server_config_one.start_miner = false;
 	server_config_one.start_wallet = false;
 	server_config_one.is_seeding = true;
@@ -158,8 +158,8 @@ fn test_p2p() {
 	// Spawn server and let it run for a bit
 	let mut server_config_two = LocalServerContainerConfig::default();
 	server_config_two.name = String::from("server_two");
-	server_config_two.p2p_server_port = 30004;
-	server_config_two.api_server_port = 30005;
+	server_config_two.p2p_server_port = 40004;
+	server_config_two.api_server_port = 40005;
 	server_config_two.start_miner = false;
 	server_config_two.start_wallet = false;
 	server_config_two.is_seeding = false;
