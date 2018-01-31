@@ -296,9 +296,9 @@ impl NetToChainAdapter {
 		}
 	}
 
-	// After we have received a block header in "header first" propagation
-	// we need to go request the block from the same peer that gave us the header
-	// (unless we have already accepted the block)
+	// After receiving a compact block if we cannot successfully hydrate
+	// it into a full block then fallback to requesting the full block
+	// from the same peer that gave us the compact block
 	//
 	// TODO - currently only request block from a single peer
 	// consider additional peers for redundancy?
@@ -314,6 +314,12 @@ impl NetToChainAdapter {
 		}
 	}
 
+	// After we have received a block header in "header first" propagation
+	// we need to go request the block (compact representation) from the
+	// same peer that gave us the header (unless we have already accepted the block)
+	//
+	// TODO - currently only request block from a single peer
+	// consider additional peers for redundancy?
 	fn request_compact_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
 		if let None = self.peers.borrow().adapter.get_block(bh.hash()) {
 			if let Some(peer) = self.peers.borrow().get_connected_peer(addr) {
@@ -359,12 +365,19 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 		}
 
 		// If we mined the block then we want to broadcast the block itself.
-		// But if we received the block from another node then broadcast "header first"
+		// If block is empty then broadcast the block.
+		// If block contains txs then broadcast the compact block.
+		// If we received the block from another node then broadcast "header first"
 		// to minimize network traffic.
 		if opts.contains(MINE) {
 			// propagate compact block out if we mined the block
-			// TODO - some cases where full block may make sense here?
-			self.peers.borrow().broadcast_compact_block(&b.as_compact_block());
+			// but broadcast full block if we have no txs
+			let cb = b.as_compact_block();
+			if cb.kern_ids.is_empty() {
+				self.peers.borrow().broadcast_block(&b);
+			} else {
+				self.peers.borrow().broadcast_compact_block(&cb);
+			}
 		} else {
 			// "header first" propagation if we are not the originator of this block
 			self.peers.borrow().broadcast_header(&b.header);

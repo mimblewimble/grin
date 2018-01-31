@@ -228,12 +228,29 @@ fn handle_payload(
 
 				// serialize and send the block over in compact representation
 				let mut body_data = vec![];
-				try!(ser::serialize(&mut body_data, &cb));
 				let mut data = vec![];
-				try!(ser::serialize(
-					&mut data,
-					&MsgHeader::new(Type::CompactBlock, body_data.len() as u64),
-				));
+
+				// if we have txs in the block send a compact block
+				// but if block is empty then send the full block
+				if cb.kern_ids.is_empty() {
+					debug!(
+						LOGGER,
+						"handle_payload: GetCompactBlock: empty block, sending full block",
+					);
+
+					try!(ser::serialize(&mut body_data, &b));
+					try!(ser::serialize(
+						&mut data,
+						&MsgHeader::new(Type::Block, body_data.len() as u64),
+					));
+				} else {
+					try!(ser::serialize(&mut body_data, &cb));
+					try!(ser::serialize(
+						&mut data,
+						&MsgHeader::new(Type::CompactBlock, body_data.len() as u64),
+					));
+				}
+
 				data.append(&mut body_data);
 				if let Err(e) = sender.unbounded_send(data) {
 					debug!(LOGGER, "handle_payload: GetCompactBlock, error sending: {:?}", e);
