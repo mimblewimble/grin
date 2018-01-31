@@ -346,8 +346,8 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 						Field::SwitchCommitHash => {
 							no_dup!(switch_commit_hash);
 
-							let val: &str = map.next_value()?;
-							let hash = core::SwitchCommitHash::from_hex(val.clone())
+							let val: String = map.next_value()?;
+							let hash = core::SwitchCommitHash::from_hex(&val.clone())
 								.map_err(serde::de::Error::custom)?;
 							switch_commit_hash = Some(hash)
 						},
