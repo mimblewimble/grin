@@ -24,6 +24,7 @@ use tokio_core::net::TcpStream;
 use core::core::target::Difficulty;
 use core::core::hash::Hash;
 use msg::*;
+use peer::Peer;
 use types::*;
 use protocol::ProtocolV1;
 use util::LOGGER;
@@ -39,6 +40,7 @@ pub struct Handshake {
 	/// The genesis block header of the chain seen by this node.
 	/// We only want to connect to other nodes seeing the same chain (forks are ok).
 	genesis: Hash,
+	config: P2PConfig,
 }
 
 unsafe impl Sync for Handshake {}
@@ -46,10 +48,11 @@ unsafe impl Send for Handshake {}
 
 impl Handshake {
 	/// Creates a new handshake handler
-	pub fn new(genesis: Hash) -> Handshake {
+	pub fn new(genesis: Hash, config: P2PConfig) -> Handshake {
 		Handshake {
 			nonces: Arc::new(RwLock::new(VecDeque::with_capacity(NONCES_CAP))),
-			genesis: genesis,
+			genesis,
+			config,
 		}
 	}
 
@@ -80,7 +83,8 @@ impl Handshake {
 			user_agent: USER_AGENT.to_string(),
 		};
 
-		let genesis = self.genesis;
+		let genesis = self.genesis.clone();
+		let config = self.config.clone();
 
 		// write and read the handshake response
 		Box::new(
@@ -105,6 +109,12 @@ impl Handshake {
 							version: shake.version,
 							total_difficulty: shake.total_difficulty,
 						};
+
+						// If denied then we want to close the connection
+						// (without providing our peer with any details why).
+						if Peer::is_denied(config, peer_info.addr) {
+							return Err(Error::ConnectionClose);
+						}
 
 						debug!(
 							LOGGER,
@@ -131,6 +141,8 @@ impl Handshake {
 	) -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
 		let nonces = self.nonces.clone();
 		let genesis = self.genesis.clone();
+		let config = self.config.clone();
+
 		Box::new(
 			read_msg::<Hand>(conn)
 				.and_then(move |(conn, hand)| {
@@ -160,6 +172,15 @@ impl Handshake {
 						version: hand.version,
 						total_difficulty: hand.total_difficulty,
 					};
+
+					// At this point we know the published ip and port of the peer
+					// so check if we are configured to explicitly allow or deny it.
+					// If denied then we want to close the connection
+					// (without providing our peer with any details why).
+					if Peer::is_denied(config, peer_info.addr) {
+						return Err(Error::ConnectionClose);
+					}
+
 					// send our reply with our info
 					let shake = Shake {
 						version: PROTOCOL_VERSION,

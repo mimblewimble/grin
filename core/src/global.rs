@@ -224,7 +224,12 @@ pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<Result<(u64, Difficulty), 
 			.map(|b| (b.clone().unwrap().0, b.clone().unwrap().1))
 			.collect();
 		for i in (1..live_intervals.len()).rev() {
-			live_intervals[i].0=live_intervals[i].0-live_intervals[i-1].0;
+			// prevents issues with very fast automated test chains
+			if live_intervals[i-1].0 > live_intervals[i].0 {
+				live_intervals[i].0 = 0;
+			} else {
+				live_intervals[i].0=live_intervals[i].0-live_intervals[i-1].0;
+			}
 		}
 		// 
 		// Remove genesis "interval"

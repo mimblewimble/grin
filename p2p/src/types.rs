@@ -79,10 +79,14 @@ impl From<TimerError> for Error {
 }
 
 /// Configuration for the peer-to-peer server.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct P2PConfig {
 	pub host: IpAddr,
 	pub port: u16,
+
+	pub peers_allow: Option<Vec<String>>,
+
+	pub peers_deny: Option<Vec<String>>,
 }
 
 /// Default address for peer-to-peer connections.
@@ -92,6 +96,8 @@ impl Default for P2PConfig {
 		P2PConfig {
 			host: ipaddr,
 			port: 13414,
+			peers_allow: None,
+			peers_deny: None,
 		}
 	}
 }
