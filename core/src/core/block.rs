@@ -554,33 +554,6 @@ impl Block {
 		}
 	}
 
-	/// Merges the 2 blocks, essentially appending the inputs, outputs and
-	/// kernels.
-	/// Also performs a compaction on the result.
-	pub fn merge(&self, other: Block) -> Block {
-		let mut all_inputs = self.inputs.clone();
-		all_inputs.append(&mut other.inputs.clone());
-
-		let mut all_outputs = self.outputs.clone();
-		all_outputs.append(&mut other.outputs.clone());
-
-		let mut all_kernels = self.kernels.clone();
-		all_kernels.append(&mut other.kernels.clone());
-
-		Block {
-			// compact will fix the merkle tree
-			header: BlockHeader {
-				pow: self.header.pow.clone(),
-				difficulty: self.header.difficulty.clone(),
-				total_difficulty: self.header.total_difficulty.clone(),
-				..self.header
-			},
-			inputs: all_inputs,
-			outputs: all_outputs,
-			kernels: all_kernels,
-		}.cut_through()
-	}
-
 	/// Validates all the elements in a block that can be checked without
 	/// additional data. Includes commitment sums and kernels, Merkle
 	/// trees, reward, etc.
@@ -912,49 +885,6 @@ mod test {
 		b.validate().unwrap();
 		assert_eq!(b.inputs.len(), 3);
 		assert_eq!(b.outputs.len(), 3);
-	}
-
-	#[test]
-	// builds 2 different blocks with a tx spending another and check if merging
-	// occurs
-	fn mergeable_blocks() {
-		let keychain = Keychain::from_random_seed().unwrap();
-		let key_id1 = keychain.derive_key_id(1).unwrap();
-		let key_id2 = keychain.derive_key_id(2).unwrap();
-		let key_id3 = keychain.derive_key_id(3).unwrap();
-
-		let mut btx1 = tx2i1o();
-
-		let (mut btx2, _) = build::transaction(
-			vec![input(7, ZERO_HASH, key_id1), output(5, key_id2.clone()), with_fee(2)],
-			&keychain,
-		).unwrap();
-
-		// spending tx2 - reuse key_id2
-		let mut btx3 = txspend1i1o(5, &keychain, key_id2.clone(), key_id3);
-
-		let b1 = new_block(vec![&mut btx1, &mut btx2], &keychain);
-		b1.validate().unwrap();
-
-		let b2 = new_block(vec![&mut btx3], &keychain);
-		b2.validate().unwrap();
-
-		// block should have been automatically compacted and should still be valid
-		let b3 = b1.merge(b2);
-		assert_eq!(b3.inputs.len(), 3);
-		assert_eq!(b3.outputs.len(), 4);
-		assert_eq!(b3.kernels.len(), 5);
-
-		// The merged block will actually fail validation (>1 coinbase kernels)
-		// Technically we support blocks with multiple coinbase kernels but we are
-		// artificially limiting it to 1 for now
-		assert!(b3.validate().is_err());
-		assert_eq!(
-			b3.kernels
-				.iter()
-				.filter(|x| x.features.contains(COINBASE_KERNEL))
-				.count(),
-			2);
 	}
 
 	#[test]
