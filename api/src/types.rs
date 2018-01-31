@@ -531,10 +531,6 @@ pub struct CompactBlockPrintable {
 	pub out_full: Vec<OutputPrintable>,
 	/// Full kernels, specifically coinbase kernel(s)
 	pub kern_full: Vec<TxKernelPrintable>,
-	/// Inputs (hex short_ids)
-	pub in_ids: Vec<String>,
-	/// Outputs (hex short_ids)
-	pub out_ids: Vec<String>,
 	/// Kernels (hex short_ids)
 	pub kern_ids: Vec<String>,
 }
@@ -559,8 +555,6 @@ impl CompactBlockPrintable {
 			header: BlockHeaderPrintable::from_header(&cb.header),
 			out_full,
 			kern_full,
-			in_ids: cb.in_ids.iter().map(|x| x.to_hex()).collect(),
-			out_ids: cb.out_ids.iter().map(|x| x.to_hex()).collect(),
 			kern_ids: cb.kern_ids.iter().map(|x| x.to_hex()).collect(),
 		}
 	}
