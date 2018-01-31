@@ -158,7 +158,6 @@ pub fn header_sync(peers: Peers, chain: Arc<chain::Chain>) {
 		if let Some(peer) = peers.most_work_peer() {
 			if let Ok(p) = peer.try_read() {
 				let peer_difficulty = p.info.total_difficulty.clone();
-				debug!(LOGGER, "sync: header_sync: {}, {}", difficulty, peer_difficulty);
 				if peer_difficulty > difficulty {
 					let _ = request_headers(
 						peer.clone(),

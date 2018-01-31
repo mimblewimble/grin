@@ -247,6 +247,30 @@ impl Peers {
 		);
 	}
 
+	pub fn broadcast_compact_block(&self, b: &core::CompactBlock) {
+		let peers = self.connected_peers();
+		let preferred_peers = 8;
+		let mut count = 0;
+		for p in peers.iter().take(preferred_peers) {
+			let p = p.read().unwrap();
+			if p.is_connected() {
+				if let Err(e) = p.send_compact_block(b) {
+					debug!(LOGGER, "Error sending compact block to peer: {:?}", e);
+				} else {
+					count += 1;
+				}
+			}
+		}
+		debug!(
+			LOGGER,
+			"broadcast_compact_block: {}, {} at {}, to {} peers, done.",
+			b.hash(),
+			b.header.total_difficulty,
+			b.header.height,
+			count,
+		);
+	}
+
 	/// Broadcasts the provided block to PEER_PREFERRED_COUNT of our peers.
 	/// We may be connected to PEER_MAX_COUNT peers so we only
 	/// want to broadcast to a random subset of peers.
@@ -421,6 +445,16 @@ impl ChainAdapter for Peers {
 	}
 	fn block_received(&self, b: core::Block, peer_addr: SocketAddr) -> bool {
 		if !self.adapter.block_received(b, peer_addr) {
+			// if the peer sent us a block that's intrinsically bad
+			// they are either mistaken or manevolent, both of which require a ban
+			self.ban_peer(&peer_addr);
+			false
+		} else {
+			true
+		}
+	}
+	fn compact_block_received(&self, cb: core::CompactBlock, peer_addr: SocketAddr) -> bool {
+		if !self.adapter.compact_block_received(cb, peer_addr) {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or manevolent, both of which require a ban
 			self.ban_peer(&peer_addr);

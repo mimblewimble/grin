@@ -50,6 +50,7 @@ impl ChainAdapter for DummyAdapter {
 	}
 	fn transaction_received(&self, _tx: core::Transaction) {}
 	fn block_received(&self, _b: core::Block, _addr: SocketAddr) -> bool { true }
+	fn compact_block_received(&self, _cb: core::CompactBlock, _addr: SocketAddr) -> bool { true }
 	fn header_received(&self, _bh: core::BlockHeader, _addr: SocketAddr) -> bool { true }
 	fn headers_received(&self, _bh: Vec<core::BlockHeader>, _addr:SocketAddr) {}
 	fn locate_headers(&self, _loc: Vec<Hash>) -> Vec<core::BlockHeader> {

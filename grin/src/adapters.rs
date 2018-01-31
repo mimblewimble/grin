@@ -15,6 +15,8 @@
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
+use rand;
+use rand::Rng;
 
 use chain::{self, ChainAdapter, Options, MINE};
 use core::core;
@@ -88,6 +90,26 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		true
 	}
 
+	fn compact_block_received(&self, bh: core::CompactBlock, addr: SocketAddr) -> bool {
+		let bhash = bh.hash();
+		debug!(
+			LOGGER,
+			"Received compact_block {} at {} from {}, going to process.",
+			bhash,
+			bh.header.height,
+			addr,
+		);
+
+		debug!(
+			LOGGER,
+			"*** cannot hydrate compact block (not yet implemented), falling back to requesting full block",
+		);
+
+		self.request_block(&bh.header, &addr);
+
+		true
+	}
+
 	fn header_received(&self, bh: core::BlockHeader, addr: SocketAddr) -> bool {
 		let bhash = bh.hash();
 		debug!(
@@ -117,7 +139,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		// we have successfully processed a block header
 		// so we can go request the block itself
-		self.request_block(&bh, &addr);
+		self.request_compact_block(&bh, &addr);
 
 		// done receiving the header
 		true
@@ -276,25 +298,39 @@ impl NetToChainAdapter {
 		}
 	}
 
-	// After we have received a block header in "header first" propagation
-	// we need to go request the block from the same peer that gave us the header
-	// (unless we have already accepted the block)
+	// After receiving a compact block if we cannot successfully hydrate
+	// it into a full block then fallback to requesting the full block
+	// from the same peer that gave us the compact block
 	//
 	// TODO - currently only request block from a single peer
 	// consider additional peers for redundancy?
 	fn request_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
 		if let None = self.peers.borrow().adapter.get_block(bh.hash()) {
-			if let Some(_) = self.peers.borrow().adapter.get_block(bh.previous) {
-				if let Some(peer) = self.peers.borrow().get_connected_peer(addr) {
-					if let Ok(peer) = peer.read() {
-						let _ = peer.send_block_request(bh.hash());
-					}
+			if let Some(peer) = self.peers.borrow().get_connected_peer(addr) {
+				if let Ok(peer) = peer.read() {
+					let _ = peer.send_block_request(bh.hash());
 				}
-			} else {
-				debug!(LOGGER, "request_block: prev block {} missing, skipping", bh.previous);
 			}
 		} else {
 			debug!(LOGGER, "request_block: block {} already known", bh.hash());
+		}
+	}
+
+	// After we have received a block header in "header first" propagation
+	// we need to go request the block (compact representation) from the
+	// same peer that gave us the header (unless we have already accepted the block)
+	//
+	// TODO - currently only request block from a single peer
+	// consider additional peers for redundancy?
+	fn request_compact_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
+		if let None = self.peers.borrow().adapter.get_block(bh.hash()) {
+			if let Some(peer) = self.peers.borrow().get_connected_peer(addr) {
+				if let Ok(peer) = peer.read() {
+					let _ = peer.send_compact_block_request(bh.hash());
+				}
+			}
+		} else {
+			debug!(LOGGER, "request_compact_block: block {} already known", bh.hash());
 		}
 	}
 
@@ -331,10 +367,29 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 		}
 
 		// If we mined the block then we want to broadcast the block itself.
-		// But if we received the block from another node then broadcast "header first"
+		// If block is empty then broadcast the block.
+		// If block contains txs then broadcast the compact block.
+		// If we received the block from another node then broadcast "header first"
 		// to minimize network traffic.
 		if opts.contains(MINE) {
-			self.peers.borrow().broadcast_block(b);
+			// propagate compact block out if we mined the block
+			// but broadcast full block if we have no txs
+			let cb = b.as_compact_block();
+			if cb.kern_ids.is_empty() {
+
+				// in the interest of testing all code paths
+				// randomly decide how we send an empty block out
+				// TODO - lock this down once we are comfortable it works...
+
+				let mut rng = rand::thread_rng();
+				if rng.gen() {
+					self.peers.borrow().broadcast_block(&b);
+				} else {
+					self.peers.borrow().broadcast_compact_block(&cb);
+				}
+			} else {
+				self.peers.borrow().broadcast_compact_block(&cb);
+			}
 		} else {
 			// "header first" propagation if we are not the originator of this block
 			self.peers.borrow().broadcast_header(&b.header);
