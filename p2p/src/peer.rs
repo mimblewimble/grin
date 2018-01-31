@@ -91,6 +91,28 @@ impl Peer {
 		self.connection = Some(conn::listen(conn, handler));
 	}
 
+	pub fn is_denied(config: &P2PConfig, peer_addr: &SocketAddr) -> bool {
+		let peer = format!("{}:{}", peer_addr.ip(), peer_addr.port());
+		if let Some(ref denied) = config.peers_deny {
+			if denied.contains(&peer) {
+				debug!(LOGGER, "checking peer allowed/denied: {:?} explicitly denied", peer_addr);
+				return true;
+			}
+		}
+		if let Some(ref allowed) = config.peers_allow {
+			if allowed.contains(&peer) {
+				debug!(LOGGER, "checking peer allowed/denied: {:?} explicitly allowed", peer_addr);
+				return false;
+			} else {
+				debug!(LOGGER, "checking peer allowed/denied: {:?} not explicitly allowed, denying", peer_addr);
+				return true;
+			}
+		}
+
+		// default to allowing peer connection if we do not explicitly allow or deny the peer
+		false
+	}
+
 	/// Whether this peer is still connected.
 	pub fn is_connected(&self) -> bool {
 		if !self.check_connection() {
@@ -126,6 +148,42 @@ impl Peer {
 			debug!(LOGGER, "Send block {} to {}", b.hash(), self.info.addr);
 			self.connection.as_ref().unwrap().send(b, msg::Type::Block)
 		} else {
+			debug!(
+				LOGGER,
+				"Suppress block send {} to {} (already seen)",
+				b.hash(),
+				self.info.addr,
+			);
+			Ok(())
+		}
+	}
+
+	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<(), Error> {
+		if !self.tracking_adapter.has(b.hash()) {
+			debug!(LOGGER, "Send compact block {} to {}", b.hash(), self.info.addr);
+			self.connection.as_ref().unwrap().send(b, msg::Type::CompactBlock)
+		} else {
+			debug!(
+				LOGGER,
+				"Suppress compact block send {} to {} (already seen)",
+				b.hash(),
+				self.info.addr,
+			);
+			Ok(())
+		}
+	}
+
+	pub fn send_header(&self, bh: &core::BlockHeader) -> Result<(), Error> {
+		if !self.tracking_adapter.has(bh.hash()) {
+			debug!(LOGGER, "Send header {} to {}", bh.hash(), self.info.addr);
+			self.connection.as_ref().unwrap().send(bh, msg::Type::Header)
+		} else {
+			debug!(
+				LOGGER,
+				"Suppress header send {} to {} (already seen)",
+				bh.hash(),
+				self.info.addr,
+			);
 			Ok(())
 		}
 	}
@@ -134,8 +192,10 @@ impl Peer {
 	/// dropped if the remote peer is known to already have the transaction.
 	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		if !self.tracking_adapter.has(tx.hash()) {
+			debug!(LOGGER, "Send tx {} to {}", tx.hash(), self.info.addr);
 			self.connection.as_ref().unwrap().send(tx, msg::Type::Transaction)
 		} else {
+			debug!(LOGGER, "Not sending tx {} to {} (already seen)", tx.hash(), self.info.addr);
 			Ok(())
 		}
 	}
@@ -155,7 +215,12 @@ impl Peer {
 		self.connection.as_ref().unwrap().send(&h, msg::Type::GetBlock)
 	}
 
-	/// Sends a request to get more peer addresses
+	/// Sends a request for a specific compact block by hash
+	pub fn send_compact_block_request(&self, h: Hash) -> Result<(), Error> {
+		debug!(LOGGER, "Requesting compact block {} from {}", h, self.info.addr);
+		self.connection.as_ref().unwrap().send(&h, msg::Type::GetCompactBlock)
+	}
+
 	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
 		debug!(LOGGER, "Asking {} for more peers.", self.info.addr);
 		self.connection.as_ref().unwrap().send(
@@ -208,7 +273,7 @@ impl TrackingAdapter {
 	fn has(&self, hash: Hash) -> bool {
 		let known = self.known.read().unwrap();
 		// may become too slow, an ordered set (by timestamp for eviction) may
-  // end up being a better choice
+		// end up being a better choice
 		known.contains(&hash)
 	}
 
@@ -238,6 +303,16 @@ impl ChainAdapter for TrackingAdapter {
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {
 		self.push(b.hash());
 		self.adapter.block_received(b, addr)
+	}
+
+	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
+		self.push(cb.hash());
+		self.adapter.compact_block_received(cb, addr)
+	}
+
+	fn header_received(&self, bh: core::BlockHeader, addr: SocketAddr) -> bool {
+		self.push(bh.hash());
+		self.adapter.header_received(bh, addr)
 	}
 
 	fn headers_received(&self, bh: Vec<core::BlockHeader>, addr: SocketAddr) {

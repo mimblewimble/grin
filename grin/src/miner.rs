@@ -198,7 +198,7 @@ impl Miner {
 			if let Some(s) = job_handle.get_solution() {
 				let proof = Proof::new(s.solution_nonces.to_vec());
 				let proof_diff = proof.clone().to_difficulty();
-				trace!(LOGGER, "Found cuckoo solution for nonce {} of difficulty {} (difficulty target {})", 
+				trace!(LOGGER, "Found cuckoo solution for nonce {} of difficulty {} (difficulty target {})",
 					s.get_nonce_as_u64(),
 					proof_diff.into_num(),
 					difficulty.into_num());
@@ -302,7 +302,7 @@ impl Miner {
 			let pow_hash = b.hash();
 			if let Ok(proof) = plugin_miner.mine(&pow_hash[..]) {
 				let proof_diff = proof.clone().to_difficulty();
-				trace!(LOGGER, "Found cuckoo solution for nonce {} of difficulty {} (difficulty target {})", 
+				trace!(LOGGER, "Found cuckoo solution for nonce {} of difficulty {} (difficulty target {})",
 					b.header.nonce,
 					proof_diff.into_num(),
 					b.header.difficulty.into_num());
@@ -528,7 +528,7 @@ impl Miner {
 				);
 			}
 
-			// if we found a solution, push our block out
+			// we found a solution, push our block through the chain processing pipeline
 			if let Some(proof) = sol {
 				info!(
 					LOGGER,
@@ -537,7 +537,7 @@ impl Miner {
 					b.hash()
 				);
 				b.header.pow = proof;
-				let res = self.chain.process_block(b, chain::NONE);
+				let res = self.chain.process_block(b, chain::MINE);
 				if let Err(e) = res {
 					error!(
 						LOGGER,

@@ -23,6 +23,7 @@ use rand::os::OsRng;
 use core::core::target::Difficulty;
 use core::core::hash::Hash;
 use msg::*;
+use peer::Peer;
 use types::*;
 use util::LOGGER;
 
@@ -37,6 +38,7 @@ pub struct Handshake {
 	/// The genesis block header of the chain seen by this node.
 	/// We only want to connect to other nodes seeing the same chain (forks are ok).
 	genesis: Hash,
+	config: P2PConfig,
 }
 
 unsafe impl Sync for Handshake {}
@@ -44,10 +46,11 @@ unsafe impl Send for Handshake {}
 
 impl Handshake {
 	/// Creates a new handshake handler
-	pub fn new(genesis: Hash) -> Handshake {
+	pub fn new(genesis: Hash, config: P2PConfig) -> Handshake {
 		Handshake {
 			nonces: Arc::new(RwLock::new(VecDeque::with_capacity(NONCES_CAP))),
-			genesis: genesis,
+			genesis,
+			config,
 		}
 	}
 
@@ -98,6 +101,12 @@ impl Handshake {
 			version: shake.version,
 			total_difficulty: shake.total_difficulty,
 		};
+
+		// If denied then we want to close the connection
+		// (without providing our peer with any details why).
+		if Peer::is_denied(&self.config, &peer_info.addr) {
+			return Err(Error::ConnectionClose);
+		}
 		
 		debug!(
 			LOGGER,
@@ -147,6 +156,15 @@ impl Handshake {
 			version: hand.version,
 			total_difficulty: hand.total_difficulty,
 		};
+
+		// At this point we know the published ip and port of the peer
+		// so check if we are configured to explicitly allow or deny it.
+		// If denied then we want to close the connection
+		// (without providing our peer with any details why).
+		if Peer::is_denied(&self.config, &peer_info.addr) {
+			return Err(Error::ConnectionClose);
+		}
+
 		// send our reply with our info
 		let shake = Shake {
 			version: PROTOCOL_VERSION,

@@ -102,15 +102,17 @@ impl Server {
 			tx_pool.clone(),
 		));
 
+		let p2p_config = config.p2p_config.clone();
 		let p2p_server = Arc::new(p2p::Server::new(
 			config.db_root.clone(),
 			config.capabilities,
-			config.p2p_config.unwrap(),
+			p2p_config,
 			net_adapter.clone(),
 			genesis.hash(),
 		)?);
 		chain_adapter.init(p2p_server.peers.clone());
 		pool_net_adapter.init(p2p_server.peers.clone());
+		net_adapter.init(p2p_server.peers.clone());
 
 		if config.seeding_type.clone() != Seeding::Programmatic {
 
@@ -185,7 +187,7 @@ impl Server {
 		let currently_syncing = self.currently_syncing.clone();
 
 		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
-		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.unwrap().port));
+		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.port));
 		let _ = thread::Builder::new()
 			.name("miner".to_string())
 			.spawn(move || {

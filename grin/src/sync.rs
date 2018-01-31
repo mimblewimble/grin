@@ -158,7 +158,6 @@ pub fn header_sync(peers: Peers, chain: Arc<chain::Chain>) {
 		if let Some(peer) = peers.most_work_peer() {
 			if let Ok(p) = peer.try_read() {
 				let peer_difficulty = p.info.total_difficulty.clone();
-				debug!(LOGGER, "sync: header_sync: {}, {}", difficulty, peer_difficulty);
 				if peer_difficulty > difficulty {
 					let _ = request_headers(
 						peer.clone(),
@@ -211,7 +210,7 @@ pub fn needs_syncing(
 		if let Some(peer) = peer {
 			if let Ok(peer) = peer.try_read() {
 				if peer.info.total_difficulty <= local_diff {
-					info!(LOGGER, "synchronize stopped, at {:?} @ {:?}", local_diff, chain.head().unwrap().height);
+					info!(LOGGER, "synchronized at {:?} @ {:?}", local_diff, chain.head().unwrap().height);
 					currently_syncing.store(false, Ordering::Relaxed);
 					let _ = chain.reset_head();
 				}

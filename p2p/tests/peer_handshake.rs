@@ -38,13 +38,15 @@ fn open_port() -> u16 {
 fn peer_handshake() {
 	let p2p_conf = p2p::P2PConfig {
 		host: "0.0.0.0".parse().unwrap(),
-		port: open_port()
+		port: open_port(),
+		peers_allow: None,
+		peers_deny: None,
 	};
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
 	let server = Arc::new(p2p::Server::new(
 		".grin".to_owned(),
 		p2p::UNKNOWN,
-		p2p_conf,
+		p2p_conf.clone(),
 		net_adapter.clone(),
 		Hash::from_vec(vec![]),
 	).unwrap());
@@ -65,7 +67,7 @@ fn peer_handshake() {
 		p2p::UNKNOWN,
 		Difficulty::one(),
 		my_addr,
-		&p2p::handshake::Handshake::new(Hash::from_vec(vec![])),
+		&p2p::handshake::Handshake::new(Hash::from_vec(vec![]), p2p_conf.clone()),
 		net_adapter,
 	).unwrap();
 

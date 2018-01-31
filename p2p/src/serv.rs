@@ -50,10 +50,10 @@ impl Server {
 		genesis: Hash,
 	) -> Result<Server, Error> {
 		Ok(Server {
-			config: config,
+			config: config.clone(),
 			capabilities: capab,
-			handshake: Arc::new(Handshake::new(genesis)),
-			peers: Peers::new(PeerStore::new(db_root)?, adapter),
+			handshake: Arc::new(Handshake::new(genesis, config.clone())),
+			peers: Peers::new(PeerStore::new(db_root)?, adapter, config),
 		})
 	}
 
@@ -86,6 +86,10 @@ impl Server {
 	/// Asks the server to connect to a new peer. Directly returns the peer if
 	/// we're already connected to the provided address.
 	pub fn connect(&self, addr: &SocketAddr) -> Result<Arc<RwLock<Peer>>, Error> {
+		if Peer::is_denied(&self.config, &addr) {
+			debug!(LOGGER, "Peer {} denied, not connecting.", addr);
+			return Err(Error::ConnectionClose);
+		}
 
 		if let Some(p) = self.peers.get_connected_peer(addr) {
 			// if we're already connected to the addr, just return the peer
@@ -164,6 +168,8 @@ impl ChainAdapter for DummyAdapter {
 		0
 	}
 	fn transaction_received(&self, _: core::Transaction) {}
+	fn compact_block_received(&self, _cb: core::CompactBlock, _addr: SocketAddr) -> bool { true }
+	fn header_received(&self, _bh: core::BlockHeader, _addr: SocketAddr) -> bool { true }
 	fn block_received(&self, _: core::Block, _: SocketAddr) -> bool { true }
 	fn headers_received(&self, _: Vec<core::BlockHeader>, _:SocketAddr) {}
 	fn locate_headers(&self, _: Vec<Hash>) -> Vec<core::BlockHeader> {

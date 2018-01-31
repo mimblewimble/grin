@@ -81,10 +81,14 @@ impl<T> From<mpsc::SendError<T>> for Error {
 // }
 
 /// Configuration for the peer-to-peer server.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct P2PConfig {
 	pub host: IpAddr,
 	pub port: u16,
+
+	pub peers_allow: Option<Vec<String>>,
+
+	pub peers_deny: Option<Vec<String>>,
 }
 
 /// Default address for peer-to-peer connections.
@@ -94,6 +98,8 @@ impl Default for P2PConfig {
 		P2PConfig {
 			host: ipaddr,
 			port: 13414,
+			peers_allow: None,
+			peers_deny: None,
 		}
 	}
 }
@@ -141,9 +147,13 @@ pub trait ChainAdapter: Sync + Send {
 
 	/// A block has been received from one of our peers. Returns true if the
 	/// block could be handled properly and is not deemed defective by the
-	/// chain. Returning false means the block will nenver be valid and
+	/// chain. Returning false means the block will never be valid and
 	/// may result in the peer being banned.
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool;
+
+	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool;
+
+	fn header_received(&self, bh: core::BlockHeader, addr: SocketAddr) -> bool;
 
 	/// A set of block header has been received, typically in response to a
 	/// block

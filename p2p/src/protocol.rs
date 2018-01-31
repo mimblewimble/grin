@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,11 +16,13 @@ use std::sync::Arc;
 use std::net::SocketAddr;
 
 use core::core;
-use core::core::hash::Hash;
+use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::ser;
 use conn::*;
 use msg::*;
+use rand;
+use rand::Rng;
 use types::*;
 use util::LOGGER;
 
@@ -85,6 +87,48 @@ impl MessageHandler for Protocol {
 				debug!(LOGGER, "handle_payload: Block {}", bh);
 
 				adapter.block_received(b, self.addr);
+				Ok(None)
+			}
+	
+
+			Type::GetCompactBlock => {
+				let h: Hash = msg.body()?;
+				debug!(LOGGER, "handle_payload: GetCompactBlock: {}", h);
+
+				if let Some(b) = adapter.get_block(h) {
+					let cb = b.as_compact_block();
+
+					// serialize and send the block over in compact representation
+
+					// if we have txs in the block send a compact block
+					// but if block is empty -
+					// to allow us to test all code paths, randomly choose to send
+					// either the block or the compact block
+					let mut rng = rand::thread_rng();
+
+					if cb.kern_ids.is_empty() && rng.gen() {
+						debug!(
+							LOGGER,
+							"handle_payload: GetCompactBlock: empty block, sending full block",
+							);
+
+						let block_bytes = ser::ser_vec(&b).unwrap();
+						Ok(Some((block_bytes, Type::Block)))
+					} else {
+						let compact_block_bytes = ser::ser_vec(&cb).unwrap();
+						Ok(Some((compact_block_bytes, Type::CompactBlock)))
+					}
+				} else {
+					Ok(None)
+				}
+			}
+
+			Type::CompactBlock => {
+				let b: core::CompactBlock = msg.body()?;
+				let bh = b.hash();
+				debug!(LOGGER, "handle_payload: CompactBlock: {}", bh);
+
+				adapter.compact_block_received(b, self.addr);
 				Ok(None)
 			}
 

@@ -31,7 +31,7 @@ db_root = ".grin"
 
 #If seeding_type = List, the list of peers to connect to.
 #
-#seeds = ["192.168.0.1:8080","192.168.0.2:8080"]
+#seeds = ["192.168.0.1:13414","192.168.0.2:13414"]
 
 #The chain type, which defines the genesis block and the set of cuckoo
 #parameters used for mining. Can be:
@@ -56,6 +56,12 @@ capabilities = [7]
 [server.p2p_config]
 host = "0.0.0.0"
 port = 13414
+
+#hardcoded peer lists for allow/deny
+#will *only* connect to peers in allow list
+#peers_allow = ["192.168.0.1:13414", "192.168.0.2:13414"]
+#will *never* connect to peers in deny list
+#peers_deny = ["192.168.0.3:13414", "192.168.0.4:13414"]
 
 #########################################
 ### LOGGING CONFIGURATION             ###

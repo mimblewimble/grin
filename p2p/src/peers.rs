@@ -19,7 +19,7 @@ use std::sync::{Arc, RwLock};
 use rand::{thread_rng, Rng};
 
 use core::core;
-use core::core::hash::Hash;
+use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use util::LOGGER;
 use time;
@@ -33,17 +33,19 @@ pub struct Peers {
 	pub adapter: Arc<ChainAdapter>,
 	store: Arc<PeerStore>,
 	peers: Arc<RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>>,
+	config: P2PConfig,
 }
 
 unsafe impl Send for Peers {}
 unsafe impl Sync for Peers {}
 
 impl Peers {
-	pub fn new(store: PeerStore, adapter: Arc<ChainAdapter>) -> Peers {
+	pub fn new(store: PeerStore, adapter: Arc<ChainAdapter>, config: P2PConfig) -> Peers {
 		Peers {
-			adapter: adapter,
+			adapter,
 			store: Arc::new(store),
 			peers: Arc::new(RwLock::new(HashMap::new())),
+			config,
 		}
 	}
 
@@ -237,10 +239,63 @@ impl Peers {
 		}
 		debug!(
 			LOGGER,
-			"broadcast_block: {}, {} at {}, to {} peers",
+			"broadcast_block: {}, {} at {}, to {} peers, done.",
 			b.hash(),
 			b.header.total_difficulty,
 			b.header.height,
+			count,
+		);
+	}
+
+	pub fn broadcast_compact_block(&self, b: &core::CompactBlock) {
+		let peers = self.connected_peers();
+		let preferred_peers = 8;
+		let mut count = 0;
+		for p in peers.iter().take(preferred_peers) {
+			let p = p.read().unwrap();
+			if p.is_connected() {
+				if let Err(e) = p.send_compact_block(b) {
+					debug!(LOGGER, "Error sending compact block to peer: {:?}", e);
+				} else {
+					count += 1;
+				}
+			}
+		}
+		debug!(
+			LOGGER,
+			"broadcast_compact_block: {}, {} at {}, to {} peers, done.",
+			b.hash(),
+			b.header.total_difficulty,
+			b.header.height,
+			count,
+		);
+	}
+
+	/// Broadcasts the provided block to PEER_PREFERRED_COUNT of our peers.
+	/// We may be connected to PEER_MAX_COUNT peers so we only
+	/// want to broadcast to a random subset of peers.
+	/// A peer implementation may drop the broadcast request
+	/// if it knows the remote peer already has the block.
+	pub fn broadcast_header(&self, bh: &core::BlockHeader) {
+		let peers = self.connected_peers();
+		let preferred_peers = 8;
+		let mut count = 0;
+		for p in peers.iter().take(preferred_peers) {
+			let p = p.read().unwrap();
+			if p.is_connected() {
+				if let Err(e) = p.send_header(bh) {
+					debug!(LOGGER, "Error sending header to peer: {:?}", e);
+				} else {
+					count += 1;
+				}
+			}
+		}
+		debug!(
+			LOGGER,
+			"broadcast_header: {}, {} at {}, to {} peers, done.",
+			bh.hash(),
+			bh.total_difficulty,
+			bh.height,
 			count,
 		);
 	}
@@ -390,8 +445,28 @@ impl ChainAdapter for Peers {
 	}
 	fn block_received(&self, b: core::Block, peer_addr: SocketAddr) -> bool {
 		if !self.adapter.block_received(b, peer_addr) {
-			// if the peer sent us a block that's intrinsically bad, they're either
-			// mistaken or manevolent, both of which require a ban
+			// if the peer sent us a block that's intrinsically bad
+			// they are either mistaken or manevolent, both of which require a ban
+			self.ban_peer(&peer_addr);
+			false
+		} else {
+			true
+		}
+	}
+	fn compact_block_received(&self, cb: core::CompactBlock, peer_addr: SocketAddr) -> bool {
+		if !self.adapter.compact_block_received(cb, peer_addr) {
+			// if the peer sent us a block that's intrinsically bad
+			// they are either mistaken or manevolent, both of which require a ban
+			self.ban_peer(&peer_addr);
+			false
+		} else {
+			true
+		}
+	}
+	fn header_received(&self, bh: core::BlockHeader, peer_addr: SocketAddr) -> bool {
+		if !self.adapter.header_received(bh, peer_addr) {
+			// if the peer sent us a block header that's intrinsically bad
+			// they are either mistaken or manevolent, both of which require a ban
 			self.ban_peer(&peer_addr);
 			false
 		} else {
