@@ -147,6 +147,8 @@ pub trait Protocol {
 	/// Relays a block to the remote peer.
 	fn send_block(&self, b: &core::Block) -> Result<(), Error>;
 
+	fn send_compact_block(&self, cb: &core::CompactBlock) -> Result<(), Error>;
+
 	/// Relays a block header to the remote peer ("header first" propagation).
 	fn send_header(&self, bh: &core::BlockHeader) -> Result<(), Error>;
 
@@ -158,6 +160,8 @@ pub trait Protocol {
 
 	/// Sends a request for a block from its hash.
 	fn send_block_request(&self, h: Hash) -> Result<(), Error>;
+
+	fn send_compact_block_request(&self, h: Hash) -> Result<(), Error>;
 
 	/// Sends a request for some peer addresses.
 	fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error>;
@@ -188,7 +192,9 @@ pub trait ChainAdapter: Sync + Send {
 	/// may result in the peer being banned.
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool;
 
-	fn header_received(&self, b: core::BlockHeader, addr: SocketAddr) -> bool;
+	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool;
+
+	fn header_received(&self, bh: core::BlockHeader, addr: SocketAddr) -> bool;
 
 	/// A set of block header has been received, typically in response to a
 	/// block

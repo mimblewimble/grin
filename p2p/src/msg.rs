@@ -49,22 +49,24 @@ pub enum ErrCodes {
 
 /// Types of messages
 enum_from_primitive! {
-  #[derive(Debug, Clone, Copy, PartialEq)]
-  pub enum Type {
-	Error,
-	Hand,
-	Shake,
-	Ping,
-	Pong,
-	GetPeerAddrs,
-	PeerAddrs,
-	GetHeaders,
-	Header,
-	Headers,
-	GetBlock,
-	Block,
-	Transaction,
-  }
+	#[derive(Debug, Clone, Copy, PartialEq)]
+	pub enum Type {
+		Error,
+		Hand,
+		Shake,
+		Ping,
+		Pong,
+		GetPeerAddrs,
+		PeerAddrs,
+		GetHeaders,
+		Header,
+		Headers,
+		GetBlock,
+		Block,
+		GetCompactBlock,
+		CompactBlock,
+		Transaction,
+	}
 }
 
 /// Future combinator to read any message where the body is a Readable. Reads

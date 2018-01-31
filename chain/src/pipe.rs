@@ -53,11 +53,12 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 
 	debug!(
 		LOGGER,
-		"pipe: process_block {} at {} with {} inputs and {} outputs.",
+		"pipe: process_block {} at {} with {} inputs, {} outputs, {} kernels",
 		b.hash(),
 		b.header.height,
 		b.inputs.len(),
-		b.outputs.len()
+		b.outputs.len(),
+		b.kernels.len(),
 	);
 	check_known(b.hash(), &mut ctx)?;
 
