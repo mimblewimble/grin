@@ -57,7 +57,7 @@ fn simple_server_wallet() {
 	});
 
 	let mut server_config = LocalServerContainerConfig::default();
-	server_config.name = String::from("server_one");
+	server_config.name = String::from("api_server_one");
 	server_config.p2p_server_port = 40000;
 	server_config.api_server_port = 40001;
 	server_config.start_miner = true;
@@ -144,7 +144,7 @@ fn test_p2p() {
 
 	// Spawn server and let it run for a bit
 	let mut server_config_one = LocalServerContainerConfig::default();
-	server_config_one.name = String::from("server_one");
+	server_config_one.name = String::from("p2p_server_one");
 	server_config_one.p2p_server_port = 40002;
 	server_config_one.api_server_port = 40003;
 	server_config_one.start_miner = false;
@@ -157,7 +157,7 @@ fn test_p2p() {
 
 	// Spawn server and let it run for a bit
 	let mut server_config_two = LocalServerContainerConfig::default();
-	server_config_two.name = String::from("server_two");
+	server_config_two.name = String::from("p2p_server_two");
 	server_config_two.p2p_server_port = 40004;
 	server_config_two.api_server_port = 40005;
 	server_config_two.start_miner = false;
@@ -186,7 +186,7 @@ fn test_p2p() {
 	assert_eq!(peers_all.unwrap().len(), 1);
 
 	// Check that the peer status is Healthy
-	let addr =  format!("{}:{}", server_config_two.base_addr, server_config_two.api_server_port);
+	let addr =  format!("{}:{}", server_config_two.base_addr, server_config_two.p2p_server_port);
 	let peer = get_peer(&base_addr, api_server_port, &addr);
 	assert!(peer.is_ok());
 	assert_eq!(peer.unwrap().flags, p2p::State::Healthy);
