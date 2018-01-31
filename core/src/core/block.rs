@@ -398,6 +398,53 @@ impl Block {
 		Ok(block)
 	}
 
+	/// Hydrate a block from a compact block.
+	///
+	/// TODO - only supporting empty compact blocks for now (coinbase output/kernel only)
+	/// eventually we want to support any compact blocks
+	/// we need to differentiate between a block with missing entries (not in tx pool)
+	/// and a truly invalid block (which will get the peer banned)
+	/// so we need to consider how to do this safely/robustly
+	/// presumably at this point we are confident we can generate a full block with no
+	/// missing pieces, but we cannot fully validate it until we push it through the pipeline
+	/// at which point the peer runs the risk of getting banned
+	pub fn hydrate_from(
+		cb: CompactBlock,
+		_inputs: Vec<Input>,
+		_outputs: Vec<Output>,
+		_kernels: Vec<TxKernel>,
+	) -> Block {
+		debug!(
+			LOGGER,
+			"block: hydrate_from: {}, {} cb outputs, {} cb kernels, {} tx kern_ids",
+			cb.hash(),
+			cb.out_full.len(),
+			cb.kern_full.len(),
+			cb.kern_ids.len(),
+		);
+
+		// we only support "empty" compact block for now
+		assert!(cb.kern_ids.is_empty());
+
+		let mut all_inputs = vec![];
+		let mut all_outputs = vec![];
+		let mut all_kernels = vec![];
+
+		all_outputs.extend(cb.out_full);
+		all_kernels.extend(cb.kern_full);
+
+		all_inputs.sort();
+		all_outputs.sort();
+		all_kernels.sort();
+
+		Block {
+			header: cb.header,
+			inputs: all_inputs,
+			outputs: all_outputs,
+			kernels: all_kernels,
+		}.cut_through()
+	}
+
 	/// Generate the compact block representation.
 	pub fn as_compact_block(&self) -> CompactBlock {
 		let header = self.header.clone();
