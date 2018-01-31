@@ -23,19 +23,12 @@ extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
 extern crate blake2_rfc as blake2;
-extern crate futures;
-extern crate futures_cpupool;
-extern crate tokio_core;
-extern crate tokio_timer;
 
 use std::thread;
 use std::time;
 use std::default::Default;
 use std::fs;
 use std::sync::{Arc, Mutex};
-
-use self::tokio_core::reactor;
-use self::tokio_timer::Timer;
 
 use wallet::WalletConfig;
 
@@ -189,8 +182,6 @@ impl LocalServerContainer {
 	}
 
 	pub fn run_server(&mut self, duration_in_seconds: u64) -> grin::ServerStats {
-		let mut event_loop = reactor::Core::new().unwrap();
-
 		let api_addr = format!("{}:{}", self.config.base_addr, self.config.api_server_port);
 
 		let mut seeding_type = grin::Seeding::None;
@@ -201,7 +192,7 @@ impl LocalServerContainer {
 			seeds = vec![self.config.seed_addr.to_string()];
 		}
 
-		let s = grin::Server::future(
+		let s = grin::Server::new(
 			grin::ServerConfig {
 				api_http_addr: api_addr,
 				db_root: format!("{}/.grin", self.working_dir),
@@ -215,7 +206,6 @@ impl LocalServerContainer {
 				skip_sync_wait:Some(true),
 				..Default::default()
 			},
-			&event_loop.handle(),
 		).unwrap();
 
 		self.p2p_server_stats = Some(s.get_server_stats().unwrap());
@@ -252,10 +242,6 @@ impl LocalServerContainer {
 			println!("{} connecting to peer: {}", self.config.p2p_server_port, p);
 			s.connect_peer(p.parse().unwrap()).unwrap();
 		}
-
-		let timeout = Timer::default().sleep(time::Duration::from_secs(duration_in_seconds));
-
-		event_loop.run(timeout).unwrap();
 
 		if self.wallet_is_running {
 			self.stop_wallet();

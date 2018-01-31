@@ -35,7 +35,6 @@ use types::*;
 use pow;
 use util::LOGGER;
 
-
 /// Grin server holding internal structures.
 pub struct Server {
 	/// server config
