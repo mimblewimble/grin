@@ -88,16 +88,16 @@ fn simple_server_wallet() {
 	assert!(status.is_ok());
 
 	// Be sure that at least a block is mined by Travis
-	while get_tip(&base_addr, api_server_port).unwrap().height == 0 {
+	let mut current_tip = get_tip(&base_addr, api_server_port).unwrap();
+	while current_tip.height == 0 {
 			thread::sleep(time::Duration::from_millis(1000));
+			current_tip = get_tip(&base_addr, api_server_port).unwrap();
 	}
 
 	warn!(LOGGER, "Testing block handler");
-	let current_tip = tip.unwrap();
-	let height = current_tip.height;
-	let last_block_by_height = get_block_by_height(&base_addr, api_server_port, height);
+	let last_block_by_height = get_block_by_height(&base_addr, api_server_port, current_tip.height);
 	assert!(last_block_by_height.is_ok());
-	let last_block_by_height_compact = get_block_by_height_compact(&base_addr, api_server_port, height);
+	let last_block_by_height_compact = get_block_by_height_compact(&base_addr, api_server_port, current_tip.height);
 	assert!(last_block_by_height_compact.is_ok());
 
 	let block_hash = current_tip.last_block_pushed;
@@ -108,7 +108,7 @@ fn simple_server_wallet() {
 
 	warn!(LOGGER, "Testing chain utxo handler");
 	let start_height = 0;
-	let end_height = height;
+	let end_height = current_tip.height;
 	let utxos_by_height = get_utxos_by_height(&base_addr, api_server_port, start_height, end_height);
 	assert!(utxos_by_height.is_ok());
 	let ids = get_ids_from_block_outputs(utxos_by_height.unwrap());
