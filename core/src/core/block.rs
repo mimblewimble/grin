@@ -854,7 +854,7 @@ mod test {
 	use core::hash::ZERO_HASH;
 	use core::Transaction;
 	use core::build::{self, input, output, with_fee};
-	use core::test::tx2i1o;
+	use core::test::{tx1i2o, tx2i1o};
 	use keychain::{Identifier, Keychain};
 	use consensus::{MAX_BLOCK_WEIGHT, BLOCK_OUTPUT_WEIGHT};
 	use std::time::Instant;
@@ -1089,6 +1089,100 @@ mod test {
 		assert_eq!(b.inputs, b2.inputs);
 		assert_eq!(b.outputs, b2.outputs);
 		assert_eq!(b.kernels, b2.kernels);
+	}
+
+	#[test]
+	fn empty_block_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let b = new_block(vec![], &keychain);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b).expect("serialization failed");
+		assert_eq!(
+			vec.len(),
+			5_676,
+		);
+	}
+
+	#[test]
+	fn block_single_tx_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let tx1 = tx1i2o();
+		let b = new_block(vec![&tx1], &keychain);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b).expect("serialization failed");
+		assert_eq!(
+			vec.len(),
+			16_224,
+		);
+	}
+
+	#[test]
+	fn empty_compact_block_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let b = new_block(vec![], &keychain);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
+		assert_eq!(
+			vec.len(),
+			5_662,
+		);
+	}
+
+	#[test]
+	fn compact_block_single_tx_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let tx1 = tx1i2o();
+		let b = new_block(vec![&tx1], &keychain);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
+		assert_eq!(
+			vec.len(),
+			5_668,
+		);
+	}
+
+	#[test]
+	fn block_10_tx_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+
+		let mut txs = vec![];
+		for _ in 0..10 {
+			let tx = tx1i2o();
+			txs.push(tx);
+		}
+
+		let b = new_block(
+			txs.iter().collect(),
+			&keychain,
+		);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b).expect("serialization failed");
+		assert_eq!(
+			vec.len(),
+			111_156,
+		);
+	}
+
+	#[test]
+	fn compact_block_10_tx_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+
+		let mut txs = vec![];
+		for _ in 0..10 {
+			let tx = tx1i2o();
+			txs.push(tx);
+		}
+
+		let b = new_block(
+			txs.iter().collect(),
+			&keychain,
+		);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
+		assert_eq!(
+			vec.len(),
+			5_722,
+		);
 	}
 
 	#[test]
