@@ -161,7 +161,7 @@ burn_reward = false
 #[[mining.cuckoo_miner_plugin_config]]
 #type_filter = "mean_cpu"
 #[mining.cuckoo_miner_plugin_config.device_parameters.0]
-#NUM_THREADS = 8
+#NUM_THREADS = 1
 
 #As above, but for older processors
 [[mining.cuckoo_miner_plugin_config]]
@@ -194,13 +194,25 @@ NUM_THREADS = 1
 #[[mining.cuckoo_miner_plugin_config]]
 #type_filter = "cuda"
 #[mining.cuckoo_miner_plugin_config.device_parameters.0]
-#NUM_BLOCKS = 64
-#THREADS_PER_BLOCK = 32
+#USE_DEVICE = 1
+
+# Below are advanced optional per-device tweakable params
+
+#GENU_BLOCKS = 256
+#GENU_TPB = 8
+#GENV_STAGE1_TPB = 32
+#GENV_STAGE2_TPB = 128
+#TRIM_STAGE1_TPB = 32
+#TRIM_STAGE2_TPB = 96
+#RENAME_0_STAGE1_TPB = 32
+#RENAME_0_STAGE2_TPB = 64
+#RENAME_1_STAGE1_TPB = 32
+#RENAME_1_STAGE2_TPB = 128
+#TRIM_3_TPB = 64
+#RENAME_3_TPB = 2
+
 #[mining.cuckoo_miner_plugin_config.device_parameters.1]
-#USE_DEVICE=1
-#NUM_BLOCKS = 64
-#THREADS_PER_BLOCK = 32
+#USE_DEVICE = 1
+
 #[mining.cuckoo_miner_plugin_config.device_parameters.2]
-#USE_DEVICE=1
-#NUM_BLOCKS = 64
-#THREADS_PER_BLOCK = 32
+#USE_DEVICE = 1
