@@ -56,7 +56,7 @@ fn peer_handshake() {
 	let pool = CpuPool::new(1);
 	let server = p2p::Server::new(
 		".grin".to_owned(),
-		p2p::UNKNOWN,
+		p2p::Capabilities::UNKNOWN,
 		p2p_conf.clone(),
 		net_adapter.clone(),
 		Hash::from_vec(vec![]),
@@ -81,7 +81,7 @@ fn peer_handshake() {
 					.and_then(move |socket| {
 						Peer::connect(
 							socket,
-							p2p::UNKNOWN,
+							p2p::Capabilities::UNKNOWN,
 							Difficulty::one(),
 							my_addr,
 							Arc::new(

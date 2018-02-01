@@ -58,6 +58,6 @@ mod types;
 pub use server::{DummyAdapter, Server};
 pub use peers::Peers;
 pub use peer::Peer;
-pub use types::{Capabilities, Error, ChainAdapter, P2PConfig, PeerInfo, FULL_HIST, FULL_NODE,
-                MAX_BLOCK_HEADERS, MAX_PEER_ADDRS, UNKNOWN};
+pub use types::{Capabilities, Error, ChainAdapter, P2PConfig, PeerInfo, MAX_BLOCK_HEADERS,
+                  MAX_PEER_ADDRS};
 pub use store::{PeerData, State};

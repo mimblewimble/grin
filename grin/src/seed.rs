@@ -155,7 +155,7 @@ impl Seeder {
 
 					// find some peers from our db
 					// and queue them up for a connection attempt
-					let peers = peers.find_peers(p2p::State::Healthy, p2p::UNKNOWN, 100);
+					let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::UNKNOWN, 100);
 					for p in peers {
 						debug!(LOGGER, "monitor_peers: queue to soon try {}", p.addr,);
 						tx.unbounded_send(p.addr).unwrap();
@@ -185,7 +185,7 @@ impl Seeder {
 		let seeder = thread_pool
 			.spawn_fn(move || {
 				// check if we have some peers in db
-				let peers = peers.find_peers(p2p::State::Healthy, p2p::FULL_HIST, 100);
+				let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::FULL_HIST, 100);
 				Ok(peers)
 			})
 			.and_then(|peers| {
