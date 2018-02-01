@@ -68,6 +68,7 @@ fn basic_genesis_mine() {
 /// messages they all end up connected.
 #[test]
 fn simulate_seeding() {
+	util::init_test_logger();
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "simulate_seeding";
@@ -106,7 +107,7 @@ fn simulate_seeding() {
 		pool.create_server(&mut server_config);
 	}
 
-	pool.connect_all_peers();
+	// pool.connect_all_peers();
 
 	let _ = pool.run_all_servers();
 }
@@ -161,7 +162,7 @@ fn simulate_parallel_mining() {
 		pool.create_server(&mut server_config);
 	}
 
-	pool.connect_all_peers();
+	// pool.connect_all_peers();
 
 	let _ = pool.run_all_servers();
 
@@ -231,69 +232,66 @@ fn a_simulate_block_propagation() {
 			if servers[n].head().height > 3 {
 				count += 1;
 			}
-			if count == 5 {
-				break;
-			}
+		}
+		if count == 5 {
+			break;
 		}
 		thread::sleep(time::Duration::from_millis(100));
 	}
 }
 
-// /// Creates 2 different disconnected servers, mine a few blocks on one, connect
-// /// them and check that the 2nd gets all the blocks
-// #[test]
-// fn simulate_full_sync() {
-// 	util::init_test_logger();
-// 
-// 	// we actually set the chain_type in the ServerConfig below
-// 	// TODO - avoid needing to set it in two places?
-// 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-// 
-// 	let test_name_dir = "grin-sync";
-// 	framework::clean_all_output(test_name_dir);
-// 
-// 	let mut evtlp = reactor::Core::new().unwrap();
-// 	let handle = evtlp.handle();
-// 
-// 	let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
-// 	let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();
-// 	plugin_config.type_filter = String::from("mean_cpu");
-// 	plugin_config_vec.push(plugin_config);
-// 
-// 	let miner_config = pow::types::MinerConfig {
-// 		enable_mining: true,
-// 		burn_reward: true,
-// 		use_cuckoo_miner: false,
-// 		cuckoo_miner_async_mode: Some(false),
-// 		cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
-// 		cuckoo_miner_plugin_config: Some(plugin_config_vec),
-// 		..Default::default()
-// 	};
-// 
-// 	// instantiates 2 servers on different ports
-// 	let mut servers = vec![];
-// 	for n in 0..2 {
-// 		let config = grin::ServerConfig {
-// 			api_http_addr: format!("127.0.0.1:{}", 19000 + n),
-// 			db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
-// 			p2p_config: Some(p2p::P2PConfig {
-// 				port: 11000 + n,
-// 				..p2p::P2PConfig::default()
-// 			}),
-// 			seeding_type: grin::Seeding::List,
-// 			seeds: Some(vec!["127.0.0.1:11000".to_string()]),
-// 			chain_type: core::global::ChainTypes::AutomatedTesting,
-// 			..Default::default()
-// 		};
-// 		let s = grin::Server::future(config, &handle).unwrap();
-// 		servers.push(s);
-// 	}
-// 
-// 	// mine a few blocks on server 1
-// 	servers[0].start_miner(miner_config);
-// 	thread::sleep(time::Duration::from_secs(5));
-// 
-// 	// 2 should get blocks
-// 	evtlp.run(change(&servers[1]));
-// }
+/// Creates 2 different disconnected servers, mine a few blocks on one, connect
+/// them and check that the 2nd gets all the blocks
+#[test]
+fn simulate_full_sync() {
+	util::init_test_logger();
 
+	// we actually set the chain_type in the ServerConfig below
+	// TODO - avoid needing to set it in two places?
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+
+	let test_name_dir = "grin-sync";
+	framework::clean_all_output(test_name_dir);
+
+	let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
+	let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();
+	plugin_config.type_filter = String::from("mean_cpu");
+	plugin_config_vec.push(plugin_config);
+
+	let miner_config = pow::types::MinerConfig {
+		enable_mining: true,
+		burn_reward: true,
+		use_cuckoo_miner: false,
+		cuckoo_miner_async_mode: Some(false),
+		cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
+		cuckoo_miner_plugin_config: Some(plugin_config_vec),
+		..Default::default()
+	};
+
+	let s1 = grin::Server::new(config(0, "grin-sync")).unwrap();
+	// mine a few blocks on server 1
+	s1.start_miner(miner_config);
+	thread::sleep(time::Duration::from_secs(5));
+
+	let mut conf = config(1, "grin-sync");
+	conf.skip_sync_wait = Some(false);
+	let s2 = grin::Server::new(conf).unwrap();
+	while s2.head().height < 4 {
+		thread::sleep(time::Duration::from_millis(100));
+	}
+}
+
+fn config(n: u16, test_name_dir: &str) -> grin::ServerConfig {
+	grin::ServerConfig {
+		api_http_addr: format!("127.0.0.1:{}", 19000 + n),
+		db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
+		p2p_config: p2p::P2PConfig {
+			port: 11000 + n,
+			..p2p::P2PConfig::default()
+		},
+		seeding_type: grin::Seeding::List,
+		seeds: Some(vec!["127.0.0.1:11000".to_string()]),
+		chain_type: core::global::ChainTypes::AutomatedTesting,
+		..Default::default()
+	}
+}

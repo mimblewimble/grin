@@ -14,8 +14,10 @@
 
 //! Message types that transit over the network and related serialization code.
 
-use std::io::{Read, Write};
+use std::io::{self, Read, Write};
 use std::net::{TcpStream, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::thread;
+use std::time;
 use num::FromPrimitive;
 
 use core::consensus::MAX_MSG_LEN;
@@ -66,6 +68,39 @@ enum_from_primitive! {
 	}
 }
 
+/// The default implementation of read_exact is useless with async TcpStream as
+/// will return as soon as something has been read, regardless of completeness.
+/// This implementation will block until it has read exactly `len` bytes and
+/// returns them as a `vec<u8>`. Additionally, a timeout in milliseconds will
+/// abort the read when it's met. Note that the timeout time is approximate.
+pub fn read_exact(conn: &mut TcpStream, mut buf: &mut [u8], timeout: u32) -> io::Result<()> {
+	let sleep_time = time::Duration::from_millis(1);
+	let mut count = 0;
+
+	loop {
+		match conn.read(buf) {
+			Ok(0) => break,
+			Ok(n) => { let tmp = buf; buf = &mut tmp[n..]; }
+			Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
+			Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
+			Err(e) => return Err(e),
+		}
+		if !buf.is_empty() {
+			thread::sleep(sleep_time);
+			count += 1;
+		} else {
+			break;
+		}
+		if count > timeout {
+			return Err(io::Error::new(io::ErrorKind::TimedOut, "reading from tcp stream"));
+		}
+	}
+	Ok(())
+}
+
+/// Read a header from the provided connection without blocking if the
+/// underlying stream is async. Typically headers will be polled for, so
+/// we do not want to block.
 pub fn read_header(conn: &mut TcpStream) -> Result<MsgHeader, Error> {
 
 	let mut head = vec![0u8; HEADER_LEN as usize];
@@ -78,15 +113,18 @@ pub fn read_header(conn: &mut TcpStream) -> Result<MsgHeader, Error> {
 	Ok(header)
 }
 
+/// Read a message body from the provided connection, always blocking
+/// until we have a result (or timeout).
 pub fn read_body<T>(h: &MsgHeader, conn: &mut TcpStream) -> Result<T, Error>
 where
 	T: Readable,
 {
 	let mut body = vec![0u8; h.msg_len as usize];
-	conn.read_exact(&mut body)?;
+	read_exact(conn, &mut body, 15000)?;
 	ser::deserialize(&mut &body[..]).map_err(From::from)
 }
 
+/// Reads a full message from the underlying connection.
 pub fn read_message<T>(conn: &mut TcpStream, msg_type: Type) -> Result<T, Error>
 where
 	T: Readable,

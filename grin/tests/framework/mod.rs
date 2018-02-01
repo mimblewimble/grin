@@ -503,7 +503,7 @@ impl LocalServerContainerPool {
 			let handle = thread::spawn(move || {
 				if is_seeding && !s.config.is_seeding {
 					// there's a seed and we're not it, so hang around longer and give the seed
-	 				// a chance to start
+					// a chance to start
 					thread::sleep(time::Duration::from_millis(2000));
 				}
 				let server_ref = s.run_server(run_length);

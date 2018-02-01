@@ -240,7 +240,7 @@ impl Peer {
 			Ok(Error::Serialization(e)) => {
 				let mut state = self.state.write().unwrap();
 				*state = State::Banned;
-				info!(LOGGER, "Client {} corrupted, ban.", self.info.addr);
+				info!(LOGGER, "Client {} corrupted, ban ({:?}).", self.info.addr, e);
 				false
 			}
 			Ok(e) => {
