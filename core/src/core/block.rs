@@ -1188,14 +1188,14 @@ mod test {
 	#[test]
 	fn convert_block_to_compact_block() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let tx1 = tx2i1o();
+		let tx1 = tx1i2o();
 		let b = new_block(vec![&tx1], &keychain);
 
 		let cb = b.as_compact_block();
 
 		assert_eq!(cb.out_full.len(), 1);
 		assert_eq!(cb.kern_full.len(), 1);
-		assert_eq!(cb.kern_ids.len(), 1);
+		assert_eq!(cb.kern_ids.len(), 2);
 
 		assert_eq!(
 			cb.kern_ids[0],
@@ -1205,6 +1205,17 @@ mod test {
 				.unwrap()
 				.short_id(&b.hash())
 		);
+	}
+
+	#[test]
+	fn hydrate_empty_compact_block() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let b = new_block(vec![], &keychain);
+		let cb = b.as_compact_block();
+		let hb = Block::hydrate_from(cb, vec![], vec![], vec![]);
+		assert_eq!(hb.header, b.header);
+		assert_eq!(hb.outputs, b.outputs);
+		assert_eq!(hb.kernels, b.kernels);
 	}
 
 	#[test]
