@@ -20,7 +20,7 @@
 //! forces us to go through some additional gymnastic to loop over the async
 //! stream and make sure we get the right number of bytes out.
 
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::sync::{Arc, Mutex, mpsc};
 use std::net::TcpStream;
 use std::thread;
@@ -131,7 +131,7 @@ where
 {
 
 	let mut conn = conn;
-	thread::Builder::new().name("peer".to_string()).spawn(move || {
+	let _ = thread::Builder::new().name("peer".to_string()).spawn(move || {
 		let sleep_time = time::Duration::from_millis(1);
 
 		let conn = &mut conn;

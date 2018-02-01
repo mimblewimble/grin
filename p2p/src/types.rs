@@ -14,8 +14,8 @@
 
 use std::convert::From;
 use std::io;
-use std::net::{TcpStream, IpAddr, SocketAddr};
-use std::sync::{Arc, mpsc};
+use std::net::{IpAddr, SocketAddr};
+use std::sync::mpsc;
 
 use core::core;
 use core::core::hash::Hash;

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::net::{SocketAddr, TcpStream};
-use std::sync::{Arc, RwLock, mpsc};
+use std::sync::{Arc, RwLock};
 
 use conn;
 use core::core;

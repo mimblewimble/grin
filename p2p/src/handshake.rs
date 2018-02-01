@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use std::collections::VecDeque;
-use std::io::Read;
 use std::net::{TcpStream, SocketAddr};
 use std::sync::{Arc, RwLock};
 

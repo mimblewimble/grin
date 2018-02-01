@@ -17,7 +17,6 @@ use std::net::SocketAddr;
 
 use core::core;
 use core::core::hash::{Hash, Hashed};
-use core::core::target::Difficulty;
 use core::ser;
 use conn::*;
 use msg::*;

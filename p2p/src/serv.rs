@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::net::{TcpListener, TcpStream, SocketAddr, Shutdown};
 use std::time::Duration;
 
