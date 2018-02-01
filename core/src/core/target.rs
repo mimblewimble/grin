@@ -159,4 +159,11 @@ impl<'de> de::Visitor<'de> for DiffVisitor {
 		};
 		Ok(Difficulty { num: num_in.unwrap() })
 	}
+
+	fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+	where
+		E: de::Error,
+	{
+		Ok(Difficulty { num: value })
+	}
 }

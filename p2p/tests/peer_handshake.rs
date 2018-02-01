@@ -45,7 +45,7 @@ fn peer_handshake() {
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
 	let server = Arc::new(p2p::Server::new(
 		".grin".to_owned(),
-		p2p::UNKNOWN,
+		p2p::Capabilities::UNKNOWN,
 		p2p_conf.clone(),
 		net_adapter.clone(),
 		Hash::from_vec(vec![]),
@@ -64,7 +64,7 @@ fn peer_handshake() {
 	let my_addr = "127.0.0.1:5000".parse().unwrap();
 	let mut peer = Peer::connect(
 		&mut socket,
-		p2p::UNKNOWN,
+		p2p::Capabilities::UNKNOWN,
 		Difficulty::one(),
 		my_addr,
 		&p2p::handshake::Handshake::new(Hash::from_vec(vec![]), p2p_conf.clone()),
