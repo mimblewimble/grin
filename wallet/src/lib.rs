@@ -28,6 +28,9 @@ extern crate prettytable;
 extern crate term;
 
 extern crate bodyparser;
+extern crate failure;
+#[macro_use]
+extern crate failure_derive;
 extern crate futures;
 extern crate hyper;
 extern crate iron;

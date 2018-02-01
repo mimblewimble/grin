@@ -78,7 +78,7 @@ fn single_send_partial_tx(url: &str, partial_tx: &PartialTx) -> Result<PartialTx
 	let work = client.request(req).and_then(|res| {
 		res.body().concat2().and_then(move |body| {
 			let partial_tx: PartialTx =
-				serde_json::from_slice(&body).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+				serde_json::from_slice(&body).context(ErrorKind::IO)?;
 			Ok(partial_tx)
 		})
 	});
@@ -99,7 +99,7 @@ fn single_create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, E
 	let work = client.request(req).and_then(|res| {
 		res.body().concat2().and_then(move |body| {
 			let coinbase: CbData =
-				serde_json::from_slice(&body).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+				serde_json::from_slice(&body).context(ErrorKind::IO)?;
 			Ok(coinbase)
 		})
 	});

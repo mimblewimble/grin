@@ -15,6 +15,7 @@
 use blake2;
 use rand::{thread_rng, Rng};
 use std::{error, fmt, num};
+use std::fmt::Display;
 use std::convert::From;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -30,6 +31,7 @@ use tokio_core::reactor;
 use tokio_retry::Retry;
 use tokio_retry::strategy::FibonacciBackoff;
 
+use failure::{Backtrace, Context, Fail, ResultExt};
 
 use api;
 use core::consensus;
@@ -63,107 +65,91 @@ pub fn tx_fee(input_len: usize, output_len: usize, base_fee: Option<u64>) -> u64
 	(tx_weight as u64) * use_base_fee
 }
 
-/// Wallet errors, mostly wrappers around underlying crypto or I/O errors.
+#[derive(Debug, Fail)]
+#[fail(display = "Not enough funds: {}", _0)] 
+pub struct NotEnoughFunds(u64);
+
+#[derive(Debug, Fail)]
+#[fail(display = "Fee dispute: sender fee {}, recipient fee {}", sender_fee, recipient_fee)] 
+pub struct FeeDispute { 
+    sender_fee: u64, 
+    recipient_fee: u64,
+}
+
+#[derive(Debug, Fail)]
+#[fail(display = "Fee exceeds amount: sender amount {}, recipient amount {}", sender_amount, recipient_amount)] 
+pub struct FeeExceedsAmount { 
+    sender_amount: u64, 
+    recipient_amount: u64,
+}
+
+#[derive(Debug, Fail)]
+#[fail(display = "{}", _0)] 
+pub struct ErrorMessage(String);
+
 #[derive(Debug)]
-pub enum Error {
-	NotEnoughFunds(u64),
-	FeeDispute { sender_fee: u64, recipient_fee: u64 },
-	FeeExceedsAmount { sender_amount: u64, recipient_fee: u64 },
-	Keychain(keychain::Error),
-	Transaction(transaction::Error),
-	Secp(secp::Error),
-	WalletData(String),
-	/// An error in the format of the JSON structures exchanged by the wallet
-	Format(String),
-	/// An IO Error
-	IOError(io::Error),
-	/// Error when contacting a node through its API
-	Node(api::Error),
-	/// Error originating from hyper.
-	Hyper(hyper::Error),
-	/// Error originating from hyper uri parsing.
-	Uri(hyper::error::UriError),
-	/// Error with signatures during exchange
-	Signature(String),
-	GenericError(String,)
+pub struct Error {
+    inner: Context<ErrorKind>,
 }
 
-impl error::Error for Error {
-	fn description(&self) -> &str {
-		match *self {
-			_ => "some kind of wallet error",
-		}
-	}
+/// Wallet errors, mostly wrappers around underlying crypto or I/O errors.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
+pub enum ErrorKind {
+    #[fail(display = "Not enoug funds")] NotEnoughFunds,
+    #[fail(display = "Fee dispute")] FeeDispute,
+    #[fail(display = "Fee exceed amount")] FeeExceedsAmount,
+    #[fail(display = "Keychain error")] Keychain,
+    #[fail(display = "Transaction error")] Transaction,
+    #[fail(display = "Secp error")] Secp,
+    #[fail(display = "Wallet data error")] WalletData,
+    /// An error in the format of the JSON structures exchanged by the wallet
+    #[fail(display = "JSON format error")] Format,
+    /// An IO Error
+    #[fail(display = "I/O error")] IO,
+    /// Error when contacting a node through its API
+    #[fail(display = "Node API error")] Node,
+    /// Error originating from hyper.
+    #[fail(display = "Hyper error")] Hyper,
+    /// Error originating from hyper uri parsing.
+    #[fail(display = "Uri parsing error")] Uri,
+    #[fail(display = "Signature error")] Signature,
+    #[fail(display = "Generic error")] GenericError,
 }
 
-impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match *self {
-			_ => write!(f, "some kind of wallet error"),
-		}
-	}
+impl Fail for Error {
+    fn cause(&self) -> Option<&Fail> {
+        self.inner.cause()
+    }
+
+    fn backtrace(&self) -> Option<&Backtrace> {
+        self.inner.backtrace()
+    }
 }
 
-impl From<keychain::Error> for Error {
-	fn from(e: keychain::Error) -> Error {
-		Error::Keychain(e)
-	}
+impl Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Display::fmt(&self.inner, f)
+    }
 }
 
-impl From<secp::Error> for Error {
-	fn from(e: secp::Error) -> Error {
-		Error::Secp(e)
-	}
+impl Error {
+    pub fn kind(&self) -> ErrorKind {
+        *self.inner.get_context()
+    }
 }
 
-impl From<transaction::Error> for Error {
-	fn from(e: transaction::Error) -> Error {
-		Error::Transaction(e)
-	}
+impl From<ErrorKind> for Error {
+    fn from(kind: ErrorKind) -> Error {
+        Error {
+            inner: Context::new(kind),
+        }
+    }
 }
 
-impl From<serde_json::Error> for Error {
-	fn from(e: serde_json::Error) -> Error {
-		Error::Format(e.to_string())
-	}
-}
-
-// TODO - rethink this, would be nice not to have to worry about
-// low level hex conversion errors like this
-impl From<num::ParseIntError> for Error {
-	fn from(_: num::ParseIntError) -> Error {
-		Error::Format("Invalid hex".to_string())
-	}
-}
-
-impl From<ser::Error> for Error {
-	fn from(e: ser::Error) -> Error {
-		Error::Format(e.to_string())
-	}
-}
-
-impl From<api::Error> for Error {
-	fn from(e: api::Error) -> Error {
-		Error::Node(e)
-	}
-}
-
-impl From<io::Error> for Error {
-	fn from(e: io::Error) -> Error {
-		Error::IOError(e)
-	}
-}
-
-impl From<hyper::Error> for Error {
-	fn from(e: hyper::Error) -> Error {
-		Error::Hyper(e)
-	}
-}
-
-impl From<hyper::error::UriError> for Error {
-	fn from(e: hyper::error::UriError) -> Error {
-		Error::Uri(e)
-	}
+impl From<Context<ErrorKind>> for Error {
+    fn from(inner: Context<ErrorKind>) -> Error {
+        Error { inner: inner }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -496,7 +482,7 @@ impl WalletData {
 					LOGGER,
 					"Failed to acquire wallet lock file (multiple retries)",
 				);
-				return Err(Error::WalletData(format!("Failed to acquire lock file")));
+				return Err(ErrorMessage(format!("Failed to acquire lock file"))).context(ErrorKind::WalletData)?;
 			}
 		}
 
@@ -507,9 +493,9 @@ impl WalletData {
 
 		// delete the lock file
 		fs::remove_file(lock_file_path).map_err(|_| {
-			Error::WalletData(format!(
+			ErrorMessage(format!(
 				"Could not remove wallet lock file. Maybe insufficient rights?"
-			))
+			)).context(ErrorKind::WalletData)
 		})?;
 
 		info!(LOGGER, "... released wallet lock");
