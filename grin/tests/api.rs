@@ -87,6 +87,11 @@ fn simple_server_wallet() {
 	let status = get_status(&base_addr, api_server_port);
 	assert!(status.is_ok());
 
+	// Be sure that at least a block is mined by Travis
+	while get_tip(&base_addr, api_server_port).unwrap().height == 0 {
+			thread::sleep(time::Duration::from_millis(1000));
+	}
+
 	warn!(LOGGER, "Testing block handler");
 	let current_tip = tip.unwrap();
 	let height = current_tip.height;
