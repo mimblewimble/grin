@@ -1195,7 +1195,7 @@ mod test {
 
 		assert_eq!(cb.out_full.len(), 1);
 		assert_eq!(cb.kern_full.len(), 1);
-		assert_eq!(cb.kern_ids.len(), 2);
+		assert_eq!(cb.kern_ids.len(), 1);
 
 		assert_eq!(
 			cb.kern_ids[0],
