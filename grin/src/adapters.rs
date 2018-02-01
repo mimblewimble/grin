@@ -68,46 +68,43 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {
-		let bhash = b.hash();
 		debug!(
 			LOGGER,
 			"Received block {} at {} from {}, going to process.",
-			bhash,
+			b.hash(),
 			b.header.height,
 			addr,
 		);
 
-		// pushing the new block through the chain pipeline
-		let res = self.chain.process_block(b, self.chain_opts());
-		if let Err(ref e) = res {
-			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
-			if e.is_bad_block() {
-				debug!(LOGGER, "block_received: {} is a bad block, resetting head", bhash);
-				let _ = self.chain.reset_head();
-				return false;
-			}
-		};
-		true
+		self.process_block(b)
 	}
 
-	fn compact_block_received(&self, bh: core::CompactBlock, addr: SocketAddr) -> bool {
-		let bhash = bh.hash();
+	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
+		let bhash = cb.hash();
 		debug!(
 			LOGGER,
 			"Received compact_block {} at {} from {}, going to process.",
 			bhash,
-			bh.header.height,
+			cb.header.height,
 			addr,
 		);
 
-		debug!(
-			LOGGER,
-			"*** cannot hydrate compact block (not yet implemented), falling back to requesting full block",
-		);
+		if cb.kern_ids.is_empty() {
+			let block = core::Block::hydrate_from(cb, vec![], vec![], vec![]);
 
-		self.request_block(&bh.header, &addr);
+			// push the freshly hydrated block through the chain pipeline
+			self.process_block(block)
+		} else {
+			// TODO - do we need to validate the header here to be sure it is not total garbage?
 
-		true
+			debug!(
+				LOGGER,
+				"*** cannot hydrate non-empty compact block (not yet implemented), \
+				falling back to requesting full block",
+			);
+			self.request_block(&cb.header, &addr);
+			true
+		}
 	}
 
 	fn header_received(&self, bh: core::BlockHeader, addr: SocketAddr) -> bool {
@@ -296,6 +293,22 @@ impl NetToChainAdapter {
 				None
 			}
 		}
+	}
+
+	// pushing the new block through the chain pipeline
+	// remembering to reset the head if we have a bad block
+	fn process_block(&self, b: core::Block) -> bool {
+		let bhash = b.hash();
+		let res = self.chain.process_block(b, self.chain_opts());
+		if let Err(ref e) = res {
+			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
+			if e.is_bad_block() {
+				debug!(LOGGER, "adapter: process_block: {} is a bad block, resetting head", bhash);
+				let _ = self.chain.reset_head();
+				return false;
+			}
+		};
+		true
 	}
 
 	// After receiving a compact block if we cannot successfully hydrate
