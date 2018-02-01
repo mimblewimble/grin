@@ -297,6 +297,34 @@ mod test {
 	}
 
 	#[test]
+	fn build_tx_kernel() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
+		let key_id3 = keychain.derive_key_id(3).unwrap();
+
+		// first build a valid tx with corresponding blinding factor
+		let (tx, blind) = build::transaction(
+			vec![
+				input(10, ZERO_HASH, key_id1),
+				output(5, key_id2),
+				output(3, key_id3),
+				with_fee(2),
+			],
+			&keychain,
+		).unwrap();
+
+		// confirm the tx validates and that we can construct a valid tx_kernel from it
+		let excess = tx.validate().unwrap();
+		let tx_kernel = tx.build_kernel(excess);
+		let _ = tx_kernel.verify().unwrap();
+
+		assert_eq!(tx_kernel.features, DEFAULT_KERNEL);
+		assert_eq!(tx_kernel.fee, tx.fee);
+		assert_eq!(tx_kernel.excess, excess);
+	}
+
+	#[test]
 	fn hash_output() {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id1 = keychain.derive_key_id(1).unwrap();
