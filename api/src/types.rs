@@ -244,7 +244,7 @@ impl OutputPrintable {
 		include_proof: bool,
 	) -> OutputPrintable {
 		let output_type =
-			if output.features.contains(core::transaction::COINBASE_OUTPUT) {
+			if output.features.contains(core::transaction::OutputFeatures::COINBASE_OUTPUT) {
 				OutputType::Coinbase
 			} else {
 				OutputType::Transaction

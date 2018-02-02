@@ -24,7 +24,7 @@ use serde::Serialize;
 use serde_json;
 
 use chain;
-use core::core::{OutputIdentifier, Transaction, DEFAULT_OUTPUT, COINBASE_OUTPUT};
+use core::core::{OutputIdentifier, Transaction, OutputFeatures};
 use core::core::hash::{Hash, Hashed};
 use core::ser;
 use pool;
@@ -68,8 +68,8 @@ impl UtxoHandler {
 		// to compare against the hash in the output MMR.
 		// For now we can just try both (but this probably needs to be part of the api params)
 		let outputs = [
-			OutputIdentifier::new(DEFAULT_OUTPUT, &commit),
-			OutputIdentifier::new(COINBASE_OUTPUT, &commit)
+			OutputIdentifier::new(OutputFeatures::DEFAULT_OUTPUT, &commit),
+			OutputIdentifier::new(OutputFeatures::COINBASE_OUTPUT, &commit)
 		];
 
 		for x in outputs.iter() {

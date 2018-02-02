@@ -29,8 +29,8 @@ use core::{
 	Proof,
 	TxKernel,
 	Transaction,
-	COINBASE_KERNEL,
-	COINBASE_OUTPUT
+	OutputFeatures,
+	KernelFeatures
 };
 use consensus;
 use consensus::{exceeds_weight, reward, REWARD, VerifySortOrder};
@@ -452,18 +452,18 @@ impl Block {
 
 		let mut out_full = self.outputs
 			.iter()
-			.filter(|x| x.features.contains(COINBASE_OUTPUT))
+			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.cloned()
 			.collect::<Vec<_>>();
 		let mut kern_full = self.kernels
 			.iter()
-			.filter(|x| x.features.contains(COINBASE_KERNEL))
+			.filter(|x| x.features.contains(KernelFeatures::COINBASE_KERNEL))
 			.cloned()
 			.collect::<Vec<_>>();
 
 		let mut kern_ids = self.kernels
 			.iter()
-			.filter(|x| !x.features.contains(COINBASE_KERNEL))
+			.filter(|x| !x.features.contains(KernelFeatures::COINBASE_KERNEL))
 			.map(|x| x.short_id(&block_hash))
 			.collect::<Vec<_>>();
 
@@ -570,7 +570,7 @@ impl Block {
 
 		let out_set = self.outputs
 			.iter()
-			.filter(|out| !out.features.contains(COINBASE_OUTPUT))
+			.filter(|out| !out.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.map(|out| out.commitment())
 			.collect::<HashSet<_>>();
 
@@ -679,13 +679,13 @@ impl Block {
 	fn verify_coinbase(&self) -> Result<(), Error> {
 		let cb_outs = self.outputs
 			.iter()
-			.filter(|out| out.features.contains(COINBASE_OUTPUT))
+			.filter(|out| out.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.cloned()
 			.collect::<Vec<Output>>();
 
 		let cb_kerns = self.kernels
 			.iter()
-			.filter(|kernel| kernel.features.contains(COINBASE_KERNEL))
+			.filter(|kernel| kernel.features.contains(KernelFeatures::COINBASE_KERNEL))
 			.cloned()
 			.collect::<Vec<TxKernel>>();
 
@@ -738,7 +738,7 @@ impl Block {
 		// _and_ that we trust this claim.
 		// We should have already confirmed the entry from the MMR exists
 		// and has the expected hash.
-		assert!(output.features.contains(COINBASE_OUTPUT));
+		assert!(output.features.contains(OutputFeatures::COINBASE_OUTPUT));
 
 		if let Some(_) = self.outputs
 			.iter()
@@ -788,7 +788,7 @@ impl Block {
 		let rproof = keychain.range_proof(reward(fees), key_id, commit, msg)?;
 
 		let output = Output {
-			features: COINBASE_OUTPUT,
+			features: OutputFeatures::COINBASE_OUTPUT,
 			commit: commit,
 			switch_commit_hash: switch_commit_hash,
 			proof: rproof,
@@ -809,7 +809,7 @@ impl Block {
 		let sig = keychain.aggsig_sign_from_key_id(&msg, &key_id)?;
 
 		let proof = TxKernel {
-			features: COINBASE_KERNEL,
+			features: KernelFeatures::COINBASE_KERNEL,
 			excess: excess,
 			excess_sig: sig,
 			fee: 0,
@@ -945,14 +945,14 @@ mod test {
 
 		let coinbase_outputs = b.outputs
 			.iter()
-			.filter(|out| out.features.contains(COINBASE_OUTPUT))
+			.filter(|out| out.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.map(|o| o.clone())
 			.collect::<Vec<_>>();
 		assert_eq!(coinbase_outputs.len(), 1);
 
 		let coinbase_kernels = b.kernels
 			.iter()
-			.filter(|out| out.features.contains(COINBASE_KERNEL))
+			.filter(|out| out.features.contains(KernelFeatures::COINBASE_KERNEL))
 			.map(|o| o.clone())
 			.collect::<Vec<_>>();
 		assert_eq!(coinbase_kernels.len(), 1);
@@ -970,8 +970,8 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let mut b = new_block(vec![], &keychain);
 
-		assert!(b.outputs[0].features.contains(COINBASE_OUTPUT));
-		b.outputs[0].features.remove(COINBASE_OUTPUT);
+		assert!(b.outputs[0].features.contains(OutputFeatures::COINBASE_OUTPUT));
+		b.outputs[0].features.remove(OutputFeatures::COINBASE_OUTPUT);
 
 		assert_eq!(
 			b.verify_coinbase(),
@@ -992,8 +992,8 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let mut b = new_block(vec![], &keychain);
 
-		assert!(b.kernels[0].features.contains(COINBASE_KERNEL));
-		b.kernels[0].features.remove(COINBASE_KERNEL);
+		assert!(b.kernels[0].features.contains(KernelFeatures::COINBASE_KERNEL));
+		b.kernels[0].features.remove(KernelFeatures::COINBASE_KERNEL);
 
 		assert_eq!(
 			b.verify_coinbase(),
@@ -1029,7 +1029,7 @@ mod test {
 		ser::serialize(&mut vec, &b).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			5_676,
+			5_676
 		);
 	}
 
@@ -1042,7 +1042,7 @@ mod test {
 		ser::serialize(&mut vec, &b).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			16_224,
+			16_224
 		);
 	}
 
@@ -1054,7 +1054,7 @@ mod test {
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			5_662,
+			5_662
 		);
 	}
 
@@ -1067,7 +1067,7 @@ mod test {
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			5_668,
+			5_668
 		);
 	}
 
@@ -1089,7 +1089,7 @@ mod test {
 		ser::serialize(&mut vec, &b).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			111_156,
+			111_156
 		);
 	}
 
@@ -1111,7 +1111,7 @@ mod test {
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			5_722,
+			5_722
 		);
 	}
 
@@ -1131,7 +1131,7 @@ mod test {
 			cb.kern_ids[0],
 			b.kernels
 				.iter()
-				.find(|x| !x.features.contains(COINBASE_KERNEL))
+				.find(|x| !x.features.contains(KernelFeatures::COINBASE_KERNEL))
 				.unwrap()
 				.short_id(&b.hash())
 		);

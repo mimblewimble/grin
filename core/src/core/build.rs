@@ -27,7 +27,7 @@
 
 use util::{secp, kernel_sig_msg};
 
-use core::{Transaction, Input, Output, OutputFeatures, SwitchCommitHash, COINBASE_OUTPUT, DEFAULT_OUTPUT};
+use core::{Transaction, Input, Output, OutputFeatures, SwitchCommitHash};
 use core::hash::Hash;
 use keychain;
 use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
@@ -69,7 +69,7 @@ pub fn input(
 	key_id: Identifier,
 ) -> Box<Append> {
 	debug!(LOGGER, "Building input (spending regular output): {}, {}", value, key_id);
-	build_input(value, DEFAULT_OUTPUT, Some(out_block), key_id)
+	build_input(value, OutputFeatures::DEFAULT_OUTPUT, Some(out_block), key_id)
 }
 
 /// Adds a coinbase input spending a coinbase output.
@@ -80,7 +80,7 @@ pub fn coinbase_input(
 	key_id: Identifier,
 ) -> Box<Append> {
 	debug!(LOGGER, "Building input (spending coinbase): {}, {}", value, key_id);
-	build_input(value, COINBASE_OUTPUT, Some(out_block), key_id)
+	build_input(value, OutputFeatures::COINBASE_OUTPUT, Some(out_block), key_id)
 }
 
 /// Adds an output with the provided value and key identifier from the
@@ -120,7 +120,7 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 
 		(
 			tx.with_output(Output {
-				features: DEFAULT_OUTPUT,
+				features: OutputFeatures::DEFAULT_OUTPUT,
 				commit: commit,
 				switch_commit_hash: switch_commit_hash,
 				proof: rproof,

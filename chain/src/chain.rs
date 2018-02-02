@@ -237,7 +237,7 @@ pub fn process_block(&self, b: Block, opts: Options)
 				}
 
 				// notifying other parts of the system of the update
-				if !opts.contains(SYNC) {
+				if !opts.contains(Options::SYNC) {
 					// broadcast the block
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b, opts);
@@ -254,7 +254,7 @@ pub fn process_block(&self, b: Block, opts: Options)
 				// or less relevant blocks somehow.
 				// We should also probably consider banning nodes that send us really old blocks.
 				//
-				if !opts.contains(SYNC) {
+				if !opts.contains(Options::SYNC) {
 					// broadcast the block
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b, opts);
