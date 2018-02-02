@@ -439,7 +439,7 @@ impl Keychain {
 
 #[cfg(test)]
 mod test {
-	use keychain::Keychain;
+	use keychain::{BlindSum, BlindingFactor, Keychain};
 	use util::secp;
 	use util::secp::pedersen::ProofMessage;
 	use util::secp::key::SecretKey;
@@ -511,6 +511,10 @@ mod test {
 		assert_eq!(proof_info.value, 0);
 	}
 
+	// We plan to "offset" the key used in the kernel commitment
+	// so we are going to be doing some key addition/subtraction.
+	// This test is mainly to demonstrate that idea that summing commitments
+	// and summing the keys used to commit to 0 have the same result.
 	#[test]
 	fn secret_key_addition() {
 		let keychain = Keychain::from_random_seed().unwrap();
@@ -537,10 +541,10 @@ mod test {
 
 		// adding secret keys 1 and 2 to give secret key 3
 		let mut skey3 = skey1.clone();
-		skey3.add_assign(&keychain.secp, &skey2);
+		let _ = skey3.add_assign(&keychain.secp, &skey2).unwrap();
 
 		// create commitments for secret keys 1, 2 and 3
-		// committing to the value 0
+		// all committing to the value 0 (which is what we do for tx_kernels)
 		let commit_1 = keychain.secp.commit(0, skey1).unwrap();
 		let commit_2 = keychain.secp.commit(0, skey2).unwrap();
 		let commit_3 = keychain.secp.commit(0, skey3).unwrap();
@@ -553,5 +557,15 @@ mod test {
 
 		// confirm the commitment for key 3 matches the sum of the commitments 1 and 2
 		assert_eq!(sum, commit_3);
+
+		// now check we can sum keys up using keychain.blind_sum()
+		// in the same way (convenience function)
+		assert_eq!(
+			keychain.blind_sum(&BlindSum::new()
+				.add_blinding_factor(BlindingFactor::new(skey1))
+				.add_blinding_factor(BlindingFactor::new(skey2))
+			).unwrap(),
+			BlindingFactor::new(skey3),
+		);
 	}
 }

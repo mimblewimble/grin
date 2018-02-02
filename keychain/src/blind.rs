@@ -18,7 +18,7 @@ use util::secp::{self, Secp256k1};
 use extkey::Identifier;
 use keychain::Error;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BlindingFactor(secp::key::SecretKey);
 
 impl BlindingFactor {
@@ -39,6 +39,7 @@ impl BlindingFactor {
 
 /// Accumulator to compute the sum of blinding factors. Keeps track of each
 /// factor as well as the "sign" with which they should be combined.
+#[derive(Clone, Debug, PartialEq)]
 pub struct BlindSum {
 	pub positive_key_ids: Vec<Identifier>,
 	pub negative_key_ids: Vec<Identifier>,
