@@ -21,19 +21,11 @@ extern crate grin_pow as pow;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
-extern crate futures;
-extern crate tokio_core;
-extern crate tokio_timer;
-
 mod framework;
 
 use std::thread;
 use std::time;
 use std::default::Default;
-
-use futures::{Async, Future, Poll};
-use futures::task::current;
-use tokio_core::reactor;
 
 use core::global;
 use core::global::ChainTypes;
@@ -76,6 +68,7 @@ fn basic_genesis_mine() {
 /// messages they all end up connected.
 #[test]
 fn simulate_seeding() {
+	util::init_test_logger();
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "simulate_seeding";
@@ -114,7 +107,7 @@ fn simulate_seeding() {
 		pool.create_server(&mut server_config);
 	}
 
-	pool.connect_all_peers();
+	// pool.connect_all_peers();
 
 	let _ = pool.run_all_servers();
 }
@@ -169,7 +162,7 @@ fn simulate_parallel_mining() {
 		pool.create_server(&mut server_config);
 	}
 
-	pool.connect_all_peers();
+	// pool.connect_all_peers();
 
 	let _ = pool.run_all_servers();
 
@@ -191,8 +184,6 @@ fn a_simulate_block_propagation() {
 
 	let test_name_dir = "grin-prop";
 	framework::clean_all_output(test_name_dir);
-	let mut evtlp = reactor::Core::new().unwrap();
-	let handle = evtlp.handle();
 
 	let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
 	let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();
@@ -212,7 +203,7 @@ fn a_simulate_block_propagation() {
 	// instantiates 5 servers on different ports
 	let mut servers = vec![];
 	for n in 0..5 {
-		let s = grin::Server::future(
+		let s = grin::Server::new(
 			grin::ServerConfig {
 				api_http_addr: format!("127.0.0.1:{}", 19000 + n),
 				db_root: format!("target/{}/grin-prop-{}", test_name_dir, n),
@@ -225,7 +216,6 @@ fn a_simulate_block_propagation() {
 				chain_type: core::global::ChainTypes::AutomatedTesting,
 				..Default::default()
 			},
-			&handle,
 		).unwrap();
 		servers.push(s);
 	}
@@ -236,10 +226,18 @@ fn a_simulate_block_propagation() {
 
 	// monitor for a change of head on a different server and check whether
 	// chain height has changed
-	evtlp.run(change(&servers[4]).and_then(|tip| {
-		assert!(tip.height == original_height + 1);
-		Ok(())
-	}));
+	loop {
+		let mut count = 0;
+		for n in 0..5 {
+			if servers[n].head().height > 3 {
+				count += 1;
+			}
+		}
+		if count == 5 {
+			break;
+		}
+		thread::sleep(time::Duration::from_millis(100));
+	}
 }
 
 /// Creates 2 different disconnected servers, mine a few blocks on one, connect
@@ -254,9 +252,6 @@ fn simulate_full_sync() {
 
 	let test_name_dir = "grin-sync";
 	framework::clean_all_output(test_name_dir);
-
-	let mut evtlp = reactor::Core::new().unwrap();
-	let handle = evtlp.handle();
 
 	let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
 	let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();
@@ -273,62 +268,30 @@ fn simulate_full_sync() {
 		..Default::default()
 	};
 
-	// instantiates 2 servers on different ports
-	let mut servers = vec![];
-	for n in 0..2 {
-		let config = grin::ServerConfig {
-			api_http_addr: format!("127.0.0.1:{}", 19000 + n),
-			db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
-			p2p_config: p2p::P2PConfig {
-				port: 11000 + n,
-				..p2p::P2PConfig::default()
-			},
-			seeding_type: grin::Seeding::List,
-			seeds: Some(vec!["127.0.0.1:11000".to_string()]),
-			chain_type: core::global::ChainTypes::AutomatedTesting,
-			..Default::default()
-		};
-		let s = grin::Server::future(config, &handle).unwrap();
-		servers.push(s);
-	}
-
+	let s1 = grin::Server::new(config(0, "grin-sync")).unwrap();
 	// mine a few blocks on server 1
-	servers[0].start_miner(miner_config);
+	s1.start_miner(miner_config);
 	thread::sleep(time::Duration::from_secs(5));
 
-	// 2 should get blocks
-	evtlp.run(change(&servers[1]));
-}
-
-// Builds the change future, monitoring for a change of head on the provided
-// server
-fn change<'a>(s: &'a grin::Server) -> HeadChange<'a> {
-	let start_head = s.head();
-	HeadChange {
-		server: s,
-		original: start_head,
+	let mut conf = config(1, "grin-sync");
+	conf.skip_sync_wait = Some(false);
+	let s2 = grin::Server::new(conf).unwrap();
+	while s2.head().height < 4 {
+		thread::sleep(time::Duration::from_millis(100));
 	}
 }
 
-/// Future that monitors when a server has had its head updated. Current
-/// implementation isn't optimized, only use for tests.
-struct HeadChange<'a> {
-	server: &'a grin::Server,
-	original: chain::Tip,
-}
-
-impl<'a> Future for HeadChange<'a> {
-	type Item = chain::Tip;
-	type Error = ();
-
-	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-		let new_head = self.server.head();
-		if new_head.last_block_h != self.original.last_block_h {
-			Ok(Async::Ready(new_head))
-		} else {
-			// egregious polling, asking the task to schedule us every iteration
-			current().notify();
-			Ok(Async::NotReady)
-		}
+fn config(n: u16, test_name_dir: &str) -> grin::ServerConfig {
+	grin::ServerConfig {
+		api_http_addr: format!("127.0.0.1:{}", 19000 + n),
+		db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
+		p2p_config: p2p::P2PConfig {
+			port: 11000 + n,
+			..p2p::P2PConfig::default()
+		},
+		seeding_type: grin::Seeding::List,
+		seeds: Some(vec!["127.0.0.1:11000".to_string()]),
+		chain_type: core::global::ChainTypes::AutomatedTesting,
+		..Default::default()
 	}
 }

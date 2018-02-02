@@ -537,4 +537,24 @@ mod test {
 		).map(|(tx, _)| tx)
 			.unwrap()
 	}
+
+	// utility producing a transaction with a single input
+	// and two outputs (one change output)
+	pub fn tx1i2o() -> Transaction {
+		let keychain = keychain::Keychain::from_random_seed().unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
+		let key_id3 = keychain.derive_key_id(3).unwrap();
+
+		build::transaction(
+			vec![
+				input(6, ZERO_HASH, key_id1),
+				output(3, key_id2),
+				output(1, key_id3),
+				with_fee(2),
+			],
+			&keychain,
+		).map(|(tx, _)| tx)
+			.unwrap()
+	}
 }

@@ -25,7 +25,7 @@ use util::LOGGER;
 use time;
 
 use peer::Peer;
-use store::{PeerData, PeerStore, State};
+use store::{PeerStore, PeerData, State};
 use types::*;
 
 #[derive(Clone)]
@@ -504,7 +504,7 @@ impl NetAdapter for Peers {
 			}
 			let peer = PeerData {
 				addr: pa,
-				capabilities: UNKNOWN,
+				capabilities: Capabilities::UNKNOWN,
 				user_agent: "".to_string(),
 				flags: State::Healthy,
 				last_banned: 0,

@@ -398,6 +398,53 @@ impl Block {
 		Ok(block)
 	}
 
+	/// Hydrate a block from a compact block.
+	///
+	/// TODO - only supporting empty compact blocks for now (coinbase output/kernel only)
+	/// eventually we want to support any compact blocks
+	/// we need to differentiate between a block with missing entries (not in tx pool)
+	/// and a truly invalid block (which will get the peer banned)
+	/// so we need to consider how to do this safely/robustly
+	/// presumably at this point we are confident we can generate a full block with no
+	/// missing pieces, but we cannot fully validate it until we push it through the pipeline
+	/// at which point the peer runs the risk of getting banned
+	pub fn hydrate_from(
+		cb: CompactBlock,
+		_inputs: Vec<Input>,
+		_outputs: Vec<Output>,
+		_kernels: Vec<TxKernel>,
+	) -> Block {
+		debug!(
+			LOGGER,
+			"block: hydrate_from: {}, {} cb outputs, {} cb kernels, {} tx kern_ids",
+			cb.hash(),
+			cb.out_full.len(),
+			cb.kern_full.len(),
+			cb.kern_ids.len(),
+		);
+
+		// we only support "empty" compact block for now
+		assert!(cb.kern_ids.is_empty());
+
+		let mut all_inputs = vec![];
+		let mut all_outputs = vec![];
+		let mut all_kernels = vec![];
+
+		all_outputs.extend(cb.out_full);
+		all_kernels.extend(cb.kern_full);
+
+		all_inputs.sort();
+		all_outputs.sort();
+		all_kernels.sort();
+
+		Block {
+			header: cb.header,
+			inputs: all_inputs,
+			outputs: all_outputs,
+			kernels: all_kernels,
+		}.cut_through()
+	}
+
 	/// Generate the compact block representation.
 	pub fn as_compact_block(&self) -> CompactBlock {
 		let header = self.header.clone();
@@ -780,7 +827,7 @@ mod test {
 	use core::hash::ZERO_HASH;
 	use core::Transaction;
 	use core::build::{self, input, output, with_fee};
-	use core::test::tx2i1o;
+	use core::test::{tx1i2o, tx2i1o};
 	use keychain::{Identifier, Keychain};
 	use consensus::{MAX_BLOCK_WEIGHT, BLOCK_OUTPUT_WEIGHT};
 	use std::time::Instant;
@@ -975,9 +1022,103 @@ mod test {
 	}
 
 	#[test]
+	fn empty_block_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let b = new_block(vec![], &keychain);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b).expect("serialization failed");
+		assert_eq!(
+			vec.len(),
+			5_676,
+		);
+	}
+
+	#[test]
+	fn block_single_tx_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let tx1 = tx1i2o();
+		let b = new_block(vec![&tx1], &keychain);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b).expect("serialization failed");
+		assert_eq!(
+			vec.len(),
+			16_224,
+		);
+	}
+
+	#[test]
+	fn empty_compact_block_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let b = new_block(vec![], &keychain);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
+		assert_eq!(
+			vec.len(),
+			5_662,
+		);
+	}
+
+	#[test]
+	fn compact_block_single_tx_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let tx1 = tx1i2o();
+		let b = new_block(vec![&tx1], &keychain);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
+		assert_eq!(
+			vec.len(),
+			5_668,
+		);
+	}
+
+	#[test]
+	fn block_10_tx_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+
+		let mut txs = vec![];
+		for _ in 0..10 {
+			let tx = tx1i2o();
+			txs.push(tx);
+		}
+
+		let b = new_block(
+			txs.iter().collect(),
+			&keychain,
+		);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b).expect("serialization failed");
+		assert_eq!(
+			vec.len(),
+			111_156,
+		);
+	}
+
+	#[test]
+	fn compact_block_10_tx_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+
+		let mut txs = vec![];
+		for _ in 0..10 {
+			let tx = tx1i2o();
+			txs.push(tx);
+		}
+
+		let b = new_block(
+			txs.iter().collect(),
+			&keychain,
+		);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
+		assert_eq!(
+			vec.len(),
+			5_722,
+		);
+	}
+
+	#[test]
 	fn convert_block_to_compact_block() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let tx1 = tx2i1o();
+		let tx1 = tx1i2o();
 		let b = new_block(vec![&tx1], &keychain);
 
 		let cb = b.as_compact_block();
@@ -994,6 +1135,17 @@ mod test {
 				.unwrap()
 				.short_id(&b.hash())
 		);
+	}
+
+	#[test]
+	fn hydrate_empty_compact_block() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let b = new_block(vec![], &keychain);
+		let cb = b.as_compact_block();
+		let hb = Block::hydrate_from(cb, vec![], vec![], vec![]);
+		assert_eq!(hb.header, b.header);
+		assert_eq!(hb.outputs, b.outputs);
+		assert_eq!(hb.kernels, b.kernels);
 	}
 
 	#[test]

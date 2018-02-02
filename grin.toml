@@ -191,10 +191,10 @@ NUM_THREADS = 1
 #disabled unless explicitly enabled by setting the 'USE_DEVICE'
 #param to 1 on each device, as demonstrated below.
 
-[[mining.cuckoo_miner_plugin_config]]
-type_filter = "cuda"
-[mining.cuckoo_miner_plugin_config.device_parameters.0]
-USE_DEVICE = 1
+#[[mining.cuckoo_miner_plugin_config]]
+#type_filter = "cuda"
+#[mining.cuckoo_miner_plugin_config.device_parameters.0]
+#USE_DEVICE = 1
 
 # Below are advanced optional per-device tweakable params
 
