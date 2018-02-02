@@ -22,7 +22,7 @@ use util::secp::{self, Secp256k1};
 use util::secp::constants::SECRET_KEY_SIZE;
 
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BlindingFactor([u8; SECRET_KEY_SIZE]);
 
 impl AsRef<[u8]> for BlindingFactor {

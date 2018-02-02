@@ -26,7 +26,7 @@ use api;
 use core::consensus::reward;
 use core::core::{build, Block, Output, Transaction, TxKernel, amount_to_hr_string};
 use core::{global, ser};
-use keychain::{Identifier, Keychain};
+use keychain::{Identifier, Keychain, BlindingFactor};
 use types::*;
 use util::{LOGGER, to_hex, secp};
 
@@ -113,7 +113,8 @@ fn handle_sender_initiation(
 	warn!(LOGGER, "Creating new aggsig context");
 	// Create a new aggsig context
 	// this will create a new blinding sum and nonce, and store them
-	keychain.aggsig_create_context(blind_sum.secret_key());
+	let blind = blind_sum.secret_key(&keychain.secp())?;
+	keychain.aggsig_create_context(blind);
 	keychain.aggsig_add_output(&key_id);
 
 	let sig_part=keychain.aggsig_calculate_partial_sig(&sender_pub_nonce, fee, tx.lock_height).unwrap();

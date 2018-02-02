@@ -43,6 +43,7 @@ use util::kernel_sig_msg;
 use util::LOGGER;
 use global;
 use keychain;
+use keychain::BlindingFactor;
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, PartialEq)]
@@ -130,6 +131,8 @@ pub struct BlockHeader {
 	pub difficulty: Difficulty,
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
+
+	pub kernel_offset: BlindingFactor,
 }
 
 impl Default for BlockHeader {
@@ -147,6 +150,7 @@ impl Default for BlockHeader {
 			kernel_root: ZERO_HASH,
 			nonce: 0,
 			pow: Proof::zero(proof_size),
+			kernel_offset: BlindingFactor::zero(),
 		}
 	}
 }
@@ -168,6 +172,7 @@ impl Writeable for BlockHeader {
 		try!(writer.write_u64(self.nonce));
 		try!(self.difficulty.write(writer));
 		try!(self.total_difficulty.write(writer));
+		try!(self.kernel_offset.write(writer));
 
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			try!(self.pow.write(writer));
@@ -188,6 +193,7 @@ impl Readable for BlockHeader {
 		let nonce = reader.read_u64()?;
 		let difficulty = Difficulty::read(reader)?;
 		let total_difficulty = Difficulty::read(reader)?;
+		let kernel_offset = BlindingFactor::read(reader)?;
 		let pow = Proof::read(reader)?;
 
 		Ok(BlockHeader {
@@ -205,6 +211,7 @@ impl Readable for BlockHeader {
 			nonce: nonce,
 			difficulty: difficulty,
 			total_difficulty: total_difficulty,
+			kernel_offset: kernel_offset,
 		})
 	}
 }
@@ -494,12 +501,21 @@ impl Block {
 		let mut inputs = vec![];
 		let mut outputs = vec![];
 
+		// we will sum these together at the end
+		// to give us the overall offset for the block
+		let mut kernel_offsets = vec![];
+
 		// iterate over the all the txs
 		// build the kernel for each
 		// and collect all the kernels, inputs and outputs
 		// to build the block (which we can sort of think of as one big tx?)
 		for tx in txs {
 			// validate each transaction and gather their kernels
+			// tx has an offset k2 where k = k1 + k2
+			// and the tx is signed using k1
+			// the kernel excess is k1G
+			// we will sum all the offsets later and store the total offset
+			// on the block_header
 			let excess = tx.validate()?;
 			let kernel = tx.build_kernel(excess);
 			kernels.push(kernel);
@@ -511,7 +527,11 @@ impl Block {
 			for output in tx.outputs.clone() {
 				outputs.push(output);
 			}
+
+			kernel_offsets.push(tx.offset);
 		}
+
+		// TODO - offset for the coinbase kernel?
 
 		// also include the reward kernel and output
 		kernels.push(reward_kern);
@@ -521,6 +541,28 @@ impl Block {
 		inputs.sort();
 		outputs.sort();
 		kernels.sort();
+
+		// now sum the kernel_offsets up to give us
+		// an aggregate offset for the entire block
+		let kernel_offset = {
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			let keys = kernel_offsets
+				.iter()
+				.cloned()
+				.filter(|x| *x != BlindingFactor::zero())
+				.filter_map(|x| {
+					println!("doing stuff {:?}", x);
+					x.secret_key(&secp).ok()
+				})
+				.collect::<Vec<_>>();
+			if keys.is_empty() {
+				BlindingFactor::zero()
+			} else {
+				let sum = secp.blind_sum(keys, vec![])?;
+				BlindingFactor::from_secret_key(sum)
+			}
+		};
 
 		// calculate the overall Merkle tree and fees (todo?)
 		Ok(
@@ -534,6 +576,7 @@ impl Block {
 					previous: prev.hash(),
 					total_difficulty: difficulty +
 						prev.total_difficulty.clone(),
+					kernel_offset: kernel_offset,
 					..Default::default()
 				},
 				inputs: inputs,

@@ -60,8 +60,9 @@ pub fn issue_send_tx(
 	 * -Sender posts inputs, outputs, Message M=fee, xS * G and kS * G to Receiver
 	*/
 
-// Create a new aggsig context
-	keychain.aggsig_create_context(blind_sum.secret_key());
+	// Create a new aggsig context
+	let blind = blind_sum.secret_key(&keychain.secp())?;
+	keychain.aggsig_create_context(blind);
 
 	let partial_tx = build_partial_tx(keychain, amount, None, tx);
 
