@@ -1072,7 +1072,7 @@ mod test {
 		ser::serialize(&mut vec, &b).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			5_676,
+			5_708,
 		);
 	}
 
@@ -1085,7 +1085,7 @@ mod test {
 		ser::serialize(&mut vec, &b).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			16_224,
+			16_256,
 		);
 	}
 
@@ -1097,7 +1097,7 @@ mod test {
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			5_662,
+			5_694,
 		);
 	}
 
@@ -1110,7 +1110,7 @@ mod test {
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			5_668,
+			5_700,
 		);
 	}
 
@@ -1132,7 +1132,7 @@ mod test {
 		ser::serialize(&mut vec, &b).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			111_156,
+			111_188,
 		);
 	}
 
@@ -1154,7 +1154,7 @@ mod test {
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			5_722,
+			5_754,
 		);
 	}
 
