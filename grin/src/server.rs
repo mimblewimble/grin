@@ -22,11 +22,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time;
 
-use futures::{Future, Stream};
-use cpupool::CpuPool;
-use tokio_core::reactor;
-use tokio_timer::Timer;
-
 use adapters::*;
 use api;
 use chain;
@@ -40,13 +35,10 @@ use types::*;
 use pow;
 use util::LOGGER;
 
-
 /// Grin server holding internal structures.
 pub struct Server {
 	/// server config
 	pub config: ServerConfig,
-	/// event handle
-	evt_handle: reactor::Handle,
 	/// handle to our network server
 	p2p: Arc<p2p::Server>,
 	/// data store access
@@ -59,28 +51,19 @@ pub struct Server {
 impl Server {
 	/// Instantiates and starts a new server.
 	pub fn start(config: ServerConfig) -> Result<Server, Error> {
-		let mut evtlp = reactor::Core::new().unwrap();
-
 		let mut mining_config = config.mining_config.clone();
-		let serv = Server::future(config, &evtlp.handle())?;
+		let serv = Server::new(config)?;
 		if mining_config.as_mut().unwrap().enable_mining {
 			serv.start_miner(mining_config.unwrap());
 		}
 
-		let forever = Timer::default()
-			.interval(time::Duration::from_secs(60))
-			.for_each(move |_| {
-				debug!(LOGGER, "event loop running");
-				Ok(())
-			})
-			.map_err(|_| ());
-
-		evtlp.run(forever).unwrap();
-		Ok(serv)
+		loop {
+			thread::sleep(time::Duration::from_secs(10));
+		}
 	}
 
 	/// Instantiates a new server associated with the provided future reactor.
-	pub fn future(mut config: ServerConfig, evt_handle: &reactor::Handle) -> Result<Server, Error> {
+	pub fn new(mut config: ServerConfig) -> Result<Server, Error> {
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
 		let pool_net_adapter = Arc::new(PoolToNetAdapter::new());
 		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(
@@ -119,50 +102,34 @@ impl Server {
 			tx_pool.clone(),
 		));
 
-		// thread pool (single thread) for offloading handler.handle()
-		// work from the main run loop in p2p_server
-		let cpu_pool = CpuPool::new(1);
-
 		let p2p_config = config.p2p_config.clone();
-
 		let p2p_server = Arc::new(p2p::Server::new(
 			config.db_root.clone(),
 			config.capabilities,
 			p2p_config,
 			net_adapter.clone(),
 			genesis.hash(),
-			cpu_pool.clone(),
 		)?);
 		chain_adapter.init(p2p_server.peers.clone());
 		pool_net_adapter.init(p2p_server.peers.clone());
 		net_adapter.init(p2p_server.peers.clone());
 
-		let seed = seed::Seeder::new(
-			config.capabilities, p2p_server.clone(), p2p_server.peers.clone());
-		match config.seeding_type.clone() {
-			Seeding::None => {
-				warn!(
-					LOGGER,
-					"No seed(s) configured, will stay solo until connected to"
-				);
-				seed.connect_and_monitor(
-					evt_handle.clone(),
-					seed::predefined_seeds(vec![]),
-				);
-			}
-			Seeding::List => {
-				seed.connect_and_monitor(
-					evt_handle.clone(),
-					seed::predefined_seeds(config.seeds.as_mut().unwrap().clone()),
-				);
-			}
-			Seeding::WebStatic => {
-				seed.connect_and_monitor(
-					evt_handle.clone(),
-					seed::web_seeds(evt_handle.clone()),
-				);
-			}
-			_ => {}
+		if config.seeding_type.clone() != Seeding::Programmatic {
+
+			let seeder = match config.seeding_type.clone() {
+				Seeding::None => {
+					warn!(LOGGER, "No seed configured, will stay solo until connected to");
+					seed::predefined_seeds(vec![])
+				}
+				Seeding::List => {
+					seed::predefined_seeds(config.seeds.as_mut().unwrap().clone())
+				}
+				Seeding::WebStatic => {
+					seed::web_seeds()
+				}
+				_ => unreachable!(),
+			};
+			seed::connect_and_monitor(p2p_server.clone(), config.capabilities, seeder);
 		}
 
 		let skip_sync_wait = match config.skip_sync_wait {
@@ -175,9 +142,12 @@ impl Server {
 			p2p_server.peers.clone(),
 			shared_chain.clone(),
 			skip_sync_wait,
-			);
+		);
 
-		evt_handle.spawn(p2p_server.start(evt_handle.clone()).map_err(|_| ()));
+		let p2p_inner = p2p_server.clone();
+		let _ = thread::Builder::new().name("p2p-server".to_string()).spawn(move || {
+			p2p_inner.listen()
+		});
 
 		info!(LOGGER, "Starting rest apis at: {}", &config.api_http_addr);
 
@@ -190,8 +160,7 @@ impl Server {
 
 		warn!(LOGGER, "Grin server started.");
 		Ok(Server {
-			config: config.clone(),
-			evt_handle: evt_handle.clone(),
+			config: config,
 			p2p: p2p_server,
 			chain: shared_chain,
 			tx_pool: tx_pool,
@@ -201,13 +170,7 @@ impl Server {
 
 	/// Asks the server to connect to a peer at the provided network address.
 	pub fn connect_peer(&self, addr: SocketAddr) -> Result<(), Error> {
-		let handle = self.evt_handle.clone();
-		handle.spawn(
-			self.p2p
-				.connect_peer(addr, handle.clone())
-				.map(|_| ())
-				.map_err(|_| ()),
-		);
+		self.p2p.connect(&addr)?;
 		Ok(())
 	}
 

@@ -25,7 +25,7 @@ use util::LOGGER;
 use time;
 
 use peer::Peer;
-use store::{PeerData, PeerStore, State};
+use store::{PeerStore, PeerData, State};
 use types::*;
 
 #[derive(Clone)]

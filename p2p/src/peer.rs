@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::net::SocketAddr;
+use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, RwLock};
 
-use futures::Future;
-use futures_cpupool::CpuPool;
-use tokio_core::net::TcpStream;
-
+use conn;
 use core::core;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use handshake::Handshake;
+use msg;
+use protocol::Protocol;
+use msg::*;
 use types::*;
 use util::LOGGER;
 
@@ -37,10 +37,10 @@ enum State {
 
 pub struct Peer {
 	pub info: PeerInfo,
-	proto: Box<Protocol>,
 	state: Arc<RwLock<State>>,
 	// set of all hashes known to this peer (so no need to send)
 	tracking_adapter: TrackingAdapter,
+	connection: Option<conn::Tracker>
 }
 
 unsafe impl Sync for Peer {}
@@ -48,77 +48,50 @@ unsafe impl Send for Peer {}
 
 impl Peer {
 	// Only accept and connect can be externally used to build a peer
-	fn new(info: PeerInfo, proto: Box<Protocol>, na: Arc<NetAdapter>) -> Peer {
+	fn new(info: PeerInfo, na: Arc<NetAdapter>) -> Peer {
 		Peer {
 			info: info,
-			proto: proto,
 			state: Arc::new(RwLock::new(State::Connected)),
 			tracking_adapter: TrackingAdapter::new(na),
+			connection: None,
 		}
 	}
 
-	/// Initiates the handshake with another peer.
-	pub fn connect(
-		conn: TcpStream,
-		capab: Capabilities,
-		total_difficulty: Difficulty,
-		self_addr: SocketAddr,
-		hs: Arc<Handshake>,
-		na: Arc<NetAdapter>,
-	) -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
-		let connect_peer = hs.connect(capab, total_difficulty, self_addr, conn)
-			.and_then(|(conn, proto, info)| {
-				Ok((conn, Peer::new(info, Box::new(proto), na)))
-			});
-		Box::new(connect_peer)
-	}
-
-	/// Accept a handshake initiated by another peer.
 	pub fn accept(
-		conn: TcpStream,
+		conn: &mut TcpStream,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		hs: &Handshake,
 		na: Arc<NetAdapter>,
-	) -> Box<Future<Item = (TcpStream, Peer), Error = Error>> {
-		let hs_peer = hs.handshake(capab, total_difficulty, conn)
-			.and_then(|(conn, proto, info)| {
-				Ok((conn, Peer::new(info, Box::new(proto), na)))
-			});
-		Box::new(hs_peer)
+	) -> Result<Peer, Error> {
+
+		let info = hs.accept(capab, total_difficulty, conn)?;
+		Ok(Peer::new(info, na))
+	}
+
+	pub fn connect(
+		conn: &mut TcpStream,
+		capab: Capabilities,
+		total_difficulty: Difficulty,
+		self_addr: SocketAddr,
+		hs: &Handshake,
+		na: Arc<NetAdapter>,
+	) -> Result<Peer, Error> {
+
+		let info = hs.initiate(capab, total_difficulty, self_addr, conn)?;
+		Ok(Peer::new(info, na))
 	}
 
 	/// Main peer loop listening for messages and forwarding to the rest of the
 	/// system.
-	pub fn run(&self, conn: TcpStream, pool: CpuPool) -> Box<Future<Item = (), Error = Error>> {
+	pub fn start(&mut self, conn: TcpStream) {
 		let addr = self.info.addr;
-		let state = self.state.clone();
 		let adapter = Arc::new(self.tracking_adapter.clone());
-
-		Box::new(self.proto.handle(conn, adapter, addr, pool).then(move |res| {
-			// handle disconnection, standard disconnections aren't considered an error
-			let mut state = state.write().unwrap();
-			match res {
-				Ok(_) => {
-					*state = State::Disconnected;
-					info!(LOGGER, "Client {} disconnected.", addr);
-					Ok(())
-				}
-				Err(Error::Serialization(e)) => {
-					*state = State::Banned;
-					info!(LOGGER, "Client {} corrupted, ban.", addr);
-					Err(Error::Serialization(e))
-				}
-				Err(e) => {
-					*state = State::Disconnected;
-					debug!(LOGGER, "Client {} connection lost: {:?}", addr, e);
-					Ok(())
-				}
-			}
-		}))
+		let handler = Protocol::new(adapter, addr);
+		self.connection = Some(conn::listen(conn, handler));
 	}
 
-	pub fn is_denied(config: P2PConfig, peer_addr: SocketAddr) -> bool {
+	pub fn is_denied(config: &P2PConfig, peer_addr: &SocketAddr) -> bool {
 		let peer = format!("{}:{}", peer_addr.ip(), peer_addr.port());
 		if let Some(ref denied) = config.peers_deny {
 			if denied.contains(&peer) {
@@ -142,12 +115,16 @@ impl Peer {
 
 	/// Whether this peer is still connected.
 	pub fn is_connected(&self) -> bool {
+		if !self.check_connection() {
+			return false
+		}
 		let state = self.state.read().unwrap();
-		*state == State::Connected
+		*state == State::Connected	
 	}
 
 	/// Whether this peer has been banned.
 	pub fn is_banned(&self) -> bool {
+		let _ = self.check_connection();
 		let state = self.state.read().unwrap();
 		*state == State::Banned
 	}
@@ -158,13 +135,10 @@ impl Peer {
 		*state = State::Banned;
 	}
 
-	/// Bytes sent and received by this peer to the remote peer.
-	pub fn transmitted_bytes(&self) -> (u64, u64) {
-		self.proto.transmitted_bytes()
-	}
-
+	/// Send a ping to the remote peer, providing our local difficulty and height
 	pub fn send_ping(&self, total_difficulty: Difficulty, height: u64) -> Result<(), Error> {
-		self.proto.send_ping(total_difficulty, height)
+		let ping_msg = Ping{total_difficulty, height};
+		self.connection.as_ref().unwrap().send(ping_msg, msg::Type::Ping)
 	}
 
 	/// Sends the provided block to the remote peer. The request may be dropped
@@ -172,7 +146,7 @@ impl Peer {
 	pub fn send_block(&self, b: &core::Block) -> Result<(), Error> {
 		if !self.tracking_adapter.has(b.hash()) {
 			debug!(LOGGER, "Send block {} to {}", b.hash(), self.info.addr);
-			self.proto.send_block(b)
+			self.connection.as_ref().unwrap().send(b, msg::Type::Block)
 		} else {
 			debug!(
 				LOGGER,
@@ -187,7 +161,7 @@ impl Peer {
 	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<(), Error> {
 		if !self.tracking_adapter.has(b.hash()) {
 			debug!(LOGGER, "Send compact block {} to {}", b.hash(), self.info.addr);
-			self.proto.send_compact_block(b)
+			self.connection.as_ref().unwrap().send(b, msg::Type::CompactBlock)
 		} else {
 			debug!(
 				LOGGER,
@@ -202,7 +176,7 @@ impl Peer {
 	pub fn send_header(&self, bh: &core::BlockHeader) -> Result<(), Error> {
 		if !self.tracking_adapter.has(bh.hash()) {
 			debug!(LOGGER, "Send header {} to {}", bh.hash(), self.info.addr);
-			self.proto.send_header(bh)
+			self.connection.as_ref().unwrap().send(bh, msg::Type::Header)
 		} else {
 			debug!(
 				LOGGER,
@@ -219,34 +193,64 @@ impl Peer {
 	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		if !self.tracking_adapter.has(tx.hash()) {
 			debug!(LOGGER, "Send tx {} to {}", tx.hash(), self.info.addr);
-			self.proto.send_transaction(tx)
+			self.connection.as_ref().unwrap().send(tx, msg::Type::Transaction)
 		} else {
 			debug!(LOGGER, "Not sending tx {} to {} (already seen)", tx.hash(), self.info.addr);
 			Ok(())
 		}
 	}
 
+	/// Sends a request for block headers from the provided block locator
 	pub fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error> {
-		self.proto.send_header_request(locator)
+		self.connection.as_ref().unwrap().send(
+			&Locator {
+				hashes: locator,
+			},
+			msg::Type::GetHeaders)
 	}
 
+	/// Sends a request for a specific block by hash
 	pub fn send_block_request(&self, h: Hash) -> Result<(), Error> {
-		debug!(LOGGER, "Requesting block {} from {}", h, self.info.addr);
-		self.proto.send_block_request(h)
+		debug!(LOGGER, "Requesting block {} from peer {}.", h, self.info.addr);
+		self.connection.as_ref().unwrap().send(&h, msg::Type::GetBlock)
 	}
 
+	/// Sends a request for a specific compact block by hash
 	pub fn send_compact_block_request(&self, h: Hash) -> Result<(), Error> {
 		debug!(LOGGER, "Requesting compact block {} from {}", h, self.info.addr);
-		self.proto.send_compact_block_request(h)
+		self.connection.as_ref().unwrap().send(&h, msg::Type::GetCompactBlock)
 	}
 
 	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
 		debug!(LOGGER, "Asking {} for more peers.", self.info.addr);
-		self.proto.send_peer_request(capab)
+		self.connection.as_ref().unwrap().send(
+			&GetPeerAddrs {
+				capabilities: capab,
+			},
+			msg::Type::GetPeerAddrs)
 	}
 
+	/// Stops the peer, closing its connection
 	pub fn stop(&self) {
-		self.proto.close();
+		let _ = self.connection.as_ref().unwrap().close_channel.send(());
+	}
+
+	fn check_connection(&self) -> bool {
+		match self.connection.as_ref().unwrap().error_channel.try_recv() {
+			Ok(Error::Serialization(e)) => {
+				let mut state = self.state.write().unwrap();
+				*state = State::Banned;
+				info!(LOGGER, "Client {} corrupted, ban ({:?}).", self.info.addr, e);
+				false
+			}
+			Ok(e) => {
+				let mut state = self.state.write().unwrap();
+				*state = State::Disconnected;
+				debug!(LOGGER, "Client {} connection lost: {:?}", self.info.addr, e);
+				false
+			}
+			Err(_) => true,
+		}
 	}
 }
 

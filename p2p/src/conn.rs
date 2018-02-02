@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2016-2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,388 +14,170 @@
 
 //! Provides a connection wrapper that handles the lower level tasks in sending
 //! or receiving data from the TCP socket, as well as dealing with timeouts.
+//!
+//! Because of a few idiosyncracies in the Rust `TcpStream`, this has to use
+//! async I/O to be able to both read *and* write on the connection. Which
+//! forces us to go through some additional gymnastic to loop over the async
+//! stream and make sure we get the right number of bytes out.
 
-use std::iter;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::io::{self, Write};
+use std::sync::{Arc, Mutex, mpsc};
+use std::net::TcpStream;
+use std::thread;
+use std::time;
 
-use futures;
-use futures::{Future, Stream, stream};
-use futures::sync::mpsc::{Sender, UnboundedReceiver, UnboundedSender};
-use futures_cpupool::CpuPool;
-use tokio_core::net::TcpStream;
-use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_io::io::{read_exact, write_all};
-use tokio_timer::{Timer, TimerError};
-
-use core::core::hash::Hash;
 use core::ser;
 use msg::*;
-use types::Error;
-use rate_limit::*;
+use types::*;
 use util::LOGGER;
 
-/// Handler to provide to the connection, will be called back anytime a message
-/// is received. The provided sender can be use to immediately send back
-/// another message.
-pub trait Handler: Sync + Send {
-	/// Handle function to implement to process incoming messages. A sender to
-	/// reply immediately as well as the message header and its unparsed body
-	/// are provided.
-	fn handle(
-		&self,
-		sender: UnboundedSender<Vec<u8>>,
-		header: MsgHeader,
-		body: Vec<u8>,
-	) -> Result<Option<Hash>, ser::Error>;
+pub trait MessageHandler: Send + 'static {
+	fn consume(&self, msg: &mut Message) -> Result<Option<(Vec<u8>, Type)>, Error>;
 }
 
-impl<F> Handler for F
-where
-	F: Fn(UnboundedSender<Vec<u8>>, MsgHeader, Vec<u8>)
-		-> Result<Option<Hash>, ser::Error>,
-	F: Sync + Send,
-{
-	fn handle(
-		&self,
-		sender: UnboundedSender<Vec<u8>>,
-		header: MsgHeader,
-		body: Vec<u8>,
-	) -> Result<Option<Hash>, ser::Error> {
-		self(sender, header, body)
-	}
-}
-
-/// A higher level connection wrapping the TcpStream. Maintains the amount of
-/// data transmitted and deals with the low-level task of sending and
-/// receiving data, parsing message headers and timeouts.
-#[allow(dead_code)]
-pub struct Connection {
-	// Channel to push bytes to the remote peer
-	outbound_chan: UnboundedSender<Vec<u8>>,
-
-	// Close the connection with the remote peer
-	close_chan: Sender<()>,
-
-	// Bytes we've sent.
-	sent_bytes: Arc<Mutex<u64>>,
-
-	// Bytes we've received.
-	received_bytes: Arc<Mutex<u64>>,
-
-	// Counter for read errors.
-	error_count: Mutex<u64>,
-}
-
-impl Connection {
-	/// Start listening on the provided connection and wraps it. Does not hang
-	/// the current thread, instead just returns a future and the Connection
-	/// itself.
-	pub fn listen<F>(
-		conn: TcpStream,
-		pool: CpuPool,
-		handler: F,
-	) -> (Connection, Box<Future<Item = (), Error = Error>>)
-	where
-		F: Handler + 'static,
-	{
-		let (reader, writer) = conn.split();
-
-		// Set Max Read to 12 Mb/s
-		let reader = ThrottledReader::new(reader, 12_000_000);
-		// Set Max Write to 12 Mb/s
-		let writer = ThrottledWriter::new(writer, 12_000_000);
-
-		// prepare the channel that will transmit data to the connection writer
-		let (tx, rx) = futures::sync::mpsc::unbounded();
-
-		// same for closing the connection
-		let (close_tx, close_rx) = futures::sync::mpsc::channel(1);
-		let close_conn = close_rx
-			.for_each(|_| Ok(()))
-			.map_err(|_| Error::ConnectionClose);
-
-		let me = Connection {
-			outbound_chan: tx.clone(),
-			close_chan: close_tx,
-			sent_bytes: Arc::new(Mutex::new(0)),
-			received_bytes: Arc::new(Mutex::new(0)),
-			error_count: Mutex::new(0),
-		};
-
-		// setup the reading future, getting messages from the peer and processing them
-		let read_msg = me.read_msg(tx, reader, handler, pool).map(|_| ());
-
-		// setting the writing future
-		// getting messages from our system and sending them out
-		let write_msg = me.write_msg(rx, writer).map(|_| ());
-
-		// select between our different futures and return them
-		let fut = Box::new(
-			close_conn
-				.select(read_msg.select(write_msg).map(|_| ()).map_err(|(e, _)| e))
-				.map(|_| ())
-				.map_err(|(e, _)| e),
-		);
-
-		(me, fut)
-	}
-
-	/// Prepares the future that gets message data produced by our system and
-	/// sends it to the peer connection
-	fn write_msg<W>(
-		&self,
-		rx: UnboundedReceiver<Vec<u8>>,
-		writer: W,
-	) -> Box<Future<Item = W, Error = Error>>
-	where
-		W: AsyncWrite + 'static,
-	{
-		let sent_bytes = self.sent_bytes.clone();
-		let send_data = rx
-			.map_err(|_| Error::ConnectionClose)
-			.map(move |data| {
-				trace!(LOGGER, "write_msg: start");
-				// add the count of bytes sent
-				let mut sent_bytes = sent_bytes.lock().unwrap();
-				*sent_bytes += data.len() as u64;
-				data
-			})
-			// write the data and make sure the future returns the right types
-			.fold(writer, |writer, data| {
-				write_all(writer, data).map_err(|e| Error::Connection(e)).map(|(writer, _)| {
-					trace!(LOGGER, "write_msg: done");
-					writer
-				})
-			});
-		Box::new(send_data)
-	}
-
-	/// Prepares the future reading from the peer connection, parsing each
-	/// message and forwarding them appropriately based on their type
-	fn read_msg<F, R>(
-		&self,
-		sender: UnboundedSender<Vec<u8>>,
-		reader: R,
-		handler: F,
-		pool: CpuPool,
-	) -> Box<Future<Item = R, Error = Error>>
-	where
-		F: Handler + 'static,
-		R: AsyncRead + Send + 'static,
-	{
-		// infinite iterator stream so we repeat the message reading logic until the
-		// peer is stopped
-		let iter = stream::iter_ok(iter::repeat(()).map(Ok::<(), Error>));
-
-		// setup the reading future, getting messages from the peer and processing them
-		let recv_bytes = self.received_bytes.clone();
-		let handler = Arc::new(handler);
-
-		let mut count = 0;
-
-		let read_msg = iter.buffered(1).fold(reader, move |reader, _| {
-			count += 1;
-			trace!(LOGGER, "read_msg: count (per buffered fold): {}", count);
-
-			let recv_bytes = recv_bytes.clone();
-			let handler = handler.clone();
-			let sender_inner = sender.clone();
-			let pool = pool.clone();
-
-			// first read the message header
-			read_exact(reader, vec![0u8; HEADER_LEN as usize])
-				.from_err()
-				.and_then(move |(reader, buf)| {
-					trace!(LOGGER, "read_msg: start");
-
-					let header = try!(ser::deserialize::<MsgHeader>(&mut &buf[..]));
-					Ok((reader, header))
-				})
-				.and_then(move |(reader, header)| {
-					// now that we have a size, proceed with the body
-					read_exact(reader, vec![0u8; header.msg_len as usize])
-						.map(|(reader, buf)| (reader, header, buf))
-						.from_err()
-				})
-				.and_then(move |(reader, header, buf)| {
-					// add the count of bytes received
-					let mut recv_bytes = recv_bytes.lock().unwrap();
-					*recv_bytes += header.serialized_len() + header.msg_len;
-
-					pool.spawn_fn(move || {
-						let msg_type = header.msg_type;
-						if let Err(e) = handler.handle(sender_inner.clone(), header, buf) {
-							debug!(LOGGER, "Invalid {:?} message: {}", msg_type, e);
-							return Err(Error::Serialization(e));
-						}
-
-						trace!(LOGGER, "read_msg: done (via cpu_pool)");
-						Ok(reader)
-					})
-				})
-		});
-		Box::new(read_msg)
-	}
-
-	/// Utility function to send any Writeable. Handles adding the header and
-	/// serialization.
-	pub fn send_msg<W: ser::Writeable>(&self, t: Type, body: &W) -> Result<(), Error> {
-		let mut body_data = vec![];
-		try!(ser::serialize(&mut body_data, body));
-		let mut data = vec![];
-		try!(ser::serialize(
-			&mut data,
-			&MsgHeader::new(t, body_data.len() as u64),
-		));
-		data.append(&mut body_data);
-
-		self.outbound_chan
-			.unbounded_send(data)
-			.map_err(|_| Error::ConnectionClose)
-	}
-
-	/// Bytes sent and received by this peer to the remote peer.
-	pub fn transmitted_bytes(&self) -> (u64, u64) {
-		let sent = *self.sent_bytes.lock().unwrap();
-		let recv = *self.received_bytes.lock().unwrap();
-		(sent, recv)
-	}
-}
-
-/// Connection wrapper that handles a request/response oriented interaction with
-/// a timeout.
-pub struct TimeoutConnection {
-	underlying: Connection,
-	expected_responses: Arc<Mutex<Vec<InFlightRequest>>>,
-}
-
-#[derive(Debug, Clone)]
-struct InFlightRequest {
-	msg_type: Type,
-	hash: Option<Hash>,
-	time: Instant,
-}
-
-impl TimeoutConnection {
-	/// Same as Connection
-	pub fn listen<F>(
-		conn: TcpStream,
-		pool: CpuPool,
-		handler: F,
-	) -> (TimeoutConnection, Box<Future<Item = (), Error = Error>>)
-	where
-		F: Handler + 'static,
-	{
-		let expects: Arc<Mutex<Vec<InFlightRequest>>> = Arc::new(Mutex::new(vec![]));
-
-		// Decorates the handler to remove the "subscription" from the expected
-		// responses. We got our replies, so no timeout should occur.
-		let exp = expects.clone();
-		let (conn, fut) = Connection::listen(conn, pool, move |sender, header: MsgHeader, data| {
-			let msg_type = header.msg_type;
-			let recv_h = try!(handler.handle(sender, header, data));
-
-			let mut expects = exp.lock().unwrap();
-			let filtered = expects
-				.iter()
-				.filter(|x| {
-					let res = x.msg_type != msg_type || x.hash.is_some() && x.hash != recv_h;
-					if res {
-						trace!(LOGGER, "timeout_conn: received: {:?}, {:?}", x.msg_type, x.hash);
-					}
-					res
-				})
-				.cloned()
-				.collect::<Vec<_>>();
-			*expects = filtered;
-
-			Ok(recv_h)
-		});
-
-		// Registers a timer with the event loop to regularly check for timeouts.
-		let exp = expects.clone();
-		let timer = Timer::default()
-			.interval(Duration::new(2, 0))
-			.fold((), move |_, _| {
-				let exp = exp.lock().unwrap();
-				trace!(LOGGER, "timeout_conn: currently registered: {:?}", exp.len());
-
-				for x in exp.iter() {
-					if Instant::now() - x.time > Duration::new(5, 0) {
-						trace!(LOGGER, "timeout_conn: timeout: {:?}, {:?}", x.msg_type, x.hash);
-						return Err(TimerError::TooLong);
-					}
-				}
-				Ok(())
-			})
-			.from_err();
-
-		let me = TimeoutConnection {
-			underlying: conn,
-			expected_responses: expects,
-		};
-		(
-			me,
-			Box::new(fut.select(timer).map(|_| ()).map_err(|(e1, _)| e1)),
-		)
-	}
-
-	/// Sends a request and registers a timer on the provided message type and
-	/// optionally the hash of the sent data.
-	/// Skips the request if we have already sent the same response and
-	/// we are still waiting for a response (not yet timed out).
-	pub fn send_request<W: ser::Writeable>(
-		&self,
-		t: Type,
-		rt: Type,
-		body: &W,
-		expect_h: Option<(Hash)>,
-	) -> Result<(), Error> {
-		{
-			let expects = self.expected_responses.lock().unwrap();
-			let existing = expects.iter().find(|x| {
-				x.msg_type == rt && x.hash == expect_h
-			});
-			if let Some(x) = existing {
-				trace!(
-					LOGGER,
-					"timeout_conn: in_flight: {:?}, {:?} (skipping)",
-					x.msg_type,
-					x.hash,
-				);
-				return Ok(())
+// Macro to simplify the boilerplate around asyn I/O error handling,
+// especially with WouldBlock kind of errors.
+macro_rules! try_break {
+	($chan:ident, $inner:expr) => {
+		match $inner {
+			Ok(v) => Some(v),
+			Err(Error::Connection(ref e)) if e.kind() == io::ErrorKind::WouldBlock => {
+				//println!("++ not ready");
+				None
+			}
+			Err(e) => {
+				let _ = $chan.send(e);
+				break;
 			}
 		}
+	}
+}
 
-		let _sent = try!(self.underlying.send_msg(t, body));
+pub struct Message<'a> {
+	pub header: MsgHeader,
+	conn: &'a mut TcpStream,
+}
 
-		{
-			let mut expects = self.expected_responses.lock().unwrap();
-			let req = InFlightRequest {
-				msg_type: rt,
-				hash: expect_h,
-				time: Instant::now(),
-			};
-			trace!(
-				LOGGER,
-				"timeout_conn: registering: {:?}, {:?}",
-				req.msg_type,
-				req.hash,
-			);
-			expects.push(req);
-		}
+impl<'a> Message<'a> {
 
+	fn from_header(header: MsgHeader, conn: &'a mut TcpStream) -> Message<'a> {
+		Message{header, conn}
+	}
+
+	pub fn body<T>(&mut self) -> Result<T, Error> where T: ser::Readable {
+		read_body(&self.header, self.conn)
+	}
+}
+
+// TODO count sent and received
+pub struct Tracker {
+	/// Bytes we've sent.
+	pub sent_bytes: Arc<Mutex<u64>>,
+	/// Bytes we've received.
+	pub received_bytes: Arc<Mutex<u64>>,
+	/// Channel to allow sending data through the connection
+	pub send_channel: mpsc::Sender<Vec<u8>>,
+	/// Channel to close the connection
+	pub close_channel: mpsc::Sender<()>,
+	/// Channel to check for errors on the connection
+	pub error_channel: mpsc::Receiver<Error>,
+}
+
+impl Tracker {
+	pub fn send<T>(&self, body: T, msg_type: Type) -> Result<(), Error>
+	where
+		T: ser::Writeable
+	{
+		let (header_buf, body_buf) = write_to_bufs(body, msg_type);
+		self.send_channel.send(header_buf)?;
+		self.send_channel.send(body_buf)?;
 		Ok(())
 	}
+}
 
-	/// Same as Connection
-	pub fn send_msg<W: ser::Writeable>(&self, t: Type, body: &W) -> Result<(), Error> {
-		self.underlying.send_msg(t, body)
-	}
+/// Start listening on the provided connection and wraps it. Does not hang
+/// the current thread, instead just returns a future and the Connection
+/// itself.
+pub fn listen<H>(stream: TcpStream, handler: H) -> Tracker
+where
+	H: MessageHandler,
+{
+	let (send_tx, send_rx) = mpsc::channel();
+	let (close_tx, close_rx) = mpsc::channel();
+	let (error_tx, error_rx) = mpsc::channel();
 
-	/// Same as Connection
-	pub fn transmitted_bytes(&self) -> (u64, u64) {
-		self.underlying.transmitted_bytes()
+	stream.set_nonblocking(true).expect("Non-blocking IO not available.");
+	poll(stream, handler, send_rx, send_tx.clone(), error_tx, close_rx);
+
+	Tracker {
+		sent_bytes: Arc::new(Mutex::new(0)),
+		received_bytes: Arc::new(Mutex::new(0)),
+		send_channel: send_tx,
+		close_channel: close_tx,
+		error_channel: error_rx,
 	}
+}
+
+fn poll<H>(
+	conn: TcpStream,
+	handler: H,
+	send_rx: mpsc::Receiver<Vec<u8>>,
+	send_tx: mpsc::Sender<Vec<u8>>,
+	error_tx: mpsc::Sender<Error>,
+	close_rx: mpsc::Receiver<()>
+)
+where
+	H: MessageHandler,
+{
+
+	let mut conn = conn;
+	let _ = thread::Builder::new().name("peer".to_string()).spawn(move || {
+		let sleep_time = time::Duration::from_millis(1);
+
+		let conn = &mut conn;
+		let mut retry_send = Err(());
+		loop {
+			// check the read end
+			if let Some(h) = try_break!(error_tx, read_header(conn)) {
+				let mut msg = Message::from_header(h, conn);
+				debug!(LOGGER, "Received message header, type {:?}, len {}.", msg.header.msg_type, msg.header.msg_len);
+				if let Some(Some((body, typ))) = try_break!(error_tx, handler.consume(&mut msg)) {
+					respond(&send_tx, typ, body);
+				}
+			}
+
+			// check the write end
+			if let Ok::<Vec<u8>, ()>(data) = retry_send {
+				if let None = try_break!(error_tx, conn.write_all(&data[..]).map_err(&From::from)) {
+					retry_send = Ok(data);
+				} else {
+					retry_send = Err(());
+				}
+			} else if let Ok(data) = send_rx.try_recv() {
+				if let None = try_break!(error_tx, conn.write_all(&data[..]).map_err(&From::from)) {
+					retry_send = Ok(data);
+				} else {
+					retry_send = Err(());
+				}
+			} else {
+				retry_send = Err(());
+			}
+
+			// check the close channel
+			if let Ok(_) = close_rx.try_recv() {
+				debug!(LOGGER,
+							 "Connection close with {} initiated by us",
+							 conn.peer_addr().map(|a| a.to_string()).unwrap_or("?".to_owned()));
+				break;
+			}
+
+			thread::sleep(sleep_time);
+		}
+	});
+}
+
+fn respond(send_tx: &mpsc::Sender<Vec<u8>>, msg_type: Type, body: Vec<u8>) {
+	let header = ser::ser_vec(&MsgHeader::new(msg_type, body.len() as u64)).unwrap();
+	send_tx.send(header).unwrap();
+	send_tx.send(body).unwrap();
 }

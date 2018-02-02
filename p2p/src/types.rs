@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2016-2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,12 +15,7 @@
 use std::convert::From;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
-
-use futures::Future;
-use futures_cpupool::CpuPool;
-use tokio_core::net::TcpStream;
-use tokio_timer::TimerError;
+use std::sync::mpsc;
 
 use core::core;
 use core::core::hash::Hash;
@@ -42,6 +37,8 @@ pub const MAX_PEER_ADDRS: u32 = 256;
 pub enum Error {
 	Serialization(ser::Error),
 	Connection(io::Error),
+	/// Header type does not match the expected message type
+	BadMessage,
 	Banned,
 	ConnectionClose,
 	Timeout,
@@ -72,11 +69,16 @@ impl From<io::Error> for Error {
 		Error::Connection(e)
 	}
 }
-impl From<TimerError> for Error {
-	fn from(_: TimerError) -> Error {
-		Error::Timeout
+impl<T> From<mpsc::SendError<T>> for Error {
+	fn from(_e: mpsc::SendError<T>) -> Error {
+		Error::ConnectionClose
 	}
 }
+// impl From<TimerError> for Error {
+// 	fn from(_: TimerError) -> Error {
+// 		Error::Timeout
+// 	}
+// }
 
 /// Configuration for the peer-to-peer server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,49 +130,6 @@ pub struct PeerInfo {
 	pub version: u32,
 	pub addr: SocketAddr,
 	pub total_difficulty: Difficulty,
-}
-
-/// A given communication protocol agreed upon between 2 peers (usually
-/// ourselves and a remote) after handshake. This trait is necessary to allow
-/// protocol negotiation as it gets upgraded to multiple versions.
-pub trait Protocol {
-	/// Starts handling protocol communication, the connection) is expected to
-	/// be  known already, usually passed during construction. Will typically
-	/// block so needs to be called withing a coroutine. Should also be called
-	/// only once.
-	fn handle(&self, conn: TcpStream, na: Arc<NetAdapter>, addr: SocketAddr, pool: CpuPool)
-		-> Box<Future<Item = (), Error = Error>>;
-
-	/// Sends a ping message to the remote peer.
-	fn send_ping(&self, total_difficulty: Difficulty, height: u64) -> Result<(), Error>;
-
-	/// Relays a block to the remote peer.
-	fn send_block(&self, b: &core::Block) -> Result<(), Error>;
-
-	fn send_compact_block(&self, cb: &core::CompactBlock) -> Result<(), Error>;
-
-	/// Relays a block header to the remote peer ("header first" propagation).
-	fn send_header(&self, bh: &core::BlockHeader) -> Result<(), Error>;
-
-	/// Relays a transaction to the remote peer.
-	fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error>;
-
-	/// Sends a request for block headers based on the provided block locator.
-	fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error>;
-
-	/// Sends a request for a block from its hash.
-	fn send_block_request(&self, h: Hash) -> Result<(), Error>;
-
-	fn send_compact_block_request(&self, h: Hash) -> Result<(), Error>;
-
-	/// Sends a request for some peer addresses.
-	fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error>;
-
-	/// How many bytes have been sent/received to/from the remote peer.
-	fn transmitted_bytes(&self) -> (u64, u64);
-
-	/// Close the connection to the remote peer.
-	fn close(&self);
 }
 
 /// Bridge between the networking layer and the rest of the system. Handles the
