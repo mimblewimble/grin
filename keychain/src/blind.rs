@@ -49,8 +49,15 @@ impl BlindingFactor {
 	}
 
 	pub fn secret_key(&self, secp: &Secp256k1) -> Result<secp::key::SecretKey, Error> {
-		secp::key::SecretKey::from_slice(secp, &self.0)
-			.map_err(|e| Error::Secp(e))
+		if *self == BlindingFactor::zero() {
+			// TODO - need this currently for tx tests
+			// the "zero" secret key is not actually a valid secret_key
+			// and secp lib checks this
+			Ok(secp::key::ZERO_KEY)
+		} else {
+			secp::key::SecretKey::from_slice(secp, &self.0)
+				.map_err(|e| Error::Secp(e))
+		}
 	}
 
 	/// Split a blinding_factor (aka secret_key) into a pair of blinding_factors.

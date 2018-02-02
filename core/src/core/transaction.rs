@@ -344,12 +344,20 @@ impl Transaction {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 
-		// k = k1 + k2
-		// we need to add k2G back in for this to work
-		let k2 = self.offset.secret_key(&secp)
-			.map_err(|_| secp::Error::InvalidSecretKey)?;
-		let offset_commit = secp.commit(0, k2)?;
-		let adj_rsum = secp.commit_sum(vec![rsum], vec![offset_commit])?;
+		// if we have no offset then just use rsum (from summing the commitments)
+		// but if we do have an offset (and we will for a real tx)
+		// we need to adjust as necessary by using the tx offset
+		let adj_rsum = if self.offset == BlindingFactor::zero() {
+			rsum
+		} else {
+			// k = k1 + k2
+			// we need to add k2G back in for this to work
+
+			let k2 = self.offset.secret_key(&secp)
+				.map_err(|_| secp::Error::InvalidSecretKey)?;
+			let offset_commit = secp.commit(0, k2)?;
+			secp.commit_sum(vec![rsum], vec![offset_commit])?
+		};
 
 		let sig = self.excess_sig;
 		// pretend the sum is a public key (which it is, being of the form r.G) and

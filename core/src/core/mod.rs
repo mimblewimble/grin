@@ -349,7 +349,7 @@ mod test {
 	#[test]
 	fn blind_tx() {
 		let btx = tx2i1o();
-		btx.verify_sig().unwrap(); // unwrap will panic if invalid
+		assert!(btx.verify_sig().is_ok());
 
 		// checks that the range proof on our blind output is sufficiently hiding
 		let Output { proof, .. } = btx.outputs[0];
