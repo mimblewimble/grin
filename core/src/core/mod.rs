@@ -541,7 +541,7 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
-		build::transaction(
+		build::transaction_with_offset(
 			vec![
 				input(10, ZERO_HASH, key_id1),
 				input(11, ZERO_HASH, key_id2),
@@ -549,7 +549,7 @@ mod test {
 				with_fee(2),
 			],
 			&keychain,
-		).map(|(tx, _)| tx)
+		).map(|(tx, _, _)| tx)
 			.unwrap()
 	}
 
@@ -559,22 +559,23 @@ mod test {
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
-		build::transaction(
+		build::transaction_with_offset(
 			vec![input(5, ZERO_HASH, key_id1), output(3, key_id2), with_fee(2)],
 			&keychain,
-		).map(|(tx, _)| tx)
+		).map(|(tx, _, _)| tx)
 			.unwrap()
 	}
 
 	// utility producing a transaction with a single input
 	// and two outputs (one change output)
+	// Note: this tx has an "offset" kernel
 	pub fn tx1i2o() -> Transaction {
 		let keychain = keychain::Keychain::from_random_seed().unwrap();
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
-		build::transaction(
+		build::transaction_with_offset(
 			vec![
 				input(6, ZERO_HASH, key_id1),
 				output(3, key_id2),
@@ -582,7 +583,7 @@ mod test {
 				with_fee(2),
 			],
 			&keychain,
-		).map(|(tx, _)| tx)
+		).map(|(tx, _, _)| tx)
 			.unwrap()
 	}
 }

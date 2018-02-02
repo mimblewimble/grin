@@ -552,7 +552,6 @@ impl Block {
 				.cloned()
 				.filter(|x| *x != BlindingFactor::zero())
 				.filter_map(|x| {
-					println!("doing stuff {:?}", x);
 					x.secret_key(&secp).ok()
 				})
 				.collect::<Vec<_>>();
@@ -564,7 +563,6 @@ impl Block {
 			}
 		};
 
-		// calculate the overall Merkle tree and fees (todo?)
 		Ok(
 			Block {
 				header: BlockHeader {
@@ -692,16 +690,28 @@ impl Block {
 		let io_sum = self.sum_commitments()?;
 
 		// sum all kernels commitments
-		let proof_commits = map_vec!(self.kernels, |proof| proof.excess);
+		let kernel_sum = {
+			let mut kernel_commits = self.kernels
+				.iter()
+				.map(|x| x.excess)
+				.collect::<Vec<_>>();
 
-		let proof_sum = {
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
-			secp.commit_sum(proof_commits, vec![])?
+
+			// add the kernel_offset in as necessary (unless offset is zero)
+			if self.header.kernel_offset != BlindingFactor::zero() {
+				let skey = self.header.kernel_offset.secret_key(&secp)?;
+				let offset_commit = secp.commit(0, skey)?;
+				kernel_commits.push(offset_commit);
+			}
+
+			secp.commit_sum(kernel_commits, vec![])?
 		};
 
-		// both should be the same
-		if proof_sum != io_sum {
+		// sum of kernel commitments (including kernel_offset) must match
+		// the sum of input/output commitments (minus fee)
+		if kernel_sum != io_sum {
 			return Err(Error::KernelSumMismatch);
 		}
 
