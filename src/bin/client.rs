@@ -81,11 +81,10 @@ pub fn unban_peer(config: &ServerConfig, peer_addr: &SocketAddr) {
 
 pub fn list_connected_peers(config: &ServerConfig) {
 	let mut e = term::stdout().unwrap();
-	let url2 = format!(
+	let url = format!(
 		"http://{}/v1/peers/connected",
 		config.api_http_addr
 	);
-	let url = format!("http://198.245.50.26:13413/v1/peers/connected");
 	match api::client::get::<Vec<p2p::PeerInfo>>(url.as_str()).map_err(|e| Error::API(e)) {
 		Ok(connected_peers) => {
 			let mut index = 0;
