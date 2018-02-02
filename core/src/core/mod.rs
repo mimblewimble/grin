@@ -264,7 +264,7 @@ mod test {
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &tx).expect("serialization failed");
 		println!("{}", vec.len());
-		assert!(vec.len() == 5364);
+		assert!(vec.len() == 5396);
 	}
 
 	#[test]

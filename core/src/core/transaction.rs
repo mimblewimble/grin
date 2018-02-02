@@ -269,6 +269,7 @@ impl Transaction {
 			fee: 0,
 			lock_height: 0,
 			excess_sig: Signature::from_raw_data(&[0;64]).unwrap(),
+			offset: BlindingFactor::zero(),
 			inputs: vec![],
 			outputs: vec![],
 		}
@@ -286,6 +287,7 @@ impl Transaction {
 			fee: fee,
 			lock_height: lock_height,
 			excess_sig: Signature::from_raw_data(&[0;64]).unwrap(),
+			offset: BlindingFactor::zero(),
 			inputs: inputs,
 			outputs: outputs,
 		}

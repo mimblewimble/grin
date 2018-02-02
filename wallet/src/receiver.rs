@@ -382,11 +382,15 @@ fn build_final_transaction(
 		keychain,
 	)?;
 
+	// here we overwrite the tx sig and the kernel "offset"
+	// k = k1 + k2
+	// we signed with k1, excess will be k1G
+	// k2 is the "offset"
 	final_tx.excess_sig = excess_sig.clone();
 	final_tx.offset = offset.clone();
 
-	// make sure the resulting transaction is valid (could have been lied to on
- // excess).
+	// make sure the resulting transaction is valid
+	// (could have been lied to on excess)
 	let _ = final_tx.validate()?;
 
 	debug!(

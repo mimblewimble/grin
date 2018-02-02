@@ -44,6 +44,10 @@ impl BlindingFactor {
 		BlindingFactor(blind)
 	}
 
+	pub fn zero() -> BlindingFactor {
+		BlindingFactor::from_secret_key(secp::key::ZERO_KEY)
+	}
+
 	pub fn secret_key(&self, secp: &Secp256k1) -> Result<secp::key::SecretKey, Error> {
 		secp::key::SecretKey::from_slice(secp, &self.0)
 			.map_err(|e| Error::Secp(e))
