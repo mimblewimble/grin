@@ -132,7 +132,7 @@ mod test {
 
 	use blind::BlindingFactor;
 	use util::secp::Secp256k1;
-	use util::secp::key::SecretKey;
+	use util::secp::key::{SecretKey, ZERO_KEY};
 
 	#[test]
 	fn split_blinding_factor() {
@@ -146,5 +146,19 @@ mod test {
 		let skey_2 = split.blind_2.secret_key(&secp).unwrap();
 		let _ = skey_sum.add_assign(&secp, &skey_2).unwrap();
 		assert_eq!(skey_in, skey_sum);
+	}
+
+	// Sanity check that we can add the zero key to a secret key and it is still
+	// the same key that we started with (k + 0 = k)
+	#[test]
+	fn zero_key_addition() {
+		let secp = Secp256k1::new();
+		let skey_in = SecretKey::new(&secp, &mut thread_rng());
+		let skey_zero = ZERO_KEY;
+
+		let mut skey_out = skey_in.clone();
+		let _ = skey_out.add_assign(&secp, &skey_zero).unwrap();
+
+		assert_eq!(skey_in, skey_out);
 	}
 }

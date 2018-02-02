@@ -181,8 +181,36 @@ pub fn transaction(
 	);
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
 	let msg = secp::Message::from_slice(&kernel_sig_msg(tx.fee, tx.lock_height))?;
+
+	// We will replace the excess_sig (and set the offset) from the wallet code
+	// but this is useful for partially built txs.
 	tx.excess_sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &blind_sum)?;
+
 	Ok((tx, blind_sum))
+}
+
+// TODO - testing only?
+pub fn transaction_with_offset(
+	elems: Vec<Box<Append>>,
+	keychain: &keychain::Keychain,
+) -> Result<(Transaction, BlindingFactor, BlindingFactor), keychain::Error> {
+	let mut ctx = Context { keychain };
+	let (mut tx, sum) = elems.iter().fold(
+		(Transaction::empty(), BlindSum::new()),
+		|acc, elem| elem(&mut ctx, acc),
+	);
+	let blind_sum = ctx.keychain.blind_sum(&sum)?;
+
+	let split = blind_sum.split(&keychain.secp())?;
+	let k1 = split.blind_1;
+	let k2 = split.blind_2;
+
+	let msg = secp::Message::from_slice(&kernel_sig_msg(tx.fee, tx.lock_height))?;
+
+	tx.excess_sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &k1)?;
+	tx.offset = k2.clone();
+
+	Ok((tx, k1, k2))
 }
 
 // Just a simple test, most exhaustive tests in the core mod.rs.
@@ -199,6 +227,26 @@ mod test {
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		let (tx, _) = transaction(
+			vec![
+				input(10, ZERO_HASH, key_id1),
+				input(11, ZERO_HASH, key_id2),
+				output(20, key_id3),
+				with_fee(1),
+			],
+			&keychain,
+		).unwrap();
+
+		tx.verify_sig().unwrap();
+	}
+
+	#[test]
+	fn blind_simple_tx_with_offset() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
+		let key_id3 = keychain.derive_key_id(3).unwrap();
+
+		let (tx, k1, k2) = transaction_with_offset(
 			vec![
 				input(10, ZERO_HASH, key_id1),
 				input(11, ZERO_HASH, key_id2),

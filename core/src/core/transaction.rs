@@ -343,10 +343,18 @@ impl Transaction {
 
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
+
+		// k = k1 + k2
+		// we need to add k2G back in for this to work
+		let k2 = self.offset.secret_key(&secp)
+			.map_err(|_| secp::Error::InvalidSecretKey)?;
+		let offset_commit = secp.commit(0, k2)?;
+		let adj_rsum = secp.commit_sum(vec![rsum], vec![offset_commit])?;
+
 		let sig = self.excess_sig;
 		// pretend the sum is a public key (which it is, being of the form r.G) and
 		// verify the transaction sig with it
-		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &rsum);
+		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &adj_rsum);
 		if !valid {
 			return Err(secp::Error::IncorrectSignature);
 		}
