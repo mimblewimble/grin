@@ -593,10 +593,10 @@ mod test {
 		// in the same way (convenience function)
 		assert_eq!(
 			keychain.blind_sum(&BlindSum::new()
-				.add_blinding_factor(BlindingFactor::new(skey1))
-				.add_blinding_factor(BlindingFactor::new(skey2))
+				.add_blinding_factor(BlindingFactor::from_secret_key(skey1))
+				.add_blinding_factor(BlindingFactor::from_secret_key(skey2))
 			).unwrap(),
-			BlindingFactor::new(skey3),
+			BlindingFactor::from_secret_key(skey3),
 		);
 	}
 }

@@ -134,7 +134,7 @@ mod test {
 	fn split_blinding_factor() {
 		let secp = Secp256k1::new();
 		let skey_in = SecretKey::new(&secp, &mut thread_rng());
-		let blind = BlindingFactor::from_secret_key(&secp, skey_in).unwrap();
+		let blind = BlindingFactor::from_secret_key(skey_in);
 		let split = blind.split(&secp).unwrap();
 
 		// split a key, sum the split keys and confirm the sum matches the original key
