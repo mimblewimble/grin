@@ -256,17 +256,17 @@ impl Keychain {
 		pos_keys.extend(&blind_sum
 			.positive_blinding_factors
 			.iter()
-			.map(|b| b.secret_key())
+			.filter_map(|b| b.secret_key(&self.secp).ok())
 			.collect::<Vec<SecretKey>>());
 
 		neg_keys.extend(&blind_sum
 			.negative_blinding_factors
 			.iter()
-			.map(|b| b.secret_key())
+			.filter_map(|b| b.secret_key(&self.secp).ok())
 			.collect::<Vec<SecretKey>>());
 
-		let blinding = self.secp.blind_sum(pos_keys, neg_keys)?;
-		Ok(BlindingFactor::new(blinding))
+		let sum = self.secp.blind_sum(pos_keys, neg_keys)?;
+		Ok(BlindingFactor::from_secret_key(sum))
 	}
 
 	pub fn aggsig_create_context(&self, sec_key:SecretKey) {
@@ -355,14 +355,43 @@ impl Keychain {
 		self.aggsig_sign_single(&msg, Some(&sec_nonce), Some(&nonce_sum), Some(&nonce_sum))
 	}
 
-	/// Helper function to calculate final singature
-	pub fn aggsig_calculate_final_sig(&self, their_sig: &Signature, our_sig: &Signature, their_pub_nonce: &PublicKey) -> Result<Signature, Error> {
+	/// Helper function to calculate final signature
+	pub fn aggsig_calculate_final_sig(
+		&self,
+		their_sig: &Signature,
+		our_sig: &Signature,
+		their_pub_nonce: &PublicKey,
+	) -> Result<Signature, Error> {
 		// Add public nonces kR*G + kS*G
 		let (_, sec_nonce) = self.aggsig_get_private_keys();
 		let mut nonce_sum = their_pub_nonce.clone();
 		let _ = nonce_sum.add_exp_assign(&self.secp, &sec_nonce);
 		let sig = aggsig::add_signatures_single(&self.secp, their_sig, our_sig, &nonce_sum)?;
 		Ok(sig)
+	}
+
+	pub fn aggsig_calculate_final_sig_with_offset(
+		&self,
+		their_sig: &Signature,
+		our_sig: &Signature,
+		their_pub_nonce: &PublicKey,
+	) -> Result<(Signature, BlindingFactor), Error> {
+		let (_, sec_nonce) = self.aggsig_get_private_keys();
+
+		// split sec_nonce (k = k1 + k2)
+		// use k1 to generate the sig
+		// and return k2 as the "offset"
+		let blind = BlindingFactor::from_secret_key(sec_nonce);
+		let split = blind.split(&self.secp)?;
+
+		let skey_1 = split.blind_1.secret_key(&self.secp)?;
+		let offset = split.blind_2;
+
+		// Add public nonces kR*G + kS*G
+		let mut nonce_sum = their_pub_nonce.clone();
+		let _ = nonce_sum.add_exp_assign(&self.secp, &skey_1);
+		let sig = aggsig::add_signatures_single(&self.secp, their_sig, our_sig, &nonce_sum)?;
+		Ok((sig, offset))
 	}
 
 	/// Helper function to calculate final public key
@@ -413,7 +442,8 @@ impl Keychain {
 		msg: &Message,
 		blinding: &BlindingFactor,
 	) -> Result<Signature, Error> {
-		let sig = aggsig::sign_single(secp, &msg, &blinding.secret_key(), None, None, None)?;
+		let skey = &blinding.secret_key(&secp)?;
+		let sig = aggsig::sign_single(secp, &msg, skey, None, None, None)?;
 		Ok(sig)
 	}
 
@@ -428,7 +458,8 @@ impl Keychain {
 		msg: &Message,
 		blinding: &BlindingFactor,
 	) -> Result<Signature, Error> {
-		let sig = self.secp.sign(msg, &blinding.secret_key())?;
+		let skey = &blinding.secret_key(&self.secp)?;
+		let sig = self.secp.sign(msg, &skey)?;
 		Ok(sig)
 	}
 

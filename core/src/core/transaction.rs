@@ -26,7 +26,7 @@ use consensus::VerifySortOrder;
 use core::Committed;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::Summable;
-use keychain::{Identifier, Keychain};
+use keychain::{Identifier, Keychain, BlindingFactor};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 use util;
 
@@ -183,6 +183,9 @@ pub struct Transaction {
 	/// The signature proving the excess is a valid public key, which signs
 	/// the transaction fee.
 	pub excess_sig: Signature,
+	/// The kernel "offset" k2
+	/// excess is k1G and we split out key k = k1 + k2
+	pub offset: BlindingFactor,
 }
 
 /// Implementation of Writeable for a fully blinded transaction, defines how to
@@ -195,6 +198,7 @@ impl Writeable for Transaction {
 			[write_u64, self.lock_height]
 		);
 		self.excess_sig.write(writer)?;
+		self.offset.write(writer)?;
 		ser_multiwrite!(
 			writer,
 			[write_u64, self.inputs.len() as u64],
@@ -220,6 +224,7 @@ impl Readable for Transaction {
 			ser_multiread!(reader, read_u64, read_u64);
 
 		let excess_sig = Signature::read(reader)?;
+		let offset = BlindingFactor::read(reader)?;
 
 		let (input_len, output_len) =
 			ser_multiread!(reader, read_u64, read_u64);
@@ -229,8 +234,9 @@ impl Readable for Transaction {
 
 		Ok(Transaction {
 			fee: fee,
-			lock_height: lock_height,
-			excess_sig: excess_sig,
+			lock_height,
+			excess_sig,
+			offset,
 			inputs: inputs,
 			outputs: outputs,
 			..Default::default()

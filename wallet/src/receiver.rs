@@ -143,7 +143,7 @@ fn handle_sender_confirmation(
 	partial_tx: &PartialTx
 ) -> Result<PartialTx, Error> {
 	let (amount, sender_pub_blinding, sender_pub_nonce, sender_sig_part, tx) = read_partial_tx(keychain, partial_tx)?;
-	let sender_sig_part=sender_sig_part.unwrap();
+	let sender_sig_part = sender_sig_part.unwrap();
 	let res = keychain.aggsig_verify_partial_sig(&sender_sig_part, &sender_pub_nonce, &sender_pub_blinding, tx.fee, tx.lock_height);
 
 	if !res {
@@ -152,13 +152,17 @@ fn handle_sender_confirmation(
 	}
 
 	//Just calculate our sig part again instead of storing
-	let our_sig_part=keychain.aggsig_calculate_partial_sig(&sender_pub_nonce, tx.fee, tx.lock_height).unwrap();
+	let our_sig_part = keychain.aggsig_calculate_partial_sig(&sender_pub_nonce, tx.fee, tx.lock_height).unwrap();
 
 	// And the final signature
-	let final_sig=keychain.aggsig_calculate_final_sig(&sender_sig_part, &our_sig_part, &sender_pub_nonce).unwrap();
+	let (final_sig, offset) = keychain.aggsig_calculate_final_sig_with_offset(
+		&sender_sig_part,
+		&our_sig_part,
+		&sender_pub_nonce,
+	).unwrap();
 
 	// Calculate the final public key (for our own sanity check)
-	let final_pubkey=keychain.aggsig_calculate_final_pubkey(&sender_pub_blinding).unwrap();
+	let final_pubkey = keychain.aggsig_calculate_final_pubkey(&sender_pub_blinding).unwrap();
 
 	//Check our final sig verifies
 	let res = keychain.aggsig_verify_final_sig_build_msg(&final_sig, &final_pubkey, tx.fee, tx.lock_height);
@@ -169,7 +173,7 @@ fn handle_sender_confirmation(
 	}
 
 
-	let final_tx = build_final_transaction(config, keychain, amount, &final_sig, tx.clone())?;
+	let final_tx = build_final_transaction(config, keychain, amount, &final_sig, &offset, tx.clone())?;
 	let tx_hex = to_hex(ser::ser_vec(&final_tx).unwrap());
 
 	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
@@ -314,9 +318,9 @@ fn build_final_transaction(
 	keychain: &Keychain,
 	amount: u64,
 	excess_sig: &secp::Signature,
+	offset: &BlindingFactor,
 	tx: Transaction,
 ) -> Result<Transaction, Error> {
-
 	let root_key_id = keychain.root_key_id();
 
 	// double check the fee amount included in the partial tx
@@ -379,6 +383,7 @@ fn build_final_transaction(
 	)?;
 
 	final_tx.excess_sig = excess_sig.clone();
+	final_tx.offset = offset.clone();
 
 	// make sure the resulting transaction is valid (could have been lied to on
  // excess).
