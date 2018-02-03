@@ -65,26 +65,10 @@ pub fn tx_fee(input_len: usize, output_len: usize, base_fee: Option<u64>) -> u64
 	(tx_weight as u64) * use_base_fee
 }
 
-#[derive(Debug, Fail)]
-#[fail(display = "Not enough funds: {}", _0)] 
-pub struct NotEnoughFunds(u64);
+
 
 #[derive(Debug, Fail)]
-#[fail(display = "Fee dispute: sender fee {}, recipient fee {}", sender_fee, recipient_fee)] 
-pub struct FeeDispute { 
-    sender_fee: u64, 
-    recipient_fee: u64,
-}
-
-#[derive(Debug, Fail)]
-#[fail(display = "Fee exceeds amount: sender amount {}, recipient amount {}", sender_amount, recipient_amount)] 
-pub struct FeeExceedsAmount { 
-    sender_amount: u64, 
-    recipient_amount: u64,
-}
-
-#[derive(Debug, Fail)]
-#[fail(display = "{}", _0)] 
+#[fail(display = "{}", _0)]
 pub struct ErrorMessage(String);
 
 #[derive(Debug)]
@@ -95,25 +79,51 @@ pub struct Error {
 /// Wallet errors, mostly wrappers around underlying crypto or I/O errors.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ErrorKind {
-    #[fail(display = "Not enoug funds")] NotEnoughFunds,
-    #[fail(display = "Fee dispute")] FeeDispute,
-    #[fail(display = "Fee exceed amount")] FeeExceedsAmount,
-    #[fail(display = "Keychain error")] Keychain,
-    #[fail(display = "Transaction error")] Transaction,
-    #[fail(display = "Secp error")] Secp,
-    #[fail(display = "Wallet data error")] WalletData,
+    #[fail(display = "Not enough funds")]
+    NotEnoughFunds(u64),
+
+    #[fail(display = "Fee dispute: sender fee {}, recipient fee {}", sender_fee, recipient_fee)]
+    FeeDispute{sender_fee: u64, recipient_fee: u64},
+
+    #[fail(display = "Fee exceeds amount: sender amount {}, recipient amount {}", sender_amount, recipient_amount)]
+    FeeExceedsAmount{sender_amount: u64,recipient_amount: u64},
+
+    #[fail(display = "Keychain error")]
+    Keychain,
+
+    #[fail(display = "Transaction error")]
+    Transaction,
+
+    #[fail(display = "Secp error")]
+    Secp,
+
+    #[fail(display = "Wallet data error")]
+    WalletData,
+
     /// An error in the format of the JSON structures exchanged by the wallet
-    #[fail(display = "JSON format error")] Format,
-    /// An IO Error
-    #[fail(display = "I/O error")] IO,
+    #[fail(display = "JSON format error")]
+    Format,
+
+    #[fail(display = "I/O error")]
+    IO,
+
     /// Error when contacting a node through its API
-    #[fail(display = "Node API error")] Node,
+    #[fail(display = "Node API error")]
+    Node,
+
     /// Error originating from hyper.
-    #[fail(display = "Hyper error")] Hyper,
+    #[fail(display = "Hyper error")]
+    Hyper,
+
     /// Error originating from hyper uri parsing.
-    #[fail(display = "Uri parsing error")] Uri,
-    #[fail(display = "Signature error")] Signature,
-    #[fail(display = "Generic error")] GenericError,
+    #[fail(display = "Uri parsing error")]
+    Uri,
+
+    #[fail(display = "Signature error")]
+    Signature,
+
+    #[fail(display = "Generic error")]
+    GenericError,
 }
 
 impl Fail for Error {
