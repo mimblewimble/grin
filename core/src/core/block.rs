@@ -299,7 +299,7 @@ pub struct Block {
 	pub inputs: Vec<Input>,
 	/// List of transaction outputs
 	pub outputs: Vec<Output>,
-	/// List of transaction kernels and associated proofs
+	/// List of kernels with associated proofs (note these are offset from tx_kernels)
 	pub kernels: Vec<TxKernel>,
 }
 
@@ -517,7 +517,12 @@ impl Block {
 			// we will sum all the offsets later and store the total offset
 			// on the block_header
 			let excess = tx.validate()?;
+
+			// TODO - will be no longer required once tx contains kernels(s)
+			// and they are no longer built at block creation time
 			let kernel = tx.build_kernel(excess);
+
+			kernel_offsets.push(tx.offset);
 			kernels.push(kernel);
 
 			for input in tx.inputs.clone() {
@@ -528,7 +533,6 @@ impl Block {
 				outputs.push(output);
 			}
 
-			kernel_offsets.push(tx.offset);
 		}
 
 		// also include the reward kernel and output
@@ -910,8 +914,7 @@ mod test {
 		build::transaction(
 			vec![input(v, ZERO_HASH, key_id1), output(3, key_id2), with_fee(2)],
 			&keychain,
-		).map(|(tx, _)| tx)
-			.unwrap()
+		).unwrap()
 	}
 
 	// Too slow for now #[test]
@@ -934,7 +937,6 @@ mod test {
 		let now = Instant::now();
 		parts.append(&mut vec![input(500000, ZERO_HASH, pks.pop().unwrap()), with_fee(2)]);
 		let mut tx = build::transaction(parts, &keychain)
-			.map(|(tx, _)| tx)
 			.unwrap();
 		println!("Build tx: {}", now.elapsed().as_secs());
 
@@ -969,7 +971,7 @@ mod test {
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		let mut btx1 = tx2i1o();
-		let (mut btx2, _) = build::transaction(
+		let mut btx2 = build::transaction(
 			vec![input(7, ZERO_HASH, key_id1), output(5, key_id2.clone()), with_fee(2)],
 			&keychain,
 		).unwrap();

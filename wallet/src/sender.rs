@@ -185,7 +185,7 @@ fn build_send_tx(
 	// on tx being sent (based on current chain height via api).
 	parts.push(build::with_lock_height(lock_height));
 
-	let (tx, blind) = build::transaction(parts, &keychain)?;
+	let (tx, blind) = build::partial_transaction(parts, &keychain)?;
 
 	Ok((tx, blind, coins, change_key))
 }
@@ -227,7 +227,7 @@ pub fn issue_burn_tx(
 	parts.push(build::output(amount - fee, Identifier::zero()));
 
 	// finalize the burn transaction and send
-	let (tx_burn, _) = build::transaction(parts, &keychain)?;
+	let (tx_burn, _) = build::partial_transaction(parts, &keychain)?;
 	tx_burn.validate()?;
 
 	let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
@@ -301,7 +301,7 @@ fn inputs_and_change(
 
 #[cfg(test)]
 mod test {
-	use core::core::build::{input, output, transaction};
+	use core::core::build;
 	use core::core::hash::ZERO_HASH;
 	use keychain::Keychain;
 
@@ -313,8 +313,8 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 
-		let (tx1, _) = transaction(vec![output(105, key_id1.clone())], &keychain).unwrap();
-		let (tx2, _) = transaction(vec![input(105, ZERO_HASH, key_id1.clone())], &keychain).unwrap();
+		let tx1 = build::transaction(vec![build::output(105, key_id1.clone())], &keychain).unwrap();
+		let tx2 = build::transaction(vec![build::input(105, ZERO_HASH, key_id1.clone())], &keychain).unwrap();
 
 		assert_eq!(tx1.outputs[0].features, tx2.inputs[0].features);
 		assert_eq!(tx1.outputs[0].commitment(), tx2.inputs[0].commitment());

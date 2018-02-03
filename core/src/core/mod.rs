@@ -304,7 +304,7 @@ mod test {
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		// first build a valid tx with corresponding blinding factor
-		let (tx, blind) = build::transaction(
+		let (tx, blind) = build::partial_transaction(
 			vec![
 				input(10, ZERO_HASH, key_id1),
 				output(5, key_id2),
@@ -331,7 +331,7 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
-		let (tx, _) = build::transaction(
+		let tx = build::transaction(
 			vec![
 				input(75, ZERO_HASH, key_id1),
 				output(42, key_id2),
@@ -393,7 +393,7 @@ mod test {
 			// Alice builds her transaction, with change, which also produces the sum
 			// of blinding factors before they're obscured.
 			let (tx, sum) =
-				build::transaction(vec![in1, in2, output(1, key_id3), with_fee(2)], &keychain)
+				build::partial_transaction(vec![in1, in2, output(1, key_id3), with_fee(2)], &keychain)
 					.unwrap();
 			tx_alice = tx;
 			blind_sum = sum;
@@ -402,7 +402,7 @@ mod test {
 		// From now on, Bob only has the obscured transaction and the sum of
 		// blinding factors. He adds his output, finalizes the transaction so it's
 		// ready for broadcast.
-		let (tx_final, _) = build::transaction(
+		let tx_final = build::transaction(
 			vec![
 				initial_tx(tx_alice),
 				with_excess(blind_sum),
@@ -483,8 +483,7 @@ mod test {
 				with_lock_height(1),
 			],
 			&keychain,
-		).map(|(tx, _)| tx)
-			.unwrap();
+		).unwrap();
 
 		let b = Block::new(
 			&BlockHeader::default(),
@@ -504,8 +503,7 @@ mod test {
 				with_lock_height(2),
 			],
 			&keychain,
-		).map(|(tx, _)| tx)
-			.unwrap();
+		).unwrap();
 
 		let b = Block::new(
 			&BlockHeader::default(),

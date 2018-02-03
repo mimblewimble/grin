@@ -103,7 +103,7 @@ fn handle_sender_initiation(
 	})?;
 
 	// Still handy for getting the blinding sum
-	let (_, blind_sum) = build::transaction(
+	let (_, blind_sum) = build::partial_transaction(
 		vec![
 			build::output(out_amount, key_id.clone()),
 		],
@@ -375,7 +375,7 @@ fn build_final_transaction(
 
 	// Build final transaction, the sum of which should
 	// be the same as the exchanged excess values
-	let (mut final_tx, _) = build::transaction(
+	let (mut final_tx, _) = build::partial_transaction(
 		vec![
 			build::initial_tx(tx),
 			build::output(out_amount, key_id.clone()),

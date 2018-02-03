@@ -170,7 +170,7 @@ pub fn initial_tx(tx: Transaction) -> Box<Append> {
 /// let (tx2, _) = build::transaction(vec![initial_tx(tx1), with_excess(sum),
 ///   output_rand(2)], keychain).unwrap();
 ///
-pub fn transaction(
+pub fn partial_transaction(
 	elems: Vec<Box<Append>>,
 	keychain: &keychain::Keychain,
 ) -> Result<(Transaction, BlindingFactor), keychain::Error> {
@@ -188,6 +188,20 @@ pub fn transaction(
 
 	Ok((tx, blind_sum))
 }
+
+/// Builds a complete transaction.
+/// TODO - build the associated kernel here also (rather than at block creation time)
+pub fn transaction(
+	elems: Vec<Box<Append>>,
+	keychain: &keychain::Keychain,
+) -> Result<Transaction, keychain::Error> {
+	let (tx, _) = partial_transaction(elems, keychain)?;
+
+	// TODO - this is a finalized tx, we can build and persist the kernel
+
+	Ok(tx)
+}
+
 
 // TODO - testing only?
 pub fn transaction_with_offset(
@@ -226,7 +240,7 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
-		let (tx, _) = transaction(
+		let tx = transaction(
 			vec![
 				input(10, ZERO_HASH, key_id1),
 				input(11, ZERO_HASH, key_id2),
@@ -246,7 +260,7 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
-		let (tx, k1, k2) = transaction_with_offset(
+		let (tx, _, _) = transaction_with_offset(
 			vec![
 				input(10, ZERO_HASH, key_id1),
 				input(11, ZERO_HASH, key_id2),
@@ -265,7 +279,7 @@ mod test {
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
-		let (tx, _) = transaction(
+		let tx = transaction(
 			vec![input(6, ZERO_HASH, key_id1), output(2, key_id2), with_fee(4)],
 			&keychain,
 		).unwrap();
