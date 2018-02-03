@@ -531,8 +531,6 @@ impl Block {
 			kernel_offsets.push(tx.offset);
 		}
 
-		// TODO - offset for the coinbase kernel?
-
 		// also include the reward kernel and output
 		kernels.push(reward_kern);
 		outputs.push(reward_out);
@@ -559,6 +557,7 @@ impl Block {
 				BlindingFactor::zero()
 			} else {
 				let sum = secp.blind_sum(keys, vec![])?;
+
 				BlindingFactor::from_secret_key(sum)
 			}
 		};

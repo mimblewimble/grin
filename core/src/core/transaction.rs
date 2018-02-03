@@ -351,8 +351,7 @@ impl Transaction {
 			rsum
 		} else {
 			// k = k1 + k2
-			// we need to add k2G back in for this to work
-
+			// kG = k1G + k2G
 			let k2 = self.offset.secret_key(&secp)
 				.map_err(|_| secp::Error::InvalidSecretKey)?;
 			let offset_commit = secp.commit(0, k2)?;
@@ -366,7 +365,8 @@ impl Transaction {
 		if !valid {
 			return Err(secp::Error::IncorrectSignature);
 		}
-		Ok(rsum)
+
+		Ok(adj_rsum)
 	}
 
 	/// Builds a transaction kernel
