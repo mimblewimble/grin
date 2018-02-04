@@ -375,7 +375,7 @@ fn build_final_transaction(
 
 	// Build final transaction, the sum of which should
 	// be the same as the exchanged excess values
-	let (mut final_tx, _) = build::partial_transaction(
+	let mut final_tx = build::transaction(
 		vec![
 			build::initial_tx(tx),
 			build::output(out_amount, key_id.clone()),

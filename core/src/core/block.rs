@@ -48,8 +48,8 @@ use keychain::BlindingFactor;
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, PartialEq)]
 pub enum Error {
-	/// The sum of output minus input commitments does not match the sum of
-	/// kernel commitments
+	/// The sum of output minus input commitments does not
+	/// match the sum of kernel commitments
 	KernelSumMismatch,
 	/// Same as above but for the coinbase part of a block, including reward
 	CoinbaseSumMismatch,
@@ -394,7 +394,7 @@ impl Block {
 		key_id: &keychain::Identifier,
 		difficulty: Difficulty,
 	) -> Result<Block, Error> {
-		let fees = txs.iter().map(|tx| tx.fee).sum();
+		let fees = txs.iter().map(|tx| tx.fee()).sum();
 		let (reward_out, reward_proof) = Block::reward_output(
 			keychain,
 			key_id,
@@ -516,26 +516,18 @@ impl Block {
 			// the kernel excess is k1G
 			// we will sum all the offsets later and store the total offset
 			// on the block_header
-			let excess = tx.validate()?;
+			tx.validate()?;
 
-			// TODO - will be no longer required once tx contains kernels(s)
-			// and they are no longer built at block creation time
-			let kernel = tx.build_kernel(excess);
-
+			// we will summ these later to give a single aggregate offset
 			kernel_offsets.push(tx.offset);
-			kernels.push(kernel);
 
-			for input in tx.inputs.clone() {
-				inputs.push(input);
-			}
-
-			for output in tx.outputs.clone() {
-				outputs.push(output);
-			}
-
+			// add all tx inputs/outputs/kernels to the block
+			kernels.extend(tx.kernels.iter().cloned());
+			inputs.extend(tx.inputs.iter().cloned());
+			outputs.extend(tx.outputs.iter().cloned());
 		}
 
-		// also include the reward kernel and output
+		// include the reward kernel and output
 		kernels.push(reward_kern);
 		outputs.push(reward_out);
 
@@ -719,8 +711,8 @@ impl Block {
 		}
 
 		// verify all signatures with the commitment as pk
-		for proof in &self.kernels {
-			proof.verify()?;
+		for kernel in &self.kernels {
+			kernel.verify()?;
 		}
 
 		Ok(())

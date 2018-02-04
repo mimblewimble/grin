@@ -263,8 +263,10 @@ mod test {
 		let tx = tx2i1o();
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &tx).expect("serialization failed");
-		println!("{}", vec.len());
-		assert!(vec.len() == 5396);
+		assert_eq!(
+			vec.len(),
+			5_438,
+		);
 	}
 
 	#[test]
@@ -273,7 +275,7 @@ mod test {
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &tx).expect("serialization failed");
 		let dtx: Transaction = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(dtx.fee, 2);
+		assert_eq!(dtx.fee(), 2);
 		assert_eq!(dtx.inputs.len(), 2);
 		assert_eq!(dtx.outputs.len(), 1);
 		assert_eq!(tx.hash(), dtx.hash());
@@ -304,7 +306,7 @@ mod test {
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		// first build a valid tx with corresponding blinding factor
-		let (tx, blind) = build::partial_transaction(
+		let (mut tx, kern, blind) = build::partial_transaction(
 			vec![
 				input(10, ZERO_HASH, key_id1),
 				output(5, key_id2),
@@ -314,14 +316,14 @@ mod test {
 			&keychain,
 		).unwrap();
 
-		// confirm the tx validates and that we can construct a valid tx_kernel from it
-		let excess = tx.validate().unwrap();
-		let tx_kernel = tx.build_kernel(excess);
-		let _ = tx_kernel.verify().unwrap();
+		// check the kernel and the tx are both valid
+		kern.verify().unwrap();
+		assert!(tx.kernels.is_empty());
+		tx.kernels.push(kern.clone());
+		tx.validate().unwrap();
 
-		assert_eq!(tx_kernel.features, DEFAULT_KERNEL);
-		assert_eq!(tx_kernel.fee, tx.fee);
-		assert_eq!(tx_kernel.excess, excess);
+		assert_eq!(kern.features, DEFAULT_KERNEL);
+		assert_eq!(kern.fee, tx.fee());
 	}
 
 	#[test]
@@ -349,7 +351,7 @@ mod test {
 	#[test]
 	fn blind_tx() {
 		let btx = tx2i1o();
-		assert!(btx.verify_sig().is_ok());
+		assert!(btx.validate().is_ok());
 
 		// checks that the range proof on our blind output is sufficiently hiding
 		let Output { proof, .. } = btx.outputs[0];
@@ -383,6 +385,7 @@ mod test {
 		let key_id4 = keychain.derive_key_id(4).unwrap();
 
 		let tx_alice: Transaction;
+		let kern_alice: TxKernel;
 		let blind_sum: BlindingFactor;
 
 		{
@@ -392,10 +395,11 @@ mod test {
 
 			// Alice builds her transaction, with change, which also produces the sum
 			// of blinding factors before they're obscured.
-			let (tx, sum) =
+			let (tx, kern, sum) =
 				build::partial_transaction(vec![in1, in2, output(1, key_id3), with_fee(2)], &keychain)
 					.unwrap();
 			tx_alice = tx;
+			kern_alice = kern;
 			blind_sum = sum;
 		}
 
@@ -404,7 +408,7 @@ mod test {
 		// ready for broadcast.
 		let tx_final = build::transaction(
 			vec![
-				initial_tx(tx_alice),
+				initial_tx(tx_alice, kern_alice),
 				with_excess(blind_sum),
 				output(4, key_id4),
 			],
@@ -435,7 +439,7 @@ mod test {
 		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let mut tx1 = tx2i1o();
-		tx1.verify_sig().unwrap();
+		tx1.validate().unwrap();
 
 		let b = Block::new(
 			&BlockHeader::default(),
@@ -523,13 +527,13 @@ mod test {
 	#[test]
 	pub fn test_verify_1i1o_sig() {
 		let tx = tx1i1o();
-		tx.verify_sig().unwrap();
+		tx.validate().unwrap();
 	}
 
 	#[test]
 	pub fn test_verify_2i1o_sig() {
 		let tx = tx2i1o();
-		tx.verify_sig().unwrap();
+		tx.validate().unwrap();
 	}
 
 	// utility producing a transaction with 2 inputs and a single outputs
@@ -547,8 +551,7 @@ mod test {
 				with_fee(2),
 			],
 			&keychain,
-		).map(|(tx, _, _)| tx)
-			.unwrap()
+		).unwrap()
 	}
 
 	// utility producing a transaction with a single input and output
@@ -560,8 +563,7 @@ mod test {
 		build::transaction_with_offset(
 			vec![input(5, ZERO_HASH, key_id1), output(3, key_id2), with_fee(2)],
 			&keychain,
-		).map(|(tx, _, _)| tx)
-			.unwrap()
+		).unwrap()
 	}
 
 	// utility producing a transaction with a single input
@@ -581,7 +583,6 @@ mod test {
 				with_fee(2),
 			],
 			&keychain,
-		).map(|(tx, _, _)| tx)
-			.unwrap()
+		).unwrap()
 	}
 }

@@ -27,7 +27,7 @@
 
 use util::{secp, kernel_sig_msg};
 
-use core::{Transaction, Input, Output, OutputFeatures, SwitchCommitHash, COINBASE_OUTPUT, DEFAULT_OUTPUT};
+use core::{Transaction, TxKernel, Input, Output, OutputFeatures, SwitchCommitHash, COINBASE_OUTPUT, DEFAULT_OUTPUT};
 use core::hash::Hash;
 use keychain;
 use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
@@ -40,7 +40,7 @@ pub struct Context<'a> {
 
 /// Function type returned by the transaction combinators. Transforms a
 /// (Transaction, BlindSum) pair into another, provided some context.
-pub type Append = for<'a> Fn(&'a mut Context, (Transaction, BlindSum)) -> (Transaction, BlindSum);
+pub type Append = for<'a> Fn(&'a mut Context, (Transaction, TxKernel, BlindSum)) -> (Transaction, TxKernel, BlindSum);
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
@@ -50,14 +50,14 @@ fn build_input(
 	out_block: Option<Hash>,
 	key_id: Identifier,
 ) -> Box<Append> {
-	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
+	Box::new(move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 		let commit = build.keychain.commit(value, &key_id).unwrap();
 		let input = Input::new(
 			features,
 			commit,
 			out_block,
 		);
-		(tx.with_input(input), sum.sub_key_id(key_id.clone()))
+		(tx.with_input(input), kern, sum.sub_key_id(key_id.clone()))
 	})
 }
 
@@ -86,7 +86,7 @@ pub fn coinbase_input(
 /// Adds an output with the provided value and key identifier from the
 /// keychain.
 pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
-	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
+	Box::new(move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 		debug!(
 			LOGGER,
 			"Building an output: {}, {}",
@@ -125,6 +125,7 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 				switch_commit_hash: switch_commit_hash,
 				proof: rproof,
 			}),
+			kern,
 			sum.add_key_id(key_id.clone()),
 		)
 	})
@@ -132,15 +133,15 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 
 /// Sets the fee on the transaction being built.
 pub fn with_fee(fee: u64) -> Box<Append> {
-	Box::new(move |_build, (tx, sum)| -> (Transaction, BlindSum) {
-		(tx.with_fee(fee), sum)
+	Box::new(move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+		(tx, kern.with_fee(fee), sum)
 	})
 }
 
 /// Sets the lock_height on the transaction being built.
 pub fn with_lock_height(lock_height: u64) -> Box<Append> {
-	Box::new(move |_build, (tx, sum)| -> (Transaction, BlindSum) {
-		(tx.with_lock_height(lock_height), sum)
+	Box::new(move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+		(tx, kern.with_lock_height(lock_height), sum)
 	})
 }
 
@@ -148,15 +149,15 @@ pub fn with_lock_height(lock_height: u64) -> Box<Append> {
 /// combination with the initial_tx function when a new transaction is built
 /// by adding to a pre-existing one.
 pub fn with_excess(excess: BlindingFactor) -> Box<Append> {
-	Box::new(move |_build, (tx, sum)| -> (Transaction, BlindSum) {
-		(tx, sum.add_blinding_factor(excess.clone()))
+	Box::new(move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+		(tx, kern, sum.add_blinding_factor(excess.clone()))
 	})
 }
 
 /// Sets an initial transaction to add to when building a new transaction.
-pub fn initial_tx(tx: Transaction) -> Box<Append> {
-	Box::new(move |_build, (_, sum)| -> (Transaction, BlindSum) {
-		(tx.clone(), sum)
+pub fn initial_tx(tx: Transaction, kern: TxKernel) -> Box<Append> {
+	Box::new(move |_build, (_, _, sum)| -> (Transaction, TxKernel, BlindSum) {
+		(tx.clone(), kern.clone(), sum)
 	})
 }
 
@@ -173,31 +174,31 @@ pub fn initial_tx(tx: Transaction) -> Box<Append> {
 pub fn partial_transaction(
 	elems: Vec<Box<Append>>,
 	keychain: &keychain::Keychain,
-) -> Result<(Transaction, BlindingFactor), keychain::Error> {
+) -> Result<(Transaction, TxKernel, BlindingFactor), keychain::Error> {
 	let mut ctx = Context { keychain };
-	let (mut tx, sum) = elems.iter().fold(
-		(Transaction::empty(), BlindSum::new()),
+	let (tx, mut kern, sum) = elems.iter().fold(
+		(Transaction::empty(), TxKernel::empty(), BlindSum::new()),
 		|acc, elem| elem(&mut ctx, acc),
 	);
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
-	let msg = secp::Message::from_slice(&kernel_sig_msg(tx.fee, tx.lock_height))?;
+	let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
 
-	// We will replace the excess_sig (and set the offset) from the wallet code
-	// but this is useful for partially built txs.
-	tx.excess_sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &blind_sum)?;
+	let skey = blind_sum.secret_key(&keychain.secp())?;
+	kern.excess = ctx.keychain.secp().commit(0, skey)?;
+	kern.excess_sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &blind_sum)?;
 
-	Ok((tx, blind_sum))
+	Ok((tx, kern, blind_sum))
 }
 
 /// Builds a complete transaction.
-/// TODO - build the associated kernel here also (rather than at block creation time)
 pub fn transaction(
 	elems: Vec<Box<Append>>,
 	keychain: &keychain::Keychain,
 ) -> Result<Transaction, keychain::Error> {
-	let (tx, _) = partial_transaction(elems, keychain)?;
+	let (mut tx, kern, _) = partial_transaction(elems, keychain)?;
 
-	// TODO - this is a finalized tx, we can build and persist the kernel
+	assert!(tx.kernels.is_empty());
+	tx.kernels.push(kern);
 
 	Ok(tx)
 }
@@ -207,10 +208,10 @@ pub fn transaction(
 pub fn transaction_with_offset(
 	elems: Vec<Box<Append>>,
 	keychain: &keychain::Keychain,
-) -> Result<(Transaction, BlindingFactor, BlindingFactor), keychain::Error> {
+) -> Result<Transaction, keychain::Error> {
 	let mut ctx = Context { keychain };
-	let (mut tx, sum) = elems.iter().fold(
-		(Transaction::empty(), BlindSum::new()),
+	let (mut tx, mut kern, sum) = elems.iter().fold(
+		(Transaction::empty(), TxKernel::empty(), BlindSum::new()),
 		|acc, elem| elem(&mut ctx, acc),
 	);
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
@@ -219,12 +220,17 @@ pub fn transaction_with_offset(
 	let k1 = split.blind_1;
 	let k2 = split.blind_2;
 
-	let msg = secp::Message::from_slice(&kernel_sig_msg(tx.fee, tx.lock_height))?;
+	let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
 
-	tx.excess_sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &k1)?;
+	let skey = k1.secret_key(&keychain.secp())?;
+	kern.excess = ctx.keychain.secp().commit(0, skey)?;
+	kern.excess_sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &k1)?;
 	tx.offset = k2.clone();
 
-	Ok((tx, k1, k2))
+	assert!(tx.kernels.is_empty());
+	tx.kernels.push(kern);
+
+	Ok(tx)
 }
 
 // Just a simple test, most exhaustive tests in the core mod.rs.
@@ -243,14 +249,14 @@ mod test {
 		let tx = transaction(
 			vec![
 				input(10, ZERO_HASH, key_id1),
-				input(11, ZERO_HASH, key_id2),
+				input(12, ZERO_HASH, key_id2),
 				output(20, key_id3),
-				with_fee(1),
+				with_fee(2),
 			],
 			&keychain,
 		).unwrap();
 
-		tx.verify_sig().unwrap();
+		tx.validate().unwrap();
 	}
 
 	#[test]
@@ -260,17 +266,17 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
-		let (tx, _, _) = transaction_with_offset(
+		let tx = transaction_with_offset(
 			vec![
 				input(10, ZERO_HASH, key_id1),
-				input(11, ZERO_HASH, key_id2),
+				input(12, ZERO_HASH, key_id2),
 				output(20, key_id3),
-				with_fee(1),
+				with_fee(2),
 			],
 			&keychain,
 		).unwrap();
 
-		tx.verify_sig().unwrap();
+		tx.validate().unwrap();
 	}
 
 	#[test]
@@ -284,6 +290,6 @@ mod test {
 			&keychain,
 		).unwrap();
 
-		tx.verify_sig().unwrap();
+		tx.validate().unwrap();
 	}
 }
