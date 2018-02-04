@@ -14,6 +14,7 @@
 
 extern crate grin_core as core;
 extern crate grin_p2p as p2p;
+extern crate grin_util as util;
 
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
@@ -36,6 +37,8 @@ fn open_port() -> u16 {
 // followed by a ping/pong exchange to make sure the connection is live.
 #[test]
 fn peer_handshake() {
+	util::init_test_logger();
+
 	let p2p_conf = p2p::P2PConfig {
 		host: "0.0.0.0".parse().unwrap(),
 		port: open_port(),
