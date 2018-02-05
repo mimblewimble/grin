@@ -7,11 +7,9 @@ authors = ["Grin Authors <mimblewimble@lists.launchpad.net>"]
 blake2-rfc = "~0.2.17"
 grin_core = { path = "../core" }
 grin_keychain = { path = "../keychain" }
-grin_store = { path = "../store" }
-grin_p2p = { path = "../p2p" }
 grin_util = { path = "../util" }
 serde = "~1.0.8"
 serde_derive = "~1.0.8"
 slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
 time = "^0.1"
-rand = "0.3"
+rand = "^0.3"
