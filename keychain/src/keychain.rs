@@ -641,7 +641,6 @@ mod test {
 		// sender starts the tx interaction
 		let (sender_pub_excess, sender_pub_nonce) = {
 			let keychain = sender_keychain.clone();
-			let key_id = keychain.derive_key_id(1).unwrap();
 
 			let skey = keychain.derived_key(
 				&keychain.derive_key_id(1).unwrap(),
@@ -783,7 +782,10 @@ mod test {
 		let sender_keychain = Keychain::from_random_seed().unwrap();
 		let receiver_keychain = Keychain::from_random_seed().unwrap();
 
-		let sender_offset = SecretKey::new(&sender_keychain.secp(), &mut thread_rng());
+		// This is the kernel offset that we use to split the key
+		// Summing these at the block level prevents the
+		// kernels from being used to reconstruct (or identify) individual transactions
+		let kernel_offset = SecretKey::new(&sender_keychain.secp(), &mut thread_rng());
 
 		// Calculate the kernel excess here for convenience.
 		// Normally this would happen during transaction building.
@@ -800,8 +802,10 @@ mod test {
 			let blinding_factor = keychain.blind_sum(
 				&BlindSum::new()
 					.sub_blinding_factor(BlindingFactor::from_secret_key(skey1))
-					.sub_blinding_factor(BlindingFactor::from_secret_key(sender_offset))
 					.add_blinding_factor(BlindingFactor::from_secret_key(skey2))
+					// subtract the kernel offset here like as would when
+					// verifying a kernel signature
+					.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset))
 			).unwrap();
 
 			keychain.secp.commit(
@@ -823,7 +827,9 @@ mod test {
 			let blinding_factor = keychain.blind_sum(
 				&BlindSum::new()
 					.sub_blinding_factor(BlindingFactor::from_secret_key(skey))
-					.sub_blinding_factor(BlindingFactor::from_secret_key(sender_offset))
+					// subtract the kernel offset to create an aggsig context
+					// with our "split" key
+					.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset))
 			).unwrap();
 
 			let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
