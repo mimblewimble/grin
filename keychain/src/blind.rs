@@ -18,6 +18,7 @@ use rand::thread_rng;
 
 use extkey::Identifier;
 use keychain::Error;
+use util;
 use util::secp::{self, Secp256k1};
 use util::secp::constants::SECRET_KEY_SIZE;
 
@@ -46,6 +47,15 @@ impl BlindingFactor {
 
 	pub fn zero() -> BlindingFactor {
 		BlindingFactor::from_secret_key(secp::key::ZERO_KEY)
+	}
+
+	pub fn to_hex(&self) -> String {
+		util::to_hex(self.0.to_vec())
+	}
+
+	pub fn from_hex(hex: &str) -> Result<BlindingFactor, Error> {
+		let bytes = util::from_hex(hex.to_string()).unwrap();
+		Ok(BlindingFactor::from_slice(&bytes))
 	}
 
 	pub fn secret_key(&self, secp: &Secp256k1) -> Result<secp::key::SecretKey, Error> {

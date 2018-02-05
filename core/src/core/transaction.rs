@@ -300,7 +300,7 @@ impl Transaction {
 	}
 
 	/// Creates a new transaction initialized with
-	/// the provided inputs, outputs, fee and lock_height.
+	/// the provided inputs, outputs, kernels
 	pub fn new(
 		inputs: Vec<Input>,
 		outputs: Vec<Output>,
@@ -311,6 +311,13 @@ impl Transaction {
 			inputs: inputs,
 			outputs: outputs,
 			kernels: kernels,
+		}
+	}
+
+	pub fn with_offset(self, offset: BlindingFactor) -> Transaction {
+		Transaction {
+			offset: offset,
+			..self
 		}
 	}
 

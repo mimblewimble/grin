@@ -24,9 +24,9 @@ use serde_json;
 
 use api;
 use core::consensus::reward;
-use core::core::{build, Block, Output, Transaction, TxKernel, amount_to_hr_string};
+use core::core::{build, Block, Committed, Output, Transaction, TxKernel, amount_to_hr_string};
 use core::{global, ser};
-use keychain::{Identifier, Keychain, BlindingFactor};
+use keychain::{Identifier, Keychain, BlindSum, BlindingFactor};
 use types::*;
 use util::{LOGGER, to_hex, secp};
 
@@ -51,7 +51,7 @@ fn handle_sender_initiation(
 	keychain: &Keychain,
 	partial_tx: &PartialTx
 ) -> Result<PartialTx, Error> {
-	let (amount, _sender_pub_blinding, sender_pub_nonce, _sig, tx) = read_partial_tx(keychain, partial_tx)?;
+	let (amount, _sender_pub_blinding, sender_pub_nonce, kernel_offset, _sig, tx) = read_partial_tx(keychain, partial_tx)?;
 
 	let root_key_id = keychain.root_key_id();
 
@@ -124,7 +124,7 @@ fn handle_sender_initiation(
 	).unwrap();
 
 	// Build the response, which should contain sR, blinding excess xR * G, public nonce kR * G
-	let mut partial_tx = build_partial_tx(keychain, amount, Some(sig_part), tx);
+	let mut partial_tx = build_partial_tx(keychain, amount, kernel_offset, Some(sig_part), tx);
 	partial_tx.phase = PartialTxPhase::ReceiverInitiation;
 
 	Ok(partial_tx)
@@ -147,7 +147,7 @@ fn handle_sender_confirmation(
 	keychain: &Keychain,
 	partial_tx: &PartialTx
 ) -> Result<PartialTx, Error> {
-	let (amount, sender_pub_blinding, sender_pub_nonce, sender_sig_part, tx) = read_partial_tx(keychain, partial_tx)?;
+	let (amount, sender_pub_blinding, sender_pub_nonce, kernel_offset, sender_sig_part, tx) = read_partial_tx(keychain, partial_tx)?;
 	let sender_sig_part = sender_sig_part.unwrap();
 	let res = keychain.aggsig_verify_partial_sig(
 		&sender_sig_part,
@@ -187,29 +187,18 @@ fn handle_sender_confirmation(
 	);
 
 	if res {
-		debug!(LOGGER, "*** final aggregated (non-offset) sig looks good ***");
+		debug!(LOGGER, "*** final aggregated sig looks good ***");
 	} else {
 		error!(LOGGER, "Final aggregated signature invalid.");
 		return Err(Error::Signature(String::from("Final aggregated signature invalid.")));
 	}
 
-	// And the final signature
-	// let (final_sig, offset) = keychain.aggsig_calculate_final_sig_with_offset(
-	// 	&sender_sig_part,
-	// 	&our_sig_part,
-	// 	&sender_pub_nonce,
-	// ).unwrap();
-
-	// TODO - we split the key and signed using k1 (we think)
-	// so what do we need to do to get k1G in the tx kernel?
-
 	let final_tx = build_final_transaction(
 		config,
 		keychain,
 		amount,
-		&final_excess,
+		kernel_offset,
 		&final_sig,
-		&offset,
 		tx.clone(),
 	)?;
 
@@ -221,7 +210,7 @@ fn handle_sender_confirmation(
 
 	// Return what we've actually posted
 	// TODO - why build_partial_tx here? Just a naming issue?
-	let mut partial_tx = build_partial_tx(keychain, amount, Some(final_sig), tx);
+	let mut partial_tx = build_partial_tx(keychain, amount, kernel_offset, Some(final_sig), tx);
 	partial_tx.phase = PartialTxPhase::ReceiverConfirmation;
 	Ok(partial_tx)
 }
@@ -357,9 +346,8 @@ fn build_final_transaction(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
-	excess: &Commitment,
+	kernel_offset: BlindingFactor,
 	excess_sig: &secp::Signature,
-	offset: &BlindingFactor,
 	tx: Transaction,
 ) -> Result<Transaction, Error> {
 	let root_key_id = keychain.root_key_id();
@@ -413,20 +401,40 @@ fn build_final_transaction(
 		(key_id, derivation)
 	})?;
 
+	debug!(LOGGER, "****** build_final_tx: offset: {:?}", kernel_offset);
+	debug!(LOGGER, "****** build_final_tx: tx offset: {:?}", tx.offset);
+
 	// Build final transaction, the sum of which should
 	// be the same as the exchanged excess values
 	let mut final_tx = build::transaction(
 		vec![
 			build::initial_tx(tx),
 			build::output(out_amount, key_id.clone()),
-			build::with_excess(excess.clone()),
+			build::with_offset(kernel_offset),
 		],
 		keychain,
 	)?;
 
+	// manually sum the input/output commitments on the final tx
+	let original_excess = final_tx.sum_commitments().unwrap();
+
+	debug!(LOGGER, "*** excess on kernel right now: {:?}", final_tx.kernels[0].excess);
+	debug!(LOGGER, "*** excess from summing commits: {:?}", original_excess);
+
+	let offset_excess = keychain.secp().commit(0, kernel_offset.secret_key(&keychain.secp()).unwrap()).unwrap();
+	let final_excess = keychain.secp().commit_sum(vec![original_excess], vec![offset_excess]).unwrap();
+
+
+	debug!(LOGGER, "****** build_final_tx: final tx offset: {:?}", final_tx.offset);
+
+
+
+	// TODO - what to do here??? aggsig with offset/split key
+
+
 	assert_eq!(final_tx.kernels.len(), 1);
+	final_tx.kernels[0].excess = final_excess.clone();
 	final_tx.kernels[0].excess_sig = excess_sig.clone();
-	final_tx.offset = offset.clone();
 
 	debug!(LOGGER, "*** does kernel verify?");
 	final_tx.kernels[0].verify()?;

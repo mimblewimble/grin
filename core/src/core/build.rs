@@ -154,6 +154,12 @@ pub fn with_excess(excess: BlindingFactor) -> Box<Append> {
 	})
 }
 
+pub fn with_offset(offset: BlindingFactor) -> Box<Append> {
+	Box::new(move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+		(tx.with_offset(offset), kern, sum)
+	})
+}
+
 /// Sets an initial transaction to add to when building a new transaction.
 /// We currently only support building a tx with a single kernel with build::transaction()
 pub fn initial_tx(mut tx: Transaction) -> Box<Append> {

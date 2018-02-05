@@ -817,7 +817,6 @@ mod test {
 			let keychain = receiver_keychain.clone();
 			let key_id = keychain.derive_key_id(1).unwrap();
 
-			// let blind = blind_sum.secret_key(&keychain.secp())?;
 			let blind = keychain.derived_key(&key_id).unwrap();
 
 			keychain.aggsig_create_context(blind);
