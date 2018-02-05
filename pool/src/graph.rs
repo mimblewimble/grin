@@ -298,7 +298,7 @@ mod tests {
 	use util::secp;
 	use keychain::Keychain;
 	use rand;
-	use core::core::{DEFAULT_OUTPUT, SwitchCommitHash};
+	use core::core::{OutputFeatures, SwitchCommitHash};
 
 	#[test]
 	fn test_add_entry() {
@@ -317,12 +317,12 @@ mod tests {
 
 		let inputs = vec![
 			core::transaction::Input::new(
-				DEFAULT_OUTPUT,
+				OutputFeatures::DEFAULT_OUTPUT,
 				keychain.commit(50, &key_id2).unwrap(),
 				None,
 			),
 			core::transaction::Input::new(
-				DEFAULT_OUTPUT,
+				OutputFeatures::DEFAULT_OUTPUT,
 				keychain.commit(25, &key_id3).unwrap(),
 				None,
 			),
@@ -330,7 +330,7 @@ mod tests {
 		let msg = secp::pedersen::ProofMessage::empty();
 
 		let output = core::transaction::Output {
-			features: DEFAULT_OUTPUT,
+			features: OutputFeatures::DEFAULT_OUTPUT,
 			commit: output_commit,
 			switch_commit_hash: switch_commit_hash,
 			proof: keychain

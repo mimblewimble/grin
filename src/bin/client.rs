@@ -15,7 +15,9 @@
 extern crate term;
 
 use std::net::SocketAddr;
+
 use api;
+use p2p;
 use grin::ServerConfig;
 
 pub fn show_status(config: &ServerConfig) {
@@ -35,7 +37,8 @@ pub fn show_status(config: &ServerConfig) {
 			writeln!(e, "Chain height: {}", status.tip.height).unwrap();
 			writeln!(e, "Last block hash: {}", status.tip.last_block_pushed).unwrap();
 			writeln!(e, "Previous block hash: {}", status.tip.prev_block_to_last).unwrap();
-			writeln!(e, "Total difficulty: {}", status.tip.total_difficulty).unwrap()
+			writeln!(e, "Total difficulty: {}", status.tip.total_difficulty).unwrap();
+
 		}
 		Err(_) => writeln!(
 			e,
@@ -43,7 +46,7 @@ pub fn show_status(config: &ServerConfig) {
 		).unwrap(),
 	};
 	e.reset().unwrap();
-	println!();
+	println!()
 }
 
 pub fn ban_peer(config: &ServerConfig, peer_addr: &SocketAddr) {
@@ -73,6 +76,32 @@ pub fn unban_peer(config: &ServerConfig, peer_addr: &SocketAddr) {
 		Ok(_) => writeln!(e, "Successfully unbanned peer {}", peer_addr).unwrap(),
 		Err(_) => writeln!(e, "Failed to unban peer {}", peer_addr).unwrap(),
 	};
+	e.reset().unwrap();
+}
+
+pub fn list_connected_peers(config: &ServerConfig) {
+	let mut e = term::stdout().unwrap();
+	let url = format!(
+		"http://{}/v1/peers/connected",
+		config.api_http_addr
+	);
+	match api::client::get::<Vec<p2p::PeerInfo>>(url.as_str()).map_err(|e| Error::API(e)) {
+		Ok(connected_peers) => {
+			let mut index = 0;
+			for connected_peer in connected_peers {
+				writeln!(e, "Peer {}:", index).unwrap();
+				writeln!(e, "Capabilities: {:?}", connected_peer.capabilities).unwrap();
+				writeln!(e, "User agent: {}", connected_peer.user_agent).unwrap();
+				writeln!(e, "Version: {}", connected_peer.version).unwrap();
+				writeln!(e, "Peer address: {}", connected_peer.addr).unwrap();
+				writeln!(e, "Total difficulty: {}", connected_peer.total_difficulty).unwrap();
+				println!();
+				index = index + 1;
+			}
+		},
+		Err(_) => writeln!(e, "Failed to get connected peers").unwrap(),
+	};
+	e.reset().unwrap();
 }
 
 fn get_status_from_node(config: &ServerConfig) -> Result<api::Status, Error> {

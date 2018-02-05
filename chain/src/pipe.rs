@@ -211,7 +211,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		return Err(Error::InvalidBlockTime);
 	}
 
-	if !ctx.opts.contains(SKIP_POW) {
+	if !ctx.opts.contains(Options::SKIP_POW) {
 		let n = global::sizeshift() as u32;
 		if !(ctx.pow_verifier)(header, n) {
 			error!(LOGGER, "pipe: validate_header failed for cuckoo shift size {}", n);
@@ -242,7 +242,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		return Err(Error::InvalidBlockTime);
 	}
 
-	if !ctx.opts.contains(SKIP_POW) {
+	if !ctx.opts.contains(Options::SKIP_POW) {
 		// verify the proof of work and related parameters
 
 		// explicit check to ensure we are not below the minimum difficulty
@@ -362,7 +362,7 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 		// in sync mode, only update the "body chain", otherwise update both the
 		// "header chain" and "body chain", updating the header chain in sync resets
 		// all additional "future" headers we've received
-		if ctx.opts.contains(SYNC) {
+		if ctx.opts.contains(Options::SYNC) {
 			ctx.store
 				.save_body_head(&tip)
 				.map_err(|e| Error::StoreErr(e, "pipe save body".to_owned()))?;

@@ -1321,7 +1321,7 @@ mod tests {
 		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
 
 		transaction::Output {
-			features: transaction::DEFAULT_OUTPUT,
+			features: transaction::OutputFeatures::DEFAULT_OUTPUT,
 			commit: commit,
 			switch_commit_hash: switch_commit_hash,
 			proof: proof,
@@ -1343,7 +1343,7 @@ mod tests {
 		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
 
 		transaction::Output {
-			features: transaction::COINBASE_OUTPUT,
+			features: transaction::OutputFeatures::COINBASE_OUTPUT,
 			commit: commit,
 			switch_commit_hash: switch_commit_hash,
 			proof: proof,

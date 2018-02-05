@@ -324,7 +324,7 @@ mod test {
 		let kern = &tx.kernels[0];
 		kern.verify().unwrap();
 
-		assert_eq!(kern.features, DEFAULT_KERNEL);
+		assert_eq!(kern.features, KernelFeatures::DEFAULT_KERNEL);
 		assert_eq!(kern.fee, tx.fee());
 	}
 

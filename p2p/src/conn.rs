@@ -42,7 +42,6 @@ macro_rules! try_break {
 		match $inner {
 			Ok(v) => Some(v),
 			Err(Error::Connection(ref e)) if e.kind() == io::ErrorKind::WouldBlock => {
-				//println!("++ not ready");
 				None
 			}
 			Err(e) => {

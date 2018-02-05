@@ -537,7 +537,7 @@ impl Miner {
 					b.hash()
 				);
 				b.header.pow = proof;
-				let res = self.chain.process_block(b, chain::MINE);
+				let res = self.chain.process_block(b, chain::Options::MINE);
 				if let Err(e) = res {
 					error!(
 						LOGGER,

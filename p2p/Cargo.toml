@@ -6,7 +6,6 @@ workspace = ".."
 
 [dependencies]
 bitflags = "^1.0"
-byteorder = "^0.5"
 slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
 net2 = "0.2.0"
 rand = "^0.3"
