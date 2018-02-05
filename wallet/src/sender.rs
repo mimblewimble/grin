@@ -54,12 +54,12 @@ pub fn issue_send_tx(
 		max_outputs,
 		selection_strategy_is_use_all,
 	)?;
-	/*
-	 * -Sender picks random blinding factors for all outputs it participates in, computes total blinding excess xS
-	 * -Sender picks random nonce kS
-	 * -Sender posts inputs, outputs, Message M=fee, xS * G and kS * G to Receiver
-	*/
 
+	//
+	// -Sender picks random blinding factors for all outputs it participates in, computes total blinding excess xS
+	// -Sender picks random nonce kS
+	// -Sender posts inputs, outputs, Message M=fee, xS * G and kS * G to Receiver
+	//
 	// Create a new aggsig context
 	let blind = blind_sum.secret_key(&keychain.secp())?;
 	keychain.aggsig_create_context(blind);
@@ -118,13 +118,19 @@ pub fn issue_send_tx(
 	 * -Sender posts sS to receiver
 	*/
 	let (_amount, recp_pub_blinding, recp_pub_nonce, sig, tx) = read_partial_tx(keychain, &res.unwrap())?;
-	let res = keychain.aggsig_verify_partial_sig(&sig.unwrap(), &recp_pub_nonce, &recp_pub_blinding, tx.fee, lock_height);
+	let res = keychain.aggsig_verify_partial_sig(
+		&sig.unwrap(),
+		&recp_pub_nonce,
+		&recp_pub_blinding,
+		tx.fee(),
+		lock_height,
+	);
 	if !res {
 		error!(LOGGER, "Partial Sig from recipient invalid.");
 		return Err(Error::Signature(String::from("Partial Sig from recipient invalid.")));
 	}
 
-	let sig_part=keychain.aggsig_calculate_partial_sig(&recp_pub_nonce, tx.fee, tx.lock_height).unwrap();
+	let sig_part = keychain.aggsig_calculate_partial_sig(&recp_pub_nonce, tx.fee(), tx.lock_height()).unwrap();
 
 	// Build the next stage, containing sS (and our pubkeys again, for the recipient's convenience)
 	let mut partial_tx = build_partial_tx(keychain, amount, Some(sig_part), tx);
@@ -146,7 +152,8 @@ pub fn issue_send_tx(
 		rollback_wallet()?;
 		return Err(e);
 	}
-	//All good so
+
+	// All good so
 	update_wallet()?;
 	Ok(())
 }
@@ -227,7 +234,7 @@ pub fn issue_burn_tx(
 	parts.push(build::output(amount - fee, Identifier::zero()));
 
 	// finalize the burn transaction and send
-	let (tx_burn, _) = build::partial_transaction(parts, &keychain)?;
+	let tx_burn = build::transaction(parts, &keychain)?;
 	tx_burn.validate()?;
 
 	let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());

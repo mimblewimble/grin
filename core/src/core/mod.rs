@@ -306,7 +306,7 @@ mod test {
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		// first build a valid tx with corresponding blinding factor
-		let (mut tx, kern, blind) = build::partial_transaction(
+		let tx = build::transaction(
 			vec![
 				input(10, ZERO_HASH, key_id1),
 				output(5, key_id2),
@@ -316,11 +316,13 @@ mod test {
 			&keychain,
 		).unwrap();
 
-		// check the kernel and the tx are both valid
-		kern.verify().unwrap();
-		assert!(tx.kernels.is_empty());
-		tx.kernels.push(kern.clone());
+		// check the tx is valid
 		tx.validate().unwrap();
+
+		// check the kernel is also itself valid
+		assert_eq!(tx.kernels.len(), 1);
+		let kern = &tx.kernels[0];
+		kern.verify().unwrap();
 
 		assert_eq!(kern.features, DEFAULT_KERNEL);
 		assert_eq!(kern.fee, tx.fee());
@@ -409,6 +411,57 @@ mod test {
 		}
 	}
 
+	// #[test]
+	// fn tx_build_aggsig() {
+	// 	let keychain = Keychain::from_random_seed().unwrap();
+	// 	let key_id1 = keychain.derive_key_id(1).unwrap();
+	// 	let key_id2 = keychain.derive_key_id(2).unwrap();
+	// 	let key_id3 = keychain.derive_key_id(3).unwrap();
+	// 	let key_id4 = keychain.derive_key_id(4).unwrap();
+    //
+	// 	let (tx_alice, blind_sum) = {
+	// 		// Alice gets 2 of her pre-existing outputs to send 5 coins to Bob, they
+	// 		// become inputs in the new transaction
+	// 		let (in1, in2) = (input(4, ZERO_HASH, key_id1), input(3, ZERO_HASH, key_id2));
+    //
+	// 		// Alice builds her transaction, with change, which also produces the sum
+	// 		// of blinding factors before they're obscured.
+	// 		let (tx, sum) = build::partial_transaction(
+	// 			vec![in1, in2, output(1, key_id3),
+	// 			with_fee(2)],
+	// 			&keychain,
+	// 		).unwrap();
+    //
+	// 		(tx, sum)
+	// 	};
+    //
+	// 	let blind = blind_sum.secret_key(&keychain.secp())?;
+	// 	keychain.aggsig_create_context(blind);
+	// 	let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys();
+    //
+	// 	let sig_part = keychain.aggsig_calculate_partial_sig(
+	// 		&pub_nonce,
+	// 		tx.fee(),
+	// 		tx.lock_height(),
+	// 	).unwrap();
+    //
+    //
+	// 	// From now on, Bob only has the obscured transaction and the sum of
+	// 	// blinding factors. He adds his output, finalizes the transaction so it's
+	// 	// ready for broadcast.
+	// 	let tx_final = build::transaction(
+	// 		vec![
+	// 			initial_tx(tx_alice),
+	// 			with_excess(blind_sum),
+	// 			output(4, key_id4),
+	// 		],
+	// 		&keychain,
+	// 	).unwrap();
+    //
+	// 	tx_final.validate().unwrap();
+    //
+	// }
+
 	/// Simulate the standard exchange between 2 parties when creating a basic
 	/// 2 inputs, 2 outputs transaction.
 	#[test]
@@ -419,31 +472,28 @@ mod test {
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 		let key_id4 = keychain.derive_key_id(4).unwrap();
 
-		let tx_alice: Transaction;
-		let kern_alice: TxKernel;
-		let blind_sum: BlindingFactor;
-
-		{
+		let (tx_alice, blind_sum) = {
 			// Alice gets 2 of her pre-existing outputs to send 5 coins to Bob, they
 			// become inputs in the new transaction
 			let (in1, in2) = (input(4, ZERO_HASH, key_id1), input(3, ZERO_HASH, key_id2));
 
 			// Alice builds her transaction, with change, which also produces the sum
 			// of blinding factors before they're obscured.
-			let (tx, kern, sum) =
-				build::partial_transaction(vec![in1, in2, output(1, key_id3), with_fee(2)], &keychain)
-					.unwrap();
-			tx_alice = tx;
-			kern_alice = kern;
-			blind_sum = sum;
-		}
+			let (tx, sum) = build::partial_transaction(
+				vec![in1, in2, output(1, key_id3),
+				with_fee(2)],
+				&keychain,
+			).unwrap();
+
+			(tx, sum)
+		};
 
 		// From now on, Bob only has the obscured transaction and the sum of
 		// blinding factors. He adds his output, finalizes the transaction so it's
 		// ready for broadcast.
 		let tx_final = build::transaction(
 			vec![
-				initial_tx(tx_alice, kern_alice),
+				initial_tx(tx_alice),
 				with_excess(blind_sum),
 				output(4, key_id4),
 			],

@@ -294,6 +294,7 @@ impl Keychain {
 		agg_context.output_ids.clone()
 	}
 
+	/// TODO - is this where we "split" the key (so partial sig and final sig are consistent?)
 	/// Returns private key, private nonce
 	pub fn aggsig_get_private_keys(&self) -> (SecretKey, SecretKey) {
 		let context = self.aggsig_context.clone();
@@ -370,6 +371,7 @@ impl Keychain {
 		Ok(sig)
 	}
 
+	// TODO - not convinced this is correct...
 	pub fn aggsig_calculate_final_sig_with_offset(
 		&self,
 		their_sig: &Signature,
@@ -391,6 +393,7 @@ impl Keychain {
 		let mut nonce_sum = their_pub_nonce.clone();
 		let _ = nonce_sum.add_exp_assign(&self.secp, &skey_1);
 		let sig = aggsig::add_signatures_single(&self.secp, their_sig, our_sig, &nonce_sum)?;
+
 		Ok((sig, offset))
 	}
 
@@ -471,6 +474,7 @@ impl Keychain {
 #[cfg(test)]
 mod test {
 	use keychain::{BlindSum, BlindingFactor, Keychain};
+	use util::kernel_sig_msg;
 	use util::secp;
 	use util::secp::pedersen::ProofMessage;
 	use util::secp::key::SecretKey;
@@ -598,5 +602,385 @@ mod test {
 			).unwrap(),
 			BlindingFactor::from_secret_key(skey3),
 		);
+	}
+
+	#[test]
+	fn aggsig_sender_receiver_interaction() {
+		let sender_keychain = Keychain::from_random_seed().unwrap();
+		let receiver_keychain = Keychain::from_random_seed().unwrap();
+
+		// Calculate the kernel excess here for convenience.
+		// Normally this would happen during transaction building.
+		let kernel_excess = {
+			let skey1 = sender_keychain.derived_key(
+				&sender_keychain.derive_key_id(1).unwrap(),
+			).unwrap();
+
+			let skey2 = receiver_keychain.derived_key(
+				&receiver_keychain.derive_key_id(1).unwrap(),
+			).unwrap();
+
+			let keychain = Keychain::from_random_seed().unwrap();
+			let blinding_factor = keychain.blind_sum(
+				&BlindSum::new()
+					.sub_blinding_factor(BlindingFactor::from_secret_key(skey1))
+					.add_blinding_factor(BlindingFactor::from_secret_key(skey2))
+			).unwrap();
+
+			keychain.secp.commit(
+				0,
+				blinding_factor.secret_key(&keychain.secp).unwrap(),
+			).unwrap()
+		};
+
+		// sender starts the tx interaction
+		let (sender_pub_excess, sender_pub_nonce) = {
+			let keychain = sender_keychain.clone();
+			let key_id = keychain.derive_key_id(1).unwrap();
+
+			let skey = keychain.derived_key(
+				&keychain.derive_key_id(1).unwrap(),
+			).unwrap();
+
+			// dealing with an input here so we need to negate the blinding_factor
+			// rather than use it as is
+			let blinding_factor = keychain.blind_sum(
+				&BlindSum::new()
+					.sub_blinding_factor(BlindingFactor::from_secret_key(skey))
+			).unwrap();
+
+			let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
+
+			keychain.aggsig_create_context(blind);
+			keychain.aggsig_get_public_keys()
+		};
+
+		// receiver receives partial tx
+		let (receiver_pub_excess, receiver_pub_nonce, sig_part) = {
+			let keychain = receiver_keychain.clone();
+			let key_id = keychain.derive_key_id(1).unwrap();
+
+			// let blind = blind_sum.secret_key(&keychain.secp())?;
+			let blind = keychain.derived_key(&key_id).unwrap();
+
+			keychain.aggsig_create_context(blind);
+			let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys();
+			keychain.aggsig_add_output(&key_id);
+
+			let sig_part = keychain.aggsig_calculate_partial_sig(
+				&sender_pub_nonce,
+				0,
+				0,
+			).unwrap();
+			(pub_excess, pub_nonce, sig_part)
+		};
+
+		// check the sender can verify the partial signature
+		// received in the response back from the receiver
+		{
+			let keychain = sender_keychain.clone();
+			let sig_verifies = keychain.aggsig_verify_partial_sig(
+				&sig_part,
+				&receiver_pub_nonce,
+				&receiver_pub_excess,
+				0,
+				0,
+			);
+			assert!(sig_verifies);
+		}
+
+		// now sender signs with their key
+		let sender_sig_part = {
+			let keychain = sender_keychain.clone();
+			keychain.aggsig_calculate_partial_sig(
+				&receiver_pub_nonce,
+				0,
+				0,
+			).unwrap()
+		};
+
+		// check the receiver can verify the partial signature
+		// received by the sender
+		{
+			let keychain = receiver_keychain.clone();
+			let sig_verifies = keychain.aggsig_verify_partial_sig(
+				&sender_sig_part,
+				&sender_pub_nonce,
+				&sender_pub_excess,
+				0,
+				0,
+			);
+			assert!(sig_verifies);
+		}
+
+		// Receiver now builds final signature from sender and receiver parts
+		let (final_sig, final_pubkey) = {
+			let keychain = receiver_keychain.clone();
+
+			// Receiver recreates their partial sig (we do not maintain state from earlier)
+			let our_sig_part = keychain.aggsig_calculate_partial_sig(
+				&sender_pub_nonce,
+				0,
+				0,
+			).unwrap();
+
+			// Receiver now generates final signature from the two parts
+			let final_sig = keychain.aggsig_calculate_final_sig(
+				&sender_sig_part,
+				&our_sig_part,
+				&sender_pub_nonce,
+			).unwrap();
+
+			// Receiver calculates the final public key (to verify sig later)
+			let final_pubkey = keychain.aggsig_calculate_final_pubkey(&sender_pub_excess).unwrap();
+
+			(final_sig, final_pubkey)
+		};
+
+		// Receiver checks the final signature verifies
+		{
+			let keychain = receiver_keychain.clone();
+
+			// Receiver check the final signature verifies
+			let sig_verifies = keychain.aggsig_verify_final_sig_build_msg(
+				&final_sig,
+				&final_pubkey,
+				0,
+				0,
+			);
+			assert!(sig_verifies);
+		}
+
+		// Check we can verify the sig using the kernel excess
+		{
+			let keychain = Keychain::from_random_seed().unwrap();
+
+			let msg = secp::Message::from_slice(
+				&kernel_sig_msg(
+					0,
+					0,
+				),
+			).unwrap();
+
+			let sig_verifies = Keychain::aggsig_verify_single_from_commit(
+				&keychain.secp,
+				&final_sig,
+				&msg,
+				&kernel_excess,
+			);
+
+			assert!(sig_verifies);
+		}
+	}
+
+	#[test]
+	fn aggsig_sender_receiver_interaction_offset() {
+		let sender_keychain = Keychain::from_random_seed().unwrap();
+		let receiver_keychain = Keychain::from_random_seed().unwrap();
+
+		// Calculate the kernel excess here for convenience.
+		// Normally this would happen during transaction building.
+		let kernel_excess = {
+			let skey1 = sender_keychain.derived_key(
+				&sender_keychain.derive_key_id(1).unwrap(),
+			).unwrap();
+
+			let skey2 = receiver_keychain.derived_key(
+				&receiver_keychain.derive_key_id(1).unwrap(),
+			).unwrap();
+
+			let keychain = Keychain::from_random_seed().unwrap();
+			let blinding_factor = keychain.blind_sum(
+				&BlindSum::new()
+					.sub_blinding_factor(BlindingFactor::from_secret_key(skey1))
+					.add_blinding_factor(BlindingFactor::from_secret_key(skey2))
+			).unwrap();
+
+			keychain.secp.commit(
+				0,
+				blinding_factor.secret_key(&keychain.secp).unwrap(),
+			).unwrap()
+		};
+
+		// sender starts the tx interaction
+		let (sender_pub_excess, sender_pub_nonce) = {
+			let keychain = sender_keychain.clone();
+			let key_id = keychain.derive_key_id(1).unwrap();
+
+			let skey = keychain.derived_key(
+				&keychain.derive_key_id(1).unwrap(),
+			).unwrap();
+
+			// dealing with an input here so we need to negate the blinding_factor
+			// rather than use it as is
+			let blinding_factor = keychain.blind_sum(
+				&BlindSum::new()
+					.sub_blinding_factor(BlindingFactor::from_secret_key(skey))
+			).unwrap();
+
+			let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
+
+			keychain.aggsig_create_context(blind);
+			keychain.aggsig_get_public_keys()
+		};
+
+		// receiver receives partial tx
+		let (receiver_pub_excess, receiver_pub_nonce, sig_part) = {
+			let keychain = receiver_keychain.clone();
+			let key_id = keychain.derive_key_id(1).unwrap();
+
+			// let blind = blind_sum.secret_key(&keychain.secp())?;
+			let blind = keychain.derived_key(&key_id).unwrap();
+
+			keychain.aggsig_create_context(blind);
+			let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys();
+			keychain.aggsig_add_output(&key_id);
+
+			let sig_part = keychain.aggsig_calculate_partial_sig(
+				&sender_pub_nonce,
+				0,
+				0,
+			).unwrap();
+			(pub_excess, pub_nonce, sig_part)
+		};
+
+		// check the sender can verify the partial signature
+		// received in the response back from the receiver
+		{
+			let keychain = sender_keychain.clone();
+			let sig_verifies = keychain.aggsig_verify_partial_sig(
+				&sig_part,
+				&receiver_pub_nonce,
+				&receiver_pub_excess,
+				0,
+				0,
+			);
+			assert!(sig_verifies);
+		}
+
+		// now sender signs with their key
+		let sender_sig_part = {
+			let keychain = sender_keychain.clone();
+			keychain.aggsig_calculate_partial_sig(
+				&receiver_pub_nonce,
+				0,
+				0,
+			).unwrap()
+		};
+
+		// check the receiver can verify the partial signature
+		// received by the sender
+		{
+			let keychain = receiver_keychain.clone();
+			let sig_verifies = keychain.aggsig_verify_partial_sig(
+				&sender_sig_part,
+				&sender_pub_nonce,
+				&sender_pub_excess,
+				0,
+				0,
+			);
+			assert!(sig_verifies);
+		}
+
+		// Receiver now builds final signature from sender and receiver parts
+		let (final_sig, final_pubkey) = {
+			let keychain = receiver_keychain.clone();
+
+			// Receiver recreates their partial sig (we do not maintain state from earlier)
+			let our_sig_part = keychain.aggsig_calculate_partial_sig(
+				&sender_pub_nonce,
+				0,
+				0,
+			).unwrap();
+
+			// Receiver now generates final signature from the two parts
+			let final_sig = keychain.aggsig_calculate_final_sig(
+				&sender_sig_part,
+				&our_sig_part,
+				&sender_pub_nonce,
+			).unwrap();
+
+			// Receiver calculates the final public key (to verify sig later)
+			let final_pubkey = keychain.aggsig_calculate_final_pubkey(&sender_pub_excess).unwrap();
+
+			(final_sig, final_pubkey)
+		};
+
+		// Receiver checks the final signature verifies
+		{
+			let keychain = receiver_keychain.clone();
+
+			// Receiver check the final signature verifies
+			let sig_verifies = keychain.aggsig_verify_final_sig_build_msg(
+				&final_sig,
+				&final_pubkey,
+				0,
+				0,
+			);
+			assert!(sig_verifies);
+		}
+
+		// Check we can verify the sig using the kernel excess
+		{
+			let keychain = Keychain::from_random_seed().unwrap();
+
+			let msg = secp::Message::from_slice(
+				&kernel_sig_msg(
+					0,
+					0,
+				),
+			).unwrap();
+
+			let sig_verifies = Keychain::aggsig_verify_single_from_commit(
+				&keychain.secp,
+				&final_sig,
+				&msg,
+				&kernel_excess,
+			);
+
+			assert!(sig_verifies);
+		}
+
+		// Alternatively the receiver creates the final signature with an "offset" key
+		// k = k1 + k2 (we sign using k1, and store offset k2 on the tx)
+		// we should be able to verify the signature from the kernel excess k1G
+		// kG = k1G + k2G
+		let (final_offset_sig, offset) = {
+			let keychain = receiver_keychain.clone();
+
+			// Receiver recreates their partial sig (we do not maintain state from earlier)
+			let our_sig_part = keychain.aggsig_calculate_partial_sig(
+				&sender_pub_nonce,
+				0,
+				0,
+			).unwrap();
+
+			keychain.aggsig_calculate_final_sig_with_offset(
+				&sender_sig_part,
+				&our_sig_part,
+				&sender_pub_nonce,
+			).unwrap()
+		};
+
+		// Check we can verify the offset signature with the kernel excess
+		{
+			let keychain = Keychain::from_random_seed().unwrap();
+
+			let msg = secp::Message::from_slice(
+				&kernel_sig_msg(
+					0,
+					0,
+				),
+			).unwrap();
+
+			let sig_verifies = Keychain::aggsig_verify_single_from_commit(
+				&keychain.secp,
+				&final_offset_sig,
+				&msg,
+				&final_excess,
+			);
+
+			assert!(sig_verifies);
+		}
 	}
 }

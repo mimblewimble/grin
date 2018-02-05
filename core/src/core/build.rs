@@ -155,7 +155,10 @@ pub fn with_excess(excess: BlindingFactor) -> Box<Append> {
 }
 
 /// Sets an initial transaction to add to when building a new transaction.
-pub fn initial_tx(tx: Transaction, kern: TxKernel) -> Box<Append> {
+/// We currently only support building a tx with a single kernel with build::transaction()
+pub fn initial_tx(mut tx: Transaction) -> Box<Append> {
+	assert_eq!(tx.kernels.len(), 1);
+	let kern = tx.kernels.remove(0);
 	Box::new(move |_build, (_, _, sum)| -> (Transaction, TxKernel, BlindSum) {
 		(tx.clone(), kern.clone(), sum)
 	})
@@ -174,20 +177,19 @@ pub fn initial_tx(tx: Transaction, kern: TxKernel) -> Box<Append> {
 pub fn partial_transaction(
 	elems: Vec<Box<Append>>,
 	keychain: &keychain::Keychain,
-) -> Result<(Transaction, TxKernel, BlindingFactor), keychain::Error> {
+) -> Result<(Transaction, BlindingFactor), keychain::Error> {
 	let mut ctx = Context { keychain };
-	let (tx, mut kern, sum) = elems.iter().fold(
+	let (mut tx, kern, sum) = elems.iter().fold(
 		(Transaction::empty(), TxKernel::empty(), BlindSum::new()),
 		|acc, elem| elem(&mut ctx, acc),
 	);
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
-	let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
 
-	let skey = blind_sum.secret_key(&keychain.secp())?;
-	kern.excess = ctx.keychain.secp().commit(0, skey)?;
-	kern.excess_sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &blind_sum)?;
+	// we only support building a tx with a single kernel via build::transaction()
+	assert!(tx.kernels.is_empty());
+	tx.kernels.push(kern);
 
-	Ok((tx, kern, blind_sum))
+	Ok((tx, blind_sum))
 }
 
 /// Builds a complete transaction.
@@ -195,14 +197,20 @@ pub fn transaction(
 	elems: Vec<Box<Append>>,
 	keychain: &keychain::Keychain,
 ) -> Result<Transaction, keychain::Error> {
-	let (mut tx, kern, _) = partial_transaction(elems, keychain)?;
+	let (mut tx, blind_sum) = partial_transaction(elems, keychain)?;
+	assert_eq!(tx.kernels.len(), 1);
 
-	assert!(tx.kernels.is_empty());
+	let mut kern = tx.kernels.remove(0);
+	let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
+
+	let skey = blind_sum.secret_key(&keychain.secp())?;
+	kern.excess = keychain.secp().commit(0, skey)?;
+	kern.excess_sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &blind_sum)?;
+
 	tx.kernels.push(kern);
 
 	Ok(tx)
 }
-
 
 // TODO - testing only?
 pub fn transaction_with_offset(

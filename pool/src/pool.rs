@@ -159,9 +159,9 @@ where
 		}
 
 		let head_header = self.blockchain.head_header()?;
-		if head_header.height < tx.lock_height {
+		if head_header.height < tx.lock_height() {
 			return Err(PoolError::ImmatureTransaction {
-				lock_height: tx.lock_height,
+				lock_height: tx.lock_height(),
 			});
 		}
 
@@ -582,7 +582,7 @@ where
 				tx_weight = 1;
 			}
 			let threshold = (tx_weight as u64) * self.config.accept_fee_base;
-			if tx.fee < threshold {
+			if tx.fee() < threshold {
 				return Err(PoolError::LowFeeTransaction(threshold));
 			}
 		}

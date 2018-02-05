@@ -59,9 +59,9 @@ fn handle_sender_initiation(
 	// we don't necessarily want to just trust the sender
 	// we could just overwrite the fee here (but we won't) due to the ecdsa sig
 	let fee = tx_fee(tx.inputs.len(), tx.outputs.len() + 1, None);
-	if fee != tx.fee {
+	if fee != tx.fee() {
 		return Err(Error::FeeDispute {
-			sender_fee: tx.fee,
+			sender_fee: tx.fee(),
 			recipient_fee: fee,
 		});
 	}
@@ -81,8 +81,8 @@ fn handle_sender_initiation(
 
 	let out_amount = amount - fee;
 
-	//First step is just to get the excess sum of the outputs we're participating in
-	//Output and key needs to be stored until transaction finalisation time, somehow
+	// First step is just to get the excess sum of the outputs we're participating in
+	// Output and key needs to be stored until transaction finalisation time, somehow
 
 	let key_id = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		let (key_id, derivation) = next_available_key(&wallet_data, keychain);
@@ -117,7 +117,11 @@ fn handle_sender_initiation(
 	keychain.aggsig_create_context(blind);
 	keychain.aggsig_add_output(&key_id);
 
-	let sig_part=keychain.aggsig_calculate_partial_sig(&sender_pub_nonce, fee, tx.lock_height).unwrap();
+	let sig_part=keychain.aggsig_calculate_partial_sig(
+		&sender_pub_nonce,
+		fee,
+		tx.lock_height(),
+	).unwrap();
 
 	// Build the response, which should contain sR, blinding excess xR * G, public nonce kR * G
 	let mut partial_tx = build_partial_tx(keychain, amount, Some(sig_part), tx);
@@ -145,15 +149,52 @@ fn handle_sender_confirmation(
 ) -> Result<PartialTx, Error> {
 	let (amount, sender_pub_blinding, sender_pub_nonce, sender_sig_part, tx) = read_partial_tx(keychain, partial_tx)?;
 	let sender_sig_part = sender_sig_part.unwrap();
-	let res = keychain.aggsig_verify_partial_sig(&sender_sig_part, &sender_pub_nonce, &sender_pub_blinding, tx.fee, tx.lock_height);
+	let res = keychain.aggsig_verify_partial_sig(
+		&sender_sig_part,
+		&sender_pub_nonce,
+		&sender_pub_blinding,
+		tx.fee(), tx.lock_height(),
+	);
 
 	if !res {
 		error!(LOGGER, "Partial Sig from sender invalid.");
 		return Err(Error::Signature(String::from("Partial Sig from sender invalid.")));
 	}
 
-	//Just calculate our sig part again instead of storing
-	let our_sig_part = keychain.aggsig_calculate_partial_sig(&sender_pub_nonce, tx.fee, tx.lock_height).unwrap();
+	// Just calculate our sig part again instead of storing
+	let our_sig_part = keychain.aggsig_calculate_partial_sig(
+		&sender_pub_nonce,
+		tx.fee(),
+		tx.lock_height(),
+	).unwrap();
+
+	// check we can build the final sig without offset and that everything works as expected
+	{
+		// And the final signature
+		let final_sig = keychain.aggsig_calculate_final_sig(
+			&sender_sig_part,
+			&our_sig_part,
+			&sender_pub_nonce,
+		).unwrap();
+
+		// Calculate the final public key (for our own sanity check)
+		let final_pubkey = keychain.aggsig_calculate_final_pubkey(&sender_pub_blinding).unwrap();
+
+		// Check our final sig verifies
+		let res = keychain.aggsig_verify_final_sig_build_msg(
+			&final_sig,
+			&final_pubkey,
+			tx.fee(),
+			tx.lock_height(),
+		);
+
+		if res {
+			debug!(LOGGER, "*** final aggregated (non-offset) sig looks good ***");
+		} else {
+			error!(LOGGER, "Final aggregated signature invalid.");
+			return Err(Error::Signature(String::from("Final aggregated signature invalid.")));
+		}
+	}
 
 	// And the final signature
 	let (final_sig, offset) = keychain.aggsig_calculate_final_sig_with_offset(
@@ -162,19 +203,19 @@ fn handle_sender_confirmation(
 		&sender_pub_nonce,
 	).unwrap();
 
-	// Calculate the final public key (for our own sanity check)
-	let final_pubkey = keychain.aggsig_calculate_final_pubkey(&sender_pub_blinding).unwrap();
+	// TODO - we split the key and signed using k1 (we think)
+	// so what do we need to do to get k1G in the tx kernel?
 
-	//Check our final sig verifies
-	let res = keychain.aggsig_verify_final_sig_build_msg(&final_sig, &final_pubkey, tx.fee, tx.lock_height);
+	let final_tx = build_final_transaction(
+		config,
+		keychain,
+		amount,
+		&final_excess,
+		&final_sig,
+		&offset,
+		tx.clone(),
+	)?;
 
-	if !res {
-		error!(LOGGER, "Final aggregated signature invalid.");
-		return Err(Error::Signature(String::from("Final aggregated signature invalid.")));
-	}
-
-
-	let final_tx = build_final_transaction(config, keychain, amount, &final_sig, &offset, tx.clone())?;
 	let tx_hex = to_hex(ser::ser_vec(&final_tx).unwrap());
 
 	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
@@ -182,6 +223,7 @@ fn handle_sender_confirmation(
 		.map_err(|e| Error::Node(e))?;
 
 	// Return what we've actually posted
+	// TODO - why build_partial_tx here? Just a naming issue?
 	let mut partial_tx = build_partial_tx(keychain, amount, Some(final_sig), tx);
 	partial_tx.phase = PartialTxPhase::ReceiverConfirmation;
 	Ok(partial_tx)
@@ -202,7 +244,7 @@ impl Handler for WalletReceiver {
 		if let Ok(Some(partial_tx)) = struct_body {
 			match partial_tx.phase {
 				PartialTxPhase::SenderInitiation => {
-					let resp_tx=handle_sender_initiation(&self.config, &self.keychain, &partial_tx)
+					let resp_tx = handle_sender_initiation(&self.config, &self.keychain, &partial_tx)
 					.map_err(|e| {
 						error!(LOGGER, "Phase 1 Sender Initiation -> Problematic partial tx, looks like this: {:?}", partial_tx);
 						api::Error::Internal(
@@ -213,7 +255,7 @@ impl Handler for WalletReceiver {
 					Ok(Response::with((status::Ok, json)))
 				},
 				PartialTxPhase::SenderConfirmation => {
-					let resp_tx=handle_sender_confirmation(&self.config, &self.keychain, &partial_tx)
+					let resp_tx = handle_sender_confirmation(&self.config, &self.keychain, &partial_tx)
 					.map_err(|e| {
 						error!(LOGGER, "Phase 3 Sender Confirmation -> Problematic partial tx, looks like this: {:?}", partial_tx);
 						api::Error::Internal(
@@ -318,6 +360,7 @@ fn build_final_transaction(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
+	excess: &Commitment,
 	excess_sig: &secp::Signature,
 	offset: &BlindingFactor,
 	tx: Transaction,
@@ -328,25 +371,25 @@ fn build_final_transaction(
 	// we don't necessarily want to just trust the sender
 	// we could just overwrite the fee here (but we won't) due to the ecdsa sig
 	let fee = tx_fee(tx.inputs.len(), tx.outputs.len() + 1, None);
-	if fee != tx.fee {
+	if fee != tx.fee() {
 		return Err(Error::FeeDispute {
-			sender_fee: tx.fee,
+			sender_fee: tx.fee(),
 			recipient_fee: fee,
 		});
 	}
 
-    if fee > amount {
+	if fee > amount {
 		info!(
 			LOGGER,
 			"Rejected the transfer because transaction fee ({}) exceeds received amount ({}).",
 			amount_to_hr_string(fee),
 			amount_to_hr_string(amount)
 		);
-        return Err(Error::FeeExceedsAmount {
-            sender_amount: amount,
-            recipient_fee: fee,
-        });
-    }
+		return Err(Error::FeeExceedsAmount {
+			sender_amount: amount,
+			recipient_fee: fee,
+		});
+	}
 
 	let out_amount = amount - fee;
 
@@ -379,6 +422,7 @@ fn build_final_transaction(
 		vec![
 			build::initial_tx(tx),
 			build::output(out_amount, key_id.clone()),
+			build::with_excess(excess.clone()),
 		],
 		keychain,
 	)?;
@@ -387,12 +431,18 @@ fn build_final_transaction(
 	// k = k1 + k2
 	// we signed with k1, excess will be k1G
 	// k2 is the "offset"
-	final_tx.excess_sig = excess_sig.clone();
+	assert_eq!(final_tx.kernels.len(), 1);
+	final_tx.kernels[0].excess_sig = excess_sig.clone();
 	final_tx.offset = offset.clone();
+
+	debug!(LOGGER, "*** does kernel verify?");
+	final_tx.kernels[0].verify()?;
+	debug!(LOGGER, "*** does kernel verify done");
+
 
 	// make sure the resulting transaction is valid
 	// (could have been lied to on excess)
-	let _ = final_tx.validate()?;
+	final_tx.validate()?;
 
 	debug!(
 		LOGGER,
