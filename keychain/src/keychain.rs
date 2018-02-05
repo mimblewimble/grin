@@ -374,32 +374,6 @@ impl Keychain {
 		Ok(sig)
 	}
 
-	// TODO - not convinced this is correct...
-	pub fn aggsig_calculate_final_sig_with_offset(
-		&self,
-		their_sig: &Signature,
-		our_sig: &Signature,
-		their_pub_nonce: &PublicKey,
-	) -> Result<(Signature, BlindingFactor), Error> {
-		let (_, sec_nonce) = self.aggsig_get_private_keys();
-
-		// split sec_nonce (k = k1 + k2)
-		// use k1 to generate the sig
-		// and return k2 as the "offset"
-		let blind = BlindingFactor::from_secret_key(sec_nonce);
-		let split = blind.split(&self.secp)?;
-
-		let skey_1 = split.blind_1.secret_key(&self.secp)?;
-		let offset = split.blind_2;
-
-		// Add public nonces kR*G + kS*G
-		let mut nonce_sum = their_pub_nonce.clone();
-		let _ = nonce_sum.add_exp_assign(&self.secp, &skey_1);
-		let sig = aggsig::add_signatures_single(&self.secp, their_sig, our_sig, &nonce_sum)?;
-
-		Ok((sig, offset))
-	}
-
 	/// Helper function to calculate final public key
 	pub fn aggsig_calculate_final_pubkey(
 		&self,
