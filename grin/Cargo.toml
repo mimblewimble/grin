@@ -21,7 +21,7 @@ slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_
 time = "^0.1"
 serde = "~1.0.8"
 serde_derive = "~1.0.8"
-serde_json = "~1.0.7"
+serde_json = "~1.0.8"
 rand = "^0.3"
 router = "~0.5.1"
 itertools = "~0.6.0"
