@@ -18,7 +18,7 @@ use util::secp::pedersen;
 use api;
 use core::global;
 use core::core::{Output, SwitchCommitHash};
-use core::core::transaction::{COINBASE_OUTPUT, DEFAULT_OUTPUT};
+use core::core::transaction::OutputFeatures;
 use types::{BlockIdentifier, WalletConfig, WalletData, OutputData, OutputStatus, Error};
 use byteorder::{BigEndian, ByteOrder};
 
@@ -87,8 +87,8 @@ fn retrieve_amount_and_coinbase_status(
 
 	let core_output = Output {
 		features: match output.output_type {
-			api::OutputType::Coinbase => COINBASE_OUTPUT,
-			api::OutputType::Transaction => DEFAULT_OUTPUT,
+			api::OutputType::Coinbase => OutputFeatures::COINBASE_OUTPUT,
+			api::OutputType::Transaction => OutputFeatures::DEFAULT_OUTPUT,
 		},
 		proof: output.range_proof()?,
 		switch_commit_hash: output.switch_commit_hash()?,

@@ -27,15 +27,15 @@ use grin_store;
 
 bitflags! {
 /// Options for block validation
-	pub flags Options: u32 {
+	pub struct Options: u32 {
 		/// No flags
-		const NONE = 0b00000000,
+		const NONE = 0b00000000;
 		/// Runs without checking the Proof of Work, mostly to make testing easier.
-		const SKIP_POW = 0b00000001,
+		const SKIP_POW = 0b00000001;
 		/// Adds block while in syncing mode.
-		const SYNC = 0b00000010,
+		const SYNC = 0b00000010;
 		/// Block validation on a block we mined ourselves
-		const MINE = 0b00000100,
+		const MINE = 0b00000100;
 	}
 }
 

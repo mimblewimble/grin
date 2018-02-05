@@ -565,7 +565,7 @@ mod test {
 				.add_blinding_factor(BlindingFactor::new(skey1))
 				.add_blinding_factor(BlindingFactor::new(skey2))
 			).unwrap(),
-			BlindingFactor::new(skey3),
+			BlindingFactor::new(skey3)
 		);
 	}
 }
