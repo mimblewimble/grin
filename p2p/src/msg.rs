@@ -69,20 +69,42 @@ enum_from_primitive! {
 }
 
 /// The default implementation of read_exact is useless with async TcpStream as
-/// will return as soon as something has been read, regardless of completeness.
-/// This implementation will block until it has read exactly `len` bytes and
-/// returns them as a `vec<u8>`. Additionally, a timeout in milliseconds will
-/// abort the read when it's met. Note that the timeout time is approximate.
-pub fn read_exact(conn: &mut TcpStream, mut buf: &mut [u8], timeout: u32) -> io::Result<()> {
+/// it will return as soon as something has been read, regardless of
+/// whether the buffer has been filled (and then errors). This implementation
+/// will block until it has read exactly `len` bytes and returns them as a
+/// `vec<u8>`. Except for a timeout, this implementation will never return a
+/// partially filled buffer.
+///
+/// The timeout in milliseconds aborts the read when it's met. Note that the
+/// time is not guaranteed to be exact. To support cases where we want to poll
+/// instead of blocking, a `block_on_empty` boolean, when false, ensures
+/// `read_exact` returns early with a `io::ErrorKind::WouldBlock` if nothing
+/// has been read from the socket. 
+pub fn read_exact(
+	conn: &mut TcpStream,
+	mut buf: &mut [u8],
+	timeout: u32,
+	block_on_empty: bool,
+) -> io::Result<()> {
+
 	let sleep_time = time::Duration::from_millis(1);
 	let mut count = 0;
 
+	let mut read = 0;
 	loop {
 		match conn.read(buf) {
 			Ok(0) => break,
-			Ok(n) => { let tmp = buf; buf = &mut tmp[n..]; }
+			Ok(n) => {
+				let tmp = buf;
+				buf = &mut tmp[n..];
+				read += n;
+			}
 			Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
-			Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
+			Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+				if read == 0 && !block_on_empty {
+					return Err(io::Error::new(io::ErrorKind::WouldBlock, "read_exact"));
+				}
+			}
 			Err(e) => return Err(e),
 		}
 		if !buf.is_empty() {
@@ -104,7 +126,7 @@ pub fn read_exact(conn: &mut TcpStream, mut buf: &mut [u8], timeout: u32) -> io:
 pub fn read_header(conn: &mut TcpStream) -> Result<MsgHeader, Error> {
 
 	let mut head = vec![0u8; HEADER_LEN as usize];
-	conn.read_exact(&mut head)?;
+	read_exact(conn, &mut head, 10000, false)?;
 	let header = ser::deserialize::<MsgHeader>(&mut &head[..])?;
 	if header.msg_len > MAX_MSG_LEN {
 		// TODO additional restrictions for each msg type to avoid 20MB pings...
@@ -120,7 +142,7 @@ where
 	T: Readable,
 {
 	let mut body = vec![0u8; h.msg_len as usize];
-	read_exact(conn, &mut body, 15000)?;
+	read_exact(conn, &mut body, 20000, true)?;
 	ser::deserialize(&mut &body[..]).map_err(From::from)
 }
 
