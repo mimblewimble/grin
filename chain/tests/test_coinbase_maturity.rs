@@ -116,7 +116,7 @@ fn test_coinbase_maturity() {
 
 	// here we build a tx that attempts to spend the earlier coinbase output
 	// this is not a valid tx as the coinbase output cannot be spent yet
-	let (coinbase_txn, _) = build::transaction(
+	let coinbase_txn = build::transaction(
 		vec![
 			build::coinbase_input(amount, block_hash, key_id1.clone()),
 			build::output(amount - 2, key_id2.clone()),
@@ -183,7 +183,7 @@ fn test_coinbase_maturity() {
 
 	let prev = chain.head_header().unwrap();
 
-	let (coinbase_txn, _) = build::transaction(
+	let coinbase_txn = build::transaction(
 		vec![
 			build::coinbase_input(amount, block_hash, key_id1.clone()),
 			build::output(amount - 2, key_id2.clone()),

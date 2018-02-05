@@ -1241,8 +1241,7 @@ mod tests {
 		}
 		tx_elements.push(build::with_fee(fees as u64));
 
-		let (tx, _) = build::transaction(tx_elements, &keychain).unwrap();
-		tx
+		build::transaction(tx_elements, &keychain).unwrap()
 	}
 
 	fn test_transaction_with_coinbase_input(
@@ -1271,8 +1270,7 @@ mod tests {
 		}
 		tx_elements.push(build::with_fee(fees as u64));
 
-		let (tx, _) = build::transaction(tx_elements, &keychain).unwrap();
-		tx
+		build::transaction(tx_elements, &keychain).unwrap()
 	}
 
 	/// Very un-dry way of building a vanilla tx and adding a lock_height to it.
@@ -1302,8 +1300,7 @@ mod tests {
 		tx_elements.push(build::with_fee(fees as u64));
 
 		tx_elements.push(build::with_lock_height(lock_height));
-		let (tx, _) = build::transaction(tx_elements, &keychain).unwrap();
-		tx
+		build::transaction(tx_elements, &keychain).unwrap()
 	}
 
 	/// Deterministically generate an output defined by our test scheme
