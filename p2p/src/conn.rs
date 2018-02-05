@@ -87,9 +87,8 @@ impl Tracker {
 	where
 		T: ser::Writeable
 	{
-		let (header_buf, body_buf) = write_to_bufs(body, msg_type);
-		self.send_channel.send(header_buf)?;
-		self.send_channel.send(body_buf)?;
+		let buf = write_to_buf(body, msg_type);
+		self.send_channel.send(buf)?;
 		Ok(())
 	}
 }
@@ -175,8 +174,8 @@ where
 	});
 }
 
-fn respond(send_tx: &mpsc::Sender<Vec<u8>>, msg_type: Type, body: Vec<u8>) {
-	let header = ser::ser_vec(&MsgHeader::new(msg_type, body.len() as u64)).unwrap();
-	send_tx.send(header).unwrap();
-	send_tx.send(body).unwrap();
+fn respond(send_tx: &mpsc::Sender<Vec<u8>>, msg_type: Type, mut body: Vec<u8>) {
+	let mut msg = ser::ser_vec(&MsgHeader::new(msg_type, body.len() as u64)).unwrap();
+	msg.append(&mut body);
+	send_tx.send(msg).unwrap();
 }

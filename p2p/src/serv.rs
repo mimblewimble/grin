@@ -65,10 +65,12 @@ impl Server {
 		// start peer monitoring thread
 		let peers_inner = self.peers.clone();
 		let _ = thread::Builder::new().name("p2p-monitor".to_string()).spawn(move || {
-			let total_diff = peers_inner.total_difficulty();
-			let total_height = peers_inner.total_height();
-			peers_inner.check_all(total_diff, total_height);
-			thread::sleep(Duration::from_secs(20));
+			loop {
+				let total_diff = peers_inner.total_difficulty();
+				let total_height = peers_inner.total_height();
+				peers_inner.check_all(total_diff, total_height);
+				thread::sleep(Duration::from_secs(20));
+			}
 		});
 
 		// start TCP listener and handle incoming connections
