@@ -168,40 +168,37 @@ fn handle_sender_confirmation(
 		tx.lock_height(),
 	).unwrap();
 
-	// check we can build the final sig without offset and that everything works as expected
-	{
-		// And the final signature
-		let final_sig = keychain.aggsig_calculate_final_sig(
-			&sender_sig_part,
-			&our_sig_part,
-			&sender_pub_nonce,
-		).unwrap();
-
-		// Calculate the final public key (for our own sanity check)
-		let final_pubkey = keychain.aggsig_calculate_final_pubkey(&sender_pub_blinding).unwrap();
-
-		// Check our final sig verifies
-		let res = keychain.aggsig_verify_final_sig_build_msg(
-			&final_sig,
-			&final_pubkey,
-			tx.fee(),
-			tx.lock_height(),
-		);
-
-		if res {
-			debug!(LOGGER, "*** final aggregated (non-offset) sig looks good ***");
-		} else {
-			error!(LOGGER, "Final aggregated signature invalid.");
-			return Err(Error::Signature(String::from("Final aggregated signature invalid.")));
-		}
-	}
-
 	// And the final signature
-	let (final_sig, offset) = keychain.aggsig_calculate_final_sig_with_offset(
+	let final_sig = keychain.aggsig_calculate_final_sig(
 		&sender_sig_part,
 		&our_sig_part,
 		&sender_pub_nonce,
 	).unwrap();
+
+	// Calculate the final public key (for our own sanity check)
+	let final_pubkey = keychain.aggsig_calculate_final_pubkey(&sender_pub_blinding).unwrap();
+
+	// Check our final sig verifies
+	let res = keychain.aggsig_verify_final_sig_build_msg(
+		&final_sig,
+		&final_pubkey,
+		tx.fee(),
+		tx.lock_height(),
+	);
+
+	if res {
+		debug!(LOGGER, "*** final aggregated (non-offset) sig looks good ***");
+	} else {
+		error!(LOGGER, "Final aggregated signature invalid.");
+		return Err(Error::Signature(String::from("Final aggregated signature invalid.")));
+	}
+
+	// And the final signature
+	// let (final_sig, offset) = keychain.aggsig_calculate_final_sig_with_offset(
+	// 	&sender_sig_part,
+	// 	&our_sig_part,
+	// 	&sender_pub_nonce,
+	// ).unwrap();
 
 	// TODO - we split the key and signed using k1 (we think)
 	// so what do we need to do to get k1G in the tx kernel?
@@ -427,10 +424,6 @@ fn build_final_transaction(
 		keychain,
 	)?;
 
-	// here we overwrite the tx sig and the kernel "offset"
-	// k = k1 + k2
-	// we signed with k1, excess will be k1G
-	// k2 is the "offset"
 	assert_eq!(final_tx.kernels.len(), 1);
 	final_tx.kernels[0].excess_sig = excess_sig.clone();
 	final_tx.offset = offset.clone();

@@ -269,7 +269,7 @@ impl Keychain {
 		Ok(BlindingFactor::from_secret_key(sum))
 	}
 
-	pub fn aggsig_create_context(&self, sec_key:SecretKey) {
+	pub fn aggsig_create_context(&self, sec_key: SecretKey) {
 		let mut context = self.aggsig_context.write().unwrap();
 		*context = Some(AggSigTxContext{
 			sec_key: sec_key,
@@ -294,8 +294,6 @@ impl Keychain {
 		agg_context.output_ids.clone()
 	}
 
-	/// TODO - is this where we "split" the key (so partial sig and final sig are consistent?)
-	/// Returns private key, private nonce
 	pub fn aggsig_get_private_keys(&self) -> (SecretKey, SecretKey) {
 		let context = self.aggsig_context.clone();
 		let context_read=context.read().unwrap();
@@ -345,7 +343,12 @@ impl Keychain {
 		self.aggsig_verify_single(sig, &msg, Some(&nonce_sum), pubkey, true)
 	}
 
-	pub fn aggsig_calculate_partial_sig(&self, other_pub_nonce:&PublicKey, fee:u64, lock_height:u64) -> Result<Signature, Error>{
+	pub fn aggsig_calculate_partial_sig(
+		&self,
+		other_pub_nonce: &PublicKey,
+		fee: u64,
+		lock_height: u64,
+	) -> Result<Signature, Error> {
 		// Add public nonces kR*G + kS*G
 		let (_, sec_nonce) = self.aggsig_get_private_keys();
 		let mut nonce_sum = other_pub_nonce.clone();
@@ -473,6 +476,8 @@ impl Keychain {
 
 #[cfg(test)]
 mod test {
+	use rand::thread_rng;
+
 	use keychain::{BlindSum, BlindingFactor, Keychain};
 	use util::kernel_sig_msg;
 	use util::secp;
@@ -778,6 +783,8 @@ mod test {
 		let sender_keychain = Keychain::from_random_seed().unwrap();
 		let receiver_keychain = Keychain::from_random_seed().unwrap();
 
+		let sender_offset = SecretKey::new(&sender_keychain.secp(), &mut thread_rng());
+
 		// Calculate the kernel excess here for convenience.
 		// Normally this would happen during transaction building.
 		let kernel_excess = {
@@ -793,6 +800,7 @@ mod test {
 			let blinding_factor = keychain.blind_sum(
 				&BlindSum::new()
 					.sub_blinding_factor(BlindingFactor::from_secret_key(skey1))
+					.sub_blinding_factor(BlindingFactor::from_secret_key(sender_offset))
 					.add_blinding_factor(BlindingFactor::from_secret_key(skey2))
 			).unwrap();
 
@@ -805,7 +813,6 @@ mod test {
 		// sender starts the tx interaction
 		let (sender_pub_excess, sender_pub_nonce) = {
 			let keychain = sender_keychain.clone();
-			let key_id = keychain.derive_key_id(1).unwrap();
 
 			let skey = keychain.derived_key(
 				&keychain.derive_key_id(1).unwrap(),
@@ -816,6 +823,7 @@ mod test {
 			let blinding_factor = keychain.blind_sum(
 				&BlindSum::new()
 					.sub_blinding_factor(BlindingFactor::from_secret_key(skey))
+					.sub_blinding_factor(BlindingFactor::from_secret_key(sender_offset))
 			).unwrap();
 
 			let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
@@ -936,48 +944,6 @@ mod test {
 				&final_sig,
 				&msg,
 				&kernel_excess,
-			);
-
-			assert!(sig_verifies);
-		}
-
-		// Alternatively the receiver creates the final signature with an "offset" key
-		// k = k1 + k2 (we sign using k1, and store offset k2 on the tx)
-		// we should be able to verify the signature from the kernel excess k1G
-		// kG = k1G + k2G
-		let (final_offset_sig, offset) = {
-			let keychain = receiver_keychain.clone();
-
-			// Receiver recreates their partial sig (we do not maintain state from earlier)
-			let our_sig_part = keychain.aggsig_calculate_partial_sig(
-				&sender_pub_nonce,
-				0,
-				0,
-			).unwrap();
-
-			keychain.aggsig_calculate_final_sig_with_offset(
-				&sender_sig_part,
-				&our_sig_part,
-				&sender_pub_nonce,
-			).unwrap()
-		};
-
-		// Check we can verify the offset signature with the kernel excess
-		{
-			let keychain = Keychain::from_random_seed().unwrap();
-
-			let msg = secp::Message::from_slice(
-				&kernel_sig_msg(
-					0,
-					0,
-				),
-			).unwrap();
-
-			let sig_verifies = Keychain::aggsig_verify_single_from_commit(
-				&keychain.secp,
-				&final_offset_sig,
-				&msg,
-				&final_excess,
 			);
 
 			assert!(sig_verifies);
