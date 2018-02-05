@@ -14,11 +14,11 @@
 
 use blake2;
 use rand::{thread_rng, Rng};
-use std::{error, fmt, num};
+use std::{fmt};
 use std::fmt::Display;
 use std::convert::From;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 use std::path::Path;
 use std::path::MAIN_SEPARATOR;
 use std::collections::HashMap;
@@ -85,8 +85,8 @@ pub enum ErrorKind {
     #[fail(display = "Fee dispute: sender fee {}, recipient fee {}", sender_fee, recipient_fee)]
     FeeDispute{sender_fee: u64, recipient_fee: u64},
 
-    #[fail(display = "Fee exceeds amount: sender amount {}, recipient amount {}", sender_amount, recipient_amount)]
-    FeeExceedsAmount{sender_amount: u64,recipient_amount: u64},
+    #[fail(display = "Fee exceeds amount: sender amount {}, recipient fee {}", sender_amount, recipient_fee)]
+    FeeExceedsAmount{sender_amount: u64,recipient_fee: u64},
 
     #[fail(display = "Keychain error")]
     Keychain,
@@ -120,10 +120,10 @@ pub enum ErrorKind {
     Uri,
 
     #[fail(display = "Signature error")]
-    Signature,
+    Signature(&'static str),
 
     #[fail(display = "Generic error")]
-    GenericError,
+    GenericError(&'static str),
 }
 
 impl Fail for Error {
@@ -230,7 +230,7 @@ impl BlockIdentifier {
 	}
 
 	pub fn from_str(hex: &str) -> Result<BlockIdentifier, Error> {
-		let hash = Hash::from_hex(hex)?;
+		let hash = Hash::from_hex(hex).context(ErrorKind::GenericError("Invalid hex"))?;
 		Ok(BlockIdentifier(hash))
 	}
 
@@ -356,7 +356,7 @@ impl WalletSeed {
 	}
 
 	fn from_hex(hex: &str) -> Result<WalletSeed, Error> {
-		let bytes = util::from_hex(hex.to_string())?;
+		let bytes = util::from_hex(hex.to_string()).context(ErrorKind::GenericError("Invalid hex"))?;
 		Ok(WalletSeed::from_bytes(&bytes))
 	}
 
@@ -366,7 +366,7 @@ impl WalletSeed {
 
 	pub fn derive_keychain(&self, password: &str) -> Result<keychain::Keychain, Error> {
 		let seed = blake2::blake2b::blake2b(64, &password.as_bytes(), &self.0);
-		let result = keychain::Keychain::from_seed(seed.as_bytes())?;
+		let result = keychain::Keychain::from_seed(seed.as_bytes()).context(ErrorKind::Keychain)?;
 		Ok(result)
 	}
 
@@ -442,13 +442,12 @@ impl WalletData {
 	/// lock).
 	pub fn read_wallet<T, F>(data_file_dir: &str, f: F) -> Result<T, Error>
 	where
-		F: FnOnce(&WalletData) -> T,
+		F: FnOnce(&WalletData) -> Result<T, Error>,
 	{
 		// open the wallet readonly and do what needs to be done with it
 		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
 		let wdat = WalletData::read_or_create(data_file_path)?;
-		let res = f(&wdat);
-		Ok(res)
+		f(&wdat)
 	}
 
 	/// Allows the reading and writing of the wallet data within a file lock.

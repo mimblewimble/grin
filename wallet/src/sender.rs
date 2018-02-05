@@ -22,6 +22,7 @@ use receiver::TxWrapper;
 use types::*;
 use util::LOGGER;
 use util;
+use failure::ResultExt;
 
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
@@ -96,8 +97,8 @@ pub fn issue_send_tx(
 	debug!(LOGGER, "Posting partial transaction to {}", url);
 	let res = client::send_partial_tx(&url, &partial_tx);
 	if let Err(e) = res {
-		match e {
-			Error::FeeExceedsAmount {sender_amount, recipient_fee} =>
+		match e.kind() {
+			ErrorKind::FeeExceedsAmount {sender_amount, recipient_fee} =>
 				error!(
 					LOGGER,
 					"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
@@ -120,7 +121,7 @@ pub fn issue_send_tx(
 	let res = keychain.aggsig_verify_partial_sig(&sig.unwrap(), &recp_pub_nonce, &recp_pub_blinding, tx.fee, lock_height);
 	if !res {
 		error!(LOGGER, "Partial Sig from recipient invalid.");
-		return Err(Error::Signature(String::from("Partial Sig from recipient invalid.")));
+		return Err(ErrorKind::Signature("Partial Sig from recipient invalid."))?;
 	}
 
 	let sig_part=keychain.aggsig_calculate_partial_sig(&recp_pub_nonce, tx.fee, tx.lock_height).unwrap();
@@ -132,8 +133,8 @@ pub fn issue_send_tx(
 	// And send again
 	let res = client::send_partial_tx(&url, &partial_tx);
 	if let Err(e) = res {
-		match e {
-			Error::FeeExceedsAmount {sender_amount, recipient_fee} =>
+		match e.kind() {
+			ErrorKind::FeeExceedsAmount {sender_amount, recipient_fee} =>
 				error!(
 					LOGGER,
 					"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
@@ -167,14 +168,14 @@ fn build_send_tx(
 
 	// select some spendable coins from the wallet
 	let coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		wallet_data.select_coins(
+		Ok(wallet_data.select_coins(
 			key_id.clone(),
 			amount,
 			current_height,
 			minimum_confirmations,
 			max_outputs,
 			selection_strategy_is_use_all,
-		)
+		))
 	})?;
 
 	// build transaction skeleton with inputs and change
@@ -184,7 +185,7 @@ fn build_send_tx(
 	// on tx being sent (based on current chain height via api).
 	parts.push(build::with_lock_height(lock_height));
 
-	let (tx, blind) = build::transaction(parts, &keychain)?;
+	let (tx, blind) = build::transaction(parts, &keychain).context(ErrorKind::Keychain)?;
 
 	Ok((tx, blind, coins, change_key))
 }
@@ -207,14 +208,14 @@ pub fn issue_burn_tx(
 
 	// select some spendable coins from the wallet
 	let coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		wallet_data.select_coins(
+		Ok(wallet_data.select_coins(
 			key_id.clone(),
 			amount,
 			current_height,
 			minimum_confirmations,
 			max_outputs,
 			false,
-		)
+		))
 	})?;
 
 	debug!(LOGGER, "selected some coins - {}", coins.len());
@@ -226,13 +227,13 @@ pub fn issue_burn_tx(
 	parts.push(build::output(amount - fee, Identifier::zero()));
 
 	// finalize the burn transaction and send
-	let (tx_burn, _) = build::transaction(parts, &keychain)?;
-	tx_burn.validate()?;
+	let (tx_burn, _) = build::transaction(parts, &keychain).context(ErrorKind::Keychain)?;
+	tx_burn.validate().context(ErrorKind::Transaction)?;
 
 	let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
 	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
 	let _: () =
-		api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).map_err(|e| Error::Node(e))?;
+		api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).context(ErrorKind::Node)?;
 	Ok(())
 }
 
@@ -247,7 +248,7 @@ fn inputs_and_change(
 	// calculate the total across all inputs, and how much is left
 	let total: u64 = coins.iter().map(|c| c.value).sum();
 	if total < amount {
-		return Err(Error::NotEnoughFunds(total as u64));
+		return Err(ErrorKind::NotEnoughFunds(total as u64))?;
 	}
 
 	// sender is responsible for setting the fee on the partial tx
@@ -264,7 +265,7 @@ fn inputs_and_change(
 
 	// build inputs using the appropriate derived key_ids
 	for coin in coins {
-		let key_id = keychain.derive_key_id(coin.n_child)?;
+		let key_id = keychain.derive_key_id(coin.n_child).context(ErrorKind::Keychain)?;
 		if coin.is_coinbase {
 			parts.push(build::coinbase_input(coin.value, coin.block.hash(), key_id));
 		} else {

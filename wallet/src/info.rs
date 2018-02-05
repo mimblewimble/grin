@@ -64,6 +64,7 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 		table.set_format(*prettytable::format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
 		table.printstd();
 		println!();
+		Ok(())
 	});
 
 	if let Err(_) = result {

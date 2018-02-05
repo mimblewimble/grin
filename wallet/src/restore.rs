@@ -36,7 +36,7 @@ pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 				config.check_node_api_http_addr,
 				e
 			);
-			Err(Error::Node(e))
+			Err(e.context(ErrorKind::Node))?
 		}
 	}
 }
