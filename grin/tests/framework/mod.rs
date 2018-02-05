@@ -288,6 +288,23 @@ impl LocalServerContainer {
 		self.wallet_is_running = true;
 	}
 
+	pub fn get_wallet_seed(config: &WalletConfig) -> wallet::WalletSeed {
+		let _=fs::create_dir_all(config.clone().data_file_dir);
+		wallet::WalletSeed::init_file(config);
+		let wallet_seed =
+			wallet::WalletSeed::from_file(config).expect("Failed to read wallet seed file.");
+		wallet_seed
+	}
+
+	pub fn get_wallet_info(config: &WalletConfig, wallet_seed: &wallet::WalletSeed) -> wallet::WalletInfo {
+		let keychain = wallet_seed.derive_keychain("grin_test").expect(
+			"Failed to derive keychain from seed file and passphrase.",
+		);
+
+		wallet::retrieve_info(config, &keychain)
+
+	}
+
 
 	pub fn send_amount_to(config: &WalletConfig,
 		amount:&str,

@@ -88,6 +88,8 @@ pub enum Error {
 	Signature(String),
 	/// Attempt to use duplicate transaction id in separate transactions
 	DuplicateTransactionId,
+	/// Wallet seed already exists
+	WalletSeedExists,
 	/// Other
 	GenericError(String,)
 }
@@ -397,7 +399,7 @@ impl WalletSeed {
 		debug!(LOGGER, "Generating wallet seed file at: {}", seed_file_path,);
 
 		if Path::new(seed_file_path).exists() {
-			panic!("wallet seed file already exists");
+			Err(Error::WalletSeedExists)
 		} else {
 			let seed = WalletSeed::init_new();
 			let mut file = File::create(seed_file_path)?;
@@ -803,4 +805,26 @@ pub struct CbData {
 	pub output: String,
 	pub kernel: String,
 	pub key_id: String,
+}
+
+/// a contained wallet info struct, so automated tests can parse wallet info
+/// can add more fields here over time as needed
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WalletInfo {
+	// height from which info was taken
+	pub current_height: u64,
+	// total amount in the wallet
+	pub total: u64,
+	// amount awaiting confirmation
+	pub amount_awaiting_confirmation: u64,
+	// confirmed but locked
+	pub amount_confirmed_but_locked: u64,
+	// amount currently spendable
+	pub amount_currently_spendable: u64,
+	// amount locked by previous transactions
+	pub amount_locked: u64,
+	// whether the data was confirmed against a live node
+	pub data_confirmed: bool,
+	// node confirming the data
+	pub data_confirmed_from: String,
 }
