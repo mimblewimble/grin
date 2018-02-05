@@ -26,7 +26,7 @@ use api;
 use core::consensus::reward;
 use core::core::{build, Block, Committed, Output, Transaction, TxKernel, amount_to_hr_string};
 use core::{global, ser};
-use keychain::{Identifier, Keychain, BlindSum, BlindingFactor};
+use keychain::{Identifier, Keychain, BlindingFactor};
 use types::*;
 use util::{LOGGER, to_hex, secp};
 
@@ -186,9 +186,7 @@ fn handle_sender_confirmation(
 		tx.lock_height(),
 	);
 
-	if res {
-		debug!(LOGGER, "*** final aggregated sig looks good ***");
-	} else {
+	if !res {
 		error!(LOGGER, "Final aggregated signature invalid.");
 		return Err(Error::Signature(String::from("Final aggregated signature invalid.")));
 	}
@@ -401,9 +399,6 @@ fn build_final_transaction(
 		(key_id, derivation)
 	})?;
 
-	debug!(LOGGER, "****** build_final_tx: offset: {:?}", kernel_offset);
-	debug!(LOGGER, "****** build_final_tx: tx offset: {:?}", tx.offset);
-
 	// Build final transaction, the sum of which should
 	// be the same as the exchanged excess values
 	let mut final_tx = build::transaction(
@@ -415,34 +410,25 @@ fn build_final_transaction(
 		keychain,
 	)?;
 
-	// manually sum the input/output commitments on the final tx
-	let original_excess = final_tx.sum_commitments().unwrap();
+	// build the final excess based on final tx and offset
+	let final_excess = {
+		// sum the input/output commitments on the final tx
+		let tx_excess = final_tx.sum_commitments()?;
 
-	debug!(LOGGER, "*** excess on kernel right now: {:?}", final_tx.kernels[0].excess);
-	debug!(LOGGER, "*** excess from summing commits: {:?}", original_excess);
+		// subtract the kernel_excess (built from kernel_offset)
+		let offset_excess = keychain.secp().commit(0, kernel_offset.secret_key(&keychain.secp()).unwrap()).unwrap();
+		keychain.secp().commit_sum(vec![tx_excess], vec![offset_excess])?
+	};
 
-	let offset_excess = keychain.secp().commit(0, kernel_offset.secret_key(&keychain.secp()).unwrap()).unwrap();
-	let final_excess = keychain.secp().commit_sum(vec![original_excess], vec![offset_excess]).unwrap();
-
-
-	debug!(LOGGER, "****** build_final_tx: final tx offset: {:?}", final_tx.offset);
-
-
-
-	// TODO - what to do here??? aggsig with offset/split key
-
-
+	// update the tx kernel to reflect the offset excess and sig
 	assert_eq!(final_tx.kernels.len(), 1);
 	final_tx.kernels[0].excess = final_excess.clone();
 	final_tx.kernels[0].excess_sig = excess_sig.clone();
 
-	debug!(LOGGER, "*** does kernel verify?");
+	// confirm the kernel verifies successfully before proceeding
 	final_tx.kernels[0].verify()?;
-	debug!(LOGGER, "*** does kernel verify done");
 
-
-	// make sure the resulting transaction is valid
-	// (could have been lied to on excess)
+	// confirm the overall transaction is valid (including the updated kernel)
 	final_tx.validate()?;
 
 	debug!(

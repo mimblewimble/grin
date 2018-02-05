@@ -726,9 +726,6 @@ pub fn build_partial_tx(
 	part_sig: Option<secp::Signature>,
 	tx: Transaction,
 ) -> PartialTx {
-
-	debug!(LOGGER, "********** build_partial_tx: offset here: {:?}", kernel_offset);
-
 	let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys();
 	let mut pub_excess = pub_excess.serialize_vec(keychain.secp(), true).clone();
 	let len = pub_excess.clone().len();
