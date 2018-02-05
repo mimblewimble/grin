@@ -25,6 +25,7 @@ tokio-retry="~0.1.0"
 router = "~0.5.1"
 prettytable-rs = "^0.6"
 term = "~0.4.6"
+uuid = { version = "~0.5.1", features = ["serde", "v4"] }
 grin_api = { path = "../api" }
 grin_core = { path = "../core" }
 grin_keychain = { path = "../keychain" }

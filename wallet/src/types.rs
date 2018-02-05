@@ -15,6 +15,7 @@
 use blake2;
 use rand::{thread_rng, Rng};
 use std::{error, fmt, num};
+use uuid::Uuid;
 use std::convert::From;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -85,6 +86,9 @@ pub enum Error {
 	Uri(hyper::error::UriError),
 	/// Error with signatures during exchange
 	Signature(String),
+	/// Attempt to use duplicate transaction id in separate transactions
+	DuplicateTransactionId,
+	/// Other
 	GenericError(String,)
 }
 
@@ -707,6 +711,7 @@ pub enum PartialTxPhase {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PartialTx {
 	pub phase:  PartialTxPhase,
+	pub id: Uuid,
 	pub amount: u64,
 	pub public_blind_excess: String,
 	pub public_nonce: String,
@@ -718,13 +723,14 @@ pub struct PartialTx {
 /// aggsig_tx_context should contain the private key/nonce pair
 /// the resulting partial tx will contain the corresponding public keys
 pub fn build_partial_tx(
+	transaction_id : &Uuid,
 	keychain: &keychain::Keychain,
 	receive_amount: u64,
 	part_sig: Option<secp::Signature>,
 	tx: Transaction,
 ) -> PartialTx {
 
-	let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys();
+	let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys(transaction_id);
 	let mut pub_excess = pub_excess.serialize_vec(keychain.secp(), true).clone();
 	let len = pub_excess.clone().len();
 	let pub_excess: Vec<_> = pub_excess.drain(0..len).collect();
@@ -735,6 +741,7 @@ pub fn build_partial_tx(
 
 	PartialTx {
 		phase: PartialTxPhase::SenderInitiation,
+		id : transaction_id.clone(),
 		amount: receive_amount,
 		public_blind_excess: util::to_hex(pub_excess),
 		public_nonce: util::to_hex(pub_nonce),

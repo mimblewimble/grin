@@ -24,6 +24,7 @@ use util::secp::aggsig;
 use util::logger::LOGGER;
 use util::kernel_sig_msg;
 use blake2;
+use uuid::Uuid;
 use blind::{BlindSum, BlindingFactor};
 use extkey::{self, Identifier};
 
@@ -32,6 +33,7 @@ pub enum Error {
 	ExtendedKey(extkey::Error),
 	Secp(secp::Error),
 	KeyDerivation(String),
+	Transaction(String),
 }
 
 impl From<secp::Error> for Error {
@@ -62,7 +64,7 @@ pub struct AggSigTxContext {
 pub struct Keychain {
 	secp: Secp256k1,
 	extkey: extkey::ExtendedKey,
-	pub aggsig_context: Arc<RwLock<Option<AggSigTxContext>>>,
+	pub aggsig_contexts: Arc<RwLock<Option<HashMap<Uuid,AggSigTxContext>>>>,
 	key_overrides: HashMap<Identifier, SecretKey>,
 	key_derivation_cache: Arc<RwLock<HashMap<Identifier, u32>>>,
 }
@@ -91,7 +93,7 @@ impl Keychain {
 		let keychain = Keychain {
 			secp: secp,
 			extkey: extkey,
-			aggsig_context: Arc::new(RwLock::new(None)),
+			aggsig_contexts: Arc::new(RwLock::new(None)),
 			key_overrides: HashMap::new(),
 			key_derivation_cache: Arc::new(RwLock::new(HashMap::new())),
 		};
@@ -269,74 +271,109 @@ impl Keychain {
 		Ok(BlindingFactor::new(blinding))
 	}
 
-	pub fn aggsig_create_context(&self, sec_key:SecretKey) {
-		let mut context = self.aggsig_context.write().unwrap();
-		*context = Some(AggSigTxContext{
+	pub fn aggsig_create_context(&self, transaction_id: &Uuid, sec_key:SecretKey) 
+		-> Result<(), Error>{
+		let mut contexts = self.aggsig_contexts.write().unwrap();
+		if contexts.is_none() {
+			*contexts = Some(HashMap::new())
+		}
+		if contexts.as_mut().unwrap().contains_key(transaction_id) {
+			return Err(Error::Transaction(String::from("Duplication transaction id")));
+		}
+		contexts.as_mut().unwrap().insert(transaction_id.clone(), AggSigTxContext{
 			sec_key: sec_key,
 			sec_nonce: aggsig::export_secnonce_single(&self.secp).unwrap(),
 			output_ids: vec![],
 		});
+		Ok(())
 	}
 
 	/// Tracks an output contributing to my excess value (if it needs to
 	/// be kept between invocations
-	pub fn aggsig_add_output(&self, id: &Identifier){
-		let mut agg_context=self.aggsig_context.write().unwrap();
-		let agg_context_write=agg_context.as_mut().unwrap();
-		agg_context_write.output_ids.push(id.clone());
+	pub fn aggsig_add_output(&self, transaction_id: &Uuid, output_id:&Identifier){
+		let mut agg_contexts = self.aggsig_contexts.write().unwrap();
+		let mut agg_contexts_local = agg_contexts.as_mut().unwrap().clone();
+		let mut agg_context = agg_contexts_local.get(transaction_id).unwrap().clone();
+		agg_context.output_ids.push(output_id.clone());
+		agg_contexts_local.insert(transaction_id.clone(), agg_context);
+		*agg_contexts = Some(agg_contexts_local);
 	}
 
 	/// Returns all stored outputs
-	pub fn aggsig_get_outputs(&self) -> Vec<Identifier> {
-		let context = self.aggsig_context.clone();
-		let context_read=context.read().unwrap();
-		let agg_context=context_read.as_ref().unwrap();
-		agg_context.output_ids.clone()
+	pub fn aggsig_get_outputs(&self, transaction_id: &Uuid) -> Vec<Identifier> {
+		let contexts = self.aggsig_contexts.clone();
+		let contexts_read = contexts.read().unwrap();
+		let agg_context = contexts_read.as_ref().unwrap();
+		let agg_context_return = agg_context.get(transaction_id);
+		agg_context_return.unwrap().output_ids.clone()
 	}
 
 	/// Returns private key, private nonce
-	pub fn aggsig_get_private_keys(&self) -> (SecretKey, SecretKey) {
-		let context = self.aggsig_context.clone();
-		let context_read=context.read().unwrap();
-		let agg_context=context_read.as_ref().unwrap();
-		(agg_context.sec_key.clone(),
-		agg_context.sec_nonce.clone())
+	pub fn aggsig_get_private_keys(&self, transaction_id: &Uuid) -> (SecretKey, SecretKey) {
+		let contexts = self.aggsig_contexts.clone();
+		let contexts_read=contexts.read().unwrap();
+		let agg_context = contexts_read.as_ref().unwrap();
+		let agg_context_return = agg_context.get(transaction_id);
+		(agg_context_return.unwrap().sec_key.clone(),
+		agg_context_return.unwrap().sec_nonce.clone())
 	}
 
 	/// Returns public key, public nonce
-	pub fn aggsig_get_public_keys(&self) -> (PublicKey, PublicKey) {
-		let context = self.aggsig_context.clone();
-		let context_read=context.read().unwrap();
-		let agg_context=context_read.as_ref().unwrap();
-		(PublicKey::from_secret_key(&self.secp, &agg_context.sec_key).unwrap(),
-		PublicKey::from_secret_key(&self.secp, &agg_context.sec_nonce).unwrap())
+	pub fn aggsig_get_public_keys(&self, transaction_id: &Uuid) -> (PublicKey, PublicKey) {
+		let contexts = self.aggsig_contexts.clone();
+		let contexts_read=contexts.read().unwrap();
+		let agg_context = contexts_read.as_ref().unwrap();
+		let agg_context_return = agg_context.get(transaction_id);
+		(PublicKey::from_secret_key(&self.secp, &agg_context_return.unwrap().sec_key).unwrap(),
+		PublicKey::from_secret_key(&self.secp, &agg_context_return.unwrap().sec_nonce).unwrap())
 	}
 
 	/// Note 'secnonce' here is used to perform the signature, while 'pubnonce' just allows you to
 	/// provide a custom public nonce to include while calculating e
 	/// nonce_sum is the sum used to decide whether secnonce should be inverted during sig time
-	pub fn aggsig_sign_single(&self, msg: &Message, secnonce:Option<&SecretKey>, pubnonce: Option<&PublicKey>, nonce_sum: Option<&PublicKey>) -> Result<Signature, Error> {
-		let context = self.aggsig_context.clone();
-		let context_read=context.read().unwrap();
-		let agg_context=context_read.as_ref().unwrap();
-		let sig = aggsig::sign_single(&self.secp, msg, &agg_context.sec_key, secnonce, pubnonce, nonce_sum)?;
+	pub fn aggsig_sign_single(&self,
+		transaction_id: &Uuid,
+		msg: &Message,
+		secnonce:Option<&SecretKey>,
+		pubnonce: Option<&PublicKey>,
+		nonce_sum: Option<&PublicKey>) -> Result<Signature, Error> {
+		let contexts = self.aggsig_contexts.clone();
+		let contexts_read=contexts.read().unwrap();
+		let agg_context = contexts_read.as_ref().unwrap();
+		let agg_context_return = agg_context.get(transaction_id);
+		let sig = aggsig::sign_single(&self.secp, msg, &agg_context_return.unwrap().sec_key, secnonce, pubnonce, nonce_sum)?;
 		Ok(sig)
 	}
 
 	//Verifies an aggsig signature
-	pub fn aggsig_verify_single(&self, sig: &Signature, msg: &Message, pubnonce:Option<&PublicKey>, pubkey:&PublicKey, is_partial:bool) -> bool {
+	pub fn aggsig_verify_single(&self,
+		sig: &Signature,
+		msg: &Message,
+		pubnonce:Option<&PublicKey>,
+		pubkey:&PublicKey,
+		is_partial:bool) -> bool {
 		aggsig::verify_single(&self.secp, sig, msg, pubnonce, pubkey, is_partial)
 	}
 
 	//Verifies other final sig corresponds with what we're expecting
-	pub fn aggsig_verify_final_sig_build_msg(&self, sig: &Signature, pubkey: &PublicKey, fee: u64, lock_height:u64) -> bool {
+	pub fn aggsig_verify_final_sig_build_msg(&self,
+		sig: &Signature,
+		pubkey: &PublicKey,
+		fee: u64,
+		lock_height:u64) -> bool {
 		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height)).unwrap();
 		self.aggsig_verify_single(sig, &msg, None, pubkey, true)
 	}
 
 	//Verifies other party's sig corresponds with what we're expecting
-	pub fn aggsig_verify_partial_sig(&self, sig: &Signature, other_pub_nonce:&PublicKey, pubkey:&PublicKey, fee: u64, lock_height:u64) -> bool {
-		let (_, sec_nonce) = self.aggsig_get_private_keys();
+	pub fn aggsig_verify_partial_sig(&self,
+		transaction_id: &Uuid,
+		sig: &Signature,
+		other_pub_nonce:&PublicKey,
+		pubkey:&PublicKey,
+		fee: u64,
+		lock_height:u64) -> bool {
+		let (_, sec_nonce) = self.aggsig_get_private_keys(transaction_id);
 		let mut nonce_sum = other_pub_nonce.clone();
 		let _ = nonce_sum.add_exp_assign(&self.secp, &sec_nonce);
 		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height)).unwrap();
@@ -344,21 +381,29 @@ impl Keychain {
 		self.aggsig_verify_single(sig, &msg, Some(&nonce_sum), pubkey, true)
 	}
 
-	pub fn aggsig_calculate_partial_sig(&self, other_pub_nonce:&PublicKey, fee:u64, lock_height:u64) -> Result<Signature, Error>{
+	pub fn aggsig_calculate_partial_sig(&self,
+		transaction_id: &Uuid,
+		other_pub_nonce:&PublicKey,
+		fee:u64,
+		lock_height:u64) -> Result<Signature, Error>{
 		// Add public nonces kR*G + kS*G
-		let (_, sec_nonce) = self.aggsig_get_private_keys();
+		let (_, sec_nonce) = self.aggsig_get_private_keys(transaction_id);
 		let mut nonce_sum = other_pub_nonce.clone();
 		let _ = nonce_sum.add_exp_assign(&self.secp, &sec_nonce);
 		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
 
 		//Now calculate signature using message M=fee, nonce in e=nonce_sum
-		self.aggsig_sign_single(&msg, Some(&sec_nonce), Some(&nonce_sum), Some(&nonce_sum))
+		self.aggsig_sign_single(transaction_id, &msg, Some(&sec_nonce), Some(&nonce_sum), Some(&nonce_sum))
 	}
 
 	/// Helper function to calculate final singature
-	pub fn aggsig_calculate_final_sig(&self, their_sig: &Signature, our_sig: &Signature, their_pub_nonce: &PublicKey) -> Result<Signature, Error> {
+	pub fn aggsig_calculate_final_sig(&self,
+		transaction_id: &Uuid,
+		their_sig: &Signature,
+		our_sig: &Signature,
+		their_pub_nonce: &PublicKey) -> Result<Signature, Error> {
 		// Add public nonces kR*G + kS*G
-		let (_, sec_nonce) = self.aggsig_get_private_keys();
+		let (_, sec_nonce) = self.aggsig_get_private_keys(transaction_id);
 		let mut nonce_sum = their_pub_nonce.clone();
 		let _ = nonce_sum.add_exp_assign(&self.secp, &sec_nonce);
 		let sig = aggsig::add_signatures_single(&self.secp, their_sig, our_sig, &nonce_sum)?;
@@ -368,9 +413,10 @@ impl Keychain {
 	/// Helper function to calculate final public key
 	pub fn aggsig_calculate_final_pubkey(
 		&self,
+		transaction_id: &Uuid,
 		their_public_key: &PublicKey,
 	) -> Result<PublicKey, Error> {
-		let (our_sec_key, _) = self.aggsig_get_private_keys();
+		let (our_sec_key, _) = self.aggsig_get_private_keys(transaction_id);
 		let mut pk_sum = their_public_key.clone();
 		let _ = pk_sum.add_exp_assign(&self.secp, &our_sec_key);
 		Ok(pk_sum)
