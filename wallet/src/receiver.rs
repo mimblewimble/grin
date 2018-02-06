@@ -188,7 +188,6 @@ fn handle_sender_confirmation(
 
 	// Check our final sig verifies
 	let res = keychain.aggsig_verify_final_sig_build_msg(
-		&partial_tx.id,
 		&final_sig,
 		&final_pubkey,
 		tx.fee(),

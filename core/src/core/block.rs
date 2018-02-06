@@ -131,7 +131,7 @@ pub struct BlockHeader {
 	pub difficulty: Difficulty,
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
-
+	/// The single aggregate "offset" that needs to be applied for all commitments to sum
 	pub kernel_offset: BlindingFactor,
 }
 

@@ -183,13 +183,14 @@ impl TxKernel {
 		Ok(())
 	}
 
+	/// Build an empty tx kernel with zero values.
 	pub fn empty() -> TxKernel {
 		TxKernel {
 			features: KernelFeatures::DEFAULT_KERNEL,
 			fee: 0,
 			lock_height: 0,
 			excess: Commitment::from_vec(vec![0; 33]),
-			excess_sig: Signature::from_raw_data(&[0;64]).unwrap(),
+			excess_sig: Signature::from_raw_data(&[0; 64]).unwrap(),
 		}
 	}
 
@@ -210,15 +211,14 @@ impl TxKernel {
 /// A transaction
 #[derive(Debug, Clone)]
 pub struct Transaction {
-	/// Set of inputs spent by the transaction.
+	/// List of inputs spent by the transaction.
 	pub inputs: Vec<Input>,
-	/// Set of outputs the transaction produces.
+	/// List of outputs the transaction produces.
 	pub outputs: Vec<Output>,
-
+	/// List of kernels that make up this transaction (usually a single kernel).
 	pub kernels: Vec<TxKernel>,
-
 	/// The kernel "offset" k2
-	/// excess is k1G and we split out key k = k1 + k2
+	/// excess is k1G after splitting the key k = k1 + k2
 	pub offset: BlindingFactor,
 }
 
@@ -314,6 +314,8 @@ impl Transaction {
 		}
 	}
 
+	/// Creates a new transaction using this transaction as a template
+	/// and with the specified offset.
 	pub fn with_offset(self, offset: BlindingFactor) -> Transaction {
 		Transaction {
 			offset: offset,
@@ -345,15 +347,24 @@ impl Transaction {
 		}
 	}
 
+	/// Total fee for a transaction is the sum of fees of all kernels.
 	pub fn fee(&self) -> u64 {
 		self.kernels.iter().fold(0, |acc, ref x| acc + x.fee)
 	}
 
+	/// Lock height of a transaction is the max lock height of the kernels.
 	pub fn lock_height(&self) -> u64 {
 		self.kernels.iter().fold(0, |acc, ref x| max(acc, x.lock_height))
 	}
 
+	/// To verify transaction kernels we check that -
+	///  * all kernels have an even fee
+	///  * sum of input/output commitments matches sum of kernel commitments after applying offset
+	///  * each kernel sig is valid (i.e. tx commitments sum to zero, given above is true)
 	fn verify_kernels(&self) -> Result<(), Error> {
+		// check that each individual kernel fee is even
+		// TODO - is this strictly necessary given that we check overall tx fee?
+		// TODO - move this into verify_fee() check or maybe kernel.verify()?
 		for k in &self.kernels {
 			if k.fee & 1 != 0 {
 				return Err(Error::OddKernelFee);
