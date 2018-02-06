@@ -12,7 +12,7 @@ use std::clone::Clone;
 use std::sync::RwLock;
 
 use core::core::{block, hash, transaction};
-use core::core::{COINBASE_OUTPUT, Input, OutputIdentifier};
+use core::core::{OutputFeatures, Input, OutputIdentifier};
 use core::global;
 use core::core::hash::Hashed;
 use types::{BlockChain, PoolError};
@@ -114,7 +114,7 @@ impl BlockChain for DummyChainImpl {
 	}
 
 	fn is_matured(&self, input: &Input, height: u64) -> Result<(), PoolError> {
-		if !input.features.contains(COINBASE_OUTPUT) {
+		if !input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
 			return Ok(());
 		}
 		let block_hash = input.out_block.expect("requires a block hash");

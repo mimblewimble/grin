@@ -319,7 +319,7 @@ mod test {
 		let tx_kernel = tx.build_kernel(excess);
 		let _ = tx_kernel.verify().unwrap();
 
-		assert_eq!(tx_kernel.features, DEFAULT_KERNEL);
+		assert_eq!(tx_kernel.features, KernelFeatures::DEFAULT_KERNEL);
 		assert_eq!(tx_kernel.fee, tx.fee);
 		assert_eq!(tx_kernel.excess, excess);
 	}

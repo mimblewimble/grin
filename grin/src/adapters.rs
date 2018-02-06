@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use rand;
 use rand::Rng;
 
-use chain::{self, ChainAdapter, Options, MINE};
+use chain::{self, ChainAdapter, Options};
 use core::core;
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
@@ -350,9 +350,9 @@ impl NetToChainAdapter {
 	/// Prepare options for the chain pipeline
 	fn chain_opts(&self) -> chain::Options {
 		let opts = if self.currently_syncing.load(Ordering::Relaxed) {
-			chain::SYNC
+			chain::Options::SYNC
 		} else {
-			chain::NONE
+			chain::Options::NONE
 		};
 		opts
 	}
@@ -384,7 +384,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 		// If block contains txs then broadcast the compact block.
 		// If we received the block from another node then broadcast "header first"
 		// to minimize network traffic.
-		if opts.contains(MINE) {
+		if opts.contains(Options::MINE) {
 			// propagate compact block out if we mined the block
 			// but broadcast full block if we have no txs
 			let cb = b.as_compact_block();

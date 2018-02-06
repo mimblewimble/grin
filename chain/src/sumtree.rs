@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use core::core::{Block, SumCommit, Input, Output, OutputIdentifier, TxKernel, COINBASE_OUTPUT};
+use core::core::{Block, SumCommit, Input, Output, OutputIdentifier, TxKernel, OutputFeatures};
 use core::core::pmmr::{HashSum, NoSum, Summable, PMMR};
 use core::core::hash::Hashed;
 use grin_store;
@@ -134,7 +134,7 @@ impl SumTrees {
 		// it claims to be spending, and that it is coinbase or non-coinbase.
 		// If we are spending a coinbase output then go find the block
 		// and check the coinbase maturity rule is being met.
-		if input.features.contains(COINBASE_OUTPUT) {
+		if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
 			let block_hash = &input.out_block
 				.expect("input spending coinbase output must have a block hash");
 			let block = self.commit_index.get_block(&block_hash)?;
@@ -280,7 +280,7 @@ impl<'a> Extension<'a> {
 		// yet and it will be needed to calculate that hash. to work around this,
 		// we insert coinbase outputs first to add at least one output of padding
 		for out in &b.outputs {
-			if out.features.contains(COINBASE_OUTPUT) {
+			if out.features.contains(OutputFeatures::COINBASE_OUTPUT) {
 				self.apply_output(out)?;
 			}
 		}
@@ -293,7 +293,7 @@ impl<'a> Extension<'a> {
 
 		// now all regular, non coinbase outputs
 		for out in &b.outputs {
-			if !out.features.contains(COINBASE_OUTPUT) {
+			if !out.features.contains(OutputFeatures::COINBASE_OUTPUT) {
 				self.apply_output(out)?;
 			}
 		}
@@ -336,7 +336,7 @@ impl<'a> Extension<'a> {
 				// it claims to be spending, and it is coinbase or non-coinbase.
 				// If we are spending a coinbase output then go find the block
 				// and check the coinbase maturity rule is being met.
-				if input.features.contains(COINBASE_OUTPUT) {
+				if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
 					let block_hash = &input.out_block
 						.expect("input spending coinbase output must have a block hash");
 					let block = self.commit_index.get_block(&block_hash)?;

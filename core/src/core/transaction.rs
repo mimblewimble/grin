@@ -38,11 +38,11 @@ pub const SWITCH_COMMIT_KEY_SIZE: usize = 32;
 
 bitflags! {
 	/// Options for a kernel's structure or use
-	pub flags KernelFeatures: u8 {
+	pub struct KernelFeatures: u8 {
 		/// No flags
-		const DEFAULT_KERNEL = 0b00000000,
+		const DEFAULT_KERNEL = 0b00000000;
 		/// Kernel matching a coinbase output
-		const COINBASE_KERNEL = 0b00000001,
+		const COINBASE_KERNEL = 0b00000001;
 	}
 }
 
@@ -348,7 +348,7 @@ impl Transaction {
 	/// Builds a transaction kernel
 	pub fn build_kernel(&self, excess: Commitment) -> TxKernel {
 		TxKernel {
-			features: DEFAULT_KERNEL,
+			features: KernelFeatures::DEFAULT_KERNEL,
 			excess: excess,
 			excess_sig: self.excess_sig.clone(),
 			fee: self.fee,
@@ -408,7 +408,7 @@ impl Writeable for Input {
 		writer.write_u8(self.features.bits())?;
 		writer.write_fixed_bytes(&self.commit)?;
 
-		if self.features.contains(COINBASE_OUTPUT) {
+		if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
 			writer.write_fixed_bytes(&self.out_block.unwrap_or(ZERO_HASH))?;
 		}
 
@@ -426,7 +426,7 @@ impl Readable for Input {
 
 		let commit = Commitment::read(reader)?;
 
-		let out_block = if features.contains(COINBASE_OUTPUT) {
+		let out_block = if features.contains(OutputFeatures::COINBASE_OUTPUT) {
 			Some(Hash::read(reader)?)
 		} else {
 			None
@@ -469,11 +469,11 @@ impl Input {
 bitflags! {
 	/// Options for block validation
 	#[derive(Serialize, Deserialize)]
-	pub flags OutputFeatures: u8 {
+	pub struct OutputFeatures: u8 {
 		/// No flags
-		const DEFAULT_OUTPUT = 0b00000000,
+		const DEFAULT_OUTPUT = 0b00000000;
 		/// Output is a coinbase output, must not be spent until maturity
-		const COINBASE_OUTPUT = 0b00000001,
+		const COINBASE_OUTPUT = 0b00000001;
 	}
 }
 
@@ -920,7 +920,7 @@ mod test {
 		let sig = secp::Signature::from_raw_data(&[0;64]).unwrap();
 
 		let kernel = TxKernel {
-			features: DEFAULT_KERNEL,
+			features: KernelFeatures::DEFAULT_KERNEL,
 			lock_height: 0,
 			excess: commit,
 			excess_sig: sig.clone(),
@@ -930,7 +930,7 @@ mod test {
 		let mut vec = vec![];
 		ser::serialize(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, DEFAULT_KERNEL);
+		assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
 		assert_eq!(kernel2.lock_height, 0);
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
@@ -938,7 +938,7 @@ mod test {
 
 		// now check a kernel with lock_height serializes/deserializes correctly
 		let kernel = TxKernel {
-			features: DEFAULT_KERNEL,
+			features: KernelFeatures::DEFAULT_KERNEL,
 			lock_height: 100,
 			excess: commit,
 			excess_sig: sig.clone(),
@@ -948,7 +948,7 @@ mod test {
 		let mut vec = vec![];
 		ser::serialize(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, DEFAULT_KERNEL);
+		assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
 		assert_eq!(kernel2.lock_height, 100);
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
@@ -970,7 +970,7 @@ mod test {
 		let proof = keychain.range_proof(5, &key_id, commit, msg).unwrap();
 
 		let out = Output {
-			features: DEFAULT_OUTPUT,
+			features: OutputFeatures::DEFAULT_OUTPUT,
 			commit: commit,
 			switch_commit_hash: switch_commit_hash,
 			proof: proof,
@@ -980,7 +980,7 @@ mod test {
 		ser::serialize(&mut vec, &out).expect("serialized failed");
 		let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
 
-		assert_eq!(dout.features, DEFAULT_OUTPUT);
+		assert_eq!(dout.features, OutputFeatures::DEFAULT_OUTPUT);
 		assert_eq!(dout.commit, out.commit);
 		assert_eq!(dout.proof, out.proof);
 	}
@@ -1001,7 +1001,7 @@ mod test {
 		let proof = keychain.range_proof(1003, &key_id, commit, msg).unwrap();
 
 		let output = Output {
-			features: DEFAULT_OUTPUT,
+			features: OutputFeatures::DEFAULT_OUTPUT,
 			commit: commit,
 			switch_commit_hash: switch_commit_hash,
 			proof: proof,
@@ -1047,7 +1047,7 @@ mod test {
 		let commit = keychain.commit(5, &key_id).unwrap();
 
 		let input = Input {
-			features: DEFAULT_OUTPUT,
+			features: OutputFeatures::DEFAULT_OUTPUT,
 			commit: commit,
 			out_block: None,
 		};
@@ -1062,7 +1062,7 @@ mod test {
 		// now generate the short_id for a *very* similar output (single feature flag different)
 		// and check it generates a different short_id
 		let input = Input {
-			features: COINBASE_OUTPUT,
+			features: OutputFeatures::COINBASE_OUTPUT,
 			commit: commit,
 			out_block: None,
 		};
