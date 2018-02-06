@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 pub mod block;
 pub mod build;
 pub mod hash;
+pub mod id;
 pub mod pmmr;
 pub mod target;
 pub mod transaction;
@@ -33,6 +34,7 @@ use util::secp::pedersen::*;
 
 pub use self::block::*;
 pub use self::transaction::*;
+pub use self::id::ShortId;
 use self::hash::Hashed;
 use ser::{Error, Readable, Reader, Writeable, Writer};
 use global;
@@ -210,6 +212,7 @@ pub fn amount_to_hr_string(amount: u64) -> String {
 #[cfg(test)]
 mod test {
 	use super::*;
+	use core::target::Difficulty;
 	use core::hash::ZERO_HASH;
 	use core::build::{initial_tx, input, output, with_excess, with_fee, with_lock_height};
 	use core::block::Error::KernelLockHeight;
@@ -247,7 +250,7 @@ mod test {
 		// blinding should fail as signing with a zero r*G shouldn't work
 		build::transaction(
 			vec![
-				input(10, key_id1.clone()),
+				input(10, ZERO_HASH, key_id1.clone()),
 				output(9, key_id1.clone()),
 				with_fee(1),
 			],
@@ -259,10 +262,9 @@ mod test {
 	fn simple_tx_ser() {
 		let tx = tx2i1o();
 		let mut vec = Vec::new();
-		ser::serialize(&mut vec, &tx).expect("serialized failed");
+		ser::serialize(&mut vec, &tx).expect("serialization failed");
 		println!("{}", vec.len());
-		assert!(vec.len() > 5340);
-		assert!(vec.len() < 5370);
+		assert!(vec.len() == 5364);
 	}
 
 	#[test]
@@ -295,6 +297,34 @@ mod test {
 	}
 
 	#[test]
+	fn build_tx_kernel() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
+		let key_id3 = keychain.derive_key_id(3).unwrap();
+
+		// first build a valid tx with corresponding blinding factor
+		let (tx, blind) = build::transaction(
+			vec![
+				input(10, ZERO_HASH, key_id1),
+				output(5, key_id2),
+				output(3, key_id3),
+				with_fee(2),
+			],
+			&keychain,
+		).unwrap();
+
+		// confirm the tx validates and that we can construct a valid tx_kernel from it
+		let excess = tx.validate().unwrap();
+		let tx_kernel = tx.build_kernel(excess);
+		let _ = tx_kernel.verify().unwrap();
+
+		assert_eq!(tx_kernel.features, KernelFeatures::DEFAULT_KERNEL);
+		assert_eq!(tx_kernel.fee, tx.fee);
+		assert_eq!(tx_kernel.excess, excess);
+	}
+
+	#[test]
 	fn hash_output() {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id1 = keychain.derive_key_id(1).unwrap();
@@ -303,7 +333,7 @@ mod test {
 
 		let (tx, _) = build::transaction(
 			vec![
-				input(75, key_id1),
+				input(75, ZERO_HASH, key_id1),
 				output(42, key_id2),
 				output(32, key_id3),
 				with_fee(1),
@@ -358,7 +388,7 @@ mod test {
 		{
 			// Alice gets 2 of her pre-existing outputs to send 5 coins to Bob, they
 			// become inputs in the new transaction
-			let (in1, in2) = (input(4, key_id1), input(3, key_id2));
+			let (in1, in2) = (input(4, ZERO_HASH, key_id1), input(3, ZERO_HASH, key_id2));
 
 			// Alice builds her transaction, with change, which also produces the sum
 			// of blinding factors before they're obscured.
@@ -394,9 +424,9 @@ mod test {
 			vec![],
 			&keychain,
 			&key_id,
-			Difficulty::minimum(),
+			Difficulty::one(),
 		).unwrap();
-		b.compact().validate().unwrap();
+		b.cut_through().validate().unwrap();
 	}
 
 	#[test]
@@ -412,9 +442,9 @@ mod test {
 			vec![&mut tx1],
 			&keychain,
 			&key_id,
-			Difficulty::minimum(),
+			Difficulty::one(),
 		).unwrap();
-		b.compact().validate().unwrap();
+		b.cut_through().validate().unwrap();
 	}
 
 	#[test]
@@ -430,7 +460,7 @@ mod test {
 			vec![&mut tx1, &mut tx2],
 			&keychain,
 			&key_id,
-			Difficulty::minimum(),
+			Difficulty::one(),
 		).unwrap();
 		b.validate().unwrap();
 	}
@@ -447,7 +477,7 @@ mod test {
 		// and that the resulting block is valid
 		let tx1 = build::transaction(
 			vec![
-				input(5, key_id1.clone()),
+				input(5, ZERO_HASH, key_id1.clone()),
 				output(3, key_id2.clone()),
 				with_fee(2),
 				with_lock_height(1),
@@ -461,14 +491,14 @@ mod test {
 			vec![&tx1],
 			&keychain,
 			&key_id3.clone(),
-			Difficulty::minimum(),
+			Difficulty::one(),
 		).unwrap();
 		b.validate().unwrap();
 
 		// now try adding a timelocked tx where lock height is greater than current block height
 		let tx1 = build::transaction(
 			vec![
-				input(5, key_id1.clone()),
+				input(5, ZERO_HASH, key_id1.clone()),
 				output(3, key_id2.clone()),
 				with_fee(2),
 				with_lock_height(2),
@@ -482,10 +512,10 @@ mod test {
 			vec![&tx1],
 			&keychain,
 			&key_id3.clone(),
-			Difficulty::minimum(),
+			Difficulty::one(),
 		).unwrap();
 		match b.validate() {
-			Err(KernelLockHeight { lock_height: height }) => {
+			Err(KernelLockHeight(height)) => {
 				assert_eq!(height, 2);
 			}
 			_ => panic!("expecting KernelLockHeight error here"),
@@ -513,8 +543,8 @@ mod test {
 
 		build::transaction(
 			vec![
-				input(10, key_id1),
-				input(11, key_id2),
+				input(10, ZERO_HASH, key_id1),
+				input(11, ZERO_HASH, key_id2),
 				output(19, key_id3),
 				with_fee(2),
 			],
@@ -530,7 +560,27 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
 		build::transaction(
-			vec![input(5, key_id1), output(3, key_id2), with_fee(2)],
+			vec![input(5, ZERO_HASH, key_id1), output(3, key_id2), with_fee(2)],
+			&keychain,
+		).map(|(tx, _)| tx)
+			.unwrap()
+	}
+
+	// utility producing a transaction with a single input
+	// and two outputs (one change output)
+	pub fn tx1i2o() -> Transaction {
+		let keychain = keychain::Keychain::from_random_seed().unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
+		let key_id3 = keychain.derive_key_id(3).unwrap();
+
+		build::transaction(
+			vec![
+				input(6, ZERO_HASH, key_id1),
+				output(3, key_id2),
+				output(1, key_id3),
+				with_fee(2),
+			],
 			&keychain,
 		).map(|(tx, _)| tx)
 			.unwrap()

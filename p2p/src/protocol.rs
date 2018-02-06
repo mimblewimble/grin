@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,368 +12,256 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::io::{self, Read, Write};
-use std::env;
-use std::fs::File;
 use std::sync::Arc;
 use std::net::SocketAddr;
 
-use futures::Future;
-use futures::sync::mpsc::UnboundedSender;
-use futures_cpupool::CpuPool;
-use tokio_core::net::TcpStream;
-
 use core::core;
-use core::core::hash::Hash;
-use core::core::target::Difficulty;
+use core::core::hash::{Hash, Hashed};
 use core::ser;
-use conn::{Handler, TimeoutConnection};
+use conn::*;
 use msg::*;
+use rand;
+use rand::Rng;
 use types::*;
 use util::LOGGER;
-use util::OneTime;
 
-#[allow(dead_code)]
-pub struct ProtocolV1 {
-	conn: OneTime<TimeoutConnection>,
-}
-
-impl ProtocolV1 {
-	pub fn new() -> ProtocolV1 {
-		ProtocolV1 {
-			conn: OneTime::new(),
-		}
-	}
-}
-
-impl Protocol for ProtocolV1 {
-	/// Sets up the protocol reading, writing and closing logic.
-	fn handle(
-		&self,
-		conn: TcpStream,
-		adapter: Arc<NetAdapter>,
-		addr: SocketAddr,
-		pool: CpuPool,
-	) -> Box<Future<Item = (), Error = Error>> {
-
-		let handler = ProtocolHandler{adapter, addr};
-		let (conn, listener) = TimeoutConnection::listen(conn, pool, handler);
-		self.conn.init(conn);
-
-		listener
-	}
-
-	/// Bytes sent and received.
-	fn transmitted_bytes(&self) -> (u64, u64) {
-		self.conn.borrow().transmitted_bytes()
-	}
-
-	/// Sends a ping message to the remote peer. Will panic if handle has never
-	/// been called on this protocol.
-	fn send_ping(&self, total_difficulty: Difficulty, height: u64) -> Result<(), Error> {
-		self.send_request(
-			Type::Ping,
-			Type::Pong,
-			&Ping { total_difficulty, height },
-			None,
-		)
-	}
-
-	/// Serializes and sends a block to our remote peer
-	fn send_block(&self, b: &core::Block) -> Result<(), Error> {
-		self.send_msg(Type::Block, b)
-	}
-
-	/// Serializes and sends a transaction to our remote peer
-	fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
-		self.send_msg(Type::Transaction, tx)
-	}
-
-	fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error> {
-		self.send_request(
-			Type::GetHeaders,
-			Type::Headers,
-			&Locator { hashes: locator },
-			None,
-		)
-	}
-
-	fn send_block_request(&self, h: Hash) -> Result<(), Error> {
-		self.send_request(Type::GetBlock, Type::Block, &h, Some(h))
-	}
-
-	fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
-		self.send_request(
-			Type::GetPeerAddrs,
-			Type::PeerAddrs,
-			&GetPeerAddrs {
-				capabilities: capab,
-			},
-			None,
-		)
-	}
-
-	fn send_sumtrees_request(&self, height: u64, hash: Hash) -> Result<(), Error> {
-		self.send_msg(Type::SumtreesRequest, &SumtreesRequest { hash, height })
-	}
-
-	/// Close the connection to the remote peer
-	fn close(&self) {
-		// TODO some kind of shutdown signal
-	}
-}
-
-impl ProtocolV1 {
-	fn send_msg<W: ser::Writeable>(&self, t: Type, body: &W) -> Result<(), Error> {
-		self.conn.borrow().send_msg(t, body)
-	}
-
-	fn send_request<W: ser::Writeable>(
-		&self,
-		t: Type,
-		rt: Type,
-		body: &W,
-		expect_resp: Option<Hash>,
-	) -> Result<(), Error> {
-		if self.conn.is_initialized() {
-			self.conn.borrow().send_request(t, rt, body, expect_resp)
-		} else {
-			Ok(())
-		}
-	}
-}
-
-struct ProtocolHandler {
+pub struct Protocol {
 	adapter: Arc<NetAdapter>,
 	addr: SocketAddr,
 }
 
-impl Handler for ProtocolHandler {
-	fn handle(
-		&self,
-		sender: UnboundedSender<Vec<u8>>,
-		header: MsgHeader,
-		buf: Vec<u8>,
-		reader: &mut Read,
-	) -> Result<Option<Hash>, ser::Error> {
+impl Protocol {
+	pub fn new(adapter: Arc<NetAdapter>, addr: SocketAddr) -> Protocol {
+		Protocol{adapter, addr}
+	}
+}
 
-		error!(LOGGER, "handle_payload: {:?}", header.msg_type);
-		match header.msg_type {
+impl MessageHandler for Protocol {
+	fn consume(&self, mut msg: Message) -> Result<Option<(Vec<u8>, Type)>, Error> {
+		let adapter = &self.adapter;
+
+		match msg.header.msg_type {
+
 			Type::Ping => {
-				let ping = ser::deserialize::<Ping>(&mut &buf[..])?;
-				self.adapter.peer_difficulty(self.addr, ping.total_difficulty, ping.height);
-				let pong = Pong {
-					total_difficulty: self.adapter.total_difficulty(),
-					height: self.adapter.total_height()
-				};
-				let mut body_data = vec![];
-				try!(ser::serialize(&mut body_data, &pong));
-				let mut data = vec![];
-				try!(ser::serialize(
-					&mut data,
-					&MsgHeader::new(Type::Pong, body_data.len() as u64),
-				));
-				data.append(&mut body_data);
+				let ping: Ping = msg.body()?;
+				adapter.peer_difficulty(self.addr, ping.total_difficulty, ping.height);
 
-				if let Err(e) = sender.unbounded_send(data) {
-					debug!(LOGGER, "handle_payload: Ping, error sending: {:?}", e);
-				}
+				let pong_bytes = ser::ser_vec(
+					&Pong {
+						total_difficulty: adapter.total_difficulty(),
+						height: adapter.total_height(),
+					}).unwrap();
 
-				Ok(None)
+				Ok(Some((pong_bytes, Type::Pong)))
 			}
+
 			Type::Pong => {
-				let pong = ser::deserialize::<Pong>(&mut &buf[..])?;
-				self.adapter.peer_difficulty(self.addr, pong.total_difficulty, pong.height);
+				let pong: Pong = msg.body()?;
+				adapter.peer_difficulty(self.addr, pong.total_difficulty, pong.height);
 				Ok(None)
 			},
+
 			Type::Transaction => {
-				let tx = ser::deserialize::<core::Transaction>(&mut &buf[..])?;
-				self.adapter.transaction_received(tx);
+				let tx: core::Transaction = msg.body()?;
+				adapter.transaction_received(tx);
 				Ok(None)
 			}
+
 			Type::GetBlock => {
-				let h = ser::deserialize::<Hash>(&mut &buf[..])?;
+				let h: Hash = msg.body()?;
 				debug!(LOGGER, "handle_payload: GetBlock {}", h);
 
-				let bo = self.adapter.get_block(h);
+				let bo = adapter.get_block(h);
 				if let Some(b) = bo {
-					// serialize and send the block over
-					let mut body_data = vec![];
-					try!(ser::serialize(&mut body_data, &b));
-					let mut data = vec![];
-					try!(ser::serialize(
-						&mut data,
-						&MsgHeader::new(Type::Block, body_data.len() as u64),
-					));
-					data.append(&mut body_data);
-					if let Err(e) = sender.unbounded_send(data) {
-						debug!(LOGGER, "handle_payload: GetBlock, error sending: {:?}", e);
-					}
+					let block_bytes = ser::ser_vec(&b).unwrap();
+					return Ok(Some((block_bytes, Type::Block)));
 				}
 				Ok(None)
 			}
+
 			Type::Block => {
-				let b = ser::deserialize::<core::Block>(&mut &buf[..])?;
+				let b: core::Block = msg.body()?;
 				let bh = b.hash();
 
 				debug!(LOGGER, "handle_payload: Block {}", bh);
 
-				self.adapter.block_received(b, self.addr);
-				Ok(Some(bh))
-			}
-			Type::GetHeaders => {
-				// load headers from the locator
-				let loc = ser::deserialize::<Locator>(&mut &buf[..])?;
-				let headers = self.adapter.locate_headers(loc.hashes);
-
-				// serialize and send all the headers over
-				let mut body_data = vec![];
-				try!(ser::serialize(
-					&mut body_data,
-					&Headers { headers: headers },
-				));
-				let mut data = vec![];
-				try!(ser::serialize(
-					&mut data,
-					&MsgHeader::new(Type::Headers, body_data.len() as u64),
-				));
-				data.append(&mut body_data);
-				if let Err(e) = sender.unbounded_send(data) {
-					debug!(LOGGER, "handle_payload: GetHeaders, error sending: {:?}", e);
-				}
-
+				adapter.block_received(b, self.addr);
 				Ok(None)
 			}
+	
+
+			Type::GetCompactBlock => {
+				let h: Hash = msg.body()?;
+				debug!(LOGGER, "handle_payload: GetCompactBlock: {}", h);
+
+				if let Some(b) = adapter.get_block(h) {
+					let cb = b.as_compact_block();
+
+					// serialize and send the block over in compact representation
+
+					// if we have txs in the block send a compact block
+					// but if block is empty -
+					// to allow us to test all code paths, randomly choose to send
+					// either the block or the compact block
+					let mut rng = rand::thread_rng();
+
+					if cb.kern_ids.is_empty() && rng.gen() {
+						debug!(
+							LOGGER,
+							"handle_payload: GetCompactBlock: empty block, sending full block",
+							);
+
+						let block_bytes = ser::ser_vec(&b).unwrap();
+						Ok(Some((block_bytes, Type::Block)))
+					} else {
+						let compact_block_bytes = ser::ser_vec(&cb).unwrap();
+						Ok(Some((compact_block_bytes, Type::CompactBlock)))
+					}
+				} else {
+					Ok(None)
+				}
+			}
+
+			Type::CompactBlock => {
+				let b: core::CompactBlock = msg.body()?;
+				let bh = b.hash();
+				debug!(LOGGER, "handle_payload: CompactBlock: {}", bh);
+
+				adapter.compact_block_received(b, self.addr);
+				Ok(None)
+			}
+
+			Type::GetHeaders => {
+				// load headers from the locator
+				let loc: Locator = msg.body()?;
+				let headers = adapter.locate_headers(loc.hashes);
+
+				// serialize and send all the headers over
+				let header_bytes = ser::ser_vec(&Headers { headers: headers }).unwrap();
+				return Ok(Some((header_bytes, Type::Headers)));
+			}
+
 			Type::Headers => {
-				let headers = ser::deserialize::<Headers>(&mut &buf[..])?;
-				self.adapter.headers_received(headers.headers, self.addr);
+				let headers: Headers = msg.body()?;
+				adapter.headers_received(headers.headers, self.addr);
 				Ok(None)
 			}
 
 			Type::GetPeerAddrs => {
-				let get_peers = ser::deserialize::<GetPeerAddrs>(&mut &buf[..])?;
-				let peer_addrs = self.adapter.find_peer_addrs(get_peers.capabilities);
-
-				// serialize and send all the headers over
-				let mut body_data = vec![];
-				ser::serialize(&mut body_data,
+				let get_peers: GetPeerAddrs = msg.body()?;
+				let peer_addrs = adapter.find_peer_addrs(get_peers.capabilities);
+				let peer_addrs_bytes = ser::ser_vec(
 					&PeerAddrs {
 						peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
-					})?;
-				let mut data = vec![];
-				ser::serialize(&mut data,
-					&MsgHeader::new(Type::PeerAddrs, body_data.len() as u64))?;
-				data.append(&mut body_data);
-				if let Err(e) = sender.unbounded_send(data) {
-					debug!(LOGGER, "handle_payload: GetPeerAddrs, error sending: {:?}", e);
-				}
-
-				Ok(None)
+					}).unwrap();
+				return Ok(Some((peer_addrs_bytes, Type::PeerAddrs)));
 			}
 
 			Type::PeerAddrs => {
-				let peer_addrs = ser::deserialize::<PeerAddrs>(&mut &buf[..])?;
-				self.adapter.peer_addrs_received(peer_addrs.peers.iter().map(|pa| pa.0).collect());
-				Ok(None)
-			}
-
-			Type::SumtreesRequest => {
-				let sm_req = ser::deserialize::<SumtreesRequest>(&mut &buf[..])?;
-				debug!(LOGGER, "handle_payload: sumtree req for {} at {}",
-							sm_req.hash, sm_req.height);
-
-				let sumtrees = self.adapter.sumtrees_read(sm_req.hash);
-
-				if let Some(mut sumtrees) = sumtrees {
-					let file_sz = sumtrees.reader.metadata()?.len();
-
-					// first send the sumtree archive information
-					let mut body_data = vec![];
-					ser::serialize(&mut body_data,
-						&SumtreesArchive {
-							height: sm_req.height as u64,
-							hash: sm_req.hash,
-							rewind_to_output: sumtrees.output_index,
-							rewind_to_kernel: sumtrees.kernel_index,
-							bytes: file_sz,
-						})?;
-
-					let mut data = vec![];
-					try!(ser::serialize(
-							&mut data,
-							&MsgHeader::new(Type::SumtreesArchive, body_data.len() as u64),
-							));
-					data.append(&mut body_data);
-
-					if let Err(e) = sender.unbounded_send(data) {
-						debug!(LOGGER, "handle_payload: error sending sumtrees info: {:?}", e);
-					}
-
-					// second, send the archive byte stream
-					debug!(LOGGER, "handle_payload: sumtree archive metadata sent, preparing to stream");
-					loop {
-						let mut buf = [0; 8000];
-						let len = sumtrees.reader.read(&mut buf)?;
-						debug!(LOGGER, "handle_payload: sending {} bytes of sumtree data", len);
-						if let Err(e) = sender.unbounded_send(buf[0..len].to_vec()) {
-							debug!(LOGGER, "handle_payload: error sending sumtrees: {:?}", e);
-						}
-						if len == 0 {
-							break;
-						}
-					}
-					debug!(LOGGER, "handle_payload: stream sent");
-				}
-				Ok(None)
-			}
-
-			Type::SumtreesArchive => {
-				let sm_arch = ser::deserialize::<SumtreesArchive>(&mut &buf[..])?;
-				debug!(LOGGER, "handle_payload: sumtree archive for {} at {} rewind to {}/{}",
-							sm_arch.hash, sm_arch.height,
-							sm_arch.rewind_to_output, sm_arch.rewind_to_kernel);
-
-				let mut tmp = env::temp_dir();
-				tmp.push("sumtree.zip");
-				{
-					let mut tmp_zip = File::create(tmp.clone())?;
-	
-					// can't simply use io::copy as we're dealing with an async socket
-					// TODO abort if nothing gets sent for 5 secs
-					let mut buffer = [0; 8000];
-					let mut total_size = 0;
-					'outer: loop {
-						let res = reader.read(&mut buffer);
-						match res {
-							Ok(n) => {
-								if n == 0 {
-									break 'outer;
-								}
-								tmp_zip.write(&buffer[0..n]);
-								total_size += n;
-								if total_size as u64 >= sm_arch.bytes {
-									break 'outer;
-								}
-							}
-							Err(e) => {
-								debug!(LOGGER, "err: {:?}", e);
-							}
-						}
-					}
-					debug!(LOGGER, "handle_payload: wrote {} bytes sumtree archive", total_size);
-					tmp_zip.sync_all()?;
-				}
-
-				let tmp_zip = File::open(tmp)?;
-				self.adapter.sumtrees_write(
-					sm_arch.hash, sm_arch.rewind_to_output, sm_arch.rewind_to_kernel, tmp_zip);
+				let peer_addrs: PeerAddrs = msg.body()?;
+				adapter.peer_addrs_received(peer_addrs.peers.iter().map(|pa| pa.0).collect());
 				Ok(None)
 			}
 
 			_ => {
-				debug!(LOGGER, "unknown message type {:?}", header.msg_type);
+				debug!(LOGGER, "unknown message type {:?}", msg.header.msg_type);
 				Ok(None)
 			}
 		}
 	}
 }
+
+
+
+//			Type::SumtreesRequest => {
+//				let sm_req = ser::deserialize::<SumtreesRequest>(&mut &buf[..])?;
+//				debug!(LOGGER, "handle_payload: sumtree req for {} at {}",
+//							sm_req.hash, sm_req.height);
+//
+//				let sumtrees = self.adapter.sumtrees_read(sm_req.hash);
+//
+//				if let Some(mut sumtrees) = sumtrees {
+//					let file_sz = sumtrees.reader.metadata()?.len();
+//
+//					// first send the sumtree archive information
+//					let mut body_data = vec![];
+//					ser::serialize(&mut body_data,
+//						&SumtreesArchive {
+//							height: sm_req.height as u64,
+//							hash: sm_req.hash,
+//							rewind_to_output: sumtrees.output_index,
+//							rewind_to_kernel: sumtrees.kernel_index,
+//							bytes: file_sz,
+//						})?;
+//
+//					let mut data = vec![];
+//					try!(ser::serialize(
+//							&mut data,
+//							&MsgHeader::new(Type::SumtreesArchive, body_data.len() as u64),
+//							));
+//					data.append(&mut body_data);
+//
+//					if let Err(e) = sender.unbounded_send(data) {
+//						debug!(LOGGER, "handle_payload: error sending sumtrees info: {:?}", e);
+//					}
+//
+//					// second, send the archive byte stream
+//					debug!(LOGGER, "handle_payload: sumtree archive metadata sent, preparing to stream");
+//					loop {
+//						let mut buf = [0; 8000];
+//						let len = sumtrees.reader.read(&mut buf)?;
+//						debug!(LOGGER, "handle_payload: sending {} bytes of sumtree data", len);
+//						if let Err(e) = sender.unbounded_send(buf[0..len].to_vec()) {
+//							debug!(LOGGER, "handle_payload: error sending sumtrees: {:?}", e);
+//						}
+//						if len == 0 {
+//							break;
+//						}
+//					}
+//					debug!(LOGGER, "handle_payload: stream sent");
+//				}
+//				Ok(None)
+//			}
+//
+//			Type::SumtreesArchive => {
+//				let sm_arch = ser::deserialize::<SumtreesArchive>(&mut &buf[..])?;
+//				debug!(LOGGER, "handle_payload: sumtree archive for {} at {} rewind to {}/{}",
+//							sm_arch.hash, sm_arch.height,
+//							sm_arch.rewind_to_output, sm_arch.rewind_to_kernel);
+//
+//				let mut tmp = env::temp_dir();
+//				tmp.push("sumtree.zip");
+//				{
+//					let mut tmp_zip = File::create(tmp.clone())?;
+//	
+//					// can't simply use io::copy as we're dealing with an async socket
+//					// TODO abort if nothing gets sent for 5 secs
+//					let mut buffer = [0; 8000];
+//					let mut total_size = 0;
+//					'outer: loop {
+//						let res = reader.read(&mut buffer);
+//						match res {
+//							Ok(n) => {
+//								if n == 0 {
+//									break 'outer;
+//								}
+//								tmp_zip.write(&buffer[0..n]);
+//								total_size += n;
+//								if total_size as u64 >= sm_arch.bytes {
+//									break 'outer;
+//								}
+//							}
+//							Err(e) => {
+//								debug!(LOGGER, "err: {:?}", e);
+//							}
+//						}
+//					}
+//					debug!(LOGGER, "handle_payload: wrote {} bytes sumtree archive", total_size);
+//					tmp_zip.sync_all()?;
+//				}
+//
+//				let tmp_zip = File::open(tmp)?;
+//				self.adapter.sumtrees_write(
+//					sm_arch.hash, sm_arch.rewind_to_output, sm_arch.rewind_to_kernel, tmp_zip);
+//				Ok(None)
+//			}

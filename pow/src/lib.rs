@@ -98,7 +98,7 @@ pub fn pow20<T: MiningWorker>(
 pub fn mine_genesis_block(
 	miner_config: Option<types::MinerConfig>,
 ) -> Result<core::core::Block, Error> {
-	let mut gen = genesis::genesis_dev();
+	let mut gen = genesis::genesis_testnet2();
 	let diff = gen.header.difficulty.clone();
 
 	let sz = global::sizeshift() as u32;
@@ -142,10 +142,9 @@ pub fn pow_size<T: MiningWorker + ?Sized>(
 
     // if we found a cycle (not guaranteed) and the proof hash is higher that the
     // diff, we're all good
-
     if let Ok(proof) = miner.mine(&pow_hash[..]) {
       if proof.clone().to_difficulty() >= diff {
-        bh.pow = proof;
+        bh.pow = proof.clone();
         return Ok(());
       }
     }
@@ -167,7 +166,6 @@ mod test {
 	use global;
 	use core::core::target::Difficulty;
 	use core::genesis;
-	use core::consensus::MINIMUM_DIFFICULTY;
 	use core::global::ChainTypes;
 
 	#[test]
@@ -183,11 +181,11 @@ mod test {
 		pow_size(
 			&mut internal_miner,
 			&mut b.header,
-			Difficulty::from_num(MINIMUM_DIFFICULTY),
+			Difficulty::one(),
 			global::sizeshift() as u32,
 		).unwrap();
 		assert!(b.header.nonce != 310);
-		assert!(b.header.pow.clone().to_difficulty() >= Difficulty::from_num(MINIMUM_DIFFICULTY));
+		assert!(b.header.pow.clone().to_difficulty() >= Difficulty::one());
 		assert!(verify_size(&b.header, global::sizeshift() as u32));
 	}
 }

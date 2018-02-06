@@ -25,8 +25,8 @@ use core::core::hash::Hashed;
 
 #[test]
 fn sumtree_append() {
-	let (data_dir, elems) = setup();
-	let mut backend = store::sumtree::PMMRBackend::new(data_dir).unwrap();
+	let (data_dir, elems) = setup("append");
+	let mut backend = store::sumtree::PMMRBackend::new(data_dir.to_string()).unwrap();
 
 	// adding first set of 4 elements and sync
 	let mut mmr_size = load(0, &elems[0..4], &mut backend);
@@ -64,14 +64,16 @@ fn sumtree_append() {
 		let pmmr = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(pmmr.root(), sum9);
 	}
+
+	teardown(data_dir);
 }
 
 #[test]
 fn sumtree_prune_compact() {
-	let (data_dir, elems) = setup();
+	let (data_dir, elems) = setup("prune_compact");
 
 	// setup the mmr store with all elements
-	let mut backend = store::sumtree::PMMRBackend::new(data_dir).unwrap();
+	let mut backend = store::sumtree::PMMRBackend::new(data_dir.to_string()).unwrap();
 	let mmr_size = load(0, &elems[..], &mut backend);
 	backend.sync().unwrap();
 
@@ -105,17 +107,19 @@ fn sumtree_prune_compact() {
 		let pmmr = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(root, pmmr.root());
 	}
+
+	teardown(data_dir);
 }
 
 #[test]
 fn sumtree_reload() {
-	let (data_dir, elems) = setup();
+	let (data_dir, elems) = setup("reload");
 
 	// set everything up with a first backend
 	let mmr_size: u64;
 	let root: HashSum<TestElem>;
 	{
-		let mut backend = store::sumtree::PMMRBackend::new(data_dir.clone()).unwrap();
+		let mut backend = store::sumtree::PMMRBackend::new(data_dir.to_string()).unwrap();
 		mmr_size = load(0, &elems[..], &mut backend);
 		backend.sync().unwrap();
 
@@ -129,7 +133,7 @@ fn sumtree_reload() {
 		backend.sync().unwrap();
 		backend.check_compact(1).unwrap();
 		backend.sync().unwrap();
-    assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
+		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
 
 		// prune some more to get rm log data
 		{
@@ -137,25 +141,27 @@ fn sumtree_reload() {
 			pmmr.prune(5, 1).unwrap();
 		}
 		backend.sync().unwrap();
-    assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
+		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
 	}
 
 	// create a new backend and check everything is kosher
 	{
-		let mut backend = store::sumtree::PMMRBackend::new(data_dir).unwrap();
-    assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
+		let mut backend = store::sumtree::PMMRBackend::new(data_dir.to_string()).unwrap();
+		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
 		{
 			let pmmr = PMMR::at(&mut backend, mmr_size);
 			assert_eq!(root, pmmr.root());
 		}
 		assert_eq!(backend.get(5), None);
 	}
+
+	teardown(data_dir);
 }
 
 #[test]
 fn sumtree_rewind() {
-	let (data_dir, elems) = setup();
-	let mut backend = store::sumtree::PMMRBackend::new(data_dir).unwrap();
+	let (data_dir, elems) = setup("rewind");
+	let mut backend = store::sumtree::PMMRBackend::new(data_dir.clone()).unwrap();
 
 	// adding elements and keeping the corresponding root
 	let mut mmr_size = load(0, &elems[0..4], &mut backend);
@@ -208,12 +214,14 @@ fn sumtree_rewind() {
 		let pmmr = PMMR::at(&mut backend, 7);
 		assert_eq!(pmmr.root(), root1);
 	}
+
+	teardown(data_dir);
 }
 
-fn setup() -> (String, Vec<TestElem>) {
+fn setup(tag: &str) -> (String, Vec<TestElem>) {
 	let _ = env_logger::init();
 	let t = time::get_time();
-	let data_dir = format!("./target/{}.{}", t.sec, t.nsec);
+	let data_dir = format!("./target/{}.{}-{}", t.sec, t.nsec, tag);
 	fs::create_dir_all(data_dir.clone()).unwrap();
 
 	let elems = vec![
@@ -228,6 +236,10 @@ fn setup() -> (String, Vec<TestElem>) {
 		TestElem([1, 0, 0, 0]),
 	];
 	(data_dir, elems)
+}
+
+fn teardown(data_dir: String) {
+	fs::remove_dir_all(data_dir).unwrap();
 }
 
 fn load(pos: u64, elems: &[TestElem], backend: &mut store::sumtree::PMMRBackend<TestElem>) -> u64 {

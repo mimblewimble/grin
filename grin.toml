@@ -31,20 +31,24 @@ db_root = ".grin"
 
 #If seeding_type = List, the list of peers to connect to.
 #
-#seeds = ["192.168.0.1:8080","192.168.0.2:8080"]
+#seeds = ["192.168.0.1:13414","192.168.0.2:13414"]
 
 #The chain type, which defines the genesis block and the set of cuckoo
 #parameters used for mining. Can be:
 #AutomatedTesting - For CI builds and instant blockchain creation
 #UserTesting - For regular user testing (cuckoo 16)
-#Testnet1 - Full production cuckoo parameter (cuckoo 30)
+#Testnet1 - Testnet1 genesis block (cuckoo 16)
+#Testnet2 - Testnet2 genesis block (cuckoo 30)
 #
-#chain_type = "UserTesting"
+chain_type = "Testnet1"
 
 #7 = Bit flags for FULL_NODE, this structure needs to be changed
 #internally to make it more configurable
 
 capabilities = [7]
+
+#skip waiting for sync on startup, (optional param, mostly for testing)
+#skip_sync_wait = true
 
 #The P2P server details (i.e. the server that communicates with other
 #grin server nodes
@@ -52,6 +56,12 @@ capabilities = [7]
 [server.p2p_config]
 host = "0.0.0.0"
 port = 13414
+
+#hardcoded peer lists for allow/deny
+#will *only* connect to peers in allow list
+#peers_allow = ["192.168.0.1:13414", "192.168.0.2:13414"]
+#will *never* connect to peers in deny list
+#peers_deny = ["192.168.0.3:13414", "192.168.0.4:13414"]
 
 #########################################
 ### LOGGING CONFIGURATION             ###
@@ -63,13 +73,13 @@ port = 13414
 log_to_stdout = true
 
 # Log level for stdout: Critical, Error, Warning, Info, Debug, Trace
-stdout_log_level = "Info"
+stdout_log_level = "Warning"
 
 # Whether to log to a file
 log_to_file = true
 
 # Log level for file: Critical, Error, Warning, Info, Debug, Trace
-file_log_level = "Debug"
+file_log_level = "Info"
 
 # Log file path
 log_file_path = "grin.log"
@@ -121,6 +131,7 @@ burn_reward = false
 #testing value, optional
 #slow_down_in_millis = 30
 
+
 #########################################
 ### CUCKOO MINER PLUGIN CONFIGURATION ###
 #########################################
@@ -136,7 +147,12 @@ burn_reward = false
 # in single-threaded mode
 
 # You'll likely get the best performance using a
-# single GPU and single CPU plugin in parallel
+# single GPU plugin and single CPU plugin in parallel
+
+# Parameters can be set per-device. On CPU plugins
+# you'll likely only be using device 0 (for now),
+# but in CUDA plugins the device number corresponds
+# to the device ID. (use nvidia-smi to find this)
 
 #The fastest cpu algorithm, but consumes the most memory
 #Also requires instructions that aren't available on
@@ -144,29 +160,61 @@ burn_reward = false
 #instead
 #[[mining.cuckoo_miner_plugin_config]]
 #type_filter = "mean_cpu"
-#parameter_list = {NUM_THREADS=4, NUM_TRIMS=68}
+#[mining.cuckoo_miner_plugin_config.device_parameters.0]
+#NUM_THREADS = 1
 
-#Same as above, but for older processors. Will be slightly
-#slower.
+#As above, but for older processors
 [[mining.cuckoo_miner_plugin_config]]
 type_filter = "mean_compat_cpu"
-parameter_list = {NUM_THREADS=1, NUM_TRIMS=68}
+[mining.cuckoo_miner_plugin_config.device_parameters.0]
+NUM_THREADS = 1
 
 #note lean_cpu currently has a bug which prevents it from
 #working with threads > 1
 
 #[[mining.cuckoo_miner_plugin_config]]
 #type_filter = "lean_cpu"
-#parameter_list = {NUM_THREADS=1, NUM_TRIMS=7}
+#[mining.cuckoo_miner_plugin_config.device_parameters.0]
+#NUM_THREADS = 1
 
-#CUDA verion of lean miner
+#CUDA Miner (Included here for integration only, Not ready for use)
 #Can currently be used only in Production (30) Mode
 #This plugin is not built by default. To build:
 #1) Ensure the latest cuda toolkit is installed
 #   (nvcc should be in your PATH)
 #2) Uncomment the 'build-cuda-plugin' feature
 #   in pow/Cargo.toml
+#
+#Parameters can be set per device, as below. In sync mode
+#device 0 is currently the only device used. In async mode
+#device 0 is used by default, and all other devices are
+#disabled unless explicitly enabled by setting the 'USE_DEVICE'
+#param to 1 on each device, as demonstrated below.
 
 #[[mining.cuckoo_miner_plugin_config]]
-#type_filter = "lean_cuda"
-#parameter_list = {}
+#type_filter = "cuda"
+#[mining.cuckoo_miner_plugin_config.device_parameters.0]
+#USE_DEVICE = 1
+
+# Below are advanced optional per-device tweakable params
+
+#N_TRIMS = 240
+#N_BLOCKS = 64
+#GENU_BLOCKS = 256
+#GENU_TPB = 8
+#GENV_STAGE1_TPB = 32
+#GENV_STAGE2_TPB = 128
+#TRIM_STAGE1_TPB = 32
+#TRIM_STAGE2_TPB = 96
+#RENAME_0_STAGE1_TPB = 32
+#RENAME_0_STAGE2_TPB = 64
+#RENAME_1_STAGE1_TPB = 32
+#RENAME_1_STAGE2_TPB = 128
+#TRIM_3_TPB = 64
+#RENAME_3_TPB = 8
+
+#[mining.cuckoo_miner_plugin_config.device_parameters.1]
+#USE_DEVICE = 1
+
+#[mining.cuckoo_miner_plugin_config.device_parameters.2]
+#USE_DEVICE = 1

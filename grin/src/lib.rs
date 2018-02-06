@@ -21,8 +21,6 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-extern crate futures;
-extern crate futures_cpupool as cpupool;
 extern crate hyper;
 extern crate itertools;
 extern crate rand;
@@ -33,8 +31,6 @@ extern crate serde_json;
 #[macro_use]
 extern crate slog;
 extern crate time;
-extern crate tokio_core;
-extern crate tokio_timer;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;

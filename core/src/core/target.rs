@@ -25,12 +25,10 @@ use std::ops::{Add, Div, Mul, Sub};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use byteorder::{BigEndian, ByteOrder};
 
-use consensus;
 use core::hash::Hash;
 use ser::{self, Readable, Reader, Writeable, Writer};
+use core::global;
 
-/// The target is the 32-bytes hash block hashes must be lower than.
-pub const MAX_TARGET: [u8; 8] = [0xf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
 
 /// The difficulty is defined as the maximum target divided by the block hash.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
@@ -52,11 +50,6 @@ impl Difficulty {
 		Difficulty { num: 1 }
 	}
 
-	/// Minimum difficulty according to our consensus rules.
-	pub fn minimum() -> Difficulty {
-		Difficulty { num: consensus::MINIMUM_DIFFICULTY }
-	}
-
 	/// Convert a `u32` into a `Difficulty`
 	pub fn from_num(num: u64) -> Difficulty {
 		Difficulty { num: num }
@@ -65,7 +58,7 @@ impl Difficulty {
 	/// Computes the difficulty from a hash. Divides the maximum target by the
 	/// provided hash.
 	pub fn from_hash(h: &Hash) -> Difficulty {
-		let max_target = BigEndian::read_u64(&MAX_TARGET);
+		let max_target = BigEndian::read_u64(&global::max_proof_target());
 		// Use the first 64 bits of the given hash
 		let mut in_vec = h.to_vec();
 		in_vec.truncate(8);
@@ -165,5 +158,12 @@ impl<'de> de::Visitor<'de> for DiffVisitor {
 			));
 		};
 		Ok(Difficulty { num: num_in.unwrap() })
+	}
+
+	fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+	where
+		E: de::Error,
+	{
+		Ok(Difficulty { num: value })
 	}
 }

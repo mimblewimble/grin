@@ -32,8 +32,11 @@ extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 extern crate rand;
 extern crate serde;
-#[macro_use]
+#[allow(unused_imports)]
+#[macro_use] // Needed for Serialize/Deserialize. The compiler complaining here is a bug.
 extern crate serde_derive;
+#[macro_use]
+extern crate slog;
 extern crate time;
 
 pub use pool::TransactionPool;

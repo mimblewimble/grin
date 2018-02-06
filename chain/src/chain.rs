@@ -20,12 +20,12 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use util::secp::pedersen::{Commitment, RangeProof};
+use util::secp::pedersen::RangeProof;
 
-use core::core::SumCommit;
+use core::core::{Input, OutputIdentifier, SumCommit};
 use core::core::pmmr::{HashSum, NoSum};
 
-use core::core::{Block, BlockHeader, Output, TxKernel};
+use core::core::{Block, BlockHeader, TxKernel};
 use core::core::target::Difficulty;
 use core::core::hash::Hash;
 use grin_store::Error::NotFoundErr;
@@ -34,6 +34,7 @@ use store;
 use sumtree;
 use types::*;
 use util::LOGGER;
+
 
 const MAX_ORPHAN_AGE_SECS: u64 = 30;
 
@@ -196,12 +197,31 @@ impl Chain {
 			pow_verifier: pow_verifier,
 		})
 	}
+/// Processes a single block, then checks for orphans, processing
+/// those as well if they're found
+pub fn process_block(&self, b: Block, opts: Options)
+-> Result<(Option<Tip>, Option<Block>), Error>
+{
+	let res = self.process_block_no_orphans(b, opts);
+	match res {
+		Ok((t, b)) => {
+			// We accepted a block, so see if we can accept any orphans
+			if b.is_some() {
+				self.check_orphans(&b.clone().unwrap());
+			}
+			Ok((t, b))
+		},
+		Err(e) => {
+			Err(e)
+		}
+	}
+}
 
 	/// Attempt to add a new block to the chain. Returns the new chain tip if it
 	/// has been added to the longest chain, None if it's added to an (as of
 	/// now) orphan chain.
-	pub fn process_block(&self, b: Block, opts: Options)
-		-> Result<Option<Tip>, Error>
+	pub fn process_block_no_orphans(&self, b: Block, opts: Options)
+		-> Result<(Option<Tip>, Option<Block>), Error>
 	{
 		let head = self.store
 			.head()
@@ -220,13 +240,12 @@ impl Chain {
 				}
 
 				// notifying other parts of the system of the update
-				if !opts.intersects(SYNC) {
+				if !opts.contains(Options::SYNC) {
 					// broadcast the block
 					let adapter = self.adapter.clone();
-					adapter.block_accepted(&b);
+					adapter.block_accepted(&b, opts);
 				}
-				// We just accepted a block so see if we can now accept any orphan(s)
-				self.check_orphans(&b);
+				Ok((Some(tip.clone()), Some(b.clone())))
 			},
 			Ok(None) => {
 				// block got accepted but we did not extend the head
@@ -238,13 +257,12 @@ impl Chain {
 				// or less relevant blocks somehow.
 				// We should also probably consider banning nodes that send us really old blocks.
 				//
-				if !opts.intersects(SYNC) {
+				if !opts.contains(Options::SYNC) {
 					// broadcast the block
 					let adapter = self.adapter.clone();
-					adapter.block_accepted(&b);
+					adapter.block_accepted(&b, opts);
 				}
-				// We just accepted a block so see if we can now accept any orphan(s)
-				self.check_orphans(&b);
+				Ok((None, Some(b.clone())))
 			},
 			Err(Error::Orphan) => {
 				let block_hash = b.hash();
@@ -266,6 +284,7 @@ impl Chain {
 					block_hash,
 					self.orphans.len(),
 				);
+				Err(Error::Orphan)
 			},
 			Err(Error::Unfit(ref msg)) => {
 				debug!(
@@ -275,8 +294,9 @@ impl Chain {
 					b.header.height,
 					msg
 				);
+				Err(Error::Unfit(msg.clone()))
 			}
-			Err(ref e) => {
+			Err(e) => {
 				info!(
 					LOGGER,
 					"Rejected block {} at {}: {:?}",
@@ -284,9 +304,20 @@ impl Chain {
 					b.header.height,
 					e
 				);
+				Err(e)
 			}
 		}
-		res
+	}
+
+	/// Process a block header received during "header first" propagation.
+	pub fn process_block_header(
+		&self,
+		bh: &BlockHeader,
+		opts: Options,
+	) -> Result<Option<Tip>, Error> {
+		let header_head = self.get_header_head()?;
+		let ctx = self.ctx_from_head(header_head, opts);
+		pipe::process_block_header(bh, ctx)
 	}
 
 	/// Attempt to add a new header to the header chain.
@@ -318,43 +349,46 @@ impl Chain {
 		self.orphans.contains(hash)
 	}
 
-	fn check_orphans(&self, block: &Block) {
+
+	/// Check for orphans, once a block is successfully added
+	pub fn check_orphans(&self, block: &Block) {
 		debug!(
 			LOGGER,
 			"chain: check_orphans: # orphans {}",
 			self.orphans.len(),
 		);
-
+		let mut last_block_hash = block.hash();
 		// Is there an orphan in our orphans that we can now process?
 		// We just processed the given block, are there any orphans that have this block
 		// as their "previous" block?
-		if let Some(orphan) = self.orphans.get_by_previous(&block.hash()) {
-			self.orphans.remove(&orphan.block.hash());
-			let _ = self.process_block(orphan.block, orphan.opts);
-		}
-	}
-
-	/// Gets an unspent output from its commitment. With return None if the
-	/// output doesn't exist or has been spent. This querying is done in a
-	/// way that's consistent with the current chain state and more
-	/// specifically the current winning fork.
-	pub fn get_unspent(&self, output_ref: &Commitment) -> Result<Output, Error> {
-		match self.store.get_output_by_commit(output_ref) {
-			Ok(out) => {
-				let mut sumtrees = self.sumtrees.write().unwrap();
-				if sumtrees.is_unspent(output_ref)? {
-					Ok(out)
-				} else {
-					Err(Error::OutputNotFound)
-				}
+		loop {
+			if let Some(orphan) = self.orphans.get_by_previous(&last_block_hash) {
+				self.orphans.remove(&orphan.block.hash());
+				let res = self.process_block_no_orphans(orphan.block, orphan.opts);
+				match res {
+					Ok((_, b)) => {
+						// We accepted a block, so see if we can accept any orphans
+						if b.is_some() {
+							last_block_hash = b.unwrap().hash();
+						} else {
+							break;
+						}
+					},
+					Err(_) => {
+						break;
+					},
+				};
+			} else {
+				break;
 			}
-			Err(NotFoundErr) => Err(Error::OutputNotFound),
-			Err(e) => Err(Error::StoreErr(e, "chain get unspent".to_owned())),
 		}
 	}
 
-	/// Checks whether an output is unspent
-	pub fn is_unspent(&self, output_ref: &Commitment) -> Result<bool, Error> {
+	/// For the given commitment find the unspent output and return the associated
+	/// Return an error if the output does not exist or has been spent.
+	/// This querying is done in a way that is consistent with the current chain state,
+	/// specifically the current winning (valid, most work) fork.
+	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.is_unspent(output_ref)
 	}
@@ -365,6 +399,14 @@ impl Chain {
 		sumtree::extending(&mut sumtrees, |extension| {
 			extension.validate(&header)
 		})
+	}
+
+	/// Check if the input has matured sufficiently for the given block height.
+	/// This only applies to inputs spending coinbase outputs.
+	/// An input spending a non-coinbase output will always pass this check.
+	pub fn is_matured(&self, input: &Input, height: u64) -> Result<(), Error> {
+		let mut sumtrees = self.sumtrees.write().unwrap();
+		sumtrees.is_matured(input, height)
 	}
 
 	/// Sets the sumtree roots on a brand new block by applying the block on the
@@ -459,17 +501,9 @@ impl Chain {
 	}
 
 	/// returns the last n nodes inserted into the utxo sum tree
-	/// returns sum tree hash plus output itself (as the sum is contained
-	/// in the output anyhow)
-	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<(Hash, Output)> {
+	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<HashSum<SumCommit>> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
-		let mut return_vec = Vec::new();
-		let sum_nodes = sumtrees.last_n_utxo(distance);
-		for sum_commit in sum_nodes {
-			let output = self.store.get_output_by_commit(&sum_commit.sum.commit);
-			return_vec.push((sum_commit.hash, output.unwrap()));
-		}
-		return_vec
+		sumtrees.last_n_utxo(distance)
 	}
 
 	/// as above, for rangeproofs
@@ -540,16 +574,6 @@ impl Chain {
 		self.store.is_on_current_chain(header).map_err(|e| {
 			Error::StoreErr(e, "chain is_on_current_chain".to_owned())
 		})
-	}
-
-	/// Gets the block header by the provided output commitment
-	pub fn get_block_header_by_output_commit(
-		&self,
-		commit: &Commitment,
-	) -> Result<BlockHeader, Error> {
-		self.store
-			.get_block_header_by_output_commit(commit)
-			.map_err(|e| Error::StoreErr(e, "chain get commitment".to_owned()))
 	}
 
 	/// Get the tip of the current "sync" header chain.

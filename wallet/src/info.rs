@@ -21,7 +21,6 @@ use prettytable;
 pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 	let result = checker::refresh_outputs(&config, &keychain);
 
-
 	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
 		let (current_height, from) = match checker::get_tip_from_node(config) {
 			Ok(tip) => (tip.height, "from server node"),
@@ -30,26 +29,26 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 				None => (0, "node/wallet unavailable"),
 			},
 		};
-		let mut unspent_total=0;
-		let mut unspent_but_locked_total=0;
-		let mut unconfirmed_total=0;
-		let mut locked_total=0;
+		let mut unspent_total = 0;
+		let mut unspent_but_locked_total = 0;
+		let mut unconfirmed_total = 0;
+		let mut locked_total = 0;
 		for out in wallet_data
 			.outputs
 			.values()
 			.filter(|out| out.root_key_id == keychain.root_key_id())
 		{
 			if out.status == OutputStatus::Unspent {
-				unspent_total+=out.value;
+				unspent_total += out.value;
 				if out.lock_height > current_height {
-						unspent_but_locked_total+=out.value;
+						unspent_but_locked_total += out.value;
 				}
 			}
 			if out.status == OutputStatus::Unconfirmed && !out.is_coinbase {
-				unconfirmed_total+=out.value;
+				unconfirmed_total += out.value;
 			}
 			if out.status == OutputStatus::Locked {
-				locked_total+=out.value;
+				locked_total += out.value;
 			}
 		};
 

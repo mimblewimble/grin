@@ -13,19 +13,17 @@
 // limitations under the License.
 
 use std::collections::VecDeque;
-use std::net::SocketAddr;
+use std::net::{TcpStream, SocketAddr};
 use std::sync::{Arc, RwLock};
 
-use futures::{self, Future};
 use rand::Rng;
 use rand::os::OsRng;
-use tokio_core::net::TcpStream;
 
 use core::core::target::Difficulty;
 use core::core::hash::Hash;
 use msg::*;
+use peer::Peer;
 use types::*;
-use protocol::ProtocolV1;
 use util::LOGGER;
 
 const NONCES_CAP: usize = 100;
@@ -39,6 +37,7 @@ pub struct Handshake {
 	/// The genesis block header of the chain seen by this node.
 	/// We only want to connect to other nodes seeing the same chain (forks are ok).
 	genesis: Hash,
+	config: P2PConfig,
 }
 
 unsafe impl Sync for Handshake {}
@@ -46,27 +45,27 @@ unsafe impl Send for Handshake {}
 
 impl Handshake {
 	/// Creates a new handshake handler
-	pub fn new(genesis: Hash) -> Handshake {
+	pub fn new(genesis: Hash, config: P2PConfig) -> Handshake {
 		Handshake {
 			nonces: Arc::new(RwLock::new(VecDeque::with_capacity(NONCES_CAP))),
-			genesis: genesis,
+			genesis,
+			config,
 		}
 	}
 
-	/// Handles connecting to a new remote peer, starting the version handshake.
-	pub fn connect(
+	pub fn initiate(
 		&self,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		self_addr: SocketAddr,
-		conn: TcpStream,
-	) -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
+		conn: &mut TcpStream,
+	) -> Result<PeerInfo, Error> {
 
 		// prepare the first part of the handshake
 		let nonce = self.next_nonce();
 		let peer_addr = match conn.peer_addr() {
 			Ok(pa) => pa,
-			Err(e) => return Box::new(futures::future::err(Error::Connection(e))),
+			Err(e) => return Err(Error::Connection(e)),
 		};
 
 		let hand = Hand {
@@ -80,96 +79,105 @@ impl Handshake {
 			user_agent: USER_AGENT.to_string(),
 		};
 
-		let genesis = self.genesis;
-
 		// write and read the handshake response
-		Box::new(
-			write_msg(conn, hand, Type::Hand)
-				.and_then(|conn| read_msg::<Shake>(conn))
-				.and_then(move |(conn, shake)| {
-					if shake.version != PROTOCOL_VERSION {
-						Err(Error::ProtocolMismatch {
-							us: PROTOCOL_VERSION,
-							peer: shake.version,
-						})
-					} else if shake.genesis != genesis {
-						Err(Error::GenesisMismatch {
-							us: genesis,
-							peer: shake.genesis,
-						})
-					} else {
-						let peer_info = PeerInfo {
-							capabilities: shake.capabilities,
-							user_agent: shake.user_agent,
-							addr: peer_addr,
-							version: shake.version,
-							total_difficulty: shake.total_difficulty,
-						};
+		write_message(conn, hand, Type::Hand)?;
+		let shake: Shake = read_message(conn, Type::Shake)?;
+		if shake.version != PROTOCOL_VERSION {
+			return Err(Error::ProtocolMismatch {
+				us: PROTOCOL_VERSION,
+				peer: shake.version,
+			});
+		} else if shake.genesis != self.genesis {
+			return Err(Error::GenesisMismatch {
+				us: self.genesis,
+				peer: shake.genesis,
+			});
+		}
+		let peer_info = PeerInfo {
+			capabilities: shake.capabilities,
+			user_agent: shake.user_agent,
+			addr: peer_addr,
+			version: shake.version,
+			total_difficulty: shake.total_difficulty,
+		};
 
-						debug!(LOGGER, "Connected to peer {:?}", peer_info);
-						// when more than one protocol version is supported, choosing should go here
-						Ok((conn, ProtocolV1::new(), peer_info))
-					}
-				}),
-		)
+		// If denied then we want to close the connection
+		// (without providing our peer with any details why).
+		if Peer::is_denied(&self.config, &peer_info.addr) {
+			return Err(Error::ConnectionClose);
+		}
+		
+		debug!(
+			LOGGER,
+			"Connected! Cumulative {} offered from {:?} {:?} {:?}",
+			peer_info.total_difficulty.into_num(),
+			peer_info.addr,
+			peer_info.user_agent,
+			peer_info.capabilities
+			);
+		// when more than one protocol version is supported, choosing should go here
+		Ok(peer_info)
 	}
 
-	/// Handles receiving a connection from a new remote peer that started the
-	/// version handshake.
-	pub fn handshake(
+	pub fn accept(
 		&self,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
-		conn: TcpStream,
-	) -> Box<Future<Item = (TcpStream, ProtocolV1, PeerInfo), Error = Error>> {
-		let nonces = self.nonces.clone();
-		let genesis = self.genesis.clone();
-		Box::new(
-			read_msg::<Hand>(conn)
-				.and_then(move |(conn, hand)| {
-					if hand.version != PROTOCOL_VERSION {
-						return Err(Error::ProtocolMismatch {
-							us: PROTOCOL_VERSION,
-							peer: hand.version,
-						});
-					} else if hand.genesis != genesis {
-						return Err(Error::GenesisMismatch {
-							us: genesis,
-							peer: hand.genesis,
-						});
-					} else {
-						// check the nonce to see if we are trying to connect to ourselves
-						let nonces = nonces.read().unwrap();
-						if nonces.contains(&hand.nonce) {
-							return Err(Error::PeerWithSelf);
-						}
-					}
+		conn: &mut TcpStream,
+	) -> Result<PeerInfo, Error> {
 
-					// all good, keep peer info
-					let peer_info = PeerInfo {
-						capabilities: hand.capabilities,
-						user_agent: hand.user_agent,
-						addr: extract_ip(&hand.sender_addr.0, &conn),
-						version: hand.version,
-						total_difficulty: hand.total_difficulty,
-					};
-					// send our reply with our info
-					let shake = Shake {
-						version: PROTOCOL_VERSION,
-						capabilities: capab,
-						genesis: genesis,
-						total_difficulty: total_difficulty,
-						user_agent: USER_AGENT.to_string(),
-					};
-					Ok((conn, shake, peer_info))
-				})
-				.and_then(|(conn, shake, peer_info)| {
-					debug!(LOGGER, "Success handshake with {}.", peer_info.addr);
-					write_msg(conn, shake, Type::Shake)
-					// when more than one protocol version is supported, choosing should go here
-					.map(|conn| (conn, ProtocolV1::new(), peer_info))
-				}),
-		)
+		let hand: Hand = read_message(conn, Type::Hand)?;
+	
+		// all the reasons we could refuse this connection for
+		if hand.version != PROTOCOL_VERSION {
+			return Err(Error::ProtocolMismatch {
+				us: PROTOCOL_VERSION,
+				peer: hand.version,
+			});
+		} else if hand.genesis != self.genesis {
+			return Err(Error::GenesisMismatch {
+				us: self.genesis,
+				peer: hand.genesis,
+			});
+		} else {
+			// check the nonce to see if we are trying to connect to ourselves
+			let nonces = self.nonces.read().unwrap();
+			if nonces.contains(&hand.nonce) {
+				return Err(Error::PeerWithSelf);
+			}
+		}
+
+		// all good, keep peer info
+		let peer_info = PeerInfo {
+			capabilities: hand.capabilities,
+			user_agent: hand.user_agent,
+			addr: extract_ip(&hand.sender_addr.0, &conn),
+			version: hand.version,
+			total_difficulty: hand.total_difficulty,
+		};
+
+		// At this point we know the published ip and port of the peer
+		// so check if we are configured to explicitly allow or deny it.
+		// If denied then we want to close the connection
+		// (without providing our peer with any details why).
+		if Peer::is_denied(&self.config, &peer_info.addr) {
+			return Err(Error::ConnectionClose);
+		}
+
+		// send our reply with our info
+		let shake = Shake {
+			version: PROTOCOL_VERSION,
+			capabilities: capab,
+			genesis: self.genesis,
+			total_difficulty: total_difficulty,
+			user_agent: USER_AGENT.to_string(),
+		};
+
+		write_message(conn, shake, Type::Shake)?;
+		debug!(LOGGER, "Success handshake with {}.", peer_info.addr);
+
+		// when more than one protocol version is supported, choosing should go here
+		Ok(peer_info)
 	}
 
 	/// Generate a new random nonce and store it in our ring buffer
