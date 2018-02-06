@@ -21,6 +21,7 @@ use iron::prelude::*;
 use iron::Handler;
 use iron::status;
 use serde_json;
+use uuid::Uuid;
 
 use api;
 use core::consensus::reward;
@@ -113,13 +114,16 @@ fn handle_sender_initiation(
 	warn!(LOGGER, "Creating new aggsig context");
 	// Create a new aggsig context
 	// this will create a new blinding sum and nonce, and store them
-	keychain.aggsig_create_context(blind_sum.secret_key());
-	keychain.aggsig_add_output(&key_id);
+	let result = keychain.aggsig_create_context(&partial_tx.id, blind_sum.secret_key());
+	if let Err(_) = result {
+		return Err(Error::DuplicateTransactionId);
+	}
+	keychain.aggsig_add_output(&partial_tx.id, &key_id);
 
-	let sig_part=keychain.aggsig_calculate_partial_sig(&sender_pub_nonce, fee, tx.lock_height).unwrap();
+	let sig_part=keychain.aggsig_calculate_partial_sig(&partial_tx.id, &sender_pub_nonce, fee, tx.lock_height).unwrap();
 
 	// Build the response, which should contain sR, blinding excess xR * G, public nonce kR * G
-	let mut partial_tx = build_partial_tx(keychain, amount, Some(sig_part), tx);
+	let mut partial_tx = build_partial_tx(&partial_tx.id, keychain, amount, Some(sig_part), tx);
 	partial_tx.phase = PartialTxPhase::ReceiverInitiation;
 
 	Ok(partial_tx)
@@ -144,7 +148,7 @@ fn handle_sender_confirmation(
 ) -> Result<PartialTx, Error> {
 	let (amount, sender_pub_blinding, sender_pub_nonce, sender_sig_part, tx) = read_partial_tx(keychain, partial_tx)?;
 	let sender_sig_part=sender_sig_part.unwrap();
-	let res = keychain.aggsig_verify_partial_sig(&sender_sig_part, &sender_pub_nonce, &sender_pub_blinding, tx.fee, tx.lock_height);
+	let res = keychain.aggsig_verify_partial_sig(&partial_tx.id, &sender_sig_part, &sender_pub_nonce, &sender_pub_blinding, tx.fee, tx.lock_height);
 
 	if !res {
 		error!(LOGGER, "Partial Sig from sender invalid.");
@@ -152,13 +156,13 @@ fn handle_sender_confirmation(
 	}
 
 	//Just calculate our sig part again instead of storing
-	let our_sig_part=keychain.aggsig_calculate_partial_sig(&sender_pub_nonce, tx.fee, tx.lock_height).unwrap();
+	let our_sig_part=keychain.aggsig_calculate_partial_sig(&partial_tx.id, &sender_pub_nonce, tx.fee, tx.lock_height).unwrap();
 
 	// And the final signature
-	let final_sig=keychain.aggsig_calculate_final_sig(&sender_sig_part, &our_sig_part, &sender_pub_nonce).unwrap();
+	let final_sig=keychain.aggsig_calculate_final_sig(&partial_tx.id, &sender_sig_part, &our_sig_part, &sender_pub_nonce).unwrap();
 
 	// Calculate the final public key (for our own sanity check)
-	let final_pubkey=keychain.aggsig_calculate_final_pubkey(&sender_pub_blinding).unwrap();
+	let final_pubkey=keychain.aggsig_calculate_final_pubkey(&partial_tx.id, &sender_pub_blinding).unwrap();
 
 	//Check our final sig verifies
 	let res = keychain.aggsig_verify_final_sig_build_msg(&final_sig, &final_pubkey, tx.fee, tx.lock_height);
@@ -168,8 +172,7 @@ fn handle_sender_confirmation(
 		return Err(Error::Signature(String::from("Final aggregated signature invalid.")));
 	}
 
-
-	let final_tx = build_final_transaction(config, keychain, amount, &final_sig, tx.clone())?;
+	let final_tx = build_final_transaction(&partial_tx.id, config, keychain, amount, &final_sig, tx.clone())?;
 	let tx_hex = to_hex(ser::ser_vec(&final_tx).unwrap());
 
 	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
@@ -177,7 +180,7 @@ fn handle_sender_confirmation(
 		.map_err(|e| Error::Node(e))?;
 
 	// Return what we've actually posted
-	let mut partial_tx = build_partial_tx(keychain, amount, Some(final_sig), tx);
+	let mut partial_tx = build_partial_tx(&partial_tx.id, keychain, amount, Some(final_sig), tx);
 	partial_tx.phase = PartialTxPhase::ReceiverConfirmation;
 	Ok(partial_tx)
 }
@@ -310,6 +313,7 @@ pub fn receive_coinbase(
 
 /// builds a final transaction after the aggregated sig exchange
 fn build_final_transaction(
+	tx_id: &Uuid,
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
@@ -347,7 +351,7 @@ fn build_final_transaction(
 
 	// Get output we created in earlier step
 	// TODO: will just be one for now, support multiple later
-	let output_vec = keychain.aggsig_get_outputs();
+	let output_vec = keychain.aggsig_get_outputs(tx_id);
 
 	// operate within a lock on wallet data
 	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {

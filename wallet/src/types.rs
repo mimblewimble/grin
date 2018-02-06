@@ -15,6 +15,7 @@
 use blake2;
 use rand::{thread_rng, Rng};
 use std::{error, fmt, num};
+use uuid::Uuid;
 use std::convert::From;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -85,6 +86,11 @@ pub enum Error {
 	Uri(hyper::error::UriError),
 	/// Error with signatures during exchange
 	Signature(String),
+	/// Attempt to use duplicate transaction id in separate transactions
+	DuplicateTransactionId,
+	/// Wallet seed already exists
+	WalletSeedExists,
+	/// Other
 	GenericError(String,)
 }
 
@@ -393,7 +399,7 @@ impl WalletSeed {
 		debug!(LOGGER, "Generating wallet seed file at: {}", seed_file_path,);
 
 		if Path::new(seed_file_path).exists() {
-			panic!("wallet seed file already exists");
+			Err(Error::WalletSeedExists)
 		} else {
 			let seed = WalletSeed::init_new();
 			let mut file = File::create(seed_file_path)?;
@@ -707,6 +713,7 @@ pub enum PartialTxPhase {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PartialTx {
 	pub phase:  PartialTxPhase,
+	pub id: Uuid,
 	pub amount: u64,
 	pub public_blind_excess: String,
 	pub public_nonce: String,
@@ -718,13 +725,14 @@ pub struct PartialTx {
 /// aggsig_tx_context should contain the private key/nonce pair
 /// the resulting partial tx will contain the corresponding public keys
 pub fn build_partial_tx(
+	transaction_id : &Uuid,
 	keychain: &keychain::Keychain,
 	receive_amount: u64,
 	part_sig: Option<secp::Signature>,
 	tx: Transaction,
 ) -> PartialTx {
 
-	let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys();
+	let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys(transaction_id);
 	let mut pub_excess = pub_excess.serialize_vec(keychain.secp(), true).clone();
 	let len = pub_excess.clone().len();
 	let pub_excess: Vec<_> = pub_excess.drain(0..len).collect();
@@ -735,6 +743,7 @@ pub fn build_partial_tx(
 
 	PartialTx {
 		phase: PartialTxPhase::SenderInitiation,
+		id : transaction_id.clone(),
 		amount: receive_amount,
 		public_blind_excess: util::to_hex(pub_excess),
 		public_nonce: util::to_hex(pub_nonce),
@@ -796,4 +805,26 @@ pub struct CbData {
 	pub output: String,
 	pub kernel: String,
 	pub key_id: String,
+}
+
+/// a contained wallet info struct, so automated tests can parse wallet info
+/// can add more fields here over time as needed
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WalletInfo {
+	// height from which info was taken
+	pub current_height: u64,
+	// total amount in the wallet
+	pub total: u64,
+	// amount awaiting confirmation
+	pub amount_awaiting_confirmation: u64,
+	// confirmed but locked
+	pub amount_confirmed_but_locked: u64,
+	// amount currently spendable
+	pub amount_currently_spendable: u64,
+	// amount locked by previous transactions
+	pub amount_locked: u64,
+	// whether the data was confirmed against a live node
+	pub data_confirmed: bool,
+	// node confirming the data
+	pub data_confirmed_from: String,
 }

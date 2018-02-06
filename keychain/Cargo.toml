@@ -6,6 +6,7 @@ authors = ["Antioch Peverell"]
 [dependencies]
 byteorder = "^1.0"
 blake2-rfc = "~0.2.17"
+uuid = { version = "~0.5.1", features = ["serde", "v4"] }
 rand = "^0.3"
 slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
 serde = "~1.0.8"
