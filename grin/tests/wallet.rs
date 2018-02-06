@@ -58,6 +58,8 @@ fn basic_wallet_transactions() {
 		coinbase_wallet.lock().unwrap().wallet_config.clone()
 	};
 
+	let coinbase_seed = LocalServerContainer::get_wallet_seed(&coinbase_wallet_config);
+
 	let _ = thread::spawn(move || {
 		let mut w = coinbase_wallet.lock().unwrap();
 		w.run_wallet(0);
@@ -73,6 +75,7 @@ fn basic_wallet_transactions() {
 		target_wallet.lock().unwrap().wallet_config.clone()
 	};
 
+	let recp_seed = LocalServerContainer::get_wallet_seed(&recp_wallet_config);
 	//Start up a second wallet, to receive
 	let _ = thread::spawn(move || {
 		let mut w = target_wallet_cloned.lock().unwrap();
@@ -96,15 +99,45 @@ fn basic_wallet_transactions() {
 		server_one.run_server(120);
 	});
 
-	//Wait for chain to build
-	thread::sleep(time::Duration::from_millis(5000));
+	//Wait until we have some funds to send
+	let mut coinbase_info = LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
+	let mut slept_time = 0;
+	while coinbase_info.amount_currently_spendable < 100000000000{
+		thread::sleep(time::Duration::from_millis(500));
+		slept_time+=500;
+		if slept_time > 10000 {
+			panic!("Coinbase not confirming in time");
+		}
+		coinbase_info = LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
+	}
 	warn!(LOGGER, "Sending 50 Grins to recipient wallet");
-	LocalServerContainer::send_amount_to(&coinbase_wallet_config, "50.00", 1, "all", "http://127.0.0.1:20002");
+	LocalServerContainer::send_amount_to(&coinbase_wallet_config, "50.00", 1, "not_all", "http://127.0.0.1:20002");
 
-	//let some more mining happen, make sure nothing pukes
-	thread::sleep(time::Duration::from_millis(5000));
+	//Wait for a confirmation
+	thread::sleep(time::Duration::from_millis(3000));
+	let coinbase_info = LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
+	println!("Coinbase wallet info: {:?}", coinbase_info);
 
+	let recipient_info = LocalServerContainer::get_wallet_info(&recp_wallet_config, &recp_seed);
+	println!("Recipient wallet info: {:?}", recipient_info);
+
+	assert!(recipient_info.data_confirmed && recipient_info.amount_currently_spendable==49992000000);
+
+	warn!(LOGGER, "Sending many small transactions to recipient wallet");
+	for _ in 0..10 {
+		LocalServerContainer::send_amount_to(&coinbase_wallet_config, "1.00", 1, "not_all", "http://127.0.0.1:20002");
+	}
+
+	thread::sleep(time::Duration::from_millis(10000));
+	let recipient_info = LocalServerContainer::get_wallet_info(&recp_wallet_config, &recp_seed);
+	println!("Recipient wallet info post little sends: {:?}", recipient_info);
+
+	assert!(recipient_info.data_confirmed && recipient_info.amount_currently_spendable==59912000000);
 	//send some cash right back
 	LocalServerContainer::send_amount_to(&recp_wallet_config, "25.00", 1, "all", "http://127.0.0.1:10002");
+
 	thread::sleep(time::Duration::from_millis(5000));
+
+	let coinbase_info = LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
+	println!("Coinbase wallet info final: {:?}", coinbase_info);
 }

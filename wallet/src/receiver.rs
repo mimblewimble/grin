@@ -21,6 +21,7 @@ use iron::prelude::*;
 use iron::Handler;
 use iron::status;
 use serde_json;
+use uuid::Uuid;
 
 use api;
 use core::consensus::reward;
@@ -114,17 +115,18 @@ fn handle_sender_initiation(
 	// Create a new aggsig context
 	// this will create a new blinding sum and nonce, and store them
 	let blind = blind_sum.secret_key(&keychain.secp())?;
-	keychain.aggsig_create_context(blind);
-	keychain.aggsig_add_output(&key_id);
+	keychain.aggsig_create_context(&partial_tx.id, blind);
+	keychain.aggsig_add_output(&partial_tx.id, &key_id);
 
-	let sig_part=keychain.aggsig_calculate_partial_sig(
+	let sig_part = keychain.aggsig_calculate_partial_sig(
+		&partial_tx.id,
 		&sender_pub_nonce,
 		fee,
 		tx.lock_height(),
 	).unwrap();
 
 	// Build the response, which should contain sR, blinding excess xR * G, public nonce kR * G
-	let mut partial_tx = build_partial_tx(keychain, amount, kernel_offset, Some(sig_part), tx);
+	let mut partial_tx = build_partial_tx(&partial_tx.id, keychain, amount, kernel_offset, Some(sig_part), tx);
 	partial_tx.phase = PartialTxPhase::ReceiverInitiation;
 
 	Ok(partial_tx)
@@ -150,6 +152,7 @@ fn handle_sender_confirmation(
 	let (amount, sender_pub_blinding, sender_pub_nonce, kernel_offset, sender_sig_part, tx) = read_partial_tx(keychain, partial_tx)?;
 	let sender_sig_part = sender_sig_part.unwrap();
 	let res = keychain.aggsig_verify_partial_sig(
+		&partial_tx.id,
 		&sender_sig_part,
 		&sender_pub_nonce,
 		&sender_pub_blinding,
@@ -163,6 +166,7 @@ fn handle_sender_confirmation(
 
 	// Just calculate our sig part again instead of storing
 	let our_sig_part = keychain.aggsig_calculate_partial_sig(
+		&partial_tx.id,
 		&sender_pub_nonce,
 		tx.fee(),
 		tx.lock_height(),
@@ -170,16 +174,21 @@ fn handle_sender_confirmation(
 
 	// And the final signature
 	let final_sig = keychain.aggsig_calculate_final_sig(
+		&partial_tx.id,
 		&sender_sig_part,
 		&our_sig_part,
 		&sender_pub_nonce,
 	).unwrap();
 
 	// Calculate the final public key (for our own sanity check)
-	let final_pubkey = keychain.aggsig_calculate_final_pubkey(&sender_pub_blinding).unwrap();
+	let final_pubkey = keychain.aggsig_calculate_final_pubkey(
+		&partial_tx.id,
+		&sender_pub_blinding,
+	).unwrap();
 
 	// Check our final sig verifies
 	let res = keychain.aggsig_verify_final_sig_build_msg(
+		&partial_tx.id,
 		&final_sig,
 		&final_pubkey,
 		tx.fee(),
@@ -192,6 +201,7 @@ fn handle_sender_confirmation(
 	}
 
 	let final_tx = build_final_transaction(
+		&partial_tx.id,
 		config,
 		keychain,
 		amount,
@@ -208,7 +218,7 @@ fn handle_sender_confirmation(
 
 	// Return what we've actually posted
 	// TODO - why build_partial_tx here? Just a naming issue?
-	let mut partial_tx = build_partial_tx(keychain, amount, kernel_offset, Some(final_sig), tx);
+	let mut partial_tx = build_partial_tx(&partial_tx.id, keychain, amount, kernel_offset, Some(final_sig), tx);
 	partial_tx.phase = PartialTxPhase::ReceiverConfirmation;
 	Ok(partial_tx)
 }
@@ -341,6 +351,7 @@ pub fn receive_coinbase(
 
 /// builds a final transaction after the aggregated sig exchange
 fn build_final_transaction(
+	tx_id: &Uuid,
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
@@ -378,7 +389,7 @@ fn build_final_transaction(
 
 	// Get output we created in earlier step
 	// TODO: will just be one for now, support multiple later
-	let output_vec = keychain.aggsig_get_outputs();
+	let output_vec = keychain.aggsig_get_outputs(tx_id);
 
 	// operate within a lock on wallet data
 	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {

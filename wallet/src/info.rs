@@ -15,13 +15,40 @@
 use checker;
 use keychain::Keychain;
 use core::core::amount_to_hr_string;
-use types::{WalletConfig, WalletData, OutputStatus};
+use types::{WalletConfig, WalletData, OutputStatus, WalletInfo};
 use prettytable;
 
 pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
+	let wallet_info = retrieve_info(config, keychain);
+	println!("\n____ Wallet Summary Info at {} ({}) ____\n", 
+		wallet_info.current_height,
+		wallet_info.data_confirmed_from);
+	let mut table = table!(
+		[bFG->"Total", FG->amount_to_hr_string(wallet_info.total)],
+		[bFY->"Awaiting Confirmation", FY->amount_to_hr_string(wallet_info.amount_awaiting_confirmation)],
+		[bFY->"Confirmed but Still Locked", FY->amount_to_hr_string(wallet_info.amount_confirmed_but_locked)],
+		[bFG->"Currently Spendable", FG->amount_to_hr_string(wallet_info.amount_currently_spendable)],
+		[Fw->"---------", Fw->"---------"],
+		[Fr->"(Locked by previous transaction)", Fr->amount_to_hr_string(wallet_info.amount_locked)]
+	);
+	table.set_format(*prettytable::format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
+	table.printstd();
+	println!();
+
+	if !wallet_info.data_confirmed {
+		println!(
+		"\nWARNING: Failed to verify wallet contents with grin server. \
+		 Above info is maybe not fully updated or invalid! \
+		 Check that your `grin server` is OK, or see `wallet help restore`"
+		);
+	}
+}
+
+pub fn retrieve_info(config: &WalletConfig, keychain: &Keychain)
+	-> WalletInfo {
 	let result = checker::refresh_outputs(&config, &keychain);
 
-	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+	let ret_val = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
 		let (current_height, from) = match checker::get_tip_from_node(config) {
 			Ok(tip) => (tip.height, "from server node"),
 			Err(_) => match wallet_data.outputs.values().map(|out| out.height).max() {
@@ -52,25 +79,20 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 			}
 		};
 
-		println!("\n____ Wallet Summary Info at {} ({}) ____\n", current_height, from);
-		let mut table = table!(
-			[bFG->"Total", FG->amount_to_hr_string(unspent_total+unconfirmed_total)],
-			[bFY->"Awaiting Confirmation", FY->amount_to_hr_string(unconfirmed_total)],
-			[bFY->"Confirmed but Still Locked", FY->amount_to_hr_string(unspent_but_locked_total)],
-			[bFG->"Currently Spendable", FG->amount_to_hr_string(unspent_total-unspent_but_locked_total)],
-			[Fw->"---------", Fw->"---------"],
-			[Fr->"(Locked by previous transaction)", Fr->amount_to_hr_string(locked_total)]
-		);
-		table.set_format(*prettytable::format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
-		table.printstd();
-		println!();
+		let mut data_confirmed = true;
+		if let Err(_) = result {
+			data_confirmed = false;
+		}
+		WalletInfo {
+			current_height : current_height,
+			total: unspent_total+unconfirmed_total,
+			amount_awaiting_confirmation: unconfirmed_total,
+			amount_confirmed_but_locked: unspent_but_locked_total,
+			amount_currently_spendable: unspent_total-unspent_but_locked_total,
+			amount_locked: locked_total,
+			data_confirmed: data_confirmed,
+			data_confirmed_from: String::from(from),
+		}
 	});
-
-	if let Err(_) = result {
-		println!(
-		"\nWARNING: Failed to verify wallet contents with grin server. \
-		 Above info is maybe not fully updated or invalid! \
-		 Check that your `grin server` is OK, or see `wallet help restore`"
-		);
-	}
+	ret_val.unwrap()
 }

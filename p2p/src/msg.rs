@@ -158,10 +158,10 @@ where
 	read_body(&header, conn)
 }
 
-pub fn write_to_bufs<T>(
+pub fn write_to_buf<T>(
 	msg: T,
 	msg_type: Type,
-) -> (Vec<u8>, Vec<u8>)
+) -> Vec<u8>
 where
 	T: Writeable,
 {
@@ -170,11 +170,12 @@ where
 	ser::serialize(&mut body_buf, &msg).unwrap();
 
 	// build and serialize the header using the body size
-	let mut header_buf = vec![];
+	let mut msg_buf = vec![];
 	let blen = body_buf.len() as u64;
-	ser::serialize(&mut header_buf, &MsgHeader::new(msg_type, blen)).unwrap();
+	ser::serialize(&mut msg_buf, &MsgHeader::new(msg_type, blen)).unwrap();
+	msg_buf.append(&mut body_buf);
 
-	(header_buf, body_buf)
+	msg_buf
 }
 
 pub fn write_message<T>(
@@ -185,10 +186,9 @@ pub fn write_message<T>(
 where
 	T: Writeable + 'static,
 {
-	let (header_buf, body_buf) = write_to_bufs(msg, msg_type);
+	let buf = write_to_buf(msg, msg_type);
 	// send the whole thing
-	conn.write_all(&header_buf[..])?;
-	conn.write_all(&body_buf[..])?;
+	conn.write_all(&buf[..])?;
 	Ok(())
 }
 
