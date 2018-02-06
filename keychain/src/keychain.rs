@@ -491,6 +491,8 @@ impl Keychain {
 mod test {
 	use rand::thread_rng;
 
+	use uuid::Uuid;
+
 	use keychain::{BlindSum, BlindingFactor, Keychain};
 	use util::kernel_sig_msg;
 	use util::secp;
@@ -627,6 +629,9 @@ mod test {
 		let sender_keychain = Keychain::from_random_seed().unwrap();
 		let receiver_keychain = Keychain::from_random_seed().unwrap();
 
+		// tx identifier for wallet interaction
+		let tx_id = Uuid::new_v4();
+
 		// Calculate the kernel excess here for convenience.
 		// Normally this would happen during transaction building.
 		let kernel_excess = {
@@ -668,8 +673,8 @@ mod test {
 
 			let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
 
-			keychain.aggsig_create_context(blind);
-			keychain.aggsig_get_public_keys()
+			keychain.aggsig_create_context(&tx_id, blind);
+			keychain.aggsig_get_public_keys(&tx_id)
 		};
 
 		// receiver receives partial tx
@@ -680,11 +685,12 @@ mod test {
 			// let blind = blind_sum.secret_key(&keychain.secp())?;
 			let blind = keychain.derived_key(&key_id).unwrap();
 
-			keychain.aggsig_create_context(blind);
-			let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys();
-			keychain.aggsig_add_output(&key_id);
+			keychain.aggsig_create_context(&tx_id, blind);
+			let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys(&tx_id);
+			keychain.aggsig_add_output(&tx_id, &key_id);
 
 			let sig_part = keychain.aggsig_calculate_partial_sig(
+				&tx_id,
 				&sender_pub_nonce,
 				0,
 				0,
@@ -697,6 +703,7 @@ mod test {
 		{
 			let keychain = sender_keychain.clone();
 			let sig_verifies = keychain.aggsig_verify_partial_sig(
+				&tx_id,
 				&sig_part,
 				&receiver_pub_nonce,
 				&receiver_pub_excess,
@@ -710,6 +717,7 @@ mod test {
 		let sender_sig_part = {
 			let keychain = sender_keychain.clone();
 			keychain.aggsig_calculate_partial_sig(
+				&tx_id,
 				&receiver_pub_nonce,
 				0,
 				0,
@@ -721,6 +729,7 @@ mod test {
 		{
 			let keychain = receiver_keychain.clone();
 			let sig_verifies = keychain.aggsig_verify_partial_sig(
+				&tx_id,
 				&sender_sig_part,
 				&sender_pub_nonce,
 				&sender_pub_excess,
@@ -736,6 +745,7 @@ mod test {
 
 			// Receiver recreates their partial sig (we do not maintain state from earlier)
 			let our_sig_part = keychain.aggsig_calculate_partial_sig(
+				&tx_id,
 				&sender_pub_nonce,
 				0,
 				0,
@@ -743,13 +753,14 @@ mod test {
 
 			// Receiver now generates final signature from the two parts
 			let final_sig = keychain.aggsig_calculate_final_sig(
+				&tx_id,
 				&sender_sig_part,
 				&our_sig_part,
 				&sender_pub_nonce,
 			).unwrap();
 
 			// Receiver calculates the final public key (to verify sig later)
-			let final_pubkey = keychain.aggsig_calculate_final_pubkey(&sender_pub_excess).unwrap();
+			let final_pubkey = keychain.aggsig_calculate_final_pubkey(&tx_id, &sender_pub_excess).unwrap();
 
 			(final_sig, final_pubkey)
 		};
@@ -794,6 +805,9 @@ mod test {
 	fn aggsig_sender_receiver_interaction_offset() {
 		let sender_keychain = Keychain::from_random_seed().unwrap();
 		let receiver_keychain = Keychain::from_random_seed().unwrap();
+
+		// tx identifier for wallet interaction
+		let tx_id = Uuid::new_v4();
 
 		// This is the kernel offset that we use to split the key
 		// Summing these at the block level prevents the
@@ -847,8 +861,8 @@ mod test {
 
 			let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
 
-			keychain.aggsig_create_context(blind);
-			keychain.aggsig_get_public_keys()
+			keychain.aggsig_create_context(&tx_id, blind);
+			keychain.aggsig_get_public_keys(&tx_id)
 		};
 
 		// receiver receives partial tx
@@ -858,11 +872,12 @@ mod test {
 
 			let blind = keychain.derived_key(&key_id).unwrap();
 
-			keychain.aggsig_create_context(blind);
-			let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys();
-			keychain.aggsig_add_output(&key_id);
+			keychain.aggsig_create_context(&tx_id, blind);
+			let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys(&tx_id);
+			keychain.aggsig_add_output(&tx_id, &key_id);
 
 			let sig_part = keychain.aggsig_calculate_partial_sig(
+				&tx_id,
 				&sender_pub_nonce,
 				0,
 				0,
@@ -875,6 +890,7 @@ mod test {
 		{
 			let keychain = sender_keychain.clone();
 			let sig_verifies = keychain.aggsig_verify_partial_sig(
+				&tx_id,
 				&sig_part,
 				&receiver_pub_nonce,
 				&receiver_pub_excess,
@@ -888,6 +904,7 @@ mod test {
 		let sender_sig_part = {
 			let keychain = sender_keychain.clone();
 			keychain.aggsig_calculate_partial_sig(
+				&tx_id,
 				&receiver_pub_nonce,
 				0,
 				0,
@@ -899,6 +916,7 @@ mod test {
 		{
 			let keychain = receiver_keychain.clone();
 			let sig_verifies = keychain.aggsig_verify_partial_sig(
+				&tx_id,
 				&sender_sig_part,
 				&sender_pub_nonce,
 				&sender_pub_excess,
@@ -914,6 +932,7 @@ mod test {
 
 			// Receiver recreates their partial sig (we do not maintain state from earlier)
 			let our_sig_part = keychain.aggsig_calculate_partial_sig(
+				&tx_id,
 				&sender_pub_nonce,
 				0,
 				0,
@@ -921,13 +940,14 @@ mod test {
 
 			// Receiver now generates final signature from the two parts
 			let final_sig = keychain.aggsig_calculate_final_sig(
+				&tx_id,
 				&sender_sig_part,
 				&our_sig_part,
 				&sender_pub_nonce,
 			).unwrap();
 
 			// Receiver calculates the final public key (to verify sig later)
-			let final_pubkey = keychain.aggsig_calculate_final_pubkey(&sender_pub_excess).unwrap();
+			let final_pubkey = keychain.aggsig_calculate_final_pubkey(&tx_id, &sender_pub_excess).unwrap();
 
 			(final_sig, final_pubkey)
 		};
