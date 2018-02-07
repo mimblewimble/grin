@@ -19,7 +19,7 @@ use util::{static_secp_instance, kernel_sig_msg};
 use util::secp::pedersen::{Commitment, RangeProof};
 use std::cmp::min;
 use std::cmp::Ordering;
-use std::ops;
+use std::{ops, error, fmt};
 
 use consensus;
 use consensus::VerifySortOrder;
@@ -84,6 +84,22 @@ pub enum Error {
 	LockHeight(u64),
 	/// Error originating from an invalid switch commitment (coinbase lock_height related)
 	SwitchCommitment,
+}
+
+impl error::Error for Error {
+	fn description(&self) -> &str {
+		match *self {
+			_ => "some kind of keychain error",
+		}
+	}
+}
+
+impl fmt::Display for Error {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			_ => write!(f, "some kind of keychain error"),
+		}
+	}
 }
 
 impl From<secp::Error> for Error {

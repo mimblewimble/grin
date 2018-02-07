@@ -29,7 +29,7 @@ use core::{global, ser};
 use keychain::{Identifier, Keychain};
 use types::*;
 use util::{LOGGER, to_hex, secp};
-use failure::{ResultExt, Context};
+use failure::{ResultExt};
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
 #[derive(Serialize, Deserialize)]
