@@ -108,8 +108,6 @@ pub fn run_fast_sync(
 
 				let header_head = chain.get_header_head().unwrap();
 
-				warn!(LOGGER, "status: {} {} {}", syncing, have_sumtrees, header_head.height);
-
 				let current_time = time::now_utc();
 				if syncing {
 

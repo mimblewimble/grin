@@ -31,8 +31,10 @@ use msg::*;
 use types::*;
 use util::LOGGER;
 
+/// A trait to be implemented in order to receive messages from the
+/// connection. Allows providing an optional response.
 pub trait MessageHandler: Send + 'static {
-	fn consume(&self, msg: Message) -> Result<Option<(Vec<u8>, Type)>, Error>;
+	fn consume<'a>(&self, msg: Message<'a>) -> Result<Option<Response<'a>>, Error>;
 }
 
 // Macro to simplify the boilerplate around asyn I/O error handling,
@@ -52,6 +54,8 @@ macro_rules! try_break {
 	}
 }
 
+/// A message as received by the connection. Provides acces to the message
+/// header lazily consumes the message body, handling its deserialization.
 pub struct Message<'a> {
 	pub header: MsgHeader,
 	conn: &'a mut TcpStream,
@@ -63,8 +67,38 @@ impl<'a> Message<'a> {
 		Message{header, conn}
 	}
 
+	/// Read the message body from the underlying connection
 	pub fn body<T>(&mut self) -> Result<T, Error> where T: ser::Readable {
 		read_body(&self.header, self.conn)
+	}
+
+	/// Respond to the message with the provided message type and body
+	pub fn respond<T>(self, resp_type: Type, body: T) -> Response<'a>
+	where
+		T: ser::Writeable
+	{
+		let body = ser::ser_vec(&body).unwrap();
+		Response{
+			resp_type: resp_type,
+			body: body,
+			conn: self.conn
+		}
+	}
+}
+
+/// Response to a `Message`
+pub struct Response<'a> {
+	resp_type: Type,
+	body: Vec<u8>,
+	conn: &'a mut TcpStream,
+}
+
+impl<'a> Response<'a> {
+	fn write(mut self) -> Result<(), Error> {
+		let mut msg = ser::ser_vec(&MsgHeader::new(self.resp_type, self.body.len() as u64)).unwrap();
+		msg.append(&mut self.body);
+		self.conn.write_all(&msg[..])?;
+		Ok(())
 	}
 }
 
@@ -139,8 +173,8 @@ where
 			if let Some(h) = try_break!(error_tx, read_header(conn)) {
 				let msg = Message::from_header(h, conn);
 				debug!(LOGGER, "Received message header, type {:?}, len {}.", msg.header.msg_type, msg.header.msg_len);
-				if let Some(Some((body, typ))) = try_break!(error_tx, handler.consume(msg)) {
-					respond(&send_tx, typ, body);
+				if let Some(Some(resp)) = try_break!(error_tx, handler.consume(msg)) {
+					try_break!(error_tx, resp.write());
 				}
 			}
 
@@ -172,10 +206,4 @@ where
 			thread::sleep(sleep_time);
 		}
 	});
-}
-
-fn respond(send_tx: &mpsc::Sender<Vec<u8>>, msg_type: Type, mut body: Vec<u8>) {
-	let mut msg = ser::ser_vec(&MsgHeader::new(msg_type, body.len() as u64)).unwrap();
-	msg.append(&mut body);
-	send_tx.send(msg).unwrap();
 }

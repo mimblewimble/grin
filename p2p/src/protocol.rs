@@ -17,7 +17,6 @@ use std::net::SocketAddr;
 
 use core::core;
 use core::core::hash::{Hash, Hashed};
-use core::ser;
 use conn::*;
 use msg::*;
 use rand;
@@ -37,7 +36,7 @@ impl Protocol {
 }
 
 impl MessageHandler for Protocol {
-	fn consume(&self, mut msg: Message) -> Result<Option<(Vec<u8>, Type)>, Error> {
+	fn consume<'a>(&self, mut msg: Message<'a>) -> Result<Option<Response<'a>>, Error> {
 		let adapter = &self.adapter;
 
 		match msg.header.msg_type {
@@ -46,13 +45,14 @@ impl MessageHandler for Protocol {
 				let ping: Ping = msg.body()?;
 				adapter.peer_difficulty(self.addr, ping.total_difficulty, ping.height);
 
-				let pong_bytes = ser::ser_vec(
-					&Pong {
-						total_difficulty: adapter.total_difficulty(),
-						height: adapter.total_height(),
-					}).unwrap();
-
-				Ok(Some((pong_bytes, Type::Pong)))
+				Ok(Some(
+					msg.respond(
+						Type::Pong,
+						Pong {
+							total_difficulty: adapter.total_difficulty(),
+							height: adapter.total_height(),
+						})
+				))
 			}
 
 			Type::Pong => {
@@ -73,8 +73,7 @@ impl MessageHandler for Protocol {
 
 				let bo = adapter.get_block(h);
 				if let Some(b) = bo {
-					let block_bytes = ser::ser_vec(&b).unwrap();
-					return Ok(Some((block_bytes, Type::Block)));
+					return Ok(Some(msg.respond(Type::Block, b)));
 				}
 				Ok(None)
 			}
@@ -111,11 +110,9 @@ impl MessageHandler for Protocol {
 							"handle_payload: GetCompactBlock: empty block, sending full block",
 							);
 
-						let block_bytes = ser::ser_vec(&b).unwrap();
-						Ok(Some((block_bytes, Type::Block)))
+						Ok(Some(msg.respond(Type::Block, b)))
 					} else {
-						let compact_block_bytes = ser::ser_vec(&cb).unwrap();
-						Ok(Some((compact_block_bytes, Type::CompactBlock)))
+						Ok(Some(msg.respond(Type::CompactBlock, cb)))
 					}
 				} else {
 					Ok(None)
@@ -137,8 +134,7 @@ impl MessageHandler for Protocol {
 				let headers = adapter.locate_headers(loc.hashes);
 
 				// serialize and send all the headers over
-				let header_bytes = ser::ser_vec(&Headers { headers: headers }).unwrap();
-				return Ok(Some((header_bytes, Type::Headers)));
+				Ok(Some(msg.respond(Type::Headers, Headers { headers: headers })))
 			}
 
 			Type::Headers => {
@@ -150,11 +146,13 @@ impl MessageHandler for Protocol {
 			Type::GetPeerAddrs => {
 				let get_peers: GetPeerAddrs = msg.body()?;
 				let peer_addrs = adapter.find_peer_addrs(get_peers.capabilities);
-				let peer_addrs_bytes = ser::ser_vec(
-					&PeerAddrs {
-						peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
-					}).unwrap();
-				return Ok(Some((peer_addrs_bytes, Type::PeerAddrs)));
+				Ok(Some(
+						msg.respond(
+							Type::PeerAddrs,
+							PeerAddrs {
+								peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
+							})
+				))
 			}
 
 			Type::PeerAddrs => {
