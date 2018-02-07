@@ -199,8 +199,8 @@ NUM_THREADS = 1
 # Below are advanced optional per-device tweakable params
 
 #N_TRIMS = 240
-#N_BLOCKS = 64
-#GENU_BLOCKS = 256
+#N_BLOCKS = 128
+#GENU_BLOCKS = 128
 #GENU_TPB = 8
 #GENV_STAGE1_TPB = 32
 #GENV_STAGE2_TPB = 128
@@ -210,7 +210,7 @@ NUM_THREADS = 1
 #RENAME_0_STAGE2_TPB = 64
 #RENAME_1_STAGE1_TPB = 32
 #RENAME_1_STAGE2_TPB = 128
-#TRIM_3_TPB = 64
+#TRIM_3_TPB = 32
 #RENAME_3_TPB = 8
 
 #[mining.cuckoo_miner_plugin_config.device_parameters.1]

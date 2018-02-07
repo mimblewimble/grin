@@ -44,16 +44,6 @@ pub fn reward(fee: u64) -> u64 {
 /// Number of blocks before a coinbase matures and can be spent
 pub const COINBASE_MATURITY: u64 = 1_000;
 
-/// Max number of coinbase outputs in a valid block.
-/// This is to prevent a miner generating an excessively large "compact block".
-/// But we do techincally support blocks with multiple coinbase outputs/kernels.
-pub const MAX_BLOCK_COINBASE_OUTPUTS: u64 = 1;
-
-/// Max number of coinbase kernels in a valid block.
-/// This is to prevent a miner generating an excessively large "compact block".
-/// But we do techincally support blocks with multiple coinbase outputs/kernels.
-pub const MAX_BLOCK_COINBASE_KERNELS: u64 = 1;
-
 /// Block interval, in seconds, the network will tune its next_target for. Note
 /// that we may reduce this value in the future as we get more data on mining
 /// with Cuckoo Cycle, networks improve and block propagation is optimized
@@ -131,7 +121,7 @@ pub fn valid_header_version(height: u64, version: u16) -> bool {
 /// Time window in blocks to calculate block time median
 pub const MEDIAN_TIME_WINDOW: u64 = 11;
 
-/// Index at half the desired median 
+/// Index at half the desired median
 pub const MEDIAN_TIME_INDEX: u64 = MEDIAN_TIME_WINDOW / 2;
 
 /// Number of blocks used to calculate difficulty adjustments
@@ -181,8 +171,8 @@ impl fmt::Display for TargetError {
 /// The difficulty calculation is based on both Digishield and GravityWave
 /// family of difficulty computation, coming to something very close to Zcash.
 /// The refence difficulty is an average of the difficulty over a window of
-/// DIFFICULTY_ADJUST_WINDOW blocks. The corresponding timespan is calculated 
-/// by using the difference between the median timestamps at the beginning 
+/// DIFFICULTY_ADJUST_WINDOW blocks. The corresponding timespan is calculated
+/// by using the difference between the median timestamps at the beginning
 /// and the end of the window.
 pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
 where
@@ -202,7 +192,7 @@ where
 		.fold(Difficulty::zero(), |sum, d| sum + d.clone().unwrap().1);
 
 	// Obtain the median window for the earlier time period
-	// which is just the first MEDIAN_TIME_WINDOW elements 
+	// which is just the first MEDIAN_TIME_WINDOW elements
 	let mut window_earliest: Vec<u64> = diff_data.iter()
 		.take(MEDIAN_TIME_WINDOW as usize)
 		.map(|n| n.clone().unwrap().0)

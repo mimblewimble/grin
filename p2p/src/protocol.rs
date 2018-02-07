@@ -88,7 +88,7 @@ impl MessageHandler for Protocol {
 				adapter.block_received(b, self.addr);
 				Ok(None)
 			}
-	
+
 
 			Type::GetCompactBlock => {
 				let h: Hash = msg.body()?;
@@ -139,6 +139,18 @@ impl MessageHandler for Protocol {
 				// serialize and send all the headers over
 				let header_bytes = ser::ser_vec(&Headers { headers: headers }).unwrap();
 				return Ok(Some((header_bytes, Type::Headers)));
+			}
+
+			// "header first" block propagation - if we have not yet seen this block
+			// we can go request it from some of our peers
+			Type::Header => {
+				let header: core::BlockHeader = msg.body()?;
+
+				adapter.header_received(header, self.addr);
+
+				// we do not return a hash here as we never request a single header
+				// a header will always arrive unsolicited
+				Ok(None)
 			}
 
 			Type::Headers => {
