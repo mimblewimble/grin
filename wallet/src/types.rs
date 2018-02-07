@@ -124,6 +124,7 @@ pub enum ErrorKind {
     GenericError(&'static str),
 }
 
+
 impl Fail for Error {
     fn cause(&self) -> Option<&Fail> {
         self.inner.cause()
@@ -520,8 +521,8 @@ impl WalletData {
 
 	/// Read output_data vec from disk.
 	fn read_outputs(data_file_path: &str) -> Result<Vec<OutputData>, Error> {
-		let data_file = File::open(data_file_path).context(ErrorKind::WalletData(&format!("Could not open {}", data_file_path)))?;
-		serde_json::from_reader(data_file).map_err(|e| { e.context(ErrorKind::WalletData(&format!("Error reading {}", data_file_path))).into()})
+		let data_file = File::open(data_file_path).context(ErrorKind::WalletData(&"Could not open wallet file"))?;
+		serde_json::from_reader(data_file).map_err(|e| { e.context(ErrorKind::WalletData(&"Error reading wallet file ")).into()})
             
             
 	}
@@ -541,13 +542,13 @@ impl WalletData {
 	/// Write the wallet data to disk.
 	fn write(&self, data_file_path: &str) -> Result<(), Error> {
 		let mut data_file = File::create(data_file_path).map_err(|e| {
-			e.context(ErrorKind::WalletData(&format!("Could not create {}", data_file_path)))})?;
+			e.context(ErrorKind::WalletData(&"Could not create "))})?;
 		let mut outputs = self.outputs.values().collect::<Vec<_>>();
 		outputs.sort();
 		let res_json = serde_json::to_vec_pretty(&outputs).map_err(|e| {
 			e.context(ErrorKind::WalletData("Error serializing wallet data"))
 		})?;
-		data_file.write_all(res_json.as_slice()).context(ErrorKind::WalletData(&format!("Error writing {}", data_file_path))).map_err(|e| e.into())
+		data_file.write_all(res_json.as_slice()).context(ErrorKind::WalletData(&"Error writing wallet file")).map_err(|e| e.into())
 	}
 
 	/// Append a new output data to the wallet data.

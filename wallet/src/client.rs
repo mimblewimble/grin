@@ -18,7 +18,7 @@ use std::ops::FnMut;
 use futures::{Future, Stream};
 use failure::ResultExt;
 use hyper;
-use hyper::{Method, Request, Uri};
+use hyper::{Method, Request};
 use hyper::header::ContentType;
 use tokio_core::reactor;
 use tokio_retry::Retry;
