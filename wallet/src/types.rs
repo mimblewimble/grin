@@ -547,7 +547,7 @@ impl WalletData {
 		let res_json = serde_json::to_vec_pretty(&outputs).map_err(|e| {
 			e.context(ErrorKind::WalletData("Error serializing wallet data"))
 		})?;
-		data_file.write_all(res_json.as_slice()).context(ErrorKind::WalletData(&format!("Error writing {}", data_file_path)))?
+		data_file.write_all(res_json.as_slice()).context(ErrorKind::WalletData(&format!("Error writing {}", data_file_path))).map_err(|e| e.into())
 	}
 
 	/// Append a new output data to the wallet data.
