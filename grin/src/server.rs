@@ -215,6 +215,11 @@ impl Server {
 		self.chain.head().unwrap()
 	}
 
+	/// The head of the block header chain
+	pub fn header_head(&self) -> chain::Tip {
+		self.chain.get_header_head().unwrap()
+	}
+
 	/// Returns a set of stats about this server. This and the ServerStats
 	/// structure
 	/// can be updated over time to include any information needed by tests or

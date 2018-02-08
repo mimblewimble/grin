@@ -106,8 +106,6 @@ pub fn run_fast_sync(
 				let syncing = needs_syncing(
 					currently_syncing.clone(), peers.clone(), chain.clone(), !have_sumtrees);
 
-				let header_head = chain.get_header_head().unwrap();
-
 				let current_time = time::now_utc();
 				if syncing {
 
@@ -120,7 +118,8 @@ pub fn run_fast_sync(
 						prev_header_sync = current_time;
 					}
 
-					// run the body_sync every 5s
+					// once sumtrees have been received, run the body_sync every 5s to
+					// catch up to latest block
 					if have_sumtrees && current_time - prev_body_sync > time::Duration::seconds(5) {
 						body_sync(
 							peers.clone(),
@@ -177,6 +176,7 @@ fn body_sync(peers: Peers, chain: Arc<chain::Chain>) {
 
 	let mut hashes = vec![];
 
+	error!(LOGGER, "1 {} {}", header_head.total_difficulty, body_head.total_difficulty);
 	if header_head.total_difficulty > body_head.total_difficulty {
 		let mut current = chain.get_block_header(&header_head.last_block_h);
 		while let Ok(header) = current {
@@ -187,11 +187,13 @@ fn body_sync(peers: Peers, chain: Arc<chain::Chain>) {
 				break;
 			}
 
+			error!(LOGGER, "push {} / {}", header.height, header.hash());
 			hashes.push(header.hash());
 			current = chain.get_block_header(&header.previous);
 		}
 	}
 	hashes.reverse();
+	error!(LOGGER, "htg1 {}", hashes.len());
 
 	// if we have 5 peers to sync from then ask for 50 blocks total (peer_count * 10)
 	// max will be 80 if all 8 peers are advertising more work
@@ -208,6 +210,7 @@ fn body_sync(peers: Peers, chain: Arc<chain::Chain>) {
 		.take(block_count)
 		.cloned()
 		.collect::<Vec<_>>();
+	error!(LOGGER, "htg2 {}", hashes_to_get.len());
 
 	if hashes_to_get.len() > 0 {
 		debug!(

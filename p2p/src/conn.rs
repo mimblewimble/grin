@@ -20,7 +20,9 @@
 //! forces us to go through some additional gymnastic to loop over the async
 //! stream and make sure we get the right number of bytes out.
 
-use std::io::{self, Write};
+use std::cmp;
+use std::fs::File;
+use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex, mpsc};
 use std::net::TcpStream;
 use std::thread;
@@ -54,7 +56,7 @@ macro_rules! try_break {
 	}
 }
 
-/// A message as received by the connection. Provides acces to the message
+/// A message as received by the connection. Provides access to the message
 /// header lazily consumes the message body, handling its deserialization.
 pub struct Message<'a> {
 	pub header: MsgHeader,
@@ -72,6 +74,18 @@ impl<'a> Message<'a> {
 		read_body(&self.header, self.conn)
 	}
 
+	pub fn copy_attachment(&mut self, len: usize, writer: &mut Write) -> Result<(), Error> {
+		let mut written = 0;
+		while written < len {
+			let read_len = cmp::min(8000, len - written);
+			let mut buf = vec![0u8; read_len];
+			read_exact(&mut self.conn, &mut buf[..], 10000, true)?;
+			writer.write_all(&mut buf)?;
+			written += read_len;
+		}
+		Ok(())
+	}
+
 	/// Respond to the message with the provided message type and body
 	pub fn respond<T>(self, resp_type: Type, body: T) -> Response<'a>
 	where
@@ -81,7 +95,8 @@ impl<'a> Message<'a> {
 		Response{
 			resp_type: resp_type,
 			body: body,
-			conn: self.conn
+			conn: self.conn,
+			attachment: None,
 		}
 	}
 }
@@ -91,14 +106,29 @@ pub struct Response<'a> {
 	resp_type: Type,
 	body: Vec<u8>,
 	conn: &'a mut TcpStream,
+	attachment: Option<File>,
 }
 
 impl<'a> Response<'a> {
 	fn write(mut self) -> Result<(), Error> {
 		let mut msg = ser::ser_vec(&MsgHeader::new(self.resp_type, self.body.len() as u64)).unwrap();
 		msg.append(&mut self.body);
-		self.conn.write_all(&msg[..])?;
+		write_all(&mut self.conn, &msg[..], 10000)?;
+		if let Some(mut file) = self.attachment {
+			let mut buf = [0u8; 8000];
+			loop {
+				match file.read(&mut buf[..]) {
+					Ok(0) => break,
+					Ok(n) => write_all(&mut self.conn, &buf[..n], 10000)?,
+					Err(e) => return Err(From::from(e)),
+				}
+			}
+		}
 		Ok(())
+	}
+
+	pub fn add_attachment(&mut self, file: File) {
+		self.attachment = Some(file);
 	}
 }
 
@@ -139,7 +169,7 @@ where
 	let (error_tx, error_rx) = mpsc::channel();
 
 	stream.set_nonblocking(true).expect("Non-blocking IO not available.");
-	poll(stream, handler, send_rx, send_tx.clone(), error_tx, close_rx);
+	poll(stream, handler, send_rx, error_tx, close_rx);
 
 	Tracker {
 		sent_bytes: Arc::new(Mutex::new(0)),
@@ -154,7 +184,6 @@ fn poll<H>(
 	conn: TcpStream,
 	handler: H,
 	send_rx: mpsc::Receiver<Vec<u8>>,
-	send_tx: mpsc::Sender<Vec<u8>>,
 	error_tx: mpsc::Sender<Error>,
 	close_rx: mpsc::Receiver<()>
 )

@@ -217,6 +217,9 @@ pub trait ChainStore: Send + Sync {
 	/// Gets a block header by hash
 	fn get_block(&self, h: &Hash) -> Result<Block, store::Error>;
 
+	/// Check whether we have a block without reading it
+	fn block_exists(&self, h: &Hash) -> Result<bool, store::Error>;
+
 	/// Gets a block header by hash
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, store::Error>;
 
@@ -243,6 +246,9 @@ pub trait ChainStore: Send + Sync {
 
 	/// Gets the block header at the provided height
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, store::Error>;
+
+	/// Save a header as associated with its height
+	fn save_header_height(&self, header: &BlockHeader) -> Result<(), store::Error>;
 
 	/// Delete the block header at the height
 	fn delete_header_by_height(&self, height: u64) -> Result<(), store::Error>;

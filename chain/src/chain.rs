@@ -23,6 +23,7 @@ use std::time::{Duration, Instant};
 use util::secp::pedersen::RangeProof;
 
 use core::core::{Input, OutputIdentifier, SumCommit};
+use core::core::hash::Hashed;
 use core::core::pmmr::{HashSum, NoSum};
 
 use core::core::{Block, BlockHeader, TxKernel};
@@ -197,25 +198,26 @@ impl Chain {
 			pow_verifier: pow_verifier,
 		})
 	}
-/// Processes a single block, then checks for orphans, processing
-/// those as well if they're found
-pub fn process_block(&self, b: Block, opts: Options)
--> Result<(Option<Tip>, Option<Block>), Error>
-{
-	let res = self.process_block_no_orphans(b, opts);
-	match res {
-		Ok((t, b)) => {
-			// We accepted a block, so see if we can accept any orphans
-			if b.is_some() {
-				self.check_orphans(&b.clone().unwrap());
+
+	/// Processes a single block, then checks for orphans, processing
+	/// those as well if they're found
+	pub fn process_block(&self, b: Block, opts: Options)
+		-> Result<(Option<Tip>, Option<Block>), Error>
+		{
+			let res = self.process_block_no_orphans(b, opts);
+			match res {
+				Ok((t, b)) => {
+					// We accepted a block, so see if we can accept any orphans
+					if let Some(ref b) = b {
+						self.check_orphans(b.hash());
+					}
+					Ok((t, b))
+				},
+				Err(e) => {
+					Err(e)
+				}
 			}
-			Ok((t, b))
-		},
-		Err(e) => {
-			Err(e)
 		}
-	}
-}
 
 	/// Attempt to add a new block to the chain. Returns the new chain tip if it
 	/// has been added to the longest chain, None if it's added to an (as of
@@ -351,13 +353,12 @@ pub fn process_block(&self, b: Block, opts: Options)
 
 
 	/// Check for orphans, once a block is successfully added
-	pub fn check_orphans(&self, block: &Block) {
+	pub fn check_orphans(&self, mut last_block_hash: Hash) {
 		debug!(
 			LOGGER,
 			"chain: check_orphans: # orphans {}",
 			self.orphans.len(),
 		);
-		let mut last_block_hash = block.hash();
 		// Is there an orphan in our orphans that we can now process?
 		// We just processed the given block, are there any orphans that have this block
 		// as their "previous" block?
@@ -491,11 +492,21 @@ pub fn process_block(&self, b: Block, opts: Options)
 			Ok(())
 		})?;
 
-		let mut sumtrees_ref = self.sumtrees.write().unwrap();
-		*sumtrees_ref = sumtrees;
+		// replace the chain sumtrees with the newly built one
+		{
+			let mut sumtrees_ref = self.sumtrees.write().unwrap();
+			*sumtrees_ref = sumtrees;
+		}
 
-		let mut head = self.head.lock().unwrap();
-		*head = Tip::from_block(&header);
+		// setup new head
+		{
+			let mut head = self.head.lock().unwrap();
+			*head = Tip::from_block(&header);
+			self.store.save_head(&head);
+			self.store.save_header_height(&header)?;
+		}
+
+		self.check_orphans(header.hash());
 
 		Ok(())
 	}

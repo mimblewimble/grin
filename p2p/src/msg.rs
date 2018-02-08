@@ -122,6 +122,34 @@ pub fn read_exact(
 	Ok(())
 }
 
+/// Same as `read_exact` but for writing.
+pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<()> {
+
+	let sleep_time = time::Duration::from_millis(1);
+	let mut count = 0;
+
+	while !buf.is_empty() {
+		match conn.write(buf) {
+			Ok(0) => return Err(io::Error::new(io::ErrorKind::WriteZero,
+																		 "failed to write whole buffer")),
+			Ok(n) => buf = &buf[n..],
+			Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
+			Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
+			Err(e) => return Err(e),
+		}
+		if !buf.is_empty() {
+			thread::sleep(sleep_time);
+			count += 1;
+		} else {
+			break;
+		}
+		if count > timeout {
+			return Err(io::Error::new(io::ErrorKind::TimedOut, "reading from tcp stream"));
+		}
+	}
+	Ok(())
+}
+
 /// Read a header from the provided connection without blocking if the
 /// underlying stream is async. Typically headers will be polled for, so
 /// we do not want to block.
