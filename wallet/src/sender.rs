@@ -45,7 +45,7 @@ pub fn issue_send_tx(
 	// proof of concept - set lock_height on the tx
 	let lock_height = chain_tip.height;
 
-	let (tx, blind_sum, coins, change_key) = build_send_tx(
+	let (tx, blind_sum, coins, change_key, amount_with_fee) = build_send_tx(
 		config,
 		keychain,
 		amount,
@@ -64,7 +64,7 @@ pub fn issue_send_tx(
 // Create a new aggsig context
 	let tx_id = Uuid::new_v4();
 	let _ = keychain.aggsig_create_context(&tx_id, blind_sum.secret_key());
-	let partial_tx = build_partial_tx(&tx_id, keychain, amount, None, tx);
+	let partial_tx = build_partial_tx(&tx_id, keychain, amount_with_fee, None, tx);
 
 	// Closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
@@ -127,7 +127,7 @@ pub fn issue_send_tx(
 	let sig_part=keychain.aggsig_calculate_partial_sig(&tx_id, &recp_pub_nonce, tx.fee, tx.lock_height).unwrap();
 
 	// Build the next stage, containing sS (and our pubkeys again, for the recipient's convenience)
-	let mut partial_tx = build_partial_tx(&tx_id, keychain, amount, Some(sig_part), tx);
+	let mut partial_tx = build_partial_tx(&tx_id, keychain, amount_with_fee, Some(sig_part), tx);
 	partial_tx.phase = PartialTxPhase::SenderConfirmation;
 
 	// And send again
@@ -163,11 +163,11 @@ fn build_send_tx(
 	lock_height: u64,
 	max_outputs: usize,
 	selection_strategy_is_use_all: bool,
-) -> Result<(Transaction, BlindingFactor, Vec<OutputData>, Identifier), Error> {
+) -> Result<(Transaction, BlindingFactor, Vec<OutputData>, Identifier, u64), Error> {
 	let key_id = keychain.clone().root_key_id();
 
 	// select some spendable coins from the wallet
-	let coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+	let mut coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
 		wallet_data.select_coins(
 			key_id.clone(),
 			amount,
@@ -178,8 +178,51 @@ fn build_send_tx(
 		)
 	})?;
 
+	// Get the maximum number of outputs in the wallet
+	let max_outputs =  WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+		wallet_data.select_coins(
+		key_id.clone(),
+		amount,
+		current_height,
+		minimum_confirmations,
+		max_outputs,
+		true,
+		)
+	})?.len();
+
+	// sender is responsible for setting the fee on the partial tx
+	// recipient should double check the fee calculation and not blindly trust the
+	// sender
+	let mut fee = tx_fee(coins.len(), 2, None);
+	let mut total: u64 = coins.iter().map(|c| c.value).sum();
+	let mut amount_with_fee = amount + fee;
+
+	// Here check if we have enough outputs for the amount including fee otherwise look for other
+	// outputs and check again
+	while total <= amount_with_fee {
+		// End the loop if we have selected all the outputs and still not enough funds
+		if coins.len() == max_outputs {
+			return Err(Error::NotEnoughFunds(total as u64));
+		}
+
+		// select some spendable coins from the wallet
+		coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+			wallet_data.select_coins(
+				key_id.clone(),
+				amount_with_fee,
+				current_height,
+				minimum_confirmations,
+				max_outputs,
+				selection_strategy_is_use_all,
+			)
+		})?;
+		fee = tx_fee(coins.len(), 2, None);
+		total = coins.iter().map(|c| c.value).sum();
+		amount_with_fee = amount + fee;
+	}
+
 	// build transaction skeleton with inputs and change
-	let (mut parts, change_key) = inputs_and_change(&coins, config, keychain, amount)?;
+	let (mut parts, change_key) = inputs_and_change(&coins, config, keychain, amount, fee)?;
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
@@ -187,7 +230,7 @@ fn build_send_tx(
 
 	let (tx, blind) = build::transaction(parts, &keychain)?;
 
-	Ok((tx, blind, coins, change_key))
+	Ok((tx, blind, coins, change_key, amount_with_fee))
 }
 
 pub fn issue_burn_tx(
@@ -220,10 +263,10 @@ pub fn issue_burn_tx(
 
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
-	let (mut parts, _) = inputs_and_change(&coins, config, keychain, amount)?;
+	let fee = tx_fee(coins.len(), 2, None);
+	let (mut parts, _) = inputs_and_change(&coins, config, keychain, amount, fee)?;
 
 	// add burn output and fees
-	let fee = tx_fee(coins.len(), 2, None);
 	parts.push(build::output(amount - fee, Identifier::zero()));
 
 	// finalize the burn transaction and send
@@ -242,26 +285,18 @@ fn inputs_and_change(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
+	fee: u64,
 ) -> Result<(Vec<Box<build::Append>>, Identifier), Error> {
 	let mut parts = vec![];
 
 	// calculate the total across all inputs, and how much is left
 	let total: u64 = coins.iter().map(|c| c.value).sum();
-	if total < amount {
-		return Err(Error::NotEnoughFunds(total as u64));
-	}
 
-	// sender is responsible for setting the fee on the partial tx
-	// recipient should double check the fee calculation and not blindly trust the
-	// sender
-	let fee = tx_fee(coins.len(), 2, None);
 	parts.push(build::with_fee(fee));
 
 	// if we are spending 10,000 coins to send 1,000 then our change will be 9,000
-	// the fee will come out of the amount itself
-	// if the fee is 80 then the recipient will only receive 920
-	// but our change will still be 9,000
-	let change = total - amount;
+	// if the fee is 80 then the recipient will receive 1000 and our change will be 8,920
+	let change = total - amount - fee;
 
 	// build inputs using the appropriate derived key_ids
 	for coin in coins {
