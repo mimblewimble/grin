@@ -261,8 +261,8 @@ where
 		let mut ret = None;
 		for peak in peaks {
 			ret = match (ret, peak) {
-				(None, x) => x,
-				(Some(hsum), None) => Some(hsum),
+				(None, rhs) => rhs,
+				(lhs, None) => lhs,
 				(Some(lhsum), Some(rhsum)) => Some(lhsum + rhsum),
 			}
 		}
@@ -755,6 +755,23 @@ pub fn family(pos: u64) -> (u64, u64) {
 	(parent, sibling)
 }
 
+pub fn family_branch(position: u64, last_pos: u64) -> Vec<(u64, u64)> {
+	// loop going up the tree, from node to parent, as long as we stay inside
+	// the tree (as defined by last_pos).
+	let mut branch = vec![];
+	let mut current = position;
+	while current + 1 <= last_pos {
+		let (parent, sibling) = family(current);
+		if parent > last_pos {
+			break;
+		}
+		branch.push((parent, sibling));
+
+		current = parent;
+	}
+	branch
+}
+
 /// Calculates the position of the top-left child of a parent node in the
 /// postorder traversal of a full binary tree.
 fn bintree_move_down_left(num: u64) -> Option<u64> {
@@ -846,7 +863,7 @@ mod test {
 
 	#[test]
 	#[allow(unused_variables)]
-	fn first_50_mmr_heights() {
+	fn first_100_mmr_heights() {
 		let first_100_str = "0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 4 \
 		                     0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 4 5 \
 		                     0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 4 0 0 1 0 0";
@@ -862,6 +879,74 @@ mod test {
 			);
 			count += 1;
 		}
+	}
+
+	/// Find parent and sibling positions for various node positions.
+	#[test]
+	fn various_families() {
+		// 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3
+		assert_eq!(family(1), (3, 2));
+		assert_eq!(family(2), (3, 1));
+		assert_eq!(family(3), (7, 6));
+		assert_eq!(family(4), (6, 5));
+		assert_eq!(family(5), (6, 4));
+		assert_eq!(family(6), (7, 3));
+		// ...
+		assert_eq!(family(7), (15, 14));
+		// ...
+		assert_eq!(family(1_000), (1_001, 997));
+	}
+
+	#[test]
+	fn various_branches() {
+		// the two leaf nodes in a 3 node tree (height 1)
+		assert_eq!(family_branch(1, 3), [(3, 2)]);
+		assert_eq!(family_branch(2, 3), [(3, 1)]);
+
+		// the root node in a 3 node tree
+		assert_eq!(family_branch(3, 3), []);
+
+		// leaf node in a larger tree of 7 nodes (height 2)
+		assert_eq!(family_branch(1, 7), [(3, 2), (7, 6)]);
+
+		// note these only go as far up as the local peak, not necessarily the single root
+		assert_eq!(family_branch(1, 4), [(3, 2)]);
+		// pos 4 in a tree of size 4 is a local peak
+		assert_eq!(family_branch(4, 4), []);
+		// pos 4 in a tree of size 5 is also still a local peak
+		assert_eq!(family_branch(4, 5), []);
+		// pos 4 in a tree of size 6 has a parent and a sibling
+		assert_eq!(family_branch(4, 6), [(6, 5)]);
+		// a tree of size 7 is all under a single root
+		assert_eq!(family_branch(4, 7), [(6, 5), (7, 3)]);
+
+		// ok now for a more realistic one, a tree with over a million nodes in it
+		// find the "family path" back up the tree from a leaf node at 0
+		// note the first two entries in the branch are consistent with a small 7 node tree
+		assert_eq!(
+			family_branch(1, 1_050_000),
+			[
+				(3, 2),
+				(7, 6),
+				(15, 14),
+				(31, 30),
+				(63, 62),
+				(127, 126),
+				(255, 254),
+				(511, 510),
+				(1023, 1022),
+				(2047, 2046),
+				(4095, 4094),
+				(8191, 8190),
+				(16383, 16382),
+				(32767, 32766),
+				(65535, 65534),
+				(131071, 131070),
+				(262143, 262142),
+				(524287, 524286),
+				(1048575, 1048574),
+			]
+		);
 	}
 
 	#[test]
