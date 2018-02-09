@@ -17,23 +17,31 @@
 
 use std::fs;
 use std::collections::HashMap;
-use std::path::Path;
+use std::fs::File;
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use core::core::{Block, SumCommit, Input, Output, OutputIdentifier, TxKernel, OutputFeatures};
-use core::core::pmmr::{HashSum, NoSum, Summable, PMMR};
+use util::{secp, static_secp_instance};
+use util::secp::pedersen::{RangeProof, Commitment};
+
+use core::consensus::reward;
+use core::core::{Block, BlockHeader, SumCommit, Input, Output, OutputIdentifier, OutputFeatures, TxKernel};
+use core::core::pmmr::{self, HashSum, NoSum, Summable, PMMR};
 use core::core::hash::Hashed;
+use core::ser::{self, Readable};
 use grin_store;
-use grin_store::sumtree::PMMRBackend;
+use grin_store::sumtree::{PMMRBackend, AppendOnlyFile};
 use types::ChainStore;
 use types::Error;
-use util::LOGGER;
-use util::secp::pedersen::{RangeProof, Commitment};
+use util::{LOGGER, zip};
 
 const SUMTREES_SUBDIR: &'static str = "sumtrees";
 const UTXO_SUBDIR: &'static str = "utxo";
 const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
 const KERNEL_SUBDIR: &'static str = "kernel";
+const KERNEL_FILE: &'static str = "kernel_full_data.bin";
+const SUMTREES_ZIP: &'static str = "sumtrees_snapshot.zip";
 
 struct PMMRHandle<T>
 where
@@ -68,10 +76,14 @@ where
 /// guaranteed to indicate whether an output is spent or not. The index
 /// may have commitments that have already been spent, even with
 /// pruning enabled.
+///
+/// In addition of the sumtrees, this maintains the full list of kernel
+/// data so it can be easily packaged for sync or validation.
 pub struct SumTrees {
 	output_pmmr_h: PMMRHandle<SumCommit>,
 	rproof_pmmr_h: PMMRHandle<NoSum<RangeProof>>,
 	kernel_pmmr_h: PMMRHandle<NoSum<TxKernel>>,
+	kernel_file: AppendOnlyFile,
 
 	// chain store used as index of commitments to MMR positions
 	commit_index: Arc<ChainStore>,
@@ -80,10 +92,16 @@ pub struct SumTrees {
 impl SumTrees {
 	/// Open an existing or new set of backends for the SumTrees
 	pub fn open(root_dir: String, commit_index: Arc<ChainStore>) -> Result<SumTrees, Error> {
+		let mut kernel_file_path: PathBuf = [&root_dir, SUMTREES_SUBDIR, KERNEL_SUBDIR].iter().collect();
+		fs::create_dir_all(kernel_file_path.clone())?;
+		kernel_file_path.push(KERNEL_FILE);
+		let kernel_file = AppendOnlyFile::open(kernel_file_path.to_str().unwrap().to_owned())?;
+
 		Ok(SumTrees {
 			output_pmmr_h: PMMRHandle::new(root_dir.clone(), UTXO_SUBDIR)?,
 			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR)?,
 			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR)?,
+			kernel_file: kernel_file,
 			commit_index: commit_index,
 		})
 	}
@@ -163,6 +181,11 @@ impl SumTrees {
 		kernel_pmmr.get_last_n_insertions(distance)
 	}
 
+	/// Output and kernel MMR indexes at the end of the provided block
+	pub fn indexes_at(&self, block: &Block) -> Result<(u64, u64), Error> {
+		indexes_at(block, self.commit_index.deref())
+	}
+
 	/// Get sum tree roots
 	pub fn roots(
 		&mut self,
@@ -193,10 +216,12 @@ where
 	let res: Result<T, Error>;
 	let rollback: bool;
 	{
-		debug!(LOGGER, "Starting new sumtree extension.");
 		let commit_index = trees.commit_index.clone();
+
+		debug!(LOGGER, "Starting new sumtree extension.");
 		let mut extension = Extension::new(trees, commit_index);
 		res = inner(&mut extension);
+
 		rollback = extension.rollback;
 		if res.is_ok() && !rollback {
 			extension.save_pos_index()?;
@@ -209,6 +234,7 @@ where
 			trees.output_pmmr_h.backend.discard();
 			trees.rproof_pmmr_h.backend.discard();
 			trees.kernel_pmmr_h.backend.discard();
+			trees.kernel_file.discard();
 			Err(e)
 		}
 		Ok(r) => {
@@ -217,11 +243,13 @@ where
 				trees.output_pmmr_h.backend.discard();
 				trees.rproof_pmmr_h.backend.discard();
 				trees.kernel_pmmr_h.backend.discard();
+				trees.kernel_file.discard();
 			} else {
 				debug!(LOGGER, "Committing sumtree extension.");
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
+				trees.kernel_file.flush()?;
 				trees.output_pmmr_h.last_pos = sizes.0;
 				trees.rproof_pmmr_h.last_pos = sizes.1;
 				trees.kernel_pmmr_h.last_pos = sizes.2;
@@ -241,6 +269,7 @@ pub struct Extension<'a> {
 	rproof_pmmr: PMMR<'a, NoSum<RangeProof>, PMMRBackend<NoSum<RangeProof>>>,
 	kernel_pmmr: PMMR<'a, NoSum<TxKernel>, PMMRBackend<NoSum<TxKernel>>>,
 
+	kernel_file: &'a mut AppendOnlyFile,
 	commit_index: Arc<ChainStore>,
 	new_output_commits: HashMap<Commitment, u64>,
 	new_kernel_excesses: HashMap<Commitment, u64>,
@@ -249,7 +278,11 @@ pub struct Extension<'a> {
 
 impl<'a> Extension<'a> {
 	// constructor
-	fn new(trees: &'a mut SumTrees, commit_index: Arc<ChainStore>) -> Extension<'a> {
+	fn new(
+		trees: &'a mut SumTrees,
+		commit_index: Arc<ChainStore>,
+	) -> Extension<'a> {
+
 		Extension {
 			output_pmmr: PMMR::at(
 				&mut trees.output_pmmr_h.backend,
@@ -263,6 +296,7 @@ impl<'a> Extension<'a> {
 				&mut trees.kernel_pmmr_h.backend,
 				trees.kernel_pmmr_h.last_pos,
 			),
+			kernel_file: &mut trees.kernel_file,
 			commit_index: commit_index,
 			new_output_commits: HashMap::new(),
 			new_kernel_excesses: HashMap::new(),
@@ -407,15 +441,18 @@ impl<'a> Extension<'a> {
 				}
 			}
 		}
-		// push kernels in their MMR
+
+		// push kernels in their MMR and file
 		let pos = self.kernel_pmmr
 			.push(NoSum(kernel.clone()))
 			.map_err(&Error::SumTreeErr)?;
 		self.new_kernel_excesses.insert(kernel.excess, pos);
+		self.kernel_file.append(&mut ser::ser_vec(&kernel).unwrap());
+
 		Ok(())
 	}
 
-	/// Rewinds the MMRs to the provided position, given the last output and
+	/// Rewinds the MMRs to the provided block, using the last output and
 	/// last kernel of the block we want to rewind to.
 	pub fn rewind(&mut self, block: &Block) -> Result<(), Error> {
 		debug!(
@@ -425,30 +462,29 @@ impl<'a> Extension<'a> {
 			block.header.height,
 		);
 
-		let out_pos_rew = match block.outputs.last() {
-			Some(output) => self.get_output_pos(&output.commitment())
-				.map_err(|e| {
-					Error::StoreErr(e, format!("missing output pos for known block"))
-				})?,
-			None => 0,
-		};
+		// rewind each MMR
+		let (out_pos_rew, kern_pos_rew) = indexes_at(block, self.commit_index.deref())?;
+		self.rewind_pos(block.header.height, out_pos_rew, kern_pos_rew)?;
+		
+		// rewind the kernel file store, the position is the number of kernels
+		// multiplied by their size
+		// the number of kernels is the number of leaves in the MMR, which is the
+		// sum of the number of leaf nodes under each peak in the MMR
+		let pos: u64 = pmmr::peaks(kern_pos_rew).iter().map(|n| (1 << n) as u64).sum();
+		self.kernel_file.rewind(pos * (TxKernel::size() as u64));
 
-		let kern_pos_rew = match block.kernels.last() {
-			Some(kernel) => self.get_kernel_pos(&kernel.excess)
-				.map_err(|e| {
-					Error::StoreErr(e, format!("missing kernel pos for known block"))
-				})?,
-			None => 0,
-		};
+		Ok(())
+	}
 
+	/// Rewinds the MMRs to the provided positions, given the output and
+	/// kernel we want to rewind to.
+	pub fn rewind_pos(&mut self, height: u64, out_pos_rew: u64, kern_pos_rew: u64) -> Result<(), Error> {
 		debug!(
 			LOGGER,
 			"Rewind sumtrees to output pos: {}, kernel pos: {}",
 			out_pos_rew,
 			kern_pos_rew,
 		);
-
-		let height = block.header.height;
 
 		self.output_pmmr
 			.rewind(out_pos_rew, height as u32)
@@ -496,14 +532,67 @@ impl<'a> Extension<'a> {
 		)
 	}
 
+	/// Validate the current sumtree state against a block header
+	pub fn validate(&self, header: &BlockHeader) -> Result<(), Error> {
+		// validate all hashes and sums within the trees
+		if let Err(e) = self.output_pmmr.validate() {
+			return Err(Error::InvalidSumtree(e));
+		}
+		if let Err(e) = self.rproof_pmmr.validate() {
+			return Err(Error::InvalidSumtree(e));
+		}
+		if let Err(e) = self.kernel_pmmr.validate() {
+			return Err(Error::InvalidSumtree(e));
+		}
+
+		// validate the tree roots against the block header
+		let (utxo_root, rproof_root, kernel_root) = self.roots();
+		if utxo_root.hash != header.utxo_root || rproof_root.hash != header.range_proof_root
+			|| kernel_root.hash != header.kernel_root
+		{
+			return Err(Error::InvalidRoot);
+		}
+
+		// the real magicking: the sum of all kernel excess should equal the sum
+		// of all UTXO commitments, minus the total supply
+		let (kernel_sum, fees) = self.sum_kernels()?;
+		let utxo_sum = self.sum_utxos()?;
+		{
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			let over_commit = secp.commit_value(header.height * reward(0) - fees / 2)?;
+			let adjusted_sum_utxo = secp.commit_sum(vec![utxo_sum], vec![over_commit])?;
+
+			if adjusted_sum_utxo != kernel_sum {
+				return Err(Error::InvalidSumtree("Differing UTXO commitment and kernel excess sums.".to_owned()));
+			}
+		}
+
+		Ok(())
+	}
+
+	/// Rebuild the index of MMR positions to the corresponding UTXO and kernel
+	/// by iterating over the whole MMR data. This is a costly operation
+	/// performed only when we receive a full new chain state.
+	pub fn rebuild_index(&self) -> Result<(), Error> {
+		for n in 1..self.output_pmmr.unpruned_size()+1 {
+			// non-pruned leaves only
+			if pmmr::bintree_postorder_height(n) == 0 {
+				if let Some(hs) = self.output_pmmr.get(n) {
+					self.commit_index.save_output_pos(&hs.sum.commit, n)?;
+				}
+			}
+		}
+		Ok(())
+	}
+
 	/// Force the rollback of this extension, no matter the result
 	pub fn force_rollback(&mut self) {
 		self.rollback = true;
 	}
 
 	/// Dumps the state of the 3 sum trees to stdout for debugging. Short
-	/// version
-	/// only prints the UTXO tree.
+	/// version only prints the UTXO tree.
 	pub fn dump(&self, short: bool) {
 		debug!(LOGGER, "-- outputs --");
 		self.output_pmmr.dump(short);
@@ -523,4 +612,109 @@ impl<'a> Extension<'a> {
 			self.kernel_pmmr.unpruned_size(),
 		)
 	}
+
+	/// Sums the excess of all our kernels, validating their signatures on the way
+	fn sum_kernels(&self) -> Result<(Commitment, u64), Error> {
+		// make sure we have the right count of kernels using the MMR, the storage
+		// file may have a few more
+		let mmr_sz = self.kernel_pmmr.unpruned_size();
+		let count: u64 = pmmr::peaks(mmr_sz).iter().map(|n| {
+			(1 << pmmr::bintree_postorder_height(*n)) as u64
+		}).sum();
+
+		let mut kernel_file = File::open(self.kernel_file.path())?;
+		let first: TxKernel = ser::deserialize(&mut kernel_file)?;
+		first.verify()?;
+		let mut sum_kernel = first.excess;
+		let mut fees = first.fee;
+
+		let secp = static_secp_instance();
+		let mut kern_count = 1;
+		loop {
+			match ser::deserialize::<TxKernel>(&mut kernel_file) {
+				Ok(kernel) => {
+					kernel.verify()?;
+					let secp = secp.lock().unwrap();
+					sum_kernel = secp.commit_sum(vec![sum_kernel, kernel.excess], vec![])?;
+					fees += kernel.fee;
+					kern_count += 1;
+					if kern_count == count {
+						break;
+					}
+				}
+				Err(_) => break,
+			}
+		}
+		debug!(LOGGER, "Validated and summed {} kernels", kern_count);
+		Ok((sum_kernel, fees))
+	}
+
+	/// Sums all our UTXO commitments
+	fn sum_utxos(&self) -> Result<Commitment, Error> {
+		let mut sum_utxo = None;
+		let mut utxo_count = 0;
+		let secp = static_secp_instance();
+		for n in 1..self.output_pmmr.unpruned_size()+1 {
+			if pmmr::bintree_postorder_height(n) == 0 {
+				if let Some(hs) = self.output_pmmr.get(n) {
+					if n == 1 {
+						sum_utxo = Some(hs.sum.commit);
+					} else {
+						let secp = secp.lock().unwrap();
+						sum_utxo = Some(secp.commit_sum(vec![sum_utxo.unwrap(), hs.sum.commit], vec![])?);
+					}
+					utxo_count += 1;
+				}
+			}
+		}
+		debug!(LOGGER, "Summed {} UTXOs", utxo_count);
+		Ok(sum_utxo.unwrap())
+	}
+}
+
+/// Output and kernel MMR indexes at the end of the provided block
+fn indexes_at(block: &Block, commit_index: &ChainStore) -> Result<(u64, u64), Error> {
+	let out_idx = match block.outputs.last() {
+		Some(output) => commit_index.get_output_pos(&output.commitment())
+			.map_err(|e| {
+				Error::StoreErr(e, format!("missing output pos for known block"))
+			})?,
+		None => 0,
+	};
+
+	let kern_idx = match block.kernels.last() {
+		Some(kernel) => commit_index.get_kernel_pos(&kernel.excess)
+			.map_err(|e| {
+				Error::StoreErr(e, format!("missing kernel pos for known block"))
+			})?,
+		None => 0,
+	};
+	Ok((out_idx, kern_idx))
+}
+
+/// Packages the sumtree data files into a zip and returns a Read to the
+/// resulting file
+pub fn zip_read(root_dir: String) -> Result<File, Error> {
+	let sumtrees_path = Path::new(&root_dir).join(SUMTREES_SUBDIR);
+	let zip_path = Path::new(&root_dir).join(SUMTREES_ZIP);
+
+	// create the zip archive
+	{
+		zip::compress(&sumtrees_path, &File::create(zip_path.clone())?)
+			.map_err(|ze| Error::Other(ze.to_string()))?;
+	}
+
+	// open it again to read it back
+	let zip_file = File::open(zip_path)?;
+	Ok(zip_file)
+}
+
+/// Extract the sumtree data from a zip file and writes the content into the
+/// sumtree storage dir
+pub fn zip_write(root_dir: String, sumtree_data: File) -> Result<(), Error> {
+	let sumtrees_path = Path::new(&root_dir).join(SUMTREES_SUBDIR);
+
+	fs::create_dir_all(sumtrees_path.clone())?;
+	zip::decompress(sumtree_data, &sumtrees_path)
+			.map_err(|ze| Error::Other(ze.to_string()))
 }

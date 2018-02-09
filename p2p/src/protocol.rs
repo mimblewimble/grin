@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
+use std::env;
+use std::fs::File;
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use core::core;
 use core::core::hash::{Hash, Hashed};
-use core::ser;
 use conn::*;
 use msg::*;
 use rand;
@@ -37,7 +38,7 @@ impl Protocol {
 }
 
 impl MessageHandler for Protocol {
-	fn consume(&self, msg: &mut Message) -> Result<Option<(Vec<u8>, Type)>, Error> {
+	fn consume<'a>(&self, mut msg: Message<'a>) -> Result<Option<Response<'a>>, Error> {
 		let adapter = &self.adapter;
 
 		match msg.header.msg_type {
@@ -46,13 +47,14 @@ impl MessageHandler for Protocol {
 				let ping: Ping = msg.body()?;
 				adapter.peer_difficulty(self.addr, ping.total_difficulty, ping.height);
 
-				let pong_bytes = ser::ser_vec(
-					&Pong {
-						total_difficulty: adapter.total_difficulty(),
-						height: adapter.total_height(),
-					}).unwrap();
-
-				Ok(Some((pong_bytes, Type::Pong)))
+				Ok(Some(
+					msg.respond(
+						Type::Pong,
+						Pong {
+							total_difficulty: adapter.total_difficulty(),
+							height: adapter.total_height(),
+						})
+				))
 			}
 
 			Type::Pong => {
@@ -73,8 +75,7 @@ impl MessageHandler for Protocol {
 
 				let bo = adapter.get_block(h);
 				if let Some(b) = bo {
-					let block_bytes = ser::ser_vec(&b).unwrap();
-					return Ok(Some((block_bytes, Type::Block)));
+					return Ok(Some(msg.respond(Type::Block, b)));
 				}
 				Ok(None)
 			}
@@ -111,11 +112,9 @@ impl MessageHandler for Protocol {
 							"handle_payload: GetCompactBlock: empty block, sending full block",
 							);
 
-						let block_bytes = ser::ser_vec(&b).unwrap();
-						Ok(Some((block_bytes, Type::Block)))
+						Ok(Some(msg.respond(Type::Block, b)))
 					} else {
-						let compact_block_bytes = ser::ser_vec(&cb).unwrap();
-						Ok(Some((compact_block_bytes, Type::CompactBlock)))
+						Ok(Some(msg.respond(Type::CompactBlock, cb)))
 					}
 				} else {
 					Ok(None)
@@ -137,8 +136,7 @@ impl MessageHandler for Protocol {
 				let headers = adapter.locate_headers(loc.hashes);
 
 				// serialize and send all the headers over
-				let header_bytes = ser::ser_vec(&Headers { headers: headers }).unwrap();
-				return Ok(Some((header_bytes, Type::Headers)));
+				Ok(Some(msg.respond(Type::Headers, Headers { headers: headers })))
 			}
 
 			// "header first" block propagation - if we have not yet seen this block
@@ -162,16 +160,64 @@ impl MessageHandler for Protocol {
 			Type::GetPeerAddrs => {
 				let get_peers: GetPeerAddrs = msg.body()?;
 				let peer_addrs = adapter.find_peer_addrs(get_peers.capabilities);
-				let peer_addrs_bytes = ser::ser_vec(
-					&PeerAddrs {
-						peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
-					}).unwrap();
-				return Ok(Some((peer_addrs_bytes, Type::PeerAddrs)));
+				Ok(Some(
+						msg.respond(
+							Type::PeerAddrs,
+							PeerAddrs {
+								peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
+							})
+				))
 			}
 
 			Type::PeerAddrs => {
 				let peer_addrs: PeerAddrs = msg.body()?;
 				adapter.peer_addrs_received(peer_addrs.peers.iter().map(|pa| pa.0).collect());
+				Ok(None)
+			}
+
+			Type::SumtreesRequest => {
+				let sm_req: SumtreesRequest = msg.body()?;
+				debug!(LOGGER, "handle_payload: sumtree req for {} at {}",
+							 sm_req.hash, sm_req.height);
+
+				let sumtrees = self.adapter.sumtrees_read(sm_req.hash);
+
+				if let Some(sumtrees) = sumtrees {
+					let file_sz = sumtrees.reader.metadata()?.len();
+					let mut resp = msg.respond(
+						Type::SumtreesArchive,
+						&SumtreesArchive {
+							height: sm_req.height as u64,
+							hash: sm_req.hash,
+							rewind_to_output: sumtrees.output_index,
+							rewind_to_kernel: sumtrees.kernel_index,
+							bytes: file_sz,
+						});
+					resp.add_attachment(sumtrees.reader);
+					Ok(Some(resp))
+				} else {
+					Ok(None)
+				}
+			}
+
+			Type::SumtreesArchive => {
+				let sm_arch: SumtreesArchive = msg.body()?;
+				debug!(LOGGER, "handle_payload: sumtree archive for {} at {} rewind to {}/{}",
+							sm_arch.hash, sm_arch.height,
+							sm_arch.rewind_to_output, sm_arch.rewind_to_kernel);
+
+				let mut tmp = env::temp_dir();
+				tmp.push("sumtree.zip");
+				{
+					let mut tmp_zip = File::create(tmp.clone())?;
+					msg.copy_attachment(sm_arch.bytes as usize, &mut tmp_zip)?;	
+					tmp_zip.sync_all()?;
+				}
+
+				let tmp_zip = File::open(tmp)?;
+				self.adapter.sumtrees_write(
+					sm_arch.hash, sm_arch.rewind_to_output,
+					sm_arch.rewind_to_kernel, tmp_zip, self.addr);
 				Ok(None)
 			}
 

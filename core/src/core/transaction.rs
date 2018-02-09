@@ -167,6 +167,13 @@ impl TxKernel {
 		}
 		Ok(())
 	}
+
+	/// Size in bytes of a kernel, necessary for binary storage
+	pub fn size() -> usize {
+		17 + // features plus fee and lock_height
+			secp::constants::PEDERSEN_COMMITMENT_SIZE +
+			secp::constants::AGG_SIGNATURE_SIZE
+	}
 }
 
 /// A transaction
@@ -770,7 +777,7 @@ impl Readable for OutputIdentifier {
 }
 
 /// Wrapper to Output commitments to provide the Summable trait.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct SumCommit {
 	/// Output features (coinbase vs. regular transaction output)
 	/// We need to include this when hashing to ensure coinbase maturity can be enforced.

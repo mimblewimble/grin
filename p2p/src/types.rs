@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::convert::From;
+use std::fs::File;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::mpsc;
@@ -132,6 +133,17 @@ pub struct PeerInfo {
 	pub total_difficulty: Difficulty,
 }
 
+/// The full sumtree data along with indexes required for a consumer to
+/// rewind to a consistant requested state.
+pub struct SumtreesRead {
+	/// Output tree index the receiver should rewind to
+	pub output_index: u64,
+	/// Kernel tree index the receiver should rewind to
+	pub kernel_index: u64,
+	/// Binary stream for the sumtree zipped data
+	pub reader: File,
+}
+
 /// Bridge between the networking layer and the rest of the system. Handles the
 /// forwarding or querying of blocks and transactions from the network among
 /// other things.
@@ -167,6 +179,19 @@ pub trait ChainAdapter: Sync + Send {
 
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
+
+	/// Provides a reading view into the current sumtree state as well as
+	/// the required indexes for a consumer to rewind to a consistant state
+	/// at the provided block hash.
+	fn sumtrees_read(&self, h: Hash) -> Option<SumtreesRead>;
+
+	/// Writes a reading view on a sumtree state that's been provided to us.
+	/// If we're willing to accept that new state, the data stream will be
+	/// read as a zip file, unzipped and the resulting state files should be
+	/// rewound to the provided indexes.
+	fn sumtrees_write(&self, h: Hash,
+										rewind_to_output: u64, rewind_to_kernel: u64,
+										sumtree_data: File, peer_addr: SocketAddr) -> bool;
 }
 
 /// Additional methods required by the protocol that don't need to be

@@ -142,6 +142,7 @@ impl Server {
 			p2p_server.peers.clone(),
 			shared_chain.clone(),
 			skip_sync_wait,
+			!config.archive_mode,
 		);
 
 		let p2p_inner = p2p_server.clone();
@@ -204,6 +205,11 @@ impl Server {
 	/// The chain head
 	pub fn head(&self) -> chain::Tip {
 		self.chain.head().unwrap()
+	}
+
+	/// The head of the block header chain
+	pub fn header_head(&self) -> chain::Tip {
+		self.chain.get_header_head().unwrap()
 	}
 
 	/// Returns a set of stats about this server. This and the ServerStats

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fs::File;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, RwLock};
 
@@ -230,6 +231,13 @@ impl Peer {
 			msg::Type::GetPeerAddrs)
 	}
 
+	pub fn send_sumtrees_request(&self, height: u64, hash: Hash) -> Result<(), Error> {
+		debug!(LOGGER, "Asking {} for sumtree archive at {} {}.",
+					 self.info.addr, height, hash);
+		self.connection.as_ref().unwrap().send(
+			&SumtreesRequest {hash, height }, msg::Type::SumtreesRequest)
+	}
+
 	/// Stops the peer, closing its connection
 	pub fn stop(&self) {
 		let _ = self.connection.as_ref().unwrap().close_channel.send(());
@@ -325,6 +333,17 @@ impl ChainAdapter for TrackingAdapter {
 
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
+	}
+
+	fn sumtrees_read(&self, h: Hash) -> Option<SumtreesRead> {
+		self.adapter.sumtrees_read(h)
+	}
+
+	fn sumtrees_write(&self, h: Hash,
+										rewind_to_output: u64, rewind_to_kernel: u64,
+										sumtree_data: File, peer_addr: SocketAddr) -> bool {
+		self.adapter.sumtrees_write(h, rewind_to_output, rewind_to_kernel,
+																sumtree_data, peer_addr)
 	}
 }
 

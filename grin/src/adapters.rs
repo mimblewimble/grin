@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -123,7 +124,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		if let &Err(ref e) = &res {
 			debug!(LOGGER, "Block header {} refused by chain: {:?}", bhash, e);
-			if e.is_bad_block() {
+			if e.is_bad_data() {
 				debug!(LOGGER, "header_received: {} is a bad header, resetting header head", bhash);
 				let _ = self.chain.reset_head();
 				return false;
@@ -183,10 +184,14 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				}
 			}
 		}
+
+		let header_head = self.chain.get_header_head().unwrap();
 		info!(
 			LOGGER,
-			"Added {} headers to the header chain.",
-			added_hs.len()
+			"Added {} headers to the header chain. Last: {} at {}.",
+			added_hs.len(),
+			header_head.last_block_h,
+			header_head.height,
 		);
 	}
 
@@ -241,6 +246,41 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
+	/// Provides a reading view into the current sumtree state as well as
+	/// the required indexes for a consumer to rewind to a consistant state
+	/// at the provided block hash.
+	fn sumtrees_read(&self, h: Hash) -> Option<p2p::SumtreesRead> {
+		match self.chain.sumtrees_read(h.clone()) {
+			Ok((out_index, kernel_index, read)) => Some(p2p::SumtreesRead {
+				output_index: out_index,
+				kernel_index: kernel_index,
+				reader: read,
+			}),
+			Err(e) => {
+				warn!(LOGGER, "Couldn't produce sumtrees data for block {}: {:?}",
+							h, e);
+				None
+			}
+		}
+	}
+
+	/// Writes a reading view on a sumtree state that's been provided to us.
+	/// If we're willing to accept that new state, the data stream will be
+	/// read as a zip file, unzipped and the resulting state files should be
+	/// rewound to the provided indexes.
+	fn sumtrees_write(&self, h: Hash,
+										rewind_to_output: u64, rewind_to_kernel: u64,
+										sumtree_data: File, peer_addr: SocketAddr) -> bool {
+		// TODO check whether we should accept any sumtree now
+		if let Err(e) = self.chain.sumtrees_write(h, rewind_to_output, rewind_to_kernel, sumtree_data) {
+			error!(LOGGER, "Failed to save sumtree archive: {:?}", e);
+			!e.is_bad_data()
+		} else {
+			info!(LOGGER, "Received valid sumtree data for {}.", h);
+			self.currently_syncing.store(true, Ordering::Relaxed);
+			true
+		}
+	}
 }
 
 impl NetToChainAdapter {
@@ -302,7 +342,7 @@ impl NetToChainAdapter {
 		let res = self.chain.process_block(b, self.chain_opts());
 		if let Err(ref e) = res {
 			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
-			if e.is_bad_block() {
+			if e.is_bad_data() {
 				debug!(LOGGER, "adapter: process_block: {} is a bad block, resetting head", bhash);
 				let _ = self.chain.reset_head();
 				return false;

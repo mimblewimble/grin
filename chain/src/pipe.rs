@@ -64,19 +64,23 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 
 	validate_header(&b.header, &mut ctx)?;
 
-	// valid header, now check we actually have the previous block in the store
+	// valid header, now check we actually have the previous block in the store	
 	// not just the header but the block itself
-	// we cannot assume we can use the chain head for this as we may be dealing with a fork
-	// we cannot use heights here as the fork may have jumped in height
-	match ctx.store.get_block(&b.header.previous) {
-		Ok(_) => {},
-		Err(grin_store::Error::NotFoundErr) => {
-			return Err(Error::Orphan);
-		},
-		Err(e) => {
-			return Err(Error::StoreErr(e, "pipe get previous".to_owned()));
+	// short circuit the test first both for performance (in-mem vs db access)
+	// but also for the specific case of the first fast sync full block
+	if b.header.previous != ctx.head.last_block_h {
+		// we cannot assume we can use the chain head for this as we may be dealing with a fork
+		// we cannot use heights here as the fork may have jumped in height
+		match ctx.store.block_exists(&b.header.previous) {
+			Ok(true) => {},
+			Ok(false) => {
+				return Err(Error::Orphan);
+			},
+			Err(e) => {
+				return Err(Error::StoreErr(e, "pipe get previous".to_owned()));
+			}
 		}
-	};
+	}
 
 	// valid header and we have a previous block, time to take the lock on the sum trees
 	let local_sumtrees = ctx.sumtrees.clone();

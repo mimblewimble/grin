@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::collections::HashMap;
+use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
@@ -481,6 +482,25 @@ impl ChainAdapter for Peers {
 	}
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
+	}
+	fn sumtrees_read(&self, h: Hash) -> Option<SumtreesRead> {
+		self.adapter.sumtrees_read(h)
+	}
+	fn sumtrees_write(
+		&self,
+		h: Hash,
+		rewind_to_output: u64,
+		rewind_to_kernel: u64,
+		sumtree_data: File,
+		peer_addr: SocketAddr,
+	) -> bool {
+		if !self.adapter.sumtrees_write(h, rewind_to_output, rewind_to_kernel,
+																		sumtree_data, peer_addr) {
+			self.ban_peer(&peer_addr);
+			false
+		} else {
+			true
+		}
 	}
 }
 

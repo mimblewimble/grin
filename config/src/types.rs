@@ -96,6 +96,7 @@ pub struct GlobalConfig {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConfigMembers {
 	/// Server config
+	#[serde(default)]
 	pub server: ServerConfig,
 	/// Mining config
 	pub mining: Option<MinerConfig>,
