@@ -536,13 +536,13 @@ impl<'a> Extension<'a> {
 	pub fn validate(&self, header: &BlockHeader) -> Result<(), Error> {
 		// validate all hashes and sums within the trees
 		if let Err(e) = self.output_pmmr.validate() {
-			return Err(Error::SumTreeErr(e));
+			return Err(Error::InvalidSumtree(e));
 		}
 		if let Err(e) = self.rproof_pmmr.validate() {
-			return Err(Error::SumTreeErr(e));
+			return Err(Error::InvalidSumtree(e));
 		}
 		if let Err(e) = self.kernel_pmmr.validate() {
-			return Err(Error::SumTreeErr(e));
+			return Err(Error::InvalidSumtree(e));
 		}
 
 		// validate the tree roots against the block header
@@ -564,7 +564,7 @@ impl<'a> Extension<'a> {
 			let adjusted_sum_utxo = secp.commit_sum(vec![utxo_sum], vec![over_commit])?;
 
 			if adjusted_sum_utxo != kernel_sum {
-				return Err(Error::SumTreeErr("Differing UTXO commitment and kernel excess sums.".to_owned()));
+				return Err(Error::InvalidSumtree("Differing UTXO commitment and kernel excess sums.".to_owned()));
 			}
 		}
 

@@ -68,7 +68,6 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 	// not just the header but the block itself
 	// short circuit the test first both for performance (in-mem vs db access)
 	// but also for the specific case of the first fast sync full block
-	error!(LOGGER, "-- {} {} {}", b.header.previous, ctx.head.last_block_h, ctx.head.height);
 	if b.header.previous != ctx.head.last_block_h {
 		// we cannot assume we can use the chain head for this as we may be dealing with a fork
 		// we cannot use heights here as the fork may have jumped in height

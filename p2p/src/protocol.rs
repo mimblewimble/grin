@@ -204,7 +204,8 @@ impl MessageHandler for Protocol {
 
 				let tmp_zip = File::open(tmp)?;
 				self.adapter.sumtrees_write(
-					sm_arch.hash, sm_arch.rewind_to_output, sm_arch.rewind_to_kernel, tmp_zip);
+					sm_arch.hash, sm_arch.rewind_to_output,
+					sm_arch.rewind_to_kernel, tmp_zip, self.addr);
 				Ok(None)
 			}
 
@@ -215,98 +216,3 @@ impl MessageHandler for Protocol {
 		}
 	}
 }
-
-
-
-//			Type::SumtreesRequest => {
-//				let sm_req = ser::deserialize::<SumtreesRequest>(&mut &buf[..])?;
-//				debug!(LOGGER, "handle_payload: sumtree req for {} at {}",
-//							sm_req.hash, sm_req.height);
-//
-//				let sumtrees = self.adapter.sumtrees_read(sm_req.hash);
-//
-//				if let Some(mut sumtrees) = sumtrees {
-//					let file_sz = sumtrees.reader.metadata()?.len();
-//
-//					// first send the sumtree archive information
-//					let mut body_data = vec![];
-//					ser::serialize(&mut body_data,
-//						&SumtreesArchive {
-//							height: sm_req.height as u64,
-//							hash: sm_req.hash,
-//							rewind_to_output: sumtrees.output_index,
-//							rewind_to_kernel: sumtrees.kernel_index,
-//							bytes: file_sz,
-//						})?;
-//
-//					let mut data = vec![];
-//					try!(ser::serialize(
-//							&mut data,
-//							&MsgHeader::new(Type::SumtreesArchive, body_data.len() as u64),
-//							));
-//					data.append(&mut body_data);
-//
-//					if let Err(e) = sender.unbounded_send(data) {
-//						debug!(LOGGER, "handle_payload: error sending sumtrees info: {:?}", e);
-//					}
-//
-//					// second, send the archive byte stream
-//					debug!(LOGGER, "handle_payload: sumtree archive metadata sent, preparing to stream");
-//					loop {
-//						let mut buf = [0; 8000];
-//						let len = sumtrees.reader.read(&mut buf)?;
-//						debug!(LOGGER, "handle_payload: sending {} bytes of sumtree data", len);
-//						if let Err(e) = sender.unbounded_send(buf[0..len].to_vec()) {
-//							debug!(LOGGER, "handle_payload: error sending sumtrees: {:?}", e);
-//						}
-//						if len == 0 {
-//							break;
-//						}
-//					}
-//					debug!(LOGGER, "handle_payload: stream sent");
-//				}
-//				Ok(None)
-//			}
-//
-//			Type::SumtreesArchive => {
-//				let sm_arch = ser::deserialize::<SumtreesArchive>(&mut &buf[..])?;
-//				debug!(LOGGER, "handle_payload: sumtree archive for {} at {} rewind to {}/{}",
-//							sm_arch.hash, sm_arch.height,
-//							sm_arch.rewind_to_output, sm_arch.rewind_to_kernel);
-//
-//				let mut tmp = env::temp_dir();
-//				tmp.push("sumtree.zip");
-//				{
-//					let mut tmp_zip = File::create(tmp.clone())?;
-//	
-//					// can't simply use io::copy as we're dealing with an async socket
-//					// TODO abort if nothing gets sent for 5 secs
-//					let mut buffer = [0; 8000];
-//					let mut total_size = 0;
-//					'outer: loop {
-//						let res = reader.read(&mut buffer);
-//						match res {
-//							Ok(n) => {
-//								if n == 0 {
-//									break 'outer;
-//								}
-//								tmp_zip.write(&buffer[0..n]);
-//								total_size += n;
-//								if total_size as u64 >= sm_arch.bytes {
-//									break 'outer;
-//								}
-//							}
-//							Err(e) => {
-//								debug!(LOGGER, "err: {:?}", e);
-//							}
-//						}
-//					}
-//					debug!(LOGGER, "handle_payload: wrote {} bytes sumtree archive", total_size);
-//					tmp_zip.sync_all()?;
-//				}
-//
-//				let tmp_zip = File::open(tmp)?;
-//				self.adapter.sumtrees_write(
-//					sm_arch.hash, sm_arch.rewind_to_output, sm_arch.rewind_to_kernel, tmp_zip);
-//				Ok(None)
-//			}

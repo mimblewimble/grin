@@ -21,16 +21,18 @@ use time;
 use chain;
 use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::core::target::Difficulty;
+use core::global;
 use p2p::{self, Peer, Peers, ChainAdapter};
 use types::Error;
 use util::LOGGER;
 
 /// Starts the syncing loop, just spawns two threads that loop forever
-pub fn run_full_sync(
+pub fn run_sync(
 	currently_syncing: Arc<AtomicBool>,
 	peers: p2p::Peers,
 	chain: Arc<chain::Chain>,
 	skip_sync_wait: bool,
+	fast_sync: bool,
 ) {
 
 	let chain = chain.clone();
@@ -39,70 +41,31 @@ pub fn run_full_sync(
 		.spawn(move || {
 			let mut prev_body_sync = time::now_utc();
 			let mut prev_header_sync = prev_body_sync.clone();
+			let mut prev_state_sync = prev_body_sync.clone() - time::Duration::seconds(5 * 60);
 
 			// initial sleep to give us time to peer with some nodes
 			if !skip_sync_wait {
 				thread::sleep(Duration::from_secs(30));
 			}
 
+			// fast sync has 3 states:
+			// * syncing headers
+			// * once all headers are sync'd, requesting the sumtree state
+			// * once we have the state, get blocks after that
+			//
+			// full sync gets rid of the middle step and just starts from
+			// the genesis state
+
 			loop {
-				let syncing = needs_syncing(
-					currently_syncing.clone(), peers.clone(), chain.clone(), false);
-				if syncing {
+				let horizon = global::cut_through_horizon() as u64;
+				let head = chain.head().unwrap();
+				let header_head = chain.get_header_head().unwrap();
 
-					let current_time = time::now_utc();
+				// in archival nodes (no fast sync) we just consider we have the whole
+				// state already
+				let have_sumtrees = !fast_sync || head.height > 0 &&
+					header_head.height.saturating_sub(head.height) <= horizon;
 
-					// run the header sync every 10s
-					if current_time - prev_header_sync > time::Duration::seconds(10) {
-						header_sync(
-							peers.clone(),
-							chain.clone(),
-						);
-						prev_header_sync = current_time;
-					}
-
-					// run the body_sync every 5s
-					if current_time - prev_body_sync > time::Duration::seconds(5) {
-						body_sync(
-							peers.clone(),
-							chain.clone(),
-						);
-						prev_body_sync = current_time;
-					}
-
-					thread::sleep(Duration::from_secs(1));
-				} else {
-					thread::sleep(Duration::from_secs(10));
-				}
-			}
-		});
-}
-
-pub fn run_fast_sync(
-	currently_syncing: Arc<AtomicBool>,
-	peers: p2p::Peers,
-	chain: Arc<chain::Chain>,
-	skip_sync_wait: bool,
-) {
-
-	let _ = thread::Builder::new()
-		.name("sync".to_string())
-		.spawn(move || {
-			let mut prev_body_sync = time::now_utc();
-			let mut prev_header_sync = prev_body_sync.clone();
-			let mut prev_state_sync = prev_body_sync.clone() - time::Duration::seconds(120);
-
-			// initial sleep to give us time to peer with some nodes
-			if !skip_sync_wait {
-				thread::sleep(Duration::from_secs(30));
-			}
-			loop {
-				// fast sync has 3 states:
-				// * syncing headers
-				// * once all headers are sync'd, requesting the sumtree state
-				// * once we have the state, get blocks after that
-
-				let have_sumtrees = chain.head().unwrap().height > 0;
 				let syncing = needs_syncing(
 					currently_syncing.clone(), peers.clone(), chain.clone(), !have_sumtrees);
 
@@ -118,8 +81,7 @@ pub fn run_fast_sync(
 						prev_header_sync = current_time;
 					}
 
-					// once sumtrees have been received, run the body_sync every 5s to
-					// catch up to latest block
+					// run the body_sync every 5s
 					if have_sumtrees && current_time - prev_body_sync > time::Duration::seconds(5) {
 						body_sync(
 							peers.clone(),
@@ -128,30 +90,28 @@ pub fn run_fast_sync(
 						prev_body_sync = current_time;
 					}
 
-				} else {
-					// TODO if no peer have more than sumtree_depth blocks, do normal sync
-					if !have_sumtrees && current_time - prev_state_sync > time::Duration::seconds(120) {
-						if let Some(peer) = peers.most_work_peer() {
-							if let Ok(p) = peer.try_read() {
-								error!(LOGGER, "sync request");
-								let header_head = chain.get_header_head().unwrap();
-								debug!(LOGGER, "Header head before sumtree request: {} / {}",
-											 header_head.height, header_head.last_block_h);
-								// TODO parameterize
-								let sumtree_depth = 20;
-								if header_head.height > sumtree_depth + 5 {
-									let mut sumtree_head = chain.get_block_header(&header_head.prev_block_h).unwrap();
-									for _ in 0..sumtree_depth-1 {
-										sumtree_head = chain.get_block_header(&sumtree_head.previous).unwrap();
-									}
-									p.send_sumtrees_request(sumtree_head.height, sumtree_head.hash());
-									prev_state_sync = current_time;
+				} else if !have_sumtrees &&
+									current_time - prev_state_sync > time::Duration::seconds(5*60) {
+
+					if let Some(peer) = peers.most_work_peer() {
+						if let Ok(p) = peer.try_read() {
+							debug!(LOGGER, "Header head before sumtree request: {} / {}",
+										 header_head.height, header_head.last_block_h);
+
+							// just to handle corner case of a too early start
+							if header_head.height > horizon {
+
+								// ask for sumtree at horizon
+								let mut sumtree_head = chain.get_block_header(&header_head.prev_block_h).unwrap();
+								for _ in 0..horizon-2 {
+									sumtree_head = chain.get_block_header(&sumtree_head.previous).unwrap();
 								}
+								p.send_sumtrees_request(sumtree_head.height, sumtree_head.hash());
+								prev_state_sync = current_time;
 							}
 						}
 					}
-				}
-
+				}	
 				thread::sleep(Duration::from_secs(1));
 			}
 		});
@@ -176,7 +136,6 @@ fn body_sync(peers: Peers, chain: Arc<chain::Chain>) {
 
 	let mut hashes = vec![];
 
-	error!(LOGGER, "1 {} {}", header_head.total_difficulty, body_head.total_difficulty);
 	if header_head.total_difficulty > body_head.total_difficulty {
 		let mut current = chain.get_block_header(&header_head.last_block_h);
 		while let Ok(header) = current {
@@ -187,13 +146,11 @@ fn body_sync(peers: Peers, chain: Arc<chain::Chain>) {
 				break;
 			}
 
-			error!(LOGGER, "push {} / {}", header.height, header.hash());
 			hashes.push(header.hash());
 			current = chain.get_block_header(&header.previous);
 		}
 	}
 	hashes.reverse();
-	error!(LOGGER, "htg1 {}", hashes.len());
 
 	// if we have 5 peers to sync from then ask for 50 blocks total (peer_count * 10)
 	// max will be 80 if all 8 peers are advertising more work
@@ -210,7 +167,6 @@ fn body_sync(peers: Peers, chain: Arc<chain::Chain>) {
 		.take(block_count)
 		.cloned()
 		.collect::<Vec<_>>();
-	error!(LOGGER, "htg2 {}", hashes_to_get.len());
 
 	if hashes_to_get.len() > 0 {
 		debug!(

@@ -25,6 +25,7 @@ use util::secp::pedersen::RangeProof;
 use core::core::{Input, OutputIdentifier, SumCommit};
 use core::core::hash::Hashed;
 use core::core::pmmr::{HashSum, NoSum};
+use core::global;
 
 use core::core::{Block, BlockHeader, TxKernel};
 use core::core::target::Difficulty;
@@ -477,8 +478,11 @@ impl Chain {
 		sumtree_data: File
 	) -> Result<(), Error> {
 
-		// TODO maybe validate the hash is on our header chain? or we could enforce
-		// at the p2p layer that it's what we asked
+		let head = self.head().unwrap();
+		let header_head = self.get_header_head().unwrap();
+		if header_head.height - head.height < global::cut_through_horizon() as u64 {
+			return Err(Error::InvalidSumtree("not needed".to_owned()));
+		}	
 
 		let header = self.store.get_block_header(&h)?;
 		sumtree::zip_write(self.db_root.clone(), sumtree_data)?;
@@ -502,7 +506,7 @@ impl Chain {
 		{
 			let mut head = self.head.lock().unwrap();
 			*head = Tip::from_block(&header);
-			self.store.save_head(&head);
+			self.store.save_body_head(&head);
 			self.store.save_header_height(&header)?;
 		}
 

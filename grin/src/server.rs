@@ -137,21 +137,13 @@ impl Server {
 			Some(b) => b,
 		};
 
-		if config.archive_mode {
-			sync::run_full_sync(
-				currently_syncing.clone(),
-				p2p_server.peers.clone(),
-				shared_chain.clone(),
-				skip_sync_wait,
-			);
-		} else {
-			sync::run_fast_sync(
-				currently_syncing.clone(),
-				p2p_server.peers.clone(),
-				shared_chain.clone(),
-				skip_sync_wait,
-			);
-		}
+		sync::run_sync(
+			currently_syncing.clone(),
+			p2p_server.peers.clone(),
+			shared_chain.clone(),
+			skip_sync_wait,
+			!config.archive_mode,
+		);
 
 		let p2p_inner = p2p_server.clone();
 		let _ = thread::Builder::new().name("p2p-server".to_string()).spawn(move || {

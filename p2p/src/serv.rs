@@ -198,8 +198,11 @@ impl ChainAdapter for DummyAdapter {
 	fn sumtrees_read(&self, _h: Hash) -> Option<SumtreesRead> {
 		unimplemented!()
 	}
-	fn sumtrees_write(&self, _h: Hash, _rewind_to_output: u64,
-										_rewind_to_kernel: u64, _sumtree_data: File) {
+
+	fn sumtrees_write(&self, _h: Hash,
+										_rewind_to_output: u64, _rewind_to_kernel: u64,
+										_sumtree_data: File, _peer_addr: SocketAddr) -> bool {
+		false
 	}
 }
 

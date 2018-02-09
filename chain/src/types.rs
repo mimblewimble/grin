@@ -77,6 +77,8 @@ pub enum Error {
 	OutputSpent,
 	/// Invalid block version, either a mistake or outdated software
 	InvalidBlockVersion(u16),
+	/// We've been provided a bad sumtree
+	InvalidSumtree(String),
 	/// Internal issue when trying to save or load data from store
 	StoreErr(grin_store::Error, String),
 	/// Error serializing or deserializing a type
@@ -114,7 +116,7 @@ impl From<secp::Error> for Error {
 
 impl Error {
 	/// Whether the error is due to a block that was intrinsically wrong
-	pub fn is_bad_block(&self) -> bool {
+	pub fn is_bad_data(&self) -> bool {
 		// shorter to match on all the "not the block's fault" errors
 		match *self {
 			Error::Unfit(_) |

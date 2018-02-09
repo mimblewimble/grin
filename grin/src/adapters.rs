@@ -124,7 +124,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		if let &Err(ref e) = &res {
 			debug!(LOGGER, "Block header {} refused by chain: {:?}", bhash, e);
-			if e.is_bad_block() {
+			if e.is_bad_data() {
 				debug!(LOGGER, "header_received: {} is a bad header, resetting header head", bhash);
 				let _ = self.chain.reset_head();
 				return false;
@@ -268,14 +268,17 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	fn sumtrees_write(&self, h: Hash, rewind_to_output: u64,
-										rewind_to_kernel: u64, sumtree_data: File) {
+	fn sumtrees_write(&self, h: Hash,
+										rewind_to_output: u64, rewind_to_kernel: u64,
+										sumtree_data: File, peer_addr: SocketAddr) -> bool {
 		// TODO check whether we should accept any sumtree now
 		if let Err(e) = self.chain.sumtrees_write(h, rewind_to_output, rewind_to_kernel, sumtree_data) {
 			error!(LOGGER, "Failed to save sumtree archive: {:?}", e);
+			!e.is_bad_data()
 		} else {
 			info!(LOGGER, "Received valid sumtree data for {}.", h);
 			self.currently_syncing.store(true, Ordering::Relaxed);
+			true
 		}
 	}
 }
@@ -339,7 +342,7 @@ impl NetToChainAdapter {
 		let res = self.chain.process_block(b, self.chain_opts());
 		if let Err(ref e) = res {
 			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
-			if e.is_bad_block() {
+			if e.is_bad_data() {
 				debug!(LOGGER, "adapter: process_block: {} is a bad block, resetting head", bhash);
 				let _ = self.chain.reset_head();
 				return false;

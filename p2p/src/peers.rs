@@ -486,10 +486,21 @@ impl ChainAdapter for Peers {
 	fn sumtrees_read(&self, h: Hash) -> Option<SumtreesRead> {
 		self.adapter.sumtrees_read(h)
 	}
-	fn sumtrees_write(&self, h: Hash, rewind_to_output: u64,
-																	rewind_to_kernel: u64, sumtree_data: File) {
-		self.adapter.sumtrees_write(h, rewind_to_output,
-																rewind_to_kernel, sumtree_data);
+	fn sumtrees_write(
+		&self,
+		h: Hash,
+		rewind_to_output: u64,
+		rewind_to_kernel: u64,
+		sumtree_data: File,
+		peer_addr: SocketAddr,
+	) -> bool {
+		if !self.adapter.sumtrees_write(h, rewind_to_output, rewind_to_kernel,
+																		sumtree_data, peer_addr) {
+			self.ban_peer(&peer_addr);
+			false
+		} else {
+			true
+		}
 	}
 }
 
