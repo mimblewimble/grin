@@ -269,6 +269,20 @@ where
 		ret.expect("no root, invalid tree")
 	}
 
+	pub fn merkle_proof(&self, pos: u64) -> bool {
+		if !is_leaf(pos) {
+			println!("\n*** pos: {}/{} (not leaf)", pos, self.last_pos);
+			return false;
+		}
+		let family_branch = family_branch(pos, self.last_pos);
+		let peaks = peaks(self.last_pos);
+
+		println!("\n*** pos: {}/{} - {:?}, {:?}", pos, self.last_pos, family_branch, peaks);
+
+		// TODO - what format to return this data?
+		true
+	}
+
 	/// Push a new Summable element in the MMR. Computes new related peaks at
 	/// the same time if applicable.
 	pub fn push(&mut self, elmt: T) -> Result<u64, String> {
@@ -737,6 +751,10 @@ pub fn bintree_postorder_height(num: u64) -> u64 {
 	most_significant_pos(h) - 1
 }
 
+pub fn is_leaf(pos: u64) -> bool {
+	bintree_postorder_height(pos) == 0
+}
+
 /// Calculates the positions of the parent and sibling of the node at the
 /// provided position.
 pub fn family(pos: u64) -> (u64, u64) {
@@ -755,11 +773,11 @@ pub fn family(pos: u64) -> (u64, u64) {
 	(parent, sibling)
 }
 
-pub fn family_branch(position: u64, last_pos: u64) -> Vec<(u64, u64)> {
+pub fn family_branch(pos: u64, last_pos: u64) -> Vec<(u64, u64)> {
 	// loop going up the tree, from node to parent, as long as we stay inside
 	// the tree (as defined by last_pos).
 	let mut branch = vec![];
-	let mut current = position;
+	let mut current = pos;
 	while current + 1 <= last_pos {
 		let (parent, sibling) = family(current);
 		if parent > last_pos {
@@ -891,9 +909,7 @@ mod test {
 		assert_eq!(family(4), (6, 5));
 		assert_eq!(family(5), (6, 4));
 		assert_eq!(family(6), (7, 3));
-		// ...
 		assert_eq!(family(7), (15, 14));
-		// ...
 		assert_eq!(family(1_000), (1_001, 997));
 	}
 
@@ -924,7 +940,7 @@ mod test {
 		// find the "family path" back up the tree from a leaf node at 0
 		// note the first two entries in the branch are consistent with a small 7 node tree
 		assert_eq!(
-			family_branch(1, 1_050_000),
+			family_branch(1, 1_049_000),
 			[
 				(3, 2),
 				(7, 6),
@@ -950,18 +966,24 @@ mod test {
 	}
 
 	#[test]
-	#[allow(unused_variables)]
 	fn some_peaks() {
+		// 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3
 		let empty: Vec<u64> = vec![];
-		assert_eq!(peaks(1), vec![1]);
+		assert_eq!(peaks(1), [1]);
 		assert_eq!(peaks(2), empty);
-		assert_eq!(peaks(3), vec![3]);
-		assert_eq!(peaks(4), vec![3, 4]);
-		assert_eq!(peaks(11), vec![7, 10, 11]);
-		assert_eq!(peaks(22), vec![15, 22]);
-		assert_eq!(peaks(32), vec![31, 32]);
-		assert_eq!(peaks(35), vec![31, 34, 35]);
-		assert_eq!(peaks(42), vec![31, 38, 41, 42]);
+		assert_eq!(peaks(3), [3]);
+		assert_eq!(peaks(4), [3, 4]);
+		assert_eq!(peaks(5), empty);
+		assert_eq!(peaks(6), empty);
+		assert_eq!(peaks(7), [7]);
+		assert_eq!(peaks(8), [7, 8]);
+		assert_eq!(peaks(9), empty);
+		assert_eq!(peaks(10), [7, 10]);
+		assert_eq!(peaks(11), [7, 10, 11]);
+		assert_eq!(peaks(22), [15, 22]);
+		assert_eq!(peaks(32), [31, 32]);
+		assert_eq!(peaks(35), [31, 34, 35]);
+		assert_eq!(peaks(42), [31, 38, 41, 42]);
 	}
 
 	#[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -986,6 +1008,54 @@ mod test {
 			try!(writer.write_u32(self.0[2]));
 			writer.write_u32(self.0[3])
 		}
+	}
+
+	#[test]
+	fn pmmr_merkle_proof() {
+		// 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3
+		let elems = [
+			TestElem([0, 0, 0, 1]),
+			TestElem([0, 0, 0, 2]),
+			TestElem([0, 0, 0, 3]),
+			TestElem([0, 0, 0, 4]),
+			TestElem([0, 0, 0, 5]),
+			TestElem([0, 0, 0, 6]),
+			TestElem([0, 0, 0, 7]),
+			TestElem([0, 0, 0, 8]),
+			TestElem([1, 0, 0, 0]),
+		];
+
+		let mut ba = VecBackend::new();
+		let mut pmmr = PMMR::new(&mut ba);
+
+		pmmr.push(elems[0]).unwrap();
+		assert_eq!(pmmr.last_pos, 1);
+		pmmr.merkle_proof(1);
+
+		pmmr.push(elems[1]).unwrap();
+		assert_eq!(pmmr.last_pos, 3);
+		pmmr.merkle_proof(1);
+		pmmr.merkle_proof(2);
+		pmmr.merkle_proof(3);
+
+		pmmr.push(elems[2]).unwrap();
+		assert_eq!(pmmr.last_pos, 4);
+		pmmr.merkle_proof(1);
+		pmmr.merkle_proof(2);
+		pmmr.merkle_proof(3);
+		pmmr.merkle_proof(4);
+
+		pmmr.push(elems[3]).unwrap();
+		assert_eq!(pmmr.last_pos, 7);
+		pmmr.merkle_proof(1);
+		pmmr.merkle_proof(2);
+		pmmr.merkle_proof(3);
+		pmmr.merkle_proof(4);
+		pmmr.merkle_proof(5);
+		pmmr.merkle_proof(6);
+		pmmr.merkle_proof(7);
+
+		panic!("panic and debug");
 	}
 
 	#[test]
