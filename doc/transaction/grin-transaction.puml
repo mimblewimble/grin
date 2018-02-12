@@ -22,7 +22,7 @@ sender -> sender: Lock **inputs** in wallet
 sender -> sender: Store **change_output** in wallet with status "Unconfirmed"
 note left of sender
 	6: Calculate **fee**:  **((-1 * num_inputs) + (4 * num_change_outputs) + 1)* 1_000_000 nG**
-		(+1 covers a single change output on the receiver's side)
+		(+1 covers a single output on the receiver's side)
 	7: Calculate total blinding excess sum for all inputs and outputs **xS** (private scalar)
 	8: Select a random nonce **kS** (private scalar)
 	9: Multiply **xS** and **kS** by generator G to create public curve points **xSG** and **kSG**
