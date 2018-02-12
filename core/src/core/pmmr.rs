@@ -209,6 +209,50 @@ where
 	fn remove(&mut self, positions: Vec<u64>, index: u32) -> Result<(), String>;
 }
 
+#[derive(Debug)]
+pub struct MerkleProof {
+	node: Hash,
+	peaks: Vec<Hash>,
+	path: Vec<Hash>,
+	sibling_branches: Vec<bool>,
+}
+
+impl MerkleProof {
+	pub fn verify(&self, root: Hash) -> bool {
+		println!("verifying - {:?}, {:?}", self, root);
+
+		assert_eq!(self.path.len(), self.sibling_branches.len());
+
+		// if we have no further elements in the path
+		// then this proof verifies successfully if our node is
+		// one of the peaks
+		// and the peaks themselves hash to give the root
+		if self.path.len() == 0 {
+			return self.peaks.contains(&self.node);
+		}
+
+		let mut path = self.path.clone();
+		let sibling = path.remove(0);
+		let mut sibling_branches = self.sibling_branches.clone();
+
+		// hash our node and sibling together (observing the position of the sibling)
+		let parent = if sibling_branches.remove(0) {
+			(self.node, sibling)
+		} else {
+			(sibling, self.node)
+		}.hash();
+
+		let proof = MerkleProof {
+			node: parent,
+			peaks: self.peaks.clone(),
+			path: path,
+			sibling_branches: sibling_branches,
+		};
+		proof.verify(root)
+	}
+}
+
+
 /// Prunable Merkle Mountain Range implementation. All positions within the tree
 /// start at 1 as they're postorder tree traversal positions rather than array
 /// indices.
@@ -269,18 +313,50 @@ where
 		ret.expect("no root, invalid tree")
 	}
 
-	pub fn merkle_proof(&self, pos: u64) -> Result<bool, String> {
+	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
 		if !is_leaf(pos) {
 			println!("\n*** pos: {}/{} (not leaf)", pos, self.last_pos);
 			return Err(format!("not a leaf at pos {}", pos));
 		}
+
+		let node = if let Some(node) = self.get(pos) {
+			node.hash
+		} else {
+			return Err(format!("node not found at pos {}", pos));
+		};
+
 		let family_branch = family_branch(pos, self.last_pos);
-		let peaks = peaks(self.last_pos);
+		let sibling_branches = family_branch
+			.iter()
+			.map(|x| x.2)
+			.collect::<Vec<_>>();
 
-		println!("\n*** pos: {}/{} - {:?}, {:?}", pos, self.last_pos, family_branch, peaks);
+		let path = family_branch
+			.iter()
+			.filter_map(|x| self.get(x.1))
+			.map(|x| x.hash)
+			.collect::<Vec<_>>();
 
-		// TODO - what format to return this data?
-		Ok(true)
+		let peaks = peaks(self.last_pos)
+			.iter()
+			.filter_map(|&x| self.get(x))
+			.map(|x| x.hash)
+			.collect::<Vec<_>>();
+
+		println!("\n*** pos: {}/{} - {:?}, {:?}, {:?}", pos, self.last_pos, path, peaks, sibling_branches);
+
+		let proof = MerkleProof {
+			node,
+			path,
+			peaks,
+			sibling_branches,
+		};
+
+		println!("{:?}", proof);
+		proof.verify(Hash::zero());
+
+
+		Ok(proof)
 	}
 
 	/// Push a new Summable element in the MMR. Computes new related peaks at
@@ -938,7 +1014,7 @@ mod test {
 		// ok now for a more realistic one, a tree with over a million nodes in it
 		// find the "family path" back up the tree from a leaf node at 0
 		// Note: the first two entries in the branch are consistent with a small 7 node tree
-		// Note: each sibling is on the left branch, this is an example of the largest possible 
+		// Note: each sibling is on the left branch, this is an example of the largest possible
 		// list of peaks before we start combining them into larger peaks.
 		assert_eq!(
 			family_branch(1, 1_049_000),
@@ -1083,7 +1159,7 @@ mod test {
 		pmmr.merkle_proof(6);
 		pmmr.merkle_proof(7);
 
-		panic!("panic and debug");
+		assert_eq!(0, 1, "fail and debug");
 	}
 
 	#[test]
