@@ -269,10 +269,10 @@ where
 		ret.expect("no root, invalid tree")
 	}
 
-	pub fn merkle_proof(&self, pos: u64) -> bool {
+	pub fn merkle_proof(&self, pos: u64) -> Result<bool, String> {
 		if !is_leaf(pos) {
 			println!("\n*** pos: {}/{} (not leaf)", pos, self.last_pos);
-			return false;
+			return Err(format!("not a leaf at pos {}", pos));
 		}
 		let family_branch = family_branch(pos, self.last_pos);
 		let peaks = peaks(self.last_pos);
@@ -280,7 +280,7 @@ where
 		println!("\n*** pos: {}/{} - {:?}, {:?}", pos, self.last_pos, family_branch, peaks);
 
 		// TODO - what format to return this data?
-		true
+		Ok(true)
 	}
 
 	/// Push a new Summable element in the MMR. Computes new related peaks at
@@ -350,7 +350,7 @@ where
 		let mut to_prune = vec![];
 		let mut current = position;
 		while current + 1 < self.last_pos {
-			let (parent, sibling) = family(current);
+			let (parent, sibling, _) = family(current);
 			if parent > self.last_pos {
 				// can't prune when our parent isn't here yet
 				break;
@@ -588,7 +588,7 @@ impl PruneList {
 	pub fn add(&mut self, pos: u64) {
 		let mut current = pos;
 		loop {
-			let (parent, sibling) = family(current);
+			let (parent, sibling, _) = family(current);
 			match self.pruned_nodes.binary_search(&sibling) {
 				Ok(idx) => {
 					self.pruned_nodes.remove(idx);
@@ -618,7 +618,7 @@ impl PruneList {
 					let next_peak_pos = self.pruned_nodes[idx];
 					let mut cursor = pos;
 					loop {
-						let (parent, _) = family(cursor);
+						let (parent, _, _) = family(cursor);
 						if next_peak_pos == parent {
 							return None;
 						}
@@ -756,34 +756,33 @@ pub fn is_leaf(pos: u64) -> bool {
 }
 
 /// Calculates the positions of the parent and sibling of the node at the
-/// provided position.
-pub fn family(pos: u64) -> (u64, u64) {
-	let sibling: u64;
-	let parent: u64;
-
+/// provided position. Also returns a boolean representing whether the sibling is on left
+/// branch or right branch (left=0, right=1)
+pub fn family(pos: u64) -> (u64, u64, bool) {
 	let pos_height = bintree_postorder_height(pos);
 	let next_height = bintree_postorder_height(pos + 1);
 	if next_height > pos_height {
-		sibling = bintree_jump_left_sibling(pos);
-		parent = pos + 1;
+		let sibling = bintree_jump_left_sibling(pos);
+		let parent = pos + 1;
+		(parent, sibling, false)
 	} else {
-		sibling = bintree_jump_right_sibling(pos);
-		parent = sibling + 1;
+		let sibling = bintree_jump_right_sibling(pos);
+		let parent = sibling + 1;
+		(parent, sibling, true)
 	}
-	(parent, sibling)
 }
 
-pub fn family_branch(pos: u64, last_pos: u64) -> Vec<(u64, u64)> {
+pub fn family_branch(pos: u64, last_pos: u64) -> Vec<(u64, u64, bool)> {
 	// loop going up the tree, from node to parent, as long as we stay inside
 	// the tree (as defined by last_pos).
 	let mut branch = vec![];
 	let mut current = pos;
 	while current + 1 <= last_pos {
-		let (parent, sibling) = family(current);
+		let (parent, sibling, sibling_branch) = family(current);
 		if parent > last_pos {
 			break;
 		}
-		branch.push((parent, sibling));
+		branch.push((parent, sibling, sibling_branch));
 
 		current = parent;
 	}
@@ -903,64 +902,66 @@ mod test {
 	#[test]
 	fn various_families() {
 		// 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3
-		assert_eq!(family(1), (3, 2));
-		assert_eq!(family(2), (3, 1));
-		assert_eq!(family(3), (7, 6));
-		assert_eq!(family(4), (6, 5));
-		assert_eq!(family(5), (6, 4));
-		assert_eq!(family(6), (7, 3));
-		assert_eq!(family(7), (15, 14));
-		assert_eq!(family(1_000), (1_001, 997));
+		assert_eq!(family(1), (3, 2, true));
+		assert_eq!(family(2), (3, 1, false));
+		assert_eq!(family(3), (7, 6, true));
+		assert_eq!(family(4), (6, 5, true));
+		assert_eq!(family(5), (6, 4, false));
+		assert_eq!(family(6), (7, 3, false));
+		assert_eq!(family(7), (15, 14, true));
+		assert_eq!(family(1_000), (1_001, 997, false));
 	}
 
 	#[test]
 	fn various_branches() {
 		// the two leaf nodes in a 3 node tree (height 1)
-		assert_eq!(family_branch(1, 3), [(3, 2)]);
-		assert_eq!(family_branch(2, 3), [(3, 1)]);
+		assert_eq!(family_branch(1, 3), [(3, 2, true)]);
+		assert_eq!(family_branch(2, 3), [(3, 1, false)]);
 
 		// the root node in a 3 node tree
 		assert_eq!(family_branch(3, 3), []);
 
 		// leaf node in a larger tree of 7 nodes (height 2)
-		assert_eq!(family_branch(1, 7), [(3, 2), (7, 6)]);
+		assert_eq!(family_branch(1, 7), [(3, 2, true), (7, 6, true)]);
 
 		// note these only go as far up as the local peak, not necessarily the single root
-		assert_eq!(family_branch(1, 4), [(3, 2)]);
+		assert_eq!(family_branch(1, 4), [(3, 2, true)]);
 		// pos 4 in a tree of size 4 is a local peak
 		assert_eq!(family_branch(4, 4), []);
 		// pos 4 in a tree of size 5 is also still a local peak
 		assert_eq!(family_branch(4, 5), []);
 		// pos 4 in a tree of size 6 has a parent and a sibling
-		assert_eq!(family_branch(4, 6), [(6, 5)]);
+		assert_eq!(family_branch(4, 6), [(6, 5, true)]);
 		// a tree of size 7 is all under a single root
-		assert_eq!(family_branch(4, 7), [(6, 5), (7, 3)]);
+		assert_eq!(family_branch(4, 7), [(6, 5, true), (7, 3, false)]);
 
 		// ok now for a more realistic one, a tree with over a million nodes in it
 		// find the "family path" back up the tree from a leaf node at 0
-		// note the first two entries in the branch are consistent with a small 7 node tree
+		// Note: the first two entries in the branch are consistent with a small 7 node tree
+		// Note: each sibling is on the left branch, this is an example of the largest possible 
+		// list of peaks before we start combining them into larger peaks.
 		assert_eq!(
 			family_branch(1, 1_049_000),
 			[
-				(3, 2),
-				(7, 6),
-				(15, 14),
-				(31, 30),
-				(63, 62),
-				(127, 126),
-				(255, 254),
-				(511, 510),
-				(1023, 1022),
-				(2047, 2046),
-				(4095, 4094),
-				(8191, 8190),
-				(16383, 16382),
-				(32767, 32766),
-				(65535, 65534),
-				(131071, 131070),
-				(262143, 262142),
-				(524287, 524286),
-				(1048575, 1048574),
+				(3, 2, true),
+				(7, 6, true),
+				(15, 14, true),
+				(31, 30, true),
+				(63, 62, true),
+				(127, 126, true),
+				(255, 254, true),
+				(511, 510, true),
+				(1023, 1022, true),
+				(2047, 2046, true),
+				(4095, 4094, true),
+				(8191, 8190, true),
+				(16383, 16382, true),
+				(32767, 32766, true),
+				(65535, 65534, true),
+				(131071, 131070, true),
+				(262143, 262142, true),
+				(524287, 524286, true),
+				(1048575, 1048574, true),
 			]
 		);
 	}
