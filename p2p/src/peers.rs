@@ -15,7 +15,7 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, atomic};
 
 use rand::{thread_rng, Rng};
 
@@ -29,11 +29,10 @@ use peer::Peer;
 use store::{PeerStore, PeerData, State};
 use types::*;
 
-#[derive(Clone)]
 pub struct Peers {
 	pub adapter: Arc<ChainAdapter>,
-	store: Arc<PeerStore>,
-	peers: Arc<RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>>,
+	store: PeerStore,
+	peers: RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>,
 	config: P2PConfig,
 }
 
@@ -44,8 +43,8 @@ impl Peers {
 	pub fn new(store: PeerStore, adapter: Arc<ChainAdapter>, config: P2PConfig) -> Peers {
 		Peers {
 			adapter,
-			store: Arc::new(store),
-			peers: Arc::new(RwLock::new(HashMap::new())),
+			store,
+			peers: RwLock::new(HashMap::new()),
 			config,
 		}
 	}
@@ -425,9 +424,9 @@ impl Peers {
 		}
 	}
 
-	pub fn stop(self) {
-		let peers = self.connected_peers();
-		for peer in peers {
+	pub fn stop(&self) {
+		let mut peers = self.peers.write().unwrap();
+		for (_, peer) in peers.drain() {
 			let peer = peer.read().unwrap();
 			peer.stop();
 		}

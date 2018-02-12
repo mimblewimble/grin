@@ -40,17 +40,18 @@ pub struct Server {
 	/// server config
 	pub config: ServerConfig,
 	/// handle to our network server
-	p2p: Arc<p2p::Server>,
+	pub p2p: Arc<p2p::Server>,
 	/// data store access
-	chain: Arc<chain::Chain>,
+	pub chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	currently_syncing: Arc<AtomicBool>,
+	stop: Arc<AtomicBool>,
 }
 
 impl Server {
 	/// Instantiates and starts a new server.
-	pub fn start(config: ServerConfig) -> Result<Server, Error> {
+	pub fn start(config: ServerConfig) -> Result<(), Error> {
 		let mut mining_config = config.mining_config.clone();
 		let serv = Server::new(config)?;
 		if mining_config.as_mut().unwrap().enable_mining {
@@ -58,12 +59,17 @@ impl Server {
 		}
 
 		loop {
-			thread::sleep(time::Duration::from_secs(10));
+			thread::sleep(time::Duration::from_secs(1));
+			if serv.stop.load(Ordering::Relaxed) {
+				return Ok(());
+			}
 		}
 	}
 
 	/// Instantiates a new server associated with the provided future reactor.
 	pub fn new(mut config: ServerConfig) -> Result<Server, Error> {
+		let stop = Arc::new(AtomicBool::new(false));
+
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
 		let pool_net_adapter = Arc::new(PoolToNetAdapter::new());
 		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(
@@ -92,13 +98,13 @@ impl Server {
 			pow::verify_size,
 		)?);
 
-		pool_adapter.set_chain(shared_chain.clone());
+		pool_adapter.set_chain(Arc::downgrade(&shared_chain));
 
 		let currently_syncing = Arc::new(AtomicBool::new(true));
 
 		let net_adapter = Arc::new(NetToChainAdapter::new(
 			currently_syncing.clone(),
-			shared_chain.clone(),
+			Arc::downgrade(&shared_chain),
 			tx_pool.clone(),
 		));
 
@@ -109,10 +115,11 @@ impl Server {
 			p2p_config,
 			net_adapter.clone(),
 			genesis.hash(),
+			stop.clone(),
 		)?);
-		chain_adapter.init(p2p_server.peers.clone());
-		pool_net_adapter.init(p2p_server.peers.clone());
-		net_adapter.init(p2p_server.peers.clone());
+		chain_adapter.init(Arc::downgrade(&p2p_server.peers));
+		pool_net_adapter.init(Arc::downgrade(&p2p_server.peers));
+		net_adapter.init(Arc::downgrade(&p2p_server.peers));
 
 		if config.seeding_type.clone() != Seeding::Programmatic {
 
@@ -129,7 +136,8 @@ impl Server {
 				}
 				_ => unreachable!(),
 			};
-			seed::connect_and_monitor(p2p_server.clone(), config.capabilities, seeder);
+			seed::connect_and_monitor(
+				p2p_server.clone(), config.capabilities, seeder, stop.clone());
 		}
 
 		let skip_sync_wait = match config.skip_sync_wait {
@@ -143,6 +151,7 @@ impl Server {
 			shared_chain.clone(),
 			skip_sync_wait,
 			!config.archive_mode,
+			stop.clone(),
 		);
 
 		let p2p_inner = p2p_server.clone();
@@ -154,9 +163,9 @@ impl Server {
 
 		api::start_rest_apis(
 			config.api_http_addr.clone(),
-			shared_chain.clone(),
-			tx_pool.clone(),
-			p2p_server.peers.clone(),
+			Arc::downgrade(&shared_chain),
+			Arc::downgrade(&tx_pool),
+			Arc::downgrade(&p2p_server.peers),
 		);
 
 		warn!(LOGGER, "Grin server started.");
@@ -166,6 +175,7 @@ impl Server {
 			chain: shared_chain,
 			tx_pool: tx_pool,
 			currently_syncing: currently_syncing,
+			stop: stop,
 		})
 	}
 
@@ -187,7 +197,8 @@ impl Server {
 		let proof_size = global::proofsize();
 		let currently_syncing = self.currently_syncing.clone();
 
-		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
+		let mut miner = miner::Miner::new(
+			config.clone(), self.chain.clone(), self.tx_pool.clone(), self.stop.clone());
 		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.port));
 		let _ = thread::Builder::new()
 			.name("miner".to_string())
@@ -217,11 +228,15 @@ impl Server {
 	/// can be updated over time to include any information needed by tests or
 	/// other
 	/// consumers
-
 	pub fn get_server_stats(&self) -> Result<ServerStats, Error> {
 		Ok(ServerStats {
 			peer_count: self.peer_count(),
 			head: self.head(),
 		})
+	}
+
+	pub fn stop(&self) {
+		self.p2p.stop();
+		self.stop.store(true, Ordering::Relaxed);
 	}
 }
