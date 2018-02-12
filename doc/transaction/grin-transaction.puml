@@ -1,0 +1,94 @@
+@startuml grin-transaction
+
+title 
+**Current Grin Tranaction Workflow** 
+Accurate as of Feb 12th, 2018 - Master branch only
+end title
+
+actor "Sender" as sender
+actor "Recipient" as recipient
+entity "Grin Node" as grin_node
+
+== Phase 1 - Sender Initiation ==
+
+note left of sender
+	1: Create Transaction **UUID** (for reference and maintaining correct state)
+	2: Set **lock_height** for output (current chain height)
+	3: Select **inputs** using desired selection strategy
+	4: Create **change_output** 
+	5: Select blinding factor for **change_output**
+end note
+sender -> sender: Lock **inputs** in wallet
+sender -> sender: Store **change_output** in wallet with status "Unconfirmed"
+note left of sender
+	6: Calculate **fee**:  **((-1 * num_inputs) + (4 * num_change_outputs) + 1)* 1_000_000 nG**
+		(+1 covers a single change output on the receiver's side)
+	7: Calculate total blinding excess sum for all inputs and outputs **xS** (private scalar)
+	8: Select a random nonce **kS** (private scalar)
+	9: Multiply **xS** and **kS** by generator G to create public curve points **xSG** and **kSG**
+end note
+sender -> recipient: **UUID**, **inputs**, **change_output**, **fee**, **lock_height**, **kSG**, **xSG** 
+== Phase 2 - Receiver Initiation ==
+note right of recipient
+	1: Check fee against number of **inputs**, **change_outputs** +1 * **receiver_output**)
+	2: Create **receiver_output**
+	3: Choose random blinding factor for **receiver_output** **xR** (private scalar)
+end note
+recipient -> recipient: Store **receiver_output** in wallet with status "Unconfirmed"
+note right of recipient
+	4: Calculate message **M** = **fee | lock_height **
+	5: Choose random nonce **kR** (private scalar)
+	6: Multiply **xR** and **kR** by generator G to create public curve points **xRG** and **kRG**
+	7: Compute Schnorr challenge **e** = Blake2(**M** | **kRG** + **kSG**)
+	8: Compute Recipient Schnorr signature **sR** = **kR** + **e** * **xR**
+end note
+alt All Okay
+recipient --> sender: Okay - **UUID**, **sR**, **xRG**, **kRG**
+else Any Failure
+recipient -> recipient: Remove **receiver_output** from wallet
+recipient ->x]: Abort
+recipient --> sender: Error
+sender -> sender: Roll back **inputs** and **change_output**
+[x<- sender: Abort
+end
+== Phase 3 - Sender Confirmation ==
+note left of sender
+	1: Calculate message **M** = **fee | lock_height **
+	2: Compute Schnorr challenge **e** = Blake2(**M** | **kRG** + **kSG**)
+	3: Verify **sR** by verifying **kRG** + **e** * **xRG** = **sRG**
+	4: Compute Sender Schnorr signature **sS** = **kS** + **e** * **xS**
+end note
+sender -> recipient: **UUID**, **sS**
+== Phase 4 - Receiver Confirmation ==
+note right of recipient
+	1: Verify **sS** by verifying **kSG** + **e** * **xSG** = **sSG**
+	2: Calculate final signature **s** = (**sS**+**sR**, **kSG**+**kRG**)
+	3: Calculate public key for **s**: **xG** = **xRG** + **xSG**
+	3: Verify **s** against excess values in final transaction using **xG**
+	4: Create Transaction Kernel Containing:
+		 Signature **s** 
+		 Public key **xG**
+		 **fee**
+		 **lock_height**
+end note
+recipient -> recipient: Create final transaction **tx**
+recipient -> grin_node: Post **tx** to mempool
+grin_node --> recipient: "Ok"
+alt All Okay
+recipient --> sender: "Ok" - **UUID**
+...Await confirmation...
+recipient -> grin_node: Confirm **receiver_output**
+recipient -> recipient: Change status of **reciever_output** to "Confirmed"
+sender -> grin_node: Confirm **change_output**
+sender -> sender: Change status of **inputs** to "Spent"
+sender -> sender: Change status of **change_output** to "Confirmed"
+else Any Error
+recipient -> recipient: Remove **receiver_output** from wallet
+recipient ->x]: Abort
+recipient --> sender: Error
+sender -> sender: Roll back **inputs** and **change_output**
+[x<- sender: Abort
+end
+
+
+@enduml
