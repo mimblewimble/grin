@@ -214,29 +214,41 @@ pub struct MerkleProof {
 	node: Hash,
 	peaks: Vec<Hash>,
 	path: Vec<Hash>,
-	sibling_branches: Vec<bool>,
+	left_right: Vec<bool>,
 }
 
 impl MerkleProof {
 	pub fn verify(&self, root: Hash) -> bool {
 		println!("verifying - {:?}, {:?}", self, root);
 
-		assert_eq!(self.path.len(), self.sibling_branches.len());
+		assert_eq!(self.path.len(), self.left_right.len());
 
 		// if we have no further elements in the path
 		// then this proof verifies successfully if our node is
 		// one of the peaks
 		// and the peaks themselves hash to give the root
 		if self.path.len() == 0 {
-			return self.peaks.contains(&self.node);
+			if !self.peaks.contains(&self.node) {
+				return false;
+			}
+
+			let mut bagged = None;
+			for peak in self.peaks.iter().map(|&x| Some(x)) {
+				bagged = match (bagged, peak) {
+					(None, rhs) => rhs,
+					(lhs, None) => lhs,
+					(Some(lhs), Some(rhs)) => Some((lhs, rhs).hash()),
+				}
+			}
+			return bagged == Some(root);
 		}
 
 		let mut path = self.path.clone();
 		let sibling = path.remove(0);
-		let mut sibling_branches = self.sibling_branches.clone();
+		let mut left_right = self.left_right.clone();
 
 		// hash our node and sibling together (observing the position of the sibling)
-		let parent = if sibling_branches.remove(0) {
+		let parent = if left_right.remove(0) {
 			(self.node, sibling)
 		} else {
 			(sibling, self.node)
@@ -245,8 +257,8 @@ impl MerkleProof {
 		let proof = MerkleProof {
 			node: parent,
 			peaks: self.peaks.clone(),
-			path: path,
-			sibling_branches: sibling_branches,
+			path,
+			left_right,
 		};
 		proof.verify(root)
 	}
@@ -319,14 +331,15 @@ where
 			return Err(format!("not a leaf at pos {}", pos));
 		}
 
-		let node = if let Some(node) = self.get(pos) {
-			node.hash
+		// TODO - cleanup this code
+		let node = if let Some(x) = self.get(pos) {
+			x.hash
 		} else {
 			return Err(format!("node not found at pos {}", pos));
 		};
 
 		let family_branch = family_branch(pos, self.last_pos);
-		let sibling_branches = family_branch
+		let left_right = family_branch
 			.iter()
 			.map(|x| x.2)
 			.collect::<Vec<_>>();
@@ -343,18 +356,17 @@ where
 			.map(|x| x.hash)
 			.collect::<Vec<_>>();
 
-		println!("\n*** pos: {}/{} - {:?}, {:?}, {:?}", pos, self.last_pos, path, peaks, sibling_branches);
+		println!("\n*** pos: {}/{} - {:?}, {:?}, {:?}", pos, self.last_pos, path, peaks, left_right);
 
 		let proof = MerkleProof {
 			node,
 			path,
 			peaks,
-			sibling_branches,
+			left_right,
 		};
 
 		println!("{:?}", proof);
-		proof.verify(Hash::zero());
-
+		proof.verify(self.root().hash);
 
 		Ok(proof)
 	}
