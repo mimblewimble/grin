@@ -19,13 +19,11 @@ use util::{static_secp_instance, kernel_sig_msg};
 use util::secp::pedersen::{Commitment, RangeProof};
 use std::cmp::min;
 use std::cmp::Ordering;
-use std::ops;
 
 use consensus;
 use consensus::VerifySortOrder;
 use core::Committed;
 use core::hash::{Hash, Hashed, ZERO_HASH};
-use core::pmmr::Summable;
 use keychain::{Identifier, Keychain};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 use util;
@@ -828,85 +826,6 @@ impl SumCommit {
 			util::to_hex(self.commit.0.to_vec()),
 			self.switch_commit_hash.to_hex(),
 		)
-	}
-}
-
-/// Outputs get summed through their commitments.
-impl Summable for SumCommit {
-	type Sum = SumCommit;
-
-	fn sum(&self) -> SumCommit {
-		SumCommit {
-			commit: self.commit.clone(),
-			features: self.features.clone(),
-			switch_commit_hash: self.switch_commit_hash.clone(),
-		}
-	}
-
-	fn sum_len() -> usize {
-		secp::constants::PEDERSEN_COMMITMENT_SIZE + SWITCH_COMMIT_HASH_SIZE + 1
-	}
-}
-
-impl Writeable for SumCommit {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u8(self.features.bits())?;
-		self.commit.write(writer)?;
-		if writer.serialization_mode() == ser::SerializationMode::Full {
-			self.switch_commit_hash.write(writer)?;
-		}
-		Ok(())
-	}
-}
-
-impl Readable for SumCommit {
-	fn read(reader: &mut Reader) -> Result<SumCommit, ser::Error> {
-		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
-			ser::Error::CorruptedData,
-		)?;
-		Ok(SumCommit {
-			features: features,
-			commit: Commitment::read(reader)?,
-			switch_commit_hash: SwitchCommitHash::read(reader)?,
-		})
-	}
-}
-
-impl ops::Add for SumCommit {
-	type Output = SumCommit;
-
-	fn add(self, other: SumCommit) -> SumCommit {
-		// Build a new commitment by summing the two commitments.
-		let secp = static_secp_instance();
-		let sum = match secp.lock().unwrap().commit_sum(
-			vec![
-				self.commit.clone(),
-				other.commit.clone(),
-			],
-			vec![],
-		) {
-			Ok(s) => s,
-			Err(_) => Commitment::from_vec(vec![1; 33]),
-		};
-
-		// Now build a new switch_commit_hash by concatenating the two switch_commit_hash value
-		// and hashing the result.
-		let mut bytes = self.switch_commit_hash.0.to_vec();
-		bytes.extend(other.switch_commit_hash.0.iter().cloned());
-		let key = SwitchCommitHashKey::zero();
-		let hash = blake2b(SWITCH_COMMIT_HASH_SIZE, &key.0, &bytes);
-		let hash = hash.as_bytes();
-		let mut h = [0; SWITCH_COMMIT_HASH_SIZE];
-		for i in 0..SWITCH_COMMIT_HASH_SIZE {
-			h[i] = hash[i];
-		}
-		let switch_commit_hash_sum = SwitchCommitHash(h);
-
-		SumCommit {
-			features: self.features | other.features,
-			commit: sum,
-			switch_commit_hash: switch_commit_hash_sum,
-		}
 	}
 }
 
