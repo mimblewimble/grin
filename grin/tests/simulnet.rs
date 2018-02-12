@@ -277,7 +277,7 @@ fn simulate_fast_sync() {
 	}
 }
 
-#[test]
+// #[test]
 fn simulate_fast_sync_double() {
 	util::init_test_logger();
 
