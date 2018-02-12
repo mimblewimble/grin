@@ -984,6 +984,33 @@ mod test {
 		assert_eq!(peaks(32), [31, 32]);
 		assert_eq!(peaks(35), [31, 34, 35]);
 		assert_eq!(peaks(42), [31, 38, 41, 42]);
+
+		// large realistic example with almost 1.5 million nodes
+		// note the distance between peaks decreases toward the right (trees get smaller)
+		assert_eq!(
+			peaks(1048555),
+			[
+				524287,
+				786430,
+				917501,
+				983036,
+				1015803,
+				1032186,
+				1040377,
+				1044472,
+				1046519,
+				1047542,
+				1048053,
+				1048308,
+				1048435,
+				1048498,
+				1048529,
+				1048544,
+				1048551,
+				1048554,
+				1048555,
+			],
+		);
 	}
 
 	#[derive(Copy, Clone, Debug, PartialEq, Eq)]
