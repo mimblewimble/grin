@@ -263,7 +263,7 @@ fn spend_in_fork() {
 	let lock_height = 1 + global::coinbase_maturity();
 	assert_eq!(lock_height, 4);
 
-	let (tx1, _) = build::transaction(
+	let tx1 = build::transaction(
 		vec![
 			build::coinbase_input(consensus::REWARD, block_hash, kc.derive_key_id(2).unwrap()),
 			build::output(consensus::REWARD - 20000, kc.derive_key_id(30).unwrap()),
@@ -276,7 +276,7 @@ fn spend_in_fork() {
 	let prev_main = next.header.clone();
 	chain.process_block(next.clone(), chain::Options::SKIP_POW).unwrap();
 
-	let (tx2, _) = build::transaction(
+	let tx2 = build::transaction(
 		vec![
 			build::input(consensus::REWARD - 20000, next.hash(), kc.derive_key_id(30).unwrap()),
 			build::output(consensus::REWARD - 40000, kc.derive_key_id(31).unwrap()),

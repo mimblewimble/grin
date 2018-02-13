@@ -337,8 +337,16 @@ mod tests {
 				.range_proof(100, &key_id1, output_commit, msg)
 				.unwrap(),
 		};
-		let outputs = vec![output];
-		let test_transaction = core::transaction::Transaction::new(inputs, outputs, 5, 0);
+
+		let kernel = core::transaction::TxKernel::empty()
+			.with_fee(5)
+			.with_lock_height(0);
+
+		let test_transaction = core::transaction::Transaction::new(
+			inputs,
+			vec![output],
+			vec![kernel],
+		);
 
 		let test_pool_entry = PoolEntry::new(&test_transaction);
 

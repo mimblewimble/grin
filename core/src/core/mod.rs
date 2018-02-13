@@ -263,8 +263,10 @@ mod test {
 		let tx = tx2i1o();
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &tx).expect("serialization failed");
-		println!("{}", vec.len());
-		assert!(vec.len() == 5364);
+		assert_eq!(
+			vec.len(),
+			5_438,
+		);
 	}
 
 	#[test]
@@ -273,7 +275,7 @@ mod test {
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &tx).expect("serialization failed");
 		let dtx: Transaction = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(dtx.fee, 2);
+		assert_eq!(dtx.fee(), 2);
 		assert_eq!(dtx.inputs.len(), 2);
 		assert_eq!(dtx.outputs.len(), 1);
 		assert_eq!(tx.hash(), dtx.hash());
@@ -304,7 +306,7 @@ mod test {
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		// first build a valid tx with corresponding blinding factor
-		let (tx, blind) = build::transaction(
+		let tx = build::transaction(
 			vec![
 				input(10, ZERO_HASH, key_id1),
 				output(5, key_id2),
@@ -314,14 +316,51 @@ mod test {
 			&keychain,
 		).unwrap();
 
-		// confirm the tx validates and that we can construct a valid tx_kernel from it
-		let excess = tx.validate().unwrap();
-		let tx_kernel = tx.build_kernel(excess);
-		let _ = tx_kernel.verify().unwrap();
+		// check the tx is valid
+		tx.validate().unwrap();
 
-		assert_eq!(tx_kernel.features, KernelFeatures::DEFAULT_KERNEL);
-		assert_eq!(tx_kernel.fee, tx.fee);
-		assert_eq!(tx_kernel.excess, excess);
+		// check the kernel is also itself valid
+		assert_eq!(tx.kernels.len(), 1);
+		let kern = &tx.kernels[0];
+		kern.verify().unwrap();
+
+		assert_eq!(kern.features, KernelFeatures::DEFAULT_KERNEL);
+		assert_eq!(kern.fee, tx.fee());
+	}
+
+	// Combine two transactions into one big transaction (with multiple kernels)
+	// and check it still validates.
+	#[test]
+	fn transaction_cut_through() {
+		let tx1 = tx1i2o();
+		let tx2 = tx2i1o();
+
+		assert!(tx1.validate().is_ok());
+		assert!(tx2.validate().is_ok());
+
+		// now build a "cut_through" tx from tx1 and tx2
+		let mut tx3 = tx1.clone();
+		tx3.inputs.extend(tx2.inputs.iter().cloned());
+		tx3.outputs.extend(tx2.outputs.iter().cloned());
+		tx3.kernels.extend(tx2.kernels.iter().cloned());
+
+		// make sure everything is sorted
+		tx3.inputs.sort();
+		tx3.outputs.sort();
+		tx3.kernels.sort();
+
+		// finally sum the offsets up
+		// TODO - hide this in a convenience function somewhere
+		tx3.offset = {
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			let skey1 = tx1.offset.secret_key(&secp).unwrap();
+			let skey2 = tx2.offset.secret_key(&secp).unwrap();
+			let skey3 = secp.blind_sum(vec![skey1, skey2], vec![]).unwrap();
+			BlindingFactor::from_secret_key(skey3)
+		};
+
+		assert!(tx3.validate().is_ok());
 	}
 
 	#[test]
@@ -331,7 +370,7 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
-		let (tx, _) = build::transaction(
+		let tx = build::transaction(
 			vec![
 				input(75, ZERO_HASH, key_id1),
 				output(42, key_id2),
@@ -349,7 +388,7 @@ mod test {
 	#[test]
 	fn blind_tx() {
 		let btx = tx2i1o();
-		btx.verify_sig().unwrap(); // unwrap will panic if invalid
+		assert!(btx.validate().is_ok());
 
 		// checks that the range proof on our blind output is sufficiently hiding
 		let Output { proof, .. } = btx.outputs[0];
@@ -372,6 +411,57 @@ mod test {
 		}
 	}
 
+	// #[test]
+	// fn tx_build_aggsig() {
+	// 	let keychain = Keychain::from_random_seed().unwrap();
+	// 	let key_id1 = keychain.derive_key_id(1).unwrap();
+	// 	let key_id2 = keychain.derive_key_id(2).unwrap();
+	// 	let key_id3 = keychain.derive_key_id(3).unwrap();
+	// 	let key_id4 = keychain.derive_key_id(4).unwrap();
+    //
+	// 	let (tx_alice, blind_sum) = {
+	// 		// Alice gets 2 of her pre-existing outputs to send 5 coins to Bob, they
+	// 		// become inputs in the new transaction
+	// 		let (in1, in2) = (input(4, ZERO_HASH, key_id1), input(3, ZERO_HASH, key_id2));
+    //
+	// 		// Alice builds her transaction, with change, which also produces the sum
+	// 		// of blinding factors before they're obscured.
+	// 		let (tx, sum) = build::partial_transaction(
+	// 			vec![in1, in2, output(1, key_id3),
+	// 			with_fee(2)],
+	// 			&keychain,
+	// 		).unwrap();
+    //
+	// 		(tx, sum)
+	// 	};
+    //
+	// 	let blind = blind_sum.secret_key(&keychain.secp())?;
+	// 	keychain.aggsig_create_context(blind);
+	// 	let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys();
+    //
+	// 	let sig_part = keychain.aggsig_calculate_partial_sig(
+	// 		&pub_nonce,
+	// 		tx.fee(),
+	// 		tx.lock_height(),
+	// 	).unwrap();
+    //
+    //
+	// 	// From now on, Bob only has the obscured transaction and the sum of
+	// 	// blinding factors. He adds his output, finalizes the transaction so it's
+	// 	// ready for broadcast.
+	// 	let tx_final = build::transaction(
+	// 		vec![
+	// 			initial_tx(tx_alice),
+	// 			with_excess(blind_sum),
+	// 			output(4, key_id4),
+	// 		],
+	// 		&keychain,
+	// 	).unwrap();
+    //
+	// 	tx_final.validate().unwrap();
+    //
+	// }
+
 	/// Simulate the standard exchange between 2 parties when creating a basic
 	/// 2 inputs, 2 outputs transaction.
 	#[test]
@@ -382,27 +472,26 @@ mod test {
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 		let key_id4 = keychain.derive_key_id(4).unwrap();
 
-		let tx_alice: Transaction;
-		let blind_sum: BlindingFactor;
-
-		{
+		let (tx_alice, blind_sum) = {
 			// Alice gets 2 of her pre-existing outputs to send 5 coins to Bob, they
 			// become inputs in the new transaction
 			let (in1, in2) = (input(4, ZERO_HASH, key_id1), input(3, ZERO_HASH, key_id2));
 
 			// Alice builds her transaction, with change, which also produces the sum
 			// of blinding factors before they're obscured.
-			let (tx, sum) =
-				build::transaction(vec![in1, in2, output(1, key_id3), with_fee(2)], &keychain)
-					.unwrap();
-			tx_alice = tx;
-			blind_sum = sum;
-		}
+			let (tx, sum) = build::partial_transaction(
+				vec![in1, in2, output(1, key_id3),
+				with_fee(2)],
+				&keychain,
+			).unwrap();
+
+			(tx, sum)
+		};
 
 		// From now on, Bob only has the obscured transaction and the sum of
 		// blinding factors. He adds his output, finalizes the transaction so it's
 		// ready for broadcast.
-		let (tx_final, _) = build::transaction(
+		let tx_final = build::transaction(
 			vec![
 				initial_tx(tx_alice),
 				with_excess(blind_sum),
@@ -435,7 +524,7 @@ mod test {
 		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let mut tx1 = tx2i1o();
-		tx1.verify_sig().unwrap();
+		tx1.validate().unwrap();
 
 		let b = Block::new(
 			&BlockHeader::default(),
@@ -483,8 +572,7 @@ mod test {
 				with_lock_height(1),
 			],
 			&keychain,
-		).map(|(tx, _)| tx)
-			.unwrap();
+		).unwrap();
 
 		let b = Block::new(
 			&BlockHeader::default(),
@@ -504,8 +592,7 @@ mod test {
 				with_lock_height(2),
 			],
 			&keychain,
-		).map(|(tx, _)| tx)
-			.unwrap();
+		).unwrap();
 
 		let b = Block::new(
 			&BlockHeader::default(),
@@ -525,13 +612,13 @@ mod test {
 	#[test]
 	pub fn test_verify_1i1o_sig() {
 		let tx = tx1i1o();
-		tx.verify_sig().unwrap();
+		tx.validate().unwrap();
 	}
 
 	#[test]
 	pub fn test_verify_2i1o_sig() {
 		let tx = tx2i1o();
-		tx.verify_sig().unwrap();
+		tx.validate().unwrap();
 	}
 
 	// utility producing a transaction with 2 inputs and a single outputs
@@ -541,7 +628,7 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
-		build::transaction(
+		build::transaction_with_offset(
 			vec![
 				input(10, ZERO_HASH, key_id1),
 				input(11, ZERO_HASH, key_id2),
@@ -549,8 +636,7 @@ mod test {
 				with_fee(2),
 			],
 			&keychain,
-		).map(|(tx, _)| tx)
-			.unwrap()
+		).unwrap()
 	}
 
 	// utility producing a transaction with a single input and output
@@ -559,22 +645,22 @@ mod test {
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
-		build::transaction(
+		build::transaction_with_offset(
 			vec![input(5, ZERO_HASH, key_id1), output(3, key_id2), with_fee(2)],
 			&keychain,
-		).map(|(tx, _)| tx)
-			.unwrap()
+		).unwrap()
 	}
 
 	// utility producing a transaction with a single input
 	// and two outputs (one change output)
+	// Note: this tx has an "offset" kernel
 	pub fn tx1i2o() -> Transaction {
 		let keychain = keychain::Keychain::from_random_seed().unwrap();
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
-		build::transaction(
+		build::transaction_with_offset(
 			vec![
 				input(6, ZERO_HASH, key_id1),
 				output(3, key_id2),
@@ -582,7 +668,6 @@ mod test {
 				with_fee(2),
 			],
 			&keychain,
-		).map(|(tx, _)| tx)
-			.unwrap()
+		).unwrap()
 	}
 }

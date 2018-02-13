@@ -12,16 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use rand::thread_rng;
 use uuid::Uuid;
+
 use api;
 use client;
 use checker;
 use core::core::{build, Transaction, amount_to_hr_string};
 use core::ser;
-use keychain::{BlindingFactor, Identifier, Keychain};
+use keychain::{BlindingFactor, BlindSum, Identifier, Keychain};
 use receiver::TxWrapper;
 use types::*;
 use util::LOGGER;
+use util::secp::key::SecretKey;
 use util;
 
 /// Issue a new transaction to the provided sender by spending some of our
@@ -45,7 +48,7 @@ pub fn issue_send_tx(
 	// proof of concept - set lock_height on the tx
 	let lock_height = chain_tip.height;
 
-	let (tx, blind_sum, coins, change_key, amount_with_fee) = build_send_tx(
+	let (tx, blind, coins, change_key, amount_with_fee) = build_send_tx(
 		config,
 		keychain,
 		amount,
@@ -55,16 +58,32 @@ pub fn issue_send_tx(
 		max_outputs,
 		selection_strategy_is_use_all,
 	)?;
-	/*
-	 * -Sender picks random blinding factors for all outputs it participates in, computes total blinding excess xS
-	 * -Sender picks random nonce kS
-	 * -Sender posts inputs, outputs, Message M=fee, xS * G and kS * G to Receiver
-	*/
 
-// Create a new aggsig context
+	// TODO - wrap this up in build_send_tx or even the build() call?
+	// Generate a random kernel offset here
+	// and subtract it from the blind_sum so we create
+	// the aggsig context with the "split" key
+	let kernel_offset = BlindingFactor::from_secret_key(
+		SecretKey::new(&keychain.secp(), &mut thread_rng())
+	);
+
+	let blind_offset = keychain.blind_sum(
+		&BlindSum::new()
+			.add_blinding_factor(blind)
+			.sub_blinding_factor(kernel_offset)
+	).unwrap();
+
+	//
+	// -Sender picks random blinding factors for all outputs it participates in, computes total blinding excess xS
+	// -Sender picks random nonce kS
+	// -Sender posts inputs, outputs, Message M=fee, xS * G and kS * G to Receiver
+	//
+	// Create a new aggsig context
 	let tx_id = Uuid::new_v4();
-	let _ = keychain.aggsig_create_context(&tx_id, blind_sum.secret_key());
-	let partial_tx = build_partial_tx(&tx_id, keychain, amount_with_fee, None, tx);
+	let skey = blind_offset.secret_key(&keychain.secp())?;
+	keychain.aggsig_create_context(&tx_id, skey);
+
+	let partial_tx = build_partial_tx(&tx_id, keychain, amount_with_fee, kernel_offset, None, tx);
 
 	// Closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
@@ -117,17 +136,25 @@ pub fn issue_send_tx(
 	 * -Sender computes their part of signature, sS = kS + e * xS
 	 * -Sender posts sS to receiver
 	*/
-	let (_amount, recp_pub_blinding, recp_pub_nonce, sig, tx) = read_partial_tx(keychain, &res.unwrap())?;
-	let res = keychain.aggsig_verify_partial_sig(&tx_id, &sig.unwrap(), &recp_pub_nonce, &recp_pub_blinding, tx.fee, lock_height);
+	let (_amount, recp_pub_blinding, recp_pub_nonce, kernel_offset, sig, tx) = read_partial_tx(keychain, &res.unwrap())?;
+	let res = keychain.aggsig_verify_partial_sig(
+		&tx_id,
+		&sig.unwrap(),
+		&recp_pub_nonce,
+		&recp_pub_blinding,
+		tx.fee(),
+		lock_height,
+	);
 	if !res {
 		error!(LOGGER, "Partial Sig from recipient invalid.");
 		return Err(Error::Signature(String::from("Partial Sig from recipient invalid.")));
 	}
 
-	let sig_part=keychain.aggsig_calculate_partial_sig(&tx_id, &recp_pub_nonce, tx.fee, tx.lock_height).unwrap();
+	let sig_part = keychain.aggsig_calculate_partial_sig(&tx_id, &recp_pub_nonce, tx.fee(), tx.lock_height()).unwrap();
 
 	// Build the next stage, containing sS (and our pubkeys again, for the recipient's convenience)
-	let mut partial_tx = build_partial_tx(&tx_id, keychain, amount_with_fee, Some(sig_part), tx);
+	// offset has not been modified during tx building, so pass it back in
+	let mut partial_tx = build_partial_tx(&tx_id, keychain, amount_with_fee, kernel_offset, Some(sig_part), tx);
 	partial_tx.phase = PartialTxPhase::SenderConfirmation;
 
 	// And send again
@@ -146,7 +173,8 @@ pub fn issue_send_tx(
 		rollback_wallet()?;
 		return Err(e);
 	}
-	//All good so
+
+	// All good so
 	update_wallet()?;
 	Ok(())
 }
@@ -228,7 +256,7 @@ fn build_send_tx(
 	// on tx being sent (based on current chain height via api).
 	parts.push(build::with_lock_height(lock_height));
 
-	let (tx, blind) = build::transaction(parts, &keychain)?;
+	let (tx, blind) = build::partial_transaction(parts, &keychain)?;
 
 	Ok((tx, blind, coins, change_key, amount_with_fee))
 }
@@ -270,7 +298,7 @@ pub fn issue_burn_tx(
 	parts.push(build::output(amount - fee, Identifier::zero()));
 
 	// finalize the burn transaction and send
-	let (tx_burn, _) = build::transaction(parts, &keychain)?;
+	let tx_burn = build::transaction(parts, &keychain)?;
 	tx_burn.validate()?;
 
 	let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
@@ -336,7 +364,7 @@ fn inputs_and_change(
 
 #[cfg(test)]
 mod test {
-	use core::core::build::{input, output, transaction};
+	use core::core::build;
 	use core::core::hash::ZERO_HASH;
 	use keychain::Keychain;
 
@@ -348,8 +376,8 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 
-		let (tx1, _) = transaction(vec![output(105, key_id1.clone())], &keychain).unwrap();
-		let (tx2, _) = transaction(vec![input(105, ZERO_HASH, key_id1.clone())], &keychain).unwrap();
+		let tx1 = build::transaction(vec![build::output(105, key_id1.clone())], &keychain).unwrap();
+		let tx2 = build::transaction(vec![build::input(105, ZERO_HASH, key_id1.clone())], &keychain).unwrap();
 
 		assert_eq!(tx1.outputs[0].features, tx2.inputs[0].features);
 		assert_eq!(tx1.outputs[0].commitment(), tx2.inputs[0].commitment());

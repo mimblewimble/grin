@@ -43,12 +43,13 @@ use util::kernel_sig_msg;
 use util::LOGGER;
 use global;
 use keychain;
+use keychain::BlindingFactor;
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, PartialEq)]
 pub enum Error {
-	/// The sum of output minus input commitments does not match the sum of
-	/// kernel commitments
+	/// The sum of output minus input commitments does not
+	/// match the sum of kernel commitments
 	KernelSumMismatch,
 	/// Same as above but for the coinbase part of a block, including reward
 	CoinbaseSumMismatch,
@@ -126,6 +127,8 @@ pub struct BlockHeader {
 	pub difficulty: Difficulty,
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
+	/// The single aggregate "offset" that needs to be applied for all commitments to sum
+	pub kernel_offset: BlindingFactor,
 }
 
 impl Default for BlockHeader {
@@ -143,6 +146,7 @@ impl Default for BlockHeader {
 			kernel_root: ZERO_HASH,
 			nonce: 0,
 			pow: Proof::zero(proof_size),
+			kernel_offset: BlindingFactor::zero(),
 		}
 	}
 }
@@ -164,6 +168,7 @@ impl Writeable for BlockHeader {
 		try!(writer.write_u64(self.nonce));
 		try!(self.difficulty.write(writer));
 		try!(self.total_difficulty.write(writer));
+		try!(self.kernel_offset.write(writer));
 
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			try!(self.pow.write(writer));
@@ -184,6 +189,7 @@ impl Readable for BlockHeader {
 		let nonce = reader.read_u64()?;
 		let difficulty = Difficulty::read(reader)?;
 		let total_difficulty = Difficulty::read(reader)?;
+		let kernel_offset = BlindingFactor::read(reader)?;
 		let pow = Proof::read(reader)?;
 
 		Ok(BlockHeader {
@@ -201,6 +207,7 @@ impl Readable for BlockHeader {
 			nonce: nonce,
 			difficulty: difficulty,
 			total_difficulty: total_difficulty,
+			kernel_offset: kernel_offset,
 		})
 	}
 }
@@ -284,7 +291,7 @@ pub struct Block {
 	pub inputs: Vec<Input>,
 	/// List of transaction outputs
 	pub outputs: Vec<Output>,
-	/// List of transaction kernels and associated proofs
+	/// List of kernels with associated proofs (note these are offset from tx_kernels)
 	pub kernels: Vec<TxKernel>,
 }
 
@@ -379,7 +386,7 @@ impl Block {
 		key_id: &keychain::Identifier,
 		difficulty: Difficulty,
 	) -> Result<Block, Error> {
-		let fees = txs.iter().map(|tx| tx.fee).sum();
+		let fees = txs.iter().map(|tx| tx.fee()).sum();
 		let (reward_out, reward_proof) = Block::reward_output(
 			keychain,
 			key_id,
@@ -486,26 +493,33 @@ impl Block {
 		let mut inputs = vec![];
 		let mut outputs = vec![];
 
+		// we will sum these together at the end
+		// to give us the overall offset for the block
+		let mut kernel_offsets = vec![];
+
 		// iterate over the all the txs
 		// build the kernel for each
 		// and collect all the kernels, inputs and outputs
 		// to build the block (which we can sort of think of as one big tx?)
 		for tx in txs {
 			// validate each transaction and gather their kernels
-			let excess = tx.validate()?;
-			let kernel = tx.build_kernel(excess);
-			kernels.push(kernel);
+			// tx has an offset k2 where k = k1 + k2
+			// and the tx is signed using k1
+			// the kernel excess is k1G
+			// we will sum all the offsets later and store the total offset
+			// on the block_header
+			tx.validate()?;
 
-			for input in tx.inputs.clone() {
-				inputs.push(input);
-			}
+			// we will summ these later to give a single aggregate offset
+			kernel_offsets.push(tx.offset);
 
-			for output in tx.outputs.clone() {
-				outputs.push(output);
-			}
+			// add all tx inputs/outputs/kernels to the block
+			kernels.extend(tx.kernels.iter().cloned());
+			inputs.extend(tx.inputs.iter().cloned());
+			outputs.extend(tx.outputs.iter().cloned());
 		}
 
-		// also include the reward kernel and output
+		// include the reward kernel and output
 		kernels.push(reward_kern);
 		outputs.push(reward_out);
 
@@ -514,7 +528,28 @@ impl Block {
 		outputs.sort();
 		kernels.sort();
 
-		// calculate the overall Merkle tree and fees (todo?)
+		// now sum the kernel_offsets up to give us
+		// an aggregate offset for the entire block
+		let kernel_offset = {
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			let keys = kernel_offsets
+				.iter()
+				.cloned()
+				.filter(|x| *x != BlindingFactor::zero())
+				.filter_map(|x| {
+					x.secret_key(&secp).ok()
+				})
+				.collect::<Vec<_>>();
+			if keys.is_empty() {
+				BlindingFactor::zero()
+			} else {
+				let sum = secp.blind_sum(keys, vec![])?;
+
+				BlindingFactor::from_secret_key(sum)
+			}
+		};
+
 		Ok(
 			Block {
 				header: BlockHeader {
@@ -526,6 +561,7 @@ impl Block {
 					previous: prev.hash(),
 					total_difficulty: difficulty +
 						prev.total_difficulty.clone(),
+					kernel_offset: kernel_offset,
 					..Default::default()
 				},
 				inputs: inputs,
@@ -641,22 +677,34 @@ impl Block {
 		let io_sum = self.sum_commitments()?;
 
 		// sum all kernels commitments
-		let proof_commits = map_vec!(self.kernels, |proof| proof.excess);
+		let kernel_sum = {
+			let mut kernel_commits = self.kernels
+				.iter()
+				.map(|x| x.excess)
+				.collect::<Vec<_>>();
 
-		let proof_sum = {
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
-			secp.commit_sum(proof_commits, vec![])?
+
+			// add the kernel_offset in as necessary (unless offset is zero)
+			if self.header.kernel_offset != BlindingFactor::zero() {
+				let skey = self.header.kernel_offset.secret_key(&secp)?;
+				let offset_commit = secp.commit(0, skey)?;
+				kernel_commits.push(offset_commit);
+			}
+
+			secp.commit_sum(kernel_commits, vec![])?
 		};
 
-		// both should be the same
-		if proof_sum != io_sum {
+		// sum of kernel commitments (including kernel_offset) must match
+		// the sum of input/output commitments (minus fee)
+		if kernel_sum != io_sum {
 			return Err(Error::KernelSumMismatch);
 		}
 
 		// verify all signatures with the commitment as pk
-		for proof in &self.kernels {
-			proof.verify()?;
+		for kernel in &self.kernels {
+			kernel.verify()?;
 		}
 
 		Ok(())
@@ -839,8 +887,7 @@ mod test {
 		build::transaction(
 			vec![input(v, ZERO_HASH, key_id1), output(3, key_id2), with_fee(2)],
 			&keychain,
-		).map(|(tx, _)| tx)
-			.unwrap()
+		).unwrap()
 	}
 
 	// Too slow for now #[test]
@@ -863,7 +910,6 @@ mod test {
 		let now = Instant::now();
 		parts.append(&mut vec![input(500000, ZERO_HASH, pks.pop().unwrap()), with_fee(2)]);
 		let mut tx = build::transaction(parts, &keychain)
-			.map(|(tx, _)| tx)
 			.unwrap();
 		println!("Build tx: {}", now.elapsed().as_secs());
 
@@ -898,7 +944,7 @@ mod test {
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		let mut btx1 = tx2i1o();
-		let (mut btx2, _) = build::transaction(
+		let mut btx2 = build::transaction(
 			vec![input(7, ZERO_HASH, key_id1), output(5, key_id2.clone()), with_fee(2)],
 			&keychain,
 		).unwrap();
@@ -1010,7 +1056,7 @@ mod test {
 		ser::serialize(&mut vec, &b).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			5_676
+			5_708,
 		);
 	}
 
@@ -1023,7 +1069,7 @@ mod test {
 		ser::serialize(&mut vec, &b).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			16_224
+			16_256,
 		);
 	}
 
@@ -1035,7 +1081,7 @@ mod test {
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			5_676
+			5_708,
 		);
 	}
 
@@ -1048,7 +1094,7 @@ mod test {
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			5_682
+			5_714,
 		);
 	}
 
@@ -1070,7 +1116,7 @@ mod test {
 		ser::serialize(&mut vec, &b).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			111_156
+			111_188,
 		);
 	}
 
@@ -1092,7 +1138,7 @@ mod test {
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			5_736
+			5_768,
 		);
 	}
 
