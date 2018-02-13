@@ -269,7 +269,7 @@ fn simulate_fast_sync() {
 	thread::sleep(time::Duration::from_secs(8));
 
 	let mut conf = config(1001, "grin-fast");
-	conf.archive_mode = false;
+	conf.archive_mode = Some(false);
 	conf.seeds = Some(vec!["127.0.0.1:12000".to_string()]);
 	let s2 = grin::Server::new(conf).unwrap();
 	while s2.head().height != s2.header_head().height || s2.head().height < 20 {
@@ -294,7 +294,7 @@ fn simulate_fast_sync_double() {
 
 	{
 		let mut conf = config(1001, "grin-double-fast2");
-		conf.archive_mode = false;
+		conf.archive_mode = Some(false);
 		conf.seeds = Some(vec!["127.0.0.1:12000".to_string()]);
 		let s2 = grin::Server::new(conf).unwrap();
 		while s2.head().height != s2.header_head().height || s2.head().height < 20 {
@@ -308,7 +308,7 @@ fn simulate_fast_sync_double() {
 	thread::sleep(time::Duration::from_secs(20));
 
 	let mut conf = config(1001, "grin-double-fast2");
-	conf.archive_mode = false;
+	conf.archive_mode = Some(false);
 	conf.seeds = Some(vec!["127.0.0.1:12000".to_string()]);
 	let s2 = grin::Server::new(conf).unwrap();
 	while s2.head().height != s2.header_head().height || s2.head().height < 50 {
@@ -327,7 +327,7 @@ fn config(n: u16, test_name_dir: &str) -> grin::ServerConfig {
 		seeding_type: grin::Seeding::List,
 		seeds: Some(vec!["127.0.0.1:11000".to_string()]),
 		chain_type: core::global::ChainTypes::AutomatedTesting,
-		archive_mode: true,
+		archive_mode: Some(true),
 		skip_sync_wait: Some(true),
 		..Default::default()
 	}
