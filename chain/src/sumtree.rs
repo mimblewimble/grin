@@ -22,16 +22,16 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use util::{secp, static_secp_instance};
+use util::{static_secp_instance};
 use util::secp::pedersen::{RangeProof, Commitment};
 
 use core::consensus::reward;
-use core::core::{Block, BlockHeader, SumCommit, Input, Output, OutputIdentifier, OutputFeatures, TxKernel};
-use core::core::pmmr::{self, HashSum, NoSum, Summable, PMMR};
-use core::core::hash::Hashed;
-use core::ser::{self, Readable};
+use core::core::{Block, BlockHeader, Input, Output, OutputIdentifier, OutputFeatures, TxKernel};
+use core::core::pmmr::{self, PMMR};
+use core::core::hash::{Hash, Hashed};
+use core::ser::{self, Writeable};
 use grin_store;
-use grin_store::sumtree::{PMMRBackend, AppendOnlyFile};
+use grin_store::pmmr::{PMMRBackend, AppendOnlyFile};
 use types::ChainStore;
 use types::Error;
 use util::{LOGGER, zip};
@@ -40,12 +40,27 @@ const SUMTREES_SUBDIR: &'static str = "sumtrees";
 const UTXO_SUBDIR: &'static str = "utxo";
 const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
 const KERNEL_SUBDIR: &'static str = "kernel";
+const UTXO_FILE: &'static str = "utxo_full_data.bin";
+const RANGEPROOF_FILE: &'static str = "rangeproof_full_data.bin";
 const KERNEL_FILE: &'static str = "kernel_full_data.bin";
 const SUMTREES_ZIP: &'static str = "sumtrees_snapshot.zip";
 
+/// Helper to read an output from underlying storage
+fn read_output_from_file(file:&AppendOnlyFile, index:usize) -> Result<Output, Error> {
+	// TODO: Determine this better
+	let output_size = Output::size_no_rangeproof();
+	let source_vec = file.read(output_size * index, output_size);
+	let res: Result<Output, _> = ser::deserialize(&mut &source_vec[..]);
+	if let Ok(out) = res {
+		Ok(out)
+	} else {
+		Err(Error::FileReadErr(String::from("Can't read output from file")))
+	}
+}
+
 struct PMMRHandle<T>
 where
-	T: Summable + Clone,
+	T: Writeable,
 {
 	backend: PMMRBackend<T>,
 	last_pos: u64,
@@ -53,7 +68,7 @@ where
 
 impl<T> PMMRHandle<T>
 where
-	T: Summable + Clone,
+	T: Writeable,
 {
 	fn new(root_dir: String, file_name: &str) -> Result<PMMRHandle<T>, Error> {
 		let path = Path::new(&root_dir).join(SUMTREES_SUBDIR).join(file_name);
@@ -70,19 +85,20 @@ where
 /// An easy to manipulate structure holding the 3 sum trees necessary to
 /// validate blocks and capturing the UTXO set, the range proofs and the
 /// kernels. Also handles the index of Commitments to positions in the
-/// output and range proof sum trees.
+/// output and range proof pmmr trees.
 ///
 /// Note that the index is never authoritative, only the trees are
 /// guaranteed to indicate whether an output is spent or not. The index
 /// may have commitments that have already been spent, even with
 /// pruning enabled.
-///
-/// In addition of the sumtrees, this maintains the full list of kernel
-/// data so it can be easily packaged for sync or validation.
+
 pub struct SumTrees {
-	output_pmmr_h: PMMRHandle<SumCommit>,
-	rproof_pmmr_h: PMMRHandle<NoSum<RangeProof>>,
-	kernel_pmmr_h: PMMRHandle<NoSum<TxKernel>>,
+	utxo_pmmr_h: PMMRHandle<Output>,
+	rproof_pmmr_h: PMMRHandle<RangeProof>,
+	kernel_pmmr_h: PMMRHandle<TxKernel>,
+
+	utxo_file: AppendOnlyFile,
+	rproof_file: AppendOnlyFile,
 	kernel_file: AppendOnlyFile,
 
 	// chain store used as index of commitments to MMR positions
@@ -92,15 +108,28 @@ pub struct SumTrees {
 impl SumTrees {
 	/// Open an existing or new set of backends for the SumTrees
 	pub fn open(root_dir: String, commit_index: Arc<ChainStore>) -> Result<SumTrees, Error> {
+
+		let mut utxo_file_path: PathBuf = [&root_dir, SUMTREES_SUBDIR, UTXO_SUBDIR].iter().collect();
+		fs::create_dir_all(utxo_file_path.clone())?;
+		utxo_file_path.push(UTXO_FILE);
+		let utxo_file = AppendOnlyFile::open(utxo_file_path.to_str().unwrap().to_owned())?;
+
+		let mut rproof_file_path: PathBuf = [&root_dir, SUMTREES_SUBDIR, RANGE_PROOF_SUBDIR].iter().collect();
+		fs::create_dir_all(rproof_file_path.clone())?;
+		rproof_file_path.push(RANGEPROOF_FILE);
+		let rproof_file = AppendOnlyFile::open(rproof_file_path.to_str().unwrap().to_owned())?;
+
 		let mut kernel_file_path: PathBuf = [&root_dir, SUMTREES_SUBDIR, KERNEL_SUBDIR].iter().collect();
 		fs::create_dir_all(kernel_file_path.clone())?;
 		kernel_file_path.push(KERNEL_FILE);
 		let kernel_file = AppendOnlyFile::open(kernel_file_path.to_str().unwrap().to_owned())?;
 
 		Ok(SumTrees {
-			output_pmmr_h: PMMRHandle::new(root_dir.clone(), UTXO_SUBDIR)?,
+			utxo_pmmr_h: PMMRHandle::new(root_dir.clone(), UTXO_SUBDIR)?,
 			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR)?,
 			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR)?,
+			utxo_file: utxo_file,
+			rproof_file: rproof_file,
 			kernel_file: kernel_file,
 			commit_index: commit_index,
 		})
@@ -112,14 +141,13 @@ impl SumTrees {
 	pub fn is_unspent(&mut self, output: &OutputIdentifier) -> Result<(), Error> {
 		match self.commit_index.get_output_pos(&output.commit) {
 			Ok(pos) => {
-				let output_pmmr = PMMR::at(
-					&mut self.output_pmmr_h.backend,
-					self.output_pmmr_h.last_pos,
+				let output_pmmr:PMMR<Output, _> = PMMR::at(
+					&mut self.utxo_pmmr_h.backend,
+					self.utxo_pmmr_h.last_pos,
 				);
-				if let Some(HashSum { hash, sum: _ }) = output_pmmr.get(pos) {
-					let sum_commit = output.as_sum_commit();
-					let hash_sum = HashSum::from_summable(pos, &sum_commit);
-					if hash == hash_sum.hash {
+				if let Some(hash) = output_pmmr.get(pos) {
+					let output = read_output_from_file(&self.utxo_file, pos as usize).unwrap();
+					if hash == output.hash() {
 						Ok(())
 					} else {
 						Err(Error::SumTreeErr(format!("sumtree hash mismatch")))
@@ -164,20 +192,21 @@ impl SumTrees {
 
 	/// returns the last N nodes inserted into the tree (i.e. the 'bottom'
 	/// nodes at level 0
-	pub fn last_n_utxo(&mut self, distance: u64) -> Vec<HashSum<SumCommit>> {
-		let output_pmmr = PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
-		output_pmmr.get_last_n_insertions(distance)
+	/// TODO: These need to return the actual data from the flat-files instead of hashes now
+	pub fn last_n_utxo(&mut self, distance: u64) -> Vec<Hash> {
+		let utxo_pmmr:PMMR<Output, _> = PMMR::at(&mut self.utxo_pmmr_h.backend, self.utxo_pmmr_h.last_pos);
+		utxo_pmmr.get_last_n_insertions(distance)
 	}
 
 	/// as above, for range proofs
-	pub fn last_n_rangeproof(&mut self, distance: u64) -> Vec<HashSum<NoSum<RangeProof>>> {
-		let rproof_pmmr = PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
+	pub fn last_n_rangeproof(&mut self, distance: u64) -> Vec<Hash> {
+		let rproof_pmmr:PMMR<RangeProof, _> = PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
 		rproof_pmmr.get_last_n_insertions(distance)
 	}
 
 	/// as above, for kernels
-	pub fn last_n_kernel(&mut self, distance: u64) -> Vec<HashSum<NoSum<TxKernel>>> {
-		let kernel_pmmr = PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
+	pub fn last_n_kernel(&mut self, distance: u64) -> Vec<Hash> {
+		let kernel_pmmr:PMMR<TxKernel, _> = PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
 		kernel_pmmr.get_last_n_insertions(distance)
 	}
 
@@ -186,17 +215,19 @@ impl SumTrees {
 		indexes_at(block, self.commit_index.deref())
 	}
 
+
 	/// Get sum tree roots
+	/// TODO: Return data instead of hashes
 	pub fn roots(
 		&mut self,
 	) -> (
-		HashSum<SumCommit>,
-		HashSum<NoSum<RangeProof>>,
-		HashSum<NoSum<TxKernel>>,
+		Hash,
+		Hash,
+		Hash,
 	) {
-		let output_pmmr = PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
-		let rproof_pmmr = PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
-		let kernel_pmmr = PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
+		let output_pmmr:PMMR<Output, _> = PMMR::at(&mut self.utxo_pmmr_h.backend, self.utxo_pmmr_h.last_pos);
+		let rproof_pmmr:PMMR<RangeProof, _> = PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
+		let kernel_pmmr:PMMR<TxKernel, _> = PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
 		(output_pmmr.root(), rproof_pmmr.root(), kernel_pmmr.root())
 	}
 }
@@ -231,26 +262,32 @@ where
 	match res {
 		Err(e) => {
 			debug!(LOGGER, "Error returned, discarding sumtree extension.");
-			trees.output_pmmr_h.backend.discard();
+			trees.utxo_pmmr_h.backend.discard();
 			trees.rproof_pmmr_h.backend.discard();
 			trees.kernel_pmmr_h.backend.discard();
+			trees.utxo_file.discard();
+			trees.rproof_file.discard();
 			trees.kernel_file.discard();
 			Err(e)
 		}
 		Ok(r) => {
 			if rollback {
 				debug!(LOGGER, "Rollbacking sumtree extension.");
-				trees.output_pmmr_h.backend.discard();
+				trees.utxo_pmmr_h.backend.discard();
 				trees.rproof_pmmr_h.backend.discard();
 				trees.kernel_pmmr_h.backend.discard();
+				trees.utxo_file.discard();
+				trees.rproof_file.discard();
 				trees.kernel_file.discard();
 			} else {
 				debug!(LOGGER, "Committing sumtree extension.");
-				trees.output_pmmr_h.backend.sync()?;
+				trees.utxo_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
+				trees.utxo_file.flush()?;
+				trees.rproof_file.flush()?;
 				trees.kernel_file.flush()?;
-				trees.output_pmmr_h.last_pos = sizes.0;
+				trees.utxo_pmmr_h.last_pos = sizes.0;
 				trees.rproof_pmmr_h.last_pos = sizes.1;
 				trees.kernel_pmmr_h.last_pos = sizes.2;
 			}
@@ -265,10 +302,12 @@ where
 /// reversible manner within a unit of work provided by the `extending`
 /// function.
 pub struct Extension<'a> {
-	output_pmmr: PMMR<'a, SumCommit, PMMRBackend<SumCommit>>,
-	rproof_pmmr: PMMR<'a, NoSum<RangeProof>, PMMRBackend<NoSum<RangeProof>>>,
-	kernel_pmmr: PMMR<'a, NoSum<TxKernel>, PMMRBackend<NoSum<TxKernel>>>,
+	utxo_pmmr: PMMR<'a, Output, PMMRBackend<Output>>,
+	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
+	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
 
+	utxo_file: &'a mut AppendOnlyFile,
+	rproof_file: &'a mut AppendOnlyFile,
 	kernel_file: &'a mut AppendOnlyFile,
 	commit_index: Arc<ChainStore>,
 	new_output_commits: HashMap<Commitment, u64>,
@@ -284,9 +323,9 @@ impl<'a> Extension<'a> {
 	) -> Extension<'a> {
 
 		Extension {
-			output_pmmr: PMMR::at(
-				&mut trees.output_pmmr_h.backend,
-				trees.output_pmmr_h.last_pos,
+			utxo_pmmr: PMMR::at(
+				&mut trees.utxo_pmmr_h.backend,
+				trees.utxo_pmmr_h.last_pos,
 			),
 			rproof_pmmr: PMMR::at(
 				&mut trees.rproof_pmmr_h.backend,
@@ -296,10 +335,13 @@ impl<'a> Extension<'a> {
 				&mut trees.kernel_pmmr_h.backend,
 				trees.kernel_pmmr_h.last_pos,
 			),
+			utxo_file: &mut trees.utxo_file,
+			rproof_file: &mut trees.rproof_file,
 			kernel_file: &mut trees.kernel_file,
 			commit_index: commit_index,
 			new_output_commits: HashMap::new(),
 			new_kernel_excesses: HashMap::new(),
+
 			rollback: false,
 		}
 	}
@@ -355,14 +397,12 @@ impl<'a> Extension<'a> {
 		let commit = input.commitment();
 		let pos_res = self.get_output_pos(&commit);
 		if let Ok(pos) = pos_res {
-			if let Some(HashSum { hash, sum: _ }) = self.output_pmmr.get(pos) {
-				let sum_commit = SumCommit::from_input(&input);
-
-				// check hash from pmmr matches hash from input
+			if let Some(hash) = self.utxo_pmmr.get(pos) {
+				// check hash from pmmr matches hash from input (or corresponding output)
 				// if not then the input is not being honest about
 				// what it is attempting to spend...
-				let hash_sum = HashSum::from_summable(pos, &sum_commit);
-				if hash != hash_sum.hash {
+				let output = read_output_from_file(&self.utxo_file, pos as usize).unwrap();
+				if hash != output.hash() {
 					return Err(Error::SumTreeErr(format!("output pmmr hash mismatch")));
 				}
 
@@ -379,9 +419,10 @@ impl<'a> Extension<'a> {
 				}
 			}
 
-			// Now prune the output_pmmr and rproof_pmmr.
+			// Now prune the utxo_pmmr, rproof_pmmr and their storage.
 			// Input is not valid if we cannot prune successfully (to spend an unspent output).
-			match self.output_pmmr.prune(pos, height as u32) {
+			// TODO: rm log, skip list for utxo and range proofs
+			match self.utxo_pmmr.prune(pos, height as u32) {
 				Ok(true) => {
 					self.rproof_pmmr
 						.prune(pos, height as u32)
@@ -398,7 +439,6 @@ impl<'a> Extension<'a> {
 
 	fn apply_output(&mut self, out: &Output) -> Result<(), Error> {
 		let commit = out.commitment();
-		let sum_commit = SumCommit::from_output(out);
 
 		if let Ok(pos) = self.get_output_pos(&commit) {
 			// we need to check whether the commitment is in the current MMR view
@@ -406,28 +446,27 @@ impl<'a> Extension<'a> {
 			// (non-historical node will have a much smaller one)
 			// note that this doesn't show the commitment *never* existed, just
 			// that this is not an existing unspent commitment right now
-			if let Some(c) = self.output_pmmr.get(pos) {
-				let hash_sum = HashSum::from_summable(pos, &sum_commit);
-
+			if let Some(c) = self.utxo_pmmr.get(pos) {
 				// processing a new fork so we may get a position on the old
 				// fork that exists but matches a different node
 				// filtering that case out
-				if c.hash == hash_sum.hash {
+				if c == out.hash() {
 					return Err(Error::DuplicateCommitment(commit));
 				}
 			}
 		}
-		// push new outputs commitments in their MMR and save them in the index
-		let pos = self.output_pmmr
-			.push(sum_commit)
+		// push new outputs in their MMR and save them in the index
+		let pos = self.utxo_pmmr
+			.push(out.clone())
 			.map_err(&Error::SumTreeErr)?;
-
 		self.new_output_commits.insert(out.commitment(), pos);
+		self.utxo_file.append(&mut ser::ser_vec(&out).unwrap());
 
-		// push range proofs in their MMR
+		// push range proofs in their MMR and file
 		self.rproof_pmmr
-			.push(NoSum(out.proof))
+			.push(out.proof)
 			.map_err(&Error::SumTreeErr)?;
+		self.rproof_file.append(&mut ser::ser_vec(&out.proof).unwrap());
 		Ok(())
 	}
 
@@ -435,8 +474,7 @@ impl<'a> Extension<'a> {
 		if let Ok(pos) = self.get_kernel_pos(&kernel.excess) {
 			// same as outputs
 			if let Some(k) = self.kernel_pmmr.get(pos) {
-				let hashsum = HashSum::from_summable(pos, &NoSum(kernel));
-				if k.hash == hashsum.hash {
+				if k == kernel.hash() {
 					return Err(Error::DuplicateKernel(kernel.excess.clone()));
 				}
 			}
@@ -444,7 +482,7 @@ impl<'a> Extension<'a> {
 
 		// push kernels in their MMR and file
 		let pos = self.kernel_pmmr
-			.push(NoSum(kernel.clone()))
+			.push(kernel.clone())
 			.map_err(&Error::SumTreeErr)?;
 		self.new_kernel_excesses.insert(kernel.excess, pos);
 		self.kernel_file.append(&mut ser::ser_vec(&kernel).unwrap());
@@ -466,11 +504,14 @@ impl<'a> Extension<'a> {
 		let (out_pos_rew, kern_pos_rew) = indexes_at(block, self.commit_index.deref())?;
 		self.rewind_pos(block.header.height, out_pos_rew, kern_pos_rew)?;
 		
-		// rewind the kernel file store, the position is the number of kernels
+		// rewind the file stores, the position is the number of kernels
 		// multiplied by their size
 		// the number of kernels is the number of leaves in the MMR, which is the
 		// sum of the number of leaf nodes under each peak in the MMR
 		let pos: u64 = pmmr::peaks(kern_pos_rew).iter().map(|n| (1 << n) as u64).sum();
+		self.utxo_file.rewind(pos * (Output::size_no_rangeproof() as u64));
+		// TODO: How without bullet proofs?
+		//self.rproof_file.rewind(pos * (RangeProof::size() as u64));
 		self.kernel_file.rewind(pos * (TxKernel::size() as u64));
 
 		Ok(())
@@ -486,7 +527,7 @@ impl<'a> Extension<'a> {
 			kern_pos_rew,
 		);
 
-		self.output_pmmr
+		self.utxo_pmmr
 			.rewind(out_pos_rew, height as u32)
 			.map_err(&Error::SumTreeErr)?;
 		self.rproof_pmmr
@@ -516,17 +557,18 @@ impl<'a> Extension<'a> {
 		}
 	}
 
+
 	/// Current root hashes and sums (if applicable) for the UTXO, range proof
 	/// and kernel sum trees.
 	pub fn roots(
 		&self,
 	) -> (
-		HashSum<SumCommit>,
-		HashSum<NoSum<RangeProof>>,
-		HashSum<NoSum<TxKernel>>,
+		Hash,
+		Hash,
+		Hash,
 	) {
 		(
-			self.output_pmmr.root(),
+			self.utxo_pmmr.root(),
 			self.rproof_pmmr.root(),
 			self.kernel_pmmr.root(),
 		)
@@ -535,7 +577,7 @@ impl<'a> Extension<'a> {
 	/// Validate the current sumtree state against a block header
 	pub fn validate(&self, header: &BlockHeader) -> Result<(), Error> {
 		// validate all hashes and sums within the trees
-		if let Err(e) = self.output_pmmr.validate() {
+		if let Err(e) = self.utxo_pmmr.validate() {
 			return Err(Error::InvalidSumtree(e));
 		}
 		if let Err(e) = self.rproof_pmmr.validate() {
@@ -547,8 +589,8 @@ impl<'a> Extension<'a> {
 
 		// validate the tree roots against the block header
 		let (utxo_root, rproof_root, kernel_root) = self.roots();
-		if utxo_root.hash != header.utxo_root || rproof_root.hash != header.range_proof_root
-			|| kernel_root.hash != header.kernel_root
+		if utxo_root != header.utxo_root || rproof_root != header.range_proof_root
+			|| kernel_root != header.kernel_root
 		{
 			return Err(Error::InvalidRoot);
 		}
@@ -575,11 +617,13 @@ impl<'a> Extension<'a> {
 	/// by iterating over the whole MMR data. This is a costly operation
 	/// performed only when we receive a full new chain state.
 	pub fn rebuild_index(&self) -> Result<(), Error> {
-		for n in 1..self.output_pmmr.unpruned_size()+1 {
+		for n in 1..self.utxo_pmmr.unpruned_size()+1 {
 			// non-pruned leaves only
 			if pmmr::bintree_postorder_height(n) == 0 {
-				if let Some(hs) = self.output_pmmr.get(n) {
-					self.commit_index.save_output_pos(&hs.sum.commit, n)?;
+				if let Some(_) = self.utxo_pmmr.get(n) {
+					let out = read_output_from_file(&self.utxo_file, n as usize).unwrap();
+					//TODO: Get commit data instead
+					self.commit_index.save_output_pos(&out.commit, n)?;
 				}
 			}
 		}
@@ -595,7 +639,7 @@ impl<'a> Extension<'a> {
 	/// version only prints the UTXO tree.
 	pub fn dump(&self, short: bool) {
 		debug!(LOGGER, "-- outputs --");
-		self.output_pmmr.dump(short);
+		self.utxo_pmmr.dump(short);
 		if !short {
 			debug!(LOGGER, "-- range proofs --");
 			self.rproof_pmmr.dump(short);
@@ -607,7 +651,7 @@ impl<'a> Extension<'a> {
 	// Sizes of the sum trees, used by `extending` on rollback.
 	fn sizes(&self) -> (u64, u64, u64) {
 		(
-			self.output_pmmr.unpruned_size(),
+			self.utxo_pmmr.unpruned_size(),
 			self.rproof_pmmr.unpruned_size(),
 			self.kernel_pmmr.unpruned_size(),
 		)
@@ -654,14 +698,14 @@ impl<'a> Extension<'a> {
 		let mut sum_utxo = None;
 		let mut utxo_count = 0;
 		let secp = static_secp_instance();
-		for n in 1..self.output_pmmr.unpruned_size()+1 {
+		for n in 1..self.utxo_pmmr.unpruned_size()+1 {
 			if pmmr::bintree_postorder_height(n) == 0 {
-				if let Some(hs) = self.output_pmmr.get(n) {
+				if let Ok(output) = read_output_from_file(self.utxo_file, n as usize) {
 					if n == 1 {
-						sum_utxo = Some(hs.sum.commit);
+						sum_utxo = Some(output.commit);
 					} else {
 						let secp = secp.lock().unwrap();
-						sum_utxo = Some(secp.commit_sum(vec![sum_utxo.unwrap(), hs.sum.commit], vec![])?);
+						sum_utxo = Some(secp.commit_sum(vec![sum_utxo.unwrap(), output.commit], vec![])?);
 					}
 					utxo_count += 1;
 				}

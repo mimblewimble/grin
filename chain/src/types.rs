@@ -81,6 +81,8 @@ pub enum Error {
 	InvalidSumtree(String),
 	/// Internal issue when trying to save or load data from store
 	StoreErr(grin_store::Error, String),
+	/// Internal issue when trying to save or load data from append only files
+	FileReadErr(String),
 	/// Error serializing or deserializing a type
 	SerErr(ser::Error),
 	/// Error with the sumtrees

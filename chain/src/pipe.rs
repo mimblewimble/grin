@@ -306,27 +306,27 @@ fn validate_block(
 	ext.apply_block(&b)?;
 
 	let (utxo_root, rproof_root, kernel_root) = ext.roots();
-	if utxo_root.hash != b.header.utxo_root || rproof_root.hash != b.header.range_proof_root
-		|| kernel_root.hash != b.header.kernel_root
+	if utxo_root != b.header.utxo_root || rproof_root != b.header.range_proof_root
+		|| kernel_root != b.header.kernel_root
 	{
 		ext.dump(false);
 
 		debug!(
 			LOGGER,
 			"validate_block: utxo roots - {:?}, {:?}",
-			utxo_root.hash,
+			utxo_root,
 			b.header.utxo_root,
 		);
 		debug!(
 			LOGGER,
 			"validate_block: rproof roots - {:?}, {:?}",
-			rproof_root.hash,
+			rproof_root,
 			b.header.range_proof_root,
 		);
 		debug!(
 			LOGGER,
 			"validate_block: kernel roots - {:?}, {:?}",
-			kernel_root.hash,
+			kernel_root,
 			b.header.kernel_root,
 		);
 

@@ -668,6 +668,14 @@ impl Output {
 	pub fn proof(&self) -> RangeProof {
 		self.proof
 	}
+	
+	/// Size in bytes of an output
+	pub fn size_no_rangeproof() -> usize {
+		1 + // features
+			secp::constants::PEDERSEN_COMMITMENT_SIZE +
+			SWITCH_COMMIT_HASH_SIZE
+	}
+
 
 	/// Validates the range proof using the commitment
 	pub fn verify_proof(&self) -> Result<(), secp::Error> {
@@ -737,21 +745,6 @@ impl OutputIdentifier {
 			util::to_hex(self.commit.0.to_vec()),
 		)
 	}
-
-	/// Convert an output_indentifier to a sum_commit representation
-	/// so we can use it to query the the output MMR
-	pub fn as_sum_commit(&self) -> SumCommit {
-		SumCommit {
-			features: self.features,
-			commit: self.commit,
-			switch_commit_hash: SwitchCommitHash::zero(),
-		}
-	}
-
-	/// Convert a sum_commit back to an output_identifier.
-	pub fn from_sum_commit(sum_commit: &SumCommit) -> OutputIdentifier {
-		OutputIdentifier::new(sum_commit.features, &sum_commit.commit)
-	}
 }
 
 impl Writeable for OutputIdentifier {
@@ -771,61 +764,6 @@ impl Readable for OutputIdentifier {
 			commit: Commitment::read(reader)?,
 			features: features,
 		})
-	}
-}
-
-/// Wrapper to Output commitments to provide the Summable trait.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct SumCommit {
-	/// Output features (coinbase vs. regular transaction output)
-	/// We need to include this when hashing to ensure coinbase maturity can be enforced.
-	pub features: OutputFeatures,
-	/// Output commitment
-	pub commit: Commitment,
-	/// The corresponding switch commit hash
-	pub switch_commit_hash: SwitchCommitHash,
-}
-
-impl SumCommit {
-	/// Build a new sum_commit.
-	pub fn new(
-		features: OutputFeatures,
-		commit: &Commitment,
-		switch_commit_hash: &SwitchCommitHash,
-	) -> SumCommit {
-		SumCommit {
-			features: features.clone(),
-			commit: commit.clone(),
-			switch_commit_hash: switch_commit_hash.clone(),
-		}
-	}
-
-	/// Build a new sum_commit from an existing output.
-	pub fn from_output(output: &Output) -> SumCommit {
-		SumCommit {
-			features: output.features,
-			commit: output.commit,
-			switch_commit_hash: output.switch_commit_hash,
-		}
-	}
-
-	/// Build a new sum_commit from an existing input.
-	pub fn from_input(input: &Input) -> SumCommit {
-		SumCommit {
-			features: input.features,
-			commit: input.commit,
-			switch_commit_hash: SwitchCommitHash::zero(),
-		}
-	}
-
-	/// Hex string representation of a sum_commit.
-	pub fn to_hex(&self) -> String {
-		format!(
-			"{:b}{}{}",
-			self.features.bits(),
-			util::to_hex(self.commit.0.to_vec()),
-			self.switch_commit_hash.to_hex(),
-		)
 	}
 }
 

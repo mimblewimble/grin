@@ -250,6 +250,7 @@ pub fn ser_vec<W: Writeable>(thing: &W) -> Result<Vec<u8>, Error> {
 	Ok(vec)
 }
 
+/// Utility to read from a binary source
 struct BinReader<'a> {
 	source: &'a mut Read,
 }

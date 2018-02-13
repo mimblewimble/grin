@@ -20,16 +20,12 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use util::secp::pedersen::RangeProof;
-
-use core::core::{Input, OutputIdentifier, SumCommit};
-use core::core::hash::Hashed;
-use core::core::pmmr::{HashSum, NoSum};
+use core::core::{Input, OutputIdentifier};
+use core::core::hash::{Hash, Hashed};
 use core::global;
 
-use core::core::{Block, BlockHeader, TxKernel};
+use core::core::{Block, BlockHeader};
 use core::core::target::Difficulty;
-use core::core::hash::Hash;
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
@@ -395,6 +391,7 @@ impl Chain {
 		sumtrees.is_unspent(output_ref)
 	}
 
+	/// Validate
 	pub fn validate(&self) -> Result<(), Error> {
 		let header = self.store.head_header()?;
 		let mut sumtrees = self.sumtrees.write().unwrap();
@@ -427,9 +424,9 @@ impl Chain {
 			Ok(extension.roots())
 		})?;
 
-		b.header.utxo_root = roots.0.hash;
-		b.header.range_proof_root = roots.1.hash;
-		b.header.kernel_root = roots.2.hash;
+		b.header.utxo_root = roots.0;
+		b.header.range_proof_root = roots.1;
+		b.header.kernel_root = roots.2;
 		Ok(())
 	}
 
@@ -437,9 +434,9 @@ impl Chain {
 	pub fn get_sumtree_roots(
 		&self,
 	) -> (
-		HashSum<SumCommit>,
-		HashSum<NoSum<RangeProof>>,
-		HashSum<NoSum<TxKernel>>,
+		Hash,
+		Hash,
+		Hash,
 	) {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.roots()
@@ -506,7 +503,7 @@ impl Chain {
 		{
 			let mut head = self.head.lock().unwrap();
 			*head = Tip::from_block(&header);
-			self.store.save_body_head(&head);
+			let _ = self.store.save_body_head(&head);
 			self.store.save_header_height(&header)?;
 		}
 
@@ -516,19 +513,19 @@ impl Chain {
 	}
 
 	/// returns the last n nodes inserted into the utxo sum tree
-	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<HashSum<SumCommit>> {
+	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<Hash> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.last_n_utxo(distance)
 	}
 
 	/// as above, for rangeproofs
-	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<HashSum<NoSum<RangeProof>>> {
+	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<Hash> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.last_n_rangeproof(distance)
 	}
 
 	/// as above, for kernels
-	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<HashSum<NoSum<TxKernel>>> {
+	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<Hash> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.last_n_kernel(distance)
 	}

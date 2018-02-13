@@ -126,7 +126,7 @@ impl AppendOnlyFile {
 
 	/// Read length bytes of data at offset from the file. Leverages the memory
 	/// map.
-	fn read(&self, offset: usize, length: usize) -> Vec<u8> {
+	pub fn read(&self, offset: usize, length: usize) -> Vec<u8> {
 		if offset >= self.buffer_start {
 			let offset = offset - self.buffer_start;
 			return self.buffer[offset..(offset+length)].to_vec();
