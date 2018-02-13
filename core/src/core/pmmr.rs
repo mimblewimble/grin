@@ -147,7 +147,7 @@ where
 			let left_hash = self.backend.get(left_sibling).expect(
 				"missing left sibling in tree, should not have been pruned",
 			);
-			current_hash = left_hash.hash_with(current_hash);
+			current_hash = left_hash + current_hash;
 
 			to_append.push(current_hash.clone());
 			height += 1;
@@ -271,7 +271,7 @@ where
 					if let Some(left_child_hs) = self.get(left_pos) {
 						if let Some(right_child_hs) = self.get(right_pos) {
 							// sum and compare
-							if left_child_hs.hash_with(right_child_hs) != hs {
+							if left_child_hs+right_child_hs != hs {
 								return Err(format!("Invalid MMR, hashsum of parent at {} does \
 																	 not match children.", n));
 							}
@@ -773,106 +773,101 @@ mod test {
 
 		// two elements
 		pmmr.push(elems[1]).unwrap();
-		let sum2 = elems[0].hash().hash_with(elems[1].hash());
+		let sum2 = elems[0].hash() + elems[1].hash();
 		pmmr.dump(false);
 		assert_eq!(pmmr.root(), sum2);
 		assert_eq!(pmmr.unpruned_size(), 3);
 
 		// three elements
 		pmmr.push(elems[2]).unwrap();
-		let sum3 = sum2.hash_with(elems[2].hash());
+		let sum3 = sum2 + elems[2].hash();
 		pmmr.dump(false);
 		assert_eq!(pmmr.root(), sum3);
 		assert_eq!(pmmr.unpruned_size(), 4);
 
 		// four elements
 		pmmr.push(elems[3]).unwrap();
-		let sum_one = elems[2].hash().hash_with(elems[3].hash());
-		let sum4 = sum2.hash_with(sum_one);
+		let sum_one = elems[2].hash() + elems[3].hash();
+		let sum4 = sum2 + sum_one;
 		pmmr.dump(false);
 		assert_eq!(pmmr.root(), sum4);
 		assert_eq!(pmmr.unpruned_size(), 7);
 
 		// five elements
 		pmmr.push(elems[4]).unwrap();
-		let sum3 = sum4.hash_with(elems[4].hash());
+		let sum3 = sum4 + elems[4].hash();
 		pmmr.dump(false);
 		assert_eq!(pmmr.root(), sum3);
 		assert_eq!(pmmr.unpruned_size(), 8);
 
-/*
 		// six elements
 		pmmr.push(elems[5]).unwrap();
-		let sum6 = sum4.clone() +
-			(HashSum::from_summable(8, &elems[4]) +
-				 HashSum::from_summable(9, &elems[5]));
+		let sum6 = sum4 +
+			(elems[4].hash() + elems[5].hash());
 		assert_eq!(pmmr.root(), sum6.clone());
 		assert_eq!(pmmr.unpruned_size(), 10);
 
 		// seven elements
 		pmmr.push(elems[6]).unwrap();
-		let sum7 = sum6 + HashSum::from_summable(11, &elems[6]);
+		let sum7 = sum6 + elems[6].hash();
 		assert_eq!(pmmr.root(), sum7);
 		assert_eq!(pmmr.unpruned_size(), 11);
 
 		// eight elements
 		pmmr.push(elems[7]).unwrap();
 		let sum8 = sum4 +
-			((HashSum::from_summable(8, &elems[4]) +
-				  HashSum::from_summable(9, &elems[5])) +
-				 (HashSum::from_summable(11, &elems[6]) +
-					  HashSum::from_summable(12, &elems[7])));
+			((elems[4].hash() + elems[5].hash()) +
+				 (elems[6].hash() + elems[7].hash()));
 		assert_eq!(pmmr.root(), sum8);
 		assert_eq!(pmmr.unpruned_size(), 15);
 
 		// nine elements
 		pmmr.push(elems[8]).unwrap();
-		let sum9 = sum8 + HashSum::from_summable(16, &elems[8]);
+		let sum9 = sum8 + elems[8].hash();
 		assert_eq!(pmmr.root(), sum9);
-		assert_eq!(pmmr.unpruned_size(), 16);*/
+		assert_eq!(pmmr.unpruned_size(), 16);
 	}
 
 	#[test]
 	fn pmmr_get_last_n_insertions() {
 		let elems = [
-			1,
-			2,
-			3,
-			4,
-			5,
-			6,
-			7,
-			8,
-			9,
-			10,
+			TestElem([0, 0, 0, 1]),
+			TestElem([0, 0, 0, 2]),
+			TestElem([0, 0, 0, 3]),
+			TestElem([0, 0, 0, 4]),
+			TestElem([0, 0, 0, 5]),
+			TestElem([0, 0, 0, 6]),
+			TestElem([0, 0, 0, 7]),
+			TestElem([0, 0, 0, 8]),
+			TestElem([1, 0, 0, 0]),
 		];
 
-		/*let mut ba = VecBackend::new();
+		let mut ba = VecBackend::new();
 		let mut pmmr = PMMR::new(&mut ba);
 
 		// test when empty
 		let res = pmmr.get_last_n_insertions(19);
-		assert!(res.len() == 0);*/
+		assert!(res.len() == 0);
 
-		/*pmmr.push(elems[0]).unwrap();
+		pmmr.push(elems[0]).unwrap();
 		let res = pmmr.get_last_n_insertions(19);
-		assert!(res.len() == 1 && res[0].sum == 1);
+		assert!(res.len() == 1);
 
 		pmmr.push(elems[1]).unwrap();
 
 		let res = pmmr.get_last_n_insertions(12);
-		assert!(res[0].sum == 2 && res[1].sum == 1);
+		assert!(res.len() == 2);
 
 		pmmr.push(elems[2]).unwrap();
 
 		let res = pmmr.get_last_n_insertions(2);
-		assert!(res[0].sum == 3 && res[1].sum == 2);
+		assert!(res.len() == 2);
 
 		pmmr.push(elems[3]).unwrap();
 
 		let res = pmmr.get_last_n_insertions(19);
 		assert!(
-			res[0].sum == 4 && res[1].sum == 3 && res[2].sum == 2 && res[3].sum == 1 && res.len() == 4
+			res.len() == 4
 		);
 
 		pmmr.push(elems[5]).unwrap();
@@ -882,26 +877,26 @@ mod test {
 
 		let res = pmmr.get_last_n_insertions(7);
 		assert!(
-			res[0].sum == 9 && res[1].sum == 8 && res[2].sum == 7 && res[3].sum == 6 && res.len() == 7
-		);*/
+			res.len() == 7
+		);
 	}
 
 	#[test]
 	#[allow(unused_variables)]
 	fn pmmr_prune() {
-				let elems = [
-			1,
-			2,
-			3,
-			4,
-			5,
-			6,
-			7,
-			8,
-			10,
+		let elems = [
+			TestElem([0, 0, 0, 1]),
+			TestElem([0, 0, 0, 2]),
+			TestElem([0, 0, 0, 3]),
+			TestElem([0, 0, 0, 4]),
+			TestElem([0, 0, 0, 5]),
+			TestElem([0, 0, 0, 6]),
+			TestElem([0, 0, 0, 7]),
+			TestElem([0, 0, 0, 8]),
+			TestElem([1, 0, 0, 0]),
 		];
 
-		/*let orig_root: HashSum<TestElem>;
+		let orig_root: Hash;
 		let sz: u64;
 		let mut ba = VecBackend::new();
 		{
@@ -921,7 +916,7 @@ mod test {
 		}
 		assert_eq!(ba.used_size(), 16);
 
-		// pruning leaves with no shared parent just removes 1 element
+		/*// pruning leaves with no shared parent just removes 1 element
 		{
 			let mut pmmr = PMMR::at(&mut ba, sz);
 			pmmr.prune(2, 0).unwrap();

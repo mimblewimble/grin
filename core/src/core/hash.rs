@@ -20,6 +20,7 @@
 use std::cmp::min;
 use std::{fmt, ops};
 use std::convert::AsRef;
+use std::ops::Add;
 
 use blake2::blake2b::Blake2b;
 
@@ -143,6 +144,13 @@ impl Readable for Hash {
 impl Writeable for Hash {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_fixed_bytes(&self.0)
+	}
+}
+
+impl Add for Hash {
+	type Output = Hash;
+	fn add(self, other: Hash) -> Hash {
+		self.hash_with(other)
 	}
 }
 
