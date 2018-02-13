@@ -16,13 +16,16 @@
 //! and mostly the chain pipeline.
 
 use std::collections::HashMap;
+use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 use util::secp::pedersen::RangeProof;
 
 use core::core::{Input, OutputIdentifier, SumCommit};
+use core::core::hash::Hashed;
 use core::core::pmmr::{HashSum, NoSum};
+use core::global;
 
 use core::core::{Block, BlockHeader, TxKernel};
 use core::core::target::Difficulty;
@@ -112,6 +115,7 @@ impl OrphanBlockPool {
 /// the current view of the UTXO set according to the chain state. Also
 /// maintains locking for the pipeline to avoid conflicting processing.
 pub struct Chain {
+	db_root: String,
 	store: Arc<ChainStore>,
 	adapter: Arc<ChainAdapter>,
 
@@ -183,9 +187,10 @@ impl Chain {
 		);
 
 		let store = Arc::new(chain_store);
-		let sumtrees = sumtree::SumTrees::open(db_root, store.clone())?;
+		let sumtrees = sumtree::SumTrees::open(db_root.clone(), store.clone())?;
 
 		Ok(Chain {
+			db_root: db_root,
 			store: store,
 			adapter: adapter,
 			head: Arc::new(Mutex::new(head)),
@@ -194,25 +199,26 @@ impl Chain {
 			pow_verifier: pow_verifier,
 		})
 	}
-/// Processes a single block, then checks for orphans, processing
-/// those as well if they're found
-pub fn process_block(&self, b: Block, opts: Options)
--> Result<(Option<Tip>, Option<Block>), Error>
-{
-	let res = self.process_block_no_orphans(b, opts);
-	match res {
-		Ok((t, b)) => {
-			// We accepted a block, so see if we can accept any orphans
-			if b.is_some() {
-				self.check_orphans(&b.clone().unwrap());
+
+	/// Processes a single block, then checks for orphans, processing
+	/// those as well if they're found
+	pub fn process_block(&self, b: Block, opts: Options)
+		-> Result<(Option<Tip>, Option<Block>), Error>
+		{
+			let res = self.process_block_no_orphans(b, opts);
+			match res {
+				Ok((t, b)) => {
+					// We accepted a block, so see if we can accept any orphans
+					if let Some(ref b) = b {
+						self.check_orphans(b.hash());
+					}
+					Ok((t, b))
+				},
+				Err(e) => {
+					Err(e)
+				}
 			}
-			Ok((t, b))
-		},
-		Err(e) => {
-			Err(e)
 		}
-	}
-}
 
 	/// Attempt to add a new block to the chain. Returns the new chain tip if it
 	/// has been added to the longest chain, None if it's added to an (as of
@@ -348,13 +354,12 @@ pub fn process_block(&self, b: Block, opts: Options)
 
 
 	/// Check for orphans, once a block is successfully added
-	pub fn check_orphans(&self, block: &Block) {
+	pub fn check_orphans(&self, mut last_block_hash: Hash) {
 		debug!(
 			LOGGER,
 			"chain: check_orphans: # orphans {}",
 			self.orphans.len(),
 		);
-		let mut last_block_hash = block.hash();
 		// Is there an orphan in our orphans that we can now process?
 		// We just processed the given block, are there any orphans that have this block
 		// as their "previous" block?
@@ -388,6 +393,14 @@ pub fn process_block(&self, b: Block, opts: Options)
 	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.is_unspent(output_ref)
+	}
+
+	pub fn validate(&self) -> Result<(), Error> {
+		let header = self.store.head_header()?;
+		let mut sumtrees = self.sumtrees.write().unwrap();
+		sumtree::extending(&mut sumtrees, |extension| {
+			extension.validate(&header)
+		})
 	}
 
 	/// Check if the input has matured sufficiently for the given block height.
@@ -432,6 +445,76 @@ pub fn process_block(&self, b: Block, opts: Options)
 		sumtrees.roots()
 	}
 
+	/// Provides a reading view into the current sumtree state as well as
+	/// the required indexes for a consumer to rewind to a consistent state
+	/// at the provided block hash.
+	pub fn sumtrees_read(&self, h: Hash) -> Result<(u64, u64, File), Error> {
+		let b = self.get_block(&h)?;
+
+		// get the indexes for the block
+		let out_index: u64;
+		let kernel_index: u64;
+		{
+			let sumtrees = self.sumtrees.read().unwrap();
+			let (oi, ki) = sumtrees.indexes_at(&b)?;
+			out_index = oi;
+			kernel_index = ki;
+		}
+
+		// prepares the zip and return the corresponding Read
+		let sumtree_reader = sumtree::zip_read(self.db_root.clone())?;
+		Ok((out_index, kernel_index, sumtree_reader))
+	}
+
+	/// Writes a reading view on a sumtree state that's been provided to us.
+	/// If we're willing to accept that new state, the data stream will be
+	/// read as a zip file, unzipped and the resulting state files should be
+	/// rewound to the provided indexes.
+	pub fn sumtrees_write(
+		&self,
+		h: Hash,
+		rewind_to_output: u64,
+		rewind_to_kernel: u64,
+		sumtree_data: File
+	) -> Result<(), Error> {
+
+		let head = self.head().unwrap();
+		let header_head = self.get_header_head().unwrap();
+		if header_head.height - head.height < global::cut_through_horizon() as u64 {
+			return Err(Error::InvalidSumtree("not needed".to_owned()));
+		}	
+
+		let header = self.store.get_block_header(&h)?;
+		sumtree::zip_write(self.db_root.clone(), sumtree_data)?;
+
+		let mut sumtrees = sumtree::SumTrees::open(self.db_root.clone(), self.store.clone())?;
+		sumtree::extending(&mut sumtrees, |extension| {
+			extension.rewind_pos(header.height, rewind_to_output, rewind_to_kernel)?;
+			extension.validate(&header)?;
+			// TODO validate kernels and their sums with UTXOs
+			extension.rebuild_index()?;
+			Ok(())
+		})?;
+
+		// replace the chain sumtrees with the newly built one
+		{
+			let mut sumtrees_ref = self.sumtrees.write().unwrap();
+			*sumtrees_ref = sumtrees;
+		}
+
+		// setup new head
+		{
+			let mut head = self.head.lock().unwrap();
+			*head = Tip::from_block(&header);
+			self.store.save_body_head(&head);
+			self.store.save_header_height(&header)?;
+		}
+
+		self.check_orphans(header.hash());
+
+		Ok(())
+	}
+
 	/// returns the last n nodes inserted into the utxo sum tree
 	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<HashSum<SumCommit>> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
@@ -453,6 +536,11 @@ pub fn process_block(&self, b: Block, opts: Options)
 	/// Total difficulty at the head of the chain
 	pub fn total_difficulty(&self) -> Difficulty {
 		self.head.lock().unwrap().clone().total_difficulty
+	}
+
+	/// Total difficulty at the head of the header chain
+	pub fn total_header_difficulty(&self) -> Result<Difficulty, Error> {
+		Ok(self.store.get_header_head()?.total_difficulty)
 	}
 
 	/// Reset header_head and sync_head to head of current body chain

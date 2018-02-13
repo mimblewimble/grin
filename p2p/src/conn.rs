@@ -20,7 +20,9 @@
 //! forces us to go through some additional gymnastic to loop over the async
 //! stream and make sure we get the right number of bytes out.
 
-use std::io::{self, Write};
+use std::cmp;
+use std::fs::File;
+use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex, mpsc};
 use std::net::TcpStream;
 use std::thread;
@@ -31,8 +33,10 @@ use msg::*;
 use types::*;
 use util::LOGGER;
 
+/// A trait to be implemented in order to receive messages from the
+/// connection. Allows providing an optional response.
 pub trait MessageHandler: Send + 'static {
-	fn consume(&self, msg: &mut Message) -> Result<Option<(Vec<u8>, Type)>, Error>;
+	fn consume<'a>(&self, msg: Message<'a>) -> Result<Option<Response<'a>>, Error>;
 }
 
 // Macro to simplify the boilerplate around asyn I/O error handling,
@@ -52,6 +56,8 @@ macro_rules! try_break {
 	}
 }
 
+/// A message as received by the connection. Provides access to the message
+/// header lazily consumes the message body, handling its deserialization.
 pub struct Message<'a> {
 	pub header: MsgHeader,
 	conn: &'a mut TcpStream,
@@ -63,8 +69,66 @@ impl<'a> Message<'a> {
 		Message{header, conn}
 	}
 
+	/// Read the message body from the underlying connection
 	pub fn body<T>(&mut self) -> Result<T, Error> where T: ser::Readable {
 		read_body(&self.header, self.conn)
+	}
+
+	pub fn copy_attachment(&mut self, len: usize, writer: &mut Write) -> Result<(), Error> {
+		let mut written = 0;
+		while written < len {
+			let read_len = cmp::min(8000, len - written);
+			let mut buf = vec![0u8; read_len];
+			read_exact(&mut self.conn, &mut buf[..], 10000, true)?;
+			writer.write_all(&mut buf)?;
+			written += read_len;
+		}
+		Ok(())
+	}
+
+	/// Respond to the message with the provided message type and body
+	pub fn respond<T>(self, resp_type: Type, body: T) -> Response<'a>
+	where
+		T: ser::Writeable
+	{
+		let body = ser::ser_vec(&body).unwrap();
+		Response{
+			resp_type: resp_type,
+			body: body,
+			conn: self.conn,
+			attachment: None,
+		}
+	}
+}
+
+/// Response to a `Message`
+pub struct Response<'a> {
+	resp_type: Type,
+	body: Vec<u8>,
+	conn: &'a mut TcpStream,
+	attachment: Option<File>,
+}
+
+impl<'a> Response<'a> {
+	fn write(mut self) -> Result<(), Error> {
+		let mut msg = ser::ser_vec(&MsgHeader::new(self.resp_type, self.body.len() as u64)).unwrap();
+		msg.append(&mut self.body);
+		write_all(&mut self.conn, &msg[..], 10000)?;
+		if let Some(mut file) = self.attachment {
+			let mut buf = [0u8; 8000];
+			loop {
+				match file.read(&mut buf[..]) {
+					Ok(0) => break,
+					Ok(n) => write_all(&mut self.conn, &buf[..n], 10000)?,
+					Err(e) => return Err(From::from(e)),
+				}
+			}
+		}
+		Ok(())
+	}
+
+	pub fn add_attachment(&mut self, file: File) {
+		self.attachment = Some(file);
 	}
 }
 
@@ -105,7 +169,7 @@ where
 	let (error_tx, error_rx) = mpsc::channel();
 
 	stream.set_nonblocking(true).expect("Non-blocking IO not available.");
-	poll(stream, handler, send_rx, send_tx.clone(), error_tx, close_rx);
+	poll(stream, handler, send_rx, error_tx, close_rx);
 
 	Tracker {
 		sent_bytes: Arc::new(Mutex::new(0)),
@@ -120,7 +184,6 @@ fn poll<H>(
 	conn: TcpStream,
 	handler: H,
 	send_rx: mpsc::Receiver<Vec<u8>>,
-	send_tx: mpsc::Sender<Vec<u8>>,
 	error_tx: mpsc::Sender<Error>,
 	close_rx: mpsc::Receiver<()>
 )
@@ -137,10 +200,10 @@ where
 		loop {
 			// check the read end
 			if let Some(h) = try_break!(error_tx, read_header(conn)) {
-				let mut msg = Message::from_header(h, conn);
+				let msg = Message::from_header(h, conn);
 				debug!(LOGGER, "Received message header, type {:?}, len {}.", msg.header.msg_type, msg.header.msg_len);
-				if let Some(Some((body, typ))) = try_break!(error_tx, handler.consume(&mut msg)) {
-					respond(&send_tx, typ, body);
+				if let Some(Some(resp)) = try_break!(error_tx, handler.consume(msg)) {
+					try_break!(error_tx, resp.write());
 				}
 			}
 
@@ -172,10 +235,4 @@ where
 			thread::sleep(sleep_time);
 		}
 	});
-}
-
-fn respond(send_tx: &mpsc::Sender<Vec<u8>>, msg_type: Type, mut body: Vec<u8>) {
-	let mut msg = ser::ser_vec(&MsgHeader::new(msg_type, body.len() as u64)).unwrap();
-	msg.append(&mut body);
-	send_tx.send(msg).unwrap();
 }

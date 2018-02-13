@@ -16,6 +16,7 @@
 
 use std::io;
 
+use util::secp;
 use util::secp::pedersen::Commitment;
 
 use grin_store as store;
@@ -76,6 +77,8 @@ pub enum Error {
 	OutputSpent,
 	/// Invalid block version, either a mistake or outdated software
 	InvalidBlockVersion(u16),
+	/// We've been provided a bad sumtree
+	InvalidSumtree(String),
 	/// Internal issue when trying to save or load data from store
 	StoreErr(grin_store::Error, String),
 	/// Error serializing or deserializing a type
@@ -105,10 +108,15 @@ impl From<io::Error> for Error {
 		Error::SumTreeErr(e.to_string())
 	}
 }
+impl From<secp::Error> for Error {
+	fn from(e: secp::Error) -> Error {
+		Error::SumTreeErr(format!("Sum validation error: {}", e.to_string()))
+	}
+}
 
 impl Error {
 	/// Whether the error is due to a block that was intrinsically wrong
-	pub fn is_bad_block(&self) -> bool {
+	pub fn is_bad_data(&self) -> bool {
 		// shorter to match on all the "not the block's fault" errors
 		match *self {
 			Error::Unfit(_) |
@@ -211,6 +219,9 @@ pub trait ChainStore: Send + Sync {
 	/// Gets a block header by hash
 	fn get_block(&self, h: &Hash) -> Result<Block, store::Error>;
 
+	/// Check whether we have a block without reading it
+	fn block_exists(&self, h: &Hash) -> Result<bool, store::Error>;
+
 	/// Gets a block header by hash
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, store::Error>;
 
@@ -237,6 +248,9 @@ pub trait ChainStore: Send + Sync {
 
 	/// Gets the block header at the provided height
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, store::Error>;
+
+	/// Save a header as associated with its height
+	fn save_header_height(&self, header: &BlockHeader) -> Result<(), store::Error>;
 
 	/// Delete the block header at the height
 	fn delete_header_by_height(&self, height: u64) -> Result<(), store::Error>;

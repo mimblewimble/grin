@@ -17,10 +17,11 @@
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
 
-use core::core::transaction;
-use core::core::OutputIdentifier;
-use core::core::{block, hash};
 use util::secp::pedersen::Commitment;
+
+use core::core::transaction;
+use core::core::{block, hash, OutputIdentifier};
+use core::global;
 
 use types::*;
 pub use graph;

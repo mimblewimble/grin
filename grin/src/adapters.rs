@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fs::File;
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
+use std::ops::Deref;
+use std::sync::{Arc, Weak, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 use rand;
 use rand::Rng;
@@ -30,23 +32,34 @@ use util::OneTime;
 use store;
 use util::LOGGER;
 
+// All adapters use `Weak` references instead of `Arc` to avoid cycles that
+// can never be destroyed. These 2 functions are simple helpers to reduce the
+// boilerplate of dealing with `Weak`.
+fn w<T>(weak: &Weak<T>) -> Arc<T> {
+	weak.upgrade().unwrap()
+}
+
+fn wo<T>(weak_one: &OneTime<Weak<T>>) -> Arc<T> {
+	w(weak_one.borrow().deref())
+}
+
 /// Implementation of the NetAdapter for the blockchain. Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
 /// implementations.
 pub struct NetToChainAdapter {
 	currently_syncing: Arc<AtomicBool>,
-	chain: Arc<chain::Chain>,
+	chain: Weak<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-	peers: OneTime<p2p::Peers>,
+	peers: OneTime<Weak<p2p::Peers>>,
 }
 
 impl p2p::ChainAdapter for NetToChainAdapter {
 	fn total_difficulty(&self) -> Difficulty {
-		self.chain.total_difficulty()
+		w(&self.chain).total_difficulty()
 	}
 
 	fn total_height(&self) -> u64 {
-		self.chain.head().unwrap().height
+		w(&self.chain).head().unwrap().height
 	}
 
 	fn transaction_received(&self, tx: core::Transaction) {
@@ -119,13 +132,13 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		// pushing the new block header through the header chain pipeline
 		// we will go ask for the block if this is a new header
-		let res = self.chain.process_block_header(&bh, self.chain_opts());
+		let res = w(&self.chain).process_block_header(&bh, self.chain_opts());
 
 		if let &Err(ref e) = &res {
 			debug!(LOGGER, "Block header {} refused by chain: {:?}", bhash, e);
-			if e.is_bad_block() {
+			if e.is_bad_data() {
 				debug!(LOGGER, "header_received: {} is a bad header, resetting header head", bhash);
-				let _ = self.chain.reset_head();
+				let _ = w(&self.chain).reset_head();
 				return false;
 			} else {
 				// we got an error when trying to process the block header
@@ -153,7 +166,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		// try to add each header to our header chain
 		let mut added_hs = vec![];
 		for bh in bhs {
-			let res = self.chain.sync_block_header(&bh, self.chain_opts());
+			let res = w(&self.chain).sync_block_header(&bh, self.chain_opts());
 			match res {
 				Ok(_) => {
 					added_hs.push(bh.hash());
@@ -183,10 +196,14 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				}
 			}
 		}
+
+		let header_head = w(&self.chain).get_header_head().unwrap();
 		info!(
 			LOGGER,
-			"Added {} headers to the header chain.",
-			added_hs.len()
+			"Added {} headers to the header chain. Last: {} at {}.",
+			added_hs.len(),
+			header_head.last_block_h,
+			header_head.height,
 		);
 	}
 
@@ -212,7 +229,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		let hh = header.height;
 		let mut headers = vec![];
 		for h in (hh + 1)..(hh + (p2p::MAX_BLOCK_HEADERS as u64)) {
-			let header = self.chain.get_header_by_height(h);
+			let header = w(&self.chain).get_header_by_height(h);
 			match header {
 				Ok(head) => headers.push(head),
 				Err(chain::Error::StoreErr(store::Error::NotFoundErr, _)) => break,
@@ -234,19 +251,56 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
-		let b = self.chain.get_block(&h);
+		let b = w(&self.chain).get_block(&h);
 		match b {
 			Ok(b) => Some(b),
 			_ => None,
 		}
 	}
 
+	/// Provides a reading view into the current sumtree state as well as
+	/// the required indexes for a consumer to rewind to a consistant state
+	/// at the provided block hash.
+	fn sumtrees_read(&self, h: Hash) -> Option<p2p::SumtreesRead> {
+		match w(&self.chain).sumtrees_read(h.clone()) {
+			Ok((out_index, kernel_index, read)) => Some(p2p::SumtreesRead {
+				output_index: out_index,
+				kernel_index: kernel_index,
+				reader: read,
+			}),
+			Err(e) => {
+				warn!(LOGGER, "Couldn't produce sumtrees data for block {}: {:?}",
+							h, e);
+				None
+			}
+		}
+	}
+
+	/// Writes a reading view on a sumtree state that's been provided to us.
+	/// If we're willing to accept that new state, the data stream will be
+	/// read as a zip file, unzipped and the resulting state files should be
+	/// rewound to the provided indexes.
+	fn sumtrees_write(&self, h: Hash,
+										rewind_to_output: u64, rewind_to_kernel: u64,
+										sumtree_data: File, peer_addr: SocketAddr) -> bool {
+		// TODO check whether we should accept any sumtree now
+		if let Err(e) = w(&self.chain).
+			sumtrees_write(h, rewind_to_output, rewind_to_kernel, sumtree_data) {
+
+			error!(LOGGER, "Failed to save sumtree archive: {:?}", e);
+			!e.is_bad_data()
+		} else {
+			info!(LOGGER, "Received valid sumtree data for {}.", h);
+			self.currently_syncing.store(true, Ordering::Relaxed);
+			true
+		}
+	}
 }
 
 impl NetToChainAdapter {
 	pub fn new(
 		currently_syncing: Arc<AtomicBool>,
-		chain_ref: Arc<chain::Chain>,
+		chain_ref: Weak<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
@@ -257,7 +311,7 @@ impl NetToChainAdapter {
 		}
 	}
 
-	pub fn init(&self, peers: p2p::Peers) {
+	pub fn init(&self, peers: Weak<p2p::Peers>) {
 		self.peers.init(peers);
 	}
 
@@ -269,12 +323,13 @@ impl NetToChainAdapter {
 			return None;
 		}
 
-		let known = self.chain.get_block_header(&locator[0]);
+		let chain = w(&self.chain);
+		let known = chain.get_block_header(&locator[0]);
 
 		match known {
 			Ok(header) => {
 				// even if we know the block, it may not be on our winning chain
-				let known_winning = self.chain.get_header_by_height(header.height);
+				let known_winning = chain.get_header_by_height(header.height);
 				if let Ok(known_winning) = known_winning {
 					if known_winning.hash() != header.hash() {
 						self.find_common_header(locator[1..].to_vec())
@@ -299,12 +354,13 @@ impl NetToChainAdapter {
 	// remembering to reset the head if we have a bad block
 	fn process_block(&self, b: core::Block) -> bool {
 		let bhash = b.hash();
-		let res = self.chain.process_block(b, self.chain_opts());
+		let chain = w(&self.chain);
+		let res = chain.process_block(b, self.chain_opts());
 		if let Err(ref e) = res {
 			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
-			if e.is_bad_block() {
+			if e.is_bad_data() {
 				debug!(LOGGER, "adapter: process_block: {} is a bad block, resetting head", bhash);
-				let _ = self.chain.reset_head();
+				let _ = chain.reset_head();
 				return false;
 			}
 		};
@@ -318,8 +374,8 @@ impl NetToChainAdapter {
 	// TODO - currently only request block from a single peer
 	// consider additional peers for redundancy?
 	fn request_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
-		if let None = self.peers.borrow().adapter.get_block(bh.hash()) {
-			if let Some(peer) = self.peers.borrow().get_connected_peer(addr) {
+		if let None = wo(&self.peers).adapter.get_block(bh.hash()) {
+			if let Some(peer) = wo(&self.peers).get_connected_peer(addr) {
 				if let Ok(peer) = peer.read() {
 					let _ = peer.send_block_request(bh.hash());
 				}
@@ -336,8 +392,8 @@ impl NetToChainAdapter {
 	// TODO - currently only request block from a single peer
 	// consider additional peers for redundancy?
 	fn request_compact_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
-		if let None = self.peers.borrow().adapter.get_block(bh.hash()) {
-			if let Some(peer) = self.peers.borrow().get_connected_peer(addr) {
+		if let None = wo(&self.peers).adapter.get_block(bh.hash()) {
+			if let Some(peer) = wo(&self.peers).get_connected_peer(addr) {
 				if let Ok(peer) = peer.read() {
 					let _ = peer.send_compact_block_request(bh.hash());
 				}
@@ -363,7 +419,7 @@ impl NetToChainAdapter {
 /// the network to broadcast the block
 pub struct ChainToPoolAndNetAdapter {
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-	peers: OneTime<p2p::Peers>,
+	peers: OneTime<Weak<p2p::Peers>>,
 }
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
@@ -396,16 +452,16 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 
 				let mut rng = rand::thread_rng();
 				if rng.gen() {
-					self.peers.borrow().broadcast_block(&b);
+					wo(&self.peers).broadcast_block(&b);
 				} else {
-					self.peers.borrow().broadcast_compact_block(&cb);
+					wo(&self.peers).broadcast_compact_block(&cb);
 				}
 			} else {
-				self.peers.borrow().broadcast_compact_block(&cb);
+				wo(&self.peers).broadcast_compact_block(&cb);
 			}
 		} else {
 			// "header first" propagation if we are not the originator of this block
-			self.peers.borrow().broadcast_header(&b.header);
+			wo(&self.peers).broadcast_header(&b.header);
 		}
 	}
 }
@@ -419,7 +475,7 @@ impl ChainToPoolAndNetAdapter {
 			peers: OneTime::new(),
 		}
 	}
-	pub fn init(&self, peers: p2p::Peers) {
+	pub fn init(&self, peers: Weak<p2p::Peers>) {
 		self.peers.init(peers);
 	}
 }
@@ -427,12 +483,12 @@ impl ChainToPoolAndNetAdapter {
 /// Adapter between the transaction pool and the network, to relay
 /// transactions that have been accepted.
 pub struct PoolToNetAdapter {
-	peers: OneTime<p2p::Peers>,
+	peers: OneTime<Weak<p2p::Peers>>,
 }
 
 impl pool::PoolAdapter for PoolToNetAdapter {
 	fn tx_accepted(&self, tx: &core::Transaction) {
-		self.peers.borrow().broadcast_transaction(tx);
+		wo(&self.peers).broadcast_transaction(tx);
 	}
 }
 
@@ -445,7 +501,7 @@ impl PoolToNetAdapter {
 	}
 
 	/// Setup the p2p server on the adapter
-	pub fn init(&self, peers: p2p::Peers) {
+	pub fn init(&self, peers: Weak<p2p::Peers>) {
 		self.peers.init(peers);
 	}
 }
@@ -455,7 +511,7 @@ impl PoolToNetAdapter {
 /// dependency between the pool and the chain.
 #[derive(Clone)]
 pub struct PoolToChainAdapter {
-	chain: OneTime<Arc<chain::Chain>>,
+	chain: OneTime<Weak<chain::Chain>>,
 }
 
 impl PoolToChainAdapter {
@@ -466,15 +522,14 @@ impl PoolToChainAdapter {
 		}
 	}
 
-	pub fn set_chain(&self, chain_ref: Arc<chain::Chain>) {
+	pub fn set_chain(&self, chain_ref: Weak<chain::Chain>) {
 		self.chain.init(chain_ref);
 	}
 }
 
 impl pool::BlockChain for PoolToChainAdapter {
 	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), pool::PoolError> {
-		self.chain
-			.borrow()
+		wo(&self.chain)
 			.is_unspent(output_ref)
 			.map_err(|e| match e {
 				chain::types::Error::OutputNotFound => pool::PoolError::OutputNotFound,
@@ -484,8 +539,7 @@ impl pool::BlockChain for PoolToChainAdapter {
 	}
 
 	fn is_matured(&self, input: &Input, height: u64) -> Result<(), pool::PoolError> {
-		self.chain
-			.borrow()
+		wo(&self.chain)
 			.is_matured(input, height)
 			.map_err(|e| match e {
 				chain::types::Error::OutputNotFound => pool::PoolError::OutputNotFound,
@@ -494,9 +548,9 @@ impl pool::BlockChain for PoolToChainAdapter {
 		}
 
 	fn head_header(&self) -> Result<BlockHeader, pool::PoolError> {
-		self.chain
-			.borrow()
+		wo(&self.chain)
 			.head_header()
 			.map_err(|_| pool::PoolError::GenericPoolError)
 	}
 }
+

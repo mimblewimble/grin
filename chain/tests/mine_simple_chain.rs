@@ -118,6 +118,7 @@ fn mine_empty_chain() {
 		let header_by_height = chain.get_header_by_height(n).unwrap();
 		assert_eq!(header_by_height.hash(), bhash);
 	}
+	chain.validate().unwrap();
 }
 
 #[test]

@@ -52,6 +52,6 @@ mod types;
 pub use serv::{Server, DummyAdapter};
 pub use peers::Peers;
 pub use peer::Peer;
-pub use types::{Capabilities, Error, ChainAdapter, P2PConfig, PeerInfo, MAX_BLOCK_HEADERS,
-                  MAX_PEER_ADDRS};
+pub use types::{Capabilities, Error, ChainAdapter, SumtreesRead, P2PConfig,
+								PeerInfo, MAX_BLOCK_HEADERS, MAX_PEER_ADDRS};
 pub use store::{PeerData, State};

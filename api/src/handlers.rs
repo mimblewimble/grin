@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::io::Read;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Weak, RwLock};
 use std::thread;
 
 use iron::prelude::*;
@@ -36,6 +36,14 @@ use types::*;
 use util;
 use util::LOGGER;
 
+// All handlers use `Weak` references instead of `Arc` to avoid cycles that
+// can never be destroyed. These 2 functions are simple helpers to reduce the
+// boilerplate of dealing with `Weak`.
+fn w<T>(weak: &Weak<T>) -> Arc<T> {
+	weak.upgrade().unwrap()
+}
+
+
 // RESTful index of available api endpoints
 // GET /v1/
 struct IndexHandler {
@@ -55,7 +63,7 @@ impl Handler for IndexHandler {
 // GET /v1/chain/utxos/byids?id=xxx&id=yyy&id=zzz
 // GET /v1/chain/utxos/byheight?start_height=101&end_height=200
 struct UtxoHandler {
-	chain: Arc<chain::Chain>,
+	chain: Weak<chain::Chain>,
 }
 
 impl UtxoHandler {
@@ -73,7 +81,7 @@ impl UtxoHandler {
 		];
 
 		for x in outputs.iter() {
-			if let Ok(_) = self.chain.is_unspent(&x) {
+			if let Ok(_) = w(&self.chain).is_unspent(&x) {
 				return Ok(Utxo::new(&commit))
 			}
 		}
@@ -109,11 +117,10 @@ impl UtxoHandler {
 		commitments: Vec<Commitment>,
 		include_proof: bool,
 	) -> BlockOutputs {
-		let header = self.chain
-			.clone()
+		let header = w(&self.chain)
 			.get_header_by_height(block_height)
 			.unwrap();
-		let block = self.chain.clone().get_block(&header.hash()).unwrap();
+		let block = w(&self.chain).get_block(&header.hash()).unwrap();
 		let outputs = block
 			.outputs
 			.iter()
@@ -121,7 +128,7 @@ impl UtxoHandler {
 				commitments.is_empty() || commitments.contains(&output.commit)
 			})
 			.map(|output| {
-				OutputPrintable::from_output(output, self.chain.clone(), include_proof)
+				OutputPrintable::from_output(output, w(&self.chain), include_proof)
 			})
 			.collect();
 		BlockOutputs {
@@ -207,28 +214,28 @@ impl Handler for UtxoHandler {
 // GET /v1/sumtrees/lastrangeproofs
 // GET /v1/sumtrees/lastkernels
 struct SumTreeHandler {
-	chain: Arc<chain::Chain>,
+	chain: Weak<chain::Chain>,
 }
 
 impl SumTreeHandler {
 	// gets roots
 	fn get_roots(&self) -> SumTrees {
-		SumTrees::from_head(self.chain.clone())
+		SumTrees::from_head(w(&self.chain))
 	}
 
 	// gets last n utxos inserted in to the tree
 	fn get_last_n_utxo(&self, distance: u64) -> Vec<SumTreeNode> {
-		SumTreeNode::get_last_n_utxo(self.chain.clone(), distance)
+		SumTreeNode::get_last_n_utxo(w(&self.chain), distance)
 	}
 
 	// gets last n utxos inserted in to the tree
 	fn get_last_n_rangeproof(&self, distance: u64) -> Vec<SumTreeNode> {
-		SumTreeNode::get_last_n_rangeproof(self.chain.clone(), distance)
+		SumTreeNode::get_last_n_rangeproof(w(&self.chain), distance)
 	}
 
 	// gets last n utxos inserted in to the tree
 	fn get_last_n_kernel(&self, distance: u64) -> Vec<SumTreeNode> {
-		SumTreeNode::get_last_n_kernel(self.chain.clone(), distance)
+		SumTreeNode::get_last_n_kernel(w(&self.chain), distance)
 	}
 }
 
@@ -261,24 +268,24 @@ impl Handler for SumTreeHandler {
 }
 
 pub struct PeersAllHandler {
-	pub peers: p2p::Peers,
+	pub peers: Weak<p2p::Peers>,
 }
 
 impl Handler for PeersAllHandler {
 	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
-		let peers = &self.peers.all_peers();
+		let peers = &w(&self.peers).all_peers();
 		json_response_pretty(&peers)
 	}
 }
 
 pub struct PeersConnectedHandler {
-	pub peers: p2p::Peers,
+	pub peers: Weak<p2p::Peers>,
 }
 
 impl Handler for PeersConnectedHandler {
 	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
 		let mut peers = vec![];
-		for p in &self.peers.connected_peers() {
+		for p in &w(&self.peers).connected_peers() {
 			let p = p.read().unwrap();
 			let peer_info = p.info.clone();
 			peers.push(peer_info);
@@ -291,7 +298,7 @@ impl Handler for PeersConnectedHandler {
 /// POST /v1/peers/10.12.12.13/ban
 /// POST /v1/peers/10.12.12.13/unban
 pub struct PeerPostHandler {
-	pub peers: p2p::Peers,
+	pub peers: Weak<p2p::Peers>,
 }
 
 impl Handler for PeerPostHandler {
@@ -305,7 +312,7 @@ impl Handler for PeerPostHandler {
 			"ban" => {
 				path_elems.pop();
 				if let Ok(addr) = path_elems.last().unwrap().parse() {
-					self.peers.ban_peer(&addr);
+					w(&self.peers).ban_peer(&addr);
 					Ok(Response::with((status::Ok, "")))
 				} else {
 					Ok(Response::with((status::BadRequest, "")))
@@ -314,7 +321,7 @@ impl Handler for PeerPostHandler {
 			"unban" => {
 				path_elems.pop();
 				if let Ok(addr) = path_elems.last().unwrap().parse() {
-					self.peers.unban_peer(&addr);
+					w(&self.peers).unban_peer(&addr);
 					Ok(Response::with((status::Ok, "")))
 				} else {
 					Ok(Response::with((status::BadRequest, "")))
@@ -327,7 +334,7 @@ impl Handler for PeerPostHandler {
 
 /// Get details about a given peer
 pub struct PeerGetHandler {
-	pub peers: p2p::Peers,
+	pub peers: Weak<p2p::Peers>,
 }
 
 impl Handler for PeerGetHandler {
@@ -338,7 +345,7 @@ impl Handler for PeerGetHandler {
 			path_elems.pop();
 		}
 		if let Ok(addr) = path_elems.last().unwrap().parse() {
-			match self.peers.get_peer(addr) {
+			match w(&self.peers).get_peer(addr) {
 				Ok(peer) => json_response(&peer),
 				Err(_) => Ok(Response::with((status::BadRequest, ""))),
 			}
@@ -351,13 +358,13 @@ impl Handler for PeerGetHandler {
 // Status handler. Post a summary of the server status
 // GET /v1/status
 pub struct StatusHandler {
-	pub chain: Arc<chain::Chain>,
-	pub peers: p2p::Peers,
+	pub chain: Weak<chain::Chain>,
+	pub peers: Weak<p2p::Peers>,
 }
 
 impl StatusHandler {
 	fn get_status(&self) -> Status {
-		Status::from_tip_and_peers(self.chain.head().unwrap(), self.peers.peer_count())
+		Status::from_tip_and_peers(w(&self.chain).head().unwrap(), w(&self.peers).peer_count())
 	}
 }
 
@@ -370,12 +377,12 @@ impl Handler for StatusHandler {
 // Chain handler. Get the head details.
 // GET /v1/chain
 pub struct ChainHandler {
-	pub chain: Arc<chain::Chain>,
+	pub chain: Weak<chain::Chain>,
 }
 
 impl ChainHandler {
 	fn get_tip(&self) -> Tip {
-		Tip::from_tip(self.chain.head().unwrap())
+		Tip::from_tip(w(&self.chain).head().unwrap())
 	}
 }
 
@@ -393,31 +400,31 @@ impl Handler for ChainHandler {
 /// GET /v1/blocks/<hash>?compact
 ///
 pub struct BlockHandler {
-	pub chain: Arc<chain::Chain>,
+	pub chain: Weak<chain::Chain>,
 }
 
 impl BlockHandler {
 	fn get_block(&self, h: &Hash) -> Result<BlockPrintable, Error> {
-		let block = self.chain.clone().get_block(h).map_err(|_| Error::NotFound)?;
+		let block = w(&self.chain).get_block(h).map_err(|_| Error::NotFound)?;
 		Ok(BlockPrintable::from_block(
 			&block,
-			self.chain.clone(),
+			w(&self.chain),
 			false,
 		))
 	}
 
 	fn get_compact_block(&self, h: &Hash) -> Result<CompactBlockPrintable, Error> {
-		let block = self.chain.clone().get_block(h).map_err(|_| Error::NotFound)?;
+		let block = w(&self.chain).get_block(h).map_err(|_| Error::NotFound)?;
 		Ok(CompactBlockPrintable::from_compact_block(
 			&block.as_compact_block(),
-			self.chain.clone(),
+			w(&self.chain),
 		))
 	}
 
 	// Try to decode the string as a height or a hash.
 	fn parse_input(&self, input: String) -> Result<Hash, Error> {
 		if let Ok(height) = input.parse() {
-			match self.chain.clone().get_header_by_height(height) {
+			match w(&self.chain).get_header_by_height(height) {
 				Ok(header) => return Ok(header.hash()),
 				Err(_) => return Err(Error::NotFound),
 			}
@@ -462,7 +469,7 @@ impl Handler for BlockHandler {
 
 // Get basic information about the transaction pool.
 struct PoolInfoHandler<T> {
-	tx_pool: Arc<RwLock<pool::TransactionPool<T>>>,
+	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
 }
 
 impl<T> Handler for PoolInfoHandler<T>
@@ -470,7 +477,8 @@ where
 	T: pool::BlockChain + Send + Sync + 'static,
 {
 	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
-		let pool = self.tx_pool.read().unwrap();
+		let pool_arc = w(&self.tx_pool);
+		let pool = pool_arc.read().unwrap();
 		json_response(&PoolInfo {
 			pool_size: pool.pool_size(),
 			orphans_size: pool.orphans_size(),
@@ -488,7 +496,7 @@ struct TxWrapper {
 // Push new transactions to our transaction pool, that should broadcast it
 // to the network if valid.
 struct PoolPushHandler<T> {
-	tx_pool: Arc<RwLock<pool::TransactionPool<T>>>,
+	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
 }
 
 impl<T> Handler for PoolPushHandler<T>
@@ -517,10 +525,8 @@ where
 			tx.outputs.len()
 		);
 
-		let res = self.tx_pool
-			.write()
-			.unwrap()
-			.add_to_memory_pool(source, tx);
+		let pool_arc = w(&self.tx_pool);
+		let res = pool_arc.write().unwrap().add_to_memory_pool(source, tx);
 
 		match res {
 			Ok(()) => Ok(Response::with(status::Ok)),
@@ -556,11 +562,17 @@ where
 }
 /// Start all server HTTP handlers. Register all of them with Iron
 /// and runs the corresponding HTTP server.
+///
+/// Hyper currently has a bug that prevents clean shutdown. In order
+/// to avoid having references kept forever by handlers, we only pass
+/// weak references. Note that this likely means a crash if the handlers are
+/// used after a server shutdown (which should normally never happen,
+/// except during tests).
 pub fn start_rest_apis<T>(
 	addr: String,
-	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<T>>>,
-	peers: p2p::Peers,
+	chain: Weak<chain::Chain>,
+	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+	peers: Weak<p2p::Peers>,
 ) where
 	T: pool::BlockChain + Send + Sync + 'static,
 {

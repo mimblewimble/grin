@@ -23,6 +23,8 @@ extern crate grin_wallet as wallet;
 
 mod framework;
 
+use std::fs;
+use std::sync::Arc;
 use std::thread;
 use std::time;
 use std::default::Default;
@@ -185,21 +187,6 @@ fn a_simulate_block_propagation() {
 	let test_name_dir = "grin-prop";
 	framework::clean_all_output(test_name_dir);
 
-	let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
-	let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();
-	plugin_config.type_filter = String::from("mean_cpu");
-	plugin_config_vec.push(plugin_config);
-
-	let miner_config = pow::types::MinerConfig {
-		enable_mining: true,
-		burn_reward: true,
-		use_cuckoo_miner: false,
-		cuckoo_miner_async_mode: None,
-		cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
-		cuckoo_miner_plugin_config: Some(plugin_config_vec),
-		..Default::default()
-	};
-
 	// instantiates 5 servers on different ports
 	let mut servers = vec![];
 	for n in 0..5 {
@@ -221,7 +208,7 @@ fn a_simulate_block_propagation() {
 	}
 
 	// start mining
-	servers[0].start_miner(miner_config);
+	servers[0].start_miner(miner_config());
 	let original_height = servers[0].head().height;
 
 	// monitor for a change of head on a different server and check whether
@@ -247,37 +234,85 @@ fn simulate_full_sync() {
 	util::init_test_logger();
 
 	// we actually set the chain_type in the ServerConfig below
-	// TODO - avoid needing to set it in two places?
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "grin-sync";
 	framework::clean_all_output(test_name_dir);
 
-	let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
-	let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();
-	plugin_config.type_filter = String::from("mean_cpu");
-	plugin_config_vec.push(plugin_config);
-
-	let miner_config = pow::types::MinerConfig {
-		enable_mining: true,
-		burn_reward: true,
-		use_cuckoo_miner: false,
-		cuckoo_miner_async_mode: Some(false),
-		cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
-		cuckoo_miner_plugin_config: Some(plugin_config_vec),
-		..Default::default()
-	};
-
 	let s1 = grin::Server::new(config(0, "grin-sync")).unwrap();
 	// mine a few blocks on server 1
-	s1.start_miner(miner_config);
-	thread::sleep(time::Duration::from_secs(5));
+	s1.start_miner(miner_config());
+	thread::sleep(time::Duration::from_secs(8));
 
 	let mut conf = config(1, "grin-sync");
-	conf.skip_sync_wait = Some(false);
 	let s2 = grin::Server::new(conf).unwrap();
 	while s2.head().height < 4 {
 		thread::sleep(time::Duration::from_millis(100));
+	}
+}
+
+/// Creates 2 different disconnected servers, mine a few blocks on one, connect
+/// them and check that the 2nd gets all using fast sync algo
+#[test]
+fn simulate_fast_sync() {
+	util::init_test_logger();
+
+	// we actually set the chain_type in the ServerConfig below
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+
+	let test_name_dir = "grin-fast";
+	framework::clean_all_output(test_name_dir);
+
+	let s1 = grin::Server::new(config(1000, "grin-fast")).unwrap();
+	// mine a few blocks on server 1
+	s1.start_miner(miner_config());
+	thread::sleep(time::Duration::from_secs(8));
+
+	let mut conf = config(1001, "grin-fast");
+	conf.archive_mode = false;
+	conf.seeds = Some(vec!["127.0.0.1:12000".to_string()]);
+	let s2 = grin::Server::new(conf).unwrap();
+	while s2.head().height != s2.header_head().height || s2.head().height < 20 {
+		thread::sleep(time::Duration::from_millis(1000));
+	}
+}
+
+// #[test]
+fn simulate_fast_sync_double() {
+	util::init_test_logger();
+
+	// we actually set the chain_type in the ServerConfig below
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+
+	framework::clean_all_output("grin-double-fast1");
+	framework::clean_all_output("grin-double-fast2");
+
+	let s1 = grin::Server::new(config(1000, "grin-double-fast1")).unwrap();
+	// mine a few blocks on server 1
+	s1.start_miner(miner_config());
+	thread::sleep(time::Duration::from_secs(8));
+
+	{
+		let mut conf = config(1001, "grin-double-fast2");
+		conf.archive_mode = false;
+		conf.seeds = Some(vec!["127.0.0.1:12000".to_string()]);
+		let s2 = grin::Server::new(conf).unwrap();
+		while s2.head().height != s2.header_head().height || s2.head().height < 20 {
+			thread::sleep(time::Duration::from_millis(1000));
+		}
+		s2.stop();
+	}
+	// locks files don't seem to be cleaned properly until process exit
+	std::fs::remove_file("target/grin-double-fast2/grin-sync-1001/chain/LOCK");
+	std::fs::remove_file("target/grin-double-fast2/grin-sync-1001/peers/LOCK");
+	thread::sleep(time::Duration::from_secs(20));
+
+	let mut conf = config(1001, "grin-double-fast2");
+	conf.archive_mode = false;
+	conf.seeds = Some(vec!["127.0.0.1:12000".to_string()]);
+	let s2 = grin::Server::new(conf).unwrap();
+	while s2.head().height != s2.header_head().height || s2.head().height < 50 {
+		thread::sleep(time::Duration::from_millis(1000));
 	}
 }
 
@@ -292,6 +327,25 @@ fn config(n: u16, test_name_dir: &str) -> grin::ServerConfig {
 		seeding_type: grin::Seeding::List,
 		seeds: Some(vec!["127.0.0.1:11000".to_string()]),
 		chain_type: core::global::ChainTypes::AutomatedTesting,
+		archive_mode: true,
+		skip_sync_wait: Some(true),
+		..Default::default()
+	}
+}
+
+fn miner_config() -> pow::types::MinerConfig {
+	let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
+	let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();
+	plugin_config.type_filter = String::from("mean_cpu");
+	plugin_config_vec.push(plugin_config);
+
+	pow::types::MinerConfig {
+		enable_mining: true,
+		burn_reward: true,
+		use_cuckoo_miner: false,
+		cuckoo_miner_async_mode: Some(false),
+		cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
+		cuckoo_miner_plugin_config: Some(plugin_config_vec),
 		..Default::default()
 	}
 }

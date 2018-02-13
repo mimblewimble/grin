@@ -24,6 +24,7 @@ use core::core::{Block, BlockHeader};
 use core::consensus::TargetError;
 use core::core::target::Difficulty;
 use grin_store::{self, option_to_not_found, to_key, Error, u64_to_key};
+use util::LOGGER;
 
 const STORE_SUBPATH: &'static str = "chain";
 
@@ -98,6 +99,10 @@ impl ChainStore for ChainKVStore {
 		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, &mut h.to_vec())))
 	}
 
+	fn block_exists(&self, h: &Hash) -> Result<bool, Error> {
+		self.db.exists(&to_key(BLOCK_PREFIX, &mut h.to_vec()))
+	}
+
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(
 			self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
@@ -137,6 +142,11 @@ impl ChainStore for ChainKVStore {
 
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		option_to_not_found(self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)))
+	}
+
+	fn save_header_height(&self, bh: &BlockHeader) -> Result<(), Error> {
+		self.db
+			.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height), bh)
 	}
 
 	fn delete_header_by_height(&self, height: u64) -> Result<(), Error> {

@@ -65,6 +65,8 @@ enum_from_primitive! {
 		GetCompactBlock,
 		CompactBlock,
 		Transaction,
+		SumtreesRequest,
+		SumtreesArchive
 	}
 }
 
@@ -105,6 +107,34 @@ pub fn read_exact(
 					return Err(io::Error::new(io::ErrorKind::WouldBlock, "read_exact"));
 				}
 			}
+			Err(e) => return Err(e),
+		}
+		if !buf.is_empty() {
+			thread::sleep(sleep_time);
+			count += 1;
+		} else {
+			break;
+		}
+		if count > timeout {
+			return Err(io::Error::new(io::ErrorKind::TimedOut, "reading from tcp stream"));
+		}
+	}
+	Ok(())
+}
+
+/// Same as `read_exact` but for writing.
+pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<()> {
+
+	let sleep_time = time::Duration::from_millis(1);
+	let mut count = 0;
+
+	while !buf.is_empty() {
+		match conn.write(buf) {
+			Ok(0) => return Err(io::Error::new(io::ErrorKind::WriteZero,
+																		 "failed to write whole buffer")),
+			Ok(n) => buf = &buf[n..],
+			Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
+			Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
 			Err(e) => return Err(e),
 		}
 		if !buf.is_empty() {
@@ -571,7 +601,7 @@ impl Readable for Ping {
 			Ok(h) => h,
 			Err(_) => 0,
 		};
-Ok(Ping { total_difficulty, height })
+		Ok(Ping { total_difficulty, height })
 	}
 }
 
@@ -603,5 +633,67 @@ impl Readable for Pong {
 			Err(_) => 0,
 		};
 		Ok(Pong { total_difficulty, height })
+	}
+}
+
+/// Request to get an archive of the full sumtree store, required to sync
+/// a new node.
+pub struct SumtreesRequest {
+	/// Hash of the block for which the sumtrees should be provided
+	pub hash: Hash,
+	/// Height of the corresponding block	
+	pub height: u64
+}
+
+impl Writeable for SumtreesRequest {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.hash.write(writer)?;
+		writer.write_u64(self.height)?;
+		Ok(())
+	}
+}
+
+impl Readable for SumtreesRequest {
+	fn read(reader: &mut Reader) -> Result<SumtreesRequest, ser::Error> {
+		Ok(SumtreesRequest {
+			hash: Hash::read(reader)?,
+			height: reader.read_u64()?,
+		})
+	}
+}
+
+/// Response to a sumtree archive request, must include a zip stream of the
+/// archive after the message body.
+pub struct SumtreesArchive {
+	/// Hash of the block for which the sumtrees are provided
+	pub hash: Hash,
+	/// Height of the corresponding block	
+	pub height: u64,
+	/// Output tree index the receiver should rewind to
+	pub rewind_to_output: u64,
+	/// Kernel tree index the receiver should rewind to
+	pub rewind_to_kernel: u64,
+	/// Size in bytes of the archive
+	pub bytes: u64,
+}
+
+impl Writeable for SumtreesArchive {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.hash.write(writer)?;
+		ser_multiwrite!(writer, [write_u64, self.height],
+										[write_u64, self.rewind_to_output],
+										[write_u64, self.rewind_to_kernel],
+										[write_u64, self.bytes]);
+		Ok(())
+	}
+}
+
+impl Readable for SumtreesArchive {
+	fn read(reader: &mut Reader) -> Result<SumtreesArchive, ser::Error> {
+		let hash = Hash::read(reader)?;
+		let (height, rewind_to_output, rewind_to_kernel, bytes) =
+			ser_multiread!(reader, read_u64, read_u64, read_u64, read_u64);
+
+		Ok(SumtreesArchive {hash, height, rewind_to_output, rewind_to_kernel, bytes})
 	}
 }

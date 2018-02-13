@@ -47,7 +47,7 @@ use util::LOGGER;
 /// the tree can sum over
 pub trait Summable {
 	/// The type of the sum
-	type Sum: Clone + ops::Add<Output = Self::Sum> + Readable + Writeable;
+	type Sum: Clone + ops::Add<Output = Self::Sum> + Readable + Writeable + PartialEq;
 
 	/// Obtain the sum of the element
 	fn sum(&self) -> Self::Sum;
@@ -80,6 +80,12 @@ impl Writeable for NullSum {
 	}
 }
 
+impl PartialEq for NullSum {
+	fn eq(&self, _other: &NullSum) -> bool {
+		true
+	}
+}
+
 /// Wrapper for a type that allows it to be inserted in a tree without summing
 #[derive(Clone, Debug)]
 pub struct NoSum<T>(pub T);
@@ -103,7 +109,7 @@ where
 
 /// A utility type to handle (Hash, Sum) pairs more conveniently. The addition
 /// of two HashSums is the (Hash(h1|h2), h1 + h2) HashSum.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Eq)]
 pub struct HashSum<T>
 where
 	T: Summable,
@@ -127,6 +133,15 @@ where
 			hash: node_hash,
 			sum: sum,
 		}
+	}
+}
+
+impl<T> PartialEq for HashSum<T>
+where
+	T: Summable,
+{
+	fn eq(&self, other: &HashSum<T>) -> bool {
+		self.hash == other.hash && self.sum == other.sum
 	}
 }
 
@@ -382,6 +397,32 @@ where
 		return_vec
 	}
 
+	/// Walks all unpruned nodes in the MMR and revalidate all parent hashes
+	/// and sums.
+	pub fn validate(&self) -> Result<(), String> {
+		// iterate on all parent nodes
+		for n in 1..(self.last_pos + 1) {
+			if bintree_postorder_height(n) > 0 {
+				if let Some(hs) = self.get(n) {
+					// take the left and right children, if they exist
+					let left_pos = bintree_move_down_left(n).unwrap();
+					let right_pos = bintree_jump_right_sibling(left_pos);
+
+					if let Some(left_child_hs) = self.get(left_pos) {
+						if let Some(right_child_hs) = self.get(right_pos) {
+							// sum and compare
+							if left_child_hs + right_child_hs != hs {
+								return Err(format!("Invalid MMR, hashsum of parent at {} does \
+																	 not match children.", n));
+							}
+						}
+					}
+				}
+			}
+		}
+		Ok(())
+	}
+
 	/// Total size of the tree, including intermediary nodes an ignoring any
 	/// pruning.
 	pub fn unpruned_size(&self) -> u64 {
@@ -583,7 +624,7 @@ impl PruneList {
 /// node's position. Starts with the top peak, which is always on the left
 /// side of the range, and navigates toward lower siblings toward the right
 /// of the range.
-fn peaks(num: u64) -> Vec<u64> {
+pub fn peaks(num: u64) -> Vec<u64> {
 	// detecting an invalid mountain range, when siblings exist but no parent
 	// exists
 	if bintree_postorder_height(num + 1) > bintree_postorder_height(num) {
