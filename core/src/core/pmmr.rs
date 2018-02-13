@@ -29,10 +29,10 @@
 //! position of siblings, parents, etc. As all those functions only rely on
 //! binary operations, they're extremely fast. For more information, see the
 //! doc on bintree_jump_left_sibling.
-//! 2. The implementation of a prunable MMR sum tree using the above. Each leaf
-//! is required to be Summable and Hashed. Tree roots can be trivially and
+//! 2. The implementation of a prunable MMR tree using the above. Each leaf
+//! is required to be Writeable (which implements Hashed). Tree roots can be trivially and
 //! efficiently calculated without materializing the full tree. The underlying
-//! (Hash, Sum) pais are stored in a Backend implementation that can either be
+//! Hashes are stored in a Backend implementation that can either be
 //! a simple Vec or a database.
 
 use std::clone::Clone;
@@ -48,7 +48,7 @@ use util::LOGGER;
 /// of an element (i.e. remove could be a no-op) but layers above can
 /// depend on an accurate Backend to check existence.
 pub trait Backend {
-	/// Append the provided HashSums to the backend storage. The position of the
+	/// Append the provided Hashes to the backend storage. The position of the
 	/// first element of the Vec in the MMR is provided to help the
 	/// implementation.
 	fn append(&mut self, position: u64, data: Vec<Hash>) -> Result<(), String>;
@@ -59,10 +59,10 @@ pub trait Backend {
 	/// occurred (see remove).
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String>;
 
-	/// Get a HashSum by insertion position
+	/// Get a Hash by insertion position
 	fn get(&self, position: u64) -> Option<Hash>;
 
-	/// Remove HashSums by insertion position. An index is also provided so the
+	/// Remove Hashes by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a
 	/// given index (practically the index is a the height of a block that
 	/// triggered removal).
@@ -129,7 +129,7 @@ where
 		ret.expect("no root, invalid tree")
 	}
 
-	/// Push a new Summable element in the MMR. Computes new related peaks at
+	/// Push a new Writeable+Hashed element in the MMR. Computes new related peaks at
 	/// the same time if applicable.
 	pub fn push(&mut self, elmt: T) -> Result<u64, String> {
 		let elmt_pos = self.last_pos + 1;
@@ -139,7 +139,7 @@ where
 		let mut pos = elmt_pos;
 
 		// we look ahead one position in the MMR, if the expected node has a higher
-		// height it means we have to build a higher peak by summing with a previous
+		// height it means we have to build a higher peak by hashing with a previous
 		// sibling. we do it iteratively in case the new peak itself allows the
 		// creation of another parent.
 		while bintree_postorder_height(pos + 1) > height {
@@ -216,7 +216,7 @@ where
 		Ok(true)
 	}
 
-	/// Helper function to get the HashSum of a node at a given position from
+	/// Helper function to get the Hash of a node at a given position from
 	/// the backend.
 	pub fn get(&self, position: u64) -> Option<Hash> {
 		if position > self.last_pos {
@@ -258,7 +258,6 @@ where
 	}
 
 	/// Walks all unpruned nodes in the MMR and revalidate all parent hashes
-	/// and sums.
 	pub fn validate(&self) -> Result<(), String> {
 		// iterate on all parent nodes
 		for n in 1..(self.last_pos + 1) {
@@ -270,9 +269,9 @@ where
 
 					if let Some(left_child_hs) = self.get(left_pos) {
 						if let Some(right_child_hs) = self.get(right_pos) {
-							// sum and compare
+							// add hashes and compare
 							if left_child_hs+right_child_hs != hs {
-								return Err(format!("Invalid MMR, hashsum of parent at {} does \
+								return Err(format!("Invalid MMR, hash of parent at {} does \
 																	 not match children.", n));
 							}
 						}
@@ -319,7 +318,7 @@ where
 
 /// Simple MMR backend implementation based on a Vector. Pruning does not
 /// compact the Vector itself but still frees the reference to the
-/// underlying HashSum.
+/// underlying Hash.
 #[derive(Clone)]
 pub struct VecBackend {
 	/// Backend elements
@@ -910,7 +909,7 @@ mod test {
 
 		// pruning a leaf with no parent should do nothing
 		{
-			let mut pmmr:PMMR<Hash, _> = PMMR::at(&mut ba, sz);
+			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(16, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
@@ -918,14 +917,14 @@ mod test {
 
 		// pruning leaves with no shared parent just removes 1 element
 		{
-			let mut pmmr:PMMR<Hash, _> = PMMR::at(&mut ba, sz);
+			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(2, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
 		assert_eq!(ba.used_size(), 15);
 
 		{
-			let mut pmmr:PMMR<Hash, _> = PMMR::at(&mut ba, sz);
+			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(4, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
@@ -933,7 +932,7 @@ mod test {
 
 		// pruning a non-leaf node has no effect
 		{
-			let mut pmmr:PMMR<Hash, _> = PMMR::at(&mut ba, sz);
+			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(3, 0).unwrap_err();
 			assert_eq!(orig_root, pmmr.root());
 		}
@@ -941,7 +940,7 @@ mod test {
 
 		// pruning sibling removes subtree
 		{
-			let mut pmmr:PMMR<Hash, _> = PMMR::at(&mut ba, sz);
+			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(5, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
@@ -949,7 +948,7 @@ mod test {
 
 		// pruning all leaves under level >1 removes all subtree
 		{
-			let mut pmmr:PMMR<Hash, _> = PMMR::at(&mut ba, sz);
+			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(1, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
@@ -957,7 +956,7 @@ mod test {
 
 		// pruning everything should only leave us the peaks
 		{
-			let mut pmmr:PMMR<Hash, _> = PMMR::at(&mut ba, sz);
+			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			for n in 1..16 {
 				let _ = pmmr.prune(n, 0);
 			}

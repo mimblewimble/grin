@@ -20,13 +20,13 @@ extern crate time;
 use std::fs;
 
 use core::ser::*;
-use core::core::pmmr::{Backend, HashSum, Summable, PMMR};
-use core::core::hash::Hashed;
+use core::core::pmmr::{Backend, PMMR};
+use core::core::hash::{Hash, Hashed};
 
 #[test]
-fn sumtree_append() {
+fn pmmr_append() {
 	let (data_dir, elems) = setup("append");
-	let mut backend = store::sumtree::PMMRBackend::new(data_dir.to_string()).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
 
 	// adding first set of 4 elements and sync
 	let mut mmr_size = load(0, &elems[0..4], &mut backend);
@@ -37,31 +37,22 @@ fn sumtree_append() {
 	backend.sync().unwrap();
 
 	// check the resulting backend store and the computation of the root
-	let hash = Hashed::hash(&elems[0].clone());
-	let sum = elems[0].sum();
-	let node_hash = (1 as u64, &sum, hash).hash();
+	let node_hash = elems[0].hash();
 	assert_eq!(
-		backend.get(1),
-		Some(HashSum {
-			hash: node_hash,
-			sum: sum,
-		})
+		backend.get(1).expect(""),
+		node_hash
 	);
 
-	let sum2 = HashSum::from_summable(1, &elems[0])
-		+ HashSum::from_summable(2, &elems[1]);
+	let sum2 = elems[0].hash() + elems[1].hash();
 	let sum4 = sum2
-		+ (HashSum::from_summable(4, &elems[2])
-			+ HashSum::from_summable(5, &elems[3]));
+		+ (elems[2].hash() + elems[3].hash());
 	let sum8 = sum4
-		+ ((HashSum::from_summable(8, &elems[4])
-			+ HashSum::from_summable(9, &elems[5]))
-			+ (HashSum::from_summable(11, &elems[6])
-				+ HashSum::from_summable(12, &elems[7])));
-	let sum9 = sum8 + HashSum::from_summable(16, &elems[8]);
+		+ ((elems[4].hash() + elems[5].hash())
+		+ (elems[6].hash() + elems[7].hash()));
+	let sum9 = sum8 + elems[8].hash();
 
 	{
-		let pmmr = PMMR::at(&mut backend, mmr_size);
+		let pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(pmmr.root(), sum9);
 	}
 
@@ -69,24 +60,24 @@ fn sumtree_append() {
 }
 
 #[test]
-fn sumtree_prune_compact() {
+fn pmmr_prune_compact() {
 	let (data_dir, elems) = setup("prune_compact");
 
 	// setup the mmr store with all elements
-	let mut backend = store::sumtree::PMMRBackend::new(data_dir.to_string()).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
 	let mmr_size = load(0, &elems[..], &mut backend);
 	backend.sync().unwrap();
 
 	// save the root
-	let root: HashSum<TestElem>;
+	let root: Hash;
 	{
-		let pmmr = PMMR::at(&mut backend, mmr_size);
+		let pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		root = pmmr.root();
 	}
 
 	// pruning some choice nodes
 	{
-		let mut pmmr = PMMR::at(&mut backend, mmr_size);
+		let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		pmmr.prune(1, 1).unwrap();
 		pmmr.prune(4, 1).unwrap();
 		pmmr.prune(5, 1).unwrap();
@@ -95,7 +86,7 @@ fn sumtree_prune_compact() {
 
 	// check the root
 	{
-		let pmmr = PMMR::at(&mut backend, mmr_size);
+		let pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(root, pmmr.root());
 	}
 
@@ -104,7 +95,7 @@ fn sumtree_prune_compact() {
 
 	// recheck the root
 	{
-		let pmmr = PMMR::at(&mut backend, mmr_size);
+		let pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(root, pmmr.root());
 	}
 
@@ -112,20 +103,20 @@ fn sumtree_prune_compact() {
 }
 
 #[test]
-fn sumtree_reload() {
+fn pmmr_reload() {
 	let (data_dir, elems) = setup("reload");
 
 	// set everything up with a first backend
 	let mmr_size: u64;
-	let root: HashSum<TestElem>;
+	let root: Hash;
 	{
-		let mut backend = store::sumtree::PMMRBackend::new(data_dir.to_string()).unwrap();
+		let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
 		mmr_size = load(0, &elems[..], &mut backend);
 		backend.sync().unwrap();
 
 		// save the root and prune some nodes so we have prune data
 		{
-			let mut pmmr = PMMR::at(&mut backend, mmr_size);
+			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			root = pmmr.root();
 			pmmr.prune(1, 1).unwrap();
 			pmmr.prune(4, 1).unwrap();
@@ -137,7 +128,7 @@ fn sumtree_reload() {
 
 		// prune some more to get rm log data
 		{
-			let mut pmmr = PMMR::at(&mut backend, mmr_size);
+			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			pmmr.prune(5, 1).unwrap();
 		}
 		backend.sync().unwrap();
@@ -146,10 +137,11 @@ fn sumtree_reload() {
 
 	// create a new backend and check everything is kosher
 	{
-		let mut backend = store::sumtree::PMMRBackend::new(data_dir.to_string()).unwrap();
+		let mut backend:store::pmmr::PMMRBackend<Hash> =
+			store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
 		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
 		{
-			let pmmr = PMMR::at(&mut backend, mmr_size);
+			let pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			assert_eq!(root, pmmr.root());
 		}
 		assert_eq!(backend.get(5), None);
@@ -159,24 +151,24 @@ fn sumtree_reload() {
 }
 
 #[test]
-fn sumtree_rewind() {
+fn pmmr_rewind() {
 	let (data_dir, elems) = setup("rewind");
-	let mut backend = store::sumtree::PMMRBackend::new(data_dir.clone()).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone()).unwrap();
 
 	// adding elements and keeping the corresponding root
 	let mut mmr_size = load(0, &elems[0..4], &mut backend);
 	backend.sync().unwrap();
-	let root1: HashSum<TestElem>;
+	let root1: Hash;
 	{
-		let pmmr = PMMR::at(&mut backend, mmr_size);
+		let pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		root1 = pmmr.root();
 	}
 
 	mmr_size = load(mmr_size, &elems[4..6], &mut backend);
 	backend.sync().unwrap();
-	let root2: HashSum<TestElem>;
+	let root2: Hash;
 	{
-		let pmmr = PMMR::at(&mut backend, mmr_size);
+		let pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		root2 = pmmr.root();
 	}
 
@@ -185,7 +177,7 @@ fn sumtree_rewind() {
 
 	// prune and compact the 2 first elements to spice things up
 	{
-		let mut pmmr = PMMR::at(&mut backend, mmr_size);
+		let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		pmmr.prune(1, 1).unwrap();
 		pmmr.prune(2, 1).unwrap();
 	}
@@ -194,24 +186,24 @@ fn sumtree_rewind() {
 
 	// rewind and check the roots still match
 	{
-		let mut pmmr = PMMR::at(&mut backend, mmr_size);
+		let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		pmmr.rewind(9, 3).unwrap();
 		assert_eq!(pmmr.root(), root2);
 	}
 	backend.sync().unwrap();
 	{
-		let pmmr = PMMR::at(&mut backend, 10);
+		let pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, 10);
 		assert_eq!(pmmr.root(), root2);
 	}
 
 	{
-		let mut pmmr = PMMR::at(&mut backend, 10);
+		let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, 10);
 		pmmr.rewind(5, 3).unwrap();
 		assert_eq!(pmmr.root(), root1);
 	}
 	backend.sync().unwrap();
 	{
-		let pmmr = PMMR::at(&mut backend, 7);
+		let pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, 7);
 		assert_eq!(pmmr.root(), root1);
 	}
 
@@ -242,7 +234,7 @@ fn teardown(data_dir: String) {
 	fs::remove_dir_all(data_dir).unwrap();
 }
 
-fn load(pos: u64, elems: &[TestElem], backend: &mut store::sumtree::PMMRBackend<TestElem>) -> u64 {
+fn load(pos: u64, elems: &[TestElem], backend: &mut store::pmmr::PMMRBackend<TestElem>) -> u64 {
 	let mut pmmr = PMMR::at(backend, pos);
 	for elem in elems {
 		pmmr.push(elem.clone()).unwrap();
@@ -252,19 +244,6 @@ fn load(pos: u64, elems: &[TestElem], backend: &mut store::sumtree::PMMRBackend<
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 struct TestElem([u32; 4]);
-impl Summable for TestElem {
-	type Sum = u64;
-	fn sum(&self) -> u64 {
-		// sums are not allowed to overflow, so we use this simple
-  // non-injective "sum" function that will still be homomorphic
-		self.0[0] as u64 * 0x1000 + self.0[1] as u64 * 0x100 + self.0[2] as u64 * 0x10
-			+ self.0[3] as u64
-	}
-	fn sum_len() -> usize {
-		8
-	}
-}
-
 impl Writeable for TestElem {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		try!(writer.write_u32(self.0[0]));

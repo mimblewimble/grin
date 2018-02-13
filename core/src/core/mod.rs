@@ -304,7 +304,7 @@ mod test {
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		// first build a valid tx with corresponding blinding factor
-		let (tx, blind) = build::transaction(
+		let (tx, _) = build::transaction(
 			vec![
 				input(10, ZERO_HASH, key_id1),
 				output(5, key_id2),

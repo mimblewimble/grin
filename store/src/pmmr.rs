@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Implementation of the persistent Backend for the prunable MMR sum-tree.
+//! Implementation of the persistent Backend for the prunable MMR tree.
 
 use memmap;
 
@@ -28,7 +28,8 @@ use libc::{ftruncate64, off64_t};
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use libc::{ftruncate as ftruncate64, off_t as off64_t};
 
-use core::core::pmmr::{self, Backend, HashSum, Summable};
+use core::core::pmmr::{self, Backend};
+use core::core::hash::Hash;
 use core::ser;
 use util::LOGGER;
 
@@ -314,7 +315,7 @@ fn include_tuple(v: &Vec<(u64, u32)>, e: u64) -> bool {
 /// PMMR persistent backend implementation. Relies on multiple facilities to
 /// handle writing, reading and pruning.
 ///
-/// * A main storage file appends HashSum instances as they come. This
+/// * A main storage file appends Hash instances as they come. This
 /// AppendOnlyFile is also backed by a mmap for reads.
 /// * An in-memory backend buffers the latest batch of writes to ensure the
 /// PMMR can always read recent values even if they haven't been flushed to
@@ -323,30 +324,30 @@ fn include_tuple(v: &Vec<(u64, u32)>, e: u64) -> bool {
 /// main storage file.
 pub struct PMMRBackend<T>
 where
-	T: Summable + Clone,
+	T: ser::Writeable,
 {
 	data_dir: String,
-	hashsum_file: AppendOnlyFile,
+	hash_file: AppendOnlyFile,
 	remove_log: RemoveLog,
 	pruned_nodes: pmmr::PruneList,
 	phantom: PhantomData<T>,
 }
 
-impl<T> Backend<T> for PMMRBackend<T>
+impl<T> Backend for PMMRBackend<T>
 where
-	T: Summable + Clone,
+	T: ser::Writeable,
 {
-	/// Append the provided HashSums to the backend storage.
+	/// Append the provided Hashes to the backend storage.
 	#[allow(unused_variables)]
-	fn append(&mut self, position: u64, data: Vec<HashSum<T>>) -> Result<(), String> {
+	fn append(&mut self, position: u64, data: Vec<Hash>) -> Result<(), String> {
 		for d in data {
-			self.hashsum_file.append(&mut ser::ser_vec(&d).unwrap());
+			self.hash_file.append(&mut ser::ser_vec(&d).unwrap());
 		}
 		Ok(())
 	}
 
-	/// Get a HashSum by insertion position
-	fn get(&self, position: u64) -> Option<HashSum<T>> {
+	/// Get a Hash by insertion position
+	fn get(&self, position: u64) -> Option<Hash> {
 		// Check if this position has been pruned in the remove log or the
 		// pruned list
 		if self.remove_log.includes(position) {
@@ -361,9 +362,9 @@ where
 		let pos = position - 1;
 
 		// Must be on disk, doing a read at the correct position
-		let record_len = 32 + T::sum_len();
+		let record_len = 32;
 		let file_offset = ((pos - shift.unwrap()) as usize) * record_len;
-		let data = self.hashsum_file.read(file_offset, record_len);
+		let data = self.hash_file.read(file_offset, record_len);
 		match ser::deserialize(&mut &data[..]) {
 			Ok(hashsum) => Some(hashsum),
 			Err(e) => {
@@ -383,13 +384,13 @@ where
 			.map_err(|e| format!("Could not truncate remove log: {}", e))?;
 
 		let shift = self.pruned_nodes.get_shift(position).unwrap_or(0);
-		let record_len = 32 + T::sum_len();
+		let record_len = 32;
 		let file_pos = (position - shift) * (record_len as u64);
-		self.hashsum_file.rewind(file_pos);
+		self.hash_file.rewind(file_pos);
 		Ok(())
 	}
 
-	/// Remove HashSums by insertion position
+	/// Remove Hashes by insertion position
 	fn remove(&mut self, positions: Vec<u64>, index: u32) -> Result<(), String> {
 		self.remove_log.append(positions, index).map_err(|e| {
 			format!("Could not write to log storage, disk full? {:?}", e)
@@ -399,7 +400,7 @@ where
 
 impl<T> PMMRBackend<T>
 where
-	T: Summable + Clone,
+	T: ser::Writeable,
 {
 	/// Instantiates a new PMMR backend that will use the provided directly to
 	/// store its files.
@@ -410,7 +411,7 @@ where
 
 		Ok(PMMRBackend {
 			data_dir: data_dir,
-			hashsum_file: hs_file,
+			hash_file: hs_file,
 			remove_log: rm_log,
 			pruned_nodes: pmmr::PruneList {
 				pruned_nodes: prune_list,
@@ -423,15 +424,15 @@ where
 	/// sync'd size.
 	pub fn unpruned_size(&self) -> io::Result<u64> {
 		let total_shift = self.pruned_nodes.get_shift(::std::u64::MAX).unwrap();
-		let record_len = 32 + T::sum_len() as u64;
-		let sz = self.hashsum_file.size()?;
+		let record_len = 32;
+		let sz = self.hash_file.size()?;
 		Ok(sz / record_len + total_shift)
 	}
 
 	/// Syncs all files to disk. A call to sync is required to ensure all the
 	/// data has been successfully written to disk.
 	pub fn sync(&mut self) -> io::Result<()> {
-		if let Err(e) = self.hashsum_file.flush() {
+		if let Err(e) = self.hash_file.flush() {
 			return Err(io::Error::new(
 					io::ErrorKind::Interrupted,
 					format!("Could not write to log storage, disk full? {:?}", e),
@@ -444,7 +445,7 @@ where
 
 	/// Discard the current, non synced state of the backend.
 	pub fn discard(&mut self) {
-		self.hashsum_file.discard();
+		self.hash_file.discard();
 		self.remove_log.discard();
 	}
 
@@ -483,7 +484,7 @@ where
 		// 1. save hashsum file to a compact copy, skipping data that's in the
 		// remove list
 		let tmp_prune_file = format!("{}/{}.prune", self.data_dir, PMMR_DATA_FILE);
-		let record_len = (32 + T::sum_len()) as u64;
+		let record_len = 32;
 		let to_rm = self.remove_log
 			.removed
 			.iter()
@@ -492,7 +493,7 @@ where
 				(pos - 1 - shift.unwrap()) * record_len
 			})
 			.collect();
-		self.hashsum_file
+		self.hash_file
 			.save_prune(tmp_prune_file.clone(), to_rm, record_len)?;
 
 		// 2. update the prune list and save it in place
@@ -509,7 +510,7 @@ where
 			tmp_prune_file.clone(),
 			format!("{}/{}", self.data_dir, PMMR_DATA_FILE),
 		)?;
-		self.hashsum_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
+		self.hash_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
 
 		// 4. truncate the rm log
 		self.remove_log.rewind(0)?;
