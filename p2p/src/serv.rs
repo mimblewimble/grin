@@ -13,8 +13,10 @@
 // limitations under the License.
 
 use std::fs::File;
+use std::io;
 use std::net::{TcpListener, TcpStream, SocketAddr, Shutdown};
 use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -34,7 +36,8 @@ pub struct Server {
 	config: P2PConfig,
 	capabilities: Capabilities,
 	handshake: Arc<Handshake>,
-	pub peers: Peers,
+	pub peers: Arc<Peers>,
+	stop: Arc<AtomicBool>,
 }
 
 unsafe impl Sync for Server {}
@@ -50,13 +53,15 @@ impl Server {
 		config: P2PConfig,
 		adapter: Arc<ChainAdapter>,
 		genesis: Hash,
+		stop: Arc<AtomicBool>,
 	) -> Result<Server, Error> {
 
 		Ok(Server {
 			config: config.clone(),
 			capabilities: capab,
 			handshake: Arc::new(Handshake::new(genesis, config.clone())),
-			peers: Peers::new(PeerStore::new(db_root)?, adapter, config),
+			peers: Arc::new(Peers::new(PeerStore::new(db_root)?, adapter, config)),
+			stop: stop,
 		})
 	}
 
@@ -65,37 +70,49 @@ impl Server {
 	pub fn listen(&self) -> Result<(), Error> {
 		// start peer monitoring thread
 		let peers_inner = self.peers.clone();
+		let stop = self.stop.clone();
 		let _ = thread::Builder::new().name("p2p-monitor".to_string()).spawn(move || {
 			loop {
 				let total_diff = peers_inner.total_difficulty();
 				let total_height = peers_inner.total_height();
 				peers_inner.check_all(total_diff, total_height);
-				thread::sleep(Duration::from_secs(20));
+				thread::sleep(Duration::from_secs(10));
+				if stop.load(Ordering::Relaxed) {
+					break;
+				}
 			}
 		});
 
 		// start TCP listener and handle incoming connections
 		let addr = SocketAddr::new(self.config.host, self.config.port);
 		let listener = TcpListener::bind(addr)?;
+		listener.set_nonblocking(true)?;
 
-		for stream in listener.incoming() {
-			match stream {
-				Ok(stream) => {
+		let sleep_time = Duration::from_millis(1);
+		loop {
+			match listener.accept() {
+				Ok((stream, peer_addr)) => {
 					if !self.check_banned(&stream) {
-						let peer_addr = stream.peer_addr();
 						if let Err(e) = self.handle_new_peer(stream) {
 							debug!(
 								LOGGER,
 								"Error accepting peer {}: {:?}",
-								peer_addr.map(|a| a.to_string()).unwrap_or("?".to_owned()),
+								peer_addr.to_string(),
 								e);
 						}
 					}
+				}
+				Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+					// nothing to do, will retry in next iteration
 				}
 				Err(e) => {
 					warn!(LOGGER, "Couldn't establish new client connection: {:?}", e);
 				}
 			}
+			if self.stop.load(Ordering::Relaxed) {
+				break;
+			}
+			thread::sleep(sleep_time);
 		}
 		Ok(())
 	}
@@ -126,7 +143,7 @@ impl Server {
 					total_diff,
 					addr,
 					&self.handshake,
-					Arc::new(self.peers.clone()),
+					self.peers.clone(),
 				)?;
 				let added = self.peers.add_connected(peer);
 				{
@@ -151,7 +168,7 @@ impl Server {
 			self.capabilities,
 			total_diff,
 			&self.handshake,
-			Arc::new(self.peers.clone()),
+			self.peers.clone(),
 		)?;
 		let added = self.peers.add_connected(peer);
 		let mut peer = added.write().unwrap();
@@ -171,6 +188,11 @@ impl Server {
 			}
 		}
 		false
+	}
+
+	pub fn stop(&self) {
+		self.stop.store(true, Ordering::Relaxed);
+		self.peers.stop();
 	}
 }
 

@@ -20,9 +20,10 @@ use std::io::Read;
 use std::net::SocketAddr;
 use std::str;
 use std::sync::{Arc, mpsc};
-use std::time;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 use std::thread;
-use time::now_utc;
+use time::{self, now_utc};
 
 use hyper;
 
@@ -38,6 +39,7 @@ pub fn connect_and_monitor(
 	p2p_server: Arc<p2p::Server>,
 	capabilities: p2p::Capabilities,
 	seed_list: Box<Fn() -> Vec<SocketAddr> + Send>,
+	stop: Arc<AtomicBool>,
 ) {
 
 	let _ = thread::Builder::new()
@@ -52,20 +54,31 @@ pub fn connect_and_monitor(
 			// check seeds first
 			connect_to_seeds(peers.clone(), tx.clone(), seed_list);
 
+			let mut prev = time::now_utc() - time::Duration::seconds(60);
 			loop {
-				// try to connect to any address sent to the channel
-				listen_for_addrs(peers.clone(), p2p_server.clone(), capabilities, &rx);
+				let current_time = time::now_utc();
 
-				// monitor additional peers if we need to add more
-				monitor_peers(peers.clone(), capabilities, tx.clone());
+				if current_time - prev > time::Duration::seconds(20) {
+					// try to connect to any address sent to the channel
+					listen_for_addrs(peers.clone(), p2p_server.clone(), capabilities, &rx);
 
-				thread::sleep(time::Duration::from_secs(20));
+					// monitor additional peers if we need to add more
+					monitor_peers(peers.clone(), capabilities, tx.clone());
+
+					prev = current_time;
+				}
+
+				thread::sleep(Duration::from_secs(1));
+
+				if stop.load(Ordering::Relaxed) {
+					break;
+				}
 			}
 		});
 }
 
 fn monitor_peers(
-	peers: p2p::Peers,
+	peers: Arc<p2p::Peers>,
 	capabilities: p2p::Capabilities,
 	tx: mpsc::Sender<SocketAddr>,
 ) {
@@ -143,7 +156,7 @@ fn monitor_peers(
 // Check if we have any pre-existing peer in db. If so, start with those,
 // otherwise use the seeds provided.
 fn connect_to_seeds(
-	peers: p2p::Peers,
+	peers: Arc<p2p::Peers>,
 	tx: mpsc::Sender<SocketAddr>,
 	seed_list: Box<Fn() -> Vec<SocketAddr>>,
 ) {
@@ -172,7 +185,7 @@ fn connect_to_seeds(
 /// connection if the max peer count isn't exceeded. A request for more
 /// peers is also automatically sent after connection.
 fn listen_for_addrs(
-	peers: p2p::Peers,
+	peers: Arc<p2p::Peers>,
 	p2p: Arc<p2p::Server>,
 	capab: p2p::Capabilities,
 	rx: &mpsc::Receiver<SocketAddr>,

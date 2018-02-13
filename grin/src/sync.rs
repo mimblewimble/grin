@@ -29,10 +29,11 @@ use util::LOGGER;
 /// Starts the syncing loop, just spawns two threads that loop forever
 pub fn run_sync(
 	currently_syncing: Arc<AtomicBool>,
-	peers: p2p::Peers,
+	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
 	skip_sync_wait: bool,
 	fast_sync: bool,
+	stop: Arc<AtomicBool>,
 ) {
 
 	let chain = chain.clone();
@@ -113,11 +114,15 @@ pub fn run_sync(
 					}
 				}	
 				thread::sleep(Duration::from_secs(1));
+
+				if stop.load(Ordering::Relaxed) {
+					break;
+				}
 			}
 		});
 }
 
-fn body_sync(peers: Peers, chain: Arc<chain::Chain>) {
+fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 
 	let body_head: chain::Tip = chain.head().unwrap();
 	let header_head: chain::Tip = chain.get_header_head().unwrap();
@@ -190,7 +195,7 @@ fn body_sync(peers: Peers, chain: Arc<chain::Chain>) {
 	}
 }
 
-pub fn header_sync(peers: Peers, chain: Arc<chain::Chain>) {
+pub fn header_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 	if let Ok(header_head) = chain.get_header_head() {
 		let difficulty = header_head.total_difficulty;
 
@@ -237,7 +242,7 @@ fn request_headers(
 /// just receiving blocks through gossip.
 pub fn needs_syncing(
 	currently_syncing: Arc<AtomicBool>,
-	peers: Peers,
+	peers: Arc<Peers>,
 	chain: Arc<chain::Chain>,
 	header_only: bool) -> bool {
 

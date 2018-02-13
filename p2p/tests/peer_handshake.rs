@@ -18,6 +18,7 @@ extern crate grin_util as util;
 
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::time;
 
@@ -52,6 +53,7 @@ fn peer_handshake() {
 		p2p_conf.clone(),
 		net_adapter.clone(),
 		Hash::from_vec(vec![]),
+		Arc::new(AtomicBool::new(false)),
 	).unwrap());
 
 	let p2p_inner = server.clone();
