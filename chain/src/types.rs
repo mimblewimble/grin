@@ -228,6 +228,10 @@ pub trait ChainStore: Send + Sync {
 	/// Save the provided block in store
 	fn save_block(&self, b: &Block) -> Result<(), store::Error>;
 
+	/// Delete a full block. Does not delete any record associated with a block
+	/// header.
+	fn delete_block(&self, bh: &Hash) -> Result<(), store::Error>;
+
 	/// Save the provided block header in store
 	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), store::Error>;
 
