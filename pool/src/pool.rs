@@ -17,12 +17,11 @@
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
 
-use core::core::hash::Hash;
-use core::core::id::{ShortId, ShortIdentifiable};
+use core::core::hash::Hashed;
+use core::core::id::ShortIdentifiable;
 use core::core::transaction;
-use core::core::{Input, Output, OutputIdentifier};
+use core::core::{OutputIdentifier, Transaction};
 use core::core::{block, hash};
-use core::global;
 use util::LOGGER;
 use util::secp::pedersen::Commitment;
 
@@ -52,7 +51,11 @@ where
 	T: BlockChain,
 {
 	/// Create a new transaction pool
-	pub fn new(config: PoolConfig, chain: Arc<T>, adapter: Arc<PoolAdapter>) -> TransactionPool<T> {
+	pub fn new(
+		config: PoolConfig,
+		chain: Arc<T>,
+		adapter: Arc<PoolAdapter>,
+	) -> TransactionPool<T> {
 		TransactionPool {
 			config: config,
 			transactions: HashMap::new(),
@@ -63,20 +66,20 @@ where
 		}
 	}
 
-	pub fn retrieve_inputs_outputs_kernels_for(
-		&self,
-		block_hash: Hash,
-		kern_ids: Vec<ShortId>,
-	) -> Result<(Vec<Input>, Vec<Output>, Vec<transaction::TxKernel>), Error> {
+	/// Query the tx pool for all known txs based on kernel short_ids
+	/// from the provided compact_block.
+	/// Note: does not validate that we return the full set of required txs.
+	/// The caller will need to validate that themselves.
+	pub fn retrieve_transactions(&self, cb: &block::CompactBlock) -> Vec<Transaction> {
 		debug!(
 			LOGGER,
-			"pool: retrieve_inputs_outputs_kernels_for: kern_ids - {:?}",
-			kern_ids,
+			"pool: retrieve_transactions: kern_ids - {:?}",
+			cb.kern_ids,
 		);
 
 		debug!(
 			LOGGER,
-			"pool: retrieve_inputs_outputs_kernels_for: txs - {}, {:?}",
+			"pool: retrieve_transactions: txs - {}, {:?}",
 			self.transactions.len(),
 			self.transactions.keys(),
 		);
@@ -86,11 +89,11 @@ where
 		for tx in self.transactions.values() {
 			for kernel in &tx.kernels {
 				// rehash each kernel to calculate the block specific short_id
-				let short_id = kernel.short_id(&block_hash);
+				let short_id = kernel.short_id(&cb.hash());
 
 				// if any kernel matches then keep the tx for later
-				if kern_ids.contains(&short_id) {
-					txs.push(tx);
+				if cb.kern_ids.contains(&short_id) {
+					txs.push(*tx.clone());
 					break;
 				}
 			}
@@ -98,25 +101,11 @@ where
 
 		debug!(
 			LOGGER,
-			"pool: retrieve_inputs_outputs_kernels_for: txs from pool - {}",
-			self.transactions.len(),
+			"pool: retrieve_transactions: matching txs from pool - {}",
+			txs.len(),
 		);
 
-		let mut inputs = vec![];
-		let mut outputs = vec![];
-		let mut kernels = vec![];
-
-		for tx in txs {
-			inputs.extend(tx.inputs.iter().cloned());
-			outputs.extend(tx.outputs.iter().cloned());
-			kernels.extend(tx.kernels.iter().cloned());
-		}
-
-		// TODO - dedupe them, sort them
-
-		// TODO - verify we have the correct number of kernels here (based on short_ids)
-
-		Ok((inputs, outputs, kernels))
+		txs
 	}
 
 	/// Searches for an output, designated by its commitment, from the current

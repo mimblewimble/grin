@@ -608,14 +608,6 @@ impl AsFixedBytes for ::util::secp::pedersen::RangeProof {
 		return self.plen;
 	}
 }
-// // TODO - is this (single byte) so we do not ever serialize a secret_key?
-// // Note: we *can* serialize a blinding_factor built from a secret_key
-// // but this needs to be done explicitly (tx kernel offset for example)
-// impl AsFixedBytes for ::util::secp::key::SecretKey {
-// 	fn len(&self) -> usize {
-// 		return 1;
-// 	}
-// }
 impl AsFixedBytes for ::util::secp::Signature {
 	fn len(&self) -> usize {
 		return 64;

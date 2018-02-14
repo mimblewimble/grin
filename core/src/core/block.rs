@@ -404,41 +404,43 @@ impl Block {
 	}
 
 	/// Hydrate a block from a compact block.
-	///
-	/// TODO - only supporting empty compact blocks for now (coinbase output/kernel only)
-	/// eventually we want to support any compact blocks
-	/// we need to differentiate between a block with missing entries (not in tx pool)
-	/// and a truly invalid block (which will get the peer banned)
-	/// so we need to consider how to do this safely/robustly
-	/// presumably at this point we are confident we can generate a full block with no
-	/// missing pieces, but we cannot fully validate it until we push it through the pipeline
-	/// at which point the peer runs the risk of getting banned
-	pub fn hydrate_from(
-		cb: CompactBlock,
-		inputs: Vec<Input>,
-		outputs: Vec<Output>,
-		kernels: Vec<TxKernel>,
-	) -> Block {
+	/// Note: caller must validate the block themselves, we do not validate it here.
+	pub fn hydrate_from(cb: CompactBlock, txs: Vec<Transaction>) -> Block {
 		debug!(
 			LOGGER,
-			"block: hydrate_from: {}, {} cb outputs, {} cb kernels, {} tx kern_ids",
+			"block: hydrate_from: {}, {} txs",
 			cb.hash(),
-			cb.out_full.len(),
-			cb.kern_full.len(),
-			cb.kern_ids.len(),
+			txs.len(),
 		);
 
-		let mut all_inputs = inputs.clone();
-		let mut all_outputs = outputs.clone();
-		let mut all_kernels = kernels.clone();
+		let mut all_inputs = HashSet::new();
+		let mut all_outputs = HashSet::new();
+		let mut all_kernels = HashSet::new();
 
+		// collect all the inputs, outputs and kernels from the txs
+		for tx in txs {
+			all_inputs.extend(tx.inputs);
+			all_outputs.extend(tx.outputs);
+			all_kernels.extend(tx.kernels);
+		}
+
+		// include the coinbase output(s) and kernel(s) from the compact_block
 		all_outputs.extend(cb.out_full);
 		all_kernels.extend(cb.kern_full);
 
+		// convert the sets to vecs
+		let mut all_inputs = all_inputs.iter().cloned().collect::<Vec<_>>();
+		let mut all_outputs = all_outputs.iter().cloned().collect::<Vec<_>>();
+		let mut all_kernels = all_kernels.iter().cloned().collect::<Vec<_>>();
+
+		// sort them all lexicographically
 		all_inputs.sort();
 		all_outputs.sort();
 		all_kernels.sort();
 
+		// finally return the full block
+		// Note: we have not actually validated the block here
+		// leave it to the caller to actually validate the block
 		Block {
 			header: cb.header,
 			inputs: all_inputs,

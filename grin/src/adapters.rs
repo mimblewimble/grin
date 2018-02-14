@@ -103,35 +103,32 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		);
 
 		if cb.kern_ids.is_empty() {
-			let block = core::Block::hydrate_from(cb, vec![], vec![], vec![]);
+			let block = core::Block::hydrate_from(cb, vec![]);
 
 			// push the freshly hydrated block through the chain pipeline
 			self.process_block(block)
 		} else {
-			// TODO - do we need to validate the header here to be sure it is not total garbage?
+			// TODO - do we need to validate the header here?
 
 			let kernel_count = cb.kern_ids.len();
 
-			let (inputs, outputs, kernels) = {
+			let txs = {
 				let tx_pool = self.tx_pool.read().unwrap();
-				tx_pool.retrieve_inputs_outputs_kernels_for(cb.hash(), cb.kern_ids.clone())
+				tx_pool.retrieve_transactions(&cb)
 			};
 
 			debug!(
 				LOGGER,
-				"adapter: found parts in tx pool - {}, {}, {} ({} kernels in block)",
-				inputs.len(),
-				outputs.len(),
-				kernels.len(),
-				kernel_count,
+				"adapter: txs from tx pool - {}",
+				txs.len(),
 			);
 
 			// TODO - 3 scenarios here -
 			// 1) we hydrate a valid block (good to go)
-			// 2) we hydrate an invalid block (parts legit missing)
+			// 2) we hydrate an invalid block (txs legit missing from our pool)
 			// 3) we hydrate an invalid block (peer sent us a "bad" compact block) - [TBD]
 
-			let block = core::Block::hydrate_from(cb.clone(), inputs, outputs, kernels);
+			let block = core::Block::hydrate_from(cb.clone(), txs);
 
 			if let Ok(()) = block.validate() {
 				debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
