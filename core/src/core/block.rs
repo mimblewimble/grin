@@ -15,8 +15,7 @@
 //! Blocks and blockheaders
 
 use time;
-use util;
-use util::{secp, static_secp_instance};
+use rand::{thread_rng, Rng};
 use std::collections::HashSet;
 
 use core::{
@@ -39,11 +38,13 @@ use core::id::ShortIdentifiable;
 use core::target::Difficulty;
 use core::transaction;
 use ser::{self, Readable, Reader, Writeable, Writer, WriteableSorted, read_and_verify_sorted};
-use util::kernel_sig_msg;
-use util::LOGGER;
 use global;
 use keychain;
 use keychain::BlindingFactor;
+use util;
+use util::kernel_sig_msg;
+use util::LOGGER;
+use util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, PartialEq)]
@@ -221,6 +222,8 @@ impl Readable for BlockHeader {
 pub struct CompactBlock {
 	/// The header with metadata and commitments to the rest of the data
 	pub header: BlockHeader,
+	/// Nonce for connection specific short_ids
+	pub nonce: u64,
 	/// List of full outputs - specifically the coinbase output(s)
 	pub out_full: Vec<Output>,
 	/// List of full kernels - specifically the coinbase kernel(s)
@@ -235,10 +238,10 @@ pub struct CompactBlock {
 impl Writeable for CompactBlock {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		try!(self.header.write(writer));
-
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			ser_multiwrite!(
 				writer,
+				[write_u64, self.nonce],
 				[write_u64, self.out_full.len() as u64],
 				[write_u64, self.kern_full.len() as u64],
 				[write_u64, self.kern_ids.len() as u64]
@@ -263,8 +266,8 @@ impl Readable for CompactBlock {
 	fn read(reader: &mut Reader) -> Result<CompactBlock, ser::Error> {
 		let header = try!(BlockHeader::read(reader));
 
-		let (out_full_len, kern_full_len, kern_id_len) =
-			ser_multiread!(reader, read_u64, read_u64, read_u64);
+		let (nonce, out_full_len, kern_full_len, kern_id_len) =
+			ser_multiread!(reader, read_u64, read_u64, read_u64, read_u64);
 
 		let out_full = read_and_verify_sorted(reader, out_full_len as u64)?;
 		let kern_full = read_and_verify_sorted(reader, kern_full_len as u64)?;
@@ -272,6 +275,7 @@ impl Readable for CompactBlock {
 
 		Ok(CompactBlock {
 			header,
+			nonce,
 			out_full,
 			kern_full,
 			kern_ids,
@@ -447,24 +451,27 @@ impl Block {
 	/// Generate the compact block representation.
 	pub fn as_compact_block(&self) -> CompactBlock {
 		let header = self.header.clone();
-		let block_hash = self.hash();
+		let nonce = thread_rng().next_u64();
+
+		// concatenate the nonce with our block_header to build the hash
+		let hash = (self, nonce).hash();
 
 		let mut out_full = self.outputs
 			.iter()
 			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.cloned()
 			.collect::<Vec<_>>();
-		let mut kern_full = self.kernels
-			.iter()
-			.filter(|x| x.features.contains(KernelFeatures::COINBASE_KERNEL))
-			.cloned()
-			.collect::<Vec<_>>();
 
-		let mut kern_ids = self.kernels
-			.iter()
-			.filter(|x| !x.features.contains(KernelFeatures::COINBASE_KERNEL))
-			.map(|x| x.short_id(&block_hash))
-			.collect::<Vec<_>>();
+		let mut kern_full = vec![];
+		let mut kern_ids = vec![];
+
+		for k in &self.kernels {
+			if k.features.contains(KernelFeatures::COINBASE_KERNEL) {
+				kern_full.push(k.clone());
+			} else {
+				kern_ids.push(k.short_id(&hash));
+			}
+		}
 
 		// sort all the lists
 		out_full.sort();
@@ -473,6 +480,7 @@ impl Block {
 
 		CompactBlock {
 			header,
+			nonce,
 			out_full,
 			kern_full,
 			kern_ids,
@@ -1081,7 +1089,7 @@ mod test {
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			5_708,
+			5_716,
 		);
 	}
 
@@ -1094,7 +1102,7 @@ mod test {
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			5_714,
+			5_722,
 		);
 	}
 
@@ -1138,7 +1146,7 @@ mod test {
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		assert_eq!(
 			vec.len(),
-			5_768,
+			5_776,
 		);
 	}
 
@@ -1147,8 +1155,9 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let tx1 = tx1i2o();
 		let b = new_block(vec![&tx1], &keychain);
-
 		let cb = b.as_compact_block();
+
+		let hash = (b.header, cb.nonce).hash();
 
 		assert_eq!(cb.out_full.len(), 1);
 		assert_eq!(cb.kern_full.len(), 1);
@@ -1160,7 +1169,7 @@ mod test {
 				.iter()
 				.find(|x| !x.features.contains(KernelFeatures::COINBASE_KERNEL))
 				.unwrap()
-				.short_id(&b.hash())
+				.short_id(&hash)
 		);
 	}
 
@@ -1179,6 +1188,7 @@ mod test {
 	fn serialize_deserialize_compact_block() {
 		let b = CompactBlock {
 			header: BlockHeader::default(),
+			nonce: 0,
 			out_full: vec![],
 			kern_full: vec![],
 			kern_ids: vec![ShortId::zero()],
