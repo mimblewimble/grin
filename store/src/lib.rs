@@ -30,7 +30,9 @@ extern crate rocksdb;
 #[macro_use]
 extern crate slog;
 
+pub mod flatfile;
 pub mod pmmr;
+pub mod types;
 
 const SEP: u8 = ':' as u8;
 

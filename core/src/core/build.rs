@@ -27,7 +27,7 @@
 
 use util::{secp, kernel_sig_msg};
 
-use core::{Transaction, Input, Output, OutputFeatures, SwitchCommitHash};
+use core::{Transaction, TxKernel, Input, Output, OutputFeatures, SwitchCommitHash};
 use core::hash::Hash;
 use keychain;
 use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
@@ -40,7 +40,7 @@ pub struct Context<'a> {
 
 /// Function type returned by the transaction combinators. Transforms a
 /// (Transaction, BlindSum) pair into another, provided some context.
-pub type Append = for<'a> Fn(&'a mut Context, (Transaction, BlindSum)) -> (Transaction, BlindSum);
+pub type Append = for<'a> Fn(&'a mut Context, (Transaction, TxKernel, BlindSum)) -> (Transaction, TxKernel, BlindSum);
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
@@ -50,14 +50,14 @@ fn build_input(
 	out_block: Option<Hash>,
 	key_id: Identifier,
 ) -> Box<Append> {
-	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
+	Box::new(move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 		let commit = build.keychain.commit(value, &key_id).unwrap();
 		let input = Input::new(
 			features,
 			commit,
 			out_block,
 		);
-		(tx.with_input(input), sum.sub_key_id(key_id.clone()))
+		(tx.with_input(input), kern, sum.sub_key_id(key_id.clone()))
 	})
 }
 
@@ -86,7 +86,7 @@ pub fn coinbase_input(
 /// Adds an output with the provided value and key identifier from the
 /// keychain.
 pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
-	Box::new(move |build, (tx, sum)| -> (Transaction, BlindSum) {
+	Box::new(move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 		debug!(
 			LOGGER,
 			"Building an output: {}, {}",
@@ -125,6 +125,7 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 				switch_commit_hash: switch_commit_hash,
 				proof: rproof,
 			}),
+			kern,
 			sum.add_key_id(key_id.clone()),
 		)
 	})
@@ -132,31 +133,41 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 
 /// Sets the fee on the transaction being built.
 pub fn with_fee(fee: u64) -> Box<Append> {
-	Box::new(move |_build, (tx, sum)| -> (Transaction, BlindSum) {
-		(tx.with_fee(fee), sum)
+	Box::new(move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+		(tx, kern.with_fee(fee), sum)
 	})
 }
 
 /// Sets the lock_height on the transaction being built.
 pub fn with_lock_height(lock_height: u64) -> Box<Append> {
-	Box::new(move |_build, (tx, sum)| -> (Transaction, BlindSum) {
-		(tx.with_lock_height(lock_height), sum)
+	Box::new(move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+		(tx, kern.with_lock_height(lock_height), sum)
 	})
 }
 
-/// Sets a known excess value on the transaction being built. Usually used in
+/// Adds a known excess value on the transaction being built. Usually used in
 /// combination with the initial_tx function when a new transaction is built
 /// by adding to a pre-existing one.
 pub fn with_excess(excess: BlindingFactor) -> Box<Append> {
-	Box::new(move |_build, (tx, sum)| -> (Transaction, BlindSum) {
-		(tx, sum.add_blinding_factor(excess.clone()))
+	Box::new(move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+		(tx, kern, sum.add_blinding_factor(excess.clone()))
+	})
+}
+
+/// Sets a known tx "offset". Used in final step of tx construction.
+pub fn with_offset(offset: BlindingFactor) -> Box<Append> {
+	Box::new(move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+		(tx.with_offset(offset), kern, sum)
 	})
 }
 
 /// Sets an initial transaction to add to when building a new transaction.
-pub fn initial_tx(tx: Transaction) -> Box<Append> {
-	Box::new(move |_build, (_, sum)| -> (Transaction, BlindSum) {
-		(tx.clone(), sum)
+/// We currently only support building a tx with a single kernel with build::transaction()
+pub fn initial_tx(mut tx: Transaction) -> Box<Append> {
+	assert_eq!(tx.kernels.len(), 1);
+	let kern = tx.kernels.remove(0);
+	Box::new(move |_build, (_, _, sum)| -> (Transaction, TxKernel, BlindSum) {
+		(tx.clone(), kern.clone(), sum)
 	})
 }
 
@@ -170,19 +181,76 @@ pub fn initial_tx(tx: Transaction) -> Box<Append> {
 /// let (tx2, _) = build::transaction(vec![initial_tx(tx1), with_excess(sum),
 ///   output_rand(2)], keychain).unwrap();
 ///
-pub fn transaction(
+pub fn partial_transaction(
 	elems: Vec<Box<Append>>,
 	keychain: &keychain::Keychain,
 ) -> Result<(Transaction, BlindingFactor), keychain::Error> {
 	let mut ctx = Context { keychain };
-	let (mut tx, sum) = elems.iter().fold(
-		(Transaction::empty(), BlindSum::new()),
+	let (mut tx, kern, sum) = elems.iter().fold(
+		(Transaction::empty(), TxKernel::empty(), BlindSum::new()),
 		|acc, elem| elem(&mut ctx, acc),
 	);
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
-	let msg = secp::Message::from_slice(&kernel_sig_msg(tx.fee, tx.lock_height))?;
-	tx.excess_sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &blind_sum)?;
+
+	// we only support building a tx with a single kernel via build::transaction()
+	assert!(tx.kernels.is_empty());
+	tx.kernels.push(kern);
+
 	Ok((tx, blind_sum))
+}
+
+/// Builds a complete transaction.
+pub fn transaction(
+	elems: Vec<Box<Append>>,
+	keychain: &keychain::Keychain,
+) -> Result<Transaction, keychain::Error> {
+	let (mut tx, blind_sum) = partial_transaction(elems, keychain)?;
+	assert_eq!(tx.kernels.len(), 1);
+
+	let mut kern = tx.kernels.remove(0);
+	let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
+
+	let skey = blind_sum.secret_key(&keychain.secp())?;
+	kern.excess = keychain.secp().commit(0, skey)?;
+	kern.excess_sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &blind_sum)?;
+
+	tx.kernels.push(kern);
+
+	Ok(tx)
+}
+
+/// Builds a complete transaction, splitting the key and
+/// setting the excess, excess_sig and tx offset as necessary.
+pub fn transaction_with_offset(
+	elems: Vec<Box<Append>>,
+	keychain: &keychain::Keychain,
+) -> Result<Transaction, keychain::Error> {
+	let mut ctx = Context { keychain };
+	let (mut tx, mut kern, sum) = elems.iter().fold(
+		(Transaction::empty(), TxKernel::empty(), BlindSum::new()),
+		|acc, elem| elem(&mut ctx, acc),
+	);
+	let blind_sum = ctx.keychain.blind_sum(&sum)?;
+
+	let split = blind_sum.split(&keychain.secp())?;
+	let k1 = split.blind_1;
+	let k2 = split.blind_2;
+
+	let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
+
+	// generate kernel excess and excess_sig using the split key k1
+	let skey = k1.secret_key(&keychain.secp())?;
+	kern.excess = ctx.keychain.secp().commit(0, skey)?;
+	kern.excess_sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &k1)?;
+
+	// store the kernel offset (k2) on the tx itself
+	// commitments will sum correctly when including the offset
+	tx.offset = k2.clone();
+
+	assert!(tx.kernels.is_empty());
+	tx.kernels.push(kern);
+
+	Ok(tx)
 }
 
 // Just a simple test, most exhaustive tests in the core mod.rs.
@@ -198,17 +266,37 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
-		let (tx, _) = transaction(
+		let tx = transaction(
 			vec![
 				input(10, ZERO_HASH, key_id1),
-				input(11, ZERO_HASH, key_id2),
+				input(12, ZERO_HASH, key_id2),
 				output(20, key_id3),
-				with_fee(1),
+				with_fee(2),
 			],
 			&keychain,
 		).unwrap();
 
-		tx.verify_sig().unwrap();
+		tx.validate().unwrap();
+	}
+
+	#[test]
+	fn blind_simple_tx_with_offset() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
+		let key_id3 = keychain.derive_key_id(3).unwrap();
+
+		let tx = transaction_with_offset(
+			vec![
+				input(10, ZERO_HASH, key_id1),
+				input(12, ZERO_HASH, key_id2),
+				output(20, key_id3),
+				with_fee(2),
+			],
+			&keychain,
+		).unwrap();
+
+		tx.validate().unwrap();
 	}
 
 	#[test]
@@ -217,11 +305,11 @@ mod test {
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
-		let (tx, _) = transaction(
+		let tx = transaction(
 			vec![input(6, ZERO_HASH, key_id1), output(2, key_id2), with_fee(4)],
 			&keychain,
 		).unwrap();
 
-		tx.verify_sig().unwrap();
+		tx.validate().unwrap();
 	}
 }

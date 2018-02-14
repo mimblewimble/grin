@@ -20,7 +20,7 @@ extern crate time;
 use std::fs;
 
 use core::ser::*;
-use core::core::pmmr::{Backend, PMMR};
+use core::core::pmmr::{PMMR, Backend};
 use core::core::hash::{Hash, Hashed};
 
 #[test]
@@ -250,5 +250,17 @@ impl Writeable for TestElem {
 		try!(writer.write_u32(self.0[1]));
 		try!(writer.write_u32(self.0[2]));
 		writer.write_u32(self.0[3])
+	}
+}
+impl Readable for TestElem {
+	fn read(reader: &mut Reader) -> Result<TestElem, Error> {
+		Ok(TestElem (
+			[
+				reader.read_u32()?,
+				reader.read_u32()?,
+				reader.read_u32()?,
+				reader.read_u32()?,
+			]
+		))
 	}
 }
