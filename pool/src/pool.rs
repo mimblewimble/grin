@@ -116,7 +116,7 @@ where
 
 		// TODO - verify we have the correct number of kernels here (based on short_ids)
 
-		Ok(inputs, outputs, kernels)
+		Ok((inputs, outputs, kernels))
 	}
 
 	/// Searches for an output, designated by its commitment, from the current

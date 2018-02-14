@@ -235,13 +235,15 @@ pub struct CompactBlock {
 /// Implementation of Writeable for a compact block, defines how to write the block to a
 /// binary writer. Differentiates between writing the block for the purpose of
 /// full serialization and the one of just extracting a hash.
+/// Note: compact block hash uses both the header *and* the nonce.
 impl Writeable for CompactBlock {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		try!(self.header.write(writer));
+		try!(writer.write_u64(self.nonce));
+
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			ser_multiwrite!(
 				writer,
-				[write_u64, self.nonce],
 				[write_u64, self.out_full.len() as u64],
 				[write_u64, self.kern_full.len() as u64],
 				[write_u64, self.kern_ids.len() as u64]
@@ -1144,13 +1146,31 @@ mod test {
 	}
 
 	#[test]
+	fn compact_block_hash_with_nonce() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let tx = tx1i2o();
+		let b = new_block(vec![&tx], &keychain);
+		let cb1 = b.as_compact_block();
+		let cb2 = b.as_compact_block();
+
+		// random nonce included in hash each time we generate a compact_block
+		// so the hash will always be unique (we use this to generate unique short_ids)
+		assert!(cb1.hash() != cb2.hash());
+
+		assert!(cb1.kern_ids[0] != cb2.kern_ids[0]);
+
+		// check we can identify the specified kernel from the short_id
+		// in either of the compact_blocks
+		assert_eq!(cb1.kern_ids[0], tx.kernels[0].short_id(&cb1.hash()));
+		assert_eq!(cb2.kern_ids[0], tx.kernels[0].short_id(&cb2.hash()));
+	}
+
+	#[test]
 	fn convert_block_to_compact_block() {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let tx1 = tx1i2o();
 		let b = new_block(vec![&tx1], &keychain);
 		let cb = b.as_compact_block();
-
-		let hash = (b.header, cb.nonce).hash();
 
 		assert_eq!(cb.out_full.len(), 1);
 		assert_eq!(cb.kern_full.len(), 1);
@@ -1162,7 +1182,7 @@ mod test {
 				.iter()
 				.find(|x| !x.features.contains(KernelFeatures::COINBASE_KERNEL))
 				.unwrap()
-				.short_id(&hash)
+				.short_id(&cb.hash())
 		);
 	}
 
