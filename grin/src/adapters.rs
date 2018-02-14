@@ -110,13 +110,37 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		} else {
 			// TODO - do we need to validate the header here to be sure it is not total garbage?
 
+			let kernel_count = cb.kern_ids.len();
+
+			let (inputs, outputs, kernels) = {
+				let tx_pool = self.tx_pool.read().unwrap();
+				tx_pool.retrieve_inputs_outputs_kernels_for(cb.hash(), cb.kern_ids.clone())
+			};
+
 			debug!(
 				LOGGER,
-				"*** cannot hydrate non-empty compact block (not yet implemented), \
-				falling back to requesting full block",
+				"adapter: found parts in tx pool - {}, {}, {} ({} kernels in block)",
+				inputs.len(),
+				outputs.len(),
+				kernels.len(),
+				kernel_count,
 			);
-			self.request_block(&cb.header, &addr);
-			true
+
+			// TODO - 3 scenarios here -
+			// 1) we hydrate a valid block (good to go)
+			// 2) we hydrate an invalid block (parts legit missing)
+			// 3) we hydrate an invalid block (peer sent us a "bad" compact block) - [TBD]
+
+			let block = core::Block::hydrate_from(cb.clone(), inputs, outputs, kernels);
+
+			if let Ok(()) = block.validate() {
+				debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
+				self.process_block(block)
+			} else {
+				debug!(LOGGER, "adapter: block invalid after hydration, requesting full block");
+				self.request_block(&cb.header, &addr);
+				true
+			}
 		}
 	}
 
@@ -424,16 +448,19 @@ pub struct ChainToPoolAndNetAdapter {
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
 	fn block_accepted(&self, b: &core::Block, opts: Options) {
-		{
-			if let Err(e) = self.tx_pool.write().unwrap().reconcile_block(b) {
-				error!(
-					LOGGER,
-					"Pool could not update itself at block {}: {:?}",
-					b.hash(),
-					e
-				);
-			}
+		debug!(LOGGER, "adapter: block_accepted: {:?}", b.hash());
+
+		if let Err(e) = self.tx_pool.write().unwrap().reconcile_block(b) {
+			error!(
+				LOGGER,
+				"Pool could not update itself at block {}: {:?}",
+				b.hash(),
+				e,
+			);
 		}
+
+		debug!(LOGGER, "adapter: block_accepted: got past the pool recon");
+
 
 		// If we mined the block then we want to broadcast the block itself.
 		// If block is empty then broadcast the block.
@@ -553,4 +580,3 @@ impl pool::BlockChain for PoolToChainAdapter {
 			.map_err(|_| pool::PoolError::GenericPoolError)
 	}
 }
-

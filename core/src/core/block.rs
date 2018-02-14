@@ -413,9 +413,9 @@ impl Block {
 	/// at which point the peer runs the risk of getting banned
 	pub fn hydrate_from(
 		cb: CompactBlock,
-		_inputs: Vec<Input>,
-		_outputs: Vec<Output>,
-		_kernels: Vec<TxKernel>,
+		inputs: Vec<Input>,
+		outputs: Vec<Output>,
+		kernels: Vec<TxKernel>,
 	) -> Block {
 		debug!(
 			LOGGER,
@@ -426,12 +426,9 @@ impl Block {
 			cb.kern_ids.len(),
 		);
 
-		// we only support "empty" compact block for now
-		assert!(cb.kern_ids.is_empty());
-
-		let mut all_inputs = vec![];
-		let mut all_outputs = vec![];
-		let mut all_kernels = vec![];
+		let mut all_inputs = inputs.clone();
+		let mut all_outputs = outputs.clone();
+		let mut all_kernels = kernels.clone();
 
 		all_outputs.extend(cb.out_full);
 		all_kernels.extend(cb.kern_full);
@@ -640,10 +637,6 @@ impl Block {
 	/// Validates all the elements in a block that can be checked without
 	/// additional data. Includes commitment sums and kernels, Merkle
 	/// trees, reward, etc.
-	///
-	/// TODO - performs various verification steps - discuss renaming this to "verify"
-	/// as all the steps within are verify steps.
-	///
 	pub fn validate(&self) -> Result<(), Error> {
 		self.verify_weight()?;
 		self.verify_sorted()?;

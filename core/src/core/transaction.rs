@@ -206,7 +206,7 @@ impl TxKernel {
 			..self
 		}
 	}
-	
+
 	/// Size in bytes of a kernel, necessary for binary storage
 	pub fn size() -> usize {
 		17 + // features plus fee and lock_height

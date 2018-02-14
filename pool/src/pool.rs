@@ -17,11 +17,14 @@
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
 
-use util::secp::pedersen::Commitment;
-
+use core::core::hash::Hash;
+use core::core::id::{ShortId, ShortIdentifiable};
 use core::core::transaction;
-use core::core::{block, hash, OutputIdentifier};
+use core::core::{Input, Output, OutputIdentifier};
+use core::core::{block, hash};
 use core::global;
+use util::LOGGER;
+use util::secp::pedersen::Commitment;
 
 use types::*;
 pub use graph;
@@ -58,6 +61,62 @@ where
 			blockchain: chain,
 			adapter: adapter,
 		}
+	}
+
+	pub fn retrieve_inputs_outputs_kernels_for(
+		&self,
+		block_hash: Hash,
+		kern_ids: Vec<ShortId>,
+	) -> Result<(Vec<Input>, Vec<Output>, Vec<transaction::TxKernel>), Error> {
+		debug!(
+			LOGGER,
+			"pool: retrieve_inputs_outputs_kernels_for: kern_ids - {:?}",
+			kern_ids,
+		);
+
+		debug!(
+			LOGGER,
+			"pool: retrieve_inputs_outputs_kernels_for: txs - {}, {:?}",
+			self.transactions.len(),
+			self.transactions.keys(),
+		);
+
+		let mut txs = vec![];
+
+		for tx in self.transactions.values() {
+			for kernel in &tx.kernels {
+				// rehash each kernel to calculate the block specific short_id
+				let short_id = kernel.short_id(&block_hash);
+
+				// if any kernel matches then keep the tx for later
+				if kern_ids.contains(&short_id) {
+					txs.push(tx);
+					break;
+				}
+			}
+		}
+
+		debug!(
+			LOGGER,
+			"pool: retrieve_inputs_outputs_kernels_for: txs from pool - {}",
+			self.transactions.len(),
+		);
+
+		let mut inputs = vec![];
+		let mut outputs = vec![];
+		let mut kernels = vec![];
+
+		for tx in txs {
+			inputs.extend(tx.inputs.iter().cloned());
+			outputs.extend(tx.outputs.iter().cloned());
+			kernels.extend(tx.kernels.iter().cloned());
+		}
+
+		// TODO - dedupe them, sort them
+
+		// TODO - verify we have the correct number of kernels here (based on short_ids)
+
+		Ok(inputs, outputs, kernels)
 	}
 
 	/// Searches for an output, designated by its commitment, from the current
