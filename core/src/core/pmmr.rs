@@ -226,6 +226,7 @@ where
 		}
 	}
 
+
 	/// Helper function to get the last N nodes inserted, i.e. the last
 	/// n nodes along the bottom of the tree
 	pub fn get_last_n_insertions(&self, n: u64) -> Vec<Hash> {
@@ -511,6 +512,30 @@ pub fn peaks(num: u64) -> Vec<u64> {
 	peaks
 }
 
+/// Helper function to convert an index to a leaf index (the nth leaf)
+pub fn leaf_index(n: u64) -> u64 {
+	let mut count = 1;
+	let mut cur_leaf = n;
+
+	// Special case that causes issues in bintree functions,
+	// just return
+	if n == 1 {
+		return count;
+	}
+
+	loop {
+		if bintree_postorder_height(cur_leaf) > 0 {
+			cur_leaf = bintree_rightmost(cur_leaf);
+		}
+		count = count + 1;
+		cur_leaf = bintree_jump_left_sibling(cur_leaf);
+		if cur_leaf == 1 {
+			break;
+		}
+	}
+	count
+}
+
 /// The height of a node in a full binary tree from its postorder traversal
 /// index. This function is the base on which all others, as well as the MMR,
 /// are built.
@@ -674,6 +699,17 @@ mod test {
 	use super::*;
 	use ser::{Writeable, Error};
 	use core::Writer;
+
+	#[test]
+	fn leaf_indices(){
+		assert_eq!(leaf_index(1),1);
+		assert_eq!(leaf_index(2),2);
+		assert_eq!(leaf_index(4),3);
+		assert_eq!(leaf_index(5),4);
+		assert_eq!(leaf_index(8),5);
+		assert_eq!(leaf_index(9),6);
+
+	}
 
 	#[test]
 	fn some_all_ones() {

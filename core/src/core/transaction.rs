@@ -668,7 +668,7 @@ pub struct Output {
 	pub features: OutputFeatures,
 	/// The homomorphic commitment representing the output amount
 	pub commit: Commitment,
-	/// The switch commitment hash, a 160 bit length blake2 hash of blind*J
+	/// The switch commitment hash, a 256 bit length blake2 hash of blind*J
 	pub switch_commit_hash: SwitchCommitHash,
 	/// A proof that the commitment is in the right range
 	pub proof: RangeProof,
@@ -724,14 +724,6 @@ impl Output {
 	pub fn proof(&self) -> RangeProof {
 		self.proof
 	}
-	
-	/// Size in bytes of an output
-	pub fn size_no_rangeproof() -> usize {
-		1 + // features
-			secp::constants::PEDERSEN_COMMITMENT_SIZE +
-			SWITCH_COMMIT_HASH_SIZE
-	}
-
 
 	/// Validates the range proof using the commitment
 	pub fn verify_proof(&self) -> Result<(), secp::Error> {
@@ -818,6 +810,71 @@ impl Readable for OutputIdentifier {
 		)?;
 		Ok(OutputIdentifier {
 			commit: Commitment::read(reader)?,
+			features: features,
+		})
+	}
+}
+
+/// Yet another output version to read/write from disk. Ends up being far too awkward
+/// to use the write serialisation property to do this
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct OutputStoreable {
+	/// Output features (coinbase vs. regular transaction output)
+	/// We need to include this when hashing to ensure coinbase maturity can be enforced.
+	pub features: OutputFeatures,
+	/// Output commitment
+	pub commit: Commitment,
+	/// Switch commit hash
+	pub switch_commit_hash: SwitchCommitHash,
+}
+
+impl OutputStoreable {
+	/// Build a StoreableOutput from an existing output.
+	pub fn from_output(output: &Output) -> OutputStoreable {
+		OutputStoreable {
+			features: output.features,
+			commit: output.commit,
+			switch_commit_hash: output.switch_commit_hash,
+		}
+	}
+
+	/// Return a regular output
+	pub fn to_output(self) -> Output {
+		Output{
+			features: self.features,
+			commit: self.commit,
+			switch_commit_hash: self.switch_commit_hash,
+			proof: RangeProof{
+				proof:[0; secp::constants::MAX_PROOF_SIZE],
+				plen: 0,
+			},
+		}
+
+	}
+
+	/// Return the size in bytes
+	pub fn size() -> usize {
+		1 + secp::constants::PEDERSEN_COMMITMENT_SIZE + SWITCH_COMMIT_HASH_SIZE
+	}
+}
+
+impl Writeable for OutputStoreable {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u8(self.features.bits())?;
+		self.commit.write(writer)?;
+		self.switch_commit_hash.write(writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for OutputStoreable {
+	fn read(reader: &mut Reader) -> Result<OutputStoreable, ser::Error> {
+		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
+			ser::Error::CorruptedData,
+		)?;
+		Ok(OutputStoreable {
+			commit: Commitment::read(reader)?,
+			switch_commit_hash: SwitchCommitHash::read(reader)?,
 			features: features,
 		})
 	}

@@ -119,6 +119,8 @@ pub enum SerializationMode {
 	Hash,
 	/// Serialize everything that a signer of the object should know
 	SigHash,
+	/// Serialize what's desired for file output
+	File,
 }
 
 /// Implementations defined how different numbers and binary structures are

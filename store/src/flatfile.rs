@@ -36,6 +36,7 @@ where
 	data_dir :String,
 	record_len: usize,
 	data_file: AppendOnlyFile,
+	data_file_path: String,
 	remove_log: RemoveLog,
 	phantom: PhantomData<T>,
 }
@@ -44,9 +45,14 @@ impl <T> FlatFileStore<T>
 where
 	T: ser::Writeable + ser::Readable,
 {
+	pub fn data_file_path(&self) -> String {
+		self.data_file_path.clone()
+	}
+
+
 	/// Append the provided elements to the backend storage.
 	#[allow(unused_variables)]
-	pub fn append(&mut self, position: u64, data: Vec<T>) -> Result<(), String> {
+	pub fn append(&mut self, data: Vec<T>) -> Result<(), String> {
 		for d in data {
 			self.data_file.append(&mut ser::ser_vec(&d).unwrap());
 		}
@@ -75,10 +81,11 @@ where
 		}
 	}
 
-	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {
-		self.remove_log
+	/// Rewind file to position
+	pub fn rewind(&mut self, position: u64) -> Result<(), String> {
+		/*self.remove_log
 			.rewind(index)
-			.map_err(|e| format!("Could not truncate remove log: {}", e))?;
+			.map_err(|e| format!("Could not truncate remove log: {}", e))?;*/
 
 		let shift = self.remove_log.get_shift(position);
 		let file_pos = (position as usize + shift) * self.record_len;
@@ -96,13 +103,15 @@ where
 	/// Instantiates a new Flatfile Store that will use the provided directly to
 	/// store its files.
 	pub fn new(data_dir: String, elem_size: usize) -> io::Result<FlatFileStore<T>> {
-		let data_file = AppendOnlyFile::open(format!("{}/{}", data_dir, DATA_FILE))?;
+		let data_file_path = format!("{}/{}", data_dir, DATA_FILE);
+		let data_file = AppendOnlyFile::open(data_file_path.clone())?;
 		let rm_log = RemoveLog::open(format!("{}/{}", data_dir, RM_LOG_FILE))?;
 
 		Ok(FlatFileStore {
 			data_dir: data_dir,
 			record_len: elem_size,
 			data_file: data_file,
+			data_file_path: data_file_path.to_string(),
 			remove_log: rm_log,
 			phantom: PhantomData,
 		})

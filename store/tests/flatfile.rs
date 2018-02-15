@@ -29,7 +29,7 @@ fn flatfile_append() {
 	let mut flat_file_store:FlatFileStore<TestElem> = FlatFileStore::new(data_dir.to_string(), 16).unwrap();
 
 	// adding test set of 9 elements and sync
-	let result = flat_file_store.append(0, elems.clone());
+	let result = flat_file_store.append(elems.clone());
 	flat_file_store.sync().unwrap();
 
 	// Read back
