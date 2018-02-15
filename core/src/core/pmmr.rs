@@ -209,18 +209,69 @@ where
 	fn remove(&mut self, positions: Vec<u64>, index: u32) -> Result<(), String>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MerkleProof {
 	peaks: Vec<Hash>,
 	path: Vec<Hash>,
 	left_right: Vec<bool>,
 }
 
+impl Writeable for MerkleProof {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		ser_multiwrite!(
+			writer,
+			[write_u64, self.peaks.len() as u64],
+
+			// note: path length used for both path and left_right vecs
+			[write_u64, self.path.len() as u64]
+		);
+
+		try!(self.peaks.write(writer));
+		try!(self.path.write(writer));
+
+		// TODO - how to serialize/deserialize these boolean values as bytes?
+		for x in &self.left_right {
+			if *x {
+				try!(writer.write_u8(1));
+			} else {
+				try!(writer.write_u8(0));
+			}
+		}
+
+		Ok(())
+	}
+}
+
+impl Readable for MerkleProof {
+	fn read(reader: &mut Reader) -> Result<MerkleProof, ser::Error> {
+
+		let (peaks_len, path_len) =
+			ser_multiread!(reader, read_u64, read_u64);
+
+		let mut peaks = Vec::with_capacity(peaks_len as usize);
+		for _ in 0..peaks_len {
+			peaks.push(Hash::read(reader)?);
+		}
+		let mut path = Vec::with_capacity(path_len as usize);
+		for _ in 0..path_len {
+			path.push(Hash::read(reader)?);
+		}
+
+		let left_right_bytes = reader.read_fixed_bytes(path_len as usize)?;
+		let left_right = left_right_bytes.iter().map(|&x| x == 1).collect();
+		Ok(
+			MerkleProof {
+				peaks,
+				path,
+				left_right,
+			}
+		)
+	}
+}
+
 impl MerkleProof {
 	pub fn verify(&self, root: Hash, node: Hash) -> bool {
 		println!("verifying - {:?}, {:?}, {:?}", self, root, node);
-
-		assert_eq!(self.path.len(), self.left_right.len());
 
 		// if we have no further elements in the path
 		// then this proof verifies successfully if our node is
@@ -1171,6 +1222,27 @@ mod test {
 		assert_eq!(proof.path.len(), 9);
 		assert_eq!(proof.left_right.len(), 9);
 		assert!(proof.verify(root, node));
+	}
+
+	#[test]
+	fn merkle_proof_ser_deser() {
+		let mut ba = VecBackend::new();
+		let mut pmmr = PMMR::new(&mut ba);
+		for x in 0..15 {
+			pmmr.push(TestElem([0, 0, 0, x])).unwrap();
+		}
+		let proof = pmmr.merkle_proof(9).unwrap();
+		let node = pmmr.get(9).unwrap().hash;
+		let root = pmmr.root().hash;
+		assert!(proof.verify(root, node));
+		println!("{:?}", proof);
+
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &proof).expect("serialization failed");
+		let proof_2: MerkleProof = ser::deserialize(&mut &vec[..]).unwrap();
+		println!("{:?}", proof_2);
+
+		assert_eq!(proof, proof_2);
 	}
 
 	#[test]
