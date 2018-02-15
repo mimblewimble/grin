@@ -30,8 +30,9 @@ pub const SHORT_ID_SIZE: usize = 6;
 
 /// A trait for types that have a short_id (inputs/outputs/kernels)
 pub trait ShortIdentifiable {
-	/// The short_id of the instance.
-	fn short_id(&self, block_hash: &Hash) -> ShortId;
+	/// The short_id of a kernel uses a hash built from the block_header *and* a
+	/// connection specific nonce to minimize the effect of collisions.
+	fn short_id(&self, hash: &Hash) -> ShortId;
 }
 
 impl<H: Hashed> ShortIdentifiable for H {
@@ -42,14 +43,14 @@ impl<H: Hashed> ShortIdentifiable for H {
 	///   * self.hash() passing in the siphasher24 instance
 	///   * drop the 2 most significant bytes (to return a 6 byte short_id)
 	///
-	fn short_id(&self, block_hash: &Hash) -> ShortId {
+	fn short_id(&self, hash: &Hash) -> ShortId {
 		// we "use" core::hash::Hash in the outer namespace
 		// so doing this here in the fn to minimize collateral damage/confusion
 		use std::hash::Hasher;
 
 		// extract k0/k1 from the block_hash
-		let k0 = LittleEndian::read_u64(&block_hash.0[0..8]);
-		let k1 = LittleEndian::read_u64(&block_hash.0[8..16]);
+		let k0 = LittleEndian::read_u64(&hash.0[0..8]);
+		let k1 = LittleEndian::read_u64(&hash.0[8..16]);
 
 		// initialize a siphasher24 with k0/k1
 		let mut sip_hasher = SipHasher24::new_with_keys(k0, k1);
