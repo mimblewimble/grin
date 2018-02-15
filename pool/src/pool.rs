@@ -73,13 +73,8 @@ where
 	pub fn retrieve_transactions(&self, cb: &block::CompactBlock) -> Vec<Transaction> {
 		debug!(
 			LOGGER,
-			"pool: retrieve_transactions: kern_ids - {:?}",
+			"pool: retrieve_transactions: kern_ids - {:?}, txs - {}, {:?}",
 			cb.kern_ids,
-		);
-
-		debug!(
-			LOGGER,
-			"pool: retrieve_transactions: txs - {}, {:?}",
 			self.transactions.len(),
 			self.transactions.keys(),
 		);
