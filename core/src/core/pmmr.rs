@@ -211,15 +211,14 @@ where
 
 #[derive(Debug)]
 pub struct MerkleProof {
-	node: Hash,
 	peaks: Vec<Hash>,
 	path: Vec<Hash>,
 	left_right: Vec<bool>,
 }
 
 impl MerkleProof {
-	pub fn verify(&self, root: Hash) -> bool {
-		println!("verifying - {:?}, {:?}", self, root);
+	pub fn verify(&self, root: Hash, node: Hash) -> bool {
+		println!("verifying - {:?}, {:?}, {:?}", self, root, node);
 
 		assert_eq!(self.path.len(), self.left_right.len());
 
@@ -228,7 +227,7 @@ impl MerkleProof {
 		// one of the peaks
 		// and the peaks themselves hash to give the root
 		if self.path.len() == 0 {
-			if !self.peaks.contains(&self.node) {
+			if !self.peaks.contains(&node) {
 				return false;
 			}
 
@@ -247,20 +246,20 @@ impl MerkleProof {
 		let sibling = path.remove(0);
 		let mut left_right = self.left_right.clone();
 
-		// hash our node and sibling together (observing the position of the sibling)
+		// hash our node and sibling together (noting left/right position of the sibling)
 		let parent = if left_right.remove(0) {
-			(self.node, sibling)
+			(node, sibling)
 		} else {
-			(sibling, self.node)
+			(sibling, node)
 		}.hash();
 
 		let proof = MerkleProof {
-			node: parent,
 			peaks: self.peaks.clone(),
 			path,
 			left_right,
 		};
-		proof.verify(root)
+
+		proof.verify(root, parent)
 	}
 }
 
@@ -327,16 +326,8 @@ where
 
 	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
 		if !is_leaf(pos) {
-			println!("\n*** pos: {}/{} (not leaf)", pos, self.last_pos);
 			return Err(format!("not a leaf at pos {}", pos));
 		}
-
-		// TODO - cleanup this code
-		let node = if let Some(x) = self.get(pos) {
-			x.hash
-		} else {
-			return Err(format!("node not found at pos {}", pos));
-		};
 
 		let family_branch = family_branch(pos, self.last_pos);
 		let left_right = family_branch
@@ -356,17 +347,11 @@ where
 			.map(|x| x.hash)
 			.collect::<Vec<_>>();
 
-		println!("\n*** pos: {}/{} - {:?}, {:?}, {:?}", pos, self.last_pos, path, peaks, left_right);
-
 		let proof = MerkleProof {
-			node,
 			path,
 			peaks,
 			left_right,
 		};
-
-		println!("{:?}", proof);
-		proof.verify(self.root().hash);
 
 		Ok(proof)
 	}
@@ -1129,49 +1114,63 @@ mod test {
 	#[test]
 	fn pmmr_merkle_proof() {
 		// 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3
-		let elems = [
-			TestElem([0, 0, 0, 1]),
-			TestElem([0, 0, 0, 2]),
-			TestElem([0, 0, 0, 3]),
-			TestElem([0, 0, 0, 4]),
-			TestElem([0, 0, 0, 5]),
-			TestElem([0, 0, 0, 6]),
-			TestElem([0, 0, 0, 7]),
-			TestElem([0, 0, 0, 8]),
-			TestElem([1, 0, 0, 0]),
-		];
 
 		let mut ba = VecBackend::new();
 		let mut pmmr = PMMR::new(&mut ba);
 
-		pmmr.push(elems[0]).unwrap();
+		pmmr.push(TestElem([0, 0, 0, 1])).unwrap();
 		assert_eq!(pmmr.last_pos, 1);
-		pmmr.merkle_proof(1);
+		let proof = pmmr.merkle_proof(1).unwrap();
+		let node = pmmr.get(1).unwrap().hash;
+		let root = pmmr.root().hash;
+		assert_eq!(proof.peaks, [root]);
+		assert!(proof.path.is_empty());
+		assert!(proof.left_right.is_empty());
+		assert!(proof.verify(root, node));
 
-		pmmr.push(elems[1]).unwrap();
-		assert_eq!(pmmr.last_pos, 3);
-		pmmr.merkle_proof(1);
-		pmmr.merkle_proof(2);
-		pmmr.merkle_proof(3);
-
-		pmmr.push(elems[2]).unwrap();
+		// push two more elements into the PMMR
+		pmmr.push(TestElem([0, 0, 0, 2])).unwrap();
+		pmmr.push(TestElem([0, 0, 0, 3])).unwrap();
 		assert_eq!(pmmr.last_pos, 4);
-		pmmr.merkle_proof(1);
-		pmmr.merkle_proof(2);
-		pmmr.merkle_proof(3);
-		pmmr.merkle_proof(4);
 
-		pmmr.push(elems[3]).unwrap();
-		assert_eq!(pmmr.last_pos, 7);
-		pmmr.merkle_proof(1);
-		pmmr.merkle_proof(2);
-		pmmr.merkle_proof(3);
-		pmmr.merkle_proof(4);
-		pmmr.merkle_proof(5);
-		pmmr.merkle_proof(6);
-		pmmr.merkle_proof(7);
+		let proof1 = pmmr.merkle_proof(1).unwrap();
+		let node1 = pmmr.get(1).unwrap().hash;
+		let root = pmmr.root().hash;
+		assert_eq!(proof1.peaks.len(), 2);
+		assert_eq!(proof1.path.len(), 1);
+		assert_eq!(proof1.left_right, [true]);
+		assert!(proof1.verify(root, node1));
 
-		assert_eq!(0, 1, "fail and debug");
+		let proof2 = pmmr.merkle_proof(2).unwrap();
+		let node2 = pmmr.get(2).unwrap().hash;
+		let root = pmmr.root().hash;
+		assert_eq!(proof2.peaks.len(), 2);
+		assert_eq!(proof2.path.len(), 1);
+		assert_eq!(proof2.left_right, [false]);
+		assert!(proof2.verify(root, node2));
+
+		// check that we cannot generate a merkle proof for pos 3 (not a leaf node)
+		assert_eq!(pmmr.merkle_proof(3).err(), Some(format!("not a leaf at pos 3")));
+
+		let proof4 = pmmr.merkle_proof(4).unwrap();
+		let node4 = pmmr.get(4).unwrap().hash;
+		let root = pmmr.root().hash;
+		assert_eq!(proof4.peaks.len(), 2);
+		assert!(proof4.path.is_empty());
+		assert!(proof4.left_right.is_empty());
+		assert!(proof4.verify(root, node4));
+
+		// now add a few more elements to the PMMR to build a larger merkle proof
+		for x in 4..1000 {
+			pmmr.push(TestElem([0, 0, 0, x])).unwrap();
+		}
+		let proof = pmmr.merkle_proof(1).unwrap();
+		let node = pmmr.get(1).unwrap().hash;
+		let root = pmmr.root().hash;
+		assert_eq!(proof.peaks.len(), 8);
+		assert_eq!(proof.path.len(), 9);
+		assert_eq!(proof.left_right.len(), 9);
+		assert!(proof.verify(root, node));
 	}
 
 	#[test]
