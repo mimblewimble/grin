@@ -1193,7 +1193,7 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let b = new_block(vec![], &keychain);
 		let cb = b.as_compact_block();
-		let hb = Block::hydrate_from(cb, vec![], vec![], vec![]);
+		let hb = Block::hydrate_from(cb, vec![]);
 		assert_eq!(hb.header, b.header);
 		assert_eq!(hb.outputs, b.outputs);
 		assert_eq!(hb.kernels, b.kernels);
