@@ -456,9 +456,6 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			);
 		}
 
-		debug!(LOGGER, "adapter: block_accepted: got past the pool recon");
-
-
 		// If we mined the block then we want to broadcast the block itself.
 		// If block is empty then broadcast the block.
 		// If block contains txs then broadcast the compact block.
