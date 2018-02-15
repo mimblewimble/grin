@@ -263,9 +263,13 @@ mod test {
 		let tx = tx2i1o();
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &tx).expect("serialization failed");
+		let target_len = match Keychain::is_using_bullet_proofs() {
+			true => 986,
+			false => 5_438,
+		};
 		assert_eq!(
 			vec.len(),
-			5_438,
+			target_len,
 		);
 	}
 
@@ -389,6 +393,12 @@ mod test {
 	fn blind_tx() {
 		let btx = tx2i1o();
 		assert!(btx.validate().is_ok());
+
+	// Ignored for bullet proofs, info doesn't exist yet and calling range_proof_info
+	// with a bullet proof causes painful errors
+	if Keychain::is_using_bullet_proofs() {
+		return;
+	}
 
 		// checks that the range proof on our blind output is sufficiently hiding
 		let Output { proof, .. } = btx.outputs[0];
