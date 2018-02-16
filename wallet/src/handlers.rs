@@ -32,7 +32,7 @@ pub struct CoinbaseHandler {
 }
 
 impl CoinbaseHandler {
-	fn build_coinbase(&self, block_fees: &BlockFees) -> Result<CbData, Error> {
+	fn build_coinbase(&self, block_fees: &BlockFees) -> Result<CbData, api::Error> {
 		let (out, kern, block_fees) = receive_coinbase(&self.config, &self.keychain, block_fees)
 			.map_err(|e| {
 				api::Error::Internal(format!("Error building coinbase: {:?}", e))
