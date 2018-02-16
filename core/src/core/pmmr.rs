@@ -311,8 +311,8 @@ where
 					None => hashes.push_str(&format!("{:>8} ", "??")),
 				}
 			}
-			trace!(LOGGER, "{}", idx);
-			trace!(LOGGER, "{}", hashes);
+			println!("{}", idx);
+			println!("{}", hashes);
 		}
 	}
 }

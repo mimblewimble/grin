@@ -91,6 +91,41 @@ fn flatfile_append() {
 	teardown(data_dir);
 }
 
+#[test]
+fn flatfile_append_2() {
+	let (data_dir, elems) = setup("flatfile_append_2");
+	let mut flat_file_store:FlatFileStore<TestElem> = FlatFileStore::new(data_dir.to_string(), 16).unwrap();
+
+	// add 1 element (coinbase, say)
+	let _ = flat_file_store.append(vec![elems[0]]);
+	// commit extension
+	flat_file_store.sync().unwrap();
+	// add 3 more elements (coinbase, mined blocks)
+	let _ = flat_file_store.append(elems[1..4].to_vec());
+	// commit extension
+	flat_file_store.sync().unwrap();
+	
+	// add coinbase for next block
+	let _ = flat_file_store.append(vec![elems[4]]);
+	// remove 1
+	let _ = flat_file_store.remove(vec![0]);
+	// add new output
+	let _ = flat_file_store.append(vec![elems[5]]);
+	// commit extension
+	flat_file_store.sync().unwrap();
+	
+	// length is 96, or 6 elements with 1 in remove log, (indices 0..4 valid)
+	// add coinbase for next block
+	let _ = flat_file_store.append(vec![elems[6]]);
+	// read element 5, should be elems[6] cause first was removed
+	assert_eq!(flat_file_store.get(5).unwrap(), elems[6]);
+	flat_file_store.sync().unwrap();
+	// and should work same after sync
+	assert_eq!(flat_file_store.get(5).unwrap(), elems[6]);
+	// try read element 6, should fail
+	assert_eq!(flat_file_store.get(6), None);
+	teardown(data_dir);
+}
 fn setup(tag: &str) -> (String, Vec<TestElem>) {
 	let _ = env_logger::init();
 	let t = time::get_time();

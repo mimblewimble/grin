@@ -388,7 +388,6 @@ impl<'a> Extension<'a> {
 				// if not then the input is not being honest about
 				// what it is attempting to spend...
 				let output = read_element_at_pmmr_index(self.utxo_file, pos).unwrap().to_output();
-				println!("Hash, other hash: {},{}", hash, output.hash());
 				if hash != output.hash() {
 					return Err(Error::SumTreeErr(format!("output pmmr hash mismatch")));
 				}
@@ -447,13 +446,13 @@ impl<'a> Extension<'a> {
 			.push(out.clone())
 			.map_err(&Error::SumTreeErr)?;
 		self.new_output_commits.insert(out.commitment(), pos);
-		let _ = self.utxo_file.append(vec![OutputStoreable::from_output(out)]);
+		let _ = store_element(self.utxo_file, OutputStoreable::from_output(out));
 
 		// push range proofs in their MMR and file
 		self.rproof_pmmr
 			.push(out.proof)
 			.map_err(&Error::SumTreeErr)?;
-		let _ = self.rproof_file.append(vec![out.proof]);
+		let _ = store_element(self.rproof_file, out.proof);
 		Ok(())
 	}
 
@@ -472,7 +471,7 @@ impl<'a> Extension<'a> {
 			.push(kernel.clone())
 			.map_err(&Error::SumTreeErr)?;
 		self.new_kernel_excesses.insert(kernel.excess, pos);
-		let _ = self.kernel_file.append(vec![kernel.clone()]);
+		let _ = store_element(self.kernel_file, kernel.clone());
 
 		Ok(())
 	}
@@ -491,15 +490,14 @@ impl<'a> Extension<'a> {
 		let (out_pos_rew, kern_pos_rew) = indexes_at(block, self.commit_index.deref())?;
 		self.rewind_pos(block.header.height, out_pos_rew, kern_pos_rew)?;
 		
-		// rewind the file stores, the position is the number of kernels
-		// multiplied by their size
+		// rewind the file stores
+		let _ = rewind_to_pmmr_index(self.utxo_file, out_pos_rew);
+		let _ = rewind_to_pmmr_index(self.rproof_file, out_pos_rew);
+		// rewind the kernels
 		// the number of kernels is the number of leaves in the MMR, which is the
 		// sum of the number of leaf nodes under each peak in the MMR
-		let pos: u64 = pmmr::peaks(kern_pos_rew).iter().map(|n| (1 << n) as u64).sum();
-		let _ = self.utxo_file.rewind(pos * (OutputStoreable::size() as u64));
-		// TODO: How without bullet proofs?
-		let _ = self.rproof_file.rewind(pos * (TEMP_RANGEPROOF_SIZE as u64));
-		let _ = self.kernel_file.rewind(pos * (TxKernel::size() as u64));
+		//let kern_pos: u64 = pmmr::peaks(kern_pos_rew).iter().map(|n| (1 << n) as u64).sum();
+		let _ = rewind_to_pmmr_index(self.kernel_file, kern_pos_rew);
 
 		Ok(())
 	}
@@ -524,7 +522,6 @@ impl<'a> Extension<'a> {
 			.rewind(kern_pos_rew, height as u32)
 			.map_err(&Error::SumTreeErr)?;
 
-		self.dump(true);
 		Ok(())
 	}
 
@@ -702,14 +699,40 @@ impl<'a> Extension<'a> {
 	}
 }
 
+fn store_element<T>(file_store: &mut FlatFileStore<T>, data: T)
+	-> Result<(), String>
+where
+	T: ser::Readable + ser::Writeable + Clone
+{
+	file_store.append(vec![data])
+}
+
 fn read_element_at_pmmr_index<T>(file_store: &FlatFileStore<T>, pos: u64) -> Option<T>
 where
 	T: ser::Readable + ser::Writeable + Clone
 {
 	let leaf_index = pmmr::leaf_index(pos);
-	println!("pos, leaf index: {},{}", pos, leaf_index);
 	// flat files are zero indexed
 	file_store.get(leaf_index - 1)
+}
+
+fn remove_element_at_pmmr_index<T>(file_store: &mut FlatFileStore<T>, pos: u64) 
+	-> Result<(), String>
+where
+	T: ser::Readable + ser::Writeable + Clone
+{
+	let leaf_index = pmmr::leaf_index(pos);
+	// flat files are zero indexed
+	file_store.remove(vec![leaf_index - 1])
+}
+
+fn rewind_to_pmmr_index<T>(file_store: &mut FlatFileStore<T>, pos: u64) -> Result<(), String>
+where
+	T: ser::Readable + ser::Writeable + Clone
+{
+	let leaf_index = pmmr::leaf_index(pos);
+	// flat files are zero indexed
+	file_store.rewind(leaf_index - 1)
 }
 
 /// Output and kernel MMR indexes at the end of the provided block

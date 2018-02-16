@@ -45,6 +45,7 @@ impl <T> FlatFileStore<T>
 where
 	T: ser::Writeable + ser::Readable,
 {
+	/// path of data file
 	pub fn data_file_path(&self) -> String {
 		self.data_file_path.clone()
 	}
@@ -64,7 +65,7 @@ where
 		let shift = self.remove_log.get_shift(position);
 		// Doing a read at the correct position
 		let file_offset = ((position as usize + shift) as usize) * self.record_len;
-		if file_offset + self.record_len > self.data_file.size().unwrap() as usize {
+		if file_offset + self.record_len > self.data_file.size_with_unsaved() as usize {
 			return None;
 		}
 		let data = self.data_file.read(file_offset, self.record_len);
@@ -83,12 +84,8 @@ where
 
 	/// Rewind file to position
 	pub fn rewind(&mut self, position: u64) -> Result<(), String> {
-		/*self.remove_log
-			.rewind(index)
-			.map_err(|e| format!("Could not truncate remove log: {}", e))?;*/
-
 		let shift = self.remove_log.get_shift(position);
-		let file_pos = (position as usize + shift) * self.record_len;
+		let file_pos = (position as usize + shift + 1) * self.record_len;
 		self.data_file.rewind(file_pos as u64);
 		Ok(())
 	}
