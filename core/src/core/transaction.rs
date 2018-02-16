@@ -138,6 +138,15 @@ pub struct TxKernel {
 
 hashable_ord!(TxKernel);
 
+/// TODO - no clean way to bridge core::hash::Hash and std::hash::Hash implementations?
+impl ::std::hash::Hash for Output {
+	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &self).expect("serialization failed");
+		::std::hash::Hash::hash(&vec, state);
+	}
+}
+
 impl Writeable for TxKernel {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(
@@ -206,7 +215,7 @@ impl TxKernel {
 			..self
 		}
 	}
-	
+
 	/// Size in bytes of a kernel, necessary for binary storage
 	pub fn size() -> usize {
 		17 + // features plus fee and lock_height
@@ -449,7 +458,7 @@ impl Transaction {
 /// Primarily a reference to an output being spent by the transaction.
 /// But also information required to verify coinbase maturity through
 /// the lock_height hashed in the switch_commit_hash.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash)]
 pub struct Input{
 	/// The features of the output being spent.
 	/// We will check maturity for coinbase output.
@@ -571,7 +580,7 @@ impl SwitchCommitHashKey {
 }
 
 /// Definition of the switch commitment hash
-#[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Hash, PartialEq, Serialize, Deserialize)]
 pub struct SwitchCommitHash([u8; SWITCH_COMMIT_HASH_SIZE]);
 
 /// Implementation of Writeable for a switch commitment hash
@@ -677,6 +686,15 @@ pub struct Output {
 }
 
 hashable_ord!(Output);
+
+/// TODO - no clean way to bridge core::hash::Hash and std::hash::Hash implementations?
+impl ::std::hash::Hash for TxKernel {
+	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &self).expect("serialization failed");
+		::std::hash::Hash::hash(&vec, state);
+	}
+}
 
 /// Implementation of Writeable for a transaction Output, defines how to write
 /// an Output as binary.
