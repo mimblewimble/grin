@@ -17,11 +17,13 @@
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
 
-use util::secp::pedersen::Commitment;
-
+use core::core::hash::Hashed;
+use core::core::id::ShortIdentifiable;
 use core::core::transaction;
-use core::core::{block, hash, OutputIdentifier};
-use core::global;
+use core::core::{OutputIdentifier, Transaction};
+use core::core::{block, hash};
+use util::LOGGER;
+use util::secp::pedersen::Commitment;
 
 use types::*;
 pub use graph;
@@ -49,7 +51,11 @@ where
 	T: BlockChain,
 {
 	/// Create a new transaction pool
-	pub fn new(config: PoolConfig, chain: Arc<T>, adapter: Arc<PoolAdapter>) -> TransactionPool<T> {
+	pub fn new(
+		config: PoolConfig,
+		chain: Arc<T>,
+		adapter: Arc<PoolAdapter>,
+	) -> TransactionPool<T> {
 		TransactionPool {
 			config: config,
 			transactions: HashMap::new(),
@@ -58,6 +64,43 @@ where
 			blockchain: chain,
 			adapter: adapter,
 		}
+	}
+
+	/// Query the tx pool for all known txs based on kernel short_ids
+	/// from the provided compact_block.
+	/// Note: does not validate that we return the full set of required txs.
+	/// The caller will need to validate that themselves.
+	pub fn retrieve_transactions(&self, cb: &block::CompactBlock) -> Vec<Transaction> {
+		debug!(
+			LOGGER,
+			"pool: retrieve_transactions: kern_ids - {:?}, txs - {}, {:?}",
+			cb.kern_ids,
+			self.transactions.len(),
+			self.transactions.keys(),
+		);
+
+		let mut txs = vec![];
+
+		for tx in self.transactions.values() {
+			for kernel in &tx.kernels {
+				// rehash each kernel to calculate the block specific short_id
+				let short_id = kernel.short_id(&cb.hash());
+
+				// if any kernel matches then keep the tx for later
+				if cb.kern_ids.contains(&short_id) {
+					txs.push(*tx.clone());
+					break;
+				}
+			}
+		}
+
+		debug!(
+			LOGGER,
+			"pool: retrieve_transactions: matching txs from pool - {}",
+			txs.len(),
+		);
+
+		txs
 	}
 
 	/// Searches for an output, designated by its commitment, from the current

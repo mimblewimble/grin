@@ -103,20 +103,41 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		);
 
 		if cb.kern_ids.is_empty() {
-			let block = core::Block::hydrate_from(cb, vec![], vec![], vec![]);
+			let block = core::Block::hydrate_from(cb, vec![]);
 
 			// push the freshly hydrated block through the chain pipeline
 			self.process_block(block)
 		} else {
-			// TODO - do we need to validate the header here to be sure it is not total garbage?
+			// TODO - do we need to validate the header here?
+
+			let kernel_count = cb.kern_ids.len();
+
+			let txs = {
+				let tx_pool = self.tx_pool.read().unwrap();
+				tx_pool.retrieve_transactions(&cb)
+			};
 
 			debug!(
 				LOGGER,
-				"*** cannot hydrate non-empty compact block (not yet implemented), \
-				falling back to requesting full block",
+				"adapter: txs from tx pool - {}",
+				txs.len(),
 			);
-			self.request_block(&cb.header, &addr);
-			true
+
+			// TODO - 3 scenarios here -
+			// 1) we hydrate a valid block (good to go)
+			// 2) we hydrate an invalid block (txs legit missing from our pool)
+			// 3) we hydrate an invalid block (peer sent us a "bad" compact block) - [TBD]
+
+			let block = core::Block::hydrate_from(cb.clone(), txs);
+
+			if let Ok(()) = block.validate() {
+				debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
+				self.process_block(block)
+			} else {
+				debug!(LOGGER, "adapter: block invalid after hydration, requesting full block");
+				self.request_block(&cb.header, &addr);
+				true
+			}
 		}
 	}
 
@@ -424,15 +445,15 @@ pub struct ChainToPoolAndNetAdapter {
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
 	fn block_accepted(&self, b: &core::Block, opts: Options) {
-		{
-			if let Err(e) = self.tx_pool.write().unwrap().reconcile_block(b) {
-				error!(
-					LOGGER,
-					"Pool could not update itself at block {}: {:?}",
-					b.hash(),
-					e
-				);
-			}
+		debug!(LOGGER, "adapter: block_accepted: {:?}", b.hash());
+
+		if let Err(e) = self.tx_pool.write().unwrap().reconcile_block(b) {
+			error!(
+				LOGGER,
+				"Pool could not update itself at block {}: {:?}",
+				b.hash(),
+				e,
+			);
 		}
 
 		// If we mined the block then we want to broadcast the block itself.
@@ -553,4 +574,3 @@ impl pool::BlockChain for PoolToChainAdapter {
 			.map_err(|_| pool::PoolError::GenericPoolError)
 	}
 }
-

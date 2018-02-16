@@ -235,13 +235,15 @@ pub struct CompactBlock {
 /// Implementation of Writeable for a compact block, defines how to write the block to a
 /// binary writer. Differentiates between writing the block for the purpose of
 /// full serialization and the one of just extracting a hash.
+/// Note: compact block hash uses both the header *and* the nonce.
 impl Writeable for CompactBlock {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		try!(self.header.write(writer));
+		try!(writer.write_u64(self.nonce));
+
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			ser_multiwrite!(
 				writer,
-				[write_u64, self.nonce],
 				[write_u64, self.out_full.len() as u64],
 				[write_u64, self.kern_full.len() as u64],
 				[write_u64, self.kern_ids.len() as u64]
@@ -402,44 +404,43 @@ impl Block {
 	}
 
 	/// Hydrate a block from a compact block.
-	///
-	/// TODO - only supporting empty compact blocks for now (coinbase output/kernel only)
-	/// eventually we want to support any compact blocks
-	/// we need to differentiate between a block with missing entries (not in tx pool)
-	/// and a truly invalid block (which will get the peer banned)
-	/// so we need to consider how to do this safely/robustly
-	/// presumably at this point we are confident we can generate a full block with no
-	/// missing pieces, but we cannot fully validate it until we push it through the pipeline
-	/// at which point the peer runs the risk of getting banned
-	pub fn hydrate_from(
-		cb: CompactBlock,
-		_inputs: Vec<Input>,
-		_outputs: Vec<Output>,
-		_kernels: Vec<TxKernel>,
-	) -> Block {
+	/// Note: caller must validate the block themselves, we do not validate it here.
+	pub fn hydrate_from(cb: CompactBlock, txs: Vec<Transaction>) -> Block {
 		debug!(
 			LOGGER,
-			"block: hydrate_from: {}, {} cb outputs, {} cb kernels, {} tx kern_ids",
+			"block: hydrate_from: {}, {} txs",
 			cb.hash(),
-			cb.out_full.len(),
-			cb.kern_full.len(),
-			cb.kern_ids.len(),
+			txs.len(),
 		);
 
-		// we only support "empty" compact block for now
-		assert!(cb.kern_ids.is_empty());
+		let mut all_inputs = HashSet::new();
+		let mut all_outputs = HashSet::new();
+		let mut all_kernels = HashSet::new();
 
-		let mut all_inputs = vec![];
-		let mut all_outputs = vec![];
-		let mut all_kernels = vec![];
+		// collect all the inputs, outputs and kernels from the txs
+		for tx in txs {
+			all_inputs.extend(tx.inputs);
+			all_outputs.extend(tx.outputs);
+			all_kernels.extend(tx.kernels);
+		}
 
+		// include the coinbase output(s) and kernel(s) from the compact_block
 		all_outputs.extend(cb.out_full);
 		all_kernels.extend(cb.kern_full);
 
+		// convert the sets to vecs
+		let mut all_inputs = all_inputs.iter().cloned().collect::<Vec<_>>();
+		let mut all_outputs = all_outputs.iter().cloned().collect::<Vec<_>>();
+		let mut all_kernels = all_kernels.iter().cloned().collect::<Vec<_>>();
+
+		// sort them all lexicographically
 		all_inputs.sort();
 		all_outputs.sort();
 		all_kernels.sort();
 
+		// finally return the full block
+		// Note: we have not actually validated the block here
+		// leave it to the caller to actually validate the block
 		Block {
 			header: cb.header,
 			inputs: all_inputs,
@@ -640,10 +641,6 @@ impl Block {
 	/// Validates all the elements in a block that can be checked without
 	/// additional data. Includes commitment sums and kernels, Merkle
 	/// trees, reward, etc.
-	///
-	/// TODO - performs various verification steps - discuss renaming this to "verify"
-	/// as all the steps within are verify steps.
-	///
 	pub fn validate(&self) -> Result<(), Error> {
 		self.verify_weight()?;
 		self.verify_sorted()?;
@@ -1151,13 +1148,31 @@ mod test {
 	}
 
 	#[test]
+	fn compact_block_hash_with_nonce() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let tx = tx1i2o();
+		let b = new_block(vec![&tx], &keychain);
+		let cb1 = b.as_compact_block();
+		let cb2 = b.as_compact_block();
+
+		// random nonce included in hash each time we generate a compact_block
+		// so the hash will always be unique (we use this to generate unique short_ids)
+		assert!(cb1.hash() != cb2.hash());
+
+		assert!(cb1.kern_ids[0] != cb2.kern_ids[0]);
+
+		// check we can identify the specified kernel from the short_id
+		// in either of the compact_blocks
+		assert_eq!(cb1.kern_ids[0], tx.kernels[0].short_id(&cb1.hash()));
+		assert_eq!(cb2.kern_ids[0], tx.kernels[0].short_id(&cb2.hash()));
+	}
+
+	#[test]
 	fn convert_block_to_compact_block() {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let tx1 = tx1i2o();
 		let b = new_block(vec![&tx1], &keychain);
 		let cb = b.as_compact_block();
-
-		let hash = (b.header, cb.nonce).hash();
 
 		assert_eq!(cb.out_full.len(), 1);
 		assert_eq!(cb.kern_full.len(), 1);
@@ -1169,7 +1184,7 @@ mod test {
 				.iter()
 				.find(|x| !x.features.contains(KernelFeatures::COINBASE_KERNEL))
 				.unwrap()
-				.short_id(&hash)
+				.short_id(&cb.hash())
 		);
 	}
 
@@ -1178,7 +1193,7 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let b = new_block(vec![], &keychain);
 		let cb = b.as_compact_block();
-		let hb = Block::hydrate_from(cb, vec![], vec![], vec![]);
+		let hb = Block::hydrate_from(cb, vec![]);
 		assert_eq!(hb.header, b.header);
 		assert_eq!(hb.outputs, b.outputs);
 		assert_eq!(hb.kernels, b.kernels);
