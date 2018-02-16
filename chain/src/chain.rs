@@ -482,7 +482,7 @@ impl Chain {
 		let header_head = self.get_header_head().unwrap();
 		if header_head.height - head.height < global::cut_through_horizon() as u64 {
 			return Err(Error::InvalidSumtree("not needed".to_owned()));
-		}	
+		}
 
 		let header = self.store.get_block_header(&h)?;
 		sumtree::zip_write(self.db_root.clone(), sumtree_data)?;
