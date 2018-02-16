@@ -1059,9 +1059,13 @@ mod test {
 		let b = new_block(vec![], &keychain);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
+		let target_len = match Keychain::is_using_bullet_proofs() {
+			true => 1_256,
+			false => 5_708,
+		};
 		assert_eq!(
 			vec.len(),
-			5_708,
+			target_len,
 		);
 	}
 
@@ -1072,9 +1076,13 @@ mod test {
 		let b = new_block(vec![&tx1], &keychain);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
+		let target_len = match Keychain::is_using_bullet_proofs() {
+			true => 2_900,
+			false => 16_256,
+		};
 		assert_eq!(
 			vec.len(),
-			16_256,
+			target_len,
 		);
 	}
 
@@ -1084,9 +1092,13 @@ mod test {
 		let b = new_block(vec![], &keychain);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
+		let target_len = match Keychain::is_using_bullet_proofs() {
+			true => 1_264,
+			false => 5_716,
+		};
 		assert_eq!(
 			vec.len(),
-			5_716,
+			target_len,
 		);
 	}
 
@@ -1097,9 +1109,13 @@ mod test {
 		let b = new_block(vec![&tx1], &keychain);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
+		let target_len = match Keychain::is_using_bullet_proofs() {
+			true => 1_270,
+			false => 5_722,
+		};
 		assert_eq!(
 			vec.len(),
-			5_722,
+			target_len,
 		);
 	}
 
@@ -1119,9 +1135,13 @@ mod test {
 		);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
+		let target_len = match Keychain::is_using_bullet_proofs() {
+			true => 17696,
+			false => 111188,
+		};
 		assert_eq!(
 			vec.len(),
-			111_188,
+			target_len,
 		);
 	}
 
@@ -1141,9 +1161,13 @@ mod test {
 		);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
+		let target_len = match Keychain::is_using_bullet_proofs() {
+			true => 1_324,
+			false => 5_776,
+		};
 		assert_eq!(
 			vec.len(),
-			5_776,
+			target_len,
 		);
 	}
 

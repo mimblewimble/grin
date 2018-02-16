@@ -3,6 +3,12 @@ name = "grin_keychain"
 version = "0.1.0"
 authors = ["Antioch Peverell"]
 
+[features]
+#remove this feature to use older-style rangeproofs
+#(this flag will disappear in future releases)
+default = ["use-bullet-proofs"]
+use-bullet-proofs = []
+
 [dependencies]
 byteorder = "^1.0"
 blake2-rfc = "~0.2.17"
