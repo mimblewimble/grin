@@ -24,7 +24,6 @@ use core::core::{Block, BlockHeader};
 use core::consensus::TargetError;
 use core::core::target::Difficulty;
 use grin_store::{self, option_to_not_found, to_key, Error, u64_to_key};
-use util::LOGGER;
 
 const STORE_SUBPATH: &'static str = "chain";
 
@@ -123,7 +122,7 @@ impl ChainStore for ChainKVStore {
 			)?;
 		batch.write()
 	}
-	
+
 	/// Delete a full block. Does not delete any record associated with a block
 	/// header.
 	fn delete_block(&self, bh: &Hash) -> Result<(), Error> {

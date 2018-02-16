@@ -15,7 +15,7 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock, atomic};
+use std::sync::{Arc, RwLock};
 
 use rand::{thread_rng, Rng};
 
@@ -33,19 +33,17 @@ pub struct Peers {
 	pub adapter: Arc<ChainAdapter>,
 	store: PeerStore,
 	peers: RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>,
-	config: P2PConfig,
 }
 
 unsafe impl Send for Peers {}
 unsafe impl Sync for Peers {}
 
 impl Peers {
-	pub fn new(store: PeerStore, adapter: Arc<ChainAdapter>, config: P2PConfig) -> Peers {
+	pub fn new(store: PeerStore, adapter: Arc<ChainAdapter>, _config: P2PConfig) -> Peers {
 		Peers {
 			adapter,
 			store,
 			peers: RwLock::new(HashMap::new()),
-			config,
 		}
 	}
 

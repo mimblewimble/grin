@@ -27,12 +27,11 @@ use serde;
 use serde::ser::SerializeStruct;
 use serde::de::MapAccess;
 use std::fmt;
-use serde_json;
 
 macro_rules! no_dup {
 	($field: ident) => {
 		if $field.is_some() {
-        	return Err(serde::de::Error::duplicate_field("$field"));
+			return Err(serde::de::Error::duplicate_field("$field"));
 		}
 	};
 }

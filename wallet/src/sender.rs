@@ -81,7 +81,7 @@ pub fn issue_send_tx(
 	// Create a new aggsig context
 	let tx_id = Uuid::new_v4();
 	let skey = blind_offset.secret_key(&keychain.secp())?;
-	keychain.aggsig_create_context(&tx_id, skey);
+	keychain.aggsig_create_context(&tx_id, skey)?;
 
 	let partial_tx = build_partial_tx(&tx_id, keychain, amount_with_fee, kernel_offset, None, tx);
 

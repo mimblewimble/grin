@@ -115,7 +115,7 @@ fn handle_sender_initiation(
 	// Create a new aggsig context
 	// this will create a new blinding sum and nonce, and store them
 	let blind = blind_sum.secret_key(&keychain.secp())?;
-	keychain.aggsig_create_context(&partial_tx.id, blind);
+	keychain.aggsig_create_context(&partial_tx.id, blind)?;
 	keychain.aggsig_add_output(&partial_tx.id, &key_id);
 
 	let sig_part = keychain.aggsig_calculate_partial_sig(
