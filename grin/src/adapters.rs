@@ -110,8 +110,6 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		} else {
 			// TODO - do we need to validate the header here?
 
-			let kernel_count = cb.kern_ids.len();
-
 			let txs = {
 				let tx_pool = self.tx_pool.read().unwrap();
 				tx_pool.retrieve_transactions(&cb)
@@ -301,9 +299,14 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	fn sumtrees_write(&self, h: Hash,
-										rewind_to_output: u64, rewind_to_kernel: u64,
-										sumtree_data: File, peer_addr: SocketAddr) -> bool {
+	fn sumtrees_write(
+		&self,
+		h: Hash,
+		rewind_to_output: u64,
+		rewind_to_kernel: u64,
+		sumtree_data: File,
+		_peer_addr: SocketAddr,
+	) -> bool {
 		// TODO check whether we should accept any sumtree now
 		if let Err(e) = w(&self.chain).
 			sumtrees_write(h, rewind_to_output, rewind_to_kernel, sumtree_data) {

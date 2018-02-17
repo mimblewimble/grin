@@ -395,6 +395,7 @@ impl Chain {
 		sumtrees.is_unspent(output_ref)
 	}
 
+	/// Validate the current chain state.
 	pub fn validate(&self) -> Result<(), Error> {
 		let header = self.store.head_header()?;
 		let mut sumtrees = self.sumtrees.write().unwrap();
@@ -506,7 +507,7 @@ impl Chain {
 		{
 			let mut head = self.head.lock().unwrap();
 			*head = Tip::from_block(&header);
-			self.store.save_body_head(&head);
+			self.store.save_body_head(&head)?;
 			self.store.save_header_height(&header)?;
 		}
 

@@ -19,10 +19,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use time;
 
 use chain;
-use core::core::hash::{Hash, Hashed, ZERO_HASH};
+use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::global;
-use p2p::{self, Peer, Peers, ChainAdapter};
+use p2p::{self, Peer, Peers};
 use types::Error;
 use util::LOGGER;
 
@@ -35,7 +35,6 @@ pub fn run_sync(
 	fast_sync: bool,
 	stop: Arc<AtomicBool>,
 ) {
-
 	let chain = chain.clone();
 	let _ = thread::Builder::new()
 		.name("sync".to_string())
@@ -107,12 +106,12 @@ pub fn run_sync(
 								for _ in 0..horizon-2 {
 									sumtree_head = chain.get_block_header(&sumtree_head.previous).unwrap();
 								}
-								p.send_sumtrees_request(sumtree_head.height, sumtree_head.hash());
+								p.send_sumtrees_request(sumtree_head.height, sumtree_head.hash()).unwrap();
 								prev_state_sync = current_time;
 							}
 						}
 					}
-				}	
+				}
 				thread::sleep(Duration::from_secs(1));
 
 				if stop.load(Ordering::Relaxed) {

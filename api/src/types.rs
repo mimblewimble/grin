@@ -27,12 +27,11 @@ use serde;
 use serde::ser::SerializeStruct;
 use serde::de::MapAccess;
 use std::fmt;
-use serde_json;
 
 macro_rules! no_dup {
 	($field: ident) => {
 		if $field.is_some() {
-        	return Err(serde::de::Error::duplicate_field("$field"));
+			return Err(serde::de::Error::duplicate_field("$field"));
 		}
 	};
 }
@@ -580,25 +579,31 @@ pub struct PoolInfo {
 	pub total_size: usize,
 }
 
-#[test]
-fn serialize_output() {
-	let hex_output = "{\
-        \"output_type\":\"Coinbase\",\
-        \"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\",\
-        \"switch_commit_hash\":\"85daaf11011dc11e52af84ebe78e2f2d19cbdc76000000000000000000000000\",\
-        \"spent\":false,\
-        \"proof\":null,\
-        \"proof_hash\":\"ed6ba96009b86173bade6a9227ed60422916593fa32dd6d78b25b7a4eeef4946\"\
-      }";
-	let deserialized: OutputPrintable = serde_json::from_str(&hex_output).unwrap();
-	let serialized = serde_json::to_string(&deserialized).unwrap();
-	assert_eq!(serialized, hex_output);
-}
+#[cfg(test)]
+mod test {
+	use super::*;
+	use serde_json;
 
-#[test]
-fn serialize_utxo() {
-	let hex_commit = "{\"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\"}";
-	let deserialized: Utxo = serde_json::from_str(&hex_commit).unwrap();
-	let serialized = serde_json::to_string(&deserialized).unwrap();
-	assert_eq!(serialized, hex_commit);
+	#[test]
+	fn serialize_output() {
+		let hex_output = "{\
+			\"output_type\":\"Coinbase\",\
+			\"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\",\
+			\"switch_commit_hash\":\"85daaf11011dc11e52af84ebe78e2f2d19cbdc76000000000000000000000000\",\
+			\"spent\":false,\
+			\"proof\":null,\
+			\"proof_hash\":\"ed6ba96009b86173bade6a9227ed60422916593fa32dd6d78b25b7a4eeef4946\"\
+		}";
+		let deserialized: OutputPrintable = serde_json::from_str(&hex_output).unwrap();
+		let serialized = serde_json::to_string(&deserialized).unwrap();
+		assert_eq!(serialized, hex_output);
+	}
+
+	#[test]
+	fn serialize_utxo() {
+		let hex_commit = "{\"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\"}";
+		let deserialized: Utxo = serde_json::from_str(&hex_commit).unwrap();
+		let serialized = serde_json::to_string(&deserialized).unwrap();
+		assert_eq!(serialized, hex_commit);
+	}
 }

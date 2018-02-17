@@ -22,14 +22,14 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use util::{secp, static_secp_instance};
+use util::static_secp_instance;
 use util::secp::pedersen::{RangeProof, Commitment};
 
 use core::consensus::reward;
 use core::core::{Block, BlockHeader, SumCommit, Input, Output, OutputIdentifier, OutputFeatures, TxKernel};
 use core::core::pmmr::{self, HashSum, NoSum, Summable, PMMR};
 use core::core::hash::Hashed;
-use core::ser::{self, Readable};
+use core::ser;
 use grin_store;
 use grin_store::sumtree::{PMMRBackend, AppendOnlyFile};
 use types::ChainStore;
@@ -465,7 +465,7 @@ impl<'a> Extension<'a> {
 		// rewind each MMR
 		let (out_pos_rew, kern_pos_rew) = indexes_at(block, self.commit_index.deref())?;
 		self.rewind_pos(block.header.height, out_pos_rew, kern_pos_rew)?;
-		
+
 		// rewind the kernel file store, the position is the number of kernels
 		// multiplied by their size
 		// the number of kernels is the number of leaves in the MMR, which is the
