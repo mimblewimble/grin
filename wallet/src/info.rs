@@ -82,7 +82,7 @@ pub fn retrieve_info(config: &WalletConfig, keychain: &Keychain) -> WalletInfo {
 		if let Err(_) = result {
 			data_confirmed = false;
 		}
-		WalletInfo {
+		Ok(WalletInfo {
 			current_height : current_height,
 			total: unspent_total+unconfirmed_total,
 			amount_awaiting_confirmation: unconfirmed_total,
@@ -91,7 +91,7 @@ pub fn retrieve_info(config: &WalletConfig, keychain: &Keychain) -> WalletInfo {
 			amount_locked: locked_total,
 			data_confirmed: data_confirmed,
 			data_confirmed_from: String::from(from),
-		}
+		})
 	});
 	ret_val.unwrap()
 }

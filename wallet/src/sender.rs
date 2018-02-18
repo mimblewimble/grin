@@ -209,14 +209,14 @@ fn build_send_tx(
 
 	// Get the maximum number of outputs in the wallet
 	let max_outputs =  WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		wallet_data.select_coins(
+		Ok(wallet_data.select_coins(
 		key_id.clone(),
 		amount,
 		current_height,
 		minimum_confirmations,
 		max_outputs,
 		true,
-		)
+		))
 	})?.len();
 
 	// sender is responsible for setting the fee on the partial tx
@@ -236,14 +236,14 @@ fn build_send_tx(
 
 		// select some spendable coins from the wallet
 		coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-			wallet_data.select_coins(
+			Ok(wallet_data.select_coins(
 				key_id.clone(),
 				amount_with_fee,
 				current_height,
 				minimum_confirmations,
 				max_outputs,
 				selection_strategy_is_use_all,
-			)
+			))
 		})?;
 		fee = tx_fee(coins.len(), 2, None);
 		total = coins.iter().map(|c| c.value).sum();

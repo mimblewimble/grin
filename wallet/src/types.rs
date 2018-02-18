@@ -65,12 +65,6 @@ pub fn tx_fee(input_len: usize, output_len: usize, base_fee: Option<u64>) -> u64
 	(tx_weight as u64) * use_base_fee
 }
 
-
-
-#[derive(Debug, Fail)]
-#[fail(display = "{}", _0)]
-pub struct ErrorMessage(String);
-
 #[derive(Debug)]
 pub struct Error {
     inner: Context<ErrorKind>,
