@@ -24,7 +24,7 @@ use util::secp::pedersen::RangeProof;
 
 use core::core::{Input, OutputIdentifier, SumCommit};
 use core::core::hash::Hashed;
-use core::core::pmmr::{HashSum, NoSum};
+use core::core::pmmr::{HashSum, NoSum, MerkleProof};
 use core::global;
 
 use core::core::{Block, BlockHeader, TxKernel};
@@ -390,7 +390,7 @@ impl Chain {
 	/// Return an error if the output does not exist or has been spent.
 	/// This querying is done in a way that is consistent with the current chain state,
 	/// specifically the current winning (valid, most work) fork.
-	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), Error> {
+	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<Hash, Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.is_unspent(output_ref)
 	}
@@ -432,6 +432,19 @@ impl Chain {
 		b.header.range_proof_root = roots.1.hash;
 		b.header.kernel_root = roots.2.hash;
 		Ok(())
+	}
+
+	pub fn get_merkle_proof(
+		&self,
+		output: &OutputIdentifier,
+		block: &Block,
+	) -> Result<MerkleProof, Error> {
+		debug!(LOGGER, "******** chain: get_merkle_proof");
+		let mut sumtrees = self.sumtrees.write().unwrap();
+		sumtree::extending(&mut sumtrees, |extension| {
+			extension.force_rollback();
+			extension.merkle_proof(output, block)
+		})
 	}
 
 	/// Returns current sumtree roots

@@ -209,8 +209,10 @@ where
 	fn remove(&mut self, positions: Vec<u64>, index: u32) -> Result<(), String>;
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct MerkleProof {
+	pub root: Hash,
+	pub node: Hash,
 	peaks: Vec<Hash>,
 	path: Vec<Hash>,
 	left_right: Vec<bool>,
@@ -220,6 +222,8 @@ impl Writeable for MerkleProof {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(
 			writer,
+			[write_fixed_bytes, &self.root],
+			[write_fixed_bytes, &self.node],
 			[write_u64, self.peaks.len() as u64],
 
 			// note: path length used for both path and left_right vecs
@@ -244,6 +248,8 @@ impl Writeable for MerkleProof {
 
 impl Readable for MerkleProof {
 	fn read(reader: &mut Reader) -> Result<MerkleProof, ser::Error> {
+		let root = Hash::read(reader)?;
+		let node = Hash::read(reader)?;
 
 		let (peaks_len, path_len) =
 			ser_multiread!(reader, read_u64, read_u64);
@@ -261,6 +267,8 @@ impl Readable for MerkleProof {
 		let left_right = left_right_bytes.iter().map(|&x| x == 1).collect();
 		Ok(
 			MerkleProof {
+				root,
+				node,
 				peaks,
 				path,
 				left_right,
@@ -270,15 +278,25 @@ impl Readable for MerkleProof {
 }
 
 impl MerkleProof {
-	pub fn verify(&self, root: Hash, node: Hash) -> bool {
-		println!("verifying - {:?}, {:?}, {:?}", self, root, node);
+	pub fn empty() -> MerkleProof {
+		MerkleProof {
+			root: Hash::zero(),
+			node: Hash::zero(),
+			peaks: vec![],
+			path: vec![],
+			left_right: vec![],
+		}
+	}
+
+	pub fn verify(&self) -> bool {
+		println!("verifying - {:?}", self);
 
 		// if we have no further elements in the path
 		// then this proof verifies successfully if our node is
 		// one of the peaks
 		// and the peaks themselves hash to give the root
 		if self.path.len() == 0 {
-			if !self.peaks.contains(&node) {
+			if !self.peaks.contains(&self.node) {
 				return false;
 			}
 
@@ -290,7 +308,7 @@ impl MerkleProof {
 					(Some(lhs), Some(rhs)) => Some((lhs, rhs).hash()),
 				}
 			}
-			return bagged == Some(root);
+			return bagged == Some(self.root);
 		}
 
 		let mut path = self.path.clone();
@@ -299,18 +317,20 @@ impl MerkleProof {
 
 		// hash our node and sibling together (noting left/right position of the sibling)
 		let parent = if left_right.remove(0) {
-			(node, sibling)
+			(self.node, sibling)
 		} else {
-			(sibling, node)
+			(sibling, self.node)
 		}.hash();
 
 		let proof = MerkleProof {
+			root: self.root,
+			node: parent,
 			peaks: self.peaks.clone(),
 			path,
 			left_right,
 		};
 
-		proof.verify(root, parent)
+		proof.verify()
 	}
 }
 
@@ -380,6 +400,9 @@ where
 			return Err(format!("not a leaf at pos {}", pos));
 		}
 
+		let root = self.root();
+		let node = self.get(pos).unwrap();
+
 		let family_branch = family_branch(pos, self.last_pos);
 		let left_right = family_branch
 			.iter()
@@ -399,6 +422,8 @@ where
 			.collect::<Vec<_>>();
 
 		let proof = MerkleProof {
+			root: root.hash,
+			node: node.hash,
 			path,
 			peaks,
 			left_right,
@@ -1177,7 +1202,7 @@ mod test {
 		assert_eq!(proof.peaks, [root]);
 		assert!(proof.path.is_empty());
 		assert!(proof.left_right.is_empty());
-		assert!(proof.verify(root, node));
+		assert!(proof.verify());
 
 		// push two more elements into the PMMR
 		pmmr.push(TestElem([0, 0, 0, 2])).unwrap();
@@ -1190,7 +1215,7 @@ mod test {
 		assert_eq!(proof1.peaks.len(), 2);
 		assert_eq!(proof1.path.len(), 1);
 		assert_eq!(proof1.left_right, [true]);
-		assert!(proof1.verify(root, node1));
+		assert!(proof1.verify());
 
 		let proof2 = pmmr.merkle_proof(2).unwrap();
 		let node2 = pmmr.get(2).unwrap().hash;
@@ -1198,7 +1223,7 @@ mod test {
 		assert_eq!(proof2.peaks.len(), 2);
 		assert_eq!(proof2.path.len(), 1);
 		assert_eq!(proof2.left_right, [false]);
-		assert!(proof2.verify(root, node2));
+		assert!(proof2.verify());
 
 		// check that we cannot generate a merkle proof for pos 3 (not a leaf node)
 		assert_eq!(pmmr.merkle_proof(3).err(), Some(format!("not a leaf at pos 3")));
@@ -1209,7 +1234,7 @@ mod test {
 		assert_eq!(proof4.peaks.len(), 2);
 		assert!(proof4.path.is_empty());
 		assert!(proof4.left_right.is_empty());
-		assert!(proof4.verify(root, node4));
+		assert!(proof4.verify());
 
 		// now add a few more elements to the PMMR to build a larger merkle proof
 		for x in 4..1000 {
@@ -1221,7 +1246,7 @@ mod test {
 		assert_eq!(proof.peaks.len(), 8);
 		assert_eq!(proof.path.len(), 9);
 		assert_eq!(proof.left_right.len(), 9);
-		assert!(proof.verify(root, node));
+		assert!(proof.verify());
 	}
 
 	#[test]
@@ -1234,7 +1259,7 @@ mod test {
 		let proof = pmmr.merkle_proof(9).unwrap();
 		let node = pmmr.get(9).unwrap().hash;
 		let root = pmmr.root().hash;
-		assert!(proof.verify(root, node));
+		assert!(proof.verify());
 		println!("{:?}", proof);
 
 		let mut vec = Vec::new();

@@ -16,11 +16,13 @@ use std::sync::Arc;
 
 use core::{core, ser};
 use core::core::hash::Hashed;
+use core::core::pmmr::MerkleProof;
 use core::core::SumCommit;
 use core::core::SwitchCommitHash;
 use chain;
 use p2p;
 use util;
+use util::LOGGER;
 use util::secp::pedersen;
 use util::secp::constants::MAX_PROOF_SIZE;
 use serde;
@@ -234,12 +236,15 @@ pub struct OutputPrintable {
 	pub proof: Option<pedersen::RangeProof>,
 	/// Rangeproof hash (as hex string)
 	pub proof_hash: String,
+
+	pub merkle_proof: Option<MerkleProof>,
 }
 
 impl OutputPrintable {
 	pub fn from_output(
 		output: &core::Output,
 		chain: Arc<chain::Chain>,
+		block: &core::Block,
 		include_proof: bool,
 	) -> OutputPrintable {
 		let output_type =
@@ -258,6 +263,17 @@ impl OutputPrintable {
 			None
 		};
 
+		let merkle_proof = if output.features.contains(core::transaction::OutputFeatures::COINBASE_OUTPUT) {
+			if spent {
+				None
+			} else {
+				let proof = chain.get_merkle_proof(&out_id, block).unwrap();
+				Some(proof)
+			}
+		} else {
+			None
+		};
+
 		OutputPrintable {
 			output_type,
 			commit: output.commit,
@@ -265,6 +281,7 @@ impl OutputPrintable {
 			spent,
 			proof,
 			proof_hash: util::to_hex(output.proof.hash().to_vec()),
+			merkle_proof,
 		}
 	}
 
@@ -285,13 +302,14 @@ impl OutputPrintable {
 impl serde::ser::Serialize for OutputPrintable {
 	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where
 		S: serde::ser::Serializer {
-		let mut state = serializer.serialize_struct("OutputPrintable", 6)?;
+		let mut state = serializer.serialize_struct("OutputPrintable", 7)?;
 		state.serialize_field("output_type", &self.output_type)?;
 		state.serialize_field("commit", &util::to_hex(self.commit.0.to_vec()))?;
 		state.serialize_field("switch_commit_hash", &self.switch_commit_hash.to_hex())?;
 		state.serialize_field("spent", &self.spent)?;
 		state.serialize_field("proof", &self.proof)?;
 		state.serialize_field("proof_hash", &self.proof_hash)?;
+		state.serialize_field("merkle_proof", &self.merkle_proof)?;
 		state.end()
 	}
 }
@@ -307,7 +325,8 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 			SwitchCommitHash,
 			Spent,
 			Proof,
-			ProofHash
+			ProofHash,
+			MerkleProof
 		}
 
 		struct OutputPrintableVisitor;
@@ -327,6 +346,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 				let mut spent = None;
 				let mut proof = None;
 				let mut proof_hash = None;
+				let mut merkle_proof = None;
 
 				while let Some(key) = map.next_key()? {
 					match key {
@@ -373,6 +393,12 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 						Field::ProofHash => {
 							no_dup!(proof_hash);
 							proof_hash = Some(map.next_value()?)
+						},
+						Field::MerkleProof => {
+							no_dup!(merkle_proof);
+							if let Some(proof) = map.next_value()? {
+								merkle_proof = Some(proof)
+							}
 						}
 					}
 				}
@@ -383,7 +409,8 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 					switch_commit_hash: switch_commit_hash.unwrap(),
 					spent: spent.unwrap(),
 					proof: proof,
-					proof_hash: proof_hash.unwrap()
+					proof_hash: proof_hash.unwrap(),
+					merkle_proof: merkle_proof,
 				})
 			}
 		}
@@ -506,7 +533,7 @@ impl BlockPrintable {
 		let outputs = block
 			.outputs
 			.iter()
-			.map(|output| OutputPrintable::from_output(output, chain.clone(), include_proof))
+			.map(|output| OutputPrintable::from_output(output, chain.clone(), &block, include_proof))
 			.collect();
 		let kernels = block
 			.kernels
@@ -540,10 +567,11 @@ impl CompactBlockPrintable {
 		cb: &core::CompactBlock,
 		chain: Arc<chain::Chain>,
 	) -> CompactBlockPrintable {
+		let block = chain.get_block(&cb.hash()).unwrap();
 		let out_full = cb
 			.out_full
 			.iter()
-			.map(|x| OutputPrintable::from_output(x, chain.clone(), false))
+			.map(|x| OutputPrintable::from_output(x, chain.clone(), &block, false))
 			.collect();
 		let kern_full = cb
 			.kern_full

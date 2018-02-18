@@ -155,7 +155,7 @@ pub trait BlockChain {
 	/// orphans, etc.
 	/// We do not maintain outputs themselves. The only information we have is the
 	/// hash from the output MMR.
-	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), PoolError>;
+	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<hash::Hash, PoolError>;
 
 	/// Check if an output being spent by the input has sufficiently matured.
 	/// This is only applicable for coinbase outputs (1,000 blocks).

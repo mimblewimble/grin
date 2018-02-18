@@ -36,6 +36,7 @@ use api;
 use core::consensus;
 use core::core::{transaction, Transaction};
 use core::core::hash::Hash;
+use core::core::pmmr::MerkleProof;
 use core::ser;
 use keychain;
 use keychain::BlindingFactor;
@@ -308,7 +309,8 @@ pub struct OutputData {
 	/// Is this a coinbase output? Is it subject to coinbase locktime?
 	pub is_coinbase: bool,
 	/// Hash of the block this output originated from.
-	pub block: BlockIdentifier,
+	pub block: Option<BlockIdentifier>,
+	pub merkle_proof: Option<MerkleProof>,
 }
 
 impl OutputData {

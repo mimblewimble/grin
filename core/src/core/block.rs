@@ -35,6 +35,7 @@ use consensus;
 use consensus::{exceeds_weight, reward, REWARD, VerifySortOrder};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::id::ShortIdentifiable;
+use core::pmmr::MerkleProof;
 use core::target::Difficulty;
 use core::transaction;
 use ser::{self, Readable, Reader, Writeable, Writer, WriteableSorted, read_and_verify_sorted};
@@ -75,6 +76,7 @@ pub enum Error {
 		/// The lock_height needed to be reached for the coinbase output to mature
 		lock_height: u64,
 	},
+	MerkleProof,
 	/// Other unspecified error condition
 	Other(String)
 }
@@ -616,13 +618,13 @@ impl Block {
 		let new_inputs = self.inputs
 			.iter()
 			.filter(|inp| !to_cut_through.contains(&inp.commitment()))
-			.map(|&inp| inp)
+			.cloned()
 			.collect::<Vec<_>>();
 
 		let new_outputs = self.outputs
 			.iter()
 			.filter(|out| !to_cut_through.contains(&out.commitment()))
-			.map(|&out| out)
+			.cloned()
 			.collect::<Vec<_>>();
 
 		Block {
@@ -645,6 +647,7 @@ impl Block {
 		self.verify_weight()?;
 		self.verify_sorted()?;
 		self.verify_coinbase()?;
+		self.verify_inputs()?;
 		self.verify_kernels()?;
 		Ok(())
 	}
@@ -660,6 +663,30 @@ impl Block {
 		self.inputs.verify_sort_order()?;
 		self.outputs.verify_sort_order()?;
 		self.kernels.verify_sort_order()?;
+		Ok(())
+	}
+
+	// TODO - how do we verify Merkle Proof here?
+	// We can verify it is internally consistent - but we cannot check block height at this point.
+	// Or that the proof actually refers to the commitment?
+	// We need the mmr hash of the sumcommit and for that we need the pos
+	// Both of which we need to assume are correct here (we will check later on that they match the MMR)
+	fn verify_inputs(&self) -> Result<(), Error> {
+		let locked_inputs = self.inputs
+			.iter()
+			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT));
+
+		// We can verify the Merkle Proofs here but we must check the following later.
+		// We cannot check these here as we need data from the index and the PMMR.
+		// * that the node is in the correct pos in the PMMR
+		// * that the block is correct one (based on the root in the block_header from the index)
+		for input in locked_inputs {
+			let merkle_proof = input.merkle_proof();
+			if !merkle_proof.verify() {
+				return Err(Error::MerkleProof);
+			}
+		}
+
 		Ok(())
 	}
 
@@ -756,41 +783,41 @@ impl Block {
 		Ok(())
 	}
 
-	/// NOTE: this happens during apply_block (not the earlier validate_block)
-	///
-	/// Calculate lock_height as block_height + 1,000
-	/// Confirm height <= lock_height
-	pub fn verify_coinbase_maturity(
-		&self,
-		input: &Input,
-		height: u64,
-	) -> Result<(), Error> {
-		let output = OutputIdentifier::from_input(&input);
-
-		// We should only be calling verify_coinbase_maturity
-		// if the sender claims we are spending a coinbase output
-		// _and_ that we trust this claim.
-		// We should have already confirmed the entry from the MMR exists
-		// and has the expected hash.
-		assert!(output.features.contains(OutputFeatures::COINBASE_OUTPUT));
-
-		if let Some(_) = self.outputs
-			.iter()
-			.find(|x| OutputIdentifier::from_output(&x) == output)
-		{
-			let lock_height = self.header.height + global::coinbase_maturity();
-			if lock_height > height {
-				Err(Error::ImmatureCoinbase{
-					height: height,
-					lock_height: lock_height,
-				})
-			} else {
-				Ok(())
-			}
-		} else {
-			Err(Error::Other(format!("output not found in block")))
-		}
-	}
+	// /// NOTE: this happens during apply_block (not the earlier validate_block)
+	// ///
+	// /// Calculate lock_height as block_height + 1,000
+	// /// Confirm height <= lock_height
+	// pub fn verify_coinbase_maturity(
+	// 	&self,
+	// 	input: &Input,
+	// 	height: u64,
+	// ) -> Result<(), Error> {
+	// 	let output = OutputIdentifier::from_input(&input);
+	//
+	// 	// We should only be calling verify_coinbase_maturity
+	// 	// if the sender claims we are spending a coinbase output
+	// 	// _and_ that we trust this claim.
+	// 	// We should have already confirmed the entry from the MMR exists
+	// 	// and has the expected hash.
+	// 	assert!(output.features.contains(OutputFeatures::COINBASE_OUTPUT));
+	//
+	// 	if let Some(_) = self.outputs
+	// 		.iter()
+	// 		.find(|x| OutputIdentifier::from_output(&x) == output)
+	// 	{
+	// 		let lock_height = self.header.height + global::coinbase_maturity();
+	// 		if lock_height > height {
+	// 			Err(Error::ImmatureCoinbase{
+	// 				height: height,
+	// 				lock_height: lock_height,
+	// 			})
+	// 		} else {
+	// 			Ok(())
+	// 		}
+	// 	} else {
+	// 		Err(Error::Other(format!("output not found in block")))
+	// 	}
+	// }
 
 	/// Builds the blinded output and related signature proof for the block reward.
 	pub fn reward_output(
@@ -890,7 +917,7 @@ mod test {
 		key_id2: Identifier,
 	) -> Transaction {
 		build::transaction(
-			vec![input(v, ZERO_HASH, key_id1), output(3, key_id2), with_fee(2)],
+			vec![input(v, key_id1), output(3, key_id2), with_fee(2)],
 			&keychain,
 		).unwrap()
 	}
@@ -913,7 +940,7 @@ mod test {
 		}
 
 		let now = Instant::now();
-		parts.append(&mut vec![input(500000, ZERO_HASH, pks.pop().unwrap()), with_fee(2)]);
+		parts.append(&mut vec![input(500000, pks.pop().unwrap()), with_fee(2)]);
 		let mut tx = build::transaction(parts, &keychain)
 			.unwrap();
 		println!("Build tx: {}", now.elapsed().as_secs());
@@ -950,7 +977,7 @@ mod test {
 
 		let mut btx1 = tx2i1o();
 		let mut btx2 = build::transaction(
-			vec![input(7, ZERO_HASH, key_id1), output(5, key_id2.clone()), with_fee(2)],
+			vec![input(7, key_id1), output(5, key_id2.clone()), with_fee(2)],
 			&keychain,
 		).unwrap();
 
