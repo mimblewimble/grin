@@ -333,11 +333,13 @@ fn inputs_and_change(
 		if coin.is_coinbase {
 			let block = coin.block.clone();
 			let merkle_proof = coin.merkle_proof.clone();
+			let merkle_proof = merkle_proof.unwrap().merkle_proof();
+
 			// TODO - we need a Merkle Proof here to spend a coinbase output
 			parts.push(build::coinbase_input(
 				coin.value,
 				block.unwrap().hash(),
-				merkle_proof.unwrap(),
+				merkle_proof,
 				key_id,
 			));
 		} else {

@@ -41,6 +41,7 @@ use std::ops::{self, Deref};
 
 use core::hash::{Hash, Hashed};
 use ser::{self, Readable, Reader, Writeable, Writer};
+use util;
 use util::LOGGER;
 
 /// Trait for an element of the tree that has a well-defined sum and hash that
@@ -286,6 +287,19 @@ impl MerkleProof {
 			path: vec![],
 			left_right: vec![],
 		}
+	}
+
+	pub fn to_hex(&self) -> String {
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &self).expect("serialization failed");
+		util::to_hex(vec)
+	}
+
+	pub fn from_hex(hex: &str) -> Result<MerkleProof, String> {
+		let bytes = util::from_hex(hex.to_string()).unwrap();
+		let res = ser::deserialize(&mut &bytes[..])
+			.map_err(|_| format!("failed to deserialize a Merkle Proof"))?;
+		Ok(res)
 	}
 
 	pub fn verify(&self) -> bool {

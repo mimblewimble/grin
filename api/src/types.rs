@@ -263,6 +263,7 @@ impl OutputPrintable {
 			None
 		};
 
+		// generate Merkle Proof for all unspent coinbase outputs (to verify maturity on spend)
 		let merkle_proof = if output.features.contains(core::transaction::OutputFeatures::COINBASE_OUTPUT) {
 			if spent {
 				None
@@ -309,7 +310,15 @@ impl serde::ser::Serialize for OutputPrintable {
 		state.serialize_field("spent", &self.spent)?;
 		state.serialize_field("proof", &self.proof)?;
 		state.serialize_field("proof_hash", &self.proof_hash)?;
-		state.serialize_field("merkle_proof", &self.merkle_proof)?;
+
+		// TODO - rework this
+		let hex_merkle_proof: Option<String> = if let Some(ref merkle_proof) = self.merkle_proof {
+			Some(merkle_proof.to_hex())
+		} else {
+			None
+		};
+		state.serialize_field("merkle_proof", &hex_merkle_proof)?;
+
 		state.end()
 	}
 }
@@ -396,8 +405,12 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 						},
 						Field::MerkleProof => {
 							no_dup!(merkle_proof);
-							if let Some(proof) = map.next_value()? {
-								merkle_proof = Some(proof)
+							if let Some(hex) = map.next_value::<Option<String>>()? {
+								if let Ok(res) = MerkleProof::from_hex(&hex) {
+									merkle_proof = Some(res);
+								} else {
+									merkle_proof = Some(MerkleProof::empty());
+								}
 							}
 						}
 					}
