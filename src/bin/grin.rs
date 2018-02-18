@@ -27,6 +27,7 @@ extern crate grin_config as config;
 extern crate grin_core as core;
 extern crate grin_grin as grin;
 extern crate grin_keychain as keychain;
+extern crate grin_p2p as p2p;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
@@ -151,7 +152,9 @@ fn main() {
     .subcommand(SubCommand::with_name("client")
                 .about("Communicates with the Grin server")
                 .subcommand(SubCommand::with_name("status")
-                            .about("current status of the Grin chain"))
+                            .about("Current status of the Grin chain"))
+				.subcommand(SubCommand::with_name("listconnectedpeers")
+							.about("Print a list of currently connected peers"))
 				.subcommand(SubCommand::with_name("ban")
 							.about("Ban peer")
 							.arg(Arg::with_name("peer")
@@ -384,6 +387,9 @@ fn client_command(client_args: &ArgMatches, global_config: GlobalConfig) {
 	match client_args.subcommand() {
 		("status", Some(_)) => {
 			client::show_status(&server_config);
+		}
+		("listconnectedpeers", Some(_)) => {
+			client::list_connected_peers(&server_config);
 		}
 		("ban", Some(peer_args)) => {
 			if let Some(peer) = peer_args.value_of("peer") {

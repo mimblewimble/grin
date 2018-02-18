@@ -17,7 +17,7 @@ use blake2::blake2b::blake2b;
 use util::secp::{self, Message, Signature};
 use util::{static_secp_instance, kernel_sig_msg};
 use util::secp::pedersen::{Commitment, RangeProof};
-use std::cmp::min;
+use std::cmp::{min, max};
 use std::cmp::Ordering;
 use std::{ops, error, fmt};
 
@@ -26,7 +26,8 @@ use consensus::VerifySortOrder;
 use core::Committed;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::Summable;
-use keychain::{Identifier, Keychain};
+use keychain;
+use keychain::{Identifier, Keychain, BlindingFactor};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 use util;
 
@@ -38,11 +39,11 @@ pub const SWITCH_COMMIT_KEY_SIZE: usize = 32;
 
 bitflags! {
 	/// Options for a kernel's structure or use
-	pub flags KernelFeatures: u8 {
+	pub struct KernelFeatures: u8 {
 		/// No flags
-		const DEFAULT_KERNEL = 0b00000000,
+		const DEFAULT_KERNEL = 0b00000000;
 		/// Kernel matching a coinbase output
-		const COINBASE_KERNEL = 0b00000001,
+		const COINBASE_KERNEL = 0b00000001;
 	}
 }
 
@@ -74,8 +75,15 @@ macro_rules! hashable_ord {
 pub enum Error {
 	/// Transaction fee can't be odd, due to half fee burning
 	OddFee,
+	/// Kernel fee can't be odd, due to half fee burning
+	OddKernelFee,
 	/// Underlying Secp256k1 error (signature validation or invalid public key typically)
 	Secp(secp::Error),
+	/// Underlying keychain related error
+	Keychain(keychain::Error),
+	/// The sum of output minus input commitments does not
+	/// match the sum of kernel commitments
+	KernelSumMismatch,
 	/// Restrict number of incoming inputs
 	TooManyInputs,
 	/// Underlying consensus error (currently for sort order)
@@ -84,6 +92,8 @@ pub enum Error {
 	LockHeight(u64),
 	/// Error originating from an invalid switch commitment (coinbase lock_height related)
 	SwitchCommitment,
+	/// Range proof validation error
+	RangeProof,
 }
 
 impl error::Error for Error {
@@ -114,6 +124,13 @@ impl From<consensus::Error> for Error {
 	}
 }
 
+impl From<keychain::Error> for Error {
+	fn from(e: keychain::Error) -> Error {
+		Error::Keychain(e)
+	}
+}
+
+
 /// A proof that a transaction sums to zero. Includes both the transaction's
 /// Pedersen commitment and the signature, that guarantees that the commitments
 /// amount to zero.
@@ -138,6 +155,15 @@ pub struct TxKernel {
 }
 
 hashable_ord!(TxKernel);
+
+/// TODO - no clean way to bridge core::hash::Hash and std::hash::Hash implementations?
+impl ::std::hash::Hash for Output {
+	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &self).expect("serialization failed");
+		::std::hash::Hash::hash(&vec, state);
+	}
+}
 
 impl Writeable for TxKernel {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
@@ -183,46 +209,73 @@ impl TxKernel {
 		}
 		Ok(())
 	}
+
+	/// Build an empty tx kernel with zero values.
+	pub fn empty() -> TxKernel {
+		TxKernel {
+			features: KernelFeatures::DEFAULT_KERNEL,
+			fee: 0,
+			lock_height: 0,
+			excess: Commitment::from_vec(vec![0; 33]),
+			excess_sig: Signature::from_raw_data(&[0; 64]).unwrap(),
+		}
+	}
+
+	/// Builds a new tx kernel with the provided fee.
+	pub fn with_fee(self, fee: u64) -> TxKernel {
+		TxKernel { fee: fee, ..self }
+	}
+
+	/// Builds a new tx kernel with the provided lock_height.
+	pub fn with_lock_height(self, lock_height: u64) -> TxKernel {
+		TxKernel {
+			lock_height: lock_height,
+			..self
+		}
+	}
+
+	/// Size in bytes of a kernel, necessary for binary storage
+	pub fn size() -> usize {
+		17 + // features plus fee and lock_height
+			secp::constants::PEDERSEN_COMMITMENT_SIZE +
+			secp::constants::AGG_SIGNATURE_SIZE
+	}
 }
 
 /// A transaction
 #[derive(Debug, Clone)]
 pub struct Transaction {
-	/// Set of inputs spent by the transaction.
+	/// List of inputs spent by the transaction.
 	pub inputs: Vec<Input>,
-	/// Set of outputs the transaction produces.
+	/// List of outputs the transaction produces.
 	pub outputs: Vec<Output>,
-	/// Fee paid by the transaction.
-	pub fee: u64,
-	/// Transaction is not valid before this chain height.
-	pub lock_height: u64,
-	/// The signature proving the excess is a valid public key, which signs
-	/// the transaction fee.
-	pub excess_sig: Signature,
+	/// List of kernels that make up this transaction (usually a single kernel).
+	pub kernels: Vec<TxKernel>,
+	/// The kernel "offset" k2
+	/// excess is k1G after splitting the key k = k1 + k2
+	pub offset: BlindingFactor,
 }
 
 /// Implementation of Writeable for a fully blinded transaction, defines how to
 /// write the transaction as binary.
 impl Writeable for Transaction {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(
-			writer,
-			[write_u64, self.fee],
-			[write_u64, self.lock_height]
-		);
-		self.excess_sig.write(writer)?;
+		self.offset.write(writer)?;
 		ser_multiwrite!(
 			writer,
 			[write_u64, self.inputs.len() as u64],
-			[write_u64, self.outputs.len() as u64]
+			[write_u64, self.outputs.len() as u64],
+			[write_u64, self.kernels.len() as u64]
 		);
 
 		// Consensus rule that everything is sorted in lexicographical order on the wire.
 		let mut inputs = self.inputs.clone();
 		let mut outputs = self.outputs.clone();
+		let mut kernels = self.kernels.clone();
 
 		try!(inputs.write_sorted(writer));
 		try!(outputs.write_sorted(writer));
+		try!(kernels.write_sorted(writer));
 
 		Ok(())
 	}
@@ -232,23 +285,20 @@ impl Writeable for Transaction {
 /// transaction from a binary stream.
 impl Readable for Transaction {
 	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
-		let (fee, lock_height) =
-			ser_multiread!(reader, read_u64, read_u64);
+		let offset = BlindingFactor::read(reader)?;
 
-		let excess_sig = Signature::read(reader)?;
-
-		let (input_len, output_len) =
-			ser_multiread!(reader, read_u64, read_u64);
+		let (input_len, output_len, kernel_len) =
+			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
 		let inputs = read_and_verify_sorted(reader, input_len)?;
 		let outputs = read_and_verify_sorted(reader, output_len)?;
+		let kernels = read_and_verify_sorted(reader, kernel_len)?;
 
 		Ok(Transaction {
-			fee: fee,
-			lock_height: lock_height,
-			excess_sig: excess_sig,
-			inputs: inputs,
-			outputs: outputs,
+			offset,
+			inputs,
+			outputs,
+			kernels,
 			..Default::default()
 		})
 	}
@@ -262,7 +312,7 @@ impl Committed for Transaction {
 		&self.outputs
 	}
 	fn overage(&self) -> i64 {
-		(self.fee as i64)
+		(self.fee() as i64)
 	}
 }
 
@@ -276,28 +326,34 @@ impl Transaction {
 	/// Creates a new empty transaction (no inputs or outputs, zero fee).
 	pub fn empty() -> Transaction {
 		Transaction {
-			fee: 0,
-			lock_height: 0,
-			excess_sig: Signature::from_raw_data(&[0;64]).unwrap(),
+			offset: BlindingFactor::zero(),
 			inputs: vec![],
 			outputs: vec![],
+			kernels: vec![],
 		}
 	}
 
 	/// Creates a new transaction initialized with
-	/// the provided inputs, outputs, fee and lock_height.
+	/// the provided inputs, outputs, kernels
 	pub fn new(
 		inputs: Vec<Input>,
 		outputs: Vec<Output>,
-		fee: u64,
-		lock_height: u64,
+		kernels: Vec<TxKernel>,
 	) -> Transaction {
 		Transaction {
-			fee: fee,
-			lock_height: lock_height,
-			excess_sig: Signature::from_raw_data(&[0;64]).unwrap(),
+			offset: BlindingFactor::zero(),
 			inputs: inputs,
 			outputs: outputs,
+			kernels: kernels,
+		}
+	}
+
+	/// Creates a new transaction using this transaction as a template
+	/// and with the specified offset.
+	pub fn with_offset(self, offset: BlindingFactor) -> Transaction {
+		Transaction {
+			offset: offset,
+			..self
 		}
 	}
 
@@ -325,74 +381,92 @@ impl Transaction {
 		}
 	}
 
-	/// Builds a new transaction with the provided fee.
-	pub fn with_fee(self, fee: u64) -> Transaction {
-		Transaction { fee: fee, ..self }
+	/// Total fee for a transaction is the sum of fees of all kernels.
+	pub fn fee(&self) -> u64 {
+		self.kernels.iter().fold(0, |acc, ref x| acc + x.fee)
 	}
 
-	/// Builds a new transaction with the provided lock_height.
-	pub fn with_lock_height(self, lock_height: u64) -> Transaction {
-		Transaction {
-			lock_height: lock_height,
-			..self
-		}
+	/// Lock height of a transaction is the max lock height of the kernels.
+	pub fn lock_height(&self) -> u64 {
+		self.kernels.iter().fold(0, |acc, ref x| max(acc, x.lock_height))
 	}
 
-	/// The verification for a MimbleWimble transaction involves getting the
-	/// excess of summing all commitments and using it as a public key
-	/// to verify the embedded signature. The rational is that if the values
-	/// sum to zero as they should in r.G + v.H then only k.G the excess
-	/// of the sum of r.G should be left. And r.G is the definition of a
-	/// public key generated using r as a private key.
-	pub fn verify_sig(&self) -> Result<Commitment, secp::Error> {
-		let rsum = self.sum_commitments()?;
-
-		let msg = Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height))?;
-
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
-		let sig = self.excess_sig;
-		// pretend the sum is a public key (which it is, being of the form r.G) and
-		// verify the transaction sig with it
-		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &rsum);
-		if !valid {
-			return Err(secp::Error::IncorrectSignature);
+	/// To verify transaction kernels we check that -
+	///  * all kernels have an even fee
+	///  * sum of input/output commitments matches sum of kernel commitments after applying offset
+	///  * each kernel sig is valid (i.e. tx commitments sum to zero, given above is true)
+	fn verify_kernels(&self) -> Result<(), Error> {
+		// check that each individual kernel fee is even
+		// TODO - is this strictly necessary given that we check overall tx fee?
+		// TODO - move this into verify_fee() check or maybe kernel.verify()?
+		for k in &self.kernels {
+			if k.fee & 1 != 0 {
+				return Err(Error::OddKernelFee);
+			}
 		}
-		Ok(rsum)
-	}
 
-	/// Builds a transaction kernel
-	pub fn build_kernel(&self, excess: Commitment) -> TxKernel {
-		TxKernel {
-			features: DEFAULT_KERNEL,
-			excess: excess,
-			excess_sig: self.excess_sig.clone(),
-			fee: self.fee,
-			lock_height: self.lock_height,
+		// sum all input and output commitments
+		let io_sum = self.sum_commitments()?;
+
+		// sum all kernels commitments
+		let kernel_sum = {
+			let mut kernel_commits = self.kernels
+				.iter()
+				.map(|x| x.excess)
+				.collect::<Vec<_>>();
+
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+
+			// add the offset in as necessary (unless offset is zero)
+			if self.offset != BlindingFactor::zero() {
+				let skey = self.offset.secret_key(&secp)?;
+				let offset_commit = secp.commit(0, skey)?;
+				kernel_commits.push(offset_commit);
+			}
+
+			secp.commit_sum(kernel_commits, vec![])?
+		};
+
+		// sum of kernel commitments (including the offset) must match
+		// the sum of input/output commitments (minus fee)
+		if kernel_sum != io_sum {
+			return Err(Error::KernelSumMismatch);
 		}
+
+		// verify all signatures with the commitment as pk
+		for kernel in &self.kernels {
+			kernel.verify()?;
+		}
+
+		Ok(())
 	}
 
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(&self) -> Result<Commitment, Error> {
-		if self.fee & 1 != 0 {
+	pub fn validate(&self) -> Result<(), Error> {
+		if self.fee() & 1 != 0 {
 			return Err(Error::OddFee);
 		}
 		if self.inputs.len() > consensus::MAX_BLOCK_INPUTS {
 			return Err(Error::TooManyInputs);
 		}
 		self.verify_sorted()?;
+
 		for out in &self.outputs {
 			out.verify_proof()?;
 		}
-		let excess = self.verify_sig()?;
-		Ok(excess)
+
+		self.verify_kernels()?;
+
+		Ok(())
 	}
 
 	fn verify_sorted(&self) -> Result<(), Error> {
 		self.inputs.verify_sort_order()?;
 		self.outputs.verify_sort_order()?;
+		self.kernels.verify_sort_order()?;
 		Ok(())
 	}
 }
@@ -402,7 +476,7 @@ impl Transaction {
 /// Primarily a reference to an output being spent by the transaction.
 /// But also information required to verify coinbase maturity through
 /// the lock_height hashed in the switch_commit_hash.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash)]
 pub struct Input{
 	/// The features of the output being spent.
 	/// We will check maturity for coinbase output.
@@ -424,7 +498,7 @@ impl Writeable for Input {
 		writer.write_u8(self.features.bits())?;
 		writer.write_fixed_bytes(&self.commit)?;
 
-		if self.features.contains(COINBASE_OUTPUT) {
+		if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
 			writer.write_fixed_bytes(&self.out_block.unwrap_or(ZERO_HASH))?;
 		}
 
@@ -442,7 +516,7 @@ impl Readable for Input {
 
 		let commit = Commitment::read(reader)?;
 
-		let out_block = if features.contains(COINBASE_OUTPUT) {
+		let out_block = if features.contains(OutputFeatures::COINBASE_OUTPUT) {
 			Some(Hash::read(reader)?)
 		} else {
 			None
@@ -485,11 +559,11 @@ impl Input {
 bitflags! {
 	/// Options for block validation
 	#[derive(Serialize, Deserialize)]
-	pub flags OutputFeatures: u8 {
+	pub struct OutputFeatures: u8 {
 		/// No flags
-		const DEFAULT_OUTPUT = 0b00000000,
+		const DEFAULT_OUTPUT = 0b00000000;
 		/// Output is a coinbase output, must not be spent until maturity
-		const COINBASE_OUTPUT = 0b00000001,
+		const COINBASE_OUTPUT = 0b00000001;
 	}
 }
 
@@ -524,7 +598,7 @@ impl SwitchCommitHashKey {
 }
 
 /// Definition of the switch commitment hash
-#[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Hash, PartialEq, Serialize, Deserialize)]
 pub struct SwitchCommitHash([u8; SWITCH_COMMIT_HASH_SIZE]);
 
 /// Implementation of Writeable for a switch commitment hash
@@ -631,6 +705,15 @@ pub struct Output {
 
 hashable_ord!(Output);
 
+/// TODO - no clean way to bridge core::hash::Hash and std::hash::Hash implementations?
+impl ::std::hash::Hash for TxKernel {
+	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &self).expect("serialization failed");
+		::std::hash::Hash::hash(&vec, state);
+	}
+}
+
 /// Implementation of Writeable for a transaction Output, defines how to write
 /// an Output as binary.
 impl Writeable for Output {
@@ -684,8 +767,11 @@ impl Output {
 	pub fn verify_proof(&self) -> Result<(), secp::Error> {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		secp.verify_range_proof(self.commit, self.proof).map(|_| ())
-	}
+		match Keychain::verify_range_proof(&secp, self.commit, self.proof){
+			Ok(_) => Ok(()),
+			Err(e) => Err(e),
+		}
+}
 
 	/// Given the original blinding factor we can recover the
 	/// value from the range proof and the commitment
@@ -786,7 +872,7 @@ impl Readable for OutputIdentifier {
 }
 
 /// Wrapper to Output commitments to provide the Summable trait.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct SumCommit {
 	/// Output features (coinbase vs. regular transaction output)
 	/// We need to include this when hashing to ensure coinbase maturity can be enforced.
@@ -936,7 +1022,7 @@ mod test {
 		let sig = secp::Signature::from_raw_data(&[0;64]).unwrap();
 
 		let kernel = TxKernel {
-			features: DEFAULT_KERNEL,
+			features: KernelFeatures::DEFAULT_KERNEL,
 			lock_height: 0,
 			excess: commit,
 			excess_sig: sig.clone(),
@@ -946,7 +1032,7 @@ mod test {
 		let mut vec = vec![];
 		ser::serialize(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, DEFAULT_KERNEL);
+		assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
 		assert_eq!(kernel2.lock_height, 0);
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
@@ -954,7 +1040,7 @@ mod test {
 
 		// now check a kernel with lock_height serializes/deserializes correctly
 		let kernel = TxKernel {
-			features: DEFAULT_KERNEL,
+			features: KernelFeatures::DEFAULT_KERNEL,
 			lock_height: 100,
 			excess: commit,
 			excess_sig: sig.clone(),
@@ -964,7 +1050,7 @@ mod test {
 		let mut vec = vec![];
 		ser::serialize(&mut vec, &kernel).expect("serialized failed");
 		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, DEFAULT_KERNEL);
+		assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
 		assert_eq!(kernel2.lock_height, 100);
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
@@ -986,7 +1072,7 @@ mod test {
 		let proof = keychain.range_proof(5, &key_id, commit, msg).unwrap();
 
 		let out = Output {
-			features: DEFAULT_OUTPUT,
+			features: OutputFeatures::DEFAULT_OUTPUT,
 			commit: commit,
 			switch_commit_hash: switch_commit_hash,
 			proof: proof,
@@ -996,7 +1082,7 @@ mod test {
 		ser::serialize(&mut vec, &out).expect("serialized failed");
 		let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
 
-		assert_eq!(dout.features, DEFAULT_OUTPUT);
+		assert_eq!(dout.features, OutputFeatures::DEFAULT_OUTPUT);
 		assert_eq!(dout.commit, out.commit);
 		assert_eq!(dout.proof, out.proof);
 	}
@@ -1017,15 +1103,21 @@ mod test {
 		let proof = keychain.range_proof(1003, &key_id, commit, msg).unwrap();
 
 		let output = Output {
-			features: DEFAULT_OUTPUT,
+			features: OutputFeatures::DEFAULT_OUTPUT,
 			commit: commit,
 			switch_commit_hash: switch_commit_hash,
 			proof: proof,
 		};
 
 		// check we can successfully recover the value with the original blinding factor
-		let recovered_value = output.recover_value(&keychain, &key_id).unwrap();
-		assert_eq!(recovered_value, 1003);
+		let result = output.recover_value(&keychain, &key_id);
+		// TODO: Remove this check once value recovery is supported within bullet proofs
+		if let Some(v) = result {
+			assert_eq!(v, 1003);
+		} else {
+			return;
+		}
+		
 
 		// check we cannot recover the value without the original blinding factor
 		let key_id2 = keychain.derive_key_id(2).unwrap();
@@ -1063,7 +1155,7 @@ mod test {
 		let commit = keychain.commit(5, &key_id).unwrap();
 
 		let input = Input {
-			features: DEFAULT_OUTPUT,
+			features: OutputFeatures::DEFAULT_OUTPUT,
 			commit: commit,
 			out_block: None,
 		};
@@ -1078,7 +1170,7 @@ mod test {
 		// now generate the short_id for a *very* similar output (single feature flag different)
 		// and check it generates a different short_id
 		let input = Input {
-			features: COINBASE_OUTPUT,
+			features: OutputFeatures::COINBASE_OUTPUT,
 			commit: commit,
 			out_block: None,
 		};

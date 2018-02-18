@@ -16,6 +16,7 @@
 
 use std::io;
 
+use util::secp;
 use util::secp::pedersen::Commitment;
 
 use grin_store as store;
@@ -27,15 +28,15 @@ use grin_store;
 
 bitflags! {
 /// Options for block validation
-	pub flags Options: u32 {
+	pub struct Options: u32 {
 		/// No flags
-		const NONE = 0b00000000,
+		const NONE = 0b00000000;
 		/// Runs without checking the Proof of Work, mostly to make testing easier.
-		const SKIP_POW = 0b00000001,
+		const SKIP_POW = 0b00000001;
 		/// Adds block while in syncing mode.
-		const SYNC = 0b00000010,
+		const SYNC = 0b00000010;
 		/// Block validation on a block we mined ourselves
-		const MINE = 0b00000100,
+		const MINE = 0b00000100;
 	}
 }
 
@@ -76,6 +77,8 @@ pub enum Error {
 	OutputSpent,
 	/// Invalid block version, either a mistake or outdated software
 	InvalidBlockVersion(u16),
+	/// We've been provided a bad sumtree
+	InvalidSumtree(String),
 	/// Internal issue when trying to save or load data from store
 	StoreErr(grin_store::Error, String),
 	/// Error serializing or deserializing a type
@@ -105,10 +108,15 @@ impl From<io::Error> for Error {
 		Error::SumTreeErr(e.to_string())
 	}
 }
+impl From<secp::Error> for Error {
+	fn from(e: secp::Error) -> Error {
+		Error::SumTreeErr(format!("Sum validation error: {}", e.to_string()))
+	}
+}
 
 impl Error {
 	/// Whether the error is due to a block that was intrinsically wrong
-	pub fn is_bad_block(&self) -> bool {
+	pub fn is_bad_data(&self) -> bool {
 		// shorter to match on all the "not the block's fault" errors
 		match *self {
 			Error::Unfit(_) |
@@ -211,11 +219,18 @@ pub trait ChainStore: Send + Sync {
 	/// Gets a block header by hash
 	fn get_block(&self, h: &Hash) -> Result<Block, store::Error>;
 
+	/// Check whether we have a block without reading it
+	fn block_exists(&self, h: &Hash) -> Result<bool, store::Error>;
+
 	/// Gets a block header by hash
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, store::Error>;
 
 	/// Save the provided block in store
 	fn save_block(&self, b: &Block) -> Result<(), store::Error>;
+
+	/// Delete a full block. Does not delete any record associated with a block
+	/// header.
+	fn delete_block(&self, bh: &Hash) -> Result<(), store::Error>;
 
 	/// Save the provided block header in store
 	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), store::Error>;
@@ -237,6 +252,9 @@ pub trait ChainStore: Send + Sync {
 
 	/// Gets the block header at the provided height
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, store::Error>;
+
+	/// Save a header as associated with its height
+	fn save_header_height(&self, header: &BlockHeader) -> Result<(), store::Error>;
 
 	/// Delete the block header at the height
 	fn delete_header_by_height(&self, height: u64) -> Result<(), store::Error>;

@@ -99,13 +99,13 @@ fn test_coinbase_maturity() {
 	assert!(
 		block.outputs[0]
 			.features
-			.contains(transaction::COINBASE_OUTPUT)
+			.contains(transaction::OutputFeatures::COINBASE_OUTPUT)
 	);
 
 	// we will need this later when we want to spend the coinbase output
 	let block_hash = block.hash();
 
-	chain.process_block(block, chain::MINE).unwrap();
+	chain.process_block(block, chain::Options::MINE).unwrap();
 
 	let prev = chain.head_header().unwrap();
 
@@ -116,7 +116,7 @@ fn test_coinbase_maturity() {
 
 	// here we build a tx that attempts to spend the earlier coinbase output
 	// this is not a valid tx as the coinbase output cannot be spent yet
-	let (coinbase_txn, _) = build::transaction(
+	let coinbase_txn = build::transaction(
 		vec![
 			build::coinbase_input(amount, block_hash, key_id1.clone()),
 			build::output(amount - 2, key_id2.clone()),
@@ -178,12 +178,12 @@ fn test_coinbase_maturity() {
 			global::sizeshift() as u32,
 		).unwrap();
 
-		chain.process_block(block, chain::MINE).unwrap();
+		chain.process_block(block, chain::Options::MINE).unwrap();
 	}
 
 	let prev = chain.head_header().unwrap();
 
-	let (coinbase_txn, _) = build::transaction(
+	let coinbase_txn = build::transaction(
 		vec![
 			build::coinbase_input(amount, block_hash, key_id1.clone()),
 			build::output(amount - 2, key_id2.clone()),
@@ -213,7 +213,7 @@ fn test_coinbase_maturity() {
 		global::sizeshift() as u32,
 	).unwrap();
 
-	let result = chain.process_block(block, chain::MINE);
+	let result = chain.process_block(block, chain::Options::MINE);
 	match result {
 		Ok(_) => (),
 		Err(Error::ImmatureCoinbase) => panic!("we should not get an ImmatureCoinbase here"),

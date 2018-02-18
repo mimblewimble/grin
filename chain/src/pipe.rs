@@ -64,19 +64,23 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 
 	validate_header(&b.header, &mut ctx)?;
 
-	// valid header, now check we actually have the previous block in the store
+	// valid header, now check we actually have the previous block in the store	
 	// not just the header but the block itself
-	// we cannot assume we can use the chain head for this as we may be dealing with a fork
-	// we cannot use heights here as the fork may have jumped in height
-	match ctx.store.get_block(&b.header.previous) {
-		Ok(_) => {},
-		Err(grin_store::Error::NotFoundErr) => {
-			return Err(Error::Orphan);
-		},
-		Err(e) => {
-			return Err(Error::StoreErr(e, "pipe get previous".to_owned()));
+	// short circuit the test first both for performance (in-mem vs db access)
+	// but also for the specific case of the first fast sync full block
+	if b.header.previous != ctx.head.last_block_h {
+		// we cannot assume we can use the chain head for this as we may be dealing with a fork
+		// we cannot use heights here as the fork may have jumped in height
+		match ctx.store.block_exists(&b.header.previous) {
+			Ok(true) => {},
+			Ok(false) => {
+				return Err(Error::Orphan);
+			},
+			Err(e) => {
+				return Err(Error::StoreErr(e, "pipe get previous".to_owned()));
+			}
 		}
-	};
+	}
 
 	// valid header and we have a previous block, time to take the lock on the sum trees
 	let local_sumtrees = ctx.sumtrees.clone();
@@ -211,7 +215,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		return Err(Error::InvalidBlockTime);
 	}
 
-	if !ctx.opts.contains(SKIP_POW) {
+	if !ctx.opts.contains(Options::SKIP_POW) {
 		let n = global::sizeshift() as u32;
 		if !(ctx.pow_verifier)(header, n) {
 			error!(LOGGER, "pipe: validate_header failed for cuckoo shift size {}", n);
@@ -242,7 +246,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		return Err(Error::InvalidBlockTime);
 	}
 
-	if !ctx.opts.contains(SKIP_POW) {
+	if !ctx.opts.contains(Options::SKIP_POW) {
 		// verify the proof of work and related parameters
 
 		// explicit check to ensure we are not below the minimum difficulty
@@ -362,7 +366,7 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 		// in sync mode, only update the "body chain", otherwise update both the
 		// "header chain" and "body chain", updating the header chain in sync resets
 		// all additional "future" headers we've received
-		if ctx.opts.contains(SYNC) {
+		if ctx.opts.contains(Options::SYNC) {
 			ctx.store
 				.save_body_head(&tip)
 				.map_err(|e| Error::StoreErr(e, "pipe save body".to_owned()))?;

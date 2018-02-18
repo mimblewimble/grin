@@ -21,36 +21,56 @@ use time;
 use chain;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use p2p::{self, Peer, Peers, ChainAdapter};
+use core::global;
+use p2p::{self, Peer, Peers};
 use types::Error;
 use util::LOGGER;
 
 /// Starts the syncing loop, just spawns two threads that loop forever
 pub fn run_sync(
 	currently_syncing: Arc<AtomicBool>,
-	peers: p2p::Peers,
+	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
 	skip_sync_wait: bool,
+	fast_sync: bool,
+	stop: Arc<AtomicBool>,
 ) {
-
 	let chain = chain.clone();
 	let _ = thread::Builder::new()
 		.name("sync".to_string())
 		.spawn(move || {
 			let mut prev_body_sync = time::now_utc();
 			let mut prev_header_sync = prev_body_sync.clone();
+			let mut prev_state_sync = prev_body_sync.clone() - time::Duration::seconds(5 * 60);
 
 			// initial sleep to give us time to peer with some nodes
 			if !skip_sync_wait {
 				thread::sleep(Duration::from_secs(30));
 			}
 
-			loop {
-				let syncing = needs_syncing(
-					currently_syncing.clone(), peers.clone(), chain.clone());
-				if syncing {
+			// fast sync has 3 states:
+			// * syncing headers
+			// * once all headers are sync'd, requesting the sumtree state
+			// * once we have the state, get blocks after that
+			//
+			// full sync gets rid of the middle step and just starts from
+			// the genesis state
 
-					let current_time = time::now_utc();
+			loop {
+				let horizon = global::cut_through_horizon() as u64;
+				let head = chain.head().unwrap();
+				let header_head = chain.get_header_head().unwrap();
+
+				// in archival nodes (no fast sync) we just consider we have the whole
+				// state already
+				let have_sumtrees = !fast_sync || head.height > 0 &&
+					header_head.height.saturating_sub(head.height) <= horizon;
+
+				let syncing = needs_syncing(
+					currently_syncing.clone(), peers.clone(), chain.clone(), !have_sumtrees);
+
+				let current_time = time::now_utc();
+				if syncing {
 
 					// run the header sync every 10s
 					if current_time - prev_header_sync > time::Duration::seconds(10) {
@@ -62,7 +82,7 @@ pub fn run_sync(
 					}
 
 					// run the body_sync every 5s
-					if current_time - prev_body_sync > time::Duration::seconds(5) {
+					if have_sumtrees && current_time - prev_body_sync > time::Duration::seconds(5) {
 						body_sync(
 							peers.clone(),
 							chain.clone(),
@@ -70,15 +90,38 @@ pub fn run_sync(
 						prev_body_sync = current_time;
 					}
 
-					thread::sleep(Duration::from_secs(1));
-				} else {
-					thread::sleep(Duration::from_secs(10));
+				} else if !have_sumtrees &&
+									current_time - prev_state_sync > time::Duration::seconds(5*60) {
+
+					if let Some(peer) = peers.most_work_peer() {
+						if let Ok(p) = peer.try_read() {
+							debug!(LOGGER, "Header head before sumtree request: {} / {}",
+										 header_head.height, header_head.last_block_h);
+
+							// just to handle corner case of a too early start
+							if header_head.height > horizon {
+
+								// ask for sumtree at horizon
+								let mut sumtree_head = chain.get_block_header(&header_head.prev_block_h).unwrap();
+								for _ in 0..horizon-2 {
+									sumtree_head = chain.get_block_header(&sumtree_head.previous).unwrap();
+								}
+								p.send_sumtrees_request(sumtree_head.height, sumtree_head.hash()).unwrap();
+								prev_state_sync = current_time;
+							}
+						}
+					}
+				}
+				thread::sleep(Duration::from_secs(1));
+
+				if stop.load(Ordering::Relaxed) {
+					break;
 				}
 			}
 		});
 }
 
-fn body_sync(peers: Peers, chain: Arc<chain::Chain>) {
+fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 
 	let body_head: chain::Tip = chain.head().unwrap();
 	let header_head: chain::Tip = chain.get_header_head().unwrap();
@@ -151,7 +194,7 @@ fn body_sync(peers: Peers, chain: Arc<chain::Chain>) {
 	}
 }
 
-pub fn header_sync(peers: Peers, chain: Arc<chain::Chain>) {
+pub fn header_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 	if let Ok(header_head) = chain.get_header_head() {
 		let difficulty = header_head.total_difficulty;
 
@@ -198,21 +241,30 @@ fn request_headers(
 /// just receiving blocks through gossip.
 pub fn needs_syncing(
 	currently_syncing: Arc<AtomicBool>,
-	peers: Peers,
-	chain: Arc<chain::Chain>) -> bool {
+	peers: Arc<Peers>,
+	chain: Arc<chain::Chain>,
+	header_only: bool) -> bool {
 
-	let local_diff = peers.total_difficulty();
+	let local_diff = if header_only {
+		chain.total_header_difficulty().unwrap()
+	} else {
+		chain.total_difficulty()
+	};
 	let peer = peers.most_work_peer();
+
 
 	// if we're already syncing, we're caught up if no peer has a higher
 	// difficulty than us
 	if currently_syncing.load(Ordering::Relaxed) {
 		if let Some(peer) = peer {
 			if let Ok(peer) = peer.try_read() {
+				debug!(LOGGER, "needs_syncing {} {} {}", local_diff, peer.info.total_difficulty, header_only);
 				if peer.info.total_difficulty <= local_diff {
 					info!(LOGGER, "synchronized at {:?} @ {:?}", local_diff, chain.head().unwrap().height);
 					currently_syncing.store(false, Ordering::Relaxed);
-					let _ = chain.reset_head();
+					if !header_only {
+						let _ = chain.reset_head();
+					}
 				}
 			}
 		} else {

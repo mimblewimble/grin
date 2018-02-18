@@ -116,6 +116,9 @@ pub struct ServerConfig {
 	#[serde(default)]
 	pub chain_type: ChainTypes,
 
+	/// Whether this node is a full archival node or a fast-sync, pruned node
+	pub archive_mode: Option<bool>,
+
 	/// Method used to get the list of seed nodes for initial bootstrap.
 	#[serde(default)]
 	pub seeding_type: Seeding,
@@ -149,14 +152,15 @@ impl Default for ServerConfig {
 		ServerConfig {
 			db_root: ".grin".to_string(),
 			api_http_addr: "0.0.0.0:13413".to_string(),
-			capabilities: p2p::FULL_NODE,
+			capabilities: p2p::Capabilities::FULL_NODE,
 			seeding_type: Seeding::default(),
 			seeds: None,
 			p2p_config: p2p::P2PConfig::default(),
 			mining_config: Some(pow::types::MinerConfig::default()),
 			chain_type: ChainTypes::default(),
+			archive_mode: None,
 			pool_config: pool::PoolConfig::default(),
-			skip_sync_wait: Some(true),
+			skip_sync_wait: None,
 		}
 	}
 }

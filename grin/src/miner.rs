@@ -17,6 +17,7 @@
 
 use rand::{self, Rng};
 use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 use time;
@@ -117,6 +118,7 @@ pub struct Miner {
 	config: MinerConfig,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	stop: Arc<AtomicBool>,
 
 	// Just to hold the port we're on, so this miner can be identified
 	// while watching debug output
@@ -130,12 +132,14 @@ impl Miner {
 		config: MinerConfig,
 		chain_ref: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		stop: Arc<AtomicBool>,
 	) -> Miner {
 		Miner {
 			config: config,
 			chain: chain_ref,
 			tx_pool: tx_pool,
 			debug_output_id: String::from("none"),
+			stop: stop,
 		}
 	}
 
@@ -537,7 +541,7 @@ impl Miner {
 					b.hash()
 				);
 				b.header.pow = proof;
-				let res = self.chain.process_block(b, chain::MINE);
+				let res = self.chain.process_block(b, chain::Options::MINE);
 				if let Err(e) = res {
 					error!(
 						LOGGER,
@@ -555,6 +559,10 @@ impl Miner {
 					block_fees
 				);
 				key_id = block_fees.key_id();
+			}
+
+			if self.stop.load(Ordering::Relaxed) {
+				break;
 			}
 		}
 	}
@@ -586,7 +594,7 @@ impl Miner {
 		let txs: Vec<&Transaction> = txs_box.iter().map(|tx| tx.as_ref()).collect();
 
 		// build the coinbase and the block itself
-		let fees = txs.iter().map(|tx| tx.fee).sum();
+		let fees = txs.iter().map(|tx| tx.fee()).sum();
 		let height = head.height + 1;
 		let block_fees = BlockFees {
 			fees,

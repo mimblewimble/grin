@@ -25,8 +25,6 @@ extern crate bitflags;
 extern crate bytes;
 #[macro_use]
 extern crate enum_primitive;
-extern crate futures;
-extern crate futures_cpupool;
 
 #[macro_use]
 extern crate grin_core as core;
@@ -40,24 +38,20 @@ extern crate serde_derive;
 #[macro_use]
 extern crate slog;
 extern crate time;
-extern crate tokio_core;
-extern crate tokio_io;
-extern crate tokio_timer;
 
 mod conn;
 pub mod handshake;
-mod rate_limit;
 pub mod msg;
 mod peer;
 mod peers;
 mod protocol;
-mod server;
+mod serv;
 mod store;
 mod types;
 
-pub use server::{DummyAdapter, Server};
+pub use serv::{Server, DummyAdapter};
 pub use peers::Peers;
 pub use peer::Peer;
-pub use types::{Capabilities, Error, ChainAdapter, P2PConfig, PeerInfo, FULL_HIST, FULL_NODE,
-                MAX_BLOCK_HEADERS, MAX_PEER_ADDRS, UNKNOWN};
+pub use types::{Capabilities, Error, ChainAdapter, SumtreesRead, P2PConfig,
+								PeerInfo, MAX_BLOCK_HEADERS, MAX_PEER_ADDRS};
 pub use store::{PeerData, State};

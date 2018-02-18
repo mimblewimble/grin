@@ -18,6 +18,7 @@ use memmap;
 use std::cmp;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, ErrorKind, Write};
+use std::marker::PhantomData;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use std::io::Read;
@@ -27,7 +28,7 @@ use libc::{ftruncate64, off64_t};
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use libc::{ftruncate as ftruncate64, off_t as off64_t};
 
-use core::core::pmmr::{self, Backend, HashSum, Summable, VecBackend};
+use core::core::pmmr::{self, Backend, HashSum, Summable};
 use core::ser;
 use util::LOGGER;
 
@@ -46,15 +47,18 @@ pub const RM_LOG_MAX_NODES: usize = 10000;
 /// Despite being append-only, the file can still be pruned and truncated. The
 /// former simply happens by rewriting it, ignoring some of the data. The
 /// latter by truncating the underlying file and re-creating the mmap.
-struct AppendOnlyFile {
+pub struct AppendOnlyFile {
 	path: String,
 	file: File,
 	mmap: Option<memmap::Mmap>,
+	buffer_start: usize,
+	buffer: Vec<u8>,
+	buffer_start_bak: usize,
 }
 
 impl AppendOnlyFile {
 	/// Open a file (existing or not) as append-only, backed by a mmap.
-	fn open(path: String) -> io::Result<AppendOnlyFile> {
+	pub fn open(path: String) -> io::Result<AppendOnlyFile> {
 		let file = OpenOptions::new()
 			.read(true)
 			.append(true)
@@ -64,36 +68,84 @@ impl AppendOnlyFile {
 			path: path.clone(),
 			file: file,
 			mmap: None,
+			buffer_start: 0,
+			buffer: vec![],
+			buffer_start_bak: 0,
 		};
 		if let Ok(sz) = aof.size() {
 			if sz > 0 {
-				aof.sync()?;
+				aof.buffer_start = sz as usize;
+				aof.mmap = Some(unsafe { memmap::Mmap::map(&aof.file)? });
 			}
 		}
 		Ok(aof)
 	}
 
-	/// Append data to the file.
-	fn append(&mut self, buf: &[u8]) -> io::Result<()> {
-		self.file.write_all(buf)
+	/// Append data to the file. Until the append-only file is synced, data is
+	/// only written to memory.
+	pub fn append(&mut self, buf: &mut Vec<u8>) {
+		self.buffer.append(buf);
+	}
+
+	/// Rewinds the data file back to a lower position. The new position needs
+	/// to be the one of the first byte the next time data is appended.
+	pub fn rewind(&mut self, pos: u64) {
+		if self.buffer_start_bak > 0 || self.buffer.len() > 0 {
+			panic!("Can't rewind on a dirty state.");
+		}
+		self.buffer_start_bak = self.buffer_start;
+		self.buffer_start = pos as usize;
 	}
 
 	/// Syncs all writes (fsync), reallocating the memory map to make the newly
 	/// written data accessible.
-	fn sync(&mut self) -> io::Result<()> {
+	pub fn flush(&mut self) -> io::Result<()> {
+		if self.buffer_start_bak > 0 {
+			// flushing a rewound state, we need to truncate before applying
+			self.truncate(self.buffer_start)?;
+			self.buffer_start_bak = 0;
+		}
+		self.buffer_start += self.buffer.len();
+		self.file.write(&self.buffer[..])?;
 		self.file.sync_data()?;
+		self.buffer = vec![];
 		self.mmap = Some(unsafe { memmap::Mmap::map(&self.file)? });
 		Ok(())
+	}
+
+	/// Discard the current non-flushed data.
+	pub fn discard(&mut self) {
+		if self.buffer_start_bak > 0 {
+			// discarding a rewound state, restore the buffer start
+			self.buffer_start = self.buffer_start_bak;
+			self.buffer_start_bak = 0;
+		}
+		self.buffer = vec![];
 	}
 
 	/// Read length bytes of data at offset from the file. Leverages the memory
 	/// map.
 	fn read(&self, offset: usize, length: usize) -> Vec<u8> {
+		if offset >= self.buffer_start {
+			let offset = offset - self.buffer_start;
+			return self.buffer[offset..(offset+length)].to_vec();
+		}
 		if let None = self.mmap {
 			return vec![];
 		}
 		let mmap = self.mmap.as_ref().unwrap();
 		(&mmap[offset..(offset + length)]).to_vec()
+	}
+
+	/// Truncates the underlying file to the provided offset
+	fn truncate(&self, offs: usize) -> io::Result<()> {
+		let fd = self.file.as_raw_fd();
+		let res = unsafe { ftruncate64(fd, offs as off64_t) };
+		if res == -1 {
+			Err(io::Error::last_os_error())
+		} else {
+			Ok(())
+		}
 	}
 
 	/// Saves a copy of the current file content, skipping data at the provided
@@ -116,7 +168,7 @@ impl AppendOnlyFile {
 			} as u64;
 
 			// write the buffer, except if we prune offsets in the current span,
-   // in which case we skip
+			// in which case we skip
 			let mut buf_start = 0;
 			while prune_offs[prune_pos] >= read && prune_offs[prune_pos] < read + len {
 				let prune_at = prune_offs[prune_pos] as usize;
@@ -135,20 +187,14 @@ impl AppendOnlyFile {
 		}
 	}
 
-	/// Truncates the underlying file to the provided offset
-	fn truncate(&self, offs: u64) -> io::Result<()> {
-		let fd = self.file.as_raw_fd();
-		let res = unsafe { ftruncate64(fd, offs as off64_t) };
-		if res == -1 {
-			Err(io::Error::last_os_error())
-		} else {
-			Ok(())
-		}
-	}
-
 	/// Current size of the file in bytes.
 	fn size(&self) -> io::Result<u64> {
 		fs::metadata(&self.path).map(|md| md.len())
+	}
+
+	/// Path of the underlying file
+	pub fn path(&self) -> String {
+		self.path.clone()
 	}
 }
 
@@ -181,11 +227,12 @@ impl RemoveLog {
 	}
 
 	/// Truncate and empties the remove log.
-	fn truncate(&mut self, last_offs: u32) -> io::Result<()> {
+	fn rewind(&mut self, last_offs: u32) -> io::Result<()> {
 		// simplifying assumption: we always remove older than what's in tmp
 		self.removed_tmp = vec![];
-		// DEBUG
-		let _ = self.flush_truncate(last_offs);
+
+		// backing it up before truncating
+		self.removed_bak = self.removed.clone();
 
 		// backing it up before truncating
 		self.removed_bak = self.removed.clone();
@@ -200,15 +247,6 @@ impl RemoveLog {
 				.collect();
 		}
 		Ok(())
-	}
-
-	// DEBUG: saves the remove log to the side before each truncate
-	fn flush_truncate(&mut self, last_offs: u32) -> io::Result<()> {
-		let mut file = File::create(format!("{}.{}", self.path.clone(), last_offs))?;
-		for elmt in &self.removed {
-			file.write_all(&ser::ser_vec(&elmt).unwrap()[..])?;
-		}
-		file.sync_data()
 	}
 
 	/// Append a set of new positions to the remove log. Both adds those
@@ -291,12 +329,7 @@ where
 	hashsum_file: AppendOnlyFile,
 	remove_log: RemoveLog,
 	pruned_nodes: pmmr::PruneList,
-	// buffers addition of new elements until they're fully written to disk
-	buffer: VecBackend<T>,
-	buffer_index: usize,
-	// whether a rewind occurred since last flush, the rewind position, index
-	// and buffer index are captured
-	rewind: Option<(u64, u32, usize)>,
+	phantom: PhantomData<T>,
 }
 
 impl<T> Backend<T> for PMMRBackend<T>
@@ -306,25 +339,19 @@ where
 	/// Append the provided HashSums to the backend storage.
 	#[allow(unused_variables)]
 	fn append(&mut self, position: u64, data: Vec<HashSum<T>>) -> Result<(), String> {
-		self.buffer
-			.append(position - (self.buffer_index as u64), data.clone())?;
+		for d in data {
+			self.hashsum_file.append(&mut ser::ser_vec(&d).unwrap());
+		}
 		Ok(())
 	}
 
 	/// Get a HashSum by insertion position
 	fn get(&self, position: u64) -> Option<HashSum<T>> {
-		// First, check if it's in our temporary write buffer
-		let pos_sz = position as usize;
-		if pos_sz > self.buffer_index && pos_sz - 1 < self.buffer_index + self.buffer.len() {
-			return self.buffer.get((pos_sz - self.buffer_index) as u64);
-		}
-
-		// Second, check if this position has been pruned in the remove log
+		// Check if this position has been pruned in the remove log or the
+		// pruned list
 		if self.remove_log.includes(position) {
 			return None;
 		}
-
-		// Third, check if it's in the pruned list or its offset
 		let shift = self.pruned_nodes.get_shift(position);
 		if let None = shift {
 			return None;
@@ -351,26 +378,19 @@ where
 	}
 
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {
-		assert!(self.buffer.len() == 0, "Rewind on non empty buffer.");
 		self.remove_log
-			.truncate(index)
+			.rewind(index)
 			.map_err(|e| format!("Could not truncate remove log: {}", e))?;
-		self.rewind = Some((position, index, self.buffer_index));
-		self.buffer_index = position as usize;
+
+		let shift = self.pruned_nodes.get_shift(position).unwrap_or(0);
+		let record_len = 32 + T::sum_len();
+		let file_pos = (position - shift) * (record_len as u64);
+		self.hashsum_file.rewind(file_pos);
 		Ok(())
 	}
 
 	/// Remove HashSums by insertion position
 	fn remove(&mut self, positions: Vec<u64>, index: u32) -> Result<(), String> {
-		if self.buffer.used_size() > 0 {
-			for position in &positions {
-				let pos_sz = *position as usize;
-				if pos_sz > self.buffer_index && pos_sz - 1 < self.buffer_index + self.buffer.len()
-				{
-					self.buffer.remove(vec![*position - self.buffer_index as u64], index).unwrap();
-				}
-			}
-		}
 		self.remove_log.append(positions, index).map_err(|e| {
 			format!("Could not write to log storage, disk full? {:?}", e)
 		})
@@ -385,8 +405,6 @@ where
 	/// store its files.
 	pub fn new(data_dir: String) -> io::Result<PMMRBackend<T>> {
 		let hs_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_DATA_FILE))?;
-		let sz = hs_file.size()?;
-		let record_len = 32 + T::sum_len();
 		let rm_log = RemoveLog::open(format!("{}/{}", data_dir, PMMR_RM_LOG_FILE))?;
 		let prune_list = read_ordered_vec(format!("{}/{}", data_dir, PMMR_PRUNED_FILE), 8)?;
 
@@ -394,12 +412,10 @@ where
 			data_dir: data_dir,
 			hashsum_file: hs_file,
 			remove_log: rm_log,
-			buffer: VecBackend::new(),
-			buffer_index: (sz as usize) / record_len,
 			pruned_nodes: pmmr::PruneList {
 				pruned_nodes: prune_list,
 			},
-			rewind: None,
+			phantom: PhantomData,
 		})
 	}
 
@@ -415,45 +431,21 @@ where
 	/// Syncs all files to disk. A call to sync is required to ensure all the
 	/// data has been successfully written to disk.
 	pub fn sync(&mut self) -> io::Result<()> {
-		// truncating the storage file if a rewind occurred
-		let record_len = 32 + T::sum_len() as u64;
-		if let Some((pos, _, _)) = self.rewind {
-			self.hashsum_file.truncate(pos * record_len)?;
-		}
-
-		for elem in &self.buffer.elems {
-			let res = if let Some(ref hs) = *elem {
-				self.hashsum_file.append(&ser::ser_vec(&hs).unwrap()[..])
-			} else {
-				// the element has alredy been pruned in the buffer, we just insert
-				// zeros until compaction to avoid wrong hashum store offsets 
-				self.hashsum_file.append(&vec![0; record_len as usize])
-			};
-
-			if let Err(e) = res {
-				return Err(io::Error::new(
+		if let Err(e) = self.hashsum_file.flush() {
+			return Err(io::Error::new(
 					io::ErrorKind::Interrupted,
 					format!("Could not write to log storage, disk full? {:?}", e),
-				));
-			}
+					));
 		}
 
-		self.buffer_index = self.buffer_index + self.buffer.len();
-		self.buffer.clear();
 		self.remove_log.flush()?;
-		self.hashsum_file.sync()?;
-		self.rewind = None;
 		Ok(())
 	}
 
 	/// Discard the current, non synced state of the backend.
 	pub fn discard(&mut self) {
-		if let Some((_, _, bi)) = self.rewind {
-			self.buffer_index = bi;
-		}
-		self.buffer.clear();
+		self.hashsum_file.discard();
 		self.remove_log.discard();
-		self.rewind = None;
 	}
 
 	/// Checks the length of the remove log to see if it should get compacted.
@@ -475,7 +467,7 @@ where
 		}
 
 		// 0. validate none of the nodes in the rm log are in the prune list (to
-  // avoid accidental double compaction)
+		// avoid accidental double compaction)
 		for pos in &self.remove_log.removed[..] {
 			if let None = self.pruned_nodes.pruned_pos(pos.0) {
 				// TODO we likely can recover from this by directly jumping to 3
@@ -489,7 +481,7 @@ where
 		}
 
 		// 1. save hashsum file to a compact copy, skipping data that's in the
-  // remove list
+		// remove list
 		let tmp_prune_file = format!("{}/{}.prune", self.data_dir, PMMR_DATA_FILE);
 		let record_len = (32 + T::sum_len()) as u64;
 		let to_rm = self.remove_log
@@ -518,10 +510,9 @@ where
 			format!("{}/{}", self.data_dir, PMMR_DATA_FILE),
 		)?;
 		self.hashsum_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
-		self.hashsum_file.sync()?;
 
 		// 4. truncate the rm log
-		self.remove_log.truncate(0)?;
+		self.remove_log.rewind(0)?;
 		self.remove_log.flush()?;
 
 		Ok(())

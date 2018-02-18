@@ -98,6 +98,10 @@ impl ChainStore for ChainKVStore {
 		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, &mut h.to_vec())))
 	}
 
+	fn block_exists(&self, h: &Hash) -> Result<bool, Error> {
+		self.db.exists(&to_key(BLOCK_PREFIX, &mut h.to_vec()))
+	}
+
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(
 			self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
@@ -119,6 +123,12 @@ impl ChainStore for ChainKVStore {
 		batch.write()
 	}
 
+	/// Delete a full block. Does not delete any record associated with a block
+	/// header.
+	fn delete_block(&self, bh: &Hash) -> Result<(), Error> {
+		self.db.delete(&to_key(BLOCK_PREFIX, &mut bh.to_vec())[..])
+	}
+
 	fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
 		let header_at_height = self.get_header_by_height(header.height)?;
 		if header.hash() == header_at_height.hash() {
@@ -137,6 +147,11 @@ impl ChainStore for ChainKVStore {
 
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		option_to_not_found(self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)))
+	}
+
+	fn save_header_height(&self, bh: &BlockHeader) -> Result<(), Error> {
+		self.db
+			.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height), bh)
 	}
 
 	fn delete_header_by_height(&self, height: u64) -> Result<(), Error> {

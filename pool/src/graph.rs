@@ -298,7 +298,7 @@ mod tests {
 	use util::secp;
 	use keychain::Keychain;
 	use rand;
-	use core::core::{DEFAULT_OUTPUT, SwitchCommitHash};
+	use core::core::{OutputFeatures, SwitchCommitHash};
 
 	#[test]
 	fn test_add_entry() {
@@ -317,12 +317,12 @@ mod tests {
 
 		let inputs = vec![
 			core::transaction::Input::new(
-				DEFAULT_OUTPUT,
+				OutputFeatures::DEFAULT_OUTPUT,
 				keychain.commit(50, &key_id2).unwrap(),
 				None,
 			),
 			core::transaction::Input::new(
-				DEFAULT_OUTPUT,
+				OutputFeatures::DEFAULT_OUTPUT,
 				keychain.commit(25, &key_id3).unwrap(),
 				None,
 			),
@@ -330,15 +330,23 @@ mod tests {
 		let msg = secp::pedersen::ProofMessage::empty();
 
 		let output = core::transaction::Output {
-			features: DEFAULT_OUTPUT,
+			features: OutputFeatures::DEFAULT_OUTPUT,
 			commit: output_commit,
 			switch_commit_hash: switch_commit_hash,
 			proof: keychain
 				.range_proof(100, &key_id1, output_commit, msg)
 				.unwrap(),
 		};
-		let outputs = vec![output];
-		let test_transaction = core::transaction::Transaction::new(inputs, outputs, 5, 0);
+
+		let kernel = core::transaction::TxKernel::empty()
+			.with_fee(5)
+			.with_lock_height(0);
+
+		let test_transaction = core::transaction::Transaction::new(
+			inputs,
+			vec![output],
+			vec![kernel],
+		);
 
 		let test_pool_entry = PoolEntry::new(&test_transaction);
 

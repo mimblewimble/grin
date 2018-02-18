@@ -15,8 +15,7 @@
 //! Blocks and blockheaders
 
 use time;
-use util;
-use util::{secp, static_secp_instance};
+use rand::{thread_rng, Rng};
 use std::collections::HashSet;
 
 use core::{
@@ -29,8 +28,8 @@ use core::{
 	Proof,
 	TxKernel,
 	Transaction,
-	COINBASE_KERNEL,
-	COINBASE_OUTPUT
+	OutputFeatures,
+	KernelFeatures
 };
 use consensus;
 use consensus::{exceeds_weight, reward, REWARD, VerifySortOrder};
@@ -39,16 +38,19 @@ use core::id::ShortIdentifiable;
 use core::target::Difficulty;
 use core::transaction;
 use ser::{self, Readable, Reader, Writeable, Writer, WriteableSorted, read_and_verify_sorted};
-use util::kernel_sig_msg;
-use util::LOGGER;
 use global;
 use keychain;
+use keychain::BlindingFactor;
+use util;
+use util::kernel_sig_msg;
+use util::LOGGER;
+use util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, PartialEq)]
 pub enum Error {
-	/// The sum of output minus input commitments does not match the sum of
-	/// kernel commitments
+	/// The sum of output minus input commitments does not
+	/// match the sum of kernel commitments
 	KernelSumMismatch,
 	/// Same as above but for the coinbase part of a block, including reward
 	CoinbaseSumMismatch,
@@ -73,10 +75,6 @@ pub enum Error {
 		/// The lock_height needed to be reached for the coinbase output to mature
 		lock_height: u64,
 	},
-	/// Limit on number of coinbase outputs in a valid block.
-	CoinbaseOutputCountExceeded,
-	/// Limit on number of coinbase kernels in a valid block.
-	CoinbaseKernelCountExceeded,
 	/// Other unspecified error condition
 	Other(String)
 }
@@ -130,6 +128,8 @@ pub struct BlockHeader {
 	pub difficulty: Difficulty,
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
+	/// The single aggregate "offset" that needs to be applied for all commitments to sum
+	pub kernel_offset: BlindingFactor,
 }
 
 impl Default for BlockHeader {
@@ -147,6 +147,7 @@ impl Default for BlockHeader {
 			kernel_root: ZERO_HASH,
 			nonce: 0,
 			pow: Proof::zero(proof_size),
+			kernel_offset: BlindingFactor::zero(),
 		}
 	}
 }
@@ -168,6 +169,7 @@ impl Writeable for BlockHeader {
 		try!(writer.write_u64(self.nonce));
 		try!(self.difficulty.write(writer));
 		try!(self.total_difficulty.write(writer));
+		try!(self.kernel_offset.write(writer));
 
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			try!(self.pow.write(writer));
@@ -188,6 +190,7 @@ impl Readable for BlockHeader {
 		let nonce = reader.read_u64()?;
 		let difficulty = Difficulty::read(reader)?;
 		let total_difficulty = Difficulty::read(reader)?;
+		let kernel_offset = BlindingFactor::read(reader)?;
 		let pow = Proof::read(reader)?;
 
 		Ok(BlockHeader {
@@ -205,6 +208,7 @@ impl Readable for BlockHeader {
 			nonce: nonce,
 			difficulty: difficulty,
 			total_difficulty: total_difficulty,
+			kernel_offset: kernel_offset,
 		})
 	}
 }
@@ -218,6 +222,8 @@ impl Readable for BlockHeader {
 pub struct CompactBlock {
 	/// The header with metadata and commitments to the rest of the data
 	pub header: BlockHeader,
+	/// Nonce for connection specific short_ids
+	pub nonce: u64,
 	/// List of full outputs - specifically the coinbase output(s)
 	pub out_full: Vec<Output>,
 	/// List of full kernels - specifically the coinbase kernel(s)
@@ -229,19 +235,17 @@ pub struct CompactBlock {
 /// Implementation of Writeable for a compact block, defines how to write the block to a
 /// binary writer. Differentiates between writing the block for the purpose of
 /// full serialization and the one of just extracting a hash.
+/// Note: compact block hash uses both the header *and* the nonce.
 impl Writeable for CompactBlock {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		try!(self.header.write(writer));
+		try!(writer.write_u64(self.nonce));
 
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			// TODO - make these constants and put them somewhere reusable?
-			assert!(self.out_full.len() < 16);
-			assert!(self.kern_full.len() < 16);
-
 			ser_multiwrite!(
 				writer,
-				[write_u8, self.out_full.len() as u8],
-				[write_u8, self.kern_full.len() as u8],
+				[write_u64, self.out_full.len() as u64],
+				[write_u64, self.kern_full.len() as u64],
 				[write_u64, self.kern_ids.len() as u64]
 			);
 
@@ -264,8 +268,8 @@ impl Readable for CompactBlock {
 	fn read(reader: &mut Reader) -> Result<CompactBlock, ser::Error> {
 		let header = try!(BlockHeader::read(reader));
 
-		let (out_full_len, kern_full_len, kern_id_len) =
-			ser_multiread!(reader, read_u8, read_u8, read_u64);
+		let (nonce, out_full_len, kern_full_len, kern_id_len) =
+			ser_multiread!(reader, read_u64, read_u64, read_u64, read_u64);
 
 		let out_full = read_and_verify_sorted(reader, out_full_len as u64)?;
 		let kern_full = read_and_verify_sorted(reader, kern_full_len as u64)?;
@@ -273,6 +277,7 @@ impl Readable for CompactBlock {
 
 		Ok(CompactBlock {
 			header,
+			nonce,
 			out_full,
 			kern_full,
 			kern_ids,
@@ -292,7 +297,7 @@ pub struct Block {
 	pub inputs: Vec<Input>,
 	/// List of transaction outputs
 	pub outputs: Vec<Output>,
-	/// List of transaction kernels and associated proofs
+	/// List of kernels with associated proofs (note these are offset from tx_kernels)
 	pub kernels: Vec<TxKernel>,
 }
 
@@ -387,7 +392,7 @@ impl Block {
 		key_id: &keychain::Identifier,
 		difficulty: Difficulty,
 	) -> Result<Block, Error> {
-		let fees = txs.iter().map(|tx| tx.fee).sum();
+		let fees = txs.iter().map(|tx| tx.fee()).sum();
 		let (reward_out, reward_proof) = Block::reward_output(
 			keychain,
 			key_id,
@@ -398,27 +403,76 @@ impl Block {
 		Ok(block)
 	}
 
+	/// Hydrate a block from a compact block.
+	/// Note: caller must validate the block themselves, we do not validate it here.
+	pub fn hydrate_from(cb: CompactBlock, txs: Vec<Transaction>) -> Block {
+		debug!(
+			LOGGER,
+			"block: hydrate_from: {}, {} txs",
+			cb.hash(),
+			txs.len(),
+		);
+
+		let mut all_inputs = HashSet::new();
+		let mut all_outputs = HashSet::new();
+		let mut all_kernels = HashSet::new();
+
+		// collect all the inputs, outputs and kernels from the txs
+		for tx in txs {
+			all_inputs.extend(tx.inputs);
+			all_outputs.extend(tx.outputs);
+			all_kernels.extend(tx.kernels);
+		}
+
+		// include the coinbase output(s) and kernel(s) from the compact_block
+		all_outputs.extend(cb.out_full);
+		all_kernels.extend(cb.kern_full);
+
+		// convert the sets to vecs
+		let mut all_inputs = all_inputs.iter().cloned().collect::<Vec<_>>();
+		let mut all_outputs = all_outputs.iter().cloned().collect::<Vec<_>>();
+		let mut all_kernels = all_kernels.iter().cloned().collect::<Vec<_>>();
+
+		// sort them all lexicographically
+		all_inputs.sort();
+		all_outputs.sort();
+		all_kernels.sort();
+
+		// finally return the full block
+		// Note: we have not actually validated the block here
+		// leave it to the caller to actually validate the block
+		Block {
+			header: cb.header,
+			inputs: all_inputs,
+			outputs: all_outputs,
+			kernels: all_kernels,
+		}.cut_through()
+	}
+
 	/// Generate the compact block representation.
 	pub fn as_compact_block(&self) -> CompactBlock {
 		let header = self.header.clone();
-		let block_hash = self.hash();
+		let nonce = thread_rng().next_u64();
+
+		// concatenate the nonce with our block_header to build the hash
+		let hash = (self, nonce).hash();
 
 		let mut out_full = self.outputs
 			.iter()
-			.filter(|x| x.features.contains(COINBASE_OUTPUT))
-			.cloned()
-			.collect::<Vec<_>>();
-		let mut kern_full = self.kernels
-			.iter()
-			.filter(|x| x.features.contains(COINBASE_KERNEL))
+			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.cloned()
 			.collect::<Vec<_>>();
 
-		let mut kern_ids = self.kernels
-			.iter()
-			.filter(|x| !x.features.contains(COINBASE_KERNEL))
-			.map(|x| x.short_id(&block_hash))
-			.collect::<Vec<_>>();
+		let mut kern_full = vec![];
+		let mut kern_ids = vec![];
+
+		for k in &self.kernels {
+			if k.features.contains(KernelFeatures::COINBASE_KERNEL) {
+				kern_full.push(k.clone());
+			} else {
+				kern_ids.push(k.short_id(&hash));
+			}
+		}
 
 		// sort all the lists
 		out_full.sort();
@@ -427,6 +481,7 @@ impl Block {
 
 		CompactBlock {
 			header,
+			nonce,
 			out_full,
 			kern_full,
 			kern_ids,
@@ -447,26 +502,33 @@ impl Block {
 		let mut inputs = vec![];
 		let mut outputs = vec![];
 
+		// we will sum these together at the end
+		// to give us the overall offset for the block
+		let mut kernel_offsets = vec![];
+
 		// iterate over the all the txs
 		// build the kernel for each
 		// and collect all the kernels, inputs and outputs
 		// to build the block (which we can sort of think of as one big tx?)
 		for tx in txs {
 			// validate each transaction and gather their kernels
-			let excess = tx.validate()?;
-			let kernel = tx.build_kernel(excess);
-			kernels.push(kernel);
+			// tx has an offset k2 where k = k1 + k2
+			// and the tx is signed using k1
+			// the kernel excess is k1G
+			// we will sum all the offsets later and store the total offset
+			// on the block_header
+			tx.validate()?;
 
-			for input in tx.inputs.clone() {
-				inputs.push(input);
-			}
+			// we will summ these later to give a single aggregate offset
+			kernel_offsets.push(tx.offset);
 
-			for output in tx.outputs.clone() {
-				outputs.push(output);
-			}
+			// add all tx inputs/outputs/kernels to the block
+			kernels.extend(tx.kernels.iter().cloned());
+			inputs.extend(tx.inputs.iter().cloned());
+			outputs.extend(tx.outputs.iter().cloned());
 		}
 
-		// also include the reward kernel and output
+		// include the reward kernel and output
 		kernels.push(reward_kern);
 		outputs.push(reward_out);
 
@@ -475,7 +537,28 @@ impl Block {
 		outputs.sort();
 		kernels.sort();
 
-		// calculate the overall Merkle tree and fees (todo?)
+		// now sum the kernel_offsets up to give us
+		// an aggregate offset for the entire block
+		let kernel_offset = {
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			let keys = kernel_offsets
+				.iter()
+				.cloned()
+				.filter(|x| *x != BlindingFactor::zero())
+				.filter_map(|x| {
+					x.secret_key(&secp).ok()
+				})
+				.collect::<Vec<_>>();
+			if keys.is_empty() {
+				BlindingFactor::zero()
+			} else {
+				let sum = secp.blind_sum(keys, vec![])?;
+
+				BlindingFactor::from_secret_key(sum)
+			}
+		};
+
 		Ok(
 			Block {
 				header: BlockHeader {
@@ -487,6 +570,7 @@ impl Block {
 					previous: prev.hash(),
 					total_difficulty: difficulty +
 						prev.total_difficulty.clone(),
+					kernel_offset: kernel_offset,
 					..Default::default()
 				},
 				inputs: inputs,
@@ -523,7 +607,7 @@ impl Block {
 
 		let out_set = self.outputs
 			.iter()
-			.filter(|out| !out.features.contains(COINBASE_OUTPUT))
+			.filter(|out| !out.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.map(|out| out.commitment())
 			.collect::<HashSet<_>>();
 
@@ -557,10 +641,6 @@ impl Block {
 	/// Validates all the elements in a block that can be checked without
 	/// additional data. Includes commitment sums and kernels, Merkle
 	/// trees, reward, etc.
-	///
-	/// TODO - performs various verification steps - discuss renaming this to "verify"
-	/// as all the steps within are verify steps.
-	///
 	pub fn validate(&self) -> Result<(), Error> {
 		self.verify_weight()?;
 		self.verify_sorted()?;
@@ -602,55 +682,56 @@ impl Block {
 		let io_sum = self.sum_commitments()?;
 
 		// sum all kernels commitments
-		let proof_commits = map_vec!(self.kernels, |proof| proof.excess);
+		let kernel_sum = {
+			let mut kernel_commits = self.kernels
+				.iter()
+				.map(|x| x.excess)
+				.collect::<Vec<_>>();
 
-		let proof_sum = {
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
-			secp.commit_sum(proof_commits, vec![])?
+
+			// add the kernel_offset in as necessary (unless offset is zero)
+			if self.header.kernel_offset != BlindingFactor::zero() {
+				let skey = self.header.kernel_offset.secret_key(&secp)?;
+				let offset_commit = secp.commit(0, skey)?;
+				kernel_commits.push(offset_commit);
+			}
+
+			secp.commit_sum(kernel_commits, vec![])?
 		};
 
-		// both should be the same
-		if proof_sum != io_sum {
+		// sum of kernel commitments (including kernel_offset) must match
+		// the sum of input/output commitments (minus fee)
+		if kernel_sum != io_sum {
 			return Err(Error::KernelSumMismatch);
 		}
 
 		// verify all signatures with the commitment as pk
-		for proof in &self.kernels {
-			proof.verify()?;
+		for kernel in &self.kernels {
+			kernel.verify()?;
 		}
 
 		Ok(())
 	}
 
-	/// Validate the coinbase outputs generated by miners. Entails 3 main checks:
-	///
-	/// * That the block does not exceed the number of permitted coinbase outputs or kernels.
-	/// * That the sum of all coinbase-marked outputs equal the supply.
-	/// * That the sum of blinding factors for all coinbase-marked outputs match
-	///   the coinbase-marked kernels.
+	// Validate the coinbase outputs generated by miners. Entails 2 main checks:
+	//
+	// * That the sum of all coinbase-marked outputs equal the supply.
+	// * That the sum of blinding factors for all coinbase-marked outputs match
+	//   the coinbase-marked kernels.
 	fn verify_coinbase(&self) -> Result<(), Error> {
 		let cb_outs = self.outputs
 			.iter()
-			.filter(|out| out.features.contains(COINBASE_OUTPUT))
+			.filter(|out| out.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.cloned()
 			.collect::<Vec<Output>>();
 
 		let cb_kerns = self.kernels
 			.iter()
-			.filter(|kernel| kernel.features.contains(COINBASE_KERNEL))
+			.filter(|kernel| kernel.features.contains(KernelFeatures::COINBASE_KERNEL))
 			.cloned()
 			.collect::<Vec<TxKernel>>();
-
-		// First check that we do not have too many coinbase outputs in the block.
-		if cb_outs.len() as u64 > consensus::MAX_BLOCK_COINBASE_OUTPUTS {
-			return Err(Error::CoinbaseOutputCountExceeded);
-		}
-
-		// And that we do not have too many coinbase kernels in the block.
-		if cb_kerns.len() as u64 > consensus::MAX_BLOCK_COINBASE_KERNELS {
-			return Err(Error::CoinbaseKernelCountExceeded);
-		}
 
 		let over_commit;
 		let out_adjust_sum;
@@ -691,7 +772,7 @@ impl Block {
 		// _and_ that we trust this claim.
 		// We should have already confirmed the entry from the MMR exists
 		// and has the expected hash.
-		assert!(output.features.contains(COINBASE_OUTPUT));
+		assert!(output.features.contains(OutputFeatures::COINBASE_OUTPUT));
 
 		if let Some(_) = self.outputs
 			.iter()
@@ -741,7 +822,7 @@ impl Block {
 		let rproof = keychain.range_proof(reward(fees), key_id, commit, msg)?;
 
 		let output = Output {
-			features: COINBASE_OUTPUT,
+			features: OutputFeatures::COINBASE_OUTPUT,
 			commit: commit,
 			switch_commit_hash: switch_commit_hash,
 			proof: rproof,
@@ -762,7 +843,7 @@ impl Block {
 		let sig = keychain.aggsig_sign_from_key_id(&msg, &key_id)?;
 
 		let proof = TxKernel {
-			features: COINBASE_KERNEL,
+			features: KernelFeatures::COINBASE_KERNEL,
 			excess: excess,
 			excess_sig: sig,
 			fee: 0,
@@ -780,7 +861,7 @@ mod test {
 	use core::hash::ZERO_HASH;
 	use core::Transaction;
 	use core::build::{self, input, output, with_fee};
-	use core::test::tx2i1o;
+	use core::test::{tx1i2o, tx2i1o};
 	use keychain::{Identifier, Keychain};
 	use consensus::{MAX_BLOCK_WEIGHT, BLOCK_OUTPUT_WEIGHT};
 	use std::time::Instant;
@@ -811,8 +892,7 @@ mod test {
 		build::transaction(
 			vec![input(v, ZERO_HASH, key_id1), output(3, key_id2), with_fee(2)],
 			&keychain,
-		).map(|(tx, _)| tx)
-			.unwrap()
+		).unwrap()
 	}
 
 	// Too slow for now #[test]
@@ -835,7 +915,6 @@ mod test {
 		let now = Instant::now();
 		parts.append(&mut vec![input(500000, ZERO_HASH, pks.pop().unwrap()), with_fee(2)]);
 		let mut tx = build::transaction(parts, &keychain)
-			.map(|(tx, _)| tx)
 			.unwrap();
 		println!("Build tx: {}", now.elapsed().as_secs());
 
@@ -870,7 +949,7 @@ mod test {
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		let mut btx1 = tx2i1o();
-		let (mut btx2, _) = build::transaction(
+		let mut btx2 = build::transaction(
 			vec![input(7, ZERO_HASH, key_id1), output(5, key_id2.clone()), with_fee(2)],
 			&keychain,
 		).unwrap();
@@ -898,14 +977,14 @@ mod test {
 
 		let coinbase_outputs = b.outputs
 			.iter()
-			.filter(|out| out.features.contains(COINBASE_OUTPUT))
+			.filter(|out| out.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.map(|o| o.clone())
 			.collect::<Vec<_>>();
 		assert_eq!(coinbase_outputs.len(), 1);
 
 		let coinbase_kernels = b.kernels
 			.iter()
-			.filter(|out| out.features.contains(COINBASE_KERNEL))
+			.filter(|out| out.features.contains(KernelFeatures::COINBASE_KERNEL))
 			.map(|o| o.clone())
 			.collect::<Vec<_>>();
 		assert_eq!(coinbase_kernels.len(), 1);
@@ -923,8 +1002,8 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let mut b = new_block(vec![], &keychain);
 
-		assert!(b.outputs[0].features.contains(COINBASE_OUTPUT));
-		b.outputs[0].features.remove(COINBASE_OUTPUT);
+		assert!(b.outputs[0].features.contains(OutputFeatures::COINBASE_OUTPUT));
+		b.outputs[0].features.remove(OutputFeatures::COINBASE_OUTPUT);
 
 		assert_eq!(
 			b.verify_coinbase(),
@@ -945,8 +1024,8 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let mut b = new_block(vec![], &keychain);
 
-		assert!(b.kernels[0].features.contains(COINBASE_KERNEL));
-		b.kernels[0].features.remove(COINBASE_KERNEL);
+		assert!(b.kernels[0].features.contains(KernelFeatures::COINBASE_KERNEL));
+		b.kernels[0].features.remove(KernelFeatures::COINBASE_KERNEL);
 
 		assert_eq!(
 			b.verify_coinbase(),
@@ -975,11 +1054,148 @@ mod test {
 	}
 
 	#[test]
+	fn empty_block_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let b = new_block(vec![], &keychain);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b).expect("serialization failed");
+		let target_len = match Keychain::is_using_bullet_proofs() {
+			true => 1_256,
+			false => 5_708,
+		};
+		assert_eq!(
+			vec.len(),
+			target_len,
+		);
+	}
+
+	#[test]
+	fn block_single_tx_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let tx1 = tx1i2o();
+		let b = new_block(vec![&tx1], &keychain);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b).expect("serialization failed");
+		let target_len = match Keychain::is_using_bullet_proofs() {
+			true => 2_900,
+			false => 16_256,
+		};
+		assert_eq!(
+			vec.len(),
+			target_len,
+		);
+	}
+
+	#[test]
+	fn empty_compact_block_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let b = new_block(vec![], &keychain);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
+		let target_len = match Keychain::is_using_bullet_proofs() {
+			true => 1_264,
+			false => 5_716,
+		};
+		assert_eq!(
+			vec.len(),
+			target_len,
+		);
+	}
+
+	#[test]
+	fn compact_block_single_tx_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let tx1 = tx1i2o();
+		let b = new_block(vec![&tx1], &keychain);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
+		let target_len = match Keychain::is_using_bullet_proofs() {
+			true => 1_270,
+			false => 5_722,
+		};
+		assert_eq!(
+			vec.len(),
+			target_len,
+		);
+	}
+
+	#[test]
+	fn block_10_tx_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+
+		let mut txs = vec![];
+		for _ in 0..10 {
+			let tx = tx1i2o();
+			txs.push(tx);
+		}
+
+		let b = new_block(
+			txs.iter().collect(),
+			&keychain,
+		);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b).expect("serialization failed");
+		let target_len = match Keychain::is_using_bullet_proofs() {
+			true => 17696,
+			false => 111188,
+		};
+		assert_eq!(
+			vec.len(),
+			target_len,
+		);
+	}
+
+	#[test]
+	fn compact_block_10_tx_serialized_size() {
+		let keychain = Keychain::from_random_seed().unwrap();
+
+		let mut txs = vec![];
+		for _ in 0..10 {
+			let tx = tx1i2o();
+			txs.push(tx);
+		}
+
+		let b = new_block(
+			txs.iter().collect(),
+			&keychain,
+		);
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
+		let target_len = match Keychain::is_using_bullet_proofs() {
+			true => 1_324,
+			false => 5_776,
+		};
+		assert_eq!(
+			vec.len(),
+			target_len,
+		);
+	}
+
+	#[test]
+	fn compact_block_hash_with_nonce() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let tx = tx1i2o();
+		let b = new_block(vec![&tx], &keychain);
+		let cb1 = b.as_compact_block();
+		let cb2 = b.as_compact_block();
+
+		// random nonce included in hash each time we generate a compact_block
+		// so the hash will always be unique (we use this to generate unique short_ids)
+		assert!(cb1.hash() != cb2.hash());
+
+		assert!(cb1.kern_ids[0] != cb2.kern_ids[0]);
+
+		// check we can identify the specified kernel from the short_id
+		// in either of the compact_blocks
+		assert_eq!(cb1.kern_ids[0], tx.kernels[0].short_id(&cb1.hash()));
+		assert_eq!(cb2.kern_ids[0], tx.kernels[0].short_id(&cb2.hash()));
+	}
+
+	#[test]
 	fn convert_block_to_compact_block() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let tx1 = tx2i1o();
+		let tx1 = tx1i2o();
 		let b = new_block(vec![&tx1], &keychain);
-
 		let cb = b.as_compact_block();
 
 		assert_eq!(cb.out_full.len(), 1);
@@ -990,16 +1206,28 @@ mod test {
 			cb.kern_ids[0],
 			b.kernels
 				.iter()
-				.find(|x| !x.features.contains(COINBASE_KERNEL))
+				.find(|x| !x.features.contains(KernelFeatures::COINBASE_KERNEL))
 				.unwrap()
-				.short_id(&b.hash())
+				.short_id(&cb.hash())
 		);
+	}
+
+	#[test]
+	fn hydrate_empty_compact_block() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let b = new_block(vec![], &keychain);
+		let cb = b.as_compact_block();
+		let hb = Block::hydrate_from(cb, vec![]);
+		assert_eq!(hb.header, b.header);
+		assert_eq!(hb.outputs, b.outputs);
+		assert_eq!(hb.kernels, b.kernels);
 	}
 
 	#[test]
 	fn serialize_deserialize_compact_block() {
 		let b = CompactBlock {
 			header: BlockHeader::default(),
+			nonce: 0,
 			out_full: vec![],
 			kern_full: vec![],
 			kern_ids: vec![ShortId::zero()],

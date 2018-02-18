@@ -16,6 +16,7 @@ use blake2;
 use rand::{thread_rng, Rng};
 use std::{fmt};
 use std::fmt::Display;
+use uuid::Uuid;
 use std::convert::From;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -37,6 +38,7 @@ use core::core::Transaction;
 use core::core::hash::Hash;
 use core::ser;
 use keychain;
+use keychain::BlindingFactor;
 use util;
 use util::secp;
 use util::secp::Signature;
@@ -102,6 +104,7 @@ pub enum ErrorKind {
     #[fail(display = "JSON format error")]
     Format,
 
+   
     #[fail(display = "I/O error")]
     IO,
 
@@ -119,6 +122,15 @@ pub enum ErrorKind {
 
     #[fail(display = "Signature error")]
     Signature(&'static str),
+
+	/// Attempt to use duplicate transaction id in separate transactions
+    #[fail(display = "Duplicate transaction ID error")]
+	DuplicateTransactionId,
+
+	/// Wallet seed already exists
+    #[fail(display = "Wallet seed exists error")]
+	WalletSeedExists,
+	
 
     #[fail(display = "Generic error: {}", _0)]
     GenericError(&'static str),
@@ -388,7 +400,7 @@ impl WalletSeed {
 		debug!(LOGGER, "Generating wallet seed file at: {}", seed_file_path,);
 
 		if Path::new(seed_file_path).exists() {
-			panic!("wallet seed file already exists");
+			Err(ErrorKind::WalletSeedExists)?
 		} else {
 			let seed = WalletSeed::init_new();
 			let mut file = File::create(seed_file_path).context(ErrorKind::IO)?;
@@ -692,9 +704,11 @@ pub enum PartialTxPhase {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PartialTx {
 	pub phase:  PartialTxPhase,
+	pub id: Uuid,
 	pub amount: u64,
 	pub public_blind_excess: String,
 	pub public_nonce: String,
+	pub kernel_offset: String,
 	pub part_sig: String,
 	pub tx: String,
 }
@@ -703,13 +717,15 @@ pub struct PartialTx {
 /// aggsig_tx_context should contain the private key/nonce pair
 /// the resulting partial tx will contain the corresponding public keys
 pub fn build_partial_tx(
+	transaction_id : &Uuid,
 	keychain: &keychain::Keychain,
 	receive_amount: u64,
+	kernel_offset: BlindingFactor,
 	part_sig: Option<secp::Signature>,
 	tx: Transaction,
 ) -> PartialTx {
 
-	let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys();
+	let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys(transaction_id);
 	let mut pub_excess = pub_excess.serialize_vec(keychain.secp(), true).clone();
 	let len = pub_excess.clone().len();
 	let pub_excess: Vec<_> = pub_excess.drain(0..len).collect();
@@ -720,9 +736,11 @@ pub fn build_partial_tx(
 
 	PartialTx {
 		phase: PartialTxPhase::SenderInitiation,
+		id : transaction_id.clone(),
 		amount: receive_amount,
 		public_blind_excess: util::to_hex(pub_excess),
 		public_nonce: util::to_hex(pub_nonce),
+		kernel_offset: kernel_offset.to_hex(),
 		part_sig: match part_sig {
 			None => String::from("00"),
 			Some(p) => util::to_hex(p.serialize_der(&keychain.secp())),
@@ -736,11 +754,15 @@ pub fn build_partial_tx(
 pub fn read_partial_tx(
 	keychain: &keychain::Keychain,
 	partial_tx: &PartialTx,
-) -> Result<(u64, PublicKey, PublicKey, Option<Signature>, Transaction), Error> {
+) -> Result<(u64, PublicKey, PublicKey, BlindingFactor, Option<Signature>, Transaction), Error> {
 	let blind_bin = util::from_hex(partial_tx.public_blind_excess.clone()).context(ErrorKind::GenericError("Could not decode HEX"))?;
 	let blinding = PublicKey::from_slice(keychain.secp(), &blind_bin[..]).context(ErrorKind::GenericError("Could not construct public key"))?;
+
 	let nonce_bin = util::from_hex(partial_tx.public_nonce.clone()).context(ErrorKind::GenericError("Could not decode HEX"))?;
 	let nonce = PublicKey::from_slice(keychain.secp(), &nonce_bin[..]).context(ErrorKind::GenericError("Could not construct public key"))?;
+
+	let kernel_offset = BlindingFactor::from_hex(&partial_tx.kernel_offset.clone()).context(ErrorKind::GenericError("Could not decode HEX"))?;
+
 	let sig_bin = util::from_hex(partial_tx.part_sig.clone()).context(ErrorKind::GenericError("Could not decode HEX"))?;
 	let sig = match sig_bin.len() {
 		1 => None,
@@ -748,7 +770,7 @@ pub fn read_partial_tx(
 	};
 	let tx_bin = util::from_hex(partial_tx.tx.clone()).context(ErrorKind::GenericError("Could not decode HEX"))?;
 	let tx = ser::deserialize(&mut &tx_bin[..]).context(ErrorKind::GenericError("Could not deserialize transaction, invalid format."))?;
-    Ok((partial_tx.amount, blinding, nonce, sig, tx))
+    Ok((partial_tx.amount, blinding, nonce, kernel_offset, sig, tx))
 }
 
 /// Amount in request to build a coinbase output.
@@ -779,4 +801,26 @@ pub struct CbData {
 	pub output: String,
 	pub kernel: String,
 	pub key_id: String,
+}
+
+/// a contained wallet info struct, so automated tests can parse wallet info
+/// can add more fields here over time as needed
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WalletInfo {
+	// height from which info was taken
+	pub current_height: u64,
+	// total amount in the wallet
+	pub total: u64,
+	// amount awaiting confirmation
+	pub amount_awaiting_confirmation: u64,
+	// confirmed but locked
+	pub amount_confirmed_but_locked: u64,
+	// amount currently spendable
+	pub amount_currently_spendable: u64,
+	// amount locked by previous transactions
+	pub amount_locked: u64,
+	// whether the data was confirmed against a live node
+	pub data_confirmed: bool,
+	// node confirming the data
+	pub data_confirmed_from: String,
 }

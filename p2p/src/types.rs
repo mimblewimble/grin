@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2016-2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,14 +13,10 @@
 // limitations under the License.
 
 use std::convert::From;
+use std::fs::File;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
-
-use futures::Future;
-use futures_cpupool::CpuPool;
-use tokio_core::net::TcpStream;
-use tokio_timer::TimerError;
+use std::sync::mpsc;
 
 use core::core;
 use core::core::hash::Hash;
@@ -42,6 +38,8 @@ pub const MAX_PEER_ADDRS: u32 = 256;
 pub enum Error {
 	Serialization(ser::Error),
 	Connection(io::Error),
+	/// Header type does not match the expected message type
+	BadMessage,
 	Banned,
 	ConnectionClose,
 	Timeout,
@@ -72,11 +70,16 @@ impl From<io::Error> for Error {
 		Error::Connection(e)
 	}
 }
-impl From<TimerError> for Error {
-	fn from(_: TimerError) -> Error {
-		Error::Timeout
+impl<T> From<mpsc::SendError<T>> for Error {
+	fn from(_e: mpsc::SendError<T>) -> Error {
+		Error::ConnectionClose
 	}
 }
+// impl From<TimerError> for Error {
+// 	fn from(_: TimerError) -> Error {
+// 		Error::Timeout
+// 	}
+// }
 
 /// Configuration for the peer-to-peer server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,23 +108,23 @@ impl Default for P2PConfig {
 bitflags! {
   /// Options for what type of interaction a peer supports
   #[derive(Serialize, Deserialize)]
-  pub flags Capabilities: u32 {
+  pub struct Capabilities: u32 {
 	/// We don't know (yet) what the peer can do.
-	const UNKNOWN = 0b00000000,
+	const UNKNOWN = 0b00000000;
 	/// Full archival node, has the whole history without any pruning.
-	const FULL_HIST = 0b00000001,
+	const FULL_HIST = 0b00000001;
 	/// Can provide block headers and the UTXO set for some recent-enough
 	/// height.
-	const UTXO_HIST = 0b00000010,
+	const UTXO_HIST = 0b00000010;
 	/// Can provide a list of healthy peers
-	const PEER_LIST = 0b00000100,
+	const PEER_LIST = 0b00000100;
 
-	const FULL_NODE = FULL_HIST.bits | UTXO_HIST.bits | PEER_LIST.bits,
+	const FULL_NODE = Capabilities::FULL_HIST.bits | Capabilities::UTXO_HIST.bits | Capabilities::PEER_LIST.bits;
   }
 }
 
 /// General information about a connected peer that's useful to other modules.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PeerInfo {
 	pub capabilities: Capabilities,
 	pub user_agent: String,
@@ -130,47 +133,15 @@ pub struct PeerInfo {
 	pub total_difficulty: Difficulty,
 }
 
-/// A given communication protocol agreed upon between 2 peers (usually
-/// ourselves and a remote) after handshake. This trait is necessary to allow
-/// protocol negotiation as it gets upgraded to multiple versions.
-pub trait Protocol {
-	/// Starts handling protocol communication, the connection) is expected to
-	/// be  known already, usually passed during construction. Will typically
-	/// block so needs to be called withing a coroutine. Should also be called
-	/// only once.
-	fn handle(&self, conn: TcpStream, na: Arc<NetAdapter>, addr: SocketAddr, pool: CpuPool)
-		-> Box<Future<Item = (), Error = Error>>;
-
-	/// Sends a ping message to the remote peer.
-	fn send_ping(&self, total_difficulty: Difficulty, height: u64) -> Result<(), Error>;
-
-	/// Relays a block to the remote peer.
-	fn send_block(&self, b: &core::Block) -> Result<(), Error>;
-
-	fn send_compact_block(&self, cb: &core::CompactBlock) -> Result<(), Error>;
-
-	/// Relays a block header to the remote peer ("header first" propagation).
-	fn send_header(&self, bh: &core::BlockHeader) -> Result<(), Error>;
-
-	/// Relays a transaction to the remote peer.
-	fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error>;
-
-	/// Sends a request for block headers based on the provided block locator.
-	fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error>;
-
-	/// Sends a request for a block from its hash.
-	fn send_block_request(&self, h: Hash) -> Result<(), Error>;
-
-	fn send_compact_block_request(&self, h: Hash) -> Result<(), Error>;
-
-	/// Sends a request for some peer addresses.
-	fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error>;
-
-	/// How many bytes have been sent/received to/from the remote peer.
-	fn transmitted_bytes(&self) -> (u64, u64);
-
-	/// Close the connection to the remote peer.
-	fn close(&self);
+/// The full sumtree data along with indexes required for a consumer to
+/// rewind to a consistant requested state.
+pub struct SumtreesRead {
+	/// Output tree index the receiver should rewind to
+	pub output_index: u64,
+	/// Kernel tree index the receiver should rewind to
+	pub kernel_index: u64,
+	/// Binary stream for the sumtree zipped data
+	pub reader: File,
 }
 
 /// Bridge between the networking layer and the rest of the system. Handles the
@@ -208,6 +179,19 @@ pub trait ChainAdapter: Sync + Send {
 
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
+
+	/// Provides a reading view into the current sumtree state as well as
+	/// the required indexes for a consumer to rewind to a consistant state
+	/// at the provided block hash.
+	fn sumtrees_read(&self, h: Hash) -> Option<SumtreesRead>;
+
+	/// Writes a reading view on a sumtree state that's been provided to us.
+	/// If we're willing to accept that new state, the data stream will be
+	/// read as a zip file, unzipped and the resulting state files should be
+	/// rewound to the provided indexes.
+	fn sumtrees_write(&self, h: Hash,
+										rewind_to_output: u64, rewind_to_kernel: u64,
+										sumtree_data: File, peer_addr: SocketAddr) -> bool;
 }
 
 /// Additional methods required by the protocol that don't need to be

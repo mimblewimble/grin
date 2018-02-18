@@ -26,7 +26,7 @@ use consensus::PROOFSIZE;
 use consensus::DEFAULT_SIZESHIFT;
 use consensus::COINBASE_MATURITY;
 use consensus::{MEDIAN_TIME_WINDOW, INITIAL_DIFFICULTY, 
-	BLOCK_TIME_SEC, DIFFICULTY_ADJUST_WINDOW};
+	BLOCK_TIME_SEC, DIFFICULTY_ADJUST_WINDOW, CUT_THROUGH_HORIZON};
 use core::target::Difficulty;
 use consensus::TargetError;
 
@@ -50,6 +50,9 @@ pub const AUTOMATED_TESTING_COINBASE_MATURITY: u64 = 3;
 
 /// User testing coinbase maturity
 pub const USER_TESTING_COINBASE_MATURITY: u64 = 3;
+
+/// Testing cut through horizon in blocks
+pub const TESTING_CUT_THROUGH_HORIZON: u32 = 20;
 
 /// Testing initial block difficulty
 pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
@@ -160,6 +163,18 @@ pub fn initial_block_difficulty() -> u64 {
 		ChainTypes::Testnet1 => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::Testnet2 => TESTNET2_INITIAL_DIFFICULTY,
 		ChainTypes::Mainnet => INITIAL_DIFFICULTY,
+	}
+}
+
+/// Horizon at which we can cut-through and do full local pruning
+pub fn cut_through_horizon() -> u32 {
+	let param_ref = CHAIN_TYPE.read().unwrap();
+	match *param_ref {
+		ChainTypes::AutomatedTesting => TESTING_CUT_THROUGH_HORIZON,
+		ChainTypes::UserTesting => TESTING_CUT_THROUGH_HORIZON,
+		ChainTypes::Testnet1 => CUT_THROUGH_HORIZON,
+		ChainTypes::Testnet2 => CUT_THROUGH_HORIZON,
+		ChainTypes::Mainnet => CUT_THROUGH_HORIZON,
 	}
 }
 

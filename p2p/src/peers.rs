@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::collections::HashMap;
+use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
@@ -25,27 +26,24 @@ use util::LOGGER;
 use time;
 
 use peer::Peer;
-use store::{PeerData, PeerStore, State};
+use store::{PeerStore, PeerData, State};
 use types::*;
 
-#[derive(Clone)]
 pub struct Peers {
 	pub adapter: Arc<ChainAdapter>,
-	store: Arc<PeerStore>,
-	peers: Arc<RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>>,
-	config: P2PConfig,
+	store: PeerStore,
+	peers: RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>,
 }
 
 unsafe impl Send for Peers {}
 unsafe impl Sync for Peers {}
 
 impl Peers {
-	pub fn new(store: PeerStore, adapter: Arc<ChainAdapter>, config: P2PConfig) -> Peers {
+	pub fn new(store: PeerStore, adapter: Arc<ChainAdapter>, _config: P2PConfig) -> Peers {
 		Peers {
 			adapter,
-			store: Arc::new(store),
-			peers: Arc::new(RwLock::new(HashMap::new())),
-			config,
+			store,
+			peers: RwLock::new(HashMap::new()),
 		}
 	}
 
@@ -424,9 +422,9 @@ impl Peers {
 		}
 	}
 
-	pub fn stop(self) {
-		let peers = self.connected_peers();
-		for peer in peers {
+	pub fn stop(&self) {
+		let mut peers = self.peers.write().unwrap();
+		for (_, peer) in peers.drain() {
 			let peer = peer.read().unwrap();
 			peer.stop();
 		}
@@ -482,6 +480,25 @@ impl ChainAdapter for Peers {
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
 	}
+	fn sumtrees_read(&self, h: Hash) -> Option<SumtreesRead> {
+		self.adapter.sumtrees_read(h)
+	}
+	fn sumtrees_write(
+		&self,
+		h: Hash,
+		rewind_to_output: u64,
+		rewind_to_kernel: u64,
+		sumtree_data: File,
+		peer_addr: SocketAddr,
+	) -> bool {
+		if !self.adapter.sumtrees_write(h, rewind_to_output, rewind_to_kernel,
+																		sumtree_data, peer_addr) {
+			self.ban_peer(&peer_addr);
+			false
+		} else {
+			true
+		}
+	}
 }
 
 impl NetAdapter for Peers {
@@ -504,7 +521,7 @@ impl NetAdapter for Peers {
 			}
 			let peer = PeerData {
 				addr: pa,
-				capabilities: UNKNOWN,
+				capabilities: Capabilities::UNKNOWN,
 				user_agent: "".to_string(),
 				flags: State::Healthy,
 				last_banned: 0,
