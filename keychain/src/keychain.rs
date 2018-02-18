@@ -15,6 +15,7 @@
 use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use std::{error, fmt};
 
 use util::secp;
 use util::secp::{Message, Secp256k1, Signature};
@@ -40,6 +41,22 @@ pub enum Error {
 	KeyDerivation(String),
 	Transaction(String),
 	RangeProof(String),
+}
+
+impl error::Error for Error {
+	fn description(&self) -> &str {
+		match *self {
+			_ => "some kind of keychain error",
+		}
+	}
+}
+
+impl fmt::Display for Error {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			_ => write!(f, "some kind of keychain error"),
+		}
+	}
 }
 
 impl From<secp::Error> for Error {

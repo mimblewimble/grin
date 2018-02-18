@@ -14,7 +14,7 @@
 
 use blake2;
 use rand::{thread_rng, Rng};
-use std::{error, fmt, num};
+use std::{fmt, num};
 use uuid::Uuid;
 use std::convert::From;
 use std::fs::{self, File, OpenOptions};
@@ -24,6 +24,7 @@ use std::path::MAIN_SEPARATOR;
 use std::collections::HashMap;
 use std::cmp::min;
 
+use failure::{Fail};
 use hyper;
 use serde;
 use serde_json;
@@ -66,49 +67,49 @@ pub fn tx_fee(input_len: usize, output_len: usize, base_fee: Option<u64>) -> u64
 }
 
 /// Wallet errors, mostly wrappers around underlying crypto or I/O errors.
-#[derive(Debug)]
+#[derive(Fail, Debug)]
 pub enum Error {
+ 	#[fail(display = "Not enough funds")]
 	NotEnoughFunds(u64),
+	#[fail(display = "Fee dispute: sender fee {}, recipient fee {}", sender_fee, recipient_fee)]
 	FeeDispute { sender_fee: u64, recipient_fee: u64 },
+	#[fail(display = "Fee exceeds amount: sender amount {}, recipient fee {}", sender_amount, recipient_fee)]
 	FeeExceedsAmount { sender_amount: u64, recipient_fee: u64 },
-	Keychain(keychain::Error),
-	Transaction(transaction::Error),
-	Secp(secp::Error),
+    #[fail(display = "Keychain error")]
+	Keychain(#[cause] keychain::Error),
+	#[fail(display = "Transaction error")]
+	Transaction(#[cause] transaction::Error),
+	#[fail(display = "Secp error")]
+	Secp(#[cause] secp::Error),
+	#[fail(display = "Wallet data error: {}", _0)]
 	WalletData(String),
 	/// An error in the format of the JSON structures exchanged by the wallet
+	#[fail(display = "JSON format error")]
 	Format(String),
 	/// An IO Error
-	IOError(io::Error),
+	#[fail(display = "I/O error")]
+	IO(#[cause] io::Error),
 	/// Error when contacting a node through its API
-	Node(api::Error),
+	#[fail(display = "Node API error")]
+	Node(#[cause] api::Error),
 	/// Error originating from hyper.
-	Hyper(hyper::Error),
+	#[fail(display = "Hyper error")]
+	Hyper(#[cause] hyper::Error),
 	/// Error originating from hyper uri parsing.
-	Uri(hyper::error::UriError),
+	#[fail(display = "Uri parsing error")]
+	Uri(#[cause] hyper::error::UriError),
 	/// Error with signatures during exchange
+	#[fail(display = "Signature error")]
 	Signature(String),
 	/// Attempt to use duplicate transaction id in separate transactions
+	#[fail(display = "Duplicate transaction ID error")]
 	DuplicateTransactionId,
 	/// Wallet seed already exists
+	#[fail(display = "Wallet sed already exists error")]
 	WalletSeedExists,
 	/// Other
+	#[fail(display = "Generic error: {}", _0)]
 	GenericError(String,)
-}
-
-impl error::Error for Error {
-	fn description(&self) -> &str {
-		match *self {
-			_ => "some kind of wallet error",
-		}
-	}
-}
-
-impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match *self {
-			_ => write!(f, "some kind of wallet error"),
-		}
-	}
 }
 
 impl From<keychain::Error> for Error {
@@ -157,7 +158,7 @@ impl From<api::Error> for Error {
 
 impl From<io::Error> for Error {
 	fn from(e: io::Error) -> Error {
-		Error::IOError(e)
+		Error::IO(e)
 	}
 }
 
