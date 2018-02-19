@@ -315,7 +315,8 @@ pub fn restore(
 							height: output.4,
 							lock_height: output.5,
 							is_coinbase: output.6,
-							block: BlockIdentifier::zero(),
+							block: None,
+							merkle_proof: None,
 						});
 					};
 				}

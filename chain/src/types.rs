@@ -71,6 +71,7 @@ pub enum Error {
 	DuplicateKernel(Commitment),
 	/// coinbase can only be spent after it has matured (n blocks)
 	ImmatureCoinbase,
+	MerkleProof,
 	/// output not found
 	OutputNotFound,
 	/// output spent

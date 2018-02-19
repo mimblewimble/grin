@@ -41,6 +41,7 @@ use std::ops::{self, Deref};
 
 use core::hash::{Hash, Hashed};
 use ser::{self, Readable, Reader, Writeable, Writer};
+use util;
 use util::LOGGER;
 
 /// Trait for an element of the tree that has a well-defined sum and hash that
@@ -209,6 +210,145 @@ where
 	fn remove(&mut self, positions: Vec<u64>, index: u32) -> Result<(), String>;
 }
 
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+pub struct MerkleProof {
+	pub root: Hash,
+	pub node: Hash,
+	peaks: Vec<Hash>,
+	path: Vec<Hash>,
+	left_right: Vec<bool>,
+}
+
+impl Writeable for MerkleProof {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		ser_multiwrite!(
+			writer,
+			[write_fixed_bytes, &self.root],
+			[write_fixed_bytes, &self.node],
+			[write_u64, self.peaks.len() as u64],
+
+			// note: path length used for both path and left_right vecs
+			[write_u64, self.path.len() as u64]
+		);
+
+		try!(self.peaks.write(writer));
+		try!(self.path.write(writer));
+
+		// TODO - how to serialize/deserialize these boolean values as bytes?
+		for x in &self.left_right {
+			if *x {
+				try!(writer.write_u8(1));
+			} else {
+				try!(writer.write_u8(0));
+			}
+		}
+
+		Ok(())
+	}
+}
+
+impl Readable for MerkleProof {
+	fn read(reader: &mut Reader) -> Result<MerkleProof, ser::Error> {
+		let root = Hash::read(reader)?;
+		let node = Hash::read(reader)?;
+
+		let (peaks_len, path_len) =
+			ser_multiread!(reader, read_u64, read_u64);
+
+		let mut peaks = Vec::with_capacity(peaks_len as usize);
+		for _ in 0..peaks_len {
+			peaks.push(Hash::read(reader)?);
+		}
+		let mut path = Vec::with_capacity(path_len as usize);
+		for _ in 0..path_len {
+			path.push(Hash::read(reader)?);
+		}
+
+		let left_right_bytes = reader.read_fixed_bytes(path_len as usize)?;
+		let left_right = left_right_bytes.iter().map(|&x| x == 1).collect();
+		Ok(
+			MerkleProof {
+				root,
+				node,
+				peaks,
+				path,
+				left_right,
+			}
+		)
+	}
+}
+
+impl MerkleProof {
+	pub fn empty() -> MerkleProof {
+		MerkleProof {
+			root: Hash::zero(),
+			node: Hash::zero(),
+			peaks: vec![],
+			path: vec![],
+			left_right: vec![],
+		}
+	}
+
+	pub fn to_hex(&self) -> String {
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &self).expect("serialization failed");
+		util::to_hex(vec)
+	}
+
+	pub fn from_hex(hex: &str) -> Result<MerkleProof, String> {
+		let bytes = util::from_hex(hex.to_string()).unwrap();
+		let res = ser::deserialize(&mut &bytes[..])
+			.map_err(|_| format!("failed to deserialize a Merkle Proof"))?;
+		Ok(res)
+	}
+
+	pub fn verify(&self) -> bool {
+		println!("verifying - {:?}", self);
+
+		// if we have no further elements in the path
+		// then this proof verifies successfully if our node is
+		// one of the peaks
+		// and the peaks themselves hash to give the root
+		if self.path.len() == 0 {
+			if !self.peaks.contains(&self.node) {
+				return false;
+			}
+
+			let mut bagged = None;
+			for peak in self.peaks.iter().map(|&x| Some(x)) {
+				bagged = match (bagged, peak) {
+					(None, rhs) => rhs,
+					(lhs, None) => lhs,
+					(Some(lhs), Some(rhs)) => Some((lhs, rhs).hash()),
+				}
+			}
+			return bagged == Some(self.root);
+		}
+
+		let mut path = self.path.clone();
+		let sibling = path.remove(0);
+		let mut left_right = self.left_right.clone();
+
+		// hash our node and sibling together (noting left/right position of the sibling)
+		let parent = if left_right.remove(0) {
+			(self.node, sibling)
+		} else {
+			(sibling, self.node)
+		}.hash();
+
+		let proof = MerkleProof {
+			root: self.root,
+			node: parent,
+			peaks: self.peaks.clone(),
+			path,
+			left_right,
+		};
+
+		proof.verify()
+	}
+}
+
+
 /// Prunable Merkle Mountain Range implementation. All positions within the tree
 /// start at 1 as they're postorder tree traversal positions rather than array
 /// indices.
@@ -261,12 +401,49 @@ where
 		let mut ret = None;
 		for peak in peaks {
 			ret = match (ret, peak) {
-				(None, x) => x,
-				(Some(hsum), None) => Some(hsum),
+				(None, rhs) => rhs,
+				(lhs, None) => lhs,
 				(Some(lhsum), Some(rhsum)) => Some(lhsum + rhsum),
 			}
 		}
 		ret.expect("no root, invalid tree")
+	}
+
+	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
+		if !is_leaf(pos) {
+			return Err(format!("not a leaf at pos {}", pos));
+		}
+
+		let root = self.root();
+		let node = self.get(pos).unwrap();
+
+		let family_branch = family_branch(pos, self.last_pos);
+		let left_right = family_branch
+			.iter()
+			.map(|x| x.2)
+			.collect::<Vec<_>>();
+
+		let path = family_branch
+			.iter()
+			.filter_map(|x| self.get(x.1))
+			.map(|x| x.hash)
+			.collect::<Vec<_>>();
+
+		let peaks = peaks(self.last_pos)
+			.iter()
+			.filter_map(|&x| self.get(x))
+			.map(|x| x.hash)
+			.collect::<Vec<_>>();
+
+		let proof = MerkleProof {
+			root: root.hash,
+			node: node.hash,
+			path,
+			peaks,
+			left_right,
+		};
+
+		Ok(proof)
 	}
 
 	/// Push a new Summable element in the MMR. Computes new related peaks at
@@ -336,7 +513,7 @@ where
 		let mut to_prune = vec![];
 		let mut current = position;
 		while current + 1 < self.last_pos {
-			let (parent, sibling) = family(current);
+			let (parent, sibling, _) = family(current);
 			if parent > self.last_pos {
 				// can't prune when our parent isn't here yet
 				break;
@@ -574,7 +751,7 @@ impl PruneList {
 	pub fn add(&mut self, pos: u64) {
 		let mut current = pos;
 		loop {
-			let (parent, sibling) = family(current);
+			let (parent, sibling, _) = family(current);
 			match self.pruned_nodes.binary_search(&sibling) {
 				Ok(idx) => {
 					self.pruned_nodes.remove(idx);
@@ -604,7 +781,7 @@ impl PruneList {
 					let next_peak_pos = self.pruned_nodes[idx];
 					let mut cursor = pos;
 					loop {
-						let (parent, _) = family(cursor);
+						let (parent, _, _) = family(cursor);
 						if next_peak_pos == parent {
 							return None;
 						}
@@ -737,22 +914,42 @@ pub fn bintree_postorder_height(num: u64) -> u64 {
 	most_significant_pos(h) - 1
 }
 
-/// Calculates the positions of the parent and sibling of the node at the
-/// provided position.
-pub fn family(pos: u64) -> (u64, u64) {
-	let sibling: u64;
-	let parent: u64;
+pub fn is_leaf(pos: u64) -> bool {
+	bintree_postorder_height(pos) == 0
+}
 
+/// Calculates the positions of the parent and sibling of the node at the
+/// provided position. Also returns a boolean representing whether the sibling is on left
+/// branch or right branch (left=0, right=1)
+pub fn family(pos: u64) -> (u64, u64, bool) {
 	let pos_height = bintree_postorder_height(pos);
 	let next_height = bintree_postorder_height(pos + 1);
 	if next_height > pos_height {
-		sibling = bintree_jump_left_sibling(pos);
-		parent = pos + 1;
+		let sibling = bintree_jump_left_sibling(pos);
+		let parent = pos + 1;
+		(parent, sibling, false)
 	} else {
-		sibling = bintree_jump_right_sibling(pos);
-		parent = sibling + 1;
+		let sibling = bintree_jump_right_sibling(pos);
+		let parent = sibling + 1;
+		(parent, sibling, true)
 	}
-	(parent, sibling)
+}
+
+pub fn family_branch(pos: u64, last_pos: u64) -> Vec<(u64, u64, bool)> {
+	// loop going up the tree, from node to parent, as long as we stay inside
+	// the tree (as defined by last_pos).
+	let mut branch = vec![];
+	let mut current = pos;
+	while current + 1 <= last_pos {
+		let (parent, sibling, sibling_branch) = family(current);
+		if parent > last_pos {
+			break;
+		}
+		branch.push((parent, sibling, sibling_branch));
+
+		current = parent;
+	}
+	branch
 }
 
 /// Calculates the position of the top-left child of a parent node in the
@@ -846,7 +1043,7 @@ mod test {
 
 	#[test]
 	#[allow(unused_variables)]
-	fn first_50_mmr_heights() {
+	fn first_100_mmr_heights() {
 		let first_100_str = "0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 4 \
 		                     0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 4 5 \
 		                     0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 4 0 0 1 0 0";
@@ -864,19 +1061,120 @@ mod test {
 		}
 	}
 
+	/// Find parent and sibling positions for various node positions.
 	#[test]
-	#[allow(unused_variables)]
+	fn various_families() {
+		// 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3
+		assert_eq!(family(1), (3, 2, true));
+		assert_eq!(family(2), (3, 1, false));
+		assert_eq!(family(3), (7, 6, true));
+		assert_eq!(family(4), (6, 5, true));
+		assert_eq!(family(5), (6, 4, false));
+		assert_eq!(family(6), (7, 3, false));
+		assert_eq!(family(7), (15, 14, true));
+		assert_eq!(family(1_000), (1_001, 997, false));
+	}
+
+	#[test]
+	fn various_branches() {
+		// the two leaf nodes in a 3 node tree (height 1)
+		assert_eq!(family_branch(1, 3), [(3, 2, true)]);
+		assert_eq!(family_branch(2, 3), [(3, 1, false)]);
+
+		// the root node in a 3 node tree
+		assert_eq!(family_branch(3, 3), []);
+
+		// leaf node in a larger tree of 7 nodes (height 2)
+		assert_eq!(family_branch(1, 7), [(3, 2, true), (7, 6, true)]);
+
+		// note these only go as far up as the local peak, not necessarily the single root
+		assert_eq!(family_branch(1, 4), [(3, 2, true)]);
+		// pos 4 in a tree of size 4 is a local peak
+		assert_eq!(family_branch(4, 4), []);
+		// pos 4 in a tree of size 5 is also still a local peak
+		assert_eq!(family_branch(4, 5), []);
+		// pos 4 in a tree of size 6 has a parent and a sibling
+		assert_eq!(family_branch(4, 6), [(6, 5, true)]);
+		// a tree of size 7 is all under a single root
+		assert_eq!(family_branch(4, 7), [(6, 5, true), (7, 3, false)]);
+
+		// ok now for a more realistic one, a tree with over a million nodes in it
+		// find the "family path" back up the tree from a leaf node at 0
+		// Note: the first two entries in the branch are consistent with a small 7 node tree
+		// Note: each sibling is on the left branch, this is an example of the largest possible
+		// list of peaks before we start combining them into larger peaks.
+		assert_eq!(
+			family_branch(1, 1_049_000),
+			[
+				(3, 2, true),
+				(7, 6, true),
+				(15, 14, true),
+				(31, 30, true),
+				(63, 62, true),
+				(127, 126, true),
+				(255, 254, true),
+				(511, 510, true),
+				(1023, 1022, true),
+				(2047, 2046, true),
+				(4095, 4094, true),
+				(8191, 8190, true),
+				(16383, 16382, true),
+				(32767, 32766, true),
+				(65535, 65534, true),
+				(131071, 131070, true),
+				(262143, 262142, true),
+				(524287, 524286, true),
+				(1048575, 1048574, true),
+			]
+		);
+	}
+
+	#[test]
 	fn some_peaks() {
+		// 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3
 		let empty: Vec<u64> = vec![];
-		assert_eq!(peaks(1), vec![1]);
+		assert_eq!(peaks(1), [1]);
 		assert_eq!(peaks(2), empty);
-		assert_eq!(peaks(3), vec![3]);
-		assert_eq!(peaks(4), vec![3, 4]);
-		assert_eq!(peaks(11), vec![7, 10, 11]);
-		assert_eq!(peaks(22), vec![15, 22]);
-		assert_eq!(peaks(32), vec![31, 32]);
-		assert_eq!(peaks(35), vec![31, 34, 35]);
-		assert_eq!(peaks(42), vec![31, 38, 41, 42]);
+		assert_eq!(peaks(3), [3]);
+		assert_eq!(peaks(4), [3, 4]);
+		assert_eq!(peaks(5), empty);
+		assert_eq!(peaks(6), empty);
+		assert_eq!(peaks(7), [7]);
+		assert_eq!(peaks(8), [7, 8]);
+		assert_eq!(peaks(9), empty);
+		assert_eq!(peaks(10), [7, 10]);
+		assert_eq!(peaks(11), [7, 10, 11]);
+		assert_eq!(peaks(22), [15, 22]);
+		assert_eq!(peaks(32), [31, 32]);
+		assert_eq!(peaks(35), [31, 34, 35]);
+		assert_eq!(peaks(42), [31, 38, 41, 42]);
+
+		// large realistic example with almost 1.5 million nodes
+		// note the distance between peaks decreases toward the right (trees get smaller)
+		assert_eq!(
+			peaks(1048555),
+			[
+				524287,
+				786430,
+				917501,
+				983036,
+				1015803,
+				1032186,
+				1040377,
+				1044472,
+				1046519,
+				1047542,
+				1048053,
+				1048308,
+				1048435,
+				1048498,
+				1048529,
+				1048544,
+				1048551,
+				1048554,
+				1048555,
+			],
+		);
 	}
 
 	#[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -901,6 +1199,95 @@ mod test {
 			try!(writer.write_u32(self.0[2]));
 			writer.write_u32(self.0[3])
 		}
+	}
+
+	#[test]
+	fn empty_merkle_proof() {
+		let proof = MerkleProof::empty();
+		assert_eq!(proof.verify(), false);
+	}
+
+	#[test]
+	fn pmmr_merkle_proof() {
+		// 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3
+
+		let mut ba = VecBackend::new();
+		let mut pmmr = PMMR::new(&mut ba);
+
+		pmmr.push(TestElem([0, 0, 0, 1])).unwrap();
+		assert_eq!(pmmr.last_pos, 1);
+		let proof = pmmr.merkle_proof(1).unwrap();
+		let node = pmmr.get(1).unwrap().hash;
+		let root = pmmr.root().hash;
+		assert_eq!(proof.peaks, [root]);
+		assert!(proof.path.is_empty());
+		assert!(proof.left_right.is_empty());
+		assert!(proof.verify());
+
+		// push two more elements into the PMMR
+		pmmr.push(TestElem([0, 0, 0, 2])).unwrap();
+		pmmr.push(TestElem([0, 0, 0, 3])).unwrap();
+		assert_eq!(pmmr.last_pos, 4);
+
+		let proof1 = pmmr.merkle_proof(1).unwrap();
+		let node1 = pmmr.get(1).unwrap().hash;
+		let root = pmmr.root().hash;
+		assert_eq!(proof1.peaks.len(), 2);
+		assert_eq!(proof1.path.len(), 1);
+		assert_eq!(proof1.left_right, [true]);
+		assert!(proof1.verify());
+
+		let proof2 = pmmr.merkle_proof(2).unwrap();
+		let node2 = pmmr.get(2).unwrap().hash;
+		let root = pmmr.root().hash;
+		assert_eq!(proof2.peaks.len(), 2);
+		assert_eq!(proof2.path.len(), 1);
+		assert_eq!(proof2.left_right, [false]);
+		assert!(proof2.verify());
+
+		// check that we cannot generate a merkle proof for pos 3 (not a leaf node)
+		assert_eq!(pmmr.merkle_proof(3).err(), Some(format!("not a leaf at pos 3")));
+
+		let proof4 = pmmr.merkle_proof(4).unwrap();
+		let node4 = pmmr.get(4).unwrap().hash;
+		let root = pmmr.root().hash;
+		assert_eq!(proof4.peaks.len(), 2);
+		assert!(proof4.path.is_empty());
+		assert!(proof4.left_right.is_empty());
+		assert!(proof4.verify());
+
+		// now add a few more elements to the PMMR to build a larger merkle proof
+		for x in 4..1000 {
+			pmmr.push(TestElem([0, 0, 0, x])).unwrap();
+		}
+		let proof = pmmr.merkle_proof(1).unwrap();
+		let node = pmmr.get(1).unwrap().hash;
+		let root = pmmr.root().hash;
+		assert_eq!(proof.peaks.len(), 8);
+		assert_eq!(proof.path.len(), 9);
+		assert_eq!(proof.left_right.len(), 9);
+		assert!(proof.verify());
+	}
+
+	#[test]
+	fn merkle_proof_ser_deser() {
+		let mut ba = VecBackend::new();
+		let mut pmmr = PMMR::new(&mut ba);
+		for x in 0..15 {
+			pmmr.push(TestElem([0, 0, 0, x])).unwrap();
+		}
+		let proof = pmmr.merkle_proof(9).unwrap();
+		let node = pmmr.get(9).unwrap().hash;
+		let root = pmmr.root().hash;
+		assert!(proof.verify());
+		println!("{:?}", proof);
+
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &proof).expect("serialization failed");
+		let proof_2: MerkleProof = ser::deserialize(&mut &vec[..]).unwrap();
+		println!("{:?}", proof_2);
+
+		assert_eq!(proof, proof_2);
 	}
 
 	#[test]

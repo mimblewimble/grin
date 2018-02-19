@@ -278,7 +278,7 @@ fn spend_in_fork() {
 
 	let tx2 = build::transaction(
 		vec![
-			build::input(consensus::REWARD - 20000, next.hash(), kc.derive_key_id(30).unwrap()),
+			build::input(consensus::REWARD - 20000, kc.derive_key_id(30).unwrap()),
 			build::output(consensus::REWARD - 40000, kc.derive_key_id(31).unwrap()),
 			build::with_fee(20000),
 		],
