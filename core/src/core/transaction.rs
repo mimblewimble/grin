@@ -24,6 +24,8 @@ use std::ops;
 use consensus;
 use consensus::VerifySortOrder;
 use core::Committed;
+use core::global;
+use core::BlockHeader;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::{MerkleProof, Summable};
 use keychain;
@@ -91,11 +93,12 @@ pub enum Error {
 	ConsensusError(consensus::Error),
 	/// Error originating from an invalid lock-height
 	LockHeight(u64),
-	/// Error originating from an invalid switch commitment (coinbase lock_height related)
+	/// Error originating from an invalid switch commitment
 	SwitchCommitment,
 	/// Range proof validation error
 	RangeProof,
 	MerkleProof,
+	ImmatureCoinbase,
 }
 
 impl From<secp::Error> for Error {
@@ -498,12 +501,11 @@ pub struct Input{
 	pub features: OutputFeatures,
 	/// The commit referencing the output being spent.
 	pub commit: Commitment,
-
-
 	/// The hash of the block the output originated from.
 	/// Currently we only care about this for coinbase outputs.
-	/// TODO - include the merkle proof here once we support these.
 	pub block_hash: Option<Hash>,
+	/// The Merkle Proof that shows the output being spent by this input
+	/// existed and was unspent at the time of this block (proof of inclusion in utxo_root)
 	pub merkle_proof: Option<MerkleProof>,
 }
 
@@ -589,14 +591,69 @@ impl Input {
 
 	/// The input commitment which _partially_ identifies the output being spent.
 	/// In the presence of a fork we need additional info to uniquely identify the output.
-	/// Specifically the block hash (so correctly calculate lock_height for coinbase outputs).
+	/// Specifically the block hash (to correctly calculate lock_height for coinbase outputs).
 	pub fn commitment(&self) -> Commitment {
 		self.commit.clone()
+	}
+
+	pub fn block_hash(&self) -> Hash {
+		let block_hash = self.block_hash.clone();
+		block_hash.unwrap_or(Hash::zero())
 	}
 
 	pub fn merkle_proof(&self) -> MerkleProof {
 		let merkle_proof = self.merkle_proof.clone();
 		merkle_proof.unwrap_or(MerkleProof::empty())
+	}
+
+	/// Verify the maturity of an output being spent by an input.
+	/// Only relevant for spending coinbase outputs currently (locked for 1,000 confirmations).
+	///
+	/// The proof associates the output with the root by its hash (and pos) in the MMR.
+	/// The proof shows the output existed and was unspent at the time the utxo_root was built.
+	/// The root associates the proof with a specific block header with that utxo_root.
+	/// So the proof shows the output was unspent at the time of the block
+	/// and is at least as old as that block (may be older).
+	///
+	/// We can verify maturity of the output being spent by -
+	///
+	/// * verifying the Merkle Proof produces the correct root for the given hash (from MMR)
+	/// * verifying the root matches the utxo_root in the block_header
+	/// * verifying the hash matches the node hash in the Merkle Proof
+	/// * finally verify maturity rules based on height of the block header
+	///
+	pub fn verify_maturity(
+		&self,
+		hash: Hash,
+		header: &BlockHeader,
+		height: u64,
+	) -> Result<(), Error> {
+		if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+			let block_hash = self.block_hash();
+			let merkle_proof = self.merkle_proof();
+
+			// Is our Merkle Proof valid? Does node hash up consistently to the root?
+			if !merkle_proof.verify() {
+				return Err(Error::MerkleProof);
+			}
+
+			// Is the root the correct root for the given block header?
+			if merkle_proof.root != header.utxo_root {
+				return Err(Error::MerkleProof);
+			}
+
+			// Does the hash from the MMR actually match the one in the Merkle Proof?
+			if merkle_proof.node != hash {
+				return Err(Error::MerkleProof);
+			}
+
+			// Finally has the output matured sufficiently now we know the block?
+			let lock_height = header.height + global::coinbase_maturity();
+			if lock_height > height {
+				return Err(Error::ImmatureCoinbase);
+			}
+		}
+		Ok(())
 	}
 }
 

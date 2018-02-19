@@ -1202,6 +1202,12 @@ mod test {
 	}
 
 	#[test]
+	fn empty_merkle_proof() {
+		let proof = MerkleProof::empty();
+		assert_eq!(proof.verify(), false);
+	}
+
+	#[test]
 	fn pmmr_merkle_proof() {
 		// 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3
 

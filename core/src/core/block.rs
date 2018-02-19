@@ -783,42 +783,6 @@ impl Block {
 		Ok(())
 	}
 
-	// /// NOTE: this happens during apply_block (not the earlier validate_block)
-	// ///
-	// /// Calculate lock_height as block_height + 1,000
-	// /// Confirm height <= lock_height
-	// pub fn verify_coinbase_maturity(
-	// 	&self,
-	// 	input: &Input,
-	// 	height: u64,
-	// ) -> Result<(), Error> {
-	// 	let output = OutputIdentifier::from_input(&input);
-	//
-	// 	// We should only be calling verify_coinbase_maturity
-	// 	// if the sender claims we are spending a coinbase output
-	// 	// _and_ that we trust this claim.
-	// 	// We should have already confirmed the entry from the MMR exists
-	// 	// and has the expected hash.
-	// 	assert!(output.features.contains(OutputFeatures::COINBASE_OUTPUT));
-	//
-	// 	if let Some(_) = self.outputs
-	// 		.iter()
-	// 		.find(|x| OutputIdentifier::from_output(&x) == output)
-	// 	{
-	// 		let lock_height = self.header.height + global::coinbase_maturity();
-	// 		if lock_height > height {
-	// 			Err(Error::ImmatureCoinbase{
-	// 				height: height,
-	// 				lock_height: lock_height,
-	// 			})
-	// 		} else {
-	// 			Ok(())
-	// 		}
-	// 	} else {
-	// 		Err(Error::Other(format!("output not found in block")))
-	// 	}
-	// }
-
 	/// Builds the blinded output and related signature proof for the block reward.
 	pub fn reward_output(
 		keychain: &keychain::Keychain,

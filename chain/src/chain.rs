@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 
 use util::secp::pedersen::RangeProof;
 
-use core::core::{Input, OutputIdentifier, SumCommit};
+use core::core::{Input, OutputIdentifier, OutputFeatures, SumCommit};
 use core::core::hash::Hashed;
 use core::core::pmmr::{HashSum, NoSum, MerkleProof};
 use core::global;
@@ -408,8 +408,14 @@ impl Chain {
 	/// This only applies to inputs spending coinbase outputs.
 	/// An input spending a non-coinbase output will always pass this check.
 	pub fn is_matured(&self, input: &Input, height: u64) -> Result<(), Error> {
-		let mut sumtrees = self.sumtrees.write().unwrap();
-		sumtrees.is_matured(input, height)
+		if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+			let mut sumtrees = self.sumtrees.write().unwrap();
+			let output = OutputIdentifier::from_input(&input);
+			let hash = sumtrees.is_unspent(&output)?;
+			let header = self.get_block_header(&input.block_hash())?;
+			input.verify_maturity(hash, &header, height)?;
+		}
+		Ok(())
 	}
 
 	/// Sets the sumtree roots on a brand new block by applying the block on the

@@ -134,55 +134,6 @@ impl SumTrees {
 		}
 	}
 
-	/// Check the output being spent by the input has sufficiently matured.
-	/// This only applies for coinbase outputs being spent (1,000 blocks).
-	/// Non-coinbase outputs will always pass this check.
-	/// For a coinbase output we find the block by the block hash provided in the input
-	/// and check coinbase maturty based on the height of this block.
-	pub fn is_matured(
-		&mut self,
-		input: &Input,
-		height: u64,
-	) -> Result<(), Error> {
-		let output = OutputIdentifier::from_input(&input);
-		let hash = self.is_unspent(&output)?;
-
-		// At this point we can be sure the input is spending the output
-		// it claims to be spending, and that it is coinbase or non-coinbase.
-		// If we are spending a coinbase output then go find the block
-		// and check the coinbase maturity rule is being met.
-		if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-			let block_hash = &input.block_hash
-				.expect("input spending coinbase output must have a block hash");
-			let merkle_proof = &input.merkle_proof();
-
-			// We need to check the following here -
-			//   * merkle proof is valid
-			//   * merkle proof root matches utxo_root in block header
-			//   * merkle proof node matches hash_sum.hash
-			//   * header height is old enough to have matured
-			if !merkle_proof.verify() {
-				return Err(Error::MerkleProof);
-			}
-			let header = self.commit_index.get_block_header(&block_hash)?;
-			if merkle_proof.root != header.utxo_root {
-				return Err(Error::MerkleProof);
-			}
-			if merkle_proof.node != hash {
-				return Err(Error::MerkleProof);
-			}
-			let lock_height = header.height + global::coinbase_maturity();
-			if lock_height > height {
-				return Err(Error::ImmatureCoinbase);
-			}
-
-			// let block = self.commit_index.get_block(&block_hash)?;
-			// block.verify_coinbase_maturity(&input, height)
-			// 	.map_err(|_| Error::ImmatureCoinbase)?;
-		}
-		Ok(())
-	}
-
 	/// returns the last N nodes inserted into the tree (i.e. the 'bottom'
 	/// nodes at level 0
 	pub fn last_n_utxo(&mut self, distance: u64) -> Vec<HashSum<SumCommit>> {
@@ -387,34 +338,10 @@ impl<'a> Extension<'a> {
 					return Err(Error::SumTreeErr(format!("output pmmr hash mismatch")));
 				}
 
-				// At this point we can be sure the input is spending the output
-				// it claims to be spending, and it is coinbase or non-coinbase.
-				// If we are spending a coinbase output then go find the block header
-				// and check the coinbase maturity rule is being met.
+				// check coinbase maturity with the Merkle Proof on the input
 				if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-					let block_hash = &input.block_hash
-						.expect("input spending coinbase output must have a block hash");
-					let merkle_proof = &input.merkle_proof();
-
-					// We need to check the following here -
-					//   * merkle proof is valid
-					//   * merkle proof root matches utxo_root in block header
-					//   * merkle proof node matches hash_sum.hash
-					//   * header height is old enough to have matured
-					if !merkle_proof.verify() {
-						return Err(Error::MerkleProof);
-					}
-					let header = self.commit_index.get_block_header(&block_hash)?;
-					if merkle_proof.root != header.utxo_root {
-						return Err(Error::MerkleProof);
-					}
-					if merkle_proof.node != hash {
-						return Err(Error::MerkleProof);
-					}
-					let lock_height = header.height + global::coinbase_maturity();
-					if lock_height > height {
-						return Err(Error::ImmatureCoinbase);
-					}
+					let header = self.commit_index.get_block_header(&input.block_hash())?;
+					input.verify_maturity(hash, &header, height)?;
 				}
 			}
 
@@ -524,7 +451,7 @@ impl<'a> Extension<'a> {
 		// the number of kernels is the number of leaves in the MMR, which is the
 		// sum of the number of leaf nodes under each peak in the MMR
 		//
-		// TODO - not convinced this works
+		// TODO - not convinced this works, commenting out for now
 		//
 		// let pos: u64 = pmmr::peaks(kern_pos_rew).iter().map(|n| (1 << n) as u64).sum();
 		// self.kernel_file.rewind(pos * (TxKernel::size() as u64));
