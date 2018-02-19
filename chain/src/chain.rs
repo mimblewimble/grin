@@ -391,7 +391,7 @@ impl Chain {
 		sumtrees.is_unspent(output_ref)
 	}
 
-	/// Validate
+	/// Validate the current chain state.
 	pub fn validate(&self) -> Result<(), Error> {
 		let header = self.store.head_header()?;
 		let mut sumtrees = self.sumtrees.write().unwrap();

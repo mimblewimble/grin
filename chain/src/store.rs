@@ -122,7 +122,7 @@ impl ChainStore for ChainKVStore {
 			)?;
 		batch.write()
 	}
-	
+
 	/// Delete a full block. Does not delete any record associated with a block
 	/// header.
 	fn delete_block(&self, bh: &Hash) -> Result<(), Error> {

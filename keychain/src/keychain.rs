@@ -28,12 +28,18 @@ use uuid::Uuid;
 use blind::{BlindSum, BlindingFactor};
 use extkey::{self, Identifier};
 
+#[cfg(feature = "use-bullet-proofs")]
+const USE_BULLET_PROOFS:bool = true;
+#[cfg(not(feature = "use-bullet-proofs"))]
+const USE_BULLET_PROOFS:bool = false;
+
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Error {
 	ExtendedKey(extkey::Error),
 	Secp(secp::Error),
 	KeyDerivation(String),
 	Transaction(String),
+	RangeProof(String),
 }
 
 impl From<secp::Error> for Error {
@@ -220,6 +226,10 @@ impl Keychain {
 		Ok(child_key.switch_key)
 	}
 
+	pub fn is_using_bullet_proofs() -> bool {
+		USE_BULLET_PROOFS
+	}
+
 	pub fn range_proof(
 		&self,
 		amount: u64,
@@ -228,9 +238,26 @@ impl Keychain {
 		msg: ProofMessage,
 	) -> Result<RangeProof, Error> {
 		let skey = self.derived_key(key_id)?;
-		let range_proof = self.secp.range_proof(0, amount, skey, commit, msg);
+		let range_proof = match USE_BULLET_PROOFS {
+			true => self.secp.bullet_proof(amount, skey),
+			false => self.secp.range_proof(0, amount, skey, commit, msg),
+		};
 		Ok(range_proof)
 	}
+
+	pub fn verify_range_proof(
+		secp: &Secp256k1,
+		commit: Commitment, 
+		proof: RangeProof) -> Result<(), secp::Error> {
+			let result = match USE_BULLET_PROOFS {
+				true => secp.verify_bullet_proof(commit, proof),
+				false => secp.verify_range_proof(commit, proof),
+			};
+			match result {
+				Ok(_) => Ok(()),
+				Err(e) => Err(e),
+			}
+		}
 
 	pub fn rewind_range_proof(
 		&self,
@@ -239,6 +266,10 @@ impl Keychain {
 		proof: RangeProof,
 	) -> Result<ProofInfo, Error> {
 		let nonce = self.derived_key(key_id)?;
+		if USE_BULLET_PROOFS {
+			error!(LOGGER, "Rewinding Bullet proofs not yet supported");
+			return Err(Error::RangeProof("Rewinding Bullet proofs not yet supported".to_string()));
+		}
 		Ok(self.secp.rewind_range_proof(commit, proof, nonce))
 	}
 
@@ -526,6 +557,11 @@ mod test {
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
 		let msg = ProofMessage::empty();
+
+		//TODO: Remove this check when bullet proofs can be rewound
+		if Keychain::is_using_bullet_proofs(){
+			return;
+		}
 
 		let proof = keychain.range_proof(5, &key_id, commit, msg).unwrap();
 		let proof_info = keychain.rewind_range_proof(&key_id, commit, proof).unwrap();

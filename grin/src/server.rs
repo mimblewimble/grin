@@ -244,6 +244,7 @@ impl Server {
 		})
 	}
 
+	/// Stop the server.
 	pub fn stop(&self) {
 		self.p2p.stop();
 		self.stop.store(true, Ordering::Relaxed);

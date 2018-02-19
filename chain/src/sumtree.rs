@@ -21,15 +21,16 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use util::{static_secp_instance};
+use util::static_secp_instance;
 use util::secp::pedersen::{RangeProof, Commitment};
 
 use core::consensus::reward;
-use core::core::{Block, BlockHeader, Input, Output, OutputIdentifier, 
+use core::core::{Block, BlockHeader, Input, Output, OutputIdentifier,
 	OutputFeatures, OutputStoreable, TxKernel};
 use core::core::pmmr::{self, PMMR};
 use core::core::hash::{Hash, Hashed};
 use core::ser::{self, Writeable};
+
 use grin_store;
 use grin_store::pmmr::PMMRBackend;
 use grin_store::flatfile::FlatFileStore;
@@ -492,7 +493,6 @@ impl<'a> Extension<'a> {
 		// rewind the file stores
 		let _ = rewind_to_pmmr_index(self.utxo_file, out_pos_rew);
 		let _ = rewind_to_pmmr_index(self.rproof_file, out_pos_rew);
-		// rewind the kernels
 		// the number of kernels is the number of leaves in the MMR, which is the
 		// sum of the number of leaf nodes under each peak in the MMR
 		//let kern_pos: u64 = pmmr::peaks(kern_pos_rew).iter().map(|n| (1 << n) as u64).sum();
@@ -715,7 +715,7 @@ where
 	file_store.get(leaf_index - 1)
 }
 
-fn remove_element_at_pmmr_index<T>(file_store: &mut FlatFileStore<T>, pos: u64) 
+fn _remove_element_at_pmmr_index<T>(file_store: &mut FlatFileStore<T>, pos: u64) 
 	-> Result<(), String>
 where
 	T: ser::Readable + ser::Writeable + Clone
