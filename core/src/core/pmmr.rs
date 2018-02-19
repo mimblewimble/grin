@@ -40,18 +40,19 @@ use std::ops::Deref;
 use std::marker::PhantomData;
 
 use core::hash::{Hash, Hashed};
-use ser::Writeable;
+use ser::PMMRable;
 use util::LOGGER;
 
 /// Storage backend for the MMR, just needs to be indexed by order of insertion.
 /// The PMMR itself does not need the Backend to be accurate on the existence
 /// of an element (i.e. remove could be a no-op) but layers above can
 /// depend on an accurate Backend to check existence.
-pub trait Backend {
+pub trait Backend<T> where
+	T:PMMRable {
 	/// Append the provided Hashes to the backend storage. The position of the
 	/// first element of the Vec in the MMR is provided to help the
 	/// implementation.
-	fn append(&mut self, position: u64, data: Vec<Hash>) -> Result<(), String>;
+	fn append(&mut self, position: u64, data: Vec<(Hash, Option<T>)>) -> Result<(), String>;
 
 	/// Rewind the backend state to a previous position, as if all append
 	/// operations after that had been canceled. Expects a position in the PMMR
@@ -59,14 +60,19 @@ pub trait Backend {
 	/// occurred (see remove).
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String>;
 
-	/// Get a Hash by insertion position
-	fn get(&self, position: u64) -> Option<Hash>;
+	/// Get a Hash/Element by insertion position
+	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)>;
 
 	/// Remove Hashes by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a
 	/// given index (practically the index is a the height of a block that
 	/// triggered removal).
 	fn remove(&mut self, positions: Vec<u64>, index: u32) -> Result<(), String>;
+
+	/// Returns the data file path.. this is a bit of a hack now that doesn't
+	/// sit well with the design, but TxKernels have to be summed and the
+	/// fastest way to to be able to allow direct access to the file
+	fn get_data_file_path(&self) -> String;
 }
 
 /// Prunable Merkle Mountain Range implementation. All positions within the tree
@@ -78,8 +84,8 @@ pub trait Backend {
 /// we are in the sequence of nodes making up the MMR.
 pub struct PMMR<'a, T, B>
 where
-	T: Writeable + Clone,
-	B: 'a + Backend,
+	T: PMMRable,
+	B: 'a + Backend<T>,
 {
 	last_pos: u64,
 	backend: &'a mut B,
@@ -89,8 +95,8 @@ where
 
 impl<'a, T, B> PMMR<'a, T, B>
 where
-	T: Writeable + Clone,
-	B: 'a + Backend,
+	T: PMMRable,
+	B: 'a + Backend<T>,
 {
 	/// Build a new prunable Merkle Mountain Range using the provided backend.
 	pub fn new(backend: &'a mut B) -> PMMR<T, B> {
@@ -116,25 +122,28 @@ where
 	/// tree and "bags" them to get a single peak.
 	pub fn root(&self) -> Hash {
 		let peaks_pos = peaks(self.last_pos);
-		let peaks: Vec<Option<Hash>> = map_vec!(peaks_pos, |&pi| self.backend.get(pi));
+		let peaks: Vec<Option<(Hash, Option<T>)>> = peaks_pos.into_iter()
+			.map(|pi| self.backend.get(pi, false))
+			.collect();
+
 
 		let mut ret = None;
 		for peak in peaks {
 			ret = match (ret, peak) {
 				(None, x) => x,
 				(Some(hash), None) => Some(hash),
-				(Some(lhash), Some(rhash)) => Some(lhash.hash_with(rhash)),
+				(Some(lhash), Some(rhash)) => Some((lhash.0.hash_with(rhash.0), None)),
 			}
 		}
-		ret.expect("no root, invalid tree")
+		ret.expect("no root, invalid tree").0
 	}
 
-	/// Push a new Writeable+Hashed element in the MMR. Computes new related peaks at
+	/// Push a new element into the MMR. Computes new related peaks at
 	/// the same time if applicable.
 	pub fn push(&mut self, elmt: T) -> Result<u64, String> {
 		let elmt_pos = self.last_pos + 1;
 		let mut current_hash = elmt.hash();
-		let mut to_append = vec![current_hash.clone()];
+		let mut to_append = vec![(current_hash, Some(elmt))];
 		let mut height = 0;
 		let mut pos = elmt_pos;
 
@@ -144,12 +153,12 @@ where
 		// creation of another parent.
 		while bintree_postorder_height(pos + 1) > height {
 			let left_sibling = bintree_jump_left_sibling(pos);
-			let left_hash = self.backend.get(left_sibling).expect(
+			let left_elem = self.backend.get(left_sibling, false).expect(
 				"missing left sibling in tree, should not have been pruned",
 			);
-			current_hash = left_hash + current_hash;
+			current_hash = left_elem.0 + current_hash;
 
-			to_append.push(current_hash.clone());
+			to_append.push((current_hash.clone(), None));
 			height += 1;
 			pos += 1;
 		}
@@ -182,7 +191,7 @@ where
 	/// to keep an index of elements to positions in the tree. Prunes parent
 	/// nodes as well when they become childless.
 	pub fn prune(&mut self, position: u64, index: u32) -> Result<bool, String> {
-		if let None = self.backend.get(position) {
+		if let None = self.backend.get(position, false) {
 			return Ok(false);
 		}
 		let prunable_height = bintree_postorder_height(position);
@@ -205,7 +214,7 @@ where
 
 			// if we have a pruned sibling, we can continue up the tree
 			// otherwise we're done
-			if let None = self.backend.get(sibling) {
+			if let None = self.backend.get(sibling, false) {
 				current = parent;
 			} else {
 				break;
@@ -216,27 +225,27 @@ where
 		Ok(true)
 	}
 
-	/// Helper function to get the Hash of a node at a given position from
+	/// Helper function to get a node at a given position from
 	/// the backend.
-	pub fn get(&self, position: u64) -> Option<Hash> {
+	pub fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)> {
 		if position > self.last_pos {
 			None
 		} else {
-			self.backend.get(position)
+			self.backend.get(position, include_data)
 		}
 	}
 
 
 	/// Helper function to get the last N nodes inserted, i.e. the last
 	/// n nodes along the bottom of the tree
-	pub fn get_last_n_insertions(&self, n: u64) -> Vec<Hash> {
+	pub fn get_last_n_insertions(&self, n: u64) -> Vec<(Hash, Option<T>)> {
 		let mut return_vec = Vec::new();
 		let mut last_leaf = self.last_pos;
 		let size = self.unpruned_size();
 		// Special case that causes issues in bintree functions,
 		// just return
 		if size == 1 {
-			return_vec.push(self.backend.get(last_leaf).unwrap());
+			return_vec.push(self.backend.get(last_leaf, true).unwrap());
 			return return_vec;
 		}
 		// if size is even, we're already at the bottom, otherwise
@@ -251,7 +260,7 @@ where
 			if bintree_postorder_height(last_leaf) > 0 {
 				last_leaf = bintree_rightmost(last_leaf);
 			}
-			return_vec.push(self.backend.get(last_leaf).unwrap());
+			return_vec.push(self.backend.get(last_leaf, true).unwrap());
 
 			last_leaf = bintree_jump_left_sibling(last_leaf);
 		}
@@ -263,15 +272,15 @@ where
 		// iterate on all parent nodes
 		for n in 1..(self.last_pos + 1) {
 			if bintree_postorder_height(n) > 0 {
-				if let Some(hs) = self.get(n) {
+				if let Some(hs) = self.get(n, false) {
 					// take the left and right children, if they exist
 					let left_pos = bintree_move_down_left(n).unwrap();
 					let right_pos = bintree_jump_right_sibling(left_pos);
 
-					if let Some(left_child_hs) = self.get(left_pos) {
-						if let Some(right_child_hs) = self.get(right_pos) {
+					if let Some(left_child_hs) = self.get(left_pos, false) {
+						if let Some(right_child_hs) = self.get(right_pos, false) {
 							// add hashes and compare
-							if left_child_hs+right_child_hs != hs {
+							if left_child_hs.0+right_child_hs.0 != hs.0 {
 								return Err(format!("Invalid MMR, hash of parent at {} does \
 																	 not match children.", n));
 							}
@@ -287,6 +296,11 @@ where
 	/// pruning.
 	pub fn unpruned_size(&self) -> u64 {
 		self.last_pos
+	}
+
+	/// Return the path of the data file (needed to sum kernels efficiently)
+	pub fn data_file_path(&self) -> String {
+		self.backend.get_data_file_path()
 	}
 
 	/// Debugging utility to print information about the MMRs. Short version
@@ -305,9 +319,9 @@ where
 					break;
 				}
 				idx.push_str(&format!("{:>8} ", m + 1));
-				let ohs = self.get(m + 1);
+				let ohs = self.get(m + 1, false);
 				match ohs {
-					Some(hs) => hashes.push_str(&format!("{} ", hs)),
+					Some(hs) => hashes.push_str(&format!("{} ", hs.0)),
 					None => hashes.push_str(&format!("{:>8} ", "??")),
 				}
 			}
@@ -321,18 +335,20 @@ where
 /// compact the Vector itself but still frees the reference to the
 /// underlying Hash.
 #[derive(Clone)]
-pub struct VecBackend {
+pub struct VecBackend<T>
+	where T:PMMRable {
 	/// Backend elements
-	pub elems: Vec<Option<Hash>>,
+	pub elems: Vec<Option<(Hash, Option<T>)>>,
 }
 
-impl Backend for VecBackend {
+impl <T> Backend <T> for VecBackend<T>
+	where T: PMMRable {
 	#[allow(unused_variables)]
-	fn append(&mut self, position: u64, data: Vec<Hash>) -> Result<(), String> {
+	fn append(&mut self, position: u64, data: Vec<(Hash, Option<T>)>) -> Result<(), String> {
 		self.elems.append(&mut map_vec!(data, |d| Some(d.clone())));
 		Ok(())
 	}
-	fn get(&self, position: u64) -> Option<Hash> {
+	fn get(&self, position: u64, _include_data:bool) -> Option<(Hash, Option<T>)> {
 		self.elems[(position - 1) as usize].clone()
 	}
 	#[allow(unused_variables)]
@@ -347,11 +363,15 @@ impl Backend for VecBackend {
 		self.elems = self.elems[0..(position as usize) + 1].to_vec();
 		Ok(())
 	}
+	fn get_data_file_path(&self) -> String {
+		"".to_string()
+	}
 }
 
-impl VecBackend {
+impl <T> VecBackend <T>
+	where T:PMMRable {
 	/// Instantiates a new VecBackend<T>
-	pub fn new() -> VecBackend {
+	pub fn new() -> VecBackend<T> {
 		VecBackend { elems: vec![] }
 	}
 
@@ -697,8 +717,9 @@ fn most_significant_pos(num: u64) -> u64 {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use ser::{Writeable, Error};
-	use core::Writer;
+	use ser::{Writeable, Readable, Error};
+	use core::{Writer, Reader};
+	use core::hash::{Hash};
 
 	#[test]
 	fn leaf_indices(){
@@ -769,12 +790,31 @@ mod test {
   #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 	struct TestElem([u32; 4]);
 
+	impl PMMRable for TestElem {
+		fn len() -> usize {
+			16
+		}
+	}
+
 	impl Writeable for TestElem {
 		fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 			try!(writer.write_u32(self.0[0]));
 			try!(writer.write_u32(self.0[1]));
 			try!(writer.write_u32(self.0[2]));
 			writer.write_u32(self.0[3])
+		}
+	}
+
+	impl Readable for TestElem {
+		fn read(reader: &mut Reader) -> Result<TestElem, Error> {
+			Ok(TestElem (
+				[
+					reader.read_u32()?,
+					reader.read_u32()?,
+					reader.read_u32()?,
+					reader.read_u32()?,
+				]
+			))
 		}
 	}
 

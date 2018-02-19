@@ -39,7 +39,7 @@ fn pmmr_append() {
 	// check the resulting backend store and the computation of the root
 	let node_hash = elems[0].hash();
 	assert_eq!(
-		backend.get(1).expect(""),
+		backend.get(1, false).expect("").0,
 		node_hash
 	);
 
@@ -117,11 +117,13 @@ fn pmmr_reload() {
 		// save the root and prune some nodes so we have prune data
 		{
 			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			pmmr.dump(false);
 			root = pmmr.root();
 			pmmr.prune(1, 1).unwrap();
 			pmmr.prune(4, 1).unwrap();
 		}
 		backend.sync().unwrap();
+
 		backend.check_compact(1).unwrap();
 		backend.sync().unwrap();
 		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
@@ -137,14 +139,14 @@ fn pmmr_reload() {
 
 	// create a new backend and check everything is kosher
 	{
-		let mut backend:store::pmmr::PMMRBackend<Hash> =
+		let mut backend:store::pmmr::PMMRBackend<TestElem> =
 			store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
 		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
 		{
 			let pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			assert_eq!(root, pmmr.root());
 		}
-		assert_eq!(backend.get(5), None);
+		assert_eq!(backend.get(5, false), None);
 	}
 
 	teardown(data_dir);
@@ -244,6 +246,13 @@ fn load(pos: u64, elems: &[TestElem], backend: &mut store::pmmr::PMMRBackend<Tes
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 struct TestElem([u32; 4]);
+
+impl PMMRable for TestElem {
+	fn len() -> usize {
+		16
+	}
+}
+
 impl Writeable for TestElem {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		try!(writer.write_u32(self.0[0]));

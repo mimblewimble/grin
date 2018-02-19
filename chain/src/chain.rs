@@ -20,7 +20,7 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use core::core::{Input, OutputIdentifier};
+use core::core::{Input, OutputIdentifier, OutputStoreable, TxKernel};
 use core::core::hash::{Hash, Hashed};
 use core::global;
 
@@ -31,6 +31,7 @@ use pipe;
 use store;
 use sumtree;
 use types::*;
+use util::secp::pedersen::RangeProof;
 use util::LOGGER;
 
 
@@ -513,19 +514,19 @@ impl Chain {
 	}
 
 	/// returns the last n nodes inserted into the utxo sum tree
-	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<Hash> {
+	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<(Hash, Option<OutputStoreable>)> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.last_n_utxo(distance)
 	}
 
 	/// as above, for rangeproofs
-	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<Hash> {
+	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<(Hash, Option<RangeProof>)> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.last_n_rangeproof(distance)
 	}
 
 	/// as above, for kernels
-	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<Hash> {
+	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<(Hash, Option<TxKernel>)> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.last_n_kernel(distance)
 	}

@@ -26,7 +26,7 @@ use core::Committed;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use keychain::{Identifier, Keychain, BlindingFactor};
 use keychain;
-use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
+use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, WriteableSorted, Writer};
 use util;
 
 /// The size of the blake2 hash of a switch commitment (256 bits)
@@ -215,9 +215,10 @@ impl TxKernel {
 			..self
 		}
 	}
+}
 
-	/// Size in bytes of a kernel, necessary for binary storage
-	pub fn size() -> usize {
+impl PMMRable for TxKernel {
+	fn len() -> usize {
 		17 + // features plus fee and lock_height
 			secp::constants::PEDERSEN_COMMITMENT_SIZE +
 			secp::constants::AGG_SIGNATURE_SIZE
@@ -874,9 +875,10 @@ impl OutputStoreable {
 		}
 
 	}
+}
 
-	/// Return the size in bytes
-	pub fn size() -> usize {
+impl PMMRable for OutputStoreable {
+	fn len() -> usize {
 		1 + secp::constants::PEDERSEN_COMMITMENT_SIZE + SWITCH_COMMIT_HASH_SIZE
 	}
 }
