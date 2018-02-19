@@ -661,6 +661,13 @@ pub fn peaks(num: u64) -> Vec<u64> {
 	peaks
 }
 
+/// The number of leaves nodes in a MMR of the provided size. 
+pub fn n_leaves(sz: u64) -> u64 {
+	peaks(sz).iter().map(|n| {
+		(1 << bintree_postorder_height(*n)) as u64
+	}).sum()
+}
+
 /// The height of a node in a full binary tree from its postorder traversal
 /// index. This function is the base on which all others, as well as the MMR,
 /// are built.
