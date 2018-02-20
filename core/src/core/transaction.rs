@@ -663,18 +663,6 @@ impl SwitchCommitHash {
 	}
 }
 
-/// There are several different ways of serialising/deserialising outputs depending
-/// on what's happening.
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-pub enum OutputSerType {
-	/// All fields are populated, all are written out.
-	FullWrite,
-	/// Hash mode, only write OutputFeatures and Commitment
-	Hash,
-	/// Storage mode, write OutputFeature, Commitment and SwitchCommitHash
-	Storage,
-}
-
 /// Output for a transaction, defining the new ownership of coins that are being
 /// transferred. The commitment is a blinded value for the output while the
 /// range proof guarantees the commitment includes a positive value without
