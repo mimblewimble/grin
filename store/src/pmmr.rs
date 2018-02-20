@@ -106,7 +106,7 @@ where
 		}
 
 		// Optionally read flatfile storage to get data element
-		let flatfile_pos = pmmr::leaf_index(position)
+		let flatfile_pos = pmmr::n_leaves(position)
 			- 1 - self.pruned_nodes.get_leaf_shift(position).unwrap();
 		let record_len = T::len();
 		let file_offset = flatfile_pos as usize * T::len();
@@ -137,7 +137,7 @@ where
 		self.hash_file.rewind(file_pos);
 
 		//Data file
-		let flatfile_pos = pmmr::leaf_index(position) - 1;
+		let flatfile_pos = pmmr::n_leaves(position) - 1;
 		let file_pos = (flatfile_pos as usize + 1) * T::len();
 		self.data_file.rewind(file_pos as u64);
 		Ok(())
@@ -276,7 +276,7 @@ where
 			.filter(|&(pos, _)| pmmr::bintree_postorder_height(pos) == 0)
 			.map(|(pos, _)| {
 				let shift = self.pruned_nodes.get_leaf_shift(pos).unwrap();
-				let pos = pmmr::leaf_index(pos as u64);
+				let pos = pmmr::n_leaves(pos as u64);
 				(pos - 1 - shift) * record_len
 			})
 			.collect();

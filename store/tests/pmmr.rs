@@ -93,7 +93,6 @@ fn pmmr_prune_compact() {
 	}
 
 	// compact
-	println!("CHECK COMPACT");
 	backend.check_compact(2).unwrap();
 
 	// recheck the root and stored data
@@ -104,7 +103,7 @@ fn pmmr_prune_compact() {
 		assert_eq!(pmmr.get(11, true).unwrap().1.unwrap(), TestElem([0, 0, 0, 7]));
 	}
 
-	//teardown(data_dir);
+	teardown(data_dir);
 }
 
 #[test]
