@@ -309,7 +309,7 @@ impl Peers {
 			let p = p.read().unwrap();
 			if p.is_connected() {
 				if let Err(e) = p.send_transaction(tx) {
-					debug!(LOGGER, "Error sending block to peer: {:?}", e);
+					debug!(LOGGER, "Error sending transaction to peer: {:?}", e);
 				}
 			}
 		}
