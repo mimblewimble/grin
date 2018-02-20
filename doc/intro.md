@@ -212,7 +212,7 @@ fees), is called a _transaction kernel_.
 This section elaborates on the building of transactions by discussing how change is
 introduced and the requirement for range proofs so all values are proven to be
 non-negative. Neither of these are absolutely required to understand MimbleWimble and
-Grin, so if you're in a hurry, fee free to jump straight to
+Grin, so if you're in a hurry, feel free to jump straight to
 [Putting It All Together](#transaction-conclusion).
 
 #### Change
