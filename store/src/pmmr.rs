@@ -110,7 +110,7 @@ where
 		}
 
 		// Optionally read flatfile storage to get data element
-		let flatfile_pos = pmmr::leaf_index(position) - 1;
+		let flatfile_pos = pmmr::n_leaves(position) - 1;
 		let record_len = T::len();
 		let file_offset = flatfile_pos as usize * T::len();
 		let data = self.data_file.read(file_offset, record_len);
@@ -140,7 +140,7 @@ where
 		self.hash_file.rewind(file_pos);
 
 		//Data file
-		let flatfile_pos = pmmr::leaf_index(position) - 1;
+		let flatfile_pos = pmmr::n_leaves(position) - 1;
 		let file_pos = (flatfile_pos as usize + 1) * T::len();
 		self.data_file.rewind(file_pos as u64);
 		Ok(())

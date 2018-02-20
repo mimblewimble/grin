@@ -459,7 +459,6 @@ impl<'a> Extension<'a> {
 		// rewind each MMR
 		let (out_pos_rew, kern_pos_rew) = indexes_at(block, self.commit_index.deref())?;
 		self.rewind_pos(block.header.height, out_pos_rew, kern_pos_rew)?;
-
 		Ok(())
 	}
 
@@ -605,9 +604,7 @@ impl<'a> Extension<'a> {
 		// make sure we have the right count of kernels using the MMR, the storage
 		// file may have a few more
 		let mmr_sz = self.kernel_pmmr.unpruned_size();
-		let count: u64 = pmmr::peaks(mmr_sz).iter().map(|n| {
-			(1 << pmmr::bintree_postorder_height(*n)) as u64
-		}).sum();
+		let count = pmmr::n_leaves(mmr_sz);
 
 		let mut kernel_file = File::open(self.kernel_pmmr.data_file_path())?;
 		let first: TxKernel = ser::deserialize(&mut kernel_file)?;

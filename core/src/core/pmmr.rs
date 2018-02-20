@@ -533,14 +533,14 @@ pub fn peaks(num: u64) -> Vec<u64> {
 	peaks
 }
 
-/// Helper function to convert an index to a leaf index (the nth leaf)
-pub fn leaf_index(n: u64) -> u64 {
+/// The number of leaves nodes in a MMR of the provided size. 
+pub fn n_leaves(sz: u64) -> u64 {
 	let mut count = 1;
-	let mut cur_leaf = n;
+	let mut cur_leaf = sz;
 
 	// Special case that causes issues in bintree functions,
 	// just return
-	if n == 1 {
+	if sz == 1 {
 		return count;
 	}
 
@@ -555,6 +555,11 @@ pub fn leaf_index(n: u64) -> u64 {
 		}
 	}
 	count
+
+	//dun work
+	/*peaks(sz).iter().map(|n| {
+		(1 << bintree_postorder_height(*n)) as u64
+	}).sum()*/
 }
 
 /// The height of a node in a full binary tree from its postorder traversal
@@ -723,14 +728,17 @@ mod test {
 	use core::hash::{Hash};
 
 	#[test]
-	fn leaf_indices(){
-		assert_eq!(leaf_index(1),1);
-		assert_eq!(leaf_index(2),2);
-		assert_eq!(leaf_index(4),3);
-		assert_eq!(leaf_index(5),4);
-		assert_eq!(leaf_index(8),5);
-		assert_eq!(leaf_index(9),6);
-
+	fn test_n_leaves(){
+		println!("n_leaves(1) {}", n_leaves(1));
+		println!("n_leaves(2) {}", n_leaves(2));
+		println!("n_leaves(9) {}", n_leaves(9));
+		assert_eq!(n_leaves(1),1);
+		assert_eq!(n_leaves(2),2);
+		assert_eq!(n_leaves(4),3);
+		assert_eq!(n_leaves(5),4);
+		assert_eq!(n_leaves(8),5);
+		assert_eq!(n_leaves(9),6);
+		
 	}
 
 	#[test]
