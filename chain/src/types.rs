@@ -20,7 +20,7 @@ use util::secp;
 use util::secp::pedersen::Commitment;
 
 use grin_store as store;
-use core::core::{Block, BlockHeader, block, transaction};
+use core::core::{Block, BlockHeader, OutputIdentifier, block, transaction};
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;

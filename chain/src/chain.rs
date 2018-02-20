@@ -445,10 +445,30 @@ impl Chain {
 	}
 
 	/// Return a pre-built Merkle proof for the given commitment from the store.
-	pub fn get_merkle_proof(&self, commit: &Commitment) -> Result<MerkleProof, Error> {
-		self.store.get_merkle_proof(commit).map_err(|e| {
+	pub fn get_merkle_proof(
+		&self,
+		output: &OutputIdentifier,
+		block: &Block,
+	) -> Result<MerkleProof, Error> {
+		let mut sumtrees = self.sumtrees.write().unwrap();
+		let merkle_proof_from_rewind = sumtree::extending(&mut sumtrees, |extension| {
+			extension.force_rollback();
+			extension.merkle_proof_via_rewind(output, block)
+		})?;
+
+		let merkle_proof_from_store = self.store.get_merkle_proof(&output.commit).map_err(|e| {
 			Error::StoreErr(e, "chain get merkle proof".to_owned())
-		})
+		})?;
+
+		debug!(LOGGER, "{:?}", merkle_proof_from_rewind);
+		debug!(LOGGER, "{:?}", merkle_proof_from_store);
+
+		assert_eq!(
+			merkle_proof_from_rewind,
+			merkle_proof_from_store,
+		);
+
+		Ok(merkle_proof_from_store)
 	}
 
 	/// Returns current sumtree roots

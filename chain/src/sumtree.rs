@@ -440,7 +440,7 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	pub fn merkle_proof(
+	pub fn merkle_proof_via_rewind(
 		&mut self,
 		output: &OutputIdentifier,
 		block: &Block,

@@ -270,7 +270,7 @@ impl OutputPrintable {
 			if spent {
 				None
 			} else {
-				let proof = chain.get_merkle_proof(&out_id.commit).unwrap();
+				let proof = chain.get_merkle_proof(&out_id, &block).unwrap();
 				Some(proof)
 			}
 		} else {
