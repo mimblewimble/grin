@@ -97,7 +97,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		let h = tx.hash();
 
-		// Here decides whether transaction will be broadcasted in stem or fluff phase
+		// Here decide whether transaction will be broadcasted in stem or fluff phase
 		let mut rng = rand::thread_rng();
 		let random = rng.gen_range(0, 101);
 		if random >= DEFAULT_DANDELION_PROB_PCT {

@@ -526,7 +526,7 @@ where
 		);
 
 		//  Push into the stempool
-		let stempool_arc = w(&self.stem_tx_pool);
+		let stempool_arc = w(&self.tx_stempool);
 		let res = stempool_arc.write().unwrap().add_to_stempool(source,tx);
 
 		match res {
