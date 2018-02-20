@@ -20,7 +20,7 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use util::secp::pedersen::RangeProof;
+use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::core::{Input, OutputIdentifier, OutputFeatures, SumCommit};
 use core::core::hash::Hashed;
@@ -444,25 +444,11 @@ impl Chain {
 		Ok(())
 	}
 
-	pub fn get_merkle_proof(
-		&self,
-		output: &OutputIdentifier,
-		block: &Block,
-	) -> Result<MerkleProof, Error> {
-		debug!(LOGGER, "******** chain: get_merkle_proof");
-		let mut sumtrees = self.sumtrees.write().unwrap();
-		let proof = sumtree::extending(&mut sumtrees, |extension| {
-			extension.force_rollback();
-			extension.merkle_proof(output, block)
-		})?;
-
-		// If these do not match then we must built an invalid Merkle proof
-		assert_eq!(
-			block.header.utxo_root,
-			proof.root,
-		);
-
-		Ok(proof)
+	/// Return a pre-built Merkle proof for the given commitment from the store.
+	pub fn get_merkle_proof(&self, commit: &Commitment) -> Result<MerkleProof, Error> {
+		self.store.get_merkle_proof(commit).map_err(|e| {
+			Error::StoreErr(e, "chain get merkle proof".to_owned())
+		})
 	}
 
 	/// Returns current sumtree roots

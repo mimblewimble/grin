@@ -381,7 +381,7 @@ where
 		}
 	}
 
-	/// Build a new prunable Merkle Mountain Range pre-initlialized until
+	/// Build a new prunable Merkle Mountain Range pre-initialized until
 	/// last_pos
 	/// with the provided backend.
 	pub fn at(backend: &'a mut B, last_pos: u64) -> PMMR<T, B> {
@@ -1277,17 +1277,21 @@ mod test {
 		assert!(proof.verify());
 	}
 
-	// #[test]
-	// fn pmmr_merkle_proof_prune_and_rewind() {
-	// 	let mut ba = VecBackend::new();
-	// 	let mut pmmr = PMMR::new(&mut ba);
-	// 	pmmr.push(TestElem([0, 0, 0, 1])).unwrap();
-	// 	pmmr.push(TestElem([0, 0, 0, 2])).unwrap();
-	// 	let proof = pmmr.merkle_proof(2).unwrap();
-	// 	println!("{:?}", proof);
-	// 	pmmr.remove
-	// 	assert!(false);
-	// }
+	#[test]
+	fn pmmr_merkle_proof_prune_and_rewind() {
+		let mut ba = VecBackend::new();
+		let mut pmmr = PMMR::new(&mut ba);
+		pmmr.push(TestElem([0, 0, 0, 1])).unwrap();
+		pmmr.push(TestElem([0, 0, 0, 2])).unwrap();
+		println!("{}", pmmr.last_pos);
+		let proof = pmmr.merkle_proof(2).unwrap();
+		println!("{:?}", proof);
+		pmmr.prune(1, 1);
+		let proof = pmmr.merkle_proof(2).unwrap();
+		println!("{}", pmmr.last_pos);
+		println!("{:?}", proof);
+		assert!(false, "fail for debug");
+	}
 
 	#[test]
 	fn merkle_proof_ser_deser() {

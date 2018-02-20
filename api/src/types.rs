@@ -263,12 +263,14 @@ impl OutputPrintable {
 			None
 		};
 
-		// generate Merkle Proof for all unspent coinbase outputs (to verify maturity on spend)
+		// Get the Merkle proof for all unspent coinbase outputs (to verify maturity on spend)
+		// (hope they are in the chain store...)
+		// TODO - what happens if they are not in the store?
 		let merkle_proof = if output.features.contains(core::transaction::OutputFeatures::COINBASE_OUTPUT) {
 			if spent {
 				None
 			} else {
-				let proof = chain.get_merkle_proof(&out_id, block).unwrap();
+				let proof = chain.get_merkle_proof(&out_id.commit).unwrap();
 				Some(proof)
 			}
 		} else {

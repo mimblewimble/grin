@@ -245,6 +245,7 @@ pub struct Extension<'a> {
 	commit_index: Arc<ChainStore>,
 	new_output_commits: HashMap<Commitment, u64>,
 	new_kernel_excesses: HashMap<Commitment, u64>,
+	new_merkle_proofs: HashMap<Commitment, MerkleProof>,
 	rollback: bool,
 }
 
@@ -272,6 +273,7 @@ impl<'a> Extension<'a> {
 			commit_index: commit_index,
 			new_output_commits: HashMap::new(),
 			new_kernel_excesses: HashMap::new(),
+			new_merkle_proofs: HashMap::new(),
 			rollback: false,
 		}
 	}
@@ -308,16 +310,36 @@ impl<'a> Extension<'a> {
 		for kernel in &b.kernels {
 			self.apply_kernel(kernel)?;
 		}
+
+		// finally, finally, generate Merkle proofs for each coinbase output
+		// and store them so we can use them when spending later
+		for out in &b.outputs {
+			if out.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+				let pos = self.get_output_pos(&out.commit)?;
+				let merkle_proof = self.output_pmmr
+					.merkle_proof(pos)
+					.map_err(&Error::SumTreeErr)?;
+				self.new_merkle_proofs.insert(out.commit, merkle_proof);
+			}
+		}
+
 		Ok(())
 	}
 
 	fn save_pos_index(&self) -> Result<(), Error> {
+		// store all new output pos in the index
 		for (commit, pos) in &self.new_output_commits {
 			self.commit_index.save_output_pos(commit, *pos)?;
 		}
 
+		// store all new kernel pos in the index
 		for (excess, pos) in &self.new_kernel_excesses {
 			self.commit_index.save_kernel_pos(excess, *pos)?;
+		}
+
+		// store all new Merkle proofs we built in the index
+		for (commit, merkle_proof) in &self.new_merkle_proofs {
+			self.commit_index.save_merkle_proof(commit, merkle_proof)?;
 		}
 
 		Ok(())
