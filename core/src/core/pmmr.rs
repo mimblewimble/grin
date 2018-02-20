@@ -326,8 +326,8 @@ where
 					None => hashes.push_str(&format!("{:>8} ", "??")),
 				}
 			}
-			println!("{}", idx);
-			println!("{}", hashes);
+			trace!(LOGGER, "{}", idx);
+			trace!(LOGGER, "{}", hashes);
 		}
 	}
 }
@@ -440,6 +440,28 @@ impl PruneList {
 		}
 	}
 
+	/// As above, but only returning the number of leaf nodes to skip for a
+	/// given leaf. Helpful if, for instance, data for each leaf is being stored
+	/// separately in a continuous flat-file
+	pub fn get_leaf_shift(&self, pos: u64) -> Option<u64> {
+		
+		// get the position where the node at pos would fit in the pruned list, if
+		// it's already pruned, nothing to skip
+		match self.pruned_pos(pos) {
+			None => None,
+			Some(idx) => {
+				// skip by the number of leaf nodes pruned in the preceeding subtrees
+				// which just 2^height
+				Some(
+					self.pruned_nodes[0..(idx as usize)]
+						.iter()
+						.map(|n| 1 << bintree_postorder_height(*n))
+						.sum(),
+				)
+			}
+		}
+	}
+
 	/// Push the node at the provided position in the prune list. Compacts the
 	/// list if pruning the additional node means a parent can get pruned as
 	/// well.
@@ -463,7 +485,7 @@ impl PruneList {
 	}
 
 	/// Gets the position a new pruned node should take in the prune list.
-	/// If the node has already bee pruned, either directly or through one of
+	/// If the node has already been pruned, either directly or through one of
 	/// its parents contained in the prune list, returns None.
 	pub fn pruned_pos(&self, pos: u64) -> Option<usize> {
 		match self.pruned_nodes.binary_search(&pos) {
@@ -533,33 +555,24 @@ pub fn peaks(num: u64) -> Vec<u64> {
 	peaks
 }
 
-/// The number of leaves nodes in a MMR of the provided size. 
-pub fn n_leaves(sz: u64) -> u64 {
-	let mut count = 1;
-	let mut cur_leaf = sz;
-
-	// Special case that causes issues in bintree functions,
-	// just return
-	if sz == 1 {
-		return count;
-	}
-
+/// The number of leaves nodes in a MMR with the given index 
+pub fn leaf_index(num: u64) -> u64 {
+	// find next valid size, go from there
+	let mut next_valid_size = num;
 	loop {
-		if bintree_postorder_height(cur_leaf) > 0 {
-			cur_leaf = bintree_rightmost(cur_leaf);
+		let retval = n_leaves(next_valid_size);
+		if retval > 0 {
+			return retval;
 		}
-		count = count + 1;
-		cur_leaf = bintree_jump_left_sibling(cur_leaf);
-		if cur_leaf == 1 {
-			break;
-		}
+		next_valid_size += 1;
 	}
-	count
+}
 
-	//dun work
-	/*peaks(sz).iter().map(|n| {
+/// The number of leaves nodes in a MMR of the provided size 
+pub fn n_leaves(sz: u64) -> u64 {
+	peaks(sz).iter().map(|n| {
 		(1 << bintree_postorder_height(*n)) as u64
-	}).sum()*/
+	}).sum()
 }
 
 /// The height of a node in a full binary tree from its postorder traversal
@@ -728,16 +741,13 @@ mod test {
 	use core::hash::{Hash};
 
 	#[test]
-	fn test_n_leaves(){
-		println!("n_leaves(1) {}", n_leaves(1));
-		println!("n_leaves(2) {}", n_leaves(2));
-		println!("n_leaves(9) {}", n_leaves(9));
-		assert_eq!(n_leaves(1),1);
-		assert_eq!(n_leaves(2),2);
-		assert_eq!(n_leaves(4),3);
-		assert_eq!(n_leaves(5),4);
-		assert_eq!(n_leaves(8),5);
-		assert_eq!(n_leaves(9),6);
+	fn test_leaf_index(){
+		assert_eq!(leaf_index(1),1);
+		assert_eq!(leaf_index(2),2);
+		assert_eq!(leaf_index(4),3);
+		assert_eq!(leaf_index(5),4);
+		assert_eq!(leaf_index(8),5);
+		assert_eq!(leaf_index(9),6);
 		
 	}
 

@@ -84,22 +84,27 @@ fn pmmr_prune_compact() {
 	}
 	backend.sync().unwrap();
 
-	// check the root
+	// check the root and stored data
 	{
 		let pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(root, pmmr.root());
+		// check we can still retrieve same element from leaf index 2
+		assert_eq!(pmmr.get(2, true).unwrap().1.unwrap(), TestElem([0, 0, 0, 2]));
 	}
 
 	// compact
+	println!("CHECK COMPACT");
 	backend.check_compact(2).unwrap();
 
-	// recheck the root
+	// recheck the root and stored data
 	{
 		let pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(root, pmmr.root());
+		assert_eq!(pmmr.get(2, true).unwrap().1.unwrap(), TestElem([0, 0, 0, 2]));
+		assert_eq!(pmmr.get(11, true).unwrap().1.unwrap(), TestElem([0, 0, 0, 7]));
 	}
 
-	teardown(data_dir);
+	//teardown(data_dir);
 }
 
 #[test]
