@@ -408,11 +408,15 @@ impl Chain {
 	/// This only applies to inputs spending coinbase outputs.
 	/// An input spending a non-coinbase output will always pass this check.
 	pub fn is_matured(&self, input: &Input, height: u64) -> Result<(), Error> {
+		debug!(LOGGER, "chain: is_matured: {:?}, {}", input, height);
 		if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
 			let mut sumtrees = self.sumtrees.write().unwrap();
 			let output = OutputIdentifier::from_input(&input);
+			debug!(LOGGER, "chain: is_matured: checking if unspent");
 			let hash = sumtrees.is_unspent(&output)?;
+			debug!(LOGGER, "chain: is_matured: getting block header");
 			let header = self.get_block_header(&input.block_hash())?;
+			debug!(LOGGER, "chain: is_matured: about to verify maturity");
 			input.verify_maturity(hash, &header, height)?;
 		}
 		Ok(())
@@ -447,10 +451,18 @@ impl Chain {
 	) -> Result<MerkleProof, Error> {
 		debug!(LOGGER, "******** chain: get_merkle_proof");
 		let mut sumtrees = self.sumtrees.write().unwrap();
-		sumtree::extending(&mut sumtrees, |extension| {
+		let proof = sumtree::extending(&mut sumtrees, |extension| {
 			extension.force_rollback();
 			extension.merkle_proof(output, block)
-		})
+		})?;
+
+		// If these do not match then we must built an invalid Merkle proof
+		assert_eq!(
+			block.header.utxo_root,
+			proof.root,
+		);
+
+		Ok(proof)
 	}
 
 	/// Returns current sumtree roots

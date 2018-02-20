@@ -838,6 +838,13 @@ pub fn peaks(num: u64) -> Vec<u64> {
 	peaks
 }
 
+/// The number of leaves nodes in a MMR of the provided size.
+pub fn n_leaves(sz: u64) -> u64 {
+	peaks(sz).iter().map(|n| {
+		(1 << bintree_postorder_height(*n)) as u64
+	}).sum()
+}
+
 /// The height of a node in a full binary tree from its postorder traversal
 /// index. This function is the base on which all others, as well as the MMR,
 /// are built.
@@ -1061,6 +1068,16 @@ mod test {
 		}
 	}
 
+	// Trst our n_leaves impl does the right thing for various MMR sizes
+	#[test]
+	fn various_n_leaves() {
+		assert_eq!(n_leaves(1), 1);
+		// 2 is not a valid size for a tree
+		assert_eq!(n_leaves(2), 0);
+		assert_eq!(n_leaves(3), 2);
+		assert_eq!(n_leaves(7), 4);
+	}
+
 	/// Find parent and sibling positions for various node positions.
 	#[test]
 	fn various_families() {
@@ -1217,7 +1234,6 @@ mod test {
 		pmmr.push(TestElem([0, 0, 0, 1])).unwrap();
 		assert_eq!(pmmr.last_pos, 1);
 		let proof = pmmr.merkle_proof(1).unwrap();
-		let node = pmmr.get(1).unwrap().hash;
 		let root = pmmr.root().hash;
 		assert_eq!(proof.peaks, [root]);
 		assert!(proof.path.is_empty());
@@ -1230,16 +1246,12 @@ mod test {
 		assert_eq!(pmmr.last_pos, 4);
 
 		let proof1 = pmmr.merkle_proof(1).unwrap();
-		let node1 = pmmr.get(1).unwrap().hash;
-		let root = pmmr.root().hash;
 		assert_eq!(proof1.peaks.len(), 2);
 		assert_eq!(proof1.path.len(), 1);
 		assert_eq!(proof1.left_right, [true]);
 		assert!(proof1.verify());
 
 		let proof2 = pmmr.merkle_proof(2).unwrap();
-		let node2 = pmmr.get(2).unwrap().hash;
-		let root = pmmr.root().hash;
 		assert_eq!(proof2.peaks.len(), 2);
 		assert_eq!(proof2.path.len(), 1);
 		assert_eq!(proof2.left_right, [false]);
@@ -1249,8 +1261,6 @@ mod test {
 		assert_eq!(pmmr.merkle_proof(3).err(), Some(format!("not a leaf at pos 3")));
 
 		let proof4 = pmmr.merkle_proof(4).unwrap();
-		let node4 = pmmr.get(4).unwrap().hash;
-		let root = pmmr.root().hash;
 		assert_eq!(proof4.peaks.len(), 2);
 		assert!(proof4.path.is_empty());
 		assert!(proof4.left_right.is_empty());
@@ -1261,13 +1271,23 @@ mod test {
 			pmmr.push(TestElem([0, 0, 0, x])).unwrap();
 		}
 		let proof = pmmr.merkle_proof(1).unwrap();
-		let node = pmmr.get(1).unwrap().hash;
-		let root = pmmr.root().hash;
 		assert_eq!(proof.peaks.len(), 8);
 		assert_eq!(proof.path.len(), 9);
 		assert_eq!(proof.left_right.len(), 9);
 		assert!(proof.verify());
 	}
+
+	// #[test]
+	// fn pmmr_merkle_proof_prune_and_rewind() {
+	// 	let mut ba = VecBackend::new();
+	// 	let mut pmmr = PMMR::new(&mut ba);
+	// 	pmmr.push(TestElem([0, 0, 0, 1])).unwrap();
+	// 	pmmr.push(TestElem([0, 0, 0, 2])).unwrap();
+	// 	let proof = pmmr.merkle_proof(2).unwrap();
+	// 	println!("{:?}", proof);
+	// 	pmmr.remove
+	// 	assert!(false);
+	// }
 
 	#[test]
 	fn merkle_proof_ser_deser() {

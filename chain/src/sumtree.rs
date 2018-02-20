@@ -427,9 +427,21 @@ impl<'a> Extension<'a> {
 		self.rewind(block)?;
 		// then calculate the Merkle Proof based on the known pos
 		let pos = self.get_output_pos(&output.commit)?;
-		self.output_pmmr
+		let merkle_proof = self.output_pmmr
 			.merkle_proof(pos)
-			.map_err(&Error::SumTreeErr)
+			.map_err(&Error::SumTreeErr)?;
+
+		// TODO - somehow we end up with a root that differs from the header utxo_root
+		// can we not rely on rewind working here if nodes have been removed?
+		debug!(
+			LOGGER,
+			"merkle_proof: {:?}, {:?}, {:?}",
+			block.header.utxo_root,
+			merkle_proof.root,
+			self.output_pmmr.root(),
+		);
+
+		Ok(merkle_proof)
 	}
 
 	/// Rewinds the MMRs to the provided block, using the last output and
@@ -448,13 +460,9 @@ impl<'a> Extension<'a> {
 
 		// rewind the kernel file store, the position is the number of kernels
 		// multiplied by their size
-		// the number of kernels is the number of leaves in the MMR, which is the
-		// sum of the number of leaf nodes under each peak in the MMR
-		//
-		// TODO - not convinced this works, commenting out for now
-		//
-		// let pos: u64 = pmmr::peaks(kern_pos_rew).iter().map(|n| (1 << n) as u64).sum();
-		// self.kernel_file.rewind(pos * (TxKernel::size() as u64));
+		// the number of kernels is the number of leaves in the MMR
+		let pos = pmmr::n_leaves(kern_pos_rew);
+		self.kernel_file.rewind(pos * (TxKernel::size() as u64));
 
 		Ok(())
 	}
@@ -601,9 +609,7 @@ impl<'a> Extension<'a> {
 		// make sure we have the right count of kernels using the MMR, the storage
 		// file may have a few more
 		let mmr_sz = self.kernel_pmmr.unpruned_size();
-		let count: u64 = pmmr::peaks(mmr_sz).iter().map(|n| {
-			(1 << pmmr::bintree_postorder_height(*n)) as u64
-		}).sum();
+		let count = pmmr::n_leaves(mmr_sz);
 
 		let mut kernel_file = File::open(self.kernel_file.path())?;
 		let first: TxKernel = ser::deserialize(&mut kernel_file)?;
