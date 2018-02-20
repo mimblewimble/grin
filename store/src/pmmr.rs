@@ -112,7 +112,6 @@ where
 		// Optionally read flatfile storage to get data element
 		let flatfile_pos = pmmr::leaf_index(position) - 1;
 		let record_len = T::len();
-		println!("LEN: {}", T::len());
 		let file_offset = flatfile_pos as usize * T::len();
 		let data = self.data_file.read(file_offset, record_len);
 		let data = match ser::deserialize(&mut &data[..]) {

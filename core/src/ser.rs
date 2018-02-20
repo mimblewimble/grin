@@ -121,8 +121,9 @@ pub enum SerializationMode {
 	Hash,
 	/// Serialize everything that a signer of the object should know
 	SigHash,
-	/// Serialize what's desired for file output
-	File,
+	/// Serialize for local storage, for instance in the case where
+	/// an output doesn't wish to store its range proof
+	Storage,
 }
 
 /// Implementations defined how different numbers and binary structures are

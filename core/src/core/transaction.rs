@@ -663,6 +663,18 @@ impl SwitchCommitHash {
 	}
 }
 
+/// There are several different ways of serialising/deserialising outputs depending
+/// on what's happening.
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub enum OutputSerType {
+	/// All fields are populated, all are written out.
+	FullWrite,
+	/// Hash mode, only write OutputFeatures and Commitment
+	Hash,
+	/// Storage mode, write OutputFeature, Commitment and SwitchCommitHash
+	Storage,
+}
+
 /// Output for a transaction, defining the new ownership of coins that are being
 /// transferred. The commitment is a blinded value for the output while the
 /// range proof guarantees the commitment includes a positive value without
@@ -670,10 +682,6 @@ impl SwitchCommitHash {
 /// provides future-proofing against quantum-based attacks, as well as providing
 /// wallet implementations with a way to identify their outputs for wallet
 /// reconstruction.
-///
-/// The hash of an output only covers its features, commitment,
-/// and switch commitment. The range proof is expected to have its own hash
-/// and is stored and committed to separately.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct Output {
 	/// Options for an output's structure or use
@@ -703,9 +711,13 @@ impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
 		writer.write_fixed_bytes(&self.commit)?;
-		writer.write_fixed_bytes(&self.switch_commit_hash)?;
-
-		// The hash of an output doesn't include the range proof
+		// Hash of an output doesn't cover the switch commit, it should 
+		// be wound into the range proof separately
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			writer.write_fixed_bytes(&self.switch_commit_hash)?;
+		}
+		// The hash of an output doesn't include the range proof, which
+		// is commit to separately
 		if writer.serialization_mode() == ser::SerializationMode::Full {
 			writer.write_bytes(&self.proof)?
 		}
@@ -873,7 +885,6 @@ impl OutputStoreable {
 				plen: 0,
 			},
 		}
-
 	}
 }
 
@@ -887,7 +898,9 @@ impl Writeable for OutputStoreable {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
 		self.commit.write(writer)?;
-		self.switch_commit_hash.write(writer)?;
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			self.switch_commit_hash.write(writer)?;
+		}
 		Ok(())
 	}
 }

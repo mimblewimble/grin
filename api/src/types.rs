@@ -119,7 +119,7 @@ impl PmmrTreeNode {
 		let last_n = chain.get_last_n_utxo(distance);
 		for x in last_n {
 			return_vec.push(PmmrTreeNode {
-				hash: util::to_hex(x.to_vec()),
+				hash: util::to_hex(x.0.to_vec()),
 			});
 		}
 		return_vec
@@ -130,7 +130,7 @@ impl PmmrTreeNode {
 		let last_n = head.get_last_n_rangeproof(distance);
 		for elem in last_n {
 			return_vec.push(PmmrTreeNode {
-				hash: util::to_hex(elem.to_vec()),
+				hash: util::to_hex(elem.0.to_vec()),
 			});
 		}
 		return_vec
@@ -141,7 +141,7 @@ impl PmmrTreeNode {
 		let last_n = head.get_last_n_kernel(distance);
 		for elem in last_n {
 			return_vec.push(PmmrTreeNode {
-				hash: util::to_hex(elem.to_vec()),
+				hash: util::to_hex(elem.0.to_vec()),
 			});
 		}
 		return_vec

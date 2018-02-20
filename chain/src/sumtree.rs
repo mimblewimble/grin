@@ -110,15 +110,16 @@ impl SumTrees {
 	/// Check is an output is unspent.
 	/// We look in the index to find the output MMR pos.
 	/// Then we check the entry in the output MMR and confirm the hash matches.
-	pub fn is_unspent(&mut self, output: &OutputIdentifier) -> Result<(), Error> {
-		match self.commit_index.get_output_pos(&output.commit) {
+	pub fn is_unspent(&mut self, output_id: &OutputIdentifier) -> Result<(), Error> {
+		match self.commit_index.get_output_pos(&output_id.commit) {
 			Ok(pos) => {
 				let output_pmmr:PMMR<OutputStoreable, _> = PMMR::at(
 					&mut self.utxo_pmmr_h.backend,
 					self.utxo_pmmr_h.last_pos,
 				);
 				if let Some((hash, _)) = output_pmmr.get(pos, false) {
-					if hash == output.hash() {
+					println!("Getting output ID hash");
+					if hash == output_id.hash() {
 						Ok(())
 					} else {
 						println!("MISMATCH BECAUSE THE BLOODY THING MISMATCHES");
@@ -353,15 +354,14 @@ impl<'a> Extension<'a> {
 	fn apply_input(&mut self, input: &Input, height: u64) -> Result<(), Error> {
 		let commit = input.commitment();
 		let pos_res = self.get_output_pos(&commit);
+		let output_id_hash = OutputIdentifier::from_input(input).hash();
 		if let Ok(pos) = pos_res {
-			if let Some((hash, output)) = self.utxo_pmmr.get(pos, true) {
+			if let Some((read_hash, read_elem)) = self.utxo_pmmr.get(pos, true) {
 				// check hash from pmmr matches hash from input (or corresponding output)
 				// if not then the input is not being honest about
 				// what it is attempting to spend...
-
-				// TODO: Inputs and outputs currently not hashing the same way.. this should
-				// be checking the hash against the input
-				if hash != output.expect("no output at this position").hash() {
+				if output_id_hash != read_hash || 
+					output_id_hash != read_elem.expect("no output at position").hash() {
 					return Err(Error::SumTreeErr(format!("output pmmr hash mismatch")));
 				}
 
