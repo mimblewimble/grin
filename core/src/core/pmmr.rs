@@ -49,9 +49,9 @@ use util::LOGGER;
 /// depend on an accurate Backend to check existence.
 pub trait Backend<T> where
 	T:PMMRable {
-	/// Append the provided Hashes to the backend storage. The position of the
-	/// first element of the Vec in the MMR is provided to help the
-	/// implementation.
+	/// Append the provided Hashes to the backend storage, and optionally an associated
+	/// data element to flatfile storage (for leaf nodes only). The position of the 
+	/// first element of the Vec in the MMR is provided to help the implementation.
 	fn append(&mut self, position: u64, data: Vec<(Hash, Option<T>)>) -> Result<(), String>;
 
 	/// Rewind the backend state to a previous position, as if all append
@@ -60,10 +60,11 @@ pub trait Backend<T> where
 	/// occurred (see remove).
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String>;
 
-	/// Get a Hash/Element by insertion position
+	/// Get a Hash/Element by insertion position. If include_data is true, will 
+	/// also return the associated data element
 	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)>;
 
-	/// Remove Hashes by insertion position. An index is also provided so the
+	/// Remove Hashes/Data by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a
 	/// given index (practically the index is a the height of a block that
 	/// triggered removal).
@@ -375,7 +376,7 @@ impl <T> VecBackend <T>
 		VecBackend { elems: vec![] }
 	}
 
-	/// Current number of HashSum elements in the underlying Vec.
+	/// Current number of elements in the underlying Vec.
 	pub fn used_size(&self) -> usize {
 		let mut usz = self.elems.len();
 		for elem in self.elems.deref() {
