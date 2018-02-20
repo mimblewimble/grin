@@ -69,6 +69,12 @@ impl MessageHandler for Protocol {
 				Ok(None)
 			}
 
+			Type::StemTransaction => {
+				let tx: core::Transaction = msg.body()?;
+				adapter.stem_transaction_received(tx);
+				Ok(None)
+			}
+
 			Type::GetBlock => {
 				let h: Hash = msg.body()?;
 				debug!(LOGGER, "handle_payload: GetBlock {}", h);
@@ -210,7 +216,7 @@ impl MessageHandler for Protocol {
 				tmp.push("sumtree.zip");
 				{
 					let mut tmp_zip = File::create(tmp.clone())?;
-					msg.copy_attachment(sm_arch.bytes as usize, &mut tmp_zip)?;	
+					msg.copy_attachment(sm_arch.bytes as usize, &mut tmp_zip)?;
 					tmp_zip.sync_all()?;
 				}
 

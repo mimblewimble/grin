@@ -120,7 +120,7 @@ impl Peer {
 			return false
 		}
 		let state = self.state.read().unwrap();
-		*state == State::Connected	
+		*state == State::Connected
 	}
 
 	/// Whether this peer has been banned.
@@ -306,6 +306,11 @@ impl ChainAdapter for TrackingAdapter {
 	fn transaction_received(&self, tx: core::Transaction) {
 		self.push(tx.hash());
 		self.adapter.transaction_received(tx)
+	}
+
+	fn stem_transaction_received(&self, tx: core::Transaction) {
+		self.push(tx.hash());
+		self.adapter.stem_transaction_received(tx)
 	}
 
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {

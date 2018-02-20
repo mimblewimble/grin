@@ -493,7 +493,7 @@ struct TxWrapper {
 	tx_hex: String,
 }
 
-// Push new transactions to our transaction pool, that should broadcast it
+// Push new transactions to our stem transaction pool, that should broadcast it
 // to the network if valid.
 struct PoolPushHandler<T> {
 	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
@@ -525,8 +525,9 @@ where
 			tx.outputs.len()
 		);
 
-		let pool_arc = w(&self.tx_pool);
-		let res = pool_arc.write().unwrap().add_to_memory_pool(source, tx);
+		//  Push into the stempool
+		let stempool_arc = w(&self.stem_tx_pool);
+		let res = stempool_arc.write().unwrap().add_to_stempool(source,tx);
 
 		match res {
 			Ok(()) => Ok(Response::with(status::Ok)),

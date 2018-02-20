@@ -441,6 +441,9 @@ impl ChainAdapter for Peers {
 	fn transaction_received(&self, tx: core::Transaction) {
 		self.adapter.transaction_received(tx)
 	}
+	fn stem_transaction_received(&self, tx: core::Transaction) {
+		self.adapter.stem_transaction_received(tx)
+	}
 	fn block_received(&self, b: core::Block, peer_addr: SocketAddr) -> bool {
 		if !self.adapter.block_received(b, peer_addr) {
 			// if the peer sent us a block that's intrinsically bad

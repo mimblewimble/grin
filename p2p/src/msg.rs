@@ -65,6 +65,7 @@ enum_from_primitive! {
 		GetCompactBlock,
 		CompactBlock,
 		Transaction,
+		StemTransaction,
 		SumtreesRequest,
 		SumtreesArchive
 	}
@@ -81,7 +82,7 @@ enum_from_primitive! {
 /// time is not guaranteed to be exact. To support cases where we want to poll
 /// instead of blocking, a `block_on_empty` boolean, when false, ensures
 /// `read_exact` returns early with a `io::ErrorKind::WouldBlock` if nothing
-/// has been read from the socket. 
+/// has been read from the socket.
 pub fn read_exact(
 	conn: &mut TcpStream,
 	mut buf: &mut [u8],
@@ -641,7 +642,7 @@ impl Readable for Pong {
 pub struct SumtreesRequest {
 	/// Hash of the block for which the sumtrees should be provided
 	pub hash: Hash,
-	/// Height of the corresponding block	
+	/// Height of the corresponding block
 	pub height: u64
 }
 
@@ -667,7 +668,7 @@ impl Readable for SumtreesRequest {
 pub struct SumtreesArchive {
 	/// Hash of the block for which the sumtrees are provided
 	pub hash: Hash,
-	/// Height of the corresponding block	
+	/// Height of the corresponding block
 	pub height: u64,
 	/// Output tree index the receiver should rewind to
 	pub rewind_to_output: u64,

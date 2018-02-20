@@ -157,6 +157,9 @@ pub trait ChainAdapter: Sync + Send {
 	/// A valid transaction has been received from one of our peers
 	fn transaction_received(&self, tx: core::Transaction);
 
+	/// A valid stem transaction has been received from one of our peers
+	fn stem_transaction_received(&self, tx: core::Transaction);
+
 	/// A block has been received from one of our peers. Returns true if the
 	/// block could be handled properly and is not deemed defective by the
 	/// chain. Returning false means the block will never be valid and

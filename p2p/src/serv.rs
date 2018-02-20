@@ -207,6 +207,7 @@ impl ChainAdapter for DummyAdapter {
 		0
 	}
 	fn transaction_received(&self, _: core::Transaction) {}
+	fn stem_transaction_received(&self, _: core::Transaction) {}
 	fn compact_block_received(&self, _cb: core::CompactBlock, _addr: SocketAddr) -> bool { true }
 	fn header_received(&self, _bh: core::BlockHeader, _addr: SocketAddr) -> bool { true }
 	fn block_received(&self, _: core::Block, _: SocketAddr) -> bool { true }
