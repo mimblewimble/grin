@@ -661,8 +661,12 @@ pub fn peaks(num: u64) -> Vec<u64> {
 	peaks
 }
 
-/// The number of leaves nodes in a MMR of the provided size. 
-pub fn n_leaves(sz: u64) -> u64 {
+/// The number of leaves nodes in a MMR of the provided size. Uses peaks to
+/// get the positions of all full binary trees and uses the height of these
+pub fn n_leaves(mut sz: u64) -> u64 {
+	while bintree_postorder_height(sz+1) > 0 {
+		sz += 1;
+	}
 	peaks(sz).iter().map(|n| {
 		(1 << bintree_postorder_height(*n)) as u64
 	}).sum()
@@ -1176,4 +1180,17 @@ mod test {
 		assert_eq!(pl.get_shift(17), Some(11));
 	}
 
+
+	#[test]
+	fn n_size_check() {
+		assert_eq!(n_leaves(1), 1);
+		assert_eq!(n_leaves(2), 2);
+		assert_eq!(n_leaves(3), 2);
+		assert_eq!(n_leaves(4), 3);
+		assert_eq!(n_leaves(5), 4);
+		assert_eq!(n_leaves(7), 4);
+		assert_eq!(n_leaves(8), 5);
+		assert_eq!(n_leaves(9), 6);
+		assert_eq!(n_leaves(10), 6);
+	}
 }
