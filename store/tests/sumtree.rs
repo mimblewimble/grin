@@ -23,6 +23,53 @@ use core::ser::*;
 use core::core::pmmr::{Backend, HashSum, Summable, PMMR};
 use core::core::hash::Hashed;
 
+
+#[test]
+fn sumtree_merkle_proof_problems() {
+	let (data_dir, elems) = setup("merkle_proof_problems");
+	let mut backend = store::sumtree::PMMRBackend::new(data_dir.to_string()).unwrap();
+
+	load(0, &elems[0..1], &mut backend);
+
+	println!("");
+	println!("MMR with a single leaf node");
+	{
+		let pmmr = PMMR::at(&mut backend, 1);
+		println!("pos 1 - {:?}", pmmr.get(1));
+		println!("root - {:?}", pmmr.root());
+	}
+
+	load(1, &elems[1..2], &mut backend);
+
+	println!("");
+	println!("MMR with 2 leaf nodes (root built from single peak)");
+	{
+		let pmmr = PMMR::at(&mut backend, 3);
+		println!("pos 1 - {:?}", pmmr.get(1));
+		println!("pos 2 - {:?}", pmmr.get(2));
+		println!("pos 3 - {:?} (peak)", pmmr.get(3));
+		println!("root - {:?}", pmmr.root());
+	}
+
+	{
+		let mut pmmr = PMMR::at(&mut backend, 3);
+		pmmr.prune(1, 1).unwrap();
+	}
+
+	println!("");
+	println!("After pruning pos 1");
+	{
+		let pmmr = PMMR::at(&mut backend, 3);
+		println!("pos 1 - {:?}", pmmr.get(1));
+		println!("pos 2 - {:?}", pmmr.get(2));
+		println!("pos 3 - {:?} (peak)", pmmr.get(3));
+		println!("root - {:?}", pmmr.root());
+	}
+
+	println!("");
+	assert!(false);
+}
+
 #[test]
 fn sumtree_append() {
 	let (data_dir, elems) = setup("append");
