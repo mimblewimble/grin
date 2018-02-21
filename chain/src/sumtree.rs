@@ -453,16 +453,6 @@ impl<'a> Extension<'a> {
 			.merkle_proof(pos)
 			.map_err(&Error::SumTreeErr)?;
 
-		// TODO - somehow we end up with a root that differs from the header utxo_root
-		// can we not rely on rewind working here if nodes have been removed?
-		debug!(
-			LOGGER,
-			"merkle_proof: {:?}, {:?}, {:?}",
-			block.header.utxo_root,
-			merkle_proof.root,
-			self.output_pmmr.root(),
-		);
-
 		Ok(merkle_proof)
 	}
 
