@@ -88,9 +88,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			b.header.height,
 			addr,
 		);
-
-		self.process_block(b)
-	}
+        self.process_block(b, addr)
+    }
 
 	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
 		let bhash = cb.hash();
@@ -106,7 +105,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			let block = core::Block::hydrate_from(cb, vec![]);
 
 			// push the freshly hydrated block through the chain pipeline
-			self.process_block(block)
+            self.process_block(block, addr)
 		} else {
 			// TODO - do we need to validate the header here?
 
@@ -130,7 +129,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 			if let Ok(()) = block.validate() {
 				debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
-				self.process_block(block)
+				self.process_block(block, addr)
 			} else {
 				debug!(LOGGER, "adapter: block invalid after hydration, requesting full block");
 				self.request_block(&cb.header, &addr);
@@ -376,20 +375,33 @@ impl NetToChainAdapter {
 
 	// pushing the new block through the chain pipeline
 	// remembering to reset the head if we have a bad block
-	fn process_block(&self, b: core::Block) -> bool {
-		let bhash = b.hash();
+    fn process_block(&self, b: core::Block, addr: SocketAddr) -> bool {
+        let prev_hash = b.header.previous;
+        let bhash = b.hash();
 		let chain = w(&self.chain);
-		let res = chain.process_block(b, self.chain_opts());
-		if let Err(ref e) = res {
-			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
-			if e.is_bad_data() {
-				debug!(LOGGER, "adapter: process_block: {} is a bad block, resetting head", bhash);
-				let _ = chain.reset_head();
-				return false;
-			}
-		};
-		true
-	}
+	    match chain.process_block(b, self.chain_opts()) {
+                Ok(_) => true,
+                Err(e) => {
+			        debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
+                    match e {
+                        chain::Error::Orphan => {
+                            // make sure we did not miss the parent block
+                            if !self.currently_syncing.load(Ordering::Relaxed) && !chain.is_orphan(&prev_hash) {
+                                debug!(LOGGER, "adapter: process_block: received an orphan block, checking the parent: {:?}", prev_hash);
+                                self.request_block_by_hash(prev_hash, &addr)
+                            }
+                            true
+                        }
+                        _ if e.is_bad_data() => {
+                            debug!(LOGGER, "adapter: process_block_logic: {} is a bad block, resetting head", bhash);
+                            let _ = chain.reset_head();
+                            false
+                        }
+                        _ => true
+                    }
+                }
+        }
+    }
 
 	// After receiving a compact block if we cannot successfully hydrate
 	// it into a full block then fallback to requesting the full block
@@ -398,16 +410,21 @@ impl NetToChainAdapter {
 	// TODO - currently only request block from a single peer
 	// consider additional peers for redundancy?
 	fn request_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
-		if let None = wo(&self.peers).adapter.get_block(bh.hash()) {
+        self.request_block_by_hash(bh.hash(), addr)
+	}
+
+	fn request_block_by_hash(&self, h: Hash, addr: &SocketAddr) {
+		if let None = wo(&self.peers).adapter.get_block(h.clone()) {
 			if let Some(peer) = wo(&self.peers).get_connected_peer(addr) {
 				if let Ok(peer) = peer.read() {
-					let _ = peer.send_block_request(bh.hash());
+                    debug!(LOGGER, "request_block: request block {}", h);
+					let _ = peer.send_block_request(h);
 				}
 			}
 		} else {
-			debug!(LOGGER, "request_block: block {} already known", bh.hash());
-		}
-	}
+			debug!(LOGGER, "request_block: block {} already known", h);
+        }
+    }
 
 	// After we have received a block header in "header first" propagation
 	// we need to go request the block (compact representation) from the
