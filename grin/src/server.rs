@@ -77,8 +77,13 @@ impl Server {
 			pool_adapter.clone(),
 			pool_net_adapter.clone(),
 		)));
+		let tx_stempool = Arc::new(RwLock::new(pool::StemTransactionPool::new(
+			config.stempool_config.clone(),
+			pool_adapter.clone(),
+			pool_net_adapter.clone(),
+		)));
 
-		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));
+		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone(), tx_stempool.clone()));
 
 		let genesis = match config.chain_type {
 			global::ChainTypes::Testnet1 => genesis::genesis_testnet1(),
@@ -106,6 +111,7 @@ impl Server {
 			currently_syncing.clone(),
 			Arc::downgrade(&shared_chain),
 			tx_pool.clone(),
+			tx_stempool.clone(),
 		));
 
 		let p2p_config = config.p2p_config.clone();
@@ -174,6 +180,7 @@ impl Server {
 			config.api_http_addr.clone(),
 			Arc::downgrade(&shared_chain),
 			Arc::downgrade(&tx_pool),
+			Arc::downgrade(&tx_stempool),
 			Arc::downgrade(&p2p_server.peers),
 		);
 

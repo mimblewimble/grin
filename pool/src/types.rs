@@ -28,7 +28,7 @@ use core::consensus;
 use core::core::{block, hash, transaction};
 use core::core::transaction::{Input, OutputIdentifier};
 
-/// Tranasction pool configuration
+/// Transaction pool configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PoolConfig {
 	/// Base fee for a transaction to be accepted by the pool. The transaction
@@ -51,10 +51,37 @@ impl Default for PoolConfig {
 	}
 }
 
+/// Stem Transaction pool configuration
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StemPoolConfig {
+	/// Base fee for a transaction to be accepted by the pool. The transaction
+	/// weight is computed from its number of inputs, outputs and kernels and
+	/// multipled by the base fee to compare to the actual transaction fee.
+	#[serde = "default_accept_fee_base"]
+	pub accept_fee_base: u64,
+
+	/// Maximum capacity of the pool in number of transactions
+	#[serde = "default_max_stempool_size"]
+	pub max_stempool_size: usize,
+}
+
+impl Default for StemPoolConfig {
+	fn default() -> StemPoolConfig {
+		StemPoolConfig {
+			accept_fee_base: default_accept_fee_base(),
+			max_stempool_size: default_max_stempool_size(),
+		}
+	}
+}
+
+
 fn default_accept_fee_base() -> u64 {
   consensus::MILLI_GRIN
 }
 fn default_max_pool_size() -> usize {
+	50_000
+}
+fn default_max_stempool_size() -> usize {
 	50_000
 }
 
