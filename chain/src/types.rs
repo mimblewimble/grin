@@ -40,6 +40,17 @@ bitflags! {
 	}
 }
 
+/// A helper to hold the roots of the sumtrees in order to keep them
+/// readable
+pub struct SumTreeRoots {
+	/// UTXO root
+	pub utxo_root: Hash,
+	/// Range Proof root
+	pub rproof_root: Hash,
+	/// Kernel root
+	pub kernel_root: Hash,
+}
+
 /// Errors
 #[derive(Debug)]
 pub enum Error {

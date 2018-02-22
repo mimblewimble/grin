@@ -33,8 +33,7 @@ use core::ser::{self, PMMRable};
 
 use grin_store;
 use grin_store::pmmr::PMMRBackend;
-use types::ChainStore;
-use types::Error;
+use types::{ChainStore, SumTreeRoots, Error};
 use util::{LOGGER, zip};
 
 const SUMTREES_SUBDIR: &'static str = "sumtrees";
@@ -506,16 +505,12 @@ impl<'a> Extension<'a> {
 	/// and kernel sum trees.
 	pub fn roots(
 		&self,
-	) -> (
-		Hash,
-		Hash,
-		Hash,
-	) {
-		(
-			self.utxo_pmmr.root(),
-			self.rproof_pmmr.root(),
-			self.kernel_pmmr.root(),
-		)
+	) -> SumTreeRoots {
+		SumTreeRoots {
+			utxo_root: self.utxo_pmmr.root(),
+			rproof_root: self.rproof_pmmr.root(),
+			kernel_root: self.kernel_pmmr.root(),
+		}
 	}
 
 	/// Validate the current sumtree state against a block header
@@ -532,9 +527,9 @@ impl<'a> Extension<'a> {
 		}
 
 		// validate the tree roots against the block header
-		let (utxo_root, rproof_root, kernel_root) = self.roots();
-		if utxo_root != header.utxo_root || rproof_root != header.range_proof_root
-			|| kernel_root != header.kernel_root
+		let roots = self.roots();
+		if roots.utxo_root != header.utxo_root || roots.rproof_root != header.range_proof_root
+			|| roots.kernel_root != header.kernel_root
 		{
 			return Err(Error::InvalidRoot);
 		}

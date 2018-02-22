@@ -425,9 +425,9 @@ impl Chain {
 			Ok(extension.roots())
 		})?;
 
-		b.header.utxo_root = roots.0;
-		b.header.range_proof_root = roots.1;
-		b.header.kernel_root = roots.2;
+		b.header.utxo_root = roots.utxo_root;
+		b.header.range_proof_root = roots.rproof_root;
+		b.header.kernel_root = roots.kernel_root;
 		Ok(())
 	}
 
