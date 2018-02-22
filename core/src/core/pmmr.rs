@@ -29,169 +29,30 @@
 //! position of siblings, parents, etc. As all those functions only rely on
 //! binary operations, they're extremely fast. For more information, see the
 //! doc on bintree_jump_left_sibling.
-//! 2. The implementation of a prunable MMR sum tree using the above. Each leaf
-//! is required to be Summable and Hashed. Tree roots can be trivially and
+//! 2. The implementation of a prunable MMR tree using the above. Each leaf
+//! is required to be Writeable (which implements Hashed). Tree roots can be trivially and
 //! efficiently calculated without materializing the full tree. The underlying
-//! (Hash, Sum) pais are stored in a Backend implementation that can either be
+//! Hashes are stored in a Backend implementation that can either be
 //! a simple Vec or a database.
 
 use std::clone::Clone;
+use std::ops::Deref;
 use std::marker::PhantomData;
-use std::ops::{self, Deref};
 
 use core::hash::{Hash, Hashed};
-use ser::{self, Readable, Reader, Writeable, Writer};
+use ser::PMMRable;
 use util::LOGGER;
-
-/// Trait for an element of the tree that has a well-defined sum and hash that
-/// the tree can sum over
-pub trait Summable {
-	/// The type of the sum
-	type Sum: Clone + ops::Add<Output = Self::Sum> + Readable + Writeable + PartialEq;
-
-	/// Obtain the sum of the element
-	fn sum(&self) -> Self::Sum;
-
-	/// Length of the Sum type when serialized. Can be used as a hint by
-	/// underlying storages.
-	fn sum_len() -> usize;
-}
-
-/// An empty sum that takes no space, to store elements that do not need summing
-/// but can still leverage the hierarchical hashing.
-#[derive(Copy, Clone, Debug)]
-pub struct NullSum;
-impl ops::Add for NullSum {
-	type Output = NullSum;
-	fn add(self, _: NullSum) -> NullSum {
-		NullSum
-	}
-}
-
-impl Readable for NullSum {
-	fn read(_: &mut Reader) -> Result<NullSum, ser::Error> {
-		Ok(NullSum)
-	}
-}
-
-impl Writeable for NullSum {
-	fn write<W: Writer>(&self, _: &mut W) -> Result<(), ser::Error> {
-		Ok(())
-	}
-}
-
-impl PartialEq for NullSum {
-	fn eq(&self, _other: &NullSum) -> bool {
-		true
-	}
-}
-
-/// Wrapper for a type that allows it to be inserted in a tree without summing
-#[derive(Clone, Debug)]
-pub struct NoSum<T>(pub T);
-impl<T> Summable for NoSum<T> {
-	type Sum = NullSum;
-	fn sum(&self) -> NullSum {
-		NullSum
-	}
-	fn sum_len() -> usize {
-		return 0;
-	}
-}
-impl<T> Writeable for NoSum<T>
-where
-	T: Writeable,
-{
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.0.write(writer)
-	}
-}
-
-/// A utility type to handle (Hash, Sum) pairs more conveniently. The addition
-/// of two HashSums is the (Hash(h1|h2), h1 + h2) HashSum.
-#[derive(Debug, Clone, Eq)]
-pub struct HashSum<T>
-where
-	T: Summable,
-{
-	/// The hash
-	pub hash: Hash,
-	/// The sum
-	pub sum: T::Sum,
-}
-
-impl<T> HashSum<T>
-where
-	T: Summable + Hashed,
-{
-	/// Create a hash sum from a summable
-	pub fn from_summable(idx: u64, elmt: &T) -> HashSum<T> {
-		let hash = elmt.hash();
-		let sum = elmt.sum();
-		let node_hash = (idx, &sum, hash).hash();
-		HashSum {
-			hash: node_hash,
-			sum: sum,
-		}
-	}
-}
-
-impl<T> PartialEq for HashSum<T>
-where
-	T: Summable,
-{
-	fn eq(&self, other: &HashSum<T>) -> bool {
-		self.hash == other.hash && self.sum == other.sum
-	}
-}
-
-impl<T> Readable for HashSum<T>
-where
-	T: Summable,
-{
-	fn read(r: &mut Reader) -> Result<HashSum<T>, ser::Error> {
-		Ok(HashSum {
-			hash: Hash::read(r)?,
-			sum: T::Sum::read(r)?,
-		})
-	}
-}
-
-impl<T> Writeable for HashSum<T>
-where
-	T: Summable,
-{
-	fn write<W: Writer>(&self, w: &mut W) -> Result<(), ser::Error> {
-		self.hash.write(w)?;
-		self.sum.write(w)
-	}
-}
-
-impl<T> ops::Add for HashSum<T>
-where
-	T: Summable,
-{
-	type Output = HashSum<T>;
-	fn add(self, other: HashSum<T>) -> HashSum<T> {
-		HashSum {
-			hash: (self.hash, other.hash).hash(),
-			sum: self.sum + other.sum,
-		}
-	}
-}
 
 /// Storage backend for the MMR, just needs to be indexed by order of insertion.
 /// The PMMR itself does not need the Backend to be accurate on the existence
 /// of an element (i.e. remove could be a no-op) but layers above can
 /// depend on an accurate Backend to check existence.
-pub trait Backend<T>
-where
-	T: Summable,
-{
-	/// Append the provided HashSums to the backend storage. The position of the
-	/// first element of the Vec in the MMR is provided to help the
-	/// implementation.
-	fn append(&mut self, position: u64, data: Vec<HashSum<T>>) -> Result<(), String>;
+pub trait Backend<T> where
+	T:PMMRable {
+	/// Append the provided Hashes to the backend storage, and optionally an associated
+	/// data element to flatfile storage (for leaf nodes only). The position of the 
+	/// first element of the Vec in the MMR is provided to help the implementation.
+	fn append(&mut self, position: u64, data: Vec<(Hash, Option<T>)>) -> Result<(), String>;
 
 	/// Rewind the backend state to a previous position, as if all append
 	/// operations after that had been canceled. Expects a position in the PMMR
@@ -199,14 +60,20 @@ where
 	/// occurred (see remove).
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String>;
 
-	/// Get a HashSum by insertion position
-	fn get(&self, position: u64) -> Option<HashSum<T>>;
+	/// Get a Hash/Element by insertion position. If include_data is true, will 
+	/// also return the associated data element
+	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)>;
 
-	/// Remove HashSums by insertion position. An index is also provided so the
+	/// Remove Hashes/Data by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a
 	/// given index (practically the index is a the height of a block that
 	/// triggered removal).
 	fn remove(&mut self, positions: Vec<u64>, index: u32) -> Result<(), String>;
+
+	/// Returns the data file path.. this is a bit of a hack now that doesn't
+	/// sit well with the design, but TxKernels have to be summed and the
+	/// fastest way to to be able to allow direct access to the file
+	fn get_data_file_path(&self) -> String;
 }
 
 /// Prunable Merkle Mountain Range implementation. All positions within the tree
@@ -218,18 +85,18 @@ where
 /// we are in the sequence of nodes making up the MMR.
 pub struct PMMR<'a, T, B>
 where
-	T: Summable,
+	T: PMMRable,
 	B: 'a + Backend<T>,
 {
 	last_pos: u64,
 	backend: &'a mut B,
 	// only needed for parameterizing Backend
-	summable: PhantomData<T>,
+	writeable: PhantomData<T>,
 }
 
 impl<'a, T, B> PMMR<'a, T, B>
 where
-	T: Summable + Hashed + Clone,
+	T: PMMRable,
 	B: 'a + Backend<T>,
 {
 	/// Build a new prunable Merkle Mountain Range using the provided backend.
@@ -237,7 +104,7 @@ where
 		PMMR {
 			last_pos: 0,
 			backend: backend,
-			summable: PhantomData,
+			writeable: PhantomData,
 		}
 	}
 
@@ -248,48 +115,51 @@ where
 		PMMR {
 			last_pos: last_pos,
 			backend: backend,
-			summable: PhantomData,
+			writeable: PhantomData,
 		}
 	}
 
 	/// Computes the root of the MMR. Find all the peaks in the current
 	/// tree and "bags" them to get a single peak.
-	pub fn root(&self) -> HashSum<T> {
+	pub fn root(&self) -> Hash {
 		let peaks_pos = peaks(self.last_pos);
-		let peaks: Vec<Option<HashSum<T>>> = map_vec!(peaks_pos, |&pi| self.backend.get(pi));
+		let peaks: Vec<Option<(Hash, Option<T>)>> = peaks_pos.into_iter()
+			.map(|pi| self.backend.get(pi, false))
+			.collect();
+
 
 		let mut ret = None;
 		for peak in peaks {
 			ret = match (ret, peak) {
 				(None, x) => x,
-				(Some(hsum), None) => Some(hsum),
-				(Some(lhsum), Some(rhsum)) => Some(lhsum + rhsum),
+				(Some(hash), None) => Some(hash),
+				(Some(lhash), Some(rhash)) => Some((lhash.0.hash_with(rhash.0), None)),
 			}
 		}
-		ret.expect("no root, invalid tree")
+		ret.expect("no root, invalid tree").0
 	}
 
-	/// Push a new Summable element in the MMR. Computes new related peaks at
+	/// Push a new element into the MMR. Computes new related peaks at
 	/// the same time if applicable.
 	pub fn push(&mut self, elmt: T) -> Result<u64, String> {
 		let elmt_pos = self.last_pos + 1;
-		let mut current_hashsum = HashSum::from_summable(elmt_pos, &elmt);
-		let mut to_append = vec![current_hashsum.clone()];
+		let mut current_hash = elmt.hash();
+		let mut to_append = vec![(current_hash, Some(elmt))];
 		let mut height = 0;
 		let mut pos = elmt_pos;
 
 		// we look ahead one position in the MMR, if the expected node has a higher
-		// height it means we have to build a higher peak by summing with a previous
+		// height it means we have to build a higher peak by hashing with a previous
 		// sibling. we do it iteratively in case the new peak itself allows the
 		// creation of another parent.
 		while bintree_postorder_height(pos + 1) > height {
 			let left_sibling = bintree_jump_left_sibling(pos);
-			let left_hashsum = self.backend.get(left_sibling).expect(
+			let left_elem = self.backend.get(left_sibling, false).expect(
 				"missing left sibling in tree, should not have been pruned",
 			);
-			current_hashsum = left_hashsum + current_hashsum;
+			current_hash = left_elem.0 + current_hash;
 
-			to_append.push(current_hashsum.clone());
+			to_append.push((current_hash.clone(), None));
 			height += 1;
 			pos += 1;
 		}
@@ -322,7 +192,7 @@ where
 	/// to keep an index of elements to positions in the tree. Prunes parent
 	/// nodes as well when they become childless.
 	pub fn prune(&mut self, position: u64, index: u32) -> Result<bool, String> {
-		if let None = self.backend.get(position) {
+		if let None = self.backend.get(position, false) {
 			return Ok(false);
 		}
 		let prunable_height = bintree_postorder_height(position);
@@ -345,7 +215,7 @@ where
 
 			// if we have a pruned sibling, we can continue up the tree
 			// otherwise we're done
-			if let None = self.backend.get(sibling) {
+			if let None = self.backend.get(sibling, false) {
 				current = parent;
 			} else {
 				break;
@@ -356,26 +226,27 @@ where
 		Ok(true)
 	}
 
-	/// Helper function to get the HashSum of a node at a given position from
+	/// Helper function to get a node at a given position from
 	/// the backend.
-	pub fn get(&self, position: u64) -> Option<HashSum<T>> {
+	pub fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)> {
 		if position > self.last_pos {
 			None
 		} else {
-			self.backend.get(position)
+			self.backend.get(position, include_data)
 		}
 	}
 
+
 	/// Helper function to get the last N nodes inserted, i.e. the last
 	/// n nodes along the bottom of the tree
-	pub fn get_last_n_insertions(&self, n: u64) -> Vec<HashSum<T>> {
+	pub fn get_last_n_insertions(&self, n: u64) -> Vec<(Hash, Option<T>)> {
 		let mut return_vec = Vec::new();
 		let mut last_leaf = self.last_pos;
 		let size = self.unpruned_size();
 		// Special case that causes issues in bintree functions,
 		// just return
 		if size == 1 {
-			return_vec.push(self.backend.get(last_leaf).unwrap());
+			return_vec.push(self.backend.get(last_leaf, true).unwrap());
 			return return_vec;
 		}
 		// if size is even, we're already at the bottom, otherwise
@@ -390,7 +261,7 @@ where
 			if bintree_postorder_height(last_leaf) > 0 {
 				last_leaf = bintree_rightmost(last_leaf);
 			}
-			return_vec.push(self.backend.get(last_leaf).unwrap());
+			return_vec.push(self.backend.get(last_leaf, true).unwrap());
 
 			last_leaf = bintree_jump_left_sibling(last_leaf);
 		}
@@ -398,21 +269,20 @@ where
 	}
 
 	/// Walks all unpruned nodes in the MMR and revalidate all parent hashes
-	/// and sums.
 	pub fn validate(&self) -> Result<(), String> {
 		// iterate on all parent nodes
 		for n in 1..(self.last_pos + 1) {
 			if bintree_postorder_height(n) > 0 {
-				if let Some(hs) = self.get(n) {
+				if let Some(hs) = self.get(n, false) {
 					// take the left and right children, if they exist
 					let left_pos = bintree_move_down_left(n).unwrap();
 					let right_pos = bintree_jump_right_sibling(left_pos);
 
-					if let Some(left_child_hs) = self.get(left_pos) {
-						if let Some(right_child_hs) = self.get(right_pos) {
-							// sum and compare
-							if left_child_hs + right_child_hs != hs {
-								return Err(format!("Invalid MMR, hashsum of parent at {} does \
+					if let Some(left_child_hs) = self.get(left_pos, false) {
+						if let Some(right_child_hs) = self.get(right_pos, false) {
+							// add hashes and compare
+							if left_child_hs.0+right_child_hs.0 != hs.0 {
+								return Err(format!("Invalid MMR, hash of parent at {} does \
 																	 not match children.", n));
 							}
 						}
@@ -427,6 +297,11 @@ where
 	/// pruning.
 	pub fn unpruned_size(&self) -> u64 {
 		self.last_pos
+	}
+
+	/// Return the path of the data file (needed to sum kernels efficiently)
+	pub fn data_file_path(&self) -> String {
+		self.backend.get_data_file_path()
 	}
 
 	/// Debugging utility to print information about the MMRs. Short version
@@ -445,40 +320,36 @@ where
 					break;
 				}
 				idx.push_str(&format!("{:>8} ", m + 1));
-				let ohs = self.get(m + 1);
+				let ohs = self.get(m + 1, false);
 				match ohs {
-					Some(hs) => hashes.push_str(&format!("{} ", hs.hash)),
+					Some(hs) => hashes.push_str(&format!("{} ", hs.0)),
 					None => hashes.push_str(&format!("{:>8} ", "??")),
 				}
 			}
-			debug!(LOGGER, "{}", idx);
-			debug!(LOGGER, "{}", hashes);
+			trace!(LOGGER, "{}", idx);
+			trace!(LOGGER, "{}", hashes);
 		}
 	}
 }
 
 /// Simple MMR backend implementation based on a Vector. Pruning does not
 /// compact the Vector itself but still frees the reference to the
-/// underlying HashSum.
+/// underlying Hash.
 #[derive(Clone)]
 pub struct VecBackend<T>
-where
-	T: Summable + Clone,
-{
+	where T:PMMRable {
 	/// Backend elements
-	pub elems: Vec<Option<HashSum<T>>>,
+	pub elems: Vec<Option<(Hash, Option<T>)>>,
 }
 
-impl<T> Backend<T> for VecBackend<T>
-where
-	T: Summable + Clone,
-{
+impl <T> Backend <T> for VecBackend<T>
+	where T: PMMRable {
 	#[allow(unused_variables)]
-	fn append(&mut self, position: u64, data: Vec<HashSum<T>>) -> Result<(), String> {
+	fn append(&mut self, position: u64, data: Vec<(Hash, Option<T>)>) -> Result<(), String> {
 		self.elems.append(&mut map_vec!(data, |d| Some(d.clone())));
 		Ok(())
 	}
-	fn get(&self, position: u64) -> Option<HashSum<T>> {
+	fn get(&self, position: u64, _include_data:bool) -> Option<(Hash, Option<T>)> {
 		self.elems[(position - 1) as usize].clone()
 	}
 	#[allow(unused_variables)]
@@ -493,18 +364,19 @@ where
 		self.elems = self.elems[0..(position as usize) + 1].to_vec();
 		Ok(())
 	}
+	fn get_data_file_path(&self) -> String {
+		"".to_string()
+	}
 }
 
-impl<T> VecBackend<T>
-where
-	T: Summable + Clone,
-{
+impl <T> VecBackend <T>
+	where T:PMMRable {
 	/// Instantiates a new VecBackend<T>
 	pub fn new() -> VecBackend<T> {
 		VecBackend { elems: vec![] }
 	}
 
-	/// Current number of HashSum elements in the underlying Vec.
+	/// Current number of elements in the underlying Vec.
 	pub fn used_size(&self) -> usize {
 		let mut usz = self.elems.len();
 		for elem in self.elems.deref() {
@@ -568,6 +440,28 @@ impl PruneList {
 		}
 	}
 
+	/// As above, but only returning the number of leaf nodes to skip for a
+	/// given leaf. Helpful if, for instance, data for each leaf is being stored
+	/// separately in a continuous flat-file
+	pub fn get_leaf_shift(&self, pos: u64) -> Option<u64> {
+		
+		// get the position where the node at pos would fit in the pruned list, if
+		// it's already pruned, nothing to skip
+		match self.pruned_pos(pos) {
+			None => None,
+			Some(idx) => {
+				// skip by the number of leaf nodes pruned in the preceeding subtrees
+				// which just 2^height
+				Some(
+					self.pruned_nodes[0..(idx as usize)]
+						.iter()
+						.map(|n| 1 << bintree_postorder_height(*n))
+						.sum(),
+				)
+			}
+		}
+	}
+
 	/// Push the node at the provided position in the prune list. Compacts the
 	/// list if pruning the additional node means a parent can get pruned as
 	/// well.
@@ -591,7 +485,7 @@ impl PruneList {
 	}
 
 	/// Gets the position a new pruned node should take in the prune list.
-	/// If the node has already bee pruned, either directly or through one of
+	/// If the node has already been pruned, either directly or through one of
 	/// its parents contained in the prune list, returns None.
 	pub fn pruned_pos(&self, pos: u64) -> Option<usize> {
 		match self.pruned_nodes.binary_search(&pos) {
@@ -833,7 +727,20 @@ fn most_significant_pos(num: u64) -> u64 {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::hash::Hashed;
+	use ser::{Writeable, Readable, Error};
+	use core::{Writer, Reader};
+	use core::hash::{Hash};
+
+	#[test]
+	fn test_leaf_index(){
+		assert_eq!(n_leaves(1),1);
+		assert_eq!(n_leaves(2),2);
+		assert_eq!(n_leaves(4),3);
+		assert_eq!(n_leaves(5),4);
+		assert_eq!(n_leaves(8),5);
+		assert_eq!(n_leaves(9),6);
+		
+	}
 
 	#[test]
 	fn some_all_ones() {
@@ -890,27 +797,34 @@ mod test {
 		assert_eq!(peaks(42), vec![31, 38, 41, 42]);
 	}
 
-	#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+  #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 	struct TestElem([u32; 4]);
-	impl Summable for TestElem {
-		type Sum = u64;
-		fn sum(&self) -> u64 {
-			// sums are not allowed to overflow, so we use this simple
-			// non-injective "sum" function that will still be homomorphic
-			self.0[0] as u64 * 0x1000 + self.0[1] as u64 * 0x100 + self.0[2] as u64 * 0x10 +
-				self.0[3] as u64
-		}
-		fn sum_len() -> usize {
-			8
+
+	impl PMMRable for TestElem {
+		fn len() -> usize {
+			16
 		}
 	}
 
 	impl Writeable for TestElem {
-		fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 			try!(writer.write_u32(self.0[0]));
 			try!(writer.write_u32(self.0[1]));
 			try!(writer.write_u32(self.0[2]));
 			writer.write_u32(self.0[3])
+		}
+	}
+
+	impl Readable for TestElem {
+		fn read(reader: &mut Reader) -> Result<TestElem, Error> {
+			Ok(TestElem (
+				[
+					reader.read_u32()?,
+					reader.read_u32()?,
+					reader.read_u32()?,
+					reader.read_u32()?,
+				]
+			))
 		}
 	}
 
@@ -934,72 +848,67 @@ mod test {
 
 		// one element
 		pmmr.push(elems[0]).unwrap();
-		let hash = Hashed::hash(&elems[0]);
-		let sum = elems[0].sum();
-		let node_hash = (1 as u64, &sum, hash).hash();
+		let node_hash = elems[0].hash();
 		assert_eq!(
 			pmmr.root(),
-			HashSum {
-				hash: node_hash,
-				sum: sum,
-			}
+			node_hash,
 		);
 		assert_eq!(pmmr.unpruned_size(), 1);
+		pmmr.dump(false);
 
 		// two elements
 		pmmr.push(elems[1]).unwrap();
-		let sum2 = HashSum::from_summable(1, &elems[0]) +
-			HashSum::from_summable(2, &elems[1]);
+		let sum2 = elems[0].hash() + elems[1].hash();
+		pmmr.dump(false);
 		assert_eq!(pmmr.root(), sum2);
 		assert_eq!(pmmr.unpruned_size(), 3);
 
 		// three elements
 		pmmr.push(elems[2]).unwrap();
-		let sum3 = sum2.clone() + HashSum::from_summable(4, &elems[2]);
+		let sum3 = sum2 + elems[2].hash();
+		pmmr.dump(false);
 		assert_eq!(pmmr.root(), sum3);
 		assert_eq!(pmmr.unpruned_size(), 4);
 
 		// four elements
 		pmmr.push(elems[3]).unwrap();
-		let sum4 = sum2 +
-			(HashSum::from_summable(4, &elems[2]) +
-				 HashSum::from_summable(5, &elems[3]));
+		let sum_one = elems[2].hash() + elems[3].hash();
+		let sum4 = sum2 + sum_one;
+		pmmr.dump(false);
 		assert_eq!(pmmr.root(), sum4);
 		assert_eq!(pmmr.unpruned_size(), 7);
 
 		// five elements
 		pmmr.push(elems[4]).unwrap();
-		let sum5 = sum4.clone() + HashSum::from_summable(8, &elems[4]);
-		assert_eq!(pmmr.root(), sum5);
+		let sum3 = sum4 + elems[4].hash();
+		pmmr.dump(false);
+		assert_eq!(pmmr.root(), sum3);
 		assert_eq!(pmmr.unpruned_size(), 8);
 
 		// six elements
 		pmmr.push(elems[5]).unwrap();
-		let sum6 = sum4.clone() +
-			(HashSum::from_summable(8, &elems[4]) +
-				 HashSum::from_summable(9, &elems[5]));
+		let sum6 = sum4 +
+			(elems[4].hash() + elems[5].hash());
 		assert_eq!(pmmr.root(), sum6.clone());
 		assert_eq!(pmmr.unpruned_size(), 10);
 
 		// seven elements
 		pmmr.push(elems[6]).unwrap();
-		let sum7 = sum6 + HashSum::from_summable(11, &elems[6]);
+		let sum7 = sum6 + elems[6].hash();
 		assert_eq!(pmmr.root(), sum7);
 		assert_eq!(pmmr.unpruned_size(), 11);
 
 		// eight elements
 		pmmr.push(elems[7]).unwrap();
 		let sum8 = sum4 +
-			((HashSum::from_summable(8, &elems[4]) +
-				  HashSum::from_summable(9, &elems[5])) +
-				 (HashSum::from_summable(11, &elems[6]) +
-					  HashSum::from_summable(12, &elems[7])));
+			((elems[4].hash() + elems[5].hash()) +
+				 (elems[6].hash() + elems[7].hash()));
 		assert_eq!(pmmr.root(), sum8);
 		assert_eq!(pmmr.unpruned_size(), 15);
 
 		// nine elements
 		pmmr.push(elems[8]).unwrap();
-		let sum9 = sum8 + HashSum::from_summable(16, &elems[8]);
+		let sum9 = sum8 + elems[8].hash();
 		assert_eq!(pmmr.root(), sum9);
 		assert_eq!(pmmr.unpruned_size(), 16);
 	}
@@ -1015,8 +924,9 @@ mod test {
 			TestElem([0, 0, 0, 6]),
 			TestElem([0, 0, 0, 7]),
 			TestElem([0, 0, 0, 8]),
-			TestElem([0, 0, 0, 9]),
+			TestElem([1, 0, 0, 0]),
 		];
+
 		let mut ba = VecBackend::new();
 		let mut pmmr = PMMR::new(&mut ba);
 
@@ -1026,23 +936,23 @@ mod test {
 
 		pmmr.push(elems[0]).unwrap();
 		let res = pmmr.get_last_n_insertions(19);
-		assert!(res.len() == 1 && res[0].sum == 1);
+		assert!(res.len() == 1);
 
 		pmmr.push(elems[1]).unwrap();
 
 		let res = pmmr.get_last_n_insertions(12);
-		assert!(res[0].sum == 2 && res[1].sum == 1);
+		assert!(res.len() == 2);
 
 		pmmr.push(elems[2]).unwrap();
 
 		let res = pmmr.get_last_n_insertions(2);
-		assert!(res[0].sum == 3 && res[1].sum == 2);
+		assert!(res.len() == 2);
 
 		pmmr.push(elems[3]).unwrap();
 
 		let res = pmmr.get_last_n_insertions(19);
 		assert!(
-			res[0].sum == 4 && res[1].sum == 3 && res[2].sum == 2 && res[3].sum == 1 && res.len() == 4
+			res.len() == 4
 		);
 
 		pmmr.push(elems[5]).unwrap();
@@ -1052,7 +962,7 @@ mod test {
 
 		let res = pmmr.get_last_n_insertions(7);
 		assert!(
-			res[0].sum == 9 && res[1].sum == 8 && res[2].sum == 7 && res[3].sum == 6 && res.len() == 7
+			res.len() == 7
 		);
 	}
 
@@ -1071,7 +981,7 @@ mod test {
 			TestElem([1, 0, 0, 0]),
 		];
 
-		let orig_root: HashSum<TestElem>;
+		let orig_root: Hash;
 		let sz: u64;
 		let mut ba = VecBackend::new();
 		{
@@ -1085,7 +995,7 @@ mod test {
 
 		// pruning a leaf with no parent should do nothing
 		{
-			let mut pmmr = PMMR::at(&mut ba, sz);
+			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(16, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
@@ -1093,14 +1003,14 @@ mod test {
 
 		// pruning leaves with no shared parent just removes 1 element
 		{
-			let mut pmmr = PMMR::at(&mut ba, sz);
+			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(2, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
 		assert_eq!(ba.used_size(), 15);
 
 		{
-			let mut pmmr = PMMR::at(&mut ba, sz);
+			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(4, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
@@ -1108,7 +1018,7 @@ mod test {
 
 		// pruning a non-leaf node has no effect
 		{
-			let mut pmmr = PMMR::at(&mut ba, sz);
+			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(3, 0).unwrap_err();
 			assert_eq!(orig_root, pmmr.root());
 		}
@@ -1116,7 +1026,7 @@ mod test {
 
 		// pruning sibling removes subtree
 		{
-			let mut pmmr = PMMR::at(&mut ba, sz);
+			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(5, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
@@ -1124,7 +1034,7 @@ mod test {
 
 		// pruning all leaves under level >1 removes all subtree
 		{
-			let mut pmmr = PMMR::at(&mut ba, sz);
+			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(1, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
@@ -1132,7 +1042,7 @@ mod test {
 
 		// pruning everything should only leave us the peaks
 		{
-			let mut pmmr = PMMR::at(&mut ba, sz);
+			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			for n in 1..16 {
 				let _ = pmmr.prune(n, 0);
 			}

@@ -16,7 +16,6 @@ use std::sync::Arc;
 
 use core::{core, ser};
 use core::core::hash::Hashed;
-use core::core::SumCommit;
 use core::core::SwitchCommitHash;
 use chain;
 use p2p;
@@ -89,8 +88,6 @@ impl Status {
 pub struct SumTrees {
 	/// UTXO Root Hash
 	pub utxo_root_hash: String,
-	// UTXO Root Sum
-	pub utxo_root_sum: String,
 	// Rangeproof root hash
 	pub range_proof_root_hash: String,
 	// Kernel set root hash
@@ -101,10 +98,9 @@ impl SumTrees {
 	pub fn from_head(head: Arc<chain::Chain>) -> SumTrees {
 		let roots = head.get_sumtree_roots();
 		SumTrees {
-			utxo_root_hash: roots.0.hash.to_hex(),
-			utxo_root_sum: roots.0.sum.to_hex(),
-			range_proof_root_hash: roots.1.hash.to_hex(),
-			kernel_root_hash: roots.2.hash.to_hex(),
+			utxo_root_hash: roots.0.to_hex(),
+			range_proof_root_hash: roots.1.to_hex(),
+			kernel_root_hash: roots.2.to_hex(),
 		}
 	}
 }
@@ -112,45 +108,40 @@ impl SumTrees {
 /// Wrapper around a list of sumtree nodes, so it can be
 /// presented properly via json
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SumTreeNode {
+pub struct PmmrTreeNode {
 	// The hash
 	pub hash: String,
-	// SumCommit (features|commitment), optional (only for utxos)
-	pub sum: Option<SumCommit>,
 }
 
-impl SumTreeNode {
-	pub fn get_last_n_utxo(chain: Arc<chain::Chain>, distance: u64) -> Vec<SumTreeNode> {
+impl PmmrTreeNode {
+	pub fn get_last_n_utxo(chain: Arc<chain::Chain>, distance: u64) -> Vec<PmmrTreeNode> {
 		let mut return_vec = Vec::new();
 		let last_n = chain.get_last_n_utxo(distance);
 		for x in last_n {
-			return_vec.push(SumTreeNode {
-				hash: util::to_hex(x.hash.to_vec()),
-				sum: Some(x.sum),
+			return_vec.push(PmmrTreeNode {
+				hash: util::to_hex(x.0.to_vec()),
 			});
 		}
 		return_vec
 	}
 
-	pub fn get_last_n_rangeproof(head: Arc<chain::Chain>, distance: u64) -> Vec<SumTreeNode> {
+	pub fn get_last_n_rangeproof(head: Arc<chain::Chain>, distance: u64) -> Vec<PmmrTreeNode> {
 		let mut return_vec = Vec::new();
 		let last_n = head.get_last_n_rangeproof(distance);
 		for elem in last_n {
-			return_vec.push(SumTreeNode {
-				hash: util::to_hex(elem.hash.to_vec()),
-				sum: None,
+			return_vec.push(PmmrTreeNode {
+				hash: util::to_hex(elem.0.to_vec()),
 			});
 		}
 		return_vec
 	}
 
-	pub fn get_last_n_kernel(head: Arc<chain::Chain>, distance: u64) -> Vec<SumTreeNode> {
+	pub fn get_last_n_kernel(head: Arc<chain::Chain>, distance: u64) -> Vec<PmmrTreeNode> {
 		let mut return_vec = Vec::new();
 		let last_n = head.get_last_n_kernel(distance);
 		for elem in last_n {
-			return_vec.push(SumTreeNode {
-				hash: util::to_hex(elem.hash.to_vec()),
-				sum: None,
+			return_vec.push(PmmrTreeNode {
+				hash: util::to_hex(elem.0.to_vec()),
 			});
 		}
 		return_vec

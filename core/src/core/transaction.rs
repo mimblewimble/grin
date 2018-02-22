@@ -19,16 +19,14 @@ use util::{static_secp_instance, kernel_sig_msg};
 use util::secp::pedersen::{Commitment, RangeProof};
 use std::cmp::{min, max};
 use std::cmp::Ordering;
-use std::ops;
 
 use consensus;
 use consensus::VerifySortOrder;
 use core::Committed;
 use core::hash::{Hash, Hashed, ZERO_HASH};
-use core::pmmr::Summable;
-use keychain;
 use keychain::{Identifier, Keychain, BlindingFactor};
-use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
+use keychain;
+use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, WriteableSorted, Writer};
 use util;
 
 /// The size of the blake2 hash of a switch commitment (256 bits)
@@ -217,9 +215,10 @@ impl TxKernel {
 			..self
 		}
 	}
+}
 
-	/// Size in bytes of a kernel, necessary for binary storage
-	pub fn size() -> usize {
+impl PMMRable for TxKernel {
+	fn len() -> usize {
 		17 + // features plus fee and lock_height
 			secp::constants::PEDERSEN_COMMITMENT_SIZE +
 			secp::constants::AGG_SIGNATURE_SIZE
@@ -671,17 +670,13 @@ impl SwitchCommitHash {
 /// provides future-proofing against quantum-based attacks, as well as providing
 /// wallet implementations with a way to identify their outputs for wallet
 /// reconstruction.
-///
-/// The hash of an output only covers its features, commitment,
-/// and switch commitment. The range proof is expected to have its own hash
-/// and is stored and committed to separately.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct Output {
 	/// Options for an output's structure or use
 	pub features: OutputFeatures,
 	/// The homomorphic commitment representing the output amount
 	pub commit: Commitment,
-	/// The switch commitment hash, a 160 bit length blake2 hash of blind*J
+	/// The switch commitment hash, a 256 bit length blake2 hash of blind*J
 	pub switch_commit_hash: SwitchCommitHash,
 	/// A proof that the commitment is in the right range
 	pub proof: RangeProof,
@@ -704,9 +699,13 @@ impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
 		writer.write_fixed_bytes(&self.commit)?;
-		writer.write_fixed_bytes(&self.switch_commit_hash)?;
-
-		// The hash of an output doesn't include the range proof
+		// Hash of an output doesn't cover the switch commit, it should 
+		// be wound into the range proof separately
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			writer.write_fixed_bytes(&self.switch_commit_hash)?;
+		}
+		// The hash of an output doesn't include the range proof, which
+		// is commit to separately
 		if writer.serialization_mode() == ser::SerializationMode::Full {
 			writer.write_bytes(&self.proof)?
 		}
@@ -818,21 +817,6 @@ impl OutputIdentifier {
 			util::to_hex(self.commit.0.to_vec()),
 		)
 	}
-
-	/// Convert an output_indentifier to a sum_commit representation
-	/// so we can use it to query the the output MMR
-	pub fn as_sum_commit(&self) -> SumCommit {
-		SumCommit {
-			features: self.features,
-			commit: self.commit,
-			switch_commit_hash: SwitchCommitHash::zero(),
-		}
-	}
-
-	/// Convert a sum_commit back to an output_identifier.
-	pub fn from_sum_commit(sum_commit: &SumCommit) -> OutputIdentifier {
-		OutputIdentifier::new(sum_commit.features, &sum_commit.commit)
-	}
 }
 
 impl Writeable for OutputIdentifier {
@@ -855,137 +839,70 @@ impl Readable for OutputIdentifier {
 	}
 }
 
-/// Wrapper to Output commitments to provide the Summable trait.
+/// Yet another output version to read/write from disk. Ends up being far too awkward
+/// to use the write serialisation property to do this
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct SumCommit {
+pub struct OutputStoreable {
 	/// Output features (coinbase vs. regular transaction output)
 	/// We need to include this when hashing to ensure coinbase maturity can be enforced.
 	pub features: OutputFeatures,
 	/// Output commitment
 	pub commit: Commitment,
-	/// The corresponding switch commit hash
+	/// Switch commit hash
 	pub switch_commit_hash: SwitchCommitHash,
 }
 
-impl SumCommit {
-	/// Build a new sum_commit.
-	pub fn new(
-		features: OutputFeatures,
-		commit: &Commitment,
-		switch_commit_hash: &SwitchCommitHash,
-	) -> SumCommit {
-		SumCommit {
-			features: features.clone(),
-			commit: commit.clone(),
-			switch_commit_hash: switch_commit_hash.clone(),
-		}
-	}
-
-	/// Build a new sum_commit from an existing output.
-	pub fn from_output(output: &Output) -> SumCommit {
-		SumCommit {
+impl OutputStoreable {
+	/// Build a StoreableOutput from an existing output.
+	pub fn from_output(output: &Output) -> OutputStoreable {
+		OutputStoreable {
 			features: output.features,
 			commit: output.commit,
 			switch_commit_hash: output.switch_commit_hash,
 		}
 	}
 
-	/// Build a new sum_commit from an existing input.
-	pub fn from_input(input: &Input) -> SumCommit {
-		SumCommit {
-			features: input.features,
-			commit: input.commit,
-			switch_commit_hash: SwitchCommitHash::zero(),
+	/// Return a regular output
+	pub fn to_output(self) -> Output {
+		Output{
+			features: self.features,
+			commit: self.commit,
+			switch_commit_hash: self.switch_commit_hash,
+			proof: RangeProof{
+				proof:[0; secp::constants::MAX_PROOF_SIZE],
+				plen: 0,
+			},
 		}
-	}
-
-	/// Hex string representation of a sum_commit.
-	pub fn to_hex(&self) -> String {
-		format!(
-			"{:b}{}{}",
-			self.features.bits(),
-			util::to_hex(self.commit.0.to_vec()),
-			self.switch_commit_hash.to_hex(),
-		)
 	}
 }
 
-/// Outputs get summed through their commitments.
-impl Summable for SumCommit {
-	type Sum = SumCommit;
-
-	fn sum(&self) -> SumCommit {
-		SumCommit {
-			commit: self.commit.clone(),
-			features: self.features.clone(),
-			switch_commit_hash: self.switch_commit_hash.clone(),
-		}
-	}
-
-	fn sum_len() -> usize {
-		secp::constants::PEDERSEN_COMMITMENT_SIZE + SWITCH_COMMIT_HASH_SIZE + 1
+impl PMMRable for OutputStoreable {
+	fn len() -> usize {
+		1 + secp::constants::PEDERSEN_COMMITMENT_SIZE + SWITCH_COMMIT_HASH_SIZE
 	}
 }
 
-impl Writeable for SumCommit {
+impl Writeable for OutputStoreable {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
 		self.commit.write(writer)?;
-		if writer.serialization_mode() == ser::SerializationMode::Full {
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			self.switch_commit_hash.write(writer)?;
 		}
 		Ok(())
 	}
 }
 
-impl Readable for SumCommit {
-	fn read(reader: &mut Reader) -> Result<SumCommit, ser::Error> {
+impl Readable for OutputStoreable {
+	fn read(reader: &mut Reader) -> Result<OutputStoreable, ser::Error> {
 		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
 			ser::Error::CorruptedData,
 		)?;
-		Ok(SumCommit {
-			features: features,
+		Ok(OutputStoreable {
 			commit: Commitment::read(reader)?,
 			switch_commit_hash: SwitchCommitHash::read(reader)?,
+			features: features,
 		})
-	}
-}
-
-impl ops::Add for SumCommit {
-	type Output = SumCommit;
-
-	fn add(self, other: SumCommit) -> SumCommit {
-		// Build a new commitment by summing the two commitments.
-		let secp = static_secp_instance();
-		let sum = match secp.lock().unwrap().commit_sum(
-			vec![
-				self.commit.clone(),
-				other.commit.clone(),
-			],
-			vec![],
-		) {
-			Ok(s) => s,
-			Err(_) => Commitment::from_vec(vec![1; 33]),
-		};
-
-		// Now build a new switch_commit_hash by concatenating the two switch_commit_hash value
-		// and hashing the result.
-		let mut bytes = self.switch_commit_hash.0.to_vec();
-		bytes.extend(other.switch_commit_hash.0.iter().cloned());
-		let key = SwitchCommitHashKey::zero();
-		let hash = blake2b(SWITCH_COMMIT_HASH_SIZE, &key.0, &bytes);
-		let hash = hash.as_bytes();
-		let mut h = [0; SWITCH_COMMIT_HASH_SIZE];
-		for i in 0..SWITCH_COMMIT_HASH_SIZE {
-			h[i] = hash[i];
-		}
-		let switch_commit_hash_sum = SwitchCommitHash(h);
-
-		SumCommit {
-			features: self.features | other.features,
-			commit: sum,
-			switch_commit_hash: switch_commit_hash_sum,
-		}
 	}
 }
 

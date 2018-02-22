@@ -37,6 +37,8 @@ use util::secp::constants::{
 	SECRET_KEY_SIZE,
 };
 
+const BULLET_PROOF_SIZE:usize = 674;
+
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]
 pub enum Error {
@@ -119,6 +121,9 @@ pub enum SerializationMode {
 	Hash,
 	/// Serialize everything that a signer of the object should know
 	SigHash,
+	/// Serialize for local storage, for instance in the case where
+	/// an output doesn't wish to store its range proof
+	Storage,
 }
 
 /// Implementations defined how different numbers and binary structures are
@@ -255,6 +260,7 @@ pub fn ser_vec<W: Writeable>(thing: &W) -> Result<Vec<u8>, Error> {
 	Ok(vec)
 }
 
+/// Utility to read from a binary source
 struct BinReader<'a> {
 	source: &'a mut Read,
 }
@@ -364,7 +370,7 @@ impl Writeable for RangeProof {
 
 impl Readable for RangeProof {
 	fn read(reader: &mut Reader) -> Result<RangeProof, Error> {
-		let p = try!(reader.read_limited_vec(MAX_PROOF_SIZE));
+		let p = try!(reader.read_limited_vec(BULLET_PROOF_SIZE));
 		let mut a = [0; MAX_PROOF_SIZE];
 		for i in 0..p.len() {
 			a[i] = p[i];
@@ -373,6 +379,12 @@ impl Readable for RangeProof {
 			proof: a,
 			plen: p.len(),
 		})
+	}
+}
+
+impl PMMRable for RangeProof {
+	fn len() -> usize {
+		BULLET_PROOF_SIZE
 	}
 }
 
@@ -540,6 +552,12 @@ impl Writeable for [u8; 4] {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_bytes(self)
 	}
+}
+
+/// Trait for types that can serialize and report their size
+pub trait PMMRable: Readable + Writeable + Hashed + Clone {
+	/// Length in bytes
+	fn len() -> usize;
 }
 
 /// Useful marker trait on types that can be sized byte slices
