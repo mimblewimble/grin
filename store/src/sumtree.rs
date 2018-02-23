@@ -345,13 +345,13 @@ where
 		Ok(())
 	}
 
-	/// Get a HashSum by insertion position
-	fn get(&self, position: u64) -> Option<HashSum<T>> {
-		// Check if this position has been pruned in the remove log or the
-		// pruned list
-		if self.remove_log.includes(position) {
-			return None;
-		}
+	/// Get a HashSum by insertion position (ignores the remove_log).
+	/// This is guaranteed to return "removed" data on a full archival node.
+	/// TODO - confirm this is actually true.
+	///
+	/// TODO - revisit this for pruned/compacted PMMR.
+	///
+	fn get_from_file(&self, position: u64) -> Option<HashSum<T>> {
 		let shift = self.pruned_nodes.get_shift(position);
 		if let None = shift {
 			return None;
@@ -375,6 +375,18 @@ where
 				None
 			}
 		}
+	}
+
+	/// Get a HashSum by insertion position.
+	/// Will return None if the position has been removed (pos in the remove_log).
+	fn get(&self, position: u64) -> Option<HashSum<T>> {
+		// Check if this position has been pruned in the remove log or the
+		// pruned list
+		if self.remove_log.includes(position) {
+			return None;
+		}
+
+		self.get_from_file(position)
 	}
 
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {

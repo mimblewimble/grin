@@ -445,6 +445,7 @@ impl<'a> Extension<'a> {
 		output: &OutputIdentifier,
 		block: &Block,
 	) -> Result<MerkleProof, Error> {
+		debug!(LOGGER, "sumtree: merkle_proof_via_rewind: rewinding to block {:?}", block.hash());
 		// rewind to the specified block
 		self.rewind(block)?;
 		// then calculate the Merkle Proof based on the known pos
@@ -675,6 +676,12 @@ impl<'a> Extension<'a> {
 
 /// Output and kernel MMR indexes at the end of the provided block
 fn indexes_at(block: &Block, commit_index: &ChainStore) -> Result<(u64, u64), Error> {
+	// TODO - if we always process outputs as "coinbase first, then all others" then this is not correct
+
+	debug!(LOGGER, "**********");
+	let all_pos = block.outputs.iter().map(|x| commit_index.get_output_pos(&x.commitment())).collect::<Vec<_>>();
+	debug!(LOGGER, "sumtree: indexes_at: {:?}", all_pos);
+
 	let out_idx = match block.outputs.last() {
 		Some(output) => commit_index.get_output_pos(&output.commitment())
 			.map_err(|e| {

@@ -38,7 +38,6 @@
 use std::clone::Clone;
 use std::marker::PhantomData;
 use std::ops::{self, Deref};
-
 use core::hash::{Hash, Hashed};
 use ser::{self, Readable, Reader, Writeable, Writer};
 use util;
@@ -202,6 +201,9 @@ where
 
 	/// Get a HashSum by insertion position
 	fn get(&self, position: u64) -> Option<HashSum<T>>;
+
+	/// Get HashSum by original insertion position (ignoring the remove list).
+	fn get_from_file(&self, position: u64) -> Option<HashSum<T>>;
 
 	/// Remove HashSums by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a
@@ -396,7 +398,13 @@ where
 	/// tree and "bags" them to get a single peak.
 	pub fn root(&self) -> HashSum<T> {
 		let peaks_pos = peaks(self.last_pos);
+		debug!(LOGGER, "root {:?}", peaks_pos);
+
 		let peaks: Vec<Option<HashSum<T>>> = map_vec!(peaks_pos, |&pi| self.backend.get(pi));
+
+		let peaks_from_file: Vec<Option<HashSum<T>>> = map_vec!(peaks_pos, |&pi| self.backend.get_from_file(pi));
+
+		debug!(LOGGER, "root, comparing backend values - {}, {}", peaks.len(), peaks_from_file.len());
 
 		let mut ret = None;
 		for peak in peaks {
@@ -410,11 +418,15 @@ where
 	}
 
 	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
+		debug!(LOGGER, "merkle_proof (via rewind) - {}, last_pos {}", pos, self.last_pos);
+
 		if !is_leaf(pos) {
 			return Err(format!("not a leaf at pos {}", pos));
 		}
 
 		let root = self.root();
+
+		// TODO - get rid of this unwrap
 		let node = self.get(pos).unwrap();
 
 		let family_branch = family_branch(pos, self.last_pos);
@@ -425,13 +437,24 @@ where
 
 		let path = family_branch
 			.iter()
-			.filter_map(|x| self.get(x.1))
+			.filter_map(|x| {
+				// we want to find siblings here even if they
+				// have been "removed" from the MMR
+				// TODO - pruned/compacted MMR will need to maintain hashes of removed nodes
+				let res = self.get_from_file(x.1);
+				debug!(LOGGER, "********** get_from_file (branch) - {:?}", res.is_some());
+				res
+			})
 			.map(|x| x.hash)
 			.collect::<Vec<_>>();
 
 		let peaks = peaks(self.last_pos)
 			.iter()
-			.filter_map(|&x| self.get(x))
+			.filter_map(|&x| {
+				let res = self.get_from_file(x);
+				debug!(LOGGER, "********** get_from_file (peaks) - {:?}", res.is_some());
+				res
+			})
 			.map(|x| x.hash)
 			.collect::<Vec<_>>();
 
@@ -540,6 +563,14 @@ where
 			None
 		} else {
 			self.backend.get(position)
+		}
+	}
+
+	fn get_from_file(&self, position: u64) -> Option<HashSum<T>> {
+		if position > self.last_pos {
+			None
+		} else {
+			self.backend.get_from_file(position)
 		}
 	}
 
@@ -658,6 +689,10 @@ where
 	fn get(&self, position: u64) -> Option<HashSum<T>> {
 		self.elems[(position - 1) as usize].clone()
 	}
+	fn get_from_file(&self, position: u64) -> Option<HashSum<T>> {
+		panic!("not yet implemented (do we need it?), also needs renaming")
+		// self.elems[(position - 1) as usize].clone()
+	}
 	#[allow(unused_variables)]
 	fn remove(&mut self, positions: Vec<u64>, index: u32) -> Result<(), String> {
 		for n in positions {
@@ -768,7 +803,7 @@ impl PruneList {
 	}
 
 	/// Gets the position a new pruned node should take in the prune list.
-	/// If the node has already bee pruned, either directly or through one of
+	/// If the node has already been pruned, either directly or through one of
 	/// its parents contained in the prune list, returns None.
 	pub fn pruned_pos(&self, pos: u64) -> Option<usize> {
 		match self.pruned_nodes.binary_search(&pos) {
