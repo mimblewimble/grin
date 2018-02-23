@@ -359,7 +359,7 @@ impl<'a> Extension<'a> {
 				// check hash from pmmr matches hash from input (or corresponding output)
 				// if not then the input is not being honest about
 				// what it is attempting to spend...
-				if output_id_hash != read_hash || 
+				if output_id_hash != read_hash ||
 					output_id_hash != read_elem.expect("no output at position").hash() {
 					return Err(Error::SumTreeErr(format!("output pmmr hash mismatch")));
 				}
@@ -668,7 +668,7 @@ where
 	file_store.get(leaf_index - 1)
 }
 
-fn _remove_element_at_pmmr_index<T>(file_store: &mut FlatFileStore<T>, pos: u64) 
+fn _remove_element_at_pmmr_index<T>(file_store: &mut FlatFileStore<T>, pos: u64)
 	-> Result<(), String>
 where
 	T: ser::Readable + ser::Writeable + Clone
@@ -687,9 +687,38 @@ where
 	file_store.rewind(leaf_index - 1)
 }*/
 
-/// Output and kernel MMR indexes at the end of the provided block
+/// Output and kernel MMR indexes at the end of the provided block.
+/// This requires us to know the "last" output processed in the block
+/// and needs to be consistent with how we originally processed
+/// the outputs in apply_block()
 fn indexes_at(block: &Block, commit_index: &ChainStore) -> Result<(u64, u64), Error> {
-	let out_idx = match block.outputs.last() {
+	// If we have any regular outputs then the "last" output is the last regular output
+	// otherwise it is the last coinbase output.
+	// This is because we process coinbase outputs before regular outputs in apply_block().
+	//
+	// TODO - consider maintaining coinbase outputs in a separate vec in a block?
+	//
+	let mut last_coinbase_output: Option<Output> = None;
+	let mut last_regular_output: Option<Output> = None;
+
+	for x in &block.outputs {
+		if x.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+			last_coinbase_output = Some(*x);
+		} else {
+			last_regular_output = Some(*x);
+		}
+	}
+
+	// use last regular output if we have any, otherwise last coinbase output
+	let last_output = if last_regular_output.is_some() {
+		last_regular_output
+	} else if last_coinbase_output.is_some() {
+		last_coinbase_output
+	} else {
+		None
+	};
+
+	let out_idx = match last_output {
 		Some(output) => commit_index.get_output_pos(&output.commitment())
 			.map_err(|e| {
 				Error::StoreErr(e, format!("missing output pos for known block"))
