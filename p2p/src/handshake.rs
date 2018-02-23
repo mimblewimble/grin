@@ -99,6 +99,7 @@ impl Handshake {
 			addr: peer_addr,
 			version: shake.version,
 			total_difficulty: shake.total_difficulty,
+			direction: Direction::Outbound,
 		};
 
 		// If denied then we want to close the connection
@@ -106,7 +107,7 @@ impl Handshake {
 		if Peer::is_denied(&self.config, &peer_info.addr) {
 			return Err(Error::ConnectionClose);
 		}
-		
+
 		debug!(
 			LOGGER,
 			"Connected! Cumulative {} offered from {:?} {:?} {:?}",
@@ -127,7 +128,7 @@ impl Handshake {
 	) -> Result<PeerInfo, Error> {
 
 		let hand: Hand = read_message(conn, Type::Hand)?;
-	
+
 		// all the reasons we could refuse this connection for
 		if hand.version != PROTOCOL_VERSION {
 			return Err(Error::ProtocolMismatch {
@@ -154,6 +155,7 @@ impl Handshake {
 			addr: extract_ip(&hand.sender_addr.0, &conn),
 			version: hand.version,
 			total_difficulty: hand.total_difficulty,
+			direction: Direction::Inbound,
 		};
 
 		// At this point we know the published ip and port of the peer
