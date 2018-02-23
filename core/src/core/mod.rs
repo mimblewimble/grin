@@ -269,7 +269,7 @@ mod test {
 		};
 		assert_eq!(
 			vec.len(),
-			target_len,
+			target_len
 		);
 	}
 
