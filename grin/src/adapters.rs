@@ -381,24 +381,22 @@ impl NetToChainAdapter {
 		let chain = w(&self.chain);
 	    match chain.process_block(b, self.chain_opts()) {
                 Ok(_) => true,
-                Err(e) => {
-			        debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
-                    match e {
-                        chain::Error::Orphan => {
-                            // make sure we did not miss the parent block
-                            if !self.currently_syncing.load(Ordering::Relaxed) && !chain.is_orphan(&prev_hash) {
-                                debug!(LOGGER, "adapter: process_block: received an orphan block, checking the parent: {:?}", prev_hash);
-                                self.request_block_by_hash(prev_hash, &addr)
-                            }
-                            true
-                        }
-                        _ if e.is_bad_data() => {
-                            debug!(LOGGER, "adapter: process_block_logic: {} is a bad block, resetting head", bhash);
-                            let _ = chain.reset_head();
-                            false
-                        }
-                        _ => true
+                Err(chain::Error::Orphan) => {
+                    // make sure we did not miss the parent block
+                    if !self.currently_syncing.load(Ordering::Relaxed) && !chain.is_orphan(&prev_hash) {
+                        debug!(LOGGER, "adapter: process_block: received an orphan block, checking the parent: {:}", prev_hash);
+                        self.request_block_by_hash(prev_hash, &addr)
                     }
+                    true
+                }
+                Err(ref e) if e.is_bad_data() => {
+                    debug!(LOGGER, "adapter: process_block: {} is a bad block, resetting head", bhash);
+                    let _ = chain.reset_head();
+                    false
+                }
+                Err(e) => {
+                    debug!(LOGGER, "adapter: process_block :block {} refused by chain: {:?}", bhash, e);
+                    true
                 }
         }
     }
