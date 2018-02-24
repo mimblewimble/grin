@@ -379,7 +379,6 @@ impl<'a> Extension<'a> {
 
 			// Now prune the utxo_pmmr, rproof_pmmr and their storage.
 			// Input is not valid if we cannot prune successfully (to spend an unspent output).
-			// TODO: rm log, skip list for utxo and range proofs
 			match self.utxo_pmmr.prune(pos, height as u32) {
 				Ok(true) => {
 					self.rproof_pmmr
@@ -628,7 +627,7 @@ impl<'a> Extension<'a> {
 		Ok((sum_kernel, fees))
 	}
 
-	/// Sums all our UTXO commitments
+	/// Sums all our UTXO commitments, checking range proofs at the same time
 	fn sum_utxos(&self) -> Result<Commitment, Error> {
 		let mut sum_utxo = None;
 		let mut utxo_count = 0;
@@ -636,11 +635,19 @@ impl<'a> Extension<'a> {
 		for n in 1..self.utxo_pmmr.unpruned_size()+1 {
 			if pmmr::bintree_postorder_height(n) == 0 {
 				if let Some((_,output)) = self.utxo_pmmr.get(n, true) {
-					if n == 1 {
-						sum_utxo = Some(output.expect("not a leaf node").commit);
+					let out = output.expect("not a leaf node");
+					let commit = out.commit.clone();
+					match self.rproof_pmmr.get(n, true) {
+						Some((_, Some(rp))) => out.to_output(rp).verify_proof()?,
+						res => {
+							return Err(Error::OutputNotFound);
+						}
+					}
+					if let None = sum_utxo {
+						sum_utxo = Some(commit);
 					} else {
 						let secp = secp.lock().unwrap();
-						sum_utxo = Some(secp.commit_sum(vec![sum_utxo.unwrap(), output.expect("not a leaf node").commit], vec![])?);
+						sum_utxo = Some(secp.commit_sum(vec![sum_utxo.unwrap(), commit], vec![])?);
 					}
 					utxo_count += 1;
 				}
@@ -650,42 +657,6 @@ impl<'a> Extension<'a> {
 		Ok(sum_utxo.unwrap())
 	}
 }
-
-/*fn store_element<T>(file_store: &mut FlatFileStore<T>, data: T)
-	-> Result<(), String>
-where
-	T: ser::Readable + ser::Writeable + Clone
-{
-	file_store.append(vec![data])
-}
-
-fn read_element_at_pmmr_index<T>(file_store: &FlatFileStore<T>, pos: u64) -> Option<T>
-where
-	T: ser::Readable + ser::Writeable + Clone
-{
-	let leaf_index = pmmr::leaf_index(pos);
-	// flat files are zero indexed
-	file_store.get(leaf_index - 1)
-}
-
-fn _remove_element_at_pmmr_index<T>(file_store: &mut FlatFileStore<T>, pos: u64)
-	-> Result<(), String>
-where
-	T: ser::Readable + ser::Writeable + Clone
-{
-	let leaf_index = pmmr::leaf_index(pos);
-	// flat files are zero indexed
-	file_store.remove(vec![leaf_index - 1])
-}
-
-fn rewind_to_pmmr_index<T>(file_store: &mut FlatFileStore<T>, pos: u64) -> Result<(), String>
-where
-	T: ser::Readable + ser::Writeable + Clone
-{
-	let leaf_index = pmmr::leaf_index(pos);
-	// flat files are zero indexed
-	file_store.rewind(leaf_index - 1)
-}*/
 
 /// Output and kernel MMR indexes at the end of the provided block.
 /// This requires us to know the "last" output processed in the block

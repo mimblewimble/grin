@@ -863,15 +863,12 @@ impl OutputStoreable {
 	}
 
 	/// Return a regular output
-	pub fn to_output(self) -> Output {
+	pub fn to_output(self, rproof: RangeProof) -> Output {
 		Output{
 			features: self.features,
 			commit: self.commit,
 			switch_commit_hash: self.switch_commit_hash,
-			proof: RangeProof{
-				proof:[0; secp::constants::MAX_PROOF_SIZE],
-				plen: 0,
-			},
+			proof: rproof,
 		}
 	}
 }

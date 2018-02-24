@@ -43,7 +43,6 @@ pub struct AppendOnlyFile {
 	buffer_start: usize,
 	buffer: Vec<u8>,
 	buffer_start_bak: usize,
-	unflushed_data_size: usize,
 }
 
 impl AppendOnlyFile {
@@ -61,7 +60,6 @@ impl AppendOnlyFile {
 			buffer_start: 0,
 			buffer: vec![],
 			buffer_start_bak: 0,
-			unflushed_data_size: 0,
 		};
 		if let Ok(sz) = aof.size() {
 			if sz > 0 {
@@ -75,7 +73,6 @@ impl AppendOnlyFile {
 	/// Append data to the file. Until the append-only file is synced, data is
 	/// only written to memory.
 	pub fn append(&mut self, buf: &mut Vec<u8>) {
-		self.unflushed_data_size += buf.len();
 		self.buffer.append(buf);
 	}
 
@@ -102,7 +99,6 @@ impl AppendOnlyFile {
 		self.file.sync_data()?;
 		self.buffer = vec![];
 		self.mmap = Some(unsafe { memmap::Mmap::map(&self.file)? });
-		self.unflushed_data_size = 0;
 		Ok(())
 	}
 
@@ -114,7 +110,6 @@ impl AppendOnlyFile {
 			self.buffer_start_bak = 0;
 		}
 		self.buffer = vec![];
-		self.unflushed_data_size = 0;
 	}
 
 	/// Read length bytes of data at offset from the file. Leverages the memory
@@ -184,11 +179,6 @@ impl AppendOnlyFile {
 	/// Current size of the file in bytes.
 	pub fn size(&self) -> io::Result<u64> {
 		fs::metadata(&self.path).map(|md| md.len())
-	}
-
-	/// Current size of file in bytes + size of unsaved data
-	pub fn size_with_unsaved(&self) -> u64 {
-		self.size().unwrap() + self.unflushed_data_size as u64
 	}
 
 	/// Path of the underlying file
