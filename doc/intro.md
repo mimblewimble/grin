@@ -14,8 +14,8 @@ The main goal and characteristics of the Grin project are:
 
 * Privacy by default. This enables complete fungibility without precluding
 	the ability to selectively disclose information as needed.
-* Scales with the number of users and not the number of transactions, with very
-  large space savings compared to other blockchains.
+* Scales modestly with the number of transactions, keeping only a ~100 byte `kernel' for
+  historical transactions, resulting in a large space savings compared to other blockchains.
 * Strong and proven cryptography. MimbleWimble only relies on Elliptic Curve
   Cryptography which has been tried and tested for decades.
 * Design simplicity that makes it easy to audit and maintain over time.
@@ -45,12 +45,11 @@ dive deeper into those assumptions, there are other opportunities to
 [learn more](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/).
 
 An Elliptic Curve for the purpose of cryptography is simply a large set of points that
-we will call _H_. On those points,
-the addition and multiplication operations have been defined, just like we know how
-to do additions and multiplications on numbers or vectors. Given a number _k_ and
-using the multiplication operation we can compute `k*H`, which is also a point on
-_H_. Given another number _j_ we can also calculate `(k+j)*H` which is equivalent
-to `k*H + j*H`. The addition and multiplication operations on an elliptic curve
+we will call _C_. These points can be added, subtracted, or multiplied by integers (also called scalars).
+Given an integer _k_ and
+using the scalar multiplication operation we can compute `k*H`, which is also a point on
+curve _C_. Given another integer _j_ we can also calculate `(k+j)*H`, which equals
+`k*H + j*H`. The addition and scalar multiplication operations on an elliptic curve
 maintain the commutative and associative properties of addition and multiplication:
 
     (k+j)*H = k*H + j*H
