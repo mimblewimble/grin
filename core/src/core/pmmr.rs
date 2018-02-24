@@ -50,7 +50,7 @@ use util::LOGGER;
 pub trait Backend<T> where
 	T:PMMRable {
 	/// Append the provided Hashes to the backend storage, and optionally an associated
-	/// data element to flatfile storage (for leaf nodes only). The position of the
+	/// data element to flatfile storage (for leaf nodes only). The position of the 
 	/// first element of the Vec in the MMR is provided to help the implementation.
 	fn append(&mut self, position: u64, data: Vec<(Hash, Option<T>)>) -> Result<(), String>;
 
@@ -60,7 +60,7 @@ pub trait Backend<T> where
 	/// occurred (see remove).
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String>;
 
-	/// Get a Hash/Element by insertion position. If include_data is true, will
+	/// Get a Hash/Element by insertion position. If include_data is true, will 
 	/// also return the associated data element
 	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)>;
 
@@ -444,7 +444,7 @@ impl PruneList {
 	/// given leaf. Helpful if, for instance, data for each leaf is being stored
 	/// separately in a continuous flat-file
 	pub fn get_leaf_shift(&self, pos: u64) -> Option<u64> {
-
+		
 		// get the position where the node at pos would fit in the pruned list, if
 		// it's already pruned, nothing to skip
 		match self.pruned_pos(pos) {
@@ -739,7 +739,7 @@ mod test {
 		assert_eq!(n_leaves(5),4);
 		assert_eq!(n_leaves(8),5);
 		assert_eq!(n_leaves(9),6);
-
+		
 	}
 
 	#[test]
@@ -851,7 +851,7 @@ mod test {
 		let node_hash = elems[0].hash();
 		assert_eq!(
 			pmmr.root(),
-			node_hash
+			node_hash,
 		);
 		assert_eq!(pmmr.unpruned_size(), 1);
 		pmmr.dump(false);

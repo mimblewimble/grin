@@ -247,7 +247,7 @@ impl Keychain {
 
 	pub fn verify_range_proof(
 		secp: &Secp256k1,
-		commit: Commitment,
+		commit: Commitment, 
 		proof: RangeProof) -> Result<(), secp::Error> {
 			let result = match USE_BULLET_PROOFS {
 				true => secp.verify_bullet_proof(commit, proof),
@@ -656,7 +656,7 @@ mod test {
 				.add_blinding_factor(BlindingFactor::from_secret_key(skey1))
 				.add_blinding_factor(BlindingFactor::from_secret_key(skey2))
 			).unwrap(),
-			BlindingFactor::from_secret_key(skey3)
+			BlindingFactor::from_secret_key(skey3),
 		);
 	}
 
