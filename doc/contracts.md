@@ -172,7 +172,7 @@ this time, instead of simply sending `sr = kr + e * rr` with his `rr*G` and
 `kr*G`, Bob sends `sr' = kr + x + e * rr` as well as `x*G`.
 3. Alice can validate that `sr'*G = kr*G + x*G + rr*G`.
 4. Alice sends back her `ss = ks + e * xs` as she normally would, now that she
-can also compute `e = Blake2(M | ks*G + kr*G)`.
+can also compute `e = SHA256(M | ks*G + kr*G)`.
 5. To complete the signature, Bob computes `sr = kr + e * rr` and the final
 signature is `(sr + ss, kr*G + ks*G)`.
 6. As soon as Bob broadcasts the final transaction to get his new grins, Alice
