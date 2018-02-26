@@ -239,7 +239,13 @@ impl Keychain {
 	) -> Result<RangeProof, Error> {
 		let skey = self.derived_key(key_id)?;
 		let range_proof = match USE_BULLET_PROOFS {
-			true => self.secp.bullet_proof(amount, skey),
+			true => {
+				if msg.len() > 64 {
+					warn!(LOGGER, "Attempting to pass a message greater than 64 \
+					bytes into a bullet proof. Message will be truncated.");
+				}
+				self.secp.bullet_proof(amount, skey, Some(msg))
+			},
 			false => self.secp.range_proof(0, amount, skey, commit, msg),
 		};
 		Ok(range_proof)
@@ -267,8 +273,18 @@ impl Keychain {
 	) -> Result<ProofInfo, Error> {
 		let nonce = self.derived_key(key_id)?;
 		if USE_BULLET_PROOFS {
-			error!(LOGGER, "Rewinding Bullet proofs not yet supported");
-			return Err(Error::RangeProof("Rewinding Bullet proofs not yet supported".to_string()));
+			let proof_message = self.secp.unwind_bullet_proof(commit, nonce, proof).unwrap();
+			let proof_info = ProofInfo {
+				success: true,
+				value: 0,
+				message: proof_message,
+				mlen: 0,
+				min: 0,
+				max: 0,
+				exp: 0,
+				mantissa: 0,
+			};
+			return Ok(proof_info);
 		}
 		Ok(self.secp.rewind_range_proof(commit, proof, nonce))
 	}
