@@ -26,6 +26,7 @@ use core::{
 	ShortId,
 	SwitchCommitHash,
 	Proof,
+	ProofMessageElements,
 	TxKernel,
 	Transaction,
 	OutputFeatures,
@@ -818,8 +819,14 @@ impl Block {
 			"Block reward - Switch Commit Hash is: {:?}",
 			switch_commit_hash
 		);
-		let msg = util::secp::pedersen::ProofMessage::empty();
-		let rproof = keychain.range_proof(reward(fees), key_id, commit, msg)?;
+
+		let value = reward(fees);
+		let msg = (ProofMessageElements {
+			value: value,
+			switch_commit_hash: switch_commit_hash,
+		}).to_proof_message();
+
+		let rproof = keychain.range_proof(value, key_id, commit, msg)?;
 
 		let output = Output {
 			features: OutputFeatures::COINBASE_OUTPUT,
