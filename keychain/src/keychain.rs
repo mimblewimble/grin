@@ -29,9 +29,9 @@ use blind::{BlindSum, BlindingFactor};
 use extkey::{self, Identifier};
 
 #[cfg(feature = "use-bullet-proofs")]
-const USE_BULLET_PROOFS:bool = true;
+pub const USE_BULLET_PROOFS:bool = true;
 #[cfg(not(feature = "use-bullet-proofs"))]
-const USE_BULLET_PROOFS:bool = false;
+pub const USE_BULLET_PROOFS:bool = false;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Error {

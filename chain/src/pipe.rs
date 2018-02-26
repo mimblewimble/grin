@@ -305,28 +305,28 @@ fn validate_block(
 	// apply the new block to the MMR trees and check the new root hashes
 	ext.apply_block(&b)?;
 
-	let (utxo_root, rproof_root, kernel_root) = ext.roots();
-	if utxo_root.hash != b.header.utxo_root || rproof_root.hash != b.header.range_proof_root
-		|| kernel_root.hash != b.header.kernel_root
+	let roots = ext.roots();
+	if roots.utxo_root != b.header.utxo_root || roots.rproof_root != b.header.range_proof_root
+		|| roots.kernel_root != b.header.kernel_root
 	{
 		ext.dump(false);
 
 		debug!(
 			LOGGER,
 			"validate_block: utxo roots - {:?}, {:?}",
-			utxo_root.hash,
+			roots.utxo_root,
 			b.header.utxo_root,
 		);
 		debug!(
 			LOGGER,
 			"validate_block: rproof roots - {:?}, {:?}",
-			rproof_root.hash,
+			roots.rproof_root,
 			b.header.range_proof_root,
 		);
 		debug!(
 			LOGGER,
 			"validate_block: kernel roots - {:?}, {:?}",
-			kernel_root.hash,
+			roots.kernel_root,
 			b.header.kernel_root,
 		);
 

@@ -117,8 +117,9 @@ fn mine_empty_chain() {
 		// now check the block height index
 		let header_by_height = chain.get_header_by_height(n).unwrap();
 		assert_eq!(header_by_height.hash(), bhash);
+
+		chain.validate().unwrap();
 	}
-	chain.validate().unwrap();
 }
 
 #[test]
@@ -253,6 +254,8 @@ fn spend_in_fork() {
 	fork_head = b.header.clone();
 	chain.process_block(b, chain::Options::SKIP_POW).unwrap();
 
+	println!("First block");
+
 	// now mine three further blocks
 	for n in 3..6 {
 		let b = prepare_block(&kc, &fork_head, &chain, n);
@@ -263,6 +266,8 @@ fn spend_in_fork() {
 	let lock_height = 1 + global::coinbase_maturity();
 	assert_eq!(lock_height, 4);
 
+	println!("3 Further Blocks: should have 4 blocks or 264 bytes in file ");
+
 	let tx1 = build::transaction(
 		vec![
 			build::coinbase_input(consensus::REWARD, block_hash, kc.derive_key_id(2).unwrap()),
@@ -272,9 +277,14 @@ fn spend_in_fork() {
 		&kc,
 	).unwrap();
 
+	println!("Built coinbase input and output");
+
 	let next = prepare_block_tx(&kc, &fork_head, &chain, 7, vec![&tx1]);
 	let prev_main = next.header.clone();
 	chain.process_block(next.clone(), chain::Options::SKIP_POW).unwrap();
+	chain.validate().unwrap();
+
+	println!("tx 1 processed, should have 6 outputs or 396 bytes in file, first skipped");
 
 	let tx2 = build::transaction(
 		vec![
@@ -288,6 +298,10 @@ fn spend_in_fork() {
 	let next = prepare_block_tx(&kc, &prev_main, &chain, 9, vec![&tx2]);
 	let prev_main = next.header.clone();
 	chain.process_block(next, chain::Options::SKIP_POW).unwrap();
+	chain.validate().unwrap();
+
+	println!("tx 2 processed");
+	/*panic!("Stop");*/
 
 	// mine 2 forked blocks from the first
 	let fork = prepare_fork_block_tx(&kc, &fork_head, &chain, 6, vec![&tx1]);
@@ -297,6 +311,7 @@ fn spend_in_fork() {
 	let fork_next = prepare_fork_block_tx(&kc, &prev_fork, &chain, 8, vec![&tx2]);
 	let prev_fork = fork_next.header.clone();
 	chain.process_block(fork_next, chain::Options::SKIP_POW).unwrap();
+	chain.validate().unwrap();
 
 	// check state
 	let head = chain.head_header().unwrap();
@@ -309,6 +324,7 @@ fn spend_in_fork() {
 	let fork_next = prepare_fork_block(&kc, &prev_fork, &chain, 10);
 	let prev_fork = fork_next.header.clone();
 	chain.process_block(fork_next, chain::Options::SKIP_POW).unwrap();
+	chain.validate().unwrap();
 
 	// check state
 	let head = chain.head_header().unwrap();
