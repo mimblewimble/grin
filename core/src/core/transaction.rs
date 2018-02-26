@@ -799,79 +799,79 @@ pub fn recover_switch_commit_hash(&self, keychain: &Keychain, key_id: &Identifie
 /// Needed because it is not sufficient to pass a commitment around.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct OutputIdentifier {
-/// Output features (coinbase vs. regular transaction output)
-/// We need to include this when hashing to ensure coinbase maturity can be enforced.
-pub features: OutputFeatures,
-/// Output commitment
-pub commit: Commitment,
+	/// Output features (coinbase vs. regular transaction output)
+	/// We need to include this when hashing to ensure coinbase maturity can be enforced.
+	pub features: OutputFeatures,
+	/// Output commitment
+	pub commit: Commitment,
 }
 
 impl OutputIdentifier {
-/// Build a new output_identifier.
-pub fn new(features: OutputFeatures, commit: &Commitment) -> OutputIdentifier {
-	OutputIdentifier {
-		features: features.clone(),
-		commit: commit.clone(),
+	/// Build a new output_identifier.
+	pub fn new(features: OutputFeatures, commit: &Commitment) -> OutputIdentifier {
+		OutputIdentifier {
+			features: features.clone(),
+			commit: commit.clone(),
+		}
 	}
-}
 
-/// Build an output_identifier from an existing output.
-pub fn from_output(output: &Output) -> OutputIdentifier {
-	OutputIdentifier {
-		features: output.features,
-		commit: output.commit,
+	/// Build an output_identifier from an existing output.
+	pub fn from_output(output: &Output) -> OutputIdentifier {
+		OutputIdentifier {
+			features: output.features,
+			commit: output.commit,
+		}
 	}
-}
 
-/// Build an output_identifier from an existing input.
-pub fn from_input(input: &Input) -> OutputIdentifier {
-	OutputIdentifier {
-		features: input.features,
-		commit: input.commit,
+	/// Build an output_identifier from an existing input.
+	pub fn from_input(input: &Input) -> OutputIdentifier {
+		OutputIdentifier {
+			features: input.features,
+			commit: input.commit,
+		}
 	}
-}
 
-/// convert an output_identifier to hex string format.
-pub fn to_hex(&self) -> String {
-	format!(
-		"{:b}{}",
-		self.features.bits(),
-		util::to_hex(self.commit.0.to_vec()),
-	)
-}
+	/// convert an output_identifier to hex string format.
+	pub fn to_hex(&self) -> String {
+		format!(
+			"{:b}{}",
+			self.features.bits(),
+			util::to_hex(self.commit.0.to_vec()),
+		)
+	}
 }
 
 impl Writeable for OutputIdentifier {
-fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-	writer.write_u8(self.features.bits())?;
-	self.commit.write(writer)?;
-	Ok(())
-}
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u8(self.features.bits())?;
+		self.commit.write(writer)?;
+		Ok(())
+	}
 }
 
 impl Readable for OutputIdentifier {
-fn read(reader: &mut Reader) -> Result<OutputIdentifier, ser::Error> {
-	let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
-		ser::Error::CorruptedData,
-	)?;
-	Ok(OutputIdentifier {
-		commit: Commitment::read(reader)?,
-		features: features,
-	})
-}
+	fn read(reader: &mut Reader) -> Result<OutputIdentifier, ser::Error> {
+		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
+			ser::Error::CorruptedData,
+		)?;
+		Ok(OutputIdentifier {
+			commit: Commitment::read(reader)?,
+			features: features,
+		})
+	}
 }
 
 /// Yet another output version to read/write from disk. Ends up being far too awkward
 /// to use the write serialisation property to do this
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct OutputStoreable {
-/// Output features (coinbase vs. regular transaction output)
-/// We need to include this when hashing to ensure coinbase maturity can be enforced.
-pub features: OutputFeatures,
-/// Output commitment
-pub commit: Commitment,
-/// Switch commit hash
-pub switch_commit_hash: SwitchCommitHash,
+	/// Output features (coinbase vs. regular transaction output)
+	/// We need to include this when hashing to ensure coinbase maturity can be enforced.
+	pub features: OutputFeatures,
+	/// Output commitment
+	pub commit: Commitment,
+	/// Switch commit hash
+	pub switch_commit_hash: SwitchCommitHash,
 }
 
 impl OutputStoreable {
@@ -896,79 +896,79 @@ pub fn to_output(self, rproof: RangeProof) -> Output {
 }
 
 impl PMMRable for OutputStoreable {
-fn len() -> usize {
-	1 + secp::constants::PEDERSEN_COMMITMENT_SIZE + SWITCH_COMMIT_HASH_SIZE
-}
+	fn len() -> usize {
+		1 + secp::constants::PEDERSEN_COMMITMENT_SIZE + SWITCH_COMMIT_HASH_SIZE
+	}
 }
 
 impl Writeable for OutputStoreable {
-fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-	writer.write_u8(self.features.bits())?;
-	self.commit.write(writer)?;
-	if writer.serialization_mode() != ser::SerializationMode::Hash {
-		self.switch_commit_hash.write(writer)?;
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u8(self.features.bits())?;
+		self.commit.write(writer)?;
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			self.switch_commit_hash.write(writer)?;
+		}
+		Ok(())
 	}
-	Ok(())
-}
 }
 
 impl Readable for OutputStoreable {
-fn read(reader: &mut Reader) -> Result<OutputStoreable, ser::Error> {
-	let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
-		ser::Error::CorruptedData,
-	)?;
-	Ok(OutputStoreable {
-		commit: Commitment::read(reader)?,
-		switch_commit_hash: SwitchCommitHash::read(reader)?,
-		features: features,
-	})
-}
+	fn read(reader: &mut Reader) -> Result<OutputStoreable, ser::Error> {
+		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
+			ser::Error::CorruptedData,
+		)?;
+		Ok(OutputStoreable {
+			commit: Commitment::read(reader)?,
+			switch_commit_hash: SwitchCommitHash::read(reader)?,
+			features: features,
+		})
+	}
 } 
 
 /// A structure which contains fields that are to be commited to within
 /// an Output's range (bullet) proof. 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ProofMessageElements {
-/// The amount, stored to allow for wallet reconstruction
-pub value: u64,
-/// Switch commit hash, as it's not commit to in the Output hash
-/// to allow outputs to be identified using just the commit and
-/// features
-pub switch_commit_hash: SwitchCommitHash,
+	/// The amount, stored to allow for wallet reconstruction
+	pub value: u64,
+	/// Switch commit hash, as it's not commit to in the Output hash
+	/// to allow outputs to be identified using just the commit and
+	/// features
+	pub switch_commit_hash: SwitchCommitHash,
 }
 
 impl Writeable for ProofMessageElements {
-fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-	writer.write_u64(self.value)?;
-	self.switch_commit_hash.write(writer)?;
-	for _ in 40..64 {
-		let _ = writer.write_u8(0);
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.value)?;
+		self.switch_commit_hash.write(writer)?;
+		for _ in 40..64 {
+			let _ = writer.write_u8(0);
+		}
+		Ok(())
 	}
-	Ok(())
-}
 }
 
 impl Readable for ProofMessageElements {
-fn read(reader: &mut Reader) -> Result<ProofMessageElements, ser::Error> {
-	Ok(ProofMessageElements {
-		value: reader.read_u64()?,
-		switch_commit_hash: SwitchCommitHash::read(reader)?,
-	})
-}
+	fn read(reader: &mut Reader) -> Result<ProofMessageElements, ser::Error> {
+		Ok(ProofMessageElements {
+			value: reader.read_u64()?,
+			switch_commit_hash: SwitchCommitHash::read(reader)?,
+		})
+	}
 }
 
 impl ProofMessageElements {
-/// Serialise and return a ProofMessage
-pub fn to_proof_message(&self)->ProofMessage {
-	ProofMessage::from_bytes(&ser_vec(self).unwrap())
-}
+	/// Serialise and return a ProofMessage
+	pub fn to_proof_message(&self)->ProofMessage {
+		ProofMessage::from_bytes(&ser_vec(self).unwrap())
+	}
 
-/// Deserialise and return the message elements
-pub fn from_proof_message(proof_message:ProofMessage)
-	-> Result<ProofMessageElements, ser::Error> {
-	let mut c = Cursor::new(proof_message.as_bytes());
-	ser::deserialize::<ProofMessageElements>(&mut c)
-}
+	/// Deserialise and return the message elements
+	pub fn from_proof_message(proof_message:ProofMessage)
+		-> Result<ProofMessageElements, ser::Error> {
+		let mut c = Cursor::new(proof_message.as_bytes());
+		ser::deserialize::<ProofMessageElements>(&mut c)
+	}
 }
 
 #[cfg(test)]
