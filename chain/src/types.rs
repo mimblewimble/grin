@@ -243,16 +243,6 @@ pub trait ChainStore: Send + Sync {
 	/// Save the provided block in store
 	fn save_block(&self, b: &Block) -> Result<(), store::Error>;
 
-	/// Get the pre-built Merkle proof for the given commitment from the store.
-	fn get_merkle_proof(&self, commit: &Commitment) -> Result<MerkleProof, store::Error>;
-
-	/// Save a Merkle proof for the given commitment to the store.
-	fn save_merkle_proof(
-		&self,
-		commit: &Commitment,
-		merkle_proof: &MerkleProof,
-	) -> Result<(), store::Error>;
-
 	/// Delete a full block. Does not delete any record associated with a block
 	/// header.
 	fn delete_block(&self, bh: &Hash) -> Result<(), store::Error>;

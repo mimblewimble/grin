@@ -21,7 +21,6 @@ use util::secp::pedersen::Commitment;
 use types::*;
 use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader};
-use core::core::pmmr::MerkleProof;
 use core::consensus::TargetError;
 use core::core::target::Difficulty;
 use grin_store::{self, option_to_not_found, to_key, Error, u64_to_key};
@@ -36,7 +35,6 @@ const SYNC_HEAD_PREFIX: u8 = 's' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
 const KERNEL_POS_PREFIX: u8 = 'k' as u8;
-const MERKLE_PROOF_PREFIX: u8 = 'm' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
 /// store.
@@ -107,20 +105,6 @@ impl ChainStore for ChainKVStore {
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(
 			self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
-		)
-	}
-
-	fn save_merkle_proof(&self, commit: &Commitment, merkle_proof: &MerkleProof) -> Result<(), Error> {
-		self.db.put_ser(
-			&to_key(MERKLE_PROOF_PREFIX, &mut commit.as_ref().to_vec())[..],
-			merkle_proof,
-		)
-	}
-
-	fn get_merkle_proof(&self, commit: &Commitment) -> Result<MerkleProof, Error> {
-		option_to_not_found(
-			self.db
-				.get_ser(&to_key(MERKLE_PROOF_PREFIX, &mut commit.as_ref().to_vec())),
 		)
 	}
 

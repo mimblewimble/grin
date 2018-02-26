@@ -174,8 +174,6 @@ impl MerkleProof {
 	}
 
 	pub fn verify(&self) -> bool {
-		println!("verifying - {:?}", self);
-
 		// if we have no further elements in the path
 		// then this proof verifies successfully if our node is
 		// one of the peaks
@@ -190,7 +188,7 @@ impl MerkleProof {
 				bagged = match (bagged, peak) {
 					(None, rhs) => rhs,
 					(lhs, None) => lhs,
-					(Some(lhs), Some(rhs)) => Some((lhs, rhs).hash()),
+					(Some(lhs), Some(rhs)) => Some(lhs.hash_with(rhs)),
 				}
 			}
 			return bagged == Some(self.root);
@@ -202,10 +200,10 @@ impl MerkleProof {
 
 		// hash our node and sibling together (noting left/right position of the sibling)
 		let parent = if left_right.remove(0) {
-			(self.node, sibling)
+			self.node.hash_with(sibling)
 		} else {
-			(sibling, self.node)
-		}.hash();
+			sibling.hash_with(self.node)
+		};
 
 		let proof = MerkleProof {
 			root: self.root,
@@ -307,7 +305,6 @@ where
 				// have been "removed" from the MMR
 				// TODO - pruned/compacted MMR will need to maintain hashes of removed nodes
 				let res = self.get_from_file(x.1);
-				debug!(LOGGER, "********** get_from_file (branch) - {:?}", res.is_some());
 				res
 			})
 			.collect::<Vec<_>>();
@@ -316,7 +313,6 @@ where
 			.iter()
 			.filter_map(|&x| {
 				let res = self.get_from_file(x);
-				debug!(LOGGER, "********** get_from_file (peaks) - {:?}", res.is_some());
 				res
 			})
 			.collect::<Vec<_>>();
@@ -1248,12 +1244,10 @@ mod test {
 		let node = pmmr.get(9).unwrap().hash;
 		let root = pmmr.root().hash;
 		assert!(proof.verify());
-		println!("{:?}", proof);
 
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &proof).expect("serialization failed");
 		let proof_2: MerkleProof = ser::deserialize(&mut &vec[..]).unwrap();
-		println!("{:?}", proof_2);
 
 		assert_eq!(proof, proof_2);
 	}

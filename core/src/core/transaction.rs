@@ -467,8 +467,7 @@ impl Transaction {
 	// We need the mmr hash of the sumcommit and for that we need the pos
 	// Both of which we need to assume are correct here (we will check later on that they match the MMR)
 	fn verify_inputs(&self) -> Result<(), Error> {
-		debug!(LOGGER, "******************** tx verify inputs");
-		let locked_inputs = self.inputs
+		let coinbase_inputs = self.inputs
 			.iter()
 			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT));
 
@@ -476,11 +475,9 @@ impl Transaction {
 		// We cannot check these here as we need data from the index and the PMMR.
 		// * that the node is in the correct pos in the PMMR
 		// * that the block is correct one (based on the root in the block_header from the index)
-		for input in locked_inputs {
+		for input in coinbase_inputs {
 			let merkle_proof = input.merkle_proof();
 			if !merkle_proof.verify() {
-				debug!(LOGGER, "******************** tx verify inputs, merkle proof failed");
-
 				return Err(Error::MerkleProof);
 			}
 		}
@@ -525,7 +522,7 @@ impl ::std::hash::Hash for Input {
 impl Writeable for Input {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
-		writer.write_fixed_bytes(&self.commit)?;
+		self.commit.write(writer)?;
 
 		if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
 			let block_hash = &self.block_hash.unwrap_or(ZERO_HASH);
@@ -634,34 +631,35 @@ impl Input {
 
 			// Check we are dealing with the correct block header
 			if block_hash != header.hash() {
-				debug!(LOGGER, "verify_maturity: block header hash does not match");
 				return Err(Error::MerkleProof);
 			}
 
 			// Is our Merkle Proof valid? Does node hash up consistently to the root?
 			if !merkle_proof.verify() {
-				debug!(LOGGER, "verify_maturity: proof does not verify");
 				return Err(Error::MerkleProof);
 			}
 
 			// Is the root the correct root for the given block header?
 			if merkle_proof.root != header.utxo_root {
-				debug!(LOGGER, "verify_maturity: root does not match, {:?}, {:?}", merkle_proof.root, header.utxo_root);
 				return Err(Error::MerkleProof);
 			}
 
 			// Does the hash from the MMR actually match the one in the Merkle Proof?
 			if merkle_proof.node != hash {
-				debug!(LOGGER, "verify_maturity: hash does not match");
 				return Err(Error::MerkleProof);
 			}
 
 			// Finally has the output matured sufficiently now we know the block?
 			let lock_height = header.height + global::coinbase_maturity();
 			if lock_height > height {
-				debug!(LOGGER, "verify_maturity: lock_height shenanigans {}, {}", lock_height, height);
 				return Err(Error::ImmatureCoinbase);
 			}
+			debug!(
+				LOGGER,
+				"input: verify_maturity: success, coinbase maturity via Merkle proof: {} vs. {}",
+				lock_height,
+				height,
+			);
 		}
 		Ok(())
 	}
@@ -826,7 +824,7 @@ impl ::std::hash::Hash for Output {
 impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
-		writer.write_fixed_bytes(&self.commit)?;
+		self.commit.write(writer)?;
 		// Hash of an output doesn't cover the switch commit, it should
 		// be wound into the range proof separately
 		if writer.serialization_mode() != ser::SerializationMode::Hash {

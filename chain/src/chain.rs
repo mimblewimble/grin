@@ -404,15 +404,11 @@ impl Chain {
 	/// This only applies to inputs spending coinbase outputs.
 	/// An input spending a non-coinbase output will always pass this check.
 	pub fn is_matured(&self, input: &Input, height: u64) -> Result<(), Error> {
-		debug!(LOGGER, "chain: is_matured: {:?}, {}", input, height);
 		if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
 			let mut sumtrees = self.sumtrees.write().unwrap();
 			let output = OutputIdentifier::from_input(&input);
-			debug!(LOGGER, "chain: is_matured: checking if unspent");
 			let hash = sumtrees.is_unspent(&output)?;
-			debug!(LOGGER, "chain: is_matured: getting block header");
 			let header = self.get_block_header(&input.block_hash())?;
-			debug!(LOGGER, "chain: is_matured: about to verify maturity");
 			input.verify_maturity(hash, &header, height)?;
 		}
 		Ok(())
@@ -447,24 +443,13 @@ impl Chain {
 		block: &Block,
 	) -> Result<MerkleProof, Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
-		let merkle_proof_from_rewind = sumtree::extending(&mut sumtrees, |extension| {
+
+		let merkle_proof = sumtree::extending(&mut sumtrees, |extension| {
 			extension.force_rollback();
 			extension.merkle_proof_via_rewind(output, block)
 		})?;
 
-		let merkle_proof_from_store = self.store.get_merkle_proof(&output.commit).map_err(|e| {
-			Error::StoreErr(e, "chain get merkle proof".to_owned())
-		})?;
-
-		debug!(LOGGER, "{:?}", merkle_proof_from_rewind);
-		debug!(LOGGER, "{:?}", merkle_proof_from_store);
-
-		assert_eq!(
-			merkle_proof_from_rewind,
-			merkle_proof_from_store,
-		);
-
-		Ok(merkle_proof_from_store)
+		Ok(merkle_proof)
 	}
 
 	/// Returns current sumtree roots

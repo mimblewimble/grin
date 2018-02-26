@@ -254,18 +254,15 @@ impl OutputPrintable {
 			None
 		};
 
-		// Get the Merkle proof for all unspent coinbase outputs (to verify maturity on spend)
-		// (hope they are in the chain store...)
-		// TODO - what happens if they are not in the store?
-		let merkle_proof = if output.features.contains(core::transaction::OutputFeatures::COINBASE_OUTPUT) {
-			if spent {
-				None
-			} else {
-				let proof = chain.get_merkle_proof(&out_id, &block).unwrap();
-				Some(proof)
-			}
-		} else {
-			None
+		// Get the Merkle proof for all unspent coinbase outputs (to verify maturity on spend).
+		// We obtain the Merkle proof by rewinding the PMMR.
+		// We require the rewind() to be stable even after the PMMR is pruned and compacted
+		// so we can still recreate the necessary proof.
+		let mut merkle_proof = None;
+		if output.features.contains(core::transaction::OutputFeatures::COINBASE_OUTPUT)
+			&& !spent
+		{
+			merkle_proof = chain.get_merkle_proof(&out_id, &block).ok()
 		};
 
 		OutputPrintable {
