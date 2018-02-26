@@ -763,12 +763,8 @@ pub fn recover_value(&self, keychain: &Keychain, key_id: &Identifier) -> Option<
 	match keychain.rewind_range_proof(key_id, self.commit, self.proof) {
 		Ok(proof_info) => {
 			if proof_info.success {
-				if Keychain::is_using_bullet_proofs() {
-					let elements = ProofMessageElements::from_proof_message(proof_info.message).unwrap();
-					Some(elements.value)
-				} else {
-					Some(proof_info.value)
-				}
+				let elements = ProofMessageElements::from_proof_message(proof_info.message).unwrap();
+				Some(elements.value)
 			} else {
 				None
 			}
@@ -1098,16 +1094,7 @@ fn test_output_value_and_switch_commit_recovery() {
 		panic!("Should have recovered switch commit value");
 	}
 
-	// check we cannot recover the value without the original blinding factor
-	let key_id2 = keychain.derive_key_id(2).unwrap();
-	let not_recoverable = output.recover_value(&keychain, &key_id2);
 	// Bulletproofs message unwind will just be gibberish given the wrong blinding factor
-	if !Keychain::is_using_bullet_proofs() {
-		match not_recoverable {
-			Some(_) => panic!("expected value to be None here"),
-			None => {}
-		}
-	}
 }
 
 #[test]
