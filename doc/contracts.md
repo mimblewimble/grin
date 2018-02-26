@@ -10,18 +10,18 @@ Pryds Pedersen, Gregory Maxwell, Andrew Poelstra, John Tromp, Claus Peter
 Schnorr. We apologize in advance for all those we couldn't name and recognize
 that most computer science discoveries are incremental.
 
-h1. Built-Ins
+# Built-Ins
 
 This section is meant as a reminder of some crucial features of the Grin chain.
 We assume some prior reading as to how these are constructed and used.
 
-h2. Pedersen Commitments
+## Pedersen Commitments
 
 All outputs include a Pedersen commitment of the form `r*G + v*H` with `r`
 the blinding factor, `v` the value, and G and H two distinct generator points
 on the same curve group.
 
-h2. Aggregate Signatures (a.k.a. Schnorr, MuSig)
+## Aggregate Signatures (a.k.a. Schnorr, MuSig)
 
 We suppose we have the Blake2 hash function and the same G curve as above. In
 its simplest form, an aggregate signature is built from:
@@ -52,7 +52,7 @@ public key `r*G`, and allows to verify non-inflation for all Grin transactions
 Because these signatues are built simply from a scalar and a public key, they
 can be used to construct a variety of contracts using "simple" arithmetic.
 
-h2. Timelocked Transactions
+## Timelocked Transactions
 
 A transaction can be time-locked with a few simple modifications:
 
@@ -62,9 +62,9 @@ becomes spendable appended to the fee (so `M = fee | h`)
 * a block with a kernel that includes a lock height lower than the current
 block height is rejected
 
-h1. Derived Contracts
+# Derived Contracts
 
-h2. Trustless Transactions
+## Trustless Transactions
 
 An aggregate (Schnorr) signature involving a single party is relatively simple
 but does not demonstrate the full flexibility of the contstruction. We show
@@ -107,7 +107,7 @@ can compute `e = SHA256(M | sum(ki*G) | sum(ri*G))` and their own signature
 `si`. Finally, a finalizing party can then gather all the partial signatures
 `si`, validate them and produce `s = (sum(si), sum(ki*G))`.
 
-h2. Multiparty Outputs (multisig)
+## Multiparty Outputs (multisig)
 
 We describe here a way to build a transaction with an output that can only be
 spent when multiple parties approve it. This construction is very similar to
@@ -133,7 +133,7 @@ need to know `ra + rb` to produce a kernel signature. To produce that spending
 kernel, Alice and Bob need to collaborate. This, again, is done using a
 protocol very close to Trustless Transactions.
 
-h2. Multiparty Timelocks
+## Multiparty Timelocks
 
 This contract is a building block from multiple other contracts. Here, Alice
 agrees to lock some funds to start a financial interaction with Bob and prove
@@ -153,7 +153,7 @@ lock expires.
 
 This contract can be trivially used for unidirectional payment channels.
 
-h2. Atomic Swap
+## Atomic Swap
 
 Alice has grins and Bob has bitcoins. They would like to swap. We assume that
 Bob built an output on the Bitcoin blockchain that can be spent either by Alice
@@ -178,4 +178,6 @@ signature is `(sr + ss, kr*G + ks*G)`.
 6. As soon as Bob broadcasts the final transaction to get his new grins, Alice
 can compute `sr' - sr` to get `x`.
 
-h2. Hashed Timelocks (Lightning Network)
+## Hashed Timelocks (Lightning Network)
+
+TODO relative lock times
