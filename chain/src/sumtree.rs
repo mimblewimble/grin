@@ -359,7 +359,7 @@ impl<'a> Extension<'a> {
 				// check hash from pmmr matches hash from input (or corresponding output)
 				// if not then the input is not being honest about
 				// what it is attempting to spend...
-				if output_id_hash != read_hash || 
+				if output_id_hash != read_hash ||
 					output_id_hash != read_elem.expect("no output at position").hash() {
 					return Err(Error::SumTreeErr(format!("output pmmr hash mismatch")));
 				}
@@ -379,7 +379,6 @@ impl<'a> Extension<'a> {
 
 			// Now prune the utxo_pmmr, rproof_pmmr and their storage.
 			// Input is not valid if we cannot prune successfully (to spend an unspent output).
-			// TODO: rm log, skip list for utxo and range proofs
 			match self.utxo_pmmr.prune(pos, height as u32) {
 				Ok(true) => {
 					self.rproof_pmmr
@@ -628,7 +627,7 @@ impl<'a> Extension<'a> {
 		Ok((sum_kernel, fees))
 	}
 
-	/// Sums all our UTXO commitments
+	/// Sums all our UTXO commitments, checking range proofs at the same time
 	fn sum_utxos(&self) -> Result<Commitment, Error> {
 		let mut sum_utxo = None;
 		let mut utxo_count = 0;
@@ -636,11 +635,19 @@ impl<'a> Extension<'a> {
 		for n in 1..self.utxo_pmmr.unpruned_size()+1 {
 			if pmmr::bintree_postorder_height(n) == 0 {
 				if let Some((_,output)) = self.utxo_pmmr.get(n, true) {
-					if n == 1 {
-						sum_utxo = Some(output.expect("not a leaf node").commit);
+					let out = output.expect("not a leaf node");
+					let commit = out.commit.clone();
+					match self.rproof_pmmr.get(n, true) {
+						Some((_, Some(rp))) => out.to_output(rp).verify_proof()?,
+						res => {
+							return Err(Error::OutputNotFound);
+						}
+					}
+					if let None = sum_utxo {
+						sum_utxo = Some(commit);
 					} else {
 						let secp = secp.lock().unwrap();
-						sum_utxo = Some(secp.commit_sum(vec![sum_utxo.unwrap(), output.expect("not a leaf node").commit], vec![])?);
+						sum_utxo = Some(secp.commit_sum(vec![sum_utxo.unwrap(), commit], vec![])?);
 					}
 					utxo_count += 1;
 				}
@@ -651,45 +658,38 @@ impl<'a> Extension<'a> {
 	}
 }
 
-/*fn store_element<T>(file_store: &mut FlatFileStore<T>, data: T)
-	-> Result<(), String>
-where
-	T: ser::Readable + ser::Writeable + Clone
-{
-	file_store.append(vec![data])
-}
-
-fn read_element_at_pmmr_index<T>(file_store: &FlatFileStore<T>, pos: u64) -> Option<T>
-where
-	T: ser::Readable + ser::Writeable + Clone
-{
-	let leaf_index = pmmr::leaf_index(pos);
-	// flat files are zero indexed
-	file_store.get(leaf_index - 1)
-}
-
-fn _remove_element_at_pmmr_index<T>(file_store: &mut FlatFileStore<T>, pos: u64) 
-	-> Result<(), String>
-where
-	T: ser::Readable + ser::Writeable + Clone
-{
-	let leaf_index = pmmr::leaf_index(pos);
-	// flat files are zero indexed
-	file_store.remove(vec![leaf_index - 1])
-}
-
-fn rewind_to_pmmr_index<T>(file_store: &mut FlatFileStore<T>, pos: u64) -> Result<(), String>
-where
-	T: ser::Readable + ser::Writeable + Clone
-{
-	let leaf_index = pmmr::leaf_index(pos);
-	// flat files are zero indexed
-	file_store.rewind(leaf_index - 1)
-}*/
-
-/// Output and kernel MMR indexes at the end of the provided block
+/// Output and kernel MMR indexes at the end of the provided block.
+/// This requires us to know the "last" output processed in the block
+/// and needs to be consistent with how we originally processed
+/// the outputs in apply_block()
 fn indexes_at(block: &Block, commit_index: &ChainStore) -> Result<(u64, u64), Error> {
-	let out_idx = match block.outputs.last() {
+	// If we have any regular outputs then the "last" output is the last regular output
+	// otherwise it is the last coinbase output.
+	// This is because we process coinbase outputs before regular outputs in apply_block().
+	//
+	// TODO - consider maintaining coinbase outputs in a separate vec in a block?
+	//
+	let mut last_coinbase_output: Option<Output> = None;
+	let mut last_regular_output: Option<Output> = None;
+
+	for x in &block.outputs {
+		if x.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+			last_coinbase_output = Some(*x);
+		} else {
+			last_regular_output = Some(*x);
+		}
+	}
+
+	// use last regular output if we have any, otherwise last coinbase output
+	let last_output = if last_regular_output.is_some() {
+		last_regular_output
+	} else if last_coinbase_output.is_some() {
+		last_coinbase_output
+	} else {
+		None
+	};
+
+	let out_idx = match last_output {
 		Some(output) => commit_index.get_output_pos(&output.commitment())
 			.map_err(|e| {
 				Error::StoreErr(e, format!("missing output pos for known block"))

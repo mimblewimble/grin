@@ -611,4 +611,9 @@ impl Chain {
 		let head = self.head.lock().unwrap();
 		store::DifficultyIter::from(head.last_block_h, self.store.clone())
 	}
+
+        /// Check whether we have a block without reading it
+        pub fn block_exists(&self, h: Hash) -> Result<bool, Error> {
+               self.store.block_exists(&h).map_err(|e| Error::StoreErr(e, "chain block exists".to_owned()))
+        }
 }
