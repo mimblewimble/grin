@@ -751,43 +751,28 @@ impl Output {
 	pub fn verify_proof(&self) -> Result<(), secp::Error> {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		match Keychain::verify_range_proof(&secp, self.commit, self.proof){
+		match Keychain::verify_range_proof(&secp, self.commit, self.proof, Some(self.switch_commit_hash.as_ref().to_vec())){
 			Ok(_) => Ok(()),
 			Err(e) => Err(e),
 		}
-}
-
-/// Given the original blinding factor we can recover the
-/// value from the range proof and the commitment
-pub fn recover_value(&self, keychain: &Keychain, key_id: &Identifier) -> Option<u64> {
-	match keychain.rewind_range_proof(key_id, self.commit, self.proof) {
-		Ok(proof_info) => {
-			if proof_info.success {
-				let elements = ProofMessageElements::from_proof_message(proof_info.message).unwrap();
-				Some(elements.value)
-			} else {
-				None
-			}
-		}
-		Err(_) => None,
 	}
-}
 
-/// Given the original blinding factor we can recover the
-/// switch commit from the rangeproof
-pub fn recover_switch_commit_hash(&self, keychain: &Keychain, key_id: &Identifier) -> Option<SwitchCommitHash> {
-	match keychain.rewind_range_proof(key_id, self.commit, self.proof) {
-		Ok(proof_info) => {
-			if proof_info.success {
-				let elements = ProofMessageElements::from_proof_message(proof_info.message).unwrap();
-				return Some(elements.switch_commit_hash);
-			} else {
-				return None;
+	/// Given the original blinding factor we can recover the
+	/// value from the range proof and the commitment
+	pub fn recover_value(&self, keychain: &Keychain, key_id: &Identifier) -> Option<u64> {
+		match keychain.rewind_range_proof(key_id, self.commit, Some(self.switch_commit_hash.as_ref().to_vec()), self.proof) {
+			Ok(proof_info) => {
+				if proof_info.success {
+					let elements = ProofMessageElements::from_proof_message(proof_info.message).unwrap();
+					Some(elements.value)
+				} else {
+					None
+				}
 			}
+			Err(_) => None,
 		}
-		Err(_) => None,
 	}
-}
+
 }
 
 /// An output_identifier can be build from either an input _or_ and output and
@@ -925,19 +910,15 @@ impl Readable for OutputStoreable {
 /// an Output's range (bullet) proof. 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ProofMessageElements {
-	/// The amount, stored to allow for wallet reconstruction
+	/// The amount, stored to allow for wallet reconstruction as 
+	/// rewinding isn't supported in bulletproofs just yet
 	pub value: u64,
-	/// Switch commit hash, as it's not commit to in the Output hash
-	/// to allow outputs to be identified using just the commit and
-	/// features
-	pub switch_commit_hash: SwitchCommitHash,
 }
 
 impl Writeable for ProofMessageElements {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u64(self.value)?;
-		self.switch_commit_hash.write(writer)?;
-		for _ in 40..64 {
+		for _ in 8..64 {
 			let _ = writer.write_u8(0);
 		}
 		Ok(())
@@ -948,7 +929,6 @@ impl Readable for ProofMessageElements {
 	fn read(reader: &mut Reader) -> Result<ProofMessageElements, ser::Error> {
 		Ok(ProofMessageElements {
 			value: reader.read_u64()?,
-			switch_commit_hash: SwitchCommitHash::read(reader)?,
 		})
 	}
 }
@@ -1031,7 +1011,7 @@ fn test_output_ser_deser() {
 		&key_id,
 	);
 	let msg = secp::pedersen::ProofMessage::empty();
-	let proof = keychain.range_proof(5, &key_id, commit, msg).unwrap();
+	let proof = keychain.range_proof(5, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg).unwrap();
 
 	let out = Output {
 		features: OutputFeatures::DEFAULT_OUTPUT,
@@ -1050,7 +1030,7 @@ fn test_output_ser_deser() {
 }
 
 #[test]
-fn test_output_value_and_switch_commit_recovery() {
+fn test_output_value_recovery() {
 	let keychain = Keychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
 	let value = 1003;
@@ -1064,10 +1044,9 @@ fn test_output_value_and_switch_commit_recovery() {
 	);
 	let msg = (ProofMessageElements {
 		value: value,
-		switch_commit_hash: switch_commit_hash,
 	}).to_proof_message();
 
-	let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
+	let proof = keychain.range_proof(value, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg).unwrap();
 
 	let output = Output {
 		features: OutputFeatures::DEFAULT_OUTPUT,
@@ -1083,15 +1062,6 @@ fn test_output_value_and_switch_commit_recovery() {
 		assert_eq!(v, 1003);
 	} else {
 		return;
-	}
-
-	// check we can successfully recover the switch commit hash with the original blinding factor
-	let result = output.recover_switch_commit_hash(&keychain, &key_id);
-	// TODO: Remove this check once value recovery is supported within bullet proofs
-	if let Some(s) = result {
-		assert_eq!(s, switch_commit_hash);
-	} else {
-		panic!("Should have recovered switch commit value");
 	}
 
 	// Bulletproofs message unwind will just be gibberish given the wrong blinding factor

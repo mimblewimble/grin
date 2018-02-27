@@ -37,7 +37,7 @@ use util::secp::constants::{
 	SECRET_KEY_SIZE,
 };
 
-// Possible errors deriving from serializing or deserializing.
+/// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]
 pub enum Error {
 	/// Wraps an io error produced when reading or writing

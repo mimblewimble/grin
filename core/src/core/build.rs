@@ -115,12 +115,11 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 
 		let msg = (ProofMessageElements {
 			value: value,
-			switch_commit_hash: switch_commit_hash,
 		}).to_proof_message();
 
 		let rproof = build
 			.keychain
-			.range_proof(value, &key_id, commit, msg)
+			.range_proof(value, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg)
 			.unwrap();
 
 		(

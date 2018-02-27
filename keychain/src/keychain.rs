@@ -226,26 +226,28 @@ impl Keychain {
 		amount: u64,
 		key_id: &Identifier,
 		commit: Commitment,
+		extra_data: Option<Vec<u8>>,
 		msg: ProofMessage,
 	) -> Result<RangeProof, Error> {
 		let skey = self.derived_key(key_id)?;
 		if msg.len() == 0 {
-			return Ok(self.secp.bullet_proof(amount, skey, None));
+			return Ok(self.secp.bullet_proof(amount, skey, extra_data, None));
 		} else {
 			if msg.len() != 64 {
 				error!(LOGGER, "Bullet proof message must be 64 bytes.");
 				return Err(Error::RangeProof("Bullet proof message must be 64 bytes".to_string()));
 			}
 		}
-		return Ok(self.secp.bullet_proof(amount, skey, Some(msg)));
+		return Ok(self.secp.bullet_proof(amount, skey, extra_data, Some(msg)));
 	}
 
 	pub fn verify_range_proof(
 		secp: &Secp256k1,
 		commit: Commitment,
-		proof: RangeProof)
+		proof: RangeProof,
+		extra_data: Option<Vec<u8>>)
 		-> Result<(), secp::Error> {
-			let result =  secp.verify_bullet_proof(commit, proof);
+			let result =  secp.verify_bullet_proof(commit, proof, extra_data);
 			match result {
 				Ok(_) => Ok(()),
 				Err(e) => Err(e),
@@ -256,10 +258,11 @@ impl Keychain {
 		&self,
 		key_id: &Identifier,
 		commit: Commitment,
+		extra_data: Option<Vec<u8>>,
 		proof: RangeProof,
 	) -> Result<ProofInfo, Error> {
 		let nonce = self.derived_key(key_id)?;
-		let proof_message = self.secp.unwind_bullet_proof(commit, nonce, proof);
+		let proof_message = self.secp.unwind_bullet_proof(commit, nonce, extra_data, proof);
 		let proof_info = match proof_message {
 		Ok(p) => ProofInfo {
 				success: true,
@@ -569,9 +572,10 @@ mod test {
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
 		let mut msg = ProofMessage::from_bytes(&[0u8; 64]);
+		let extra_data = [99u8; 64];
 
-		let proof = keychain.range_proof(5, &key_id, commit, msg).unwrap();
-		let mut proof_info = keychain.rewind_range_proof(&key_id, commit, proof).unwrap();
+		let proof = keychain.range_proof(5, &key_id, commit, Some(extra_data.to_vec().clone()), msg).unwrap();
+		let proof_info = keychain.rewind_range_proof(&key_id, commit, Some(extra_data.to_vec().clone()), proof).unwrap();
 
 		assert_eq!(proof_info.success, true);
 
@@ -587,7 +591,7 @@ mod test {
 
 		// cannot rewind with a different nonce
 		let proof_info = keychain
-			.rewind_range_proof(&key_id2, commit, proof)
+			.rewind_range_proof(&key_id2, commit, Some(extra_data.to_vec().clone()), proof)
 			.unwrap();
 		// With bullet proofs, if you provide the wrong nonce you'll get gibberish back as opposed
 		// to a failure to recover the message
@@ -600,7 +604,7 @@ mod test {
 		// cannot rewind with a commitment to the same value using a different key
 		let commit2 = keychain.commit(5, &key_id2).unwrap();
 		let proof_info = keychain
-			.rewind_range_proof(&key_id, commit2, proof)
+			.rewind_range_proof(&key_id, commit2, Some(extra_data.to_vec().clone()), proof)
 			.unwrap();
 		assert_eq!(proof_info.success, false);
 		assert_eq!(proof_info.value, 0);
@@ -608,8 +612,18 @@ mod test {
 		// cannot rewind with a commitment to a different value
 		let commit3 = keychain.commit(4, &key_id).unwrap();
 		let proof_info = keychain
-			.rewind_range_proof(&key_id, commit3, proof)
+			.rewind_range_proof(&key_id, commit3, Some(extra_data.to_vec().clone()), proof)
 			.unwrap();
+		assert_eq!(proof_info.success, false);
+		assert_eq!(proof_info.value, 0);
+
+		// cannot rewind with wrong extra committed data
+		let commit3 = keychain.commit(4, &key_id).unwrap();
+		let wrong_extra_data = [98u8; 64];
+		let should_err = keychain
+			.rewind_range_proof(&key_id, commit3, Some(wrong_extra_data.to_vec().clone()), proof)
+			.unwrap();
+
 		assert_eq!(proof_info.success, false);
 		assert_eq!(proof_info.value, 0);
 	}

@@ -42,7 +42,6 @@ use ser::{self, Readable, Reader, Writeable, Writer, WriteableSorted, read_and_v
 use global;
 use keychain;
 use keychain::BlindingFactor;
-use util;
 use util::kernel_sig_msg;
 use util::LOGGER;
 use util::{secp, static_secp_instance};
@@ -822,11 +821,10 @@ impl Block {
 
 		let value = reward(fees);
 		let msg = (ProofMessageElements {
-			value: value,
-			switch_commit_hash: switch_commit_hash,
+			value: value
 		}).to_proof_message();
 
-		let rproof = keychain.range_proof(value, key_id, commit, msg)?;
+		let rproof = keychain.range_proof(value, key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg)?;
 
 		let output = Output {
 			features: OutputFeatures::COINBASE_OUTPUT,
