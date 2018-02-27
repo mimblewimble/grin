@@ -155,6 +155,9 @@ This contract can be trivially used for unidirectional payment channels.
 
 ## Atomic Swap
 
+TODO still WIP, mostly ability for Alice to check `x*G` is what is locked on
+the other chain. Check this would work on Ethereum (pubkey derivation).
+
 Alice has grins and Bob has bitcoins. They would like to swap. We assume that
 Bob built an output on the Bitcoin blockchain that can be spent either by Alice
 if she learns about a hash pre-image `x`, or by Bob after time `Tb`. Alice is
