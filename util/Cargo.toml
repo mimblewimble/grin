@@ -21,4 +21,4 @@ zip = "^0.2.6"
 git = "https://github.com/mimblewimble/rust-secp256k1-zkp"
 tag="grin_integration_14"
 #path = "../../rust-secp256k1-zkp"
-#features=["bullet-proof-sizing"]
+features=["bullet-proof-sizing"]
