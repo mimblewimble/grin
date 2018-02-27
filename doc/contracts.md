@@ -23,7 +23,7 @@ on the same curve group.
 
 ## Aggregate Signatures (a.k.a. Schnorr, MuSig)
 
-We suppose we have the Blake2 hash function and the same G curve as above. In
+We suppose we have the SHA256 hash function and the same G curve as above. In
 its simplest form, an aggregate signature is built from:
 
 * the message `M` to sign, in our case the transaction fee
