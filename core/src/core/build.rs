@@ -27,7 +27,7 @@
 
 use util::{secp, kernel_sig_msg};
 
-use core::{Transaction, TxKernel, Input, Output, OutputFeatures, SwitchCommitHash};
+use core::{Transaction, TxKernel, Input, Output, OutputFeatures, ProofMessageElements, SwitchCommitHash};
 use core::hash::Hash;
 use keychain;
 use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
@@ -112,10 +112,14 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 			"Builder - Switch Commit Hash is: {:?}",
 			switch_commit_hash
 		);
-		let msg = secp::pedersen::ProofMessage::empty();
+
+		let msg = (ProofMessageElements {
+			value: value,
+		}).to_proof_message();
+
 		let rproof = build
 			.keychain
-			.range_proof(value, &key_id, commit, msg)
+			.range_proof(value, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg)
 			.unwrap();
 
 		(

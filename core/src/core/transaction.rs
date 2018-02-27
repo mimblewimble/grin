@@ -16,7 +16,7 @@
 use blake2::blake2b::blake2b;
 use util::secp::{self, Message, Signature};
 use util::{static_secp_instance, kernel_sig_msg};
-use util::secp::pedersen::{Commitment, RangeProof};
+use util::secp::pedersen::{Commitment, RangeProof, ProofMessage};
 use std::cmp::{min, max};
 use std::cmp::Ordering;
 
@@ -26,7 +26,8 @@ use core::Committed;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use keychain::{Identifier, Keychain, BlindingFactor};
 use keychain;
-use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, WriteableSorted, Writer};
+use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, WriteableSorted, Writer, ser_vec};
+use std::io::Cursor;
 use util;
 
 /// The size of the blake2 hash of a switch commitment (256 bits)
@@ -48,24 +49,24 @@ bitflags! {
 // don't seem to be able to define an Ord implementation for Hash due to
 // Ord being defined on all pointers, resorting to a macro instead
 macro_rules! hashable_ord {
-  ($hashable: ident) => {
-    impl Ord for $hashable {
-      fn cmp(&self, other: &$hashable) -> Ordering {
-        self.hash().cmp(&other.hash())
-      }
-    }
-    impl PartialOrd for $hashable {
-      fn partial_cmp(&self, other: &$hashable) -> Option<Ordering> {
-        Some(self.hash().cmp(&other.hash()))
-      }
-    }
-    impl PartialEq for $hashable {
-      fn eq(&self, other: &$hashable) -> bool {
-        self.hash() == other.hash()
-      }
-    }
-    impl Eq for $hashable {}
-  }
+	($hashable: ident) => {
+		impl Ord for $hashable {
+			fn cmp(&self, other: &$hashable) -> Ordering {
+				self.hash().cmp(&other.hash())
+			}
+		}
+		impl PartialOrd for $hashable {
+			fn partial_cmp(&self, other: &$hashable) -> Option<Ordering> {
+				Some(self.hash().cmp(&other.hash()))
+			}
+		}
+		impl PartialEq for $hashable {
+			fn eq(&self, other: &$hashable) -> bool {
+				self.hash() == other.hash()
+			}
+		}
+		impl Eq for $hashable {}
+	}
 }
 
 /// Errors thrown by Block validation
@@ -750,19 +751,20 @@ impl Output {
 	pub fn verify_proof(&self) -> Result<(), secp::Error> {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		match Keychain::verify_range_proof(&secp, self.commit, self.proof){
+		match Keychain::verify_range_proof(&secp, self.commit, self.proof, Some(self.switch_commit_hash.as_ref().to_vec())){
 			Ok(_) => Ok(()),
 			Err(e) => Err(e),
 		}
-}
+	}
 
 	/// Given the original blinding factor we can recover the
 	/// value from the range proof and the commitment
 	pub fn recover_value(&self, keychain: &Keychain, key_id: &Identifier) -> Option<u64> {
-		match keychain.rewind_range_proof(key_id, self.commit, self.proof) {
+		match keychain.rewind_range_proof(key_id, self.commit, Some(self.switch_commit_hash.as_ref().to_vec()), self.proof) {
 			Ok(proof_info) => {
 				if proof_info.success {
-					Some(proof_info.value)
+					let elements = ProofMessageElements::from_proof_message(proof_info.message).unwrap();
+					Some(elements.value)
 				} else {
 					None
 				}
@@ -770,6 +772,7 @@ impl Output {
 			Err(_) => None,
 		}
 	}
+
 }
 
 /// An output_identifier can be build from either an input _or_ and output and
@@ -853,24 +856,24 @@ pub struct OutputStoreable {
 }
 
 impl OutputStoreable {
-	/// Build a StoreableOutput from an existing output.
-	pub fn from_output(output: &Output) -> OutputStoreable {
-		OutputStoreable {
-			features: output.features,
-			commit: output.commit,
-			switch_commit_hash: output.switch_commit_hash,
-		}
+/// Build a StoreableOutput from an existing output.
+pub fn from_output(output: &Output) -> OutputStoreable {
+	OutputStoreable {
+		features: output.features,
+		commit: output.commit,
+		switch_commit_hash: output.switch_commit_hash,
 	}
+}
 
-	/// Return a regular output
-	pub fn to_output(self, rproof: RangeProof) -> Output {
-		Output{
-			features: self.features,
-			commit: self.commit,
-			switch_commit_hash: self.switch_commit_hash,
-			proof: rproof,
-		}
+/// Return a regular output
+pub fn to_output(self, rproof: RangeProof) -> Output {
+	Output{
+		features: self.features,
+		commit: self.commit,
+		switch_commit_hash: self.switch_commit_hash,
+		proof: rproof,
 	}
+}
 }
 
 impl PMMRable for OutputStoreable {
@@ -901,183 +904,221 @@ impl Readable for OutputStoreable {
 			features: features,
 		})
 	}
+} 
+
+/// A structure which contains fields that are to be commited to within
+/// an Output's range (bullet) proof. 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct ProofMessageElements {
+	/// The amount, stored to allow for wallet reconstruction as 
+	/// rewinding isn't supported in bulletproofs just yet
+	pub value: u64,
+}
+
+impl Writeable for ProofMessageElements {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.value)?;
+		for _ in 8..64 {
+			let _ = writer.write_u8(0);
+		}
+		Ok(())
+	}
+}
+
+impl Readable for ProofMessageElements {
+	fn read(reader: &mut Reader) -> Result<ProofMessageElements, ser::Error> {
+		Ok(ProofMessageElements {
+			value: reader.read_u64()?,
+		})
+	}
+}
+
+impl ProofMessageElements {
+	/// Serialise and return a ProofMessage
+	pub fn to_proof_message(&self)->ProofMessage {
+		ProofMessage::from_bytes(&ser_vec(self).unwrap())
+	}
+
+	/// Deserialise and return the message elements
+	pub fn from_proof_message(proof_message:ProofMessage)
+		-> Result<ProofMessageElements, ser::Error> {
+		let mut c = Cursor::new(proof_message.as_bytes());
+		ser::deserialize::<ProofMessageElements>(&mut c)
+	}
 }
 
 #[cfg(test)]
 mod test {
-	use super::*;
-	use core::id::{ShortId, ShortIdentifiable};
-	use keychain::Keychain;
-	use util::secp;
+use super::*;
+use core::id::{ShortId, ShortIdentifiable};
+use keychain::Keychain;
+use util::secp;
 
-	#[test]
-	fn test_kernel_ser_deser() {
-		let keychain = Keychain::from_random_seed().unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
-		let commit = keychain.commit(5, &key_id).unwrap();
+#[test]
+fn test_kernel_ser_deser() {
+	let keychain = Keychain::from_random_seed().unwrap();
+	let key_id = keychain.derive_key_id(1).unwrap();
+	let commit = keychain.commit(5, &key_id).unwrap();
 
-		// just some bytes for testing ser/deser
-		let sig = secp::Signature::from_raw_data(&[0;64]).unwrap();
+	// just some bytes for testing ser/deser
+	let sig = secp::Signature::from_raw_data(&[0;64]).unwrap();
 
-		let kernel = TxKernel {
-			features: KernelFeatures::DEFAULT_KERNEL,
-			lock_height: 0,
-			excess: commit,
-			excess_sig: sig.clone(),
-			fee: 10,
-		};
+	let kernel = TxKernel {
+		features: KernelFeatures::DEFAULT_KERNEL,
+		lock_height: 0,
+		excess: commit,
+		excess_sig: sig.clone(),
+		fee: 10,
+	};
 
-		let mut vec = vec![];
-		ser::serialize(&mut vec, &kernel).expect("serialized failed");
-		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
-		assert_eq!(kernel2.lock_height, 0);
-		assert_eq!(kernel2.excess, commit);
-		assert_eq!(kernel2.excess_sig, sig.clone());
-		assert_eq!(kernel2.fee, 10);
+	let mut vec = vec![];
+	ser::serialize(&mut vec, &kernel).expect("serialized failed");
+	let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
+	assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
+	assert_eq!(kernel2.lock_height, 0);
+	assert_eq!(kernel2.excess, commit);
+	assert_eq!(kernel2.excess_sig, sig.clone());
+	assert_eq!(kernel2.fee, 10);
 
-		// now check a kernel with lock_height serializes/deserializes correctly
-		let kernel = TxKernel {
-			features: KernelFeatures::DEFAULT_KERNEL,
-			lock_height: 100,
-			excess: commit,
-			excess_sig: sig.clone(),
-			fee: 10,
-		};
+	// now check a kernel with lock_height serializes/deserializes correctly
+	let kernel = TxKernel {
+		features: KernelFeatures::DEFAULT_KERNEL,
+		lock_height: 100,
+		excess: commit,
+		excess_sig: sig.clone(),
+		fee: 10,
+	};
 
-		let mut vec = vec![];
-		ser::serialize(&mut vec, &kernel).expect("serialized failed");
-		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
-		assert_eq!(kernel2.lock_height, 100);
-		assert_eq!(kernel2.excess, commit);
-		assert_eq!(kernel2.excess_sig, sig.clone());
-		assert_eq!(kernel2.fee, 10);
+	let mut vec = vec![];
+	ser::serialize(&mut vec, &kernel).expect("serialized failed");
+	let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
+	assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
+	assert_eq!(kernel2.lock_height, 100);
+	assert_eq!(kernel2.excess, commit);
+	assert_eq!(kernel2.excess_sig, sig.clone());
+	assert_eq!(kernel2.fee, 10);
+}
+
+#[test]
+fn test_output_ser_deser() {
+	let keychain = Keychain::from_random_seed().unwrap();
+	let key_id = keychain.derive_key_id(1).unwrap();
+	let commit = keychain.commit(5, &key_id).unwrap();
+	let switch_commit = keychain.switch_commit(&key_id).unwrap();
+	let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+		switch_commit,
+		&keychain,
+		&key_id,
+	);
+	let msg = secp::pedersen::ProofMessage::empty();
+	let proof = keychain.range_proof(5, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg).unwrap();
+
+	let out = Output {
+		features: OutputFeatures::DEFAULT_OUTPUT,
+		commit: commit,
+		switch_commit_hash: switch_commit_hash,
+		proof: proof,
+	};
+
+	let mut vec = vec![];
+	ser::serialize(&mut vec, &out).expect("serialized failed");
+	let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
+
+	assert_eq!(dout.features, OutputFeatures::DEFAULT_OUTPUT);
+	assert_eq!(dout.commit, out.commit);
+	assert_eq!(dout.proof, out.proof);
+}
+
+#[test]
+fn test_output_value_recovery() {
+	let keychain = Keychain::from_random_seed().unwrap();
+	let key_id = keychain.derive_key_id(1).unwrap();
+	let value = 1003;
+
+	let commit = keychain.commit(value, &key_id).unwrap();
+	let switch_commit = keychain.switch_commit(&key_id).unwrap();
+	let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+		switch_commit,
+		&keychain,
+		&key_id,
+	);
+	let msg = (ProofMessageElements {
+		value: value,
+	}).to_proof_message();
+
+	let proof = keychain.range_proof(value, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg).unwrap();
+
+	let output = Output {
+		features: OutputFeatures::DEFAULT_OUTPUT,
+		commit: commit,
+		switch_commit_hash: switch_commit_hash,
+		proof: proof,
+	};
+
+	// check we can successfully recover the value with the original blinding factor
+	let result = output.recover_value(&keychain, &key_id);
+	// TODO: Remove this check once value recovery is supported within bullet proofs
+	if let Some(v) = result {
+		assert_eq!(v, 1003);
+	} else {
+		return;
 	}
 
-	#[test]
-	fn test_output_ser_deser() {
-		let keychain = Keychain::from_random_seed().unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
-		let commit = keychain.commit(5, &key_id).unwrap();
-		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
-			switch_commit,
-			&keychain,
-			&key_id,
-		);
-		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain.range_proof(5, &key_id, commit, msg).unwrap();
+	// Bulletproofs message unwind will just be gibberish given the wrong blinding factor
+}
 
-		let out = Output {
-			features: OutputFeatures::DEFAULT_OUTPUT,
-			commit: commit,
-			switch_commit_hash: switch_commit_hash,
-			proof: proof,
-		};
+#[test]
+fn commit_consistency() {
+	let keychain = Keychain::from_seed(&[0; 32]).unwrap();
+	let key_id = keychain.derive_key_id(1).unwrap();
 
-		let mut vec = vec![];
-		ser::serialize(&mut vec, &out).expect("serialized failed");
-		let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
+	let commit = keychain.commit(1003, &key_id).unwrap();
+	let switch_commit = keychain.switch_commit(&key_id).unwrap();
+	println!("Switch commit: {:?}", switch_commit);
+	println!("commit: {:?}", commit);
+	let key_id = keychain.derive_key_id(1).unwrap();
 
-		assert_eq!(dout.features, OutputFeatures::DEFAULT_OUTPUT);
-		assert_eq!(dout.commit, out.commit);
-		assert_eq!(dout.proof, out.proof);
-	}
+	let switch_commit_2 = keychain.switch_commit(&key_id).unwrap();
+	let commit_2 = keychain.commit(1003, &key_id).unwrap();
+	println!("Switch commit 2: {:?}", switch_commit_2);
+	println!("commit2 : {:?}", commit_2);
 
-	#[test]
-	fn test_output_value_recovery() {
-		let keychain = Keychain::from_random_seed().unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
+	assert!(commit == commit_2);
+	assert!(switch_commit == switch_commit_2);
+}
 
-		let commit = keychain.commit(1003, &key_id).unwrap();
-		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
-			switch_commit,
-			&keychain,
-			&key_id,
-		);
-		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain.range_proof(1003, &key_id, commit, msg).unwrap();
+#[test]
+fn input_short_id() {
+	let keychain = Keychain::from_seed(&[0; 32]).unwrap();
+	let key_id = keychain.derive_key_id(1).unwrap();
+	let commit = keychain.commit(5, &key_id).unwrap();
 
-		let output = Output {
-			features: OutputFeatures::DEFAULT_OUTPUT,
-			commit: commit,
-			switch_commit_hash: switch_commit_hash,
-			proof: proof,
-		};
+	let input = Input {
+		features: OutputFeatures::DEFAULT_OUTPUT,
+		commit: commit,
+		out_block: None,
+	};
 
-		// check we can successfully recover the value with the original blinding factor
-		let result = output.recover_value(&keychain, &key_id);
-		// TODO: Remove this check once value recovery is supported within bullet proofs
-		if let Some(v) = result {
-			assert_eq!(v, 1003);
-		} else {
-			return;
-		}
-		
+	let block_hash = Hash::from_hex(
+		"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
+	).unwrap();
 
-		// check we cannot recover the value without the original blinding factor
-		let key_id2 = keychain.derive_key_id(2).unwrap();
-		let not_recoverable = output.recover_value(&keychain, &key_id2);
-		match not_recoverable {
-			Some(_) => panic!("expected value to be None here"),
-			None => {}
-		}
-	}
+	let short_id = input.short_id(&block_hash);
+	assert_eq!(short_id, ShortId::from_hex("3e1262905b7a").unwrap());
 
-	#[test]
-	fn commit_consistency() {
-		let keychain = Keychain::from_seed(&[0; 32]).unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
+	// now generate the short_id for a *very* similar output (single feature flag different)
+	// and check it generates a different short_id
+	let input = Input {
+		features: OutputFeatures::COINBASE_OUTPUT,
+		commit: commit,
+		out_block: None,
+	};
 
-		let commit = keychain.commit(1003, &key_id).unwrap();
-		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		println!("Switch commit: {:?}", switch_commit);
-		println!("commit: {:?}", commit);
-		let key_id = keychain.derive_key_id(1).unwrap();
+	let block_hash = Hash::from_hex(
+		"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
+	).unwrap();
 
-		let switch_commit_2 = keychain.switch_commit(&key_id).unwrap();
-		let commit_2 = keychain.commit(1003, &key_id).unwrap();
-		println!("Switch commit 2: {:?}", switch_commit_2);
-		println!("commit2 : {:?}", commit_2);
-
-		assert!(commit == commit_2);
-		assert!(switch_commit == switch_commit_2);
-	}
-
-	#[test]
-	fn input_short_id() {
-		let keychain = Keychain::from_seed(&[0; 32]).unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
-		let commit = keychain.commit(5, &key_id).unwrap();
-
-		let input = Input {
-			features: OutputFeatures::DEFAULT_OUTPUT,
-			commit: commit,
-			out_block: None,
-		};
-
-		let block_hash = Hash::from_hex(
-			"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
-		).unwrap();
-
-		let short_id = input.short_id(&block_hash);
-		assert_eq!(short_id, ShortId::from_hex("3e1262905b7a").unwrap());
-
-		// now generate the short_id for a *very* similar output (single feature flag different)
-		// and check it generates a different short_id
-		let input = Input {
-			features: OutputFeatures::COINBASE_OUTPUT,
-			commit: commit,
-			out_block: None,
-		};
-
-		let block_hash = Hash::from_hex(
-			"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
-		).unwrap();
-
-		let short_id = input.short_id(&block_hash);
-		assert_eq!(short_id, ShortId::from_hex("90653c1c870a").unwrap());
-	}
+	let short_id = input.short_id(&block_hash);
+	assert_eq!(short_id, ShortId::from_hex("90653c1c870a").unwrap());
+}
 }

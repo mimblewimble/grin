@@ -1359,7 +1359,7 @@ mod tests {
 			&key_id,
 		);
 		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
+		let proof = keychain.range_proof(value, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg).unwrap();
 
 		transaction::Output {
 			features: transaction::OutputFeatures::DEFAULT_OUTPUT,
@@ -1381,7 +1381,7 @@ mod tests {
 			&key_id,
 		);
 		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
+		let proof = keychain.range_proof(value, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg).unwrap();
 
 		transaction::Output {
 			features: transaction::OutputFeatures::COINBASE_OUTPUT,
