@@ -639,7 +639,7 @@ impl<'a> Extension<'a> {
 					let commit = out.commit.clone();
 					match self.rproof_pmmr.get(n, true) {
 						Some((_, Some(rp))) => out.to_output(rp).verify_proof()?,
-						res => {
+						_res => {
 							return Err(Error::OutputNotFound);
 						}
 					}
