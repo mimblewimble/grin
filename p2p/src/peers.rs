@@ -442,9 +442,11 @@ impl ChainAdapter for Peers {
 		self.adapter.transaction_received(tx)
 	}
 	fn block_received(&self, b: core::Block, peer_addr: SocketAddr) -> bool {
+		let hash = b.hash();
 		if !self.adapter.block_received(b, peer_addr) {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or manevolent, both of which require a ban
+			debug!(LOGGER, "Received a bad block {} from  {}, the peer will be banned", hash, peer_addr);
 			self.ban_peer(&peer_addr);
 			false
 		} else {
@@ -452,9 +454,11 @@ impl ChainAdapter for Peers {
 		}
 	}
 	fn compact_block_received(&self, cb: core::CompactBlock, peer_addr: SocketAddr) -> bool {
+		let hash = cb.hash();
 		if !self.adapter.compact_block_received(cb, peer_addr) {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or manevolent, both of which require a ban
+			debug!(LOGGER, "Received a bad compact block {} from  {}, the peer will be banned", hash, &peer_addr);
 			self.ban_peer(&peer_addr);
 			false
 		} else {
@@ -493,6 +497,7 @@ impl ChainAdapter for Peers {
 	) -> bool {
 		if !self.adapter.sumtrees_write(h, rewind_to_output, rewind_to_kernel,
 																		sumtree_data, peer_addr) {
+			debug!(LOGGER, "Received a bad sumtree data from {}, the peer will be banned", &peer_addr);
 			self.ban_peer(&peer_addr);
 			false
 		} else {
