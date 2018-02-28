@@ -528,75 +528,6 @@ where
 	}
 }
 
-/// Simple MMR backend implementation based on a Vector. Pruning does not
-/// compact the Vector itself but still frees the reference to the
-/// underlying Hash.
-#[derive(Clone)]
-pub struct VecBackend<T>
-	where T:PMMRable {
-	/// Backend elements
-	pub elems: Vec<Option<(Hash, Option<T>)>>,
-}
-
-impl <T> Backend <T> for VecBackend<T>
-	where T: PMMRable {
-	#[allow(unused_variables)]
-	fn append(&mut self, position: u64, data: Vec<(Hash, Option<T>)>) -> Result<(), String> {
-		self.elems.append(&mut map_vec!(data, |d| Some(d.clone())));
-		Ok(())
-	}
-	fn get(&self, position: u64, _include_data:bool) -> Option<(Hash, Option<T>)> {
-		self.elems[(position - 1) as usize].clone()
-	}
-	fn get_from_file(&self, position: u64) -> Option<Hash> {
-		panic!("not yet implemented (do we need it?), also probably needs renaming")
-	}
-	#[allow(unused_variables)]
-	fn remove(&mut self, positions: Vec<u64>, index: u32) -> Result<(), String> {
-		for n in positions {
-			self.elems[(n - 1) as usize] = None
-		}
-		Ok(())
-	}
-	#[allow(unused_variables)]
-	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {
-		self.elems = self.elems[0..(position as usize) + 1].to_vec();
-		Ok(())
-	}
-	fn get_data_file_path(&self) -> String {
-		"".to_string()
-	}
-}
-
-impl <T> VecBackend <T>
-	where T:PMMRable {
-	/// Instantiates a new VecBackend<T>
-	pub fn new() -> VecBackend<T> {
-		VecBackend { elems: vec![] }
-	}
-
-	/// Current number of elements in the underlying Vec.
-	pub fn used_size(&self) -> usize {
-		let mut usz = self.elems.len();
-		for elem in self.elems.deref() {
-			if elem.is_none() {
-				usz -= 1;
-			}
-		}
-		usz
-	}
-
-	/// Resets the backend, emptying the underlying Vec.
-	pub fn clear(&mut self) {
-		self.elems = Vec::new();
-	}
-
-	/// Total length of the underlying vector.
-	pub fn len(&self) -> usize {
-		self.elems.len()
-	}
-}
-
 /// Maintains a list of previously pruned nodes in PMMR, compacting the list as
 /// parents get pruned and allowing checking whether a leaf is pruned. Given
 /// a node's position, computes how much it should get shifted given the
@@ -950,6 +881,92 @@ mod test {
 	use core::{Writer, Reader};
 	use core::hash::{Hash};
 
+	/// Simple MMR backend implementation based on a Vector. Pruning does not
+	/// compact the Vec itself.
+	#[derive(Clone)]
+	pub struct VecBackend<T>
+		where T:PMMRable {
+		/// Backend elements
+		pub elems: Vec<Option<(Hash, Option<T>)>>,
+		/// Positions of removed elements
+		pub remove_list: Vec<u64>,
+	}
+
+	impl <T> Backend <T> for VecBackend<T>
+		where T: PMMRable
+	{
+		fn append(&mut self, _position: u64, data: Vec<(Hash, Option<T>)>) -> Result<(), String> {
+			self.elems.append(&mut map_vec!(data, |d| Some(d.clone())));
+			Ok(())
+		}
+
+		fn get(&self, position: u64, _include_data: bool) -> Option<(Hash, Option<T>)> {
+			if self.remove_list.contains(&position) {
+				None
+			} else {
+				self.elems[(position - 1) as usize].clone()
+			}
+		}
+
+		fn get_from_file(&self, position: u64) -> Option<Hash> {
+			if let Some(ref x) = self.elems[(position - 1) as usize] {
+				Some(x.0)
+			} else {
+				None
+			}
+		}
+
+		fn remove(&mut self, positions: Vec<u64>, _index: u32) -> Result<(), String> {
+			for n in positions {
+				self.remove_list.push(n)
+			}
+			Ok(())
+		}
+
+		fn rewind(&mut self, position: u64, _index: u32) -> Result<(), String> {
+			self.elems = self.elems[0..(position as usize) + 1].to_vec();
+			Ok(())
+		}
+
+		fn get_data_file_path(&self) -> String {
+			"".to_string()
+		}
+	}
+
+	impl <T> VecBackend <T>
+		where T:PMMRable
+	{
+		/// Instantiates a new VecBackend<T>
+		pub fn new() -> VecBackend<T> {
+			VecBackend {
+				elems: vec![],
+				remove_list: vec![],
+			}
+		}
+
+		/// Current number of elements in the underlying Vec.
+		pub fn used_size(&self) -> usize {
+			let mut usz = self.elems.len();
+			for (idx, elem) in self.elems.iter().enumerate() {
+				let idx = idx as u64;
+				if self.remove_list.contains(&idx) {
+					usz -= 1;
+				}
+			}
+			usz
+		}
+
+		/// Resets the backend, emptying the underlying Vec.
+		pub fn clear(&mut self) {
+			self.elems = Vec::new();
+		}
+
+		/// Total length of the underlying vector.
+		pub fn len(&self) -> usize {
+			self.elems.len()
+		}
+	}
+
 	#[test]
 	fn test_leaf_index(){
 		assert_eq!(n_leaves(1),1);
@@ -1005,8 +1022,8 @@ mod test {
 	#[test]
 	fn various_n_leaves() {
 		assert_eq!(n_leaves(1), 1);
-		// 2 is not a valid size for a tree
-		assert_eq!(n_leaves(2), 0);
+		// 2 is not a valid size for a tree, but n_leaves rounds up to next valid tree size
+		assert_eq!(n_leaves(2), 2);
 		assert_eq!(n_leaves(3), 2);
 		assert_eq!(n_leaves(7), 4);
 	}
@@ -1174,7 +1191,7 @@ mod test {
 		pmmr.push(TestElem([0, 0, 0, 1])).unwrap();
 		assert_eq!(pmmr.last_pos, 1);
 		let proof = pmmr.merkle_proof(1).unwrap();
-		let root = pmmr.root().hash;
+		let root = pmmr.root();
 		assert_eq!(proof.peaks, [root]);
 		assert!(proof.path.is_empty());
 		assert!(proof.left_right.is_empty());
@@ -1223,14 +1240,13 @@ mod test {
 		let mut pmmr = PMMR::new(&mut ba);
 		pmmr.push(TestElem([0, 0, 0, 1])).unwrap();
 		pmmr.push(TestElem([0, 0, 0, 2])).unwrap();
-		println!("{}", pmmr.last_pos);
 		let proof = pmmr.merkle_proof(2).unwrap();
-		println!("{:?}", proof);
+
+		// now prune an element and check we can still generate
+		// the correct Merkle proof for the other element (after sibling pruned)
 		pmmr.prune(1, 1);
-		let proof = pmmr.merkle_proof(2).unwrap();
-		println!("{}", pmmr.last_pos);
-		println!("{:?}", proof);
-		assert!(false, "fail for debug");
+		let proof_2 = pmmr.merkle_proof(2).unwrap();
+		assert_eq!(proof, proof_2);
 	}
 
 	#[test]
@@ -1241,8 +1257,6 @@ mod test {
 			pmmr.push(TestElem([0, 0, 0, x])).unwrap();
 		}
 		let proof = pmmr.merkle_proof(9).unwrap();
-		let node = pmmr.get(9).unwrap().hash;
-		let root = pmmr.root().hash;
 		assert!(proof.verify());
 
 		let mut vec = Vec::new();

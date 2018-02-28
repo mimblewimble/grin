@@ -524,12 +524,14 @@ impl Writeable for Input {
 		writer.write_u8(self.features.bits())?;
 		self.commit.write(writer)?;
 
-		if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-			let block_hash = &self.block_hash.unwrap_or(ZERO_HASH);
-			let merkle_proof = self.merkle_proof();
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+				let block_hash = &self.block_hash.unwrap_or(ZERO_HASH);
+				let merkle_proof = self.merkle_proof();
 
-			writer.write_fixed_bytes(block_hash)?;
-			merkle_proof.write(writer)?;
+				writer.write_fixed_bytes(block_hash)?;
+				merkle_proof.write(writer)?;
+			}
 		}
 
 		Ok(())
@@ -1195,7 +1197,6 @@ mod test {
 		let short_id = input.short_id(&block_hash);
 		assert_eq!(short_id, ShortId::from_hex("3e1262905b7a").unwrap());
 
-		// TODO - this is failing after adding merkle_proof, investigate why???
 		// now generate the short_id for a *very* similar output (single feature flag different)
 		// and check it generates a different short_id
 		let input = Input {
@@ -1210,6 +1211,6 @@ mod test {
 		).unwrap();
 
 		let short_id = input.short_id(&block_hash);
-		assert_eq!(short_id, ShortId::from_hex("90653c1c870a").unwrap());
+		assert_eq!(short_id, ShortId::from_hex("9b1b00ded6e6").unwrap());
 	}
 }
