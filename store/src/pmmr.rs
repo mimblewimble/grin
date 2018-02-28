@@ -180,13 +180,26 @@ where
 		})
 	}
 
-	/// Total size of the PMMR stored by this backend. Only produces the fully
-	/// sync'd size.
+	/// Number of elements in the PMMR stored by this backend. Only produces the
+	/// fully sync'd size.
 	pub fn unpruned_size(&self) -> io::Result<u64> {
 		let total_shift = self.pruned_nodes.get_shift(::std::u64::MAX).unwrap();
 		let record_len = 32;
 		let sz = self.hash_file.size()?;
 		Ok(sz / record_len + total_shift)
+	}
+
+	/// Number of elements in the underlying stored data. Extremely dependent on
+	/// pruning and compaction.
+	pub fn data_size(&self) -> io::Result<u64> {
+		let record_len = T::len() as u64;
+		self.data_file.size().map(|sz| sz / record_len)
+	}
+
+	/// Size of the underlying hashed data. Extremely dependent on pruning
+	/// and compaction.
+	pub fn hash_size(&self) -> io::Result<u64> {
+		self.hash_file.size().map(|sz| sz / 32)
 	}
 
 	/// Syncs all files to disk. A call to sync is required to ensure all the
@@ -229,9 +242,15 @@ where
 	/// to decide whether the remove log has reached its maximum length,
 	/// otherwise the RM_LOG_MAX_NODES default value is used.
 	///
+	/// A cutoff limits compaction on recent data. Provided as an indexed value
+	/// on pruned data (practically a block height), it forces compaction to
+	/// ignore any prunable data beyond the cutoff. This is used to enforce
+	/// an horizon after which the local node should have all the data to allow
+	/// rewinding.
+	///
 	/// TODO whatever is calling this should also clean up the commit to
 	/// position index in db
-	pub fn check_compact(&mut self, max_len: usize) -> io::Result<()> {
+	pub fn check_compact(&mut self, max_len: usize, cutoff_index: u32) -> io::Result<()> {
 		if !(max_len > 0 && self.rm_log.len() > max_len
 			|| max_len == 0 && self.rm_log.len() > RM_LOG_MAX_NODES)
 		{
@@ -242,6 +261,7 @@ where
 		// avoid accidental double compaction)
 		for pos in &self.rm_log.removed[..] {
 			if let None = self.pruned_nodes.pruned_pos(pos.0) {
+				println!("ALREADY PRUNED?");
 				// TODO we likely can recover from this by directly jumping to 3
 				error!(
 					LOGGER,
@@ -256,37 +276,37 @@ where
 		// remove list
 		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);
 		let record_len = 32;
-		let to_rm = self.rm_log
-			.removed
-			.iter()
-			.map(|&(pos, _)| {
+		let to_rm = filter_map_vec!(self.rm_log.removed, |&(pos, idx)| {
+			if idx < cutoff_index {
 				let shift = self.pruned_nodes.get_shift(pos);
-				(pos - 1 - shift.unwrap()) * record_len
-			})
-			.collect();
+				Some((pos - 1 - shift.unwrap()) * record_len)
+			} else {
+				None
+			}
+		});
 		self.hash_file
 			.save_prune(tmp_prune_file_hash.clone(), to_rm, record_len)?;
 
 		// 2. And the same with the data file
 		let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir, PMMR_DATA_FILE);
 		let record_len = T::len() as u64;
-		let to_rm = self.rm_log
-			.removed.clone()
-			.into_iter()
-			.filter(|&(pos, _)| pmmr::bintree_postorder_height(pos) == 0)
-			.map(|(pos, _)| {
+		let to_rm = filter_map_vec!(self.rm_log.removed, |&(pos, idx)| {
+			if pmmr::bintree_postorder_height(pos) == 0 && idx < cutoff_index {
 				let shift = self.pruned_nodes.get_leaf_shift(pos).unwrap();
 				let pos = pmmr::n_leaves(pos as u64);
-				(pos - 1 - shift) * record_len
-			})
-			.collect();
-
+				Some((pos - 1 - shift) * record_len)
+			} else {
+				None
+			}
+		});
 		self.data_file
 			.save_prune(tmp_prune_file_data.clone(), to_rm, record_len)?;
 
 		// 3. update the prune list and save it in place
-		for &(rm_pos, _) in &self.rm_log.removed[..] {
-			self.pruned_nodes.add(rm_pos);
+		for &(rm_pos, idx) in &self.rm_log.removed[..] {
+			if idx < cutoff_index {
+				self.pruned_nodes.add(rm_pos);
+			}
 		}
 		write_vec(
 			format!("{}/{}", self.data_dir, PMMR_PRUNED_FILE),
@@ -308,7 +328,11 @@ where
 		self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
 
 		// 6. truncate the rm log
-		self.rm_log.rewind(0)?;
+		self.rm_log.removed = self.rm_log.removed
+			.iter()
+			.filter(|&&(_, idx)| idx >= cutoff_index)
+			.map(|x| *x)
+			.collect();
 		self.rm_log.flush()?;
 
 		Ok(())

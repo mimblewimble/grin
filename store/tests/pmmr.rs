@@ -93,7 +93,7 @@ fn pmmr_prune_compact() {
 	}
 
 	// compact
-	backend.check_compact(2).unwrap();
+	backend.check_compact(2, 2).unwrap();
 
 	// recheck the root and stored data
 	{
@@ -128,7 +128,7 @@ fn pmmr_reload() {
 		}
 		backend.sync().unwrap();
 
-		backend.check_compact(1).unwrap();
+		backend.check_compact(1, 2).unwrap();
 		backend.sync().unwrap();
 		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
 
@@ -187,7 +187,7 @@ fn pmmr_rewind() {
 		pmmr.prune(1, 1).unwrap();
 		pmmr.prune(2, 1).unwrap();
 	}
-	backend.check_compact(1).unwrap();
+	backend.check_compact(1, 2).unwrap();
 	backend.sync().unwrap();
 
 	// rewind and check the roots still match
@@ -211,6 +211,62 @@ fn pmmr_rewind() {
 	{
 		let pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, 7);
 		assert_eq!(pmmr.root(), root1);
+	}
+
+	teardown(data_dir);
+}
+
+#[test]
+fn pmmr_compact_horizon() {
+	let (data_dir, elems) = setup("compact_horizon");
+
+	let root: Hash;
+	{
+		// setup the mmr store with all elements
+		let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
+		let mmr_size = load(0, &elems[..], &mut backend);
+		backend.sync().unwrap();
+
+		// save the root
+		{
+			let pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			root = pmmr.root();
+		}
+
+		// pruning some choice nodes with an increasing block height
+		{
+			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			pmmr.prune(1, 1).unwrap();
+			pmmr.prune(2, 2).unwrap();
+			pmmr.prune(4, 3).unwrap();
+			pmmr.prune(5, 4).unwrap();
+		}
+		backend.sync().unwrap();
+		// compact
+		backend.check_compact(2, 3).unwrap();
+	}
+
+	// recheck stored data
+	{
+		// recreate backend
+		let mut backend = store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string()).unwrap();
+		// 9 elements total, minus 2 compacted
+		assert_eq!(backend.data_size().unwrap(), 7);
+		// 15 nodes total, 2 pruned and compacted
+		assert_eq!(backend.hash_size().unwrap(), 13);
+		
+		// compact some more
+		backend.check_compact(1, 5).unwrap();
+	}
+
+	// recheck stored data
+	{
+		// recreate backend
+		let backend = store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string()).unwrap();
+		// 9 elements total, minus 4 compacted
+		assert_eq!(backend.data_size().unwrap(), 5);
+		// 15 nodes total, 6 pruned and compacted
+		assert_eq!(backend.hash_size().unwrap(), 9);
 	}
 
 	teardown(data_dir);
