@@ -21,7 +21,6 @@ use core::core::SwitchCommitHash;
 use chain;
 use p2p;
 use util;
-use util::LOGGER;
 use util::secp::pedersen;
 use util::secp::constants::MAX_PROOF_SIZE;
 use serde;
@@ -623,7 +622,8 @@ mod test {
 			\"switch_commit_hash\":\"85daaf11011dc11e52af84ebe78e2f2d19cbdc76000000000000000000000000\",\
 			\"spent\":false,\
 			\"proof\":null,\
-			\"proof_hash\":\"ed6ba96009b86173bade6a9227ed60422916593fa32dd6d78b25b7a4eeef4946\"\
+			\"proof_hash\":\"ed6ba96009b86173bade6a9227ed60422916593fa32dd6d78b25b7a4eeef4946\",\
+			\"merkle_proof\":null\
 		}";
 		let deserialized: OutputPrintable = serde_json::from_str(&hex_output).unwrap();
 		let serialized = serde_json::to_string(&deserialized).unwrap();
