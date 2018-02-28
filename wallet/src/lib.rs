@@ -29,6 +29,9 @@ extern crate prettytable;
 extern crate term;
 
 extern crate bodyparser;
+extern crate failure;
+#[macro_use]
+extern crate failure_derive;
 extern crate futures;
 extern crate hyper;
 extern crate iron;
@@ -57,5 +60,5 @@ pub use outputs::show_outputs;
 pub use info::{show_info, retrieve_info};
 pub use receiver::{WalletReceiver};
 pub use sender::{issue_burn_tx, issue_send_tx};
-pub use types::{BlockFees, CbData, Error, WalletConfig, WalletReceiveRequest, WalletInfo, WalletSeed};
+pub use types::{BlockFees, CbData, Error, ErrorKind, WalletConfig, WalletReceiveRequest, WalletInfo, WalletSeed};
 pub use restore::restore;

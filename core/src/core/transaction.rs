@@ -19,6 +19,7 @@ use util::{static_secp_instance, kernel_sig_msg};
 use util::secp::pedersen::{Commitment, RangeProof, ProofMessage};
 use std::cmp::{min, max};
 use std::cmp::Ordering;
+use std::{error, fmt};
 
 use consensus;
 use consensus::VerifySortOrder;
@@ -93,6 +94,22 @@ pub enum Error {
 	SwitchCommitment,
 	/// Range proof validation error
 	RangeProof,
+}
+
+impl error::Error for Error {
+	fn description(&self) -> &str {
+		match *self {
+			_ => "some kind of keychain error",
+		}
+	}
+}
+
+impl fmt::Display for Error {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			_ => write!(f, "some kind of keychain error"),
+		}
+	}
 }
 
 impl From<secp::Error> for Error {

@@ -515,27 +515,29 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 					dest,
 					selection_strategy,
 				),
-				Err(wallet::Error::NotEnoughFunds(available)) => {
-					error!(
-						LOGGER,
-						"Tx not sent: insufficient funds (max: {})",
-						amount_to_hr_string(available),
-					);
-				}
-				Err(wallet::Error::FeeExceedsAmount {
-					sender_amount,
-					recipient_fee,
-				}) => {
-					error!(
-						LOGGER,
-						"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
-						amount_to_hr_string(recipient_fee),
-						amount_to_hr_string(sender_amount)
-					);
-				}
-				Err(e) => {
-					error!(LOGGER, "Tx not sent: {:?}", e);
-				}
+                Err(e) => match e.kind() {
+			    	wallet::ErrorKind::NotEnoughFunds(available) => {
+			    		error!(
+			    			LOGGER,
+			    			"Tx not sent: insufficient funds (max: {})",
+			    			amount_to_hr_string(available),
+			    		);
+			    	}
+			    	wallet::ErrorKind::FeeExceedsAmount {
+			    		sender_amount,
+			    		recipient_fee,
+			    	} => {
+			    		error!(
+			    			LOGGER,
+			    			"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
+			    			amount_to_hr_string(recipient_fee),
+			    			amount_to_hr_string(sender_amount)
+			    		);
+			    	}
+			    	_ => {
+			    		error!(LOGGER, "Tx not sent: {:?}", e);
+			    	}
+                }
 			};
 		}
 		("burn", Some(send_args)) => {
