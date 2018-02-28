@@ -28,11 +28,6 @@ use uuid::Uuid;
 use blind::{BlindSum, BlindingFactor};
 use extkey::{self, Identifier};
 
-#[cfg(feature = "use-bullet-proofs")]
-pub const USE_BULLET_PROOFS:bool = true;
-#[cfg(not(feature = "use-bullet-proofs"))]
-pub const USE_BULLET_PROOFS:bool = false;
-
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Error {
 	ExtendedKey(extkey::Error),
@@ -226,33 +221,33 @@ impl Keychain {
 		Ok(child_key.switch_key)
 	}
 
-	pub fn is_using_bullet_proofs() -> bool {
-		USE_BULLET_PROOFS
-	}
-
 	pub fn range_proof(
 		&self,
 		amount: u64,
 		key_id: &Identifier,
 		commit: Commitment,
+		extra_data: Option<Vec<u8>>,
 		msg: ProofMessage,
 	) -> Result<RangeProof, Error> {
 		let skey = self.derived_key(key_id)?;
-		let range_proof = match USE_BULLET_PROOFS {
-			true => self.secp.bullet_proof(amount, skey),
-			false => self.secp.range_proof(0, amount, skey, commit, msg),
-		};
-		Ok(range_proof)
+		if msg.len() == 0 {
+			return Ok(self.secp.bullet_proof(amount, skey, extra_data, None));
+		} else {
+			if msg.len() != 64 {
+				error!(LOGGER, "Bullet proof message must be 64 bytes.");
+				return Err(Error::RangeProof("Bullet proof message must be 64 bytes".to_string()));
+			}
+		}
+		return Ok(self.secp.bullet_proof(amount, skey, extra_data, Some(msg)));
 	}
 
 	pub fn verify_range_proof(
 		secp: &Secp256k1,
-		commit: Commitment, 
-		proof: RangeProof) -> Result<(), secp::Error> {
-			let result = match USE_BULLET_PROOFS {
-				true => secp.verify_bullet_proof(commit, proof),
-				false => secp.verify_range_proof(commit, proof),
-			};
+		commit: Commitment,
+		proof: RangeProof,
+		extra_data: Option<Vec<u8>>)
+		-> Result<(), secp::Error> {
+			let result =  secp.verify_bullet_proof(commit, proof, extra_data);
 			match result {
 				Ok(_) => Ok(()),
 				Err(e) => Err(e),
@@ -263,14 +258,34 @@ impl Keychain {
 		&self,
 		key_id: &Identifier,
 		commit: Commitment,
+		extra_data: Option<Vec<u8>>,
 		proof: RangeProof,
 	) -> Result<ProofInfo, Error> {
 		let nonce = self.derived_key(key_id)?;
-		if USE_BULLET_PROOFS {
-			error!(LOGGER, "Rewinding Bullet proofs not yet supported");
-			return Err(Error::RangeProof("Rewinding Bullet proofs not yet supported".to_string()));
-		}
-		Ok(self.secp.rewind_range_proof(commit, proof, nonce))
+		let proof_message = self.secp.unwind_bullet_proof(commit, nonce, extra_data, proof);
+		let proof_info = match proof_message {
+		Ok(p) => ProofInfo {
+				success: true,
+				value: 0,
+				message: p,
+				mlen: 0,
+				min: 0,
+				max: 0,
+				exp: 0,
+				mantissa: 0,
+			},
+			Err(_) => ProofInfo {
+				success: false,
+				value: 0,
+				message: ProofMessage::empty(),
+				mlen: 0,
+				min: 0,
+				max: 0,
+				exp: 0,
+				mantissa: 0,
+			}
+		};
+		return Ok(proof_info);
 	}
 
 	pub fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error> {
@@ -556,39 +571,40 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
-		let msg = ProofMessage::empty();
+		let mut msg = ProofMessage::from_bytes(&[0u8; 64]);
+		let extra_data = [99u8; 64];
 
-		//TODO: Remove this check when bullet proofs can be rewound
-		if Keychain::is_using_bullet_proofs(){
-			return;
-		}
-
-		let proof = keychain.range_proof(5, &key_id, commit, msg).unwrap();
-		let proof_info = keychain.rewind_range_proof(&key_id, commit, proof).unwrap();
+		let proof = keychain.range_proof(5, &key_id, commit, Some(extra_data.to_vec().clone()), msg).unwrap();
+		let proof_info = keychain.rewind_range_proof(&key_id, commit, Some(extra_data.to_vec().clone()), proof).unwrap();
 
 		assert_eq!(proof_info.success, true);
-		assert_eq!(proof_info.value, 5);
 
 		// now check the recovered message is "empty" (but not truncated) i.e. all
 		// zeroes
+		//Value is in the message in this case
 		assert_eq!(
 			proof_info.message,
-			secp::pedersen::ProofMessage::from_bytes(&[0; secp::constants::PROOF_MSG_SIZE])
+			secp::pedersen::ProofMessage::from_bytes(&[0; secp::constants::BULLET_PROOF_MSG_SIZE])
 		);
 
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
 		// cannot rewind with a different nonce
 		let proof_info = keychain
-			.rewind_range_proof(&key_id2, commit, proof)
+			.rewind_range_proof(&key_id2, commit, Some(extra_data.to_vec().clone()), proof)
 			.unwrap();
-		assert_eq!(proof_info.success, false);
+		// With bullet proofs, if you provide the wrong nonce you'll get gibberish back as opposed
+		// to a failure to recover the message
+		assert_ne!(
+			proof_info.message,
+			secp::pedersen::ProofMessage::from_bytes(&[0; secp::constants::BULLET_PROOF_MSG_SIZE])
+		);
 		assert_eq!(proof_info.value, 0);
 
 		// cannot rewind with a commitment to the same value using a different key
 		let commit2 = keychain.commit(5, &key_id2).unwrap();
 		let proof_info = keychain
-			.rewind_range_proof(&key_id, commit2, proof)
+			.rewind_range_proof(&key_id, commit2, Some(extra_data.to_vec().clone()), proof)
 			.unwrap();
 		assert_eq!(proof_info.success, false);
 		assert_eq!(proof_info.value, 0);
@@ -596,8 +612,18 @@ mod test {
 		// cannot rewind with a commitment to a different value
 		let commit3 = keychain.commit(4, &key_id).unwrap();
 		let proof_info = keychain
-			.rewind_range_proof(&key_id, commit3, proof)
+			.rewind_range_proof(&key_id, commit3, Some(extra_data.to_vec().clone()), proof)
 			.unwrap();
+		assert_eq!(proof_info.success, false);
+		assert_eq!(proof_info.value, 0);
+
+		// cannot rewind with wrong extra committed data
+		let commit3 = keychain.commit(4, &key_id).unwrap();
+		let wrong_extra_data = [98u8; 64];
+		let should_err = keychain
+			.rewind_range_proof(&key_id, commit3, Some(wrong_extra_data.to_vec().clone()), proof)
+			.unwrap();
+
 		assert_eq!(proof_info.success, false);
 		assert_eq!(proof_info.value, 0);
 	}

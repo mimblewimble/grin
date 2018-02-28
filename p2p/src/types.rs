@@ -123,6 +123,15 @@ bitflags! {
   }
 }
 
+/// Types of connection
+enum_from_primitive! {
+	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+	pub enum Direction {
+		Inbound,
+		Outbound,
+	}
+}
+
 /// General information about a connected peer that's useful to other modules.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PeerInfo {
@@ -131,6 +140,7 @@ pub struct PeerInfo {
 	pub version: u32,
 	pub addr: SocketAddr,
 	pub total_difficulty: Difficulty,
+	pub direction: Direction,
 }
 
 /// The full sumtree data along with indexes required for a consumer to
