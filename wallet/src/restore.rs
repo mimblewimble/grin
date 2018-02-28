@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+use failure::{ResultExt, Fail};
 use keychain::{Keychain, Identifier};
 use util::{LOGGER, to_hex};
 use util::secp::pedersen;
@@ -19,7 +19,7 @@ use api;
 use core::global;
 use core::core::{Output, SwitchCommitHash};
 use core::core::transaction::OutputFeatures;
-use types::{BlockIdentifier, WalletConfig, WalletData, OutputData, OutputStatus, Error};
+use types::{BlockIdentifier, WalletConfig, WalletData, OutputData, OutputStatus, Error, ErrorKind};
 use byteorder::{BigEndian, ByteOrder};
 
 
@@ -36,7 +36,7 @@ pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 				config.check_node_api_http_addr,
 				e
 			);
-			Err(Error::Node(e))
+			Err(e.context(ErrorKind::Node).into())
 		}
 	}
 }
@@ -61,17 +61,17 @@ fn output_with_range_proof(
 				if let Some(output) = block_output.outputs.first() {
 					Ok(output.clone())
 				} else {
-					Err(Error::Node(api::Error::NotFound))
+					Err(ErrorKind::Node)?
 				}
 			} else {
-				Err(Error::Node(api::Error::NotFound))
+			    Err(ErrorKind::Node)?
 			}
 		}
 		Err(e) => {
 			// if we got anything other than 200 back from server, don't attempt to refresh
 			// the wallet
 			// data after
-			Err(Error::Node(e))
+			Err(e.context(ErrorKind::Node))?
 		}
 	}
 }
@@ -90,9 +90,9 @@ fn retrieve_amount_and_coinbase_status(
 			api::OutputType::Coinbase => OutputFeatures::COINBASE_OUTPUT,
 			api::OutputType::Transaction => OutputFeatures::DEFAULT_OUTPUT,
 		},
-		proof: output.range_proof()?,
-		switch_commit_hash: output.switch_commit_hash()?,
-		commit: output.commit()?,
+		proof: output.range_proof().context(ErrorKind::GenericError("range proof error"))?,
+		switch_commit_hash: output.switch_commit_hash().context(ErrorKind::GenericError("switch commit hash error"))?,
+		commit: output.commit().context(ErrorKind::GenericError("commit error"))?,
 	};
 
 	if let Some(amount) = core_output.recover_value(keychain, &key_id) {
@@ -102,7 +102,7 @@ fn retrieve_amount_and_coinbase_status(
 		};
 		Ok((amount, is_coinbase))
 	} else {
-		Err(Error::GenericError(format!("cannot recover value")))
+		Err(ErrorKind::GenericError("cannot recover value"))?
 	}
 }
 
@@ -130,7 +130,7 @@ pub fn utxos_batch_block(
 				config.check_node_api_http_addr,
 				e
 			);
-			Err(Error::Node(e))
+			Err(e.context(ErrorKind::Node))?
 		}
 	}
 }
@@ -244,8 +244,8 @@ pub fn restore(
 ) -> Result<(), Error> {
 	// Don't proceed if wallet.dat has anything in it
 	let is_empty = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		wallet_data.outputs.len() == 0
-	})?;
+		Ok(wallet_data.outputs.len() == 0)
+	}).context(ErrorKind::WalletData("could not read wallet"))?;
 	if !is_empty {
 		error!(
 			LOGGER,

@@ -17,6 +17,7 @@
 
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use failure::{ResultExt};
 
 use api;
 use core::core::hash::Hash;
@@ -69,9 +70,10 @@ fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain) -> R
 				x.status == OutputStatus::Unspent
 			})
 		{
-			let commit = keychain.commit_with_key_index(out.value, out.n_child).unwrap();
-			wallet_outputs.insert(commit, out.key_id.clone());
+			let commit = keychain.commit_with_key_index(out.value, out.n_child).context(ErrorKind::Keychain)?;
+            wallet_outputs.insert(commit, out.key_id.clone());
 		}
+		Ok(())
 	});
 
 	// nothing to do so return (otherwise we hit the api with a monster query...)
@@ -128,7 +130,7 @@ fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain) -> R
 		Err(e) => {
 			// if we got anything other than 200 back from server, bye
 			error!(LOGGER, "Refresh failed... unable to contact node: {}", e);
-			return Err(Error::Node(e));
+			return Err(e).context(ErrorKind::Node)?;
 		}
 	}
 
@@ -170,9 +172,10 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<()
 				x.status != OutputStatus::Spent
 			})
 		{
-			let commit = keychain.commit_with_key_index(out.value, out.n_child).unwrap();
+			let commit = keychain.commit_with_key_index(out.value, out.n_child).context(ErrorKind::Keychain)?;
 			wallet_outputs.insert(commit, out.key_id.clone());
-		}
+		};
+		Ok(())
 	});
 
 	// build the necessary query params -
@@ -202,7 +205,7 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<()
 		Err(e) => {
 			// if we got anything other than 200 back from server, don't attempt to refresh
 			// the wallet data after
-			return Err(Error::Node(e));
+			return Err(e).context(ErrorKind::Node)?;
 		}
 	};
 
@@ -223,5 +226,5 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<()
 
 pub fn get_tip_from_node(config: &WalletConfig) -> Result<api::Tip, Error> {
 	let url = format!("{}/v1/chain", config.check_node_api_http_addr);
-	api::client::get::<api::Tip>(url.as_str()).map_err(|e| Error::Node(e))
+	api::client::get::<api::Tip>(url.as_str()).context(ErrorKind::Node).map_err(|e| e.into())
 }

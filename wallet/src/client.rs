@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{io, time};
+use std::time;
 use std::ops::FnMut;
 
 use futures::{Future, Stream};
+use failure::ResultExt;
 use hyper;
 use hyper::{Method, Request};
 use hyper::header::ContentType;
@@ -26,6 +27,7 @@ use serde_json;
 
 use types::*;
 use util::LOGGER;
+use std::io;
 
 /// Call the wallet API to create a coinbase output for the given block_fees.
 /// Will retry based on default "retry forever with backoff" behavior.
@@ -54,7 +56,7 @@ fn retry_backoff_forever<F, R>(f: F) -> Result<R, Error>
 where
 	F: FnMut() -> Result<R, Error>,
 {
-	let mut core = reactor::Core::new()?;
+	let mut core = reactor::Core::new().context(ErrorKind::GenericError("Could not create reactor"))?;
 	let retry_strategy =
 		FibonacciBackoff::from_millis(100).max_delay(time::Duration::from_secs(10));
 	let retry_future = Retry::spawn(core.handle(), retry_strategy, f);
@@ -67,33 +69,32 @@ pub fn send_partial_tx(url: &str, partial_tx: &PartialTx) -> Result<PartialTx, E
 }
 
 fn single_send_partial_tx(url: &str, partial_tx: &PartialTx) -> Result<PartialTx, Error> {
-	let mut core = reactor::Core::new()?;
+    let mut core = reactor::Core::new().context(ErrorKind::Hyper)?;
 	let client = hyper::Client::new(&core.handle());
 
-	let mut req = Request::new(Method::Post, url.parse()?);
+	let mut req = Request::new(Method::Post, url.parse::<hyper::Uri>().context(ErrorKind::Hyper)?);
 	req.headers_mut().set(ContentType::json());
-	let json = serde_json::to_string(&partial_tx)?;
+	let json = serde_json::to_string(&partial_tx).context(ErrorKind::Hyper)?;
 	req.set_body(json);
 
 	let work = client.request(req).and_then(|res| {
 		res.body().concat2().and_then(move |body| {
-			let partial_tx: PartialTx =
-				serde_json::from_slice(&body).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+			let partial_tx: PartialTx = serde_json::from_slice(&body).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 			Ok(partial_tx)
 		})
 	});
-	let res = core.run(work)?;
-	Ok(res)
+    let res = core.run(work).context(ErrorKind::Hyper)?;
+    Ok(res)
 }
 
 /// Makes a single request to the wallet API to create a new coinbase output.
 fn single_create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
-	let mut core = reactor::Core::new()?;
+	let mut core = reactor::Core::new().context(ErrorKind::GenericError("Could not create reactor"))?;
 	let client = hyper::Client::new(&core.handle());
 
-	let mut req = Request::new(Method::Post, url.parse()?);
+	let mut req = Request::new(Method::Post, url.parse::<hyper::Uri>().context(ErrorKind::Uri)?);
 	req.headers_mut().set(ContentType::json());
-	let json = serde_json::to_string(&block_fees)?;
+	let json = serde_json::to_string(&block_fees).context(ErrorKind::Format)?;
 	req.set_body(json);
 
 	let work = client.request(req).and_then(|res| {
@@ -104,6 +105,6 @@ fn single_create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, E
 		})
 	});
 
-	let res = core.run(work)?;
+	let res = core.run(work).context(ErrorKind::GenericError("Could not run core"))?;
 	Ok(res)
 }

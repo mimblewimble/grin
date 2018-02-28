@@ -90,6 +90,7 @@ pub fn show_outputs(config: &WalletConfig, keychain: &Keychain, show_spent:bool)
 		table.set_format(*prettytable::format::consts::FORMAT_NO_COLSEP);
 		table.printstd();
 		println!();
+		Ok(())
 	});
 
 	if let Err(_) = result {
