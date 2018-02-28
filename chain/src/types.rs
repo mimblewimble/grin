@@ -81,9 +81,6 @@ pub enum Error {
 	DuplicateCommitment(Commitment),
 	/// A kernel with that excess commitment already exists (should be unique)
 	DuplicateKernel(Commitment),
-	/// coinbase can only be spent after it has matured (n blocks)
-	ImmatureCoinbase,
-	MerkleProof,
 	/// output not found
 	OutputNotFound,
 	/// output spent
