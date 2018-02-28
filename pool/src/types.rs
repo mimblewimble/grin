@@ -103,8 +103,8 @@ impl fmt::Debug for Parent {
 /// Enum of errors
 #[derive(Debug)]
 pub enum PoolError {
-	/// An invalid pool entry
-	Invalid,
+	/// An invalid pool entry caused by underlying tx validation error
+	InvalidTx(transaction::Error),
 	/// An entry already in the pool
 	AlreadyInPool,
 	/// A duplicate output
@@ -123,9 +123,6 @@ pub enum PoolError {
 		/// The spent output
 		spent_output: Commitment,
 	},
-	/// Attempt to spend an output before it matures
-	/// lock_height must not exceed current block height
-	ImmatureCoinbase,
 	/// Attempt to add a transaction to the pool with lock_height
 	/// greater than height of current block
 	ImmatureTransaction {

@@ -127,7 +127,7 @@ impl BlockChain for DummyChainImpl {
 				return Ok(());
 			}
 		}
-		Err(PoolError::ImmatureCoinbase)
+		Err(PoolError::InvalidTx(transaction::Error::ImmatureCoinbase))
 	}
 
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError> {

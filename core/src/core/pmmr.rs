@@ -85,9 +85,9 @@ pub trait Backend<T> where
 pub struct MerkleProof {
 	pub root: Hash,
 	pub node: Hash,
-	peaks: Vec<Hash>,
-	path: Vec<Hash>,
-	left_right: Vec<bool>,
+	pub peaks: Vec<Hash>,
+	pub path: Vec<Hash>,
+	pub left_right: Vec<bool>,
 }
 
 impl Writeable for MerkleProof {
@@ -146,6 +146,12 @@ impl Readable for MerkleProof {
 				left_right,
 			}
 		)
+	}
+}
+
+impl Default for MerkleProof {
+	fn default() -> MerkleProof {
+		MerkleProof::empty()
 	}
 }
 

@@ -320,10 +320,12 @@ mod tests {
 				OutputFeatures::DEFAULT_OUTPUT,
 				keychain.commit(50, &key_id2).unwrap(),
 				None,
+				None,
 			),
 			core::transaction::Input::new(
 				OutputFeatures::DEFAULT_OUTPUT,
 				keychain.commit(25, &key_id3).unwrap(),
+				None,
 				None,
 			),
 		];
