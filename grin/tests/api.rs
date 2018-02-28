@@ -283,38 +283,38 @@ fn get_utxos_by_height(base_addr: &String, api_server_port: u16, start_height: u
 
 // Sumtree handler functions
 fn get_sumtree_roots(base_addr: &String, api_server_port: u16)  -> Result<api::SumTrees, Error> {
-	let url = format!("http://{}:{}/v1/sumtrees/roots", base_addr, api_server_port);
+	let url = format!("http://{}:{}/v1/pmmrtrees/roots", base_addr, api_server_port);
 	api::client::get::<api::SumTrees>(url.as_str()).map_err(|e| Error::API(e))
 }
 
-fn get_sumtree_lastutxos(base_addr: &String, api_server_port: u16, n: u64) -> Result<Vec<api::SumTreeNode>, Error> {
+fn get_sumtree_lastutxos(base_addr: &String, api_server_port: u16, n: u64) -> Result<Vec<api::PmmrTreeNode>, Error> {
 	let url: String;
 	if n == 0 {
-		url = format!("http://{}:{}/v1/sumtrees/lastutxos", base_addr, api_server_port);
+		url = format!("http://{}:{}/v1/pmmrtrees/lastutxos", base_addr, api_server_port);
 	} else {
-		url = format!("http://{}:{}/v1/sumtrees/lastutxos?n={}", base_addr, api_server_port, n);
+		url = format!("http://{}:{}/v1/pmmrtrees/lastutxos?n={}", base_addr, api_server_port, n);
 	}
-	api::client::get::<Vec<api::SumTreeNode>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<api::PmmrTreeNode>>(url.as_str()).map_err(|e| Error::API(e))
 }
 
-fn get_sumtree_lastrangeproofs(base_addr: &String, api_server_port: u16, n: u64) -> Result<Vec<api::SumTreeNode>, Error> {
+fn get_sumtree_lastrangeproofs(base_addr: &String, api_server_port: u16, n: u64) -> Result<Vec<api::PmmrTreeNode>, Error> {
 	let url: String;
 	if n == 0 {
-		url = format!("http://{}:{}/v1/sumtrees/lastrangeproofs", base_addr, api_server_port);
+		url = format!("http://{}:{}/v1/pmmrtrees/lastrangeproofs", base_addr, api_server_port);
 	} else {
-		url = format!("http://{}:{}/v1/sumtrees/lastrangeproofs?n={}", base_addr, api_server_port, n);
+		url = format!("http://{}:{}/v1/pmmrtrees/lastrangeproofs?n={}", base_addr, api_server_port, n);
 	}
-	api::client::get::<Vec<api::SumTreeNode>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<api::PmmrTreeNode>>(url.as_str()).map_err(|e| Error::API(e))
 }
 
-fn getsumtree_lastkernels(base_addr: &String, api_server_port: u16, n: u64) -> Result<Vec<api::SumTreeNode>, Error> {
+fn getsumtree_lastkernels(base_addr: &String, api_server_port: u16, n: u64) -> Result<Vec<api::PmmrTreeNode>, Error> {
 	let url: String;
 	if n == 0 {
-		url = format!("http://{}:{}/v1/sumtrees/lastkernels", base_addr, api_server_port);
+		url = format!("http://{}:{}/v1/pmmrtrees/lastkernels", base_addr, api_server_port);
 	} else {
-		url = format!("http://{}:{}/v1/sumtrees/lastkernels?n={}", base_addr, api_server_port, n);
+		url = format!("http://{}:{}/v1/pmmrtrees/lastkernels?n={}", base_addr, api_server_port, n);
 	}
-	api::client::get::<Vec<api::SumTreeNode>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<api::PmmrTreeNode>>(url.as_str()).map_err(|e| Error::API(e))
 }
 
 // Helper function to get a vec of commitment output ids from a vec of block outputs

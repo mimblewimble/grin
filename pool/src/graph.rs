@@ -334,7 +334,7 @@ mod tests {
 			commit: output_commit,
 			switch_commit_hash: switch_commit_hash,
 			proof: keychain
-				.range_proof(100, &key_id1, output_commit, msg)
+				.range_proof(100, &key_id1, output_commit, Some(switch_commit_hash.as_ref().to_vec()), msg)
 				.unwrap(),
 		};
 

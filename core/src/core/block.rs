@@ -26,6 +26,7 @@ use core::{
 	ShortId,
 	SwitchCommitHash,
 	Proof,
+	ProofMessageElements,
 	TxKernel,
 	Transaction,
 	OutputFeatures,
@@ -41,7 +42,6 @@ use ser::{self, Readable, Reader, Writeable, Writer, WriteableSorted, read_and_v
 use global;
 use keychain;
 use keychain::BlindingFactor;
-use util;
 use util::kernel_sig_msg;
 use util::LOGGER;
 use util::{secp, static_secp_instance};
@@ -818,8 +818,13 @@ impl Block {
 			"Block reward - Switch Commit Hash is: {:?}",
 			switch_commit_hash
 		);
-		let msg = util::secp::pedersen::ProofMessage::empty();
-		let rproof = keychain.range_proof(reward(fees), key_id, commit, msg)?;
+
+		let value = reward(fees);
+		let msg = (ProofMessageElements {
+			value: value
+		}).to_proof_message();
+
+		let rproof = keychain.range_proof(value, key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg)?;
 
 		let output = Output {
 			features: OutputFeatures::COINBASE_OUTPUT,
@@ -1059,10 +1064,7 @@ mod test {
 		let b = new_block(vec![], &keychain);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
-		let target_len = match Keychain::is_using_bullet_proofs() {
-			true => 1_256,
-			false => 5_708,
-		};
+		let target_len = 1_256;
 		assert_eq!(
 			vec.len(),
 			target_len,
@@ -1076,10 +1078,7 @@ mod test {
 		let b = new_block(vec![&tx1], &keychain);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
-		let target_len = match Keychain::is_using_bullet_proofs() {
-			true => 2_900,
-			false => 16_256,
-		};
+		let target_len = 2_900;
 		assert_eq!(
 			vec.len(),
 			target_len,
@@ -1092,10 +1091,7 @@ mod test {
 		let b = new_block(vec![], &keychain);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-		let target_len = match Keychain::is_using_bullet_proofs() {
-			true => 1_264,
-			false => 5_716,
-		};
+		let target_len = 1_264;
 		assert_eq!(
 			vec.len(),
 			target_len,
@@ -1109,10 +1105,7 @@ mod test {
 		let b = new_block(vec![&tx1], &keychain);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-		let target_len = match Keychain::is_using_bullet_proofs() {
-			true => 1_270,
-			false => 5_722,
-		};
+		let target_len = 1_270;
 		assert_eq!(
 			vec.len(),
 			target_len,
@@ -1135,10 +1128,7 @@ mod test {
 		);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
-		let target_len = match Keychain::is_using_bullet_proofs() {
-			true => 17696,
-			false => 111188,
-		};
+		let target_len = 17_696;
 		assert_eq!(
 			vec.len(),
 			target_len,
@@ -1161,10 +1151,7 @@ mod test {
 		);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-		let target_len = match Keychain::is_using_bullet_proofs() {
-			true => 1_324,
-			false => 5_776,
-		};
+		let target_len = 1_324;
 		assert_eq!(
 			vec.len(),
 			target_len,

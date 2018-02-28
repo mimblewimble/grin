@@ -20,13 +20,13 @@
 use std::cmp::min;
 use std::{fmt, ops};
 use std::convert::AsRef;
+use std::ops::Add;
 
 use blake2::blake2b::Blake2b;
 
 use consensus;
 use ser::{self, AsFixedBytes, Error, Readable, Reader, Writeable, Writer};
 use util;
-use util::LOGGER;
 
 /// A hash consisting of all zeroes, used as a sentinel. No known preimage.
 pub const ZERO_HASH: Hash = Hash([0; 32]);
@@ -147,6 +147,13 @@ impl Writeable for Hash {
 	}
 }
 
+impl Add for Hash {
+	type Output = Hash;
+	fn add(self, other: Hash) -> Hash {
+		self.hash_with(other)
+	}
+}
+
 /// Serializer that outputs a hash of the serialized object
 pub struct HashWriter {
 	state: Blake2b,
@@ -205,7 +212,6 @@ impl<W: ser::Writeable> Hashed for W {
 	fn hash_with<T: Writeable>(&self, other: T) -> Hash {
 		let mut hasher = HashWriter::default();
 		ser::Writeable::write(self, &mut hasher).unwrap();
-		trace!(LOGGER, "Hashing with additional data");
 		ser::Writeable::write(&other, &mut hasher).unwrap();
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
