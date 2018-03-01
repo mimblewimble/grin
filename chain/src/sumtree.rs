@@ -32,8 +32,8 @@ use core::core::hash::{Hash, Hashed};
 use core::ser::{self, PMMRable};
 
 use grin_store;
-use grin_store::pmmr::PMMRBackend;
-use types::{ChainStore, SumTreeRoots, Error};
+use grin_store::pmmr::{PMMRBackend, PMMRFileMetadata};
+use types::{ChainStore, SumTreeRoots, PMMRFileMetadataCollection, Error};
 use util::{LOGGER, zip};
 
 const SUMTREES_SUBDIR: &'static str = "sumtrees";
@@ -63,6 +63,11 @@ where
 			backend: be,
 			last_pos: sz,
 		})
+	}
+	
+	/// Return last written positions of hash file and data file
+	pub fn last_file_positions(&self) -> PMMRFileMetadata {
+		self.backend.last_file_positions()
 	}
 }
 
@@ -187,7 +192,15 @@ impl SumTrees {
 		indexes_at(block, self.commit_index.deref())
 	}
 
-
+	/// Last file positions of UTXO set.. hash file,data file
+	pub fn last_file_metadata(&self) -> PMMRFileMetadataCollection {
+		PMMRFileMetadataCollection::new(
+			self.utxo_pmmr_h.last_file_positions(),
+			self.rproof_pmmr_h.last_file_positions(),
+			self.kernel_pmmr_h.last_file_positions()
+		)
+	}
+ 
 	/// Get sum tree roots
 	/// TODO: Return data instead of hashes
 	pub fn roots(

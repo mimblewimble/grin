@@ -93,7 +93,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 
 	// start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
-	sumtree::extending(&mut sumtrees, |mut extension| {
+	let result = sumtree::extending(&mut sumtrees, |mut extension| {
 		validate_block(b, &mut ctx, &mut extension)?;
 		debug!(
 			LOGGER,
@@ -108,7 +108,41 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 			extension.force_rollback();
 		}
 		Ok(h)
-	})
+	});
+
+	match result {
+		Ok(t) => {
+			// We want to store written file data for the last 2 blocks, so we potentially
+			// have a couple of options to roll back to
+
+			// Save pmmr file metadata for this block
+			let block_file_md = sumtrees.last_file_metadata();
+			ctx.store
+				.save_block_pmmr_file_metadata(&b.hash(), &block_file_md)
+				.map_err(|e| Error::StoreErr(e, "saving pmmr file metadata".to_owned()))?;
+
+			// Delete the metadata of the oldest block written
+			let oldest_block_hash = ctx.store
+				.get_previous_pmmr_file_block();
+			if let Ok(h) = oldest_block_hash {
+				ctx.store
+					.delete_block_pmmr_file_metadata(&h)
+					.map_err(|e| Error::StoreErr(e, "deleting oldest stored pmmr block".to_owned()))?;
+			}
+
+			// Swap previous block index
+			ctx.store
+				.save_previous_pmmr_file_block(&b.header.previous)
+				.map_err(|e| Error::StoreErr(e, "saving pmmr file previous metadata".to_owned()))?;
+
+			// Swap current block index
+			ctx.store
+				.save_current_pmmr_file_block(&b.hash())
+				.map_err(|e| Error::StoreErr(e, "saving pmmr file most current metadata".to_owned()))?;
+			Ok(t)
+		},
+		Err(e) => Err(e),
+	}
 }
 
 /// Process the block header.

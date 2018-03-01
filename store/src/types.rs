@@ -43,6 +43,7 @@ pub struct AppendOnlyFile {
 	buffer_start: usize,
 	buffer: Vec<u8>,
 	buffer_start_bak: usize,
+	last_written_pos: u64
 }
 
 impl AppendOnlyFile {
@@ -60,6 +61,7 @@ impl AppendOnlyFile {
 			buffer_start: 0,
 			buffer: vec![],
 			buffer_start_bak: 0,
+			last_written_pos: 0
 		};
 		if let Ok(sz) = aof.size() {
 			if sz > 0 {
@@ -96,10 +98,18 @@ impl AppendOnlyFile {
 		}
 		self.buffer_start += self.buffer.len();
 		self.file.write(&self.buffer[..])?;
-		self.file.sync_data()?;
+		self.file.sync_all()?;
+		let metadata = self.file.metadata()?;
+		self.last_written_pos = metadata.len();
 		self.buffer = vec![];
 		self.mmap = Some(unsafe { memmap::Mmap::map(&self.file)? });
 		Ok(())
+	}
+
+	/// Returns the last position (in bytes) written to disk,
+	/// node this is only really valid in PMMR terms after a flush
+	pub fn last_written_pos(&self) -> u64 {
+		self.last_written_pos
 	}
 
 	/// Discard the current non-flushed data.
