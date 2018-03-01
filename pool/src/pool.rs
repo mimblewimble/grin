@@ -84,7 +84,7 @@ where
 		for tx in self.transactions.values() {
 			for kernel in &tx.kernels {
 				// rehash each kernel to calculate the block specific short_id
-				let short_id = kernel.short_id(&cb.hash());
+				let short_id = kernel.short_id(&cb.hash(), cb.nonce);
 
 				// if any kernel matches then keep the tx for later
 				if cb.kern_ids.contains(&short_id) {

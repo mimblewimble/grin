@@ -1249,8 +1249,10 @@ mod test {
 			"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
 		).unwrap();
 
-		let short_id = input.short_id(&block_hash);
-		assert_eq!(short_id, ShortId::from_hex("3e1262905b7a").unwrap());
+		let nonce = 0;
+
+		let short_id = input.short_id(&block_hash, nonce);
+		assert_eq!(short_id, ShortId::from_hex("28fea5a693af").unwrap());
 
 		// now generate the short_id for a *very* similar output (single feature flag different)
 		// and check it generates a different short_id
@@ -1261,11 +1263,7 @@ mod test {
 			merkle_proof: None,
 		};
 
-		let block_hash = Hash::from_hex(
-			"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
-		).unwrap();
-
-		let short_id = input.short_id(&block_hash);
-		assert_eq!(short_id, ShortId::from_hex("9b1b00ded6e6").unwrap());
+		let short_id = input.short_id(&block_hash, nonce);
+		assert_eq!(short_id, ShortId::from_hex("2df325971ab0").unwrap());
 	}
 }
