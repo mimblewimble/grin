@@ -20,6 +20,7 @@ use core::core::SwitchCommitHash;
 use chain;
 use p2p;
 use util;
+use util::LOGGER;
 use util::secp::pedersen;
 use util::secp::constants::MAX_PROOF_SIZE;
 use serde;
