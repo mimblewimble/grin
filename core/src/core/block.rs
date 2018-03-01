@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,7 +22,6 @@ use core::{
 	Committed,
 	Input,
 	Output,
-	OutputIdentifier,
 	ShortId,
 	SwitchCommitHash,
 	Proof,
@@ -36,7 +35,6 @@ use consensus;
 use consensus::{exceeds_weight, reward, REWARD, VerifySortOrder};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::id::ShortIdentifiable;
-use core::pmmr::MerkleProof;
 use core::target::Difficulty;
 use core::transaction;
 use ser::{self, Readable, Reader, Writeable, Writer, WriteableSorted, read_and_verify_sorted};
@@ -76,6 +74,7 @@ pub enum Error {
 		/// The lock_height needed to be reached for the coinbase output to mature
 		lock_height: u64,
 	},
+	/// Underlying Merkle proof error
 	MerkleProof,
 	/// Other unspecified error condition
 	Other(String)
@@ -851,7 +850,6 @@ impl Block {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::hash::ZERO_HASH;
 	use core::Transaction;
 	use core::build::{self, input, output, with_fee};
 	use core::test::{tx1i2o, tx2i1o};

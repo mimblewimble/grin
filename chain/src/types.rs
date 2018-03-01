@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,9 +20,8 @@ use util::secp;
 use util::secp::pedersen::Commitment;
 
 use grin_store as store;
-use core::core::{Block, BlockHeader, OutputIdentifier, block, transaction};
+use core::core::{Block, BlockHeader, block, transaction};
 use core::core::hash::{Hash, Hashed};
-use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
 use core::ser;
 use grin_store;

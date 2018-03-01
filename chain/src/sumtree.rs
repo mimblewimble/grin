@@ -1,3 +1,4 @@
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -409,6 +410,11 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	/// Build a Merkle proof for the given output and the block by
+	/// rewinding the MMR to the last pos of the block.
+	/// Note: this relies on the MMR being stable even after pruning/compaction.
+	/// We need the hash of each sibling pos from the pos up to the peak
+	/// including the sibling leaf node which may have been removed.
 	pub fn merkle_proof_via_rewind(
 		&mut self,
 		output: &OutputIdentifier,

@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ use core::core::SwitchCommitHash;
 use chain;
 use p2p;
 use util;
-use util::LOGGER;
 use util::secp::pedersen;
 use util::secp::constants::MAX_PROOF_SIZE;
 use serde;

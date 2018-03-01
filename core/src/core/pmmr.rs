@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,7 +36,6 @@
 //! a simple Vec or a database.
 
 use std::clone::Clone;
-use std::ops::Deref;
 use std::marker::PhantomData;
 use core::hash::{Hash, Hashed};
 use ser;
@@ -81,12 +80,24 @@ pub trait Backend<T> where
 	fn get_data_file_path(&self) -> String;
 }
 
+/// A Merkle proof.
+/// Proves inclusion of an output (node) in the output MMR.
+/// We can use this to prove an output was unspent at the time of a given block
+/// as the root will match the utxo_root of the block header.
+/// The path and left_right can be used to reconstruct the peak hash for a given tree
+/// in the MMR.
+/// The root is the result of hashing all the peaks together.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct MerkleProof {
+	/// The root hash of the full Merkle tree (in an MMR the hash of all peaks)
 	pub root: Hash,
+	/// The hash of the element in the tree we care about
 	pub node: Hash,
+	/// The full list of peak hashes in the MMR
 	pub peaks: Vec<Hash>,
+	/// The siblings along the path of the tree as we traverse from node to peak
 	pub path: Vec<Hash>,
+	/// Order of siblings (left vs right) matters, so track this here for each path element
 	pub left_right: Vec<bool>,
 }
 
@@ -156,6 +167,8 @@ impl Default for MerkleProof {
 }
 
 impl MerkleProof {
+	/// The "empty" Merkle proof.
+	/// Basically some reasonable defaults. Will not verify successfully.
 	pub fn empty() -> MerkleProof {
 		MerkleProof {
 			root: Hash::zero(),
@@ -166,12 +179,14 @@ impl MerkleProof {
 		}
 	}
 
+	/// Serialize the Merkle proof as a hex string (for api json endpoints)
 	pub fn to_hex(&self) -> String {
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &self).expect("serialization failed");
 		util::to_hex(vec)
 	}
 
+	/// Convert hex string represenation back to a Merkle proof instance
 	pub fn from_hex(hex: &str) -> Result<MerkleProof, String> {
 		let bytes = util::from_hex(hex.to_string()).unwrap();
 		let res = ser::deserialize(&mut &bytes[..])
@@ -179,6 +194,10 @@ impl MerkleProof {
 		Ok(res)
 	}
 
+	/// Verify the Merkle proof.
+	/// We do this by verifying the folloiwing -
+	///  * inclusion of the node beneath a peak (via the Merkle path/branch of siblings)
+	///  * inclusion of the peak in the "bag of peaks" beneath the root
 	pub fn verify(&self) -> bool {
 		// if we have no further elements in the path
 		// then this proof verifies successfully if our node is
@@ -286,6 +305,7 @@ where
 		ret.expect("no root, invalid tree").0
 	}
 
+	/// Build a Merkle proof for the element at the given position in the MMR
 	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
 		debug!(LOGGER, "merkle_proof (via rewind) - {}, last_pos {}", pos, self.last_pos);
 
@@ -767,9 +787,7 @@ pub fn n_leaves(mut sz: u64) -> u64 {
 /// any node, from its postorder traversal position. Which is the order in which
 /// nodes are added in a MMR.
 ///
-/// [1]  https://github.
-/// com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.
-/// md
+/// [1]  https://github.com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.md
 pub fn bintree_postorder_height(num: u64) -> u64 {
 	let mut h = num;
 	while !all_ones(h) {
@@ -778,6 +796,9 @@ pub fn bintree_postorder_height(num: u64) -> u64 {
 	most_significant_pos(h) - 1
 }
 
+/// Is this position a leaf in the MMR?
+/// We know the positions of all leaves based on the postorder height of an MMR of any size
+/// (somewhat unintuitively but this is how the PMMR is "append only").
 pub fn is_leaf(pos: u64) -> bool {
 	bintree_postorder_height(pos) == 0
 }
@@ -799,6 +820,9 @@ pub fn family(pos: u64) -> (u64, u64, bool) {
 	}
 }
 
+/// For a given starting position calculate the parent and sibling positions
+/// for the branch/path from that position to the peak of the tree.
+/// We will use the sibling positions to generate the "path" of a Merkle proof.
 pub fn family_branch(pos: u64, last_pos: u64) -> Vec<(u64, u64, bool)> {
 	// loop going up the tree, from node to parent, as long as we stay inside
 	// the tree (as defined by last_pos).
@@ -953,23 +977,13 @@ mod test {
 		/// Current number of elements in the underlying Vec.
 		pub fn used_size(&self) -> usize {
 			let mut usz = self.elems.len();
-			for (idx, elem) in self.elems.iter().enumerate() {
+			for (idx, _) in self.elems.iter().enumerate() {
 				let idx = idx as u64;
 				if self.remove_list.contains(&idx) {
 					usz -= 1;
 				}
 			}
 			usz
-		}
-
-		/// Resets the backend, emptying the underlying Vec.
-		pub fn clear(&mut self) {
-			self.elems = Vec::new();
-		}
-
-		/// Total length of the underlying vector.
-		pub fn len(&self) -> usize {
-			self.elems.len()
 		}
 	}
 
@@ -1250,7 +1264,7 @@ mod test {
 
 		// now prune an element and check we can still generate
 		// the correct Merkle proof for the other element (after sibling pruned)
-		pmmr.prune(1, 1);
+		pmmr.prune(1, 1).unwrap();
 		let proof_2 = pmmr.merkle_proof(2).unwrap();
 		assert_eq!(proof, proof_2);
 	}

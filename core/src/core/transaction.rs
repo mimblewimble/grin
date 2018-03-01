@@ -98,7 +98,9 @@ pub enum Error {
 	SwitchCommitment,
 	/// Range proof validation error
 	RangeProof,
+	/// Error originating from an invalid Merkle proof
 	MerkleProof,
+	/// Error originating from an input attempting to spend an immature coinbase output
 	ImmatureCoinbase,
 }
 
@@ -613,11 +615,16 @@ impl Input {
 		self.commit.clone()
 	}
 
+	/// Convenience functon to return the (optional) block_hash for this input.
+	/// Will return the "zero" hash if we do not have one.
 	pub fn block_hash(&self) -> Hash {
 		let block_hash = self.block_hash.clone();
 		block_hash.unwrap_or(Hash::zero())
 	}
 
+	/// Convenience function to return the (optional) merkle_proof for this input.
+	/// Will return the "empty" Merkle proof if we do not have one.
+	/// We currently only care about the Merkle proof for inputs spending coinbase outputs.
 	pub fn merkle_proof(&self) -> MerkleProof {
 		let merkle_proof = self.merkle_proof.clone();
 		merkle_proof.unwrap_or(MerkleProof::empty())

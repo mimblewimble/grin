@@ -19,7 +19,6 @@ use api;
 use client;
 use checker;
 use core::core::{build, Transaction, amount_to_hr_string};
-use core::core::pmmr::MerkleProof;
 use core::ser;
 use keychain::{BlindingFactor, BlindSum, Identifier, Keychain};
 use receiver::TxWrapper;
@@ -378,7 +377,6 @@ fn inputs_and_change(
 #[cfg(test)]
 mod test {
 	use core::core::build;
-	use core::core::hash::ZERO_HASH;
 	use keychain::Keychain;
 
 

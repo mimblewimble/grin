@@ -284,10 +284,6 @@ impl BlockIdentifier {
 		let hash = Hash::from_hex(hex).context(ErrorKind::GenericError("Invalid hex"))?;
 		Ok(BlockIdentifier(hash))
 	}
-
-	pub fn zero() -> BlockIdentifier {
-		BlockIdentifier(Hash::zero())
-	}
 }
 
 impl serde::ser::Serialize for BlockIdentifier {

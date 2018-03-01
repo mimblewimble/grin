@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,8 +20,6 @@ use std::collections::HashMap;
 use failure::{ResultExt};
 
 use api;
-use core::core::hash::Hash;
-use core::core::pmmr::MerkleProof;
 use types::*;
 use keychain::{Identifier, Keychain};
 use util::secp::pedersen;

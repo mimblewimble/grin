@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -264,7 +264,6 @@ pub fn transaction_with_offset(
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::hash::ZERO_HASH;
 
 	#[test]
 	fn blind_simple_tx() {
