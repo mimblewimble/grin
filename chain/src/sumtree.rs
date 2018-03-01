@@ -682,28 +682,27 @@ fn indexes_at(block: &Block, commit_index: &ChainStore) -> Result<(u64, u64), Er
 
 	// use last regular output if we have any, otherwise last coinbase output
 	let last_output = if last_regular_output.is_some() {
-		last_regular_output
+		last_regular_output.unwrap()
 	} else if last_coinbase_output.is_some() {
-		last_coinbase_output
+		last_coinbase_output.unwrap()
 	} else {
-		None
+		return Err(Error::Other("can't get index in an empty block".to_owned()))
 	};
 
-	let out_idx = match last_output {
-		Some(output) => commit_index.get_output_pos(&output.commitment())
-			.map_err(|e| {
-				Error::StoreErr(e, format!("missing output pos for known block"))
-			})?,
-		None => 0,
-	};
+	let out_idx = commit_index
+		.get_output_pos(&last_output.commitment())
+		.map_err(|e| Error::StoreErr(e, format!("missing output pos for block")))?;
 
 	let kern_idx = match block.kernels.last() {
 		Some(kernel) => commit_index.get_kernel_pos(&kernel.excess)
 			.map_err(|e| {
-				Error::StoreErr(e, format!("missing kernel pos for known block"))
+				Error::StoreErr(e, format!("missing kernel pos for block"))
 			})?,
-		None => 0,
+		None => {
+			return Err(Error::Other("can't get index in an empty block".to_owned()));
+		}
 	};
+
 	Ok((out_idx, kern_idx))
 }
 
