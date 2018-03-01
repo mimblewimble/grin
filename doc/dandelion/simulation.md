@@ -1,6 +1,9 @@
 Dandelion Simulation
 ==================
-This document describes a network of node with Dandelion. In this scenario, we simulate a successfull aggregation but a failed transaction cut-through forcing a node to revert its stempool state.
+This document describes a network of node with Dandelion.
+
+In this scenario, we simulate a successfull aggregation but a failed transaction cut-through forcing a node to revert its stempool state.
+
 This document also helps visualizing all the timers in a simple way.
 
 ## Initial Situation
@@ -9,7 +12,7 @@ This document also helps visualizing all the timers in a simple way.
 
 ## T = 0
 
-A sends grins to B, adds the tx to its stempool and starts its patience timer.
+A sends grins to B, adds the transaction to its stempool and starts its patience timer.
 
 ![t = 0](images/ti.png)
 
@@ -21,7 +24,7 @@ B waits until he runs out of patience.
 
 ## T = 30
 
-B runs out of patience, flips a coin, broadcasts the tx to its stem relay and starts the embargo timer for this tx.
+B runs out of patience, flips a coin, broadcasts the transaction to its stem relay and starts the embargo timer for this transaction.
 
 ![t = 30](images/t30.png)
 
@@ -34,7 +37,7 @@ B and H wait.
 ## T = 40
 
 G sends grins to E.
-E adds the tx to its stempool and starts its patience timer.
+E adds the transaction to its stempool and starts its patience timer.
 
 ![t = 40](images/t40.png)
 
@@ -47,13 +50,13 @@ B, H and E wait.
 ## T = 55
 
 B spends B1 to D.
-D adds the tx to its stempool and starts its patience timer.
+D adds the transaction to its stempool and starts its patience timer.
 
 ![t = 55](images/t55.png)
 
 ## T = 60
 
-H runs out of patience, flips a coin, broadcasts the tx to its stem relay and starts the embargo timer for this tx.
+H runs out of patience, flips a coin, broadcasts the transaction to its stem relay and starts the embargo timer for this transaction.
 
 ![t = 60](images/t60.png)
 
@@ -65,7 +68,7 @@ Waiting.
 
 ## T = 70
 
-E runs out of patience, flips a coin, broadcasts the aggregated tx to its stem relay and starts the embargo timer for this tx.
+E runs out of patience, flips a coin, broadcasts the aggregated transaction to its stem relay and starts the embargo timer for this transaction.
 
 ![t = 70](images/t70.png)
 
@@ -77,14 +80,14 @@ Waiting.
 
 ## T = 85
 
-D runs out of patience, flips a coin, broadcasts the aggregated tx to its stem relay and starts the embargo timer for this tx.
-E receives the stem tx, aggregates its (thus removing duplicate input/output pair B1) and starts it s patience timer.
+D runs out of patience, flips a coin, broadcasts the aggregated transaction to its stem relay and starts the embargo timer for this transaction.
+E receives the stem transaction, aggregates its (thus removing duplicate input/output pair B1) and starts it s patience timer.
 
 ![t = 85](images/t85.png)
 
 ## T = 100
 
-F runs out of patience, flips a coin, broadcasts the aggregated tx to all its peers (fluff in the mempool).
-E receives the tx in its mempool and reverts the state of its stempool to avoid conflicting transactions.
+F runs out of patience, flips a coin, broadcasts the aggregated transaction to all its peers (fluff in the mempool).
+E receives the transaction in its mempool and reverts the state of its stempool to avoid conflicting transactions.
 
 ![t = 100](images/t100.png)
