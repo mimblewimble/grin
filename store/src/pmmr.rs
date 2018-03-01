@@ -18,7 +18,7 @@ use std::io::{self};
 use std::marker::PhantomData;
 
 use core::core::pmmr::{self, Backend};
-use core::ser::{self, PMMRable};
+use core::ser::{self, PMMRable, Readable, Writeable, Reader, Writer};
 use core::core::hash::Hash;
 use util::LOGGER;
 use types::{AppendOnlyFile, RemoveLog, read_ordered_vec, write_vec};
@@ -30,6 +30,32 @@ const PMMR_PRUNED_FILE: &'static str = "pmmr_pruned.bin";
 
 /// Maximum number of nodes in the remove log before it gets flushed
 pub const RM_LOG_MAX_NODES: usize = 10000;
+
+/// Metadata for the PMMR backend's AppendOnlyFile, which can be serialized and stored
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct PMMRFileMetadata {
+	/// last written index of the hash file
+	pub last_hash_file_pos: u64,
+	/// last written index of the data file
+	pub last_data_file_pos: u64,
+}
+
+impl Writeable for PMMRFileMetadata {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.last_hash_file_pos)?;
+		writer.write_u64(self.last_data_file_pos)?;
+		Ok(())
+	}
+}
+
+impl Readable for PMMRFileMetadata {
+	fn read(reader: &mut Reader) -> Result<PMMRFileMetadata, ser::Error> {
+		Ok(PMMRFileMetadata {
+			last_hash_file_pos: reader.read_u64()?,
+			last_data_file_pos: reader.read_u64()?,
+		})
+	}
+}
 
 /// PMMR persistent backend implementation. Relies on multiple facilities to
 /// handle writing, reading and pruning.
@@ -231,6 +257,14 @@ where
 	/// Return the data file path
 	pub fn data_file_path(&self) -> String {
 		self.get_data_file_path()
+	}
+
+	/// Return last flushed file positions for the hash file and the data file
+	pub fn last_file_positions(&self) -> PMMRFileMetadata {
+		PMMRFileMetadata {
+			last_hash_file_pos: self.hash_file.last_written_pos(),
+			last_data_file_pos: self.data_file.last_written_pos()
+		}
 	}
 
 	/// Checks the length of the remove log to see if it should get compacted.
