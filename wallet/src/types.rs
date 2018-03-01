@@ -14,27 +14,27 @@
 
 use blake2;
 use rand::{thread_rng, Rng};
-use std::{error, fmt, num};
+use std::{fmt};
+use std::fmt::Display;
 use uuid::Uuid;
 use std::convert::From;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 use std::path::Path;
 use std::path::MAIN_SEPARATOR;
 use std::collections::HashMap;
 use std::cmp::min;
 
-use hyper;
 use serde;
 use serde_json;
 use tokio_core::reactor;
 use tokio_retry::Retry;
 use tokio_retry::strategy::FibonacciBackoff;
 
+use failure::{Backtrace, Context, Fail, ResultExt};
 
-use api;
 use core::consensus;
-use core::core::{transaction, Transaction};
+use core::core::Transaction;
 use core::core::hash::Hash;
 use core::ser;
 use keychain;
@@ -65,112 +65,106 @@ pub fn tx_fee(input_len: usize, output_len: usize, base_fee: Option<u64>) -> u64
 	(tx_weight as u64) * use_base_fee
 }
 
-/// Wallet errors, mostly wrappers around underlying crypto or I/O errors.
 #[derive(Debug)]
-pub enum Error {
-	NotEnoughFunds(u64),
-	FeeDispute { sender_fee: u64, recipient_fee: u64 },
-	FeeExceedsAmount { sender_amount: u64, recipient_fee: u64 },
-	Keychain(keychain::Error),
-	Transaction(transaction::Error),
-	Secp(secp::Error),
-	WalletData(String),
-	/// An error in the format of the JSON structures exchanged by the wallet
-	Format(String),
-	/// An IO Error
-	IOError(io::Error),
-	/// Error when contacting a node through its API
-	Node(api::Error),
-	/// Error originating from hyper.
-	Hyper(hyper::Error),
-	/// Error originating from hyper uri parsing.
-	Uri(hyper::error::UriError),
-	/// Error with signatures during exchange
-	Signature(String),
+pub struct Error {
+    inner: Context<ErrorKind>,
+}
+
+/// Wallet errors, mostly wrappers around underlying crypto or I/O errors.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
+pub enum ErrorKind {
+    #[fail(display = "Not enough funds")]
+    NotEnoughFunds(u64),
+
+    #[fail(display = "Fee dispute: sender fee {}, recipient fee {}", sender_fee, recipient_fee)]
+    FeeDispute{sender_fee: u64, recipient_fee: u64},
+
+    #[fail(display = "Fee exceeds amount: sender amount {}, recipient fee {}", sender_amount, recipient_fee)]
+    FeeExceedsAmount{sender_amount: u64,recipient_fee: u64},
+
+    #[fail(display = "Keychain error")]
+    Keychain,
+
+    #[fail(display = "Transaction error")]
+    Transaction,
+
+    #[fail(display = "Secp error")]
+    Secp,
+
+    #[fail(display = "Wallet data error: {}", _0)]
+    WalletData(&'static str),
+
+    /// An error in the format of the JSON structures exchanged by the wallet
+    #[fail(display = "JSON format error")]
+    Format,
+
+   
+    #[fail(display = "I/O error")]
+    IO,
+
+    /// Error when contacting a node through its API
+    #[fail(display = "Node API error")]
+    Node,
+
+    /// Error originating from hyper.
+    #[fail(display = "Hyper error")]
+    Hyper,
+
+    /// Error originating from hyper uri parsing.
+    #[fail(display = "Uri parsing error")]
+    Uri,
+
+    #[fail(display = "Signature error")]
+    Signature(&'static str),
+
 	/// Attempt to use duplicate transaction id in separate transactions
+    #[fail(display = "Duplicate transaction ID error")]
 	DuplicateTransactionId,
+
 	/// Wallet seed already exists
+    #[fail(display = "Wallet seed exists error")]
 	WalletSeedExists,
-	/// Other
-	GenericError(String,)
+	
+
+    #[fail(display = "Generic error: {}", _0)]
+    GenericError(&'static str),
 }
 
-impl error::Error for Error {
-	fn description(&self) -> &str {
-		match *self {
-			_ => "some kind of wallet error",
-		}
-	}
+
+impl Fail for Error {
+    fn cause(&self) -> Option<&Fail> {
+        self.inner.cause()
+    }
+
+    fn backtrace(&self) -> Option<&Backtrace> {
+        self.inner.backtrace()
+    }
 }
 
-impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match *self {
-			_ => write!(f, "some kind of wallet error"),
-		}
-	}
+impl Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Display::fmt(&self.inner, f)
+    }
 }
 
-impl From<keychain::Error> for Error {
-	fn from(e: keychain::Error) -> Error {
-		Error::Keychain(e)
-	}
+impl Error {
+    pub fn kind(&self) -> ErrorKind {
+        *self.inner.get_context()
+    }
 }
 
-impl From<secp::Error> for Error {
-	fn from(e: secp::Error) -> Error {
-		Error::Secp(e)
-	}
+impl From<ErrorKind> for Error {
+    fn from(kind: ErrorKind) -> Error {
+        Error {
+            inner: Context::new(kind),
+        }
+    }
 }
 
-impl From<transaction::Error> for Error {
-	fn from(e: transaction::Error) -> Error {
-		Error::Transaction(e)
-	}
-}
-
-impl From<serde_json::Error> for Error {
-	fn from(e: serde_json::Error) -> Error {
-		Error::Format(e.to_string())
-	}
-}
-
-// TODO - rethink this, would be nice not to have to worry about
-// low level hex conversion errors like this
-impl From<num::ParseIntError> for Error {
-	fn from(_: num::ParseIntError) -> Error {
-		Error::Format("Invalid hex".to_string())
-	}
-}
-
-impl From<ser::Error> for Error {
-	fn from(e: ser::Error) -> Error {
-		Error::Format(e.to_string())
-	}
-}
-
-impl From<api::Error> for Error {
-	fn from(e: api::Error) -> Error {
-		Error::Node(e)
-	}
-}
-
-impl From<io::Error> for Error {
-	fn from(e: io::Error) -> Error {
-		Error::IOError(e)
-	}
-}
-
-impl From<hyper::Error> for Error {
-	fn from(e: hyper::Error) -> Error {
-		Error::Hyper(e)
-	}
-}
-
-impl From<hyper::error::UriError> for Error {
-	fn from(e: hyper::error::UriError) -> Error {
-		Error::Uri(e)
-	}
+impl From<Context<ErrorKind>> for Error {
+    fn from(inner: Context<ErrorKind>) -> Error {
+        Error { inner: inner }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -241,7 +235,7 @@ impl BlockIdentifier {
 	}
 
 	pub fn from_str(hex: &str) -> Result<BlockIdentifier, Error> {
-		let hash = Hash::from_hex(hex)?;
+		let hash = Hash::from_hex(hex).context(ErrorKind::GenericError("Invalid hex"))?;
 		Ok(BlockIdentifier(hash))
 	}
 
@@ -367,7 +361,7 @@ impl WalletSeed {
 	}
 
 	fn from_hex(hex: &str) -> Result<WalletSeed, Error> {
-		let bytes = util::from_hex(hex.to_string())?;
+		let bytes = util::from_hex(hex.to_string()).context(ErrorKind::GenericError("Invalid hex"))?;
 		Ok(WalletSeed::from_bytes(&bytes))
 	}
 
@@ -377,7 +371,7 @@ impl WalletSeed {
 
 	pub fn derive_keychain(&self, password: &str) -> Result<keychain::Keychain, Error> {
 		let seed = blake2::blake2b::blake2b(64, &password.as_bytes(), &self.0);
-		let result = keychain::Keychain::from_seed(seed.as_bytes())?;
+		let result = keychain::Keychain::from_seed(seed.as_bytes()).context(ErrorKind::Keychain)?;
 		Ok(result)
 	}
 
@@ -388,7 +382,7 @@ impl WalletSeed {
 
 	pub fn init_file(wallet_config: &WalletConfig) -> Result<WalletSeed, Error> {
 		// create directory if it doesn't exist
-		fs::create_dir_all(&wallet_config.data_file_dir)?;
+		fs::create_dir_all(&wallet_config.data_file_dir).context(ErrorKind::IO)?;
 
 		let seed_file_path = &format!(
 			"{}{}{}",
@@ -400,18 +394,18 @@ impl WalletSeed {
 		debug!(LOGGER, "Generating wallet seed file at: {}", seed_file_path,);
 
 		if Path::new(seed_file_path).exists() {
-			Err(Error::WalletSeedExists)
+			Err(ErrorKind::WalletSeedExists)?
 		} else {
 			let seed = WalletSeed::init_new();
-			let mut file = File::create(seed_file_path)?;
-			file.write_all(&seed.to_hex().as_bytes())?;
+			let mut file = File::create(seed_file_path).context(ErrorKind::IO)?;
+			file.write_all(&seed.to_hex().as_bytes()).context(ErrorKind::IO)?;
 			Ok(seed)
 		}
 	}
 
 	pub fn from_file(wallet_config: &WalletConfig) -> Result<WalletSeed, Error> {
 		// create directory if it doesn't exist
-		fs::create_dir_all(&wallet_config.data_file_dir)?;
+		fs::create_dir_all(&wallet_config.data_file_dir).context(ErrorKind::IO)?;
 
 		let seed_file_path = &format!(
 			"{}{}{}",
@@ -423,9 +417,9 @@ impl WalletSeed {
 		debug!(LOGGER, "Using wallet seed file at: {}", seed_file_path,);
 
 		if Path::new(seed_file_path).exists() {
-			let mut file = File::open(seed_file_path)?;
+			let mut file = File::open(seed_file_path).context(ErrorKind::IO)?;
 			let mut buffer = String::new();
-			file.read_to_string(&mut buffer)?;
+			file.read_to_string(&mut buffer).context(ErrorKind::IO)?;
 			let wallet_seed = WalletSeed::from_hex(&buffer)?;
 			Ok(wallet_seed)
 		} else {
@@ -453,13 +447,12 @@ impl WalletData {
 	/// lock).
 	pub fn read_wallet<T, F>(data_file_dir: &str, f: F) -> Result<T, Error>
 	where
-		F: FnOnce(&WalletData) -> T,
+		F: FnOnce(&WalletData) -> Result<T, Error>,
 	{
 		// open the wallet readonly and do what needs to be done with it
 		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
 		let wdat = WalletData::read_or_create(data_file_path)?;
-		let res = f(&wdat);
-		Ok(res)
+		f(&wdat)
 	}
 
 	/// Allows the reading and writing of the wallet data within a file lock.
@@ -498,12 +491,12 @@ impl WalletData {
 
 		match retry_result {
 			Ok(_) => {}
-			Err(_) => {
+			Err(e) => {
 				error!(
 					LOGGER,
 					"Failed to acquire wallet lock file (multiple retries)",
 				);
-				return Err(Error::WalletData(format!("Failed to acquire lock file")));
+				return Err(e.context(ErrorKind::WalletData("Failed to acquire lock file")).into());
 			}
 		}
 
@@ -513,11 +506,7 @@ impl WalletData {
 		wdat.write(data_file_path)?;
 
 		// delete the lock file
-		fs::remove_file(lock_file_path).map_err(|_| {
-			Error::WalletData(format!(
-				"Could not remove wallet lock file. Maybe insufficient rights?"
-			))
-		})?;
+		fs::remove_file(lock_file_path).context(ErrorKind::WalletData("Could not remove wallet lock file. Maybe insufficient rights?"))?;
 
 		info!(LOGGER, "... released wallet lock");
 
@@ -538,12 +527,10 @@ impl WalletData {
 
 	/// Read output_data vec from disk.
 	fn read_outputs(data_file_path: &str) -> Result<Vec<OutputData>, Error> {
-		let data_file = File::open(data_file_path).map_err(|e| {
-			Error::WalletData(format!("Could not open {}: {}", data_file_path, e))
-		})?;
-		serde_json::from_reader(data_file).map_err(|e| {
-			Error::WalletData(format!("Error reading {}: {}", data_file_path, e))
-		})
+		let data_file = File::open(data_file_path).context(ErrorKind::WalletData(&"Could not open wallet file"))?;
+		serde_json::from_reader(data_file).map_err(|e| { e.context(ErrorKind::WalletData(&"Error reading wallet file ")).into()})
+            
+            
 	}
 
 	/// Populate wallet_data with output_data from disk.
@@ -561,16 +548,13 @@ impl WalletData {
 	/// Write the wallet data to disk.
 	fn write(&self, data_file_path: &str) -> Result<(), Error> {
 		let mut data_file = File::create(data_file_path).map_err(|e| {
-			Error::WalletData(format!("Could not create {}: {}", data_file_path, e))
-		})?;
+			e.context(ErrorKind::WalletData(&"Could not create "))})?;
 		let mut outputs = self.outputs.values().collect::<Vec<_>>();
 		outputs.sort();
 		let res_json = serde_json::to_vec_pretty(&outputs).map_err(|e| {
-			Error::WalletData(format!("Error serializing wallet data: {}", e))
+			e.context(ErrorKind::WalletData("Error serializing wallet data"))
 		})?;
-		data_file.write_all(res_json.as_slice()).map_err(|e| {
-			Error::WalletData(format!("Error writing {}: {}", data_file_path, e))
-		})
+		data_file.write_all(res_json.as_slice()).context(ErrorKind::WalletData(&"Error writing wallet file")).map_err(|e| e.into())
 	}
 
 	/// Append a new output data to the wallet data.
@@ -765,24 +749,22 @@ pub fn read_partial_tx(
 	keychain: &keychain::Keychain,
 	partial_tx: &PartialTx,
 ) -> Result<(u64, PublicKey, PublicKey, BlindingFactor, Option<Signature>, Transaction), Error> {
-	let blind_bin = util::from_hex(partial_tx.public_blind_excess.clone())?;
-	let blinding = PublicKey::from_slice(keychain.secp(), &blind_bin[..])?;
+	let blind_bin = util::from_hex(partial_tx.public_blind_excess.clone()).context(ErrorKind::GenericError("Could not decode HEX"))?;
+	let blinding = PublicKey::from_slice(keychain.secp(), &blind_bin[..]).context(ErrorKind::GenericError("Could not construct public key"))?;
 
-	let nonce_bin = util::from_hex(partial_tx.public_nonce.clone())?;
-	let nonce = PublicKey::from_slice(keychain.secp(), &nonce_bin[..])?;
+	let nonce_bin = util::from_hex(partial_tx.public_nonce.clone()).context(ErrorKind::GenericError("Could not decode HEX"))?;
+	let nonce = PublicKey::from_slice(keychain.secp(), &nonce_bin[..]).context(ErrorKind::GenericError("Could not construct public key"))?;
 
-	let kernel_offset = BlindingFactor::from_hex(&partial_tx.kernel_offset.clone())?;
+	let kernel_offset = BlindingFactor::from_hex(&partial_tx.kernel_offset.clone()).context(ErrorKind::GenericError("Could not decode HEX"))?;
 
-	let sig_bin = util::from_hex(partial_tx.part_sig.clone())?;
+	let sig_bin = util::from_hex(partial_tx.part_sig.clone()).context(ErrorKind::GenericError("Could not decode HEX"))?;
 	let sig = match sig_bin.len() {
 		1 => None,
-		_ => Some(Signature::from_der(keychain.secp(), &sig_bin[..])?),
+		_ => Some(Signature::from_der(keychain.secp(), &sig_bin[..]).context(ErrorKind::GenericError("Could not create signature"))?),
 	};
-	let tx_bin = util::from_hex(partial_tx.tx.clone())?;
-	let tx = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
-		Error::Format("Could not deserialize transaction, invalid format.".to_string())
-	})?;
-	Ok((partial_tx.amount, blinding, nonce, kernel_offset, sig, tx))
+	let tx_bin = util::from_hex(partial_tx.tx.clone()).context(ErrorKind::GenericError("Could not decode HEX"))?;
+	let tx = ser::deserialize(&mut &tx_bin[..]).context(ErrorKind::GenericError("Could not deserialize transaction, invalid format."))?;
+    Ok((partial_tx.amount, blinding, nonce, kernel_offset, sig, tx))
 }
 
 /// Amount in request to build a coinbase output.

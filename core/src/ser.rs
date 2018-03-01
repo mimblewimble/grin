@@ -37,8 +37,6 @@ use util::secp::constants::{
 	SECRET_KEY_SIZE,
 };
 
-const BULLET_PROOF_SIZE: usize = 674;
-
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]
 pub enum Error {
@@ -370,7 +368,7 @@ impl Writeable for RangeProof {
 
 impl Readable for RangeProof {
 	fn read(reader: &mut Reader) -> Result<RangeProof, Error> {
-		let p = reader.read_limited_vec(BULLET_PROOF_SIZE)?;
+		let p = reader.read_limited_vec(MAX_PROOF_SIZE)?;
 		let mut a = [0; MAX_PROOF_SIZE];
 		for i in 0..p.len() {
 			a[i] = p[i];
@@ -384,7 +382,7 @@ impl Readable for RangeProof {
 
 impl PMMRable for RangeProof {
 	fn len() -> usize {
-		BULLET_PROOF_SIZE + 8
+		MAX_PROOF_SIZE + 8
 	}
 }
 

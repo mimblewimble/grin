@@ -30,6 +30,7 @@ use core::{global, ser};
 use keychain::{Identifier, Keychain, BlindingFactor};
 use types::*;
 use util::{LOGGER, to_hex, secp};
+use failure::{ResultExt};
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
 #[derive(Serialize, Deserialize)]
@@ -61,10 +62,10 @@ fn handle_sender_initiation(
 	// we could just overwrite the fee here (but we won't) due to the ecdsa sig
 	let fee = tx_fee(tx.inputs.len(), tx.outputs.len() + 1, None);
 	if fee != tx.fee() {
-		return Err(Error::FeeDispute {
+		return Err(ErrorKind::FeeDispute {
 			sender_fee: tx.fee(),
 			recipient_fee: fee,
-		});
+		})?;
 	}
 
     if fee > amount {
@@ -74,10 +75,10 @@ fn handle_sender_initiation(
 			amount_to_hr_string(fee),
 			amount_to_hr_string(amount)
 		);
-        return Err(Error::FeeExceedsAmount {
+        return Err(ErrorKind::FeeExceedsAmount {
             sender_amount: amount,
             recipient_fee: fee,
-        });
+        })?;
     }
 
 	let out_amount = amount - fee;
@@ -109,13 +110,13 @@ fn handle_sender_initiation(
 			build::output(out_amount, key_id.clone()),
 		],
 		keychain,
-	)?;
+	).context(ErrorKind::Keychain)?;
 
 	warn!(LOGGER, "Creating new aggsig context");
 	// Create a new aggsig context
 	// this will create a new blinding sum and nonce, and store them
-	let blind = blind_sum.secret_key(&keychain.secp())?;
-	keychain.aggsig_create_context(&partial_tx.id, blind)?;
+	let blind = blind_sum.secret_key(&keychain.secp()).context(ErrorKind::Keychain)?;
+	keychain.aggsig_create_context(&partial_tx.id, blind).context(ErrorKind::Keychain)?;
 	keychain.aggsig_add_output(&partial_tx.id, &key_id);
 
 	let sig_part = keychain.aggsig_calculate_partial_sig(
@@ -161,7 +162,7 @@ fn handle_sender_confirmation(
 
 	if !res {
 		error!(LOGGER, "Partial Sig from sender invalid.");
-		return Err(Error::Signature(String::from("Partial Sig from sender invalid.")));
+		return Err(ErrorKind::Signature("Partial Sig from sender invalid."))?;
 	}
 
 	// Just calculate our sig part again instead of storing
@@ -196,7 +197,7 @@ fn handle_sender_confirmation(
 
 	if !res {
 		error!(LOGGER, "Final aggregated signature invalid.");
-		return Err(Error::Signature(String::from("Final aggregated signature invalid.")));
+		return Err(ErrorKind::Signature("Final aggregated signature invalid."))?;
 	}
 
 	let final_tx = build_final_transaction(
@@ -213,7 +214,7 @@ fn handle_sender_confirmation(
 
 	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
 	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })
-		.map_err(|e| Error::Node(e))?;
+		.context(ErrorKind::Node)?;
 
 	// Return what we've actually posted
 	// TODO - why build_partial_tx here? Just a naming issue?
@@ -344,7 +345,7 @@ pub fn receive_coinbase(
 		&key_id,
 		block_fees.fees,
 		block_fees.height,
-	)?;
+	).context(ErrorKind::Keychain)?;
 	Ok((out, kern, block_fees))
 }
 
@@ -365,10 +366,10 @@ fn build_final_transaction(
 	// we could just overwrite the fee here (but we won't) due to the ecdsa sig
 	let fee = tx_fee(tx.inputs.len(), tx.outputs.len() + 1, None);
 	if fee != tx.fee() {
-		return Err(Error::FeeDispute {
+		return Err(ErrorKind::FeeDispute {
 			sender_fee: tx.fee(),
 			recipient_fee: fee,
-		});
+		})?;
 	}
 
 	if fee > amount {
@@ -378,11 +379,11 @@ fn build_final_transaction(
 			amount_to_hr_string(fee),
 			amount_to_hr_string(amount)
 		);
-		return Err(Error::FeeExceedsAmount {
-			sender_amount: amount,
-			recipient_fee: fee,
-		});
-	}
+   		return Err(ErrorKind::FeeExceedsAmount {
+            		sender_amount: amount,
+            		recipient_fee: fee,
+        	})?;
+    }
 
 	let out_amount = amount - fee;
 
@@ -418,16 +419,16 @@ fn build_final_transaction(
 			build::with_offset(kernel_offset),
 		],
 		keychain,
-	)?;
+	).context(ErrorKind::Keychain)?;
 
 	// build the final excess based on final tx and offset
 	let final_excess = {
 		// sum the input/output commitments on the final tx
-		let tx_excess = final_tx.sum_commitments()?;
+		let tx_excess = final_tx.sum_commitments().context(ErrorKind::Transaction)?;
 
 		// subtract the kernel_excess (built from kernel_offset)
 		let offset_excess = keychain.secp().commit(0, kernel_offset.secret_key(&keychain.secp()).unwrap()).unwrap();
-		keychain.secp().commit_sum(vec![tx_excess], vec![offset_excess])?
+		keychain.secp().commit_sum(vec![tx_excess], vec![offset_excess]).context(ErrorKind::Transaction)?
 	};
 
 	// update the tx kernel to reflect the offset excess and sig
@@ -436,10 +437,10 @@ fn build_final_transaction(
 	final_tx.kernels[0].excess_sig = excess_sig.clone();
 
 	// confirm the kernel verifies successfully before proceeding
-	final_tx.kernels[0].verify()?;
+	final_tx.kernels[0].verify().context(ErrorKind::Transaction)?;
 
 	// confirm the overall transaction is valid (including the updated kernel)
-	final_tx.validate()?;
+	let _ = final_tx.validate().context(ErrorKind::Transaction)?;
 
 	debug!(
 		LOGGER,

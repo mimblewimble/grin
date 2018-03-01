@@ -219,10 +219,6 @@ impl RemoveLog {
 	pub fn rewind(&mut self, last_offs: u32) -> io::Result<()> {
 		// simplifying assumption: we always remove older than what's in tmp
 		self.removed_tmp = vec![];
-
-		// backing it up before truncating
-		self.removed_bak = self.removed.clone();
-
 		// backing it up before truncating
 		self.removed_bak = self.removed.clone();
 

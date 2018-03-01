@@ -24,6 +24,7 @@ use api;
 use keychain::Keychain;
 use types::*;
 use util;
+use failure::{Fail, ResultExt};
 
 
 pub struct CoinbaseHandler {
@@ -36,20 +37,20 @@ impl CoinbaseHandler {
 		let (out, kern, block_fees) = receive_coinbase(&self.config, &self.keychain, block_fees)
 			.map_err(|e| {
 				api::Error::Internal(format!("Error building coinbase: {:?}", e))
-			})?;
+			}).context(ErrorKind::Node)?;
 
 		let out_bin = ser::ser_vec(&out).map_err(|e| {
 			api::Error::Internal(format!("Error serializing output: {:?}", e))
-		})?;
+		}).context(ErrorKind::Node)?;
 
 		let kern_bin = ser::ser_vec(&kern).map_err(|e| {
 			api::Error::Internal(format!("Error serializing kernel: {:?}", e))
-		})?;
+		}).context(ErrorKind::Node)?;
 
 		let key_id_bin = match block_fees.key_id {
 			Some(key_id) => ser::ser_vec(&key_id).map_err(|e| {
 				api::Error::Internal(format!("Error serializing kernel: {:?}", e))
-			})?,
+			}).context(ErrorKind::Node)?,
 			None => vec![],
 		};
 
@@ -69,7 +70,7 @@ impl Handler for CoinbaseHandler {
 
 		if let Ok(Some(block_fees)) = struct_body {
 			let coinbase = self.build_coinbase(&block_fees)
-				.map_err(|e| IronError::new(e, status::BadRequest))?;
+				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
 			if let Ok(json) = serde_json::to_string(&coinbase) {
 				Ok(Response::with((status::Ok, json)))
 			} else {

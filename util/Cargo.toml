@@ -14,7 +14,11 @@ byteorder = "^1.0"
 rand = "^0.3"
 serde = "~1.0.8"
 serde_derive = "~1.0.8"
-secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp", tag="grin_integration_8" }
-#secp256k1zkp = { path = "../../rust-secp256k1-zkp" }
 walkdir = "^2.0.1"
 zip = "^0.2.6"
+
+[dependencies.secp256k1zkp]
+git = "https://github.com/mimblewimble/rust-secp256k1-zkp"
+tag="grin_integration_14"
+#path = "../../rust-secp256k1-zkp"
+features=["bullet-proof-sizing"]

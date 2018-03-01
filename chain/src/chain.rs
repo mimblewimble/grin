@@ -151,16 +151,24 @@ impl Chain {
 	) -> Result<Chain, Error> {
 		let chain_store = store::ChainKVStore::new(db_root.clone())?;
 
+		let store = Arc::new(chain_store);
+		let mut sumtrees = sumtree::SumTrees::open(db_root.clone(), store.clone())?;
+
 		// check if we have a head in store, otherwise the genesis block is it
-		let head = match chain_store.head() {
+		let head = match store.head() {
 			Ok(tip) => tip,
 			Err(NotFoundErr) => {
 				let tip = Tip::new(genesis.hash());
-				chain_store.save_block(&genesis)?;
-				chain_store.setup_height(&genesis.header, &tip)?;
+				store.save_block(&genesis)?;
+				store.setup_height(&genesis.header, &tip)?;
+				if genesis.kernels.len() > 0 {
+					sumtree::extending(&mut sumtrees, |extension| {
+						extension.apply_block(&genesis)
+					})?;
+				}
 
 				// saving a new tip based on genesis
-				chain_store.save_head(&tip)?;
+				store.save_head(&tip)?;
 				info!(
 					LOGGER,
 					"Saved genesis block: {:?}, nonce: {:?}, pow: {:?}",
@@ -175,16 +183,9 @@ impl Chain {
 
 		// Reset sync_head and header_head to head of current chain.
 		// Make sure sync_head is available for later use when needed.
-		chain_store.reset_head()?;
+		store.reset_head()?;
 
-		info!(
-			LOGGER,
-			"Chain init: {:?}",
-			head,
-		);
-
-		let store = Arc::new(chain_store);
-		let sumtrees = sumtree::SumTrees::open(db_root.clone(), store.clone())?;
+		debug!(LOGGER, "Chain init: {:?}", head);
 
 		Ok(Chain {
 			db_root: db_root,
