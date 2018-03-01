@@ -91,7 +91,7 @@ signature `sr = kr + e * rr`.
 5. Bob sends `sr`, `kr*G` and `rr*G` to Alice.
 6. Alice computes `e` just like Bob did and can check that
 `sr*G = kr*G + e*rr*G`.
-7. Alice sends her side of the signature `ss = ks + e * sr` to Bob.
+7. Alice sends her side of the signature `ss = ks + e * rs` to Bob.
 8. Bob validates `ss*G` just like Alice did for `sr*G` in step 5 and can
 produce the final signature `s = (ss + sr, ks*G + kr*G)` as well as the final
 transaction kernel including `s` and the public key `rr*G + rs*G`.
