@@ -717,7 +717,7 @@ impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
 		writer.write_fixed_bytes(&self.commit)?;
-		// Hash of an output doesn't cover the switch commit, it should 
+		// Hash of an output doesn't cover the switch commit, it should
 		// be wound into the range proof separately
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			writer.write_fixed_bytes(&self.switch_commit_hash)?;
@@ -921,13 +921,13 @@ impl Readable for OutputStoreable {
 			features: features,
 		})
 	}
-} 
+}
 
 /// A structure which contains fields that are to be commited to within
-/// an Output's range (bullet) proof. 
+/// an Output's range (bullet) proof.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ProofMessageElements {
-	/// The amount, stored to allow for wallet reconstruction as 
+	/// The amount, stored to allow for wallet reconstruction as
 	/// rewinding isn't supported in bulletproofs just yet
 	pub value: u64,
 }
@@ -1120,8 +1120,10 @@ fn input_short_id() {
 		"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
 	).unwrap();
 
-	let short_id = input.short_id(&block_hash);
-	assert_eq!(short_id, ShortId::from_hex("3e1262905b7a").unwrap());
+	let nonce = 0;
+
+	let short_id = input.short_id(&block_hash, nonce);
+	assert_eq!(short_id, ShortId::from_hex("28fea5a693af").unwrap());
 
 	// now generate the short_id for a *very* similar output (single feature flag different)
 	// and check it generates a different short_id
@@ -1135,7 +1137,7 @@ fn input_short_id() {
 		"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
 	).unwrap();
 
-	let short_id = input.short_id(&block_hash);
-	assert_eq!(short_id, ShortId::from_hex("90653c1c870a").unwrap());
+	let short_id = input.short_id(&block_hash, nonce);
+	assert_eq!(short_id, ShortId::from_hex("c8af83b54e46").unwrap());
 }
 }
