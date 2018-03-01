@@ -22,6 +22,7 @@
 
 extern crate byteorder;
 extern crate env_logger;
+#[macro_use]
 extern crate grin_core as core;
 extern crate grin_util as util;
 extern crate libc;
