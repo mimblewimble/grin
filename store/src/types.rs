@@ -42,13 +42,13 @@ pub struct AppendOnlyFile {
 	mmap: Option<memmap::Mmap>,
 	buffer_start: usize,
 	buffer: Vec<u8>,
-	buffer_start_bak: usize,
-	last_written_pos: u64
+	buffer_start_bak: usize
 }
 
 impl AppendOnlyFile {
-	/// Open a file (existing or not) as append-only, backed by a mmap.
-	pub fn open(path: String) -> io::Result<AppendOnlyFile> {
+	/// Open a file (existing or not) as append-only, backed by a mmap. Sets
+	/// the last written pos to to_pos if > 0, otherwise the end of the file
+	pub fn open(path: String, to_pos: u64) -> io::Result<AppendOnlyFile> {
 		let file = OpenOptions::new()
 			.read(true)
 			.append(true)
@@ -61,11 +61,14 @@ impl AppendOnlyFile {
 			buffer_start: 0,
 			buffer: vec![],
 			buffer_start_bak: 0,
-			last_written_pos: 0
 		};
 		if let Ok(sz) = aof.size() {
-			if sz > 0 {
-				aof.buffer_start = sz as usize;
+			let mut buf_start = sz;
+			if to_pos > 0 && to_pos <= buf_start {
+				buf_start = to_pos;
+			}
+			if buf_start > 0 {
+				aof.buffer_start = buf_start as usize;
 				aof.mmap = Some(unsafe { memmap::Mmap::map(&aof.file)? });
 			}
 		}
@@ -99,17 +102,15 @@ impl AppendOnlyFile {
 		self.buffer_start += self.buffer.len();
 		self.file.write(&self.buffer[..])?;
 		self.file.sync_all()?;
-		let metadata = self.file.metadata()?;
-		self.last_written_pos = metadata.len();
 		self.buffer = vec![];
 		self.mmap = Some(unsafe { memmap::Mmap::map(&self.file)? });
 		Ok(())
 	}
 
-	/// Returns the last position (in bytes) written to disk,
-	/// node this is only really valid in PMMR terms after a flush
-	pub fn last_written_pos(&self) -> u64 {
-		self.last_written_pos
+	/// Returns the last position (in bytes), taking into account whether data
+	/// has been rewound
+	pub fn last_buffer_pos(&self) -> usize {
+		self.buffer_start
 	}
 
 	/// Discard the current non-flushed data.

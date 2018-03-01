@@ -54,10 +54,10 @@ impl<T> PMMRHandle<T>
 where
 	T: PMMRable,
 {
-	fn new(root_dir: String, file_name: &str) -> Result<PMMRHandle<T>, Error> {
+	fn new(root_dir: String, file_name: &str, index_md: Option<PMMRFileMetadata>) -> Result<PMMRHandle<T>, Error> {
 		let path = Path::new(&root_dir).join(SUMTREES_SUBDIR).join(file_name);
 		fs::create_dir_all(path.clone())?;
-		let be = PMMRBackend::new(path.to_str().unwrap().to_string())?;
+		let be = PMMRBackend::new(path.to_str().unwrap().to_string(), index_md)?;
 		let sz = be.unpruned_size()?;
 		Ok(PMMRHandle {
 			backend: be,
@@ -92,7 +92,10 @@ pub struct SumTrees {
 
 impl SumTrees {
 	/// Open an existing or new set of backends for the SumTrees
-	pub fn open(root_dir: String, commit_index: Arc<ChainStore>) -> Result<SumTrees, Error> {
+	pub fn open(root_dir: String,
+		commit_index: Arc<ChainStore>,
+		last_file_positions: Option<PMMRFileMetadataCollection>
+		) -> Result<SumTrees, Error> {
 
 		let utxo_file_path: PathBuf = [&root_dir, SUMTREES_SUBDIR, UTXO_SUBDIR].iter().collect();
 		fs::create_dir_all(utxo_file_path.clone())?;
@@ -103,10 +106,20 @@ impl SumTrees {
 		let kernel_file_path: PathBuf = [&root_dir, SUMTREES_SUBDIR, KERNEL_SUBDIR].iter().collect();
 		fs::create_dir_all(kernel_file_path.clone())?;
 
+		let mut utxo_md = None;
+		let mut rproof_md = None;
+		let mut kernel_md = None;
+
+		if let Some(p) = last_file_positions {
+			utxo_md = Some(p.utxo_file_md);
+			rproof_md = Some(p.rproof_file_md);
+			kernel_md = Some(p.kernel_file_md);
+		}
+
 		Ok(SumTrees {
-			utxo_pmmr_h: PMMRHandle::new(root_dir.clone(), UTXO_SUBDIR)?,
-			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR)?,
-			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR)?,
+			utxo_pmmr_h: PMMRHandle::new(root_dir.clone(), UTXO_SUBDIR, utxo_md)?,
+			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR, rproof_md)?,
+			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR, kernel_md)?,
 			commit_index: commit_index,
 		})
 	}
@@ -476,8 +489,7 @@ impl<'a> Extension<'a> {
 	/// Rewinds the MMRs to the provided positions, given the output and
 	/// kernel we want to rewind to.
 	pub fn rewind_pos(&mut self, height: u64, out_pos_rew: u64, kern_pos_rew: u64) -> Result<(), Error> {
-		debug!(
-			LOGGER,
+		debug!(LOGGER,
 			"Rewind sumtrees to output pos: {}, kernel pos: {}",
 			out_pos_rew,
 			kern_pos_rew,
