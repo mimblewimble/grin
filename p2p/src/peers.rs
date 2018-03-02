@@ -15,7 +15,7 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock, atomic};
+use std::sync::{Arc, RwLock};
 
 use rand::{thread_rng, Rng};
 

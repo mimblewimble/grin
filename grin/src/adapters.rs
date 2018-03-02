@@ -598,4 +598,3 @@ impl pool::BlockChain for PoolToChainAdapter {
 			.map_err(|_| pool::PoolError::GenericPoolError)
 	}
 }
-
