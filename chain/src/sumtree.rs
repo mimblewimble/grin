@@ -1,3 +1,4 @@
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -523,7 +524,6 @@ impl<'a> Extension<'a> {
 			self.commit_index.get_kernel_pos(excess)
 		}
 	}
-
 
 	/// Current root hashes and sums (if applicable) for the UTXO, range proof
 	/// and kernel sum trees.

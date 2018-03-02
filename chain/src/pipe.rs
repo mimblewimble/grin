@@ -112,44 +112,20 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 
 	match result {
 		Ok(t) => {
-			sync_file_metadata(&b, &sumtrees, ctx.store.clone())?; 
+			save_pmmr_metadata(&Tip::from_block(&b.header), &sumtrees, ctx.store.clone())?; 
 			Ok(t)
 		},
 		Err(e) => Err(e),
 	}
 }
 
-fn sync_file_metadata(b: &Block, sumtrees: &sumtree::SumTrees, store: Arc<ChainStore>) -> Result<(), Error> {
-	// We want to store written file data for the last 2 blocks, so we potentially
-	// have a couple of options to roll back to
-
-	// TODO: Delete all old blocks before doing this
-
+/// Save pmmr index location for a given block
+pub fn save_pmmr_metadata(t: &Tip, sumtrees: &sumtree::SumTrees, store: Arc<ChainStore>) -> Result<(), Error> {
 	// Save pmmr file metadata for this block
 	let block_file_md = sumtrees.last_file_metadata();
 	store
-		.save_block_pmmr_file_metadata(&b.hash(), &block_file_md)
+		.save_block_pmmr_file_metadata(&t.last_block_h, &block_file_md)
 		.map_err(|e| Error::StoreErr(e, "saving pmmr file metadata".to_owned()))?;
-
-	// Delete the metadata of the oldest block written
-	let oldest_block_hash = store
-		.get_previous_pmmr_file_block();
-	if let Ok(h) = oldest_block_hash {
-		store
-			.delete_block_pmmr_file_metadata(&h)
-			.map_err(|e| Error::StoreErr(e, "deleting oldest stored pmmr block".to_owned()))?;
-	}
-
-	// Swap previous block index
-	store
-		.save_previous_pmmr_file_block(&b.header.previous)
-		.map_err(|e| Error::StoreErr(e, "saving pmmr file previous metadata".to_owned()))?;
-
-	// Swap current block index
-	store
-		.save_current_pmmr_file_block(&b.hash())
-		.map_err(|e| Error::StoreErr(e, "saving pmmr file most current metadata".to_owned()))?;
-
 	Ok(())
 }
 

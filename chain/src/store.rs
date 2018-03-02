@@ -36,8 +36,6 @@ const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
 const KERNEL_POS_PREFIX: u8 = 'k' as u8;
 const BLOCK_PMMR_FILE_METADATA_PREFIX: u8 = 'p' as u8;
-const CURRENT_PMMR_FILE_METADATA_PREFIX: u8 = 'r' as u8;
-const PREVIOUS_PMMR_FILE_METADATA_PREFIX: u8 = 'e' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
 /// store.
@@ -205,22 +203,6 @@ impl ChainStore for ChainKVStore {
 
 	fn delete_block_pmmr_file_metadata(&self, h: &Hash) -> Result<(), Error> {
 		self.db.delete(&to_key(BLOCK_PMMR_FILE_METADATA_PREFIX, &mut h.to_vec())[..])
-	}
-
-	fn save_current_pmmr_file_block(&self, h: &Hash) -> Result<(), Error> {
-		self.db.put_ser(&vec![CURRENT_PMMR_FILE_METADATA_PREFIX], h)
-	}
-
-	fn get_current_pmmr_file_block(&self) -> Result<Hash, Error> {
-		option_to_not_found(self.db.get_ser(&vec![CURRENT_PMMR_FILE_METADATA_PREFIX]))
-	}
-
-	fn save_previous_pmmr_file_block(&self, h: &Hash) -> Result<(), Error> {
-		self.db.put_ser(&vec![PREVIOUS_PMMR_FILE_METADATA_PREFIX], h)
-	}
-
-	fn get_previous_pmmr_file_block(&self) -> Result<Hash, Error> {
-		option_to_not_found(self.db.get_ser(&vec![PREVIOUS_PMMR_FILE_METADATA_PREFIX]))
 	}
 
 	/// Maintain consistency of the "header_by_height" index by traversing back

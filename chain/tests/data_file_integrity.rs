@@ -109,17 +109,16 @@ fn data_files() {
 
 			let prev_bhash = b.header.previous;
 			let bhash = b.hash();
-			chain.process_block(b, chain::Options::MINE).unwrap();
+			chain.process_block(b.clone(), chain::Options::MINE).unwrap();
+
+			let head = Tip::from_block(&b.header);
 
 			// Check we have indexes for the last block and the block previous
-			let cur_pmmr_md_hash = chain.get_current_pmmr_file_block().unwrap();
-			let prev_pmmr_md_hash = chain.get_previous_pmmr_file_block().unwrap();
-			println!("current_pmmr_md: {}, prev: {}", cur_pmmr_md_hash, prev_pmmr_md_hash);
-			assert_eq!(bhash, cur_pmmr_md_hash);
-			assert_eq!(prev_bhash, prev_pmmr_md_hash);
-
-			let cur_pmmr_md = chain.get_block_pmmr_file_metadata(&cur_pmmr_md_hash)
+			let cur_pmmr_md = chain.get_block_pmmr_file_metadata(&head.last_block_h)
 				.expect("block pmmr file data doesn't exist");
+			let pref_pmmr_md = chain.get_block_pmmr_file_metadata(&head.prev_block_h)
+				.expect("previous block pmmr file data doesn't exist");
+
 
 			println!("Cur_pmmr_md: {:?}", cur_pmmr_md);
 			chain.validate().unwrap();

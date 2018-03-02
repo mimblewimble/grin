@@ -156,9 +156,8 @@ impl Chain {
 		// check if we have a head in store, otherwise the genesis block is it
 		let head = store.head();
 		let sumtree_md = match head {
-			Ok(_) => {
-				let cur_pmmr_md_hash = store.get_current_pmmr_file_block()?;
-				Some(store.get_block_pmmr_file_metadata(&cur_pmmr_md_hash)?)
+			Ok(h) => {
+				Some(store.get_block_pmmr_file_metadata(&h.last_block_h)?)
 			},
 			Err(NotFoundErr) => None,
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
@@ -166,6 +165,7 @@ impl Chain {
 
 		let mut sumtrees = sumtree::SumTrees::open(db_root.clone(), store.clone(), sumtree_md)?;
 
+		let head = store.head();
 		let head = match head {
 			Ok(h) => h,
 			Err(NotFoundErr) => {
@@ -187,6 +187,7 @@ impl Chain {
 					genesis.header.nonce,
 					genesis.header.pow,
 				);
+				let _ = pipe::save_pmmr_metadata(&tip, &sumtrees, store.clone());
 				tip
 			}
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
@@ -627,18 +628,6 @@ impl Chain {
 	/// Check whether we have a block without reading it
 	pub fn block_exists(&self, h: Hash) -> Result<bool, Error> {
 		self.store.block_exists(&h).map_err(|e| Error::StoreErr(e, "chain block exists".to_owned()))
-	}
-
-	/// Retrieve the file index data of the current block
-	pub fn get_current_pmmr_file_block(&self) -> Result<Hash, Error> {
-		self.store.get_current_pmmr_file_block()
-			.map_err(|e| Error::StoreErr(e, "current block pmmr metadata".to_owned()))
-	}
-
-	/// Retrieve the file index data of the block previous to the current
-	pub fn get_previous_pmmr_file_block(&self) -> Result<Hash, Error> {
-		self.store.get_previous_pmmr_file_block()
-			.map_err(|e| Error::StoreErr(e, "previous block pmmr metadata".to_owned()))
 	}
 
 	/// Retrieve the file index metadata for a given block

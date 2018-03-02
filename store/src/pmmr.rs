@@ -57,6 +57,16 @@ impl Readable for PMMRFileMetadata {
 	}
 }
 
+impl PMMRFileMetadata {
+	/// Return fields with all positions = 0
+	pub fn empty() -> PMMRFileMetadata {
+		PMMRFileMetadata {
+			last_hash_file_pos: 0,
+			last_data_file_pos: 0,
+		}
+	}
+}
+
 /// PMMR persistent backend implementation. Relies on multiple facilities to
 /// handle writing, reading and pruning.
 ///

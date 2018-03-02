@@ -302,18 +302,6 @@ pub trait ChainStore: Send + Sync {
 	/// Delete stored pmmr file metadata information for a given block
 	fn delete_block_pmmr_file_metadata(&self, h: &Hash) -> Result<(), store::Error>;
 
-	/// Save the hash of the most current block committed to disk
-	fn save_current_pmmr_file_block(&self, h: &Hash) -> Result<(), store::Error>;
-
-	/// Retrieve the hash of the most current block committed to disk
-	fn get_current_pmmr_file_block(&self) -> Result<Hash, store::Error>;
-
-	/// Save the hash of the previous block committed to disk
-	fn save_previous_pmmr_file_block(&self, h: &Hash) -> Result<(), store::Error>;
-
-	/// Retrieve the hash of the previous block committed to disk
-	fn get_previous_pmmr_file_block(&self) -> Result<Hash, store::Error>;
-
 	/// Saves the provided block header at the corresponding height. Also check
 	/// the consistency of the height chain in store by assuring previous
 	/// headers are also at their respective heights.
@@ -351,16 +339,25 @@ impl Readable for PMMRFileMetadataCollection {
 }
 
 impl PMMRFileMetadataCollection {
+	/// Return empty with all file positions = 0
+	pub fn empty() -> PMMRFileMetadataCollection {
+		PMMRFileMetadataCollection {
+			utxo_file_md: PMMRFileMetadata::empty(),
+			rproof_file_md: PMMRFileMetadata::empty(),
+			kernel_file_md: PMMRFileMetadata::empty(),
+		}
+	}
+
 	/// Helper to create a new collection
 	pub fn new(utxo_md: PMMRFileMetadata,
 		rproof_md: PMMRFileMetadata,
 		kernel_md: PMMRFileMetadata) -> PMMRFileMetadataCollection {
 			PMMRFileMetadataCollection {
-				utxo_file_md : utxo_md,
-				rproof_file_md: rproof_md,
-				kernel_file_md: kernel_md,
-			}
+			utxo_file_md : utxo_md,
+			rproof_file_md: rproof_md,
+			kernel_file_md: kernel_md,
 		}
+	}
 }
 
 /// Bridge between the chain pipeline and the rest of the system. Handles

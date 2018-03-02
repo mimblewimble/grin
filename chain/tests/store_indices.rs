@@ -58,7 +58,8 @@ fn test_various_store_indices() {
 	let block_hash = block.hash();
 
 	chain_store.save_block(&block).unwrap();
-	chain_store.setup_height(&block.header, &Tip::from_block(&block.header)).unwrap();
+	chain_store.setup_height(&block.header, 
+		&Tip::from_block(&block.header)).unwrap();
 
 	let block_header = chain_store.get_block_header(&block_hash).unwrap();
 	assert_eq!(block_header.hash(), block_hash);
