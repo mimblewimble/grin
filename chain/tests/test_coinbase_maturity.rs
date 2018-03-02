@@ -27,6 +27,7 @@ use chain::types::*;
 use core::core::build;
 use core::core::target::Difficulty;
 use core::core::transaction;
+use core::core::OutputIdentifier;
 use core::consensus;
 use core::global;
 use core::global::ChainTypes;
@@ -96,16 +97,21 @@ fn test_coinbase_maturity() {
 	).unwrap();
 
 	assert_eq!(block.outputs.len(), 1);
+	let coinbase_output = block.outputs[0];
 	assert!(
-		block.outputs[0]
+		coinbase_output
 			.features
 			.contains(transaction::OutputFeatures::COINBASE_OUTPUT)
 	);
 
+	let out_id = OutputIdentifier::from_output(&coinbase_output);
+
 	// we will need this later when we want to spend the coinbase output
 	let block_hash = block.hash();
 
-	chain.process_block(block, chain::Options::MINE).unwrap();
+	chain.process_block(block.clone(), chain::Options::MINE).unwrap();
+
+	let merkle_proof = chain.get_merkle_proof(&out_id, &block).unwrap();
 
 	let prev = chain.head_header().unwrap();
 
@@ -118,7 +124,12 @@ fn test_coinbase_maturity() {
 	// this is not a valid tx as the coinbase output cannot be spent yet
 	let coinbase_txn = build::transaction(
 		vec![
-			build::coinbase_input(amount, block_hash, key_id1.clone()),
+			build::coinbase_input(
+				amount,
+				block_hash,
+				merkle_proof.clone(),
+				key_id1.clone(),
+			),
 			build::output(amount - 2, key_id2.clone()),
 			build::with_fee(2),
 		],
@@ -139,7 +150,7 @@ fn test_coinbase_maturity() {
 	block.header.difficulty = difficulty.clone();
 
 	match chain.set_sumtree_roots(&mut block, false) {
-		Err(Error::ImmatureCoinbase) => (),
+		Err(Error::Transaction(transaction::Error::ImmatureCoinbase)) => (),
 		_ => panic!("expected ImmatureCoinbase error here"),
 	}
 
@@ -185,7 +196,12 @@ fn test_coinbase_maturity() {
 
 	let coinbase_txn = build::transaction(
 		vec![
-			build::coinbase_input(amount, block_hash, key_id1.clone()),
+			build::coinbase_input(
+				amount,
+				block_hash,
+				merkle_proof.clone(),
+				key_id1.clone(),
+			),
 			build::output(amount - 2, key_id2.clone()),
 			build::with_fee(2),
 		],
@@ -216,7 +232,6 @@ fn test_coinbase_maturity() {
 	let result = chain.process_block(block, chain::Options::MINE);
 	match result {
 		Ok(_) => (),
-		Err(Error::ImmatureCoinbase) => panic!("we should not get an ImmatureCoinbase here"),
 		Err(_) => panic!("we did not expect an error here"),
 	};
 }

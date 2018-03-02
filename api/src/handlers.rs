@@ -128,7 +128,7 @@ impl UtxoHandler {
 				commitments.is_empty() || commitments.contains(&output.commit)
 			})
 			.map(|output| {
-				OutputPrintable::from_output(output, w(&self.chain), include_proof)
+				OutputPrintable::from_output(output, w(&self.chain), &block, include_proof)
 			})
 			.collect();
 		BlockOutputs {

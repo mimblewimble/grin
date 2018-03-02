@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ use std::collections::HashMap;
 use failure::{ResultExt};
 
 use api;
-use core::core::hash::Hash;
 use types::*;
 use keychain::{Identifier, Keychain};
 use util::secp::pedersen;
@@ -65,7 +64,7 @@ fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain) -> R
 			.values()
 			.filter(|x| {
 				x.root_key_id == keychain.root_key_id() &&
-				x.block.hash() == Hash::zero() &&
+				x.block.is_none() &&
 				x.status == OutputStatus::Unspent
 			})
 		{
@@ -113,11 +112,16 @@ fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain) -> R
 	debug!(LOGGER, "{:?}", url);
 
 	let mut api_blocks: HashMap<pedersen::Commitment, api::BlockHeaderInfo> = HashMap::new();
+	let mut api_merkle_proofs: HashMap<pedersen::Commitment, MerkleProofWrapper> = HashMap::new();
 	match api::client::get::<Vec<api::BlockOutputs>>(url.as_str()) {
 		Ok(blocks) => {
 			for block in blocks {
 				for out in block.outputs {
 					api_blocks.insert(out.commit, block.header.clone());
+					if let Some(merkle_proof) = out.merkle_proof {
+						let wrapper = MerkleProofWrapper(merkle_proof);
+						api_merkle_proofs.insert(out.commit, wrapper);
+					}
 				}
 			}
 		}
@@ -138,8 +142,11 @@ fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain) -> R
 			if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
 				if let Some(b) = api_blocks.get(&commit) {
 					let output = output.get_mut();
-					output.block = BlockIdentifier::from_str(&b.hash).unwrap();
+					output.block = Some(BlockIdentifier::from_hex(&b.hash).unwrap());
 					output.height = b.height;
+					if let Some(merkle_proof) = api_merkle_proofs.get(&commit) {
+						output.merkle_proof = Some(merkle_proof.clone());
+					}
 				}
 			}
 		}

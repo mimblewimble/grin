@@ -24,12 +24,16 @@ use std::{error, fmt};
 use consensus;
 use consensus::VerifySortOrder;
 use core::Committed;
+use core::global;
+use core::BlockHeader;
 use core::hash::{Hash, Hashed, ZERO_HASH};
-use keychain::{Identifier, Keychain, BlindingFactor};
+use core::pmmr::MerkleProof;
 use keychain;
+use keychain::{Identifier, Keychain, BlindingFactor};
 use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, WriteableSorted, Writer, ser_vec};
 use std::io::Cursor;
 use util;
+use util::LOGGER;
 
 /// The size of the blake2 hash of a switch commitment (256 bits)
 pub const SWITCH_COMMIT_HASH_SIZE: usize = 32;
@@ -90,10 +94,14 @@ pub enum Error {
 	ConsensusError(consensus::Error),
 	/// Error originating from an invalid lock-height
 	LockHeight(u64),
-	/// Error originating from an invalid switch commitment (coinbase lock_height related)
+	/// Error originating from an invalid switch commitment
 	SwitchCommitment,
 	/// Range proof validation error
 	RangeProof,
+	/// Error originating from an invalid Merkle proof
+	MerkleProof,
+	/// Error originating from an input attempting to spend an immature coinbase output
+	ImmatureCoinbase,
 }
 
 impl error::Error for Error {
@@ -157,7 +165,7 @@ pub struct TxKernel {
 hashable_ord!(TxKernel);
 
 /// TODO - no clean way to bridge core::hash::Hash and std::hash::Hash implementations?
-impl ::std::hash::Hash for Output {
+impl ::std::hash::Hash for TxKernel {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &self).expect("serialization failed");
@@ -455,6 +463,8 @@ impl Transaction {
 		}
 		self.verify_sorted()?;
 
+		self.verify_inputs()?;
+
 		for out in &self.outputs {
 			out.verify_proof()?;
 		}
@@ -470,6 +480,26 @@ impl Transaction {
 		self.kernels.verify_sort_order()?;
 		Ok(())
 	}
+
+	/// We can verify the Merkle proof (for coinbase inputs) here in isolation.
+	/// But we cannot check the following as we need data from the index and the PMMR.
+	/// So we must be sure to check these at the appropriate point during block validation.
+	///   * node is in the correct pos in the PMMR
+	///   * block is the correct one (based on utxo_root from block_header via the index)
+	fn verify_inputs(&self) -> Result<(), Error> {
+		let coinbase_inputs = self.inputs
+			.iter()
+			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT));
+
+		for input in coinbase_inputs {
+			let merkle_proof = input.merkle_proof();
+			if !merkle_proof.verify() {
+				return Err(Error::MerkleProof);
+			}
+		}
+
+		Ok(())
+	}
 }
 
 /// A transaction input.
@@ -477,7 +507,7 @@ impl Transaction {
 /// Primarily a reference to an output being spent by the transaction.
 /// But also information required to verify coinbase maturity through
 /// the lock_height hashed in the switch_commit_hash.
-#[derive(Debug, Clone, Copy, Hash)]
+#[derive(Debug, Clone)]
 pub struct Input{
 	/// The features of the output being spent.
 	/// We will check maturity for coinbase output.
@@ -486,21 +516,38 @@ pub struct Input{
 	pub commit: Commitment,
 	/// The hash of the block the output originated from.
 	/// Currently we only care about this for coinbase outputs.
-	/// TODO - include the merkle proof here once we support these.
-	pub out_block: Option<Hash>,
+	pub block_hash: Option<Hash>,
+	/// The Merkle Proof that shows the output being spent by this input
+	/// existed and was unspent at the time of this block (proof of inclusion in utxo_root)
+	pub merkle_proof: Option<MerkleProof>,
 }
 
 hashable_ord!(Input);
+
+/// TODO - no clean way to bridge core::hash::Hash and std::hash::Hash implementations?
+impl ::std::hash::Hash for Input {
+	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &self).expect("serialization failed");
+		::std::hash::Hash::hash(&vec, state);
+	}
+}
 
 /// Implementation of Writeable for a transaction Input, defines how to write
 /// an Input as binary.
 impl Writeable for Input {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
-		writer.write_fixed_bytes(&self.commit)?;
+		self.commit.write(writer)?;
 
-		if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-			writer.write_fixed_bytes(&self.out_block.unwrap_or(ZERO_HASH))?;
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+				let block_hash = &self.block_hash.unwrap_or(ZERO_HASH);
+				let merkle_proof = self.merkle_proof();
+
+				writer.write_fixed_bytes(block_hash)?;
+				merkle_proof.write(writer)?;
+			}
 		}
 
 		Ok(())
@@ -517,17 +564,23 @@ impl Readable for Input {
 
 		let commit = Commitment::read(reader)?;
 
-		let out_block = if features.contains(OutputFeatures::COINBASE_OUTPUT) {
-			Some(Hash::read(reader)?)
+		if features.contains(OutputFeatures::COINBASE_OUTPUT) {
+			let block_hash = Some(Hash::read(reader)?);
+			let merkle_proof = Some(MerkleProof::read(reader)?);
+			Ok(Input::new(
+				features,
+				commit,
+				block_hash,
+				merkle_proof,
+			))
 		} else {
-			None
-		};
-
-		Ok(Input::new(
-			features,
-			commit,
-			out_block,
-		))
+			Ok(Input::new(
+				features,
+				commit,
+				None,
+				None,
+			))
+		}
 	}
 }
 
@@ -536,24 +589,102 @@ impl Readable for Input {
 /// Input must also provide the original output features and the hash of the block
 /// the output originated from.
 impl Input {
-	/// Build a new input from the data required to identify and verify an output beng spent.
+	/// Build a new input from the data required to identify and verify an output being spent.
 	pub fn new(
 		features: OutputFeatures,
 		commit: Commitment,
-		out_block: Option<Hash>,
+		block_hash: Option<Hash>,
+		merkle_proof: Option<MerkleProof>,
 	) -> Input {
 		Input {
 			features,
 			commit,
-			out_block,
+			block_hash,
+			merkle_proof,
 		}
 	}
 
 	/// The input commitment which _partially_ identifies the output being spent.
 	/// In the presence of a fork we need additional info to uniquely identify the output.
-	/// Specifically the block hash (so correctly calculate lock_height for coinbase outputs).
+	/// Specifically the block hash (to correctly calculate lock_height for coinbase outputs).
 	pub fn commitment(&self) -> Commitment {
-		self.commit
+		self.commit.clone()
+	}
+
+	/// Convenience functon to return the (optional) block_hash for this input.
+	/// Will return the "zero" hash if we do not have one.
+	pub fn block_hash(&self) -> Hash {
+		let block_hash = self.block_hash.clone();
+		block_hash.unwrap_or(Hash::zero())
+	}
+
+	/// Convenience function to return the (optional) merkle_proof for this input.
+	/// Will return the "empty" Merkle proof if we do not have one.
+	/// We currently only care about the Merkle proof for inputs spending coinbase outputs.
+	pub fn merkle_proof(&self) -> MerkleProof {
+		let merkle_proof = self.merkle_proof.clone();
+		merkle_proof.unwrap_or(MerkleProof::empty())
+	}
+
+	/// Verify the maturity of an output being spent by an input.
+	/// Only relevant for spending coinbase outputs currently (locked for 1,000 confirmations).
+	///
+	/// The proof associates the output with the root by its hash (and pos) in the MMR.
+	/// The proof shows the output existed and was unspent at the time the utxo_root was built.
+	/// The root associates the proof with a specific block header with that utxo_root.
+	/// So the proof shows the output was unspent at the time of the block
+	/// and is at least as old as that block (may be older).
+	///
+	/// We can verify maturity of the output being spent by -
+	///
+	/// * verifying the Merkle Proof produces the correct root for the given hash (from MMR)
+	/// * verifying the root matches the utxo_root in the block_header
+	/// * verifying the hash matches the node hash in the Merkle Proof
+	/// * finally verify maturity rules based on height of the block header
+	///
+	pub fn verify_maturity(
+		&self,
+		hash: Hash,
+		header: &BlockHeader,
+		height: u64,
+	) -> Result<(), Error> {
+		if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+			let block_hash = self.block_hash();
+			let merkle_proof = self.merkle_proof();
+
+			// Check we are dealing with the correct block header
+			if block_hash != header.hash() {
+				return Err(Error::MerkleProof);
+			}
+
+			// Is our Merkle Proof valid? Does node hash up consistently to the root?
+			if !merkle_proof.verify() {
+				return Err(Error::MerkleProof);
+			}
+
+			// Is the root the correct root for the given block header?
+			if merkle_proof.root != header.utxo_root {
+				return Err(Error::MerkleProof);
+			}
+
+			// Does the hash from the MMR actually match the one in the Merkle Proof?
+			if merkle_proof.node != hash {
+				return Err(Error::MerkleProof);
+			}
+
+			// Finally has the output matured sufficiently now we know the block?
+			let lock_height = header.height + global::coinbase_maturity();
+			if lock_height > height {
+				return Err(Error::ImmatureCoinbase);
+			}
+			debug!(
+				LOGGER,
+				"input: verify_maturity: success, coinbase maturity via Merkle proof: {} vs. {}",
+				lock_height,
+				height,
+			);
+		}
+		Ok(())
 	}
 }
 
@@ -703,7 +834,7 @@ pub struct Output {
 hashable_ord!(Output);
 
 /// TODO - no clean way to bridge core::hash::Hash and std::hash::Hash implementations?
-impl ::std::hash::Hash for TxKernel {
+impl ::std::hash::Hash for Output {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &self).expect("serialization failed");
@@ -716,7 +847,7 @@ impl ::std::hash::Hash for TxKernel {
 impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
-		writer.write_fixed_bytes(&self.commit)?;
+		self.commit.write(writer)?;
 		// Hash of an output doesn't cover the switch commit, it should
 		// be wound into the range proof separately
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
@@ -792,7 +923,7 @@ impl Output {
 
 }
 
-/// An output_identifier can be build from either an input _or_ and output and
+/// An output_identifier can be build from either an input _or_ an output and
 /// contains everything we need to uniquely identify an output being spent.
 /// Needed because it is not sufficient to pass a commitment around.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -873,24 +1004,24 @@ pub struct OutputStoreable {
 }
 
 impl OutputStoreable {
-/// Build a StoreableOutput from an existing output.
-pub fn from_output(output: &Output) -> OutputStoreable {
-	OutputStoreable {
-		features: output.features,
-		commit: output.commit,
-		switch_commit_hash: output.switch_commit_hash,
+	/// Build a StoreableOutput from an existing output.
+	pub fn from_output(output: &Output) -> OutputStoreable {
+		OutputStoreable {
+			features: output.features,
+			commit: output.commit,
+			switch_commit_hash: output.switch_commit_hash,
+		}
 	}
-}
 
-/// Return a regular output
-pub fn to_output(self, rproof: RangeProof) -> Output {
-	Output{
-		features: self.features,
-		commit: self.commit,
-		switch_commit_hash: self.switch_commit_hash,
-		proof: rproof,
+	/// Return a regular output
+	pub fn to_output(self, rproof: RangeProof) -> Output {
+		Output{
+			features: self.features,
+			commit: self.commit,
+			switch_commit_hash: self.switch_commit_hash,
+			proof: rproof,
+		}
 	}
-}
 }
 
 impl PMMRable for OutputStoreable {
@@ -966,178 +1097,176 @@ impl ProofMessageElements {
 
 #[cfg(test)]
 mod test {
-use super::*;
-use core::id::{ShortId, ShortIdentifiable};
-use keychain::Keychain;
-use util::secp;
+	use super::*;
+	use core::id::{ShortId, ShortIdentifiable};
+	use keychain::Keychain;
+	use util::secp;
 
-#[test]
-fn test_kernel_ser_deser() {
-	let keychain = Keychain::from_random_seed().unwrap();
-	let key_id = keychain.derive_key_id(1).unwrap();
-	let commit = keychain.commit(5, &key_id).unwrap();
+	#[test]
+	fn test_kernel_ser_deser() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
+		let commit = keychain.commit(5, &key_id).unwrap();
 
-	// just some bytes for testing ser/deser
-	let sig = secp::Signature::from_raw_data(&[0;64]).unwrap();
+		// just some bytes for testing ser/deser
+		let sig = secp::Signature::from_raw_data(&[0;64]).unwrap();
 
-	let kernel = TxKernel {
-		features: KernelFeatures::DEFAULT_KERNEL,
-		lock_height: 0,
-		excess: commit,
-		excess_sig: sig.clone(),
-		fee: 10,
-	};
+		let kernel = TxKernel {
+			features: KernelFeatures::DEFAULT_KERNEL,
+			lock_height: 0,
+			excess: commit,
+			excess_sig: sig.clone(),
+			fee: 10,
+		};
 
-	let mut vec = vec![];
-	ser::serialize(&mut vec, &kernel).expect("serialized failed");
-	let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
-	assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
-	assert_eq!(kernel2.lock_height, 0);
-	assert_eq!(kernel2.excess, commit);
-	assert_eq!(kernel2.excess_sig, sig.clone());
-	assert_eq!(kernel2.fee, 10);
+		let mut vec = vec![];
+		ser::serialize(&mut vec, &kernel).expect("serialized failed");
+		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
+		assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
+		assert_eq!(kernel2.lock_height, 0);
+		assert_eq!(kernel2.excess, commit);
+		assert_eq!(kernel2.excess_sig, sig.clone());
+		assert_eq!(kernel2.fee, 10);
 
-	// now check a kernel with lock_height serializes/deserializes correctly
-	let kernel = TxKernel {
-		features: KernelFeatures::DEFAULT_KERNEL,
-		lock_height: 100,
-		excess: commit,
-		excess_sig: sig.clone(),
-		fee: 10,
-	};
+		// now check a kernel with lock_height serializes/deserializes correctly
+		let kernel = TxKernel {
+			features: KernelFeatures::DEFAULT_KERNEL,
+			lock_height: 100,
+			excess: commit,
+			excess_sig: sig.clone(),
+			fee: 10,
+		};
 
-	let mut vec = vec![];
-	ser::serialize(&mut vec, &kernel).expect("serialized failed");
-	let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
-	assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
-	assert_eq!(kernel2.lock_height, 100);
-	assert_eq!(kernel2.excess, commit);
-	assert_eq!(kernel2.excess_sig, sig.clone());
-	assert_eq!(kernel2.fee, 10);
-}
-
-#[test]
-fn test_output_ser_deser() {
-	let keychain = Keychain::from_random_seed().unwrap();
-	let key_id = keychain.derive_key_id(1).unwrap();
-	let commit = keychain.commit(5, &key_id).unwrap();
-	let switch_commit = keychain.switch_commit(&key_id).unwrap();
-	let switch_commit_hash = SwitchCommitHash::from_switch_commit(
-		switch_commit,
-		&keychain,
-		&key_id,
-	);
-	let msg = secp::pedersen::ProofMessage::empty();
-	let proof = keychain.range_proof(5, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg).unwrap();
-
-	let out = Output {
-		features: OutputFeatures::DEFAULT_OUTPUT,
-		commit: commit,
-		switch_commit_hash: switch_commit_hash,
-		proof: proof,
-	};
-
-	let mut vec = vec![];
-	ser::serialize(&mut vec, &out).expect("serialized failed");
-	let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
-
-	assert_eq!(dout.features, OutputFeatures::DEFAULT_OUTPUT);
-	assert_eq!(dout.commit, out.commit);
-	assert_eq!(dout.proof, out.proof);
-}
-
-#[test]
-fn test_output_value_recovery() {
-	let keychain = Keychain::from_random_seed().unwrap();
-	let key_id = keychain.derive_key_id(1).unwrap();
-	let value = 1003;
-
-	let commit = keychain.commit(value, &key_id).unwrap();
-	let switch_commit = keychain.switch_commit(&key_id).unwrap();
-	let switch_commit_hash = SwitchCommitHash::from_switch_commit(
-		switch_commit,
-		&keychain,
-		&key_id,
-	);
-	let msg = (ProofMessageElements {
-		value: value,
-	}).to_proof_message();
-
-	let proof = keychain.range_proof(value, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg).unwrap();
-
-	let output = Output {
-		features: OutputFeatures::DEFAULT_OUTPUT,
-		commit: commit,
-		switch_commit_hash: switch_commit_hash,
-		proof: proof,
-	};
-
-	// check we can successfully recover the value with the original blinding factor
-	let result = output.recover_value(&keychain, &key_id);
-	// TODO: Remove this check once value recovery is supported within bullet proofs
-	if let Some(v) = result {
-		assert_eq!(v, 1003);
-	} else {
-		return;
+		let mut vec = vec![];
+		ser::serialize(&mut vec, &kernel).expect("serialized failed");
+		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
+		assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
+		assert_eq!(kernel2.lock_height, 100);
+		assert_eq!(kernel2.excess, commit);
+		assert_eq!(kernel2.excess_sig, sig.clone());
+		assert_eq!(kernel2.fee, 10);
 	}
 
-	// Bulletproofs message unwind will just be gibberish given the wrong blinding factor
-}
+	#[test]
+	fn test_output_ser_deser() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
+		let commit = keychain.commit(5, &key_id).unwrap();
+		let switch_commit = keychain.switch_commit(&key_id).unwrap();
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			&keychain,
+			&key_id,
+		);
+		let msg = secp::pedersen::ProofMessage::empty();
+		let proof = keychain.range_proof(5, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg).unwrap();
 
-#[test]
-fn commit_consistency() {
-	let keychain = Keychain::from_seed(&[0; 32]).unwrap();
-	let key_id = keychain.derive_key_id(1).unwrap();
+		let out = Output {
+			features: OutputFeatures::DEFAULT_OUTPUT,
+			commit: commit,
+			switch_commit_hash: switch_commit_hash,
+			proof: proof,
+		};
 
-	let commit = keychain.commit(1003, &key_id).unwrap();
-	let switch_commit = keychain.switch_commit(&key_id).unwrap();
-	println!("Switch commit: {:?}", switch_commit);
-	println!("commit: {:?}", commit);
-	let key_id = keychain.derive_key_id(1).unwrap();
+		let mut vec = vec![];
+		ser::serialize(&mut vec, &out).expect("serialized failed");
+		let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
 
-	let switch_commit_2 = keychain.switch_commit(&key_id).unwrap();
-	let commit_2 = keychain.commit(1003, &key_id).unwrap();
-	println!("Switch commit 2: {:?}", switch_commit_2);
-	println!("commit2 : {:?}", commit_2);
+		assert_eq!(dout.features, OutputFeatures::DEFAULT_OUTPUT);
+		assert_eq!(dout.commit, out.commit);
+		assert_eq!(dout.proof, out.proof);
+	}
 
-	assert!(commit == commit_2);
-	assert!(switch_commit == switch_commit_2);
-}
+	#[test]
+	fn test_output_value_recovery() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
+		let value = 1003;
 
-#[test]
-fn input_short_id() {
-	let keychain = Keychain::from_seed(&[0; 32]).unwrap();
-	let key_id = keychain.derive_key_id(1).unwrap();
-	let commit = keychain.commit(5, &key_id).unwrap();
+		let commit = keychain.commit(value, &key_id).unwrap();
+		let switch_commit = keychain.switch_commit(&key_id).unwrap();
+		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+			switch_commit,
+			&keychain,
+			&key_id,
+		);
+		let msg = (ProofMessageElements {
+			value: value,
+		}).to_proof_message();
 
-	let input = Input {
-		features: OutputFeatures::DEFAULT_OUTPUT,
-		commit: commit,
-		out_block: None,
-	};
+		let proof = keychain.range_proof(value, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg).unwrap();
 
-	let block_hash = Hash::from_hex(
-		"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
-	).unwrap();
+		let output = Output {
+			features: OutputFeatures::DEFAULT_OUTPUT,
+			commit: commit,
+			switch_commit_hash: switch_commit_hash,
+			proof: proof,
+		};
 
-	let nonce = 0;
+		// check we can successfully recover the value with the original blinding factor
+		let result = output.recover_value(&keychain, &key_id);
+		// TODO: Remove this check once value recovery is supported within bullet proofs
+		if let Some(v) = result {
+			assert_eq!(v, 1003);
+		} else {
+			return;
+		}
 
-	let short_id = input.short_id(&block_hash, nonce);
-	assert_eq!(short_id, ShortId::from_hex("28fea5a693af").unwrap());
+		// Bulletproofs message unwind will just be gibberish given the wrong blinding factor
+	}
 
-	// now generate the short_id for a *very* similar output (single feature flag different)
-	// and check it generates a different short_id
-	let input = Input {
-		features: OutputFeatures::COINBASE_OUTPUT,
-		commit: commit,
-		out_block: None,
-	};
+	#[test]
+	fn commit_consistency() {
+		let keychain = Keychain::from_seed(&[0; 32]).unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
 
-	let block_hash = Hash::from_hex(
-		"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
-	).unwrap();
+		let commit = keychain.commit(1003, &key_id).unwrap();
+		let switch_commit = keychain.switch_commit(&key_id).unwrap();
+		println!("Switch commit: {:?}", switch_commit);
+		println!("commit: {:?}", commit);
+		let key_id = keychain.derive_key_id(1).unwrap();
 
-	let short_id = input.short_id(&block_hash, nonce);
-	assert_eq!(short_id, ShortId::from_hex("c8af83b54e46").unwrap());
-}
+		let switch_commit_2 = keychain.switch_commit(&key_id).unwrap();
+		let commit_2 = keychain.commit(1003, &key_id).unwrap();
+		println!("Switch commit 2: {:?}", switch_commit_2);
+		println!("commit2 : {:?}", commit_2);
+
+		assert!(commit == commit_2);
+		assert!(switch_commit == switch_commit_2);
+	}
+
+	#[test]
+	fn input_short_id() {
+		let keychain = Keychain::from_seed(&[0; 32]).unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
+		let commit = keychain.commit(5, &key_id).unwrap();
+
+		let input = Input {
+			features: OutputFeatures::DEFAULT_OUTPUT,
+			commit: commit,
+			block_hash: None,
+			merkle_proof: None,
+		};
+
+		let block_hash = Hash::from_hex(
+			"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
+		).unwrap();
+
+		let nonce = 0;
+
+		let short_id = input.short_id(&block_hash, nonce);
+		assert_eq!(short_id, ShortId::from_hex("28fea5a693af").unwrap());
+
+		// now generate the short_id for a *very* similar output (single feature flag different)
+		// and check it generates a different short_id
+		let input = Input {
+			features: OutputFeatures::COINBASE_OUTPUT,
+			commit: commit,
+			block_hash: None,
+			merkle_proof: None,
+		};
+
+		let short_id = input.short_id(&block_hash, nonce);
+		assert_eq!(short_id, ShortId::from_hex("2df325971ab0").unwrap());
+	}
 }

@@ -103,8 +103,8 @@ impl fmt::Debug for Parent {
 /// Enum of errors
 #[derive(Debug)]
 pub enum PoolError {
-	/// An invalid pool entry
-	Invalid,
+	/// An invalid pool entry caused by underlying tx validation error
+	InvalidTx(transaction::Error),
 	/// An entry already in the pool
 	AlreadyInPool,
 	/// A duplicate output
@@ -123,9 +123,6 @@ pub enum PoolError {
 		/// The spent output
 		spent_output: Commitment,
 	},
-	/// Attempt to spend an output before it matures
-	/// lock_height must not exceed current block height
-	ImmatureCoinbase,
 	/// Attempt to add a transaction to the pool with lock_height
 	/// greater than height of current block
 	ImmatureTransaction {
@@ -155,7 +152,7 @@ pub trait BlockChain {
 	/// orphans, etc.
 	/// We do not maintain outputs themselves. The only information we have is the
 	/// hash from the output MMR.
-	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), PoolError>;
+	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<hash::Hash, PoolError>;
 
 	/// Check if an output being spent by the input has sufficiently matured.
 	/// This is only applicable for coinbase outputs (1,000 blocks).

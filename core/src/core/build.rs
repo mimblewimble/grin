@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ use util::{secp, kernel_sig_msg};
 
 use core::{Transaction, TxKernel, Input, Output, OutputFeatures, ProofMessageElements, SwitchCommitHash};
 use core::hash::Hash;
+use core::pmmr::MerkleProof;
 use keychain;
 use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
 use util::LOGGER;
@@ -47,7 +48,8 @@ pub type Append = for<'a> Fn(&'a mut Context, (Transaction, TxKernel, BlindSum))
 fn build_input(
 	value: u64,
 	features: OutputFeatures,
-	out_block: Option<Hash>,
+	block_hash: Option<Hash>,
+	merkle_proof: Option<MerkleProof>,
 	key_id: Identifier,
 ) -> Box<Append> {
 	Box::new(move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
@@ -55,7 +57,8 @@ fn build_input(
 		let input = Input::new(
 			features,
 			commit,
-			out_block,
+			block_hash.clone(),
+			merkle_proof.clone(),
 		);
 		(tx.with_input(input), kern, sum.sub_key_id(key_id.clone()))
 	})
@@ -65,22 +68,22 @@ fn build_input(
 /// being built.
 pub fn input(
 	value: u64,
-	out_block: Hash,
 	key_id: Identifier,
 ) -> Box<Append> {
 	debug!(LOGGER, "Building input (spending regular output): {}, {}", value, key_id);
-	build_input(value, OutputFeatures::DEFAULT_OUTPUT, Some(out_block), key_id)
+	build_input(value, OutputFeatures::DEFAULT_OUTPUT, None, None, key_id)
 }
 
 /// Adds a coinbase input spending a coinbase output.
 /// We will use the block hash to verify coinbase maturity.
 pub fn coinbase_input(
 	value: u64,
-	out_block: Hash,
+	block_hash: Hash,
+	merkle_proof: MerkleProof,
 	key_id: Identifier,
 ) -> Box<Append> {
 	debug!(LOGGER, "Building input (spending coinbase): {}, {}", value, key_id);
-	build_input(value, OutputFeatures::COINBASE_OUTPUT, Some(out_block), key_id)
+	build_input(value, OutputFeatures::COINBASE_OUTPUT, Some(block_hash), Some(merkle_proof), key_id)
 }
 
 /// Adds an output with the provided value and key identifier from the
@@ -261,7 +264,6 @@ pub fn transaction_with_offset(
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::hash::ZERO_HASH;
 
 	#[test]
 	fn blind_simple_tx() {
@@ -272,8 +274,8 @@ mod test {
 
 		let tx = transaction(
 			vec![
-				input(10, ZERO_HASH, key_id1),
-				input(12, ZERO_HASH, key_id2),
+				input(10, key_id1),
+				input(12, key_id2),
 				output(20, key_id3),
 				with_fee(2),
 			],
@@ -292,8 +294,8 @@ mod test {
 
 		let tx = transaction_with_offset(
 			vec![
-				input(10, ZERO_HASH, key_id1),
-				input(12, ZERO_HASH, key_id2),
+				input(10, key_id1),
+				input(12, key_id2),
 				output(20, key_id3),
 				with_fee(2),
 			],
@@ -310,7 +312,7 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
 		let tx = transaction(
-			vec![input(6, ZERO_HASH, key_id1), output(2, key_id2), with_fee(4)],
+			vec![input(6, key_id1), output(2, key_id2), with_fee(4)],
 			&keychain,
 		).unwrap();
 

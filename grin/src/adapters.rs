@@ -573,7 +573,7 @@ impl PoolToChainAdapter {
 }
 
 impl pool::BlockChain for PoolToChainAdapter {
-	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), pool::PoolError> {
+	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<Hash, pool::PoolError> {
 		wo(&self.chain)
 			.is_unspent(output_ref)
 			.map_err(|e| match e {

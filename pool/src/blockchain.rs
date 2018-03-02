@@ -106,9 +106,9 @@ impl DummyChainImpl {
 }
 
 impl BlockChain for DummyChainImpl {
-	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), PoolError> {
+	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<hash::Hash, PoolError> {
 		match self.utxo.read().unwrap().get_output(&output_ref.commit) {
-			Some(_) => Ok(()),
+			Some(_) => Ok(hash::Hash::zero()),
 			None => Err(PoolError::GenericPoolError),
 		}
 	}
@@ -117,7 +117,7 @@ impl BlockChain for DummyChainImpl {
 		if !input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
 			return Ok(());
 		}
-		let block_hash = input.out_block.expect("requires a block hash");
+		let block_hash = input.block_hash.expect("requires a block hash");
 		let headers = self.block_headers.read().unwrap();
 		if let Some(h) = headers
 			.iter()
@@ -127,7 +127,7 @@ impl BlockChain for DummyChainImpl {
 				return Ok(());
 			}
 		}
-		Err(PoolError::ImmatureCoinbase)
+		Err(PoolError::InvalidTx(transaction::Error::ImmatureCoinbase))
 	}
 
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError> {

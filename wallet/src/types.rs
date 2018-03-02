@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@ use failure::{Backtrace, Context, Fail, ResultExt};
 use core::consensus;
 use core::core::Transaction;
 use core::core::hash::Hash;
+use core::core::pmmr::MerkleProof;
 use core::ser;
 use keychain;
 use keychain::BlindingFactor;
@@ -98,7 +99,7 @@ pub enum ErrorKind {
     #[fail(display = "JSON format error")]
     Format,
 
-   
+
     #[fail(display = "I/O error")]
     IO,
 
@@ -124,7 +125,6 @@ pub enum ErrorKind {
 	/// Wallet seed already exists
     #[fail(display = "Wallet seed exists error")]
 	WalletSeedExists,
-	
 
     #[fail(display = "Generic error: {}", _0)]
     GenericError(&'static str),
@@ -227,6 +227,52 @@ impl fmt::Display for OutputStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+pub struct MerkleProofWrapper(pub MerkleProof);
+
+impl MerkleProofWrapper {
+	pub fn merkle_proof(&self) -> MerkleProof {
+		self.0.clone()
+	}
+}
+
+impl serde::ser::Serialize for MerkleProofWrapper {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::ser::Serializer,
+	{
+		serializer.serialize_str(&self.0.to_hex())
+	}
+}
+
+impl<'de> serde::de::Deserialize<'de> for MerkleProofWrapper {
+	fn deserialize<D>(deserializer: D) -> Result<MerkleProofWrapper, D::Error>
+	where
+		D: serde::de::Deserializer<'de>,
+	{
+		deserializer.deserialize_str(MerkleProofWrapperVisitor)
+	}
+}
+
+struct MerkleProofWrapperVisitor;
+
+impl<'de> serde::de::Visitor<'de> for MerkleProofWrapperVisitor {
+	type Value = MerkleProofWrapper;
+
+	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+		formatter.write_str("a merkle proof")
+	}
+
+	fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+	where
+		E: serde::de::Error,
+	{
+		let merkle_proof = MerkleProof::from_hex(s).unwrap();
+		Ok(MerkleProofWrapper(merkle_proof))
+	}
+}
+
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct BlockIdentifier(Hash);
 
 impl BlockIdentifier {
@@ -234,13 +280,9 @@ impl BlockIdentifier {
 		self.0
 	}
 
-	pub fn from_str(hex: &str) -> Result<BlockIdentifier, Error> {
+	pub fn from_hex(hex: &str) -> Result<BlockIdentifier, Error> {
 		let hash = Hash::from_hex(hex).context(ErrorKind::GenericError("Invalid hex"))?;
 		Ok(BlockIdentifier(hash))
-	}
-
-	pub fn zero() -> BlockIdentifier {
-		BlockIdentifier(Hash::zero())
 	}
 }
 
@@ -302,7 +344,8 @@ pub struct OutputData {
 	/// Is this a coinbase output? Is it subject to coinbase locktime?
 	pub is_coinbase: bool,
 	/// Hash of the block this output originated from.
-	pub block: BlockIdentifier,
+	pub block: Option<BlockIdentifier>,
+	pub merkle_proof: Option<MerkleProofWrapper>,
 }
 
 impl OutputData {
@@ -529,8 +572,8 @@ impl WalletData {
 	fn read_outputs(data_file_path: &str) -> Result<Vec<OutputData>, Error> {
 		let data_file = File::open(data_file_path).context(ErrorKind::WalletData(&"Could not open wallet file"))?;
 		serde_json::from_reader(data_file).map_err(|e| { e.context(ErrorKind::WalletData(&"Error reading wallet file ")).into()})
-            
-            
+
+
 	}
 
 	/// Populate wallet_data with output_data from disk.
