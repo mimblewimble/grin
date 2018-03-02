@@ -1,3 +1,4 @@
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,7 +28,7 @@ use util::secp::pedersen::{RangeProof, Commitment};
 use core::consensus::reward;
 use core::core::{Block, BlockHeader, Input, Output, OutputIdentifier,
 	OutputFeatures, OutputStoreable, TxKernel};
-use core::core::pmmr::{self, PMMR};
+use core::core::pmmr::{self, PMMR, MerkleProof};
 use core::core::hash::{Hash, Hashed};
 use core::ser::{self, PMMRable};
 
@@ -106,10 +107,10 @@ impl SumTrees {
 		})
 	}
 
-	/// Check is an output is unspent.
+	/// Check if an output is unspent.
 	/// We look in the index to find the output MMR pos.
 	/// Then we check the entry in the output MMR and confirm the hash matches.
-	pub fn is_unspent(&mut self, output_id: &OutputIdentifier) -> Result<(), Error> {
+	pub fn is_unspent(&mut self, output_id: &OutputIdentifier) -> Result<Hash, Error> {
 		match self.commit_index.get_output_pos(&output_id.commit) {
 			Ok(pos) => {
 				let output_pmmr:PMMR<OutputStoreable, _> = PMMR::at(
@@ -117,11 +118,9 @@ impl SumTrees {
 					self.utxo_pmmr_h.last_pos,
 				);
 				if let Some((hash, _)) = output_pmmr.get(pos, false) {
-					println!("Getting output ID hash");
 					if hash == output_id.hash() {
-						Ok(())
+						Ok(hash)
 					} else {
-						println!("MISMATCH BECAUSE THE BLOODY THING MISMATCHES");
 						Err(Error::SumTreeErr(format!("sumtree hash mismatch")))
 					}
 				} else {
@@ -131,35 +130,6 @@ impl SumTrees {
 			Err(grin_store::Error::NotFoundErr) => Err(Error::OutputNotFound),
 			Err(e) => Err(Error::StoreErr(e, format!("sumtree unspent check"))),
 		}
-	}
-
-	/// Check the output being spent by the input has sufficiently matured.
-	/// This only applies for coinbase outputs being spent (1,000 blocks).
-	/// Non-coinbase outputs will always pass this check.
-	/// For a coinbase output we find the block by the block hash provided in the input
-	/// and check coinbase maturty based on the height of this block.
-	pub fn is_matured(
-		&mut self,
-		input: &Input,
-		height: u64,
-	) -> Result<(), Error> {
-		// We should never be in a situation where we are checking maturity rules
-		// if the output is already spent (this should have already been checked).
-		let output = OutputIdentifier::from_input(&input);
-		assert!(self.is_unspent(&output).is_ok());
-
-		// At this point we can be sure the input is spending the output
-		// it claims to be spending, and that it is coinbase or non-coinbase.
-		// If we are spending a coinbase output then go find the block
-		// and check the coinbase maturity rule is being met.
-		if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-			let block_hash = &input.out_block
-				.expect("input spending coinbase output must have a block hash");
-			let block = self.commit_index.get_block(&block_hash)?;
-			block.verify_coinbase_maturity(&input, height)
-				.map_err(|_| Error::ImmatureCoinbase)?;
-		}
-		Ok(())
 	}
 
 	/// returns the last N nodes inserted into the tree (i.e. the 'bottom'
@@ -298,7 +268,6 @@ impl<'a> Extension<'a> {
 			commit_index: commit_index,
 			new_output_commits: HashMap::new(),
 			new_kernel_excesses: HashMap::new(),
-
 			rollback: false,
 		}
 	}
@@ -335,14 +304,17 @@ impl<'a> Extension<'a> {
 		for kernel in &b.kernels {
 			self.apply_kernel(kernel)?;
 		}
+
 		Ok(())
 	}
 
 	fn save_pos_index(&self) -> Result<(), Error> {
+		// store all new output pos in the index
 		for (commit, pos) in &self.new_output_commits {
 			self.commit_index.save_output_pos(commit, *pos)?;
 		}
 
+		// store all new kernel pos in the index
 		for (excess, pos) in &self.new_kernel_excesses {
 			self.commit_index.save_kernel_pos(excess, *pos)?;
 		}
@@ -364,16 +336,10 @@ impl<'a> Extension<'a> {
 					return Err(Error::SumTreeErr(format!("output pmmr hash mismatch")));
 				}
 
-				// At this point we can be sure the input is spending the output
-				// it claims to be spending, and it is coinbase or non-coinbase.
-				// If we are spending a coinbase output then go find the block
-				// and check the coinbase maturity rule is being met.
+				// check coinbase maturity with the Merkle Proof on the input
 				if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-					let block_hash = &input.out_block
-						.expect("input spending coinbase output must have a block hash");
-					let block = self.commit_index.get_block(&block_hash)?;
-					block.verify_coinbase_maturity(&input, height)
-						.map_err(|_| Error::ImmatureCoinbase)?;
+					let header = self.commit_index.get_block_header(&input.block_hash())?;
+					input.verify_maturity(read_hash, &header, height)?;
 				}
 			}
 
@@ -442,6 +408,28 @@ impl<'a> Extension<'a> {
 		self.new_kernel_excesses.insert(kernel.excess, pos);
 
 		Ok(())
+	}
+
+	/// Build a Merkle proof for the given output and the block by
+	/// rewinding the MMR to the last pos of the block.
+	/// Note: this relies on the MMR being stable even after pruning/compaction.
+	/// We need the hash of each sibling pos from the pos up to the peak
+	/// including the sibling leaf node which may have been removed.
+	pub fn merkle_proof_via_rewind(
+		&mut self,
+		output: &OutputIdentifier,
+		block: &Block,
+	) -> Result<MerkleProof, Error> {
+		debug!(LOGGER, "sumtree: merkle_proof_via_rewind: rewinding to block {:?}", block.hash());
+		// rewind to the specified block
+		self.rewind(block)?;
+		// then calculate the Merkle Proof based on the known pos
+		let pos = self.get_output_pos(&output.commit)?;
+		let merkle_proof = self.utxo_pmmr
+			.merkle_proof(pos)
+			.map_err(&Error::SumTreeErr)?;
+
+		Ok(merkle_proof)
 	}
 
 	/// Rewinds the MMRs to the provided block, using the last output and

@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -80,8 +80,6 @@ pub enum Error {
 	DuplicateCommitment(Commitment),
 	/// A kernel with that excess commitment already exists (should be unique)
 	DuplicateKernel(Commitment),
-	/// coinbase can only be spent after it has matured (n blocks)
-	ImmatureCoinbase,
 	/// output not found
 	OutputNotFound,
 	/// output spent

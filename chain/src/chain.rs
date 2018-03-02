@@ -20,12 +20,11 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use core::core::{Input, OutputIdentifier, OutputStoreable, TxKernel};
+use core::core::{Block, BlockHeader, Input, OutputFeatures, OutputIdentifier, OutputStoreable, TxKernel};
 use core::core::hash::{Hash, Hashed};
-use core::global;
-
-use core::core::{Block, BlockHeader};
+use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
+use core::global;
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
@@ -388,7 +387,7 @@ impl Chain {
 	/// Return an error if the output does not exist or has been spent.
 	/// This querying is done in a way that is consistent with the current chain state,
 	/// specifically the current winning (valid, most work) fork.
-	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), Error> {
+	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<Hash, Error> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.is_unspent(output_ref)
 	}
@@ -406,8 +405,14 @@ impl Chain {
 	/// This only applies to inputs spending coinbase outputs.
 	/// An input spending a non-coinbase output will always pass this check.
 	pub fn is_matured(&self, input: &Input, height: u64) -> Result<(), Error> {
-		let mut sumtrees = self.sumtrees.write().unwrap();
-		sumtrees.is_matured(input, height)
+		if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+			let mut sumtrees = self.sumtrees.write().unwrap();
+			let output = OutputIdentifier::from_input(&input);
+			let hash = sumtrees.is_unspent(&output)?;
+			let header = self.get_block_header(&input.block_hash())?;
+			input.verify_maturity(hash, &header, height)?;
+		}
+		Ok(())
 	}
 
 	/// Sets the sumtree roots on a brand new block by applying the block on the
@@ -430,6 +435,22 @@ impl Chain {
 		b.header.range_proof_root = roots.rproof_root;
 		b.header.kernel_root = roots.kernel_root;
 		Ok(())
+	}
+
+	/// Return a pre-built Merkle proof for the given commitment from the store.
+	pub fn get_merkle_proof(
+		&self,
+		output: &OutputIdentifier,
+		block: &Block,
+	) -> Result<MerkleProof, Error> {
+		let mut sumtrees = self.sumtrees.write().unwrap();
+
+		let merkle_proof = sumtree::extending(&mut sumtrees, |extension| {
+			extension.force_rollback();
+			extension.merkle_proof_via_rewind(output, block)
+		})?;
+
+		Ok(merkle_proof)
 	}
 
 	/// Returns current sumtree roots
@@ -613,8 +634,10 @@ impl Chain {
 		store::DifficultyIter::from(head.last_block_h, self.store.clone())
 	}
 
-        /// Check whether we have a block without reading it
-        pub fn block_exists(&self, h: Hash) -> Result<bool, Error> {
-               self.store.block_exists(&h).map_err(|e| Error::StoreErr(e, "chain block exists".to_owned()))
-        }
+	/// Check whether we have a block without reading it
+	pub fn block_exists(&self, h: Hash) -> Result<bool, Error> {
+		self.store
+			.block_exists(&h)
+			.map_err(|e| Error::StoreErr(e, "chain block exists".to_owned()))
+	}
 }

@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use chain::Chain;
 use chain::types::*;
-use core::core::{Block, BlockHeader, Transaction, OutputIdentifier, build};
+use core::core::{Block, BlockHeader, Transaction, OutputIdentifier, OutputFeatures, build};
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::consensus;
@@ -251,8 +251,12 @@ fn spend_in_fork() {
 	// so we can spend the coinbase later
 	let b = prepare_block(&kc, &fork_head, &chain, 2);
 	let block_hash = b.hash();
+	let out_id = OutputIdentifier::from_output(&b.outputs[0]);
+	assert!(out_id.features.contains(OutputFeatures::COINBASE_OUTPUT));
 	fork_head = b.header.clone();
-	chain.process_block(b, chain::Options::SKIP_POW).unwrap();
+	chain.process_block(b.clone(), chain::Options::SKIP_POW).unwrap();
+
+	let merkle_proof = chain.get_merkle_proof(&out_id, &b).unwrap();
 
 	println!("First block");
 
@@ -270,7 +274,12 @@ fn spend_in_fork() {
 
 	let tx1 = build::transaction(
 		vec![
-			build::coinbase_input(consensus::REWARD, block_hash, kc.derive_key_id(2).unwrap()),
+			build::coinbase_input(
+				consensus::REWARD,
+				block_hash,
+				merkle_proof,
+				kc.derive_key_id(2).unwrap(),
+			),
 			build::output(consensus::REWARD - 20000, kc.derive_key_id(30).unwrap()),
 			build::with_fee(20000),
 		],
@@ -288,7 +297,7 @@ fn spend_in_fork() {
 
 	let tx2 = build::transaction(
 		vec![
-			build::input(consensus::REWARD - 20000, next.hash(), kc.derive_key_id(30).unwrap()),
+			build::input(consensus::REWARD - 20000, kc.derive_key_id(30).unwrap()),
 			build::output(consensus::REWARD - 40000, kc.derive_key_id(31).unwrap()),
 			build::with_fee(20000),
 		],

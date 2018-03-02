@@ -98,7 +98,8 @@ fn handle_sender_initiation(
 			height: 0,
 			lock_height: 0,
 			is_coinbase: false,
-			block: BlockIdentifier::zero(),
+			block: None,
+			merkle_proof: None,
 		});
 
 		key_id
@@ -322,7 +323,8 @@ pub fn receive_coinbase(
 			height: height,
 			lock_height: lock_height,
 			is_coinbase: true,
-			block: BlockIdentifier::zero(),
+			block: None,
+			merkle_proof: None,
 		});
 
 		(key_id, derivation)
@@ -404,7 +406,8 @@ fn build_final_transaction(
 			height: 0,
 			lock_height: 0,
 			is_coinbase: false,
-			block: BlockIdentifier::zero(),
+			block: None,
+			merkle_proof: None,
 		});
 
 		(key_id, derivation)

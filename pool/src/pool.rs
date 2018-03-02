@@ -186,7 +186,7 @@ where
 		}
 
 		// Making sure the transaction is valid before anything else.
-		tx.validate().map_err(|_e| PoolError::Invalid)?;
+		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
 
 		// The first check involves ensuring that an identical transaction is
   // not already in the pool's transaction set.
@@ -646,9 +646,10 @@ mod tests {
 	use blake2;
 	use core::global::ChainTypes;
 	use core::core::SwitchCommitHash;
-	use core::core::hash::ZERO_HASH;
 	use core::core::hash::{Hash, Hashed};
+	use core::core::pmmr::MerkleProof;
 	use core::core::target::Difficulty;
+	use types::PoolError::InvalidTx;
 
 	macro_rules! expect_output_parent {
 		($pool:expr, $expected:pat, $( $output:expr ),+ ) => {
@@ -873,7 +874,7 @@ mod tests {
 			);
 			let result = write_pool.add_to_memory_pool(test_source(), txn);
 			match result {
-				Err(PoolError::ImmatureCoinbase) => {},
+				Err(InvalidTx(transaction::Error::ImmatureCoinbase)) => {},
 				_ => panic!("expected ImmatureCoinbase error here"),
 			};
 
@@ -1024,22 +1025,22 @@ mod tests {
   //  invalidated (orphaned).
 		let conflict_child = test_transaction(vec![12], vec![2]);
 		// 7. A transaction that descends from transaction 2 that should be
-  //  valid due to its inputs being satisfied by the block.
+		//  valid due to its inputs being satisfied by the block.
 		let conflict_valid_child = test_transaction(vec![6], vec![4]);
 		// 8. A transaction that descends from transaction 3 that should be
-  //  invalidated due to an output conflict.
+		//  invalidated due to an output conflict.
 		let valid_child_conflict = test_transaction(vec![13], vec![9]);
 		// 9. A transaction that descends from transaction 3 that should remain
-  //  valid after reconciliation.
+		//  valid after reconciliation.
 		let valid_child_valid = test_transaction(vec![15], vec![11]);
 		// 10. A transaction that descends from both transaction 6 and
-  //  transaction 9
+		//  transaction 9
 		let mixed_child = test_transaction(vec![2, 11], vec![7]);
 
 		// Add transactions.
-  // Note: There are some ordering constraints that must be followed here
-  // until orphans is 100% implemented. Once the orphans process has
-  // stabilized, we can mix these up to exercise that path a bit.
+		// Note: There are some ordering constraints that must be followed here
+		// until orphans is 100% implemented. Once the orphans process has
+		// stabilized, we can mix these up to exercise that path a bit.
 		let mut txs_to_add = vec![
 			block_transaction,
 			conflict_transaction,
@@ -1056,7 +1057,7 @@ mod tests {
 		let expected_pool_size = txs_to_add.len();
 
 		// First we add the above transactions to the pool; all should be
-  // accepted.
+		// accepted.
 		{
 			let mut write_pool = pool.write().unwrap();
 			assert_eq!(write_pool.total_size(), 0);
@@ -1068,8 +1069,8 @@ mod tests {
 			assert_eq!(write_pool.total_size(), expected_pool_size);
 		}
 		// Now we prepare the block that will cause the above condition.
-  // First, the transactions we want in the block:
-  // - Copy of 1
+		// First, the transactions we want in the block:
+		// - Copy of 1
 		let block_tx_1 = test_transaction(vec![10], vec![8]);
 		// - Conflict w/ 2, satisfies 7
 		let block_tx_2 = test_transaction(vec![20], vec![6]);
@@ -1103,7 +1104,7 @@ mod tests {
 			assert_eq!(evicted_transactions.unwrap().len(), 6);
 
 			// TODO: Txids are not yet deterministic. When they are, we should
-   // check the specific transactions that were evicted.
+			// check the specific transactions that were evicted.
 		}
 
 
@@ -1204,8 +1205,8 @@ mod tests {
 			txs = read_pool.prepare_mineable_transactions(3);
 			assert_eq!(txs.len(), 3);
 			// TODO: This is ugly, either make block::new take owned
-   // txs instead of mut refs, or change
-   // prepare_mineable_transactions to return mut refs
+			// txs instead of mut refs, or change
+			// prepare_mineable_transactions to return mut refs
 			let block_txs: Vec<transaction::Transaction> = txs.drain(..).map(|x| *x).collect();
 			let tx_refs = block_txs.iter().collect();
 
@@ -1276,7 +1277,7 @@ mod tests {
 
 		for input_value in input_values {
 			let key_id = keychain.derive_key_id(input_value as u32).unwrap();
-			tx_elements.push(build::input(input_value, ZERO_HASH, key_id));
+			tx_elements.push(build::input(input_value, key_id));
 		}
 
 		for output_value in output_values {
@@ -1304,9 +1305,22 @@ mod tests {
 
 		let mut tx_elements = Vec::new();
 
-		// for input_value in input_values {
+		let merkle_proof = MerkleProof {
+			node: Hash::zero(),
+			root: Hash::zero(),
+			peaks: vec![Hash::zero()],
+			.. MerkleProof::default()
+		};
+
 		let key_id = keychain.derive_key_id(input_value as u32).unwrap();
-		tx_elements.push(build::coinbase_input(input_value, input_block_hash, key_id));
+		tx_elements.push(
+			build::coinbase_input(
+				input_value,
+				input_block_hash,
+				merkle_proof,
+				key_id,
+			),
+		);
 
 		for output_value in output_values {
 			let key_id = keychain.derive_key_id(output_value as u32).unwrap();
@@ -1334,7 +1348,7 @@ mod tests {
 
 		for input_value in input_values {
 			let key_id = keychain.derive_key_id(input_value as u32).unwrap();
-			tx_elements.push(build::input(input_value, ZERO_HASH, key_id));
+			tx_elements.push(build::input(input_value, key_id));
 		}
 
 		for output_value in output_values {

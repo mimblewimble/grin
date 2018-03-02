@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ use api;
 use core::global;
 use core::core::{Output, SwitchCommitHash};
 use core::core::transaction::OutputFeatures;
-use types::{BlockIdentifier, WalletConfig, WalletData, OutputData, OutputStatus, Error, ErrorKind};
+use types::{WalletConfig, WalletData, OutputData, OutputStatus, Error, ErrorKind};
 use byteorder::{BigEndian, ByteOrder};
 
 
@@ -315,7 +315,8 @@ pub fn restore(
 							height: output.4,
 							lock_height: output.5,
 							is_coinbase: output.6,
-							block: BlockIdentifier::zero(),
+							block: None,
+							merkle_proof: None,
 						});
 					};
 				}

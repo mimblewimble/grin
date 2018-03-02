@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,7 +22,6 @@ use core::{
 	Committed,
 	Input,
 	Output,
-	OutputIdentifier,
 	ShortId,
 	SwitchCommitHash,
 	Proof,
@@ -75,6 +74,8 @@ pub enum Error {
 		/// The lock_height needed to be reached for the coinbase output to mature
 		lock_height: u64,
 	},
+	/// Underlying Merkle proof error
+	MerkleProof,
 	/// Other unspecified error condition
 	Other(String)
 }
@@ -613,13 +614,13 @@ impl Block {
 		let new_inputs = self.inputs
 			.iter()
 			.filter(|inp| !to_cut_through.contains(&inp.commitment()))
-			.map(|&inp| inp)
+			.cloned()
 			.collect::<Vec<_>>();
 
 		let new_outputs = self.outputs
 			.iter()
 			.filter(|out| !to_cut_through.contains(&out.commitment()))
-			.map(|&out| out)
+			.cloned()
 			.collect::<Vec<_>>();
 
 		Block {
@@ -642,6 +643,7 @@ impl Block {
 		self.verify_weight()?;
 		self.verify_sorted()?;
 		self.verify_coinbase()?;
+		self.verify_inputs()?;
 		self.verify_kernels()?;
 		Ok(())
 	}
@@ -657,6 +659,26 @@ impl Block {
 		self.inputs.verify_sort_order()?;
 		self.outputs.verify_sort_order()?;
 		self.kernels.verify_sort_order()?;
+		Ok(())
+	}
+
+	/// We can verify the Merkle proof (for coinbase inputs) here in isolation.
+	/// But we cannot check the following as we need data from the index and the PMMR.
+	/// So we must be sure to check these at the appropriate point during block validation.
+	///   * node is in the correct pos in the PMMR
+	///   * block is the correct one (based on utxo_root from block_header via the index)
+	fn verify_inputs(&self) -> Result<(), Error> {
+		let coinbase_inputs = self.inputs
+			.iter()
+			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT));
+
+		for input in coinbase_inputs {
+			let merkle_proof = input.merkle_proof();
+			if !merkle_proof.verify() {
+				return Err(Error::MerkleProof);
+			}
+		}
+
 		Ok(())
 	}
 
@@ -753,42 +775,6 @@ impl Block {
 		Ok(())
 	}
 
-	/// NOTE: this happens during apply_block (not the earlier validate_block)
-	///
-	/// Calculate lock_height as block_height + 1,000
-	/// Confirm height <= lock_height
-	pub fn verify_coinbase_maturity(
-		&self,
-		input: &Input,
-		height: u64,
-	) -> Result<(), Error> {
-		let output = OutputIdentifier::from_input(&input);
-
-		// We should only be calling verify_coinbase_maturity
-		// if the sender claims we are spending a coinbase output
-		// _and_ that we trust this claim.
-		// We should have already confirmed the entry from the MMR exists
-		// and has the expected hash.
-		assert!(output.features.contains(OutputFeatures::COINBASE_OUTPUT));
-
-		if let Some(_) = self.outputs
-			.iter()
-			.find(|x| OutputIdentifier::from_output(&x) == output)
-		{
-			let lock_height = self.header.height + global::coinbase_maturity();
-			if lock_height > height {
-				Err(Error::ImmatureCoinbase{
-					height: height,
-					lock_height: lock_height,
-				})
-			} else {
-				Ok(())
-			}
-		} else {
-			Err(Error::Other(format!("output not found in block")))
-		}
-	}
-
 	/// Builds the blinded output and related signature proof for the block reward.
 	pub fn reward_output(
 		keychain: &keychain::Keychain,
@@ -860,7 +846,6 @@ impl Block {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::hash::ZERO_HASH;
 	use core::Transaction;
 	use core::build::{self, input, output, with_fee};
 	use core::test::{tx1i2o, tx2i1o};
@@ -892,7 +877,7 @@ mod test {
 		key_id2: Identifier,
 	) -> Transaction {
 		build::transaction(
-			vec![input(v, ZERO_HASH, key_id1), output(3, key_id2), with_fee(2)],
+			vec![input(v, key_id1), output(3, key_id2), with_fee(2)],
 			&keychain,
 		).unwrap()
 	}
@@ -915,7 +900,7 @@ mod test {
 		}
 
 		let now = Instant::now();
-		parts.append(&mut vec![input(500000, ZERO_HASH, pks.pop().unwrap()), with_fee(2)]);
+		parts.append(&mut vec![input(500000, pks.pop().unwrap()), with_fee(2)]);
 		let mut tx = build::transaction(parts, &keychain)
 			.unwrap();
 		println!("Build tx: {}", now.elapsed().as_secs());
@@ -952,7 +937,7 @@ mod test {
 
 		let mut btx1 = tx2i1o();
 		let mut btx2 = build::transaction(
-			vec![input(7, ZERO_HASH, key_id1), output(5, key_id2.clone()), with_fee(2)],
+			vec![input(7, key_id1), output(5, key_id2.clone()), with_fee(2)],
 			&keychain,
 		).unwrap();
 

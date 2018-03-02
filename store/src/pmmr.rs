@@ -69,13 +69,7 @@ where
 		Ok(())
 	}
 
-	/// Get a Hash by insertion position
-	fn get(&self, position: u64, include_data:bool) -> Option<(Hash, Option<T>)> {
-		// Check if this position has been pruned in the remove log or the
-		// pruned list
-		if self.rm_log.includes(position) {
-			return None;
-		}
+	fn get_from_file(&self, position: u64) -> Option<Hash> {
 		let shift = self.pruned_nodes.get_shift(position);
 		if let None = shift {
 			return None;
@@ -89,8 +83,8 @@ where
 		let hash_record_len = 32;
 		let file_offset = ((pos - shift.unwrap()) as usize) * hash_record_len;
 		let data = self.hash_file.read(file_offset, hash_record_len);
-		let hash_val = match ser::deserialize(&mut &data[..]) {
-			Ok(h) => h,
+		match ser::deserialize(&mut &data[..]) {
+			Ok(h) => Some(h),
 			Err(e) => {
 				error!(
 					LOGGER,
@@ -99,10 +93,26 @@ where
 				);
 				return None;
 			}
-		};
+		}
+	}
 
+	/// Get a Hash by insertion position
+	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)> {
+		// Check if this position has been pruned in the remove log or the
+		// pruned list
+		if self.rm_log.includes(position) {
+			return None;
+		}
+
+		let hash_val = self.get_from_file(position);
+
+		// TODO - clean this up
 		if !include_data {
-			return Some(((hash_val), None));
+			if let Some(hash) = hash_val {
+				return Some((hash, None));
+			} else {
+				return None;
+			}
 		}
 
 		// Optionally read flatfile storage to get data element
@@ -123,7 +133,12 @@ where
 			}
 		};
 
-		Some((hash_val, data))
+		// TODO - clean this up
+		if let Some(hash) = hash_val {
+			return Some((hash, data));
+		} else {
+			return None;
+		}
 	}
 
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {
@@ -338,5 +353,3 @@ where
 		Ok(())
 	}
 }
-
-
