@@ -235,13 +235,13 @@ pub struct CompactBlock {
 /// Implementation of Writeable for a compact block, defines how to write the block to a
 /// binary writer. Differentiates between writing the block for the purpose of
 /// full serialization and the one of just extracting a hash.
-/// Note: compact block hash uses both the header *and* the nonce.
 impl Writeable for CompactBlock {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		try!(self.header.write(writer));
-		try!(writer.write_u64(self.nonce));
 
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			try!(writer.write_u64(self.nonce));
+
 			ser_multiwrite!(
 				writer,
 				[write_u64, self.out_full.len() as u64],
@@ -454,9 +454,6 @@ impl Block {
 		let header = self.header.clone();
 		let nonce = thread_rng().next_u64();
 
-		// concatenate the nonce with our block_header to build the hash
-		let hash = (self, nonce).hash();
-
 		let mut out_full = self.outputs
 			.iter()
 			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
@@ -470,7 +467,7 @@ impl Block {
 			if k.features.contains(KernelFeatures::COINBASE_KERNEL) {
 				kern_full.push(k.clone());
 			} else {
-				kern_ids.push(k.short_id(&hash));
+				kern_ids.push(k.short_id(&header.hash(), nonce));
 			}
 		}
 
@@ -1166,16 +1163,18 @@ mod test {
 		let cb1 = b.as_compact_block();
 		let cb2 = b.as_compact_block();
 
-		// random nonce included in hash each time we generate a compact_block
-		// so the hash will always be unique (we use this to generate unique short_ids)
-		assert!(cb1.hash() != cb2.hash());
+		// random nonce will not affect the hash of the compact block itself
+		// hash is based on header only
+		assert!(cb1.nonce != cb2.nonce);
+		assert_eq!(b.hash(), cb1.hash());
+		assert_eq!(cb1.hash(), cb2.hash());
 
 		assert!(cb1.kern_ids[0] != cb2.kern_ids[0]);
 
 		// check we can identify the specified kernel from the short_id
-		// in either of the compact_blocks
-		assert_eq!(cb1.kern_ids[0], tx.kernels[0].short_id(&cb1.hash()));
-		assert_eq!(cb2.kern_ids[0], tx.kernels[0].short_id(&cb2.hash()));
+		// correctly in both of the compact_blocks
+		assert_eq!(cb1.kern_ids[0], tx.kernels[0].short_id(&cb1.hash(), cb1.nonce));
+		assert_eq!(cb2.kern_ids[0], tx.kernels[0].short_id(&cb2.hash(), cb2.nonce));
 	}
 
 	#[test]
@@ -1195,7 +1194,7 @@ mod test {
 				.iter()
 				.find(|x| !x.features.contains(KernelFeatures::COINBASE_KERNEL))
 				.unwrap()
-				.short_id(&cb.hash())
+				.short_id(&cb.hash(), cb.nonce)
 		);
 	}
 

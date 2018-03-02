@@ -32,25 +32,28 @@ pub const SHORT_ID_SIZE: usize = 6;
 pub trait ShortIdentifiable {
 	/// The short_id of a kernel uses a hash built from the block_header *and* a
 	/// connection specific nonce to minimize the effect of collisions.
-	fn short_id(&self, hash: &Hash) -> ShortId;
+	fn short_id(&self, hash: &Hash, nonce: u64) -> ShortId;
 }
 
 impl<H: Hashed> ShortIdentifiable for H {
 	/// Generate a short_id via the following -
 	///
-	///   * extract k0/k1 from block_hash (first two u64 values)
+	///   * extract k0/k1 from block_hash hashed with the nonce (first two u64 values)
 	///   * initialize a siphasher24 with k0/k1
 	///   * self.hash() passing in the siphasher24 instance
 	///   * drop the 2 most significant bytes (to return a 6 byte short_id)
 	///
-	fn short_id(&self, hash: &Hash) -> ShortId {
+	fn short_id(&self, hash: &Hash, nonce: u64) -> ShortId {
+		// take the block hash and the nonce and hash them together
+		let hash_with_nonce = (hash, nonce).hash();
+
 		// we "use" core::hash::Hash in the outer namespace
 		// so doing this here in the fn to minimize collateral damage/confusion
 		use std::hash::Hasher;
 
 		// extract k0/k1 from the block_hash
-		let k0 = LittleEndian::read_u64(&hash.0[0..8]);
-		let k1 = LittleEndian::read_u64(&hash.0[8..16]);
+		let k0 = LittleEndian::read_u64(&hash_with_nonce.0[0..8]);
+		let k1 = LittleEndian::read_u64(&hash_with_nonce.0[8..16]);
 
 		// initialize a siphasher24 with k0/k1
 		let mut sip_hasher = SipHasher24::new_with_keys(k0, k1);
@@ -142,14 +145,14 @@ mod test {
 		}
 
 		let foo = Foo(0);
+
 		let expected_hash = Hash::from_hex(
 			"81e47a19e6b29b0a65b9591762ce5143ed30d0261e5d24a3201752506b20f15c",
 		).unwrap();
 		assert_eq!(foo.hash(), expected_hash);
 
 		let other_hash = Hash::zero();
-		println!("{:?}", foo.short_id(&other_hash));
-		assert_eq!(foo.short_id(&other_hash), ShortId::from_hex("e973960ba690").unwrap());
+		assert_eq!(foo.short_id(&other_hash, foo.0), ShortId::from_hex("4cc808b62476").unwrap());
 
 		let foo = Foo(5);
 		let expected_hash = Hash::from_hex(
@@ -158,8 +161,7 @@ mod test {
 		assert_eq!(foo.hash(), expected_hash);
 
 		let other_hash = Hash::zero();
-		println!("{:?}", foo.short_id(&other_hash));
-		assert_eq!(foo.short_id(&other_hash), ShortId::from_hex("f0c06e838e59").unwrap());
+		assert_eq!(foo.short_id(&other_hash, foo.0), ShortId::from_hex("02955a094534").unwrap());
 
 		let foo = Foo(5);
 		let expected_hash = Hash::from_hex(
@@ -170,7 +172,6 @@ mod test {
 		let other_hash = Hash::from_hex(
 			"81e47a19e6b29b0a65b9591762ce5143ed30d0261e5d24a3201752506b20f15c",
 		).unwrap();
-		println!("{:?}", foo.short_id(&other_hash));
-		assert_eq!(foo.short_id(&other_hash), ShortId::from_hex("95bf0ca12d5b").unwrap());
+		assert_eq!(foo.short_id(&other_hash, foo.0), ShortId::from_hex("3e9cde72a687").unwrap());
 	}
 }

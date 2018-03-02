@@ -22,7 +22,7 @@ Illustration:
                                                    └-> I ...
 </pre>
 
-TODO Add transaction aggregation in stem mode
+This mechanism also allows Grin transactions to be aggregated during the stem phase and then broadcasted to all the nodes on the network. This result in transaction aggregation and possibly cut-through (thus removing spent outputs) giving a significant privacy gain similar to a non-interactive coinjoin with cut-through.
 
 ## Specification
 
@@ -49,7 +49,27 @@ Nodes that receives stem transactions are called stem relays. This relay is chos
 
 ## Aggregation
 
-TODO Transaction aggregation
+Two aggregation scenarios have been proposed.
+
+### Scenario 1: aggregating transaction without lock_height
+
+In this scenario, transactions are aggregated during the stem phase and then broadcasted to the mempool only when the fluff phase happens.
+
+Each node maintains a ```patience``` timer along with a ```max_patience``` value. When a node receives a stem transaction, its ```patience``` timer starts, waiting for more stem transactions to aggregate. Once the ```patience``` timer reachs the ```max_patience``` value, the node flips a coin to decide whether to send as stem or fluff.
+In the of a stem transactions, the node starts an embargo timer which is defined in the Considerations part. The node need to track every stem transactions it receives aggregated or not in order to guarantee its propagation and be able to revert to a previous stempool state.
+
+A simulation of this scenario is available [here](simulation.md).
+
+### Scenario 2: aggregating transaction with lock_height
+
+Similar to the previous scenario, except that we aggregate transactions that are locked with ```lock_height```. As of now (7f478d7), transactions with ```lock_height > chain_height``` are rejected by the mempool. In this scenario, such locked transaction would be accepted in the stempool and relayed to other stem relays with the following conditions:
+
+```
+if (lock_height <= chain_tip.height && coin_flip <= stem_probability)
+```
+
+In this scenario, a patience parameter would still exist to know for how long a peer keep the transaction to its stempool before broadcasting it. Also a ```max_lock_height``` parameter must be defined in order to limit the potential denial of service vector.
+
 
 ## Considerations
 
