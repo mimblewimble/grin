@@ -300,12 +300,7 @@ impl serde::ser::Serialize for OutputPrintable {
 		state.serialize_field("proof", &self.proof)?;
 		state.serialize_field("proof_hash", &self.proof_hash)?;
 
-		// TODO - rework this
-		let hex_merkle_proof: Option<String> = if let Some(ref merkle_proof) = self.merkle_proof {
-			Some(merkle_proof.to_hex())
-		} else {
-			None
-		};
+		let hex_merkle_proof = &self.merkle_proof.clone().map(|x| x.to_hex());
 		state.serialize_field("merkle_proof", &hex_merkle_proof)?;
 
 		state.end()

@@ -315,8 +315,9 @@ where
 
 		let root = self.root();
 
-		// TODO - get rid of this unwrap
-		let node = self.get(pos, false).unwrap().0;
+		let node = self.get(pos, false)
+			.ok_or(format!("no element at pos {}", pos))?
+			.0;
 
 		let family_branch = family_branch(pos, self.last_pos);
 		let left_right = family_branch
@@ -497,7 +498,8 @@ where
 			if bintree_postorder_height(n) > 0 {
 				if let Some(hs) = self.get(n, false) {
 					// take the left and right children, if they exist
-					let left_pos = bintree_move_down_left(n).unwrap();
+					let left_pos = bintree_move_down_left(n)
+						.ok_or(format!("left_pos not found"))?;
 					let right_pos = bintree_jump_right_sibling(left_pos);
 
 					if let Some(left_child_hs) = self.get(left_pos, false) {
@@ -505,7 +507,7 @@ where
 							// add hashes and compare
 							if left_child_hs.0+right_child_hs.0 != hs.0 {
 								return Err(format!("Invalid MMR, hash of parent at {} does \
-																	 not match children.", n));
+														not match children.", n));
 							}
 						}
 					}
