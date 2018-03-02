@@ -14,7 +14,7 @@ This document also helps visualizing all the timers in a simple way.
 
 A sends grins to B, adds the transaction to its stempool and starts its patience timer.
 
-![t = 0](images/ti.png)
+![t = 0](images/t0.png)
 
 ## T = 10
 
