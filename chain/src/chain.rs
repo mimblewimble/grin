@@ -187,7 +187,7 @@ impl Chain {
 					genesis.header.nonce,
 					genesis.header.pow,
 				);
-				let _ = pipe::save_pmmr_metadata(&tip, &sumtrees, store.clone());
+				pipe::save_pmmr_metadata(&tip, &sumtrees, store.clone())?;
 				tip
 			}
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
