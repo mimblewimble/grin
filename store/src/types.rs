@@ -156,6 +156,11 @@ impl AppendOnlyFile {
 		prune_offs: Vec<u64>,
 		prune_len: u64,
 	) -> io::Result<()> {
+		println!(
+			"***** save_prune: {}, {:?}, {}",
+			target, prune_offs, prune_len
+		);
+
 		let mut reader = File::open(self.path.clone())?;
 		let mut writer = File::create(target)?;
 

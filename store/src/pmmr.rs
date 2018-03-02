@@ -316,11 +316,24 @@ where
 	/// TODO whatever is calling this should also clean up the commit to
 	/// position index in db
 	pub fn check_compact(&mut self, max_len: usize, cutoff_index: u32) -> io::Result<()> {
+		println!(
+			"check_compact: {}, {}, {}",
+			self.rm_log.len(),
+			max_len,
+			cutoff_index
+		);
+
 		if !(max_len > 0 && self.rm_log.len() > max_len
 			|| max_len == 0 && self.rm_log.len() > RM_LOG_MAX_NODES)
 		{
 			return Ok(());
 		}
+
+		println!("***** compacting!!!");
+
+		println!("***** rm_log - {:?}", &self.rm_log.removed);
+
+		println!("***** pruned_nodes - {:?}", &self.pruned_nodes.pruned_nodes);
 
 		// 0. validate none of the nodes in the rm log are in the prune list (to
 		// avoid accidental double compaction)
@@ -346,6 +359,9 @@ where
 		} else {
 			None
 		});
+
+		println!("***** to_rm {:?}", to_rm);
+
 		self.hash_file
 			.save_prune(tmp_prune_file_hash.clone(), to_rm, record_len)?;
 
