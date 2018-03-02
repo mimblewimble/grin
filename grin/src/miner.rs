@@ -594,7 +594,7 @@ impl Miner {
 		let txs: Vec<&Transaction> = txs_box.iter().map(|tx| tx.as_ref()).collect();
 
 		// build the coinbase and the block itself
-		let fees = txs.iter().map(|tx| tx.fee).sum();
+		let fees = txs.iter().map(|tx| tx.fee()).sum();
 		let height = head.height + 1;
 		let block_fees = BlockFees {
 			fees,

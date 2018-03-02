@@ -42,13 +42,15 @@ db_root = ".grin"
 #
 chain_type = "Testnet1"
 
+#run the node in "full archive" mode (default is fast-sync, pruned node)
+#archive_mode = false
+
 #7 = Bit flags for FULL_NODE, this structure needs to be changed
 #internally to make it more configurable
-
 capabilities = [7]
 
 #skip waiting for sync on startup, (optional param, mostly for testing)
-#skip_sync_wait = true
+#skip_sync_wait = false
 
 #The P2P server details (i.e. the server that communicates with other
 #grin server nodes

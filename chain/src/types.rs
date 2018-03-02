@@ -40,6 +40,17 @@ bitflags! {
 	}
 }
 
+/// A helper to hold the roots of the sumtrees in order to keep them
+/// readable
+pub struct SumTreeRoots {
+	/// UTXO root
+	pub utxo_root: Hash,
+	/// Range Proof root
+	pub rproof_root: Hash,
+	/// Kernel root
+	pub kernel_root: Hash,
+}
+
 /// Errors
 #[derive(Debug)]
 pub enum Error {
@@ -81,6 +92,8 @@ pub enum Error {
 	InvalidSumtree(String),
 	/// Internal issue when trying to save or load data from store
 	StoreErr(grin_store::Error, String),
+	/// Internal issue when trying to save or load data from append only files
+	FileReadErr(String),
 	/// Error serializing or deserializing a type
 	SerErr(ser::Error),
 	/// Error with the sumtrees
@@ -227,6 +240,10 @@ pub trait ChainStore: Send + Sync {
 
 	/// Save the provided block in store
 	fn save_block(&self, b: &Block) -> Result<(), store::Error>;
+
+	/// Delete a full block. Does not delete any record associated with a block
+	/// header.
+	fn delete_block(&self, bh: &Hash) -> Result<(), store::Error>;
 
 	/// Save the provided block header in store
 	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), store::Error>;

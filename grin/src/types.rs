@@ -117,7 +117,7 @@ pub struct ServerConfig {
 	pub chain_type: ChainTypes,
 
 	/// Whether this node is a full archival node or a fast-sync, pruned node
-	pub archive_mode: bool,
+	pub archive_mode: Option<bool>,
 
 	/// Method used to get the list of seed nodes for initial bootstrap.
 	#[serde(default)]
@@ -158,9 +158,9 @@ impl Default for ServerConfig {
 			p2p_config: p2p::P2PConfig::default(),
 			mining_config: Some(pow::types::MinerConfig::default()),
 			chain_type: ChainTypes::default(),
-			archive_mode: false,
+			archive_mode: None,
 			pool_config: pool::PoolConfig::default(),
-			skip_sync_wait: Some(true),
+			skip_sync_wait: None,
 		}
 	}
 }

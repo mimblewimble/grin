@@ -17,11 +17,13 @@
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
 
-use util::secp::pedersen::Commitment;
-
+use core::core::hash::Hashed;
+use core::core::id::ShortIdentifiable;
 use core::core::transaction;
-use core::core::{block, hash, OutputIdentifier};
-use core::global;
+use core::core::{OutputIdentifier, Transaction};
+use core::core::{block, hash};
+use util::LOGGER;
+use util::secp::pedersen::Commitment;
 
 use types::*;
 pub use graph;
@@ -49,7 +51,11 @@ where
 	T: BlockChain,
 {
 	/// Create a new transaction pool
-	pub fn new(config: PoolConfig, chain: Arc<T>, adapter: Arc<PoolAdapter>) -> TransactionPool<T> {
+	pub fn new(
+		config: PoolConfig,
+		chain: Arc<T>,
+		adapter: Arc<PoolAdapter>,
+	) -> TransactionPool<T> {
 		TransactionPool {
 			config: config,
 			transactions: HashMap::new(),
@@ -58,6 +64,43 @@ where
 			blockchain: chain,
 			adapter: adapter,
 		}
+	}
+
+	/// Query the tx pool for all known txs based on kernel short_ids
+	/// from the provided compact_block.
+	/// Note: does not validate that we return the full set of required txs.
+	/// The caller will need to validate that themselves.
+	pub fn retrieve_transactions(&self, cb: &block::CompactBlock) -> Vec<Transaction> {
+		debug!(
+			LOGGER,
+			"pool: retrieve_transactions: kern_ids - {:?}, txs - {}, {:?}",
+			cb.kern_ids,
+			self.transactions.len(),
+			self.transactions.keys(),
+		);
+
+		let mut txs = vec![];
+
+		for tx in self.transactions.values() {
+			for kernel in &tx.kernels {
+				// rehash each kernel to calculate the block specific short_id
+				let short_id = kernel.short_id(&cb.hash(), cb.nonce);
+
+				// if any kernel matches then keep the tx for later
+				if cb.kern_ids.contains(&short_id) {
+					txs.push(*tx.clone());
+					break;
+				}
+			}
+		}
+
+		debug!(
+			LOGGER,
+			"pool: retrieve_transactions: matching txs from pool - {}",
+			txs.len(),
+		);
+
+		txs
 	}
 
 	/// Searches for an output, designated by its commitment, from the current
@@ -160,9 +203,9 @@ where
 		}
 
 		let head_header = self.blockchain.head_header()?;
-		if head_header.height < tx.lock_height {
+		if head_header.height < tx.lock_height() {
 			return Err(PoolError::ImmatureTransaction {
-				lock_height: tx.lock_height,
+				lock_height: tx.lock_height(),
 			});
 		}
 
@@ -583,7 +626,7 @@ where
 				tx_weight = 1;
 			}
 			let threshold = (tx_weight as u64) * self.config.accept_fee_base;
-			if tx.fee < threshold {
+			if tx.fee() < threshold {
 				return Err(PoolError::LowFeeTransaction(threshold));
 			}
 		}
@@ -1242,8 +1285,7 @@ mod tests {
 		}
 		tx_elements.push(build::with_fee(fees as u64));
 
-		let (tx, _) = build::transaction(tx_elements, &keychain).unwrap();
-		tx
+		build::transaction(tx_elements, &keychain).unwrap()
 	}
 
 	fn test_transaction_with_coinbase_input(
@@ -1272,8 +1314,7 @@ mod tests {
 		}
 		tx_elements.push(build::with_fee(fees as u64));
 
-		let (tx, _) = build::transaction(tx_elements, &keychain).unwrap();
-		tx
+		build::transaction(tx_elements, &keychain).unwrap()
 	}
 
 	/// Very un-dry way of building a vanilla tx and adding a lock_height to it.
@@ -1303,8 +1344,7 @@ mod tests {
 		tx_elements.push(build::with_fee(fees as u64));
 
 		tx_elements.push(build::with_lock_height(lock_height));
-		let (tx, _) = build::transaction(tx_elements, &keychain).unwrap();
-		tx
+		build::transaction(tx_elements, &keychain).unwrap()
 	}
 
 	/// Deterministically generate an output defined by our test scheme
@@ -1319,7 +1359,7 @@ mod tests {
 			&key_id,
 		);
 		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
+		let proof = keychain.range_proof(value, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg).unwrap();
 
 		transaction::Output {
 			features: transaction::OutputFeatures::DEFAULT_OUTPUT,
@@ -1341,7 +1381,7 @@ mod tests {
 			&key_id,
 		);
 		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain.range_proof(value, &key_id, commit, msg).unwrap();
+		let proof = keychain.range_proof(value, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg).unwrap();
 
 		transaction::Output {
 			features: transaction::OutputFeatures::COINBASE_OUTPUT,

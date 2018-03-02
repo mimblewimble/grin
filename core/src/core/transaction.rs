@@ -16,18 +16,19 @@
 use blake2::blake2b::blake2b;
 use util::secp::{self, Message, Signature};
 use util::{static_secp_instance, kernel_sig_msg};
-use util::secp::pedersen::{Commitment, RangeProof};
-use std::cmp::min;
+use util::secp::pedersen::{Commitment, RangeProof, ProofMessage};
+use std::cmp::{min, max};
 use std::cmp::Ordering;
-use std::ops;
+use std::{error, fmt};
 
 use consensus;
 use consensus::VerifySortOrder;
 use core::Committed;
 use core::hash::{Hash, Hashed, ZERO_HASH};
-use core::pmmr::Summable;
-use keychain::{Identifier, Keychain};
-use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
+use keychain::{Identifier, Keychain, BlindingFactor};
+use keychain;
+use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, WriteableSorted, Writer, ser_vec};
+use std::io::Cursor;
 use util;
 
 /// The size of the blake2 hash of a switch commitment (256 bits)
@@ -49,24 +50,24 @@ bitflags! {
 // don't seem to be able to define an Ord implementation for Hash due to
 // Ord being defined on all pointers, resorting to a macro instead
 macro_rules! hashable_ord {
-  ($hashable: ident) => {
-    impl Ord for $hashable {
-      fn cmp(&self, other: &$hashable) -> Ordering {
-        self.hash().cmp(&other.hash())
-      }
-    }
-    impl PartialOrd for $hashable {
-      fn partial_cmp(&self, other: &$hashable) -> Option<Ordering> {
-        Some(self.hash().cmp(&other.hash()))
-      }
-    }
-    impl PartialEq for $hashable {
-      fn eq(&self, other: &$hashable) -> bool {
-        self.hash() == other.hash()
-      }
-    }
-    impl Eq for $hashable {}
-  }
+	($hashable: ident) => {
+		impl Ord for $hashable {
+			fn cmp(&self, other: &$hashable) -> Ordering {
+				self.hash().cmp(&other.hash())
+			}
+		}
+		impl PartialOrd for $hashable {
+			fn partial_cmp(&self, other: &$hashable) -> Option<Ordering> {
+				Some(self.hash().cmp(&other.hash()))
+			}
+		}
+		impl PartialEq for $hashable {
+			fn eq(&self, other: &$hashable) -> bool {
+				self.hash() == other.hash()
+			}
+		}
+		impl Eq for $hashable {}
+	}
 }
 
 /// Errors thrown by Block validation
@@ -74,8 +75,15 @@ macro_rules! hashable_ord {
 pub enum Error {
 	/// Transaction fee can't be odd, due to half fee burning
 	OddFee,
+	/// Kernel fee can't be odd, due to half fee burning
+	OddKernelFee,
 	/// Underlying Secp256k1 error (signature validation or invalid public key typically)
 	Secp(secp::Error),
+	/// Underlying keychain related error
+	Keychain(keychain::Error),
+	/// The sum of output minus input commitments does not
+	/// match the sum of kernel commitments
+	KernelSumMismatch,
 	/// Restrict number of incoming inputs
 	TooManyInputs,
 	/// Underlying consensus error (currently for sort order)
@@ -84,6 +92,24 @@ pub enum Error {
 	LockHeight(u64),
 	/// Error originating from an invalid switch commitment (coinbase lock_height related)
 	SwitchCommitment,
+	/// Range proof validation error
+	RangeProof,
+}
+
+impl error::Error for Error {
+	fn description(&self) -> &str {
+		match *self {
+			_ => "some kind of keychain error",
+		}
+	}
+}
+
+impl fmt::Display for Error {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			_ => write!(f, "some kind of keychain error"),
+		}
+	}
 }
 
 impl From<secp::Error> for Error {
@@ -97,6 +123,13 @@ impl From<consensus::Error> for Error {
 		Error::ConsensusError(e)
 	}
 }
+
+impl From<keychain::Error> for Error {
+	fn from(e: keychain::Error) -> Error {
+		Error::Keychain(e)
+	}
+}
+
 
 /// A proof that a transaction sums to zero. Includes both the transaction's
 /// Pedersen commitment and the signature, that guarantees that the commitments
@@ -122,6 +155,15 @@ pub struct TxKernel {
 }
 
 hashable_ord!(TxKernel);
+
+/// TODO - no clean way to bridge core::hash::Hash and std::hash::Hash implementations?
+impl ::std::hash::Hash for Output {
+	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &self).expect("serialization failed");
+		::std::hash::Hash::hash(&vec, state);
+	}
+}
 
 impl Writeable for TxKernel {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
@@ -168,8 +210,33 @@ impl TxKernel {
 		Ok(())
 	}
 
-	/// Size in bytes of a kernel, necessary for binary storage
-	pub fn size() -> usize {
+	/// Build an empty tx kernel with zero values.
+	pub fn empty() -> TxKernel {
+		TxKernel {
+			features: KernelFeatures::DEFAULT_KERNEL,
+			fee: 0,
+			lock_height: 0,
+			excess: Commitment::from_vec(vec![0; 33]),
+			excess_sig: Signature::from_raw_data(&[0; 64]).unwrap(),
+		}
+	}
+
+	/// Builds a new tx kernel with the provided fee.
+	pub fn with_fee(self, fee: u64) -> TxKernel {
+		TxKernel { fee: fee, ..self }
+	}
+
+	/// Builds a new tx kernel with the provided lock_height.
+	pub fn with_lock_height(self, lock_height: u64) -> TxKernel {
+		TxKernel {
+			lock_height: lock_height,
+			..self
+		}
+	}
+}
+
+impl PMMRable for TxKernel {
+	fn len() -> usize {
 		17 + // features plus fee and lock_height
 			secp::constants::PEDERSEN_COMMITMENT_SIZE +
 			secp::constants::AGG_SIGNATURE_SIZE
@@ -179,41 +246,37 @@ impl TxKernel {
 /// A transaction
 #[derive(Debug, Clone)]
 pub struct Transaction {
-	/// Set of inputs spent by the transaction.
+	/// List of inputs spent by the transaction.
 	pub inputs: Vec<Input>,
-	/// Set of outputs the transaction produces.
+	/// List of outputs the transaction produces.
 	pub outputs: Vec<Output>,
-	/// Fee paid by the transaction.
-	pub fee: u64,
-	/// Transaction is not valid before this chain height.
-	pub lock_height: u64,
-	/// The signature proving the excess is a valid public key, which signs
-	/// the transaction fee.
-	pub excess_sig: Signature,
+	/// List of kernels that make up this transaction (usually a single kernel).
+	pub kernels: Vec<TxKernel>,
+	/// The kernel "offset" k2
+	/// excess is k1G after splitting the key k = k1 + k2
+	pub offset: BlindingFactor,
 }
 
 /// Implementation of Writeable for a fully blinded transaction, defines how to
 /// write the transaction as binary.
 impl Writeable for Transaction {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(
-			writer,
-			[write_u64, self.fee],
-			[write_u64, self.lock_height]
-		);
-		self.excess_sig.write(writer)?;
+		self.offset.write(writer)?;
 		ser_multiwrite!(
 			writer,
 			[write_u64, self.inputs.len() as u64],
-			[write_u64, self.outputs.len() as u64]
+			[write_u64, self.outputs.len() as u64],
+			[write_u64, self.kernels.len() as u64]
 		);
 
 		// Consensus rule that everything is sorted in lexicographical order on the wire.
 		let mut inputs = self.inputs.clone();
 		let mut outputs = self.outputs.clone();
+		let mut kernels = self.kernels.clone();
 
 		try!(inputs.write_sorted(writer));
 		try!(outputs.write_sorted(writer));
+		try!(kernels.write_sorted(writer));
 
 		Ok(())
 	}
@@ -223,23 +286,20 @@ impl Writeable for Transaction {
 /// transaction from a binary stream.
 impl Readable for Transaction {
 	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
-		let (fee, lock_height) =
-			ser_multiread!(reader, read_u64, read_u64);
+		let offset = BlindingFactor::read(reader)?;
 
-		let excess_sig = Signature::read(reader)?;
-
-		let (input_len, output_len) =
-			ser_multiread!(reader, read_u64, read_u64);
+		let (input_len, output_len, kernel_len) =
+			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
 		let inputs = read_and_verify_sorted(reader, input_len)?;
 		let outputs = read_and_verify_sorted(reader, output_len)?;
+		let kernels = read_and_verify_sorted(reader, kernel_len)?;
 
 		Ok(Transaction {
-			fee: fee,
-			lock_height: lock_height,
-			excess_sig: excess_sig,
-			inputs: inputs,
-			outputs: outputs,
+			offset,
+			inputs,
+			outputs,
+			kernels,
 			..Default::default()
 		})
 	}
@@ -253,7 +313,7 @@ impl Committed for Transaction {
 		&self.outputs
 	}
 	fn overage(&self) -> i64 {
-		(self.fee as i64)
+		(self.fee() as i64)
 	}
 }
 
@@ -267,28 +327,34 @@ impl Transaction {
 	/// Creates a new empty transaction (no inputs or outputs, zero fee).
 	pub fn empty() -> Transaction {
 		Transaction {
-			fee: 0,
-			lock_height: 0,
-			excess_sig: Signature::from_raw_data(&[0;64]).unwrap(),
+			offset: BlindingFactor::zero(),
 			inputs: vec![],
 			outputs: vec![],
+			kernels: vec![],
 		}
 	}
 
 	/// Creates a new transaction initialized with
-	/// the provided inputs, outputs, fee and lock_height.
+	/// the provided inputs, outputs, kernels
 	pub fn new(
 		inputs: Vec<Input>,
 		outputs: Vec<Output>,
-		fee: u64,
-		lock_height: u64,
+		kernels: Vec<TxKernel>,
 	) -> Transaction {
 		Transaction {
-			fee: fee,
-			lock_height: lock_height,
-			excess_sig: Signature::from_raw_data(&[0;64]).unwrap(),
+			offset: BlindingFactor::zero(),
 			inputs: inputs,
 			outputs: outputs,
+			kernels: kernels,
+		}
+	}
+
+	/// Creates a new transaction using this transaction as a template
+	/// and with the specified offset.
+	pub fn with_offset(self, offset: BlindingFactor) -> Transaction {
+		Transaction {
+			offset: offset,
+			..self
 		}
 	}
 
@@ -316,74 +382,92 @@ impl Transaction {
 		}
 	}
 
-	/// Builds a new transaction with the provided fee.
-	pub fn with_fee(self, fee: u64) -> Transaction {
-		Transaction { fee: fee, ..self }
+	/// Total fee for a transaction is the sum of fees of all kernels.
+	pub fn fee(&self) -> u64 {
+		self.kernels.iter().fold(0, |acc, ref x| acc + x.fee)
 	}
 
-	/// Builds a new transaction with the provided lock_height.
-	pub fn with_lock_height(self, lock_height: u64) -> Transaction {
-		Transaction {
-			lock_height: lock_height,
-			..self
-		}
+	/// Lock height of a transaction is the max lock height of the kernels.
+	pub fn lock_height(&self) -> u64 {
+		self.kernels.iter().fold(0, |acc, ref x| max(acc, x.lock_height))
 	}
 
-	/// The verification for a MimbleWimble transaction involves getting the
-	/// excess of summing all commitments and using it as a public key
-	/// to verify the embedded signature. The rational is that if the values
-	/// sum to zero as they should in r.G + v.H then only k.G the excess
-	/// of the sum of r.G should be left. And r.G is the definition of a
-	/// public key generated using r as a private key.
-	pub fn verify_sig(&self) -> Result<Commitment, secp::Error> {
-		let rsum = self.sum_commitments()?;
-
-		let msg = Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height))?;
-
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
-		let sig = self.excess_sig;
-		// pretend the sum is a public key (which it is, being of the form r.G) and
-		// verify the transaction sig with it
-		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &rsum);
-		if !valid {
-			return Err(secp::Error::IncorrectSignature);
+	/// To verify transaction kernels we check that -
+	///  * all kernels have an even fee
+	///  * sum of input/output commitments matches sum of kernel commitments after applying offset
+	///  * each kernel sig is valid (i.e. tx commitments sum to zero, given above is true)
+	fn verify_kernels(&self) -> Result<(), Error> {
+		// check that each individual kernel fee is even
+		// TODO - is this strictly necessary given that we check overall tx fee?
+		// TODO - move this into verify_fee() check or maybe kernel.verify()?
+		for k in &self.kernels {
+			if k.fee & 1 != 0 {
+				return Err(Error::OddKernelFee);
+			}
 		}
-		Ok(rsum)
-	}
 
-	/// Builds a transaction kernel
-	pub fn build_kernel(&self, excess: Commitment) -> TxKernel {
-		TxKernel {
-			features: KernelFeatures::DEFAULT_KERNEL,
-			excess: excess,
-			excess_sig: self.excess_sig.clone(),
-			fee: self.fee,
-			lock_height: self.lock_height,
+		// sum all input and output commitments
+		let io_sum = self.sum_commitments()?;
+
+		// sum all kernels commitments
+		let kernel_sum = {
+			let mut kernel_commits = self.kernels
+				.iter()
+				.map(|x| x.excess)
+				.collect::<Vec<_>>();
+
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+
+			// add the offset in as necessary (unless offset is zero)
+			if self.offset != BlindingFactor::zero() {
+				let skey = self.offset.secret_key(&secp)?;
+				let offset_commit = secp.commit(0, skey)?;
+				kernel_commits.push(offset_commit);
+			}
+
+			secp.commit_sum(kernel_commits, vec![])?
+		};
+
+		// sum of kernel commitments (including the offset) must match
+		// the sum of input/output commitments (minus fee)
+		if kernel_sum != io_sum {
+			return Err(Error::KernelSumMismatch);
 		}
+
+		// verify all signatures with the commitment as pk
+		for kernel in &self.kernels {
+			kernel.verify()?;
+		}
+
+		Ok(())
 	}
 
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(&self) -> Result<Commitment, Error> {
-		if self.fee & 1 != 0 {
+	pub fn validate(&self) -> Result<(), Error> {
+		if self.fee() & 1 != 0 {
 			return Err(Error::OddFee);
 		}
 		if self.inputs.len() > consensus::MAX_BLOCK_INPUTS {
 			return Err(Error::TooManyInputs);
 		}
 		self.verify_sorted()?;
+
 		for out in &self.outputs {
 			out.verify_proof()?;
 		}
-		let excess = self.verify_sig()?;
-		Ok(excess)
+
+		self.verify_kernels()?;
+
+		Ok(())
 	}
 
 	fn verify_sorted(&self) -> Result<(), Error> {
 		self.inputs.verify_sort_order()?;
 		self.outputs.verify_sort_order()?;
+		self.kernels.verify_sort_order()?;
 		Ok(())
 	}
 }
@@ -393,7 +477,7 @@ impl Transaction {
 /// Primarily a reference to an output being spent by the transaction.
 /// But also information required to verify coinbase maturity through
 /// the lock_height hashed in the switch_commit_hash.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash)]
 pub struct Input{
 	/// The features of the output being spent.
 	/// We will check maturity for coinbase output.
@@ -515,7 +599,7 @@ impl SwitchCommitHashKey {
 }
 
 /// Definition of the switch commitment hash
-#[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Hash, PartialEq, Serialize, Deserialize)]
 pub struct SwitchCommitHash([u8; SWITCH_COMMIT_HASH_SIZE]);
 
 /// Implementation of Writeable for a switch commitment hash
@@ -604,17 +688,13 @@ impl SwitchCommitHash {
 /// provides future-proofing against quantum-based attacks, as well as providing
 /// wallet implementations with a way to identify their outputs for wallet
 /// reconstruction.
-///
-/// The hash of an output only covers its features, commitment,
-/// and switch commitment. The range proof is expected to have its own hash
-/// and is stored and committed to separately.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct Output {
 	/// Options for an output's structure or use
 	pub features: OutputFeatures,
 	/// The homomorphic commitment representing the output amount
 	pub commit: Commitment,
-	/// The switch commitment hash, a 160 bit length blake2 hash of blind*J
+	/// The switch commitment hash, a 256 bit length blake2 hash of blind*J
 	pub switch_commit_hash: SwitchCommitHash,
 	/// A proof that the commitment is in the right range
 	pub proof: RangeProof,
@@ -622,15 +702,28 @@ pub struct Output {
 
 hashable_ord!(Output);
 
+/// TODO - no clean way to bridge core::hash::Hash and std::hash::Hash implementations?
+impl ::std::hash::Hash for TxKernel {
+	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
+		let mut vec = Vec::new();
+		ser::serialize(&mut vec, &self).expect("serialization failed");
+		::std::hash::Hash::hash(&vec, state);
+	}
+}
+
 /// Implementation of Writeable for a transaction Output, defines how to write
 /// an Output as binary.
 impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
 		writer.write_fixed_bytes(&self.commit)?;
-		writer.write_fixed_bytes(&self.switch_commit_hash)?;
-
-		// The hash of an output doesn't include the range proof
+		// Hash of an output doesn't cover the switch commit, it should
+		// be wound into the range proof separately
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			writer.write_fixed_bytes(&self.switch_commit_hash)?;
+		}
+		// The hash of an output doesn't include the range proof, which
+		// is commit to separately
 		if writer.serialization_mode() == ser::SerializationMode::Full {
 			writer.write_bytes(&self.proof)?
 		}
@@ -675,16 +768,20 @@ impl Output {
 	pub fn verify_proof(&self) -> Result<(), secp::Error> {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		secp.verify_range_proof(self.commit, self.proof).map(|_| ())
+		match Keychain::verify_range_proof(&secp, self.commit, self.proof, Some(self.switch_commit_hash.as_ref().to_vec())){
+			Ok(_) => Ok(()),
+			Err(e) => Err(e),
+		}
 	}
 
 	/// Given the original blinding factor we can recover the
 	/// value from the range proof and the commitment
 	pub fn recover_value(&self, keychain: &Keychain, key_id: &Identifier) -> Option<u64> {
-		match keychain.rewind_range_proof(key_id, self.commit, self.proof) {
+		match keychain.rewind_range_proof(key_id, self.commit, Some(self.switch_commit_hash.as_ref().to_vec()), self.proof) {
 			Ok(proof_info) => {
 				if proof_info.success {
-					Some(proof_info.value)
+					let elements = ProofMessageElements::from_proof_message(proof_info.message).unwrap();
+					Some(elements.value)
 				} else {
 					None
 				}
@@ -692,6 +789,7 @@ impl Output {
 			Err(_) => None,
 		}
 	}
+
 }
 
 /// An output_identifier can be build from either an input _or_ and output and
@@ -739,21 +837,6 @@ impl OutputIdentifier {
 			util::to_hex(self.commit.0.to_vec()),
 		)
 	}
-
-	/// Convert an output_indentifier to a sum_commit representation
-	/// so we can use it to query the the output MMR
-	pub fn as_sum_commit(&self) -> SumCommit {
-		SumCommit {
-			features: self.features,
-			commit: self.commit,
-			switch_commit_hash: SwitchCommitHash::zero(),
-		}
-	}
-
-	/// Convert a sum_commit back to an output_identifier.
-	pub fn from_sum_commit(sum_commit: &SumCommit) -> OutputIdentifier {
-		OutputIdentifier::new(sum_commit.features, &sum_commit.commit)
-	}
 }
 
 impl Writeable for OutputIdentifier {
@@ -776,309 +859,285 @@ impl Readable for OutputIdentifier {
 	}
 }
 
-/// Wrapper to Output commitments to provide the Summable trait.
+/// Yet another output version to read/write from disk. Ends up being far too awkward
+/// to use the write serialisation property to do this
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct SumCommit {
+pub struct OutputStoreable {
 	/// Output features (coinbase vs. regular transaction output)
 	/// We need to include this when hashing to ensure coinbase maturity can be enforced.
 	pub features: OutputFeatures,
 	/// Output commitment
 	pub commit: Commitment,
-	/// The corresponding switch commit hash
+	/// Switch commit hash
 	pub switch_commit_hash: SwitchCommitHash,
 }
 
-impl SumCommit {
-	/// Build a new sum_commit.
-	pub fn new(
-		features: OutputFeatures,
-		commit: &Commitment,
-		switch_commit_hash: &SwitchCommitHash,
-	) -> SumCommit {
-		SumCommit {
-			features: features.clone(),
-			commit: commit.clone(),
-			switch_commit_hash: switch_commit_hash.clone(),
-		}
-	}
-
-	/// Build a new sum_commit from an existing output.
-	pub fn from_output(output: &Output) -> SumCommit {
-		SumCommit {
-			features: output.features,
-			commit: output.commit,
-			switch_commit_hash: output.switch_commit_hash,
-		}
-	}
-
-	/// Build a new sum_commit from an existing input.
-	pub fn from_input(input: &Input) -> SumCommit {
-		SumCommit {
-			features: input.features,
-			commit: input.commit,
-			switch_commit_hash: SwitchCommitHash::zero(),
-		}
-	}
-
-	/// Hex string representation of a sum_commit.
-	pub fn to_hex(&self) -> String {
-		format!(
-			"{:b}{}{}",
-			self.features.bits(),
-			util::to_hex(self.commit.0.to_vec()),
-			self.switch_commit_hash.to_hex(),
-		)
+impl OutputStoreable {
+/// Build a StoreableOutput from an existing output.
+pub fn from_output(output: &Output) -> OutputStoreable {
+	OutputStoreable {
+		features: output.features,
+		commit: output.commit,
+		switch_commit_hash: output.switch_commit_hash,
 	}
 }
 
-/// Outputs get summed through their commitments.
-impl Summable for SumCommit {
-	type Sum = SumCommit;
-
-	fn sum(&self) -> SumCommit {
-		SumCommit {
-			commit: self.commit.clone(),
-			features: self.features.clone(),
-			switch_commit_hash: self.switch_commit_hash.clone(),
-		}
+/// Return a regular output
+pub fn to_output(self, rproof: RangeProof) -> Output {
+	Output{
+		features: self.features,
+		commit: self.commit,
+		switch_commit_hash: self.switch_commit_hash,
+		proof: rproof,
 	}
+}
+}
 
-	fn sum_len() -> usize {
-		secp::constants::PEDERSEN_COMMITMENT_SIZE + SWITCH_COMMIT_HASH_SIZE + 1
+impl PMMRable for OutputStoreable {
+	fn len() -> usize {
+		1 + secp::constants::PEDERSEN_COMMITMENT_SIZE + SWITCH_COMMIT_HASH_SIZE
 	}
 }
 
-impl Writeable for SumCommit {
+impl Writeable for OutputStoreable {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
 		self.commit.write(writer)?;
-		if writer.serialization_mode() == ser::SerializationMode::Full {
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			self.switch_commit_hash.write(writer)?;
 		}
 		Ok(())
 	}
 }
 
-impl Readable for SumCommit {
-	fn read(reader: &mut Reader) -> Result<SumCommit, ser::Error> {
+impl Readable for OutputStoreable {
+	fn read(reader: &mut Reader) -> Result<OutputStoreable, ser::Error> {
 		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
 			ser::Error::CorruptedData,
 		)?;
-		Ok(SumCommit {
-			features: features,
+		Ok(OutputStoreable {
 			commit: Commitment::read(reader)?,
 			switch_commit_hash: SwitchCommitHash::read(reader)?,
+			features: features,
 		})
 	}
 }
 
-impl ops::Add for SumCommit {
-	type Output = SumCommit;
+/// A structure which contains fields that are to be commited to within
+/// an Output's range (bullet) proof.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct ProofMessageElements {
+	/// The amount, stored to allow for wallet reconstruction as
+	/// rewinding isn't supported in bulletproofs just yet
+	pub value: u64,
+}
 
-	fn add(self, other: SumCommit) -> SumCommit {
-		// Build a new commitment by summing the two commitments.
-		let secp = static_secp_instance();
-		let sum = match secp.lock().unwrap().commit_sum(
-			vec![
-				self.commit.clone(),
-				other.commit.clone(),
-			],
-			vec![],
-		) {
-			Ok(s) => s,
-			Err(_) => Commitment::from_vec(vec![1; 33]),
-		};
-
-		// Now build a new switch_commit_hash by concatenating the two switch_commit_hash value
-		// and hashing the result.
-		let mut bytes = self.switch_commit_hash.0.to_vec();
-		bytes.extend(other.switch_commit_hash.0.iter().cloned());
-		let key = SwitchCommitHashKey::zero();
-		let hash = blake2b(SWITCH_COMMIT_HASH_SIZE, &key.0, &bytes);
-		let hash = hash.as_bytes();
-		let mut h = [0; SWITCH_COMMIT_HASH_SIZE];
-		for i in 0..SWITCH_COMMIT_HASH_SIZE {
-			h[i] = hash[i];
+impl Writeable for ProofMessageElements {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.value)?;
+		for _ in 8..64 {
+			let _ = writer.write_u8(0);
 		}
-		let switch_commit_hash_sum = SwitchCommitHash(h);
+		Ok(())
+	}
+}
 
-		SumCommit {
-			features: self.features | other.features,
-			commit: sum,
-			switch_commit_hash: switch_commit_hash_sum,
-		}
+impl Readable for ProofMessageElements {
+	fn read(reader: &mut Reader) -> Result<ProofMessageElements, ser::Error> {
+		Ok(ProofMessageElements {
+			value: reader.read_u64()?,
+		})
+	}
+}
+
+impl ProofMessageElements {
+	/// Serialise and return a ProofMessage
+	pub fn to_proof_message(&self)->ProofMessage {
+		ProofMessage::from_bytes(&ser_vec(self).unwrap())
+	}
+
+	/// Deserialise and return the message elements
+	pub fn from_proof_message(proof_message:ProofMessage)
+		-> Result<ProofMessageElements, ser::Error> {
+		let mut c = Cursor::new(proof_message.as_bytes());
+		ser::deserialize::<ProofMessageElements>(&mut c)
 	}
 }
 
 #[cfg(test)]
 mod test {
-	use super::*;
-	use core::id::{ShortId, ShortIdentifiable};
-	use keychain::Keychain;
-	use util::secp;
+use super::*;
+use core::id::{ShortId, ShortIdentifiable};
+use keychain::Keychain;
+use util::secp;
 
-	#[test]
-	fn test_kernel_ser_deser() {
-		let keychain = Keychain::from_random_seed().unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
-		let commit = keychain.commit(5, &key_id).unwrap();
+#[test]
+fn test_kernel_ser_deser() {
+	let keychain = Keychain::from_random_seed().unwrap();
+	let key_id = keychain.derive_key_id(1).unwrap();
+	let commit = keychain.commit(5, &key_id).unwrap();
 
-		// just some bytes for testing ser/deser
-		let sig = secp::Signature::from_raw_data(&[0;64]).unwrap();
+	// just some bytes for testing ser/deser
+	let sig = secp::Signature::from_raw_data(&[0;64]).unwrap();
 
-		let kernel = TxKernel {
-			features: KernelFeatures::DEFAULT_KERNEL,
-			lock_height: 0,
-			excess: commit,
-			excess_sig: sig.clone(),
-			fee: 10,
-		};
+	let kernel = TxKernel {
+		features: KernelFeatures::DEFAULT_KERNEL,
+		lock_height: 0,
+		excess: commit,
+		excess_sig: sig.clone(),
+		fee: 10,
+	};
 
-		let mut vec = vec![];
-		ser::serialize(&mut vec, &kernel).expect("serialized failed");
-		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
-		assert_eq!(kernel2.lock_height, 0);
-		assert_eq!(kernel2.excess, commit);
-		assert_eq!(kernel2.excess_sig, sig.clone());
-		assert_eq!(kernel2.fee, 10);
+	let mut vec = vec![];
+	ser::serialize(&mut vec, &kernel).expect("serialized failed");
+	let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
+	assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
+	assert_eq!(kernel2.lock_height, 0);
+	assert_eq!(kernel2.excess, commit);
+	assert_eq!(kernel2.excess_sig, sig.clone());
+	assert_eq!(kernel2.fee, 10);
 
-		// now check a kernel with lock_height serializes/deserializes correctly
-		let kernel = TxKernel {
-			features: KernelFeatures::DEFAULT_KERNEL,
-			lock_height: 100,
-			excess: commit,
-			excess_sig: sig.clone(),
-			fee: 10,
-		};
+	// now check a kernel with lock_height serializes/deserializes correctly
+	let kernel = TxKernel {
+		features: KernelFeatures::DEFAULT_KERNEL,
+		lock_height: 100,
+		excess: commit,
+		excess_sig: sig.clone(),
+		fee: 10,
+	};
 
-		let mut vec = vec![];
-		ser::serialize(&mut vec, &kernel).expect("serialized failed");
-		let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
-		assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
-		assert_eq!(kernel2.lock_height, 100);
-		assert_eq!(kernel2.excess, commit);
-		assert_eq!(kernel2.excess_sig, sig.clone());
-		assert_eq!(kernel2.fee, 10);
+	let mut vec = vec![];
+	ser::serialize(&mut vec, &kernel).expect("serialized failed");
+	let kernel2: TxKernel = ser::deserialize(&mut &vec[..]).unwrap();
+	assert_eq!(kernel2.features, KernelFeatures::DEFAULT_KERNEL);
+	assert_eq!(kernel2.lock_height, 100);
+	assert_eq!(kernel2.excess, commit);
+	assert_eq!(kernel2.excess_sig, sig.clone());
+	assert_eq!(kernel2.fee, 10);
+}
+
+#[test]
+fn test_output_ser_deser() {
+	let keychain = Keychain::from_random_seed().unwrap();
+	let key_id = keychain.derive_key_id(1).unwrap();
+	let commit = keychain.commit(5, &key_id).unwrap();
+	let switch_commit = keychain.switch_commit(&key_id).unwrap();
+	let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+		switch_commit,
+		&keychain,
+		&key_id,
+	);
+	let msg = secp::pedersen::ProofMessage::empty();
+	let proof = keychain.range_proof(5, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg).unwrap();
+
+	let out = Output {
+		features: OutputFeatures::DEFAULT_OUTPUT,
+		commit: commit,
+		switch_commit_hash: switch_commit_hash,
+		proof: proof,
+	};
+
+	let mut vec = vec![];
+	ser::serialize(&mut vec, &out).expect("serialized failed");
+	let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
+
+	assert_eq!(dout.features, OutputFeatures::DEFAULT_OUTPUT);
+	assert_eq!(dout.commit, out.commit);
+	assert_eq!(dout.proof, out.proof);
+}
+
+#[test]
+fn test_output_value_recovery() {
+	let keychain = Keychain::from_random_seed().unwrap();
+	let key_id = keychain.derive_key_id(1).unwrap();
+	let value = 1003;
+
+	let commit = keychain.commit(value, &key_id).unwrap();
+	let switch_commit = keychain.switch_commit(&key_id).unwrap();
+	let switch_commit_hash = SwitchCommitHash::from_switch_commit(
+		switch_commit,
+		&keychain,
+		&key_id,
+	);
+	let msg = (ProofMessageElements {
+		value: value,
+	}).to_proof_message();
+
+	let proof = keychain.range_proof(value, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg).unwrap();
+
+	let output = Output {
+		features: OutputFeatures::DEFAULT_OUTPUT,
+		commit: commit,
+		switch_commit_hash: switch_commit_hash,
+		proof: proof,
+	};
+
+	// check we can successfully recover the value with the original blinding factor
+	let result = output.recover_value(&keychain, &key_id);
+	// TODO: Remove this check once value recovery is supported within bullet proofs
+	if let Some(v) = result {
+		assert_eq!(v, 1003);
+	} else {
+		return;
 	}
 
-	#[test]
-	fn test_output_ser_deser() {
-		let keychain = Keychain::from_random_seed().unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
-		let commit = keychain.commit(5, &key_id).unwrap();
-		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
-			switch_commit,
-			&keychain,
-			&key_id,
-		);
-		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain.range_proof(5, &key_id, commit, msg).unwrap();
+	// Bulletproofs message unwind will just be gibberish given the wrong blinding factor
+}
 
-		let out = Output {
-			features: OutputFeatures::DEFAULT_OUTPUT,
-			commit: commit,
-			switch_commit_hash: switch_commit_hash,
-			proof: proof,
-		};
+#[test]
+fn commit_consistency() {
+	let keychain = Keychain::from_seed(&[0; 32]).unwrap();
+	let key_id = keychain.derive_key_id(1).unwrap();
 
-		let mut vec = vec![];
-		ser::serialize(&mut vec, &out).expect("serialized failed");
-		let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
+	let commit = keychain.commit(1003, &key_id).unwrap();
+	let switch_commit = keychain.switch_commit(&key_id).unwrap();
+	println!("Switch commit: {:?}", switch_commit);
+	println!("commit: {:?}", commit);
+	let key_id = keychain.derive_key_id(1).unwrap();
 
-		assert_eq!(dout.features, OutputFeatures::DEFAULT_OUTPUT);
-		assert_eq!(dout.commit, out.commit);
-		assert_eq!(dout.proof, out.proof);
-	}
+	let switch_commit_2 = keychain.switch_commit(&key_id).unwrap();
+	let commit_2 = keychain.commit(1003, &key_id).unwrap();
+	println!("Switch commit 2: {:?}", switch_commit_2);
+	println!("commit2 : {:?}", commit_2);
 
-	#[test]
-	fn test_output_value_recovery() {
-		let keychain = Keychain::from_random_seed().unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
+	assert!(commit == commit_2);
+	assert!(switch_commit == switch_commit_2);
+}
 
-		let commit = keychain.commit(1003, &key_id).unwrap();
-		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
-			switch_commit,
-			&keychain,
-			&key_id,
-		);
-		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain.range_proof(1003, &key_id, commit, msg).unwrap();
+#[test]
+fn input_short_id() {
+	let keychain = Keychain::from_seed(&[0; 32]).unwrap();
+	let key_id = keychain.derive_key_id(1).unwrap();
+	let commit = keychain.commit(5, &key_id).unwrap();
 
-		let output = Output {
-			features: OutputFeatures::DEFAULT_OUTPUT,
-			commit: commit,
-			switch_commit_hash: switch_commit_hash,
-			proof: proof,
-		};
+	let input = Input {
+		features: OutputFeatures::DEFAULT_OUTPUT,
+		commit: commit,
+		out_block: None,
+	};
 
-		// check we can successfully recover the value with the original blinding factor
-		let recovered_value = output.recover_value(&keychain, &key_id).unwrap();
-		assert_eq!(recovered_value, 1003);
+	let block_hash = Hash::from_hex(
+		"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
+	).unwrap();
 
-		// check we cannot recover the value without the original blinding factor
-		let key_id2 = keychain.derive_key_id(2).unwrap();
-		let not_recoverable = output.recover_value(&keychain, &key_id2);
-		match not_recoverable {
-			Some(_) => panic!("expected value to be None here"),
-			None => {}
-		}
-	}
+	let nonce = 0;
 
-	#[test]
-	fn commit_consistency() {
-		let keychain = Keychain::from_seed(&[0; 32]).unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
+	let short_id = input.short_id(&block_hash, nonce);
+	assert_eq!(short_id, ShortId::from_hex("28fea5a693af").unwrap());
 
-		let commit = keychain.commit(1003, &key_id).unwrap();
-		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		println!("Switch commit: {:?}", switch_commit);
-		println!("commit: {:?}", commit);
-		let key_id = keychain.derive_key_id(1).unwrap();
+	// now generate the short_id for a *very* similar output (single feature flag different)
+	// and check it generates a different short_id
+	let input = Input {
+		features: OutputFeatures::COINBASE_OUTPUT,
+		commit: commit,
+		out_block: None,
+	};
 
-		let switch_commit_2 = keychain.switch_commit(&key_id).unwrap();
-		let commit_2 = keychain.commit(1003, &key_id).unwrap();
-		println!("Switch commit 2: {:?}", switch_commit_2);
-		println!("commit2 : {:?}", commit_2);
+	let block_hash = Hash::from_hex(
+		"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
+	).unwrap();
 
-		assert!(commit == commit_2);
-		assert!(switch_commit == switch_commit_2);
-	}
-
-	#[test]
-	fn input_short_id() {
-		let keychain = Keychain::from_seed(&[0; 32]).unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
-		let commit = keychain.commit(5, &key_id).unwrap();
-
-		let input = Input {
-			features: OutputFeatures::DEFAULT_OUTPUT,
-			commit: commit,
-			out_block: None,
-		};
-
-		let block_hash = Hash::from_hex(
-			"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
-		).unwrap();
-
-		let short_id = input.short_id(&block_hash);
-		assert_eq!(short_id, ShortId::from_hex("3e1262905b7a").unwrap());
-
-		// now generate the short_id for a *very* similar output (single feature flag different)
-		// and check it generates a different short_id
-		let input = Input {
-			features: OutputFeatures::COINBASE_OUTPUT,
-			commit: commit,
-			out_block: None,
-		};
-
-		let block_hash = Hash::from_hex(
-			"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
-		).unwrap();
-
-		let short_id = input.short_id(&block_hash);
-		assert_eq!(short_id, ShortId::from_hex("90653c1c870a").unwrap());
-	}
+	let short_id = input.short_id(&block_hash, nonce);
+	assert_eq!(short_id, ShortId::from_hex("c8af83b54e46").unwrap());
+}
 }

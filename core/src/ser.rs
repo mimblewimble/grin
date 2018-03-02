@@ -22,7 +22,7 @@
 use std::{cmp, error, fmt};
 use std::io::{self, Read, Write};
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
-use keychain::{Identifier, IDENTIFIER_SIZE};
+use keychain::{Identifier, BlindingFactor, IDENTIFIER_SIZE};
 use consensus;
 use consensus::VerifySortOrder;
 use core::hash::Hashed;
@@ -30,7 +30,12 @@ use core::transaction::{SWITCH_COMMIT_HASH_SIZE, SwitchCommitHash};
 use util::secp::pedersen::Commitment;
 use util::secp::pedersen::RangeProof;
 use util::secp::Signature;
-use util::secp::constants::{MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE, AGG_SIGNATURE_SIZE};
+use util::secp::constants::{
+	MAX_PROOF_SIZE,
+	PEDERSEN_COMMITMENT_SIZE,
+	AGG_SIGNATURE_SIZE,
+	SECRET_KEY_SIZE,
+};
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]
@@ -114,6 +119,9 @@ pub enum SerializationMode {
 	Hash,
 	/// Serialize everything that a signer of the object should know
 	SigHash,
+	/// Serialize for local storage, for instance in the case where
+	/// an output doesn't wish to store its range proof
+	Storage,
 }
 
 /// Implementations defined how different numbers and binary structures are
@@ -250,6 +258,7 @@ pub fn ser_vec<W: Writeable>(thing: &W) -> Result<Vec<u8>, Error> {
 	Ok(vec)
 }
 
+/// Utility to read from a binary source
 struct BinReader<'a> {
 	source: &'a mut Read,
 }
@@ -325,6 +334,19 @@ impl Writeable for Commitment {
 	}
 }
 
+impl Writeable for BlindingFactor {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_fixed_bytes(self)
+	}
+}
+
+impl Readable for BlindingFactor {
+	fn read(reader: &mut Reader) -> Result<BlindingFactor, Error> {
+		let bytes = reader.read_fixed_bytes(SECRET_KEY_SIZE)?;
+		Ok(BlindingFactor::from_slice(&bytes))
+	}
+}
+
 impl Writeable for Identifier {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_fixed_bytes(self)
@@ -340,13 +362,13 @@ impl Readable for Identifier {
 
 impl Writeable for RangeProof {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_fixed_bytes(self)
+		writer.write_bytes(self)
 	}
 }
 
 impl Readable for RangeProof {
 	fn read(reader: &mut Reader) -> Result<RangeProof, Error> {
-		let p = try!(reader.read_limited_vec(MAX_PROOF_SIZE));
+		let p = reader.read_limited_vec(MAX_PROOF_SIZE)?;
 		let mut a = [0; MAX_PROOF_SIZE];
 		for i in 0..p.len() {
 			a[i] = p[i];
@@ -355,6 +377,12 @@ impl Readable for RangeProof {
 			proof: a,
 			plen: p.len(),
 		})
+	}
+}
+
+impl PMMRable for RangeProof {
+	fn len() -> usize {
+		MAX_PROOF_SIZE + 8
 	}
 }
 
@@ -524,6 +552,12 @@ impl Writeable for [u8; 4] {
 	}
 }
 
+/// Trait for types that can serialize and report their size
+pub trait PMMRable: Readable + Writeable + Hashed + Clone {
+	/// Length in bytes
+	fn len() -> usize;
+}
+
 /// Useful marker trait on types that can be sized byte slices
 pub trait AsFixedBytes: Sized + AsRef<[u8]> {
 	/// The length in bytes
@@ -590,11 +624,6 @@ impl AsFixedBytes for ::util::secp::pedersen::RangeProof {
 		return self.plen;
 	}
 }
-impl AsFixedBytes for ::util::secp::key::SecretKey {
-	fn len(&self) -> usize {
-		return 1;
-	}
-}
 impl AsFixedBytes for ::util::secp::Signature {
 	fn len(&self) -> usize {
 		return 64;
@@ -603,6 +632,11 @@ impl AsFixedBytes for ::util::secp::Signature {
 impl AsFixedBytes for ::util::secp::pedersen::Commitment {
 	fn len(&self) -> usize {
 		return PEDERSEN_COMMITMENT_SIZE;
+	}
+}
+impl AsFixedBytes for BlindingFactor {
+	fn len(&self) -> usize {
+		return SECRET_KEY_SIZE;
 	}
 }
 impl AsFixedBytes for SwitchCommitHash {

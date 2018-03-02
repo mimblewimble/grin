@@ -153,7 +153,7 @@ impl Server {
 				Ok(added)
 			}
 			Err(e) => {
-				debug!(LOGGER, "Couldn not connect to {}: {:?}", addr, e);
+				debug!(LOGGER, "Could not connect to {}: {:?}", addr, e);
 				Err(Error::Connection(e))
 			}
 		}
@@ -235,4 +235,3 @@ impl NetAdapter for DummyAdapter {
 	fn peer_addrs_received(&self, _: Vec<SocketAddr>) {}
 	fn peer_difficulty(&self, _: SocketAddr, _: Difficulty, _:u64) {}
 }
-

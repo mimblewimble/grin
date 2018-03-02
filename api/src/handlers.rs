@@ -206,13 +206,13 @@ impl Handler for UtxoHandler {
 }
 
 // Sum tree handler. Retrieve the roots:
-// GET /v1/sumtrees/roots
+// GET /v1/pmmrtrees/roots
 //
 // Last inserted nodes::
-// GET /v1/sumtrees/lastutxos (gets last 10)
-// GET /v1/sumtrees/lastutxos?n=5
-// GET /v1/sumtrees/lastrangeproofs
-// GET /v1/sumtrees/lastkernels
+// GET /v1/pmmrtrees/lastutxos (gets last 10)
+// GET /v1/pmmrtrees/lastutxos?n=5
+// GET /v1/pmmrtrees/lastrangeproofs
+// GET /v1/pmmrtrees/lastkernels
 struct SumTreeHandler {
 	chain: Weak<chain::Chain>,
 }
@@ -224,18 +224,18 @@ impl SumTreeHandler {
 	}
 
 	// gets last n utxos inserted in to the tree
-	fn get_last_n_utxo(&self, distance: u64) -> Vec<SumTreeNode> {
-		SumTreeNode::get_last_n_utxo(w(&self.chain), distance)
+	fn get_last_n_utxo(&self, distance: u64) -> Vec<PmmrTreeNode> {
+		PmmrTreeNode::get_last_n_utxo(w(&self.chain), distance)
 	}
 
 	// gets last n utxos inserted in to the tree
-	fn get_last_n_rangeproof(&self, distance: u64) -> Vec<SumTreeNode> {
-		SumTreeNode::get_last_n_rangeproof(w(&self.chain), distance)
+	fn get_last_n_rangeproof(&self, distance: u64) -> Vec<PmmrTreeNode> {
+		PmmrTreeNode::get_last_n_rangeproof(w(&self.chain), distance)
 	}
 
 	// gets last n utxos inserted in to the tree
-	fn get_last_n_kernel(&self, distance: u64) -> Vec<SumTreeNode> {
-		SumTreeNode::get_last_n_kernel(w(&self.chain), distance)
+	fn get_last_n_kernel(&self, distance: u64) -> Vec<PmmrTreeNode> {
+		PmmrTreeNode::get_last_n_kernel(w(&self.chain), distance)
 	}
 }
 
@@ -620,10 +620,10 @@ pub fn start_rest_apis<T>(
 				"get chain".to_string(),
 				"get chain/utxos".to_string(),
 				"get status".to_string(),
-				"get sumtrees/roots".to_string(),
-				"get sumtrees/lastutxos?n=10".to_string(),
-				"get sumtrees/lastrangeproofs".to_string(),
-				"get sumtrees/lastkernels".to_string(),
+				"get pmmrtrees/roots".to_string(),
+				"get pmmrtrees/lastutxos?n=10".to_string(),
+				"get pmmrtrees/lastrangeproofs".to_string(),
+				"get pmmrtrees/lastkernels".to_string(),
 				"get pool".to_string(),
 				"post pool/push".to_string(),
 				"post peers/a.b.c.d:p/ban".to_string(),
@@ -641,7 +641,7 @@ pub fn start_rest_apis<T>(
 				chain_tip: get "/chain" => chain_tip_handler,
 				chain_utxos: get "/chain/utxos/*" => utxo_handler,
 				status: get "/status" => status_handler,
-				sumtree_roots: get "/sumtrees/*" => sumtree_handler,
+				sumtree_roots: get "/pmmrtrees/*" => sumtree_handler,
 				pool_info: get "/pool" => pool_info_handler,
 				pool_push: post "/pool/push" => pool_push_handler,
 				peers_all: get "/peers/all" => peers_all_handler,

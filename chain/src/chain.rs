@@ -20,21 +20,18 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use util::secp::pedersen::RangeProof;
-
-use core::core::{Input, OutputIdentifier, SumCommit};
-use core::core::hash::Hashed;
-use core::core::pmmr::{HashSum, NoSum};
+use core::core::{Input, OutputIdentifier, OutputStoreable, TxKernel};
+use core::core::hash::{Hash, Hashed};
 use core::global;
 
-use core::core::{Block, BlockHeader, TxKernel};
+use core::core::{Block, BlockHeader};
 use core::core::target::Difficulty;
-use core::core::hash::Hash;
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use sumtree;
 use types::*;
+use util::secp::pedersen::RangeProof;
 use util::LOGGER;
 
 
@@ -154,16 +151,24 @@ impl Chain {
 	) -> Result<Chain, Error> {
 		let chain_store = store::ChainKVStore::new(db_root.clone())?;
 
+		let store = Arc::new(chain_store);
+		let mut sumtrees = sumtree::SumTrees::open(db_root.clone(), store.clone())?;
+
 		// check if we have a head in store, otherwise the genesis block is it
-		let head = match chain_store.head() {
+		let head = match store.head() {
 			Ok(tip) => tip,
 			Err(NotFoundErr) => {
 				let tip = Tip::new(genesis.hash());
-				chain_store.save_block(&genesis)?;
-				chain_store.setup_height(&genesis.header, &tip)?;
+				store.save_block(&genesis)?;
+				store.setup_height(&genesis.header, &tip)?;
+				if genesis.kernels.len() > 0 {
+					sumtree::extending(&mut sumtrees, |extension| {
+						extension.apply_block(&genesis)
+					})?;
+				}
 
 				// saving a new tip based on genesis
-				chain_store.save_head(&tip)?;
+				store.save_head(&tip)?;
 				info!(
 					LOGGER,
 					"Saved genesis block: {:?}, nonce: {:?}, pow: {:?}",
@@ -178,16 +183,9 @@ impl Chain {
 
 		// Reset sync_head and header_head to head of current chain.
 		// Make sure sync_head is available for later use when needed.
-		chain_store.reset_head()?;
+		store.reset_head()?;
 
-		info!(
-			LOGGER,
-			"Chain init: {:?}",
-			head,
-		);
-
-		let store = Arc::new(chain_store);
-		let sumtrees = sumtree::SumTrees::open(db_root.clone(), store.clone())?;
+		debug!(LOGGER, "Chain init: {:?}", head);
 
 		Ok(Chain {
 			db_root: db_root,
@@ -395,6 +393,7 @@ impl Chain {
 		sumtrees.is_unspent(output_ref)
 	}
 
+	/// Validate the current chain state.
 	pub fn validate(&self) -> Result<(), Error> {
 		let header = self.store.head_header()?;
 		let mut sumtrees = self.sumtrees.write().unwrap();
@@ -427,9 +426,9 @@ impl Chain {
 			Ok(extension.roots())
 		})?;
 
-		b.header.utxo_root = roots.0.hash;
-		b.header.range_proof_root = roots.1.hash;
-		b.header.kernel_root = roots.2.hash;
+		b.header.utxo_root = roots.utxo_root;
+		b.header.range_proof_root = roots.rproof_root;
+		b.header.kernel_root = roots.kernel_root;
 		Ok(())
 	}
 
@@ -437,9 +436,9 @@ impl Chain {
 	pub fn get_sumtree_roots(
 		&self,
 	) -> (
-		HashSum<SumCommit>,
-		HashSum<NoSum<RangeProof>>,
-		HashSum<NoSum<TxKernel>>,
+		Hash,
+		Hash,
+		Hash,
 	) {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.roots()
@@ -482,7 +481,7 @@ impl Chain {
 		let header_head = self.get_header_head().unwrap();
 		if header_head.height - head.height < global::cut_through_horizon() as u64 {
 			return Err(Error::InvalidSumtree("not needed".to_owned()));
-		}	
+		}
 
 		let header = self.store.get_block_header(&h)?;
 		sumtree::zip_write(self.db_root.clone(), sumtree_data)?;
@@ -506,7 +505,7 @@ impl Chain {
 		{
 			let mut head = self.head.lock().unwrap();
 			*head = Tip::from_block(&header);
-			self.store.save_body_head(&head);
+			let _ = self.store.save_body_head(&head);
 			self.store.save_header_height(&header)?;
 		}
 
@@ -516,19 +515,19 @@ impl Chain {
 	}
 
 	/// returns the last n nodes inserted into the utxo sum tree
-	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<HashSum<SumCommit>> {
+	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<(Hash, Option<OutputStoreable>)> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.last_n_utxo(distance)
 	}
 
 	/// as above, for rangeproofs
-	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<HashSum<NoSum<RangeProof>>> {
+	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<(Hash, Option<RangeProof>)> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.last_n_rangeproof(distance)
 	}
 
 	/// as above, for kernels
-	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<HashSum<NoSum<TxKernel>>> {
+	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<(Hash, Option<TxKernel>)> {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.last_n_kernel(distance)
 	}
@@ -613,4 +612,9 @@ impl Chain {
 		let head = self.head.lock().unwrap();
 		store::DifficultyIter::from(head.last_block_h, self.store.clone())
 	}
+
+        /// Check whether we have a block without reading it
+        pub fn block_exists(&self, h: Hash) -> Result<bool, Error> {
+               self.store.block_exists(&h).map_err(|e| Error::StoreErr(e, "chain block exists".to_owned()))
+        }
 }

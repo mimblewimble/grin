@@ -88,9 +88,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			b.header.height,
 			addr,
 		);
-
-		self.process_block(b)
-	}
+               self.process_block(b, addr)
+       }
 
 	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
 		let bhash = cb.hash();
@@ -103,20 +102,39 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		);
 
 		if cb.kern_ids.is_empty() {
-			let block = core::Block::hydrate_from(cb, vec![], vec![], vec![]);
+			let block = core::Block::hydrate_from(cb, vec![]);
 
 			// push the freshly hydrated block through the chain pipeline
-			self.process_block(block)
+                       self.process_block(block, addr)
 		} else {
-			// TODO - do we need to validate the header here to be sure it is not total garbage?
+			// TODO - do we need to validate the header here?
+
+			let txs = {
+				let tx_pool = self.tx_pool.read().unwrap();
+				tx_pool.retrieve_transactions(&cb)
+			};
 
 			debug!(
 				LOGGER,
-				"*** cannot hydrate non-empty compact block (not yet implemented), \
-				falling back to requesting full block",
+				"adapter: txs from tx pool - {}",
+				txs.len(),
 			);
-			self.request_block(&cb.header, &addr);
-			true
+
+			// TODO - 3 scenarios here -
+			// 1) we hydrate a valid block (good to go)
+			// 2) we hydrate an invalid block (txs legit missing from our pool)
+			// 3) we hydrate an invalid block (peer sent us a "bad" compact block) - [TBD]
+
+			let block = core::Block::hydrate_from(cb.clone(), txs);
+
+			if let Ok(()) = block.validate() {
+				debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
+				self.process_block(block, addr)
+			} else {
+				debug!(LOGGER, "adapter: block invalid after hydration, requesting full block");
+				self.request_block(&cb.header, &addr);
+				true
+			}
 		}
 	}
 
@@ -280,9 +298,14 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	fn sumtrees_write(&self, h: Hash,
-										rewind_to_output: u64, rewind_to_kernel: u64,
-										sumtree_data: File, peer_addr: SocketAddr) -> bool {
+	fn sumtrees_write(
+		&self,
+		h: Hash,
+		rewind_to_output: u64,
+		rewind_to_kernel: u64,
+		sumtree_data: File,
+		_peer_addr: SocketAddr,
+	) -> bool {
 		// TODO check whether we should accept any sumtree now
 		if let Err(e) = w(&self.chain).
 			sumtrees_write(h, rewind_to_output, rewind_to_kernel, sumtree_data) {
@@ -352,20 +375,31 @@ impl NetToChainAdapter {
 
 	// pushing the new block through the chain pipeline
 	// remembering to reset the head if we have a bad block
-	fn process_block(&self, b: core::Block) -> bool {
-		let bhash = b.hash();
-		let chain = w(&self.chain);
-		let res = chain.process_block(b, self.chain_opts());
-		if let Err(ref e) = res {
-			debug!(LOGGER, "Block {} refused by chain: {:?}", bhash, e);
-			if e.is_bad_data() {
-				debug!(LOGGER, "adapter: process_block: {} is a bad block, resetting head", bhash);
-				let _ = chain.reset_head();
-				return false;
-			}
-		};
-		true
-	}
+       fn process_block(&self, b: core::Block, addr: SocketAddr) -> bool {
+               let prev_hash = b.header.previous;
+               let bhash = b.hash();
+               let chain = w(&self.chain);
+               match chain.process_block(b, self.chain_opts()) {
+                       Ok(_) => true,
+                       Err(chain::Error::Orphan) => {
+                               // make sure we did not miss the parent block
+                               if !self.currently_syncing.load(Ordering::Relaxed) && !chain.is_orphan(&prev_hash) {
+                                       debug!(LOGGER, "adapter: process_block: received an orphan block, checking the parent: {:}", prev_hash);
+                                       self.request_block_by_hash(prev_hash, &addr)
+                               }
+                               true
+                       }
+                       Err(ref e) if e.is_bad_data() => {
+                               debug!(LOGGER, "adapter: process_block: {} is a bad block, resetting head", bhash);
+                               let _ = chain.reset_head();
+                               false
+                       }
+                       Err(e) => {
+                               debug!(LOGGER, "adapter: process_block :block {} refused by chain: {:?}", bhash, e);
+                               true
+                       }
+               }
+       }
 
 	// After receiving a compact block if we cannot successfully hydrate
 	// it into a full block then fallback to requesting the full block
@@ -374,16 +408,12 @@ impl NetToChainAdapter {
 	// TODO - currently only request block from a single peer
 	// consider additional peers for redundancy?
 	fn request_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
-		if let None = wo(&self.peers).adapter.get_block(bh.hash()) {
-			if let Some(peer) = wo(&self.peers).get_connected_peer(addr) {
-				if let Ok(peer) = peer.read() {
-					let _ = peer.send_block_request(bh.hash());
-				}
-			}
-		} else {
-			debug!(LOGGER, "request_block: block {} already known", bh.hash());
-		}
+               self.request_block_by_hash(bh.hash(), addr)
 	}
+
+	fn request_block_by_hash(&self, h: Hash, addr: &SocketAddr) {
+               self.send_block_request_to_peer(h, addr, |peer, h| peer.send_block_request(h))
+        }
 
 	// After we have received a block header in "header first" propagation
 	// we need to go request the block (compact representation) from the
@@ -392,16 +422,31 @@ impl NetToChainAdapter {
 	// TODO - currently only request block from a single peer
 	// consider additional peers for redundancy?
 	fn request_compact_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
-		if let None = wo(&self.peers).adapter.get_block(bh.hash()) {
-			if let Some(peer) = wo(&self.peers).get_connected_peer(addr) {
-				if let Ok(peer) = peer.read() {
-					let _ = peer.send_compact_block_request(bh.hash());
-				}
-			}
-		} else {
-			debug!(LOGGER, "request_compact_block: block {} already known", bh.hash());
-		}
+               self.send_block_request_to_peer(bh.hash(), addr, |peer, h| peer.send_compact_block_request(h))
 	}
+
+       fn send_block_request_to_peer<F>(&self, h: Hash, addr: &SocketAddr, f: F)
+       where F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error> {
+                match w(&self.chain).block_exists(h) {
+                        Ok(false) => {
+                                match  wo(&self.peers).get_connected_peer(addr) {
+                                        None => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, not connected", addr),
+                                        Some(peer) => {
+                                                match peer.read() {
+                                                        Err(e) => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, read fails: {:?}", addr, e),
+                                                        Ok(p) => {
+                                                                if let Err(e) =  f(&p, h) {
+                                                                        error!(LOGGER, "send_block_request_to_peer: failed: {:?}", e)
+                                                                }
+                                                        }
+                                                }
+                                        }
+                                }
+                        }
+                        Ok(true) => debug!(LOGGER, "send_block_request_to_peer: block {} already known", h),
+                        Err(e) => error!(LOGGER, "send_block_request_to_peer: failed to check block exists: {:?}", e)
+                }
+       }
 
 	/// Prepare options for the chain pipeline
 	fn chain_opts(&self) -> chain::Options {
@@ -424,15 +469,15 @@ pub struct ChainToPoolAndNetAdapter {
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
 	fn block_accepted(&self, b: &core::Block, opts: Options) {
-		{
-			if let Err(e) = self.tx_pool.write().unwrap().reconcile_block(b) {
-				error!(
-					LOGGER,
-					"Pool could not update itself at block {}: {:?}",
-					b.hash(),
-					e
-				);
-			}
+		debug!(LOGGER, "adapter: block_accepted: {:?}", b.hash());
+
+		if let Err(e) = self.tx_pool.write().unwrap().reconcile_block(b) {
+			error!(
+				LOGGER,
+				"Pool could not update itself at block {}: {:?}",
+				b.hash(),
+				e,
+			);
 		}
 
 		// If we mined the block then we want to broadcast the block itself.
