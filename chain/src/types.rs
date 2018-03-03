@@ -23,8 +23,9 @@ use grin_store as store;
 use core::core::{Block, BlockHeader, block, transaction};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use core::ser;
+use core::ser::{self, Readable, Writeable, Reader, Writer};
 use grin_store;
+use grin_store::pmmr::PMMRFileMetadata;
 
 bitflags! {
 /// Options for block validation
@@ -290,10 +291,71 @@ pub trait ChainStore: Send + Sync {
 	/// UTXO MMR. Used as an index for spending and pruning.
 	fn get_kernel_pos(&self, commit: &Commitment) -> Result<u64, store::Error>;
 
+	/// Saves information about the last written PMMR file positions for each committed block
+	fn save_block_pmmr_file_metadata(&self, h: &Hash, md: &PMMRFileMetadataCollection) -> Result<(), store::Error>;
+
+	/// Retrieves stored pmmr file metadata information for a given block
+	fn get_block_pmmr_file_metadata(&self, h: &Hash) -> Result<PMMRFileMetadataCollection, store::Error>;
+
+	/// Delete stored pmmr file metadata information for a given block
+	fn delete_block_pmmr_file_metadata(&self, h: &Hash) -> Result<(), store::Error>;
+
 	/// Saves the provided block header at the corresponding height. Also check
 	/// the consistency of the height chain in store by assuring previous
 	/// headers are also at their respective heights.
 	fn setup_height(&self, bh: &BlockHeader, old_tip: &Tip) -> Result<(), store::Error>;
+}
+
+/// Single serializable struct to hold metadata about all PMMR file position for a given block
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct PMMRFileMetadataCollection {
+	/// file metadata for the utxo file
+	pub utxo_file_md: PMMRFileMetadata,
+	/// file metadata for the rangeproof file
+	pub rproof_file_md: PMMRFileMetadata,
+	/// file metadata for the kernel file
+	pub kernel_file_md: PMMRFileMetadata
+}
+
+impl Writeable for PMMRFileMetadataCollection {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.utxo_file_md.write(writer)?;
+		self.rproof_file_md.write(writer)?;
+		self.kernel_file_md.write(writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for PMMRFileMetadataCollection {
+	fn read(reader: &mut Reader) -> Result<PMMRFileMetadataCollection, ser::Error> {
+		Ok(PMMRFileMetadataCollection {
+			utxo_file_md : PMMRFileMetadata::read(reader)?,
+			rproof_file_md : PMMRFileMetadata::read(reader)?,
+			kernel_file_md : PMMRFileMetadata::read(reader)?,
+		})
+	}
+}
+
+impl PMMRFileMetadataCollection {
+	/// Return empty with all file positions = 0
+	pub fn empty() -> PMMRFileMetadataCollection {
+		PMMRFileMetadataCollection {
+			utxo_file_md: PMMRFileMetadata::empty(),
+			rproof_file_md: PMMRFileMetadata::empty(),
+			kernel_file_md: PMMRFileMetadata::empty(),
+		}
+	}
+
+	/// Helper to create a new collection
+	pub fn new(utxo_md: PMMRFileMetadata,
+		rproof_md: PMMRFileMetadata,
+		kernel_md: PMMRFileMetadata) -> PMMRFileMetadataCollection {
+			PMMRFileMetadataCollection {
+			utxo_file_md : utxo_md,
+			rproof_file_md: rproof_md,
+			kernel_file_md: kernel_md,
+		}
+	}
 }
 
 /// Bridge between the chain pipeline and the rest of the system. Handles

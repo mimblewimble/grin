@@ -151,11 +151,22 @@ impl Chain {
 		let chain_store = store::ChainKVStore::new(db_root.clone())?;
 
 		let store = Arc::new(chain_store);
-		let mut sumtrees = sumtree::SumTrees::open(db_root.clone(), store.clone())?;
 
 		// check if we have a head in store, otherwise the genesis block is it
-		let head = match store.head() {
-			Ok(tip) => tip,
+		let head = store.head();
+		let sumtree_md = match head {
+			Ok(h) => {
+				Some(store.get_block_pmmr_file_metadata(&h.last_block_h)?)
+			},
+			Err(NotFoundErr) => None,
+			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
+		};
+
+		let mut sumtrees = sumtree::SumTrees::open(db_root.clone(), store.clone(), sumtree_md)?;
+
+		let head = store.head();
+		let head = match head {
+			Ok(h) => h,
 			Err(NotFoundErr) => {
 				let tip = Tip::new(genesis.hash());
 				store.save_block(&genesis)?;
@@ -175,6 +186,7 @@ impl Chain {
 					genesis.header.nonce,
 					genesis.header.pow,
 				);
+				pipe::save_pmmr_metadata(&tip, &sumtrees, store.clone())?;
 				tip
 			}
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
@@ -507,7 +519,7 @@ impl Chain {
 		let header = self.store.get_block_header(&h)?;
 		sumtree::zip_write(self.db_root.clone(), sumtree_data)?;
 
-		let mut sumtrees = sumtree::SumTrees::open(self.db_root.clone(), self.store.clone())?;
+		let mut sumtrees = sumtree::SumTrees::open(self.db_root.clone(), self.store.clone(), None)?;
 		sumtree::extending(&mut sumtrees, |extension| {
 			extension.rewind_pos(header.height, rewind_to_output, rewind_to_kernel)?;
 			extension.validate(&header)?;
@@ -636,8 +648,13 @@ impl Chain {
 
 	/// Check whether we have a block without reading it
 	pub fn block_exists(&self, h: Hash) -> Result<bool, Error> {
-		self.store
-			.block_exists(&h)
+		self.store.block_exists(&h)
 			.map_err(|e| Error::StoreErr(e, "chain block exists".to_owned()))
+	}
+
+	/// Retrieve the file index metadata for a given block
+	pub fn get_block_pmmr_file_metadata(&self, h: &Hash) -> Result<PMMRFileMetadataCollection, Error> {
+		self.store.get_block_pmmr_file_metadata(h)
+			.map_err(|e| Error::StoreErr(e, "retrieve block pmmr metadata".to_owned()))
 	}
 }

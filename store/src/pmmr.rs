@@ -18,7 +18,7 @@ use std::io::{self};
 use std::marker::PhantomData;
 
 use core::core::pmmr::{self, Backend};
-use core::ser::{self, PMMRable};
+use core::ser::{self, PMMRable, Readable, Writeable, Reader, Writer};
 use core::core::hash::Hash;
 use util::LOGGER;
 use types::{AppendOnlyFile, RemoveLog, read_ordered_vec, write_vec};
@@ -30,6 +30,42 @@ const PMMR_PRUNED_FILE: &'static str = "pmmr_pruned.bin";
 
 /// Maximum number of nodes in the remove log before it gets flushed
 pub const RM_LOG_MAX_NODES: usize = 10000;
+
+/// Metadata for the PMMR backend's AppendOnlyFile, which can be serialized and stored
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct PMMRFileMetadata {
+	/// last written index of the hash file
+	pub last_hash_file_pos: u64,
+	/// last written index of the data file
+	pub last_data_file_pos: u64,
+}
+
+impl Writeable for PMMRFileMetadata {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.last_hash_file_pos)?;
+		writer.write_u64(self.last_data_file_pos)?;
+		Ok(())
+	}
+}
+
+impl Readable for PMMRFileMetadata {
+	fn read(reader: &mut Reader) -> Result<PMMRFileMetadata, ser::Error> {
+		Ok(PMMRFileMetadata {
+			last_hash_file_pos: reader.read_u64()?,
+			last_data_file_pos: reader.read_u64()?,
+		})
+	}
+}
+
+impl PMMRFileMetadata {
+	/// Return fields with all positions = 0
+	pub fn empty() -> PMMRFileMetadata {
+		PMMRFileMetadata {
+			last_hash_file_pos: 0,
+			last_data_file_pos: 0,
+		}
+	}
+}
 
 /// PMMR persistent backend implementation. Relies on multiple facilities to
 /// handle writing, reading and pruning.
@@ -177,11 +213,15 @@ where
 {
 	/// Instantiates a new PMMR backend that will use the provided directly to
 	/// store its files.
-	pub fn new(data_dir: String) -> io::Result<PMMRBackend<T>> {
-		let hash_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
+	pub fn new(data_dir: String, file_md: Option<PMMRFileMetadata>) -> io::Result<PMMRBackend<T>> {
+		let (hash_to_pos, data_to_pos) = match file_md {
+			Some(m) => (m.last_hash_file_pos, m.last_data_file_pos),
+			None => (0,0)
+		};
+		let hash_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE), hash_to_pos)?;
 		let rm_log = RemoveLog::open(format!("{}/{}", data_dir, PMMR_RM_LOG_FILE))?;
 		let prune_list = read_ordered_vec(format!("{}/{}", data_dir, PMMR_PRUNED_FILE), 8)?;
-		let data_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_DATA_FILE))?;
+		let data_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_DATA_FILE), data_to_pos)?;
 
 		Ok(PMMRBackend {
 			data_dir: data_dir,
@@ -248,6 +288,14 @@ where
 		self.get_data_file_path()
 	}
 
+	/// Return last written buffer positions for the hash file and the data file
+	pub fn last_file_positions(&self) -> PMMRFileMetadata {
+		PMMRFileMetadata {
+			last_hash_file_pos: self.hash_file.last_buffer_pos() as u64,
+			last_data_file_pos: self.data_file.last_buffer_pos() as u64
+		}
+	}
+
 	/// Checks the length of the remove log to see if it should get compacted.
 	/// If so, the remove log is flushed into the pruned list, which itself gets
 	/// saved, and the main hashsum data file is rewritten, cutting the removed
@@ -276,7 +324,6 @@ where
 		// avoid accidental double compaction)
 		for pos in &self.rm_log.removed[..] {
 			if let None = self.pruned_nodes.pruned_pos(pos.0) {
-				println!("ALREADY PRUNED?");
 				// TODO we likely can recover from this by directly jumping to 3
 				error!(
 					LOGGER,
@@ -333,14 +380,14 @@ where
 			tmp_prune_file_hash.clone(),
 			format!("{}/{}", self.data_dir, PMMR_HASH_FILE),
 		)?;
-		self.hash_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_HASH_FILE))?;
+		self.hash_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_HASH_FILE), 0)?;
 
 		// 5. and the same with the data file
 		fs::rename(
 			tmp_prune_file_data.clone(),
 			format!("{}/{}", self.data_dir, PMMR_DATA_FILE),
 		)?;
-		self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
+		self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE), 0)?;
 
 		// 6. truncate the rm log
 		self.rm_log.removed = self.rm_log.removed

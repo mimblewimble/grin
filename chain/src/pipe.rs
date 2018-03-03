@@ -93,7 +93,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 
 	// start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
-	sumtree::extending(&mut sumtrees, |mut extension| {
+	let result = sumtree::extending(&mut sumtrees, |mut extension| {
 		validate_block(b, &mut ctx, &mut extension)?;
 		debug!(
 			LOGGER,
@@ -108,7 +108,25 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 			extension.force_rollback();
 		}
 		Ok(h)
-	})
+	});
+
+	match result {
+		Ok(t) => {
+			save_pmmr_metadata(&Tip::from_block(&b.header), &sumtrees, ctx.store.clone())?; 
+			Ok(t)
+		},
+		Err(e) => Err(e),
+	}
+}
+
+/// Save pmmr index location for a given block
+pub fn save_pmmr_metadata(t: &Tip, sumtrees: &sumtree::SumTrees, store: Arc<ChainStore>) -> Result<(), Error> {
+	// Save pmmr file metadata for this block
+	let block_file_md = sumtrees.last_file_metadata();
+	store
+		.save_block_pmmr_file_metadata(&t.last_block_h, &block_file_md)
+		.map_err(|e| Error::StoreErr(e, "saving pmmr file metadata".to_owned()))?;
+	Ok(())
 }
 
 /// Process the block header.
