@@ -21,12 +21,12 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
+extern crate byteorder;
+extern crate rand;
 #[macro_use]
 extern crate slog;
 extern crate slog_async;
 extern crate slog_term;
-extern crate byteorder;
-extern crate rand;
 
 #[macro_use]
 extern crate lazy_static;
@@ -50,7 +50,7 @@ pub mod secp_static;
 pub use secp_static::static_secp_instance;
 
 pub mod types;
-pub use types::{LoggingConfig, LogLevel};
+pub use types::{LogLevel, LoggingConfig};
 
 // other utils
 use std::cell::{Ref, RefCell};

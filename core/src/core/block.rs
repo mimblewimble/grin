@@ -18,26 +18,15 @@ use time;
 use rand::{thread_rng, Rng};
 use std::collections::HashSet;
 
-use core::{
-	Committed,
-	Input,
-	Output,
-	ShortId,
-	SwitchCommitHash,
-	Proof,
-	ProofMessageElements,
-	TxKernel,
-	Transaction,
-	OutputFeatures,
-	KernelFeatures
-};
+use core::{Committed, Input, KernelFeatures, Output, OutputFeatures, Proof, ProofMessageElements,
+           ShortId, SwitchCommitHash, Transaction, TxKernel};
 use consensus;
-use consensus::{exceeds_weight, reward, REWARD, VerifySortOrder};
+use consensus::{exceeds_weight, reward, VerifySortOrder, REWARD};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::id::ShortIdentifiable;
 use core::target::Difficulty;
 use core::transaction;
-use ser::{self, Readable, Reader, Writeable, Writer, WriteableSorted, read_and_verify_sorted};
+use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 use global;
 use keychain;
 use keychain::BlindingFactor;
@@ -77,7 +66,7 @@ pub enum Error {
 	/// Underlying Merkle proof error
 	MerkleProof,
 	/// Other unspecified error condition
-	Other(String)
+	Other(String),
 }
 
 impl From<transaction::Error> for Error {
@@ -394,12 +383,8 @@ impl Block {
 		difficulty: Difficulty,
 	) -> Result<Block, Error> {
 		let fees = txs.iter().map(|tx| tx.fee()).sum();
-		let (reward_out, reward_proof) = Block::reward_output(
-			keychain,
-			key_id,
-			fees,
-			prev.height + 1,
-		)?;
+		let (reward_out, reward_proof) =
+			Block::reward_output(keychain, key_id, fees, prev.height + 1)?;
 		let block = Block::with_reward(prev, txs, reward_out, reward_proof, difficulty)?;
 		Ok(block)
 	}
@@ -544,9 +529,7 @@ impl Block {
 				.iter()
 				.cloned()
 				.filter(|x| *x != BlindingFactor::zero())
-				.filter_map(|x| {
-					x.secret_key(&secp).ok()
-				})
+				.filter_map(|x| x.secret_key(&secp).ok())
 				.collect::<Vec<_>>();
 			if keys.is_empty() {
 				BlindingFactor::zero()
@@ -557,25 +540,22 @@ impl Block {
 			}
 		};
 
-		Ok(
-			Block {
-				header: BlockHeader {
-					height: prev.height + 1,
-					timestamp: time::Tm {
-						tm_nsec: 0,
-						..time::now_utc()
-					},
-					previous: prev.hash(),
-					total_difficulty: difficulty +
-						prev.total_difficulty.clone(),
-					kernel_offset: kernel_offset,
-					..Default::default()
+		Ok(Block {
+			header: BlockHeader {
+				height: prev.height + 1,
+				timestamp: time::Tm {
+					tm_nsec: 0,
+					..time::now_utc()
 				},
-				inputs: inputs,
-				outputs: outputs,
-				kernels: kernels,
-			}.cut_through(),
-		)
+				previous: prev.hash(),
+				total_difficulty: difficulty + prev.total_difficulty.clone(),
+				kernel_offset: kernel_offset,
+				..Default::default()
+			},
+			inputs: inputs,
+			outputs: outputs,
+			kernels: kernels,
+		}.cut_through())
 	}
 
 	/// Blockhash, computed using only the header
@@ -702,10 +682,7 @@ impl Block {
 
 		// sum all kernels commitments
 		let kernel_sum = {
-			let mut kernel_commits = self.kernels
-				.iter()
-				.map(|x| x.excess)
-				.collect::<Vec<_>>();
+			let mut kernel_commits = self.kernels.iter().map(|x| x.excess).collect::<Vec<_>>();
 
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
@@ -763,10 +740,7 @@ impl Block {
 				cb_outs.iter().map(|x| x.commitment()).collect(),
 				vec![over_commit],
 			)?;
-			kerns_sum = secp.commit_sum(
-				cb_kerns.iter().map(|x| x.excess).collect(),
-				vec![],
-			)?;
+			kerns_sum = secp.commit_sum(cb_kerns.iter().map(|x| x.excess).collect(), vec![])?;
 		}
 
 		if kerns_sum != out_adjust_sum {
@@ -784,11 +758,8 @@ impl Block {
 	) -> Result<(Output, TxKernel), keychain::Error> {
 		let commit = keychain.commit(reward(fees), key_id)?;
 		let switch_commit = keychain.switch_commit(key_id)?;
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
-			switch_commit,
-			keychain,
-			key_id,
-		);
+		let switch_commit_hash =
+			SwitchCommitHash::from_switch_commit(switch_commit, keychain, key_id);
 
 		trace!(
 			LOGGER,
@@ -803,11 +774,15 @@ impl Block {
 		);
 
 		let value = reward(fees);
-		let msg = (ProofMessageElements {
-			value: value
-		}).to_proof_message();
+		let msg = (ProofMessageElements { value: value }).to_proof_message();
 
-		let rproof = keychain.range_proof(value, key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg)?;
+		let rproof = keychain.range_proof(
+			value,
+			key_id,
+			commit,
+			Some(switch_commit_hash.as_ref().to_vec()),
+			msg,
+		)?;
 
 		let output = Output {
 			features: OutputFeatures::COINBASE_OUTPUT,
@@ -850,7 +825,7 @@ mod test {
 	use core::build::{self, input, output, with_fee};
 	use core::test::{tx1i2o, tx2i1o};
 	use keychain::{Identifier, Keychain};
-	use consensus::{MAX_BLOCK_WEIGHT, BLOCK_OUTPUT_WEIGHT};
+	use consensus::{BLOCK_OUTPUT_WEIGHT, MAX_BLOCK_WEIGHT};
 	use std::time::Instant;
 
 	use util::secp;
@@ -864,7 +839,7 @@ mod test {
 			txs,
 			keychain,
 			&key_id,
-			Difficulty::one()
+			Difficulty::one(),
 		).unwrap()
 	}
 
@@ -901,8 +876,7 @@ mod test {
 
 		let now = Instant::now();
 		parts.append(&mut vec![input(500000, pks.pop().unwrap()), with_fee(2)]);
-		let mut tx = build::transaction(parts, &keychain)
-			.unwrap();
+		let mut tx = build::transaction(parts, &keychain).unwrap();
 		println!("Build tx: {}", now.elapsed().as_secs());
 
 		let b = new_block(vec![&mut tx], &keychain);
@@ -924,7 +898,6 @@ mod test {
 			b.verify_coinbase(),
 			Err(Error::Secp(secp::Error::IncorrectCommitSum))
 		);
-
 	}
 
 	#[test]
@@ -989,19 +962,19 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let mut b = new_block(vec![], &keychain);
 
-		assert!(b.outputs[0].features.contains(OutputFeatures::COINBASE_OUTPUT));
-		b.outputs[0].features.remove(OutputFeatures::COINBASE_OUTPUT);
-
-		assert_eq!(
-			b.verify_coinbase(),
-			Err(Error::CoinbaseSumMismatch)
+		assert!(
+			b.outputs[0]
+				.features
+				.contains(OutputFeatures::COINBASE_OUTPUT)
 		);
+		b.outputs[0]
+			.features
+			.remove(OutputFeatures::COINBASE_OUTPUT);
+
+		assert_eq!(b.verify_coinbase(), Err(Error::CoinbaseSumMismatch));
 		assert_eq!(b.verify_kernels(), Ok(()));
 
-		assert_eq!(
-			b.validate(),
-			Err(Error::CoinbaseSumMismatch)
-		);
+		assert_eq!(b.validate(), Err(Error::CoinbaseSumMismatch));
 	}
 
 	#[test]
@@ -1011,8 +984,14 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let mut b = new_block(vec![], &keychain);
 
-		assert!(b.kernels[0].features.contains(KernelFeatures::COINBASE_KERNEL));
-		b.kernels[0].features.remove(KernelFeatures::COINBASE_KERNEL);
+		assert!(
+			b.kernels[0]
+				.features
+				.contains(KernelFeatures::COINBASE_KERNEL)
+		);
+		b.kernels[0]
+			.features
+			.remove(KernelFeatures::COINBASE_KERNEL);
 
 		assert_eq!(
 			b.verify_coinbase(),
@@ -1047,10 +1026,7 @@ mod test {
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
 		let target_len = 1_256;
-		assert_eq!(
-			vec.len(),
-			target_len,
-		);
+		assert_eq!(vec.len(), target_len,);
 	}
 
 	#[test]
@@ -1061,10 +1037,7 @@ mod test {
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
 		let target_len = 2_900;
-		assert_eq!(
-			vec.len(),
-			target_len,
-		);
+		assert_eq!(vec.len(), target_len,);
 	}
 
 	#[test]
@@ -1074,10 +1047,7 @@ mod test {
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		let target_len = 1_264;
-		assert_eq!(
-			vec.len(),
-			target_len,
-		);
+		assert_eq!(vec.len(), target_len,);
 	}
 
 	#[test]
@@ -1088,10 +1058,7 @@ mod test {
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		let target_len = 1_270;
-		assert_eq!(
-			vec.len(),
-			target_len,
-		);
+		assert_eq!(vec.len(), target_len,);
 	}
 
 	#[test]
@@ -1104,17 +1071,11 @@ mod test {
 			txs.push(tx);
 		}
 
-		let b = new_block(
-			txs.iter().collect(),
-			&keychain,
-		);
+		let b = new_block(txs.iter().collect(), &keychain);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
 		let target_len = 17_696;
-		assert_eq!(
-			vec.len(),
-			target_len,
-		);
+		assert_eq!(vec.len(), target_len,);
 	}
 
 	#[test]
@@ -1127,17 +1088,11 @@ mod test {
 			txs.push(tx);
 		}
 
-		let b = new_block(
-			txs.iter().collect(),
-			&keychain,
-		);
+		let b = new_block(txs.iter().collect(), &keychain);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		let target_len = 1_324;
-		assert_eq!(
-			vec.len(),
-			target_len,
-		);
+		assert_eq!(vec.len(), target_len,);
 	}
 
 	#[test]
@@ -1158,8 +1113,14 @@ mod test {
 
 		// check we can identify the specified kernel from the short_id
 		// correctly in both of the compact_blocks
-		assert_eq!(cb1.kern_ids[0], tx.kernels[0].short_id(&cb1.hash(), cb1.nonce));
-		assert_eq!(cb2.kern_ids[0], tx.kernels[0].short_id(&cb2.hash(), cb2.nonce));
+		assert_eq!(
+			cb1.kern_ids[0],
+			tx.kernels[0].short_id(&cb1.hash(), cb1.nonce)
+		);
+		assert_eq!(
+			cb2.kern_ids[0],
+			tx.kernels[0].short_id(&cb2.hash(), cb2.nonce)
+		);
 	}
 
 	#[test]

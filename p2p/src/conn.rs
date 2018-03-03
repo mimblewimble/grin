@@ -23,7 +23,7 @@
 use std::cmp;
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{mpsc, Arc, Mutex};
 use std::net::TcpStream;
 use std::thread;
 use std::time;
@@ -64,13 +64,15 @@ pub struct Message<'a> {
 }
 
 impl<'a> Message<'a> {
-
 	fn from_header(header: MsgHeader, conn: &'a mut TcpStream) -> Message<'a> {
-		Message{header, conn}
+		Message { header, conn }
 	}
 
 	/// Read the message body from the underlying connection
-	pub fn body<T>(&mut self) -> Result<T, Error> where T: ser::Readable {
+	pub fn body<T>(&mut self) -> Result<T, Error>
+	where
+		T: ser::Readable,
+	{
 		read_body(&self.header, self.conn)
 	}
 
@@ -89,10 +91,10 @@ impl<'a> Message<'a> {
 	/// Respond to the message with the provided message type and body
 	pub fn respond<T>(self, resp_type: Type, body: T) -> Response<'a>
 	where
-		T: ser::Writeable
+		T: ser::Writeable,
 	{
 		let body = ser::ser_vec(&body).unwrap();
-		Response{
+		Response {
 			resp_type: resp_type,
 			body: body,
 			conn: self.conn,
@@ -111,7 +113,8 @@ pub struct Response<'a> {
 
 impl<'a> Response<'a> {
 	fn write(mut self) -> Result<(), Error> {
-		let mut msg = ser::ser_vec(&MsgHeader::new(self.resp_type, self.body.len() as u64)).unwrap();
+		let mut msg =
+			ser::ser_vec(&MsgHeader::new(self.resp_type, self.body.len() as u64)).unwrap();
 		msg.append(&mut self.body);
 		write_all(&mut self.conn, &msg[..], 10000)?;
 		if let Some(mut file) = self.attachment {
@@ -149,7 +152,7 @@ pub struct Tracker {
 impl Tracker {
 	pub fn send<T>(&self, body: T, msg_type: Type) -> Result<(), Error>
 	where
-		T: ser::Writeable
+		T: ser::Writeable,
 	{
 		let buf = write_to_buf(body, msg_type);
 		self.send_channel.send(buf)?;
@@ -168,7 +171,9 @@ where
 	let (close_tx, close_rx) = mpsc::channel();
 	let (error_tx, error_rx) = mpsc::channel();
 
-	stream.set_nonblocking(true).expect("Non-blocking IO not available.");
+	stream
+		.set_nonblocking(true)
+		.expect("Non-blocking IO not available.");
 	poll(stream, handler, send_rx, error_tx, close_rx);
 
 	Tracker {
@@ -185,54 +190,67 @@ fn poll<H>(
 	handler: H,
 	send_rx: mpsc::Receiver<Vec<u8>>,
 	error_tx: mpsc::Sender<Error>,
-	close_rx: mpsc::Receiver<()>
-)
-where
+	close_rx: mpsc::Receiver<()>,
+) where
 	H: MessageHandler,
 {
-
 	let mut conn = conn;
-	let _ = thread::Builder::new().name("peer".to_string()).spawn(move || {
-		let sleep_time = time::Duration::from_millis(1);
+	let _ = thread::Builder::new()
+		.name("peer".to_string())
+		.spawn(move || {
+			let sleep_time = time::Duration::from_millis(1);
 
-		let conn = &mut conn;
-		let mut retry_send = Err(());
-		loop {
-			// check the read end
-			if let Some(h) = try_break!(error_tx, read_header(conn)) {
-				let msg = Message::from_header(h, conn);
-				debug!(LOGGER, "Received message header, type {:?}, len {}.", msg.header.msg_type, msg.header.msg_len);
-				if let Some(Some(resp)) = try_break!(error_tx, handler.consume(msg)) {
-					try_break!(error_tx, resp.write());
+			let conn = &mut conn;
+			let mut retry_send = Err(());
+			loop {
+				// check the read end
+				if let Some(h) = try_break!(error_tx, read_header(conn)) {
+					let msg = Message::from_header(h, conn);
+					debug!(
+						LOGGER,
+						"Received message header, type {:?}, len {}.",
+						msg.header.msg_type,
+						msg.header.msg_len
+					);
+					if let Some(Some(resp)) = try_break!(error_tx, handler.consume(msg)) {
+						try_break!(error_tx, resp.write());
+					}
 				}
-			}
 
-			// check the write end
-			if let Ok::<Vec<u8>, ()>(data) = retry_send {
-				if let None = try_break!(error_tx, conn.write_all(&data[..]).map_err(&From::from)) {
-					retry_send = Ok(data);
+				// check the write end
+				if let Ok::<Vec<u8>, ()>(data) = retry_send {
+					if let None =
+						try_break!(error_tx, conn.write_all(&data[..]).map_err(&From::from))
+					{
+						retry_send = Ok(data);
+					} else {
+						retry_send = Err(());
+					}
+				} else if let Ok(data) = send_rx.try_recv() {
+					if let None =
+						try_break!(error_tx, conn.write_all(&data[..]).map_err(&From::from))
+					{
+						retry_send = Ok(data);
+					} else {
+						retry_send = Err(());
+					}
 				} else {
 					retry_send = Err(());
 				}
-			} else if let Ok(data) = send_rx.try_recv() {
-				if let None = try_break!(error_tx, conn.write_all(&data[..]).map_err(&From::from)) {
-					retry_send = Ok(data);
-				} else {
-					retry_send = Err(());
+
+				// check the close channel
+				if let Ok(_) = close_rx.try_recv() {
+					debug!(
+						LOGGER,
+						"Connection close with {} initiated by us",
+						conn.peer_addr()
+							.map(|a| a.to_string())
+							.unwrap_or("?".to_owned())
+					);
+					break;
 				}
-			} else {
-				retry_send = Err(());
-			}
 
-			// check the close channel
-			if let Ok(_) = close_rx.try_recv() {
-				debug!(LOGGER,
-							 "Connection close with {} initiated by us",
-							 conn.peer_addr().map(|a| a.to_string()).unwrap_or("?".to_owned()));
-				break;
+				thread::sleep(sleep_time);
 			}
-
-			thread::sleep(sleep_time);
-		}
-	});
+		});
 }

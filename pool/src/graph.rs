@@ -130,9 +130,7 @@ impl fmt::Debug for Edge {
 		write!(
 			f,
 			"Edge {{source: {:?}, destination: {:?}, commitment: {:?}}}",
-			self.source,
-			self.destination,
-			self.output
+			self.source, self.destination, self.output
 		)
 	}
 }
@@ -193,14 +191,14 @@ impl DirectedGraph {
 		let mut new_vertices: Vec<PoolEntry> = vec![];
 
 		// first find the set of all destinations from the edges in the graph
-  // a root is a vertex that is not a destination of any edge
+		// a root is a vertex that is not a destination of any edge
 		let destinations = self.edges
 			.values()
 			.filter_map(|edge| edge.destination)
 			.collect::<HashSet<_>>();
 
 		// now iterate over the current non-root vertices
-  // and check if it is now a root based on the set of edge destinations
+		// and check if it is now a root based on the set of edge destinations
 		for x in &self.vertices {
 			if destinations.contains(&x.transaction_hash) {
 				new_vertices.push(x.clone());
@@ -309,11 +307,8 @@ mod tests {
 
 		let output_commit = keychain.commit(70, &key_id1).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id1).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
-			switch_commit,
-			&keychain,
-			&key_id1,
-		);
+		let switch_commit_hash =
+			SwitchCommitHash::from_switch_commit(switch_commit, &keychain, &key_id1);
 
 		let inputs = vec![
 			core::transaction::Input::new(
@@ -336,7 +331,13 @@ mod tests {
 			commit: output_commit,
 			switch_commit_hash: switch_commit_hash,
 			proof: keychain
-				.range_proof(100, &key_id1, output_commit, Some(switch_commit_hash.as_ref().to_vec()), msg)
+				.range_proof(
+					100,
+					&key_id1,
+					output_commit,
+					Some(switch_commit_hash.as_ref().to_vec()),
+					msg,
+				)
 				.unwrap(),
 		};
 
@@ -344,11 +345,8 @@ mod tests {
 			.with_fee(5)
 			.with_lock_height(0);
 
-		let test_transaction = core::transaction::Transaction::new(
-			inputs,
-			vec![output],
-			vec![kernel],
-		);
+		let test_transaction =
+			core::transaction::Transaction::new(inputs, vec![output], vec![kernel]);
 
 		let test_pool_entry = PoolEntry::new(&test_transaction);
 

@@ -19,7 +19,7 @@
 use std::io::Read;
 use std::net::SocketAddr;
 use std::str;
-use std::sync::{Arc, mpsc};
+use std::sync::{mpsc, Arc};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use std::thread;
@@ -41,7 +41,6 @@ pub fn connect_and_monitor(
 	seed_list: Box<Fn() -> Vec<SocketAddr> + Send>,
 	stop: Arc<AtomicBool>,
 ) {
-
 	let _ = thread::Builder::new()
 		.name("seed".to_string())
 		.spawn(move || {
@@ -106,7 +105,7 @@ fn monitor_peers(
 					debug!(
 						LOGGER,
 						"monitor_peers: unbanned {} after {} seconds", x.addr, interval
-						);
+					);
 				} else {
 					banned_count += 1;
 				}
@@ -123,7 +122,7 @@ fn monitor_peers(
 		healthy_count,
 		banned_count,
 		defunct_count,
-		);
+	);
 
 	// maintenance step first, clean up p2p server peers
 	peers.clean_peers(PEER_MAX_COUNT as usize);
@@ -160,7 +159,6 @@ fn connect_to_seeds(
 	tx: mpsc::Sender<SocketAddr>,
 	seed_list: Box<Fn() -> Vec<SocketAddr>>,
 ) {
-
 	// check if we have some peers in db
 	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::FULL_HIST, 100);
 
@@ -190,7 +188,6 @@ fn listen_for_addrs(
 	capab: p2p::Capabilities,
 	rx: &mpsc::Receiver<SocketAddr>,
 ) {
-
 	let pc = peers.peer_count();
 	for addr in rx.try_iter() {
 		if pc < PEER_MAX_COUNT {
@@ -201,11 +198,11 @@ fn listen_for_addrs(
 					if let Ok(p) = p.try_read() {
 						let _ = p.send_peer_request(capab);
 					}
-				},
+				}
 				Err(e) => {
 					debug!(LOGGER, "connect_and_req: {} is Defunct; {:?}", addr, e);
 					let _ = peers.update_state(addr, p2p::State::Defunct);
-				},
+				}
 			}
 		}
 	}
@@ -219,12 +216,16 @@ pub fn web_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 		debug!(LOGGER, "Retrieving seed nodes from {}", &SEEDS_URL);
 
 		// http get, filtering out non 200 results
-		let mut res = client.get(SEEDS_URL).send().expect("Failed to resolve seeds.");
+		let mut res = client
+			.get(SEEDS_URL)
+			.send()
+			.expect("Failed to resolve seeds.");
 		if res.status != hyper::Ok {
 			panic!("Failed to resolve seeds, got status {}.", res.status);
 		}
 		let mut buf = vec![];
-		res.read_to_end(&mut buf).expect("Could not read seed list.");
+		res.read_to_end(&mut buf)
+			.expect("Could not read seed list.");
 
 		let text = str::from_utf8(&buf[..]).expect("Corrupted seed list.");
 		let addrs = text.split_whitespace()

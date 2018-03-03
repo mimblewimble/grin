@@ -76,13 +76,8 @@ fn test_coinbase_maturity() {
 	let key_id3 = keychain.derive_key_id(3).unwrap();
 	let key_id4 = keychain.derive_key_id(4).unwrap();
 
-	let mut block = core::core::Block::new(
-		&prev,
-		vec![],
-		&keychain,
-		&key_id1,
-		Difficulty::one()
-	).unwrap();
+	let mut block =
+		core::core::Block::new(&prev, vec![], &keychain, &key_id1, Difficulty::one()).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -109,7 +104,9 @@ fn test_coinbase_maturity() {
 	// we will need this later when we want to spend the coinbase output
 	let block_hash = block.hash();
 
-	chain.process_block(block.clone(), chain::Options::MINE).unwrap();
+	chain
+		.process_block(block.clone(), chain::Options::MINE)
+		.unwrap();
 
 	let merkle_proof = chain.get_merkle_proof(&out_id, &block).unwrap();
 
@@ -124,26 +121,20 @@ fn test_coinbase_maturity() {
 	// this is not a valid tx as the coinbase output cannot be spent yet
 	let coinbase_txn = build::transaction(
 		vec![
-			build::coinbase_input(
-				amount,
-				block_hash,
-				merkle_proof.clone(),
-				key_id1.clone(),
-			),
+			build::coinbase_input(amount, block_hash, merkle_proof.clone(), key_id1.clone()),
 			build::output(amount - 2, key_id2.clone()),
 			build::with_fee(2),
 		],
 		&keychain,
 	).unwrap();
 
-	let mut block =
-		core::core::Block::new(
-			&prev,
-			vec![&coinbase_txn],
-			&keychain,
-			&key_id3,
-			Difficulty::one(),
-		).unwrap();
+	let mut block = core::core::Block::new(
+		&prev,
+		vec![&coinbase_txn],
+		&keychain,
+		&key_id3,
+		Difficulty::one(),
+	).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -169,13 +160,8 @@ fn test_coinbase_maturity() {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let pk = keychain.derive_key_id(1).unwrap();
 
-		let mut block = core::core::Block::new(
-			&prev,
-			vec![],
-			&keychain,
-			&pk,
-			Difficulty::one()
-		).unwrap();
+		let mut block =
+			core::core::Block::new(&prev, vec![], &keychain, &pk, Difficulty::one()).unwrap();
 		block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -196,12 +182,7 @@ fn test_coinbase_maturity() {
 
 	let coinbase_txn = build::transaction(
 		vec![
-			build::coinbase_input(
-				amount,
-				block_hash,
-				merkle_proof.clone(),
-				key_id1.clone(),
-			),
+			build::coinbase_input(amount, block_hash, merkle_proof.clone(), key_id1.clone()),
 			build::output(amount - 2, key_id2.clone()),
 			build::with_fee(2),
 		],

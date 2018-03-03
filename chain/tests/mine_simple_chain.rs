@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use chain::Chain;
 use chain::types::*;
-use core::core::{Block, BlockHeader, Transaction, OutputIdentifier, OutputFeatures, build};
+use core::core::{build, Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::consensus;
@@ -76,13 +76,8 @@ fn mine_empty_chain() {
 		let prev = chain.head_header().unwrap();
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 		let pk = keychain.derive_key_id(n as u32).unwrap();
-		let mut b = core::core::Block::new(
-			&prev,
-			vec![],
-			&keychain,
-			&pk,
-			difficulty.clone(),
-		).unwrap();
+		let mut b =
+			core::core::Block::new(&prev, vec![], &keychain, &pk, difficulty.clone()).unwrap();
 		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 		b.header.difficulty = difficulty.clone(); // TODO: overwrite here? really?
@@ -181,11 +176,13 @@ fn mine_losing_fork() {
 	let bfork = prepare_block(&kc, &b1head, &chain, 3);
 
 	// add higher difficulty first, prepare its successor, then fork
- // with lower diff
+	// with lower diff
 	chain.process_block(b2, chain::Options::SKIP_POW).unwrap();
 	assert_eq!(chain.head_header().unwrap().hash(), b2head.hash());
 	let b3 = prepare_block(&kc, &b2head, &chain, 5);
-	chain.process_block(bfork, chain::Options::SKIP_POW).unwrap();
+	chain
+		.process_block(bfork, chain::Options::SKIP_POW)
+		.unwrap();
 
 	// adding the successor
 	let b3head = b3.header.clone();
@@ -206,12 +203,14 @@ fn longer_fork() {
 	// for the forked chain
 	let mut prev = chain.head_header().unwrap();
 	for n in 0..10 {
-		let b = prepare_block(&kc, &prev, &chain, 2*n + 2);
+		let b = prepare_block(&kc, &prev, &chain, 2 * n + 2);
 		let bh = b.header.clone();
 
 		if n < 5 {
 			let b_fork = b.clone();
-			chain_fork.process_block(b_fork, chain::Options::SKIP_POW).unwrap();
+			chain_fork
+				.process_block(b_fork, chain::Options::SKIP_POW)
+				.unwrap();
 		}
 
 		chain.process_block(b, chain::Options::SKIP_POW).unwrap();
@@ -227,13 +226,15 @@ fn longer_fork() {
 
 	let mut prev_fork = head_fork.clone();
 	for n in 0..7 {
-		let b_fork = prepare_block(&kc, &prev_fork, &chain_fork, 2*n + 11);
+		let b_fork = prepare_block(&kc, &prev_fork, &chain_fork, 2 * n + 11);
 		let bh_fork = b_fork.header.clone();
 
 		let b = b_fork.clone();
 		chain.process_block(b, chain::Options::SKIP_POW).unwrap();
 
-		chain_fork.process_block(b_fork, chain::Options::SKIP_POW).unwrap();
+		chain_fork
+			.process_block(b_fork, chain::Options::SKIP_POW)
+			.unwrap();
 		prev_fork = bh_fork;
 	}
 }
@@ -254,7 +255,9 @@ fn spend_in_fork() {
 	let out_id = OutputIdentifier::from_output(&b.outputs[0]);
 	assert!(out_id.features.contains(OutputFeatures::COINBASE_OUTPUT));
 	fork_head = b.header.clone();
-	chain.process_block(b.clone(), chain::Options::SKIP_POW).unwrap();
+	chain
+		.process_block(b.clone(), chain::Options::SKIP_POW)
+		.unwrap();
 
 	let merkle_proof = chain.get_merkle_proof(&out_id, &b).unwrap();
 
@@ -290,7 +293,9 @@ fn spend_in_fork() {
 
 	let next = prepare_block_tx(&kc, &fork_head, &chain, 7, vec![&tx1]);
 	let prev_main = next.header.clone();
-	chain.process_block(next.clone(), chain::Options::SKIP_POW).unwrap();
+	chain
+		.process_block(next.clone(), chain::Options::SKIP_POW)
+		.unwrap();
 	chain.validate().unwrap();
 
 	println!("tx 1 processed, should have 6 outputs or 396 bytes in file, first skipped");
@@ -310,7 +315,7 @@ fn spend_in_fork() {
 	chain.validate().unwrap();
 
 	println!("tx 2 processed");
-	/*panic!("Stop");*/
+	/* panic!("Stop"); */
 
 	// mine 2 forked blocks from the first
 	let fork = prepare_fork_block_tx(&kc, &fork_head, &chain, 6, vec![&tx1]);
@@ -319,28 +324,48 @@ fn spend_in_fork() {
 
 	let fork_next = prepare_fork_block_tx(&kc, &prev_fork, &chain, 8, vec![&tx2]);
 	let prev_fork = fork_next.header.clone();
-	chain.process_block(fork_next, chain::Options::SKIP_POW).unwrap();
+	chain
+		.process_block(fork_next, chain::Options::SKIP_POW)
+		.unwrap();
 	chain.validate().unwrap();
 
 	// check state
 	let head = chain.head_header().unwrap();
 	assert_eq!(head.height, 6);
 	assert_eq!(head.hash(), prev_main.hash());
-	assert!(chain.is_unspent(&OutputIdentifier::from_output(&tx2.outputs[0])).is_ok());
-	assert!(chain.is_unspent(&OutputIdentifier::from_output(&tx1.outputs[0])).is_err());
+	assert!(
+		chain
+			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs[0]))
+			.is_ok()
+	);
+	assert!(
+		chain
+			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs[0]))
+			.is_err()
+	);
 
 	// make the fork win
 	let fork_next = prepare_fork_block(&kc, &prev_fork, &chain, 10);
 	let prev_fork = fork_next.header.clone();
-	chain.process_block(fork_next, chain::Options::SKIP_POW).unwrap();
+	chain
+		.process_block(fork_next, chain::Options::SKIP_POW)
+		.unwrap();
 	chain.validate().unwrap();
 
 	// check state
 	let head = chain.head_header().unwrap();
 	assert_eq!(head.height, 7);
 	assert_eq!(head.hash(), prev_fork.hash());
-	assert!(chain.is_unspent(&OutputIdentifier::from_output(&tx2.outputs[0])).is_ok());
-	assert!(chain.is_unspent(&OutputIdentifier::from_output(&tx1.outputs[0])).is_err());
+	assert!(
+		chain
+			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs[0]))
+			.is_ok()
+	);
+	assert!(
+		chain
+			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs[0]))
+			.is_err()
+	);
 }
 
 fn prepare_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
@@ -349,7 +374,13 @@ fn prepare_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) ->
 	b
 }
 
-fn prepare_block_tx(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64, txs: Vec<&Transaction>) -> Block {
+fn prepare_block_tx(
+	kc: &Keychain,
+	prev: &BlockHeader,
+	chain: &Chain,
+	diff: u64,
+	txs: Vec<&Transaction>,
+) -> Block {
 	let mut b = prepare_block_nosum(kc, prev, diff, txs);
 	chain.set_sumtree_roots(&mut b, false).unwrap();
 	b
@@ -361,18 +392,29 @@ fn prepare_fork_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u6
 	b
 }
 
-fn prepare_fork_block_tx(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64, txs: Vec<&Transaction>) -> Block {
+fn prepare_fork_block_tx(
+	kc: &Keychain,
+	prev: &BlockHeader,
+	chain: &Chain,
+	diff: u64,
+	txs: Vec<&Transaction>,
+) -> Block {
 	let mut b = prepare_block_nosum(kc, prev, diff, txs);
 	chain.set_sumtree_roots(&mut b, true).unwrap();
 	b
 }
 
-fn prepare_block_nosum(kc: &Keychain, prev: &BlockHeader, diff: u64, txs: Vec<&Transaction>) -> Block {
+fn prepare_block_nosum(
+	kc: &Keychain,
+	prev: &BlockHeader,
+	diff: u64,
+	txs: Vec<&Transaction>,
+) -> Block {
 	let key_id = kc.derive_key_id(diff as u32).unwrap();
 
 	let mut b = match core::core::Block::new(prev, txs, kc, &key_id, Difficulty::from_num(diff)) {
-		Err(e) => panic!("{:?}",e),
-		Ok(b) => b
+		Err(e) => panic!("{:?}", e),
+		Ok(b) => b,
 	};
 	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 	b.header.total_difficulty = Difficulty::from_num(diff);

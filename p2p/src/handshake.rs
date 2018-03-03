@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::collections::VecDeque;
-use std::net::{TcpStream, SocketAddr};
+use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, RwLock};
 
 use rand::Rng;
@@ -60,7 +60,6 @@ impl Handshake {
 		self_addr: SocketAddr,
 		conn: &mut TcpStream,
 	) -> Result<PeerInfo, Error> {
-
 		// prepare the first part of the handshake
 		let nonce = self.next_nonce();
 		let peer_addr = match conn.peer_addr() {
@@ -115,7 +114,7 @@ impl Handshake {
 			peer_info.addr,
 			peer_info.user_agent,
 			peer_info.capabilities
-			);
+		);
 		// when more than one protocol version is supported, choosing should go here
 		Ok(peer_info)
 	}
@@ -126,7 +125,6 @@ impl Handshake {
 		total_difficulty: Difficulty,
 		conn: &mut TcpStream,
 	) -> Result<PeerInfo, Error> {
-
 		let hand: Hand = read_message(conn, Type::Hand)?;
 
 		// all the reasons we could refuse this connection for
@@ -201,23 +199,23 @@ impl Handshake {
 // port reported by the connection is always incorrect for receiving
 // connections as it's dynamically allocated by the server.
 fn extract_ip(advertised: &SocketAddr, conn: &TcpStream) -> SocketAddr {
-  match advertised {
-    &SocketAddr::V4(v4sock) => {
-      let ip = v4sock.ip();
-      if ip.is_loopback() || ip.is_unspecified() {
-        if let Ok(addr) =  conn.peer_addr() {
-          return SocketAddr::new(addr.ip(), advertised.port());
-        }
-      }
-    }
-    &SocketAddr::V6(v6sock) => {
-      let ip = v6sock.ip();
-      if ip.is_loopback() || ip.is_unspecified() {
-        if let Ok(addr) =  conn.peer_addr() {
-          return SocketAddr::new(addr.ip(), advertised.port());
-        }
-      }
-    }
-  }
-  advertised.clone()
+	match advertised {
+		&SocketAddr::V4(v4sock) => {
+			let ip = v4sock.ip();
+			if ip.is_loopback() || ip.is_unspecified() {
+				if let Ok(addr) = conn.peer_addr() {
+					return SocketAddr::new(addr.ip(), advertised.port());
+				}
+			}
+		}
+		&SocketAddr::V6(v6sock) => {
+			let ip = v6sock.ip();
+			if ip.is_loopback() || ip.is_unspecified() {
+				if let Ok(addr) = conn.peer_addr() {
+					return SocketAddr::new(addr.ip(), advertised.port());
+				}
+			}
+		}
+	}
+	advertised.clone()
 }

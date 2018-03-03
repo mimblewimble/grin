@@ -22,7 +22,6 @@ use util;
 use util::secp::{self, Secp256k1};
 use util::secp::constants::SECRET_KEY_SIZE;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BlindingFactor([u8; SECRET_KEY_SIZE]);
 
@@ -65,8 +64,7 @@ impl BlindingFactor {
 			// and secp lib checks this
 			Ok(secp::key::ZERO_KEY)
 		} else {
-			secp::key::SecretKey::from_slice(secp, &self.0)
-				.map_err(|e| Error::Secp(e))
+			secp::key::SecretKey::from_slice(secp, &self.0).map_err(|e| Error::Secp(e))
 		}
 	}
 
@@ -86,10 +84,7 @@ impl BlindingFactor {
 		let blind_1 = BlindingFactor::from_secret_key(skey_1);
 		let blind_2 = BlindingFactor::from_secret_key(skey_2);
 
-		Ok(SplitBlindingFactor {
-			blind_1,
-			blind_2,
-		})
+		Ok(SplitBlindingFactor { blind_1, blind_2 })
 	}
 }
 

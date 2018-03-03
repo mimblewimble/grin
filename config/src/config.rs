@@ -121,8 +121,8 @@ impl GlobalConfig {
 		}
 
 		// Try to parse the config file if it exists
-  // explode if it does exist but something's wrong
-  // with it
+		// explode if it does exist but something's wrong
+		// with it
 		return_value.read_config()
 	}
 
@@ -164,9 +164,10 @@ impl GlobalConfig {
 		match encoded {
 			Ok(enc) => return Ok(enc),
 			Err(e) => {
-				return Err(ConfigError::SerializationError(
-					String::from(format!("{}", e)),
-				));
+				return Err(ConfigError::SerializationError(String::from(format!(
+					"{}",
+					e
+				))));
 			}
 		}
 	}

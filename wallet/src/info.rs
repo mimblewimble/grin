@@ -15,14 +15,15 @@
 use checker;
 use keychain::Keychain;
 use core::core::amount_to_hr_string;
-use types::{WalletConfig, WalletData, OutputStatus, WalletInfo};
+use types::{OutputStatus, WalletConfig, WalletData, WalletInfo};
 use prettytable;
 
 pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 	let wallet_info = retrieve_info(config, keychain);
-	println!("\n____ Wallet Summary Info at {} ({}) ____\n", 
-		wallet_info.current_height,
-		wallet_info.data_confirmed_from);
+	println!(
+		"\n____ Wallet Summary Info at {} ({}) ____\n",
+		wallet_info.current_height, wallet_info.data_confirmed_from
+	);
 	let mut table = table!(
 		[bFG->"Total", FG->amount_to_hr_string(wallet_info.total)],
 		[bFY->"Awaiting Confirmation", FY->amount_to_hr_string(wallet_info.amount_awaiting_confirmation)],
@@ -37,9 +38,9 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 
 	if !wallet_info.data_confirmed {
 		println!(
-		"\nWARNING: Failed to verify wallet contents with grin server. \
-		 Above info is maybe not fully updated or invalid! \
-		 Check that your `grin server` is OK, or see `wallet help restore`"
+			"\nWARNING: Failed to verify wallet contents with grin server. \
+			 Above info is maybe not fully updated or invalid! \
+			 Check that your `grin server` is OK, or see `wallet help restore`"
 		);
 	}
 }
@@ -67,7 +68,7 @@ pub fn retrieve_info(config: &WalletConfig, keychain: &Keychain) -> WalletInfo {
 			if out.status == OutputStatus::Unspent {
 				unspent_total += out.value;
 				if out.lock_height > current_height {
-						unspent_but_locked_total += out.value;
+					unspent_but_locked_total += out.value;
 				}
 			}
 			if out.status == OutputStatus::Unconfirmed && !out.is_coinbase {
@@ -76,18 +77,18 @@ pub fn retrieve_info(config: &WalletConfig, keychain: &Keychain) -> WalletInfo {
 			if out.status == OutputStatus::Locked {
 				locked_total += out.value;
 			}
-		};
+		}
 
 		let mut data_confirmed = true;
 		if let Err(_) = result {
 			data_confirmed = false;
 		}
 		Ok(WalletInfo {
-			current_height : current_height,
-			total: unspent_total+unconfirmed_total,
+			current_height: current_height,
+			total: unspent_total + unconfirmed_total,
 			amount_awaiting_confirmation: unconfirmed_total,
 			amount_confirmed_but_locked: unspent_but_locked_total,
-			amount_currently_spendable: unspent_total-unspent_but_locked_total,
+			amount_currently_spendable: unspent_total - unspent_but_locked_total,
 			amount_locked: locked_total,
 			data_confirmed: data_confirmed,
 			data_confirmed_from: String::from(from),
