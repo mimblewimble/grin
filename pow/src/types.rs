@@ -22,7 +22,7 @@ pub struct CuckooMinerPluginConfig {
 	pub type_filter: String,
 
 	/// device params
-	pub device_parameters: Option<HashMap<String, HashMap<String, u32>>>
+	pub device_parameters: Option<HashMap<String, HashMap<String, u32>>>,
 }
 
 impl Default for CuckooMinerPluginConfig {

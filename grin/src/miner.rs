@@ -48,7 +48,6 @@ use pow::plugin::PluginMiner;
 
 use itertools::Itertools;
 
-
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
 
@@ -202,10 +201,13 @@ impl Miner {
 			if let Some(s) = job_handle.get_solution() {
 				let proof = Proof::new(s.solution_nonces.to_vec());
 				let proof_diff = proof.clone().to_difficulty();
-				trace!(LOGGER, "Found cuckoo solution for nonce {} of difficulty {} (difficulty target {})",
+				trace!(
+					LOGGER,
+					"Found cuckoo solution for nonce {} of difficulty {} (difficulty target {})",
 					s.get_nonce_as_u64(),
 					proof_diff.into_num(),
-					difficulty.into_num());
+					difficulty.into_num()
+				);
 				if proof_diff >= b.header.difficulty {
 					sol = Some(proof);
 					b.header.nonce = s.get_nonce_as_u64();
@@ -218,8 +220,11 @@ impl Miner {
 					let stats = job_handle.get_stats(i);
 					if let Ok(stat_vec) = stats {
 						for s in stat_vec {
-							if s.in_use == 0 {continue;}
-							let last_solution_time_secs = s.last_solution_time as f64 / 1000000000.0;
+							if s.in_use == 0 {
+								continue;
+							}
+							let last_solution_time_secs =
+								s.last_solution_time as f64 / 1000000000.0;
 							let last_hashes_per_sec = 1.0 / last_solution_time_secs;
 							let status = match s.has_errored {
 								0 => "OK",
@@ -274,8 +279,8 @@ impl Miner {
 		latest_hash: &mut Hash,
 	) -> Option<Proof> {
 		// look for a pow for at most attempt_time_per_block sec on the same block (to
-  // give a chance to new
-  // transactions) and as long as the head hasn't changed
+		// give a chance to new
+		// transactions) and as long as the head hasn't changed
 		let deadline = time::get_time().sec + attempt_time_per_block as i64;
 		let stat_check_interval = 3;
 		let mut next_stat_check = time::get_time().sec + stat_check_interval;
@@ -306,10 +311,13 @@ impl Miner {
 			let pow_hash = b.hash();
 			if let Ok(proof) = plugin_miner.mine(&pow_hash[..]) {
 				let proof_diff = proof.clone().to_difficulty();
-				trace!(LOGGER, "Found cuckoo solution for nonce {} of difficulty {} (difficulty target {})",
+				trace!(
+					LOGGER,
+					"Found cuckoo solution for nonce {} of difficulty {} (difficulty target {})",
 					b.header.nonce,
 					proof_diff.into_num(),
-					b.header.difficulty.into_num());
+					b.header.difficulty.into_num()
+				);
 				if proof_diff >= b.header.difficulty {
 					sol = Some(proof);
 					break;
@@ -319,7 +327,9 @@ impl Miner {
 			if time::get_time().sec >= next_stat_check {
 				let stats_vec = plugin_miner.get_stats(0).unwrap();
 				for s in stats_vec.into_iter() {
-					if s.in_use == 0 {continue;}
+					if s.in_use == 0 {
+						continue;
+					}
 					let last_solution_time_secs = s.last_solution_time as f64 / 1000000000.0;
 					let last_hashes_per_sec = 1.0 / last_solution_time_secs;
 					let status = match s.has_errored {
@@ -336,7 +346,10 @@ impl Miner {
 						3,
 						last_hashes_per_sec
 					);
-					info!(LOGGER, "Mining at {} graphs per second", last_hashes_per_sec);
+					info!(
+						LOGGER,
+						"Mining at {} graphs per second", last_hashes_per_sec
+					);
 				}
 				next_stat_check = time::get_time().sec + stat_check_interval;
 			}
@@ -443,8 +456,7 @@ impl Miner {
 	pub fn run_loop(&self, miner_config: MinerConfig, cuckoo_size: u32, proof_size: usize) {
 		info!(
 			LOGGER,
-			"(Server ID: {}) Starting miner loop.",
-			self.debug_output_id
+			"(Server ID: {}) Starting miner loop.", self.debug_output_id
 		);
 		let mut plugin_miner = None;
 		let mut miner = None;
@@ -555,8 +567,7 @@ impl Miner {
 			} else {
 				debug!(
 					LOGGER,
-					"setting pubkey in miner to pubkey from block_fees - {:?}",
-					block_fees
+					"setting pubkey in miner to pubkey from block_fees - {:?}", block_fees
 				);
 				key_id = block_fees.key_id();
 			}
@@ -574,7 +585,6 @@ impl Miner {
 		head: &core::BlockHeader,
 		key_id: Option<Identifier>,
 	) -> Result<(core::Block, BlockFees), Error> {
-
 		// prepare the block header timestamp
 		let mut now_sec = time::get_time().sec;
 		let head_sec = head.timestamp.to_timespec().sec;
@@ -637,7 +647,10 @@ impl Miner {
 
 			//Some other issue, possibly duplicate kernel
 			Err(e) => {
-				error!(LOGGER, "Error setting sumtree root to build a block: {:?}", e);
+				error!(
+					LOGGER,
+					"Error setting sumtree root to build a block: {:?}", e
+				);
 				Err(Error::Chain(chain::Error::Other(format!("{:?}", e))))
 			}
 		}
@@ -652,12 +665,9 @@ impl Miner {
 	) -> Result<(core::Output, core::TxKernel, BlockFees), Error> {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
-		let (out, kernel) = core::Block::reward_output(
-			&keychain,
-			&key_id,
-			block_fees.fees,
-			block_fees.height,
-		).unwrap();
+		let (out, kernel) =
+			core::Block::reward_output(&keychain, &key_id, block_fees.fees, block_fees.height)
+				.unwrap();
 		Ok((out, kernel, block_fees))
 	}
 

@@ -155,5 +155,8 @@ impl PeerStore {
 }
 
 fn peer_key(peer_addr: SocketAddr) -> Vec<u8> {
-	to_key(PEER_PREFIX, &mut format!("{}:{}", peer_addr.ip(), peer_addr.port()).into_bytes())
+	to_key(
+		PEER_PREFIX,
+		&mut format!("{}:{}", peer_addr.ip(), peer_addr.port()).into_bytes(),
+	)
 }

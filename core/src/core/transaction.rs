@@ -15,9 +15,9 @@
 //! Transactions
 use blake2::blake2b::blake2b;
 use util::secp::{self, Message, Signature};
-use util::{static_secp_instance, kernel_sig_msg};
-use util::secp::pedersen::{Commitment, RangeProof, ProofMessage};
-use std::cmp::{min, max};
+use util::{kernel_sig_msg, static_secp_instance};
+use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
+use std::cmp::{max, min};
 use std::cmp::Ordering;
 use std::{error, fmt};
 
@@ -29,8 +29,9 @@ use core::BlockHeader;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
 use keychain;
-use keychain::{Identifier, Keychain, BlindingFactor};
-use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, WriteableSorted, Writer, ser_vec};
+use keychain::{BlindingFactor, Identifier, Keychain};
+use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
+          WriteableSorted, Writer};
 use std::io::Cursor;
 use util;
 use util::LOGGER;
@@ -138,7 +139,6 @@ impl From<keychain::Error> for Error {
 	}
 }
 
-
 /// A proof that a transaction sums to zero. Includes both the transaction's
 /// Pedersen commitment and the signature, that guarantees that the commitments
 /// amount to zero.
@@ -189,9 +189,8 @@ impl Writeable for TxKernel {
 
 impl Readable for TxKernel {
 	fn read(reader: &mut Reader) -> Result<TxKernel, ser::Error> {
-		let features = KernelFeatures::from_bits(reader.read_u8()?).ok_or(
-			ser::Error::CorruptedData,
-		)?;
+		let features =
+			KernelFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 		Ok(TxKernel {
 			features: features,
 			fee: reader.read_u64()?,
@@ -246,8 +245,7 @@ impl TxKernel {
 impl PMMRable for TxKernel {
 	fn len() -> usize {
 		17 + // features plus fee and lock_height
-			secp::constants::PEDERSEN_COMMITMENT_SIZE +
-			secp::constants::AGG_SIGNATURE_SIZE
+			secp::constants::PEDERSEN_COMMITMENT_SIZE + secp::constants::AGG_SIGNATURE_SIZE
 	}
 }
 
@@ -344,11 +342,7 @@ impl Transaction {
 
 	/// Creates a new transaction initialized with
 	/// the provided inputs, outputs, kernels
-	pub fn new(
-		inputs: Vec<Input>,
-		outputs: Vec<Output>,
-		kernels: Vec<TxKernel>,
-	) -> Transaction {
+	pub fn new(inputs: Vec<Input>, outputs: Vec<Output>, kernels: Vec<TxKernel>) -> Transaction {
 		Transaction {
 			offset: BlindingFactor::zero(),
 			inputs: inputs,
@@ -397,7 +391,9 @@ impl Transaction {
 
 	/// Lock height of a transaction is the max lock height of the kernels.
 	pub fn lock_height(&self) -> u64 {
-		self.kernels.iter().fold(0, |acc, ref x| max(acc, x.lock_height))
+		self.kernels
+			.iter()
+			.fold(0, |acc, ref x| max(acc, x.lock_height))
 	}
 
 	/// To verify transaction kernels we check that -
@@ -419,10 +415,7 @@ impl Transaction {
 
 		// sum all kernels commitments
 		let kernel_sum = {
-			let mut kernel_commits = self.kernels
-				.iter()
-				.map(|x| x.excess)
-				.collect::<Vec<_>>();
+			let mut kernel_commits = self.kernels.iter().map(|x| x.excess).collect::<Vec<_>>();
 
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
@@ -508,7 +501,7 @@ impl Transaction {
 /// But also information required to verify coinbase maturity through
 /// the lock_height hashed in the switch_commit_hash.
 #[derive(Debug, Clone)]
-pub struct Input{
+pub struct Input {
 	/// The features of the output being spent.
 	/// We will check maturity for coinbase output.
 	pub features: OutputFeatures,
@@ -558,28 +551,17 @@ impl Writeable for Input {
 /// an Input from a binary stream.
 impl Readable for Input {
 	fn read(reader: &mut Reader) -> Result<Input, ser::Error> {
-		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
-			ser::Error::CorruptedData,
-		)?;
+		let features =
+			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 
 		let commit = Commitment::read(reader)?;
 
 		if features.contains(OutputFeatures::COINBASE_OUTPUT) {
 			let block_hash = Some(Hash::read(reader)?);
 			let merkle_proof = Some(MerkleProof::read(reader)?);
-			Ok(Input::new(
-				features,
-				commit,
-				block_hash,
-				merkle_proof,
-			))
+			Ok(Input::new(features, commit, block_hash, merkle_proof))
 		} else {
-			Ok(Input::new(
-				features,
-				commit,
-				None,
-				None,
-			))
+			Ok(Input::new(features, commit, None, None))
 		}
 	}
 }
@@ -701,7 +683,7 @@ bitflags! {
 
 /// Definition of the switch commitment hash
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SwitchCommitHashKey ([u8; SWITCH_COMMIT_KEY_SIZE]);
+pub struct SwitchCommitHashKey([u8; SWITCH_COMMIT_KEY_SIZE]);
 
 impl SwitchCommitHashKey {
 	/// We use a zero value key for regular transactions.
@@ -712,14 +694,18 @@ impl SwitchCommitHashKey {
 	/// Generate a switch commit hash key from the provided keychain and key id.
 	pub fn from_keychain(keychain: &Keychain, key_id: &Identifier) -> SwitchCommitHashKey {
 		SwitchCommitHashKey(
-			keychain.switch_commit_hash_key(key_id)
-				.expect("failed to derive switch commit hash key")
+			keychain
+				.switch_commit_hash_key(key_id)
+				.expect("failed to derive switch commit hash key"),
 		)
 	}
 
 	/// Reconstructs a switch commit hash key from a byte slice.
 	pub fn from_bytes(bytes: &[u8]) -> SwitchCommitHashKey {
-		assert!(bytes.len() == 32, "switch_commit_hash_key requires 32 bytes");
+		assert!(
+			bytes.len() == 32,
+			"switch_commit_hash_key requires 32 bytes"
+		);
 
 		let mut key = [0; SWITCH_COMMIT_KEY_SIZE];
 		for i in 0..min(SWITCH_COMMIT_KEY_SIZE, bytes.len()) {
@@ -866,9 +852,8 @@ impl Writeable for Output {
 /// an Output from a binary stream.
 impl Readable for Output {
 	fn read(reader: &mut Reader) -> Result<Output, ser::Error> {
-		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
-			ser::Error::CorruptedData,
-		)?;
+		let features =
+			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 
 		Ok(Output {
 			features: features,
@@ -899,7 +884,12 @@ impl Output {
 	pub fn verify_proof(&self) -> Result<(), secp::Error> {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		match Keychain::verify_range_proof(&secp, self.commit, self.proof, Some(self.switch_commit_hash.as_ref().to_vec())){
+		match Keychain::verify_range_proof(
+			&secp,
+			self.commit,
+			self.proof,
+			Some(self.switch_commit_hash.as_ref().to_vec()),
+		) {
 			Ok(_) => Ok(()),
 			Err(e) => Err(e),
 		}
@@ -908,10 +898,16 @@ impl Output {
 	/// Given the original blinding factor we can recover the
 	/// value from the range proof and the commitment
 	pub fn recover_value(&self, keychain: &Keychain, key_id: &Identifier) -> Option<u64> {
-		match keychain.rewind_range_proof(key_id, self.commit, Some(self.switch_commit_hash.as_ref().to_vec()), self.proof) {
+		match keychain.rewind_range_proof(
+			key_id,
+			self.commit,
+			Some(self.switch_commit_hash.as_ref().to_vec()),
+			self.proof,
+		) {
 			Ok(proof_info) => {
 				if proof_info.success {
-					let elements = ProofMessageElements::from_proof_message(proof_info.message).unwrap();
+					let elements =
+						ProofMessageElements::from_proof_message(proof_info.message).unwrap();
 					Some(elements.value)
 				} else {
 					None
@@ -920,7 +916,6 @@ impl Output {
 			Err(_) => None,
 		}
 	}
-
 }
 
 /// An output_identifier can be build from either an input _or_ an output and
@@ -980,9 +975,8 @@ impl Writeable for OutputIdentifier {
 
 impl Readable for OutputIdentifier {
 	fn read(reader: &mut Reader) -> Result<OutputIdentifier, ser::Error> {
-		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
-			ser::Error::CorruptedData,
-		)?;
+		let features =
+			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 		Ok(OutputIdentifier {
 			commit: Commitment::read(reader)?,
 			features: features,
@@ -1015,7 +1009,7 @@ impl OutputStoreable {
 
 	/// Return a regular output
 	pub fn to_output(self, rproof: RangeProof) -> Output {
-		Output{
+		Output {
 			features: self.features,
 			commit: self.commit,
 			switch_commit_hash: self.switch_commit_hash,
@@ -1043,9 +1037,8 @@ impl Writeable for OutputStoreable {
 
 impl Readable for OutputStoreable {
 	fn read(reader: &mut Reader) -> Result<OutputStoreable, ser::Error> {
-		let features = OutputFeatures::from_bits(reader.read_u8()?).ok_or(
-			ser::Error::CorruptedData,
-		)?;
+		let features =
+			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 		Ok(OutputStoreable {
 			commit: Commitment::read(reader)?,
 			switch_commit_hash: SwitchCommitHash::read(reader)?,
@@ -1083,13 +1076,14 @@ impl Readable for ProofMessageElements {
 
 impl ProofMessageElements {
 	/// Serialise and return a ProofMessage
-	pub fn to_proof_message(&self)->ProofMessage {
+	pub fn to_proof_message(&self) -> ProofMessage {
 		ProofMessage::from_bytes(&ser_vec(self).unwrap())
 	}
 
 	/// Deserialise and return the message elements
-	pub fn from_proof_message(proof_message:ProofMessage)
-		-> Result<ProofMessageElements, ser::Error> {
+	pub fn from_proof_message(
+		proof_message: ProofMessage,
+	) -> Result<ProofMessageElements, ser::Error> {
 		let mut c = Cursor::new(proof_message.as_bytes());
 		ser::deserialize::<ProofMessageElements>(&mut c)
 	}
@@ -1109,7 +1103,7 @@ mod test {
 		let commit = keychain.commit(5, &key_id).unwrap();
 
 		// just some bytes for testing ser/deser
-		let sig = secp::Signature::from_raw_data(&[0;64]).unwrap();
+		let sig = secp::Signature::from_raw_data(&[0; 64]).unwrap();
 
 		let kernel = TxKernel {
 			features: KernelFeatures::DEFAULT_KERNEL,
@@ -1153,13 +1147,18 @@ mod test {
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
-			switch_commit,
-			&keychain,
-			&key_id,
-		);
+		let switch_commit_hash =
+			SwitchCommitHash::from_switch_commit(switch_commit, &keychain, &key_id);
 		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain.range_proof(5, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg).unwrap();
+		let proof = keychain
+			.range_proof(
+				5,
+				&key_id,
+				commit,
+				Some(switch_commit_hash.as_ref().to_vec()),
+				msg,
+			)
+			.unwrap();
 
 		let out = Output {
 			features: OutputFeatures::DEFAULT_OUTPUT,
@@ -1185,16 +1184,19 @@ mod test {
 
 		let commit = keychain.commit(value, &key_id).unwrap();
 		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
-			switch_commit,
-			&keychain,
-			&key_id,
-		);
-		let msg = (ProofMessageElements {
-			value: value,
-		}).to_proof_message();
+		let switch_commit_hash =
+			SwitchCommitHash::from_switch_commit(switch_commit, &keychain, &key_id);
+		let msg = (ProofMessageElements { value: value }).to_proof_message();
 
-		let proof = keychain.range_proof(value, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg).unwrap();
+		let proof = keychain
+			.range_proof(
+				value,
+				&key_id,
+				commit,
+				Some(switch_commit_hash.as_ref().to_vec()),
+				msg,
+			)
+			.unwrap();
 
 		let output = Output {
 			features: OutputFeatures::DEFAULT_OUTPUT,

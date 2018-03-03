@@ -91,8 +91,7 @@ pub const MAX_BLOCK_INPUTS: usize = 300_000; // soft fork down when too_high
 /// Whether a block exceeds the maximum acceptable weight
 pub fn exceeds_weight(input_len: usize, output_len: usize, kernel_len: usize) -> bool {
 	input_len * BLOCK_INPUT_WEIGHT + output_len * BLOCK_OUTPUT_WEIGHT
-		+ kernel_len * BLOCK_KERNEL_WEIGHT > MAX_BLOCK_WEIGHT
-		|| input_len > MAX_BLOCK_INPUTS
+		+ kernel_len * BLOCK_KERNEL_WEIGHT > MAX_BLOCK_WEIGHT || input_len > MAX_BLOCK_INPUTS
 }
 
 /// Fork every 250,000 blocks for first 2 years, simple number and just a
@@ -186,21 +185,24 @@ where
 	// Get the difficulty sum for averaging later
 	// Which in this case is the sum of the last
 	// DIFFICULTY_ADJUST_WINDOW elements
-	let diff_sum = diff_data.iter()
+	let diff_sum = diff_data
+		.iter()
 		.skip(MEDIAN_TIME_WINDOW as usize)
 		.take(DIFFICULTY_ADJUST_WINDOW as usize)
 		.fold(Difficulty::zero(), |sum, d| sum + d.clone().unwrap().1);
 
 	// Obtain the median window for the earlier time period
 	// which is just the first MEDIAN_TIME_WINDOW elements
-	let mut window_earliest: Vec<u64> = diff_data.iter()
+	let mut window_earliest: Vec<u64> = diff_data
+		.iter()
 		.take(MEDIAN_TIME_WINDOW as usize)
 		.map(|n| n.clone().unwrap().0)
 		.collect();
 
 	// Obtain the median window for the latest time period
 	// i.e. the last MEDIAN_TIME_WINDOW elements
-	let mut window_latest: Vec<u64> = diff_data.iter()
+	let mut window_latest: Vec<u64> = diff_data
+		.iter()
 		.skip(DIFFICULTY_ADJUST_WINDOW as usize)
 		.map(|n| n.clone().unwrap().0)
 		.collect();
@@ -212,15 +214,14 @@ where
 	let earliest_ts = window_earliest[MEDIAN_TIME_INDEX as usize];
 
 	// Calculate the average difficulty
-	let diff_avg = diff_sum.into_num()  /
-		Difficulty::from_num(DIFFICULTY_ADJUST_WINDOW).into_num();
+	let diff_avg = diff_sum.into_num() / Difficulty::from_num(DIFFICULTY_ADJUST_WINDOW).into_num();
 
 	// Actual undampened time delta
 	let ts_delta = latest_ts - earliest_ts;
 
 	// Apply dampening
 	let ts_damp = match diff_avg {
-		n if n >= DAMP_FACTOR => ((DAMP_FACTOR-1) * BLOCK_TIME_WINDOW + ts_delta) / DAMP_FACTOR,
+		n if n >= DAMP_FACTOR => ((DAMP_FACTOR - 1) * BLOCK_TIME_WINDOW + ts_delta) / DAMP_FACTOR,
 		_ => ts_delta,
 	};
 
@@ -233,8 +234,7 @@ where
 		ts_damp
 	};
 
-	let difficulty =
-		diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW).into_num()
+	let difficulty = diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW).into_num()
 		/ Difficulty::from_num(adj_ts).into_num();
 
 	Ok(max(Difficulty::from_num(difficulty), Difficulty::one()))

@@ -119,7 +119,6 @@ impl Default for LocalServerContainerConfig {
 	}
 }
 
-
 /// A top-level container to hold everything that might be running
 /// on a server, i.e. server, wallet in send or receive mode
 
@@ -151,7 +150,7 @@ pub struct LocalServerContainer {
 	pub working_dir: String,
 
 	// Wallet configuration
-	pub wallet_config:WalletConfig,
+	pub wallet_config: WalletConfig,
 }
 
 impl LocalServerContainer {
@@ -166,19 +165,17 @@ impl LocalServerContainer {
 		wallet_config.api_listen_port = format!("{}", config.wallet_port);
 		wallet_config.check_node_api_http_addr = config.wallet_validating_node_url.clone();
 		wallet_config.data_file_dir = working_dir.clone();
-		Ok(
-			LocalServerContainer {
-				config: config,
-				p2p_server_stats: None,
-				api_server: None,
-				server_is_running: false,
-				server_is_mining: false,
-				wallet_is_running: false,
-				working_dir: working_dir,
-				peer_list: Vec::new(),
-				wallet_config:wallet_config,
-			},
-		)
+		Ok(LocalServerContainer {
+			config: config,
+			p2p_server_stats: None,
+			api_server: None,
+			server_is_running: false,
+			server_is_mining: false,
+			wallet_is_running: false,
+			working_dir: working_dir,
+			peer_list: Vec::new(),
+			wallet_config: wallet_config,
+		})
 	}
 
 	pub fn run_server(&mut self, duration_in_seconds: u64) -> grin::ServerStats {
@@ -192,21 +189,19 @@ impl LocalServerContainer {
 			seeds = vec![self.config.seed_addr.to_string()];
 		}
 
-		let s = grin::Server::new(
-			grin::ServerConfig {
-				api_http_addr: api_addr,
-				db_root: format!("{}/.grin", self.working_dir),
-				p2p_config: p2p::P2PConfig {
-					port: self.config.p2p_server_port,
-					..p2p::P2PConfig::default()
-				},
-				seeds: Some(seeds),
-				seeding_type: seeding_type,
-				chain_type: core::global::ChainTypes::AutomatedTesting,
-				skip_sync_wait:Some(true),
-				..Default::default()
+		let s = grin::Server::new(grin::ServerConfig {
+			api_http_addr: api_addr,
+			db_root: format!("{}/.grin", self.working_dir),
+			p2p_config: p2p::P2PConfig {
+				port: self.config.p2p_server_port,
+				..p2p::P2PConfig::default()
 			},
-		).unwrap();
+			seeds: Some(seeds),
+			seeding_type: seeding_type,
+			chain_type: core::global::ChainTypes::AutomatedTesting,
+			skip_sync_wait: Some(true),
+			..Default::default()
+		}).unwrap();
 
 		self.p2p_server_stats = Some(s.get_server_stats().unwrap());
 
@@ -262,7 +257,6 @@ impl LocalServerContainer {
 
 		let _seed = blake2::blake2b::blake2b(32, &[], seed.as_bytes());
 
-
 		println!(
 			"Starting the Grin wallet receiving daemon on {} ",
 			self.config.wallet_port
@@ -271,57 +265,59 @@ impl LocalServerContainer {
 		self.wallet_config = WalletConfig::default();
 
 		self.wallet_config.api_listen_port = format!("{}", self.config.wallet_port);
-		self.wallet_config.check_node_api_http_addr = self.config.wallet_validating_node_url.clone();
+		self.wallet_config.check_node_api_http_addr =
+			self.config.wallet_validating_node_url.clone();
 		self.wallet_config.data_file_dir = self.working_dir.clone();
 
-		let _=fs::create_dir_all(self.wallet_config.clone().data_file_dir);
+		let _ = fs::create_dir_all(self.wallet_config.clone().data_file_dir);
 		wallet::WalletSeed::init_file(&self.wallet_config);
 
-		let wallet_seed =
-			wallet::WalletSeed::from_file(&self.wallet_config).expect("Failed to read wallet seed file.");
+		let wallet_seed = wallet::WalletSeed::from_file(&self.wallet_config)
+			.expect("Failed to read wallet seed file.");
 
-		let keychain = wallet_seed.derive_keychain("grin_test").expect(
-			"Failed to derive keychain from seed file and passphrase.",
-		);
+		let keychain = wallet_seed
+			.derive_keychain("grin_test")
+			.expect("Failed to derive keychain from seed file and passphrase.");
 
 		wallet::server::start_rest_apis(self.wallet_config.clone(), keychain);
 		self.wallet_is_running = true;
 	}
 
 	pub fn get_wallet_seed(config: &WalletConfig) -> wallet::WalletSeed {
-		let _=fs::create_dir_all(config.clone().data_file_dir);
+		let _ = fs::create_dir_all(config.clone().data_file_dir);
 		wallet::WalletSeed::init_file(config);
 		let wallet_seed =
 			wallet::WalletSeed::from_file(config).expect("Failed to read wallet seed file.");
 		wallet_seed
 	}
 
-	pub fn get_wallet_info(config: &WalletConfig, wallet_seed: &wallet::WalletSeed) -> wallet::WalletInfo {
-		let keychain = wallet_seed.derive_keychain("grin_test").expect(
-			"Failed to derive keychain from seed file and passphrase.",
-		);
+	pub fn get_wallet_info(
+		config: &WalletConfig,
+		wallet_seed: &wallet::WalletSeed,
+	) -> wallet::WalletInfo {
+		let keychain = wallet_seed
+			.derive_keychain("grin_test")
+			.expect("Failed to derive keychain from seed file and passphrase.");
 
 		wallet::retrieve_info(config, &keychain)
-
 	}
 
-
-	pub fn send_amount_to(config: &WalletConfig,
-		amount:&str,
+	pub fn send_amount_to(
+		config: &WalletConfig,
+		amount: &str,
 		minimum_confirmations: u64,
-		selection_strategy:&str,
-		dest: &str){
-
-		let amount = core::core::amount_from_hr_string(amount).expect(
-			"Could not parse amount as a number with optional decimal point.",
-		);
+		selection_strategy: &str,
+		dest: &str,
+	) {
+		let amount = core::core::amount_from_hr_string(amount)
+			.expect("Could not parse amount as a number with optional decimal point.");
 
 		let wallet_seed =
 			wallet::WalletSeed::from_file(config).expect("Failed to read wallet seed file.");
 
-		let mut keychain = wallet_seed.derive_keychain("grin_test").expect(
-			"Failed to derive keychain from seed file and passphrase.",
-		);
+		let mut keychain = wallet_seed
+			.derive_keychain("grin_test")
+			.expect("Failed to derive keychain from seed file and passphrase.");
 		let max_outputs = 500;
 		let result = wallet::issue_send_tx(
 			config,
@@ -331,27 +327,25 @@ impl LocalServerContainer {
 			dest.to_string(),
 			max_outputs,
 			selection_strategy == "all",
-			);
+		);
 		match result {
-			Ok(_) => {
-				println!(
-					"Tx sent: {} grin to {} (strategy '{}')",
-					core::core::amount_to_hr_string(amount),
-					dest,
-					selection_strategy,
-				)
-			}
-            Err(e) => match e.kind() {
-			    wallet::ErrorKind::NotEnoughFunds(available) => {
-			    	println!(
-			    		"Tx not sent: insufficient funds (max: {})",
-			    		core::core::amount_to_hr_string(available),
-			    	);
-			    }
-			    _ => {
-			    	println!("Tx not sent to {}: {:?}", dest, e);
-			    }
-            }
+			Ok(_) => println!(
+				"Tx sent: {} grin to {} (strategy '{}')",
+				core::core::amount_to_hr_string(amount),
+				dest,
+				selection_strategy,
+			),
+			Err(e) => match e.kind() {
+				wallet::ErrorKind::NotEnoughFunds(available) => {
+					println!(
+						"Tx not sent: insufficient funds (max: {})",
+						core::core::amount_to_hr_string(available),
+					);
+				}
+				_ => {
+					println!("Tx not sent to {}: {:?}", dest, e);
+				}
+			},
 		};
 	}
 
@@ -456,19 +450,14 @@ impl LocalServerContainerPool {
 
 		server_config.name = String::from(format!(
 			"{}/{}-{}",
-			self.config.base_name,
-			self.config.base_name,
-			server_config.p2p_server_port
+			self.config.base_name, self.config.base_name, server_config.p2p_server_port
 		));
-
 
 		// Use self as coinbase wallet
 		server_config.coinbase_wallet_address = String::from(format!(
 			"http://{}:{}",
-			server_config.base_addr,
-			server_config.wallet_port
+			server_config.base_addr, server_config.wallet_port
 		));
-
 
 		self.next_p2p_port += 1;
 		self.next_api_port += 1;
@@ -480,8 +469,7 @@ impl LocalServerContainerPool {
 
 		let _server_address = format!(
 			"{}:{}",
-			server_config.base_addr,
-			server_config.p2p_server_port
+			server_config.base_addr, server_config.p2p_server_port
 		);
 
 		let server_container = LocalServerContainer::new(server_config.clone()).unwrap();

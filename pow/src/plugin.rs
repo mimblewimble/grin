@@ -84,9 +84,9 @@ impl PluginMiner {
 		}
 
 		// First, load and query the plugins in the given directory
-  // These should all be stored in 'plugins' at the moment relative
-  // to the executable path, though they should appear somewhere else
-  // when packaging is more//thought out
+		// These should all be stored in 'plugins' at the moment relative
+		// to the executable path, though they should appear somewhere else
+		// when packaging is more//thought out
 
 		let mut loaded_config_ref = LOADED_CONFIG.lock().unwrap();
 
@@ -117,7 +117,7 @@ impl PluginMiner {
 		let mut index = 0;
 		for f in plugin_vec_filters {
 			// So this is built dynamically based on the plugin implementation
-   // type and the consensus sizeshift
+			// type and the consensus sizeshift
 			let filter = format!("{}_{}", f, sz);
 
 			let caps = plugin_manager.get_available_plugins(&filter).unwrap();
@@ -135,17 +135,25 @@ impl PluginMiner {
 			if let Some(l) = miner_config.clone().cuckoo_miner_plugin_config {
 				if let Some(dp) = l[index].device_parameters.clone() {
 					for (device, param_map) in dp.into_iter() {
-						for (param_name, param_value) in param_map.into_iter(){
+						for (param_name, param_value) in param_map.into_iter() {
 							let device_id = match device.parse::<u32>() {
 								Ok(n) => n,
 								Err(e) => {
 									error!(LOGGER, "Error initializing mining plugin: {:?}", e);
 									panic!("Unable to init mining plugin.");
-								},
+								}
 							};
-							debug!(LOGGER, "Cuckoo Plugin {}: Setting mining parameter {} to {} on Device {}",
-								index, param_name, param_value, device_id);
-							config.parameter_list.push((param_name, device_id, param_value));
+							debug!(
+								LOGGER,
+								"Cuckoo Plugin {}: Setting mining parameter {} to {} on Device {}",
+								index,
+								param_name,
+								param_value,
+								device_id
+							);
+							config
+								.parameter_list
+								.push((param_name, device_id, param_value));
 						}
 					}
 				}
@@ -154,7 +162,7 @@ impl PluginMiner {
 			index += 1;
 		}
 		// Store this config now, because we just want one instance
-  // of the plugin lib per invocation now
+		// of the plugin lib per invocation now
 		*loaded_config_ref = Some(cuckoo_configs.clone());
 
 		// this will load the associated plugin

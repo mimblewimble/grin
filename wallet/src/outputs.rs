@@ -15,19 +15,19 @@
 use checker;
 use keychain::Keychain;
 use core::core;
-use types::{WalletConfig, WalletData, OutputStatus};
+use types::{OutputStatus, WalletConfig, WalletData};
 use prettytable;
 use term;
 use std::io::prelude::*;
 
-pub fn show_outputs(config: &WalletConfig, keychain: &Keychain, show_spent:bool) {
+pub fn show_outputs(config: &WalletConfig, keychain: &Keychain, show_spent: bool) {
 	let root_key_id = keychain.root_key_id();
 	let result = checker::refresh_outputs(&config, &keychain);
 
 	// just read the wallet here, no need for a write lock
 	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
 		// get the current height via the api
-  // if we cannot get the current height use the max height known to the wallet
+		// if we cannot get the current height use the max height known to the wallet
 		let current_height = match checker::get_tip_from_node(config) {
 			Ok(tip) => tip.height,
 			Err(_) => match wallet_data.outputs.values().map(|out| out.height).max() {
@@ -40,16 +40,17 @@ pub fn show_outputs(config: &WalletConfig, keychain: &Keychain, show_spent:bool)
 			.outputs
 			.values()
 			.filter(|out| out.root_key_id == root_key_id)
-			.filter(|out|
+			.filter(|out| {
 				if show_spent {
 					true
 				} else {
 					out.status != OutputStatus::Spent
-				})
+				}
+			})
 			.collect::<Vec<_>>();
 		outputs.sort_by_key(|out| out.n_child);
 
-		let title=format!("Wallet Outputs - Block Height: {}", current_height);
+		let title = format!("Wallet Outputs - Block Height: {}", current_height);
 		println!();
 		let mut t = term::stdout().unwrap();
 		t.fg(term::color::MAGENTA).unwrap();
@@ -69,13 +70,13 @@ pub fn show_outputs(config: &WalletConfig, keychain: &Keychain, show_spent:bool)
 		]);
 
 		for out in outputs {
-			let key_id=format!("{}", out.key_id);
-			let height=format!("{}", out.height);
-			let lock_height=format!("{}", out.lock_height);
-			let status=format!("{:?}", out.status);
-			let is_coinbase=format!("{}", out.is_coinbase);
-			let num_confirmations=format!("{}", out.num_confirmations(current_height));
-			let value=format!("{}", core::amount_to_hr_string(out.value));
+			let key_id = format!("{}", out.key_id);
+			let height = format!("{}", out.height);
+			let lock_height = format!("{}", out.lock_height);
+			let status = format!("{:?}", out.status);
+			let is_coinbase = format!("{}", out.is_coinbase);
+			let num_confirmations = format!("{}", out.num_confirmations(current_height));
+			let value = format!("{}", core::amount_to_hr_string(out.value));
 			table.add_row(row![
 				bFC->key_id,
 				bFB->height,

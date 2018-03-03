@@ -18,9 +18,9 @@ use uuid::Uuid;
 use api;
 use client;
 use checker;
-use core::core::{build, Transaction, amount_to_hr_string};
+use core::core::{amount_to_hr_string, build, Transaction};
 use core::ser;
-use keychain::{BlindingFactor, BlindSum, Identifier, Keychain};
+use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 use receiver::TxWrapper;
 use types::*;
 use util::LOGGER;
@@ -64,44 +64,52 @@ pub fn issue_send_tx(
 	// Generate a random kernel offset here
 	// and subtract it from the blind_sum so we create
 	// the aggsig context with the "split" key
-	let kernel_offset = BlindingFactor::from_secret_key(
-		SecretKey::new(&keychain.secp(), &mut thread_rng())
-	);
+	let kernel_offset =
+		BlindingFactor::from_secret_key(SecretKey::new(&keychain.secp(), &mut thread_rng()));
 
-	let blind_offset = keychain.blind_sum(
-		&BlindSum::new()
+	let blind_offset = keychain
+		.blind_sum(&BlindSum::new()
 			.add_blinding_factor(blind)
-			.sub_blinding_factor(kernel_offset)
-	).unwrap();
+			.sub_blinding_factor(kernel_offset))
+		.unwrap();
 
 	//
-	// -Sender picks random blinding factors for all outputs it participates in, computes total blinding excess xS
-	// -Sender picks random nonce kS
+	// -Sender picks random blinding factors for all outputs it participates in,
+	// computes total blinding excess xS -Sender picks random nonce kS
 	// -Sender posts inputs, outputs, Message M=fee, xS * G and kS * G to Receiver
 	//
 	// Create a new aggsig context
 	let tx_id = Uuid::new_v4();
-	let skey = blind_offset.secret_key(&keychain.secp()).context(ErrorKind::Keychain)?;
-	keychain.aggsig_create_context(&tx_id, skey).context(ErrorKind::Keychain)?;
+	let skey = blind_offset
+		.secret_key(&keychain.secp())
+		.context(ErrorKind::Keychain)?;
+	keychain
+		.aggsig_create_context(&tx_id, skey)
+		.context(ErrorKind::Keychain)?;
 
 	let partial_tx = build_partial_tx(&tx_id, keychain, amount_with_fee, kernel_offset, None, tx);
 
 	// Closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
-	let update_wallet = || WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		for coin in coins {
-			wallet_data.lock_output(&coin);
-		}
-	});
+	let update_wallet = || {
+		WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+			for coin in coins {
+				wallet_data.lock_output(&coin);
+			}
+		})
+	};
 
-	// Closure to acquire wallet lock and delete the change output in case of tx failure.
-	let rollback_wallet = || WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		info!(LOGGER, "cleaning up unused change output from wallet");
-		wallet_data.delete_output(&change_key);
-	});
+	// Closure to acquire wallet lock and delete the change output in case of tx
+	// failure.
+	let rollback_wallet = || {
+		WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+			info!(LOGGER, "cleaning up unused change output from wallet");
+			wallet_data.delete_output(&change_key);
+		})
+	};
 
-	// TODO: stdout option removed for now, as it won't work very will with this version of
-	// aggsig exchange
+	// TODO: stdout option removed for now, as it won't work very will with this
+	// version of aggsig exchange
 
 	/*if dest == "stdout" {
 		let json_tx = serde_json::to_string_pretty(&partial_tx).unwrap();
@@ -110,7 +118,10 @@ pub fn issue_send_tx(
 	} else */
 
 	if &dest[..4] != "http" {
-		panic!("dest formatted as {} but send -d expected stdout or http://IP:port", dest);
+		panic!(
+			"dest formatted as {} but send -d expected stdout or http://IP:port",
+			dest
+		);
 	}
 
 	let url = format!("{}/v1/receive/transaction", &dest);
@@ -118,14 +129,19 @@ pub fn issue_send_tx(
 	let res = client::send_partial_tx(&url, &partial_tx);
 	if let Err(e) = res {
 		match e.kind() {
-			ErrorKind::FeeExceedsAmount {sender_amount, recipient_fee} =>
-				error!(
+			ErrorKind::FeeExceedsAmount {
+				sender_amount,
+				recipient_fee,
+			} => error!(
 					LOGGER,
 					"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
 					amount_to_hr_string(recipient_fee),
 					amount_to_hr_string(sender_amount)
 				),
-			_ => error!(LOGGER, "Communication with receiver failed on SenderInitiation send. Aborting transaction"),
+			_ => error!(
+				LOGGER,
+				"Communication with receiver failed on SenderInitiation send. Aborting transaction"
+			),
 		}
 		rollback_wallet()?;
 		return Err(e);
@@ -133,11 +149,12 @@ pub fn issue_send_tx(
 
 	/* -Sender receives xR * G, kR * G, sR
 	 * -Sender computes Schnorr challenge e = H(M | kR * G + kS * G)
-	 * -Sender verifies receivers sig, by verifying that kR * G + e * xR * G = sR * G·
-	 * -Sender computes their part of signature, sS = kS + e * xS
+	 * -Sender verifies receivers sig, by verifying that kR * G + e * xR * G =
+	 * sR * G· -Sender computes their part of signature, sS = kS + e * xS
 	 * -Sender posts sS to receiver
-	*/
-	let (_amount, recp_pub_blinding, recp_pub_nonce, kernel_offset, sig, tx) = read_partial_tx(keychain, &res.unwrap())?;
+	 */
+	let (_amount, recp_pub_blinding, recp_pub_nonce, kernel_offset, sig, tx) =
+		read_partial_tx(keychain, &res.unwrap())?;
 	let res = keychain.aggsig_verify_partial_sig(
 		&tx_id,
 		&sig.unwrap(),
@@ -151,11 +168,21 @@ pub fn issue_send_tx(
 		return Err(ErrorKind::Signature("Partial Sig from recipient invalid."))?;
 	}
 
-	let sig_part = keychain.aggsig_calculate_partial_sig(&tx_id, &recp_pub_nonce, tx.fee(), tx.lock_height()).unwrap();
+	let sig_part = keychain
+		.aggsig_calculate_partial_sig(&tx_id, &recp_pub_nonce, tx.fee(), tx.lock_height())
+		.unwrap();
 
-	// Build the next stage, containing sS (and our pubkeys again, for the recipient's convenience)
-	// offset has not been modified during tx building, so pass it back in
-	let mut partial_tx = build_partial_tx(&tx_id, keychain, amount_with_fee, kernel_offset, Some(sig_part), tx);
+	// Build the next stage, containing sS (and our pubkeys again, for the
+	// recipient's convenience) offset has not been modified during tx building,
+	// so pass it back in
+	let mut partial_tx = build_partial_tx(
+		&tx_id,
+		keychain,
+		amount_with_fee,
+		kernel_offset,
+		Some(sig_part),
+		tx,
+	);
 	partial_tx.phase = PartialTxPhase::SenderConfirmation;
 
 	// And send again
@@ -192,7 +219,16 @@ fn build_send_tx(
 	lock_height: u64,
 	max_outputs: usize,
 	selection_strategy_is_use_all: bool,
-) -> Result<(Transaction, BlindingFactor, Vec<OutputData>, Identifier, u64), Error> {
+) -> Result<
+	(
+		Transaction,
+		BlindingFactor,
+		Vec<OutputData>,
+		Identifier,
+		u64,
+	),
+	Error,
+> {
 	let key_id = keychain.clone().root_key_id();
 
 	// select some spendable coins from the wallet
@@ -208,14 +244,14 @@ fn build_send_tx(
 	})?;
 
 	// Get the maximum number of outputs in the wallet
-	let max_outputs =  WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+	let max_outputs = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
 		Ok(wallet_data.select_coins(
-		key_id.clone(),
-		amount,
-		current_height,
-		minimum_confirmations,
-		max_outputs,
-		true,
+			key_id.clone(),
+			amount,
+			current_height,
+			minimum_confirmations,
+			max_outputs,
+			true,
 		))
 	})?.len();
 
@@ -226,8 +262,8 @@ fn build_send_tx(
 	let mut total: u64 = coins.iter().map(|c| c.value).sum();
 	let mut amount_with_fee = amount + fee;
 
-	// Here check if we have enough outputs for the amount including fee otherwise look for other
-	// outputs and check again
+	// Here check if we have enough outputs for the amount including fee otherwise
+	// look for other outputs and check again
 	while total <= amount_with_fee {
 		// End the loop if we have selected all the outputs and still not enough funds
 		if coins.len() == max_outputs {
@@ -324,12 +360,15 @@ fn inputs_and_change(
 	parts.push(build::with_fee(fee));
 
 	// if we are spending 10,000 coins to send 1,000 then our change will be 9,000
-	// if the fee is 80 then the recipient will receive 1000 and our change will be 8,920
+	// if the fee is 80 then the recipient will receive 1000 and our change will be
+	// 8,920
 	let change = total - amount - fee;
 
 	// build inputs using the appropriate derived key_ids
 	for coin in coins {
-		let key_id = keychain.derive_key_id(coin.n_child).context(ErrorKind::Keychain)?;
+		let key_id = keychain
+			.derive_key_id(coin.n_child)
+			.context(ErrorKind::Keychain)?;
 		if coin.is_coinbase {
 			let block = coin.block.clone();
 			let merkle_proof = coin.merkle_proof.clone();
@@ -377,7 +416,6 @@ fn inputs_and_change(
 mod test {
 	use core::core::build;
 	use keychain::Keychain;
-
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment
