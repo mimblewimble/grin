@@ -514,6 +514,40 @@ impl Chain {
 		Ok(())
 	}
 
+	/// Triggers chain compaction, cleaning up some unecessary historical
+	/// information. We introduce a chain depth called horizon, which is
+	/// typically in the range of a couple days. Before that horizon, this
+	/// method will:
+	///
+	/// * compact the MMRs data files and flushing the corresponding remove logs
+	/// * delete old records from the k/v store (older blocks, indexes, etc.)
+	///
+	/// This operation can be resource intensive and takes some time to execute.
+	/// Meanwhile, the chain will not be able to accept new blocks. It should
+	/// therefore be called judiciously.
+	pub fn compact(&self) -> Result<(), Error> {
+		let mut sumtrees = self.sumtrees.write().unwrap();
+		sumtrees.compact()?;
+
+		let horizon = global::cut_through_horizon() as u64;
+		let head = self.head()?;
+		let mut current = self.store.get_header_by_height(head.height-horizon-1)?;
+		loop {
+			match self.store.get_block(&current.hash()) {
+				Ok(b) => {
+					self.store.delete_block(&b.hash())?;
+				}
+				Err(NotFoundErr) => {
+					break;
+				}
+				Err(e) => return Err(
+					Error::StoreErr(e, "retrieving block to compact".to_owned())),
+			}
+			current = self.store.get_block_header(&current.previous)?;
+		}
+		Ok(())
+	}
+
 	/// returns the last n nodes inserted into the utxo sum tree
 	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<(Hash, Option<OutputStoreable>)> {
 		let mut sumtrees = self.sumtrees.write().unwrap();

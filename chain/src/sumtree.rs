@@ -27,11 +27,13 @@ use util::secp::pedersen::{RangeProof, Commitment};
 use core::consensus::reward;
 use core::core::{Block, BlockHeader, Input, Output, OutputIdentifier,
 	OutputFeatures, OutputStoreable, TxKernel};
+use core::global;
 use core::core::pmmr::{self, PMMR};
 use core::core::hash::{Hash, Hashed};
 use core::ser::{self, PMMRable};
 
 use grin_store;
+use grin_store::types::prune_noop;
 use grin_store::pmmr::PMMRBackend;
 use types::{ChainStore, SumTreeRoots, Error};
 use util::{LOGGER, zip};
@@ -187,7 +189,6 @@ impl SumTrees {
 		indexes_at(block, self.commit_index.deref())
 	}
 
-
 	/// Get sum tree roots
 	/// TODO: Return data instead of hashes
 	pub fn roots(
@@ -201,6 +202,18 @@ impl SumTrees {
 		let rproof_pmmr:PMMR<RangeProof, _> = PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
 		let kernel_pmmr:PMMR<TxKernel, _> = PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
 		(output_pmmr.root(), rproof_pmmr.root(), kernel_pmmr.root())
+	}
+
+	/// Compact the MMR data files and flush the rm logs
+	pub fn compact(&mut self) -> Result<(), Error> {
+		let horizon = global::cut_through_horizon();
+		let commit_index = self.commit_index.clone();
+		let clean_output_index = |commit: &[u8]| {
+			let _ = commit_index.delete_output_pos(commit);
+		};
+		self.utxo_pmmr_h.backend.check_compact(1000, horizon, clean_output_index)?;
+		self.rproof_pmmr_h.backend.check_compact(1000, horizon, &prune_noop)?;
+		Ok(())
 	}
 }
 
@@ -560,6 +573,14 @@ impl<'a> Extension<'a> {
 			if pmmr::bintree_postorder_height(n) == 0 {
 				if let Some((_, out)) = self.utxo_pmmr.get(n, true) {
 					self.commit_index.save_output_pos(&out.expect("not a leaf node").commit, n)?;
+				}
+			}
+		}
+		for n in 1..self.kernel_pmmr.unpruned_size()+1 {
+			// non-pruned leaves only
+			if pmmr::bintree_postorder_height(n) == 0 {
+				if let Some((_, kernel)) = self.kernel_pmmr.get(n, true) {
+					self.commit_index.save_kernel_pos(&kernel.expect("not a leaf node").excess, n)?;
 				}
 			}
 		}
