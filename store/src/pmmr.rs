@@ -254,7 +254,7 @@ where
 		prune_cb: P,
 	) -> io::Result<bool> where P: Fn(&[u8]) {
 
-		if !(max_len > 0 && self.rm_log.len() > max_len
+		if !(max_len > 0 && self.rm_log.len() >= max_len
 			|| max_len == 0 && self.rm_log.len() > RM_LOG_MAX_NODES)
 		{
 			return Ok(false);

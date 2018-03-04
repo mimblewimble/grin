@@ -211,8 +211,9 @@ impl SumTrees {
 		let clean_output_index = |commit: &[u8]| {
 			let _ = commit_index.delete_output_pos(commit);
 		};
-		self.utxo_pmmr_h.backend.check_compact(1000, horizon, clean_output_index)?;
-		self.rproof_pmmr_h.backend.check_compact(1000, horizon, &prune_noop)?;
+		let min_rm = (horizon / 10) as usize;
+		self.utxo_pmmr_h.backend.check_compact(min_rm, horizon, clean_output_index)?;
+		self.rproof_pmmr_h.backend.check_compact(min_rm, horizon, &prune_noop)?;
 		Ok(())
 	}
 }

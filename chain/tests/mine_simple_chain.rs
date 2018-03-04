@@ -239,7 +239,7 @@ fn longer_fork() {
 }
 
 #[test]
-fn spend_in_fork() {
+fn spend_in_fork_and_compact() {
 	util::init_test_logger();
 	let chain = setup(".grin6");
 	let prev = chain.head_header().unwrap();
@@ -332,6 +332,18 @@ fn spend_in_fork() {
 	assert_eq!(head.hash(), prev_fork.hash());
 	assert!(chain.is_unspent(&OutputIdentifier::from_output(&tx2.outputs[0])).is_ok());
 	assert!(chain.is_unspent(&OutputIdentifier::from_output(&tx1.outputs[0])).is_err());
+
+	// add 20 blocks to go past the test horizon
+	let mut prev = prev_fork;
+	for n in 0..20 {
+		let next = prepare_block(&kc, &prev, &chain, 11+n);
+		prev = next.header.clone();
+		chain.process_block(next, chain::Options::SKIP_POW).unwrap();
+	}
+
+	chain.validate().unwrap();
+	chain.compact().unwrap();
+	chain.validate().unwrap();
 }
 
 fn prepare_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {

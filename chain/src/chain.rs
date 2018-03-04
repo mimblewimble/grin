@@ -543,7 +543,14 @@ impl Chain {
 				Err(e) => return Err(
 					Error::StoreErr(e, "retrieving block to compact".to_owned())),
 			}
-			current = self.store.get_block_header(&current.previous)?;
+			if current.height <= 1 {
+				break;
+			}
+			match self.store.get_block_header(&current.previous) {
+				Ok(h) => current = h,
+				Err(NotFoundErr) => break,
+				Err(e) => return Err(From::from(e)),
+			}
 		}
 		Ok(())
 	}
