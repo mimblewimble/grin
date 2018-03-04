@@ -25,7 +25,7 @@ use std::time;
 use adapters::*;
 use api;
 use chain;
-use core::{global, genesis};
+use core::{genesis, global};
 use miner;
 use p2p;
 use pool;
@@ -85,11 +85,7 @@ impl Server {
 			//global::ChainTypes::Testnet2 => genesis::genesis_testnet2(),
 			_ => pow::mine_genesis_block(config.mining_config.clone())?,
 		};
-		info!(
-			LOGGER,
-			"Starting server, genesis block: {}",
-			genesis.hash(),
-		);
+		info!(LOGGER, "Starting server, genesis block: {}", genesis.hash(),);
 
 		let shared_chain = Arc::new(chain::Chain::init(
 			config.db_root.clone(),
@@ -122,22 +118,24 @@ impl Server {
 		net_adapter.init(Arc::downgrade(&p2p_server.peers));
 
 		if config.seeding_type.clone() != Seeding::Programmatic {
-
 			let seeder = match config.seeding_type.clone() {
 				Seeding::None => {
-					warn!(LOGGER, "No seed configured, will stay solo until connected to");
+					warn!(
+						LOGGER,
+						"No seed configured, will stay solo until connected to"
+					);
 					seed::predefined_seeds(vec![])
 				}
-				Seeding::List => {
-					seed::predefined_seeds(config.seeds.as_mut().unwrap().clone())
-				}
-				Seeding::WebStatic => {
-					seed::web_seeds()
-				}
+				Seeding::List => seed::predefined_seeds(config.seeds.as_mut().unwrap().clone()),
+				Seeding::WebStatic => seed::web_seeds(),
 				_ => unreachable!(),
 			};
 			seed::connect_and_monitor(
-				p2p_server.clone(), config.capabilities, seeder, stop.clone());
+				p2p_server.clone(),
+				config.capabilities,
+				seeder,
+				stop.clone(),
+			);
 		}
 
 		// Defaults to None (optional) in config file.
@@ -164,9 +162,9 @@ impl Server {
 		);
 
 		let p2p_inner = p2p_server.clone();
-		let _ = thread::Builder::new().name("p2p-server".to_string()).spawn(move || {
-			p2p_inner.listen()
-		});
+		let _ = thread::Builder::new()
+			.name("p2p-server".to_string())
+			.spawn(move || p2p_inner.listen());
 
 		info!(LOGGER, "Starting rest apis at: {}", &config.api_http_addr);
 
@@ -207,7 +205,11 @@ impl Server {
 		let currently_syncing = self.currently_syncing.clone();
 
 		let mut miner = miner::Miner::new(
-			config.clone(), self.chain.clone(), self.tx_pool.clone(), self.stop.clone());
+			config.clone(),
+			self.chain.clone(),
+			self.tx_pool.clone(),
+			self.stop.clone(),
+		);
 		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.port));
 		let _ = thread::Builder::new()
 			.name("miner".to_string())

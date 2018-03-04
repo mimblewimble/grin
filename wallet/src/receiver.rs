@@ -25,12 +25,12 @@ use uuid::Uuid;
 
 use api;
 use core::consensus::reward;
-use core::core::{build, Block, Committed, Output, Transaction, TxKernel, amount_to_hr_string};
+use core::core::{amount_to_hr_string, build, Block, Committed, Output, Transaction, TxKernel};
 use core::{global, ser};
-use keychain::{Identifier, Keychain, BlindingFactor};
+use keychain::{BlindingFactor, Identifier, Keychain};
 use types::*;
-use util::{LOGGER, to_hex, secp};
-use failure::{ResultExt};
+use util::{secp, to_hex, LOGGER};
+use failure::ResultExt;
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
 #[derive(Serialize, Deserialize)]
@@ -51,9 +51,10 @@ pub struct TxWrapper {
 fn handle_sender_initiation(
 	config: &WalletConfig,
 	keychain: &Keychain,
-	partial_tx: &PartialTx
+	partial_tx: &PartialTx,
 ) -> Result<PartialTx, Error> {
-	let (amount, _sender_pub_blinding, sender_pub_nonce, kernel_offset, _sig, tx) = read_partial_tx(keychain, partial_tx)?;
+	let (amount, _sender_pub_blinding, sender_pub_nonce, kernel_offset, _sig, tx) =
+		read_partial_tx(keychain, partial_tx)?;
 
 	let root_key_id = keychain.root_key_id();
 
@@ -68,23 +69,24 @@ fn handle_sender_initiation(
 		})?;
 	}
 
-    if fee > amount {
+	if fee > amount {
 		info!(
 			LOGGER,
 			"Rejected the transfer because transaction fee ({}) exceeds received amount ({}).",
 			amount_to_hr_string(fee),
 			amount_to_hr_string(amount)
 		);
-        return Err(ErrorKind::FeeExceedsAmount {
-            sender_amount: amount,
-            recipient_fee: fee,
-        })?;
-    }
+		return Err(ErrorKind::FeeExceedsAmount {
+			sender_amount: amount,
+			recipient_fee: fee,
+		})?;
+	}
 
 	let out_amount = amount - fee;
 
-	// First step is just to get the excess sum of the outputs we're participating in
-	// Output and key needs to be stored until transaction finalisation time, somehow
+	// First step is just to get the excess sum of the outputs we're participating
+	// in Output and key needs to be stored until transaction finalisation time,
+	// somehow
 
 	let key_id = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		let (key_id, derivation) = next_available_key(&wallet_data, keychain);
@@ -106,29 +108,35 @@ fn handle_sender_initiation(
 	})?;
 
 	// Still handy for getting the blinding sum
-	let (_, blind_sum) = build::partial_transaction(
-		vec![
-			build::output(out_amount, key_id.clone()),
-		],
-		keychain,
-	).context(ErrorKind::Keychain)?;
+	let (_, blind_sum) =
+		build::partial_transaction(vec![build::output(out_amount, key_id.clone())], keychain)
+			.context(ErrorKind::Keychain)?;
 
 	warn!(LOGGER, "Creating new aggsig context");
 	// Create a new aggsig context
 	// this will create a new blinding sum and nonce, and store them
-	let blind = blind_sum.secret_key(&keychain.secp()).context(ErrorKind::Keychain)?;
-	keychain.aggsig_create_context(&partial_tx.id, blind).context(ErrorKind::Keychain)?;
+	let blind = blind_sum
+		.secret_key(&keychain.secp())
+		.context(ErrorKind::Keychain)?;
+	keychain
+		.aggsig_create_context(&partial_tx.id, blind)
+		.context(ErrorKind::Keychain)?;
 	keychain.aggsig_add_output(&partial_tx.id, &key_id);
 
-	let sig_part = keychain.aggsig_calculate_partial_sig(
-		&partial_tx.id,
-		&sender_pub_nonce,
-		fee,
-		tx.lock_height(),
-	).unwrap();
+	let sig_part = keychain
+		.aggsig_calculate_partial_sig(&partial_tx.id, &sender_pub_nonce, fee, tx.lock_height())
+		.unwrap();
 
-	// Build the response, which should contain sR, blinding excess xR * G, public nonce kR * G
-	let mut partial_tx = build_partial_tx(&partial_tx.id, keychain, amount, kernel_offset, Some(sig_part), tx);
+	// Build the response, which should contain sR, blinding excess xR * G, public
+	// nonce kR * G
+	let mut partial_tx = build_partial_tx(
+		&partial_tx.id,
+		keychain,
+		amount,
+		kernel_offset,
+		Some(sig_part),
+		tx,
+	);
 	partial_tx.phase = PartialTxPhase::ReceiverInitiation;
 
 	Ok(partial_tx)
@@ -149,16 +157,18 @@ fn handle_sender_initiation(
 fn handle_sender_confirmation(
 	config: &WalletConfig,
 	keychain: &Keychain,
-	partial_tx: &PartialTx
+	partial_tx: &PartialTx,
 ) -> Result<PartialTx, Error> {
-	let (amount, sender_pub_blinding, sender_pub_nonce, kernel_offset, sender_sig_part, tx) = read_partial_tx(keychain, partial_tx)?;
+	let (amount, sender_pub_blinding, sender_pub_nonce, kernel_offset, sender_sig_part, tx) =
+		read_partial_tx(keychain, partial_tx)?;
 	let sender_sig_part = sender_sig_part.unwrap();
 	let res = keychain.aggsig_verify_partial_sig(
 		&partial_tx.id,
 		&sender_sig_part,
 		&sender_pub_nonce,
 		&sender_pub_blinding,
-		tx.fee(), tx.lock_height(),
+		tx.fee(),
+		tx.lock_height(),
 	);
 
 	if !res {
@@ -167,26 +177,29 @@ fn handle_sender_confirmation(
 	}
 
 	// Just calculate our sig part again instead of storing
-	let our_sig_part = keychain.aggsig_calculate_partial_sig(
-		&partial_tx.id,
-		&sender_pub_nonce,
-		tx.fee(),
-		tx.lock_height(),
-	).unwrap();
+	let our_sig_part = keychain
+		.aggsig_calculate_partial_sig(
+			&partial_tx.id,
+			&sender_pub_nonce,
+			tx.fee(),
+			tx.lock_height(),
+		)
+		.unwrap();
 
 	// And the final signature
-	let final_sig = keychain.aggsig_calculate_final_sig(
-		&partial_tx.id,
-		&sender_sig_part,
-		&our_sig_part,
-		&sender_pub_nonce,
-	).unwrap();
+	let final_sig = keychain
+		.aggsig_calculate_final_sig(
+			&partial_tx.id,
+			&sender_sig_part,
+			&our_sig_part,
+			&sender_pub_nonce,
+		)
+		.unwrap();
 
 	// Calculate the final public key (for our own sanity check)
-	let final_pubkey = keychain.aggsig_calculate_final_pubkey(
-		&partial_tx.id,
-		&sender_pub_blinding,
-	).unwrap();
+	let final_pubkey = keychain
+		.aggsig_calculate_final_pubkey(&partial_tx.id, &sender_pub_blinding)
+		.unwrap();
 
 	// Check our final sig verifies
 	let res = keychain.aggsig_verify_final_sig_build_msg(
@@ -214,12 +227,18 @@ fn handle_sender_confirmation(
 	let tx_hex = to_hex(ser::ser_vec(&final_tx).unwrap());
 
 	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
-	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })
-		.context(ErrorKind::Node)?;
+	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).context(ErrorKind::Node)?;
 
 	// Return what we've actually posted
 	// TODO - why build_partial_tx here? Just a naming issue?
-	let mut partial_tx = build_partial_tx(&partial_tx.id, keychain, amount, kernel_offset, Some(final_sig), tx);
+	let mut partial_tx = build_partial_tx(
+		&partial_tx.id,
+		keychain,
+		amount,
+		kernel_offset,
+		Some(final_sig),
+		tx,
+	);
 	partial_tx.phase = PartialTxPhase::ReceiverConfirmation;
 	Ok(partial_tx)
 }
@@ -239,28 +258,38 @@ impl Handler for WalletReceiver {
 		if let Ok(Some(partial_tx)) = struct_body {
 			match partial_tx.phase {
 				PartialTxPhase::SenderInitiation => {
-					let resp_tx = handle_sender_initiation(&self.config, &self.keychain, &partial_tx)
-					.map_err(|e| {
+					let resp_tx = handle_sender_initiation(
+						&self.config,
+						&self.keychain,
+						&partial_tx,
+					).map_err(|e| {
 						error!(LOGGER, "Phase 1 Sender Initiation -> Problematic partial tx, looks like this: {:?}", partial_tx);
-						api::Error::Internal(
-							format!("Error processing partial transaction: {:?}", e),
-						)})
-					.unwrap();
+						api::Error::Internal(format!(
+							"Error processing partial transaction: {:?}",
+							e
+						))
+					})
+						.unwrap();
 					let json = serde_json::to_string(&resp_tx).unwrap();
 					Ok(Response::with((status::Ok, json)))
-				},
+				}
 				PartialTxPhase::SenderConfirmation => {
-					let resp_tx = handle_sender_confirmation(&self.config, &self.keychain, &partial_tx)
-					.map_err(|e| {
+					let resp_tx = handle_sender_confirmation(
+						&self.config,
+						&self.keychain,
+						&partial_tx,
+					).map_err(|e| {
 						error!(LOGGER, "Phase 3 Sender Confirmation -> Problematic partial tx, looks like this: {:?}", partial_tx);
-						api::Error::Internal(
-							format!("Error processing partial transaction: {:?}", e),
-						)})
-					.unwrap();
+						api::Error::Internal(format!(
+							"Error processing partial transaction: {:?}",
+							e
+						))
+					})
+						.unwrap();
 					let json = serde_json::to_string(&resp_tx).unwrap();
 					Ok(Response::with((status::Ok, json)))
-				},
-				_=> {
+				}
+				_ => {
 					error!(LOGGER, "Unhandled Phase: {:?}", partial_tx);
 					Ok(Response::with((status::BadRequest, "Unhandled Phase")))
 				}
@@ -271,10 +300,7 @@ impl Handler for WalletReceiver {
 	}
 }
 
-fn retrieve_existing_key(
-	wallet_data: &WalletData,
-	key_id: Identifier,
-) -> (Identifier, u32) {
+fn retrieve_existing_key(wallet_data: &WalletData, key_id: Identifier) -> (Identifier, u32) {
 	if let Some(existing) = wallet_data.get_output(&key_id) {
 		let key_id = existing.key_id.clone();
 		let derivation = existing.n_child;
@@ -284,10 +310,7 @@ fn retrieve_existing_key(
 	}
 }
 
-fn next_available_key(
-	wallet_data: &WalletData,
-	keychain: &Keychain,
-) -> (Identifier, u32) {
+fn next_available_key(wallet_data: &WalletData, keychain: &Keychain) -> (Identifier, u32) {
 	let root_key_id = keychain.root_key_id();
 	let derivation = wallet_data.next_child(root_key_id.clone());
 	let key_id = keychain.derive_key_id(derivation).unwrap();
@@ -342,12 +365,8 @@ pub fn receive_coinbase(
 
 	debug!(LOGGER, "receive_coinbase: {:?}", block_fees);
 
-	let (out, kern) = Block::reward_output(
-		&keychain,
-		&key_id,
-		block_fees.fees,
-		block_fees.height,
-	).context(ErrorKind::Keychain)?;
+	let (out, kern) = Block::reward_output(&keychain, &key_id, block_fees.fees, block_fees.height)
+		.context(ErrorKind::Keychain)?;
 	Ok((out, kern, block_fees))
 }
 
@@ -381,11 +400,11 @@ fn build_final_transaction(
 			amount_to_hr_string(fee),
 			amount_to_hr_string(amount)
 		);
-   		return Err(ErrorKind::FeeExceedsAmount {
-            		sender_amount: amount,
-            		recipient_fee: fee,
-        	})?;
-    }
+		return Err(ErrorKind::FeeExceedsAmount {
+			sender_amount: amount,
+			recipient_fee: fee,
+		})?;
+	}
 
 	let out_amount = amount - fee;
 
@@ -430,8 +449,14 @@ fn build_final_transaction(
 		let tx_excess = final_tx.sum_commitments().context(ErrorKind::Transaction)?;
 
 		// subtract the kernel_excess (built from kernel_offset)
-		let offset_excess = keychain.secp().commit(0, kernel_offset.secret_key(&keychain.secp()).unwrap()).unwrap();
-		keychain.secp().commit_sum(vec![tx_excess], vec![offset_excess]).context(ErrorKind::Transaction)?
+		let offset_excess = keychain
+			.secp()
+			.commit(0, kernel_offset.secret_key(&keychain.secp()).unwrap())
+			.unwrap();
+		keychain
+			.secp()
+			.commit_sum(vec![tx_excess], vec![offset_excess])
+			.context(ErrorKind::Transaction)?
 	};
 
 	// update the tx kernel to reflect the offset excess and sig
@@ -440,7 +465,9 @@ fn build_final_transaction(
 	final_tx.kernels[0].excess_sig = excess_sig.clone();
 
 	// confirm the kernel verifies successfully before proceeding
-	final_tx.kernels[0].verify().context(ErrorKind::Transaction)?;
+	final_tx.kernels[0]
+		.verify()
+		.context(ErrorKind::Transaction)?;
 
 	// confirm the overall transaction is valid (including the updated kernel)
 	let _ = final_tx.validate().context(ErrorKind::Transaction)?;

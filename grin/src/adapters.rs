@@ -15,7 +15,7 @@
 use std::fs::File;
 use std::net::SocketAddr;
 use std::ops::Deref;
-use std::sync::{Arc, Weak, RwLock};
+use std::sync::{Arc, RwLock, Weak};
 use std::sync::atomic::{AtomicBool, Ordering};
 use rand;
 use rand::Rng;
@@ -88,8 +88,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			b.header.height,
 			addr,
 		);
-               self.process_block(b, addr)
-       }
+		self.process_block(b, addr)
+	}
 
 	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
 		let bhash = cb.hash();
@@ -105,7 +105,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			let block = core::Block::hydrate_from(cb, vec![]);
 
 			// push the freshly hydrated block through the chain pipeline
-                       self.process_block(block, addr)
+			self.process_block(block, addr)
 		} else {
 			// TODO - do we need to validate the header here?
 
@@ -114,11 +114,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				tx_pool.retrieve_transactions(&cb)
 			};
 
-			debug!(
-				LOGGER,
-				"adapter: txs from tx pool - {}",
-				txs.len(),
-			);
+			debug!(LOGGER, "adapter: txs from tx pool - {}", txs.len(),);
 
 			// TODO - 3 scenarios here -
 			// 1) we hydrate a valid block (good to go)
@@ -131,7 +127,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
 				self.process_block(block, addr)
 			} else {
-				debug!(LOGGER, "adapter: block invalid after hydration, requesting full block");
+				debug!(
+					LOGGER,
+					"adapter: block invalid after hydration, requesting full block"
+				);
 				self.request_block(&cb.header, &addr);
 				true
 			}
@@ -142,10 +141,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		let bhash = bh.hash();
 		debug!(
 			LOGGER,
-			"Received block header {} at {} from {}, going to process.",
-			bhash,
-			bh.height,
-			addr,
+			"Received block header {} at {} from {}, going to process.", bhash, bh.height, addr,
 		);
 
 		// pushing the new block header through the header chain pipeline
@@ -155,7 +151,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		if let &Err(ref e) = &res {
 			debug!(LOGGER, "Block header {} refused by chain: {:?}", bhash, e);
 			if e.is_bad_data() {
-				debug!(LOGGER, "header_received: {} is a bad header, resetting header head", bhash);
+				debug!(
+					LOGGER,
+					"header_received: {} is a bad header, resetting header head", bhash
+				);
 				let _ = w(&self.chain).reset_head();
 				return false;
 			} else {
@@ -226,22 +225,14 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
-		debug!(
-			LOGGER,
-			"locate_headers: {:?}",
-			locator,
-		);
+		debug!(LOGGER, "locate_headers: {:?}", locator,);
 
 		let header = match self.find_common_header(locator) {
 			Some(header) => header,
 			None => return vec![],
 		};
 
-		debug!(
-			LOGGER,
-			"locate_headers: common header: {:?}",
-			header.hash(),
-		);
+		debug!(LOGGER, "locate_headers: common header: {:?}", header.hash(),);
 
 		// looks like we know one, getting as many following headers as allowed
 		let hh = header.height;
@@ -287,8 +278,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				reader: read,
 			}),
 			Err(e) => {
-				warn!(LOGGER, "Couldn't produce sumtrees data for block {}: {:?}",
-							h, e);
+				warn!(
+					LOGGER,
+					"Couldn't produce sumtrees data for block {}: {:?}", h, e
+				);
 				None
 			}
 		}
@@ -307,9 +300,9 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		_peer_addr: SocketAddr,
 	) -> bool {
 		// TODO check whether we should accept any sumtree now
-		if let Err(e) = w(&self.chain).
-			sumtrees_write(h, rewind_to_output, rewind_to_kernel, sumtree_data) {
-
+		if let Err(e) =
+			w(&self.chain).sumtrees_write(h, rewind_to_output, rewind_to_kernel, sumtree_data)
+		{
 			error!(LOGGER, "Failed to save sumtree archive: {:?}", e);
 			!e.is_bad_data()
 		} else {
@@ -362,10 +355,10 @@ impl NetToChainAdapter {
 				} else {
 					self.find_common_header(locator[1..].to_vec())
 				}
-			},
+			}
 			Err(chain::Error::StoreErr(store::Error::NotFoundErr, _)) => {
 				self.find_common_header(locator[1..].to_vec())
-			},
+			}
 			Err(e) => {
 				error!(LOGGER, "Could not build header locator: {:?}", e);
 				None
@@ -375,31 +368,37 @@ impl NetToChainAdapter {
 
 	// pushing the new block through the chain pipeline
 	// remembering to reset the head if we have a bad block
-       fn process_block(&self, b: core::Block, addr: SocketAddr) -> bool {
-               let prev_hash = b.header.previous;
-               let bhash = b.hash();
-               let chain = w(&self.chain);
-               match chain.process_block(b, self.chain_opts()) {
-                       Ok(_) => true,
-                       Err(chain::Error::Orphan) => {
-                               // make sure we did not miss the parent block
-                               if !self.currently_syncing.load(Ordering::Relaxed) && !chain.is_orphan(&prev_hash) {
-                                       debug!(LOGGER, "adapter: process_block: received an orphan block, checking the parent: {:}", prev_hash);
-                                       self.request_block_by_hash(prev_hash, &addr)
-                               }
-                               true
-                       }
-                       Err(ref e) if e.is_bad_data() => {
-                               debug!(LOGGER, "adapter: process_block: {} is a bad block, resetting head", bhash);
-                               let _ = chain.reset_head();
-                               false
-                       }
-                       Err(e) => {
-                               debug!(LOGGER, "adapter: process_block :block {} refused by chain: {:?}", bhash, e);
-                               true
-                       }
-               }
-       }
+	fn process_block(&self, b: core::Block, addr: SocketAddr) -> bool {
+		let prev_hash = b.header.previous;
+		let bhash = b.hash();
+		let chain = w(&self.chain);
+		match chain.process_block(b, self.chain_opts()) {
+			Ok(_) => true,
+			Err(chain::Error::Orphan) => {
+				// make sure we did not miss the parent block
+				if !self.currently_syncing.load(Ordering::Relaxed) && !chain.is_orphan(&prev_hash) {
+					debug!(LOGGER, "adapter: process_block: received an orphan block, checking the parent: {:}", prev_hash);
+					self.request_block_by_hash(prev_hash, &addr)
+				}
+				true
+			}
+			Err(ref e) if e.is_bad_data() => {
+				debug!(
+					LOGGER,
+					"adapter: process_block: {} is a bad block, resetting head", bhash
+				);
+				let _ = chain.reset_head();
+				false
+			}
+			Err(e) => {
+				debug!(
+					LOGGER,
+					"adapter: process_block :block {} refused by chain: {:?}", bhash, e
+				);
+				true
+			}
+		}
+	}
 
 	// After receiving a compact block if we cannot successfully hydrate
 	// it into a full block then fallback to requesting the full block
@@ -408,12 +407,12 @@ impl NetToChainAdapter {
 	// TODO - currently only request block from a single peer
 	// consider additional peers for redundancy?
 	fn request_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
-               self.request_block_by_hash(bh.hash(), addr)
+		self.request_block_by_hash(bh.hash(), addr)
 	}
 
 	fn request_block_by_hash(&self, h: Hash, addr: &SocketAddr) {
-               self.send_block_request_to_peer(h, addr, |peer, h| peer.send_block_request(h))
-        }
+		self.send_block_request_to_peer(h, addr, |peer, h| peer.send_block_request(h))
+	}
 
 	// After we have received a block header in "header first" propagation
 	// we need to go request the block (compact representation) from the
@@ -422,12 +421,16 @@ impl NetToChainAdapter {
 	// TODO - currently only request block from a single peer
 	// consider additional peers for redundancy?
 	fn request_compact_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
-               self.send_block_request_to_peer(bh.hash(), addr, |peer, h| peer.send_compact_block_request(h))
+		self.send_block_request_to_peer(bh.hash(), addr, |peer, h| {
+			peer.send_compact_block_request(h)
+		})
 	}
 
-       fn send_block_request_to_peer<F>(&self, h: Hash, addr: &SocketAddr, f: F)
-       where F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error> {
-                match w(&self.chain).block_exists(h) {
+	fn send_block_request_to_peer<F>(&self, h: Hash, addr: &SocketAddr, f: F)
+	where
+		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
+	{
+		match w(&self.chain).block_exists(h) {
                         Ok(false) => {
                                 match  wo(&self.peers).get_connected_peer(addr) {
                                         None => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, not connected", addr),
@@ -446,7 +449,7 @@ impl NetToChainAdapter {
                         Ok(true) => debug!(LOGGER, "send_block_request_to_peer: block {} already known", h),
                         Err(e) => error!(LOGGER, "send_block_request_to_peer: failed to check block exists: {:?}", e)
                 }
-       }
+	}
 
 	/// Prepare options for the chain pipeline
 	fn chain_opts(&self) -> chain::Options {
@@ -490,7 +493,6 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			// but broadcast full block if we have no txs
 			let cb = b.as_compact_block();
 			if cb.kern_ids.is_empty() {
-
 				// in the interest of testing all code paths
 				// randomly decide how we send an empty block out
 				// TODO - lock this down once we are comfortable it works...
@@ -574,13 +576,11 @@ impl PoolToChainAdapter {
 
 impl pool::BlockChain for PoolToChainAdapter {
 	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<Hash, pool::PoolError> {
-		wo(&self.chain)
-			.is_unspent(output_ref)
-			.map_err(|e| match e {
-				chain::types::Error::OutputNotFound => pool::PoolError::OutputNotFound,
-				chain::types::Error::OutputSpent => pool::PoolError::OutputSpent,
-				_ => pool::PoolError::GenericPoolError,
-			})
+		wo(&self.chain).is_unspent(output_ref).map_err(|e| match e {
+			chain::types::Error::OutputNotFound => pool::PoolError::OutputNotFound,
+			chain::types::Error::OutputSpent => pool::PoolError::OutputSpent,
+			_ => pool::PoolError::GenericPoolError,
+		})
 	}
 
 	fn is_matured(&self, input: &Input, height: u64) -> Result<(), pool::PoolError> {
@@ -590,7 +590,7 @@ impl pool::BlockChain for PoolToChainAdapter {
 				chain::types::Error::OutputNotFound => pool::PoolError::OutputNotFound,
 				_ => pool::PoolError::GenericPoolError,
 			})
-		}
+	}
 
 	fn head_header(&self) -> Result<BlockHeader, pool::PoolError> {
 		wo(&self.chain)

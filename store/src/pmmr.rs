@@ -13,15 +13,15 @@
 
 //! Implementation of the persistent Backend for the prunable MMR tree.
 
-use std::fs::{self};
-use std::io::{self};
+use std::fs;
+use std::io;
 use std::marker::PhantomData;
 
 use core::core::pmmr::{self, Backend};
-use core::ser::{self, PMMRable, Readable, Writeable, Reader, Writer};
+use core::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
 use core::core::hash::Hash;
 use util::LOGGER;
-use types::{AppendOnlyFile, RemoveLog, read_ordered_vec, write_vec};
+use types::{read_ordered_vec, write_vec, AppendOnlyFile, RemoveLog};
 
 const PMMR_HASH_FILE: &'static str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &'static str = "pmmr_data.bin";
@@ -31,7 +31,8 @@ const PMMR_PRUNED_FILE: &'static str = "pmmr_pruned.bin";
 /// Maximum number of nodes in the remove log before it gets flushed
 pub const RM_LOG_MAX_NODES: usize = 10000;
 
-/// Metadata for the PMMR backend's AppendOnlyFile, which can be serialized and stored
+/// Metadata for the PMMR backend's AppendOnlyFile, which can be serialized and
+/// stored
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct PMMRFileMetadata {
 	/// last written index of the hash file
@@ -124,8 +125,7 @@ where
 			Err(e) => {
 				error!(
 					LOGGER,
-					"Corrupted storage, could not read an entry from hash store: {:?}",
-					e
+					"Corrupted storage, could not read an entry from hash store: {:?}", e
 				);
 				return None;
 			}
@@ -152,8 +152,8 @@ where
 		}
 
 		// Optionally read flatfile storage to get data element
-		let flatfile_pos = pmmr::n_leaves(position)
-			- 1 - self.pruned_nodes.get_leaf_shift(position).unwrap();
+		let flatfile_pos =
+			pmmr::n_leaves(position) - 1 - self.pruned_nodes.get_leaf_shift(position).unwrap();
 		let record_len = T::len();
 		let file_offset = flatfile_pos as usize * T::len();
 		let data = self.data_file.read(file_offset, record_len);
@@ -196,9 +196,9 @@ where
 
 	/// Remove Hashes by insertion position
 	fn remove(&mut self, positions: Vec<u64>, index: u32) -> Result<(), String> {
-		self.rm_log.append(positions, index).map_err(|e| {
-			format!("Could not write to log storage, disk full? {:?}", e)
-		})
+		self.rm_log
+			.append(positions, index)
+			.map_err(|e| format!("Could not write to log storage, disk full? {:?}", e))
 	}
 
 	/// Return data file path
@@ -216,12 +216,14 @@ where
 	pub fn new(data_dir: String, file_md: Option<PMMRFileMetadata>) -> io::Result<PMMRBackend<T>> {
 		let (hash_to_pos, data_to_pos) = match file_md {
 			Some(m) => (m.last_hash_file_pos, m.last_data_file_pos),
-			None => (0,0)
+			None => (0, 0),
 		};
-		let hash_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE), hash_to_pos)?;
+		let hash_file =
+			AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE), hash_to_pos)?;
 		let rm_log = RemoveLog::open(format!("{}/{}", data_dir, PMMR_RM_LOG_FILE))?;
 		let prune_list = read_ordered_vec(format!("{}/{}", data_dir, PMMR_PRUNED_FILE), 8)?;
-		let data_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_DATA_FILE), data_to_pos)?;
+		let data_file =
+			AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_DATA_FILE), data_to_pos)?;
 
 		Ok(PMMRBackend {
 			data_dir: data_dir,
@@ -262,15 +264,15 @@ where
 	pub fn sync(&mut self) -> io::Result<()> {
 		if let Err(e) = self.hash_file.flush() {
 			return Err(io::Error::new(
-					io::ErrorKind::Interrupted,
-					format!("Could not write to log hash storage, disk full? {:?}", e),
-					));
+				io::ErrorKind::Interrupted,
+				format!("Could not write to log hash storage, disk full? {:?}", e),
+			));
 		}
 		if let Err(e) = self.data_file.flush() {
 			return Err(io::Error::new(
-					io::ErrorKind::Interrupted,
-					format!("Could not write to log data storage, disk full? {:?}", e),
-					));
+				io::ErrorKind::Interrupted,
+				format!("Could not write to log data storage, disk full? {:?}", e),
+			));
 		}
 		self.rm_log.flush()?;
 		Ok(())
@@ -292,7 +294,7 @@ where
 	pub fn last_file_positions(&self) -> PMMRFileMetadata {
 		PMMRFileMetadata {
 			last_hash_file_pos: self.hash_file.last_buffer_pos() as u64,
-			last_data_file_pos: self.data_file.last_buffer_pos() as u64
+			last_data_file_pos: self.data_file.last_buffer_pos() as u64,
 		}
 	}
 
@@ -338,13 +340,11 @@ where
 		// remove list
 		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);
 		let record_len = 32;
-		let to_rm = filter_map_vec!(self.rm_log.removed, |&(pos, idx)| {
-			if idx < cutoff_index {
-				let shift = self.pruned_nodes.get_shift(pos);
-				Some((pos - 1 - shift.unwrap()) * record_len)
-			} else {
-				None
-			}
+		let to_rm = filter_map_vec!(self.rm_log.removed, |&(pos, idx)| if idx < cutoff_index {
+			let shift = self.pruned_nodes.get_shift(pos);
+			Some((pos - 1 - shift.unwrap()) * record_len)
+		} else {
+			None
 		});
 		self.hash_file
 			.save_prune(tmp_prune_file_hash.clone(), to_rm, record_len)?;
@@ -390,7 +390,8 @@ where
 		self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE), 0)?;
 
 		// 6. truncate the rm log
-		self.rm_log.removed = self.rm_log.removed
+		self.rm_log.removed = self.rm_log
+			.removed
 			.iter()
 			.filter(|&&(_, idx)| idx >= cutoff_index)
 			.map(|x| *x)

@@ -34,7 +34,6 @@ extern crate serde_derive;
 #[macro_use]
 extern crate slog;
 
-
 pub mod pmmr;
 pub mod types;
 

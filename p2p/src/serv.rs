@@ -14,7 +14,7 @@
 
 use std::fs::File;
 use std::io;
-use std::net::{TcpListener, TcpStream, SocketAddr, Shutdown};
+use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -45,7 +45,6 @@ unsafe impl Send for Server {}
 
 // TODO TLS
 impl Server {
-
 	/// Creates a new idle p2p server with no peers
 	pub fn new(
 		db_root: String,
@@ -55,7 +54,6 @@ impl Server {
 		genesis: Hash,
 		stop: Arc<AtomicBool>,
 	) -> Result<Server, Error> {
-
 		Ok(Server {
 			config: config.clone(),
 			capabilities: capab,
@@ -71,8 +69,9 @@ impl Server {
 		// start peer monitoring thread
 		let peers_inner = self.peers.clone();
 		let stop = self.stop.clone();
-		let _ = thread::Builder::new().name("p2p-monitor".to_string()).spawn(move || {
-			loop {
+		let _ = thread::Builder::new()
+			.name("p2p-monitor".to_string())
+			.spawn(move || loop {
 				let total_diff = peers_inner.total_difficulty();
 				let total_height = peers_inner.total_height();
 				peers_inner.check_all(total_diff, total_height);
@@ -80,8 +79,7 @@ impl Server {
 				if stop.load(Ordering::Relaxed) {
 					break;
 				}
-			}
-		});
+			});
 
 		// start TCP listener and handle incoming connections
 		let addr = SocketAddr::new(self.config.host, self.config.port);
@@ -98,7 +96,8 @@ impl Server {
 								LOGGER,
 								"Error accepting peer {}: {:?}",
 								peer_addr.to_string(),
-								e);
+								e
+							);
 						}
 					}
 				}
@@ -207,10 +206,16 @@ impl ChainAdapter for DummyAdapter {
 		0
 	}
 	fn transaction_received(&self, _: core::Transaction) {}
-	fn compact_block_received(&self, _cb: core::CompactBlock, _addr: SocketAddr) -> bool { true }
-	fn header_received(&self, _bh: core::BlockHeader, _addr: SocketAddr) -> bool { true }
-	fn block_received(&self, _: core::Block, _: SocketAddr) -> bool { true }
-	fn headers_received(&self, _: Vec<core::BlockHeader>, _:SocketAddr) {}
+	fn compact_block_received(&self, _cb: core::CompactBlock, _addr: SocketAddr) -> bool {
+		true
+	}
+	fn header_received(&self, _bh: core::BlockHeader, _addr: SocketAddr) -> bool {
+		true
+	}
+	fn block_received(&self, _: core::Block, _: SocketAddr) -> bool {
+		true
+	}
+	fn headers_received(&self, _: Vec<core::BlockHeader>, _: SocketAddr) {}
 	fn locate_headers(&self, _: Vec<Hash>) -> Vec<core::BlockHeader> {
 		vec![]
 	}
@@ -221,9 +226,14 @@ impl ChainAdapter for DummyAdapter {
 		unimplemented!()
 	}
 
-	fn sumtrees_write(&self, _h: Hash,
-										_rewind_to_output: u64, _rewind_to_kernel: u64,
-										_sumtree_data: File, _peer_addr: SocketAddr) -> bool {
+	fn sumtrees_write(
+		&self,
+		_h: Hash,
+		_rewind_to_output: u64,
+		_rewind_to_kernel: u64,
+		_sumtree_data: File,
+		_peer_addr: SocketAddr,
+	) -> bool {
 		false
 	}
 }
@@ -233,5 +243,5 @@ impl NetAdapter for DummyAdapter {
 		vec![]
 	}
 	fn peer_addrs_received(&self, _: Vec<SocketAddr>) {}
-	fn peer_difficulty(&self, _: SocketAddr, _: Difficulty, _:u64) {}
+	fn peer_difficulty(&self, _: SocketAddr, _: Difficulty, _: u64) {}
 }

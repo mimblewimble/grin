@@ -15,7 +15,7 @@
 //! Message types that transit over the network and related serialization code.
 
 use std::io::{self, Read, Write};
-use std::net::{TcpStream, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream};
 use std::thread;
 use std::time;
 use num::FromPrimitive;
@@ -81,14 +81,13 @@ enum_from_primitive! {
 /// time is not guaranteed to be exact. To support cases where we want to poll
 /// instead of blocking, a `block_on_empty` boolean, when false, ensures
 /// `read_exact` returns early with a `io::ErrorKind::WouldBlock` if nothing
-/// has been read from the socket. 
+/// has been read from the socket.
 pub fn read_exact(
 	conn: &mut TcpStream,
 	mut buf: &mut [u8],
 	timeout: u32,
 	block_on_empty: bool,
 ) -> io::Result<()> {
-
 	let sleep_time = time::Duration::from_millis(1);
 	let mut count = 0;
 
@@ -116,7 +115,10 @@ pub fn read_exact(
 			break;
 		}
 		if count > timeout {
-			return Err(io::Error::new(io::ErrorKind::TimedOut, "reading from tcp stream"));
+			return Err(io::Error::new(
+				io::ErrorKind::TimedOut,
+				"reading from tcp stream",
+			));
 		}
 	}
 	Ok(())
@@ -124,14 +126,17 @@ pub fn read_exact(
 
 /// Same as `read_exact` but for writing.
 pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<()> {
-
 	let sleep_time = time::Duration::from_millis(1);
 	let mut count = 0;
 
 	while !buf.is_empty() {
 		match conn.write(buf) {
-			Ok(0) => return Err(io::Error::new(io::ErrorKind::WriteZero,
-																		 "failed to write whole buffer")),
+			Ok(0) => {
+				return Err(io::Error::new(
+					io::ErrorKind::WriteZero,
+					"failed to write whole buffer",
+				))
+			}
 			Ok(n) => buf = &buf[n..],
 			Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
 			Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
@@ -144,7 +149,10 @@ pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<(
 			break;
 		}
 		if count > timeout {
-			return Err(io::Error::new(io::ErrorKind::TimedOut, "reading from tcp stream"));
+			return Err(io::Error::new(
+				io::ErrorKind::TimedOut,
+				"reading from tcp stream",
+			));
 		}
 	}
 	Ok(())
@@ -154,7 +162,6 @@ pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<(
 /// underlying stream is async. Typically headers will be polled for, so
 /// we do not want to block.
 pub fn read_header(conn: &mut TcpStream) -> Result<MsgHeader, Error> {
-
 	let mut head = vec![0u8; HEADER_LEN as usize];
 	read_exact(conn, &mut head, 10000, false)?;
 	let header = ser::deserialize::<MsgHeader>(&mut &head[..])?;
@@ -188,10 +195,7 @@ where
 	read_body(&header, conn)
 }
 
-pub fn write_to_buf<T>(
-	msg: T,
-	msg_type: Type,
-) -> Vec<u8>
+pub fn write_to_buf<T>(msg: T, msg_type: Type) -> Vec<u8>
 where
 	T: Writeable,
 {
@@ -208,11 +212,7 @@ where
 	msg_buf
 }
 
-pub fn write_message<T>(
-	conn: &mut TcpStream,
-	msg: T,
-	msg_type: Type,
-) -> Result<(), Error>
+pub fn write_message<T>(conn: &mut TcpStream, msg: T, msg_type: Type) -> Result<(), Error>
 where
 	T: Writeable + 'static,
 {
@@ -597,11 +597,14 @@ impl Readable for Ping {
 			Ok(diff) => diff,
 			Err(_) => Difficulty::zero(),
 		};
-		let height = match reader.read_u64(){
+		let height = match reader.read_u64() {
 			Ok(h) => h,
 			Err(_) => 0,
 		};
-		Ok(Ping { total_difficulty, height })
+		Ok(Ping {
+			total_difficulty,
+			height,
+		})
 	}
 }
 
@@ -610,7 +613,7 @@ pub struct Pong {
 	/// may be needed
 	pub total_difficulty: Difficulty,
 	/// height accumulated by sender
-	pub height: u64
+	pub height: u64,
 }
 
 impl Writeable for Pong {
@@ -632,7 +635,10 @@ impl Readable for Pong {
 			Ok(h) => h,
 			Err(_) => 0,
 		};
-		Ok(Pong { total_difficulty, height })
+		Ok(Pong {
+			total_difficulty,
+			height,
+		})
 	}
 }
 
@@ -641,8 +647,8 @@ impl Readable for Pong {
 pub struct SumtreesRequest {
 	/// Hash of the block for which the sumtrees should be provided
 	pub hash: Hash,
-	/// Height of the corresponding block	
-	pub height: u64
+	/// Height of the corresponding block
+	pub height: u64,
 }
 
 impl Writeable for SumtreesRequest {
@@ -667,7 +673,7 @@ impl Readable for SumtreesRequest {
 pub struct SumtreesArchive {
 	/// Hash of the block for which the sumtrees are provided
 	pub hash: Hash,
-	/// Height of the corresponding block	
+	/// Height of the corresponding block
 	pub height: u64,
 	/// Output tree index the receiver should rewind to
 	pub rewind_to_output: u64,
@@ -680,10 +686,13 @@ pub struct SumtreesArchive {
 impl Writeable for SumtreesArchive {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.hash.write(writer)?;
-		ser_multiwrite!(writer, [write_u64, self.height],
-										[write_u64, self.rewind_to_output],
-										[write_u64, self.rewind_to_kernel],
-										[write_u64, self.bytes]);
+		ser_multiwrite!(
+			writer,
+			[write_u64, self.height],
+			[write_u64, self.rewind_to_output],
+			[write_u64, self.rewind_to_kernel],
+			[write_u64, self.bytes]
+		);
 		Ok(())
 	}
 }
@@ -694,6 +703,12 @@ impl Readable for SumtreesArchive {
 		let (height, rewind_to_output, rewind_to_kernel, bytes) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64, read_u64);
 
-		Ok(SumtreesArchive {hash, height, rewind_to_output, rewind_to_kernel, bytes})
+		Ok(SumtreesArchive {
+			hash,
+			height,
+			rewind_to_output,
+			rewind_to_kernel,
+			bytes,
+		})
 	}
 }

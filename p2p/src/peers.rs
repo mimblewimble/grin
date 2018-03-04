@@ -26,7 +26,7 @@ use util::LOGGER;
 use time;
 
 use peer::Peer;
-use store::{PeerStore, PeerData, State};
+use store::{PeerData, PeerStore, State};
 use types::*;
 
 pub struct Peers {
@@ -446,7 +446,10 @@ impl ChainAdapter for Peers {
 		if !self.adapter.block_received(b, peer_addr) {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or manevolent, both of which require a ban
-			debug!(LOGGER, "Received a bad block {} from  {}, the peer will be banned", hash, peer_addr);
+			debug!(
+				LOGGER,
+				"Received a bad block {} from  {}, the peer will be banned", hash, peer_addr
+			);
 			self.ban_peer(&peer_addr);
 			false
 		} else {
@@ -458,7 +461,12 @@ impl ChainAdapter for Peers {
 		if !self.adapter.compact_block_received(cb, peer_addr) {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or manevolent, both of which require a ban
-			debug!(LOGGER, "Received a bad compact block {} from  {}, the peer will be banned", hash, &peer_addr);
+			debug!(
+				LOGGER,
+				"Received a bad compact block {} from  {}, the peer will be banned",
+				hash,
+				&peer_addr
+			);
 			self.ban_peer(&peer_addr);
 			false
 		} else {
@@ -495,9 +503,17 @@ impl ChainAdapter for Peers {
 		sumtree_data: File,
 		peer_addr: SocketAddr,
 	) -> bool {
-		if !self.adapter.sumtrees_write(h, rewind_to_output, rewind_to_kernel,
-																		sumtree_data, peer_addr) {
-			debug!(LOGGER, "Received a bad sumtree data from {}, the peer will be banned", &peer_addr);
+		if !self.adapter.sumtrees_write(
+			h,
+			rewind_to_output,
+			rewind_to_kernel,
+			sumtree_data,
+			peer_addr,
+		) {
+			debug!(
+				LOGGER,
+				"Received a bad sumtree data from {}, the peer will be banned", &peer_addr
+			);
 			self.ban_peer(&peer_addr);
 			false
 		} else {

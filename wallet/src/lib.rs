@@ -16,17 +16,17 @@
 
 extern crate blake2_rfc as blake2;
 extern crate byteorder;
+#[macro_use]
+extern crate prettytable;
 extern crate rand;
 extern crate serde;
-extern crate uuid;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
 #[macro_use]
 extern crate slog;
-#[macro_use]
-extern crate prettytable;
 extern crate term;
+extern crate uuid;
 
 extern crate bodyparser;
 extern crate failure;
@@ -57,8 +57,9 @@ pub mod client;
 pub mod server;
 
 pub use outputs::show_outputs;
-pub use info::{show_info, retrieve_info};
-pub use receiver::{WalletReceiver};
+pub use info::{retrieve_info, show_info};
+pub use receiver::WalletReceiver;
 pub use sender::{issue_burn_tx, issue_send_tx};
-pub use types::{BlockFees, CbData, Error, ErrorKind, WalletConfig, WalletReceiveRequest, WalletInfo, WalletSeed};
+pub use types::{BlockFees, CbData, Error, ErrorKind, WalletConfig, WalletInfo,
+                WalletReceiveRequest, WalletSeed};
 pub use restore::restore;

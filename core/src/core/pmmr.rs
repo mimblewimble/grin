@@ -30,10 +30,10 @@
 //! binary operations, they're extremely fast. For more information, see the
 //! doc on bintree_jump_left_sibling.
 //! 2. The implementation of a prunable MMR tree using the above. Each leaf
-//! is required to be Writeable (which implements Hashed). Tree roots can be trivially and
-//! efficiently calculated without materializing the full tree. The underlying
-//! Hashes are stored in a Backend implementation that can either be
-//! a simple Vec or a database.
+//! is required to be Writeable (which implements Hashed). Tree roots can be
+//! trivially and efficiently calculated without materializing the full tree.
+//! The underlying Hashes are stored in a Backend implementation that can
+//! either be a simple Vec or a database.
 
 use std::clone::Clone;
 use std::marker::PhantomData;
@@ -48,8 +48,10 @@ use util::LOGGER;
 /// The PMMR itself does not need the Backend to be accurate on the existence
 /// of an element (i.e. remove could be a no-op) but layers above can
 /// depend on an accurate Backend to check existence.
-pub trait Backend<T> where
-	T:PMMRable {
+pub trait Backend<T>
+where
+	T: PMMRable,
+{
 	/// Append the provided Hashes to the backend storage, and optionally an associated
 	/// data element to flatfile storage (for leaf nodes only). The position of the
 	/// first element of the Vec in the MMR is provided to help the implementation.
@@ -65,7 +67,8 @@ pub trait Backend<T> where
 	/// also return the associated data element
 	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)>;
 
-	/// Get a Hash/Element by original insertion position (ignoring the remove list).
+	/// Get a Hash/Element by original insertion position (ignoring the remove
+	/// list).
 	fn get_from_file(&self, position: u64) -> Option<Hash>;
 
 	/// Remove HashSums by insertion position. An index is also provided so the
@@ -97,7 +100,8 @@ pub struct MerkleProof {
 	pub peaks: Vec<Hash>,
 	/// The siblings along the path of the tree as we traverse from node to peak
 	pub path: Vec<Hash>,
-	/// Order of siblings (left vs right) matters, so track this here for each path element
+	/// Order of siblings (left vs right) matters, so track this here for each
+	/// path element
 	pub left_right: Vec<bool>,
 }
 
@@ -108,7 +112,6 @@ impl Writeable for MerkleProof {
 			[write_fixed_bytes, &self.root],
 			[write_fixed_bytes, &self.node],
 			[write_u64, self.peaks.len() as u64],
-
 			// note: path length used for both path and left_right vecs
 			[write_u64, self.path.len() as u64]
 		);
@@ -134,8 +137,7 @@ impl Readable for MerkleProof {
 		let root = Hash::read(reader)?;
 		let node = Hash::read(reader)?;
 
-		let (peaks_len, path_len) =
-			ser_multiread!(reader, read_u64, read_u64);
+		let (peaks_len, path_len) = ser_multiread!(reader, read_u64, read_u64);
 
 		let mut peaks = Vec::with_capacity(peaks_len as usize);
 		for _ in 0..peaks_len {
@@ -148,15 +150,13 @@ impl Readable for MerkleProof {
 
 		let left_right_bytes = reader.read_fixed_bytes(path_len as usize)?;
 		let left_right = left_right_bytes.iter().map(|&x| x == 1).collect();
-		Ok(
-			MerkleProof {
-				root,
-				node,
-				peaks,
-				path,
-				left_right,
-			}
-		)
+		Ok(MerkleProof {
+			root,
+			node,
+			peaks,
+			path,
+			left_right,
+		})
 	}
 }
 
@@ -223,7 +223,8 @@ impl MerkleProof {
 		let sibling = path.remove(0);
 		let mut left_right = self.left_right.clone();
 
-		// hash our node and sibling together (noting left/right position of the sibling)
+		// hash our node and sibling together (noting left/right position of the
+		// sibling)
 		let parent = if left_right.remove(0) {
 			self.node.hash_with(sibling)
 		} else {
@@ -241,7 +242,6 @@ impl MerkleProof {
 		proof.verify()
 	}
 }
-
 
 /// Prunable Merkle Mountain Range implementation. All positions within the tree
 /// start at 1 as they're postorder tree traversal positions rather than array
@@ -290,7 +290,8 @@ where
 	/// tree and "bags" them to get a single peak.
 	pub fn root(&self) -> Hash {
 		let peaks_pos = peaks(self.last_pos);
-		let peaks: Vec<Option<(Hash, Option<T>)>> = peaks_pos.into_iter()
+		let peaks: Vec<Option<(Hash, Option<T>)>> = peaks_pos
+			.into_iter()
 			.map(|pi| self.backend.get(pi, false))
 			.collect();
 
@@ -307,7 +308,10 @@ where
 
 	/// Build a Merkle proof for the element at the given position in the MMR
 	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
-		debug!(LOGGER, "merkle_proof (via rewind) - {}, last_pos {}", pos, self.last_pos);
+		debug!(
+			LOGGER,
+			"merkle_proof (via rewind) - {}, last_pos {}", pos, self.last_pos
+		);
 
 		if !is_leaf(pos) {
 			return Err(format!("not a leaf at pos {}", pos));
@@ -320,10 +324,7 @@ where
 			.0;
 
 		let family_branch = family_branch(pos, self.last_pos);
-		let left_right = family_branch
-			.iter()
-			.map(|x| x.2)
-			.collect::<Vec<_>>();
+		let left_right = family_branch.iter().map(|x| x.2).collect::<Vec<_>>();
 
 		let path = family_branch
 			.iter()
@@ -370,9 +371,9 @@ where
 		// creation of another parent.
 		while bintree_postorder_height(pos + 1) > height {
 			let left_sibling = bintree_jump_left_sibling(pos);
-			let left_elem = self.backend.get(left_sibling, false).expect(
-				"missing left sibling in tree, should not have been pruned",
-			);
+			let left_elem = self.backend
+				.get(left_sibling, false)
+				.expect("missing left sibling in tree, should not have been pruned");
 			current_hash = left_elem.0 + current_hash;
 
 			to_append.push((current_hash.clone(), None));
@@ -498,16 +499,18 @@ where
 			if bintree_postorder_height(n) > 0 {
 				if let Some(hs) = self.get(n, false) {
 					// take the left and right children, if they exist
-					let left_pos = bintree_move_down_left(n)
-						.ok_or(format!("left_pos not found"))?;
+					let left_pos = bintree_move_down_left(n).ok_or(format!("left_pos not found"))?;
 					let right_pos = bintree_jump_right_sibling(left_pos);
 
 					if let Some(left_child_hs) = self.get(left_pos, false) {
 						if let Some(right_child_hs) = self.get(right_pos, false) {
 							// add hashes and compare
-							if left_child_hs.0+right_child_hs.0 != hs.0 {
-								return Err(format!("Invalid MMR, hash of parent at {} does \
-														not match children.", n));
+							if left_child_hs.0 + right_child_hs.0 != hs.0 {
+								return Err(format!(
+									"Invalid MMR, hash of parent at {} does \
+									 not match children.",
+									n
+								));
 							}
 						}
 					}
@@ -575,7 +578,9 @@ pub struct PruneList {
 impl PruneList {
 	/// Instantiate a new empty prune list
 	pub fn new() -> PruneList {
-		PruneList { pruned_nodes: vec![] }
+		PruneList {
+			pruned_nodes: vec![],
+		}
 	}
 
 	/// Computes by how many positions a node at pos should be shifted given the
@@ -602,7 +607,6 @@ impl PruneList {
 	/// given leaf. Helpful if, for instance, data for each leaf is being stored
 	/// separately in a continuous flat-file
 	pub fn get_leaf_shift(&self, pos: u64) -> Option<u64> {
-
 		// get the position where the node at pos would fit in the pruned list, if
 		// it's already pruned, nothing to skip
 		match self.pruned_pos(pos) {
@@ -716,12 +720,13 @@ pub fn peaks(num: u64) -> Vec<u64> {
 /// The number of leaves nodes in a MMR of the provided size. Uses peaks to
 /// get the positions of all full binary trees and uses the height of these
 pub fn n_leaves(mut sz: u64) -> u64 {
-	while bintree_postorder_height(sz+1) > 0 {
+	while bintree_postorder_height(sz + 1) > 0 {
 		sz += 1;
 	}
-	peaks(sz).iter().map(|n| {
-		(1 << bintree_postorder_height(*n)) as u64
-	}).sum()
+	peaks(sz)
+		.iter()
+		.map(|n| (1 << bintree_postorder_height(*n)) as u64)
+		.sum()
 }
 
 /// The height of a node in a full binary tree from its postorder traversal
@@ -909,23 +914,26 @@ fn most_significant_pos(num: u64) -> u64 {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use ser::{Writeable, Readable, Error};
-	use core::{Writer, Reader};
-	use core::hash::{Hash};
+	use ser::{Error, Readable, Writeable};
+	use core::{Reader, Writer};
+	use core::hash::Hash;
 
 	/// Simple MMR backend implementation based on a Vector. Pruning does not
 	/// compact the Vec itself.
 	#[derive(Clone)]
 	pub struct VecBackend<T>
-		where T:PMMRable {
+	where
+		T: PMMRable,
+	{
 		/// Backend elements
 		pub elems: Vec<Option<(Hash, Option<T>)>>,
 		/// Positions of removed elements
 		pub remove_list: Vec<u64>,
 	}
 
-	impl <T> Backend <T> for VecBackend<T>
-		where T: PMMRable
+	impl<T> Backend<T> for VecBackend<T>
+	where
+		T: PMMRable,
 	{
 		fn append(&mut self, _position: u64, data: Vec<(Hash, Option<T>)>) -> Result<(), String> {
 			self.elems.append(&mut map_vec!(data, |d| Some(d.clone())));
@@ -965,8 +973,9 @@ mod test {
 		}
 	}
 
-	impl <T> VecBackend <T>
-		where T:PMMRable
+	impl<T> VecBackend<T>
+	where
+		T: PMMRable,
 	{
 		/// Instantiates a new VecBackend<T>
 		pub fn new() -> VecBackend<T> {
@@ -990,14 +999,13 @@ mod test {
 	}
 
 	#[test]
-	fn test_leaf_index(){
-		assert_eq!(n_leaves(1),1);
-		assert_eq!(n_leaves(2),2);
-		assert_eq!(n_leaves(4),3);
-		assert_eq!(n_leaves(5),4);
-		assert_eq!(n_leaves(8),5);
-		assert_eq!(n_leaves(9),6);
-
+	fn test_leaf_index() {
+		assert_eq!(n_leaves(1), 1);
+		assert_eq!(n_leaves(2), 2);
+		assert_eq!(n_leaves(4), 3);
+		assert_eq!(n_leaves(5), 4);
+		assert_eq!(n_leaves(8), 5);
+		assert_eq!(n_leaves(9), 6);
 	}
 
 	#[test]
@@ -1044,7 +1052,8 @@ mod test {
 	#[test]
 	fn various_n_leaves() {
 		assert_eq!(n_leaves(1), 1);
-		// 2 is not a valid size for a tree, but n_leaves rounds up to next valid tree size
+		// 2 is not a valid size for a tree, but n_leaves rounds up to next valid tree
+		// size
 		assert_eq!(n_leaves(2), 2);
 		assert_eq!(n_leaves(3), 2);
 		assert_eq!(n_leaves(7), 4);
@@ -1076,7 +1085,8 @@ mod test {
 		// leaf node in a larger tree of 7 nodes (height 2)
 		assert_eq!(family_branch(1, 7), [(3, 2, true), (7, 6, true)]);
 
-		// note these only go as far up as the local peak, not necessarily the single root
+		// note these only go as far up as the local peak, not necessarily the single
+		// root
 		assert_eq!(family_branch(1, 4), [(3, 2, true)]);
 		// pos 4 in a tree of size 4 is a local peak
 		assert_eq!(family_branch(4, 4), []);
@@ -1089,9 +1099,10 @@ mod test {
 
 		// ok now for a more realistic one, a tree with over a million nodes in it
 		// find the "family path" back up the tree from a leaf node at 0
-		// Note: the first two entries in the branch are consistent with a small 7 node tree
-		// Note: each sibling is on the left branch, this is an example of the largest possible
-		// list of peaks before we start combining them into larger peaks.
+		// Note: the first two entries in the branch are consistent with a small 7 node
+		// tree Note: each sibling is on the left branch, this is an example of the
+		// largest possible list of peaks before we start combining them into larger
+		// peaks.
 		assert_eq!(
 			family_branch(1, 1_049_000),
 			[
@@ -1139,34 +1150,19 @@ mod test {
 		assert_eq!(peaks(42), [31, 38, 41, 42]);
 
 		// large realistic example with almost 1.5 million nodes
-		// note the distance between peaks decreases toward the right (trees get smaller)
+		// note the distance between peaks decreases toward the right (trees get
+		// smaller)
 		assert_eq!(
 			peaks(1048555),
 			[
-				524287,
-				786430,
-				917501,
-				983036,
-				1015803,
-				1032186,
-				1040377,
-				1044472,
-				1046519,
-				1047542,
-				1048053,
-				1048308,
-				1048435,
-				1048498,
-				1048529,
-				1048544,
-				1048551,
-				1048554,
+				524287, 786430, 917501, 983036, 1015803, 1032186, 1040377, 1044472, 1046519,
+				1047542, 1048053, 1048308, 1048435, 1048498, 1048529, 1048544, 1048551, 1048554,
 				1048555,
 			],
 		);
 	}
 
-  #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+	#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 	struct TestElem([u32; 4]);
 
 	impl PMMRable for TestElem {
@@ -1186,14 +1182,12 @@ mod test {
 
 	impl Readable for TestElem {
 		fn read(reader: &mut Reader) -> Result<TestElem, Error> {
-			Ok(TestElem (
-				[
-					reader.read_u32()?,
-					reader.read_u32()?,
-					reader.read_u32()?,
-					reader.read_u32()?,
-				]
-			))
+			Ok(TestElem([
+				reader.read_u32()?,
+				reader.read_u32()?,
+				reader.read_u32()?,
+				reader.read_u32()?,
+			]))
 		}
 	}
 
@@ -1237,7 +1231,10 @@ mod test {
 		assert!(proof2.verify());
 
 		// check that we cannot generate a merkle proof for pos 3 (not a leaf node)
-		assert_eq!(pmmr.merkle_proof(3).err(), Some(format!("not a leaf at pos 3")));
+		assert_eq!(
+			pmmr.merkle_proof(3).err(),
+			Some(format!("not a leaf at pos 3"))
+		);
 
 		let proof4 = pmmr.merkle_proof(4).unwrap();
 		assert_eq!(proof4.peaks.len(), 2);
@@ -1309,10 +1306,7 @@ mod test {
 		// one element
 		pmmr.push(elems[0]).unwrap();
 		let node_hash = elems[0].hash();
-		assert_eq!(
-			pmmr.root(),
-			node_hash,
-		);
+		assert_eq!(pmmr.root(), node_hash,);
 		assert_eq!(pmmr.unpruned_size(), 1);
 		pmmr.dump(false);
 
@@ -1347,8 +1341,7 @@ mod test {
 
 		// six elements
 		pmmr.push(elems[5]).unwrap();
-		let sum6 = sum4 +
-			(elems[4].hash() + elems[5].hash());
+		let sum6 = sum4 + (elems[4].hash() + elems[5].hash());
 		assert_eq!(pmmr.root(), sum6.clone());
 		assert_eq!(pmmr.unpruned_size(), 10);
 
@@ -1360,9 +1353,8 @@ mod test {
 
 		// eight elements
 		pmmr.push(elems[7]).unwrap();
-		let sum8 = sum4 +
-			((elems[4].hash() + elems[5].hash()) +
-				 (elems[6].hash() + elems[7].hash()));
+		let sum8 =
+			sum4 + ((elems[4].hash() + elems[5].hash()) + (elems[6].hash() + elems[7].hash()));
 		assert_eq!(pmmr.root(), sum8);
 		assert_eq!(pmmr.unpruned_size(), 15);
 
@@ -1411,9 +1403,7 @@ mod test {
 		pmmr.push(elems[3]).unwrap();
 
 		let res = pmmr.get_last_n_insertions(19);
-		assert!(
-			res.len() == 4
-		);
+		assert!(res.len() == 4);
 
 		pmmr.push(elems[5]).unwrap();
 		pmmr.push(elems[6]).unwrap();
@@ -1421,9 +1411,7 @@ mod test {
 		pmmr.push(elems[8]).unwrap();
 
 		let res = pmmr.get_last_n_insertions(7);
-		assert!(
-			res.len() == 7
-		);
+		assert!(res.len() == 7);
 	}
 
 	#[test]
@@ -1455,7 +1443,7 @@ mod test {
 
 		// pruning a leaf with no parent should do nothing
 		{
-			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
+			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(16, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
@@ -1463,14 +1451,14 @@ mod test {
 
 		// pruning leaves with no shared parent just removes 1 element
 		{
-			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
+			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(2, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
 		assert_eq!(ba.used_size(), 15);
 
 		{
-			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
+			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(4, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
@@ -1478,7 +1466,7 @@ mod test {
 
 		// pruning a non-leaf node has no effect
 		{
-			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
+			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(3, 0).unwrap_err();
 			assert_eq!(orig_root, pmmr.root());
 		}
@@ -1486,7 +1474,7 @@ mod test {
 
 		// pruning sibling removes subtree
 		{
-			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
+			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(5, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
@@ -1494,7 +1482,7 @@ mod test {
 
 		// pruning all leaves under level >1 removes all subtree
 		{
-			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
+			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			pmmr.prune(1, 0).unwrap();
 			assert_eq!(orig_root, pmmr.root());
 		}
@@ -1502,7 +1490,7 @@ mod test {
 
 		// pruning everything should only leave us the peaks
 		{
-			let mut pmmr:PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
+			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			for n in 1..16 {
 				let _ = pmmr.prune(n, 0);
 			}
@@ -1549,7 +1537,6 @@ mod test {
 		assert_eq!(pl.get_shift(9), Some(8));
 		assert_eq!(pl.get_shift(17), Some(11));
 	}
-
 
 	#[test]
 	fn n_size_check() {

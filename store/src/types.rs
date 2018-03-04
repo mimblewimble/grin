@@ -42,7 +42,7 @@ pub struct AppendOnlyFile {
 	mmap: Option<memmap::Mmap>,
 	buffer_start: usize,
 	buffer: Vec<u8>,
-	buffer_start_bak: usize
+	buffer_start_bak: usize,
 }
 
 impl AppendOnlyFile {
@@ -128,7 +128,7 @@ impl AppendOnlyFile {
 	pub fn read(&self, offset: usize, length: usize) -> Vec<u8> {
 		if offset >= self.buffer_start {
 			let offset = offset - self.buffer_start;
-			return self.buffer[offset..(offset+length)].to_vec();
+			return self.buffer[offset..(offset + length)].to_vec();
 		}
 		if let None = self.mmap {
 			return vec![];
@@ -150,7 +150,12 @@ impl AppendOnlyFile {
 
 	/// Saves a copy of the current file content, skipping data at the provided
 	/// prune indices. The prune Vec must be ordered.
-	pub fn save_prune(&self, target: String, prune_offs: Vec<u64>, prune_len: u64) -> io::Result<()> {
+	pub fn save_prune(
+		&self,
+		target: String,
+		prune_offs: Vec<u64>,
+		prune_len: u64,
+	) -> io::Result<()> {
 		let mut reader = File::open(self.path.clone())?;
 		let mut writer = File::create(target)?;
 
@@ -303,8 +308,8 @@ impl RemoveLog {
 				}
 			}
 		}
-		let pos = match complete_list.binary_search(&(elmt,0)){
-			Ok(idx) => idx+1,
+		let pos = match complete_list.binary_search(&(elmt, 0)) {
+			Ok(idx) => idx + 1,
 			Err(idx) => idx,
 		};
 		complete_list.split_at(pos).0.len()

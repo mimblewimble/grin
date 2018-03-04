@@ -63,50 +63,52 @@ pub fn run_sync(
 
 				// in archival nodes (no fast sync) we just consider we have the whole
 				// state already
-				let have_sumtrees = !fast_sync || head.height > 0 &&
-					header_head.height.saturating_sub(head.height) <= horizon;
+				let have_sumtrees = !fast_sync
+					|| head.height > 0 && header_head.height.saturating_sub(head.height) <= horizon;
 
 				let syncing = needs_syncing(
-					currently_syncing.clone(), peers.clone(), chain.clone(), !have_sumtrees);
+					currently_syncing.clone(),
+					peers.clone(),
+					chain.clone(),
+					!have_sumtrees,
+				);
 
 				let current_time = time::now_utc();
 				if syncing {
-
 					// run the header sync every 10s
 					if current_time - prev_header_sync > time::Duration::seconds(10) {
-						header_sync(
-							peers.clone(),
-							chain.clone(),
-						);
+						header_sync(peers.clone(), chain.clone());
 						prev_header_sync = current_time;
 					}
 
 					// run the body_sync every 5s
 					if have_sumtrees && current_time - prev_body_sync > time::Duration::seconds(5) {
-						body_sync(
-							peers.clone(),
-							chain.clone(),
-						);
+						body_sync(peers.clone(), chain.clone());
 						prev_body_sync = current_time;
 					}
-
-				} else if !have_sumtrees &&
-									current_time - prev_state_sync > time::Duration::seconds(5*60) {
-
+				} else if !have_sumtrees
+					&& current_time - prev_state_sync > time::Duration::seconds(5 * 60)
+				{
 					if let Some(peer) = peers.most_work_peer() {
 						if let Ok(p) = peer.try_read() {
-							debug!(LOGGER, "Header head before sumtree request: {} / {}",
-										 header_head.height, header_head.last_block_h);
+							debug!(
+								LOGGER,
+								"Header head before sumtree request: {} / {}",
+								header_head.height,
+								header_head.last_block_h
+							);
 
 							// just to handle corner case of a too early start
 							if header_head.height > horizon {
-
 								// ask for sumtree at horizon
-								let mut sumtree_head = chain.get_block_header(&header_head.prev_block_h).unwrap();
-								for _ in 0..horizon-2 {
-									sumtree_head = chain.get_block_header(&sumtree_head.previous).unwrap();
+								let mut sumtree_head =
+									chain.get_block_header(&header_head.prev_block_h).unwrap();
+								for _ in 0..horizon - 2 {
+									sumtree_head =
+										chain.get_block_header(&sumtree_head.previous).unwrap();
 								}
-								p.send_sumtrees_request(sumtree_head.height, sumtree_head.hash()).unwrap();
+								p.send_sumtrees_request(sumtree_head.height, sumtree_head.hash())
+									.unwrap();
 								prev_state_sync = current_time;
 							}
 						}
@@ -122,7 +124,6 @@ pub fn run_sync(
 }
 
 fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
-
 	let body_head: chain::Tip = chain.head().unwrap();
 	let header_head: chain::Tip = chain.get_header_head().unwrap();
 	let sync_head: chain::Tip = chain.get_sync_head().unwrap();
@@ -143,7 +144,6 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 	if header_head.total_difficulty > body_head.total_difficulty {
 		let mut current = chain.get_block_header(&header_head.last_block_h);
 		while let Ok(header) = current {
-
 			// break out of the while loop when we find a header common
 			// between the this chain and the current chain
 			if let Ok(_) = chain.is_on_current_chain(&header) {
@@ -156,8 +156,8 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 	}
 	hashes.reverse();
 
-	// if we have 5 peers to sync from then ask for 50 blocks total (peer_count * 10)
-	// max will be 80 if all 8 peers are advertising more work
+	// if we have 5 peers to sync from then ask for 50 blocks total (peer_count *
+	// 10) max will be 80 if all 8 peers are advertising more work
 	let peer_count = cmp::min(peers.more_work_peers().len(), 10);
 	let block_count = peer_count * 10;
 
@@ -180,10 +180,11 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 			header_head.height,
 			hashes_to_get,
 			peer_count,
-			);
+		);
 
 		for hash in hashes_to_get.clone() {
-			// TODO - Is there a threshold where we sync from most_work_peer (not more_work_peer)?
+			// TODO - Is there a threshold where we sync from most_work_peer (not
+			// more_work_peer)?
 			let peer = peers.more_work_peer();
 			if let Some(peer) = peer {
 				if let Ok(peer) = peer.try_read() {
@@ -202,10 +203,7 @@ pub fn header_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 			if let Ok(p) = peer.try_read() {
 				let peer_difficulty = p.info.total_difficulty.clone();
 				if peer_difficulty > difficulty {
-					let _ = request_headers(
-						peer.clone(),
-						chain.clone(),
-					);
+					let _ = request_headers(peer.clone(), chain.clone());
 				}
 			}
 		}
@@ -213,17 +211,12 @@ pub fn header_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 }
 
 /// Request some block headers from a peer to advance us.
-fn request_headers(
-	peer: Arc<RwLock<Peer>>,
-	chain: Arc<chain::Chain>,
-) -> Result<(), Error> {
+fn request_headers(peer: Arc<RwLock<Peer>>, chain: Arc<chain::Chain>) -> Result<(), Error> {
 	let locator = get_locator(chain)?;
 	if let Ok(peer) = peer.try_read() {
 		debug!(
 			LOGGER,
-			"sync: request_headers: asking {} for headers, {:?}",
-			peer.info.addr,
-			locator,
+			"sync: request_headers: asking {} for headers, {:?}", peer.info.addr, locator,
 		);
 		let _ = peer.send_header_request(locator);
 	} else {
@@ -236,15 +229,14 @@ fn request_headers(
 	Ok(())
 }
 
-
 /// Whether we're currently syncing the chain or we're fully caught up and
 /// just receiving blocks through gossip.
 pub fn needs_syncing(
 	currently_syncing: Arc<AtomicBool>,
 	peers: Arc<Peers>,
 	chain: Arc<chain::Chain>,
-	header_only: bool) -> bool {
-
+	header_only: bool,
+) -> bool {
 	let local_diff = if header_only {
 		chain.total_header_difficulty().unwrap()
 	} else {
@@ -252,15 +244,22 @@ pub fn needs_syncing(
 	};
 	let peer = peers.most_work_peer();
 
-
 	// if we're already syncing, we're caught up if no peer has a higher
 	// difficulty than us
 	if currently_syncing.load(Ordering::Relaxed) {
 		if let Some(peer) = peer {
 			if let Ok(peer) = peer.try_read() {
-				debug!(LOGGER, "needs_syncing {} {} {}", local_diff, peer.info.total_difficulty, header_only);
+				debug!(
+					LOGGER,
+					"needs_syncing {} {} {}", local_diff, peer.info.total_difficulty, header_only
+				);
 				if peer.info.total_difficulty <= local_diff {
-					info!(LOGGER, "synchronized at {:?} @ {:?}", local_diff, chain.head().unwrap().height);
+					info!(
+						LOGGER,
+						"synchronized at {:?} @ {:?}",
+						local_diff,
+						chain.head().unwrap().height
+					);
 					currently_syncing.store(false, Ordering::Relaxed);
 					if !header_only {
 						let _ = chain.reset_head();
@@ -327,11 +326,7 @@ fn get_locator_heights(height: u64) -> Vec<u64> {
 	while current > 0 {
 		heights.push(current);
 		let next = 2u64.pow(heights.len() as u32);
-		current = if current > next {
-			current - next
-		} else {
-			0
-		}
+		current = if current > next { current - next } else { 0 }
 	}
 	heights.push(0);
 	heights
@@ -353,10 +348,13 @@ mod test {
 			get_locator_heights(1000),
 			vec![1000, 998, 994, 986, 970, 938, 874, 746, 490, 0]
 		);
-		// check the locator is still a manageable length, even for large numbers of headers
+		// check the locator is still a manageable length, even for large numbers of
+		// headers
 		assert_eq!(
 			get_locator_heights(10000),
-			vec![10000, 9998, 9994, 9986, 9970, 9938, 9874, 9746, 9490, 8978, 7954, 5906, 1810, 0]
+			vec![
+				10000, 9998, 9994, 9986, 9970, 9938, 9874, 9746, 9490, 8978, 7954, 5906, 1810, 0
+			]
 		);
 	}
 }

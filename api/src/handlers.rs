@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::io::Read;
-use std::sync::{Arc, Weak, RwLock};
+use std::sync::{Arc, RwLock, Weak};
 use std::thread;
 
 use iron::prelude::*;
@@ -24,7 +24,7 @@ use serde::Serialize;
 use serde_json;
 
 use chain;
-use core::core::{OutputIdentifier, Transaction, OutputFeatures};
+use core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use core::core::hash::{Hash, Hashed};
 use core::ser;
 use pool;
@@ -42,7 +42,6 @@ use util::LOGGER;
 fn w<T>(weak: &Weak<T>) -> Arc<T> {
 	weak.upgrade().unwrap()
 }
-
 
 // RESTful index of available api endpoints
 // GET /v1/
@@ -74,15 +73,16 @@ impl UtxoHandler {
 
 		// We need the features here to be able to generate the necessary hash
 		// to compare against the hash in the output MMR.
-		// For now we can just try both (but this probably needs to be part of the api params)
+		// For now we can just try both (but this probably needs to be part of the api
+		// params)
 		let outputs = [
 			OutputIdentifier::new(OutputFeatures::DEFAULT_OUTPUT, &commit),
-			OutputIdentifier::new(OutputFeatures::COINBASE_OUTPUT, &commit)
+			OutputIdentifier::new(OutputFeatures::COINBASE_OUTPUT, &commit),
 		];
 
 		for x in outputs.iter() {
 			if let Ok(_) = w(&self.chain).is_unspent(&x) {
-				return Ok(Utxo::new(&commit))
+				return Ok(Utxo::new(&commit));
 			}
 		}
 		Err(Error::NotFound)
@@ -117,16 +117,12 @@ impl UtxoHandler {
 		commitments: Vec<Commitment>,
 		include_proof: bool,
 	) -> BlockOutputs {
-		let header = w(&self.chain)
-			.get_header_by_height(block_height)
-			.unwrap();
+		let header = w(&self.chain).get_header_by_height(block_height).unwrap();
 		let block = w(&self.chain).get_block(&header.hash()).unwrap();
 		let outputs = block
 			.outputs
 			.iter()
-			.filter(|output| {
-				commitments.is_empty() || commitments.contains(&output.commit)
-			})
+			.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
 			.map(|output| {
 				OutputPrintable::from_output(output, w(&self.chain), &block, include_proof)
 			})
@@ -406,11 +402,7 @@ pub struct BlockHandler {
 impl BlockHandler {
 	fn get_block(&self, h: &Hash) -> Result<BlockPrintable, Error> {
 		let block = w(&self.chain).get_block(h).map_err(|_| Error::NotFound)?;
-		Ok(BlockPrintable::from_block(
-			&block,
-			w(&self.chain),
-			false,
-		))
+		Ok(BlockPrintable::from_block(&block, w(&self.chain), false))
 	}
 
 	fn get_compact_block(&self, h: &Hash) -> Result<CompactBlockPrintable, Error> {

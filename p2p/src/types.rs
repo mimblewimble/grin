@@ -119,7 +119,9 @@ bitflags! {
 	/// Can provide a list of healthy peers
 	const PEER_LIST = 0b00000100;
 
-	const FULL_NODE = Capabilities::FULL_HIST.bits | Capabilities::UTXO_HIST.bits | Capabilities::PEER_LIST.bits;
+	const FULL_NODE = Capabilities::FULL_HIST.bits
+		| Capabilities::UTXO_HIST.bits
+		| Capabilities::PEER_LIST.bits;
   }
 }
 
@@ -199,9 +201,14 @@ pub trait ChainAdapter: Sync + Send {
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	fn sumtrees_write(&self, h: Hash,
-										rewind_to_output: u64, rewind_to_kernel: u64,
-										sumtree_data: File, peer_addr: SocketAddr) -> bool;
+	fn sumtrees_write(
+		&self,
+		h: Hash,
+		rewind_to_output: u64,
+		rewind_to_kernel: u64,
+		sumtree_data: File,
+		peer_addr: SocketAddr,
+	) -> bool;
 }
 
 /// Additional methods required by the protocol that don't need to be

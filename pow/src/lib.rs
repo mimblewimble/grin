@@ -76,7 +76,7 @@ pub trait MiningWorker {
 /// satisfies the requirements of the header.
 pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
 	// make sure the pow hash shows a difficulty at least as large as the target
- // difficulty
+	// difficulty
 	if bh.difficulty > bh.pow.clone().to_difficulty() {
 		return false;
 	}
@@ -129,35 +129,35 @@ pub fn pow_size<T: MiningWorker + ?Sized>(
 ) -> Result<(), Error> {
 	let start_nonce = bh.nonce;
 
-  // set the nonce for faster solution finding in user testing
-	if bh.height == 0 &&  global::is_user_testing_mode() {
-    bh.nonce = global::get_genesis_nonce();
+	// set the nonce for faster solution finding in user testing
+	if bh.height == 0 && global::is_user_testing_mode() {
+		bh.nonce = global::get_genesis_nonce();
 	}
 
-  // try to find a cuckoo cycle on that header hash
-  loop {
-    // can be trivially optimized by avoiding re-serialization every time but this
-    // is not meant as a fast miner implementation
-    let pow_hash = bh.hash();
+	// try to find a cuckoo cycle on that header hash
+	loop {
+		// can be trivially optimized by avoiding re-serialization every time but this
+		// is not meant as a fast miner implementation
+		let pow_hash = bh.hash();
 
-    // if we found a cycle (not guaranteed) and the proof hash is higher that the
-    // diff, we're all good
-    if let Ok(proof) = miner.mine(&pow_hash[..]) {
-      if proof.clone().to_difficulty() >= diff {
-        bh.pow = proof.clone();
-        return Ok(());
-      }
-    }
+		// if we found a cycle (not guaranteed) and the proof hash is higher that the
+		// diff, we're all good
+		if let Ok(proof) = miner.mine(&pow_hash[..]) {
+			if proof.clone().to_difficulty() >= diff {
+				bh.pow = proof.clone();
+				return Ok(());
+			}
+		}
 
-    // otherwise increment the nonce
-    bh.nonce += 1;
+		// otherwise increment the nonce
+		bh.nonce += 1;
 
-    // and if we're back where we started, update the time (changes the hash as
-    // well)
-    if bh.nonce == start_nonce {
-      bh.timestamp = time::at_utc(time::Timespec { sec: 0, nsec: 0 });
-    }
-  }
+		// and if we're back where we started, update the time (changes the hash as
+		// well)
+		if bh.nonce == start_nonce {
+			bh.timestamp = time::at_utc(time::Timespec { sec: 0, nsec: 0 });
+		}
+	}
 }
 
 #[cfg(test)]

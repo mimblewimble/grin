@@ -64,25 +64,27 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 
 	validate_header(&b.header, &mut ctx)?;
 
-	// valid header, now check we actually have the previous block in the store	
+	// valid header, now check we actually have the previous block in the store
 	// not just the header but the block itself
 	// short circuit the test first both for performance (in-mem vs db access)
 	// but also for the specific case of the first fast sync full block
 	if b.header.previous != ctx.head.last_block_h {
-		// we cannot assume we can use the chain head for this as we may be dealing with a fork
-		// we cannot use heights here as the fork may have jumped in height
+		// we cannot assume we can use the chain head for this as we may be dealing
+		// with a fork we cannot use heights here as the fork may have jumped in
+		// height
 		match ctx.store.block_exists(&b.header.previous) {
-			Ok(true) => {},
+			Ok(true) => {}
 			Ok(false) => {
 				return Err(Error::Orphan);
-			},
+			}
 			Err(e) => {
 				return Err(Error::StoreErr(e, "pipe get previous".to_owned()));
 			}
 		}
 	}
 
-	// valid header and we have a previous block, time to take the lock on the sum trees
+	// valid header and we have a previous block, time to take the lock on the sum
+	// trees
 	let local_sumtrees = ctx.sumtrees.clone();
 	let mut sumtrees = local_sumtrees.write().unwrap();
 
@@ -112,15 +114,19 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 
 	match result {
 		Ok(t) => {
-			save_pmmr_metadata(&Tip::from_block(&b.header), &sumtrees, ctx.store.clone())?; 
+			save_pmmr_metadata(&Tip::from_block(&b.header), &sumtrees, ctx.store.clone())?;
 			Ok(t)
-		},
+		}
 		Err(e) => Err(e),
 	}
 }
 
 /// Save pmmr index location for a given block
-pub fn save_pmmr_metadata(t: &Tip, sumtrees: &sumtree::SumTrees, store: Arc<ChainStore>) -> Result<(), Error> {
+pub fn save_pmmr_metadata(
+	t: &Tip,
+	sumtrees: &sumtree::SumTrees,
+	store: Arc<ChainStore>,
+) -> Result<(), Error> {
 	// Save pmmr file metadata for this block
 	let block_file_md = sumtrees.last_file_metadata();
 	store
@@ -136,7 +142,12 @@ pub fn sync_block_header(
 	mut sync_ctx: BlockContext,
 	mut header_ctx: BlockContext,
 ) -> Result<Option<Tip>, Error> {
-	debug!(LOGGER, "pipe: sync_block_header: {} at {}", bh.hash(), bh.height);
+	debug!(
+		LOGGER,
+		"pipe: sync_block_header: {} at {}",
+		bh.hash(),
+		bh.height
+	);
 
 	validate_header(&bh, &mut sync_ctx)?;
 	add_block_header(bh, &mut sync_ctx)?;
@@ -146,17 +157,20 @@ pub fn sync_block_header(
 	// just taking the shared lock
 	let _ = header_ctx.sumtrees.write().unwrap();
 
-	// now update the header_head (if new header with most work) and the sync_head (always)
+	// now update the header_head (if new header with most work) and the sync_head
+	// (always)
 	update_header_head(bh, &mut header_ctx)?;
 	update_sync_head(bh, &mut sync_ctx)
 }
 
 /// Process block header as part of "header first" block propagation.
-pub fn process_block_header(
-	bh: &BlockHeader,
-	mut ctx: BlockContext,
-) -> Result<Option<Tip>, Error> {
-	debug!(LOGGER, "pipe: process_block_header: {} at {}", bh.hash(), bh.height);
+pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
+	debug!(
+		LOGGER,
+		"pipe: process_block_header: {} at {}",
+		bh.hash(),
+		bh.height
+	);
 
 	check_header_known(bh.hash(), &mut ctx)?;
 	validate_header(&bh, &mut ctx)?;
@@ -214,13 +228,11 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 /// arranged by order of cost to have as little DoS surface as possible.
 /// TODO require only the block header (with length information)
 fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-
 	// check version, enforces scheduled hard fork
 	if !consensus::valid_header_version(header.height, header.version) {
 		error!(
 			LOGGER,
-			"Invalid block header version received ({}), maybe update Grin?",
-			header.version
+			"Invalid block header version received ({}), maybe update Grin?", header.version
 		);
 		return Err(Error::InvalidBlockVersion(header.version));
 	}
@@ -236,11 +248,17 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	if !ctx.opts.contains(Options::SKIP_POW) {
 		let n = global::sizeshift() as u32;
 		if !(ctx.pow_verifier)(header, n) {
-			error!(LOGGER, "pipe: validate_header failed for cuckoo shift size {}", n);
+			error!(
+				LOGGER,
+				"pipe: validate_header failed for cuckoo shift size {}", n
+			);
 			return Err(Error::InvalidPow);
 		}
 		if header.height % 500 == 0 {
-			debug!(LOGGER, "Validating header validated, using cuckoo shift size {}", n);
+			debug!(
+				LOGGER,
+				"Validating header validated, using cuckoo shift size {}", n
+			);
 		}
 	}
 
@@ -248,9 +266,10 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	let prev = match ctx.store.get_block_header(&header.previous) {
 		Ok(prev) => Ok(prev),
 		Err(grin_store::Error::NotFoundErr) => Err(Error::Orphan),
-		Err(e) =>{
-			Err(Error::StoreErr(e, format!("previous header {}", header.previous)))
-		}
+		Err(e) => Err(Error::StoreErr(
+			e,
+			format!("previous header {}", header.previous),
+		)),
 	}?;
 
 	if header.height != prev.height + 1 {
@@ -312,7 +331,6 @@ fn validate_block(
 	ctx: &mut BlockContext,
 	ext: &mut sumtree::Extension,
 ) -> Result<(), Error> {
-
 	// main isolated block validation, checks all commitment sums and sigs
 	b.validate().map_err(&Error::InvalidBlockProof)?;
 
@@ -331,9 +349,7 @@ fn validate_block(
 
 		debug!(
 			LOGGER,
-			"validate_block: utxo roots - {:?}, {:?}",
-			roots.utxo_root,
-			b.header.utxo_root,
+			"validate_block: utxo roots - {:?}, {:?}", roots.utxo_root, b.header.utxo_root,
 		);
 		debug!(
 			LOGGER,
@@ -343,9 +359,7 @@ fn validate_block(
 		);
 		debug!(
 			LOGGER,
-			"validate_block: kernel roots - {:?}, {:?}",
-			roots.kernel_root,
-			b.header.kernel_root,
+			"validate_block: kernel roots - {:?}, {:?}", roots.kernel_root, b.header.kernel_root,
 		);
 
 		return Err(Error::InvalidRoot);
@@ -395,11 +409,21 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 		}
 		ctx.head = tip.clone();
 		if b.header.height % 100 == 0 {
-			info!(LOGGER, "pipe: chain head reached {} @ {} [{}]",
-				b.header.height, b.header.difficulty, b.hash());
+			info!(
+				LOGGER,
+				"pipe: chain head reached {} @ {} [{}]",
+				b.header.height,
+				b.header.difficulty,
+				b.hash()
+			);
 		} else {
-			debug!(LOGGER, "pipe: chain head reached {} @ {} [{}]",
-				b.header.height, b.header.difficulty, b.hash());
+			debug!(
+				LOGGER,
+				"pipe: chain head reached {} @ {} [{}]",
+				b.header.height,
+				b.header.difficulty,
+				b.hash()
+			);
 		}
 		Ok(Some(tip))
 	} else {
@@ -415,9 +439,21 @@ fn update_sync_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<T
 		.map_err(|e| Error::StoreErr(e, "pipe save sync head".to_owned()))?;
 	ctx.head = tip.clone();
 	if bh.height % 100 == 0 {
-		info!(LOGGER, "sync head {} @ {} [{}]", bh.total_difficulty, bh.height, bh.hash());
+		info!(
+			LOGGER,
+			"sync head {} @ {} [{}]",
+			bh.total_difficulty,
+			bh.height,
+			bh.hash()
+		);
 	} else {
-		debug!(LOGGER, "sync head {} @ {} [{}]", bh.total_difficulty, bh.height, bh.hash());
+		debug!(
+			LOGGER,
+			"sync head {} @ {} [{}]",
+			bh.total_difficulty,
+			bh.height,
+			bh.hash()
+		);
 	}
 	Ok(Some(tip))
 }
@@ -430,9 +466,21 @@ fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option
 			.map_err(|e| Error::StoreErr(e, "pipe save header head".to_owned()))?;
 		ctx.head = tip.clone();
 		if bh.height % 100 == 0 {
-			info!(LOGGER, "header head {} @ {} [{}]", bh.total_difficulty, bh.height, bh.hash());
+			info!(
+				LOGGER,
+				"header head {} @ {} [{}]",
+				bh.total_difficulty,
+				bh.height,
+				bh.hash()
+			);
 		} else {
-			debug!(LOGGER, "header head {} @ {} [{}]", bh.total_difficulty, bh.height, bh.hash());
+			debug!(
+				LOGGER,
+				"header head {} @ {} [{}]",
+				bh.total_difficulty,
+				bh.height,
+				bh.hash()
+			);
 		}
 		Ok(Some(tip))
 	} else {
@@ -449,7 +497,6 @@ pub fn rewind_and_apply_fork(
 	store: Arc<ChainStore>,
 	ext: &mut sumtree::Extension,
 ) -> Result<(), Error> {
-
 	// extending a fork, first identify the block where forking occurred
 	// keeping the hashes of blocks along the fork
 	let mut current = b.header.previous;
@@ -479,9 +526,9 @@ pub fn rewind_and_apply_fork(
 
 	// apply all forked blocks, including this new one
 	for h in hashes {
-		let fb = store.get_block(&h).map_err(|e| {
-			Error::StoreErr(e, format!("getting forked blocks"))
-		})?;
+		let fb = store
+			.get_block(&h)
+			.map_err(|e| Error::StoreErr(e, format!("getting forked blocks")))?;
 		ext.apply_block(&fb)?;
 	}
 	Ok(())

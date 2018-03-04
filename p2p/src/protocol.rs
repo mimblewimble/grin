@@ -33,7 +33,7 @@ pub struct Protocol {
 
 impl Protocol {
 	pub fn new(adapter: Arc<NetAdapter>, addr: SocketAddr) -> Protocol {
-		Protocol{adapter, addr}
+		Protocol { adapter, addr }
 	}
 }
 
@@ -42,26 +42,24 @@ impl MessageHandler for Protocol {
 		let adapter = &self.adapter;
 
 		match msg.header.msg_type {
-
 			Type::Ping => {
 				let ping: Ping = msg.body()?;
 				adapter.peer_difficulty(self.addr, ping.total_difficulty, ping.height);
 
-				Ok(Some(
-					msg.respond(
-						Type::Pong,
-						Pong {
-							total_difficulty: adapter.total_difficulty(),
-							height: adapter.total_height(),
-						})
-				))
+				Ok(Some(msg.respond(
+					Type::Pong,
+					Pong {
+						total_difficulty: adapter.total_difficulty(),
+						height: adapter.total_height(),
+					},
+				)))
 			}
 
 			Type::Pong => {
 				let pong: Pong = msg.body()?;
 				adapter.peer_difficulty(self.addr, pong.total_difficulty, pong.height);
 				Ok(None)
-			},
+			}
 
 			Type::Transaction => {
 				let tx: core::Transaction = msg.body()?;
@@ -90,7 +88,6 @@ impl MessageHandler for Protocol {
 				Ok(None)
 			}
 
-
 			Type::GetCompactBlock => {
 				let h: Hash = msg.body()?;
 				debug!(LOGGER, "handle_payload: GetCompactBlock: {}", h);
@@ -110,7 +107,7 @@ impl MessageHandler for Protocol {
 						debug!(
 							LOGGER,
 							"handle_payload: GetCompactBlock: empty block, sending full block",
-							);
+						);
 
 						Ok(Some(msg.respond(Type::Block, b)))
 					} else {
@@ -136,7 +133,10 @@ impl MessageHandler for Protocol {
 				let headers = adapter.locate_headers(loc.hashes);
 
 				// serialize and send all the headers over
-				Ok(Some(msg.respond(Type::Headers, Headers { headers: headers })))
+				Ok(Some(msg.respond(
+					Type::Headers,
+					Headers { headers: headers },
+				)))
 			}
 
 			// "header first" block propagation - if we have not yet seen this block
@@ -160,13 +160,12 @@ impl MessageHandler for Protocol {
 			Type::GetPeerAddrs => {
 				let get_peers: GetPeerAddrs = msg.body()?;
 				let peer_addrs = adapter.find_peer_addrs(get_peers.capabilities);
-				Ok(Some(
-						msg.respond(
-							Type::PeerAddrs,
-							PeerAddrs {
-								peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
-							})
-				))
+				Ok(Some(msg.respond(
+					Type::PeerAddrs,
+					PeerAddrs {
+						peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
+					},
+				)))
 			}
 
 			Type::PeerAddrs => {
@@ -177,8 +176,10 @@ impl MessageHandler for Protocol {
 
 			Type::SumtreesRequest => {
 				let sm_req: SumtreesRequest = msg.body()?;
-				debug!(LOGGER, "handle_payload: sumtree req for {} at {}",
-							 sm_req.hash, sm_req.height);
+				debug!(
+					LOGGER,
+					"handle_payload: sumtree req for {} at {}", sm_req.hash, sm_req.height
+				);
 
 				let sumtrees = self.adapter.sumtrees_read(sm_req.hash);
 
@@ -192,7 +193,8 @@ impl MessageHandler for Protocol {
 							rewind_to_output: sumtrees.output_index,
 							rewind_to_kernel: sumtrees.kernel_index,
 							bytes: file_sz,
-						});
+						},
+					);
 					resp.add_attachment(sumtrees.reader);
 					Ok(Some(resp))
 				} else {
@@ -202,22 +204,31 @@ impl MessageHandler for Protocol {
 
 			Type::SumtreesArchive => {
 				let sm_arch: SumtreesArchive = msg.body()?;
-				debug!(LOGGER, "handle_payload: sumtree archive for {} at {} rewind to {}/{}",
-							sm_arch.hash, sm_arch.height,
-							sm_arch.rewind_to_output, sm_arch.rewind_to_kernel);
+				debug!(
+					LOGGER,
+					"handle_payload: sumtree archive for {} at {} rewind to {}/{}",
+					sm_arch.hash,
+					sm_arch.height,
+					sm_arch.rewind_to_output,
+					sm_arch.rewind_to_kernel
+				);
 
 				let mut tmp = env::temp_dir();
 				tmp.push("sumtree.zip");
 				{
 					let mut tmp_zip = File::create(tmp.clone())?;
-					msg.copy_attachment(sm_arch.bytes as usize, &mut tmp_zip)?;	
+					msg.copy_attachment(sm_arch.bytes as usize, &mut tmp_zip)?;
 					tmp_zip.sync_all()?;
 				}
 
 				let tmp_zip = File::open(tmp)?;
 				self.adapter.sumtrees_write(
-					sm_arch.hash, sm_arch.rewind_to_output,
-					sm_arch.rewind_to_kernel, tmp_zip, self.addr);
+					sm_arch.hash,
+					sm_arch.rewind_to_output,
+					sm_arch.rewind_to_kernel,
+					tmp_zip,
+					self.addr,
+				);
 				Ok(None)
 			}
 

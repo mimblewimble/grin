@@ -41,7 +41,7 @@ pub struct Peer {
 	state: Arc<RwLock<State>>,
 	// set of all hashes known to this peer (so no need to send)
 	tracking_adapter: TrackingAdapter,
-	connection: Option<conn::Tracker>
+	connection: Option<conn::Tracker>,
 }
 
 unsafe impl Sync for Peer {}
@@ -65,7 +65,6 @@ impl Peer {
 		hs: &Handshake,
 		na: Arc<NetAdapter>,
 	) -> Result<Peer, Error> {
-
 		let info = hs.accept(capab, total_difficulty, conn)?;
 		Ok(Peer::new(info, na))
 	}
@@ -78,7 +77,6 @@ impl Peer {
 		hs: &Handshake,
 		na: Arc<NetAdapter>,
 	) -> Result<Peer, Error> {
-
 		let info = hs.initiate(capab, total_difficulty, self_addr, conn)?;
 		Ok(Peer::new(info, na))
 	}
@@ -96,31 +94,41 @@ impl Peer {
 		let peer = format!("{}:{}", peer_addr.ip(), peer_addr.port());
 		if let Some(ref denied) = config.peers_deny {
 			if denied.contains(&peer) {
-				debug!(LOGGER, "checking peer allowed/denied: {:?} explicitly denied", peer_addr);
+				debug!(
+					LOGGER,
+					"checking peer allowed/denied: {:?} explicitly denied", peer_addr
+				);
 				return true;
 			}
 		}
 		if let Some(ref allowed) = config.peers_allow {
 			if allowed.contains(&peer) {
-				debug!(LOGGER, "checking peer allowed/denied: {:?} explicitly allowed", peer_addr);
+				debug!(
+					LOGGER,
+					"checking peer allowed/denied: {:?} explicitly allowed", peer_addr
+				);
 				return false;
 			} else {
-				debug!(LOGGER, "checking peer allowed/denied: {:?} not explicitly allowed, denying", peer_addr);
+				debug!(
+					LOGGER,
+					"checking peer allowed/denied: {:?} not explicitly allowed, denying", peer_addr
+				);
 				return true;
 			}
 		}
 
-		// default to allowing peer connection if we do not explicitly allow or deny the peer
+		// default to allowing peer connection if we do not explicitly allow or deny
+		// the peer
 		false
 	}
 
 	/// Whether this peer is still connected.
 	pub fn is_connected(&self) -> bool {
 		if !self.check_connection() {
-			return false
+			return false;
 		}
 		let state = self.state.read().unwrap();
-		*state == State::Connected	
+		*state == State::Connected
 	}
 
 	/// Whether this peer has been banned.
@@ -136,10 +144,17 @@ impl Peer {
 		*state = State::Banned;
 	}
 
-	/// Send a ping to the remote peer, providing our local difficulty and height
+	/// Send a ping to the remote peer, providing our local difficulty and
+	/// height
 	pub fn send_ping(&self, total_difficulty: Difficulty, height: u64) -> Result<(), Error> {
-		let ping_msg = Ping{total_difficulty, height};
-		self.connection.as_ref().unwrap().send(ping_msg, msg::Type::Ping)
+		let ping_msg = Ping {
+			total_difficulty,
+			height,
+		};
+		self.connection
+			.as_ref()
+			.unwrap()
+			.send(ping_msg, msg::Type::Ping)
 	}
 
 	/// Sends the provided block to the remote peer. The request may be dropped
@@ -161,8 +176,16 @@ impl Peer {
 
 	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<(), Error> {
 		if !self.tracking_adapter.has(b.hash()) {
-			debug!(LOGGER, "Send compact block {} to {}", b.hash(), self.info.addr);
-			self.connection.as_ref().unwrap().send(b, msg::Type::CompactBlock)
+			debug!(
+				LOGGER,
+				"Send compact block {} to {}",
+				b.hash(),
+				self.info.addr
+			);
+			self.connection
+				.as_ref()
+				.unwrap()
+				.send(b, msg::Type::CompactBlock)
 		} else {
 			debug!(
 				LOGGER,
@@ -177,7 +200,10 @@ impl Peer {
 	pub fn send_header(&self, bh: &core::BlockHeader) -> Result<(), Error> {
 		if !self.tracking_adapter.has(bh.hash()) {
 			debug!(LOGGER, "Send header {} to {}", bh.hash(), self.info.addr);
-			self.connection.as_ref().unwrap().send(bh, msg::Type::Header)
+			self.connection
+				.as_ref()
+				.unwrap()
+				.send(bh, msg::Type::Header)
 		} else {
 			debug!(
 				LOGGER,
@@ -194,32 +220,51 @@ impl Peer {
 	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		if !self.tracking_adapter.has(tx.hash()) {
 			debug!(LOGGER, "Send tx {} to {}", tx.hash(), self.info.addr);
-			self.connection.as_ref().unwrap().send(tx, msg::Type::Transaction)
+			self.connection
+				.as_ref()
+				.unwrap()
+				.send(tx, msg::Type::Transaction)
 		} else {
-			debug!(LOGGER, "Not sending tx {} to {} (already seen)", tx.hash(), self.info.addr);
+			debug!(
+				LOGGER,
+				"Not sending tx {} to {} (already seen)",
+				tx.hash(),
+				self.info.addr
+			);
 			Ok(())
 		}
 	}
 
 	/// Sends a request for block headers from the provided block locator
 	pub fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error> {
-		self.connection.as_ref().unwrap().send(
-			&Locator {
-				hashes: locator,
-			},
-			msg::Type::GetHeaders)
+		self.connection
+			.as_ref()
+			.unwrap()
+			.send(&Locator { hashes: locator }, msg::Type::GetHeaders)
 	}
 
 	/// Sends a request for a specific block by hash
 	pub fn send_block_request(&self, h: Hash) -> Result<(), Error> {
-		debug!(LOGGER, "Requesting block {} from peer {}.", h, self.info.addr);
-		self.connection.as_ref().unwrap().send(&h, msg::Type::GetBlock)
+		debug!(
+			LOGGER,
+			"Requesting block {} from peer {}.", h, self.info.addr
+		);
+		self.connection
+			.as_ref()
+			.unwrap()
+			.send(&h, msg::Type::GetBlock)
 	}
 
 	/// Sends a request for a specific compact block by hash
 	pub fn send_compact_block_request(&self, h: Hash) -> Result<(), Error> {
-		debug!(LOGGER, "Requesting compact block {} from {}", h, self.info.addr);
-		self.connection.as_ref().unwrap().send(&h, msg::Type::GetCompactBlock)
+		debug!(
+			LOGGER,
+			"Requesting compact block {} from {}", h, self.info.addr
+		);
+		self.connection
+			.as_ref()
+			.unwrap()
+			.send(&h, msg::Type::GetCompactBlock)
 	}
 
 	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
@@ -228,14 +273,19 @@ impl Peer {
 			&GetPeerAddrs {
 				capabilities: capab,
 			},
-			msg::Type::GetPeerAddrs)
+			msg::Type::GetPeerAddrs,
+		)
 	}
 
 	pub fn send_sumtrees_request(&self, height: u64, hash: Hash) -> Result<(), Error> {
-		debug!(LOGGER, "Asking {} for sumtree archive at {} {}.",
-					 self.info.addr, height, hash);
+		debug!(
+			LOGGER,
+			"Asking {} for sumtree archive at {} {}.", self.info.addr, height, hash
+		);
 		self.connection.as_ref().unwrap().send(
-			&SumtreesRequest {hash, height }, msg::Type::SumtreesRequest)
+			&SumtreesRequest { hash, height },
+			msg::Type::SumtreesRequest,
+		)
 	}
 
 	/// Stops the peer, closing its connection
@@ -248,7 +298,10 @@ impl Peer {
 			Ok(Error::Serialization(e)) => {
 				let mut state = self.state.write().unwrap();
 				*state = State::Banned;
-				info!(LOGGER, "Client {} corrupted, ban ({:?}).", self.info.addr, e);
+				info!(
+					LOGGER,
+					"Client {} corrupted, ban ({:?}).", self.info.addr, e
+				);
 				false
 			}
 			Ok(e) => {
@@ -339,11 +392,21 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.sumtrees_read(h)
 	}
 
-	fn sumtrees_write(&self, h: Hash,
-										rewind_to_output: u64, rewind_to_kernel: u64,
-										sumtree_data: File, peer_addr: SocketAddr) -> bool {
-		self.adapter.sumtrees_write(h, rewind_to_output, rewind_to_kernel,
-																sumtree_data, peer_addr)
+	fn sumtrees_write(
+		&self,
+		h: Hash,
+		rewind_to_output: u64,
+		rewind_to_kernel: u64,
+		sumtree_data: File,
+		peer_addr: SocketAddr,
+	) -> bool {
+		self.adapter.sumtrees_write(
+			h,
+			rewind_to_output,
+			rewind_to_kernel,
+			sumtree_data,
+			peer_addr,
+		)
 	}
 }
 
@@ -356,7 +419,7 @@ impl NetAdapter for TrackingAdapter {
 		self.adapter.peer_addrs_received(addrs)
 	}
 
-	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty, height:u64) {
+	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty, height: u64) {
 		self.adapter.peer_difficulty(addr, diff, height)
 	}
 }

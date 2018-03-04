@@ -20,7 +20,8 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use core::core::{Block, BlockHeader, Input, OutputFeatures, OutputIdentifier, OutputStoreable, TxKernel};
+use core::core::{Block, BlockHeader, Input, OutputFeatures, OutputIdentifier, OutputStoreable,
+                 TxKernel};
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
@@ -32,7 +33,6 @@ use sumtree;
 use types::*;
 use util::secp::pedersen::RangeProof;
 use util::LOGGER;
-
 
 const MAX_ORPHAN_AGE_SECS: u64 = 30;
 
@@ -75,7 +75,9 @@ impl OrphanBlockPool {
 		{
 			let mut orphans = self.orphans.write().unwrap();
 			let mut prev_idx = self.prev_idx.write().unwrap();
-			orphans.retain(|_, ref mut x| x.added.elapsed() < Duration::from_secs(MAX_ORPHAN_AGE_SECS));
+			orphans.retain(|_, ref mut x| {
+				x.added.elapsed() < Duration::from_secs(MAX_ORPHAN_AGE_SECS)
+			});
 			prev_idx.retain(|_, &mut x| orphans.contains_key(&x));
 		}
 	}
@@ -155,9 +157,7 @@ impl Chain {
 		// check if we have a head in store, otherwise the genesis block is it
 		let head = store.head();
 		let sumtree_md = match head {
-			Ok(h) => {
-				Some(store.get_block_pmmr_file_metadata(&h.last_block_h)?)
-			},
+			Ok(h) => Some(store.get_block_pmmr_file_metadata(&h.last_block_h)?),
 			Err(NotFoundErr) => None,
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
 		};
@@ -172,9 +172,7 @@ impl Chain {
 				store.save_block(&genesis)?;
 				store.setup_height(&genesis.header, &tip)?;
 				if genesis.kernels.len() > 0 {
-					sumtree::extending(&mut sumtrees, |extension| {
-						extension.apply_block(&genesis)
-					})?;
+					sumtree::extending(&mut sumtrees, |extension| extension.apply_block(&genesis))?;
 				}
 
 				// saving a new tip based on genesis
@@ -211,30 +209,32 @@ impl Chain {
 
 	/// Processes a single block, then checks for orphans, processing
 	/// those as well if they're found
-	pub fn process_block(&self, b: Block, opts: Options)
-		-> Result<(Option<Tip>, Option<Block>), Error>
-		{
-			let res = self.process_block_no_orphans(b, opts);
-			match res {
-				Ok((t, b)) => {
-					// We accepted a block, so see if we can accept any orphans
-					if let Some(ref b) = b {
-						self.check_orphans(b.hash());
-					}
-					Ok((t, b))
-				},
-				Err(e) => {
-					Err(e)
+	pub fn process_block(
+		&self,
+		b: Block,
+		opts: Options,
+	) -> Result<(Option<Tip>, Option<Block>), Error> {
+		let res = self.process_block_no_orphans(b, opts);
+		match res {
+			Ok((t, b)) => {
+				// We accepted a block, so see if we can accept any orphans
+				if let Some(ref b) = b {
+					self.check_orphans(b.hash());
 				}
+				Ok((t, b))
 			}
+			Err(e) => Err(e),
 		}
+	}
 
 	/// Attempt to add a new block to the chain. Returns the new chain tip if it
 	/// has been added to the longest chain, None if it's added to an (as of
 	/// now) orphan chain.
-	pub fn process_block_no_orphans(&self, b: Block, opts: Options)
-		-> Result<(Option<Tip>, Option<Block>), Error>
-	{
+	pub fn process_block_no_orphans(
+		&self,
+		b: Block,
+		opts: Options,
+	) -> Result<(Option<Tip>, Option<Block>), Error> {
 		let head = self.store
 			.head()
 			.map_err(|e| Error::StoreErr(e, "chain load head".to_owned()))?;
@@ -258,7 +258,7 @@ impl Chain {
 					adapter.block_accepted(&b, opts);
 				}
 				Ok((Some(tip.clone()), Some(b.clone())))
-			},
+			}
 			Ok(None) => {
 				// block got accepted but we did not extend the head
 				// so its on a fork (or is the start of a new fork)
@@ -267,7 +267,8 @@ impl Chain {
 				// TODO - This opens us to an amplification attack on blocks
 				// mined at a low difficulty. We should suppress really old blocks
 				// or less relevant blocks somehow.
-				// We should also probably consider banning nodes that send us really old blocks.
+				// We should also probably consider banning nodes that send us really old
+				// blocks.
 				//
 				if !opts.contains(Options::SYNC) {
 					// broadcast the block
@@ -275,7 +276,7 @@ impl Chain {
 					adapter.block_accepted(&b, opts);
 				}
 				Ok((None, Some(b.clone())))
-			},
+			}
 			Err(Error::Orphan) => {
 				let block_hash = b.hash();
 				let orphan = Orphan {
@@ -297,7 +298,7 @@ impl Chain {
 					self.orphans.len(),
 				);
 				Err(Error::Orphan)
-			},
+			}
 			Err(Error::Unfit(ref msg)) => {
 				debug!(
 					LOGGER,
@@ -334,11 +335,7 @@ impl Chain {
 
 	/// Attempt to add a new header to the header chain.
 	/// This is only ever used during sync and uses sync_head.
-	pub fn sync_block_header(
-		&self,
-		bh: &BlockHeader,
-		opts: Options,
-	) -> Result<Option<Tip>, Error> {
+	pub fn sync_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<Option<Tip>, Error> {
 		let sync_head = self.get_sync_head()?;
 		let header_head = self.get_header_head()?;
 		let sync_ctx = self.ctx_from_head(sync_head, opts);
@@ -360,7 +357,6 @@ impl Chain {
 	pub fn is_orphan(&self, hash: &Hash) -> bool {
 		self.orphans.contains(hash)
 	}
-
 
 	/// Check for orphans, once a block is successfully added
 	pub fn check_orphans(&self, mut last_block_hash: Hash) {
@@ -384,10 +380,10 @@ impl Chain {
 						} else {
 							break;
 						}
-					},
+					}
 					Err(_) => {
 						break;
-					},
+					}
 				};
 			} else {
 				break;
@@ -408,9 +404,7 @@ impl Chain {
 	pub fn validate(&self) -> Result<(), Error> {
 		let header = self.store.head_header()?;
 		let mut sumtrees = self.sumtrees.write().unwrap();
-		sumtree::extending(&mut sumtrees, |extension| {
-			extension.validate(&header)
-		})
+		sumtree::extending(&mut sumtrees, |extension| extension.validate(&header))
 	}
 
 	/// Check if the input has matured sufficiently for the given block height.
@@ -466,13 +460,7 @@ impl Chain {
 	}
 
 	/// Returns current sumtree roots
-	pub fn get_sumtree_roots(
-		&self,
-	) -> (
-		Hash,
-		Hash,
-		Hash,
-	) {
+	pub fn get_sumtree_roots(&self) -> (Hash, Hash, Hash) {
 		let mut sumtrees = self.sumtrees.write().unwrap();
 		sumtrees.roots()
 	}
@@ -507,9 +495,8 @@ impl Chain {
 		h: Hash,
 		rewind_to_output: u64,
 		rewind_to_kernel: u64,
-		sumtree_data: File
+		sumtree_data: File,
 	) -> Result<(), Error> {
-
 		let head = self.head().unwrap();
 		let header_head = self.get_header_head().unwrap();
 		if header_head.height - head.height < global::cut_through_horizon() as u64 {
@@ -610,17 +597,17 @@ impl Chain {
 
 	/// Gets the block header at the provided height
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
-		self.store.get_header_by_height(height).map_err(|e| {
-			Error::StoreErr(e, "chain get header by height".to_owned())
-		})
+		self.store
+			.get_header_by_height(height)
+			.map_err(|e| Error::StoreErr(e, "chain get header by height".to_owned()))
 	}
 
 	/// Verifies the given block header is actually on the current chain.
 	/// Checks the header_by_height index to verify the header is where we say it is
 	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
-		self.store.is_on_current_chain(header).map_err(|e| {
-			Error::StoreErr(e, "chain is_on_current_chain".to_owned())
-		})
+		self.store
+			.is_on_current_chain(header)
+			.map_err(|e| Error::StoreErr(e, "chain is_on_current_chain".to_owned()))
 	}
 
 	/// Get the tip of the current "sync" header chain.
@@ -648,13 +635,18 @@ impl Chain {
 
 	/// Check whether we have a block without reading it
 	pub fn block_exists(&self, h: Hash) -> Result<bool, Error> {
-		self.store.block_exists(&h)
+		self.store
+			.block_exists(&h)
 			.map_err(|e| Error::StoreErr(e, "chain block exists".to_owned()))
 	}
 
 	/// Retrieve the file index metadata for a given block
-	pub fn get_block_pmmr_file_metadata(&self, h: &Hash) -> Result<PMMRFileMetadataCollection, Error> {
-		self.store.get_block_pmmr_file_metadata(h)
+	pub fn get_block_pmmr_file_metadata(
+		&self,
+		h: &Hash,
+	) -> Result<PMMRFileMetadataCollection, Error> {
+		self.store
+			.get_block_pmmr_file_metadata(h)
 			.map_err(|e| Error::StoreErr(e, "retrieve block pmmr metadata".to_owned()))
 	}
 }

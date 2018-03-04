@@ -22,20 +22,16 @@
 use std::{cmp, error, fmt};
 use std::io::{self, Read, Write};
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
-use keychain::{Identifier, BlindingFactor, IDENTIFIER_SIZE};
+use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use consensus;
 use consensus::VerifySortOrder;
 use core::hash::Hashed;
-use core::transaction::{SWITCH_COMMIT_HASH_SIZE, SwitchCommitHash};
+use core::transaction::{SwitchCommitHash, SWITCH_COMMIT_HASH_SIZE};
 use util::secp::pedersen::Commitment;
 use util::secp::pedersen::RangeProof;
 use util::secp::Signature;
-use util::secp::constants::{
-	MAX_PROOF_SIZE,
-	PEDERSEN_COMMITMENT_SIZE,
-	AGG_SIGNATURE_SIZE,
-	SECRET_KEY_SIZE,
-};
+use util::secp::constants::{AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE,
+                            SECRET_KEY_SIZE};
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]
@@ -207,7 +203,8 @@ pub trait Writeable {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error>;
 }
 
-/// Trait to allow a collection of Writeables to be written in lexicographical sort order.
+/// Trait to allow a collection of Writeables to be written in lexicographical
+/// sort order.
 pub trait WriteableSorted {
 	/// Write the data but sort it first.
 	fn write_sorted<W: Writer>(&mut self, writer: &mut W) -> Result<(), Error>;
@@ -402,7 +399,6 @@ impl Writeable for Signature {
 		writer.write_fixed_bytes(self)
 	}
 }
-
 
 /// Utility wrapper for an underlying byte Writer. Defines higher level methods
 /// to write numbers, byte vectors, hashes, etc.

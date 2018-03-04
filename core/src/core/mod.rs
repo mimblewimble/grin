@@ -264,10 +264,7 @@ mod test {
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &tx).expect("serialization failed");
 		let target_len = 986;
-		assert_eq!(
-			vec.len(),
-			target_len,
-		);
+		assert_eq!(vec.len(), target_len,);
 	}
 
 	#[test]
@@ -392,8 +389,8 @@ mod test {
 		let btx = tx2i1o();
 		assert!(btx.validate().is_ok());
 
-	// Ignored for bullet proofs, because calling range_proof_info
-	// with a bullet proof causes painful errors
+		// Ignored for bullet proofs, because calling range_proof_info
+		// with a bullet proof causes painful errors
 
 		// checks that the range proof on our blind output is sufficiently hiding
 		let Output { proof, .. } = btx.outputs[0];
@@ -423,12 +420,13 @@ mod test {
 	// 	let key_id2 = keychain.derive_key_id(2).unwrap();
 	// 	let key_id3 = keychain.derive_key_id(3).unwrap();
 	// 	let key_id4 = keychain.derive_key_id(4).unwrap();
-    //
+	//
 	// 	let (tx_alice, blind_sum) = {
 	// 		// Alice gets 2 of her pre-existing outputs to send 5 coins to Bob, they
 	// 		// become inputs in the new transaction
-	// 		let (in1, in2) = (input(4, ZERO_HASH, key_id1), input(3, ZERO_HASH, key_id2));
-    //
+	// let (in1, in2) = (input(4, ZERO_HASH, key_id1), input(3, ZERO_HASH,
+	// key_id2));
+	//
 	// 		// Alice builds her transaction, with change, which also produces the sum
 	// 		// of blinding factors before they're obscured.
 	// 		let (tx, sum) = build::partial_transaction(
@@ -436,21 +434,21 @@ mod test {
 	// 			with_fee(2)],
 	// 			&keychain,
 	// 		).unwrap();
-    //
+	//
 	// 		(tx, sum)
 	// 	};
-    //
+	//
 	// 	let blind = blind_sum.secret_key(&keychain.secp())?;
 	// 	keychain.aggsig_create_context(blind);
 	// 	let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys();
-    //
+	//
 	// 	let sig_part = keychain.aggsig_calculate_partial_sig(
 	// 		&pub_nonce,
 	// 		tx.fee(),
 	// 		tx.lock_height(),
 	// 	).unwrap();
-    //
-    //
+	//
+	//
 	// 	// From now on, Bob only has the obscured transaction and the sum of
 	// 	// blinding factors. He adds his output, finalizes the transaction so it's
 	// 	// ready for broadcast.
@@ -462,9 +460,9 @@ mod test {
 	// 		],
 	// 		&keychain,
 	// 	).unwrap();
-    //
+	//
 	// 	tx_final.validate().unwrap();
-    //
+	//
 	// }
 
 	/// Simulate the standard exchange between 2 parties when creating a basic
@@ -485,8 +483,7 @@ mod test {
 			// Alice builds her transaction, with change, which also produces the sum
 			// of blinding factors before they're obscured.
 			let (tx, sum) = build::partial_transaction(
-				vec![in1, in2, output(1, key_id3),
-				with_fee(2)],
+				vec![in1, in2, output(1, key_id3), with_fee(2)],
 				&keychain,
 			).unwrap();
 
@@ -567,8 +564,8 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
-		// first check we can add a timelocked tx where lock height matches current block height
-		// and that the resulting block is valid
+		// first check we can add a timelocked tx where lock height matches current
+		// block height and that the resulting block is valid
 		let tx1 = build::transaction(
 			vec![
 				input(5, key_id1.clone()),
@@ -588,7 +585,8 @@ mod test {
 		).unwrap();
 		b.validate().unwrap();
 
-		// now try adding a timelocked tx where lock height is greater than current block height
+		// now try adding a timelocked tx where lock height is greater than current
+		// block height
 		let tx1 = build::transaction(
 			vec![
 				input(5, key_id1.clone()),

@@ -88,13 +88,8 @@ fn data_files() {
 			let prev = chain.head_header().unwrap();
 			let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 			let pk = keychain.derive_key_id(n as u32).unwrap();
-			let mut b = core::core::Block::new(
-				&prev,
-				vec![],
-				&keychain,
-				&pk,
-				difficulty.clone(),
-			).unwrap();
+			let mut b =
+				core::core::Block::new(&prev, vec![], &keychain, &pk, difficulty.clone()).unwrap();
 			b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 			b.header.difficulty = difficulty.clone(); // TODO: overwrite here? really?
@@ -109,16 +104,19 @@ fn data_files() {
 
 			let prev_bhash = b.header.previous;
 			let bhash = b.hash();
-			chain.process_block(b.clone(), chain::Options::MINE).unwrap();
+			chain
+				.process_block(b.clone(), chain::Options::MINE)
+				.unwrap();
 
 			let head = Tip::from_block(&b.header);
 
 			// Check we have indexes for the last block and the block previous
-			let cur_pmmr_md = chain.get_block_pmmr_file_metadata(&head.last_block_h)
+			let cur_pmmr_md = chain
+				.get_block_pmmr_file_metadata(&head.last_block_h)
 				.expect("block pmmr file data doesn't exist");
-			let pref_pmmr_md = chain.get_block_pmmr_file_metadata(&head.prev_block_h)
+			let pref_pmmr_md = chain
+				.get_block_pmmr_file_metadata(&head.prev_block_h)
 				.expect("previous block pmmr file data doesn't exist");
-
 
 			println!("Cur_pmmr_md: {:?}", cur_pmmr_md);
 			chain.validate().unwrap();
@@ -137,7 +135,13 @@ fn prepare_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) ->
 	b
 }
 
-fn prepare_block_tx(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64, txs: Vec<&Transaction>) -> Block {
+fn prepare_block_tx(
+	kc: &Keychain,
+	prev: &BlockHeader,
+	chain: &Chain,
+	diff: u64,
+	txs: Vec<&Transaction>,
+) -> Block {
 	let mut b = prepare_block_nosum(kc, prev, diff, txs);
 	chain.set_sumtree_roots(&mut b, false).unwrap();
 	b
@@ -149,18 +153,29 @@ fn prepare_fork_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u6
 	b
 }
 
-fn prepare_fork_block_tx(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64, txs: Vec<&Transaction>) -> Block {
+fn prepare_fork_block_tx(
+	kc: &Keychain,
+	prev: &BlockHeader,
+	chain: &Chain,
+	diff: u64,
+	txs: Vec<&Transaction>,
+) -> Block {
 	let mut b = prepare_block_nosum(kc, prev, diff, txs);
 	chain.set_sumtree_roots(&mut b, true).unwrap();
 	b
 }
 
-fn prepare_block_nosum(kc: &Keychain, prev: &BlockHeader, diff: u64, txs: Vec<&Transaction>) -> Block {
+fn prepare_block_nosum(
+	kc: &Keychain,
+	prev: &BlockHeader,
+	diff: u64,
+	txs: Vec<&Transaction>,
+) -> Block {
 	let key_id = kc.derive_key_id(diff as u32).unwrap();
 
 	let mut b = match core::core::Block::new(prev, txs, kc, &key_id, Difficulty::from_num(diff)) {
-		Err(e) => panic!("{:?}",e),
-		Ok(b) => b
+		Err(e) => panic!("{:?}", e),
+		Ok(b) => b,
 	};
 	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 	b.header.total_difficulty = Difficulty::from_num(diff);

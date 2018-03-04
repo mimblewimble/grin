@@ -52,7 +52,7 @@ impl Default for PoolConfig {
 }
 
 fn default_accept_fee_base() -> u64 {
-  consensus::MILLI_GRIN
+	consensus::MILLI_GRIN
 }
 fn default_max_pool_size() -> usize {
 	50_000
@@ -86,15 +86,11 @@ impl fmt::Debug for Parent {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			&Parent::Unknown => write!(f, "Parent: Unknown"),
-			&Parent::BlockTransaction => {
-				write!(f, "Parent: Block Transaction")
-			}
+			&Parent::BlockTransaction => write!(f, "Parent: Block Transaction"),
 			&Parent::PoolTransaction { tx_ref: x } => {
 				write!(f, "Parent: Pool Transaction ({:?})", x)
 			}
-			&Parent::AlreadySpent { other_tx: x } => {
-				write!(f, "Parent: Already Spent By {:?}", x)
-			}
+			&Parent::AlreadySpent { other_tx: x } => write!(f, "Parent: Already Spent By {:?}", x),
 		}
 	}
 }
@@ -259,7 +255,7 @@ impl Pool {
 		}
 
 		// Adding the transaction to the vertices list along with internal
-  // pool edges
+		// pool edges
 		self.graph.add_entry(pool_entry, pool_refs);
 
 		// Adding the new unspents to the unspent map
@@ -421,11 +417,10 @@ impl Orphans {
 		}
 
 		// if missing_refs is the same length as orphan_refs, we have
-  // no orphan-orphan links for this transaction and it is a
-  // root transaction of the orphans set
+		// no orphan-orphan links for this transaction and it is a
+		// root transaction of the orphans set
 		self.graph
 			.add_vertex_only(orphan_entry, is_missing.len() == orphan_refs.len());
-
 
 		// Adding the new unspents to the unspent map
 		for unspent_output in new_unspents.drain(..) {
