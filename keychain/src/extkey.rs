@@ -218,8 +218,8 @@ impl ExtendedKey {
 		let derived = blake2b(64, b"Grin/MW Seed", seed);
 		let slice = derived.as_bytes();
 
-		let key = SecretKey::from_slice(&secp, &slice[0..32])
-			.expect("Error deriving key (from_slice)");
+		let key =
+			SecretKey::from_slice(&secp, &slice[0..32]).expect("Error deriving key (from_slice)");
 
 		let mut chain_code: [u8; 32] = Default::default();
 		(&mut chain_code).copy_from_slice(&slice[32..64]);
@@ -295,7 +295,6 @@ impl ExtendedKey {
 	}
 }
 
-
 #[cfg(test)]
 mod test {
 	use serde_json;
@@ -341,10 +340,7 @@ mod test {
 		let identifier = from_hex("6f7c1a053ca54592e783");
 		let n_child = 0;
 		assert_eq!(extk.key, secret_key);
-		assert_eq!(
-			extk.key_id,
-			Identifier::from_bytes(identifier.as_slice())
-		);
+		assert_eq!(extk.key_id, Identifier::from_bytes(identifier.as_slice()));
 		assert_eq!(
 			extk.root_key_id,
 			Identifier::from_bytes(identifier.as_slice())

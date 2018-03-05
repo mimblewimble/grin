@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate  grin_util as util;
+extern crate grin_util as util;
 
 use std::fs::{self, File};
 use std::path::Path;
@@ -30,12 +30,12 @@ fn zip_unzip() {
 	let zip_file = File::create(zip_name).unwrap();
 	zip::compress(&root.join("./to_zip"), &zip_file).unwrap();
 	zip_file.sync_all();
-	
+
 	let zip_path = Path::new(zip_name);
 	assert!(zip_path.exists());
 	assert!(zip_path.is_file());
 	assert!(zip_path.metadata().unwrap().len() > 300);
-	
+
 	fs::create_dir_all(root.join("./dezipped")).unwrap();
 	let zip_file = File::open(zip_name).unwrap();
 	zip::decompress(zip_file, &root.join("./dezipped")).unwrap();

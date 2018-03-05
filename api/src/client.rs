@@ -32,9 +32,8 @@ where
 {
 	let client = hyper::Client::new();
 	let res = check_error(client.get(url).send())?;
-	serde_json::from_reader(res).map_err(|e| {
-		Error::Internal(format!("Server returned invalid JSON: {}", e))
-	})
+	serde_json::from_reader(res)
+		.map_err(|e| Error::Internal(format!("Server returned invalid JSON: {}", e)))
 }
 
 /// Helper function to easily issue a HTTP POST request with the provided JSON
@@ -45,9 +44,8 @@ pub fn post<'a, IN>(url: &'a str, input: &IN) -> Result<(), Error>
 where
 	IN: Serialize,
 {
-	let in_json = serde_json::to_string(input).map_err(|e| {
-		Error::Internal(format!("Could not serialize data to JSON: {}", e))
-	})?;
+	let in_json = serde_json::to_string(input)
+		.map_err(|e| Error::Internal(format!("Could not serialize data to JSON: {}", e)))?;
 	let client = hyper::Client::new();
 	let _res = check_error(client.post(url).body(&mut in_json.as_bytes()).send())?;
 	Ok(())
@@ -61,13 +59,17 @@ fn check_error(res: hyper::Result<Response>) -> Result<Response, Error> {
 	let mut response = res.unwrap();
 	match response.status.class() {
 		StatusClass::Success => Ok(response),
-		StatusClass::ServerError => {
-			Err(Error::Internal(format!("Server error: {}", err_msg(&mut response))))
-		}
+		StatusClass::ServerError => Err(Error::Internal(format!(
+			"Server error: {}",
+			err_msg(&mut response)
+		))),
 		StatusClass::ClientError => if response.status == StatusCode::NotFound {
 			Err(Error::NotFound)
 		} else {
-			Err(Error::Argument(format!("Argument error: {}", err_msg(&mut response))))
+			Err(Error::Argument(format!(
+				"Argument error: {}",
+				err_msg(&mut response)
+			)))
 		},
 		_ => Err(Error::Internal(format!("Unrecognized error."))),
 	}

@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use core::{core, ser};
 use core::core::hash::Hashed;
+use core::core::pmmr::MerkleProof;
 use core::core::SwitchCommitHash;
 use chain;
 use p2p;
@@ -162,7 +163,9 @@ pub struct Utxo {
 
 impl Utxo {
 	pub fn new(commit: &pedersen::Commitment) -> Utxo {
-		Utxo { commit: PrintableCommitment(commit.clone()) }
+		Utxo {
+			commit: PrintableCommitment(commit.clone()),
+		}
 	}
 }
 
@@ -181,15 +184,19 @@ impl PrintableCommitment {
 }
 
 impl serde::ser::Serialize for PrintableCommitment {
-	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where
-		S: serde::ser::Serializer {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::ser::Serializer,
+	{
 		serializer.serialize_str(&util::to_hex(self.to_vec()))
 	}
 }
 
 impl<'de> serde::de::Deserialize<'de> for PrintableCommitment {
-	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where
-		D: serde::de::Deserializer<'de> {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::de::Deserializer<'de>,
+	{
 		deserializer.deserialize_str(PrintableCommitmentVisitor)
 	}
 }
@@ -203,9 +210,13 @@ impl<'de> serde::de::Visitor<'de> for PrintableCommitmentVisitor {
 		formatter.write_str("a Pedersen commitment")
 	}
 
-	fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where
-		E: serde::de::Error, {
-		Ok(PrintableCommitment(pedersen::Commitment::from_vec(util::from_hex(String::from(v)).unwrap())))
+	fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+	where
+		E: serde::de::Error,
+	{
+		Ok(PrintableCommitment(pedersen::Commitment::from_vec(
+			util::from_hex(String::from(v)).unwrap(),
+		)))
 	}
 }
 
@@ -225,20 +236,25 @@ pub struct OutputPrintable {
 	pub proof: Option<pedersen::RangeProof>,
 	/// Rangeproof hash (as hex string)
 	pub proof_hash: String,
+
+	pub merkle_proof: Option<MerkleProof>,
 }
 
 impl OutputPrintable {
 	pub fn from_output(
 		output: &core::Output,
 		chain: Arc<chain::Chain>,
+		block: &core::Block,
 		include_proof: bool,
 	) -> OutputPrintable {
-		let output_type =
-			if output.features.contains(core::transaction::OutputFeatures::COINBASE_OUTPUT) {
-				OutputType::Coinbase
-			} else {
-				OutputType::Transaction
-			};
+		let output_type = if output
+			.features
+			.contains(core::transaction::OutputFeatures::COINBASE_OUTPUT)
+		{
+			OutputType::Coinbase
+		} else {
+			OutputType::Transaction
+		};
 
 		let out_id = core::OutputIdentifier::from_output(&output);
 		let spent = chain.is_unspent(&out_id).is_err();
@@ -249,6 +265,18 @@ impl OutputPrintable {
 			None
 		};
 
+		// Get the Merkle proof for all unspent coinbase outputs (to verify maturity on
+		// spend). We obtain the Merkle proof by rewinding the PMMR.
+		// We require the rewind() to be stable even after the PMMR is pruned and
+		// compacted so we can still recreate the necessary proof.
+		let mut merkle_proof = None;
+		if output
+			.features
+			.contains(core::transaction::OutputFeatures::COINBASE_OUTPUT) && !spent
+		{
+			merkle_proof = chain.get_merkle_proof(&out_id, &block).ok()
+		};
+
 		OutputPrintable {
 			output_type,
 			commit: output.commit,
@@ -256,6 +284,7 @@ impl OutputPrintable {
 			spent,
 			proof,
 			proof_hash: util::to_hex(output.proof.hash().to_vec()),
+			merkle_proof,
 		}
 	}
 
@@ -269,27 +298,37 @@ impl OutputPrintable {
 	}
 
 	pub fn range_proof(&self) -> Result<pedersen::RangeProof, ser::Error> {
-		self.proof.clone().ok_or_else(|| ser::Error::HexError(format!("output range_proof missing")))
+		self.proof
+			.clone()
+			.ok_or_else(|| ser::Error::HexError(format!("output range_proof missing")))
 	}
 }
 
 impl serde::ser::Serialize for OutputPrintable {
-	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where
-		S: serde::ser::Serializer {
-		let mut state = serializer.serialize_struct("OutputPrintable", 6)?;
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::ser::Serializer,
+	{
+		let mut state = serializer.serialize_struct("OutputPrintable", 7)?;
 		state.serialize_field("output_type", &self.output_type)?;
 		state.serialize_field("commit", &util::to_hex(self.commit.0.to_vec()))?;
 		state.serialize_field("switch_commit_hash", &self.switch_commit_hash.to_hex())?;
 		state.serialize_field("spent", &self.spent)?;
 		state.serialize_field("proof", &self.proof)?;
 		state.serialize_field("proof_hash", &self.proof_hash)?;
+
+		let hex_merkle_proof = &self.merkle_proof.clone().map(|x| x.to_hex());
+		state.serialize_field("merkle_proof", &hex_merkle_proof)?;
+
 		state.end()
 	}
 }
 
 impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
-	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where
-		D: serde::de::Deserializer<'de> {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::de::Deserializer<'de>,
+	{
 		#[derive(Deserialize)]
 		#[serde(field_identifier, rename_all = "snake_case")]
 		enum Field {
@@ -298,7 +337,8 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 			SwitchCommitHash,
 			Spent,
 			Proof,
-			ProofHash
+			ProofHash,
+			MerkleProof,
 		}
 
 		struct OutputPrintableVisitor;
@@ -310,29 +350,32 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 				formatter.write_str("a print able Output")
 			}
 
-			fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error> where
-				A: MapAccess<'de>, {
+			fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+			where
+				A: MapAccess<'de>,
+			{
 				let mut output_type = None;
 				let mut commit = None;
 				let mut switch_commit_hash = None;
 				let mut spent = None;
 				let mut proof = None;
 				let mut proof_hash = None;
+				let mut merkle_proof = None;
 
 				while let Some(key) = map.next_key()? {
 					match key {
 						Field::OutputType => {
 							no_dup!(output_type);
 							output_type = Some(map.next_value()?)
-						},
+						}
 						Field::Commit => {
 							no_dup!(commit);
 
 							let val: String = map.next_value()?;
-							let vec = util::from_hex(val.clone())
-								.map_err(serde::de::Error::custom)?;
+							let vec =
+								util::from_hex(val.clone()).map_err(serde::de::Error::custom)?;
 							commit = Some(pedersen::Commitment::from_vec(vec));
-						},
+						}
 						Field::SwitchCommitHash => {
 							no_dup!(switch_commit_hash);
 
@@ -340,11 +383,11 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 							let hash = core::SwitchCommitHash::from_hex(&val.clone())
 								.map_err(serde::de::Error::custom)?;
 							switch_commit_hash = Some(hash)
-						},
+						}
 						Field::Spent => {
 							no_dup!(spent);
 							spent = Some(map.next_value()?)
-						},
+						}
 						Field::Proof => {
 							no_dup!(proof);
 
@@ -358,12 +401,25 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 									bytes[i] = vec[i];
 								}
 
-								proof = Some(pedersen::RangeProof { proof: bytes, plen: vec.len() })
+								proof = Some(pedersen::RangeProof {
+									proof: bytes,
+									plen: vec.len(),
+								})
 							}
-						},
+						}
 						Field::ProofHash => {
 							no_dup!(proof_hash);
 							proof_hash = Some(map.next_value()?)
+						}
+						Field::MerkleProof => {
+							no_dup!(merkle_proof);
+							if let Some(hex) = map.next_value::<Option<String>>()? {
+								if let Ok(res) = MerkleProof::from_hex(&hex) {
+									merkle_proof = Some(res);
+								} else {
+									merkle_proof = Some(MerkleProof::empty());
+								}
+							}
 						}
 					}
 				}
@@ -374,12 +430,20 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 					switch_commit_hash: switch_commit_hash.unwrap(),
 					spent: spent.unwrap(),
 					proof: proof,
-					proof_hash: proof_hash.unwrap()
+					proof_hash: proof_hash.unwrap(),
+					merkle_proof: merkle_proof,
 				})
 			}
 		}
 
-		const FIELDS: &'static [&'static str] = &["output_type", "commit", "switch_commit_hash", "spent", "proof", "proof_hash"];
+		const FIELDS: &'static [&'static str] = &[
+			"output_type",
+			"commit",
+			"switch_commit_hash",
+			"spent",
+			"proof",
+			"proof_hash",
+		];
 		deserializer.deserialize_struct("OutputPrintable", FIELDS, OutputPrintableVisitor)
 	}
 }
@@ -490,14 +554,17 @@ impl BlockPrintable {
 		chain: Arc<chain::Chain>,
 		include_proof: bool,
 	) -> BlockPrintable {
-		let inputs = block.inputs
+		let inputs = block
+			.inputs
 			.iter()
 			.map(|x| util::to_hex(x.commitment().0.to_vec()))
 			.collect();
 		let outputs = block
 			.outputs
 			.iter()
-			.map(|output| OutputPrintable::from_output(output, chain.clone(), include_proof))
+			.map(|output| {
+				OutputPrintable::from_output(output, chain.clone(), &block, include_proof)
+			})
 			.collect();
 		let kernels = block
 			.kernels
@@ -526,18 +593,18 @@ pub struct CompactBlockPrintable {
 }
 
 impl CompactBlockPrintable {
-	/// Convert a compact block into a printable representation suitable for api response
+	/// Convert a compact block into a printable representation suitable for
+	/// api response
 	pub fn from_compact_block(
 		cb: &core::CompactBlock,
 		chain: Arc<chain::Chain>,
 	) -> CompactBlockPrintable {
-		let out_full = cb
-			.out_full
+		let block = chain.get_block(&cb.hash()).unwrap();
+		let out_full = cb.out_full
 			.iter()
-			.map(|x| OutputPrintable::from_output(x, chain.clone(), false))
+			.map(|x| OutputPrintable::from_output(x, chain.clone(), &block, false))
 			.collect();
-		let kern_full = cb
-			.kern_full
+		let kern_full = cb.kern_full
 			.iter()
 			.map(|x| TxKernelPrintable::from_txkernel(x))
 			.collect();
@@ -577,14 +644,16 @@ mod test {
 
 	#[test]
 	fn serialize_output() {
-		let hex_output = "{\
-			\"output_type\":\"Coinbase\",\
-			\"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\",\
-			\"switch_commit_hash\":\"85daaf11011dc11e52af84ebe78e2f2d19cbdc76000000000000000000000000\",\
-			\"spent\":false,\
-			\"proof\":null,\
-			\"proof_hash\":\"ed6ba96009b86173bade6a9227ed60422916593fa32dd6d78b25b7a4eeef4946\"\
-		}";
+		let hex_output =
+			"{\
+			 \"output_type\":\"Coinbase\",\
+			 \"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\",\
+			 \"switch_commit_hash\":\"85daaf11011dc11e52af84ebe78e2f2d19cbdc76000000000000000000000000\",\
+			 \"spent\":false,\
+			 \"proof\":null,\
+			 \"proof_hash\":\"ed6ba96009b86173bade6a9227ed60422916593fa32dd6d78b25b7a4eeef4946\",\
+			 \"merkle_proof\":null\
+			 }";
 		let deserialized: OutputPrintable = serde_json::from_str(&hex_output).unwrap();
 		let serialized = serde_json::to_string(&deserialized).unwrap();
 		assert_eq!(serialized, hex_output);
@@ -592,7 +661,8 @@ mod test {
 
 	#[test]
 	fn serialize_utxo() {
-		let hex_commit = "{\"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\"}";
+		let hex_commit =
+			"{\"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\"}";
 		let deserialized: Utxo = serde_json::from_str(&hex_commit).unwrap();
 		let serialized = serde_json::to_string(&deserialized).unwrap();
 		assert_eq!(serialized, hex_commit);

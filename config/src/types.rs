@@ -45,8 +45,7 @@ impl fmt::Display for ConfigError {
 			ConfigError::ParseError(ref file_name, ref message) => write!(
 				f,
 				"Error parsing configuration file at {} - {}",
-				file_name,
-				message
+				file_name, message
 			),
 			ConfigError::FileIOError(ref file_name, ref message) => {
 				write!(f, "{} {}", message, file_name)

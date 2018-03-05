@@ -101,8 +101,7 @@ fn simulate_seeding() {
 	server_config.is_seeding = false;
 	server_config.seed_addr = String::from(format!(
 		"{}:{}",
-		server_config.base_addr,
-		server_config.p2p_server_port
+		server_config.base_addr, server_config.p2p_server_port
 	));
 
 	for _ in 0..4 {
@@ -153,8 +152,7 @@ fn simulate_parallel_mining() {
 	server_config.is_seeding = false;
 	server_config.seed_addr = String::from(format!(
 		"{}:{}",
-		server_config.base_addr,
-		server_config.p2p_server_port
+		server_config.base_addr, server_config.p2p_server_port
 	));
 
 	// And create 4 more, then let them run for a while
@@ -169,8 +167,8 @@ fn simulate_parallel_mining() {
 	let _ = pool.run_all_servers();
 
 	// Check mining difficulty here?, though I'd think it's more valuable
- // to simply output it. Can at least see the evolution of the difficulty target
- // in the debug log output for now
+	// to simply output it. Can at least see the evolution of the difficulty target
+	// in the debug log output for now
 }
 
 // TODO: Convert these tests to newer framework format
@@ -190,20 +188,18 @@ fn a_simulate_block_propagation() {
 	// instantiates 5 servers on different ports
 	let mut servers = vec![];
 	for n in 0..5 {
-		let s = grin::Server::new(
-			grin::ServerConfig {
-				api_http_addr: format!("127.0.0.1:{}", 19000 + n),
-				db_root: format!("target/{}/grin-prop-{}", test_name_dir, n),
-				p2p_config: p2p::P2PConfig {
-					port: 18000 + n,
-					..p2p::P2PConfig::default()
-				},
-				seeding_type: grin::Seeding::List,
-				seeds: Some(vec!["127.0.0.1:18000".to_string()]),
-				chain_type: core::global::ChainTypes::AutomatedTesting,
-				..Default::default()
+		let s = grin::Server::new(grin::ServerConfig {
+			api_http_addr: format!("127.0.0.1:{}", 19000 + n),
+			db_root: format!("target/{}/grin-prop-{}", test_name_dir, n),
+			p2p_config: p2p::P2PConfig {
+				port: 18000 + n,
+				..p2p::P2PConfig::default()
 			},
-		).unwrap();
+			seeding_type: grin::Seeding::List,
+			seeds: Some(vec!["127.0.0.1:18000".to_string()]),
+			chain_type: core::global::ChainTypes::AutomatedTesting,
+			..Default::default()
+		}).unwrap();
 		servers.push(s);
 	}
 

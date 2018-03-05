@@ -47,19 +47,19 @@ fn peer_handshake() {
 		peers_deny: None,
 	};
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
-	let server = Arc::new(p2p::Server::new(
-		".grin".to_owned(),
-		p2p::Capabilities::UNKNOWN,
-		p2p_conf.clone(),
-		net_adapter.clone(),
-		Hash::from_vec(vec![]),
-		Arc::new(AtomicBool::new(false)),
-	).unwrap());
+	let server = Arc::new(
+		p2p::Server::new(
+			".grin".to_owned(),
+			p2p::Capabilities::UNKNOWN,
+			p2p_conf.clone(),
+			net_adapter.clone(),
+			Hash::from_vec(vec![]),
+			Arc::new(AtomicBool::new(false)),
+		).unwrap(),
+	);
 
 	let p2p_inner = server.clone();
-	let _ = thread::spawn(move || {
-		p2p_inner.listen()
-	});
+	let _ = thread::spawn(move || p2p_inner.listen());
 
 	thread::sleep(time::Duration::from_secs(1));
 
@@ -81,7 +81,7 @@ fn peer_handshake() {
 
 	peer.send_ping(Difficulty::one(), 0).unwrap();
 	thread::sleep(time::Duration::from_secs(1));
-	
+
 	let server_peer = server.peers.get_connected_peer(&my_addr).unwrap();
 	let server_peer = server_peer.read().unwrap();
 	assert_eq!(server_peer.info.total_difficulty, Difficulty::one());

@@ -21,7 +21,7 @@ use std::fs::{self, File};
 use walkdir::WalkDir;
 
 use zip_rs;
-use zip_rs::result::{ZipResult, ZipError};
+use zip_rs::result::{ZipError, ZipResult};
 use zip_rs::write::FileOptions;
 
 /// Compress a source directory recursively into a zip file using the
@@ -29,8 +29,10 @@ use zip_rs::write::FileOptions;
 /// unwanted execution bits.
 pub fn compress(src_dir: &Path, dst_file: &File) -> ZipResult<()> {
 	if !Path::new(src_dir).is_dir() {
-		return Err(ZipError::Io(
-			io::Error::new(io::ErrorKind::Other, "Source must be a directory.")));
+		return Err(ZipError::Io(io::Error::new(
+			io::ErrorKind::Other,
+			"Source must be a directory.",
+		)));
 	}
 
 	let options = FileOptions::default()
@@ -61,7 +63,10 @@ pub fn compress(src_dir: &Path, dst_file: &File) -> ZipResult<()> {
 }
 
 /// Decompress a source file into the provided destination path.
-pub fn decompress<R>(src_file: R, dest: &Path) -> ZipResult<()> where R: io::Read + io::Seek {
+pub fn decompress<R>(src_file: R, dest: &Path) -> ZipResult<()>
+where
+	R: io::Read + io::Seek,
+{
 	let mut archive = zip_rs::ZipArchive::new(src_file)?;
 
 	for i in 0..archive.len() {
@@ -85,10 +90,12 @@ pub fn decompress<R>(src_file: R, dest: &Path) -> ZipResult<()> where R: io::Rea
 		{
 			use std::os::unix::fs::PermissionsExt;
 			if let Some(mode) = file.unix_mode() {
-				fs::set_permissions(&file_path.to_str().unwrap(), PermissionsExt::from_mode(mode))?;
+				fs::set_permissions(
+					&file_path.to_str().unwrap(),
+					PermissionsExt::from_mode(mode),
+				)?;
 			}
 		}
-
 	}
 	Ok(())
 }

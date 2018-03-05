@@ -38,7 +38,6 @@ pub fn show_status(config: &ServerConfig) {
 			writeln!(e, "Last block hash: {}", status.tip.last_block_pushed).unwrap();
 			writeln!(e, "Previous block hash: {}", status.tip.prev_block_to_last).unwrap();
 			writeln!(e, "Total difficulty: {}", status.tip.total_difficulty).unwrap();
-
 		}
 		Err(_) => writeln!(
 			e,
@@ -81,10 +80,7 @@ pub fn unban_peer(config: &ServerConfig, peer_addr: &SocketAddr) {
 
 pub fn list_connected_peers(config: &ServerConfig) {
 	let mut e = term::stdout().unwrap();
-	let url = format!(
-		"http://{}/v1/peers/connected",
-		config.api_http_addr
-	);
+	let url = format!("http://{}/v1/peers/connected", config.api_http_addr);
 	match api::client::get::<Vec<p2p::PeerInfo>>(url.as_str()).map_err(|e| Error::API(e)) {
 		Ok(connected_peers) => {
 			let mut index = 0;
@@ -98,7 +94,7 @@ pub fn list_connected_peers(config: &ServerConfig) {
 				println!();
 				index = index + 1;
 			}
-		},
+		}
 		Err(_) => writeln!(e, "Failed to get connected peers").unwrap(),
 	};
 	e.reset().unwrap();

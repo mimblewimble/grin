@@ -429,7 +429,11 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
-	let key_derivations: u32 = wallet_args.value_of("key_derivations").unwrap().parse().unwrap();
+	let key_derivations: u32 = wallet_args
+		.value_of("key_derivations")
+		.unwrap()
+		.parse()
+		.unwrap();
 
 	let mut show_spent = false;
 	if wallet_args.is_present("show_spent") {
@@ -515,29 +519,29 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 					dest,
 					selection_strategy,
 				),
-                Err(e) => match e.kind() {
-			    	wallet::ErrorKind::NotEnoughFunds(available) => {
-			    		error!(
-			    			LOGGER,
-			    			"Tx not sent: insufficient funds (max: {})",
-			    			amount_to_hr_string(available),
-			    		);
-			    	}
-			    	wallet::ErrorKind::FeeExceedsAmount {
-			    		sender_amount,
-			    		recipient_fee,
-			    	} => {
-			    		error!(
+				Err(e) => match e.kind() {
+					wallet::ErrorKind::NotEnoughFunds(available) => {
+						error!(
+							LOGGER,
+							"Tx not sent: insufficient funds (max: {})",
+							amount_to_hr_string(available),
+						);
+					}
+					wallet::ErrorKind::FeeExceedsAmount {
+						sender_amount,
+						recipient_fee,
+					} => {
+						error!(
 			    			LOGGER,
 			    			"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
 			    			amount_to_hr_string(recipient_fee),
 			    			amount_to_hr_string(sender_amount)
 			    		);
-			    	}
-			    	_ => {
-			    		error!(LOGGER, "Tx not sent: {:?}", e);
-			    	}
-                }
+					}
+					_ => {
+						error!(LOGGER, "Tx not sent: {:?}", e);
+					}
+				},
 			};
 		}
 		("burn", Some(send_args)) => {

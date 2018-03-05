@@ -19,19 +19,19 @@ extern crate slog;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;
+extern crate grin_config as config;
 extern crate grin_core as core;
 extern crate grin_grin as grin;
 extern crate grin_p2p as p2p;
 extern crate grin_pow as pow;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
-extern crate grin_config as config;
 
 mod framework;
 
 use std::{thread, time};
 use std::sync::{Arc, Mutex};
-use framework::{LocalServerContainer,LocalServerContainerConfig};
+use framework::{LocalServerContainer, LocalServerContainerConfig};
 
 use util::LOGGER;
 
@@ -51,12 +51,12 @@ fn basic_wallet_transactions() {
 	// Run a separate coinbase wallet for coinbase transactions
 	let mut coinbase_config = LocalServerContainerConfig::default();
 	coinbase_config.name = String::from("coinbase_wallet");
-	coinbase_config.wallet_validating_node_url=String::from("http://127.0.0.1:30001");
+	coinbase_config.wallet_validating_node_url = String::from("http://127.0.0.1:30001");
 	coinbase_config.wallet_port = 10002;
-	let coinbase_wallet = Arc::new(Mutex::new(LocalServerContainer::new(coinbase_config).unwrap()));
-	let coinbase_wallet_config = {
-		coinbase_wallet.lock().unwrap().wallet_config.clone()
-	};
+	let coinbase_wallet = Arc::new(Mutex::new(
+		LocalServerContainer::new(coinbase_config).unwrap(),
+	));
+	let coinbase_wallet_config = { coinbase_wallet.lock().unwrap().wallet_config.clone() };
 
 	let coinbase_seed = LocalServerContainer::get_wallet_seed(&coinbase_wallet_config);
 
@@ -67,13 +67,11 @@ fn basic_wallet_transactions() {
 
 	let mut recp_config = LocalServerContainerConfig::default();
 	recp_config.name = String::from("target_wallet");
-	recp_config.wallet_validating_node_url=String::from("http://127.0.0.1:30001");
+	recp_config.wallet_validating_node_url = String::from("http://127.0.0.1:30001");
 	recp_config.wallet_port = 20002;
 	let target_wallet = Arc::new(Mutex::new(LocalServerContainer::new(recp_config).unwrap()));
 	let target_wallet_cloned = target_wallet.clone();
-	let recp_wallet_config = {
-		target_wallet.lock().unwrap().wallet_config.clone()
-	};
+	let recp_wallet_config = { target_wallet.lock().unwrap().wallet_config.clone() };
 
 	let recp_seed = LocalServerContainer::get_wallet_seed(&recp_wallet_config);
 	//Start up a second wallet, to receive
@@ -90,54 +88,83 @@ fn basic_wallet_transactions() {
 		server_config.api_server_port = 30001;
 		server_config.start_miner = true;
 		server_config.start_wallet = false;
-		server_config.coinbase_wallet_address = String::from(format!(
-			"http://{}:{}",
-			server_config.base_addr,
-			10002
-		));
+		server_config.coinbase_wallet_address =
+			String::from(format!("http://{}:{}", server_config.base_addr, 10002));
 		let mut server_one = LocalServerContainer::new(server_config).unwrap();
 		server_one.run_server(120);
 	});
 
 	//Wait until we have some funds to send
-	let mut coinbase_info = LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
+	let mut coinbase_info =
+		LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
 	let mut slept_time = 0;
-	while coinbase_info.amount_currently_spendable < 100000000000{
+	while coinbase_info.amount_currently_spendable < 100000000000 {
 		thread::sleep(time::Duration::from_millis(500));
-		slept_time+=500;
+		slept_time += 500;
 		if slept_time > 10000 {
 			panic!("Coinbase not confirming in time");
 		}
-		coinbase_info = LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
+		coinbase_info =
+			LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
 	}
 	warn!(LOGGER, "Sending 50 Grins to recipient wallet");
-	LocalServerContainer::send_amount_to(&coinbase_wallet_config, "50.00", 1, "not_all", "http://127.0.0.1:20002");
+	LocalServerContainer::send_amount_to(
+		&coinbase_wallet_config,
+		"50.00",
+		1,
+		"not_all",
+		"http://127.0.0.1:20002",
+	);
 
 	//Wait for a confirmation
 	thread::sleep(time::Duration::from_millis(3000));
-	let coinbase_info = LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
+	let coinbase_info =
+		LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
 	println!("Coinbase wallet info: {:?}", coinbase_info);
 
 	let recipient_info = LocalServerContainer::get_wallet_info(&recp_wallet_config, &recp_seed);
 	println!("Recipient wallet info: {:?}", recipient_info);
 
-	assert!(recipient_info.data_confirmed && recipient_info.amount_currently_spendable==50000000000);
+	assert!(
+		recipient_info.data_confirmed && recipient_info.amount_currently_spendable == 50000000000
+	);
 
-	warn!(LOGGER, "Sending many small transactions to recipient wallet");
+	warn!(
+		LOGGER,
+		"Sending many small transactions to recipient wallet"
+	);
 	for _ in 0..10 {
-		LocalServerContainer::send_amount_to(&coinbase_wallet_config, "1.00", 1, "not_all", "http://127.0.0.1:20002");
+		LocalServerContainer::send_amount_to(
+			&coinbase_wallet_config,
+			"1.00",
+			1,
+			"not_all",
+			"http://127.0.0.1:20002",
+		);
 	}
 
 	thread::sleep(time::Duration::from_millis(10000));
 	let recipient_info = LocalServerContainer::get_wallet_info(&recp_wallet_config, &recp_seed);
-	println!("Recipient wallet info post little sends: {:?}", recipient_info);
+	println!(
+		"Recipient wallet info post little sends: {:?}",
+		recipient_info
+	);
 
-	assert!(recipient_info.data_confirmed && recipient_info.amount_currently_spendable==60000000000);
+	assert!(
+		recipient_info.data_confirmed && recipient_info.amount_currently_spendable == 60000000000
+	);
 	//send some cash right back
-	LocalServerContainer::send_amount_to(&recp_wallet_config, "25.00", 1, "all", "http://127.0.0.1:10002");
+	LocalServerContainer::send_amount_to(
+		&recp_wallet_config,
+		"25.00",
+		1,
+		"all",
+		"http://127.0.0.1:10002",
+	);
 
 	thread::sleep(time::Duration::from_millis(5000));
 
-	let coinbase_info = LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
+	let coinbase_info =
+		LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
 	println!("Coinbase wallet info final: {:?}", coinbase_info);
 }
