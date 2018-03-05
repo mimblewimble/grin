@@ -77,7 +77,7 @@ impl Server {
 			pool_adapter.clone(),
 			pool_net_adapter.clone(),
 		)));
-		// TODO Add Dandelion tx watcher in pool
+		tx_pool.monitor_transactions(tx_pool, stop.clone());
 
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));
 

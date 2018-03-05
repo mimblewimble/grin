@@ -14,8 +14,12 @@
 
 //! Top-level Pool type, methods, and tests
 
-use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
+use std::thread;
+use std::time::Duration;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use time::{self, now_utc};
 use rand;
 use rand::Rng;
 
@@ -36,6 +40,8 @@ pub use graph;
 /// keyed by their transaction hash.
 pub struct TransactionPool<T> {
 	config: PoolConfig,
+	/// All transactions hash in the stempool with a time attached to ensure propagation
+	pub time_stem_transactions: HashMap<hash::Hash, i64>,
 	/// All transactions in the stempool
 	pub stem_transactions: HashMap<hash::Hash, Box<transaction::Transaction>>,
 	/// All transactions in the pool
@@ -61,6 +67,7 @@ where
 	pub fn new(config: PoolConfig, chain: Arc<T>, adapter: Arc<PoolAdapter>) -> TransactionPool<T> {
 		TransactionPool {
 			config: config,
+			time_stem_transactions: HashMap::new(),
 			stem_transactions: HashMap::new(),
 			transactions: HashMap::new(),
 			stempool: Pool::empty(),
@@ -226,7 +233,7 @@ where
 		// The current tx.hash() method, for example, does not cover changes
 		// to fees or other elements of the signature preimage.
 		let tx_hash = graph::transaction_identifier(&tx);
-		if let Err(e) = self.is_not_in_pools(&tx_hash) {
+		if let Err(e) = self.check_pools(&tx_hash, stem) {
 			return Err(e);
 		}
 
@@ -300,6 +307,7 @@ where
 
 				self.adapter.stem_tx_accepted(&tx);
 				self.stem_transactions.insert(tx_hash, Box::new(tx));
+				self.time_stem_transactions.insert(tx_hash, time::now_utc().to_timespec().sec);
 			} else {
 				// Fluff phase: transaction is added to memory pool and broadcasted normally
 				self.pool
@@ -674,9 +682,23 @@ where
 	}
 
 	// Check that the transaction is not in the stempool or in the pool
-	fn is_not_in_pools(&self, tx_hash: &Hash) -> Result<(), PoolError> {
-		if self.stem_transactions.contains_key(&tx_hash) || self.transactions.contains_key(&tx_hash) {
-			return Err(PoolError::AlreadyInPool);
+	fn check_pools(&self, tx_hash: &Hash, stem: bool) -> Result<(), PoolError> {
+		if stem && self.stem_transactions.contains_key(&tx_hash) {
+			return Err(PoolError::AlreadyInStempool);
+		} else {
+			// In that case the transaction has been fluffed, we can safely remove it from our
+			// hashmaps
+			if self.stem_transactions.contains_key(&tx_hash) {
+				debug!(
+					LOGGER,
+					"pool: check_pools: transaction has been fluffed - {}",
+					&tx_hash,
+				);
+				self.stem_transactions.remove(&tx_hash);
+				self.time_stem_transactions.remove(&tx_hash);
+			} else if self.transactions.contains_key(&tx_hash) {
+				return Err(PoolError::AlreadyInPool);
+			}
 		}
 		Ok(())
 	}
@@ -723,7 +745,53 @@ where
 		}
 		Ok(vec![pool_refs, orphan_refs, blockchain_refs])
 	}
+
+	pub fn monitor_transactions(&self, stop: Arc<AtomicBool>) {
+		let _ = thread::Builder::new()
+		.name("dandelion".to_string())
+		.spawn(move || {
+			let stem_transactions = self.stem_transactions.clone();
+			let time_stem_transactions = self.time_stem_transactions.clone();
+			let config = self.config.clone();
+
+			let mut prev = time::now_utc() - time::Duration::seconds(60);
+			loop {
+				let current_time = time::now_utc();
+
+				if current_time - prev > time::Duration::seconds(20) {
+					for tx_hash in stem_transactions.keys() {
+						let time_transaction = time_stem_transactions.get(tx_hash).unwrap();
+						let interval = now_utc().to_timespec().sec - time_transaction;
+						// Unban peer
+						if interval >= config.dandelion_embargo {
+							let source = TxSource {
+								debug_name: "dandelion-monitor".to_string(),
+								identifier: "?.?.?.?".to_string(),
+							};
+							info!(
+								LOGGER,
+								"Pushing transaction after embargo timer expired."
+							);
+							let stem_transaction = stem_transactions.get(tx_hash).unwrap();
+							self.add_to_memory_pool(source, *stem_transaction.clone(), false);
+						}
+					}
+					prev = current_time;
+				}
+
+				thread::sleep(Duration::from_secs(1));
+
+				if stop.load(Ordering::Relaxed) {
+					break;
+				}
+			}
+		});
+	}
 }
+
+
+
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -1322,6 +1390,7 @@ mod tests {
 				accept_fee_base: 0,
 				max_pool_size: 10_000,
 				dandelion_probability: 90,
+				dandelion_embargo: 30,
 			},
 			stem_transactions: HashMap::new(),
 			transactions: HashMap::new(),

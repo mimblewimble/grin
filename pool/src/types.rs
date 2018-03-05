@@ -44,6 +44,10 @@ pub struct PoolConfig {
 	/// Maximum capacity of the pool in number of transactions
 	#[serde = "default_dandelion_probability"]
 	pub dandelion_probability: usize,
+
+	/// Default embargo for Dandelion transaction
+	#[serde = "default_dandelion_embargo"]
+	pub dandelion_embargo: i64,
 }
 
 impl Default for PoolConfig {
@@ -52,6 +56,7 @@ impl Default for PoolConfig {
 			accept_fee_base: default_accept_fee_base(),
 			max_pool_size: default_max_pool_size(),
 			dandelion_probability: default_dandelion_probability(),
+			dandelion_embargo: default_dandelion_embargo(),
 		}
 	}
 }
@@ -64,6 +69,9 @@ fn default_max_pool_size() -> usize {
 }
 fn default_dandelion_probability() -> usize {
 	90
+}
+fn default_dandelion_embargo() -> i64 {
+	30
 }
 
 /// Placeholder: the data representing where we heard about a tx from.
@@ -111,6 +119,8 @@ pub enum PoolError {
 	InvalidTx(transaction::Error),
 	/// An entry already in the pool
 	AlreadyInPool,
+	/// An entry already in the stempool
+	AlreadyInStempool,
 	/// A duplicate output
 	DuplicateOutput {
 		/// The other transaction
