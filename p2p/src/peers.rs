@@ -298,6 +298,20 @@ impl Peers {
 		);
 	}
 
+	/// Broadcasts the provided stem transaction to our peer relay.
+	pub fn broadcast_stem_transaction(&self, tx: &core::Transaction) {
+		let peers = self.connected_peers();
+		// TODO Broadcast only to the peer relay here.
+		for p in peers.iter().take(8) {
+			let p = p.read().unwrap();
+			if p.is_connected() {
+				if let Err(e) = p.send_transaction(tx) {
+					debug!(LOGGER, "Error sending stem transaction to peer relay: {:?}", e);
+				}
+			}
+		}
+	}
+
 	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our peers.
 	/// We may be connected to PEER_MAX_COUNT peers so we only
 	/// want to broadcast to a random subset of peers.
