@@ -488,7 +488,7 @@ struct TxWrapper {
 // Push new transactions to our stem transaction pool, that should broadcast it
 // to the network if valid.
 struct PoolPushHandler<T> {
-	tx_stempool: Weak<RwLock<pool::StemTransactionPool<T>>>,
+	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
 }
 
 impl<T> Handler for PoolPushHandler<T>
@@ -518,8 +518,8 @@ where
 		);
 
 		//  Push into the stempool
-		let stempool_arc = w(&self.tx_stempool);
-		let res = stempool_arc.write().unwrap().add_to_stem_memory_pool(source,tx);
+		let pool_arc = w(&self.tx_pool);
+		let res = pool_arc.write().unwrap().add_to_stem_memory_pool(source,tx);
 
 		match res {
 			Ok(()) => Ok(Response::with(status::Ok)),
@@ -565,7 +565,6 @@ pub fn start_rest_apis<T>(
 	addr: String,
 	chain: Weak<chain::Chain>,
 	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
-	tx_stempool : Weak<RwLock<pool::StemTransactionPool<T>>>,
 	peers: Weak<p2p::Peers>,
 ) where
 	T: pool::BlockChain + Send + Sync + 'static,
@@ -594,7 +593,7 @@ pub fn start_rest_apis<T>(
 				tx_pool: tx_pool.clone(),
 			};
 			let pool_push_handler = PoolPushHandler {
-				tx_stempool: tx_stempool.clone(),
+				tx_pool: tx_pool.clone(),
 			};
 			let peers_all_handler = PeersAllHandler {
 				peers: peers.clone(),
