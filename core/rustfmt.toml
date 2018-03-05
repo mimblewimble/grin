@@ -1,4 +1,2 @@
 hard_tabs = true
 wrap_comments = true
-comment_width = 120 # we have some long urls in comments
-write_mode = "Overwrite"
