@@ -21,7 +21,7 @@ use std::fs;
 
 use core::ser::*;
 use core::core::pmmr::{Backend, PMMR};
-use core::core::hash::{Hash, Hashed};
+use core::core::hash::Hash;
 
 #[test]
 fn pmmr_append() {
@@ -60,7 +60,7 @@ fn pmmr_compact_leaf_sibling() {
 	let (data_dir, elems) = setup("compact_leaf_sibling");
 
 	// setup the mmr store with all elements
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();
 	let mmr_size = load(0, &elems[..], &mut backend);
 	backend.sync().unwrap();
 
@@ -191,7 +191,7 @@ fn pmmr_reload() {
 	let (data_dir, elems) = setup("reload");
 
 	// set everything up with an initial backend
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();
 
 	let mmr_size = load(0, &elems[..], &mut backend);
 
@@ -230,7 +230,7 @@ fn pmmr_reload() {
 	// create a new backend referencing the data files
 	// and check everything still works as expected
 	{
-		let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
+		let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();
 		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
 		{
 			let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
