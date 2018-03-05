@@ -99,7 +99,8 @@ fn pmmr_compact_leaf_sibling() {
 		assert_eq!(pmmr.get(3, false).unwrap().0, pos_3_hash);
 	}
 
-	// check we can still retrieve the "removed" element at pos 1 from the backend file
+	// check we can still retrieve the "removed" element at pos 1 from the backend
+	// file
 	assert_eq!(backend.get_from_file(1).unwrap(), pos_1_hash);
 
 	// aggressively compact the PMMR files
@@ -117,10 +118,11 @@ fn pmmr_compact_leaf_sibling() {
 		assert_eq!(pmmr.get(3, false).unwrap().0, pos_3_hash);
 	}
 
-	// check we can still retrieve the "removed" element at pos 1 from the backend file
-	// it should still be available even after pruning and compacting
+	// check we can still retrieve the "removed" element at pos 1 from the backend
+	// file it should still be available even after pruning and compacting
 	// TODO - work out how to *not* prune leaves if sibling still exists
-	// we should ideally leave it in the remove list and not roll it into the prune list (somehow)
+	// we should ideally leave it in the remove list and not roll it into the prune
+	// list (somehow)
 	assert_eq!(backend.get_from_file(1).unwrap(), pos_1_hash);
 
 	assert!(false, "stop and debug");
