@@ -30,7 +30,7 @@ use failure::ResultExt;
 
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
-/// UTXOs. The destination can be "stdout" (for command line) (currently disabled) or a URL to the
+/// Outputs. The destination can be "stdout" (for command line) (currently disabled) or a URL to the
 /// recipients wallet receiver (to be implemented).
 pub fn issue_send_tx(
 	config: &WalletConfig,

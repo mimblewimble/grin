@@ -26,14 +26,14 @@ A Grin transaction consists of the following -
 * An explicit transaction fee in the clear.
 * A signature, computed by taking the excess blinding value (the sum of all outputs plus the fee, minus the inputs) and using it as the private key.
 
-We can show the output is unspent by looking for the commitment in the current UTXO set. The UTXO set is authoritative; if the output exists in the UTXO set we know it has not yet been spent. If an output does not exist in the UTXO set we know it has either never existed, or that it previously existed and has been spent (we will not necessarily know which).
+We can show the output is unspent by looking for the commitment in the current Output set. The Output set is authoritative; if the output exists in the Output set we know it has not yet been spent. If an output does not exist in the Output set we know it has either never existed, or that it previously existed and has been spent (we will not necessarily know which).
 
 To prove ownership we can verify the transaction signature. We can _only_ have signed the transaction if the transaction sums to zero _and_ we know both `v` and `r`.
 
 Knowing `v` and `r` we can uniquely identify the output (via its commitment) _and_ we can prove ownership of the output by validating the signature on the original coinbase transaction.
 
-Grin does not permit duplicate commitments to exist in the UTXO set at the same time.
-But once an output is spent it is removed from the UTXO set and a duplicate commitment can be added back into the UTXO set.
+Grin does not permit duplicate commitments to exist in the Output set at the same time.
+But once an output is spent it is removed from the Output set and a duplicate commitment can be added back into the Output set.
 This is not necessarily recommended but Grin must handle this situation in a way that does not break consensus across the network.
 
 Several things complicate this situation -
@@ -42,8 +42,8 @@ Several things complicate this situation -
 1. It is possible for a non-coinbase output to have the same value as a coinbase output.
 1. It is possible (but not recommended) for a miner to reuse private keys.
 
-Grin does not allow duplicate commitments to exist in the UTXO set simultaneously.
-But the UTXO set is specific to the state of a particular chain fork. It _is_ possible for duplicate _identical_ commitments to exist simultaneously on different concurrent forks.
+Grin does not allow duplicate commitments to exist in the Output set simultaneously.
+But the Output set is specific to the state of a particular chain fork. It _is_ possible for duplicate _identical_ commitments to exist simultaneously on different concurrent forks.
 And these duplicate commitments may have different "lock heights" at which they mature and become spendable on the different forks.
 
 * Output O<sub>1</sub> from block B<sub>1</sub> spendable at height h<sub>1</sub> (on fork f<sub>1</sub>)
@@ -97,7 +97,7 @@ We maintain an index mapping commitment to position in the output MMR.
 
 If no entry in the index exists or no entry in the output MMR exists for a given commitment then we now the output is not spendable (either it was spent previously or it never existed).
 
-If we find an entry in the output MMR then we know a spendable output exists in the UTXO set _but_ we do not know if this is the correct one. We do not if it is a coinbase output or not and we do not know the height of the block it originated from.
+If we find an entry in the output MMR then we know a spendable output exists in the Output set _but_ we do not know if this is the correct one. We do not if it is a coinbase output or not and we do not know the height of the block it originated from.
 
 If the hash stored in the output MMR covers both the commitment and the output features and we require an input to provide both the commitment and the feature then we can do a further validation step -
 * output exists in the output MMR (based on commitment), and

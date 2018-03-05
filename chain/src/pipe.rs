@@ -342,14 +342,14 @@ fn validate_block(
 	ext.apply_block(&b)?;
 
 	let roots = ext.roots();
-	if roots.utxo_root != b.header.utxo_root || roots.rproof_root != b.header.range_proof_root
+	if roots.output_root != b.header.output_root || roots.rproof_root != b.header.range_proof_root
 		|| roots.kernel_root != b.header.kernel_root
 	{
 		ext.dump(false);
 
 		debug!(
 			LOGGER,
-			"validate_block: utxo roots - {:?}, {:?}", roots.utxo_root, b.header.utxo_root,
+			"validate_block: output roots - {:?}, {:?}", roots.output_root, b.header.output_root,
 		);
 		debug!(
 			LOGGER,

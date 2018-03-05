@@ -110,7 +110,7 @@ impl OrphanBlockPool {
 }
 
 /// Facade to the blockchain block processing pipeline and storage. Provides
-/// the current view of the UTXO set according to the chain state. Also
+/// the current view of the TxHashSet according to the chain state. Also
 /// maintains locking for the pipeline to avoid conflicting processing.
 pub struct Chain {
 	db_root: String,
@@ -437,7 +437,7 @@ impl Chain {
 			Ok(extension.roots())
 		})?;
 
-		b.header.utxo_root = roots.utxo_root;
+		b.header.output_root = roots.output_root;
 		b.header.range_proof_root = roots.rproof_root;
 		b.header.kernel_root = roots.kernel_root;
 		Ok(())
@@ -510,7 +510,7 @@ impl Chain {
 		txhashset::extending(&mut txhashset, |extension| {
 			extension.rewind_pos(header.height, rewind_to_output, rewind_to_kernel)?;
 			extension.validate(&header)?;
-			// TODO validate kernels and their sums with UTXOs
+			// TODO validate kernels and their sums with Outputs
 			extension.rebuild_index()?;
 			Ok(())
 		})?;
@@ -534,10 +534,10 @@ impl Chain {
 		Ok(())
 	}
 
-	/// returns the last n nodes inserted into the utxo sum tree
-	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<(Hash, Option<OutputStoreable>)> {
+	/// returns the last n nodes inserted into the output sum tree
+	pub fn get_last_n_output(&self, distance: u64) -> Vec<(Hash, Option<OutputStoreable>)> {
 		let mut txhashset = self.txhashset.write().unwrap();
-		txhashset.last_n_utxo(distance)
+		txhashset.last_n_output(distance)
 	}
 
 	/// as above, for rangeproofs

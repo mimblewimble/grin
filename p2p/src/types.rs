@@ -113,14 +113,14 @@ bitflags! {
 	const UNKNOWN = 0b00000000;
 	/// Full archival node, has the whole history without any pruning.
 	const FULL_HIST = 0b00000001;
-	/// Can provide block headers and the UTXO set for some recent-enough
+	/// Can provide block headers and the TxHashSet for some recent-enough
 	/// height.
-	const UTXO_HIST = 0b00000010;
+	const TXHASHSET_HIST = 0b00000010;
 	/// Can provide a list of healthy peers
 	const PEER_LIST = 0b00000100;
 
 	const FULL_NODE = Capabilities::FULL_HIST.bits
-		| Capabilities::UTXO_HIST.bits
+		| Capabilities::TXHASHSET_HIST.bits
 		| Capabilities::PEER_LIST.bits;
   }
 }
