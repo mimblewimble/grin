@@ -193,6 +193,9 @@ pub trait PoolAdapter: Send + Sync {
 	/// The transaction pool has accepted this transactions as valid and added
 	/// it to its internal cache.
 	fn tx_accepted(&self, tx: &transaction::Transaction);
+	/// The stem transaction pool has accepted this transactions as valid and added
+	/// it to its internal cache.
+	fn stem_tx_accepted(&self, tx: &transaction::Transaction);
 }
 
 /// Dummy adapter used as a placeholder for real implementations
@@ -201,6 +204,7 @@ pub trait PoolAdapter: Send + Sync {
 pub struct NoopAdapter {}
 impl PoolAdapter for NoopAdapter {
 	fn tx_accepted(&self, _: &transaction::Transaction) {}
+	fn stem_tx_accepted(&self, _: &transaction::Transaction) {}
 }
 
 /// Pool contains the elements of the graph that are connected, in full, to

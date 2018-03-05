@@ -61,6 +61,7 @@ fn estimate_transaction_size(_tx: &core::transaction::Transaction) -> u64 {
 /// An edge connecting graph vertices.
 /// For various use cases, one of either the source or destination may be
 /// unpopulated
+#[derive(Clone)]
 pub struct Edge {
 	// Source and Destination are the vertex id's, the transaction (kernel)
 	// hash.
