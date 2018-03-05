@@ -917,6 +917,7 @@ mod test {
 	use ser::{Error, Readable, Writeable};
 	use core::{Reader, Writer};
 	use core::hash::Hash;
+	use ser::{PMMRable, PMMRIndexHashable};
 
 	/// Simple MMR backend implementation based on a Vector. Pruning does not
 	/// compact the Vec itself.
@@ -1168,9 +1169,6 @@ mod test {
 	impl PMMRable for TestElem {
 		fn len() -> usize {
 			16
-		}
-		fn hash_with_index(&self, index: u64) -> Hash {
-			(index, self).hash()
 		}
 }
 

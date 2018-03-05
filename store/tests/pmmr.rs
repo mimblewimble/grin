@@ -317,9 +317,6 @@ impl PMMRable for TestElem {
 	fn len() -> usize {
 		16
 	}
-	fn hash_with_index(&self, index: u64) -> Hash {
-		(index, self).hash()
-	}
 }
 
 impl Writeable for TestElem {

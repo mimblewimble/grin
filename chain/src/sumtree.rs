@@ -30,7 +30,7 @@ use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdenti
                  OutputStoreable, TxKernel};
 use core::core::pmmr::{self, MerkleProof, PMMR};
 use core::core::hash::{Hash, Hashed};
-use core::ser::{self, PMMRable};
+use core::ser::{self, PMMRable, PMMRIndexHashable};
 
 use grin_store;
 use grin_store::pmmr::{PMMRBackend, PMMRFileMetadata};
