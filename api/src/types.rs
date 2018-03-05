@@ -643,7 +643,7 @@ mod test {
 	use serde_json;
 
 	#[test]
-	fn serialize_output() {
+	fn serialize_output_printable() {
 		let hex_output =
 			"{\
 			 \"output_type\":\"Coinbase\",\
