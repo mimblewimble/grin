@@ -86,7 +86,7 @@ where
 /// A Merkle proof.
 /// Proves inclusion of an output (node) in the output MMR.
 /// We can use this to prove an output was unspent at the time of a given block
-/// as the root will match the utxo_root of the block header.
+/// as the root will match the output_root of the block header.
 /// The path and left_right can be used to reconstruct the peak hash for a given tree
 /// in the MMR.
 /// The root is the result of hashing all the peaks together.

@@ -483,7 +483,7 @@ impl Transaction {
 	/// But we cannot check the following as we need data from the index and the PMMR.
 	/// So we must be sure to check these at the appropriate point during block validation.
 	///   * node is in the correct pos in the PMMR
-	///   * block is the correct one (based on utxo_root from block_header via the index)
+	///   * block is the correct one (based on output_root from block_header via the index)
 	fn verify_inputs(&self) -> Result<(), Error> {
 		let coinbase_inputs = self.inputs
 			.iter()
@@ -516,7 +516,7 @@ pub struct Input {
 	/// Currently we only care about this for coinbase outputs.
 	pub block_hash: Option<Hash>,
 	/// The Merkle Proof that shows the output being spent by this input
-	/// existed and was unspent at the time of this block (proof of inclusion in utxo_root)
+	/// existed and was unspent at the time of this block (proof of inclusion in output_root)
 	pub merkle_proof: Option<MerkleProof>,
 }
 
@@ -619,15 +619,15 @@ impl Input {
 	/// Only relevant for spending coinbase outputs currently (locked for 1,000 confirmations).
 	///
 	/// The proof associates the output with the root by its hash (and pos) in the MMR.
-	/// The proof shows the output existed and was unspent at the time the utxo_root was built.
-	/// The root associates the proof with a specific block header with that utxo_root.
+	/// The proof shows the output existed and was unspent at the time the output_root was built.
+	/// The root associates the proof with a specific block header with that output_root.
 	/// So the proof shows the output was unspent at the time of the block
 	/// and is at least as old as that block (may be older).
 	///
 	/// We can verify maturity of the output being spent by -
 	///
 	/// * verifying the Merkle Proof produces the correct root for the given hash (from MMR)
-	/// * verifying the root matches the utxo_root in the block_header
+	/// * verifying the root matches the output_root in the block_header
 	/// * verifying the hash matches the node hash in the Merkle Proof
 	/// * finally verify maturity rules based on height of the block header
 	///
@@ -652,7 +652,7 @@ impl Input {
 			}
 
 			// Is the root the correct root for the given block header?
-			if merkle_proof.root != header.utxo_root {
+			if merkle_proof.root != header.output_root {
 				return Err(Error::MerkleProof);
 			}
 

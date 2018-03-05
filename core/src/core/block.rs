@@ -107,11 +107,11 @@ pub struct BlockHeader {
 	pub previous: Hash,
 	/// Timestamp at which the block was built.
 	pub timestamp: time::Tm,
-	/// Merklish root of all the commitments in the UTXO set
-	pub utxo_root: Hash,
-	/// Merklish root of all range proofs in the UTXO set
+	/// Merklish root of all the commitments in the TxHashSet
+	pub output_root: Hash,
+	/// Merklish root of all range proofs in the TxHashSet
 	pub range_proof_root: Hash,
-	/// Merklish root of all transaction kernels in the UTXO set
+	/// Merklish root of all transaction kernels in the TxHashSet
 	pub kernel_root: Hash,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
@@ -136,7 +136,7 @@ impl Default for BlockHeader {
 			timestamp: time::at_utc(time::Timespec { sec: 0, nsec: 0 }),
 			difficulty: Difficulty::one(),
 			total_difficulty: Difficulty::one(),
-			utxo_root: ZERO_HASH,
+			output_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
 			kernel_root: ZERO_HASH,
 			nonce: 0,
@@ -155,7 +155,7 @@ impl Writeable for BlockHeader {
 			[write_u64, self.height],
 			[write_fixed_bytes, &self.previous],
 			[write_i64, self.timestamp.to_timespec().sec],
-			[write_fixed_bytes, &self.utxo_root],
+			[write_fixed_bytes, &self.output_root],
 			[write_fixed_bytes, &self.range_proof_root],
 			[write_fixed_bytes, &self.kernel_root]
 		);
@@ -178,7 +178,7 @@ impl Readable for BlockHeader {
 		let (version, height) = ser_multiread!(reader, read_u16, read_u64);
 		let previous = Hash::read(reader)?;
 		let timestamp = reader.read_i64()?;
-		let utxo_root = Hash::read(reader)?;
+		let output_root = Hash::read(reader)?;
 		let rproof_root = Hash::read(reader)?;
 		let kernel_root = Hash::read(reader)?;
 		let nonce = reader.read_u64()?;
@@ -195,7 +195,7 @@ impl Readable for BlockHeader {
 				sec: timestamp,
 				nsec: 0,
 			}),
-			utxo_root: utxo_root,
+			output_root: output_root,
 			range_proof_root: rproof_root,
 			kernel_root: kernel_root,
 			pow: pow,
@@ -654,7 +654,7 @@ impl Block {
 	/// But we cannot check the following as we need data from the index and the PMMR.
 	/// So we must be sure to check these at the appropriate point during block validation.
 	///   * node is in the correct pos in the PMMR
-	///   * block is the correct one (based on utxo_root from block_header via the index)
+	///   * block is the correct one (based on output_root from block_header via the index)
 	fn verify_inputs(&self) -> Result<(), Error> {
 		let coinbase_inputs = self.inputs
 			.iter()

@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -83,7 +83,7 @@ impl Server {
 
 		let genesis = match config.chain_type {
 			global::ChainTypes::Testnet1 => genesis::genesis_testnet1(),
-			//global::ChainTypes::Testnet2 => genesis::genesis_testnet2(),
+			global::ChainTypes::Testnet2 => genesis::genesis_testnet2(),
 			_ => pow::mine_genesis_block(config.mining_config.clone())?,
 		};
 		info!(LOGGER, "Starting server, genesis block: {}", genesis.hash(),);

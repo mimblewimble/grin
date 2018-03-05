@@ -84,64 +84,64 @@ impl Status {
 	}
 }
 
-/// Sumtrees
+/// TxHashSet
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SumTrees {
-	/// UTXO Root Hash
-	pub utxo_root_hash: String,
+pub struct TxHashSet {
+	/// Output Root Hash
+	pub output_root_hash: String,
 	// Rangeproof root hash
 	pub range_proof_root_hash: String,
 	// Kernel set root hash
 	pub kernel_root_hash: String,
 }
 
-impl SumTrees {
-	pub fn from_head(head: Arc<chain::Chain>) -> SumTrees {
-		let roots = head.get_sumtree_roots();
-		SumTrees {
-			utxo_root_hash: roots.0.to_hex(),
+impl TxHashSet {
+	pub fn from_head(head: Arc<chain::Chain>) -> TxHashSet {
+		let roots = head.get_txhashset_roots();
+		TxHashSet {
+			output_root_hash: roots.0.to_hex(),
 			range_proof_root_hash: roots.1.to_hex(),
 			kernel_root_hash: roots.2.to_hex(),
 		}
 	}
 }
 
-/// Wrapper around a list of sumtree nodes, so it can be
+/// Wrapper around a list of txhashset nodes, so it can be
 /// presented properly via json
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PmmrTreeNode {
+pub struct TxHashSetNode {
 	// The hash
 	pub hash: String,
 }
 
-impl PmmrTreeNode {
-	pub fn get_last_n_utxo(chain: Arc<chain::Chain>, distance: u64) -> Vec<PmmrTreeNode> {
+impl TxHashSetNode {
+	pub fn get_last_n_output(chain: Arc<chain::Chain>, distance: u64) -> Vec<TxHashSetNode> {
 		let mut return_vec = Vec::new();
-		let last_n = chain.get_last_n_utxo(distance);
+		let last_n = chain.get_last_n_output(distance);
 		for x in last_n {
-			return_vec.push(PmmrTreeNode {
+			return_vec.push(TxHashSetNode {
 				hash: util::to_hex(x.0.to_vec()),
 			});
 		}
 		return_vec
 	}
 
-	pub fn get_last_n_rangeproof(head: Arc<chain::Chain>, distance: u64) -> Vec<PmmrTreeNode> {
+	pub fn get_last_n_rangeproof(head: Arc<chain::Chain>, distance: u64) -> Vec<TxHashSetNode> {
 		let mut return_vec = Vec::new();
 		let last_n = head.get_last_n_rangeproof(distance);
 		for elem in last_n {
-			return_vec.push(PmmrTreeNode {
+			return_vec.push(TxHashSetNode {
 				hash: util::to_hex(elem.0.to_vec()),
 			});
 		}
 		return_vec
 	}
 
-	pub fn get_last_n_kernel(head: Arc<chain::Chain>, distance: u64) -> Vec<PmmrTreeNode> {
+	pub fn get_last_n_kernel(head: Arc<chain::Chain>, distance: u64) -> Vec<TxHashSetNode> {
 		let mut return_vec = Vec::new();
 		let last_n = head.get_last_n_kernel(distance);
 		for elem in last_n {
-			return_vec.push(PmmrTreeNode {
+			return_vec.push(TxHashSetNode {
 				hash: util::to_hex(elem.0.to_vec()),
 			});
 		}
@@ -156,14 +156,14 @@ pub enum OutputType {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Utxo {
+pub struct Output {
 	/// The output commitment representing the amount
 	pub commit: PrintableCommitment,
 }
 
-impl Utxo {
-	pub fn new(commit: &pedersen::Commitment) -> Utxo {
-		Utxo {
+impl Output {
+	pub fn new(commit: &pedersen::Commitment) -> Output {
+		Output {
 			commit: PrintableCommitment(commit.clone()),
 		}
 	}
@@ -503,11 +503,11 @@ pub struct BlockHeaderPrintable {
 	pub previous: String,
 	/// rfc3339 timestamp at which the block was built.
 	pub timestamp: String,
-	/// Merklish root of all the commitments in the UTXO set
-	pub utxo_root: String,
-	/// Merklish root of all range proofs in the UTXO set
+	/// Merklish root of all the commitments in the TxHashSet
+	pub output_root: String,
+	/// Merklish root of all range proofs in the TxHashSet
 	pub range_proof_root: String,
-	/// Merklish root of all transaction kernels in the UTXO set
+	/// Merklish root of all transaction kernels in the TxHashSet
 	pub kernel_root: String,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
@@ -525,7 +525,7 @@ impl BlockHeaderPrintable {
 			height: h.height,
 			previous: util::to_hex(h.previous.to_vec()),
 			timestamp: h.timestamp.rfc3339().to_string(),
-			utxo_root: util::to_hex(h.utxo_root.to_vec()),
+			output_root: util::to_hex(h.output_root.to_vec()),
 			range_proof_root: util::to_hex(h.range_proof_root.to_vec()),
 			kernel_root: util::to_hex(h.kernel_root.to_vec()),
 			nonce: h.nonce,
@@ -643,7 +643,7 @@ mod test {
 	use serde_json;
 
 	#[test]
-	fn serialize_output() {
+	fn serialize_output_printable() {
 		let hex_output =
 			"{\
 			 \"output_type\":\"Coinbase\",\
@@ -660,10 +660,10 @@ mod test {
 	}
 
 	#[test]
-	fn serialize_utxo() {
+	fn serialize_output() {
 		let hex_commit =
 			"{\"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\"}";
-		let deserialized: Utxo = serde_json::from_str(&hex_commit).unwrap();
+		let deserialized: Output = serde_json::from_str(&hex_commit).unwrap();
 		let serialized = serde_json::to_string(&deserialized).unwrap();
 		assert_eq!(serialized, hex_commit);
 	}
