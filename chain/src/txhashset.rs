@@ -38,7 +38,7 @@ use types::{ChainStore, Error, PMMRFileMetadataCollection, TxHashSetRoots};
 use util::{zip, LOGGER};
 
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
-const Output_SUBDIR: &'static str = "output";
+const OUTPUT_SUBDIR: &'static str = "output";
 const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
 const KERNEL_SUBDIR: &'static str = "kernel";
 const TXHASHSET_ZIP: &'static str = "txhashset_snapshot.zip";
@@ -102,7 +102,7 @@ impl TxHashSet {
 		commit_index: Arc<ChainStore>,
 		last_file_positions: Option<PMMRFileMetadataCollection>,
 	) -> Result<TxHashSet, Error> {
-		let output_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, Output_SUBDIR].iter().collect();
+		let output_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, OUTPUT_SUBDIR].iter().collect();
 		fs::create_dir_all(output_file_path.clone())?;
 
 		let rproof_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, RANGE_PROOF_SUBDIR]
@@ -125,7 +125,7 @@ impl TxHashSet {
 		}
 
 		Ok(TxHashSet {
-			output_pmmr_h: PMMRHandle::new(root_dir.clone(), Output_SUBDIR, output_md)?,
+			output_pmmr_h: PMMRHandle::new(root_dir.clone(), OUTPUT_SUBDIR, output_md)?,
 			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR, rproof_md)?,
 			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR, kernel_md)?,
 			commit_index: commit_index,
