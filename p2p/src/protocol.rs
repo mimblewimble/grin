@@ -174,39 +174,39 @@ impl MessageHandler for Protocol {
 				Ok(None)
 			}
 
-			Type::SumtreesRequest => {
-				let sm_req: SumtreesRequest = msg.body()?;
+			Type::TxHashSetRequest => {
+				let sm_req: TxHashSetRequest = msg.body()?;
 				debug!(
 					LOGGER,
-					"handle_payload: sumtree req for {} at {}", sm_req.hash, sm_req.height
+					"handle_payload: txhashset req for {} at {}", sm_req.hash, sm_req.height
 				);
 
-				let sumtrees = self.adapter.sumtrees_read(sm_req.hash);
+				let txhashset = self.adapter.txhashset_read(sm_req.hash);
 
-				if let Some(sumtrees) = sumtrees {
-					let file_sz = sumtrees.reader.metadata()?.len();
+				if let Some(txhashset) = txhashset {
+					let file_sz = txhashset.reader.metadata()?.len();
 					let mut resp = msg.respond(
-						Type::SumtreesArchive,
-						&SumtreesArchive {
+						Type::TxHashSetArchive,
+						&TxHashSetArchive {
 							height: sm_req.height as u64,
 							hash: sm_req.hash,
-							rewind_to_output: sumtrees.output_index,
-							rewind_to_kernel: sumtrees.kernel_index,
+							rewind_to_output: txhashset.output_index,
+							rewind_to_kernel: txhashset.kernel_index,
 							bytes: file_sz,
 						},
 					);
-					resp.add_attachment(sumtrees.reader);
+					resp.add_attachment(txhashset.reader);
 					Ok(Some(resp))
 				} else {
 					Ok(None)
 				}
 			}
 
-			Type::SumtreesArchive => {
-				let sm_arch: SumtreesArchive = msg.body()?;
+			Type::TxHashSetArchive => {
+				let sm_arch: TxHashSetArchive = msg.body()?;
 				debug!(
 					LOGGER,
-					"handle_payload: sumtree archive for {} at {} rewind to {}/{}",
+					"handle_payload: txhashset archive for {} at {} rewind to {}/{}",
 					sm_arch.hash,
 					sm_arch.height,
 					sm_arch.rewind_to_output,
@@ -214,7 +214,7 @@ impl MessageHandler for Protocol {
 				);
 
 				let mut tmp = env::temp_dir();
-				tmp.push("sumtree.zip");
+				tmp.push("txhashset.zip");
 				{
 					let mut tmp_zip = File::create(tmp.clone())?;
 					msg.copy_attachment(sm_arch.bytes as usize, &mut tmp_zip)?;
@@ -222,7 +222,7 @@ impl MessageHandler for Protocol {
 				}
 
 				let tmp_zip = File::open(tmp)?;
-				self.adapter.sumtrees_write(
+				self.adapter.txhashset_write(
 					sm_arch.hash,
 					sm_arch.rewind_to_output,
 					sm_arch.rewind_to_kernel,

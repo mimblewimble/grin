@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -81,7 +81,7 @@ fn mine_empty_chain() {
 		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 		b.header.difficulty = difficulty.clone(); // TODO: overwrite here? really?
-		chain.set_sumtree_roots(&mut b, false).unwrap();
+		chain.set_txhashset_roots(&mut b, false).unwrap();
 
 		pow::pow_size(
 			&mut cuckoo_miner,
@@ -193,7 +193,7 @@ fn mine_losing_fork() {
 #[test]
 fn longer_fork() {
 	let kc = Keychain::from_random_seed().unwrap();
-	// to make it easier to compute the sumtree roots in the test, we
+	// to make it easier to compute the txhashset roots in the test, we
 	// prepare 2 chains, the 2nd will be have the forked blocks we can
 	// then send back on the 1st
 	let chain = setup(".grin4");
@@ -370,7 +370,7 @@ fn spend_in_fork() {
 
 fn prepare_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
 	let mut b = prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_sumtree_roots(&mut b, false).unwrap();
+	chain.set_txhashset_roots(&mut b, false).unwrap();
 	b
 }
 
@@ -382,13 +382,13 @@ fn prepare_block_tx(
 	txs: Vec<&Transaction>,
 ) -> Block {
 	let mut b = prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_sumtree_roots(&mut b, false).unwrap();
+	chain.set_txhashset_roots(&mut b, false).unwrap();
 	b
 }
 
 fn prepare_fork_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
 	let mut b = prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_sumtree_roots(&mut b, true).unwrap();
+	chain.set_txhashset_roots(&mut b, true).unwrap();
 	b
 }
 
@@ -400,7 +400,7 @@ fn prepare_fork_block_tx(
 	txs: Vec<&Transaction>,
 ) -> Block {
 	let mut b = prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_sumtree_roots(&mut b, true).unwrap();
+	chain.set_txhashset_roots(&mut b, true).unwrap();
 	b
 }
 

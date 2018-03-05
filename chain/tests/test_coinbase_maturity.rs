@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -82,7 +82,7 @@ fn test_coinbase_maturity() {
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 	block.header.difficulty = difficulty.clone();
-	chain.set_sumtree_roots(&mut block, false).unwrap();
+	chain.set_txhashset_roots(&mut block, false).unwrap();
 
 	pow::pow_size(
 		&mut cuckoo_miner,
@@ -140,7 +140,7 @@ fn test_coinbase_maturity() {
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 	block.header.difficulty = difficulty.clone();
 
-	match chain.set_sumtree_roots(&mut block, false) {
+	match chain.set_txhashset_roots(&mut block, false) {
 		Err(Error::Transaction(transaction::Error::ImmatureCoinbase)) => (),
 		_ => panic!("expected ImmatureCoinbase error here"),
 	}
@@ -166,7 +166,7 @@ fn test_coinbase_maturity() {
 
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 		block.header.difficulty = difficulty.clone();
-		chain.set_sumtree_roots(&mut block, false).unwrap();
+		chain.set_txhashset_roots(&mut block, false).unwrap();
 
 		pow::pow_size(
 			&mut cuckoo_miner,
@@ -201,7 +201,7 @@ fn test_coinbase_maturity() {
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 	block.header.difficulty = difficulty.clone();
-	chain.set_sumtree_roots(&mut block, false).unwrap();
+	chain.set_txhashset_roots(&mut block, false).unwrap();
 
 	pow::pow_size(
 		&mut cuckoo_miner,

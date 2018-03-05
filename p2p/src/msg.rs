@@ -1,4 +1,4 @@
-// Copyright 2016-2018 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -65,8 +65,8 @@ enum_from_primitive! {
 		GetCompactBlock,
 		CompactBlock,
 		Transaction,
-		SumtreesRequest,
-		SumtreesArchive
+		TxHashSetRequest,
+		TxHashSetArchive
 	}
 }
 
@@ -642,16 +642,16 @@ impl Readable for Pong {
 	}
 }
 
-/// Request to get an archive of the full sumtree store, required to sync
+/// Request to get an archive of the full txhashset store, required to sync
 /// a new node.
-pub struct SumtreesRequest {
-	/// Hash of the block for which the sumtrees should be provided
+pub struct TxHashSetRequest {
+	/// Hash of the block for which the txhashset should be provided
 	pub hash: Hash,
 	/// Height of the corresponding block
 	pub height: u64,
 }
 
-impl Writeable for SumtreesRequest {
+impl Writeable for TxHashSetRequest {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.hash.write(writer)?;
 		writer.write_u64(self.height)?;
@@ -659,19 +659,19 @@ impl Writeable for SumtreesRequest {
 	}
 }
 
-impl Readable for SumtreesRequest {
-	fn read(reader: &mut Reader) -> Result<SumtreesRequest, ser::Error> {
-		Ok(SumtreesRequest {
+impl Readable for TxHashSetRequest {
+	fn read(reader: &mut Reader) -> Result<TxHashSetRequest, ser::Error> {
+		Ok(TxHashSetRequest {
 			hash: Hash::read(reader)?,
 			height: reader.read_u64()?,
 		})
 	}
 }
 
-/// Response to a sumtree archive request, must include a zip stream of the
+/// Response to a txhashset archive request, must include a zip stream of the
 /// archive after the message body.
-pub struct SumtreesArchive {
-	/// Hash of the block for which the sumtrees are provided
+pub struct TxHashSetArchive {
+	/// Hash of the block for which the txhashset are provided
 	pub hash: Hash,
 	/// Height of the corresponding block
 	pub height: u64,
@@ -683,7 +683,7 @@ pub struct SumtreesArchive {
 	pub bytes: u64,
 }
 
-impl Writeable for SumtreesArchive {
+impl Writeable for TxHashSetArchive {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.hash.write(writer)?;
 		ser_multiwrite!(
@@ -697,13 +697,13 @@ impl Writeable for SumtreesArchive {
 	}
 }
 
-impl Readable for SumtreesArchive {
-	fn read(reader: &mut Reader) -> Result<SumtreesArchive, ser::Error> {
+impl Readable for TxHashSetArchive {
+	fn read(reader: &mut Reader) -> Result<TxHashSetArchive, ser::Error> {
 		let hash = Hash::read(reader)?;
 		let (height, rewind_to_output, rewind_to_kernel, bytes) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64, read_u64);
 
-		Ok(SumtreesArchive {
+		Ok(TxHashSetArchive {
 			hash,
 			height,
 			rewind_to_output,

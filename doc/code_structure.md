@@ -37,7 +37,7 @@ List of folders in the grin git repo, and the `wallet` and `server` folders whic
   - .grin
     - chain - a Rocksdb with the blockchain blocks and related information
     - peers - a Rocksdb with the list of Grin peers you're connected to
-    - sumtrees - containts folders kernel, rangeproof and utxo that each have a pmmr_dat.bin
+    - txhashset - containts folders kernel, rangeproof and output that each have a pmmr_dat.bin
 - src
   Code for the `grin` binary.
 - store

@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -182,7 +182,7 @@ impl PoolAdapter for NoopAdapter {
 /// not respected.
 /// Spending references (input -> output) exist in two structures: internal
 /// graph references are contained in the pool edge sets, while references
-/// sourced from the blockchain's UTXO set are contained in the
+/// sourced from the blockchain's Output set are contained in the
 /// blockchain_connections set.
 /// Spent by references (output-> input) exist in two structures: pool-pool
 /// connections are in the pool edge set, while unspent (dangling) references
@@ -195,7 +195,7 @@ pub struct Pool {
 	// output's hash.
 	available_outputs: HashMap<Commitment, graph::Edge>,
 
-	// Consumed blockchain utxo's are kept in a separate map.
+	// Consumed blockchain output's are kept in a separate map.
 	consumed_blockchain_outputs: HashMap<Commitment, graph::Edge>,
 }
 

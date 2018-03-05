@@ -46,7 +46,7 @@ fn output_with_range_proof(
 	height: u64,
 ) -> Result<api::OutputPrintable, Error> {
 	let url = format!(
-		"{}/v1/chain/utxos/byheight?start_height={}&end_height={}&id={}&include_rp",
+		"{}/v1/chain/outputs/byheight?start_height={}&end_height={}&id={}&include_rp",
 		config.check_node_api_http_addr, height, height, commit_id,
 	);
 
@@ -107,7 +107,7 @@ fn retrieve_amount_and_coinbase_status(
 	}
 }
 
-pub fn utxos_batch_block(
+pub fn outputs_batch_block(
 	config: &WalletConfig,
 	start_height: u64,
 	end_height: u64,
@@ -115,7 +115,7 @@ pub fn utxos_batch_block(
 	let query_param = format!("start_height={}&end_height={}", start_height, end_height);
 
 	let url = format!(
-		"{}/v1/chain/utxos/byheight?{}",
+		"{}/v1/chain/outputs/byheight?{}",
 		config.check_node_api_http_addr, query_param,
 	);
 
@@ -125,7 +125,7 @@ pub fn utxos_batch_block(
 			// if we got anything other than 200 back from server, bye
 			error!(
 				LOGGER,
-				"utxos_batch_block: Restore failed... unable to contact API {}. Error: {}",
+				"outputs_batch_block: Restore failed... unable to contact API {}. Error: {}",
 				config.check_node_api_http_addr,
 				e
 			);
@@ -135,7 +135,7 @@ pub fn utxos_batch_block(
 }
 
 // TODO - wrap the many return values in a struct
-fn find_utxos_with_key(
+fn find_outputs_with_key(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	switch_commit_cache: &Vec<pedersen::Commitment>,
@@ -279,12 +279,12 @@ pub fn restore(
 		} else {
 			h = 0;
 		}
-		let mut blocks = utxos_batch_block(config, h + 1, end_batch)?;
+		let mut blocks = outputs_batch_block(config, h + 1, end_batch)?;
 		blocks.reverse();
 
 		let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 			for block in blocks {
-				let result_vec = find_utxos_with_key(
+				let result_vec = find_outputs_with_key(
 					config,
 					keychain,
 					&switch_commit_cache,

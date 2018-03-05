@@ -1,4 +1,4 @@
-// Copyright 2016-2018 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -113,14 +113,14 @@ bitflags! {
 	const UNKNOWN = 0b00000000;
 	/// Full archival node, has the whole history without any pruning.
 	const FULL_HIST = 0b00000001;
-	/// Can provide block headers and the UTXO set for some recent-enough
+	/// Can provide block headers and the TxHashSet for some recent-enough
 	/// height.
-	const UTXO_HIST = 0b00000010;
+	const TXHASHSET_HIST = 0b00000010;
 	/// Can provide a list of healthy peers
 	const PEER_LIST = 0b00000100;
 
 	const FULL_NODE = Capabilities::FULL_HIST.bits
-		| Capabilities::UTXO_HIST.bits
+		| Capabilities::TXHASHSET_HIST.bits
 		| Capabilities::PEER_LIST.bits;
   }
 }
@@ -145,14 +145,14 @@ pub struct PeerInfo {
 	pub direction: Direction,
 }
 
-/// The full sumtree data along with indexes required for a consumer to
+/// The full txhashset data along with indexes required for a consumer to
 /// rewind to a consistant requested state.
-pub struct SumtreesRead {
+pub struct TxHashSetRead {
 	/// Output tree index the receiver should rewind to
 	pub output_index: u64,
 	/// Kernel tree index the receiver should rewind to
 	pub kernel_index: u64,
-	/// Binary stream for the sumtree zipped data
+	/// Binary stream for the txhashset zipped data
 	pub reader: File,
 }
 
@@ -192,21 +192,21 @@ pub trait ChainAdapter: Sync + Send {
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
 
-	/// Provides a reading view into the current sumtree state as well as
+	/// Provides a reading view into the current txhashset state as well as
 	/// the required indexes for a consumer to rewind to a consistant state
 	/// at the provided block hash.
-	fn sumtrees_read(&self, h: Hash) -> Option<SumtreesRead>;
+	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead>;
 
-	/// Writes a reading view on a sumtree state that's been provided to us.
+	/// Writes a reading view on a txhashset state that's been provided to us.
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	fn sumtrees_write(
+	fn txhashset_write(
 		&self,
 		h: Hash,
 		rewind_to_output: u64,
 		rewind_to_kernel: u64,
-		sumtree_data: File,
+		txhashset_data: File,
 		peer_addr: SocketAddr,
 	) -> bool;
 }

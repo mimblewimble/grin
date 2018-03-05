@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -300,7 +300,7 @@ where
 
 	/// Checks the length of the remove log to see if it should get compacted.
 	/// If so, the remove log is flushed into the pruned list, which itself gets
-	/// saved, and the main hashsum data file is rewritten, cutting the removed
+	/// saved, and the hash and data files are rewritten, cutting the removed
 	/// data.
 	///
 	/// If a max_len strictly greater than 0 is provided, the value will be used
@@ -310,7 +310,7 @@ where
 	/// A cutoff limits compaction on recent data. Provided as an indexed value
 	/// on pruned data (practically a block height), it forces compaction to
 	/// ignore any prunable data beyond the cutoff. This is used to enforce
-	/// an horizon after which the local node should have all the data to allow
+	/// a horizon after which the local node should have all the data to allow
 	/// rewinding.
 	///
 	/// TODO whatever is calling this should also clean up the commit to
@@ -336,7 +336,7 @@ where
 			}
 		}
 
-		// 1. save hashsum file to a compact copy, skipping data that's in the
+		// 1. save hash file to a compact copy, skipping data that's in the
 		// remove list
 		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);
 		let record_len = 32;
@@ -375,7 +375,7 @@ where
 			&self.pruned_nodes.pruned_nodes,
 		)?;
 
-		// 4. move the compact copy of hashes to the hashsum file and re-open it
+		// 4. move the compact copy of hashes to the hash file and re-open it
 		fs::rename(
 			tmp_prune_file_hash.clone(),
 			format!("{}/{}", self.data_dir, PMMR_HASH_FILE),
