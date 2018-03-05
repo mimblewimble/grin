@@ -356,14 +356,9 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.total_height()
 	}
 
-	fn transaction_received(&self, tx: core::Transaction) {
+	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
 		self.push(tx.hash());
-		self.adapter.transaction_received(tx)
-	}
-
-	fn stem_transaction_received(&self, tx: core::Transaction) {
-		self.push(tx.hash());
-		self.adapter.stem_transaction_received(tx)
+		self.adapter.transaction_received(tx, stem)
 	}
 
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {

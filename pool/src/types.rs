@@ -40,6 +40,10 @@ pub struct PoolConfig {
 	/// Maximum capacity of the pool in number of transactions
 	#[serde = "default_max_pool_size"]
 	pub max_pool_size: usize,
+
+	/// Maximum capacity of the pool in number of transactions
+	#[serde = "default_dandelion_probability"]
+	pub dandelion_probability: usize,
 }
 
 impl Default for PoolConfig {
@@ -47,33 +51,10 @@ impl Default for PoolConfig {
 		PoolConfig {
 			accept_fee_base: default_accept_fee_base(),
 			max_pool_size: default_max_pool_size(),
+			dandelion_probability: default_dandelion_probability(),
 		}
 	}
 }
-
-/// Stem Transaction pool configuration
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StemPoolConfig {
-	/// Base fee for a transaction to be accepted by the pool. The transaction
-	/// weight is computed from its number of inputs, outputs and kernels and
-	/// multipled by the base fee to compare to the actual transaction fee.
-	#[serde = "default_accept_fee_base"]
-	pub accept_fee_base: u64,
-
-	/// Maximum capacity of the pool in number of transactions
-	#[serde = "default_max_stempool_size"]
-	pub max_stempool_size: usize,
-}
-
-impl Default for StemPoolConfig {
-	fn default() -> StemPoolConfig {
-		StemPoolConfig {
-			accept_fee_base: default_accept_fee_base(),
-			max_stempool_size: default_max_stempool_size(),
-		}
-	}
-}
-
 
 fn default_accept_fee_base() -> u64 {
 	consensus::MILLI_GRIN
@@ -81,8 +62,8 @@ fn default_accept_fee_base() -> u64 {
 fn default_max_pool_size() -> usize {
 	50_000
 }
-fn default_max_stempool_size() -> usize {
-	50_000
+fn default_dandelion_probability() -> usize {
+	90
 }
 
 /// Placeholder: the data representing where we heard about a tx from.

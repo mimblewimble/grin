@@ -452,11 +452,8 @@ impl ChainAdapter for Peers {
 	fn total_height(&self) -> u64 {
 		self.adapter.total_height()
 	}
-	fn transaction_received(&self, tx: core::Transaction) {
-		self.adapter.transaction_received(tx)
-	}
-	fn stem_transaction_received(&self, tx: core::Transaction) {
-		self.adapter.stem_transaction_received(tx)
+	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
+		self.adapter.transaction_received(tx, stem)
 	}
 	fn block_received(&self, b: core::Block, peer_addr: SocketAddr) -> bool {
 		let hash = b.hash();

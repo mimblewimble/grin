@@ -16,6 +16,8 @@
 
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
+use rand;
+use rand::Rng;
 
 use core::core::hash::Hash;
 use core::core::hash::Hashed;
@@ -194,17 +196,17 @@ where
 		self.pool.num_transactions() + self.pool.num_transactions() + self.orphans.num_transactions()
 	}
 
-
-	/// Attempts to add a transaction to the stempool.
+	/// Attempts to add a transaction to the stempool or the memory pool.
 	///
 	/// Adds a transaction to the stem memory pool, deferring to the orphans pool
 	/// if necessary, and performing any connection-related validity checks.
 	/// Happens under an exclusive mutable reference gated by the write portion
 	/// of a RWLock.
-	pub fn add_to_stem_memory_pool(
+	pub fn add_to_memory_pool(
 		&mut self,
 		_: TxSource,
 		tx: transaction::Transaction,
+		stem: bool,
 	) -> Result<(), PoolError> {
 		// Do we have the capacity to accept this transaction?
 		if let Err(e) = self.is_acceptable(&tx) {
@@ -241,7 +243,7 @@ where
 		let mut blockchain_refs: Vec<graph::Edge>;
 
 		// In this case, we allow unspent outputs from the stempool
-		match self.identify_unspent_outputs(&tx, tx_hash, &head_header, true){
+		match self.identify_unspent_outputs(&tx, tx_hash, &head_header, stem){
 			Ok(refs) => {
 				pool_refs = refs[0].clone();
 				orphan_refs = refs[1].clone();
@@ -284,151 +286,29 @@ where
 			// In the non-orphan (pool) case, we've ensured that every input
 			// maps one-to-one with an unspent (available) output, and each
 			// output is unique. No further checks are necessary.
-			self.stempool
-			.add_pool_transaction(pool_entry, blockchain_refs, pool_refs, new_unspents);
-			// TODO watch transaction with embargo timer
-			self.reconcile_orphans().unwrap();
-			self.adapter.stem_tx_accepted(&tx);
-			self.stem_transactions.insert(tx_hash, Box::new(tx));
-			Ok(())
-		} else {
-			// At this point, we're pretty sure the transaction is an orphan,
-			// but we have to explicitly check for double spends against the
-			// orphans set; we do not check this as part of the connectivity
-			// checking above.
-			// First, any references resolved to the pool need to be compared
-			// against active orphan pool_connections.
-			// Note that pool_connections here also does double duty to
-			// account for blockchain connections.
-			for pool_ref in pool_refs.iter().chain(blockchain_refs.iter()) {
-				match self.orphans
-					.get_external_spent_output(&pool_ref.output_commitment())
-				{
-					// Should the below err be subtyped to orphans somehow?
-					Some(x) => {
-						return Err(PoolError::DoubleSpend {
-							other_tx: x.destination_hash().unwrap(),
-							spent_output: x.output_commitment(),
-						})
-					}
-					None => {}
-				}
-			}
 
-			// Next, we have to consider the possibility of double spends
-			// within the orphans set.
-			// We also have to distinguish now between missing and internal
-			// references.
-			let missing_refs = self.resolve_orphan_refs(tx_hash, &mut orphan_refs)?;
-
-			// We have passed all failure modes.
-			pool_refs.append(&mut blockchain_refs);
-			self.orphans.add_orphan_transaction(
-				pool_entry,
-				pool_refs,
-				orphan_refs,
-				missing_refs,
-				new_unspents,
-			);
-
-			Err(PoolError::OrphanTransaction)
-		}
-	}
-
-	/// Attempts to add a transaction to the pool.
-	///
-	/// Adds a transaction to the memory pool, deferring to the orphans pool
-	/// if necessary, and performing any connection-related validity checks.
-	/// Happens under an exclusive mutable reference gated by the write portion
-	/// of a RWLock.
-	pub fn add_to_memory_pool(
-		&mut self,
-		_: TxSource,
-		tx: transaction::Transaction,
-	) -> Result<(), PoolError> {
-		// Do we have the capacity to accept this transaction?
-		if let Err(e) = self.is_acceptable(&tx) {
-			return Err(e);
-		}
-
-		// Making sure the transaction is valid before anything else.
-		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
-
-		// The first check involves ensuring that an identical transaction is
-		// not already in the pool's transaction set.
-		// A non-authoritative similar check should be performed under the
-		// pool's read lock before we get to this point, which would catch the
-		// majority of duplicate cases. The race condition is caught here.
-		// TODO: When the transaction identifier is finalized, the assumptions
-		// here may change depending on the exact coverage of the identifier.
-		// The current tx.hash() method, for example, does not cover changes
-		// to fees or other elements of the signature preimage.
-		let tx_hash = graph::transaction_identifier(&tx);
-		if let Err(e) = self.is_not_in_pools(&tx_hash) {
-			return Err(e);
-		}
-
-		// Check that the transaction is mature
-		let head_header = self.blockchain.head_header()?;
-		if let Err(e) = self.is_mature(&tx, &head_header) {
-			return Err(e);
-		}
-
-		// The next issue is to identify all unspent outputs that
-		// this transaction will consume and make sure they exist in the set.
-		let mut pool_refs: Vec<graph::Edge>;
-		let mut orphan_refs: Vec<graph::Edge>;
-		let mut blockchain_refs: Vec<graph::Edge>;
-
-		match self.identify_unspent_outputs(&tx, tx_hash, &head_header, false){
-			Ok(refs) => {
-				pool_refs = refs[0].clone();
-				orphan_refs = refs[1].clone();
-				blockchain_refs = refs[2].clone();
-			},
-			Err(e) => return Err(e),
-		};
-
-		let is_orphan = orphan_refs.len() > 0;
-
-		// Next we examine the outputs this transaction creates and ensure
-		// that they do not already exist.
-		// I believe its worth preventing duplicate outputs from being
-		// accepted, even though it is possible for them to be mined
-		// with strict ordering. In the future, if desirable, this could
-		// be node policy config or more intelligent.
-		for output in &tx.outputs {
-			self.check_duplicate_outputs(output, is_orphan)?
-		}
-
-		// Assertion: we have exactly as many resolved spending references as
-		// inputs to the transaction.
-		assert_eq!(
-			tx.inputs.len(),
-			blockchain_refs.len() + pool_refs.len() + orphan_refs.len()
-		);
-
-		// At this point we know if we're spending all known unspents and not
-		// creating any duplicate unspents.
-		let pool_entry = graph::PoolEntry::new(&tx);
-		let new_unspents = tx.outputs
-			.iter()
-			.map(|x| {
-				let output = OutputIdentifier::from_output(&x);
-				graph::Edge::new(Some(tx_hash), None, output)
-			})
-			.collect();
-
-		if !is_orphan {
-			// In the non-orphan (pool) case, we've ensured that every input
-			// maps one-to-one with an unspent (available) output, and each
-			// output is unique. No further checks are necessary.
-			self.pool
+			// Here if we have a stem transaction, decide wether it will be broadcasted
+			// in stem or fluff phase
+			let mut rng = rand::thread_rng();
+			let random = rng.gen_range(0, 101);
+			if stem && random <= self.config.dandelion_probability {
+				// Stem phase: transaction is added to the stem memory pool and broadcasted to a
+				// randomly selected node.
+				self.stempool
 				.add_pool_transaction(pool_entry, blockchain_refs, pool_refs, new_unspents);
+				// TODO watch transaction with embargo timer
 
+				self.adapter.stem_tx_accepted(&tx);
+				self.stem_transactions.insert(tx_hash, Box::new(tx));
+			} else {
+				// Fluff phase: transaction is added to memory pool and broadcasted normally
+				self.pool
+					.add_pool_transaction(pool_entry, blockchain_refs, pool_refs, new_unspents);
+				self.reconcile_orphans().unwrap();
+				self.adapter.tx_accepted(&tx);
+				self.transactions.insert(tx_hash, Box::new(tx));
+			}
 			self.reconcile_orphans().unwrap();
-			self.adapter.tx_accepted(&tx);
-			self.transactions.insert(tx_hash, Box::new(tx));
 			Ok(())
 		} else {
 			// At this point, we're pretty sure the transaction is an orphan,
@@ -909,13 +789,13 @@ mod tests {
 			assert_eq!(write_pool.total_size(), 0);
 
 			// First, add the transaction rooted in the blockchain
-			let result = write_pool.add_to_memory_pool(test_source(), parent_transaction);
+			let result = write_pool.add_to_memory_pool(test_source(), parent_transaction, false);
 			if result.is_err() {
 				panic!("got an error adding parent tx: {:?}", result.err().unwrap());
 			}
 
 			// Now, add the transaction connected as a child to the first
-			let child_result = write_pool.add_to_memory_pool(test_source(), child_transaction);
+			let child_result = write_pool.add_to_memory_pool(test_source(), child_transaction, false);
 
 			if child_result.is_err() {
 				panic!(
@@ -961,7 +841,7 @@ mod tests {
 			// First expected failure: duplicate output
 			let duplicate_tx = test_transaction(vec![5, 6], vec![7]);
 
-			match write_pool.add_to_memory_pool(test_source(), duplicate_tx) {
+			match write_pool.add_to_memory_pool(test_source(), duplicate_tx, false) {
 				Ok(_) => panic!("Got OK from add_to_memory_pool when dup was expected"),
 				Err(x) => {
 					match x {
@@ -986,7 +866,7 @@ mod tests {
 			// a valid transaction.
 			let valid_transaction = test_transaction(vec![5, 6], vec![9]);
 
-			match write_pool.add_to_memory_pool(test_source(), valid_transaction.clone()) {
+			match write_pool.add_to_memory_pool(test_source(), valid_transaction.clone(), false) {
 				Ok(_) => {}
 				Err(x) => panic!("Unexpected error while adding a valid transaction: {:?}", x),
 			};
@@ -995,7 +875,7 @@ mod tests {
 			// as valid_transaction:
 			let double_spend_transaction = test_transaction(vec![6], vec![2]);
 
-			match write_pool.add_to_memory_pool(test_source(), double_spend_transaction) {
+			match write_pool.add_to_memory_pool(test_source(), double_spend_transaction, false) {
 				Ok(_) => panic!("Expected error when adding double spend, got Ok"),
 				Err(x) => {
 					match x {
@@ -1021,7 +901,7 @@ mod tests {
 			// added
 			//let already_in_pool = test_transaction(vec![5, 6], vec![9]);
 
-			match write_pool.add_to_memory_pool(test_source(), valid_transaction) {
+			match write_pool.add_to_memory_pool(test_source(), valid_transaction, false) {
 				Ok(_) => panic!("Expected error when adding already in pool, got Ok"),
 				Err(x) => {
 					match x {
@@ -1036,7 +916,7 @@ mod tests {
 			// now attempt to add a timelocked tx to the pool
 			// should fail as invalid based on current height
 			let timelocked_tx_1 = timelocked_transaction(vec![9], vec![5], 10);
-			match write_pool.add_to_memory_pool(test_source(), timelocked_tx_1) {
+			match write_pool.add_to_memory_pool(test_source(), timelocked_tx_1, false) {
 				Err(PoolError::ImmatureTransaction {
 					lock_height: height,
 				}) => {
@@ -1078,7 +958,7 @@ mod tests {
 			chain_ref.store_head_header(&head_header);
 
 			let txn = test_transaction_with_coinbase_input(15, coinbase_header.hash(), vec![10, 3]);
-			let result = write_pool.add_to_memory_pool(test_source(), txn);
+			let result = write_pool.add_to_memory_pool(test_source(), txn, false);
 			match result {
 				Err(InvalidTx(transaction::Error::ImmatureCoinbase)) => {}
 				_ => panic!("expected ImmatureCoinbase error here"),
@@ -1091,7 +971,7 @@ mod tests {
 			chain_ref.store_head_header(&head_header);
 
 			let txn = test_transaction_with_coinbase_input(15, coinbase_header.hash(), vec![10, 3]);
-			let result = write_pool.add_to_memory_pool(test_source(), txn);
+			let result = write_pool.add_to_memory_pool(test_source(), txn, false);
 			match result {
 				Ok(_) => {}
 				Err(_) => panic!("this should not return an error here"),
@@ -1133,8 +1013,8 @@ mod tests {
 
 			// now add both txs to the pool (tx2 spends tx1 with zero confirmations)
 			// both should be accepted if tx1 added before tx2
-			write_pool.add_to_memory_pool(test_source(), tx1).unwrap();
-			write_pool.add_to_memory_pool(test_source(), tx2).unwrap();
+			write_pool.add_to_memory_pool(test_source(), tx1, false).unwrap();
+			write_pool.add_to_memory_pool(test_source(), tx2, false).unwrap();
 
 			assert_eq!(write_pool.pool_size(), 2);
 		}
@@ -1265,7 +1145,7 @@ mod tests {
 			assert_eq!(write_pool.total_size(), 0);
 
 			for tx in txs_to_add.drain(..) {
-				write_pool.add_to_memory_pool(test_source(), tx).unwrap();
+				write_pool.add_to_memory_pool(test_source(), tx, false).unwrap();
 			}
 
 			assert_eq!(write_pool.total_size(), expected_pool_size);
@@ -1371,27 +1251,27 @@ mod tests {
 
 			assert!(
 				write_pool
-					.add_to_memory_pool(test_source(), root_tx_1)
+					.add_to_memory_pool(test_source(), root_tx_1, false)
 					.is_ok()
 			);
 			assert!(
 				write_pool
-					.add_to_memory_pool(test_source(), root_tx_2)
+					.add_to_memory_pool(test_source(), root_tx_2, false)
 					.is_ok()
 			);
 			assert!(
 				write_pool
-					.add_to_memory_pool(test_source(), root_tx_3)
+					.add_to_memory_pool(test_source(), root_tx_3, false)
 					.is_ok()
 			);
 			assert!(
 				write_pool
-					.add_to_memory_pool(test_source(), child_tx_1)
+					.add_to_memory_pool(test_source(), child_tx_1, false)
 					.is_ok()
 			);
 			assert!(
 				write_pool
-					.add_to_memory_pool(test_source(), child_tx_2)
+					.add_to_memory_pool(test_source(), child_tx_2, false)
 					.is_ok()
 			);
 
@@ -1441,6 +1321,7 @@ mod tests {
 			config: PoolConfig {
 				accept_fee_base: 0,
 				max_pool_size: 10_000,
+				dandelion_probability: 90,
 			},
 			stem_transactions: HashMap::new(),
 			transactions: HashMap::new(),

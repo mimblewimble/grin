@@ -142,10 +142,6 @@ pub struct ServerConfig {
 	#[serde(default)]
 	pub pool_config: pool::PoolConfig,
 
-	/// Stem Transaction pool configuration
-	#[serde(default)]
-	pub stempool_config: pool::StemPoolConfig,
-
 	/// Whether to skip the sync timeout on startup
 	/// (To assist testing on solo chains)
 	pub skip_sync_wait: Option<bool>,
@@ -164,7 +160,6 @@ impl Default for ServerConfig {
 			chain_type: ChainTypes::default(),
 			archive_mode: None,
 			pool_config: pool::PoolConfig::default(),
-			stempool_config: pool::StemPoolConfig::default(),
 			skip_sync_wait: None,
 		}
 	}

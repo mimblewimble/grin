@@ -32,9 +32,6 @@ use util::OneTime;
 use store;
 use util::LOGGER;
 
-/// Dandelion default stem probability TODO Externalize
-pub const DEFAULT_DANDELION_PROB_PCT: u64 = 90;
-
 // All adapters use `Weak` references instead of `Arc` to avoid cycles that
 // can never be destroyed. These 2 functions are simple helpers to reduce the
 // boilerplate of dealing with `Weak`.
@@ -65,7 +62,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		w(&self.chain).head().unwrap().height
 	}
 
-	fn transaction_received(&self, tx: core::Transaction) {
+	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
 		let source = pool::TxSource {
 			debug_name: "p2p".to_string(),
 			identifier: "?.?.?.?".to_string(),
@@ -78,39 +75,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		);
 
 		let h = tx.hash();
-		if let Err(e) = self.tx_pool.write().unwrap().add_to_memory_pool(source, tx) {
+		if let Err(e) = self.tx_pool.write().unwrap().add_to_memory_pool(source, tx, stem) {
 			debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
-		}
-	}
-
-	fn stem_transaction_received(&self, tx: core::Transaction) {
-		let source = pool::TxSource {
-			debug_name: "p2p".to_string(),
-			identifier: "?.?.?.?".to_string(),
-		};
-		debug!(
-			LOGGER,
-			"Received stem tx {} from {}, going to process.",
-			tx.hash(),
-			source.identifier,
-		);
-
-		let h = tx.hash();
-
-		// Here decide whether transaction will be broadcasted in stem or fluff phase
-		let mut rng = rand::thread_rng();
-		let random = rng.gen_range(0, 101);
-		if random >= DEFAULT_DANDELION_PROB_PCT {
-			// Stem phase: transaction is added to the stem memory pool and broadcasted to a
-			// randomly selected node.
-			if let Err(e) = self.tx_pool.write().unwrap().add_to_stem_memory_pool(source, tx) {
-				debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
-			}
-		} else {
-			// Fluff phase: transaction is added to memory pool and broadcasted normally
-			if let Err(e) = self.tx_pool.write().unwrap().add_to_memory_pool(source, tx) {
-				debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
-			}
 		}
 	}
 

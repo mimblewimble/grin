@@ -40,4 +40,4 @@ extern crate slog;
 extern crate time;
 
 pub use pool::TransactionPool;
-pub use types::{BlockChain, PoolAdapter, PoolConfig, StemPoolConfig, PoolError, TxSource};
+pub use types::{BlockChain, PoolAdapter, PoolConfig, PoolError, TxSource};
