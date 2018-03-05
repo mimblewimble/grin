@@ -53,7 +53,6 @@ pub struct NetToChainAdapter {
 	currently_syncing: Arc<AtomicBool>,
 	chain: Weak<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-	tx_stempool: Arc<RwLock<pool::StemTransactionPool<PoolToChainAdapter>>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 }
 
@@ -104,7 +103,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		if random >= DEFAULT_DANDELION_PROB_PCT {
 			// Stem phase: transaction is added to the stem memory pool and broadcasted to a
 			// randomly selected node.
-			if let Err(e) = self.tx_stempool.write().unwrap().add_to_stem_memory_pool(source, tx) {
+			if let Err(e) = self.tx_pool.write().unwrap().add_to_stem_memory_pool(source, tx) {
 				debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
 			}
 		} else {
@@ -353,13 +352,11 @@ impl NetToChainAdapter {
 		currently_syncing: Arc<AtomicBool>,
 		chain_ref: Weak<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-		tx_stempool: Arc<RwLock<pool::StemTransactionPool<PoolToChainAdapter>>>,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
 			currently_syncing: currently_syncing,
 			chain: chain_ref,
 			tx_pool: tx_pool,
-			tx_stempool: tx_stempool,
 			peers: OneTime::new(),
 		}
 	}
@@ -504,7 +501,6 @@ impl NetToChainAdapter {
 /// the network to broadcast the block
 pub struct ChainToPoolAndNetAdapter {
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-	tx_stempool: Arc<RwLock<pool::StemTransactionPool<PoolToChainAdapter>>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 }
 
@@ -513,17 +509,6 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 		debug!(LOGGER, "adapter: block_accepted: {:?}", b.hash());
 
 		if let Err(e) = self.tx_pool.write().unwrap().reconcile_block(b) {
-			error!(
-				LOGGER,
-				"Pool could not update itself at block {}: {:?}",
-				b.hash(),
-				e,
-			);
-		}
-
-		// TODO probably somethign to change here (i.e. when a block is broadcasted with a tx in
-		// the stem pool)
-		if let Err(e) = self.tx_stempool.write().unwrap().reconcile_block(b) {
 			error!(
 				LOGGER,
 				"Pool could not update itself at block {}: {:?}",
@@ -565,11 +550,9 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 impl ChainToPoolAndNetAdapter {
 	pub fn new(
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-		tx_stempool: Arc<RwLock<pool::StemTransactionPool<PoolToChainAdapter>>>,
 	) -> ChainToPoolAndNetAdapter {
 		ChainToPoolAndNetAdapter {
 			tx_pool: tx_pool,
-			tx_stempool: tx_stempool,
 			peers: OneTime::new(),
 		}
 	}
@@ -585,6 +568,9 @@ pub struct PoolToNetAdapter {
 }
 
 impl pool::PoolAdapter for PoolToNetAdapter {
+	fn stem_tx_accepted(&self, tx: &core::Transaction) {
+		wo(&self.peers).broadcast_stem_transaction(tx);
+	}
 	fn tx_accepted(&self, tx: &core::Transaction) {
 		wo(&self.peers).broadcast_transaction(tx);
 	}
