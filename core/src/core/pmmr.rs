@@ -40,7 +40,7 @@ use std::marker::PhantomData;
 use core::hash::{Hash, Hashed};
 use ser;
 use ser::{Readable, Reader, Writeable, Writer};
-use ser::PMMRable;
+use ser::{PMMRable, PMMRIndexHashable};
 use util;
 use util::LOGGER;
 

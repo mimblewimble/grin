@@ -378,7 +378,6 @@ impl Readable for RangeProof {
 }
 
 impl PMMRable for RangeProof {
-
 	fn len() -> usize {
 		MAX_PROOF_SIZE + 8
 	}
@@ -550,7 +549,7 @@ impl Writeable for [u8; 4] {
 }
 
 /// Trait for types that can serialize and report their size
-pub trait PMMRable: PMMRIndexHashable + Readable + Writeable + Hashed + Clone {
+pub trait PMMRable: Readable + Writeable + Clone {
 	/// Length in bytes
 	fn len() -> usize;
 }
