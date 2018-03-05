@@ -40,7 +40,7 @@ use std::marker::PhantomData;
 use core::hash::{Hash, Hashed};
 use ser;
 use ser::{Readable, Reader, Writeable, Writer};
-use ser::PMMRable;
+use ser::{PMMRable, PMMRIndexHashable};
 use util;
 use util::LOGGER;
 
@@ -360,7 +360,7 @@ where
 	/// the same time if applicable.
 	pub fn push(&mut self, elmt: T) -> Result<u64, String> {
 		let elmt_pos = self.last_pos + 1;
-		let mut current_hash = elmt.hash();
+		let mut current_hash = elmt.hash_with_index(elmt_pos);
 		let mut to_append = vec![(current_hash, Some(elmt))];
 		let mut height = 0;
 		let mut pos = elmt_pos;
@@ -917,6 +917,7 @@ mod test {
 	use ser::{Error, Readable, Writeable};
 	use core::{Reader, Writer};
 	use core::hash::Hash;
+	use ser::{PMMRable, PMMRIndexHashable};
 
 	/// Simple MMR backend implementation based on a Vector. Pruning does not
 	/// compact the Vec itself.
@@ -1169,7 +1170,7 @@ mod test {
 		fn len() -> usize {
 			16
 		}
-	}
+}
 
 	impl Writeable for TestElem {
 		fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
@@ -1305,28 +1306,28 @@ mod test {
 
 		// one element
 		pmmr.push(elems[0]).unwrap();
-		let node_hash = elems[0].hash();
-		assert_eq!(pmmr.root(), node_hash,);
+		let node_hash = elems[0].hash_with_index(1);
+		assert_eq!(pmmr.root(), node_hash);
 		assert_eq!(pmmr.unpruned_size(), 1);
 		pmmr.dump(false);
 
 		// two elements
 		pmmr.push(elems[1]).unwrap();
-		let sum2 = elems[0].hash() + elems[1].hash();
+		let sum2 = elems[0].hash_with_index(1) + elems[1].hash_with_index(2);
 		pmmr.dump(false);
 		assert_eq!(pmmr.root(), sum2);
 		assert_eq!(pmmr.unpruned_size(), 3);
 
 		// three elements
 		pmmr.push(elems[2]).unwrap();
-		let sum3 = sum2 + elems[2].hash();
+		let sum3 = sum2 + elems[2].hash_with_index(4);
 		pmmr.dump(false);
 		assert_eq!(pmmr.root(), sum3);
 		assert_eq!(pmmr.unpruned_size(), 4);
 
 		// four elements
 		pmmr.push(elems[3]).unwrap();
-		let sum_one = elems[2].hash() + elems[3].hash();
+		let sum_one = elems[2].hash_with_index(4) + elems[3].hash_with_index(5);
 		let sum4 = sum2 + sum_one;
 		pmmr.dump(false);
 		assert_eq!(pmmr.root(), sum4);
@@ -1334,33 +1335,34 @@ mod test {
 
 		// five elements
 		pmmr.push(elems[4]).unwrap();
-		let sum3 = sum4 + elems[4].hash();
+		let sum3 = sum4 + elems[4].hash_with_index(8);
 		pmmr.dump(false);
 		assert_eq!(pmmr.root(), sum3);
 		assert_eq!(pmmr.unpruned_size(), 8);
 
 		// six elements
 		pmmr.push(elems[5]).unwrap();
-		let sum6 = sum4 + (elems[4].hash() + elems[5].hash());
+		let sum6 = sum4 + (elems[4].hash_with_index(8) + elems[5].hash_with_index(9));
 		assert_eq!(pmmr.root(), sum6.clone());
 		assert_eq!(pmmr.unpruned_size(), 10);
 
 		// seven elements
 		pmmr.push(elems[6]).unwrap();
-		let sum7 = sum6 + elems[6].hash();
+		let sum7 = sum6 + elems[6].hash_with_index(11);
 		assert_eq!(pmmr.root(), sum7);
 		assert_eq!(pmmr.unpruned_size(), 11);
 
 		// eight elements
 		pmmr.push(elems[7]).unwrap();
 		let sum8 =
-			sum4 + ((elems[4].hash() + elems[5].hash()) + (elems[6].hash() + elems[7].hash()));
+			sum4 + ((elems[4].hash_with_index(8) + elems[5].hash_with_index(9))
+				+ (elems[6].hash_with_index(11) + elems[7].hash_with_index(12)));
 		assert_eq!(pmmr.root(), sum8);
 		assert_eq!(pmmr.unpruned_size(), 15);
 
 		// nine elements
 		pmmr.push(elems[8]).unwrap();
-		let sum9 = sum8 + elems[8].hash();
+		let sum9 = sum8 + elems[8].hash_with_index(16);
 		assert_eq!(pmmr.root(), sum9);
 		assert_eq!(pmmr.unpruned_size(), 16);
 	}

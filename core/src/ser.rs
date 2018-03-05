@@ -25,7 +25,7 @@ use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use consensus;
 use consensus::VerifySortOrder;
-use core::hash::Hashed;
+use core::hash::{Hashed, Hash};
 use core::transaction::{SwitchCommitHash, SWITCH_COMMIT_HASH_SIZE};
 use util::secp::pedersen::Commitment;
 use util::secp::pedersen::RangeProof;
@@ -549,9 +549,21 @@ impl Writeable for [u8; 4] {
 }
 
 /// Trait for types that can serialize and report their size
-pub trait PMMRable: Readable + Writeable + Hashed + Clone {
+pub trait PMMRable: Readable + Writeable + Clone {
 	/// Length in bytes
 	fn len() -> usize;
+}
+
+/// Generic trait to ensure PMMR elements can be hashed with an index
+pub trait PMMRIndexHashable {
+	/// Hash with a given index
+	fn hash_with_index(&self, index: u64) -> Hash;
+}
+
+impl<T: PMMRable> PMMRIndexHashable for T {
+	fn hash_with_index(&self, index: u64) -> Hash {
+		(index, self).hash()
+	}
 }
 
 /// Useful marker trait on types that can be sized byte slices

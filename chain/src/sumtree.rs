@@ -30,7 +30,7 @@ use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdenti
                  OutputStoreable, TxKernel};
 use core::core::pmmr::{self, MerkleProof, PMMR};
 use core::core::hash::{Hash, Hashed};
-use core::ser::{self, PMMRable};
+use core::ser::{self, PMMRable, PMMRIndexHashable};
 
 use grin_store;
 use grin_store::pmmr::{PMMRBackend, PMMRFileMetadata};
@@ -141,7 +141,7 @@ impl SumTrees {
 				let output_pmmr: PMMR<OutputStoreable, _> =
 					PMMR::at(&mut self.utxo_pmmr_h.backend, self.utxo_pmmr_h.last_pos);
 				if let Some((hash, _)) = output_pmmr.get(pos, false) {
-					if hash == output_id.hash() {
+					if hash == output_id.hash_with_index(pos) {
 						Ok(hash)
 					} else {
 						Err(Error::SumTreeErr(format!("sumtree hash mismatch")))
@@ -348,14 +348,14 @@ impl<'a> Extension<'a> {
 	fn apply_input(&mut self, input: &Input, height: u64) -> Result<(), Error> {
 		let commit = input.commitment();
 		let pos_res = self.get_output_pos(&commit);
-		let output_id_hash = OutputIdentifier::from_input(input).hash();
 		if let Ok(pos) = pos_res {
+			let output_id_hash = OutputIdentifier::from_input(input).hash_with_index(pos);
 			if let Some((read_hash, read_elem)) = self.utxo_pmmr.get(pos, true) {
 				// check hash from pmmr matches hash from input (or corresponding output)
 				// if not then the input is not being honest about
 				// what it is attempting to spend...
 				if output_id_hash != read_hash
-					|| output_id_hash != read_elem.expect("no output at position").hash()
+					|| output_id_hash != read_elem.expect("no output at position").hash_with_index(pos)
 				{
 					return Err(Error::SumTreeErr(format!("output pmmr hash mismatch")));
 				}

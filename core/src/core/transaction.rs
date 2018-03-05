@@ -938,6 +938,8 @@ pub struct OutputIdentifier {
 	pub commit: Commitment,
 }
 
+
+
 impl OutputIdentifier {
 	/// Build a new output_identifier.
 	pub fn new(features: OutputFeatures, commit: &Commitment) -> OutputIdentifier {
@@ -970,6 +972,13 @@ impl OutputIdentifier {
 			self.features.bits(),
 			util::to_hex(self.commit.0.to_vec()),
 		)
+	}
+}
+
+/// Ensure this is implemented to centralize hashing with indexes
+impl PMMRable for OutputIdentifier {
+	fn len() -> usize {
+		1 + secp::constants::PEDERSEN_COMMITMENT_SIZE + SWITCH_COMMIT_HASH_SIZE
 	}
 }
 
