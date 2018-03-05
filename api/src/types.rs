@@ -109,39 +109,39 @@ impl TxHashSet {
 /// Wrapper around a list of txhashset nodes, so it can be
 /// presented properly via json
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PmmrTreeNode {
+pub struct TxHashSetNode {
 	// The hash
 	pub hash: String,
 }
 
-impl PmmrTreeNode {
-	pub fn get_last_n_utxo(chain: Arc<chain::Chain>, distance: u64) -> Vec<PmmrTreeNode> {
+impl TxHashSetNode {
+	pub fn get_last_n_utxo(chain: Arc<chain::Chain>, distance: u64) -> Vec<TxHashSetNode> {
 		let mut return_vec = Vec::new();
 		let last_n = chain.get_last_n_utxo(distance);
 		for x in last_n {
-			return_vec.push(PmmrTreeNode {
+			return_vec.push(TxHashSetNode {
 				hash: util::to_hex(x.0.to_vec()),
 			});
 		}
 		return_vec
 	}
 
-	pub fn get_last_n_rangeproof(head: Arc<chain::Chain>, distance: u64) -> Vec<PmmrTreeNode> {
+	pub fn get_last_n_rangeproof(head: Arc<chain::Chain>, distance: u64) -> Vec<TxHashSetNode> {
 		let mut return_vec = Vec::new();
 		let last_n = head.get_last_n_rangeproof(distance);
 		for elem in last_n {
-			return_vec.push(PmmrTreeNode {
+			return_vec.push(TxHashSetNode {
 				hash: util::to_hex(elem.0.to_vec()),
 			});
 		}
 		return_vec
 	}
 
-	pub fn get_last_n_kernel(head: Arc<chain::Chain>, distance: u64) -> Vec<PmmrTreeNode> {
+	pub fn get_last_n_kernel(head: Arc<chain::Chain>, distance: u64) -> Vec<TxHashSetNode> {
 		let mut return_vec = Vec::new();
 		let last_n = head.get_last_n_kernel(distance);
 		for elem in last_n {
-			return_vec.push(PmmrTreeNode {
+			return_vec.push(TxHashSetNode {
 				hash: util::to_hex(elem.0.to_vec()),
 			});
 		}

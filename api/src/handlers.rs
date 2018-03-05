@@ -202,13 +202,13 @@ impl Handler for UtxoHandler {
 }
 
 // Sum tree handler. Retrieve the roots:
-// GET /v1/pmmrtrees/roots
+// GET /v1/txhashset/roots
 //
 // Last inserted nodes::
-// GET /v1/pmmrtrees/lastutxos (gets last 10)
-// GET /v1/pmmrtrees/lastutxos?n=5
-// GET /v1/pmmrtrees/lastrangeproofs
-// GET /v1/pmmrtrees/lastkernels
+// GET /v1/txhashset/lastutxos (gets last 10)
+// GET /v1/txhashset/lastutxos?n=5
+// GET /v1/txhashset/lastrangeproofs
+// GET /v1/txhashset/lastkernels
 struct TxHashSetHandler {
 	chain: Weak<chain::Chain>,
 }
@@ -220,18 +220,18 @@ impl TxHashSetHandler {
 	}
 
 	// gets last n utxos inserted in to the tree
-	fn get_last_n_utxo(&self, distance: u64) -> Vec<PmmrTreeNode> {
-		PmmrTreeNode::get_last_n_utxo(w(&self.chain), distance)
+	fn get_last_n_utxo(&self, distance: u64) -> Vec<TxHashSetNode> {
+		TxHashSetNode::get_last_n_utxo(w(&self.chain), distance)
 	}
 
 	// gets last n utxos inserted in to the tree
-	fn get_last_n_rangeproof(&self, distance: u64) -> Vec<PmmrTreeNode> {
-		PmmrTreeNode::get_last_n_rangeproof(w(&self.chain), distance)
+	fn get_last_n_rangeproof(&self, distance: u64) -> Vec<TxHashSetNode> {
+		TxHashSetNode::get_last_n_rangeproof(w(&self.chain), distance)
 	}
 
 	// gets last n utxos inserted in to the tree
-	fn get_last_n_kernel(&self, distance: u64) -> Vec<PmmrTreeNode> {
-		PmmrTreeNode::get_last_n_kernel(w(&self.chain), distance)
+	fn get_last_n_kernel(&self, distance: u64) -> Vec<TxHashSetNode> {
+		TxHashSetNode::get_last_n_kernel(w(&self.chain), distance)
 	}
 }
 
@@ -612,10 +612,10 @@ pub fn start_rest_apis<T>(
 				"get chain".to_string(),
 				"get chain/utxos".to_string(),
 				"get status".to_string(),
-				"get pmmrtrees/roots".to_string(),
-				"get pmmrtrees/lastutxos?n=10".to_string(),
-				"get pmmrtrees/lastrangeproofs".to_string(),
-				"get pmmrtrees/lastkernels".to_string(),
+				"get txhashset/roots".to_string(),
+				"get txhashset/lastutxos?n=10".to_string(),
+				"get txhashset/lastrangeproofs".to_string(),
+				"get txhashset/lastkernels".to_string(),
 				"get pool".to_string(),
 				"post pool/push".to_string(),
 				"post peers/a.b.c.d:p/ban".to_string(),
@@ -633,7 +633,7 @@ pub fn start_rest_apis<T>(
 				chain_tip: get "/chain" => chain_tip_handler,
 				chain_utxos: get "/chain/utxos/*" => utxo_handler,
 				status: get "/status" => status_handler,
-				txhashset_roots: get "/pmmrtrees/*" => txhashset_handler,
+				txhashset_roots: get "/txhashset/*" => txhashset_handler,
 				pool_info: get "/pool" => pool_info_handler,
 				pool_push: post "/pool/push" => pool_push_handler,
 				peers_all: get "/peers/all" => peers_all_handler,

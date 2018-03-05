@@ -344,7 +344,7 @@ fn get_utxos_by_height(
 // TxHashSet handler functions
 fn get_txhashset_roots(base_addr: &String, api_server_port: u16) -> Result<api::TxHashSet, Error> {
 	let url = format!(
-		"http://{}:{}/v1/pmmrtrees/roots",
+		"http://{}:{}/v1/txhashset/roots",
 		base_addr, api_server_port
 	);
 	api::client::get::<api::TxHashSet>(url.as_str()).map_err(|e| Error::API(e))
@@ -354,60 +354,60 @@ fn get_txhashset_lastutxos(
 	base_addr: &String,
 	api_server_port: u16,
 	n: u64,
-) -> Result<Vec<api::PmmrTreeNode>, Error> {
+) -> Result<Vec<api::TxHashSetNode>, Error> {
 	let url: String;
 	if n == 0 {
 		url = format!(
-			"http://{}:{}/v1/pmmrtrees/lastutxos",
+			"http://{}:{}/v1/txhashset/lastutxos",
 			base_addr, api_server_port
 		);
 	} else {
 		url = format!(
-			"http://{}:{}/v1/pmmrtrees/lastutxos?n={}",
+			"http://{}:{}/v1/txhashset/lastutxos?n={}",
 			base_addr, api_server_port, n
 		);
 	}
-	api::client::get::<Vec<api::PmmrTreeNode>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<api::TxHashSetNode>>(url.as_str()).map_err(|e| Error::API(e))
 }
 
 fn get_txhashset_lastrangeproofs(
 	base_addr: &String,
 	api_server_port: u16,
 	n: u64,
-) -> Result<Vec<api::PmmrTreeNode>, Error> {
+) -> Result<Vec<api::TxHashSetNode>, Error> {
 	let url: String;
 	if n == 0 {
 		url = format!(
-			"http://{}:{}/v1/pmmrtrees/lastrangeproofs",
+			"http://{}:{}/v1/txhashset/lastrangeproofs",
 			base_addr, api_server_port
 		);
 	} else {
 		url = format!(
-			"http://{}:{}/v1/pmmrtrees/lastrangeproofs?n={}",
+			"http://{}:{}/v1/txhashset/lastrangeproofs?n={}",
 			base_addr, api_server_port, n
 		);
 	}
-	api::client::get::<Vec<api::PmmrTreeNode>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<api::TxHashSetNode>>(url.as_str()).map_err(|e| Error::API(e))
 }
 
 fn gettxhashset_lastkernels(
 	base_addr: &String,
 	api_server_port: u16,
 	n: u64,
-) -> Result<Vec<api::PmmrTreeNode>, Error> {
+) -> Result<Vec<api::TxHashSetNode>, Error> {
 	let url: String;
 	if n == 0 {
 		url = format!(
-			"http://{}:{}/v1/pmmrtrees/lastkernels",
+			"http://{}:{}/v1/txhashset/lastkernels",
 			base_addr, api_server_port
 		);
 	} else {
 		url = format!(
-			"http://{}:{}/v1/pmmrtrees/lastkernels?n={}",
+			"http://{}:{}/v1/txhashset/lastkernels?n={}",
 			base_addr, api_server_port, n
 		);
 	}
-	api::client::get::<Vec<api::PmmrTreeNode>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<api::TxHashSetNode>>(url.as_str()).map_err(|e| Error::API(e))
 }
 
 // Helper function to get a vec of commitment output ids from a vec of block
