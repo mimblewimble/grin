@@ -25,7 +25,7 @@ use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use consensus;
 use consensus::VerifySortOrder;
-use core::hash::Hashed;
+use core::hash::{Hashed, Hash};
 use core::transaction::{SwitchCommitHash, SWITCH_COMMIT_HASH_SIZE};
 use util::secp::pedersen::Commitment;
 use util::secp::pedersen::RangeProof;
@@ -378,8 +378,13 @@ impl Readable for RangeProof {
 }
 
 impl PMMRable for RangeProof {
+
 	fn len() -> usize {
 		MAX_PROOF_SIZE + 8
+	}
+
+	fn hash_with_index(&self, index: u64) -> Hash {
+		(index, self).hash()
 	}
 }
 
@@ -552,6 +557,9 @@ impl Writeable for [u8; 4] {
 pub trait PMMRable: Readable + Writeable + Hashed + Clone {
 	/// Length in bytes
 	fn len() -> usize;
+
+	/// Hash this element with an index
+	fn hash_with_index(&self, index: u64) -> Hash;
 }
 
 /// Useful marker trait on types that can be sized byte slices

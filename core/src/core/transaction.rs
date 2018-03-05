@@ -251,6 +251,10 @@ impl PMMRable for TxKernel {
 		17 + // features plus fee and lock_height
 			secp::constants::PEDERSEN_COMMITMENT_SIZE + secp::constants::AGG_SIGNATURE_SIZE
 	}
+
+	fn hash_with_index(&self, index: u64) -> Hash {
+		(index, self).hash()
+	}
 }
 
 /// A transaction
@@ -938,6 +942,17 @@ pub struct OutputIdentifier {
 	pub commit: Commitment,
 }
 
+/// Ensure this is implemented to centralize hashing with indexes
+impl PMMRable for OutputIdentifier {
+	fn len() -> usize {
+		1 + secp::constants::PEDERSEN_COMMITMENT_SIZE + SWITCH_COMMIT_HASH_SIZE
+	}
+
+	fn hash_with_index(&self, index: u64) -> Hash {
+		(index, self).hash()
+	}
+}
+
 impl OutputIdentifier {
 	/// Build a new output_identifier.
 	pub fn new(features: OutputFeatures, commit: &Commitment) -> OutputIdentifier {
@@ -1029,6 +1044,10 @@ impl OutputStoreable {
 impl PMMRable for OutputStoreable {
 	fn len() -> usize {
 		1 + secp::constants::PEDERSEN_COMMITMENT_SIZE + SWITCH_COMMIT_HASH_SIZE
+	}
+
+	fn hash_with_index(&self, index: u64) -> Hash {
+		(index, self).hash()
 	}
 }
 
