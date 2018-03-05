@@ -41,9 +41,9 @@ bitflags! {
 	}
 }
 
-/// A helper to hold the roots of the sumtrees in order to keep them
+/// A helper to hold the roots of the txhashset in order to keep them
 /// readable
-pub struct SumTreeRoots {
+pub struct TxHashSetRoots {
 	/// UTXO root
 	pub utxo_root: Hash,
 	/// Range Proof root
@@ -87,16 +87,16 @@ pub enum Error {
 	OutputSpent,
 	/// Invalid block version, either a mistake or outdated software
 	InvalidBlockVersion(u16),
-	/// We've been provided a bad sumtree
-	InvalidSumtree(String),
+	/// We've been provided a bad txhashset
+	InvalidTxHashSet(String),
 	/// Internal issue when trying to save or load data from store
 	StoreErr(grin_store::Error, String),
 	/// Internal issue when trying to save or load data from append only files
 	FileReadErr(String),
 	/// Error serializing or deserializing a type
 	SerErr(ser::Error),
-	/// Error with the sumtrees
-	SumTreeErr(String),
+	/// Error with the txhashset
+	TxHashSetErr(String),
 	/// No chain exists and genesis block is required
 	GenesisBlockRequired,
 	/// Error from underlying tx handling
@@ -117,12 +117,12 @@ impl From<ser::Error> for Error {
 }
 impl From<io::Error> for Error {
 	fn from(e: io::Error) -> Error {
-		Error::SumTreeErr(e.to_string())
+		Error::TxHashSetErr(e.to_string())
 	}
 }
 impl From<secp::Error> for Error {
 	fn from(e: secp::Error) -> Error {
-		Error::SumTreeErr(format!("Sum validation error: {}", e.to_string()))
+		Error::TxHashSetErr(format!("Sum validation error: {}", e.to_string()))
 	}
 }
 
@@ -135,7 +135,7 @@ impl Error {
 			| Error::Orphan
 			| Error::StoreErr(_, _)
 			| Error::SerErr(_)
-			| Error::SumTreeErr(_)
+			| Error::TxHashSetErr(_)
 			| Error::GenesisBlockRequired
 			| Error::Other(_) => false,
 			_ => true,

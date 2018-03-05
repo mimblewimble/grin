@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Utility structs to handle the 3 sumtrees (utxo, range proof, kernel) more
+//! Utility structs to handle the 3 hashtrees (utxo, range proof, kernel) more
 //! conveniently and transactionally.
 
 use std::fs;
@@ -34,14 +34,14 @@ use core::ser::{self, PMMRable};
 
 use grin_store;
 use grin_store::pmmr::{PMMRBackend, PMMRFileMetadata};
-use types::{ChainStore, Error, PMMRFileMetadataCollection, SumTreeRoots};
+use types::{ChainStore, Error, PMMRFileMetadataCollection, TxHashSetRoots};
 use util::{zip, LOGGER};
 
-const SUMTREES_SUBDIR: &'static str = "sumtrees";
+const TXHASHSET_SUBDIR: &'static str = "txhashset";
 const UTXO_SUBDIR: &'static str = "utxo";
 const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
 const KERNEL_SUBDIR: &'static str = "kernel";
-const SUMTREES_ZIP: &'static str = "sumtrees_snapshot.zip";
+const TXHASHSET_ZIP: &'static str = "txhashset_snapshot.zip";
 
 struct PMMRHandle<T>
 where
@@ -60,7 +60,7 @@ where
 		file_name: &str,
 		index_md: Option<PMMRFileMetadata>,
 	) -> Result<PMMRHandle<T>, Error> {
-		let path = Path::new(&root_dir).join(SUMTREES_SUBDIR).join(file_name);
+		let path = Path::new(&root_dir).join(TXHASHSET_SUBDIR).join(file_name);
 		fs::create_dir_all(path.clone())?;
 		let be = PMMRBackend::new(path.to_str().unwrap().to_string(), index_md)?;
 		let sz = be.unpruned_size()?;
@@ -86,8 +86,8 @@ where
 /// may have commitments that have already been spent, even with
 /// pruning enabled.
 
-pub struct SumTrees {
-	utxo_pmmr_h: PMMRHandle<OutputStoreable>,
+pub struct TxHashSet {
+	output_pmmr_h: PMMRHandle<OutputStoreable>,
 	rproof_pmmr_h: PMMRHandle<RangeProof>,
 	kernel_pmmr_h: PMMRHandle<TxKernel>,
 
@@ -95,23 +95,23 @@ pub struct SumTrees {
 	commit_index: Arc<ChainStore>,
 }
 
-impl SumTrees {
-	/// Open an existing or new set of backends for the SumTrees
+impl TxHashSet {
+	/// Open an existing or new set of backends for the TxHashSet
 	pub fn open(
 		root_dir: String,
 		commit_index: Arc<ChainStore>,
 		last_file_positions: Option<PMMRFileMetadataCollection>,
-	) -> Result<SumTrees, Error> {
-		let utxo_file_path: PathBuf = [&root_dir, SUMTREES_SUBDIR, UTXO_SUBDIR].iter().collect();
+	) -> Result<TxHashSet, Error> {
+		let utxo_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, UTXO_SUBDIR].iter().collect();
 		fs::create_dir_all(utxo_file_path.clone())?;
 
-		let rproof_file_path: PathBuf = [&root_dir, SUMTREES_SUBDIR, RANGE_PROOF_SUBDIR]
+		let rproof_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, RANGE_PROOF_SUBDIR]
 			.iter()
 			.collect();
 		fs::create_dir_all(rproof_file_path.clone())?;
 
 		let kernel_file_path: PathBuf =
-			[&root_dir, SUMTREES_SUBDIR, KERNEL_SUBDIR].iter().collect();
+			[&root_dir, TXHASHSET_SUBDIR, KERNEL_SUBDIR].iter().collect();
 		fs::create_dir_all(kernel_file_path.clone())?;
 
 		let mut utxo_md = None;
@@ -124,8 +124,8 @@ impl SumTrees {
 			kernel_md = Some(p.kernel_file_md);
 		}
 
-		Ok(SumTrees {
-			utxo_pmmr_h: PMMRHandle::new(root_dir.clone(), UTXO_SUBDIR, utxo_md)?,
+		Ok(TxHashSet {
+			output_pmmr_h: PMMRHandle::new(root_dir.clone(), UTXO_SUBDIR, utxo_md)?,
 			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR, rproof_md)?,
 			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR, kernel_md)?,
 			commit_index: commit_index,
@@ -139,19 +139,19 @@ impl SumTrees {
 		match self.commit_index.get_output_pos(&output_id.commit) {
 			Ok(pos) => {
 				let output_pmmr: PMMR<OutputStoreable, _> =
-					PMMR::at(&mut self.utxo_pmmr_h.backend, self.utxo_pmmr_h.last_pos);
+					PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some((hash, _)) = output_pmmr.get(pos, false) {
 					if hash == output_id.hash() {
 						Ok(hash)
 					} else {
-						Err(Error::SumTreeErr(format!("sumtree hash mismatch")))
+						Err(Error::TxHashSetErr(format!("txhashset hash mismatch")))
 					}
 				} else {
 					Err(Error::OutputNotFound)
 				}
 			}
 			Err(grin_store::Error::NotFoundErr) => Err(Error::OutputNotFound),
-			Err(e) => Err(Error::StoreErr(e, format!("sumtree unspent check"))),
+			Err(e) => Err(Error::StoreErr(e, format!("txhashset unspent check"))),
 		}
 	}
 
@@ -160,7 +160,7 @@ impl SumTrees {
 	/// TODO: These need to return the actual data from the flat-files instead of hashes now
 	pub fn last_n_utxo(&mut self, distance: u64) -> Vec<(Hash, Option<OutputStoreable>)> {
 		let utxo_pmmr: PMMR<OutputStoreable, _> =
-			PMMR::at(&mut self.utxo_pmmr_h.backend, self.utxo_pmmr_h.last_pos);
+			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		utxo_pmmr.get_last_n_insertions(distance)
 	}
 
@@ -186,7 +186,7 @@ impl SumTrees {
 	/// Last file positions of UTXO set.. hash file,data file
 	pub fn last_file_metadata(&self) -> PMMRFileMetadataCollection {
 		PMMRFileMetadataCollection::new(
-			self.utxo_pmmr_h.last_file_positions(),
+			self.output_pmmr_h.last_file_positions(),
 			self.rproof_pmmr_h.last_file_positions(),
 			self.kernel_pmmr_h.last_file_positions(),
 		)
@@ -196,7 +196,7 @@ impl SumTrees {
 	/// TODO: Return data instead of hashes
 	pub fn roots(&mut self) -> (Hash, Hash, Hash) {
 		let output_pmmr: PMMR<OutputStoreable, _> =
-			PMMR::at(&mut self.utxo_pmmr_h.backend, self.utxo_pmmr_h.last_pos);
+			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		let rproof_pmmr: PMMR<RangeProof, _> =
 			PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
 		let kernel_pmmr: PMMR<TxKernel, _> =
@@ -208,11 +208,11 @@ impl SumTrees {
 /// Starts a new unit of work to extend the chain with additional blocks,
 /// accepting a closure that will work within that unit of work. The closure
 /// has access to an Extension object that allows the addition of blocks to
-/// the sumtrees and the checking of the current tree roots.
+/// the txhashset and the checking of the current tree roots.
 ///
 /// If the closure returns an error, modifications are canceled and the unit
 /// of work is abandoned. Otherwise, the unit of work is permanently applied.
-pub fn extending<'a, F, T>(trees: &'a mut SumTrees, inner: F) -> Result<T, Error>
+pub fn extending<'a, F, T>(trees: &'a mut TxHashSet, inner: F) -> Result<T, Error>
 where
 	F: FnOnce(&mut Extension) -> Result<T, Error>,
 {
@@ -222,7 +222,7 @@ where
 	{
 		let commit_index = trees.commit_index.clone();
 
-		debug!(LOGGER, "Starting new sumtree extension.");
+		debug!(LOGGER, "Starting new txhashset extension.");
 		let mut extension = Extension::new(trees, commit_index);
 		res = inner(&mut extension);
 
@@ -234,29 +234,29 @@ where
 	}
 	match res {
 		Err(e) => {
-			debug!(LOGGER, "Error returned, discarding sumtree extension.");
-			trees.utxo_pmmr_h.backend.discard();
+			debug!(LOGGER, "Error returned, discarding txhashset extension.");
+			trees.output_pmmr_h.backend.discard();
 			trees.rproof_pmmr_h.backend.discard();
 			trees.kernel_pmmr_h.backend.discard();
 			Err(e)
 		}
 		Ok(r) => {
 			if rollback {
-				debug!(LOGGER, "Rollbacking sumtree extension.");
-				trees.utxo_pmmr_h.backend.discard();
+				debug!(LOGGER, "Rollbacking txhashset extension.");
+				trees.output_pmmr_h.backend.discard();
 				trees.rproof_pmmr_h.backend.discard();
 				trees.kernel_pmmr_h.backend.discard();
 			} else {
-				debug!(LOGGER, "Committing sumtree extension.");
-				trees.utxo_pmmr_h.backend.sync()?;
+				debug!(LOGGER, "Committing txhashset extension.");
+				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
-				trees.utxo_pmmr_h.last_pos = sizes.0;
+				trees.output_pmmr_h.last_pos = sizes.0;
 				trees.rproof_pmmr_h.last_pos = sizes.1;
 				trees.kernel_pmmr_h.last_pos = sizes.2;
 			}
 
-			debug!(LOGGER, "Sumtree extension done.");
+			debug!(LOGGER, "TxHashSet extension done.");
 			Ok(r)
 		}
 	}
@@ -278,9 +278,9 @@ pub struct Extension<'a> {
 
 impl<'a> Extension<'a> {
 	// constructor
-	fn new(trees: &'a mut SumTrees, commit_index: Arc<ChainStore>) -> Extension<'a> {
+	fn new(trees: &'a mut TxHashSet, commit_index: Arc<ChainStore>) -> Extension<'a> {
 		Extension {
-			utxo_pmmr: PMMR::at(&mut trees.utxo_pmmr_h.backend, trees.utxo_pmmr_h.last_pos),
+			utxo_pmmr: PMMR::at(&mut trees.output_pmmr_h.backend, trees.output_pmmr_h.last_pos),
 			rproof_pmmr: PMMR::at(
 				&mut trees.rproof_pmmr_h.backend,
 				trees.rproof_pmmr_h.last_pos,
@@ -357,7 +357,7 @@ impl<'a> Extension<'a> {
 				if output_id_hash != read_hash
 					|| output_id_hash != read_elem.expect("no output at position").hash()
 				{
-					return Err(Error::SumTreeErr(format!("output pmmr hash mismatch")));
+					return Err(Error::TxHashSetErr(format!("output pmmr hash mismatch")));
 				}
 
 				// check coinbase maturity with the Merkle Proof on the input
@@ -374,10 +374,10 @@ impl<'a> Extension<'a> {
 				Ok(true) => {
 					self.rproof_pmmr
 						.prune(pos, height as u32)
-						.map_err(|s| Error::SumTreeErr(s))?;
+						.map_err(|s| Error::TxHashSetErr(s))?;
 				}
 				Ok(false) => return Err(Error::AlreadySpent(commit)),
-				Err(s) => return Err(Error::SumTreeErr(s)),
+				Err(s) => return Err(Error::TxHashSetErr(s)),
 			}
 		} else {
 			return Err(Error::AlreadySpent(commit));
@@ -406,13 +406,13 @@ impl<'a> Extension<'a> {
 		// push new outputs in their MMR and save them in the index
 		let pos = self.utxo_pmmr
 			.push(OutputStoreable::from_output(out))
-			.map_err(&Error::SumTreeErr)?;
+			.map_err(&Error::TxHashSetErr)?;
 		self.new_output_commits.insert(out.commitment(), pos);
 
 		// push range proofs in their MMR and file
 		self.rproof_pmmr
 			.push(out.proof)
-			.map_err(&Error::SumTreeErr)?;
+			.map_err(&Error::TxHashSetErr)?;
 		Ok(())
 	}
 
@@ -429,7 +429,7 @@ impl<'a> Extension<'a> {
 		// push kernels in their MMR and file
 		let pos = self.kernel_pmmr
 			.push(kernel.clone())
-			.map_err(&Error::SumTreeErr)?;
+			.map_err(&Error::TxHashSetErr)?;
 		self.new_kernel_excesses.insert(kernel.excess, pos);
 
 		Ok(())
@@ -447,7 +447,7 @@ impl<'a> Extension<'a> {
 	) -> Result<MerkleProof, Error> {
 		debug!(
 			LOGGER,
-			"sumtree: merkle_proof_via_rewind: rewinding to block {:?}",
+			"txhashset: merkle_proof_via_rewind: rewinding to block {:?}",
 			block.hash()
 		);
 		// rewind to the specified block
@@ -456,7 +456,7 @@ impl<'a> Extension<'a> {
 		let pos = self.get_output_pos(&output.commit)?;
 		let merkle_proof = self.utxo_pmmr
 			.merkle_proof(pos)
-			.map_err(&Error::SumTreeErr)?;
+			.map_err(&Error::TxHashSetErr)?;
 
 		Ok(merkle_proof)
 	}
@@ -466,7 +466,7 @@ impl<'a> Extension<'a> {
 	pub fn rewind(&mut self, block: &Block) -> Result<(), Error> {
 		debug!(
 			LOGGER,
-			"Rewind sumtrees to header {} at {}",
+			"Rewind txhashset to header {} at {}",
 			block.header.hash(),
 			block.header.height,
 		);
@@ -487,18 +487,18 @@ impl<'a> Extension<'a> {
 	) -> Result<(), Error> {
 		debug!(
 			LOGGER,
-			"Rewind sumtrees to output pos: {}, kernel pos: {}", out_pos_rew, kern_pos_rew,
+			"Rewind txhashset to output pos: {}, kernel pos: {}", out_pos_rew, kern_pos_rew,
 		);
 
 		self.utxo_pmmr
 			.rewind(out_pos_rew, height as u32)
-			.map_err(&Error::SumTreeErr)?;
+			.map_err(&Error::TxHashSetErr)?;
 		self.rproof_pmmr
 			.rewind(out_pos_rew, height as u32)
-			.map_err(&Error::SumTreeErr)?;
+			.map_err(&Error::TxHashSetErr)?;
 		self.kernel_pmmr
 			.rewind(kern_pos_rew, height as u32)
-			.map_err(&Error::SumTreeErr)?;
+			.map_err(&Error::TxHashSetErr)?;
 
 		Ok(())
 	}
@@ -521,25 +521,25 @@ impl<'a> Extension<'a> {
 
 	/// Current root hashes and sums (if applicable) for the UTXO, range proof
 	/// and kernel sum trees.
-	pub fn roots(&self) -> SumTreeRoots {
-		SumTreeRoots {
+	pub fn roots(&self) -> TxHashSetRoots {
+		TxHashSetRoots {
 			utxo_root: self.utxo_pmmr.root(),
 			rproof_root: self.rproof_pmmr.root(),
 			kernel_root: self.kernel_pmmr.root(),
 		}
 	}
 
-	/// Validate the current sumtree state against a block header
+	/// Validate the current txhashset state against a block header
 	pub fn validate(&self, header: &BlockHeader) -> Result<(), Error> {
 		// validate all hashes and sums within the trees
 		if let Err(e) = self.utxo_pmmr.validate() {
-			return Err(Error::InvalidSumtree(e));
+			return Err(Error::InvalidTxHashSet(e));
 		}
 		if let Err(e) = self.rproof_pmmr.validate() {
-			return Err(Error::InvalidSumtree(e));
+			return Err(Error::InvalidTxHashSet(e));
 		}
 		if let Err(e) = self.kernel_pmmr.validate() {
-			return Err(Error::InvalidSumtree(e));
+			return Err(Error::InvalidTxHashSet(e));
 		}
 
 		// validate the tree roots against the block header
@@ -561,7 +561,7 @@ impl<'a> Extension<'a> {
 			let adjusted_sum_utxo = secp.commit_sum(vec![utxo_sum], vec![over_commit])?;
 
 			if adjusted_sum_utxo != kernel_sum {
-				return Err(Error::InvalidSumtree(
+				return Err(Error::InvalidTxHashSet(
 					"Differing UTXO commitment and kernel excess sums.".to_owned(),
 				));
 			}
@@ -727,15 +727,15 @@ fn indexes_at(block: &Block, commit_index: &ChainStore) -> Result<(u64, u64), Er
 	Ok((out_idx, kern_idx))
 }
 
-/// Packages the sumtree data files into a zip and returns a Read to the
+/// Packages the txhashset data files into a zip and returns a Read to the
 /// resulting file
 pub fn zip_read(root_dir: String) -> Result<File, Error> {
-	let sumtrees_path = Path::new(&root_dir).join(SUMTREES_SUBDIR);
-	let zip_path = Path::new(&root_dir).join(SUMTREES_ZIP);
+	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
+	let zip_path = Path::new(&root_dir).join(TXHASHSET_ZIP);
 
 	// create the zip archive
 	{
-		zip::compress(&sumtrees_path, &File::create(zip_path.clone())?)
+		zip::compress(&txhashset_path, &File::create(zip_path.clone())?)
 			.map_err(|ze| Error::Other(ze.to_string()))?;
 	}
 
@@ -744,11 +744,11 @@ pub fn zip_read(root_dir: String) -> Result<File, Error> {
 	Ok(zip_file)
 }
 
-/// Extract the sumtree data from a zip file and writes the content into the
-/// sumtree storage dir
-pub fn zip_write(root_dir: String, sumtree_data: File) -> Result<(), Error> {
-	let sumtrees_path = Path::new(&root_dir).join(SUMTREES_SUBDIR);
+/// Extract the txhashset data from a zip file and writes the content into the
+/// txhashset storage dir
+pub fn zip_write(root_dir: String, txhashset_data: File) -> Result<(), Error> {
+	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
 
-	fs::create_dir_all(sumtrees_path.clone())?;
-	zip::decompress(sumtree_data, &sumtrees_path).map_err(|ze| Error::Other(ze.to_string()))
+	fs::create_dir_all(txhashset_path.clone())?;
+	zip::decompress(txhashset_data, &txhashset_path).map_err(|ze| Error::Other(ze.to_string()))
 }

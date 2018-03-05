@@ -84,9 +84,9 @@ impl Status {
 	}
 }
 
-/// Sumtrees
+/// TxHashSet
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SumTrees {
+pub struct TxHashSet {
 	/// UTXO Root Hash
 	pub utxo_root_hash: String,
 	// Rangeproof root hash
@@ -95,10 +95,10 @@ pub struct SumTrees {
 	pub kernel_root_hash: String,
 }
 
-impl SumTrees {
-	pub fn from_head(head: Arc<chain::Chain>) -> SumTrees {
-		let roots = head.get_sumtree_roots();
-		SumTrees {
+impl TxHashSet {
+	pub fn from_head(head: Arc<chain::Chain>) -> TxHashSet {
+		let roots = head.get_txhashset_roots();
+		TxHashSet {
 			utxo_root_hash: roots.0.to_hex(),
 			range_proof_root_hash: roots.1.to_hex(),
 			kernel_root_hash: roots.2.to_hex(),
@@ -106,7 +106,7 @@ impl SumTrees {
 	}
 }
 
-/// Wrapper around a list of sumtree nodes, so it can be
+/// Wrapper around a list of txhashset nodes, so it can be
 /// presented properly via json
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PmmrTreeNode {

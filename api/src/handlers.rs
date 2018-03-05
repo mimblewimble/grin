@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -209,14 +209,14 @@ impl Handler for UtxoHandler {
 // GET /v1/pmmrtrees/lastutxos?n=5
 // GET /v1/pmmrtrees/lastrangeproofs
 // GET /v1/pmmrtrees/lastkernels
-struct SumTreeHandler {
+struct TxHashSetHandler {
 	chain: Weak<chain::Chain>,
 }
 
-impl SumTreeHandler {
+impl TxHashSetHandler {
 	// gets roots
-	fn get_roots(&self) -> SumTrees {
-		SumTrees::from_head(w(&self.chain))
+	fn get_roots(&self) -> TxHashSet {
+		TxHashSet::from_head(w(&self.chain))
 	}
 
 	// gets last n utxos inserted in to the tree
@@ -235,7 +235,7 @@ impl SumTreeHandler {
 	}
 }
 
-impl Handler for SumTreeHandler {
+impl Handler for TxHashSetHandler {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		let url = req.url.clone();
 		let mut path_elems = url.path();
@@ -585,7 +585,7 @@ pub fn start_rest_apis<T>(
 				chain: chain.clone(),
 				peers: peers.clone(),
 			};
-			let sumtree_handler = SumTreeHandler {
+			let txhashset_handler = TxHashSetHandler {
 				chain: chain.clone(),
 			};
 			let pool_info_handler = PoolInfoHandler {
@@ -633,7 +633,7 @@ pub fn start_rest_apis<T>(
 				chain_tip: get "/chain" => chain_tip_handler,
 				chain_utxos: get "/chain/utxos/*" => utxo_handler,
 				status: get "/status" => status_handler,
-				sumtree_roots: get "/pmmrtrees/*" => sumtree_handler,
+				txhashset_roots: get "/pmmrtrees/*" => txhashset_handler,
 				pool_info: get "/pool" => pool_info_handler,
 				pool_push: post "/pool/push" => pool_push_handler,
 				peers_all: get "/peers/all" => peers_all_handler,

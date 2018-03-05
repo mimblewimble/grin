@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -20,7 +20,7 @@ extern crate test;
 use rand::Rng;
 use test::Bencher;
 
-use core::core::sumtree::{self, SumTree, Summable};
+use core::core::txhashset::{self, TxHashSet, Summable};
 use core::ser::{Error, Writeable, Writer};
 
 #[derive(Copy, Clone, Debug)]
@@ -48,7 +48,7 @@ impl Writeable for TestElem {
 fn bench_small_tree(b: &mut Bencher) {
 	let mut rng = rand::thread_rng();
 	b.iter(|| {
-		let mut big_tree = SumTree::new();
+		let mut big_tree = TxHashSet::new();
 		for i in 0..1000 {
 			// To avoid RNG overflow we generate random elements that are small.
 			// Though to avoid repeat elements they have to be reasonably big.

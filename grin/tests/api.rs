@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -119,20 +119,20 @@ fn simple_server_wallet() {
 	let utxos_by_ids2 = get_utxos_by_ids2(&base_addr, api_server_port, ids.clone());
 	assert!(utxos_by_ids2.is_ok());
 
-	warn!(LOGGER, "Testing sumtree handler");
-	let roots = get_sumtree_roots(&base_addr, api_server_port);
+	warn!(LOGGER, "Testing txhashset handler");
+	let roots = get_txhashset_roots(&base_addr, api_server_port);
 	assert!(roots.is_ok());
-	let last_10_utxos = get_sumtree_lastutxos(&base_addr, api_server_port, 0);
+	let last_10_utxos = get_txhashset_lastutxos(&base_addr, api_server_port, 0);
 	assert!(last_10_utxos.is_ok());
-	let last_5_utxos = get_sumtree_lastutxos(&base_addr, api_server_port, 5);
+	let last_5_utxos = get_txhashset_lastutxos(&base_addr, api_server_port, 5);
 	assert!(last_5_utxos.is_ok());
-	let last_10_rangeproofs = get_sumtree_lastrangeproofs(&base_addr, api_server_port, 0);
+	let last_10_rangeproofs = get_txhashset_lastrangeproofs(&base_addr, api_server_port, 0);
 	assert!(last_10_rangeproofs.is_ok());
-	let last_5_rangeproofs = get_sumtree_lastrangeproofs(&base_addr, api_server_port, 5);
+	let last_5_rangeproofs = get_txhashset_lastrangeproofs(&base_addr, api_server_port, 5);
 	assert!(last_5_rangeproofs.is_ok());
-	let last_10_kernels = getsumtree_lastkernels(&base_addr, api_server_port, 0);
+	let last_10_kernels = gettxhashset_lastkernels(&base_addr, api_server_port, 0);
 	assert!(last_10_kernels.is_ok());
-	let last_5_kernels = getsumtree_lastkernels(&base_addr, api_server_port, 5);
+	let last_5_kernels = gettxhashset_lastkernels(&base_addr, api_server_port, 5);
 	assert!(last_5_kernels.is_ok());
 
 	//let some more mining happen, make sure nothing pukes
@@ -341,16 +341,16 @@ fn get_utxos_by_height(
 	api::client::get::<Vec<api::BlockOutputs>>(url.as_str()).map_err(|e| Error::API(e))
 }
 
-// Sumtree handler functions
-fn get_sumtree_roots(base_addr: &String, api_server_port: u16) -> Result<api::SumTrees, Error> {
+// TxHashSet handler functions
+fn get_txhashset_roots(base_addr: &String, api_server_port: u16) -> Result<api::TxHashSet, Error> {
 	let url = format!(
 		"http://{}:{}/v1/pmmrtrees/roots",
 		base_addr, api_server_port
 	);
-	api::client::get::<api::SumTrees>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<api::TxHashSet>(url.as_str()).map_err(|e| Error::API(e))
 }
 
-fn get_sumtree_lastutxos(
+fn get_txhashset_lastutxos(
 	base_addr: &String,
 	api_server_port: u16,
 	n: u64,
@@ -370,7 +370,7 @@ fn get_sumtree_lastutxos(
 	api::client::get::<Vec<api::PmmrTreeNode>>(url.as_str()).map_err(|e| Error::API(e))
 }
 
-fn get_sumtree_lastrangeproofs(
+fn get_txhashset_lastrangeproofs(
 	base_addr: &String,
 	api_server_port: u16,
 	n: u64,
@@ -390,7 +390,7 @@ fn get_sumtree_lastrangeproofs(
 	api::client::get::<Vec<api::PmmrTreeNode>>(url.as_str()).map_err(|e| Error::API(e))
 }
 
-fn getsumtree_lastkernels(
+fn gettxhashset_lastkernels(
 	base_addr: &String,
 	api_server_port: u16,
 	n: u64,

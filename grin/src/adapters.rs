@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -267,12 +267,12 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
-	/// Provides a reading view into the current sumtree state as well as
+	/// Provides a reading view into the current txhashset state as well as
 	/// the required indexes for a consumer to rewind to a consistant state
 	/// at the provided block hash.
-	fn sumtrees_read(&self, h: Hash) -> Option<p2p::SumtreesRead> {
-		match w(&self.chain).sumtrees_read(h.clone()) {
-			Ok((out_index, kernel_index, read)) => Some(p2p::SumtreesRead {
+	fn txhashset_read(&self, h: Hash) -> Option<p2p::TxHashSetRead> {
+		match w(&self.chain).txhashset_read(h.clone()) {
+			Ok((out_index, kernel_index, read)) => Some(p2p::TxHashSetRead {
 				output_index: out_index,
 				kernel_index: kernel_index,
 				reader: read,
@@ -280,33 +280,33 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			Err(e) => {
 				warn!(
 					LOGGER,
-					"Couldn't produce sumtrees data for block {}: {:?}", h, e
+					"Couldn't produce txhashset data for block {}: {:?}", h, e
 				);
 				None
 			}
 		}
 	}
 
-	/// Writes a reading view on a sumtree state that's been provided to us.
+	/// Writes a reading view on a txhashset state that's been provided to us.
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	fn sumtrees_write(
+	fn txhashset_write(
 		&self,
 		h: Hash,
 		rewind_to_output: u64,
 		rewind_to_kernel: u64,
-		sumtree_data: File,
+		txhashset_data: File,
 		_peer_addr: SocketAddr,
 	) -> bool {
-		// TODO check whether we should accept any sumtree now
+		// TODO check whether we should accept any txhashset now
 		if let Err(e) =
-			w(&self.chain).sumtrees_write(h, rewind_to_output, rewind_to_kernel, sumtree_data)
+			w(&self.chain).txhashset_write(h, rewind_to_output, rewind_to_kernel, txhashset_data)
 		{
-			error!(LOGGER, "Failed to save sumtree archive: {:?}", e);
+			error!(LOGGER, "Failed to save txhashset archive: {:?}", e);
 			!e.is_bad_data()
 		} else {
-			info!(LOGGER, "Received valid sumtree data for {}.", h);
+			info!(LOGGER, "Received valid txhashset data for {}.", h);
 			self.currently_syncing.store(true, Ordering::Relaxed);
 			true
 		}

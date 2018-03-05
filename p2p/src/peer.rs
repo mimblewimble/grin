@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -277,14 +277,14 @@ impl Peer {
 		)
 	}
 
-	pub fn send_sumtrees_request(&self, height: u64, hash: Hash) -> Result<(), Error> {
+	pub fn send_txhashset_request(&self, height: u64, hash: Hash) -> Result<(), Error> {
 		debug!(
 			LOGGER,
-			"Asking {} for sumtree archive at {} {}.", self.info.addr, height, hash
+			"Asking {} for txhashset archive at {} {}.", self.info.addr, height, hash
 		);
 		self.connection.as_ref().unwrap().send(
-			&SumtreesRequest { hash, height },
-			msg::Type::SumtreesRequest,
+			&TxHashSetRequest { hash, height },
+			msg::Type::TxHashSetRequest,
 		)
 	}
 
@@ -388,23 +388,23 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.get_block(h)
 	}
 
-	fn sumtrees_read(&self, h: Hash) -> Option<SumtreesRead> {
-		self.adapter.sumtrees_read(h)
+	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {
+		self.adapter.txhashset_read(h)
 	}
 
-	fn sumtrees_write(
+	fn txhashset_write(
 		&self,
 		h: Hash,
 		rewind_to_output: u64,
 		rewind_to_kernel: u64,
-		sumtree_data: File,
+		txhashset_data: File,
 		peer_addr: SocketAddr,
 	) -> bool {
-		self.adapter.sumtrees_write(
+		self.adapter.txhashset_write(
 			h,
 			rewind_to_output,
 			rewind_to_kernel,
-			sumtree_data,
+			txhashset_data,
 			peer_addr,
 		)
 	}

@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -50,7 +50,7 @@ pub fn run_sync(
 
 			// fast sync has 3 states:
 			// * syncing headers
-			// * once all headers are sync'd, requesting the sumtree state
+			// * once all headers are sync'd, requesting the txhashset state
 			// * once we have the state, get blocks after that
 			//
 			// full sync gets rid of the middle step and just starts from
@@ -63,14 +63,14 @@ pub fn run_sync(
 
 				// in archival nodes (no fast sync) we just consider we have the whole
 				// state already
-				let have_sumtrees = !fast_sync
+				let have_txhashset = !fast_sync
 					|| head.height > 0 && header_head.height.saturating_sub(head.height) <= horizon;
 
 				let syncing = needs_syncing(
 					currently_syncing.clone(),
 					peers.clone(),
 					chain.clone(),
-					!have_sumtrees,
+					!have_txhashset,
 				);
 
 				let current_time = time::now_utc();
@@ -82,32 +82,32 @@ pub fn run_sync(
 					}
 
 					// run the body_sync every 5s
-					if have_sumtrees && current_time - prev_body_sync > time::Duration::seconds(5) {
+					if have_txhashset && current_time - prev_body_sync > time::Duration::seconds(5) {
 						body_sync(peers.clone(), chain.clone());
 						prev_body_sync = current_time;
 					}
-				} else if !have_sumtrees
+				} else if !have_txhashset
 					&& current_time - prev_state_sync > time::Duration::seconds(5 * 60)
 				{
 					if let Some(peer) = peers.most_work_peer() {
 						if let Ok(p) = peer.try_read() {
 							debug!(
 								LOGGER,
-								"Header head before sumtree request: {} / {}",
+								"Header head before txhashset request: {} / {}",
 								header_head.height,
 								header_head.last_block_h
 							);
 
 							// just to handle corner case of a too early start
 							if header_head.height > horizon {
-								// ask for sumtree at horizon
-								let mut sumtree_head =
+								// ask for txhashset at horizon
+								let mut txhashset_head =
 									chain.get_block_header(&header_head.prev_block_h).unwrap();
 								for _ in 0..horizon - 2 {
-									sumtree_head =
-										chain.get_block_header(&sumtree_head.previous).unwrap();
+									txhashset_head =
+										chain.get_block_header(&txhashset_head.previous).unwrap();
 								}
-								p.send_sumtrees_request(sumtree_head.height, sumtree_head.hash())
+								p.send_txhashset_request(txhashset_head.height, txhashset_head.hash())
 									.unwrap();
 								prev_state_sync = current_time;
 							}
