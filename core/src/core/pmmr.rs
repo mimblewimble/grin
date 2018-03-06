@@ -71,9 +71,15 @@ where
 	/// list).
 	fn get_from_file(&self, position: u64) -> Option<Hash>;
 
+	/// Returns true if the provided pos has been "removed" from the backend.
+	/// Underlying data may still be present in the underlying storage
+	/// even after compaction. We keep subtree roots and leaves with siblings
+	/// around as we need their hashes for Merkle proofs.
+	fn is_removed(&self, pos: u64) -> bool;
+
 	/// Remove HashSums by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a
-	/// given index (practically the index is a the height of a block that
+	/// given index (practically the index is the height of a block that
 	/// triggered removal).
 	fn remove(&mut self, positions: Vec<u64>, index: u32) -> Result<(), String>;
 
@@ -371,6 +377,8 @@ where
 		// creation of another parent.
 		while bintree_postorder_height(pos + 1) > height {
 			let left_sibling = bintree_jump_left_sibling(pos);
+			println!("***** left_sibling: {}", left_sibling);
+
 			let left_elem = self.backend
 				.get(left_sibling, false)
 				.expect("missing left sibling in tree, should not have been pruned");
@@ -534,7 +542,7 @@ where
 		Ok(())
 	}
 
-	/// Total size of the tree, including intermediary nodes an ignoring any
+	/// Total size of the tree, including intermediary nodes and ignoring any
 	/// pruning.
 	pub fn unpruned_size(&self) -> u64 {
 		self.last_pos
@@ -595,6 +603,13 @@ impl PruneList {
 		PruneList {
 			pruned_nodes: vec![],
 		}
+	}
+
+	/// A node can be pruned because it is either -
+	///  * in the prune list itself (it is a root and is "removed" but not "compacted")
+	///  * a descendent of an entry in the prune list (both "removed" and "compacted")
+	pub fn is_in_prune_list(&self, pos: u64) -> bool {
+		self.pruned_nodes.contains(&pos)
 	}
 
 	/// Computes by how many positions a node at pos should be shifted given the

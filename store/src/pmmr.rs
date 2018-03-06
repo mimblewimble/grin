@@ -132,28 +132,37 @@ where
 		}
 	}
 
+	// Node pos in either the rm_log or the prune list are treated as removed.
+	fn is_removed(&self, pos: u64) -> bool {
+		self.rm_log.includes(pos) || self.pruned_nodes.is_in_prune_list(pos)
+	}
+
 	/// Get a Hash by insertion position
 	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)> {
+		println!("***** store pmmr: get: {}", position);
+
 		// Check if this position has been pruned in the remove log or the
 		// pruned list
-		if self.rm_log.includes(position) {
+		if self.is_removed(position) {
+			println!(
+				"***** store pmmr: get: appears to have been removed: {}, {:?}, {:?}",
+				position,
+				self.rm_log.removed,
+				self.pruned_nodes.pruned_nodes,
+			);
 			return None;
 		}
 
 		let hash_val = self.get_from_file(position);
 
-		// TODO - clean this up
 		if !include_data {
-			if let Some(hash) = hash_val {
-				return Some((hash, None));
-			} else {
-				return None;
-			}
+			return hash_val.map(|x| (x, None));
 		}
 
 		// Optionally read flatfile storage to get data element
 		let flatfile_pos =
 			pmmr::n_leaves(position) - 1 - self.pruned_nodes.get_leaf_shift(position).unwrap();
+
 		let record_len = T::len();
 		let file_offset = flatfile_pos as usize * T::len();
 		let data = self.data_file.read(file_offset, record_len);
@@ -169,12 +178,7 @@ where
 			}
 		};
 
-		// TODO - clean this up
-		if let Some(hash) = hash_val {
-			return Some((hash, data));
-		} else {
-			return None;
-		}
+		hash_val.map(|x| (x, data))
 	}
 
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {
