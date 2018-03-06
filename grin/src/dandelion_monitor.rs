@@ -53,17 +53,13 @@ T: BlockChain + Send + Sync + 'static,
                             debug_name: "dandelion-monitor".to_string(),
                             identifier: "?.?.?.?".to_string(),
                         };
-                        info!(
-                            LOGGER,
-                            "Pushing transaction after embargo timer expired."
-                        );
                         let stem_transaction = stem_transactions.get(tx_hash).unwrap();
                         let res = tx_pool.write().unwrap().add_to_memory_pool(source, *stem_transaction.clone(), false);
 
                         match res {
                             Ok(()) => info!(
                                 LOGGER,
-                                "successfully pushed transaction after embargo timer expired."
+                                "Fluffing transaction after embargo timer expired."
                             ),
                             Err(e) => debug!(LOGGER, "error - {:?}", e),
                         };
