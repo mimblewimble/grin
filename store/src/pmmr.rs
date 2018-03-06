@@ -134,7 +134,7 @@ where
 
 	/// Get a Hash by insertion position
 	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)> {
-		// Check if this position has been pruned in the remove log... 
+		// Check if this position has been pruned in the remove log...
 		if self.rm_log.includes(position) {
 			return None;
 		}
@@ -146,7 +146,7 @@ where
 
 		let hash_val = self.get_from_file(position);
 		if !include_data {
-			return hash_val.map(|hash| (hash, None))
+			return hash_val.map(|hash| (hash, None));
 		}
 
 		// Optionally read flatfile storage to get data element
