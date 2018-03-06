@@ -134,26 +134,23 @@ where
 
 	/// Get a Hash by insertion position
 	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)> {
-		// Check if this position has been pruned in the remove log or the
-		// pruned list
+		// Check if this position has been pruned in the remove log... 
 		if self.rm_log.includes(position) {
 			return None;
 		}
+		// ... or in the prune list
+		let prune_shift = match self.pruned_nodes.get_leaf_shift(position) {
+			Some(shift) => shift,
+			None => return None,
+		};
 
 		let hash_val = self.get_from_file(position);
-
-		// TODO - clean this up
 		if !include_data {
-			if let Some(hash) = hash_val {
-				return Some((hash, None));
-			} else {
-				return None;
-			}
+			return hash_val.map(|hash| (hash, None))
 		}
 
 		// Optionally read flatfile storage to get data element
-		let flatfile_pos =
-			pmmr::n_leaves(position) - 1 - self.pruned_nodes.get_leaf_shift(position).unwrap();
+		let flatfile_pos = pmmr::n_leaves(position) - 1 - prune_shift;
 		let record_len = T::len();
 		let file_offset = flatfile_pos as usize * T::len();
 		let data = self.data_file.read(file_offset, record_len);

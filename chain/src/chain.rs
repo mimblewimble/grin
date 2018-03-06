@@ -550,7 +550,7 @@ impl Chain {
 	/// Meanwhile, the chain will not be able to accept new blocks. It should
 	/// therefore be called judiciously.
 	pub fn compact(&self) -> Result<(), Error> {
-		let mut sumtrees = self.sumtrees.write().unwrap();
+		let mut sumtrees = self.txhashset.write().unwrap();
 		sumtrees.compact()?;
 
 		let horizon = global::cut_through_horizon() as u64;
@@ -560,6 +560,7 @@ impl Chain {
 			match self.store.get_block(&current.hash()) {
 				Ok(b) => {
 					self.store.delete_block(&b.hash())?;
+					self.store.delete_block_pmmr_file_metadata(&b.hash())?;
 				}
 				Err(NotFoundErr) => {
 					break;

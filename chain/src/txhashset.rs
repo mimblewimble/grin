@@ -26,7 +26,6 @@ use util::static_secp_instance;
 use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::consensus::reward;
-use core::core::pmmr::{self, PMMR};
 use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier,
                  OutputStoreable, TxKernel};
 use core::core::pmmr::{self, MerkleProof, PMMR};
@@ -218,7 +217,7 @@ impl TxHashSet {
 			let _ = commit_index.delete_output_pos(commit);
 		};
 		let min_rm = (horizon / 10) as usize;
-		self.utxo_pmmr_h
+		self.output_pmmr_h
 			.backend
 			.check_compact(min_rm, horizon, clean_output_index)?;
 		self.rproof_pmmr_h

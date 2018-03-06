@@ -584,7 +584,8 @@ impl PruneList {
 	}
 
 	/// Computes by how many positions a node at pos should be shifted given the
-	/// number of nodes that have already been pruned before it.
+	/// number of nodes that have already been pruned before it. Returns None if
+	/// the position has already been pruned.
 	pub fn get_shift(&self, pos: u64) -> Option<u64> {
 		// get the position where the node at pos would fit in the pruned list, if
 		// it's already pruned, nothing to skip
@@ -605,7 +606,8 @@ impl PruneList {
 
 	/// As above, but only returning the number of leaf nodes to skip for a
 	/// given leaf. Helpful if, for instance, data for each leaf is being stored
-	/// separately in a continuous flat-file
+	/// separately in a continuous flat-file. Returns None if the position has
+	/// already been pruned.
 	pub fn get_leaf_shift(&self, pos: u64) -> Option<u64> {
 		// get the position where the node at pos would fit in the pruned list, if
 		// it's already pruned, nothing to skip
