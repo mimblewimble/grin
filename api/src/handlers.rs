@@ -517,12 +517,19 @@ where
 			tx.outputs.len()
 		);
 
-		//  Push into the stempool
+		let mut fluff = false;
+		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
+			if let Some(_) = params.get("fluff") {
+				fluff = true;
+			}
+		}
+
+		//  Push into the pool or stempool
 		let pool_arc = w(&self.tx_pool);
 		let res = pool_arc
 			.write()
 			.unwrap()
-			.add_to_memory_pool(source, tx, true);
+			.add_to_memory_pool(source, tx, !fluff);
 
 		match res {
 			Ok(()) => Ok(Response::with(status::Ok)),
