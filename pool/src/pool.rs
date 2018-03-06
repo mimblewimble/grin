@@ -26,6 +26,7 @@ use core::core::id::ShortIdentifiable;
 use core::core::transaction;
 use core::core::{OutputIdentifier, Transaction};
 use core::core::{block, hash};
+use util;
 use util::LOGGER;
 use util::secp::pedersen::Commitment;
 
@@ -198,7 +199,7 @@ where
 	/// Get the total size (stem transactions + transactions + orphans) of the
 	/// pool
 	pub fn total_size(&self) -> usize {
-		self.pool.num_transactions() + self.pool.num_transactions()
+		self.stempool.num_transactions() + self.pool.num_transactions()
 			+ self.orphans.num_transactions()
 	}
 
@@ -244,19 +245,34 @@ where
 
 		// The next issue is to identify all unspent outputs that
 		// this transaction will consume and make sure they exist in the set.
-		let mut pool_refs: Vec<graph::Edge>;
-		let mut orphan_refs: Vec<graph::Edge>;
-		let mut blockchain_refs: Vec<graph::Edge>;
+		let mut pool_refs: Vec<graph::Edge> = Vec::new();
+		let mut orphan_refs: Vec<graph::Edge> = Vec::new();
+		let mut blockchain_refs: Vec<graph::Edge> = Vec::new();
 
-		// In this case, we allow unspent outputs from the stempool
-		match self.identify_unspent_outputs(&tx, tx_hash, &head_header, stem) {
-			Ok(refs) => {
-				pool_refs = refs[0].clone();
-				orphan_refs = refs[1].clone();
-				blockchain_refs = refs[2].clone();
+		for input in &tx.inputs {
+			let output = OutputIdentifier::from_input(&input);
+			let base = graph::Edge::new(None, Some(tx_hash), output.clone());
+
+			// Note that search_for_best_output does not examine orphans, by
+			// design. If an incoming transaction consumes pool outputs already
+			// spent by the orphans set, this does not preclude its inclusion
+			// into the pool.
+			match self.search_for_best_output(&output, stem) {
+				Parent::PoolTransaction { tx_ref: x } => pool_refs.push(base.with_source(Some(x))),
+				Parent::BlockTransaction => {
+					let height = head_header.height + 1;
+					self.blockchain.is_matured(&input, height)?;
+					blockchain_refs.push(base);
+				}
+				Parent::Unknown => orphan_refs.push(base),
+				Parent::AlreadySpent { other_tx: x } => {
+					return Err(PoolError::DoubleSpend {
+						other_tx: x,
+						spent_output: input.commitment(),
+					})
+				}
 			}
-			Err(e) => return Err(e),
-		};
+		}
 
 		let is_orphan = orphan_refs.len() > 0;
 
@@ -358,6 +374,7 @@ where
 
 			// We have passed all failure modes.
 			pool_refs.append(&mut blockchain_refs);
+			error!(LOGGER, "Add to orphan");
 			self.orphans.add_orphan_transaction(
 				pool_entry,
 				pool_refs,
@@ -794,45 +811,6 @@ where
 		}
 		Ok(())
 	}
-
-	// Indentify the unspent outputs for a transaction and return
-	fn identify_unspent_outputs(
-		&self,
-		tx: &transaction::Transaction,
-		tx_hash: Hash,
-		head_header: &block::BlockHeader,
-		stem: bool,
-	) -> Result<Vec<Vec<graph::Edge>>, PoolError> {
-		let mut pool_refs: Vec<graph::Edge> = Vec::new();
-		let mut orphan_refs: Vec<graph::Edge> = Vec::new();
-		let mut blockchain_refs: Vec<graph::Edge> = Vec::new();
-
-		for input in &tx.inputs {
-			let output = OutputIdentifier::from_input(&input);
-			let base = graph::Edge::new(None, Some(tx_hash), output.clone());
-
-			// Note that search_for_best_output does not examine orphans, by
-			// design. If an incoming transaction consumes pool outputs already
-			// spent by the orphans set, this does not preclude its inclusion
-			// into the pool.
-			match self.search_for_best_output(&output, stem) {
-				Parent::PoolTransaction { tx_ref: x } => pool_refs.push(base.with_source(Some(x))),
-				Parent::BlockTransaction => {
-					let height = head_header.height + 1;
-					self.blockchain.is_matured(&input, height)?;
-					blockchain_refs.push(base);
-				}
-				Parent::Unknown => orphan_refs.push(base),
-				Parent::AlreadySpent { other_tx: x } => {
-					return Err(PoolError::DoubleSpend {
-						other_tx: x,
-						spent_output: input.commitment(),
-					})
-				}
-			}
-		}
-		Ok(vec![pool_refs, orphan_refs, blockchain_refs])
-	}
 }
 
 #[cfg(test)]
@@ -923,6 +901,7 @@ mod tests {
 		// Now take the read lock and use a few exposed methods to check consistency
 		{
 			let read_pool = pool.read().unwrap();
+			assert_eq!(read_pool.orphans_size(),0);
 			assert_eq!(read_pool.total_size(), 2);
 			expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 12);
 			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 11, 5);
