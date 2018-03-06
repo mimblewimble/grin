@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -155,5 +155,8 @@ impl PeerStore {
 }
 
 fn peer_key(peer_addr: SocketAddr) -> Vec<u8> {
-	to_key(PEER_PREFIX, &mut format!("{}:{}", peer_addr.ip(), peer_addr.port()).into_bytes())
+	to_key(
+		PEER_PREFIX,
+		&mut format!("{}:{}", peer_addr.ip(), peer_addr.port()).into_bytes(),
+	)
 }

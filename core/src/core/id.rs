@@ -16,14 +16,13 @@
 
 use std::cmp::min;
 
-use byteorder::{LittleEndian, ByteOrder};
+use byteorder::{ByteOrder, LittleEndian};
 use siphasher::sip::SipHasher24;
 
 use core::hash::{Hash, Hashed};
 use ser;
-use ser::{Reader, Readable, Writer, Writeable};
+use ser::{Readable, Reader, Writeable, Writer};
 use util;
-
 
 /// The size of a short id used to identify inputs|outputs|kernels (6 bytes)
 pub const SHORT_ID_SIZE: usize = 6;
@@ -62,7 +61,8 @@ impl<H: Hashed> ShortIdentifiable for H {
 		sip_hasher.write(&self.hash().to_vec()[..]);
 		let res = sip_hasher.finish();
 
-		// construct a short_id from the resulting bytes (dropping the 2 most significant bytes)
+		// construct a short_id from the resulting bytes (dropping the 2 most
+		// significant bytes)
 		let mut buf = [0; 8];
 		LittleEndian::write_u64(&mut buf, res);
 		ShortId::from_bytes(&buf[0..6])
@@ -131,7 +131,6 @@ mod test {
 	use super::*;
 	use ser::{Writeable, Writer};
 
-
 	#[test]
 	fn test_short_id() {
 		// minimal struct for testing
@@ -152,7 +151,10 @@ mod test {
 		assert_eq!(foo.hash(), expected_hash);
 
 		let other_hash = Hash::zero();
-		assert_eq!(foo.short_id(&other_hash, foo.0), ShortId::from_hex("4cc808b62476").unwrap());
+		assert_eq!(
+			foo.short_id(&other_hash, foo.0),
+			ShortId::from_hex("4cc808b62476").unwrap()
+		);
 
 		let foo = Foo(5);
 		let expected_hash = Hash::from_hex(
@@ -161,7 +163,10 @@ mod test {
 		assert_eq!(foo.hash(), expected_hash);
 
 		let other_hash = Hash::zero();
-		assert_eq!(foo.short_id(&other_hash, foo.0), ShortId::from_hex("02955a094534").unwrap());
+		assert_eq!(
+			foo.short_id(&other_hash, foo.0),
+			ShortId::from_hex("02955a094534").unwrap()
+		);
 
 		let foo = Foo(5);
 		let expected_hash = Hash::from_hex(
@@ -172,6 +177,9 @@ mod test {
 		let other_hash = Hash::from_hex(
 			"81e47a19e6b29b0a65b9591762ce5143ed30d0261e5d24a3201752506b20f15c",
 		).unwrap();
-		assert_eq!(foo.short_id(&other_hash, foo.0), ShortId::from_hex("3e9cde72a687").unwrap());
+		assert_eq!(
+			foo.short_id(&other_hash, foo.0),
+			ShortId::from_hex("3e9cde72a687").unwrap()
+		);
 	}
 }

@@ -9,7 +9,7 @@ Grin is an in-progress implementation of the MimbleWimble protocol. Many charact
   * Cuckoo Cycle proof of work (at least to start with).
   * Relatively fast block time (a minute or less, possibly decreasing as networks improve).
   * Fixed block reward, both over time and in blocks (fees are not additive).
-  * Transaction fees are based on the number of UTXO created/destroyed and total transaction size.
+  * Transaction fees are based on the number of Outputs created/destroyed and total transaction size.
   * Smooth curve for difficulty adjustments.
 
 To learn more, read our [introduction to MimbleWimble and Grin](doc/intro.md).

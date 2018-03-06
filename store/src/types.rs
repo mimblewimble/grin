@@ -48,8 +48,9 @@ pub struct AppendOnlyFile {
 }
 
 impl AppendOnlyFile {
-	/// Open a file (existing or not) as append-only, backed by a mmap.
-	pub fn open(path: String) -> io::Result<AppendOnlyFile> {
+	/// Open a file (existing or not) as append-only, backed by a mmap. Sets
+	/// the last written pos to to_pos if > 0, otherwise the end of the file
+	pub fn open(path: String, to_pos: u64) -> io::Result<AppendOnlyFile> {
 		let file = OpenOptions::new()
 			.read(true)
 			.append(true)
@@ -64,8 +65,12 @@ impl AppendOnlyFile {
 			buffer_start_bak: 0,
 		};
 		if let Ok(sz) = aof.size() {
-			if sz > 0 {
-				aof.buffer_start = sz as usize;
+			let mut buf_start = sz;
+			if to_pos > 0 && to_pos <= buf_start {
+				buf_start = to_pos;
+			}
+			if buf_start > 0 {
+				aof.buffer_start = buf_start as usize;
 				aof.mmap = Some(unsafe { memmap::Mmap::map(&aof.file)? });
 			}
 		}
@@ -98,10 +103,16 @@ impl AppendOnlyFile {
 		}
 		self.buffer_start += self.buffer.len();
 		self.file.write(&self.buffer[..])?;
-		self.file.sync_data()?;
+		self.file.sync_all()?;
 		self.buffer = vec![];
 		self.mmap = Some(unsafe { memmap::Mmap::map(&self.file)? });
 		Ok(())
+	}
+
+	/// Returns the last position (in bytes), taking into account whether data
+	/// has been rewound
+	pub fn last_buffer_pos(&self) -> usize {
+		self.buffer_start
 	}
 
 	/// Discard the current non-flushed data.
@@ -119,7 +130,7 @@ impl AppendOnlyFile {
 	pub fn read(&self, offset: usize, length: usize) -> Vec<u8> {
 		if offset >= self.buffer_start {
 			let offset = offset - self.buffer_start;
-			return self.buffer[offset..(offset+length)].to_vec();
+			return self.buffer[offset..(offset + length)].to_vec();
 		}
 		if let None = self.mmap {
 			return vec![];
@@ -303,8 +314,8 @@ impl RemoveLog {
 				}
 			}
 		}
-		let pos = match complete_list.binary_search(&(elmt,0)){
-			Ok(idx) => idx+1,
+		let pos = match complete_list.binary_search(&(elmt, 0)) {
+			Ok(idx) => idx + 1,
 			Err(idx) => idx,
 		};
 		complete_list.split_at(pos).0.len()

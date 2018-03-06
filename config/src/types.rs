@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -45,8 +45,7 @@ impl fmt::Display for ConfigError {
 			ConfigError::ParseError(ref file_name, ref message) => write!(
 				f,
 				"Error parsing configuration file at {} - {}",
-				file_name,
-				message
+				file_name, message
 			),
 			ConfigError::FileIOError(ref file_name, ref message) => {
 				write!(f, "{} {}", message, file_name)

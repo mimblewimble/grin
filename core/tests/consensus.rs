@@ -20,9 +20,14 @@ use core::core::target::Difficulty;
 use core::global;
 use core::consensus::*;
 
-	// Builds an iterator for next difficulty calculation with the provided
- // constant time interval, difficulty and total length.
-fn repeat(interval: u64, diff: u64, len: u64, cur_time:Option<u64>) -> Vec<Result<(u64, Difficulty), TargetError>> {
+// Builds an iterator for next difficulty calculation with the provided
+// constant time interval, difficulty and total length.
+fn repeat(
+	interval: u64,
+	diff: u64,
+	len: u64,
+	cur_time: Option<u64>,
+) -> Vec<Result<(u64, Difficulty), TargetError>> {
 	let cur_time = match cur_time {
 		Some(t) => t,
 		None => time::get_time().sec as u64,
@@ -39,25 +44,32 @@ fn repeat(interval: u64, diff: u64, len: u64, cur_time:Option<u64>) -> Vec<Resul
 
 // Creates a new chain with a genesis at a simulated difficulty
 fn create_chain_sim(diff: u64) -> Vec<Result<(u64, Difficulty), TargetError>> {
-	vec![Ok((time::get_time().sec as u64, Difficulty::from_num(diff)))]
+	vec![
+		Ok((time::get_time().sec as u64, Difficulty::from_num(diff))),
+	]
 }
 
 // Adds another 'block' to the iterator, so to speak, with difficulty calculated
 // from the difficulty adjustment at interval seconds from the previous block
-fn add_block(interval: u64, chain_sim: Vec<Result<(u64, Difficulty), TargetError>>) 
-	-> Vec<Result<(u64, Difficulty), TargetError>> {
+fn add_block(
+	interval: u64,
+	chain_sim: Vec<Result<(u64, Difficulty), TargetError>>,
+) -> Vec<Result<(u64, Difficulty), TargetError>> {
 	let mut return_chain = chain_sim.clone();
 	// get last interval
 	let last_elem = chain_sim.first().as_ref().unwrap().as_ref().unwrap();
-	return_chain.insert(0, Ok((last_elem.0+interval, last_elem.clone().1)));
+	return_chain.insert(0, Ok((last_elem.0 + interval, last_elem.clone().1)));
 	let diff = next_difficulty(return_chain.clone()).unwrap();
-	return_chain[0]=Ok((last_elem.0+interval, diff));
+	return_chain[0] = Ok((last_elem.0 + interval, diff));
 	return_chain
 }
 
 // Adds another n 'blocks' to the iterator, with difficulty calculated
-fn add_block_repeated(interval: u64, chain_sim: Vec<Result<(u64, Difficulty), TargetError>>, iterations: usize) 
-	-> Vec<Result<(u64, Difficulty), TargetError>> {
+fn add_block_repeated(
+	interval: u64,
+	chain_sim: Vec<Result<(u64, Difficulty), TargetError>>,
+	iterations: usize,
+) -> Vec<Result<(u64, Difficulty), TargetError>> {
 	let mut return_chain = chain_sim.clone();
 	for _ in 0..iterations {
 		return_chain = add_block(interval, return_chain.clone());
@@ -65,19 +77,23 @@ fn add_block_repeated(interval: u64, chain_sim: Vec<Result<(u64, Difficulty), Ta
 	return_chain
 }
 
-// Prints the contents of the iterator and its difficulties.. useful for tweaking
-fn print_chain_sim(chain_sim: &Vec<Result<(u64, Difficulty), TargetError>>)  {
-	let mut chain_sim=chain_sim.clone();
+// Prints the contents of the iterator and its difficulties.. useful for
+// tweaking
+fn print_chain_sim(chain_sim: &Vec<Result<(u64, Difficulty), TargetError>>) {
+	let mut chain_sim = chain_sim.clone();
 	chain_sim.reverse();
-	let mut last_time=0;
-	chain_sim.iter()
-		.enumerate()
-		.for_each(|(i, b)| {
-			let block = b.as_ref().unwrap();
-			println!("Height: {}, Time: {}, Interval: {}, Next network difficulty:{}",
-			i, block.0, block.0-last_time, block.1);
-			last_time=block.0;
-		});
+	let mut last_time = 0;
+	chain_sim.iter().enumerate().for_each(|(i, b)| {
+		let block = b.as_ref().unwrap();
+		println!(
+			"Height: {}, Time: {}, Interval: {}, Next network difficulty:{}",
+			i,
+			block.0,
+			block.0 - last_time,
+			block.1
+		);
+		last_time = block.0;
+	});
 }
 
 fn repeat_offs(
@@ -86,10 +102,13 @@ fn repeat_offs(
 	diff: u64,
 	len: u64,
 ) -> Vec<Result<(u64, Difficulty), TargetError>> {
-	map_vec!(repeat(interval, diff, len, Some(from)), |e| match e.clone() {
-		Err(e) => Err(e),
-		Ok((t, d)) => Ok((t, d)),
-	})
+	map_vec!(
+		repeat(interval, diff, len, Some(from)),
+		|e| match e.clone() {
+			Err(e) => Err(e),
+			Ok((t, d)) => Ok((t, d)),
+		}
+	)
 }
 
 /// Checks different next_target adjustments and difficulty boundaries
@@ -123,7 +142,7 @@ fn adjustment_scenarios() {
 	println!("*********************************************************");
 	let just_enough = (DIFFICULTY_ADJUST_WINDOW + MEDIAN_TIME_WINDOW) as usize;
 
-// Steady difficulty for a good while, then a sudden drop 
+	// Steady difficulty for a good while, then a sudden drop
 	let chain_sim = create_chain_sim(global::initial_block_difficulty());
 	let chain_sim = add_block_repeated(10, chain_sim, just_enough as usize);
 	let chain_sim = add_block_repeated(600, chain_sim, 10);
@@ -135,7 +154,7 @@ fn adjustment_scenarios() {
 	print_chain_sim(&chain_sim);
 	println!("*********************************************************");
 
-// Sudden increase
+	// Sudden increase
 	let chain_sim = create_chain_sim(global::initial_block_difficulty());
 	let chain_sim = add_block_repeated(60, chain_sim, just_enough as usize);
 	let chain_sim = add_block_repeated(10, chain_sim, 10);
@@ -147,7 +166,7 @@ fn adjustment_scenarios() {
 	print_chain_sim(&chain_sim);
 	println!("*********************************************************");
 
-// Oscillations
+	// Oscillations
 	let chain_sim = create_chain_sim(global::initial_block_difficulty());
 	let chain_sim = add_block_repeated(60, chain_sim, just_enough as usize);
 	let chain_sim = add_block_repeated(10, chain_sim, 10);
@@ -166,7 +185,7 @@ fn adjustment_scenarios() {
 #[test]
 fn next_target_adjustment() {
 	global::set_mining_mode(global::ChainTypes::AutomatedTesting);
-	let cur_time =  time::get_time().sec as u64;
+	let cur_time = time::get_time().sec as u64;
 
 	assert_eq!(
 		next_difficulty(vec![Ok((cur_time, Difficulty::one()))]).unwrap(),
@@ -194,7 +213,12 @@ fn next_target_adjustment() {
 	// checking averaging works
 	let sec = DIFFICULTY_ADJUST_WINDOW / 2 + MEDIAN_TIME_WINDOW;
 	let mut s1 = repeat(60, 500, sec, Some(cur_time));
-	let mut s2 = repeat_offs(cur_time+(sec * 60) as u64, 60, 1500, DIFFICULTY_ADJUST_WINDOW / 2);
+	let mut s2 = repeat_offs(
+		cur_time + (sec * 60) as u64,
+		60,
+		1500,
+		DIFFICULTY_ADJUST_WINDOW / 2,
+	);
 	s2.append(&mut s1);
 	assert_eq!(next_difficulty(s2).unwrap(), Difficulty::from_num(1000));
 

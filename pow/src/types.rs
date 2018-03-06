@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ pub struct CuckooMinerPluginConfig {
 	pub type_filter: String,
 
 	/// device params
-	pub device_parameters: Option<HashMap<String, HashMap<String, u32>>>
+	pub device_parameters: Option<HashMap<String, HashMap<String, u32>>>,
 }
 
 impl Default for CuckooMinerPluginConfig {

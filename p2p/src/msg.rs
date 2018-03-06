@@ -1,4 +1,4 @@
-// Copyright 2016-2018 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 //! Message types that transit over the network and related serialization code.
 
 use std::io::{self, Read, Write};
-use std::net::{TcpStream, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream};
 use std::thread;
 use std::time;
 use num::FromPrimitive;
@@ -65,8 +65,8 @@ enum_from_primitive! {
 		GetCompactBlock,
 		CompactBlock,
 		Transaction,
-		SumtreesRequest,
-		SumtreesArchive
+		TxHashSetRequest,
+		TxHashSetArchive
 	}
 }
 
@@ -81,14 +81,13 @@ enum_from_primitive! {
 /// time is not guaranteed to be exact. To support cases where we want to poll
 /// instead of blocking, a `block_on_empty` boolean, when false, ensures
 /// `read_exact` returns early with a `io::ErrorKind::WouldBlock` if nothing
-/// has been read from the socket. 
+/// has been read from the socket.
 pub fn read_exact(
 	conn: &mut TcpStream,
 	mut buf: &mut [u8],
 	timeout: u32,
 	block_on_empty: bool,
 ) -> io::Result<()> {
-
 	let sleep_time = time::Duration::from_millis(1);
 	let mut count = 0;
 
@@ -116,7 +115,10 @@ pub fn read_exact(
 			break;
 		}
 		if count > timeout {
-			return Err(io::Error::new(io::ErrorKind::TimedOut, "reading from tcp stream"));
+			return Err(io::Error::new(
+				io::ErrorKind::TimedOut,
+				"reading from tcp stream",
+			));
 		}
 	}
 	Ok(())
@@ -124,14 +126,17 @@ pub fn read_exact(
 
 /// Same as `read_exact` but for writing.
 pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<()> {
-
 	let sleep_time = time::Duration::from_millis(1);
 	let mut count = 0;
 
 	while !buf.is_empty() {
 		match conn.write(buf) {
-			Ok(0) => return Err(io::Error::new(io::ErrorKind::WriteZero,
-																		 "failed to write whole buffer")),
+			Ok(0) => {
+				return Err(io::Error::new(
+					io::ErrorKind::WriteZero,
+					"failed to write whole buffer",
+				))
+			}
 			Ok(n) => buf = &buf[n..],
 			Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
 			Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
@@ -144,7 +149,10 @@ pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<(
 			break;
 		}
 		if count > timeout {
-			return Err(io::Error::new(io::ErrorKind::TimedOut, "reading from tcp stream"));
+			return Err(io::Error::new(
+				io::ErrorKind::TimedOut,
+				"reading from tcp stream",
+			));
 		}
 	}
 	Ok(())
@@ -154,7 +162,6 @@ pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<(
 /// underlying stream is async. Typically headers will be polled for, so
 /// we do not want to block.
 pub fn read_header(conn: &mut TcpStream) -> Result<MsgHeader, Error> {
-
 	let mut head = vec![0u8; HEADER_LEN as usize];
 	read_exact(conn, &mut head, 10000, false)?;
 	let header = ser::deserialize::<MsgHeader>(&mut &head[..])?;
@@ -188,10 +195,7 @@ where
 	read_body(&header, conn)
 }
 
-pub fn write_to_buf<T>(
-	msg: T,
-	msg_type: Type,
-) -> Vec<u8>
+pub fn write_to_buf<T>(msg: T, msg_type: Type) -> Vec<u8>
 where
 	T: Writeable,
 {
@@ -208,11 +212,7 @@ where
 	msg_buf
 }
 
-pub fn write_message<T>(
-	conn: &mut TcpStream,
-	msg: T,
-	msg_type: Type,
-) -> Result<(), Error>
+pub fn write_message<T>(conn: &mut TcpStream, msg: T, msg_type: Type) -> Result<(), Error>
 where
 	T: Writeable + 'static,
 {
@@ -597,11 +597,14 @@ impl Readable for Ping {
 			Ok(diff) => diff,
 			Err(_) => Difficulty::zero(),
 		};
-		let height = match reader.read_u64(){
+		let height = match reader.read_u64() {
 			Ok(h) => h,
 			Err(_) => 0,
 		};
-		Ok(Ping { total_difficulty, height })
+		Ok(Ping {
+			total_difficulty,
+			height,
+		})
 	}
 }
 
@@ -610,7 +613,7 @@ pub struct Pong {
 	/// may be needed
 	pub total_difficulty: Difficulty,
 	/// height accumulated by sender
-	pub height: u64
+	pub height: u64,
 }
 
 impl Writeable for Pong {
@@ -632,20 +635,23 @@ impl Readable for Pong {
 			Ok(h) => h,
 			Err(_) => 0,
 		};
-		Ok(Pong { total_difficulty, height })
+		Ok(Pong {
+			total_difficulty,
+			height,
+		})
 	}
 }
 
-/// Request to get an archive of the full sumtree store, required to sync
+/// Request to get an archive of the full txhashset store, required to sync
 /// a new node.
-pub struct SumtreesRequest {
-	/// Hash of the block for which the sumtrees should be provided
+pub struct TxHashSetRequest {
+	/// Hash of the block for which the txhashset should be provided
 	pub hash: Hash,
-	/// Height of the corresponding block	
-	pub height: u64
+	/// Height of the corresponding block
+	pub height: u64,
 }
 
-impl Writeable for SumtreesRequest {
+impl Writeable for TxHashSetRequest {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.hash.write(writer)?;
 		writer.write_u64(self.height)?;
@@ -653,21 +659,21 @@ impl Writeable for SumtreesRequest {
 	}
 }
 
-impl Readable for SumtreesRequest {
-	fn read(reader: &mut Reader) -> Result<SumtreesRequest, ser::Error> {
-		Ok(SumtreesRequest {
+impl Readable for TxHashSetRequest {
+	fn read(reader: &mut Reader) -> Result<TxHashSetRequest, ser::Error> {
+		Ok(TxHashSetRequest {
 			hash: Hash::read(reader)?,
 			height: reader.read_u64()?,
 		})
 	}
 }
 
-/// Response to a sumtree archive request, must include a zip stream of the
+/// Response to a txhashset archive request, must include a zip stream of the
 /// archive after the message body.
-pub struct SumtreesArchive {
-	/// Hash of the block for which the sumtrees are provided
+pub struct TxHashSetArchive {
+	/// Hash of the block for which the txhashset are provided
 	pub hash: Hash,
-	/// Height of the corresponding block	
+	/// Height of the corresponding block
 	pub height: u64,
 	/// Output tree index the receiver should rewind to
 	pub rewind_to_output: u64,
@@ -677,23 +683,32 @@ pub struct SumtreesArchive {
 	pub bytes: u64,
 }
 
-impl Writeable for SumtreesArchive {
+impl Writeable for TxHashSetArchive {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.hash.write(writer)?;
-		ser_multiwrite!(writer, [write_u64, self.height],
-										[write_u64, self.rewind_to_output],
-										[write_u64, self.rewind_to_kernel],
-										[write_u64, self.bytes]);
+		ser_multiwrite!(
+			writer,
+			[write_u64, self.height],
+			[write_u64, self.rewind_to_output],
+			[write_u64, self.rewind_to_kernel],
+			[write_u64, self.bytes]
+		);
 		Ok(())
 	}
 }
 
-impl Readable for SumtreesArchive {
-	fn read(reader: &mut Reader) -> Result<SumtreesArchive, ser::Error> {
+impl Readable for TxHashSetArchive {
+	fn read(reader: &mut Reader) -> Result<TxHashSetArchive, ser::Error> {
 		let hash = Hash::read(reader)?;
 		let (height, rewind_to_output, rewind_to_kernel, bytes) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64, read_u64);
 
-		Ok(SumtreesArchive {hash, height, rewind_to_output, rewind_to_kernel, bytes})
+		Ok(TxHashSetArchive {
+			hash,
+			height,
+			rewind_to_output,
+			rewind_to_kernel,
+			bytes,
+		})
 	}
 }

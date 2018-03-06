@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,17 +11,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use failure::{ResultExt, Fail};
-use keychain::{Keychain, Identifier};
-use util::{LOGGER, to_hex};
+use failure::{Fail, ResultExt};
+use keychain::{Identifier, Keychain};
+use util::{to_hex, LOGGER};
 use util::secp::pedersen;
 use api;
 use core::global;
 use core::core::{Output, SwitchCommitHash};
 use core::core::transaction::OutputFeatures;
-use types::{BlockIdentifier, WalletConfig, WalletData, OutputData, OutputStatus, Error, ErrorKind};
+use types::{Error, ErrorKind, OutputData, OutputStatus, WalletConfig, WalletData};
 use byteorder::{BigEndian, ByteOrder};
-
 
 pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 	let url = format!("{}/v1/chain", config.check_node_api_http_addr);
@@ -46,13 +45,9 @@ fn output_with_range_proof(
 	commit_id: &str,
 	height: u64,
 ) -> Result<api::OutputPrintable, Error> {
-	let url =
-		format!(
-		"{}/v1/chain/utxos/byheight?start_height={}&end_height={}&id={}&include_rp",
-		config.check_node_api_http_addr,
-		height,
-		height,
-		commit_id,
+	let url = format!(
+		"{}/v1/chain/outputs/byheight?start_height={}&end_height={}&id={}&include_rp",
+		config.check_node_api_http_addr, height, height, commit_id,
 	);
 
 	match api::client::get::<Vec<api::BlockOutputs>>(url.as_str()) {
@@ -64,7 +59,7 @@ fn output_with_range_proof(
 					Err(ErrorKind::Node)?
 				}
 			} else {
-			    Err(ErrorKind::Node)?
+				Err(ErrorKind::Node)?
 			}
 		}
 		Err(e) => {
@@ -90,9 +85,15 @@ fn retrieve_amount_and_coinbase_status(
 			api::OutputType::Coinbase => OutputFeatures::COINBASE_OUTPUT,
 			api::OutputType::Transaction => OutputFeatures::DEFAULT_OUTPUT,
 		},
-		proof: output.range_proof().context(ErrorKind::GenericError("range proof error"))?,
-		switch_commit_hash: output.switch_commit_hash().context(ErrorKind::GenericError("switch commit hash error"))?,
-		commit: output.commit().context(ErrorKind::GenericError("commit error"))?,
+		proof: output
+			.range_proof()
+			.context(ErrorKind::GenericError("range proof error"))?,
+		switch_commit_hash: output
+			.switch_commit_hash()
+			.context(ErrorKind::GenericError("switch commit hash error"))?,
+		commit: output
+			.commit()
+			.context(ErrorKind::GenericError("commit error"))?,
 	};
 
 	if let Some(amount) = core_output.recover_value(keychain, &key_id) {
@@ -106,18 +107,16 @@ fn retrieve_amount_and_coinbase_status(
 	}
 }
 
-pub fn utxos_batch_block(
+pub fn outputs_batch_block(
 	config: &WalletConfig,
 	start_height: u64,
 	end_height: u64,
 ) -> Result<Vec<api::BlockOutputs>, Error> {
 	let query_param = format!("start_height={}&end_height={}", start_height, end_height);
 
-	let url =
-		format!(
-		"{}/v1/chain/utxos/byheight?{}",
-		config.check_node_api_http_addr,
-		query_param,
+	let url = format!(
+		"{}/v1/chain/outputs/byheight?{}",
+		config.check_node_api_http_addr, query_param,
 	);
 
 	match api::client::get::<Vec<api::BlockOutputs>>(url.as_str()) {
@@ -126,7 +125,7 @@ pub fn utxos_batch_block(
 			// if we got anything other than 200 back from server, bye
 			error!(
 				LOGGER,
-				"utxos_batch_block: Restore failed... unable to contact API {}. Error: {}",
+				"outputs_batch_block: Restore failed... unable to contact API {}. Error: {}",
 				config.check_node_api_http_addr,
 				e
 			);
@@ -136,7 +135,7 @@ pub fn utxos_batch_block(
 }
 
 // TODO - wrap the many return values in a struct
-fn find_utxos_with_key(
+fn find_outputs_with_key(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	switch_commit_cache: &Vec<pedersen::Commitment>,
@@ -167,12 +166,7 @@ fn find_utxos_with_key(
 				);
 
 				if x == expected_hash {
-					info!(
-						LOGGER,
-						"Output found: {:?}, key_index: {:?}",
-						output,
-						i,
-					);
+					info!(LOGGER, "Output found: {:?}, key_index: {:?}", output, i,);
 
 					// add it to result set here
 					let commit_id = output.commit.0;
@@ -219,8 +213,7 @@ fn find_utxos_with_key(
 					} else {
 						info!(
 							LOGGER,
-							"Unable to retrieve the amount (needs investigating) {:?}",
-							res,
+							"Unable to retrieve the amount (needs investigating) {:?}", res,
 						);
 					}
 				}
@@ -258,15 +251,13 @@ pub fn restore(
 	let chain_height = get_chain_height(config)?;
 	info!(
 		LOGGER,
-		"Starting restore: Chain height is {}.",
-		chain_height
+		"Starting restore: Chain height is {}.", chain_height
 	);
 
 	let mut switch_commit_cache: Vec<pedersen::Commitment> = vec![];
 	info!(
 		LOGGER,
-		"Building key derivation cache ({}) ...",
-		key_derivations,
+		"Building key derivation cache ({}) ...", key_derivations,
 	);
 	for i in 0..key_derivations {
 		let switch_commit = keychain.switch_commit_from_index(i as u32).unwrap();
@@ -288,12 +279,12 @@ pub fn restore(
 		} else {
 			h = 0;
 		}
-		let mut blocks = utxos_batch_block(config, h + 1, end_batch)?;
+		let mut blocks = outputs_batch_block(config, h + 1, end_batch)?;
 		blocks.reverse();
 
 		let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 			for block in blocks {
-				let result_vec = find_utxos_with_key(
+				let result_vec = find_outputs_with_key(
 					config,
 					keychain,
 					&switch_commit_cache,
@@ -315,14 +306,14 @@ pub fn restore(
 							height: output.4,
 							lock_height: output.5,
 							is_coinbase: output.6,
-							block: BlockIdentifier::zero(),
+							block: None,
+							merkle_proof: None,
 						});
-					};
+					}
 				}
 			}
 		});
 		h > 0
-	}
-	{}
+	} {}
 	Ok(())
 }
