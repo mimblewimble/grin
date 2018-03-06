@@ -17,7 +17,7 @@ use std::fs;
 use std::io;
 use std::marker::PhantomData;
 
-use core::core::pmmr::{self, Backend, family};
+use core::core::pmmr::{self, family, Backend};
 use core::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
 use core::core::hash::Hash;
 use util::LOGGER;
@@ -140,7 +140,6 @@ where
 
 	/// Get a Hash by insertion position
 	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)> {
-
 		// Check if this position has been pruned in the remove log or the
 		// pruned list
 		if self.is_removed(position) {
@@ -362,7 +361,8 @@ where
 		{
 			let record_len = 32;
 
-			let pos_to_rm = self.rm_log.removed
+			let pos_to_rm = self.rm_log
+				.removed
 				.iter()
 				.filter_map(|&(pos, idx)| {
 					let (parent_pos, _, _) = family(pos);
@@ -393,11 +393,13 @@ where
 		{
 			let record_len = T::len() as u64;
 
-			let pos_to_rm = self.rm_log.removed
+			let pos_to_rm = self.rm_log
+				.removed
 				.iter()
 				.filter_map(|&(pos, idx)| {
 					let (parent_pos, _, _) = family(pos);
-					if idx < cutoff_index && pmmr::is_leaf(pos) && self.rm_log.includes(parent_pos) {
+					if idx < cutoff_index && pmmr::is_leaf(pos) && self.rm_log.includes(parent_pos)
+					{
 						Some(pos)
 					} else {
 						None
