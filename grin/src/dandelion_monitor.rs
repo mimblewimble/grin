@@ -25,9 +25,12 @@ use pool::TxSource;
 use pool::BlockChain;
 
 /// A process to monitor transactions in the stempool.
-/// Periodically read the stempool and test if the embargo timer is expired.
+/// With Dandelion, transaction can be broadcasted in stem or fluff phase.
+/// When sent in stem phase, the transaction is relayed to only node: the dandelion relay. In
+/// order to maintain reliability a timer is started for each transaction sent in stem phase.
+/// This function will the stempool and test if the timer is expired.
 /// In that case the transaction will be sent in fluff phase (to multiple peers) instead of
-/// sending only to the peer relay
+/// sending only to the peer relay.
 pub fn monitor_transactions<T>(
 	config: PoolConfig,
 	tx_pool: Arc<RwLock<TransactionPool<T>>>,
