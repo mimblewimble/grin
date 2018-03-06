@@ -283,6 +283,9 @@ pub trait ChainStore: Send + Sync {
 	/// Output MMR. Used as an index for spending and pruning.
 	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, store::Error>;
 
+	/// Deletes the MMR position of an output.
+	fn delete_output_pos(&self, commit: &[u8]) -> Result<(), store::Error>;
+
 	/// Saves the position of a kernel, represented by its excess, in the
 	/// Kernel MMR. Used as an index for spending and pruning.
 	fn save_kernel_pos(&self, commit: &Commitment, pos: u64) -> Result<(), store::Error>;

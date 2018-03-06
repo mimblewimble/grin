@@ -351,8 +351,8 @@ impl Handler for PeerGetHandler {
 	}
 }
 
-// Status handler. Post a summary of the server status
-// GET /v1/status
+/// Status handler. Post a summary of the server status
+/// GET /v1/status
 pub struct StatusHandler {
 	pub chain: Weak<chain::Chain>,
 	pub peers: Weak<p2p::Peers>,
@@ -370,8 +370,8 @@ impl Handler for StatusHandler {
 	}
 }
 
-// Chain handler. Get the head details.
-// GET /v1/chain
+/// Chain handler. Get the head details.
+/// GET /v1/chain
 pub struct ChainHandler {
 	pub chain: Weak<chain::Chain>,
 }
@@ -385,6 +385,20 @@ impl ChainHandler {
 impl Handler for ChainHandler {
 	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
 		json_response(&self.get_tip())
+	}
+}
+
+/// Chain compaction handler. Trigger a compaction of the chain state to regain
+/// storage space.
+/// GET /v1/chain/compact
+pub struct ChainCompactHandler {
+	pub chain: Weak<chain::Chain>,
+}
+
+impl Handler for ChainCompactHandler {
+	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+		w(&self.chain).compact().unwrap();
+		Ok(Response::with((status::Ok, "{}")))
 	}
 }
 
@@ -581,6 +595,9 @@ pub fn start_rest_apis<T>(
 			let chain_tip_handler = ChainHandler {
 				chain: chain.clone(),
 			};
+			let chain_compact_handler = ChainCompactHandler {
+				chain: chain.clone(),
+			};
 			let status_handler = StatusHandler {
 				chain: chain.clone(),
 				peers: peers.clone(),
@@ -610,6 +627,7 @@ pub fn start_rest_apis<T>(
 			let route_list = vec![
 				"get blocks".to_string(),
 				"get chain".to_string(),
+				"get chain/compact".to_string(),
 				"get chain/outputs".to_string(),
 				"get status".to_string(),
 				"get txhashset/roots".to_string(),
@@ -624,13 +642,13 @@ pub fn start_rest_apis<T>(
 				"get peers/connected".to_string(),
 				"get peers/a.b.c.d".to_string(),
 			];
-			// We allow manually banning, like this:
-			// curl -v -X POST http://127.0.0.1:13413/v1/peers/88.99.251.87:13414/ban
 			let index_handler = IndexHandler { list: route_list };
+
 			let router = router!(
 				index: get "/" => index_handler,
 				blocks: get "/blocks/*" => block_handler,
 				chain_tip: get "/chain" => chain_tip_handler,
+				chain_compact: get "/chain/compact" => chain_compact_handler,
 				chain_outputs: get "/chain/outputs/*" => output_handler,
 				status: get "/status" => status_handler,
 				txhashset_roots: get "/txhashset/*" => txhashset_handler,

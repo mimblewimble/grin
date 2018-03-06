@@ -29,11 +29,13 @@ use core::consensus::reward;
 use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier,
                  OutputStoreable, TxKernel};
 use core::core::pmmr::{self, MerkleProof, PMMR};
+use core::global;
 use core::core::hash::{Hash, Hashed};
-use core::ser::{self, PMMRable, PMMRIndexHashable};
+use core::ser::{self, PMMRIndexHashable, PMMRable};
 
 use grin_store;
 use grin_store::pmmr::{PMMRBackend, PMMRFileMetadata};
+use grin_store::types::prune_noop;
 use types::{ChainStore, Error, PMMRFileMetadataCollection, TxHashSetRoots};
 use util::{zip, LOGGER};
 
@@ -102,7 +104,9 @@ impl TxHashSet {
 		commit_index: Arc<ChainStore>,
 		last_file_positions: Option<PMMRFileMetadataCollection>,
 	) -> Result<TxHashSet, Error> {
-		let output_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, OUTPUT_SUBDIR].iter().collect();
+		let output_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, OUTPUT_SUBDIR]
+			.iter()
+			.collect();
 		fs::create_dir_all(output_file_path.clone())?;
 
 		let rproof_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, RANGE_PROOF_SUBDIR]
@@ -110,8 +114,9 @@ impl TxHashSet {
 			.collect();
 		fs::create_dir_all(rproof_file_path.clone())?;
 
-		let kernel_file_path: PathBuf =
-			[&root_dir, TXHASHSET_SUBDIR, KERNEL_SUBDIR].iter().collect();
+		let kernel_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, KERNEL_SUBDIR]
+			.iter()
+			.collect();
 		fs::create_dir_all(kernel_file_path.clone())?;
 
 		let mut output_md = None;
@@ -203,6 +208,23 @@ impl TxHashSet {
 			PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
 		(output_pmmr.root(), rproof_pmmr.root(), kernel_pmmr.root())
 	}
+
+	/// Compact the MMR data files and flush the rm logs
+	pub fn compact(&mut self) -> Result<(), Error> {
+		let horizon = global::cut_through_horizon();
+		let commit_index = self.commit_index.clone();
+		let clean_output_index = |commit: &[u8]| {
+			let _ = commit_index.delete_output_pos(commit);
+		};
+		let min_rm = (horizon / 10) as usize;
+		self.output_pmmr_h
+			.backend
+			.check_compact(min_rm, horizon, clean_output_index)?;
+		self.rproof_pmmr_h
+			.backend
+			.check_compact(min_rm, horizon, &prune_noop)?;
+		Ok(())
+	}
 }
 
 /// Starts a new unit of work to extend the chain with additional blocks,
@@ -280,7 +302,10 @@ impl<'a> Extension<'a> {
 	// constructor
 	fn new(trees: &'a mut TxHashSet, commit_index: Arc<ChainStore>) -> Extension<'a> {
 		Extension {
-			output_pmmr: PMMR::at(&mut trees.output_pmmr_h.backend, trees.output_pmmr_h.last_pos),
+			output_pmmr: PMMR::at(
+				&mut trees.output_pmmr_h.backend,
+				trees.output_pmmr_h.last_pos,
+			),
 			rproof_pmmr: PMMR::at(
 				&mut trees.rproof_pmmr_h.backend,
 				trees.rproof_pmmr_h.last_pos,
@@ -355,7 +380,10 @@ impl<'a> Extension<'a> {
 				// if not then the input is not being honest about
 				// what it is attempting to spend...
 				if output_id_hash != read_hash
-					|| output_id_hash != read_elem.expect("no output at position").hash_with_index(pos)
+					|| output_id_hash
+						!= read_elem
+							.expect("no output at position")
+							.hash_with_index(pos)
 				{
 					return Err(Error::TxHashSetErr(format!("output pmmr hash mismatch")));
 				}
@@ -583,6 +611,15 @@ impl<'a> Extension<'a> {
 				}
 			}
 		}
+		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
+			// non-pruned leaves only
+			if pmmr::bintree_postorder_height(n) == 0 {
+				if let Some((_, kernel)) = self.kernel_pmmr.get(n, true) {
+					self.commit_index
+						.save_kernel_pos(&kernel.expect("not a leaf node").excess, n)?;
+				}
+			}
+		}
 		Ok(())
 	}
 
@@ -668,7 +705,8 @@ impl<'a> Extension<'a> {
 						sum_output = Some(commit);
 					} else {
 						let secp = secp.lock().unwrap();
-						sum_output = Some(secp.commit_sum(vec![sum_output.unwrap(), commit], vec![])?);
+						sum_output =
+							Some(secp.commit_sum(vec![sum_output.unwrap(), commit], vec![])?);
 					}
 					output_count += 1;
 				}
