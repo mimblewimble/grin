@@ -83,21 +83,24 @@ fn pmmr_compact_leaf_sibling() {
 		pmmr.prune(1, 1).unwrap();
 
 		// prune pos 8 as well to push the remove list past the cutoff
-		pmmr.prune(8, 1).unwrap();
+		// pmmr.prune(8, 1).unwrap();
+
+		// prune the other sibling, causing a subtree to be pruned (parent at pos 3)
+		pmmr.prune(2, 1).unwrap();
 	}
 	backend.sync().unwrap();
 
-	// check pos 1, 2, 3 are in the state we expect after pruning
-	{
-		let pmmr = PMMR::at(&mut backend, mmr_size);
-
-		// check that pos 1 is "removed"
-		assert_eq!(pmmr.get(1, false), None);
-
-		// check that pos 2 and 3 are unchanged
-		assert_eq!(pmmr.get(2, false).unwrap().0, pos_2_hash);
-		assert_eq!(pmmr.get(3, false).unwrap().0, pos_3_hash);
-	}
+	// // check pos 1, 2, 3 are in the state we expect after pruning
+	// {
+	// 	let pmmr = PMMR::at(&mut backend, mmr_size);
+	//
+	// 	// check that pos 1 is "removed"
+	// 	assert_eq!(pmmr.get(1, false), None);
+	//
+	// 	// check that pos 2 and 3 are unchanged
+	// 	assert_eq!(pmmr.get(2, false).unwrap().0, pos_2_hash);
+	// 	assert_eq!(pmmr.get(3, false).unwrap().0, pos_3_hash);
+	// }
 
 	// check we can still retrieve the "removed" element at pos 1 from the backend
 	// file
@@ -118,12 +121,12 @@ fn pmmr_compact_leaf_sibling() {
 		assert_eq!(pmmr.get(3, false).unwrap().0, pos_3_hash);
 	}
 
-	// check we can still retrieve the "removed" element at pos 1 from the backend
-	// file it should still be available even after pruning and compacting
+	// Check we can still retrieve the "removed" element at pos 1 from the backend
+	// file. It should still be available even after pruning and compacting.
 	// TODO - work out how to *not* prune leaves if sibling still exists
 	// we should ideally leave it in the remove list and not roll it into the prune
 	// list (somehow)
-	assert_eq!(backend.get_from_file(1).unwrap(), pos_1_hash);
+	// assert_eq!(backend.get_from_file(1).unwrap(), pos_1_hash);
 
 	assert!(false, "stop and debug");
 }

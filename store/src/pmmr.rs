@@ -333,7 +333,7 @@ where
 
 		println!("***** rm_log - {:?}", &self.rm_log.removed);
 
-		println!("***** pruned_nodes - {:?}", &self.pruned_nodes.pruned_nodes);
+		println!("***** current pruned_nodes - {:?}", &self.pruned_nodes.pruned_nodes);
 
 		// 0. validate none of the nodes in the rm log are in the prune list (to
 		// avoid accidental double compaction)
@@ -386,6 +386,12 @@ where
 				self.pruned_nodes.add(rm_pos);
 			}
 		}
+
+		// TODO - we do not want the "roots" of each pruned tree to be in the
+		// list of pruned nodes (just everything beneath it)
+		// TODO - we also want to keep leaves hanging around in the rm log
+		println!("***** updated pruned_nodes - {:?}", &self.pruned_nodes.pruned_nodes);
+
 		write_vec(
 			format!("{}/{}", self.data_dir, PMMR_PRUNED_FILE),
 			&self.pruned_nodes.pruned_nodes,

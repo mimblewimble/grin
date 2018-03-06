@@ -421,23 +421,31 @@ where
 		// loop going up the tree, from node to parent, as long as we stay inside
 		// the tree.
 		let mut to_prune = vec![];
+
 		let mut current = position;
 		while current + 1 < self.last_pos {
+			println!("***** pmmr: prune: checking if we can prune - {}", current);
 			let (parent, sibling, _) = family(current);
 			if parent > self.last_pos {
 				// can't prune when our parent isn't here yet
 				break;
 			}
+
+			println!("***** pmmr: prune: pushing to prune list - {}", current);
 			to_prune.push(current);
 
 			// if we have a pruned sibling, we can continue up the tree
 			// otherwise we're done
 			if let None = self.backend.get(sibling, false) {
+				println!("***** pmmr: prune: sibling pruned (pos {}), going up tree", sibling);
 				current = parent;
 			} else {
+				println!("***** pmmr: prune: hit a root (so far) of a pruned subtree {}", current);
 				break;
 			}
 		}
+
+		// at this point we *could* know leaves and roots of pruned subtrees
 
 		self.backend.remove(to_prune, index)?;
 		Ok(true)
@@ -596,7 +604,18 @@ impl PruneList {
 				Some(
 					self.pruned_nodes[0..(idx as usize)]
 						.iter()
-						.map(|n| (1 << (bintree_postorder_height(*n) + 1)) - 1)
+						.map(|n| {
+							let height = bintree_postorder_height(*n);
+							if height == 0 {
+								0
+							} else {
+								// (1 << height) - 1
+								// height 1, offset 2
+								// height 2, offset 6
+								// TODO - rework this calculation...
+								(1 << height + 1) - 1 - 1
+							}
+						})
 						.sum(),
 				)
 			}
@@ -606,18 +625,33 @@ impl PruneList {
 	/// As above, but only returning the number of leaf nodes to skip for a
 	/// given leaf. Helpful if, for instance, data for each leaf is being stored
 	/// separately in a continuous flat-file
+	///
+	/// EXPERIMENTAL -
+	/// height 0 == 0 leaves (slightly more complex than 1 leaf as we need the hash even after pruning)
+	/// height 1 == 2 leaves
+	///
 	pub fn get_leaf_shift(&self, pos: u64) -> Option<u64> {
 		// get the position where the node at pos would fit in the pruned list, if
 		// it's already pruned, nothing to skip
 		match self.pruned_pos(pos) {
 			None => None,
 			Some(idx) => {
-				// skip by the number of leaf nodes pruned in the preceeding subtrees
-				// which just 2^height
 				Some(
+					// skip by the number of leaf nodes pruned in the preceeding subtrees
+					// which just 2^height
+					// except in the case of height==0 (where we want to treat the pruned tree as 0 leaves)
 					self.pruned_nodes[0..(idx as usize)]
 						.iter()
-						.map(|n| 1 << bintree_postorder_height(*n))
+						.map(|n| {
+							let height = bintree_postorder_height(*n);
+							if height == 0 {
+								0
+							} else {
+								(1 << height)
+							}
+							// original behavior
+							// 1 << bintree_postorder_height(*n)
+						})
 						.sum(),
 				)
 			}
@@ -628,16 +662,20 @@ impl PruneList {
 	/// list if pruning the additional node means a parent can get pruned as
 	/// well.
 	pub fn add(&mut self, pos: u64) {
+		println!("****** pmmr: prunelist: add: pos {}", pos);
+
 		let mut current = pos;
 		loop {
 			let (parent, sibling, _) = family(current);
 			match self.pruned_nodes.binary_search(&sibling) {
 				Ok(idx) => {
+					println!("****** pmmr: prunelist: add: sibling also pruned (pos {}), traversing up to {}", sibling, parent);
 					self.pruned_nodes.remove(idx);
 					current = parent;
 				}
 				Err(_) => {
 					if let Err(idx) = self.pruned_nodes.binary_search(&current) {
+						println!("****** pmmr: prunelist: add: inserting idx {}, pos {}", idx, current);
 						self.pruned_nodes.insert(idx, current);
 					}
 					break;
@@ -1502,42 +1540,189 @@ mod test {
 	}
 
 	#[test]
+	fn pmmr_prune_leaf_shift() {
+		let mut pl = PruneList::new();
+
+		// start with an empty prune list (nothing shifted)
+		assert_eq!(pl.pruned_nodes.len(), 0);
+		assert_eq!(pl.get_leaf_shift(1), Some(0));
+		assert_eq!(pl.get_leaf_shift(2), Some(0));
+		assert_eq!(pl.get_leaf_shift(4), Some(0));
+
+		// now add a single leaf pos to the prune list
+		// note this does not shift anything (we only start shifting after pruning a parent)
+		pl.add(1);
+		assert_eq!(pl.pruned_nodes.len(), 1);
+		assert_eq!(pl.pruned_nodes, [1]);
+		assert_eq!(pl.get_leaf_shift(1), None);
+		assert_eq!(pl.get_leaf_shift(2), Some(0));
+		assert_eq!(pl.get_leaf_shift(3), Some(0));
+		assert_eq!(pl.get_leaf_shift(4), Some(0));
+
+		// now add the sibling leaf pos (pos 1 and pos 2) which will prune the parent at pos 3
+		// this in turn will "leaf shift" the leaf at pos 3 by 2
+		pl.add(2);
+		assert_eq!(pl.pruned_nodes.len(), 1);
+		assert_eq!(pl.pruned_nodes, [3]);
+		assert_eq!(pl.get_leaf_shift(1), None);
+		assert_eq!(pl.get_leaf_shift(2), None);
+		assert_eq!(pl.get_leaf_shift(3), None);
+		assert_eq!(pl.get_leaf_shift(4), Some(2));
+		assert_eq!(pl.get_leaf_shift(5), Some(2));
+
+		// now prune an additional leaf at pos 4
+		// leaf offset of subsequent pos will be 2
+		// 00100120
+		pl.add(4);
+		assert_eq!(pl.pruned_nodes, [3, 4]);
+		assert_eq!(pl.get_leaf_shift(1), None);
+		assert_eq!(pl.get_leaf_shift(2), None);
+		assert_eq!(pl.get_leaf_shift(3), None);
+		assert_eq!(pl.get_leaf_shift(4), None);
+		assert_eq!(pl.get_leaf_shift(5), Some(2));
+		assert_eq!(pl.get_leaf_shift(6), Some(2));
+		assert_eq!(pl.get_leaf_shift(7), Some(2));
+		assert_eq!(pl.get_leaf_shift(8), Some(2));
+
+		// now prune the sibling at pos 5
+		// the two smaller subtrees (pos 3 and pos 6) are rolled up to larger subtree (pos 7)
+		// the leaf offset is now 4 to cover entire subtree containing first 4 leaves
+		// 00100120
+		pl.add(5);
+		assert_eq!(pl.pruned_nodes, [7]);
+		assert_eq!(pl.get_leaf_shift(1), None);
+		assert_eq!(pl.get_leaf_shift(2), None);
+		assert_eq!(pl.get_leaf_shift(3), None);
+		assert_eq!(pl.get_leaf_shift(4), None);
+		assert_eq!(pl.get_leaf_shift(5), None);
+		assert_eq!(pl.get_leaf_shift(6), None);
+		assert_eq!(pl.get_leaf_shift(7), None);
+		assert_eq!(pl.get_leaf_shift(8), Some(4));
+		assert_eq!(pl.get_leaf_shift(9), Some(4));
+
+		// now check we can prune some of these in an arbitrary order
+		// final result is one leaf (pos 2) and one small subtree (pos 6) pruned
+		// with leaf offset of 2 to account for the pruned subtree
+		let mut pl = PruneList::new();
+		pl.add(2);
+		pl.add(5);
+		pl.add(4);
+		assert_eq!(pl.pruned_nodes, [2, 6]);
+		assert_eq!(pl.get_leaf_shift(1), Some(0));
+		assert_eq!(pl.get_leaf_shift(2), None);
+		assert_eq!(pl.get_leaf_shift(3), Some(0));
+		assert_eq!(pl.get_leaf_shift(4), None);
+		assert_eq!(pl.get_leaf_shift(5), None);
+		assert_eq!(pl.get_leaf_shift(6), None);
+		assert_eq!(pl.get_leaf_shift(7), Some(2));
+		assert_eq!(pl.get_leaf_shift(8), Some(2));
+		assert_eq!(pl.get_leaf_shift(9), Some(2));
+	}
+
+	#[test]
 	fn pmmr_prune_list() {
 		let mut pl = PruneList::new();
-		pl.add(4);
-		assert_eq!(pl.pruned_nodes.len(), 1);
-		assert_eq!(pl.pruned_nodes[0], 4);
-		assert_eq!(pl.get_shift(5), Some(1));
+		assert!(pl.pruned_nodes.is_empty());
+		assert_eq!(pl.get_shift(1), Some(0));
 		assert_eq!(pl.get_shift(2), Some(0));
-		assert_eq!(pl.get_shift(4), None);
+		assert_eq!(pl.get_shift(3), Some(0));
 
-		pl.add(5);
-		assert_eq!(pl.pruned_nodes.len(), 1);
-		assert_eq!(pl.pruned_nodes[0], 6);
-		assert_eq!(pl.get_shift(8), Some(3));
+		// prune a single leaf node
+		// pruning only a leaf node does not shift any subsequent pos
+		// we will only start shifting when a parent can be pruned
+		pl.add(1);
+		assert_eq!(pl.pruned_nodes, [1]);
+		assert_eq!(pl.get_shift(1), None);
 		assert_eq!(pl.get_shift(2), Some(0));
-		assert_eq!(pl.get_shift(5), None);
+		assert_eq!(pl.get_shift(3), Some(0));
 
 		pl.add(2);
-		assert_eq!(pl.pruned_nodes.len(), 2);
-		assert_eq!(pl.pruned_nodes[0], 2);
-		assert_eq!(pl.get_shift(8), Some(4));
+		assert_eq!(pl.pruned_nodes, [3]);
+		assert_eq!(pl.get_shift(1), None);
+		assert_eq!(pl.get_shift(2), None);
+		assert_eq!(pl.get_shift(3), None);
+		assert_eq!(pl.get_shift(4), Some(2));
+		assert_eq!(pl.get_shift(5), Some(2));
+		assert_eq!(pl.get_shift(6), Some(2));
+
+		pl.add(4);
+		assert_eq!(pl.pruned_nodes, [3, 4]);
+		assert_eq!(pl.get_shift(1), None);
+		assert_eq!(pl.get_shift(2), None);
+		assert_eq!(pl.get_shift(3), None);
+		assert_eq!(pl.get_shift(4), None);
+		assert_eq!(pl.get_shift(5), Some(2));
+		assert_eq!(pl.get_shift(6), Some(2));
+
+		pl.add(5);
+		assert_eq!(pl.pruned_nodes, [7]);
+		assert_eq!(pl.get_shift(1), None);
+		assert_eq!(pl.get_shift(2), None);
+		assert_eq!(pl.get_shift(3), None);
+		assert_eq!(pl.get_shift(4), None);
+		assert_eq!(pl.get_shift(5), None);
+		assert_eq!(pl.get_shift(6), None);
+		assert_eq!(pl.get_shift(7), None);
+		assert_eq!(pl.get_shift(8), Some(6));
+		assert_eq!(pl.get_shift(9), Some(6));
+
+		let mut pl = PruneList::new();
+		pl.add(2);
+		pl.add(5);
+		pl.add(4);
+		assert_eq!(pl.pruned_nodes, [2, 6]);
 		assert_eq!(pl.get_shift(1), Some(0));
+		assert_eq!(pl.get_shift(2), None);
+		assert_eq!(pl.get_shift(3), Some(0));
+		assert_eq!(pl.get_shift(4), None);
+		assert_eq!(pl.get_shift(5), None);
+		assert_eq!(pl.get_shift(6), None);
+		assert_eq!(pl.get_shift(7), Some(2));
+		assert_eq!(pl.get_shift(8), Some(2));
+		assert_eq!(pl.get_shift(9), Some(2));
 
-		pl.add(8);
-		pl.add(11);
-		assert_eq!(pl.pruned_nodes.len(), 4);
+		// TODO - put some of these tests back in place for completeness
 
-		pl.add(1);
-		assert_eq!(pl.pruned_nodes.len(), 3);
-		assert_eq!(pl.pruned_nodes[0], 7);
-		assert_eq!(pl.get_shift(12), Some(9));
-
-		pl.add(12);
-		assert_eq!(pl.pruned_nodes.len(), 3);
-		assert_eq!(pl.get_shift(12), None);
-		assert_eq!(pl.get_shift(9), Some(8));
-		assert_eq!(pl.get_shift(17), Some(11));
+		//
+		// let mut pl = PruneList::new();
+		// pl.add(4);
+		// assert_eq!(pl.pruned_nodes.len(), 1);
+		// assert_eq!(pl.pruned_nodes, [4]);
+		// assert_eq!(pl.get_shift(1), Some(0));
+		// assert_eq!(pl.get_shift(2), Some(0));
+		// assert_eq!(pl.get_shift(3), Some(0));
+		// assert_eq!(pl.get_shift(4), None);
+		// assert_eq!(pl.get_shift(5), Some(1));
+		// assert_eq!(pl.get_shift(6), Some(1));
+		//
+		//
+		// pl.add(5);
+		// assert_eq!(pl.pruned_nodes.len(), 1);
+		// assert_eq!(pl.pruned_nodes[0], 6);
+		// assert_eq!(pl.get_shift(8), Some(3));
+		// assert_eq!(pl.get_shift(2), Some(0));
+		// assert_eq!(pl.get_shift(5), None);
+		//
+		// pl.add(2);
+		// assert_eq!(pl.pruned_nodes.len(), 2);
+		// assert_eq!(pl.pruned_nodes[0], 2);
+		// assert_eq!(pl.get_shift(8), Some(4));
+		// assert_eq!(pl.get_shift(1), Some(0));
+		//
+		// pl.add(8);
+		// pl.add(11);
+		// assert_eq!(pl.pruned_nodes.len(), 4);
+		//
+		// pl.add(1);
+		// assert_eq!(pl.pruned_nodes.len(), 3);
+		// assert_eq!(pl.pruned_nodes[0], 7);
+		// assert_eq!(pl.get_shift(12), Some(9));
+		//
+		// pl.add(12);
+		// assert_eq!(pl.pruned_nodes.len(), 3);
+		// assert_eq!(pl.get_shift(12), None);
+		// assert_eq!(pl.get_shift(9), Some(8));
+		// assert_eq!(pl.get_shift(17), Some(11));
 	}
 
 	#[test]
