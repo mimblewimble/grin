@@ -322,7 +322,6 @@ where
 					pool_refs,
 					new_unspents,
 				);
-				// TODO watch transaction with embargo timer
 
 				self.adapter.stem_tx_accepted(&tx);
 				self.stem_transactions.insert(tx_hash, Box::new(tx));
@@ -901,7 +900,68 @@ mod tests {
 		// Now take the read lock and use a few exposed methods to check consistency
 		{
 			let read_pool = pool.read().unwrap();
-			assert_eq!(read_pool.orphans_size(),0);
+			assert_eq!(read_pool.total_size(), 2);
+			expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 12);
+			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 11, 5);
+			expect_output_parent!(read_pool, Parent::BlockTransaction, 8);
+			expect_output_parent!(read_pool, Parent::Unknown, 20);
+		}
+	}
+
+	#[test]
+	/// A basic test; add a pair of transactions to the stempool.
+	fn test_basic_stempool_add() {
+		util::init_test_logger();
+		let mut dummy_chain = DummyChainImpl::new();
+		let head_header = block::BlockHeader {
+			height: 1,
+			..block::BlockHeader::default()
+		};
+		dummy_chain.store_head_header(&head_header);
+
+		let parent_transaction = test_transaction(vec![5, 6, 7], vec![11, 3]);
+		// We want this transaction to be rooted in the blockchain.
+		let new_output = DummyOutputSet::empty()
+			.with_output(test_output(5))
+			.with_output(test_output(6))
+			.with_output(test_output(7))
+			.with_output(test_output(8));
+
+		// Prepare a second transaction, connected to the first.
+		let child_transaction = test_transaction(vec![11, 3], vec![12]);
+
+		dummy_chain.update_output_set(new_output);
+
+		// To mirror how this construction is intended to be used, the pool
+		// is placed inside a RwLock.
+		let pool = RwLock::new(test_setup(&Arc::new(dummy_chain)));
+
+		// Take the write lock and add a pool entry
+		{
+			let mut write_pool = pool.write().unwrap();
+			assert_eq!(write_pool.total_size(), 0);
+
+			// First, add the transaction rooted in the blockchain
+			let result = write_pool.add_to_memory_pool(test_source(), parent_transaction, true);
+			if result.is_err() {
+				panic!("got an error adding parent tx: {:?}", result.err().unwrap());
+			}
+
+			// Now, add the transaction connected as a child to the first
+			let child_result =
+				write_pool.add_to_memory_pool(test_source(), child_transaction, true);
+
+			if child_result.is_err() {
+				panic!(
+					"got an error adding child tx: {:?}",
+					child_result.err().unwrap()
+				);
+			}
+		}
+
+		// Now take the read lock and use a few exposed methods to check consistency
+		{
+			let read_pool = pool.read().unwrap();
 			assert_eq!(read_pool.total_size(), 2);
 			expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 12);
 			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 11, 5);
