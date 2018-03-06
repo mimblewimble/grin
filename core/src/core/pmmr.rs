@@ -269,7 +269,7 @@ where
 
 impl<'a, T, B> PMMR<'a, T, B>
 where
-	T: PMMRable,
+	T: PMMRable + ::std::fmt::Debug,
 	B: 'a + Backend<T>,
 {
 	/// Build a new prunable Merkle Mountain Range using the provided backend.
@@ -366,7 +366,10 @@ where
 	/// the same time if applicable.
 	pub fn push(&mut self, elmt: T) -> Result<u64, String> {
 		let elmt_pos = self.last_pos + 1;
+		println!("***** pmmr:push: {:?}, {}", elmt, elmt_pos);
 		let mut current_hash = elmt.hash_with_index(elmt_pos);
+		println!("***** pmmr:push: {:?}", current_hash);
+
 		let mut to_append = vec![(current_hash, Some(elmt))];
 		let mut height = 0;
 		let mut pos = elmt_pos;
@@ -720,7 +723,7 @@ impl PruneList {
 			Ok(idx) => {
 				// TODO - this feels hacky, still not sure this is correct
 				Some(idx + 1)
-			},
+			}
 			Err(idx) => {
 				if self.pruned_nodes.len() > idx {
 					// the node at pos can't be a child of lower position nodes by MMR

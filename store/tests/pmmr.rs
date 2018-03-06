@@ -253,13 +253,19 @@ fn pmmr_reload() {
 			assert_eq!(root, pmmr.root());
 		}
 
-		// pos 4 is in the prune list
+		// pos 4 is removed (via prune list)
 		assert_eq!(backend.get(4, false), None);
-		// pos 5 is in the rm_log
+		// pos 5 is removed (via rm_log)
 		assert_eq!(backend.get(5, false), None);
-		// but both are still in the underlying hash file
-		assert_eq!(backend.get_from_file(4), Some(Hash::zero()));
-		assert_eq!(backend.get_from_file(5), Some(Hash::zero()));
+
+		// but both are still in the underlying hash file -
+		// 0010012
+		// 3rd test element hash should be at pos 4 in the hash file
+		// after accounting for offset
+		assert_eq!(backend.get_from_file(4), Some(elems[2].hash_with_index(4)));
+		// 4th test element hash should be at pos 5 in the hash file
+		// after accounting for offset
+		assert_eq!(backend.get_from_file(5), Some(elems[3].hash_with_index(5)));
 	}
 
 	teardown(data_dir);
