@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@
 #![deny(non_snake_case)]
 #![deny(unused_mut)]
 #![warn(missing_docs)]
-
 
 extern crate serde;
 #[macro_use]

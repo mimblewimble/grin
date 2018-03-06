@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -20,7 +20,7 @@ extern crate test;
 use rand::Rng;
 use test::Bencher;
 
-use core::core::sumtree::{self, SumTree, Summable};
+use core::core::txhashset::{self, TxHashSet, Summable};
 use core::ser::{Error, Writeable, Writer};
 
 #[derive(Copy, Clone, Debug)]
@@ -29,7 +29,7 @@ impl Summable for TestElem {
 	type Sum = u64;
 	fn sum(&self) -> u64 {
 		// sums are not allowed to overflow, so we use this simple
-  // non-injective "sum" function that will still be homomorphic
+		// non-injective "sum" function that will still be homomorphic
 		self.0[0] as u64 * 0x1000 + self.0[1] as u64 * 0x100 + self.0[2] as u64 * 0x10
 			+ self.0[3] as u64
 	}
@@ -48,10 +48,10 @@ impl Writeable for TestElem {
 fn bench_small_tree(b: &mut Bencher) {
 	let mut rng = rand::thread_rng();
 	b.iter(|| {
-		let mut big_tree = SumTree::new();
+		let mut big_tree = TxHashSet::new();
 		for i in 0..1000 {
 			// To avoid RNG overflow we generate random elements that are small.
-   // Though to avoid repeat elements they have to be reasonably big.
+			// Though to avoid repeat elements they have to be reasonably big.
 			let new_elem;
 			let word1 = rng.gen::<u16>() as u32;
 			let word2 = rng.gen::<u16>() as u32;

@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -49,9 +49,9 @@ mod serv;
 mod store;
 mod types;
 
-pub use serv::{Server, DummyAdapter};
+pub use serv::{DummyAdapter, Server};
 pub use peers::Peers;
 pub use peer::Peer;
-pub use types::{Capabilities, Error, ChainAdapter, SumtreesRead, P2PConfig,
-								PeerInfo, MAX_BLOCK_HEADERS, MAX_PEER_ADDRS};
+pub use types::{Capabilities, ChainAdapter, Error, P2PConfig, PeerInfo, TxHashSetRead,
+                MAX_BLOCK_HEADERS, MAX_PEER_ADDRS};
 pub use store::{PeerData, State};

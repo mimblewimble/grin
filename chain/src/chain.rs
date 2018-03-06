@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,20 +20,19 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use core::core::{Input, OutputIdentifier, OutputStoreable, TxKernel};
+use core::core::{Block, BlockHeader, Input, OutputFeatures, OutputIdentifier, OutputStoreable,
+                 TxKernel};
 use core::core::hash::{Hash, Hashed};
-use core::global;
-
-use core::core::{Block, BlockHeader};
+use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
+use core::global;
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
-use sumtree;
+use txhashset;
 use types::*;
 use util::secp::pedersen::RangeProof;
 use util::LOGGER;
-
 
 const MAX_ORPHAN_AGE_SECS: u64 = 30;
 
@@ -76,7 +75,9 @@ impl OrphanBlockPool {
 		{
 			let mut orphans = self.orphans.write().unwrap();
 			let mut prev_idx = self.prev_idx.write().unwrap();
-			orphans.retain(|_, ref mut x| x.added.elapsed() < Duration::from_secs(MAX_ORPHAN_AGE_SECS));
+			orphans.retain(|_, ref mut x| {
+				x.added.elapsed() < Duration::from_secs(MAX_ORPHAN_AGE_SECS)
+			});
 			prev_idx.retain(|_, &mut x| orphans.contains_key(&x));
 		}
 	}
@@ -109,7 +110,7 @@ impl OrphanBlockPool {
 }
 
 /// Facade to the blockchain block processing pipeline and storage. Provides
-/// the current view of the UTXO set according to the chain state. Also
+/// the current view of the TxHashSet according to the chain state. Also
 /// maintains locking for the pipeline to avoid conflicting processing.
 pub struct Chain {
 	db_root: String,
@@ -118,7 +119,7 @@ pub struct Chain {
 
 	head: Arc<Mutex<Tip>>,
 	orphans: Arc<OrphanBlockPool>,
-	sumtrees: Arc<RwLock<sumtree::SumTrees>>,
+	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 
 	// POW verification function
 	pow_verifier: fn(&BlockHeader, u32) -> bool,
@@ -152,19 +153,26 @@ impl Chain {
 		let chain_store = store::ChainKVStore::new(db_root.clone())?;
 
 		let store = Arc::new(chain_store);
-		let mut sumtrees = sumtree::SumTrees::open(db_root.clone(), store.clone())?;
 
 		// check if we have a head in store, otherwise the genesis block is it
-		let head = match store.head() {
-			Ok(tip) => tip,
+		let head = store.head();
+		let txhashset_md = match head {
+			Ok(h) => Some(store.get_block_pmmr_file_metadata(&h.last_block_h)?),
+			Err(NotFoundErr) => None,
+			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
+		};
+
+		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), txhashset_md)?;
+
+		let head = store.head();
+		let head = match head {
+			Ok(h) => h,
 			Err(NotFoundErr) => {
 				let tip = Tip::new(genesis.hash());
 				store.save_block(&genesis)?;
 				store.setup_height(&genesis.header, &tip)?;
 				if genesis.kernels.len() > 0 {
-					sumtree::extending(&mut sumtrees, |extension| {
-						extension.apply_block(&genesis)
-					})?;
+					txhashset::extending(&mut txhashset, |extension| extension.apply_block(&genesis))?;
 				}
 
 				// saving a new tip based on genesis
@@ -176,6 +184,7 @@ impl Chain {
 					genesis.header.nonce,
 					genesis.header.pow,
 				);
+				pipe::save_pmmr_metadata(&tip, &txhashset, store.clone())?;
 				tip
 			}
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
@@ -193,37 +202,39 @@ impl Chain {
 			adapter: adapter,
 			head: Arc::new(Mutex::new(head)),
 			orphans: Arc::new(OrphanBlockPool::new()),
-			sumtrees: Arc::new(RwLock::new(sumtrees)),
+			txhashset: Arc::new(RwLock::new(txhashset)),
 			pow_verifier: pow_verifier,
 		})
 	}
 
 	/// Processes a single block, then checks for orphans, processing
 	/// those as well if they're found
-	pub fn process_block(&self, b: Block, opts: Options)
-		-> Result<(Option<Tip>, Option<Block>), Error>
-		{
-			let res = self.process_block_no_orphans(b, opts);
-			match res {
-				Ok((t, b)) => {
-					// We accepted a block, so see if we can accept any orphans
-					if let Some(ref b) = b {
-						self.check_orphans(b.hash());
-					}
-					Ok((t, b))
-				},
-				Err(e) => {
-					Err(e)
+	pub fn process_block(
+		&self,
+		b: Block,
+		opts: Options,
+	) -> Result<(Option<Tip>, Option<Block>), Error> {
+		let res = self.process_block_no_orphans(b, opts);
+		match res {
+			Ok((t, b)) => {
+				// We accepted a block, so see if we can accept any orphans
+				if let Some(ref b) = b {
+					self.check_orphans(b.hash());
 				}
+				Ok((t, b))
 			}
+			Err(e) => Err(e),
 		}
+	}
 
 	/// Attempt to add a new block to the chain. Returns the new chain tip if it
 	/// has been added to the longest chain, None if it's added to an (as of
 	/// now) orphan chain.
-	pub fn process_block_no_orphans(&self, b: Block, opts: Options)
-		-> Result<(Option<Tip>, Option<Block>), Error>
-	{
+	pub fn process_block_no_orphans(
+		&self,
+		b: Block,
+		opts: Options,
+	) -> Result<(Option<Tip>, Option<Block>), Error> {
 		let head = self.store
 			.head()
 			.map_err(|e| Error::StoreErr(e, "chain load head".to_owned()))?;
@@ -247,7 +258,7 @@ impl Chain {
 					adapter.block_accepted(&b, opts);
 				}
 				Ok((Some(tip.clone()), Some(b.clone())))
-			},
+			}
 			Ok(None) => {
 				// block got accepted but we did not extend the head
 				// so its on a fork (or is the start of a new fork)
@@ -256,7 +267,8 @@ impl Chain {
 				// TODO - This opens us to an amplification attack on blocks
 				// mined at a low difficulty. We should suppress really old blocks
 				// or less relevant blocks somehow.
-				// We should also probably consider banning nodes that send us really old blocks.
+				// We should also probably consider banning nodes that send us really old
+				// blocks.
 				//
 				if !opts.contains(Options::SYNC) {
 					// broadcast the block
@@ -264,7 +276,7 @@ impl Chain {
 					adapter.block_accepted(&b, opts);
 				}
 				Ok((None, Some(b.clone())))
-			},
+			}
 			Err(Error::Orphan) => {
 				let block_hash = b.hash();
 				let orphan = Orphan {
@@ -286,7 +298,7 @@ impl Chain {
 					self.orphans.len(),
 				);
 				Err(Error::Orphan)
-			},
+			}
 			Err(Error::Unfit(ref msg)) => {
 				debug!(
 					LOGGER,
@@ -323,11 +335,7 @@ impl Chain {
 
 	/// Attempt to add a new header to the header chain.
 	/// This is only ever used during sync and uses sync_head.
-	pub fn sync_block_header(
-		&self,
-		bh: &BlockHeader,
-		opts: Options,
-	) -> Result<Option<Tip>, Error> {
+	pub fn sync_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<Option<Tip>, Error> {
 		let sync_head = self.get_sync_head()?;
 		let header_head = self.get_header_head()?;
 		let sync_ctx = self.ctx_from_head(sync_head, opts);
@@ -341,7 +349,7 @@ impl Chain {
 			store: self.store.clone(),
 			head: head,
 			pow_verifier: self.pow_verifier,
-			sumtrees: self.sumtrees.clone(),
+			txhashset: self.txhashset.clone(),
 		}
 	}
 
@@ -349,7 +357,6 @@ impl Chain {
 	pub fn is_orphan(&self, hash: &Hash) -> bool {
 		self.orphans.contains(hash)
 	}
-
 
 	/// Check for orphans, once a block is successfully added
 	pub fn check_orphans(&self, mut last_block_hash: Hash) {
@@ -373,10 +380,10 @@ impl Chain {
 						} else {
 							break;
 						}
-					},
+					}
 					Err(_) => {
 						break;
-					},
+					}
 				};
 			} else {
 				break;
@@ -388,36 +395,40 @@ impl Chain {
 	/// Return an error if the output does not exist or has been spent.
 	/// This querying is done in a way that is consistent with the current chain state,
 	/// specifically the current winning (valid, most work) fork.
-	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<(), Error> {
-		let mut sumtrees = self.sumtrees.write().unwrap();
-		sumtrees.is_unspent(output_ref)
+	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<Hash, Error> {
+		let mut txhashset = self.txhashset.write().unwrap();
+		txhashset.is_unspent(output_ref)
 	}
 
 	/// Validate the current chain state.
 	pub fn validate(&self) -> Result<(), Error> {
 		let header = self.store.head_header()?;
-		let mut sumtrees = self.sumtrees.write().unwrap();
-		sumtree::extending(&mut sumtrees, |extension| {
-			extension.validate(&header)
-		})
+		let mut txhashset = self.txhashset.write().unwrap();
+		txhashset::extending(&mut txhashset, |extension| extension.validate(&header))
 	}
 
 	/// Check if the input has matured sufficiently for the given block height.
 	/// This only applies to inputs spending coinbase outputs.
 	/// An input spending a non-coinbase output will always pass this check.
 	pub fn is_matured(&self, input: &Input, height: u64) -> Result<(), Error> {
-		let mut sumtrees = self.sumtrees.write().unwrap();
-		sumtrees.is_matured(input, height)
+		if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+			let mut txhashset = self.txhashset.write().unwrap();
+			let output = OutputIdentifier::from_input(&input);
+			let hash = txhashset.is_unspent(&output)?;
+			let header = self.get_block_header(&input.block_hash())?;
+			input.verify_maturity(hash, &header, height)?;
+		}
+		Ok(())
 	}
 
-	/// Sets the sumtree roots on a brand new block by applying the block on the
-	/// current sumtree state.
-	pub fn set_sumtree_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Error> {
-		let mut sumtrees = self.sumtrees.write().unwrap();
+	/// Sets the txhashset roots on a brand new block by applying the block on the
+	/// current txhashset state.
+	pub fn set_txhashset_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Error> {
+		let mut txhashset = self.txhashset.write().unwrap();
 		let store = self.store.clone();
 
-		let roots = sumtree::extending(&mut sumtrees, |extension| {
-			// apply the block on the sumtrees and check the resulting root
+		let roots = txhashset::extending(&mut txhashset, |extension| {
+			// apply the block on the txhashset and check the resulting root
 			if is_fork {
 				pipe::rewind_and_apply_fork(b, store, extension)?;
 			}
@@ -426,79 +437,88 @@ impl Chain {
 			Ok(extension.roots())
 		})?;
 
-		b.header.utxo_root = roots.utxo_root;
+		b.header.output_root = roots.output_root;
 		b.header.range_proof_root = roots.rproof_root;
 		b.header.kernel_root = roots.kernel_root;
 		Ok(())
 	}
 
-	/// Returns current sumtree roots
-	pub fn get_sumtree_roots(
+	/// Return a pre-built Merkle proof for the given commitment from the store.
+	pub fn get_merkle_proof(
 		&self,
-	) -> (
-		Hash,
-		Hash,
-		Hash,
-	) {
-		let mut sumtrees = self.sumtrees.write().unwrap();
-		sumtrees.roots()
+		output: &OutputIdentifier,
+		block: &Block,
+	) -> Result<MerkleProof, Error> {
+		let mut txhashset = self.txhashset.write().unwrap();
+
+		let merkle_proof = txhashset::extending(&mut txhashset, |extension| {
+			extension.force_rollback();
+			extension.merkle_proof_via_rewind(output, block)
+		})?;
+
+		Ok(merkle_proof)
 	}
 
-	/// Provides a reading view into the current sumtree state as well as
+	/// Returns current txhashset roots
+	pub fn get_txhashset_roots(&self) -> (Hash, Hash, Hash) {
+		let mut txhashset = self.txhashset.write().unwrap();
+		txhashset.roots()
+	}
+
+	/// Provides a reading view into the current txhashset state as well as
 	/// the required indexes for a consumer to rewind to a consistent state
 	/// at the provided block hash.
-	pub fn sumtrees_read(&self, h: Hash) -> Result<(u64, u64, File), Error> {
+	pub fn txhashset_read(&self, h: Hash) -> Result<(u64, u64, File), Error> {
 		let b = self.get_block(&h)?;
 
 		// get the indexes for the block
 		let out_index: u64;
 		let kernel_index: u64;
 		{
-			let sumtrees = self.sumtrees.read().unwrap();
-			let (oi, ki) = sumtrees.indexes_at(&b)?;
+			let txhashset = self.txhashset.read().unwrap();
+			let (oi, ki) = txhashset.indexes_at(&b)?;
 			out_index = oi;
 			kernel_index = ki;
 		}
 
 		// prepares the zip and return the corresponding Read
-		let sumtree_reader = sumtree::zip_read(self.db_root.clone())?;
-		Ok((out_index, kernel_index, sumtree_reader))
+		let txhashset_reader = txhashset::zip_read(self.db_root.clone())?;
+		Ok((out_index, kernel_index, txhashset_reader))
 	}
 
-	/// Writes a reading view on a sumtree state that's been provided to us.
+	/// Writes a reading view on a txhashset state that's been provided to us.
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	pub fn sumtrees_write(
+	pub fn txhashset_write(
 		&self,
 		h: Hash,
 		rewind_to_output: u64,
 		rewind_to_kernel: u64,
-		sumtree_data: File
+		txhashset_data: File,
 	) -> Result<(), Error> {
-
 		let head = self.head().unwrap();
 		let header_head = self.get_header_head().unwrap();
 		if header_head.height - head.height < global::cut_through_horizon() as u64 {
-			return Err(Error::InvalidSumtree("not needed".to_owned()));
+			return Err(Error::InvalidTxHashSet("not needed".to_owned()));
 		}
 
 		let header = self.store.get_block_header(&h)?;
-		sumtree::zip_write(self.db_root.clone(), sumtree_data)?;
+		txhashset::zip_write(self.db_root.clone(), txhashset_data)?;
 
-		let mut sumtrees = sumtree::SumTrees::open(self.db_root.clone(), self.store.clone())?;
-		sumtree::extending(&mut sumtrees, |extension| {
+		let mut txhashset = txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), None)?;
+		txhashset::extending(&mut txhashset, |extension| {
 			extension.rewind_pos(header.height, rewind_to_output, rewind_to_kernel)?;
 			extension.validate(&header)?;
-			// TODO validate kernels and their sums with UTXOs
+			// TODO validate kernels and their sums with Outputs
 			extension.rebuild_index()?;
 			Ok(())
 		})?;
 
-		// replace the chain sumtrees with the newly built one
+		// replace the chain txhashset with the newly built one
 		{
-			let mut sumtrees_ref = self.sumtrees.write().unwrap();
-			*sumtrees_ref = sumtrees;
+			let mut txhashset_ref = self.txhashset.write().unwrap();
+			*txhashset_ref = txhashset;
 		}
 
 		// setup new head
@@ -514,22 +534,22 @@ impl Chain {
 		Ok(())
 	}
 
-	/// returns the last n nodes inserted into the utxo sum tree
-	pub fn get_last_n_utxo(&self, distance: u64) -> Vec<(Hash, Option<OutputStoreable>)> {
-		let mut sumtrees = self.sumtrees.write().unwrap();
-		sumtrees.last_n_utxo(distance)
+	/// returns the last n nodes inserted into the output sum tree
+	pub fn get_last_n_output(&self, distance: u64) -> Vec<(Hash, Option<OutputStoreable>)> {
+		let mut txhashset = self.txhashset.write().unwrap();
+		txhashset.last_n_output(distance)
 	}
 
 	/// as above, for rangeproofs
 	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<(Hash, Option<RangeProof>)> {
-		let mut sumtrees = self.sumtrees.write().unwrap();
-		sumtrees.last_n_rangeproof(distance)
+		let mut txhashset = self.txhashset.write().unwrap();
+		txhashset.last_n_rangeproof(distance)
 	}
 
 	/// as above, for kernels
 	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<(Hash, Option<TxKernel>)> {
-		let mut sumtrees = self.sumtrees.write().unwrap();
-		sumtrees.last_n_kernel(distance)
+		let mut txhashset = self.txhashset.write().unwrap();
+		txhashset.last_n_kernel(distance)
 	}
 
 	/// Total difficulty at the head of the chain
@@ -577,17 +597,17 @@ impl Chain {
 
 	/// Gets the block header at the provided height
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
-		self.store.get_header_by_height(height).map_err(|e| {
-			Error::StoreErr(e, "chain get header by height".to_owned())
-		})
+		self.store
+			.get_header_by_height(height)
+			.map_err(|e| Error::StoreErr(e, "chain get header by height".to_owned()))
 	}
 
 	/// Verifies the given block header is actually on the current chain.
 	/// Checks the header_by_height index to verify the header is where we say it is
 	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
-		self.store.is_on_current_chain(header).map_err(|e| {
-			Error::StoreErr(e, "chain is_on_current_chain".to_owned())
-		})
+		self.store
+			.is_on_current_chain(header)
+			.map_err(|e| Error::StoreErr(e, "chain is_on_current_chain".to_owned()))
 	}
 
 	/// Get the tip of the current "sync" header chain.
@@ -613,8 +633,20 @@ impl Chain {
 		store::DifficultyIter::from(head.last_block_h, self.store.clone())
 	}
 
-        /// Check whether we have a block without reading it
-        pub fn block_exists(&self, h: Hash) -> Result<bool, Error> {
-               self.store.block_exists(&h).map_err(|e| Error::StoreErr(e, "chain block exists".to_owned()))
-        }
+	/// Check whether we have a block without reading it
+	pub fn block_exists(&self, h: Hash) -> Result<bool, Error> {
+		self.store
+			.block_exists(&h)
+			.map_err(|e| Error::StoreErr(e, "chain block exists".to_owned()))
+	}
+
+	/// Retrieve the file index metadata for a given block
+	pub fn get_block_pmmr_file_metadata(
+		&self,
+		h: &Hash,
+	) -> Result<PMMRFileMetadataCollection, Error> {
+		self.store
+			.get_block_pmmr_file_metadata(h)
+			.map_err(|e| Error::StoreErr(e, "retrieve block pmmr metadata".to_owned()))
+	}
 }

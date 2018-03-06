@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,13 +18,13 @@ extern crate blake2_rfc as blake2;
 extern crate byteorder;
 extern crate grin_util as util;
 extern crate rand;
-extern crate uuid;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
 #[macro_use]
 extern crate slog;
+extern crate uuid;
 
 mod blind;
 mod extkey;
@@ -32,4 +32,4 @@ mod extkey;
 pub use blind::{BlindSum, BlindingFactor};
 pub use extkey::{ExtendedKey, Identifier, IDENTIFIER_SIZE};
 pub mod keychain;
-pub use keychain::{Error, Keychain, AggSigTxContext};
+pub use keychain::{AggSigTxContext, Error, Keychain};

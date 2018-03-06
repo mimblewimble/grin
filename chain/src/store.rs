@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ const SYNC_HEAD_PREFIX: u8 = 's' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
 const KERNEL_POS_PREFIX: u8 = 'k' as u8;
+const BLOCK_PMMR_FILE_METADATA_PREFIX: u8 = 'p' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
 /// store.
@@ -104,7 +105,8 @@ impl ChainStore for ChainKVStore {
 
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(
-			self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
+			self.db
+				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
 		)
 	}
 
@@ -112,10 +114,7 @@ impl ChainStore for ChainKVStore {
 	fn save_block(&self, b: &Block) -> Result<(), Error> {
 		let batch = self.db
 			.batch()
-			.put_ser(
-				&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..],
-				b,
-			)?
+			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?
 			.put_ser(
 				&to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..],
 				&b.header,
@@ -186,6 +185,29 @@ impl ChainStore for ChainKVStore {
 		)
 	}
 
+	fn save_block_pmmr_file_metadata(
+		&self,
+		h: &Hash,
+		md: &PMMRFileMetadataCollection,
+	) -> Result<(), Error> {
+		self.db.put_ser(
+			&to_key(BLOCK_PMMR_FILE_METADATA_PREFIX, &mut h.to_vec())[..],
+			&md,
+		)
+	}
+
+	fn get_block_pmmr_file_metadata(&self, h: &Hash) -> Result<PMMRFileMetadataCollection, Error> {
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(BLOCK_PMMR_FILE_METADATA_PREFIX, &mut h.to_vec())),
+		)
+	}
+
+	fn delete_block_pmmr_file_metadata(&self, h: &Hash) -> Result<(), Error> {
+		self.db
+			.delete(&to_key(BLOCK_PMMR_FILE_METADATA_PREFIX, &mut h.to_vec())[..])
+	}
+
 	/// Maintain consistency of the "header_by_height" index by traversing back
 	/// through the current chain and updating "header_by_height" until we reach
 	/// a block_header that is consistent with its height (everything prior to
@@ -193,9 +215,7 @@ impl ChainStore for ChainKVStore {
 	/// We need to handle the case where we have no index entry for a given
 	/// height to account for the case where we just switched to a new fork and
 	/// the height jumped beyond current chain height.
-	fn setup_height(&self, header: &BlockHeader, old_tip: &Tip)
-		-> Result<(), Error> {
-
+	fn setup_height(&self, header: &BlockHeader, old_tip: &Tip) -> Result<(), Error> {
 		// remove headers ahead if we backtracked
 		for n in header.height..old_tip.height {
 			self.delete_header_by_height(n)?;
@@ -210,8 +230,10 @@ impl ChainStore for ChainKVStore {
 				if let Ok(_) = self.is_on_current_chain(&prev_header) {
 					break;
 				}
-				self.db
-					.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, prev_header.height), &prev_header)?;
+				self.db.put_ser(
+					&u64_to_key(HEADER_HEIGHT_PREFIX, prev_header.height),
+					&prev_header,
+				)?;
 
 				prev_header = self.get_block_header(&prev_header.previous)?;
 			}

@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ use util::LOGGER;
 use time;
 
 use peer::Peer;
-use store::{PeerStore, PeerData, State};
+use store::{PeerData, PeerStore, State};
 use types::*;
 
 pub struct Peers {
@@ -446,7 +446,10 @@ impl ChainAdapter for Peers {
 		if !self.adapter.block_received(b, peer_addr) {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or manevolent, both of which require a ban
-			debug!(LOGGER, "Received a bad block {} from  {}, the peer will be banned", hash, peer_addr);
+			debug!(
+				LOGGER,
+				"Received a bad block {} from  {}, the peer will be banned", hash, peer_addr
+			);
 			self.ban_peer(&peer_addr);
 			false
 		} else {
@@ -458,7 +461,12 @@ impl ChainAdapter for Peers {
 		if !self.adapter.compact_block_received(cb, peer_addr) {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or manevolent, both of which require a ban
-			debug!(LOGGER, "Received a bad compact block {} from  {}, the peer will be banned", hash, &peer_addr);
+			debug!(
+				LOGGER,
+				"Received a bad compact block {} from  {}, the peer will be banned",
+				hash,
+				&peer_addr
+			);
 			self.ban_peer(&peer_addr);
 			false
 		} else {
@@ -484,20 +492,28 @@ impl ChainAdapter for Peers {
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
 	}
-	fn sumtrees_read(&self, h: Hash) -> Option<SumtreesRead> {
-		self.adapter.sumtrees_read(h)
+	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {
+		self.adapter.txhashset_read(h)
 	}
-	fn sumtrees_write(
+	fn txhashset_write(
 		&self,
 		h: Hash,
 		rewind_to_output: u64,
 		rewind_to_kernel: u64,
-		sumtree_data: File,
+		txhashset_data: File,
 		peer_addr: SocketAddr,
 	) -> bool {
-		if !self.adapter.sumtrees_write(h, rewind_to_output, rewind_to_kernel,
-																		sumtree_data, peer_addr) {
-			debug!(LOGGER, "Received a bad sumtree data from {}, the peer will be banned", &peer_addr);
+		if !self.adapter.txhashset_write(
+			h,
+			rewind_to_output,
+			rewind_to_kernel,
+			txhashset_data,
+			peer_addr,
+		) {
+			debug!(
+				LOGGER,
+				"Received a bad txhashset data from {}, the peer will be banned", &peer_addr
+			);
 			self.ban_peer(&peer_addr);
 			false
 		} else {

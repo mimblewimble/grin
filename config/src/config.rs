@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -121,8 +121,8 @@ impl GlobalConfig {
 		}
 
 		// Try to parse the config file if it exists
-  // explode if it does exist but something's wrong
-  // with it
+		// explode if it does exist but something's wrong
+		// with it
 		return_value.read_config()
 	}
 
@@ -164,9 +164,10 @@ impl GlobalConfig {
 		match encoded {
 			Ok(enc) => return Ok(enc),
 			Err(e) => {
-				return Err(ConfigError::SerializationError(
-					String::from(format!("{}", e)),
-				));
+				return Err(ConfigError::SerializationError(String::from(format!(
+					"{}",
+					e
+				))));
 			}
 		}
 	}

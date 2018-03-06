@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,15 +14,15 @@
 
 extern crate grin_chain as chain;
 extern crate grin_core as core;
-extern crate grin_pool as pool;
 extern crate grin_p2p as p2p;
+extern crate grin_pool as pool;
 extern crate grin_store as store;
 extern crate grin_util as util;
 
 extern crate hyper;
+extern crate iron;
 #[macro_use]
 extern crate lazy_static;
-extern crate iron;
 extern crate mount;
 extern crate regex;
 #[macro_use]

@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ use keychain::Error;
 use util;
 use util::secp::{self, Secp256k1};
 use util::secp::constants::SECRET_KEY_SIZE;
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BlindingFactor([u8; SECRET_KEY_SIZE]);
@@ -65,8 +64,7 @@ impl BlindingFactor {
 			// and secp lib checks this
 			Ok(secp::key::ZERO_KEY)
 		} else {
-			secp::key::SecretKey::from_slice(secp, &self.0)
-				.map_err(|e| Error::Secp(e))
+			secp::key::SecretKey::from_slice(secp, &self.0).map_err(|e| Error::Secp(e))
 		}
 	}
 
@@ -86,10 +84,7 @@ impl BlindingFactor {
 		let blind_1 = BlindingFactor::from_secret_key(skey_1);
 		let blind_2 = BlindingFactor::from_secret_key(skey_2);
 
-		Ok(SplitBlindingFactor {
-			blind_1,
-			blind_2,
-		})
+		Ok(SplitBlindingFactor { blind_1, blind_2 })
 	}
 }
 

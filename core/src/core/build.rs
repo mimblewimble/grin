@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,12 +25,14 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use util::{secp, kernel_sig_msg};
+use util::{kernel_sig_msg, secp};
 
-use core::{Transaction, TxKernel, Input, Output, OutputFeatures, ProofMessageElements, SwitchCommitHash};
+use core::{Input, Output, OutputFeatures, ProofMessageElements, SwitchCommitHash, Transaction,
+           TxKernel};
 use core::hash::Hash;
+use core::pmmr::MerkleProof;
 use keychain;
-use keychain::{Keychain, BlindSum, BlindingFactor, Identifier};
+use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 use util::LOGGER;
 
 /// Context information available to transaction combinators.
@@ -40,129 +42,144 @@ pub struct Context<'a> {
 
 /// Function type returned by the transaction combinators. Transforms a
 /// (Transaction, BlindSum) pair into another, provided some context.
-pub type Append = for<'a> Fn(&'a mut Context, (Transaction, TxKernel, BlindSum)) -> (Transaction, TxKernel, BlindSum);
+pub type Append = for<'a> Fn(&'a mut Context, (Transaction, TxKernel, BlindSum))
+	-> (Transaction, TxKernel, BlindSum);
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
 fn build_input(
 	value: u64,
 	features: OutputFeatures,
-	out_block: Option<Hash>,
+	block_hash: Option<Hash>,
+	merkle_proof: Option<MerkleProof>,
 	key_id: Identifier,
 ) -> Box<Append> {
-	Box::new(move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-		let commit = build.keychain.commit(value, &key_id).unwrap();
-		let input = Input::new(
-			features,
-			commit,
-			out_block,
-		);
-		(tx.with_input(input), kern, sum.sub_key_id(key_id.clone()))
-	})
+	Box::new(
+		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+			let commit = build.keychain.commit(value, &key_id).unwrap();
+			let input = Input::new(features, commit, block_hash.clone(), merkle_proof.clone());
+			(tx.with_input(input), kern, sum.sub_key_id(key_id.clone()))
+		},
+	)
 }
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
-pub fn input(
-	value: u64,
-	out_block: Hash,
-	key_id: Identifier,
-) -> Box<Append> {
-	debug!(LOGGER, "Building input (spending regular output): {}, {}", value, key_id);
-	build_input(value, OutputFeatures::DEFAULT_OUTPUT, Some(out_block), key_id)
+pub fn input(value: u64, key_id: Identifier) -> Box<Append> {
+	debug!(
+		LOGGER,
+		"Building input (spending regular output): {}, {}", value, key_id
+	);
+	build_input(value, OutputFeatures::DEFAULT_OUTPUT, None, None, key_id)
 }
 
 /// Adds a coinbase input spending a coinbase output.
 /// We will use the block hash to verify coinbase maturity.
 pub fn coinbase_input(
 	value: u64,
-	out_block: Hash,
+	block_hash: Hash,
+	merkle_proof: MerkleProof,
 	key_id: Identifier,
 ) -> Box<Append> {
-	debug!(LOGGER, "Building input (spending coinbase): {}, {}", value, key_id);
-	build_input(value, OutputFeatures::COINBASE_OUTPUT, Some(out_block), key_id)
+	debug!(
+		LOGGER,
+		"Building input (spending coinbase): {}, {}", value, key_id
+	);
+	build_input(
+		value,
+		OutputFeatures::COINBASE_OUTPUT,
+		Some(block_hash),
+		Some(merkle_proof),
+		key_id,
+	)
 }
 
 /// Adds an output with the provided value and key identifier from the
 /// keychain.
 pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
-	Box::new(move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-		debug!(
-			LOGGER,
-			"Building an output: {}, {}",
-			value,
-			key_id,
-		);
+	Box::new(
+		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+			debug!(LOGGER, "Building an output: {}, {}", value, key_id,);
 
-		let commit = build.keychain.commit(value, &key_id).unwrap();
-		let switch_commit = build.keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash = SwitchCommitHash::from_switch_commit(
-			switch_commit,
-			build.keychain,
-			&key_id,
-		);
-		trace!(
-			LOGGER,
-			"Builder - Pedersen Commit is: {:?}, Switch Commit is: {:?}",
-			commit,
-			switch_commit,
-		);
-		trace!(
-			LOGGER,
-			"Builder - Switch Commit Hash is: {:?}",
-			switch_commit_hash
-		);
+			let commit = build.keychain.commit(value, &key_id).unwrap();
+			let switch_commit = build.keychain.switch_commit(&key_id).unwrap();
+			let switch_commit_hash =
+				SwitchCommitHash::from_switch_commit(switch_commit, build.keychain, &key_id);
+			trace!(
+				LOGGER,
+				"Builder - Pedersen Commit is: {:?}, Switch Commit is: {:?}",
+				commit,
+				switch_commit,
+			);
+			trace!(
+				LOGGER,
+				"Builder - Switch Commit Hash is: {:?}",
+				switch_commit_hash
+			);
 
-		let msg = (ProofMessageElements {
-			value: value,
-		}).to_proof_message();
+			let msg = (ProofMessageElements { value: value }).to_proof_message();
 
-		let rproof = build
-			.keychain
-			.range_proof(value, &key_id, commit, Some(switch_commit_hash.as_ref().to_vec()), msg)
-			.unwrap();
+			let rproof = build
+				.keychain
+				.range_proof(
+					value,
+					&key_id,
+					commit,
+					Some(switch_commit_hash.as_ref().to_vec()),
+					msg,
+				)
+				.unwrap();
 
-		(
-			tx.with_output(Output {
-				features: OutputFeatures::DEFAULT_OUTPUT,
-				commit: commit,
-				switch_commit_hash: switch_commit_hash,
-				proof: rproof,
-			}),
-			kern,
-			sum.add_key_id(key_id.clone()),
-		)
-	})
+			(
+				tx.with_output(Output {
+					features: OutputFeatures::DEFAULT_OUTPUT,
+					commit: commit,
+					switch_commit_hash: switch_commit_hash,
+					proof: rproof,
+				}),
+				kern,
+				sum.add_key_id(key_id.clone()),
+			)
+		},
+	)
 }
 
 /// Sets the fee on the transaction being built.
 pub fn with_fee(fee: u64) -> Box<Append> {
-	Box::new(move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-		(tx, kern.with_fee(fee), sum)
-	})
+	Box::new(
+		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+			(tx, kern.with_fee(fee), sum)
+		},
+	)
 }
 
 /// Sets the lock_height on the transaction being built.
 pub fn with_lock_height(lock_height: u64) -> Box<Append> {
-	Box::new(move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-		(tx, kern.with_lock_height(lock_height), sum)
-	})
+	Box::new(
+		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+			(tx, kern.with_lock_height(lock_height), sum)
+		},
+	)
 }
 
 /// Adds a known excess value on the transaction being built. Usually used in
 /// combination with the initial_tx function when a new transaction is built
 /// by adding to a pre-existing one.
 pub fn with_excess(excess: BlindingFactor) -> Box<Append> {
-	Box::new(move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-		(tx, kern, sum.add_blinding_factor(excess.clone()))
-	})
+	Box::new(
+		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+			(tx, kern, sum.add_blinding_factor(excess.clone()))
+		},
+	)
 }
 
 /// Sets a known tx "offset". Used in final step of tx construction.
 pub fn with_offset(offset: BlindingFactor) -> Box<Append> {
-	Box::new(move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-		(tx.with_offset(offset), kern, sum)
-	})
+	Box::new(
+		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+			(tx.with_offset(offset), kern, sum)
+		},
+	)
 }
 
 /// Sets an initial transaction to add to when building a new transaction.
@@ -170,9 +187,11 @@ pub fn with_offset(offset: BlindingFactor) -> Box<Append> {
 pub fn initial_tx(mut tx: Transaction) -> Box<Append> {
 	assert_eq!(tx.kernels.len(), 1);
 	let kern = tx.kernels.remove(0);
-	Box::new(move |_build, (_, _, sum)| -> (Transaction, TxKernel, BlindSum) {
-		(tx.clone(), kern.clone(), sum)
-	})
+	Box::new(
+		move |_build, (_, _, sum)| -> (Transaction, TxKernel, BlindSum) {
+			(tx.clone(), kern.clone(), sum)
+		},
+	)
 }
 
 /// Builds a new transaction by combining all the combinators provided in a
@@ -261,7 +280,6 @@ pub fn transaction_with_offset(
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::hash::ZERO_HASH;
 
 	#[test]
 	fn blind_simple_tx() {
@@ -272,8 +290,8 @@ mod test {
 
 		let tx = transaction(
 			vec![
-				input(10, ZERO_HASH, key_id1),
-				input(12, ZERO_HASH, key_id2),
+				input(10, key_id1),
+				input(12, key_id2),
 				output(20, key_id3),
 				with_fee(2),
 			],
@@ -292,8 +310,8 @@ mod test {
 
 		let tx = transaction_with_offset(
 			vec![
-				input(10, ZERO_HASH, key_id1),
-				input(12, ZERO_HASH, key_id2),
+				input(10, key_id1),
+				input(12, key_id2),
 				output(20, key_id3),
 				with_fee(2),
 			],
@@ -310,7 +328,7 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
 		let tx = transaction(
-			vec![input(6, ZERO_HASH, key_id1), output(2, key_id2), with_fee(4)],
+			vec![input(6, key_id1), output(2, key_id2), with_fee(4)],
 			&keychain,
 		).unwrap();
 

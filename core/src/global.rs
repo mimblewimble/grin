@@ -25,8 +25,8 @@ use std::sync::RwLock;
 use consensus::PROOFSIZE;
 use consensus::DEFAULT_SIZESHIFT;
 use consensus::COINBASE_MATURITY;
-use consensus::{MEDIAN_TIME_WINDOW, INITIAL_DIFFICULTY, 
-	BLOCK_TIME_SEC, DIFFICULTY_ADJUST_WINDOW, CUT_THROUGH_HORIZON};
+use consensus::{BLOCK_TIME_SEC, CUT_THROUGH_HORIZON, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY,
+                MEDIAN_TIME_WINDOW};
 use core::target::Difficulty;
 use consensus::TargetError;
 
@@ -64,8 +64,9 @@ pub const TESTNET2_INITIAL_DIFFICULTY: u64 = 1;
 
 /// The target is the 32-bytes hash block hashes must be lower than.
 pub const MAX_PROOF_TARGET: [u8; 8] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
- 
-/// We want to slow this right down for user testing at cuckoo 16, so pick a smaller max
+
+/// We want to slow this right down for user testing at cuckoo 16, so pick a
+/// smaller max
 pub const MAX_PROOF_TARGET_TESTING: [u8; 8] = [0x05, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
 
 /// Types of chain a server can run with, dictates the genesis block and
@@ -78,13 +79,13 @@ pub enum ChainTypes {
 	/// For User testing
 	UserTesting,
 
-  /// First test network
+	/// First test network
 	Testnet1,
 
 	/// Second test network
 	Testnet2,
 
-  /// Main production network
+	/// Main production network
 	Mainnet,
 }
 
@@ -193,9 +194,8 @@ pub fn is_user_testing_mode() -> bool {
 /// Are we in production mode (a live public network)?
 pub fn is_production_mode() -> bool {
 	let param_ref = CHAIN_TYPE.read().unwrap();
-	ChainTypes::Testnet1 == *param_ref ||
-    ChainTypes::Testnet2 == *param_ref ||
-    ChainTypes::Mainnet == *param_ref
+	ChainTypes::Testnet1 == *param_ref || ChainTypes::Testnet2 == *param_ref
+		|| ChainTypes::Mainnet == *param_ref
 }
 
 /// Helper function to get a nonce known to create a valid POW on
@@ -210,22 +210,21 @@ pub fn get_genesis_nonce() -> u64 {
 		// Magic nonce for current genesis block at cuckoo16
 		ChainTypes::UserTesting => 27944,
 		// Magic nonce for genesis block for testnet2 (cuckoo30)
-
 		_ => panic!("Pre-set"),
 	}
 }
 
-/// Converts an iterator of block difficulty data to more a more mangeable vector and pads 
+/// Converts an iterator of block difficulty data to more a more mangeable vector and pads
 /// if needed (which will) only be needed for the first few blocks after genesis
 
 pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<Result<(u64, Difficulty), TargetError>>
-	where
-	T: IntoIterator<Item = Result<(u64, Difficulty), TargetError>> {
+where
+	T: IntoIterator<Item = Result<(u64, Difficulty), TargetError>>,
+{
 	// Convert iterator to vector, so we can append to it if necessary
 	let needed_block_count = (MEDIAN_TIME_WINDOW + DIFFICULTY_ADJUST_WINDOW) as usize;
-	let mut last_n: Vec<Result<(u64, Difficulty), TargetError>> = cursor.into_iter()
-		.take(needed_block_count)
-		.collect();
+	let mut last_n: Vec<Result<(u64, Difficulty), TargetError>> =
+		cursor.into_iter().take(needed_block_count).collect();
 
 	// Sort blocks from earliest to latest (to keep conceptually easier)
 	last_n.reverse();
@@ -235,18 +234,19 @@ pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<Result<(u64, Difficulty), 
 	let block_count_difference = needed_block_count - last_n.len();
 	if block_count_difference > 0 {
 		// Collect any real data we have
-		let mut live_intervals:Vec<(u64, Difficulty)> = last_n.iter()
+		let mut live_intervals: Vec<(u64, Difficulty)> = last_n
+			.iter()
 			.map(|b| (b.clone().unwrap().0, b.clone().unwrap().1))
 			.collect();
 		for i in (1..live_intervals.len()).rev() {
 			// prevents issues with very fast automated test chains
-			if live_intervals[i-1].0 > live_intervals[i].0 {
+			if live_intervals[i - 1].0 > live_intervals[i].0 {
 				live_intervals[i].0 = 0;
 			} else {
-				live_intervals[i].0=live_intervals[i].0-live_intervals[i-1].0;
+				live_intervals[i].0 = live_intervals[i].0 - live_intervals[i - 1].0;
 			}
 		}
-		// 
+		//
 		// Remove genesis "interval"
 		if live_intervals.len() > 1 {
 			live_intervals.remove(0);
@@ -266,7 +266,7 @@ pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<Result<(u64, Difficulty), 
 			let last_diff = &live_intervals[interval_index].1;
 			last_n.insert(0, Ok((last_ts, last_diff.clone())));
 			interval_index = match interval_index {
-				0 => live_intervals.len()-1,
+				0 => live_intervals.len() - 1,
 				_ => interval_index - 1,
 			};
 		}
