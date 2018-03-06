@@ -40,7 +40,7 @@ use std::marker::PhantomData;
 use core::hash::{Hash, Hashed};
 use ser;
 use ser::{Readable, Reader, Writeable, Writer};
-use ser::{PMMRable, PMMRIndexHashable};
+use ser::{PMMRIndexHashable, PMMRable};
 use util;
 use util::LOGGER;
 
@@ -437,10 +437,16 @@ where
 			// if we have a pruned sibling, we can continue up the tree
 			// otherwise we're done
 			if let None = self.backend.get(sibling, false) {
-				println!("***** pmmr: prune: sibling pruned (pos {}), going up tree", sibling);
+				println!(
+					"***** pmmr: prune: sibling pruned (pos {}), going up tree",
+					sibling
+				);
 				current = parent;
 			} else {
-				println!("***** pmmr: prune: hit a root (so far) of a pruned subtree {}", current);
+				println!(
+					"***** pmmr: prune: hit a root (so far) of a pruned subtree {}",
+					current
+				);
 				break;
 			}
 		}
@@ -627,8 +633,8 @@ impl PruneList {
 	/// separately in a continuous flat-file
 	///
 	/// EXPERIMENTAL -
-	/// height 0 == 0 leaves (slightly more complex than 1 leaf as we need the hash even after pruning)
-	/// height 1 == 2 leaves
+	/// height 0 == 0 leaves (slightly more complex than 1 leaf as we need the hash even after
+	/// pruning) height 1 == 2 leaves
 	///
 	pub fn get_leaf_shift(&self, pos: u64) -> Option<u64> {
 		// get the position where the node at pos would fit in the pruned list, if
@@ -639,7 +645,8 @@ impl PruneList {
 				Some(
 					// skip by the number of leaf nodes pruned in the preceeding subtrees
 					// which just 2^height
-					// except in the case of height==0 (where we want to treat the pruned tree as 0 leaves)
+					// except in the case of height==0 (where we want to treat the pruned tree as
+					// 0 leaves)
 					self.pruned_nodes[0..(idx as usize)]
 						.iter()
 						.map(|n| {
@@ -675,7 +682,10 @@ impl PruneList {
 				}
 				Err(_) => {
 					if let Err(idx) = self.pruned_nodes.binary_search(&current) {
-						println!("****** pmmr: prunelist: add: inserting idx {}, pos {}", idx, current);
+						println!(
+							"****** pmmr: prunelist: add: inserting idx {}, pos {}",
+							idx, current
+						);
 						self.pruned_nodes.insert(idx, current);
 					}
 					break;
@@ -955,7 +965,7 @@ mod test {
 	use ser::{Error, Readable, Writeable};
 	use core::{Reader, Writer};
 	use core::hash::Hash;
-	use ser::{PMMRable, PMMRIndexHashable};
+	use ser::{PMMRIndexHashable, PMMRable};
 
 	/// Simple MMR backend implementation based on a Vector. Pruning does not
 	/// compact the Vec itself.
@@ -1208,7 +1218,7 @@ mod test {
 		fn len() -> usize {
 			16
 		}
-}
+	}
 
 	impl Writeable for TestElem {
 		fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
@@ -1392,8 +1402,8 @@ mod test {
 
 		// eight elements
 		pmmr.push(elems[7]).unwrap();
-		let sum8 =
-			sum4 + ((elems[4].hash_with_index(8) + elems[5].hash_with_index(9))
+		let sum8 = sum4
+			+ ((elems[4].hash_with_index(8) + elems[5].hash_with_index(9))
 				+ (elems[6].hash_with_index(11) + elems[7].hash_with_index(12)));
 		assert_eq!(pmmr.root(), sum8);
 		assert_eq!(pmmr.unpruned_size(), 15);
@@ -1550,7 +1560,8 @@ mod test {
 		assert_eq!(pl.get_leaf_shift(4), Some(0));
 
 		// now add a single leaf pos to the prune list
-		// note this does not shift anything (we only start shifting after pruning a parent)
+		// note this does not shift anything (we only start shifting after pruning a
+		// parent)
 		pl.add(1);
 		assert_eq!(pl.pruned_nodes.len(), 1);
 		assert_eq!(pl.pruned_nodes, [1]);
@@ -1559,8 +1570,8 @@ mod test {
 		assert_eq!(pl.get_leaf_shift(3), Some(0));
 		assert_eq!(pl.get_leaf_shift(4), Some(0));
 
-		// now add the sibling leaf pos (pos 1 and pos 2) which will prune the parent at pos 3
-		// this in turn will "leaf shift" the leaf at pos 3 by 2
+		// now add the sibling leaf pos (pos 1 and pos 2) which will prune the parent
+		// at pos 3 this in turn will "leaf shift" the leaf at pos 3 by 2
 		pl.add(2);
 		assert_eq!(pl.pruned_nodes.len(), 1);
 		assert_eq!(pl.pruned_nodes, [3]);
@@ -1585,9 +1596,9 @@ mod test {
 		assert_eq!(pl.get_leaf_shift(8), Some(2));
 
 		// now prune the sibling at pos 5
-		// the two smaller subtrees (pos 3 and pos 6) are rolled up to larger subtree (pos 7)
-		// the leaf offset is now 4 to cover entire subtree containing first 4 leaves
-		// 00100120
+		// the two smaller subtrees (pos 3 and pos 6) are rolled up to larger subtree
+		// (pos 7) the leaf offset is now 4 to cover entire subtree containing first
+		// 4 leaves 00100120
 		pl.add(5);
 		assert_eq!(pl.pruned_nodes, [7]);
 		assert_eq!(pl.get_leaf_shift(1), None);
