@@ -367,7 +367,7 @@ where
 				.iter()
 				.filter_map(|&(pos, idx)| {
 					let (parent_pos, _, _) = family(pos);
-					
+
 					// **********************
 					// TODO - need to account for idx here for parent also...
 					// filter by ids first, then use this list exclusively?
