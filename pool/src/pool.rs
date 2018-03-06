@@ -37,7 +37,8 @@ pub use graph;
 /// keyed by their transaction hash.
 pub struct TransactionPool<T> {
 	config: PoolConfig,
-	/// All transactions hash in the stempool with a time attached to ensure propagation
+	/// All transactions hash in the stempool with a time attached to ensure
+	/// propagation
 	pub time_stem_transactions: HashMap<hash::Hash, i64>,
 	/// All transactions in the stempool
 	pub stem_transactions: HashMap<hash::Hash, Box<transaction::Transaction>>,
@@ -131,12 +132,12 @@ where
 					let tx_ref = x.source_hash().unwrap();
 					Parent::PoolTransaction { tx_ref }
 				})
-				.or(self.stempool.get_available_output(&output_ref.commit)
-				.map(|x| {
-					let tx_ref = x.source_hash().unwrap();
-					Parent::PoolTransaction { tx_ref }
-				})
-				)
+				.or(self.stempool
+					.get_available_output(&output_ref.commit)
+					.map(|x| {
+						let tx_ref = x.source_hash().unwrap();
+						Parent::PoolTransaction { tx_ref }
+					}))
 				.or(self.search_blockchain_unspents(output_ref))
 				.or(self.search_pool_spents(&output_ref.commit))
 				.unwrap_or(Parent::Unknown)
@@ -150,7 +151,6 @@ where
 				.or(self.search_blockchain_unspents(output_ref))
 				.or(self.search_pool_spents(&output_ref.commit))
 				.unwrap_or(Parent::Unknown)
-
 		}
 	}
 
@@ -195,9 +195,11 @@ where
 		self.orphans.num_transactions()
 	}
 
-	/// Get the total size (stem transactions + transactions + orphans) of the pool
+	/// Get the total size (stem transactions + transactions + orphans) of the
+	/// pool
 	pub fn total_size(&self) -> usize {
-		self.pool.num_transactions() + self.pool.num_transactions() + self.orphans.num_transactions()
+		self.pool.num_transactions() + self.pool.num_transactions()
+			+ self.orphans.num_transactions()
 	}
 
 	/// Attempts to add a transaction to the stempool or the memory pool.
@@ -247,12 +249,12 @@ where
 		let mut blockchain_refs: Vec<graph::Edge>;
 
 		// In this case, we allow unspent outputs from the stempool
-		match self.identify_unspent_outputs(&tx, tx_hash, &head_header, stem){
+		match self.identify_unspent_outputs(&tx, tx_hash, &head_header, stem) {
 			Ok(refs) => {
 				pool_refs = refs[0].clone();
 				orphan_refs = refs[1].clone();
 				blockchain_refs = refs[2].clone();
-			},
+			}
 			Err(e) => return Err(e),
 		};
 
@@ -279,12 +281,12 @@ where
 		// creating any duplicate unspents.
 		let pool_entry = graph::PoolEntry::new(&tx);
 		let new_unspents = tx.outputs
-		.iter()
-		.map(|x| {
-			let output = OutputIdentifier::from_output(&x);
-			graph::Edge::new(Some(tx_hash), None, output)
-		})
-		.collect();
+			.iter()
+			.map(|x| {
+				let output = OutputIdentifier::from_output(&x);
+				graph::Edge::new(Some(tx_hash), None, output)
+			})
+			.collect();
 
 		if !is_orphan {
 			// In the non-orphan (pool) case, we've ensured that every input
@@ -298,17 +300,26 @@ where
 			if stem && random <= self.config.dandelion_probability {
 				// Stem phase: transaction is added to the stem memory pool and broadcasted to a
 				// randomly selected node.
-				self.stempool
-				.add_pool_transaction(pool_entry, blockchain_refs, pool_refs, new_unspents);
+				self.stempool.add_pool_transaction(
+					pool_entry,
+					blockchain_refs,
+					pool_refs,
+					new_unspents,
+				);
 				// TODO watch transaction with embargo timer
 
 				self.adapter.stem_tx_accepted(&tx);
 				self.stem_transactions.insert(tx_hash, Box::new(tx));
-				self.time_stem_transactions.insert(tx_hash, time::now_utc().to_timespec().sec);
+				self.time_stem_transactions
+					.insert(tx_hash, time::now_utc().to_timespec().sec);
 			} else {
 				// Fluff phase: transaction is added to memory pool and broadcasted normally
-				self.pool
-					.add_pool_transaction(pool_entry, blockchain_refs, pool_refs, new_unspents);
+				self.pool.add_pool_transaction(
+					pool_entry,
+					blockchain_refs,
+					pool_refs,
+					new_unspents,
+				);
 				self.reconcile_orphans().unwrap();
 				self.adapter.tx_accepted(&tx);
 				self.transactions.insert(tx_hash, Box::new(tx));
@@ -570,16 +581,15 @@ where
 				.filter_map(|x| x.source_hash())
 				.collect();
 
-
-			// Similarly find all outputs that conflict in the stempool- potential for duplicates so use a HashSet
-			// here
+			// Similarly find all outputs that conflict in the stempool- potential for
+			// duplicates so use a HashSet here
 			let conflicting_stem_outputs: HashSet<hash::Hash> = block
 				.outputs
 				.iter()
 				.filter_map(|x: &transaction::Output| {
 					self.stempool
-					.get_internal_spent_output(&x.commitment())
-					.or(self.stempool.get_available_output(&x.commitment()))
+						.get_internal_spent_output(&x.commitment())
+						.or(self.stempool.get_available_output(&x.commitment()))
 				})
 				.filter_map(|x| x.source_hash())
 				.collect();
@@ -599,7 +609,6 @@ where
 		let freed_txs = self.sweep_transactions(marked_transactions, false);
 		let freed_stem_txs = self.sweep_transactions(marked_stem_transactions, true);
 
-
 		self.reconcile_orphans().unwrap();
 
 		// Return something else here ?
@@ -616,7 +625,12 @@ where
 	///
 	/// Marked transactions are added to the mutable marked_txs HashMap which
 	/// is supplied by the calling function.
-	fn mark_transaction(&self, conflicting_tx: hash::Hash, marked_txs: &mut HashSet<hash::Hash>, stem: bool) {
+	fn mark_transaction(
+		&self,
+		conflicting_tx: hash::Hash,
+		marked_txs: &mut HashSet<hash::Hash>,
+		stem: bool,
+	) {
 		// we can stop recursively visiting txs if we have already seen this one
 		if marked_txs.contains(&conflicting_tx) {
 			return;
@@ -628,7 +642,9 @@ where
 			let tx_ref = self.stem_transactions.get(&conflicting_tx);
 
 			for output in &tx_ref.unwrap().outputs {
-				match self.stempool.get_internal_spent_output(&output.commitment()) {
+				match self.stempool
+					.get_internal_spent_output(&output.commitment())
+				{
 					Some(x) => if self.blockchain.is_unspent(&x.output()).is_err() {
 						self.mark_transaction(x.destination_hash().unwrap(), marked_txs, true);
 					},
@@ -662,7 +678,7 @@ where
 	fn sweep_transactions(
 		&mut self,
 		marked_transactions: HashSet<hash::Hash>,
-		stem: bool
+		stem: bool,
 	) -> Vec<Box<transaction::Transaction>> {
 		let mut removed_txs = Vec::new();
 
@@ -671,7 +687,7 @@ where
 				let removed_tx = self.stem_transactions.remove(&tx_hash).unwrap();
 
 				self.stempool
-				.remove_pool_transaction(&removed_tx, &marked_transactions);
+					.remove_pool_transaction(&removed_tx, &marked_transactions);
 
 				removed_txs.push(removed_tx);
 			}
@@ -684,15 +700,15 @@ where
 				let removed_tx = self.transactions.remove(&tx_hash).unwrap();
 
 				self.pool
-				.remove_pool_transaction(&removed_tx, &marked_transactions);
+					.remove_pool_transaction(&removed_tx, &marked_transactions);
 
 				removed_txs.push(removed_tx);
 			}
 
-		// final step is to update the pool to reflect the new set of roots
-		// a tx that was non-root may now be root based on the txs removed
-		self.pool.update_roots();
-}
+			// final step is to update the pool to reflect the new set of roots
+			// a tx that was non-root may now be root based on the txs removed
+			self.pool.update_roots();
+		}
 		removed_txs
 	}
 
@@ -749,13 +765,12 @@ where
 		if stem && self.stem_transactions.contains_key(&tx_hash) {
 			return Err(PoolError::AlreadyInStempool);
 		} else {
-			// In that case the transaction has been fluffed, we can safely remove it from our
-			// hashmaps
+			// In that case the transaction has been fluffed, we can safely remove it from
+			// our hashmaps
 			if self.stem_transactions.contains_key(&tx_hash) {
 				debug!(
 					LOGGER,
-					"pool: check_pools: transaction has been fluffed - {}",
-					&tx_hash,
+					"pool: check_pools: transaction has been fluffed - {}", &tx_hash,
 				);
 				self.stem_transactions.remove(&tx_hash);
 				self.time_stem_transactions.remove(&tx_hash);
@@ -767,7 +782,11 @@ where
 	}
 
 	// Check that the transaction is mature
-	fn is_mature(&self, tx: &transaction::Transaction, head_header: &block::BlockHeader) -> Result<(), PoolError> {
+	fn is_mature(
+		&self,
+		tx: &transaction::Transaction,
+		head_header: &block::BlockHeader,
+	) -> Result<(), PoolError> {
 		if head_header.height < tx.lock_height() {
 			return Err(PoolError::ImmatureTransaction {
 				lock_height: tx.lock_height(),
@@ -777,7 +796,13 @@ where
 	}
 
 	// Indentify the unspent outputs for a transaction and return
-	fn identify_unspent_outputs(&self,tx: &transaction::Transaction, tx_hash: Hash, head_header: &block::BlockHeader, stem: bool) -> Result<Vec<Vec<graph::Edge>>, PoolError> {
+	fn identify_unspent_outputs(
+		&self,
+		tx: &transaction::Transaction,
+		tx_hash: Hash,
+		head_header: &block::BlockHeader,
+		stem: bool,
+	) -> Result<Vec<Vec<graph::Edge>>, PoolError> {
 		let mut pool_refs: Vec<graph::Edge> = Vec::new();
 		let mut orphan_refs: Vec<graph::Edge> = Vec::new();
 		let mut blockchain_refs: Vec<graph::Edge> = Vec::new();
@@ -810,9 +835,6 @@ where
 	}
 }
 
-
-
-
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -833,7 +855,10 @@ mod tests {
 	macro_rules! expect_output_parent {
 		($pool:expr, $expected:pat, $( $output:expr ),+ ) => {
 			$(
-				match $pool.search_for_best_output(&OutputIdentifier::from_output(&test_output($output)), false) {
+				match $pool
+				.search_for_best_output(
+					&OutputIdentifier::from_output(&test_output($output)), false
+				) {
 					$expected => {},
 					x => panic!(
 						"Unexpected result from output search for {:?}, got {:?}",
@@ -884,7 +909,8 @@ mod tests {
 			}
 
 			// Now, add the transaction connected as a child to the first
-			let child_result = write_pool.add_to_memory_pool(test_source(), child_transaction, false);
+			let child_result =
+				write_pool.add_to_memory_pool(test_source(), child_transaction, false);
 
 			if child_result.is_err() {
 				panic!(
@@ -1102,8 +1128,12 @@ mod tests {
 
 			// now add both txs to the pool (tx2 spends tx1 with zero confirmations)
 			// both should be accepted if tx1 added before tx2
-			write_pool.add_to_memory_pool(test_source(), tx1, false).unwrap();
-			write_pool.add_to_memory_pool(test_source(), tx2, false).unwrap();
+			write_pool
+				.add_to_memory_pool(test_source(), tx1, false)
+				.unwrap();
+			write_pool
+				.add_to_memory_pool(test_source(), tx2, false)
+				.unwrap();
 
 			assert_eq!(write_pool.pool_size(), 2);
 		}
@@ -1234,7 +1264,9 @@ mod tests {
 			assert_eq!(write_pool.total_size(), 0);
 
 			for tx in txs_to_add.drain(..) {
-				write_pool.add_to_memory_pool(test_source(), tx, false).unwrap();
+				write_pool
+					.add_to_memory_pool(test_source(), tx, false)
+					.unwrap();
 			}
 
 			assert_eq!(write_pool.total_size(), expected_pool_size);

@@ -78,7 +78,11 @@ impl Server {
 			pool_adapter.clone(),
 			pool_net_adapter.clone(),
 		)));
-		dandelion_monitor::monitor_transactions(config.pool_config.clone(), tx_pool.clone(), stop.clone());
+		dandelion_monitor::monitor_transactions(
+			config.pool_config.clone(),
+			tx_pool.clone(),
+			stop.clone(),
+		);
 
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));
 

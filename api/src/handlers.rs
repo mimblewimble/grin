@@ -519,7 +519,10 @@ where
 
 		//  Push into the stempool
 		let pool_arc = w(&self.tx_pool);
-		let res = pool_arc.write().unwrap().add_to_memory_pool(source, tx, true);
+		let res = pool_arc
+			.write()
+			.unwrap()
+			.add_to_memory_pool(source, tx, true);
 
 		match res {
 			Ok(()) => Ok(Response::with(status::Ok)),

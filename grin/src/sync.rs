@@ -82,7 +82,8 @@ pub fn run_sync(
 					}
 
 					// run the body_sync every 5s
-					if have_txhashset && current_time - prev_body_sync > time::Duration::seconds(5) {
+					if have_txhashset && current_time - prev_body_sync > time::Duration::seconds(5)
+					{
 						body_sync(peers.clone(), chain.clone());
 						prev_body_sync = current_time;
 					}
@@ -107,8 +108,10 @@ pub fn run_sync(
 									txhashset_head =
 										chain.get_block_header(&txhashset_head.previous).unwrap();
 								}
-								p.send_txhashset_request(txhashset_head.height, txhashset_head.hash())
-									.unwrap();
+								p.send_txhashset_request(
+									txhashset_head.height,
+									txhashset_head.hash(),
+								).unwrap();
 								prev_state_sync = current_time;
 							}
 						}

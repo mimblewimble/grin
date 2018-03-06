@@ -75,7 +75,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		);
 
 		let h = tx.hash();
-		if let Err(e) = self.tx_pool.write().unwrap().add_to_memory_pool(source, tx, stem) {
+		if let Err(e) = self.tx_pool
+			.write()
+			.unwrap()
+			.add_to_memory_pool(source, tx, stem)
+		{
 			debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
 		}
 	}

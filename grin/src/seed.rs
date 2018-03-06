@@ -119,7 +119,7 @@ fn monitor_peers(
 					peers.update_dandelion_relay();
 				} else {
 					for last_added in dandelion_relay.keys() {
-					    let dandelion_interval = now_utc().to_timespec().sec - last_added;
+						let dandelion_interval = now_utc().to_timespec().sec - last_added;
 						if dandelion_interval >= DANDELION_RELAY_TIME {
 							debug!(LOGGER, "monitor_peers: updating dandelion relay");
 							peers.update_dandelion_relay();

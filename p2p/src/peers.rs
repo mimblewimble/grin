@@ -80,13 +80,16 @@ impl Peers {
 			Some(peer) => {
 				// Clear the map and add new relay
 				self.dandelion_relay.write().unwrap().clear();
-				self.dandelion_relay.write().unwrap().insert(time::now_utc().to_timespec().sec, peer.clone());
-			},
+				self.dandelion_relay
+					.write()
+					.unwrap()
+					.insert(time::now_utc().to_timespec().sec, peer.clone());
+			}
 			None => error!(LOGGER, "Could not update dandelion relay"),
 		};
 	}
 	// Get the dandelion relay
-	pub fn get_dandelion_relay(&self) ->  HashMap<i64, Arc<RwLock<Peer>>> {
+	pub fn get_dandelion_relay(&self) -> HashMap<i64, Arc<RwLock<Peer>>> {
 		let res = self.dandelion_relay.read().unwrap().clone();
 		res
 	}
@@ -329,7 +332,10 @@ impl Peers {
 			let relay = relay.read().unwrap();
 			if relay.is_connected() {
 				if let Err(e) = relay.send_transaction(tx) {
-					debug!(LOGGER, "Error sending stem transaction to peer relay: {:?}", e);
+					debug!(
+						LOGGER,
+						"Error sending stem transaction to peer relay: {:?}", e
+					);
 				}
 			}
 		}
