@@ -83,33 +83,11 @@ fn pmmr_compact_leaf_sibling() {
 		pmmr.prune(1, 1).unwrap();
 
 		// prune pos 8 as well to push the remove list past the cutoff
-		// pmmr.prune(8, 1).unwrap();
-
-		// prune the other sibling, causing a subtree to be pruned (parent at pos 3)
-		pmmr.prune(2, 1).unwrap();
+		pmmr.prune(8, 1).unwrap();
 	}
 	backend.sync().unwrap();
 
 	// // check pos 1, 2, 3 are in the state we expect after pruning
-	// {
-	// 	let pmmr = PMMR::at(&mut backend, mmr_size);
-	//
-	// 	// check that pos 1 is "removed"
-	// 	assert_eq!(pmmr.get(1, false), None);
-	//
-	// 	// check that pos 2 and 3 are unchanged
-	// 	assert_eq!(pmmr.get(2, false).unwrap().0, pos_2_hash);
-	// 	assert_eq!(pmmr.get(3, false).unwrap().0, pos_3_hash);
-	// }
-
-	// check we can still retrieve the "removed" element at pos 1 from the backend
-	// file
-	assert_eq!(backend.get_from_file(1).unwrap(), pos_1_hash);
-
-	// aggressively compact the PMMR files
-	backend.check_compact(1, 2).unwrap();
-
-	// // check pos 1, 2, 3 are in the state we expect after compacting
 	{
 		let pmmr = PMMR::at(&mut backend, mmr_size);
 
@@ -121,14 +99,28 @@ fn pmmr_compact_leaf_sibling() {
 		assert_eq!(pmmr.get(3, false).unwrap().0, pos_3_hash);
 	}
 
-	// Check we can still retrieve the "removed" element at pos 1 from the backend
-	// file. It should still be available even after pruning and compacting.
-	// TODO - work out how to *not* prune leaves if sibling still exists
-	// we should ideally leave it in the remove list and not roll it into the prune
-	// list (somehow)
-	// assert_eq!(backend.get_from_file(1).unwrap(), pos_1_hash);
+	// check we can still retrieve the "removed" element at pos 1
+	// from the backend hash file.
+	assert_eq!(backend.get_from_file(1).unwrap(), pos_1_hash);
 
-	assert!(false, "stop and debug");
+	// aggressively compact the PMMR files
+	backend.check_compact(1, 2).unwrap();
+
+	// check pos 1, 2, 3 are in the state we expect after compacting
+	{
+		let pmmr = PMMR::at(&mut backend, mmr_size);
+
+		// check that pos 1 is "removed"
+		assert_eq!(pmmr.get(1, false), None);
+
+		// check that pos 2 and 3 are unchanged
+		assert_eq!(pmmr.get(2, false).unwrap().0, pos_2_hash);
+		assert_eq!(pmmr.get(3, false).unwrap().0, pos_3_hash);
+	}
+
+	// Check we can still retrieve the "removed" hash at pos 1 from the hash file.
+	// It should still be available even after pruning and compacting.
+	assert_eq!(backend.get_from_file(1).unwrap(), pos_1_hash);
 }
 
 #[test]
@@ -200,6 +192,11 @@ fn pmmr_reload() {
 
 	let mmr_size = load(0, &elems[..], &mut backend);
 
+	// retrieve entries from the hash file for comparison later
+	let (pos_3_hash, _) = backend.get(3, false).unwrap();
+	let (pos_4_hash, _) = backend.get(4, false).unwrap();
+	let (pos_5_hash, _) = backend.get(5, false).unwrap();
+
 	// save the root
 	let root = {
 		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
@@ -253,19 +250,29 @@ fn pmmr_reload() {
 			assert_eq!(root, pmmr.root());
 		}
 
+		// pos 1 and pos 2 are both removed (via parent pos 3 in prune list)
+		assert_eq!(backend.get(1, false), None);
+		assert_eq!(backend.get(2, false), None);
+
+		// pos 3 is removed (via prune list)
+		assert_eq!(backend.get(3, false), None);
+
 		// pos 4 is removed (via prune list)
 		assert_eq!(backend.get(4, false), None);
 		// pos 5 is removed (via rm_log)
 		assert_eq!(backend.get(5, false), None);
 
-		// but both are still in the underlying hash file -
-		// 0010012
-		// 3rd test element hash should be at pos 4 in the hash file
-		// after accounting for offset
-		assert_eq!(backend.get_from_file(4), Some(elems[2].hash_with_index(4)));
-		// 4th test element hash should be at pos 5 in the hash file
-		// after accounting for offset
-		assert_eq!(backend.get_from_file(5), Some(elems[3].hash_with_index(5)));
+		// now check contents of the hash file
+		// pos 1 and pos 2 are no longer in the hash file
+		assert_eq!(backend.get_from_file(1), None);
+		assert_eq!(backend.get_from_file(2), None);
+
+		// pos 3 is still in there
+		assert_eq!(backend.get_from_file(3), Some(pos_3_hash));
+
+		// pos 4 and pos 5 are also still in there
+		assert_eq!(backend.get_from_file(4), Some(pos_4_hash));
+		assert_eq!(backend.get_from_file(5), Some(pos_5_hash));
 	}
 
 	teardown(data_dir);
@@ -341,11 +348,11 @@ fn pmmr_compact_horizon() {
 		let mmr_size = load(0, &elems[..], &mut backend);
 		backend.sync().unwrap();
 
-		// save the root
-		{
-			let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			let _root = pmmr.root();
-		}
+		// 0010012001001230
+		// 9 leaves
+		assert_eq!(backend.data_size().unwrap(), 9);
+		// 16 hashes
+		assert_eq!(backend.hash_size().unwrap(), 16);
 
 		// pruning some choice nodes with an increasing block height
 		{
@@ -363,12 +370,19 @@ fn pmmr_compact_horizon() {
 	// recheck stored data
 	{
 		// recreate backend
+		let backend =
+			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), None).unwrap();
+		// 9 leaves in total, minus 2 compacted
+		assert_eq!(backend.data_size().unwrap(), 7);
+		// 16 hashes total, 2 pruned and compacted
+		assert_eq!(backend.hash_size().unwrap(), 14);
+
+		assert!(false);
+	}
+
+	{
 		let mut backend =
 			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), None).unwrap();
-		// 9 elements total, minus 2 compacted
-		assert_eq!(backend.data_size().unwrap(), 7);
-		// 15 nodes total, 2 pruned and compacted
-		assert_eq!(backend.hash_size().unwrap(), 13);
 
 		// compact some more
 		backend.check_compact(1, 5).unwrap();
@@ -379,10 +393,14 @@ fn pmmr_compact_horizon() {
 		// recreate backend
 		let backend =
 			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), None).unwrap();
+
+		// 0010012001001230
+
 		// 9 elements total, minus 4 compacted
 		assert_eq!(backend.data_size().unwrap(), 5);
-		// 15 nodes total, 6 pruned and compacted
-		assert_eq!(backend.hash_size().unwrap(), 9);
+		// 16 nodes total
+		// 4 leaves pruned resulting in 6 pruned and compacted nodes
+		assert_eq!(backend.hash_size().unwrap(), 10);
 	}
 
 	teardown(data_dir);

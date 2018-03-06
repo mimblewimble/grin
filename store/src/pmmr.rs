@@ -359,7 +359,6 @@ where
 
 		// 1. save hashsum file to a compact copy, skipping data that's in the
 		// remove list
-		// TODO - unless the entry in the remove list is a "root"
 		{
 			let record_len = 32;
 
@@ -368,6 +367,12 @@ where
 				.iter()
 				.filter_map(|&(pos, idx)| {
 					let (parent_pos, _, _) = family(pos);
+					
+					// **********************
+					// TODO - need to account for idx here for parent also...
+					// filter by ids first, then use this list exclusively?
+					// **********************
+
 					if idx < cutoff_index && self.rm_log.includes(parent_pos) {
 						Some(pos)
 					} else {
@@ -375,6 +380,8 @@ where
 					}
 				})
 				.collect::<Vec<_>>();
+
+			println!("***** pos_to_rm {:?}", pos_to_rm);
 
 			let off_to_rm = pos_to_rm
 				.iter()
@@ -400,6 +407,12 @@ where
 				.iter()
 				.filter_map(|&(pos, idx)| {
 					let (parent_pos, _, _) = family(pos);
+
+					// **********************
+					// TODO - need to account for idx here for parent also...
+					// filter by ids first, then use this list exclusively?
+					// **********************
+
 					if idx < cutoff_index && pmmr::is_leaf(pos) && self.rm_log.includes(parent_pos)
 					{
 						Some(pos)

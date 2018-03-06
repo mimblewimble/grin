@@ -699,11 +699,15 @@ impl PruneList {
 				}
 				Err(_) => {
 					if let Err(idx) = self.pruned_nodes.binary_search(&current) {
-						println!(
-							"****** pmmr: prunelist: add: inserting idx {}, pos {}",
-							idx, current
-						);
-						self.pruned_nodes.insert(idx, current);
+						if let Ok(_) = self.pruned_nodes.binary_search(&parent) {
+							println!("***** pmmr: prunelist: add: parent in there, so skipping");
+						} else {
+							println!(
+								"****** pmmr: prunelist: add: inserting idx {}, pos {}",
+								idx, current
+							);
+							self.pruned_nodes.insert(idx, current);
+						}
 					}
 					break;
 				}
