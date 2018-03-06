@@ -24,6 +24,10 @@ use pool::PoolConfig;
 use pool::TxSource;
 use pool::BlockChain;
 
+/// A process to monitor transactions in the stempool.
+/// Periodically read the stempool and test if the embargo timer is expired.
+/// In that case the transaction will be sent in fluff phase (to multiple peers) instead of
+/// sending only to the peer relay
 pub fn monitor_transactions<T>(
 	config: PoolConfig,
 	tx_pool: Arc<RwLock<TransactionPool<T>>>,
