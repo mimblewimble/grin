@@ -538,6 +538,7 @@ where
 		// After the pool has been successfully processed, an orphans
 		// reconciliation job is triggered.
 		let mut marked_transactions: HashSet<hash::Hash> = HashSet::new();
+		let mut marked_stem_transactions: HashSet<hash::Hash> = HashSet::new();
 
 		{
 			// find all conflicting txs based on inputs to the block
@@ -545,6 +546,14 @@ where
 				.inputs
 				.iter()
 				.filter_map(|x| self.pool.get_external_spent_output(&x.commitment()))
+				.filter_map(|x| x.destination_hash())
+				.collect();
+
+			// find all conflicting stem txs based on inputs to the block
+			let conflicting_stem_txs: HashSet<hash::Hash> = block
+				.inputs
+				.iter()
+				.filter_map(|x| self.stempool.get_external_spent_output(&x.commitment()))
 				.filter_map(|x| x.destination_hash())
 				.collect();
 
@@ -561,16 +570,39 @@ where
 				.filter_map(|x| x.source_hash())
 				.collect();
 
+
+			// Similarly find all outputs that conflict in the stempool- potential for duplicates so use a HashSet
+			// here
+			let conflicting_stem_outputs: HashSet<hash::Hash> = block
+				.outputs
+				.iter()
+				.filter_map(|x: &transaction::Output| {
+					self.stempool
+					.get_internal_spent_output(&x.commitment())
+					.or(self.stempool.get_available_output(&x.commitment()))
+				})
+				.filter_map(|x| x.source_hash())
+				.collect();
+
 			// now iterate over all conflicting hashes from both txs and outputs
 			// we can just use the union of the two sets here to remove duplicates
 			for &txh in conflicting_txs.union(&conflicting_outputs) {
-				self.mark_transaction(txh, &mut marked_transactions);
+				self.mark_transaction(txh, &mut marked_transactions, false);
+			}
+
+			// Do the same for the stempool
+			for &txh in conflicting_stem_txs.union(&conflicting_stem_outputs) {
+				self.mark_transaction(txh, &mut marked_stem_transactions, true);
 			}
 		}
-		let freed_txs = self.sweep_transactions(marked_transactions);
+
+		let freed_txs = self.sweep_transactions(marked_transactions, false);
+		let freed_stem_txs = self.sweep_transactions(marked_stem_transactions, true);
+
 
 		self.reconcile_orphans().unwrap();
 
+		// Return something else here ?
 		Ok(freed_txs)
 	}
 
@@ -584,7 +616,7 @@ where
 	///
 	/// Marked transactions are added to the mutable marked_txs HashMap which
 	/// is supplied by the calling function.
-	fn mark_transaction(&self, conflicting_tx: hash::Hash, marked_txs: &mut HashSet<hash::Hash>) {
+	fn mark_transaction(&self, conflicting_tx: hash::Hash, marked_txs: &mut HashSet<hash::Hash>, stem: bool) {
 		// we can stop recursively visiting txs if we have already seen this one
 		if marked_txs.contains(&conflicting_tx) {
 			return;
@@ -592,15 +624,28 @@ where
 
 		marked_txs.insert(conflicting_tx);
 
-		let tx_ref = self.transactions.get(&conflicting_tx);
+		if stem {
+			let tx_ref = self.stem_transactions.get(&conflicting_tx);
 
-		for output in &tx_ref.unwrap().outputs {
-			match self.pool.get_internal_spent_output(&output.commitment()) {
-				Some(x) => if self.blockchain.is_unspent(&x.output()).is_err() {
-					self.mark_transaction(x.destination_hash().unwrap(), marked_txs);
-				},
-				None => {}
-			};
+			for output in &tx_ref.unwrap().outputs {
+				match self.stempool.get_internal_spent_output(&output.commitment()) {
+					Some(x) => if self.blockchain.is_unspent(&x.output()).is_err() {
+						self.mark_transaction(x.destination_hash().unwrap(), marked_txs, true);
+					},
+					None => {}
+				};
+			}
+		} else {
+			let tx_ref = self.transactions.get(&conflicting_tx);
+
+			for output in &tx_ref.unwrap().outputs {
+				match self.pool.get_internal_spent_output(&output.commitment()) {
+					Some(x) => if self.blockchain.is_unspent(&x.output()).is_err() {
+						self.mark_transaction(x.destination_hash().unwrap(), marked_txs, false);
+					},
+					None => {}
+				};
+			}
 		}
 	}
 	/// The sweep portion of mark-and-sweep pool cleanup.
@@ -617,22 +662,37 @@ where
 	fn sweep_transactions(
 		&mut self,
 		marked_transactions: HashSet<hash::Hash>,
+		stem: bool
 	) -> Vec<Box<transaction::Transaction>> {
 		let mut removed_txs = Vec::new();
 
-		for tx_hash in &marked_transactions {
-			let removed_tx = self.transactions.remove(&tx_hash).unwrap();
+		if stem {
+			for tx_hash in &marked_transactions {
+				let removed_tx = self.stem_transactions.remove(&tx_hash).unwrap();
 
-			self.pool
+				self.stempool
 				.remove_pool_transaction(&removed_tx, &marked_transactions);
 
-			removed_txs.push(removed_tx);
-		}
+				removed_txs.push(removed_tx);
+			}
+
+			// final step is to update the pool to reflect the new set of roots
+			// a tx that was non-root may now be root based on the txs removed
+			self.pool.update_roots();
+		} else {
+			for tx_hash in &marked_transactions {
+				let removed_tx = self.transactions.remove(&tx_hash).unwrap();
+
+				self.pool
+				.remove_pool_transaction(&removed_tx, &marked_transactions);
+
+				removed_txs.push(removed_tx);
+			}
 
 		// final step is to update the pool to reflect the new set of roots
 		// a tx that was non-root may now be root based on the txs removed
 		self.pool.update_roots();
-
+}
 		removed_txs
 	}
 
