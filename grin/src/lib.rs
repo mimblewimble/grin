@@ -44,6 +44,7 @@ extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
 mod adapters;
+mod dandelion_monitor;
 mod server;
 mod seed;
 mod sync;

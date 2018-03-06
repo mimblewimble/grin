@@ -15,11 +15,8 @@
 //! Top-level Pool type, methods, and tests
 
 use std::collections::{HashMap, HashSet};
-use std::thread;
-use std::time::Duration;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use time::{self, now_utc};
+use time;
 use rand;
 use rand::Rng;
 
@@ -657,6 +654,12 @@ where
 			.collect()
 	}
 
+	/// Remove tx from stempool
+	pub fn remove_from_stempool(&mut self, tx_hash: &Hash) {
+		self.stem_transactions.remove(&tx_hash);
+		self.time_stem_transactions.remove(&tx_hash);
+	}
+
 	/// Whether the transaction is acceptable to the pool, given both how
 	/// full the pool is and the transaction weight.
 	fn is_acceptable(&self, tx: &transaction::Transaction) -> Result<(), PoolError> {
@@ -682,7 +685,7 @@ where
 	}
 
 	// Check that the transaction is not in the stempool or in the pool
-	fn check_pools(&self, tx_hash: &Hash, stem: bool) -> Result<(), PoolError> {
+	fn check_pools(&mut self, tx_hash: &Hash, stem: bool) -> Result<(), PoolError> {
 		if stem && self.stem_transactions.contains_key(&tx_hash) {
 			return Err(PoolError::AlreadyInStempool);
 		} else {
@@ -744,48 +747,6 @@ where
 			}
 		}
 		Ok(vec![pool_refs, orphan_refs, blockchain_refs])
-	}
-
-	pub fn monitor_transactions(&self, stop: Arc<AtomicBool>) {
-		let _ = thread::Builder::new()
-		.name("dandelion".to_string())
-		.spawn(move || {
-			let stem_transactions = self.stem_transactions.clone();
-			let time_stem_transactions = self.time_stem_transactions.clone();
-			let config = self.config.clone();
-
-			let mut prev = time::now_utc() - time::Duration::seconds(60);
-			loop {
-				let current_time = time::now_utc();
-
-				if current_time - prev > time::Duration::seconds(20) {
-					for tx_hash in stem_transactions.keys() {
-						let time_transaction = time_stem_transactions.get(tx_hash).unwrap();
-						let interval = now_utc().to_timespec().sec - time_transaction;
-						// Unban peer
-						if interval >= config.dandelion_embargo {
-							let source = TxSource {
-								debug_name: "dandelion-monitor".to_string(),
-								identifier: "?.?.?.?".to_string(),
-							};
-							info!(
-								LOGGER,
-								"Pushing transaction after embargo timer expired."
-							);
-							let stem_transaction = stem_transactions.get(tx_hash).unwrap();
-							self.add_to_memory_pool(source, *stem_transaction.clone(), false);
-						}
-					}
-					prev = current_time;
-				}
-
-				thread::sleep(Duration::from_secs(1));
-
-				if stop.load(Ordering::Relaxed) {
-					break;
-				}
-			}
-		});
 	}
 }
 
@@ -1392,6 +1353,7 @@ mod tests {
 				dandelion_probability: 90,
 				dandelion_embargo: 30,
 			},
+			time_stem_transactions: HashMap::new(),
 			stem_transactions: HashMap::new(),
 			transactions: HashMap::new(),
 			stempool: Pool::empty(),
