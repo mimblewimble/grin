@@ -38,7 +38,7 @@ macro_rules! try_map_vec {
 }
 
 /// Eliminates some of the verbosity in having iter and collect
-/// around every fitler_map call.
+/// around every filter_map call.
 #[macro_export]
 macro_rules! filter_map_vec {
   ($thing:expr, $mapfn:expr ) => {
@@ -61,17 +61,6 @@ macro_rules! tee {
     $thing
     }
   }
-}
-
-#[macro_export]
-macro_rules! try_to_o {
-  ($trying:expr) => {{
-    let tried = $trying;
-    if let Err(e) = tried {
-      return Some(e);
-    }
-    tried.unwrap()
-  }}
 }
 
 /// Eliminate some of the boilerplate of deserialization (package ser) by

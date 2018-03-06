@@ -209,11 +209,22 @@ fn pmmr_reload() {
 	{
 		backend.sync().unwrap();
 
-		// prune some nodes so we have prune data
+		// prune a node so we have prune data
 		{
 			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			pmmr.prune(1, 1).unwrap();
+		}
+		backend.sync().unwrap();
+
+		// now check and compact the backend
+		backend.check_compact(1, 2).unwrap();
+		backend.sync().unwrap();
+
+		// prune another node to force compact to actually do something
+		{
+			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			pmmr.prune(4, 1).unwrap();
+			pmmr.prune(2, 1).unwrap();
 		}
 		backend.sync().unwrap();
 

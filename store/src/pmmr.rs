@@ -17,7 +17,7 @@ use std::fs;
 use std::io;
 use std::marker::PhantomData;
 
-use core::core::pmmr::{self, Backend};
+use core::core::pmmr::{self, Backend, family};
 use core::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
 use core::core::hash::Hash;
 use util::LOGGER;
@@ -132,22 +132,18 @@ where
 		}
 	}
 
-	// Node pos in either the rm_log or the prune list are treated as removed.
+	// Node pos in either the rm_log or explicitly in the prune list are
+	// treated as "removed" but not "compacted" so data is still in underlying file.
 	fn is_removed(&self, pos: u64) -> bool {
 		self.rm_log.includes(pos) || self.pruned_nodes.is_in_prune_list(pos)
 	}
 
 	/// Get a Hash by insertion position
 	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)> {
-		println!("***** store pmmr: get: {}", position);
 
 		// Check if this position has been pruned in the remove log or the
 		// pruned list
 		if self.is_removed(position) {
-			println!(
-				"***** store pmmr: get: appears to have been removed: {}, {:?}, {:?}",
-				position, self.rm_log.removed, self.pruned_nodes.pruned_nodes,
-			);
 			return None;
 		}
 
@@ -243,6 +239,9 @@ where
 	/// fully sync'd size.
 	pub fn unpruned_size(&self) -> io::Result<u64> {
 		let total_shift = self.pruned_nodes.get_shift(::std::u64::MAX).unwrap();
+
+		// TODO - we should get rid of this hardcoded hash len (all over this file)
+		// and centralize it somewhere, similar to how we deal with T::len()
 		let record_len = 32;
 		let sz = self.hash_file.size()?;
 		Ok(sz / record_len + total_shift)
@@ -319,7 +318,7 @@ where
 	/// position index in db
 	pub fn check_compact(&mut self, max_len: usize, cutoff_index: u32) -> io::Result<()> {
 		println!(
-			"check_compact: {}, {}, {}",
+			"check_compact: rm len {}, max {}, cutoff {}",
 			self.rm_log.len(),
 			max_len,
 			cutoff_index
@@ -354,56 +353,88 @@ where
 			}
 		}
 
+		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);
+		let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir, PMMR_DATA_FILE);
+
 		// 1. save hashsum file to a compact copy, skipping data that's in the
 		// remove list
-		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);
-		let record_len = 32;
-		let to_rm = filter_map_vec!(self.rm_log.removed, |&(pos, idx)| if idx < cutoff_index {
-			let shift = self.pruned_nodes.get_shift(pos);
-			Some((pos - 1 - shift.unwrap()) * record_len)
-		} else {
-			None
-		});
+		// TODO - unless the entry in the remove list is a "root"
+		{
+			let record_len = 32;
 
-		println!("***** to_rm {:?}", to_rm);
+			let pos_to_rm = self.rm_log.removed
+				.iter()
+				.filter_map(|&(pos, idx)| {
+					let (parent_pos, _, _) = family(pos);
+					if idx < cutoff_index && self.rm_log.includes(parent_pos) {
+						Some(pos)
+					} else {
+						None
+					}
+				})
+				.collect::<Vec<_>>();
 
-		self.hash_file
-			.save_prune(tmp_prune_file_hash.clone(), to_rm, record_len)?;
+			let off_to_rm = pos_to_rm
+				.iter()
+				.map(|&pos| {
+					let shift = self.pruned_nodes.get_shift(pos);
+					(pos - 1 - shift.unwrap()) * record_len
+				})
+				.collect::<Vec<_>>();
 
-		// 2. And the same with the data file
-		let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir, PMMR_DATA_FILE);
-		let record_len = T::len() as u64;
-		let to_rm = filter_map_vec!(self.rm_log.removed, |&(pos, idx)| {
-			if pmmr::bintree_postorder_height(pos) == 0 && idx < cutoff_index {
-				let shift = self.pruned_nodes.get_leaf_shift(pos).unwrap();
-				let pos = pmmr::n_leaves(pos as u64);
-				Some((pos - 1 - shift) * record_len)
-			} else {
-				None
-			}
-		});
-		self.data_file
-			.save_prune(tmp_prune_file_data.clone(), to_rm, record_len)?;
+			println!("***** off_to_rm {:?}", off_to_rm);
 
-		// 3. update the prune list and save it in place
-		for &(rm_pos, idx) in &self.rm_log.removed[..] {
-			if idx < cutoff_index {
-				self.pruned_nodes.add(rm_pos);
-			}
+			self.hash_file
+				.save_prune(tmp_prune_file_hash.clone(), off_to_rm, record_len)?;
 		}
 
-		// TODO - we do not want the "roots" of each pruned tree to be in the
-		// list of pruned nodes (just everything beneath it)
-		// TODO - we also want to keep leaves hanging around in the rm log
-		println!(
-			"***** updated pruned_nodes - {:?}",
-			&self.pruned_nodes.pruned_nodes
-		);
+		// 2. And the same with the data file
+		// TODO - handle "roots" and "leaves" here correctly as well
+		{
+			let record_len = T::len() as u64;
 
-		write_vec(
-			format!("{}/{}", self.data_dir, PMMR_PRUNED_FILE),
-			&self.pruned_nodes.pruned_nodes,
-		)?;
+			let pos_to_rm = self.rm_log.removed
+				.iter()
+				.filter_map(|&(pos, idx)| {
+					let (parent_pos, _, _) = family(pos);
+					if idx < cutoff_index && pmmr::is_leaf(pos) && self.rm_log.includes(parent_pos) {
+						Some(pos)
+					} else {
+						None
+					}
+				})
+				.collect::<Vec<_>>();
+
+			let off_to_rm = pos_to_rm
+				.iter()
+				.map(|&pos| {
+					let shift = self.pruned_nodes.get_leaf_shift(pos);
+					(pos - 1 - shift.unwrap()) * record_len
+				})
+				.collect::<Vec<_>>();
+
+			self.data_file
+				.save_prune(tmp_prune_file_data.clone(), off_to_rm, record_len)?;
+		}
+
+		// 3. update the prune list and save it in place
+		{
+			for &(rm_pos, idx) in &self.rm_log.removed[..] {
+				if idx < cutoff_index {
+					self.pruned_nodes.add(rm_pos);
+				}
+			}
+
+			println!(
+				"***** updated pruned_nodes - {:?}",
+				&self.pruned_nodes.pruned_nodes
+			);
+
+			write_vec(
+				format!("{}/{}", self.data_dir, PMMR_PRUNED_FILE),
+				&self.pruned_nodes.pruned_nodes,
+			)?;
+		}
 
 		// 4. move the compact copy of hashes to the hashsum file and re-open it
 		fs::rename(

@@ -377,7 +377,6 @@ where
 		// creation of another parent.
 		while bintree_postorder_height(pos + 1) > height {
 			let left_sibling = bintree_jump_left_sibling(pos);
-			println!("***** left_sibling: {}", left_sibling);
 
 			let left_elem = self.backend
 				.get(left_sibling, false)

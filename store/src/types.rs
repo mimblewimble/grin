@@ -161,39 +161,44 @@ impl AppendOnlyFile {
 			target, prune_offs, prune_len
 		);
 
-		let mut reader = File::open(self.path.clone())?;
-		let mut writer = File::create(target)?;
+		if prune_offs.is_empty() {
+			fs::copy(self.path.clone(), target.clone())?;
+			Ok(())
+		} else {
+			let mut reader = File::open(self.path.clone())?;
+			let mut writer = File::create(target.clone())?;
 
-		// align the buffer on prune_len to avoid misalignments
-		let mut buf = vec![0; (prune_len * 256) as usize];
-		let mut read = 0;
-		let mut prune_pos = 0;
-		loop {
-			// fill our buffer
-			let len = match reader.read(&mut buf) {
-				Ok(0) => return Ok(()),
-				Ok(len) => len,
-				Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
-				Err(e) => return Err(e),
-			} as u64;
+			// align the buffer on prune_len to avoid misalignments
+			let mut buf = vec![0; (prune_len * 256) as usize];
+			let mut read = 0;
+			let mut prune_pos = 0;
+			loop {
+				// fill our buffer
+				let len = match reader.read(&mut buf) {
+					Ok(0) => return Ok(()),
+					Ok(len) => len,
+					Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+					Err(e) => return Err(e),
+				} as u64;
 
-			// write the buffer, except if we prune offsets in the current span,
-			// in which case we skip
-			let mut buf_start = 0;
-			while prune_offs[prune_pos] >= read && prune_offs[prune_pos] < read + len {
-				let prune_at = prune_offs[prune_pos] as usize;
-				if prune_at != buf_start {
-					writer.write_all(&buf[buf_start..prune_at])?;
+				// write the buffer, except if we prune offsets in the current span,
+				// in which case we skip
+				let mut buf_start = 0;
+				while prune_offs[prune_pos] >= read && prune_offs[prune_pos] < read + len {
+					let prune_at = prune_offs[prune_pos] as usize;
+					if prune_at != buf_start {
+						writer.write_all(&buf[buf_start..prune_at])?;
+					}
+					buf_start = prune_at + (prune_len as usize);
+					if prune_offs.len() > prune_pos + 1 {
+						prune_pos += 1;
+					} else {
+						break;
+					}
 				}
-				buf_start = prune_at + (prune_len as usize);
-				if prune_offs.len() > prune_pos + 1 {
-					prune_pos += 1;
-				} else {
-					break;
-				}
+				writer.write_all(&mut buf[buf_start..(len as usize)])?;
+				read += len;
 			}
-			writer.write_all(&mut buf[buf_start..(len as usize)])?;
-			read += len;
 		}
 	}
 
