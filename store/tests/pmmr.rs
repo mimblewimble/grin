@@ -252,7 +252,14 @@ fn pmmr_reload() {
 			let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			assert_eq!(root, pmmr.root());
 		}
+
+		// pos 4 is in the prune list
+		assert_eq!(backend.get(4, false), None);
+		// pos 5 is in the rm_log
 		assert_eq!(backend.get(5, false), None);
+		// but both are still in the underlying hash file
+		assert_eq!(backend.get_from_file(4), Some(Hash::zero()));
+		assert_eq!(backend.get_from_file(5), Some(Hash::zero()));
 	}
 
 	teardown(data_dir);

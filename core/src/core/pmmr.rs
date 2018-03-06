@@ -616,7 +616,7 @@ impl PruneList {
 	pub fn get_shift(&self, pos: u64) -> Option<u64> {
 		// get the position where the node at pos would fit in the pruned list, if
 		// it's already pruned, nothing to skip
-		match self.pruned_pos(pos) {
+		match self.pruned_idx(pos) {
 			None => None,
 			Some(idx) => {
 				// skip by the number of elements pruned in the preceding subtrees,
@@ -653,7 +653,7 @@ impl PruneList {
 	pub fn get_leaf_shift(&self, pos: u64) -> Option<u64> {
 		// get the position where the node at pos would fit in the pruned list, if
 		// it's already pruned, nothing to skip
-		match self.pruned_pos(pos) {
+		match self.pruned_idx(pos) {
 			None => None,
 			Some(idx) => {
 				Some(
@@ -708,12 +708,15 @@ impl PruneList {
 		}
 	}
 
-	/// Gets the position a new pruned node should take in the prune list.
-	/// If the node has already been pruned, either directly or through one of
-	/// its parents contained in the prune list, returns None.
-	pub fn pruned_pos(&self, pos: u64) -> Option<usize> {
+	/// Gets the idx the provided pruned node pos should take in the prune list.
+	/// If the node has been pruned and pos is in the prune list then return Some(idx).
+	/// If the node has been pruned via an ancestor in the prune list then return None.
+	pub fn pruned_idx(&self, pos: u64) -> Option<usize> {
 		match self.pruned_nodes.binary_search(&pos) {
-			Ok(_) => None,
+			Ok(idx) => {
+				println!("**** pruned_idx: found it at {}", idx);
+				Some(idx)
+			},
 			Err(idx) => {
 				if self.pruned_nodes.len() > idx {
 					// the node at pos can't be a child of lower position nodes by MMR
@@ -1024,6 +1027,10 @@ mod test {
 				self.remove_list.push(n)
 			}
 			Ok(())
+		}
+
+		fn is_removed(&self, pos: u64) -> bool {
+			self.remove_list.contains(&pos)
 		}
 
 		fn rewind(&mut self, position: u64, _index: u32) -> Result<(), String> {
@@ -1561,6 +1568,35 @@ mod test {
 			assert_eq!(orig_root, pmmr.root());
 		}
 		assert_eq!(ba.used_size(), 2);
+	}
+
+	#[test]
+	fn pmmr_get_prune_pos() {
+		let mut pl = PruneList::new();
+
+		assert_eq!(pl.pruned_nodes.len(), 0);
+		assert_eq!(pl.pruned_idx(1), Some(0));
+		assert_eq!(pl.pruned_idx(2), Some(0));
+		assert_eq!(pl.pruned_idx(3), Some(0));
+
+		pl.add(2);
+		assert_eq!(pl.pruned_nodes.len(), 1);
+		assert_eq!(pl.pruned_nodes, [2]);
+		assert_eq!(pl.pruned_idx(1), Some(0));
+		assert_eq!(pl.pruned_idx(2), None);
+		assert_eq!(pl.pruned_idx(3), Some(1));
+		assert_eq!(pl.pruned_idx(4), Some(1));
+
+		pl.add(1);
+		assert_eq!(pl.pruned_nodes.len(), 1);
+		assert_eq!(pl.pruned_nodes, [3]);
+		assert_eq!(pl.pruned_idx(1), None);
+		assert_eq!(pl.pruned_idx(2), None);
+		assert_eq!(pl.pruned_idx(3), None);
+		assert_eq!(pl.pruned_idx(4), Some(1));
+		assert_eq!(pl.pruned_idx(5), Some(1));
+
+		assert!(false, "and debug");
 	}
 
 	#[test]
