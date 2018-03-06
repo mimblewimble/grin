@@ -26,7 +26,6 @@ use core::core::id::ShortIdentifiable;
 use core::core::transaction;
 use core::core::{OutputIdentifier, Transaction};
 use core::core::{block, hash};
-use util;
 use util::LOGGER;
 use util::secp::pedersen::Commitment;
 
