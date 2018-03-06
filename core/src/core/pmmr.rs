@@ -616,7 +616,7 @@ impl PruneList {
 	pub fn get_shift(&self, pos: u64) -> Option<u64> {
 		// get the position where the node at pos would fit in the pruned list, if
 		// it's already pruned, nothing to skip
-		match self.pruned_idx(pos) {
+		match self.next_pruned_idx(pos) {
 			None => None,
 			Some(idx) => {
 				// skip by the number of elements pruned in the preceding subtrees,
@@ -653,7 +653,7 @@ impl PruneList {
 	pub fn get_leaf_shift(&self, pos: u64) -> Option<u64> {
 		// get the position where the node at pos would fit in the pruned list, if
 		// it's already pruned, nothing to skip
-		match self.pruned_idx(pos) {
+		match self.next_pruned_idx(pos) {
 			None => None,
 			Some(idx) => {
 				Some(
@@ -708,15 +708,19 @@ impl PruneList {
 		}
 	}
 
-	/// Gets the idx the provided pruned node pos should take in the prune list.
-	/// If the node has been pruned and pos is in the prune list then return Some(idx).
-	/// If the node has been pruned via an ancestor in the prune list then return None.
-	pub fn pruned_idx(&self, pos: u64) -> Option<usize> {
+	// pub fn pruned_idx(&self, pos: u64) -> Option<usize> {
+	// 	match self.pruned_nodes.binary_search(&pos) {
+	// 		Ok(idx) => Some(idx),
+	// 		Err(_) => None,
+	// 	}
+	// }
+
+	pub fn next_pruned_idx(&self, pos: u64) -> Option<usize> {
 		match self.pruned_nodes.binary_search(&pos) {
 			Ok(idx) => {
-				println!("**** pruned_idx: found it at {}", idx);
-				Some(idx)
-			}
+				// TODO - this feels hacky, still not sure this is correct
+				Some(idx + 1)
+			},
 			Err(idx) => {
 				if self.pruned_nodes.len() > idx {
 					// the node at pos can't be a child of lower position nodes by MMR
@@ -1570,33 +1574,57 @@ mod test {
 		assert_eq!(ba.used_size(), 2);
 	}
 
+	// #[test]
+	// fn pmmr_pruned_idx() {
+	// 	let mut pl = PruneList::new();
+	//
+	// 	assert_eq!(pl.pruned_nodes.len(), 0);
+	// 	assert_eq!(pl.pruned_idx(1), None);
+	// 	assert_eq!(pl.pruned_idx(2), None);
+	// 	assert_eq!(pl.pruned_idx(3), None);
+	//
+	// 	pl.add(2);
+	// 	assert_eq!(pl.pruned_nodes.len(), 1);
+	// 	assert_eq!(pl.pruned_nodes, [2]);
+	// 	assert_eq!(pl.pruned_idx(1), None);
+	// 	assert_eq!(pl.pruned_idx(2), Some(0));
+	// 	assert_eq!(pl.pruned_idx(3), None);
+	// 	assert_eq!(pl.pruned_idx(4), None);
+	//
+	// 	pl.add(1);
+	// 	assert_eq!(pl.pruned_nodes.len(), 1);
+	// 	assert_eq!(pl.pruned_nodes, [3]);
+	// 	assert_eq!(pl.pruned_idx(1), None);
+	// 	assert_eq!(pl.pruned_idx(2), None);
+	// 	assert_eq!(pl.pruned_idx(3), Some(0));
+	// 	assert_eq!(pl.pruned_idx(4), None);
+	// }
+
 	#[test]
-	fn pmmr_get_prune_pos() {
+	fn pmmr_next_pruned_idx() {
 		let mut pl = PruneList::new();
 
 		assert_eq!(pl.pruned_nodes.len(), 0);
-		assert_eq!(pl.pruned_idx(1), Some(0));
-		assert_eq!(pl.pruned_idx(2), Some(0));
-		assert_eq!(pl.pruned_idx(3), Some(0));
+		assert_eq!(pl.next_pruned_idx(1), Some(0));
+		assert_eq!(pl.next_pruned_idx(2), Some(0));
+		assert_eq!(pl.next_pruned_idx(3), Some(0));
 
 		pl.add(2);
 		assert_eq!(pl.pruned_nodes.len(), 1);
 		assert_eq!(pl.pruned_nodes, [2]);
-		assert_eq!(pl.pruned_idx(1), Some(0));
-		assert_eq!(pl.pruned_idx(2), None);
-		assert_eq!(pl.pruned_idx(3), Some(1));
-		assert_eq!(pl.pruned_idx(4), Some(1));
+		assert_eq!(pl.next_pruned_idx(1), Some(0));
+		assert_eq!(pl.next_pruned_idx(2), Some(1));
+		assert_eq!(pl.next_pruned_idx(3), Some(1));
+		assert_eq!(pl.next_pruned_idx(4), Some(1));
 
 		pl.add(1);
 		assert_eq!(pl.pruned_nodes.len(), 1);
 		assert_eq!(pl.pruned_nodes, [3]);
-		assert_eq!(pl.pruned_idx(1), None);
-		assert_eq!(pl.pruned_idx(2), None);
-		assert_eq!(pl.pruned_idx(3), None);
-		assert_eq!(pl.pruned_idx(4), Some(1));
-		assert_eq!(pl.pruned_idx(5), Some(1));
-
-		assert!(false, "and debug");
+		assert_eq!(pl.next_pruned_idx(1), None);
+		assert_eq!(pl.next_pruned_idx(2), None);
+		assert_eq!(pl.next_pruned_idx(3), Some(1));
+		assert_eq!(pl.next_pruned_idx(4), Some(1));
+		assert_eq!(pl.next_pruned_idx(5), Some(1));
 	}
 
 	#[test]
@@ -1615,7 +1643,7 @@ mod test {
 		pl.add(1);
 		assert_eq!(pl.pruned_nodes.len(), 1);
 		assert_eq!(pl.pruned_nodes, [1]);
-		assert_eq!(pl.get_leaf_shift(1), None);
+		assert_eq!(pl.get_leaf_shift(1), Some(0));
 		assert_eq!(pl.get_leaf_shift(2), Some(0));
 		assert_eq!(pl.get_leaf_shift(3), Some(0));
 		assert_eq!(pl.get_leaf_shift(4), Some(0));
@@ -1627,7 +1655,7 @@ mod test {
 		assert_eq!(pl.pruned_nodes, [3]);
 		assert_eq!(pl.get_leaf_shift(1), None);
 		assert_eq!(pl.get_leaf_shift(2), None);
-		assert_eq!(pl.get_leaf_shift(3), None);
+		assert_eq!(pl.get_leaf_shift(3), Some(2));
 		assert_eq!(pl.get_leaf_shift(4), Some(2));
 		assert_eq!(pl.get_leaf_shift(5), Some(2));
 
@@ -1638,8 +1666,8 @@ mod test {
 		assert_eq!(pl.pruned_nodes, [3, 4]);
 		assert_eq!(pl.get_leaf_shift(1), None);
 		assert_eq!(pl.get_leaf_shift(2), None);
-		assert_eq!(pl.get_leaf_shift(3), None);
-		assert_eq!(pl.get_leaf_shift(4), None);
+		assert_eq!(pl.get_leaf_shift(3), Some(2));
+		assert_eq!(pl.get_leaf_shift(4), Some(2));
 		assert_eq!(pl.get_leaf_shift(5), Some(2));
 		assert_eq!(pl.get_leaf_shift(6), Some(2));
 		assert_eq!(pl.get_leaf_shift(7), Some(2));
@@ -1657,7 +1685,7 @@ mod test {
 		assert_eq!(pl.get_leaf_shift(4), None);
 		assert_eq!(pl.get_leaf_shift(5), None);
 		assert_eq!(pl.get_leaf_shift(6), None);
-		assert_eq!(pl.get_leaf_shift(7), None);
+		assert_eq!(pl.get_leaf_shift(7), Some(4));
 		assert_eq!(pl.get_leaf_shift(8), Some(4));
 		assert_eq!(pl.get_leaf_shift(9), Some(4));
 
@@ -1670,11 +1698,11 @@ mod test {
 		pl.add(4);
 		assert_eq!(pl.pruned_nodes, [2, 6]);
 		assert_eq!(pl.get_leaf_shift(1), Some(0));
-		assert_eq!(pl.get_leaf_shift(2), None);
+		assert_eq!(pl.get_leaf_shift(2), Some(0));
 		assert_eq!(pl.get_leaf_shift(3), Some(0));
 		assert_eq!(pl.get_leaf_shift(4), None);
 		assert_eq!(pl.get_leaf_shift(5), None);
-		assert_eq!(pl.get_leaf_shift(6), None);
+		assert_eq!(pl.get_leaf_shift(6), Some(2));
 		assert_eq!(pl.get_leaf_shift(7), Some(2));
 		assert_eq!(pl.get_leaf_shift(8), Some(2));
 		assert_eq!(pl.get_leaf_shift(9), Some(2));
@@ -1693,7 +1721,7 @@ mod test {
 		// we will only start shifting when a parent can be pruned
 		pl.add(1);
 		assert_eq!(pl.pruned_nodes, [1]);
-		assert_eq!(pl.get_shift(1), None);
+		assert_eq!(pl.get_shift(1), Some(0));
 		assert_eq!(pl.get_shift(2), Some(0));
 		assert_eq!(pl.get_shift(3), Some(0));
 
@@ -1701,7 +1729,8 @@ mod test {
 		assert_eq!(pl.pruned_nodes, [3]);
 		assert_eq!(pl.get_shift(1), None);
 		assert_eq!(pl.get_shift(2), None);
-		assert_eq!(pl.get_shift(3), None);
+		// pos 3 is in the prune list, so removed but not compacted, but still shifted
+		assert_eq!(pl.get_shift(3), Some(2));
 		assert_eq!(pl.get_shift(4), Some(2));
 		assert_eq!(pl.get_shift(5), Some(2));
 		assert_eq!(pl.get_shift(6), Some(2));
@@ -1710,8 +1739,11 @@ mod test {
 		assert_eq!(pl.pruned_nodes, [3, 4]);
 		assert_eq!(pl.get_shift(1), None);
 		assert_eq!(pl.get_shift(2), None);
-		assert_eq!(pl.get_shift(3), None);
-		assert_eq!(pl.get_shift(4), None);
+		// pos 3 is in the prune list, so removed but not compacted, but still shifted
+		assert_eq!(pl.get_shift(3), Some(2));
+		// pos 4 is also in the prune list and also shifted by same amount
+		assert_eq!(pl.get_shift(4), Some(2));
+		// subsequent nodes also shifted consistently
 		assert_eq!(pl.get_shift(5), Some(2));
 		assert_eq!(pl.get_shift(6), Some(2));
 
@@ -1723,7 +1755,9 @@ mod test {
 		assert_eq!(pl.get_shift(4), None);
 		assert_eq!(pl.get_shift(5), None);
 		assert_eq!(pl.get_shift(6), None);
-		assert_eq!(pl.get_shift(7), None);
+		// everything prior to pos 7 is compacted away
+		// pos 7 is shifted by 6 to account for this
+		assert_eq!(pl.get_shift(7), Some(6));
 		assert_eq!(pl.get_shift(8), Some(6));
 		assert_eq!(pl.get_shift(9), Some(6));
 
@@ -1733,11 +1767,11 @@ mod test {
 		pl.add(4);
 		assert_eq!(pl.pruned_nodes, [2, 6]);
 		assert_eq!(pl.get_shift(1), Some(0));
-		assert_eq!(pl.get_shift(2), None);
+		assert_eq!(pl.get_shift(2), Some(0));
 		assert_eq!(pl.get_shift(3), Some(0));
 		assert_eq!(pl.get_shift(4), None);
 		assert_eq!(pl.get_shift(5), None);
-		assert_eq!(pl.get_shift(6), None);
+		assert_eq!(pl.get_shift(6), Some(2));
 		assert_eq!(pl.get_shift(7), Some(2));
 		assert_eq!(pl.get_shift(8), Some(2));
 		assert_eq!(pl.get_shift(9), Some(2));

@@ -343,7 +343,7 @@ where
 		// 0. validate none of the nodes in the rm log are in the prune list (to
 		// avoid accidental double compaction)
 		for pos in &self.rm_log.removed[..] {
-			if let None = self.pruned_nodes.pruned_idx(pos.0) {
+			if let None = self.pruned_nodes.next_pruned_idx(pos.0) {
 				// TODO we likely can recover from this by directly jumping to 3
 				error!(
 					LOGGER,
