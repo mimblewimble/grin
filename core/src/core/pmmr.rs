@@ -716,7 +716,7 @@ impl PruneList {
 			Ok(idx) => {
 				println!("**** pruned_idx: found it at {}", idx);
 				Some(idx)
-			},
+			}
 			Err(idx) => {
 				if self.pruned_nodes.len() > idx {
 					// the node at pos can't be a child of lower position nodes by MMR

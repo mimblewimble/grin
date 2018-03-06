@@ -106,7 +106,8 @@ where
 		Ok(())
 	}
 
-	// TODO - how to handle get_shift here if we are a pruned root (and still in the file)???
+	// TODO - how to handle get_shift here if we are a pruned root (and still in
+	// the file)???
 	fn get_from_file(&self, position: u64) -> Option<Hash> {
 		let shift = self.pruned_nodes.get_shift(position);
 		if let None = shift {
