@@ -146,9 +146,7 @@ where
 		if self.is_removed(position) {
 			println!(
 				"***** store pmmr: get: appears to have been removed: {}, {:?}, {:?}",
-				position,
-				self.rm_log.removed,
-				self.pruned_nodes.pruned_nodes,
+				position, self.rm_log.removed, self.pruned_nodes.pruned_nodes,
 			);
 			return None;
 		}
