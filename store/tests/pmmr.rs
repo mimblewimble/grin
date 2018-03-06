@@ -42,8 +42,9 @@ fn pmmr_append() {
 
 	let sum2 = elems[0].hash_with_index(1) + elems[1].hash_with_index(2);
 	let sum4 = sum2 + (elems[2].hash_with_index(4) + elems[3].hash_with_index(5));
-	let sum8 = sum4 + ((elems[4].hash_with_index(8) + elems[5].hash_with_index(9))
-		+ (elems[6].hash_with_index(11) + elems[7].hash_with_index(12)));
+	let sum8 = sum4
+		+ ((elems[4].hash_with_index(8) + elems[5].hash_with_index(9))
+			+ (elems[6].hash_with_index(11) + elems[7].hash_with_index(12)));
 	let sum9 = sum8 + elems[8].hash_with_index(16);
 
 	{

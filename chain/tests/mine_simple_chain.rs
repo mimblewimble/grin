@@ -370,7 +370,7 @@ fn spend_in_fork_and_compact() {
 	// add 20 blocks to go past the test horizon
 	let mut prev = prev_fork;
 	for n in 0..20 {
-		let next = prepare_block(&kc, &prev, &chain, 11+n);
+		let next = prepare_block(&kc, &prev, &chain, 11 + n);
 		prev = next.header.clone();
 		chain.process_block(next, chain::Options::SKIP_POW).unwrap();
 	}

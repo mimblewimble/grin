@@ -40,7 +40,7 @@ use std::marker::PhantomData;
 use core::hash::{Hash, Hashed};
 use ser;
 use ser::{Readable, Reader, Writeable, Writer};
-use ser::{PMMRable, PMMRIndexHashable};
+use ser::{PMMRIndexHashable, PMMRable};
 use util;
 use util::LOGGER;
 
@@ -917,7 +917,7 @@ mod test {
 	use ser::{Error, Readable, Writeable};
 	use core::{Reader, Writer};
 	use core::hash::Hash;
-	use ser::{PMMRable, PMMRIndexHashable};
+	use ser::{PMMRIndexHashable, PMMRable};
 
 	/// Simple MMR backend implementation based on a Vector. Pruning does not
 	/// compact the Vec itself.
@@ -1170,7 +1170,7 @@ mod test {
 		fn len() -> usize {
 			16
 		}
-}
+	}
 
 	impl Writeable for TestElem {
 		fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
@@ -1354,8 +1354,8 @@ mod test {
 
 		// eight elements
 		pmmr.push(elems[7]).unwrap();
-		let sum8 =
-			sum4 + ((elems[4].hash_with_index(8) + elems[5].hash_with_index(9))
+		let sum8 = sum4
+			+ ((elems[4].hash_with_index(8) + elems[5].hash_with_index(9))
 				+ (elems[6].hash_with_index(11) + elems[7].hash_with_index(12)));
 		assert_eq!(pmmr.root(), sum8);
 		assert_eq!(pmmr.unpruned_size(), 15);

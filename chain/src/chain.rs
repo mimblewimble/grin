@@ -162,7 +162,8 @@ impl Chain {
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
 		};
 
-		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), txhashset_md)?;
+		let mut txhashset =
+			txhashset::TxHashSet::open(db_root.clone(), store.clone(), txhashset_md)?;
 
 		let head = store.head();
 		let head = match head {
@@ -172,7 +173,9 @@ impl Chain {
 				store.save_block(&genesis)?;
 				store.setup_height(&genesis.header, &tip)?;
 				if genesis.kernels.len() > 0 {
-					txhashset::extending(&mut txhashset, |extension| extension.apply_block(&genesis))?;
+					txhashset::extending(&mut txhashset, |extension| {
+						extension.apply_block(&genesis)
+					})?;
 				}
 
 				// saving a new tip based on genesis
@@ -506,7 +509,8 @@ impl Chain {
 		let header = self.store.get_block_header(&h)?;
 		txhashset::zip_write(self.db_root.clone(), txhashset_data)?;
 
-		let mut txhashset = txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), None)?;
+		let mut txhashset =
+			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), None)?;
 		txhashset::extending(&mut txhashset, |extension| {
 			extension.rewind_pos(header.height, rewind_to_output, rewind_to_kernel)?;
 			extension.validate(&header)?;
@@ -551,7 +555,7 @@ impl Chain {
 
 		let horizon = global::cut_through_horizon() as u64;
 		let head = self.head()?;
-		let mut current = self.store.get_header_by_height(head.height-horizon-1)?;
+		let mut current = self.store.get_header_by_height(head.height - horizon - 1)?;
 		loop {
 			match self.store.get_block(&current.hash()) {
 				Ok(b) => {
@@ -560,8 +564,7 @@ impl Chain {
 				Err(NotFoundErr) => {
 					break;
 				}
-				Err(e) => return Err(
-					Error::StoreErr(e, "retrieving block to compact".to_owned())),
+				Err(e) => return Err(Error::StoreErr(e, "retrieving block to compact".to_owned())),
 			}
 			if current.height <= 1 {
 				break;

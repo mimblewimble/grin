@@ -158,8 +158,10 @@ impl AppendOnlyFile {
 		prune_offs: Vec<u64>,
 		prune_len: u64,
 		prune_cb: T,
-	) -> io::Result<()> where T: Fn(&[u8]) {
-
+	) -> io::Result<()>
+	where
+		T: Fn(&[u8]),
+	{
 		let mut reader = File::open(self.path.clone())?;
 		let mut writer = File::create(target)?;
 
