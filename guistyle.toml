@@ -1,0 +1,40 @@
+# Every field in a theme file is optional.
+
+shadow = false
+borders = "simple" # Alternatives are "none" and "simple"
+
+# Base colors are red, green, blue,
+# cyan, magenta, yellow, white and black.
+[colors]
+	# There are 3 ways to select a color:
+	# - The 16 base colors are selected by name:
+	#       "blue", "light red", "magenta", ...
+	# - Low-resolution colors use 3 characters, each <= 5:
+	#       "541", "003", ...
+	# - Full-resolution colors start with '#' and can be 3 or 6 hex digits:
+	#       "#1A6", "#123456", ...
+
+	# If the value is an array, the first valid
+	# and supported color will be used.
+	background = ["black"]
+
+	# If the terminal doesn't support custom color (like the linux TTY),
+	# non-base colors will be skipped.
+	shadow     = ["black"]
+	view       = ["black"]
+
+	# An array with a single value has the same effect as a simple value.
+	primary   = ["white"]
+#	secondary = "#EEEEEE"
+#	tertiary  = "#252521"
+
+	# Hex values can use lower or uppercase.
+	# (base color MUST be lowercase)
+#	title_primary   = ["BLUE", "yellow"] # `BLUE` will be skipped.
+#	title_secondary = "#ffff55"
+
+	# Lower precision values can use only 3 digits.
+#	highlight          = "#F88"
+#	highlight_inactive = "#5555FF"
+highlight          = "cyan"
+highlight_inactive = "blue"

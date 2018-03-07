@@ -50,17 +50,23 @@ pub struct Server {
 }
 
 impl Server {
-	/// Instantiates and starts a new server.
-	pub fn start(config: ServerConfig) -> Result<(), Error> {
+	/// Instantiates and starts a new server. Optionally takes a callback 
+	/// for the server to send an ARC copy of itself, to allow another process
+	/// to poll info about the server status
+	pub fn start<F>(config: ServerConfig, mut info_callback: F) -> Result<(), Error> 
+		where F : FnMut(Arc<Server>) {
+
 		let mut mining_config = config.mining_config.clone();
-		let serv = Server::new(config)?;
+		let serv = Arc::new(Server::new(config)?);
 		if mining_config.as_mut().unwrap().enable_mining {
 			serv.start_miner(mining_config.unwrap());
 		}
-
+	
 		loop {
 			thread::sleep(time::Duration::from_secs(1));
+			info_callback(serv.clone());
 			if serv.stop.load(Ordering::Relaxed) {
+				warn!(LOGGER, "Stopping loop");
 				return Ok(());
 			}
 		}
@@ -248,6 +254,7 @@ impl Server {
 
 	/// Stop the server.
 	pub fn stop(&self) {
+		warn!(LOGGER, "Stopping");
 		self.p2p.stop();
 		self.stop.store(true, Ordering::Relaxed);
 	}
