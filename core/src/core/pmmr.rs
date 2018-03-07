@@ -358,9 +358,7 @@ where
 	/// the same time if applicable.
 	pub fn push(&mut self, elmt: T) -> Result<u64, String> {
 		let elmt_pos = self.last_pos + 1;
-		println!("***** pmmr:push: {:?}, {}", elmt, elmt_pos);
 		let mut current_hash = elmt.hash_with_index(elmt_pos);
-		println!("***** pmmr:push: {:?}", current_hash);
 
 		let mut to_append = vec![(current_hash, Some(elmt))];
 		let mut height = 0;
@@ -375,7 +373,7 @@ where
 
 			let left_elem = self.backend
 				.get(left_sibling, false)
-				.expect("missing left sibling in tree, should not have been pruned");
+				.ok_or("missing left sibling in tree, should not have been pruned")?;
 			current_hash = left_elem.0 + current_hash;
 
 			to_append.push((current_hash.clone(), None));
@@ -426,29 +424,19 @@ where
 
 		let mut current = position;
 		while current + 1 < self.last_pos {
-			println!("***** pmmr: prune: checking if we can prune - {}", current);
 			let (parent, sibling, _) = family(current);
 			if parent > self.last_pos {
 				// can't prune when our parent isn't here yet
 				break;
 			}
 
-			println!("***** pmmr: prune: pushing to prune list - {}", current);
 			to_prune.push(current);
 
 			// if we have a pruned sibling, we can continue up the tree
 			// otherwise we're done
 			if let None = self.backend.get(sibling, false) {
-				println!(
-					"***** pmmr: prune: sibling pruned (pos {}), going up tree",
-					sibling
-				);
 				current = parent;
 			} else {
-				println!(
-					"***** pmmr: prune: hit a root (so far) of a pruned subtree {}",
-					current
-				);
 				break;
 			}
 		}
@@ -607,7 +595,6 @@ impl PruneList {
 
 		let pruned_idx = self.next_pruned_idx(pos);
 		let next_idx = self.pruned_nodes.binary_search(&pos).map(|x| x + 1).ok();
-		println!("***** get_shift: idx {:?}, next_idx {:?}", pruned_idx, next_idx);
 		match pruned_idx.or(next_idx) {
 			None => None,
 			Some(idx) => {
@@ -638,18 +625,12 @@ impl PruneList {
 	/// As above, but only returning the number of leaf nodes to skip for a
 	/// given leaf. Helpful if, for instance, data for each leaf is being stored
 	/// separately in a continuous flat-file
-	///
-	/// EXPERIMENTAL -
-	/// height 0 == 0 leaves (slightly more complex than 1 leaf as we need the hash even after
-	/// pruning) height 1 == 2 leaves
-	///
 	pub fn get_leaf_shift(&self, pos: u64) -> Option<u64> {
 		// get the position where the node at pos would fit in the pruned list, if
 		// it's already pruned, nothing to skip
 
 		let pruned_idx = self.next_pruned_idx(pos);
 		let next_idx = self.pruned_nodes.binary_search(&pos).map(|x| x + 1).ok();
-		println!("***** get_leaf_shift: idx {:?}, next_idx {:?}", pruned_idx, next_idx);
 
 		match pruned_idx.or(next_idx) {
 			None => None,
@@ -657,8 +638,8 @@ impl PruneList {
 				Some(
 					// skip by the number of leaf nodes pruned in the preceeding subtrees
 					// which just 2^height
-					// except in the case of height==0 (where we want to treat the pruned tree as
-					// 0 leaves)
+					// except in the case of height==0
+					// (where we want to treat the pruned tree as 0 leaves)
 					self.pruned_nodes[0..(idx as usize)]
 						.iter()
 						.map(|n| {
@@ -668,8 +649,6 @@ impl PruneList {
 							} else {
 								(1 << height)
 							}
-							// original behavior
-							// 1 << bintree_postorder_height(*n)
 						})
 						.sum(),
 				)
@@ -681,28 +660,17 @@ impl PruneList {
 	/// list if pruning the additional node means a parent can get pruned as
 	/// well.
 	pub fn add(&mut self, pos: u64) {
-		println!("***** pmmr: prunelist: add: pos {}", pos);
-
 		let mut current = pos;
 		loop {
 			let (parent, sibling, _) = family(current);
 
 			match self.pruned_nodes.binary_search(&sibling) {
 				Ok(idx) => {
-					println!(
-						"***** pmmr: prunelist: add: sibling directly pruned (pos {}), traversing up to {}",
-						sibling,
-						parent,
-					);
 					self.pruned_nodes.remove(idx);
 					current = parent;
 				}
 				Err(_) => {
 					if let Some(idx) = self.next_pruned_idx(current) {
-						println!(
-							"***** pmmr: prunelist: add: inserting idx {}, pos {}",
-							idx, current
-						);
 						self.pruned_nodes.insert(idx, current);
 					}
 					break;

@@ -176,7 +176,7 @@ where
 		let file_pos = (position - shift) * (record_len as u64);
 		self.hash_file.rewind(file_pos);
 
-		//Data file
+		// Data file
 		let flatfile_pos = pmmr::n_leaves(position) - 1;
 		let file_pos = (flatfile_pos as usize + 1) * T::len();
 		self.data_file.rewind(file_pos as u64);
@@ -231,8 +231,6 @@ where
 	pub fn unpruned_size(&self) -> io::Result<u64> {
 		let total_shift = self.pruned_nodes.get_shift(::std::u64::MAX).unwrap();
 
-		// TODO - we should get rid of this hardcoded hash len (all over this file)
-		// and centralize it somewhere, similar to how we deal with T::len()
 		let record_len = 32;
 		let sz = self.hash_file.size()?;
 		Ok(sz / record_len + total_shift)
@@ -308,51 +306,17 @@ where
 	/// TODO whatever is calling this should also clean up the commit to
 	/// position index in db
 	pub fn check_compact(&mut self, max_len: usize, cutoff_index: u32) -> io::Result<()> {
-		println!(
-			"check_compact: rm len {}, max {}, cutoff {}",
-			self.rm_log.len(),
-			max_len,
-			cutoff_index
-		);
-
 		if !(max_len > 0 && self.rm_log.len() > max_len
 			|| max_len == 0 && self.rm_log.len() > RM_LOG_MAX_NODES)
 		{
 			return Ok(());
 		}
 
-		println!("***** compacting!!!");
-
-		println!("***** rm_log - {:?}", &self.rm_log.removed);
-
-		println!(
-			"***** current pruned_nodes - {:?}",
-			&self.pruned_nodes.pruned_nodes
-		);
-
-		// 0. validate none of the nodes in the rm log are in the prune list (to
-		// avoid accidental double compaction)
-		//
-		// TODO - revisit this once we get things working (no longer necessary)?
-		//
-		// {
-		// 	for pos in &self.rm_log.removed[..] {
-		// 		if let None = self.pruned_nodes.next_pruned_idx(pos.0) {
-		// 			// TODO we likely can recover from this by directly jumping to 3
-		// 			error!(
-		// 				LOGGER,
-		// 				"The remove log contains nodes that are already in the pruned \
-		// 				 list, a previous compaction likely failed."
-		// 			);
-		// 			return Ok(());
-		// 		}
-		// 	}
-		// }
-
 		// Paths for tmp hash and data files.
 		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);
 		let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir, PMMR_DATA_FILE);
 
+		// Pos we want to get rid of.
 		let rm_pre_cutoff = self.rm_log.removed_pre_cutoff(cutoff_index);
 		let pos_to_rm = removed_excl_roots(rm_pre_cutoff.clone());
 		let leaf_pos_to_rm = removed_leaves(pos_to_rm.clone());
@@ -415,8 +379,8 @@ where
 		)?;
 		self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE), 0)?;
 
-		// 6. Truncate the rm log based on pos removed (excluding roots which remain in
-		// rm log).
+		// 6. Truncate the rm log based on pos removed.
+		// Excluding roots which remain in rm log.
 		self.rm_log
 			.removed
 			.retain(|&(pos, _)| !pos_to_rm.contains(&&pos));
