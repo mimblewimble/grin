@@ -40,8 +40,7 @@ use cursive::views::Dialog;
 
 use grin::Server;
 
-const WELCOME_LOGO:&str = 
-"                 GGGGG                      GGGGGGG         
+const WELCOME_LOGO: &str = "                 GGGGG                      GGGGGGG         
                GGGGGGG                      GGGGGGGGG      
              GGGGGGGGG         GGGG         GGGGGGGGGG     
            GGGGGGGGGGG       GGGGGGGG       GGGGGGGGGGG    
@@ -90,27 +89,32 @@ impl UI {
 		};
 
 		let mut logo_string = StyledString::new();
-		logo_string.append(StyledString::styled(WELCOME_LOGO, Color::Dark(BaseColor::Green)));
+		logo_string.append(StyledString::styled(
+			WELCOME_LOGO,
+			Color::Dark(BaseColor::Green),
+		));
 
 		let mut title_string = StyledString::new();
-		title_string.append(StyledString::styled("Grin Version 0.0.1", Color::Dark(BaseColor::Green)));
-
+		title_string.append(StyledString::styled(
+			"Grin Version 0.0.1",
+			Color::Dark(BaseColor::Green),
+		));
 
 		// Create UI objects, etc
 		let basic_status_view = BoxView::with_full_screen(
 			LinearLayout::new(Orientation::Horizontal)
-				.child(
-					TextView::new(logo_string).v_align(VAlign::Center)
-				)
+				.child(TextView::new(logo_string).v_align(VAlign::Center))
 				.child(
 					LinearLayout::new(Orientation::Vertical)
 						.child(TextView::new(title_string))
 						.child(TextView::new("------------------"))
 						.child(
 							LinearLayout::new(Orientation::Horizontal)
-							.child(TextView::new("Current Status:"))
-							.child(TextView::new("BASIC_STATUS").with_id("basic_current_status")),
-					)
+								.child(TextView::new("Current Status:"))
+								.child(
+									TextView::new("BASIC_STATUS").with_id("basic_current_status"),
+								),
+						),
 				),
 		).with_id("basic_status_view");
 		let advanced_status_view = BoxView::with_full_screen(TextView::new(
@@ -247,4 +251,3 @@ impl Controller {
 		}
 	}
 }
-
