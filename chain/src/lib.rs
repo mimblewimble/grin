@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -37,7 +37,7 @@ extern crate grin_util as util;
 mod chain;
 pub mod pipe;
 pub mod store;
-pub mod sumtree;
+pub mod txhashset;
 pub mod types;
 
 // Re-export the base interface

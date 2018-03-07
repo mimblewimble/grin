@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -107,32 +107,32 @@ fn simple_server_wallet() {
 		get_block_by_hash_compact(&base_addr, api_server_port, &block_hash);
 	assert!(last_block_by_hash_compact.is_ok());
 
-	warn!(LOGGER, "Testing chain utxo handler");
+	warn!(LOGGER, "Testing chain output handler");
 	let start_height = 0;
 	let end_height = current_tip.height;
-	let utxos_by_height =
-		get_utxos_by_height(&base_addr, api_server_port, start_height, end_height);
-	assert!(utxos_by_height.is_ok());
-	let ids = get_ids_from_block_outputs(utxos_by_height.unwrap());
-	let utxos_by_ids1 = get_utxos_by_ids1(&base_addr, api_server_port, ids.clone());
-	assert!(utxos_by_ids1.is_ok());
-	let utxos_by_ids2 = get_utxos_by_ids2(&base_addr, api_server_port, ids.clone());
-	assert!(utxos_by_ids2.is_ok());
+	let outputs_by_height =
+		get_outputs_by_height(&base_addr, api_server_port, start_height, end_height);
+	assert!(outputs_by_height.is_ok());
+	let ids = get_ids_from_block_outputs(outputs_by_height.unwrap());
+	let outputs_by_ids1 = get_outputs_by_ids1(&base_addr, api_server_port, ids.clone());
+	assert!(outputs_by_ids1.is_ok());
+	let outputs_by_ids2 = get_outputs_by_ids2(&base_addr, api_server_port, ids.clone());
+	assert!(outputs_by_ids2.is_ok());
 
-	warn!(LOGGER, "Testing sumtree handler");
-	let roots = get_sumtree_roots(&base_addr, api_server_port);
+	warn!(LOGGER, "Testing txhashset handler");
+	let roots = get_txhashset_roots(&base_addr, api_server_port);
 	assert!(roots.is_ok());
-	let last_10_utxos = get_sumtree_lastutxos(&base_addr, api_server_port, 0);
-	assert!(last_10_utxos.is_ok());
-	let last_5_utxos = get_sumtree_lastutxos(&base_addr, api_server_port, 5);
-	assert!(last_5_utxos.is_ok());
-	let last_10_rangeproofs = get_sumtree_lastrangeproofs(&base_addr, api_server_port, 0);
+	let last_10_outputs = get_txhashset_lastoutputs(&base_addr, api_server_port, 0);
+	assert!(last_10_outputs.is_ok());
+	let last_5_outputs = get_txhashset_lastoutputs(&base_addr, api_server_port, 5);
+	assert!(last_5_outputs.is_ok());
+	let last_10_rangeproofs = get_txhashset_lastrangeproofs(&base_addr, api_server_port, 0);
 	assert!(last_10_rangeproofs.is_ok());
-	let last_5_rangeproofs = get_sumtree_lastrangeproofs(&base_addr, api_server_port, 5);
+	let last_5_rangeproofs = get_txhashset_lastrangeproofs(&base_addr, api_server_port, 5);
 	assert!(last_5_rangeproofs.is_ok());
-	let last_10_kernels = getsumtree_lastkernels(&base_addr, api_server_port, 0);
+	let last_10_kernels = gettxhashset_lastkernels(&base_addr, api_server_port, 0);
 	assert!(last_10_kernels.is_ok());
-	let last_5_kernels = getsumtree_lastkernels(&base_addr, api_server_port, 5);
+	let last_5_kernels = gettxhashset_lastkernels(&base_addr, api_server_port, 5);
 	assert!(last_5_kernels.is_ok());
 
 	//let some more mining happen, make sure nothing pukes
@@ -295,26 +295,26 @@ fn get_block_by_hash_compact(
 	api::client::get::<api::CompactBlockPrintable>(url.as_str()).map_err(|e| Error::API(e))
 }
 
-// Chain utxo handler functions
-fn get_utxos_by_ids1(
+// Chain output handler functions
+fn get_outputs_by_ids1(
 	base_addr: &String,
 	api_server_port: u16,
 	ids: Vec<String>,
-) -> Result<Vec<api::Utxo>, Error> {
+) -> Result<Vec<api::Output>, Error> {
 	let url = format!(
-		"http://{}:{}/v1/chain/utxos/byids?id={}",
+		"http://{}:{}/v1/chain/outputs/byids?id={}",
 		base_addr,
 		api_server_port,
 		ids.join(",")
 	);
-	api::client::get::<Vec<api::Utxo>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<api::Output>>(url.as_str()).map_err(|e| Error::API(e))
 }
 
-fn get_utxos_by_ids2(
+fn get_outputs_by_ids2(
 	base_addr: &String,
 	api_server_port: u16,
 	ids: Vec<String>,
-) -> Result<Vec<api::Utxo>, Error> {
+) -> Result<Vec<api::Output>, Error> {
 	let mut ids_string: String = String::from("");
 	for id in ids {
 		ids_string = ids_string + "?id=" + &id;
@@ -322,92 +322,92 @@ fn get_utxos_by_ids2(
 	let ids_string = String::from(&ids_string[1..ids_string.len()]);
 	println!("{}", ids_string);
 	let url = format!(
-		"http://{}:{}/v1/chain/utxos/byids?{}",
+		"http://{}:{}/v1/chain/outputs/byids?{}",
 		base_addr, api_server_port, ids_string
 	);
-	api::client::get::<Vec<api::Utxo>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<api::Output>>(url.as_str()).map_err(|e| Error::API(e))
 }
 
-fn get_utxos_by_height(
+fn get_outputs_by_height(
 	base_addr: &String,
 	api_server_port: u16,
 	start_height: u64,
 	end_height: u64,
 ) -> Result<Vec<api::BlockOutputs>, Error> {
 	let url = format!(
-		"http://{}:{}/v1/chain/utxos/byheight?start_height={}&end_height={}",
+		"http://{}:{}/v1/chain/outputs/byheight?start_height={}&end_height={}",
 		base_addr, api_server_port, start_height, end_height
 	);
 	api::client::get::<Vec<api::BlockOutputs>>(url.as_str()).map_err(|e| Error::API(e))
 }
 
-// Sumtree handler functions
-fn get_sumtree_roots(base_addr: &String, api_server_port: u16) -> Result<api::SumTrees, Error> {
+// TxHashSet handler functions
+fn get_txhashset_roots(base_addr: &String, api_server_port: u16) -> Result<api::TxHashSet, Error> {
 	let url = format!(
-		"http://{}:{}/v1/pmmrtrees/roots",
+		"http://{}:{}/v1/txhashset/roots",
 		base_addr, api_server_port
 	);
-	api::client::get::<api::SumTrees>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<api::TxHashSet>(url.as_str()).map_err(|e| Error::API(e))
 }
 
-fn get_sumtree_lastutxos(
+fn get_txhashset_lastoutputs(
 	base_addr: &String,
 	api_server_port: u16,
 	n: u64,
-) -> Result<Vec<api::PmmrTreeNode>, Error> {
+) -> Result<Vec<api::TxHashSetNode>, Error> {
 	let url: String;
 	if n == 0 {
 		url = format!(
-			"http://{}:{}/v1/pmmrtrees/lastutxos",
+			"http://{}:{}/v1/txhashset/lastoutputs",
 			base_addr, api_server_port
 		);
 	} else {
 		url = format!(
-			"http://{}:{}/v1/pmmrtrees/lastutxos?n={}",
+			"http://{}:{}/v1/txhashset/lastoutputs?n={}",
 			base_addr, api_server_port, n
 		);
 	}
-	api::client::get::<Vec<api::PmmrTreeNode>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<api::TxHashSetNode>>(url.as_str()).map_err(|e| Error::API(e))
 }
 
-fn get_sumtree_lastrangeproofs(
+fn get_txhashset_lastrangeproofs(
 	base_addr: &String,
 	api_server_port: u16,
 	n: u64,
-) -> Result<Vec<api::PmmrTreeNode>, Error> {
+) -> Result<Vec<api::TxHashSetNode>, Error> {
 	let url: String;
 	if n == 0 {
 		url = format!(
-			"http://{}:{}/v1/pmmrtrees/lastrangeproofs",
+			"http://{}:{}/v1/txhashset/lastrangeproofs",
 			base_addr, api_server_port
 		);
 	} else {
 		url = format!(
-			"http://{}:{}/v1/pmmrtrees/lastrangeproofs?n={}",
+			"http://{}:{}/v1/txhashset/lastrangeproofs?n={}",
 			base_addr, api_server_port, n
 		);
 	}
-	api::client::get::<Vec<api::PmmrTreeNode>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<api::TxHashSetNode>>(url.as_str()).map_err(|e| Error::API(e))
 }
 
-fn getsumtree_lastkernels(
+fn gettxhashset_lastkernels(
 	base_addr: &String,
 	api_server_port: u16,
 	n: u64,
-) -> Result<Vec<api::PmmrTreeNode>, Error> {
+) -> Result<Vec<api::TxHashSetNode>, Error> {
 	let url: String;
 	if n == 0 {
 		url = format!(
-			"http://{}:{}/v1/pmmrtrees/lastkernels",
+			"http://{}:{}/v1/txhashset/lastkernels",
 			base_addr, api_server_port
 		);
 	} else {
 		url = format!(
-			"http://{}:{}/v1/pmmrtrees/lastkernels?n={}",
+			"http://{}:{}/v1/txhashset/lastkernels?n={}",
 			base_addr, api_server_port, n
 		);
 	}
-	api::client::get::<Vec<api::PmmrTreeNode>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<api::TxHashSetNode>>(url.as_str()).map_err(|e| Error::API(e))
 }
 
 // Helper function to get a vec of commitment output ids from a vec of block

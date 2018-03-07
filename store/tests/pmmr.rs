@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ use std::fs;
 use core::ser::*;
 use core::core::pmmr::{Backend, PMMR};
 use core::core::hash::Hash;
+use store::types::prune_noop;
 
 #[test]
 fn pmmr_append() {
@@ -104,7 +105,7 @@ fn pmmr_compact_leaf_sibling() {
 	assert_eq!(backend.get_from_file(1).unwrap(), pos_1_hash);
 
 	// aggressively compact the PMMR files
-	backend.check_compact(1, 2).unwrap();
+	backend.check_compact(1, 2, &prune_noop).unwrap();
 
 	// check pos 1, 2, 3 are in the state we expect after compacting
 	{
@@ -164,7 +165,7 @@ fn pmmr_prune_compact() {
 	}
 
 	// compact
-	backend.check_compact(2, 2).unwrap();
+	backend.check_compact(2, 2, &prune_noop).unwrap();
 
 	// recheck the root and stored data
 	{
@@ -214,7 +215,7 @@ fn pmmr_reload() {
 		backend.sync().unwrap();
 
 		// now check and compact the backend
-		backend.check_compact(1, 2).unwrap();
+		backend.check_compact(1, 2, &prune_noop).unwrap();
 		backend.sync().unwrap();
 
 		// prune another node to force compact to actually do something
@@ -225,8 +226,7 @@ fn pmmr_reload() {
 		}
 		backend.sync().unwrap();
 
-		// now check and compact the backend
-		backend.check_compact(1, 2).unwrap();
+		backend.check_compact(1, 2, &prune_noop).unwrap();
 		backend.sync().unwrap();
 
 		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
@@ -309,7 +309,7 @@ fn pmmr_rewind() {
 		pmmr.prune(1, 1).unwrap();
 		pmmr.prune(2, 1).unwrap();
 	}
-	backend.check_compact(1, 2).unwrap();
+	backend.check_compact(1, 2, &prune_noop).unwrap();
 	backend.sync().unwrap();
 
 	// rewind and check the roots still match
@@ -364,7 +364,7 @@ fn pmmr_compact_horizon() {
 		}
 		backend.sync().unwrap();
 		// compact
-		backend.check_compact(2, 3).unwrap();
+		backend.check_compact(2, 3, &prune_noop).unwrap();
 	}
 
 	// recheck stored data
@@ -383,7 +383,7 @@ fn pmmr_compact_horizon() {
 			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), None).unwrap();
 
 		// compact some more
-		backend.check_compact(1, 5).unwrap();
+		backend.check_compact(1, 5, &prune_noop).unwrap();
 	}
 
 	// recheck stored data

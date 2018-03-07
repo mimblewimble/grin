@@ -34,7 +34,7 @@ fn mark_unspent_output(out: &mut OutputData) {
 	}
 }
 
-// Transitions a local wallet output (based on it not being in the node utxo
+// Transitions a local wallet output (based on it not being in the node output
 // set) -
 // Unspent -> Spent
 // Locked -> Spent
@@ -97,7 +97,7 @@ fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain) -> R
 	query_params.append(&mut id_params);
 
 	let url = format!(
-		"{}/v1/chain/utxos/byheight?{}",
+		"{}/v1/chain/outputs/byheight?{}",
 		config.check_node_api_http_addr,
 		query_params.join("&"),
 	);
@@ -175,18 +175,18 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<()
 		.collect();
 
 	// build a map of api outputs by commit so we can look them up efficiently
-	let mut api_utxos: HashMap<pedersen::Commitment, api::Utxo> = HashMap::new();
+	let mut api_outputs: HashMap<pedersen::Commitment, api::Output> = HashMap::new();
 
 	let query_string = query_params.join("&");
 
 	let url = format!(
-		"{}/v1/chain/utxos/byids?{}",
+		"{}/v1/chain/outputs/byids?{}",
 		config.check_node_api_http_addr, query_string,
 	);
 
-	match api::client::get::<Vec<api::Utxo>>(url.as_str()) {
+	match api::client::get::<Vec<api::Output>>(url.as_str()) {
 		Ok(outputs) => for out in outputs {
-			api_utxos.insert(out.commit.commit(), out);
+			api_outputs.insert(out.commit.commit(), out);
 		},
 		Err(e) => {
 			// if we got anything other than 200 back from server, don't attempt to refresh
@@ -203,7 +203,7 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<()
 		for commit in wallet_outputs.keys() {
 			let id = wallet_outputs.get(&commit).unwrap();
 			if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
-				match api_utxos.get(&commit) {
+				match api_outputs.get(&commit) {
 					Some(_) => mark_unspent_output(&mut output.get_mut()),
 					None => mark_spent_output(&mut output.get_mut()),
 				};

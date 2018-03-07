@@ -1,4 +1,4 @@
-// Copyright 2016-2018 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -222,16 +222,16 @@ impl ChainAdapter for DummyAdapter {
 	fn get_block(&self, _: Hash) -> Option<core::Block> {
 		None
 	}
-	fn sumtrees_read(&self, _h: Hash) -> Option<SumtreesRead> {
+	fn txhashset_read(&self, _h: Hash) -> Option<TxHashSetRead> {
 		unimplemented!()
 	}
 
-	fn sumtrees_write(
+	fn txhashset_write(
 		&self,
 		_h: Hash,
 		_rewind_to_output: u64,
 		_rewind_to_kernel: u64,
-		_sumtree_data: File,
+		_txhashset_data: File,
 		_peer_addr: SocketAddr,
 	) -> bool {
 		false

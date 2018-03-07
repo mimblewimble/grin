@@ -7,15 +7,10 @@ Grin uses [rustfmt](https://github.com/rust-lang-nursery/rustfmt) to maintain co
 Note: we assume Rust has been installed via [Rustup](https://www.rustup.rs/).
 See [build docs](./build.md) for more info.
 
-rustfmt itself requires the nightly toolchain -
-
 ```
+rustup component add rustfmt-preview
 rustup update
-rustup install nightly
-rustup run nightly cargo install rustfmt-nightly
 ```
-
-If you still get problems with running `cargo +nightly fmt`, you might need to also do `rustup component add rustfmt-preview` (see [more info](https://github.com/rust-lang-nursery/rustfmt/issues/2304))
 
 ## Install git pre-commit hook
 

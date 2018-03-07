@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use consensus;
 use consensus::VerifySortOrder;
-use core::hash::{Hashed, Hash};
+use core::hash::{Hash, Hashed};
 use core::transaction::{SwitchCommitHash, SWITCH_COMMIT_HASH_SIZE};
 use util::secp::pedersen::Commitment;
 use util::secp::pedersen::RangeProof;

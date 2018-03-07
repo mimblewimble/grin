@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -169,6 +169,11 @@ impl ChainStore for ChainKVStore {
 			self.db
 				.get_ser(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())),
 		)
+	}
+
+	fn delete_output_pos(&self, commit: &[u8]) -> Result<(), Error> {
+		self.db
+			.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.to_vec()))
 	}
 
 	fn save_kernel_pos(&self, excess: &Commitment, pos: u64) -> Result<(), Error> {

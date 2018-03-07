@@ -86,7 +86,7 @@ where
 /// A Merkle proof.
 /// Proves inclusion of an output (node) in the output MMR.
 /// We can use this to prove an output was unspent at the time of a given block
-/// as the root will match the utxo_root of the block header.
+/// as the root will match the output_root of the block header.
 /// The path and left_right can be used to reconstruct the peak hash for a given tree
 /// in the MMR.
 /// The root is the result of hashing all the peaks together.
@@ -586,7 +586,8 @@ impl PruneList {
 	}
 
 	/// Computes by how many positions a node at pos should be shifted given the
-	/// number of nodes that have already been pruned before it.
+	/// number of nodes that have already been pruned before it. Returns None if
+	/// the position has already been pruned.
 	pub fn get_shift(&self, pos: u64) -> Option<u64> {
 		// get the position where the node at pos would fit in the pruned list, if
 		// it's already pruned, nothing to skip
@@ -622,7 +623,8 @@ impl PruneList {
 
 	/// As above, but only returning the number of leaf nodes to skip for a
 	/// given leaf. Helpful if, for instance, data for each leaf is being stored
-	/// separately in a continuous flat-file
+	/// separately in a continuous flat-file. Returns None if the position has
+	/// already been pruned.
 	pub fn get_leaf_shift(&self, pos: u64) -> Option<u64> {
 		// get the position where the node at pos would fit in the pruned list, if
 		// it's already pruned, nothing to skip

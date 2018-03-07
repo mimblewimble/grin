@@ -28,6 +28,8 @@ use libc::{ftruncate as ftruncate64, off_t as off64_t};
 
 use core::ser;
 
+pub fn prune_noop(_pruned_data: &[u8]) {}
+
 /// Wrapper for a file that can be read at any position (random read) but for
 /// which writes are append only. Reads are backed by a memory map (mmap(2)),
 /// relying on the operating system for fast access and caching. The memory
@@ -150,12 +152,16 @@ impl AppendOnlyFile {
 
 	/// Saves a copy of the current file content, skipping data at the provided
 	/// prune indices. The prune Vec must be ordered.
-	pub fn save_prune(
+	pub fn save_prune<T>(
 		&self,
 		target: String,
 		prune_offs: Vec<u64>,
 		prune_len: u64,
-	) -> io::Result<()> {
+		prune_cb: T,
+	) -> io::Result<()>
+	where
+	 	T: Fn(&[u8]),
+	{
 		if prune_offs.is_empty() {
 			fs::copy(self.path.clone(), target.clone())?;
 			Ok(())
@@ -183,6 +189,8 @@ impl AppendOnlyFile {
 					let prune_at = prune_offs[prune_pos] as usize;
 					if prune_at != buf_start {
 						writer.write_all(&buf[buf_start..prune_at])?;
+					} else {
+						prune_cb(&buf[buf_start..prune_at]);
 					}
 					buf_start = prune_at + (prune_len as usize);
 					if prune_offs.len() > prune_pos + 1 {

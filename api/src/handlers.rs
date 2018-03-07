@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -58,15 +58,15 @@ impl Handler for IndexHandler {
 }
 
 // Supports retrieval of multiple outputs in a single request -
-// GET /v1/chain/utxos/byids?id=xxx,yyy,zzz
-// GET /v1/chain/utxos/byids?id=xxx&id=yyy&id=zzz
-// GET /v1/chain/utxos/byheight?start_height=101&end_height=200
-struct UtxoHandler {
+// GET /v1/chain/outputs/byids?id=xxx,yyy,zzz
+// GET /v1/chain/outputs/byids?id=xxx&id=yyy&id=zzz
+// GET /v1/chain/outputs/byheight?start_height=101&end_height=200
+struct OutputHandler {
 	chain: Weak<chain::Chain>,
 }
 
-impl UtxoHandler {
-	fn get_utxo(&self, id: &str) -> Result<Utxo, Error> {
+impl OutputHandler {
+	fn get_output(&self, id: &str) -> Result<Output, Error> {
 		let c = util::from_hex(String::from(id))
 			.map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
 		let commit = Commitment::from_vec(c);
@@ -82,13 +82,13 @@ impl UtxoHandler {
 
 		for x in outputs.iter() {
 			if let Ok(_) = w(&self.chain).is_unspent(&x) {
-				return Ok(Utxo::new(&commit));
+				return Ok(Output::new(&commit));
 			}
 		}
 		Err(Error::NotFound)
 	}
 
-	fn utxos_by_ids(&self, req: &mut Request) -> Vec<Utxo> {
+	fn outputs_by_ids(&self, req: &mut Request) -> Vec<Output> {
 		let mut commitments: Vec<&str> = vec![];
 		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
 			if let Some(ids) = params.get("id") {
@@ -100,15 +100,15 @@ impl UtxoHandler {
 			}
 		}
 
-		debug!(LOGGER, "utxos_by_ids: {:?}", commitments);
+		debug!(LOGGER, "outputs_by_ids: {:?}", commitments);
 
-		let mut utxos: Vec<Utxo> = vec![];
+		let mut outputs: Vec<Output> = vec![];
 		for x in commitments {
-			if let Ok(utxo) = self.get_utxo(x) {
-				utxos.push(utxo);
+			if let Ok(output) = self.get_output(x) {
+				outputs.push(output);
 			}
 		}
-		utxos
+		outputs
 	}
 
 	fn outputs_at_height(
@@ -186,7 +186,7 @@ impl UtxoHandler {
 	}
 }
 
-impl Handler for UtxoHandler {
+impl Handler for OutputHandler {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		let url = req.url.clone();
 		let mut path_elems = url.path();
@@ -194,7 +194,7 @@ impl Handler for UtxoHandler {
 			path_elems.pop();
 		}
 		match *path_elems.last().unwrap() {
-			"byids" => json_response(&self.utxos_by_ids(req)),
+			"byids" => json_response(&self.outputs_by_ids(req)),
 			"byheight" => json_response(&self.outputs_block_batch(req)),
 			_ => Ok(Response::with((status::BadRequest, ""))),
 		}
@@ -202,40 +202,40 @@ impl Handler for UtxoHandler {
 }
 
 // Sum tree handler. Retrieve the roots:
-// GET /v1/pmmrtrees/roots
+// GET /v1/txhashset/roots
 //
 // Last inserted nodes::
-// GET /v1/pmmrtrees/lastutxos (gets last 10)
-// GET /v1/pmmrtrees/lastutxos?n=5
-// GET /v1/pmmrtrees/lastrangeproofs
-// GET /v1/pmmrtrees/lastkernels
-struct SumTreeHandler {
+// GET /v1/txhashset/lastoutputs (gets last 10)
+// GET /v1/txhashset/lastoutputs?n=5
+// GET /v1/txhashset/lastrangeproofs
+// GET /v1/txhashset/lastkernels
+struct TxHashSetHandler {
 	chain: Weak<chain::Chain>,
 }
 
-impl SumTreeHandler {
+impl TxHashSetHandler {
 	// gets roots
-	fn get_roots(&self) -> SumTrees {
-		SumTrees::from_head(w(&self.chain))
+	fn get_roots(&self) -> TxHashSet {
+		TxHashSet::from_head(w(&self.chain))
 	}
 
-	// gets last n utxos inserted in to the tree
-	fn get_last_n_utxo(&self, distance: u64) -> Vec<PmmrTreeNode> {
-		PmmrTreeNode::get_last_n_utxo(w(&self.chain), distance)
+	// gets last n outputs inserted in to the tree
+	fn get_last_n_output(&self, distance: u64) -> Vec<TxHashSetNode> {
+		TxHashSetNode::get_last_n_output(w(&self.chain), distance)
 	}
 
-	// gets last n utxos inserted in to the tree
-	fn get_last_n_rangeproof(&self, distance: u64) -> Vec<PmmrTreeNode> {
-		PmmrTreeNode::get_last_n_rangeproof(w(&self.chain), distance)
+	// gets last n outputs inserted in to the tree
+	fn get_last_n_rangeproof(&self, distance: u64) -> Vec<TxHashSetNode> {
+		TxHashSetNode::get_last_n_rangeproof(w(&self.chain), distance)
 	}
 
-	// gets last n utxos inserted in to the tree
-	fn get_last_n_kernel(&self, distance: u64) -> Vec<PmmrTreeNode> {
-		PmmrTreeNode::get_last_n_kernel(w(&self.chain), distance)
+	// gets last n outputs inserted in to the tree
+	fn get_last_n_kernel(&self, distance: u64) -> Vec<TxHashSetNode> {
+		TxHashSetNode::get_last_n_kernel(w(&self.chain), distance)
 	}
 }
 
-impl Handler for SumTreeHandler {
+impl Handler for TxHashSetHandler {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		let url = req.url.clone();
 		let mut path_elems = url.path();
@@ -255,7 +255,7 @@ impl Handler for SumTreeHandler {
 		}
 		match *path_elems.last().unwrap() {
 			"roots" => json_response_pretty(&self.get_roots()),
-			"lastutxos" => json_response_pretty(&self.get_last_n_utxo(last_n)),
+			"lastoutputs" => json_response_pretty(&self.get_last_n_output(last_n)),
 			"lastrangeproofs" => json_response_pretty(&self.get_last_n_rangeproof(last_n)),
 			"lastkernels" => json_response_pretty(&self.get_last_n_kernel(last_n)),
 			_ => Ok(Response::with((status::BadRequest, ""))),
@@ -351,8 +351,8 @@ impl Handler for PeerGetHandler {
 	}
 }
 
-// Status handler. Post a summary of the server status
-// GET /v1/status
+/// Status handler. Post a summary of the server status
+/// GET /v1/status
 pub struct StatusHandler {
 	pub chain: Weak<chain::Chain>,
 	pub peers: Weak<p2p::Peers>,
@@ -370,8 +370,8 @@ impl Handler for StatusHandler {
 	}
 }
 
-// Chain handler. Get the head details.
-// GET /v1/chain
+/// Chain handler. Get the head details.
+/// GET /v1/chain
 pub struct ChainHandler {
 	pub chain: Weak<chain::Chain>,
 }
@@ -385,6 +385,20 @@ impl ChainHandler {
 impl Handler for ChainHandler {
 	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
 		json_response(&self.get_tip())
+	}
+}
+
+/// Chain compaction handler. Trigger a compaction of the chain state to regain
+/// storage space.
+/// GET /v1/chain/compact
+pub struct ChainCompactHandler {
+	pub chain: Weak<chain::Chain>,
+}
+
+impl Handler for ChainCompactHandler {
+	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+		w(&self.chain).compact().unwrap();
+		Ok(Response::with((status::Ok, "{}")))
 	}
 }
 
@@ -572,7 +586,7 @@ pub fn start_rest_apis<T>(
 		.name("apis".to_string())
 		.spawn(move || {
 			// build handlers and register them under the appropriate endpoint
-			let utxo_handler = UtxoHandler {
+			let output_handler = OutputHandler {
 				chain: chain.clone(),
 			};
 			let block_handler = BlockHandler {
@@ -581,11 +595,14 @@ pub fn start_rest_apis<T>(
 			let chain_tip_handler = ChainHandler {
 				chain: chain.clone(),
 			};
+			let chain_compact_handler = ChainCompactHandler {
+				chain: chain.clone(),
+			};
 			let status_handler = StatusHandler {
 				chain: chain.clone(),
 				peers: peers.clone(),
 			};
-			let sumtree_handler = SumTreeHandler {
+			let txhashset_handler = TxHashSetHandler {
 				chain: chain.clone(),
 			};
 			let pool_info_handler = PoolInfoHandler {
@@ -610,12 +627,13 @@ pub fn start_rest_apis<T>(
 			let route_list = vec![
 				"get blocks".to_string(),
 				"get chain".to_string(),
-				"get chain/utxos".to_string(),
+				"get chain/compact".to_string(),
+				"get chain/outputs".to_string(),
 				"get status".to_string(),
-				"get pmmrtrees/roots".to_string(),
-				"get pmmrtrees/lastutxos?n=10".to_string(),
-				"get pmmrtrees/lastrangeproofs".to_string(),
-				"get pmmrtrees/lastkernels".to_string(),
+				"get txhashset/roots".to_string(),
+				"get txhashset/lastoutputs?n=10".to_string(),
+				"get txhashset/lastrangeproofs".to_string(),
+				"get txhashset/lastkernels".to_string(),
 				"get pool".to_string(),
 				"post pool/push".to_string(),
 				"post peers/a.b.c.d:p/ban".to_string(),
@@ -624,16 +642,16 @@ pub fn start_rest_apis<T>(
 				"get peers/connected".to_string(),
 				"get peers/a.b.c.d".to_string(),
 			];
-			// We allow manually banning, like this:
-			// curl -v -X POST http://127.0.0.1:13413/v1/peers/88.99.251.87:13414/ban
 			let index_handler = IndexHandler { list: route_list };
+
 			let router = router!(
 				index: get "/" => index_handler,
 				blocks: get "/blocks/*" => block_handler,
 				chain_tip: get "/chain" => chain_tip_handler,
-				chain_utxos: get "/chain/utxos/*" => utxo_handler,
+				chain_compact: get "/chain/compact" => chain_compact_handler,
+				chain_outputs: get "/chain/outputs/*" => output_handler,
 				status: get "/status" => status_handler,
-				sumtree_roots: get "/pmmrtrees/*" => sumtree_handler,
+				txhashset_roots: get "/txhashset/*" => txhashset_handler,
 				pool_info: get "/pool" => pool_info_handler,
 				pool_push: post "/pool/push" => pool_push_handler,
 				peers_all: get "/peers/all" => peers_all_handler,

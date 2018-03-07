@@ -1,4 +1,4 @@
-// Copyright 2016 The Grin Developers
+// Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -633,7 +633,7 @@ impl Miner {
 		b.header.difficulty = difficulty;
 		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
 
-		let roots_result = self.chain.set_sumtree_roots(&mut b, false);
+		let roots_result = self.chain.set_txhashset_roots(&mut b, false);
 
 		match roots_result {
 			Ok(_) => Ok((b, block_fees)),
@@ -649,7 +649,7 @@ impl Miner {
 			Err(e) => {
 				error!(
 					LOGGER,
-					"Error setting sumtree root to build a block: {:?}", e
+					"Error setting txhashset root to build a block: {:?}", e
 				);
 				Err(Error::Chain(chain::Error::Other(format!("{:?}", e))))
 			}

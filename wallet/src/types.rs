@@ -659,7 +659,7 @@ impl WalletData {
 		// use a sliding window to identify potential sets of possible outputs to spend
 		// Case of amount > total amount of max_outputs(500):
 		// The limit exists because by default, we always select as many inputs as
-		// possible in a transaction, to reduce both the UTXO set and the fees.
+		// possible in a transaction, to reduce both the Output set and the fees.
 		// But that only makes sense up to a point, hence the limit to avoid being too
 		// greedy. But if max_outputs(500) is actually not enought to cover the whole
 		// amount, the wallet should allow going over it to satisfy what the user

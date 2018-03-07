@@ -1,4 +1,4 @@
-// Copyright 2017 The Grin Developers
+// Copyright 2018 The Grin Developers
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -21,7 +21,7 @@ use core::core::pmmr::{self, family, Backend};
 use core::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
 use core::core::hash::Hash;
 use util::LOGGER;
-use types::{read_ordered_vec, write_vec, AppendOnlyFile, RemoveLog};
+use types::*;
 
 const PMMR_HASH_FILE: &'static str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &'static str = "pmmr_data.bin";
@@ -134,20 +134,24 @@ where
 
 	/// Get a Hash by insertion position
 	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)> {
+		// Check if this position has been pruned in the remove log...
 		if self.rm_log.includes(position) {
 			return None;
 		}
 
-		let hash_val = self.get_from_file(position);
+		// ... or in the prune list
+		let prune_shift = match self.pruned_nodes.get_leaf_shift(position) {
+			Some(shift) => shift,
+			None => return None,
+		};
 
+		let hash_val = self.get_from_file(position);
 		if !include_data {
-			return hash_val.map(|x| (x, None));
+			return hash_val.map(|hash| (hash, None));
 		}
 
 		// Optionally read flatfile storage to get data element
-		let flatfile_pos =
-			pmmr::n_leaves(position) - 1 - self.pruned_nodes.get_leaf_shift(position).unwrap();
-
+		let flatfile_pos = pmmr::n_leaves(position) - 1 - prune_shift;
 		let record_len = T::len();
 		let file_offset = flatfile_pos as usize * T::len();
 		let data = self.data_file.read(file_offset, record_len);
@@ -290,7 +294,7 @@ where
 
 	/// Checks the length of the remove log to see if it should get compacted.
 	/// If so, the remove log is flushed into the pruned list, which itself gets
-	/// saved, and the main hashsum data file is rewritten, cutting the removed
+	/// saved, and the hash and data files are rewritten, cutting the removed
 	/// data.
 	///
 	/// If a max_len strictly greater than 0 is provided, the value will be used
@@ -300,16 +304,21 @@ where
 	/// A cutoff limits compaction on recent data. Provided as an indexed value
 	/// on pruned data (practically a block height), it forces compaction to
 	/// ignore any prunable data beyond the cutoff. This is used to enforce
-	/// an horizon after which the local node should have all the data to allow
+	/// a horizon after which the local node should have all the data to allow
 	/// rewinding.
-	///
-	/// TODO whatever is calling this should also clean up the commit to
-	/// position index in db
-	pub fn check_compact(&mut self, max_len: usize, cutoff_index: u32) -> io::Result<()> {
-		if !(max_len > 0 && self.rm_log.len() > max_len
+	pub fn check_compact<P>(
+		&mut self,
+		max_len: usize,
+		cutoff_index: u32,
+		prune_cb: P,
+	) -> io::Result<bool>
+	where
+		P: Fn(&[u8]),
+	{
+		if !(max_len > 0 && self.rm_log.len() >= max_len
 			|| max_len == 0 && self.rm_log.len() > RM_LOG_MAX_NODES)
 		{
-			return Ok(());
+			return Ok(false);
 		}
 
 		// Paths for tmp hash and data files.
@@ -337,7 +346,7 @@ where
 				.collect();
 
 			self.hash_file
-				.save_prune(tmp_prune_file_hash.clone(), off_to_rm, record_len)?;
+				.save_prune(tmp_prune_file_hash.clone(), off_to_rm, record_len, &prune_noop)?;
 		}
 
 		// 2. Save compact copy of the data file, skipping removed leaves.
@@ -353,7 +362,7 @@ where
 				.collect::<Vec<_>>();
 
 			self.data_file
-				.save_prune(tmp_prune_file_data.clone(), off_to_rm, record_len)?;
+				.save_prune(tmp_prune_file_data.clone(), off_to_rm, record_len, prune_cb)?;
 		}
 
 		// 3. Update the prune list and save it in place.
@@ -389,7 +398,7 @@ where
 			.retain(|&(pos, _)| !pos_to_rm.contains(&&pos));
 		self.rm_log.flush()?;
 
-		Ok(())
+		Ok(true)
 	}
 }
 
