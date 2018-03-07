@@ -345,8 +345,12 @@ where
 				})
 				.collect();
 
-			self.hash_file
-				.save_prune(tmp_prune_file_hash.clone(), off_to_rm, record_len, &prune_noop)?;
+			self.hash_file.save_prune(
+				tmp_prune_file_hash.clone(),
+				off_to_rm,
+				record_len,
+				&prune_noop,
+			)?;
 		}
 
 		// 2. Save compact copy of the data file, skipping removed leaves.
@@ -361,8 +365,12 @@ where
 				})
 				.collect::<Vec<_>>();
 
-			self.data_file
-				.save_prune(tmp_prune_file_data.clone(), off_to_rm, record_len, prune_cb)?;
+			self.data_file.save_prune(
+				tmp_prune_file_data.clone(),
+				off_to_rm,
+				record_len,
+				prune_cb,
+			)?;
 		}
 
 		// 3. Update the prune list and save it in place.

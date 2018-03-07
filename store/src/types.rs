@@ -160,7 +160,7 @@ impl AppendOnlyFile {
 		prune_cb: T,
 	) -> io::Result<()>
 	where
-	 	T: Fn(&[u8]),
+		T: Fn(&[u8]),
 	{
 		if prune_offs.is_empty() {
 			fs::copy(self.path.clone(), target.clone())?;
