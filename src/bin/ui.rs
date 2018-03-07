@@ -18,8 +18,11 @@ use std::sync::{mpsc, Arc};
 
 use cursive::Cursive;
 use cursive::theme::{BaseColor, BorderStyle, Color, ColorStyle};
+use cursive::utils::markup::StyledString;
+use cursive::align::VAlign;
 use cursive::event::Key;
 use cursive::views::TextView;
+use cursive::views::TextContent;
 use cursive::views::BoxView;
 use cursive::views::EditView;
 use cursive::views::DummyView;
@@ -36,6 +39,33 @@ use cursive::traits::*;
 use cursive::views::Dialog;
 
 use grin::Server;
+
+const WELCOME_LOGO:&str = 
+"                 GGGGG                      GGGGGGG         
+               GGGGGGG                      GGGGGGGGG      
+             GGGGGGGGG         GGGG         GGGGGGGGGG     
+           GGGGGGGGGGG       GGGGGGGG       GGGGGGGGGGG    
+          GGGGGGGGGGGG       GGGGGGGG       GGGGGGGGGGGG   
+         GGGGGGGGGGGGG       GGGGGGGG       GGGGGGGGGGGGG  
+        GGGGGGGGGGGGGG       GGGGGGGG       GGGGGGGGGGGGGG 
+        GGGGGGGGGGGGGG       GGGGGGGGGGGGGGGGGGGGGGGGGGGGG 
+       GGGGGGGGGGGGGGG       GGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+       GGGGGGGGGGGGGGG       GGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+                             GGGGGG                        
+                             GGGGGGG                       
+                             GGGGGGGG                      
+       GGGGGGGGGGGGGGG       GGGGGGGG       GGGGGGGGGGGGGGG
+       GGGGGGGGGGGGGGG       GGGGGGGG       GGGGGGGGGGGGGGG
+        GGGGGGGGGGGGGG       GGGGGGGG       GGGGGGGGGGGGGGG
+         GGGGGGGGGGGGG       GGGGGGGG       GGGGGGGGGGGGGG 
+          GGGGGGGGGGGG       GGGGGGGG       GGGGGGGGGGGGG  
+           GGGGGGGGGGG       GGGGGGGG       GGGGGGGGGGGG   
+            GGGGGGGGGG       GGGGGGGG       GGGGGGGGGGG    
+              GGGGGGGG       GGGGGGGG       GGGGGGGGG      
+               GGGGGGG       GGGGGGGG       GGGGGGG        
+                  GGGG       GGGGGGGG       GGGG           
+                    GG       GGGGGGGG       GG             
+                             GGGGGGGG                       ";
 
 pub struct UI {
 	cursive: Cursive,
@@ -59,14 +89,28 @@ impl UI {
 			controller_tx: controller_tx,
 		};
 
+		let mut logo_string = StyledString::new();
+		logo_string.append(StyledString::styled(WELCOME_LOGO, Color::Dark(BaseColor::Green)));
+
+		let mut title_string = StyledString::new();
+		title_string.append(StyledString::styled("Grin Version 0.0.1", Color::Dark(BaseColor::Green)));
+
+
 		// Create UI objects, etc
 		let basic_status_view = BoxView::with_full_screen(
-			LinearLayout::new(Orientation::Vertical)
-				.child(TextView::new("Grin - Basic Runtime Info"))
+			LinearLayout::new(Orientation::Horizontal)
 				.child(
-					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("Current Status:"))
-						.child(TextView::new("BASIC_STATUS").with_id("basic_current_status")),
+					TextView::new(logo_string).v_align(VAlign::Center)
+				)
+				.child(
+					LinearLayout::new(Orientation::Vertical)
+						.child(TextView::new(title_string))
+						.child(TextView::new("------------------"))
+						.child(
+							LinearLayout::new(Orientation::Horizontal)
+							.child(TextView::new("Current Status:"))
+							.child(TextView::new("BASIC_STATUS").with_id("basic_current_status")),
+					)
 				),
 		).with_id("basic_status_view");
 		let advanced_status_view = BoxView::with_full_screen(TextView::new(
@@ -203,3 +247,4 @@ impl Controller {
 		}
 	}
 }
+
