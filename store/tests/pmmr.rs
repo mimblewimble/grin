@@ -376,8 +376,6 @@ fn pmmr_compact_horizon() {
 		assert_eq!(backend.data_size().unwrap(), 7);
 		// 16 hashes total, 2 pruned and compacted
 		assert_eq!(backend.hash_size().unwrap(), 14);
-
-		assert!(false);
 	}
 
 	{

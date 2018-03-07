@@ -28,6 +28,7 @@ use libc::{ftruncate as ftruncate64, off_t as off64_t};
 
 use core::ser;
 
+
 /// Wrapper for a file that can be read at any position (random read) but for
 /// which writes are append only. Reads are backed by a memory map (mmap(2)),
 /// relying on the operating system for fast access and caching. The memory
@@ -157,7 +158,7 @@ impl AppendOnlyFile {
 		prune_len: u64,
 	) -> io::Result<()> {
 		println!(
-			"***** save_prune: {}, {:?}, {}",
+			"***** save_prune: taget {}, offs {:?}, elmt len {}",
 			target, prune_offs, prune_len
 		);
 
@@ -328,6 +329,21 @@ impl RemoveLog {
 	/// Number of positions stored in the remove log.
 	pub fn len(&self) -> usize {
 		self.removed.len()
+	}
+
+	/// Return vec of pos for removed elements before the provided cutoff index.
+	/// Useful for when we prune and compact an MMR.
+	pub fn removed_pre_cutoff(&self, cutoff_idx: u32) -> Vec<u64> {
+		self.removed
+			.iter()
+			.filter_map(|&(pos, idx)| {
+				if idx < cutoff_idx {
+					Some(pos)
+				} else {
+					None
+				}
+			})
+			.collect()
 	}
 }
 

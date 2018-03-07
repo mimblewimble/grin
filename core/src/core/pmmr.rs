@@ -71,12 +71,6 @@ where
 	/// list).
 	fn get_from_file(&self, position: u64) -> Option<Hash>;
 
-	/// Returns true if the provided pos has been "removed" from the backend.
-	/// Underlying data may still be present in the underlying storage
-	/// even after compaction. We keep subtree roots and leaves with siblings
-	/// around as we need their hashes for Merkle proofs.
-	fn is_removed(&self, pos: u64) -> bool;
-
 	/// Remove HashSums by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a
 	/// given index (practically the index is the height of a block that
@@ -607,13 +601,6 @@ impl PruneList {
 		}
 	}
 
-	/// A node can be pruned because it is either -
-	///  * in the prune list itself (it is a root and is "removed" but not "compacted")
-	///  * a descendent of an entry in the prune list (both "removed" and "compacted")
-	pub fn is_in_prune_list(&self, pos: u64) -> bool {
-		self.pruned_nodes.contains(&pos)
-	}
-
 	/// Computes by how many positions a node at pos should be shifted given the
 	/// number of nodes that have already been pruned before it.
 	pub fn get_shift(&self, pos: u64) -> Option<u64> {
@@ -630,11 +617,13 @@ impl PruneList {
 						.map(|n| {
 							let height = bintree_postorder_height(*n);
 							if height == 0 {
+								// a leaf node can be pruned but will not be compacted
+								// so we do not shift for a leaf node
 								0
 							} else {
-								// (1 << height) - 1
-								// height 1, offset 2
-								// height 2, offset 6
+								// height 1, 3 nodes, offset 2 = 1 + 1
+								// height 2, 7 nodes, offset 6 = 3 + 3
+								// height 3, 15 nodes, offset 14 = 7 + 7
 								// TODO - rework this calculation...
 								(1 << height + 1) - 1 - 1
 							}
@@ -686,14 +675,14 @@ impl PruneList {
 	/// list if pruning the additional node means a parent can get pruned as
 	/// well.
 	pub fn add(&mut self, pos: u64) {
-		println!("****** pmmr: prunelist: add: pos {}", pos);
+		println!("***** pmmr: prunelist: add: pos {}", pos);
 
 		let mut current = pos;
 		loop {
 			let (parent, sibling, _) = family(current);
 			match self.pruned_nodes.binary_search(&sibling) {
 				Ok(idx) => {
-					println!("****** pmmr: prunelist: add: sibling also pruned (pos {}), traversing up to {}", sibling, parent);
+					println!("***** pmmr: prunelist: add: sibling also pruned (pos {}), traversing up to {}", sibling, parent);
 					self.pruned_nodes.remove(idx);
 					current = parent;
 				}
@@ -703,7 +692,7 @@ impl PruneList {
 							println!("***** pmmr: prunelist: add: parent in there, so skipping");
 						} else {
 							println!(
-								"****** pmmr: prunelist: add: inserting idx {}, pos {}",
+								"***** pmmr: prunelist: add: inserting idx {}, pos {}",
 								idx, current
 							);
 							self.pruned_nodes.insert(idx, current);
@@ -1038,10 +1027,6 @@ mod test {
 				self.remove_list.push(n)
 			}
 			Ok(())
-		}
-
-		fn is_removed(&self, pos: u64) -> bool {
-			self.remove_list.contains(&pos)
 		}
 
 		fn rewind(&mut self, position: u64, _index: u32) -> Result<(), String> {

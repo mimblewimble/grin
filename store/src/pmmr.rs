@@ -29,7 +29,7 @@ const PMMR_RM_LOG_FILE: &'static str = "pmmr_rm_log.bin";
 const PMMR_PRUNED_FILE: &'static str = "pmmr_pruned.bin";
 
 /// Maximum number of nodes in the remove log before it gets flushed
-pub const RM_LOG_MAX_NODES: usize = 10000;
+pub const RM_LOG_MAX_NODES: usize = 10_000;
 
 /// Metadata for the PMMR backend's AppendOnlyFile, which can be serialized and
 /// stored
@@ -134,17 +134,9 @@ where
 		}
 	}
 
-	// Node pos in either the rm_log or explicitly in the prune list are
-	// treated as "removed" but not "compacted" so data is still in underlying file.
-	fn is_removed(&self, pos: u64) -> bool {
-		self.rm_log.includes(pos) || self.pruned_nodes.is_in_prune_list(pos)
-	}
-
 	/// Get a Hash by insertion position
 	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)> {
-		// Check if this position has been pruned in the remove log or the
-		// pruned list
-		if self.is_removed(position) {
+		if self.rm_log.includes(position) {
 			return None;
 		}
 
@@ -342,46 +334,31 @@ where
 
 		// 0. validate none of the nodes in the rm log are in the prune list (to
 		// avoid accidental double compaction)
-		for pos in &self.rm_log.removed[..] {
-			if let None = self.pruned_nodes.next_pruned_idx(pos.0) {
-				// TODO we likely can recover from this by directly jumping to 3
-				error!(
-					LOGGER,
-					"The remove log contains nodes that are already in the pruned \
-					 list, a previous compaction likely failed."
-				);
-				return Ok(());
+		{
+			for pos in &self.rm_log.removed[..] {
+				if let None = self.pruned_nodes.next_pruned_idx(pos.0) {
+					// TODO we likely can recover from this by directly jumping to 3
+					error!(
+						LOGGER,
+						"The remove log contains nodes that are already in the pruned \
+						 list, a previous compaction likely failed."
+					);
+					return Ok(());
+				}
 			}
 		}
 
+		// Paths for tmp hash and data files.
 		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);
 		let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir, PMMR_DATA_FILE);
 
-		// 1. save hashsum file to a compact copy, skipping data that's in the
-		// remove list
+		let rm_pre_cutoff = self.rm_log.removed_pre_cutoff(cutoff_index);
+		let pos_to_rm = removed_excl_roots(rm_pre_cutoff.clone());
+		let leaf_pos_to_rm = removed_leaves(pos_to_rm.clone());
+
+		// 1. Save compact copy of the hash file, skipping removed data.
 		{
 			let record_len = 32;
-
-			let pos_to_rm = self.rm_log
-				.removed
-				.iter()
-				.filter_map(|&(pos, idx)| {
-					let (parent_pos, _, _) = family(pos);
-
-					// **********************
-					// TODO - need to account for idx here for parent also...
-					// filter by ids first, then use this list exclusively?
-					// **********************
-
-					if idx < cutoff_index && self.rm_log.includes(parent_pos) {
-						Some(pos)
-					} else {
-						None
-					}
-				})
-				.collect::<Vec<_>>();
-
-			println!("***** pos_to_rm {:?}", pos_to_rm);
 
 			let off_to_rm = pos_to_rm
 				.iter()
@@ -389,43 +366,20 @@ where
 					let shift = self.pruned_nodes.get_shift(pos);
 					(pos - 1 - shift.unwrap()) * record_len
 				})
-				.collect::<Vec<_>>();
-
-			println!("***** off_to_rm {:?}", off_to_rm);
+				.collect();
 
 			self.hash_file
 				.save_prune(tmp_prune_file_hash.clone(), off_to_rm, record_len)?;
 		}
 
-		// 2. And the same with the data file
-		// TODO - handle "roots" and "leaves" here correctly as well
+		// 2. Save compact copy of the data file, skipping removed leaves.
 		{
 			let record_len = T::len() as u64;
 
-			let pos_to_rm = self.rm_log
-				.removed
+			let off_to_rm = leaf_pos_to_rm
 				.iter()
-				.filter_map(|&(pos, idx)| {
-					let (parent_pos, _, _) = family(pos);
-
-					// **********************
-					// TODO - need to account for idx here for parent also...
-					// filter by ids first, then use this list exclusively?
-					// **********************
-
-					if idx < cutoff_index && pmmr::is_leaf(pos) && self.rm_log.includes(parent_pos)
-					{
-						Some(pos)
-					} else {
-						None
-					}
-				})
-				.collect::<Vec<_>>();
-
-			let off_to_rm = pos_to_rm
-				.iter()
-				.map(|&pos| {
-					let shift = self.pruned_nodes.get_leaf_shift(pos);
+				.map(|pos| {
+					let shift = self.pruned_nodes.get_leaf_shift(*pos);
 					(pos - 1 - shift.unwrap()) * record_len
 				})
 				.collect::<Vec<_>>();
@@ -434,18 +388,11 @@ where
 				.save_prune(tmp_prune_file_data.clone(), off_to_rm, record_len)?;
 		}
 
-		// 3. update the prune list and save it in place
+		// 3. Update the prune list and save it in place.
 		{
-			for &(rm_pos, idx) in &self.rm_log.removed[..] {
-				if idx < cutoff_index {
-					self.pruned_nodes.add(rm_pos);
-				}
+			for &pos in &rm_pre_cutoff {
+				self.pruned_nodes.add(pos);
 			}
-
-			println!(
-				"***** updated pruned_nodes - {:?}",
-				&self.pruned_nodes.pruned_nodes
-			);
 
 			write_vec(
 				format!("{}/{}", self.data_dir, PMMR_PRUNED_FILE),
@@ -453,29 +400,48 @@ where
 			)?;
 		}
 
-		// 4. move the compact copy of hashes to the hashsum file and re-open it
+		// 4. Rename the compact copy of hash file and reopen it.
 		fs::rename(
 			tmp_prune_file_hash.clone(),
 			format!("{}/{}", self.data_dir, PMMR_HASH_FILE),
 		)?;
 		self.hash_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_HASH_FILE), 0)?;
 
-		// 5. and the same with the data file
+		// 5. Rename the compact copy of the data file and reopen it.
 		fs::rename(
 			tmp_prune_file_data.clone(),
 			format!("{}/{}", self.data_dir, PMMR_DATA_FILE),
 		)?;
 		self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE), 0)?;
 
-		// 6. truncate the rm log
-		self.rm_log.removed = self.rm_log
+		// 6. Truncate the rm log based on pos removed (excluding roots which remain in rm log).
+		self.rm_log
 			.removed
-			.iter()
-			.filter(|&&(_, idx)| idx >= cutoff_index)
-			.map(|x| *x)
-			.collect();
+			.retain(|&(pos, _)| !pos_to_rm.contains(&&pos));
 		self.rm_log.flush()?;
 
 		Ok(())
 	}
+}
+
+/// Filter remove list to exclude roots.
+/// We want to keep roots around so we have hashes for Merkle proofs.
+fn removed_excl_roots(removed: Vec<u64>) -> Vec<u64> {
+	removed
+		.iter()
+		.filter(|&pos| {
+			let (parent_pos, _, _) = family(*pos);
+			removed.contains(&parent_pos)
+		})
+		.cloned()
+		.collect()
+}
+
+/// Filter remove list to only include leaf positions.
+fn removed_leaves(removed: Vec<u64>) -> Vec<u64> {
+	removed
+		.iter()
+		.filter(|&pos| pmmr::is_leaf(*pos))
+		.cloned()
+		.collect()
 }
