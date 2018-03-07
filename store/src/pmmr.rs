@@ -414,7 +414,8 @@ where
 		)?;
 		self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE), 0)?;
 
-		// 6. Truncate the rm log based on pos removed (excluding roots which remain in rm log).
+		// 6. Truncate the rm log based on pos removed (excluding roots which remain in
+		// rm log).
 		self.rm_log
 			.removed
 			.retain(|&(pos, _)| !pos_to_rm.contains(&&pos));

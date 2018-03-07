@@ -28,7 +28,6 @@ use libc::{ftruncate as ftruncate64, off_t as off64_t};
 
 use core::ser;
 
-
 /// Wrapper for a file that can be read at any position (random read) but for
 /// which writes are append only. Reads are backed by a memory map (mmap(2)),
 /// relying on the operating system for fast access and caching. The memory
@@ -336,13 +335,15 @@ impl RemoveLog {
 	pub fn removed_pre_cutoff(&self, cutoff_idx: u32) -> Vec<u64> {
 		self.removed
 			.iter()
-			.filter_map(|&(pos, idx)| {
-				if idx < cutoff_idx {
-					Some(pos)
-				} else {
-					None
-				}
-			})
+			.filter_map(
+				|&(pos, idx)| {
+					if idx < cutoff_idx {
+						Some(pos)
+					} else {
+						None
+					}
+				},
+			)
 			.collect()
 	}
 }
