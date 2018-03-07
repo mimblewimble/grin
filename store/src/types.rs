@@ -156,11 +156,6 @@ impl AppendOnlyFile {
 		prune_offs: Vec<u64>,
 		prune_len: u64,
 	) -> io::Result<()> {
-		println!(
-			"***** save_prune: taget {}, offs {:?}, elmt len {}",
-			target, prune_offs, prune_len
-		);
-
 		if prune_offs.is_empty() {
 			fs::copy(self.path.clone(), target.clone())?;
 			Ok(())

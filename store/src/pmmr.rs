@@ -106,8 +106,6 @@ where
 		Ok(())
 	}
 
-	// TODO - how to handle get_shift here if we are a pruned root (and still in
-	// the file)???
 	fn get_from_file(&self, position: u64) -> Option<Hash> {
 		let shift = self.pruned_nodes.get_shift(position);
 		if let None = shift {
@@ -334,19 +332,22 @@ where
 
 		// 0. validate none of the nodes in the rm log are in the prune list (to
 		// avoid accidental double compaction)
-		{
-			for pos in &self.rm_log.removed[..] {
-				if let None = self.pruned_nodes.next_pruned_idx(pos.0) {
-					// TODO we likely can recover from this by directly jumping to 3
-					error!(
-						LOGGER,
-						"The remove log contains nodes that are already in the pruned \
-						 list, a previous compaction likely failed."
-					);
-					return Ok(());
-				}
-			}
-		}
+		//
+		// TODO - revisit this once we get things working (no longer necessary)?
+		//
+		// {
+		// 	for pos in &self.rm_log.removed[..] {
+		// 		if let None = self.pruned_nodes.next_pruned_idx(pos.0) {
+		// 			// TODO we likely can recover from this by directly jumping to 3
+		// 			error!(
+		// 				LOGGER,
+		// 				"The remove log contains nodes that are already in the pruned \
+		// 				 list, a previous compaction likely failed."
+		// 			);
+		// 			return Ok(());
+		// 		}
+		// 	}
+		// }
 
 		// Paths for tmp hash and data files.
 		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);

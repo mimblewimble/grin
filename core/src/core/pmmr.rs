@@ -331,9 +331,7 @@ where
 			.filter_map(|x| {
 				// we want to find siblings here even if they
 				// have been "removed" from the MMR
-				// TODO - pruned/compacted MMR will need to maintain hashes of removed nodes
-				let res = self.get_from_file(x.1);
-				res
+				self.get_from_file(x.1)
 			})
 			.collect::<Vec<_>>();
 
@@ -606,7 +604,11 @@ impl PruneList {
 	pub fn get_shift(&self, pos: u64) -> Option<u64> {
 		// get the position where the node at pos would fit in the pruned list, if
 		// it's already pruned, nothing to skip
-		match self.next_pruned_idx(pos) {
+
+		let pruned_idx = self.next_pruned_idx(pos);
+		let next_idx = self.pruned_nodes.binary_search(&pos).map(|x| x + 1).ok();
+		println!("***** get_shift: idx {:?}, next_idx {:?}", pruned_idx, next_idx);
+		match pruned_idx.or(next_idx) {
 			None => None,
 			Some(idx) => {
 				// skip by the number of elements pruned in the preceding subtrees,
@@ -624,8 +626,7 @@ impl PruneList {
 								// height 1, 3 nodes, offset 2 = 1 + 1
 								// height 2, 7 nodes, offset 6 = 3 + 3
 								// height 3, 15 nodes, offset 14 = 7 + 7
-								// TODO - rework this calculation...
-								(1 << height + 1) - 1 - 1
+								2 * ((1 << height) - 1)
 							}
 						})
 						.sum(),
@@ -645,7 +646,12 @@ impl PruneList {
 	pub fn get_leaf_shift(&self, pos: u64) -> Option<u64> {
 		// get the position where the node at pos would fit in the pruned list, if
 		// it's already pruned, nothing to skip
-		match self.next_pruned_idx(pos) {
+
+		let pruned_idx = self.next_pruned_idx(pos);
+		let next_idx = self.pruned_nodes.binary_search(&pos).map(|x| x + 1).ok();
+		println!("***** get_leaf_shift: idx {:?}, next_idx {:?}", pruned_idx, next_idx);
+
+		match pruned_idx.or(next_idx) {
 			None => None,
 			Some(idx) => {
 				Some(
@@ -680,23 +686,24 @@ impl PruneList {
 		let mut current = pos;
 		loop {
 			let (parent, sibling, _) = family(current);
+
 			match self.pruned_nodes.binary_search(&sibling) {
 				Ok(idx) => {
-					println!("***** pmmr: prunelist: add: sibling also pruned (pos {}), traversing up to {}", sibling, parent);
+					println!(
+						"***** pmmr: prunelist: add: sibling directly pruned (pos {}), traversing up to {}",
+						sibling,
+						parent,
+					);
 					self.pruned_nodes.remove(idx);
 					current = parent;
 				}
 				Err(_) => {
-					if let Err(idx) = self.pruned_nodes.binary_search(&current) {
-						if let Ok(_) = self.pruned_nodes.binary_search(&parent) {
-							println!("***** pmmr: prunelist: add: parent in there, so skipping");
-						} else {
-							println!(
-								"***** pmmr: prunelist: add: inserting idx {}, pos {}",
-								idx, current
-							);
-							self.pruned_nodes.insert(idx, current);
-						}
+					if let Some(idx) = self.next_pruned_idx(current) {
+						println!(
+							"***** pmmr: prunelist: add: inserting idx {}, pos {}",
+							idx, current
+						);
+						self.pruned_nodes.insert(idx, current);
 					}
 					break;
 				}
@@ -704,19 +711,12 @@ impl PruneList {
 		}
 	}
 
-	// pub fn pruned_idx(&self, pos: u64) -> Option<usize> {
-	// 	match self.pruned_nodes.binary_search(&pos) {
-	// 		Ok(idx) => Some(idx),
-	// 		Err(_) => None,
-	// 	}
-	// }
-
+	/// Gets the index a new pruned node should take in the prune list.
+	/// If the node has already been pruned, either directly or through one of
+	/// its parents contained in the prune list, returns None.
 	pub fn next_pruned_idx(&self, pos: u64) -> Option<usize> {
 		match self.pruned_nodes.binary_search(&pos) {
-			Ok(idx) => {
-				// TODO - this feels hacky, still not sure this is correct
-				Some(idx + 1)
-			}
+			Ok(_) => None,
 			Err(idx) => {
 				if self.pruned_nodes.len() > idx {
 					// the node at pos can't be a child of lower position nodes by MMR
@@ -1566,32 +1566,6 @@ mod test {
 		assert_eq!(ba.used_size(), 2);
 	}
 
-	// #[test]
-	// fn pmmr_pruned_idx() {
-	// 	let mut pl = PruneList::new();
-	//
-	// 	assert_eq!(pl.pruned_nodes.len(), 0);
-	// 	assert_eq!(pl.pruned_idx(1), None);
-	// 	assert_eq!(pl.pruned_idx(2), None);
-	// 	assert_eq!(pl.pruned_idx(3), None);
-	//
-	// 	pl.add(2);
-	// 	assert_eq!(pl.pruned_nodes.len(), 1);
-	// 	assert_eq!(pl.pruned_nodes, [2]);
-	// 	assert_eq!(pl.pruned_idx(1), None);
-	// 	assert_eq!(pl.pruned_idx(2), Some(0));
-	// 	assert_eq!(pl.pruned_idx(3), None);
-	// 	assert_eq!(pl.pruned_idx(4), None);
-	//
-	// 	pl.add(1);
-	// 	assert_eq!(pl.pruned_nodes.len(), 1);
-	// 	assert_eq!(pl.pruned_nodes, [3]);
-	// 	assert_eq!(pl.pruned_idx(1), None);
-	// 	assert_eq!(pl.pruned_idx(2), None);
-	// 	assert_eq!(pl.pruned_idx(3), Some(0));
-	// 	assert_eq!(pl.pruned_idx(4), None);
-	// }
-
 	#[test]
 	fn pmmr_next_pruned_idx() {
 		let mut pl = PruneList::new();
@@ -1605,7 +1579,7 @@ mod test {
 		assert_eq!(pl.pruned_nodes.len(), 1);
 		assert_eq!(pl.pruned_nodes, [2]);
 		assert_eq!(pl.next_pruned_idx(1), Some(0));
-		assert_eq!(pl.next_pruned_idx(2), Some(1));
+		assert_eq!(pl.next_pruned_idx(2), None);
 		assert_eq!(pl.next_pruned_idx(3), Some(1));
 		assert_eq!(pl.next_pruned_idx(4), Some(1));
 
@@ -1614,7 +1588,16 @@ mod test {
 		assert_eq!(pl.pruned_nodes, [3]);
 		assert_eq!(pl.next_pruned_idx(1), None);
 		assert_eq!(pl.next_pruned_idx(2), None);
-		assert_eq!(pl.next_pruned_idx(3), Some(1));
+		assert_eq!(pl.next_pruned_idx(3), None);
+		assert_eq!(pl.next_pruned_idx(4), Some(1));
+		assert_eq!(pl.next_pruned_idx(5), Some(1));
+
+		pl.add(3);
+		assert_eq!(pl.pruned_nodes.len(), 1);
+		assert_eq!(pl.pruned_nodes, [3]);
+		assert_eq!(pl.next_pruned_idx(1), None);
+		assert_eq!(pl.next_pruned_idx(2), None);
+		assert_eq!(pl.next_pruned_idx(3), None);
 		assert_eq!(pl.next_pruned_idx(4), Some(1));
 		assert_eq!(pl.next_pruned_idx(5), Some(1));
 	}
@@ -1701,7 +1684,7 @@ mod test {
 	}
 
 	#[test]
-	fn pmmr_prune_list() {
+	fn pmmr_prune_shift() {
 		let mut pl = PruneList::new();
 		assert!(pl.pruned_nodes.is_empty());
 		assert_eq!(pl.get_shift(1), Some(0));
@@ -1718,6 +1701,18 @@ mod test {
 		assert_eq!(pl.get_shift(3), Some(0));
 
 		pl.add(2);
+		assert_eq!(pl.pruned_nodes, [3]);
+		assert_eq!(pl.get_shift(1), None);
+		assert_eq!(pl.get_shift(2), None);
+		// pos 3 is in the prune list, so removed but not compacted, but still shifted
+		assert_eq!(pl.get_shift(3), Some(2));
+		assert_eq!(pl.get_shift(4), Some(2));
+		assert_eq!(pl.get_shift(5), Some(2));
+		assert_eq!(pl.get_shift(6), Some(2));
+
+		// pos 3 is not a leaf and is already in prune list
+		// prune it and check we are still consistent
+		pl.add(3);
 		assert_eq!(pl.pruned_nodes, [3]);
 		assert_eq!(pl.get_shift(1), None);
 		assert_eq!(pl.get_shift(2), None);
@@ -1752,6 +1747,13 @@ mod test {
 		assert_eq!(pl.get_shift(7), Some(6));
 		assert_eq!(pl.get_shift(8), Some(6));
 		assert_eq!(pl.get_shift(9), Some(6));
+
+		// prune a bunch more
+		for x in 6..1000 {
+			pl.add(x);
+		}
+		// and check we shift by a large number (hopefully the correct number...)
+		assert_eq!(pl.get_shift(1010), Some(996));
 
 		let mut pl = PruneList::new();
 		pl.add(2);
