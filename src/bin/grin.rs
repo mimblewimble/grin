@@ -16,12 +16,12 @@
 
 extern crate blake2_rfc as blake2;
 extern crate clap;
+extern crate cursive;
 extern crate daemonize;
 extern crate serde;
 extern crate serde_json;
 #[macro_use]
 extern crate slog;
-extern crate cursive;
 
 extern crate grin_api as api;
 extern crate grin_config as config;
@@ -49,20 +49,18 @@ use core::core::amount_to_hr_string;
 use util::{init_logger, LoggingConfig, LOGGER};
 
 fn start_server(config: grin::ServerConfig) {
-		// Run the UI controller.. here for now for simplicity to access
-		// everything it might need
-		let mut controller = ui::Controller::new()
-			.unwrap_or_else(|e| {
-				panic!("Error loading UI controller: {}", e);
-			});
-		let mut ui_started = false;
-		grin::Server::start(config, |serv:Arc<grin::Server>|{
-			if !ui_started {
-				controller.run(serv.clone());
-				ui_started = true;
-			}
-
-		}).unwrap();
+	// Run the UI controller.. here for now for simplicity to access
+	// everything it might need
+	let mut controller = ui::Controller::new().unwrap_or_else(|e| {
+		panic!("Error loading UI controller: {}", e);
+	});
+	let mut ui_started = false;
+	grin::Server::start(config, |serv: Arc<grin::Server>| {
+		if !ui_started {
+			controller.run(serv.clone());
+			ui_started = true;
+		}
+	}).unwrap();
 }
 
 fn start_from_config_file(mut global_config: GlobalConfig) {
@@ -471,12 +469,12 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 
 	let wallet_seed =
 		wallet::WalletSeed::from_file(&wallet_config).expect("Failed to read wallet seed file.");
-	let passphrase = wallet_args.value_of("pass").expect(
-		"Failed to read passphrase.",
-	);
-	let mut keychain = wallet_seed.derive_keychain(&passphrase).expect(
-		"Failed to derive keychain from seed file and passphrase.",
-	);
+	let passphrase = wallet_args
+		.value_of("pass")
+		.expect("Failed to read passphrase.");
+	let mut keychain = wallet_seed
+		.derive_keychain(&passphrase)
+		.expect("Failed to derive keychain from seed file and passphrase.");
 
 	match wallet_args.subcommand() {
 		("listen", Some(listen_args)) => {
@@ -505,24 +503,22 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			}
 		}*/
 		("send", Some(send_args)) => {
-			let amount = send_args.value_of("amount").expect(
-				"Amount to send required",
-			);
-			let amount = core::core::amount_from_hr_string(amount).expect(
-				"Could not parse amount as a number with optional decimal point.",
-			);
-			let minimum_confirmations: u64 =
-				send_args
-					.value_of("minimum_confirmations")
-					.unwrap()
-					.parse()
-					.expect("Could not parse minimum_confirmations as a whole number.");
-			let selection_strategy = send_args.value_of("selection_strategy").expect(
-				"Selection strategy required",
-			);
-			let dest = send_args.value_of("dest").expect(
-				"Destination wallet address required",
-			);
+			let amount = send_args
+				.value_of("amount")
+				.expect("Amount to send required");
+			let amount = core::core::amount_from_hr_string(amount)
+				.expect("Could not parse amount as a number with optional decimal point.");
+			let minimum_confirmations: u64 = send_args
+				.value_of("minimum_confirmations")
+				.unwrap()
+				.parse()
+				.expect("Could not parse minimum_confirmations as a whole number.");
+			let selection_strategy = send_args
+				.value_of("selection_strategy")
+				.expect("Selection strategy required");
+			let dest = send_args
+				.value_of("dest")
+				.expect("Destination wallet address required");
 			let max_outputs = 500;
 			let result = wallet::issue_send_tx(
 				&wallet_config,
@@ -534,55 +530,49 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				selection_strategy == "all",
 			);
 			match result {
-				Ok(_) => {
-					info!(
+				Ok(_) => info!(
 					LOGGER,
 					"Tx sent: {} grin to {} (strategy '{}')",
 					amount_to_hr_string(amount),
 					dest,
 					selection_strategy,
-				)
-				}
-				Err(e) => {
-					match e.kind() {
-						wallet::ErrorKind::NotEnoughFunds(available) => {
-							error!(
+				),
+				Err(e) => match e.kind() {
+					wallet::ErrorKind::NotEnoughFunds(available) => {
+						error!(
 							LOGGER,
 							"Tx not sent: insufficient funds (max: {})",
 							amount_to_hr_string(available),
 						);
-						}
-						wallet::ErrorKind::FeeExceedsAmount {
-							sender_amount,
-							recipient_fee,
-						} => {
-							error!(
+					}
+					wallet::ErrorKind::FeeExceedsAmount {
+						sender_amount,
+						recipient_fee,
+					} => {
+						error!(
 								LOGGER,
 								"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
 								amount_to_hr_string(recipient_fee),
 								amount_to_hr_string(sender_amount)
 							);
-						}
-						_ => {
-							error!(LOGGER, "Tx not sent: {:?}", e);
-						}
 					}
-				}
+					_ => {
+						error!(LOGGER, "Tx not sent: {:?}", e);
+					}
+				},
 			};
 		}
 		("burn", Some(send_args)) => {
-			let amount = send_args.value_of("amount").expect(
-				"Amount to burn required",
-			);
-			let amount = core::core::amount_from_hr_string(amount).expect(
-				"Could not parse amount as number with optional decimal point.",
-			);
-			let minimum_confirmations: u64 =
-				send_args
-					.value_of("minimum_confirmations")
-					.unwrap()
-					.parse()
-					.expect("Could not parse minimum_confirmations as a whole number.");
+			let amount = send_args
+				.value_of("amount")
+				.expect("Amount to burn required");
+			let amount = core::core::amount_from_hr_string(amount)
+				.expect("Could not parse amount as number with optional decimal point.");
+			let minimum_confirmations: u64 = send_args
+				.value_of("minimum_confirmations")
+				.unwrap()
+				.parse()
+				.expect("Could not parse minimum_confirmations as a whole number.");
 			let max_outputs = 500;
 			wallet::issue_burn_tx(
 				&wallet_config,
