@@ -317,8 +317,11 @@ where
 		let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir, PMMR_DATA_FILE);
 
 		// Pos we want to get rid of.
+		// Filtered by cutoff index.
 		let rm_pre_cutoff = self.rm_log.removed_pre_cutoff(cutoff_index);
+		// Filtered to exclude the subtree "roots".
 		let pos_to_rm = removed_excl_roots(rm_pre_cutoff.clone());
+		// Filtered for leaves only.
 		let leaf_pos_to_rm = removed_leaves(pos_to_rm.clone());
 
 		// 1. Save compact copy of the hash file, skipping removed data.
