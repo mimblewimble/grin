@@ -441,8 +441,6 @@ where
 			}
 		}
 
-		// at this point we *could* know leaves and roots of pruned subtrees
-
 		self.backend.remove(to_prune, index)?;
 		Ok(true)
 	}
