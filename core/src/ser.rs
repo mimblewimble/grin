@@ -19,7 +19,7 @@
 //! To use it simply implement `Writeable` or `Readable` and then use the
 //! `serialize` or `deserialize` functions on them as appropriate.
 
-use std::{cmp, error, fmt};
+use std::{cmp, error, fmt, mem};
 use std::io::{self, Read, Write};
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
@@ -219,6 +219,10 @@ pub fn read_and_verify_sorted<T>(reader: &mut Reader, count: u64) -> Result<Vec<
 where
 	T: Readable + Hashed + Writeable,
 {
+	let elem_size = mem::size_of::<T>();
+	if count.checked_mul(elem_size as u64).is_none() {
+		return Err(Error::TooLargeReadErr);
+	}
 	let result: Vec<T> = try!((0..count).map(|_| T::read(reader)).collect());
 	result.verify_sort_order()?;
 	Ok(result)
