@@ -450,13 +450,13 @@ impl Chain {
 	pub fn get_merkle_proof(
 		&self,
 		output: &OutputIdentifier,
-		block: &Block,
+		block_header: &BlockHeader,
 	) -> Result<MerkleProof, Error> {
 		let mut txhashset = self.txhashset.write().unwrap();
 
 		let merkle_proof = txhashset::extending(&mut txhashset, |extension| {
 			extension.force_rollback();
-			extension.merkle_proof_via_rewind(output, block)
+			extension.merkle_proof_via_rewind(output, block_header)
 		})?;
 
 		Ok(merkle_proof)
@@ -472,14 +472,12 @@ impl Chain {
 	/// the required indexes for a consumer to rewind to a consistent state
 	/// at the provided block hash.
 	pub fn txhashset_read(&self, h: Hash) -> Result<(u64, u64, File), Error> {
-		let b = self.get_block(&h)?;
-
 		// get the indexes for the block
 		let out_index: u64;
 		let kernel_index: u64;
 		{
 			let txhashset = self.txhashset.read().unwrap();
-			let (oi, ki) = txhashset.indexes_at(&b)?;
+			let (oi, ki) = txhashset.indexes_at(&h)?;
 			out_index = oi;
 			kernel_index = ki;
 		}
@@ -561,6 +559,7 @@ impl Chain {
 				Ok(b) => {
 					self.store.delete_block(&b.hash())?;
 					self.store.delete_block_pmmr_file_metadata(&b.hash())?;
+					self.store.delete_block_marker(&b.hash())?;
 				}
 				Err(NotFoundErr) => {
 					break;

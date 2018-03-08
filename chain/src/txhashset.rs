@@ -18,7 +18,6 @@
 use std::fs;
 use std::collections::HashMap;
 use std::fs::File;
-use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -184,8 +183,8 @@ impl TxHashSet {
 	}
 
 	/// Output and kernel MMR indexes at the end of the provided block
-	pub fn indexes_at(&self, block: &Block) -> Result<(u64, u64), Error> {
-		indexes_at(block, self.commit_index.deref())
+	pub fn indexes_at(&self, bh: &Hash) -> Result<(u64, u64), Error> {
+		self.commit_index.get_block_marker(bh).map_err(&From::from)
 	}
 
 	/// Last file positions of Output set.. hash file,data file
@@ -250,7 +249,7 @@ where
 
 		rollback = extension.rollback;
 		if res.is_ok() && !rollback {
-			extension.save_pos_index()?;
+			extension.save_indexes()?;
 		}
 		sizes = extension.sizes();
 	}
@@ -294,7 +293,7 @@ pub struct Extension<'a> {
 
 	commit_index: Arc<ChainStore>,
 	new_output_commits: HashMap<Commitment, u64>,
-	new_kernel_excesses: HashMap<Commitment, u64>,
+	new_block_markers: HashMap<Hash, (u64, u64)>,
 	rollback: bool,
 }
 
@@ -316,7 +315,7 @@ impl<'a> Extension<'a> {
 			),
 			commit_index: commit_index,
 			new_output_commits: HashMap::new(),
-			new_kernel_excesses: HashMap::new(),
+			new_block_markers: HashMap::new(),
 			rollback: false,
 		}
 	}
@@ -348,25 +347,28 @@ impl<'a> Extension<'a> {
 			}
 		}
 
-		// finally, applying all kernels
+		// then applying all kernels
 		for kernel in &b.kernels {
 			self.apply_kernel(kernel)?;
 		}
 
+		// finally, recording the PMMR positions after this block for future rewind
+		let last_output_pos = self.output_pmmr.unpruned_size();
+		let last_kernel_pos = self.kernel_pmmr.unpruned_size();
+		self.new_block_markers
+			.insert(b.hash(), (last_output_pos, last_kernel_pos));
+
 		Ok(())
 	}
 
-	fn save_pos_index(&self) -> Result<(), Error> {
+	fn save_indexes(&self) -> Result<(), Error> {
 		// store all new output pos in the index
 		for (commit, pos) in &self.new_output_commits {
 			self.commit_index.save_output_pos(commit, *pos)?;
 		}
-
-		// store all new kernel pos in the index
-		for (excess, pos) in &self.new_kernel_excesses {
-			self.commit_index.save_kernel_pos(excess, *pos)?;
+		for (bh, tag) in &self.new_block_markers {
+			self.commit_index.save_block_marker(bh, tag)?;
 		}
-
 		Ok(())
 	}
 
@@ -445,20 +447,10 @@ impl<'a> Extension<'a> {
 	}
 
 	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
-		if let Ok(pos) = self.get_kernel_pos(&kernel.excess) {
-			// same as outputs
-			if let Some((h, _)) = self.kernel_pmmr.get(pos, false) {
-				if h == kernel.hash() {
-					return Err(Error::DuplicateKernel(kernel.excess.clone()));
-				}
-			}
-		}
-
 		// push kernels in their MMR and file
-		let pos = self.kernel_pmmr
+		self.kernel_pmmr
 			.push(kernel.clone())
 			.map_err(&Error::TxHashSetErr)?;
-		self.new_kernel_excesses.insert(kernel.excess, pos);
 
 		Ok(())
 	}
@@ -471,15 +463,16 @@ impl<'a> Extension<'a> {
 	pub fn merkle_proof_via_rewind(
 		&mut self,
 		output: &OutputIdentifier,
-		block: &Block,
+		block_header: &BlockHeader,
 	) -> Result<MerkleProof, Error> {
 		debug!(
 			LOGGER,
 			"txhashset: merkle_proof_via_rewind: rewinding to block {:?}",
-			block.hash()
+			block_header.hash()
 		);
+
 		// rewind to the specified block
-		self.rewind(block)?;
+		self.rewind(block_header)?;
 		// then calculate the Merkle Proof based on the known pos
 		let pos = self.get_output_pos(&output.commit)?;
 		let merkle_proof = self.output_pmmr
@@ -491,17 +484,14 @@ impl<'a> Extension<'a> {
 
 	/// Rewinds the MMRs to the provided block, using the last output and
 	/// last kernel of the block we want to rewind to.
-	pub fn rewind(&mut self, block: &Block) -> Result<(), Error> {
-		debug!(
-			LOGGER,
-			"Rewind txhashset to header {} at {}",
-			block.header.hash(),
-			block.header.height,
-		);
+	pub fn rewind(&mut self, block_header: &BlockHeader) -> Result<(), Error> {
+		let hash = block_header.hash();
+		let height = block_header.height;
+		debug!(LOGGER, "Rewind to header {} at {}", hash, height);
 
 		// rewind each MMR
-		let (out_pos_rew, kern_pos_rew) = indexes_at(block, self.commit_index.deref())?;
-		self.rewind_pos(block.header.height, out_pos_rew, kern_pos_rew)?;
+		let (out_pos_rew, kern_pos_rew) = self.commit_index.get_block_marker(&hash)?;
+		self.rewind_pos(height, out_pos_rew, kern_pos_rew)?;
 		Ok(())
 	}
 
@@ -536,14 +526,6 @@ impl<'a> Extension<'a> {
 			Ok(*pos)
 		} else {
 			self.commit_index.get_output_pos(commit)
-		}
-	}
-
-	fn get_kernel_pos(&self, excess: &Commitment) -> Result<u64, grin_store::Error> {
-		if let Some(pos) = self.new_kernel_excesses.get(excess) {
-			Ok(*pos)
-		} else {
-			self.commit_index.get_kernel_pos(excess)
 		}
 	}
 
@@ -608,15 +590,6 @@ impl<'a> Extension<'a> {
 				if let Some((_, out)) = self.output_pmmr.get(n, true) {
 					self.commit_index
 						.save_output_pos(&out.expect("not a leaf node").commit, n)?;
-				}
-			}
-		}
-		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
-			// non-pruned leaves only
-			if pmmr::bintree_postorder_height(n) == 0 {
-				if let Some((_, kernel)) = self.kernel_pmmr.get(n, true) {
-					self.commit_index
-						.save_kernel_pos(&kernel.expect("not a leaf node").excess, n)?;
 				}
 			}
 		}
@@ -715,54 +688,6 @@ impl<'a> Extension<'a> {
 		debug!(LOGGER, "Summed {} Outputs", output_count);
 		Ok(sum_output.unwrap())
 	}
-}
-
-/// Output and kernel MMR indexes at the end of the provided block.
-/// This requires us to know the "last" output processed in the block
-/// and needs to be consistent with how we originally processed
-/// the outputs in apply_block()
-fn indexes_at(block: &Block, commit_index: &ChainStore) -> Result<(u64, u64), Error> {
-	// If we have any regular outputs then the "last" output is the last regular
-	// output otherwise it is the last coinbase output.
-	// This is because we process coinbase outputs before regular outputs in
-	// apply_block().
-	//
-	// TODO - consider maintaining coinbase outputs in a separate vec in a block?
-	//
-	let mut last_coinbase_output: Option<Output> = None;
-	let mut last_regular_output: Option<Output> = None;
-
-	for x in &block.outputs {
-		if x.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-			last_coinbase_output = Some(*x);
-		} else {
-			last_regular_output = Some(*x);
-		}
-	}
-
-	// use last regular output if we have any, otherwise last coinbase output
-	let last_output = if last_regular_output.is_some() {
-		last_regular_output.unwrap()
-	} else if last_coinbase_output.is_some() {
-		last_coinbase_output.unwrap()
-	} else {
-		return Err(Error::Other("can't get index in an empty block".to_owned()));
-	};
-
-	let out_idx = commit_index
-		.get_output_pos(&last_output.commitment())
-		.map_err(|e| Error::StoreErr(e, format!("missing output pos for block")))?;
-
-	let kern_idx = match block.kernels.last() {
-		Some(kernel) => commit_index
-			.get_kernel_pos(&kernel.excess)
-			.map_err(|e| Error::StoreErr(e, format!("missing kernel pos for block")))?,
-		None => {
-			return Err(Error::Other("can't get index in an empty block".to_owned()));
-		}
-	};
-
-	Ok((out_idx, kern_idx))
 }
 
 /// Packages the txhashset data files into a zip and returns a Read to the

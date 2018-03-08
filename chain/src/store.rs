@@ -34,7 +34,7 @@ const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
 const SYNC_HEAD_PREFIX: u8 = 's' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
-const KERNEL_POS_PREFIX: u8 = 'k' as u8;
+const BLOCK_MARKER_PREFIX: u8 = 'm' as u8;
 const BLOCK_PMMR_FILE_METADATA_PREFIX: u8 = 'p' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
@@ -176,18 +176,21 @@ impl ChainStore for ChainKVStore {
 			.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.to_vec()))
 	}
 
-	fn save_kernel_pos(&self, excess: &Commitment, pos: u64) -> Result<(), Error> {
-		self.db.put_ser(
-			&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())[..],
-			&pos,
+	fn save_block_marker(&self, bh: &Hash, marker: &(u64, u64)) -> Result<(), Error> {
+		self.db
+			.put_ser(&to_key(BLOCK_MARKER_PREFIX, &mut bh.to_vec())[..], &marker)
+	}
+
+	fn get_block_marker(&self, bh: &Hash) -> Result<(u64, u64), Error> {
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(BLOCK_MARKER_PREFIX, &mut bh.to_vec())),
 		)
 	}
 
-	fn get_kernel_pos(&self, excess: &Commitment) -> Result<u64, Error> {
-		option_to_not_found(
-			self.db
-				.get_ser(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())),
-		)
+	fn delete_block_marker(&self, bh: &Hash) -> Result<(), Error> {
+		self.db
+			.delete(&to_key(BLOCK_MARKER_PREFIX, &mut bh.to_vec()))
 	}
 
 	fn save_block_pmmr_file_metadata(
