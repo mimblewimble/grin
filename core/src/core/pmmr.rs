@@ -604,16 +604,11 @@ impl PruneList {
 						.iter()
 						.map(|n| {
 							let height = bintree_postorder_height(*n);
-							if height == 0 {
-								// a leaf node can be pruned but will not be compacted
-								// so we do not shift for a leaf node
-								0
-							} else {
-								// height 1, 3 nodes, offset 2 = 1 + 1
-								// height 2, 7 nodes, offset 6 = 3 + 3
-								// height 3, 15 nodes, offset 14 = 7 + 7
-								2 * ((1 << height) - 1)
-							}
+							// height 0, 1 node, offset 0 = 0 + 0
+							// height 1, 3 nodes, offset 2 = 1 + 1
+							// height 2, 7 nodes, offset 6 = 3 + 3
+							// height 3, 15 nodes, offset 14 = 7 + 7
+							2 * ((1 << height) - 1)
 						})
 						.sum(),
 				)
