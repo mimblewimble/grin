@@ -315,6 +315,14 @@ where
 	where
 		P: Fn(&[u8]),
 	{
+		debug!(
+			LOGGER,
+			"pmmr: check_compact: max_len: {:?}, cutoff: {:?}, rm_log: {:?}",
+			max_len,
+			cutoff_index,
+			self.rm_log.len(),
+		);
+
 		if !(max_len > 0 && self.rm_log.len() >= max_len
 			|| max_len == 0 && self.rm_log.len() > RM_LOG_MAX_NODES)
 		{
@@ -403,7 +411,7 @@ where
 		// Excluding roots which remain in rm log.
 		self.rm_log
 			.removed
-			.retain(|&(pos, _)| !pos_to_rm.contains(&&pos));
+			.retain(|&(pos, _)| !pos_to_rm.binary_search(&&pos).is_ok());
 		self.rm_log.flush()?;
 
 		Ok(true)
@@ -417,7 +425,7 @@ fn removed_excl_roots(removed: Vec<u64>) -> Vec<u64> {
 		.iter()
 		.filter(|&pos| {
 			let (parent_pos, _, _) = family(*pos);
-			removed.contains(&parent_pos)
+			removed.binary_search(&parent_pos).is_ok()
 		})
 		.cloned()
 		.collect()

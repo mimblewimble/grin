@@ -217,6 +217,9 @@ impl TxHashSet {
 			let _ = commit_index.delete_output_pos(commit);
 		};
 		let min_rm = (horizon / 10) as usize;
+
+		debug!(LOGGER, "txhashset: compact: horizon: {:?}, min_rm: {:?}", horizon, min_rm);
+
 		self.output_pmmr_h
 			.backend
 			.check_compact(min_rm, horizon, clean_output_index)?;
