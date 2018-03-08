@@ -20,7 +20,7 @@ extern crate test;
 use rand::Rng;
 use test::Bencher;
 
-use core::core::txhashset::{self, TxHashSet, Summable};
+use core::core::txhashset::{self, Summable, TxHashSet};
 use core::ser::{Error, Writeable, Writer};
 
 #[derive(Copy, Clone, Debug)]

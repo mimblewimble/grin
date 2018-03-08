@@ -938,8 +938,6 @@ pub struct OutputIdentifier {
 	pub commit: Commitment,
 }
 
-
-
 impl OutputIdentifier {
 	/// Build a new output_identifier.
 	pub fn new(features: OutputFeatures, commit: &Commitment) -> OutputIdentifier {

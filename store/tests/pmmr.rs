@@ -22,6 +22,7 @@ use std::fs;
 use core::ser::*;
 use core::core::pmmr::{Backend, PMMR};
 use core::core::hash::{Hash, Hashed};
+use store::types::prune_noop;
 
 #[test]
 fn pmmr_append() {
@@ -42,8 +43,9 @@ fn pmmr_append() {
 
 	let sum2 = elems[0].hash_with_index(1) + elems[1].hash_with_index(2);
 	let sum4 = sum2 + (elems[2].hash_with_index(4) + elems[3].hash_with_index(5));
-	let sum8 = sum4 + ((elems[4].hash_with_index(8) + elems[5].hash_with_index(9))
-		+ (elems[6].hash_with_index(11) + elems[7].hash_with_index(12)));
+	let sum8 = sum4
+		+ ((elems[4].hash_with_index(8) + elems[5].hash_with_index(9))
+			+ (elems[6].hash_with_index(11) + elems[7].hash_with_index(12)));
 	let sum9 = sum8 + elems[8].hash_with_index(16);
 
 	{
@@ -91,7 +93,7 @@ fn pmmr_prune_compact() {
 	}
 
 	// compact
-	backend.check_compact(2, 2).unwrap();
+	backend.check_compact(2, 2, &prune_noop).unwrap();
 
 	// recheck the root and stored data
 	{
@@ -132,7 +134,7 @@ fn pmmr_reload() {
 		}
 		backend.sync().unwrap();
 
-		backend.check_compact(1, 2).unwrap();
+		backend.check_compact(1, 2, &prune_noop).unwrap();
 		backend.sync().unwrap();
 		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
 
@@ -191,7 +193,7 @@ fn pmmr_rewind() {
 		pmmr.prune(1, 1).unwrap();
 		pmmr.prune(2, 1).unwrap();
 	}
-	backend.check_compact(1, 2).unwrap();
+	backend.check_compact(1, 2, &prune_noop).unwrap();
 	backend.sync().unwrap();
 
 	// rewind and check the roots still match
@@ -247,7 +249,7 @@ fn pmmr_compact_horizon() {
 		}
 		backend.sync().unwrap();
 		// compact
-		backend.check_compact(2, 3).unwrap();
+		backend.check_compact(2, 3, &prune_noop).unwrap();
 	}
 
 	// recheck stored data
@@ -261,7 +263,7 @@ fn pmmr_compact_horizon() {
 		assert_eq!(backend.hash_size().unwrap(), 13);
 
 		// compact some more
-		backend.check_compact(1, 5).unwrap();
+		backend.check_compact(1, 5, &prune_noop).unwrap();
 	}
 
 	// recheck stored data

@@ -40,7 +40,7 @@ use std::marker::PhantomData;
 use core::hash::{Hash, Hashed};
 use ser;
 use ser::{Readable, Reader, Writeable, Writer};
-use ser::{PMMRable, PMMRIndexHashable};
+use ser::{PMMRIndexHashable, PMMRable};
 use util;
 use util::LOGGER;
 
@@ -584,7 +584,8 @@ impl PruneList {
 	}
 
 	/// Computes by how many positions a node at pos should be shifted given the
-	/// number of nodes that have already been pruned before it.
+	/// number of nodes that have already been pruned before it. Returns None if
+	/// the position has already been pruned.
 	pub fn get_shift(&self, pos: u64) -> Option<u64> {
 		// get the position where the node at pos would fit in the pruned list, if
 		// it's already pruned, nothing to skip
@@ -605,7 +606,8 @@ impl PruneList {
 
 	/// As above, but only returning the number of leaf nodes to skip for a
 	/// given leaf. Helpful if, for instance, data for each leaf is being stored
-	/// separately in a continuous flat-file
+	/// separately in a continuous flat-file. Returns None if the position has
+	/// already been pruned.
 	pub fn get_leaf_shift(&self, pos: u64) -> Option<u64> {
 		// get the position where the node at pos would fit in the pruned list, if
 		// it's already pruned, nothing to skip
@@ -917,7 +919,7 @@ mod test {
 	use ser::{Error, Readable, Writeable};
 	use core::{Reader, Writer};
 	use core::hash::Hash;
-	use ser::{PMMRable, PMMRIndexHashable};
+	use ser::{PMMRIndexHashable, PMMRable};
 
 	/// Simple MMR backend implementation based on a Vector. Pruning does not
 	/// compact the Vec itself.
@@ -1170,7 +1172,7 @@ mod test {
 		fn len() -> usize {
 			16
 		}
-}
+	}
 
 	impl Writeable for TestElem {
 		fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
@@ -1354,8 +1356,8 @@ mod test {
 
 		// eight elements
 		pmmr.push(elems[7]).unwrap();
-		let sum8 =
-			sum4 + ((elems[4].hash_with_index(8) + elems[5].hash_with_index(9))
+		let sum8 = sum4
+			+ ((elems[4].hash_with_index(8) + elems[5].hash_with_index(9))
 				+ (elems[6].hash_with_index(11) + elems[7].hash_with_index(12)));
 		assert_eq!(pmmr.root(), sum8);
 		assert_eq!(pmmr.unpruned_size(), 15);
