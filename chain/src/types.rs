@@ -285,7 +285,7 @@ pub trait ChainStore: Send + Sync {
 	fn delete_output_pos(&self, commit: &[u8]) -> Result<(), store::Error>;
 
 	fn save_block_marker(&self, bh: &Hash, marker: &(u64, u64)) -> Result<(), store::Error>;
-	
+
 	fn get_block_marker(&self, bh: &Hash) -> Result<(u64, u64), store::Error>;
 
 	fn delete_block_marker(&self, bh: &Hash) -> Result<(), store::Error>;

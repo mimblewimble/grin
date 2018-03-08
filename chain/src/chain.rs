@@ -472,7 +472,6 @@ impl Chain {
 	/// the required indexes for a consumer to rewind to a consistent state
 	/// at the provided block hash.
 	pub fn txhashset_read(&self, h: Hash) -> Result<(u64, u64, File), Error> {
-
 		// get the indexes for the block
 		let out_index: u64;
 		let kernel_index: u64;

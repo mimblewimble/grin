@@ -355,7 +355,8 @@ impl<'a> Extension<'a> {
 		// finally, recording the PMMR positions after this block for future rewind
 		let last_output_pos = self.output_pmmr.unpruned_size();
 		let last_kernel_pos = self.kernel_pmmr.unpruned_size();
-		self.new_block_markers.insert(b.hash(), (last_output_pos, last_kernel_pos));
+		self.new_block_markers
+			.insert(b.hash(), (last_output_pos, last_kernel_pos));
 
 		Ok(())
 	}
@@ -447,7 +448,9 @@ impl<'a> Extension<'a> {
 
 	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
 		// push kernels in their MMR and file
-		self.kernel_pmmr.push(kernel.clone()).map_err(&Error::TxHashSetErr)?;
+		self.kernel_pmmr
+			.push(kernel.clone())
+			.map_err(&Error::TxHashSetErr)?;
 
 		Ok(())
 	}

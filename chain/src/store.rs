@@ -177,12 +177,10 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn save_block_marker(&self, bh: &Hash, marker: &(u64, u64)) -> Result<(), Error> {
-		self.db.put_ser(
-			&to_key(BLOCK_MARKER_PREFIX, &mut bh.to_vec())[..],
-			&marker,
-		)
+		self.db
+			.put_ser(&to_key(BLOCK_MARKER_PREFIX, &mut bh.to_vec())[..], &marker)
 	}
-	
+
 	fn get_block_marker(&self, bh: &Hash) -> Result<(u64, u64), Error> {
 		option_to_not_found(
 			self.db
