@@ -92,7 +92,7 @@ where
 
 
 /// Maixmum peeks for a Merkle proof
-pub const MAX_PEEKS: u64 = 300_000;
+pub const MAX_PEAKS: u64 = 300_000;
 
 /// Maixmum path for a Merkle proof
 pub const MAX_PATH: u64 = 300_000;
@@ -153,7 +153,7 @@ impl Readable for MerkleProof {
 
 		let (peaks_len, path_len) = ser_multiread!(reader, read_u64, read_u64);
 
-		if peaks_len > MAX_PEEKS || path_len > MAX_PATH {
+		if peaks_len > MAX_PEAKS || path_len > MAX_PATH {
 			return Err(ser::Error::TooLargeReadErr);
 		}
 
