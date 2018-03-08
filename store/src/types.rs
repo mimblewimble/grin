@@ -28,7 +28,6 @@ use libc::{ftruncate as ftruncate64, off_t as off64_t};
 
 use core::ser;
 
-
 /// Noop
 pub fn prune_noop(_pruned_data: &[u8]) {}
 
@@ -231,7 +230,7 @@ pub struct RemoveLog {
 impl RemoveLog {
 	/// Open the remove log file. The content of the file will be read in memory
 	/// for fast checking.
-	pub fn open(path: String, rewind_to_index:u32) -> io::Result<RemoveLog> {
+	pub fn open(path: String, rewind_to_index: u32) -> io::Result<RemoveLog> {
 		let removed = read_ordered_vec(path.clone(), 12)?;
 		let mut rl = RemoveLog {
 			path: path,

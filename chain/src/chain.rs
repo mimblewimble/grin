@@ -158,17 +158,17 @@ impl Chain {
 		let head = store.head();
 		let txhashset_md = match head {
 			Ok(h) => {
-				// Add the height to the metadata for the use of the rewind log, as this isn't stored
+				// Add the height to the metadata for the use of the rewind log, as this isn't
+				// stored
 				let mut ts = store.get_block_pmmr_file_metadata(&h.last_block_h)?;
 				ts.output_file_md.block_height = h.height;
 				ts.rproof_file_md.block_height = h.height;
 				ts.kernel_file_md.block_height = h.height;
 				Some(ts)
-			},
+			}
 			Err(NotFoundErr) => None,
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
 		};
-
 
 		let mut txhashset =
 			txhashset::TxHashSet::open(db_root.clone(), store.clone(), txhashset_md)?;

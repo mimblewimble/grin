@@ -217,7 +217,11 @@ where
 	/// store its files.
 	pub fn new(data_dir: String, file_md: Option<PMMRFileMetadata>) -> io::Result<PMMRBackend<T>> {
 		let (height, hash_to_pos, data_to_pos) = match file_md {
-			Some(m) => (m.block_height as u32, m.last_hash_file_pos, m.last_data_file_pos),
+			Some(m) => (
+				m.block_height as u32,
+				m.last_hash_file_pos,
+				m.last_data_file_pos,
+			),
 			None => (0, 0, 0),
 		};
 		let hash_file =
