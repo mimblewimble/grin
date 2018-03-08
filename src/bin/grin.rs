@@ -49,7 +49,6 @@ use core::global;
 use core::core::amount_to_hr_string;
 use util::{init_logger, LoggingConfig, LOGGER};
 
-
 /// wrap below to allow UI to clean up on stop
 fn start_server(config: grin::ServerConfig) {
 	start_server_tui(config);
@@ -122,7 +121,13 @@ fn main() {
 
 	if global_config.using_config_file {
 		// initialise the logger
-		let mut log_conf = global_config.members.as_mut().unwrap().logging.clone().unwrap();
+		let mut log_conf = global_config
+			.members
+			.as_mut()
+			.unwrap()
+			.logging
+			.clone()
+			.unwrap();
 		let run_tui = global_config.members.as_mut().unwrap().server.run_tui;
 		if run_tui.is_some() && run_tui.unwrap() {
 			log_conf.log_to_stdout = false;
