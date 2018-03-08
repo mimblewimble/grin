@@ -162,7 +162,8 @@ impl Chain {
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
 		};
 
-		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), txhashset_md)?;
+		let mut txhashset =
+			txhashset::TxHashSet::open(db_root.clone(), store.clone(), txhashset_md)?;
 
 		let head = store.head();
 		let head = match head {
@@ -172,7 +173,9 @@ impl Chain {
 				store.save_block(&genesis)?;
 				store.setup_height(&genesis.header, &tip)?;
 				if genesis.kernels.len() > 0 {
-					txhashset::extending(&mut txhashset, |extension| extension.apply_block(&genesis))?;
+					txhashset::extending(&mut txhashset, |extension| {
+						extension.apply_block(&genesis)
+					})?;
 				}
 
 				// saving a new tip based on genesis
@@ -506,7 +509,8 @@ impl Chain {
 		let header = self.store.get_block_header(&h)?;
 		txhashset::zip_write(self.db_root.clone(), txhashset_data)?;
 
-		let mut txhashset = txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), None)?;
+		let mut txhashset =
+			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), None)?;
 		txhashset::extending(&mut txhashset, |extension| {
 			extension.rewind_pos(header.height, rewind_to_output, rewind_to_kernel)?;
 			extension.validate(&header)?;
@@ -531,6 +535,47 @@ impl Chain {
 
 		self.check_orphans(header.hash());
 
+		Ok(())
+	}
+
+	/// Triggers chain compaction, cleaning up some unecessary historical
+	/// information. We introduce a chain depth called horizon, which is
+	/// typically in the range of a couple days. Before that horizon, this
+	/// method will:
+	///
+	/// * compact the MMRs data files and flushing the corresponding remove logs
+	/// * delete old records from the k/v store (older blocks, indexes, etc.)
+	///
+	/// This operation can be resource intensive and takes some time to execute.
+	/// Meanwhile, the chain will not be able to accept new blocks. It should
+	/// therefore be called judiciously.
+	pub fn compact(&self) -> Result<(), Error> {
+		let mut sumtrees = self.txhashset.write().unwrap();
+		sumtrees.compact()?;
+
+		let horizon = global::cut_through_horizon() as u64;
+		let head = self.head()?;
+		let mut current = self.store.get_header_by_height(head.height - horizon - 1)?;
+		loop {
+			match self.store.get_block(&current.hash()) {
+				Ok(b) => {
+					self.store.delete_block(&b.hash())?;
+					self.store.delete_block_pmmr_file_metadata(&b.hash())?;
+				}
+				Err(NotFoundErr) => {
+					break;
+				}
+				Err(e) => return Err(Error::StoreErr(e, "retrieving block to compact".to_owned())),
+			}
+			if current.height <= 1 {
+				break;
+			}
+			match self.store.get_block_header(&current.previous) {
+				Ok(h) => current = h,
+				Err(NotFoundErr) => break,
+				Err(e) => return Err(From::from(e)),
+			}
+		}
 		Ok(())
 	}
 

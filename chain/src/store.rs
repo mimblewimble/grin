@@ -171,6 +171,11 @@ impl ChainStore for ChainKVStore {
 		)
 	}
 
+	fn delete_output_pos(&self, commit: &[u8]) -> Result<(), Error> {
+		self.db
+			.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.to_vec()))
+	}
+
 	fn save_kernel_pos(&self, excess: &Commitment, pos: u64) -> Result<(), Error> {
 		self.db.put_ser(
 			&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())[..],

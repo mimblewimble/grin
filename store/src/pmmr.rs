@@ -21,7 +21,7 @@ use core::core::pmmr::{self, Backend};
 use core::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
 use core::core::hash::Hash;
 use util::LOGGER;
-use types::{read_ordered_vec, write_vec, AppendOnlyFile, RemoveLog};
+use types::*;
 
 const PMMR_HASH_FILE: &'static str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &'static str = "pmmr_data.bin";
@@ -134,26 +134,23 @@ where
 
 	/// Get a Hash by insertion position
 	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)> {
-		// Check if this position has been pruned in the remove log or the
-		// pruned list
+		// Check if this position has been pruned in the remove log...
 		if self.rm_log.includes(position) {
 			return None;
 		}
+		// ... or in the prune list
+		let prune_shift = match self.pruned_nodes.get_leaf_shift(position) {
+			Some(shift) => shift,
+			None => return None,
+		};
 
 		let hash_val = self.get_from_file(position);
-
-		// TODO - clean this up
 		if !include_data {
-			if let Some(hash) = hash_val {
-				return Some((hash, None));
-			} else {
-				return None;
-			}
+			return hash_val.map(|hash| (hash, None));
 		}
 
 		// Optionally read flatfile storage to get data element
-		let flatfile_pos =
-			pmmr::n_leaves(position) - 1 - self.pruned_nodes.get_leaf_shift(position).unwrap();
+		let flatfile_pos = pmmr::n_leaves(position) - 1 - prune_shift;
 		let record_len = T::len();
 		let file_offset = flatfile_pos as usize * T::len();
 		let data = self.data_file.read(file_offset, record_len);
@@ -312,14 +309,19 @@ where
 	/// ignore any prunable data beyond the cutoff. This is used to enforce
 	/// a horizon after which the local node should have all the data to allow
 	/// rewinding.
-	///
-	/// TODO whatever is calling this should also clean up the commit to
-	/// position index in db
-	pub fn check_compact(&mut self, max_len: usize, cutoff_index: u32) -> io::Result<()> {
-		if !(max_len > 0 && self.rm_log.len() > max_len
+	pub fn check_compact<P>(
+		&mut self,
+		max_len: usize,
+		cutoff_index: u32,
+		prune_cb: P,
+	) -> io::Result<bool>
+	where
+		P: Fn(&[u8]),
+	{
+		if !(max_len > 0 && self.rm_log.len() >= max_len
 			|| max_len == 0 && self.rm_log.len() > RM_LOG_MAX_NODES)
 		{
-			return Ok(());
+			return Ok(false);
 		}
 
 		// 0. validate none of the nodes in the rm log are in the prune list (to
@@ -332,7 +334,7 @@ where
 					"The remove log contains nodes that are already in the pruned \
 					 list, a previous compaction likely failed."
 				);
-				return Ok(());
+				return Ok(false);
 			}
 		}
 
@@ -347,7 +349,7 @@ where
 			None
 		});
 		self.hash_file
-			.save_prune(tmp_prune_file_hash.clone(), to_rm, record_len)?;
+			.save_prune(tmp_prune_file_hash.clone(), to_rm, record_len, &prune_noop)?;
 
 		// 2. And the same with the data file
 		let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir, PMMR_DATA_FILE);
@@ -362,7 +364,7 @@ where
 			}
 		});
 		self.data_file
-			.save_prune(tmp_prune_file_data.clone(), to_rm, record_len)?;
+			.save_prune(tmp_prune_file_data.clone(), to_rm, record_len, prune_cb)?;
 
 		// 3. update the prune list and save it in place
 		for &(rm_pos, idx) in &self.rm_log.removed[..] {
@@ -398,6 +400,6 @@ where
 			.collect();
 		self.rm_log.flush()?;
 
-		Ok(())
+		Ok(true)
 	}
 }
