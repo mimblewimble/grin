@@ -559,6 +559,7 @@ impl Chain {
 				Ok(b) => {
 					self.store.delete_block(&b.hash())?;
 					self.store.delete_block_pmmr_file_metadata(&b.hash())?;
+					self.store.delete_block_marker(&b.hash())?;
 				}
 				Err(NotFoundErr) => {
 					break;
