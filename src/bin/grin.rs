@@ -73,9 +73,9 @@ fn start_server_tui(config: grin::ServerConfig) {
 				.spawn(move || {
 					let mut controller = ui::Controller::new().unwrap_or_else(|e| {
 						panic!("Error loading UI controller: {}", e);
+					});
+					controller.run(serv.clone());
 				});
-				controller.run(serv.clone());
-			});
 		}).unwrap();
 	} else {
 		grin::Server::start(config, |_| {}).unwrap();

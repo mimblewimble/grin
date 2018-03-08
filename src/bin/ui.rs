@@ -126,24 +126,18 @@ impl UI {
 						.child(
 							LinearLayout::new(Orientation::Horizontal)
 								.child(TextView::new("Current Status: "))
-								.child(
-									TextView::new("Starting").with_id("basic_current_status"),
-								),
+								.child(TextView::new("Starting").with_id("basic_current_status")),
 						)
 						.child(
 							LinearLayout::new(Orientation::Horizontal)
 								.child(TextView::new("Connected Peers: "))
-								.child(
-									TextView::new("0").with_id("connected_peers"),
-								),
+								.child(TextView::new("0").with_id("connected_peers")),
 						)
 						.child(
 							LinearLayout::new(Orientation::Horizontal)
 								.child(TextView::new("Chain Height: "))
-								.child(
-									TextView::new("").with_id("chain_height"),
-								),
-						)
+								.child(TextView::new("").with_id("chain_height")),
+						),
 				)),
 		).with_id("basic_status_view");
 
@@ -233,12 +227,14 @@ impl UI {
 			match message {
 				UIMessage::UpdateStatus(update) => {
 					//find and update here as needed
-					self.cursive.call_on_id("basic_current_status", |t: &mut TextView| {
-						t.set_content(update.basic_status.clone());
-					});
-					self.cursive.call_on_id("connected_peers", |t: &mut TextView| {
-						t.set_content(update.peer_count.clone());
-					});
+					self.cursive
+						.call_on_id("basic_current_status", |t: &mut TextView| {
+							t.set_content(update.basic_status.clone());
+						});
+					self.cursive
+						.call_on_id("connected_peers", |t: &mut TextView| {
+							t.set_content(update.peer_count.clone());
+						});
 					self.cursive.call_on_id("chain_height", |t: &mut TextView| {
 						t.set_content(update.chain_height.clone());
 					});
@@ -301,7 +297,7 @@ impl Controller {
 	}
 	/// update the UI with server status at given intervals (should be
 	/// once a second at present
-	pub fn update_status(&mut self, server: Arc<Server>){
+	pub fn update_status(&mut self, server: Arc<Server>) {
 		let stats = server.get_server_stats().unwrap();
 		let basic_status = {
 			if stats.is_syncing {
@@ -311,13 +307,10 @@ impl Controller {
 			}
 		};
 		let update = StatusUpdates {
-			basic_status : basic_status.to_string(),
+			basic_status: basic_status.to_string(),
 			peer_count: stats.peer_count.to_string(),
 			chain_height: stats.head.height.to_string(),
 		};
-		self.ui
-			.ui_tx
-			.send(UIMessage::UpdateStatus(update))
-			.unwrap();
+		self.ui.ui_tx.send(UIMessage::UpdateStatus(update)).unwrap();
 	}
 }
