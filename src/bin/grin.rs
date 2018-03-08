@@ -22,6 +22,7 @@ extern crate serde;
 extern crate serde_json;
 #[macro_use]
 extern crate slog;
+extern crate time;
 
 extern crate grin_api as api;
 extern crate grin_config as config;
@@ -66,15 +67,15 @@ fn start_server_tui(config: grin::ServerConfig) {
 	// everything it might need
 	if config.run_tui.is_some() && config.run_tui.unwrap() {
 		println!("Starting GRIN in UI mode...");
-		let mut controller = ui::Controller::new().unwrap_or_else(|e| {
-			panic!("Error loading UI controller: {}", e);
-		});
-		let mut ui_started = false;
 		grin::Server::start(config, |serv: Arc<grin::Server>| {
-			if !ui_started {
+			let _ = thread::Builder::new()
+				.name("ui".to_string())
+				.spawn(move || {
+					let mut controller = ui::Controller::new().unwrap_or_else(|e| {
+						panic!("Error loading UI controller: {}", e);
+				});
 				controller.run(serv.clone());
-				ui_started = true;
-			}
+			});
 		}).unwrap();
 	} else {
 		grin::Server::start(config, |_| {}).unwrap();

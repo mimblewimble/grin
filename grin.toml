@@ -103,7 +103,7 @@ log_file_append = true
 
 #flag whether mining is enabled
 
-enable_mining = false
+enable_mining = true
 
 #Whether to use cuckoo-miner,  and related parameters
 
@@ -132,7 +132,7 @@ wallet_listener_url = "http://127.0.0.1:13415"
 
 #whether to ignore the reward (mostly for testing)
 
-burn_reward = false
+burn_reward = true
 
 #testing value, optional
 #slow_down_in_millis = 30

@@ -181,4 +181,6 @@ pub struct ServerStats {
 	pub peer_count: u32,
 	/// Chain head
 	pub head: chain::Tip,
+	/// Whether we're currently syncing
+	pub is_syncing: bool,
 }

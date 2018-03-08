@@ -15,9 +15,11 @@
 //! Main for building the binary of a Grin peer-to-peer node.
 
 use std::sync::{mpsc, Arc};
+use util::LOGGER;
 use std::process::exit;
 use std::thread;
 use std::time::Duration;
+use time;
 
 use cursive::Cursive;
 use cursive::theme::{BaseColor, BorderStyle, Color, ColorStyle};
@@ -76,8 +78,14 @@ pub struct UI {
 	controller_tx: mpsc::Sender<ControllerMessage>,
 }
 
+pub struct StatusUpdates {
+	pub basic_status: String,
+	pub peer_count: String,
+	pub chain_height: String,
+}
+
 pub enum UIMessage {
-	UpdateOutput(String),
+	UpdateStatus(StatusUpdates),
 }
 
 impl UI {
@@ -117,11 +125,25 @@ impl UI {
 						.child(TextView::new("------------------"))
 						.child(
 							LinearLayout::new(Orientation::Horizontal)
-								.child(TextView::new("Current Status:"))
+								.child(TextView::new("Current Status: "))
 								.child(
-									TextView::new("BASIC_STATUS").with_id("basic_current_status"),
+									TextView::new("Starting").with_id("basic_current_status"),
 								),
-						),
+						)
+						.child(
+							LinearLayout::new(Orientation::Horizontal)
+								.child(TextView::new("Connected Peers: "))
+								.child(
+									TextView::new("0").with_id("connected_peers"),
+								),
+						)
+						.child(
+							LinearLayout::new(Orientation::Horizontal)
+								.child(TextView::new("Chain Height: "))
+								.child(
+									TextView::new("").with_id("chain_height"),
+								),
+						)
 				)),
 		).with_id("basic_status_view");
 
@@ -185,9 +207,6 @@ impl UI {
 				/*sv.pop_layer();
 				sv.add_layer(bas_sta);*/			});
 		});
-		grin_ui.cursive.add_global_callback('q', |s| {
-			s.quit();
-		});
 		grin_ui.cursive.load_theme_file("guistyle.toml").unwrap();
 		grin_ui.cursive.add_layer(top_layer);
 
@@ -198,6 +217,7 @@ impl UI {
 				.send(ControllerMessage::Shutdown)
 				.unwrap();
 		});
+		grin_ui.cursive.set_fps(4);
 		grin_ui
 	}
 
@@ -211,8 +231,17 @@ impl UI {
 		// Process any pending UI messages
 		while let Some(message) = self.ui_rx.try_iter().next() {
 			match message {
-				UIMessage::UpdateOutput(text) => {
+				UIMessage::UpdateStatus(update) => {
 					//find and update here as needed
+					self.cursive.call_on_id("basic_current_status", |t: &mut TextView| {
+						t.set_content(update.basic_status.clone());
+					});
+					self.cursive.call_on_id("connected_peers", |t: &mut TextView| {
+						t.set_content(update.peer_count.clone());
+					});
+					self.cursive.call_on_id("chain_height", |t: &mut TextView| {
+						t.set_content(update.chain_height.clone());
+					});
 				}
 			}
 		}
@@ -249,6 +278,8 @@ impl Controller {
 	}
 	/// Run the controller
 	pub fn run(&mut self, server: Arc<Server>) {
+		let stat_update_interval = 1;
+		let mut next_stat_update = time::get_time().sec + stat_update_interval;
 		while self.ui.step() {
 			while let Some(message) = self.rx.try_iter().next() {
 				match message {
@@ -262,6 +293,31 @@ impl Controller {
 					}
 				}
 			}
+			if time::get_time().sec > next_stat_update {
+				self.update_status(server.clone());
+				next_stat_update = time::get_time().sec + stat_update_interval;
+			}
 		}
+	}
+	/// update the UI with server status at given intervals (should be
+	/// once a second at present
+	pub fn update_status(&mut self, server: Arc<Server>){
+		let stats = server.get_server_stats().unwrap();
+		let basic_status = {
+			if stats.is_syncing {
+				"Syncing"
+			} else {
+				"Running"
+			}
+		};
+		let update = StatusUpdates {
+			basic_status : basic_status.to_string(),
+			peer_count: stats.peer_count.to_string(),
+			chain_height: stats.head.height.to_string(),
+		};
+		self.ui
+			.ui_tx
+			.send(UIMessage::UpdateStatus(update))
+			.unwrap();
 	}
 }

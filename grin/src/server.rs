@@ -63,11 +63,10 @@ impl Server {
 			serv.start_miner(mining_config.unwrap());
 		}
 
+		info_callback(serv.clone());
 		loop {
 			thread::sleep(time::Duration::from_secs(1));
-			info_callback(serv.clone());
 			if serv.stop.load(Ordering::Relaxed) {
-				warn!(LOGGER, "Stopping loop");
 				return Ok(());
 			}
 		}
@@ -250,12 +249,12 @@ impl Server {
 		Ok(ServerStats {
 			peer_count: self.peer_count(),
 			head: self.head(),
+			is_syncing: self.currently_syncing.load(Ordering::Relaxed),
 		})
 	}
 
 	/// Stop the server.
 	pub fn stop(&self) {
-		warn!(LOGGER, "Stopping");
 		self.p2p.stop();
 		self.stop.store(true, Ordering::Relaxed);
 	}
