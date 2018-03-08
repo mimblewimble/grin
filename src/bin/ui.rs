@@ -15,11 +15,14 @@
 //! Main for building the binary of a Grin peer-to-peer node.
 
 use std::sync::{mpsc, Arc};
+use std::process::exit;
+use std::thread;
+use std::time::Duration;
 
 use cursive::Cursive;
 use cursive::theme::{BaseColor, BorderStyle, Color, ColorStyle};
 use cursive::utils::markup::StyledString;
-use cursive::align::VAlign;
+use cursive::align::{HAlign, VAlign};
 use cursive::event::Key;
 use cursive::views::TextView;
 use cursive::views::TextContent;
@@ -103,8 +106,12 @@ impl UI {
 		// Create UI objects, etc
 		let basic_status_view = BoxView::with_full_screen(
 			LinearLayout::new(Orientation::Horizontal)
-				.child(TextView::new(logo_string).v_align(VAlign::Center))
-				.child(
+				.child(BoxView::with_full_screen(
+					TextView::new(logo_string)
+						.v_align(VAlign::Center)
+						.h_align(HAlign::Center),
+				))
+				.child(BoxView::with_full_screen(
 					LinearLayout::new(Orientation::Vertical)
 						.child(TextView::new(title_string))
 						.child(TextView::new("------------------"))
@@ -115,8 +122,9 @@ impl UI {
 									TextView::new("BASIC_STATUS").with_id("basic_current_status"),
 								),
 						),
-				),
+				)),
 		).with_id("basic_status_view");
+
 		let advanced_status_view = BoxView::with_full_screen(TextView::new(
 			"Advanced Status Display",
 		)).with_id("advanced_status");
@@ -214,6 +222,11 @@ impl UI {
 
 		true
 	}
+
+	/// Stop the UI
+	pub fn stop(&mut self) {
+		self.cursive.quit();
+	}
 }
 
 pub struct Controller {
@@ -241,10 +254,11 @@ impl Controller {
 				match message {
 					ControllerMessage::Shutdown => {
 						server.stop();
-						self.ui
+						self.ui.stop();
+						/*self.ui
 							.ui_tx
 							.send(UIMessage::UpdateOutput("update".to_string()))
-							.unwrap();
+							.unwrap();*/
 					}
 				}
 			}

@@ -39,6 +39,7 @@ use std::thread;
 use std::sync::Arc;
 use std::time::Duration;
 use std::env::current_dir;
+use std::process::exit;
 
 use clap::{App, Arg, ArgMatches, SubCommand};
 use daemonize::Daemonize;
@@ -48,19 +49,37 @@ use core::global;
 use core::core::amount_to_hr_string;
 use util::{init_logger, LoggingConfig, LOGGER};
 
+
+/// wrap below to allow UI to clean up on stop
 fn start_server(config: grin::ServerConfig) {
+	start_server_tui(config);
+	// Just kill process for now, otherwise the process
+	// hangs around until sigint because the API server
+	// currently has no shutdown facility
+	println!("Shutting down...");
+	thread::sleep(Duration::from_millis(1000));
+	println!("Shutdown complete.");
+	exit(0);
+}
+
+fn start_server_tui(config: grin::ServerConfig) {
 	// Run the UI controller.. here for now for simplicity to access
 	// everything it might need
-	let mut controller = ui::Controller::new().unwrap_or_else(|e| {
-		panic!("Error loading UI controller: {}", e);
-	});
-	let mut ui_started = false;
-	grin::Server::start(config, |serv: Arc<grin::Server>| {
-		if !ui_started {
-			controller.run(serv.clone());
-			ui_started = true;
-		}
-	}).unwrap();
+	if config.run_tui.is_some() && config.run_tui.unwrap() {
+		println!("Starting GRIN in UI mode...");
+		let mut controller = ui::Controller::new().unwrap_or_else(|e| {
+			panic!("Error loading UI controller: {}", e);
+		});
+		let mut ui_started = false;
+		grin::Server::start(config, |serv: Arc<grin::Server>| {
+			if !ui_started {
+				controller.run(serv.clone());
+				ui_started = true;
+			}
+		}).unwrap();
+	} else {
+		grin::Server::start(config, |_| {}).unwrap();
+	}
 }
 
 fn start_from_config_file(mut global_config: GlobalConfig) {
@@ -103,7 +122,12 @@ fn main() {
 
 	if global_config.using_config_file {
 		// initialise the logger
-		init_logger(global_config.members.as_mut().unwrap().logging.clone());
+		let mut log_conf = global_config.members.as_mut().unwrap().logging.clone().unwrap();
+		let run_tui = global_config.members.as_mut().unwrap().server.run_tui;
+		if run_tui.is_some() && run_tui.unwrap() {
+			log_conf.log_to_stdout = false;
+		}
+		init_logger(Some(log_conf));
 		info!(
 			LOGGER,
 			"Using configuration file at: {}",

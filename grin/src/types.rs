@@ -145,6 +145,10 @@ pub struct ServerConfig {
 	/// Whether to skip the sync timeout on startup
 	/// (To assist testing on solo chains)
 	pub skip_sync_wait: Option<bool>,
+
+	/// Whether to run the TUI
+	/// if enabled, this will disable logging to stdout
+	pub run_tui: Option<bool>,
 }
 
 impl Default for ServerConfig {
@@ -161,6 +165,7 @@ impl Default for ServerConfig {
 			archive_mode: None,
 			pool_config: pool::PoolConfig::default(),
 			skip_sync_wait: None,
+			run_tui: None,
 		}
 	}
 }
