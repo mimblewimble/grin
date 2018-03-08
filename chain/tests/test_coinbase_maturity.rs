@@ -108,7 +108,7 @@ fn test_coinbase_maturity() {
 		.process_block(block.clone(), chain::Options::MINE)
 		.unwrap();
 
-	let merkle_proof = chain.get_merkle_proof(&out_id, &block).unwrap();
+	let merkle_proof = chain.get_merkle_proof(&out_id, &block.header).unwrap();
 
 	let prev = chain.head_header().unwrap();
 

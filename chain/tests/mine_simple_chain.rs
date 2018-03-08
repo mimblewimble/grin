@@ -259,7 +259,7 @@ fn spend_in_fork_and_compact() {
 		.process_block(b.clone(), chain::Options::SKIP_POW)
 		.unwrap();
 
-	let merkle_proof = chain.get_merkle_proof(&out_id, &b).unwrap();
+	let merkle_proof = chain.get_merkle_proof(&out_id, &b.header).unwrap();
 
 	println!("First block");
 
