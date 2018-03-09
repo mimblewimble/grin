@@ -328,7 +328,7 @@ fn pmmr_rewind() {
 
 #[test]
 fn pmmr_compact_single_leaves() {
-	let (data_dir, elems) = setup("compact_entire_peak");
+	let (data_dir, elems) = setup("compact_single_leaves");
 	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
 	let mmr_size = load(0, &elems[0..5], &mut backend);
 	backend.sync().unwrap();

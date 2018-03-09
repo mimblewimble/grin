@@ -418,10 +418,10 @@ where
 			return Ok(false);
 		}
 		let prunable_height = bintree_postorder_height(position);
-		// if prunable_height > 0 {
-		// 	// only leaves can be pruned
-		// 	return Err(format!("Node at {} is not a leaf, can't prune.", position));
-		// }
+		if prunable_height > 0 {
+			// only leaves can be pruned
+			return Err(format!("Node at {} is not a leaf, can't prune.", position));
+		}
 
 		// loop going up the tree, from node to parent, as long as we stay inside
 		// the tree.
@@ -566,6 +566,9 @@ where
 		}
 	}
 
+	/// Debugging utility to print information about the MMRs. Short version
+	/// only prints the last 8 nodes.
+	/// Looks in the underlying hash file and so ignores the remove log.
 	pub fn dump_from_file(&self, short: bool) {
 		let sz = self.unpruned_size();
 		if sz > 2000 && !short {
@@ -980,7 +983,7 @@ mod test {
 
 	/// Simple MMR backend implementation based on a Vector. Pruning does not
 	/// compact the Vec itself.
-	#[derive(Clone)]
+	#[derive(Clone, Debug)]
 	pub struct VecBackend<T>
 	where
 		T: PMMRable,
@@ -1549,7 +1552,7 @@ mod test {
 		}
 		assert_eq!(ba.used_size(), 9);
 
-		// pruning everything should only leave us the peaks
+		// pruning everything should only leave us with a single peak
 		{
 			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 			for n in 1..16 {
@@ -1557,7 +1560,7 @@ mod test {
 			}
 			assert_eq!(orig_root, pmmr.root());
 		}
-		assert_eq!(ba.used_size(), 2);
+		assert_eq!(ba.used_size(), 1);
 	}
 
 	#[test]
