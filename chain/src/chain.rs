@@ -553,6 +553,9 @@ impl Chain {
 		let mut sumtrees = self.txhashset.write().unwrap();
 		sumtrees.compact()?;
 
+		// leave blocks in the index for now (for testing)
+		return Ok(());
+
 		let horizon = global::cut_through_horizon() as u64;
 		let head = self.head()?;
 

@@ -327,45 +327,43 @@ fn pmmr_rewind() {
 }
 
 #[test]
-fn pmmr_compact_scratch() {
-	let (data_dir, elems) = setup("compact_horizon");
+fn pmmr_compact_entire_peak() {
+	let (data_dir, elems) = setup("compact_entire_peak");
 	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
-	let mmr_size = load(0, &elems[..], &mut backend);
+	let mut mmr_size = load(0, &elems[0..5], &mut backend);
 	backend.sync().unwrap();
 	backend.dump_from_file(false);
 
+	let pos_7 = backend.get(7, true).unwrap();
+	let pos_7_hash = backend.get_from_file(7).unwrap();
+	assert_eq!(pos_7.0, pos_7_hash);
+
+	let pos_8 = backend.get(8, true).unwrap();
+	let pos_8_hash = backend.get_from_file(8).unwrap();
+	assert_eq!(pos_8.0, pos_8_hash);
+
+	// prune all leaves under the peak at pos 7
 	{
-		// pruning some choice nodes with an increasing block height
-		{
-			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			pmmr.prune(2, 1).unwrap();
-			pmmr.prune(4, 1).unwrap();
-			pmmr.prune(5, 1).unwrap();
-		}
-		backend.sync().unwrap();
+		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		pmmr.prune(1, 1).unwrap();
+		pmmr.prune(2, 1).unwrap();
+		pmmr.prune(4, 1).unwrap();
+		pmmr.prune(5, 1).unwrap();
 	}
+
+	backend.sync().unwrap();
 
 	// compact
 	backend.check_compact(2, 2, &prune_noop).unwrap();
-	backend.sync().unwrap();
-	backend.dump_from_file(false);
 
-	{
-		// pruning some choice nodes with an increasing block height
-		{
-			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			pmmr.prune(5, 2).unwrap();
-			pmmr.prune(1, 2).unwrap();
-		}
-		backend.sync().unwrap();
-	}
+	// now check we have pruned up to and including the peak at pos 7
+	// hash still available in underlying hash file
+	assert_eq!(backend.get(7, false), None);
+	assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
-	// compact
-	backend.check_compact(2, 3, &prune_noop).unwrap();
-	backend.sync().unwrap();
-	backend.dump_from_file(false);
-
-	assert!(false, "and debug");
+	// now check we still have subsequent hash and data where we expect
+	assert_eq!(backend.get(8, true), Some(pos_8));
+	assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
 }
 
 #[test]
@@ -525,7 +523,7 @@ fn setup(tag: &str) -> (String, Vec<TestElem>) {
 	fs::create_dir_all(data_dir.clone()).unwrap();
 
 	let mut elems = vec![];
-	for x in 1..10 {
+	for x in 1..20 {
 		elems.push(TestElem(x));
 	}
 	(data_dir, elems)

@@ -134,6 +134,7 @@ where
 
 	/// Get a Hash by insertion position
 	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)> {
+		println!("***** get {}", position);
 		// Check if this position has been pruned in the remove log...
 		if self.rm_log.includes(position) {
 			return None;
@@ -273,7 +274,7 @@ where
 			println!("{}", hashes);
 		}
 
-		for pos in 1..sz + 1 {
+		for pos in 1..sz-1 {
 			println!("pos {}, {:?}", pos, self.get(pos, true));
 		}
 	}
@@ -317,6 +318,9 @@ where
 			));
 		}
 		self.rm_log.flush()?;
+
+		self.dump_from_file(false);
+
 		Ok(())
 	}
 
@@ -363,12 +367,11 @@ where
 	where
 		P: Fn(&[u8]),
 	{
-		debug!(
-			LOGGER,
+		println!(
 			"pmmr: check_compact: max_len: {:?}, cutoff: {:?}, rm_log: {:?}",
 			max_len,
 			cutoff_index,
-			self.rm_log.len(),
+			self.rm_log.removed,
 		);
 
 		if !(max_len > 0 && self.rm_log.len() >= max_len
@@ -468,6 +471,8 @@ where
 		self.rm_log.flush()?;
 
 		println!("***** rm_log after compaction: {:?}", self.rm_log.removed);
+
+		self.dump_from_file(false);
 
 		Ok(true)
 	}

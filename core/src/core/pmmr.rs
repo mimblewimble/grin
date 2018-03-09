@@ -430,14 +430,15 @@ where
 		let mut to_prune = vec![];
 
 		let mut current = position;
-		while current + 1 < self.last_pos {
+		while current + 1 <= self.last_pos {
 			let (parent, sibling, _) = family(current);
+
+			to_prune.push(current);
+
 			if parent > self.last_pos {
 				// can't prune when our parent isn't here yet
 				break;
 			}
-
-			to_prune.push(current);
 
 			// if we have a pruned sibling, we can continue up the tree
 			// otherwise we're done

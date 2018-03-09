@@ -55,7 +55,7 @@ where
 
 impl<T> PMMRHandle<T>
 where
-	T: PMMRable,
+	T: PMMRable + ::std::fmt::Debug,
 {
 	fn new(
 		root_dir: String,
@@ -343,7 +343,6 @@ impl<'a> Extension<'a> {
 
 		{
 			debug!(LOGGER, "about to apply inputs");
-			self.output_pmmr.dump_backend(false);
 		}
 
 		// then doing inputs guarantees an input can't spend an output in the
