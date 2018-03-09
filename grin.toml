@@ -54,7 +54,7 @@ capabilities = [7]
 
 #whether to run the ncurses TUI. Ncurses must be installed and this
 #will also disable logging to stdout
-run_tui = true
+run_tui = false
 
 #The P2P server details (i.e. the server that communicates with other
 #grin server nodes
@@ -128,7 +128,7 @@ wallet_listener_url = "http://127.0.0.1:13415"
 
 #whether to ignore the reward (mostly for testing)
 
-burn_reward = false
+burn_reward = true
 
 #testing value, optional
 #slow_down_in_millis = 30
