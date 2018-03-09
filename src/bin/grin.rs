@@ -16,11 +16,13 @@
 
 extern crate blake2_rfc as blake2;
 extern crate clap;
+extern crate cursive;
 extern crate daemonize;
 extern crate serde;
 extern crate serde_json;
 #[macro_use]
 extern crate slog;
+extern crate time;
 
 extern crate grin_api as api;
 extern crate grin_config as config;
@@ -32,10 +34,13 @@ extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
 mod client;
+mod ui;
 
 use std::thread;
+use std::sync::Arc;
 use std::time::Duration;
 use std::env::current_dir;
+use std::process::exit;
 
 use clap::{App, Arg, ArgMatches, SubCommand};
 use daemonize::Daemonize;
@@ -44,6 +49,38 @@ use config::GlobalConfig;
 use core::global;
 use core::core::amount_to_hr_string;
 use util::{init_logger, LoggingConfig, LOGGER};
+
+/// wrap below to allow UI to clean up on stop
+fn start_server(config: grin::ServerConfig) {
+	start_server_tui(config);
+	// Just kill process for now, otherwise the process
+	// hangs around until sigint because the API server
+	// currently has no shutdown facility
+	println!("Shutting down...");
+	thread::sleep(Duration::from_millis(1000));
+	println!("Shutdown complete.");
+	exit(0);
+}
+
+fn start_server_tui(config: grin::ServerConfig) {
+	// Run the UI controller.. here for now for simplicity to access
+	// everything it might need
+	if config.run_tui.is_some() && config.run_tui.unwrap() {
+		println!("Starting GRIN in UI mode...");
+		grin::Server::start(config, |serv: Arc<grin::Server>| {
+			let _ = thread::Builder::new()
+				.name("ui".to_string())
+				.spawn(move || {
+					let mut controller = ui::Controller::new().unwrap_or_else(|e| {
+						panic!("Error loading UI controller: {}", e);
+					});
+					controller.run(serv.clone());
+				});
+		}).unwrap();
+	} else {
+		grin::Server::start(config, |_| {}).unwrap();
+	}
+}
 
 fn start_from_config_file(mut global_config: GlobalConfig) {
 	info!(
@@ -62,7 +99,7 @@ fn start_from_config_file(mut global_config: GlobalConfig) {
 			.chain_type,
 	);
 
-	grin::Server::start(global_config.members.as_mut().unwrap().server.clone()).unwrap();
+	start_server(global_config.members.as_mut().unwrap().server.clone());
 	loop {
 		thread::sleep(Duration::from_secs(60));
 	}
@@ -85,7 +122,18 @@ fn main() {
 
 	if global_config.using_config_file {
 		// initialise the logger
-		init_logger(global_config.members.as_mut().unwrap().logging.clone());
+		let mut log_conf = global_config
+			.members
+			.as_mut()
+			.unwrap()
+			.logging
+			.clone()
+			.unwrap();
+		let run_tui = global_config.members.as_mut().unwrap().server.run_tui;
+		if run_tui.is_some() && run_tui.unwrap() {
+			log_conf.log_to_stdout = false;
+		}
+		init_logger(Some(log_conf));
 		info!(
 			LOGGER,
 			"Using configuration file at: {}",
@@ -351,7 +399,7 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 	// start the server in the different run modes (interactive or daemon)
 	match server_args.subcommand() {
 		("run", _) => {
-			grin::Server::start(server_config).unwrap();
+			start_server(server_config);
 		}
 		("start", _) => {
 			let daemonize = Daemonize::new()
@@ -359,7 +407,7 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 				.chown_pid_file(true)
 				.working_directory(current_dir().unwrap())
 				.privileged_action(move || {
-					grin::Server::start(server_config.clone()).unwrap();
+					start_server(server_config.clone());
 					loop {
 						thread::sleep(Duration::from_secs(60));
 					}
@@ -532,11 +580,11 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 						recipient_fee,
 					} => {
 						error!(
-			    			LOGGER,
-			    			"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
-			    			amount_to_hr_string(recipient_fee),
-			    			amount_to_hr_string(sender_amount)
-			    		);
+								LOGGER,
+								"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
+								amount_to_hr_string(recipient_fee),
+								amount_to_hr_string(sender_amount)
+							);
 					}
 					_ => {
 						error!(LOGGER, "Tx not sent: {:?}", e);

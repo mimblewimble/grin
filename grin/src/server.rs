@@ -45,19 +45,33 @@ pub struct Server {
 	pub chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	/// Whether we're currently syncing
 	currently_syncing: Arc<AtomicBool>,
+	/// To be passed around to collect stats and info
+	state_info: ServerStateInfo,
+	/// Stop flag
 	stop: Arc<AtomicBool>,
 }
 
 impl Server {
-	/// Instantiates and starts a new server.
-	pub fn start(config: ServerConfig) -> Result<(), Error> {
+	/// Instantiates and starts a new server. Optionally takes a callback
+	/// for the server to send an ARC copy of itself, to allow another process
+	/// to poll info about the server status
+	pub fn start<F>(config: ServerConfig, mut info_callback: F) -> Result<(), Error>
+	where
+		F: FnMut(Arc<Server>),
+	{
 		let mut mining_config = config.mining_config.clone();
-		let serv = Server::new(config)?;
+		let serv = Arc::new(Server::new(config)?);
 		if mining_config.as_mut().unwrap().enable_mining {
+			{
+				let mut mining_stats = serv.state_info.mining_stats.write().unwrap();
+				mining_stats.is_enabled = true;
+			}
 			serv.start_miner(mining_config.unwrap());
 		}
 
+		info_callback(serv.clone());
 		loop {
 			thread::sleep(time::Duration::from_secs(1));
 			if serv.stop.load(Ordering::Relaxed) {
@@ -97,6 +111,7 @@ impl Server {
 		pool_adapter.set_chain(Arc::downgrade(&shared_chain));
 
 		let currently_syncing = Arc::new(AtomicBool::new(true));
+		let awaiting_peers = Arc::new(AtomicBool::new(false));
 
 		let net_adapter = Arc::new(NetToChainAdapter::new(
 			currently_syncing.clone(),
@@ -154,6 +169,7 @@ impl Server {
 
 		sync::run_sync(
 			currently_syncing.clone(),
+			awaiting_peers.clone(),
 			p2p_server.peers.clone(),
 			shared_chain.clone(),
 			skip_sync_wait,
@@ -182,6 +198,10 @@ impl Server {
 			chain: shared_chain,
 			tx_pool: tx_pool,
 			currently_syncing: currently_syncing,
+			state_info: ServerStateInfo {
+				awaiting_peers: awaiting_peers,
+				..Default::default()
+			},
 			stop: stop,
 		})
 	}
@@ -210,6 +230,7 @@ impl Server {
 			self.tx_pool.clone(),
 			self.stop.clone(),
 		);
+		let mining_stats = self.state_info.mining_stats.clone();
 		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.port));
 		let _ = thread::Builder::new()
 			.name("miner".to_string())
@@ -220,7 +241,7 @@ impl Server {
 				while currently_syncing.load(Ordering::Relaxed) {
 					thread::sleep(secs_5);
 				}
-				miner.run_loop(config.clone(), cuckoo_size as u32, proof_size);
+				miner.run_loop(config.clone(), mining_stats, cuckoo_size as u32, proof_size);
 			});
 	}
 
@@ -240,9 +261,15 @@ impl Server {
 	/// other
 	/// consumers
 	pub fn get_server_stats(&self) -> Result<ServerStats, Error> {
+		let mining_stats = self.state_info.mining_stats.read().unwrap().clone();
+		let awaiting_peers = self.state_info.awaiting_peers.load(Ordering::Relaxed);
 		Ok(ServerStats {
 			peer_count: self.peer_count(),
 			head: self.head(),
+			header_head: self.header_head(),
+			is_syncing: self.currently_syncing.load(Ordering::Relaxed),
+			awaiting_peers: awaiting_peers,
+			mining_stats: mining_stats,
 		})
 	}
 

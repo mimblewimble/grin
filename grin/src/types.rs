@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use std::convert::From;
+use std::sync::{Arc, RwLock};
+use std::sync::atomic::AtomicBool;
 
 use api;
 use chain;
@@ -145,6 +147,10 @@ pub struct ServerConfig {
 	/// Whether to skip the sync timeout on startup
 	/// (To assist testing on solo chains)
 	pub skip_sync_wait: Option<bool>,
+
+	/// Whether to run the TUI
+	/// if enabled, this will disable logging to stdout
+	pub run_tui: Option<bool>,
 }
 
 impl Default for ServerConfig {
@@ -161,19 +167,74 @@ impl Default for ServerConfig {
 			archive_mode: None,
 			pool_config: pool::PoolConfig::default(),
 			skip_sync_wait: None,
+			run_tui: None,
 		}
 	}
 }
 
-/// Thread-safe container to return all server related stats that other
-/// consumers might be interested in, such as test results
-///
-///
-///
+/// Server state info collection struct, to be passed around into internals
+/// and populated when required
+#[derive(Clone)]
+pub struct ServerStateInfo {
+	/// whether we're in a state of waiting for peers at startup
+	pub awaiting_peers: Arc<AtomicBool>,
+	/// Mining stats
+	pub mining_stats: Arc<RwLock<MiningStats>>,
+}
+
+impl Default for ServerStateInfo {
+	fn default() -> ServerStateInfo {
+		ServerStateInfo {
+			awaiting_peers: Arc::new(AtomicBool::new(false)),
+			mining_stats: Arc::new(RwLock::new(MiningStats::default())),
+		}
+	}
+}
+/// Simpler thread-unware version of above to be populated and retured to
+/// consumers might be interested in, such as test results or UI
 #[derive(Clone)]
 pub struct ServerStats {
 	/// Number of peers
 	pub peer_count: u32,
 	/// Chain head
 	pub head: chain::Tip,
+	/// sync header head
+	pub header_head: chain::Tip,
+	/// Whether we're currently syncing
+	pub is_syncing: bool,
+	/// Whether we're awaiting peers
+	pub awaiting_peers: bool,
+	/// Handle to current mining stats
+	pub mining_stats: MiningStats,
+}
+
+/// Struct to return relevant information about the mining process
+/// back to interested callers (such as the TUI)
+#[derive(Clone)]
+pub struct MiningStats {
+	/// whether mining is enabled
+	pub is_enabled: bool,
+	/// whether we're currently mining
+	pub is_mining: bool,
+	/// combined graphs per second
+	pub combined_gps: f64,
+	/// what block height we're mining at
+	pub block_height: u64,
+	/// current network difficulty we're working on
+	pub network_difficulty: u64,
+	/// cuckoo size used for mining
+	pub cuckoo_size: u16,
+}
+
+impl Default for MiningStats {
+	fn default() -> MiningStats {
+		MiningStats {
+			is_enabled: false,
+			is_mining: false,
+			combined_gps: 0.0,
+			block_height: 0,
+			network_difficulty: 0,
+			cuckoo_size: 0,
+		}
+	}
 }

@@ -26,16 +26,16 @@ use adapters::PoolToChainAdapter;
 use core::consensus;
 use core::core;
 use core::core::Proof;
-use pow::cuckoo;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Transaction};
 use core::core::hash::{Hash, Hashed};
-use pow::MiningWorker;
+use pow::{cuckoo, MiningWorker};
 use pow::types::MinerConfig;
 use core::ser;
+use core::global;
 use core::ser::AsFixedBytes;
 use util::LOGGER;
-use types::Error;
+use types::{Error, MiningStats};
 
 use chain;
 use pool;
@@ -158,6 +158,7 @@ impl Miner {
 		head: &BlockHeader,
 		latest_hash: &Hash,
 		attempt_time_per_block: u32,
+		mining_stats: Arc<RwLock<MiningStats>>,
 	) -> Option<Proof> {
 		debug!(
 			LOGGER,
@@ -250,6 +251,10 @@ impl Miner {
 					}
 				}
 				info!(LOGGER, "Mining at {} graphs per second", sps_total);
+				if sps_total.is_finite() {
+					let mut mining_stats = mining_stats.write().unwrap();
+					mining_stats.combined_gps = sps_total;
+				}
 				next_stat_output = time::get_time().sec + stat_output_interval;
 			}
 			// avoid busy wait
@@ -277,6 +282,7 @@ impl Miner {
 		head: &BlockHeader,
 		attempt_time_per_block: u32,
 		latest_hash: &mut Hash,
+		mining_stats: Arc<RwLock<MiningStats>>,
 	) -> Option<Proof> {
 		// look for a pow for at most attempt_time_per_block sec on the same block (to
 		// give a chance to new
@@ -350,6 +356,10 @@ impl Miner {
 						LOGGER,
 						"Mining at {} graphs per second", last_hashes_per_sec
 					);
+					if last_hashes_per_sec.is_finite() {
+						let mut mining_stats = mining_stats.write().unwrap();
+						mining_stats.combined_gps = last_hashes_per_sec;
+					}
 				}
 				next_stat_check = time::get_time().sec + stat_check_interval;
 			}
@@ -381,6 +391,7 @@ impl Miner {
 	}
 
 	/// The inner part of mining loop for the internal miner
+	/// kept around mostly for automated testing purposes
 	pub fn inner_loop_sync_internal<T: MiningWorker>(
 		&self,
 		miner: &mut T,
@@ -453,14 +464,21 @@ impl Miner {
 
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
-	pub fn run_loop(&self, miner_config: MinerConfig, cuckoo_size: u32, proof_size: usize) {
+	pub fn run_loop(
+		&self,
+		miner_config: MinerConfig,
+		mining_stats: Arc<RwLock<MiningStats>>,
+		cuckoo_size: u32,
+		proof_size: usize,
+	) {
 		info!(
 			LOGGER,
 			"(Server ID: {}) Starting miner loop.", self.debug_output_id
 		);
+
 		let mut plugin_miner = None;
 		let mut miner = None;
-		if miner_config.use_cuckoo_miner {
+		if !global::is_automated_testing_mode() {
 			plugin_miner = Some(PluginMiner::new(
 				consensus::EASINESS,
 				cuckoo_size,
@@ -475,10 +493,15 @@ impl Miner {
 			));
 		}
 
-		// to prevent the wallet from generating a new HD key derivation for each
 		// iteration, we keep the returned derivation to provide it back when
 		// nothing has changed
 		let mut key_id = None;
+
+		{
+			let mut mining_stats = mining_stats.write().unwrap();
+			mining_stats.is_mining = true;
+			mining_stats.cuckoo_size = cuckoo_size as u16;
+		}
 
 		loop {
 			debug!(LOGGER, "in miner loop...");
@@ -503,10 +526,15 @@ impl Miner {
 			}
 
 			let (mut b, block_fees) = result.unwrap();
+			{
+				let mut mining_stats = mining_stats.write().unwrap();
+				mining_stats.block_height = b.header.height;
+				mining_stats.network_difficulty = b.header.difficulty.into_num();
+			}
 
 			let mut sol = None;
 			let mut use_async = false;
-			if let Some(c) = self.config.cuckoo_miner_async_mode {
+			if let Some(c) = self.config.miner_async_mode {
 				if c {
 					use_async = true;
 				}
@@ -521,6 +549,7 @@ impl Miner {
 						&head,
 						&latest_hash,
 						miner_config.attempt_time_per_block,
+						mining_stats.clone(),
 					);
 				} else {
 					sol = self.inner_loop_sync_plugin(
@@ -530,6 +559,7 @@ impl Miner {
 						&head,
 						miner_config.attempt_time_per_block,
 						&mut latest_hash,
+						mining_stats.clone(),
 					);
 				}
 			}
