@@ -155,12 +155,12 @@ fn pmmr_prune_compact() {
 		// check we can still retrieve same element from leaf index 2
 		assert_eq!(
 			pmmr.get(2, true).unwrap().1.unwrap(),
-			TestElem([0, 0, 0, 2])
+			TestElem(2)
 		);
 		// and the same for leaf index 7
 		assert_eq!(
 			pmmr.get(11, true).unwrap().1.unwrap(),
-			TestElem([0, 0, 0, 7])
+			TestElem(7)
 		);
 	}
 
@@ -173,11 +173,11 @@ fn pmmr_prune_compact() {
 		assert_eq!(root, pmmr.root());
 		assert_eq!(
 			pmmr.get(2, true).unwrap().1.unwrap(),
-			TestElem([0, 0, 0, 2])
+			TestElem(2)
 		);
 		assert_eq!(
 			pmmr.get(11, true).unwrap().1.unwrap(),
-			TestElem([0, 0, 0, 7])
+			TestElem(7)
 		);
 	}
 
@@ -341,41 +341,101 @@ fn pmmr_rewind() {
 #[test]
 fn pmmr_compact_horizon() {
 	let (data_dir, elems) = setup("compact_horizon");
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
+	let mmr_size = load(0, &elems[..], &mut backend);
+	backend.sync().unwrap();
+
+	backend.dump_from_file(false);
+
+	// 0010012001001230
+	// 9 leaves
+	assert_eq!(backend.data_size().unwrap(), 9);
+	// 16 hashes
+	assert_eq!(backend.hash_size().unwrap(), 16);
+
+	let pos_3 = backend.get(3, false).unwrap();
+	let pos_3_hash = backend.get_from_file(3).unwrap();
+	assert_eq!(pos_3.0, pos_3_hash);
+
+	let pos_6 = backend.get(6, false).unwrap();
+	let pos_6_hash = backend.get_from_file(6).unwrap();
+	assert_eq!(pos_6.0, pos_6_hash);
+
+	let pos_7 = backend.get(7, false).unwrap();
+	let pos_7_hash = backend.get_from_file(7).unwrap();
+	assert_eq!(pos_7.0, pos_7_hash);
+
+	let pos_8 = backend.get(8, true).unwrap();
+	let pos_8_hash = backend.get_from_file(8).unwrap();
+	assert_eq!(pos_8.0, pos_8_hash);
 
 	{
-		// setup the mmr store with all elements
-		let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();
-		let mmr_size = load(0, &elems[..], &mut backend);
-		backend.sync().unwrap();
-
-		// 0010012001001230
-		// 9 leaves
-		assert_eq!(backend.data_size().unwrap(), 9);
-		// 16 hashes
-		assert_eq!(backend.hash_size().unwrap(), 16);
-
 		// pruning some choice nodes with an increasing block height
 		{
 			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			pmmr.prune(1, 1).unwrap();
-			pmmr.prune(2, 2).unwrap();
-			pmmr.prune(4, 3).unwrap();
-			pmmr.prune(5, 4).unwrap();
+			pmmr.prune(4, 1).unwrap();
+			pmmr.prune(5, 2).unwrap();
+			pmmr.prune(1, 3).unwrap();
+			pmmr.prune(2, 4).unwrap();
 		}
 		backend.sync().unwrap();
+
+		// check we can read hashes and data correctly after pruning
+		{
+			assert_eq!(backend.get(3, false), None);
+			assert_eq!(backend.get_from_file(3), Some(pos_3_hash));
+
+			assert_eq!(backend.get(6, false), None);
+			assert_eq!(backend.get_from_file(6), Some(pos_6_hash));
+
+			assert_eq!(backend.get(7, true), None);
+			assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
+
+			assert_eq!(backend.get(8, true), Some(pos_8));
+			assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
+		}
+
 		// compact
 		backend.check_compact(2, 3, &prune_noop).unwrap();
+		backend.sync().unwrap();
+
+		// check we can read a hash by pos correctly after compaction
+		{
+			assert_eq!(backend.get(3, false), None);
+			assert_eq!(backend.get_from_file(3), Some(pos_3_hash));
+
+			assert_eq!(backend.get(6, false), None);
+			assert_eq!(backend.get_from_file(6), Some(pos_6_hash));
+
+			assert_eq!(backend.get(7, true), None);
+			assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
+
+			assert_eq!(backend.get(8, true), Some(pos_8));
+			assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
+		}
 	}
+
 
 	// recheck stored data
 	{
 		// recreate backend
 		let backend =
 			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), None).unwrap();
+
 		// 9 leaves in total, minus 2 compacted
-		assert_eq!(backend.data_size().unwrap(), 7);
+		// assert_eq!(backend.data_size().unwrap(), 7);
+		assert_eq!(backend.data_size().unwrap(), 9);
 		// 16 hashes total, 2 pruned and compacted
 		assert_eq!(backend.hash_size().unwrap(), 14);
+
+		// check we can read a hash by pos correctly from recreated backend
+		assert_eq!(backend.get(7, true), None);
+		assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
+
+		backend.dump_from_file(false);
+
+		assert_eq!(backend.get(8, true), Some(pos_8));
+		assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
 	}
 
 	{
@@ -395,10 +455,20 @@ fn pmmr_compact_horizon() {
 		// 0010012001001230
 
 		// 9 elements total, minus 4 compacted
-		assert_eq!(backend.data_size().unwrap(), 5);
+		// assert_eq!(backend.data_size().unwrap(), 5);
+		assert_eq!(backend.data_size().unwrap(), 9);
 		// 16 nodes total
 		// 4 leaves pruned resulting in 6 pruned and compacted nodes
 		assert_eq!(backend.hash_size().unwrap(), 10);
+
+		// check we can read a hash by pos correctly from recreated backend
+		assert_eq!(backend.get(7, true), None);
+		assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
+
+		backend.dump_from_file(false);
+
+		assert_eq!(backend.get(8, true), Some(pos_8));
+		assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
 	}
 
 	teardown(data_dir);
@@ -410,17 +480,10 @@ fn setup(tag: &str) -> (String, Vec<TestElem>) {
 	let data_dir = format!("./target/{}.{}-{}", t.sec, t.nsec, tag);
 	fs::create_dir_all(data_dir.clone()).unwrap();
 
-	let elems = vec![
-		TestElem([0, 0, 0, 1]),
-		TestElem([0, 0, 0, 2]),
-		TestElem([0, 0, 0, 3]),
-		TestElem([0, 0, 0, 4]),
-		TestElem([0, 0, 0, 5]),
-		TestElem([0, 0, 0, 6]),
-		TestElem([0, 0, 0, 7]),
-		TestElem([0, 0, 0, 8]),
-		TestElem([1, 0, 0, 0]),
-	];
+	let mut elems = vec![];
+	for x in 1..10 {
+		elems.push(TestElem(x));
+	}
 	(data_dir, elems)
 }
 
@@ -437,29 +500,21 @@ fn load(pos: u64, elems: &[TestElem], backend: &mut store::pmmr::PMMRBackend<Tes
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-struct TestElem([u32; 4]);
+struct TestElem(u32);
 
 impl PMMRable for TestElem {
 	fn len() -> usize {
-		16
+		4
 	}
 }
 
 impl Writeable for TestElem {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		try!(writer.write_u32(self.0[0]));
-		try!(writer.write_u32(self.0[1]));
-		try!(writer.write_u32(self.0[2]));
-		writer.write_u32(self.0[3])
+		writer.write_u32(self.0)
 	}
 }
 impl Readable for TestElem {
 	fn read(reader: &mut Reader) -> Result<TestElem, Error> {
-		Ok(TestElem([
-			reader.read_u32()?,
-			reader.read_u32()?,
-			reader.read_u32()?,
-			reader.read_u32()?,
-		]))
+		Ok(TestElem(reader.read_u32()?))
 	}
 }

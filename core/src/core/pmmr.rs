@@ -290,20 +290,27 @@ where
 	/// tree and "bags" them to get a single peak.
 	pub fn root(&self) -> Hash {
 		let peaks_pos = peaks(self.last_pos);
-		let peaks: Vec<Option<(Hash, Option<T>)>> = peaks_pos
+		debug!(LOGGER, "pmmr: root: {:?}", peaks_pos);
+		let peaks: Vec<Option<Hash>> = peaks_pos
 			.into_iter()
-			.map(|pi| self.backend.get(pi, false))
+			.map(|pi| {
+				// here we want to get from underlying hash file
+				// as the pos *may* have been "removed"
+				self.backend.get_from_file(pi)
+			})
 			.collect();
+
+		debug!(LOGGER, "pmmr: root: {:?}", peaks);
 
 		let mut ret = None;
 		for peak in peaks {
 			ret = match (ret, peak) {
 				(None, x) => x,
 				(Some(hash), None) => Some(hash),
-				(Some(lhash), Some(rhash)) => Some((lhash.0.hash_with(rhash.0), None)),
+				(Some(lhash), Some(rhash)) => Some(lhash.hash_with(rhash)),
 			}
 		}
-		ret.expect("no root, invalid tree").0
+		ret.expect("no root, invalid tree")
 	}
 
 	/// Build a Merkle proof for the element at the given position in the MMR
@@ -555,9 +562,38 @@ where
 					None => hashes.push_str(&format!("{:>8} ", "??")),
 				}
 			}
-			trace!(LOGGER, "{}", idx);
-			trace!(LOGGER, "{}", hashes);
+			debug!(LOGGER, "{}", idx);
+			debug!(LOGGER, "{}", hashes);
 		}
+	}
+
+	pub fn dump_from_file(&self, short: bool) {
+		let sz = self.unpruned_size();
+		if sz > 2000 && !short {
+			return;
+		}
+		let start = if short && sz > 7 { sz / 8 - 1 } else { 0 };
+		for n in start..(sz / 8 + 1) {
+			let mut idx = "".to_owned();
+			let mut hashes = "".to_owned();
+			for m in (n * 8)..(n + 1) * 8 {
+				if m >= sz {
+					break;
+				}
+				idx.push_str(&format!("{:>8} ", m + 1));
+				let ohs = self.get_from_file(m + 1);
+				match ohs {
+					Some(hs) => hashes.push_str(&format!("{} ", hs)),
+					None => hashes.push_str(&format!("{:>8} ", "??")),
+				}
+			}
+			debug!(LOGGER, "{}", idx);
+			debug!(LOGGER, "{}", hashes);
+		}
+	}
+
+	pub fn dump_prune_list(&self) {
+
 	}
 }
 
@@ -582,6 +618,23 @@ impl PruneList {
 	pub fn new() -> PruneList {
 		PruneList {
 			pruned_nodes: vec![],
+		}
+	}
+
+	pub fn get_full_shift(&self, pos: u64) -> Option<u64> {
+		match self.next_pruned_idx(pos) {
+			None => None,
+			Some(idx) => {
+				// for the purposes of compacting the flat data file
+				// skip by number of non-leaves + pruned leaves in preceeding subtrees
+				// TODO - explain difference between this and get_leaf_shift() ...
+				Some(
+					self.pruned_nodes[0..(idx as usize)]
+						.iter()
+						.map(|n| (1 << (bintree_postorder_height(*n) + 1)) - 1)
+						.sum(),
+				)
+			}
 		}
 	}
 
@@ -1644,6 +1697,18 @@ mod test {
 		assert_eq!(pl.get_leaf_shift(7), Some(2));
 		assert_eq!(pl.get_leaf_shift(8), Some(2));
 		assert_eq!(pl.get_leaf_shift(9), Some(2));
+
+		pl.add(1);
+		assert_eq!(pl.pruned_nodes, [7]);
+		assert_eq!(pl.get_leaf_shift(1), None);
+		assert_eq!(pl.get_leaf_shift(2), None);
+		assert_eq!(pl.get_leaf_shift(3), None);
+		assert_eq!(pl.get_leaf_shift(4), None);
+		assert_eq!(pl.get_leaf_shift(5), None);
+		assert_eq!(pl.get_leaf_shift(6), None);
+		assert_eq!(pl.get_leaf_shift(7), Some(4));
+		assert_eq!(pl.get_leaf_shift(8), Some(4));
+		assert_eq!(pl.get_leaf_shift(9), Some(4));
 	}
 
 	#[test]

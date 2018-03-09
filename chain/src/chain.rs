@@ -555,6 +555,11 @@ impl Chain {
 
 		let horizon = global::cut_through_horizon() as u64;
 		let head = self.head()?;
+
+		if head.height <= horizon {
+			return Ok(());
+		}
+
 		let mut current = self.store.get_header_by_height(head.height - horizon - 1)?;
 		loop {
 			match self.store.get_block(&current.hash()) {

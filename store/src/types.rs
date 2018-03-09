@@ -28,6 +28,7 @@ use libc::{ftruncate as ftruncate64, off_t as off64_t};
 
 use core::ser;
 
+/// A no-op function for doing nothing with some pruned data.
 pub fn prune_noop(_pruned_data: &[u8]) {}
 
 /// Wrapper for a file that can be read at any position (random read) but for
@@ -162,6 +163,7 @@ impl AppendOnlyFile {
 	where
 		T: Fn(&[u8]),
 	{
+		println!("save_prune: {:?}, {:?}", prune_offs, prune_len);
 		if prune_offs.is_empty() {
 			fs::copy(self.path.clone(), target.clone())?;
 			Ok(())

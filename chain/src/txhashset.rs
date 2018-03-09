@@ -341,6 +341,11 @@ impl<'a> Extension<'a> {
 			}
 		}
 
+		{
+			debug!(LOGGER, "about to apply inputs");
+			self.output_pmmr.dump_from_file(false);
+		}
+
 		// then doing inputs guarantees an input can't spend an output in the
 		// same block, enforcing block cut-through
 		for input in &b.inputs {
@@ -385,6 +390,17 @@ impl<'a> Extension<'a> {
 				// check hash from pmmr matches hash from input (or corresponding output)
 				// if not then the input is not being honest about
 				// what it is attempting to spend...
+
+				debug!(
+					LOGGER,
+					"apply_input: {}, {}, {}, {:?}, {:?}",
+					pos,
+					output_id_hash,
+					read_hash,
+					read_elem,
+					OutputIdentifier::from_input(input),
+				);
+
 				if output_id_hash != read_hash
 					|| output_id_hash
 						!= read_elem
