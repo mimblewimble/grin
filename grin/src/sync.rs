@@ -29,6 +29,7 @@ use util::LOGGER;
 /// Starts the syncing loop, just spawns two threads that loop forever
 pub fn run_sync(
 	currently_syncing: Arc<AtomicBool>,
+	awaiting_peers: Arc<AtomicBool>,
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
 	skip_sync_wait: bool,
@@ -45,7 +46,9 @@ pub fn run_sync(
 
 			// initial sleep to give us time to peer with some nodes
 			if !skip_sync_wait {
+				awaiting_peers.store(true, Ordering::Relaxed);
 				thread::sleep(Duration::from_secs(30));
+				awaiting_peers.store(false, Ordering::Relaxed);
 			}
 
 			// fast sync has 3 states:

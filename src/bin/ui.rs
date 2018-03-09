@@ -12,36 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Main for building the binary of a Grin peer-to-peer node.
+//! Basic TUI to better output the overall system status and status
+//! of various subsystems
 
 use std::sync::{mpsc, Arc};
-use util::LOGGER;
-use std::process::exit;
-use std::thread;
-use std::time::Duration;
 use time;
 
 use cursive::Cursive;
-use cursive::theme::{BaseColor, BorderStyle, Color, ColorStyle};
+use cursive::theme::{BaseColor, Color, BorderStyle};
+use cursive::theme::PaletteColor::*;
+use cursive::theme::Color::*;
+use cursive::theme::BaseColor::*;
 use cursive::utils::markup::StyledString;
 use cursive::align::{HAlign, VAlign};
 use cursive::event::Key;
-use cursive::views::TextView;
-use cursive::views::TextContent;
-use cursive::views::BoxView;
-use cursive::views::EditView;
-use cursive::views::DummyView;
-use cursive::views::Button;
-use cursive::views::LinearLayout;
-use cursive::views::Panel;
-use cursive::views::StackView;
-use cursive::views::LayerPosition;
-use cursive::views::OnEventView;
-use cursive::direction::{Direction, Orientation};
-use cursive::view::SizeConstraint;
-use cursive::menu::MenuTree;
+use cursive::views::{BoxView, LinearLayout, Panel,
+	StackView, LayerPosition, TextView};
+use cursive::direction::{Orientation};
 use cursive::traits::*;
-use cursive::views::Dialog;
 
 use grin::Server;
 
@@ -82,6 +70,9 @@ pub struct StatusUpdates {
 	pub basic_status: String,
 	pub peer_count: String,
 	pub chain_height: String,
+	pub basic_mining_config_status: String,
+	pub basic_mining_status: String,
+	pub basic_network_info: String,
 }
 
 pub enum UIMessage {
@@ -110,19 +101,21 @@ impl UI {
 			"Grin Version 0.0.1",
 			Color::Dark(BaseColor::Green),
 		));
-
+		let mut logo_view = TextView::new(logo_string)
+			.v_align(VAlign::Center)
+			.h_align(HAlign::Center);
+		logo_view.set_scrollable(false);
+	
 		// Create UI objects, etc
 		let basic_status_view = BoxView::with_full_screen(
 			LinearLayout::new(Orientation::Horizontal)
 				.child(BoxView::with_full_screen(
-					TextView::new(logo_string)
-						.v_align(VAlign::Center)
-						.h_align(HAlign::Center),
+					logo_view
 				))
 				.child(BoxView::with_full_screen(
 					LinearLayout::new(Orientation::Vertical)
 						.child(TextView::new(title_string))
-						.child(TextView::new("------------------"))
+						.child(TextView::new("------------------------"))
 						.child(
 							LinearLayout::new(Orientation::Horizontal)
 								.child(TextView::new("Current Status: "))
@@ -137,12 +130,34 @@ impl UI {
 							LinearLayout::new(Orientation::Horizontal)
 								.child(TextView::new("Chain Height: "))
 								.child(TextView::new("").with_id("chain_height")),
-						),
+						)
+						.child(
+							LinearLayout::new(Orientation::Horizontal)
+								.child(TextView::new("------------------------"))
+						)
+						.child(
+							LinearLayout::new(Orientation::Horizontal)
+								.child(TextView::new("").with_id("basic_mining_config_status"))
+						)
+						.child(
+							LinearLayout::new(Orientation::Horizontal)
+								.child(TextView::new("").with_id("basic_mining_status")),
+						)
+						.child(
+							LinearLayout::new(Orientation::Horizontal)
+								.child(TextView::new("").with_id("basic_network_info")),
+						)
 				)),
 		).with_id("basic_status_view");
 
 		let advanced_status_view = BoxView::with_full_screen(TextView::new(
-			"Advanced Status Display",
+			"Advanced Status Display will go here and should contain detailed readouts for:
+--Latest Blocks
+--Sync Info
+--Chain Info
+--Peer Info
+--Mining Info
+			"
 		)).with_id("advanced_status");
 
 		let root_stack = StackView::new()
@@ -167,8 +182,6 @@ impl UI {
 			//s.quit();
 		});
 		quit_button.set_label_raw("Quit");*/
-
-		let temp_text = TextView::new("temp_text").with_id("temp_text");
 
 		let top_layer = LinearLayout::new(Orientation::Vertical)
 			.child(Panel::new(root_stack))
@@ -201,12 +214,25 @@ impl UI {
 				/*sv.pop_layer();
 				sv.add_layer(bas_sta);*/			});
 		});
-		grin_ui.cursive.load_theme_file("guistyle.toml").unwrap();
+
+		//set theme
+		let mut theme = grin_ui.cursive.current_theme().clone();
+		theme.shadow = false;
+		theme.borders = BorderStyle::Simple;
+		theme.palette[Background] = Dark(Black);
+		theme.palette[Shadow] = Dark(Black);
+		theme.palette[View] = Dark(Black);
+		theme.palette[Primary] = Dark(White);
+		theme.palette[Highlight] = Dark(Cyan);
+		theme.palette[HighlightInactive] = Dark(Blue);
+		// also secondary, tertiary, TitlePrimary, TitleSecondary
+		grin_ui.cursive.set_theme(theme);
+
 		grin_ui.cursive.add_layer(top_layer);
 
 		// Configure a callback (shutdown, for the first test)
 		let controller_tx_clone = grin_ui.controller_tx.clone();
-		grin_ui.cursive.add_global_callback('q', move |c| {
+		grin_ui.cursive.add_global_callback('q', move |_| {
 			controller_tx_clone
 				.send(ControllerMessage::Shutdown)
 				.unwrap();
@@ -238,6 +264,18 @@ impl UI {
 					self.cursive.call_on_id("chain_height", |t: &mut TextView| {
 						t.set_content(update.chain_height.clone());
 					});
+					self.cursive
+						.call_on_id("basic_mining_config_status", |t: &mut TextView| {
+							t.set_content(update.basic_mining_config_status.clone());
+						});
+					self.cursive
+						.call_on_id("basic_mining_status", |t: &mut TextView| {
+							t.set_content(update.basic_mining_status.clone());
+						});
+					self.cursive
+						.call_on_id("basic_network_info", |t: &mut TextView| {
+							t.set_content(update.basic_network_info.clone());
+						});
 				}
 			}
 		}
@@ -301,15 +339,50 @@ impl Controller {
 		let stats = server.get_server_stats().unwrap();
 		let basic_status = {
 			if stats.is_syncing {
-				"Syncing"
+				if stats.awaiting_peers {
+					"Waiting for peers".to_string()
+				} else {
+					format!("Syncing - Latest header: {}", stats.header_head.height).to_string()
+				}
 			} else {
-				"Running"
+				"Running".to_string()
+			}
+		};
+		let basic_mining_config_status = {
+			if stats.mining_stats.is_enabled {
+				"Configured as mining node"
+			} else {
+				"Configured as validating node only (not mining)"
+			}
+		};
+		let (basic_mining_status, basic_network_info) = {
+			if stats.mining_stats.is_enabled {
+				if stats.is_syncing {
+					("Mining Status: Paused while syncing".to_string(),
+						"".to_string())
+				} else if stats.mining_stats.combined_gps == 0.0 {
+					("Mining Status: Starting miner and awating first solution...".to_string(),
+						"".to_string())
+				} else {
+					(format!("Mining Status: Mining at height {} at {:.*} GPS",
+						stats.mining_stats.block_height,
+						4,
+						stats.mining_stats.combined_gps),
+						format!("Cuckoo {} - Network Difficulty {}", 
+							stats.mining_stats.cuckoo_size,
+							stats.mining_stats.network_difficulty.to_string()))
+				}
+			} else {
+				("".to_string(), "".to_string())
 			}
 		};
 		let update = StatusUpdates {
-			basic_status: basic_status.to_string(),
+			basic_status: basic_status,
 			peer_count: stats.peer_count.to_string(),
 			chain_height: stats.head.height.to_string(),
+			basic_mining_config_status: basic_mining_config_status.to_string(),
+			basic_mining_status: basic_mining_status,
+			basic_network_info: basic_network_info,
 		};
 		self.ui.ui_tx.send(UIMessage::UpdateStatus(update)).unwrap();
 	}
