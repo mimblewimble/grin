@@ -550,12 +550,21 @@ impl Chain {
 	/// Meanwhile, the chain will not be able to accept new blocks. It should
 	/// therefore be called judiciously.
 	pub fn compact(&self) -> Result<(), Error> {
-		let mut sumtrees = self.txhashset.write().unwrap();
-		sumtrees.compact()?;
+		{
+			let mut txhashes = self.txhashset.write().unwrap();
 
-		// leave blocks in the index for now (for testing)
-		return Ok(());
+			// compact the txhashset
+			txhashes.compact()?;
 
+			// print out useful debug info after compaction
+			txhashset::extending(&mut txhashes, |extension| {
+				extension.dump_output_pmmr();
+				Ok(())
+			})?;
+		}
+
+		// we need to be careful here in testing as 20 blocks is not that long
+		// in wall clock time
 		let horizon = global::cut_through_horizon() as u64;
 		let head = self.head()?;
 

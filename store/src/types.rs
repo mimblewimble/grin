@@ -163,7 +163,6 @@ impl AppendOnlyFile {
 	where
 		T: Fn(&[u8]),
 	{
-		println!("save_prune: {:?}, {:?}", prune_offs, prune_len);
 		if prune_offs.is_empty() {
 			fs::copy(self.path.clone(), target.clone())?;
 			Ok(())

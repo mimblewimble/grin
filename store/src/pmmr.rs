@@ -134,7 +134,6 @@ where
 
 	/// Get a Hash by insertion position
 	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)> {
-		println!("***** get {}", position);
 		// Check if this position has been pruned in the remove log...
 		if self.rm_log.includes(position) {
 			return None;
@@ -238,47 +237,6 @@ where
 		})
 	}
 
-	pub fn dump_from_file(&self, short: bool) {
-		println!("---- pmmr backend file ----");
-		println!("pruned:  {:?}", self.pruned_nodes.pruned_nodes);
-		println!(
-			"removed: {:?}",
-			self.rm_log
-				.removed
-				.iter()
-				.map(|&(x, _)| x)
-				.collect::<Vec<_>>()
-		);
-		println!("data size: {:?}", self.data_size());
-		println!("hash size: {:?}", self.hash_size());
-		let sz = self.unpruned_size().unwrap();
-		if sz > 2000 && !short {
-			return;
-		}
-		let start = if short && sz > 7 { sz / 8 - 1 } else { 0 };
-		for n in start..(sz / 8 + 1) {
-			let mut idx = "".to_owned();
-			let mut hashes = "".to_owned();
-			for m in (n * 8)..(n + 1) * 8 {
-				if m >= sz {
-					break;
-				}
-				idx.push_str(&format!("{:>8} ", m + 1));
-				let ohs = self.get_from_file(m + 1);
-				match ohs {
-					Some(hs) => hashes.push_str(&format!("{} ", hs)),
-					None => hashes.push_str(&format!("{:>8} ", " .")),
-				}
-			}
-			println!("{}", idx);
-			println!("{}", hashes);
-		}
-
-		for pos in 1..sz-1 {
-			println!("pos {}, {:?}", pos, self.get(pos, true));
-		}
-	}
-
 	/// Number of elements in the PMMR stored by this backend. Only produces the
 	/// fully sync'd size.
 	pub fn unpruned_size(&self) -> io::Result<u64> {
@@ -318,8 +276,6 @@ where
 			));
 		}
 		self.rm_log.flush()?;
-
-		self.dump_from_file(false);
 
 		Ok(())
 	}
@@ -367,13 +323,6 @@ where
 	where
 		P: Fn(&[u8]),
 	{
-		println!(
-			"pmmr: check_compact: max_len: {:?}, cutoff: {:?}, rm_log: {:?}",
-			max_len,
-			cutoff_index,
-			self.rm_log.removed,
-		);
-
 		if !(max_len > 0 && self.rm_log.len() >= max_len
 			|| max_len == 0 && self.rm_log.len() > RM_LOG_MAX_NODES)
 		{
@@ -468,11 +417,7 @@ where
 		self.rm_log
 			.removed
 			.retain(|&(pos, _)| !pos_to_rm.binary_search(&&pos).is_ok());
-		self.rm_log.flush()?;
-
-		println!("***** rm_log after compaction: {:?}", self.rm_log.removed);
-
-		self.dump_from_file(false);
+			self.rm_log.flush()?;
 
 		Ok(true)
 	}

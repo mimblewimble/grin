@@ -637,43 +637,33 @@ impl Input {
 		header: &BlockHeader,
 		height: u64,
 	) -> Result<(), Error> {
-		debug!(
-			LOGGER,
-			"input: verify_maturity: height {}, features {:?}", height, self.features,
-		);
-
 		if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
 			let block_hash = self.block_hash();
 			let merkle_proof = self.merkle_proof();
 
 			// Check we are dealing with the correct block header
 			if block_hash != header.hash() {
-				println!("***** block_hash mismatch");
 				return Err(Error::MerkleProof);
 			}
 
 			// Is our Merkle Proof valid? Does node hash up consistently to the root?
 			if !merkle_proof.verify() {
-				println!("***** merkle proof did not verify");
 				return Err(Error::MerkleProof);
 			}
 
 			// Is the root the correct root for the given block header?
 			if merkle_proof.root != header.output_root {
-				println!("***** wrong root");
 				return Err(Error::MerkleProof);
 			}
 
 			// Does the hash from the MMR actually match the one in the Merkle Proof?
 			if merkle_proof.node != hash {
-				println!("***** wrong hash");
 				return Err(Error::MerkleProof);
 			}
 
 			// Finally has the output matured sufficiently now we know the block?
 			let lock_height = header.height + global::coinbase_maturity();
 			if lock_height > height {
-				println!("***** immature");
 				return Err(Error::ImmatureCoinbase);
 			}
 

@@ -290,7 +290,6 @@ where
 	/// tree and "bags" them to get a single peak.
 	pub fn root(&self) -> Hash {
 		let peaks_pos = peaks(self.last_pos);
-		debug!(LOGGER, "pmmr: root: {:?}", peaks_pos);
 		let peaks: Vec<Option<Hash>> = peaks_pos
 			.into_iter()
 			.map(|pi| {
@@ -299,8 +298,6 @@ where
 				self.backend.get_from_file(pi)
 			})
 			.collect();
-
-		debug!(LOGGER, "pmmr: root: {:?}", peaks);
 
 		let mut ret = None;
 		for peak in peaks {
@@ -378,10 +375,11 @@ where
 		while bintree_postorder_height(pos + 1) > height {
 			let left_sibling = bintree_jump_left_sibling(pos);
 
-			let left_elem = self.backend
-				.get(left_sibling, false)
+			let left_hash = self.backend
+				.get_from_file(left_sibling)
 				.ok_or("missing left sibling in tree, should not have been pruned")?;
-			current_hash = left_elem.0 + current_hash;
+
+			current_hash = left_hash + current_hash;
 
 			to_append.push((current_hash.clone(), None));
 			height += 1;
@@ -420,10 +418,10 @@ where
 			return Ok(false);
 		}
 		let prunable_height = bintree_postorder_height(position);
-		if prunable_height > 0 {
-			// only leaves can be pruned
-			return Err(format!("Node at {} is not a leaf, can't prune.", position));
-		}
+		// if prunable_height > 0 {
+		// 	// only leaves can be pruned
+		// 	return Err(format!("Node at {} is not a leaf, can't prune.", position));
+		// }
 
 		// loop going up the tree, from node to parent, as long as we stay inside
 		// the tree.
@@ -563,8 +561,8 @@ where
 					None => hashes.push_str(&format!("{:>8} ", "??")),
 				}
 			}
-			debug!(LOGGER, "{}", idx);
-			debug!(LOGGER, "{}", hashes);
+			trace!(LOGGER, "{}", idx);
+			trace!(LOGGER, "{}", hashes);
 		}
 	}
 
@@ -585,7 +583,7 @@ where
 				let ohs = self.get_from_file(m + 1);
 				match ohs {
 					Some(hs) => hashes.push_str(&format!("{} ", hs)),
-					None => hashes.push_str(&format!("{:>8} ", "??")),
+					None => hashes.push_str(&format!("{:>8} ", " .")),
 				}
 			}
 			debug!(LOGGER, "{}", idx);
@@ -615,23 +613,6 @@ impl PruneList {
 	pub fn new() -> PruneList {
 		PruneList {
 			pruned_nodes: vec![],
-		}
-	}
-
-	pub fn get_full_shift(&self, pos: u64) -> Option<u64> {
-		match self.next_pruned_idx(pos) {
-			None => None,
-			Some(idx) => {
-				// for the purposes of compacting the flat data file
-				// skip by number of non-leaves + pruned leaves in preceeding subtrees
-				// TODO - explain difference between this and get_leaf_shift() ...
-				Some(
-					self.pruned_nodes[0..(idx as usize)]
-						.iter()
-						.map(|n| (1 << (bintree_postorder_height(*n) + 1)) - 1)
-						.sum(),
-				)
-			}
 		}
 	}
 

@@ -327,12 +327,43 @@ fn pmmr_rewind() {
 }
 
 #[test]
+fn pmmr_compact_single_leaves() {
+	let (data_dir, elems) = setup("compact_entire_peak");
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
+	let mut mmr_size = load(0, &elems[0..5], &mut backend);
+	backend.sync().unwrap();
+
+	{
+		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		pmmr.prune(1, 1).unwrap();
+		pmmr.prune(4, 1).unwrap();
+	}
+
+	backend.sync().unwrap();
+
+	// compact
+	backend.check_compact(2, 2, &prune_noop).unwrap();
+
+	{
+		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		pmmr.prune(2, 2).unwrap();
+		pmmr.prune(5, 2).unwrap();
+	}
+
+	backend.sync().unwrap();
+
+	// compact
+	backend.check_compact(2, 3, &prune_noop).unwrap();
+
+	assert!(false, "and debug");
+}
+
+#[test]
 fn pmmr_compact_entire_peak() {
 	let (data_dir, elems) = setup("compact_entire_peak");
 	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
 	let mut mmr_size = load(0, &elems[0..5], &mut backend);
 	backend.sync().unwrap();
-	backend.dump_from_file(false);
 
 	let pos_7 = backend.get(7, true).unwrap();
 	let pos_7_hash = backend.get_from_file(7).unwrap();
@@ -372,8 +403,6 @@ fn pmmr_compact_horizon() {
 	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
 	let mmr_size = load(0, &elems[..], &mut backend);
 	backend.sync().unwrap();
-
-	backend.dump_from_file(false);
 
 	// 0010012001001230
 	// 9 leaves
@@ -466,8 +495,6 @@ fn pmmr_compact_horizon() {
 		assert_eq!(backend.get(7, true), None);
 		assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
-		backend.dump_from_file(false);
-
 		assert_eq!(backend.get(8, true), Some(pos_8));
 		assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
 	}
@@ -505,8 +532,6 @@ fn pmmr_compact_horizon() {
 		// check we can read a hash by pos correctly from recreated backend
 		assert_eq!(backend.get(7, true), None);
 		assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
-
-		backend.dump_from_file(false);
 
 		assert_eq!(backend.get(11, true), Some(pos_11));
 		assert_eq!(backend.get_from_file(11), Some(pos_11_hash));

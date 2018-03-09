@@ -211,21 +211,24 @@ impl TxHashSet {
 
 	/// Compact the MMR data files and flush the rm logs
 	pub fn compact(&mut self) -> Result<(), Error> {
-		let horizon = global::cut_through_horizon();
 		let commit_index = self.commit_index.clone();
+		let head = commit_index.head()?;
+		let current_height = head.height;
+
+		// horizon for compacting is based on current_height
+		let horizon = (current_height as u32).saturating_sub(global::cut_through_horizon());
+
 		let clean_output_index = |commit: &[u8]| {
+			// do we care if this fails?
 			let _ = commit_index.delete_output_pos(commit);
 		};
-		let min_rm = (horizon / 10) as usize;
 
-		debug!(
-			LOGGER,
-			"txhashset: compact: horizon: {:?}, min_rm: {:?}", horizon, min_rm
-		);
+		let min_rm = (horizon / 10) as usize;
 
 		self.output_pmmr_h
 			.backend
 			.check_compact(min_rm, horizon, clean_output_index)?;
+
 		self.rproof_pmmr_h
 			.backend
 			.check_compact(min_rm, horizon, &prune_noop)?;
@@ -647,6 +650,14 @@ impl<'a> Extension<'a> {
 	/// Force the rollback of this extension, no matter the result
 	pub fn force_rollback(&mut self) {
 		self.rollback = true;
+	}
+
+	/// Dumps the output MMR.
+	/// We use this after compacting for visual confirmation that it worked.
+	pub fn dump_output_pmmr(&self) {
+		debug!(LOGGER, "-- outputs --");
+		self.output_pmmr.dump_from_file(false);
+		debug!(LOGGER, "-- end of outputs --");
 	}
 
 	/// Dumps the state of the 3 sum trees to stdout for debugging. Short
