@@ -591,10 +591,6 @@ where
 			debug!(LOGGER, "{}", hashes);
 		}
 	}
-
-	pub fn dump_prune_list(&self) {
-
-	}
 }
 
 /// Maintains a list of previously pruned nodes in PMMR, compacting the list as

@@ -159,9 +159,6 @@ where
 		// let flatfile_pos = pmmr::n_leaves(position) - 1 - prune_shift;
 		let flatfile_pos = pmmr::n_leaves(position) - 1;
 
-		println!("*** get: {} -> {}", position, flatfile_pos);
-
-
 		let record_len = T::len();
 		let file_offset = flatfile_pos as usize * T::len();
 		let data = self.data_file.read(file_offset, record_len);
@@ -243,7 +240,14 @@ where
 	pub fn dump_from_file(&self, short: bool) {
 		println!("---- pmmr backend file ----");
 		println!("pruned:  {:?}", self.pruned_nodes.pruned_nodes);
-		println!("removed: {:?}", self.rm_log.removed.iter().map(|&(x, _)| x).collect::<Vec<_>>());
+		println!(
+			"removed: {:?}",
+			self.rm_log
+				.removed
+				.iter()
+				.map(|&(x, _)| x)
+				.collect::<Vec<_>>()
+		);
 		println!("data size: {:?}", self.data_size());
 		println!("hash size: {:?}", self.hash_size());
 		let sz = self.unpruned_size().unwrap();
@@ -269,7 +273,7 @@ where
 			println!("{}", hashes);
 		}
 
-		for pos in 1..sz {
+		for pos in 1..sz+1 {
 			println!("pos {}, {:?}", pos, self.get(pos, true));
 		}
 	}
@@ -375,7 +379,8 @@ where
 
 		// Paths for tmp hash and data files.
 		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);
-		// let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir, PMMR_DATA_FILE);
+		// let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir,
+		// PMMR_DATA_FILE);
 
 		// Pos we want to get rid of.
 		// Filtered by cutoff index.
@@ -417,7 +422,8 @@ where
 		// 		})
 		// 		.collect::<Vec<_>>();
 		//
-		// 	println!("compacting the data file: pos {:?}, offs {:?}", leaf_pos_to_rm, off_to_rm);
+		// println!("compacting the data file: pos {:?}, offs {:?}", leaf_pos_to_rm,
+		// off_to_rm);
 		//
 		// 	self.data_file.save_prune(
 		// 		tmp_prune_file_data.clone(),
@@ -451,7 +457,8 @@ where
 		// 	tmp_prune_file_data.clone(),
 		// 	format!("{}/{}", self.data_dir, PMMR_DATA_FILE),
 		// )?;
-		// self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE), 0)?;
+		// self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir,
+		// PMMR_DATA_FILE), 0)?;
 
 		// 6. Truncate the rm log based on pos removed.
 		// Excluding roots which remain in rm log.

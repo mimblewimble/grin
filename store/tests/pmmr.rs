@@ -153,15 +153,9 @@ fn pmmr_prune_compact() {
 		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(root, pmmr.root());
 		// check we can still retrieve same element from leaf index 2
-		assert_eq!(
-			pmmr.get(2, true).unwrap().1.unwrap(),
-			TestElem(2)
-		);
+		assert_eq!(pmmr.get(2, true).unwrap().1.unwrap(), TestElem(2));
 		// and the same for leaf index 7
-		assert_eq!(
-			pmmr.get(11, true).unwrap().1.unwrap(),
-			TestElem(7)
-		);
+		assert_eq!(pmmr.get(11, true).unwrap().1.unwrap(), TestElem(7));
 	}
 
 	// compact
@@ -171,14 +165,8 @@ fn pmmr_prune_compact() {
 	{
 		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(root, pmmr.root());
-		assert_eq!(
-			pmmr.get(2, true).unwrap().1.unwrap(),
-			TestElem(2)
-		);
-		assert_eq!(
-			pmmr.get(11, true).unwrap().1.unwrap(),
-			TestElem(7)
-		);
+		assert_eq!(pmmr.get(2, true).unwrap().1.unwrap(), TestElem(2));
+		assert_eq!(pmmr.get(11, true).unwrap().1.unwrap(), TestElem(7));
 	}
 
 	teardown(data_dir);
@@ -339,6 +327,48 @@ fn pmmr_rewind() {
 }
 
 #[test]
+fn pmmr_compact_scratch() {
+	let (data_dir, elems) = setup("compact_horizon");
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
+	let mmr_size = load(0, &elems[..], &mut backend);
+	backend.sync().unwrap();
+	backend.dump_from_file(false);
+
+	{
+		// pruning some choice nodes with an increasing block height
+		{
+			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			pmmr.prune(2, 1).unwrap();
+			pmmr.prune(4, 1).unwrap();
+			pmmr.prune(5, 1).unwrap();
+		}
+		backend.sync().unwrap();
+	}
+
+	// compact
+	backend.check_compact(2, 2, &prune_noop).unwrap();
+	backend.sync().unwrap();
+	backend.dump_from_file(false);
+
+	{
+		// pruning some choice nodes with an increasing block height
+		{
+			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			pmmr.prune(5, 2).unwrap();
+			pmmr.prune(1, 2).unwrap();
+		}
+		backend.sync().unwrap();
+	}
+
+	// compact
+	backend.check_compact(2, 3, &prune_noop).unwrap();
+	backend.sync().unwrap();
+	backend.dump_from_file(false);
+
+	assert!(false, "and debug");
+}
+
+#[test]
 fn pmmr_compact_horizon() {
 	let (data_dir, elems) = setup("compact_horizon");
 	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
@@ -369,6 +399,10 @@ fn pmmr_compact_horizon() {
 	let pos_8_hash = backend.get_from_file(8).unwrap();
 	assert_eq!(pos_8.0, pos_8_hash);
 
+	let pos_11 = backend.get(11, true).unwrap();
+	let pos_11_hash = backend.get_from_file(11).unwrap();
+	assert_eq!(pos_11.0, pos_11_hash);
+
 	{
 		// pruning some choice nodes with an increasing block height
 		{
@@ -393,6 +427,9 @@ fn pmmr_compact_horizon() {
 
 			assert_eq!(backend.get(8, true), Some(pos_8));
 			assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
+
+			assert_eq!(backend.get(11, true), Some(pos_11));
+			assert_eq!(backend.get_from_file(11), Some(pos_11_hash));
 		}
 
 		// compact
@@ -414,7 +451,6 @@ fn pmmr_compact_horizon() {
 			assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
 		}
 	}
-
 
 	// recheck stored data
 	{
@@ -442,8 +478,15 @@ fn pmmr_compact_horizon() {
 		let mut backend =
 			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), None).unwrap();
 
+		{
+			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+
+			pmmr.prune(8, 5).unwrap();
+			pmmr.prune(9, 5).unwrap();
+		}
+
 		// compact some more
-		backend.check_compact(1, 5, &prune_noop).unwrap();
+		backend.check_compact(1, 6, &prune_noop).unwrap();
 	}
 
 	// recheck stored data
@@ -467,10 +510,11 @@ fn pmmr_compact_horizon() {
 
 		backend.dump_from_file(false);
 
-		assert_eq!(backend.get(8, true), Some(pos_8));
-		assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
+		assert_eq!(backend.get(11, true), Some(pos_11));
+		assert_eq!(backend.get_from_file(11), Some(pos_11_hash));
 	}
 
+	assert!(false);
 	teardown(data_dir);
 }
 

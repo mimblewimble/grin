@@ -639,9 +639,7 @@ impl Input {
 	) -> Result<(), Error> {
 		debug!(
 			LOGGER,
-			"input: verify_maturity: height {}, features {:?}",
-			height,
-			self.features,
+			"input: verify_maturity: height {}, features {:?}", height, self.features,
 		);
 
 		if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
@@ -681,9 +679,7 @@ impl Input {
 
 			debug!(
 				LOGGER,
-				"input: verify_maturity: success via Merkle proof: {} vs {}",
-				lock_height,
-				height,
+				"input: verify_maturity: success via Merkle proof: {} vs {}", lock_height, height,
 			);
 		}
 		Ok(())
