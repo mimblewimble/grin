@@ -29,7 +29,7 @@ use core::core::Proof;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Transaction};
 use core::core::hash::{Hash, Hashed};
-use pow::{MiningWorker, cuckoo};
+use pow::{cuckoo, MiningWorker};
 use pow::types::MinerConfig;
 use core::ser;
 use core::global;
