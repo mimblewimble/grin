@@ -146,11 +146,12 @@ impl ChainStore for ChainKVStore {
 
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		option_to_not_found(self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)))
+			.and_then(|hash| self.get_block_header(&hash))
 	}
 
 	fn save_header_height(&self, bh: &BlockHeader) -> Result<(), Error> {
 		self.db
-			.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height), bh)
+			.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height), &bh.hash())
 	}
 
 	fn delete_header_by_height(&self, height: u64) -> Result<(), Error> {
@@ -229,8 +230,7 @@ impl ChainStore for ChainKVStore {
 			self.delete_header_by_height(n)?;
 		}
 
-		self.db
-			.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, header.height), header)?;
+		self.save_header_height(&header)?;
 
 		if header.height > 0 {
 			let mut prev_header = self.get_block_header(&header.previous)?;
@@ -238,10 +238,7 @@ impl ChainStore for ChainKVStore {
 				if let Ok(_) = self.is_on_current_chain(&prev_header) {
 					break;
 				}
-				self.db.put_ser(
-					&u64_to_key(HEADER_HEIGHT_PREFIX, prev_header.height),
-					&prev_header,
-				)?;
+				self.save_header_height(&prev_header)?;
 
 				prev_header = self.get_block_header(&prev_header.previous)?;
 			}
