@@ -150,15 +150,8 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn save_header_height(&self, bh: &BlockHeader) -> Result<(), Error> {
-		let batch = self.db
-			.batch()
-			.put_ser(
-				&to_key(BLOCK_HEADER_PREFIX, &mut bh.hash().to_vec())[..],
-				bh,
-			)?
-			.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height), &bh.hash())?;
-
-		batch.write()
+		self.db
+			.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height), &bh.hash())
 	}
 
 	fn delete_header_by_height(&self, height: u64) -> Result<(), Error> {

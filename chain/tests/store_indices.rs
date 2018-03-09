@@ -82,6 +82,7 @@ fn test_store_header_height() {
 	let mut block_header = BlockHeader::default();
 	block_header.height = 1;
 
+	chain_store.save_block_header(&block_header).unwrap();
 	chain_store.save_header_height(&block_header).unwrap();
 
 	let stored_block_header = chain_store.get_header_by_height(1).unwrap();
