@@ -29,9 +29,10 @@ use core::core::Proof;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Transaction};
 use core::core::hash::{Hash, Hashed};
-use pow::MiningWorker;
+use pow::{MiningWorker, cuckoo};
 use pow::types::MinerConfig;
 use core::ser;
+use core::global;
 use core::ser::AsFixedBytes;
 use util::LOGGER;
 use types::{Error, MiningStats};
@@ -389,6 +390,78 @@ impl Miner {
 		sol
 	}
 
+	/// The inner part of mining loop for the internal miner
+	/// kept around mostly for automated testing purposes
+	pub fn inner_loop_sync_internal<T: MiningWorker>(
+		&self,
+		miner: &mut T,
+		b: &mut Block,
+		cuckoo_size: u32,
+		head: &BlockHeader,
+		attempt_time_per_block: u32,
+		latest_hash: &mut Hash,
+	) -> Option<Proof> {
+		// look for a pow for at most 2 sec on the same block (to give a chance to new
+		// transactions) and as long as the head hasn't changed
+		let deadline = time::get_time().sec + attempt_time_per_block as i64;
+
+		debug!(
+			LOGGER,
+			"(Server ID: {}) Mining at Cuckoo{} for at most {} secs on block {} at difficulty {}.",
+			self.debug_output_id,
+			cuckoo_size,
+			attempt_time_per_block,
+			latest_hash,
+			b.header.difficulty
+		);
+		let mut iter_count = 0;
+
+		if self.config.slow_down_in_millis != None && self.config.slow_down_in_millis.unwrap() > 0 {
+			debug!(
+				LOGGER,
+				"(Server ID: {}) Artificially slowing down loop by {}ms per iteration.",
+				self.debug_output_id,
+				self.config.slow_down_in_millis.unwrap()
+			);
+		}
+
+		let mut sol = None;
+		while head.hash() == *latest_hash && time::get_time().sec < deadline {
+			let pow_hash = b.hash();
+			if let Ok(proof) = miner.mine(&pow_hash[..]) {
+				let proof_diff = proof.clone().to_difficulty();
+				if proof_diff >= b.header.difficulty {
+					sol = Some(proof);
+					break;
+				}
+			}
+
+			b.header.nonce += 1;
+			*latest_hash = self.chain.head().unwrap().last_block_h;
+			iter_count += 1;
+
+			// Artificial slow down
+			if self.config.slow_down_in_millis != None
+				&& self.config.slow_down_in_millis.unwrap() > 0
+			{
+				thread::sleep(Duration::from_millis(
+					self.config.slow_down_in_millis.unwrap(),
+				));
+			}
+		}
+
+		if sol == None {
+			debug!(
+				LOGGER,
+				"(Server ID: {}) No solution found after {} iterations, continuing...",
+				self.debug_output_id,
+				iter_count
+			)
+		}
+
+		sol
+	}
+
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
 	pub fn run_loop(
@@ -402,14 +475,24 @@ impl Miner {
 			LOGGER,
 			"(Server ID: {}) Starting miner loop.", self.debug_output_id
 		);
-		let mut plugin_miner = Some(PluginMiner::new(
-			consensus::EASINESS,
-			cuckoo_size,
-			proof_size,
-		));
-		plugin_miner.as_mut().unwrap().init(miner_config.clone());
 
-		// to prevent the wallet from generating a new HD key derivation for each
+		let mut plugin_miner = None;
+		let mut miner = None;
+		if !global::is_automated_testing_mode() {
+			plugin_miner = Some(PluginMiner::new(
+				consensus::EASINESS,
+				cuckoo_size,
+				proof_size,
+			));
+			plugin_miner.as_mut().unwrap().init(miner_config.clone());
+		} else {
+			miner = Some(cuckoo::Miner::new(
+				consensus::EASINESS,
+				cuckoo_size,
+				proof_size,
+			));
+		}
+
 		// iteration, we keep the returned derivation to provide it back when
 		// nothing has changed
 		let mut key_id = None;
@@ -479,6 +562,16 @@ impl Miner {
 						mining_stats.clone(),
 					);
 				}
+			}
+			if let Some(m) = miner.as_mut() {
+				sol = self.inner_loop_sync_internal(
+					m,
+					&mut b,
+					cuckoo_size,
+					&head,
+					miner_config.attempt_time_per_block,
+					&mut latest_hash,
+				);
 			}
 
 			// we found a solution, push our block through the chain processing pipeline
