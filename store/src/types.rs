@@ -240,6 +240,7 @@ impl RemoveLog {
 		};
 		if rewind_to_index > 0 {
 			rl.rewind(rewind_to_index)?;
+			rl.flush()?;
 		}
 		Ok(rl)
 	}
