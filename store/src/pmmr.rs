@@ -417,7 +417,7 @@ where
 		self.rm_log
 			.removed
 			.retain(|&(pos, _)| !pos_to_rm.binary_search(&&pos).is_ok());
-			self.rm_log.flush()?;
+		self.rm_log.flush()?;
 
 		Ok(true)
 	}

@@ -330,7 +330,7 @@ fn pmmr_rewind() {
 fn pmmr_compact_single_leaves() {
 	let (data_dir, elems) = setup("compact_entire_peak");
 	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
-	let mut mmr_size = load(0, &elems[0..5], &mut backend);
+	let mmr_size = load(0, &elems[0..5], &mut backend);
 	backend.sync().unwrap();
 
 	{
@@ -355,14 +355,14 @@ fn pmmr_compact_single_leaves() {
 	// compact
 	backend.check_compact(2, 3, &prune_noop).unwrap();
 
-	assert!(false, "and debug");
+	teardown(data_dir);
 }
 
 #[test]
 fn pmmr_compact_entire_peak() {
 	let (data_dir, elems) = setup("compact_entire_peak");
 	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
-	let mut mmr_size = load(0, &elems[0..5], &mut backend);
+	let mmr_size = load(0, &elems[0..5], &mut backend);
 	backend.sync().unwrap();
 
 	let pos_7 = backend.get(7, true).unwrap();
@@ -395,6 +395,8 @@ fn pmmr_compact_entire_peak() {
 	// now check we still have subsequent hash and data where we expect
 	assert_eq!(backend.get(8, true), Some(pos_8));
 	assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
+
+	teardown(data_dir);
 }
 
 #[test]
@@ -406,9 +408,10 @@ fn pmmr_compact_horizon() {
 
 	// 0010012001001230
 	// 9 leaves
-	assert_eq!(backend.data_size().unwrap(), 9);
-	// 16 hashes
-	assert_eq!(backend.hash_size().unwrap(), 16);
+	// data file compaction commented out for now
+	// assert_eq!(backend.data_size().unwrap(), 9);
+	assert_eq!(backend.data_size().unwrap(), 19);
+	assert_eq!(backend.hash_size().unwrap(), 35);
 
 	let pos_3 = backend.get(3, false).unwrap();
 	let pos_3_hash = backend.get_from_file(3).unwrap();
@@ -485,11 +488,8 @@ fn pmmr_compact_horizon() {
 		let backend =
 			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), None).unwrap();
 
-		// 9 leaves in total, minus 2 compacted
-		// assert_eq!(backend.data_size().unwrap(), 7);
-		assert_eq!(backend.data_size().unwrap(), 9);
-		// 16 hashes total, 2 pruned and compacted
-		assert_eq!(backend.hash_size().unwrap(), 14);
+		assert_eq!(backend.data_size().unwrap(), 19);
+		assert_eq!(backend.hash_size().unwrap(), 33);
 
 		// check we can read a hash by pos correctly from recreated backend
 		assert_eq!(backend.get(7, true), None);
@@ -522,12 +522,8 @@ fn pmmr_compact_horizon() {
 
 		// 0010012001001230
 
-		// 9 elements total, minus 4 compacted
-		// assert_eq!(backend.data_size().unwrap(), 5);
-		assert_eq!(backend.data_size().unwrap(), 9);
-		// 16 nodes total
-		// 4 leaves pruned resulting in 6 pruned and compacted nodes
-		assert_eq!(backend.hash_size().unwrap(), 10);
+		assert_eq!(backend.data_size().unwrap(), 19);
+		assert_eq!(backend.hash_size().unwrap(), 29);
 
 		// check we can read a hash by pos correctly from recreated backend
 		assert_eq!(backend.get(7, true), None);
@@ -537,7 +533,6 @@ fn pmmr_compact_horizon() {
 		assert_eq!(backend.get_from_file(11), Some(pos_11_hash));
 	}
 
-	assert!(false);
 	teardown(data_dir);
 }
 

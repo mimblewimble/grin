@@ -148,8 +148,6 @@ impl OutputHandler {
 				outputs: vec![],
 			}
 		}
-
-
 	}
 
 	// returns outputs for a specified range of blocks
