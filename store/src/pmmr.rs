@@ -35,6 +35,8 @@ pub const RM_LOG_MAX_NODES: usize = 10000;
 /// stored
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct PMMRFileMetadata {
+	/// The block height represented by these indices in the file
+	pub block_height: u64,
 	/// last written index of the hash file
 	pub last_hash_file_pos: u64,
 	/// last written index of the data file
@@ -43,6 +45,7 @@ pub struct PMMRFileMetadata {
 
 impl Writeable for PMMRFileMetadata {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.block_height)?;
 		writer.write_u64(self.last_hash_file_pos)?;
 		writer.write_u64(self.last_data_file_pos)?;
 		Ok(())
@@ -52,6 +55,7 @@ impl Writeable for PMMRFileMetadata {
 impl Readable for PMMRFileMetadata {
 	fn read(reader: &mut Reader) -> Result<PMMRFileMetadata, ser::Error> {
 		Ok(PMMRFileMetadata {
+			block_height: reader.read_u64()?,
 			last_hash_file_pos: reader.read_u64()?,
 			last_data_file_pos: reader.read_u64()?,
 		})
@@ -62,6 +66,7 @@ impl PMMRFileMetadata {
 	/// Return fields with all positions = 0
 	pub fn empty() -> PMMRFileMetadata {
 		PMMRFileMetadata {
+			block_height: 0,
 			last_hash_file_pos: 0,
 			last_data_file_pos: 0,
 		}
@@ -211,13 +216,17 @@ where
 	/// Instantiates a new PMMR backend that will use the provided directly to
 	/// store its files.
 	pub fn new(data_dir: String, file_md: Option<PMMRFileMetadata>) -> io::Result<PMMRBackend<T>> {
-		let (hash_to_pos, data_to_pos) = match file_md {
-			Some(m) => (m.last_hash_file_pos, m.last_data_file_pos),
-			None => (0, 0),
+		let (height, hash_to_pos, data_to_pos) = match file_md {
+			Some(m) => (
+				m.block_height as u32,
+				m.last_hash_file_pos,
+				m.last_data_file_pos,
+			),
+			None => (0, 0, 0),
 		};
 		let hash_file =
 			AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE), hash_to_pos)?;
-		let rm_log = RemoveLog::open(format!("{}/{}", data_dir, PMMR_RM_LOG_FILE))?;
+		let rm_log = RemoveLog::open(format!("{}/{}", data_dir, PMMR_RM_LOG_FILE), height)?;
 		let prune_list = read_ordered_vec(format!("{}/{}", data_dir, PMMR_PRUNED_FILE), 8)?;
 		let data_file =
 			AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_DATA_FILE), data_to_pos)?;
@@ -290,6 +299,7 @@ where
 	/// Return last written buffer positions for the hash file and the data file
 	pub fn last_file_positions(&self) -> PMMRFileMetadata {
 		PMMRFileMetadata {
+			block_height: 0,
 			last_hash_file_pos: self.hash_file.last_buffer_pos() as u64,
 			last_data_file_pos: self.data_file.last_buffer_pos() as u64,
 		}
