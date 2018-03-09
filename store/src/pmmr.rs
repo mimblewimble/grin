@@ -273,7 +273,7 @@ where
 			println!("{}", hashes);
 		}
 
-		for pos in 1..sz+1 {
+		for pos in 1..sz + 1 {
 			println!("pos {}, {:?}", pos, self.get(pos, true));
 		}
 	}
