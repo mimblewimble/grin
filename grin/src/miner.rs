@@ -34,7 +34,7 @@ use pow::types::MinerConfig;
 use core::ser;
 use core::ser::AsFixedBytes;
 use util::LOGGER;
-use types::{MiningStats, Error};
+use types::{Error, MiningStats};
 
 use chain;
 use pool;
@@ -157,7 +157,7 @@ impl Miner {
 		head: &BlockHeader,
 		latest_hash: &Hash,
 		attempt_time_per_block: u32,
-		mining_stats: Arc<RwLock<MiningStats>>
+		mining_stats: Arc<RwLock<MiningStats>>,
 	) -> Option<Proof> {
 		debug!(
 			LOGGER,
@@ -250,7 +250,7 @@ impl Miner {
 					}
 				}
 				info!(LOGGER, "Mining at {} graphs per second", sps_total);
-				if sps_total.is_finite(){
+				if sps_total.is_finite() {
 					let mut mining_stats = mining_stats.write().unwrap();
 					mining_stats.combined_gps = sps_total;
 				}
@@ -281,7 +281,7 @@ impl Miner {
 		head: &BlockHeader,
 		attempt_time_per_block: u32,
 		latest_hash: &mut Hash,
-		mining_stats: Arc<RwLock<MiningStats>>
+		mining_stats: Arc<RwLock<MiningStats>>,
 	) -> Option<Proof> {
 		// look for a pow for at most attempt_time_per_block sec on the same block (to
 		// give a chance to new
@@ -355,7 +355,7 @@ impl Miner {
 						LOGGER,
 						"Mining at {} graphs per second", last_hashes_per_sec
 					);
-					if last_hashes_per_sec.is_finite(){
+					if last_hashes_per_sec.is_finite() {
 						let mut mining_stats = mining_stats.write().unwrap();
 						mining_stats.combined_gps = last_hashes_per_sec;
 					}
@@ -391,20 +391,22 @@ impl Miner {
 
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
-	pub fn run_loop(&self,
+	pub fn run_loop(
+		&self,
 		miner_config: MinerConfig,
 		mining_stats: Arc<RwLock<MiningStats>>,
 		cuckoo_size: u32,
-		proof_size: usize) {
+		proof_size: usize,
+	) {
 		info!(
 			LOGGER,
 			"(Server ID: {}) Starting miner loop.", self.debug_output_id
 		);
 		let mut plugin_miner = Some(PluginMiner::new(
-				consensus::EASINESS,
-				cuckoo_size,
-				proof_size,
-			));
+			consensus::EASINESS,
+			cuckoo_size,
+			proof_size,
+		));
 		plugin_miner.as_mut().unwrap().init(miner_config.clone());
 
 		// to prevent the wallet from generating a new HD key derivation for each

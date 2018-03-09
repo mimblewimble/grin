@@ -198,7 +198,7 @@ impl Server {
 			chain: shared_chain,
 			tx_pool: tx_pool,
 			currently_syncing: currently_syncing,
-			state_info: ServerStateInfo{
+			state_info: ServerStateInfo {
 				awaiting_peers: awaiting_peers,
 				..Default::default()
 			},
@@ -241,10 +241,7 @@ impl Server {
 				while currently_syncing.load(Ordering::Relaxed) {
 					thread::sleep(secs_5);
 				}
-				miner.run_loop(config.clone(),
-					mining_stats,
-					cuckoo_size as u32,
-					proof_size);
+				miner.run_loop(config.clone(), mining_stats, cuckoo_size as u32, proof_size);
 			});
 	}
 

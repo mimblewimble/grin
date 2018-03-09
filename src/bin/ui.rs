@@ -19,16 +19,15 @@ use std::sync::{mpsc, Arc};
 use time;
 
 use cursive::Cursive;
-use cursive::theme::{BaseColor, Color, BorderStyle};
+use cursive::theme::{BaseColor, BorderStyle, Color};
 use cursive::theme::PaletteColor::*;
 use cursive::theme::Color::*;
 use cursive::theme::BaseColor::*;
 use cursive::utils::markup::StyledString;
 use cursive::align::{HAlign, VAlign};
 use cursive::event::Key;
-use cursive::views::{BoxView, LinearLayout, Panel,
-	StackView, LayerPosition, TextView};
-use cursive::direction::{Orientation};
+use cursive::views::{BoxView, LayerPosition, LinearLayout, Panel, StackView, TextView};
+use cursive::direction::Orientation;
 use cursive::traits::*;
 
 use grin::Server;
@@ -105,13 +104,11 @@ impl UI {
 			.v_align(VAlign::Center)
 			.h_align(HAlign::Center);
 		logo_view.set_scrollable(false);
-	
+
 		// Create UI objects, etc
 		let basic_status_view = BoxView::with_full_screen(
 			LinearLayout::new(Orientation::Horizontal)
-				.child(BoxView::with_full_screen(
-					logo_view
-				))
+				.child(BoxView::with_full_screen(logo_view))
 				.child(BoxView::with_full_screen(
 					LinearLayout::new(Orientation::Vertical)
 						.child(TextView::new(title_string))
@@ -133,11 +130,11 @@ impl UI {
 						)
 						.child(
 							LinearLayout::new(Orientation::Horizontal)
-								.child(TextView::new("------------------------"))
+								.child(TextView::new("------------------------")),
 						)
 						.child(
 							LinearLayout::new(Orientation::Horizontal)
-								.child(TextView::new("").with_id("basic_mining_config_status"))
+								.child(TextView::new("").with_id("basic_mining_config_status")),
 						)
 						.child(
 							LinearLayout::new(Orientation::Horizontal)
@@ -146,7 +143,7 @@ impl UI {
 						.child(
 							LinearLayout::new(Orientation::Horizontal)
 								.child(TextView::new("").with_id("basic_network_info")),
-						)
+						),
 				)),
 		).with_id("basic_status_view");
 
@@ -157,7 +154,7 @@ impl UI {
 --Chain Info
 --Peer Info
 --Mining Info
-			"
+			",
 		)).with_id("advanced_status");
 
 		let root_stack = StackView::new()
@@ -358,19 +355,27 @@ impl Controller {
 		let (basic_mining_status, basic_network_info) = {
 			if stats.mining_stats.is_enabled {
 				if stats.is_syncing {
-					("Mining Status: Paused while syncing".to_string(),
-						"".to_string())
+					(
+						"Mining Status: Paused while syncing".to_string(),
+						"".to_string(),
+					)
 				} else if stats.mining_stats.combined_gps == 0.0 {
-					("Mining Status: Starting miner and awating first solution...".to_string(),
-						"".to_string())
+					(
+						"Mining Status: Starting miner and awating first solution...".to_string(),
+						"".to_string(),
+					)
 				} else {
-					(format!("Mining Status: Mining at height {} at {:.*} GPS",
-						stats.mining_stats.block_height,
-						4,
-						stats.mining_stats.combined_gps),
-						format!("Cuckoo {} - Network Difficulty {}", 
+					(
+						format!(
+							"Mining Status: Mining at height {} at {:.*} GPS",
+							stats.mining_stats.block_height, 4, stats.mining_stats.combined_gps
+						),
+						format!(
+							"Cuckoo {} - Network Difficulty {}",
 							stats.mining_stats.cuckoo_size,
-							stats.mining_stats.network_difficulty.to_string()))
+							stats.mining_stats.network_difficulty.to_string()
+						),
+					)
 				}
 			} else {
 				("".to_string(), "".to_string())
