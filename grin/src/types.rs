@@ -151,6 +151,9 @@ pub struct ServerConfig {
 	/// Whether to run the TUI
 	/// if enabled, this will disable logging to stdout
 	pub run_tui: Option<bool>,
+
+	/// Whether to run the wallet listener with the server by default
+	pub run_wallet_listener: Option<bool>,
 }
 
 impl Default for ServerConfig {
@@ -168,6 +171,7 @@ impl Default for ServerConfig {
 			pool_config: pool::PoolConfig::default(),
 			skip_sync_wait: None,
 			run_tui: None,
+			run_wallet_listener: Some(false),
 		}
 	}
 }

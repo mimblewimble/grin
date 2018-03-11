@@ -368,7 +368,7 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 	info!(LOGGER, "Starting the Grin server...");
 
 	// just get defaults from the global config
-	let mut server_config = global_config.members.unwrap().server;
+	let mut server_config = global_config.members.as_ref().unwrap().server.clone();
 
 	if let Some(port) = server_args.value_of("port") {
 		server_config.p2p_config.port = port.parse().unwrap();
@@ -394,6 +394,21 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 	if let Some(seeds) = server_args.values_of("seed") {
 		server_config.seeding_type = grin::Seeding::List;
 		server_config.seeds = Some(seeds.map(|s| s.to_string()).collect());
+	}
+
+	if let Some(true) = server_config.run_wallet_listener {
+		let mut wallet_config = global_config.members.unwrap().wallet;
+		let wallet_seed =
+			wallet::WalletSeed::from_file(&wallet_config).expect("Failed to read wallet seed file.");
+		let mut keychain = wallet_seed
+			.derive_keychain("")
+			.expect("Failed to derive keychain from seed file and passphrase.");
+
+		let _ = thread::Builder::new()
+			.name("wallet_listener".to_string())
+			.spawn(move || {
+				wallet::server::start_rest_apis(wallet_config, keychain);
+			});
 	}
 
 	// start the server in the different run modes (interactive or daemon)
@@ -513,25 +528,6 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			}
 			wallet::server::start_rest_apis(wallet_config, keychain);
 		}
-		// The following is gone for now, as a result of aggsig transactions
-		// being implemented
-		/*("receive", Some(receive_args)) => {
-			let input = receive_args.value_of("input").expect("Input file required");
-			let mut file = File::open(input).expect("Unable to open transaction file.");
-			let mut contents = String::new();
-			file.read_to_string(&mut contents).expect(
-				"Unable to read transaction file.",
-			);
-			if let Err(e) =
-				wallet::receive_json_tx_str(
-					&wallet_config, &keychain, contents.as_str()) {
-
-				println!("Error receiving transaction, the most likely reasons are:");
-				println!(" * the transaction has already been sent");
-				println!(" * your node isn't running or can't be reached");
-				println!("\nDetailed error: {:?}", e);
-			}
-		}*/
 		("send", Some(send_args)) => {
 			let amount = send_args
 				.value_of("amount")
