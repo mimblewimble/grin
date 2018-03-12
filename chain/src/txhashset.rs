@@ -35,6 +35,7 @@ use core::ser::{self, PMMRIndexHashable, PMMRable};
 use grin_store;
 use grin_store::pmmr::{PMMRBackend, PMMRFileMetadata};
 use grin_store::types::prune_noop;
+use keychain::BlindingFactor;
 use types::{ChainStore, Error, PMMRFileMetadataCollection, TxHashSetRoots};
 use util::{zip, LOGGER};
 
@@ -573,14 +574,18 @@ impl<'a> Extension<'a> {
 		// the real magicking: the sum of all kernel excess should equal the sum
 		// of all Output commitments, minus the total supply
 		let (kernel_sum, fees) = self.sum_kernels()?;
+		let kernel_offset = self.sum_kernel_offsets(&header)?;
 		let output_sum = self.sum_outputs()?;
+
 		{
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
-			let over_commit = secp.commit_value(header.height * reward(0) - fees / 2)?;
-			let adjusted_sum_output = secp.commit_sum(vec![output_sum], vec![over_commit])?;
 
-			if adjusted_sum_output != kernel_sum {
+			let supply = header.height * reward(0) - fees / 2;
+			let over_commit = secp.commit_value(supply)?;
+			let adjusted_sum_output = secp.commit_sum(vec![output_sum], vec![over_commit])?;
+			let offset_kernel_sum = secp.commit_sum(vec![kernel_sum, kernel_offset], vec![])?;
+			if adjusted_sum_output != offset_kernel_sum {
 				return Err(Error::InvalidTxHashSet(
 					"Differing Output commitment and kernel excess sums.".to_owned(),
 				));
@@ -641,6 +646,41 @@ impl<'a> Extension<'a> {
 		)
 	}
 
+	fn sum_kernel_offsets(&self, header: &BlockHeader) -> Result<Commitment, Error> {
+		let mut kernel_offsets = vec![];
+
+		// iterate back up the chain collecting the kernel offset for each block header
+		let mut current = header.clone();
+		while current.height > 0 {
+			kernel_offsets.push(current.kernel_offset);
+			current = self.commit_index.get_block_header(&current.previous)?;
+		}
+
+		// now sum the kernel_offset from each block header
+		// to give us an aggregate offset for the entire
+		// blockchain
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
+
+		let keys = kernel_offsets
+			.iter()
+			.cloned()
+			.filter(|x| *x != BlindingFactor::zero())
+			.filter_map(|x| x.secret_key(&secp).ok())
+			.collect::<Vec<_>>();
+
+		let offset = if keys.is_empty() {
+			secp.commit_value(0)?
+		} else {
+			let sum = secp.blind_sum(keys, vec![])?;
+			let offset = BlindingFactor::from_secret_key(sum);
+			let skey = offset.secret_key(&secp)?;
+			secp.commit(0, skey)?
+		};
+
+		Ok(offset)
+	}
+
 	/// Sums the excess of all our kernels, validating their signatures on the
 	/// way
 	fn sum_kernels(&self) -> Result<(Commitment, u64), Error> {
@@ -682,7 +722,7 @@ impl<'a> Extension<'a> {
 		let mut output_count = 0;
 		let secp = static_secp_instance();
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
-			if pmmr::bintree_postorder_height(n) == 0 {
+			if pmmr::is_leaf(n) {
 				if let Some((_, output)) = self.output_pmmr.get(n, true) {
 					let out = output.expect("not a leaf node");
 					let commit = out.commit.clone();
