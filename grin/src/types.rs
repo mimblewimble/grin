@@ -248,7 +248,7 @@ pub struct PeerStats {
 }
 
 impl PeerStats {
-	pub fn from_peer(peer: &p2p::Peer)->PeerStats{
+	pub fn from_peer(peer: &p2p::Peer) -> PeerStats {
 		// State
 		let mut state = "Disconnected";
 		if peer.is_connected() {
@@ -262,7 +262,7 @@ impl PeerStats {
 			p2p::types::Direction::Inbound => "Inbound",
 			p2p::types::Direction::Outbound => "Outbound",
 		};
-		PeerStats{
+		PeerStats {
 			state: state.to_string(),
 			addr: addr,
 			version: peer.info.version,

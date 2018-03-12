@@ -24,7 +24,7 @@ use cursive::theme::PaletteColor::*;
 use cursive::theme::Color::*;
 use cursive::theme::BaseColor::*;
 use cursive::utils::markup::StyledString;
-use cursive::align::{HAlign};
+use cursive::align::HAlign;
 use cursive::event::{EventResult, Key};
 use cursive::view::AnyView;
 use cursive::views::{BoxView, LinearLayout, OnEventView, Panel, SelectView, StackView, TextView};
@@ -140,58 +140,55 @@ fn create_basic_status_view() -> Box<AnyView> {
 		.h_align(HAlign::Left);
 	logo_view.set_scrollable(false);*/
 	let basic_status_view =
-		LinearLayout::new(Orientation::Vertical)
-			.child(BoxView::with_full_screen(
-				LinearLayout::new(Orientation::Vertical)
-					.child(TextView::new(title_string))
-					.child(TextView::new("------------------------"))
-					.child(
-						LinearLayout::new(Orientation::Horizontal)
-							.child(TextView::new("Current Status: "))
-							.child(TextView::new("Starting").with_id("basic_current_status")),
-					)
-					.child(
-						LinearLayout::new(Orientation::Horizontal)
-							.child(TextView::new("Connected Peers: "))
-							.child(TextView::new("0").with_id("connected_peers")),
-					)
-					.child(
-						LinearLayout::new(Orientation::Horizontal)
-							.child(TextView::new("Chain Height: "))
-							.child(TextView::new("  ").with_id("chain_height")),
-					)
-					.child(
-						LinearLayout::new(Orientation::Horizontal)
-							.child(TextView::new("------------------------")),
-					)
-					.child(
-						LinearLayout::new(Orientation::Horizontal)
-							.child(TextView::new("  ").with_id("basic_mining_config_status")),
-					)
-					.child(
-						LinearLayout::new(Orientation::Horizontal)
-							.child(TextView::new("  ").with_id("basic_mining_status")),
-					)
-					.child(
-						LinearLayout::new(Orientation::Horizontal)
-							.child(TextView::new("  ").with_id("basic_network_info")),
-					)
-					//.child(logo_view)
-			));
+		LinearLayout::new(Orientation::Vertical).child(BoxView::with_full_screen(
+			LinearLayout::new(Orientation::Vertical)
+				.child(TextView::new(title_string))
+				.child(TextView::new("------------------------"))
+				.child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("Current Status: "))
+						.child(TextView::new("Starting").with_id("basic_current_status")),
+				)
+				.child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("Connected Peers: "))
+						.child(TextView::new("0").with_id("connected_peers")),
+				)
+				.child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("Chain Height: "))
+						.child(TextView::new("  ").with_id("chain_height")),
+				)
+				.child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("------------------------")),
+				)
+				.child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("  ").with_id("basic_mining_config_status")),
+				)
+				.child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("  ").with_id("basic_mining_status")),
+				)
+				.child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("  ").with_id("basic_network_info")),
+				), //.child(logo_view)
+		));
 	Box::new(basic_status_view.with_id("basic_status_view"))
 }
 
 fn create_peer_status_view() -> Box<AnyView> {
 	let peer_status_view = BoxView::with_full_screen(TextView::new(
-		"Sync and peer status coming soon!"
+		"Sync and peer status coming soon!",
 	)).with_id("peer_sync_view");
 	Box::new(peer_status_view)
 }
 
 fn create_mining_status_view() -> Box<AnyView> {
-	let mining_view = BoxView::with_full_screen(TextView::new(
-		"Mining status coming soon!"
-	)).with_id("mining_view");
+	let mining_view = BoxView::with_full_screen(TextView::new("Mining status coming soon!"))
+		.with_id("mining_view");
 	Box::new(mining_view)
 }
 
