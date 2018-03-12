@@ -28,6 +28,9 @@ use libc::{ftruncate as ftruncate64, off_t as off64_t};
 
 use core::ser;
 
+/// Noop
+pub fn prune_noop(_pruned_data: &[u8]) {}
+
 /// Wrapper for a file that can be read at any position (random read) but for
 /// which writes are append only. Reads are backed by a memory map (mmap(2)),
 /// relying on the operating system for fast access and caching. The memory
@@ -150,12 +153,16 @@ impl AppendOnlyFile {
 
 	/// Saves a copy of the current file content, skipping data at the provided
 	/// prune indices. The prune Vec must be ordered.
-	pub fn save_prune(
+	pub fn save_prune<T>(
 		&self,
 		target: String,
 		prune_offs: Vec<u64>,
 		prune_len: u64,
-	) -> io::Result<()> {
+		prune_cb: T,
+	) -> io::Result<()>
+	where
+		T: Fn(&[u8]),
+	{
 		let mut reader = File::open(self.path.clone())?;
 		let mut writer = File::create(target)?;
 
@@ -179,6 +186,8 @@ impl AppendOnlyFile {
 				let prune_at = prune_offs[prune_pos] as usize;
 				if prune_at != buf_start {
 					writer.write_all(&buf[buf_start..prune_at])?;
+				} else {
+					prune_cb(&buf[buf_start..prune_at]);
 				}
 				buf_start = prune_at + (prune_len as usize);
 				if prune_offs.len() > prune_pos + 1 {
@@ -221,14 +230,19 @@ pub struct RemoveLog {
 impl RemoveLog {
 	/// Open the remove log file. The content of the file will be read in memory
 	/// for fast checking.
-	pub fn open(path: String) -> io::Result<RemoveLog> {
+	pub fn open(path: String, rewind_to_index: u32) -> io::Result<RemoveLog> {
 		let removed = read_ordered_vec(path.clone(), 12)?;
-		Ok(RemoveLog {
+		let mut rl = RemoveLog {
 			path: path,
 			removed: removed,
 			removed_tmp: vec![],
 			removed_bak: vec![],
-		})
+		};
+		if rewind_to_index > 0 {
+			rl.rewind(rewind_to_index)?;
+			rl.flush()?;
+		}
+		Ok(rl)
 	}
 
 	/// Truncate and empties the remove log.

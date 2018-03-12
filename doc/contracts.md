@@ -49,7 +49,7 @@ kernel is assembled from the aggregate signature generated using `r` and the
 public key `r*G`, and allows to verify non-inflation for all Grin transactions
 (and signs the fees).
 
-Because these signatues are built simply from a scalar and a public key, they
+Because these signatures are built simply from a scalar and a public key, they
 can be used to construct a variety of contracts using "simple" arithmetic.
 
 ## Timelocked Transactions

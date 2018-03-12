@@ -244,7 +244,7 @@ impl OutputPrintable {
 	pub fn from_output(
 		output: &core::Output,
 		chain: Arc<chain::Chain>,
-		block: &core::Block,
+		block_header: &core::BlockHeader,
 		include_proof: bool,
 	) -> OutputPrintable {
 		let output_type = if output
@@ -274,7 +274,7 @@ impl OutputPrintable {
 			.features
 			.contains(core::transaction::OutputFeatures::COINBASE_OUTPUT) && !spent
 		{
-			merkle_proof = chain.get_merkle_proof(&out_id, &block).ok()
+			merkle_proof = chain.get_merkle_proof(&out_id, &block_header).ok()
 		};
 
 		OutputPrintable {
@@ -563,7 +563,7 @@ impl BlockPrintable {
 			.outputs
 			.iter()
 			.map(|output| {
-				OutputPrintable::from_output(output, chain.clone(), &block, include_proof)
+				OutputPrintable::from_output(output, chain.clone(), &block.header, include_proof)
 			})
 			.collect();
 		let kernels = block
@@ -602,7 +602,7 @@ impl CompactBlockPrintable {
 		let block = chain.get_block(&cb.hash()).unwrap();
 		let out_full = cb.out_full
 			.iter()
-			.map(|x| OutputPrintable::from_output(x, chain.clone(), &block, false))
+			.map(|x| OutputPrintable::from_output(x, chain.clone(), &block.header, false))
 			.collect();
 		let kern_full = cb.kern_full
 			.iter()

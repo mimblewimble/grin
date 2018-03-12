@@ -56,6 +56,9 @@ capabilities = [7]
 #will also disable logging to stdout
 run_tui = false
 
+#Whether to run the wallet listener with the server by default
+run_wallet_listener = true
+
 #The P2P server details (i.e. the server that communicates with other
 #grin server nodes
 
