@@ -398,8 +398,8 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 
 	if let Some(true) = server_config.run_wallet_listener {
 		let mut wallet_config = global_config.members.unwrap().wallet;
-		let wallet_seed =
-			wallet::WalletSeed::from_file(&wallet_config).expect("Failed to read wallet seed file.");
+		let wallet_seed = wallet::WalletSeed::from_file(&wallet_config)
+			.expect("Failed to read wallet seed file.");
 		let mut keychain = wallet_seed
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
