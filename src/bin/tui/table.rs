@@ -694,12 +694,8 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 
 impl<T: TableViewItem<H> + 'static, H: Eq + Hash + Copy + Clone + 'static> View
 	for TableView<T, H> {
-
 	fn draw(&self, printer: &Printer) {
-		
-
 		self.draw_columns(printer, "╷ ", |printer, column| {
-
 			let color = if column.order != Ordering::Equal || column.selected {
 				if self.column_select && column.selected && self.enabled && printer.focused {
 					Highlight
