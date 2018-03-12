@@ -19,7 +19,7 @@ use std::sync::{mpsc, Arc};
 use time;
 
 use cursive::Cursive;
-use cursive::theme::{BaseColor, BorderStyle, Color};
+use cursive::theme::{BaseColor, BorderStyle, Color, Theme};
 use cursive::theme::PaletteColor::*;
 use cursive::theme::Color::*;
 use cursive::theme::BaseColor::*;
@@ -85,6 +85,10 @@ fn create_main_menu() -> Box<AnyView> {
 	main_menu.add_item("Peers and Sync", "peer_sync_view");
 	main_menu.add_item("Mining", "peer_sync_view");
 	let change_view = |s: &mut Cursive, v: &str| {
+		if v=="" {
+			return;
+		}
+
 		let _ = s.call_on_id("root_stack", |sv: &mut StackView| {
 			let pos = sv.find_layer_from_id(v).unwrap();
 			sv.move_to_front(pos);
@@ -110,6 +114,13 @@ fn create_main_menu() -> Box<AnyView> {
 			}
 			Some(EventResult::Consumed(None))
 		});
+	let main_menu = LinearLayout::new(Orientation::Vertical)
+		.child(BoxView::with_full_height(main_menu))
+		.child(TextView::new("------------------"))
+		.child(TextView::new("Tab/Arrow : Cycle "))
+		.child(TextView::new("Enter     : Select"))
+		.child(TextView::new("Q         : Quit  "));
+		;
 	Box::new(main_menu)
 }
 
@@ -184,6 +195,19 @@ fn create_advanced_status_view() -> Box<AnyView> {
 	)).with_id("peer_sync_view");
 	Box::new(advanced_status_view)
 }
+
+fn modify_theme(theme: &mut Theme) {
+		theme.shadow = false;
+		theme.borders = BorderStyle::Simple;
+		theme.palette[Background] = Dark(Black);
+		theme.palette[Shadow] = Dark(Black);
+		theme.palette[View] = Dark(Black);
+		theme.palette[Primary] = Dark(White);
+		theme.palette[Highlight] = Dark(Cyan);
+		theme.palette[HighlightInactive] = Dark(Blue);
+		// also secondary, tertiary, TitlePrimary, TitleSecondary
+}
+
 impl UI {
 	/// Create a new UI
 	pub fn new(controller_tx: mpsc::Sender<ControllerMessage>) -> UI {
@@ -209,34 +233,9 @@ impl UI {
 			.child(Panel::new(main_menu))
 			.child(Panel::new(root_stack));
 
-		grin_ui.cursive.add_global_callback('1', |s| {
-			let mut sv = s.find_id::<StackView>("root_stack").unwrap();
-			let pos = sv.find_layer_from_id("basic_status_view").unwrap();
-			sv.move_to_front(pos);
-		});
-
-		grin_ui.cursive.add_global_callback('2', |s| {
-			let mut sv = s.find_id::<StackView>("root_stack").unwrap();
-			let pos = sv.find_layer_from_id("peer_sync_view").unwrap();
-			sv.move_to_front(pos);
-		});
-
-		/*grin_ui.cursive.add_global_callback('b', |s| {
-			let mut sv = s.find_id::<StackView>("root_stack").unwrap();
-			sv.move_id_to_front("basic_status_view");
-		});*/
-
 		//set theme
 		let mut theme = grin_ui.cursive.current_theme().clone();
-		theme.shadow = false;
-		theme.borders = BorderStyle::Simple;
-		theme.palette[Background] = Dark(Black);
-		theme.palette[Shadow] = Dark(Black);
-		theme.palette[View] = Dark(Black);
-		theme.palette[Primary] = Dark(White);
-		theme.palette[Highlight] = Dark(Cyan);
-		theme.palette[HighlightInactive] = Dark(Blue);
-		// also secondary, tertiary, TitlePrimary, TitleSecondary
+		modify_theme(&mut theme);
 		grin_ui.cursive.set_theme(theme);
 
 		grin_ui.cursive.add_layer(main_layer);
