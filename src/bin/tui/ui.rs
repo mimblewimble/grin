@@ -183,20 +183,13 @@ fn create_basic_status_view() -> Box<AnyView> {
 		Color::Dark(BaseColor::Green),
 	));*/
 
-	let mut title_string = StyledString::new();
-	title_string.append(StyledString::styled(
-		"Grin Version 0.0.1",
-		Color::Dark(BaseColor::Green),
-	));
 	/*let mut logo_view = TextView::new(logo_string)
 		.v_align(VAlign::Top)
 		.h_align(HAlign::Left);
 	logo_view.set_scrollable(false);*/
 	let basic_status_view =
-		LinearLayout::new(Orientation::Vertical).child(BoxView::with_full_screen(
+		BoxView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)
-				.child(TextView::new(title_string))
-				.child(TextView::new("------------------------"))
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Current Status: "))
@@ -228,7 +221,7 @@ fn create_basic_status_view() -> Box<AnyView> {
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("  ").with_id("basic_network_info")),
 				), //.child(logo_view)
-		));
+		);
 	Box::new(basic_status_view.with_id("basic_status_view"))
 }
 
@@ -302,9 +295,19 @@ impl UI {
 			.layer(basic_status_view)
 			.with_id("root_stack");
 
-		let main_layer = LinearLayout::new(Orientation::Horizontal)
-			.child(Panel::new(main_menu))
-			.child(Panel::new(root_stack));
+		let mut title_string = StyledString::new();
+		title_string.append(StyledString::styled(
+			"Grin Version 0.0.1",
+			Color::Dark(BaseColor::Green),
+		));
+
+		let main_layer = LinearLayout::new(Orientation::Vertical)
+			.child(Panel::new(TextView::new(title_string)))
+			.child(
+				LinearLayout::new(Orientation::Horizontal)
+					.child(Panel::new(main_menu))
+					.child(Panel::new(root_stack))
+			);
 
 		//set theme
 		let mut theme = grin_ui.cursive.current_theme().clone();
