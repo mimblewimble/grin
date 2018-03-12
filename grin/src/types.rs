@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Server types
+
 use std::convert::From;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::AtomicBool;
@@ -41,6 +43,7 @@ pub enum Error {
 	API(api::Error),
 	/// Error originating from wallet API.
 	Wallet(wallet::Error),
+	/// Error originating from the cuckoo miner
 	Cuckoo(pow::cuckoo::Error),
 }
 
@@ -233,7 +236,7 @@ pub struct MiningStats {
 }
 
 /// Struct to return relevant information about peers
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PeerStats {
 	/// Current state of peer
 	pub state: String,
@@ -248,6 +251,7 @@ pub struct PeerStats {
 }
 
 impl PeerStats {
+	/// Convert from a peer directly
 	pub fn from_peer(peer: &p2p::Peer) -> PeerStats {
 		// State
 		let mut state = "Disconnected";

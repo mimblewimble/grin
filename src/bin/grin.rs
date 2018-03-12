@@ -34,7 +34,7 @@ extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
 mod client;
-mod ui;
+pub mod tui;
 
 use std::thread;
 use std::sync::Arc;
@@ -49,6 +49,7 @@ use config::GlobalConfig;
 use core::global;
 use core::core::amount_to_hr_string;
 use util::{init_logger, LoggingConfig, LOGGER};
+use tui::ui;
 
 /// wrap below to allow UI to clean up on stop
 fn start_server(config: grin::ServerConfig) {
