@@ -235,14 +235,19 @@ pub struct RemoveLog {
 impl RemoveLog {
 	/// Open the remove log file. The content of the file will be read in memory
 	/// for fast checking.
-	pub fn open(path: String) -> io::Result<RemoveLog> {
+	pub fn open(path: String, rewind_to_index: u32) -> io::Result<RemoveLog> {
 		let removed = read_ordered_vec(path.clone(), 12)?;
-		Ok(RemoveLog {
+		let mut rl = RemoveLog {
 			path: path,
 			removed: removed,
 			removed_tmp: vec![],
 			removed_bak: vec![],
-		})
+		};
+		if rewind_to_index > 0 {
+			rl.rewind(rewind_to_index)?;
+			rl.flush()?;
+		}
+		Ok(rl)
 	}
 
 	/// Truncate and empties the remove log.

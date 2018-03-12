@@ -60,7 +60,7 @@ fn test_coinbase_maturity() {
 		burn_reward: true,
 		..Default::default()
 	};
-	miner_config.cuckoo_miner_plugin_dir = Some(String::from("../target/debug/deps"));
+	miner_config.miner_plugin_dir = Some(String::from("../target/debug/deps"));
 
 	let mut cuckoo_miner = cuckoo::Miner::new(
 		consensus::EASINESS,
@@ -108,7 +108,7 @@ fn test_coinbase_maturity() {
 		.process_block(block.clone(), chain::Options::MINE)
 		.unwrap();
 
-	let merkle_proof = chain.get_merkle_proof(&out_id, &block).unwrap();
+	let merkle_proof = chain.get_merkle_proof(&out_id, &block.header).unwrap();
 
 	let prev = chain.head_header().unwrap();
 

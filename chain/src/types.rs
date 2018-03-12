@@ -79,8 +79,6 @@ pub enum Error {
 	AlreadySpent(Commitment),
 	/// An output with that commitment already exists (should be unique)
 	DuplicateCommitment(Commitment),
-	/// A kernel with that excess commitment already exists (should be unique)
-	DuplicateKernel(Commitment),
 	/// output not found
 	OutputNotFound,
 	/// output spent
@@ -286,13 +284,11 @@ pub trait ChainStore: Send + Sync {
 	/// Deletes the MMR position of an output.
 	fn delete_output_pos(&self, commit: &[u8]) -> Result<(), store::Error>;
 
-	/// Saves the position of a kernel, represented by its excess, in the
-	/// Kernel MMR. Used as an index for spending and pruning.
-	fn save_kernel_pos(&self, commit: &Commitment, pos: u64) -> Result<(), store::Error>;
+	fn save_block_marker(&self, bh: &Hash, marker: &(u64, u64)) -> Result<(), store::Error>;
 
-	/// Gets the position of a kernel, represented by its excess, in the
-	/// Kernel MMR. Used as an index for spending and pruning.
-	fn get_kernel_pos(&self, commit: &Commitment) -> Result<u64, store::Error>;
+	fn get_block_marker(&self, bh: &Hash) -> Result<(u64, u64), store::Error>;
+
+	fn delete_block_marker(&self, bh: &Hash) -> Result<(), store::Error>;
 
 	/// Saves information about the last written PMMR file positions for each
 	/// committed block

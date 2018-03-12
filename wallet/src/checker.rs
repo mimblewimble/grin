@@ -60,7 +60,7 @@ fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain) -> R
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
 	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
 		for out in wallet_data.outputs.values().filter(|x| {
-			x.root_key_id == keychain.root_key_id() && x.block.is_none()
+			x.root_key_id == keychain.root_key_id() && x.is_coinbase && x.block.is_none()
 				&& x.status == OutputStatus::Unspent
 		}) {
 			let commit = keychain

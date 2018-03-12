@@ -512,13 +512,13 @@ pub fn rewind_and_apply_fork(
 		}
 	}
 
-	let forked_block = store.get_block(&current)?;
+	let forked_block = store.get_block_header(&current)?;
 
 	debug!(
 		LOGGER,
 		"rewind_and_apply_fork @ {} [{}]",
-		forked_block.header.height,
-		forked_block.header.hash(),
+		forked_block.height,
+		forked_block.hash(),
 	);
 
 	// rewind the sum trees up to the forking block

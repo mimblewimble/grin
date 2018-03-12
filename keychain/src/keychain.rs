@@ -245,7 +245,7 @@ impl Keychain {
 		&self,
 		amount: u64,
 		key_id: &Identifier,
-		commit: Commitment,
+		_commit: Commitment,
 		extra_data: Option<Vec<u8>>,
 		msg: ProofMessage,
 	) -> Result<RangeProof, Error> {
