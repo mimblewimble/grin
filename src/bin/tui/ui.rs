@@ -28,7 +28,8 @@ use cursive::utils::markup::StyledString;
 use cursive::align::HAlign;
 use cursive::event::{EventResult, Key};
 use cursive::view::AnyView;
-use cursive::views::{BoxView, Dialog, LinearLayout, OnEventView, Panel, SelectView, StackView, TextView};
+use cursive::views::{BoxView, Dialog, LinearLayout, OnEventView, Panel, SelectView, StackView,
+                     TextView};
 use cursive::direction::Orientation;
 use cursive::traits::*;
 
@@ -96,7 +97,10 @@ impl TableViewItem<PeerColumn> for PeerStats {
 		}
 	}
 
-	fn cmp(&self, other: &Self, column:PeerColumn) -> Ordering where Self:Sized {
+	fn cmp(&self, other: &Self, column: PeerColumn) -> Ordering
+	where
+		Self: Sized,
+	{
 		match column {
 			PeerColumn::Address => self.addr.cmp(&other.addr),
 			PeerColumn::State => self.state.cmp(&other.state),
@@ -229,24 +233,32 @@ fn create_basic_status_view() -> Box<AnyView> {
 }
 
 fn create_peer_status_view() -> Box<AnyView> {
-	let table_view = TableView::<PeerStats, PeerColumn>::new()
-		.column(PeerColumn::Address, "Address", |c| c.width_percent(20))
-		.column(PeerColumn::State, "State", |c| c.width_percent(20))
-		.column(PeerColumn::Direction, "Direction", |c| c.width_percent(20))
-		.column(PeerColumn::TotalDifficulty, "Total Difficulty", |c| c.width_percent(20))
-		.column(PeerColumn::Version, "Version", |c| c.width_percent(20));
-		
+	let table_view =
+		TableView::<PeerStats, PeerColumn>::new()
+			.column(PeerColumn::Address, "Address", |c| c.width_percent(20))
+			.column(PeerColumn::State, "State", |c| c.width_percent(20))
+			.column(PeerColumn::Direction, "Direction", |c| {
+				c.width_percent(20)
+			})
+			.column(PeerColumn::TotalDifficulty, "Total Difficulty", |c| {
+				c.width_percent(20)
+			})
+			.column(PeerColumn::Version, "Version", |c| c.width_percent(20));
+
 	let peer_status_view = BoxView::with_full_screen(
-		Dialog::around(table_view.with_id("peer_status_table").min_size((50, 20))).title("Connected Peers")
-	)
-		.with_id("peer_sync_view");
+		Dialog::around(table_view.with_id("peer_status_table").min_size((50, 20)))
+			.title("Connected Peers"),
+	).with_id("peer_sync_view");
 	Box::new(peer_status_view)
 }
 
 fn update_peer_status_view(c: &mut Cursive, peer_info: Vec<PeerStats>) {
-	let _ = c.call_on_id("peer_status_table", |t: &mut TableView<PeerStats, PeerColumn>| {
-		t.set_items(peer_info);
-	});
+	let _ = c.call_on_id(
+		"peer_status_table",
+		|t: &mut TableView<PeerStats, PeerColumn>| {
+			t.set_items(peer_info);
+		},
+	);
 }
 
 fn create_mining_status_view() -> Box<AnyView> {
