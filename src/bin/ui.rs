@@ -25,8 +25,9 @@ use cursive::theme::Color::*;
 use cursive::theme::BaseColor::*;
 use cursive::utils::markup::StyledString;
 use cursive::align::{HAlign, VAlign};
-use cursive::event::Key;
-use cursive::views::{BoxView, LayerPosition, LinearLayout, Panel, StackView, TextView};
+use cursive::event::{EventResult, Key};
+use cursive::view::AnyView;
+use cursive::views::{BoxView, OnEventView, LinearLayout, Panel, SelectView, StackView, TextView};
 use cursive::direction::Orientation;
 use cursive::traits::*;
 
@@ -78,17 +79,41 @@ pub enum UIMessage {
 	UpdateStatus(StatusUpdates),
 }
 
-impl UI {
-	/// Create a new UI
-	pub fn new(controller_tx: mpsc::Sender<ControllerMessage>) -> UI {
-		let (ui_tx, ui_rx) = mpsc::channel::<UIMessage>();
-		let mut grin_ui = UI {
-			cursive: Cursive::new(),
-			ui_tx: ui_tx,
-			ui_rx: ui_rx,
-			controller_tx: controller_tx,
+fn create_main_menu() -> Box<AnyView> {
+		let mut main_menu = SelectView::new().h_align(HAlign::Left);
+		main_menu.add_item("Basic Status", "basic_status_view");
+		main_menu.add_item("Peers and Sync", "peer_sync_view");
+		main_menu.add_item("Mining", "peer_sync_view");
+		let change_view = |s:&mut Cursive, v:&str| {
+			let _ = s.call_on_id("root_stack", |sv:&mut StackView| {
+			let pos = sv.find_layer_from_id(v).unwrap();
+				sv.move_to_front(pos);
+			});
 		};
 
+		main_menu.set_on_submit(change_view);
+
+		let main_menu = OnEventView::new(main_menu)
+			.on_pre_event_inner('k', |s| {
+				s.select_up(1);
+				Some(EventResult::Consumed(None))
+			})
+			.on_pre_event_inner('j', |s| {
+				s.select_down(1);
+				Some(EventResult::Consumed(None))
+			})
+			.on_pre_event_inner(Key::Tab, |s| {
+				if s.selected_id().unwrap() == s.len()-1 {
+					s.set_selection(0);
+				} else {
+					s.select_down(1);
+				}
+				Some(EventResult::Consumed(None))
+			});
+		Box::new(main_menu)
+}
+
+fn create_basic_status_view() -> Box<AnyView> {
 		let mut logo_string = StyledString::new();
 		logo_string.append(StyledString::styled(
 			WELCOME_LOGO,
@@ -104,8 +129,6 @@ impl UI {
 			.v_align(VAlign::Center)
 			.h_align(HAlign::Center);
 		logo_view.set_scrollable(false);
-
-		// Create UI objects, etc
 		let basic_status_view = BoxView::with_full_screen(
 			LinearLayout::new(Orientation::Horizontal)
 				.child(BoxView::with_full_screen(logo_view))
@@ -146,8 +169,11 @@ impl UI {
 						),
 				)),
 		).with_id("basic_status_view");
+		Box::new(basic_status_view)
+}
 
-		let advanced_status_view = BoxView::with_full_screen(TextView::new(
+fn create_advanced_status_view() -> Box<AnyView> {
+				let advanced_status_view = BoxView::with_full_screen(TextView::new(
 			"Advanced Status Display will go here and should contain detailed readouts for:
 --Latest Blocks
 --Sync Info
@@ -155,62 +181,50 @@ impl UI {
 --Peer Info
 --Mining Info
 			",
-		)).with_id("advanced_status");
+		)).with_id("peer_sync_view");
+		Box::new(advanced_status_view)
+}
+impl UI {
+	/// Create a new UI
+	pub fn new(controller_tx: mpsc::Sender<ControllerMessage>) -> UI {
+		let (ui_tx, ui_rx) = mpsc::channel::<UIMessage>();
+		let mut grin_ui = UI {
+			cursive: Cursive::new(),
+			ui_tx: ui_tx,
+			ui_rx: ui_rx,
+			controller_tx: controller_tx,
+		};
+
+		// Create UI objects, etc
+		let main_menu = create_main_menu();
+		let basic_status_view = create_basic_status_view();
+		let advanced_status_view = create_advanced_status_view();
 
 		let root_stack = StackView::new()
 			.layer(advanced_status_view)
 			.layer(basic_status_view)
 			.with_id("root_stack");
 
-		/*
-		let mut basic_button = Button::new("", |s| {
-			//
-		});
-		basic_button.set_label_raw("1 - Basic Status");
-		let mut advanced_button = Button::new("2 - Advanced Status", |s| {
-			//
-		});
-		//advanced_button.set_label_raw("2 - Advanced Status");
-		let mut config_button = Button::new("", |s| {
-			//
-		});
-		config_button.set_label_raw("3 - Config");
-		let mut quit_button = Button::new("", |s| {
-			//s.quit();
-		});
-		quit_button.set_label_raw("Quit");*/
+		let main_layer = LinearLayout::new(Orientation::Horizontal)
+			.child(Panel::new(main_menu))
+			.child(Panel::new(root_stack));
 
-		let top_layer = LinearLayout::new(Orientation::Vertical)
-			.child(Panel::new(root_stack))
-			.child(
-				LinearLayout::new(Orientation::Horizontal)
-					.child(Panel::new(TextView::new(
-						"<TAB> Toggle Basic / Advanced view",
-					)))
-					.child(Panel::new(TextView::new("<Q> Quit"))),
-			);
-		/*.child(
-				LinearLayout::new(Orientation::Horizontal)
-					.child(Panel::new(basic_button))
-					.child(Panel::new(advanced_button))
-					.child(Panel::new(config_button))
-					.child(Panel::new(quit_button))
-			);*/
-
-		grin_ui.cursive.add_global_callback(Key::Tab, |s| {
-			//let bas_sta = s.find_id::<Panel<BoxView<TextView>>>("basic_status").unwrap();
-			//let mut root_stack = s.find_id::<StackView>("root_stack").unwrap();
-			//root_stack.add_layer(adv_sta);
-
-			s.call_on_id("root_stack", |sv: &mut StackView| {
-				/*if let FunctionalState::BasicStatus = cur_state {
-					return;
-				}*/
-				sv.move_to_front(LayerPosition::FromBack(0));
-				//sv.add_layer(advanced_status);
-				/*sv.pop_layer();
-				sv.add_layer(bas_sta);*/			});
+		grin_ui.cursive.add_global_callback('1', |s| {
+			let mut sv = s.find_id::<StackView>("root_stack").unwrap();
+			let pos = sv.find_layer_from_id("basic_status_view").unwrap();
+			sv.move_to_front(pos);
 		});
+
+		grin_ui.cursive.add_global_callback('2', |s| {
+			let mut sv = s.find_id::<StackView>("root_stack").unwrap();
+			let pos = sv.find_layer_from_id("peer_sync_view").unwrap();
+			sv.move_to_front(pos);
+		});
+
+		/*grin_ui.cursive.add_global_callback('b', |s| {
+			let mut sv = s.find_id::<StackView>("root_stack").unwrap();
+			sv.move_id_to_front("basic_status_view");
+		});*/
 
 		//set theme
 		let mut theme = grin_ui.cursive.current_theme().clone();
@@ -225,7 +239,7 @@ impl UI {
 		// also secondary, tertiary, TitlePrimary, TitleSecondary
 		grin_ui.cursive.set_theme(theme);
 
-		grin_ui.cursive.add_layer(top_layer);
+		grin_ui.cursive.add_layer(main_layer);
 
 		// Configure a callback (shutdown, for the first test)
 		let controller_tx_clone = grin_ui.controller_tx.clone();
