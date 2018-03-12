@@ -85,7 +85,7 @@ fn create_main_menu() -> Box<AnyView> {
 	main_menu.add_item("Peers and Sync", "peer_sync_view");
 	main_menu.add_item("Mining", "peer_sync_view");
 	let change_view = |s: &mut Cursive, v: &str| {
-		if v=="" {
+		if v == "" {
 			return;
 		}
 
@@ -120,7 +120,6 @@ fn create_main_menu() -> Box<AnyView> {
 		.child(TextView::new("Tab/Arrow : Cycle "))
 		.child(TextView::new("Enter     : Select"))
 		.child(TextView::new("Q         : Quit  "));
-		;
 	Box::new(main_menu)
 }
 
@@ -197,15 +196,15 @@ fn create_advanced_status_view() -> Box<AnyView> {
 }
 
 fn modify_theme(theme: &mut Theme) {
-		theme.shadow = false;
-		theme.borders = BorderStyle::Simple;
-		theme.palette[Background] = Dark(Black);
-		theme.palette[Shadow] = Dark(Black);
-		theme.palette[View] = Dark(Black);
-		theme.palette[Primary] = Dark(White);
-		theme.palette[Highlight] = Dark(Cyan);
-		theme.palette[HighlightInactive] = Dark(Blue);
-		// also secondary, tertiary, TitlePrimary, TitleSecondary
+	theme.shadow = false;
+	theme.borders = BorderStyle::Simple;
+	theme.palette[Background] = Dark(Black);
+	theme.palette[Shadow] = Dark(Black);
+	theme.palette[View] = Dark(Black);
+	theme.palette[Primary] = Dark(White);
+	theme.palette[Highlight] = Dark(Cyan);
+	theme.palette[HighlightInactive] = Dark(Blue);
+	// also secondary, tertiary, TitlePrimary, TitleSecondary
 }
 
 impl UI {
