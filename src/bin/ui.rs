@@ -27,7 +27,7 @@ use cursive::utils::markup::StyledString;
 use cursive::align::{HAlign, VAlign};
 use cursive::event::{EventResult, Key};
 use cursive::view::AnyView;
-use cursive::views::{BoxView, OnEventView, LinearLayout, Panel, SelectView, StackView, TextView};
+use cursive::views::{BoxView, LinearLayout, OnEventView, Panel, SelectView, StackView, TextView};
 use cursive::direction::Orientation;
 use cursive::traits::*;
 
@@ -80,109 +80,109 @@ pub enum UIMessage {
 }
 
 fn create_main_menu() -> Box<AnyView> {
-		let mut main_menu = SelectView::new().h_align(HAlign::Left);
-		main_menu.add_item("Basic Status", "basic_status_view");
-		main_menu.add_item("Peers and Sync", "peer_sync_view");
-		main_menu.add_item("Mining", "peer_sync_view");
-		let change_view = |s:&mut Cursive, v:&str| {
-			let _ = s.call_on_id("root_stack", |sv:&mut StackView| {
+	let mut main_menu = SelectView::new().h_align(HAlign::Left);
+	main_menu.add_item("Basic Status", "basic_status_view");
+	main_menu.add_item("Peers and Sync", "peer_sync_view");
+	main_menu.add_item("Mining", "peer_sync_view");
+	let change_view = |s: &mut Cursive, v: &str| {
+		let _ = s.call_on_id("root_stack", |sv: &mut StackView| {
 			let pos = sv.find_layer_from_id(v).unwrap();
-				sv.move_to_front(pos);
-			});
-		};
+			sv.move_to_front(pos);
+		});
+	};
 
-		main_menu.set_on_submit(change_view);
+	main_menu.set_on_submit(change_view);
 
-		let main_menu = OnEventView::new(main_menu)
-			.on_pre_event_inner('k', |s| {
-				s.select_up(1);
-				Some(EventResult::Consumed(None))
-			})
-			.on_pre_event_inner('j', |s| {
+	let main_menu = OnEventView::new(main_menu)
+		.on_pre_event_inner('k', |s| {
+			s.select_up(1);
+			Some(EventResult::Consumed(None))
+		})
+		.on_pre_event_inner('j', |s| {
+			s.select_down(1);
+			Some(EventResult::Consumed(None))
+		})
+		.on_pre_event_inner(Key::Tab, |s| {
+			if s.selected_id().unwrap() == s.len() - 1 {
+				s.set_selection(0);
+			} else {
 				s.select_down(1);
-				Some(EventResult::Consumed(None))
-			})
-			.on_pre_event_inner(Key::Tab, |s| {
-				if s.selected_id().unwrap() == s.len()-1 {
-					s.set_selection(0);
-				} else {
-					s.select_down(1);
-				}
-				Some(EventResult::Consumed(None))
-			});
-		Box::new(main_menu)
+			}
+			Some(EventResult::Consumed(None))
+		});
+	Box::new(main_menu)
 }
 
 fn create_basic_status_view() -> Box<AnyView> {
-		let mut logo_string = StyledString::new();
-		logo_string.append(StyledString::styled(
-			WELCOME_LOGO,
-			Color::Dark(BaseColor::Green),
-		));
+	let mut logo_string = StyledString::new();
+	logo_string.append(StyledString::styled(
+		WELCOME_LOGO,
+		Color::Dark(BaseColor::Green),
+	));
 
-		let mut title_string = StyledString::new();
-		title_string.append(StyledString::styled(
-			"Grin Version 0.0.1",
-			Color::Dark(BaseColor::Green),
-		));
-		let mut logo_view = TextView::new(logo_string)
-			.v_align(VAlign::Center)
-			.h_align(HAlign::Center);
-		logo_view.set_scrollable(false);
-		let basic_status_view = BoxView::with_full_screen(
-			LinearLayout::new(Orientation::Horizontal)
-				.child(BoxView::with_full_screen(logo_view))
-				.child(BoxView::with_full_screen(
-					LinearLayout::new(Orientation::Vertical)
-						.child(TextView::new(title_string))
-						.child(TextView::new("------------------------"))
-						.child(
-							LinearLayout::new(Orientation::Horizontal)
-								.child(TextView::new("Current Status: "))
-								.child(TextView::new("Starting").with_id("basic_current_status")),
-						)
-						.child(
-							LinearLayout::new(Orientation::Horizontal)
-								.child(TextView::new("Connected Peers: "))
-								.child(TextView::new("0").with_id("connected_peers")),
-						)
-						.child(
-							LinearLayout::new(Orientation::Horizontal)
-								.child(TextView::new("Chain Height: "))
-								.child(TextView::new("").with_id("chain_height")),
-						)
-						.child(
-							LinearLayout::new(Orientation::Horizontal)
-								.child(TextView::new("------------------------")),
-						)
-						.child(
-							LinearLayout::new(Orientation::Horizontal)
-								.child(TextView::new("").with_id("basic_mining_config_status")),
-						)
-						.child(
-							LinearLayout::new(Orientation::Horizontal)
-								.child(TextView::new("").with_id("basic_mining_status")),
-						)
-						.child(
-							LinearLayout::new(Orientation::Horizontal)
-								.child(TextView::new("").with_id("basic_network_info")),
-						),
-				)),
-		).with_id("basic_status_view");
-		Box::new(basic_status_view)
+	let mut title_string = StyledString::new();
+	title_string.append(StyledString::styled(
+		"Grin Version 0.0.1",
+		Color::Dark(BaseColor::Green),
+	));
+	let mut logo_view = TextView::new(logo_string)
+		.v_align(VAlign::Center)
+		.h_align(HAlign::Center);
+	logo_view.set_scrollable(false);
+	let basic_status_view = BoxView::with_full_screen(
+		LinearLayout::new(Orientation::Horizontal)
+			.child(BoxView::with_full_screen(logo_view))
+			.child(BoxView::with_full_screen(
+				LinearLayout::new(Orientation::Vertical)
+					.child(TextView::new(title_string))
+					.child(TextView::new("------------------------"))
+					.child(
+						LinearLayout::new(Orientation::Horizontal)
+							.child(TextView::new("Current Status: "))
+							.child(TextView::new("Starting").with_id("basic_current_status")),
+					)
+					.child(
+						LinearLayout::new(Orientation::Horizontal)
+							.child(TextView::new("Connected Peers: "))
+							.child(TextView::new("0").with_id("connected_peers")),
+					)
+					.child(
+						LinearLayout::new(Orientation::Horizontal)
+							.child(TextView::new("Chain Height: "))
+							.child(TextView::new("").with_id("chain_height")),
+					)
+					.child(
+						LinearLayout::new(Orientation::Horizontal)
+							.child(TextView::new("------------------------")),
+					)
+					.child(
+						LinearLayout::new(Orientation::Horizontal)
+							.child(TextView::new("").with_id("basic_mining_config_status")),
+					)
+					.child(
+						LinearLayout::new(Orientation::Horizontal)
+							.child(TextView::new("").with_id("basic_mining_status")),
+					)
+					.child(
+						LinearLayout::new(Orientation::Horizontal)
+							.child(TextView::new("").with_id("basic_network_info")),
+					),
+			)),
+	).with_id("basic_status_view");
+	Box::new(basic_status_view)
 }
 
 fn create_advanced_status_view() -> Box<AnyView> {
-				let advanced_status_view = BoxView::with_full_screen(TextView::new(
-			"Advanced Status Display will go here and should contain detailed readouts for:
+	let advanced_status_view = BoxView::with_full_screen(TextView::new(
+		"Advanced Status Display will go here and should contain detailed readouts for:
 --Latest Blocks
 --Sync Info
 --Chain Info
 --Peer Info
 --Mining Info
 			",
-		)).with_id("peer_sync_view");
-		Box::new(advanced_status_view)
+	)).with_id("peer_sync_view");
+	Box::new(advanced_status_view)
 }
 impl UI {
 	/// Create a new UI
