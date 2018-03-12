@@ -573,7 +573,8 @@ impl Chain {
 			})?;
 		}
 
-		// Now check we can still successfully validate the chain state after compacting.
+		// Now check we can still successfully validate the chain state after
+		// compacting.
 		self.validate()?;
 
 		// we need to be careful here in testing as 20 blocks is not that long
