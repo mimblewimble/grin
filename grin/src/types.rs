@@ -210,6 +210,8 @@ pub struct ServerStats {
 	pub awaiting_peers: bool,
 	/// Handle to current mining stats
 	pub mining_stats: MiningStats,
+	/// Peer stats
+	pub peer_stats: Vec<PeerStats>,
 }
 
 /// Struct to return relevant information about the mining process
@@ -228,6 +230,46 @@ pub struct MiningStats {
 	pub network_difficulty: u64,
 	/// cuckoo size used for mining
 	pub cuckoo_size: u16,
+}
+
+/// Struct to return relevant information about peers
+#[derive(Clone)]
+pub struct PeerStats {
+	/// Current state of peer
+	pub state: String,
+	/// Address
+	pub addr: String,
+	/// version running
+	pub version: u32,
+	/// version running
+	pub total_difficulty: u64,
+	/// direction
+	pub direction: String,
+}
+
+impl PeerStats {
+	pub fn from_peer(peer: &p2p::Peer)->PeerStats{
+		// State
+		let mut state = "Disconnected";
+		if peer.is_connected() {
+			state = "Connected";
+		}
+		if peer.is_banned() {
+			state = "Banned";
+		}
+		let addr = peer.info.addr.to_string();
+		let direction = match peer.info.direction {
+			p2p::types::Direction::Inbound => "Inbound",
+			p2p::types::Direction::Outbound => "Outbound",
+		};
+		PeerStats{
+			state: state.to_string(),
+			addr: addr,
+			version: peer.info.version,
+			total_difficulty: peer.info.total_difficulty.into_num(),
+			direction: direction.to_string(),
+		}
+	}
 }
 
 impl Default for MiningStats {

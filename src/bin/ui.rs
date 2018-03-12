@@ -24,7 +24,7 @@ use cursive::theme::PaletteColor::*;
 use cursive::theme::Color::*;
 use cursive::theme::BaseColor::*;
 use cursive::utils::markup::StyledString;
-use cursive::align::{HAlign, VAlign};
+use cursive::align::{HAlign};
 use cursive::event::{EventResult, Key};
 use cursive::view::AnyView;
 use cursive::views::{BoxView, LinearLayout, OnEventView, Panel, SelectView, StackView, TextView};
@@ -33,7 +33,7 @@ use cursive::traits::*;
 
 use grin::Server;
 
-const WELCOME_LOGO: &str = "                 GGGGG                      GGGGGGG         
+const _WELCOME_LOGO: &str = "                 GGGGG                      GGGGGGG         
                GGGGGGG                      GGGGGGGGG      
              GGGGGGGGG         GGGG         GGGGGGGGGG     
            GGGGGGGGGGG       GGGGGGGG       GGGGGGGGGGG    
@@ -83,7 +83,7 @@ fn create_main_menu() -> Box<AnyView> {
 	let mut main_menu = SelectView::new().h_align(HAlign::Left);
 	main_menu.add_item("Basic Status", "basic_status_view");
 	main_menu.add_item("Peers and Sync", "peer_sync_view");
-	main_menu.add_item("Mining", "peer_sync_view");
+	main_menu.add_item("Mining", "mining_view");
 	let change_view = |s: &mut Cursive, v: &str| {
 		if v == "" {
 			return;
@@ -124,24 +124,23 @@ fn create_main_menu() -> Box<AnyView> {
 }
 
 fn create_basic_status_view() -> Box<AnyView> {
-	let mut logo_string = StyledString::new();
+	/*let mut logo_string = StyledString::new();
 	logo_string.append(StyledString::styled(
 		WELCOME_LOGO,
 		Color::Dark(BaseColor::Green),
-	));
+	));*/
 
 	let mut title_string = StyledString::new();
 	title_string.append(StyledString::styled(
 		"Grin Version 0.0.1",
 		Color::Dark(BaseColor::Green),
 	));
-	let mut logo_view = TextView::new(logo_string)
-		.v_align(VAlign::Center)
-		.h_align(HAlign::Center);
-	logo_view.set_scrollable(false);
-	let basic_status_view = BoxView::with_full_screen(
-		LinearLayout::new(Orientation::Horizontal)
-			.child(BoxView::with_full_screen(logo_view))
+	/*let mut logo_view = TextView::new(logo_string)
+		.v_align(VAlign::Top)
+		.h_align(HAlign::Left);
+	logo_view.set_scrollable(false);*/
+	let basic_status_view =
+		LinearLayout::new(Orientation::Vertical)
 			.child(BoxView::with_full_screen(
 				LinearLayout::new(Orientation::Vertical)
 					.child(TextView::new(title_string))
@@ -159,7 +158,7 @@ fn create_basic_status_view() -> Box<AnyView> {
 					.child(
 						LinearLayout::new(Orientation::Horizontal)
 							.child(TextView::new("Chain Height: "))
-							.child(TextView::new("").with_id("chain_height")),
+							.child(TextView::new("  ").with_id("chain_height")),
 					)
 					.child(
 						LinearLayout::new(Orientation::Horizontal)
@@ -167,32 +166,33 @@ fn create_basic_status_view() -> Box<AnyView> {
 					)
 					.child(
 						LinearLayout::new(Orientation::Horizontal)
-							.child(TextView::new("").with_id("basic_mining_config_status")),
+							.child(TextView::new("  ").with_id("basic_mining_config_status")),
 					)
 					.child(
 						LinearLayout::new(Orientation::Horizontal)
-							.child(TextView::new("").with_id("basic_mining_status")),
+							.child(TextView::new("  ").with_id("basic_mining_status")),
 					)
 					.child(
 						LinearLayout::new(Orientation::Horizontal)
-							.child(TextView::new("").with_id("basic_network_info")),
-					),
-			)),
-	).with_id("basic_status_view");
-	Box::new(basic_status_view)
+							.child(TextView::new("  ").with_id("basic_network_info")),
+					)
+					//.child(logo_view)
+			));
+	Box::new(basic_status_view.with_id("basic_status_view"))
 }
 
-fn create_advanced_status_view() -> Box<AnyView> {
-	let advanced_status_view = BoxView::with_full_screen(TextView::new(
-		"Advanced Status Display will go here and should contain detailed readouts for:
---Latest Blocks
---Sync Info
---Chain Info
---Peer Info
---Mining Info
-			",
+fn create_peer_status_view() -> Box<AnyView> {
+	let peer_status_view = BoxView::with_full_screen(TextView::new(
+		"Sync and peer status coming soon!"
 	)).with_id("peer_sync_view");
-	Box::new(advanced_status_view)
+	Box::new(peer_status_view)
+}
+
+fn create_mining_status_view() -> Box<AnyView> {
+	let mining_view = BoxView::with_full_screen(TextView::new(
+		"Mining status coming soon!"
+	)).with_id("mining_view");
+	Box::new(mining_view)
 }
 
 fn modify_theme(theme: &mut Theme) {
@@ -221,10 +221,12 @@ impl UI {
 		// Create UI objects, etc
 		let main_menu = create_main_menu();
 		let basic_status_view = create_basic_status_view();
-		let advanced_status_view = create_advanced_status_view();
+		let peer_status_view = create_peer_status_view();
+		let mining_status_view = create_mining_status_view();
 
 		let root_stack = StackView::new()
-			.layer(advanced_status_view)
+			.layer(mining_status_view)
+			.layer(peer_status_view)
 			.layer(basic_status_view)
 			.with_id("root_stack");
 
@@ -291,7 +293,6 @@ impl UI {
 
 		// Step the UI
 		self.cursive.step();
-
 		true
 	}
 
@@ -369,12 +370,12 @@ impl Controller {
 				if stats.is_syncing {
 					(
 						"Mining Status: Paused while syncing".to_string(),
-						"".to_string(),
+						" ".to_string(),
 					)
 				} else if stats.mining_stats.combined_gps == 0.0 {
 					(
 						"Mining Status: Starting miner and awating first solution...".to_string(),
-						"".to_string(),
+						" ".to_string(),
 					)
 				} else {
 					(
@@ -390,7 +391,7 @@ impl Controller {
 					)
 				}
 			} else {
-				("".to_string(), "".to_string())
+				(" ".to_string(), " ".to_string())
 			}
 		};
 		let update = StatusUpdates {
