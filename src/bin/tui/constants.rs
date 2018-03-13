@@ -24,6 +24,7 @@ pub const TABLE_PEER_STATUS: &str = "peer_status_table";
 
 // Mining View
 pub const VIEW_MINING: &str = "mining_view";
+pub const TABLE_MINING_STATUS: &str = "mining_status_table";
 
 // Menu and root elements
 pub const ROOT_STACK: &str = "root_stack";

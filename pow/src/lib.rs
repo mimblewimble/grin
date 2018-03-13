@@ -42,7 +42,9 @@ extern crate time;
 extern crate grin_core as core;
 extern crate grin_util as util;
 
-extern crate cuckoo_miner;
+// Re-export (mostly for stat collection)
+pub extern crate cuckoo_miner as cuckoo_;
+pub use cuckoo_ as cuckoo_miner;
 
 mod siphash;
 pub mod plugin;

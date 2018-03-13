@@ -37,7 +37,7 @@ enum PeerColumn {
 }
 
 impl PeerColumn {
-	fn as_str(&self) -> &str {
+	fn _as_str(&self) -> &str {
 		match *self {
 			PeerColumn::Address => "Address",
 			PeerColumn::State => "State",

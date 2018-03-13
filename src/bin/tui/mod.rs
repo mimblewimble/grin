@@ -13,6 +13,7 @@
 // limitations under the License.
 
 //! Grin TUI
+extern crate grin_pow as pow;
 
 pub mod ui;
 mod table;

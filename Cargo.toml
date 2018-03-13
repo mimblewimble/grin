@@ -18,6 +18,7 @@ grin_core = { path = "./core" }
 grin_grin = { path = "./grin" }
 grin_keychain = { path = "./keychain" }
 grin_p2p = { path = "./p2p"}
+grin_pow = { path = "./pow"}
 grin_util = { path = "./util"}
 grin_wallet = { path = "./wallet" }
 blake2-rfc = "~0.2.17"

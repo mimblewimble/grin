@@ -233,6 +233,8 @@ pub struct MiningStats {
 	pub network_difficulty: u64,
 	/// cuckoo size used for mining
 	pub cuckoo_size: u16,
+	/// Individual device status from Cuckoo-Miner
+	pub device_stats: Option<Vec<Vec<pow::cuckoo_miner::CuckooMinerDeviceStats>>>,
 }
 
 /// Struct to return relevant information about peers
@@ -285,6 +287,7 @@ impl Default for MiningStats {
 			block_height: 0,
 			network_difficulty: 0,
 			cuckoo_size: 0,
+			device_stats: None,
 		}
 	}
 }
