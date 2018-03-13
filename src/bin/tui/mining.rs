@@ -12,13 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Grin TUI
+//! Mining status view definition
 
-pub mod ui;
-mod table;
-mod peers;
-mod constants;
-mod menu;
-mod status;
-mod mining;
-mod types;
+use cursive::Cursive;
+use cursive::view::AnyView;
+use cursive::views::{BoxView, TextView};
+use cursive::traits::*;
+
+use tui::constants::*;
+use tui::types::*;
+
+use grin::types::ServerStats;
+
+/// Mining status view
+pub struct TUIMiningView;
+
+impl TUIStatusListener for TUIMiningView {
+	/// Create the mining view
+	fn create() -> Box<AnyView> {
+		let mining_view = BoxView::with_full_screen(TextView::new("Mining status coming soon!"))
+			.with_id(VIEW_MINING);
+		Box::new(mining_view)
+	}
+
+	/// update
+	fn update(c: &mut Cursive, stats: &ServerStats) {}
+}

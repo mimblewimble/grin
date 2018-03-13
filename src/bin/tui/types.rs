@@ -12,13 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Grin TUI
+//! Types specific to the UI module
 
-pub mod ui;
-mod table;
-mod peers;
-mod constants;
-mod menu;
-mod status;
-mod mining;
-mod types;
+use cursive::Cursive;
+use cursive::view::AnyView;
+use grin::types::ServerStats;
+
+/// Main message struct to communicate between the UI and
+/// the main process
+pub enum UIMessage {
+	UpdateStatus(ServerStats),
+}
+
+/// Trait for a UI element that recieves status update messages
+/// and updates itself
+
+pub trait TUIStatusListener {
+	/// create the view, to return to the main UI controller
+	fn create() -> Box<AnyView>;
+	/// Update according to status update contents
+	fn update(c: &mut Cursive, stats: &ServerStats);
+}
