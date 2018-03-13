@@ -24,7 +24,7 @@ use std::sync::Arc;
 use util::static_secp_instance;
 use util::secp::pedersen::{Commitment, RangeProof};
 
-use core::consensus::reward;
+use core::consensus::REWARD;
 use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier,
                  OutputStoreable, TxKernel};
 use core::core::pmmr::{self, MerkleProof, PMMR};
@@ -567,7 +567,7 @@ impl<'a> Extension<'a> {
 		{
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
-			let over_commit = secp.commit_value(header.height * reward(0) - fees / 2)?;
+			let over_commit = secp.commit_value(header.height * REWARD)?;
 			let adjusted_sum_output = secp.commit_sum(vec![output_sum], vec![over_commit])?;
 
 			if adjusted_sum_output != kernel_sum {

@@ -38,7 +38,7 @@ pub const REWARD: u64 = 60 * GRIN_BASE;
 
 /// Actual block reward for a given total fee amount
 pub fn reward(fee: u64) -> u64 {
-	REWARD + fee / 2
+	REWARD + fee
 }
 
 /// Number of blocks before a coinbase matures and can be spent

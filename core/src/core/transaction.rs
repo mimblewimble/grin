@@ -324,7 +324,7 @@ impl Committed for Transaction {
 		&self.outputs
 	}
 	fn overage(&self) -> i64 {
-		(self.fee() as i64)
+		self.fee() as i64
 	}
 }
 
@@ -406,15 +406,6 @@ impl Transaction {
 	///  * sum of input/output commitments matches sum of kernel commitments after applying offset
 	///  * each kernel sig is valid (i.e. tx commitments sum to zero, given above is true)
 	fn verify_kernels(&self) -> Result<(), Error> {
-		// check that each individual kernel fee is even
-		// TODO - is this strictly necessary given that we check overall tx fee?
-		// TODO - move this into verify_fee() check or maybe kernel.verify()?
-		for k in &self.kernels {
-			if k.fee & 1 != 0 {
-				return Err(Error::OddKernelFee);
-			}
-		}
-
 		// sum all input and output commitments
 		let io_sum = self.sum_commitments()?;
 
