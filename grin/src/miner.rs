@@ -254,6 +254,11 @@ impl Miner {
 				if sps_total.is_finite() {
 					let mut mining_stats = mining_stats.write().unwrap();
 					mining_stats.combined_gps = sps_total;
+					let mut device_vec = vec![];
+					for i in 0..plugin_miner.loaded_plugin_count() {
+						device_vec.push(job_handle.get_stats(i).unwrap());
+					}
+					mining_stats.device_stats = Some(device_vec);
 				}
 				next_stat_output = time::get_time().sec + stat_output_interval;
 			}
@@ -359,6 +364,9 @@ impl Miner {
 					if last_hashes_per_sec.is_finite() {
 						let mut mining_stats = mining_stats.write().unwrap();
 						mining_stats.combined_gps = last_hashes_per_sec;
+						let mut device_vec = vec![];
+						device_vec.push(plugin_miner.get_stats(0).unwrap());
+						mining_stats.device_stats = Some(device_vec);
 					}
 				}
 				next_stat_check = time::get_time().sec + stat_check_interval;

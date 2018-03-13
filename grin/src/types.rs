@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Server types
+
 use std::convert::From;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::AtomicBool;
@@ -41,6 +43,7 @@ pub enum Error {
 	API(api::Error),
 	/// Error originating from wallet API.
 	Wallet(wallet::Error),
+	/// Error originating from the cuckoo miner
 	Cuckoo(pow::cuckoo::Error),
 }
 
@@ -210,6 +213,8 @@ pub struct ServerStats {
 	pub awaiting_peers: bool,
 	/// Handle to current mining stats
 	pub mining_stats: MiningStats,
+	/// Peer stats
+	pub peer_stats: Vec<PeerStats>,
 }
 
 /// Struct to return relevant information about the mining process
@@ -228,6 +233,49 @@ pub struct MiningStats {
 	pub network_difficulty: u64,
 	/// cuckoo size used for mining
 	pub cuckoo_size: u16,
+	/// Individual device status from Cuckoo-Miner
+	pub device_stats: Option<Vec<Vec<pow::cuckoo_miner::CuckooMinerDeviceStats>>>,
+}
+
+/// Struct to return relevant information about peers
+#[derive(Clone, Debug)]
+pub struct PeerStats {
+	/// Current state of peer
+	pub state: String,
+	/// Address
+	pub addr: String,
+	/// version running
+	pub version: u32,
+	/// version running
+	pub total_difficulty: u64,
+	/// direction
+	pub direction: String,
+}
+
+impl PeerStats {
+	/// Convert from a peer directly
+	pub fn from_peer(peer: &p2p::Peer) -> PeerStats {
+		// State
+		let mut state = "Disconnected";
+		if peer.is_connected() {
+			state = "Connected";
+		}
+		if peer.is_banned() {
+			state = "Banned";
+		}
+		let addr = peer.info.addr.to_string();
+		let direction = match peer.info.direction {
+			p2p::types::Direction::Inbound => "Inbound",
+			p2p::types::Direction::Outbound => "Outbound",
+		};
+		PeerStats {
+			state: state.to_string(),
+			addr: addr,
+			version: peer.info.version,
+			total_difficulty: peer.info.total_difficulty.into_num(),
+			direction: direction.to_string(),
+		}
+	}
 }
 
 impl Default for MiningStats {
@@ -239,6 +287,7 @@ impl Default for MiningStats {
 			block_height: 0,
 			network_difficulty: 0,
 			cuckoo_size: 0,
+			device_stats: None,
 		}
 	}
 }

@@ -34,7 +34,7 @@ extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
 mod client;
-mod ui;
+pub mod tui;
 
 use std::thread;
 use std::sync::Arc;
@@ -49,6 +49,7 @@ use config::GlobalConfig;
 use core::global;
 use core::core::amount_to_hr_string;
 use util::{init_logger, LoggingConfig, LOGGER};
+use tui::ui;
 
 /// wrap below to allow UI to clean up on stop
 fn start_server(config: grin::ServerConfig) {
@@ -398,8 +399,8 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 
 	if let Some(true) = server_config.run_wallet_listener {
 		let mut wallet_config = global_config.members.unwrap().wallet;
-		let wallet_seed =
-			wallet::WalletSeed::from_file(&wallet_config).expect("Failed to read wallet seed file.");
+		let wallet_seed = wallet::WalletSeed::from_file(&wallet_config)
+			.expect("Failed to read wallet seed file.");
 		let mut keychain = wallet_seed
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");

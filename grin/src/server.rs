@@ -263,6 +263,15 @@ impl Server {
 	pub fn get_server_stats(&self) -> Result<ServerStats, Error> {
 		let mining_stats = self.state_info.mining_stats.read().unwrap().clone();
 		let awaiting_peers = self.state_info.awaiting_peers.load(Ordering::Relaxed);
+		let peer_stats = self.p2p
+			.peers
+			.connected_peers()
+			.into_iter()
+			.map(|p| {
+				let p = p.read().unwrap();
+				PeerStats::from_peer(&p)
+			})
+			.collect();
 		Ok(ServerStats {
 			peer_count: self.peer_count(),
 			head: self.head(),
@@ -270,6 +279,7 @@ impl Server {
 			is_syncing: self.currently_syncing.load(Ordering::Relaxed),
 			awaiting_peers: awaiting_peers,
 			mining_stats: mining_stats,
+			peer_stats: peer_stats,
 		})
 	}
 

@@ -47,7 +47,7 @@ mod adapters;
 mod server;
 mod seed;
 mod sync;
-mod types;
+pub mod types;
 mod miner;
 
 pub use server::Server;
