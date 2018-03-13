@@ -28,7 +28,7 @@ use libc::{ftruncate as ftruncate64, off_t as off64_t};
 
 use core::ser;
 
-/// Noop
+/// A no-op function for doing nothing with some pruned data.
 pub fn prune_noop(_pruned_data: &[u8]) {}
 
 /// Wrapper for a file that can be read at any position (random read) but for
@@ -163,41 +163,46 @@ impl AppendOnlyFile {
 	where
 		T: Fn(&[u8]),
 	{
-		let mut reader = File::open(self.path.clone())?;
-		let mut writer = File::create(target)?;
+		if prune_offs.is_empty() {
+			fs::copy(self.path.clone(), target.clone())?;
+			Ok(())
+		} else {
+			let mut reader = File::open(self.path.clone())?;
+			let mut writer = File::create(target.clone())?;
 
-		// align the buffer on prune_len to avoid misalignments
-		let mut buf = vec![0; (prune_len * 256) as usize];
-		let mut read = 0;
-		let mut prune_pos = 0;
-		loop {
-			// fill our buffer
-			let len = match reader.read(&mut buf) {
-				Ok(0) => return Ok(()),
-				Ok(len) => len,
-				Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
-				Err(e) => return Err(e),
-			} as u64;
+			// align the buffer on prune_len to avoid misalignments
+			let mut buf = vec![0; (prune_len * 256) as usize];
+			let mut read = 0;
+			let mut prune_pos = 0;
+			loop {
+				// fill our buffer
+				let len = match reader.read(&mut buf) {
+					Ok(0) => return Ok(()),
+					Ok(len) => len,
+					Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+					Err(e) => return Err(e),
+				} as u64;
 
-			// write the buffer, except if we prune offsets in the current span,
-			// in which case we skip
-			let mut buf_start = 0;
-			while prune_offs[prune_pos] >= read && prune_offs[prune_pos] < read + len {
-				let prune_at = prune_offs[prune_pos] as usize;
-				if prune_at != buf_start {
-					writer.write_all(&buf[buf_start..prune_at])?;
-				} else {
-					prune_cb(&buf[buf_start..prune_at]);
+				// write the buffer, except if we prune offsets in the current span,
+				// in which case we skip
+				let mut buf_start = 0;
+				while prune_offs[prune_pos] >= read && prune_offs[prune_pos] < read + len {
+					let prune_at = prune_offs[prune_pos] as usize;
+					if prune_at != buf_start {
+						writer.write_all(&buf[buf_start..prune_at])?;
+					} else {
+						prune_cb(&buf[buf_start..prune_at]);
+					}
+					buf_start = prune_at + (prune_len as usize);
+					if prune_offs.len() > prune_pos + 1 {
+						prune_pos += 1;
+					} else {
+						break;
+					}
 				}
-				buf_start = prune_at + (prune_len as usize);
-				if prune_offs.len() > prune_pos + 1 {
-					prune_pos += 1;
-				} else {
-					break;
-				}
+				writer.write_all(&mut buf[buf_start..(len as usize)])?;
+				read += len;
 			}
-			writer.write_all(&mut buf[buf_start..(len as usize)])?;
-			read += len;
 		}
 	}
 
@@ -332,6 +337,23 @@ impl RemoveLog {
 	/// Number of positions stored in the remove log.
 	pub fn len(&self) -> usize {
 		self.removed.len()
+	}
+
+	/// Return vec of pos for removed elements before the provided cutoff index.
+	/// Useful for when we prune and compact an MMR.
+	pub fn removed_pre_cutoff(&self, cutoff_idx: u32) -> Vec<u64> {
+		self.removed
+			.iter()
+			.filter_map(
+				|&(pos, idx)| {
+					if idx < cutoff_idx {
+						Some(pos)
+					} else {
+						None
+					}
+				},
+			)
+			.collect()
 	}
 }
 

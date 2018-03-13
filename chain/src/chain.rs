@@ -556,11 +556,36 @@ impl Chain {
 	/// Meanwhile, the chain will not be able to accept new blocks. It should
 	/// therefore be called judiciously.
 	pub fn compact(&self) -> Result<(), Error> {
-		let mut sumtrees = self.txhashset.write().unwrap();
-		sumtrees.compact()?;
+		// First check we can successfully validate the full chain state.
+		// If we cannot then do not attempt to compact.
+		// This should not be required long term - but doing this for debug purposes.
+		self.validate()?;
 
+		// Now compact the txhashset via the extension.
+		{
+			let mut txhashes = self.txhashset.write().unwrap();
+			txhashes.compact()?;
+
+			// print out useful debug info after compaction
+			txhashset::extending(&mut txhashes, |extension| {
+				extension.dump_output_pmmr();
+				Ok(())
+			})?;
+		}
+
+		// Now check we can still successfully validate the chain state after
+		// compacting.
+		self.validate()?;
+
+		// we need to be careful here in testing as 20 blocks is not that long
+		// in wall clock time
 		let horizon = global::cut_through_horizon() as u64;
 		let head = self.head()?;
+
+		if head.height <= horizon {
+			return Ok(());
+		}
+
 		let mut current = self.store.get_header_by_height(head.height - horizon - 1)?;
 		loop {
 			match self.store.get_block(&current.hash()) {

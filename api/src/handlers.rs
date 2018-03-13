@@ -118,18 +118,35 @@ impl OutputHandler {
 		include_proof: bool,
 	) -> BlockOutputs {
 		let header = w(&self.chain).get_header_by_height(block_height).unwrap();
-		let block = w(&self.chain).get_block(&header.hash()).unwrap();
-		let outputs = block
-			.outputs
-			.iter()
-			.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
-			.map(|output| {
-				OutputPrintable::from_output(output, w(&self.chain), &header, include_proof)
-			})
-			.collect();
-		BlockOutputs {
-			header: BlockHeaderInfo::from_header(&header),
-			outputs: outputs,
+
+		// TODO - possible to compact away blocks we care about
+		// in the period between accepting the block and refreshing the wallet
+		if let Ok(block) = w(&self.chain).get_block(&header.hash()) {
+			let outputs = block
+				.outputs
+				.iter()
+				.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
+				.map(|output| {
+					OutputPrintable::from_output(output, w(&self.chain), &header, include_proof)
+				})
+				.collect();
+
+			BlockOutputs {
+				header: BlockHeaderInfo::from_header(&header),
+				outputs: outputs,
+			}
+		} else {
+			debug!(
+				LOGGER,
+				"could not find block {:?} at height {}, maybe compacted?",
+				&header.hash(),
+				block_height,
+			);
+
+			BlockOutputs {
+				header: BlockHeaderInfo::from_header(&header),
+				outputs: vec![],
+			}
 		}
 	}
 

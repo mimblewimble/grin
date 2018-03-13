@@ -24,6 +24,7 @@ use core::core::{block, transaction, Block, BlockHeader};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
+use keychain;
 use grin_store;
 use grin_store::pmmr::PMMRFileMetadata;
 
@@ -75,6 +76,10 @@ pub enum Error {
 	InvalidRoot,
 	/// Something does not look right with the switch commitment
 	InvalidSwitchCommit,
+	/// Error from underlying keychain impl
+	Keychain(keychain::Error),
+	/// Error from underlying secp lib
+	Secp(secp::Error),
 	/// One of the inputs in the block has already been spent
 	AlreadySpent(Commitment),
 	/// An output with that commitment already exists (should be unique)
@@ -108,19 +113,28 @@ impl From<grin_store::Error> for Error {
 		Error::StoreErr(e, "wrapped".to_owned())
 	}
 }
+
 impl From<ser::Error> for Error {
 	fn from(e: ser::Error) -> Error {
 		Error::SerErr(e)
 	}
 }
+
 impl From<io::Error> for Error {
 	fn from(e: io::Error) -> Error {
 		Error::TxHashSetErr(e.to_string())
 	}
 }
+
+impl From<keychain::Error> for Error {
+	fn from(e: keychain::Error) -> Error {
+		Error::Keychain(e)
+	}
+}
+
 impl From<secp::Error> for Error {
 	fn from(e: secp::Error) -> Error {
-		Error::TxHashSetErr(format!("Sum validation error: {}", e.to_string()))
+		Error::Secp(e)
 	}
 }
 

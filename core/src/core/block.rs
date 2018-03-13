@@ -21,7 +21,7 @@ use std::collections::HashSet;
 use core::{Committed, Input, KernelFeatures, Output, OutputFeatures, Proof, ProofMessageElements,
            ShortId, SwitchCommitHash, Transaction, TxKernel};
 use consensus;
-use consensus::{exceeds_weight, reward, REWARD, VerifySortOrder};
+use consensus::{exceeds_weight, reward, VerifySortOrder, REWARD};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::id::ShortIdentifiable;
 use core::target::Difficulty;
@@ -121,6 +121,9 @@ pub struct BlockHeader {
 	pub total_difficulty: Difficulty,
 	/// The single aggregate "offset" that needs to be applied for all
 	/// commitments to sum
+	/// TODO - maintain total_offset (based on sum of all headers)
+	/// If we need the individual offset for this block we can derive
+	/// it easily from current - previous
 	pub kernel_offset: BlindingFactor,
 }
 

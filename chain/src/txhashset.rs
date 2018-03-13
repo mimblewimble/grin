@@ -35,6 +35,7 @@ use core::ser::{self, PMMRIndexHashable, PMMRable};
 use grin_store;
 use grin_store::pmmr::{PMMRBackend, PMMRFileMetadata};
 use grin_store::types::prune_noop;
+use keychain::BlindingFactor;
 use types::{ChainStore, Error, PMMRFileMetadataCollection, TxHashSetRoots};
 use util::{zip, LOGGER};
 
@@ -54,7 +55,7 @@ where
 
 impl<T> PMMRHandle<T>
 where
-	T: PMMRable,
+	T: PMMRable + ::std::fmt::Debug,
 {
 	fn new(
 		root_dir: String,
@@ -210,15 +211,24 @@ impl TxHashSet {
 
 	/// Compact the MMR data files and flush the rm logs
 	pub fn compact(&mut self) -> Result<(), Error> {
-		let horizon = global::cut_through_horizon();
 		let commit_index = self.commit_index.clone();
+		let head = commit_index.head()?;
+		let current_height = head.height;
+
+		// horizon for compacting is based on current_height
+		let horizon = (current_height as u32).saturating_sub(global::cut_through_horizon());
+
 		let clean_output_index = |commit: &[u8]| {
+			// do we care if this fails?
 			let _ = commit_index.delete_output_pos(commit);
 		};
+
 		let min_rm = (horizon / 10) as usize;
+
 		self.output_pmmr_h
 			.backend
 			.check_compact(min_rm, horizon, clean_output_index)?;
+
 		self.rproof_pmmr_h
 			.backend
 			.check_compact(min_rm, horizon, &prune_noop)?;
@@ -381,6 +391,7 @@ impl<'a> Extension<'a> {
 				// check hash from pmmr matches hash from input (or corresponding output)
 				// if not then the input is not being honest about
 				// what it is attempting to spend...
+
 				if output_id_hash != read_hash
 					|| output_id_hash
 						!= read_elem
@@ -562,14 +573,19 @@ impl<'a> Extension<'a> {
 
 		// the real magicking: the sum of all kernel excess should equal the sum
 		// of all Output commitments, minus the total supply
-		let (kernel_sum, fees) = self.sum_kernels()?;
+		let kernel_offset = self.sum_kernel_offsets(&header)?;
+		let kernel_sum = self.sum_kernels(kernel_offset)?;
 		let output_sum = self.sum_outputs()?;
+
+		// supply is the sum of the coinbase outputs from all the block headers
+		let supply = header.height * REWARD;
+
 		{
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
-			let over_commit = secp.commit_value(header.height * REWARD)?;
-			let adjusted_sum_output = secp.commit_sum(vec![output_sum], vec![over_commit])?;
 
+			let over_commit = secp.commit_value(supply)?;
+			let adjusted_sum_output = secp.commit_sum(vec![output_sum], vec![over_commit])?;
 			if adjusted_sum_output != kernel_sum {
 				return Err(Error::InvalidTxHashSet(
 					"Differing Output commitment and kernel excess sums.".to_owned(),
@@ -601,6 +617,14 @@ impl<'a> Extension<'a> {
 		self.rollback = true;
 	}
 
+	/// Dumps the output MMR.
+	/// We use this after compacting for visual confirmation that it worked.
+	pub fn dump_output_pmmr(&self) {
+		debug!(LOGGER, "-- outputs --");
+		self.output_pmmr.dump_from_file(false);
+		debug!(LOGGER, "-- end of outputs --");
+	}
+
 	/// Dumps the state of the 3 sum trees to stdout for debugging. Short
 	/// version only prints the Output tree.
 	pub fn dump(&self, short: bool) {
@@ -623,9 +647,46 @@ impl<'a> Extension<'a> {
 		)
 	}
 
+	/// TODO - Just use total_offset from latest header once this is available.
+	/// So we do not need to iterate over all the headers to calculate it.
+	fn sum_kernel_offsets(&self, header: &BlockHeader) -> Result<Option<Commitment>, Error> {
+		let mut kernel_offsets = vec![];
+
+		// iterate back up the chain collecting the kernel offset for each block header
+		let mut current = header.clone();
+		while current.height > 0 {
+			kernel_offsets.push(current.kernel_offset);
+			current = self.commit_index.get_block_header(&current.previous)?;
+		}
+
+		// now sum the kernel_offset from each block header
+		// to give us an aggregate offset for the entire
+		// blockchain
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
+
+		let keys = kernel_offsets
+			.iter()
+			.cloned()
+			.filter(|x| *x != BlindingFactor::zero())
+			.filter_map(|x| x.secret_key(&secp).ok())
+			.collect::<Vec<_>>();
+
+		let offset = if keys.is_empty() {
+			None
+		} else {
+			let sum = secp.blind_sum(keys, vec![])?;
+			let offset = BlindingFactor::from_secret_key(sum);
+			let skey = offset.secret_key(&secp)?;
+			Some(secp.commit(0, skey)?)
+		};
+
+		Ok(offset)
+	}
+
 	/// Sums the excess of all our kernels, validating their signatures on the
 	/// way
-	fn sum_kernels(&self) -> Result<(Commitment, u64), Error> {
+	fn sum_kernels(&self, kernel_offset: Option<Commitment>) -> Result<Commitment, Error> {
 		// make sure we have the right count of kernels using the MMR, the storage
 		// file may have a few more
 		let mmr_sz = self.kernel_pmmr.unpruned_size();
@@ -635,7 +696,6 @@ impl<'a> Extension<'a> {
 		let first: TxKernel = ser::deserialize(&mut kernel_file)?;
 		first.verify()?;
 		let mut sum_kernel = first.excess;
-		let mut fees = first.fee;
 
 		let secp = static_secp_instance();
 		let mut kern_count = 1;
@@ -645,7 +705,6 @@ impl<'a> Extension<'a> {
 					kernel.verify()?;
 					let secp = secp.lock().unwrap();
 					sum_kernel = secp.commit_sum(vec![sum_kernel, kernel.excess], vec![])?;
-					fees += kernel.fee;
 					kern_count += 1;
 					if kern_count == count {
 						break;
@@ -654,8 +713,20 @@ impl<'a> Extension<'a> {
 				Err(_) => break,
 			}
 		}
-		debug!(LOGGER, "Validated and summed {} kernels", kern_count);
-		Ok((sum_kernel, fees))
+
+		// now apply the kernel offset of we have one
+		{
+			let secp = secp.lock().unwrap();
+			if let Some(kernel_offset) = kernel_offset {
+				sum_kernel = secp.commit_sum(vec![sum_kernel, kernel_offset], vec![])?;
+			}
+		}
+
+		debug!(
+			LOGGER,
+			"Validated, summed (and offset) {} kernels", kern_count
+		);
+		Ok(sum_kernel)
 	}
 
 	/// Sums all our Output commitments, checking range proofs at the same time
@@ -664,7 +735,7 @@ impl<'a> Extension<'a> {
 		let mut output_count = 0;
 		let secp = static_secp_instance();
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
-			if pmmr::bintree_postorder_height(n) == 0 {
+			if pmmr::is_leaf(n) {
 				if let Some((_, output)) = self.output_pmmr.get(n, true) {
 					let out = output.expect("not a leaf node");
 					let commit = out.commit.clone();

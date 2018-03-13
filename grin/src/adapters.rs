@@ -393,7 +393,7 @@ impl NetToChainAdapter {
 			Err(e) => {
 				debug!(
 					LOGGER,
-					"adapter: process_block :block {} refused by chain: {:?}", bhash, e
+					"adapter: process_block: block {} refused by chain: {:?}", bhash, e
 				);
 				true
 			}

@@ -657,11 +657,10 @@ impl Input {
 			if lock_height > height {
 				return Err(Error::ImmatureCoinbase);
 			}
+
 			debug!(
 				LOGGER,
-				"input: verify_maturity: success, coinbase maturity via Merkle proof: {} vs. {}",
-				lock_height,
-				height,
+				"input: verify_maturity: success via Merkle proof: {} vs {}", lock_height, height,
 			);
 		}
 		Ok(())
