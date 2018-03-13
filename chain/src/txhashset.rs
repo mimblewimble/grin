@@ -722,7 +722,10 @@ impl<'a> Extension<'a> {
 			}
 		}
 
-		debug!(LOGGER, "Validated, summed (and offset) {} kernels", kern_count);
+		debug!(
+			LOGGER,
+			"Validated, summed (and offset) {} kernels", kern_count
+		);
 		Ok(sum_kernel)
 	}
 
