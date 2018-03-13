@@ -664,7 +664,7 @@ impl Miner {
 		);
 
 		// making sure we're not spending time mining a useless block
-		b.validate()?;
+		b.validate(&head)?;
 
 		let mut rng = rand::OsRng::new().unwrap();
 		b.header.nonce = rng.gen();

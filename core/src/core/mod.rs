@@ -458,14 +458,16 @@ mod test {
 		let keychain = keychain::Keychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 
+		let previous_header = BlockHeader::default();
+
 		let b = Block::new(
-			&BlockHeader::default(),
+			&previous_header,
 			vec![],
 			&keychain,
 			&key_id,
 			Difficulty::one(),
 		).unwrap();
-		b.cut_through().validate().unwrap();
+		b.cut_through().validate(&previous_header).unwrap();
 	}
 
 	#[test]
@@ -476,14 +478,16 @@ mod test {
 		let mut tx1 = tx2i1o();
 		tx1.validate().unwrap();
 
-		let b = Block::new(
-			&BlockHeader::default(),
+		let previous_header = BlockHeader::default();
+
+		let block = Block::new(
+			&previous_header,
 			vec![&mut tx1],
 			&keychain,
 			&key_id,
 			Difficulty::one(),
 		).unwrap();
-		b.cut_through().validate().unwrap();
+		block.cut_through().validate(&previous_header).unwrap();
 	}
 
 	#[test]
@@ -494,14 +498,16 @@ mod test {
 		let mut tx1 = tx2i1o();
 		let mut tx2 = tx1i1o();
 
+		let previous_header = BlockHeader::default();
+
 		let b = Block::new(
-			&BlockHeader::default(),
+			&previous_header,
 			vec![&mut tx1, &mut tx2],
 			&keychain,
 			&key_id,
 			Difficulty::one(),
 		).unwrap();
-		b.validate().unwrap();
+		b.validate(&previous_header).unwrap();
 	}
 
 	#[test]
@@ -524,14 +530,16 @@ mod test {
 			&keychain,
 		).unwrap();
 
+		let previous_header = BlockHeader::default();
+
 		let b = Block::new(
-			&BlockHeader::default(),
+			&previous_header,
 			vec![&tx1],
 			&keychain,
 			&key_id3.clone(),
 			Difficulty::one(),
 		).unwrap();
-		b.validate().unwrap();
+		b.validate(&previous_header).unwrap();
 
 		// now try adding a timelocked tx where lock height is greater than current
 		// block height
@@ -545,14 +553,16 @@ mod test {
 			&keychain,
 		).unwrap();
 
+		let previous_header = BlockHeader::default();
+
 		let b = Block::new(
-			&BlockHeader::default(),
+			&previous_header,
 			vec![&tx1],
 			&keychain,
 			&key_id3.clone(),
 			Difficulty::one(),
 		).unwrap();
-		match b.validate() {
+		match b.validate(&previous_header) {
 			Err(KernelLockHeight(height)) => {
 				assert_eq!(height, 2);
 			}
