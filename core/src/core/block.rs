@@ -120,8 +120,6 @@ pub struct BlockHeader {
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
 
-
-
 	/// The single aggregate "offset" that needs to be applied for all
 	/// commitments to sum
 	/// TODO - maintain total_offset (based on sum of all headers)
@@ -860,13 +858,7 @@ mod test {
 		previous_header: &BlockHeader,
 	) -> Block {
 		let key_id = keychain.derive_key_id(1).unwrap();
-		Block::new(
-			&previous_header,
-			txs,
-			keychain,
-			&key_id,
-			Difficulty::one(),
-		).unwrap()
+		Block::new(&previous_header, txs, keychain, &key_id, Difficulty::one()).unwrap()
 	}
 
 	// utility producing a transaction that spends an output with the provided

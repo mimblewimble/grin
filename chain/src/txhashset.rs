@@ -648,7 +648,8 @@ impl<'a> Extension<'a> {
 	}
 
 	// We maintain the total accumulated kernel offset in each block header.
-	// So "summing" is just a case of taking the offset from the current block header.
+	// So "summing" is just a case of taking the total kernel offset
+	// directly from the current block header.
 	fn sum_kernel_offsets(&self, header: &BlockHeader) -> Result<Option<Commitment>, Error> {
 		let offset = if header.total_kernel_offset == BlindingFactor::zero() {
 			None

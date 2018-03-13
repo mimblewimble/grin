@@ -123,7 +123,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 			let block = core::Block::hydrate_from(cb.clone(), txs);
 
-			let chain = self.chain.upgrade()
+			let chain = self.chain
+				.upgrade()
 				.expect("failed to upgrade weak ref to chain");
 
 			if let Ok(prev_header) = chain.get_block_header(&cb.header.previous) {
