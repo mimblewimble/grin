@@ -24,7 +24,7 @@ use std::sync::Arc;
 use util::static_secp_instance;
 use util::secp::pedersen::{Commitment, RangeProof};
 
-use core::consensus::reward;
+use core::consensus::REWARD;
 use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier,
                  OutputStoreable, TxKernel};
 use core::core::pmmr::{self, MerkleProof, PMMR};
@@ -573,15 +573,17 @@ impl<'a> Extension<'a> {
 
 		// the real magicking: the sum of all kernel excess should equal the sum
 		// of all Output commitments, minus the total supply
-		let (kernel_sum, fees) = self.sum_kernels()?;
+		let kernel_sum = self.sum_kernels()?;
 		let kernel_offset = self.sum_kernel_offsets(&header)?;
 		let output_sum = self.sum_outputs()?;
+
+		// supply is the sum of the coinbase outputs from all the block headers
+		let supply = header.height * REWARD;
 
 		{
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
 
-			let supply = header.height * reward(0) - fees / 2;
 			let over_commit = secp.commit_value(supply)?;
 			let adjusted_sum_output = secp.commit_sum(vec![output_sum], vec![over_commit])?;
 			let offset_kernel_sum = secp.commit_sum(vec![kernel_sum, kernel_offset], vec![])?;
@@ -646,6 +648,8 @@ impl<'a> Extension<'a> {
 		)
 	}
 
+	/// TODO - Just use total_offset from latest header once this is available.
+	/// So we do not need to iterate over all the headers to calculate it.
 	fn sum_kernel_offsets(&self, header: &BlockHeader) -> Result<Commitment, Error> {
 		let mut kernel_offsets = vec![];
 
@@ -683,7 +687,7 @@ impl<'a> Extension<'a> {
 
 	/// Sums the excess of all our kernels, validating their signatures on the
 	/// way
-	fn sum_kernels(&self) -> Result<(Commitment, u64), Error> {
+	fn sum_kernels(&self) -> Result<Commitment, Error> {
 		// make sure we have the right count of kernels using the MMR, the storage
 		// file may have a few more
 		let mmr_sz = self.kernel_pmmr.unpruned_size();
@@ -693,7 +697,6 @@ impl<'a> Extension<'a> {
 		let first: TxKernel = ser::deserialize(&mut kernel_file)?;
 		first.verify()?;
 		let mut sum_kernel = first.excess;
-		let mut fees = first.fee;
 
 		let secp = static_secp_instance();
 		let mut kern_count = 1;
@@ -703,7 +706,6 @@ impl<'a> Extension<'a> {
 					kernel.verify()?;
 					let secp = secp.lock().unwrap();
 					sum_kernel = secp.commit_sum(vec![sum_kernel, kernel.excess], vec![])?;
-					fees += kernel.fee;
 					kern_count += 1;
 					if kern_count == count {
 						break;
@@ -713,7 +715,7 @@ impl<'a> Extension<'a> {
 			}
 		}
 		debug!(LOGGER, "Validated and summed {} kernels", kern_count);
-		Ok((sum_kernel, fees))
+		Ok(sum_kernel)
 	}
 
 	/// Sums all our Output commitments, checking range proofs at the same time

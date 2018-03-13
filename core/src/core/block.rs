@@ -21,7 +21,7 @@ use std::collections::HashSet;
 use core::{Committed, Input, KernelFeatures, Output, OutputFeatures, Proof, ProofMessageElements,
            ShortId, SwitchCommitHash, Transaction, TxKernel};
 use consensus;
-use consensus::{exceeds_weight, reward, VerifySortOrder, REWARD};
+use consensus::{exceeds_weight, reward, REWARD, VerifySortOrder};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::id::ShortIdentifiable;
 use core::target::Difficulty;
@@ -42,8 +42,6 @@ pub enum Error {
 	KernelSumMismatch,
 	/// Same as above but for the coinbase part of a block, including reward
 	CoinbaseSumMismatch,
-	/// Kernel fee can't be odd, due to half fee burning
-	OddKernelFee,
 	/// Too many inputs, outputs or kernels in the block
 	WeightExceeded,
 	/// Kernel not valid due to lock_height exceeding block header height
@@ -123,6 +121,9 @@ pub struct BlockHeader {
 	pub total_difficulty: Difficulty,
 	/// The single aggregate "offset" that needs to be applied for all
 	/// commitments to sum
+	/// TODO - maintain total_offset (based on sum of all headers)
+	/// If we need the individual offset for this block we can derive
+	/// it easily from current - previous
 	pub kernel_offset: BlindingFactor,
 }
 
@@ -360,7 +361,7 @@ impl Committed for Block {
 		&self.outputs
 	}
 	fn overage(&self) -> i64 {
-		((self.total_fees() / 2) as i64) - (REWARD as i64)
+		-(REWARD as i64)
 	}
 }
 
@@ -674,10 +675,6 @@ impl Block {
 	/// and that all kernel signatures are valid.
 	fn verify_kernels(&self) -> Result<(), Error> {
 		for k in &self.kernels {
-			if k.fee & 1 != 0 {
-				return Err(Error::OddKernelFee);
-			}
-
 			// check we have no kernels with lock_heights greater than current height
 			// no tx can be included in a block earlier than its lock_height
 			if k.lock_height > self.header.height {
