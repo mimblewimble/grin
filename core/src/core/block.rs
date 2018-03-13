@@ -119,15 +119,9 @@ pub struct BlockHeader {
 	pub difficulty: Difficulty,
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
-
-	/// The single aggregate "offset" that needs to be applied for all
-	/// commitments to sum
-	/// TODO - maintain total_offset (based on sum of all headers)
-	/// If we need the individual offset for this block we can derive
-	/// it easily from current - previous
-	// pub kernel_offset: BlindingFactor,
-
-	/// Total accumulated difficulty since genesis block
+	/// Total accumulated sum of kernel offsets since genesis block.
+	/// We can derive the kernel offset sum for *this* block from
+	/// the total kernel offset of the previous block header.
 	pub total_kernel_offset: BlindingFactor,
 }
 
