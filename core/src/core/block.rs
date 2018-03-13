@@ -21,7 +21,7 @@ use std::collections::HashSet;
 use core::{Committed, Input, KernelFeatures, Output, OutputFeatures, Proof, ProofMessageElements,
            ShortId, SwitchCommitHash, Transaction, TxKernel};
 use consensus;
-use consensus::{exceeds_weight, reward, REWARD, VerifySortOrder};
+use consensus::{exceeds_weight, reward, VerifySortOrder, REWARD};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::id::ShortIdentifiable;
 use core::target::Difficulty;

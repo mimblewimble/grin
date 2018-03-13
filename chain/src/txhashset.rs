@@ -573,8 +573,8 @@ impl<'a> Extension<'a> {
 
 		// the real magicking: the sum of all kernel excess should equal the sum
 		// of all Output commitments, minus the total supply
-		let kernel_sum = self.sum_kernels()?;
 		let kernel_offset = self.sum_kernel_offsets(&header)?;
+		let kernel_sum = self.sum_kernels(kernel_offset)?;
 		let output_sum = self.sum_outputs()?;
 
 		// supply is the sum of the coinbase outputs from all the block headers
@@ -586,8 +586,7 @@ impl<'a> Extension<'a> {
 
 			let over_commit = secp.commit_value(supply)?;
 			let adjusted_sum_output = secp.commit_sum(vec![output_sum], vec![over_commit])?;
-			let offset_kernel_sum = secp.commit_sum(vec![kernel_sum, kernel_offset], vec![])?;
-			if adjusted_sum_output != offset_kernel_sum {
+			if adjusted_sum_output != kernel_sum {
 				return Err(Error::InvalidTxHashSet(
 					"Differing Output commitment and kernel excess sums.".to_owned(),
 				));
@@ -650,7 +649,7 @@ impl<'a> Extension<'a> {
 
 	/// TODO - Just use total_offset from latest header once this is available.
 	/// So we do not need to iterate over all the headers to calculate it.
-	fn sum_kernel_offsets(&self, header: &BlockHeader) -> Result<Commitment, Error> {
+	fn sum_kernel_offsets(&self, header: &BlockHeader) -> Result<Option<Commitment>, Error> {
 		let mut kernel_offsets = vec![];
 
 		// iterate back up the chain collecting the kernel offset for each block header
@@ -674,12 +673,12 @@ impl<'a> Extension<'a> {
 			.collect::<Vec<_>>();
 
 		let offset = if keys.is_empty() {
-			secp.commit_value(0)?
+			None
 		} else {
 			let sum = secp.blind_sum(keys, vec![])?;
 			let offset = BlindingFactor::from_secret_key(sum);
 			let skey = offset.secret_key(&secp)?;
-			secp.commit(0, skey)?
+			Some(secp.commit(0, skey)?)
 		};
 
 		Ok(offset)
@@ -687,7 +686,7 @@ impl<'a> Extension<'a> {
 
 	/// Sums the excess of all our kernels, validating their signatures on the
 	/// way
-	fn sum_kernels(&self) -> Result<Commitment, Error> {
+	fn sum_kernels(&self, kernel_offset: Option<Commitment>) -> Result<Commitment, Error> {
 		// make sure we have the right count of kernels using the MMR, the storage
 		// file may have a few more
 		let mmr_sz = self.kernel_pmmr.unpruned_size();
@@ -714,7 +713,16 @@ impl<'a> Extension<'a> {
 				Err(_) => break,
 			}
 		}
-		debug!(LOGGER, "Validated and summed {} kernels", kern_count);
+
+		// now apply the kernel offset of we have one
+		{
+			let secp = secp.lock().unwrap();
+			if let Some(kernel_offset) = kernel_offset {
+				sum_kernel = secp.commit_sum(vec![sum_kernel, kernel_offset], vec![])?;
+			}
+		}
+
+		debug!(LOGGER, "Validated, summed (and offset) {} kernels", kern_count);
 		Ok(sum_kernel)
 	}
 
