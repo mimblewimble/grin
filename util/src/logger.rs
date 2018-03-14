@@ -19,6 +19,9 @@ use slog::{Discard, Drain, Duplicate, Level, LevelFilter, Logger};
 use slog_term;
 use slog_async;
 
+use backtrace::Backtrace;
+use std::{panic, thread};
+
 use types::{LogLevel, LoggingConfig};
 
 fn convert_log_level(in_level: &LogLevel) -> Level {
@@ -89,6 +92,7 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 		*was_init_ref = true;
 		// .. allow logging, having ensured that paths etc are immutable
 	}
+	send_panic_to_log();
 }
 
 /// Initializes the logger for unit and integration tests
@@ -100,4 +104,46 @@ pub fn init_test_logger() {
 	let mut config_ref = LOGGING_CONFIG.lock().unwrap();
 	*config_ref = LoggingConfig::default();
 	*was_init_ref = true;
+	send_panic_to_log();
+}
+
+/// hook to send panics to logs as well as stderr
+fn send_panic_to_log() {
+	panic::set_hook(Box::new(|info| {
+		let backtrace = Backtrace::new();
+
+		let thread = thread::current();
+		let thread = thread.name().unwrap_or("unnamed");
+
+		let msg = match info.payload().downcast_ref::<&'static str>() {
+			Some(s) => *s,
+			None => match info.payload().downcast_ref::<String>() {
+				Some(s) => &**s,
+				None => "Box<Any>",
+			},
+		};
+
+		match info.location() {
+			Some(location) => {
+				error!(
+					LOGGER,
+					"thread '{}' panicked at '{}': {}:{}{:?}",
+					thread,
+					msg,
+					location.file(),
+					location.line(),
+					backtrace
+				);
+			}
+			None => error!(
+				LOGGER,
+				"thread '{}' panicked at '{}'{:?}", thread, msg, backtrace
+			),
+		}
+		//also print to stderr
+		eprintln!(
+			"Thread '{}' panicked with message:\n\"{}\"\nSee grin.log for further details.",
+			thread, msg
+		);
+	}));
 }
