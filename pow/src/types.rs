@@ -53,6 +53,12 @@ pub struct MinerConfig {
 	/// Cuckoo miner plugin configuration, one for each plugin
 	pub cuckoo_miner_plugin_config: Option<Vec<CuckooMinerPluginConfig>>,
 
+	/// Run a stratum mining server rather than mining locally in-process
+	pub enable_stratum_server: bool,
+
+	/// If enabled, the address and port to listen on
+	pub stratum_server_addr: Option<String>,
+
 	/// How long to wait before stopping the miner, recollecting transactions
 	/// and starting again
 	pub attempt_time_per_block: u32,
@@ -77,6 +83,8 @@ impl Default for MinerConfig {
 			cuckoo_miner_async_mode: None,
 			cuckoo_miner_plugin_dir: None,
 			cuckoo_miner_plugin_config: None,
+			enable_stratum_server: false,
+			stratum_server_addr: None,
 			wallet_listener_url: "http://localhost:13415".to_string(),
 			burn_reward: false,
 			slow_down_in_millis: Some(0),

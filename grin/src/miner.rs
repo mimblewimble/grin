@@ -19,6 +19,9 @@ use rand::{self, Rng};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
+use std::net::{Shutdown, TcpListener, TcpStream};
+use std::io::{ErrorKind, Read, Write};
+use std::mem;
 use time;
 
 use adapters::PoolToChainAdapter;
@@ -46,7 +49,6 @@ use wallet::BlockFees;
 use pow::plugin::PluginMiner;
 
 use itertools::Itertools;
-
 
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
@@ -137,13 +139,106 @@ impl Miner {
 			tx_pool: tx_pool,
 			debug_output_id: String::from("none"),
 		}
-	}
+	} // fn new
 
 	/// Keeping this optional so setting in a separate function
 	/// instead of in the new function
 	pub fn set_debug_output_id(&mut self, debug_output_id: String) {
 		self.debug_output_id = debug_output_id;
 	}
+
+	// Get a solution (BlockHeader) from the stratum client
+	fn stratum_get_solution(
+		&self,
+		stream: &mut TcpStream,
+		stream_err: &mut bool,
+	) -> Option<BlockHeader> {
+		// Get a solved block header from the stream
+		// get size
+		let dsz: usize;
+		let mut data = [0 as u8; 4]; // using 4 byte buffer
+		loop {
+			match stream.read_exact(&mut data) {
+				Ok(_) => unsafe {
+					let sz = mem::transmute::<[u8; 4], u32>(data);
+					dsz = sz as usize;
+					break;
+				},
+				Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+					// This is not an 'error', just isnt any data ready for us to read right now
+					return None;
+				}
+				Err(e) => {
+					// We lost our client
+					warn!(LOGGER, "Error in connection with stratum client: {}", e);
+					*stream_err = true;
+					return None;
+				}
+			}
+		} // loop
+
+		// get serialized data
+		let mut retry = 0;
+		let mut dvec = vec![0; dsz];
+		loop {
+			match stream.read_exact(&mut dvec) {
+				Ok(_) => {
+					let mut bh: BlockHeader = ser::deserialize(&mut &dvec[..]).unwrap();
+					return Some(bh);
+				}
+				Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+					// Sleep a bit and try again, but give up at some point
+					retry += 1;
+					if retry >= 1000 {
+						warn!(LOGGER, "Error in connection with stratum client: {}", e);
+						*stream_err = true;
+						return None;
+					}
+					thread::sleep(Duration::from_millis(100));
+				}
+				Err(e) => {
+					warn!(LOGGER, "Error in connection with stratum client: {}", e);
+					*stream_err = true;
+					return None;
+				}
+			} // ? {}
+		}
+	} // End get_solution
+
+	// Send a new block to the stratum client
+	fn stratum_send_block(&self, stream: &mut TcpStream, b: &Block, stream_err: &mut bool) {
+		// Serialize the block for sending over the wire
+		let mut bvec = Vec::new();
+		ser::serialize(&mut bvec, &b).expect("serialization failed");
+
+		// Send the size of the block
+		let bveclen: u32 = bvec.len() as u32;
+		unsafe {
+			let bszb = mem::transmute::<u32, [u8; 4]>(bveclen);
+			match stream.write(&bszb) {
+				Ok(_) => {
+					info!(LOGGER, "Sent Block Size");
+				}
+				Err(e) => {
+					warn!(LOGGER, "Error in connection with stratum client: {}", e);
+					*stream_err = true;
+					return;
+				}
+			}
+		}
+
+		// Send block to client
+		match stream.write(&bvec) {
+			Ok(_) => {
+				info!(LOGGER, "Sent block");
+			}
+			Err(e) => {
+				warn!(LOGGER, "Error in connection with stratum client: {}", e);
+				*stream_err = true;
+				return;
+			}
+		}
+	} // End send_block
 
 	/// Inner part of the mining loop for cuckoo-miner async mode
 	pub fn inner_loop_async(
@@ -156,15 +251,13 @@ impl Miner {
 		latest_hash: &Hash,
 		attempt_time_per_block: u32,
 	) -> Option<Proof> {
-		debug!(
-			LOGGER,
-			"(Server ID: {}) Mining at Cuckoo{} for at most {} secs at height {} and difficulty {}.",
-			self.debug_output_id,
-			cuckoo_size,
-			attempt_time_per_block,
-			b.header.height,
-			b.header.difficulty
-		);
+		debug!(LOGGER,
+		       "(Server ID: {}) Mining at Cuckoo{} for at most {} secs at height {} and difficulty {}.",
+		       self.debug_output_id,
+		       cuckoo_size,
+		       attempt_time_per_block,
+		       b.header.height,
+		       b.header.difficulty);
 
 		// look for a pow for at most attempt_time_per_block sec on the
 		// same block (to give a chance to new
@@ -207,7 +300,8 @@ impl Miner {
 					let stats = job_handle.get_stats(i);
 					if let Ok(stat_vec) = stats {
 						for s in stat_vec {
-							let last_solution_time_secs = s.last_solution_time as f64 / 1000000000.0;
+							let last_solution_time_secs =
+								s.last_solution_time as f64 / 1000000000.0;
 							let last_hashes_per_sec = 1.0 / last_solution_time_secs;
 							debug!(
 								LOGGER,
@@ -257,8 +351,8 @@ impl Miner {
 		latest_hash: &mut Hash,
 	) -> Option<Proof> {
 		// look for a pow for at most attempt_time_per_block sec on the same block (to
-  // give a chance to new
-  // transactions) and as long as the head hasn't changed
+		// give a chance to new
+		// transactions) and as long as the head hasn't changed
 		let deadline = time::get_time().sec + attempt_time_per_block as i64;
 		let stat_check_interval = 3;
 		let mut next_stat_check = time::get_time().sec + stat_check_interval;
@@ -412,11 +506,10 @@ impl Miner {
 
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
-	pub fn run_loop(&self, miner_config: MinerConfig, cuckoo_size: u32, proof_size: usize) {
+	pub fn run_mining_loop(&self, miner_config: MinerConfig, cuckoo_size: u32, proof_size: usize) {
 		info!(
 			LOGGER,
-			"(Server ID: {}) Starting miner loop.",
-			self.debug_output_id
+			"(Server ID: {}) Starting miner loop.", self.debug_output_id
 		);
 		let mut plugin_miner = None;
 		let mut miner = None;
@@ -437,7 +530,7 @@ impl Miner {
 
 		// to prevent the wallet from generating a new HD key derivation for each
 		// iteration, we keep the returned derivation to provide it back when
-		// nothing has changed
+		// nothing has changed.  We only want to create on key_id for each new block.
 		let mut key_id = None;
 
 		loop {
@@ -452,7 +545,8 @@ impl Miner {
 			while let Err(e) = result {
 				match e {
 					self::Error::Chain(chain::Error::DuplicateCommitment(_)) => {
-						debug!(LOGGER, "Duplicate commit for potential coinbase detected. Trying next derivation.");
+						debug!(LOGGER,
+						       "Duplicate commit for potential coinbase detected. Trying next derivation.");
 					}
 					ae => {
 						warn!(LOGGER, "Error building new block: {:?}. Retrying.", ae);
@@ -527,13 +621,174 @@ impl Miner {
 			} else {
 				debug!(
 					LOGGER,
-					"setting pubkey in miner to pubkey from block_fees - {:?}",
-					block_fees
+					"setting pubkey in miner to pubkey from block_fees - {:?}", block_fees
 				);
 				key_id = block_fees.key_id();
 			}
 		}
 	}
+
+	/// Starts the stratum-server.  Listens for a connection, then enters a
+	/// loop, building a new
+	/// block on top of the existing chain anytime required and sending that to
+	/// the connected
+	/// stratum miner, proxy, or pool, and accepts solutions to be submitted.
+	pub fn run_stratum_server_loop(
+		&self,
+		miner_config: MinerConfig,
+		cuckoo_size: u32,
+		proof_size: usize,
+	) {
+		info!(
+			LOGGER,
+			"(Server ID: {}) Starting stratum server with cuckoo_size = {}, proof_size = {}",
+			self.debug_output_id,
+			cuckoo_size,
+			proof_size
+		);
+
+		// "globals" for this function
+		let mut b: Block = Block::default();
+		let mut stream_err: bool;
+		let attempt_time_per_block = miner_config.attempt_time_per_block;
+		let mut deadline: i64 = 0;
+		// to prevent the wallet from generating a new HD key derivation for each
+		// iteration, we keep the returned derivation to provide it back when
+		// nothing has changed. We only want to create on key_id for each new block,
+		// but not when we rebuild the current block to add new tx.
+		let mut key_id = None;
+
+		let listen_addr = miner_config.stratum_server_addr.clone().unwrap();
+		let listener = TcpListener::bind(listen_addr).unwrap();
+		warn!(
+			LOGGER,
+			"Stratum server started on {}",
+			miner_config.stratum_server_addr.unwrap()
+		);
+
+		// Listen for miner connection
+		for stream in listener.incoming() {
+			stream_err = false;
+			match stream {
+				Err(e) => {
+					// connection failed
+					error!(
+						LOGGER,
+						"(Server ID: {}) Error accepting stratum connection: {:?}",
+						self.debug_output_id,
+						e
+					);
+				}
+				Ok(mut stream) => {
+					info!(LOGGER, "New connection: {}", stream.peer_addr().unwrap());
+					stream
+						.set_nonblocking(true)
+						.expect("set_nonblocking call failed");
+					let mut current_hash = self.chain.head().unwrap().prev_block_h;
+
+					loop {
+						trace!(LOGGER, "key_id: {:?}", key_id);
+
+						// Abort connection on error
+						if stream_err == true {
+							warn!(
+								LOGGER,
+								"(Server ID: {}) Resetting stratum server connection",
+								self.debug_output_id
+							);
+							match stream.shutdown(Shutdown::Both) {
+								_ => {}
+							}
+							break;
+						}
+
+						// get the latest chain state and build a block on top of it
+						let head = self.chain.head_header().unwrap();
+						let mut latest_hash = self.chain.head().unwrap().last_block_h;
+
+						// Build a new block to mine
+						if current_hash != latest_hash || time::get_time().sec >= deadline {
+							// There is a new block on the chain
+							// OR we are rebuilding the current one to include new transactions
+							if current_hash != latest_hash {
+								// A brand new block, so we will generate a new key_id
+								key_id = None;
+							}
+
+							let mut result = self.build_block(&head, key_id.clone());
+							while let Err(e) = result {
+								match e {
+									self::Error::Chain(chain::Error::DuplicateCommitment(_)) => {
+										debug!(LOGGER,
+										       "Duplicate commit for potential coinbase detected. Trying next derivation.");
+									}
+									ae => {
+										warn!(
+											LOGGER,
+											"Error building new block: {:?}. Retrying.", ae
+										);
+									}
+								}
+								thread::sleep(Duration::from_millis(100));
+								result = self.build_block(&head, key_id.clone());
+							} // error building block
+
+							let (new_block, block_fees) = result.unwrap();
+							b = new_block;
+							key_id = block_fees.key_id();
+							current_hash = latest_hash;
+							// set a new deadline for rebuilding with fresh transactions
+							deadline = time::get_time().sec + attempt_time_per_block as i64;
+
+							debug!(
+								LOGGER,
+								"(Server ID: {}) sending block {} to stratum client",
+								self.debug_output_id,
+								b.header.height
+							);
+
+							// Push the new block "b" to the connected client
+							self.stratum_send_block(&mut stream, &b, &mut stream_err);
+						}
+
+						// Get a solved block header - if any are waiting
+						// Here, we are expecting real solutions at the full difficulty.
+						match self.stratum_get_solution(&mut stream, &mut stream_err) {
+							Some(a_block_header) => {
+								// Got a solution
+								if a_block_header.height == b.header.height {
+									b.header = a_block_header;
+									info!(LOGGER,
+									      "(Server ID: {}) Found valid proof of work, adding block {}",
+									      self.debug_output_id,
+									      b.hash());
+									let res = self.chain.process_block(b.clone(), chain::NONE);
+									if let Err(e) = res {
+										error!(
+											LOGGER,
+											"(Server ID: {}) Error validating mined block: {:?}",
+											self.debug_output_id,
+											e
+										);
+									}
+									debug!(LOGGER, "resetting key_id in miner to None");
+								} else {
+									warn!(LOGGER,
+									      "(Server ID: {}) Found POW for block at height: {} -  but too late",
+									      self.debug_output_id,
+									      b.header.height);
+								}
+							}
+							None => {} /* No solutions found yet, let the client keep mining the
+							            * same block */
+						} // checking for solution
+		// sleep before restarting loop
+						thread::sleep(Duration::from_millis(500));
+					} // loop forever
+				} // end OK() match stream
+			} // match stream
+		} // for stream incoming
+	} // fn run_stratum_server_loop()
 
 	/// Builds a new block with the chain head as previous and eligible
 	/// transactions from the pool.
@@ -542,7 +797,6 @@ impl Miner {
 		head: &core::BlockHeader,
 		key_id: Option<Identifier>,
 	) -> Result<(core::Block, BlockFees), Error> {
-
 		// prepare the block header timestamp
 		let mut now_sec = time::get_time().sec;
 		let head_sec = head.timestamp.to_timespec().sec;
@@ -602,9 +856,12 @@ impl Miner {
 				Err(Error::Chain(chain::Error::DuplicateCommitment(e)))
 			}
 
-			//Some other issue, possibly duplicate kernel
+			// Some other issue, possibly duplicate kernel
 			Err(e) => {
-				error!(LOGGER, "Error setting sumtree root to build a block: {:?}", e);
+				error!(
+					LOGGER,
+					"Error setting sumtree root to build a block: {:?}", e
+				);
 				Err(Error::Chain(chain::Error::Other(format!("{:?}", e))))
 			}
 		}
