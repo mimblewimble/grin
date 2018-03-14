@@ -21,6 +21,7 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
+extern crate backtrace;
 extern crate byteorder;
 extern crate rand;
 #[macro_use]

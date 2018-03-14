@@ -65,7 +65,7 @@ fn mine_empty_chain() {
 		burn_reward: true,
 		..Default::default()
 	};
-	miner_config.cuckoo_miner_plugin_dir = Some(String::from("../target/debug/deps"));
+	miner_config.miner_plugin_dir = Some(String::from("../target/debug/deps"));
 
 	let mut cuckoo_miner = cuckoo::Miner::new(
 		consensus::EASINESS,
@@ -259,7 +259,7 @@ fn spend_in_fork_and_compact() {
 		.process_block(b.clone(), chain::Options::SKIP_POW)
 		.unwrap();
 
-	let merkle_proof = chain.get_merkle_proof(&out_id, &b).unwrap();
+	let merkle_proof = chain.get_merkle_proof(&out_id, &b.header).unwrap();
 
 	println!("First block");
 

@@ -42,7 +42,9 @@ extern crate time;
 extern crate grin_core as core;
 extern crate grin_util as util;
 
-extern crate cuckoo_miner;
+// Re-export (mostly for stat collection)
+pub extern crate cuckoo_miner as cuckoo_;
+pub use cuckoo_ as cuckoo_miner;
 
 mod siphash;
 pub mod plugin;
@@ -105,7 +107,7 @@ pub fn mine_genesis_block(
 	let proof_size = global::proofsize();
 
 	let mut miner: Box<MiningWorker> = match miner_config {
-		Some(c) => if c.use_cuckoo_miner {
+		Some(c) => if c.enable_mining {
 			let mut p = plugin::PluginMiner::new(consensus::EASINESS, sz, proof_size);
 			p.init(c.clone());
 			Box::new(p)

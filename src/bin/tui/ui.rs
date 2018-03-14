@@ -1,0 +1,183 @@
+// Copyright 2018 The Grin Developers
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//! Basic TUI to better output the overall system status and status
+//! of various subsystems
+
+use std::sync::{mpsc, Arc};
+use time;
+
+use cursive::Cursive;
+use cursive::theme::{BaseColor, BorderStyle, Color, Theme};
+use cursive::theme::PaletteColor::*;
+use cursive::theme::Color::*;
+use cursive::theme::BaseColor::*;
+use cursive::utils::markup::StyledString;
+use cursive::views::{LinearLayout, Panel, StackView, TextView};
+use cursive::direction::Orientation;
+use cursive::traits::*;
+
+use grin::Server;
+//use util::LOGGER;
+
+use tui::{menu, mining, peers, status};
+use tui::types::*;
+use tui::constants::*;
+
+pub struct UI {
+	cursive: Cursive,
+	ui_rx: mpsc::Receiver<UIMessage>,
+	ui_tx: mpsc::Sender<UIMessage>,
+	controller_tx: mpsc::Sender<ControllerMessage>,
+}
+
+fn modify_theme(theme: &mut Theme) {
+	theme.shadow = false;
+	theme.borders = BorderStyle::Simple;
+	theme.palette[Background] = Dark(Black);
+	theme.palette[Shadow] = Dark(Black);
+	theme.palette[View] = Dark(Black);
+	theme.palette[Primary] = Dark(White);
+	theme.palette[Highlight] = Dark(Cyan);
+	theme.palette[HighlightInactive] = Dark(Blue);
+	// also secondary, tertiary, TitlePrimary, TitleSecondary
+}
+
+impl UI {
+	/// Create a new UI
+	pub fn new(controller_tx: mpsc::Sender<ControllerMessage>) -> UI {
+		let (ui_tx, ui_rx) = mpsc::channel::<UIMessage>();
+		let mut grin_ui = UI {
+			cursive: Cursive::new(),
+			ui_tx: ui_tx,
+			ui_rx: ui_rx,
+			controller_tx: controller_tx,
+		};
+
+		// Create UI objects, etc
+		let status_view = status::TUIStatusView::create();
+		let mining_view = mining::TUIMiningView::create();
+		let peer_view = peers::TUIPeerView::create();
+
+		let main_menu = menu::create();
+
+		let root_stack = StackView::new()
+			.layer(mining_view)
+			.layer(peer_view)
+			.layer(status_view)
+			.with_id(ROOT_STACK);
+
+		let mut title_string = StyledString::new();
+		title_string.append(StyledString::styled(
+			"Grin Version 0.0.1",
+			Color::Dark(BaseColor::Green),
+		));
+
+		let main_layer = LinearLayout::new(Orientation::Vertical)
+			.child(Panel::new(TextView::new(title_string)))
+			.child(
+				LinearLayout::new(Orientation::Horizontal)
+					.child(Panel::new(main_menu))
+					.child(Panel::new(root_stack)),
+			);
+
+		//set theme
+		let mut theme = grin_ui.cursive.current_theme().clone();
+		modify_theme(&mut theme);
+		grin_ui.cursive.set_theme(theme);
+		grin_ui.cursive.add_layer(main_layer);
+
+		// Configure a callback (shutdown, for the first test)
+		let controller_tx_clone = grin_ui.controller_tx.clone();
+		grin_ui.cursive.add_global_callback('q', move |_| {
+			controller_tx_clone
+				.send(ControllerMessage::Shutdown)
+				.unwrap();
+		});
+		grin_ui.cursive.set_fps(4);
+		grin_ui
+	}
+
+	/// Step the UI by calling into Cursive's step function, then
+	/// processing any UI messages
+	pub fn step(&mut self) -> bool {
+		if !self.cursive.is_running() {
+			return false;
+		}
+
+		// Process any pending UI messages
+		while let Some(message) = self.ui_rx.try_iter().next() {
+			match message {
+				UIMessage::UpdateStatus(update) => {
+					status::TUIStatusView::update(&mut self.cursive, &update);
+					mining::TUIMiningView::update(&mut self.cursive, &update);
+					peers::TUIPeerView::update(&mut self.cursive, &update);
+				}
+			}
+		}
+
+		// Step the UI
+		self.cursive.step();
+		true
+	}
+
+	/// Stop the UI
+	pub fn stop(&mut self) {
+		self.cursive.quit();
+	}
+}
+
+pub struct Controller {
+	rx: mpsc::Receiver<ControllerMessage>,
+	ui: UI,
+}
+
+pub enum ControllerMessage {
+	Shutdown,
+}
+
+impl Controller {
+	/// Create a new controller
+	pub fn new() -> Result<Controller, String> {
+		let (tx, rx) = mpsc::channel::<ControllerMessage>();
+		Ok(Controller {
+			rx: rx,
+			ui: UI::new(tx.clone()),
+		})
+	}
+	/// Run the controller
+	pub fn run(&mut self, server: Arc<Server>) {
+		let stat_update_interval = 1;
+		let mut next_stat_update = time::get_time().sec + stat_update_interval;
+		while self.ui.step() {
+			while let Some(message) = self.rx.try_iter().next() {
+				match message {
+					ControllerMessage::Shutdown => {
+						server.stop();
+						self.ui.stop();
+						/*self.ui
+							.ui_tx
+							.send(UIMessage::UpdateOutput("update".to_string()))
+							.unwrap();*/
+					}
+				}
+			}
+			if time::get_time().sec > next_stat_update {
+				let stats = server.get_server_stats().unwrap();
+				self.ui.ui_tx.send(UIMessage::UpdateStatus(stats)).unwrap();
+				next_stat_update = time::get_time().sec + stat_update_interval;
+			}
+		}
+	}
+}

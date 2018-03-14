@@ -48,7 +48,7 @@ mod dandelion_monitor;
 mod server;
 mod seed;
 mod sync;
-mod types;
+pub mod types;
 mod miner;
 
 pub use server::Server;

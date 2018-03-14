@@ -37,20 +37,17 @@ impl Default for CuckooMinerPluginConfig {
 /// Mining configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MinerConfig {
-	/// Whether to start the miner with the server
+	/// Whether to start the miner with the server (requires using cuckoo-miner)
 	pub enable_mining: bool,
 
-	/// Whether to use the cuckoo-miner crate and plugin for mining
-	pub use_cuckoo_miner: bool,
-
 	/// Whether to use the async version of mining
-	pub cuckoo_miner_async_mode: Option<bool>,
+	pub miner_async_mode: Option<bool>,
 
 	/// plugin dir
-	pub cuckoo_miner_plugin_dir: Option<String>,
+	pub miner_plugin_dir: Option<String>,
 
 	/// Cuckoo miner plugin configuration, one for each plugin
-	pub cuckoo_miner_plugin_config: Option<Vec<CuckooMinerPluginConfig>>,
+	pub miner_plugin_config: Option<Vec<CuckooMinerPluginConfig>>,
 
 	/// How long to wait before stopping the miner, recollecting transactions
 	/// and starting again
@@ -72,10 +69,9 @@ impl Default for MinerConfig {
 	fn default() -> MinerConfig {
 		MinerConfig {
 			enable_mining: false,
-			use_cuckoo_miner: false,
-			cuckoo_miner_async_mode: None,
-			cuckoo_miner_plugin_dir: None,
-			cuckoo_miner_plugin_config: None,
+			miner_async_mode: None,
+			miner_plugin_dir: None,
+			miner_plugin_config: None,
 			wallet_listener_url: "http://localhost:13415".to_string(),
 			burn_reward: false,
 			slow_down_in_millis: Some(0),

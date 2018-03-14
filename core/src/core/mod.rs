@@ -413,58 +413,6 @@ mod test {
 		}
 	}
 
-	// #[test]
-	// fn tx_build_aggsig() {
-	// 	let keychain = Keychain::from_random_seed().unwrap();
-	// 	let key_id1 = keychain.derive_key_id(1).unwrap();
-	// 	let key_id2 = keychain.derive_key_id(2).unwrap();
-	// 	let key_id3 = keychain.derive_key_id(3).unwrap();
-	// 	let key_id4 = keychain.derive_key_id(4).unwrap();
-	//
-	// 	let (tx_alice, blind_sum) = {
-	// 		// Alice gets 2 of her pre-existing outputs to send 5 coins to Bob, they
-	// 		// become inputs in the new transaction
-	// let (in1, in2) = (input(4, ZERO_HASH, key_id1), input(3, ZERO_HASH,
-	// key_id2));
-	//
-	// 		// Alice builds her transaction, with change, which also produces the sum
-	// 		// of blinding factors before they're obscured.
-	// 		let (tx, sum) = build::partial_transaction(
-	// 			vec![in1, in2, output(1, key_id3),
-	// 			with_fee(2)],
-	// 			&keychain,
-	// 		).unwrap();
-	//
-	// 		(tx, sum)
-	// 	};
-	//
-	// 	let blind = blind_sum.secret_key(&keychain.secp())?;
-	// 	keychain.aggsig_create_context(blind);
-	// 	let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys();
-	//
-	// 	let sig_part = keychain.aggsig_calculate_partial_sig(
-	// 		&pub_nonce,
-	// 		tx.fee(),
-	// 		tx.lock_height(),
-	// 	).unwrap();
-	//
-	//
-	// 	// From now on, Bob only has the obscured transaction and the sum of
-	// 	// blinding factors. He adds his output, finalizes the transaction so it's
-	// 	// ready for broadcast.
-	// 	let tx_final = build::transaction(
-	// 		vec![
-	// 			initial_tx(tx_alice),
-	// 			with_excess(blind_sum),
-	// 			output(4, key_id4),
-	// 		],
-	// 		&keychain,
-	// 	).unwrap();
-	//
-	// 	tx_final.validate().unwrap();
-	//
-	// }
-
 	/// Simulate the standard exchange between 2 parties when creating a basic
 	/// 2 inputs, 2 outputs transaction.
 	#[test]
@@ -510,14 +458,16 @@ mod test {
 		let keychain = keychain::Keychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 
+		let previous_header = BlockHeader::default();
+
 		let b = Block::new(
-			&BlockHeader::default(),
+			&previous_header,
 			vec![],
 			&keychain,
 			&key_id,
 			Difficulty::one(),
 		).unwrap();
-		b.cut_through().validate().unwrap();
+		b.cut_through().validate(&previous_header).unwrap();
 	}
 
 	#[test]
@@ -528,14 +478,16 @@ mod test {
 		let mut tx1 = tx2i1o();
 		tx1.validate().unwrap();
 
-		let b = Block::new(
-			&BlockHeader::default(),
+		let previous_header = BlockHeader::default();
+
+		let block = Block::new(
+			&previous_header,
 			vec![&mut tx1],
 			&keychain,
 			&key_id,
 			Difficulty::one(),
 		).unwrap();
-		b.cut_through().validate().unwrap();
+		block.cut_through().validate(&previous_header).unwrap();
 	}
 
 	#[test]
@@ -546,14 +498,16 @@ mod test {
 		let mut tx1 = tx2i1o();
 		let mut tx2 = tx1i1o();
 
+		let previous_header = BlockHeader::default();
+
 		let b = Block::new(
-			&BlockHeader::default(),
+			&previous_header,
 			vec![&mut tx1, &mut tx2],
 			&keychain,
 			&key_id,
 			Difficulty::one(),
 		).unwrap();
-		b.validate().unwrap();
+		b.validate(&previous_header).unwrap();
 	}
 
 	#[test]
@@ -576,14 +530,16 @@ mod test {
 			&keychain,
 		).unwrap();
 
+		let previous_header = BlockHeader::default();
+
 		let b = Block::new(
-			&BlockHeader::default(),
+			&previous_header,
 			vec![&tx1],
 			&keychain,
 			&key_id3.clone(),
 			Difficulty::one(),
 		).unwrap();
-		b.validate().unwrap();
+		b.validate(&previous_header).unwrap();
 
 		// now try adding a timelocked tx where lock height is greater than current
 		// block height
@@ -597,14 +553,16 @@ mod test {
 			&keychain,
 		).unwrap();
 
+		let previous_header = BlockHeader::default();
+
 		let b = Block::new(
-			&BlockHeader::default(),
+			&previous_header,
 			vec![&tx1],
 			&keychain,
 			&key_id3.clone(),
 			Difficulty::one(),
 		).unwrap();
-		match b.validate() {
+		match b.validate(&previous_header) {
 			Err(KernelLockHeight(height)) => {
 				assert_eq!(height, 2);
 			}
