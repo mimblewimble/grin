@@ -131,15 +131,15 @@ impl TUIStatusListener for TUIMiningView {
 		let status_view = LinearLayout::new(Orientation::Vertical)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_id("basic_mining_config_status")),
+					.child(TextView::new("  ").with_id("mining_config_status")),
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_id("basic_mining_status")),
+					.child(TextView::new("  ").with_id("mining_status")),
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_id("basic_network_info")),
+					.child(TextView::new("  ").with_id("network_info")),
 			);
 
 		let mining_view = LinearLayout::new(Orientation::Vertical)
@@ -154,8 +154,54 @@ impl TUIStatusListener for TUIMiningView {
 
 	/// update
 	fn update(c: &mut Cursive, stats: &ServerStats) {
-		let mining_stats = stats.mining_stats.clone();
+		let basic_mining_config_status = {
+			if stats.mining_stats.is_enabled {
+				"Configured as mining node"
+			} else {
+				"Configured as validating node only (not mining)"
+			}
+		};
+		let (basic_mining_status, basic_network_info) = {
+			if stats.mining_stats.is_enabled {
+				if stats.is_syncing {
+					(
+						"Mining Status: Paused while syncing".to_string(),
+						" ".to_string(),
+					)
+				} else if stats.mining_stats.combined_gps == 0.0 {
+					(
+						"Mining Status: Starting miner and awating first solution...".to_string(),
+						" ".to_string(),
+					)
+				} else {
+					(
+						format!(
+							"Mining Status: Mining at height {} at {:.*} GPS",
+							stats.mining_stats.block_height, 4, stats.mining_stats.combined_gps
+						),
+						format!(
+							"Cuckoo {} - Network Difficulty {}",
+							stats.mining_stats.cuckoo_size,
+							stats.mining_stats.network_difficulty.to_string()
+						),
+					)
+				}
+			} else {
+				(" ".to_string(), " ".to_string())
+			}
+		};
 
+		c.call_on_id("mining_config_status", |t: &mut TextView| {
+			t.set_content(basic_mining_config_status);
+		});
+		c.call_on_id("mining_status", |t: &mut TextView| {
+			t.set_content(basic_mining_status);
+		});
+		c.call_on_id("network_info", |t: &mut TextView| {
+			t.set_content(basic_network_info);
+		});
+
+		let mining_stats = stats.mining_stats.clone();
 		let device_stats = mining_stats.device_stats;
 		if device_stats.is_none() {
 			return;
