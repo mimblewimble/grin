@@ -272,7 +272,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		)),
 	}?;
 
-	// make sure this header has a height exactly one higher than the previous header
+	// make sure this header has a height exactly one higher than the previous
+	// header
 	if header.height != prev.height + 1 {
 		return Err(Error::InvalidBlockHeight);
 	}
