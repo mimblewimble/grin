@@ -276,7 +276,15 @@ impl Iterator for DifficultyIter {
 			Err(_) => None,
 			Ok(bh) => {
 				self.next = bh.previous;
-				Some(Ok((bh.timestamp.to_timespec().sec as u64, bh.difficulty)))
+
+				// TODO - error handling, base case for the loop, maybe look at height?
+				let difficulty = if let Ok(prev_header) = self.store.get_block_header(&bh.previous) {
+					bh.total_difficulty - prev_header.total_difficulty
+				} else {
+					bh.total_difficulty
+				};
+
+				Some(Ok((bh.timestamp.to_timespec().sec as u64, difficulty)))
 			}
 		}
 	}

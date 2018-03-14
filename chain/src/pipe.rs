@@ -39,7 +39,7 @@ pub struct BlockContext {
 	/// The head
 	pub head: Tip,
 	/// The POW verification function
-	pub pow_verifier: fn(&BlockHeader, u32) -> bool,
+	pub pow_verifier: fn(&BlockHeader, Option<BlockHeader>, u32) -> bool,
 	/// MMR sum tree states
 	pub txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 }
@@ -245,9 +245,16 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		return Err(Error::InvalidBlockTime);
 	}
 
+	// TODO - confirm genesis height is 1
+	let prev_header = if header.height > 1 {
+		Some(ctx.store.get_block_header(&header.previous)?)
+	} else {
+		None
+	};
+
 	if !ctx.opts.contains(Options::SKIP_POW) {
 		let n = global::sizeshift() as u32;
-		if !(ctx.pow_verifier)(header, n) {
+		if !(ctx.pow_verifier)(header, prev_header, n) {
 			error!(
 				LOGGER,
 				"pipe: validate_header failed for cuckoo shift size {}", n
@@ -283,43 +290,53 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		return Err(Error::InvalidBlockTime);
 	}
 
+	// verify the proof of work and related parameters
 	if !ctx.opts.contains(Options::SKIP_POW) {
-		// verify the proof of work and related parameters
+
+		// TODO - think this through...
+		// we have the following -
+		// total_difficulty (from this header)
+		// total_difficulty (from previous header)
+		// consensus::next_difficulty() (what the network says the diff should be based on previous header)
+		// anything else?
+
+
+		let current_difficulty = header.total_difficulty.clone() - prev.total_difficulty.clone();
 
 		// explicit check to ensure we are not below the minimum difficulty
 		// we will also check difficulty based on next_difficulty later on
-		if header.difficulty < Difficulty::one() {
+		if current_difficulty < Difficulty::one() {
 			return Err(Error::DifficultyTooLow);
 		}
 
 		let diff_iter = store::DifficultyIter::from(header.previous, ctx.store.clone());
-		let difficulty =
+		let network_difficulty =
 			consensus::next_difficulty(diff_iter).map_err(|e| Error::Other(e.to_string()))?;
 
 		// explicit check to ensure total_difficulty has increased by exactly
 		// the _network_ difficulty of the previous block
 		// (during testnet1 we use _block_ difficulty here)
-		if header.total_difficulty != prev.total_difficulty.clone() + difficulty.clone() {
+		if current_difficulty != network_difficulty.clone() {
 			error!(
 				LOGGER,
 				"validate_header: BANNABLE OFFENCE: header cumulative difficulty {} != {}",
-				header.difficulty.into_num(),
-				prev.total_difficulty.into_num() + difficulty.into_num()
+				current_difficulty.into_num(),
+				prev.total_difficulty.into_num() + network_difficulty.into_num()
 			);
 			return Err(Error::WrongTotalDifficulty);
 		}
 
-		// now check that the difficulty is not less than that calculated by the
-		// difficulty iterator based on the previous block
-		if header.difficulty < difficulty {
-			error!(
-				LOGGER,
-				"validate_header: BANNABLE OFFENCE: header difficulty {} < {}",
-				header.difficulty.into_num(),
-				difficulty.into_num()
-			);
-			return Err(Error::DifficultyTooLow);
-		}
+		// // now check that the difficulty is not less than that calculated by the
+		// // difficulty iterator based on the previous block
+		// if header.total_difficulty < current_difficulty - network_difficulty {
+		// 	error!(
+		// 		LOGGER,
+		// 		"validate_header: BANNABLE OFFENCE: header difficulty {} < {}",
+		// 		header.difficulty.into_num(),
+		// 		network_difficulty.into_num()
+		// 	);
+		// 	return Err(Error::DifficultyTooLow);
+		// }
 	}
 
 	Ok(())
@@ -416,7 +433,7 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 				LOGGER,
 				"pipe: chain head reached {} @ {} [{}]",
 				b.header.height,
-				b.header.difficulty,
+				b.header.total_difficulty,
 				b.hash()
 			);
 		} else {
@@ -424,7 +441,7 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 				LOGGER,
 				"pipe: chain head reached {} @ {} [{}]",
 				b.header.height,
-				b.header.difficulty,
+				b.header.total_difficulty,
 				b.hash()
 			);
 		}

@@ -122,7 +122,7 @@ pub struct Chain {
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 
 	// POW verification function
-	pow_verifier: fn(&BlockHeader, u32) -> bool,
+	pow_verifier: fn(&BlockHeader, Option<BlockHeader>, u32) -> bool,
 }
 
 unsafe impl Sync for Chain {}
@@ -148,7 +148,7 @@ impl Chain {
 		db_root: String,
 		adapter: Arc<ChainAdapter>,
 		genesis: Block,
-		pow_verifier: fn(&BlockHeader, u32) -> bool,
+		pow_verifier: fn(&BlockHeader, Option<BlockHeader>, u32) -> bool,
 	) -> Result<Chain, Error> {
 		let chain_store = store::ChainKVStore::new(db_root.clone())?;
 

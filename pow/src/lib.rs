@@ -76,23 +76,22 @@ pub trait MiningWorker {
 
 /// Validates the proof of work of a given header, and that the proof of work
 /// satisfies the requirements of the header.
-pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
-	// make sure the pow hash shows a difficulty at least as large as the target
-	// difficulty
-	if bh.difficulty > bh.pow.clone().to_difficulty() {
+pub fn verify_size(bh: &BlockHeader, prev_bh: Option<BlockHeader>, cuckoo_sz: u32) -> bool {
+	// make sure the pow hash shows a difficulty at least as large
+	// as the target difficulty
+	let difficulty = if let Some(prev_bh) = prev_bh {
+		bh.total_difficulty.clone() - prev_bh.total_difficulty.clone()
+	} else {
+		// genesis block header total_difficulty is just the initial difficulty
+		bh.total_difficulty.clone()
+	};
+	
+	if difficulty > bh.pow.clone().to_difficulty()
+	{
 		return false;
 	}
-	Cuckoo::new(&bh.hash()[..], cuckoo_sz).verify(bh.pow.clone(), consensus::EASINESS as u64)
-}
 
-/// Uses the much easier Cuckoo20 (mostly for
-/// tests).
-pub fn pow20<T: MiningWorker>(
-	miner: &mut T,
-	bh: &mut BlockHeader,
-	diff: Difficulty,
-) -> Result<(), Error> {
-	pow_size(miner, bh, diff, 20)
+	Cuckoo::new(&bh.hash()[..], cuckoo_sz).verify(bh.pow.clone(), consensus::EASINESS as u64)
 }
 
 /// Mines a genesis block, using the config specified miner if specified.
@@ -101,7 +100,9 @@ pub fn mine_genesis_block(
 	miner_config: Option<types::MinerConfig>,
 ) -> Result<core::core::Block, Error> {
 	let mut gen = genesis::genesis_testnet2();
-	let diff = gen.header.difficulty.clone();
+
+	// total_difficulty on the genesis header *is* the difficulty of that block
+	let genesis_difficulty = gen.header.total_difficulty.clone();
 
 	let sz = global::sizeshift() as u32;
 	let proof_size = global::proofsize();
@@ -116,7 +117,7 @@ pub fn mine_genesis_block(
 		},
 		None => Box::new(cuckoo::Miner::new(consensus::EASINESS, sz, proof_size)),
 	};
-	pow_size(&mut *miner, &mut gen.header, diff, sz as u32).unwrap();
+	pow_size(&mut *miner, &mut gen.header, genesis_difficulty, sz as u32).unwrap();
 	Ok(gen)
 }
 
