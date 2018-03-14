@@ -285,7 +285,7 @@ impl Keychain {
 	) -> Result<ProofInfo, Error> {
 		let nonce = self.derived_key(key_id)?;
 		let proof_message = self.secp
-			.unwind_bullet_proof(commit, nonce, extra_data, proof);
+			.unwind_bullet_proof(commit, nonce, nonce, extra_data, proof);
 		let proof_info = match proof_message {
 			Ok(p) => ProofInfo {
 				success: true,
