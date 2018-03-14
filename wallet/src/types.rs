@@ -125,6 +125,10 @@ pub enum ErrorKind {
 	#[fail(display = "Wallet seed exists error")]
 	WalletSeedExists,
 
+	/// Wallet seed doesn't exist
+	#[fail(display = "Wallet seed doesn't exist error")]
+	WalletSeedDoesntExist,
+
 	#[fail(display = "Generic error: {}", _0)] GenericError(&'static str),
 }
 
@@ -471,12 +475,11 @@ impl WalletSeed {
 		} else {
 			error!(
 				LOGGER,
-				"Run: \"grin wallet init\" to initialize a new wallet.",
-			);
-			panic!(format!(
-				"wallet seed file {} could not be opened (grin wallet init)",
+				"wallet seed file {} could not be opened (grin wallet init). \
+				 Run \"grin wallet init\" to initialize a new wallet.",
 				seed_file_path
-			));
+			);
+			Err(ErrorKind::WalletSeedDoesntExist)?
 		}
 	}
 }

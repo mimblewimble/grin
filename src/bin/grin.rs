@@ -83,29 +83,6 @@ fn start_server_tui(config: grin::ServerConfig) {
 	}
 }
 
-fn start_from_config_file(mut global_config: GlobalConfig) {
-	info!(
-		LOGGER,
-		"Starting the Grin server from configuration file at {}",
-		global_config.config_file_path.unwrap().to_str().unwrap()
-	);
-
-	global::set_mining_mode(
-		global_config
-			.members
-			.as_mut()
-			.unwrap()
-			.server
-			.clone()
-			.chain_type,
-	);
-
-	start_server(global_config.members.as_mut().unwrap().server.clone());
-	loop {
-		thread::sleep(Duration::from_secs(60));
-	}
-}
-
 fn main() {
 	// First, load a global config object,
 	// then modify that object with any switches
@@ -135,16 +112,6 @@ fn main() {
 			log_conf.log_to_stdout = false;
 		}
 		init_logger(Some(log_conf));
-		info!(
-			LOGGER,
-			"Using configuration file at: {}",
-			global_config
-				.config_file_path
-				.clone()
-				.unwrap()
-				.to_str()
-				.unwrap()
-		);
 		global::set_mining_mode(
 			global_config
 				.members
@@ -332,7 +299,7 @@ fn main() {
 	match args.subcommand() {
 		// server commands and options
 		("server", Some(server_args)) => {
-			server_command(server_args, global_config);
+			server_command(Some(server_args), global_config);
 		}
 
 		// client commands and options
@@ -350,7 +317,7 @@ fn main() {
 		// with most command line options being phased out
 		_ => {
 			if global_config.using_config_file {
-				start_from_config_file(global_config);
+				server_command(None, global_config);
 			} else {
 				// won't attempt to just start with defaults,
 				// and will reject
@@ -365,42 +332,67 @@ fn main() {
 /// stopping the Grin blockchain server. Processes all the command line
 /// arguments
 /// to build a proper configuration and runs Grin with that configuration.
-fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
-	info!(LOGGER, "Starting the Grin server...");
+fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalConfig) {
+	if global_config.using_config_file {
+		info!(
+			LOGGER,
+			"Starting the Grin server from configuration file at {}",
+			global_config.config_file_path.unwrap().to_str().unwrap()
+		);
+		global::set_mining_mode(
+			global_config
+				.members
+				.as_mut()
+				.unwrap()
+				.server
+				.clone()
+				.chain_type,
+		);
+	} else {
+		info!(
+			LOGGER,
+			"Starting the Grin server (no configuration file) ..."
+		);
+	}
 
 	// just get defaults from the global config
 	let mut server_config = global_config.members.as_ref().unwrap().server.clone();
 
-	if let Some(port) = server_args.value_of("port") {
-		server_config.p2p_config.port = port.parse().unwrap();
-	}
+	if let Some(a) = server_args {
+		if let Some(port) = a.value_of("port") {
+			server_config.p2p_config.port = port.parse().unwrap();
+		}
 
-	if let Some(api_port) = server_args.value_of("api_port") {
-		let default_ip = "0.0.0.0";
-		server_config.api_http_addr = format!("{}:{}", default_ip, api_port);
-	}
+		if let Some(api_port) = a.value_of("api_port") {
+			let default_ip = "0.0.0.0";
+			server_config.api_http_addr = format!("{}:{}", default_ip, api_port);
+		}
 
-	if server_args.is_present("mine") {
-		server_config.mining_config.as_mut().unwrap().enable_mining = true;
-	}
+		if a.is_present("mine") {
+			server_config.mining_config.as_mut().unwrap().enable_mining = true;
+		}
 
-	if let Some(wallet_url) = server_args.value_of("wallet_url") {
-		server_config
-			.mining_config
-			.as_mut()
-			.unwrap()
-			.wallet_listener_url = wallet_url.to_string();
-	}
+		if let Some(wallet_url) = a.value_of("wallet_url") {
+			server_config
+				.mining_config
+				.as_mut()
+				.unwrap()
+				.wallet_listener_url = wallet_url.to_string();
+		}
 
-	if let Some(seeds) = server_args.values_of("seed") {
-		server_config.seeding_type = grin::Seeding::List;
-		server_config.seeds = Some(seeds.map(|s| s.to_string()).collect());
+		if let Some(seeds) = a.values_of("seed") {
+			server_config.seeding_type = grin::Seeding::List;
+			server_config.seeds = Some(seeds.map(|s| s.to_string()).collect());
+		}
 	}
 
 	if let Some(true) = server_config.run_wallet_listener {
 		let mut wallet_config = global_config.members.unwrap().wallet;
-		let wallet_seed = wallet::WalletSeed::from_file(&wallet_config)
-			.expect("Failed to read wallet seed file.");
+		let wallet_seed = match wallet::WalletSeed::from_file(&wallet_config) {
+			Ok(ws) => ws,
+			Err(_) => wallet::WalletSeed::init_file(&wallet_config)
+				.expect("Failed to create wallet seed file."),
+		};
 		let mut keychain = wallet_seed
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
@@ -413,34 +405,38 @@ fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
 	}
 
 	// start the server in the different run modes (interactive or daemon)
-	match server_args.subcommand() {
-		("run", _) => {
-			start_server(server_config);
-		}
-		("start", _) => {
-			let daemonize = Daemonize::new()
-				.pid_file("/tmp/grin.pid")
-				.chown_pid_file(true)
-				.working_directory(current_dir().unwrap())
-				.privileged_action(move || {
-					start_server(server_config.clone());
-					loop {
-						thread::sleep(Duration::from_secs(60));
-					}
-				});
-			match daemonize.start() {
-				Ok(_) => info!(LOGGER, "Grin server successfully started."),
-				Err(e) => error!(LOGGER, "Error starting: {}", e),
+	if let Some(a) = server_args {
+		match a.subcommand() {
+			("run", _) => {
+				start_server(server_config);
+			}
+			("start", _) => {
+				let daemonize = Daemonize::new()
+					.pid_file("/tmp/grin.pid")
+					.chown_pid_file(true)
+					.working_directory(current_dir().unwrap())
+					.privileged_action(move || {
+						start_server(server_config.clone());
+						loop {
+							thread::sleep(Duration::from_secs(60));
+						}
+					});
+				match daemonize.start() {
+					Ok(_) => info!(LOGGER, "Grin server successfully started."),
+					Err(e) => error!(LOGGER, "Error starting: {}", e),
+				}
+			}
+			("stop", _) => println!("TODO. Just 'kill $pid' for now. Maybe /tmp/grin.pid is $pid"),
+			(cmd, _) => {
+				println!(":: {:?}", server_args);
+				panic!(
+					"Unknown server command '{}', use 'grin help server' for details",
+					cmd
+				);
 			}
 		}
-		("stop", _) => println!("TODO. Just 'kill $pid' for now. Maybe /tmp/grin.pid is $pid"),
-		(cmd, _) => {
-			println!(":: {:?}", server_args);
-			panic!(
-				"Unknown server command '{}', use 'grin help server' for details",
-				cmd
-			);
-		}
+	} else {
+		start_server(server_config);
 	}
 }
 
