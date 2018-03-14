@@ -199,7 +199,7 @@ fn test_coinbase_maturity() {
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
-	
+
 	chain.set_txhashset_roots(&mut block, false).unwrap();
 
 	pow::pow_size(
