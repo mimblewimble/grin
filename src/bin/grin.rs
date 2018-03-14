@@ -349,7 +349,10 @@ fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalCon
 				.chain_type,
 		);
 	} else {
-		info!(LOGGER, "Starting the Grin server (no configuration file) ...");
+		info!(
+			LOGGER,
+			"Starting the Grin server (no configuration file) ..."
+		);
 	}
 
 	// just get defaults from the global config
