@@ -123,15 +123,27 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 			let block = core::Block::hydrate_from(cb.clone(), txs);
 
-			if let Ok(()) = block.validate() {
-				debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
-				self.process_block(block, addr)
+			let chain = self.chain
+				.upgrade()
+				.expect("failed to upgrade weak ref to chain");
+
+			if let Ok(prev_header) = chain.get_block_header(&cb.header.previous) {
+				if let Ok(()) = block.validate(&prev_header) {
+					debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
+					self.process_block(block, addr)
+				} else {
+					debug!(
+						LOGGER,
+						"adapter: block invalid after hydration, requesting full block"
+					);
+					self.request_block(&cb.header, &addr);
+					true
+				}
 			} else {
-				debug!(
+				error!(
 					LOGGER,
-					"adapter: block invalid after hydration, requesting full block"
+					"adapter: failed to retrieve previous block header (consider ban here?)"
 				);
-				self.request_block(&cb.header, &addr);
 				true
 			}
 		}

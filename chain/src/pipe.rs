@@ -331,8 +331,11 @@ fn validate_block(
 	ctx: &mut BlockContext,
 	ext: &mut txhashset::Extension,
 ) -> Result<(), Error> {
-	// main isolated block validation, checks all commitment sums and sigs
-	b.validate().map_err(&Error::InvalidBlockProof)?;
+	let prev_header = ctx.store.get_block_header(&b.header.previous)?;
+
+	// main isolated block validation
+	// checks all commitment sums and sigs
+	b.validate(&prev_header).map_err(&Error::InvalidBlockProof)?;
 
 	if b.header.previous != ctx.head.last_block_h {
 		rewind_and_apply_fork(b, ctx.store.clone(), ext)?;

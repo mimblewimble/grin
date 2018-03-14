@@ -647,40 +647,18 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	/// TODO - Just use total_offset from latest header once this is available.
-	/// So we do not need to iterate over all the headers to calculate it.
+	// We maintain the total accumulated kernel offset in each block header.
+	// So "summing" is just a case of taking the total kernel offset
+	// directly from the current block header.
 	fn sum_kernel_offsets(&self, header: &BlockHeader) -> Result<Option<Commitment>, Error> {
-		let mut kernel_offsets = vec![];
-
-		// iterate back up the chain collecting the kernel offset for each block header
-		let mut current = header.clone();
-		while current.height > 0 {
-			kernel_offsets.push(current.kernel_offset);
-			current = self.commit_index.get_block_header(&current.previous)?;
-		}
-
-		// now sum the kernel_offset from each block header
-		// to give us an aggregate offset for the entire
-		// blockchain
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
-
-		let keys = kernel_offsets
-			.iter()
-			.cloned()
-			.filter(|x| *x != BlindingFactor::zero())
-			.filter_map(|x| x.secret_key(&secp).ok())
-			.collect::<Vec<_>>();
-
-		let offset = if keys.is_empty() {
+		let offset = if header.total_kernel_offset == BlindingFactor::zero() {
 			None
 		} else {
-			let sum = secp.blind_sum(keys, vec![])?;
-			let offset = BlindingFactor::from_secret_key(sum);
-			let skey = offset.secret_key(&secp)?;
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			let skey = header.total_kernel_offset.secret_key(&secp)?;
 			Some(secp.commit(0, skey)?)
 		};
-
 		Ok(offset)
 	}
 

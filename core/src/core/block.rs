@@ -119,12 +119,10 @@ pub struct BlockHeader {
 	pub difficulty: Difficulty,
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
-	/// The single aggregate "offset" that needs to be applied for all
-	/// commitments to sum
-	/// TODO - maintain total_offset (based on sum of all headers)
-	/// If we need the individual offset for this block we can derive
-	/// it easily from current - previous
-	pub kernel_offset: BlindingFactor,
+	/// Total accumulated sum of kernel offsets since genesis block.
+	/// We can derive the kernel offset sum for *this* block from
+	/// the total kernel offset of the previous block header.
+	pub total_kernel_offset: BlindingFactor,
 }
 
 impl Default for BlockHeader {
@@ -142,7 +140,7 @@ impl Default for BlockHeader {
 			kernel_root: ZERO_HASH,
 			nonce: 0,
 			pow: Proof::zero(proof_size),
-			kernel_offset: BlindingFactor::zero(),
+			total_kernel_offset: BlindingFactor::zero(),
 		}
 	}
 }
@@ -164,7 +162,7 @@ impl Writeable for BlockHeader {
 		try!(writer.write_u64(self.nonce));
 		try!(self.difficulty.write(writer));
 		try!(self.total_difficulty.write(writer));
-		try!(self.kernel_offset.write(writer));
+		try!(self.total_kernel_offset.write(writer));
 
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			try!(self.pow.write(writer));
@@ -185,7 +183,7 @@ impl Readable for BlockHeader {
 		let nonce = reader.read_u64()?;
 		let difficulty = Difficulty::read(reader)?;
 		let total_difficulty = Difficulty::read(reader)?;
-		let kernel_offset = BlindingFactor::read(reader)?;
+		let total_kernel_offset = BlindingFactor::read(reader)?;
 		let pow = Proof::read(reader)?;
 
 		Ok(BlockHeader {
@@ -203,7 +201,7 @@ impl Readable for BlockHeader {
 			nonce: nonce,
 			difficulty: difficulty,
 			total_difficulty: total_difficulty,
-			kernel_offset: kernel_offset,
+			total_kernel_offset: total_kernel_offset,
 		})
 	}
 }
@@ -531,20 +529,23 @@ impl Block {
 
 		// now sum the kernel_offsets up to give us
 		// an aggregate offset for the entire block
-		let kernel_offset = {
+		let total_kernel_offset = {
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
-			let keys = kernel_offsets
+			let mut keys = kernel_offsets
 				.iter()
 				.cloned()
 				.filter(|x| *x != BlindingFactor::zero())
 				.filter_map(|x| x.secret_key(&secp).ok())
 				.collect::<Vec<_>>();
+			if prev.total_kernel_offset != BlindingFactor::zero() {
+				keys.push(prev.total_kernel_offset.secret_key(&secp)?);
+			}
+
 			if keys.is_empty() {
 				BlindingFactor::zero()
 			} else {
 				let sum = secp.blind_sum(keys, vec![])?;
-
 				BlindingFactor::from_secret_key(sum)
 			}
 		};
@@ -558,7 +559,7 @@ impl Block {
 				},
 				previous: prev.hash(),
 				total_difficulty: difficulty + prev.total_difficulty.clone(),
-				kernel_offset: kernel_offset,
+				total_kernel_offset: total_kernel_offset,
 				..Default::default()
 			},
 			inputs: inputs,
@@ -628,12 +629,12 @@ impl Block {
 	/// Validates all the elements in a block that can be checked without
 	/// additional data. Includes commitment sums and kernels, Merkle
 	/// trees, reward, etc.
-	pub fn validate(&self) -> Result<(), Error> {
+	pub fn validate(&self, prev: &BlockHeader) -> Result<(), Error> {
 		self.verify_weight()?;
 		self.verify_sorted()?;
 		self.verify_coinbase()?;
 		self.verify_inputs()?;
-		self.verify_kernels()?;
+		self.verify_kernels(prev)?;
 		Ok(())
 	}
 
@@ -673,7 +674,7 @@ impl Block {
 
 	/// Verifies the sum of input/output commitments match the sum in kernels
 	/// and that all kernel signatures are valid.
-	fn verify_kernels(&self) -> Result<(), Error> {
+	fn verify_kernels(&self, prev: &BlockHeader) -> Result<(), Error> {
 		for k in &self.kernels {
 			// check we have no kernels with lock_heights greater than current height
 			// no tx can be included in a block earlier than its lock_height
@@ -692,14 +693,20 @@ impl Block {
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
 
-			// add the kernel_offset in as necessary (unless offset is zero)
-			if self.header.kernel_offset != BlindingFactor::zero() {
-				let skey = self.header.kernel_offset.secret_key(&secp)?;
-				let offset_commit = secp.commit(0, skey)?;
-				kernel_commits.push(offset_commit);
+			// given the total_kernel_offset of this block and the previous block
+			// we can account for the kernel_offset of this particular block
+			if self.header.total_kernel_offset != BlindingFactor::zero() {
+				let skey = self.header.total_kernel_offset.secret_key(&secp)?;
+				kernel_commits.push(secp.commit(0, skey)?);
 			}
 
-			secp.commit_sum(kernel_commits, vec![])?
+			let mut prev_offset_commits = vec![];
+			if prev.total_kernel_offset != BlindingFactor::zero() {
+				let skey = prev.total_kernel_offset.secret_key(&secp)?;
+				prev_offset_commits.push(secp.commit(0, skey)?);
+			}
+
+			secp.commit_sum(kernel_commits, prev_offset_commits)?
 		};
 
 		// sum of kernel commitments (including kernel_offset) must match
@@ -839,15 +846,13 @@ mod test {
 
 	// utility to create a block without worrying about the key or previous
 	// header
-	fn new_block(txs: Vec<&Transaction>, keychain: &Keychain) -> Block {
+	fn new_block(
+		txs: Vec<&Transaction>,
+		keychain: &Keychain,
+		previous_header: &BlockHeader,
+	) -> Block {
 		let key_id = keychain.derive_key_id(1).unwrap();
-		Block::new(
-			&BlockHeader::default(),
-			txs,
-			keychain,
-			&key_id,
-			Difficulty::one(),
-		).unwrap()
+		Block::new(&previous_header, txs, keychain, &key_id, Difficulty::one()).unwrap()
 	}
 
 	// utility producing a transaction that spends an output with the provided
@@ -886,8 +891,9 @@ mod test {
 		let mut tx = build::transaction(parts, &keychain).unwrap();
 		println!("Build tx: {}", now.elapsed().as_secs());
 
-		let b = new_block(vec![&mut tx], &keychain);
-		assert!(b.validate().is_err());
+		let prev = BlockHeader::default();
+		let b = new_block(vec![&mut tx], &keychain, &prev);
+		assert!(b.validate(&prev).is_err());
 	}
 
 	#[test]
@@ -924,11 +930,12 @@ mod test {
 		// spending tx2 - reuse key_id2
 
 		let mut btx3 = txspend1i1o(5, &keychain, key_id2.clone(), key_id3);
-		let b = new_block(vec![&mut btx1, &mut btx2, &mut btx3], &keychain);
+		let prev = BlockHeader::default();
+		let b = new_block(vec![&mut btx1, &mut btx2, &mut btx3], &keychain, &prev);
 
 		// block should have been automatically compacted (including reward
 		// output) and should still be valid
-		b.validate().unwrap();
+		b.validate(&prev).unwrap();
 		assert_eq!(b.inputs.len(), 3);
 		assert_eq!(b.outputs.len(), 3);
 	}
@@ -936,7 +943,8 @@ mod test {
 	#[test]
 	fn empty_block_with_coinbase_is_valid() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let b = new_block(vec![], &keychain);
+		let prev = BlockHeader::default();
+		let b = new_block(vec![], &keychain, &prev);
 
 		assert_eq!(b.inputs.len(), 0);
 		assert_eq!(b.outputs.len(), 1);
@@ -958,7 +966,7 @@ mod test {
 
 		// the block should be valid here (single coinbase output with corresponding
 		// txn kernel)
-		assert_eq!(b.validate(), Ok(()));
+		assert_eq!(b.validate(&prev), Ok(()));
 	}
 
 	#[test]
@@ -967,7 +975,8 @@ mod test {
 	// additionally verifying the merkle_inputs_outputs also fails
 	fn remove_coinbase_output_flag() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let mut b = new_block(vec![], &keychain);
+		let prev = BlockHeader::default();
+		let mut b = new_block(vec![], &keychain, &prev);
 
 		assert!(
 			b.outputs[0]
@@ -979,9 +988,9 @@ mod test {
 			.remove(OutputFeatures::COINBASE_OUTPUT);
 
 		assert_eq!(b.verify_coinbase(), Err(Error::CoinbaseSumMismatch));
-		assert_eq!(b.verify_kernels(), Ok(()));
+		assert_eq!(b.verify_kernels(&prev), Ok(()));
 
-		assert_eq!(b.validate(), Err(Error::CoinbaseSumMismatch));
+		assert_eq!(b.validate(&prev), Err(Error::CoinbaseSumMismatch));
 	}
 
 	#[test]
@@ -989,7 +998,8 @@ mod test {
 	// invalidates the block and specifically it causes verify_coinbase to fail
 	fn remove_coinbase_kernel_flag() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let mut b = new_block(vec![], &keychain);
+		let prev = BlockHeader::default();
+		let mut b = new_block(vec![], &keychain, &prev);
 
 		assert!(
 			b.kernels[0]
@@ -1006,7 +1016,7 @@ mod test {
 		);
 
 		assert_eq!(
-			b.validate(),
+			b.validate(&prev),
 			Err(Error::Secp(secp::Error::IncorrectCommitSum))
 		);
 	}
@@ -1014,7 +1024,8 @@ mod test {
 	#[test]
 	fn serialize_deserialize_block() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let b = new_block(vec![], &keychain);
+		let prev = BlockHeader::default();
+		let b = new_block(vec![], &keychain, &prev);
 
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
@@ -1029,7 +1040,8 @@ mod test {
 	#[test]
 	fn empty_block_serialized_size() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let b = new_block(vec![], &keychain);
+		let prev = BlockHeader::default();
+		let b = new_block(vec![], &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
 		let target_len = 1_256;
@@ -1040,7 +1052,8 @@ mod test {
 	fn block_single_tx_serialized_size() {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let tx1 = tx1i2o();
-		let b = new_block(vec![&tx1], &keychain);
+		let prev = BlockHeader::default();
+		let b = new_block(vec![&tx1], &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
 		let target_len = 2_900;
@@ -1050,7 +1063,8 @@ mod test {
 	#[test]
 	fn empty_compact_block_serialized_size() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let b = new_block(vec![], &keychain);
+		let prev = BlockHeader::default();
+		let b = new_block(vec![], &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		let target_len = 1_264;
@@ -1061,7 +1075,8 @@ mod test {
 	fn compact_block_single_tx_serialized_size() {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let tx1 = tx1i2o();
-		let b = new_block(vec![&tx1], &keychain);
+		let prev = BlockHeader::default();
+		let b = new_block(vec![&tx1], &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		let target_len = 1_270;
@@ -1077,8 +1092,8 @@ mod test {
 			let tx = tx1i2o();
 			txs.push(tx);
 		}
-
-		let b = new_block(txs.iter().collect(), &keychain);
+		let prev = BlockHeader::default();
+		let b = new_block(txs.iter().collect(), &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
 		let target_len = 17_696;
@@ -1094,8 +1109,8 @@ mod test {
 			let tx = tx1i2o();
 			txs.push(tx);
 		}
-
-		let b = new_block(txs.iter().collect(), &keychain);
+		let prev = BlockHeader::default();
+		let b = new_block(txs.iter().collect(), &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 		let target_len = 1_324;
@@ -1106,7 +1121,8 @@ mod test {
 	fn compact_block_hash_with_nonce() {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let tx = tx1i2o();
-		let b = new_block(vec![&tx], &keychain);
+		let prev = BlockHeader::default();
+		let b = new_block(vec![&tx], &keychain, &prev);
 		let cb1 = b.as_compact_block();
 		let cb2 = b.as_compact_block();
 
@@ -1134,7 +1150,8 @@ mod test {
 	fn convert_block_to_compact_block() {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let tx1 = tx1i2o();
-		let b = new_block(vec![&tx1], &keychain);
+		let prev = BlockHeader::default();
+		let b = new_block(vec![&tx1], &keychain, &prev);
 		let cb = b.as_compact_block();
 
 		assert_eq!(cb.out_full.len(), 1);
@@ -1154,7 +1171,8 @@ mod test {
 	#[test]
 	fn hydrate_empty_compact_block() {
 		let keychain = Keychain::from_random_seed().unwrap();
-		let b = new_block(vec![], &keychain);
+		let prev = BlockHeader::default();
+		let b = new_block(vec![], &keychain, &prev);
 		let cb = b.as_compact_block();
 		let hb = Block::hydrate_from(cb, vec![]);
 		assert_eq!(hb.header, b.header);
