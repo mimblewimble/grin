@@ -39,7 +39,7 @@ pub struct BlockContext {
 	/// The head
 	pub head: Tip,
 	/// The POW verification function
-	pub pow_verifier: fn(&BlockHeader, Option<BlockHeader>, u32) -> bool,
+	pub pow_verifier: fn(&BlockHeader, u32) -> bool,
 	/// MMR sum tree states
 	pub txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 }
@@ -245,16 +245,9 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		return Err(Error::InvalidBlockTime);
 	}
 
-	// TODO - confirm genesis height is 1
-	let prev_header = if header.height > 1 {
-		Some(ctx.store.get_block_header(&header.previous)?)
-	} else {
-		None
-	};
-
 	if !ctx.opts.contains(Options::SKIP_POW) {
 		let n = global::sizeshift() as u32;
-		if !(ctx.pow_verifier)(header, prev_header, n) {
+		if !(ctx.pow_verifier)(header, n) {
 			error!(
 				LOGGER,
 				"pipe: validate_header failed for cuckoo shift size {}", n
@@ -279,6 +272,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		)),
 	}?;
 
+	// make sure this header has a height exactly one higher than the previous header
 	if header.height != prev.height + 1 {
 		return Err(Error::InvalidBlockHeight);
 	}
@@ -290,16 +284,26 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		return Err(Error::InvalidBlockTime);
 	}
 
+	// at this point we have a previous block header
+	// we know the height increased by one
+	// so now we can check the total_difficulty increase is also valid
+	// check the pow hash shows a difficulty at least as large
+	// as the target difficulty
+	if !ctx.opts.contains(Options::SKIP_POW) {
+		let target_difficulty = header.total_difficulty.clone() - prev.total_difficulty.clone();
+		if header.pow.clone().to_difficulty() < target_difficulty {
+			return Err(Error::DifficultyTooLow);
+		}
+	}
+
 	// verify the proof of work and related parameters
 	if !ctx.opts.contains(Options::SKIP_POW) {
-
 		// TODO - think this through...
 		// we have the following -
 		// total_difficulty (from this header)
 		// total_difficulty (from previous header)
-		// consensus::next_difficulty() (what the network says the diff should be based on previous header)
-		// anything else?
-
+		// consensus::next_difficulty() (what the network says the diff should be based
+		// on previous header) anything else?
 
 		let current_difficulty = header.total_difficulty.clone() - prev.total_difficulty.clone();
 

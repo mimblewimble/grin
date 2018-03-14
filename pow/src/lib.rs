@@ -76,21 +76,7 @@ pub trait MiningWorker {
 
 /// Validates the proof of work of a given header, and that the proof of work
 /// satisfies the requirements of the header.
-pub fn verify_size(bh: &BlockHeader, prev_bh: Option<BlockHeader>, cuckoo_sz: u32) -> bool {
-	// make sure the pow hash shows a difficulty at least as large
-	// as the target difficulty
-	let difficulty = if let Some(prev_bh) = prev_bh {
-		bh.total_difficulty.clone() - prev_bh.total_difficulty.clone()
-	} else {
-		// genesis block header total_difficulty is just the initial difficulty
-		bh.total_difficulty.clone()
-	};
-	
-	if difficulty > bh.pow.clone().to_difficulty()
-	{
-		return false;
-	}
-
+pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
 	Cuckoo::new(&bh.hash()[..], cuckoo_sz).verify(bh.pow.clone(), consensus::EASINESS as u64)
 }
 

@@ -278,7 +278,8 @@ impl Iterator for DifficultyIter {
 				self.next = bh.previous;
 
 				// TODO - error handling, base case for the loop, maybe look at height?
-				let difficulty = if let Ok(prev_header) = self.store.get_block_header(&bh.previous) {
+				let difficulty = if let Ok(prev_header) = self.store.get_block_header(&bh.previous)
+				{
 					bh.total_difficulty - prev_header.total_difficulty
 				} else {
 					bh.total_difficulty

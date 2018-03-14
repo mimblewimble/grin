@@ -430,6 +430,6 @@ fn prepare_block_nosum(
 		Ok(b) => b,
 	};
 	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
-	b.header.total_difficulty = Difficulty::from_num(diff);
+	b.header.total_difficulty = prev.total_difficulty.clone() + Difficulty::from_num(diff);
 	b
 }
