@@ -167,7 +167,7 @@ impl Miner {
 			cuckoo_size,
 			attempt_time_per_block,
 			b.header.height,
-			b.header.difficulty
+			b.header.total_difficulty
 		);
 
 		// look for a pow for at most attempt_time_per_block sec on the
@@ -209,7 +209,8 @@ impl Miner {
 					proof_diff.into_num(),
 					difficulty.into_num()
 				);
-				if proof_diff >= b.header.difficulty {
+				if proof_diff > (b.header.total_difficulty.clone() - head.total_difficulty.clone())
+				{
 					sol = Some(proof);
 					b.header.nonce = s.get_nonce_as_u64();
 					break;
@@ -304,7 +305,7 @@ impl Miner {
 			cuckoo_size,
 			attempt_time_per_block,
 			latest_hash,
-			b.header.difficulty
+			b.header.total_difficulty
 		);
 		let mut iter_count = 0;
 
@@ -327,9 +328,10 @@ impl Miner {
 					"Found cuckoo solution for nonce {} of difficulty {} (difficulty target {})",
 					b.header.nonce,
 					proof_diff.into_num(),
-					b.header.difficulty.into_num()
+					b.header.total_difficulty.into_num()
 				);
-				if proof_diff >= b.header.difficulty {
+				if proof_diff > (b.header.total_difficulty.clone() - head.total_difficulty.clone())
+				{
 					sol = Some(proof);
 					break;
 				}
@@ -420,7 +422,7 @@ impl Miner {
 			cuckoo_size,
 			attempt_time_per_block,
 			latest_hash,
-			b.header.difficulty
+			b.header.total_difficulty
 		);
 		let mut iter_count = 0;
 
@@ -438,7 +440,8 @@ impl Miner {
 			let pow_hash = b.hash();
 			if let Ok(proof) = miner.mine(&pow_hash[..]) {
 				let proof_diff = proof.clone().to_difficulty();
-				if proof_diff >= b.header.difficulty {
+				if proof_diff > (b.header.total_difficulty.clone() - head.total_difficulty.clone())
+				{
 					sol = Some(proof);
 					break;
 				}
@@ -537,7 +540,8 @@ impl Miner {
 			{
 				let mut mining_stats = mining_stats.write().unwrap();
 				mining_stats.block_height = b.header.height;
-				mining_stats.network_difficulty = b.header.difficulty.into_num();
+				mining_stats.network_difficulty =
+					(b.header.total_difficulty.clone() - head.total_difficulty.clone()).into_num();
 			}
 
 			let mut sol = None;
@@ -551,7 +555,7 @@ impl Miner {
 				if use_async {
 					sol = self.inner_loop_async(
 						&mut p,
-						b.header.difficulty.clone(),
+						(b.header.total_difficulty.clone() - head.total_difficulty.clone()),
 						&mut b,
 						cuckoo_size,
 						&head,
@@ -668,7 +672,6 @@ impl Miner {
 
 		let mut rng = rand::OsRng::new().unwrap();
 		b.header.nonce = rng.gen();
-		b.header.difficulty = difficulty;
 		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
 
 		let roots_result = self.chain.set_txhashset_roots(&mut b, false);

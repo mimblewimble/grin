@@ -90,7 +90,6 @@ pub fn genesis_testnet2() -> core::Block {
 				..time::empty_tm()
 			},
 			//TODO: Check this is over-estimated at T2 launch
-			difficulty: Difficulty::from_num(global::initial_block_difficulty()),
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
 			nonce: 70081,
 			pow: core::Proof::new(vec![
@@ -122,7 +121,6 @@ pub fn genesis_main() -> core::Block {
 				tm_mday: 14,
 				..time::empty_tm()
 			},
-			difficulty: Difficulty::from_num(global::initial_block_difficulty()),
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
 			nonce: global::get_genesis_nonce(),
 			pow: core::Proof::zero(consensus::PROOFSIZE),
