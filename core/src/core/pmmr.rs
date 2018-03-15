@@ -885,6 +885,7 @@ pub fn family(pos: u64) -> (u64, u64) {
 	}
 }
 
+/// Is the node at this pos the "left" sibling of its parent?
 pub fn is_left_sibling(pos: u64) -> bool {
 	let (_, sibling_pos) = family(pos);
 	sibling_pos > pos
