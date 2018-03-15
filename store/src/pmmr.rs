@@ -381,7 +381,6 @@ where
 				.map(|pos| {
 					let shift = self.pruned_nodes.get_leaf_shift(*pos);
 					(pmmr::n_leaves(pos - shift.unwrap()) - 1) * record_len
-					//(pos - 1 - shift.unwrap()) * record_len
 				})
 				.collect::<Vec<_>>();
 
