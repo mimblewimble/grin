@@ -195,7 +195,7 @@ fn main() {
 			.long("pass")
 			.help("Wallet passphrase used to generate the private key seed")
 			.takes_value(true)
-			.default_value("mimblewimble"))
+			.default_value(""))
 		.arg(Arg::with_name("data_dir")
 			.short("dd")
 			.long("data_dir")
