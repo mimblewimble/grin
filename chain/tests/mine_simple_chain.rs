@@ -80,7 +80,6 @@ fn mine_empty_chain() {
 			core::core::Block::new(&prev, vec![], &keychain, &pk, difficulty.clone()).unwrap();
 		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
-		b.header.difficulty = difficulty.clone(); // TODO: overwrite here? really?
 		chain.set_txhashset_roots(&mut b, false).unwrap();
 
 		pow::pow_size(
@@ -429,6 +428,6 @@ fn prepare_block_nosum(
 		Ok(b) => b,
 	};
 	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
-	b.header.total_difficulty = Difficulty::from_num(diff);
+	b.header.total_difficulty = prev.total_difficulty.clone() + Difficulty::from_num(diff);
 	b
 }

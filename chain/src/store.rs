@@ -252,8 +252,15 @@ impl ChainStore for ChainKVStore {
 /// previous difficulties). Mostly used by the consensus next difficulty
 /// calculation.
 pub struct DifficultyIter {
-	next: Hash,
+	start: Hash,
 	store: Arc<ChainStore>,
+
+	// maintain state for both the "next" header in this iteration
+	// and its previous header in the chain ("next next" in the iteration)
+	// so we effectively read-ahead as we iterate through the chain back
+	// toward the genesis block (while maintaining current state)
+	header: Option<BlockHeader>,
+	prev_header: Option<BlockHeader>,
 }
 
 impl DifficultyIter {
@@ -261,8 +268,10 @@ impl DifficultyIter {
 	/// the provided block hash.
 	pub fn from(start: Hash, store: Arc<ChainStore>) -> DifficultyIter {
 		DifficultyIter {
-			next: start,
+			start: start,
 			store: store,
+			header: None,
+			prev_header: None,
 		}
 	}
 }
@@ -271,13 +280,27 @@ impl Iterator for DifficultyIter {
 	type Item = Result<(u64, Difficulty), TargetError>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		let bhe = self.store.get_block_header(&self.next);
-		match bhe {
-			Err(_) => None,
-			Ok(bh) => {
-				self.next = bh.previous;
-				Some(Ok((bh.timestamp.to_timespec().sec as u64, bh.difficulty)))
-			}
+		// Get both header and previous_header if this is the initial iteration.
+		// Otherwise move prev_header to header and get the next prev_header.
+		self.header = if self.header.is_none() {
+			self.store.get_block_header(&self.start).ok()
+		} else {
+			self.prev_header.clone()
+		};
+
+		// If we have a header we can do this iteration.
+		// Otherwise we are done.
+		if let Some(header) = self.header.clone() {
+			self.prev_header = self.store.get_block_header(&header.previous).ok();
+
+			let prev_difficulty = self.prev_header
+				.clone()
+				.map_or(Difficulty::zero(), |x| x.total_difficulty);
+			let difficulty = header.total_difficulty - prev_difficulty;
+
+			Some(Ok((header.timestamp.to_timespec().sec as u64, difficulty)))
+		} else {
+			return None;
 		}
 	}
 }

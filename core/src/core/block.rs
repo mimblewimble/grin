@@ -115,8 +115,6 @@ pub struct BlockHeader {
 	pub nonce: u64,
 	/// Proof of work data.
 	pub pow: Proof,
-	/// Difficulty used to mine the block.
-	pub difficulty: Difficulty,
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
 	/// Total accumulated sum of kernel offsets since genesis block.
@@ -133,7 +131,6 @@ impl Default for BlockHeader {
 			height: 0,
 			previous: ZERO_HASH,
 			timestamp: time::at_utc(time::Timespec { sec: 0, nsec: 0 }),
-			difficulty: Difficulty::one(),
 			total_difficulty: Difficulty::one(),
 			output_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
@@ -160,7 +157,6 @@ impl Writeable for BlockHeader {
 		);
 
 		try!(writer.write_u64(self.nonce));
-		try!(self.difficulty.write(writer));
 		try!(self.total_difficulty.write(writer));
 		try!(self.total_kernel_offset.write(writer));
 
@@ -181,7 +177,6 @@ impl Readable for BlockHeader {
 		let rproof_root = Hash::read(reader)?;
 		let kernel_root = Hash::read(reader)?;
 		let nonce = reader.read_u64()?;
-		let difficulty = Difficulty::read(reader)?;
 		let total_difficulty = Difficulty::read(reader)?;
 		let total_kernel_offset = BlindingFactor::read(reader)?;
 		let pow = Proof::read(reader)?;
@@ -203,7 +198,6 @@ impl Readable for BlockHeader {
 			kernel_root: kernel_root,
 			pow: pow,
 			nonce: nonce,
-			difficulty: difficulty,
 			total_difficulty: total_difficulty,
 			total_kernel_offset: total_kernel_offset,
 		})
@@ -620,7 +614,6 @@ impl Block {
 		Block {
 			header: BlockHeader {
 				pow: self.header.pow.clone(),
-				difficulty: self.header.difficulty.clone(),
 				total_difficulty: self.header.total_difficulty.clone(),
 				..self.header
 			},
@@ -1048,7 +1041,7 @@ mod test {
 		let b = new_block(vec![], &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
-		let target_len = 1_256;
+		let target_len = 1_248;
 		assert_eq!(vec.len(), target_len,);
 	}
 
@@ -1060,7 +1053,7 @@ mod test {
 		let b = new_block(vec![&tx1], &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
-		let target_len = 2_900;
+		let target_len = 2_892;
 		assert_eq!(vec.len(), target_len,);
 	}
 
@@ -1071,7 +1064,7 @@ mod test {
 		let b = new_block(vec![], &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-		let target_len = 1_264;
+		let target_len = 1_256;
 		assert_eq!(vec.len(), target_len,);
 	}
 
@@ -1083,7 +1076,7 @@ mod test {
 		let b = new_block(vec![&tx1], &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-		let target_len = 1_270;
+		let target_len = 1_262;
 		assert_eq!(vec.len(), target_len,);
 	}
 
@@ -1100,7 +1093,7 @@ mod test {
 		let b = new_block(txs.iter().collect(), &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
-		let target_len = 17_696;
+		let target_len = 17_688;
 		assert_eq!(vec.len(), target_len,);
 	}
 
@@ -1117,7 +1110,7 @@ mod test {
 		let b = new_block(txs.iter().collect(), &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-		let target_len = 1_324;
+		let target_len = 1_316;
 		assert_eq!(vec.len(), target_len,);
 	}
 

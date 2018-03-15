@@ -42,9 +42,8 @@ impl Difficulty {
 		Difficulty { num: 0 }
 	}
 
-	/// Difficulty of one, which is the minumum difficulty (when the hash
-	/// equals the max target)
-	/// TODO - is this the minimum dificulty or is consensus::MINIMUM_DIFFICULTY the minimum?
+	/// Difficulty of one, which is the minumum difficulty
+	/// (when the hash equals the max target)
 	pub fn one() -> Difficulty {
 		Difficulty { num: 1 }
 	}

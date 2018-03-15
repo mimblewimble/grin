@@ -92,7 +92,6 @@ fn data_files() {
 				core::core::Block::new(&prev, vec![], &keychain, &pk, difficulty.clone()).unwrap();
 			b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
-			b.header.difficulty = difficulty.clone(); // TODO: overwrite here? really?
 			chain.set_txhashset_roots(&mut b, false).unwrap();
 
 			pow::pow_size(
