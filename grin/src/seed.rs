@@ -65,8 +65,6 @@ pub fn connect_and_monitor(
 					// monitor additional peers if we need to add more
 					monitor_peers(peers.clone(), capabilities, tx.clone());
 
-					// TODO Add Dandelion relay watcher here
-
 					prev = current_time;
 				}
 
