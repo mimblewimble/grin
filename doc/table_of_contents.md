@@ -1,5 +1,4 @@
 # Documentation structure
-- [FAQ](faq.md) - Frequently Asked Questions
 - [build](build.md) - Explaining how to build and run the Grin binaries
 - [chain_sync](chain/chain_sync.md) - About how Grin's blockchain is synchronized
 - [blocks_and_headers](chain/blocks_and_headers.md) - How Grin tracks blocks and headers on the chain
@@ -13,3 +12,9 @@
 - [rangeproofs](rangeproofs.md) - Technical explanation of range proofs
 - [style](style.md) - About code formatting
 - [wallet](wallet.md) - Explains the wallet design and `grin wallet` sub-commands
+
+# External (wiki)
+- [FAQ](https://github.com/mimblewimble/docs/wiki/FAQ) - Frequently Asked Questions
+- [Building grin](https://github.com/mimblewimble/docs/wiki/Building)
+- [How to use grin](https://github.com/mimblewimble/docs/wiki/How-to-use-grin)
+- [Hacking and contributing](https://github.com/mimblewimble/docs/wiki/Hacking-and-contributing)
