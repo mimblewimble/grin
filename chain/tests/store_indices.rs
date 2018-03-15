@@ -37,7 +37,7 @@ fn clean_output_dir(dir_name: &str) {
 #[test]
 fn test_various_store_indices() {
 	let _ = env_logger::init();
-	let chain_dir = ".grin";
+	let chain_dir = ".grin_idx_1";
 	clean_output_dir(chain_dir);
 
 	let keychain = Keychain::from_random_seed().unwrap();
@@ -77,7 +77,7 @@ fn test_various_store_indices() {
 #[test]
 fn test_store_header_height() {
 	let _ = env_logger::init();
-	let chain_dir = ".grin2";
+	let chain_dir = ".grin_idx_2";
 	clean_output_dir(chain_dir);
 
 	let chain_store =
