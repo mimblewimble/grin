@@ -43,7 +43,8 @@ fn test_various_store_indices() {
 	let keychain = Keychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
 
-	let chain_store = &chain::store::ChainKVStore::new(chain_dir.to_string()).unwrap() as &ChainStore;
+	let chain_store =
+		&chain::store::ChainKVStore::new(chain_dir.to_string()).unwrap() as &ChainStore;
 
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis = pow::mine_genesis_block(None).unwrap();
@@ -79,7 +80,8 @@ fn test_store_header_height() {
 	let chain_dir = ".grin";
 	clean_output_dir(chain_dir);
 
-	let chain_store = &chain::store::ChainKVStore::new(chain_dir.to_string()).unwrap() as &ChainStore;
+	let chain_store =
+		&chain::store::ChainKVStore::new(chain_dir.to_string()).unwrap() as &ChainStore;
 
 	let mut block_header = BlockHeader::default();
 	block_header.height = 1;
