@@ -622,6 +622,8 @@ impl<'a> Extension<'a> {
 	pub fn dump_output_pmmr(&self) {
 		debug!(LOGGER, "-- outputs --");
 		self.output_pmmr.dump_from_file(false);
+		debug!(LOGGER, "--");
+		self.output_pmmr.dump_stats();
 		debug!(LOGGER, "-- end of outputs --");
 	}
 
