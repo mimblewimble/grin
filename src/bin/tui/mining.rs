@@ -17,7 +17,7 @@
 use std::cmp::Ordering;
 
 use cursive::Cursive;
-use cursive::view::AnyView;
+use cursive::view::View;
 use cursive::views::{BoxView, Dialog, LinearLayout, TextView};
 use cursive::direction::Orientation;
 use cursive::traits::*;
@@ -105,7 +105,7 @@ pub struct TUIMiningView;
 
 impl TUIStatusListener for TUIMiningView {
 	/// Create the mining view
-	fn create() -> Box<AnyView> {
+	fn create() -> Box<View> {
 		let table_view =
 			TableView::<CuckooMinerDeviceStats, MiningDeviceColumn>::new()
 				.column(MiningDeviceColumn::PluginId, "Plugin ID", |c| {

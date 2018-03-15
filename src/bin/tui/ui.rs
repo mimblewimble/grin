@@ -24,7 +24,7 @@ use cursive::theme::PaletteColor::*;
 use cursive::theme::Color::*;
 use cursive::theme::BaseColor::*;
 use cursive::utils::markup::StyledString;
-use cursive::views::{LinearLayout, Panel, StackView, TextView};
+use cursive::views::{LinearLayout, Panel, StackView, TextView, ViewBox};
 use cursive::direction::Orientation;
 use cursive::traits::*;
 
@@ -88,7 +88,7 @@ impl UI {
 			.child(Panel::new(TextView::new(title_string)))
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
-					.child(Panel::new(main_menu))
+					.child(Panel::new(ViewBox::new(main_menu)))
 					.child(Panel::new(root_stack)),
 			);
 

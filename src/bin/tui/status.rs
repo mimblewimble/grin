@@ -15,7 +15,7 @@
 //! Basic status view definition
 
 use cursive::Cursive;
-use cursive::view::AnyView;
+use cursive::view::View;
 use cursive::views::{BoxView, LinearLayout, TextView};
 use cursive::direction::Orientation;
 use cursive::traits::*;
@@ -29,7 +29,7 @@ pub struct TUIStatusView;
 
 impl TUIStatusListener for TUIStatusView {
 	/// Create basic status view
-	fn create() -> Box<AnyView> {
+	fn create() -> Box<View> {
 		let basic_status_view = BoxView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)
 				.child(
