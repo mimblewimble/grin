@@ -275,7 +275,10 @@ where
 						pool_refs.push(base.with_source(Some(x)));
 					} else {
 						will_stem = true;
-						debug!(LOGGER, "Parent is in stempool, force transaction to go in stempool");
+						debug!(
+							LOGGER,
+							"Parent is in stempool, force transaction to go in stempool"
+						);
 						pool_refs.push(base.with_source(Some(x)));
 					}
 				}
@@ -1045,31 +1048,31 @@ mod tests {
 			}
 
 			// Now, add the transaction connected as a child to the first
-			let child_result = write_pool.add_to_memory_pool(test_source(), child_transaction, false);
+			let child_result =
+				write_pool.add_to_memory_pool(test_source(), child_transaction, false);
 			if child_result.is_err() {
 				panic!(
 					"got an error adding child tx: {:?}",
 					child_result.err().unwrap()
 				);
 			}
-
 		}
 
 		// Now take the read lock and use a few exposed methods to check consistency
 		{
 			let read_pool = pool.read().unwrap();
-				// First transaction is a stem transaction. In that case the child transaction
-				// should be force stem
-				assert_eq!(read_pool.total_size(), 2);
-				// Parent has been directly fluffed
-				if read_pool.stempool.num_transactions() == 0 {
-					expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 12);
-				} else {
-					expect_output_parent!(read_pool, Parent::StemPoolTransaction{tx_ref: _}, 12);
-				}
-				expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 11, 5);
-				expect_output_parent!(read_pool, Parent::BlockTransaction, 8);
-				expect_output_parent!(read_pool, Parent::Unknown, 20);
+			// First transaction is a stem transaction. In that case the child transaction
+			// should be force stem
+			assert_eq!(read_pool.total_size(), 2);
+			// Parent has been directly fluffed
+			if read_pool.stempool.num_transactions() == 0 {
+				expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 12);
+			} else {
+				expect_output_parent!(read_pool, Parent::StemPoolTransaction{tx_ref: _}, 12);
+			}
+			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 11, 5);
+			expect_output_parent!(read_pool, Parent::BlockTransaction, 8);
+			expect_output_parent!(read_pool, Parent::Unknown, 20);
 		}
 	}
 
