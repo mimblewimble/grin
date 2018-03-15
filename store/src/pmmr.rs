@@ -384,11 +384,6 @@ where
 				})
 				.collect::<Vec<_>>();
 
-			println!(
-				"compacting the data file: pos {:?}, offs {:?}",
-				leaf_pos_to_rm, off_to_rm
-			);
-
 			self.data_file.save_prune(
 				tmp_prune_file_data.clone(),
 				off_to_rm,
