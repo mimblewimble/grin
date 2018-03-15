@@ -293,12 +293,14 @@ impl Iterator for DifficultyIter {
 		if let Some(header) = self.header.clone() {
 			self.prev_header = self.store.get_block_header(&header.previous).ok();
 
-			let prev_difficulty = self.prev_header.clone().map_or(Difficulty::zero(), |x| x.total_difficulty);
+			let prev_difficulty = self.prev_header
+				.clone()
+				.map_or(Difficulty::zero(), |x| x.total_difficulty);
 			let difficulty = header.total_difficulty - prev_difficulty;
 
 			Some(Ok((header.timestamp.to_timespec().sec as u64, difficulty)))
 		} else {
-			return None
+			return None;
 		}
 	}
 }

@@ -672,7 +672,6 @@ impl Miner {
 
 		let mut rng = rand::OsRng::new().unwrap();
 		b.header.nonce = rng.gen();
-		// b.header.difficulty = difficulty;
 		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
 
 		let roots_result = self.chain.set_txhashset_roots(&mut b, false);
