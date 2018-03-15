@@ -125,17 +125,16 @@ where
 		//   Pool unspent + (blockchain unspent - pool->blockchain spent)
 		//   Pool unspents are unconditional so we check those first
 		self.search_stempool_spents(&output_ref.commit)
-			.or(self.pool
+			.or(self.pool.get_available_output(&output_ref.commit).map(|x| {
+				let tx_ref = x.source_hash().unwrap();
+				Parent::PoolTransaction { tx_ref }
+			}))
+			.or(self.stempool
 				.get_available_output(&output_ref.commit)
 				.map(|x| {
 					let tx_ref = x.source_hash().unwrap();
-					Parent::PoolTransaction { tx_ref }
+					Parent::StemPoolTransaction { tx_ref }
 				}))
-			.or(self.stempool.get_available_output(&output_ref.commit)
-						.map(|x| {
-							let tx_ref = x.source_hash().unwrap();
-							Parent::StemPoolTransaction { tx_ref }
-			}))
 			.or(self.search_blockchain_unspents(output_ref))
 			.or(self.search_pool_spents(&output_ref.commit))
 			.unwrap_or(Parent::Unknown)
@@ -156,7 +155,7 @@ where
 						let other_tx = x.destination_hash().unwrap();
 						Parent::AlreadySpent { other_tx }
 					}
-					None => Parent::BlockTransaction
+					None => Parent::BlockTransaction,
 				},
 			}
 		})
@@ -226,8 +225,8 @@ where
 		// Making sure the transaction is valid before anything else.
 		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
 
-		// The first check involves ensuring that an indentical transaction is not alreay in the
-		// stem transaction or regular transaction pool.
+		// The first check involves ensuring that an indentical transaction is not
+		// alreay in the stem transaction or regular transaction pool.
 		// A non-authoritative similar check should be performed under the
 		// pool's read lock before we get to this point, which would catch the
 		// majority of duplicate cases. The race condition is caught here.
@@ -245,7 +244,6 @@ where
 		if let Err(e) = self.is_mature(&tx, &head_header) {
 			return Err(e);
 		}
-
 
 		// Here if we have a stem transaction, decide wether it will be broadcasted
 		// in stem or fluff phase
@@ -270,7 +268,7 @@ where
 			// into the pool.
 			match self.search_for_best_output(&output) {
 				Parent::PoolTransaction { tx_ref: x } => pool_refs.push(base.with_source(Some(x))),
-				Parent::StemPoolTransaction  { tx_ref: x } => {
+				Parent::StemPoolTransaction { tx_ref: x } => {
 					if will_stem {
 						// Going to stem this transaction if parent is in stempool it's ok.
 						debug!(LOGGER, "Going is in stempool");
@@ -279,7 +277,7 @@ where
 						debug!(LOGGER, "Parent is in stempool, reject transaction");
 						orphan_refs.push(base);
 					}
-				},
+				}
 				Parent::BlockTransaction => {
 					let height = head_header.height + 1;
 					self.blockchain.is_matured(&input, height)?;
@@ -294,7 +292,6 @@ where
 				}
 			}
 		}
-
 
 		let is_orphan = orphan_refs.len() > 0;
 
@@ -801,14 +798,15 @@ where
 			return Err(PoolError::AlreadyInStempool);
 		} else {
 			// Now it leaves us with two cases:
-			// 1. The transaction is not a stem transaction and is in stempool. (false && true)
-			// => The transaction has been fluffed by another node.
-			//    It is okay too but we have to remove this transaction from our stempool before
-			//    adding it in our transaction pool
-			// 2. The transaction is a stem transaction and is not in stempool. (true && false).
-			//    => Ok
-			// 3. The transaction is not a stem transaction is not in stempool (false && false)
-			//    => We have to check if the transaction is in the transaction pool
+			// 1. The transaction is not a stem transaction and is in stempool. (false &&
+			// true) => The transaction has been fluffed by another node.
+			// It is okay too but we have to remove this transaction from our stempool
+			// before    adding it in our transaction pool
+			// 2. The transaction is a stem transaction and is not in stempool. (true &&
+			// false).    => Ok
+			// 3. The transaction is not a stem transaction is not in stempool (false &&
+			// false) => We have to check if the transaction is in the transaction
+			// pool
 
 			// Case number 1, maybe uneeded check
 			if self.stem_transactions.contains_key(&tx_hash) {
@@ -941,7 +939,8 @@ mod tests {
 	}
 
 	#[test]
-	/// A basic test; add a transaction to the pool and a the child to the stempool
+	/// A basic test; add a transaction to the pool and a the child to the
+	/// stempool
 	fn test_pool_stempool_add() {
 		let mut dummy_chain = DummyChainImpl::new();
 		let head_header = block::BlockHeader {
@@ -1046,9 +1045,7 @@ mod tests {
 
 			// Now, add the transaction connected as a child to the first
 
-				write_pool.add_to_memory_pool(test_source(), child_transaction, false);
-
-
+			write_pool.add_to_memory_pool(test_source(), child_transaction, false);
 		}
 
 		// Now take the read lock and use a few exposed methods to check consistency
@@ -1061,9 +1058,9 @@ mod tests {
 				expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 11, 5);
 				expect_output_parent!(read_pool, Parent::BlockTransaction, 8);
 				expect_output_parent!(read_pool, Parent::Unknown, 20);
-
 			} else {
-				// First transaction is a stem transaction. In that case the child transaction should be orphaned
+				// First transaction is a stem transaction. In that case the child transaction
+				// should be orphaned
 				assert_eq!(read_pool.total_size(), 2);
 				expect_output_parent!(read_pool, Parent::Unknown, 12);
 				expect_output_parent!(read_pool, Parent::StemPoolTransaction{tx_ref: _}, 11);

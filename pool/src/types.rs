@@ -304,8 +304,7 @@ impl Pool {
 		// Removing consumed available_outputs
 		for new_edge in &pool_refs {
 			// All of these *can* correspond to an existing unspent
-			self.available_outputs
-					.remove(&new_edge.output_commitment());
+			self.available_outputs.remove(&new_edge.output_commitment());
 		}
 
 		// Accounting for consumed blockchain outputs
