@@ -282,7 +282,7 @@ impl Iterator for DifficultyIter {
 	fn next(&mut self) -> Option<Self::Item> {
 		// Get both header and previous_header if this is the initial iteration.
 		// Otherwise move prev_header to header and get the next prev_header.
-		let self.header = if self.header.is_none() {
+		self.header = if self.header.is_none() {
 			self.store.get_block_header(&self.start).ok()
 		} else {
 			self.prev_header.clone()
