@@ -81,6 +81,9 @@ where
 	/// sit well with the design, but TxKernels have to be summed and the
 	/// fastest way to to be able to allow direct access to the file
 	fn get_data_file_path(&self) -> String;
+
+	/// For debugging purposes so we can see how compaction is doing.
+	fn dump_stats(&self);
 }
 
 /// A Merkle proof.
@@ -566,6 +569,11 @@ where
 		}
 	}
 
+	pub fn dump_stats(&self) {
+		debug!(LOGGER, "pmmr: unpruned - {}", self.unpruned_size());
+		self.backend.dump_stats();
+	}
+
 	/// Debugging utility to print information about the MMRs. Short version
 	/// only prints the last 8 nodes.
 	/// Looks in the underlying hash file and so ignores the remove log.
@@ -1034,6 +1042,8 @@ mod test {
 		fn get_data_file_path(&self) -> String {
 			"".to_string()
 		}
+
+		fn dump_stats(&self) {}
 	}
 
 	impl<T> VecBackend<T>

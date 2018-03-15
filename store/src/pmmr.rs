@@ -97,7 +97,7 @@ where
 
 impl<T> Backend<T> for PMMRBackend<T>
 where
-	T: PMMRable,
+	T: PMMRable + ::std::fmt::Debug,
 {
 	/// Append the provided Hashes to the backend storage.
 	#[allow(unused_variables)]
@@ -209,6 +209,16 @@ where
 	/// Return data file path
 	fn get_data_file_path(&self) -> String {
 		self.data_file.path()
+	}
+
+	fn dump_stats(&self) {
+		debug!(
+			LOGGER,
+			"pmmr backend: unpruned - {}, hashes - {}, data - {}",
+			self.unpruned_size().unwrap_or(0),
+			self.hash_size().unwrap_or(0),
+			self.data_size().unwrap_or(0)
+		);
 	}
 }
 
