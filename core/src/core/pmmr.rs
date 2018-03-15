@@ -504,7 +504,9 @@ where
 						if let Some(right_child_hs) = self.get(right_pos, false) {
 							// hashes the two nodes together with parent_pos and compare
 							let (parent_pos, _) = family(left_pos);
-							if (left_child_hs.0, right_child_hs.0).hash_with_index(parent_pos) != hs.0 {
+							if (left_child_hs.0, right_child_hs.0).hash_with_index(parent_pos)
+								!= hs.0
+							{
 								return Err(format!(
 									"Invalid MMR, hash of parent at {} does \
 									 not match children.",
