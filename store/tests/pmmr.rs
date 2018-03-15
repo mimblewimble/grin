@@ -122,6 +122,8 @@ fn pmmr_compact_leaf_sibling() {
 	// Check we can still retrieve the "removed" hash at pos 1 from the hash file.
 	// It should still be available even after pruning and compacting.
 	assert_eq!(backend.get_from_file(1).unwrap(), pos_1_hash);
+
+	teardown(data_dir);
 }
 
 #[test]
@@ -408,8 +410,6 @@ fn pmmr_compact_horizon() {
 
 	// 0010012001001230
 	// 9 leaves
-	// data file compaction commented out for now
-	// assert_eq!(backend.data_size().unwrap(), 9);
 	assert_eq!(backend.data_size().unwrap(), 19);
 	assert_eq!(backend.hash_size().unwrap(), 35);
 
@@ -488,7 +488,7 @@ fn pmmr_compact_horizon() {
 		let backend =
 			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), None).unwrap();
 
-		assert_eq!(backend.data_size().unwrap(), 19);
+		assert_eq!(backend.data_size().unwrap(), 17);
 		assert_eq!(backend.hash_size().unwrap(), 33);
 
 		// check we can read a hash by pos correctly from recreated backend
@@ -522,7 +522,7 @@ fn pmmr_compact_horizon() {
 
 		// 0010012001001230
 
-		assert_eq!(backend.data_size().unwrap(), 19);
+		assert_eq!(backend.data_size().unwrap(), 15);
 		assert_eq!(backend.hash_size().unwrap(), 29);
 
 		// check we can read a hash by pos correctly from recreated backend

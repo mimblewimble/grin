@@ -63,13 +63,17 @@ where
 	/// occurred (see remove).
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String>;
 
-	/// Get a Hash/Element by insertion position. If include_data is true, will
+	/// Get a Hash by insertion position. If include_data is true, will
 	/// also return the associated data element
 	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)>;
 
-	/// Get a Hash/Element by original insertion position (ignoring the remove
+	/// Get a Hash  by original insertion position (ignoring the remove
 	/// list).
 	fn get_from_file(&self, position: u64) -> Option<Hash>;
+
+	/// Get a Data Element by original insertion position (ignoring the remove
+	/// list).
+	fn get_data_from_file(&self, position: u64) -> Option<T>;
 
 	/// Remove HashSums by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a
@@ -81,6 +85,9 @@ where
 	/// sit well with the design, but TxKernels have to be summed and the
 	/// fastest way to to be able to allow direct access to the file
 	fn get_data_file_path(&self) -> String;
+
+	/// For debugging purposes so we can see how compaction is doing.
+	fn dump_stats(&self);
 }
 
 /// A Merkle proof.
@@ -566,6 +573,11 @@ where
 		}
 	}
 
+	pub fn dump_stats(&self) {
+		debug!(LOGGER, "pmmr: unpruned - {}", self.unpruned_size());
+		self.backend.dump_stats();
+	}
+
 	/// Debugging utility to print information about the MMRs. Short version
 	/// only prints the last 8 nodes.
 	/// Looks in the underlying hash file and so ignores the remove log.
@@ -1019,6 +1031,14 @@ mod test {
 			}
 		}
 
+		fn get_data_from_file(&self, position: u64) -> Option<T> {
+			if let Some(ref x) = self.elems[(position - 1) as usize] {
+				x.1.clone()
+			} else {
+				None
+			}
+		}
+
 		fn remove(&mut self, positions: Vec<u64>, _index: u32) -> Result<(), String> {
 			for n in positions {
 				self.remove_list.push(n)
@@ -1034,6 +1054,8 @@ mod test {
 		fn get_data_file_path(&self) -> String {
 			"".to_string()
 		}
+
+		fn dump_stats(&self) {}
 	}
 
 	impl<T> VecBackend<T>

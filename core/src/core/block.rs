@@ -186,6 +186,10 @@ impl Readable for BlockHeader {
 		let total_kernel_offset = BlindingFactor::read(reader)?;
 		let pow = Proof::read(reader)?;
 
+		if timestamp > (1 << 60) {
+			return Err(ser::Error::CorruptedData);
+		}
+
 		Ok(BlockHeader {
 			version: version,
 			height: height,
