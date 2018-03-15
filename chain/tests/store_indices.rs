@@ -77,7 +77,7 @@ fn test_various_store_indices() {
 #[test]
 fn test_store_header_height() {
 	let _ = env_logger::init();
-	let chain_dir = ".grin";
+	let chain_dir = ".grin2";
 	clean_output_dir(chain_dir);
 
 	let chain_store =
