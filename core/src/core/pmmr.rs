@@ -1023,6 +1023,14 @@ mod test {
 			}
 		}
 
+		fn get_data_from_file(&self, position: u64) -> Option<T> {
+			if let Some(ref x) = self.elems[(position - 1) as usize] {
+				x.1.clone()
+			} else {
+				None
+			}
+		}
+
 		fn remove(&mut self, positions: Vec<u64>, _index: u32) -> Result<(), String> {
 			for n in positions {
 				self.remove_list.push(n)
