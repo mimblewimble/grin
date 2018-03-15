@@ -139,7 +139,6 @@ impl Readable for MerkleProof {
 			peaks.push(Hash::read(reader)?);
 		}
 
-		// Should we use a tuple here for (path, path_pos, left_right)?
 		let mut path = Vec::with_capacity(path_len as usize);
 		for _ in 0..path_len {
 			let hash = Hash::read(reader)?;
