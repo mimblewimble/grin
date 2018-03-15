@@ -8,10 +8,10 @@ publish = false
 [package.metadata]
 cargo-fuzz = true
 
-[dependencies.grin_core]
-path = ".."
-[dependencies.libfuzzer-sys]
-git = "https://github.com/rust-fuzz/libfuzzer-sys.git"
+[dependencies]
+grin_core = { path = ".."}
+grin_keychain = { path = "../../keychain"}
+libfuzzer-sys = { git = "https://github.com/rust-fuzz/libfuzzer-sys.git" }
 
 # Prevent this from interfering with workspaces
 [workspace]
@@ -20,3 +20,11 @@ members = ["."]
 [[bin]]
 name = "transaction_read"
 path = "fuzz_targets/transaction_read.rs"
+
+[[bin]]
+name = "gen-corpus"
+path = "src/main.rs"
+
+[[bin]]
+name = "block_read"
+path = "fuzz_targets/block_read.rs"
