@@ -1042,6 +1042,8 @@ mod test {
 		fn get_data_file_path(&self) -> String {
 			"".to_string()
 		}
+
+		fn dump_stats(&self) {}
 	}
 
 	impl<T> VecBackend<T>
