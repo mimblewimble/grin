@@ -395,7 +395,7 @@ fn pmmr_compact_entire_peak() {
 	assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
 	// now check we still have subsequent hash and data where we expect
-	assert_eq!(backend.get(8, true).unwrap().1, pos_8.1);
+	assert_eq!(backend.get(8, true), Some(pos_8));
 	assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
 
 	teardown(data_dir);
@@ -495,7 +495,7 @@ fn pmmr_compact_horizon() {
 		assert_eq!(backend.get(7, true), None);
 		assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
-		assert_eq!(backend.get(8, true).unwrap().1, pos_8.1);
+		assert_eq!(backend.get(8, true), Some(pos_8));
 		assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
 	}
 
@@ -529,7 +529,7 @@ fn pmmr_compact_horizon() {
 		assert_eq!(backend.get(7, true), None);
 		assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
-		assert_eq!(backend.get(11, true).unwrap().1, pos_11.1);
+		assert_eq!(backend.get(11, true), Some(pos_11));
 		assert_eq!(backend.get_from_file(11), Some(pos_11_hash));
 	}
 
