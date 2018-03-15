@@ -250,7 +250,7 @@ where
 		let mut rng = rand::thread_rng();
 		let random = rng.gen_range(0, 101);
 		let stem_propagation = random <= self.config.dandelion_probability;
-		let will_stem = stem && stem_propagation;
+		let mut will_stem = stem && stem_propagation;
 
 		// The next issue is to identify all unspent outputs that
 		// this transaction will consume and make sure they exist in the set.
@@ -274,8 +274,9 @@ where
 						debug!(LOGGER, "Going is in stempool");
 						pool_refs.push(base.with_source(Some(x)));
 					} else {
-						debug!(LOGGER, "Parent is in stempool, reject transaction");
-						orphan_refs.push(base);
+						will_stem = true;
+						debug!(LOGGER, "Parent is in stempool, force transaction to go in stempool");
+						pool_refs.push(base.with_source(Some(x)));
 					}
 				}
 				Parent::BlockTransaction => {
@@ -1006,7 +1007,7 @@ mod tests {
 
 	#[test]
 	/// A basic test; add a transaction to the stempool and one the regular transaction pool
-	/// Child transaction should be considered as an orphan
+	/// Child transaction should be added to the stempool.
 	fn test_stempool_pool_add() {
 		let mut dummy_chain = DummyChainImpl::new();
 		let head_header = block::BlockHeader {
@@ -1044,30 +1045,31 @@ mod tests {
 			}
 
 			// Now, add the transaction connected as a child to the first
+			let child_result = write_pool.add_to_memory_pool(test_source(), child_transaction, false);
+			if child_result.is_err() {
+				panic!(
+					"got an error adding child tx: {:?}",
+					child_result.err().unwrap()
+				);
+			}
 
-			write_pool.add_to_memory_pool(test_source(), child_transaction, false);
 		}
 
 		// Now take the read lock and use a few exposed methods to check consistency
 		{
 			let read_pool = pool.read().unwrap();
-			if read_pool.stempool.num_transactions() == 0 {
-				// First transaction has been fluffed which is equivalent to the first test
+				// First transaction is a stem transaction. In that case the child transaction
+				// should be force stem
 				assert_eq!(read_pool.total_size(), 2);
-				expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 12);
+				// Parent has been directly fluffed
+				if read_pool.stempool.num_transactions() == 0 {
+					expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 12);
+				} else {
+					expect_output_parent!(read_pool, Parent::StemPoolTransaction{tx_ref: _}, 12);
+				}
 				expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 11, 5);
 				expect_output_parent!(read_pool, Parent::BlockTransaction, 8);
 				expect_output_parent!(read_pool, Parent::Unknown, 20);
-			} else {
-				// First transaction is a stem transaction. In that case the child transaction
-				// should be orphaned
-				assert_eq!(read_pool.total_size(), 2);
-				expect_output_parent!(read_pool, Parent::Unknown, 12);
-				expect_output_parent!(read_pool, Parent::StemPoolTransaction{tx_ref: _}, 11);
-				expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 5);
-				expect_output_parent!(read_pool, Parent::BlockTransaction, 8);
-				expect_output_parent!(read_pool, Parent::Unknown, 20);
-			}
 		}
 	}
 
