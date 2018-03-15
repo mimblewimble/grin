@@ -499,11 +499,12 @@ where
 					let left_pos = bintree_move_down_left(n).ok_or(format!("left_pos not found"))?;
 					let right_pos = bintree_jump_right_sibling(left_pos);
 
-					if let Some(left_child_hs) = self.get(left_pos, false) {
-						if let Some(right_child_hs) = self.get(right_pos, false) {
-							// hashes the two nodes together with parent_pos and compare
+					// using get_from_file here for the children (they may have been "removed")
+					if let Some(left_child_hs) = self.get_from_file(left_pos) {
+						if let Some(right_child_hs) = self.get_from_file(right_pos) {
+							// hash the two child nodes together with parent_pos and compare
 							let (parent_pos, _) = family(left_pos);
-							if (left_child_hs.0, right_child_hs.0).hash_with_index(parent_pos)
+							if (left_child_hs, right_child_hs).hash_with_index(parent_pos)
 								!= hs.0
 							{
 								return Err(format!(
