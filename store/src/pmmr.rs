@@ -342,8 +342,7 @@ where
 
 		// Paths for tmp hash and data files.
 		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);
-		let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir,
-			PMMR_DATA_FILE);
+		let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir, PMMR_DATA_FILE);
 
 		// Pos we want to get rid of.
 		// Filtered by cutoff index.
@@ -376,7 +375,7 @@ where
 		// 2. Save compact copy of the data file, skipping removed leaves.
 		{
 			let record_len = T::len() as u64;
-		
+
 			let off_to_rm = leaf_pos_to_rm
 				.iter()
 				.map(|pos| {
@@ -385,10 +384,12 @@ where
 					//(pos - 1 - shift.unwrap()) * record_len
 				})
 				.collect::<Vec<_>>();
-		
-		println!("compacting the data file: pos {:?}, offs {:?}", leaf_pos_to_rm,
-		off_to_rm);
-		
+
+			println!(
+				"compacting the data file: pos {:?}, offs {:?}",
+				leaf_pos_to_rm, off_to_rm
+			);
+
 			self.data_file.save_prune(
 				tmp_prune_file_data.clone(),
 				off_to_rm,
@@ -421,8 +422,7 @@ where
 			tmp_prune_file_data.clone(),
 			format!("{}/{}", self.data_dir, PMMR_DATA_FILE),
 		)?;
-		self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir,
-		PMMR_DATA_FILE), 0)?;
+		self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE), 0)?;
 
 		// 6. Truncate the rm log based on pos removed.
 		// Excluding roots which remain in rm log.
