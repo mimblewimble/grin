@@ -95,6 +95,7 @@ pub enum Parent {
 	Unknown,
 	BlockTransaction,
 	PoolTransaction { tx_ref: hash::Hash },
+	StemPoolTransaction { tx_ref: hash::Hash },
 	AlreadySpent { other_tx: hash::Hash },
 }
 
@@ -105,6 +106,9 @@ impl fmt::Debug for Parent {
 			&Parent::BlockTransaction => write!(f, "Parent: Block Transaction"),
 			&Parent::PoolTransaction { tx_ref: x } => {
 				write!(f, "Parent: Pool Transaction ({:?})", x)
+			}
+			&Parent::StemPoolTransaction { tx_ref: x } => {
+				write!(f, "Parent: Stempool Transaction ({:?})", x)
 			}
 			&Parent::AlreadySpent { other_tx: x } => write!(f, "Parent: Already Spent By {:?}", x),
 		}
@@ -268,6 +272,40 @@ impl Pool {
 					.remove(&new_edge.output_commitment())
 					.is_some()
 			);
+		}
+
+		// Accounting for consumed blockchain outputs
+		for new_blockchain_edge in blockchain_refs.drain(..) {
+			self.consumed_blockchain_outputs
+				.insert(new_blockchain_edge.output_commitment(), new_blockchain_edge);
+		}
+
+		// Adding the transaction to the vertices list along with internal
+		// pool edges
+		self.graph.add_entry(pool_entry, pool_refs);
+
+		// Adding the new unspents to the unspent map
+		for unspent_output in new_unspents.drain(..) {
+			self.available_outputs
+				.insert(unspent_output.output_commitment(), unspent_output);
+		}
+	}
+
+	// More relax way for stempool transaction in order to accept scenario such as:
+	// Parent is in mempool, child is allowed in stempool
+	//
+	pub fn add_stempool_transaction(
+		&mut self,
+		pool_entry: graph::PoolEntry,
+		mut blockchain_refs: Vec<graph::Edge>,
+		pool_refs: Vec<graph::Edge>,
+		mut new_unspents: Vec<graph::Edge>,
+	) {
+		// Removing consumed available_outputs
+		for new_edge in &pool_refs {
+			// All of these *can* correspond to an existing unspent
+			self.available_outputs
+					.remove(&new_edge.output_commitment());
 		}
 
 		// Accounting for consumed blockchain outputs
