@@ -63,13 +63,17 @@ where
 	/// occurred (see remove).
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String>;
 
-	/// Get a Hash/Element by insertion position. If include_data is true, will
+	/// Get a Hash by insertion position. If include_data is true, will
 	/// also return the associated data element
 	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)>;
 
-	/// Get a Hash/Element by original insertion position (ignoring the remove
+	/// Get a Hash  by original insertion position (ignoring the remove
 	/// list).
 	fn get_from_file(&self, position: u64) -> Option<Hash>;
+
+	/// Get a Data Element by original insertion position (ignoring the remove
+	/// list).
+	fn get_data_from_file(&self, position: u64) -> Option<T>;
 
 	/// Remove HashSums by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a
@@ -1022,6 +1026,14 @@ mod test {
 		fn get_from_file(&self, position: u64) -> Option<Hash> {
 			if let Some(ref x) = self.elems[(position - 1) as usize] {
 				Some(x.0)
+			} else {
+				None
+			}
+		}
+
+		fn get_data_from_file(&self, position: u64) -> Option<T> {
+			if let Some(ref x) = self.elems[(position - 1) as usize] {
+				x.1.clone()
 			} else {
 				None
 			}

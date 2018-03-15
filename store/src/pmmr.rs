@@ -137,18 +137,36 @@ where
 		}
 	}
 
+	fn get_data_from_file(&self, position: u64) -> Option<T> {
+		let shift = self.pruned_nodes.get_leaf_shift(position);
+		if let None = shift {
+			return None;
+		}
+
+		let pos = pmmr::n_leaves(position) - 1;
+
+		// Must be on disk, doing a read at the correct position
+		let record_len = T::len();
+		let file_offset = ((pos - shift.unwrap()) as usize) * record_len;
+		let data = self.data_file.read(file_offset, record_len);
+		match ser::deserialize(&mut &data[..]) {
+			Ok(h) => Some(h),
+			Err(e) => {
+				error!(
+					LOGGER,
+					"Corrupted storage, could not read an entry from data store: {:?}", e
+				);
+				return None;
+			}
+		}
+	}
+
 	/// Get a Hash by insertion position
 	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)> {
 		// Check if this position has been pruned in the remove log...
 		if self.rm_log.includes(position) {
 			return None;
 		}
-
-		// ... or in the prune list
-		// let prune_shift = match self.pruned_nodes.get_leaf_shift(position) {
-		// 	Some(shift) => shift,
-		// 	None => return None,
-		// };
 
 		let hash_val = self.get_from_file(position);
 		if !include_data {
@@ -160,24 +178,7 @@ where
 			return hash_val.map(|hash| (hash, None));
 		}
 
-		// Optionally read flatfile storage to get data element
-		// let flatfile_pos = pmmr::n_leaves(position) - 1 - prune_shift;
-		let flatfile_pos = pmmr::n_leaves(position) - 1;
-
-		let record_len = T::len();
-		let file_offset = flatfile_pos as usize * T::len();
-		let data = self.data_file.read(file_offset, record_len);
-		let data = match ser::deserialize(&mut &data[..]) {
-			Ok(elem) => Some(elem),
-			Err(e) => {
-				error!(
-					LOGGER,
-					"Corrupted storage, could not read an entry from backend flatfile store: {:?}",
-					e
-				);
-				None
-			}
-		};
+		let data = self.get_data_from_file(position);
 
 		hash_val.map(|x| (x, data))
 	}
@@ -351,8 +352,7 @@ where
 
 		// Paths for tmp hash and data files.
 		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);
-		// let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir,
-		// PMMR_DATA_FILE);
+		let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir, PMMR_DATA_FILE);
 
 		// Pos we want to get rid of.
 		// Filtered by cutoff index.
@@ -360,7 +360,7 @@ where
 		// Filtered to exclude the subtree "roots".
 		let pos_to_rm = removed_excl_roots(rm_pre_cutoff.clone());
 		// Filtered for leaves only.
-		// let leaf_pos_to_rm = removed_leaves(pos_to_rm.clone());
+		let leaf_pos_to_rm = removed_leaves(pos_to_rm.clone());
 
 		// 1. Save compact copy of the hash file, skipping removed data.
 		{
@@ -383,27 +383,24 @@ where
 		}
 
 		// 2. Save compact copy of the data file, skipping removed leaves.
-		// {
-		// 	let record_len = T::len() as u64;
-		//
-		// 	let off_to_rm = leaf_pos_to_rm
-		// 		.iter()
-		// 		.map(|pos| {
-		// 			let shift = self.pruned_nodes.get_leaf_shift(*pos);
-		// 			(pos - 1 - shift.unwrap()) * record_len
-		// 		})
-		// 		.collect::<Vec<_>>();
-		//
-		// println!("compacting the data file: pos {:?}, offs {:?}", leaf_pos_to_rm,
-		// off_to_rm);
-		//
-		// 	self.data_file.save_prune(
-		// 		tmp_prune_file_data.clone(),
-		// 		off_to_rm,
-		// 		record_len,
-		// 		prune_cb,
-		// 	)?;
-		// }
+		{
+			let record_len = T::len() as u64;
+
+			let off_to_rm = leaf_pos_to_rm
+				.iter()
+				.map(|pos| {
+					let shift = self.pruned_nodes.get_leaf_shift(*pos);
+					(pmmr::n_leaves(pos - shift.unwrap()) - 1) * record_len
+				})
+				.collect::<Vec<_>>();
+
+			self.data_file.save_prune(
+				tmp_prune_file_data.clone(),
+				off_to_rm,
+				record_len,
+				prune_cb,
+			)?;
+		}
 
 		// 3. Update the prune list and save it in place.
 		{
@@ -425,12 +422,11 @@ where
 		self.hash_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_HASH_FILE), 0)?;
 
 		// 5. Rename the compact copy of the data file and reopen it.
-		// fs::rename(
-		// 	tmp_prune_file_data.clone(),
-		// 	format!("{}/{}", self.data_dir, PMMR_DATA_FILE),
-		// )?;
-		// self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir,
-		// PMMR_DATA_FILE), 0)?;
+		fs::rename(
+			tmp_prune_file_data.clone(),
+			format!("{}/{}", self.data_dir, PMMR_DATA_FILE),
+		)?;
+		self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE), 0)?;
 
 		// 6. Truncate the rm log based on pos removed.
 		// Excluding roots which remain in rm log.
