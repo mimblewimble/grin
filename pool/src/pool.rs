@@ -728,7 +728,7 @@ where
 
 			// final step is to update the pool to reflect the new set of roots
 			// a tx that was non-root may now be root based on the txs removed
-			self.pool.update_roots();
+			self.stempool.update_roots();
 		} else {
 			for tx_hash in &marked_transactions {
 				let removed_tx = self.transactions.remove(&tx_hash).unwrap();
