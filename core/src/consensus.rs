@@ -88,6 +88,15 @@ pub const MAX_BLOCK_WEIGHT: usize = 80_000;
 /// Hundreds of inputs + 1 output might be slow to validate (issue#258)
 pub const MAX_BLOCK_INPUTS: usize = 300_000; // soft fork down when too_high
 
+/// Maixmum inputs for a transaction
+pub const MAX_TX_INPUTS: u64 = 500;
+
+/// Maixmum outputs for a transaction
+pub const MAX_TX_OUTPUTS: u64 = 500; // wallet uses 500 as max
+
+/// Maixmum kernels for a transaction
+pub const MAX_TX_KERNELS: u64 = 2048;
+
 /// Whether a block exceeds the maximum acceptable weight
 pub fn exceeds_weight(input_len: usize, output_len: usize, kernel_len: usize) -> bool {
 	input_len * BLOCK_INPUT_WEIGHT + output_len * BLOCK_OUTPUT_WEIGHT

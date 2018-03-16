@@ -90,6 +90,12 @@ where
 	fn dump_stats(&self);
 }
 
+/// Maixmum peeks for a Merkle proof
+pub const MAX_PEAKS: u64 = 300_000;
+
+/// Maixmum path for a Merkle proof
+pub const MAX_PATH: u64 = 300_000;
+
 /// A Merkle proof.
 /// Proves inclusion of an output (node) in the output MMR.
 /// We can use this to prove an output was unspent at the time of a given block
@@ -133,6 +139,10 @@ impl Readable for MerkleProof {
 		let node = Hash::read(reader)?;
 
 		let (peaks_len, path_len) = ser_multiread!(reader, read_u64, read_u64);
+
+		if peaks_len > MAX_PEAKS || path_len > MAX_PATH {
+			return Err(ser::Error::CorruptedData);
+		}
 
 		let mut peaks = Vec::with_capacity(peaks_len as usize);
 		for _ in 0..peaks_len {
