@@ -53,7 +53,6 @@ pub mod types;
 
 use core::consensus;
 use core::core::BlockHeader;
-use core::core::hash::Hashed;
 use core::core::Proof;
 use core::core::target::Difficulty;
 use core::global;
@@ -128,7 +127,7 @@ pub fn pow_size<T: MiningWorker + ?Sized>(
 	loop {
 		// can be trivially optimized by avoiding re-serialization every time but this
 		// is not meant as a fast miner implementation
-		let pow_hash = bh.hash();
+		let pow_hash = bh.pre_pow_hash();
 
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good
