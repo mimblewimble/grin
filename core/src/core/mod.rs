@@ -24,7 +24,8 @@ pub mod transaction;
 // pub mod txoset;
 #[allow(dead_code)]
 
-use std::fmt;
+use rand::{thread_rng, Rng};
+use std::{fmt, iter};
 use std::cmp::Ordering;
 use std::num::ParseFloatError;
 use consensus::GRIN_BASE;
@@ -149,6 +150,21 @@ impl Proof {
 		Proof {
 			proof_size: proof_size,
 			nonces: vec![0; proof_size],
+		}
+	}
+
+	/// Builds a proof with random POW data,
+	/// needed so that tests that ignore POW
+	/// don't fail due to duplicate hashes
+	pub fn random(proof_size: usize) -> Proof {
+		let mut rng = thread_rng();
+		let v: Vec<u32> = iter::repeat(())
+			.map(|()| rng.gen())
+			.take(proof_size)
+			.collect();
+		Proof {
+			proof_size: proof_size,
+			nonces: v,
 		}
 	}
 

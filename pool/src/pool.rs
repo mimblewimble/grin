@@ -636,7 +636,7 @@ mod tests {
 	use std::sync::{Arc, RwLock};
 	use blake2;
 	use core::global::ChainTypes;
-	use core::core::SwitchCommitHash;
+	use core::core::{Proof, SwitchCommitHash};
 	use core::core::hash::{Hash, Hashed};
 	use core::core::pmmr::MerkleProof;
 	use core::core::target::Difficulty;
@@ -833,6 +833,7 @@ mod tests {
 	fn test_immature_coinbase() {
 		global::set_mining_mode(ChainTypes::AutomatedTesting);
 		let mut dummy_chain = DummyChainImpl::new();
+		let proof_size = global::proofsize();
 
 		let lock_height = 1 + global::coinbase_maturity();
 		assert_eq!(lock_height, 4);
@@ -848,12 +849,14 @@ mod tests {
 
 			let coinbase_header = block::BlockHeader {
 				height: 1,
+				pow: Proof::random(proof_size),
 				..block::BlockHeader::default()
 			};
 			chain_ref.store_head_header(&coinbase_header);
 
 			let head_header = block::BlockHeader {
 				height: 2,
+				pow: Proof::random(proof_size),
 				..block::BlockHeader::default()
 			};
 			chain_ref.store_head_header(&head_header);
