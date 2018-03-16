@@ -15,7 +15,7 @@
 //! Types specific to the UI module
 
 use cursive::Cursive;
-use cursive::view::AnyView;
+use cursive::view::View;
 use grin::types::ServerStats;
 
 /// Main message struct to communicate between the UI and
@@ -29,7 +29,7 @@ pub enum UIMessage {
 
 pub trait TUIStatusListener {
 	/// create the view, to return to the main UI controller
-	fn create() -> Box<AnyView>;
+	fn create() -> Box<View>;
 	/// Update according to status update contents
 	fn update(c: &mut Cursive, stats: &ServerStats);
 }
