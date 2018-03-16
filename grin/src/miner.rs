@@ -79,9 +79,7 @@ impl HeaderPrePowWriter {
 
 impl ser::Writer for HeaderPrePowWriter {
 	fn serialization_mode(&self) -> ser::SerializationMode {
-		// not actually hashing, just skipping the POW, (which is why we need
-		// this whole struct)
-		ser::SerializationMode::Hash
+		ser::SerializationMode::Full
 	}
 
 	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, bytes_in: &T) -> Result<(), ser::Error> {
@@ -161,7 +159,7 @@ impl Miner {
 
 		// Get parts of the header
 		let mut pre_pow_writer = HeaderPrePowWriter::default();
-		ser::Writeable::write(&b.header, &mut pre_pow_writer).unwrap();
+		b.header.write_pre_pow(&mut pre_pow_writer).unwrap();
 		let pre_pow = pre_pow_writer.as_hex_string(false);
 
 		// Start the miner working
@@ -292,7 +290,7 @@ impl Miner {
 
 		let mut sol = None;
 		while head.hash() == *latest_hash && time::get_time().sec < deadline {
-			let pow_hash = b.hash();
+			let pow_hash = b.header.pre_pow_hash();
 			if let Ok(proof) = plugin_miner.mine(&pow_hash[..]) {
 				let proof_diff = proof.clone().to_difficulty();
 				trace!(
@@ -409,7 +407,7 @@ impl Miner {
 
 		let mut sol = None;
 		while head.hash() == *latest_hash && time::get_time().sec < deadline {
-			let pow_hash = b.hash();
+			let pow_hash = b.header.pre_pow_hash();
 			if let Ok(proof) = miner.mine(&pow_hash[..]) {
 				let proof_diff = proof.clone().to_difficulty();
 				if proof_diff > (b.header.total_difficulty.clone() - head.total_difficulty.clone())
@@ -560,13 +558,13 @@ impl Miner {
 
 			// we found a solution, push our block through the chain processing pipeline
 			if let Some(proof) = sol {
+				b.header.pow = proof;
 				info!(
 					LOGGER,
 					"(Server ID: {}) Found valid proof of work, adding block {}.",
 					self.debug_output_id,
 					b.hash()
 				);
-				b.header.pow = proof;
 				let res = self.chain.process_block(b, chain::Options::MINE);
 				if let Err(e) = res {
 					error!(

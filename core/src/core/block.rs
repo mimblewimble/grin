@@ -22,7 +22,7 @@ use core::{Committed, Input, KernelFeatures, Output, OutputFeatures, Proof, Proo
            ShortId, SwitchCommitHash, Transaction, TxKernel};
 use consensus;
 use consensus::{exceeds_weight, reward, VerifySortOrder, REWARD};
-use core::hash::{Hash, Hashed, ZERO_HASH};
+use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::id::ShortIdentifiable;
 use core::target::Difficulty;
 use core::transaction;
@@ -145,22 +145,11 @@ impl Default for BlockHeader {
 /// Serialization of a block header
 impl Writeable for BlockHeader {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(
-			writer,
-			[write_u16, self.version],
-			[write_u64, self.height],
-			[write_fixed_bytes, &self.previous],
-			[write_i64, self.timestamp.to_timespec().sec],
-			[write_u64, self.total_difficulty.into_num()],
-			[write_fixed_bytes, &self.output_root],
-			[write_fixed_bytes, &self.range_proof_root],
-			[write_fixed_bytes, &self.kernel_root],
-			[write_fixed_bytes, &self.total_kernel_offset],
-			[write_u64, self.nonce]
-		);
-
-		if writer.serialization_mode() != ser::SerializationMode::Hash {
+		if writer.serialization_mode() == ser::SerializationMode::Hash {
 			try!(self.pow.write(writer));
+		} else {
+			self.write_pre_pow(writer)?;
+			self.pow.write(writer)?;
 		}
 		Ok(())
 	}
@@ -200,6 +189,36 @@ impl Readable for BlockHeader {
 			nonce: nonce,
 			pow: pow,
 		})
+	}
+}
+
+impl BlockHeader {
+	/// Write the pre-hash portion of the header
+	pub fn write_pre_pow<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		ser_multiwrite!(
+			writer,
+			[write_u16, self.version],
+			[write_u64, self.height],
+			[write_fixed_bytes, &self.previous],
+			[write_i64, self.timestamp.to_timespec().sec],
+			[write_u64, self.total_difficulty.into_num()],
+			[write_fixed_bytes, &self.output_root],
+			[write_fixed_bytes, &self.range_proof_root],
+			[write_fixed_bytes, &self.kernel_root],
+			[write_fixed_bytes, &self.total_kernel_offset],
+			[write_u64, self.nonce]
+		);
+		Ok(())
+	}
+	///
+	/// Returns the pre-pow hash, as the post-pow hash
+	/// should just be the hash of the POW
+	pub fn pre_pow_hash(&self) -> Hash {
+		let mut hasher = HashWriter::default();
+		self.write_pre_pow(&mut hasher).unwrap();
+		let mut ret = [0; 32];
+		hasher.finalize(&mut ret);
+		Hash(ret)
 	}
 }
 
@@ -565,7 +584,7 @@ impl Block {
 		}.cut_through())
 	}
 
-	/// Blockhash, computed using only the header
+	/// Blockhash, computed using only the POW
 	pub fn hash(&self) -> Hash {
 		self.header.hash()
 	}
@@ -1123,7 +1142,7 @@ mod test {
 		let cb2 = b.as_compact_block();
 
 		// random nonce will not affect the hash of the compact block itself
-		// hash is based on header only
+		// hash is based on header POW only
 		assert!(cb1.nonce != cb2.nonce);
 		assert_eq!(b.hash(), cb1.hash());
 		assert_eq!(cb1.hash(), cb2.hash());
