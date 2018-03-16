@@ -105,22 +105,22 @@ pub struct BlockHeader {
 	pub previous: Hash,
 	/// Timestamp at which the block was built.
 	pub timestamp: time::Tm,
+	/// Total accumulated difficulty since genesis block
+	pub total_difficulty: Difficulty,
 	/// Merklish root of all the commitments in the TxHashSet
 	pub output_root: Hash,
 	/// Merklish root of all range proofs in the TxHashSet
 	pub range_proof_root: Hash,
 	/// Merklish root of all transaction kernels in the TxHashSet
 	pub kernel_root: Hash,
-	/// Nonce increment used to mine this block.
-	pub nonce: u64,
-	/// Proof of work data.
-	pub pow: Proof,
-	/// Total accumulated difficulty since genesis block
-	pub total_difficulty: Difficulty,
 	/// Total accumulated sum of kernel offsets since genesis block.
 	/// We can derive the kernel offset sum for *this* block from
 	/// the total kernel offset of the previous block header.
 	pub total_kernel_offset: BlindingFactor,
+	/// Nonce increment used to mine this block.
+	pub nonce: u64,
+	/// Proof of work data.
+	pub pow: Proof,
 }
 
 impl Default for BlockHeader {
@@ -135,9 +135,9 @@ impl Default for BlockHeader {
 			output_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
 			kernel_root: ZERO_HASH,
+			total_kernel_offset: BlindingFactor::zero(),
 			nonce: 0,
 			pow: Proof::zero(proof_size),
-			total_kernel_offset: BlindingFactor::zero(),
 		}
 	}
 }
@@ -151,14 +151,13 @@ impl Writeable for BlockHeader {
 			[write_u64, self.height],
 			[write_fixed_bytes, &self.previous],
 			[write_i64, self.timestamp.to_timespec().sec],
+			[write_u64, self.total_difficulty.into_num()],
 			[write_fixed_bytes, &self.output_root],
 			[write_fixed_bytes, &self.range_proof_root],
-			[write_fixed_bytes, &self.kernel_root]
+			[write_fixed_bytes, &self.kernel_root],
+			[write_fixed_bytes, &self.total_kernel_offset],
+			[write_u64, self.nonce]
 		);
-
-		try!(writer.write_u64(self.nonce));
-		try!(self.total_difficulty.write(writer));
-		try!(self.total_kernel_offset.write(writer));
 
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			try!(self.pow.write(writer));
@@ -173,12 +172,12 @@ impl Readable for BlockHeader {
 		let (version, height) = ser_multiread!(reader, read_u16, read_u64);
 		let previous = Hash::read(reader)?;
 		let timestamp = reader.read_i64()?;
+		let total_difficulty = Difficulty::read(reader)?;
 		let output_root = Hash::read(reader)?;
 		let rproof_root = Hash::read(reader)?;
 		let kernel_root = Hash::read(reader)?;
-		let nonce = reader.read_u64()?;
-		let total_difficulty = Difficulty::read(reader)?;
 		let total_kernel_offset = BlindingFactor::read(reader)?;
+		let nonce = reader.read_u64()?;
 		let pow = Proof::read(reader)?;
 
 		if timestamp > (1 << 60) {
@@ -193,13 +192,13 @@ impl Readable for BlockHeader {
 				sec: timestamp,
 				nsec: 0,
 			}),
+			total_difficulty: total_difficulty,
 			output_root: output_root,
 			range_proof_root: rproof_root,
 			kernel_root: kernel_root,
-			pow: pow,
-			nonce: nonce,
-			total_difficulty: total_difficulty,
 			total_kernel_offset: total_kernel_offset,
+			nonce: nonce,
+			pow: pow,
 		})
 	}
 }
