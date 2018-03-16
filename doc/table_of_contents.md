@@ -10,7 +10,6 @@
 - [merkle](merkle.md) - Technical explanation of grin's favorite kind of merkle trees
 - [pruning](pruning.md) - Technical explanation of pruning
 - [rangeproofs](rangeproofs.md) - Technical explanation of range proofs
-- [style](style.md) - About code formatting
 - [wallet](wallet.md) - Explains the wallet design and `grin wallet` sub-commands
 
 # External (wiki)
