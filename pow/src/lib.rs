@@ -77,7 +77,8 @@ pub trait MiningWorker {
 /// Validates the proof of work of a given header, and that the proof of work
 /// satisfies the requirements of the header.
 pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
-	Cuckoo::new(&bh.pre_pow_hash()[..], cuckoo_sz).verify(bh.pow.clone(), consensus::EASINESS as u64)
+	Cuckoo::new(&bh.pre_pow_hash()[..], cuckoo_sz)
+		.verify(bh.pow.clone(), consensus::EASINESS as u64)
 }
 
 /// Mines a genesis block, using the config specified miner if specified.
