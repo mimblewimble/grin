@@ -75,7 +75,7 @@ impl Peers {
 
 	// Update the dandelion relay
 	pub fn update_dandelion_relay(&self) {
-		let peers = self.connected_peers();
+		let peers = self.outgoing_connected_peers();
 		match thread_rng().choose(&peers) {
 			Some(peer) => {
 				// Clear the map and add new relay
@@ -107,6 +107,19 @@ impl Peers {
 			.cloned()
 			.collect::<Vec<_>>();
 		thread_rng().shuffle(&mut res);
+		res
+	}
+
+	pub fn outgoing_connected_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
+		let peers = self.connected_peers();
+		let res = peers
+			.iter()
+			.filter(|x| match x.try_read() {
+				Ok(peer) => peer.info.direction == Direction::Outbound,
+				Err(_) => false,
+			})
+			.cloned()
+			.collect::<Vec<_>>();
 		res
 	}
 
