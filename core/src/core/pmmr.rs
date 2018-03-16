@@ -91,10 +91,10 @@ where
 }
 
 /// Maixmum peeks for a Merkle proof
-pub const MAX_PEAKS: u64 = 300_000;
+pub const MAX_PEAKS: u64 = 100;
 
 /// Maixmum path for a Merkle proof
-pub const MAX_PATH: u64 = 300_000;
+pub const MAX_PATH: u64 = 100;
 
 /// A Merkle proof.
 /// Proves inclusion of an output (node) in the output MMR.
