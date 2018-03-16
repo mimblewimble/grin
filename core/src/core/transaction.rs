@@ -307,6 +307,12 @@ impl Readable for Transaction {
 				return Err(ser::Error::TooLargeReadErr)
 			}
 
+		if input_len > consensus::MAX_TX_INPUTS
+			|| output_len > consensus::MAX_TX_OUTPUTS
+			|| kernel_len > consensus::MAX_TX_KERNELS {
+				return Err(ser::Error::CorruptedData)
+			}
+
 		let inputs = read_and_verify_sorted(reader, input_len)?;
 		let outputs = read_and_verify_sorted(reader, output_len)?;
 		let kernels = read_and_verify_sorted(reader, kernel_len)?;

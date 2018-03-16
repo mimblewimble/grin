@@ -445,7 +445,7 @@ fn removed_excl_roots(removed: Vec<u64>) -> Vec<u64> {
 	removed
 		.iter()
 		.filter(|&pos| {
-			let (parent_pos, _, _) = family(*pos);
+			let (parent_pos, _) = family(*pos);
 			removed.binary_search(&parent_pos).is_ok()
 		})
 		.cloned()

@@ -19,7 +19,7 @@ use std::cmp::Ordering;
 use grin::types::{PeerStats, ServerStats};
 
 use cursive::Cursive;
-use cursive::view::AnyView;
+use cursive::view::View;
 use cursive::views::{BoxView, Dialog};
 use cursive::traits::*;
 
@@ -76,7 +76,7 @@ impl TableViewItem<PeerColumn> for PeerStats {
 pub struct TUIPeerView;
 
 impl TUIStatusListener for TUIPeerView {
-	fn create() -> Box<AnyView> {
+	fn create() -> Box<View> {
 		let table_view =
 			TableView::<PeerStats, PeerColumn>::new()
 				.column(PeerColumn::Address, "Address", |c| c.width_percent(20))
