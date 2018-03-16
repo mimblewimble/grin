@@ -11,7 +11,8 @@ List of files tracked in `git` and some files you'll create when you use grin.
 - [rustfmt.toml](../rustfmt.toml) - configuration file for rustfmt. Required before contributing _new_ code.
 
 ## Folder structure
-List of folders in the grin git repo, and the `wallet` and `server` folders which you're [recommended to create yourself](build.md#running-a-node).
+After checking out grin, building and using, these are the folders you'll have:
+
 - api
   Code for ApiEndpoints accessible over REST.
 - chain
@@ -48,10 +49,10 @@ List of folders in the grin git repo, and the `wallet` and `server` folders whic
 - util
   Low-level rust utilities.
 - wallet
-  A folder you're [supposed to create](build.md#running-a-node), before creating your wallet: cd to project root; mkdir wallet; cd wallet; grin wallet init
+  A folder you're [supposed to create](build.md), before creating your wallet: cd to project root; mkdir wallet; cd wallet; grin wallet init
   - wallet.dat - your "outputs", that once confirmed and matured, can be spent with the [`grin wallet send`](wallet.md) command. (locally created, _not_ in git)
   - wallet.seed - your secret wallet seed. (locally created, _not_ in git)
 
 ## grin dependencies
 - [secp256k1](https://github.com/mimblewimble/rust-secp256k1-zkp)
-  Integration and rust bindings for libsecp256l1, and some changes waiting to be upstreamed. Imported in util/Cargo.toml.
+  Integration and rust bindings for libsecp256k1, and some changes waiting to be upstreamed. Imported in util/Cargo.toml.
