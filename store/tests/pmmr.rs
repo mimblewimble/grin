@@ -41,16 +41,32 @@ fn pmmr_append() {
 	let node_hash = elems[0].hash_with_index(1);
 	assert_eq!(backend.get(1, false).expect("").0, node_hash);
 
-	let sum2 = elems[0].hash_with_index(1) + elems[1].hash_with_index(2);
-	let sum4 = sum2 + (elems[2].hash_with_index(4) + elems[3].hash_with_index(5));
-	let sum8 = sum4
-		+ ((elems[4].hash_with_index(8) + elems[5].hash_with_index(9))
-			+ (elems[6].hash_with_index(11) + elems[7].hash_with_index(12)));
-	let sum9 = sum8 + elems[8].hash_with_index(16);
+	// 0010012001001230
+
+	let pos_1 = elems[0].hash_with_index(1);
+	let pos_2 = elems[1].hash_with_index(2);
+	let pos_3 = (pos_1, pos_2).hash_with_index(3);
+
+	let pos_4 = elems[2].hash_with_index(4);
+	let pos_5 = elems[3].hash_with_index(5);
+	let pos_6 = (pos_4, pos_5).hash_with_index(6);
+	let pos_7 = (pos_3, pos_6).hash_with_index(7);
+
+	let pos_8 = elems[4].hash_with_index(8);
+	let pos_9 = elems[5].hash_with_index(9);
+	let pos_10 = (pos_8, pos_9).hash_with_index(10);
+
+	let pos_11 = elems[6].hash_with_index(11);
+	let pos_12 = elems[7].hash_with_index(12);
+	let pos_13 = (pos_11, pos_12).hash_with_index(13);
+	let pos_14 = (pos_10, pos_13).hash_with_index(14);
+	let pos_15 = (pos_7, pos_14).hash_with_index(15);
+
+	let pos_16 = elems[8].hash_with_index(16);
 
 	{
 		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-		assert_eq!(pmmr.root(), sum9);
+		assert_eq!(pmmr.root(), pos_15 + pos_16);
 	}
 
 	teardown(data_dir);
