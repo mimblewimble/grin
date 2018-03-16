@@ -68,14 +68,18 @@ pub fn send_partial_tx(url: &str, partial_tx: &PartialTx, fluff: bool) -> Result
 	single_send_partial_tx(url, partial_tx, fluff)
 }
 
-fn single_send_partial_tx(url: &str, partial_tx: &PartialTx, fluff: bool) -> Result<PartialTx, Error> {
+fn single_send_partial_tx(
+	url: &str,
+	partial_tx: &PartialTx,
+	fluff: bool,
+) -> Result<PartialTx, Error> {
 	let mut core = reactor::Core::new().context(ErrorKind::Hyper)?;
 	let client = hyper::Client::new(&core.handle());
 
 	// In case we want to do an express send
 	let mut url_pool = url.to_owned();
 	if fluff {
-		url_pool = format!("{}{}", url ,"?fluff");
+		url_pool = format!("{}{}", url, "?fluff");
 	}
 
 	let mut req = Request::new(
