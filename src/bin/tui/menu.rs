@@ -15,7 +15,7 @@
 //! Main Menu definition
 
 use cursive::Cursive;
-use cursive::view::AnyView;
+use cursive::view::View;
 use cursive::align::HAlign;
 use cursive::event::{EventResult, Key};
 use cursive::views::{BoxView, LinearLayout, OnEventView, SelectView, StackView, TextView};
@@ -23,7 +23,7 @@ use cursive::direction::Orientation;
 
 use tui::constants::*;
 
-pub fn create() -> Box<AnyView> {
+pub fn create() -> Box<View> {
 	let mut main_menu = SelectView::new().h_align(HAlign::Left);
 	main_menu.add_item("Basic Status", VIEW_BASIC_STATUS);
 	main_menu.add_item("Peers and Sync", VIEW_PEER_SYNC);
