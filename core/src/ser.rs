@@ -562,7 +562,14 @@ pub trait PMMRIndexHashable {
 
 impl<T: PMMRable> PMMRIndexHashable for T {
 	fn hash_with_index(&self, index: u64) -> Hash {
-		(index, self).hash()
+		(self, index).hash()
+	}
+}
+
+// Convenient way to hash two existing hashes together with an index.
+impl PMMRIndexHashable for (Hash, Hash) {
+	fn hash_with_index(&self, index: u64) -> Hash {
+		(&self.0, &self.1, index).hash()
 	}
 }
 

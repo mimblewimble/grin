@@ -105,11 +105,9 @@ pub struct MerkleProof {
 	pub node: Hash,
 	/// The full list of peak hashes in the MMR
 	pub peaks: Vec<Hash>,
-	/// The siblings along the path of the tree as we traverse from node to peak
-	pub path: Vec<Hash>,
-	/// Order of siblings (left vs right) matters, so track this here for each
-	/// path element
-	pub left_right: Vec<bool>,
+	/// The sibling (hash, pos) along the path of the tree
+	/// as we traverse from node to peak
+	pub path: Vec<(Hash, u64)>,
 }
 
 impl Writeable for MerkleProof {
@@ -119,21 +117,11 @@ impl Writeable for MerkleProof {
 			[write_fixed_bytes, &self.root],
 			[write_fixed_bytes, &self.node],
 			[write_u64, self.peaks.len() as u64],
-			// note: path length used for both path and left_right vecs
 			[write_u64, self.path.len() as u64]
 		);
 
 		try!(self.peaks.write(writer));
 		try!(self.path.write(writer));
-
-		// TODO - how to serialize/deserialize these boolean values as bytes?
-		for x in &self.left_right {
-			if *x {
-				try!(writer.write_u8(1));
-			} else {
-				try!(writer.write_u8(0));
-			}
-		}
 
 		Ok(())
 	}
@@ -150,19 +138,19 @@ impl Readable for MerkleProof {
 		for _ in 0..peaks_len {
 			peaks.push(Hash::read(reader)?);
 		}
+
 		let mut path = Vec::with_capacity(path_len as usize);
 		for _ in 0..path_len {
-			path.push(Hash::read(reader)?);
+			let hash = Hash::read(reader)?;
+			let pos = reader.read_u64()?;
+			path.push((hash, pos));
 		}
 
-		let left_right_bytes = reader.read_fixed_bytes(path_len as usize)?;
-		let left_right = left_right_bytes.iter().map(|&x| x == 1).collect();
 		Ok(MerkleProof {
 			root,
 			node,
 			peaks,
 			path,
-			left_right,
 		})
 	}
 }
@@ -182,7 +170,6 @@ impl MerkleProof {
 			node: Hash::zero(),
 			peaks: vec![],
 			path: vec![],
-			left_right: vec![],
 		}
 	}
 
@@ -216,26 +203,25 @@ impl MerkleProof {
 			}
 
 			let mut bagged = None;
-			for peak in self.peaks.iter().map(|&x| Some(x)) {
+			for peak in self.peaks.iter().cloned() {
 				bagged = match (bagged, peak) {
-					(None, rhs) => rhs,
-					(lhs, None) => lhs,
-					(Some(lhs), Some(rhs)) => Some(lhs.hash_with(rhs)),
+					(None, rhs) => Some(rhs),
+					(Some(lhs), rhs) => Some(lhs.hash_with(rhs)),
 				}
 			}
 			return bagged == Some(self.root);
 		}
 
 		let mut path = self.path.clone();
-		let sibling = path.remove(0);
-		let mut left_right = self.left_right.clone();
+		let (sibling, sibling_pos) = path.remove(0);
+		let (parent_pos, _) = family(sibling_pos);
 
 		// hash our node and sibling together (noting left/right position of the
 		// sibling)
-		let parent = if left_right.remove(0) {
-			self.node.hash_with(sibling)
+		let parent = if is_left_sibling(sibling_pos) {
+			(sibling, self.node).hash_with_index(parent_pos)
 		} else {
-			sibling.hash_with(self.node)
+			(self.node, sibling).hash_with_index(parent_pos)
 		};
 
 		let proof = MerkleProof {
@@ -243,7 +229,6 @@ impl MerkleProof {
 			node: parent,
 			peaks: self.peaks.clone(),
 			path,
-			left_right,
 		};
 
 		proof.verify()
@@ -293,28 +278,30 @@ where
 		}
 	}
 
-	/// Computes the root of the MMR. Find all the peaks in the current
-	/// tree and "bags" them to get a single peak.
-	pub fn root(&self) -> Hash {
+	/// Returns a vec of the peaks of this MMR.
+	pub fn peaks(&self) -> Vec<Hash> {
 		let peaks_pos = peaks(self.last_pos);
-		let peaks: Vec<Option<Hash>> = peaks_pos
+		peaks_pos
 			.into_iter()
-			.map(|pi| {
+			.filter_map(|pi| {
 				// here we want to get from underlying hash file
 				// as the pos *may* have been "removed"
 				self.backend.get_from_file(pi)
 			})
-			.collect();
+			.collect()
+	}
 
-		let mut ret = None;
-		for peak in peaks {
-			ret = match (ret, peak) {
-				(None, x) => x,
-				(Some(hash), None) => Some(hash),
-				(Some(lhash), Some(rhash)) => Some(lhash.hash_with(rhash)),
+	/// Computes the root of the MMR. Find all the peaks in the current
+	/// tree and "bags" them to get a single peak.
+	pub fn root(&self) -> Hash {
+		let mut res = None;
+		for peak in self.peaks() {
+			res = match (res, peak) {
+				(None, rhash) => Some(rhash),
+				(Some(lhash), rhash) => Some(lhash.hash_with(rhash)),
 			}
 		}
-		ret.expect("no root, invalid tree")
+		res.expect("no root, invalid tree")
 	}
 
 	/// Build a Merkle proof for the element at the given position in the MMR
@@ -335,15 +322,10 @@ where
 			.0;
 
 		let family_branch = family_branch(pos, self.last_pos);
-		let left_right = family_branch.iter().map(|x| x.2).collect::<Vec<_>>();
 
 		let path = family_branch
 			.iter()
-			.filter_map(|x| {
-				// we want to find siblings here even if they
-				// have been "removed" from the MMR
-				self.get_from_file(x.1)
-			})
+			.map(|x| (self.get_from_file(x.1).unwrap_or(Hash::zero()), x.1))
 			.collect::<Vec<_>>();
 
 		let peaks = peaks(self.last_pos)
@@ -357,9 +339,8 @@ where
 		let proof = MerkleProof {
 			root,
 			node,
-			path,
 			peaks,
-			left_right,
+			path,
 		};
 
 		Ok(proof)
@@ -386,11 +367,12 @@ where
 				.get_from_file(left_sibling)
 				.ok_or("missing left sibling in tree, should not have been pruned")?;
 
-			current_hash = left_hash + current_hash;
-
-			to_append.push((current_hash.clone(), None));
 			height += 1;
 			pos += 1;
+
+			current_hash = (left_hash, current_hash).hash_with_index(pos);
+
+			to_append.push((current_hash.clone(), None));
 		}
 
 		// append all the new nodes and update the MMR index
@@ -436,7 +418,7 @@ where
 
 		let mut current = position;
 		while current + 1 <= self.last_pos {
-			let (parent, sibling, _) = family(current);
+			let (parent, sibling) = family(current);
 
 			to_prune.push(current);
 
@@ -517,10 +499,12 @@ where
 					let left_pos = bintree_move_down_left(n).ok_or(format!("left_pos not found"))?;
 					let right_pos = bintree_jump_right_sibling(left_pos);
 
-					if let Some(left_child_hs) = self.get(left_pos, false) {
-						if let Some(right_child_hs) = self.get(right_pos, false) {
-							// add hashes and compare
-							if left_child_hs.0 + right_child_hs.0 != hs.0 {
+					// using get_from_file here for the children (they may have been "removed")
+					if let Some(left_child_hs) = self.get_from_file(left_pos) {
+						if let Some(right_child_hs) = self.get_from_file(right_pos) {
+							// hash the two child nodes together with parent_pos and compare
+							let (parent_pos, _) = family(left_pos);
+							if (left_child_hs, right_child_hs).hash_with_index(parent_pos) != hs.0 {
 								return Err(format!(
 									"Invalid MMR, hash of parent at {} does \
 									 not match children.",
@@ -703,7 +687,7 @@ impl PruneList {
 	pub fn add(&mut self, pos: u64) {
 		let mut current = pos;
 		loop {
-			let (parent, sibling, _) = family(current);
+			let (parent, sibling) = family(current);
 
 			match self.pruned_nodes.binary_search(&sibling) {
 				Ok(idx) => {
@@ -734,7 +718,7 @@ impl PruneList {
 					let next_peak_pos = self.pruned_nodes[idx];
 					let mut cursor = pos;
 					loop {
-						let (parent, _, _) = family(cursor);
+						let (parent, _) = family(cursor);
 						if next_peak_pos == parent {
 							return None;
 						}
@@ -885,36 +869,41 @@ pub fn is_leaf(pos: u64) -> bool {
 }
 
 /// Calculates the positions of the parent and sibling of the node at the
-/// provided position. Also returns a boolean representing whether the sibling is on left
-/// branch or right branch (left=0, right=1)
-pub fn family(pos: u64) -> (u64, u64, bool) {
+/// provided position.
+pub fn family(pos: u64) -> (u64, u64) {
 	let pos_height = bintree_postorder_height(pos);
 	let next_height = bintree_postorder_height(pos + 1);
 	if next_height > pos_height {
 		let sibling = bintree_jump_left_sibling(pos);
 		let parent = pos + 1;
-		(parent, sibling, false)
+		(parent, sibling)
 	} else {
 		let sibling = bintree_jump_right_sibling(pos);
 		let parent = sibling + 1;
-		(parent, sibling, true)
+		(parent, sibling)
 	}
+}
+
+/// Is the node at this pos the "left" sibling of its parent?
+pub fn is_left_sibling(pos: u64) -> bool {
+	let (_, sibling_pos) = family(pos);
+	sibling_pos > pos
 }
 
 /// For a given starting position calculate the parent and sibling positions
 /// for the branch/path from that position to the peak of the tree.
 /// We will use the sibling positions to generate the "path" of a Merkle proof.
-pub fn family_branch(pos: u64, last_pos: u64) -> Vec<(u64, u64, bool)> {
+pub fn family_branch(pos: u64, last_pos: u64) -> Vec<(u64, u64)> {
 	// loop going up the tree, from node to parent, as long as we stay inside
 	// the tree (as defined by last_pos).
 	let mut branch = vec![];
 	let mut current = pos;
 	while current + 1 <= last_pos {
-		let (parent, sibling, sibling_branch) = family(current);
+		let (parent, sibling) = family(current);
 		if parent > last_pos {
 			break;
 		}
-		branch.push((parent, sibling, sibling_branch));
+		branch.push((parent, sibling));
 
 		current = parent;
 	}
@@ -1148,39 +1137,46 @@ mod test {
 	#[test]
 	fn various_families() {
 		// 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3
-		assert_eq!(family(1), (3, 2, true));
-		assert_eq!(family(2), (3, 1, false));
-		assert_eq!(family(3), (7, 6, true));
-		assert_eq!(family(4), (6, 5, true));
-		assert_eq!(family(5), (6, 4, false));
-		assert_eq!(family(6), (7, 3, false));
-		assert_eq!(family(7), (15, 14, true));
-		assert_eq!(family(1_000), (1_001, 997, false));
+		assert_eq!(family(1), (3, 2));
+		assert_eq!(family(2), (3, 1));
+		assert_eq!(family(3), (7, 6));
+		assert_eq!(family(4), (6, 5));
+		assert_eq!(family(5), (6, 4));
+		assert_eq!(family(6), (7, 3));
+		assert_eq!(family(7), (15, 14));
+		assert_eq!(family(1_000), (1_001, 997));
+	}
+
+	#[test]
+	fn test_is_left_sibling() {
+		assert_eq!(is_left_sibling(1), true);
+		assert_eq!(is_left_sibling(2), false);
+		assert_eq!(is_left_sibling(3), true);
 	}
 
 	#[test]
 	fn various_branches() {
 		// the two leaf nodes in a 3 node tree (height 1)
-		assert_eq!(family_branch(1, 3), [(3, 2, true)]);
-		assert_eq!(family_branch(2, 3), [(3, 1, false)]);
+		assert_eq!(family_branch(1, 3), [(3, 2)]);
+		assert_eq!(family_branch(2, 3), [(3, 1)]);
 
 		// the root node in a 3 node tree
 		assert_eq!(family_branch(3, 3), []);
 
 		// leaf node in a larger tree of 7 nodes (height 2)
-		assert_eq!(family_branch(1, 7), [(3, 2, true), (7, 6, true)]);
+		assert_eq!(family_branch(1, 7), [(3, 2), (7, 6)]);
 
 		// note these only go as far up as the local peak, not necessarily the single
 		// root
-		assert_eq!(family_branch(1, 4), [(3, 2, true)]);
+		assert_eq!(family_branch(1, 4), [(3, 2)]);
 		// pos 4 in a tree of size 4 is a local peak
 		assert_eq!(family_branch(4, 4), []);
 		// pos 4 in a tree of size 5 is also still a local peak
 		assert_eq!(family_branch(4, 5), []);
 		// pos 4 in a tree of size 6 has a parent and a sibling
-		assert_eq!(family_branch(4, 6), [(6, 5, true)]);
+		assert_eq!(family_branch(4, 6), [(6, 5)]);
 		// a tree of size 7 is all under a single root
-		assert_eq!(family_branch(4, 7), [(6, 5, true), (7, 3, false)]);
+		assert_eq!(family_branch(4, 7), [(6, 5), (7, 3)]);
 
 		// ok now for a more realistic one, a tree with over a million nodes in it
 		// find the "family path" back up the tree from a leaf node at 0
@@ -1191,25 +1187,25 @@ mod test {
 		assert_eq!(
 			family_branch(1, 1_049_000),
 			[
-				(3, 2, true),
-				(7, 6, true),
-				(15, 14, true),
-				(31, 30, true),
-				(63, 62, true),
-				(127, 126, true),
-				(255, 254, true),
-				(511, 510, true),
-				(1023, 1022, true),
-				(2047, 2046, true),
-				(4095, 4094, true),
-				(8191, 8190, true),
-				(16383, 16382, true),
-				(32767, 32766, true),
-				(65535, 65534, true),
-				(131071, 131070, true),
-				(262143, 262142, true),
-				(524287, 524286, true),
-				(1048575, 1048574, true),
+				(3, 2),
+				(7, 6),
+				(15, 14),
+				(31, 30),
+				(63, 62),
+				(127, 126),
+				(255, 254),
+				(511, 510),
+				(1023, 1022),
+				(2047, 2046),
+				(4095, 4094),
+				(8191, 8190),
+				(16383, 16382),
+				(32767, 32766),
+				(65535, 65534),
+				(131071, 131070),
+				(262143, 262142),
+				(524287, 524286),
+				(1048575, 1048574),
 			]
 		);
 	}
@@ -1295,7 +1291,6 @@ mod test {
 		let root = pmmr.root();
 		assert_eq!(proof.peaks, [root]);
 		assert!(proof.path.is_empty());
-		assert!(proof.left_right.is_empty());
 		assert!(proof.verify());
 
 		// push two more elements into the PMMR
@@ -1306,13 +1301,11 @@ mod test {
 		let proof1 = pmmr.merkle_proof(1).unwrap();
 		assert_eq!(proof1.peaks.len(), 2);
 		assert_eq!(proof1.path.len(), 1);
-		assert_eq!(proof1.left_right, [true]);
 		assert!(proof1.verify());
 
 		let proof2 = pmmr.merkle_proof(2).unwrap();
 		assert_eq!(proof2.peaks.len(), 2);
 		assert_eq!(proof2.path.len(), 1);
-		assert_eq!(proof2.left_right, [false]);
 		assert!(proof2.verify());
 
 		// check that we cannot generate a merkle proof for pos 3 (not a leaf node)
@@ -1324,7 +1317,6 @@ mod test {
 		let proof4 = pmmr.merkle_proof(4).unwrap();
 		assert_eq!(proof4.peaks.len(), 2);
 		assert!(proof4.path.is_empty());
-		assert!(proof4.left_right.is_empty());
 		assert!(proof4.verify());
 
 		// now add a few more elements to the PMMR to build a larger merkle proof
@@ -1334,7 +1326,6 @@ mod test {
 		let proof = pmmr.merkle_proof(1).unwrap();
 		assert_eq!(proof.peaks.len(), 8);
 		assert_eq!(proof.path.len(), 9);
-		assert_eq!(proof.left_right.len(), 9);
 		assert!(proof.verify());
 	}
 
@@ -1390,64 +1381,79 @@ mod test {
 
 		// one element
 		pmmr.push(elems[0]).unwrap();
-		let node_hash = elems[0].hash_with_index(1);
-		assert_eq!(pmmr.root(), node_hash);
-		assert_eq!(pmmr.unpruned_size(), 1);
 		pmmr.dump(false);
+		let pos_1 = elems[0].hash_with_index(1);
+		assert_eq!(pmmr.peaks(), vec![pos_1]);
+		assert_eq!(pmmr.root(), pos_1);
+		assert_eq!(pmmr.unpruned_size(), 1);
 
 		// two elements
 		pmmr.push(elems[1]).unwrap();
-		let sum2 = elems[0].hash_with_index(1) + elems[1].hash_with_index(2);
 		pmmr.dump(false);
-		assert_eq!(pmmr.root(), sum2);
+		let pos_2 = elems[1].hash_with_index(2);
+		let pos_3 = (pos_1, pos_2).hash_with_index(3);
+		assert_eq!(pmmr.peaks(), vec![pos_3]);
+		assert_eq!(pmmr.root(), pos_3);
 		assert_eq!(pmmr.unpruned_size(), 3);
 
 		// three elements
 		pmmr.push(elems[2]).unwrap();
-		let sum3 = sum2 + elems[2].hash_with_index(4);
 		pmmr.dump(false);
-		assert_eq!(pmmr.root(), sum3);
+		let pos_4 = elems[2].hash_with_index(4);
+		assert_eq!(pmmr.peaks(), vec![pos_3, pos_4]);
+		let root = pos_3 + pos_4;
+		assert_eq!(pmmr.root(), pos_3 + pos_4);
 		assert_eq!(pmmr.unpruned_size(), 4);
 
 		// four elements
 		pmmr.push(elems[3]).unwrap();
-		let sum_one = elems[2].hash_with_index(4) + elems[3].hash_with_index(5);
-		let sum4 = sum2 + sum_one;
 		pmmr.dump(false);
-		assert_eq!(pmmr.root(), sum4);
+		let pos_5 = elems[3].hash_with_index(5);
+		let pos_6 = (pos_4, pos_5).hash_with_index(6);
+		let pos_7 = (pos_3, pos_6).hash_with_index(7);
+		assert_eq!(pmmr.peaks(), vec![pos_7]);
+		assert_eq!(pmmr.root(), pos_7);
 		assert_eq!(pmmr.unpruned_size(), 7);
 
 		// five elements
 		pmmr.push(elems[4]).unwrap();
-		let sum3 = sum4 + elems[4].hash_with_index(8);
 		pmmr.dump(false);
-		assert_eq!(pmmr.root(), sum3);
+		let pos_8 = elems[4].hash_with_index(8);
+		assert_eq!(pmmr.peaks(), vec![pos_7, pos_8]);
+		assert_eq!(pmmr.root(), pos_7 + pos_8);
 		assert_eq!(pmmr.unpruned_size(), 8);
 
 		// six elements
 		pmmr.push(elems[5]).unwrap();
-		let sum6 = sum4 + (elems[4].hash_with_index(8) + elems[5].hash_with_index(9));
-		assert_eq!(pmmr.root(), sum6.clone());
+		let pos_9 = elems[5].hash_with_index(9);
+		let pos_10 = (pos_8, pos_9).hash_with_index(10);
+		assert_eq!(pmmr.peaks(), vec![pos_7, pos_10]);
+		assert_eq!(pmmr.root(), pos_7 + pos_10);
 		assert_eq!(pmmr.unpruned_size(), 10);
 
 		// seven elements
 		pmmr.push(elems[6]).unwrap();
-		let sum7 = sum6 + elems[6].hash_with_index(11);
-		assert_eq!(pmmr.root(), sum7);
+		let pos_11 = elems[6].hash_with_index(11);
+		assert_eq!(pmmr.peaks(), vec![pos_7, pos_10, pos_11]);
+		assert_eq!(pmmr.root(), pos_7 + pos_10 + pos_11);
 		assert_eq!(pmmr.unpruned_size(), 11);
 
+		// 001001200100123
 		// eight elements
 		pmmr.push(elems[7]).unwrap();
-		let sum8 = sum4
-			+ ((elems[4].hash_with_index(8) + elems[5].hash_with_index(9))
-				+ (elems[6].hash_with_index(11) + elems[7].hash_with_index(12)));
-		assert_eq!(pmmr.root(), sum8);
+		let pos_12 = elems[7].hash_with_index(12);
+		let pos_13 = (pos_11, pos_12).hash_with_index(13);
+		let pos_14 = (pos_10, pos_13).hash_with_index(14);
+		let pos_15 = (pos_7, pos_14).hash_with_index(15);
+		assert_eq!(pmmr.peaks(), vec![pos_15]);
+		assert_eq!(pmmr.root(), pos_15);
 		assert_eq!(pmmr.unpruned_size(), 15);
 
 		// nine elements
 		pmmr.push(elems[8]).unwrap();
-		let sum9 = sum8 + elems[8].hash_with_index(16);
-		assert_eq!(pmmr.root(), sum9);
+		let pos_16 = elems[8].hash_with_index(16);
+		assert_eq!(pmmr.peaks(), vec![pos_15, pos_16]);
+		assert_eq!(pmmr.root(), pos_15 + pos_16);
 		assert_eq!(pmmr.unpruned_size(), 16);
 	}
 
