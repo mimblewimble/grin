@@ -341,10 +341,14 @@ impl Peers {
 			debug!(LOGGER, "No dandelion relay updating");
 			self.update_dandelion_relay();
 		}
+		// If still empty broadcast the transaction normally
+		if dandelion_relay.is_empty() {
+			self.broadcast_transaction(tx);
+		}
 		for relay in dandelion_relay.values() {
 			let relay = relay.read().unwrap();
 			if relay.is_connected() {
-				if let Err(e) = relay.send_transaction(tx) {
+				if let Err(e) = relay.send_stem_transaction(tx) {
 					debug!(
 						LOGGER,
 						"Error sending stem transaction to peer relay: {:?}", e
