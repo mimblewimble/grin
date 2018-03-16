@@ -59,7 +59,7 @@ features=["no-plugin-build"]
 and that it's not commented out.
 
 ## Build errors
-See [Troubleshooting](FAQ.md#troubleshooting)
+See [Troubleshooting](https://github.com/mimblewimble/docs/wiki/Troubleshooting)
 
 ## What was built?
 

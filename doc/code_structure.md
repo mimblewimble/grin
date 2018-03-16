@@ -43,7 +43,8 @@ List of folders in the grin git repo, and the `wallet` and `server` folders whic
 - store
   Data store - a thin wrapper for Rocksdb, a key-value database forked from LevelDB.
 - target
-  Where the grin binary ends up, after the compile and build process finishes. In case of trouble, see [troubleshooting](FAQ.md#troubleshooting)
+  Where the grin binary ends up, after the compile and build process finishes.
+  In case of trouble, see [troubleshooting](https://github.com/mimblewimble/docs/wiki/Troubleshooting)
 - util
   Low-level rust utilities.
 - wallet

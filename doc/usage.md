@@ -7,7 +7,8 @@ Please try it out and help finding bugs.
 Please participate in testing grin!
 Ask about errors you see, and try retelling the answers in your own words.
 That brings attention to them, so we can make them more understandable for
-users, and improve the [troubleshooting](FAQ.md#troubleshooting) section.
+users, and improve the page about
+[troubleshooting](https://github.com/mimblewimble/docs/wiki/Troubleshooting).
 
 As a user, you can already try to:
 
@@ -43,7 +44,7 @@ As a user, you can already try to:
 Legend for the above: `☑ Probably yes now, or ☐ Probably not now.`
 
 ## Known problems
-When you run into problems, please see [troubleshooting](FAQ.md#troubleshooting)
+When you run into problems, please see [troubleshooting](https://github.com/mimblewimble/docs/wiki/Troubleshooting)
 and ask on [gitter chat](https://gitter.im/grin_community/Lobby).
 
 Especially if you're not sure you've found a new bug,
