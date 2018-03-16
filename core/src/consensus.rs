@@ -89,7 +89,7 @@ pub const MAX_BLOCK_WEIGHT: usize = 80_000;
 pub const MAX_BLOCK_INPUTS: usize = 300_000; // soft fork down when too_high
 
 /// Maximum inputs for a transaction
-pub const MAX_TX_INPUTS: u64 = 500;
+pub const MAX_TX_INPUTS: u64 = 2048;
 
 /// Maximum outputs for a transaction
 pub const MAX_TX_OUTPUTS: u64 = 500; // wallet uses 500 as max
