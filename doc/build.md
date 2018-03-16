@@ -101,6 +101,12 @@ grin client help
 
 # Using grin
 
+The wiki page [How to use grin](https://github.com/mimblewimble/docs/wiki/How-to-use-grin)
+and linked pages have more information on what features we have,
+troubleshooting, etc.
+
+## Basic usage
+
 Running just `grin` with no command line switches starts `grin server` using defaults and any settings from `grin.toml` if found.
 
 
