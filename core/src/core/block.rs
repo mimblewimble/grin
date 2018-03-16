@@ -169,7 +169,7 @@ impl Readable for BlockHeader {
 		let nonce = reader.read_u64()?;
 		let pow = Proof::read(reader)?;
 
-		if timestamp > (1 << 60) {
+		if timestamp > (1 << 55) ||  timestamp < -(1 << 55) {
 			return Err(ser::Error::CorruptedData);
 		}
 
