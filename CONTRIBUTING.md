@@ -15,7 +15,8 @@ Find us:
 
 # Grin Style Guide
 
-Grin uses `rustfmt` to maintain consistent formatting (and a [git commit hook](doc/style.md) to run it).
+Grin uses `rustfmt` to maintain consistent formatting.
+Please use the git commit hook as explained below.
 
 ## Install rustfmt
 
