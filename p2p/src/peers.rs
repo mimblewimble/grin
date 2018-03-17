@@ -341,7 +341,7 @@ impl Peers {
 			debug!(LOGGER, "No dandelion relay updating");
 			self.update_dandelion_relay();
 		}
-		// If still empty broadcast the transaction normally
+		// If still empty broadcast then broadcast transaction normally
 		if dandelion_relay.is_empty() {
 			self.broadcast_transaction(tx);
 		}
