@@ -230,10 +230,12 @@ fn handle_sender_confirmation(
 
 	let url;
 	if fluff {
-		url = format!("{}/v1/pool/push?fluff", config.check_node_api_http_addr.as_str());
+		url = format!(
+			"{}/v1/pool/push?fluff",
+			config.check_node_api_http_addr.as_str()
+		);
 	} else {
 		url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
-
 	}
 	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).context(ErrorKind::Node)?;
 

@@ -26,8 +26,8 @@ extern crate serde_json;
 #[macro_use]
 extern crate slog;
 extern crate term;
-extern crate uuid;
 extern crate urlencoded;
+extern crate uuid;
 
 extern crate bodyparser;
 extern crate failure;
