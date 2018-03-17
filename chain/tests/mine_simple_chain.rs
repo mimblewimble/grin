@@ -421,6 +421,7 @@ fn prepare_block_nosum(
 	diff: u64,
 	txs: Vec<&Transaction>,
 ) -> Block {
+	let proof_size = global::proofsize();
 	let key_id = kc.derive_key_id(diff as u32).unwrap();
 
 	let mut b = match core::core::Block::new(prev, txs, kc, &key_id, Difficulty::from_num(diff)) {
@@ -429,5 +430,6 @@ fn prepare_block_nosum(
 	};
 	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 	b.header.total_difficulty = prev.total_difficulty.clone() + Difficulty::from_num(diff);
+	b.header.pow = core::core::Proof::random(proof_size);
 	b
 }

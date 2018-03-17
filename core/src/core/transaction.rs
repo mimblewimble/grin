@@ -302,6 +302,12 @@ impl Readable for Transaction {
 		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
+		if input_len > consensus::MAX_TX_INPUTS
+			|| output_len > consensus::MAX_TX_OUTPUTS
+			|| kernel_len > consensus::MAX_TX_KERNELS {
+				return Err(ser::Error::CorruptedData)
+			}
+
 		let inputs = read_and_verify_sorted(reader, input_len)?;
 		let outputs = read_and_verify_sorted(reader, output_len)?;
 		let kernels = read_and_verify_sorted(reader, kernel_len)?;

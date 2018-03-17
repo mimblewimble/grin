@@ -1,85 +1,79 @@
 # Grin - Build, Configuration, and Running
 
-# Building
-
 ## Supported Platforms
 
-Note that it's still too early in development to declare 'officially supported' plaforms, but at the moment, the situation is:
+Longer term, most platforms will likely be supported to some extent.
+Grin's programming language `rust` has build targets for most platforms.
 
-* Linux - Primary platform (x86 only, at present, but also known to work on ARMv7), as most development and testing is happening here
-* Mac OS - Known to work, but may be slight hiccups
-* Windows - Known to compile, but working status unknown, and not a focus for the development team at present. Note that no mining plugins will be present on a Windows system after building Grin.
-
-The instructions below will assume a Linux system.
-
-## Build Prerequisites
-
-In order to compile and run Grin on your machine, you should have installed:
-
-* <b>Git</b> - to clone the repository
-* <b>cmake</b> - 3.2 or greater should be installed and on your $PATH. Used by the build to compile the mining plugins found in the included [Cuckoo Miner](https://github.com/mimblewimble/cuckoo-miner)
-* <b>clang</b> - required by rocksdb dependency, used by grin as a datastore
-* <b>libncurses</b> - required for a nicer terminal experience, look for `libncurses5` and `libncurses5w` packages.
-* <b>Rust</b> - 1.21.0 or greater via [Rustup](https://www.rustup.rs/) - Can be installed via your package manager or manually via the following commands:
-```
-curl https://sh.rustup.rs -sSf | sh
-source $HOME/.cargo/env
-```
-Note that the compiler also requires up to 2Gb of available memory.  
-
-## Build Instructions (Linux/Unix)
+What's working so far?
+* Linux x86_64 and MacOS [grin + mining + development]
+* Not Windows 10 yet [grin kind-of builds. No mining yet. Help wanted!]
 
 
-### Clone Grin
+## Requirements
 
-```
-git clone https://github.com/mimblewimble/grin.git
-```
+See [Requirements on the wiki](https://github.com/mimblewimble/docs/wiki/Building).
 
-### Build Grin
+But basically:
+- rust 1.21+ (use [rustup]((https://www.rustup.rs/))- i.e. `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
+- cmake 3.2+ (for [Cuckoo mining plugins]((https://github.com/mimblewimble/cuckoo-miner)))
+- rocksdb + libs for compiling rocksdb:
+  - clang (clanglib or clang-devel or libclang-dev)
+  - llvm (Fedora llvm-devel, Debian llvm-dev)
+- ncurses and libs (ncurses ncurses5w)
+- linux-headers (reported needed on Alpine linux)
+
+
+## Build steps
+
 ```sh
-cd grin
-# if running a testnet1 node, check out the correct branch:
-git checkout milestone/testnet1
-cargo build
+    git clone https://github.com/mimblewimble/grin.git
+    cd grin
+    # Decide yourself if you want master, another branch, or tag
+    cargo update # first time, in case you have some old stuff
+    cargo build
+    # or: cargo install && cargo clean # if you don't plan to build again soon
 ```
-## Build errors
-See [Troubleshooting](FAQ.md#troubleshooting)
 
-#### Cross-compiling
 
-It should be fairly easy and cheap to build and run a validating node everywhere (wherever Rust can run). That being said, it is possible to cross-compile `grin` on a x86 Linux platform and produce ARM binaries, for example, in order to run on a Raspberry Pi. You will need to use the `milestone/testnet1` branch and uncomment the `no-plugin-build` feature as documented [below](#cuckoo-miner-considerations) to avoid compiling and running the mining plugins.
+### Cross-builds
 
-If you have any issues with native cross-compilation in your host system, you can try using Docker and [rust-on-raspberry-docker](https://github.com/kargakis/rust-on-raspberry-docker).
+Rust (cargo) can build grin for many platforms, so in theory running `grin`
+as a validating node on your low powered device might be possible.
+To cross-compile `grin` on a x86 Linux platform and produce ARM binaries,
+say, for a Raspberry Pi, uncomment or add the `no-plugin-build` feature in
+`grin.toml` to avoid the mining plugins.
 
-### Cuckoo-Miner considerations
 
-If you're having issues with building cuckoo-miner plugins (which will usually manifest as a lot of C errors when building the `grin_pow` crate, you can turn mining plugin builds off by editing the file `pow/Cargo.toml' as follows:
+### Building the Cuckoo-Miner plugins
 
-```toml
-# uncomment this feature to turn off plugin builds
+Building `grin_pow` might fail if you're not on a x86_64 system,
+because that crate also builds external Cuckoo mining plugins.
+
+To avoid building mining plugins, ensure your `pow/Cargo.toml' has a line
+
+```
 features=["no-plugin-build"]
 ```
 
-This may help when building on 32 bit systems or non x86 architectures. You can still use the internal miner to mine by setting:
+and that it's not commented out.
 
-```toml
-use_cuckoo_miner = false
-```
+## Build errors
+See [Troubleshooting](https://github.com/mimblewimble/docs/wiki/Troubleshooting)
 
-In `grin.toml`
+## What was built?
 
-## What have I just built?
+A successful build gets you:
 
-Provided all of the prerequisites were installed and there were no issues, there should be 3 things in your project directory that you need to pay attention to in order to configure and run grin. These are:
+ - `target/debug/grin` - the main grin binary
 
-* The Grin binary, which should be located in your project directory as target/debug/grin
+ - `target/debug/plugins/*` - mining plugins (optional)
 
-* A set of mining plugins, which should be in the 'plugins' directory located next to the grin executable
+With the included `grin.toml` unchanged,
+if you execute `cargo run`
+you get a `.grin` subfolder that grin starts filling up.
 
-* A configuration file in the root project directory named grin.toml
-
-For the time being, it's recommended just to put the built version of grin on your path, e.g. via:
+While testing, put the grin binary on your path like this:
 
 ```
 export PATH=/path/to/grin/dir/target/debug:$PATH
@@ -87,87 +81,88 @@ export PATH=/path/to/grin/dir/target/debug:$PATH
 
 # Configuration
 
-Grin is currently configured via a combination of configuration file and command line switches, with any provided switches overriding the contents of the configuration file. To see a list of commands and switches use:
+Grin has a good defaults, a configuration file `grin.toml` that's documented inline that can override the defaults,
+and command line switches that has top priority and overrides all others.
+
+The `grin.toml` file can placed in one of several locations, using the first one it finds:
+
+1. The current working directory
+2. In the directory that holds the grin executable
+3. {USER_HOME}/.grin
+
+For help on grin commands and their switches, try:
 
 ```
 grin help
+grin wallet help
+grin client help
 ```
 
-At startup, grin looks for a configuration file called 'grin.toml' in the following places in the following order, using the first one it finds:
 
-* The current working directory
-* The directory in which the grin executable is located
-* {USER_HOME}/.grin
+# Using grin
 
-If no configuration file is found, command line switches must be given to grin in order to start it. If a configuration file is found but no command line switches are provided, grin starts in server mode using the values found in the configuration file.
+The wiki page [How to use grin](https://github.com/mimblewimble/docs/wiki/How-to-use-grin)
+and linked pages have more information on what features we have,
+troubleshooting, etc.
 
-At present, the relevant modes of operation are 'server' and 'wallet'. When running in server mode, any command line switches provided will override the values found in the configuration file. Running in wallet mode does not currently use any values from the configuration file other than logging output parameters.
+## Basic usage
 
-# Basic Execution
+Running just `grin` with no command line switches starts `grin server` using defaults and any settings from `grin.toml` if found.
 
-For a basic example simulating a single node network, create a directory called 'node1' and change your working directory to it. You'll use this directory to run a wallet and create a new blockchain via a server running in mining mode.
 
-You'll need a config file - the easiest is to copy over the grin.toml file from the root grin directory into the node1 directory you just made.
+## Simulating: a chain and a few nodes
 
-Before running your mining server, a wallet server needs to be set up and listening so that the mining server knows where to send mining rewards. Do this from the first node directory with the following commands:
+For a basic example, make a directory 'node1' and enter it.
+We'll run a wallet listener and a server that creates a new local blockchain.
+
+Copy over the grin.toml file from the grin folder and into your new node1 folder.
+
+The miner needs a wallet to send mining rewards to, or else it can't mine.
+
+So begin with the wallet listener in node1:
 
 ```
 node1$ grin wallet init
 node1$ grin wallet -p "password" listen
 ```
 
-See [wallet](wallet.md) for more info on the various Grin wallet commands and options.
+Also try `grin wallet help`.
 
-This will create a wallet server listening on the default port 13415 with the password "password". Next, in another terminal window in the 'node1' directory, run a full mining node with the following command:
+The above created a wallet listener on the default port 13415,
+using the wallet.seed and the password "password".
+
+Now open another terminal window on the same machine.
+Go to the 'node1' directory, and run a node that is mining:
 
 ```
 node1$ grin server -m run
 ```
 
-This creates a new .grin database directory in the current directory, and begins mining new blocks (with no transactions, for now). Note this starts two services listening on two default ports,
-port 13414 for the peer-to-peer (P2P) service which keeps all nodes synchronized, and 13413 for the Rest API service used to verify transactions and post new transactions to the pool (for example). These ports can be configured via command line switches, or via a grin.toml file in the working directory.
+A new .grin folder is created, and starts filling up with new blocks having
+just one coinbase transaction
 
-Let the mining server find a few blocks, then stop (just ctrl-c) the mining server and the wallet server. You'll notice grin has created a database directory (.grin) in which the blockchain and peer data is stored. There should also be a wallet.dat file in the current directory, which contains a few coinbase mining rewards created each time the server mines a new block.
+Note that `server run` starts two services listening on two default ports:
 
-# Running a Node
+ - port 13414 for the peer-to-peer (P2P) service which keeps all nodes synchronized
+ - and 13413 for the Rest API service that can verify transactions and post new transactions to the pool.
 
-The following are minimal instructions to get a testnet1 node up and running.
+The port numbers can be configured in grin.toml or on the command line, explained above.
 
-After following the instructions above to build a testnet executable and ensuring it's on your system path, create two directories wherever you prefer. Call one 'wallet' and one 'server'.
+Let the mining server find a few blocks, then stop (just ctrl-c) the mining server and the wallet server.
 
-In the 'wallet' directory (preferably in a separate terminal window), run the following command to create a wallet seed:
+Now take a look in .grin. Here grin built the blockchain, peer data, and more.
+You should also have a wallet.dat file which contains some coinbase mining rewards.
+They are created each time the server starts on a new block.
+If you have multiple miners active, you might see unused coinbase rewards,
+and/or if your transaction gets orphaned, a similar situation can occur.
+The not usable outputs are expected to be cleaned out over time, so it's ok
+and nothing to worry about.
 
-```
-grin wallet init
-```
+And if you see "slogger: dropped messages" in your mining node window it's
+nothing to worry. It means your grin is so busy that it can't show on screen
+(or in grin.log) all the details, unless you slow it down.
 
-Then, to run a publicly listening wallet receiver, run the following command:
+## Advanced Examples
 
-```
-grin wallet -p password -e listen
-```
-
-Next, in the 'server' directory in another terminal window, copy the grin.toml file from the project root:
-
-```
-server$ cp /path/to/project/root/grin.toml .
-server$ grin server -m run
-```
-
-The server should start, connect to the seed and any available peers, and place mining rewards into your running wallet listener.
-
-From your 'wallet' directory, you should be able to check your wallet contents with the command:
-
-```
-grin wallet -p password info
-```
-as well as see the individual outputs with:
-```
-grin wallet -p password outputs
-```
-
-See [wallet](wallet.md) for more info on the various Grin wallet commands and options.
-
-For further information on a more complicated internal setup for testing, see the [local net documentation](local_net.md)
-
-The [grin.toml](../grin.toml) configuration file has further information about the various options available.
+See [usage](usage.md) and on the wiki
+[How to use grin](https://github.com/mimblewimble/docs/wiki/How-to-use-grin).

@@ -53,7 +53,6 @@ pub mod types;
 
 use core::consensus;
 use core::core::BlockHeader;
-use core::core::hash::Hashed;
 use core::core::Proof;
 use core::core::target::Difficulty;
 use core::global;
@@ -77,7 +76,8 @@ pub trait MiningWorker {
 /// Validates the proof of work of a given header, and that the proof of work
 /// satisfies the requirements of the header.
 pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
-	Cuckoo::new(&bh.hash()[..], cuckoo_sz).verify(bh.pow.clone(), consensus::EASINESS as u64)
+	Cuckoo::new(&bh.pre_pow_hash()[..], cuckoo_sz)
+		.verify(bh.pow.clone(), consensus::EASINESS as u64)
 }
 
 /// Mines a genesis block, using the config specified miner if specified.
@@ -127,7 +127,7 @@ pub fn pow_size<T: MiningWorker + ?Sized>(
 	loop {
 		// can be trivially optimized by avoiding re-serialization every time but this
 		// is not meant as a fast miner implementation
-		let pow_hash = bh.hash();
+		let pow_hash = bh.pre_pow_hash();
 
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good

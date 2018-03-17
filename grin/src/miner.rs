@@ -51,64 +51,41 @@ use itertools::Itertools;
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
 
-const PRE_NONCE_SIZE: usize = 146;
-
-/// Serializer that outputs pre and post nonce portions of a block header
-/// which can then be sent off to miner to mutate at will
-pub struct HeaderPartWriter {
-	//
-	pub pre_nonce: Vec<u8>,
-	// Post nonce is currently variable length
-	// because of difficulty
-	pub post_nonce: Vec<u8>,
-	// which difficulty field we're on
-	bytes_written: usize,
-	writing_pre: bool,
+/// Serializer that outputs the pre-pow part of the header,
+/// including the nonce (last 8 bytes) that can be sent off
+/// to the miner to mutate at will
+pub struct HeaderPrePowWriter {
+	pub pre_pow: Vec<u8>,
 }
 
-impl Default for HeaderPartWriter {
-	fn default() -> HeaderPartWriter {
-		HeaderPartWriter {
-			bytes_written: 0,
-			writing_pre: true,
-			pre_nonce: Vec::new(),
-			post_nonce: Vec::new(),
+impl Default for HeaderPrePowWriter {
+	fn default() -> HeaderPrePowWriter {
+		HeaderPrePowWriter {
+			pre_pow: Vec::new(),
 		}
 	}
 }
 
-impl HeaderPartWriter {
-	pub fn parts_as_hex_strings(&self) -> (String, String) {
-		(
-			String::from(format!("{:02x}", self.pre_nonce.iter().format(""))),
-			String::from(format!("{:02x}", self.post_nonce.iter().format(""))),
-		)
+impl HeaderPrePowWriter {
+	pub fn as_hex_string(&self, include_nonce: bool) -> String {
+		let mut result = String::from(format!("{:02x}", self.pre_pow.iter().format("")));
+		if !include_nonce {
+			let l = result.len() - 16;
+			result.truncate(l);
+		}
+		result
 	}
 }
 
-impl ser::Writer for HeaderPartWriter {
+impl ser::Writer for HeaderPrePowWriter {
 	fn serialization_mode(&self) -> ser::SerializationMode {
-		ser::SerializationMode::Hash
+		ser::SerializationMode::Full
 	}
 
 	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, bytes_in: &T) -> Result<(), ser::Error> {
-		if self.writing_pre {
-			for i in 0..bytes_in.len() {
-				self.pre_nonce.push(bytes_in.as_ref()[i])
-			}
-		} else if self.bytes_written != 0 {
-			for i in 0..bytes_in.len() {
-				self.post_nonce.push(bytes_in.as_ref()[i])
-			}
+		for i in 0..bytes_in.len() {
+			self.pre_pow.push(bytes_in.as_ref()[i])
 		}
-
-		self.bytes_written += bytes_in.len();
-
-		if self.bytes_written == PRE_NONCE_SIZE && self.writing_pre {
-			self.writing_pre = false;
-			self.bytes_written = 0;
-		}
-
 		Ok(())
 	}
 }
@@ -181,20 +158,13 @@ impl Miner {
 		let mut next_stat_output = time::get_time().sec + stat_output_interval;
 
 		// Get parts of the header
-		let mut header_parts = HeaderPartWriter::default();
-		ser::Writeable::write(&b.header, &mut header_parts).unwrap();
-		let (pre, post) = header_parts.parts_as_hex_strings();
-
-		//Just test output to mine a genesis block when needed
-		/*let mut header_parts = HeaderPartWriter::default();
-		let gen = genesis::genesis();
-		ser::Writeable::write(&gen.header, &mut header_parts).unwrap();
-		let (pre, post) = header_parts.parts_as_hex_strings();
-		println!("pre, post: {}, {}", pre, post);*/
+		let mut pre_pow_writer = HeaderPrePowWriter::default();
+		b.header.write_pre_pow(&mut pre_pow_writer).unwrap();
+		let pre_pow = pre_pow_writer.as_hex_string(false);
 
 		// Start the miner working
 		let miner = plugin_miner.get_consumable();
-		let job_handle = miner.notify(1, &pre, &post, 0).unwrap();
+		let job_handle = miner.notify(1, &pre_pow, "", 0).unwrap();
 
 		let mut sol = None;
 
@@ -320,7 +290,7 @@ impl Miner {
 
 		let mut sol = None;
 		while head.hash() == *latest_hash && time::get_time().sec < deadline {
-			let pow_hash = b.hash();
+			let pow_hash = b.header.pre_pow_hash();
 			if let Ok(proof) = plugin_miner.mine(&pow_hash[..]) {
 				let proof_diff = proof.clone().to_difficulty();
 				trace!(
@@ -437,7 +407,7 @@ impl Miner {
 
 		let mut sol = None;
 		while head.hash() == *latest_hash && time::get_time().sec < deadline {
-			let pow_hash = b.hash();
+			let pow_hash = b.header.pre_pow_hash();
 			if let Ok(proof) = miner.mine(&pow_hash[..]) {
 				let proof_diff = proof.clone().to_difficulty();
 				if proof_diff > (b.header.total_difficulty.clone() - head.total_difficulty.clone())
@@ -588,13 +558,13 @@ impl Miner {
 
 			// we found a solution, push our block through the chain processing pipeline
 			if let Some(proof) = sol {
+				b.header.pow = proof;
 				info!(
 					LOGGER,
 					"(Server ID: {}) Found valid proof of work, adding block {}.",
 					self.debug_output_id,
 					b.hash()
 				);
-				b.header.pow = proof;
 				let res = self.chain.process_block(b, chain::Options::MINE);
 				if let Err(e) = res {
 					error!(
