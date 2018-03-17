@@ -2,6 +2,7 @@
 name = "grin_keychain"
 version = "0.1.0"
 authors = ["Antioch Peverell"]
+workspace = '..'
 publish = false
 
 [dependencies]
