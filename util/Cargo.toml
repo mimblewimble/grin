@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Ignotus Peverell <igno.peverell@protonmail.com>",
            "Yeastplume <yeastplume@protonmail.com>"]
 workspace = ".."
+publish = false
 
 [dependencies]
 slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }

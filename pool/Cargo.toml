@@ -2,6 +2,7 @@
 name = "grin_pool"
 version = "0.1.0"
 authors = ["Grin Authors <mimblewimble@lists.launchpad.net>"]
+publish = false
 
 [dependencies]
 blake2-rfc = "~0.2.17"

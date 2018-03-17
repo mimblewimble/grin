@@ -3,6 +3,7 @@ name = "grin_config"
 version = "0.1.0"
 authors = [" yeastplume"]
 workspace = ".."
+publish = false
 
 [dependencies]
 serde = "~1.0.8"

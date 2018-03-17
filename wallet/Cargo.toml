@@ -6,6 +6,7 @@ authors = [
 	"Laurent Meunier <laurent.meunier95@gmail.com>",
 	"Antioch Peverell",
 ]
+publish = false
 
 [dependencies]
 
