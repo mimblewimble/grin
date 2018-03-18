@@ -27,6 +27,8 @@ use store;
 use pow;
 use wallet;
 use core::global::ChainTypes;
+use core::core::target::Difficulty;
+use core::consensus::TargetError;
 
 /// Error type wrapping underlying module errors.
 #[derive(Debug)]
@@ -235,6 +237,21 @@ pub struct MiningStats {
 	pub cuckoo_size: u16,
 	/// Individual device status from Cuckoo-Miner
 	pub device_stats: Option<Vec<Vec<pow::cuckoo_miner::CuckooMinerDeviceStats>>>,
+	/// Difficulty calculation statistics
+	pub diff_stats: Option<DiffStats>,
+}
+
+/// Stats on the last WINDOW blocks and the difficulty calculation
+#[derive(Clone)]
+pub struct DiffStats {
+	/// Last WINDOW block data
+	pub last_blocks: Vec<Result<(u64, Difficulty), TargetError>>,
+	/// Average block time for last WINDOW blocks
+	pub average_block_time: u64,
+	/// Average WINDOW difficulty
+	pub average_difficulty: u64,
+	/// WINDOW size
+	pub window_size: u64,
 }
 
 /// Struct to return relevant information about peers
@@ -288,6 +305,7 @@ impl Default for MiningStats {
 			network_difficulty: 0,
 			cuckoo_size: 0,
 			device_stats: None,
+			diff_stats: None,
 		}
 	}
 }
