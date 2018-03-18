@@ -35,7 +35,7 @@ use core::ser;
 use core::global;
 use core::ser::AsFixedBytes;
 use util::LOGGER;
-use types::{DiffStats, Error, MiningStats};
+use types::{Error, MiningStats};
 
 use chain;
 use pool;
@@ -492,7 +492,7 @@ impl Miner {
 			let head = self.chain.head_header().unwrap();
 			let mut latest_hash = self.chain.head().unwrap().last_block_h;
 
-			let mut result = self.build_block(&head, key_id.clone(), mining_stats.clone());
+			let mut result = self.build_block(&head, key_id.clone());
 			while let Err(e) = result {
 				match e {
 					self::Error::Chain(chain::Error::DuplicateCommitment(_)) => {
@@ -503,7 +503,7 @@ impl Miner {
 					}
 				}
 				thread::sleep(Duration::from_millis(100));
-				result = self.build_block(&head, key_id.clone(), mining_stats.clone());
+				result = self.build_block(&head, key_id.clone());
 			}
 
 			let (mut b, block_fees) = result.unwrap();
@@ -595,8 +595,7 @@ impl Miner {
 	fn build_block(
 		&self,
 		head: &core::BlockHeader,
-		key_id: Option<Identifier>,
-		mining_stats: Arc<RwLock<MiningStats>>,
+		key_id: Option<Identifier>
 	) -> Result<(core::Block, BlockFees), Error> {
 		// prepare the block header timestamp
 		let mut now_sec = time::get_time().sec;
@@ -608,38 +607,6 @@ impl Miner {
 		// get the difficulty our block should be at
 		let diff_iter = self.chain.difficulty_iter();
 		let difficulty = consensus::next_difficulty(diff_iter).unwrap();
-
-		// Fill out stats on our current difficulty calculation
-		// TODO: check the overhead of calculating this again isn't too much
-		// could return it from next_difficulty, but would rather keep consensus
-		// code clean. This may be handy for testing but not really needed
-		// for release
-		{
-			let diff_iter = self.chain.difficulty_iter();
-			let last_blocks: Vec<Result<(u64, Difficulty), consensus::TargetError>> =
-				global::difficulty_data_to_vector(diff_iter)
-					.into_iter()
-					.skip(consensus::MEDIAN_TIME_WINDOW as usize)
-					.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
-					.collect();
-			let block_time_sum = last_blocks
-				.iter()
-				.map(|n| n.clone().unwrap().0)
-				.fold(0, |sum, t| sum + t);
-			let block_diff_sum = last_blocks
-				.iter()
-				.fold(Difficulty::zero(), |sum, d| sum + d.clone().unwrap().1);
-			let diff_stats = DiffStats {
-				last_blocks: last_blocks,
-				average_block_time: block_time_sum / consensus::DIFFICULTY_ADJUST_WINDOW,
-				average_difficulty: block_diff_sum.into_num() / consensus::DIFFICULTY_ADJUST_WINDOW,
-				window_size: consensus::DIFFICULTY_ADJUST_WINDOW,
-			};
-			{
-				let mut mining_stats = mining_stats.write().unwrap();
-				mining_stats.diff_stats = Some(diff_stats);
-			}
-		}
 
 		// extract current transaction from the pool
 		let txs_box = self.tx_pool

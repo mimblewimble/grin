@@ -25,7 +25,8 @@ use std::time;
 use adapters::*;
 use api;
 use chain;
-use core::{genesis, global};
+use core::{genesis, global, consensus};
+use core::core::target::Difficulty;
 use miner;
 use p2p;
 use pool;
@@ -263,6 +264,43 @@ impl Server {
 	pub fn get_server_stats(&self) -> Result<ServerStats, Error> {
 		let mining_stats = self.state_info.mining_stats.read().unwrap().clone();
 		let awaiting_peers = self.state_info.awaiting_peers.load(Ordering::Relaxed);
+
+		// Fill out stats on our current difficulty calculation
+		// TODO: check the overhead of calculating this again isn't too much
+		// could return it from next_difficulty, but would rather keep consensus
+		// code clean. This may be handy for testing but not really needed
+		// for release
+		let diff_stats = {
+			let diff_iter = self.chain.difficulty_iter();
+			let last_blocks:Vec<Result<(u64, Difficulty), consensus::TargetError>>
+				= global::difficulty_data_to_vector(diff_iter)
+				.into_iter()
+				.skip(consensus::MEDIAN_TIME_WINDOW as usize)
+				.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
+				.collect();
+
+			let mut last_time = last_blocks[0].clone().unwrap().0;
+
+			let block_time_sum = last_blocks
+				.iter()
+				.skip(1)
+				.map(|n| {
+					let r = n.clone().unwrap().0 - last_time;
+					last_time = n.clone().unwrap().0;
+					r
+				})
+				.fold(0, |sum, t| sum + t);
+			let block_diff_sum = last_blocks
+			.iter()
+			.fold(Difficulty::zero(), |sum, d| sum + d.clone().unwrap().1);
+			DiffStats {
+				last_blocks: last_blocks,
+				average_block_time: block_time_sum / consensus::DIFFICULTY_ADJUST_WINDOW,
+				average_difficulty: block_diff_sum.into_num() / consensus::DIFFICULTY_ADJUST_WINDOW,
+				window_size: consensus::DIFFICULTY_ADJUST_WINDOW,
+			}
+		};
+
 		let peer_stats = self.p2p
 			.peers
 			.connected_peers()
@@ -280,6 +318,7 @@ impl Server {
 			awaiting_peers: awaiting_peers,
 			mining_stats: mining_stats,
 			peer_stats: peer_stats,
+			diff_stats: diff_stats,
 		})
 	}
 

@@ -22,11 +22,13 @@ use cursive::view::View;
 use cursive::views::{BoxView, Button, Dialog, LinearLayout, OnEventView, StackView, TextView};
 use cursive::direction::Orientation;
 use cursive::traits::*;
+use std::time;
 
 use tui::constants::*;
 use tui::types::*;
 
 use grin::types::ServerStats;
+use grin::stats::DiffStats;
 use tui::pow::cuckoo_miner::CuckooMinerDeviceStats;
 use tui::table::{TableView, TableViewItem};
 
@@ -101,6 +103,51 @@ impl TableViewItem<MiningDeviceColumn> for CuckooMinerDeviceStats {
 	}
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+enum DiffColumn {
+	BlockNumber,
+	Index,
+	Difficulty,
+	Time,
+	Duration
+}
+
+impl DiffColumn {
+	fn _as_str(&self) -> &str {
+		match *self {
+			DiffColumn::BlockNumber => "Block Number",
+			DiffColumn::Index => "Index",
+			DiffColumn::Difficulty => "Difficulty",
+			DiffColumn::Time => "Time",
+			DiffColumn::Duration => "Duration",
+		}
+	}
+}
+
+impl TableViewItem<DiffColumn> for DiffStats {
+	fn to_column(&self, column: DiffColumn) -> String {
+		match column {
+			DiffColumn::BlockNumber => String::from(""),
+			DiffColumn::Index => String::from(""),
+			DiffColumn::Difficulty => String::from(""),
+			DiffColumn::Time => String::from(""),
+			DiffColumn::Duration => String::from(""),
+		}
+	}
+
+	fn cmp(&self, _other: &Self, column: DiffColumn) -> Ordering
+	where
+		Self: Sized,
+	{
+		match column {
+			DiffColumn::BlockNumber => Ordering::Equal,
+			DiffColumn::Index => Ordering::Equal,
+			DiffColumn::Difficulty => Ordering::Equal,
+			DiffColumn::Time => Ordering::Equal,
+			DiffColumn::Duration => Ordering::Equal,
+		}
+	}
+}
 /// Mining status view
 pub struct TUIMiningView;
 
@@ -127,17 +174,6 @@ impl TUIStatusListener for TUIMiningView {
 		let mining_submenu = OnEventView::new(mining_submenu).on_pre_event(Key::Esc, move |c| {
 			let _ = c.focus_id(MAIN_MENU);
 		});
-
-		let _change_view = |_s: &mut Cursive, _v: &&str| {
-			/*if *v == "" {
-				return;
-			}
-
-			let _ = s.call_on_id(ROOT_STACK, |sv: &mut StackView| {
-				let pos = sv.find_layer_from_id(v).unwrap();
-				sv.move_to_front(pos);
-			});*/
-		};
 
 		let table_view =
 			TableView::<CuckooMinerDeviceStats, MiningDeviceColumn>::new()
@@ -183,7 +219,25 @@ impl TUIStatusListener for TUIMiningView {
 			))
 			.with_id("mining_device_view");
 
+		let diff_status_view = LinearLayout::new(Orientation::Vertical)
+			.child(
+				LinearLayout::new(Orientation::Horizontal)
+					.child(TextView::new("Difficulty Adjustment Window: "))
+					.child(TextView::new("").with_id("diff_adjust_window"))
+			)
+			.child(
+				LinearLayout::new(Orientation::Horizontal)
+					.child(TextView::new("Average Block Time: "))
+					.child(TextView::new("").with_id("diff_avg_block_time"))
+			)
+			.child(
+				LinearLayout::new(Orientation::Horizontal)
+					.child(TextView::new("Average Difficulty: "))
+					.child(TextView::new("").with_id("diff_avg_difficulty"))
+			);
+
 		let mining_difficulty_view = LinearLayout::new(Orientation::Vertical)
+			.child(diff_status_view)
 			.child(BoxView::with_full_screen(Dialog::around(TextView::new(
 				"mining diff",
 			))))
@@ -240,6 +294,7 @@ impl TUIStatusListener for TUIMiningView {
 			}
 		};
 
+		// device
 		c.call_on_id("mining_config_status", |t: &mut TextView| {
 			t.set_content(basic_mining_config_status);
 		});
@@ -248,6 +303,19 @@ impl TUIStatusListener for TUIMiningView {
 		});
 		c.call_on_id("network_info", |t: &mut TextView| {
 			t.set_content(basic_network_info);
+		});
+
+
+		//diff stats
+		c.call_on_id("diff_adjust_window", |t: &mut TextView| {
+			t.set_content(stats.diff_stats.window_size.to_string());
+		});
+		let dur = time::Duration::from_secs(stats.diff_stats.average_block_time);
+		c.call_on_id("diff_avg_block_time", |t: &mut TextView| {
+			t.set_content(format!("{} Secs", dur.as_secs()).to_string());
+		});
+		c.call_on_id("diff_avg_difficulty", |t: &mut TextView| {
+			t.set_content(stats.diff_stats.average_difficulty.to_string());
 		});
 
 		let mining_stats = stats.mining_stats.clone();
