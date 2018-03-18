@@ -17,8 +17,9 @@
 use std::cmp::Ordering;
 
 use cursive::Cursive;
+use cursive::event::Key;
 use cursive::view::View;
-use cursive::views::{BoxView, Dialog, LinearLayout, TextView};
+use cursive::views::{BoxView, Button, Dialog, LinearLayout, OnEventView, StackView, TextView};
 use cursive::direction::Orientation;
 use cursive::traits::*;
 
@@ -106,6 +107,38 @@ pub struct TUIMiningView;
 impl TUIStatusListener for TUIMiningView {
 	/// Create the mining view
 	fn create() -> Box<View> {
+		let devices_button = Button::new_raw("Status / Devices", |s| {
+			let _ = s.call_on_id("mining_stack_view", |sv: &mut StackView| {
+				let pos = sv.find_layer_from_id("mining_device_view").unwrap();
+				sv.move_to_front(pos);
+			});
+		}).with_id(SUBMENU_MINING_BUTTON);
+		let difficulty_button = Button::new_raw("Difficulty", |s| {
+			let _ = s.call_on_id("mining_stack_view", |sv: &mut StackView| {
+				let pos = sv.find_layer_from_id("mining_difficulty_view").unwrap();
+				sv.move_to_front(pos);
+			});
+		});
+		let mining_submenu = LinearLayout::new(Orientation::Horizontal)
+			.child(devices_button)
+			.child(TextView::new(" | "))
+			.child(difficulty_button);
+
+		let mining_submenu = OnEventView::new(mining_submenu).on_pre_event(Key::Esc, move |c| {
+			let _ = c.focus_id(MAIN_MENU);
+		});
+
+		let _change_view = |_s: &mut Cursive, _v: &&str| {
+			/*if *v == "" {
+				return;
+			}
+
+			let _ = s.call_on_id(ROOT_STACK, |sv: &mut StackView| {
+				let pos = sv.find_layer_from_id(v).unwrap();
+				sv.move_to_front(pos);
+			});*/
+		};
+
 		let table_view =
 			TableView::<CuckooMinerDeviceStats, MiningDeviceColumn>::new()
 				.column(MiningDeviceColumn::PluginId, "Plugin ID", |c| {
@@ -142,12 +175,28 @@ impl TUIStatusListener for TUIMiningView {
 					.child(TextView::new("  ").with_id("network_info")),
 			);
 
-		let mining_view = LinearLayout::new(Orientation::Vertical)
+		let mining_device_view = LinearLayout::new(Orientation::Vertical)
 			.child(status_view)
 			.child(BoxView::with_full_screen(
 				Dialog::around(table_view.with_id(TABLE_MINING_STATUS).min_size((50, 20)))
 					.title("Mining Devices"),
-			));
+			))
+			.with_id("mining_device_view");
+
+		let mining_difficulty_view = LinearLayout::new(Orientation::Vertical)
+			.child(BoxView::with_full_screen(Dialog::around(TextView::new(
+				"mining diff",
+			))))
+			.with_id("mining_difficulty_view");
+
+		let view_stack = StackView::new()
+			.layer(mining_difficulty_view)
+			.layer(mining_device_view)
+			.with_id("mining_stack_view");
+
+		let mining_view = LinearLayout::new(Orientation::Vertical)
+			.child(mining_submenu)
+			.child(view_stack);
 
 		Box::new(mining_view.with_id(VIEW_MINING))
 	}
