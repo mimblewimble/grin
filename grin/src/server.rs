@@ -25,7 +25,7 @@ use std::time;
 use adapters::*;
 use api;
 use chain;
-use core::{genesis, global, consensus};
+use core::{consensus, genesis, global};
 use core::core::target::Difficulty;
 use miner;
 use p2p;
@@ -272,12 +272,12 @@ impl Server {
 		// for release
 		let diff_stats = {
 			let diff_iter = self.chain.difficulty_iter();
-			let last_blocks:Vec<Result<(u64, Difficulty), consensus::TargetError>>
-				= global::difficulty_data_to_vector(diff_iter)
-				.into_iter()
-				.skip(consensus::MEDIAN_TIME_WINDOW as usize)
-				.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
-				.collect();
+			let last_blocks: Vec<Result<(u64, Difficulty), consensus::TargetError>> =
+				global::difficulty_data_to_vector(diff_iter)
+					.into_iter()
+					.skip(consensus::MEDIAN_TIME_WINDOW as usize)
+					.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
+					.collect();
 
 			let mut last_time = last_blocks[0].clone().unwrap().0;
 
@@ -291,8 +291,8 @@ impl Server {
 				})
 				.fold(0, |sum, t| sum + t);
 			let block_diff_sum = last_blocks
-			.iter()
-			.fold(Difficulty::zero(), |sum, d| sum + d.clone().unwrap().1);
+				.iter()
+				.fold(Difficulty::zero(), |sum, d| sum + d.clone().unwrap().1);
 			DiffStats {
 				last_blocks: last_blocks,
 				average_block_time: block_time_sum / consensus::DIFFICULTY_ADJUST_WINDOW,

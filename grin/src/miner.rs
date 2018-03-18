@@ -595,7 +595,7 @@ impl Miner {
 	fn build_block(
 		&self,
 		head: &core::BlockHeader,
-		key_id: Option<Identifier>
+		key_id: Option<Identifier>,
 	) -> Result<(core::Block, BlockFees), Error> {
 		// prepare the block header timestamp
 		let mut now_sec = time::get_time().sec;

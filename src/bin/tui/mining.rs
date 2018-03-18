@@ -109,7 +109,7 @@ enum DiffColumn {
 	Index,
 	Difficulty,
 	Time,
-	Duration
+	Duration,
 }
 
 impl DiffColumn {
@@ -223,17 +223,17 @@ impl TUIStatusListener for TUIMiningView {
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("Difficulty Adjustment Window: "))
-					.child(TextView::new("").with_id("diff_adjust_window"))
+					.child(TextView::new("").with_id("diff_adjust_window")),
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("Average Block Time: "))
-					.child(TextView::new("").with_id("diff_avg_block_time"))
+					.child(TextView::new("").with_id("diff_avg_block_time")),
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("Average Difficulty: "))
-					.child(TextView::new("").with_id("diff_avg_difficulty"))
+					.child(TextView::new("").with_id("diff_avg_difficulty")),
 			);
 
 		let mining_difficulty_view = LinearLayout::new(Orientation::Vertical)
@@ -304,7 +304,6 @@ impl TUIStatusListener for TUIMiningView {
 		c.call_on_id("network_info", |t: &mut TextView| {
 			t.set_content(basic_network_info);
 		});
-
 
 		//diff stats
 		c.call_on_id("diff_adjust_window", |t: &mut TextView| {
