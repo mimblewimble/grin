@@ -1,7 +1,7 @@
 [package]
 name = "grin_pool"
 version = "0.1.0"
-authors = ["Grin Authors <mimblewimble@lists.launchpad.net>"]
+authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 workspace = '..'
 publish = false
 

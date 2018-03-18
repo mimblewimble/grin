@@ -1,11 +1,7 @@
 [package]
 name = "grin_wallet"
 version = "0.1.0"
-authors = [
-	"Ignotus Peverell <igno_peverell@protonmail.com>",
-	"Laurent Meunier <laurent.meunier95@gmail.com>",
-	"Antioch Peverell",
-]
+authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 workspace = '..'
 publish = false
 
