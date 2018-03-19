@@ -268,7 +268,7 @@ impl Chain {
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b, opts);
 				}
-				Ok((Some(tip.clone()), Some(b.clone())))
+				Ok((Some(tip.clone()), Some(b)))
 			}
 			Ok(None) => {
 				// block got accepted but we did not extend the head
@@ -286,12 +286,12 @@ impl Chain {
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b, opts);
 				}
-				Ok((None, Some(b.clone())))
+				Ok((None, Some(b)))
 			}
 			Err(Error::Orphan) => {
 				let block_hash = b.hash();
 				let orphan = Orphan {
-					block: b.clone(),
+					block: b,
 					opts: opts,
 					added: Instant::now(),
 				};

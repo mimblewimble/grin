@@ -38,6 +38,9 @@ fn convert_log_level(in_level: &LogLevel) -> Level {
 lazy_static! {
 	/// Flag to observe whether logging was explicitly initialised (don't output otherwise)
 	static ref WAS_INIT: Mutex<bool> = Mutex::new(false);
+	/// Flag to observe whether tui is running, and we therefore don't want to attempt to write
+	/// panics to stdout
+	static ref TUI_RUNNING: Mutex<bool> = Mutex::new(false);
 	/// Static Logging configuration, should only be set once, before first logging call
 	static ref LOGGING_CONFIG: Mutex<LoggingConfig> = Mutex::new(LoggingConfig::default());
 
@@ -47,6 +50,10 @@ lazy_static! {
 		let config = LOGGING_CONFIG.lock().unwrap();
 		let slog_level_stdout = convert_log_level(&config.stdout_log_level);
 		let slog_level_file = convert_log_level(&config.file_log_level);
+		if config.tui_running.is_some() && config.tui_running.unwrap() {
+			let mut tui_running_ref = TUI_RUNNING.lock().unwrap();
+			*tui_running_ref = true;
+		}
 
 		//Terminal output drain
 		let terminal_decorator = slog_term::TermDecorator::new().build();
@@ -141,9 +148,12 @@ fn send_panic_to_log() {
 			),
 		}
 		//also print to stderr
-		eprintln!(
-			"Thread '{}' panicked with message:\n\"{}\"\nSee grin.log for further details.",
-			thread, msg
-		);
+		let tui_running = TUI_RUNNING.lock().unwrap().clone();
+		if !tui_running {
+			eprintln!(
+				"Thread '{}' panicked with message:\n\"{}\"\nSee grin.log for further details.",
+				thread, msg
+			);
+		}
 	}));
 }

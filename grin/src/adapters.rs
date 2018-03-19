@@ -392,9 +392,11 @@ impl NetToChainAdapter {
 			Ok(_) => true,
 			Err(chain::Error::Orphan) => {
 				// make sure we did not miss the parent block
-				if !self.currently_syncing.load(Ordering::Relaxed) && !chain.is_orphan(&prev_hash) {
-					debug!(LOGGER, "adapter: process_block: received an orphan block, checking the parent: {:}", prev_hash);
-					self.request_block_by_hash(prev_hash, &addr)
+				if !chain.is_orphan(&prev_hash) {
+					if let Err(_) = chain.get_block_header(&prev_hash) {
+						debug!(LOGGER, "adapter: process_block: received an orphan block, checking the parent: {:}", prev_hash);
+						self.request_block_by_hash(prev_hash, &addr)
+					}
 				}
 				true
 			}
@@ -419,8 +421,6 @@ impl NetToChainAdapter {
 	// After receiving a compact block if we cannot successfully hydrate
 	// it into a full block then fallback to requesting the full block
 	// from the same peer that gave us the compact block
-	//
-	// TODO - currently only request block from a single peer
 	// consider additional peers for redundancy?
 	fn request_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
 		self.request_block_by_hash(bh.hash(), addr)
@@ -433,9 +433,6 @@ impl NetToChainAdapter {
 	// After we have received a block header in "header first" propagation
 	// we need to go request the block (compact representation) from the
 	// same peer that gave us the header (unless we have already accepted the block)
-	//
-	// TODO - currently only request block from a single peer
-	// consider additional peers for redundancy?
 	fn request_compact_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
 		self.send_block_request_to_peer(bh.hash(), addr, |peer, h| {
 			peer.send_compact_block_request(h)
@@ -447,24 +444,24 @@ impl NetToChainAdapter {
 		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
 	{
 		match w(&self.chain).block_exists(h) {
-                        Ok(false) => {
-                                match  wo(&self.peers).get_connected_peer(addr) {
-                                        None => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, not connected", addr),
-                                        Some(peer) => {
-                                                match peer.read() {
-                                                        Err(e) => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, read fails: {:?}", addr, e),
-                                                        Ok(p) => {
-                                                                if let Err(e) =  f(&p, h) {
-                                                                        error!(LOGGER, "send_block_request_to_peer: failed: {:?}", e)
-                                                                }
-                                                        }
-                                                }
-                                        }
-                                }
-                        }
-                        Ok(true) => debug!(LOGGER, "send_block_request_to_peer: block {} already known", h),
-                        Err(e) => error!(LOGGER, "send_block_request_to_peer: failed to check block exists: {:?}", e)
-                }
+			Ok(false) => {
+				match  wo(&self.peers).get_connected_peer(addr) {
+					None => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, not connected", addr),
+					Some(peer) => {
+						match peer.read() {
+							Err(e) => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, read fails: {:?}", addr, e),
+							Ok(p) => {
+								if let Err(e) =  f(&p, h) {
+									error!(LOGGER, "send_block_request_to_peer: failed: {:?}", e)
+								}
+							}
+						}
+					}
+				}
+			}
+			Ok(true) => debug!(LOGGER, "send_block_request_to_peer: block {} already known", h),
+			Err(e) => error!(LOGGER, "send_block_request_to_peer: failed to check block exists: {:?}", e)
+		}
 	}
 
 	/// Prepare options for the chain pipeline

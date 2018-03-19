@@ -86,6 +86,10 @@ pub fn mine_genesis_block(
 	miner_config: Option<types::MinerConfig>,
 ) -> Result<core::core::Block, Error> {
 	let mut gen = genesis::genesis_testnet2();
+	if global::is_user_testing_mode() {
+		gen = genesis::genesis_dev();
+		gen.header.timestamp = time::now();
+	}
 
 	// total_difficulty on the genesis header *is* the difficulty of that block
 	let genesis_difficulty = gen.header.total_difficulty.clone();
