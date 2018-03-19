@@ -16,7 +16,7 @@ use std::thread;
 use std::time::Duration;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
-use time::{self, now_utc};
+use time::now_utc;
 use util::LOGGER;
 
 use pool::TransactionPool;
@@ -41,19 +41,18 @@ pub fn monitor_transactions<T>(
 	let _ = thread::Builder::new()
 		.name("dandelion".to_string())
 		.spawn(move || {
-			let stem_transactions = tx_pool.write().unwrap().stem_transactions.clone();
-			let time_stem_transactions = tx_pool.write().unwrap().time_stem_transactions.clone();
 
-			let mut prev = time::now_utc() - time::Duration::seconds(60);
 			loop {
-				let current_time = time::now_utc();
+				let tx_pool = tx_pool.clone();
+				let stem_transactions = tx_pool.read().unwrap().stem_transactions.clone();
+				let time_stem_transactions = tx_pool.read().unwrap().time_stem_transactions.clone();
 
-				if current_time - prev > time::Duration::seconds(20) {
 					for tx_hash in stem_transactions.keys() {
 						let time_transaction = time_stem_transactions.get(tx_hash).unwrap();
 						let interval = now_utc().to_timespec().sec - time_transaction;
 						// Unban peer
 						// TODO Randomize between 30 and 60 seconds
+						debug!(LOGGER, "Dandelion Monitor running");
 						if interval >= config.dandelion_embargo {
 							let source = TxSource {
 								debug_name: "dandelion-monitor".to_string(),
@@ -77,8 +76,6 @@ pub fn monitor_transactions<T>(
 							tx_pool.write().unwrap().remove_from_stempool(tx_hash);
 						}
 					}
-					prev = current_time;
-				}
 
 				thread::sleep(Duration::from_secs(1));
 
