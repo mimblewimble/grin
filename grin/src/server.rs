@@ -38,6 +38,7 @@ use seed;
 use sync;
 use types::*;
 use pow;
+use stratumserver;
 use util::LOGGER;
 
 
@@ -227,12 +228,12 @@ impl Server {
 				while currently_syncing.load(Ordering::Relaxed) {
 					thread::sleep(secs_5);
 				}
-				miner.run_mining_loop(config.clone(), cuckoo_size as u32, proof_size);
+				miner.run_loop(config.clone(), cuckoo_size as u32, proof_size);
 			});
 	}
 
 
-        /// Start a "stratum" mining service on a separate thread
+        /// Start a minimal "stratum" mining service on a separate thread
 	pub fn start_stratum_server(&self, config: pow::types::MinerConfig) {
 		let cuckoo_size = global::sizeshift();
 		let proof_size = global::proofsize();
@@ -240,6 +241,7 @@ impl Server {
 
 		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
 		miner.set_debug_output_id(format!("Port {}", config.stratum_server_addr.clone().unwrap()));
+                let stratum_server = stratumserver::StratumServer::new(miner);
 		let _ = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {
@@ -247,7 +249,7 @@ impl Server {
 				while currently_syncing.load(Ordering::Relaxed) {
 					thread::sleep(secs_5);
 				}
-				miner.run_stratum_server_loop(config.clone(), cuckoo_size as u32, proof_size);
+				stratum_server.run_loop(config.clone(), cuckoo_size as u32, proof_size);
 			});
 	}
 

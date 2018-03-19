@@ -53,6 +53,7 @@ mod seed;
 mod sync;
 mod types;
 mod miner;
+mod stratumserver;
 
 pub use server::Server;
 pub use types::{Seeding, ServerConfig, ServerStats};
