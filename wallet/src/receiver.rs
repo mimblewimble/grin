@@ -16,14 +16,16 @@
 //! receiving money in MimbleWimble requires an interactive exchange, a
 //! wallet server that's running at all time is required in many cases.
 
-use bodyparser;
-use iron::prelude::*;
-use iron::Handler;
-use iron::status;
+use futures::{Future, Stream};
+
+use hyper::Error as HyperError;
+use hyper::server::{Request, Response};
+
 use serde_json;
 use uuid::Uuid;
 
 use api;
+use api::rest::{error_response, Handler, json_response, PathParams};
 use core::consensus::reward;
 use core::core::{amount_to_hr_string, build, Block, Committed, Output, Transaction, TxKernel};
 use core::{global, ser};
@@ -252,51 +254,57 @@ pub struct WalletReceiver {
 }
 
 impl Handler for WalletReceiver {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let struct_body = req.get::<bodyparser::Struct<PartialTx>>();
+	fn handle(&self, req: Request, _params: PathParams) -> Result<Response, HyperError> {
+		let _ = req.body().concat2().and_then(move |body| {
+			let partial_tx: PartialTx = match serde_json::from_slice(&body) {
+				Ok(partial_tx) => partial_tx,
+				Err(e) => return error_response(api::Error::Argument(e.to_string())),
+			};
 
-		if let Ok(Some(partial_tx)) = struct_body {
 			match partial_tx.phase {
 				PartialTxPhase::SenderInitiation => {
-					let resp_tx = handle_sender_initiation(
+					let resp_tx = match handle_sender_initiation(
 						&self.config,
 						&self.keychain,
 						&partial_tx,
-					).map_err(|e| {
-						error!(LOGGER, "Phase 1 Sender Initiation -> Problematic partial tx, looks like this: {:?}", partial_tx);
-						api::Error::Internal(format!(
-							"Error processing partial transaction: {:?}",
-							e
-						))
-					})
-						.unwrap();
+					) {
+						Ok(resp_tx) => resp_tx,
+						Err(e) => {
+							error!(LOGGER, "Phase 1 Sender Initiation -> Problematic partial tx, looks like this: {:?}", partial_tx);
+							return error_response(api::Error::Internal(format!(
+								"Error processing partial transaction: {:?}",
+								e
+							)));	
+						},
+					};
 					let json = serde_json::to_string(&resp_tx).unwrap();
-					Ok(Response::with((status::Ok, json)))
+					return json_response(&json);
 				}
 				PartialTxPhase::SenderConfirmation => {
-					let resp_tx = handle_sender_confirmation(
+					let resp_tx = match handle_sender_confirmation(
 						&self.config,
 						&self.keychain,
 						&partial_tx,
-					).map_err(|e| {
-						error!(LOGGER, "Phase 3 Sender Confirmation -> Problematic partial tx, looks like this: {:?}", partial_tx);
-						api::Error::Internal(format!(
-							"Error processing partial transaction: {:?}",
-							e
-						))
-					})
-						.unwrap();
+					) {
+						Ok(resp_tx) => resp_tx,
+						Err(e) => {
+							error!(LOGGER, "Phase 3 Sender Confirmation -> Problematic partial tx, looks like this: {:?}", partial_tx);
+							return error_response(api::Error::Internal(format!(
+								"Error processing partial transaction: {:?}",
+								e
+							)));
+						},
+					};
 					let json = serde_json::to_string(&resp_tx).unwrap();
-					Ok(Response::with((status::Ok, json)))
+					return json_response(&json);
 				}
 				_ => {
 					error!(LOGGER, "Unhandled Phase: {:?}", partial_tx);
-					Ok(Response::with((status::BadRequest, "Unhandled Phase")))
+					return error_response(api::Error::Argument("Unhandled Phase".to_string()));
 				}
-			}
-		} else {
-			Ok(Response::with((status::BadRequest, "")))
-		}
+			};			
+		});
+		Ok(Response::new())
 	}
 }
 
