@@ -192,7 +192,10 @@ impl Server {
 			Arc::downgrade(&p2p_server.peers),
 		);
 
-		info!(LOGGER, "Starting dandelion monitor: {}", &config.api_http_addr);
+		info!(
+			LOGGER,
+			"Starting dandelion monitor: {}", &config.api_http_addr
+		);
 		dandelion_monitor::monitor_transactions(
 			config.pool_config.clone(),
 			tx_pool.clone(),

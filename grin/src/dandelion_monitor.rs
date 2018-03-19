@@ -41,41 +41,39 @@ pub fn monitor_transactions<T>(
 	let _ = thread::Builder::new()
 		.name("dandelion".to_string())
 		.spawn(move || {
-
 			loop {
 				let tx_pool = tx_pool.clone();
 				let stem_transactions = tx_pool.read().unwrap().stem_transactions.clone();
 				let time_stem_transactions = tx_pool.read().unwrap().time_stem_transactions.clone();
 
-					for tx_hash in stem_transactions.keys() {
-						let time_transaction = time_stem_transactions.get(tx_hash).unwrap();
-						let interval = now_utc().to_timespec().sec - time_transaction;
-						// Unban peer
-						// TODO Randomize between 30 and 60 seconds
-						debug!(LOGGER, "Dandelion Monitor running");
-						if interval >= config.dandelion_embargo {
-							let source = TxSource {
-								debug_name: "dandelion-monitor".to_string(),
-								identifier: "?.?.?.?".to_string(),
-							};
-							let stem_transaction = stem_transactions.get(tx_hash).unwrap();
-							let res = tx_pool.write().unwrap().add_to_memory_pool(
-								source,
-								*stem_transaction.clone(),
-								false,
-							);
+				for tx_hash in stem_transactions.keys() {
+					let time_transaction = time_stem_transactions.get(tx_hash).unwrap();
+					let interval = now_utc().to_timespec().sec - time_transaction;
+					// Unban peer
+					// TODO Randomize between 30 and 60 seconds
+					debug!(LOGGER, "Dandelion Monitor running");
+					if interval >= config.dandelion_embargo {
+						let source = TxSource {
+							debug_name: "dandelion-monitor".to_string(),
+							identifier: "?.?.?.?".to_string(),
+						};
+						let stem_transaction = stem_transactions.get(tx_hash).unwrap();
+						let res = tx_pool.write().unwrap().add_to_memory_pool(
+							source,
+							*stem_transaction.clone(),
+							false,
+						);
 
-							match res {
-								Ok(()) => info!(
-									LOGGER,
-									"Fluffing transaction after embargo timer expired."
-								),
-								Err(e) => debug!(LOGGER, "error - {:?}", e),
-							};
-							// Remove from tx pool
-							tx_pool.write().unwrap().remove_from_stempool(tx_hash);
-						}
+						match res {
+							Ok(()) => {
+								info!(LOGGER, "Fluffing transaction after embargo timer expired.")
+							}
+							Err(e) => debug!(LOGGER, "error - {:?}", e),
+						};
+						// Remove from tx pool
+						tx_pool.write().unwrap().remove_from_stempool(tx_hash);
 					}
+				}
 
 				thread::sleep(Duration::from_secs(1));
 

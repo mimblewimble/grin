@@ -91,9 +91,8 @@ fn test_dandelion_timeout() {
 	server_one_config.start_wallet = false;
 	server_one_config.is_seeding = false;
 	server_one_config.coinbase_wallet_address =
-			String::from(format!("http://{}:{}", server_one_config.base_addr, 10002));
+		String::from(format!("http://{}:{}", server_one_config.base_addr, 10002));
 	let mut server_one = LocalServerContainer::new(server_one_config).unwrap();
-
 
 	let mut server_two_config = LocalServerContainerConfig::default();
 	server_two_config.name = String::from("server_two");
@@ -117,14 +116,12 @@ fn test_dandelion_timeout() {
 	// Wait for the first server to start
 	thread::sleep(time::Duration::from_millis(5000));
 
-
 	let _ = thread::spawn(move || {
 		server_one.run_server(120);
 	});
 
 	// Let them do a handshake and properly update their peer relay
 	thread::sleep(time::Duration::from_millis(30000));
-
 
 	//Wait until we have some funds to send
 	let mut coinbase_info =
@@ -168,8 +165,5 @@ fn test_dandelion_timeout() {
 	thread::sleep(time::Duration::from_millis(35000));
 	println!("Recipient wallet info: {:?}", recipient_info);
 	let recipient_info = LocalServerContainer::get_wallet_info(&recp_wallet_config, &recp_seed);
-	assert!(
-		recipient_info.amount_currently_spendable == 50000000000
-	);
-
+	assert!(recipient_info.amount_currently_spendable == 50000000000);
 }
