@@ -110,6 +110,7 @@ fn main() {
 		let run_tui = global_config.members.as_mut().unwrap().server.run_tui;
 		if run_tui.is_some() && run_tui.unwrap() {
 			log_conf.log_to_stdout = false;
+			log_conf.tui_running = Some(true);
 		}
 		init_logger(Some(log_conf));
 		global::set_mining_mode(
