@@ -519,6 +519,7 @@ struct TxWrapper {
 // Push new transactions to our stem transaction pool, that should broadcast it
 // to the network if valid.
 struct PoolPushHandler<T> {
+	peers: Weak<p2p::Peers>,
 	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
 }
 
@@ -553,6 +554,12 @@ where
 			if let Some(_) = params.get("fluff") {
 				fluff = true;
 			}
+		}
+
+		// Will not do a stem transaction if our dandelion peer relay is empty
+		if !fluff && w(&self.peers).get_dandelion_relay().is_empty() {
+			debug!(LOGGER, "Missing Dandelion relay: will push stem transaction normally");
+			fluff = true;
 		}
 
 		//  Push into the pool or stempool
@@ -637,6 +644,7 @@ pub fn start_rest_apis<T>(
 				tx_pool: tx_pool.clone(),
 			};
 			let pool_push_handler = PoolPushHandler {
+				peers: peers.clone(),
 				tx_pool: tx_pool.clone(),
 			};
 			let peers_all_handler = PeersAllHandler {
