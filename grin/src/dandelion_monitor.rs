@@ -38,6 +38,7 @@ pub fn monitor_transactions<T>(
 ) where
 	T: BlockChain + Send + Sync + 'static,
 {
+	debug!(LOGGER, "Started Dandelion transaction monitor");
 	let _ = thread::Builder::new()
 		.name("dandelion".to_string())
 		.spawn(move || {
@@ -49,9 +50,8 @@ pub fn monitor_transactions<T>(
 				for tx_hash in stem_transactions.keys() {
 					let time_transaction = time_stem_transactions.get(tx_hash).unwrap();
 					let interval = now_utc().to_timespec().sec - time_transaction;
-					// Unban peer
+
 					// TODO Randomize between 30 and 60 seconds
-					debug!(LOGGER, "Dandelion Monitor running");
 					if interval >= config.dandelion_embargo {
 						let source = TxSource {
 							debug_name: "dandelion-monitor".to_string(),
