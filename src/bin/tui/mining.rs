@@ -19,16 +19,16 @@ use std::cmp::Ordering;
 use cursive::Cursive;
 use cursive::event::Key;
 use cursive::view::View;
-use cursive::views::{BoxView, Button, Dialog, LinearLayout, OnEventView, StackView, TextView};
+use cursive::views::{BoxView, Button, Dialog, LinearLayout, OnEventView, Panel, StackView, TextView};
 use cursive::direction::Orientation;
 use cursive::traits::*;
 use std::time;
+use tui::chrono::prelude::*;
 
 use tui::constants::*;
 use tui::types::*;
 
-use grin::types::ServerStats;
-use grin::stats::DiffStats;
+use grin::stats::*;
 use tui::pow::cuckoo_miner::CuckooMinerDeviceStats;
 use tui::table::{TableView, TableViewItem};
 
@@ -116,22 +116,25 @@ impl DiffColumn {
 	fn _as_str(&self) -> &str {
 		match *self {
 			DiffColumn::BlockNumber => "Block Number",
-			DiffColumn::Index => "Index",
-			DiffColumn::Difficulty => "Difficulty",
-			DiffColumn::Time => "Time",
+			DiffColumn::Index => "Block Index",
+			DiffColumn::Difficulty => "Network Difficulty",
+			DiffColumn::Time => "Block Time",
 			DiffColumn::Duration => "Duration",
 		}
 	}
 }
 
-impl TableViewItem<DiffColumn> for DiffStats {
+impl TableViewItem<DiffColumn> for DiffBlock {
 	fn to_column(&self, column: DiffColumn) -> String {
+		let naive_datetime = NaiveDateTime::from_timestamp(self.time as i64, 0);
+		let datetime: DateTime<Utc> = DateTime::from_utc(naive_datetime, Utc);
+		
 		match column {
-			DiffColumn::BlockNumber => String::from(""),
-			DiffColumn::Index => String::from(""),
-			DiffColumn::Difficulty => String::from(""),
-			DiffColumn::Time => String::from(""),
-			DiffColumn::Duration => String::from(""),
+			DiffColumn::BlockNumber => self.block_number.to_string(),
+			DiffColumn::Index => self.block_index.to_string(),
+			DiffColumn::Difficulty => self.difficulty.to_string(),
+			DiffColumn::Time => format!("{}", datetime).to_string(),
+			DiffColumn::Duration => format!("{}s", self.duration).to_string(),
 		}
 	}
 
@@ -167,9 +170,8 @@ impl TUIStatusListener for TUIMiningView {
 			});
 		});
 		let mining_submenu = LinearLayout::new(Orientation::Horizontal)
-			.child(devices_button)
-			.child(TextView::new(" | "))
-			.child(difficulty_button);
+			.child(Panel::new(devices_button))
+			.child(Panel::new(difficulty_button));
 
 		let mining_submenu = OnEventView::new(mining_submenu).on_pre_event(Key::Esc, move |c| {
 			let _ = c.focus_id(MAIN_MENU);
@@ -222,6 +224,11 @@ impl TUIStatusListener for TUIMiningView {
 		let diff_status_view = LinearLayout::new(Orientation::Vertical)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
+					.child(TextView::new("Tip Height: "))
+					.child(TextView::new("").with_id("diff_cur_height")),
+			)
+			.child(
+				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("Difficulty Adjustment Window: "))
 					.child(TextView::new("").with_id("diff_adjust_window")),
 			)
@@ -236,11 +243,31 @@ impl TUIStatusListener for TUIMiningView {
 					.child(TextView::new("").with_id("diff_avg_difficulty")),
 			);
 
+		let diff_table_view =
+			TableView::<DiffBlock, DiffColumn>::new()
+				.column(DiffColumn::BlockNumber, "Block Number", |c| {
+					c.width_percent(20)
+				})
+				.column(DiffColumn::Index, "Distance from Head", |c| {
+					c.width_percent(20)
+				})
+				.column(DiffColumn::Difficulty, "Network Difficulty", |c| {
+					c.width_percent(20)
+				})
+				.column(DiffColumn::Time, "Block Time", |c| {
+					c.width_percent(20)
+				})
+				.column(DiffColumn::Duration, "Duration", |c| {
+					c.width_percent(20)
+				});
+
+
 		let mining_difficulty_view = LinearLayout::new(Orientation::Vertical)
 			.child(diff_status_view)
-			.child(BoxView::with_full_screen(Dialog::around(TextView::new(
-				"mining diff",
-			))))
+			.child(BoxView::with_full_screen(
+				Dialog::around(diff_table_view.with_id(TABLE_MINING_DIFF_STATUS).min_size((50, 20)))
+					.title("Mining Difficulty Data"),
+			))
 			.with_id("mining_difficulty_view");
 
 		let view_stack = StackView::new()
@@ -306,6 +333,9 @@ impl TUIStatusListener for TUIMiningView {
 		});
 
 		//diff stats
+		c.call_on_id("diff_cur_height", |t: &mut TextView| {
+			t.set_content(stats.diff_stats.height.to_string());
+		});
 		c.call_on_id("diff_adjust_window", |t: &mut TextView| {
 			t.set_content(stats.diff_stats.window_size.to_string());
 		});
@@ -319,6 +349,8 @@ impl TUIStatusListener for TUIMiningView {
 
 		let mining_stats = stats.mining_stats.clone();
 		let device_stats = mining_stats.device_stats;
+		let mut diff_stats = stats.diff_stats.last_blocks.clone();
+		diff_stats.reverse();
 		if device_stats.is_none() {
 			return;
 		}
@@ -334,6 +366,12 @@ impl TUIStatusListener for TUIMiningView {
 			TABLE_MINING_STATUS,
 			|t: &mut TableView<CuckooMinerDeviceStats, MiningDeviceColumn>| {
 				t.set_items(flattened_device_stats);
+			},
+		);
+		let _ = c.call_on_id(
+			TABLE_MINING_DIFF_STATUS,
+			|t: &mut TableView<DiffBlock, DiffColumn>| {
+				t.set_items(diff_stats);
 			},
 		);
 	}

@@ -14,6 +14,7 @@
 
 //! Grin TUI
 extern crate grin_pow as pow;
+extern crate chrono;
 
 pub mod ui;
 pub mod table;

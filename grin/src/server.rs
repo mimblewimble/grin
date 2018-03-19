@@ -33,6 +33,7 @@ use pool;
 use seed;
 use sync;
 use types::*;
+use stats::*;
 use pow;
 use util::LOGGER;
 
@@ -280,23 +281,42 @@ impl Server {
 					.collect();
 
 			let mut last_time = last_blocks[0].clone().unwrap().0;
+			let tip_height = self.chain.head().unwrap().height as i64;
+			let earliest_block_height = tip_height as i64 - last_blocks.len() as i64;
+			
+			let mut i = 1;
 
-			let block_time_sum = last_blocks
+			let diff_entries:Vec<DiffBlock> = last_blocks
 				.iter()
 				.skip(1)
 				.map(|n| {
-					let r = n.clone().unwrap().0 - last_time;
-					last_time = n.clone().unwrap().0;
-					r
+					let (time, diff) = n.clone().unwrap();
+					let dur = time - last_time;
+					let height = earliest_block_height + i + 1;
+					let index = tip_height - height;
+					i += 1;
+					last_time = time;
+					DiffBlock{
+						block_number: height,
+						block_index: index,
+						difficulty: diff.into_num(),
+						time: time,
+						duration: dur,
+					}
 				})
-				.fold(0, |sum, t| sum + t);
-			let block_diff_sum = last_blocks
+				.collect();
+
+			let block_time_sum = diff_entries
 				.iter()
-				.fold(Difficulty::zero(), |sum, d| sum + d.clone().unwrap().1);
+				.fold(0, |sum, t| sum + t.duration);
+			let block_diff_sum = diff_entries
+				.iter()
+				.fold(0, |sum, d| sum + d.difficulty);
 			DiffStats {
-				last_blocks: last_blocks,
+				height: tip_height as u64,
+				last_blocks: diff_entries,
 				average_block_time: block_time_sum / consensus::DIFFICULTY_ADJUST_WINDOW,
-				average_difficulty: block_diff_sum.into_num() / consensus::DIFFICULTY_ADJUST_WINDOW,
+				average_difficulty: block_diff_sum / consensus::DIFFICULTY_ADJUST_WINDOW,
 				window_size: consensus::DIFFICULTY_ADJUST_WINDOW,
 			}
 		};

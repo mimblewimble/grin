@@ -21,8 +21,6 @@ use std::sync::atomic::AtomicBool;
 use chain;
 use p2p;
 use pow;
-use core::core::target::Difficulty;
-use core::consensus::TargetError;
 
 /// Server state info collection struct, to be passed around into internals
 /// and populated when required
@@ -87,14 +85,31 @@ pub struct MiningStats {
 /// Stats on the last WINDOW blocks and the difficulty calculation
 #[derive(Clone)]
 pub struct DiffStats {
+	/// latest height
+	pub height: u64,
 	/// Last WINDOW block data
-	pub last_blocks: Vec<Result<(u64, Difficulty), TargetError>>,
+	pub last_blocks: Vec<DiffBlock>,
 	/// Average block time for last WINDOW blocks
 	pub average_block_time: u64,
 	/// Average WINDOW difficulty
 	pub average_difficulty: u64,
 	/// WINDOW size
 	pub window_size: u64,
+}
+
+/// Last n blocks for difficulty calculation purposes
+#[derive(Clone, Debug)]
+pub struct DiffBlock {
+	/// Block number (can be negative for a new chain)
+	pub block_number: i64,
+	/// Ordinal index from current block
+	pub block_index: i64,
+	/// Block network difficulty
+	pub difficulty: u64,
+	/// Time block was found (epoch seconds)
+	pub time: u64,
+	/// Duration since previous block (epoch seconds)
+	pub duration: u64,
 }
 
 /// Struct to return relevant information about peers
