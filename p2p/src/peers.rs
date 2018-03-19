@@ -84,6 +84,7 @@ impl Peers {
 					.write()
 					.unwrap()
 					.insert(time::now_utc().to_timespec().sec, peer.clone());
+				debug!(LOGGER, "Successfully updated Dandelion relay to: {}", peer.try_read().unwrap().info.addr);
 			}
 			None => error!(LOGGER, "Could not update dandelion relay"),
 		};
