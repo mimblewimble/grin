@@ -3,7 +3,6 @@
 .grin*
 node*
 target
-Cargo.lock
 **.iml
 grin.log
 wallet.seed
