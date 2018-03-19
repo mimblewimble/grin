@@ -90,7 +90,7 @@ where
 	fn dump_stats(&self);
 }
 
-/// Maixmum peeks for a Merkle proof
+/// Maixmum peaks for a Merkle proof
 pub const MAX_PEAKS: u64 = 100;
 
 /// Maixmum path for a Merkle proof
