@@ -19,7 +19,8 @@ use std::cmp::Ordering;
 use cursive::Cursive;
 use cursive::event::Key;
 use cursive::view::View;
-use cursive::views::{BoxView, Button, Dialog, LinearLayout, OnEventView, Panel, StackView, TextView};
+use cursive::views::{BoxView, Button, Dialog, LinearLayout, OnEventView, Panel, StackView,
+                     TextView};
 use cursive::direction::Orientation;
 use cursive::traits::*;
 use std::time;
@@ -128,7 +129,7 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 	fn to_column(&self, column: DiffColumn) -> String {
 		let naive_datetime = NaiveDateTime::from_timestamp(self.time as i64, 0);
 		let datetime: DateTime<Utc> = DateTime::from_utc(naive_datetime, Utc);
-		
+
 		match column {
 			DiffColumn::BlockNumber => self.block_number.to_string(),
 			DiffColumn::Index => self.block_index.to_string(),
@@ -243,30 +244,27 @@ impl TUIStatusListener for TUIMiningView {
 					.child(TextView::new("").with_id("diff_avg_difficulty")),
 			);
 
-		let diff_table_view =
-			TableView::<DiffBlock, DiffColumn>::new()
-				.column(DiffColumn::BlockNumber, "Block Number", |c| {
-					c.width_percent(20)
-				})
-				.column(DiffColumn::Index, "Distance from Head", |c| {
-					c.width_percent(20)
-				})
-				.column(DiffColumn::Difficulty, "Network Difficulty", |c| {
-					c.width_percent(20)
-				})
-				.column(DiffColumn::Time, "Block Time", |c| {
-					c.width_percent(20)
-				})
-				.column(DiffColumn::Duration, "Duration", |c| {
-					c.width_percent(20)
-				});
-
+		let diff_table_view = TableView::<DiffBlock, DiffColumn>::new()
+			.column(DiffColumn::BlockNumber, "Block Number", |c| {
+				c.width_percent(20)
+			})
+			.column(DiffColumn::Index, "Distance from Head", |c| {
+				c.width_percent(20)
+			})
+			.column(DiffColumn::Difficulty, "Network Difficulty", |c| {
+				c.width_percent(20)
+			})
+			.column(DiffColumn::Time, "Block Time", |c| c.width_percent(20))
+			.column(DiffColumn::Duration, "Duration", |c| c.width_percent(20));
 
 		let mining_difficulty_view = LinearLayout::new(Orientation::Vertical)
 			.child(diff_status_view)
 			.child(BoxView::with_full_screen(
-				Dialog::around(diff_table_view.with_id(TABLE_MINING_DIFF_STATUS).min_size((50, 20)))
-					.title("Mining Difficulty Data"),
+				Dialog::around(
+					diff_table_view
+						.with_id(TABLE_MINING_DIFF_STATUS)
+						.min_size((50, 20)),
+				).title("Mining Difficulty Data"),
 			))
 			.with_id("mining_difficulty_view");
 

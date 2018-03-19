@@ -283,10 +283,10 @@ impl Server {
 			let mut last_time = last_blocks[0].clone().unwrap().0;
 			let tip_height = self.chain.head().unwrap().height as i64;
 			let earliest_block_height = tip_height as i64 - last_blocks.len() as i64;
-			
+
 			let mut i = 1;
 
-			let diff_entries:Vec<DiffBlock> = last_blocks
+			let diff_entries: Vec<DiffBlock> = last_blocks
 				.iter()
 				.skip(1)
 				.map(|n| {
@@ -296,7 +296,7 @@ impl Server {
 					let index = tip_height - height;
 					i += 1;
 					last_time = time;
-					DiffBlock{
+					DiffBlock {
 						block_number: height,
 						block_index: index,
 						difficulty: diff.into_num(),
@@ -306,12 +306,8 @@ impl Server {
 				})
 				.collect();
 
-			let block_time_sum = diff_entries
-				.iter()
-				.fold(0, |sum, t| sum + t.duration);
-			let block_diff_sum = diff_entries
-				.iter()
-				.fold(0, |sum, d| sum + d.difficulty);
+			let block_time_sum = diff_entries.iter().fold(0, |sum, t| sum + t.duration);
+			let block_diff_sum = diff_entries.iter().fold(0, |sum, d| sum + d.difficulty);
 			DiffStats {
 				height: tip_height as u64,
 				last_blocks: diff_entries,
