@@ -54,7 +54,7 @@ capabilities = [7]
 
 #whether to run the ncurses TUI. Ncurses must be installed and this
 #will also disable logging to stdout
-run_tui = false
+run_tui = true
 
 #Whether to run the wallet listener with the server by default
 run_wallet_listener = true
