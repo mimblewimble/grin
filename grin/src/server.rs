@@ -92,11 +92,6 @@ impl Server {
 			pool_adapter.clone(),
 			pool_net_adapter.clone(),
 		)));
-		dandelion_monitor::monitor_transactions(
-			config.pool_config.clone(),
-			tx_pool.clone(),
-			stop.clone(),
-		);
 
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));
 
@@ -195,6 +190,13 @@ impl Server {
 			Arc::downgrade(&shared_chain),
 			Arc::downgrade(&tx_pool),
 			Arc::downgrade(&p2p_server.peers),
+		);
+
+		info!(LOGGER, "Starting dandelion monitor: {}", &config.api_http_addr);
+		dandelion_monitor::monitor_transactions(
+			config.pool_config.clone(),
+			tx_pool.clone(),
+			stop.clone(),
 		);
 
 		warn!(LOGGER, "Grin server started.");
