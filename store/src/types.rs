@@ -250,21 +250,21 @@ impl RemoveLog {
 		Ok(rl)
 	}
 
-	/// Truncate and empties the remove log.
-	pub fn rewind(&mut self, last_offs: u32) -> io::Result<()> {
+	/// Rewinds the remove log back to the provided index.
+	/// We keep everything in the rm_log from that index and earlier.
+	/// In practice the index is a block height, so we rewind back to that block
+	/// keeping everything in the rm_log up to and including that block.
+	pub fn rewind(&mut self, idx: u32) -> io::Result<()> {
 		// simplifying assumption: we always remove older than what's in tmp
 		self.removed_tmp = vec![];
 		// backing it up before truncating
 		self.removed_bak = self.removed.clone();
 
-		if last_offs == 0 {
+		if idx == 0 {
 			self.removed = vec![];
 		} else {
-			self.removed = self.removed
-				.iter()
-				.filter(|&&(_, idx)| idx < last_offs)
-				.map(|x| *x)
-				.collect();
+			// retain rm_log entries up to and including those at the provided index
+			self.removed.retain(|&(_, x)| x <= idx);
 		}
 		Ok(())
 	}
