@@ -349,6 +349,13 @@ impl TUIStatusListener for TUIMiningView {
 		let device_stats = mining_stats.device_stats;
 		let mut diff_stats = stats.diff_stats.last_blocks.clone();
 		diff_stats.reverse();
+		let _ = c.call_on_id(
+			TABLE_MINING_DIFF_STATUS,
+			|t: &mut TableView<DiffBlock, DiffColumn>| {
+				t.set_items(diff_stats);
+			},
+		);
+
 		if device_stats.is_none() {
 			return;
 		}
@@ -364,12 +371,6 @@ impl TUIStatusListener for TUIMiningView {
 			TABLE_MINING_STATUS,
 			|t: &mut TableView<CuckooMinerDeviceStats, MiningDeviceColumn>| {
 				t.set_items(flattened_device_stats);
-			},
-		);
-		let _ = c.call_on_id(
-			TABLE_MINING_DIFF_STATUS,
-			|t: &mut TableView<DiffBlock, DiffColumn>| {
-				t.set_items(diff_stats);
 			},
 		);
 	}
