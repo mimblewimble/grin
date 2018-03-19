@@ -943,8 +943,7 @@ mod tests {
 	}
 
 	#[test]
-	/// A basic test; add a transaction to the pool and a the child to the
-	/// stempool
+	/// A basic test; add a transaction to the pool and add the child to the stempool
 	fn test_pool_stempool_add() {
 		let mut dummy_chain = DummyChainImpl::new();
 		let head_header = block::BlockHeader {
