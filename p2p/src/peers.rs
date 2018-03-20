@@ -76,11 +76,13 @@ impl Peers {
 	// Update the dandelion relay
 	pub fn update_dandelion_relay(&self) {
 		let peers = self.outgoing_connected_peers();
+
 		match thread_rng().choose(&peers) {
 			Some(peer) => {
 				// Clear the map and add new relay
-				self.dandelion_relay.write().unwrap().clear();
-				self.dandelion_relay
+				let dandelion_relay = &self.dandelion_relay;
+				dandelion_relay.write().unwrap().clear();
+				dandelion_relay
 					.write()
 					.unwrap()
 					.insert(time::now_utc().to_timespec().sec, peer.clone());
