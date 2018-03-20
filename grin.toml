@@ -109,7 +109,7 @@ stdout_log_level = "Warning"
 log_to_file = true
 
 # Log level for file: Critical, Error, Warning, Info, Debug, Trace
-file_log_level = "Debut"
+file_log_level = "Debug"
 
 # Log file path
 log_file_path = "grin.log"
