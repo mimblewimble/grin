@@ -39,11 +39,11 @@ where
     let uri = url.parse::<hyper::Uri>().unwrap();
     let mut core = Core::new().unwrap();
     let client = Client::new(&core.handle());
-    let req_f = client.get(uri).map_err(|_| {Error::Internal(format!("Error in request."))});
+    let req_f = client.get(uri).map_err(|_| {Error::Internal(format!("The server does not respond. Please check if the server is operational."))});
     let work = req_f.and_then(|res| {
         let status_code = res.status();
         res.body().concat2()
-        .map_err(|_| {Error::Internal(format!("Error in request."))})
+        .map_err(|_| {Error::Internal(format!("The server does not respond. Please check if the server is operational."))})
         .and_then(move |body_chunks| {
             let s = String::from_utf8(body_chunks.to_vec()).unwrap();
             match status_code {
@@ -55,7 +55,7 @@ where
             }
         })
     });
-    let json = core.run(work).unwrap();
+    let json = core.run(work)?;
     serde_json::from_slice(json.as_ref()).map_err(|e| {
         Error::Internal(format!("Server returned invalid JSON: {}", e))
     })
@@ -83,11 +83,11 @@ where
 
     let mut core = Core::new().unwrap();
     let client = Client::new(&core.handle());
-    let req_f = client.request(req).map_err(|_| {Error::Internal(format!("Error in request."))});
+    let req_f = client.request(req).map_err(|_| {Error::Internal(format!("The server does not response. Please check if the server is operational."))});
     let work = req_f.and_then(|res| {
         let status_code = res.status();        
         res.body().concat2()
-        .map_err(|_| {Error::Internal(format!("Error in request."))})
+        .map_err(|_| {Error::Internal(format!("The server does not response. Please check if the server is operational."))})
         .and_then(move |body_chunks| {
             let s = String::from_utf8(body_chunks.to_vec()).unwrap();
             match status_code {
@@ -99,6 +99,6 @@ where
             }
         })
     });
-    let _ = core.run(work).unwrap();
+    let _ = core.run(work)?;
 	Ok(())
 }
