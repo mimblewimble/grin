@@ -60,7 +60,7 @@ fn test_coinbase_maturity() {
 		burn_reward: true,
 		..Default::default()
 	};
-	miner_config.cuckoo_miner_plugin_dir = Some(String::from("../target/debug/deps"));
+	miner_config.miner_plugin_dir = Some(String::from("../target/debug/deps"));
 
 	let mut cuckoo_miner = cuckoo::Miner::new(
 		consensus::EASINESS,
@@ -81,7 +81,7 @@ fn test_coinbase_maturity() {
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
-	block.header.difficulty = difficulty.clone();
+
 	chain.set_txhashset_roots(&mut block, false).unwrap();
 
 	pow::pow_size(
@@ -108,7 +108,7 @@ fn test_coinbase_maturity() {
 		.process_block(block.clone(), chain::Options::MINE)
 		.unwrap();
 
-	let merkle_proof = chain.get_merkle_proof(&out_id, &block).unwrap();
+	let merkle_proof = chain.get_merkle_proof(&out_id, &block.header).unwrap();
 
 	let prev = chain.head_header().unwrap();
 
@@ -138,7 +138,6 @@ fn test_coinbase_maturity() {
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
-	block.header.difficulty = difficulty.clone();
 
 	match chain.set_txhashset_roots(&mut block, false) {
 		Err(Error::Transaction(transaction::Error::ImmatureCoinbase)) => (),
@@ -165,7 +164,7 @@ fn test_coinbase_maturity() {
 		block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
-		block.header.difficulty = difficulty.clone();
+
 		chain.set_txhashset_roots(&mut block, false).unwrap();
 
 		pow::pow_size(
@@ -200,7 +199,7 @@ fn test_coinbase_maturity() {
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
-	block.header.difficulty = difficulty.clone();
+
 	chain.set_txhashset_roots(&mut block, false).unwrap();
 
 	pow::pow_size(

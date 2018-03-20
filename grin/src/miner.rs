@@ -26,16 +26,17 @@ use adapters::PoolToChainAdapter;
 use core::consensus;
 use core::core;
 use core::core::Proof;
-use pow::cuckoo;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Transaction};
 use core::core::hash::{Hash, Hashed};
-use pow::MiningWorker;
+use pow::{cuckoo, MiningWorker};
 use pow::types::MinerConfig;
 use core::ser;
+use core::global;
 use core::ser::AsFixedBytes;
 use util::LOGGER;
 use types::Error;
+use stats::MiningStats;
 
 use chain;
 use pool;
@@ -51,64 +52,41 @@ use itertools::Itertools;
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
 
-const PRE_NONCE_SIZE: usize = 146;
-
-/// Serializer that outputs pre and post nonce portions of a block header
-/// which can then be sent off to miner to mutate at will
-pub struct HeaderPartWriter {
-	//
-	pub pre_nonce: Vec<u8>,
-	// Post nonce is currently variable length
-	// because of difficulty
-	pub post_nonce: Vec<u8>,
-	// which difficulty field we're on
-	bytes_written: usize,
-	writing_pre: bool,
+/// Serializer that outputs the pre-pow part of the header,
+/// including the nonce (last 8 bytes) that can be sent off
+/// to the miner to mutate at will
+pub struct HeaderPrePowWriter {
+	pub pre_pow: Vec<u8>,
 }
 
-impl Default for HeaderPartWriter {
-	fn default() -> HeaderPartWriter {
-		HeaderPartWriter {
-			bytes_written: 0,
-			writing_pre: true,
-			pre_nonce: Vec::new(),
-			post_nonce: Vec::new(),
+impl Default for HeaderPrePowWriter {
+	fn default() -> HeaderPrePowWriter {
+		HeaderPrePowWriter {
+			pre_pow: Vec::new(),
 		}
 	}
 }
 
-impl HeaderPartWriter {
-	pub fn parts_as_hex_strings(&self) -> (String, String) {
-		(
-			String::from(format!("{:02x}", self.pre_nonce.iter().format(""))),
-			String::from(format!("{:02x}", self.post_nonce.iter().format(""))),
-		)
+impl HeaderPrePowWriter {
+	pub fn as_hex_string(&self, include_nonce: bool) -> String {
+		let mut result = String::from(format!("{:02x}", self.pre_pow.iter().format("")));
+		if !include_nonce {
+			let l = result.len() - 16;
+			result.truncate(l);
+		}
+		result
 	}
 }
 
-impl ser::Writer for HeaderPartWriter {
+impl ser::Writer for HeaderPrePowWriter {
 	fn serialization_mode(&self) -> ser::SerializationMode {
-		ser::SerializationMode::Hash
+		ser::SerializationMode::Full
 	}
 
 	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, bytes_in: &T) -> Result<(), ser::Error> {
-		if self.writing_pre {
-			for i in 0..bytes_in.len() {
-				self.pre_nonce.push(bytes_in.as_ref()[i])
-			}
-		} else if self.bytes_written != 0 {
-			for i in 0..bytes_in.len() {
-				self.post_nonce.push(bytes_in.as_ref()[i])
-			}
+		for i in 0..bytes_in.len() {
+			self.pre_pow.push(bytes_in.as_ref()[i])
 		}
-
-		self.bytes_written += bytes_in.len();
-
-		if self.bytes_written == PRE_NONCE_SIZE && self.writing_pre {
-			self.writing_pre = false;
-			self.bytes_written = 0;
-		}
-
 		Ok(())
 	}
 }
@@ -158,6 +136,7 @@ impl Miner {
 		head: &BlockHeader,
 		latest_hash: &Hash,
 		attempt_time_per_block: u32,
+		mining_stats: Arc<RwLock<MiningStats>>,
 	) -> Option<Proof> {
 		debug!(
 			LOGGER,
@@ -166,7 +145,7 @@ impl Miner {
 			cuckoo_size,
 			attempt_time_per_block,
 			b.header.height,
-			b.header.difficulty
+			b.header.total_difficulty
 		);
 
 		// look for a pow for at most attempt_time_per_block sec on the
@@ -180,20 +159,13 @@ impl Miner {
 		let mut next_stat_output = time::get_time().sec + stat_output_interval;
 
 		// Get parts of the header
-		let mut header_parts = HeaderPartWriter::default();
-		ser::Writeable::write(&b.header, &mut header_parts).unwrap();
-		let (pre, post) = header_parts.parts_as_hex_strings();
-
-		//Just test output to mine a genesis block when needed
-		/*let mut header_parts = HeaderPartWriter::default();
-		let gen = genesis::genesis();
-		ser::Writeable::write(&gen.header, &mut header_parts).unwrap();
-		let (pre, post) = header_parts.parts_as_hex_strings();
-		println!("pre, post: {}, {}", pre, post);*/
+		let mut pre_pow_writer = HeaderPrePowWriter::default();
+		b.header.write_pre_pow(&mut pre_pow_writer).unwrap();
+		let pre_pow = pre_pow_writer.as_hex_string(false);
 
 		// Start the miner working
 		let miner = plugin_miner.get_consumable();
-		let job_handle = miner.notify(1, &pre, &post, 0).unwrap();
+		let job_handle = miner.notify(1, &pre_pow, "", 0).unwrap();
 
 		let mut sol = None;
 
@@ -208,7 +180,8 @@ impl Miner {
 					proof_diff.into_num(),
 					difficulty.into_num()
 				);
-				if proof_diff >= b.header.difficulty {
+				if proof_diff > (b.header.total_difficulty.clone() - head.total_difficulty.clone())
+				{
 					sol = Some(proof);
 					b.header.nonce = s.get_nonce_as_u64();
 					break;
@@ -250,6 +223,15 @@ impl Miner {
 					}
 				}
 				info!(LOGGER, "Mining at {} graphs per second", sps_total);
+				if sps_total.is_finite() {
+					let mut mining_stats = mining_stats.write().unwrap();
+					mining_stats.combined_gps = sps_total;
+					let mut device_vec = vec![];
+					for i in 0..plugin_miner.loaded_plugin_count() {
+						device_vec.push(job_handle.get_stats(i).unwrap());
+					}
+					mining_stats.device_stats = Some(device_vec);
+				}
 				next_stat_output = time::get_time().sec + stat_output_interval;
 			}
 			// avoid busy wait
@@ -277,6 +259,7 @@ impl Miner {
 		head: &BlockHeader,
 		attempt_time_per_block: u32,
 		latest_hash: &mut Hash,
+		mining_stats: Arc<RwLock<MiningStats>>,
 	) -> Option<Proof> {
 		// look for a pow for at most attempt_time_per_block sec on the same block (to
 		// give a chance to new
@@ -293,7 +276,7 @@ impl Miner {
 			cuckoo_size,
 			attempt_time_per_block,
 			latest_hash,
-			b.header.difficulty
+			b.header.total_difficulty
 		);
 		let mut iter_count = 0;
 
@@ -308,7 +291,7 @@ impl Miner {
 
 		let mut sol = None;
 		while head.hash() == *latest_hash && time::get_time().sec < deadline {
-			let pow_hash = b.hash();
+			let pow_hash = b.header.pre_pow_hash();
 			if let Ok(proof) = plugin_miner.mine(&pow_hash[..]) {
 				let proof_diff = proof.clone().to_difficulty();
 				trace!(
@@ -316,9 +299,10 @@ impl Miner {
 					"Found cuckoo solution for nonce {} of difficulty {} (difficulty target {})",
 					b.header.nonce,
 					proof_diff.into_num(),
-					b.header.difficulty.into_num()
+					b.header.total_difficulty.into_num()
 				);
-				if proof_diff >= b.header.difficulty {
+				if proof_diff > (b.header.total_difficulty.clone() - head.total_difficulty.clone())
+				{
 					sol = Some(proof);
 					break;
 				}
@@ -350,6 +334,13 @@ impl Miner {
 						LOGGER,
 						"Mining at {} graphs per second", last_hashes_per_sec
 					);
+					if last_hashes_per_sec.is_finite() {
+						let mut mining_stats = mining_stats.write().unwrap();
+						mining_stats.combined_gps = last_hashes_per_sec;
+						let mut device_vec = vec![];
+						device_vec.push(plugin_miner.get_stats(0).unwrap());
+						mining_stats.device_stats = Some(device_vec);
+					}
 				}
 				next_stat_check = time::get_time().sec + stat_check_interval;
 			}
@@ -381,6 +372,7 @@ impl Miner {
 	}
 
 	/// The inner part of mining loop for the internal miner
+	/// kept around mostly for automated testing purposes
 	pub fn inner_loop_sync_internal<T: MiningWorker>(
 		&self,
 		miner: &mut T,
@@ -401,7 +393,7 @@ impl Miner {
 			cuckoo_size,
 			attempt_time_per_block,
 			latest_hash,
-			b.header.difficulty
+			b.header.total_difficulty
 		);
 		let mut iter_count = 0;
 
@@ -416,10 +408,11 @@ impl Miner {
 
 		let mut sol = None;
 		while head.hash() == *latest_hash && time::get_time().sec < deadline {
-			let pow_hash = b.hash();
+			let pow_hash = b.header.pre_pow_hash();
 			if let Ok(proof) = miner.mine(&pow_hash[..]) {
 				let proof_diff = proof.clone().to_difficulty();
-				if proof_diff >= b.header.difficulty {
+				if proof_diff > (b.header.total_difficulty.clone() - head.total_difficulty.clone())
+				{
 					sol = Some(proof);
 					break;
 				}
@@ -453,14 +446,21 @@ impl Miner {
 
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
-	pub fn run_loop(&self, miner_config: MinerConfig, cuckoo_size: u32, proof_size: usize) {
+	pub fn run_loop(
+		&self,
+		miner_config: MinerConfig,
+		mining_stats: Arc<RwLock<MiningStats>>,
+		cuckoo_size: u32,
+		proof_size: usize,
+	) {
 		info!(
 			LOGGER,
 			"(Server ID: {}) Starting miner loop.", self.debug_output_id
 		);
+
 		let mut plugin_miner = None;
 		let mut miner = None;
-		if miner_config.use_cuckoo_miner {
+		if !global::is_automated_testing_mode() {
 			plugin_miner = Some(PluginMiner::new(
 				consensus::EASINESS,
 				cuckoo_size,
@@ -475,10 +475,15 @@ impl Miner {
 			));
 		}
 
-		// to prevent the wallet from generating a new HD key derivation for each
 		// iteration, we keep the returned derivation to provide it back when
 		// nothing has changed
 		let mut key_id = None;
+
+		{
+			let mut mining_stats = mining_stats.write().unwrap();
+			mining_stats.is_mining = true;
+			mining_stats.cuckoo_size = cuckoo_size as u16;
+		}
 
 		loop {
 			debug!(LOGGER, "in miner loop...");
@@ -503,10 +508,16 @@ impl Miner {
 			}
 
 			let (mut b, block_fees) = result.unwrap();
+			{
+				let mut mining_stats = mining_stats.write().unwrap();
+				mining_stats.block_height = b.header.height;
+				mining_stats.network_difficulty =
+					(b.header.total_difficulty.clone() - head.total_difficulty.clone()).into_num();
+			}
 
 			let mut sol = None;
 			let mut use_async = false;
-			if let Some(c) = self.config.cuckoo_miner_async_mode {
+			if let Some(c) = self.config.miner_async_mode {
 				if c {
 					use_async = true;
 				}
@@ -515,12 +526,13 @@ impl Miner {
 				if use_async {
 					sol = self.inner_loop_async(
 						&mut p,
-						b.header.difficulty.clone(),
+						(b.header.total_difficulty.clone() - head.total_difficulty.clone()),
 						&mut b,
 						cuckoo_size,
 						&head,
 						&latest_hash,
 						miner_config.attempt_time_per_block,
+						mining_stats.clone(),
 					);
 				} else {
 					sol = self.inner_loop_sync_plugin(
@@ -530,6 +542,7 @@ impl Miner {
 						&head,
 						miner_config.attempt_time_per_block,
 						&mut latest_hash,
+						mining_stats.clone(),
 					);
 				}
 			}
@@ -546,13 +559,13 @@ impl Miner {
 
 			// we found a solution, push our block through the chain processing pipeline
 			if let Some(proof) = sol {
+				b.header.pow = proof;
 				info!(
 					LOGGER,
 					"(Server ID: {}) Found valid proof of work, adding block {}.",
 					self.debug_output_id,
 					b.hash()
 				);
-				b.header.pow = proof;
 				let res = self.chain.process_block(b, chain::Options::MINE);
 				if let Err(e) = res {
 					error!(
@@ -626,11 +639,10 @@ impl Miner {
 		);
 
 		// making sure we're not spending time mining a useless block
-		b.validate()?;
+		b.validate(&head)?;
 
 		let mut rng = rand::OsRng::new().unwrap();
 		b.header.nonce = rng.gen();
-		b.header.difficulty = difficulty;
 		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
 
 		let roots_result = self.chain.set_txhashset_roots(&mut b, false);

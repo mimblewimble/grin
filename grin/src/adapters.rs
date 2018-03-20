@@ -62,7 +62,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		w(&self.chain).head().unwrap().height
 	}
 
-	fn transaction_received(&self, tx: core::Transaction) {
+	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
 		let source = pool::TxSource {
 			debug_name: "p2p".to_string(),
 			identifier: "?.?.?.?".to_string(),
@@ -75,7 +75,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		);
 
 		let h = tx.hash();
-		if let Err(e) = self.tx_pool.write().unwrap().add_to_memory_pool(source, tx) {
+		if let Err(e) = self.tx_pool
+			.write()
+			.unwrap()
+			.add_to_memory_pool(source, tx, stem)
+		{
 			debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
 		}
 	}
@@ -123,15 +127,27 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 			let block = core::Block::hydrate_from(cb.clone(), txs);
 
-			if let Ok(()) = block.validate() {
-				debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
-				self.process_block(block, addr)
+			let chain = self.chain
+				.upgrade()
+				.expect("failed to upgrade weak ref to chain");
+
+			if let Ok(prev_header) = chain.get_block_header(&cb.header.previous) {
+				if let Ok(()) = block.validate(&prev_header) {
+					debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
+					self.process_block(block, addr)
+				} else {
+					debug!(
+						LOGGER,
+						"adapter: block invalid after hydration, requesting full block"
+					);
+					self.request_block(&cb.header, &addr);
+					true
+				}
 			} else {
-				debug!(
+				error!(
 					LOGGER,
-					"adapter: block invalid after hydration, requesting full block"
+					"adapter: failed to retrieve previous block header (consider ban here?)"
 				);
-				self.request_block(&cb.header, &addr);
 				true
 			}
 		}
@@ -376,9 +392,11 @@ impl NetToChainAdapter {
 			Ok(_) => true,
 			Err(chain::Error::Orphan) => {
 				// make sure we did not miss the parent block
-				if !self.currently_syncing.load(Ordering::Relaxed) && !chain.is_orphan(&prev_hash) {
-					debug!(LOGGER, "adapter: process_block: received an orphan block, checking the parent: {:}", prev_hash);
-					self.request_block_by_hash(prev_hash, &addr)
+				if !chain.is_orphan(&prev_hash) && !self.currently_syncing.load(Ordering::Relaxed) {
+					if let Err(_) = chain.get_block_header(&prev_hash) {
+						debug!(LOGGER, "adapter: process_block: received an orphan block, checking the parent: {:}", prev_hash);
+						self.request_block_by_hash(prev_hash, &addr)
+					}
 				}
 				true
 			}
@@ -393,7 +411,7 @@ impl NetToChainAdapter {
 			Err(e) => {
 				debug!(
 					LOGGER,
-					"adapter: process_block :block {} refused by chain: {:?}", bhash, e
+					"adapter: process_block: block {} refused by chain: {:?}", bhash, e
 				);
 				true
 			}
@@ -403,8 +421,6 @@ impl NetToChainAdapter {
 	// After receiving a compact block if we cannot successfully hydrate
 	// it into a full block then fallback to requesting the full block
 	// from the same peer that gave us the compact block
-	//
-	// TODO - currently only request block from a single peer
 	// consider additional peers for redundancy?
 	fn request_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
 		self.request_block_by_hash(bh.hash(), addr)
@@ -417,9 +433,6 @@ impl NetToChainAdapter {
 	// After we have received a block header in "header first" propagation
 	// we need to go request the block (compact representation) from the
 	// same peer that gave us the header (unless we have already accepted the block)
-	//
-	// TODO - currently only request block from a single peer
-	// consider additional peers for redundancy?
 	fn request_compact_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
 		self.send_block_request_to_peer(bh.hash(), addr, |peer, h| {
 			peer.send_compact_block_request(h)
@@ -431,24 +444,24 @@ impl NetToChainAdapter {
 		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
 	{
 		match w(&self.chain).block_exists(h) {
-                        Ok(false) => {
-                                match  wo(&self.peers).get_connected_peer(addr) {
-                                        None => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, not connected", addr),
-                                        Some(peer) => {
-                                                match peer.read() {
-                                                        Err(e) => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, read fails: {:?}", addr, e),
-                                                        Ok(p) => {
-                                                                if let Err(e) =  f(&p, h) {
-                                                                        error!(LOGGER, "send_block_request_to_peer: failed: {:?}", e)
-                                                                }
-                                                        }
-                                                }
-                                        }
-                                }
-                        }
-                        Ok(true) => debug!(LOGGER, "send_block_request_to_peer: block {} already known", h),
-                        Err(e) => error!(LOGGER, "send_block_request_to_peer: failed to check block exists: {:?}", e)
-                }
+			Ok(false) => {
+				match  wo(&self.peers).get_connected_peer(addr) {
+					None => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, not connected", addr),
+					Some(peer) => {
+						match peer.read() {
+							Err(e) => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, read fails: {:?}", addr, e),
+							Ok(p) => {
+								if let Err(e) =  f(&p, h) {
+									error!(LOGGER, "send_block_request_to_peer: failed: {:?}", e)
+								}
+							}
+						}
+					}
+				}
+			}
+			Ok(true) => debug!(LOGGER, "send_block_request_to_peer: block {} already known", h),
+			Err(e) => error!(LOGGER, "send_block_request_to_peer: failed to check block exists: {:?}", e)
+		}
 	}
 
 	/// Prepare options for the chain pipeline
@@ -534,6 +547,9 @@ pub struct PoolToNetAdapter {
 }
 
 impl pool::PoolAdapter for PoolToNetAdapter {
+	fn stem_tx_accepted(&self, tx: &core::Transaction) {
+		wo(&self.peers).broadcast_stem_transaction(tx);
+	}
 	fn tx_accepted(&self, tx: &core::Transaction) {
 		wo(&self.peers).broadcast_transaction(tx);
 	}

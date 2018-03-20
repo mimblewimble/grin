@@ -47,7 +47,7 @@ mod peers;
 mod protocol;
 mod serv;
 mod store;
-mod types;
+pub mod types;
 
 pub use serv::{DummyAdapter, Server};
 pub use peers::Peers;

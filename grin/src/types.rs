@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Server types
+
 use std::convert::From;
 
 use api;
@@ -39,6 +41,7 @@ pub enum Error {
 	API(api::Error),
 	/// Error originating from wallet API.
 	Wallet(wallet::Error),
+	/// Error originating from the cuckoo miner
 	Cuckoo(pow::cuckoo::Error),
 }
 
@@ -145,6 +148,13 @@ pub struct ServerConfig {
 	/// Whether to skip the sync timeout on startup
 	/// (To assist testing on solo chains)
 	pub skip_sync_wait: Option<bool>,
+
+	/// Whether to run the TUI
+	/// if enabled, this will disable logging to stdout
+	pub run_tui: Option<bool>,
+
+	/// Whether to run the wallet listener with the server by default
+	pub run_wallet_listener: Option<bool>,
 }
 
 impl Default for ServerConfig {
@@ -161,19 +171,8 @@ impl Default for ServerConfig {
 			archive_mode: None,
 			pool_config: pool::PoolConfig::default(),
 			skip_sync_wait: None,
+			run_tui: None,
+			run_wallet_listener: Some(false),
 		}
 	}
-}
-
-/// Thread-safe container to return all server related stats that other
-/// consumers might be interested in, such as test results
-///
-///
-///
-#[derive(Clone)]
-pub struct ServerStats {
-	/// Number of peers
-	pub peer_count: u32,
-	/// Chain head
-	pub head: chain::Tip,
 }

@@ -31,6 +31,7 @@ extern crate slog;
 extern crate time;
 
 extern crate grin_core as core;
+extern crate grin_keychain as keychain;
 extern crate grin_store;
 extern crate grin_util as util;
 

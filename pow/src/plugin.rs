@@ -69,16 +69,16 @@ impl PluginMiner {
 		let mut exe_path = env::current_exe().unwrap();
 		exe_path.pop();
 		let exe_path = exe_path.to_str().unwrap();
-		let plugin_install_path = match miner_config.cuckoo_miner_plugin_dir.clone() {
+		let plugin_install_path = match miner_config.miner_plugin_dir.clone() {
 			Some(s) => s,
 			None => String::from(format!("{}/plugins", exe_path)),
 		};
 
 		let mut plugin_vec_filters = Vec::new();
-		if let None = miner_config.cuckoo_miner_plugin_config {
+		if let None = miner_config.miner_plugin_config {
 			plugin_vec_filters.push(String::from("simple"));
 		} else {
-			for p in miner_config.clone().cuckoo_miner_plugin_config.unwrap() {
+			for p in miner_config.clone().miner_plugin_config.unwrap() {
 				plugin_vec_filters.push(p.type_filter);
 			}
 		}
@@ -132,7 +132,7 @@ impl PluginMiner {
 				caps[0].full_path.clone()
 			);
 			config.plugin_full_path = caps[0].full_path.clone();
-			if let Some(l) = miner_config.clone().cuckoo_miner_plugin_config {
+			if let Some(l) = miner_config.clone().miner_plugin_config {
 				if let Some(dp) = l[index].device_parameters.clone() {
 					for (device, param_map) in dp.into_iter() {
 						for (param_name, param_value) in param_map.into_iter() {

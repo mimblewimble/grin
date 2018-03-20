@@ -65,7 +65,7 @@ fn mine_empty_chain() {
 		burn_reward: true,
 		..Default::default()
 	};
-	miner_config.cuckoo_miner_plugin_dir = Some(String::from("../target/debug/deps"));
+	miner_config.miner_plugin_dir = Some(String::from("../target/debug/deps"));
 
 	let mut cuckoo_miner = cuckoo::Miner::new(
 		consensus::EASINESS,
@@ -80,7 +80,6 @@ fn mine_empty_chain() {
 			core::core::Block::new(&prev, vec![], &keychain, &pk, difficulty.clone()).unwrap();
 		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
-		b.header.difficulty = difficulty.clone(); // TODO: overwrite here? really?
 		chain.set_txhashset_roots(&mut b, false).unwrap();
 
 		pow::pow_size(
@@ -259,7 +258,7 @@ fn spend_in_fork_and_compact() {
 		.process_block(b.clone(), chain::Options::SKIP_POW)
 		.unwrap();
 
-	let merkle_proof = chain.get_merkle_proof(&out_id, &b).unwrap();
+	let merkle_proof = chain.get_merkle_proof(&out_id, &b.header).unwrap();
 
 	println!("First block");
 
@@ -422,6 +421,7 @@ fn prepare_block_nosum(
 	diff: u64,
 	txs: Vec<&Transaction>,
 ) -> Block {
+	let proof_size = global::proofsize();
 	let key_id = kc.derive_key_id(diff as u32).unwrap();
 
 	let mut b = match core::core::Block::new(prev, txs, kc, &key_id, Difficulty::from_num(diff)) {
@@ -429,6 +429,7 @@ fn prepare_block_nosum(
 		Ok(b) => b,
 	};
 	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
-	b.header.total_difficulty = Difficulty::from_num(diff);
+	b.header.total_difficulty = prev.total_difficulty.clone() + Difficulty::from_num(diff);
+	b.header.pow = core::core::Proof::random(proof_size);
 	b
 }

@@ -167,7 +167,7 @@ pub trait ChainAdapter: Sync + Send {
 	fn total_height(&self) -> u64;
 
 	/// A valid transaction has been received from one of our peers
-	fn transaction_received(&self, tx: core::Transaction);
+	fn transaction_received(&self, tx: core::Transaction, stem: bool);
 
 	/// A block has been received from one of our peers. Returns true if the
 	/// block could be handled properly and is not deemed defective by the

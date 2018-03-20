@@ -1,8 +1,9 @@
 [package]
 name = "grin_p2p"
 version = "0.1.0"
-authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
+authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 workspace = ".."
+publish = false
 
 [dependencies]
 bitflags = "^1.0"

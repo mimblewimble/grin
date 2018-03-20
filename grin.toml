@@ -40,7 +40,7 @@ db_root = ".grin"
 #Testnet1 - Testnet1 genesis block (cuckoo 16)
 #Testnet2 - Testnet2 genesis block (cuckoo 30)
 #
-chain_type = "Testnet1"
+chain_type = "Testnet2"
 
 #run the node in "full archive" mode (default is fast-sync, pruned node)
 #archive_mode = false
@@ -51,6 +51,13 @@ capabilities = [7]
 
 #skip waiting for sync on startup, (optional param, mostly for testing)
 #skip_sync_wait = false
+
+#whether to run the ncurses TUI. Ncurses must be installed and this
+#will also disable logging to stdout
+run_tui = true
+
+#Whether to run the wallet listener with the server by default
+run_wallet_listener = true
 
 #The P2P server details (i.e. the server that communicates with other
 #grin server nodes
@@ -64,6 +71,27 @@ port = 13414
 #peers_allow = ["192.168.0.1:13414", "192.168.0.2:13414"]
 #will *never* connect to peers in deny list
 #peers_deny = ["192.168.0.3:13414", "192.168.0.4:13414"]
+
+#########################################
+### WALLET CONFIGURATION              ###
+#########################################
+
+[wallet]
+
+# Whether the wallet should be open to the outside
+external = false
+
+# Host IP for wallet listener
+api_listen_interface = "127.0.0.1"
+
+# Port for wallet listener
+api_listen_port = "13415"
+
+# Where the wallet should find a running node
+check_node_api_http_addr = "http://localhost:13413"
+
+# Where to find wallet files (seed, data, etc)
+data_file_dir = "."
 
 #########################################
 ### LOGGING CONFIGURATION             ###
@@ -81,7 +109,7 @@ stdout_log_level = "Warning"
 log_to_file = true
 
 # Log level for file: Critical, Error, Warning, Info, Debug, Trace
-file_log_level = "Info"
+file_log_level = "Debug"
 
 # Log file path
 log_file_path = "grin.log"
@@ -99,23 +127,19 @@ log_file_append = true
 
 #flag whether mining is enabled
 
-enable_mining = false
+enable_mining = true
 
-#Whether to use cuckoo-miner,  and related parameters
-
-use_cuckoo_miner = true
-
-#Whether to use async mode for cuckoo miner, if the plugin supports it.
+#Whether to use async mode for the miner, if the plugin supports it.
 #this allows for many searches to be run in parallel, e.g. if the system
 #has multiple GPUs, or if you want to mine using multiple plugins
 
-cuckoo_miner_async_mode = false
+miner_async_mode = false
 
-#If using cuckoo_miner, the directory in which plugins are installed
+#The directory in which mining plugins are installed
 #if not specified, grin will look in the directory /deps relative
 #to the executable
 
-#cuckoo_miner_plugin_dir = "target/debug/plugins"
+#miner_plugin_dir = "target/debug/plugins"
 
 #The amount of time, in seconds, to attempt to mine on a particular
 #header before stopping and re-collecting transactions from the pool
@@ -160,23 +184,23 @@ burn_reward = false
 #Also requires instructions that aren't available on
 #older processors. In this case, use mean_compat_cpu
 #instead
-#[[mining.cuckoo_miner_plugin_config]]
+#[[mining.miner_plugin_config]]
 #type_filter = "mean_cpu"
 #[mining.cuckoo_miner_plugin_config.device_parameters.0]
 #NUM_THREADS = 1
 
 #As above, but for older processors
-[[mining.cuckoo_miner_plugin_config]]
+[[mining.miner_plugin_config]]
 type_filter = "mean_compat_cpu"
-[mining.cuckoo_miner_plugin_config.device_parameters.0]
+[mining.miner_plugin_config.device_parameters.0]
 NUM_THREADS = 1
 
 #note lean_cpu currently has a bug which prevents it from
 #working with threads > 1
 
-#[[mining.cuckoo_miner_plugin_config]]
+#[[mining.miner_plugin_config]]
 #type_filter = "lean_cpu"
-#[mining.cuckoo_miner_plugin_config.device_parameters.0]
+#[mining.miner_plugin_config.device_parameters.0]
 #NUM_THREADS = 1
 
 #CUDA Miner (Included here for integration only, Not ready for use)
@@ -193,9 +217,9 @@ NUM_THREADS = 1
 #disabled unless explicitly enabled by setting the 'USE_DEVICE'
 #param to 1 on each device, as demonstrated below.
 
-#[[mining.cuckoo_miner_plugin_config]]
+#[[mining.miner_plugin_config]]
 #type_filter = "cuda"
-#[mining.cuckoo_miner_plugin_config.device_parameters.0]
+#[mining.miner_plugin_config.device_parameters.0]
 #USE_DEVICE = 1
 
 # Below are advanced optional per-device tweakable params
@@ -215,8 +239,8 @@ NUM_THREADS = 1
 #TRIM_3_TPB = 32
 #RENAME_3_TPB = 8
 
-#[mining.cuckoo_miner_plugin_config.device_parameters.1]
+#[mining.miner_plugin_config.device_parameters.1]
 #USE_DEVICE = 1
 
-#[mining.cuckoo_miner_plugin_config.device_parameters.2]
+#[mining.miner_plugin_config.device_parameters.2]
 #USE_DEVICE = 1

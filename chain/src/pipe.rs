@@ -272,6 +272,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		)),
 	}?;
 
+	// make sure this header has a height exactly one higher than the previous
+	// header
 	if header.height != prev.height + 1 {
 		return Err(Error::InvalidBlockHeight);
 	}
@@ -283,42 +285,43 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		return Err(Error::InvalidBlockTime);
 	}
 
+	// verify the proof of work and related parameters
+	// at this point we have a previous block header
+	// we know the height increased by one
+	// so now we can check the total_difficulty increase is also valid
+	// check the pow hash shows a difficulty at least as large
+	// as the target difficulty
 	if !ctx.opts.contains(Options::SKIP_POW) {
-		// verify the proof of work and related parameters
-
-		// explicit check to ensure we are not below the minimum difficulty
-		// we will also check difficulty based on next_difficulty later on
-		if header.difficulty < Difficulty::one() {
+		if header.total_difficulty.clone() <= prev.total_difficulty.clone() {
 			return Err(Error::DifficultyTooLow);
 		}
 
-		let diff_iter = store::DifficultyIter::from(header.previous, ctx.store.clone());
-		let difficulty =
-			consensus::next_difficulty(diff_iter).map_err(|e| Error::Other(e.to_string()))?;
+		let target_difficulty = header.total_difficulty.clone() - prev.total_difficulty.clone();
+
+		if header.pow.clone().to_difficulty() < target_difficulty {
+			return Err(Error::DifficultyTooLow);
+		}
+
+		// explicit check to ensure we are not below the minimum difficulty
+		// we will also check difficulty based on next_difficulty later on
+		if target_difficulty < Difficulty::one() {
+			return Err(Error::DifficultyTooLow);
+		}
 
 		// explicit check to ensure total_difficulty has increased by exactly
 		// the _network_ difficulty of the previous block
 		// (during testnet1 we use _block_ difficulty here)
-		if header.total_difficulty != prev.total_difficulty.clone() + difficulty.clone() {
+		let diff_iter = store::DifficultyIter::from(header.previous, ctx.store.clone());
+		let network_difficulty =
+			consensus::next_difficulty(diff_iter).map_err(|e| Error::Other(e.to_string()))?;
+		if target_difficulty != network_difficulty.clone() {
 			error!(
 				LOGGER,
 				"validate_header: BANNABLE OFFENCE: header cumulative difficulty {} != {}",
-				header.difficulty.into_num(),
-				prev.total_difficulty.into_num() + difficulty.into_num()
+				target_difficulty.into_num(),
+				prev.total_difficulty.into_num() + network_difficulty.into_num()
 			);
 			return Err(Error::WrongTotalDifficulty);
-		}
-
-		// now check that the difficulty is not less than that calculated by the
-		// difficulty iterator based on the previous block
-		if header.difficulty < difficulty {
-			error!(
-				LOGGER,
-				"validate_header: BANNABLE OFFENCE: header difficulty {} < {}",
-				header.difficulty.into_num(),
-				difficulty.into_num()
-			);
-			return Err(Error::DifficultyTooLow);
 		}
 	}
 
@@ -331,8 +334,11 @@ fn validate_block(
 	ctx: &mut BlockContext,
 	ext: &mut txhashset::Extension,
 ) -> Result<(), Error> {
-	// main isolated block validation, checks all commitment sums and sigs
-	b.validate().map_err(&Error::InvalidBlockProof)?;
+	let prev_header = ctx.store.get_block_header(&b.header.previous)?;
+
+	// main isolated block validation
+	// checks all commitment sums and sigs
+	b.validate(&prev_header).map_err(&Error::InvalidBlockProof)?;
 
 	if b.header.previous != ctx.head.last_block_h {
 		rewind_and_apply_fork(b, ctx.store.clone(), ext)?;
@@ -413,7 +419,7 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 				LOGGER,
 				"pipe: chain head reached {} @ {} [{}]",
 				b.header.height,
-				b.header.difficulty,
+				b.header.total_difficulty,
 				b.hash()
 			);
 		} else {
@@ -421,7 +427,7 @@ fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> 
 				LOGGER,
 				"pipe: chain head reached {} @ {} [{}]",
 				b.header.height,
-				b.header.difficulty,
+				b.header.total_difficulty,
 				b.hash()
 			);
 		}
@@ -512,13 +518,13 @@ pub fn rewind_and_apply_fork(
 		}
 	}
 
-	let forked_block = store.get_block(&current)?;
+	let forked_block = store.get_block_header(&current)?;
 
 	debug!(
 		LOGGER,
 		"rewind_and_apply_fork @ {} [{}]",
-		forked_block.header.height,
-		forked_block.header.hash(),
+		forked_block.height,
+		forked_block.hash(),
 	);
 
 	// rewind the sum trees up to the forking block

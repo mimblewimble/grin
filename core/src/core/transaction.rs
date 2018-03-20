@@ -302,6 +302,12 @@ impl Readable for Transaction {
 		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
+		if input_len > consensus::MAX_TX_INPUTS
+			|| output_len > consensus::MAX_TX_OUTPUTS
+			|| kernel_len > consensus::MAX_TX_KERNELS {
+				return Err(ser::Error::CorruptedData)
+			}
+
 		let inputs = read_and_verify_sorted(reader, input_len)?;
 		let outputs = read_and_verify_sorted(reader, output_len)?;
 		let kernels = read_and_verify_sorted(reader, kernel_len)?;
@@ -324,7 +330,7 @@ impl Committed for Transaction {
 		&self.outputs
 	}
 	fn overage(&self) -> i64 {
-		(self.fee() as i64)
+		self.fee() as i64
 	}
 }
 
@@ -406,15 +412,6 @@ impl Transaction {
 	///  * sum of input/output commitments matches sum of kernel commitments after applying offset
 	///  * each kernel sig is valid (i.e. tx commitments sum to zero, given above is true)
 	fn verify_kernels(&self) -> Result<(), Error> {
-		// check that each individual kernel fee is even
-		// TODO - is this strictly necessary given that we check overall tx fee?
-		// TODO - move this into verify_fee() check or maybe kernel.verify()?
-		for k in &self.kernels {
-			if k.fee & 1 != 0 {
-				return Err(Error::OddKernelFee);
-			}
-		}
-
 		// sum all input and output commitments
 		let io_sum = self.sum_commitments()?;
 
@@ -666,11 +663,10 @@ impl Input {
 			if lock_height > height {
 				return Err(Error::ImmatureCoinbase);
 			}
+
 			debug!(
 				LOGGER,
-				"input: verify_maturity: success, coinbase maturity via Merkle proof: {} vs. {}",
-				lock_height,
-				height,
+				"input: verify_maturity: success via Merkle proof: {} vs {}", lock_height, height,
 			);
 		}
 		Ok(())

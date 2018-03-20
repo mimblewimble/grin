@@ -118,18 +118,35 @@ impl OutputHandler {
 		include_proof: bool,
 	) -> BlockOutputs {
 		let header = w(&self.chain).get_header_by_height(block_height).unwrap();
-		let block = w(&self.chain).get_block(&header.hash()).unwrap();
-		let outputs = block
-			.outputs
-			.iter()
-			.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
-			.map(|output| {
-				OutputPrintable::from_output(output, w(&self.chain), &block, include_proof)
-			})
-			.collect();
-		BlockOutputs {
-			header: BlockHeaderInfo::from_header(&header),
-			outputs: outputs,
+
+		// TODO - possible to compact away blocks we care about
+		// in the period between accepting the block and refreshing the wallet
+		if let Ok(block) = w(&self.chain).get_block(&header.hash()) {
+			let outputs = block
+				.outputs
+				.iter()
+				.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
+				.map(|output| {
+					OutputPrintable::from_output(output, w(&self.chain), &header, include_proof)
+				})
+				.collect();
+
+			BlockOutputs {
+				header: BlockHeaderInfo::from_header(&header),
+				outputs: outputs,
+			}
+		} else {
+			debug!(
+				LOGGER,
+				"could not find block {:?} at height {}, maybe compacted?",
+				&header.hash(),
+				block_height,
+			);
+
+			BlockOutputs {
+				header: BlockHeaderInfo::from_header(&header),
+				outputs: vec![],
+			}
 		}
 	}
 
@@ -499,9 +516,10 @@ struct TxWrapper {
 	tx_hex: String,
 }
 
-// Push new transactions to our transaction pool, that should broadcast it
+// Push new transactions to our stem transaction pool, that should broadcast it
 // to the network if valid.
 struct PoolPushHandler<T> {
+	peers: Weak<p2p::Peers>,
 	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
 }
 
@@ -531,8 +549,28 @@ where
 			tx.outputs.len()
 		);
 
+		let mut fluff = false;
+		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
+			if let Some(_) = params.get("fluff") {
+				fluff = true;
+			}
+		}
+
+		// Will not do a stem transaction if our dandelion peer relay is empty
+		if !fluff && w(&self.peers).get_dandelion_relay().is_empty() {
+			debug!(
+				LOGGER,
+				"Missing Dandelion relay: will push stem transaction normally"
+			);
+			fluff = true;
+		}
+
+		//  Push into the pool or stempool
 		let pool_arc = w(&self.tx_pool);
-		let res = pool_arc.write().unwrap().add_to_memory_pool(source, tx);
+		let res = pool_arc
+			.write()
+			.unwrap()
+			.add_to_memory_pool(source, tx, !fluff);
 
 		match res {
 			Ok(()) => Ok(Response::with(status::Ok)),
@@ -609,6 +647,7 @@ pub fn start_rest_apis<T>(
 				tx_pool: tx_pool.clone(),
 			};
 			let pool_push_handler = PoolPushHandler {
+				peers: peers.clone(),
 				tx_pool: tx_pool.clone(),
 			};
 			let peers_all_handler = PeersAllHandler {

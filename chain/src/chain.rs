@@ -157,7 +157,15 @@ impl Chain {
 		// check if we have a head in store, otherwise the genesis block is it
 		let head = store.head();
 		let txhashset_md = match head {
-			Ok(h) => Some(store.get_block_pmmr_file_metadata(&h.last_block_h)?),
+			Ok(h) => {
+				// Add the height to the metadata for the use of the rewind log, as this isn't
+				// stored
+				let mut ts = store.get_block_pmmr_file_metadata(&h.last_block_h)?;
+				ts.output_file_md.block_height = h.height;
+				ts.rproof_file_md.block_height = h.height;
+				ts.kernel_file_md.block_height = h.height;
+				Some(ts)
+			}
 			Err(NotFoundErr) => None,
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
 		};
@@ -260,7 +268,7 @@ impl Chain {
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b, opts);
 				}
-				Ok((Some(tip.clone()), Some(b.clone())))
+				Ok((Some(tip.clone()), Some(b)))
 			}
 			Ok(None) => {
 				// block got accepted but we did not extend the head
@@ -278,12 +286,12 @@ impl Chain {
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b, opts);
 				}
-				Ok((None, Some(b.clone())))
+				Ok((None, Some(b)))
 			}
 			Err(Error::Orphan) => {
 				let block_hash = b.hash();
 				let orphan = Orphan {
-					block: b.clone(),
+					block: b,
 					opts: opts,
 					added: Instant::now(),
 				};
@@ -407,7 +415,16 @@ impl Chain {
 	pub fn validate(&self) -> Result<(), Error> {
 		let header = self.store.head_header()?;
 		let mut txhashset = self.txhashset.write().unwrap();
-		txhashset::extending(&mut txhashset, |extension| extension.validate(&header))
+
+		// Now create an extension from the txhashset and validate
+		// against the latest block header.
+		// We will rewind the extension internally to the pos for
+		// the block header to ensure the view is consistent.
+		// Force rollback first as this is a "read-only" extension.
+		txhashset::extending(&mut txhashset, |extension| {
+			extension.force_rollback();
+			extension.validate(&header)
+		})
 	}
 
 	/// Check if the input has matured sufficiently for the given block height.
@@ -450,13 +467,13 @@ impl Chain {
 	pub fn get_merkle_proof(
 		&self,
 		output: &OutputIdentifier,
-		block: &Block,
+		block_header: &BlockHeader,
 	) -> Result<MerkleProof, Error> {
 		let mut txhashset = self.txhashset.write().unwrap();
 
 		let merkle_proof = txhashset::extending(&mut txhashset, |extension| {
 			extension.force_rollback();
-			extension.merkle_proof_via_rewind(output, block)
+			extension.merkle_proof_via_rewind(output, block_header)
 		})?;
 
 		Ok(merkle_proof)
@@ -472,14 +489,12 @@ impl Chain {
 	/// the required indexes for a consumer to rewind to a consistent state
 	/// at the provided block hash.
 	pub fn txhashset_read(&self, h: Hash) -> Result<(u64, u64, File), Error> {
-		let b = self.get_block(&h)?;
-
 		// get the indexes for the block
 		let out_index: u64;
 		let kernel_index: u64;
 		{
 			let txhashset = self.txhashset.read().unwrap();
-			let (oi, ki) = txhashset.indexes_at(&b)?;
+			let (oi, ki) = txhashset.indexes_at(&h)?;
 			out_index = oi;
 			kernel_index = ki;
 		}
@@ -509,10 +524,14 @@ impl Chain {
 		let header = self.store.get_block_header(&h)?;
 		txhashset::zip_write(self.db_root.clone(), txhashset_data)?;
 
+		// write the block marker so we can safely rewind to
+		// the pos for that block when we validate the extension below
+		self.store
+			.save_block_marker(&h, &(rewind_to_output, rewind_to_kernel))?;
+
 		let mut txhashset =
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), None)?;
 		txhashset::extending(&mut txhashset, |extension| {
-			extension.rewind_pos(header.height, rewind_to_output, rewind_to_kernel)?;
 			extension.validate(&header)?;
 			// TODO validate kernels and their sums with Outputs
 			extension.rebuild_index()?;
@@ -550,17 +569,43 @@ impl Chain {
 	/// Meanwhile, the chain will not be able to accept new blocks. It should
 	/// therefore be called judiciously.
 	pub fn compact(&self) -> Result<(), Error> {
-		let mut sumtrees = self.txhashset.write().unwrap();
-		sumtrees.compact()?;
+		// First check we can successfully validate the full chain state.
+		// If we cannot then do not attempt to compact.
+		// This should not be required long term - but doing this for debug purposes.
+		self.validate()?;
 
+		// Now compact the txhashset via the extension.
+		{
+			let mut txhashes = self.txhashset.write().unwrap();
+			txhashes.compact()?;
+
+			// print out useful debug info after compaction
+			txhashset::extending(&mut txhashes, |extension| {
+				extension.dump_output_pmmr();
+				Ok(())
+			})?;
+		}
+
+		// Now check we can still successfully validate the chain state after
+		// compacting.
+		self.validate()?;
+
+		// we need to be careful here in testing as 20 blocks is not that long
+		// in wall clock time
 		let horizon = global::cut_through_horizon() as u64;
 		let head = self.head()?;
+
+		if head.height <= horizon {
+			return Ok(());
+		}
+
 		let mut current = self.store.get_header_by_height(head.height - horizon - 1)?;
 		loop {
 			match self.store.get_block(&current.hash()) {
 				Ok(b) => {
 					self.store.delete_block(&b.hash())?;
 					self.store.delete_block_pmmr_file_metadata(&b.hash())?;
+					self.store.delete_block_marker(&b.hash())?;
 				}
 				Err(NotFoundErr) => {
 					break;

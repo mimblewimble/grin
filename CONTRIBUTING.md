@@ -13,8 +13,51 @@ Find us:
 * Chat: [Gitter](https://gitter.im/grin_community/Lobby).
 * Mailing list: join the [~MimbleWimble team](https://launchpad.net/~mimblewimble) and subscribe on Launchpad.
 
-## Style Guide
+# Grin Style Guide
 
-For info on the Grin style guide, see the [style docs](doc/style.md).
+Grin uses `rustfmt` to maintain consistent formatting.
+Please use the git commit hook as explained below.
 
-Grin leverages `rustfmt` to maintain consistent formatting (and a [git commit hook](doc/style.md) to run it).
+## Install rustfmt
+
+You should use rustup. See [build docs](doc/build.md) for more info.
+
+```
+rustup component add rustfmt-preview
+rustup update
+rustfmt --version
+```
+
+and verify you did get version `0.3.4-nightly (6714a44 2017-12-23)` or newer.
+
+## Install git pre-commit hook
+
+There is a basic git [pre-commit](../.hooks/pre-commit) hook in the repo.
+
+The pre-commit hook will not prevent commits if style issues are present but it will
+indicate any files that need formatting.
+
+To enable this, create a symlink in `.git/hooks` (note the relative path) -
+
+```
+cd .git/hooks
+ln -s -f ../../.hooks/pre-commit
+```
+
+## Running rustfmt
+
+You can run rustfmt (i.e. rustfmt-preview) on one file or on all files.
+
+First try a dry-run on a file you've worked on, say:
+`rustfmt --write-mode diff -- client.rs`
+
+Any errors or rustfmt failures? Fix those manually.
+
+Then let rustfmt make any further changes and save you the work:
+
+`rustfmt --write-mode overwrite -- client.rs`
+
+*Please add the rustfmt corrections as a separate commit at the end of your Pull Request to make the reviewers happy.*
+
+
+And don't use ~~`cargo +nightly fmt`~~ if at all possible.

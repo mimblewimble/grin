@@ -24,6 +24,7 @@ use std::fs;
 use chain::{ChainStore, Tip};
 use core::core::hash::Hashed;
 use core::core::Block;
+use core::core::BlockHeader;
 use core::core::target::Difficulty;
 use keychain::Keychain;
 use core::global;
@@ -36,12 +37,14 @@ fn clean_output_dir(dir_name: &str) {
 #[test]
 fn test_various_store_indices() {
 	let _ = env_logger::init();
-	clean_output_dir(".grin");
+	let chain_dir = ".grin_idx_1";
+	clean_output_dir(chain_dir);
 
 	let keychain = Keychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
 
-	let chain_store = &chain::store::ChainKVStore::new(".grin".to_string()).unwrap() as &ChainStore;
+	let chain_store =
+		&chain::store::ChainKVStore::new(chain_dir.to_string()).unwrap() as &ChainStore;
 
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis = pow::mine_genesis_block(None).unwrap();
@@ -69,4 +72,28 @@ fn test_various_store_indices() {
 
 	let block_header = chain_store.get_header_by_height(1).unwrap();
 	assert_eq!(block_header.hash(), block_hash);
+}
+
+#[test]
+fn test_store_header_height() {
+	let _ = env_logger::init();
+	let chain_dir = ".grin_idx_2";
+	clean_output_dir(chain_dir);
+
+	let chain_store =
+		&chain::store::ChainKVStore::new(chain_dir.to_string()).unwrap() as &ChainStore;
+
+	let mut block_header = BlockHeader::default();
+	block_header.height = 1;
+
+	chain_store.save_block_header(&block_header).unwrap();
+	chain_store.save_header_height(&block_header).unwrap();
+
+	let stored_block_header = chain_store.get_header_by_height(1).unwrap();
+	assert_eq!(block_header.hash(), stored_block_header.hash());
+
+	chain_store.delete_header_by_height(1).unwrap();
+
+	let result = chain_store.get_header_by_height(1);
+	assert_eq!(result.is_err(), true);
 }

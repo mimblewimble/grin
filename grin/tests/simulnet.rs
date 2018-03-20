@@ -48,7 +48,7 @@ fn basic_genesis_mine() {
 	// Create a server pool
 	let mut pool_config = LocalServerContainerPoolConfig::default();
 	pool_config.base_name = String::from(test_name_dir);
-	pool_config.run_length_in_seconds = 5;
+	pool_config.run_length_in_seconds = 10;
 
 	pool_config.base_api_port = 30000;
 	pool_config.base_p2p_port = 31000;
@@ -338,10 +338,9 @@ fn miner_config() -> pow::types::MinerConfig {
 	pow::types::MinerConfig {
 		enable_mining: true,
 		burn_reward: true,
-		use_cuckoo_miner: false,
-		cuckoo_miner_async_mode: Some(false),
-		cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
-		cuckoo_miner_plugin_config: Some(plugin_config_vec),
+		miner_async_mode: Some(false),
+		miner_plugin_dir: None,
+		miner_plugin_config: Some(plugin_config_vec),
 		..Default::default()
 	}
 }

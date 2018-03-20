@@ -25,13 +25,16 @@ use std::time;
 use adapters::*;
 use api;
 use chain;
-use core::{genesis, global};
+use core::{consensus, genesis, global};
+use core::core::target::Difficulty;
+use dandelion_monitor;
 use miner;
 use p2p;
 use pool;
 use seed;
 use sync;
 use types::*;
+use stats::*;
 use pow;
 use util::LOGGER;
 
@@ -45,19 +48,33 @@ pub struct Server {
 	pub chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	/// Whether we're currently syncing
 	currently_syncing: Arc<AtomicBool>,
+	/// To be passed around to collect stats and info
+	state_info: ServerStateInfo,
+	/// Stop flag
 	stop: Arc<AtomicBool>,
 }
 
 impl Server {
-	/// Instantiates and starts a new server.
-	pub fn start(config: ServerConfig) -> Result<(), Error> {
+	/// Instantiates and starts a new server. Optionally takes a callback
+	/// for the server to send an ARC copy of itself, to allow another process
+	/// to poll info about the server status
+	pub fn start<F>(config: ServerConfig, mut info_callback: F) -> Result<(), Error>
+	where
+		F: FnMut(Arc<Server>),
+	{
 		let mut mining_config = config.mining_config.clone();
-		let serv = Server::new(config)?;
+		let serv = Arc::new(Server::new(config)?);
 		if mining_config.as_mut().unwrap().enable_mining {
+			{
+				let mut mining_stats = serv.state_info.mining_stats.write().unwrap();
+				mining_stats.is_enabled = true;
+			}
 			serv.start_miner(mining_config.unwrap());
 		}
 
+		info_callback(serv.clone());
 		loop {
 			thread::sleep(time::Duration::from_secs(1));
 			if serv.stop.load(Ordering::Relaxed) {
@@ -97,6 +114,7 @@ impl Server {
 		pool_adapter.set_chain(Arc::downgrade(&shared_chain));
 
 		let currently_syncing = Arc::new(AtomicBool::new(true));
+		let awaiting_peers = Arc::new(AtomicBool::new(false));
 
 		let net_adapter = Arc::new(NetToChainAdapter::new(
 			currently_syncing.clone(),
@@ -154,6 +172,7 @@ impl Server {
 
 		sync::run_sync(
 			currently_syncing.clone(),
+			awaiting_peers.clone(),
 			p2p_server.peers.clone(),
 			shared_chain.clone(),
 			skip_sync_wait,
@@ -175,6 +194,16 @@ impl Server {
 			Arc::downgrade(&p2p_server.peers),
 		);
 
+		info!(
+			LOGGER,
+			"Starting dandelion monitor: {}", &config.api_http_addr
+		);
+		dandelion_monitor::monitor_transactions(
+			config.pool_config.clone(),
+			tx_pool.clone(),
+			stop.clone(),
+		);
+
 		warn!(LOGGER, "Grin server started.");
 		Ok(Server {
 			config: config,
@@ -182,6 +211,10 @@ impl Server {
 			chain: shared_chain,
 			tx_pool: tx_pool,
 			currently_syncing: currently_syncing,
+			state_info: ServerStateInfo {
+				awaiting_peers: awaiting_peers,
+				..Default::default()
+			},
 			stop: stop,
 		})
 	}
@@ -210,6 +243,7 @@ impl Server {
 			self.tx_pool.clone(),
 			self.stop.clone(),
 		);
+		let mining_stats = self.state_info.mining_stats.clone();
 		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.port));
 		let _ = thread::Builder::new()
 			.name("miner".to_string())
@@ -220,7 +254,7 @@ impl Server {
 				while currently_syncing.load(Ordering::Relaxed) {
 					thread::sleep(secs_5);
 				}
-				miner.run_loop(config.clone(), cuckoo_size as u32, proof_size);
+				miner.run_loop(config.clone(), mining_stats, cuckoo_size as u32, proof_size);
 			});
 	}
 
@@ -240,9 +274,78 @@ impl Server {
 	/// other
 	/// consumers
 	pub fn get_server_stats(&self) -> Result<ServerStats, Error> {
+		let mining_stats = self.state_info.mining_stats.read().unwrap().clone();
+		let awaiting_peers = self.state_info.awaiting_peers.load(Ordering::Relaxed);
+
+		// Fill out stats on our current difficulty calculation
+		// TODO: check the overhead of calculating this again isn't too much
+		// could return it from next_difficulty, but would rather keep consensus
+		// code clean. This may be handy for testing but not really needed
+		// for release
+		let diff_stats = {
+			let diff_iter = self.chain.difficulty_iter();
+			let last_blocks: Vec<Result<(u64, Difficulty), consensus::TargetError>> =
+				global::difficulty_data_to_vector(diff_iter)
+					.into_iter()
+					.skip(consensus::MEDIAN_TIME_WINDOW as usize)
+					.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
+					.collect();
+
+			let mut last_time = last_blocks[0].clone().unwrap().0;
+			let tip_height = self.chain.head().unwrap().height as i64;
+			let earliest_block_height = tip_height as i64 - last_blocks.len() as i64;
+
+			let mut i = 1;
+
+			let diff_entries: Vec<DiffBlock> = last_blocks
+				.iter()
+				.skip(1)
+				.map(|n| {
+					let (time, diff) = n.clone().unwrap();
+					let dur = time - last_time;
+					let height = earliest_block_height + i + 1;
+					let index = tip_height - height;
+					i += 1;
+					last_time = time;
+					DiffBlock {
+						block_number: height,
+						block_index: index,
+						difficulty: diff.into_num(),
+						time: time,
+						duration: dur,
+					}
+				})
+				.collect();
+
+			let block_time_sum = diff_entries.iter().fold(0, |sum, t| sum + t.duration);
+			let block_diff_sum = diff_entries.iter().fold(0, |sum, d| sum + d.difficulty);
+			DiffStats {
+				height: tip_height as u64,
+				last_blocks: diff_entries,
+				average_block_time: block_time_sum / consensus::DIFFICULTY_ADJUST_WINDOW,
+				average_difficulty: block_diff_sum / consensus::DIFFICULTY_ADJUST_WINDOW,
+				window_size: consensus::DIFFICULTY_ADJUST_WINDOW,
+			}
+		};
+
+		let peer_stats = self.p2p
+			.peers
+			.connected_peers()
+			.into_iter()
+			.map(|p| {
+				let p = p.read().unwrap();
+				PeerStats::from_peer(&p)
+			})
+			.collect();
 		Ok(ServerStats {
 			peer_count: self.peer_count(),
 			head: self.head(),
+			header_head: self.header_head(),
+			is_syncing: self.currently_syncing.load(Ordering::Relaxed),
+			awaiting_peers: awaiting_peers,
+			mining_stats: mining_stats,
+			peer_stats: peer_stats,
+			diff_stats: diff_stats,
 		})
 	}
 

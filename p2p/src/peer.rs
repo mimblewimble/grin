@@ -235,6 +235,26 @@ impl Peer {
 		}
 	}
 
+	/// Sends the provided stem transaction to the remote peer. The request may be
+	/// dropped if the remote peer is known to already have the stem transaction.
+	pub fn send_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
+		if !self.tracking_adapter.has(tx.hash()) {
+			debug!(LOGGER, "Send tx {} to {}", tx.hash(), self.info.addr);
+			self.connection
+				.as_ref()
+				.unwrap()
+				.send(tx, msg::Type::StemTransaction)
+		} else {
+			debug!(
+				LOGGER,
+				"Not sending tx {} to {} (already seen)",
+				tx.hash(),
+				self.info.addr
+			);
+			Ok(())
+		}
+	}
+
 	/// Sends a request for block headers from the provided block locator
 	pub fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error> {
 		self.connection
@@ -356,9 +376,9 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.total_height()
 	}
 
-	fn transaction_received(&self, tx: core::Transaction) {
+	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
 		self.push(tx.hash());
-		self.adapter.transaction_received(tx)
+		self.adapter.transaction_received(tx, stem)
 	}
 
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {

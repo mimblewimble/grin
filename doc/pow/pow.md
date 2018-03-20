@@ -149,8 +149,6 @@ the median timestamps at the beginning and the end of the window. If the timespa
 range, (adjusted with a dampening factor to allow for normal variation,) then the difficulty is raised or lowered
 to a value aiming for the target block solve time.
 
-The minimum difficuly is 10, as defined in the consensus MINIMUM_DIFFICULTY value.
-
 ### The Mining Loop
 
 All of these systems are put together in the mining loop, which attempts to create

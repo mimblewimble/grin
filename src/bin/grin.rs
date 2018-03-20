@@ -16,11 +16,13 @@
 
 extern crate blake2_rfc as blake2;
 extern crate clap;
+extern crate cursive;
 extern crate daemonize;
 extern crate serde;
 extern crate serde_json;
 #[macro_use]
 extern crate slog;
+extern crate time;
 
 extern crate grin_api as api;
 extern crate grin_config as config;
@@ -32,10 +34,13 @@ extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
 mod client;
+pub mod tui;
 
 use std::thread;
+use std::sync::Arc;
 use std::time::Duration;
 use std::env::current_dir;
+use std::process::exit;
 
 use clap::{App, Arg, ArgMatches, SubCommand};
 use daemonize::Daemonize;
@@ -44,27 +49,37 @@ use config::GlobalConfig;
 use core::global;
 use core::core::amount_to_hr_string;
 use util::{init_logger, LoggingConfig, LOGGER};
+use tui::ui;
 
-fn start_from_config_file(mut global_config: GlobalConfig) {
-	info!(
-		LOGGER,
-		"Starting the Grin server from configuration file at {}",
-		global_config.config_file_path.unwrap().to_str().unwrap()
-	);
+/// wrap below to allow UI to clean up on stop
+fn start_server(config: grin::ServerConfig) {
+	start_server_tui(config);
+	// Just kill process for now, otherwise the process
+	// hangs around until sigint because the API server
+	// currently has no shutdown facility
+	println!("Shutting down...");
+	thread::sleep(Duration::from_millis(1000));
+	println!("Shutdown complete.");
+	exit(0);
+}
 
-	global::set_mining_mode(
-		global_config
-			.members
-			.as_mut()
-			.unwrap()
-			.server
-			.clone()
-			.chain_type,
-	);
-
-	grin::Server::start(global_config.members.as_mut().unwrap().server.clone()).unwrap();
-	loop {
-		thread::sleep(Duration::from_secs(60));
+fn start_server_tui(config: grin::ServerConfig) {
+	// Run the UI controller.. here for now for simplicity to access
+	// everything it might need
+	if config.run_tui.is_some() && config.run_tui.unwrap() {
+		println!("Starting GRIN in UI mode...");
+		grin::Server::start(config, |serv: Arc<grin::Server>| {
+			let _ = thread::Builder::new()
+				.name("ui".to_string())
+				.spawn(move || {
+					let mut controller = ui::Controller::new().unwrap_or_else(|e| {
+						panic!("Error loading UI controller: {}", e);
+					});
+					controller.run(serv.clone());
+				});
+		}).unwrap();
+	} else {
+		grin::Server::start(config, |_| {}).unwrap();
 	}
 }
 
@@ -85,17 +100,19 @@ fn main() {
 
 	if global_config.using_config_file {
 		// initialise the logger
-		init_logger(global_config.members.as_mut().unwrap().logging.clone());
-		info!(
-			LOGGER,
-			"Using configuration file at: {}",
-			global_config
-				.config_file_path
-				.clone()
-				.unwrap()
-				.to_str()
-				.unwrap()
-		);
+		let mut log_conf = global_config
+			.members
+			.as_mut()
+			.unwrap()
+			.logging
+			.clone()
+			.unwrap();
+		let run_tui = global_config.members.as_mut().unwrap().server.run_tui;
+		if run_tui.is_some() && run_tui.unwrap() {
+			log_conf.log_to_stdout = false;
+			log_conf.tui_running = Some(true);
+		}
+		init_logger(Some(log_conf));
 		global::set_mining_mode(
 			global_config
 				.members
@@ -179,7 +196,7 @@ fn main() {
 			.long("pass")
 			.help("Wallet passphrase used to generate the private key seed")
 			.takes_value(true)
-			.default_value("mimblewimble"))
+			.default_value(""))
 		.arg(Arg::with_name("data_dir")
 			.short("dd")
 			.long("data_dir")
@@ -249,7 +266,11 @@ fn main() {
 				.help("Send the transaction to the provided server")
 				.short("d")
 				.long("dest")
-				.takes_value(true)))
+				.takes_value(true))
+			.arg(Arg::with_name("fluff")
+				.help("Fluff the transaction (ignore Dandelion relay protocol)")
+				.short("f")
+				.long("fluff")))
 
 		.subcommand(SubCommand::with_name("burn")
 			.about("** TESTING ONLY ** Burns the provided amount to a known \
@@ -283,7 +304,7 @@ fn main() {
 	match args.subcommand() {
 		// server commands and options
 		("server", Some(server_args)) => {
-			server_command(server_args, global_config);
+			server_command(Some(server_args), global_config);
 		}
 
 		// client commands and options
@@ -301,7 +322,7 @@ fn main() {
 		// with most command line options being phased out
 		_ => {
 			if global_config.using_config_file {
-				start_from_config_file(global_config);
+				server_command(None, global_config);
 			} else {
 				// won't attempt to just start with defaults,
 				// and will reject
@@ -316,67 +337,111 @@ fn main() {
 /// stopping the Grin blockchain server. Processes all the command line
 /// arguments
 /// to build a proper configuration and runs Grin with that configuration.
-fn server_command(server_args: &ArgMatches, global_config: GlobalConfig) {
-	info!(LOGGER, "Starting the Grin server...");
+fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalConfig) {
+	if global_config.using_config_file {
+		info!(
+			LOGGER,
+			"Starting the Grin server from configuration file at {}",
+			global_config.config_file_path.unwrap().to_str().unwrap()
+		);
+		global::set_mining_mode(
+			global_config
+				.members
+				.as_mut()
+				.unwrap()
+				.server
+				.clone()
+				.chain_type,
+		);
+	} else {
+		info!(
+			LOGGER,
+			"Starting the Grin server (no configuration file) ..."
+		);
+	}
 
 	// just get defaults from the global config
-	let mut server_config = global_config.members.unwrap().server;
+	let mut server_config = global_config.members.as_ref().unwrap().server.clone();
 
-	if let Some(port) = server_args.value_of("port") {
-		server_config.p2p_config.port = port.parse().unwrap();
+	if let Some(a) = server_args {
+		if let Some(port) = a.value_of("port") {
+			server_config.p2p_config.port = port.parse().unwrap();
+		}
+
+		if let Some(api_port) = a.value_of("api_port") {
+			let default_ip = "0.0.0.0";
+			server_config.api_http_addr = format!("{}:{}", default_ip, api_port);
+		}
+
+		if a.is_present("mine") {
+			server_config.mining_config.as_mut().unwrap().enable_mining = true;
+		}
+
+		if let Some(wallet_url) = a.value_of("wallet_url") {
+			server_config
+				.mining_config
+				.as_mut()
+				.unwrap()
+				.wallet_listener_url = wallet_url.to_string();
+		}
+
+		if let Some(seeds) = a.values_of("seed") {
+			server_config.seeding_type = grin::Seeding::List;
+			server_config.seeds = Some(seeds.map(|s| s.to_string()).collect());
+		}
 	}
 
-	if let Some(api_port) = server_args.value_of("api_port") {
-		let default_ip = "0.0.0.0";
-		server_config.api_http_addr = format!("{}:{}", default_ip, api_port);
-	}
+	if let Some(true) = server_config.run_wallet_listener {
+		let mut wallet_config = global_config.members.unwrap().wallet;
+		let wallet_seed = match wallet::WalletSeed::from_file(&wallet_config) {
+			Ok(ws) => ws,
+			Err(_) => wallet::WalletSeed::init_file(&wallet_config)
+				.expect("Failed to create wallet seed file."),
+		};
+		let mut keychain = wallet_seed
+			.derive_keychain("")
+			.expect("Failed to derive keychain from seed file and passphrase.");
 
-	if server_args.is_present("mine") {
-		server_config.mining_config.as_mut().unwrap().enable_mining = true;
-	}
-
-	if let Some(wallet_url) = server_args.value_of("wallet_url") {
-		server_config
-			.mining_config
-			.as_mut()
-			.unwrap()
-			.wallet_listener_url = wallet_url.to_string();
-	}
-
-	if let Some(seeds) = server_args.values_of("seed") {
-		server_config.seeding_type = grin::Seeding::List;
-		server_config.seeds = Some(seeds.map(|s| s.to_string()).collect());
+		let _ = thread::Builder::new()
+			.name("wallet_listener".to_string())
+			.spawn(move || {
+				wallet::server::start_rest_apis(wallet_config, keychain);
+			});
 	}
 
 	// start the server in the different run modes (interactive or daemon)
-	match server_args.subcommand() {
-		("run", _) => {
-			grin::Server::start(server_config).unwrap();
-		}
-		("start", _) => {
-			let daemonize = Daemonize::new()
-				.pid_file("/tmp/grin.pid")
-				.chown_pid_file(true)
-				.working_directory(current_dir().unwrap())
-				.privileged_action(move || {
-					grin::Server::start(server_config.clone()).unwrap();
-					loop {
-						thread::sleep(Duration::from_secs(60));
-					}
-				});
-			match daemonize.start() {
-				Ok(_) => info!(LOGGER, "Grin server successfully started."),
-				Err(e) => error!(LOGGER, "Error starting: {}", e),
+	if let Some(a) = server_args {
+		match a.subcommand() {
+			("run", _) => {
+				start_server(server_config);
+			}
+			("start", _) => {
+				let daemonize = Daemonize::new()
+					.pid_file("/tmp/grin.pid")
+					.chown_pid_file(true)
+					.working_directory(current_dir().unwrap())
+					.privileged_action(move || {
+						start_server(server_config.clone());
+						loop {
+							thread::sleep(Duration::from_secs(60));
+						}
+					});
+				match daemonize.start() {
+					Ok(_) => info!(LOGGER, "Grin server successfully started."),
+					Err(e) => error!(LOGGER, "Error starting: {}", e),
+				}
+			}
+			("stop", _) => println!("TODO. Just 'kill $pid' for now. Maybe /tmp/grin.pid is $pid"),
+			(cmd, _) => {
+				println!(":: {:?}", server_args);
+				panic!(
+					"Unknown server command '{}', use 'grin help server' for details",
+					cmd
+				);
 			}
 		}
-		("stop", _) => println!("TODO. Just 'kill $pid' for now. Maybe /tmp/grin.pid is $pid"),
-		(cmd, _) => {
-			println!(":: {:?}", server_args);
-			panic!(
-				"Unknown server command '{}', use 'grin help server' for details",
-				cmd
-			);
-		}
+	} else {
+		start_server(server_config);
 	}
 }
 
@@ -465,25 +530,6 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			}
 			wallet::server::start_rest_apis(wallet_config, keychain);
 		}
-		// The following is gone for now, as a result of aggsig transactions
-		// being implemented
-		/*("receive", Some(receive_args)) => {
-			let input = receive_args.value_of("input").expect("Input file required");
-			let mut file = File::open(input).expect("Unable to open transaction file.");
-			let mut contents = String::new();
-			file.read_to_string(&mut contents).expect(
-				"Unable to read transaction file.",
-			);
-			if let Err(e) =
-				wallet::receive_json_tx_str(
-					&wallet_config, &keychain, contents.as_str()) {
-
-				println!("Error receiving transaction, the most likely reasons are:");
-				println!(" * the transaction has already been sent");
-				println!(" * your node isn't running or can't be reached");
-				println!("\nDetailed error: {:?}", e);
-			}
-		}*/
 		("send", Some(send_args)) => {
 			let amount = send_args
 				.value_of("amount")
@@ -501,6 +547,10 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			let dest = send_args
 				.value_of("dest")
 				.expect("Destination wallet address required");
+			let mut fluff = false;
+			if send_args.is_present("fluff") {
+				fluff = true;
+			}
 			let max_outputs = 500;
 			let result = wallet::issue_send_tx(
 				&wallet_config,
@@ -510,6 +560,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				dest.to_string(),
 				max_outputs,
 				selection_strategy == "all",
+				fluff,
 			);
 			match result {
 				Ok(_) => info!(
@@ -532,11 +583,11 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 						recipient_fee,
 					} => {
 						error!(
-			    			LOGGER,
-			    			"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
-			    			amount_to_hr_string(recipient_fee),
-			    			amount_to_hr_string(sender_amount)
-			    		);
+								LOGGER,
+								"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
+								amount_to_hr_string(recipient_fee),
+								amount_to_hr_string(sender_amount)
+							);
 					}
 					_ => {
 						error!(LOGGER, "Tx not sent: {:?}", e);

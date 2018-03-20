@@ -125,6 +125,10 @@ pub enum ErrorKind {
 	#[fail(display = "Wallet seed exists error")]
 	WalletSeedExists,
 
+	/// Wallet seed doesn't exist
+	#[fail(display = "Wallet seed doesn't exist error")]
+	WalletSeedDoesntExist,
+
 	#[fail(display = "Generic error: {}", _0)] GenericError(&'static str),
 }
 
@@ -374,6 +378,14 @@ impl OutputData {
 			return false;
 		} else if self.status == OutputStatus::Unconfirmed && self.is_coinbase {
 			return false;
+		} else if self.is_coinbase && self.block.is_none() {
+			// if we do not have a block hash for coinbase output we cannot spent it
+			// block index got compacted before we refreshed our wallet?
+			return false;
+		} else if self.is_coinbase && self.merkle_proof.is_none() {
+			// if we do not have a Merkle proof for coinbase output we cannot spent it
+			// block index got compacted before we refreshed our wallet?
+			return false;
 		} else if self.lock_height > current_height {
 			return false;
 		} else if self.status == OutputStatus::Unspent
@@ -463,12 +475,11 @@ impl WalletSeed {
 		} else {
 			error!(
 				LOGGER,
-				"Run: \"grin wallet init\" to initialize a new wallet.",
-			);
-			panic!(format!(
-				"wallet seed file {} could not be opened (grin wallet init)",
+				"wallet seed file {} could not be opened (grin wallet init). \
+				 Run \"grin wallet init\" to initialize a new wallet.",
 				seed_file_path
-			));
+			);
+			Err(ErrorKind::WalletSeedDoesntExist)?
 		}
 	}
 }

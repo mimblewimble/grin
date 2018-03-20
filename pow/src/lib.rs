@@ -42,7 +42,9 @@ extern crate time;
 extern crate grin_core as core;
 extern crate grin_util as util;
 
-extern crate cuckoo_miner;
+// Re-export (mostly for stat collection)
+pub extern crate cuckoo_miner as cuckoo_;
+pub use cuckoo_ as cuckoo_miner;
 
 mod siphash;
 pub mod plugin;
@@ -51,7 +53,6 @@ pub mod types;
 
 use core::consensus;
 use core::core::BlockHeader;
-use core::core::hash::Hashed;
 use core::core::Proof;
 use core::core::target::Difficulty;
 use core::global;
@@ -75,22 +76,8 @@ pub trait MiningWorker {
 /// Validates the proof of work of a given header, and that the proof of work
 /// satisfies the requirements of the header.
 pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
-	// make sure the pow hash shows a difficulty at least as large as the target
-	// difficulty
-	if bh.difficulty > bh.pow.clone().to_difficulty() {
-		return false;
-	}
-	Cuckoo::new(&bh.hash()[..], cuckoo_sz).verify(bh.pow.clone(), consensus::EASINESS as u64)
-}
-
-/// Uses the much easier Cuckoo20 (mostly for
-/// tests).
-pub fn pow20<T: MiningWorker>(
-	miner: &mut T,
-	bh: &mut BlockHeader,
-	diff: Difficulty,
-) -> Result<(), Error> {
-	pow_size(miner, bh, diff, 20)
+	Cuckoo::new(&bh.pre_pow_hash()[..], cuckoo_sz)
+		.verify(bh.pow.clone(), consensus::EASINESS as u64)
 }
 
 /// Mines a genesis block, using the config specified miner if specified.
@@ -99,13 +86,19 @@ pub fn mine_genesis_block(
 	miner_config: Option<types::MinerConfig>,
 ) -> Result<core::core::Block, Error> {
 	let mut gen = genesis::genesis_testnet2();
-	let diff = gen.header.difficulty.clone();
+	if global::is_user_testing_mode() {
+		gen = genesis::genesis_dev();
+		gen.header.timestamp = time::now();
+	}
+
+	// total_difficulty on the genesis header *is* the difficulty of that block
+	let genesis_difficulty = gen.header.total_difficulty.clone();
 
 	let sz = global::sizeshift() as u32;
 	let proof_size = global::proofsize();
 
 	let mut miner: Box<MiningWorker> = match miner_config {
-		Some(c) => if c.use_cuckoo_miner {
+		Some(c) => if c.enable_mining {
 			let mut p = plugin::PluginMiner::new(consensus::EASINESS, sz, proof_size);
 			p.init(c.clone());
 			Box::new(p)
@@ -114,7 +107,7 @@ pub fn mine_genesis_block(
 		},
 		None => Box::new(cuckoo::Miner::new(consensus::EASINESS, sz, proof_size)),
 	};
-	pow_size(&mut *miner, &mut gen.header, diff, sz as u32).unwrap();
+	pow_size(&mut *miner, &mut gen.header, genesis_difficulty, sz as u32).unwrap();
 	Ok(gen)
 }
 
@@ -138,7 +131,7 @@ pub fn pow_size<T: MiningWorker + ?Sized>(
 	loop {
 		// can be trivially optimized by avoiding re-serialization every time but this
 		// is not meant as a fast miner implementation
-		let pow_hash = bh.hash();
+		let pow_hash = bh.pre_pow_hash();
 
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good
