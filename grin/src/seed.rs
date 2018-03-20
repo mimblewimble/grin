@@ -155,9 +155,7 @@ fn monitor_peers(
 	}
 }
 
-fn update_dandelion_relay(
-	peers: Arc<p2p::Peers>,
-) {
+fn update_dandelion_relay(peers: Arc<p2p::Peers>) {
 	// Dandelion Relay Updater
 	let dandelion_relay = peers.get_dandelion_relay();
 	if dandelion_relay.is_empty() {
