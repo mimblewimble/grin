@@ -40,7 +40,7 @@ db_root = ".grin"
 #Testnet1 - Testnet1 genesis block (cuckoo 16)
 #Testnet2 - Testnet2 genesis block (cuckoo 30)
 #
-chain_type = "Testnet1"
+chain_type = "Testnet2"
 
 #run the node in "full archive" mode (default is fast-sync, pruned node)
 #archive_mode = false
@@ -73,6 +73,27 @@ port = 13414
 #peers_deny = ["192.168.0.3:13414", "192.168.0.4:13414"]
 
 #########################################
+### WALLET CONFIGURATION              ###
+#########################################
+
+[wallet]
+
+# Whether the wallet should be open to the outside
+external = false
+
+# Host IP for wallet listener
+api_listen_interface = "127.0.0.1"
+
+# Port for wallet listener
+api_listen_port = "13415"
+
+# Where the wallet should find a running node
+check_node_api_http_addr = "http://localhost:13413"
+
+# Where to find wallet files (seed, data, etc)
+data_file_dir = "."
+
+#########################################
 ### LOGGING CONFIGURATION             ###
 #########################################
 
@@ -88,7 +109,7 @@ stdout_log_level = "Warning"
 log_to_file = true
 
 # Log level for file: Critical, Error, Warning, Info, Debug, Trace
-file_log_level = "Info"
+file_log_level = "Debut"
 
 # Log file path
 log_file_path = "grin.log"
