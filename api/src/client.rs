@@ -14,12 +14,17 @@
 
 //! High level JSON/HTTP client API
 
+use futures::future;
+use futures::{Future, Stream};
+
 use hyper;
-use hyper::client::Response;
-use hyper::status::{StatusClass, StatusCode};
+use hyper::{Client, Method, Request, StatusCode};
+use hyper::header::{ContentLength, ContentType};
+
 use serde::{Deserialize, Serialize};
 use serde_json;
-use std::io::Read;
+
+use tokio_core::reactor::Core;
 
 use rest::Error;
 
@@ -30,10 +35,31 @@ pub fn get<'a, T>(url: &'a str) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de>,
 {
-	let client = hyper::Client::new();
-	let res = check_error(client.get(url).send())?;
-	serde_json::from_reader(res)
-		.map_err(|e| Error::Internal(format!("Server returned invalid JSON: {}", e)))
+
+    let uri = url.parse::<hyper::Uri>().unwrap();
+    let mut core = Core::new().unwrap();
+    let client = Client::new(&core.handle());
+    let req_f = client.get(uri).map_err(|_| {Error::Internal(format!("The server does not respond. Please check if the server is operational."))});
+    let work = req_f.and_then(|res| {
+        let status_code = res.status();
+        res.body().concat2()
+        .map_err(|_| {Error::Internal(format!("The server does not respond. Please check if the server is operational."))})
+        .and_then(move |body_chunks| {
+            let s = String::from_utf8(body_chunks.to_vec()).unwrap();
+            match status_code {
+                StatusCode::Ok => future::ok::<_, Error>(s),
+                StatusCode::BadRequest => future::err::<_, Error>(Error::Argument(format!("Server returned missing argument error: {}", s))),
+                StatusCode::InternalServerError => future::err::<_, Error>(Error::Internal(format!("Server returned internal error: {}", s))),
+                StatusCode::NotFound => future::err::<_, Error>(Error::NotFound),
+                _ => future::err::<_, Error>(Error::Internal(format!("Server returned undefined internal error"))),
+            }
+        })
+    });
+    let json = core.run(work)?;
+    serde_json::from_slice(json.as_ref()).map_err(|e| {
+        Error::Internal(format!("Server returned invalid JSON: {}", e))
+    })
+		
 }
 
 /// Helper function to easily issue a HTTP POST request with the provided JSON
@@ -44,42 +70,35 @@ pub fn post<'a, IN>(url: &'a str, input: &IN) -> Result<(), Error>
 where
 	IN: Serialize,
 {
-	let in_json = serde_json::to_string(input)
-		.map_err(|e| Error::Internal(format!("Could not serialize data to JSON: {}", e)))?;
-	let client = hyper::Client::new();
-	let _res = check_error(client.post(url).body(&mut in_json.as_bytes()).send())?;
+
+    let json = serde_json::to_string(input).map_err(|e| {
+            Error::Internal(format!("Could not serialize data to JSON: {}", e))
+    })?;
+
+    let uri = url.parse::<hyper::Uri>().unwrap();
+    let mut req = Request::new(Method::Post, uri);
+    req.headers_mut().set(ContentType::json());
+    req.headers_mut().set(ContentLength(json.len() as u64));
+    req.set_body(json);
+
+    let mut core = Core::new().unwrap();
+    let client = Client::new(&core.handle());
+    let req_f = client.request(req).map_err(|_| {Error::Internal(format!("The server does not response. Please check if the server is operational."))});
+    let work = req_f.and_then(|res| {
+        let status_code = res.status();        
+        res.body().concat2()
+        .map_err(|_| {Error::Internal(format!("The server does not response. Please check if the server is operational."))})
+        .and_then(move |body_chunks| {
+            let s = String::from_utf8(body_chunks.to_vec()).unwrap();
+            match status_code {
+                StatusCode::Ok => future::ok::<_, Error>(s),
+                StatusCode::BadRequest => future::err::<_, Error>(Error::Argument(format!("Server returned missing argument error: {}", s))),
+                StatusCode::InternalServerError => future::err::<_, Error>(Error::Internal(format!("Server returned internal error: {}", s))),
+                StatusCode::NotFound => future::err::<_, Error>(Error::NotFound),
+                _ => future::err::<_, Error>(Error::Internal(format!("Server returned unknown internal error."))),
+            }
+        })
+    });
+    let _ = core.run(work)?;
 	Ok(())
-}
-
-// convert hyper error and check for non success response codes
-fn check_error(res: hyper::Result<Response>) -> Result<Response, Error> {
-	if let Err(e) = res {
-		return Err(Error::Internal(format!("Error during request: {}", e)));
-	}
-	let mut response = res.unwrap();
-	match response.status.class() {
-		StatusClass::Success => Ok(response),
-		StatusClass::ServerError => Err(Error::Internal(format!(
-			"Server error: {}",
-			err_msg(&mut response)
-		))),
-		StatusClass::ClientError => if response.status == StatusCode::NotFound {
-			Err(Error::NotFound)
-		} else {
-			Err(Error::Argument(format!(
-				"Argument error: {}",
-				err_msg(&mut response)
-			)))
-		},
-		_ => Err(Error::Internal(format!("Unrecognized error."))),
-	}
-}
-
-fn err_msg(resp: &mut Response) -> String {
-	let mut msg = String::new();
-	if let Err(_) = resp.read_to_string(&mut msg) {
-		"<no message>".to_owned()
-	} else {
-		msg
-	}
 }

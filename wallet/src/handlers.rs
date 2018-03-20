@@ -12,15 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use iron::prelude::*;
-use iron::Handler;
-use iron::status;
+use futures::{Future, Stream};
+
+use hyper::Error as HyperError;
+use hyper::server::{Request, Response};
+
 use serde_json;
-use bodyparser;
 
 use receiver::receive_coinbase;
 use core::ser;
 use api;
+use api::rest::{error_response, Handler, json_response, PathParams};
 use keychain::Keychain;
 use types::*;
 use util;
@@ -63,19 +65,28 @@ impl CoinbaseHandler {
 // TODO - error handling - what to return if we fail to get the wallet lock for
 // some reason...
 impl Handler for CoinbaseHandler {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let struct_body = req.get::<bodyparser::Struct<BlockFees>>();
+	fn handle(&self, req: Request, _params: PathParams) -> Result<Response, HyperError> {
+		let _ = req.body().concat2().and_then(move |body| {
+			let block_fees: BlockFees = match serde_json::from_slice(&body) {
+				Ok(block_fees) => block_fees,
+				Err(e) => return error_response(api::Error::Argument(e.to_string())),
+			};
 
-		if let Ok(Some(block_fees)) = struct_body {
+			// TODO - refactoring the commented line below upon new error mapping of Fail between client/server.
+			// commenting out the following line until setting standard of 
+			// how to map Fail errors into Http StatusCode for client/server error handling/mapping.
+			// reference) https://github.com/mimblewimble/grin/pull/713
+			// Currently using mapping between Api::Error and Hyper::StatusCode.
+			/*
 			let coinbase = self.build_coinbase(&block_fees)
 				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
-			if let Ok(json) = serde_json::to_string(&coinbase) {
-				Ok(Response::with((status::Ok, json)))
-			} else {
-				Ok(Response::with((status::BadRequest, "")))
-			}
-		} else {
-			Ok(Response::with((status::BadRequest, "")))
-		}
+			*/
+			let coinbase = match self.build_coinbase(&block_fees) {
+				Ok(coinbase) => coinbase,
+				Err(e) => return error_response(api::Error::Argument(e.to_string())),
+			};
+			return json_response(&coinbase);
+		});
+		Ok(Response::new())
 	}
 }

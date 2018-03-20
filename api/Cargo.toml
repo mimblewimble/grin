@@ -11,14 +11,15 @@ grin_pool = { path = "../pool" }
 grin_store = { path = "../store" }
 grin_util = { path = "../util" }
 grin_p2p = { path = "../p2p" }
-hyper = "~0.10.6"
+error-chain = "~0.11"
+fnv = "1.0"
+futures = "~0.1"
+hyper = "~0.11.22"
 slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
 lazy_static = "~0.2.8"
-iron = "~0.5.1"
-router = "~0.5.1"
 regex = "^0.2"
-mount = "~0.3.0"
-urlencoded = "~0.5.0"
 serde = "~1.0.8"
 serde_derive = "~1.0.8"
 serde_json = "~1.0.9"
+tokio-core = "~0.1"
+url = "~1.7.0"

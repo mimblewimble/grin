@@ -12,6 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! RESTful API server to easily expose services as RESTful JSON/HTTP endpoints.
+//! Fairly constrained on what the service API must look like by design.
+//!
+//! # Examples
+//!
+//! ```text
+//!	struct IndexHandler {
+//!	 list: Vec<String>,
+//!	}
+//!
+//!	impl Handler for IndexHandler {
+//!	 fn handle(&self, _req: Request, _params: PathParams) -> Result<Response, HyperError> {
+//!		some implementation...
+//!	 }
+//!	}
+//!
+//!	let router = router!(
+//!	 get "/v1" => index_handler,
+//!	);
+//!
+//!	let apis = ApiServer::new(router.unwrap());
+//!	info!(LOGGER, "Starting Http API server at {}.", addr);
+//!	let socket_addr = addr[..].parse().unwrap(); 
+//!	let server = Http::new().bind(&socket_addr, apis).unwrap();
+//!	server.run().unwrap();
+//!
+//! ```
+
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_p2p as p2p;
@@ -19,27 +47,31 @@ extern crate grin_pool as pool;
 extern crate grin_store as store;
 extern crate grin_util as util;
 
+#[macro_use]
+extern crate error_chain;
+extern crate fnv;
+extern crate futures;
 extern crate hyper;
-extern crate iron;
 #[macro_use]
 extern crate lazy_static;
-extern crate mount;
 extern crate regex;
-#[macro_use]
-extern crate router;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
 #[macro_use]
 extern crate slog;
-extern crate urlencoded;
+extern crate tokio_core;
+extern crate url;
 
 pub mod client;
+#[macro_use]
+pub mod router;
 mod handlers;
-mod rest;
+pub mod rest;
 mod types;
 
 pub use handlers::start_rest_apis;
 pub use types::*;
 pub use rest::*;
+pub use router::router::Router;

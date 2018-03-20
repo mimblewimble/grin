@@ -12,27 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! RESTful API server to easily expose services as RESTful JSON/HTTP endpoints.
-//! Fairly constrained on what the service API must look like by design.
-//!
-//! To use it, just have your service(s) implement the ApiEndpoint trait and
-//! register them on a ApiServer.
+use fnv::FnvHashMap;
+
+use futures::IntoFuture;
+use futures::future::FutureResult;
+
+use hyper;
+use hyper::{Error as HyperError, StatusCode};
+use hyper::header::ContentLength;
+use hyper::server::{Service, NewService, Request, Response};
+
+use serde::Serialize;
+use serde_json;
 
 use std::error;
 use std::fmt::{self, Display, Formatter};
-use std::net::ToSocketAddrs;
 use std::string::ToString;
-use std::mem;
+use std::sync::Arc;
 
-use iron::prelude::*;
-use iron::{status, Listening};
-use iron::middleware::Handler;
-use router::Router;
-use mount::Mount;
-
+use super::router::Router;
 use store;
 
-/// Errors that can be returned by an ApiEndpoint implementation.
+/// Errors that can be returned by Handler implementation.
 #[derive(Debug)]
 pub enum Error {
 	Internal(String),
@@ -60,16 +61,6 @@ impl error::Error for Error {
 	}
 }
 
-impl From<Error> for IronError {
-	fn from(e: Error) -> IronError {
-		match e {
-			Error::Argument(_) => IronError::new(e, status::Status::BadRequest),
-			Error::Internal(_) => IronError::new(e, status::Status::InternalServerError),
-			Error::NotFound => IronError::new(e, status::Status::NotFound),
-		}
-	}
-}
-
 impl From<store::Error> for Error {
 	fn from(e: store::Error) -> Error {
 		match e {
@@ -79,46 +70,127 @@ impl From<store::Error> for Error {
 	}
 }
 
-/// HTTP server allowing the registration of ApiEndpoint implementations.
+// === Handler trait and associated type parameter ===
+
+/// Type of path parameter.
+///
+/// The value of path parameter (a.k.a. wildcard) is retrieved and returned by
+/// lookup function of node of radix trie.
+/// For speed, FnvHashMap is used.
+pub type PathParams = FnvHashMap<String, String>;
+
+/// Handler trait
+pub trait Handler: Send + Sync + 'static {
+    /// Produce a `Response` from a Request, with the possibility of error.
+    fn handle(&self, req: Request, params: PathParams) -> Result<Response, HyperError>;
+}
+
+/// Handler Fn implementation
+impl<F> Handler for F
+where
+    F: Fn(Request, PathParams) -> Result<Response, HyperError> + Send + Sync + 'static,
+{
+    fn handle(&self, req: Request, params: PathParams) -> Result<Response, HyperError> {
+        (*self)(req, params)
+    }
+}
+
+/// API server implementing hyper::NewService trait
+/// to makes copy of hyper::Service for each Http request.
 pub struct ApiServer {
-	root: String,
-	router: Router,
-	mount: Mount,
-	server_listener: Option<Listening>,
+	service: Arc<ApiService>,
 }
 
 impl ApiServer {
-	/// Creates a new ApiServer that will serve ApiEndpoint implementations
-	/// under the root URL.
-	pub fn new(root: String) -> ApiServer {
+	/// Creates a new ApiServer that will serve hyper::NewService implementation.
+	pub fn new(router: Router) -> ApiServer {
 		ApiServer {
-			root: root,
-			router: Router::new(),
-			mount: Mount::new(),
-			server_listener: None,
+			service: Arc::new(ApiService::new(router)),
 		}
 	}
+}
 
-	/// Starts the ApiServer at the provided address.
-	pub fn start<A: ToSocketAddrs>(&mut self, addr: A) -> Result<(), String> {
-		// replace this value to satisfy borrow checker
-		let r = mem::replace(&mut self.router, Router::new());
-		let mut m = mem::replace(&mut self.mount, Mount::new());
-		m.mount("/", r);
-		let result = Iron::new(m).http(addr);
-		let return_value = result.as_ref().map(|_| ()).map_err(|e| e.to_string());
-		self.server_listener = Some(result.unwrap());
-		return_value
-	}
+impl NewService for ApiServer {
+    type Request = Request;
+    type Response = Response;
+    type Error = hyper::Error;
+    type Instance = Arc<ApiService>;
 
-	/// Stops the API server
-	pub fn stop(&mut self) {
-		let r = mem::replace(&mut self.server_listener, None);
-		r.unwrap().close().unwrap();
-	}
+    fn new_service(&self) -> ::std::io::Result<Self::Instance> {
+		Ok(self.service.clone())
+    }
+}
 
-	/// Registers an iron handler (via mount)
-	pub fn register_handler<H: Handler>(&mut self, handler: H) -> &mut Mount {
-		self.mount.mount(&self.root, handler)
+/// API service implementing hyper::Service trait
+/// to serve each Http request.
+#[derive(Clone)]
+pub struct ApiService {
+	router: Arc<Router>
+}
+
+impl ApiService {
+	/// Creates a new ApiService that will serve hyper::Service implementation.
+	pub fn new(router: Router) -> ApiService {
+		ApiService {
+			router: Arc::new(router),
+		}
 	}
+}
+
+impl Service for ApiService {
+    type Request = Request;
+    type Response = Response;
+    type Error = hyper::Error;
+    type Future = FutureResult<Response, hyper::Error>;
+
+    fn call(&self, req: Self::Request) -> Self::Future {
+		self.router.lookup(req).into_future()
+    }
+}
+
+// === utils ===
+
+/// Utility to serialize a struct into JSON and produce Response out of it.
+pub fn json_response<T>(s: &T) -> Result<Response, HyperError>
+where
+	T: Serialize,
+{
+	match serde_json::to_string(s) {
+        Ok(json) => Ok(Response::new()
+                    .with_header(ContentLength(json.len() as u64))
+                    .with_body(json)),
+        Err(_) => error_response(Error::Internal("failed to serialize data into json.".to_string())),
+
+	}
+}
+
+/// pretty-printed version of above
+pub fn json_response_pretty<T>(s: &T) -> Result<Response, HyperError>
+where
+	T: Serialize,
+{
+	match serde_json::to_string_pretty(s) {
+        Ok(json) => Ok(Response::new()
+                    .with_header(ContentLength(json.len() as u64))
+                    .with_body(json)),
+        Err(_) => error_response(Error::Internal("failed to serialize data into pretty-printed json.".to_string())),
+
+	}
+}
+
+/// Takes a `Error` enum as an argument and
+/// returns Response.
+pub fn error_response(e: Error) -> Result<Response, HyperError> {
+    match e {
+        Error::Argument(message) => Ok(Response::new()
+                                .with_status(StatusCode::BadRequest)
+                                .with_header(ContentLength(message.len() as u64))
+                                .with_body(message)),
+        Error::Internal(message) => Ok(Response::new()
+                                .with_status(StatusCode::InternalServerError)
+                                .with_header(ContentLength(message.len() as u64))
+                                .with_body(message)),
+        Error::NotFound => Ok(Response::new()
+                                .with_status(StatusCode::NotFound)),
+    }
 }

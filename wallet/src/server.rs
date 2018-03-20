@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use api::ApiServer;
+use hyper::server::Http;
+
+use api::{ApiServer, Router};
 use keychain::Keychain;
 use handlers::CoinbaseHandler;
 use receiver::WalletReceiver;
@@ -20,11 +22,6 @@ use types::WalletConfig;
 use util::LOGGER;
 
 pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
-	info!(
-		LOGGER,
-		"Starting the Grin wallet receiving daemon at {}...",
-		wallet_config.api_listen_addr()
-	);
 
 	let receive_tx_handler = WalletReceiver {
 		config: wallet_config.clone(),
@@ -36,14 +33,23 @@ pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 	};
 
 	let router = router!(
-		receive_tx: post "/receive/transaction" => receive_tx_handler,
-		receive_coinbase: post "/receive/coinbase" => coinbase_handler,
+		post "/v1/receive/transaction" => receive_tx_handler,
+		post "/v1/receive/coinbase" => coinbase_handler,
 	);
 
-	let mut apis = ApiServer::new("/v1".to_string());
-	apis.register_handler(router);
-	match apis.start(wallet_config.api_listen_addr()) {
-		Err(e) => error!(LOGGER, "Failed to start Grin wallet listener: {}.", e),
-		Ok(_) => info!(LOGGER, "Wallet listener started"),
-	};
+	let apis = ApiServer::new(router.unwrap());
+	info!(
+		LOGGER,
+		"Starting the Grin wallet API server at {}.",
+		wallet_config.api_listen_addr()
+	);
+
+	let socket_addr = wallet_config.api_listen_addr().parse().unwrap(); 
+	let server = Http::new().bind(&socket_addr, apis).unwrap();
+	info!(
+		LOGGER,
+		"The Grin wallet API server is listening on http://{}.",
+		server.local_addr().unwrap()
+	);
+	server.run().unwrap();
 }

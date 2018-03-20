@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::io::Read;
+use futures::{Future, Stream};
+
+use hyper::Error as HyperError;
+use hyper::server::{Http, Request, Response};
+
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock, Weak};
 use std::thread;
 
-use iron::prelude::*;
-use iron::Handler;
-use iron::status;
-use urlencoded::UrlEncodedQuery;
-use serde::Serialize;
 use serde_json;
+use url::form_urlencoded;
 
 use chain;
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};
@@ -31,6 +32,7 @@ use pool;
 use p2p;
 use regex::Regex;
 use rest::*;
+use router::router::Router;
 use util::secp::pedersen::Commitment;
 use types::*;
 use util;
@@ -52,7 +54,7 @@ struct IndexHandler {
 impl IndexHandler {}
 
 impl Handler for IndexHandler {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+	fn handle(&self, _req: Request, _params: PathParams) -> Result<Response, HyperError> {
 		json_response_pretty(&self.list)
 	}
 }
@@ -88,17 +90,15 @@ impl OutputHandler {
 		Err(Error::NotFound)
 	}
 
-	fn outputs_by_ids(&self, req: &mut Request) -> Vec<Output> {
+	fn outputs_by_ids(&self, query_string: HashMap<String, Vec<String>>) -> Vec<Output> {
 		let mut commitments: Vec<&str> = vec![];
-		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
-			if let Some(ids) = params.get("id") {
-				for id in ids {
-					for id in id.split(",") {
-						commitments.push(id.clone());
-					}
-				}
-			}
-		}
+        if let Some(ids) = query_string.get("id") {
+            for id in ids {
+                for id in id.split(",") {
+                    commitments.push(id.clone());
+                }
+            }
+        }
 
 		debug!(LOGGER, "outputs_by_ids: {:?}", commitments);
 
@@ -151,36 +151,34 @@ impl OutputHandler {
 	}
 
 	// returns outputs for a specified range of blocks
-	fn outputs_block_batch(&self, req: &mut Request) -> Vec<BlockOutputs> {
+	fn outputs_block_batch(&self, query_string: HashMap<String, Vec<String>>) -> Vec<BlockOutputs> {
 		let mut commitments: Vec<Commitment> = vec![];
 		let mut start_height = 1;
 		let mut end_height = 1;
 		let mut include_rp = false;
 
-		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
-			if let Some(ids) = params.get("id") {
-				for id in ids {
-					for id in id.split(",") {
-						if let Ok(x) = util::from_hex(String::from(id)) {
-							commitments.push(Commitment::from_vec(x));
-						}
-					}
-				}
-			}
-			if let Some(heights) = params.get("start_height") {
-				for height in heights {
-					start_height = height.parse().unwrap();
-				}
-			}
-			if let Some(heights) = params.get("end_height") {
-				for height in heights {
-					end_height = height.parse().unwrap();
-				}
-			}
-			if let Some(_) = params.get("include_rp") {
-				include_rp = true;
-			}
-		}
+        if let Some(ids) = query_string.get("id") {
+            for id in ids {
+                for id in id.split(",") {
+                    if let Ok(x) = util::from_hex(String::from(id)) {
+                        commitments.push(Commitment::from_vec(x));
+                    }
+                }
+            }
+        }
+        if let Some(heights) = query_string.get("start_height") {
+            for height in heights {
+                start_height = height.parse().unwrap();
+            }
+        }
+        if let Some(heights) = query_string.get("end_height") {
+            for height in heights {
+                end_height = height.parse().unwrap();
+            }
+        }
+        if let Some(_) = query_string.get("include_rp") {
+            include_rp = true;
+        }
 
 		debug!(
 			LOGGER,
@@ -204,17 +202,18 @@ impl OutputHandler {
 }
 
 impl Handler for OutputHandler {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let url = req.url.clone();
-		let mut path_elems = url.path();
-		if *path_elems.last().unwrap() == "" {
-			path_elems.pop();
-		}
-		match *path_elems.last().unwrap() {
-			"byids" => json_response(&self.outputs_by_ids(req)),
-			"byheight" => json_response(&self.outputs_block_batch(req)),
-			_ => Ok(Response::with((status::BadRequest, ""))),
-		}
+	fn handle(&self, req: Request, params: PathParams) -> Result<Response, HyperError> {
+        let query_string = get_query_string(req);
+        match params.get("option") {
+            Some(option) => {
+                match option.as_ref() {
+                    "byids" => json_response(&self.outputs_by_ids(query_string)),
+                    "byheight" => json_response(&self.outputs_block_batch(query_string)),
+                    _ => error_response(Error::Argument("Unsupported request".to_string())),
+                }
+            },
+            None => error_response(Error::Argument("Unsupported request".to_string())),
+    	}
 	}
 }
 
@@ -253,30 +252,30 @@ impl TxHashSetHandler {
 }
 
 impl Handler for TxHashSetHandler {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let url = req.url.clone();
-		let mut path_elems = url.path();
-		if *path_elems.last().unwrap() == "" {
-			path_elems.pop();
-		}
-		// TODO: probably need to set a reasonable max limit here
-		let mut last_n = 10;
-		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
-			if let Some(nums) = params.get("n") {
-				for num in nums {
-					if let Ok(n) = str::parse(num) {
-						last_n = n;
-					}
-				}
-			}
-		}
-		match *path_elems.last().unwrap() {
-			"roots" => json_response_pretty(&self.get_roots()),
-			"lastoutputs" => json_response_pretty(&self.get_last_n_output(last_n)),
-			"lastrangeproofs" => json_response_pretty(&self.get_last_n_rangeproof(last_n)),
-			"lastkernels" => json_response_pretty(&self.get_last_n_kernel(last_n)),
-			_ => Ok(Response::with((status::BadRequest, ""))),
-		}
+	fn handle(&self, req: Request, params: PathParams) -> Result<Response, HyperError> {
+        let query_string = get_query_string(req);
+        // TODO: probably need to set a reasonable max limit here
+        let mut last_n = 10;
+        if let Some(nums) = query_string.get("n") {
+            for num in nums {
+                if let Ok(n) = str::parse(num) {
+                    last_n = n;
+                }
+            }
+        }
+
+        match params.get("option") {
+            Some(option) => {
+                match option.as_ref() {
+                    "roots" => json_response_pretty(&self.get_roots()),
+                    "lastutxos" => json_response_pretty(&self.get_last_n_output(last_n)),
+                    "lastrangeproofs" => json_response_pretty(&self.get_last_n_rangeproof(last_n)),
+                    "lastkernels" => json_response_pretty(&self.get_last_n_kernel(last_n)),
+                    _ => error_response(Error::Argument("Unsupported request".to_string())),
+                }
+            },
+            None => error_response(Error::Argument("Unsupported request".to_string())),
+        }	
 	}
 }
 
@@ -285,7 +284,7 @@ pub struct PeersAllHandler {
 }
 
 impl Handler for PeersAllHandler {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+	fn handle(&self, _req: Request, _params: PathParams) -> Result<Response, HyperError> {
 		let peers = &w(&self.peers).all_peers();
 		json_response_pretty(&peers)
 	}
@@ -296,7 +295,7 @@ pub struct PeersConnectedHandler {
 }
 
 impl Handler for PeersConnectedHandler {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+	fn handle(&self, _req: Request, _params: PathParams) -> Result<Response, HyperError> {
 		let mut peers = vec![];
 		for p in &w(&self.peers).connected_peers() {
 			let p = p.read().unwrap();
@@ -315,33 +314,32 @@ pub struct PeerPostHandler {
 }
 
 impl Handler for PeerPostHandler {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let url = req.url.clone();
-		let mut path_elems = url.path();
-		if *path_elems.last().unwrap() == "" {
-			path_elems.pop();
-		}
-		match *path_elems.last().unwrap() {
-			"ban" => {
-				path_elems.pop();
-				if let Ok(addr) = path_elems.last().unwrap().parse() {
-					w(&self.peers).ban_peer(&addr);
-					Ok(Response::with((status::Ok, "")))
-				} else {
-					Ok(Response::with((status::BadRequest, "")))
-				}
-			}
-			"unban" => {
-				path_elems.pop();
-				if let Ok(addr) = path_elems.last().unwrap().parse() {
-					w(&self.peers).unban_peer(&addr);
-					Ok(Response::with((status::Ok, "")))
-				} else {
-					Ok(Response::with((status::BadRequest, "")))
-				}
-			}
-			_ => Ok(Response::with((status::BadRequest, ""))),
-		}
+	fn handle(&self, _req: Request, params: PathParams) -> Result<Response, HyperError> {
+        match params.get("action") {
+            Some(action) => {
+                match action.as_ref() {
+                    "ban" => {
+                        if let Ok(addr) = params.get("addr").unwrap().parse() {
+                            w(&self.peers).ban_peer(&addr);
+                            Ok(Response::new())
+                        } else {
+                            error_response(Error::Argument("Unsupported request".to_string()))
+                        }
+                    }
+                    "unban" => {
+                        if let Ok(addr) = params.get("addr").unwrap().parse() {
+                            w(&self.peers).unban_peer(&addr);
+                            Ok(Response::new())
+                        } else {
+                            error_response(Error::Argument("Unsupported request".to_string()))
+                        }
+                    }
+                    _ => error_response(Error::Argument("Unsupported request".to_string())),
+
+                }
+            },
+            None => error_response(Error::Argument("Unsupported request".to_string())),
+        }
 	}
 }
 
@@ -351,20 +349,15 @@ pub struct PeerGetHandler {
 }
 
 impl Handler for PeerGetHandler {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let url = req.url.clone();
-		let mut path_elems = url.path();
-		if *path_elems.last().unwrap() == "" {
-			path_elems.pop();
-		}
-		if let Ok(addr) = path_elems.last().unwrap().parse() {
-			match w(&self.peers).get_peer(addr) {
-				Ok(peer) => json_response(&peer),
-				Err(_) => Ok(Response::with((status::BadRequest, ""))),
-			}
-		} else {
-			Ok(Response::with((status::BadRequest, "")))
-		}
+	fn handle(&self, _req: Request, params: PathParams) -> Result<Response, HyperError> {
+        if let Ok(addr) = params.get("addr").unwrap().parse() {
+            match w(&self.peers).get_peer(addr) {
+                Ok(peer) => json_response(&peer),
+                Err(_) => error_response(Error::Argument("Unsupported request".to_string())),
+            }
+        } else {
+            error_response(Error::Argument("Unsupported request".to_string()))
+        }
 	}
 }
 
@@ -382,7 +375,7 @@ impl StatusHandler {
 }
 
 impl Handler for StatusHandler {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+	fn handle(&self, _req: Request, _params: PathParams) -> Result<Response, HyperError> {
 		json_response(&self.get_status())
 	}
 }
@@ -400,7 +393,7 @@ impl ChainHandler {
 }
 
 impl Handler for ChainHandler {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+	fn handle(&self, _req: Request, _params: PathParams) -> Result<Response, HyperError> {
 		json_response(&self.get_tip())
 	}
 }
@@ -413,9 +406,9 @@ pub struct ChainCompactHandler {
 }
 
 impl Handler for ChainCompactHandler {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+	fn handle(&self, _req: Request, _params: PathParams) -> Result<Response, HyperError> {
 		w(&self.chain).compact().unwrap();
-		Ok(Response::with((status::Ok, "{}")))
+		Ok(Response::new())
 	}
 }
 
@@ -464,29 +457,33 @@ impl BlockHandler {
 }
 
 impl Handler for BlockHandler {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let url = req.url.clone();
-		let mut path_elems = url.path();
-		if *path_elems.last().unwrap() == "" {
-			path_elems.pop();
-		}
-		let el = *path_elems.last().unwrap();
-		let h = try!(self.parse_input(el.to_string()));
+	fn handle(&self, req: Request, params: PathParams) -> Result<Response, HyperError> {
+        if let Some(id) = params.get("id") {
+            match self.parse_input(id.to_string()) {
+                Ok(h) => {
+                    let mut compact = false;
+                    let query_string = get_query_string(req);
+                    if let Some(_) = query_string.get("compact") {
+                        compact = true;
+                    }
 
-		let mut compact = false;
-		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
-			if let Some(_) = params.get("compact") {
-				compact = true;
-			}
-		}
-
-		if compact {
-			let b = try!(self.get_compact_block(&h));
-			json_response(&b)
-		} else {
-			let b = try!(self.get_block(&h));
-			json_response(&b)
-		}
+                    if compact {
+                        match self.get_compact_block(&h) {
+                            Ok(b) => json_response(&b),
+                            Err(e) => error_response(e),
+                        }
+                    } else {
+                        match self.get_block(&h) {
+                            Ok(b) => json_response(&b),
+                            Err(e) => error_response(e),
+                        }
+                    }
+                },
+                Err(e) => error_response(e),
+            }
+        } else {
+            error_response(Error::Argument("Unsupported request".to_string()))
+        }
 	}
 }
 
@@ -499,7 +496,7 @@ impl<T> Handler for PoolInfoHandler<T>
 where
 	T: pool::BlockChain + Send + Sync + 'static,
 {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+	fn handle(&self, _req: Request, _params: PathParams) -> Result<Response, HyperError> {
 		let pool_arc = w(&self.tx_pool);
 		let pool = pool_arc.read().unwrap();
 		json_response(&PoolInfo {
@@ -526,63 +523,69 @@ impl<T> Handler for PoolPushHandler<T>
 where
 	T: pool::BlockChain + Send + Sync + 'static,
 {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let wrapper: TxWrapper = serde_json::from_reader(req.body.by_ref())
-			.map_err(|e| IronError::new(e, status::BadRequest))?;
+	fn handle(&self, req: Request, _params: PathParams) -> Result<Response, HyperError> {
+        let _ = req.body().concat2().and_then(|body| {
+            let wrapper: TxWrapper = match serde_json::from_slice(body.as_ref()) {
+                Ok(wrapper) => wrapper,
+                Err(e) => return error_response(Error::Argument(e.to_string())),
+            };
 
-		let tx_bin = util::from_hex(wrapper.tx_hex)
-			.map_err(|_| Error::Argument(format!("Invalid hex in transaction wrapper.")))?;
+            let tx_bin = match util::from_hex(wrapper.tx_hex) {
+                Ok(tx_bin) => tx_bin,
+                Err(_e) => return error_response(Error::Argument(format!("Invalid hex in transaction wrapper.")))
+            };
+			
+            let tx: Transaction = match ser::deserialize(&mut &tx_bin[..]) {
+                Ok(tx) => tx,
+                Err(_e) => return error_response(Error::Argument("Could not deserialize transaction, invalid format.".to_string())),
+            };
+            
+			let source = pool::TxSource {
+                debug_name: "push-api".to_string(),
+                identifier: "?.?.?.?".to_string(),
+            };
+                        
+			info!(
+                LOGGER,
+                "Pushing transaction with {} inputs and {} outputs to pool.",
+                tx.inputs.len(),
+                tx.outputs.len()
+            );
 
-		let tx: Transaction = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
-			Error::Argument("Could not deserialize transaction, invalid format.".to_string())
-		})?;
+            let pool_arc = w(&self.tx_pool);
+            let res = pool_arc.write().unwrap().add_to_memory_pool(source, tx);
 
-		let source = pool::TxSource {
-			debug_name: "push-api".to_string(),
-			identifier: "?.?.?.?".to_string(),
-		};
-		info!(
-			LOGGER,
-			"Pushing transaction with {} inputs and {} outputs to pool.",
-			tx.inputs.len(),
-			tx.outputs.len()
-		);
+            match res {
+                Ok(()) => return Ok(Response::new()),
+                Err(e) => {
+                    debug!(LOGGER, "error - {:?}", e);
+                    return error_response(Error::Argument(format!("{:?}", e)))
+                }
+            }
+		});
+		Ok(Response::new())
+	}
+}
 
-		let pool_arc = w(&self.tx_pool);
-		let res = pool_arc.write().unwrap().add_to_memory_pool(source, tx);
-
-		match res {
-			Ok(()) => Ok(Response::with(status::Ok)),
-			Err(e) => {
-				debug!(LOGGER, "error - {:?}", e);
-				Err(IronError::from(Error::Argument(format!("{:?}", e))))
-			}
+// retrieve query strings from url and store them in collection
+fn get_query_string(req: Request) -> HashMap<String, Vec<String>> {
+	let mut pairs: HashMap<String, Vec<String>> = HashMap::new();
+	let query_string = match req.query() {
+		Some(query_string) => query_string,
+		None => return pairs,
+	};
+    for (key, value) in form_urlencoded::parse(query_string.as_bytes()).into_owned() {
+		if pairs.contains_key(&key) {
+			pairs.get_mut(&key).unwrap().push(value);
+		} else {
+			let mut v = Vec::new();
+			v.push(value);
+			pairs.insert(key, v);
 		}
-	}
+    }
+    pairs
 }
 
-// Utility to serialize a struct into JSON and produce a sensible IronResult
-// out of it.
-fn json_response<T>(s: &T) -> IronResult<Response>
-where
-	T: Serialize,
-{
-	match serde_json::to_string(s) {
-		Ok(json) => Ok(Response::with((status::Ok, json))),
-		Err(_) => Ok(Response::with((status::InternalServerError, ""))),
-	}
-}
-
-// pretty-printed version of above
-fn json_response_pretty<T>(s: &T) -> IronResult<Response>
-where
-	T: Serialize,
-{
-	match serde_json::to_string_pretty(s) {
-		Ok(json) => Ok(Response::with((status::Ok, json))),
-		Err(_) => Ok(Response::with((status::InternalServerError, ""))),
-	}
-}
 /// Start all server HTTP handlers. Register all of them with Iron
 /// and runs the corresponding HTTP server.
 ///
@@ -660,29 +663,34 @@ pub fn start_rest_apis<T>(
 				"get peers/a.b.c.d".to_string(),
 			];
 			let index_handler = IndexHandler { list: route_list };
-
+			
 			let router = router!(
-				index: get "/" => index_handler,
-				blocks: get "/blocks/*" => block_handler,
-				chain_tip: get "/chain" => chain_tip_handler,
-				chain_compact: get "/chain/compact" => chain_compact_handler,
-				chain_outputs: get "/chain/outputs/*" => output_handler,
-				status: get "/status" => status_handler,
-				txhashset_roots: get "/txhashset/*" => txhashset_handler,
-				pool_info: get "/pool" => pool_info_handler,
-				pool_push: post "/pool/push" => pool_push_handler,
-				peers_all: get "/peers/all" => peers_all_handler,
-				peers_connected: get "/peers/connected" => peers_connected_handler,
-				peer: post "/peers/*" => peer_post_handler,
-				peer: get "/peers/*" => peer_get_handler
+				get "/v1" => index_handler,
+				get "/v1/blocks/:id" => block_handler,
+				get "/v1/chain" => chain_tip_handler,
+				get "/v1/chain/compact" => chain_compact_handler,
+				get "/v1/chain/outputs/:option" => output_handler,
+				get "/v1/status" => status_handler,
+				get "/v1/txhashset/:option" => txhashset_handler,
+				get "/v1/pool" => pool_info_handler,
+				post "/v1/pool/push" => pool_push_handler,
+				get "/v1/peers/all" => peers_all_handler,
+				get "/v1/peers/connected" => peers_connected_handler,
+				post "/v1/peers/:addr/:action" => peer_post_handler,
+				get "/v1/peers/:addr" => peer_get_handler
 			);
 
-			let mut apis = ApiServer::new("/v1".to_string());
-			apis.register_handler(router);
+			if router.is_err() {
+				error!(LOGGER, "Http API router error: {}", router.err().unwrap());
+				error!(LOGGER, "Http API server does not start. Please correct the error and try again.");
+				return;
+			}
+			let apis = ApiServer::new(router.unwrap());
 
-			info!(LOGGER, "Starting HTTP API server at {}.", addr);
-			apis.start(&addr[..]).unwrap_or_else(|e| {
-				error!(LOGGER, "Failed to start API HTTP server: {}.", e);
-			});
+			info!(LOGGER, "Starting Http API server at {}.", addr);
+			let socket_addr = addr[..].parse().unwrap(); 
+			let server = Http::new().bind(&socket_addr, apis).unwrap();
+			// TODO: graceful shutdown
+			server.run().unwrap();
 		});
 }

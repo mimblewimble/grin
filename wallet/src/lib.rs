@@ -28,18 +28,15 @@ extern crate slog;
 extern crate term;
 extern crate uuid;
 
-extern crate bodyparser;
 extern crate failure;
 #[macro_use]
 extern crate failure_derive;
 extern crate futures;
 extern crate hyper;
-extern crate iron;
-#[macro_use]
-extern crate router;
 extern crate tokio_core;
 extern crate tokio_retry;
 
+#[macro_use]
 extern crate grin_api as api;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
