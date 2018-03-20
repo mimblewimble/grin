@@ -550,8 +550,13 @@ impl<'a> Extension<'a> {
 		}
 	}
 
-	/// Validate the current txhashset state against a block header
-	pub fn validate(&self, header: &BlockHeader) -> Result<(), Error> {
+	/// Validate the txhashset state against the provided block header.
+	/// Rewinds to that pos for the header first so we see a consistent
+	/// view of the world.
+	pub fn validate(&mut self, header: &BlockHeader) -> Result<(), Error> {
+		// first rewind to the provided header
+		&self.rewind(header)?;
+
 		// validate all hashes and sums within the trees
 		if let Err(e) = self.output_pmmr.validate() {
 			return Err(Error::InvalidTxHashSet(e));
