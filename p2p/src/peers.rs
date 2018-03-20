@@ -92,7 +92,7 @@ impl Peers {
 					peer.try_read().unwrap().info.addr
 				);
 			}
-			None => error!(LOGGER, "Could not update dandelion relay"),
+			None => debug!(LOGGER, "Could not update dandelion relay"),
 		};
 	}
 	// Get the dandelion relay
