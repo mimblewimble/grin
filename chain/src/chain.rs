@@ -415,7 +415,16 @@ impl Chain {
 	pub fn validate(&self) -> Result<(), Error> {
 		let header = self.store.head_header()?;
 		let mut txhashset = self.txhashset.write().unwrap();
-		txhashset::extending(&mut txhashset, |extension| extension.validate(&header))
+
+		// Now create an extension from the txhashset and validate
+		// against the latest block header.
+		// We will rewind the extension internally to the pos for
+		// the block header to ensure the view is consistent.
+		// Force rollback first as this is a "read-only" extension.
+		txhashset::extending(&mut txhashset, |extension| {
+			extension.force_rollback();
+			extension.validate(&header)
+		})
 	}
 
 	/// Check if the input has matured sufficiently for the given block height.
