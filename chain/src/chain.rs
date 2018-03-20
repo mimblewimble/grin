@@ -415,7 +415,6 @@ impl Chain {
 	pub fn validate(&self) -> Result<(), Error> {
 		let header = self.store.head_header()?;
 		let mut txhashset = self.txhashset.write().unwrap();
-		txhashset.force_rollback();
 		txhashset::extending(&mut txhashset, |extension| extension.validate(&header))
 	}
 
