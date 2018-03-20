@@ -30,7 +30,11 @@ slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_
 term = "~0.4.6"
 time = "^0.1"
 chrono = "^0.4.0"
-cursive = { git = "https://github.com/yeastplume/Cursive" }
+#This is temporary until cursive author does a new release
+[dependencies.cursive]
+git = "https://github.com/yeastplume/Cursive"
+tag="grin_integration_1"
+
 # TODO - once "patch" is available we should be able to clean up the workspace dependencies
 # [patch.crate-io]
 # secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }
