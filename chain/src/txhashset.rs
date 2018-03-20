@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 
 use util::static_secp_instance;
 use util::secp::pedersen::{Commitment, RangeProof};
@@ -598,6 +599,10 @@ impl<'a> Extension<'a> {
 			}
 		}
 
+		// now verify the rangeproof for each output included in the sum above
+		// this is an expensive operation
+		self.verify_rangeproofs()?;
+
 		Ok(())
 	}
 
@@ -672,6 +677,8 @@ impl<'a> Extension<'a> {
 	/// Sums the excess of all our kernels, validating their signatures on the
 	/// way
 	fn sum_kernels(&self, kernel_offset: Option<Commitment>) -> Result<Commitment, Error> {
+		let now = Instant::now();
+
 		// make sure we have the right count of kernels using the MMR, the storage
 		// file may have a few more
 		let mmr_sz = self.kernel_pmmr.unpruned_size();
@@ -709,13 +716,46 @@ impl<'a> Extension<'a> {
 
 		debug!(
 			LOGGER,
-			"Validated, summed (and offset) {} kernels", kern_count
+			"Validated, summed (and offset) {} kernels, pmmr size {}, took {}s",
+			kern_count,
+			self.kernel_pmmr.unpruned_size(),
+			now.elapsed().as_secs(),
 		);
 		Ok(sum_kernel)
 	}
 
+	fn verify_rangeproofs(&self) -> Result<(), Error> {
+		let now = Instant::now();
+
+		let mut proof_count = 0;
+		for n in 1..self.output_pmmr.unpruned_size() + 1 {
+			if pmmr::is_leaf(n) {
+				if let Some((_, output)) = self.output_pmmr.get(n, true) {
+					let out = output.expect("not a leaf node");
+					match self.rproof_pmmr.get(n, true) {
+						Some((_, Some(rp))) => out.to_output(rp).verify_proof()?,
+						_res => {
+							return Err(Error::OutputNotFound);
+						}
+					}
+					proof_count += 1;
+				}
+			}
+		}
+		debug!(
+			LOGGER,
+			"Verified {} Rangeproofs, pmmr size {}, took {}s",
+			proof_count,
+			self.rproof_pmmr.unpruned_size(),
+			now.elapsed().as_secs(),
+		);
+		Ok(())
+	}
+
 	/// Sums all our Output commitments, checking range proofs at the same time
 	fn sum_outputs(&self) -> Result<Commitment, Error> {
+		let now = Instant::now();
+
 		let mut sum_output = None;
 		let mut output_count = 0;
 		let secp = static_secp_instance();
@@ -724,12 +764,6 @@ impl<'a> Extension<'a> {
 				if let Some((_, output)) = self.output_pmmr.get(n, true) {
 					let out = output.expect("not a leaf node");
 					let commit = out.commit.clone();
-					match self.rproof_pmmr.get(n, true) {
-						Some((_, Some(rp))) => out.to_output(rp).verify_proof()?,
-						_res => {
-							return Err(Error::OutputNotFound);
-						}
-					}
 					if let None = sum_output {
 						sum_output = Some(commit);
 					} else {
@@ -741,7 +775,13 @@ impl<'a> Extension<'a> {
 				}
 			}
 		}
-		debug!(LOGGER, "Summed {} Outputs", output_count);
+		debug!(
+			LOGGER,
+			"Summed {} Outputs, pmmr size {}, took {}s",
+			output_count,
+			self.output_pmmr.unpruned_size(),
+			now.elapsed().as_secs(),
+		);
 		Ok(sum_output.unwrap())
 	}
 }
