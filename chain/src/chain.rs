@@ -268,7 +268,7 @@ impl Chain {
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b, opts);
 				}
-				Ok((Some(tip.clone()), Some(b.clone())))
+				Ok((Some(tip.clone()), Some(b)))
 			}
 			Ok(None) => {
 				// block got accepted but we did not extend the head
@@ -286,12 +286,12 @@ impl Chain {
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b, opts);
 				}
-				Ok((None, Some(b.clone())))
+				Ok((None, Some(b)))
 			}
 			Err(Error::Orphan) => {
 				let block_hash = b.hash();
 				let orphan = Orphan {
-					block: b.clone(),
+					block: b,
 					opts: opts,
 					added: Instant::now(),
 				};
@@ -515,10 +515,14 @@ impl Chain {
 		let header = self.store.get_block_header(&h)?;
 		txhashset::zip_write(self.db_root.clone(), txhashset_data)?;
 
+		// write the block marker so we can safely rewind to
+		// the pos for that block when we validate the extension below
+		self.store
+			.save_block_marker(&h, &(rewind_to_output, rewind_to_kernel))?;
+
 		let mut txhashset =
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), None)?;
 		txhashset::extending(&mut txhashset, |extension| {
-			extension.rewind_pos(header.height, rewind_to_output, rewind_to_kernel)?;
 			extension.validate(&header)?;
 			// TODO validate kernels and their sums with Outputs
 			extension.rebuild_index()?;

@@ -35,7 +35,8 @@ use core::ser;
 use core::global;
 use core::ser::AsFixedBytes;
 use util::LOGGER;
-use types::{Error, MiningStats};
+use types::Error;
+use stats::MiningStats;
 
 use chain;
 use pool;

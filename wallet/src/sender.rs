@@ -40,6 +40,7 @@ pub fn issue_send_tx(
 	dest: String,
 	max_outputs: usize,
 	selection_strategy_is_use_all: bool,
+	fluff: bool,
 ) -> Result<(), Error> {
 	checker::refresh_outputs(config, keychain)?;
 
@@ -126,7 +127,7 @@ pub fn issue_send_tx(
 
 	let url = format!("{}/v1/receive/transaction", &dest);
 	debug!(LOGGER, "Posting partial transaction to {}", url);
-	let res = client::send_partial_tx(&url, &partial_tx);
+	let res = client::send_partial_tx(&url, &partial_tx, fluff);
 	if let Err(e) = res {
 		match e.kind() {
 			ErrorKind::FeeExceedsAmount {
@@ -186,7 +187,7 @@ pub fn issue_send_tx(
 	partial_tx.phase = PartialTxPhase::SenderConfirmation;
 
 	// And send again
-	let res = client::send_partial_tx(&url, &partial_tx);
+	let res = client::send_partial_tx(&url, &partial_tx, fluff);
 	if let Err(e) = res {
 		match e.kind() {
 			ErrorKind::FeeExceedsAmount {sender_amount, recipient_fee} =>

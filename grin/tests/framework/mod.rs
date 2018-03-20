@@ -307,6 +307,7 @@ impl LocalServerContainer {
 		minimum_confirmations: u64,
 		selection_strategy: &str,
 		dest: &str,
+		fluff: bool,
 	) {
 		let amount = core::core::amount_from_hr_string(amount)
 			.expect("Could not parse amount as a number with optional decimal point.");
@@ -326,6 +327,7 @@ impl LocalServerContainer {
 			dest.to_string(),
 			max_outputs,
 			selection_strategy == "all",
+			fluff,
 		);
 		match result {
 			Ok(_) => println!(

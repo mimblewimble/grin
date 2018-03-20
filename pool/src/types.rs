@@ -28,7 +28,7 @@ use core::consensus;
 use core::core::{block, hash, transaction};
 use core::core::transaction::{Input, OutputIdentifier};
 
-/// Tranasction pool configuration
+/// Transaction pool configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PoolConfig {
 	/// Base fee for a transaction to be accepted by the pool. The transaction
@@ -40,6 +40,14 @@ pub struct PoolConfig {
 	/// Maximum capacity of the pool in number of transactions
 	#[serde = "default_max_pool_size"]
 	pub max_pool_size: usize,
+
+	/// Maximum capacity of the pool in number of transactions
+	#[serde = "default_dandelion_probability"]
+	pub dandelion_probability: usize,
+
+	/// Default embargo for Dandelion transaction
+	#[serde = "default_dandelion_embargo"]
+	pub dandelion_embargo: i64,
 }
 
 impl Default for PoolConfig {
@@ -47,6 +55,8 @@ impl Default for PoolConfig {
 		PoolConfig {
 			accept_fee_base: default_accept_fee_base(),
 			max_pool_size: default_max_pool_size(),
+			dandelion_probability: default_dandelion_probability(),
+			dandelion_embargo: default_dandelion_embargo(),
 		}
 	}
 }
@@ -56,6 +66,12 @@ fn default_accept_fee_base() -> u64 {
 }
 fn default_max_pool_size() -> usize {
 	50_000
+}
+fn default_dandelion_probability() -> usize {
+	90
+}
+fn default_dandelion_embargo() -> i64 {
+	30
 }
 
 /// Placeholder: the data representing where we heard about a tx from.
@@ -79,6 +95,7 @@ pub enum Parent {
 	Unknown,
 	BlockTransaction,
 	PoolTransaction { tx_ref: hash::Hash },
+	StemPoolTransaction { tx_ref: hash::Hash },
 	AlreadySpent { other_tx: hash::Hash },
 }
 
@@ -89,6 +106,9 @@ impl fmt::Debug for Parent {
 			&Parent::BlockTransaction => write!(f, "Parent: Block Transaction"),
 			&Parent::PoolTransaction { tx_ref: x } => {
 				write!(f, "Parent: Pool Transaction ({:?})", x)
+			}
+			&Parent::StemPoolTransaction { tx_ref: x } => {
+				write!(f, "Parent: Stempool Transaction ({:?})", x)
 			}
 			&Parent::AlreadySpent { other_tx: x } => write!(f, "Parent: Already Spent By {:?}", x),
 		}
@@ -103,6 +123,8 @@ pub enum PoolError {
 	InvalidTx(transaction::Error),
 	/// An entry already in the pool
 	AlreadyInPool,
+	/// An entry already in the stempool
+	AlreadyInStempool,
 	/// A duplicate output
 	DuplicateOutput {
 		/// The other transaction
@@ -166,6 +188,9 @@ pub trait PoolAdapter: Send + Sync {
 	/// The transaction pool has accepted this transactions as valid and added
 	/// it to its internal cache.
 	fn tx_accepted(&self, tx: &transaction::Transaction);
+	/// The stem transaction pool has accepted this transactions as valid and added
+	/// it to its internal cache.
+	fn stem_tx_accepted(&self, tx: &transaction::Transaction);
 }
 
 /// Dummy adapter used as a placeholder for real implementations
@@ -174,6 +199,7 @@ pub trait PoolAdapter: Send + Sync {
 pub struct NoopAdapter {}
 impl PoolAdapter for NoopAdapter {
 	fn tx_accepted(&self, _: &transaction::Transaction) {}
+	fn stem_tx_accepted(&self, _: &transaction::Transaction) {}
 }
 
 /// Pool contains the elements of the graph that are connected, in full, to
@@ -246,6 +272,39 @@ impl Pool {
 					.remove(&new_edge.output_commitment())
 					.is_some()
 			);
+		}
+
+		// Accounting for consumed blockchain outputs
+		for new_blockchain_edge in blockchain_refs.drain(..) {
+			self.consumed_blockchain_outputs
+				.insert(new_blockchain_edge.output_commitment(), new_blockchain_edge);
+		}
+
+		// Adding the transaction to the vertices list along with internal
+		// pool edges
+		self.graph.add_entry(pool_entry, pool_refs);
+
+		// Adding the new unspents to the unspent map
+		for unspent_output in new_unspents.drain(..) {
+			self.available_outputs
+				.insert(unspent_output.output_commitment(), unspent_output);
+		}
+	}
+
+	// More relax way for stempool transaction in order to accept scenario such as:
+	// Parent is in mempool, child is allowed in stempool
+	//
+	pub fn add_stempool_transaction(
+		&mut self,
+		pool_entry: graph::PoolEntry,
+		mut blockchain_refs: Vec<graph::Edge>,
+		pool_refs: Vec<graph::Edge>,
+		mut new_unspents: Vec<graph::Edge>,
+	) {
+		// Removing consumed available_outputs
+		for new_edge in &pool_refs {
+			// All of these *can* correspond to an existing unspent
+			self.available_outputs.remove(&new_edge.output_commitment());
 		}
 
 		// Accounting for consumed blockchain outputs

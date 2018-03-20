@@ -64,6 +64,7 @@ enum_from_primitive! {
 		Block,
 		GetCompactBlock,
 		CompactBlock,
+		StemTransaction,
 		Transaction,
 		TxHashSetRequest,
 		TxHashSetArchive

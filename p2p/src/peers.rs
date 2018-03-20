@@ -33,6 +33,7 @@ pub struct Peers {
 	pub adapter: Arc<ChainAdapter>,
 	store: PeerStore,
 	peers: RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>,
+	dandelion_relay: RwLock<HashMap<i64, Arc<RwLock<Peer>>>>,
 }
 
 unsafe impl Send for Peers {}
@@ -44,6 +45,7 @@ impl Peers {
 			adapter,
 			store,
 			peers: RwLock::new(HashMap::new()),
+			dandelion_relay: RwLock::new(HashMap::new()),
 		}
 	}
 
@@ -71,6 +73,34 @@ impl Peers {
 		apeer.clone()
 	}
 
+	// Update the dandelion relay
+	pub fn update_dandelion_relay(&self) {
+		let peers = self.outgoing_connected_peers();
+
+		match thread_rng().choose(&peers) {
+			Some(peer) => {
+				// Clear the map and add new relay
+				let dandelion_relay = &self.dandelion_relay;
+				dandelion_relay.write().unwrap().clear();
+				dandelion_relay
+					.write()
+					.unwrap()
+					.insert(time::now_utc().to_timespec().sec, peer.clone());
+				debug!(
+					LOGGER,
+					"Successfully updated Dandelion relay to: {}",
+					peer.try_read().unwrap().info.addr
+				);
+			}
+			None => error!(LOGGER, "Could not update dandelion relay"),
+		};
+	}
+	// Get the dandelion relay
+	pub fn get_dandelion_relay(&self) -> HashMap<i64, Arc<RwLock<Peer>>> {
+		let res = self.dandelion_relay.read().unwrap().clone();
+		res
+	}
+
 	pub fn is_known(&self, addr: &SocketAddr) -> bool {
 		self.get_connected_peer(addr).is_some()
 	}
@@ -84,6 +114,19 @@ impl Peers {
 			.cloned()
 			.collect::<Vec<_>>();
 		thread_rng().shuffle(&mut res);
+		res
+	}
+
+	pub fn outgoing_connected_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
+		let peers = self.connected_peers();
+		let res = peers
+			.iter()
+			.filter(|x| match x.try_read() {
+				Ok(peer) => peer.info.direction == Direction::Outbound,
+				Err(_) => false,
+			})
+			.cloned()
+			.collect::<Vec<_>>();
 		res
 	}
 
@@ -298,6 +341,30 @@ impl Peers {
 		);
 	}
 
+	/// Broadcasts the provided stem transaction to our peer relay.
+	pub fn broadcast_stem_transaction(&self, tx: &core::Transaction) {
+		let dandelion_relay = self.get_dandelion_relay();
+		if dandelion_relay.is_empty() {
+			debug!(LOGGER, "No dandelion relay updating");
+			self.update_dandelion_relay();
+		}
+		// If still empty broadcast then broadcast transaction normally
+		if dandelion_relay.is_empty() {
+			self.broadcast_transaction(tx);
+		}
+		for relay in dandelion_relay.values() {
+			let relay = relay.read().unwrap();
+			if relay.is_connected() {
+				if let Err(e) = relay.send_stem_transaction(tx) {
+					debug!(
+						LOGGER,
+						"Error sending stem transaction to peer relay: {:?}", e
+					);
+				}
+			}
+		}
+	}
+
 	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our peers.
 	/// We may be connected to PEER_MAX_COUNT peers so we only
 	/// want to broadcast to a random subset of peers.
@@ -438,8 +505,8 @@ impl ChainAdapter for Peers {
 	fn total_height(&self) -> u64 {
 		self.adapter.total_height()
 	}
-	fn transaction_received(&self, tx: core::Transaction) {
-		self.adapter.transaction_received(tx)
+	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
+		self.adapter.transaction_received(tx, stem)
 	}
 	fn block_received(&self, b: core::Block, peer_addr: SocketAddr) -> bool {
 		let hash = b.hash();

@@ -18,18 +18,23 @@ use cursive::Cursive;
 use cursive::view::View;
 use cursive::align::HAlign;
 use cursive::event::{EventResult, Key};
-use cursive::views::{BoxView, LinearLayout, OnEventView, SelectView, StackView, TextView};
+use cursive::view::Identifiable;
+use cursive::views::{BoxView, LinearLayout, OnEventView, SelectView, StackView, TextView, ViewRef};
 use cursive::direction::Orientation;
 
 use tui::constants::*;
 
 pub fn create() -> Box<View> {
-	let mut main_menu = SelectView::new().h_align(HAlign::Left);
-	main_menu.add_item("Basic Status", VIEW_BASIC_STATUS);
-	main_menu.add_item("Peers and Sync", VIEW_PEER_SYNC);
-	main_menu.add_item("Mining", VIEW_MINING);
-	let change_view = |s: &mut Cursive, v: &str| {
-		if v == "" {
+	let mut main_menu = SelectView::new().h_align(HAlign::Left).with_id(MAIN_MENU);
+	main_menu
+		.get_mut()
+		.add_item("Basic Status", VIEW_BASIC_STATUS);
+	main_menu
+		.get_mut()
+		.add_item("Peers and Sync", VIEW_PEER_SYNC);
+	main_menu.get_mut().add_item("Mining", VIEW_MINING);
+	let change_view = |s: &mut Cursive, v: &&str| {
+		if *v == "" {
 			return;
 		}
 
@@ -39,24 +44,33 @@ pub fn create() -> Box<View> {
 		});
 	};
 
-	main_menu.set_on_submit(change_view);
-
-	let main_menu = OnEventView::new(main_menu)
-		.on_pre_event_inner('k', |s| {
-			s.select_up(1);
-			Some(EventResult::Consumed(None))
-		})
-		.on_pre_event_inner('j', |s| {
-			s.select_down(1);
-			Some(EventResult::Consumed(None))
-		})
-		.on_pre_event_inner(Key::Tab, |s| {
-			if s.selected_id().unwrap() == s.len() - 1 {
-				s.set_selection(0);
-			} else {
-				s.select_down(1);
+	main_menu.get_mut().set_on_select(change_view);
+	main_menu
+		.get_mut()
+		.set_on_submit(|c: &mut Cursive, v: &str| {
+			if v == VIEW_MINING {
+				let _ = c.focus_id(SUBMENU_MINING_BUTTON);
 			}
-			Some(EventResult::Consumed(None))
+		});
+	let main_menu = OnEventView::new(main_menu)
+		.on_pre_event('j', move |c| {
+			let mut s: ViewRef<SelectView<&str>> = c.find_id(MAIN_MENU).unwrap();
+			s.select_down(1)(c);
+			Some(EventResult::Consumed(None));
+		})
+		.on_pre_event('k', move |c| {
+			let mut s: ViewRef<SelectView<&str>> = c.find_id(MAIN_MENU).unwrap();
+			s.select_up(1)(c);
+			Some(EventResult::Consumed(None));
+		})
+		.on_pre_event(Key::Tab, move |c| {
+			let mut s: ViewRef<SelectView<&str>> = c.find_id(MAIN_MENU).unwrap();
+			if s.selected_id().unwrap() == s.len() - 1 {
+				s.set_selection(0)(c);
+			} else {
+				s.select_down(1)(c);
+			}
+			Some(EventResult::Consumed(None));
 		});
 	let main_menu = LinearLayout::new(Orientation::Vertical)
 		.child(BoxView::with_full_height(main_menu))

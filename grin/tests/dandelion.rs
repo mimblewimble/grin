@@ -35,11 +35,13 @@ use framework::{LocalServerContainer, LocalServerContainerConfig};
 
 use util::LOGGER;
 
-/// Start 1 node mining and two wallets, then send a few
-/// transactions from one to the other
+/// Start 1 node mining, 1 non mining node and two wallets.
+/// Then send a transaction from one wallet to another and propagate it a stem transaction
+/// but without stem relay and check if the transaction is still broadcasted.
 #[test]
-fn basic_wallet_transactions() {
-	let test_name_dir = "test_servers";
+#[ignore]
+fn test_dandelion_timeout() {
+	let test_name_dir = "test_dandelion_timeout";
 	core::global::set_mining_mode(core::global::ChainTypes::AutomatedTesting);
 	framework::clean_all_output(test_name_dir);
 	let mut log_config = util::LoggingConfig::default();
@@ -81,18 +83,45 @@ fn basic_wallet_transactions() {
 	});
 
 	// Spawn server and let it run for a bit
+	let mut server_one_config = LocalServerContainerConfig::default();
+	server_one_config.name = String::from("server_one");
+	server_one_config.p2p_server_port = 30000;
+	server_one_config.api_server_port = 30001;
+	server_one_config.start_miner = true;
+	server_one_config.start_wallet = false;
+	server_one_config.is_seeding = false;
+	server_one_config.coinbase_wallet_address =
+		String::from(format!("http://{}:{}", server_one_config.base_addr, 10002));
+	let mut server_one = LocalServerContainer::new(server_one_config).unwrap();
+
+	let mut server_two_config = LocalServerContainerConfig::default();
+	server_two_config.name = String::from("server_two");
+	server_two_config.p2p_server_port = 40000;
+	server_two_config.api_server_port = 40001;
+	server_two_config.start_miner = false;
+	server_two_config.start_wallet = false;
+	server_two_config.is_seeding = true;
+	let mut server_two = LocalServerContainer::new(server_two_config.clone()).unwrap();
+
+	server_one.add_peer(format!(
+		"{}:{}",
+		server_two_config.base_addr, server_two_config.p2p_server_port
+	));
+
+	// Spawn servers and let them run for a bit
 	let _ = thread::spawn(move || {
-		let mut server_config = LocalServerContainerConfig::default();
-		server_config.name = String::from("server_one");
-		server_config.p2p_server_port = 30000;
-		server_config.api_server_port = 30001;
-		server_config.start_miner = true;
-		server_config.start_wallet = false;
-		server_config.coinbase_wallet_address =
-			String::from(format!("http://{}:{}", server_config.base_addr, 10002));
-		let mut server_one = LocalServerContainer::new(server_config).unwrap();
+		server_two.run_server(120);
+	});
+
+	// Wait for the first server to start
+	thread::sleep(time::Duration::from_millis(5000));
+
+	let _ = thread::spawn(move || {
 		server_one.run_server(120);
 	});
+
+	// Let them do a handshake and properly update their peer relay
+	thread::sleep(time::Duration::from_millis(30000));
 
 	//Wait until we have some funds to send
 	let mut coinbase_info =
@@ -107,66 +136,34 @@ fn basic_wallet_transactions() {
 		coinbase_info =
 			LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
 	}
+
 	warn!(LOGGER, "Sending 50 Grins to recipient wallet");
+
+	// Sending stem transaction
 	LocalServerContainer::send_amount_to(
 		&coinbase_wallet_config,
 		"50.00",
 		1,
 		"not_all",
 		"http://127.0.0.1:20002",
-		true,
+		false,
 	);
 
-	//Wait for a confirmation
-	thread::sleep(time::Duration::from_millis(3000));
 	let coinbase_info =
 		LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
 	println!("Coinbase wallet info: {:?}", coinbase_info);
 
 	let recipient_info = LocalServerContainer::get_wallet_info(&recp_wallet_config, &recp_seed);
+
+	// The transaction should be waiting in the node stempool thus cannot be mined.
 	println!("Recipient wallet info: {:?}", recipient_info);
 	assert!(
-		recipient_info.data_confirmed && recipient_info.amount_currently_spendable == 50000000000
+		recipient_info.data_confirmed && recipient_info.amount_awaiting_confirmation == 50000000000
 	);
 
-	warn!(
-		LOGGER,
-		"Sending many small transactions to recipient wallet"
-	);
-	for i in 0..10 {
-		LocalServerContainer::send_amount_to(
-			&coinbase_wallet_config,
-			"1.00",
-			1,
-			"not_all",
-			"http://127.0.0.1:20002",
-			true,
-		);
-	}
-
-	thread::sleep(time::Duration::from_millis(10000));
+	// Wait for stem timeout
+	thread::sleep(time::Duration::from_millis(35000));
+	println!("Recipient wallet info: {:?}", recipient_info);
 	let recipient_info = LocalServerContainer::get_wallet_info(&recp_wallet_config, &recp_seed);
-	println!(
-		"Recipient wallet info post little sends: {:?}",
-		recipient_info
-	);
-
-	assert!(
-		recipient_info.data_confirmed && recipient_info.amount_currently_spendable == 60000000000
-	);
-	//send some cash right back
-	LocalServerContainer::send_amount_to(
-		&recp_wallet_config,
-		"25.00",
-		1,
-		"all",
-		"http://127.0.0.1:10002",
-		true,
-	);
-
-	thread::sleep(time::Duration::from_millis(5000));
-
-	let coinbase_info =
-		LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
-	println!("Coinbase wallet info final: {:?}", coinbase_info);
+	assert!(recipient_info.amount_currently_spendable == 50000000000);
 }
