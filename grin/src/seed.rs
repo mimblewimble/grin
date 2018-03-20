@@ -30,6 +30,7 @@ use hyper;
 use p2p;
 use util::LOGGER;
 
+const DANDELION_RELAY_TIME: i64 = 600;
 const BAN_WINDOW: i64 = 10800;
 const PEER_MAX_COUNT: u32 = 25;
 const PEER_PREFERRED_COUNT: u32 = 8;
@@ -91,6 +92,21 @@ fn monitor_peers(
 		peers.connected_peers().len(),
 		total_count,
 	);
+
+	// Dandelion Relay Updater
+	let dandelion_relay = peers.get_dandelion_relay();
+	if dandelion_relay.is_empty() {
+		debug!(LOGGER, "monitor_peers: no dandelion relay updating");
+		peers.update_dandelion_relay();
+	} else {
+		for last_added in dandelion_relay.keys() {
+			let dandelion_interval = now_utc().to_timespec().sec - last_added;
+			if dandelion_interval >= DANDELION_RELAY_TIME {
+				debug!(LOGGER, "monitor_peers: updating expired dandelion relay");
+				peers.update_dandelion_relay();
+			}
+		}
+	}
 
 	let mut healthy_count = 0;
 	let mut banned_count = 0;

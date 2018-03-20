@@ -62,7 +62,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		w(&self.chain).head().unwrap().height
 	}
 
-	fn transaction_received(&self, tx: core::Transaction) {
+	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
 		let source = pool::TxSource {
 			debug_name: "p2p".to_string(),
 			identifier: "?.?.?.?".to_string(),
@@ -75,7 +75,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		);
 
 		let h = tx.hash();
-		if let Err(e) = self.tx_pool.write().unwrap().add_to_memory_pool(source, tx) {
+		if let Err(e) = self.tx_pool
+			.write()
+			.unwrap()
+			.add_to_memory_pool(source, tx, stem)
+		{
 			debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
 		}
 	}
@@ -543,6 +547,9 @@ pub struct PoolToNetAdapter {
 }
 
 impl pool::PoolAdapter for PoolToNetAdapter {
+	fn stem_tx_accepted(&self, tx: &core::Transaction) {
+		wo(&self.peers).broadcast_stem_transaction(tx);
+	}
 	fn tx_accepted(&self, tx: &core::Transaction) {
 		wo(&self.peers).broadcast_transaction(tx);
 	}

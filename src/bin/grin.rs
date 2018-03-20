@@ -266,7 +266,11 @@ fn main() {
 				.help("Send the transaction to the provided server")
 				.short("d")
 				.long("dest")
-				.takes_value(true)))
+				.takes_value(true))
+			.arg(Arg::with_name("fluff")
+				.help("Fluff the transaction (ignore Dandelion relay protocol)")
+				.short("f")
+				.long("fluff")))
 
 		.subcommand(SubCommand::with_name("burn")
 			.about("** TESTING ONLY ** Burns the provided amount to a known \
@@ -543,6 +547,10 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			let dest = send_args
 				.value_of("dest")
 				.expect("Destination wallet address required");
+			let mut fluff = false;
+			if send_args.is_present("fluff") {
+				fluff = true;
+			}
 			let max_outputs = 500;
 			let result = wallet::issue_send_tx(
 				&wallet_config,
@@ -552,6 +560,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				dest.to_string(),
 				max_outputs,
 				selection_strategy == "all",
+				fluff,
 			);
 			match result {
 				Ok(_) => info!(

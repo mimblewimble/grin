@@ -30,6 +30,7 @@ use core::{global, ser};
 use keychain::{BlindingFactor, Identifier, Keychain};
 use types::*;
 use util::{secp, to_hex, LOGGER};
+use urlencoded::UrlEncodedQuery;
 use failure::ResultExt;
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
@@ -158,6 +159,7 @@ fn handle_sender_confirmation(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	partial_tx: &PartialTx,
+	fluff: bool,
 ) -> Result<PartialTx, Error> {
 	let (amount, sender_pub_blinding, sender_pub_nonce, kernel_offset, sender_sig_part, tx) =
 		read_partial_tx(keychain, partial_tx)?;
@@ -226,7 +228,15 @@ fn handle_sender_confirmation(
 
 	let tx_hex = to_hex(ser::ser_vec(&final_tx).unwrap());
 
-	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
+	let url;
+	if fluff {
+		url = format!(
+			"{}/v1/pool/push?fluff",
+			config.check_node_api_http_addr.as_str()
+		);
+	} else {
+		url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
+	}
 	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).context(ErrorKind::Node)?;
 
 	// Return what we've actually posted
@@ -255,6 +265,13 @@ impl Handler for WalletReceiver {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		let struct_body = req.get::<bodyparser::Struct<PartialTx>>();
 
+		let mut fluff = false;
+		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
+			if let Some(_) = params.get("fluff") {
+				fluff = true;
+			}
+		}
+
 		if let Ok(Some(partial_tx)) = struct_body {
 			match partial_tx.phase {
 				PartialTxPhase::SenderInitiation => {
@@ -278,6 +295,7 @@ impl Handler for WalletReceiver {
 						&self.config,
 						&self.keychain,
 						&partial_tx,
+						fluff,
 					).map_err(|e| {
 						error!(LOGGER, "Phase 3 Sender Confirmation -> Problematic partial tx, looks like this: {:?}", partial_tx);
 						api::Error::Internal(format!(

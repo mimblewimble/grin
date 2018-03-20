@@ -27,6 +27,7 @@ use api;
 use chain;
 use core::{consensus, genesis, global};
 use core::core::target::Difficulty;
+use dandelion_monitor;
 use miner;
 use p2p;
 use pool;
@@ -191,6 +192,16 @@ impl Server {
 			Arc::downgrade(&shared_chain),
 			Arc::downgrade(&tx_pool),
 			Arc::downgrade(&p2p_server.peers),
+		);
+
+		info!(
+			LOGGER,
+			"Starting dandelion monitor: {}", &config.api_http_addr
+		);
+		dandelion_monitor::monitor_transactions(
+			config.pool_config.clone(),
+			tx_pool.clone(),
+			stop.clone(),
 		);
 
 		warn!(LOGGER, "Grin server started.");
