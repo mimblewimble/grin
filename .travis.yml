@@ -1,5 +1,7 @@
 language: rust
 cache: cargo
+before_cache:
+  - rm -rf target/tmp
 dist: trusty
 sudo: false
 rust:
@@ -17,7 +19,7 @@ addons:
       - libdw-dev
       - cmake
       - gcc
-      - binutils-dev 
+      - binutils-dev
 env:
   global:
     - RUST_BACKTRACE="1"
