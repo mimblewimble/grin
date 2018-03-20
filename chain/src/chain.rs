@@ -517,7 +517,8 @@ impl Chain {
 
 		// write the block marker so we can safely rewind to
 		// the pos for that block when we validate the extension below
-		self.store.save_block_marker(&h, &(rewind_to_output, rewind_to_kernel))?;
+		self.store
+			.save_block_marker(&h, &(rewind_to_output, rewind_to_kernel))?;
 
 		let mut txhashset =
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), None)?;
