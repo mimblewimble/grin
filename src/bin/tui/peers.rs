@@ -16,7 +16,7 @@
 
 use std::cmp::Ordering;
 
-use grin::types::{PeerStats, ServerStats};
+use grin::stats::{PeerStats, ServerStats};
 
 use cursive::Cursive;
 use cursive::view::View;

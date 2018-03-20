@@ -25,13 +25,15 @@ use std::time;
 use adapters::*;
 use api;
 use chain;
-use core::{genesis, global};
+use core::{consensus, genesis, global};
+use core::core::target::Difficulty;
 use miner;
 use p2p;
 use pool;
 use seed;
 use sync;
 use types::*;
+use stats::*;
 use pow;
 use util::LOGGER;
 
@@ -263,6 +265,58 @@ impl Server {
 	pub fn get_server_stats(&self) -> Result<ServerStats, Error> {
 		let mining_stats = self.state_info.mining_stats.read().unwrap().clone();
 		let awaiting_peers = self.state_info.awaiting_peers.load(Ordering::Relaxed);
+
+		// Fill out stats on our current difficulty calculation
+		// TODO: check the overhead of calculating this again isn't too much
+		// could return it from next_difficulty, but would rather keep consensus
+		// code clean. This may be handy for testing but not really needed
+		// for release
+		let diff_stats = {
+			let diff_iter = self.chain.difficulty_iter();
+			let last_blocks: Vec<Result<(u64, Difficulty), consensus::TargetError>> =
+				global::difficulty_data_to_vector(diff_iter)
+					.into_iter()
+					.skip(consensus::MEDIAN_TIME_WINDOW as usize)
+					.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
+					.collect();
+
+			let mut last_time = last_blocks[0].clone().unwrap().0;
+			let tip_height = self.chain.head().unwrap().height as i64;
+			let earliest_block_height = tip_height as i64 - last_blocks.len() as i64;
+
+			let mut i = 1;
+
+			let diff_entries: Vec<DiffBlock> = last_blocks
+				.iter()
+				.skip(1)
+				.map(|n| {
+					let (time, diff) = n.clone().unwrap();
+					let dur = time - last_time;
+					let height = earliest_block_height + i + 1;
+					let index = tip_height - height;
+					i += 1;
+					last_time = time;
+					DiffBlock {
+						block_number: height,
+						block_index: index,
+						difficulty: diff.into_num(),
+						time: time,
+						duration: dur,
+					}
+				})
+				.collect();
+
+			let block_time_sum = diff_entries.iter().fold(0, |sum, t| sum + t.duration);
+			let block_diff_sum = diff_entries.iter().fold(0, |sum, d| sum + d.difficulty);
+			DiffStats {
+				height: tip_height as u64,
+				last_blocks: diff_entries,
+				average_block_time: block_time_sum / consensus::DIFFICULTY_ADJUST_WINDOW,
+				average_difficulty: block_diff_sum / consensus::DIFFICULTY_ADJUST_WINDOW,
+				window_size: consensus::DIFFICULTY_ADJUST_WINDOW,
+			}
+		};
+
 		let peer_stats = self.p2p
 			.peers
 			.connected_peers()
@@ -280,6 +334,7 @@ impl Server {
 			awaiting_peers: awaiting_peers,
 			mining_stats: mining_stats,
 			peer_stats: peer_stats,
+			diff_stats: diff_stats,
 		})
 	}
 

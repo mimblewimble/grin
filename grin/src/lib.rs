@@ -48,7 +48,9 @@ mod server;
 mod seed;
 mod sync;
 pub mod types;
+pub mod stats;
 mod miner;
 
 pub use server::Server;
-pub use types::{Seeding, ServerConfig, ServerStats};
+pub use types::{Seeding, ServerConfig};
+pub use stats::ServerStats;
