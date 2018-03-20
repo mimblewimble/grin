@@ -1,8 +1,9 @@
 [package]
 name = "grin_core"
 version = "0.1.0"
-authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
+authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 workspace = ".."
+publish = false
 
 [dependencies]
 bitflags = "^1.0"
@@ -16,5 +17,6 @@ serde_derive = "~1.0.8"
 siphasher = "~0.1"
 time = "^0.1"
 lazy_static = "~0.2.8"
+
 grin_keychain = { path = "../keychain" }
 grin_util = { path = "../util" }

@@ -1,9 +1,9 @@
 [package]
 name = "grin_util"
 version = "0.1.0"
-authors = ["Ignotus Peverell <igno.peverell@protonmail.com>",
-           "Yeastplume <yeastplume@protonmail.com>"]
+authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 workspace = ".."
+publish = false
 
 [dependencies]
 slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
@@ -20,6 +20,6 @@ zip = "^0.2.6"
 
 [dependencies.secp256k1zkp]
 git = "https://github.com/mimblewimble/rust-secp256k1-zkp"
-tag="grin_integration_15"
+tag = "grin_integration_15"
 #path = "../../rust-secp256k1-zkp"
-features=["bullet-proof-sizing"]
+features = ["bullet-proof-sizing"]
