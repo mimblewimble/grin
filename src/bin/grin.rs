@@ -84,48 +84,6 @@ fn start_server_tui(config: grin::ServerConfig) {
 }
 
 fn main() {
-	// First, load a global config object,
-	// then modify that object with any switches
-	// found so that the switches override the
-	// global config file
-
-	// This will return a global config object,
-	// which will either contain defaults for all // of the config structures or a
-	// configuration
-	// read from a config file
-
-	let mut global_config = GlobalConfig::new(None).unwrap_or_else(|e| {
-		panic!("Error parsing config file: {}", e);
-	});
-
-	if global_config.using_config_file {
-		// initialise the logger
-		let mut log_conf = global_config
-			.members
-			.as_mut()
-			.unwrap()
-			.logging
-			.clone()
-			.unwrap();
-		let run_tui = global_config.members.as_mut().unwrap().server.run_tui;
-		if run_tui.is_some() && run_tui.unwrap() {
-			log_conf.log_to_stdout = false;
-			log_conf.tui_running = Some(true);
-		}
-		init_logger(Some(log_conf));
-		global::set_mining_mode(
-			global_config
-				.members
-				.as_mut()
-				.unwrap()
-				.server
-				.clone()
-				.chain_type,
-		);
-	} else {
-		init_logger(Some(LoggingConfig::default()));
-	}
-
 	let args = App::new("Grin")
 		.version("0.1")
 		.author("The Grin Team")
@@ -300,6 +258,48 @@ fn main() {
 				NOTE: Backup wallet.* and run `wallet listen` before running restore.")))
 
 	.get_matches();
+
+	// load a global config object,
+	// then modify that object with any switches
+	// found so that the switches override the
+	// global config file
+
+	// This will return a global config object,
+	// which will either contain defaults for all // of the config structures or a
+	// configuration
+	// read from a config file
+
+	let mut global_config = GlobalConfig::new(None).unwrap_or_else(|e| {
+		panic!("Error parsing config file: {}", e);
+	});
+
+	if global_config.using_config_file {
+		// initialise the logger
+		let mut log_conf = global_config
+			.members
+			.as_mut()
+			.unwrap()
+			.logging
+			.clone()
+			.unwrap();
+		let run_tui = global_config.members.as_mut().unwrap().server.run_tui;
+		if run_tui.is_some() && run_tui.unwrap() && args.subcommand().0 != "wallet" {
+			log_conf.log_to_stdout = false;
+			log_conf.tui_running = Some(true);
+		}
+		init_logger(Some(log_conf));
+		global::set_mining_mode(
+			global_config
+				.members
+				.as_mut()
+				.unwrap()
+				.server
+				.clone()
+				.chain_type,
+		);
+	} else {
+		init_logger(Some(LoggingConfig::default()));
+	}
 
 	match args.subcommand() {
 		// server commands and options
