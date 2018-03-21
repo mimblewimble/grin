@@ -37,15 +37,15 @@ Bitcoin's 10 minute block time has its initial 50 btc reward cut in half every 4
 
 ### Wait, what!? No address?
 
-Nope, no address. All outputs in Grin are unique and have no common data with any previous output. Instead of relying on a known address to send money, transactions have to be built interactively, with 2 (or more) wallets exchanging data with one another. Practically, this isn't so much of a problem as there are multiple ways for 2 programs to interact privately and securely. And this interaction could even take place over email or Signal (or carrier pigeons).
+Nope, no address. All outputs in Grin are unique and have no common data with any previous output. Instead of relying on a known address to send money, transactions have to be built interactively, with two (or more) wallets exchanging data with one another. Practically speaking, this isn't so much of a problem as there are multiple ways for two programs to interact privately and securely. This interaction could even take place over email or Signal (or carrier pigeons).
 
-### If transactions information get removed, can't I just cheat and create money?
+### If transaction information gets removed, can't I just cheat and create money?
 
 No, and this is where MimbleWimble and Grin shine. Confidential transactions are a form of [homomorphic encryption](https://en.wikipedia.org/wiki/Homomorphic_encryption). Without revealing any amount, Grin can verify that the sum of all transaction inputs equal the sum of transaction outputs, plus the fee. Going even further, comparing the sum of all money created by mining with the total sum of money that's being held, Grin nodes can check the correctness of the total money supply.
 
-### If I listen to transaction relay, can I just figure out who they belong to before being cut-through?
+### If I listen to transaction relay, can't I just figure out who they belong to before being cut-through?
 
-You can figure out which outputs are being spent by which transaction. But the trail of data stops here. All inputs and outputs look like random pieces of data, so you can't tell if the money was transferred, still belongs to the same person, which output is the actual transfer and which is the change, etc. Grin transactions are built with *no identifiable piece of information*.
+You can figure out which outputs are being spent by which transaction, but the trail of data stops here. All inputs and outputs look like random pieces of data, so you can't tell if the money was transferred, still belongs to the same person, which output is the actual transfer and which is the change, etc. Grin transactions are built with *no identifiable piece of information*.
 
 ### What about the quantum computaggedon?
 
