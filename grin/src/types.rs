@@ -88,6 +88,19 @@ impl From<wallet::Error> for Error {
 
 /// Type of seeding the server will use to find other peers on the network.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ChainValidationMode {
+	EveryBlock,
+	Disabled,
+}
+
+impl Default for ChainValidationMode {
+	fn default() -> ChainValidationMode {
+		ChainValidationMode::EveryBlock
+	}
+}
+
+/// Type of seeding the server will use to find other peers on the network.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Seeding {
 	/// No seeding, mostly for tests that programmatically connect
 	None,
@@ -121,6 +134,9 @@ pub struct ServerConfig {
 
 	/// Whether this node is a full archival node or a fast-sync, pruned node
 	pub archive_mode: Option<bool>,
+
+	#[serde(default)]
+	pub chain_validation_mode: ChainValidationMode, 
 
 	/// Method used to get the list of seed nodes for initial bootstrap.
 	#[serde(default)]
@@ -169,6 +185,7 @@ impl Default for ServerConfig {
 			mining_config: Some(pow::types::MinerConfig::default()),
 			chain_type: ChainTypes::default(),
 			archive_mode: None,
+			chain_validation_mode: ChainValidationMode::default(),
 			pool_config: pool::PoolConfig::default(),
 			skip_sync_wait: None,
 			run_tui: None,
