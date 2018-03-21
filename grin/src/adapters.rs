@@ -17,6 +17,7 @@ use std::net::SocketAddr;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock, Weak};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 use rand;
 use rand::Rng;
 
@@ -30,6 +31,7 @@ use p2p;
 use pool;
 use util::OneTime;
 use store;
+use types::{ChainValidationMode, ServerConfig};
 use util::LOGGER;
 
 // All adapters use `Weak` references instead of `Arc` to avoid cycles that
@@ -51,6 +53,7 @@ pub struct NetToChainAdapter {
 	chain: Weak<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	peers: OneTime<Weak<p2p::Peers>>,
+	config: ServerConfig,
 }
 
 impl p2p::ChainAdapter for NetToChainAdapter {
@@ -334,12 +337,14 @@ impl NetToChainAdapter {
 		currently_syncing: Arc<AtomicBool>,
 		chain_ref: Weak<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		config: ServerConfig,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
 			currently_syncing: currently_syncing,
 			chain: chain_ref,
 			tx_pool: tx_pool,
 			peers: OneTime::new(),
+			config: config,
 		}
 	}
 
@@ -388,7 +393,7 @@ impl NetToChainAdapter {
 		let prev_hash = b.header.previous;
 		let bhash = b.hash();
 		let chain = w(&self.chain);
-		match chain.process_block(b, self.chain_opts()) {
+		let result = match chain.process_block(b, self.chain_opts()) {
 			Ok(_) => true,
 			Err(chain::Error::Orphan) => {
 				// make sure we did not miss the parent block
@@ -415,7 +420,36 @@ impl NetToChainAdapter {
 				);
 				true
 			}
+		};
+
+		// If we are running in "validate the full chain every block" then
+		// panic here if validation fails for any reason.
+		// We are out of consensus at this point and want to track the problem
+		// down as soon as possible.
+		// Skip this if we are currently syncing (too slow).
+		if !self.currently_syncing.load(Ordering::Relaxed)
+			&& self.config.chain_validation_mode == ChainValidationMode::EveryBlock
+		{
+			let now = Instant::now();
+
+			debug!(
+				LOGGER,
+				"adapter: process_block: ***** validating full chain state at {}", bhash,
+			);
+
+			let chain = w(&self.chain);
+			chain
+				.validate(true)
+				.expect("chain validation failed, hard stop");
+
+			debug!(
+				LOGGER,
+				"adapter: process_block: ***** done validating full chain state, took {}s",
+				now.elapsed().as_secs(),
+			);
 		}
+
+		result
 	}
 
 	// After receiving a compact block if we cannot successfully hydrate
