@@ -555,7 +555,7 @@ fn pmmr_compact_horizon() {
 fn setup(tag: &str) -> (String, Vec<TestElem>) {
 	let _ = env_logger::init();
 	let t = time::get_time();
-	let data_dir = format!("./target/{}.{}-{}", t.sec, t.nsec, tag);
+	let data_dir = format!("./target/tmp/{}.{}-{}", t.sec, t.nsec, tag);
 	fs::create_dir_all(data_dir.clone()).unwrap();
 
 	let mut elems = vec![];

@@ -17,15 +17,19 @@
 use std::cmp::Ordering;
 
 use cursive::Cursive;
+use cursive::event::Key;
 use cursive::view::View;
-use cursive::views::{BoxView, Dialog, LinearLayout, TextView};
+use cursive::views::{BoxView, Button, Dialog, LinearLayout, OnEventView, Panel, StackView,
+                     TextView};
 use cursive::direction::Orientation;
 use cursive::traits::*;
+use std::time;
+use tui::chrono::prelude::*;
 
 use tui::constants::*;
 use tui::types::*;
 
-use grin::types::ServerStats;
+use grin::stats::*;
 use tui::pow::cuckoo_miner::CuckooMinerDeviceStats;
 use tui::table::{TableView, TableViewItem};
 
@@ -100,12 +104,80 @@ impl TableViewItem<MiningDeviceColumn> for CuckooMinerDeviceStats {
 	}
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+enum DiffColumn {
+	BlockNumber,
+	Index,
+	Difficulty,
+	Time,
+	Duration,
+}
+
+impl DiffColumn {
+	fn _as_str(&self) -> &str {
+		match *self {
+			DiffColumn::BlockNumber => "Block Number",
+			DiffColumn::Index => "Block Index",
+			DiffColumn::Difficulty => "Network Difficulty",
+			DiffColumn::Time => "Block Time",
+			DiffColumn::Duration => "Duration",
+		}
+	}
+}
+
+impl TableViewItem<DiffColumn> for DiffBlock {
+	fn to_column(&self, column: DiffColumn) -> String {
+		let naive_datetime = NaiveDateTime::from_timestamp(self.time as i64, 0);
+		let datetime: DateTime<Utc> = DateTime::from_utc(naive_datetime, Utc);
+
+		match column {
+			DiffColumn::BlockNumber => self.block_number.to_string(),
+			DiffColumn::Index => self.block_index.to_string(),
+			DiffColumn::Difficulty => self.difficulty.to_string(),
+			DiffColumn::Time => format!("{}", datetime).to_string(),
+			DiffColumn::Duration => format!("{}s", self.duration).to_string(),
+		}
+	}
+
+	fn cmp(&self, _other: &Self, column: DiffColumn) -> Ordering
+	where
+		Self: Sized,
+	{
+		match column {
+			DiffColumn::BlockNumber => Ordering::Equal,
+			DiffColumn::Index => Ordering::Equal,
+			DiffColumn::Difficulty => Ordering::Equal,
+			DiffColumn::Time => Ordering::Equal,
+			DiffColumn::Duration => Ordering::Equal,
+		}
+	}
+}
 /// Mining status view
 pub struct TUIMiningView;
 
 impl TUIStatusListener for TUIMiningView {
 	/// Create the mining view
 	fn create() -> Box<View> {
+		let devices_button = Button::new_raw("Status / Devices", |s| {
+			let _ = s.call_on_id("mining_stack_view", |sv: &mut StackView| {
+				let pos = sv.find_layer_from_id("mining_device_view").unwrap();
+				sv.move_to_front(pos);
+			});
+		}).with_id(SUBMENU_MINING_BUTTON);
+		let difficulty_button = Button::new_raw("Difficulty", |s| {
+			let _ = s.call_on_id("mining_stack_view", |sv: &mut StackView| {
+				let pos = sv.find_layer_from_id("mining_difficulty_view").unwrap();
+				sv.move_to_front(pos);
+			});
+		});
+		let mining_submenu = LinearLayout::new(Orientation::Horizontal)
+			.child(Panel::new(devices_button))
+			.child(Panel::new(difficulty_button));
+
+		let mining_submenu = OnEventView::new(mining_submenu).on_pre_event(Key::Esc, move |c| {
+			let _ = c.focus_id(MAIN_MENU);
+		});
+
 		let table_view =
 			TableView::<CuckooMinerDeviceStats, MiningDeviceColumn>::new()
 				.column(MiningDeviceColumn::PluginId, "Plugin ID", |c| {
@@ -142,12 +214,68 @@ impl TUIStatusListener for TUIMiningView {
 					.child(TextView::new("  ").with_id("network_info")),
 			);
 
-		let mining_view = LinearLayout::new(Orientation::Vertical)
+		let mining_device_view = LinearLayout::new(Orientation::Vertical)
 			.child(status_view)
 			.child(BoxView::with_full_screen(
 				Dialog::around(table_view.with_id(TABLE_MINING_STATUS).min_size((50, 20)))
 					.title("Mining Devices"),
-			));
+			))
+			.with_id("mining_device_view");
+
+		let diff_status_view = LinearLayout::new(Orientation::Vertical)
+			.child(
+				LinearLayout::new(Orientation::Horizontal)
+					.child(TextView::new("Tip Height: "))
+					.child(TextView::new("").with_id("diff_cur_height")),
+			)
+			.child(
+				LinearLayout::new(Orientation::Horizontal)
+					.child(TextView::new("Difficulty Adjustment Window: "))
+					.child(TextView::new("").with_id("diff_adjust_window")),
+			)
+			.child(
+				LinearLayout::new(Orientation::Horizontal)
+					.child(TextView::new("Average Block Time: "))
+					.child(TextView::new("").with_id("diff_avg_block_time")),
+			)
+			.child(
+				LinearLayout::new(Orientation::Horizontal)
+					.child(TextView::new("Average Difficulty: "))
+					.child(TextView::new("").with_id("diff_avg_difficulty")),
+			);
+
+		let diff_table_view = TableView::<DiffBlock, DiffColumn>::new()
+			.column(DiffColumn::BlockNumber, "Block Number", |c| {
+				c.width_percent(20)
+			})
+			.column(DiffColumn::Index, "Distance from Head", |c| {
+				c.width_percent(20)
+			})
+			.column(DiffColumn::Difficulty, "Network Difficulty", |c| {
+				c.width_percent(20)
+			})
+			.column(DiffColumn::Time, "Block Time", |c| c.width_percent(20))
+			.column(DiffColumn::Duration, "Duration", |c| c.width_percent(20));
+
+		let mining_difficulty_view = LinearLayout::new(Orientation::Vertical)
+			.child(diff_status_view)
+			.child(BoxView::with_full_screen(
+				Dialog::around(
+					diff_table_view
+						.with_id(TABLE_MINING_DIFF_STATUS)
+						.min_size((50, 20)),
+				).title("Mining Difficulty Data"),
+			))
+			.with_id("mining_difficulty_view");
+
+		let view_stack = StackView::new()
+			.layer(mining_difficulty_view)
+			.layer(mining_device_view)
+			.with_id("mining_stack_view");
+
+		let mining_view = LinearLayout::new(Orientation::Vertical)
+			.child(mining_submenu)
+			.child(view_stack);
 
 		Box::new(mining_view.with_id(VIEW_MINING))
 	}
@@ -191,6 +319,7 @@ impl TUIStatusListener for TUIMiningView {
 			}
 		};
 
+		// device
 		c.call_on_id("mining_config_status", |t: &mut TextView| {
 			t.set_content(basic_mining_config_status);
 		});
@@ -201,8 +330,32 @@ impl TUIStatusListener for TUIMiningView {
 			t.set_content(basic_network_info);
 		});
 
+		//diff stats
+		c.call_on_id("diff_cur_height", |t: &mut TextView| {
+			t.set_content(stats.diff_stats.height.to_string());
+		});
+		c.call_on_id("diff_adjust_window", |t: &mut TextView| {
+			t.set_content(stats.diff_stats.window_size.to_string());
+		});
+		let dur = time::Duration::from_secs(stats.diff_stats.average_block_time);
+		c.call_on_id("diff_avg_block_time", |t: &mut TextView| {
+			t.set_content(format!("{} Secs", dur.as_secs()).to_string());
+		});
+		c.call_on_id("diff_avg_difficulty", |t: &mut TextView| {
+			t.set_content(stats.diff_stats.average_difficulty.to_string());
+		});
+
 		let mining_stats = stats.mining_stats.clone();
 		let device_stats = mining_stats.device_stats;
+		let mut diff_stats = stats.diff_stats.last_blocks.clone();
+		diff_stats.reverse();
+		let _ = c.call_on_id(
+			TABLE_MINING_DIFF_STATUS,
+			|t: &mut TableView<DiffBlock, DiffColumn>| {
+				t.set_items(diff_stats);
+			},
+		);
+
 		if device_stats.is_none() {
 			return;
 		}

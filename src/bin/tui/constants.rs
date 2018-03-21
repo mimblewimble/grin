@@ -24,9 +24,12 @@ pub const TABLE_PEER_STATUS: &str = "peer_status_table";
 
 // Mining View
 pub const VIEW_MINING: &str = "mining_view";
+pub const SUBMENU_MINING_BUTTON: &str = "mining_submenu_button";
 pub const TABLE_MINING_STATUS: &str = "mining_status_table";
+pub const TABLE_MINING_DIFF_STATUS: &str = "mining_diff_status_table";
 
 // Menu and root elements
+pub const MAIN_MENU: &str = "main_menu";
 pub const ROOT_STACK: &str = "root_stack";
 
 // Logo (not final, to be used somewhere eventually

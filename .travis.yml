@@ -1,5 +1,10 @@
 language: rust
-cache: cargo
+cache:
+  cargo: true
+  timeout:
+    240 # =4 min (default 120). ~6 GB cache up/down from S3 needs time.
+before_cache:
+  - rm -rf target/tmp
 dist: trusty
 sudo: false
 rust:
@@ -17,7 +22,7 @@ addons:
       - libdw-dev
       - cmake
       - gcc
-      - binutils-dev 
+      - binutils-dev
 env:
   global:
     - RUST_BACKTRACE="1"

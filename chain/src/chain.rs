@@ -268,7 +268,7 @@ impl Chain {
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b, opts);
 				}
-				Ok((Some(tip.clone()), Some(b.clone())))
+				Ok((Some(tip.clone()), Some(b)))
 			}
 			Ok(None) => {
 				// block got accepted but we did not extend the head
@@ -286,12 +286,12 @@ impl Chain {
 					let adapter = self.adapter.clone();
 					adapter.block_accepted(&b, opts);
 				}
-				Ok((None, Some(b.clone())))
+				Ok((None, Some(b)))
 			}
 			Err(Error::Orphan) => {
 				let block_hash = b.hash();
 				let orphan = Orphan {
-					block: b.clone(),
+					block: b,
 					opts: opts,
 					added: Instant::now(),
 				};
@@ -412,10 +412,19 @@ impl Chain {
 	}
 
 	/// Validate the current chain state.
-	pub fn validate(&self) -> Result<(), Error> {
+	pub fn validate(&self, skip_rproofs: bool) -> Result<(), Error> {
 		let header = self.store.head_header()?;
 		let mut txhashset = self.txhashset.write().unwrap();
-		txhashset::extending(&mut txhashset, |extension| extension.validate(&header))
+
+		// Now create an extension from the txhashset and validate
+		// against the latest block header.
+		// We will rewind the extension internally to the pos for
+		// the block header to ensure the view is consistent.
+		// Force rollback first as this is a "read-only" extension.
+		txhashset::extending(&mut txhashset, |extension| {
+			extension.force_rollback();
+			extension.validate(&header, skip_rproofs)
+		})
 	}
 
 	/// Check if the input has matured sufficiently for the given block height.
@@ -515,11 +524,15 @@ impl Chain {
 		let header = self.store.get_block_header(&h)?;
 		txhashset::zip_write(self.db_root.clone(), txhashset_data)?;
 
+		// write the block marker so we can safely rewind to
+		// the pos for that block when we validate the extension below
+		self.store
+			.save_block_marker(&h, &(rewind_to_output, rewind_to_kernel))?;
+
 		let mut txhashset =
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), None)?;
 		txhashset::extending(&mut txhashset, |extension| {
-			extension.rewind_pos(header.height, rewind_to_output, rewind_to_kernel)?;
-			extension.validate(&header)?;
+			extension.validate(&header, false)?;
 			// TODO validate kernels and their sums with Outputs
 			extension.rebuild_index()?;
 			Ok(())
@@ -559,7 +572,7 @@ impl Chain {
 		// First check we can successfully validate the full chain state.
 		// If we cannot then do not attempt to compact.
 		// This should not be required long term - but doing this for debug purposes.
-		self.validate()?;
+		self.validate(true)?;
 
 		// Now compact the txhashset via the extension.
 		{
@@ -575,7 +588,7 @@ impl Chain {
 
 		// Now check we can still successfully validate the chain state after
 		// compacting.
-		self.validate()?;
+		self.validate(true)?;
 
 		// we need to be careful here in testing as 20 blocks is not that long
 		// in wall clock time

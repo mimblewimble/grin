@@ -16,7 +16,7 @@
 
 use cursive::Cursive;
 use cursive::view::View;
-use grin::types::ServerStats;
+use grin::stats::ServerStats;
 
 /// Main message struct to communicate between the UI and
 /// the main process

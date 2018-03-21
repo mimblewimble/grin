@@ -112,7 +112,7 @@ fn mine_empty_chain() {
 		let header_by_height = chain.get_header_by_height(n).unwrap();
 		assert_eq!(header_by_height.hash(), bhash);
 
-		chain.validate().unwrap();
+		chain.validate(false).unwrap();
 	}
 }
 
@@ -295,7 +295,7 @@ fn spend_in_fork_and_compact() {
 	chain
 		.process_block(next.clone(), chain::Options::SKIP_POW)
 		.unwrap();
-	chain.validate().unwrap();
+	chain.validate(false).unwrap();
 
 	println!("tx 1 processed, should have 6 outputs or 396 bytes in file, first skipped");
 
@@ -311,7 +311,7 @@ fn spend_in_fork_and_compact() {
 	let next = prepare_block_tx(&kc, &prev_main, &chain, 9, vec![&tx2]);
 	let prev_main = next.header.clone();
 	chain.process_block(next, chain::Options::SKIP_POW).unwrap();
-	chain.validate().unwrap();
+	chain.validate(false).unwrap();
 
 	println!("tx 2 processed");
 	/* panic!("Stop"); */
@@ -326,7 +326,7 @@ fn spend_in_fork_and_compact() {
 	chain
 		.process_block(fork_next, chain::Options::SKIP_POW)
 		.unwrap();
-	chain.validate().unwrap();
+	chain.validate(false).unwrap();
 
 	// check state
 	let head = chain.head_header().unwrap();
@@ -349,7 +349,7 @@ fn spend_in_fork_and_compact() {
 	chain
 		.process_block(fork_next, chain::Options::SKIP_POW)
 		.unwrap();
-	chain.validate().unwrap();
+	chain.validate(false).unwrap();
 
 	// check state
 	let head = chain.head_header().unwrap();
@@ -374,9 +374,9 @@ fn spend_in_fork_and_compact() {
 		chain.process_block(next, chain::Options::SKIP_POW).unwrap();
 	}
 
-	chain.validate().unwrap();
+	chain.validate(false).unwrap();
 	chain.compact().unwrap();
-	chain.validate().unwrap();
+	chain.validate(false).unwrap();
 }
 
 fn prepare_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
@@ -421,6 +421,7 @@ fn prepare_block_nosum(
 	diff: u64,
 	txs: Vec<&Transaction>,
 ) -> Block {
+	let proof_size = global::proofsize();
 	let key_id = kc.derive_key_id(diff as u32).unwrap();
 
 	let mut b = match core::core::Block::new(prev, txs, kc, &key_id, Difficulty::from_num(diff)) {
@@ -429,5 +430,6 @@ fn prepare_block_nosum(
 	};
 	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 	b.header.total_difficulty = prev.total_difficulty.clone() + Difficulty::from_num(diff);
+	b.header.pow = core::core::Proof::random(proof_size);
 	b
 }

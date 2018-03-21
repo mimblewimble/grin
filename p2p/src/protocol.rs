@@ -63,7 +63,13 @@ impl MessageHandler for Protocol {
 
 			Type::Transaction => {
 				let tx: core::Transaction = msg.body()?;
-				adapter.transaction_received(tx);
+				adapter.transaction_received(tx, false);
+				Ok(None)
+			}
+
+			Type::StemTransaction => {
+				let tx: core::Transaction = msg.body()?;
+				adapter.transaction_received(tx, true);
 				Ok(None)
 			}
 

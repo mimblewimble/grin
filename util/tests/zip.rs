@@ -21,8 +21,8 @@ use util::zip;
 
 #[test]
 fn zip_unzip() {
-	let root = Path::new("./target");
-	let zip_name = "./target/zipped.zip";
+	let root = Path::new("./target/tmp");
+	let zip_name = "./target/tmp/zipped.zip";
 
 	fs::create_dir_all(root.join("./to_zip/sub")).unwrap();
 	write_files(&root).unwrap();
