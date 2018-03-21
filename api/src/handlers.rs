@@ -405,6 +405,20 @@ impl Handler for ChainHandler {
 	}
 }
 
+/// Chain validation handler.
+/// GET /v1/chain/validate
+pub struct ChainValidationHandler {
+	pub chain: Weak<chain::Chain>,
+}
+
+impl Handler for ChainValidationHandler {
+	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+		// TODO - read skip_rproofs from query params
+		w(&self.chain).validate(true).unwrap();
+		Ok(Response::with((status::Ok, "{}")))
+	}
+}
+
 /// Chain compaction handler. Trigger a compaction of the chain state to regain
 /// storage space.
 /// GET /v1/chain/compact
@@ -636,6 +650,9 @@ pub fn start_rest_apis<T>(
 			let chain_compact_handler = ChainCompactHandler {
 				chain: chain.clone(),
 			};
+			let chain_validation_handler = ChainValidationHandler {
+				chain: chain.clone(),
+			};
 			let status_handler = StatusHandler {
 				chain: chain.clone(),
 				peers: peers.clone(),
@@ -667,6 +684,7 @@ pub fn start_rest_apis<T>(
 				"get blocks".to_string(),
 				"get chain".to_string(),
 				"get chain/compact".to_string(),
+				"get chain/validate".to_string(),
 				"get chain/outputs".to_string(),
 				"get status".to_string(),
 				"get txhashset/roots".to_string(),
@@ -688,6 +706,7 @@ pub fn start_rest_apis<T>(
 				blocks: get "/blocks/*" => block_handler,
 				chain_tip: get "/chain" => chain_tip_handler,
 				chain_compact: get "/chain/compact" => chain_compact_handler,
+				chain_validate: get "/chain/validate" => chain_validation_handler,
 				chain_outputs: get "/chain/outputs/*" => output_handler,
 				status: get "/status" => status_handler,
 				txhashset_roots: get "/txhashset/*" => txhashset_handler,
