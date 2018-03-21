@@ -392,7 +392,7 @@ impl NetToChainAdapter {
 			Ok(_) => true,
 			Err(chain::Error::Orphan) => {
 				// make sure we did not miss the parent block
-				if !chain.is_orphan(&prev_hash) {
+				if !chain.is_orphan(&prev_hash) && !self.currently_syncing.load(Ordering::Relaxed) {
 					if let Err(_) = chain.get_block_header(&prev_hash) {
 						debug!(LOGGER, "adapter: process_block: received an orphan block, checking the parent: {:}", prev_hash);
 						self.request_block_by_hash(prev_hash, &addr)

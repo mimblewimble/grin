@@ -1,14 +1,11 @@
 [package]
 name = "grin_wallet"
 version = "0.1.0"
-authors = [
-	"Ignotus Peverell <igno_peverell@protonmail.com>",
-	"Laurent Meunier <laurent.meunier95@gmail.com>",
-	"Antioch Peverell",
-]
+authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+workspace = '..'
+publish = false
 
 [dependencies]
-
 byteorder = "^1.0"
 slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
 rand = "^0.3"
@@ -22,13 +19,14 @@ failure_derive = "0.1.1"
 futures = "^0.1.15"
 iron = "~0.5.1"
 hyper = "~0.11.4"
-tokio-core="~0.1.1"
-tokio-retry="~0.1.0"
+tokio-core = "~0.1.1"
+tokio-retry = "~0.1.0"
 router = "~0.5.1"
 prettytable-rs = "^0.6"
 term = "~0.4.6"
 uuid = { version = "~0.5.1", features = ["serde", "v4"] }
 urlencoded = "~0.5.0"
+
 grin_api = { path = "../api" }
 grin_core = { path = "../core" }
 grin_keychain = { path = "../keychain" }

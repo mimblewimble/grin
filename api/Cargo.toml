@@ -1,16 +1,11 @@
 [package]
 name = "grin_api"
 version = "0.1.0"
-authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
+authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 workspace = ".."
+publish = false
 
 [dependencies]
-grin_core = { path = "../core" }
-grin_chain = { path = "../chain" }
-grin_pool = { path = "../pool" }
-grin_store = { path = "../store" }
-grin_util = { path = "../util" }
-grin_p2p = { path = "../p2p" }
 hyper = "~0.10.6"
 slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
 lazy_static = "~0.2.8"
@@ -22,3 +17,10 @@ urlencoded = "~0.5.0"
 serde = "~1.0.8"
 serde_derive = "~1.0.8"
 serde_json = "~1.0.9"
+
+grin_core = { path = "../core" }
+grin_chain = { path = "../chain" }
+grin_pool = { path = "../pool" }
+grin_store = { path = "../store" }
+grin_util = { path = "../util" }
+grin_p2p = { path = "../p2p" }

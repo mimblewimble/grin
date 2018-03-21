@@ -69,8 +69,8 @@ pub fn run_sync(
 				let have_txhashset = !fast_sync
 					|| head.height > 0 && header_head.height.saturating_sub(head.height) <= horizon;
 
-				let syncing = needs_syncing(
-					currently_syncing.clone(),
+				let mut syncing = needs_syncing(
+					currently_syncing.as_ref(),
 					peers.clone(),
 					chain.clone(),
 					!have_txhashset,
@@ -90,36 +90,39 @@ pub fn run_sync(
 						body_sync(peers.clone(), chain.clone());
 						prev_body_sync = current_time;
 					}
-				} else if !have_txhashset
-					&& current_time - prev_state_sync > time::Duration::seconds(5 * 60)
-				{
-					if let Some(peer) = peers.most_work_peer() {
-						if let Ok(p) = peer.try_read() {
-							debug!(
-								LOGGER,
-								"Header head before txhashset request: {} / {}",
-								header_head.height,
-								header_head.last_block_h
-							);
+				} else if !have_txhashset && header_head.height > 0 {
+					if current_time - prev_state_sync > time::Duration::seconds(5 * 60) {
+						if let Some(peer) = peers.most_work_peer() {
+							if let Ok(p) = peer.try_read() {
+								debug!(
+									LOGGER,
+									"Header head before txhashset request: {} / {}",
+									header_head.height,
+									header_head.last_block_h
+								);
 
-							// just to handle corner case of a too early start
-							if header_head.height > horizon {
-								// ask for txhashset at horizon
-								let mut txhashset_head =
-									chain.get_block_header(&header_head.prev_block_h).unwrap();
-								for _ in 0..horizon - 2 {
-									txhashset_head =
-										chain.get_block_header(&txhashset_head.previous).unwrap();
+								// just to handle corner case of a too early start
+								if header_head.height > horizon {
+									// ask for txhashset at horizon
+									let mut txhashset_head =
+										chain.get_block_header(&header_head.prev_block_h).unwrap();
+									for _ in 0..horizon - 2 {
+										txhashset_head =
+											chain.get_block_header(&txhashset_head.previous).unwrap();
+									}
+									p.send_txhashset_request(
+										txhashset_head.height,
+										txhashset_head.hash(),
+									).unwrap();
+									prev_state_sync = current_time;
 								}
-								p.send_txhashset_request(
-									txhashset_head.height,
-									txhashset_head.hash(),
-								).unwrap();
-								prev_state_sync = current_time;
 							}
 						}
 					}
+					syncing = true;
 				}
+				currently_syncing.store(syncing, Ordering::Relaxed);
+
 				thread::sleep(Duration::from_secs(1));
 
 				if stop.load(Ordering::Relaxed) {
@@ -237,8 +240,8 @@ fn request_headers(peer: Arc<RwLock<Peer>>, chain: Arc<chain::Chain>) -> Result<
 
 /// Whether we're currently syncing the chain or we're fully caught up and
 /// just receiving blocks through gossip.
-pub fn needs_syncing(
-	currently_syncing: Arc<AtomicBool>,
+fn needs_syncing(
+	currently_syncing: &AtomicBool,
 	peers: Arc<Peers>,
 	chain: Arc<chain::Chain>,
 	header_only: bool,
@@ -249,16 +252,17 @@ pub fn needs_syncing(
 		chain.total_difficulty()
 	};
 	let peer = peers.most_work_peer();
+	let is_syncing = currently_syncing.load(Ordering::Relaxed);
 
 	// if we're already syncing, we're caught up if no peer has a higher
 	// difficulty than us
-	if currently_syncing.load(Ordering::Relaxed) {
+	if is_syncing {
 		if let Some(peer) = peer {
 			if let Ok(peer) = peer.try_read() {
-				debug!(
-					LOGGER,
+				debug!(LOGGER,
 					"needs_syncing {} {} {}", local_diff, peer.info.total_difficulty, header_only
 				);
+
 				if peer.info.total_difficulty <= local_diff {
 					info!(
 						LOGGER,
@@ -266,15 +270,15 @@ pub fn needs_syncing(
 						local_diff,
 						chain.head().unwrap().height
 					);
-					currently_syncing.store(false, Ordering::Relaxed);
 					if !header_only {
 						let _ = chain.reset_head();
 					}
+					return false;
 				}
 			}
 		} else {
 			info!(LOGGER, "sync: no peers available, disabling sync");
-			currently_syncing.store(false, Ordering::Relaxed);
+			return false
 		}
 	} else {
 		if let Some(peer) = peer {
@@ -294,12 +298,12 @@ pub fn needs_syncing(
 						peer.info.total_difficulty,
 						threshold,
 					);
-					currently_syncing.store(true, Ordering::Relaxed);
+					return true
 				}
 			}
 		}
 	}
-	currently_syncing.load(Ordering::Relaxed)
+	is_syncing
 }
 
 /// We build a locator based on sync_head.

@@ -1,8 +1,9 @@
 [package]
 name = "grin"
 version = "0.1.0"
-authors = ["Ignotus Peverell <igno.peverell@protonmail.com>"]
+authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 exclude = ["**/*.grin", "**/*.grin2"]
+publish = false
 
 [workspace]
 members = ["api", "chain", "config", "core", "grin", "keychain", "p2p", "store", "util", "pool", "wallet"]
@@ -12,15 +13,6 @@ name = "grin"
 path = "src/bin/grin.rs"
 
 [dependencies]
-grin_api = { path = "./api" }
-grin_config = { path = "./config" }
-grin_core = { path = "./core" }
-grin_grin = { path = "./grin" }
-grin_keychain = { path = "./keychain" }
-grin_p2p = { path = "./p2p"}
-grin_pow = { path = "./pow"}
-grin_util = { path = "./util"}
-grin_wallet = { path = "./wallet" }
 blake2-rfc = "~0.2.17"
 clap = "^2.23.3"
 daemonize = "^0.2.3"
@@ -30,6 +22,17 @@ slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_
 term = "~0.4.6"
 time = "^0.1"
 chrono = "^0.4.0"
+
+grin_api = { path = "./api" }
+grin_config = { path = "./config" }
+grin_core = { path = "./core" }
+grin_grin = { path = "./grin" }
+grin_keychain = { path = "./keychain" }
+grin_p2p = { path = "./p2p"}
+grin_pow = { path = "./pow"}
+grin_util = { path = "./util"}
+grin_wallet = { path = "./wallet" }
+
 #This is temporary until cursive author does a new release
 [dependencies.cursive]
 git = "https://github.com/yeastplume/Cursive"
