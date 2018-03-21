@@ -91,7 +91,8 @@ impl From<wallet::Error> for Error {
 pub enum ChainValidationMode {
 	/// Run full chain validation after processing every block.
 	EveryBlock,
-	/// Do not automatically run chain validation during normal block processing.
+	/// Do not automatically run chain validation during normal block
+	/// processing.
 	Disabled,
 }
 
