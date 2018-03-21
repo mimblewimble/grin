@@ -31,7 +31,7 @@ use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdenti
 use core::core::pmmr::{self, MerkleProof, PMMR};
 use core::global;
 use core::core::hash::{Hash, Hashed};
-use core::ser::{self, PMMRIndexHashable, PMMRable};
+use core::ser::{PMMRIndexHashable, PMMRable};
 
 use grin_store;
 use grin_store::pmmr::{PMMRBackend, PMMRFileMetadata};
@@ -554,7 +554,7 @@ impl<'a> Extension<'a> {
 	/// Validate the txhashset state against the provided block header.
 	/// Rewinds to that pos for the header first so we see a consistent
 	/// view of the world.
-	pub fn validate(&mut self, header: &BlockHeader) -> Result<(), Error> {
+	pub fn validate(&mut self, header: &BlockHeader, skip_rproofs: bool) -> Result<(), Error> {
 		// first rewind to the provided header
 		&self.rewind(header)?;
 
@@ -599,9 +599,11 @@ impl<'a> Extension<'a> {
 			}
 		}
 
-		// now verify the rangeproof for each output included in the sum above
-		// this is an expensive operation
-		self.verify_rangeproofs()?;
+		// now verify the rangeproof for each output in the sum above
+		// this is an expensive operation (only verified if requested)
+		if !skip_rproofs {
+			self.verify_rangeproofs()?;
+		}
 
 		Ok(())
 	}
@@ -679,40 +681,24 @@ impl<'a> Extension<'a> {
 	fn sum_kernels(&self, kernel_offset: Option<Commitment>) -> Result<Commitment, Error> {
 		let now = Instant::now();
 
-		// make sure we have the right count of kernels using the MMR, the storage
-		// file may have a few more
-		let mmr_sz = self.kernel_pmmr.unpruned_size();
-		let count = pmmr::n_leaves(mmr_sz);
+		let mut commitments = vec![];
+		if let Some(offset) = kernel_offset {
+			commitments.push(offset);
+		}
 
-		let mut kernel_file = File::open(self.kernel_pmmr.data_file_path())?;
-		let first: TxKernel = ser::deserialize(&mut kernel_file)?;
-		first.verify()?;
-		let mut sum_kernel = first.excess;
+		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
+			if pmmr::is_leaf(n) {
+				if let Some((_, Some(kernel))) = self.kernel_pmmr.get(n, true) {
+					kernel.verify()?;
+					commitments.push(kernel.excess.clone());
+				}
+			}
+		}
 
 		let secp = static_secp_instance();
-		let mut kern_count = 1;
-		loop {
-			match ser::deserialize::<TxKernel>(&mut kernel_file) {
-				Ok(kernel) => {
-					kernel.verify()?;
-					let secp = secp.lock().unwrap();
-					sum_kernel = secp.commit_sum(vec![sum_kernel, kernel.excess], vec![])?;
-					kern_count += 1;
-					if kern_count == count {
-						break;
-					}
-				}
-				Err(_) => break,
-			}
-		}
-
-		// now apply the kernel offset of we have one
-		{
-			let secp = secp.lock().unwrap();
-			if let Some(kernel_offset) = kernel_offset {
-				sum_kernel = secp.commit_sum(vec![sum_kernel, kernel_offset], vec![])?;
-			}
-		}
+		let secp = secp.lock().unwrap();
+		let kern_count = commitments.len();
+		let sum_kernel = secp.commit_sum(commitments, vec![])?;
 
 		debug!(
 			LOGGER,
@@ -730,13 +716,12 @@ impl<'a> Extension<'a> {
 		let mut proof_count = 0;
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
-				if let Some((_, output)) = self.output_pmmr.get(n, true) {
-					let out = output.expect("not a leaf node");
-					match self.rproof_pmmr.get(n, true) {
-						Some((_, Some(rp))) => out.to_output(rp).verify_proof()?,
-						_res => {
-							return Err(Error::OutputNotFound);
-						}
+				if let Some((_, Some(out))) = self.output_pmmr.get(n, true) {
+					if let Some((_, Some(rp))) = self.rproof_pmmr.get(n, true) {
+						out.to_output(rp).verify_proof()?;
+					} else {
+						// TODO - rangeproof not found
+						return Err(Error::OutputNotFound);
 					}
 					proof_count += 1;
 				}
@@ -756,33 +741,29 @@ impl<'a> Extension<'a> {
 	fn sum_outputs(&self) -> Result<Commitment, Error> {
 		let now = Instant::now();
 
-		let mut sum_output = None;
-		let mut output_count = 0;
-		let secp = static_secp_instance();
+		let mut commitments = vec![];
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
-				if let Some((_, output)) = self.output_pmmr.get(n, true) {
-					let out = output.expect("not a leaf node");
-					let commit = out.commit.clone();
-					if let None = sum_output {
-						sum_output = Some(commit);
-					} else {
-						let secp = secp.lock().unwrap();
-						sum_output =
-							Some(secp.commit_sum(vec![sum_output.unwrap(), commit], vec![])?);
-					}
-					output_count += 1;
+				if let Some((_, Some(out))) = self.output_pmmr.get(n, true) {
+					commitments.push(out.commit.clone());
 				}
 			}
 		}
+
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
+		let commit_count = commitments.len();
+		let sum_output = secp.commit_sum(commitments, vec![])?;
+
 		debug!(
 			LOGGER,
 			"Summed {} Outputs, pmmr size {}, took {}s",
-			output_count,
+			commit_count,
 			self.output_pmmr.unpruned_size(),
 			now.elapsed().as_secs(),
 		);
-		Ok(sum_output.unwrap())
+
+		Ok(sum_output)
 	}
 }
 

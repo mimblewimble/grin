@@ -118,13 +118,13 @@ fn data_files() {
 				.expect("previous block pmmr file data doesn't exist");
 
 			println!("Cur_pmmr_md: {:?}", cur_pmmr_md);
-			chain.validate().unwrap();
+			chain.validate(false).unwrap();
 		}
 	}
 	// Now reload the chain, should have valid indices
 	{
 		let chain = reload_chain(chain_dir);
-		chain.validate().unwrap();
+		chain.validate(false).unwrap();
 	}
 }
 
