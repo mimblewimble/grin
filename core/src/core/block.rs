@@ -18,8 +18,8 @@ use time;
 use rand::{thread_rng, Rng};
 use std::collections::HashSet;
 
-use core::{Committed, Input, KernelFeatures, Output, OutputFeatures, Proof, ProofMessageElements,
-           ShortId, SwitchCommitHash, Transaction, TxKernel};
+use core::{Committed, Input, KernelFeatures, Output, OutputFeatures, Proof,
+           ShortId, Transaction, TxKernel};
 use consensus;
 use consensus::{exceeds_weight, reward, VerifySortOrder, REWARD};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
@@ -785,37 +785,23 @@ impl Block {
 		height: u64,
 	) -> Result<(Output, TxKernel), keychain::Error> {
 		let commit = keychain.commit(reward(fees), key_id)?;
-		let switch_commit = keychain.switch_commit(key_id)?;
-		let switch_commit_hash =
-			SwitchCommitHash::from_switch_commit(switch_commit, keychain, key_id);
 
 		trace!(
 			LOGGER,
-			"Block reward - Pedersen Commit is: {:?}, Switch Commit is: {:?}",
+			"Block reward - Pedersen Commit is: {:?}",
 			commit,
-			switch_commit
 		);
-		trace!(
-			LOGGER,
-			"Block reward - Switch Commit Hash is: {:?}",
-			switch_commit_hash
-		);
-
-		let value = reward(fees);
-		let msg = (ProofMessageElements { value: value }).to_proof_message();
 
 		let rproof = keychain.range_proof(
-			value,
+			reward(fees),
 			key_id,
 			commit,
-			Some(switch_commit_hash.as_ref().to_vec()),
-			msg,
+			None,
 		)?;
 
 		let output = Output {
 			features: OutputFeatures::COINBASE_OUTPUT,
 			commit: commit,
-			switch_commit_hash: switch_commit_hash,
 			proof: rproof,
 		};
 
@@ -1059,7 +1045,7 @@ mod test {
 		let b = new_block(vec![], &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
-		let target_len = 1_248;
+		let target_len = 1_216;
 		assert_eq!(vec.len(), target_len,);
 	}
 
@@ -1071,8 +1057,8 @@ mod test {
 		let b = new_block(vec![&tx1], &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
-		let target_len = 2_892;
-		assert_eq!(vec.len(), target_len,);
+		let target_len = 2_796;
+		assert_eq!(vec.len(), target_len);
 	}
 
 	#[test]
@@ -1082,7 +1068,7 @@ mod test {
 		let b = new_block(vec![], &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-		let target_len = 1_256;
+		let target_len = 1_224;
 		assert_eq!(vec.len(), target_len,);
 	}
 
@@ -1094,7 +1080,7 @@ mod test {
 		let b = new_block(vec![&tx1], &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-		let target_len = 1_262;
+		let target_len = 1_230;
 		assert_eq!(vec.len(), target_len,);
 	}
 
@@ -1111,7 +1097,7 @@ mod test {
 		let b = new_block(txs.iter().collect(), &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
-		let target_len = 17_688;
+		let target_len = 17_016;
 		assert_eq!(vec.len(), target_len,);
 	}
 
@@ -1128,7 +1114,7 @@ mod test {
 		let b = new_block(txs.iter().collect(), &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-		let target_len = 1_316;
+		let target_len = 1_284;
 		assert_eq!(vec.len(), target_len,);
 	}
 

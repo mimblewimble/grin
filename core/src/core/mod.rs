@@ -279,7 +279,7 @@ mod test {
 		let tx = tx2i1o();
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &tx).expect("serialization failed");
-		let target_len = 986;
+		let target_len = 954;
 		assert_eq!(vec.len(), target_len,);
 	}
 

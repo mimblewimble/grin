@@ -214,53 +214,15 @@ impl Keychain {
 		Ok(commit)
 	}
 
-	pub fn switch_commit(&self, key_id: &Identifier) -> Result<Commitment, Error> {
-		let skey = self.derived_key(key_id)?;
-		let commit = self.secp.switch_commit(skey)?;
-		Ok(commit)
-	}
-
-	pub fn switch_commit_from_index(&self, index: u32) -> Result<Commitment, Error> {
-		// just do this directly, because cache seems really slow for wallet reconstruct
-		let skey = self.extkey.derive(&self.secp, index)?;
-		let skey = skey.key;
-		let commit = self.secp.switch_commit(skey)?;
-		Ok(commit)
-	}
-
-	pub fn switch_commit_hash_key(&self, key_id: &Identifier) -> Result<[u8; 32], Error> {
-		// first check our overrides and just return zero key if we have an override
-		// we allow keys to be overridden for testing
-		// and do not care about switch_commit_hash_keys in this case
-		if let Some(_) = self.key_overrides.get(key_id) {
-			let key: [u8; 32] = Default::default();
-			return Ok(key);
-		}
-
-		let child_key = self.derived_child_key(key_id)?;
-		Ok(child_key.switch_key)
-	}
-
 	pub fn range_proof(
 		&self,
 		amount: u64,
 		key_id: &Identifier,
 		_commit: Commitment,
 		extra_data: Option<Vec<u8>>,
-		msg: ProofMessage,
 	) -> Result<RangeProof, Error> {
 		let skey = self.derived_key(key_id)?;
-		if msg.len() == 0 {
-			return Ok(self.secp.bullet_proof(amount, skey, extra_data, None));
-		} else {
-			if msg.len() != 64 {
-				error!(LOGGER, "Bullet proof message must be 64 bytes.");
-				return Err(Error::RangeProof(
-					"Bullet proof message must be 64 bytes".to_string(),
-				));
-			}
-		}
-		return Ok(self.secp.bullet_proof(amount, skey, extra_data, Some(msg)));
+		Ok(self.secp.bullet_proof(amount, skey, extra_data, None))
 	}
 
 	pub fn verify_range_proof(
