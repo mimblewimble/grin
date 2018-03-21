@@ -198,6 +198,7 @@ fn a_simulate_block_propagation() {
 			seeding_type: grin::Seeding::List,
 			seeds: Some(vec!["127.0.0.1:18000".to_string()]),
 			chain_type: core::global::ChainTypes::AutomatedTesting,
+			skip_sync_wait: Some(true),
 			..Default::default()
 		}).unwrap();
 		servers.push(s);
