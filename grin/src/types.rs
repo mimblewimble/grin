@@ -135,8 +135,7 @@ pub struct ServerConfig {
 	/// Whether this node is a full archival node or a fast-sync, pruned node
 	pub archive_mode: Option<bool>,
 
-	#[serde(default)]
-	pub chain_validation_mode: ChainValidationMode, 
+	#[serde(default)] pub chain_validation_mode: ChainValidationMode,
 
 	/// Method used to get the list of seed nodes for initial bootstrap.
 	#[serde(default)]

@@ -31,7 +31,7 @@ use p2p;
 use pool;
 use util::OneTime;
 use store;
-use types::{ServerConfig, ChainValidationMode};
+use types::{ChainValidationMode, ServerConfig};
 use util::LOGGER;
 
 // All adapters use `Weak` references instead of `Arc` to avoid cycles that
@@ -434,12 +434,13 @@ impl NetToChainAdapter {
 
 			debug!(
 				LOGGER,
-				"adapter: process_block: ***** validating full chain state at {}",
-				bhash,
+				"adapter: process_block: ***** validating full chain state at {}", bhash,
 			);
 
 			let chain = w(&self.chain);
-			chain.validate(true).expect("chain validation failed, hard stop");
+			chain
+				.validate(true)
+				.expect("chain validation failed, hard stop");
 
 			debug!(
 				LOGGER,
