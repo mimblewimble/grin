@@ -89,7 +89,9 @@ impl From<wallet::Error> for Error {
 /// Type of seeding the server will use to find other peers on the network.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ChainValidationMode {
+	/// Run full chain validation after processing every block.
 	EveryBlock,
+	/// Do not automatically run chain validation during normal block processing.
 	Disabled,
 }
 
@@ -135,7 +137,9 @@ pub struct ServerConfig {
 	/// Whether this node is a full archival node or a fast-sync, pruned node
 	pub archive_mode: Option<bool>,
 
-	#[serde(default)] pub chain_validation_mode: ChainValidationMode,
+	/// Automatically run full chain validation during normal block processing?
+	#[serde(default)]
+	pub chain_validation_mode: ChainValidationMode,
 
 	/// Method used to get the list of seed nodes for initial bootstrap.
 	#[serde(default)]
