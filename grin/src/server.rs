@@ -120,6 +120,7 @@ impl Server {
 			currently_syncing.clone(),
 			Arc::downgrade(&shared_chain),
 			tx_pool.clone(),
+			config.clone(),
 		));
 
 		let p2p_config = config.p2p_config.clone();
