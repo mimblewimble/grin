@@ -190,7 +190,7 @@ fn a_simulate_block_propagation() {
 	for n in 0..5 {
 		let s = grin::Server::new(grin::ServerConfig {
 			api_http_addr: format!("127.0.0.1:{}", 19000 + n),
-			db_root: format!("target/{}/grin-prop-{}", test_name_dir, n),
+			db_root: format!("target/tmp/{}/grin-prop-{}", test_name_dir, n),
 			p2p_config: p2p::P2PConfig {
 				port: 18000 + n,
 				..p2p::P2PConfig::default()
@@ -300,8 +300,8 @@ fn simulate_fast_sync_double() {
 		s2.stop();
 	}
 	// locks files don't seem to be cleaned properly until process exit
-	std::fs::remove_file("target/grin-double-fast2/grin-sync-1001/chain/LOCK");
-	std::fs::remove_file("target/grin-double-fast2/grin-sync-1001/peers/LOCK");
+	std::fs::remove_file("target/tmp/grin-double-fast2/grin-sync-1001/chain/LOCK");
+	std::fs::remove_file("target/tmp/grin-double-fast2/grin-sync-1001/peers/LOCK");
 	thread::sleep(time::Duration::from_secs(20));
 
 	let mut conf = config(1001, "grin-double-fast2");
@@ -316,7 +316,7 @@ fn simulate_fast_sync_double() {
 fn config(n: u16, test_name_dir: &str) -> grin::ServerConfig {
 	grin::ServerConfig {
 		api_http_addr: format!("127.0.0.1:{}", 19000 + n),
-		db_root: format!("target/{}/grin-sync-{}", test_name_dir, n),
+		db_root: format!("target/tmp/{}/grin-sync-{}", test_name_dir, n),
 		p2p_config: p2p::P2PConfig {
 			port: 11000 + n,
 			..p2p::P2PConfig::default()
