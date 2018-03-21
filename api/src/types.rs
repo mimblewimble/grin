@@ -304,7 +304,7 @@ impl OutputPrintable {
 		let p_vec = util::from_hex(proof_str).unwrap();
 		let mut p_bytes = [0; util::secp::constants::MAX_PROOF_SIZE];
 		for i in 0..p_bytes.len() {
-			p_bytes[i]=p_vec[i];
+			p_bytes[i] = p_vec[i];
 		}
 		Ok(pedersen::RangeProof {
 			proof: p_bytes,
@@ -400,7 +400,6 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 						Field::Proof => {
 							no_dup!(proof);
 							proof = map.next_value()?
-							
 						}
 						Field::ProofHash => {
 							no_dup!(proof_hash);
