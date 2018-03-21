@@ -294,10 +294,9 @@ pub fn transaction_identifier(tx: &core::transaction::Transaction) -> core::hash
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use util::secp;
 	use keychain::Keychain;
 	use rand;
-	use core::core::{OutputFeatures, SwitchCommitHash};
+	use core::core::OutputFeatures;
 
 	#[test]
 	fn test_add_entry() {
@@ -307,9 +306,6 @@ mod tests {
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
 		let output_commit = keychain.commit(70, &key_id1).unwrap();
-		let switch_commit = keychain.switch_commit(&key_id1).unwrap();
-		let switch_commit_hash =
-			SwitchCommitHash::from_switch_commit(switch_commit, &keychain, &key_id1);
 
 		let inputs = vec![
 			core::transaction::Input::new(
@@ -325,19 +321,16 @@ mod tests {
 				None,
 			),
 		];
-		let msg = secp::pedersen::ProofMessage::empty();
 
 		let output = core::transaction::Output {
 			features: OutputFeatures::DEFAULT_OUTPUT,
 			commit: output_commit,
-			switch_commit_hash: switch_commit_hash,
 			proof: keychain
 				.range_proof(
 					100,
 					&key_id1,
 					output_commit,
-					Some(switch_commit_hash.as_ref().to_vec()),
-					msg,
+					None,
 				)
 				.unwrap(),
 		};
