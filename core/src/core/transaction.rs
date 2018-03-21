@@ -457,13 +457,7 @@ impl Transaction {
 			return Err(Error::TooManyInputs);
 		}
 		self.verify_sorted()?;
-
 		self.verify_inputs()?;
-
-		for out in &self.outputs {
-			out.verify_proof()?;
-		}
-
 		self.verify_kernels()?;
 
 		Ok(())
