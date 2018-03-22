@@ -437,6 +437,7 @@ impl NetToChainAdapter {
 		// We are out of consensus at this point and want to track the problem
 		// down as soon as possible.
 		// Skip this if we are currently syncing (too slow).
+		let chain = w(&self.chain);
 		if chain.head().unwrap().height > 0 && !self.currently_syncing.load(Ordering::Relaxed)
 			&& self.config.chain_validation_mode == ChainValidationMode::EveryBlock
 		{
