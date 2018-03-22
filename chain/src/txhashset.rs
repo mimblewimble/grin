@@ -26,8 +26,7 @@ use util::static_secp_instance;
 use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::consensus::REWARD;
-use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier,
-                 OutputStoreable, TxKernel};
+use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
 use core::core::pmmr::{self, MerkleProof, PMMR};
 use core::global;
 use core::core::hash::{Hash, Hashed};
@@ -90,7 +89,7 @@ where
 /// pruning enabled.
 
 pub struct TxHashSet {
-	output_pmmr_h: PMMRHandle<OutputStoreable>,
+	output_pmmr_h: PMMRHandle<OutputIdentifier>,
 	rproof_pmmr_h: PMMRHandle<RangeProof>,
 	kernel_pmmr_h: PMMRHandle<TxKernel>,
 
@@ -144,7 +143,7 @@ impl TxHashSet {
 	pub fn is_unspent(&mut self, output_id: &OutputIdentifier) -> Result<Hash, Error> {
 		match self.commit_index.get_output_pos(&output_id.commit) {
 			Ok(pos) => {
-				let output_pmmr: PMMR<OutputStoreable, _> =
+				let output_pmmr: PMMR<OutputIdentifier, _> =
 					PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some((hash, _)) = output_pmmr.get(pos, false) {
 					if hash == output_id.hash_with_index(pos) {
@@ -164,8 +163,8 @@ impl TxHashSet {
 	/// returns the last N nodes inserted into the tree (i.e. the 'bottom'
 	/// nodes at level 0
 	/// TODO: These need to return the actual data from the flat-files instead of hashes now
-	pub fn last_n_output(&mut self, distance: u64) -> Vec<(Hash, Option<OutputStoreable>)> {
-		let output_pmmr: PMMR<OutputStoreable, _> =
+	pub fn last_n_output(&mut self, distance: u64) -> Vec<(Hash, Option<OutputIdentifier>)> {
+		let output_pmmr: PMMR<OutputIdentifier, _> =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		output_pmmr.get_last_n_insertions(distance)
 	}
@@ -201,7 +200,7 @@ impl TxHashSet {
 	/// Get sum tree roots
 	/// TODO: Return data instead of hashes
 	pub fn roots(&mut self) -> (Hash, Hash, Hash) {
-		let output_pmmr: PMMR<OutputStoreable, _> =
+		let output_pmmr: PMMR<OutputIdentifier, _> =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		let rproof_pmmr: PMMR<RangeProof, _> =
 			PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
@@ -298,7 +297,7 @@ where
 /// reversible manner within a unit of work provided by the `extending`
 /// function.
 pub struct Extension<'a> {
-	output_pmmr: PMMR<'a, OutputStoreable, PMMRBackend<OutputStoreable>>,
+	output_pmmr: PMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
 
@@ -440,14 +439,14 @@ impl<'a> Extension<'a> {
 				// processing a new fork so we may get a position on the old
 				// fork that exists but matches a different node
 				// filtering that case out
-				if hash == OutputStoreable::from_output(out).hash() {
+				if hash == OutputIdentifier::from_output(out).hash() {
 					return Err(Error::DuplicateCommitment(commit));
 				}
 			}
 		}
 		// push new outputs in their MMR and save them in the index
 		let pos = self.output_pmmr
-			.push(OutputStoreable::from_output(out))
+			.push(OutputIdentifier::from_output(out))
 			.map_err(&Error::TxHashSetErr)?;
 		self.new_output_commits.insert(out.commitment(), pos);
 

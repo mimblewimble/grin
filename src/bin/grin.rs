@@ -251,11 +251,7 @@ fn main() {
 			.about("basic wallet contents summary"))
 
 		.subcommand(SubCommand::with_name("init")
-			.about("Initialize a new wallet seed file."))
-
-		.subcommand(SubCommand::with_name("restore")
-			.about("Attempt to restore wallet contents from the chain using seed and password. \
-				NOTE: Backup wallet.* and run `wallet listen` before running restore.")))
+			.about("Initialize a new wallet seed file.")))
 
 	.get_matches();
 
@@ -494,12 +490,6 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
-	let key_derivations: u32 = wallet_args
-		.value_of("key_derivations")
-		.unwrap()
-		.parse()
-		.unwrap();
-
 	let mut show_spent = false;
 	if wallet_args.is_present("show_spent") {
 		show_spent = true;
@@ -620,9 +610,6 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 		}
 		("outputs", Some(_)) => {
 			wallet::show_outputs(&wallet_config, &keychain, show_spent);
-		}
-		("restore", Some(_)) => {
-			let _ = wallet::restore(&wallet_config, &keychain, key_derivations);
 		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}
