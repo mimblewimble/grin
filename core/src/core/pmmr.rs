@@ -567,6 +567,7 @@ where
 		}
 	}
 
+	/// Prints PMMR statistics to the logs, used for debugging.
 	pub fn dump_stats(&self) {
 		debug!(LOGGER, "pmmr: unpruned - {}", self.unpruned_size());
 		self.backend.dump_stats();

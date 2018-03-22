@@ -13,11 +13,10 @@
 // limitations under the License.
 
 //! Transactions
-use blake2::blake2b::blake2b;
 use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
-use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
-use std::cmp::{max, min};
+use util::secp::pedersen::{Commitment, RangeProof};
+use std::cmp::max;
 use std::cmp::Ordering;
 use std::{error, fmt};
 
@@ -29,19 +28,11 @@ use core::BlockHeader;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
 use keychain;
-use keychain::{BlindingFactor, Identifier, Keychain};
-use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
+use keychain::{BlindingFactor, Keychain};
+use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable,
           WriteableSorted, Writer};
-use std::io::Cursor;
 use util;
 use util::LOGGER;
-
-/// The size of the blake2 hash of a switch commitment (256 bits)
-pub const SWITCH_COMMIT_HASH_SIZE: usize = 32;
-
-/// The size of the secret key used in to generate blake2 switch commitment
-/// hash (256 bits)
-pub const SWITCH_COMMIT_KEY_SIZE: usize = 32;
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -97,8 +88,6 @@ pub enum Error {
 	ConsensusError(consensus::Error),
 	/// Error originating from an invalid lock-height
 	LockHeight(u64),
-	/// Error originating from an invalid switch commitment
-	SwitchCommitment,
 	/// Range proof validation error
 	RangeProof,
 	/// Error originating from an invalid Merkle proof
@@ -494,8 +483,6 @@ impl Transaction {
 /// A transaction input.
 ///
 /// Primarily a reference to an output being spent by the transaction.
-/// But also information required to verify coinbase maturity through
-/// the lock_height hashed in the switch_commit_hash.
 #[derive(Debug, Clone)]
 pub struct Input {
 	/// The features of the output being spent.
@@ -678,123 +665,6 @@ bitflags! {
 	}
 }
 
-/// Definition of the switch commitment hash
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SwitchCommitHashKey([u8; SWITCH_COMMIT_KEY_SIZE]);
-
-impl SwitchCommitHashKey {
-	/// We use a zero value key for regular transactions.
-	pub fn zero() -> SwitchCommitHashKey {
-		SwitchCommitHashKey([0; SWITCH_COMMIT_KEY_SIZE])
-	}
-
-	/// Generate a switch commit hash key from the provided keychain and key id.
-	pub fn from_keychain(keychain: &Keychain, key_id: &Identifier) -> SwitchCommitHashKey {
-		SwitchCommitHashKey(
-			keychain
-				.switch_commit_hash_key(key_id)
-				.expect("failed to derive switch commit hash key"),
-		)
-	}
-
-	/// Reconstructs a switch commit hash key from a byte slice.
-	pub fn from_bytes(bytes: &[u8]) -> SwitchCommitHashKey {
-		assert!(
-			bytes.len() == 32,
-			"switch_commit_hash_key requires 32 bytes"
-		);
-
-		let mut key = [0; SWITCH_COMMIT_KEY_SIZE];
-		for i in 0..min(SWITCH_COMMIT_KEY_SIZE, bytes.len()) {
-			key[i] = bytes[i];
-		}
-		SwitchCommitHashKey(key)
-	}
-}
-
-/// Definition of the switch commitment hash
-#[derive(Copy, Clone, Hash, PartialEq, Serialize, Deserialize)]
-pub struct SwitchCommitHash([u8; SWITCH_COMMIT_HASH_SIZE]);
-
-/// Implementation of Writeable for a switch commitment hash
-impl Writeable for SwitchCommitHash {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_fixed_bytes(&self.0)?;
-		Ok(())
-	}
-}
-
-/// Implementation of Readable for a switch commitment hash
-/// an Output from a binary stream.
-impl Readable for SwitchCommitHash {
-	fn read(reader: &mut Reader) -> Result<SwitchCommitHash, ser::Error> {
-		let a = try!(reader.read_fixed_bytes(SWITCH_COMMIT_HASH_SIZE));
-		let mut c = [0; SWITCH_COMMIT_HASH_SIZE];
-		for i in 0..SWITCH_COMMIT_HASH_SIZE {
-			c[i] = a[i];
-		}
-		Ok(SwitchCommitHash(c))
-	}
-}
-// As Ref for AsFixedBytes
-impl AsRef<[u8]> for SwitchCommitHash {
-	fn as_ref(&self) -> &[u8] {
-		&self.0
-	}
-}
-
-impl ::std::fmt::Debug for SwitchCommitHash {
-	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-		try!(write!(f, "{}(", stringify!(SwitchCommitHash)));
-		try!(write!(f, "{}", self.to_hex()));
-		write!(f, ")")
-	}
-}
-
-impl SwitchCommitHash {
-	/// Builds a switch commit hash from a switch commit using blake2
-	pub fn from_switch_commit(
-		switch_commit: Commitment,
-		keychain: &Keychain,
-		key_id: &Identifier,
-	) -> SwitchCommitHash {
-		let key = SwitchCommitHashKey::from_keychain(keychain, key_id);
-		let switch_commit_hash = blake2b(SWITCH_COMMIT_HASH_SIZE, &key.0, &switch_commit.0);
-		let switch_commit_hash_bytes = switch_commit_hash.as_bytes();
-		let mut h = [0; SWITCH_COMMIT_HASH_SIZE];
-		for i in 0..SWITCH_COMMIT_HASH_SIZE {
-			h[i] = switch_commit_hash_bytes[i];
-		}
-		SwitchCommitHash(h)
-	}
-
-	/// Reconstructs a switch commit hash from a byte slice.
-	pub fn from_bytes(bytes: &[u8]) -> SwitchCommitHash {
-		let mut hash = [0; SWITCH_COMMIT_HASH_SIZE];
-		for i in 0..min(SWITCH_COMMIT_HASH_SIZE, bytes.len()) {
-			hash[i] = bytes[i];
-		}
-		SwitchCommitHash(hash)
-	}
-
-	/// Hex string representation of a switch commitment hash.
-	pub fn to_hex(&self) -> String {
-		util::to_hex(self.0.to_vec())
-	}
-
-	/// Reconstructs a switch commit hash from a hex string.
-	pub fn from_hex(hex: &str) -> Result<SwitchCommitHash, ser::Error> {
-		let bytes = util::from_hex(hex.to_string())
-			.map_err(|_| ser::Error::HexError(format!("switch_commit_hash from_hex error")))?;
-		Ok(SwitchCommitHash::from_bytes(&bytes))
-	}
-
-	/// Build an "zero" switch commitment hash
-	pub fn zero() -> SwitchCommitHash {
-		SwitchCommitHash([0; SWITCH_COMMIT_HASH_SIZE])
-	}
-}
-
 /// Output for a transaction, defining the new ownership of coins that are being
 /// transferred. The commitment is a blinded value for the output while the
 /// range proof guarantees the commitment includes a positive value without
@@ -808,8 +678,6 @@ pub struct Output {
 	pub features: OutputFeatures,
 	/// The homomorphic commitment representing the output amount
 	pub commit: Commitment,
-	/// The switch commitment hash, a 256 bit length blake2 hash of blind*J
-	pub switch_commit_hash: SwitchCommitHash,
 	/// A proof that the commitment is in the right range
 	pub proof: RangeProof,
 }
@@ -832,11 +700,6 @@ impl Writeable for Output {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
 		self.commit.write(writer)?;
-		// Hash of an output doesn't cover the switch commit, it should
-		// be wound into the range proof separately
-		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			writer.write_fixed_bytes(&self.switch_commit_hash)?;
-		}
 		// The hash of an output doesn't include the range proof, which
 		// is commit to separately
 		if writer.serialization_mode() == ser::SerializationMode::Full {
@@ -856,7 +719,6 @@ impl Readable for Output {
 		Ok(Output {
 			features: features,
 			commit: Commitment::read(reader)?,
-			switch_commit_hash: SwitchCommitHash::read(reader)?,
 			proof: RangeProof::read(reader)?,
 		})
 	}
@@ -866,11 +728,6 @@ impl Output {
 	/// Commitment for the output
 	pub fn commitment(&self) -> Commitment {
 		self.commit
-	}
-
-	/// Switch commitment hash for the output
-	pub fn switch_commit_hash(&self) -> SwitchCommitHash {
-		self.switch_commit_hash
 	}
 
 	/// Range proof for the output
@@ -886,32 +743,10 @@ impl Output {
 			&secp,
 			self.commit,
 			self.proof,
-			Some(self.switch_commit_hash.as_ref().to_vec()),
+			None,
 		) {
 			Ok(_) => Ok(()),
 			Err(e) => Err(e),
-		}
-	}
-
-	/// Given the original blinding factor we can recover the
-	/// value from the range proof and the commitment
-	pub fn recover_value(&self, keychain: &Keychain, key_id: &Identifier) -> Option<u64> {
-		match keychain.rewind_range_proof(
-			key_id,
-			self.commit,
-			Some(self.switch_commit_hash.as_ref().to_vec()),
-			self.proof,
-		) {
-			Ok(proof_info) => {
-				if proof_info.success {
-					let elements =
-						ProofMessageElements::from_proof_message(proof_info.message).unwrap();
-					Some(elements.value)
-				} else {
-					None
-				}
-			}
-			Err(_) => None,
 		}
 	}
 }
@@ -945,6 +780,15 @@ impl OutputIdentifier {
 		}
 	}
 
+	/// Converts this identifier to a full output, provided a RangeProof
+	pub fn to_output(self, proof: RangeProof) -> Output {
+		Output {
+			features: self.features,
+			commit: self.commit,
+			proof: proof,
+		}	
+	}
+
 	/// Build an output_identifier from an existing input.
 	pub fn from_input(input: &Input) -> OutputIdentifier {
 		OutputIdentifier {
@@ -966,7 +810,7 @@ impl OutputIdentifier {
 /// Ensure this is implemented to centralize hashing with indexes
 impl PMMRable for OutputIdentifier {
 	fn len() -> usize {
-		1 + secp::constants::PEDERSEN_COMMITMENT_SIZE + SWITCH_COMMIT_HASH_SIZE
+		1 + secp::constants::PEDERSEN_COMMITMENT_SIZE
 	}
 }
 
@@ -986,111 +830,6 @@ impl Readable for OutputIdentifier {
 			commit: Commitment::read(reader)?,
 			features: features,
 		})
-	}
-}
-
-/// Yet another output version to read/write from disk. Ends up being far too awkward
-/// to use the write serialisation property to do this
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct OutputStoreable {
-	/// Output features (coinbase vs. regular transaction output)
-	/// We need to include this when hashing to ensure coinbase maturity can be enforced.
-	pub features: OutputFeatures,
-	/// Output commitment
-	pub commit: Commitment,
-	/// Switch commit hash
-	pub switch_commit_hash: SwitchCommitHash,
-}
-
-impl OutputStoreable {
-	/// Build a StoreableOutput from an existing output.
-	pub fn from_output(output: &Output) -> OutputStoreable {
-		OutputStoreable {
-			features: output.features,
-			commit: output.commit,
-			switch_commit_hash: output.switch_commit_hash,
-		}
-	}
-
-	/// Return a regular output
-	pub fn to_output(self, rproof: RangeProof) -> Output {
-		Output {
-			features: self.features,
-			commit: self.commit,
-			switch_commit_hash: self.switch_commit_hash,
-			proof: rproof,
-		}
-	}
-}
-
-impl PMMRable for OutputStoreable {
-	fn len() -> usize {
-		1 + secp::constants::PEDERSEN_COMMITMENT_SIZE + SWITCH_COMMIT_HASH_SIZE
-	}
-}
-
-impl Writeable for OutputStoreable {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u8(self.features.bits())?;
-		self.commit.write(writer)?;
-		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			self.switch_commit_hash.write(writer)?;
-		}
-		Ok(())
-	}
-}
-
-impl Readable for OutputStoreable {
-	fn read(reader: &mut Reader) -> Result<OutputStoreable, ser::Error> {
-		let features =
-			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
-		Ok(OutputStoreable {
-			commit: Commitment::read(reader)?,
-			switch_commit_hash: SwitchCommitHash::read(reader)?,
-			features: features,
-		})
-	}
-}
-
-/// A structure which contains fields that are to be commited to within
-/// an Output's range (bullet) proof.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct ProofMessageElements {
-	/// The amount, stored to allow for wallet reconstruction as
-	/// rewinding isn't supported in bulletproofs just yet
-	pub value: u64,
-}
-
-impl Writeable for ProofMessageElements {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u64(self.value)?;
-		for _ in 8..64 {
-			let _ = writer.write_u8(0);
-		}
-		Ok(())
-	}
-}
-
-impl Readable for ProofMessageElements {
-	fn read(reader: &mut Reader) -> Result<ProofMessageElements, ser::Error> {
-		Ok(ProofMessageElements {
-			value: reader.read_u64()?,
-		})
-	}
-}
-
-impl ProofMessageElements {
-	/// Serialise and return a ProofMessage
-	pub fn to_proof_message(&self) -> ProofMessage {
-		ProofMessage::from_bytes(&ser_vec(self).unwrap())
-	}
-
-	/// Deserialise and return the message elements
-	pub fn from_proof_message(
-		proof_message: ProofMessage,
-	) -> Result<ProofMessageElements, ser::Error> {
-		let mut c = Cursor::new(proof_message.as_bytes());
-		ser::deserialize::<ProofMessageElements>(&mut c)
 	}
 }
 
@@ -1151,24 +890,19 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
-		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash =
-			SwitchCommitHash::from_switch_commit(switch_commit, &keychain, &key_id);
 		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain
 			.range_proof(
 				5,
 				&key_id,
 				commit,
-				Some(switch_commit_hash.as_ref().to_vec()),
-				msg,
+				None,
 			)
 			.unwrap();
 
 		let out = Output {
 			features: OutputFeatures::DEFAULT_OUTPUT,
 			commit: commit,
-			switch_commit_hash: switch_commit_hash,
 			proof: proof,
 		};
 
@@ -1182,65 +916,18 @@ mod test {
 	}
 
 	#[test]
-	fn test_output_value_recovery() {
-		let keychain = Keychain::from_random_seed().unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
-		let value = 1003;
-
-		let commit = keychain.commit(value, &key_id).unwrap();
-		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash =
-			SwitchCommitHash::from_switch_commit(switch_commit, &keychain, &key_id);
-		let msg = (ProofMessageElements { value: value }).to_proof_message();
-
-		let proof = keychain
-			.range_proof(
-				value,
-				&key_id,
-				commit,
-				Some(switch_commit_hash.as_ref().to_vec()),
-				msg,
-			)
-			.unwrap();
-
-		let output = Output {
-			features: OutputFeatures::DEFAULT_OUTPUT,
-			commit: commit,
-			switch_commit_hash: switch_commit_hash,
-			proof: proof,
-		};
-
-		// check we can successfully recover the value with the original blinding factor
-		let result = output.recover_value(&keychain, &key_id);
-		// TODO: Remove this check once value recovery is supported within bullet proofs
-		if let Some(v) = result {
-			assert_eq!(v, 1003);
-		} else {
-			return;
-		}
-
-		// Bulletproofs message unwind will just be gibberish given the wrong blinding
-		// factor
-	}
-
-	#[test]
 	fn commit_consistency() {
 		let keychain = Keychain::from_seed(&[0; 32]).unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let commit = keychain.commit(1003, &key_id).unwrap();
-		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		println!("Switch commit: {:?}", switch_commit);
 		println!("commit: {:?}", commit);
 		let key_id = keychain.derive_key_id(1).unwrap();
 
-		let switch_commit_2 = keychain.switch_commit(&key_id).unwrap();
 		let commit_2 = keychain.commit(1003, &key_id).unwrap();
-		println!("Switch commit 2: {:?}", switch_commit_2);
 		println!("commit2 : {:?}", commit_2);
 
 		assert!(commit == commit_2);
-		assert!(switch_commit == switch_commit_2);
 	}
 
 	#[test]

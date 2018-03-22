@@ -84,9 +84,9 @@ pub fn genesis_testnet2() -> core::Block {
 			previous: core::hash::Hash([0xff; 32]),
 			timestamp: time::Tm {
 				tm_year: 2017 - 1900,
-				tm_mon: 10,
-				tm_mday: 16,
-				tm_hour: 20,
+				tm_mon: 3,
+				tm_mday: 21,
+				tm_hour: 22,
 				..time::empty_tm()
 			},
 			//TODO: Check this is over-estimated at T2 launch

@@ -180,8 +180,6 @@ pub struct ChildKey {
 	pub key_id: Identifier,
 	/// The private key
 	pub key: SecretKey,
-	/// The key used for generating the associated switch_commit_hash
-	pub switch_key: [u8; 32],
 }
 
 /// An ExtendedKey is a secret key which can be used to derive new
@@ -201,10 +199,6 @@ pub struct ExtendedKey {
 	pub key: SecretKey,
 	/// The chain code for the key derivation chain
 	pub chain_code: [u8; 32],
-	/// The key used for generating the associated switch_commit_hash
-	pub switch_key: [u8; 32],
-	/// The chain code for the switch key derivation chain
-	pub switch_chain_code: [u8; 32],
 }
 
 impl ExtendedKey {
@@ -226,19 +220,6 @@ impl ExtendedKey {
 
 		let key_id = Identifier::from_secret_key(secp, &key)?;
 
-		// Now derive the switch_key and switch_chain_code in a similar fashion
-		// but using a different key to ensure there is nothing linking
-		// the secret key and the switch commit hash key for any extended key
-		// we subsequently derive
-		let switch_derived = blake2b(64, b"Grin/MW Switch Seed", seed);
-		let switch_slice = switch_derived.as_bytes();
-
-		let mut switch_key: [u8; 32] = Default::default();
-		(&mut switch_key).copy_from_slice(&switch_slice[0..32]);
-
-		let mut switch_chain_code: [u8; 32] = Default::default();
-		(&mut switch_chain_code).copy_from_slice(&switch_slice[32..64]);
-
 		let ext_key = ExtendedKey {
 			n_child: 0,
 			root_key_id: key_id.clone(),
@@ -247,10 +228,6 @@ impl ExtendedKey {
 			// key and extended chain code for the key itself
 			key,
 			chain_code,
-
-			// key and extended chain code for the key for hashed switch commitments
-			switch_key,
-			switch_chain_code,
 		};
 
 		Ok(ext_key)
@@ -275,22 +252,11 @@ impl ExtendedKey {
 
 		let key_id = Identifier::from_secret_key(secp, &key)?;
 
-		let mut switch_seed = self.switch_key[..].to_vec();
-		switch_seed.extend_from_slice(&n_bytes);
-
-		// only need a 32 byte digest here as we only need the bytes for the key itself
-		// we do not need additional bytes for a derived (and unused) chain code
-		let switch_derived = blake2b(32, &self.switch_chain_code[..], &switch_seed[..]);
-
-		let mut switch_key: [u8; 32] = Default::default();
-		(&mut switch_key).copy_from_slice(&switch_derived.as_bytes()[..]);
-
 		Ok(ChildKey {
 			n_child: n,
 			root_key_id: self.root_key_id.clone(),
 			key_id,
 			key,
-			switch_key,
 		})
 	}
 }

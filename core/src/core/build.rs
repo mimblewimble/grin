@@ -27,8 +27,7 @@
 
 use util::{kernel_sig_msg, secp};
 
-use core::{Input, Output, OutputFeatures, ProofMessageElements, SwitchCommitHash, Transaction,
-           TxKernel};
+use core::{Input, Output, OutputFeatures, Transaction, TxKernel};
 use core::hash::Hash;
 use core::pmmr::MerkleProof;
 use keychain;
@@ -102,22 +101,11 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 			debug!(LOGGER, "Building an output: {}, {}", value, key_id,);
 
 			let commit = build.keychain.commit(value, &key_id).unwrap();
-			let switch_commit = build.keychain.switch_commit(&key_id).unwrap();
-			let switch_commit_hash =
-				SwitchCommitHash::from_switch_commit(switch_commit, build.keychain, &key_id);
 			trace!(
 				LOGGER,
-				"Builder - Pedersen Commit is: {:?}, Switch Commit is: {:?}",
+				"Builder - Pedersen Commit is: {:?}",
 				commit,
-				switch_commit,
 			);
-			trace!(
-				LOGGER,
-				"Builder - Switch Commit Hash is: {:?}",
-				switch_commit_hash
-			);
-
-			let msg = (ProofMessageElements { value: value }).to_proof_message();
 
 			let rproof = build
 				.keychain
@@ -125,8 +113,7 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 					value,
 					&key_id,
 					commit,
-					Some(switch_commit_hash.as_ref().to_vec()),
-					msg,
+					None,
 				)
 				.unwrap();
 
@@ -134,7 +121,6 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 				tx.with_output(Output {
 					features: OutputFeatures::DEFAULT_OUTPUT,
 					commit: commit,
-					switch_commit_hash: switch_commit_hash,
 					proof: rproof,
 				}),
 				kern,

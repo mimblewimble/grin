@@ -26,7 +26,6 @@ use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use consensus;
 use consensus::VerifySortOrder;
 use core::hash::{Hash, Hashed};
-use core::transaction::{SwitchCommitHash, SWITCH_COMMIT_HASH_SIZE};
 use util::secp::pedersen::Commitment;
 use util::secp::pedersen::RangeProof;
 use util::secp::Signature;
@@ -566,14 +565,14 @@ pub trait PMMRIndexHashable {
 
 impl<T: PMMRable> PMMRIndexHashable for T {
 	fn hash_with_index(&self, index: u64) -> Hash {
-		(self, index).hash()
+		(index, self).hash()
 	}
 }
 
 // Convenient way to hash two existing hashes together with an index.
 impl PMMRIndexHashable for (Hash, Hash) {
 	fn hash_with_index(&self, index: u64) -> Hash {
-		(&self.0, &self.1, index).hash()
+		(index, &self.0, &self.1).hash()
 	}
 }
 
@@ -656,11 +655,6 @@ impl AsFixedBytes for ::util::secp::pedersen::Commitment {
 impl AsFixedBytes for BlindingFactor {
 	fn len(&self) -> usize {
 		return SECRET_KEY_SIZE;
-	}
-}
-impl AsFixedBytes for SwitchCommitHash {
-	fn len(&self) -> usize {
-		return SWITCH_COMMIT_HASH_SIZE;
 	}
 }
 impl AsFixedBytes for ::keychain::Identifier {

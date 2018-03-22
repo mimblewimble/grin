@@ -53,7 +53,6 @@ mod info;
 mod receiver;
 mod sender;
 mod types;
-mod restore;
 pub mod client;
 pub mod server;
 
@@ -63,4 +62,3 @@ pub use receiver::WalletReceiver;
 pub use sender::{issue_burn_tx, issue_send_tx};
 pub use types::{BlockFees, CbData, Error, ErrorKind, WalletConfig, WalletInfo,
                 WalletReceiveRequest, WalletSeed};
-pub use restore::restore;
