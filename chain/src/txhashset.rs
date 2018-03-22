@@ -511,13 +511,15 @@ impl<'a> Extension<'a> {
 	/// Rewinds the MMRs to the provided block, using the last output and
 	/// last kernel of the block we want to rewind to.
 	pub fn rewind_readonly(&mut self, block_header: &BlockHeader) -> Result<(), Error> {
-
 		// first make sure we set the rollback flag (read-only use of the extension)
 		self.force_rollback();
 
 		let hash = block_header.hash();
 		let height = block_header.height;
-		debug!(LOGGER, "Rewinding (readonly) to header {} at {}", hash, height);
+		debug!(
+			LOGGER,
+			"Rewinding (readonly) to header {} at {}", hash, height
+		);
 
 		self.rewind(block_header)
 	}
@@ -570,8 +572,8 @@ impl<'a> Extension<'a> {
 	/// Rewinds to that pos for the header first so we see a consistent
 	/// view of the world.
 	pub fn validate(&mut self, header: &BlockHeader, skip_rproofs: bool) -> Result<(), Error> {
-
-		// first rewind to the provided header and set the force_rollback flag (read-only)
+		// first rewind to the provided header and set the force_rollback flag
+		// (read-only)
 		&self.rewind_readonly(header)?;
 
 		// validate all hashes and sums within the trees
