@@ -4,23 +4,24 @@ extern crate grin_keychain;
 use std::path::Path;
 use std::fs::{self, File};
 use grin_core::ser;
-use grin_core::core::{Transaction, Block, BlockHeader};
+use grin_core::core::{Block, BlockHeader, CompactBlock, Transaction};
 use grin_core::core::target::Difficulty;
 
-use grin_core::core::build::{input, output, with_fee, transaction_with_offset};
-use grin_keychain::keychain::{ Keychain};
+use grin_core::core::build::{input, output, transaction_with_offset, with_fee};
+use grin_keychain::keychain::Keychain;
 
 fn main() {
 	generate("transaction_read", &tx()).unwrap();
 	generate("block_read", &block()).unwrap();
+	generate("compact_block_read", &compact_block()).unwrap();
 }
 
 fn generate<W: ser::Writeable>(target: &str, obj: W) -> Result<(), ser::Error> {
 	let dir_path = Path::new("corpus").join(target);
 	if !dir_path.is_dir() {
 		fs::create_dir(&dir_path).map_err(|e| ser::Error::IOErr(e))?;
-	}		
-		
+	}
+
 	let pattern_path = dir_path.join("pattern");
 	if !pattern_path.exists() {
 		let mut file = File::create(&pattern_path).map_err(|e| ser::Error::IOErr(e))?;
@@ -44,7 +45,17 @@ fn block() -> Block {
 		&key_id,
 		Difficulty::one(),
 	).unwrap()
+}
+
+fn compact_block() -> CompactBlock {
+	CompactBlock {
+		header: BlockHeader::default(),
+		nonce: 1,
+		out_full: vec![],
+		kern_full: vec![],
+		kern_ids: vec![],
 	}
+}
 
 fn tx() -> Transaction {
 	let keychain = Keychain::from_random_seed().unwrap();
@@ -61,4 +72,4 @@ fn tx() -> Transaction {
 		],
 		&keychain,
 	).unwrap()
-	}
+}

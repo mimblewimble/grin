@@ -28,3 +28,7 @@ path = "src/main.rs"
 [[bin]]
 name = "block_read"
 path = "fuzz_targets/block_read.rs"
+
+[[bin]]
+name = "compact_block_read"
+path = "fuzz_targets/compact_block_read.rs"
