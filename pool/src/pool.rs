@@ -641,7 +641,6 @@ where
 		}
 
 		let freed_txs = self.sweep_transactions(marked_transactions, false);
-		let freed_stem_txs = self.sweep_transactions(marked_stem_transactions, true);
 
 		self.reconcile_orphans().unwrap();
 
@@ -852,12 +851,11 @@ mod tests {
 	use core::core::build;
 	use core::global;
 	use blockchain::{DummyChain, DummyChainImpl, DummyOutputSet};
-	use util::secp;
 	use keychain::Keychain;
 	use std::sync::{Arc, RwLock};
 	use blake2;
 	use core::global::ChainTypes;
-	use core::core::{Proof, SwitchCommitHash};
+	use core::core::Proof;
 	use core::core::hash::{Hash, Hashed};
 	use core::core::pmmr::MerkleProof;
 	use core::core::target::Difficulty;
@@ -1713,24 +1711,18 @@ mod tests {
 		let keychain = keychain_for_tests();
 		let key_id = keychain.derive_key_id(value as u32).unwrap();
 		let commit = keychain.commit(value, &key_id).unwrap();
-		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash =
-			SwitchCommitHash::from_switch_commit(switch_commit, &keychain, &key_id);
-		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain
 			.range_proof(
 				value,
 				&key_id,
 				commit,
-				Some(switch_commit_hash.as_ref().to_vec()),
-				msg,
+				None,
 			)
 			.unwrap();
 
 		transaction::Output {
 			features: transaction::OutputFeatures::DEFAULT_OUTPUT,
 			commit: commit,
-			switch_commit_hash: switch_commit_hash,
 			proof: proof,
 		}
 	}
@@ -1740,24 +1732,18 @@ mod tests {
 		let keychain = keychain_for_tests();
 		let key_id = keychain.derive_key_id(value as u32).unwrap();
 		let commit = keychain.commit(value, &key_id).unwrap();
-		let switch_commit = keychain.switch_commit(&key_id).unwrap();
-		let switch_commit_hash =
-			SwitchCommitHash::from_switch_commit(switch_commit, &keychain, &key_id);
-		let msg = secp::pedersen::ProofMessage::empty();
 		let proof = keychain
 			.range_proof(
 				value,
 				&key_id,
 				commit,
-				Some(switch_commit_hash.as_ref().to_vec()),
-				msg,
+				None,
 			)
 			.unwrap();
 
 		transaction::Output {
 			features: transaction::OutputFeatures::COINBASE_OUTPUT,
 			commit: commit,
-			switch_commit_hash: switch_commit_hash,
 			proof: proof,
 		}
 	}

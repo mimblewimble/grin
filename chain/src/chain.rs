@@ -20,8 +20,7 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use core::core::{Block, BlockHeader, Input, OutputFeatures, OutputIdentifier, OutputStoreable,
-                 TxKernel};
+use core::core::{Block, BlockHeader, Input, OutputFeatures, OutputIdentifier, TxKernel};
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
@@ -625,7 +624,7 @@ impl Chain {
 	}
 
 	/// returns the last n nodes inserted into the output sum tree
-	pub fn get_last_n_output(&self, distance: u64) -> Vec<(Hash, Option<OutputStoreable>)> {
+	pub fn get_last_n_output(&self, distance: u64) -> Vec<(Hash, Option<OutputIdentifier>)> {
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset.last_n_output(distance)
 	}

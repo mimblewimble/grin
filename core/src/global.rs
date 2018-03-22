@@ -29,7 +29,6 @@ use consensus::{BLOCK_TIME_SEC, CUT_THROUGH_HORIZON, DIFFICULTY_ADJUST_WINDOW, I
                 MEDIAN_TIME_WINDOW};
 use core::target::Difficulty;
 use consensus::TargetError;
-use util::LOGGER;
 
 /// Define these here, as they should be developer-set, not really tweakable
 /// by users

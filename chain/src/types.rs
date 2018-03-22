@@ -299,10 +299,14 @@ pub trait ChainStore: Send + Sync {
 	/// Deletes the MMR position of an output.
 	fn delete_output_pos(&self, commit: &[u8]) -> Result<(), store::Error>;
 
+	/// Saves a marker associated with a block recording the MMR positions of its
+	/// last elements.
 	fn save_block_marker(&self, bh: &Hash, marker: &(u64, u64)) -> Result<(), store::Error>;
 
+	/// Retrieves a block marker from a block hash.
 	fn get_block_marker(&self, bh: &Hash) -> Result<(u64, u64), store::Error>;
 
+	/// Deletes a block marker associated with the provided hash
 	fn delete_block_marker(&self, bh: &Hash) -> Result<(), store::Error>;
 
 	/// Saves information about the last written PMMR file positions for each

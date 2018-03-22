@@ -17,7 +17,6 @@ use std::sync::Arc;
 use core::{core, ser};
 use core::core::hash::Hashed;
 use core::core::pmmr::MerkleProof;
-use core::core::SwitchCommitHash;
 use chain;
 use p2p;
 use util;
@@ -228,8 +227,6 @@ pub struct OutputPrintable {
 	/// The homomorphic commitment representing the output's amount
 	/// (as hex string)
 	pub commit: pedersen::Commitment,
-	/// switch commit hash
-	pub switch_commit_hash: SwitchCommitHash,
 	/// Whether the output has been spent
 	pub spent: bool,
 	/// Rangeproof (as hex string)
@@ -280,17 +277,11 @@ impl OutputPrintable {
 		OutputPrintable {
 			output_type,
 			commit: output.commit,
-			switch_commit_hash: output.switch_commit_hash,
 			spent,
 			proof,
 			proof_hash: util::to_hex(output.proof.hash().to_vec()),
 			merkle_proof,
 		}
-	}
-
-	// Convert the hex string back into a switch_commit_hash instance
-	pub fn switch_commit_hash(&self) -> Result<core::SwitchCommitHash, ser::Error> {
-		Ok(self.switch_commit_hash.clone())
 	}
 
 	pub fn commit(&self) -> Result<pedersen::Commitment, ser::Error> {
@@ -312,7 +303,6 @@ impl serde::ser::Serialize for OutputPrintable {
 		let mut state = serializer.serialize_struct("OutputPrintable", 7)?;
 		state.serialize_field("output_type", &self.output_type)?;
 		state.serialize_field("commit", &util::to_hex(self.commit.0.to_vec()))?;
-		state.serialize_field("switch_commit_hash", &self.switch_commit_hash.to_hex())?;
 		state.serialize_field("spent", &self.spent)?;
 		state.serialize_field("proof", &self.proof)?;
 		state.serialize_field("proof_hash", &self.proof_hash)?;
@@ -334,7 +324,6 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 		enum Field {
 			OutputType,
 			Commit,
-			SwitchCommitHash,
 			Spent,
 			Proof,
 			ProofHash,
@@ -356,7 +345,6 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 			{
 				let mut output_type = None;
 				let mut commit = None;
-				let mut switch_commit_hash = None;
 				let mut spent = None;
 				let mut proof = None;
 				let mut proof_hash = None;
@@ -375,14 +363,6 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 							let vec =
 								util::from_hex(val.clone()).map_err(serde::de::Error::custom)?;
 							commit = Some(pedersen::Commitment::from_vec(vec));
-						}
-						Field::SwitchCommitHash => {
-							no_dup!(switch_commit_hash);
-
-							let val: String = map.next_value()?;
-							let hash = core::SwitchCommitHash::from_hex(&val.clone())
-								.map_err(serde::de::Error::custom)?;
-							switch_commit_hash = Some(hash)
 						}
 						Field::Spent => {
 							no_dup!(spent);
@@ -427,7 +407,6 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 				Ok(OutputPrintable {
 					output_type: output_type.unwrap(),
 					commit: commit.unwrap(),
-					switch_commit_hash: switch_commit_hash.unwrap(),
 					spent: spent.unwrap(),
 					proof: proof,
 					proof_hash: proof_hash.unwrap(),
@@ -439,7 +418,6 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 		const FIELDS: &'static [&'static str] = &[
 			"output_type",
 			"commit",
-			"switch_commit_hash",
 			"spent",
 			"proof",
 			"proof_hash",
@@ -645,7 +623,6 @@ mod test {
 			"{\
 			 \"output_type\":\"Coinbase\",\
 			 \"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\",\
-			 \"switch_commit_hash\":\"85daaf11011dc11e52af84ebe78e2f2d19cbdc76000000000000000000000000\",\
 			 \"spent\":false,\
 			 \"proof\":null,\
 			 \"proof_hash\":\"ed6ba96009b86173bade6a9227ed60422916593fa32dd6d78b25b7a4eeef4946\",\

@@ -26,7 +26,6 @@ use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use consensus;
 use consensus::VerifySortOrder;
 use core::hash::{Hash, Hashed};
-use core::transaction::{SwitchCommitHash, SWITCH_COMMIT_HASH_SIZE};
 use util::secp::pedersen::Commitment;
 use util::secp::pedersen::RangeProof;
 use util::secp::Signature;
@@ -656,11 +655,6 @@ impl AsFixedBytes for ::util::secp::pedersen::Commitment {
 impl AsFixedBytes for BlindingFactor {
 	fn len(&self) -> usize {
 		return SECRET_KEY_SIZE;
-	}
-}
-impl AsFixedBytes for SwitchCommitHash {
-	fn len(&self) -> usize {
-		return SWITCH_COMMIT_HASH_SIZE;
 	}
 }
 impl AsFixedBytes for ::keychain::Identifier {
