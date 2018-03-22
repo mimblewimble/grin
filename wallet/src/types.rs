@@ -178,7 +178,7 @@ pub struct WalletConfig {
 	// by default this is 127.0.0.1 (and will not accept connections from external clients)
 	pub api_listen_interface: String,
 	// The port this wallet will run on
-	pub api_listen_port: String,
+	pub api_listen_port: u16,
 	// The api address of a running server node against which transaction inputs
 	// will be checked during send
 	pub check_node_api_http_addr: String,
@@ -191,7 +191,7 @@ impl Default for WalletConfig {
 		WalletConfig {
 			// enable_wallet: false,
 			api_listen_interface: "127.0.0.1".to_string(),
-			api_listen_port: "13415".to_string(),
+			api_listen_port: 13415,
 			check_node_api_http_addr: "http://127.0.0.1:13413".to_string(),
 			data_file_dir: ".".to_string(),
 		}
