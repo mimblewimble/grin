@@ -107,8 +107,9 @@ pub fn run_sync(
 									let mut txhashset_head =
 										chain.get_block_header(&header_head.prev_block_h).unwrap();
 									for _ in 0..horizon - 2 {
-										txhashset_head =
-											chain.get_block_header(&txhashset_head.previous).unwrap();
+										txhashset_head = chain
+											.get_block_header(&txhashset_head.previous)
+											.unwrap();
 									}
 									p.send_txhashset_request(
 										txhashset_head.height,
@@ -259,7 +260,8 @@ fn needs_syncing(
 	if is_syncing {
 		if let Some(peer) = peer {
 			if let Ok(peer) = peer.try_read() {
-				debug!(LOGGER,
+				debug!(
+					LOGGER,
 					"needs_syncing {} {} {}", local_diff, peer.info.total_difficulty, header_only
 				);
 
@@ -278,7 +280,7 @@ fn needs_syncing(
 			}
 		} else {
 			info!(LOGGER, "sync: no peers available, disabling sync");
-			return false
+			return false;
 		}
 	} else {
 		if let Some(peer) = peer {
@@ -298,7 +300,7 @@ fn needs_syncing(
 						peer.info.total_difficulty,
 						threshold,
 					);
-					return true
+					return true;
 				}
 			}
 		}
