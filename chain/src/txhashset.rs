@@ -471,19 +471,21 @@ impl<'a> Extension<'a> {
 	/// Note: this relies on the MMR being stable even after pruning/compaction.
 	/// We need the hash of each sibling pos from the pos up to the peak
 	/// including the sibling leaf node which may have been removed.
-	pub fn merkle_proof_via_rewind(
+	pub fn merkle_proof(
 		&mut self,
 		output: &OutputIdentifier,
 		block_header: &BlockHeader,
 	) -> Result<MerkleProof, Error> {
 		debug!(
 			LOGGER,
-			"txhashset: merkle_proof_via_rewind: rewinding to block {:?}",
+			"txhashset: merkle_proof: output: {:?}, block: {:?}",
+			output.commit,
 			block_header.hash()
 		);
 
-		// rewind to the specified block
-		self.rewind(block_header)?;
+		// rewind to the specified block and set the force_rollback flag (read-only)
+		self.rewind_readonly(block_header)?;
+
 		// then calculate the Merkle Proof based on the known pos
 		let pos = self.get_output_pos(&output.commit)?;
 		let merkle_proof = self.output_pmmr
@@ -506,9 +508,25 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	/// Rewinds the MMRs to the provided block, using the last output and
+	/// last kernel of the block we want to rewind to.
+	pub fn rewind_readonly(&mut self, block_header: &BlockHeader) -> Result<(), Error> {
+		// first make sure we set the rollback flag (read-only use of the extension)
+		self.force_rollback();
+
+		let hash = block_header.hash();
+		let height = block_header.height;
+		debug!(
+			LOGGER,
+			"Rewinding (readonly) to header {} at {}", hash, height
+		);
+
+		self.rewind(block_header)
+	}
+
 	/// Rewinds the MMRs to the provided positions, given the output and
 	/// kernel we want to rewind to.
-	pub fn rewind_pos(
+	fn rewind_pos(
 		&mut self,
 		height: u64,
 		out_pos_rew: u64,
@@ -553,9 +571,12 @@ impl<'a> Extension<'a> {
 	/// Validate the txhashset state against the provided block header.
 	/// Rewinds to that pos for the header first so we see a consistent
 	/// view of the world.
+	/// Note: this is an expensive operation and sets force_rollback
+	/// so the extension is read-only.
 	pub fn validate(&mut self, header: &BlockHeader, skip_rproofs: bool) -> Result<(), Error> {
-		// first rewind to the provided header
-		&self.rewind(header)?;
+		// first rewind to the provided header and
+		// set the force_rollback flag (read-only)
+		&self.rewind_readonly(header)?;
 
 		// validate all hashes and sums within the trees
 		if let Err(e) = self.output_pmmr.validate() {

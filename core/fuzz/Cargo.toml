@@ -1,0 +1,34 @@
+
+[package]
+name = "grin_core-fuzz"
+version = "0.0.1"
+authors = ["Automatically generated"]
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+grin_core = { path = ".."}
+grin_keychain = { path = "../../keychain"}
+libfuzzer-sys = { git = "https://github.com/rust-fuzz/libfuzzer-sys.git" }
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "transaction_read"
+path = "fuzz_targets/transaction_read.rs"
+
+[[bin]]
+name = "gen-corpus"
+path = "src/main.rs"
+
+[[bin]]
+name = "block_read"
+path = "fuzz_targets/block_read.rs"
+
+[[bin]]
+name = "compact_block_read"
+path = "fuzz_targets/compact_block_read.rs"

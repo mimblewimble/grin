@@ -516,7 +516,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 	match wallet_args.subcommand() {
 		("listen", Some(listen_args)) => {
 			if let Some(port) = listen_args.value_of("port") {
-				wallet_config.api_listen_port = port.to_string();
+				wallet_config.api_listen_port = port.parse().unwrap();
 			}
 			wallet::server::start_rest_apis(wallet_config, keychain);
 		}

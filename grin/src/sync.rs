@@ -94,21 +94,22 @@ pub fn run_sync(
 					if current_time - prev_state_sync > time::Duration::seconds(5 * 60) {
 						if let Some(peer) = peers.most_work_peer() {
 							if let Ok(p) = peer.try_read() {
-								debug!(
-									LOGGER,
-									"Header head before txhashset request: {} / {}",
-									header_head.height,
-									header_head.last_block_h
-								);
-
 								// just to handle corner case of a too early start
 								if header_head.height > horizon {
+									debug!(
+										LOGGER,
+										"Header head before txhashset request: {} / {}",
+										header_head.height,
+										header_head.last_block_h
+									);
+
 									// ask for txhashset at horizon
 									let mut txhashset_head =
 										chain.get_block_header(&header_head.prev_block_h).unwrap();
 									for _ in 0..horizon - 2 {
-										txhashset_head =
-											chain.get_block_header(&txhashset_head.previous).unwrap();
+										txhashset_head = chain
+											.get_block_header(&txhashset_head.previous)
+											.unwrap();
 									}
 									p.send_txhashset_request(
 										txhashset_head.height,
@@ -259,7 +260,8 @@ fn needs_syncing(
 	if is_syncing {
 		if let Some(peer) = peer {
 			if let Ok(peer) = peer.try_read() {
-				debug!(LOGGER,
+				debug!(
+					LOGGER,
 					"needs_syncing {} {} {}", local_diff, peer.info.total_difficulty, header_only
 				);
 
@@ -278,7 +280,7 @@ fn needs_syncing(
 			}
 		} else {
 			info!(LOGGER, "sync: no peers available, disabling sync");
-			return false
+			return false;
 		}
 	} else {
 		if let Some(peer) = peer {
@@ -298,7 +300,7 @@ fn needs_syncing(
 						peer.info.total_difficulty,
 						threshold,
 					);
-					return true
+					return true;
 				}
 			}
 		}
