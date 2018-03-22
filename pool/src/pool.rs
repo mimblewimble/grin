@@ -1711,14 +1711,7 @@ mod tests {
 		let keychain = keychain_for_tests();
 		let key_id = keychain.derive_key_id(value as u32).unwrap();
 		let commit = keychain.commit(value, &key_id).unwrap();
-		let proof = keychain
-			.range_proof(
-				value,
-				&key_id,
-				commit,
-				None,
-			)
-			.unwrap();
+		let proof = keychain.range_proof(value, &key_id, commit, None).unwrap();
 
 		transaction::Output {
 			features: transaction::OutputFeatures::DEFAULT_OUTPUT,
@@ -1732,14 +1725,7 @@ mod tests {
 		let keychain = keychain_for_tests();
 		let key_id = keychain.derive_key_id(value as u32).unwrap();
 		let commit = keychain.commit(value, &key_id).unwrap();
-		let proof = keychain
-			.range_proof(
-				value,
-				&key_id,
-				commit,
-				None,
-			)
-			.unwrap();
+		let proof = keychain.range_proof(value, &key_id, commit, None).unwrap();
 
 		transaction::Output {
 			features: transaction::OutputFeatures::COINBASE_OUTPUT,
