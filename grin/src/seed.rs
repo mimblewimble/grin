@@ -65,6 +65,8 @@ pub fn connect_and_monitor(
 					// monitor additional peers if we need to add more
 					monitor_peers(peers.clone(), capabilities, tx.clone());
 
+					update_dandelion_relay(peers.clone());
+
 					prev = current_time;
 				}
 
@@ -92,21 +94,6 @@ fn monitor_peers(
 		peers.connected_peers().len(),
 		total_count,
 	);
-
-	// Dandelion Relay Updater
-	let dandelion_relay = peers.get_dandelion_relay();
-	if dandelion_relay.is_empty() {
-		debug!(LOGGER, "monitor_peers: no dandelion relay updating");
-		peers.update_dandelion_relay();
-	} else {
-		for last_added in dandelion_relay.keys() {
-			let dandelion_interval = now_utc().to_timespec().sec - last_added;
-			if dandelion_interval >= DANDELION_RELAY_TIME {
-				debug!(LOGGER, "monitor_peers: updating expired dandelion relay");
-				peers.update_dandelion_relay();
-			}
-		}
-	}
 
 	let mut healthy_count = 0;
 	let mut banned_count = 0;
@@ -165,6 +152,23 @@ fn monitor_peers(
 	for p in peers {
 		debug!(LOGGER, "monitor_peers: queue to soon try {}", p.addr);
 		tx.send(p.addr).unwrap();
+	}
+}
+
+fn update_dandelion_relay(peers: Arc<p2p::Peers>) {
+	// Dandelion Relay Updater
+	let dandelion_relay = peers.get_dandelion_relay();
+	if dandelion_relay.is_empty() {
+		debug!(LOGGER, "monitor_peers: no dandelion relay updating");
+		peers.update_dandelion_relay();
+	} else {
+		for last_added in dandelion_relay.keys() {
+			let dandelion_interval = now_utc().to_timespec().sec - last_added;
+			if dandelion_interval >= DANDELION_RELAY_TIME {
+				debug!(LOGGER, "monitor_peers: updating expired dandelion relay");
+				peers.update_dandelion_relay();
+			}
+		}
 	}
 }
 
