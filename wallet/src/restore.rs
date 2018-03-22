@@ -93,6 +93,8 @@ fn find_outputs_with_key(
 		*key_iterations,
 	);
 
+	// skey doesn't matter in this case
+	let skey = keychain.derive_key_id(1).unwrap();
 	for output in block_outputs.outputs.iter().filter(|x| !x.spent) {
 		// attempt to unwind message from the RP and get a value.. note
 		// this will only return okay if the value is included in the
@@ -101,10 +103,10 @@ fn find_outputs_with_key(
 		// only the first 32 bytes of the recovered message will be accurate
 		let info = keychain
 			.rewind_range_proof(
-				&Identifier::zero(),
+				&skey,
 				output.commit,
 				None,
-				output.proof.unwrap(),
+				output.range_proof().unwrap(),
 			)
 			.unwrap();
 		let message = ProofMessageElements::from_proof_message(info.message).unwrap();
@@ -122,7 +124,7 @@ fn find_outputs_with_key(
 			found = true;
 			// we have a partial match, let's just confirm
 			let info = keychain
-				.rewind_range_proof(key_id, output.commit, None, output.proof.unwrap())
+				.rewind_range_proof(key_id, output.commit, None, output.range_proof().unwrap())
 				.unwrap();
 			let message = ProofMessageElements::from_proof_message(info.message).unwrap();
 			let value = message.value();
@@ -130,7 +132,7 @@ fn find_outputs_with_key(
 				continue;
 			}
 			let value = value.unwrap();
-			info!(LOGGER, "Output found: {:?}, key_index: {:?}", output, i,);
+			info!(LOGGER, "Output found: {:?}, key_index: {:?}", output.commit, i,);
 
 			// add it to result set here
 			let commit_id = output.commit.0;
