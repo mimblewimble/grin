@@ -571,9 +571,11 @@ impl<'a> Extension<'a> {
 	/// Validate the txhashset state against the provided block header.
 	/// Rewinds to that pos for the header first so we see a consistent
 	/// view of the world.
+	/// Note: this is an expensive operation and sets force_rollback
+	/// so the extension is read-only.
 	pub fn validate(&mut self, header: &BlockHeader, skip_rproofs: bool) -> Result<(), Error> {
-		// first rewind to the provided header and set the force_rollback flag
-		// (read-only)
+		// first rewind to the provided header and
+		// set the force_rollback flag (read-only)
 		&self.rewind_readonly(header)?;
 
 		// validate all hashes and sums within the trees

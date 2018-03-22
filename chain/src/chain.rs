@@ -419,7 +419,6 @@ impl Chain {
 		// against the latest block header.
 		// We will rewind the extension internally to the pos for
 		// the block header to ensure the view is consistent.
-		// Force rollback first as this is a "read-only" extension.
 		txhashset::extending(&mut txhashset, |extension| {
 			extension.validate(&header, skip_rproofs)
 		})
