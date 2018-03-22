@@ -15,10 +15,11 @@
 //! Transactions
 use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
-use util::secp::pedersen::{Commitment, RangeProof};
+use util::secp::pedersen::{Commitment, RangeProof, ProofMessage};
 use std::cmp::max;
 use std::cmp::Ordering;
 use std::{error, fmt};
+use std::io::Cursor;
 
 use consensus;
 use consensus::VerifySortOrder;
@@ -29,7 +30,7 @@ use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
 use keychain;
 use keychain::{BlindingFactor, Keychain};
-use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable,
+use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
           WriteableSorted, Writer};
 use util;
 use util::LOGGER;
@@ -95,6 +96,9 @@ pub enum Error {
 	/// Error originating from an input attempting to spend an immature
 	/// coinbase output
 	ImmatureCoinbase,
+	/// Returns if the value hidden within the a RangeProof message isn't
+	/// repeated 3 times, indicating it's incorrect
+	InvalidProofMessage,
 }
 
 impl error::Error for Error {
@@ -833,6 +837,78 @@ impl Readable for OutputIdentifier {
 	}
 }
 
+/// A structure which contains fields that are to be commited to within
+/// an Output's range (bullet) proof.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct ProofMessageElements {
+	/// The amount, stored to allow for wallet reconstruction as
+	/// rewinding isn't supported in bulletproofs just yet
+	/// This is going to be written 3 times, to facilitate checking
+	/// values on rewind
+	value: u64,
+	/// another copy of the value, to check on rewind
+	value_copy_1: u64,
+	/// another copy of the value
+	value_copy_2: u64,
+}
+
+impl Writeable for ProofMessageElements {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.value)?;
+		writer.write_u64(self.value_copy_1)?;
+		writer.write_u64(self.value_copy_2)?;
+		for _ in 24..64 {
+			let _ = writer.write_u8(0);
+		}
+		Ok(())
+	}
+}
+
+impl Readable for ProofMessageElements {
+	fn read(reader: &mut Reader) -> Result<ProofMessageElements, ser::Error> {
+		// if the value isn't repeated 3 times, it's most likely not the value,
+		// so reject
+		Ok(ProofMessageElements {
+			value: reader.read_u64()?,
+			value_copy_1: reader.read_u64()?,
+			value_copy_2: reader.read_u64()?,
+		})
+	}
+}
+
+impl ProofMessageElements {
+	/// Create a new proof message
+	pub fn new(value: u64) -> ProofMessageElements {
+		ProofMessageElements {
+			value: value,
+			value_copy_1: value,
+			value_copy_2: value,
+		}
+	}
+
+	/// Return the value if it's valid, an error otherwise
+	pub fn value(&self) -> Result<u64, Error> {
+		if self.value == self.value_copy_1 && self.value == self.value_copy_2 {
+			Ok(self.value)
+		} else {
+			Err(Error::InvalidProofMessage)
+		}
+	}
+
+	/// Serialise and return a ProofMessage
+	pub fn to_proof_message(&self) -> ProofMessage {
+		ProofMessage::from_bytes(&ser_vec(self).unwrap())
+	}
+
+	/// Deserialise and return the message elements
+	pub fn from_proof_message(
+		proof_message: ProofMessage,
+	) -> Result<ProofMessageElements, ser::Error> {
+		let mut c = Cursor::new(proof_message.as_bytes());
+		ser::deserialize::<ProofMessageElements>(&mut c)
+	}
+}
+
 #[cfg(test)]
 mod test {
 	use super::*;
@@ -897,6 +973,7 @@ mod test {
 				&key_id,
 				commit,
 				None,
+				msg,
 			)
 			.unwrap();
 

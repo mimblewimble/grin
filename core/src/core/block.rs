@@ -18,7 +18,7 @@ use time;
 use rand::{thread_rng, Rng};
 use std::collections::HashSet;
 
-use core::{Committed, Input, KernelFeatures, Output, OutputFeatures, Proof,
+use core::{Committed, Input, KernelFeatures, Output, OutputFeatures, Proof, ProofMessageElements,
            ShortId, Transaction, TxKernel};
 use consensus;
 use consensus::{exceeds_weight, reward, VerifySortOrder, REWARD};
@@ -784,7 +784,9 @@ impl Block {
 		fees: u64,
 		height: u64,
 	) -> Result<(Output, TxKernel), keychain::Error> {
-		let commit = keychain.commit(reward(fees), key_id)?;
+		let value = reward(fees);
+		let commit = keychain.commit(value, key_id)?;
+		let msg = ProofMessageElements::new(value);
 
 		trace!(
 			LOGGER,
@@ -793,10 +795,11 @@ impl Block {
 		);
 
 		let rproof = keychain.range_proof(
-			reward(fees),
+			value,
 			key_id,
 			commit,
 			None,
+			msg.to_proof_message(),
 		)?;
 
 		let output = Output {

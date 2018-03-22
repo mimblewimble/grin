@@ -27,7 +27,7 @@
 
 use util::{kernel_sig_msg, secp};
 
-use core::{Input, Output, OutputFeatures, Transaction, TxKernel};
+use core::{Input, Output, OutputFeatures, ProofMessageElements, Transaction, TxKernel};
 use core::hash::Hash;
 use core::pmmr::MerkleProof;
 use keychain;
@@ -107,6 +107,8 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 				commit,
 			);
 
+			let msg = ProofMessageElements::new(value);
+
 			let rproof = build
 				.keychain
 				.range_proof(
@@ -114,6 +116,7 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 					&key_id,
 					commit,
 					None,
+					msg.to_proof_message(),
 				)
 				.unwrap();
 
