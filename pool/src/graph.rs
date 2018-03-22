@@ -329,13 +329,7 @@ mod tests {
 			features: OutputFeatures::DEFAULT_OUTPUT,
 			commit: output_commit,
 			proof: keychain
-				.range_proof(
-					100,
-					&key_id1,
-					output_commit,
-					None,
-					msg.to_proof_message(),
-				)
+				.range_proof(100, &key_id1, output_commit, None, msg.to_proof_message())
 				.unwrap(),
 		};
 

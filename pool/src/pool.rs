@@ -1714,13 +1714,7 @@ mod tests {
 		let msg = ProofMessageElements::new(value, &key_id);
 		let commit = keychain.commit(value, &key_id).unwrap();
 		let proof = keychain
-			.range_proof(
-				value,
-				&key_id,
-				commit,
-				None,
-				msg.to_proof_message(),
-			)
+			.range_proof(value, &key_id, commit, None, msg.to_proof_message())
 			.unwrap();
 
 		transaction::Output {
@@ -1737,13 +1731,7 @@ mod tests {
 		let msg = ProofMessageElements::new(value, &key_id);
 		let commit = keychain.commit(value, &key_id).unwrap();
 		let proof = keychain
-			.range_proof(
-				value,
-				&key_id,
-				commit,
-				None,
-				msg.to_proof_message(),
-			)
+			.range_proof(value, &key_id, commit, None, msg.to_proof_message())
 			.unwrap();
 
 		transaction::Output {
