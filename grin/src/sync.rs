@@ -94,15 +94,15 @@ pub fn run_sync(
 					if current_time - prev_state_sync > time::Duration::seconds(5 * 60) {
 						if let Some(peer) = peers.most_work_peer() {
 							if let Ok(p) = peer.try_read() {
-								debug!(
-									LOGGER,
-									"Header head before txhashset request: {} / {}",
-									header_head.height,
-									header_head.last_block_h
-								);
-
 								// just to handle corner case of a too early start
 								if header_head.height > horizon {
+									debug!(
+										LOGGER,
+										"Header head before txhashset request: {} / {}",
+										header_head.height,
+										header_head.last_block_h
+									);
+
 									// ask for txhashset at horizon
 									let mut txhashset_head =
 										chain.get_block_header(&header_head.prev_block_h).unwrap();
