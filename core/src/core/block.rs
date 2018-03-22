@@ -786,7 +786,7 @@ impl Block {
 	) -> Result<(Output, TxKernel), keychain::Error> {
 		let value = reward(fees);
 		let commit = keychain.commit(value, key_id)?;
-		let msg = ProofMessageElements::new(value);
+		let msg = ProofMessageElements::new(value, key_id);
 
 		trace!(LOGGER, "Block reward - Pedersen Commit is: {:?}", commit,);
 

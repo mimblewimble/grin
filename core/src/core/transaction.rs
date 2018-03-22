@@ -840,11 +840,20 @@ pub struct ProofMessageElements {
 	/// rewinding isn't supported in bulletproofs just yet
 	/// This is going to be written 3 times, to facilitate checking
 	/// values on rewind
+	/// Note that rewinding with only the nonce will give you back
+	/// the first 32 bytes of the message. To get the second
+	/// 32 bytes, you need to provide the correct blinding factor as well
 	value: u64,
 	/// another copy of the value, to check on rewind
 	value_copy_1: u64,
 	/// another copy of the value
 	value_copy_2: u64,
+	/// the first 8 bytes of the blinding factor, used to avoid having to grind
+	/// through a proof each time you want to check against key possibilities
+	bf_first_8: Vec<u8>,
+	/// unused portion of message, used to test whether we have both nonce
+	/// and blinding correct
+	zeroes: Vec<u8>,
 }
 
 impl Writeable for ProofMessageElements {
@@ -852,8 +861,9 @@ impl Writeable for ProofMessageElements {
 		writer.write_u64(self.value)?;
 		writer.write_u64(self.value_copy_1)?;
 		writer.write_u64(self.value_copy_2)?;
-		for _ in 24..64 {
-			let _ = writer.write_u8(0);
+		writer.write_fixed_bytes(&self.bf_first_8)?;
+		for i in 0..32 {
+			let _ = writer.write_u8(self.zeroes[i]);
 		}
 		Ok(())
 	}
@@ -867,17 +877,21 @@ impl Readable for ProofMessageElements {
 			value: reader.read_u64()?,
 			value_copy_1: reader.read_u64()?,
 			value_copy_2: reader.read_u64()?,
+			bf_first_8: reader.read_fixed_bytes(8)?,
+			zeroes: reader.read_fixed_bytes(32)?,
 		})
 	}
 }
 
 impl ProofMessageElements {
 	/// Create a new proof message
-	pub fn new(value: u64) -> ProofMessageElements {
+	pub fn new(value: u64, blinding: &keychain::Identifier) -> ProofMessageElements {
 		ProofMessageElements {
 			value: value,
 			value_copy_1: value,
 			value_copy_2: value,
+			bf_first_8: blinding.to_bytes()[0..8].to_vec(),
+			zeroes: [0u8; 32].to_vec(),
 		}
 	}
 
@@ -888,6 +902,28 @@ impl ProofMessageElements {
 		} else {
 			Err(Error::InvalidProofMessage)
 		}
+	}
+
+	/// Compare given identifier with first 8 bytes of what's stored
+	pub fn compare_bf_first_8(&self, in_id: &keychain::Identifier) -> bool {
+		let in_id_vec = in_id.to_bytes()[0..8].to_vec();
+		for i in 0..8 {
+			if in_id_vec[i] != self.bf_first_8[i] {
+				return false;
+			}
+		}
+		true
+	}
+
+	/// Whether our remainder is zero (as it should be if the BF and nonce used to unwind
+	/// are correct
+	pub fn zeroes_correct(&self) -> bool {
+		for i in 0..self.zeroes.len() {
+			if self.zeroes[i]!=0 {
+				return false;
+			}
+		}
+		true
 	}
 
 	/// Serialise and return a ProofMessage

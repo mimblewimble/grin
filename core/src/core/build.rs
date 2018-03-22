@@ -103,7 +103,7 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 			let commit = build.keychain.commit(value, &key_id).unwrap();
 			trace!(LOGGER, "Builder - Pedersen Commit is: {:?}", commit,);
 
-			let msg = ProofMessageElements::new(value);
+			let msg = ProofMessageElements::new(value, &key_id);
 
 			let rproof = build
 				.keychain
