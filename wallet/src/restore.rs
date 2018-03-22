@@ -39,9 +39,7 @@ pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 	}
 }
 
-fn coinbase_status(
-	output: &api::OutputPrintable,
-) -> bool {
+fn coinbase_status(output: &api::OutputPrintable) -> bool {
 	match output.output_type {
 		api::OutputType::Coinbase => true,
 		api::OutputType::Transaction => false,
@@ -53,7 +51,10 @@ pub fn outputs_batch_block(
 	start_height: u64,
 	end_height: u64,
 ) -> Result<Vec<api::BlockOutputs>, Error> {
-	let query_param = format!("start_height={}&end_height={}&include_rp", start_height, end_height);
+	let query_param = format!(
+		"start_height={}&end_height={}&include_rp",
+		start_height, end_height
+	);
 
 	let url = format!(
 		"{}/v1/chain/outputs/byheight?{}",
@@ -93,16 +94,19 @@ fn find_outputs_with_key(
 	);
 
 	for output in block_outputs.outputs.iter().filter(|x| !x.spent) {
-		// attempt to unwind message from the RP and get a value.. note 
+		// attempt to unwind message from the RP and get a value.. note
 		// this will only return okay if the value is included in the
 		// message 3 times, indicating a strong match. Also, sec_key provided
 		// to unwind in this case will be meaningless. With only the nonce known
 		// only the first 32 bytes of the recovered message will be accurate
-		let info = keychain.rewind_range_proof(
-			&Identifier::zero(),
-			output.commit,
-			None,
-			output.proof.unwrap()).unwrap();
+		let info = keychain
+			.rewind_range_proof(
+				&Identifier::zero(),
+				output.commit,
+				None,
+				output.proof.unwrap(),
+			)
+			.unwrap();
 		let message = ProofMessageElements::from_proof_message(info.message).unwrap();
 		let value = message.value();
 		if value.is_err() {
@@ -117,11 +121,9 @@ fn find_outputs_with_key(
 			}
 			found = true;
 			// we have a partial match, let's just confirm
-			let info = keychain.rewind_range_proof(
-				key_id,
-				output.commit,
-				None,
-				output.proof.unwrap()).unwrap();
+			let info = keychain
+				.rewind_range_proof(key_id, output.commit, None, output.proof.unwrap())
+				.unwrap();
 			let message = ProofMessageElements::from_proof_message(info.message).unwrap();
 			let value = message.value();
 			if value.is_err() || !message.zeroes_correct() {
@@ -157,11 +159,14 @@ fn find_outputs_with_key(
 				lock_height,
 				is_coinbase,
 			));
-			
 		}
 		if !found {
-			warn!(LOGGER, "Very probable matching output found with amount: {} \
-			run restore again with a larger value of key_iterations to claim", message.value().unwrap());
+			warn!(
+				LOGGER,
+				"Very probable matching output found with amount: {} \
+				 run restore again with a larger value of key_iterations to claim",
+				message.value().unwrap()
+			);
 		}
 	}
 	debug!(
@@ -215,11 +220,7 @@ pub fn restore(
 
 		let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 			for block in blocks {
-				let result_vec = find_outputs_with_key(
-					keychain,
-					block,
-					&mut key_iterations,
-				);
+				let result_vec = find_outputs_with_key(keychain, block, &mut key_iterations);
 				if result_vec.len() > 0 {
 					for output in result_vec.clone() {
 						let root_key_id = keychain.root_key_id();

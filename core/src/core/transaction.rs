@@ -919,7 +919,7 @@ impl ProofMessageElements {
 	/// are correct
 	pub fn zeroes_correct(&self) -> bool {
 		for i in 0..self.zeroes.len() {
-			if self.zeroes[i]!=0 {
+			if self.zeroes[i] != 0 {
 				return false;
 			}
 		}
