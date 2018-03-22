@@ -393,8 +393,11 @@ impl NetToChainAdapter {
 		let prev_hash = b.header.previous;
 		let bhash = b.hash();
 		let chain = w(&self.chain);
-		let result = match chain.process_block(b, self.chain_opts()) {
-			Ok(_) => true,
+		match chain.process_block(b, self.chain_opts()) {
+			Ok(_) => {
+				self.validate_chain(bhash);
+				true
+			}
 			Err(chain::Error::Orphan) => {
 				// make sure we did not miss the parent block
 				if !chain.is_orphan(&prev_hash) && !self.currently_syncing.load(Ordering::Relaxed) {
@@ -411,6 +414,11 @@ impl NetToChainAdapter {
 					"adapter: process_block: {} is a bad block, resetting head", bhash
 				);
 				let _ = chain.reset_head();
+
+				// we potentially changed the state of the system here
+				// so check everything is still ok
+				self.validate_chain(bhash);
+
 				false
 			}
 			Err(e) => {
@@ -420,8 +428,10 @@ impl NetToChainAdapter {
 				);
 				true
 			}
-		};
+		}
+	}
 
+	fn validate_chain(&self, bhash: Hash) {
 		// If we are running in "validate the full chain every block" then
 		// panic here if validation fails for any reason.
 		// We are out of consensus at this point and want to track the problem
@@ -448,8 +458,6 @@ impl NetToChainAdapter {
 				now.elapsed().as_secs(),
 			);
 		}
-
-		result
 	}
 
 	// After receiving a compact block if we cannot successfully hydrate
