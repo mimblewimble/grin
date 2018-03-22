@@ -102,12 +102,7 @@ fn find_outputs_with_key(
 		// to unwind in this case will be meaningless. With only the nonce known
 		// only the first 32 bytes of the recovered message will be accurate
 		let info = keychain
-			.rewind_range_proof(
-				&skey,
-				output.commit,
-				None,
-				output.range_proof().unwrap(),
-			)
+			.rewind_range_proof(&skey, output.commit, None, output.range_proof().unwrap())
 			.unwrap();
 		let message = ProofMessageElements::from_proof_message(info.message).unwrap();
 		let value = message.value();
@@ -132,7 +127,10 @@ fn find_outputs_with_key(
 				continue;
 			}
 			let value = value.unwrap();
-			info!(LOGGER, "Output found: {:?}, key_index: {:?}", output.commit, i,);
+			info!(
+				LOGGER,
+				"Output found: {:?}, key_index: {:?}", output.commit, i,
+			);
 
 			// add it to result set here
 			let commit_id = output.commit.0;
