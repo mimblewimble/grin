@@ -91,7 +91,7 @@ external = false
 api_listen_interface = "127.0.0.1"
 
 # Port for wallet listener
-api_listen_port = "13415"
+api_listen_port = 13415
 
 # Where the wallet should find a running node
 check_node_api_http_addr = "http://localhost:13413"

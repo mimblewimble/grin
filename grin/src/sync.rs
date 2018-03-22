@@ -66,8 +66,8 @@ pub fn run_sync(
 
 				// in archival nodes (no fast sync) we just consider we have the whole
 				// state already
-				let have_txhashset = !fast_sync
-					|| header_head.height.saturating_sub(head.height) <= horizon;
+				let have_txhashset =
+					!fast_sync || header_head.height.saturating_sub(head.height) <= horizon;
 
 				let mut syncing = needs_syncing(
 					currently_syncing.as_ref(),
