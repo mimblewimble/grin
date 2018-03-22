@@ -175,7 +175,7 @@ fn simulate_parallel_mining() {
 /// Create a network of 5 servers and mine a block, verifying that the block
 /// gets propagated to all.
 #[test]
-fn a_simulate_block_propagation() {
+fn simulate_block_propagation() {
 	util::init_test_logger();
 
 	// we actually set the chain_type in the ServerConfig below
@@ -188,20 +188,9 @@ fn a_simulate_block_propagation() {
 	// instantiates 5 servers on different ports
 	let mut servers = vec![];
 	for n in 0..5 {
-		let s = grin::Server::new(grin::ServerConfig {
-			api_http_addr: format!("127.0.0.1:{}", 19000 + n),
-			db_root: format!("target/tmp/{}/grin-prop-{}", test_name_dir, n),
-			p2p_config: p2p::P2PConfig {
-				port: 18000 + n,
-				..p2p::P2PConfig::default()
-			},
-			seeding_type: grin::Seeding::List,
-			seeds: Some(vec!["127.0.0.1:18000".to_string()]),
-			chain_type: core::global::ChainTypes::AutomatedTesting,
-			skip_sync_wait: Some(true),
-			..Default::default()
-		}).unwrap();
+		let s = grin::Server::new(config(10*n, test_name_dir, 0)).unwrap();
 		servers.push(s);
+		thread::sleep(time::Duration::from_millis(100));
 	}
 
 	// start mining
@@ -222,6 +211,9 @@ fn a_simulate_block_propagation() {
 		}
 		thread::sleep(time::Duration::from_millis(100));
 	}
+	for n in 0..5 {
+		servers[n].stop();
+	}
 }
 
 /// Creates 2 different disconnected servers, mine a few blocks on one, connect
@@ -236,16 +228,18 @@ fn simulate_full_sync() {
 	let test_name_dir = "grin-sync";
 	framework::clean_all_output(test_name_dir);
 
-	let s1 = grin::Server::new(config(0, "grin-sync")).unwrap();
+	let s1 = grin::Server::new(config(1000, "grin-sync", 1000)).unwrap();
 	// mine a few blocks on server 1
 	s1.start_miner(miner_config());
 	thread::sleep(time::Duration::from_secs(8));
 
-	let mut conf = config(1, "grin-sync");
+	let mut conf = config(1001, "grin-sync", 1000);
 	let s2 = grin::Server::new(conf).unwrap();
 	while s2.head().height < 4 {
 		thread::sleep(time::Duration::from_millis(100));
 	}
+	s1.stop();
+	s2.stop();
 }
 
 /// Creates 2 different disconnected servers, mine a few blocks on one, connect
@@ -260,18 +254,19 @@ fn simulate_fast_sync() {
 	let test_name_dir = "grin-fast";
 	framework::clean_all_output(test_name_dir);
 
-	let s1 = grin::Server::new(config(1000, "grin-fast")).unwrap();
+	let s1 = grin::Server::new(config(2000, "grin-fast", 2000)).unwrap();
 	// mine a few blocks on server 1
 	s1.start_miner(miner_config());
 	thread::sleep(time::Duration::from_secs(8));
 
-	let mut conf = config(1001, "grin-fast");
+	let mut conf = config(2001, "grin-fast", 2000);
 	conf.archive_mode = Some(false);
-	conf.seeds = Some(vec!["127.0.0.1:12000".to_string()]);
 	let s2 = grin::Server::new(conf).unwrap();
 	while s2.head().height != s2.header_head().height || s2.head().height < 20 {
 		thread::sleep(time::Duration::from_millis(1000));
 	}
+	s1.stop();
+	s2.stop();
 }
 
 // #[test]
@@ -284,15 +279,14 @@ fn simulate_fast_sync_double() {
 	framework::clean_all_output("grin-double-fast1");
 	framework::clean_all_output("grin-double-fast2");
 
-	let s1 = grin::Server::new(config(1000, "grin-double-fast1")).unwrap();
+	let s1 = grin::Server::new(config(3000, "grin-double-fast1", 3000)).unwrap();
 	// mine a few blocks on server 1
 	s1.start_miner(miner_config());
 	thread::sleep(time::Duration::from_secs(8));
 
 	{
-		let mut conf = config(1001, "grin-double-fast2");
+		let mut conf = config(3001, "grin-double-fast2", 3000);
 		conf.archive_mode = Some(false);
-		conf.seeds = Some(vec!["127.0.0.1:12000".to_string()]);
 		let s2 = grin::Server::new(conf).unwrap();
 		while s2.head().height != s2.header_head().height || s2.head().height < 20 {
 			thread::sleep(time::Duration::from_millis(1000));
@@ -304,25 +298,26 @@ fn simulate_fast_sync_double() {
 	std::fs::remove_file("target/tmp/grin-double-fast2/grin-sync-1001/peers/LOCK");
 	thread::sleep(time::Duration::from_secs(20));
 
-	let mut conf = config(1001, "grin-double-fast2");
+	let mut conf = config(3001, "grin-double-fast2", 3000);
 	conf.archive_mode = Some(false);
-	conf.seeds = Some(vec!["127.0.0.1:12000".to_string()]);
 	let s2 = grin::Server::new(conf).unwrap();
 	while s2.head().height != s2.header_head().height || s2.head().height < 50 {
 		thread::sleep(time::Duration::from_millis(1000));
 	}
+	s1.stop();
+	s2.stop();
 }
 
-fn config(n: u16, test_name_dir: &str) -> grin::ServerConfig {
+fn config(n: u16, test_name_dir: &str, seed_n: u16) -> grin::ServerConfig {
 	grin::ServerConfig {
-		api_http_addr: format!("127.0.0.1:{}", 19000 + n),
+		api_http_addr: format!("127.0.0.1:{}", 20000 + n),
 		db_root: format!("target/tmp/{}/grin-sync-{}", test_name_dir, n),
 		p2p_config: p2p::P2PConfig {
-			port: 11000 + n,
+			port: 10000 + n,
 			..p2p::P2PConfig::default()
 		},
 		seeding_type: grin::Seeding::List,
-		seeds: Some(vec!["127.0.0.1:11000".to_string()]),
+		seeds: Some(vec![format!("127.0.0.1:{}", 10000 + seed_n)]),
 		chain_type: core::global::ChainTypes::AutomatedTesting,
 		archive_mode: Some(true),
 		skip_sync_wait: Some(true),
