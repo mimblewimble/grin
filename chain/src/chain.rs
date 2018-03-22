@@ -421,7 +421,6 @@ impl Chain {
 		// the block header to ensure the view is consistent.
 		// Force rollback first as this is a "read-only" extension.
 		txhashset::extending(&mut txhashset, |extension| {
-			extension.force_rollback();
 			extension.validate(&header, skip_rproofs)
 		})
 	}
@@ -471,8 +470,7 @@ impl Chain {
 		let mut txhashset = self.txhashset.write().unwrap();
 
 		let merkle_proof = txhashset::extending(&mut txhashset, |extension| {
-			extension.force_rollback();
-			extension.merkle_proof_via_rewind(output, block_header)
+			extension.merkle_proof(output, block_header)
 		})?;
 
 		Ok(merkle_proof)
