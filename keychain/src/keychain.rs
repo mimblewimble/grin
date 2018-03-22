@@ -219,7 +219,7 @@ impl Keychain {
 		let root_key = self.root_key_id().to_bytes();
 		let res = blake2::blake2b::blake2b(32, &commit.0, &root_key);
 		let res = res.as_bytes();
-		let mut ret_val = [0;32];
+		let mut ret_val = [0; 32];
 		for i in 0..res.len() {
 			ret_val[i] = res[i];
 		}
@@ -238,7 +238,8 @@ impl Keychain {
 		let skey = self.derived_key(key_id)?;
 		let nonce = self.rangeproof_create_nonce(&commit);
 		if msg.len() == 0 {
-			return Ok(self.secp.bullet_proof(amount, skey, nonce, extra_data, None));
+			return Ok(self.secp
+				.bullet_proof(amount, skey, nonce, extra_data, None));
 		} else {
 			if msg.len() != 64 {
 				error!(LOGGER, "Bullet proof message must be 64 bytes.");
@@ -247,7 +248,8 @@ impl Keychain {
 				));
 			}
 		}
-		return Ok(self.secp.bullet_proof(amount, skey, nonce, extra_data, Some(msg)));
+		return Ok(self.secp
+			.bullet_proof(amount, skey, nonce, extra_data, Some(msg)));
 	}
 
 	pub fn verify_range_proof(

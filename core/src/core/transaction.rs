@@ -15,7 +15,7 @@
 //! Transactions
 use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
-use util::secp::pedersen::{Commitment, RangeProof, ProofMessage};
+use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
 use std::cmp::max;
 use std::cmp::Ordering;
 use std::{error, fmt};
@@ -743,12 +743,7 @@ impl Output {
 	pub fn verify_proof(&self) -> Result<(), secp::Error> {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		match Keychain::verify_range_proof(
-			&secp,
-			self.commit,
-			self.proof,
-			None,
-		) {
+		match Keychain::verify_range_proof(&secp, self.commit, self.proof, None) {
 			Ok(_) => Ok(()),
 			Err(e) => Err(e),
 		}
@@ -790,7 +785,7 @@ impl OutputIdentifier {
 			features: self.features,
 			commit: self.commit,
 			proof: proof,
-		}	
+		}
 	}
 
 	/// Build an output_identifier from an existing input.
@@ -967,15 +962,7 @@ mod test {
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
 		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain
-			.range_proof(
-				5,
-				&key_id,
-				commit,
-				None,
-				msg,
-			)
-			.unwrap();
+		let proof = keychain.range_proof(5, &key_id, commit, None, msg).unwrap();
 
 		let out = Output {
 			features: OutputFeatures::DEFAULT_OUTPUT,

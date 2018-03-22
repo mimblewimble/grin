@@ -169,7 +169,7 @@ impl Readable for BlockHeader {
 		let nonce = reader.read_u64()?;
 		let pow = Proof::read(reader)?;
 
-		if timestamp > (1 << 55) ||  timestamp < -(1 << 55) {
+		if timestamp > (1 << 55) || timestamp < -(1 << 55) {
 			return Err(ser::Error::CorruptedData);
 		}
 
@@ -788,19 +788,9 @@ impl Block {
 		let commit = keychain.commit(value, key_id)?;
 		let msg = ProofMessageElements::new(value);
 
-		trace!(
-			LOGGER,
-			"Block reward - Pedersen Commit is: {:?}",
-			commit,
-		);
+		trace!(LOGGER, "Block reward - Pedersen Commit is: {:?}", commit,);
 
-		let rproof = keychain.range_proof(
-			value,
-			key_id,
-			commit,
-			None,
-			msg.to_proof_message(),
-		)?;
+		let rproof = keychain.range_proof(value, key_id, commit, None, msg.to_proof_message())?;
 
 		let output = Output {
 			features: OutputFeatures::COINBASE_OUTPUT,
