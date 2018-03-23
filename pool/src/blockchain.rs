@@ -107,7 +107,7 @@ impl DummyChainImpl {
 impl BlockChain for DummyChainImpl {
 	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<hash::Hash, PoolError> {
 		match self.output.read().unwrap().get_output(&output_ref.commit) {
-			Some(_) => Ok(hash::Hash::zero()),
+			Some(_) => Ok(hash::Hash::default()),
 			None => Err(PoolError::GenericPoolError),
 		}
 	}

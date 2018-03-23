@@ -1654,9 +1654,9 @@ mod tests {
 		let mut tx_elements = Vec::new();
 
 		let merkle_proof = MerkleProof {
-			node: Hash::zero(),
-			root: Hash::zero(),
-			peaks: vec![Hash::zero()],
+			node: Hash::default(),
+			root: Hash::default(),
+			peaks: vec![Hash::default()],
 			..MerkleProof::default()
 		};
 

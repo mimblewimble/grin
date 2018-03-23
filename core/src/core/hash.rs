@@ -67,11 +67,6 @@ impl Hash {
 		self.0.to_vec()
 	}
 
-	/// The "zero" hash. No known preimage.
-	pub fn zero() -> Hash {
-		ZERO_HASH
-	}
-
 	/// Convert a hash to hex string format.
 	pub fn to_hex(&self) -> String {
 		util::to_hex(self.to_vec())
@@ -151,6 +146,12 @@ impl Add for Hash {
 	type Output = Hash;
 	fn add(self, other: Hash) -> Hash {
 		self.hash_with(other)
+	}
+}
+
+impl Default for Hash {
+	fn default() -> Hash {
+		ZERO_HASH
 	}
 }
 

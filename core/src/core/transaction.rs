@@ -583,10 +583,10 @@ impl Input {
 	}
 
 	/// Convenience functon to return the (optional) block_hash for this input.
-	/// Will return the "zero" hash if we do not have one.
+	/// Will return the default hash if we do not have one.
 	pub fn block_hash(&self) -> Hash {
 		let block_hash = self.block_hash.clone();
-		block_hash.unwrap_or(Hash::zero())
+		block_hash.unwrap_or(Hash::default())
 	}
 
 	/// Convenience function to return the (optional) merkle_proof for this input.
