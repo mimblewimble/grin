@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 exclude = ["**/*.grin", "**/*.grin2"]
 publish = false
+build = "src/build/build.rs"
 
 [workspace]
 members = ["api", "chain", "config", "core", "grin", "keychain", "p2p", "store", "util", "pool", "wallet"]
@@ -41,3 +42,6 @@ tag="grin_integration_1"
 # TODO - once "patch" is available we should be able to clean up the workspace dependencies
 # [patch.crate-io]
 # secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }
+
+[build-dependencies]
+built = "^0.2.3"

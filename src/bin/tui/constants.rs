@@ -28,6 +28,9 @@ pub const SUBMENU_MINING_BUTTON: &str = "mining_submenu_button";
 pub const TABLE_MINING_STATUS: &str = "mining_status_table";
 pub const TABLE_MINING_DIFF_STATUS: &str = "mining_diff_status_table";
 
+// Mining View
+pub const VIEW_VERSION: &str = "version_view";
+
 // Menu and root elements
 pub const MAIN_MENU: &str = "main_menu";
 pub const ROOT_STACK: &str = "root_stack";

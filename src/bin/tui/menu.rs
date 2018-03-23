@@ -33,6 +33,7 @@ pub fn create() -> Box<View> {
 		.get_mut()
 		.add_item("Peers and Sync", VIEW_PEER_SYNC);
 	main_menu.get_mut().add_item("Mining", VIEW_MINING);
+	main_menu.get_mut().add_item("Version Info", VIEW_VERSION);
 	let change_view = |s: &mut Cursive, v: &&str| {
 		if *v == "" {
 			return;

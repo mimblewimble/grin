@@ -12,16 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Grin TUI
-extern crate chrono;
-extern crate grin_pow as pow;
+//! Build hooks to spit out version+build time info
 
-pub mod ui;
-pub mod table;
-mod peers;
-mod constants;
-mod menu;
-mod status;
-mod mining;
-mod version;
-mod types;
+extern crate built;
+
+use std::env;
+
+fn main() {
+	let mut opts = built::Options::default();
+	opts.set_dependencies(true);
+	built::write_built_file_with_opts(
+		&opts,
+		env!("CARGO_MANIFEST_DIR"),
+		format!("{}{}", env::var("OUT_DIR").unwrap(), "/built.rs"),
+	).expect("Failed to acquire build-time information");
+}
