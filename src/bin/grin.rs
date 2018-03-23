@@ -79,7 +79,7 @@ fn log_build_info() {
 	let (basic_info, detailed_info, deps) = info_strings();
 	info!(LOGGER, "{}", basic_info);
 	debug!(LOGGER, "{}", detailed_info);
-	debug!(LOGGER, "{}", deps);
+	trace!(LOGGER, "{}", deps);
 }
 
 /// wrap below to allow UI to clean up on stop
