@@ -161,28 +161,8 @@ where
 		}
 	}
 
-	/// Get a Hash by insertion position
-	// fn get(&self, position: u64, include_data: bool) -> Option<(Hash,
-	// Option<T>)> { // Check if this position has been pruned in the remove
-	// log... 	if self.rm_log.includes(position) {
-	// 		return None;
-	// 	}
-	//
-	// 	let hash_val = self.get_from_file(position);
-	// 	if !include_data {
-	// 		return hash_val.map(|hash| (hash, None));
-	// 	}
-	//
-	// 	// if this is not a leaf then we have no data
-	// 	if !pmmr::is_leaf(position) {
-	// 		return hash_val.map(|hash| (hash, None));
-	// 	}
-	//
-	// 	let data = self.get_data_from_file(position);
-	//
-	// 	hash_val.map(|x| (x, data))
-	// }
-
+	/// Get the hash at pos.
+	/// Return None if it has been removed.
 	fn get_hash(&self, pos: u64) -> Option<(Hash)> {
 		// Check if this position has been pruned in the remove log...
 		if self.rm_log.includes(pos) {

@@ -63,18 +63,18 @@ where
 	/// occurred (see remove).
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String>;
 
-	/// Get a Hash by insertion position. If include_data is true, will
-	/// also return the associated data element
+	/// Get a Hash by insertion position.
 	fn get_hash(&self, position: u64) -> Option<Hash>;
 
+	/// Get underlying data by insertion position.
 	fn get_data(&self, position: u64) -> Option<T>;
 
-	/// Get a Hash  by original insertion position (ignoring the remove
-	/// list).
+	/// Get a Hash  by original insertion position
+	/// (ignoring the remove log).
 	fn get_from_file(&self, position: u64) -> Option<Hash>;
 
-	/// Get a Data Element by original insertion position (ignoring the remove
-	/// list).
+	/// Get a Data Element by original insertion position
+	/// (ignoring the remove log).
 	fn get_data_from_file(&self, position: u64) -> Option<T>;
 
 	/// Remove HashSums by insertion position. An index is also provided so the
@@ -451,6 +451,7 @@ where
 		Ok(true)
 	}
 
+	/// Get a hash at provided position in the MMR.
 	pub fn get_hash(&self, pos: u64) -> Option<Hash> {
 		if pos > self.last_pos {
 			None
@@ -459,6 +460,7 @@ where
 		}
 	}
 
+	/// Get the data element at provided in the MMR.
 	pub fn get_data(&self, pos: u64) -> Option<T> {
 		if pos > self.last_pos {
 			None
@@ -467,6 +469,8 @@ where
 		}
 	}
 
+	/// Get the hash from the underlying MMR file
+	/// (ignores the remove log).
 	fn get_from_file(&self, pos: u64) -> Option<Hash> {
 		if pos > self.last_pos {
 			None
