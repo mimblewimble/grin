@@ -413,6 +413,12 @@ impl Chain {
 	/// Validate the current chain state.
 	pub fn validate(&self, skip_rproofs: bool) -> Result<(), Error> {
 		let header = self.store.head_header()?;
+
+		// Lets just treat an "empty" node that just got started up as valid.
+		if header.height == 0 {
+			return Ok(());
+		}
+
 		let mut txhashset = self.txhashset.write().unwrap();
 
 		// Now create an extension from the txhashset and validate
