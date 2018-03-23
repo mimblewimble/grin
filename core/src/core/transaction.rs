@@ -706,7 +706,7 @@ impl Writeable for Output {
 		self.commit.write(writer)?;
 		// The hash of an output doesn't include the range proof, which
 		// is commit to separately
-		if writer.serialization_mode() == ser::SerializationMode::Full {
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			writer.write_bytes(&self.proof)?
 		}
 		Ok(())

@@ -145,12 +145,11 @@ impl Default for BlockHeader {
 /// Serialization of a block header
 impl Writeable for BlockHeader {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		if writer.serialization_mode() == ser::SerializationMode::Hash {
-			try!(self.pow.write(writer));
-		} else {
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			self.write_pre_pow(writer)?;
-			self.pow.write(writer)?;
 		}
+
+		self.pow.write(writer)?;
 		Ok(())
 	}
 }
