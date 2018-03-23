@@ -178,8 +178,8 @@ impl MerkleProof {
 	/// Basically some reasonable defaults. Will not verify successfully.
 	pub fn empty() -> MerkleProof {
 		MerkleProof {
-			root: Hash::zero(),
-			node: Hash::zero(),
+			root: Hash::default(),
+			node: Hash::default(),
 			peaks: vec![],
 			path: vec![],
 		}
@@ -336,7 +336,7 @@ where
 
 		let path = family_branch
 			.iter()
-			.map(|x| (self.get_from_file(x.1).unwrap_or(Hash::zero()), x.1))
+			.map(|x| (self.get_from_file(x.1).unwrap_or(Hash::default()), x.1))
 			.collect::<Vec<_>>();
 
 		let peaks = peaks(self.last_pos)

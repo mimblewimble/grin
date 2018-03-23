@@ -150,7 +150,7 @@ mod test {
 		).unwrap();
 		assert_eq!(foo.hash(), expected_hash);
 
-		let other_hash = Hash::zero();
+		let other_hash = Hash::default();
 		assert_eq!(
 			foo.short_id(&other_hash, foo.0),
 			ShortId::from_hex("4cc808b62476").unwrap()
@@ -162,7 +162,7 @@ mod test {
 		).unwrap();
 		assert_eq!(foo.hash(), expected_hash);
 
-		let other_hash = Hash::zero();
+		let other_hash = Hash::default();
 		assert_eq!(
 			foo.short_id(&other_hash, foo.0),
 			ShortId::from_hex("02955a094534").unwrap()
