@@ -15,10 +15,11 @@
 //! Transactions
 use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
-use util::secp::pedersen::{Commitment, RangeProof};
+use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
 use std::cmp::max;
 use std::cmp::Ordering;
 use std::{error, fmt};
+use std::io::Cursor;
 
 use consensus;
 use consensus::VerifySortOrder;
@@ -29,7 +30,7 @@ use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
 use keychain;
 use keychain::{BlindingFactor, Keychain};
-use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable,
+use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
           WriteableSorted, Writer};
 use util;
 use util::LOGGER;
@@ -95,6 +96,9 @@ pub enum Error {
 	/// Error originating from an input attempting to spend an immature
 	/// coinbase output
 	ImmatureCoinbase,
+	/// Returns if the value hidden within the a RangeProof message isn't
+	/// repeated 3 times, indicating it's incorrect
+	InvalidProofMessage,
 }
 
 impl error::Error for Error {
@@ -739,12 +743,7 @@ impl Output {
 	pub fn verify_proof(&self) -> Result<(), secp::Error> {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		match Keychain::verify_range_proof(
-			&secp,
-			self.commit,
-			self.proof,
-			None,
-		) {
+		match Keychain::verify_range_proof(&secp, self.commit, self.proof, None) {
 			Ok(_) => Ok(()),
 			Err(e) => Err(e),
 		}
@@ -786,7 +785,7 @@ impl OutputIdentifier {
 			features: self.features,
 			commit: self.commit,
 			proof: proof,
-		}	
+		}
 	}
 
 	/// Build an output_identifier from an existing input.
@@ -830,6 +829,114 @@ impl Readable for OutputIdentifier {
 			commit: Commitment::read(reader)?,
 			features: features,
 		})
+	}
+}
+
+/// A structure which contains fields that are to be commited to within
+/// an Output's range (bullet) proof.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct ProofMessageElements {
+	/// The amount, stored to allow for wallet reconstruction as
+	/// rewinding isn't supported in bulletproofs just yet
+	/// This is going to be written 3 times, to facilitate checking
+	/// values on rewind
+	/// Note that rewinding with only the nonce will give you back
+	/// the first 32 bytes of the message. To get the second
+	/// 32 bytes, you need to provide the correct blinding factor as well
+	value: u64,
+	/// another copy of the value, to check on rewind
+	value_copy_1: u64,
+	/// another copy of the value
+	value_copy_2: u64,
+	/// the first 8 bytes of the blinding factor, used to avoid having to grind
+	/// through a proof each time you want to check against key possibilities
+	bf_first_8: Vec<u8>,
+	/// unused portion of message, used to test whether we have both nonce
+	/// and blinding correct
+	zeroes: Vec<u8>,
+}
+
+impl Writeable for ProofMessageElements {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.value)?;
+		writer.write_u64(self.value_copy_1)?;
+		writer.write_u64(self.value_copy_2)?;
+		writer.write_fixed_bytes(&self.bf_first_8)?;
+		for i in 0..32 {
+			let _ = writer.write_u8(self.zeroes[i]);
+		}
+		Ok(())
+	}
+}
+
+impl Readable for ProofMessageElements {
+	fn read(reader: &mut Reader) -> Result<ProofMessageElements, ser::Error> {
+		// if the value isn't repeated 3 times, it's most likely not the value,
+		// so reject
+		Ok(ProofMessageElements {
+			value: reader.read_u64()?,
+			value_copy_1: reader.read_u64()?,
+			value_copy_2: reader.read_u64()?,
+			bf_first_8: reader.read_fixed_bytes(8)?,
+			zeroes: reader.read_fixed_bytes(32)?,
+		})
+	}
+}
+
+impl ProofMessageElements {
+	/// Create a new proof message
+	pub fn new(value: u64, blinding: &keychain::Identifier) -> ProofMessageElements {
+		ProofMessageElements {
+			value: value,
+			value_copy_1: value,
+			value_copy_2: value,
+			bf_first_8: blinding.to_bytes()[0..8].to_vec(),
+			zeroes: [0u8; 32].to_vec(),
+		}
+	}
+
+	/// Return the value if it's valid, an error otherwise
+	pub fn value(&self) -> Result<u64, Error> {
+		if self.value == self.value_copy_1 && self.value == self.value_copy_2 {
+			Ok(self.value)
+		} else {
+			Err(Error::InvalidProofMessage)
+		}
+	}
+
+	/// Compare given identifier with first 8 bytes of what's stored
+	pub fn compare_bf_first_8(&self, in_id: &keychain::Identifier) -> bool {
+		let in_id_vec = in_id.to_bytes()[0..8].to_vec();
+		for i in 0..8 {
+			if in_id_vec[i] != self.bf_first_8[i] {
+				return false;
+			}
+		}
+		true
+	}
+
+	/// Whether our remainder is zero (as it should be if the BF and nonce used to unwind
+	/// are correct
+	pub fn zeroes_correct(&self) -> bool {
+		for i in 0..self.zeroes.len() {
+			if self.zeroes[i] != 0 {
+				return false;
+			}
+		}
+		true
+	}
+
+	/// Serialise and return a ProofMessage
+	pub fn to_proof_message(&self) -> ProofMessage {
+		ProofMessage::from_bytes(&ser_vec(self).unwrap())
+	}
+
+	/// Deserialise and return the message elements
+	pub fn from_proof_message(
+		proof_message: ProofMessage,
+	) -> Result<ProofMessageElements, ser::Error> {
+		let mut c = Cursor::new(proof_message.as_bytes());
+		ser::deserialize::<ProofMessageElements>(&mut c)
 	}
 }
 
@@ -891,14 +998,7 @@ mod test {
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
 		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain
-			.range_proof(
-				5,
-				&key_id,
-				commit,
-				None,
-			)
-			.unwrap();
+		let proof = keychain.range_proof(5, &key_id, commit, None, msg).unwrap();
 
 		let out = Output {
 			features: OutputFeatures::DEFAULT_OUTPUT,

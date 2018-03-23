@@ -205,7 +205,7 @@ impl ChainAdapter for DummyAdapter {
 	fn total_height(&self) -> u64 {
 		0
 	}
-	fn transaction_received(&self, _: core::Transaction, stem: bool) {}
+	fn transaction_received(&self, _: core::Transaction, _stem: bool) {}
 	fn compact_block_received(&self, _cb: core::CompactBlock, _addr: SocketAddr) -> bool {
 		true
 	}

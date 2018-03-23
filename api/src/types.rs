@@ -21,7 +21,6 @@ use chain;
 use p2p;
 use util;
 use util::secp::pedersen;
-use util::secp::constants::MAX_PROOF_SIZE;
 use serde;
 use serde::ser::SerializeStruct;
 use serde::de::MapAccess;
@@ -230,7 +229,7 @@ pub struct OutputPrintable {
 	/// Whether the output has been spent
 	pub spent: bool,
 	/// Rangeproof (as hex string)
-	pub proof: Option<pedersen::RangeProof>,
+	pub proof: Option<String>,
 	/// Rangeproof hash (as hex string)
 	pub proof_hash: String,
 
@@ -257,7 +256,7 @@ impl OutputPrintable {
 		let spent = chain.is_unspent(&out_id).is_err();
 
 		let proof = if include_proof {
-			Some(output.proof)
+			Some(util::to_hex(output.proof.proof.to_vec()))
 		} else {
 			None
 		};
@@ -289,9 +288,19 @@ impl OutputPrintable {
 	}
 
 	pub fn range_proof(&self) -> Result<pedersen::RangeProof, ser::Error> {
-		self.proof
+		let proof_str = self.proof
 			.clone()
 			.ok_or_else(|| ser::Error::HexError(format!("output range_proof missing")))
+			.unwrap();
+		let p_vec = util::from_hex(proof_str).unwrap();
+		let mut p_bytes = [0; util::secp::constants::MAX_PROOF_SIZE];
+		for i in 0..p_bytes.len() {
+			p_bytes[i] = p_vec[i];
+		}
+		Ok(pedersen::RangeProof {
+			proof: p_bytes,
+			plen: p_bytes.len(),
+		})
 	}
 }
 
@@ -370,22 +379,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 						}
 						Field::Proof => {
 							no_dup!(proof);
-
-							let val: Option<String> = map.next_value()?;
-
-							if val.is_some() {
-								let vec = util::from_hex(val.unwrap().clone())
-									.map_err(serde::de::Error::custom)?;
-								let mut bytes = [0; MAX_PROOF_SIZE];
-								for i in 0..vec.len() {
-									bytes[i] = vec[i];
-								}
-
-								proof = Some(pedersen::RangeProof {
-									proof: bytes,
-									plen: vec.len(),
-								})
-							}
+							proof = map.next_value()?
 						}
 						Field::ProofHash => {
 							no_dup!(proof_hash);
@@ -415,13 +409,8 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 			}
 		}
 
-		const FIELDS: &'static [&'static str] = &[
-			"output_type",
-			"commit",
-			"spent",
-			"proof",
-			"proof_hash",
-		];
+		const FIELDS: &'static [&'static str] =
+			&["output_type", "commit", "spent", "proof", "proof_hash"];
 		deserializer.deserialize_struct("OutputPrintable", FIELDS, OutputPrintableVisitor)
 	}
 }

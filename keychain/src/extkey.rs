@@ -126,6 +126,10 @@ impl Identifier {
 		Identifier(identifier)
 	}
 
+	pub fn to_bytes(&self) -> [u8; IDENTIFIER_SIZE] {
+		self.0.clone()
+	}
+
 	pub fn from_pubkey(secp: &Secp256k1, pubkey: &PublicKey) -> Identifier {
 		let bytes = pubkey.serialize_vec(secp, true);
 		let identifier = blake2b(IDENTIFIER_SIZE, &[], &bytes[..]);

@@ -859,6 +859,7 @@ mod tests {
 	use core::core::hash::{Hash, Hashed};
 	use core::core::pmmr::MerkleProof;
 	use core::core::target::Difficulty;
+	use core::core::transaction::ProofMessageElements;
 	use types::PoolError::InvalidTx;
 
 	macro_rules! expect_output_parent {
@@ -1710,9 +1711,11 @@ mod tests {
 	fn test_output(value: u64) -> transaction::Output {
 		let keychain = keychain_for_tests();
 		let key_id = keychain.derive_key_id(value as u32).unwrap();
+		let msg = ProofMessageElements::new(value, &key_id);
 		let commit = keychain.commit(value, &key_id).unwrap();
-		let proof = keychain.range_proof(value, &key_id, commit, None).unwrap();
-
+		let proof = keychain
+			.range_proof(value, &key_id, commit, None, msg.to_proof_message())
+			.unwrap();
 		transaction::Output {
 			features: transaction::OutputFeatures::DEFAULT_OUTPUT,
 			commit: commit,
@@ -1724,9 +1727,11 @@ mod tests {
 	fn test_coinbase_output(value: u64) -> transaction::Output {
 		let keychain = keychain_for_tests();
 		let key_id = keychain.derive_key_id(value as u32).unwrap();
+		let msg = ProofMessageElements::new(value, &key_id);
 		let commit = keychain.commit(value, &key_id).unwrap();
-		let proof = keychain.range_proof(value, &key_id, commit, None).unwrap();
-
+		let proof = keychain
+			.range_proof(value, &key_id, commit, None, msg.to_proof_message())
+			.unwrap();
 		transaction::Output {
 			features: transaction::OutputFeatures::COINBASE_OUTPUT,
 			commit: commit,

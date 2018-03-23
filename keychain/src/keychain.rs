@@ -214,15 +214,42 @@ impl Keychain {
 		Ok(commit)
 	}
 
+	pub fn rangeproof_create_nonce(&self, commit: &Commitment) -> SecretKey {
+		// hash(commit|masterkey) as nonce
+		let root_key = self.root_key_id().to_bytes();
+		let res = blake2::blake2b::blake2b(32, &commit.0, &root_key);
+		let res = res.as_bytes();
+		let mut ret_val = [0; 32];
+		for i in 0..res.len() {
+			ret_val[i] = res[i];
+		}
+		SecretKey::from_slice(&self.secp, &ret_val).unwrap()
+	}
+
 	pub fn range_proof(
 		&self,
 		amount: u64,
 		key_id: &Identifier,
 		_commit: Commitment,
 		extra_data: Option<Vec<u8>>,
+		msg: ProofMessage,
 	) -> Result<RangeProof, Error> {
+		let commit = self.commit(amount, key_id)?;
 		let skey = self.derived_key(key_id)?;
-		Ok(self.secp.bullet_proof(amount, skey, extra_data, None))
+		let nonce = self.rangeproof_create_nonce(&commit);
+		if msg.len() == 0 {
+			return Ok(self.secp
+				.bullet_proof(amount, skey, nonce, extra_data, None));
+		} else {
+			if msg.len() != 64 {
+				error!(LOGGER, "Bullet proof message must be 64 bytes.");
+				return Err(Error::RangeProof(
+					"Bullet proof message must be 64 bytes".to_string(),
+				));
+			}
+		}
+		return Ok(self.secp
+			.bullet_proof(amount, skey, nonce, extra_data, Some(msg)));
 	}
 
 	pub fn verify_range_proof(
@@ -245,9 +272,10 @@ impl Keychain {
 		extra_data: Option<Vec<u8>>,
 		proof: RangeProof,
 	) -> Result<ProofInfo, Error> {
-		let nonce = self.derived_key(key_id)?;
+		let skey = self.derived_key(key_id)?;
+		let nonce = self.rangeproof_create_nonce(&commit);
 		let proof_message = self.secp
-			.unwind_bullet_proof(commit, nonce, nonce, extra_data, proof);
+			.unwind_bullet_proof(commit, skey, nonce, extra_data, proof);
 		let proof_info = match proof_message {
 			Ok(p) => ProofInfo {
 				success: true,
@@ -974,5 +1002,76 @@ mod test {
 
 			assert!(sig_verifies);
 		}
+	}
+
+	#[test]
+	fn test_rewind_range_proof() {
+		let keychain = Keychain::from_random_seed().unwrap();
+		let key_id = keychain.derive_key_id(1).unwrap();
+		let commit = keychain.commit(5, &key_id).unwrap();
+		let mut msg = ProofMessage::from_bytes(&[0u8; 64]);
+		let extra_data = [99u8; 64];
+
+		let proof = keychain
+			.range_proof(5, &key_id, commit, Some(extra_data.to_vec().clone()), msg)
+			.unwrap();
+		let proof_info = keychain
+			.rewind_range_proof(&key_id, commit, Some(extra_data.to_vec().clone()), proof)
+			.unwrap();
+
+		assert_eq!(proof_info.success, true);
+
+		// now check the recovered message is "empty" (but not truncated) i.e. all
+		// zeroes
+		//Value is in the message in this case
+		assert_eq!(
+			proof_info.message,
+			secp::pedersen::ProofMessage::from_bytes(&[0; secp::constants::BULLET_PROOF_MSG_SIZE])
+		);
+
+		let key_id2 = keychain.derive_key_id(2).unwrap();
+
+		// cannot rewind with a different nonce
+		let proof_info = keychain
+			.rewind_range_proof(&key_id2, commit, Some(extra_data.to_vec().clone()), proof)
+			.unwrap();
+		// With bullet proofs, if you provide the wrong nonce you'll get gibberish back
+		// as opposed to a failure to recover the message
+		assert_ne!(
+			proof_info.message,
+			secp::pedersen::ProofMessage::from_bytes(&[0; secp::constants::BULLET_PROOF_MSG_SIZE])
+		);
+		assert_eq!(proof_info.value, 0);
+
+		// cannot rewind with a commitment to the same value using a different key
+		let commit2 = keychain.commit(5, &key_id2).unwrap();
+		let proof_info = keychain
+			.rewind_range_proof(&key_id, commit2, Some(extra_data.to_vec().clone()), proof)
+			.unwrap();
+		assert_eq!(proof_info.success, false);
+		assert_eq!(proof_info.value, 0);
+
+		// cannot rewind with a commitment to a different value
+		let commit3 = keychain.commit(4, &key_id).unwrap();
+		let proof_info = keychain
+			.rewind_range_proof(&key_id, commit3, Some(extra_data.to_vec().clone()), proof)
+			.unwrap();
+		assert_eq!(proof_info.success, false);
+		assert_eq!(proof_info.value, 0);
+
+		// cannot rewind with wrong extra committed data
+		let commit3 = keychain.commit(4, &key_id).unwrap();
+		let wrong_extra_data = [98u8; 64];
+		let should_err = keychain
+			.rewind_range_proof(
+				&key_id,
+				commit3,
+				Some(wrong_extra_data.to_vec().clone()),
+				proof,
+			)
+			.unwrap();
+
+		assert_eq!(proof_info.success, false);
+		assert_eq!(proof_info.value, 0);
 	}
 }
