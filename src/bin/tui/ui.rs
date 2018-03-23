@@ -29,11 +29,12 @@ use cursive::direction::Orientation;
 use cursive::traits::*;
 
 use grin::Server;
-//use util::LOGGER;
 
-use tui::{menu, mining, peers, status};
+use tui::{menu, mining, peers, status, version};
 use tui::types::*;
 use tui::constants::*;
+
+use built_info;
 
 pub struct UI {
 	cursive: Cursive,
@@ -69,10 +70,12 @@ impl UI {
 		let status_view = status::TUIStatusView::create();
 		let mining_view = mining::TUIMiningView::create();
 		let peer_view = peers::TUIPeerView::create();
+		let version_view = version::TUIVersionView::create();
 
 		let main_menu = menu::create();
 
 		let root_stack = StackView::new()
+			.layer(version_view)
 			.layer(mining_view)
 			.layer(peer_view)
 			.layer(status_view)
@@ -80,7 +83,7 @@ impl UI {
 
 		let mut title_string = StyledString::new();
 		title_string.append(StyledString::styled(
-			"Grin Version 0.0.1",
+			format!("Grin Version {}", built_info::PKG_VERSION),
 			Color::Dark(BaseColor::Green),
 		));
 
@@ -123,6 +126,7 @@ impl UI {
 					status::TUIStatusView::update(&mut self.cursive, &update);
 					mining::TUIMiningView::update(&mut self.cursive, &update);
 					peers::TUIPeerView::update(&mut self.cursive, &update);
+					version::TUIVersionView::update(&mut self.cursive, &update);
 				}
 			}
 		}
