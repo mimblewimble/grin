@@ -262,7 +262,7 @@ where
 		// the 71-15=56 pre genesis blocks will have
 		// intervals/difficulties I1..I15 I1..I15 I1..I15 I1..I11
 		for _ in 0..block_count_difference {
-			last_ts = last_ts - live_intervals[interval_index].0;
+			last_ts = last_ts.saturating_sub(live_intervals[interval_index].0);
 			let last_diff = &live_intervals[interval_index].1;
 			last_n.insert(0, Ok((last_ts, last_diff.clone())));
 			interval_index = match interval_index {

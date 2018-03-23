@@ -271,7 +271,7 @@ where
 				Parent::StemPoolTransaction { tx_ref: x } => {
 					if will_stem {
 						// Going to stem this transaction if parent is in stempool it's ok.
-						debug!(LOGGER, "Going is in stempool");
+						debug!(LOGGER, "Going in stempool");
 						pool_refs.push(base.with_source(Some(x)));
 					} else {
 						will_stem = true;
@@ -1716,7 +1716,6 @@ mod tests {
 		let proof = keychain
 			.range_proof(value, &key_id, commit, None, msg.to_proof_message())
 			.unwrap();
-
 		transaction::Output {
 			features: transaction::OutputFeatures::DEFAULT_OUTPUT,
 			commit: commit,
@@ -1733,7 +1732,6 @@ mod tests {
 		let proof = keychain
 			.range_proof(value, &key_id, commit, None, msg.to_proof_message())
 			.unwrap();
-
 		transaction::Output {
 			features: transaction::OutputFeatures::COINBASE_OUTPUT,
 			commit: commit,

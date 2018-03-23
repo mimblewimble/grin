@@ -26,6 +26,7 @@ addons:
 env:
   global:
     - RUST_BACKTRACE="1"
+    - RUST_FLAGS="-C debug-assertions"
   matrix:
     - RUST_TEST_THREADS=1 TEST_DIR=grin
     - TEST_DIR=store
@@ -39,4 +40,4 @@ env:
     - TEST_DIR=core
     - TEST_DIR=util
 
-script: cd $TEST_DIR && cargo test --verbose
+script: cd $TEST_DIR && cargo test --release

@@ -162,7 +162,7 @@ impl LocalServerContainer {
 		let working_dir = format!("target/tmp/test_servers/{}", config.name);
 		let mut wallet_config = WalletConfig::default();
 
-		wallet_config.api_listen_port = format!("{}", config.wallet_port);
+		wallet_config.api_listen_port = config.wallet_port;
 		wallet_config.check_node_api_http_addr = config.wallet_validating_node_url.clone();
 		wallet_config.data_file_dir = working_dir.clone();
 		Ok(LocalServerContainer {
@@ -263,7 +263,7 @@ impl LocalServerContainer {
 
 		self.wallet_config = WalletConfig::default();
 
-		self.wallet_config.api_listen_port = format!("{}", self.config.wallet_port);
+		self.wallet_config.api_listen_port = self.config.wallet_port;
 		self.wallet_config.check_node_api_http_addr =
 			self.config.wallet_validating_node_url.clone();
 		self.wallet_config.data_file_dir = self.working_dir.clone();
