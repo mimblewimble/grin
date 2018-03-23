@@ -18,7 +18,7 @@ use time;
 use rand::{thread_rng, Rng};
 use std::collections::HashSet;
 
-use core::{Committed, Input, KernelFeatures, Output, OutputFeatures, Proof,
+use core::{Committed, Input, KernelFeatures, Output, OutputFeatures, Proof, ProofMessageElements,
            ShortId, Transaction, TxKernel};
 use consensus;
 use consensus::{exceeds_weight, reward, VerifySortOrder, REWARD};
@@ -169,7 +169,7 @@ impl Readable for BlockHeader {
 		let nonce = reader.read_u64()?;
 		let pow = Proof::read(reader)?;
 
-		if timestamp > (1 << 55) ||  timestamp < -(1 << 55) {
+		if timestamp > (1 << 55) || timestamp < -(1 << 55) {
 			return Err(ser::Error::CorruptedData);
 		}
 
@@ -784,20 +784,13 @@ impl Block {
 		fees: u64,
 		height: u64,
 	) -> Result<(Output, TxKernel), keychain::Error> {
-		let commit = keychain.commit(reward(fees), key_id)?;
+		let value = reward(fees);
+		let commit = keychain.commit(value, key_id)?;
+		let msg = ProofMessageElements::new(value, key_id);
 
-		trace!(
-			LOGGER,
-			"Block reward - Pedersen Commit is: {:?}",
-			commit,
-		);
+		trace!(LOGGER, "Block reward - Pedersen Commit is: {:?}", commit,);
 
-		let rproof = keychain.range_proof(
-			reward(fees),
-			key_id,
-			commit,
-			None,
-		)?;
+		let rproof = keychain.range_proof(value, key_id, commit, None, msg.to_proof_message())?;
 
 		let output = Output {
 			features: OutputFeatures::COINBASE_OUTPUT,

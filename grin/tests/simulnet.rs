@@ -188,7 +188,7 @@ fn simulate_block_propagation() {
 	// instantiates 5 servers on different ports
 	let mut servers = vec![];
 	for n in 0..5 {
-		let s = grin::Server::new(config(10*n, test_name_dir, 0)).unwrap();
+		let s = grin::Server::new(config(10 * n, test_name_dir, 0)).unwrap();
 		servers.push(s);
 		thread::sleep(time::Duration::from_millis(100));
 	}
