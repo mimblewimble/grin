@@ -91,6 +91,7 @@ pub fn list_connected_peers(config: &ServerConfig) {
 				writeln!(e, "Version: {}", connected_peer.version).unwrap();
 				writeln!(e, "Peer address: {}", connected_peer.addr).unwrap();
 				writeln!(e, "Total difficulty: {}", connected_peer.total_difficulty).unwrap();
+				writeln!(e, "Direction: {:?}", connected_peer.direction).unwrap();
 				println!();
 				index = index + 1;
 			}
