@@ -145,7 +145,7 @@ impl TxHashSet {
 			Ok(pos) => {
 				let output_pmmr: PMMR<OutputIdentifier, _> =
 					PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
-				if let Some((hash, _)) = output_pmmr.get(pos, false) {
+				if let Some(hash) = output_pmmr.get_hash(pos) {
 					if hash == output_id.hash_with_index(pos) {
 						Ok(hash)
 					} else {
@@ -163,21 +163,21 @@ impl TxHashSet {
 	/// returns the last N nodes inserted into the tree (i.e. the 'bottom'
 	/// nodes at level 0
 	/// TODO: These need to return the actual data from the flat-files instead of hashes now
-	pub fn last_n_output(&mut self, distance: u64) -> Vec<(Hash, Option<OutputIdentifier>)> {
+	pub fn last_n_output(&mut self, distance: u64) -> Vec<(Hash, OutputIdentifier)> {
 		let output_pmmr: PMMR<OutputIdentifier, _> =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		output_pmmr.get_last_n_insertions(distance)
 	}
 
 	/// as above, for range proofs
-	pub fn last_n_rangeproof(&mut self, distance: u64) -> Vec<(Hash, Option<RangeProof>)> {
+	pub fn last_n_rangeproof(&mut self, distance: u64) -> Vec<(Hash, RangeProof)> {
 		let rproof_pmmr: PMMR<RangeProof, _> =
 			PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
 		rproof_pmmr.get_last_n_insertions(distance)
 	}
 
 	/// as above, for kernels
-	pub fn last_n_kernel(&mut self, distance: u64) -> Vec<(Hash, Option<TxKernel>)> {
+	pub fn last_n_kernel(&mut self, distance: u64) -> Vec<(Hash, TxKernel)> {
 		let kernel_pmmr: PMMR<TxKernel, _> =
 			PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
 		kernel_pmmr.get_last_n_insertions(distance)
@@ -387,10 +387,12 @@ impl<'a> Extension<'a> {
 		let pos_res = self.get_output_pos(&commit);
 		if let Ok(pos) = pos_res {
 			let output_id_hash = OutputIdentifier::from_input(input).hash_with_index(pos);
-			if let Some((read_hash, read_elem)) = self.output_pmmr.get(pos, true) {
+			if let Some(read_hash) = self.output_pmmr.get_hash(pos) {
 				// check hash from pmmr matches hash from input (or corresponding output)
 				// if not then the input is not being honest about
 				// what it is attempting to spend...
+
+				let read_elem = self.output_pmmr.get_data(pos);
 
 				if output_id_hash != read_hash
 					|| output_id_hash
@@ -435,7 +437,7 @@ impl<'a> Extension<'a> {
 			// (non-historical node will have a much smaller one)
 			// note that this doesn't show the commitment *never* existed, just
 			// that this is not an existing unspent commitment right now
-			if let Some((hash, _)) = self.output_pmmr.get(pos, false) {
+			if let Some(hash) = self.output_pmmr.get_hash(pos) {
 				// processing a new fork so we may get a position on the old
 				// fork that exists but matches a different node
 				// filtering that case out
@@ -635,9 +637,8 @@ impl<'a> Extension<'a> {
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
 			// non-pruned leaves only
 			if pmmr::bintree_postorder_height(n) == 0 {
-				if let Some((_, out)) = self.output_pmmr.get(n, true) {
-					self.commit_index
-						.save_output_pos(&out.expect("not a leaf node").commit, n)?;
+				if let Some(out) = self.output_pmmr.get_data(n) {
+					self.commit_index.save_output_pos(&out.commit, n)?;
 				}
 			}
 		}
@@ -708,7 +709,7 @@ impl<'a> Extension<'a> {
 
 		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
-				if let Some((_, Some(kernel))) = self.kernel_pmmr.get(n, true) {
+				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
 					kernel.verify()?;
 					commitments.push(kernel.excess.clone());
 				}
@@ -736,8 +737,8 @@ impl<'a> Extension<'a> {
 		let mut proof_count = 0;
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
-				if let Some((_, Some(out))) = self.output_pmmr.get(n, true) {
-					if let Some((_, Some(rp))) = self.rproof_pmmr.get(n, true) {
+				if let Some(out) = self.output_pmmr.get_data(n) {
+					if let Some(rp) = self.rproof_pmmr.get_data(n) {
 						out.to_output(rp).verify_proof()?;
 					} else {
 						// TODO - rangeproof not found
@@ -764,7 +765,7 @@ impl<'a> Extension<'a> {
 		let mut commitments = vec![];
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
-				if let Some((_, Some(out))) = self.output_pmmr.get(n, true) {
+				if let Some(out) = self.output_pmmr.get_data(n) {
 					commitments.push(out.commit.clone());
 				}
 			}
