@@ -37,7 +37,7 @@ use util::LOGGER;
 
 /// Start 1 node mining and two wallets, then send a few
 /// transactions from one to the other
-#[test]
+// #[test]
 fn basic_wallet_transactions() {
 	let test_name_dir = "test_servers";
 	core::global::set_mining_mode(core::global::ChainTypes::AutomatedTesting);
