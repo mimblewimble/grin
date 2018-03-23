@@ -39,7 +39,7 @@ fn pmmr_append() {
 
 	// check the resulting backend store and the computation of the root
 	let node_hash = elems[0].hash_with_index(1);
-	assert_eq!(backend.get(1, false).expect("").0, node_hash);
+	assert_eq!(backend.get_hash(1).unwrap(), node_hash);
 
 	// 0010012001001230
 
@@ -88,9 +88,9 @@ fn pmmr_compact_leaf_sibling() {
 	let (pos_1_hash, pos_2_hash, pos_3_hash) = {
 		let mut pmmr = PMMR::at(&mut backend, mmr_size);
 		(
-			pmmr.get(1, false).unwrap().0,
-			pmmr.get(2, false).unwrap().0,
-			pmmr.get(3, false).unwrap().0,
+			pmmr.get_hash(1).unwrap(),
+			pmmr.get_hash(2).unwrap(),
+			pmmr.get_hash(3).unwrap(),
 		)
 	};
 
@@ -109,11 +109,11 @@ fn pmmr_compact_leaf_sibling() {
 		let pmmr = PMMR::at(&mut backend, mmr_size);
 
 		// check that pos 1 is "removed"
-		assert_eq!(pmmr.get(1, false), None);
+		assert_eq!(pmmr.get_hash(1), None);
 
 		// check that pos 2 and 3 are unchanged
-		assert_eq!(pmmr.get(2, false).unwrap().0, pos_2_hash);
-		assert_eq!(pmmr.get(3, false).unwrap().0, pos_3_hash);
+		assert_eq!(pmmr.get_hash(2).unwrap(), pos_2_hash);
+		assert_eq!(pmmr.get_hash(3).unwrap(), pos_3_hash);
 	}
 
 	// check we can still retrieve the "removed" element at pos 1
@@ -128,11 +128,11 @@ fn pmmr_compact_leaf_sibling() {
 		let pmmr = PMMR::at(&mut backend, mmr_size);
 
 		// check that pos 1 is "removed"
-		assert_eq!(pmmr.get(1, false), None);
+		assert_eq!(pmmr.get_hash(1), None);
 
 		// check that pos 2 and 3 are unchanged
-		assert_eq!(pmmr.get(2, false).unwrap().0, pos_2_hash);
-		assert_eq!(pmmr.get(3, false).unwrap().0, pos_3_hash);
+		assert_eq!(pmmr.get_hash(2).unwrap(), pos_2_hash);
+		assert_eq!(pmmr.get_hash(3).unwrap(), pos_3_hash);
 	}
 
 	// Check we can still retrieve the "removed" hash at pos 1 from the hash file.
@@ -171,9 +171,9 @@ fn pmmr_prune_compact() {
 		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(root, pmmr.root());
 		// check we can still retrieve same element from leaf index 2
-		assert_eq!(pmmr.get(2, true).unwrap().1.unwrap(), TestElem(2));
+		assert_eq!(pmmr.get_data(2).unwrap(), TestElem(2));
 		// and the same for leaf index 7
-		assert_eq!(pmmr.get(11, true).unwrap().1.unwrap(), TestElem(7));
+		assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
 	}
 
 	// compact
@@ -183,8 +183,8 @@ fn pmmr_prune_compact() {
 	{
 		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(root, pmmr.root());
-		assert_eq!(pmmr.get(2, true).unwrap().1.unwrap(), TestElem(2));
-		assert_eq!(pmmr.get(11, true).unwrap().1.unwrap(), TestElem(7));
+		assert_eq!(pmmr.get_data(2).unwrap(), TestElem(2));
+		assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
 	}
 
 	teardown(data_dir);
@@ -200,9 +200,9 @@ fn pmmr_reload() {
 	let mmr_size = load(0, &elems[..], &mut backend);
 
 	// retrieve entries from the hash file for comparison later
-	let (pos_3_hash, _) = backend.get(3, false).unwrap();
-	let (pos_4_hash, _) = backend.get(4, false).unwrap();
-	let (pos_5_hash, _) = backend.get(5, false).unwrap();
+	let pos_3_hash = backend.get_hash(3).unwrap();
+	let pos_4_hash = backend.get_hash(4).unwrap();
+	let pos_5_hash = backend.get_hash(5).unwrap();
 
 	// save the root
 	let root = {
@@ -257,16 +257,16 @@ fn pmmr_reload() {
 		}
 
 		// pos 1 and pos 2 are both removed (via parent pos 3 in prune list)
-		assert_eq!(backend.get(1, false), None);
-		assert_eq!(backend.get(2, false), None);
+		assert_eq!(backend.get_hash(1), None);
+		assert_eq!(backend.get_hash(2), None);
 
 		// pos 3 is removed (via prune list)
-		assert_eq!(backend.get(3, false), None);
+		assert_eq!(backend.get_hash(3), None);
 
 		// pos 4 is removed (via prune list)
-		assert_eq!(backend.get(4, false), None);
+		assert_eq!(backend.get_hash(4), None);
 		// pos 5 is removed (via rm_log)
-		assert_eq!(backend.get(5, false), None);
+		assert_eq!(backend.get_hash(5), None);
 
 		// now check contents of the hash file
 		// pos 1 and pos 2 are no longer in the hash file
@@ -383,13 +383,10 @@ fn pmmr_compact_entire_peak() {
 	let mmr_size = load(0, &elems[0..5], &mut backend);
 	backend.sync().unwrap();
 
-	let pos_7 = backend.get(7, true).unwrap();
-	let pos_7_hash = backend.get_from_file(7).unwrap();
-	assert_eq!(pos_7.0, pos_7_hash);
+	let pos_7_hash = backend.get_hash(7).unwrap();
 
-	let pos_8 = backend.get(8, true).unwrap();
-	let pos_8_hash = backend.get_from_file(8).unwrap();
-	assert_eq!(pos_8.0, pos_8_hash);
+	let pos_8 = backend.get_data(8).unwrap();
+	let pos_8_hash = backend.get_hash(8).unwrap();
 
 	// prune all leaves under the peak at pos 7
 	{
@@ -407,11 +404,12 @@ fn pmmr_compact_entire_peak() {
 
 	// now check we have pruned up to and including the peak at pos 7
 	// hash still available in underlying hash file
-	assert_eq!(backend.get(7, false), None);
+	assert_eq!(backend.get_hash(7), None);
 	assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
 	// now check we still have subsequent hash and data where we expect
-	assert_eq!(backend.get(8, true), Some(pos_8));
+	assert_eq!(backend.get_hash(8), Some(pos_8_hash));
+	assert_eq!(backend.get_data(8), Some(pos_8));
 	assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
 
 	teardown(data_dir);
@@ -429,25 +427,17 @@ fn pmmr_compact_horizon() {
 	assert_eq!(backend.data_size().unwrap(), 19);
 	assert_eq!(backend.hash_size().unwrap(), 35);
 
-	let pos_3 = backend.get(3, false).unwrap();
-	let pos_3_hash = backend.get_from_file(3).unwrap();
-	assert_eq!(pos_3.0, pos_3_hash);
+	let pos_3_hash = backend.get_hash(3).unwrap();
 
-	let pos_6 = backend.get(6, false).unwrap();
-	let pos_6_hash = backend.get_from_file(6).unwrap();
-	assert_eq!(pos_6.0, pos_6_hash);
+	let pos_6_hash = backend.get_hash(6).unwrap();
 
-	let pos_7 = backend.get(7, false).unwrap();
-	let pos_7_hash = backend.get_from_file(7).unwrap();
-	assert_eq!(pos_7.0, pos_7_hash);
+	let pos_7_hash = backend.get_hash(7).unwrap();
 
-	let pos_8 = backend.get(8, true).unwrap();
-	let pos_8_hash = backend.get_from_file(8).unwrap();
-	assert_eq!(pos_8.0, pos_8_hash);
+	let pos_8 = backend.get_data(8).unwrap();
+	let pos_8_hash = backend.get_hash(8).unwrap();
 
-	let pos_11 = backend.get(11, true).unwrap();
-	let pos_11_hash = backend.get_from_file(11).unwrap();
-	assert_eq!(pos_11.0, pos_11_hash);
+	let pos_11 = backend.get_data(11).unwrap();
+	let pos_11_hash = backend.get_hash(11).unwrap();
 
 	{
 		// pruning some choice nodes with an increasing block height
@@ -462,19 +452,21 @@ fn pmmr_compact_horizon() {
 
 		// check we can read hashes and data correctly after pruning
 		{
-			assert_eq!(backend.get(3, false), None);
+			assert_eq!(backend.get_hash(3), None);
 			assert_eq!(backend.get_from_file(3), Some(pos_3_hash));
 
-			assert_eq!(backend.get(6, false), None);
+			assert_eq!(backend.get_hash(6), None);
 			assert_eq!(backend.get_from_file(6), Some(pos_6_hash));
 
-			assert_eq!(backend.get(7, true), None);
+			assert_eq!(backend.get_hash(7), None);
 			assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
-			assert_eq!(backend.get(8, true), Some(pos_8));
+			assert_eq!(backend.get_hash(8), Some(pos_8_hash));
+			assert_eq!(backend.get_data(8), Some(pos_8));
 			assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
 
-			assert_eq!(backend.get(11, true), Some(pos_11));
+			assert_eq!(backend.get_hash(11), Some(pos_11_hash));
+			assert_eq!(backend.get_data(11), Some(pos_11));
 			assert_eq!(backend.get_from_file(11), Some(pos_11_hash));
 		}
 
@@ -484,16 +476,16 @@ fn pmmr_compact_horizon() {
 
 		// check we can read a hash by pos correctly after compaction
 		{
-			assert_eq!(backend.get(3, false), None);
+			assert_eq!(backend.get_hash(3), None);
 			assert_eq!(backend.get_from_file(3), Some(pos_3_hash));
 
-			assert_eq!(backend.get(6, false), None);
+			assert_eq!(backend.get_hash(6), None);
 			assert_eq!(backend.get_from_file(6), Some(pos_6_hash));
 
-			assert_eq!(backend.get(7, true), None);
+			assert_eq!(backend.get_hash(7), None);
 			assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
-			assert_eq!(backend.get(8, true), Some(pos_8));
+			assert_eq!(backend.get_hash(8), Some(pos_8_hash));
 			assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
 		}
 	}
@@ -508,10 +500,10 @@ fn pmmr_compact_horizon() {
 		assert_eq!(backend.hash_size().unwrap(), 33);
 
 		// check we can read a hash by pos correctly from recreated backend
-		assert_eq!(backend.get(7, true), None);
+		assert_eq!(backend.get_hash(7), None);
 		assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
-		assert_eq!(backend.get(8, true), Some(pos_8));
+		assert_eq!(backend.get_hash(8), Some(pos_8_hash));
 		assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
 	}
 
@@ -542,10 +534,11 @@ fn pmmr_compact_horizon() {
 		assert_eq!(backend.hash_size().unwrap(), 29);
 
 		// check we can read a hash by pos correctly from recreated backend
-		assert_eq!(backend.get(7, true), None);
+		assert_eq!(backend.get_hash(7), None);
 		assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
-		assert_eq!(backend.get(11, true), Some(pos_11));
+		assert_eq!(backend.get_hash(11), Some(pos_11_hash));
+		assert_eq!(backend.get_data(11), Some(pos_11));
 		assert_eq!(backend.get_from_file(11), Some(pos_11_hash));
 	}
 

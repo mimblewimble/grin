@@ -161,26 +161,27 @@ where
 		}
 	}
 
-	/// Get a Hash by insertion position
-	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)> {
+	/// Get the hash at pos.
+	/// Return None if it has been removed.
+	fn get_hash(&self, pos: u64) -> Option<(Hash)> {
 		// Check if this position has been pruned in the remove log...
-		if self.rm_log.includes(position) {
-			return None;
+		if self.rm_log.includes(pos) {
+			None
+		} else {
+			self.get_from_file(pos)
 		}
+	}
 
-		let hash_val = self.get_from_file(position);
-		if !include_data {
-			return hash_val.map(|hash| (hash, None));
+	/// Get the data at pos.
+	/// Return None if it has been removed or if pos is not a leaf node.
+	fn get_data(&self, pos: u64) -> Option<(T)> {
+		if self.rm_log.includes(pos) {
+			None
+		} else if !pmmr::is_leaf(pos) {
+			None
+		} else {
+			self.get_data_from_file(pos)
 		}
-
-		// if this is not a leaf then we have no data
-		if !pmmr::is_leaf(position) {
-			return hash_val.map(|hash| (hash, None));
-		}
-
-		let data = self.get_data_from_file(position);
-
-		hash_val.map(|x| (x, data))
 	}
 
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {

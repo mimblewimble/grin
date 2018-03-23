@@ -627,19 +627,19 @@ impl Chain {
 	}
 
 	/// returns the last n nodes inserted into the output sum tree
-	pub fn get_last_n_output(&self, distance: u64) -> Vec<(Hash, Option<OutputIdentifier>)> {
+	pub fn get_last_n_output(&self, distance: u64) -> Vec<(Hash, OutputIdentifier)> {
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset.last_n_output(distance)
 	}
 
 	/// as above, for rangeproofs
-	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<(Hash, Option<RangeProof>)> {
+	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<(Hash, RangeProof)> {
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset.last_n_rangeproof(distance)
 	}
 
 	/// as above, for kernels
-	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<(Hash, Option<TxKernel>)> {
+	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<(Hash, TxKernel)> {
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset.last_n_kernel(distance)
 	}

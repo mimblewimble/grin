@@ -63,16 +63,18 @@ where
 	/// occurred (see remove).
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String>;
 
-	/// Get a Hash by insertion position. If include_data is true, will
-	/// also return the associated data element
-	fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)>;
+	/// Get a Hash by insertion position.
+	fn get_hash(&self, position: u64) -> Option<Hash>;
 
-	/// Get a Hash  by original insertion position (ignoring the remove
-	/// list).
+	/// Get underlying data by insertion position.
+	fn get_data(&self, position: u64) -> Option<T>;
+
+	/// Get a Hash  by original insertion position
+	/// (ignoring the remove log).
 	fn get_from_file(&self, position: u64) -> Option<Hash>;
 
-	/// Get a Data Element by original insertion position (ignoring the remove
-	/// list).
+	/// Get a Data Element by original insertion position
+	/// (ignoring the remove log).
 	fn get_data_from_file(&self, position: u64) -> Option<T>;
 
 	/// Remove HashSums by insertion position. An index is also provided so the
@@ -327,9 +329,8 @@ where
 
 		let root = self.root();
 
-		let node = self.get(pos, false)
-			.ok_or(format!("no element at pos {}", pos))?
-			.0;
+		let node = self.get_hash(pos)
+			.ok_or(format!("no element at pos {}", pos))?;
 
 		let family_branch = family_branch(pos, self.last_pos);
 
@@ -413,7 +414,7 @@ where
 	/// to keep an index of elements to positions in the tree. Prunes parent
 	/// nodes as well when they become childless.
 	pub fn prune(&mut self, position: u64, index: u32) -> Result<bool, String> {
-		if let None = self.backend.get(position, false) {
+		if let None = self.backend.get_hash(position) {
 			return Ok(false);
 		}
 		let prunable_height = bintree_postorder_height(position);
@@ -439,7 +440,7 @@ where
 
 			// if we have a pruned sibling, we can continue up the tree
 			// otherwise we're done
-			if let None = self.backend.get(sibling, false) {
+			if let None = self.backend.get_hash(sibling) {
 				current = parent;
 			} else {
 				break;
@@ -450,34 +451,47 @@ where
 		Ok(true)
 	}
 
-	/// Helper function to get a node at a given position from
-	/// the backend.
-	pub fn get(&self, position: u64, include_data: bool) -> Option<(Hash, Option<T>)> {
-		if position > self.last_pos {
+	/// Get a hash at provided position in the MMR.
+	pub fn get_hash(&self, pos: u64) -> Option<Hash> {
+		if pos > self.last_pos {
 			None
 		} else {
-			self.backend.get(position, include_data)
+			self.backend.get_hash(pos)
 		}
 	}
 
-	fn get_from_file(&self, position: u64) -> Option<Hash> {
-		if position > self.last_pos {
+	/// Get the data element at provided in the MMR.
+	pub fn get_data(&self, pos: u64) -> Option<T> {
+		if pos > self.last_pos {
 			None
 		} else {
-			self.backend.get_from_file(position)
+			self.backend.get_data(pos)
+		}
+	}
+
+	/// Get the hash from the underlying MMR file
+	/// (ignores the remove log).
+	fn get_from_file(&self, pos: u64) -> Option<Hash> {
+		if pos > self.last_pos {
+			None
+		} else {
+			self.backend.get_from_file(pos)
 		}
 	}
 
 	/// Helper function to get the last N nodes inserted, i.e. the last
 	/// n nodes along the bottom of the tree
-	pub fn get_last_n_insertions(&self, n: u64) -> Vec<(Hash, Option<T>)> {
-		let mut return_vec = Vec::new();
+	pub fn get_last_n_insertions(&self, n: u64) -> Vec<(Hash, T)> {
+		let mut return_vec = vec![];
 		let mut last_leaf = self.last_pos;
 		let size = self.unpruned_size();
 		// Special case that causes issues in bintree functions,
 		// just return
 		if size == 1 {
-			return_vec.push(self.backend.get(last_leaf, true).unwrap());
+			return_vec.push((
+				self.backend.get_hash(last_leaf).unwrap(),
+				self.backend.get_data(last_leaf).unwrap(),
+			));
 			return return_vec;
 		}
 		// if size is even, we're already at the bottom, otherwise
@@ -492,7 +506,10 @@ where
 			if bintree_postorder_height(last_leaf) > 0 {
 				last_leaf = bintree_rightmost(last_leaf);
 			}
-			return_vec.push(self.backend.get(last_leaf, true).unwrap());
+			return_vec.push((
+				self.backend.get_hash(last_leaf).unwrap(),
+				self.backend.get_data(last_leaf).unwrap(),
+			));
 
 			last_leaf = bintree_jump_left_sibling(last_leaf);
 		}
@@ -504,7 +521,7 @@ where
 		// iterate on all parent nodes
 		for n in 1..(self.last_pos + 1) {
 			if bintree_postorder_height(n) > 0 {
-				if let Some(hs) = self.get(n, false) {
+				if let Some(hash) = self.get_hash(n) {
 					// take the left and right children, if they exist
 					let left_pos = bintree_move_down_left(n).ok_or(format!("left_pos not found"))?;
 					let right_pos = bintree_jump_right_sibling(left_pos);
@@ -514,7 +531,7 @@ where
 						if let Some(right_child_hs) = self.get_from_file(right_pos) {
 							// hash the two child nodes together with parent_pos and compare
 							let (parent_pos, _) = family(left_pos);
-							if (left_child_hs, right_child_hs).hash_with_index(parent_pos) != hs.0 {
+							if (left_child_hs, right_child_hs).hash_with_index(parent_pos) != hash {
 								return Err(format!(
 									"Invalid MMR, hash of parent at {} does \
 									 not match children.",
@@ -556,9 +573,9 @@ where
 					break;
 				}
 				idx.push_str(&format!("{:>8} ", m + 1));
-				let ohs = self.get(m + 1, false);
+				let ohs = self.get_hash(m + 1);
 				match ohs {
-					Some(hs) => hashes.push_str(&format!("{} ", hs.0)),
+					Some(hs) => hashes.push_str(&format!("{} ", hs)),
 					None => hashes.push_str(&format!("{:>8} ", "??")),
 				}
 			}
@@ -1015,11 +1032,27 @@ mod test {
 			Ok(())
 		}
 
-		fn get(&self, position: u64, _include_data: bool) -> Option<(Hash, Option<T>)> {
+		fn get_hash(&self, position: u64) -> Option<Hash> {
 			if self.remove_list.contains(&position) {
 				None
 			} else {
-				self.elems[(position - 1) as usize].clone()
+				if let Some(ref elem) = self.elems[(position - 1) as usize] {
+					Some(elem.0)
+				} else {
+					None
+				}
+			}
+		}
+
+		fn get_data(&self, position: u64) -> Option<T> {
+			if self.remove_list.contains(&position) {
+				None
+			} else {
+				if let Some(ref elem) = self.elems[(position - 1) as usize] {
+					elem.1.clone()
+				} else {
+					None
+				}
 			}
 		}
 
