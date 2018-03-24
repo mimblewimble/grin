@@ -12,7 +12,7 @@ serde = "1"
 serde_derive = "1"
 slog = { version = "2", features = ["max_level_trace", "release_max_level_trace"] }
 libc = "^0.2"
-memmap = { git = "https://github.com/danburkert/memmap-rs", tag="0.6.0" }
+memmap = { git = "https://github.com/danburkert/memmap-rs", tag = "0.6.0" }
 rocksdb = "^0.8.0"
 
 grin_core = { path = "../core" }
