@@ -13,10 +13,10 @@ iron = "~0.5.1"
 router = "~0.5.1"
 regex = "^0.2"
 mount = "~0.3.0"
-urlencoded = "~0.5.0"
 serde = "1"
 serde_derive = "1"
 serde_json = "1"
+urlencoded = "0.5" # 0.6+ lacks trait `plugin::Plugin<iron::Request<'_, '_>>`
 
 grin_core = { path = "../core" }
 grin_chain = { path = "../chain" }
