@@ -8,9 +8,9 @@ publish = false
 [dependencies]
 bitflags = "^1.0"
 byteorder = "^0.5"
-slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
-serde = "~1.0.8"
-serde_derive = "~1.0.8"
+slog = { version = "2", features = ["max_level_trace", "release_max_level_trace"] }
+serde = "1"
+serde_derive = "1"
 time = "^0.1"
 
 grin_core = { path = "../core" }

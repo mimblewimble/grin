@@ -7,9 +7,9 @@ publish = false
 
 [dependencies]
 blake2-rfc = "~0.2.17"
-serde = "~1.0.8"
-serde_derive = "~1.0.8"
-slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
+serde = "1"
+serde_derive = "1"
+slog = { version = "2", features = ["max_level_trace", "release_max_level_trace"] }
 time = "^0.1"
 rand = "^0.3"
 
