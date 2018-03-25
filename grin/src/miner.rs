@@ -26,7 +26,6 @@ use adapters::PoolToChainAdapter;
 use core::consensus;
 use core::core;
 use core::core::Proof;
-use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Transaction};
 use core::core::hash::{Hash, Hashed};
 use pow::{cuckoo, MiningWorker};
@@ -130,7 +129,6 @@ impl Miner {
 	pub fn inner_loop_async(
 		&self,
 		plugin_miner: &mut PluginMiner,
-		difficulty: Difficulty,
 		b: &mut Block,
 		cuckoo_size: u32,
 		head: &BlockHeader,
@@ -140,12 +138,13 @@ impl Miner {
 	) -> Option<Proof> {
 		debug!(
 			LOGGER,
-			"(Server ID: {}) Mining at Cuckoo{} for at most {} secs at height {} and difficulty {}.",
+			"(Server ID: {}) Mining Cuckoo{} for max {}s on {} @ {} [{}].",
 			self.debug_output_id,
 			cuckoo_size,
 			attempt_time_per_block,
+			b.header.total_difficulty,
 			b.header.height,
-			b.header.total_difficulty
+			b.header.hash()
 		);
 
 		// look for a pow for at most attempt_time_per_block sec on the
@@ -175,10 +174,10 @@ impl Miner {
 				let proof_diff = proof.clone().to_difficulty();
 				trace!(
 					LOGGER,
-					"Found cuckoo solution for nonce {} of difficulty {} (difficulty target {})",
+					"Found cuckoo solution! nonce {} gave difficulty {} (block diff {})",
 					s.get_nonce_as_u64(),
 					proof_diff.into_num(),
-					difficulty.into_num()
+					(b.header.total_difficulty.clone() - head.total_difficulty.clone()).into_num()
 				);
 				if proof_diff > (b.header.total_difficulty.clone() - head.total_difficulty.clone())
 				{
@@ -270,13 +269,14 @@ impl Miner {
 
 		debug!(
 			LOGGER,
-			"(Server ID: {}) Mining at Cuckoo{} for {} secs (will wait for last solution) \
-			 on block {} at difficulty {}.",
+			"(Server ID: {}) Mining Cuckoo{} for max {}s (will wait for last solution) \
+			 on {} @ {} [{}].",
 			self.debug_output_id,
 			cuckoo_size,
 			attempt_time_per_block,
-			latest_hash,
-			b.header.total_difficulty
+			b.header.total_difficulty,
+			b.header.height,
+			latest_hash
 		);
 		let mut iter_count = 0;
 
@@ -296,7 +296,7 @@ impl Miner {
 				let proof_diff = proof.clone().to_difficulty();
 				trace!(
 					LOGGER,
-					"Found cuckoo solution for nonce {} of difficulty {} (difficulty target {})",
+					"Found cuckoo solution for nonce {} of difficulty {} (cumulative diff {})",
 					b.header.nonce,
 					proof_diff.into_num(),
 					b.header.total_difficulty.into_num()
@@ -388,12 +388,13 @@ impl Miner {
 
 		debug!(
 			LOGGER,
-			"(Server ID: {}) Mining at Cuckoo{} for at most {} secs on block {} at difficulty {}.",
+			"(Server ID: {}) Mining Cuckoo{} for max {}s on {} @ {} [{}].",
 			self.debug_output_id,
 			cuckoo_size,
 			attempt_time_per_block,
-			latest_hash,
-			b.header.total_difficulty
+			b.header.total_difficulty,
+			b.header.height,
+			latest_hash
 		);
 		let mut iter_count = 0;
 
@@ -486,8 +487,7 @@ impl Miner {
 		}
 
 		loop {
-			debug!(LOGGER, "in miner loop...");
-			trace!(LOGGER, "key_id: {:?}", key_id);
+			trace!(LOGGER, "in miner loop. key_id: {:?}", key_id);
 
 			// get the latest chain state and build a block on top of it
 			let head = self.chain.head_header().unwrap();
@@ -526,7 +526,6 @@ impl Miner {
 				if use_async {
 					sol = self.inner_loop_async(
 						&mut p,
-						(b.header.total_difficulty.clone() - head.total_difficulty.clone()),
 						&mut b,
 						cuckoo_size,
 						&head,
@@ -575,7 +574,7 @@ impl Miner {
 						e
 					);
 				}
-				debug!(LOGGER, "resetting key_id in miner to None");
+				trace!(LOGGER, "resetting key_id in miner to None");
 				key_id = None;
 			} else {
 				debug!(
@@ -630,7 +629,7 @@ impl Miner {
 
 		debug!(
 			LOGGER,
-			"(Server ID: {}) Built new block with {} inputs and {} outputs, network difficulty: {}, block cumulative difficulty {}",
+			"(Server ID: {}) Built new block with {} inputs and {} outputs, network difficulty: {}, cumulative difficulty {}",
 			self.debug_output_id,
 			b.inputs.len(),
 			b.outputs.len(),

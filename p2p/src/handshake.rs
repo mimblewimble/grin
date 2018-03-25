@@ -174,7 +174,7 @@ impl Handshake {
 		};
 
 		write_message(conn, shake, Type::Shake)?;
-		debug!(LOGGER, "Success handshake with {}.", peer_info.addr);
+		trace!(LOGGER, "Success handshake with {}.", peer_info.addr);
 
 		// when more than one protocol version is supported, choosing should go here
 		Ok(peer_info)

@@ -253,7 +253,7 @@ where
 	{
 		let commit_index = trees.commit_index.clone();
 
-		debug!(LOGGER, "Starting new txhashset extension.");
+		trace!(LOGGER, "Starting new txhashset extension.");
 		let mut extension = Extension::new(trees, commit_index);
 		res = inner(&mut extension);
 
@@ -273,12 +273,12 @@ where
 		}
 		Ok(r) => {
 			if rollback {
-				debug!(LOGGER, "Rollbacking txhashset extension.");
+				debug!(LOGGER, "Rollbacking txhashset extension. sizes {:?}", sizes);
 				trees.output_pmmr_h.backend.discard();
 				trees.rproof_pmmr_h.backend.discard();
 				trees.kernel_pmmr_h.backend.discard();
 			} else {
-				debug!(LOGGER, "Committing txhashset extension.");
+				debug!(LOGGER, "Committing txhashset extension. sizes {:?}", sizes);
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
@@ -287,7 +287,7 @@ where
 				trees.kernel_pmmr_h.last_pos = sizes.2;
 			}
 
-			debug!(LOGGER, "TxHashSet extension done.");
+			trace!(LOGGER, "TxHashSet extension done.");
 			Ok(r)
 		}
 	}
