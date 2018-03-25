@@ -87,14 +87,6 @@ fn monitor_peers(
 	// regularly check if we need to acquire more peers  and if so, gets
 	// them from db
 	let total_count = peers.all_peers().len();
-	debug!(
-		LOGGER,
-		"monitor_peers: {} most_work_peers, {} connected, {} total known",
-		peers.most_work_peers().len(),
-		peers.connected_peers().len(),
-		total_count,
-	);
-
 	let mut healthy_count = 0;
 	let mut banned_count = 0;
 	let mut defunct_count = 0;
@@ -120,7 +112,10 @@ fn monitor_peers(
 
 	debug!(
 		LOGGER,
-		"monitor_peers: all {} = {} healthy + {} banned + {} defunct",
+		"monitor_peers: {} connected ({} most_work). \
+		 all {} = {} healthy + {} banned + {} defunct",
+		peers.connected_peers().len(),
+		peers.most_work_peers().len(),
 		total_count,
 		healthy_count,
 		banned_count,
