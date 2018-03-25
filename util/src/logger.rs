@@ -134,7 +134,7 @@ fn send_panic_to_log() {
 			Some(location) => {
 				error!(
 					LOGGER,
-					"thread '{}' panicked at '{}': {}:{}{:?}",
+					"\nthread '{}' panicked at '{}': {}:{}{:?}\n\n",
 					thread,
 					msg,
 					location.file(),
