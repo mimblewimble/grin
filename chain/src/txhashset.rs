@@ -273,12 +273,12 @@ where
 		}
 		Ok(r) => {
 			if rollback {
-				debug!(LOGGER, "Rollbacking txhashset extension.");
+				debug!(LOGGER, "Rollbacking txhashset extension. sizes {:?}", sizes);
 				trees.output_pmmr_h.backend.discard();
 				trees.rproof_pmmr_h.backend.discard();
 				trees.kernel_pmmr_h.backend.discard();
 			} else {
-				debug!(LOGGER, "Committing txhashset extension.");
+				debug!(LOGGER, "Committing txhashset extension. sizes {:?}", sizes);
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;

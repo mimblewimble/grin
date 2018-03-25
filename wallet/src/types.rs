@@ -525,7 +525,7 @@ impl WalletData {
 		info!(LOGGER, "Acquiring wallet lock ...");
 
 		let action = || {
-			debug!(LOGGER, "Attempting to acquire wallet lock");
+			trace!(LOGGER, "making lock file for wallet lock");
 			OpenOptions::new()
 				.write(true)
 				.create_new(true)
