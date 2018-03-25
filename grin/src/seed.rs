@@ -214,7 +214,7 @@ fn listen_for_addrs(
 			let connect_peer = p2p.connect(&addr);
 			match connect_peer {
 				Ok(p) => {
-					debug!(LOGGER, "connect_and_req: ok. attempting send_peer_request");
+					trace!(LOGGER, "connect_and_req: ok. attempting send_peer_request");
 					if let Ok(p) = p.try_read() {
 						let _ = p.send_peer_request(capab);
 					}

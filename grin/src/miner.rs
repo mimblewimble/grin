@@ -486,8 +486,7 @@ impl Miner {
 		}
 
 		loop {
-			debug!(LOGGER, "in miner loop...");
-			trace!(LOGGER, "key_id: {:?}", key_id);
+			trace!(LOGGER, "in miner loop. key_id: {:?}", key_id);
 
 			// get the latest chain state and build a block on top of it
 			let head = self.chain.head_header().unwrap();
@@ -575,7 +574,7 @@ impl Miner {
 						e
 					);
 				}
-				debug!(LOGGER, "resetting key_id in miner to None");
+				trace!(LOGGER, "resetting key_id in miner to None");
 				key_id = None;
 			} else {
 				debug!(

@@ -370,7 +370,7 @@ impl Chain {
 
 	/// Check for orphans, once a block is successfully added
 	pub fn check_orphans(&self, mut last_block_hash: Hash) {
-		debug!(
+		trace!(
 			LOGGER,
 			"chain: check_orphans: # orphans {}",
 			self.orphans.len(),

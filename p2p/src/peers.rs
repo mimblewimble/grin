@@ -331,7 +331,7 @@ impl Peers {
 				}
 			}
 		}
-		debug!(
+		trace!(
 			LOGGER,
 			"broadcast_header: {}, {} at {}, to {} peers, done.",
 			bh.hash(),
@@ -600,7 +600,7 @@ impl NetAdapter for Peers {
 
 	/// A list of peers has been received from one of our peers.
 	fn peer_addrs_received(&self, peer_addrs: Vec<SocketAddr>) {
-		debug!(LOGGER, "Received {} peer addrs, saving.", peer_addrs.len());
+		trace!(LOGGER, "Received {} peer addrs, saving.", peer_addrs.len());
 		for pa in peer_addrs {
 			if let Ok(e) = self.exists_peer(pa) {
 				if e {

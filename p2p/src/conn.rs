@@ -206,7 +206,7 @@ fn poll<H>(
 				// check the read end
 				if let Some(h) = try_break!(error_tx, read_header(conn)) {
 					let msg = Message::from_header(h, conn);
-					debug!(
+					trace!(
 						LOGGER,
 						"Received message header, type {:?}, len {}.",
 						msg.header.msg_type,

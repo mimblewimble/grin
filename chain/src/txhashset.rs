@@ -253,7 +253,7 @@ where
 	{
 		let commit_index = trees.commit_index.clone();
 
-		debug!(LOGGER, "Starting new txhashset extension.");
+		trace!(LOGGER, "Starting new txhashset extension.");
 		let mut extension = Extension::new(trees, commit_index);
 		res = inner(&mut extension);
 
@@ -287,7 +287,7 @@ where
 				trees.kernel_pmmr_h.last_pos = sizes.2;
 			}
 
-			debug!(LOGGER, "TxHashSet extension done.");
+			trace!(LOGGER, "TxHashSet extension done.");
 			Ok(r)
 		}
 	}
