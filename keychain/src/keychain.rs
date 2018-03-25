@@ -1009,7 +1009,7 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
-		let mut msg = ProofMessage::from_bytes(&[0u8; 64]);
+		let msg = ProofMessage::from_bytes(&[0u8; 64]);
 		let extra_data = [99u8; 64];
 
 		let proof = keychain
@@ -1062,7 +1062,7 @@ mod test {
 		// cannot rewind with wrong extra committed data
 		let commit3 = keychain.commit(4, &key_id).unwrap();
 		let wrong_extra_data = [98u8; 64];
-		let should_err = keychain
+		let _should_err = keychain
 			.rewind_range_proof(
 				&key_id,
 				commit3,
