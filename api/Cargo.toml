@@ -6,21 +6,21 @@ workspace = ".."
 publish = false
 
 [dependencies]
-hyper = "~0.10.6"
-slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
-lazy_static = "~0.2.8"
-iron = "~0.5.1"
-router = "~0.5.1"
-regex = "^0.2"
-mount = "~0.3.0"
-urlencoded = "~0.5.0"
-serde = "~1.0.8"
-serde_derive = "~1.0.8"
-serde_json = "~1.0.9"
+hyper = "0.10"
+iron = "0.5"
+lazy_static = "0.2"
+mount = "0.3"
+regex = "0.2"
+router = "0.5"
+serde = "1"
+serde_derive = "1"
+serde_json = "1"
+slog = { version = "2", features = ["max_level_trace", "release_max_level_trace"] }
+urlencoded = "0.5" # 0.6+ lacks trait `plugin::Plugin<iron::Request<'_, '_>>`
 
 grin_core = { path = "../core" }
 grin_chain = { path = "../chain" }
+grin_p2p = { path = "../p2p" }
 grin_pool = { path = "../pool" }
 grin_store = { path = "../store" }
 grin_util = { path = "../util" }
-grin_p2p = { path = "../p2p" }

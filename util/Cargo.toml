@@ -6,17 +6,17 @@ workspace = ".."
 publish = false
 
 [dependencies]
-slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
-slog-term = "^2.2.0"
-slog-async = "^2.1.0"
-lazy_static = "~0.2.8"
-backtrace = "^0.3.5"
-byteorder = "^1.0"
-rand = "^0.3"
-serde = "~1.0.8"
-serde_derive = "~1.0.8"
-walkdir = "^2.0.1"
-zip = "^0.2.6"
+backtrace = "0.3"
+byteorder = "1"
+lazy_static = "0.2"
+rand = "0.3"
+serde = "1"
+serde_derive = "1"
+slog = { version = "2", features = ["max_level_trace", "release_max_level_trace"] }
+slog-term = "2"
+slog-async = "2"
+walkdir = "2"
+zip = "0.2"
 
 [dependencies.secp256k1zkp]
 git = "https://github.com/mimblewimble/rust-secp256k1-zkp"

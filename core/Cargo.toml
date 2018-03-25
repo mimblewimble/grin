@@ -6,17 +6,17 @@ workspace = ".."
 publish = false
 
 [dependencies]
-bitflags = "^1.0"
-blake2-rfc = "~0.2.17"
-byteorder = "^1.0"
-slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
-num-bigint = "^0.1.35"
-rand = "^0.3"
-serde = "~1.0.8"
-serde_derive = "~1.0.8"
-siphasher = "~0.1"
-time = "^0.1"
-lazy_static = "~0.2.8"
+bitflags = "1"
+blake2-rfc = "0.2"
+byteorder = "1"
+lazy_static = "0.2"
+num-bigint = "0.1"
+rand = "0.3"
+serde = "1"
+serde_derive = "1"
+siphasher = "0.1"
+slog = { version = "2", features = ["max_level_trace", "release_max_level_trace"] }
+time = "0.1"
 
 grin_keychain = { path = "../keychain" }
 grin_util = { path = "../util" }

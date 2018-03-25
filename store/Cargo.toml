@@ -6,17 +6,17 @@ workspace = ".."
 publish = false
 
 [dependencies]
-byteorder = "^1.0"
-env_logger = "^0.3.5"
-serde = "~1.0.8"
-serde_derive = "~1.0.8"
-slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
-libc = "^0.2"
-memmap = { git = "https://github.com/danburkert/memmap-rs", tag="0.6.0" }
-rocksdb = "^0.8.0"
+byteorder = "1"
+env_logger = "0.3"
+libc = "0.2"
+memmap = { git = "https://github.com/danburkert/memmap-rs", tag = "0.6.0" }
+rocksdb = "0.8"
+serde = "1"
+serde_derive = "1"
+slog = { version = "2", features = ["max_level_trace", "release_max_level_trace"] }
 
 grin_core = { path = "../core" }
 grin_util = { path = "../util" }
 
 [dev-dependencies]
-time = "^0.1"
+time = "0.1"

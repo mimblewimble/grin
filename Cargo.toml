@@ -14,15 +14,15 @@ name = "grin"
 path = "src/bin/grin.rs"
 
 [dependencies]
-blake2-rfc = "~0.2.17"
-clap = "^2.23.3"
-daemonize = "^0.2.3"
-serde = "~1.0.8"
-serde_json = "~1.0.7"
-slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
-term = "~0.4.6"
-time = "^0.1"
-chrono = "^0.4.0"
+blake2-rfc = "0.2"
+chrono = "0.4"
+clap = "2.23"
+daemonize = "0.2"
+serde = "1"
+serde_json = "1"
+slog = { version = "2", features = ["max_level_trace", "release_max_level_trace"] }
+term = "0.4"
+time = "0.1"
 
 grin_api = { path = "./api" }
 grin_config = { path = "./config" }
@@ -37,11 +37,11 @@ grin_wallet = { path = "./wallet" }
 #This is temporary until cursive author does a new release
 [dependencies.cursive]
 git = "https://github.com/yeastplume/Cursive"
-tag="grin_integration_1"
+tag = "grin_integration_1"
 
 # TODO - once "patch" is available we should be able to clean up the workspace dependencies
 # [patch.crate-io]
 # secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }
 
 [build-dependencies]
-built = "^0.2.3"
+built = "0.2"

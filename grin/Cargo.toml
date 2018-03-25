@@ -6,27 +6,27 @@ workspace = ".."
 publish = false
 
 [dependencies]
-hyper = "~0.10.6"
-slog = { version = "^2.0.12", features = ["max_level_trace", "release_max_level_trace"] }
-time = "^0.1"
-serde = "~1.0.8"
-serde_derive = "~1.0.8"
-serde_json = "~1.0.8"
-rand = "^0.3"
-router = "~0.5.1"
-itertools = "~0.6.0"
+hyper = "0.10"
+itertools = "0.6"
+rand = "0.3"
+router = "0.5"
+slog = { version = "2", features = ["max_level_trace", "release_max_level_trace"] }
+serde = "1"
+serde_derive = "1"
+serde_json = "1"
+time = "0.1"
 
 grin_api = { path = "../api" }
 grin_chain = { path = "../chain" }
 grin_core = { path = "../core" }
-grin_store = { path = "../store" }
+grin_keychain = { path = "../keychain" }
 grin_p2p = { path = "../p2p" }
 grin_pool = { path = "../pool" }
-grin_util = { path = "../util" }
-grin_keychain = { path = "../keychain" }
-grin_wallet = { path = "../wallet" }
 grin_pow = { path = "../pow" }
+grin_store = { path = "../store" }
+grin_util = { path = "../util" }
+grin_wallet = { path = "../wallet" }
 
 [dev-dependencies]
-blake2-rfc = "~0.2.17"
+blake2-rfc = "0.2"
 grin_config = { path = "../config" }
