@@ -6,12 +6,12 @@ workspace = ".."
 publish = false
 
 [dependencies]
-hyper = "~0.10.6"
-lazy_static = "~0.2.8"
-iron = "~0.5.1"
-router = "~0.5.1"
-regex = "^0.2"
-mount = "~0.3.0"
+hyper = "0.10"
+iron = "0.5"
+lazy_static = "0.2"
+mount = "0.3"
+regex = "0.2"
+router = "0.5"
 serde = "1"
 serde_derive = "1"
 serde_json = "1"

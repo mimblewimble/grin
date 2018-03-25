@@ -14,15 +14,15 @@ name = "grin"
 path = "src/bin/grin.rs"
 
 [dependencies]
-blake2-rfc = "~0.2.17"
-clap = "^2.23.3"
-daemonize = "^0.2.3"
+blake2-rfc = "0.2"
+chrono = "0.4"
+clap = "2.23"
+daemonize = "0.2"
 serde = "1"
 serde_json = "1"
 slog = { version = "2", features = ["max_level_trace", "release_max_level_trace"] }
-term = "~0.4.6"
-time = "^0.1"
-chrono = "^0.4.0"
+term = "0.4"
+time = "0.1"
 
 grin_api = { path = "./api" }
 grin_config = { path = "./config" }
@@ -44,4 +44,4 @@ tag = "grin_integration_1"
 # secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }
 
 [build-dependencies]
-built = "^0.2.3"
+built = "0.2"

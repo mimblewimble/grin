@@ -6,16 +6,16 @@ workspace = ".."
 publish = false
 
 [dependencies]
-bitflags = "^1.0"
-net2 = "0.2.0"
-rand = "^0.3"
+bitflags = "1"
+bytes = "0.4"
+enum_primitive = "0.1"
+net2 = "0.2"
+num = "0.1"
+rand = "0.3"
 serde = "1"
 serde_derive = "1"
-bytes = "0.4.3"
-time = "^0.1"
-enum_primitive = "^0.1.0"
-num = "^0.1.36"
 slog = { version = "2", features = ["max_level_trace", "release_max_level_trace"] }
+time = "0.1"
 
 grin_core = { path = "../core" }
 grin_store = { path = "../store" }
