@@ -204,7 +204,13 @@ impl Chain {
 		// Make sure sync_head is available for later use when needed.
 		store.reset_head()?;
 
-		debug!(LOGGER, "Chain init: {:?}", head);
+		debug!(
+			LOGGER,
+			"Chain init: {} @ {} [{}]",
+			head.total_difficulty.into_num(),
+			head.height,
+			head.last_block_h
+		);
 
 		Ok(Chain {
 			db_root: db_root,
@@ -370,7 +376,7 @@ impl Chain {
 
 	/// Check for orphans, once a block is successfully added
 	pub fn check_orphans(&self, mut last_block_hash: Hash) {
-		debug!(
+		trace!(
 			LOGGER,
 			"chain: check_orphans: # orphans {}",
 			self.orphans.len(),

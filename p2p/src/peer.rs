@@ -161,7 +161,7 @@ impl Peer {
 	/// if the remote peer is known to already have the block.
 	pub fn send_block(&self, b: &core::Block) -> Result<(), Error> {
 		if !self.tracking_adapter.has(b.hash()) {
-			debug!(LOGGER, "Send block {} to {}", b.hash(), self.info.addr);
+			trace!(LOGGER, "Send block {} to {}", b.hash(), self.info.addr);
 			self.connection.as_ref().unwrap().send(b, msg::Type::Block)
 		} else {
 			debug!(
@@ -176,7 +176,7 @@ impl Peer {
 
 	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<(), Error> {
 		if !self.tracking_adapter.has(b.hash()) {
-			debug!(
+			trace!(
 				LOGGER,
 				"Send compact block {} to {}",
 				b.hash(),
@@ -205,7 +205,7 @@ impl Peer {
 				.unwrap()
 				.send(bh, msg::Type::Header)
 		} else {
-			debug!(
+			trace!(
 				LOGGER,
 				"Suppress header send {} to {} (already seen)",
 				bh.hash(),

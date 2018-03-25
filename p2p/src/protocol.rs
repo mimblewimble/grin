@@ -75,7 +75,7 @@ impl MessageHandler for Protocol {
 
 			Type::GetBlock => {
 				let h: Hash = msg.body()?;
-				debug!(LOGGER, "handle_payload: GetBlock {}", h);
+				trace!(LOGGER, "handle_payload: GetBlock {}", h);
 
 				let bo = adapter.get_block(h);
 				if let Some(b) = bo {
@@ -88,7 +88,7 @@ impl MessageHandler for Protocol {
 				let b: core::Block = msg.body()?;
 				let bh = b.hash();
 
-				debug!(LOGGER, "handle_payload: Block {}", bh);
+				trace!(LOGGER, "handle_payload: Block {}", bh);
 
 				adapter.block_received(b, self.addr);
 				Ok(None)

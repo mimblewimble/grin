@@ -97,7 +97,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 	// internal validation and saving operations
 	let result = txhashset::extending(&mut txhashset, |mut extension| {
 		validate_block(b, &mut ctx, &mut extension)?;
-		debug!(
+		trace!(
 			LOGGER,
 			"pipe: process_block: {} at {} is valid, save and append.",
 			b.hash(),
