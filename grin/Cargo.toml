@@ -19,13 +19,13 @@ itertools = "~0.6.0"
 grin_api = { path = "../api" }
 grin_chain = { path = "../chain" }
 grin_core = { path = "../core" }
-grin_store = { path = "../store" }
+grin_keychain = { path = "../keychain" }
 grin_p2p = { path = "../p2p" }
 grin_pool = { path = "../pool" }
-grin_util = { path = "../util" }
-grin_keychain = { path = "../keychain" }
-grin_wallet = { path = "../wallet" }
 grin_pow = { path = "../pow" }
+grin_store = { path = "../store" }
+grin_util = { path = "../util" }
+grin_wallet = { path = "../wallet" }
 
 [dev-dependencies]
 blake2-rfc = "~0.2.17"

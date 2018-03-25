@@ -37,7 +37,7 @@ grin_wallet = { path = "./wallet" }
 #This is temporary until cursive author does a new release
 [dependencies.cursive]
 git = "https://github.com/yeastplume/Cursive"
-tag="grin_integration_1"
+tag = "grin_integration_1"
 
 # TODO - once "patch" is available we should be able to clean up the workspace dependencies
 # [patch.crate-io]

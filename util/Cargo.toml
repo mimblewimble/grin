@@ -6,6 +6,8 @@ workspace = ".."
 publish = false
 
 [dependencies]
+serde = "1"
+serde_derive = "1"
 slog = { version = "2", features = ["max_level_trace", "release_max_level_trace"] }
 slog-term = "2"
 slog-async = "2"
@@ -13,8 +15,6 @@ lazy_static = "~0.2.8"
 backtrace = "^0.3.5"
 byteorder = "^1.0"
 rand = "^0.3"
-serde = "1"
-serde_derive = "1"
 walkdir = "^2.0.1"
 zip = "^0.2.6"
 
