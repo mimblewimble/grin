@@ -266,11 +266,13 @@ fn needs_syncing(
 				);
 
 				if peer.info.total_difficulty <= local_diff {
+					let ch = chain.head().unwrap();
 					info!(
 						LOGGER,
-						"synchronized at {:?} @ {:?}",
-						local_diff,
-						chain.head().unwrap().height
+						"synchronised at {} @ {} [{}]",
+						local_diff.into_num(),
+						ch.height,
+						ch.last_block_h
 					);
 					if !header_only {
 						let _ = chain.reset_head();

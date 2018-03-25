@@ -204,7 +204,13 @@ impl Chain {
 		// Make sure sync_head is available for later use when needed.
 		store.reset_head()?;
 
-		debug!(LOGGER, "Chain init: {:?}", head);
+		debug!(
+			LOGGER,
+			"Chain init: {} @ {} [{}]",
+			head.total_difficulty.into_num(),
+			head.height,
+			head.last_block_h
+		);
 
 		Ok(Chain {
 			db_root: db_root,

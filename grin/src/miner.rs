@@ -140,12 +140,13 @@ impl Miner {
 	) -> Option<Proof> {
 		debug!(
 			LOGGER,
-			"(Server ID: {}) Mining at Cuckoo{} for at most {} secs at height {} and difficulty {}.",
+			"(Server ID: {}) Mining Cuckoo{} for max {}s on {} @ {} [{}].",
 			self.debug_output_id,
 			cuckoo_size,
 			attempt_time_per_block,
+			b.header.total_difficulty,
 			b.header.height,
-			b.header.total_difficulty
+			b.header.hash()
 		);
 
 		// look for a pow for at most attempt_time_per_block sec on the
@@ -270,13 +271,14 @@ impl Miner {
 
 		debug!(
 			LOGGER,
-			"(Server ID: {}) Mining at Cuckoo{} for {} secs (will wait for last solution) \
-			 on block {} at difficulty {}.",
+			"(Server ID: {}) Mining Cuckoo{} for max {}s (will wait for last solution) \
+			 on {} @ {} [{}].",
 			self.debug_output_id,
 			cuckoo_size,
 			attempt_time_per_block,
-			latest_hash,
-			b.header.total_difficulty
+			b.header.total_difficulty,
+			b.header.height,
+			latest_hash
 		);
 		let mut iter_count = 0;
 
@@ -388,12 +390,13 @@ impl Miner {
 
 		debug!(
 			LOGGER,
-			"(Server ID: {}) Mining at Cuckoo{} for at most {} secs on block {} at difficulty {}.",
+			"(Server ID: {}) Mining Cuckoo{} for max {}s on {} @ {} [{}].",
 			self.debug_output_id,
 			cuckoo_size,
 			attempt_time_per_block,
-			latest_hash,
-			b.header.total_difficulty
+			b.header.total_difficulty,
+			b.header.height,
+			latest_hash
 		);
 		let mut iter_count = 0;
 
