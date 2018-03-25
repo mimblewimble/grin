@@ -6,9 +6,9 @@ Grin is an in-progress implementation of the MimbleWimble protocol. Many charact
 
   * Clean and minimal implementation, aiming to stay as such.
   * Follows the MimbleWimble protocol, which provides great anonymity and scaling characteristics.
-  * Cuckoo Cycle proof of work (at least to start with).
-  * Relatively fast block time (a minute or less, possibly decreasing as networks improve).
-  * Fixed block reward, both over time and in blocks (fees are not additive).
+  * Cuckoo Cycle proof of work.
+  * Relatively fast block time (a minute).
+  * Fixed block reward over time with a decreasing dilution.
   * Transaction fees are based on the number of Outputs created/destroyed and total transaction size.
   * Smooth curve for difficulty adjustments.
 
