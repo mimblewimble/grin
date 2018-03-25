@@ -146,7 +146,7 @@ impl TxHashSet {
 				let output_pmmr: PMMR<OutputIdentifier, _> =
 					PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some(hash) = output_pmmr.get_hash(pos) {
-					if hash == output_id.hash_with_index(pos) {
+					if hash == output_id.hash_with_index(pos-1) {
 						Ok(hash)
 					} else {
 						Err(Error::TxHashSetErr(format!("txhashset hash mismatch")))
@@ -386,7 +386,7 @@ impl<'a> Extension<'a> {
 		let commit = input.commitment();
 		let pos_res = self.get_output_pos(&commit);
 		if let Ok(pos) = pos_res {
-			let output_id_hash = OutputIdentifier::from_input(input).hash_with_index(pos);
+			let output_id_hash = OutputIdentifier::from_input(input).hash_with_index(pos-1);
 			if let Some(read_hash) = self.output_pmmr.get_hash(pos) {
 				// check hash from pmmr matches hash from input (or corresponding output)
 				// if not then the input is not being honest about
@@ -398,7 +398,7 @@ impl<'a> Extension<'a> {
 					|| output_id_hash
 						!= read_elem
 							.expect("no output at position")
-							.hash_with_index(pos)
+							.hash_with_index(pos-1)
 				{
 					return Err(Error::TxHashSetErr(format!("output pmmr hash mismatch")));
 				}
