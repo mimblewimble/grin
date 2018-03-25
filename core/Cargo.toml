@@ -15,7 +15,7 @@ rand = "0.3"
 serde = "1"
 serde_derive = "1"
 siphasher = "0.1"
-slog = { version = "2", features = ["max_level_trace", "release_max_level_trace"] }
+slog = { version = "2.1", features = ["max_level_trace", "release_max_level_trace"] }
 time = "0.1"
 
 grin_keychain = { path = "../keychain" }

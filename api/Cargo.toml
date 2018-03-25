@@ -15,7 +15,7 @@ router = "0.5"
 serde = "1"
 serde_derive = "1"
 serde_json = "1"
-slog = { version = "2", features = ["max_level_trace", "release_max_level_trace"] }
+slog = { version = "2.1", features = ["max_level_trace", "release_max_level_trace"] }
 urlencoded = "0.5" # 0.6+ lacks trait `plugin::Plugin<iron::Request<'_, '_>>`
 
 grin_core = { path = "../core" }
