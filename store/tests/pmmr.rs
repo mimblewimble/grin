@@ -38,7 +38,7 @@ fn pmmr_append() {
 	backend.sync().unwrap();
 
 	// check the resulting backend store and the computation of the root
-	let node_hash = elems[0].hash_with_index(1);
+	let node_hash = elems[0].hash_with_index(0);
 	assert_eq!(backend.get_hash(1).unwrap(), node_hash);
 
 	// 0010012001001230
