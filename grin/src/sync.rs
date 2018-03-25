@@ -281,7 +281,7 @@ fn needs_syncing(
 				}
 			}
 		} else {
-			info!(LOGGER, "sync: no peers available, disabling sync");
+			warn!(LOGGER, "sync: no peers available, disabling sync");
 			return false;
 		}
 	} else {
