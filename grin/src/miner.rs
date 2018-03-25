@@ -174,7 +174,7 @@ impl Miner {
 				let proof_diff = proof.clone().to_difficulty();
 				trace!(
 					LOGGER,
-					"Found cuckoo solution for nonce {} of difficulty {} (difficulty target {})",
+					"Found cuckoo solution! nonce {} gave difficulty {} (block diff {})",
 					s.get_nonce_as_u64(),
 					proof_diff.into_num(),
 					(b.header.total_difficulty.clone() - head.total_difficulty.clone()).into_num()
@@ -296,7 +296,7 @@ impl Miner {
 				let proof_diff = proof.clone().to_difficulty();
 				trace!(
 					LOGGER,
-					"Found cuckoo solution for nonce {} of difficulty {} (difficulty target {})",
+					"Found cuckoo solution for nonce {} of difficulty {} (cumulative diff {})",
 					b.header.nonce,
 					proof_diff.into_num(),
 					b.header.total_difficulty.into_num()
@@ -629,7 +629,7 @@ impl Miner {
 
 		debug!(
 			LOGGER,
-			"(Server ID: {}) Built new block with {} inputs and {} outputs, network difficulty: {}, block cumulative difficulty {}",
+			"(Server ID: {}) Built new block with {} inputs and {} outputs, network difficulty: {}, cumulative difficulty {}",
 			self.debug_output_id,
 			b.inputs.len(),
 			b.outputs.len(),
