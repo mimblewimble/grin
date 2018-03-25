@@ -26,7 +26,6 @@ use adapters::PoolToChainAdapter;
 use core::consensus;
 use core::core;
 use core::core::Proof;
-use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Transaction};
 use core::core::hash::{Hash, Hashed};
 use pow::{cuckoo, MiningWorker};
@@ -130,7 +129,6 @@ impl Miner {
 	pub fn inner_loop_async(
 		&self,
 		plugin_miner: &mut PluginMiner,
-		difficulty: Difficulty,
 		b: &mut Block,
 		cuckoo_size: u32,
 		head: &BlockHeader,
@@ -179,7 +177,7 @@ impl Miner {
 					"Found cuckoo solution for nonce {} of difficulty {} (difficulty target {})",
 					s.get_nonce_as_u64(),
 					proof_diff.into_num(),
-					difficulty.into_num()
+					(b.header.total_difficulty.clone() - head.total_difficulty.clone()).into_num()
 				);
 				if proof_diff > (b.header.total_difficulty.clone() - head.total_difficulty.clone())
 				{
@@ -528,7 +526,6 @@ impl Miner {
 				if use_async {
 					sol = self.inner_loop_async(
 						&mut p,
-						(b.header.total_difficulty.clone() - head.total_difficulty.clone()),
 						&mut b,
 						cuckoo_size,
 						&head,
