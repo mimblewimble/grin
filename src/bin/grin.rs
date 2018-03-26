@@ -15,6 +15,7 @@
 //! Main for building the binary of a Grin peer-to-peer node.
 
 extern crate blake2_rfc as blake2;
+#[macro_use]
 extern crate clap;
 extern crate cursive;
 extern crate daemonize;
@@ -116,7 +117,7 @@ fn start_server_tui(config: grin::ServerConfig) {
 
 fn main() {
 	let args = App::new("Grin")
-		.version("0.1")
+		.version(crate_version!())
 		.author("The Grin Team")
 		.about("Lightweight implementation of the MimbleWimble protocol.")
 
