@@ -130,7 +130,7 @@ impl Server {
 			return Ok(p);
 		}
 
-		debug!(LOGGER, "connect_peer: connecting to {}", addr);
+		trace!(LOGGER, "connect_peer: connecting to {}", addr);
 		match TcpStream::connect_timeout(addr, Duration::from_secs(10)) {
 			Ok(mut stream) => {
 				let addr = SocketAddr::new(self.config.host, self.config.port);

@@ -1,8 +1,7 @@
-
 [package]
 name = "grin_core-fuzz"
 version = "0.0.1"
-authors = ["Automatically generated"]
+authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 publish = false
 
 [package.metadata]
