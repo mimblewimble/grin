@@ -57,10 +57,8 @@ pub const TESTING_CUT_THROUGH_HORIZON: u32 = 20;
 /// Testing initial block difficulty
 pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
 
-/// Testing initial block difficulty, testnet 2
-/// we want to overestimate here as well
-/// Setting to 1 for development, but should be 1000 at T2 launch
-pub const TESTNET2_INITIAL_DIFFICULTY: u64 = 1;
+/// Testnet 2 initial block difficulty, high to see how it goes
+pub const TESTNET2_INITIAL_DIFFICULTY: u64 = 1000;
 
 /// The target is the 32-bytes hash block hashes must be lower than.
 pub const MAX_PROOF_TARGET: [u8; 8] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
