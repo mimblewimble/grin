@@ -36,7 +36,7 @@ use core::global::ChainTypes;
 use framework::{LocalServerContainer, LocalServerContainerConfig};
 use util::{init_test_logger, LOGGER};
 
-// #[test]
+#[test]
 fn simple_server_wallet() {
 	let test_name_dir = "test_servers";
 	core::global::set_mining_mode(core::global::ChainTypes::AutomatedTesting);
@@ -57,6 +57,9 @@ fn simple_server_wallet() {
 		let mut w = coinbase_wallet.lock().unwrap();
 		w.run_wallet(0);
 	});
+
+	// Wait for the wallet to start
+	thread::sleep(time::Duration::from_millis(1000));
 
 	let mut server_config = LocalServerContainerConfig::default();
 	server_config.name = String::from("api_server_one");
