@@ -117,7 +117,7 @@ pub enum Seeding {
 
 impl Default for Seeding {
 	fn default() -> Seeding {
-		Seeding::None
+		Seeding::WebStatic
 	}
 }
 
