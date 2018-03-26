@@ -100,6 +100,7 @@ impl Server {
 		let genesis = match config.chain_type {
 			global::ChainTypes::Testnet1 => genesis::genesis_testnet1(),
 			global::ChainTypes::Testnet2 => genesis::genesis_testnet2(),
+			global::ChainTypes::AutomatedTesting => genesis::genesis_dev(),
 			_ => pow::mine_genesis_block(config.mining_config.clone())?,
 		};
 		info!(LOGGER, "Starting server, genesis block: {}", genesis.hash(),);

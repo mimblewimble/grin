@@ -84,15 +84,20 @@ listener automatically on start.
 
 # Configuration
 
-Grin has a good defaults, a configuration file `grin.toml` that's documented
-inline that can override the defaults, and command line switches that has top
-priority and overrides all others.
+Grin attempts to run with sensible defaults, and can be further configured via
+the `grin.toml` file. You should always ensure that this file is available to grin.
+The supplied `grin.toml` contains inline documentation on all configuration
+options, and should be the first point of reference for all options.
 
 The `grin.toml` file can placed in one of several locations, using the first one it finds:
 
 1. The current working directory
 2. In the directory that holds the grin executable
 3. {USER_HOME}/.grin
+
+While it's recommended that you perform all grin server configuration via
+`grin.toml`, it's also possible to supply command line switches to grin that
+override any settings in the `grin.toml` file. 
 
 For help on grin commands and their switches, try:
 

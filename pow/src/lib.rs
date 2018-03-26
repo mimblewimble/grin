@@ -86,7 +86,7 @@ pub fn mine_genesis_block(
 	miner_config: Option<types::MinerConfig>,
 ) -> Result<core::core::Block, Error> {
 	let mut gen = genesis::genesis_testnet2();
-	if global::is_user_testing_mode() {
+	if global::is_user_testing_mode() || global::is_automated_testing_mode() {
 		gen = genesis::genesis_dev();
 		gen.header.timestamp = time::now();
 	}
