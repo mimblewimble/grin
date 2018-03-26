@@ -36,7 +36,7 @@ use core::global::ChainTypes;
 use framework::{LocalServerContainer, LocalServerContainerConfig};
 use util::{init_test_logger, LOGGER};
 
-#[test]
+// #[test]
 fn simple_server_wallet() {
 	let test_name_dir = "test_servers";
 	core::global::set_mining_mode(core::global::ChainTypes::AutomatedTesting);
