@@ -18,7 +18,8 @@ But basically:
 - rocksdb + libs for compiling rocksdb:
   - clang (clanglib or clang-devel or libclang-dev)
   - llvm (Fedora llvm-devel, Debian llvm-dev)
-- ncurses and libs (ncurses, ncurses5w)
+- ncurses and libs (ncurses, ncursesw5)
+- zlib libs (zlib1g-dev or zlib-devel)
 - linux-headers (reported needed on Alpine linux)
 
 
