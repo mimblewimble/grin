@@ -4,6 +4,6 @@
 node*
 target
 Cargo.lock
-**.iml
+*.iml
 grin.log
 wallet.seed
