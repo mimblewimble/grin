@@ -27,7 +27,6 @@ But basically:
 ```sh
 git clone https://github.com/mimblewimble/grin.git
 cd grin
-cargo update
 cargo build
 ```
 
