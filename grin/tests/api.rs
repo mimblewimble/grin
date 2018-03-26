@@ -181,7 +181,7 @@ fn test_p2p() {
 	let _ = thread::spawn(move || server_two.run_server(120));
 
 	// Let them do the handshake
-	thread::sleep(time::Duration::from_millis(1500));
+	thread::sleep(time::Duration::from_millis(2000));
 
 	// Starting tests
 	warn!(LOGGER, "Starting P2P Tests");
