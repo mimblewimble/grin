@@ -91,7 +91,7 @@ pub fn genesis_testnet2() -> core::Block {
 			},
 			//TODO: Check this is over-estimated at T2 launch
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
-			nonce: 42365,
+			nonce: 329,
 			pow: core::Proof::new(vec![
 				0x5108b5, 0x6de3c4, 0xded539, 0x15d0e7a, 0x1b05bad, 0x24503fb, 0x420ee7a,
 				0x5d905bb, 0x615571f, 0x631d3de, 0x740f1a2, 0x763f189, 0x778edd0, 0x916b09e,
