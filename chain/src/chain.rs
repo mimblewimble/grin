@@ -176,7 +176,7 @@ impl Chain {
 		let head = match head {
 			Ok(h) => h,
 			Err(NotFoundErr) => {
-				let tip = Tip::new(genesis.hash());
+				let tip = Tip::from_block(&genesis.header);
 				store.save_block(&genesis)?;
 				store.setup_height(&genesis.header, &tip)?;
 				if genesis.kernels.len() > 0 {
