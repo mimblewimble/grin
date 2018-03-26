@@ -61,7 +61,6 @@ fn simple_server_wallet() {
 	// Wait for the wallet to start
 	thread::sleep(time::Duration::from_millis(1000));
 
-
 	let mut server_config = LocalServerContainerConfig::default();
 	server_config.name = String::from("api_server_one");
 	server_config.p2p_server_port = 40000;
