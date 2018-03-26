@@ -29,7 +29,7 @@ fn zip_unzip() {
 
 	let zip_file = File::create(zip_name).unwrap();
 	zip::compress(&root.join("./to_zip"), &zip_file).unwrap();
-	zip_file.sync_all();
+	zip_file.sync_all().unwrap();
 
 	let zip_path = Path::new(zip_name);
 	assert!(zip_path.exists());
