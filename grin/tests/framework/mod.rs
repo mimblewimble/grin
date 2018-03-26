@@ -189,28 +189,6 @@ impl LocalServerContainer {
 			seeds = vec![self.config.seed_addr.to_string()];
 		}
 
-		let s = grin::Server::new(grin::ServerConfig {
-			api_http_addr: api_addr,
-			db_root: format!("{}/.grin", self.working_dir),
-			p2p_config: p2p::P2PConfig {
-				port: self.config.p2p_server_port,
-				..p2p::P2PConfig::default()
-			},
-			seeds: Some(seeds),
-			seeding_type: seeding_type,
-			chain_type: core::global::ChainTypes::AutomatedTesting,
-			skip_sync_wait: Some(true),
-			..Default::default()
-		}).unwrap();
-
-		self.p2p_server_stats = Some(s.get_server_stats().unwrap());
-
-		if self.config.start_wallet == true {
-			self.run_wallet(duration_in_seconds + 5);
-			// give a second to start wallet before continuing
-			thread::sleep(time::Duration::from_millis(1000));
-		}
-
 		let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
 		let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();
 		plugin_config.type_filter = String::from("mean_cpu");
@@ -226,6 +204,29 @@ impl LocalServerContainer {
 			slow_down_in_millis: Some(self.config.miner_slowdown_in_millis.clone()),
 			..Default::default()
 		};
+
+		let s = grin::Server::new(grin::ServerConfig {
+			api_http_addr: api_addr,
+			db_root: format!("{}/.grin", self.working_dir),
+			p2p_config: p2p::P2PConfig {
+				port: self.config.p2p_server_port,
+				..p2p::P2PConfig::default()
+			},
+			seeds: Some(seeds),
+			seeding_type: seeding_type,
+			chain_type: core::global::ChainTypes::AutomatedTesting,
+			skip_sync_wait: Some(true),
+			mining_config: Some(miner_config.clone()),
+			..Default::default()
+		}).unwrap();
+
+		self.p2p_server_stats = Some(s.get_server_stats().unwrap());
+
+		if self.config.start_wallet == true {
+			self.run_wallet(duration_in_seconds + 5);
+			// give a second to start wallet before continuing
+			thread::sleep(time::Duration::from_millis(1000));
+		}
 
 		if self.config.start_miner == true {
 			println!("starting Miner on port {}", self.config.p2p_server_port);
