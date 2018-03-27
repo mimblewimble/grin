@@ -139,7 +139,6 @@ impl Worker {
 		let mut line = String::new();
 		match self.stream.read_line(&mut line) {
 			Ok(_) => {
-				println!("Got a string: {:?}", line);
 				return Some(line);
 			}
 			Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
@@ -159,7 +158,6 @@ impl Worker {
 
 	// Send Message to the worker
 	fn send_message(&mut self, message: String) {
-		println!("Send message to client: {:?}", message);
 		match self.stream.write(message.as_bytes()) {
 			Ok(_) => match self.stream.flush() {
 				Ok(_) => {}
@@ -224,14 +222,15 @@ impl StratumServer {
 		for num in 0..workers_l.len() {
 			match workers_l[num].read_message() {
 				Some(the_message) => {
-					println!("Handle:  {:?}", the_message);
-
 					// Decompose the request from the JSONRpc wrapper
 					let request: RpcRequest = match serde_json::from_str(&the_message) {
 						Ok(request) => request,
 						Err(e) => {
 							// not a valid JSON RpcRequest - disconnect the worker
-							println!("Invalid Request: {:?}", e.description());
+							warn!(
+								LOGGER,
+								"(Server ID: {}) Failed to parse JSONRpc: {}", self.id, e.description()
+							);
 							workers_l[num].stream_err = true;
 							continue;
 						}
@@ -282,7 +281,6 @@ impl StratumServer {
 					}
 
 					// Send the reply
-					println!("rpc_response = {:?}", rpc_response);
 					workers_l[num].send_message(rpc_response);
 				},
 				None => {} // No message for us from this worker
@@ -496,7 +494,6 @@ impl StratumServer {
 			self.handle_rpc_requests();
 
 			// sleep before restarting loop
-			println!("...");
 			thread::sleep(Duration::from_millis(500));
 		} // Main Loop
 	} // fn run_loop()
