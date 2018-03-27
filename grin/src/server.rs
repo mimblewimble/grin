@@ -241,7 +241,7 @@ impl Server {
 
 		let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone());
 		miner.set_debug_output_id(format!("Port {}", config.stratum_server_addr.clone().unwrap()));
-                let stratum_server = stratumserver::StratumServer::new(miner);
+                let mut stratum_server = stratumserver::StratumServer::new(miner);
 		let _ = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {

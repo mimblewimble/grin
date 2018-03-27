@@ -13,160 +13,438 @@
 // limitations under the License.
 
 //! Mining Stratum Server
-
 use std::thread;
 use std::time::Duration;
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::io::{ErrorKind, Read, Write};
+use std::error::Error;
 use std::mem;
 use time;
 use util::LOGGER;
+use std::io::BufReader;
+use std::io::BufRead;
+use bufstream::BufStream;
+use std::sync::{Arc, Mutex};
+use serde_json;
 
-use core::core::{Block, BlockHeader};
+use core::core::{Block, BlockHeader, Proof};
 use core::ser;
 use pow::types::MinerConfig;
 use chain;
 use miner::Miner;
+use miner::*;
+
+// ----------------------------------------
+
+
+// ----------------------------------------
+// http://www.jsonrpc.org/specification
+// RPC Methods
+#[derive(Serialize, Deserialize, Debug)]
+struct RpcRequest {
+  id: String,
+  jsonrpc: String,
+  method: String,
+  params: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct RpcResponse {
+  id: String,
+  jsonrpc: String,
+  result: Option<String>,
+  error: Option<RpcError>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct RpcError {
+  code: i32,
+  message: String
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct LoginParams {
+  login: String,
+  pass: String,
+  agent: String
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct SubmitParams {
+  height: u64,
+  nonce: u64,
+  pow: Vec<u32>
+}
+
+
+// ----------------------------------------
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct JobTemplate {
+	pre_nonce: String,
+	post_nonce: String
+}
+
+pub struct Worker {
+  id: String,
+  stream: BufStream<TcpStream>,
+  stream_err: bool,
+  authenticated: bool,
+}
+
+impl Worker {
+
+
+  pub fn new(
+    id: String,
+    stream: BufStream<TcpStream>
+  ) -> Worker {
+    Worker {
+      id: id,
+      stream: stream,
+      stream_err: false,
+      authenticated: false
+    }
+  }
+
+	// Get Message from the worker
+	fn read_message(&mut self) -> Option<String> {
+		let mut line = String::new();
+		match self.stream.read_line(&mut line) {
+			Ok(_) => {
+				println!("Got a string: {:?}", line);
+				return Some(line);
+			}
+			Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+				// Not an error, just no messages ready
+				return None;
+			}
+			Err(e) => {
+				warn!(
+					LOGGER,
+					"(Server ID: {}) Error in connection with stratum client: {}",
+					self.id,
+					e
+				);
+				self.stream_err = true;
+				return None;
+			}
+		}
+	}
+
+
+	// Send Message to the worker
+	fn send_message(&mut self, message: String) {
+		println!("Send message to client: {:?}", message);
+		match self.stream.write(message.as_bytes()) {
+			Ok(_) => {
+				self.stream.flush();
+			}
+			Err(e) => {
+				warn!(
+					LOGGER,
+					"(Server ID: {}) Error in connection with stratum client: {}",
+					self.id,
+					e
+				);
+				self.stream_err = true;
+				return;
+			}
+		}
+	}
+} // impl Worker
+
+
+// ----------------------------------------
+
+
+        // Run in a thread. Adds new connections to the workers list
+	fn accept_workers(id: String, address: String, workers: &mut Arc<Mutex<Vec<Worker>>>) {
+		let listener = TcpListener::bind(address).expect("Failed to buind");
+		let mut worker_id: u32 = 0;
+		for stream in listener.incoming() {
+			match stream {
+				Ok(stream) => {
+					info!(
+						LOGGER,
+						"(Server ID: {}) New connection: {}",
+						id,
+						stream.peer_addr().unwrap()
+					);
+					stream.set_nonblocking(true).expect("set_nonblocking call failed");
+					let mut worker = Worker::new(worker_id.to_string(), BufStream::new(stream));
+					workers.lock().unwrap().push(worker);
+					worker_id = worker_id + 1;
+				}
+				Err(e) => {
+					warn!(
+						LOGGER,
+						"(Server ID: {}) Error accepting connection: {:?}",
+						id,
+						e
+					);
+	
+				}
+			}
+			thread::sleep(Duration::from_millis(100));
+	 	}
+		// close the socket server
+		drop(listener);
+	}
+
+// ----------------------------------------
+
 
 pub struct StratumServer {
+	id: String,
 	miner: Miner,
-	// Id is to identify stratum server messages in the log
-	debug_output_id: String,
+	current_block: Block,
+	workers: Arc<Mutex<Vec<Worker>>>,
 }
 
 impl StratumServer {
 	/// Creates a new Stratum Server.
 	pub fn new(miner: Miner) -> StratumServer {
 		StratumServer {
+			id: String::from("StratumServer"),
 			miner: miner,
-			debug_output_id: String::from("Stratum"),
+			current_block: Block::default(),
+			workers: Arc::new((Mutex::new(Vec::new()))),
 		}
 	}
 
-	// Get a solution (BlockHeader) from the client
-	fn get_solution(&self, stream: &mut TcpStream, stream_err: &mut bool) -> Option<BlockHeader> {
-		// Get a solved block header from the stream
-		// get size
-		let dsz: usize;
-		let mut data = [0 as u8; 4]; // using 4 byte buffer
-		match stream.read_exact(&mut data) {
-			Ok(_) => unsafe {
-				// We got the size
-				let sz = mem::transmute::<[u8; 4], u32>(data);
-				dsz = sz as usize;
-			},
-			Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-				// This is not an 'error', just isnt any data ready for us to read right now
-				return None;
-			}
-			Err(e) => {
-				// We lost our client
-				warn!(
-					LOGGER,
-					"(Server ID: {}) Error in connection with stratum client: {}",
-					self.debug_output_id,
-					e
-				);
-				*stream_err = true;
-				return None;
-			}
-		}
+	// Build and return a JobTemplate for mining the current block
+	fn build_block_template(&self, bh: BlockHeader) -> JobTemplate {
+		// Serialize the block header and JSONize
+		let mut header_parts = HeaderPartWriter::default();
+		ser::Writeable::write(&bh, &mut header_parts).unwrap();
+		let (pre, post) = header_parts.parts_as_hex_strings();
+		let job_template = JobTemplate {
+			pre_nonce: pre,
+			post_nonce: post,
+		};
+		return job_template;
+	}
 
-		// get serialized data.  We know a block is coming because we just got the size,
-		// so we loop for some reasonable amout of time waiting for it.
-		let mut retry = 0;
-		let mut dvec = vec![0; dsz];
-		loop {
-			match stream.read_exact(&mut dvec) {
-				Ok(_) => {
-					let mut bh: BlockHeader = ser::deserialize(&mut &dvec[..]).unwrap();
-					return Some(bh);
-				}
-				Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-					// Sleep a bit and try again, but give up at some point
-					retry += 1;
-					if retry >= 100 {
-						warn!(
-							LOGGER,
-							"(Server ID: {}) Error in connection with stratum client: {}",
-							self.debug_output_id,
-							e
-						);
-						*stream_err = true;
-						return None;
+	// Handle an RPC request message from the worker
+	fn handle_rpc_requests(&mut self) {
+                // Get and respond to messages from workers
+                let mut workers_l = self.workers.lock().unwrap();
+		for num in 0..workers_l.len() {
+			match workers_l[num].read_message() {
+				Some(the_message) => {
+					println!("Handle:  {:?}", the_message);
+	
+					let request: RpcRequest = match serde_json::from_str(&the_message) {
+						Ok(request) =>  { request },
+						Err(e) => { 
+							// not a valid JSON RpcRequest - disconnect the worker
+							println!("Invalid Request: {:?}", e.description());
+							workers_l[num].stream_err = true;
+							continue;
+						}
+      	                          	};
+
+					let response: String;
+					let err: bool;
+					let (response, err) = match request.method.as_str() {
+						// Call the handle_method
+						"login" =>		{ self.handle_login(request.params.unwrap()) },
+						"submit" =>		{ self.handle_submit(request.params.unwrap()) },
+						"keepalive" =>		{ self.handle_keepalive() },
+						"getjobtemplate" => 	{ self.handle_getjobtemplate(self.current_block.header.clone()) },
+						"status" =>		{ self.handle_status() },
+						_ => {  // Called undefined method
+							let e = r#"{"code": -32601, "message": "Method not found"}"#; 
+							let err = e.to_string();
+							(err, true)
+						     },
+					};
+
+					// Package reply as RpcResponse json 
+					let rpc_response: String;
+					if err == true {
+						let rpc_err: RpcError = serde_json::from_str(&response).unwrap();
+						let resp = RpcResponse {
+							id: workers_l[num].id.clone(),
+							jsonrpc: String::from("2.0"),
+							result: None,
+							error: Some(rpc_err),
+						};
+						rpc_response = serde_json::to_string(&resp).unwrap();
+					} else {
+						let resp = RpcResponse {
+							id: workers_l[num].id.clone(),
+							jsonrpc: String::from("2.0"),
+							result: Some(response),
+							error: None,
+						};
+						rpc_response = serde_json::to_string(&resp).unwrap();
 					}
-					thread::sleep(Duration::from_millis(100));
+
+					// Send the response
+					println!("rpc_response = {:?}", rpc_response);
+					workers_l[num].send_message(rpc_response);
 				}
-				Err(e) => {
-					warn!(
-						LOGGER,
-						"(Server ID: {}) Error in connection with stratum client: {}",
-						self.debug_output_id,
-						e
-					);
-					*stream_err = true;
-					return None;
-				}
+				None => {} // No message for us from this worker
 			}
 		}
-	} // End get_solution
+	}
 
-	// Send a new block to the stratum client for mining
-	fn send_block(&self, stream: &mut TcpStream, b: &Block, stream_err: &mut bool) {
-		// Serialize the block for sending over the wire
-		let mut bvec = Vec::new();
-		ser::serialize(&mut bvec, &b).expect("serialization failed");
+	// Handle STATUS message
+	fn handle_status(&self) -> (String, bool) {
+		// XXX TODO:  Return stratum status and stats in json for use
+		//  by a dashboard or healthcheck at least.
+		//  For now, just return "ok"
+		return (String::from("ok"), false);
+        }
 
-		// Send the size of the block
-		let bveclen: u32 = bvec.len() as u32;
-		unsafe {
-			let bszb = mem::transmute::<u32, [u8; 4]>(bveclen);
-			match stream.write(&bszb) {
-				Ok(_) => {}
-				Err(e) => {
-					warn!(LOGGER, "Error in connection with stratum client: {}", e);
-					*stream_err = true;
-					return;
-				}
+	// Handle GETJOBTEMPLATE message
+	fn handle_getjobtemplate(&self, bh: BlockHeader) -> (String, bool) {
+		// Build a JobTemplate from a BlockHeader and return JSON
+		let job_template = self.build_block_template(bh);
+		let job_template_json = serde_json::to_string(&job_template).unwrap();
+		return (job_template_json, false);
+        }
+
+	// Handle KEEPALIVE message
+	fn handle_keepalive(&self) -> (String, bool) {
+		return (String::from("ok"), false);
+        }
+
+	// Handle LOGIN message
+	fn handle_login(&self, params: String) -> (String, bool)  {
+		// Extract the params string into a LoginParams struct
+		let login_params: LoginParams = match serde_json::from_str(&params) {
+			Ok(val) => { val },
+			Err(e) => { 
+				let r = r#"{"code": -32600, "message": "Invalid Request"}"#;
+				return (String::from(r), true);
 			}
+		};
+		// XXX TODO Future (this may need to be done one level up the stack)
+		// Validate username and password
+		// Set agent string
+		// Mark the Worker as authenticated
+		return (String::from("ok"), false);
+        }
+
+	// Handle SUBMIT message
+	//  params contains a solved block header
+	//  we are expecting real solutions at the full difficulty.
+	fn handle_submit(&self, params: String) -> (String, bool) {
+                // Extract the params string into a SubmitParams struct
+		let submit_params: SubmitParams = match serde_json::from_str(&params) {
+			Ok(val) => { val },
+			Err(e) => { 
+				let r = r#"{"code": -32600, "message": "Invalid Request"}"#;
+				return (String::from(r), true);
+			}
+		};
+
+		let mut b: Block;
+		if submit_params.height == self.current_block.header.height {
+			// Reconstruct the block header
+			b = self.current_block.clone();
+			b.header.nonce = submit_params.nonce;
+			//b.header.pow = submit_params.pow;
+			b.header.pow.proof_size = submit_params.pow.len();
+			b.header.pow.nonces = submit_params.pow;
+			info!(
+				LOGGER,
+				"(Server ID: {}) Found proof of work, adding block {}",
+				self.id,
+				b.hash()
+			);
+			let res = self.miner.chain.process_block(b.clone(), chain::NONE);
+			if let Err(e) = res {
+				error!(
+					LOGGER,
+					"(Server ID: {}) Error validating mined block: {:?}", self.id, e
+				);
+				let e = r#"{"code": -1, "message": "Solution validation failed"}"#;
+                                let err = e.to_string();
+                                return (err, true)
+			}
+		} else {
+			warn!(
+				LOGGER,
+				"(Server ID: {}) Found POW for block at height: {} -  but too late",
+				self.id,
+				submit_params.height
+			);
+			let e = r#"{"code": -1, "message": "Solution submitted too late"}"#;
+                        let err = e.to_string();
+                        return (err, true)
 		}
+		return (String::from("ok"), false);
+	} // handle submit a solution
 
-		// Send block to client
-		match stream.write(&bvec) {
-			Ok(_) => {
-				info!(
-					LOGGER,
-					"(Server ID: {}) Sent block to stratum client", self.debug_output_id
-				);
-			}
-			Err(e) => {
-				warn!(
-					LOGGER,
-					"(Server ID: {}) Error in connection with stratum client: {}",
-					self.debug_output_id,
-					e
-				);
-				*stream_err = true;
+	// Purge dead workers
+	fn clean_workers(&mut self) {
+		let mut start = 0;
+		// Remove all workers with failed connections
+	        let mut workers_l = self.workers.lock().unwrap();
+		loop {
+	                for num in start..workers_l.len() {
+	                        if workers_l[num].stream_err == true {
+	                                warn!(
+	                                        LOGGER,
+	                                        "(Server ID: {}) Dropping worker: {}",
+	                                        self.id,
+						workers_l[num].id;
+	                                );
+	                                workers_l.remove(num);
+	                                break;
+	                        }
+				start = num+1;
+	                }
+			if start >= workers_l.len() {
 				return;
 			}
 		}
-	} // End send_block
+        }
+
+	// Broadcast a jobtemplate to all connected workers
+	fn broadcast_job(&mut self) {
+		debug!(
+			LOGGER,
+			"(Server ID: {}) sending block {} to stratum client",
+			self.id,
+			self.current_block.header.height
+		);
+
+		// Package new block into RpcRequest
+	        let job_template = self.build_block_template(self.current_block.header.clone());
+		let job_template_json = serde_json::to_string(&job_template).unwrap();
+		let job_request = RpcRequest {
+			id: String::from("Stratum"),
+			jsonrpc: String::from("2.0"),
+			method: String::from("job"),
+			params: Some(job_template_json),
+		};
+		let job_request_json = serde_json::to_string(&job_request).unwrap();
+
+		// Push the new block to all connected clients
+		let mut workers_l = self.workers.lock().unwrap();
+		for num in 0..workers_l.len() {
+			workers_l[num].send_message(job_request_json.clone());
+		}
+        }
 
 	/// Starts the stratum-server.  Listens for a connection, then enters a
 	/// loop, building a new block on top of the existing chain anytime required and sending that to
 	/// the connected stratum miner, proxy, or pool, and accepts full solutions to be submitted.
-	pub fn run_loop(&self, miner_config: MinerConfig, cuckoo_size: u32, proof_size: usize) {
+	pub fn run_loop(&mut self, miner_config: MinerConfig, cuckoo_size: u32, proof_size: usize) {
 		info!(
 			LOGGER,
 			"(Server ID: {}) Starting stratum server with cuckoo_size = {}, proof_size = {}",
-			self.debug_output_id,
+			self.id,
 			cuckoo_size,
 			proof_size
 		);
 
 		// "globals" for this function
-		let mut b: Block = Block::default();
-		let mut stream_err: bool;
 		let attempt_time_per_block = miner_config.attempt_time_per_block;
 		let mut deadline: i64 = 0;
 		// to prevent the wallet from generating a new HD key derivation for each
@@ -174,134 +452,56 @@ impl StratumServer {
 		// nothing has changed. We only want to create on key_id for each new block,
 		// but not when we rebuild the current block to add new tx.
 		let mut key_id = None;
-
+		let mut current_hash = self.miner.chain.head().unwrap().prev_block_h;
+		let mut latest_hash;
 		let listen_addr = miner_config.stratum_server_addr.clone().unwrap();
-		let listener = TcpListener::bind(listen_addr).unwrap();
+
+		// Start a thread to accept new worker connections
+		let mut workers_th = self.workers.clone();
+		let id_th = self.id.clone();
+		let listener = thread::spawn(move || {
+			accept_workers(id_th, listen_addr, &mut workers_th);
+		});
 		warn!(
 			LOGGER,
 			"Stratum server started on {}",
 			miner_config.stratum_server_addr.unwrap()
 		);
 
-		// Outer Loop - Listen for miner connection
-		for stream in listener.incoming() {
-			stream_err = false;
-			match stream {
-				Err(e) => {
-					// connection failed
-					error!(
-						LOGGER,
-						"(Server ID: {}) Error accepting stratum connection: {:?}",
-						self.debug_output_id,
-						e
-					);
+		// Main Loop
+		loop {
+			// Remove workers with failed connections
+			self.clean_workers();
+
+			// get the latest chain state
+			latest_hash = self.miner.chain.head().unwrap().last_block_h;
+
+			// Build a new block if:
+			//    There is a new block on the chain
+			// or we are rebuilding the current one to include new transactions
+			if current_hash != latest_hash || time::get_time().sec >= deadline {
+				if current_hash != latest_hash {
+					// A brand new block, so we will generate a new key_id
+					key_id = None;
 				}
-				Ok(mut stream) => {
-					info!(
-						LOGGER,
-						"(Server ID: {}) New connection: {}",
-						self.debug_output_id,
-						stream.peer_addr().unwrap()
-					);
-					stream
-						.set_nonblocking(true)
-						.expect("set_nonblocking call failed");
-					let mut current_hash = self.miner.chain.head().unwrap().prev_block_h;
-					let mut latest_hash;
 
-					// Inner Loop
-					loop {
-						trace!(
-							LOGGER,
-							"(Server ID: {}) key_id: {:?}",
-							self.debug_output_id,
-							key_id
-						);
+				let (new_block, block_fees) = self.miner.get_block(key_id.clone());
+				self.current_block = new_block;
+				key_id = block_fees.key_id();
+				current_hash = latest_hash;
+				// set a new deadline for rebuilding with fresh transactions
+				deadline = time::get_time().sec + attempt_time_per_block as i64;
 
-						// Abort connection on error
-						if stream_err == true {
-							warn!(
-								LOGGER,
-								"(Server ID: {}) Resetting stratum server connection",
-								self.debug_output_id
-							);
-							match stream.shutdown(Shutdown::Both) {
-								_ => {}
-							}
-							break;
-						}
+				self.broadcast_job();
+			}
 
-						// get the latest chain state and build a block on top of it
-						latest_hash = self.miner.chain.head().unwrap().last_block_h;
+			// Handle any messages from the workers
+			self.handle_rpc_requests();
 
-						// Build a new block to mine
-						if current_hash != latest_hash || time::get_time().sec >= deadline {
-							// There is a new block on the chain
-							// OR we are rebuilding the current one to include new transactions
-							if current_hash != latest_hash {
-								// A brand new block, so we will generate a new key_id
-								key_id = None;
-							}
-
-							let (new_block, block_fees) = self.miner.get_block(key_id.clone());
-							b = new_block;
-							key_id = block_fees.key_id();
-							current_hash = latest_hash;
-							// set a new deadline for rebuilding with fresh transactions
-							deadline = time::get_time().sec + attempt_time_per_block as i64;
-
-							debug!(
-								LOGGER,
-								"(Server ID: {}) sending block {} to stratum client",
-								self.debug_output_id,
-								b.header.height
-							);
-
-							// Push the new block "b" to the connected client
-							self.send_block(&mut stream, &b, &mut stream_err);
-						}
-
-						// Get a solved block header - if any are waiting
-						// Here, we are expecting real solutions at the full difficulty.
-						match self.get_solution(&mut stream, &mut stream_err) {
-							Some(a_block_header) => {
-								// Got a solution
-								if a_block_header.height == b.header.height {
-									b.header = a_block_header;
-									info!(LOGGER,
-									      "(Server ID: {}) Found valid proof of work, adding block {}",
-									      self.debug_output_id,
-									      b.hash());
-									let res =
-										self.miner.chain.process_block(b.clone(), chain::NONE);
-									if let Err(e) = res {
-										error!(
-											LOGGER,
-											"(Server ID: {}) Error validating mined block: {:?}",
-											self.debug_output_id,
-											e
-										);
-									}
-									debug!(
-										LOGGER,
-										"(Server ID: {}) Resetting key_id in miner to None",
-										self.debug_output_id
-									);
-								} else {
-									warn!(LOGGER,
-									      "(Server ID: {}) Found POW for block at height: {} -  but too late",
-									      self.debug_output_id,
-									      b.header.height);
-								}
-							}
-							None => {} /* No solutions found yet, let the client keep mining the
-							            * same block */
-						} // checking for solution
-		// sleep before restarting loop
-						thread::sleep(Duration::from_millis(500));
-					} // loop forever
-				} // end OK() match stream
-			} // match stream
-		} // for stream incoming
+			// sleep before restarting loop
+			println!("...");
+			thread::sleep(Duration::from_millis(500));
+		} // Main Loop
 	} // fn run_loop()
+
 } // StratumServer
