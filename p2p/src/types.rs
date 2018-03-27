@@ -223,4 +223,7 @@ pub trait NetAdapter: ChainAdapter {
 
 	/// Heard total_difficulty from a connected peer (via ping/pong).
 	fn peer_difficulty(&self, SocketAddr, Difficulty, u64);
+
+	/// Is this peer currently banned?
+	fn is_banned(&self, addr: SocketAddr) -> bool;
 }

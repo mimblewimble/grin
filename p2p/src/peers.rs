@@ -638,4 +638,13 @@ impl NetAdapter for Peers {
 			}
 		}
 	}
+
+	fn is_banned(&self, addr: SocketAddr) -> bool {
+		if let Some(peer) = self.get_connected_peer(&addr) {
+			let mut peer = peer.write().unwrap();
+			peer.is_banned()
+		} else {
+			false
+		}
+	}
 }
