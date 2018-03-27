@@ -515,7 +515,7 @@ pub fn rewind_and_apply_fork(
 		if let Ok(_) = store.is_on_current_chain(&curr_header) {
 			break;
 		} else {
-			hashes.insert(0, curr_header.hash());
+			hashes.insert(0, (curr_header.height, curr_header.hash()));
 			current = curr_header.previous;
 		}
 	}
@@ -524,16 +524,23 @@ pub fn rewind_and_apply_fork(
 
 	debug!(
 		LOGGER,
-		"rewind_and_apply_fork @ {} [{}]",
+		"rewind_and_apply_fork @ {} [{}], was @ {} [{}]",
 		forked_block.height,
 		forked_block.hash(),
+		b.header.height,
+		b.header.hash()
 	);
 
 	// rewind the sum trees up to the forking block
 	ext.rewind(&forked_block)?;
 
+	debug!(
+		LOGGER,
+		"rewind_and_apply_fork: blocks on fork: {:?}", hashes
+	);
+
 	// apply all forked blocks, including this new one
-	for h in hashes {
+	for (_, h) in hashes {
 		let fb = store
 			.get_block(&h)
 			.map_err(|e| Error::StoreErr(e, format!("getting forked blocks")))?;
