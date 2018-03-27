@@ -213,18 +213,18 @@ fn listen_for_addrs(
 				.spawn(move || {
 					let connect_peer = p2p_c.connect(&addr);
 					match connect_peer {
-					Ok(p) => {
-						trace!(LOGGER, "connect_and_req: ok. attempting send_peer_request");
-						if let Ok(p) = p.try_read() {
-							let _ = p.send_peer_request(capab);
+						Ok(p) => {
+							trace!(LOGGER, "connect_and_req: ok. attempting send_peer_request");
+							if let Ok(p) = p.try_read() {
+								let _ = p.send_peer_request(capab);
+							}
+						}
+						Err(e) => {
+							debug!(LOGGER, "connect_and_req: {} is Defunct; {:?}", addr, e);
+							let _ = peers_c.update_state(addr, p2p::State::Defunct);
 						}
 					}
-					Err(e) => {
-						debug!(LOGGER, "connect_and_req: {} is Defunct; {:?}", addr, e);
-						let _ = peers_c.update_state(addr, p2p::State::Defunct);
-					}
-				}
-			});
+				});
 		}
 	}
 }
