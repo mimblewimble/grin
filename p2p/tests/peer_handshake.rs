@@ -76,6 +76,8 @@ fn peer_handshake() {
 		net_adapter,
 	).unwrap();
 
+	assert!(peer.info.user_agent.ends_with(env!("CARGO_PKG_VERSION")));
+
 	peer.start(socket);
 	thread::sleep(time::Duration::from_secs(1));
 
