@@ -206,19 +206,25 @@ fn listen_for_addrs(
 	let pc = peers.peer_count();
 	for addr in rx.try_iter() {
 		if pc < PEER_MAX_COUNT {
-			let connect_peer = p2p.connect(&addr);
-			match connect_peer {
-				Ok(p) => {
-					trace!(LOGGER, "connect_and_req: ok. attempting send_peer_request");
-					if let Ok(p) = p.try_read() {
-						let _ = p.send_peer_request(capab);
+			let peers_c = peers.clone();
+			let p2p_c = p2p.clone();
+			let _ = thread::Builder::new()
+				.name("peer_connect".to_string())
+				.spawn(move || {
+					let connect_peer = p2p_c.connect(&addr);
+					match connect_peer {
+						Ok(p) => {
+							trace!(LOGGER, "connect_and_req: ok. attempting send_peer_request");
+							if let Ok(p) = p.try_read() {
+								let _ = p.send_peer_request(capab);
+							}
+						}
+						Err(e) => {
+							debug!(LOGGER, "connect_and_req: {} is Defunct; {:?}", addr, e);
+							let _ = peers_c.update_state(addr, p2p::State::Defunct);
+						}
 					}
-				}
-				Err(e) => {
-					debug!(LOGGER, "connect_and_req: {} is Defunct; {:?}", addr, e);
-					let _ = peers.update_state(addr, p2p::State::Defunct);
-				}
-			}
+				});
 		}
 	}
 }
