@@ -97,7 +97,7 @@ impl TUIStatusListener for TUIStatusView {
 					)
 				} else if stats.mining_stats.combined_gps == 0.0 {
 					(
-						"Mining Status: Starting miner and awating first solution...".to_string(),
+						"Mining Status: Starting miner and awaiting first solution...".to_string(),
 						" ".to_string(),
 					)
 				} else {
