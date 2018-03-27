@@ -45,6 +45,7 @@ fn peer_handshake() {
 		port: open_port(),
 		peers_allow: None,
 		peers_deny: None,
+		..p2p::P2PConfig::default()
 	};
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
 	let server = Arc::new(

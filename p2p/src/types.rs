@@ -103,13 +103,13 @@ pub struct P2PConfig {
 
 	pub peers_deny: Option<Vec<String>>,
 
-	dandelion_relay_time: Option<i64>,
+	pub dandelion_relay_time: Option<i64>,
 
-	ban_window: Option<i64>,
+	pub ban_window: Option<i64>,
 
-	peer_max_count: Option<u32>,
+	pub peer_max_count: Option<u32>,
 
-	peer_min_preferred_count: Option<u32>,
+	pub peer_min_preferred_count: Option<u32>,
 }
 
 /// Default address for peer-to-peer connections.
