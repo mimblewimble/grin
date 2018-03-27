@@ -433,3 +433,33 @@ fn prepare_block_nosum(
 	b.header.pow = core::core::Proof::random(proof_size);
 	b
 }
+
+#[test]
+#[ignore]
+fn actual_diff_iter_output() {
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	let genesis_block = pow::mine_genesis_block(None).unwrap();
+	let chain = chain::Chain::init(
+		"../.grin".to_string(),
+		Arc::new(NoopAdapter {}),
+		genesis_block,
+		pow::verify_size,
+	).unwrap();
+	let iter = chain.difficulty_iter();
+	let mut last_time = 0;
+	let mut first = true;
+	for i in iter.into_iter() {
+		let elem = i.unwrap();
+		if first {
+			last_time = elem.0;
+			first = false;
+		}
+		println!(
+			"next_difficulty time: {}, diff: {}, duration: {} ",
+			elem.0,
+			elem.1.into_num(),
+			last_time - elem.0
+		);
+		last_time = elem.0;
+	}
+}
