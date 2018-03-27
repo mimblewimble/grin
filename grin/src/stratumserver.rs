@@ -15,19 +15,17 @@
 //! Mining Stratum Server
 use std::thread;
 use std::time::Duration;
-use std::net::{Shutdown, TcpListener, TcpStream};
-use std::io::{ErrorKind, Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::io::{ErrorKind, Write};
 use std::error::Error;
-use std::mem;
 use time;
 use util::LOGGER;
-use std::io::BufReader;
 use std::io::BufRead;
 use bufstream::BufStream;
 use std::sync::{Arc, Mutex};
 use serde_json;
 
-use core::core::{Block, BlockHeader, Proof};
+use core::core::{Block, BlockHeader};
 use core::ser;
 use pow::types::MinerConfig;
 use chain;
@@ -35,77 +33,106 @@ use miner::Miner;
 use miner::*;
 
 // ----------------------------------------
-
-
-// ----------------------------------------
 // http://www.jsonrpc.org/specification
 // RPC Methods
+
 #[derive(Serialize, Deserialize, Debug)]
 struct RpcRequest {
-  id: String,
-  jsonrpc: String,
-  method: String,
-  params: Option<String>,
+	id: String,
+	jsonrpc: String,
+	method: String,
+	params: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct RpcResponse {
-  id: String,
-  jsonrpc: String,
-  result: Option<String>,
-  error: Option<RpcError>,
+	id: String,
+	jsonrpc: String,
+	result: Option<String>,
+	error: Option<RpcError>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct RpcError {
-  code: i32,
-  message: String
+	code: i32,
+	message: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct LoginParams {
-  login: String,
-  pass: String,
-  agent: String
+	login: String,
+	pass: String,
+	agent: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct SubmitParams {
-  height: u64,
-  nonce: u64,
-  pow: Vec<u32>
+	height: u64,
+	nonce: u64,
+	pow: Vec<u32>,
 }
 
+// ----------------------------------------
+// Worker Factory Thread Function
+// Run in a thread. Adds new connections to the workers list
+fn accept_workers(id: String, address: String, workers: &mut Arc<Mutex<Vec<Worker>>>) {
+	let listener = TcpListener::bind(address).expect("Failed to buind");
+	let mut worker_id: u32 = 0;
+	for stream in listener.incoming() {
+		match stream {
+			Ok(stream) => {
+				info!(
+					LOGGER,
+					"(Server ID: {}) New connection: {}",
+					id,
+					stream.peer_addr().unwrap()
+				);
+				stream
+					.set_nonblocking(true)
+					.expect("set_nonblocking call failed");
+				let mut worker = Worker::new(worker_id.to_string(), BufStream::new(stream));
+				workers.lock().unwrap().push(worker);
+				worker_id = worker_id + 1;
+			}
+			Err(e) => {
+				warn!(
+					LOGGER,
+					"(Server ID: {}) Error accepting connection: {:?}", id, e
+				);
+			}
+		}
+		thread::sleep(Duration::from_millis(100));
+	}
+	// close the socket server
+	drop(listener);
+}
 
 // ----------------------------------------
+// Worker Object
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct JobTemplate {
 	pre_nonce: String,
-	post_nonce: String
+	post_nonce: String,
 }
 
 pub struct Worker {
-  id: String,
-  stream: BufStream<TcpStream>,
-  stream_err: bool,
-  authenticated: bool,
+	id: String,
+	stream: BufStream<TcpStream>,
+	stream_err: bool,
+	authenticated: bool,
 }
 
 impl Worker {
-
-
-  pub fn new(
-    id: String,
-    stream: BufStream<TcpStream>
-  ) -> Worker {
-    Worker {
-      id: id,
-      stream: stream,
-      stream_err: false,
-      authenticated: false
-    }
-  }
+	/// Creates a new Stratum Worker.
+	pub fn new(id: String, stream: BufStream<TcpStream>) -> Worker {
+		Worker {
+			id: id,
+			stream: stream,
+			stream_err: false,
+			authenticated: false,
+		}
+	}
 
 	// Get Message from the worker
 	fn read_message(&mut self) -> Option<String> {
@@ -122,9 +149,7 @@ impl Worker {
 			Err(e) => {
 				warn!(
 					LOGGER,
-					"(Server ID: {}) Error in connection with stratum client: {}",
-					self.id,
-					e
+					"(Server ID: {}) Error in connection with stratum client: {}", self.id, e
 				);
 				self.stream_err = true;
 				return None;
@@ -132,20 +157,24 @@ impl Worker {
 		}
 	}
 
-
 	// Send Message to the worker
 	fn send_message(&mut self, message: String) {
 		println!("Send message to client: {:?}", message);
 		match self.stream.write(message.as_bytes()) {
-			Ok(_) => {
-				self.stream.flush();
-			}
+			Ok(_) => match self.stream.flush() {
+				Ok(_) => {}
+				Err(e) => {
+					warn!(
+						LOGGER,
+						"(Server ID: {}) Error in connection with stratum client: {}", self.id, e
+					);
+					self.stream_err = true;
+				}
+			},
 			Err(e) => {
 				warn!(
 					LOGGER,
-					"(Server ID: {}) Error in connection with stratum client: {}",
-					self.id,
-					e
+					"(Server ID: {}) Error in connection with stratum client: {}", self.id, e
 				);
 				self.stream_err = true;
 				return;
@@ -154,46 +183,8 @@ impl Worker {
 	}
 } // impl Worker
 
-
 // ----------------------------------------
-
-
-        // Run in a thread. Adds new connections to the workers list
-	fn accept_workers(id: String, address: String, workers: &mut Arc<Mutex<Vec<Worker>>>) {
-		let listener = TcpListener::bind(address).expect("Failed to buind");
-		let mut worker_id: u32 = 0;
-		for stream in listener.incoming() {
-			match stream {
-				Ok(stream) => {
-					info!(
-						LOGGER,
-						"(Server ID: {}) New connection: {}",
-						id,
-						stream.peer_addr().unwrap()
-					);
-					stream.set_nonblocking(true).expect("set_nonblocking call failed");
-					let mut worker = Worker::new(worker_id.to_string(), BufStream::new(stream));
-					workers.lock().unwrap().push(worker);
-					worker_id = worker_id + 1;
-				}
-				Err(e) => {
-					warn!(
-						LOGGER,
-						"(Server ID: {}) Error accepting connection: {:?}",
-						id,
-						e
-					);
-	
-				}
-			}
-			thread::sleep(Duration::from_millis(100));
-	 	}
-		// close the socket server
-		drop(listener);
-	}
-
-// ----------------------------------------
-
+// Grin Stratum Server
 
 pub struct StratumServer {
 	id: String,
@@ -228,40 +219,48 @@ impl StratumServer {
 
 	// Handle an RPC request message from the worker
 	fn handle_rpc_requests(&mut self) {
-                // Get and respond to messages from workers
-                let mut workers_l = self.workers.lock().unwrap();
+		// Get and respond to messages from workers
+		let mut workers_l = self.workers.lock().unwrap();
 		for num in 0..workers_l.len() {
 			match workers_l[num].read_message() {
 				Some(the_message) => {
 					println!("Handle:  {:?}", the_message);
-	
+
+					// Decompose the request from the JSONRpc wrapper
 					let request: RpcRequest = match serde_json::from_str(&the_message) {
-						Ok(request) =>  { request },
-						Err(e) => { 
+						Ok(request) => request,
+						Err(e) => {
 							// not a valid JSON RpcRequest - disconnect the worker
 							println!("Invalid Request: {:?}", e.description());
 							workers_l[num].stream_err = true;
 							continue;
 						}
-      	                          	};
-
-					let response: String;
-					let err: bool;
-					let (response, err) = match request.method.as_str() {
-						// Call the handle_method
-						"login" =>		{ self.handle_login(request.params.unwrap()) },
-						"submit" =>		{ self.handle_submit(request.params.unwrap()) },
-						"keepalive" =>		{ self.handle_keepalive() },
-						"getjobtemplate" => 	{ self.handle_getjobtemplate(self.current_block.header.clone()) },
-						"status" =>		{ self.handle_status() },
-						_ => {  // Called undefined method
-							let e = r#"{"code": -32601, "message": "Method not found"}"#; 
-							let err = e.to_string();
-							(err, true)
-						     },
 					};
 
-					// Package reply as RpcResponse json 
+					// Call the handler function for given method
+					let (response, err) = match request.method.as_str() {
+						"login" => {
+							let (response, err) = self.handle_login(request.params.unwrap());
+							// XXX TODO Future - Validate username and password
+							workers_l[num].authenticated = true;
+							(response, err)
+						}
+						"submit" => self.handle_submit(request.params.unwrap()),
+						"keepalive" => self.handle_keepalive(),
+						"getjobtemplate" => {
+							let b = self.current_block.header.clone();
+							self.handle_getjobtemplate(b)
+						}
+						"status" => self.handle_status(),
+						_ => {
+							// Called undefined method
+							let e = r#"{"code": -32601, "message": "Method not found"}"#;
+							let err = e.to_string();
+							(err, true)
+						}
+					};
+
+					// Package the reply as RpcResponse json
 					let rpc_response: String;
 					if err == true {
 						let rpc_err: RpcError = serde_json::from_str(&response).unwrap();
@@ -282,10 +281,10 @@ impl StratumServer {
 						rpc_response = serde_json::to_string(&resp).unwrap();
 					}
 
-					// Send the response
+					// Send the reply
 					println!("rpc_response = {:?}", rpc_response);
 					workers_l[num].send_message(rpc_response);
-				}
+				},
 				None => {} // No message for us from this worker
 			}
 		}
@@ -293,11 +292,11 @@ impl StratumServer {
 
 	// Handle STATUS message
 	fn handle_status(&self) -> (String, bool) {
-		// XXX TODO:  Return stratum status and stats in json for use
-		//  by a dashboard or healthcheck at least.
-		//  For now, just return "ok"
+		// XXX TODO:  Return stratum and worker status and stats in json for use
+		//   by a dashboard or healthcheck at least.
+		// For now, just return "ok"
 		return (String::from("ok"), false);
-        }
+	}
 
 	// Handle GETJOBTEMPLATE message
 	fn handle_getjobtemplate(&self, bh: BlockHeader) -> (String, bool) {
@@ -305,38 +304,34 @@ impl StratumServer {
 		let job_template = self.build_block_template(bh);
 		let job_template_json = serde_json::to_string(&job_template).unwrap();
 		return (job_template_json, false);
-        }
+	}
 
 	// Handle KEEPALIVE message
 	fn handle_keepalive(&self) -> (String, bool) {
 		return (String::from("ok"), false);
-        }
+	}
 
 	// Handle LOGIN message
-	fn handle_login(&self, params: String) -> (String, bool)  {
+	fn handle_login(&self, params: String) -> (String, bool) {
 		// Extract the params string into a LoginParams struct
-		let login_params: LoginParams = match serde_json::from_str(&params) {
-			Ok(val) => { val },
-			Err(e) => { 
+		let _login_params: LoginParams = match serde_json::from_str(&params) {
+			Ok(val) => val,
+			Err(_e) => {
 				let r = r#"{"code": -32600, "message": "Invalid Request"}"#;
 				return (String::from(r), true);
 			}
 		};
-		// XXX TODO Future (this may need to be done one level up the stack)
-		// Validate username and password
-		// Set agent string
-		// Mark the Worker as authenticated
 		return (String::from("ok"), false);
-        }
+	}
 
 	// Handle SUBMIT message
 	//  params contains a solved block header
 	//  we are expecting real solutions at the full difficulty.
 	fn handle_submit(&self, params: String) -> (String, bool) {
-                // Extract the params string into a SubmitParams struct
+		// Extract the params string into a SubmitParams struct
 		let submit_params: SubmitParams = match serde_json::from_str(&params) {
-			Ok(val) => { val },
-			Err(e) => { 
+			Ok(val) => val,
+			Err(_e) => {
 				let r = r#"{"code": -32600, "message": "Invalid Request"}"#;
 				return (String::from(r), true);
 			}
@@ -344,10 +339,9 @@ impl StratumServer {
 
 		let mut b: Block;
 		if submit_params.height == self.current_block.header.height {
-			// Reconstruct the block header
+			// Reconstruct the block header with this nonce and pow added
 			b = self.current_block.clone();
 			b.header.nonce = submit_params.nonce;
-			//b.header.pow = submit_params.pow;
 			b.header.pow.proof_size = submit_params.pow.len();
 			b.header.pow.nonces = submit_params.pow;
 			info!(
@@ -356,6 +350,7 @@ impl StratumServer {
 				self.id,
 				b.hash()
 			);
+			// Submit the block
 			let res = self.miner.chain.process_block(b.clone(), chain::NONE);
 			if let Err(e) = res {
 				error!(
@@ -363,8 +358,8 @@ impl StratumServer {
 					"(Server ID: {}) Error validating mined block: {:?}", self.id, e
 				);
 				let e = r#"{"code": -1, "message": "Solution validation failed"}"#;
-                                let err = e.to_string();
-                                return (err, true)
+				let err = e.to_string();
+				return (err, true);
 			}
 		} else {
 			warn!(
@@ -374,38 +369,37 @@ impl StratumServer {
 				submit_params.height
 			);
 			let e = r#"{"code": -1, "message": "Solution submitted too late"}"#;
-                        let err = e.to_string();
-                        return (err, true)
+			let err = e.to_string();
+			return (err, true);
 		}
 		return (String::from("ok"), false);
 	} // handle submit a solution
 
-	// Purge dead workers
+	// Purge dead workers - remove all workers marked in err state
 	fn clean_workers(&mut self) {
 		let mut start = 0;
-		// Remove all workers with failed connections
-	        let mut workers_l = self.workers.lock().unwrap();
+		let mut workers_l = self.workers.lock().unwrap();
 		loop {
-	                for num in start..workers_l.len() {
-	                        if workers_l[num].stream_err == true {
-	                                warn!(
+			for num in start..workers_l.len() {
+				if workers_l[num].stream_err == true {
+					warn!(
 	                                        LOGGER,
 	                                        "(Server ID: {}) Dropping worker: {}",
 	                                        self.id,
 						workers_l[num].id;
 	                                );
-	                                workers_l.remove(num);
-	                                break;
-	                        }
-				start = num+1;
-	                }
+					workers_l.remove(num);
+					break;
+				}
+				start = num + 1;
+			}
 			if start >= workers_l.len() {
 				return;
 			}
 		}
-        }
+	}
 
-	// Broadcast a jobtemplate to all connected workers
+	// Broadcast a jobtemplate RpcRequest to all connected workers
 	fn broadcast_job(&mut self) {
 		debug!(
 			LOGGER,
@@ -415,7 +409,7 @@ impl StratumServer {
 		);
 
 		// Package new block into RpcRequest
-	        let job_template = self.build_block_template(self.current_block.header.clone());
+		let job_template = self.build_block_template(self.current_block.header.clone());
 		let job_template_json = serde_json::to_string(&job_template).unwrap();
 		let job_request = RpcRequest {
 			id: String::from("Stratum"),
@@ -430,7 +424,7 @@ impl StratumServer {
 		for num in 0..workers_l.len() {
 			workers_l[num].send_message(job_request_json.clone());
 		}
-        }
+	}
 
 	/// Starts the stratum-server.  Listens for a connection, then enters a
 	/// loop, building a new block on top of the existing chain anytime required and sending that to
@@ -459,9 +453,11 @@ impl StratumServer {
 		// Start a thread to accept new worker connections
 		let mut workers_th = self.workers.clone();
 		let id_th = self.id.clone();
-		let listener = thread::spawn(move || {
+		let _listener_th = thread::spawn(move || {
 			accept_workers(id_th, listen_addr, &mut workers_th);
 		});
+
+		// We have started
 		warn!(
 			LOGGER,
 			"Stratum server started on {}",
@@ -478,7 +474,7 @@ impl StratumServer {
 
 			// Build a new block if:
 			//    There is a new block on the chain
-			// or we are rebuilding the current one to include new transactions
+			// or We are rebuilding the current one to include new transactions
 			if current_hash != latest_hash || time::get_time().sec >= deadline {
 				if current_hash != latest_hash {
 					// A brand new block, so we will generate a new key_id
@@ -492,6 +488,7 @@ impl StratumServer {
 				// set a new deadline for rebuilding with fresh transactions
 				deadline = time::get_time().sec + attempt_time_per_block as i64;
 
+				// Send this job to all connected workers
 				self.broadcast_job();
 			}
 
@@ -503,5 +500,4 @@ impl StratumServer {
 			thread::sleep(Duration::from_millis(500));
 		} // Main Loop
 	} // fn run_loop()
-
 } // StratumServer
