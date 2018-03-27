@@ -128,7 +128,7 @@ fn monitor_peers(
 	peers.clean_peers(config.peer_max_count() as usize);
 
 	// not enough peers, getting more from db
-	if peers.peer_count() >= config.peer_preferred_count() {
+	if peers.peer_count() >= config.peer_min_preferred_count() {
 		return;
 	}
 

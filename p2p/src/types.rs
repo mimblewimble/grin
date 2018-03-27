@@ -43,8 +43,8 @@ const BAN_WINDOW: i64 = 10800;
 /// The max peer count
 const PEER_MAX_COUNT: u32 = 25;
 
-/// max preferred peer count
-const PEER_PREFERRED_COUNT: u32 = 8;
+/// min preferred peer count
+const PEER_MIN_PREFERRED_COUNT: u32 = 8;
 
 #[derive(Debug)]
 pub enum Error {
@@ -109,7 +109,7 @@ pub struct P2PConfig {
 
 	peer_max_count: Option<u32>,
 
-	peer_preferred_count: Option<u32>,
+	peer_min_preferred_count: Option<u32>,
 }
 
 /// Default address for peer-to-peer connections.
@@ -124,7 +124,7 @@ impl Default for P2PConfig {
 			dandelion_relay_time: Some(DANDELION_RELAY_TIME),
 			ban_window: Some(BAN_WINDOW),
 			peer_max_count: Some(PEER_MAX_COUNT),
-			peer_preferred_count: Some(PEER_PREFERRED_COUNT),
+			peer_min_preferred_count: Some(PEER_MIN_PREFERRED_COUNT),
 		}
 	}
 }
@@ -157,10 +157,10 @@ impl P2PConfig {
 	}
 
 	/// return peer_preferred_count
-	pub fn peer_preferred_count(&self) -> u32 {
-		match self.peer_preferred_count {
+	pub fn peer_min_preferred_count(&self) -> u32 {
+		match self.peer_min_preferred_count {
 			Some(n) => n,
-			None => PEER_PREFERRED_COUNT,
+			None => PEER_MIN_PREFERRED_COUNT,
 		}
 	}
 }
