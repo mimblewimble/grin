@@ -172,7 +172,7 @@ impl Miner {
 			if let Some(s) = job_handle.get_solution() {
 				let proof = Proof::new(s.solution_nonces.to_vec());
 				let proof_diff = proof.clone().to_difficulty();
-				trace!(
+				debug!(
 					LOGGER,
 					"Found cuckoo solution! nonce {} gave difficulty {} (block diff {})",
 					s.get_nonce_as_u64(),
@@ -296,7 +296,7 @@ impl Miner {
 			let pow_hash = b.header.pre_pow_hash();
 			if let Ok(proof) = plugin_miner.mine(&pow_hash[..]) {
 				let proof_diff = proof.clone().to_difficulty();
-				trace!(
+				debug!(
 					LOGGER,
 					"Found cuckoo solution for nonce {} of difficulty {} (cumulative diff {})",
 					b.header.nonce,
