@@ -435,6 +435,7 @@ fn prepare_block_nosum(
 }
 
 #[test]
+#[ignore]
 fn actual_diff_iter_output() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis_block = pow::mine_genesis_block(None).unwrap();
