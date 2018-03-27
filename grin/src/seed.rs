@@ -30,10 +30,6 @@ use hyper;
 use p2p;
 use util::LOGGER;
 
-const DANDELION_RELAY_TIME: i64 = 600;
-const BAN_WINDOW: i64 = 10800;
-const PEER_MAX_COUNT: u32 = 25;
-const PEER_PREFERRED_COUNT: u32 = 8;
 const SEEDS_URL: &'static str = "http://grin-tech.org/seeds.txt";
 
 pub fn connect_and_monitor(
@@ -63,9 +59,14 @@ pub fn connect_and_monitor(
 					listen_for_addrs(peers.clone(), p2p_server.clone(), capabilities, &rx);
 
 					// monitor additional peers if we need to add more
-					monitor_peers(peers.clone(), capabilities, tx.clone());
+					monitor_peers(
+						peers.clone(),
+						p2p_server.config.clone(),
+						capabilities,
+						tx.clone(),
+					);
 
-					update_dandelion_relay(peers.clone());
+					update_dandelion_relay(peers.clone(), p2p_server.config.clone());
 
 					prev = current_time;
 				}
@@ -81,6 +82,7 @@ pub fn connect_and_monitor(
 
 fn monitor_peers(
 	peers: Arc<p2p::Peers>,
+	config: p2p::P2PConfig,
 	capabilities: p2p::Capabilities,
 	tx: mpsc::Sender<SocketAddr>,
 ) {
@@ -95,7 +97,7 @@ fn monitor_peers(
 			p2p::State::Banned => {
 				let interval = now_utc().to_timespec().sec - x.last_banned;
 				// Unban peer
-				if interval >= BAN_WINDOW {
+				if interval >= config.ban_window() {
 					peers.unban_peer(&x.addr);
 					debug!(
 						LOGGER,
@@ -123,10 +125,10 @@ fn monitor_peers(
 	);
 
 	// maintenance step first, clean up p2p server peers
-	peers.clean_peers(PEER_MAX_COUNT as usize);
+	peers.clean_peers(config.peer_max_count() as usize);
 
 	// not enough peers, getting more from db
-	if peers.peer_count() >= PEER_PREFERRED_COUNT {
+	if peers.peer_count() >= config.peer_min_preferred_count() {
 		return;
 	}
 
@@ -150,7 +152,7 @@ fn monitor_peers(
 	}
 }
 
-fn update_dandelion_relay(peers: Arc<p2p::Peers>) {
+fn update_dandelion_relay(peers: Arc<p2p::Peers>, config: p2p::P2PConfig) {
 	// Dandelion Relay Updater
 	let dandelion_relay = peers.get_dandelion_relay();
 	if dandelion_relay.is_empty() {
@@ -159,7 +161,7 @@ fn update_dandelion_relay(peers: Arc<p2p::Peers>) {
 	} else {
 		for last_added in dandelion_relay.keys() {
 			let dandelion_interval = now_utc().to_timespec().sec - last_added;
-			if dandelion_interval >= DANDELION_RELAY_TIME {
+			if dandelion_interval >= config.dandelion_relay_time() {
 				debug!(LOGGER, "monitor_peers: updating expired dandelion relay");
 				peers.update_dandelion_relay();
 			}
@@ -205,7 +207,7 @@ fn listen_for_addrs(
 ) {
 	let pc = peers.peer_count();
 	for addr in rx.try_iter() {
-		if pc < PEER_MAX_COUNT {
+		if pc < p2p.config.peer_max_count() {
 			let peers_c = peers.clone();
 			let p2p_c = p2p.clone();
 			let _ = thread::Builder::new()

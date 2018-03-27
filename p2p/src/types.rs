@@ -34,6 +34,18 @@ pub const MAX_BLOCK_BODIES: u32 = 16;
 /// Maximum number of peer addresses a peer should ever send
 pub const MAX_PEER_ADDRS: u32 = 256;
 
+/// Dandelion relay time
+const DANDELION_RELAY_TIME: i64 = 600;
+
+/// How long a banned peer should be banned for
+const BAN_WINDOW: i64 = 10800;
+
+/// The max peer count
+const PEER_MAX_COUNT: u32 = 25;
+
+/// min preferred peer count
+const PEER_MIN_PREFERRED_COUNT: u32 = 8;
+
 #[derive(Debug)]
 pub enum Error {
 	Serialization(ser::Error),
@@ -90,6 +102,14 @@ pub struct P2PConfig {
 	pub peers_allow: Option<Vec<String>>,
 
 	pub peers_deny: Option<Vec<String>>,
+
+	pub dandelion_relay_time: Option<i64>,
+
+	pub ban_window: Option<i64>,
+
+	pub peer_max_count: Option<u32>,
+
+	pub peer_min_preferred_count: Option<u32>,
 }
 
 /// Default address for peer-to-peer connections.
@@ -101,6 +121,46 @@ impl Default for P2PConfig {
 			port: 13414,
 			peers_allow: None,
 			peers_deny: None,
+			dandelion_relay_time: Some(DANDELION_RELAY_TIME),
+			ban_window: Some(BAN_WINDOW),
+			peer_max_count: Some(PEER_MAX_COUNT),
+			peer_min_preferred_count: Some(PEER_MIN_PREFERRED_COUNT),
+		}
+	}
+}
+
+/// Note certain fields are options just so they don't have to be
+/// included in grin.toml, but we don't want them to ever return none
+impl P2PConfig {
+	/// return dandelion_relay_time
+	pub fn dandelion_relay_time(&self) -> i64 {
+		match self.dandelion_relay_time {
+			Some(n) => n,
+			None => DANDELION_RELAY_TIME,
+		}
+	}
+
+	/// return ban window
+	pub fn ban_window(&self) -> i64 {
+		match self.ban_window {
+			Some(n) => n,
+			None => BAN_WINDOW,
+		}
+	}
+
+	/// return peer_max_count
+	pub fn peer_max_count(&self) -> u32 {
+		match self.peer_max_count {
+			Some(n) => n,
+			None => PEER_MAX_COUNT,
+		}
+	}
+
+	/// return peer_preferred_count
+	pub fn peer_min_preferred_count(&self) -> u32 {
+		match self.peer_min_preferred_count {
+			Some(n) => n,
+			None => PEER_MIN_PREFERRED_COUNT,
 		}
 	}
 }
