@@ -164,7 +164,9 @@ pub fn sync_block_header(
 }
 
 /// Process block header as part of "header first" block propagation.
-pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
+/// We validate the header but we do not store it or update header head based on this.
+/// We will update these once we get the block back after requesting it.
+pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<(), Error> {
 	debug!(
 		LOGGER,
 		"pipe: process_block_header: {} at {}",
@@ -173,19 +175,7 @@ pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<O
 	);
 
 	check_header_known(bh.hash(), &mut ctx)?;
-	validate_header(&bh, &mut ctx)?;
-
-	debug!(
-		LOGGER,
-		"pipe: process_block_header: {} at {} is valid, saving.",
-		bh.hash(),
-		bh.height,
-	);
-
-	add_block_header(bh, &mut ctx)?;
-
-	// now update the header_head (if new header with most work)
-	update_header_head(bh, &mut ctx)
+	validate_header(&bh, &mut ctx)
 }
 
 /// Quick in-memory check to fast-reject any block header we've already handled
