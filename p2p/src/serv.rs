@@ -244,4 +244,7 @@ impl NetAdapter for DummyAdapter {
 	}
 	fn peer_addrs_received(&self, _: Vec<SocketAddr>) {}
 	fn peer_difficulty(&self, _: SocketAddr, _: Difficulty, _: u64) {}
+	fn is_banned(&self, _: SocketAddr) -> bool {
+		false
+	}
 }
