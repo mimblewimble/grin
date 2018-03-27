@@ -339,11 +339,7 @@ impl Chain {
 	}
 
 	/// Process a block header received during "header first" propagation.
-	pub fn process_block_header(
-		&self,
-		bh: &BlockHeader,
-		opts: Options,
-	) -> Result<Option<Tip>, Error> {
+	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
 		let header_head = self.get_header_head()?;
 		let ctx = self.ctx_from_head(header_head, opts);
 		pipe::process_block_header(bh, ctx)
