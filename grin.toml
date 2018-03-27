@@ -192,7 +192,7 @@ burn_reward = false
 #instead
 #[[mining.miner_plugin_config]]
 #type_filter = "mean_cpu"
-#[mining.cuckoo_miner_plugin_config.device_parameters.0]
+#[mining.miner_plugin_config.device_parameters.0]
 #NUM_THREADS = 1
 
 #As above, but for older processors
