@@ -621,15 +621,17 @@ impl NetAdapter for Peers {
 	}
 
 	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty, height: u64) {
-		debug!(
-			LOGGER,
-			"ping/pong: {}: {} @ {} vs us: {} @ {}",
-			addr,
-			diff,
-			height,
-			self.total_difficulty(),
-			self.total_height()
-		);
+		if diff != self.total_difficulty() || height != self.total_height() {
+			debug!(
+				LOGGER,
+				"ping/pong: {}: {} @ {} vs us: {} @ {}",
+				addr,
+				diff,
+				height,
+				self.total_difficulty(),
+				self.total_height()
+			);
+		}
 
 		if diff.into_num() > 0 {
 			if let Some(peer) = self.get_connected_peer(&addr) {
