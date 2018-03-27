@@ -132,7 +132,7 @@ impl Miner {
 		b: &mut Block,
 		cuckoo_size: u32,
 		head: &BlockHeader,
-		latest_hash: &Hash,
+		latest_hash: &mut Hash,
 		attempt_time_per_block: u32,
 		mining_stats: Arc<RwLock<MiningStats>>,
 	) -> Option<Proof> {
@@ -235,6 +235,8 @@ impl Miner {
 			}
 			// avoid busy wait
 			thread::sleep(Duration::from_millis(100));
+
+			*latest_hash = self.chain.head().unwrap().last_block_h;
 		}
 		if sol == None {
 			debug!(
@@ -529,7 +531,7 @@ impl Miner {
 						&mut b,
 						cuckoo_size,
 						&head,
-						&latest_hash,
+						&mut latest_hash,
 						miner_config.attempt_time_per_block,
 						mining_stats.clone(),
 					);
