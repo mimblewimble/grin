@@ -623,8 +623,7 @@ impl NetAdapter for Peers {
 	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty, height: u64) {
 		debug!(
 			LOGGER,
-			"peer total_diff @ height (ping/pong): {}: {} @ {} \
-			 vs us: {} @ {}",
+			"ping/pong: {}: {} @ {} vs us: {} @ {}",
 			addr,
 			diff,
 			height,
