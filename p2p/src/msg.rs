@@ -31,8 +31,8 @@ use types::*;
 /// Current latest version of the protocol
 pub const PROTOCOL_VERSION: u32 = 1;
 
-/// Grin's user agent with current version (TODO externalize)
-pub const USER_AGENT: &'static str = "MW/Grin 0.1";
+/// Grin's user agent with current version
+pub const USER_AGENT: &'static str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION"));
 
 /// Magic number expected in the header of every message
 const MAGIC: [u8; 2] = [0x1e, 0xc5];
