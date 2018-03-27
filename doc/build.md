@@ -13,7 +13,7 @@ What's working so far?
 ## Requirements
 
 But basically:
-- rust 1.21+ (use [rustup]((https://www.rustup.rs/))- i.e. `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
+- rust 1.24+ (use [rustup]((https://www.rustup.rs/))- i.e. `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
 - cmake 3.2+ (for [Cuckoo mining plugins]((https://github.com/mimblewimble/cuckoo-miner)))
 - rocksdb + libs for compiling rocksdb:
   - clang (clanglib or clang-devel or libclang-dev)
