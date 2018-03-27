@@ -44,6 +44,11 @@ fn repeat(
 
 // Creates a new chain with a genesis at a simulated difficulty
 fn create_chain_sim(diff: u64) -> Vec<Result<(u64, Difficulty), TargetError>> {
+	println!(
+		"adding create: {}, {}",
+		time::get_time().sec,
+		Difficulty::from_num(diff)
+	);
 	vec![
 		Ok((time::get_time().sec as u64, Difficulty::from_num(diff))),
 	]
@@ -57,10 +62,10 @@ fn add_block(
 ) -> Vec<Result<(u64, Difficulty), TargetError>> {
 	let mut return_chain = chain_sim.clone();
 	// get last interval
-	let last_elem = chain_sim.first().as_ref().unwrap().as_ref().unwrap();
-	return_chain.insert(0, Ok((last_elem.0 + interval, last_elem.clone().1)));
 	let diff = next_difficulty(return_chain.clone()).unwrap();
-	return_chain[0] = Ok((last_elem.0 + interval, diff));
+	let last_elem = chain_sim.first().as_ref().unwrap().as_ref().unwrap();
+	let time = last_elem.0 + interval;
+	return_chain.insert(0, Ok((time, diff)));
 	return_chain
 }
 
@@ -103,7 +108,7 @@ fn print_chain_sim(chain_sim: &Vec<Result<(u64, Difficulty), TargetError>>) {
 			first = false;
 		}
 		println!(
-			"Height: {}, Time: {}, Interval: {}, Next network difficulty:{}",
+			"Height: {}, Time: {}, Interval: {}, Network difficulty:{}",
 			i,
 			block.0,
 			block.0 - last_time,
@@ -201,8 +206,9 @@ fn adjustment_scenarios() {
 	let testnet2_intervals = [
 		2880, 16701, 1882, 3466, 614, 605, 1551, 538, 931, 23, 690, 1397, 2112, 2058, 605, 721,
 		2148, 1605, 134, 1234, 1569, 482, 1775, 2732, 540, 958, 883, 3475, 518, 1346, 1926, 780,
-		865, 269, 141, 105, 781, 289, 256, 709, 68, 165, 1813, 3899, 1458, 955, 2336, 239, 674,
-		1059, 157, 214, 15, 157, 558, 1945, 1677,
+		865, 269, 1079, 141, 105, 781, 289, 256, 709, 68, 165, 1813, 3899, 1458, 955, 2336, 239,
+		674, 1059, 157, 214, 15, 157, 558, 1945, 1677, 1825, 1307, 1973, 660, 77, 3134, 410, 347,
+		537, 649, 325, 370, 2271, 106, 19, 329,
 	];
 
 	global::set_mining_mode(global::ChainTypes::Testnet2);
