@@ -623,8 +623,7 @@ impl NetAdapter for Peers {
 	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty, height: u64) {
 		debug!(
 			LOGGER,
-			"peer total_diff @ height (ping/pong): {}: {} @ {} \
-			 vs us: {} @ {}",
+			"ping/pong: {}: {} @ {} vs us: {} @ {}",
 			addr,
 			diff,
 			height,
@@ -637,6 +636,15 @@ impl NetAdapter for Peers {
 				let mut peer = peer.write().unwrap();
 				peer.info.total_difficulty = diff;
 			}
+		}
+	}
+
+	fn is_banned(&self, addr: SocketAddr) -> bool {
+		if let Some(peer) = self.get_connected_peer(&addr) {
+			let mut peer = peer.write().unwrap();
+			peer.is_banned()
+		} else {
+			false
 		}
 	}
 }

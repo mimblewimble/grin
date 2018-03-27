@@ -442,4 +442,8 @@ impl NetAdapter for TrackingAdapter {
 	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty, height: u64) {
 		self.adapter.peer_difficulty(addr, diff, height)
 	}
+
+	fn is_banned(&self, addr: SocketAddr) -> bool {
+		self.adapter.is_banned(addr)
+	}
 }
