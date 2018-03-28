@@ -414,7 +414,7 @@ impl Block {
 	/// Hydrate a block from a compact block.
 	/// Note: caller must validate the block themselves, we do not validate it here.
 	pub fn hydrate_from(cb: CompactBlock, txs: Vec<Transaction>) -> Block {
-		debug!(
+		trace!(
 			LOGGER,
 			"block: hydrate_from: {}, {} txs",
 			cb.hash(),
