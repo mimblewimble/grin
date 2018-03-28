@@ -142,7 +142,7 @@ pub struct Tracker {
 	/// Bytes we've received.
 	pub received_bytes: Arc<Mutex<u64>>,
 	/// Channel to allow sending data through the connection
-	pub send_channel: mpsc::Sender<Vec<u8>>,
+	pub send_channel: mpsc::SyncSender<Vec<u8>>,
 	/// Channel to close the connection
 	pub close_channel: mpsc::Sender<()>,
 	/// Channel to check for errors on the connection
@@ -167,7 +167,7 @@ pub fn listen<H>(stream: TcpStream, handler: H) -> Tracker
 where
 	H: MessageHandler,
 {
-	let (send_tx, send_rx) = mpsc::channel();
+	let (send_tx, send_rx) = mpsc::sync_channel(10);
 	let (close_tx, close_rx) = mpsc::channel();
 	let (error_tx, error_rx) = mpsc::channel();
 
