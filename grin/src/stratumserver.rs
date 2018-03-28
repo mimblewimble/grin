@@ -74,14 +74,15 @@ struct SubmitParams {
 
 // ----------------------------------------
 // Worker Factory Thread Function
+
 // Run in a thread. Adds new connections to the workers list
 fn accept_workers(id: String, address: String, workers: &mut Arc<Mutex<Vec<Worker>>>) {
-	let listener = TcpListener::bind(address).expect("Failed to buind");
+	let listener = TcpListener::bind(address).expect("Failed to bind to listen address");
 	let mut worker_id: u32 = 0;
 	for stream in listener.incoming() {
 		match stream {
 			Ok(stream) => {
-				info!(
+				warn!(
 					LOGGER,
 					"(Server ID: {}) New connection: {}",
 					id,
@@ -101,14 +102,13 @@ fn accept_workers(id: String, address: String, workers: &mut Arc<Mutex<Vec<Worke
 				);
 			}
 		}
-		thread::sleep(Duration::from_millis(100));
 	}
 	// close the socket server
 	drop(listener);
 }
 
 // ----------------------------------------
-// Worker Object
+// Worker Object - a connected stratum client - a miner, pool, proxy, etc...
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct JobTemplate {
@@ -119,7 +119,7 @@ pub struct JobTemplate {
 pub struct Worker {
 	id: String,
 	stream: BufStream<TcpStream>,
-	stream_err: bool,
+	error: bool,
 	authenticated: bool,
 }
 
@@ -129,13 +129,14 @@ impl Worker {
 		Worker {
 			id: id,
 			stream: stream,
-			stream_err: false,
+			error: false,
 			authenticated: false,
 		}
 	}
 
 	// Get Message from the worker
 	fn read_message(&mut self) -> Option<String> {
+		// Read and return a single message or None
 		let mut line = String::new();
 		match self.stream.read_line(&mut line) {
 			Ok(_) => {
@@ -150,7 +151,7 @@ impl Worker {
 					LOGGER,
 					"(Server ID: {}) Error in connection with stratum client: {}", self.id, e
 				);
-				self.stream_err = true;
+				self.error = true;
 				return None;
 			}
 		}
@@ -158,6 +159,7 @@ impl Worker {
 
 	// Send Message to the worker
 	fn send_message(&mut self, message: String) {
+		// Write and Flush the message
 		match self.stream.write(message.as_bytes()) {
 			Ok(_) => match self.stream.flush() {
 				Ok(_) => {}
@@ -166,7 +168,7 @@ impl Worker {
 						LOGGER,
 						"(Server ID: {}) Error in connection with stratum client: {}", self.id, e
 					);
-					self.stream_err = true;
+					self.error = true;
 				}
 			},
 			Err(e) => {
@@ -174,7 +176,7 @@ impl Worker {
 					LOGGER,
 					"(Server ID: {}) Error in connection with stratum client: {}", self.id, e
 				);
-				self.stream_err = true;
+				self.error = true;
 				return;
 			}
 		}
@@ -204,7 +206,7 @@ impl StratumServer {
 
 	// Build and return a JobTemplate for mining the current block
 	fn build_block_template(&self, bh: BlockHeader) -> JobTemplate {
-		// Serialize the block header and JSONize
+		// Serialize the block header into pre and post nonce strings
 		let mut header_parts = HeaderPartWriter::default();
 		ser::Writeable::write(&bh, &mut header_parts).unwrap();
 		let (pre, post) = header_parts.parts_as_hex_strings();
@@ -215,9 +217,8 @@ impl StratumServer {
 		return job_template;
 	}
 
-	// Handle an RPC request message from the worker
+	// Handle an RPC request message from the worker(s)
 	fn handle_rpc_requests(&mut self) {
-		// Get and respond to messages from workers
 		let mut workers_l = self.workers.lock().unwrap();
 		for num in 0..workers_l.len() {
 			match workers_l[num].read_message() {
@@ -229,22 +230,26 @@ impl StratumServer {
 							// not a valid JSON RpcRequest - disconnect the worker
 							warn!(
 								LOGGER,
-								"(Server ID: {}) Failed to parse JSONRpc: {}", self.id, e.description()
+								"(Server ID: {}) Failed to parse JSONRpc: {}",
+								self.id,
+								e.description()
 							);
-							workers_l[num].stream_err = true;
+							workers_l[num].error = true;
 							continue;
 						}
 					};
 
-					// Call the handler function for given method
+					// Call the handler function for requested method
 					let (response, err) = match request.method.as_str() {
 						"login" => {
-							let (response, err) = self.handle_login(request.params.unwrap());
-							// XXX TODO Future - Validate username and password
-							workers_l[num].authenticated = true;
+							let (response, err) = self.handle_login(request.params);
+							// XXX TODO Future? - Validate username and password
+							if err == false {
+								workers_l[num].authenticated = true;
+							}
 							(response, err)
 						}
-						"submit" => self.handle_submit(request.params.unwrap()),
+						"submit" => self.handle_submit(request.params),
 						"keepalive" => self.handle_keepalive(),
 						"getjobtemplate" => {
 							let b = self.current_block.header.clone();
@@ -282,7 +287,7 @@ impl StratumServer {
 
 					// Send the reply
 					workers_l[num].send_message(rpc_response);
-				},
+				}
 				None => {} // No message for us from this worker
 			}
 		}
@@ -310,9 +315,13 @@ impl StratumServer {
 	}
 
 	// Handle LOGIN message
-	fn handle_login(&self, params: String) -> (String, bool) {
+	fn handle_login(&self, params: Option<String>) -> (String, bool) {
 		// Extract the params string into a LoginParams struct
-		let _login_params: LoginParams = match serde_json::from_str(&params) {
+		let params_str = match params {
+			Some(val) => val,
+			None => String::from("{}"),
+		};
+		let _login_params: LoginParams = match serde_json::from_str(&params_str) {
 			Ok(val) => val,
 			Err(_e) => {
 				let r = r#"{"code": -32600, "message": "Invalid Request"}"#;
@@ -325,9 +334,13 @@ impl StratumServer {
 	// Handle SUBMIT message
 	//  params contains a solved block header
 	//  we are expecting real solutions at the full difficulty.
-	fn handle_submit(&self, params: String) -> (String, bool) {
+	fn handle_submit(&self, params: Option<String>) -> (String, bool) {
 		// Extract the params string into a SubmitParams struct
-		let submit_params: SubmitParams = match serde_json::from_str(&params) {
+		let params_str = match params {
+			Some(val) => val,
+			None => String::from("{}"),
+		};
+		let submit_params: SubmitParams = match serde_json::from_str(&params_str) {
 			Ok(val) => val,
 			Err(_e) => {
 				let r = r#"{"code": -32600, "message": "Invalid Request"}"#;
@@ -348,7 +361,7 @@ impl StratumServer {
 				self.id,
 				b.hash()
 			);
-			// Submit the block
+			// Submit the block to grin server (known here as "self.miner")
 			let res = self.miner.chain.process_block(b.clone(), chain::NONE);
 			if let Err(e) = res {
 				error!(
@@ -373,13 +386,13 @@ impl StratumServer {
 		return (String::from("ok"), false);
 	} // handle submit a solution
 
-	// Purge dead workers - remove all workers marked in err state
+	// Purge dead/sick workers - remove all workers marked in error state
 	fn clean_workers(&mut self) {
 		let mut start = 0;
 		let mut workers_l = self.workers.lock().unwrap();
 		loop {
 			for num in start..workers_l.len() {
-				if workers_l[num].stream_err == true {
+				if workers_l[num].error == true {
 					warn!(
 	                                        LOGGER,
 	                                        "(Server ID: {}) Dropping worker: {}",
@@ -424,7 +437,7 @@ impl StratumServer {
 		}
 	}
 
-	/// Starts the stratum-server.  Listens for a connection, then enters a
+	/// "main()" - Starts the stratum-server.  Listens for a connection, then enters a
 	/// loop, building a new block on top of the existing chain anytime required and sending that to
 	/// the connected stratum miner, proxy, or pool, and accepts full solutions to be submitted.
 	pub fn run_loop(&mut self, miner_config: MinerConfig, cuckoo_size: u32, proof_size: usize) {
@@ -441,8 +454,8 @@ impl StratumServer {
 		let mut deadline: i64 = 0;
 		// to prevent the wallet from generating a new HD key derivation for each
 		// iteration, we keep the returned derivation to provide it back when
-		// nothing has changed. We only want to create on key_id for each new block,
-		// but not when we rebuild the current block to add new tx.
+		// nothing has changed. We only want to create a key_id for each new block,
+		// and reuse it when we rebuild the current block to add new tx.
 		let mut key_id = None;
 		let mut current_hash = self.miner.chain.head().unwrap().prev_block_h;
 		let mut latest_hash;
