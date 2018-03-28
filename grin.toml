@@ -97,10 +97,7 @@ port = 13414
 
 [wallet]
 
-# Whether the wallet should be open to the outside
-external = false
-
-# Host IP for wallet listener
+# Host IP for wallet listener, change to "0.0.0.0" to receive grins
 api_listen_interface = "127.0.0.1"
 
 # Port for wallet listener
