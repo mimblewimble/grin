@@ -602,8 +602,8 @@ impl Miner {
 		// prepare the block header timestamp
 		let mut now_sec = time::get_time().sec;
 		let head_sec = head.timestamp.to_timespec().sec;
-		if now_sec == head_sec {
-			now_sec += 1;
+		if now_sec <= head_sec {
+			now_sec = head_sec + 1;
 		}
 
 		// get the difficulty our block should be at
