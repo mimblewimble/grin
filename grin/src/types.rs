@@ -98,7 +98,7 @@ pub enum ChainValidationMode {
 
 impl Default for ChainValidationMode {
 	fn default() -> ChainValidationMode {
-		ChainValidationMode::EveryBlock
+		ChainValidationMode::Disabled
 	}
 }
 

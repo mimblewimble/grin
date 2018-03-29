@@ -46,7 +46,7 @@ chain_type = "Testnet2"
 #want to run a full chain validation. Can be:
 #EveryBlock - run full chain validation when processing each block (except during sync)
 #Disabled - disable full chain validation (just run regular block validation)
-#chain_validation_mode=EveryBlock
+#chain_validation_mode=Disabled
 
 #run the node in "full archive" mode (default is fast-sync, pruned node)
 #archive_mode = false
