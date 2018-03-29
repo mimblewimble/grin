@@ -202,6 +202,7 @@ pub struct PeerInfo {
 	pub version: u32,
 	pub addr: SocketAddr,
 	pub total_difficulty: Difficulty,
+	pub height: u64,
 	pub direction: Direction,
 }
 

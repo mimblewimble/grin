@@ -102,8 +102,6 @@ pub struct DiffStats {
 pub struct DiffBlock {
 	/// Block number (can be negative for a new chain)
 	pub block_number: i64,
-	/// Ordinal index from current block
-	pub block_index: i64,
 	/// Block network difficulty
 	pub difficulty: u64,
 	/// Time block was found (epoch seconds)
@@ -121,8 +119,10 @@ pub struct PeerStats {
 	pub addr: String,
 	/// version running
 	pub version: u32,
-	/// version running
+	/// difficulty repored by peer
 	pub total_difficulty: u64,
+	/// height reported by peer on ping
+	pub height: u64,
 	/// direction
 	pub direction: String,
 }
@@ -148,6 +148,7 @@ impl PeerStats {
 			addr: addr,
 			version: peer.info.version,
 			total_difficulty: peer.info.total_difficulty.into_num(),
+			height: peer.info.height,
 			direction: direction.to_string(),
 		}
 	}
