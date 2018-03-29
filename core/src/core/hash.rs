@@ -21,6 +21,7 @@ use std::cmp::min;
 use std::{fmt, ops};
 use std::convert::AsRef;
 use std::ops::Add;
+use byteorder::{BigEndian, ByteOrder};
 
 use blake2::blake2b::Blake2b;
 
@@ -76,6 +77,11 @@ impl Hash {
 	pub fn from_hex(hex: &str) -> Result<Hash, Error> {
 		let bytes = util::from_hex(hex.to_string()).unwrap();
 		Ok(Hash::from_vec(bytes))
+	}
+
+	/// Most significant 64 bits
+	pub fn to_u64(&self) -> u64 {
+		BigEndian::read_u64(&self.0)
 	}
 }
 

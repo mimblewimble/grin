@@ -191,48 +191,34 @@ where
 	// adjustment if there isn't enough window data
 	// length will be DIFFICULTY_ADJUST_WINDOW+MEDIAN_TIME_WINDOW
 	let diff_data = global::difficulty_data_to_vector(cursor);
-	// Get the difficulty sum for averaging later
-	// Which in this case is the sum of the last
-	// DIFFICULTY_ADJUST_WINDOW elements
-	let diff_sum = diff_data
-		.iter()
-		.skip(MEDIAN_TIME_WINDOW as usize)
-		.take(DIFFICULTY_ADJUST_WINDOW as usize)
-		.fold(Difficulty::zero(), |sum, d| sum + d.clone().unwrap().1);
 
 	// Obtain the median window for the earlier time period
-	// which is just the first MEDIAN_TIME_WINDOW elements
+	// the first MEDIAN_TIME_WINDOW elements
 	let mut window_earliest: Vec<u64> = diff_data
 		.iter()
 		.take(MEDIAN_TIME_WINDOW as usize)
 		.map(|n| n.clone().unwrap().0)
 		.collect();
+	// pick median
+	window_earliest.sort();
+	let earliest_ts = window_earliest[MEDIAN_TIME_INDEX as usize];
 
 	// Obtain the median window for the latest time period
-	// i.e. the last MEDIAN_TIME_WINDOW elements
+	// i.e. the last  MEDIAN_TIME_WINDOW elements
 	let mut window_latest: Vec<u64> = diff_data
 		.iter()
 		.skip(DIFFICULTY_ADJUST_WINDOW as usize)
 		.map(|n| n.clone().unwrap().0)
 		.collect();
-
-	// And obtain our median values
-	window_earliest.sort();
+	// pick median
 	window_latest.sort();
 	let latest_ts = window_latest[MEDIAN_TIME_INDEX as usize];
-	let earliest_ts = window_earliest[MEDIAN_TIME_INDEX as usize];
 
-	// Calculate the average difficulty
-	let diff_avg = diff_sum.into_num() / Difficulty::from_num(DIFFICULTY_ADJUST_WINDOW).into_num();
-
-	// Actual undampened time delta
+	// median time delta
 	let ts_delta = latest_ts - earliest_ts;
 
 	// Apply dampening
-	let ts_damp = match diff_avg {
-		n if n >= DAMP_FACTOR => ((DAMP_FACTOR - 1) * BLOCK_TIME_WINDOW + ts_delta) / DAMP_FACTOR,
-		_ => ts_delta,
-	};
+	let ts_damp = (1 * ts_delta + (DAMP_FACTOR-1) * BLOCK_TIME_WINDOW) / DAMP_FACTOR;
 
 	// Apply time bounds
 	let adj_ts = if ts_damp < LOWER_TIME_BOUND {
@@ -243,10 +229,15 @@ where
 		ts_damp
 	};
 
-	let difficulty = diff_avg * Difficulty::from_num(BLOCK_TIME_WINDOW).into_num()
-		/ Difficulty::from_num(adj_ts).into_num();
+	// Get the difficulty sum of the last DIFFICULTY_ADJUST_WINDOW elements
+	let diff_sum = diff_data
+		.iter()
+		.skip(MEDIAN_TIME_WINDOW as usize)
+		.fold(0, |sum, d| sum + d.clone().unwrap().1.into_num());
 
-	Ok(max(Difficulty::from_num(difficulty), Difficulty::one()))
+	let difficulty = diff_sum * BLOCK_TIME_SEC / adj_ts;
+
+	Ok(Difficulty::from_num(max(difficulty, 1)))
 }
 
 /// Consensus rule that collections of items are sorted lexicographically.
