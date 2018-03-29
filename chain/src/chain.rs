@@ -533,11 +533,14 @@ impl Chain {
 		self.store
 			.save_block_marker(&h, &(rewind_to_output, rewind_to_kernel))?;
 
+		debug!(
+			LOGGER,
+			"Going to validate new txhashset, might take some time..."
+		);
 		let mut txhashset =
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), None)?;
 		txhashset::extending(&mut txhashset, |extension| {
 			extension.validate(&header, false)?;
-			// TODO validate kernels and their sums with Outputs
 			extension.rebuild_index()?;
 			Ok(())
 		})?;
