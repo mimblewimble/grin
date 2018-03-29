@@ -217,8 +217,18 @@ where
 	// median time delta
 	let ts_delta = latest_ts - earliest_ts;
 
-	// Apply dampening
-	let ts_damp = (1 * ts_delta + (DAMP_FACTOR-1) * BLOCK_TIME_WINDOW) / DAMP_FACTOR;
+	// Get the difficulty sum of the last DIFFICULTY_ADJUST_WINDOW elements
+	let diff_sum = diff_data
+		.iter()
+		.skip(MEDIAN_TIME_WINDOW as usize)
+		.fold(0, |sum, d| sum + d.clone().unwrap().1.into_num());
+
+	// Apply dampening except when difficulty is near 1
+	let ts_damp = if diff_sum < DAMP_FACTOR * DIFFICULTY_ADJUST_WINDOW {
+		ts_delta
+	} else {
+		(1 * ts_delta + (DAMP_FACTOR-1) * BLOCK_TIME_WINDOW) / DAMP_FACTOR
+	};
 
 	// Apply time bounds
 	let adj_ts = if ts_damp < LOWER_TIME_BOUND {
@@ -228,12 +238,6 @@ where
 	} else {
 		ts_damp
 	};
-
-	// Get the difficulty sum of the last DIFFICULTY_ADJUST_WINDOW elements
-	let diff_sum = diff_data
-		.iter()
-		.skip(MEDIAN_TIME_WINDOW as usize)
-		.fold(0, |sum, d| sum + d.clone().unwrap().1.into_num());
 
 	let difficulty = diff_sum * BLOCK_TIME_SEC / adj_ts;
 
