@@ -99,11 +99,9 @@ impl TUIStatusListener for TUIPeerView {
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Longest Chain: "))
-						.child(TextView::new("  ").with_id("longest_work_peer"))
+						.child(TextView::new("  ").with_id("longest_work_peer")),
 				)
-				.child(
-					TextView::new("   ")
-				)
+				.child(TextView::new("   "))
 				.child(
 					Dialog::around(table_view.with_id(TABLE_PEER_STATUS).min_size((50, 20)))
 						.title("Connected Peers"),
