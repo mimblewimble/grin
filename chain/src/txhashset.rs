@@ -502,7 +502,7 @@ impl<'a> Extension<'a> {
 	pub fn rewind(&mut self, block_header: &BlockHeader) -> Result<(), Error> {
 		let hash = block_header.hash();
 		let height = block_header.height;
-		debug!(LOGGER, "Rewind to header {} at {}", hash, height);
+		debug!(LOGGER, "Rewind to header at {} [{}]", height, hash); // keep this
 
 		// rewind each MMR
 		let (out_pos_rew, kern_pos_rew) = self.commit_index.get_block_marker(&hash)?;

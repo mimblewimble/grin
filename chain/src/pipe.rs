@@ -169,10 +169,10 @@ pub fn sync_block_header(
 pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<(), Error> {
 	debug!(
 		LOGGER,
-		"pipe: process_block_header: {} at {}",
-		bh.hash(),
-		bh.height
-	);
+		"pipe: process_block_header at {} [{}]",
+		bh.height,
+		bh.hash()
+	); // keep this
 
 	check_header_known(bh.hash(), &mut ctx)?;
 	validate_header(&bh, &mut ctx)
