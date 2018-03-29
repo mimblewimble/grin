@@ -55,7 +55,7 @@ impl TableViewItem<PeerColumn> for PeerStats {
 			PeerColumn::Address => self.addr.clone(),
 			PeerColumn::State => self.state.clone(),
 			PeerColumn::TotalDifficulty => {
-				format!("{} @ {}", self.total_difficulty, self.height).to_string()
+				format!("{} D @ {} H", self.total_difficulty, self.height).to_string()
 			}
 			PeerColumn::Direction => self.direction.clone(),
 			PeerColumn::Version => self.version.to_string(),
@@ -117,7 +117,7 @@ impl TUIStatusListener for TUIPeerView {
 			.max_by(|x, y| x.total_difficulty.cmp(&y.total_difficulty));
 		let lp_str = match lp {
 			Some(l) => format!(
-				"{} @ {} vs Us: {} @ {}",
+				"{} D @ {} H vs Us: {} D @ {} H",
 				l.total_difficulty, l.height, stats.head.total_difficulty, stats.head.height
 			).to_string(),
 			None => "".to_string(),
