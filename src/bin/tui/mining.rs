@@ -107,7 +107,6 @@ impl TableViewItem<MiningDeviceColumn> for CuckooMinerDeviceStats {
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum DiffColumn {
 	BlockNumber,
-	Index,
 	Difficulty,
 	Time,
 	Duration,
@@ -117,7 +116,6 @@ impl DiffColumn {
 	fn _as_str(&self) -> &str {
 		match *self {
 			DiffColumn::BlockNumber => "Block Number",
-			DiffColumn::Index => "Block Index",
 			DiffColumn::Difficulty => "Network Difficulty",
 			DiffColumn::Time => "Block Time",
 			DiffColumn::Duration => "Duration",
@@ -132,7 +130,6 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 
 		match column {
 			DiffColumn::BlockNumber => self.block_number.to_string(),
-			DiffColumn::Index => self.block_index.to_string(),
 			DiffColumn::Difficulty => self.difficulty.to_string(),
 			DiffColumn::Time => format!("{}", datetime).to_string(),
 			DiffColumn::Duration => format!("{}s", self.duration).to_string(),
@@ -145,7 +142,6 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 	{
 		match column {
 			DiffColumn::BlockNumber => Ordering::Equal,
-			DiffColumn::Index => Ordering::Equal,
 			DiffColumn::Difficulty => Ordering::Equal,
 			DiffColumn::Time => Ordering::Equal,
 			DiffColumn::Duration => Ordering::Equal,
@@ -246,16 +242,13 @@ impl TUIStatusListener for TUIMiningView {
 
 		let diff_table_view = TableView::<DiffBlock, DiffColumn>::new()
 			.column(DiffColumn::BlockNumber, "Block Number", |c| {
-				c.width_percent(20)
-			})
-			.column(DiffColumn::Index, "Distance from Head", |c| {
-				c.width_percent(20)
+				c.width_percent(25)
 			})
 			.column(DiffColumn::Difficulty, "Network Difficulty", |c| {
-				c.width_percent(20)
+				c.width_percent(25)
 			})
-			.column(DiffColumn::Time, "Block Time", |c| c.width_percent(20))
-			.column(DiffColumn::Duration, "Duration", |c| c.width_percent(20));
+			.column(DiffColumn::Time, "Block Time", |c| c.width_percent(25))
+			.column(DiffColumn::Duration, "Duration", |c| c.width_percent(25));
 
 		let mining_difficulty_view = LinearLayout::new(Orientation::Vertical)
 			.child(diff_status_view)

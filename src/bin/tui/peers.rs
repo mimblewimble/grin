@@ -20,7 +20,8 @@ use grin::stats::{PeerStats, ServerStats};
 
 use cursive::Cursive;
 use cursive::view::View;
-use cursive::views::{BoxView, Dialog};
+use cursive::views::{BoxView, Dialog, LinearLayout, TextView};
+use cursive::direction::Orientation;
 use cursive::traits::*;
 
 use tui::table::{TableView, TableViewItem};
@@ -53,7 +54,9 @@ impl TableViewItem<PeerColumn> for PeerStats {
 		match column {
 			PeerColumn::Address => self.addr.clone(),
 			PeerColumn::State => self.state.clone(),
-			PeerColumn::TotalDifficulty => self.total_difficulty.to_string(),
+			PeerColumn::TotalDifficulty => {
+				format!("{} D @ {} H", self.total_difficulty, self.height).to_string()
+			}
 			PeerColumn::Direction => self.direction.clone(),
 			PeerColumn::Version => self.version.to_string(),
 		}
@@ -86,20 +89,50 @@ impl TUIStatusListener for TUIPeerView {
 					c.width_percent(20)
 				})
 				.column(PeerColumn::Version, "Version", |c| c.width_percent(20));
-
 		let peer_status_view = BoxView::with_full_screen(
-			Dialog::around(table_view.with_id(TABLE_PEER_STATUS).min_size((50, 20)))
-				.title("Connected Peers"),
+			LinearLayout::new(Orientation::Vertical)
+				.child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("Total Peers: "))
+						.child(TextView::new("  ").with_id("peers_total")),
+				)
+				.child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("Longest Chain: "))
+						.child(TextView::new("  ").with_id("longest_work_peer")),
+				)
+				.child(TextView::new("   "))
+				.child(
+					Dialog::around(table_view.with_id(TABLE_PEER_STATUS).min_size((50, 20)))
+						.title("Connected Peers"),
+				),
 		).with_id(VIEW_PEER_SYNC);
 		Box::new(peer_status_view)
 	}
 
 	fn update(c: &mut Cursive, stats: &ServerStats) {
+		let lp = stats
+			.peer_stats
+			.iter()
+			.max_by(|x, y| x.total_difficulty.cmp(&y.total_difficulty));
+		let lp_str = match lp {
+			Some(l) => format!(
+				"{} D @ {} H vs Us: {} D @ {} H",
+				l.total_difficulty, l.height, stats.head.total_difficulty, stats.head.height
+			).to_string(),
+			None => "".to_string(),
+		};
 		let _ = c.call_on_id(
 			TABLE_PEER_STATUS,
 			|t: &mut TableView<PeerStats, PeerColumn>| {
 				t.set_items(stats.peer_stats.clone());
 			},
 		);
+		let _ = c.call_on_id("peers_total", |t: &mut TextView| {
+			t.set_content(stats.peer_stats.len().to_string());
+		});
+		let _ = c.call_on_id("longest_work_peer", |t: &mut TextView| {
+			t.set_content(lp_str);
+		});
 	}
 }

@@ -49,6 +49,11 @@ impl TUIStatusListener for TUIStatusView {
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("Total Difficulty: "))
+						.child(TextView::new("  ").with_id("basic_total_difficulty")),
+				)
+				.child(
+					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("------------------------")),
 				)
 				.child(
@@ -125,6 +130,9 @@ impl TUIStatusListener for TUIStatusView {
 		});
 		c.call_on_id("chain_height", |t: &mut TextView| {
 			t.set_content(stats.head.height.to_string());
+		});
+		c.call_on_id("basic_total_difficulty", |t: &mut TextView| {
+			t.set_content(stats.head.total_difficulty.to_string());
 		});
 		c.call_on_id("basic_mining_config_status", |t: &mut TextView| {
 			t.set_content(basic_mining_config_status);
