@@ -239,7 +239,10 @@ where
 		ts_damp
 	};
 
-	let difficulty = diff_sum * BLOCK_TIME_SEC / adj_ts;
+	// AVOID BREAKING CONSENSUS FOR NOW WITH OLD DOUBLE TRUNCATION CALC
+	let difficulty = (diff_sum / DIFFICULTY_ADJUST_WINDOW) * BLOCK_TIME_WINDOW / adj_ts;
+	// EVENTUALLY BREAK CONSENSUS WITH THIS IMPROVED SINGLE TRUNCATION DIFF CALC
+	// let difficulty = diff_sum * BLOCK_TIME_SEC / adj_ts;
 
 	Ok(Difficulty::from_num(max(difficulty, 1)))
 }
