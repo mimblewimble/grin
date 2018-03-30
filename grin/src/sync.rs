@@ -80,12 +80,6 @@ pub fn run_sync(
 				let fast_sync_enabled =
 					!archive_mode && highest_height.saturating_sub(head.height) > horizon;
 
-				debug!(LOGGER, "syncing: {}, fast: {}", syncing, fast_sync_enabled);
-				debug!(
-					LOGGER,
-					"heights: {}, vs local {}", highest_height, header_head.height
-				);
-
 				let current_time = time::now_utc();
 				if syncing {
 					// run the header sync every 10s
