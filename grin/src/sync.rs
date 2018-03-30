@@ -33,7 +33,7 @@ pub fn run_sync(
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
 	skip_sync_wait: bool,
-	fast_sync: bool,
+	archive_mode: bool,
 	stop: Arc<AtomicBool>,
 ) {
 	let chain = chain.clone();
@@ -42,7 +42,8 @@ pub fn run_sync(
 		.spawn(move || {
 			let mut prev_body_sync = time::now_utc();
 			let mut prev_header_sync = prev_body_sync.clone();
-			let mut prev_state_sync = prev_body_sync.clone() - time::Duration::seconds(5 * 60);
+			let mut prev_fast_sync = prev_body_sync.clone() - time::Duration::seconds(5 * 60);
+			let mut highest_height = 0;
 
 			// initial sleep to give us time to peer with some nodes
 			if !skip_sync_wait {
@@ -64,16 +65,25 @@ pub fn run_sync(
 				let head = chain.head().unwrap();
 				let header_head = chain.get_header_head().unwrap();
 
-				// in archival nodes (no fast sync) we just consider we have the whole
-				// state already
-				let have_txhashset =
-					!fast_sync || header_head.height.saturating_sub(head.height) <= horizon;
+				// is syncing generally needed when we compare our state with others
+				let (syncing, most_work_height) =
+					needs_syncing(currently_syncing.as_ref(), peers.clone(), chain.clone());
 
-				let mut syncing = needs_syncing(
-					currently_syncing.as_ref(),
-					peers.clone(),
-					chain.clone(),
-					!have_txhashset,
+				if most_work_height > 0 {
+					// we can occasionally get a most work height of 0 if read locks fail
+					highest_height = most_work_height;
+				}
+
+				// in archival nodes (no fast sync) we just consider we have the whole
+				// state already, then fast sync triggers if other peers are much
+				// further ahead
+				let fast_sync_enabled =
+					!archive_mode && highest_height.saturating_sub(head.height) > horizon;
+
+				debug!(LOGGER, "syncing: {}, fast: {}", syncing, fast_sync_enabled);
+				debug!(
+					LOGGER,
+					"heights: {}, vs local {}", highest_height, header_head.height
 				);
 
 				let current_time = time::now_utc();
@@ -85,42 +95,20 @@ pub fn run_sync(
 					}
 
 					// run the body_sync every 5s
-					if have_txhashset && current_time - prev_body_sync > time::Duration::seconds(5)
+					if !fast_sync_enabled
+						&& current_time - prev_body_sync > time::Duration::seconds(5)
 					{
 						body_sync(peers.clone(), chain.clone());
 						prev_body_sync = current_time;
 					}
-				} else if !have_txhashset && header_head.height > 0 {
-					if current_time - prev_state_sync > time::Duration::seconds(5 * 60) {
-						if let Some(peer) = peers.most_work_peer() {
-							if let Ok(p) = peer.try_read() {
-								// just to handle corner case of a too early start
-								if header_head.height > horizon {
-									debug!(
-										LOGGER,
-										"Header head before txhashset request: {} / {}",
-										header_head.height,
-										header_head.last_block_h
-									);
 
-									// ask for txhashset at horizon
-									let mut txhashset_head =
-										chain.get_block_header(&header_head.prev_block_h).unwrap();
-									for _ in 0..horizon - 2 {
-										txhashset_head = chain
-											.get_block_header(&txhashset_head.previous)
-											.unwrap();
-									}
-									p.send_txhashset_request(
-										txhashset_head.height,
-										txhashset_head.hash(),
-									).unwrap();
-									prev_state_sync = current_time;
-								}
-							}
+					// run fast sync if applicable, every 5 min
+					if fast_sync_enabled && header_head.height == highest_height {
+						if current_time - prev_fast_sync > time::Duration::seconds(5 * 60) {
+							fast_sync(peers.clone(), chain.clone(), &header_head);
+							prev_fast_sync = current_time;
 						}
 					}
-					syncing = true;
 				}
 				currently_syncing.store(syncing, Ordering::Relaxed);
 
@@ -198,14 +186,16 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 			let peer = peers.more_work_peer();
 			if let Some(peer) = peer {
 				if let Ok(peer) = peer.try_read() {
-					let _ = peer.send_block_request(hash);
+					if let Err(e) = peer.send_block_request(hash) {
+						debug!(LOGGER, "Skipped request to {}: {:?}", peer.info.addr, e);
+					}
 				}
 			}
 		}
 	}
 }
 
-pub fn header_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
+fn header_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 	if let Ok(header_head) = chain.get_header_head() {
 		let difficulty = header_head.total_difficulty;
 
@@ -216,6 +206,29 @@ pub fn header_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 					let _ = request_headers(peer.clone(), chain.clone());
 				}
 			}
+		}
+	}
+}
+
+fn fast_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>, header_head: &chain::Tip) {
+	let horizon = global::cut_through_horizon() as u64;
+
+	if let Some(peer) = peers.most_work_peer() {
+		if let Ok(p) = peer.try_read() {
+			debug!(
+				LOGGER,
+				"Header head before txhashset request: {} / {}",
+				header_head.height,
+				header_head.last_block_h
+			);
+
+			// ask for txhashset at horizon
+			let mut txhashset_head = chain.get_block_header(&header_head.prev_block_h).unwrap();
+			for _ in 0..horizon.saturating_sub(20) {
+				txhashset_head = chain.get_block_header(&txhashset_head.previous).unwrap();
+			}
+			p.send_txhashset_request(txhashset_head.height, txhashset_head.hash())
+				.unwrap();
 		}
 	}
 }
@@ -245,15 +258,11 @@ fn needs_syncing(
 	currently_syncing: &AtomicBool,
 	peers: Arc<Peers>,
 	chain: Arc<chain::Chain>,
-	header_only: bool,
-) -> bool {
-	let local_diff = if header_only {
-		chain.total_header_difficulty().unwrap()
-	} else {
-		chain.total_difficulty()
-	};
+) -> (bool, u64) {
+	let local_diff = chain.total_difficulty();
 	let peer = peers.most_work_peer();
 	let is_syncing = currently_syncing.load(Ordering::Relaxed);
+	let mut most_work_height = 0;
 
 	// if we're already syncing, we're caught up if no peer has a higher
 	// difficulty than us
@@ -262,8 +271,9 @@ fn needs_syncing(
 			if let Ok(peer) = peer.try_read() {
 				debug!(
 					LOGGER,
-					"needs_syncing {} {} {}", local_diff, peer.info.total_difficulty, header_only
+					"needs_syncing {} {}", local_diff, peer.info.total_difficulty
 				);
+				most_work_height = peer.info.height;
 
 				if peer.info.total_difficulty <= local_diff {
 					let ch = chain.head().unwrap();
@@ -274,19 +284,20 @@ fn needs_syncing(
 						ch.height,
 						ch.last_block_h
 					);
-					if !header_only {
-						let _ = chain.reset_head();
-					}
-					return false;
+
+					let _ = chain.reset_head();
+					return (false, 0);
 				}
 			}
 		} else {
 			warn!(LOGGER, "sync: no peers available, disabling sync");
-			return false;
+			return (false, 0);
 		}
 	} else {
 		if let Some(peer) = peer {
 			if let Ok(peer) = peer.try_read() {
+				most_work_height = peer.info.height;
+
 				// sum the last 5 difficulties to give us the threshold
 				let threshold = chain
 					.difficulty_iter()
@@ -302,12 +313,12 @@ fn needs_syncing(
 						peer.info.total_difficulty,
 						threshold,
 					);
-					return true;
+					return (true, most_work_height);
 				}
 			}
 		}
 	}
-	is_syncing
+	(is_syncing, most_work_height)
 }
 
 /// We build a locator based on sync_head.

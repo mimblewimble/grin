@@ -65,6 +65,7 @@ pub enum Error {
 		us: Hash,
 		peer: Hash,
 	},
+	Send(String),
 }
 
 impl From<ser::Error> for Error {
@@ -82,9 +83,9 @@ impl From<io::Error> for Error {
 		Error::Connection(e)
 	}
 }
-impl<T> From<mpsc::SendError<T>> for Error {
-	fn from(_e: mpsc::SendError<T>) -> Error {
-		Error::ConnectionClose
+impl<T> From<mpsc::TrySendError<T>> for Error {
+	fn from(e: mpsc::TrySendError<T>) -> Error {
+		Error::Send(e.to_string())
 	}
 }
 // impl From<TimerError> for Error {

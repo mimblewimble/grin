@@ -155,7 +155,7 @@ impl Tracker {
 		T: ser::Writeable,
 	{
 		let buf = write_to_buf(body, msg_type);
-		self.send_channel.send(buf)?;
+		self.send_channel.try_send(buf)?;
 		Ok(())
 	}
 }
