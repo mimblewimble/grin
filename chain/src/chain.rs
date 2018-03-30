@@ -541,6 +541,10 @@ impl Chain {
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), None)?;
 		txhashset::extending(&mut txhashset, |extension| {
 			extension.validate(&header, false)?;
+
+			// validate rewinds and rollbacks, in this specific case we want to
+			// apply the rewind
+			extension.cancel_rollback();
 			extension.rebuild_index()?;
 			Ok(())
 		})?;

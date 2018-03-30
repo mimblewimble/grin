@@ -650,6 +650,11 @@ impl<'a> Extension<'a> {
 		self.rollback = true;
 	}
 
+	/// Cancel a previous rollback, to apply this extension
+	pub fn cancel_rollback(&mut self) {
+		self.rollback = false;
+	}
+
 	/// Dumps the output MMR.
 	/// We use this after compacting for visual confirmation that it worked.
 	pub fn dump_output_pmmr(&self) {
