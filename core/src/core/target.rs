@@ -23,11 +23,10 @@ use std::fmt;
 use std::ops::{Add, Div, Mul, Sub};
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use byteorder::{BigEndian, ByteOrder};
+use std::cmp::max;
 
 use core::hash::Hash;
 use ser::{self, Readable, Reader, Writeable, Writer};
-use core::global;
 
 /// The difficulty is defined as the maximum target divided by the block hash.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
@@ -56,13 +55,10 @@ impl Difficulty {
 	/// Computes the difficulty from a hash. Divides the maximum target by the
 	/// provided hash.
 	pub fn from_hash(h: &Hash) -> Difficulty {
-		let max_target = BigEndian::read_u64(&global::max_proof_target());
-		// Use the first 64 bits of the given hash
-		let mut in_vec = h.to_vec();
-		in_vec.truncate(8);
-		let num = BigEndian::read_u64(&in_vec);
+		let max_target = <u64>::max_value();
+		let num = h.to_u64();
 		Difficulty {
-			num: max_target / num,
+			num: max_target / max(num, 1),
 		}
 	}
 
