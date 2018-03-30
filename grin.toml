@@ -219,11 +219,17 @@ NUM_THREADS = 1
 #[mining.miner_plugin_config.device_parameters.0]
 #NUM_THREADS = 1
 
-#CUDA Miner (Included here for integration only, Not ready for use)
+#CUDA Miner
+#
+# Note! 4+ GB GPU cards only!
+#   If you have 6GB GPU RAM, set N_BLOCKS = 128
+#   Docs: https://github.com/tromp/cuckoo/blob/master/GPU.md
+#
 #Can currently be used only in Production (30) Mode
 #This plugin is not built by default. To build:
 #1) Ensure the latest cuda toolkit is installed
 #   (nvcc should be in your PATH)
+#   Wrong gcc? install gcc-5 g++-5; export CC=`which gcc-5`; # then build
 #2) Uncomment the 'build-cuda-plugin' feature
 #   in pow/Cargo.toml
 #

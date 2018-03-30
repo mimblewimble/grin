@@ -221,7 +221,11 @@ impl Miner {
 						}
 					}
 				}
-				info!(LOGGER, "Mining at {} graphs per second", sps_total);
+				info!(
+					LOGGER,
+					"Mining: Cuckoo{} at {} gps (graphs per second)",
+					cuckoo_size,
+					sps_total);
 				if sps_total.is_finite() {
 					let mut mining_stats = mining_stats.write().unwrap();
 					mining_stats.combined_gps = sps_total;

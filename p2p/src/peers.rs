@@ -280,10 +280,10 @@ impl Peers {
 		}
 		debug!(
 			LOGGER,
-			"broadcast_block: {}, {} at {}, to {} peers, done.",
-			b.hash(),
+			"broadcast_block: {} @ {} [{}] was sent to {} peers.",
 			b.header.total_difficulty,
 			b.header.height,
+			b.hash(),
 			count,
 		);
 	}
@@ -594,7 +594,7 @@ impl NetAdapter for Peers {
 	/// addresses.
 	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr> {
 		let peers = self.find_peers(State::Healthy, capab, MAX_PEER_ADDRS as usize);
-		debug!(LOGGER, "Got {} peer addrs to send.", peers.len());
+		trace!(LOGGER, "find_peer_addrs: {} healthy peers picked", peers.len());
 		map_vec!(peers, |p| p.addr)
 	}
 

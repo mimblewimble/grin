@@ -178,7 +178,7 @@ impl Server {
 			p2p_server.peers.clone(),
 			shared_chain.clone(),
 			skip_sync_wait,
-			!archive_mode,
+			archive_mode,
 			stop.clone(),
 		);
 
