@@ -368,13 +368,10 @@ where
 		{
 			let record_len = 32;
 
-			let off_to_rm = pos_to_rm
-				.iter()
-				.map(|&pos| {
-					let shift = self.pruned_nodes.get_shift(pos);
-					(pos - 1 - shift.unwrap()) * record_len
-				})
-				.collect();
+			let off_to_rm = map_vec!(pos_to_rm, |&pos| {
+				let shift = self.pruned_nodes.get_shift(pos).unwrap();
+				(pos - 1 - shift) * record_len
+			});
 
 			self.hash_file.save_prune(
 				tmp_prune_file_hash.clone(),
@@ -388,13 +385,10 @@ where
 		{
 			let record_len = T::len() as u64;
 
-			let off_to_rm = leaf_pos_to_rm
-				.iter()
-				.map(|pos| {
-					let shift = self.pruned_nodes.get_leaf_shift(*pos);
-					(pmmr::n_leaves(pos - shift.unwrap()) - 1) * record_len
-				})
-				.collect::<Vec<_>>();
+			let off_to_rm = map_vec!(leaf_pos_to_rm, |pos| {
+				let shift = self.pruned_nodes.get_leaf_shift(*pos);
+				(pmmr::n_leaves(pos - shift.unwrap()) - 1) * record_len
+			});
 
 			self.data_file.save_prune(
 				tmp_prune_file_data.clone(),

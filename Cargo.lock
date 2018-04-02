@@ -384,7 +384,7 @@ dependencies = [
 [[package]]
 name = "cuckoo_miner"
 version = "0.1.0"
-source = "git+https://github.com/mimblewimble/cuckoo-miner?tag=grin_integration_24#d017db6d70061f566a65f35513dc0252bb5b4ee1"
+source = "git+https://github.com/mimblewimble/cuckoo-miner?tag=grin_integration_25#40cb3146a56d338452b350bbfab18bf0805d1d9d"
 dependencies = [
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -772,7 +772,7 @@ name = "grin_pow"
 version = "0.2.0"
 dependencies = [
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
- "cuckoo_miner 0.1.0 (git+https://github.com/mimblewimble/cuckoo-miner?tag=grin_integration_24)",
+ "cuckoo_miner 0.1.0 (git+https://github.com/mimblewimble/cuckoo-miner?tag=grin_integration_25)",
  "grin_core 0.2.0",
  "grin_util 0.2.0",
  "lazy_static 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2281,7 +2281,7 @@ dependencies = [
 "checksum crossbeam-utils 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "2760899e32a1d58d5abb31129f8fae5de75220bc2176e77ff7c627ae45c918d9"
 "checksum crossbeam-utils 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "d636a8b3bcc1b409d7ffd3facef8f21dcb4009626adbd0c5e6c4305c07253c7b"
 "checksum csv 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7ef22b37c7a51c564a365892c012dc0271221fdcc64c69b19ba4d6fa8bd96d9c"
-"checksum cuckoo_miner 0.1.0 (git+https://github.com/mimblewimble/cuckoo-miner?tag=grin_integration_24)" = "<none>"
+"checksum cuckoo_miner 0.1.0 (git+https://github.com/mimblewimble/cuckoo-miner?tag=grin_integration_25)" = "<none>"
 "checksum cursive 0.8.2-alpha.0 (git+https://github.com/yeastplume/Cursive?tag=grin_integration_1)" = "<none>"
 "checksum daemonize 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "0239832c1b4ca406d5ec73728cf4c7336d25cf85dd32db9e047e9e706ee0e935"
 "checksum dtoa 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "0dd841b58510c9618291ffa448da2e4e0f699d984d436122372f446dae62263d"

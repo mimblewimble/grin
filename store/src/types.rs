@@ -187,7 +187,7 @@ impl AppendOnlyFile {
 				// in which case we skip
 				let mut buf_start = 0;
 				while prune_offs[prune_pos] >= read && prune_offs[prune_pos] < read + len {
-					let prune_at = prune_offs[prune_pos] as usize;
+					let prune_at = (prune_offs[prune_pos] - read) as usize;
 					if prune_at != buf_start {
 						writer.write_all(&buf[buf_start..prune_at])?;
 					} else {
