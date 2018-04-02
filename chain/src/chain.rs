@@ -750,4 +750,11 @@ impl Chain {
 			.get_block_pmmr_file_metadata(h)
 			.map_err(|e| Error::StoreErr(e, "retrieve block pmmr metadata".to_owned()))
 	}
+
+	pub fn rebuild_header_by_height(&self) -> Result<(), Error> {
+		let head = self.head_header()?;
+		self.store
+			.build_by_height_index(&head, true)
+			.map_err(|e| Error::StoreErr(e, "rebuilf header by height index".to_owned()))
+	}
 }

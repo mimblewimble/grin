@@ -330,6 +330,9 @@ pub trait ChainStore: Send + Sync {
 	/// the consistency of the height chain in store by assuring previous
 	/// headers are also at their respective heights.
 	fn setup_height(&self, bh: &BlockHeader, old_tip: &Tip) -> Result<(), store::Error>;
+
+	/// Similar to setup_height but without handling fork
+	fn build_by_height_index(&self, header: &BlockHeader, force: bool) -> Result<(), store::Error>;
 }
 
 /// Single serializable struct to hold metadata about all PMMR file position

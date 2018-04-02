@@ -229,14 +229,19 @@ impl ChainStore for ChainKVStore {
 		for n in header.height..old_tip.height {
 			self.delete_header_by_height(n)?;
 		}
+		self.build_by_height_index(header, false)
+	}
 
+	fn build_by_height_index(&self, header: &BlockHeader, force: bool) -> Result<(), Error> {
 		self.save_header_height(&header)?;
 
 		if header.height > 0 {
 			let mut prev_header = self.get_block_header(&header.previous)?;
 			while prev_header.height > 0 {
-				if let Ok(_) = self.is_on_current_chain(&prev_header) {
-					break;
+				if !force {
+					if let Ok(_) = self.is_on_current_chain(&prev_header) {
+						break;
+					}
 				}
 				self.save_header_height(&prev_header)?;
 
