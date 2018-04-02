@@ -179,7 +179,7 @@ impl Miner {
 					proof_diff.into_num(),
 					(b.header.total_difficulty.clone() - head.total_difficulty.clone()).into_num()
 				);
-				if proof_diff > (b.header.total_difficulty.clone() - head.total_difficulty.clone())
+				if proof_diff >= (b.header.total_difficulty.clone() - head.total_difficulty.clone())
 				{
 					sol = Some(proof);
 					b.header.nonce = s.get_nonce_as_u64();
@@ -307,7 +307,7 @@ impl Miner {
 					proof_diff.into_num(),
 					b.header.total_difficulty.into_num()
 				);
-				if proof_diff > (b.header.total_difficulty.clone() - head.total_difficulty.clone())
+				if proof_diff >= (b.header.total_difficulty.clone() - head.total_difficulty.clone())
 				{
 					sol = Some(proof);
 					break;
@@ -418,7 +418,7 @@ impl Miner {
 			let pow_hash = b.header.pre_pow_hash();
 			if let Ok(proof) = miner.mine(&pow_hash[..]) {
 				let proof_diff = proof.clone().to_difficulty();
-				if proof_diff > (b.header.total_difficulty.clone() - head.total_difficulty.clone())
+				if proof_diff >= (b.header.total_difficulty.clone() - head.total_difficulty.clone())
 				{
 					sol = Some(proof);
 					break;
