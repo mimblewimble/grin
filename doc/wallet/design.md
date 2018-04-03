@@ -24,12 +24,15 @@ offline.
 sent to the receiver in any practical way. The receiver builds upon that file,
 sending it back to the sender. The sender finalizes the transaction and sends it
 to a Grin node.
-3. Hardware wallet. Similar to offline but the hardware wallet interacts with
+3. Fully online interaction through a non-trusted 3rd party. In this mode
+receiver and sender both connect to a web server that facilitates the
+interaction. Exchanges can be all be encrypted.
+4. Hardware wallet. Similar to offline but the hardware wallet interacts with
 a computer to produce required public keys and signatures.
-4. Web wallet. A 3rd party runs the required software behind the scenes and
+5. Web wallet. A 3rd party runs the required software behind the scenes and
 handles some of the key generation. This could be done in a custodial,
 non-custodial and multisig fashion.
-5. Fully programmatic. Similar to the online server, but both for receiving and
+6. Fully programmatic. Similar to the online server, but both for receiving and
 sending, most likely by an automated bot of some sorts.
 
 As part of the Grin project, we will only consider the first 2 modes of
