@@ -45,7 +45,11 @@ pub fn run_sync(
 			// initial sleep to give us time to peer with some nodes
 			if !skip_sync_wait {
 				awaiting_peers.store(true, Ordering::Relaxed);
-				thread::sleep(Duration::from_secs(30));
+				let mut n = 0;   
+				while peers.more_work_peers().len() < 4 && n < 30 {                                             
+					thread::sleep(Duration::from_secs(1));                                 
+					n += 1;        
+				}    
 				awaiting_peers.store(false, Ordering::Relaxed);
 			}
 
@@ -368,7 +372,7 @@ impl SyncInfo {
 		let now = time::now_utc();
 		let (prev_ts, prev_height) = self.prev_header_sync;
 
-		if header_head.height >= prev_height + (p2p::MAX_BLOCK_HEADERS as u64)
+		if header_head.height >= prev_height + (p2p::MAX_BLOCK_HEADERS as u64) - 4
 			|| now - prev_ts > time::Duration::seconds(10)
 		{
 			self.prev_header_sync = (now, header_head.height);
@@ -381,7 +385,7 @@ impl SyncInfo {
 		let now = time::now_utc();
 		let (prev_ts, prev_height) = self.prev_body_sync;
 
-		if head.height >= prev_height + 100 || now - prev_ts > time::Duration::seconds(5) {
+		if head.height >= prev_height + 96 || now - prev_ts > time::Duration::seconds(5) {
 			self.prev_body_sync = (now, head.height);
 			return true;
 		}
