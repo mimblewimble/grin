@@ -20,13 +20,14 @@ use std::thread;
 use std::time;
 use num::FromPrimitive;
 
-use core::consensus::MAX_MSG_LEN;
+use core::consensus::{MAX_MSG_LEN, MAX_TX_INPUTS, MAX_TX_KERNELS, MAX_TX_OUTPUTS};
 use core::core::BlockHeader;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::*;
+use util::LOGGER;
 
 /// Current latest version of the protocol
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -67,9 +68,30 @@ enum_from_primitive! {
 		StemTransaction,
 		Transaction,
 		TxHashSetRequest,
-		TxHashSetArchive
+		TxHashSetArchive,
 	}
 }
+
+const MAX_MSG_SIZES: [u64; 18] = [
+	0,                                                                  // Error
+	128,                                                                // Hand
+	88,                                                                 // Shake
+	16,                                                                 // Ping
+	16,                                                                 // Pong
+	4,                                                                  // GetPeerAddrs
+	4 + (1 + 16 + 2) * MAX_PEER_ADDRS as u64,                           // PeerAddrs, with all IPv6
+	1 + 32 * MAX_LOCATORS as u64,                                       // GetHeaders locators
+	365,                                                                // Header
+	2 + 365 * MAX_BLOCK_HEADERS as u64,                                 // Headers
+	32,                                                                 // GetBlock
+	MAX_MSG_LEN,                                                        // Block
+	32,                                                                 // GetCompactBlock
+	MAX_MSG_LEN / 10,                                                   // CompactBlock
+	1000 * MAX_TX_INPUTS + 710 * MAX_TX_OUTPUTS + 114 * MAX_TX_KERNELS, // StemTransaction,
+	1000 * MAX_TX_INPUTS + 710 * MAX_TX_OUTPUTS + 114 * MAX_TX_KERNELS, // Transaction,
+	40,                                                                 // TxHashSetRequest
+	64,                                                                 // TxHashSetArchive
+];
 
 /// The default implementation of read_exact is useless with async TcpStream as
 /// it will return as soon as something has been read, regardless of
@@ -166,8 +188,13 @@ pub fn read_header(conn: &mut TcpStream) -> Result<MsgHeader, Error> {
 	let mut head = vec![0u8; HEADER_LEN as usize];
 	read_exact(conn, &mut head, 10000, false)?;
 	let header = ser::deserialize::<MsgHeader>(&mut &head[..])?;
-	if header.msg_len > MAX_MSG_LEN {
-		// TODO additional restrictions for each msg type to avoid 20MB pings...
+	let max_len = MAX_MSG_SIZES[header.msg_type as usize];
+	// TODO 4x the limits for now to leave ourselves space to change things
+	if header.msg_len > max_len * 4 {
+		error!(
+			LOGGER,
+			"Too large read {}, had {}, wanted {}.", header.msg_type as u8, max_len, header.msg_len
+		);
 		return Err(Error::Serialization(ser::Error::TooLargeReadErr));
 	}
 	Ok(header)
@@ -541,6 +568,9 @@ impl Writeable for Locator {
 impl Readable for Locator {
 	fn read(reader: &mut Reader) -> Result<Locator, ser::Error> {
 		let len = reader.read_u8()?;
+		if len > (MAX_LOCATORS as u8) {
+			return Err(ser::Error::TooLargeReadErr);
+		}
 		let mut hashes = Vec::with_capacity(len as usize);
 		for _ in 0..len {
 			hashes.push(Hash::read(reader)?);
@@ -567,6 +597,9 @@ impl Writeable for Headers {
 impl Readable for Headers {
 	fn read(reader: &mut Reader) -> Result<Headers, ser::Error> {
 		let len = reader.read_u16()?;
+		if (len as u32) > MAX_BLOCK_HEADERS + 1 {
+			return Err(ser::Error::TooLargeReadErr);
+		}
 		let mut headers = Vec::with_capacity(len as usize);
 		for _ in 0..len {
 			headers.push(BlockHeader::read(reader)?);
