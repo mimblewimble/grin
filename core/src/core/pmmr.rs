@@ -987,28 +987,12 @@ fn bintree_jump_left(num: u64) -> u64 {
 
 // Check if the binary representation of a number is all ones.
 fn all_ones(num: u64) -> bool {
-	if num == 0 {
-		return false;
-	}
-	let mut bit = 1;
-	while num >= bit {
-		if num & bit == 0 {
-			return false;
-		}
-		bit = bit << 1;
-	}
-	true
+	num.leading_zeros() + num.count_ones() == 64
 }
 
 // Get the position of the most significant bit in a number.
 fn most_significant_pos(num: u64) -> u64 {
-	let mut pos = 0;
-	let mut bit = 1;
-	while num >= bit {
-		bit = bit << 1;
-		pos += 1;
-	}
-	pos
+	64 - u64::from(num.leading_zeros())
 }
 
 #[cfg(test)]
