@@ -45,11 +45,11 @@ pub fn run_sync(
 			// initial sleep to give us time to peer with some nodes
 			if !skip_sync_wait {
 				awaiting_peers.store(true, Ordering::Relaxed);
-				let mut n = 0;   
-				while peers.more_work_peers().len() < 4 && n < 30 {                                             
-					thread::sleep(Duration::from_secs(1));                                 
-					n += 1;        
-				}    
+				let mut n = 0;
+				while peers.more_work_peers().len() < 4 && n < 30 {
+					thread::sleep(Duration::from_secs(1));
+					n += 1;
+				}
 				awaiting_peers.store(false, Ordering::Relaxed);
 			}
 
