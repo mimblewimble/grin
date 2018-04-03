@@ -27,6 +27,7 @@ use core::core::target::Difficulty;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::*;
+use util::LOGGER;
 
 /// Current latest version of the protocol
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -75,9 +76,9 @@ const MAX_MSG_SIZES: [u64; 18] = [
 	0,                                                                  // Error
 	128,                                                                // Hand
 	88,                                                                 // Shake
-	12,                                                                 // Ping
-	12,                                                                 // Pong
-	2,                                                                  // GetPeerAddrs
+	16,                                                                 // Ping
+	16,                                                                 // Pong
+	4,                                                                  // GetPeerAddrs
 	4 + (1 + 16 + 2) * MAX_PEER_ADDRS as u64,                           // PeerAddrs, with all IPv6
 	1 + 32 * MAX_LOCATORS as u64,                                       // GetHeaders locators
 	365,                                                                // Header
@@ -187,7 +188,9 @@ pub fn read_header(conn: &mut TcpStream) -> Result<MsgHeader, Error> {
 	let mut head = vec![0u8; HEADER_LEN as usize];
 	read_exact(conn, &mut head, 10000, false)?;
 	let header = ser::deserialize::<MsgHeader>(&mut &head[..])?;
-	if header.msg_len > MAX_MSG_SIZES[header.msg_type as usize] {
+	let max_len = MAX_MSG_SIZES[header.msg_type as usize];
+	if header.msg_len > max_len {
+		error!(LOGGER, "Too large read {}, had {}, wanted {}.", header.msg_type as u8, max_len, header.msg_len);
 		return Err(Error::Serialization(ser::Error::TooLargeReadErr));
 	}
 	Ok(header)

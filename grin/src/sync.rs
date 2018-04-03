@@ -89,11 +89,10 @@ pub fn run_sync(
 					}
 
 					// run fast sync if applicable, every 5 min
-					if fast_sync_enabled 
-						&& header_head.height == si.highest_height
-						&& si.fast_sync_due() {
-
-							fast_sync(peers.clone(), chain.clone(), &header_head);
+					if fast_sync_enabled && header_head.height == si.highest_height
+						&& si.fast_sync_due()
+					{
+						fast_sync(peers.clone(), chain.clone(), &header_head);
 					}
 				}
 				currently_syncing.store(syncing, Ordering::Relaxed);
@@ -370,10 +369,10 @@ impl SyncInfo {
 		let (prev_ts, prev_height) = self.prev_header_sync;
 
 		if header_head.height >= prev_height + (p2p::MAX_BLOCK_HEADERS as u64)
-			|| now - prev_ts > time::Duration::seconds(10) {
-
-				self.prev_header_sync = (now, header_head.height);
-				return true;
+			|| now - prev_ts > time::Duration::seconds(10)
+		{
+			self.prev_header_sync = (now, header_head.height);
+			return true;
 		}
 		false
 	}
@@ -382,8 +381,7 @@ impl SyncInfo {
 		let now = time::now_utc();
 		let (prev_ts, prev_height) = self.prev_body_sync;
 
-		if head.height >= prev_height + 100
-			|| now - prev_ts > time::Duration::seconds(5) {
+		if head.height >= prev_height + 100 || now - prev_ts > time::Duration::seconds(5) {
 			self.prev_body_sync = (now, head.height);
 			return true;
 		}
