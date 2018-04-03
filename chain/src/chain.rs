@@ -561,6 +561,7 @@ impl Chain {
 			*head = Tip::from_block(&header);
 			let _ = self.store.save_body_head(&head);
 			self.store.save_header_height(&header)?;
+			self.store.build_by_height_index(&header, true)?;
 		}
 
 		self.check_orphans(header.hash());
