@@ -189,11 +189,9 @@ pub fn read_header(conn: &mut TcpStream) -> Result<MsgHeader, Error> {
 	read_exact(conn, &mut head, 10000, false)?;
 	let header = ser::deserialize::<MsgHeader>(&mut &head[..])?;
 	let max_len = MAX_MSG_SIZES[header.msg_type as usize];
-	if header.msg_len > max_len {
-		error!(
-			LOGGER,
-			"Too large read {}, had {}, wanted {}.", header.msg_type as u8, max_len, header.msg_len
-		);
+	// TODO 4x the limits for now to leave ourselves space to change things
+	if header.msg_len > max_len * 4 {
+		error!(LOGGER, "Too large read {}, had {}, wanted {}.", header.msg_type as u8, max_len, header.msg_len);
 		return Err(Error::Serialization(ser::Error::TooLargeReadErr));
 	}
 	Ok(header)
