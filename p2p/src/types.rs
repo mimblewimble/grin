@@ -34,6 +34,9 @@ pub const MAX_BLOCK_BODIES: u32 = 16;
 /// Maximum number of peer addresses a peer should ever send
 pub const MAX_PEER_ADDRS: u32 = 256;
 
+/// Maximum number of block header hashes to send as part of a locator
+pub const MAX_LOCATORS: u32 = 20;
+
 /// Dandelion relay time
 const DANDELION_RELAY_TIME: i64 = 600;
 
