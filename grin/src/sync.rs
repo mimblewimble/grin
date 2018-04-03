@@ -40,10 +40,7 @@ pub fn run_sync(
 	let _ = thread::Builder::new()
 		.name("sync".to_string())
 		.spawn(move || {
-			let mut prev_body_sync = time::now_utc();
-			let mut prev_header_sync = prev_body_sync.clone();
-			let mut prev_fast_sync = prev_body_sync.clone() - time::Duration::seconds(5 * 60);
-			let mut highest_height = 0;
+			let mut si = SyncInfo::new();
 
 			// initial sleep to give us time to peer with some nodes
 			if !skip_sync_wait {
@@ -52,7 +49,7 @@ pub fn run_sync(
 				awaiting_peers.store(false, Ordering::Relaxed);
 			}
 
-			// fast sync has 3 states:
+			// fast sync has 3 "states":
 			// * syncing headers
 			// * once all headers are sync'd, requesting the txhashset state
 			// * once we have the state, get blocks after that
@@ -71,37 +68,32 @@ pub fn run_sync(
 
 				if most_work_height > 0 {
 					// we can occasionally get a most work height of 0 if read locks fail
-					highest_height = most_work_height;
+					si.highest_height = most_work_height;
 				}
 
 				// in archival nodes (no fast sync) we just consider we have the whole
 				// state already, then fast sync triggers if other peers are much
 				// further ahead
 				let fast_sync_enabled =
-					!archive_mode && highest_height.saturating_sub(head.height) > horizon;
+					!archive_mode && si.highest_height.saturating_sub(head.height) > horizon;
 
-				let current_time = time::now_utc();
 				if syncing {
 					// run the header sync every 10s
-					if current_time - prev_header_sync > time::Duration::seconds(10) {
+					if si.header_sync_due(&header_head) {
 						header_sync(peers.clone(), chain.clone());
-						prev_header_sync = current_time;
 					}
 
 					// run the body_sync every 5s
-					if !fast_sync_enabled
-						&& current_time - prev_body_sync > time::Duration::seconds(5)
-					{
+					if !fast_sync_enabled && si.body_sync_due(&head) {
 						body_sync(peers.clone(), chain.clone());
-						prev_body_sync = current_time;
 					}
 
 					// run fast sync if applicable, every 5 min
-					if fast_sync_enabled && header_head.height == highest_height {
-						if current_time - prev_fast_sync > time::Duration::seconds(5 * 60) {
+					if fast_sync_enabled 
+						&& header_head.height == si.highest_height
+						&& si.fast_sync_due() {
+
 							fast_sync(peers.clone(), chain.clone(), &header_head);
-							prev_fast_sync = current_time;
-						}
 					}
 				}
 				currently_syncing.store(syncing, Ordering::Relaxed);
@@ -344,11 +336,68 @@ fn get_locator_heights(height: u64) -> Vec<u64> {
 	let mut heights = vec![];
 	while current > 0 {
 		heights.push(current);
+		if heights.len() >= (p2p::MAX_LOCATORS as usize) - 1 {
+			break;
+		}
 		let next = 2u64.pow(heights.len() as u32);
 		current = if current > next { current - next } else { 0 }
 	}
 	heights.push(0);
 	heights
+}
+
+// Utility struct to group what information the main sync loop has to track
+struct SyncInfo {
+	prev_body_sync: (time::Tm, u64),
+	prev_header_sync: (time::Tm, u64),
+	prev_fast_sync: time::Tm,
+	highest_height: u64,
+}
+
+impl SyncInfo {
+	fn new() -> SyncInfo {
+		let now = time::now_utc();
+		SyncInfo {
+			prev_body_sync: (now.clone(), 0),
+			prev_header_sync: (now.clone(), 0),
+			prev_fast_sync: now.clone() - time::Duration::seconds(5 * 60),
+			highest_height: 0,
+		}
+	}
+
+	fn header_sync_due(&mut self, header_head: &chain::Tip) -> bool {
+		let now = time::now_utc();
+		let (prev_ts, prev_height) = self.prev_header_sync;
+
+		if header_head.height >= prev_height + (p2p::MAX_BLOCK_HEADERS as u64)
+			|| now - prev_ts > time::Duration::seconds(10) {
+
+				self.prev_header_sync = (now, header_head.height);
+				return true;
+		}
+		false
+	}
+
+	fn body_sync_due(&mut self, head: &chain::Tip) -> bool {
+		let now = time::now_utc();
+		let (prev_ts, prev_height) = self.prev_body_sync;
+
+		if head.height >= prev_height + 100
+			|| now - prev_ts > time::Duration::seconds(5) {
+			self.prev_body_sync = (now, head.height);
+			return true;
+		}
+		false
+	}
+
+	fn fast_sync_due(&mut self) -> bool {
+		let now = time::now_utc();
+		if now - self.prev_fast_sync > time::Duration::seconds(5 * 60) {
+			self.prev_fast_sync = now;
+			return true;
+		}
+		false
+	}
 }
 
 #[cfg(test)]

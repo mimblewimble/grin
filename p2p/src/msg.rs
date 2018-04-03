@@ -20,7 +20,7 @@ use std::thread;
 use std::time;
 use num::FromPrimitive;
 
-use core::consensus::{MAX_MSG_LEN, MAX_TX_INPUTS, MAX_TX_OUTPUTS, MAX_TX_KERNELS};
+use core::consensus::{MAX_MSG_LEN, MAX_TX_INPUTS, MAX_TX_KERNELS, MAX_TX_OUTPUTS};
 use core::core::BlockHeader;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
@@ -72,24 +72,24 @@ enum_from_primitive! {
 }
 
 const MAX_MSG_SIZES: [u64; 18] = [
-	0, // Error
-	128, // Hand
-	88, // Shake
-	12, // Ping
-	12, // Pong
-	2, // GetPeerAddrs
-	4 + (1 + 16 + 2) * MAX_PEER_ADDRS as u64, // PeerAddrs, with all IPv6
-	1 + 32 * MAX_LOCATORS as u64, // GetHeaders locators
-	365, // Header
-	2 + 365 * MAX_BLOCK_HEADERS as u64, // Headers
-	32, // GetBlock
-	MAX_MSG_LEN, // Block
-	32, // GetCompactBlock
-	MAX_MSG_LEN / 10, // CompactBlock
+	0,                                                                  // Error
+	128,                                                                // Hand
+	88,                                                                 // Shake
+	12,                                                                 // Ping
+	12,                                                                 // Pong
+	2,                                                                  // GetPeerAddrs
+	4 + (1 + 16 + 2) * MAX_PEER_ADDRS as u64,                           // PeerAddrs, with all IPv6
+	1 + 32 * MAX_LOCATORS as u64,                                       // GetHeaders locators
+	365,                                                                // Header
+	2 + 365 * MAX_BLOCK_HEADERS as u64,                                 // Headers
+	32,                                                                 // GetBlock
+	MAX_MSG_LEN,                                                        // Block
+	32,                                                                 // GetCompactBlock
+	MAX_MSG_LEN / 10,                                                   // CompactBlock
 	1000 * MAX_TX_INPUTS + 710 * MAX_TX_OUTPUTS + 114 * MAX_TX_KERNELS, // StemTransaction,
 	1000 * MAX_TX_INPUTS + 710 * MAX_TX_OUTPUTS + 114 * MAX_TX_KERNELS, // Transaction,
-	40, // TxHashSetRequest
-	64, // TxHashSetArchive
+	40,                                                                 // TxHashSetRequest
+	64,                                                                 // TxHashSetArchive
 ];
 
 /// The default implementation of read_exact is useless with async TcpStream as
