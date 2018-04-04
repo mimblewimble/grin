@@ -252,6 +252,11 @@ where
 		let stem_propagation = random <= self.config.dandelion_probability;
 		let mut will_stem = stem && stem_propagation;
 
+		// Track the case where a parent of a transaction is in stempool
+		let mut parent_in_stempool = false;
+		// The timer attached to this transaction
+		let mut timer: i64 = 0;
+
 		// The next issue is to identify all unspent outputs that
 		// this transaction will consume and make sure they exist in the set.
 		let mut pool_refs: Vec<graph::Edge> = Vec::new();
@@ -269,17 +274,13 @@ where
 			match self.search_for_best_output(&output) {
 				Parent::PoolTransaction { tx_ref: x } => pool_refs.push(base.with_source(Some(x))),
 				Parent::StemPoolTransaction { tx_ref: x } => {
-					if will_stem {
-						// Going to stem this transaction if parent is in stempool it's ok.
-						debug!(LOGGER, "Going in stempool");
-						pool_refs.push(base.with_source(Some(x)));
-					} else {
-						will_stem = true;
-						debug!(
-							LOGGER,
-							"Parent is in stempool, force transaction to go in stempool"
-						);
-						pool_refs.push(base.with_source(Some(x)));
+					will_stem = true;
+					parent_in_stempool = true;
+					debug!(LOGGER, "Parent is in stempool, going in stempool");
+					pool_refs.push(base.with_source(Some(x)));
+					let temp_timer = self.time_stem_transactions.get(&x).unwrap().clone();
+					if temp_timer > timer {
+						timer = temp_timer;
 					}
 				}
 				Parent::BlockTransaction => {
@@ -298,6 +299,11 @@ where
 		}
 
 		let is_orphan = orphan_refs.len() > 0;
+
+		// In the case the parent is not in stempool we randomize the timer
+		if !parent_in_stempool {
+			timer = time::now_utc().to_timespec().sec + rand::thread_rng().gen_range(0, 31);
+		}
 
 		// Next we examine the outputs this transaction creates and ensure
 		// that they do not already exist.
@@ -344,8 +350,7 @@ where
 				self.adapter.stem_tx_accepted(&tx);
 				self.stem_transactions.insert(tx_hash, Box::new(tx));
 				// Track this transaction
-				self.time_stem_transactions
-					.insert(tx_hash, time::now_utc().to_timespec().sec);
+				self.time_stem_transactions.insert(tx_hash, timer);
 			} else {
 				// Fluff phase: transaction is added to memory pool and broadcasted normally
 				self.pool.add_pool_transaction(
