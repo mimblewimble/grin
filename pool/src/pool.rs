@@ -274,17 +274,14 @@ where
 			match self.search_for_best_output(&output) {
 				Parent::PoolTransaction { tx_ref: x } => pool_refs.push(base.with_source(Some(x))),
 				Parent::StemPoolTransaction { tx_ref: x } => {
-						will_stem = true;
-						parent_in_stempool = true;
-						debug!(
-							LOGGER,
-							"Parent is in stempool, going in stempool"
-						);
-						pool_refs.push(base.with_source(Some(x)));
-						let temp_timer = self.time_stem_transactions.get(&x).unwrap().clone();
-						if  temp_timer < timer {
-							timer = temp_timer;
-						}
+					will_stem = true;
+					parent_in_stempool = true;
+					debug!(LOGGER, "Parent is in stempool, going in stempool");
+					pool_refs.push(base.with_source(Some(x)));
+					let temp_timer = self.time_stem_transactions.get(&x).unwrap().clone();
+					if temp_timer < timer {
+						timer = temp_timer;
+					}
 				}
 				Parent::BlockTransaction => {
 					let height = head_header.height + 1;
@@ -353,8 +350,7 @@ where
 				self.adapter.stem_tx_accepted(&tx);
 				self.stem_transactions.insert(tx_hash, Box::new(tx));
 				// Track this transaction
-				self.time_stem_transactions
-					.insert(tx_hash, timer);
+				self.time_stem_transactions.insert(tx_hash, timer);
 			} else {
 				// Fluff phase: transaction is added to memory pool and broadcasted normally
 				self.pool.add_pool_transaction(
