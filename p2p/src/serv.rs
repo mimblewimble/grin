@@ -61,21 +61,21 @@ impl Server {
 		if archive_mode && adapter.total_height() > 0 {
 			// Check that we have block 1
 			match block_1_hash {
-				Some(hash) => {
-					match adapter.get_block(hash) {
-						Some(_) => debug!(LOGGER, "Full block 1 found, archive capabilities confirmed"),
-						None => {
-							debug!(LOGGER, "Full block 1 not found, archive capabilities disabled");
-							capab.remove(Capabilities::FULL_HIST);
-						}
+				Some(hash) => match adapter.get_block(hash) {
+					Some(_) => debug!(LOGGER, "Full block 1 found, archive capabilities confirmed"),
+					None => {
+						debug!(
+							LOGGER,
+							"Full block 1 not found, archive capabilities disabled"
+						);
+						capab.remove(Capabilities::FULL_HIST);
 					}
-				}
+				},
 				None => {
 					debug!(LOGGER, "Block 1 not found, archive capabilities disabled");
 					capab.remove(Capabilities::FULL_HIST);
+				}
 			}
-		}
-
 		}
 		Ok(Server {
 			config: config.clone(),
