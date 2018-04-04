@@ -176,12 +176,18 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 			if let Some(peer) = peer {
 				if let Ok(peer) = peer.try_read() {
 					// Only ask full archival node
-					if peer.info.capabilities.contains(p2p::Capabilities::FULL_HIST) {
+					if peer.info
+						.capabilities
+						.contains(p2p::Capabilities::FULL_HIST)
+					{
 						if let Err(e) = peer.send_block_request(hash) {
 							debug!(LOGGER, "Skipped request to {}: {:?}", peer.info.addr, e);
 						}
 					} else {
-						debug!(LOGGER, "Skipped request to {}: not an archival node", peer.info.addr);
+						debug!(
+							LOGGER,
+							"Skipped request to {}: not an archival node", peer.info.addr
+						);
 					}
 				}
 			}
