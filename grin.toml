@@ -149,7 +149,7 @@ enable_mining = true
 #this allows for many searches to be run in parallel, e.g. if the system
 #has multiple GPUs, or if you want to mine using multiple plugins
 
-miner_async_mode = false
+miner_async_mode = true
 
 #The directory in which mining plugins are installed
 #if not specified, grin will look in the directory /deps relative
