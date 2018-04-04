@@ -255,7 +255,7 @@ where
 		// Track the case where a parent of a transaction is in stempool
 		let mut parent_in_stempool = false;
 		// The timer attached to this transaction
-		let mut timer: i64 = <i64>::max_value();
+		let mut timer: i64 = 0;
 
 		// The next issue is to identify all unspent outputs that
 		// this transaction will consume and make sure they exist in the set.
@@ -279,7 +279,7 @@ where
 					debug!(LOGGER, "Parent is in stempool, going in stempool");
 					pool_refs.push(base.with_source(Some(x)));
 					let temp_timer = self.time_stem_transactions.get(&x).unwrap().clone();
-					if temp_timer < timer {
+					if temp_timer > timer {
 						timer = temp_timer;
 					}
 				}
