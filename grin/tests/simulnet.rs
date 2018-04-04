@@ -265,7 +265,6 @@ fn simulate_fast_sync() {
 	while s2.head().height != s2.header_head().height || s2.head().height < 20 {
 		thread::sleep(time::Duration::from_millis(1000));
 	}
-	s2.chain.rebuild_header_by_height();
 	let h2 = s2.chain.get_header_by_height(1).unwrap();
 
 	s1.stop();
