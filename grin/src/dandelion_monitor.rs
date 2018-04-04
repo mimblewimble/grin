@@ -51,7 +51,6 @@ pub fn monitor_transactions<T>(
 					let time_transaction = time_stem_transactions.get(tx_hash).unwrap();
 					let interval = now_utc().to_timespec().sec - time_transaction;
 
-					// TODO Randomize between 30 and 60 seconds
 					if interval >= config.dandelion_embargo {
 						let source = TxSource {
 							debug_name: "dandelion-monitor".to_string(),
