@@ -176,7 +176,10 @@ impl Peers {
 		let mut max_peers = peers
 			.iter()
 			.filter(|x| match x.try_read() {
-				Ok(peer) => peer.info.total_difficulty > total_difficulty && peer.info.capabilities.contains(Capabilities::FULL_HIST),
+				Ok(peer) => {
+					peer.info.total_difficulty > total_difficulty
+						&& peer.info.capabilities.contains(Capabilities::FULL_HIST)
+				}
 				Err(_) => false,
 			})
 			.cloned()
@@ -625,7 +628,11 @@ impl NetAdapter for Peers {
 	/// addresses.
 	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr> {
 		let peers = self.find_peers(State::Healthy, capab, MAX_PEER_ADDRS as usize);
-		trace!(LOGGER, "find_peer_addrs: {} healthy peers picked", peers.len());
+		trace!(
+			LOGGER,
+			"find_peer_addrs: {} healthy peers picked",
+			peers.len()
+		);
 		map_vec!(peers, |p| p.addr)
 	}
 

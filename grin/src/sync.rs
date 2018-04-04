@@ -175,9 +175,9 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 			let peer = peers.more_work_archival_peer();
 			if let Some(peer) = peer {
 				if let Ok(peer) = peer.try_read() {
-						if let Err(e) = peer.send_block_request(hash) {
-							debug!(LOGGER, "Skipped request to {}: {:?}", peer.info.addr, e);
-						}
+					if let Err(e) = peer.send_block_request(hash) {
+						debug!(LOGGER, "Skipped request to {}: {:?}", peer.info.addr, e);
+					}
 				}
 			}
 		}
