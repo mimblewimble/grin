@@ -27,6 +27,7 @@ use api;
 use chain;
 use core::{consensus, genesis, global};
 use core::core::target::Difficulty;
+use core::core::hash::Hashed;
 use dandelion_monitor;
 use miner;
 use p2p;
@@ -136,6 +137,11 @@ impl Server {
 			config.clone(),
 		));
 
+		let block_1_hash = match shared_chain.get_header_by_height(1) {
+			Ok(header) => Some(header.hash()),
+			Err(_) => None,
+		};
+
 		let p2p_config = config.p2p_config.clone();
 		let p2p_server = Arc::new(p2p::Server::new(
 			config.db_root.clone(),
@@ -144,6 +150,8 @@ impl Server {
 			net_adapter.clone(),
 			genesis.hash(),
 			stop.clone(),
+			archive_mode,
+			block_1_hash,
 		)?);
 		chain_adapter.init(Arc::downgrade(&p2p_server.peers));
 		pool_net_adapter.init(Arc::downgrade(&p2p_server.peers));
