@@ -85,6 +85,18 @@ impl Server {
 
 	/// Instantiates a new server associated with the provided future reactor.
 	pub fn new(mut config: ServerConfig) -> Result<Server, Error> {
+		// Defaults to None (optional) in config file.
+		// This translates to false here.
+		let archive_mode = match config.archive_mode {
+			None => false,
+			Some(b) => b,
+		};
+
+		// If archive mode is enabled then the flags should contains the FULL_HIST flag
+		if archive_mode && !config.capabilities.contains(p2p::Capabilities::FULL_HIST) {
+			config.capabilities.insert(p2p::Capabilities::FULL_HIST);
+		}
+
 		let stop = Arc::new(AtomicBool::new(false));
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
@@ -157,13 +169,6 @@ impl Server {
 				stop.clone(),
 			);
 		}
-
-		// Defaults to None (optional) in config file.
-		// This translates to false here.
-		let archive_mode = match config.archive_mode {
-			None => false,
-			Some(b) => b,
-		};
 
 		// Defaults to None (optional) in config file.
 		// This translates to false here so we do not skip by default.
