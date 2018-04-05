@@ -68,7 +68,9 @@ impl OrphanBlockPool {
 		let mut orphans = self.orphans.write().unwrap();
 		let mut height_idx = self.height_idx.write().unwrap();
 		{
-			let height_hashes = height_idx.entry(orphan.block.header.height).or_insert(vec![]);
+			let height_hashes = height_idx
+				.entry(orphan.block.header.height)
+				.or_insert(vec![]);
 			height_hashes.push(orphan.block.hash());
 			orphans.insert(orphan.block.hash(), orphan);
 		}
@@ -97,7 +99,9 @@ impl OrphanBlockPool {
 	fn remove_by_height(&self, height: &u64) -> Option<Vec<Orphan>> {
 		let mut orphans = self.orphans.write().unwrap();
 		let mut height_idx = self.height_idx.write().unwrap();
-		height_idx.remove(height).map(|hs| map_vec!(hs, |h| orphans.remove(h).unwrap()))
+		height_idx
+			.remove(height)
+			.map(|hs| map_vec!(hs, |h| orphans.remove(h).unwrap()))
 	}
 
 	fn contains(&self, hash: &Hash) -> bool {

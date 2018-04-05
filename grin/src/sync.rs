@@ -150,7 +150,10 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 
 	// if the chain is already saturated with orphans, throttle
 	// still asking for at least 1 unknown block to avoid getting stuck
-	block_count = cmp::min(block_count, chain::MAX_ORPHAN_SIZE.saturating_sub(chain.orphans_len()) + 1);
+	block_count = cmp::min(
+		block_count,
+		chain::MAX_ORPHAN_SIZE.saturating_sub(chain.orphans_len()) + 1,
+	);
 
 	let hashes_to_get = hashes
 		.iter()
