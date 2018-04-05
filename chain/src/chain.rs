@@ -33,8 +33,11 @@ use types::*;
 use util::secp::pedersen::RangeProof;
 use util::LOGGER;
 
-const MAX_ORPHAN_AGE_SECS: u64 = 300;
+/// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
+
+/// When evicting, very old orphans are evicted first
+const MAX_ORPHAN_AGE_SECS: u64 = 300;
 
 #[derive(Debug, Clone)]
 struct Orphan {
@@ -654,6 +657,7 @@ impl Chain {
 		self.head.lock().unwrap().clone().total_difficulty
 	}
 
+	/// Orphans pool size
 	pub fn orphans_len(&self) -> usize {
 		self.orphans.len()
 	}
@@ -751,10 +755,11 @@ impl Chain {
 			.map_err(|e| Error::StoreErr(e, "retrieve block pmmr metadata".to_owned()))
 	}
 
+	/// Rebuilds height index. Reachable as endpoint POST /chain/height-index
 	pub fn rebuild_header_by_height(&self) -> Result<(), Error> {
 		let head = self.head_header()?;
 		self.store
 			.build_by_height_index(&head, true)
-			.map_err(|e| Error::StoreErr(e, "rebuilf header by height index".to_owned()))
+			.map_err(|e| Error::StoreErr(e, "rebuild header by height index".to_owned()))
 	}
 }
