@@ -296,8 +296,8 @@ fn simulate_fast_sync_double() {
 		s2.stop();
 	}
 	// locks files don't seem to be cleaned properly until process exit
-	std::fs::remove_file("target/tmp/grin-double-fast2/grin-sync-1001/chain/LOCK");
-	std::fs::remove_file("target/tmp/grin-double-fast2/grin-sync-1001/peers/LOCK");
+	std::fs::remove_file("target/tmp/grin-double-fast2/grin-sync-1001/chain/LOCK").unwrap();
+	std::fs::remove_file("target/tmp/grin-double-fast2/grin-sync-1001/peers/LOCK").unwrap();
 	thread::sleep(time::Duration::from_secs(20));
 
 	let mut conf = config(3001, "grin-double-fast2", 3000);
