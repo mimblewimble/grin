@@ -14,6 +14,7 @@
 
 //! short ids for compact blocks
 
+use std::cmp::Ordering;
 use std::cmp::min;
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -70,8 +71,12 @@ impl<H: Hashed> ShortIdentifiable for H {
 }
 
 /// Short id for identifying inputs/outputs/kernels
-#[derive(PartialEq, Clone, PartialOrd, Ord, Eq, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ShortId([u8; 6]);
+
+/// We want to sort short_ids in a canonical and consistent manner so we can
+/// verify sort order in the same way we do for full inputs|outputs|kernels themselves.
+hashable_ord!(ShortId);
 
 impl ::std::fmt::Debug for ShortId {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
@@ -130,6 +135,29 @@ impl ShortId {
 mod test {
 	use super::*;
 	use ser::{Writeable, Writer};
+
+	#[test]
+	fn short_id_ord() {
+		let id_1 = ShortId::from_bytes(&[1, 1, 1, 1]);
+		let id_2 = ShortId::from_bytes(&[2, 2, 2, 2]);
+		let id_3 = ShortId::from_bytes(&[3, 3, 3, 3]);
+
+		let mut ids = vec![id_1.clone(), id_2.clone(), id_3.clone()];
+		println!("{:?}", ids);
+
+		let mut hashes = ids.iter().map(|x| x.hash()).collect::<Vec<_>>();
+		println!("{:?}", hashes);
+
+		// NOTE: after sorting hash(3) comes before hash(2)
+		hashes.sort();
+		println!("{:?}", hashes);
+		assert_eq!(hashes, [id_1.hash(), id_3.hash(), id_2.hash()]);
+
+		// NOTE: this also applies to sorting the ids (we sort based on hashes)
+		ids.sort();
+		println!("{:?}", ids);
+		assert_eq!(ids, [id_1, id_3, id_2]);
+	}
 
 	#[test]
 	fn test_short_id() {

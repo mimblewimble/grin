@@ -92,3 +92,26 @@ macro_rules! ser_multiwrite {
     $( try!($wrtr.$write_call($val)) );*
   }
 }
+
+// don't seem to be able to define an Ord implementation for Hash due to
+// Ord being defined on all pointers, resorting to a macro instead
+macro_rules! hashable_ord {
+	($hashable: ident) => {
+		impl Ord for $hashable {
+			fn cmp(&self, other: &$hashable) -> Ordering {
+				self.hash().cmp(&other.hash())
+			}
+		}
+		impl PartialOrd for $hashable {
+			fn partial_cmp(&self, other: &$hashable) -> Option<Ordering> {
+				Some(self.cmp(other))
+			}
+		}
+		impl PartialEq for $hashable {
+			fn eq(&self, other: &$hashable) -> bool {
+				self.hash() == other.hash()
+			}
+		}
+		impl Eq for $hashable {}
+	}
+}
