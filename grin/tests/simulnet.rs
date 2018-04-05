@@ -23,7 +23,6 @@ extern crate grin_wallet as wallet;
 
 mod framework;
 
-use std::fs;
 use std::thread;
 use std::time;
 use std::default::Default;
@@ -194,7 +193,7 @@ fn simulate_block_propagation() {
 
 	// start mining
 	servers[0].start_miner(miner_config());
-	let original_height = servers[0].head().height;
+	let _original_height = servers[0].head().height;
 
 	// monitor for a change of head on a different server and check whether
 	// chain height has changed
@@ -232,6 +231,7 @@ fn simulate_full_sync() {
 	s1.start_miner(miner_config());
 	thread::sleep(time::Duration::from_secs(8));
 
+	#[ignore(unused_mut)] // mut needed?
 	let mut conf = config(1001, "grin-sync", 1000);
 	let s2 = grin::Server::new(conf).unwrap();
 	while s2.head().height < 4 {
@@ -264,7 +264,7 @@ fn simulate_fast_sync() {
 	while s2.head().height != s2.header_head().height || s2.head().height < 20 {
 		thread::sleep(time::Duration::from_millis(1000));
 	}
-	let h2 = s2.chain.get_header_by_height(1).unwrap();
+	let _h2 = s2.chain.get_header_by_height(1).unwrap();
 
 	s1.stop();
 	s2.stop();
