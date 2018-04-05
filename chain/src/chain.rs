@@ -101,7 +101,7 @@ impl OrphanBlockPool {
 		let mut height_idx = self.height_idx.write().unwrap();
 		height_idx
 			.remove(height)
-			.map(|hs| map_vec!(hs, |h| orphans.remove(h).unwrap()))
+			.map(|hs| hs.iter().filter_map(|h| orphans.remove(h)).collect())
 	}
 
 	fn contains(&self, hash: &Hash) -> bool {
