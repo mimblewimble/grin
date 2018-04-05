@@ -27,7 +27,6 @@ use std::sync::Arc;
 use chain::Chain;
 use chain::types::*;
 use core::core::{Block, BlockHeader, Transaction};
-use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::{consensus, genesis};
 use core::global;
@@ -101,7 +100,7 @@ fn data_files() {
 				global::sizeshift() as u32,
 			).unwrap();
 
-			let prev_bhash = b.header.previous;
+			// let prev_bhash = b.header.previous;
 			let bhash = b.hash();
 			chain
 				.process_block(b.clone(), chain::Options::MINE)
@@ -113,7 +112,7 @@ fn data_files() {
 			let cur_pmmr_md = chain
 				.get_block_pmmr_file_metadata(&head.last_block_h)
 				.expect("block pmmr file data doesn't exist");
-			let pref_pmmr_md = chain
+			chain
 				.get_block_pmmr_file_metadata(&head.prev_block_h)
 				.expect("previous block pmmr file data doesn't exist");
 

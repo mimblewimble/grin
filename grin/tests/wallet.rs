@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[macro_use]
 extern crate router;
 #[macro_use]
 extern crate slog;
@@ -133,7 +132,7 @@ fn basic_wallet_transactions() {
 		LOGGER,
 		"Sending many small transactions to recipient wallet"
 	);
-	for i in 0..10 {
+	for _i in 0..10 {
 		LocalServerContainer::send_amount_to(
 			&coinbase_wallet_config,
 			"1.00",

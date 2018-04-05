@@ -115,7 +115,7 @@ impl Server {
 				Ok((stream, peer_addr)) => {
 					if !self.check_banned(&stream) {
 						if let Err(e) = self.handle_new_peer(stream) {
-							debug!(
+							warn!(
 								LOGGER,
 								"Error accepting peer {}: {:?}",
 								peer_addr.to_string(),
@@ -149,7 +149,7 @@ impl Server {
 
 		if let Some(p) = self.peers.get_connected_peer(addr) {
 			// if we're already connected to the addr, just return the peer
-			debug!(LOGGER, "connect_peer: already connected {}", addr);
+			trace!(LOGGER, "connect_peer: already connected {}", addr);
 			return Ok(p);
 		}
 

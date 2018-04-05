@@ -122,7 +122,7 @@ pub fn issue_send_tx(
 		WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 			info!(LOGGER, "cleaning up unused change output from wallet");
 			wallet_data.delete_output(&change_key);
-		});
+		}).unwrap();
 		panic!(
 			"dest formatted as {} but send -d expected stdout or http://IP:port",
 			dest

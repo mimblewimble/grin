@@ -717,7 +717,7 @@ mod test {
 
 			let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
 
-			keychain.aggsig_create_context(&tx_id, blind);
+			keychain.aggsig_create_context(&tx_id, blind).unwrap();
 			keychain.aggsig_get_public_keys(&tx_id)
 		};
 
@@ -729,7 +729,7 @@ mod test {
 			// let blind = blind_sum.secret_key(&keychain.secp())?;
 			let blind = keychain.derived_key(&key_id).unwrap();
 
-			keychain.aggsig_create_context(&tx_id, blind);
+			keychain.aggsig_create_context(&tx_id, blind).unwrap();
 			let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys(&tx_id);
 			keychain.aggsig_add_output(&tx_id, &key_id);
 
@@ -891,7 +891,7 @@ mod test {
 
 			let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
 
-			keychain.aggsig_create_context(&tx_id, blind);
+			keychain.aggsig_create_context(&tx_id, blind).unwrap();
 			keychain.aggsig_get_public_keys(&tx_id)
 		};
 
@@ -902,7 +902,7 @@ mod test {
 
 			let blind = keychain.derived_key(&key_id).unwrap();
 
-			keychain.aggsig_create_context(&tx_id, blind);
+			keychain.aggsig_create_context(&tx_id, blind).unwrap();
 			let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys(&tx_id);
 			keychain.aggsig_add_output(&tx_id, &key_id);
 
