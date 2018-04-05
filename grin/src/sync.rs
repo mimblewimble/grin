@@ -146,7 +146,14 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 	// if we have 5 peers to sync from then ask for 50 blocks total (peer_count *
 	// 10) max will be 80 if all 8 peers are advertising more work
 	let peer_count = cmp::min(peers.more_work_peers().len(), 10);
-	let block_count = peer_count * 10;
+	let mut block_count = peer_count * 10;
+
+	// if the chain is already saturated with orphans, throttle
+	// still asking for at least 1 unknown block to avoid getting stuck
+	block_count = cmp::min(
+		block_count,
+		chain::MAX_ORPHAN_SIZE.saturating_sub(chain.orphans_len()) + 1,
+	);
 
 	let hashes_to_get = hashes
 		.iter()

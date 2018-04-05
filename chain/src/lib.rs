@@ -30,6 +30,7 @@ extern crate serde_derive;
 extern crate slog;
 extern crate time;
 
+#[macro_use]
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_store;
@@ -43,5 +44,5 @@ pub mod types;
 
 // Re-export the base interface
 
-pub use chain::Chain;
+pub use chain::{Chain, MAX_ORPHAN_SIZE};
 pub use types::{ChainAdapter, ChainStore, Error, Options, Tip};
