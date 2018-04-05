@@ -129,7 +129,6 @@ impl Default for LocalServerContainerConfig {
 	}
 }
 
-
 /// A top-level container to hold everything that might be running
 /// on a server, i.e. server, wallet in send or listen mode
 
@@ -168,18 +167,16 @@ impl LocalServerContainer {
 
 	pub fn new(config: LocalServerContainerConfig) -> Result<LocalServerContainer, Error> {
 		let working_dir = format!("target/test_servers/{}", config.name);
-		Ok(
-			LocalServerContainer {
-				config: config,
-				p2p_server_stats: None,
-				api_server: None,
-				server_is_running: false,
-				server_is_mining: false,
-				wallet_is_running: false,
-				working_dir: working_dir,
-				peer_list: Vec::new(),
-			},
-		)
+		Ok(LocalServerContainer {
+			config: config,
+			p2p_server_stats: None,
+			api_server: None,
+			server_is_running: false,
+			server_is_mining: false,
+			wallet_is_running: false,
+			working_dir: working_dir,
+			peer_list: Vec::new(),
+		})
 	}
 
 	pub fn run_server(&mut self, duration_in_seconds: u64) -> grin::ServerStats {
@@ -403,19 +400,14 @@ impl LocalServerContainerPool {
 
 		server_config.name = String::from(format!(
 			"{}/{}-{}",
-			self.config.base_name,
-			self.config.base_name,
-			server_config.p2p_server_port
+			self.config.base_name, self.config.base_name, server_config.p2p_server_port
 		));
-
 
 		// Use self as coinbase wallet
 		server_config.coinbase_wallet_address = String::from(format!(
 			"http://{}:{}",
-			server_config.base_addr,
-			server_config.wallet_port
+			server_config.base_addr, server_config.wallet_port
 		));
-
 
 		self.next_p2p_port += 1;
 		self.next_api_port += 1;
@@ -427,8 +419,7 @@ impl LocalServerContainerPool {
 
 		let _server_address = format!(
 			"{}:{}",
-			server_config.base_addr,
-			server_config.p2p_server_port
+			server_config.base_addr, server_config.p2p_server_port
 		);
 
 		let server_container = LocalServerContainer::new(server_config.clone()).unwrap();
@@ -469,7 +460,7 @@ impl LocalServerContainerPool {
 			let handle = thread::spawn(move || {
 				if is_seeding && !s.config.is_seeding {
 					// there's a seed and we're not it, so hang around longer and give the seed
-	 				// a chance to start
+					// a chance to start
 					thread::sleep(time::Duration::from_millis(2000));
 				}
 				let server_ref = s.run_server(run_length);
@@ -497,7 +488,6 @@ impl LocalServerContainerPool {
 	}
 
 	pub fn connect_all_peers(&mut self) {
-
 		/// just pull out all currently active servers, build a list,
 		/// and feed into all servers
 		let mut server_addresses: Vec<String> = Vec::new();

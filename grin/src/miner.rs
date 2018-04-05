@@ -47,7 +47,6 @@ use pow::plugin::PluginMiner;
 
 use itertools::Itertools;
 
-
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
 
@@ -115,8 +114,8 @@ impl ser::Writer for HeaderPartWriter {
 
 pub struct Miner {
 	config: MinerConfig,
-	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	pub chain: Arc<chain::Chain>,
+	pub tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 
 	// Just to hold the port we're on, so this miner can be identified
 	// while watching debug output
@@ -156,15 +155,13 @@ impl Miner {
 		latest_hash: &Hash,
 		attempt_time_per_block: u32,
 	) -> Option<Proof> {
-		debug!(
-			LOGGER,
-			"(Server ID: {}) Mining at Cuckoo{} for at most {} secs at height {} and difficulty {}.",
-			self.debug_output_id,
-			cuckoo_size,
-			attempt_time_per_block,
-			b.header.height,
-			b.header.difficulty
-		);
+		debug!(LOGGER,
+		       "(Server ID: {}) Mining at Cuckoo{} for at most {} secs at height {} and difficulty {}.",
+		       self.debug_output_id,
+		       cuckoo_size,
+		       attempt_time_per_block,
+		       b.header.height,
+		       b.header.difficulty);
 
 		// look for a pow for at most attempt_time_per_block sec on the
 		// same block (to give a chance to new
@@ -207,7 +204,8 @@ impl Miner {
 					let stats = job_handle.get_stats(i);
 					if let Ok(stat_vec) = stats {
 						for s in stat_vec {
-							let last_solution_time_secs = s.last_solution_time as f64 / 1000000000.0;
+							let last_solution_time_secs =
+								s.last_solution_time as f64 / 1000000000.0;
 							let last_hashes_per_sec = 1.0 / last_solution_time_secs;
 							debug!(
 								LOGGER,
@@ -257,8 +255,8 @@ impl Miner {
 		latest_hash: &mut Hash,
 	) -> Option<Proof> {
 		// look for a pow for at most attempt_time_per_block sec on the same block (to
-  // give a chance to new
-  // transactions) and as long as the head hasn't changed
+		// give a chance to new
+		// transactions) and as long as the head hasn't changed
 		let deadline = time::get_time().sec + attempt_time_per_block as i64;
 		let stat_check_interval = 3;
 		let mut next_stat_check = time::get_time().sec + stat_check_interval;
@@ -415,8 +413,7 @@ impl Miner {
 	pub fn run_loop(&self, miner_config: MinerConfig, cuckoo_size: u32, proof_size: usize) {
 		info!(
 			LOGGER,
-			"(Server ID: {}) Starting miner loop.",
-			self.debug_output_id
+			"(Server ID: {}) Starting miner loop.", self.debug_output_id
 		);
 		let mut plugin_miner = None;
 		let mut miner = None;
@@ -437,7 +434,7 @@ impl Miner {
 
 		// to prevent the wallet from generating a new HD key derivation for each
 		// iteration, we keep the returned derivation to provide it back when
-		// nothing has changed
+		// nothing has changed.  We only want to create on key_id for each new block.
 		let mut key_id = None;
 
 		loop {
@@ -448,21 +445,7 @@ impl Miner {
 			let head = self.chain.head_header().unwrap();
 			let mut latest_hash = self.chain.head().unwrap().last_block_h;
 
-			let mut result = self.build_block(&head, key_id.clone());
-			while let Err(e) = result {
-				match e {
-					self::Error::Chain(chain::Error::DuplicateCommitment(_)) => {
-						debug!(LOGGER, "Duplicate commit for potential coinbase detected. Trying next derivation.");
-					}
-					ae => {
-						warn!(LOGGER, "Error building new block: {:?}. Retrying.", ae);
-					}
-				}
-				thread::sleep(Duration::from_millis(100));
-				result = self.build_block(&head, key_id.clone());
-			}
-
-			let (mut b, block_fees) = result.unwrap();
+			let (mut b, block_fees) = self.get_block(key_id.clone());
 
 			let mut sol = None;
 			let mut use_async = false;
@@ -527,13 +510,37 @@ impl Miner {
 			} else {
 				debug!(
 					LOGGER,
-					"setting pubkey in miner to pubkey from block_fees - {:?}",
-					block_fees
+					"setting pubkey in miner to pubkey from block_fees - {:?}", block_fees
 				);
 				key_id = block_fees.key_id();
 			}
 		}
 	}
+
+        // Ensure a block is built and returned
+        pub fn get_block(
+                &self,
+                key_id: Option<Identifier>,
+        ) -> (core::Block, BlockFees) {
+		// get the latest chain state and build a block on top of it
+		let head = self.chain.head_header().unwrap();
+
+		let mut result = self.build_block(&head, key_id.clone());
+		while let Err(e) = result {
+			match e {
+				self::Error::Chain(chain::Error::DuplicateCommitment(_)) => {
+					debug!(LOGGER,
+					"Duplicate commit for potential coinbase detected. Trying next derivation.");
+				}
+				ae => {
+					warn!(LOGGER, "Error building new block: {:?}. Retrying.", ae);
+				}
+			}
+			thread::sleep(Duration::from_millis(100));
+			result = self.build_block(&head, key_id.clone());
+		}
+		return result.unwrap();
+        }
 
 	/// Builds a new block with the chain head as previous and eligible
 	/// transactions from the pool.
@@ -542,7 +549,6 @@ impl Miner {
 		head: &core::BlockHeader,
 		key_id: Option<Identifier>,
 	) -> Result<(core::Block, BlockFees), Error> {
-
 		// prepare the block header timestamp
 		let mut now_sec = time::get_time().sec;
 		let head_sec = head.timestamp.to_timespec().sec;
@@ -602,9 +608,12 @@ impl Miner {
 				Err(Error::Chain(chain::Error::DuplicateCommitment(e)))
 			}
 
-			//Some other issue, possibly duplicate kernel
+			// Some other issue, possibly duplicate kernel
 			Err(e) => {
-				error!(LOGGER, "Error setting sumtree root to build a block: {:?}", e);
+				error!(
+					LOGGER,
+					"Error setting sumtree root to build a block: {:?}", e
+				);
 				Err(Error::Chain(chain::Error::Other(format!("{:?}", e))))
 			}
 		}

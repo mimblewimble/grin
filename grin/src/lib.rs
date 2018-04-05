@@ -35,6 +35,8 @@ extern crate slog;
 extern crate time;
 extern crate tokio_core;
 extern crate tokio_timer;
+extern crate jsonrpc_core;
+extern crate bufstream;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;
@@ -53,6 +55,7 @@ mod seed;
 mod sync;
 mod types;
 mod miner;
+mod stratumserver;
 
 pub use server::Server;
 pub use types::{Seeding, ServerConfig, ServerStats};
