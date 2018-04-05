@@ -36,7 +36,7 @@ use util::secp::pedersen::*;
 pub use self::block::*;
 pub use self::transaction::*;
 pub use self::id::ShortId;
-use self::hash::Hashed;
+use core::hash::Hashed;
 use ser::{Error, Readable, Reader, Writeable, Writer};
 use global;
 
