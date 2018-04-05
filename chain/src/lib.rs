@@ -30,7 +30,6 @@ extern crate serde_derive;
 extern crate slog;
 extern crate time;
 
-#[macro_use]
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_store;

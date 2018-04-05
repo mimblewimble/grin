@@ -24,7 +24,6 @@ extern crate grin_wallet as wallet;
 mod framework;
 
 use std::fs;
-use std::sync::Arc;
 use std::thread;
 use std::time;
 use std::default::Default;

@@ -27,7 +27,6 @@ use std::sync::Arc;
 use chain::Chain;
 use chain::types::*;
 use core::core::{Block, BlockHeader, Transaction};
-use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::{consensus, genesis};
 use core::global;
