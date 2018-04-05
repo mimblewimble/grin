@@ -270,7 +270,7 @@ impl LocalServerContainer {
 		self.wallet_config.data_file_dir = self.working_dir.clone();
 
 		let _ = fs::create_dir_all(self.wallet_config.clone().data_file_dir);
-		wallet::WalletSeed::init_file(&self.wallet_config);
+		wallet::WalletSeed::init_file(&self.wallet_config).unwrap();
 
 		let wallet_seed = wallet::WalletSeed::from_file(&self.wallet_config)
 			.expect("Failed to read wallet seed file.");
@@ -285,7 +285,7 @@ impl LocalServerContainer {
 
 	pub fn get_wallet_seed(config: &WalletConfig) -> wallet::WalletSeed {
 		let _ = fs::create_dir_all(config.clone().data_file_dir);
-		wallet::WalletSeed::init_file(config);
+		wallet::WalletSeed::init_file(config).unwrap();
 		let wallet_seed =
 			wallet::WalletSeed::from_file(config).expect("Failed to read wallet seed file.");
 		wallet_seed

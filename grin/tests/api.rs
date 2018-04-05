@@ -38,6 +38,7 @@ use util::{init_test_logger, LOGGER};
 
 #[test]
 fn simple_server_wallet() {
+	info!(LOGGER, "starting simple_server_wallet");
 	let test_name_dir = "test_servers";
 	core::global::set_mining_mode(core::global::ChainTypes::AutomatedTesting);
 	framework::clean_all_output(test_name_dir);
@@ -145,6 +146,7 @@ fn simple_server_wallet() {
 /// Creates 2 servers and test P2P API
 #[test]
 fn test_p2p() {
+	info!(LOGGER, "starting test_p2p");
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "test_servers";
