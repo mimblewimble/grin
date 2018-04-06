@@ -87,7 +87,11 @@ impl OrphanBlockPool {
 			let mut heights = height_idx.keys().cloned().collect::<Vec<u64>>();
 			heights.sort_unstable();
 			for h in heights.iter().rev() {
-				let _ = self.remove_by_height(h);
+				if let Some(hs) = height_idx.remove(h) {
+					for h in hs {
+						let _ = orphans.remove(&h);
+					}
+				}
 				if orphans.len() < MAX_ORPHAN_SIZE {
 					break;
 				}
