@@ -544,7 +544,7 @@ impl Miner {
 
 	/// Builds a new block with the chain head as previous and eligible
 	/// transactions from the pool.
-	pub fn build_block(
+	fn build_block(
 		&self,
 		head: &core::BlockHeader,
 		key_id: Option<Identifier>,
