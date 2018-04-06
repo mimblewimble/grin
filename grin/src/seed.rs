@@ -18,6 +18,7 @@
 
 use std::io::Read;
 use std::net::SocketAddr;
+use std::net::ToSocketAddrs;
 use std::str;
 use std::sync::{mpsc, Arc};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -31,6 +32,8 @@ use p2p;
 use util::LOGGER;
 
 const SEEDS_URL: &'static str = "http://grin-tech.org/seeds.txt";
+// TODO Add more DNS Seeds
+const DNS_SEEDS: &'static [&'static str] = &["seed.grin.lesceller.com"];
 
 pub fn connect_and_monitor(
 	p2p_server: Arc<p2p::Server>,
@@ -229,6 +232,20 @@ fn listen_for_addrs(
 				});
 		}
 	}
+}
+
+pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
+	Box::new(|| {
+		let mut addresses: Vec<SocketAddr> = vec![];
+		for dns_seed in DNS_SEEDS {
+			debug!(LOGGER, "Retrieving seed nodes from dns {}", dns_seed);
+			match (dns_seed.to_owned(),0).to_socket_addrs() {
+				Ok(addrs) => addresses.append(&mut (addrs.into_iter().collect())),
+				Err(e) => debug!(LOGGER, "Failed to resolve seed {:?} got error {:?}", dns_seed, e),
+			}
+		}
+		addresses
+	})
 }
 
 /// Extract the list of seeds from a pre-defined text file available through
