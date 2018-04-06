@@ -239,9 +239,12 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 		let mut addresses: Vec<SocketAddr> = vec![];
 		for dns_seed in DNS_SEEDS {
 			debug!(LOGGER, "Retrieving seed nodes from dns {}", dns_seed);
-			match (dns_seed.to_owned(),0).to_socket_addrs() {
+			match (dns_seed.to_owned(), 0).to_socket_addrs() {
 				Ok(addrs) => addresses.append(&mut (addrs.into_iter().collect())),
-				Err(e) => debug!(LOGGER, "Failed to resolve seed {:?} got error {:?}", dns_seed, e),
+				Err(e) => debug!(
+					LOGGER,
+					"Failed to resolve seed {:?} got error {:?}", dns_seed, e
+				),
 			}
 		}
 		addresses
