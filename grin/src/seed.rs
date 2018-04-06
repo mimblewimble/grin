@@ -32,8 +32,7 @@ use p2p;
 use util::LOGGER;
 
 const SEEDS_URL: &'static str = "http://grin-tech.org/seeds.txt";
-// TODO Add more DNS Seeds
-const DNS_SEEDS: &'static [&'static str] = &["seed.grin.lesceller.com"];
+const DNS_SEEDS: &'static [&'static str] = &["seed.grin-tech.org","seed.grin.lesceller.com"];
 
 pub fn connect_and_monitor(
 	p2p_server: Arc<p2p::Server>,
