@@ -116,7 +116,8 @@ impl Server {
 			global::ChainTypes::AutomatedTesting => genesis::genesis_dev(),
 			_ => pow::mine_genesis_block(config.mining_config.clone())?,
 		};
-		info!(LOGGER, "Starting server, genesis block: {}", genesis.hash(),);
+
+		info!(LOGGER, "Starting server, genesis block: {}", genesis.hash());
 
 		let shared_chain = Arc::new(chain::Chain::init(
 			config.db_root.clone(),

@@ -248,6 +248,14 @@ impl MessageHandler for Protocol {
 					tmp_zip,
 					self.addr,
 				);
+
+				debug!(
+					LOGGER,
+					"handle_payload: txhashset archive for {} at {}, DONE",
+					sm_arch.hash,
+					sm_arch.height
+				);
+
 				Ok(None)
 			}
 

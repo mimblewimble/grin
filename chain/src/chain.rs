@@ -160,15 +160,20 @@ impl Chain {
 
 		// check if we have a head in store, otherwise the genesis block is it
 		let head = store.head();
+
 		let txhashset_md = match head {
 			Ok(h) => {
 				// Add the height to the metadata for the use of the rewind log, as this isn't
 				// stored
-				let mut ts = store.get_block_pmmr_file_metadata(&h.last_block_h)?;
-				ts.output_file_md.block_height = h.height;
-				ts.rproof_file_md.block_height = h.height;
-				ts.kernel_file_md.block_height = h.height;
-				Some(ts)
+				if let Ok(mut ts) = store.get_block_pmmr_file_metadata(&h.last_block_h) {
+					ts.output_file_md.block_height = h.height;
+					ts.rproof_file_md.block_height = h.height;
+					ts.kernel_file_md.block_height = h.height;
+					Some(ts)
+				} else {
+					debug!(LOGGER, "metadata not found for {} @ {}", h.height, h.hash());
+					None
+				}
 			}
 			Err(NotFoundErr) => None,
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
@@ -178,6 +183,7 @@ impl Chain {
 			txhashset::TxHashSet::open(db_root.clone(), store.clone(), txhashset_md)?;
 
 		let head = store.head();
+
 		let head = match head {
 			Ok(h) => h,
 			Err(NotFoundErr) => {
