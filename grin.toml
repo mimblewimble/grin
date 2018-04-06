@@ -103,11 +103,10 @@ cuckoo_miner_async_mode = false
 #cuckoo_miner_plugin_dir = "target/debug/plugins"
 
 #flag whether stratum server is enabled
-enable_stratum_server = true
+enable_stratum_server = false
 
 #what port and address for the stratum server to listen on
 stratum_server_addr = "127.0.0.1:13416"
-
 
 #The amount of time, in seconds, to attempt to mine on a particular
 #header before stopping and re-collecting transactions from the pool
