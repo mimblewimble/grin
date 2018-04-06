@@ -158,8 +158,12 @@ impl Worker {
 	}
 
 	// Send Message to the worker
-	fn send_message(&mut self, message: String) {
+	fn send_message(&mut self, message_in: String) {
 		// Write and Flush the message
+		let mut message = message_in.clone();
+		if !message.ends_with("\n") {
+			message += "\n";
+		}
 		match self.stream.write(message.as_bytes()) {
 			Ok(_) => match self.stream.flush() {
 				Ok(_) => {}
@@ -230,9 +234,10 @@ impl StratumServer {
 							// not a valid JSON RpcRequest - disconnect the worker
 							warn!(
 								LOGGER,
-								"(Server ID: {}) Failed to parse JSONRpc: {}",
+								"(Server ID: {}) Failed to parse JSONRpc: {} - {:?}",
 								self.id,
-								e.description()
+								e.description(),
+								the_message.as_bytes(),
 							);
 							workers_l[num].error = true;
 							continue;
@@ -414,7 +419,7 @@ impl StratumServer {
 	fn broadcast_job(&mut self) {
 		debug!(
 			LOGGER,
-			"(Server ID: {}) sending block {} to stratum client",
+			"(Server ID: {}) sending block {} to stratum clients",
 			self.id,
 			self.current_block.header.height
 		);

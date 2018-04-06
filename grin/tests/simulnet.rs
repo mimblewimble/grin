@@ -24,7 +24,9 @@ extern crate grin_pow as pow;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
+extern crate bufstream;
 extern crate futures;
+extern crate serde_json;
 extern crate tokio_core;
 extern crate tokio_timer;
 
@@ -38,6 +40,11 @@ use futures::{Async, Future, Poll};
 use futures::task::current;
 use tokio_core::reactor;
 // use tokio_timer::Timer;
+
+use std::io::prelude::*;
+use std::net::TcpStream;
+use bufstream::BufStream;
+use serde_json::Value;
 
 // use core::consensus;
 use core::global;
@@ -77,6 +84,148 @@ fn basic_genesis_mine() {
 	pool.run_all_servers();
 }
 
+// Create a grin server, and a stratum server.  Simulate a few JSONRpc requests
+// and verify the results.  Validate disconnected workers and broadcasting new
+// jobs.
+#[test]
+fn basic_stratum_server() {
+	util::init_test_logger();
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+
+	let test_name_dir = "stratum_server";
+	framework::clean_all_output(test_name_dir);
+	let evtlp = reactor::Core::new().unwrap();
+	let handle = evtlp.handle();
+
+	// Create a server manually
+	let config = grin::ServerConfig {
+		api_http_addr: format!("127.0.0.1:{}", 19100),
+		db_root: format!("target/{}/grin-sync-{}", test_name_dir, 0),
+		p2p_config: Some(p2p::P2PConfig {
+			port: 11100,
+			..p2p::P2PConfig::default()
+		}),
+		seeding_type: grin::Seeding::List,
+		seeds: Some(vec!["127.0.0.1:11100".to_string()]),
+		chain_type: core::global::ChainTypes::AutomatedTesting,
+		..Default::default()
+	};
+	let s = grin::Server::future(config, &handle).unwrap();
+
+	// Create miner
+	let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
+	let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();
+	plugin_config.type_filter = String::from("mean_cpu");
+	plugin_config_vec.push(plugin_config);
+
+	let miner_config = pow::types::MinerConfig {
+		enable_mining: true,
+		burn_reward: true,
+		attempt_time_per_block: 999,
+		use_cuckoo_miner: false,
+		cuckoo_miner_async_mode: Some(false),
+		cuckoo_miner_plugin_dir: Some(String::from("../target/debug/deps")),
+		cuckoo_miner_plugin_config: Some(plugin_config_vec),
+		enable_stratum_server: true,
+		stratum_server_addr: Some("127.0.0.1:11101".to_string()),
+		..Default::default()
+	};
+
+	// Start stratum server
+	s.start_stratum_server(miner_config.clone());
+
+	// Wait for stratum server to start and
+	// Verify stratum server accepts connections
+	loop {
+		match TcpStream::connect("127.0.0.1:11101") {
+			Ok(mut _stream) => {
+				break;
+			}
+			Err(_e) => thread::sleep(time::Duration::from_millis(500)),
+		}
+		// As this stream falls out of scope it will be disconnected
+	}
+
+	// Create a few new worker connections
+	let mut workers = vec![];
+	for _n in 0..5 {
+		let w = TcpStream::connect("127.0.0.1:11101").unwrap();
+		w.set_nonblocking(true)
+			.expect("Failed to set TcpStream to non-blocking");
+		let stream = BufStream::new(w);
+		workers.push(stream);
+	}
+	assert!(workers.len() == 5);
+
+	// Verify the inial *block broadcast* RPC request from server->workers; method:
+	// job
+	let expected = String::from("job");
+	thread::sleep(time::Duration::from_secs(2));
+	// Worker 3
+	let mut jobtemplate = String::new();
+	let _st = workers[2].read_line(&mut jobtemplate);
+	let job_template: Value = serde_json::from_str(&jobtemplate).unwrap();
+	assert_eq!(job_template["method"], expected);
+	// worker 4
+	let mut jobtemplate = String::new();
+	let _st = workers[3].read_line(&mut jobtemplate);
+	let job_template: Value = serde_json::from_str(&jobtemplate).unwrap();
+	assert_eq!(job_template["method"], expected);
+
+	// Verify a few stratum JSONRpc commands
+	// getjobtemplate - expected block template result
+	let mut response = String::new();
+	let job_req = "{\"id\": \"Stratum\", \"jsonrpc\": \"2.0\", \"method\": \"getjobtemplate\"}\n";
+	workers[2].write(job_req.as_bytes()).unwrap();
+	workers[2].flush().unwrap();
+	thread::sleep(time::Duration::from_secs(3)); // Wait for the server to reply
+	match workers[2].read_line(&mut response) {
+		Ok(_) => {
+			// We have not started mining yet, so the current block is still
+			// the initial genesis block. Validate against that.
+			let r: Value = serde_json::from_str(&response).unwrap();
+			assert_eq!(job_template["params"], r["result"]);
+		}
+		Err(_e) => {
+			assert!(false);
+		}
+	}
+
+	// keepalive - expected "ok" result
+	let mut response = String::new();
+	let job_req = "{\"id\":\"3\",\"jsonrpc\":\"2.0\",\"method\":\"keepalive\"}\n";
+	let ok_resp = "{\"id\":\"3\",\"jsonrpc\":\"2.0\",\"result\":\"ok\",\"error\":null}\n";
+	workers[2].write(job_req.as_bytes()).unwrap();
+	workers[2].flush().unwrap();
+	thread::sleep(time::Duration::from_secs(2)); // Wait for the server to reply
+	let _st = workers[2].read_line(&mut response);
+	assert_eq!(response.as_str(), ok_resp);
+
+	// "doesnotexist" - error expected
+	let mut response = String::new();
+	let job_req = "{\"id\":\"4\",\"jsonrpc\":\"2.0\",\"method\":\"doesnotexist\"}\n";
+	let ok_resp = "{\"id\":\"4\",\"jsonrpc\":\"2.0\",\"result\":null,\"error\":{\"code\":-32601,\"message\":\"Method not found\"}}\n";
+	workers[3].write(job_req.as_bytes()).unwrap();
+	workers[3].flush().unwrap();
+	thread::sleep(time::Duration::from_secs(2)); // Wait for the server to reply
+	let _st = workers[3].read_line(&mut response);
+	assert_eq!(response.as_str(), ok_resp);
+
+	// Simulate a worker lost connection
+	workers.remove(1);
+
+	// Start mining blocks
+	s.start_miner(miner_config.clone());
+
+	// Verify blocks are being broadcast to workers
+	let expected = String::from("job");
+	thread::sleep(time::Duration::from_secs(3)); // Wait for a few mined blocks
+	let mut jobtemplate = String::new();
+	let _st = workers[2].read_line(&mut jobtemplate);
+	let job_template: Value = serde_json::from_str(&jobtemplate).unwrap();
+	assert_eq!(job_template["method"], expected);
+}
+
 /// Creates 5 servers, first being a seed and check that through peer address
 /// messages they all end up connected.
 #[test]
@@ -110,8 +259,7 @@ fn simulate_seeding() {
 	server_config.is_seeding = false;
 	server_config.seed_addr = String::from(format!(
 		"{}:{}",
-		server_config.base_addr,
-		server_config.p2p_server_port
+		server_config.base_addr, server_config.p2p_server_port
 	));
 
 	for _ in 0..4 {
@@ -162,8 +310,7 @@ fn simulate_parallel_mining() {
 	server_config.is_seeding = false;
 	server_config.seed_addr = String::from(format!(
 		"{}:{}",
-		server_config.base_addr,
-		server_config.p2p_server_port
+		server_config.base_addr, server_config.p2p_server_port
 	));
 
 	// And create 4 more, then let them run for a while
@@ -178,8 +325,8 @@ fn simulate_parallel_mining() {
 	let _ = pool.run_all_servers();
 
 	// Check mining difficulty here?, though I'd think it's more valuable
- // to simply output it. Can at least see the evolution of the difficulty target
- // in the debug log output for now
+	// to simply output it. Can at least see the evolution of the difficulty target
+	// in the debug log output for now
 }
 
 // TODO: Convert these tests to newer framework format
