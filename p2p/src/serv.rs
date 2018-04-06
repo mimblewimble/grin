@@ -48,12 +48,35 @@ impl Server {
 	/// Creates a new idle p2p server with no peers
 	pub fn new(
 		db_root: String,
-		capab: Capabilities,
+		mut capab: Capabilities,
 		config: P2PConfig,
 		adapter: Arc<ChainAdapter>,
 		genesis: Hash,
 		stop: Arc<AtomicBool>,
+		archive_mode: bool,
+		block_1_hash: Option<Hash>,
 	) -> Result<Server, Error> {
+		// In the case of an archive node, check that we do have the first block.
+		// In case of first sync we do not perform this check.
+		if archive_mode && adapter.total_height() > 0 {
+			// Check that we have block 1
+			match block_1_hash {
+				Some(hash) => match adapter.get_block(hash) {
+					Some(_) => debug!(LOGGER, "Full block 1 found, archive capabilities confirmed"),
+					None => {
+						debug!(
+							LOGGER,
+							"Full block 1 not found, archive capabilities disabled"
+						);
+						capab.remove(Capabilities::FULL_HIST);
+					}
+				},
+				None => {
+					debug!(LOGGER, "Block 1 not found, archive capabilities disabled");
+					capab.remove(Capabilities::FULL_HIST);
+				}
+			}
+		}
 		Ok(Server {
 			config: config.clone(),
 			capabilities: capab,

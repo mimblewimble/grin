@@ -163,9 +163,43 @@ impl Peers {
 		max_peers
 	}
 
+	// Return vec of connected peers that currently advertise more work
+	// (total_difficulty) than we do and are also full archival nodes.
+	pub fn more_work_archival_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
+		let peers = self.connected_peers();
+		if peers.len() == 0 {
+			return vec![];
+		}
+
+		let total_difficulty = self.total_difficulty();
+
+		let mut max_peers = peers
+			.iter()
+			.filter(|x| match x.try_read() {
+				Ok(peer) => {
+					peer.info.total_difficulty > total_difficulty
+						&& peer.info.capabilities.contains(Capabilities::FULL_HIST)
+				}
+				Err(_) => false,
+			})
+			.cloned()
+			.collect::<Vec<_>>();
+
+		thread_rng().shuffle(&mut max_peers);
+		max_peers
+	}
+
 	/// Returns single random peer with more work than us.
 	pub fn more_work_peer(&self) -> Option<Arc<RwLock<Peer>>> {
 		match self.more_work_peers().first() {
+			Some(x) => Some(x.clone()),
+			None => None,
+		}
+	}
+
+	/// Returns single random archival peer with more work than us.
+	pub fn more_work_archival_peer(&self) -> Option<Arc<RwLock<Peer>>> {
+		match self.more_work_archival_peers().first() {
 			Some(x) => Some(x.clone()),
 			None => None,
 		}
@@ -594,7 +628,11 @@ impl NetAdapter for Peers {
 	/// addresses.
 	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr> {
 		let peers = self.find_peers(State::Healthy, capab, MAX_PEER_ADDRS as usize);
-		trace!(LOGGER, "find_peer_addrs: {} healthy peers picked", peers.len());
+		trace!(
+			LOGGER,
+			"find_peer_addrs: {} healthy peers picked",
+			peers.len()
+		);
 		map_vec!(peers, |p| p.addr)
 	}
 

@@ -179,7 +179,7 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 		for hash in hashes_to_get.clone() {
 			// TODO - Is there a threshold where we sync from most_work_peer (not
 			// more_work_peer)?
-			let peer = peers.more_work_peer();
+			let peer = peers.more_work_archival_peer();
 			if let Some(peer) = peer {
 				if let Ok(peer) = peer.try_read() {
 					if let Err(e) = peer.send_block_request(hash) {

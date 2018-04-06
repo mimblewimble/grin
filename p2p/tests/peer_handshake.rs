@@ -56,6 +56,8 @@ fn peer_handshake() {
 			net_adapter.clone(),
 			Hash::from_vec(vec![]),
 			Arc::new(AtomicBool::new(false)),
+			false,
+			None,
 		).unwrap(),
 	);
 
