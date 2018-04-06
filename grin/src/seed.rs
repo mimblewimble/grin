@@ -237,6 +237,7 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 	Box::new(|| {
 		let mut addresses: Vec<SocketAddr> = vec![];
 		for dns_seed in DNS_SEEDS {
+			let temp_addresses = addresses.clone();
 			debug!(LOGGER, "Retrieving seed nodes from dns {}", dns_seed);
 			match (dns_seed.to_owned(), 0).to_socket_addrs() {
 				Ok(addrs) => addresses.append(
@@ -245,6 +246,7 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 							addr.set_port(13414);
 							addr
 						})
+						.filter(|addr| !temp_addresses.contains(addr))
 						.collect()),
 				),
 				Err(e) => debug!(
