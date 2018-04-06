@@ -240,7 +240,14 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 		for dns_seed in DNS_SEEDS {
 			debug!(LOGGER, "Retrieving seed nodes from dns {}", dns_seed);
 			match (dns_seed.to_owned(), 0).to_socket_addrs() {
-				Ok(addrs) => addresses.append(&mut (addrs.map(|mut addr| {addr.set_port(13414); addr}).collect())),
+				Ok(addrs) => addresses.append(
+					&mut (addrs
+						.map(|mut addr| {
+							addr.set_port(13414);
+							addr
+						})
+						.collect()),
+				),
 				Err(e) => debug!(
 					LOGGER,
 					"Failed to resolve seed {:?} got error {:?}", dns_seed, e
