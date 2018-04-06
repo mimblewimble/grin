@@ -6,6 +6,8 @@ workspace = ".."
 publish = false
 
 [dependencies]
+failure = "0.1"
+failure_derive = "0.1"
 hyper = "0.10"
 iron = "0.5"
 lazy_static = "0.2"

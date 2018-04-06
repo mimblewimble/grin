@@ -15,18 +15,18 @@
 //! The primary module containing the implementations of the transaction pool
 //! and its top-level members.
 
-use std::vec::Vec;
 use std::collections::{HashMap, HashSet};
 use std::iter::Iterator;
-use std::fmt;
+use std::vec::Vec;
+use std::{error, fmt};
 
 use util::secp::pedersen::Commitment;
 
 pub use graph;
 
 use core::consensus;
-use core::core::{block, hash, transaction};
 use core::core::transaction::{Input, OutputIdentifier};
+use core::core::{block, hash, transaction};
 
 /// Transaction pool configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -162,14 +162,30 @@ pub enum PoolError {
 	LowFeeTransaction(u64),
 }
 
+impl error::Error for PoolError {
+	fn description(&self) -> &str {
+		match *self {
+			_ => "some kind of pool error",
+		}
+	}
+}
+
+impl fmt::Display for PoolError {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			_ => write!(f, "some kind of pool error"),
+		}
+	}
+}
+
 /// Interface that the pool requires from a blockchain implementation.
 pub trait BlockChain {
-	/// Get an unspent output by its commitment. Will return an error if the output
-	/// is spent or if it doesn't exist. The blockchain is expected to produce
-	/// a result with its current view of the most worked chain, ignoring
-	/// orphans, etc.
-	/// We do not maintain outputs themselves. The only information we have is the
-	/// hash from the output MMR.
+	/// Get an unspent output by its commitment. Will return an error if the
+	/// output is spent or if it doesn't exist. The blockchain is expected to
+	/// produce a result with its current view of the most worked chain,
+	/// ignoring orphans, etc.
+	/// We do not maintain outputs themselves. The only information we have is
+	/// the hash from the output MMR.
 	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<hash::Hash, PoolError>;
 
 	/// Check if an output being spent by the input has sufficiently matured.
@@ -188,8 +204,8 @@ pub trait PoolAdapter: Send + Sync {
 	/// The transaction pool has accepted this transactions as valid and added
 	/// it to its internal cache.
 	fn tx_accepted(&self, tx: &transaction::Transaction);
-	/// The stem transaction pool has accepted this transactions as valid and added
-	/// it to its internal cache.
+	/// The stem transaction pool has accepted this transactions as valid and
+	/// added it to its internal cache.
 	fn stem_tx_accepted(&self, tx: &transaction::Transaction);
 }
 

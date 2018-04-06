@@ -17,8 +17,8 @@
 //! wallet server that's running at all time is required in many cases.
 
 use bodyparser;
-use iron::prelude::*;
 use iron::Handler;
+use iron::prelude::*;
 use iron::status;
 use serde_json;
 use uuid::Uuid;
@@ -27,11 +27,11 @@ use api;
 use core::consensus::reward;
 use core::core::{amount_to_hr_string, build, Block, Committed, Output, Transaction, TxKernel};
 use core::{global, ser};
+use failure::{Fail, ResultExt};
 use keychain::{BlindingFactor, Identifier, Keychain};
 use types::*;
-use util::{secp, to_hex, LOGGER};
 use urlencoded::UrlEncodedQuery;
-use failure::ResultExt;
+use util::{secp, to_hex, LOGGER};
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
 #[derive(Serialize, Deserialize)]
@@ -42,8 +42,9 @@ pub struct TxWrapper {
 /// Receive Part 1 of interactive transactions from sender, Sender Initiation
 /// Return result of part 2, Recipient Initation, to sender
 /// -Receiver receives inputs, outputs xS * G and kS * G
-/// -Receiver picks random blinding factors for all outputs being received, computes total blinding
-///     excess xR
+/// -Receiver picks random blinding factors for all outputs being received,
+/// computes total blinding     
+/// excess xR
 /// -Receiver picks random nonce kR
 /// -Receiver computes Schnorr challenge e = H(M | kR * G + kS * G)
 /// -Receiver computes their part of signature, sR = kR + e * xR
@@ -146,7 +147,8 @@ fn handle_sender_initiation(
 /// Receive Part 3 of interactive transactions from sender, Sender Confirmation
 /// Return Ok/Error
 /// -Receiver receives sS
-/// -Receiver verifies sender's sig, by verifying that kS * G + e *xS * G = sS * G
+/// -Receiver verifies sender's sig, by verifying that 
+/// kS * G + e *xS * G = sS* G 
 /// -Receiver calculates final sig as s=(sS+sR, kS * G+kR * G)
 /// -Receiver puts into TX kernel:
 ///
@@ -281,9 +283,8 @@ impl Handler for WalletReceiver {
 						&partial_tx,
 					).map_err(|e| {
 						error!(LOGGER, "Phase 1 Sender Initiation -> Problematic partial tx, looks like this: {:?}", partial_tx);
-						api::Error::Internal(format!(
-							"Error processing partial transaction: {:?}",
-							e
+						e.context(api::ErrorKind::Internal(
+							"Error processing partial transaction".to_owned(),
 						))
 					})
 						.unwrap();
@@ -298,9 +299,8 @@ impl Handler for WalletReceiver {
 						fluff,
 					).map_err(|e| {
 						error!(LOGGER, "Phase 3 Sender Confirmation -> Problematic partial tx, looks like this: {:?}", partial_tx);
-						api::Error::Internal(format!(
-							"Error processing partial transaction: {:?}",
-							e
+						e.context(api::ErrorKind::Internal(
+							"Error processing partial transaction".to_owned(),
 						))
 					})
 						.unwrap();

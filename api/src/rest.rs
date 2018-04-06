@@ -18,64 +18,70 @@
 //! To use it, just have your service(s) implement the ApiEndpoint trait and
 //! register them on a ApiServer.
 
-use std::error;
 use std::fmt::{self, Display, Formatter};
+use std::mem;
 use std::net::ToSocketAddrs;
 use std::string::ToString;
-use std::mem;
 
+use failure::{Backtrace, Context, Fail, ResultExt};
+use iron::middleware::Handler;
 use iron::prelude::*;
 use iron::{status, Listening};
-use iron::middleware::Handler;
-use router::Router;
 use mount::Mount;
+use router::Router;
 
 use store;
 
 /// Errors that can be returned by an ApiEndpoint implementation.
+
 #[derive(Debug)]
-pub enum Error {
+pub struct Error {
+	inner: Context<ErrorKind>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Fail)]
+pub enum ErrorKind {
+	#[fail(display = "Internal error: {}", _0)]
 	Internal(String),
+	#[fail(display = "Bad arguments: {}", _0)]
 	Argument(String),
+	#[fail(display = "Not found.")]
 	NotFound,
 }
 
+impl Fail for Error {
+	fn cause(&self) -> Option<&Fail> {
+		self.inner.cause()
+	}
+
+	fn backtrace(&self) -> Option<&Backtrace> {
+		self.inner.backtrace()
+	}
+}
+
 impl Display for Error {
-	fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-		match *self {
-			Error::Argument(ref s) => write!(f, "Bad arguments: {}", s),
-			Error::Internal(ref s) => write!(f, "Internal error: {}", s),
-			Error::NotFound => write!(f, "Not found."),
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		Display::fmt(&self.inner, f)
+	}
+}
+
+impl Error {
+	pub fn kind(&self) -> &ErrorKind {
+		self.inner.get_context()
+	}
+}
+
+impl From<ErrorKind> for Error {
+	fn from(kind: ErrorKind) -> Error {
+		Error {
+			inner: Context::new(kind),
 		}
 	}
 }
 
-impl error::Error for Error {
-	fn description(&self) -> &str {
-		match *self {
-			Error::Argument(_) => "Bad arguments.",
-			Error::Internal(_) => "Internal error.",
-			Error::NotFound => "Not found.",
-		}
-	}
-}
-
-impl From<Error> for IronError {
-	fn from(e: Error) -> IronError {
-		match e {
-			Error::Argument(_) => IronError::new(e, status::Status::BadRequest),
-			Error::Internal(_) => IronError::new(e, status::Status::InternalServerError),
-			Error::NotFound => IronError::new(e, status::Status::NotFound),
-		}
-	}
-}
-
-impl From<store::Error> for Error {
-	fn from(e: store::Error) -> Error {
-		match e {
-			store::Error::NotFoundErr => Error::NotFound,
-			_ => Error::Internal(e.to_string()),
-		}
+impl From<Context<ErrorKind>> for Error {
+	fn from(inner: Context<ErrorKind>) -> Error {
+		Error { inner: inner }
 	}
 }
 
