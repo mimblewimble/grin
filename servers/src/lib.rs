@@ -31,6 +31,8 @@ extern crate serde_json;
 #[macro_use]
 extern crate slog;
 extern crate time;
+extern crate jsonrpc_core;
+extern crate bufstream;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;
