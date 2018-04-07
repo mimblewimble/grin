@@ -25,7 +25,7 @@ api_http_addr = "127.0.0.1:13413"
 
 db_root = ".grin"
 
-#How to seed this server, can be None, List or WebStatic
+#How to seed this server, can be None, List, WebStatic or DNSSeed
 #
 #seeding_type = "None"
 
