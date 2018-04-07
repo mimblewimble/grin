@@ -92,8 +92,8 @@ impl ser::Writer for HeaderPrePowWriter {
 
 pub struct Miner {
 	config: MinerConfig,
-	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	pub chain: Arc<chain::Chain>,
+	pub tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	stop: Arc<AtomicBool>,
 
 	// Just to hold the port we're on, so this miner can be identified
@@ -483,7 +483,7 @@ impl Miner {
 		}
 
 		// iteration, we keep the returned derivation to provide it back when
-		// nothing has changed
+		// nothing has changed. We only want to create on key_id for each new block.
 		let mut key_id = None;
 
 		{
@@ -499,21 +499,7 @@ impl Miner {
 			let head = self.chain.head_header().unwrap();
 			let mut latest_hash = self.chain.head().unwrap().last_block_h;
 
-			let mut result = self.build_block(&head, key_id.clone());
-			while let Err(e) = result {
-				match e {
-					self::Error::Chain(chain::Error::DuplicateCommitment(_)) => {
-						debug!(LOGGER, "Duplicate commit for potential coinbase detected. Trying next derivation.");
-					}
-					ae => {
-						warn!(LOGGER, "Error building new block: {:?}. Retrying.", ae);
-					}
-				}
-				thread::sleep(Duration::from_millis(100));
-				result = self.build_block(&head, key_id.clone());
-			}
-
-			let (mut b, block_fees) = result.unwrap();
+			let (mut b, block_fees) = self.get_block(key_id.clone());
 			{
 				let mut mining_stats = mining_stats.write().unwrap();
 				mining_stats.block_height = b.header.height;
@@ -595,6 +581,31 @@ impl Miner {
 			}
 		}
 	}
+
+        // Ensure a block is built and returned
+        pub fn get_block(
+                &self,
+                key_id: Option<Identifier>,
+        ) -> (core::Block, BlockFees) {
+               // get the latest chain state and build a block on top of it
+               let head = self.chain.head_header().unwrap();
+
+               let mut result = self.build_block(&head, key_id.clone());
+               while let Err(e) = result {
+                       match e {
+                               self::Error::Chain(chain::Error::DuplicateCommitment(_)) => {
+                                       debug!(LOGGER,
+                                       "Duplicate commit for potential coinbase detected. Trying next derivation.");
+                               }
+                               ae => {
+                                       warn!(LOGGER, "Error building new block: {:?}. Retrying.", ae);
+                               }
+                       }
+                       thread::sleep(Duration::from_millis(100));
+                       result = self.build_block(&head, key_id.clone());
+               }
+               return result.unwrap();
+        }
 
 	/// Builds a new block with the chain head as previous and eligible
 	/// transactions from the pool.

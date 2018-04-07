@@ -37,6 +37,7 @@ use sync;
 use types::*;
 use stats::*;
 use pow;
+use stratumserver;
 use util::LOGGER;
 
 /// Grin server holding internal structures.
@@ -67,12 +68,16 @@ impl Server {
 	{
 		let mut mining_config = config.mining_config.clone();
 		let serv = Arc::new(Server::new(config)?);
+
 		if mining_config.as_mut().unwrap().enable_mining {
 			{
 				let mut mining_stats = serv.state_info.mining_stats.write().unwrap();
 				mining_stats.is_enabled = true;
 			}
-			serv.start_miner(mining_config.unwrap());
+			serv.start_miner(mining_config.clone().unwrap());
+		}
+		if mining_config.as_mut().unwrap().enable_stratum_server {
+			serv.start_stratum_server(mining_config.clone().unwrap());
 		}
 
 		info_callback(serv.clone());
@@ -179,6 +184,13 @@ impl Server {
 		}
 
 		// Defaults to None (optional) in config file.
+		// This translates to false here.
+		let archive_mode = match config.archive_mode {
+			None => false,
+			Some(b) => b,
+		};
+
+		// Defaults to None (optional) in config file.
 		// This translates to false here so we do not skip by default.
 		let skip_sync_wait = match config.skip_sync_wait {
 			None => false,
@@ -272,6 +284,26 @@ impl Server {
 				miner.run_loop(config.clone(), mining_stats, cuckoo_size as u32, proof_size);
 			});
 	}
+
+        /// Start a minimal "stratum" mining service on a separate thread
+        pub fn start_stratum_server(&self, config: pow::types::MinerConfig) {
+                let cuckoo_size = global::sizeshift();
+                let proof_size = global::proofsize();
+                let currently_syncing = self.currently_syncing.clone();
+
+                let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone(), self.stop.clone());
+                miner.set_debug_output_id(format!("Port {}", config.stratum_server_addr.clone().unwrap()));
+                let mut stratum_server = stratumserver::StratumServer::new(miner);
+                let _ = thread::Builder::new()
+                        .name("stratum_server".to_string())
+                        .spawn(move || {
+                                let secs_5 = time::Duration::from_secs(5);
+                                while currently_syncing.load(Ordering::Relaxed) {
+                                        thread::sleep(secs_5);
+                                }
+                                stratum_server.run_loop(config.clone(), cuckoo_size as u32, proof_size);
+                        });
+        }
 
 	/// The chain head
 	pub fn head(&self) -> chain::Tip {
