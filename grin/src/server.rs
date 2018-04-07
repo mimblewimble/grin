@@ -168,6 +168,7 @@ impl Server {
 					seed::predefined_seeds(vec![])
 				}
 				Seeding::List => seed::predefined_seeds(config.seeds.as_mut().unwrap().clone()),
+				Seeding::DNSSeed => seed::dns_seeds(),
 				Seeding::WebStatic => seed::web_seeds(),
 				_ => unreachable!(),
 			};
