@@ -184,13 +184,6 @@ impl Server {
 		}
 
 		// Defaults to None (optional) in config file.
-		// This translates to false here.
-		let archive_mode = match config.archive_mode {
-			None => false,
-			Some(b) => b,
-		};
-
-		// Defaults to None (optional) in config file.
 		// This translates to false here so we do not skip by default.
 		let skip_sync_wait = match config.skip_sync_wait {
 			None => false,
