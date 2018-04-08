@@ -21,15 +21,7 @@ extern crate grin_pow as pow;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
-extern crate bufstream;
-extern crate serde_json;
-
 mod framework;
-
-use std::io::prelude::*;
-use std::net::TcpStream;
-use bufstream::BufStream;
-use serde_json::Value;
 
 use std::fs;
 use std::sync::Arc;
@@ -72,107 +64,6 @@ fn basic_genesis_mine() {
 
 	pool.create_server(&mut server_config);
 	pool.run_all_servers();
-}
-
-// Create a grin server, and a stratum server.  Simulate a few JSONRpc requests
-// and verify the results.  Validate disconnected workers and broadcasting new
-// jobs.
-#[test]
-fn basic_stratum_server() {
-        util::init_test_logger();
-        global::set_mining_mode(ChainTypes::AutomatedTesting);
-
-        let test_name_dir = "stratum_server";
-        framework::clean_all_output(test_name_dir);
-
-        // Create a server
-        let s = grin::Server::new(config(4000, test_name_dir, 0)).unwrap();
-
-	// Get mining config with stratumserver enabled
-        let mut miner_cfg = miner_config();
-	miner_cfg.enable_mining = false;
-	miner_cfg.attempt_time_per_block = 999;
-	miner_cfg.enable_stratum_server = true;
-	miner_cfg.stratum_server_addr = Some(String::from("127.0.0.1:11101"));
-
-        // Start stratum server
-        s.start_stratum_server(miner_cfg);
-
-        // Wait for stratum server to start and
-        // Verify stratum server accepts connections
-        loop {
-                if let Ok(_stream) = TcpStream::connect("127.0.0.1:11101") {
-                	break;
-		} else {
-                        thread::sleep(time::Duration::from_millis(500));
-                }
-                // As this stream falls out of scope it will be disconnected
-        }
-
-        // Create a few new worker connections
-        let mut workers = vec![];
-        for _n in 0..5 {
-                let w = TcpStream::connect("127.0.0.1:11101").unwrap();
-                w.set_nonblocking(true)
-                        .expect("Failed to set TcpStream to non-blocking");
-                let stream = BufStream::new(w);
-                workers.push(stream);
-        }
-        assert!(workers.len() == 5);
-
-
-        // Verify a few stratum JSONRpc commands
-        // getjobtemplate - expected block template result
-        let mut jobtemplate = String::new();
-        let mut response = String::new();
-        let job_req = "{\"id\": \"Stratum\", \"jsonrpc\": \"2.0\", \"method\": \"getjobtemplate\"}\n";
-        workers[2].write(job_req.as_bytes()).unwrap();
-        workers[2].flush().unwrap();
-        thread::sleep(time::Duration::from_secs(3)); // Wait for the server to reply
-        match workers[2].read_line(&mut response) {
-                Ok(_) => {
-                        let r: Value = serde_json::from_str(&response).unwrap();
-                        assert_eq!(r["error"],  serde_json::Value::Null);
-			assert_ne!(r["result"], serde_json::Value::Null);
-                }
-                Err(_e) => {
-                        assert!(false);
-                }
-        }
-
-        // keepalive - expected "ok" result
-        let mut response = String::new();
-        let job_req = "{\"id\":\"3\",\"jsonrpc\":\"2.0\",\"method\":\"keepalive\"}\n";
-        let ok_resp = "{\"id\":\"3\",\"jsonrpc\":\"2.0\",\"result\":\"ok\",\"error\":null}\n";
-        workers[2].write(job_req.as_bytes()).unwrap();
-        workers[2].flush().unwrap();
-        thread::sleep(time::Duration::from_secs(2)); // Wait for the server to reply
-        let _st = workers[2].read_line(&mut response);
-        assert_eq!(response.as_str(), ok_resp);
-
-        // "doesnotexist" - error expected
-        let mut response = String::new();
-        let job_req = "{\"id\":\"4\",\"jsonrpc\":\"2.0\",\"method\":\"doesnotexist\"}\n";
-        let ok_resp = "{\"id\":\"4\",\"jsonrpc\":\"2.0\",\"result\":null,\"error\":{\"code\":-32601,\"message\":\"Method not found\"}}\n";
-        workers[3].write(job_req.as_bytes()).unwrap();
-        workers[3].flush().unwrap();
-        thread::sleep(time::Duration::from_secs(2)); // Wait for the server to reply
-        let _st = workers[3].read_line(&mut response);
-        assert_eq!(response.as_str(), ok_resp);
-
-        // Simulate a worker lost connection
-        workers.remove(1);
-
-        // Start mining blocks
-        s.start_miner(miner_config());
-
-        // Verify blocks are being broadcast to workers
-        let expected = String::from("job");
-        thread::sleep(time::Duration::from_secs(3)); // Wait for a few mined blocks
-        let mut jobtemplate = String::new();
-        let _st = workers[2].read_line(&mut jobtemplate);
-        let job_template: Value = serde_json::from_str(&jobtemplate).unwrap();
-        assert_eq!(job_template["method"], expected);
 }
 
 /// Creates 5 servers, first being a seed and check that through peer address
@@ -297,13 +188,13 @@ fn simulate_block_propagation() {
 	// instantiates 5 servers on different ports
 	let mut servers = vec![];
 	for n in 0..5 {
-		let s = servers::Server::new(config(10 * n, test_name_dir, 0)).unwrap();
+		let s = servers::Server::new(framework::config(10 * n, test_name_dir, 0)).unwrap();
 		servers.push(s);
 		thread::sleep(time::Duration::from_millis(100));
 	}
 
 	// start mining
-	servers[0].start_miner(miner_config());
+	servers[0].start_miner(framework::miner_config());
 	let _original_height = servers[0].head().height;
 
 	// monitor for a change of head on a different server and check whether
@@ -337,13 +228,13 @@ fn simulate_full_sync() {
 	let test_name_dir = "grin-sync";
 	framework::clean_all_output(test_name_dir);
 
-	let s1 = servers::Server::new(config(1000, "grin-sync", 1000)).unwrap();
+	let s1 = servers::Server::new(framework::config(1000, "grin-sync", 1000)).unwrap();
 	// mine a few blocks on server 1
-	s1.start_miner(miner_config());
+	s1.start_miner(framework::miner_config());
 	thread::sleep(time::Duration::from_secs(8));
 
 	#[ignore(unused_mut)] // mut needed?
-	let mut conf = config(1001, "grin-sync", 1000);
+	let mut conf = framework::config(1001, "grin-sync", 1000);
 	let s2 = servers::Server::new(conf).unwrap();
 	while s2.head().height < 4 {
 		thread::sleep(time::Duration::from_millis(100));
@@ -364,12 +255,12 @@ fn simulate_fast_sync() {
 	let test_name_dir = "grin-fast";
 	framework::clean_all_output(test_name_dir);
 
-	let s1 = servers::Server::new(config(2000, "grin-fast", 2000)).unwrap();
+	let s1 = servers::Server::new(framework::config(2000, "grin-fast", 2000)).unwrap();
 	// mine a few blocks on server 1
-	s1.start_miner(miner_config());
+	s1.start_miner(framework::miner_config());
 	thread::sleep(time::Duration::from_secs(8));
 
-	let mut conf = config(2001, "grin-fast", 2000);
+	let mut conf = framework::config(2001, "grin-fast", 2000);
 	conf.archive_mode = Some(false);
 	let s2 = servers::Server::new(conf).unwrap();
 	while s2.head().height != s2.header_head().height || s2.head().height < 20 {
@@ -391,13 +282,13 @@ fn simulate_fast_sync_double() {
 	framework::clean_all_output("grin-double-fast1");
 	framework::clean_all_output("grin-double-fast2");
 
-	let s1 = servers::Server::new(config(3000, "grin-double-fast1", 3000)).unwrap();
+	let s1 = servers::Server::new(framework::config(3000, "grin-double-fast1", 3000)).unwrap();
 	// mine a few blocks on server 1
-	s1.start_miner(miner_config());
+	s1.start_miner(framework::miner_config());
 	thread::sleep(time::Duration::from_secs(8));
 
 	{
-		let mut conf = config(3001, "grin-double-fast2", 3000);
+		let mut conf = framework::config(3001, "grin-double-fast2", 3000);
 		conf.archive_mode = Some(false);
 		let s2 = servers::Server::new(conf).unwrap();
 		while s2.head().height != s2.header_head().height || s2.head().height < 20 {
@@ -410,7 +301,7 @@ fn simulate_fast_sync_double() {
 	std::fs::remove_file("target/tmp/grin-double-fast2/grin-sync-1001/peers/LOCK").unwrap();
 	thread::sleep(time::Duration::from_secs(20));
 
-	let mut conf = config(3001, "grin-double-fast2", 3000);
+	let mut conf = framework::config(3001, "grin-double-fast2", 3000);
 	conf.archive_mode = Some(false);
 	let s2 = servers::Server::new(conf).unwrap();
 	while s2.head().height != s2.header_head().height || s2.head().height < 50 {
@@ -418,37 +309,4 @@ fn simulate_fast_sync_double() {
 	}
 	s1.stop();
 	s2.stop();
-}
-
-fn config(n: u16, test_name_dir: &str, seed_n: u16) -> servers::ServerConfig {
-	servers::ServerConfig {
-		api_http_addr: format!("127.0.0.1:{}", 20000 + n),
-		db_root: format!("target/tmp/{}/grin-sync-{}", test_name_dir, n),
-		p2p_config: p2p::P2PConfig {
-			port: 10000 + n,
-			..p2p::P2PConfig::default()
-		},
-		seeding_type: servers::Seeding::List,
-		seeds: Some(vec![format!("127.0.0.1:{}", 10000 + seed_n)]),
-		chain_type: core::global::ChainTypes::AutomatedTesting,
-		archive_mode: Some(true),
-		skip_sync_wait: Some(true),
-		..Default::default()
-	}
-}
-
-fn miner_config() -> pow::types::MinerConfig {
-	let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
-	let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();
-	plugin_config.type_filter = String::from("mean_cpu");
-	plugin_config_vec.push(plugin_config);
-
-	pow::types::MinerConfig {
-		enable_mining: true,
-		burn_reward: true,
-		miner_async_mode: Some(false),
-		miner_plugin_dir: None,
-		miner_plugin_config: Some(plugin_config_vec),
-		..Default::default()
-	}
 }

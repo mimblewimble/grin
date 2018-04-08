@@ -22,14 +22,19 @@ use time;
 use util::LOGGER;
 use std::io::BufRead;
 use bufstream::BufStream;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use serde_json;
 
+use adapters::PoolToChainAdapter;
 use core::core::{Block, BlockHeader};
 use pow::types::MinerConfig;
-use chain;
-use miner::Miner;
 use miner::*;
+use chain;
+use pool;
+use mine_block;
+
+// Max number of transactions this miner will assemble in a block
+const MAX_TX: u32 = 5000;
 
 // ----------------------------------------
 // http://www.jsonrpc.org/specification
@@ -190,17 +195,25 @@ impl Worker {
 
 pub struct StratumServer {
 	id: String,
-	miner: Miner,
+	config: MinerConfig,
+	chain: Arc<chain::Chain>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	current_block: Block,
 	workers: Arc<Mutex<Vec<Worker>>>,
 }
 
 impl StratumServer {
 	/// Creates a new Stratum Server.
-	pub fn new(miner: Miner) -> StratumServer {
+	pub fn new(
+		config: MinerConfig,
+		chain_ref: Arc<chain::Chain>,
+		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	) -> StratumServer {
 		StratumServer {
 			id: String::from("StratumServer"),
-			miner: miner,
+			config: config,
+			chain: chain_ref,
+			tx_pool: tx_pool,
 			current_block: Block::default(),
 			workers: Arc::new(Mutex::new(Vec::new())),
 		}
@@ -210,11 +223,9 @@ impl StratumServer {
 	fn build_block_template(&self, bh: BlockHeader) -> JobTemplate {
 		// Serialize the block header into pre and post nonce strings
 		let mut pre_pow_writer = HeaderPrePowWriter::default();
-                bh.write_pre_pow(&mut pre_pow_writer).unwrap();
+		bh.write_pre_pow(&mut pre_pow_writer).unwrap();
 		let pre = pre_pow_writer.as_hex_string(false);
-		let job_template = JobTemplate {
-			pre_pow: pre,
-		};
+		let job_template = JobTemplate { pre_pow: pre };
 		return job_template;
 	}
 
@@ -364,7 +375,7 @@ impl StratumServer {
 				b.hash()
 			);
 			// Submit the block to grin server (known here as "self.miner")
-			let res = self.miner.chain.process_block(b.clone(), chain::Options::MINE);
+			let res = self.chain.process_block(b.clone(), chain::Options::MINE);
 			if let Err(e) = res {
 				error!(
 					LOGGER,
@@ -459,7 +470,7 @@ impl StratumServer {
 		// nothing has changed. We only want to create a key_id for each new block,
 		// and reuse it when we rebuild the current block to add new tx.
 		let mut key_id = None;
-		let mut current_hash = self.miner.chain.head().unwrap().prev_block_h;
+		let mut current_hash = self.chain.head().unwrap().prev_block_h;
 		let mut latest_hash;
 		let listen_addr = miner_config.stratum_server_addr.clone().unwrap();
 
@@ -483,7 +494,7 @@ impl StratumServer {
 			self.clean_workers();
 
 			// get the latest chain state
-			latest_hash = self.miner.chain.head().unwrap().last_block_h;
+			latest_hash = self.chain.head().unwrap().last_block_h;
 
 			// Build a new block if:
 			//    There is a new block on the chain
@@ -493,8 +504,18 @@ impl StratumServer {
 					// A brand new block, so we will generate a new key_id
 					key_id = None;
 				}
+				let mut wallet_listener_url: Option<String> = None;
+				if !self.config.burn_reward {
+					wallet_listener_url = Some(self.config.wallet_listener_url.clone());
+				}
 
-				let (new_block, block_fees) = self.miner.get_block(key_id.clone());
+				let (new_block, block_fees) = mine_block::get_block(
+					&self.chain,
+					&self.tx_pool,
+					key_id.clone(),
+					MAX_TX.clone(),
+					wallet_listener_url,
+				);
 				self.current_block = new_block;
 				key_id = block_fees.key_id();
 				current_hash = latest_hash;
