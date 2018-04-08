@@ -285,25 +285,27 @@ impl Server {
 			});
 	}
 
-        /// Start a minimal "stratum" mining service on a separate thread
-        pub fn start_stratum_server(&self, config: pow::types::MinerConfig) {
-                let cuckoo_size = global::sizeshift();
-                let proof_size = global::proofsize();
-                let currently_syncing = self.currently_syncing.clone();
+	/// Start a minimal "stratum" mining service on a separate thread
+	pub fn start_stratum_server(&self, config: pow::types::MinerConfig) {
+		let cuckoo_size = global::sizeshift();
+		let proof_size = global::proofsize();
+		let currently_syncing = self.currently_syncing.clone();
 
-                let mut miner = miner::Miner::new(config.clone(), self.chain.clone(), self.tx_pool.clone(), self.stop.clone());
-                miner.set_debug_output_id(format!("Port {}", config.stratum_server_addr.clone().unwrap()));
-                let mut stratum_server = stratumserver::StratumServer::new(miner);
-                let _ = thread::Builder::new()
-                        .name("stratum_server".to_string())
-                        .spawn(move || {
-                                let secs_5 = time::Duration::from_secs(5);
-                                while currently_syncing.load(Ordering::Relaxed) {
-                                        thread::sleep(secs_5);
-                                }
-                                stratum_server.run_loop(config.clone(), cuckoo_size as u32, proof_size);
-                        });
-        }
+		let mut stratum_server = stratumserver::StratumServer::new(
+			config.clone(),
+			self.chain.clone(),
+			self.tx_pool.clone(),
+		);
+		let _ = thread::Builder::new()
+			.name("stratum_server".to_string())
+			.spawn(move || {
+				let secs_5 = time::Duration::from_secs(5);
+				while currently_syncing.load(Ordering::Relaxed) {
+					thread::sleep(secs_5);
+				}
+				stratum_server.run_loop(config.clone(), cuckoo_size as u32, proof_size);
+			});
+	}
 
 	/// The chain head
 	pub fn head(&self) -> chain::Tip {
