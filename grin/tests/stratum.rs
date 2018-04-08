@@ -31,17 +31,13 @@ use std::net::TcpStream;
 use bufstream::BufStream;
 use serde_json::Value;
 
-use std::fs;
-use std::sync::Arc;
 use std::thread;
 use std::time;
-use std::default::Default;
 
 use core::global;
 use core::global::ChainTypes;
 
-use framework::{LocalServerContainerConfig, LocalServerContainerPool,
-                LocalServerContainerPoolConfig};
+use framework::{config, miner_config};
 
 // Create a grin server, and a stratum server.
 // Simulate a few JSONRpc requests and verify the results.
@@ -56,10 +52,10 @@ fn basic_stratum_server() {
 	framework::clean_all_output(test_name_dir);
 
 	// Create a server
-	let s = grin::Server::new(framework::config(4000, test_name_dir, 0)).unwrap();
+	let s = grin::Server::new(config(4000, test_name_dir, 0)).unwrap();
 
 	// Get mining config with stratumserver enabled
-	let mut miner_cfg = framework::miner_config();
+	let mut miner_cfg = miner_config();
 	miner_cfg.enable_mining = false;
 	miner_cfg.attempt_time_per_block = 999;
 	miner_cfg.enable_stratum_server = true;
@@ -97,12 +93,11 @@ fn basic_stratum_server() {
 	thread::sleep(time::Duration::from_secs(1)); // Wait for the server to broadcast
 	let mut response = String::new();
 	for n in 0..workers.len() {
-		workers[n].read_line(&mut response);
+		let _result = workers[n].read_line(&mut response);
 	}
 
 	// Verify a few stratum JSONRpc commands
 	// getjobtemplate - expected block template result
-	let mut jobtemplate = String::new();
 	let mut response = String::new();
 	let job_req = "{\"id\": \"Stratum\", \"jsonrpc\": \"2.0\", \"method\": \"getjobtemplate\"}\n";
 	workers[2].write(job_req.as_bytes()).unwrap();
@@ -143,7 +138,7 @@ fn basic_stratum_server() {
 	workers.remove(1);
 
 	// Start mining blocks
-	s.start_miner(framework::miner_config());
+	s.start_miner(miner_config());
 
 	// Verify blocks are being broadcast to workers
 	let expected = String::from("job");

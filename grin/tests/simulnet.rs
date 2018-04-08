@@ -33,7 +33,7 @@ use core::global;
 use core::global::ChainTypes;
 
 use framework::{LocalServerContainerConfig, LocalServerContainerPool,
-                LocalServerContainerPoolConfig};
+                LocalServerContainerPoolConfig, config, miner_config};
 
 /// Testing the frameworks by starting a fresh server, creating a genesis
 /// Block and mining into a wallet for a bit
@@ -188,13 +188,13 @@ fn simulate_block_propagation() {
 	// instantiates 5 servers on different ports
 	let mut servers = vec![];
 	for n in 0..5 {
-		let s = grin::Server::new(framework::config(10 * n, test_name_dir, 0)).unwrap();
+		let s = grin::Server::new(config(10 * n, test_name_dir, 0)).unwrap();
 		servers.push(s);
 		thread::sleep(time::Duration::from_millis(100));
 	}
 
 	// start mining
-	servers[0].start_miner(framework::miner_config());
+	servers[0].start_miner(miner_config());
 	let _original_height = servers[0].head().height;
 
 	// monitor for a change of head on a different server and check whether
@@ -228,13 +228,13 @@ fn simulate_full_sync() {
 	let test_name_dir = "grin-sync";
 	framework::clean_all_output(test_name_dir);
 
-	let s1 = grin::Server::new(framework::config(1000, "grin-sync", 1000)).unwrap();
+	let s1 = grin::Server::new(config(1000, "grin-sync", 1000)).unwrap();
 	// mine a few blocks on server 1
-	s1.start_miner(framework::miner_config());
+	s1.start_miner(miner_config());
 	thread::sleep(time::Duration::from_secs(8));
 
 	#[ignore(unused_mut)] // mut needed?
-	let mut conf = framework::config(1001, "grin-sync", 1000);
+	let mut conf = config(1001, "grin-sync", 1000);
 	let s2 = grin::Server::new(conf).unwrap();
 	while s2.head().height < 4 {
 		thread::sleep(time::Duration::from_millis(100));
@@ -255,12 +255,12 @@ fn simulate_fast_sync() {
 	let test_name_dir = "grin-fast";
 	framework::clean_all_output(test_name_dir);
 
-	let s1 = grin::Server::new(framework::config(2000, "grin-fast", 2000)).unwrap();
+	let s1 = grin::Server::new(config(2000, "grin-fast", 2000)).unwrap();
 	// mine a few blocks on server 1
-	s1.start_miner(framework::miner_config());
+	s1.start_miner(miner_config());
 	thread::sleep(time::Duration::from_secs(8));
 
-	let mut conf = framework::config(2001, "grin-fast", 2000);
+	let mut conf = config(2001, "grin-fast", 2000);
 	conf.archive_mode = Some(false);
 	let s2 = grin::Server::new(conf).unwrap();
 	while s2.head().height != s2.header_head().height || s2.head().height < 20 {
@@ -282,13 +282,13 @@ fn simulate_fast_sync_double() {
 	framework::clean_all_output("grin-double-fast1");
 	framework::clean_all_output("grin-double-fast2");
 
-	let s1 = grin::Server::new(framework::config(3000, "grin-double-fast1", 3000)).unwrap();
+	let s1 = grin::Server::new(config(3000, "grin-double-fast1", 3000)).unwrap();
 	// mine a few blocks on server 1
-	s1.start_miner(framework::miner_config());
+	s1.start_miner(miner_config());
 	thread::sleep(time::Duration::from_secs(8));
 
 	{
-		let mut conf = framework::config(3001, "grin-double-fast2", 3000);
+		let mut conf = config(3001, "grin-double-fast2", 3000);
 		conf.archive_mode = Some(false);
 		let s2 = grin::Server::new(conf).unwrap();
 		while s2.head().height != s2.header_head().height || s2.head().height < 20 {
@@ -301,7 +301,7 @@ fn simulate_fast_sync_double() {
 	std::fs::remove_file("target/tmp/grin-double-fast2/grin-sync-1001/peers/LOCK").unwrap();
 	thread::sleep(time::Duration::from_secs(20));
 
-	let mut conf = framework::config(3001, "grin-double-fast2", 3000);
+	let mut conf = config(3001, "grin-double-fast2", 3000);
 	conf.archive_mode = Some(false);
 	let s2 = grin::Server::new(conf).unwrap();
 	while s2.head().height != s2.header_head().height || s2.head().height < 50 {

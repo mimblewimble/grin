@@ -475,7 +475,7 @@ impl Miner {
 		}
 
 		// iteration, we keep the returned derivation to provide it back when
-		// nothing has changed. We only want to create on key_id for each new block.
+		// nothing has changed. We only want to create a new key_id for each new block.
 		let mut key_id = None;
 
 		{
