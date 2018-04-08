@@ -33,7 +33,7 @@ use core::global;
 use core::global::ChainTypes;
 
 use framework::{LocalServerContainerConfig, LocalServerContainerPool,
-                LocalServerContainerPoolConfig};
+                LocalServerContainerPoolConfig, config, miner_config};
 
 /// Testing the frameworks by starting a fresh server, creating a genesis
 /// Block and mining into a wallet for a bit
@@ -194,7 +194,7 @@ fn simulate_block_propagation() {
 	}
 
 	// start mining
-	servers[0].start_miner(framework::miner_config());
+	servers[0].start_miner(miner_config());
 	let _original_height = servers[0].head().height;
 
 	// monitor for a change of head on a different server and check whether
@@ -230,7 +230,7 @@ fn simulate_full_sync() {
 
 	let s1 = servers::Server::new(framework::config(1000, "grin-sync", 1000)).unwrap();
 	// mine a few blocks on server 1
-	s1.start_miner(framework::miner_config());
+	s1.start_miner(miner_config());
 	thread::sleep(time::Duration::from_secs(8));
 
 	#[ignore(unused_mut)] // mut needed?
@@ -257,10 +257,10 @@ fn simulate_fast_sync() {
 
 	let s1 = servers::Server::new(framework::config(2000, "grin-fast", 2000)).unwrap();
 	// mine a few blocks on server 1
-	s1.start_miner(framework::miner_config());
+	s1.start_miner(miner_config());
 	thread::sleep(time::Duration::from_secs(8));
 
-	let mut conf = framework::config(2001, "grin-fast", 2000);
+	let mut conf = config(2001, "grin-fast", 2000);
 	conf.archive_mode = Some(false);
 	let s2 = servers::Server::new(conf).unwrap();
 	while s2.head().height != s2.header_head().height || s2.head().height < 20 {
@@ -284,11 +284,11 @@ fn simulate_fast_sync_double() {
 
 	let s1 = servers::Server::new(framework::config(3000, "grin-double-fast1", 3000)).unwrap();
 	// mine a few blocks on server 1
-	s1.start_miner(framework::miner_config());
+	s1.start_miner(miner_config());
 	thread::sleep(time::Duration::from_secs(8));
 
 	{
-		let mut conf = framework::config(3001, "grin-double-fast2", 3000);
+		let mut conf = config(3001, "grin-double-fast2", 3000);
 		conf.archive_mode = Some(false);
 		let s2 = servers::Server::new(conf).unwrap();
 		while s2.head().height != s2.header_head().height || s2.head().height < 20 {
@@ -301,7 +301,7 @@ fn simulate_fast_sync_double() {
 	std::fs::remove_file("target/tmp/grin-double-fast2/grin-sync-1001/peers/LOCK").unwrap();
 	thread::sleep(time::Duration::from_secs(20));
 
-	let mut conf = framework::config(3001, "grin-double-fast2", 3000);
+	let mut conf = config(3001, "grin-double-fast2", 3000);
 	conf.archive_mode = Some(false);
 	let s2 = servers::Server::new(conf).unwrap();
 	while s2.head().height != s2.header_head().height || s2.head().height < 50 {
