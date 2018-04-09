@@ -236,6 +236,42 @@ impl TxHashSet {
 	}
 }
 
+/// Starts a new unit of work to extend (or rewind) the chain with additional blocks.
+/// Accepts a closure that will operate within that unit of work.
+/// The closure has access to an Extension object that allows the addition
+/// of blocks to the txhashset and the checking of the current tree roots.
+///
+/// The unit of work is always discarded (always rollback) as this is read-only.
+pub fn extending_readonly<'a, F, T>(trees: &'a mut TxHashSet, inner: F) -> Result<T, Error>
+where
+	F: FnOnce(&mut Extension) -> Result<T, Error>,
+{
+	let sizes: (u64, u64, u64);
+	let res: Result<T, Error>;
+	{
+		let commit_index = trees.commit_index.clone();
+
+		trace!(LOGGER, "Starting new txhashset (readonly) extension.");
+		let mut extension = Extension::new(trees, commit_index);
+		res = inner(&mut extension);
+
+		sizes = extension.sizes();
+	}
+
+	debug!(
+		LOGGER,
+		"Rollbacking txhashset (readonly) extension. sizes {:?}", sizes
+	);
+
+	trees.output_pmmr_h.backend.discard();
+	trees.rproof_pmmr_h.backend.discard();
+	trees.kernel_pmmr_h.backend.discard();
+
+	trace!(LOGGER, "TxHashSet (readonly) extension done.");
+
+	res
+}
+
 /// Starts a new unit of work to extend the chain with additional blocks,
 /// accepting a closure that will work within that unit of work. The closure
 /// has access to an Extension object that allows the addition of blocks to
@@ -485,8 +521,8 @@ impl<'a> Extension<'a> {
 			block_header.hash()
 		);
 
-		// rewind to the specified block and set the force_rollback flag (read-only)
-		self.rewind_readonly(block_header)?;
+		// rewind to the specified block for a consistent view
+		self.rewind(block_header)?;
 
 		// then calculate the Merkle Proof based on the known pos
 		let pos = self.get_output_pos(&output.commit)?;
@@ -508,22 +544,6 @@ impl<'a> Extension<'a> {
 		let (out_pos_rew, kern_pos_rew) = self.commit_index.get_block_marker(&hash)?;
 		self.rewind_pos(height, out_pos_rew, kern_pos_rew)?;
 		Ok(())
-	}
-
-	/// Rewinds the MMRs to the provided block, using the last output and
-	/// last kernel of the block we want to rewind to.
-	pub fn rewind_readonly(&mut self, block_header: &BlockHeader) -> Result<(), Error> {
-		// first make sure we set the rollback flag (read-only use of the extension)
-		self.force_rollback();
-
-		let hash = block_header.hash();
-		let height = block_header.height;
-		debug!(
-			LOGGER,
-			"Rewinding (readonly) to header {} at {}", hash, height
-		);
-
-		self.rewind(block_header)
 	}
 
 	/// Rewinds the MMRs to the provided positions, given the output and
@@ -576,9 +596,8 @@ impl<'a> Extension<'a> {
 	/// Note: this is an expensive operation and sets force_rollback
 	/// so the extension is read-only.
 	pub fn validate(&mut self, header: &BlockHeader, skip_rproofs: bool) -> Result<(), Error> {
-		// first rewind to the provided header and
-		// set the force_rollback flag (read-only)
-		&self.rewind_readonly(header)?;
+		// rewind to the provided header for a consistent view
+		&self.rewind(header)?;
 
 		// validate all hashes and sums within the trees
 		if let Err(e) = self.output_pmmr.validate() {
@@ -648,11 +667,6 @@ impl<'a> Extension<'a> {
 	/// Force the rollback of this extension, no matter the result
 	pub fn force_rollback(&mut self) {
 		self.rollback = true;
-	}
-
-	/// Cancel a previous rollback, to apply this extension
-	pub fn cancel_rollback(&mut self) {
-		self.rollback = false;
 	}
 
 	/// Dumps the output MMR.

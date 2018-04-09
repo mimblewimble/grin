@@ -435,7 +435,7 @@ impl Chain {
 		// against the latest block header.
 		// We will rewind the extension internally to the pos for
 		// the block header to ensure the view is consistent.
-		txhashset::extending(&mut txhashset, |extension| {
+		txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.validate(&header, skip_rproofs)
 		})
 	}
@@ -460,13 +460,12 @@ impl Chain {
 		let mut txhashset = self.txhashset.write().unwrap();
 		let store = self.store.clone();
 
-		let roots = txhashset::extending(&mut txhashset, |extension| {
+		let roots = txhashset::extending_readonly(&mut txhashset, |extension| {
 			// apply the block on the txhashset and check the resulting root
 			if is_fork {
 				pipe::rewind_and_apply_fork(b, store, extension)?;
 			}
 			extension.apply_block(b)?;
-			extension.force_rollback();
 			Ok(extension.roots())
 		})?;
 
@@ -484,7 +483,7 @@ impl Chain {
 	) -> Result<MerkleProof, Error> {
 		let mut txhashset = self.txhashset.write().unwrap();
 
-		let merkle_proof = txhashset::extending(&mut txhashset, |extension| {
+		let merkle_proof = txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.merkle_proof(output, block_header)
 		})?;
 
@@ -549,10 +548,6 @@ impl Chain {
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), None)?;
 		txhashset::extending(&mut txhashset, |extension| {
 			extension.validate(&header, false)?;
-
-			// validate rewinds and rollbacks, in this specific case we want to
-			// apply the rewind
-			extension.cancel_rollback();
 			extension.rebuild_index()?;
 			Ok(())
 		})?;
@@ -600,7 +595,7 @@ impl Chain {
 			txhashes.compact()?;
 
 			// print out useful debug info after compaction
-			txhashset::extending(&mut txhashes, |extension| {
+			txhashset::extending_readonly(&mut txhashes, |extension| {
 				extension.dump_output_pmmr();
 				Ok(())
 			})?;
