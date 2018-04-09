@@ -185,8 +185,11 @@ impl TxHashSet {
 
 	/// returns outputs from the given insertion (leaf) index up to the specified
 	/// limit. Also returns the last index actually populated
-	pub fn outputs_by_insertion_index(&mut self, start_index: u64, max_count: u64) 
-		-> (u64, Vec<OutputIdentifier>) {
+	pub fn outputs_by_insertion_index(
+		&mut self,
+		start_index: u64,
+		max_count: u64,
+	) -> (u64, Vec<OutputIdentifier>) {
 		let output_pmmr: PMMR<OutputIdentifier, _> =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		output_pmmr.elements_from_insertion_index(start_index, max_count)
@@ -198,8 +201,11 @@ impl TxHashSet {
 	}
 
 	/// As above, for rangeproofs
-	pub fn rangeproofs_by_insertion_index(&mut self, start_index: u64, max_count: u64) 
-		-> (u64, Vec<RangeProof>) {
+	pub fn rangeproofs_by_insertion_index(
+		&mut self,
+		start_index: u64,
+		max_count: u64,
+	) -> (u64, Vec<RangeProof>) {
 		let rproof_pmmr: PMMR<RangeProof, _> =
 			PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
 		rproof_pmmr.elements_from_insertion_index(start_index, max_count)

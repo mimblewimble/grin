@@ -127,7 +127,12 @@ impl OutputHandler {
 				.iter()
 				.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
 				.map(|output| {
-					OutputPrintable::from_output(output, w(&self.chain), Some(&header), include_proof)
+					OutputPrintable::from_output(
+						output,
+						w(&self.chain),
+						Some(&header),
+						include_proof,
+					)
 				})
 				.collect();
 
@@ -260,14 +265,16 @@ impl TxHashSetHandler {
 		if max > 1000 {
 			max = 1000;
 		}
-		let outputs = w(&self.chain).unspent_outputs_by_insertion_index(start_index, max).unwrap();
+		let outputs = w(&self.chain)
+			.unspent_outputs_by_insertion_index(start_index, max)
+			.unwrap();
 		OutputListing {
 			last_retrieved_index: outputs.0,
 			highest_index: outputs.1,
-			outputs: outputs.2.iter()
-				.map(|x|{
-					OutputPrintable::from_output(x, w(&self.chain), None, true)
-				})
+			outputs: outputs
+				.2
+				.iter()
+				.map(|x| OutputPrintable::from_output(x, w(&self.chain), None, true))
 				.collect(),
 		}
 	}

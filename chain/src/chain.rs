@@ -663,16 +663,21 @@ impl Chain {
 	}
 
 	/// outputs by insertion index
-	pub fn unspent_outputs_by_insertion_index(&self, start_index: u64, max: u64) 
-		-> Result<(u64, u64, Vec<Output>), Error> {
+	pub fn unspent_outputs_by_insertion_index(
+		&self,
+		start_index: u64,
+		max: u64,
+	) -> Result<(u64, u64, Vec<Output>), Error> {
 		let mut txhashset = self.txhashset.write().unwrap();
 		let max_index = txhashset.highest_output_insertion_index();
 		let outputs = txhashset.outputs_by_insertion_index(start_index, max);
 		let rangeproofs = txhashset.rangeproofs_by_insertion_index(start_index, max);
 		if outputs.0 != rangeproofs.0 || outputs.1.len() != rangeproofs.1.len() {
-			return Err(Error::TxHashSetErr(String::from("Output and rangeproof sets don't match")));
+			return Err(Error::TxHashSetErr(String::from(
+				"Output and rangeproof sets don't match",
+			)));
 		}
-		let mut output_vec:Vec<Output> = vec![];
+		let mut output_vec: Vec<Output> = vec![];
 		for (ref x, &y) in outputs.1.iter().zip(rangeproofs.1.iter()) {
 			output_vec.push(Output {
 				commit: x.commit,

@@ -528,7 +528,12 @@ impl BlockPrintable {
 			.outputs
 			.iter()
 			.map(|output| {
-				OutputPrintable::from_output(output, chain.clone(), Some(&block.header), include_proof)
+				OutputPrintable::from_output(
+					output,
+					chain.clone(),
+					Some(&block.header),
+					include_proof,
+				)
 			})
 			.collect();
 		let kernels = block
