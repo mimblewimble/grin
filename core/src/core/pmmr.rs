@@ -525,6 +525,27 @@ where
 		return_vec
 	}
 
+	/// Helper function which returns un-pruned nodes from the insertion index
+	/// forward
+	/// returns last insertion index returned along with data
+	pub fn elements_from_insertion_index(&self, mut index: u64, max_count: u64) -> (u64, Vec<T>) {
+		let mut return_vec = vec![];
+		if index == 0 {
+			index = 1;
+		}
+		let mut return_index = index;
+		let mut pmmr_index = insertion_to_pmmr_index(index);
+		while return_vec.len() < max_count as usize && pmmr_index <= self.last_pos {
+			if let Some(t) = self.get_data(pmmr_index) {
+				return_vec.push(t);
+				return_index = index;
+			}
+			index += 1;
+			pmmr_index = insertion_to_pmmr_index(index);
+		}
+		(return_index, return_vec)
+	}
+
 	/// Walks all unpruned nodes in the MMR and revalidate all parent hashes
 	pub fn validate(&self) -> Result<(), String> {
 		// iterate on all parent nodes
@@ -822,6 +843,13 @@ pub fn n_leaves(mut sz: u64) -> u64 {
 		.iter()
 		.map(|n| (1 << bintree_postorder_height(*n)) as u64)
 		.sum()
+}
+
+/// Returns the pmmr index of the nth inserted element
+pub fn insertion_to_pmmr_index(mut sz: u64) -> u64{
+	//1 based pmmrs
+	sz = sz-1;
+	2*sz - sz.count_ones() as u64 + 1
 }
 
 /// The height of a node in a full binary tree from its postorder traversal
@@ -1940,5 +1968,59 @@ mod test {
 			pos += 1;
 		}
 		pos
+	}
+
+	#[test]
+	fn check_insertion_to_pmmr_index() {
+		assert_eq!(insertion_to_pmmr_index(1),1);
+		assert_eq!(insertion_to_pmmr_index(2),2);
+		assert_eq!(insertion_to_pmmr_index(3),4);
+		assert_eq!(insertion_to_pmmr_index(4),5);
+		assert_eq!(insertion_to_pmmr_index(5),8);
+		assert_eq!(insertion_to_pmmr_index(6),9);
+		assert_eq!(insertion_to_pmmr_index(7),11);
+		assert_eq!(insertion_to_pmmr_index(8),12);
+	}
+
+	#[test]
+	fn check_elements_from_insertion_index() {
+		let mut ba = VecBackend::new();
+		let mut pmmr = PMMR::new(&mut ba);
+		for x in 1..1000 {
+			pmmr.push(TestElem([0, 0, 0, x])).unwrap();
+		}
+		// Normal case
+		let res = pmmr.elements_from_insertion_index(1, 100);
+		assert_eq!(res.0, 100);
+		assert_eq!(res.1.len(), 100);
+		assert_eq!(res.1[0].0[3], 1);
+		assert_eq!(res.1[99].0[3], 100);
+
+		// middle of pack
+		let res = pmmr.elements_from_insertion_index(351, 70);
+		assert_eq!(res.0, 420);
+		assert_eq!(res.1.len(), 70);
+		assert_eq!(res.1[0].0[3], 351);
+		assert_eq!(res.1[69].0[3], 420);
+
+		// past the end
+		let res = pmmr.elements_from_insertion_index(650, 1000);
+		assert_eq!(res.0, 999);
+		assert_eq!(res.1.len(), 350);
+		assert_eq!(res.1[0].0[3], 650);
+		assert_eq!(res.1[349].0[3], 999);
+
+		// pruning a few nodes should get consistent results
+		pmmr.prune(insertion_to_pmmr_index(650), 0).unwrap();
+		pmmr.prune(insertion_to_pmmr_index(651), 0).unwrap();
+		pmmr.prune(insertion_to_pmmr_index(800), 0).unwrap();
+		pmmr.prune(insertion_to_pmmr_index(900), 0).unwrap();
+		pmmr.prune(insertion_to_pmmr_index(998), 0).unwrap();
+		let res = pmmr.elements_from_insertion_index(650, 1000);
+		assert_eq!(res.0, 999);
+		assert_eq!(res.1.len(), 345);
+		assert_eq!(res.1[0].0[3], 652);
+		assert_eq!(res.1[344].0[3], 999);
+
 	}
 }
