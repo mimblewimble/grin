@@ -497,7 +497,7 @@ impl BlockHeaderPrintable {
 			kernel_root: util::to_hex(h.kernel_root.to_vec()),
 			nonce: h.nonce,
 			total_difficulty: h.total_difficulty.into_num(),
-			total_kernel_offset: h.total_kernel_offset.to_hex()
+			total_kernel_offset: h.total_kernel_offset.to_hex(),
 		}
 	}
 }
