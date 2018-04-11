@@ -43,15 +43,10 @@ extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
-mod adapters;
-mod dandelion_monitor;
-mod server;
-mod seed;
-mod sync;
-pub mod types;
-pub mod stats;
-mod miner;
+mod common;
+mod grin;
+mod mining;
 
-pub use server::Server;
-pub use types::{Seeding, ServerConfig};
-pub use stats::ServerStats;
+pub use grin::server::Server;
+pub use common::types::{Seeding, ServerConfig};
+pub use common::stats::{PeerStats, ServerStats, DiffBlock};

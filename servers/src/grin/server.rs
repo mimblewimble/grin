@@ -22,20 +22,20 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time;
 
-use adapters::*;
+use common::adapters::*;
 use api;
 use chain;
 use core::{consensus, genesis, global};
 use core::core::target::Difficulty;
 use core::core::hash::Hashed;
-use dandelion_monitor;
-use miner;
+use grin::dandelion_monitor;
+use mining::miner;
 use p2p;
 use pool;
-use seed;
-use sync;
-use types::*;
-use stats::*;
+use grin::seed;
+use grin::sync;
+use common::types::*;
+use common::stats::*;
 use pow;
 use util::LOGGER;
 

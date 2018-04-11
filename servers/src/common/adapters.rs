@@ -31,7 +31,7 @@ use p2p;
 use pool;
 use util::OneTime;
 use store;
-use types::{ChainValidationMode, ServerConfig};
+use common::types::{ChainValidationMode, ServerConfig};
 use util::LOGGER;
 
 // All adapters use `Weak` references instead of `Arc` to avoid cycles that

@@ -28,7 +28,7 @@ use cursive::views::{LinearLayout, Panel, StackView, TextView, ViewBox};
 use cursive::direction::Orientation;
 use cursive::traits::*;
 
-use grin::Server;
+use servers::Server;
 
 use tui::{menu, mining, peers, status, version};
 use tui::types::*;

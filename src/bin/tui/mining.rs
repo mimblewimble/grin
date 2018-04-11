@@ -29,7 +29,7 @@ use tui::chrono::prelude::*;
 use tui::constants::*;
 use tui::types::*;
 
-use grin::stats::*;
+use servers::{ServerStats, DiffBlock};
 use tui::pow::cuckoo_miner::CuckooMinerDeviceStats;
 use tui::table::{TableView, TableViewItem};
 

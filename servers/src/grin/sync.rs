@@ -23,7 +23,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::global;
 use p2p::{self, Peer, Peers};
-use types::Error;
+use common::types::Error;
 use util::LOGGER;
 
 /// Starts the syncing loop, just spawns two threads that loop forever

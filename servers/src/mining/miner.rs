@@ -22,7 +22,7 @@ use std::thread;
 use std::time::Duration;
 use time;
 
-use adapters::PoolToChainAdapter;
+use common::adapters::PoolToChainAdapter;
 use core::consensus;
 use core::core;
 use core::core::Proof;
@@ -34,8 +34,8 @@ use core::ser;
 use core::global;
 use core::ser::AsFixedBytes;
 use util::LOGGER;
-use types::Error;
-use stats::MiningStats;
+use common::types::Error;
+use common::stats::MiningStats;
 
 use chain;
 use pool;

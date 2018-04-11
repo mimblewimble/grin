@@ -10,7 +10,7 @@ serde = "1"
 serde_derive = "1"
 toml = "0.4"
 
-grin_grin = { path = "../grin" }
+grin_servers = { path = "../servers" }
 grin_p2p = { path = "../p2p" }
 grin_pow = { path = "../pow"}
 grin_util = { path = "../util" }
