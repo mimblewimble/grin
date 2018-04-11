@@ -21,7 +21,7 @@ use core::core::transaction::ProofMessageElements;
 use types::{Error, ErrorKind, OutputData, OutputStatus, WalletConfig, WalletData};
 use byteorder::{BigEndian, ByteOrder};
 
-pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
+pub fn _get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 	let url = format!("{}/v1/chain", config.check_node_api_http_addr);
 
 	match api::client::get::<api::Tip>(url.as_str()) {
@@ -46,28 +46,25 @@ fn coinbase_status(output: &api::OutputPrintable) -> bool {
 	}
 }
 
-pub fn outputs_batch_block(
+pub fn outputs_batch(
 	config: &WalletConfig,
 	start_height: u64,
-	end_height: u64,
-) -> Result<Vec<api::BlockOutputs>, Error> {
-	let query_param = format!(
-		"start_height={}&end_height={}&include_rp",
-		start_height, end_height
-	);
+	max: u64,
+) -> Result<api::OutputListing, Error> {
+	let query_param = format!("start_index={}&max={}", start_height, max);
 
 	let url = format!(
-		"{}/v1/chain/outputs/byheight?{}",
+		"{}/v1/txhashset/outputs?{}",
 		config.check_node_api_http_addr, query_param,
 	);
 
-	match api::client::get::<Vec<api::BlockOutputs>>(url.as_str()) {
-		Ok(outputs) => Ok(outputs),
+	match api::client::get::<api::OutputListing>(url.as_str()) {
+		Ok(o) => Ok(o),
 		Err(e) => {
 			// if we got anything other than 200 back from server, bye
 			error!(
 				LOGGER,
-				"outputs_batch_block: Restore failed... unable to contact API {}. Error: {}",
+				"outputs_batch: Restore failed... unable to contact API {}. Error: {}",
 				config.check_node_api_http_addr,
 				e
 			);
@@ -79,23 +76,18 @@ pub fn outputs_batch_block(
 // TODO - wrap the many return values in a struct
 fn find_outputs_with_key(
 	keychain: &Keychain,
-	block_outputs: api::BlockOutputs,
-	key_iterations: &mut usize,
+	outputs: Vec<api::OutputPrintable>,
 ) -> Vec<(pedersen::Commitment, Identifier, u32, u64, u64, u64, bool)> {
 	let mut wallet_outputs: Vec<(pedersen::Commitment, Identifier, u32, u64, u64, u64, bool)> =
 		Vec::new();
 
-	info!(
-		LOGGER,
-		"Scanning block {}, {} outputs, over {} key derivations",
-		block_outputs.header.height,
-		block_outputs.outputs.len(),
-		*key_iterations,
-	);
+	let max_derivations = 1_000_000;
+
+	info!(LOGGER, "Scanning {} outputs", outputs.len(),);
 
 	// skey doesn't matter in this case
 	let skey = keychain.derive_key_id(1).unwrap();
-	for output in block_outputs.outputs.iter().filter(|x| !x.spent) {
+	for output in outputs.iter().filter(|x| !x.spent) {
 		// attempt to unwind message from the RP and get a value.. note
 		// this will only return okay if the value is included in the
 		// message 3 times, indicating a strong match. Also, sec_key provided
@@ -111,7 +103,7 @@ fn find_outputs_with_key(
 		}
 		// we have a match, now check through our key iterations to find a partial match
 		let mut found = false;
-		for i in 1..*key_iterations {
+		for i in 1..max_derivations {
 			let key_id = &keychain.derive_key_id(i as u32).unwrap();
 			if !message.compare_bf_first_8(key_id) {
 				continue;
@@ -143,7 +135,8 @@ fn find_outputs_with_key(
 				.commit_with_key_index(BigEndian::read_u64(&commit_id), i as u32)
 				.expect("commit with key index");
 
-			let height = block_outputs.header.height;
+			//let height = outputs.header.height;
+			let height = 0;
 			let lock_height = if is_coinbase {
 				height + global::coinbase_maturity()
 			} else {
@@ -159,31 +152,25 @@ fn find_outputs_with_key(
 				lock_height,
 				is_coinbase,
 			));
+
+			break;
 		}
 		if !found {
 			warn!(
 				LOGGER,
 				"Very probable matching output found with amount: {} \
-				 run restore again with a larger value of key_iterations to claim",
-				message.value().unwrap()
+				 but didn't match key child key up to {}",
+				message.value().unwrap(),
+				max_derivations,
 			);
 		}
 	}
-	debug!(
-		LOGGER,
-		"Found {} wallet_outputs for block {}",
-		wallet_outputs.len(),
-		block_outputs.header.height,
-	);
+	debug!(LOGGER, "Found {} wallet_outputs", wallet_outputs.len(),);
 
 	wallet_outputs
 }
 
-pub fn restore(
-	config: &WalletConfig,
-	keychain: &Keychain,
-	key_derivations: u32,
-) -> Result<(), Error> {
+pub fn restore(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> {
 	// Don't proceed if wallet.dat has anything in it
 	let is_empty = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
 		Ok(wallet_data.outputs.len() == 0)
@@ -196,53 +183,48 @@ pub fn restore(
 		return Ok(());
 	}
 
-	// Get height of chain from node (we'll check again when done)
-	let chain_height = get_chain_height(config)?;
-	info!(
-		LOGGER,
-		"Starting restore: Chain height is {}.", chain_height
-	);
+	info!(LOGGER, "Starting restore.");
 
-	let batch_size = 100;
+	let batch_size = 1000;
+	let mut start_index = 1;
 	// this will start here, then lower as outputs are found, moving backwards on
 	// the chain
-	let mut key_iterations = key_derivations as usize;
-	let mut h = chain_height;
-	while {
-		let end_batch = h;
-		if h >= batch_size {
-			h -= batch_size;
-		} else {
-			h = 0;
-		}
-		let mut blocks = outputs_batch_block(config, h + 1, end_batch)?;
-		blocks.reverse();
+	loop {
+		let output_listing = outputs_batch(config, start_index, batch_size)?;
+		info!(
+			LOGGER,
+			"Retrieved {} outputs, up to index {}. (Highest index: {})",
+			output_listing.outputs.len(),
+			output_listing.last_retrieved_index,
+			output_listing.highest_index
+		);
 
 		let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-			for block in blocks {
-				let result_vec = find_outputs_with_key(keychain, block, &mut key_iterations);
-				if result_vec.len() > 0 {
-					for output in result_vec.clone() {
-						let root_key_id = keychain.root_key_id();
-						// Just plonk it in for now, and refresh actual values via wallet info
-						// command later
-						wallet_data.add_output(OutputData {
-							root_key_id: root_key_id.clone(),
-							key_id: output.1.clone(),
-							n_child: output.2,
-							value: output.3,
-							status: OutputStatus::Unconfirmed,
-							height: output.4,
-							lock_height: output.5,
-							is_coinbase: output.6,
-							block: None,
-							merkle_proof: None,
-						});
-					}
+			let result_vec = find_outputs_with_key(keychain, output_listing.outputs.clone());
+			if result_vec.len() > 0 {
+				for output in result_vec.clone() {
+					let root_key_id = keychain.root_key_id();
+					// Just plonk it in for now, and refresh actual values via wallet info
+					// command later
+					wallet_data.add_output(OutputData {
+						root_key_id: root_key_id.clone(),
+						key_id: output.1.clone(),
+						n_child: output.2,
+						value: output.3,
+						status: OutputStatus::Unconfirmed,
+						height: output.4,
+						lock_height: output.5,
+						is_coinbase: output.6,
+						block: None,
+						merkle_proof: None,
+					});
 				}
 			}
 		});
-		h > 0
-	} {}
+		if output_listing.highest_index == output_listing.last_retrieved_index {
+			break;
+		}
+		start_index = output_listing.last_retrieved_index + 1;
+	}
 	Ok(())
 }

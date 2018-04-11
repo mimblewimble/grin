@@ -240,7 +240,7 @@ impl OutputPrintable {
 	pub fn from_output(
 		output: &core::Output,
 		chain: Arc<chain::Chain>,
-		block_header: &core::BlockHeader,
+		block_header: Option<&core::BlockHeader>,
 		include_proof: bool,
 	) -> OutputPrintable {
 		let output_type = if output
@@ -269,8 +269,9 @@ impl OutputPrintable {
 		if output
 			.features
 			.contains(core::transaction::OutputFeatures::COINBASE_OUTPUT) && !spent
+			&& block_header.is_some()
 		{
-			merkle_proof = chain.get_merkle_proof(&out_id, &block_header).ok()
+			merkle_proof = chain.get_merkle_proof(&out_id, &block_header.unwrap()).ok()
 		};
 
 		OutputPrintable {
@@ -527,7 +528,12 @@ impl BlockPrintable {
 			.outputs
 			.iter()
 			.map(|output| {
-				OutputPrintable::from_output(output, chain.clone(), &block.header, include_proof)
+				OutputPrintable::from_output(
+					output,
+					chain.clone(),
+					Some(&block.header),
+					include_proof,
+				)
 			})
 			.collect();
 		let kernels = block
@@ -566,7 +572,7 @@ impl CompactBlockPrintable {
 		let block = chain.get_block(&cb.hash()).unwrap();
 		let out_full = cb.out_full
 			.iter()
-			.map(|x| OutputPrintable::from_output(x, chain.clone(), &block.header, false))
+			.map(|x| OutputPrintable::from_output(x, chain.clone(), Some(&block.header), false))
 			.collect();
 		let kern_full = cb.kern_full
 			.iter()
@@ -587,6 +593,18 @@ impl CompactBlockPrintable {
 pub struct BlockOutputs {
 	/// The block header
 	pub header: BlockHeaderInfo,
+	/// A printable version of the outputs
+	pub outputs: Vec<OutputPrintable>,
+}
+
+// For traversing all outputs in the UTXO set
+// transactions in the block
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OutputListing {
+	/// The last available output index
+	pub highest_index: u64,
+	/// The last insertion index retrieved
+	pub last_retrieved_index: u64,
 	/// A printable version of the outputs
 	pub outputs: Vec<OutputPrintable>,
 }

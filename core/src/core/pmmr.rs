@@ -37,7 +37,7 @@
 
 use std::clone::Clone;
 use std::marker::PhantomData;
-use core::hash::{Hash};
+use core::hash::Hash;
 use ser;
 use ser::{Readable, Reader, Writeable, Writer};
 use ser::{PMMRIndexHashable, PMMRable};
@@ -222,8 +222,8 @@ impl MerkleProof {
 			let mut bagged = None;
 			for peak in self.peaks.iter().rev() {
 				bagged = match bagged {
-					None      => Some(*peak),
-					Some(rhs) => Some((*peak,rhs).hash_with_index(self.mmr_size)),
+					None => Some(*peak),
+					Some(rhs) => Some((*peak, rhs).hash_with_index(self.mmr_size)),
 				}
 			}
 			return bagged == Some(self.root);
@@ -236,9 +236,9 @@ impl MerkleProof {
 		// hash our node and sibling together (noting left/right position of the
 		// sibling)
 		let parent = if is_left_sibling(sibling_pos) {
-			(sibling, self.node).hash_with_index(parent_pos-1)
+			(sibling, self.node).hash_with_index(parent_pos - 1)
 		} else {
-			(self.node, sibling).hash_with_index(parent_pos-1)
+			(self.node, sibling).hash_with_index(parent_pos - 1)
 		};
 
 		let proof = MerkleProof {
@@ -315,8 +315,8 @@ where
 		let mut res = None;
 		for peak in self.peaks().iter().rev() {
 			res = match res {
-				None        => Some(*peak),
-				Some(rhash) => Some((*peak,rhash).hash_with_index(self.unpruned_size())),
+				None => Some(*peak),
+				Some(rhash) => Some((*peak, rhash).hash_with_index(self.unpruned_size())),
 			}
 		}
 		res.expect("no root, invalid tree")
@@ -370,7 +370,7 @@ where
 	/// the same time if applicable.
 	pub fn push(&mut self, elmt: T) -> Result<u64, String> {
 		let elmt_pos = self.last_pos + 1;
-		let mut current_hash = elmt.hash_with_index(elmt_pos-1);
+		let mut current_hash = elmt.hash_with_index(elmt_pos - 1);
 
 		let mut to_append = vec![(current_hash, Some(elmt))];
 		let mut height = 0;
@@ -390,7 +390,7 @@ where
 			height += 1;
 			pos += 1;
 
-			current_hash = (left_hash, current_hash).hash_with_index(pos-1);
+			current_hash = (left_hash, current_hash).hash_with_index(pos - 1);
 
 			to_append.push((current_hash.clone(), None));
 		}
@@ -525,6 +525,27 @@ where
 		return_vec
 	}
 
+	/// Helper function which returns un-pruned nodes from the insertion index
+	/// forward
+	/// returns last insertion index returned along with data
+	pub fn elements_from_insertion_index(&self, mut index: u64, max_count: u64) -> (u64, Vec<T>) {
+		let mut return_vec = vec![];
+		if index == 0 {
+			index = 1;
+		}
+		let mut return_index = index;
+		let mut pmmr_index = insertion_to_pmmr_index(index);
+		while return_vec.len() < max_count as usize && pmmr_index <= self.last_pos {
+			if let Some(t) = self.get_data(pmmr_index) {
+				return_vec.push(t);
+				return_index = index;
+			}
+			index += 1;
+			pmmr_index = insertion_to_pmmr_index(index);
+		}
+		(return_index, return_vec)
+	}
+
 	/// Walks all unpruned nodes in the MMR and revalidate all parent hashes
 	pub fn validate(&self) -> Result<(), String> {
 		// iterate on all parent nodes
@@ -540,7 +561,9 @@ where
 						if let Some(right_child_hs) = self.get_from_file(right_pos) {
 							// hash the two child nodes together with parent_pos and compare
 							let (parent_pos, _) = family(left_pos);
-							if (left_child_hs, right_child_hs).hash_with_index(parent_pos-1) != hash {
+							if (left_child_hs, right_child_hs).hash_with_index(parent_pos - 1)
+								!= hash
+							{
 								return Err(format!(
 									"Invalid MMR, hash of parent at {} does \
 									 not match children.",
@@ -822,6 +845,13 @@ pub fn n_leaves(mut sz: u64) -> u64 {
 		.iter()
 		.map(|n| (1 << bintree_postorder_height(*n)) as u64)
 		.sum()
+}
+
+/// Returns the pmmr index of the nth inserted element
+pub fn insertion_to_pmmr_index(mut sz: u64) -> u64 {
+	//1 based pmmrs
+	sz = sz - 1;
+	2 * sz - sz.count_ones() as u64 + 1
 }
 
 /// The height of a node in a full binary tree from its postorder traversal
@@ -1472,7 +1502,10 @@ mod test {
 		pmmr.push(elems[6]).unwrap();
 		let pos_10 = elems[6].hash_with_index(10);
 		assert_eq!(pmmr.peaks(), vec![pos_6, pos_9, pos_10]);
-		assert_eq!(pmmr.root(), (pos_6, (pos_9, pos_10).hash_with_index(11)).hash_with_index(11));
+		assert_eq!(
+			pmmr.root(),
+			(pos_6, (pos_9, pos_10).hash_with_index(11)).hash_with_index(11)
+		);
 		assert_eq!(pmmr.unpruned_size(), 11);
 
 		// 001001200100123
@@ -1901,11 +1934,10 @@ mod test {
 		assert_eq!(n_leaves(10), 6);
 	}
 
-
 	#[test]
 	fn check_all_ones() {
 		for i in 0..1000000 {
-			assert_eq!(old_all_ones(i),all_ones(i));
+			assert_eq!(old_all_ones(i), all_ones(i));
 		}
 	}
 
@@ -1927,7 +1959,7 @@ mod test {
 	#[test]
 	fn check_most_significant_pos() {
 		for i in 0u64..1000000 {
-			assert_eq!(old_most_significant_pos(i),most_significant_pos(i));
+			assert_eq!(old_most_significant_pos(i), most_significant_pos(i));
 		}
 	}
 
@@ -1940,5 +1972,58 @@ mod test {
 			pos += 1;
 		}
 		pos
+	}
+
+	#[test]
+	fn check_insertion_to_pmmr_index() {
+		assert_eq!(insertion_to_pmmr_index(1), 1);
+		assert_eq!(insertion_to_pmmr_index(2), 2);
+		assert_eq!(insertion_to_pmmr_index(3), 4);
+		assert_eq!(insertion_to_pmmr_index(4), 5);
+		assert_eq!(insertion_to_pmmr_index(5), 8);
+		assert_eq!(insertion_to_pmmr_index(6), 9);
+		assert_eq!(insertion_to_pmmr_index(7), 11);
+		assert_eq!(insertion_to_pmmr_index(8), 12);
+	}
+
+	#[test]
+	fn check_elements_from_insertion_index() {
+		let mut ba = VecBackend::new();
+		let mut pmmr = PMMR::new(&mut ba);
+		for x in 1..1000 {
+			pmmr.push(TestElem([0, 0, 0, x])).unwrap();
+		}
+		// Normal case
+		let res = pmmr.elements_from_insertion_index(1, 100);
+		assert_eq!(res.0, 100);
+		assert_eq!(res.1.len(), 100);
+		assert_eq!(res.1[0].0[3], 1);
+		assert_eq!(res.1[99].0[3], 100);
+
+		// middle of pack
+		let res = pmmr.elements_from_insertion_index(351, 70);
+		assert_eq!(res.0, 420);
+		assert_eq!(res.1.len(), 70);
+		assert_eq!(res.1[0].0[3], 351);
+		assert_eq!(res.1[69].0[3], 420);
+
+		// past the end
+		let res = pmmr.elements_from_insertion_index(650, 1000);
+		assert_eq!(res.0, 999);
+		assert_eq!(res.1.len(), 350);
+		assert_eq!(res.1[0].0[3], 650);
+		assert_eq!(res.1[349].0[3], 999);
+
+		// pruning a few nodes should get consistent results
+		pmmr.prune(insertion_to_pmmr_index(650), 0).unwrap();
+		pmmr.prune(insertion_to_pmmr_index(651), 0).unwrap();
+		pmmr.prune(insertion_to_pmmr_index(800), 0).unwrap();
+		pmmr.prune(insertion_to_pmmr_index(900), 0).unwrap();
+		pmmr.prune(insertion_to_pmmr_index(998), 0).unwrap();
+		let res = pmmr.elements_from_insertion_index(650, 1000);
+		assert_eq!(res.0, 999);
+		assert_eq!(res.1.len(), 345);
+		assert_eq!(res.1[0].0[3], 652);
+		assert_eq!(res.1[344].0[3], 999);
 	}
 }

@@ -20,7 +20,7 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use core::core::{Block, BlockHeader, Input, OutputFeatures, OutputIdentifier, TxKernel};
+use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
@@ -655,6 +655,32 @@ impl Chain {
 	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<(Hash, TxKernel)> {
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset.last_n_kernel(distance)
+	}
+
+	/// outputs by insertion index
+	pub fn unspent_outputs_by_insertion_index(
+		&self,
+		start_index: u64,
+		max: u64,
+	) -> Result<(u64, u64, Vec<Output>), Error> {
+		let mut txhashset = self.txhashset.write().unwrap();
+		let max_index = txhashset.highest_output_insertion_index();
+		let outputs = txhashset.outputs_by_insertion_index(start_index, max);
+		let rangeproofs = txhashset.rangeproofs_by_insertion_index(start_index, max);
+		if outputs.0 != rangeproofs.0 || outputs.1.len() != rangeproofs.1.len() {
+			return Err(Error::TxHashSetErr(String::from(
+				"Output and rangeproof sets don't match",
+			)));
+		}
+		let mut output_vec: Vec<Output> = vec![];
+		for (ref x, &y) in outputs.1.iter().zip(rangeproofs.1.iter()) {
+			output_vec.push(Output {
+				commit: x.commit,
+				features: x.features,
+				proof: y,
+			});
+		}
+		Ok((outputs.0, max_index, output_vec))
 	}
 
 	/// Total difficulty at the head of the chain

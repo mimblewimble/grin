@@ -208,14 +208,6 @@ fn main() {
 			.long("api_server_address")
 			.help("Api address of running node on which to check inputs and post transactions")
 			.takes_value(true))
-		.arg(Arg::with_name("key_derivations")
-				.help("The number of keys possiblities to search for each output. \
-				Ideally, set this to a number greater than the number of outputs \
-				you believe should belong to this seed/password.")
-				.short("k")
-				.long("key_derivations")
-				.default_value("1000")
-				.takes_value(true))
 
 		.subcommand(SubCommand::with_name("listen")
 			.about("Runs the wallet in listening mode waiting for transactions.")
@@ -528,12 +520,6 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
-	let key_derivations: u32 = wallet_args
-		.value_of("key_derivations")
-		.unwrap()
-		.parse()
-		.unwrap();
-
 	let mut show_spent = false;
 	if wallet_args.is_present("show_spent") {
 		show_spent = true;
@@ -656,7 +642,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			wallet::show_outputs(&wallet_config, &keychain, show_spent);
 		}
 		("restore", Some(_)) => {
-			let _ = wallet::restore(&wallet_config, &keychain, key_derivations);
+			let _ = wallet::restore(&wallet_config, &keychain);
 		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}

@@ -127,7 +127,12 @@ impl OutputHandler {
 				.iter()
 				.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
 				.map(|output| {
-					OutputPrintable::from_output(output, w(&self.chain), &header, include_proof)
+					OutputPrintable::from_output(
+						output,
+						w(&self.chain),
+						Some(&header),
+						include_proof,
+					)
 				})
 				.collect();
 
@@ -226,6 +231,9 @@ impl Handler for OutputHandler {
 // GET /v1/txhashset/lastoutputs?n=5
 // GET /v1/txhashset/lastrangeproofs
 // GET /v1/txhashset/lastkernels
+
+// UTXO traversal::
+// GET /v1/txhashset/outputs?start_index=1&max=100
 struct TxHashSetHandler {
 	chain: Weak<chain::Chain>,
 }
@@ -250,12 +258,34 @@ impl TxHashSetHandler {
 	fn get_last_n_kernel(&self, distance: u64) -> Vec<TxHashSetNode> {
 		TxHashSetNode::get_last_n_kernel(w(&self.chain), distance)
 	}
+
+	// allows traversal of utxo set
+	fn outputs(&self, start_index: u64, mut max: u64) -> OutputListing {
+		//set a limit here
+		if max > 1000 {
+			max = 1000;
+		}
+		let outputs = w(&self.chain)
+			.unspent_outputs_by_insertion_index(start_index, max)
+			.unwrap();
+		OutputListing {
+			last_retrieved_index: outputs.0,
+			highest_index: outputs.1,
+			outputs: outputs
+				.2
+				.iter()
+				.map(|x| OutputPrintable::from_output(x, w(&self.chain), None, true))
+				.collect(),
+		}
+	}
 }
 
 impl Handler for TxHashSetHandler {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		let url = req.url.clone();
 		let mut path_elems = url.path();
+		let mut start_index = 1;
+		let mut max = 100;
 		if *path_elems.last().unwrap() == "" {
 			path_elems.pop();
 		}
@@ -269,12 +299,27 @@ impl Handler for TxHashSetHandler {
 					}
 				}
 			}
+			if let Some(start_indexes) = params.get("start_index") {
+				for si in start_indexes {
+					if let Ok(s) = str::parse(si) {
+						start_index = s;
+					}
+				}
+			}
+			if let Some(maxes) = params.get("max") {
+				for ma in maxes {
+					if let Ok(m) = str::parse(ma) {
+						max = m;
+					}
+				}
+			}
 		}
 		match *path_elems.last().unwrap() {
 			"roots" => json_response_pretty(&self.get_roots()),
 			"lastoutputs" => json_response_pretty(&self.get_last_n_output(last_n)),
 			"lastrangeproofs" => json_response_pretty(&self.get_last_n_rangeproof(last_n)),
 			"lastkernels" => json_response_pretty(&self.get_last_n_kernel(last_n)),
+			"outputs" => json_response_pretty(&self.outputs(start_index, max)),
 			_ => Ok(Response::with((status::BadRequest, ""))),
 		}
 	}
@@ -710,6 +755,7 @@ pub fn start_rest_apis<T>(
 				"get txhashset/lastoutputs?n=10".to_string(),
 				"get txhashset/lastrangeproofs".to_string(),
 				"get txhashset/lastkernels".to_string(),
+				"get txhashset/outputs?start_index=1&max=100".to_string(),
 				"get pool".to_string(),
 				"post pool/push".to_string(),
 				"post peers/a.b.c.d:p/ban".to_string(),

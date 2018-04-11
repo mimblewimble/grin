@@ -183,6 +183,34 @@ impl TxHashSet {
 		kernel_pmmr.get_last_n_insertions(distance)
 	}
 
+	/// returns outputs from the given insertion (leaf) index up to the specified
+	/// limit. Also returns the last index actually populated
+	pub fn outputs_by_insertion_index(
+		&mut self,
+		start_index: u64,
+		max_count: u64,
+	) -> (u64, Vec<OutputIdentifier>) {
+		let output_pmmr: PMMR<OutputIdentifier, _> =
+			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+		output_pmmr.elements_from_insertion_index(start_index, max_count)
+	}
+
+	/// highest output insertion index availalbe
+	pub fn highest_output_insertion_index(&mut self) -> u64 {
+		pmmr::n_leaves(self.output_pmmr_h.last_pos)
+	}
+
+	/// As above, for rangeproofs
+	pub fn rangeproofs_by_insertion_index(
+		&mut self,
+		start_index: u64,
+		max_count: u64,
+	) -> (u64, Vec<RangeProof>) {
+		let rproof_pmmr: PMMR<RangeProof, _> =
+			PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
+		rproof_pmmr.elements_from_insertion_index(start_index, max_count)
+	}
+
 	/// Output and kernel MMR indexes at the end of the provided block
 	pub fn indexes_at(&self, bh: &Hash) -> Result<(u64, u64), Error> {
 		self.commit_index.get_block_marker(bh).map_err(&From::from)
