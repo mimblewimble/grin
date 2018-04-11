@@ -12,7 +12,7 @@ This document also helps visualizing all the timers in a simple way.
 
 ## T = 0
 
-A sends grins to B, adds the transaction to its stempool and starts its patience timer.
+A sends grins to B. B adds the transaction to its stempool and starts its patience timer.
 
 ![t = 0](images/t0.png)
 
