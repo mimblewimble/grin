@@ -38,7 +38,6 @@ use grin::sync;
 use common::types::*;
 use common::stats::*;
 use pow;
-use stratumserver;
 use util::LOGGER;
 
 /// Grin server holding internal structures.
