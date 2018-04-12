@@ -15,7 +15,7 @@
 extern crate grin_api as api;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
-extern crate grin_grin as grin;
+extern crate grin_servers as servers;
 extern crate grin_keychain as keychain;
 extern crate grin_p2p as p2p;
 extern crate grin_pow as pow;
@@ -128,7 +128,7 @@ pub struct LocalServerContainer {
 
 	// Structure of references to the
 	// internal server data
-	pub p2p_server_stats: Option<grin::ServerStats>,
+	pub p2p_server_stats: Option<servers::ServerStats>,
 
 	// The API server instance
 	api_server: Option<api::ApiServer>,
@@ -178,14 +178,14 @@ impl LocalServerContainer {
 		})
 	}
 
-	pub fn run_server(&mut self, duration_in_seconds: u64) -> grin::ServerStats {
+	pub fn run_server(&mut self, duration_in_seconds: u64) -> servers::ServerStats {
 		let api_addr = format!("{}:{}", self.config.base_addr, self.config.api_server_port);
 
-		let mut seeding_type = grin::Seeding::None;
+		let mut seeding_type = servers::Seeding::None;
 		let mut seeds = Vec::new();
 
 		if self.config.seed_addr.len() > 0 {
-			seeding_type = grin::Seeding::List;
+			seeding_type = servers::Seeding::List;
 			seeds = vec![self.config.seed_addr.to_string()];
 		}
 
@@ -205,7 +205,7 @@ impl LocalServerContainer {
 			..Default::default()
 		};
 
-		let s = grin::Server::new(grin::ServerConfig {
+		let s = servers::Server::new(servers::ServerConfig {
 			api_http_addr: api_addr,
 			db_root: format!("{}/.grin", self.working_dir),
 			p2p_config: p2p::P2PConfig {
@@ -498,7 +498,7 @@ impl LocalServerContainerPool {
 	/// once they've all been run
 	///
 
-	pub fn run_all_servers(self) -> Vec<grin::ServerStats> {
+	pub fn run_all_servers(self) -> Vec<servers::ServerStats> {
 		let run_length = self.config.run_length_in_seconds;
 		let mut handles = vec![];
 

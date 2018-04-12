@@ -23,7 +23,7 @@ use cursive::traits::*;
 use tui::constants::*;
 use tui::types::*;
 
-use grin::ServerStats;
+use servers::ServerStats;
 use info_strings;
 
 pub struct TUIVersionView;

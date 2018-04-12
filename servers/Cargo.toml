@@ -1,5 +1,5 @@
 [package]
-name = "grin_grin"
+name = "grin_servers"
 version = "0.2.0"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 workspace = ".."

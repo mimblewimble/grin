@@ -18,7 +18,7 @@ use std::net::SocketAddr;
 
 use api;
 use p2p;
-use grin::ServerConfig;
+use servers::ServerConfig;
 
 pub fn show_status(config: &ServerConfig) {
 	println!();

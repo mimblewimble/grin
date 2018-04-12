@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::fs::File;
 
 use toml;
-use grin::ServerConfig;
+use servers::ServerConfig;
 use pow::types::MinerConfig;
 use util::LoggingConfig;
 use types::{ConfigError, ConfigMembers, GlobalConfig};

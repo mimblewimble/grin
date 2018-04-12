@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::io;
 use std::fmt;
 
-use grin::ServerConfig;
+use servers::ServerConfig;
 use pow::types::MinerConfig;
 use util::LoggingConfig;
 use wallet::WalletConfig;

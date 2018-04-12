@@ -28,7 +28,7 @@ extern crate time;
 extern crate grin_api as api;
 extern crate grin_config as config;
 extern crate grin_core as core;
-extern crate grin_grin as grin;
+extern crate grin_servers as servers;
 extern crate grin_keychain as keychain;
 extern crate grin_p2p as p2p;
 extern crate grin_util as util;
@@ -84,7 +84,7 @@ fn log_build_info() {
 }
 
 /// wrap below to allow UI to clean up on stop
-fn start_server(config: grin::ServerConfig) {
+fn start_server(config: servers::ServerConfig) {
 	start_server_tui(config);
 	// Just kill process for now, otherwise the process
 	// hangs around until sigint because the API server
@@ -95,12 +95,12 @@ fn start_server(config: grin::ServerConfig) {
 	exit(0);
 }
 
-fn start_server_tui(config: grin::ServerConfig) {
+fn start_server_tui(config: servers::ServerConfig) {
 	// Run the UI controller.. here for now for simplicity to access
 	// everything it might need
 	if config.run_tui.is_some() && config.run_tui.unwrap() {
 		println!("Starting GRIN in UI mode...");
-		grin::Server::start(config, |serv: Arc<grin::Server>| {
+		servers::Server::start(config, |serv: Arc<servers::Server>| {
 			let _ = thread::Builder::new()
 				.name("ui".to_string())
 				.spawn(move || {
@@ -111,7 +111,7 @@ fn start_server_tui(config: grin::ServerConfig) {
 				});
 		}).unwrap();
 	} else {
-		grin::Server::start(config, |_| {}).unwrap();
+		servers::Server::start(config, |_| {}).unwrap();
 	}
 }
 
@@ -412,7 +412,7 @@ fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalCon
 		}
 
 		if let Some(seeds) = a.values_of("seed") {
-			server_config.seeding_type = grin::Seeding::List;
+			server_config.seeding_type = servers::Seeding::List;
 			server_config.seeds = Some(seeds.map(|s| s.to_string()).collect());
 		}
 	}

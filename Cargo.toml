@@ -7,7 +7,7 @@ publish = false
 build = "src/build/build.rs"
 
 [workspace]
-members = ["api", "chain", "config", "core", "grin", "keychain", "p2p", "store", "util", "pool", "wallet"]
+members = ["api", "chain", "config", "core", "keychain", "p2p", "servers", "store", "util", "pool", "wallet"]
 
 [[bin]]
 name = "grin"
@@ -27,10 +27,10 @@ time = "0.1"
 grin_api = { path = "./api" }
 grin_config = { path = "./config" }
 grin_core = { path = "./core" }
-grin_grin = { path = "./grin" }
 grin_keychain = { path = "./keychain" }
 grin_p2p = { path = "./p2p"}
 grin_pow = { path = "./pow"}
+grin_servers = { path = "./servers" }
 grin_util = { path = "./util"}
 grin_wallet = { path = "./wallet" }
 

@@ -28,7 +28,7 @@ env:
     - RUST_BACKTRACE="1"
     - RUST_FLAGS="-C debug-assertions"
   matrix:
-    - RUST_TEST_THREADS=1 TEST_DIR=grin
+    - RUST_TEST_THREADS=1 TEST_DIR=servers
     - TEST_DIR=store
     - TEST_DIR=chain
     - TEST_DIR=pool
