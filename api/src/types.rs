@@ -481,6 +481,8 @@ pub struct BlockHeaderPrintable {
 	pub nonce: u64,
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: u64,
+	/// Total kernel offset since genesis block
+	pub total_kernel_offset: String,
 }
 
 impl BlockHeaderPrintable {
@@ -496,6 +498,7 @@ impl BlockHeaderPrintable {
 			kernel_root: util::to_hex(h.kernel_root.to_vec()),
 			nonce: h.nonce,
 			total_difficulty: h.total_difficulty.into_num(),
+			total_kernel_offset: h.total_kernel_offset.to_hex(),
 		}
 	}
 }
