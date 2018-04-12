@@ -127,6 +127,7 @@ pub struct Chain {
 
 	head: Arc<Mutex<Tip>>,
 	orphans: Arc<OrphanBlockPool>,
+	txhashset_lock: Arc<Mutex<bool>>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 
 	// POW verification function
@@ -233,6 +234,7 @@ impl Chain {
 			adapter: adapter,
 			head: Arc::new(Mutex::new(head)),
 			orphans: Arc::new(OrphanBlockPool::new()),
+			txhashset_lock: Arc::new(Mutex::new(false)),
 			txhashset: Arc::new(RwLock::new(txhashset)),
 			pow_verifier: pow_verifier,
 		})
@@ -526,6 +528,7 @@ impl Chain {
 		rewind_to_kernel: u64,
 		txhashset_data: File,
 	) -> Result<(), Error> {
+		let _lock = self.txhashset_lock.lock().unwrap();
 		let head = self.head().unwrap();
 		let header_head = self.get_header_head().unwrap();
 		if header_head.height - head.height < global::cut_through_horizon() as u64 {
