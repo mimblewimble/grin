@@ -25,13 +25,13 @@ use bufstream::BufStream;
 use std::sync::{Arc, Mutex, RwLock};
 use serde_json;
 
-use adapters::PoolToChainAdapter;
+use common::adapters::PoolToChainAdapter;
 use core::core::{Block, BlockHeader};
 use pow::types::MinerConfig;
-use miner::*;
+use mining::miner::*;
+use mining::mine_block;
 use chain;
 use pool;
-use mine_block;
 
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;

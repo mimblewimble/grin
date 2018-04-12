@@ -559,15 +559,15 @@ impl LocalServerContainerPool {
 }
 
 /// Create and return a ServerConfig
-pub fn config(n: u16, test_name_dir: &str, seed_n: u16) -> grin::ServerConfig {
-	grin::ServerConfig {
+pub fn config(n: u16, test_name_dir: &str, seed_n: u16) -> servers::ServerConfig {
+	servers::ServerConfig {
 		api_http_addr: format!("127.0.0.1:{}", 20000 + n),
 		db_root: format!("target/tmp/{}/grin-sync-{}", test_name_dir, n),
 		p2p_config: p2p::P2PConfig {
 			port: 10000 + n,
 			..p2p::P2PConfig::default()
 		},
-		seeding_type: grin::Seeding::List,
+		seeding_type: servers::Seeding::List,
 		seeds: Some(vec![format!("127.0.0.1:{}", 10000 + seed_n)]),
 		chain_type: core::global::ChainTypes::AutomatedTesting,
 		archive_mode: Some(true),

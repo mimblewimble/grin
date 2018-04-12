@@ -15,7 +15,7 @@
 extern crate grin_api as api;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
-extern crate grin_grin as grin;
+extern crate grin_servers as servers;
 extern crate grin_p2p as p2p;
 extern crate grin_pow as pow;
 extern crate grin_util as util;
@@ -52,7 +52,7 @@ fn basic_stratum_server() {
 	framework::clean_all_output(test_name_dir);
 
 	// Create a server
-	let s = grin::Server::new(config(4000, test_name_dir, 0)).unwrap();
+	let s = servers::Server::new(config(4000, test_name_dir, 0)).unwrap();
 
 	// Get mining config with stratumserver enabled
 	let mut miner_cfg = miner_config();

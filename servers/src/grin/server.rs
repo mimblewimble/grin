@@ -30,6 +30,7 @@ use core::core::target::Difficulty;
 use core::core::hash::Hashed;
 use grin::dandelion_monitor;
 use mining::miner;
+use mining::stratumserver;
 use p2p;
 use pool;
 use grin::seed;
@@ -37,7 +38,6 @@ use grin::sync;
 use common::types::*;
 use common::stats::*;
 use pow;
-use stratumserver;
 use util::LOGGER;
 
 /// Grin server holding internal structures.

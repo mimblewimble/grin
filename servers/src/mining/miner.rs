@@ -35,12 +35,11 @@ use core::ser;
 use core::global;
 use core::ser::AsFixedBytes;
 use util::LOGGER;
-use common::types::Error;
 use common::stats::MiningStats;
 
 use chain;
 use pool;
-use mine_block;
+use mining::mine_block;
 
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;

@@ -32,8 +32,8 @@ use wallet;
 use wallet::BlockFees;
 use util;
 use util::LOGGER;
-use types::Error;
-use adapters::PoolToChainAdapter;
+use common::types::Error;
+use common::adapters::PoolToChainAdapter;
 
 // Ensure a block suitable for mining is built and returned
 // If a wallet listener URL is not provided the reward will be "burnt"
