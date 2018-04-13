@@ -76,12 +76,15 @@ impl Server {
 			}
 			serv.start_miner(mining_config.clone().unwrap());
 		}
-		if mining_config.as_mut().unwrap().enable_stratum_server {
-			{
-				let mut stratum_stats = serv.state_info.stratum_stats.write().unwrap();
-				stratum_stats.is_enabled = true;
+		let enable_stratum_server = mining_config.as_mut().unwrap().enable_stratum_server;
+		if let Some(s) = enable_stratum_server {
+			if s {
+				{
+					let mut stratum_stats = serv.state_info.stratum_stats.write().unwrap();
+					stratum_stats.is_enabled = true;
+				}
+				serv.start_stratum_server(mining_config.clone().unwrap());
 			}
-			serv.start_stratum_server(mining_config.clone().unwrap());
 		}
 
 		info_callback(serv.clone());
