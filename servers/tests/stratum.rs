@@ -58,7 +58,7 @@ fn basic_stratum_server() {
 	let mut miner_cfg = miner_config();
 	miner_cfg.enable_mining = false;
 	miner_cfg.attempt_time_per_block = 999;
-	miner_cfg.enable_stratum_server = true;
+	miner_cfg.enable_stratum_server = Some(true);
 	miner_cfg.stratum_server_addr = Some(String::from("127.0.0.1:11101"));
 
 	// Start stratum server
