@@ -12,41 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Mining service, gathers transactions from the pool, assemble them in a
-//! block and mine the block to produce a valid header with its proof-of-work.
+//! Mining service, gets a block to mine, and based on mining configuration chooses
+//! a version of the cuckoo miner to mine the block and produce a valid header with
+//! its proof-of-work.  Any valid mined blocks are submitted to the network.
 
-use rand::{self, Rng};
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 use time;
+use itertools::Itertools;
 
 use common::adapters::PoolToChainAdapter;
 use core::consensus;
-use core::core;
 use core::core::Proof;
-use core::core::{Block, BlockHeader, Transaction};
+use core::core::{Block, BlockHeader};
 use core::core::hash::{Hash, Hashed};
 use pow::{cuckoo, MiningWorker};
 use pow::types::MinerConfig;
+use pow::plugin::PluginMiner;
 use core::ser;
 use core::global;
 use core::ser::AsFixedBytes;
 use util::LOGGER;
-use common::types::Error;
 use common::stats::MiningStats;
 
 use chain;
 use pool;
-use util;
-use keychain::{Identifier, Keychain};
-use wallet;
-use wallet::BlockFees;
-
-use pow::plugin::PluginMiner;
-
-use itertools::Itertools;
+use mining::mine_block;
 
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
@@ -223,9 +216,8 @@ impl Miner {
 				}
 				info!(
 					LOGGER,
-					"Mining: Cuckoo{} at {} gps (graphs per second)",
-					cuckoo_size,
-					sps_total);
+					"Mining: Cuckoo{} at {} gps (graphs per second)", cuckoo_size, sps_total
+				);
 				if sps_total.is_finite() {
 					let mut mining_stats = mining_stats.write().unwrap();
 					mining_stats.combined_gps = sps_total;
@@ -483,7 +475,7 @@ impl Miner {
 		}
 
 		// iteration, we keep the returned derivation to provide it back when
-		// nothing has changed
+		// nothing has changed. We only want to create a new key_id for each new block.
 		let mut key_id = None;
 
 		{
@@ -498,22 +490,18 @@ impl Miner {
 			// get the latest chain state and build a block on top of it
 			let head = self.chain.head_header().unwrap();
 			let mut latest_hash = self.chain.head().unwrap().last_block_h;
-
-			let mut result = self.build_block(&head, key_id.clone());
-			while let Err(e) = result {
-				match e {
-					self::Error::Chain(chain::Error::DuplicateCommitment(_)) => {
-						debug!(LOGGER, "Duplicate commit for potential coinbase detected. Trying next derivation.");
-					}
-					ae => {
-						warn!(LOGGER, "Error building new block: {:?}. Retrying.", ae);
-					}
-				}
-				thread::sleep(Duration::from_millis(100));
-				result = self.build_block(&head, key_id.clone());
+			let mut wallet_listener_url: Option<String> = None;
+			if !self.config.burn_reward {
+				wallet_listener_url = Some(self.config.wallet_listener_url.clone());
 			}
 
-			let (mut b, block_fees) = result.unwrap();
+			let (mut b, block_fees) = mine_block::get_block(
+				&self.chain,
+				&self.tx_pool,
+				key_id.clone(),
+				MAX_TX.clone(),
+				wallet_listener_url,
+			);
 			{
 				let mut mining_stats = mining_stats.write().unwrap();
 				mining_stats.block_height = b.header.height;
@@ -593,129 +581,6 @@ impl Miner {
 			if self.stop.load(Ordering::Relaxed) {
 				break;
 			}
-		}
-	}
-
-	/// Builds a new block with the chain head as previous and eligible
-	/// transactions from the pool.
-	fn build_block(
-		&self,
-		head: &core::BlockHeader,
-		key_id: Option<Identifier>,
-	) -> Result<(core::Block, BlockFees), Error> {
-		// prepare the block header timestamp
-		let mut now_sec = time::get_time().sec;
-		let head_sec = head.timestamp.to_timespec().sec;
-		if now_sec <= head_sec {
-			now_sec = head_sec + 1;
-		}
-
-		// get the difficulty our block should be at
-		let diff_iter = self.chain.difficulty_iter();
-		let difficulty = consensus::next_difficulty(diff_iter).unwrap();
-
-		// extract current transaction from the pool
-		let txs_box = self.tx_pool
-			.read()
-			.unwrap()
-			.prepare_mineable_transactions(MAX_TX);
-		let txs: Vec<&Transaction> = txs_box.iter().map(|tx| tx.as_ref()).collect();
-
-		// build the coinbase and the block itself
-		let fees = txs.iter().map(|tx| tx.fee()).sum();
-		let height = head.height + 1;
-		let block_fees = BlockFees {
-			fees,
-			key_id,
-			height,
-		};
-
-		let (output, kernel, block_fees) = self.get_coinbase(block_fees)?;
-		let mut b = core::Block::with_reward(head, txs, output, kernel, difficulty.clone())?;
-
-		debug!(
-			LOGGER,
-			"(Server ID: {}) Built new block with {} inputs and {} outputs, network difficulty: {}, cumulative difficulty {}",
-			self.debug_output_id,
-			b.inputs.len(),
-			b.outputs.len(),
-			difficulty.clone().into_num(),
-			b.header.clone().total_difficulty.clone().into_num(),
-		);
-
-		// making sure we're not spending time mining a useless block
-		b.validate(&head)?;
-
-		let mut rng = rand::OsRng::new().unwrap();
-		b.header.nonce = rng.gen();
-		b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
-
-		let roots_result = self.chain.set_txhashset_roots(&mut b, false);
-
-		match roots_result {
-			Ok(_) => Ok((b, block_fees)),
-
-			// If it's a duplicate commitment, it's likely trying to use
-			// a key that's already been derived but not in the wallet
-			// for some reason, allow caller to retry
-			Err(chain::Error::DuplicateCommitment(e)) => {
-				Err(Error::Chain(chain::Error::DuplicateCommitment(e)))
-			}
-
-			//Some other issue, possibly duplicate kernel
-			Err(e) => {
-				error!(
-					LOGGER,
-					"Error setting txhashset root to build a block: {:?}", e
-				);
-				Err(Error::Chain(chain::Error::Other(format!("{:?}", e))))
-			}
-		}
-	}
-
-	///
-	/// Probably only want to do this when testing.
-	///
-	fn burn_reward(
-		&self,
-		block_fees: BlockFees,
-	) -> Result<(core::Output, core::TxKernel, BlockFees), Error> {
-		let keychain = Keychain::from_random_seed().unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
-		let (out, kernel) =
-			core::Block::reward_output(&keychain, &key_id, block_fees.fees, block_fees.height)
-				.unwrap();
-		Ok((out, kernel, block_fees))
-	}
-
-	fn get_coinbase(
-		&self,
-		block_fees: BlockFees,
-	) -> Result<(core::Output, core::TxKernel, BlockFees), Error> {
-		if self.config.burn_reward {
-			self.burn_reward(block_fees)
-		} else {
-			let url = format!(
-				"{}/v1/receive/coinbase",
-				self.config.wallet_listener_url.as_str()
-			);
-
-			let res = wallet::client::create_coinbase(&url, &block_fees)?;
-
-			let out_bin = util::from_hex(res.output).unwrap();
-			let kern_bin = util::from_hex(res.kernel).unwrap();
-			let key_id_bin = util::from_hex(res.key_id).unwrap();
-			let output = ser::deserialize(&mut &out_bin[..]).unwrap();
-			let kernel = ser::deserialize(&mut &kern_bin[..]).unwrap();
-			let key_id = ser::deserialize(&mut &key_id_bin[..]).unwrap();
-			let block_fees = BlockFees {
-				key_id: Some(key_id),
-				..block_fees
-			};
-
-			debug!(LOGGER, "get_coinbase: {:?}", block_fees);
-
-			Ok((output, kernel, block_fees))
 		}
 	}
 }

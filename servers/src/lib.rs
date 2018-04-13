@@ -21,8 +21,10 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
+extern crate bufstream;
 extern crate hyper;
 extern crate itertools;
+extern crate jsonrpc_core;
 extern crate rand;
 extern crate serde;
 #[macro_use]

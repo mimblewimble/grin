@@ -30,6 +30,7 @@ use core::core::target::Difficulty;
 use core::core::hash::Hashed;
 use grin::dandelion_monitor;
 use mining::miner;
+use mining::stratumserver;
 use p2p;
 use pool;
 use grin::seed;
@@ -67,12 +68,20 @@ impl Server {
 	{
 		let mut mining_config = config.mining_config.clone();
 		let serv = Arc::new(Server::new(config)?);
+
 		if mining_config.as_mut().unwrap().enable_mining {
 			{
 				let mut mining_stats = serv.state_info.mining_stats.write().unwrap();
 				mining_stats.is_enabled = true;
 			}
-			serv.start_miner(mining_config.unwrap());
+			serv.start_miner(mining_config.clone().unwrap());
+		}
+		if mining_config.as_mut().unwrap().enable_stratum_server {
+			{
+				let mut stratum_stats = serv.state_info.stratum_stats.write().unwrap();
+				stratum_stats.is_enabled = true;
+			}
+			serv.start_stratum_server(mining_config.clone().unwrap());
 		}
 
 		info_callback(serv.clone());
@@ -275,6 +284,29 @@ impl Server {
 			});
 	}
 
+	/// Start a minimal "stratum" mining service on a separate thread
+	pub fn start_stratum_server(&self, config: pow::types::MinerConfig) {
+		let cuckoo_size = global::sizeshift();
+		let proof_size = global::proofsize();
+		let currently_syncing = self.currently_syncing.clone();
+
+		let mut stratum_server = stratumserver::StratumServer::new(
+			config.clone(),
+			self.chain.clone(),
+			self.tx_pool.clone(),
+		);
+		let stratum_stats = self.state_info.stratum_stats.clone();
+		let _ = thread::Builder::new()
+			.name("stratum_server".to_string())
+			.spawn(move || {
+				let secs_5 = time::Duration::from_secs(5);
+				while currently_syncing.load(Ordering::Relaxed) {
+					thread::sleep(secs_5);
+				}
+				stratum_server.run_loop(config.clone(), stratum_stats, cuckoo_size as u32, proof_size);
+			});
+	}
+
 	/// The chain head
 	pub fn head(&self) -> chain::Tip {
 		self.chain.head().unwrap()
@@ -292,6 +324,7 @@ impl Server {
 	/// consumers
 	pub fn get_server_stats(&self) -> Result<ServerStats, Error> {
 		let mining_stats = self.state_info.mining_stats.read().unwrap().clone();
+		let stratum_stats = self.state_info.stratum_stats.read().unwrap().clone();
 		let awaiting_peers = self.state_info.awaiting_peers.load(Ordering::Relaxed);
 
 		// Fill out stats on our current difficulty calculation
@@ -359,6 +392,7 @@ impl Server {
 			is_syncing: self.currently_syncing.load(Ordering::Relaxed),
 			awaiting_peers: awaiting_peers,
 			mining_stats: mining_stats,
+			stratum_stats: stratum_stats,
 			peer_stats: peer_stats,
 			diff_stats: diff_stats,
 		})

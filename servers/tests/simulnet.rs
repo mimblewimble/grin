@@ -23,6 +23,8 @@ extern crate grin_wallet as wallet;
 
 mod framework;
 
+use std::fs;
+use std::sync::Arc;
 use std::thread;
 use std::time;
 use std::default::Default;
@@ -31,7 +33,7 @@ use core::global;
 use core::global::ChainTypes;
 
 use framework::{LocalServerContainerConfig, LocalServerContainerPool,
-                LocalServerContainerPoolConfig};
+                LocalServerContainerPoolConfig, config, miner_config};
 
 /// Testing the frameworks by starting a fresh server, creating a genesis
 /// Block and mining into a wallet for a bit
@@ -186,7 +188,7 @@ fn simulate_block_propagation() {
 	// instantiates 5 servers on different ports
 	let mut servers = vec![];
 	for n in 0..5 {
-		let s = servers::Server::new(config(10 * n, test_name_dir, 0)).unwrap();
+		let s = servers::Server::new(framework::config(10 * n, test_name_dir, 0)).unwrap();
 		servers.push(s);
 		thread::sleep(time::Duration::from_millis(100));
 	}
@@ -226,13 +228,13 @@ fn simulate_full_sync() {
 	let test_name_dir = "grin-sync";
 	framework::clean_all_output(test_name_dir);
 
-	let s1 = servers::Server::new(config(1000, "grin-sync", 1000)).unwrap();
+	let s1 = servers::Server::new(framework::config(1000, "grin-sync", 1000)).unwrap();
 	// mine a few blocks on server 1
 	s1.start_miner(miner_config());
 	thread::sleep(time::Duration::from_secs(8));
 
 	#[ignore(unused_mut)] // mut needed?
-	let mut conf = config(1001, "grin-sync", 1000);
+	let mut conf = framework::config(1001, "grin-sync", 1000);
 	let s2 = servers::Server::new(conf).unwrap();
 	while s2.head().height < 4 {
 		thread::sleep(time::Duration::from_millis(100));
@@ -253,7 +255,7 @@ fn simulate_fast_sync() {
 	let test_name_dir = "grin-fast";
 	framework::clean_all_output(test_name_dir);
 
-	let s1 = servers::Server::new(config(2000, "grin-fast", 2000)).unwrap();
+	let s1 = servers::Server::new(framework::config(2000, "grin-fast", 2000)).unwrap();
 	// mine a few blocks on server 1
 	s1.start_miner(miner_config());
 	thread::sleep(time::Duration::from_secs(8));
@@ -280,7 +282,7 @@ fn simulate_fast_sync_double() {
 	framework::clean_all_output("grin-double-fast1");
 	framework::clean_all_output("grin-double-fast2");
 
-	let s1 = servers::Server::new(config(3000, "grin-double-fast1", 3000)).unwrap();
+	let s1 = servers::Server::new(framework::config(3000, "grin-double-fast1", 3000)).unwrap();
 	// mine a few blocks on server 1
 	s1.start_miner(miner_config());
 	thread::sleep(time::Duration::from_secs(8));
@@ -307,37 +309,4 @@ fn simulate_fast_sync_double() {
 	}
 	s1.stop();
 	s2.stop();
-}
-
-fn config(n: u16, test_name_dir: &str, seed_n: u16) -> servers::ServerConfig {
-	servers::ServerConfig {
-		api_http_addr: format!("127.0.0.1:{}", 20000 + n),
-		db_root: format!("target/tmp/{}/grin-sync-{}", test_name_dir, n),
-		p2p_config: p2p::P2PConfig {
-			port: 10000 + n,
-			..p2p::P2PConfig::default()
-		},
-		seeding_type: servers::Seeding::List,
-		seeds: Some(vec![format!("127.0.0.1:{}", 10000 + seed_n)]),
-		chain_type: core::global::ChainTypes::AutomatedTesting,
-		archive_mode: Some(true),
-		skip_sync_wait: Some(true),
-		..Default::default()
-	}
-}
-
-fn miner_config() -> pow::types::MinerConfig {
-	let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
-	let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();
-	plugin_config.type_filter = String::from("mean_cpu");
-	plugin_config_vec.push(plugin_config);
-
-	pow::types::MinerConfig {
-		enable_mining: true,
-		burn_reward: true,
-		miner_async_mode: Some(false),
-		miner_plugin_dir: None,
-		miner_plugin_config: Some(plugin_config_vec),
-		..Default::default()
-	}
 }

@@ -557,3 +557,38 @@ impl LocalServerContainerPool {
 		}
 	}
 }
+
+/// Create and return a ServerConfig
+pub fn config(n: u16, test_name_dir: &str, seed_n: u16) -> servers::ServerConfig {
+	servers::ServerConfig {
+		api_http_addr: format!("127.0.0.1:{}", 20000 + n),
+		db_root: format!("target/tmp/{}/grin-sync-{}", test_name_dir, n),
+		p2p_config: p2p::P2PConfig {
+			port: 10000 + n,
+			..p2p::P2PConfig::default()
+		},
+		seeding_type: servers::Seeding::List,
+		seeds: Some(vec![format!("127.0.0.1:{}", 10000 + seed_n)]),
+		chain_type: core::global::ChainTypes::AutomatedTesting,
+		archive_mode: Some(true),
+		skip_sync_wait: Some(true),
+		..Default::default()
+	}
+}
+
+/// Create and return a MinerConfig
+pub fn miner_config() -> pow::types::MinerConfig {
+	let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
+	let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();
+	plugin_config.type_filter = String::from("mean_cpu");
+	plugin_config_vec.push(plugin_config);
+
+	pow::types::MinerConfig {
+		enable_mining: true,
+		burn_reward: true,
+		miner_async_mode: Some(false),
+		miner_plugin_dir: None,
+		miner_plugin_config: Some(plugin_config_vec),
+		..Default::default()
+	}
+}
