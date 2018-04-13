@@ -64,11 +64,11 @@ pub struct MinerConfig {
 	/// mining loop by adding a sleep to the thread
 	pub slow_down_in_millis: Option<u64>,
 
-        /// Run a stratum mining server rather than mining locally in-process
-        pub enable_stratum_server: bool,
- 
-        /// If enabled, the address and port to listen on
-        pub stratum_server_addr: Option<String>,
+	/// Run a stratum mining server rather than mining locally in-process
+	pub enable_stratum_server: Option<bool>,
+
+	/// If enabled, the address and port to listen on
+	pub stratum_server_addr: Option<String>,
 }
 
 impl Default for MinerConfig {
@@ -82,7 +82,7 @@ impl Default for MinerConfig {
 			burn_reward: false,
 			slow_down_in_millis: Some(0),
 			attempt_time_per_block: 2,
-			enable_stratum_server: false,
+			enable_stratum_server: None,
 			stratum_server_addr: None,
 		}
 	}
