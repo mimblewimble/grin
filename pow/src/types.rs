@@ -69,7 +69,6 @@ pub struct MinerConfig {
 
 	/// If enabled, the address and port to listen on
 	pub stratum_server_addr: Option<String>,
-
 }
 
 impl Default for MinerConfig {

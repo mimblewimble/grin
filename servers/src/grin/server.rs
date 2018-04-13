@@ -306,7 +306,12 @@ impl Server {
 				while currently_syncing.load(Ordering::Relaxed) {
 					thread::sleep(secs_5);
 				}
-				stratum_server.run_loop(config.clone(), stratum_stats, cuckoo_size as u32, proof_size);
+				stratum_server.run_loop(
+					config.clone(),
+					stratum_stats,
+					cuckoo_size as u32,
+					proof_size,
+				);
 			});
 	}
 
