@@ -77,6 +77,10 @@ impl Server {
 			serv.start_miner(mining_config.clone().unwrap());
 		}
 		if mining_config.as_mut().unwrap().enable_stratum_server {
+			{
+				let mut stratum_stats = serv.state_info.stratum_stats.write().unwrap();
+				stratum_stats.is_enabled = true;
+			}
 			serv.start_stratum_server(mining_config.clone().unwrap());
 		}
 
@@ -291,6 +295,7 @@ impl Server {
 			self.chain.clone(),
 			self.tx_pool.clone(),
 		);
+		let stratum_stats = self.state_info.stratum_stats.clone();
 		let _ = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {
@@ -298,7 +303,7 @@ impl Server {
 				while currently_syncing.load(Ordering::Relaxed) {
 					thread::sleep(secs_5);
 				}
-				stratum_server.run_loop(config.clone(), cuckoo_size as u32, proof_size);
+				stratum_server.run_loop(config.clone(), stratum_stats, cuckoo_size as u32, proof_size);
 			});
 	}
 
@@ -319,6 +324,7 @@ impl Server {
 	/// consumers
 	pub fn get_server_stats(&self) -> Result<ServerStats, Error> {
 		let mining_stats = self.state_info.mining_stats.read().unwrap().clone();
+		let stratum_stats = self.state_info.stratum_stats.read().unwrap().clone();
 		let awaiting_peers = self.state_info.awaiting_peers.load(Ordering::Relaxed);
 
 		// Fill out stats on our current difficulty calculation
@@ -386,6 +392,7 @@ impl Server {
 			is_syncing: self.currently_syncing.load(Ordering::Relaxed),
 			awaiting_peers: awaiting_peers,
 			mining_stats: mining_stats,
+			stratum_stats: stratum_stats,
 			peer_stats: peer_stats,
 			diff_stats: diff_stats,
 		})

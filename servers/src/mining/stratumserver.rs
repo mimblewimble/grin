@@ -24,6 +24,7 @@ use std::io::BufRead;
 use bufstream::BufStream;
 use std::sync::{Arc, Mutex, RwLock};
 use serde_json;
+use std::time::SystemTime;
 
 use common::adapters::PoolToChainAdapter;
 use core::core::{Block, BlockHeader};
@@ -32,6 +33,7 @@ use mining::miner::*;
 use mining::mine_block;
 use chain;
 use pool;
+use common::stats::{StratumStats, WorkerStats};
 
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
@@ -80,7 +82,7 @@ struct SubmitParams {
 // Worker Factory Thread Function
 
 // Run in a thread. Adds new connections to the workers list
-fn accept_workers(id: String, address: String, workers: &mut Arc<Mutex<Vec<Worker>>>) {
+fn accept_workers(id: String, address: String, workers: &mut Arc<Mutex<Vec<Worker>>>, stratum_stats: &mut Arc<RwLock<StratumStats>>) {
 	let listener = TcpListener::bind(address).expect("Failed to bind to listen address");
 	let mut worker_id: u32 = 0;
 	for stream in listener.incoming() {
@@ -97,6 +99,13 @@ fn accept_workers(id: String, address: String, workers: &mut Arc<Mutex<Vec<Worke
 					.expect("set_nonblocking call failed");
 				let mut worker = Worker::new(worker_id.to_string(), BufStream::new(stream));
 				workers.lock().unwrap().push(worker);
+				// stats for this worker (worker stat objects are added and updated but never removed)
+				let mut worker_stats = WorkerStats::default();
+				worker_stats.is_connected = true;
+				worker_stats.id = worker_id.to_string();
+				worker_stats.pow_difficulty = 1;  // XXX TODO
+				let mut stratum_stats = stratum_stats.write().unwrap();
+				stratum_stats.worker_stats.push(worker_stats);
 				worker_id = worker_id + 1;
 			}
 			Err(e) => {
@@ -230,7 +239,7 @@ impl StratumServer {
 	}
 
 	// Handle an RPC request message from the worker(s)
-	fn handle_rpc_requests(&mut self) {
+	fn handle_rpc_requests(&mut self, stratum_stats: &mut Arc<RwLock<StratumStats>>) {
 		let mut workers_l = self.workers.lock().unwrap();
 		for num in 0..workers_l.len() {
 			match workers_l[num].read_message() {
@@ -252,6 +261,10 @@ impl StratumServer {
 						}
 					};
 
+					let mut stratum_stats = stratum_stats.write().unwrap();
+					let worker_stats_id = stratum_stats.worker_stats.iter().position(|r| r.id == workers_l[num].id).unwrap();
+					stratum_stats.worker_stats[worker_stats_id].last_seen = SystemTime::now();
+
 					// Call the handler function for requested method
 					let (response, err) = match request.method.as_str() {
 						"login" => {
@@ -262,13 +275,13 @@ impl StratumServer {
 							}
 							(response, err)
 						}
-						"submit" => self.handle_submit(request.params),
+						"submit" => self.handle_submit(request.params, &mut stratum_stats.worker_stats[worker_stats_id]),
 						"keepalive" => self.handle_keepalive(),
 						"getjobtemplate" => {
 							let b = self.current_block.header.clone();
 							self.handle_getjobtemplate(b)
 						}
-						"status" => self.handle_status(),
+						"status" => self.handle_status(&stratum_stats.worker_stats[worker_stats_id]),
 						_ => {
 							// Called undefined method
 							let e = r#"{"code": -32601, "message": "Method not found"}"#;
@@ -307,11 +320,10 @@ impl StratumServer {
 	}
 
 	// Handle STATUS message
-	fn handle_status(&self) -> (String, bool) {
-		// XXX TODO:  Return stratum and worker status and stats in json for use
-		//   by a dashboard or healthcheck at least.
-		// For now, just return "ok"
-		return (String::from("ok"), false);
+	fn handle_status(&self, worker_stats: &WorkerStats) -> (String, bool) {
+		// Return stratum and worker stats in json for use  by a dashboard or healthcheck.
+		let response = serde_json::to_string(&worker_stats).unwrap();
+		return (response, false);
 	}
 
 	// Handle GETJOBTEMPLATE message
@@ -347,7 +359,7 @@ impl StratumServer {
 	// Handle SUBMIT message
 	//  params contains a solved block header
 	//  we are expecting real solutions at the full difficulty.
-	fn handle_submit(&self, params: Option<String>) -> (String, bool) {
+	fn handle_submit(&self, params: Option<String>, worker_stats: &mut WorkerStats) -> (String, bool) {
 		// Extract the params string into a SubmitParams struct
 		let params_str = match params {
 			Some(val) => val,
@@ -381,6 +393,7 @@ impl StratumServer {
 					LOGGER,
 					"(Server ID: {}) Error validating mined block: {:?}", self.id, e
 				);
+				worker_stats.num_rejected += 1;
 				let e = r#"{"code": -1, "message": "Solution validation failed"}"#;
 				let err = e.to_string();
 				return (err, true);
@@ -392,15 +405,17 @@ impl StratumServer {
 				self.id,
 				submit_params.height
 			);
+			worker_stats.num_stale += 1;
 			let e = r#"{"code": -1, "message": "Solution submitted too late"}"#;
 			let err = e.to_string();
 			return (err, true);
 		}
+		worker_stats.num_accepted += 1;
 		return (String::from("ok"), false);
 	} // handle submit a solution
 
 	// Purge dead/sick workers - remove all workers marked in error state
-	fn clean_workers(&mut self) {
+	fn clean_workers(&mut self, stratum_stats: &mut Arc<RwLock<StratumStats>>) {
 		let mut start = 0;
 		let mut workers_l = self.workers.lock().unwrap();
 		loop {
@@ -412,12 +427,19 @@ impl StratumServer {
 	                                        self.id,
 						workers_l[num].id;
 	                                );
+					// Update worker stats
+					let mut stratum_stats = stratum_stats.write().unwrap();
+					let worker_stats_id = stratum_stats.worker_stats.iter().position(|r| r.id == workers_l[num].id).unwrap();
+					stratum_stats.worker_stats[worker_stats_id].is_connected = false;
+					// Remove the dead worker
 					workers_l.remove(num);
 					break;
 				}
 				start = num + 1;
 			}
 			if start >= workers_l.len() {
+				let mut stratum_stats = stratum_stats.write().unwrap();
+				stratum_stats.num_workers = workers_l.len();
 				return;
 			}
 		}
@@ -453,7 +475,7 @@ impl StratumServer {
 	/// "main()" - Starts the stratum-server.  Listens for a connection, then enters a
 	/// loop, building a new block on top of the existing chain anytime required and sending that to
 	/// the connected stratum miner, proxy, or pool, and accepts full solutions to be submitted.
-	pub fn run_loop(&mut self, miner_config: MinerConfig, cuckoo_size: u32, proof_size: usize) {
+	pub fn run_loop(&mut self, miner_config: MinerConfig, stratum_stats: Arc<RwLock<StratumStats>>, cuckoo_size: u32, proof_size: usize) {
 		info!(
 			LOGGER,
 			"(Server ID: {}) Starting stratum server with cuckoo_size = {}, proof_size = {}",
@@ -470,18 +492,26 @@ impl StratumServer {
 		// nothing has changed. We only want to create a key_id for each new block,
 		// and reuse it when we rebuild the current block to add new tx.
 		let mut key_id = None;
-		let mut current_hash = self.chain.head().unwrap().prev_block_h;
+		let mut head = self.chain.head().unwrap();
+		let mut current_hash = head.prev_block_h;
 		let mut latest_hash;
 		let listen_addr = miner_config.stratum_server_addr.clone().unwrap();
 
 		// Start a thread to accept new worker connections
 		let mut workers_th = self.workers.clone();
 		let id_th = self.id.clone();
+		let mut stats_th = stratum_stats.clone();
 		let _listener_th = thread::spawn(move || {
-			accept_workers(id_th, listen_addr, &mut workers_th);
+			accept_workers(id_th, listen_addr, &mut workers_th, &mut stats_th);
 		});
 
 		// We have started
+                {
+                        let mut stratum_stats = stratum_stats.write().unwrap();
+                        stratum_stats.is_running = true;
+                        stratum_stats.cuckoo_size = cuckoo_size as u16;
+                }
+
 		warn!(
 			LOGGER,
 			"Stratum server started on {}",
@@ -491,10 +521,11 @@ impl StratumServer {
 		// Main Loop
 		loop {
 			// Remove workers with failed connections
-			self.clean_workers();
+			self.clean_workers(&mut stratum_stats.clone());
 
 			// get the latest chain state
-			latest_hash = self.chain.head().unwrap().last_block_h;
+			head = self.chain.head().unwrap();
+			latest_hash = head.last_block_h;
 
 			// Build a new block if:
 			//    There is a new block on the chain
@@ -522,12 +553,19 @@ impl StratumServer {
 				// set a new deadline for rebuilding with fresh transactions
 				deadline = time::get_time().sec + attempt_time_per_block as i64;
 
+				{
+					let mut stratum_stats = stratum_stats.write().unwrap();
+					stratum_stats.block_height = self.current_block.header.height;
+					stratum_stats.network_difficulty = 
+                        			(self.current_block.header.total_difficulty.clone() - head.total_difficulty.clone()).into_num();
+				}
+
 				// Send this job to all connected workers
 				self.broadcast_job();
 			}
 
 			// Handle any messages from the workers
-			self.handle_rpc_requests();
+			self.handle_rpc_requests(&mut stratum_stats.clone());
 
 			// sleep before restarting loop
 			thread::sleep(Duration::from_millis(500));

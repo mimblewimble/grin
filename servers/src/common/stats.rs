@@ -17,6 +17,7 @@
 
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::AtomicBool;
+use std::time::SystemTime;
 
 use chain;
 use p2p;
@@ -30,6 +31,8 @@ pub struct ServerStateInfo {
 	pub awaiting_peers: Arc<AtomicBool>,
 	/// Mining stats
 	pub mining_stats: Arc<RwLock<MiningStats>>,
+	/// Stratum stats
+	pub stratum_stats: Arc<RwLock<StratumStats>>,
 }
 
 impl Default for ServerStateInfo {
@@ -37,6 +40,7 @@ impl Default for ServerStateInfo {
 		ServerStateInfo {
 			awaiting_peers: Arc::new(AtomicBool::new(false)),
 			mining_stats: Arc::new(RwLock::new(MiningStats::default())),
+			stratum_stats: Arc::new(RwLock::new(StratumStats::default())),
 		}
 	}
 }
@@ -56,6 +60,8 @@ pub struct ServerStats {
 	pub awaiting_peers: bool,
 	/// Handle to current mining stats
 	pub mining_stats: MiningStats,
+	/// Handle to current stratum server stats
+	pub stratum_stats: StratumStats,
 	/// Peer stats
 	pub peer_stats: Vec<PeerStats>,
 	/// Difficulty calculation statistics
@@ -80,6 +86,44 @@ pub struct MiningStats {
 	pub cuckoo_size: u16,
 	/// Individual device status from Cuckoo-Miner
 	pub device_stats: Option<Vec<Vec<pow::cuckoo_miner::CuckooMinerDeviceStats>>>,
+}
+
+/// Struct to return relevant information about stratum workers
+#[derive(Clone, Serialize, Debug)]
+pub struct WorkerStats {
+	/// Unique ID for this worker
+	pub id: String,
+        /// whether stratum worker is currently connected
+        pub is_connected: bool,
+	/// Timestamp of most recent communication with this worker
+	pub last_seen: SystemTime,
+        /// pow difficulty this worker is using
+        pub pow_difficulty: u64,
+	/// number of valid shares submitted
+	pub num_accepted: u64,
+	/// number of invalid shares submitted
+	pub num_rejected: u64,
+	/// number of shares submitted too late
+	pub num_stale: u64,
+}
+
+/// Struct to return relevant information about the stratum server
+#[derive(Clone, Serialize, Debug)]
+pub struct StratumStats {
+        /// whether stratum server is enabled
+        pub is_enabled: bool,
+        /// whether stratum server is running
+        pub is_running: bool,
+        /// Number of connected workers
+        pub num_workers: usize,
+        /// what block height we're mining at
+        pub block_height: u64,
+        /// current network difficulty we're working on
+        pub network_difficulty: u64,
+        /// cuckoo size used for mining
+        pub cuckoo_size: u16,
+        /// Individual worker status
+        pub worker_stats: Vec<WorkerStats>,
 }
 
 /// Stats on the last WINDOW blocks and the difficulty calculation
@@ -164,6 +208,34 @@ impl Default for MiningStats {
 			network_difficulty: 0,
 			cuckoo_size: 0,
 			device_stats: None,
+		}
+	}
+}
+
+impl Default for WorkerStats {
+	fn default() -> WorkerStats {
+		WorkerStats {
+			id: String::from("unknown"),
+			is_connected: false,
+			last_seen: SystemTime::now(),
+			pow_difficulty: 0,
+			num_accepted: 0,
+			num_rejected: 0,
+			num_stale: 0,
+		}
+	}
+}
+
+impl Default for StratumStats {
+	fn default() -> StratumStats {
+		StratumStats {
+			is_enabled: false,
+			is_running: false,
+			num_workers: 0,
+			block_height: 0,
+			network_difficulty: 0,
+			cuckoo_size: 0,
+			worker_stats: Vec::new(),
 		}
 	}
 }
