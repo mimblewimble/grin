@@ -134,11 +134,18 @@ fn basic_stratum_server() {
 	let _st = workers[3].read_line(&mut response);
 	assert_eq!(response.as_str(), ok_resp);
 
-	// Simulate a worker lost connection
-	workers.remove(1);
+	// Verify stratum server and worker stats
+	let stats = s.get_server_stats().unwrap();
+	assert_eq!(stats.stratum_stats.block_height, 1); // just 1 genesis block
+	assert_eq!(stats.stratum_stats.num_workers, 4); // 5 - 1 = 4
+	assert_eq!(stats.stratum_stats.worker_stats[5].is_connected, false); // worker was removed
+	assert_eq!(stats.stratum_stats.worker_stats[1].is_connected, true);
 
 	// Start mining blocks
 	s.start_miner(miner_config());
+
+	// Simulate a worker lost connection
+	workers.remove(1);
 
 	// Verify blocks are being broadcast to workers
 	let expected = String::from("job");
@@ -147,4 +154,10 @@ fn basic_stratum_server() {
 	let _st = workers[2].read_line(&mut jobtemplate);
 	let job_template: Value = serde_json::from_str(&jobtemplate).unwrap();
 	assert_eq!(job_template["method"], expected);
+
+	// Verify stratum server and worker stats
+	let stats = s.get_server_stats().unwrap();
+	assert_eq!(stats.stratum_stats.num_workers, 3); // 5 - 2 = 3
+	assert_eq!(stats.stratum_stats.worker_stats[2].is_connected, false); // worker was removed
+	assert_ne!(stats.stratum_stats.block_height, 1);
 }
