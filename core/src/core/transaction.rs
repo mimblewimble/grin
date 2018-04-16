@@ -468,8 +468,9 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
 
-    // we will sum these together at the end to give us the overall offset for the transaction
-    let mut kernel_offsets = vec![];
+	// we will sum these together at the end to give us the overall offset for the
+	// transaction
+	let mut kernel_offsets = vec![];
 
 	for mut transaction in transactions {
 		// we will summ these later to give a single aggregate offset
@@ -480,7 +481,8 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 		kernels.append(&mut transaction.kernels);
 	}
 
-	// now sum the kernel_offsets up to give us an aggregate offset for the transaction
+	// now sum the kernel_offsets up to give us an aggregate offset for the
+	// transaction
 	let total_kernel_offset = {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
@@ -528,7 +530,6 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 
 	Ok(tx.with_offset(total_kernel_offset))
 }
-
 
 /// A transaction input.
 ///
