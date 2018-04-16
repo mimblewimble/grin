@@ -45,7 +45,7 @@ say, for a Raspberry Pi.
 Building `grin_pow` might fail if you're not on a x86_64 system,
 because that crate also builds external Cuckoo mining plugins.
 
-To avoid building mining plugins, ensure your `pow/Cargo.toml' has a line
+To avoid building mining plugins, ensure your `pow/Cargo.toml` has a line in section `[dependencies.cuckoo_miner]`
 
 ```
 features=["no-plugin-build"]
