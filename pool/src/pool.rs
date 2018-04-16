@@ -982,11 +982,14 @@ mod tests {
 			assert_eq!(write_pool.total_size(), 0);
 
 			// First, add the transaction rooted in the blockchain
-			let result = write_pool.add_to_memory_pool(test_source(), multi_kernel_transaction, false);
+			let result =
+				write_pool.add_to_memory_pool(test_source(), multi_kernel_transaction, false);
 			if result.is_err() {
-				panic!("got an error adding multi-kernel tx: {:?}", result.err().unwrap());
+				panic!(
+					"got an error adding multi-kernel tx: {:?}",
+					result.err().unwrap()
+				);
 			}
-
 		}
 
 		// Now take the read lock and use a few exposed methods to check consistency
@@ -999,7 +1002,6 @@ mod tests {
 			expect_output_parent!(read_pool, Parent::Unknown, 11, 3, 20);
 		}
 	}
-
 
 	#[test]
 	/// A basic test; add a transaction to the pool and add the child to the
