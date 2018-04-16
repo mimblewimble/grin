@@ -14,19 +14,19 @@
 
 //! Base types that the block chain pipeline requires.
 
-use std::io;
+use std::{error, fmt, io};
 
 use util::secp;
 use util::secp::pedersen::Commitment;
 
-use grin_store as store;
-use core::core::{block, transaction, Block, BlockHeader};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
+use core::core::{block, transaction, Block, BlockHeader};
 use core::ser::{self, Readable, Reader, Writeable, Writer};
-use keychain;
+use grin_store as store;
 use grin_store;
 use grin_store::pmmr::PMMRFileMetadata;
+use keychain;
 
 bitflags! {
 /// Options for block validation
@@ -107,6 +107,22 @@ pub enum Error {
 	Transaction(transaction::Error),
 	/// Anything else
 	Other(String),
+}
+
+impl error::Error for Error {
+	fn description(&self) -> &str {
+		match *self {
+			_ => "some kind of chain error",
+		}
+	}
+}
+
+impl fmt::Display for Error {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			_ => write!(f, "some kind of chain error"),
+		}
+	}
 }
 
 impl From<grin_store::Error> for Error {
@@ -285,7 +301,8 @@ pub trait ChainStore: Send + Sync {
 	fn delete_header_by_height(&self, height: u64) -> Result<(), store::Error>;
 
 	/// Is the block header on the current chain?
-	/// Use the header_by_height index to verify the block header is where we think it is.
+	/// Use the header_by_height index to verify the block header is where we
+	/// think it is.
 	fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), store::Error>;
 
 	/// Saves the position of an output, represented by its commitment, in the
@@ -299,8 +316,8 @@ pub trait ChainStore: Send + Sync {
 	/// Deletes the MMR position of an output.
 	fn delete_output_pos(&self, commit: &[u8]) -> Result<(), store::Error>;
 
-	/// Saves a marker associated with a block recording the MMR positions of its
-	/// last elements.
+	/// Saves a marker associated with a block recording the MMR positions of
+	/// its last elements.
 	fn save_block_marker(&self, bh: &Hash, marker: &(u64, u64)) -> Result<(), store::Error>;
 
 	/// Retrieves a block marker from a block hash.

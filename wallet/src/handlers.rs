@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use iron::prelude::*;
+use bodyparser;
 use iron::Handler;
+use iron::prelude::*;
 use iron::status;
 use serde_json;
-use bodyparser;
 
-use receiver::receive_coinbase;
-use core::ser;
 use api;
+use core::ser;
+use failure::{Fail, ResultExt};
 use keychain::Keychain;
+use receiver::receive_coinbase;
 use types::*;
 use util;
-use failure::{Fail, ResultExt};
 
 pub struct CoinbaseHandler {
 	pub config: WalletConfig,
@@ -33,22 +33,15 @@ pub struct CoinbaseHandler {
 
 impl CoinbaseHandler {
 	fn build_coinbase(&self, block_fees: &BlockFees) -> Result<CbData, Error> {
-		let (out, kern, block_fees) = receive_coinbase(&self.config, &self.keychain, block_fees)
-			.map_err(|e| api::Error::Internal(format!("Error building coinbase: {:?}", e)))
-			.context(ErrorKind::Node)?;
+		let (out, kern, block_fees) =
+			receive_coinbase(&self.config, &self.keychain, block_fees).context(ErrorKind::Node)?;
 
-		let out_bin = ser::ser_vec(&out)
-			.map_err(|e| api::Error::Internal(format!("Error serializing output: {:?}", e)))
-			.context(ErrorKind::Node)?;
+		let out_bin = ser::ser_vec(&out).context(ErrorKind::Node)?;
 
-		let kern_bin = ser::ser_vec(&kern)
-			.map_err(|e| api::Error::Internal(format!("Error serializing kernel: {:?}", e)))
-			.context(ErrorKind::Node)?;
+		let kern_bin = ser::ser_vec(&kern).context(ErrorKind::Node)?;
 
 		let key_id_bin = match block_fees.key_id {
-			Some(key_id) => ser::ser_vec(&key_id)
-				.map_err(|e| api::Error::Internal(format!("Error serializing kernel: {:?}", e)))
-				.context(ErrorKind::Node)?,
+			Some(key_id) => ser::ser_vec(&key_id).context(ErrorKind::Node)?,
 			None => vec![],
 		};
 

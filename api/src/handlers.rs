@@ -16,25 +16,26 @@ use std::io::Read;
 use std::sync::{Arc, RwLock, Weak};
 use std::thread;
 
-use iron::prelude::*;
+use failure::{Fail, ResultExt};
 use iron::Handler;
+use iron::prelude::*;
 use iron::status;
-use urlencoded::UrlEncodedQuery;
 use serde::Serialize;
 use serde_json;
+use urlencoded::UrlEncodedQuery;
 
 use chain;
-use core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use core::core::hash::{Hash, Hashed};
+use core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use core::ser;
-use pool;
 use p2p;
+use pool;
 use regex::Regex;
 use rest::*;
-use util::secp::pedersen::Commitment;
 use types::*;
 use util;
 use util::LOGGER;
+use util::secp::pedersen::Commitment;
 
 // All handlers use `Weak` references instead of `Arc` to avoid cycles that
 // can never be destroyed. These 2 functions are simple helpers to reduce the
@@ -67,8 +68,10 @@ struct OutputHandler {
 
 impl OutputHandler {
 	fn get_output(&self, id: &str) -> Result<Output, Error> {
-		let c = util::from_hex(String::from(id))
-			.map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
+		let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
+			"Not a valid commitment: {}",
+			id
+		)))?;
 		let commit = Commitment::from_vec(c);
 
 		// We need the features here to be able to generate the necessary hash
@@ -85,7 +88,7 @@ impl OutputHandler {
 				return Ok(Output::new(&commit));
 			}
 		}
-		Err(Error::NotFound)
+		Err(ErrorKind::NotFound)?
 	}
 
 	fn outputs_by_ids(&self, req: &mut Request) -> Vec<Output> {
@@ -499,19 +502,18 @@ impl Handler for ChainCompactHandler {
 ///
 /// Optionally return results as "compact blocks" by passing "?compact" query param
 /// GET /v1/blocks/<hash>?compact
-///
 pub struct BlockHandler {
 	pub chain: Weak<chain::Chain>,
 }
 
 impl BlockHandler {
 	fn get_block(&self, h: &Hash) -> Result<BlockPrintable, Error> {
-		let block = w(&self.chain).get_block(h).map_err(|_| Error::NotFound)?;
+		let block = w(&self.chain).get_block(h).context(ErrorKind::NotFound)?;
 		Ok(BlockPrintable::from_block(&block, w(&self.chain), false))
 	}
 
 	fn get_compact_block(&self, h: &Hash) -> Result<CompactBlockPrintable, Error> {
-		let block = w(&self.chain).get_block(h).map_err(|_| Error::NotFound)?;
+		let block = w(&self.chain).get_block(h).context(ErrorKind::NotFound)?;
 		Ok(CompactBlockPrintable::from_compact_block(
 			&block.as_compact_block(),
 			w(&self.chain),
@@ -523,14 +525,16 @@ impl BlockHandler {
 		if let Ok(height) = input.parse() {
 			match w(&self.chain).get_header_by_height(height) {
 				Ok(header) => return Ok(header.hash()),
-				Err(_) => return Err(Error::NotFound),
+				Err(_) => return Err(ErrorKind::NotFound)?,
 			}
 		}
 		lazy_static! {
 			static ref RE: Regex = Regex::new(r"[0-9a-fA-F]{64}").unwrap();
 		}
 		if !RE.is_match(&input) {
-			return Err(Error::Argument(String::from("Not a valid hash or height.")));
+			return Err(ErrorKind::Argument(
+				"Not a valid hash or height.".to_owned(),
+			))?;
 		}
 		let vec = util::from_hex(input).unwrap();
 		Ok(Hash::from_vec(vec))
@@ -545,7 +549,8 @@ impl Handler for BlockHandler {
 			path_elems.pop();
 		}
 		let el = *path_elems.last().unwrap();
-		let h = try!(self.parse_input(el.to_string()));
+		let h = self.parse_input(el.to_string())
+			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
 
 		let mut compact = false;
 		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
@@ -555,10 +560,12 @@ impl Handler for BlockHandler {
 		}
 
 		if compact {
-			let b = try!(self.get_compact_block(&h));
+			let b = self.get_compact_block(&h)
+				.map_err(|e| IronError::new(Fail::compat(e), status::InternalServerError))?;
 			json_response(&b)
 		} else {
-			let b = try!(self.get_block(&h));
+			let b = self.get_block(&h)
+				.map_err(|e| IronError::new(Fail::compat(e), status::InternalServerError))?;
 			json_response(&b)
 		}
 	}
@@ -603,14 +610,13 @@ where
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		let wrapper: TxWrapper = serde_json::from_reader(req.body.by_ref())
-			.map_err(|e| IronError::new(e, status::BadRequest))?;
+			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
 
 		let tx_bin = util::from_hex(wrapper.tx_hex)
-			.map_err(|_| Error::Argument(format!("Invalid hex in transaction wrapper.")))?;
+			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
 
-		let tx: Transaction = ser::deserialize(&mut &tx_bin[..]).map_err(|_| {
-			Error::Argument("Could not deserialize transaction, invalid format.".to_string())
-		})?;
+		let tx: Transaction = ser::deserialize(&mut &tx_bin[..])
+			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
 
 		let source = pool::TxSource {
 			debug_name: "push-api".to_string(),
@@ -650,7 +656,7 @@ where
 			Ok(()) => Ok(Response::with(status::Ok)),
 			Err(e) => {
 				debug!(LOGGER, "error - {:?}", e);
-				Err(IronError::from(Error::Argument(format!("{:?}", e))))
+				Err(IronError::new(Fail::compat(e), status::BadRequest))
 			}
 		}
 	}

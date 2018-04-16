@@ -19,6 +19,10 @@ extern crate grin_pool as pool;
 extern crate grin_store as store;
 extern crate grin_util as util;
 
+
+extern crate failure;
+#[macro_use]
+extern crate failure_derive;
 extern crate hyper;
 extern crate iron;
 #[macro_use]
