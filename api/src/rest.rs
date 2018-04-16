@@ -18,19 +18,17 @@
 //! To use it, just have your service(s) implement the ApiEndpoint trait and
 //! register them on a ApiServer.
 
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{self, Display};
 use std::mem;
 use std::net::ToSocketAddrs;
 use std::string::ToString;
 
-use failure::{Backtrace, Context, Fail, ResultExt};
+use failure::{Backtrace, Context, Fail};
 use iron::middleware::Handler;
 use iron::prelude::*;
-use iron::{status, Listening};
+use iron::Listening;
 use mount::Mount;
 use router::Router;
-
-use store;
 
 /// Errors that can be returned by an ApiEndpoint implementation.
 

@@ -18,7 +18,6 @@ use iron::prelude::*;
 use iron::status;
 use serde_json;
 
-use api;
 use core::ser;
 use failure::{Fail, ResultExt};
 use keychain::Keychain;
