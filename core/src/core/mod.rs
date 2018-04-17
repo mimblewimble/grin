@@ -353,26 +353,7 @@ mod test {
 		assert!(tx2.validate().is_ok());
 
 		// now build a "cut_through" tx from tx1 and tx2
-		let mut tx3 = tx1.clone();
-		tx3.inputs.extend(tx2.inputs.iter().cloned());
-		tx3.outputs.extend(tx2.outputs.iter().cloned());
-		tx3.kernels.extend(tx2.kernels.iter().cloned());
-
-		// make sure everything is sorted
-		tx3.inputs.sort();
-		tx3.outputs.sort();
-		tx3.kernels.sort();
-
-		// finally sum the offsets up
-		// TODO - hide this in a convenience function somewhere
-		tx3.offset = {
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-			let skey1 = tx1.offset.secret_key(&secp).unwrap();
-			let skey2 = tx2.offset.secret_key(&secp).unwrap();
-			let skey3 = secp.blind_sum(vec![skey1, skey2], vec![]).unwrap();
-			BlindingFactor::from_secret_key(skey3)
-		};
+		let tx3 = aggregate(vec![tx1, tx2]).unwrap();
 
 		assert!(tx3.validate().is_ok());
 	}
