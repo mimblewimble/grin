@@ -29,7 +29,6 @@ use std::time::SystemTime;
 use common::adapters::PoolToChainAdapter;
 use core::core::{Block, BlockHeader};
 use pow::types::MinerConfig;
-use mining::miner::*;
 use mining::mine_block;
 use chain;
 use pool;
@@ -78,6 +77,23 @@ struct SubmitParams {
 	pow: Vec<u32>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct JobTemplate {
+	difficulty: u64,
+	pre_pow: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WorkerStatus {
+	id: String,
+	height: u64,
+	difficulty: u64,
+	accepted: u64,
+	rejected: u64,
+	stale: u64,
+}
+
+
 // ----------------------------------------
 // Worker Factory Thread Function
 
@@ -123,11 +139,6 @@ fn accept_workers(id: String, address: String, workers: &mut Arc<Mutex<Vec<Worke
 // ----------------------------------------
 // Worker Object - a connected stratum client - a miner, pool, proxy, etc...
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct JobTemplate {
-	pre_pow: String,
-}
-
 pub struct Worker {
 	id: String,
 	stream: BufStream<TcpStream>,
@@ -170,7 +181,7 @@ impl Worker {
 	}
 
 	// Send Message to the worker
-	fn send_message(&mut self, message_in: String) {
+	fn write_message(&mut self, message_in: String) {
 		// Write and Flush the message
 		let mut message = message_in.clone();
 		if !message.ends_with("\n") {
@@ -208,6 +219,7 @@ pub struct StratumServer {
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	current_block: Block,
+	current_difficulty: u64,
 	workers: Arc<Mutex<Vec<Worker>>>,
 }
 
@@ -224,6 +236,7 @@ impl StratumServer {
 			chain: chain_ref,
 			tx_pool: tx_pool,
 			current_block: Block::default(),
+			current_difficulty: <u64>::max_value(),
 			workers: Arc::new(Mutex::new(Vec::new())),
 		}
 	}
@@ -231,10 +244,13 @@ impl StratumServer {
 	// Build and return a JobTemplate for mining the current block
 	fn build_block_template(&self, bh: BlockHeader) -> JobTemplate {
 		// Serialize the block header into pre and post nonce strings
-		let mut pre_pow_writer = HeaderPrePowWriter::default();
+		let mut pre_pow_writer = mine_block::HeaderPrePowWriter::default();
 		bh.write_pre_pow(&mut pre_pow_writer).unwrap();
 		let pre = pre_pow_writer.as_hex_string(false);
-		let job_template = JobTemplate { pre_pow: pre };
+		let job_template = JobTemplate {
+			difficulty: self.current_difficulty,
+			pre_pow: pre
+		};
 		return job_template;
 	}
 
@@ -312,7 +328,7 @@ impl StratumServer {
 					}
 
 					// Send the reply
-					workers_l[num].send_message(rpc_response);
+					workers_l[num].write_message(rpc_response);
 				}
 				None => {} // No message for us from this worker
 			}
@@ -321,8 +337,16 @@ impl StratumServer {
 
 	// Handle STATUS message
 	fn handle_status(&self, worker_stats: &WorkerStats) -> (String, bool) {
-		// Return stratum and worker stats in json for use  by a dashboard or healthcheck.
-		let response = serde_json::to_string(&worker_stats).unwrap();
+		// Return worker status in json for use by a dashboard or healthcheck.
+		let status = WorkerStatus {
+			id: worker_stats.id.clone(),
+			height: self.current_block.header.height,
+			difficulty:  worker_stats.pow_difficulty,
+			accepted: worker_stats.num_accepted,
+			rejected: worker_stats.num_rejected,
+			stale: worker_stats.num_stale,
+		};
+		let response = serde_json::to_string(&status).unwrap();
 		return (response, false);
 	}
 
@@ -445,7 +469,7 @@ impl StratumServer {
 		}
 	}
 
-	// Broadcast a jobtemplate RpcRequest to all connected workers
+	// Broadcast a jobtemplate RpcRequest to all connected workers - no response expected
 	fn broadcast_job(&mut self) {
 		debug!(
 			LOGGER,
@@ -468,11 +492,11 @@ impl StratumServer {
 		// Push the new block to all connected clients
 		let mut workers_l = self.workers.lock().unwrap();
 		for num in 0..workers_l.len() {
-			workers_l[num].send_message(job_request_json.clone());
+			workers_l[num].write_message(job_request_json.clone());
 		}
 	}
 
-	/// "main()" - Starts the stratum-server.  Listens for a connection, then enters a
+	/// "main()" - Starts the stratum-server.  Creates a thread to Listens for a connection, then enters a
 	/// loop, building a new block on top of the existing chain anytime required and sending that to
 	/// the connected stratum miner, proxy, or pool, and accepts full solutions to be submitted.
 	pub fn run_loop(&mut self, miner_config: MinerConfig, stratum_stats: Arc<RwLock<StratumStats>>, cuckoo_size: u32, proof_size: usize) {
@@ -548,6 +572,8 @@ impl StratumServer {
 					wallet_listener_url,
 				);
 				self.current_block = new_block;
+				self.current_difficulty =
+					(self.current_block.header.total_difficulty.clone() - head.total_difficulty.clone()).into_num();
 				key_id = block_fees.key_id();
 				current_hash = latest_hash;
 				// set a new deadline for rebuilding with fresh transactions
@@ -556,8 +582,7 @@ impl StratumServer {
 				{
 					let mut stratum_stats = stratum_stats.write().unwrap();
 					stratum_stats.block_height = self.current_block.header.height;
-					stratum_stats.network_difficulty = 
-                        			(self.current_block.header.total_difficulty.clone() - head.total_difficulty.clone()).into_num();
+					stratum_stats.network_difficulty = self.current_difficulty;
 				}
 
 				// Send this job to all connected workers
