@@ -20,7 +20,9 @@ use std::sync::{Arc, RwLock};
 use time;
 use std::time::Duration;
 use rand::{self, Rng};
+use itertools::Itertools;
 
+use core::ser::{AsFixedBytes};
 use chain;
 use pool;
 use core::consensus;
@@ -34,6 +36,45 @@ use util;
 use util::LOGGER;
 use common::types::Error;
 use common::adapters::PoolToChainAdapter;
+
+/// Serializer that outputs the pre-pow part of the header,
+/// including the nonce (last 8 bytes) that can be sent off
+/// to the miner to mutate at will
+pub struct HeaderPrePowWriter {
+        pub pre_pow: Vec<u8>,
+}
+
+impl Default for HeaderPrePowWriter {
+        fn default() -> HeaderPrePowWriter {
+                HeaderPrePowWriter {
+                        pre_pow: Vec::new(),
+                }
+        }
+}
+
+impl HeaderPrePowWriter {
+        pub fn as_hex_string(&self, include_nonce: bool) -> String {
+                let mut result = String::from(format!("{:02x}", self.pre_pow.iter().format("")));
+                if !include_nonce {
+                        let l = result.len() - 16;
+                        result.truncate(l);
+                }
+                result
+        }
+}
+
+impl ser::Writer for HeaderPrePowWriter {
+        fn serialization_mode(&self) -> ser::SerializationMode {
+                ser::SerializationMode::Full
+        }
+
+        fn write_fixed_bytes<T: AsFixedBytes>(&mut self, bytes_in: &T) -> Result<(), ser::Error> {
+                for i in 0..bytes_in.len() {
+                        self.pre_pow.push(bytes_in.as_ref()[i])
+                }
+                Ok(())
+        }
+}
 
 // Ensure a block suitable for mining is built and returned
 // If a wallet listener URL is not provided the reward will be "burnt"

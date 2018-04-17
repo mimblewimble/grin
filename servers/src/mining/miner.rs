@@ -21,7 +21,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 use time;
-use itertools::Itertools;
 
 use common::adapters::PoolToChainAdapter;
 use core::consensus;
@@ -31,9 +30,7 @@ use core::core::hash::{Hash, Hashed};
 use pow::{cuckoo, MiningWorker};
 use pow::types::MinerConfig;
 use pow::plugin::PluginMiner;
-use core::ser;
 use core::global;
-use core::ser::AsFixedBytes;
 use util::LOGGER;
 use common::stats::MiningStats;
 
@@ -43,45 +40,6 @@ use mining::mine_block;
 
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
-
-/// Serializer that outputs the pre-pow part of the header,
-/// including the nonce (last 8 bytes) that can be sent off
-/// to the miner to mutate at will
-pub struct HeaderPrePowWriter {
-	pub pre_pow: Vec<u8>,
-}
-
-impl Default for HeaderPrePowWriter {
-	fn default() -> HeaderPrePowWriter {
-		HeaderPrePowWriter {
-			pre_pow: Vec::new(),
-		}
-	}
-}
-
-impl HeaderPrePowWriter {
-	pub fn as_hex_string(&self, include_nonce: bool) -> String {
-		let mut result = String::from(format!("{:02x}", self.pre_pow.iter().format("")));
-		if !include_nonce {
-			let l = result.len() - 16;
-			result.truncate(l);
-		}
-		result
-	}
-}
-
-impl ser::Writer for HeaderPrePowWriter {
-	fn serialization_mode(&self) -> ser::SerializationMode {
-		ser::SerializationMode::Full
-	}
-
-	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, bytes_in: &T) -> Result<(), ser::Error> {
-		for i in 0..bytes_in.len() {
-			self.pre_pow.push(bytes_in.as_ref()[i])
-		}
-		Ok(())
-	}
-}
 
 pub struct Miner {
 	config: MinerConfig,
@@ -151,7 +109,7 @@ impl Miner {
 		let mut next_stat_output = time::get_time().sec + stat_output_interval;
 
 		// Get parts of the header
-		let mut pre_pow_writer = HeaderPrePowWriter::default();
+		let mut pre_pow_writer = mine_block::HeaderPrePowWriter::default();
 		b.header.write_pre_pow(&mut pre_pow_writer).unwrap();
 		let pre_pow = pre_pow_writer.as_hex_string(false);
 
