@@ -19,12 +19,44 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use time;
 
 use chain;
+use common::types::Error;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::global;
+use grin::sync;
 use p2p::{self, Peer, Peers};
-use common::types::Error;
 use util::LOGGER;
+
+pub struct Syncer {
+}
+
+impl Syncer {
+	pub fn new() -> Syncer {
+		Syncer {}
+	}
+
+	pub fn run_sync(
+		&self,
+		currently_syncing: Arc<AtomicBool>,
+		awaiting_peers: Arc<AtomicBool>,
+		peers: Arc<p2p::Peers>,
+		chain: Arc<chain::Chain>,
+		skip_sync_wait: bool,
+		archive_mode: bool,
+		stop: Arc<AtomicBool>,
+	) {
+		sync::run_sync(
+			currently_syncing,
+			awaiting_peers,
+			peers,
+			chain,
+			skip_sync_wait,
+			archive_mode,
+			stop,
+		)
+	}
+}
+
 
 /// Starts the syncing loop, just spawns two threads that loop forever
 pub fn run_sync(
@@ -265,10 +297,6 @@ fn needs_syncing(
 	if is_syncing {
 		if let Some(peer) = peer {
 			if let Ok(peer) = peer.try_read() {
-				debug!(
-					LOGGER,
-					"needs_syncing {} {}", local_diff, peer.info.total_difficulty
-				);
 				most_work_height = peer.info.height;
 
 				if peer.info.total_difficulty <= local_diff {
@@ -360,7 +388,7 @@ fn get_locator_heights(height: u64) -> Vec<u64> {
 struct SyncInfo {
 	prev_body_sync: (time::Tm, u64),
 	prev_header_sync: (time::Tm, u64),
-	prev_fast_sync: time::Tm,
+	prev_fast_sync: Option<time::Tm>,
 	highest_height: u64,
 }
 
@@ -370,7 +398,7 @@ impl SyncInfo {
 		SyncInfo {
 			prev_body_sync: (now.clone(), 0),
 			prev_header_sync: (now.clone(), 0),
-			prev_fast_sync: now.clone() - time::Duration::seconds(5 * 60),
+			prev_fast_sync: None,
 			highest_height: 0,
 		}
 	}
@@ -399,13 +427,15 @@ impl SyncInfo {
 		false
 	}
 
+	// For now this is a one-time thing (it can be slow) at initial startup.
 	fn fast_sync_due(&mut self) -> bool {
-		let now = time::now_utc();
-		if now - self.prev_fast_sync > time::Duration::seconds(5 * 60) {
-			self.prev_fast_sync = now;
-			return true;
+		if let None = self.prev_fast_sync {
+			let now = time::now_utc();
+			self.prev_fast_sync = Some(now);
+			true
+		} else {
+			false
 		}
-		false
 	}
 }
 
