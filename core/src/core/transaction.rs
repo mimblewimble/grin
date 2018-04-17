@@ -514,17 +514,22 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 
 	let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
 
-	let new_inputs = inputs
+	let mut new_inputs = inputs
 		.iter()
 		.filter(|inp| !to_cut_through.contains(&inp.commitment()))
 		.cloned()
 		.collect::<Vec<_>>();
 
-	let new_outputs = outputs
+	let mut new_outputs = outputs
 		.iter()
 		.filter(|out| !to_cut_through.contains(&out.commitment()))
 		.cloned()
 		.collect::<Vec<_>>();
+
+	// sort them lexicographically
+	new_inputs.sort();
+	new_outputs.sort();
+	kernels.sort();
 
 	let tx = Transaction::new(new_inputs, new_outputs, kernels);
 
