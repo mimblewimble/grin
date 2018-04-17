@@ -27,8 +27,7 @@ use grin::sync;
 use p2p::{self, Peer, Peers};
 use util::LOGGER;
 
-pub struct Syncer {
-}
+pub struct Syncer {}
 
 impl Syncer {
 	pub fn new() -> Syncer {
@@ -56,7 +55,6 @@ impl Syncer {
 		)
 	}
 }
-
 
 /// Starts the syncing loop, just spawns two threads that loop forever
 pub fn run_sync(
