@@ -105,11 +105,8 @@ pub fn run_sync(
 					si.highest_height = most_work_height;
 				}
 
-				// in archival nodes (no fast sync) we just consider we have the whole
-				// state already, then fast sync triggers if other peers are much
-				// further ahead
-				let fast_sync_enabled =
-					!archive_mode && si.highest_height.saturating_sub(head.height) > horizon;
+				let fast_sync_enabled = !archive_mode && si.prev_fast_sync.is_none()
+					&& si.highest_height.saturating_sub(head.height) > horizon;
 
 				if syncing {
 					// run the header sync every 10s
@@ -117,18 +114,19 @@ pub fn run_sync(
 						header_sync(peers.clone(), chain.clone());
 					}
 
-					// run the body_sync every 5s
-					if !fast_sync_enabled && si.body_sync_due(&head) {
-						body_sync(peers.clone(), chain.clone());
-					}
-
-					// run fast sync if applicable, every 5 min
-					if fast_sync_enabled && header_head.height == si.highest_height
-						&& si.fast_sync_due()
-					{
-						fast_sync(peers.clone(), chain.clone(), &header_head);
+					if fast_sync_enabled {
+						// run fast sync if applicable, every 5 min
+						if header_head.height == si.highest_height && si.fast_sync_due() {
+							fast_sync(peers.clone(), chain.clone(), &header_head);
+						}
+					} else {
+						// run the body_sync every 5s
+						if si.body_sync_due(&head) {
+							body_sync(peers.clone(), chain.clone());
+						}
 					}
 				}
+
 				currently_syncing.store(syncing, Ordering::Relaxed);
 
 				thread::sleep(Duration::from_secs(1));
