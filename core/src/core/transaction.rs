@@ -16,6 +16,7 @@
 use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
 use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
+use std::collections::HashSet;
 use std::cmp::max;
 use std::cmp::Ordering;
 use std::{error, fmt};
@@ -486,6 +487,80 @@ impl Transaction {
 
 		Ok(())
 	}
+}
+
+/// Aggregate a vec of transactions into a multi-kernel transaction
+pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
+	let mut inputs: Vec<Input> = vec![];
+	let mut outputs: Vec<Output> = vec![];
+	let mut kernels: Vec<TxKernel> = vec![];
+
+	// we will sum these together at the end to give us the overall offset for the
+	// transaction
+	let mut kernel_offsets = vec![];
+
+	for mut transaction in transactions {
+		// we will summ these later to give a single aggregate offset
+		kernel_offsets.push(transaction.offset);
+
+		inputs.append(&mut transaction.inputs);
+		outputs.append(&mut transaction.outputs);
+		kernels.append(&mut transaction.kernels);
+	}
+
+	// now sum the kernel_offsets up to give us an aggregate offset for the
+	// transaction
+	let total_kernel_offset = {
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
+		let mut keys = kernel_offsets
+			.iter()
+			.cloned()
+			.filter(|x| *x != BlindingFactor::zero())
+			.filter_map(|x| x.secret_key(&secp).ok())
+			.collect::<Vec<_>>();
+
+		if keys.is_empty() {
+			BlindingFactor::zero()
+		} else {
+			let sum = secp.blind_sum(keys, vec![])?;
+			BlindingFactor::from_secret_key(sum)
+		}
+	};
+
+	let in_set = inputs
+		.iter()
+		.map(|inp| inp.commitment())
+		.collect::<HashSet<_>>();
+
+	let out_set = outputs
+		.iter()
+		.filter(|out| !out.features.contains(OutputFeatures::COINBASE_OUTPUT))
+		.map(|out| out.commitment())
+		.collect::<HashSet<_>>();
+
+	let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
+
+	let mut new_inputs = inputs
+		.iter()
+		.filter(|inp| !to_cut_through.contains(&inp.commitment()))
+		.cloned()
+		.collect::<Vec<_>>();
+
+	let mut new_outputs = outputs
+		.iter()
+		.filter(|out| !to_cut_through.contains(&out.commitment()))
+		.cloned()
+		.collect::<Vec<_>>();
+
+	// sort them lexicographically
+	new_inputs.sort();
+	new_outputs.sort();
+	kernels.sort();
+
+	let tx = Transaction::new(new_inputs, new_outputs, kernels);
+
+	Ok(tx.with_offset(total_kernel_offset))
 }
 
 /// A transaction input.
