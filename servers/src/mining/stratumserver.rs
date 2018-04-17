@@ -79,6 +79,7 @@ struct SubmitParams {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct JobTemplate {
+	height: u64,
 	difficulty: u64,
 	pre_pow: String,
 }
@@ -93,12 +94,16 @@ pub struct WorkerStatus {
 	stale: u64,
 }
 
-
 // ----------------------------------------
 // Worker Factory Thread Function
 
 // Run in a thread. Adds new connections to the workers list
-fn accept_workers(id: String, address: String, workers: &mut Arc<Mutex<Vec<Worker>>>, stratum_stats: &mut Arc<RwLock<StratumStats>>) {
+fn accept_workers(
+	id: String,
+	address: String,
+	workers: &mut Arc<Mutex<Vec<Worker>>>,
+	stratum_stats: &mut Arc<RwLock<StratumStats>>,
+) {
 	let listener = TcpListener::bind(address).expect("Failed to bind to listen address");
 	let mut worker_id: u32 = 0;
 	for stream in listener.incoming() {
@@ -115,11 +120,12 @@ fn accept_workers(id: String, address: String, workers: &mut Arc<Mutex<Vec<Worke
 					.expect("set_nonblocking call failed");
 				let mut worker = Worker::new(worker_id.to_string(), BufStream::new(stream));
 				workers.lock().unwrap().push(worker);
-				// stats for this worker (worker stat objects are added and updated but never removed)
+				// stats for this worker (worker stat objects are added and updated but never
+				// removed)
 				let mut worker_stats = WorkerStats::default();
 				worker_stats.is_connected = true;
 				worker_stats.id = worker_id.to_string();
-				worker_stats.pow_difficulty = 1;  // XXX TODO
+				worker_stats.pow_difficulty = 1; // XXX TODO
 				let mut stratum_stats = stratum_stats.write().unwrap();
 				stratum_stats.worker_stats.push(worker_stats);
 				worker_id = worker_id + 1;
@@ -248,8 +254,9 @@ impl StratumServer {
 		bh.write_pre_pow(&mut pre_pow_writer).unwrap();
 		let pre = pre_pow_writer.as_hex_string(false);
 		let job_template = JobTemplate {
+			height: bh.height,
 			difficulty: self.current_difficulty,
-			pre_pow: pre
+			pre_pow: pre,
 		};
 		return job_template;
 	}
@@ -278,7 +285,11 @@ impl StratumServer {
 					};
 
 					let mut stratum_stats = stratum_stats.write().unwrap();
-					let worker_stats_id = stratum_stats.worker_stats.iter().position(|r| r.id == workers_l[num].id).unwrap();
+					let worker_stats_id = stratum_stats
+						.worker_stats
+						.iter()
+						.position(|r| r.id == workers_l[num].id)
+						.unwrap();
 					stratum_stats.worker_stats[worker_stats_id].last_seen = SystemTime::now();
 
 					// Call the handler function for requested method
@@ -291,13 +302,18 @@ impl StratumServer {
 							}
 							(response, err)
 						}
-						"submit" => self.handle_submit(request.params, &mut stratum_stats.worker_stats[worker_stats_id]),
+						"submit" => self.handle_submit(
+							request.params,
+							&mut stratum_stats.worker_stats[worker_stats_id],
+						),
 						"keepalive" => self.handle_keepalive(),
 						"getjobtemplate" => {
 							let b = self.current_block.header.clone();
 							self.handle_getjobtemplate(b)
 						}
-						"status" => self.handle_status(&stratum_stats.worker_stats[worker_stats_id]),
+						"status" => {
+							self.handle_status(&stratum_stats.worker_stats[worker_stats_id])
+						}
 						_ => {
 							// Called undefined method
 							let e = r#"{"code": -32601, "message": "Method not found"}"#;
@@ -341,7 +357,7 @@ impl StratumServer {
 		let status = WorkerStatus {
 			id: worker_stats.id.clone(),
 			height: self.current_block.header.height,
-			difficulty:  worker_stats.pow_difficulty,
+			difficulty: worker_stats.pow_difficulty,
 			accepted: worker_stats.num_accepted,
 			rejected: worker_stats.num_rejected,
 			stale: worker_stats.num_stale,
@@ -383,7 +399,11 @@ impl StratumServer {
 	// Handle SUBMIT message
 	//  params contains a solved block header
 	//  we are expecting real solutions at the full difficulty.
-	fn handle_submit(&self, params: Option<String>, worker_stats: &mut WorkerStats) -> (String, bool) {
+	fn handle_submit(
+		&self,
+		params: Option<String>,
+		worker_stats: &mut WorkerStats,
+	) -> (String, bool) {
 		// Extract the params string into a SubmitParams struct
 		let params_str = match params {
 			Some(val) => val,
@@ -453,7 +473,11 @@ impl StratumServer {
 	                                );
 					// Update worker stats
 					let mut stratum_stats = stratum_stats.write().unwrap();
-					let worker_stats_id = stratum_stats.worker_stats.iter().position(|r| r.id == workers_l[num].id).unwrap();
+					let worker_stats_id = stratum_stats
+						.worker_stats
+						.iter()
+						.position(|r| r.id == workers_l[num].id)
+						.unwrap();
 					stratum_stats.worker_stats[worker_stats_id].is_connected = false;
 					// Remove the dead worker
 					workers_l.remove(num);
@@ -469,7 +493,8 @@ impl StratumServer {
 		}
 	}
 
-	// Broadcast a jobtemplate RpcRequest to all connected workers - no response expected
+	// Broadcast a jobtemplate RpcRequest to all connected workers - no response
+	// expected
 	fn broadcast_job(&mut self) {
 		debug!(
 			LOGGER,
@@ -496,10 +521,17 @@ impl StratumServer {
 		}
 	}
 
-	/// "main()" - Starts the stratum-server.  Creates a thread to Listens for a connection, then enters a
-	/// loop, building a new block on top of the existing chain anytime required and sending that to
-	/// the connected stratum miner, proxy, or pool, and accepts full solutions to be submitted.
-	pub fn run_loop(&mut self, miner_config: MinerConfig, stratum_stats: Arc<RwLock<StratumStats>>, cuckoo_size: u32, proof_size: usize) {
+	/// "main()" - Starts the stratum-server.  Creates a thread to Listens for a connection, then
+	/// enters a loop, building a new block on top of the existing chain anytime required and
+	/// sending that to the connected stratum miner, proxy, or pool, and accepts full solutions to
+	/// be submitted.
+	pub fn run_loop(
+		&mut self,
+		miner_config: MinerConfig,
+		stratum_stats: Arc<RwLock<StratumStats>>,
+		cuckoo_size: u32,
+		proof_size: usize,
+	) {
 		info!(
 			LOGGER,
 			"(Server ID: {}) Starting stratum server with cuckoo_size = {}, proof_size = {}",
@@ -530,11 +562,11 @@ impl StratumServer {
 		});
 
 		// We have started
-                {
-                        let mut stratum_stats = stratum_stats.write().unwrap();
-                        stratum_stats.is_running = true;
-                        stratum_stats.cuckoo_size = cuckoo_size as u16;
-                }
+		{
+			let mut stratum_stats = stratum_stats.write().unwrap();
+			stratum_stats.is_running = true;
+			stratum_stats.cuckoo_size = cuckoo_size as u16;
+		}
 
 		warn!(
 			LOGGER,
@@ -572,8 +604,9 @@ impl StratumServer {
 					wallet_listener_url,
 				);
 				self.current_block = new_block;
-				self.current_difficulty =
-					(self.current_block.header.total_difficulty.clone() - head.total_difficulty.clone()).into_num();
+				self.current_difficulty = (self.current_block.header.total_difficulty.clone()
+					- head.total_difficulty.clone())
+					.into_num();
 				key_id = block_fees.key_id();
 				current_hash = latest_hash;
 				// set a new deadline for rebuilding with fresh transactions
