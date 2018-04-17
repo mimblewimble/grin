@@ -786,11 +786,7 @@ where
 		// (-1 * 1) + (4 * 2) + 1 = 8
 		// 8 * 10 = 80
 		if self.config.accept_fee_base > 0 {
-			let mut tx_weight = -1 * (tx.inputs.len() as i32) + (4 * tx.outputs.len() as i32) + 1;
-			if tx_weight < 1 {
-				tx_weight = 1;
-			}
-			let threshold = (tx_weight as u64) * self.config.accept_fee_base;
+			let threshold = (tx.tx_weight() as u64) * self.config.accept_fee_base;
 			if tx.fee() < threshold {
 				return Err(PoolError::LowFeeTransaction(threshold));
 			}

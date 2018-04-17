@@ -433,6 +433,33 @@ impl Transaction {
 		Ok(())
 	}
 
+	/// Calculate transaction weight
+	pub fn tx_weight(&self) -> u32 {
+		Transaction::weight(
+			self.inputs.len(),
+			self.outputs.len(),
+			self.input_proofs_count(),
+		)
+	}
+
+	/// Collect input's Merkle proofs
+	pub fn input_proofs_count(&self) -> usize {
+		self.inputs
+			.iter()
+			.filter(|i| i.merkle_proof.is_some())
+			.count()
+	}
+
+	/// Calculate transaction weight from transaction details
+	pub fn weight(input_len: usize, output_len: usize, proof_len: usize) -> u32 {
+		let mut tx_weight =
+			-1 * (input_len as i32) + (4 * output_len as i32) + (proof_len as i32) + 1;
+		if tx_weight < 1 {
+			tx_weight = 1;
+		}
+		tx_weight as u32
+	}
+
 	fn verify_sorted(&self) -> Result<(), Error> {
 		self.inputs.verify_sort_order()?;
 		self.outputs.verify_sort_order()?;

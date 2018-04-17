@@ -263,7 +263,7 @@ fn build_send_tx(
 	// sender is responsible for setting the fee on the partial tx
 	// recipient should double check the fee calculation and not blindly trust the
 	// sender
-	let mut fee = tx_fee(coins.len(), 2, None);
+	let mut fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
 	let mut total: u64 = coins.iter().map(|c| c.value).sum();
 	let mut amount_with_fee = amount + fee;
 
@@ -286,7 +286,7 @@ fn build_send_tx(
 				selection_strategy_is_use_all,
 			))
 		})?;
-		fee = tx_fee(coins.len(), 2, None);
+		fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
 		total = coins.iter().map(|c| c.value).sum();
 		amount_with_fee = amount + fee;
 	}
@@ -301,6 +301,10 @@ fn build_send_tx(
 	let (tx, blind) = build::partial_transaction(parts, &keychain).context(ErrorKind::Keychain)?;
 
 	Ok((tx, blind, coins, change_key, amount_with_fee))
+}
+
+fn coins_proof_count(coins: &Vec<OutputData>) -> usize {
+	coins.iter().filter(|c| c.merkle_proof.is_some()).count()
 }
 
 pub fn issue_burn_tx(
@@ -333,7 +337,7 @@ pub fn issue_burn_tx(
 
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
-	let fee = tx_fee(coins.len(), 2, None);
+	let fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
 	let (mut parts, _) = inputs_and_change(&coins, config, keychain, amount, fee)?;
 
 	// add burn output and fees

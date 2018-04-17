@@ -53,17 +53,13 @@ const SEED_FILE: &'static str = "wallet.seed";
 const DEFAULT_BASE_FEE: u64 = consensus::MILLI_GRIN;
 
 /// Transaction fee calculation
-pub fn tx_fee(input_len: usize, output_len: usize, base_fee: Option<u64>) -> u64 {
+pub fn tx_fee(input_len: usize, output_len: usize, proof_len: usize, base_fee: Option<u64>) -> u64 {
 	let use_base_fee = match base_fee {
 		Some(bf) => bf,
 		None => DEFAULT_BASE_FEE,
 	};
-	let mut tx_weight = -1 * (input_len as i32) + 4 * (output_len as i32) + 1;
-	if tx_weight < 1 {
-		tx_weight = 1;
-	}
 
-	(tx_weight as u64) * use_base_fee
+	(Transaction::weight(input_len, output_len, proof_len) as u64) * use_base_fee
 }
 
 #[derive(Debug)]
@@ -74,13 +70,11 @@ pub struct Error {
 /// Wallet errors, mostly wrappers around underlying crypto or I/O errors.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ErrorKind {
-	#[fail(display = "Not enough funds")] NotEnoughFunds(u64),
+	#[fail(display = "Not enough funds")]
+	NotEnoughFunds(u64),
 
 	#[fail(display = "Fee dispute: sender fee {}, recipient fee {}", sender_fee, recipient_fee)]
-	FeeDispute {
-		sender_fee: u64,
-		recipient_fee: u64,
-	},
+	FeeDispute { sender_fee: u64, recipient_fee: u64 },
 
 	#[fail(display = "Fee exceeds amount: sender amount {}, recipient fee {}", sender_amount,
 	       recipient_fee)]
@@ -89,19 +83,24 @@ pub enum ErrorKind {
 		recipient_fee: u64,
 	},
 
-	#[fail(display = "Keychain error")] Keychain,
+	#[fail(display = "Keychain error")]
+	Keychain,
 
-	#[fail(display = "Transaction error")] Transaction,
+	#[fail(display = "Transaction error")]
+	Transaction,
 
-	#[fail(display = "Secp error")] Secp,
+	#[fail(display = "Secp error")]
+	Secp,
 
-	#[fail(display = "Wallet data error: {}", _0)] WalletData(&'static str),
+	#[fail(display = "Wallet data error: {}", _0)]
+	WalletData(&'static str),
 
 	/// An error in the format of the JSON structures exchanged by the wallet
 	#[fail(display = "JSON format error")]
 	Format,
 
-	#[fail(display = "I/O error")] IO,
+	#[fail(display = "I/O error")]
+	IO,
 
 	/// Error when contacting a node through its API
 	#[fail(display = "Node API error")]
@@ -115,7 +114,8 @@ pub enum ErrorKind {
 	#[fail(display = "Uri parsing error")]
 	Uri,
 
-	#[fail(display = "Signature error")] Signature(&'static str),
+	#[fail(display = "Signature error")]
+	Signature(&'static str),
 
 	/// Attempt to use duplicate transaction id in separate transactions
 	#[fail(display = "Duplicate transaction ID error")]
@@ -129,7 +129,8 @@ pub enum ErrorKind {
 	#[fail(display = "Wallet seed doesn't exist error")]
 	WalletSeedDoesntExist,
 
-	#[fail(display = "Generic error: {}", _0)] GenericError(&'static str),
+	#[fail(display = "Generic error: {}", _0)]
+	GenericError(&'static str),
 }
 
 impl Fail for Error {
