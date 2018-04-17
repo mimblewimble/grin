@@ -1004,6 +1004,49 @@ mod tests {
 	}
 
 	#[test]
+	/// Attempt to add a bad multi kernel transaction to the mempool should get rejected
+	fn test_bad_multikernel_pool_add() {
+		let mut dummy_chain = DummyChainImpl::new();
+		let head_header = block::BlockHeader {
+			height: 1,
+			..block::BlockHeader::default()
+		};
+		dummy_chain.store_head_header(&head_header);
+
+		let parent_transaction = test_transaction(vec![5, 6, 7], vec![11, 3]);
+		// We want this transaction to be rooted in the blockchain.
+		let new_output = DummyOutputSet::empty()
+			.with_output(test_output(5))
+			.with_output(test_output(6))
+			.with_output(test_output(7))
+			.with_output(test_output(8));
+
+		// Prepare a second transaction, connected to the first.
+		let child_transaction1 = test_transaction(vec![11, 3], vec![12]);
+		let child_transaction2 = test_transaction(vec![11, 3], vec![10]);
+
+		let txs = vec![parent_transaction, child_transaction1, child_transaction2];
+		let bad_multi_kernel_transaction = transaction::aggregate(txs).unwrap();
+
+		dummy_chain.update_output_set(new_output);
+
+		// To mirror how this construction is intended to be used, the pool
+		// is placed inside a RwLock.
+		let pool = RwLock::new(test_setup(&Arc::new(dummy_chain)));
+
+		// Take the write lock and add a pool entry
+		{
+			let mut write_pool = pool.write().unwrap();
+			assert_eq!(write_pool.total_size(), 0);
+
+			// First, add the transaction rooted in the blockchain
+			let result =
+				write_pool.add_to_memory_pool(test_source(), bad_multi_kernel_transaction, false);
+			assert!(result.is_err());
+		}
+	}
+
+	#[test]
 	/// A basic test; add a transaction to the pool and add the child to the
 	/// stempool
 	fn test_pool_stempool_add() {
