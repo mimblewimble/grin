@@ -796,8 +796,7 @@ impl<'a> Extension<'a> {
 					if proof_count % 500 == 0 {
 						debug!(
 							LOGGER,
-							"txhashset: verify_rangeproofs: verified {} rangeproofs",
-							proof_count,
+							"txhashset: verify_rangeproofs: verified {} rangeproofs", proof_count,
 						);
 					}
 				}
