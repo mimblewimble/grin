@@ -792,6 +792,13 @@ impl<'a> Extension<'a> {
 						return Err(Error::OutputNotFound);
 					}
 					proof_count += 1;
+
+					if proof_count % 500 == 0 {
+						debug!(
+							LOGGER,
+							"txhashset: verify_rangeproofs: verified {} rangeproofs", proof_count,
+						);
+					}
 				}
 			}
 		}

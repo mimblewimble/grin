@@ -199,7 +199,9 @@ impl Server {
 			Some(b) => b,
 		};
 
-		sync::run_sync(
+		let syncer = sync::Syncer::new();
+
+		syncer.run_sync(
 			currently_syncing.clone(),
 			awaiting_peers.clone(),
 			p2p_server.peers.clone(),
