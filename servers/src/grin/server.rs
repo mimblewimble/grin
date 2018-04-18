@@ -29,7 +29,6 @@ use core::{consensus, genesis, global};
 use core::core::target::Difficulty;
 use core::core::hash::Hashed;
 use grin::dandelion_monitor;
-use mining::miner;
 use mining::stratumserver;
 use p2p;
 use pool;
@@ -66,16 +65,9 @@ impl Server {
 	where
 		F: FnMut(Arc<Server>),
 	{
-		let mut mining_config = config.mining_config.clone();
+		let mut mining_config = config.stratum_mining_config.clone();
 		let serv = Arc::new(Server::new(config)?);
 
-		if mining_config.as_mut().unwrap().enable_mining {
-			{
-				let mut mining_stats = serv.state_info.mining_stats.write().unwrap();
-				mining_stats.is_enabled = true;
-			}
-			serv.start_miner(mining_config.clone().unwrap());
-		}
 		let enable_stratum_server = mining_config.as_mut().unwrap().enable_stratum_server;
 		if let Some(s) = enable_stratum_server {
 			if s {
@@ -126,7 +118,7 @@ impl Server {
 			global::ChainTypes::Testnet1 => genesis::genesis_testnet1(),
 			global::ChainTypes::Testnet2 => genesis::genesis_testnet2(),
 			global::ChainTypes::AutomatedTesting => genesis::genesis_dev(),
-			_ => pow::mine_genesis_block(config.mining_config.clone())?,
+			_ => pow::mine_genesis_block()?,
 		};
 
 		info!(LOGGER, "Starting server, genesis block: {}", genesis.hash());
@@ -259,36 +251,8 @@ impl Server {
 		self.p2p.peers.peer_count()
 	}
 
-	/// Start mining for blocks on a separate thread. Uses toy miner by default,
-	/// mostly for testing, but can also load a plugin from cuckoo-miner
-	pub fn start_miner(&self, config: pow::types::MinerConfig) {
-		let cuckoo_size = global::sizeshift();
-		let proof_size = global::proofsize();
-		let currently_syncing = self.currently_syncing.clone();
-
-		let mut miner = miner::Miner::new(
-			config.clone(),
-			self.chain.clone(),
-			self.tx_pool.clone(),
-			self.stop.clone(),
-		);
-		let mining_stats = self.state_info.mining_stats.clone();
-		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.port));
-		let _ = thread::Builder::new()
-			.name("miner".to_string())
-			.spawn(move || {
-				// TODO push this down in the run loop so miner gets paused anytime we
-				// decide to sync again
-				let secs_5 = time::Duration::from_secs(5);
-				while currently_syncing.load(Ordering::Relaxed) {
-					thread::sleep(secs_5);
-				}
-				miner.run_loop(config.clone(), mining_stats, cuckoo_size as u32, proof_size);
-			});
-	}
-
 	/// Start a minimal "stratum" mining service on a separate thread
-	pub fn start_stratum_server(&self, config: pow::types::MinerConfig) {
+	pub fn start_stratum_server(&self, config: StratumServerConfig) {
 		let cuckoo_size = global::sizeshift();
 		let proof_size = global::proofsize();
 		let currently_syncing = self.currently_syncing.clone();
@@ -331,7 +295,6 @@ impl Server {
 	/// other
 	/// consumers
 	pub fn get_server_stats(&self) -> Result<ServerStats, Error> {
-		let mining_stats = self.state_info.mining_stats.read().unwrap().clone();
 		let stratum_stats = self.state_info.stratum_stats.read().unwrap().clone();
 		let awaiting_peers = self.state_info.awaiting_peers.load(Ordering::Relaxed);
 
@@ -399,7 +362,6 @@ impl Server {
 			header_head: self.header_head(),
 			is_syncing: self.currently_syncing.load(Ordering::Relaxed),
 			awaiting_peers: awaiting_peers,
-			mining_stats: mining_stats,
 			stratum_stats: stratum_stats,
 			peer_stats: peer_stats,
 			diff_stats: diff_stats,

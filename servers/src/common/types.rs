@@ -161,7 +161,7 @@ pub struct ServerConfig {
 	pub p2p_config: p2p::P2PConfig,
 
 	/// Configuration for the mining daemon
-	pub mining_config: Option<pow::types::MinerConfig>,
+	pub stratum_mining_config: Option<StratumServerConfig>,
 
 	/// Transaction pool configuration
 	#[serde(default)]
@@ -188,7 +188,7 @@ impl Default for ServerConfig {
 			seeding_type: Seeding::default(),
 			seeds: None,
 			p2p_config: p2p::P2PConfig::default(),
-			mining_config: Some(pow::types::MinerConfig::default()),
+			stratum_mining_config: Some(StratumServerConfig::default()),
 			chain_type: ChainTypes::default(),
 			archive_mode: None,
 			chain_validation_mode: ChainValidationMode::default(),
@@ -196,6 +196,41 @@ impl Default for ServerConfig {
 			skip_sync_wait: None,
 			run_tui: None,
 			run_wallet_listener: Some(false),
+		}
+	}
+}
+
+/// Stratum (Mining server) configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StratumServerConfig {
+		/// Run a stratum mining server (the only way to communicate to mine this
+		/// node via grin-miner
+	pub enable_stratum_server: Option<bool>,
+
+	/// If enabled, the address and port to listen on
+	pub stratum_server_addr: Option<String>,
+
+	/// How long to wait before stopping the miner, recollecting transactions
+	/// and starting again
+	pub attempt_time_per_block: u32,
+
+	/// Base address to the HTTP wallet receiver
+	pub wallet_listener_url: String,
+
+	/// Attributes the reward to a random private key instead of contacting the
+	/// wallet receiver. Mostly used for tests.
+	pub burn_reward: bool,
+
+}
+
+impl Default for StratumServerConfig {
+	fn default() -> StratumServerConfig {
+		StratumServerConfig {
+			wallet_listener_url: "http://localhost:13415".to_string(),
+			burn_reward: false,
+			attempt_time_per_block: 2,
+			enable_stratum_server: None,
+			stratum_server_addr: None,
 		}
 	}
 }

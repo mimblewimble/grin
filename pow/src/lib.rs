@@ -29,27 +29,15 @@
 #![warn(missing_docs)]
 
 extern crate blake2_rfc as blake2;
-#[macro_use]
-extern crate lazy_static;
 extern crate rand;
 extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate slog;
 extern crate time;
 
 extern crate grin_core as core;
 extern crate grin_util as util;
 
-// Re-export (mostly for stat collection)
-pub extern crate cuckoo_miner as cuckoo_;
-pub use cuckoo_ as cuckoo_miner;
-
 mod siphash;
-pub mod plugin;
 pub mod cuckoo;
-pub mod types;
 
 use core::consensus;
 use core::core::BlockHeader;
@@ -80,11 +68,8 @@ pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
 		.verify(bh.pow.clone(), consensus::EASINESS as u64)
 }
 
-/// Mines a genesis block, using the config specified miner if specified.
-/// Otherwise, uses the internal miner
-pub fn mine_genesis_block(
-	miner_config: Option<types::MinerConfig>,
-) -> Result<core::core::Block, Error> {
+/// Mines a genesis block using the internal miner
+pub fn mine_genesis_block() -> Result<core::core::Block, Error> {
 	let mut gen = genesis::genesis_testnet2();
 	if global::is_user_testing_mode() || global::is_automated_testing_mode() {
 		gen = genesis::genesis_dev();
@@ -97,16 +82,9 @@ pub fn mine_genesis_block(
 	let sz = global::sizeshift() as u32;
 	let proof_size = global::proofsize();
 
-	let mut miner: Box<MiningWorker> = match miner_config {
-		Some(c) => if c.enable_mining {
-			let mut p = plugin::PluginMiner::new(consensus::EASINESS, sz, proof_size);
-			p.init(c.clone());
-			Box::new(p)
-		} else {
-			Box::new(cuckoo::Miner::new(consensus::EASINESS, sz, proof_size))
-		},
-		None => Box::new(cuckoo::Miner::new(consensus::EASINESS, sz, proof_size)),
-	};
+	let mut miner: Box<MiningWorker> = 
+		Box::new(cuckoo::Miner::new(consensus::EASINESS, sz, proof_size));
+	
 	pow_size(&mut *miner, &mut gen.header, genesis_difficulty, sz as u32).unwrap();
 	Ok(gen)
 }

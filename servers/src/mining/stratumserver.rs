@@ -28,7 +28,7 @@ use std::time::SystemTime;
 
 use common::adapters::PoolToChainAdapter;
 use core::core::{Block, BlockHeader};
-use pow::types::MinerConfig;
+use common::types::StratumServerConfig;
 use mining::mine_block;
 use chain;
 use pool;
@@ -221,7 +221,7 @@ impl Worker {
 
 pub struct StratumServer {
 	id: String,
-	config: MinerConfig,
+	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	current_block: Block,
@@ -232,7 +232,7 @@ pub struct StratumServer {
 impl StratumServer {
 	/// Creates a new Stratum Server.
 	pub fn new(
-		config: MinerConfig,
+		config: StratumServerConfig,
 		chain_ref: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	) -> StratumServer {
@@ -527,7 +527,7 @@ impl StratumServer {
 	/// be submitted.
 	pub fn run_loop(
 		&mut self,
-		miner_config: MinerConfig,
+		miner_config: StratumServerConfig,
 		stratum_stats: Arc<RwLock<StratumStats>>,
 		cuckoo_size: u32,
 		proof_size: usize,
