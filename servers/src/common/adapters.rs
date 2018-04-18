@@ -147,9 +147,9 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 					true
 				}
 			} else {
-				error!(
+				debug!(
 					LOGGER,
-					"adapter: failed to retrieve previous block header (consider ban here?)"
+					"adapter: failed to retrieve previous block header (still syncing?)"
 				);
 				true
 			}
