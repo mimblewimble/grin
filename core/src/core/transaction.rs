@@ -49,10 +49,6 @@ bitflags! {
 /// Errors thrown by Block validation
 #[derive(Clone, Debug, PartialEq)]
 pub enum Error {
-	/// Transaction fee can't be odd, due to half fee burning
-	OddFee,
-	/// Kernel fee can't be odd, due to half fee burning
-	OddKernelFee,
 	/// Underlying Secp256k1 error (signature validation or invalid public key
 	/// typically)
 	Secp(secp::Error),
@@ -421,9 +417,6 @@ impl Transaction {
 	/// excess value against the signature as well as range proofs for each
 	/// output.
 	pub fn validate(&self) -> Result<(), Error> {
-		if self.fee() & 1 != 0 {
-			return Err(Error::OddFee);
-		}
 		if self.inputs.len() > consensus::MAX_BLOCK_INPUTS {
 			return Err(Error::TooManyInputs);
 		}
