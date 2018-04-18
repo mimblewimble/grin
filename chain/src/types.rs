@@ -288,6 +288,9 @@ pub trait ChainStore: Send + Sync {
 	/// Save the provided tip as the current head of the sync header chain
 	fn save_sync_head(&self, t: &Tip) -> Result<(), store::Error>;
 
+	/// Initialize header_head if necessary and set sync_head to header_head.
+	fn init_head(&self) -> Result<(), store::Error>;
+
 	/// Reset header_head and sync_head to head of current body chain
 	fn reset_head(&self) -> Result<(), store::Error>;
 

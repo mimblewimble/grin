@@ -88,6 +88,15 @@ impl ChainStore for ChainKVStore {
 		self.db.put_ser(&vec![SYNC_HEAD_PREFIX], t)
 	}
 
+	fn init_head(&self) -> Result<(), Error> {
+		if self.get_header_head().is_err() {
+			let tip = self.head()?;
+			self.save_header_head(&tip)?;
+		}
+		let header_tip = self.get_header_head()?;
+		self.save_sync_head(&header_tip)
+	}
+
 	// Reset both header_head and sync_head to the current head of the body chain
 	fn reset_head(&self) -> Result<(), Error> {
 		let tip = self.head()?;

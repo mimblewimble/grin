@@ -216,9 +216,8 @@ impl Chain {
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
 		};
 
-		// Reset sync_head and header_head to head of current chain.
-		// Make sure sync_head is available for later use when needed.
-		store.reset_head()?;
+		// Initialize header_head and sync_head as necessary for chain init.
+		store.init_head()?;
 
 		debug!(
 			LOGGER,
