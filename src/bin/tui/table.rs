@@ -287,7 +287,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// _sort(|siv: &mut Cursive, column: BasicColumn, order: Ordering| {});
+	/// rt(|siv: &mut Cursive, column: BasicColumn, order: Ordering| {});
 	/// ```
 	pub fn set_on_sort<F>(&mut self, cb: F)
 	where
@@ -304,7 +304,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// t(|siv: &mut Cursive, column: BasicColumn, order: Ordering| {});
+	/// siv: &mut Cursive, column: BasicColumn, order: Ordering| {});
 	/// ```
 	pub fn on_sort<F>(self, cb: F) -> Self
 	where
@@ -322,7 +322,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// _submit(|siv: &mut Cursive, row: usize, index: usize| {});
+	/// bmit(|siv: &mut Cursive, row: usize, index: usize| {});
 	/// ```
 	pub fn set_on_submit<F>(&mut self, cb: F)
 	where
@@ -342,7 +342,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// mit(|siv: &mut Cursive, row: usize, index: usize| {});
+	/// (|siv: &mut Cursive, row: usize, index: usize| {});
 	/// ```
 	pub fn on_submit<F>(self, cb: F) -> Self
 	where
@@ -359,7 +359,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// _select(|siv: &mut Cursive, row: usize, index: usize| {});
+	/// lect(|siv: &mut Cursive, row: usize, index: usize| {});
 	/// ```
 	pub fn set_on_select<F>(&mut self, cb: F)
 	where
@@ -378,7 +378,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// ect(|siv: &mut Cursive, row: usize, index: usize| {});
+	/// (|siv: &mut Cursive, row: usize, index: usize| {});
 	/// ```
 	pub fn on_select<F>(self, cb: F) -> Self
 	where
