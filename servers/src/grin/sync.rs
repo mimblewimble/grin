@@ -105,10 +105,10 @@ pub fn run_sync(
 					si.highest_height = most_work_height;
 				}
 
-				let fast_sync_enabled = !archive_mode && si.prev_fast_sync.is_none()
-					&& si.highest_height.saturating_sub(head.height) > horizon;
-
 				if syncing {
+					let fast_sync_enabled =
+						!archive_mode && si.highest_height.saturating_sub(head.height) > horizon;
+
 					// run the header sync every 10s
 					if si.header_sync_due(&header_head) {
 						header_sync(peers.clone(), chain.clone());
