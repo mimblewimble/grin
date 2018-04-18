@@ -217,6 +217,10 @@ impl MessageHandler for Protocol {
 					resp.add_attachment(txhashset.reader);
 					Ok(Some(resp))
 				} else {
+					debug!(
+						LOGGER,
+						"can't serve txhashset req for {} at {}", sm_req.hash, sm_req.height
+					);
 					Ok(None)
 				}
 			}

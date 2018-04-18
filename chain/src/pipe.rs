@@ -494,30 +494,31 @@ pub fn rewind_and_apply_fork(
 	// keeping the hashes of blocks along the fork
 	let mut current = b.header.previous;
 	let mut hashes = vec![];
+	let mut curr_header = store.get_block_header(&current)?;
 	loop {
-		let curr_header = store.get_block_header(&current)?;
-
 		if let Ok(_) = store.is_on_current_chain(&curr_header) {
 			break;
 		} else {
 			hashes.insert(0, (curr_header.height, curr_header.hash()));
 			current = curr_header.previous;
 		}
+		curr_header = store.get_block_header(&current)?;
 	}
 
-	let forked_block = store.get_block_header(&current)?;
+	let forked_block = store.get_block(&current)
+		.map_err(|_e| Error::ForkBeyondHorizon(curr_header.height, curr_header.hash()))?;
 
 	debug!(
 		LOGGER,
 		"rewind_and_apply_fork @ {} [{}], was @ {} [{}]",
-		forked_block.height,
-		forked_block.hash(),
+		forked_block.header.height,
+		forked_block.header.hash(),
 		b.header.height,
 		b.header.hash()
 	);
 
 	// rewind the sum trees up to the forking block
-	ext.rewind(&forked_block)?;
+	ext.rewind(&forked_block.header)?;
 
 	debug!(
 		LOGGER,

@@ -114,9 +114,11 @@ pub fn run_sync(
 						header_sync(peers.clone(), chain.clone());
 					}
 
+					// run fast sync if applicable
 					if fast_sync_enabled {
-						// run fast sync if applicable, every 5 min
-						if header_head.height == si.highest_height && si.fast_sync_due() {
+						if fast_sync_enabled && header_head.height == si.highest_height
+							&& si.fast_sync_due()
+						{
 							fast_sync(peers.clone(), chain.clone(), &header_head);
 						}
 					} else {
@@ -205,8 +207,10 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 		);
 
 		for hash in hashes_to_get.clone() {
-			// TODO - Is there a threshold where we sync from most_work_peer (not
-			// more_work_peer)?
+			// TODO - Is there a threshold where we sync from most_work_peer
+			// (not more_work_peer)?
+			// TODO - right now we *only* sync blocks from a full archival node
+			// even if we are requesting recent blocks (i.e. during a fast sync)
 			let peer = peers.more_work_archival_peer();
 			if let Some(peer) = peer {
 				if let Ok(peer) = peer.try_read() {
