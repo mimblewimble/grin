@@ -29,7 +29,7 @@ use tui::chrono::prelude::*;
 use tui::constants::*;
 use tui::types::*;
 
-use servers::{ServerStats, DiffBlock};
+use servers::{DiffBlock, ServerStats};
 use tui::table::{TableView, TableViewItem};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
@@ -188,7 +188,6 @@ impl TUIStatusListener for TUIMiningView {
 
 	/// update
 	fn update(c: &mut Cursive, stats: &ServerStats) {
-
 		c.call_on_id("diff_cur_height", |t: &mut TextView| {
 			t.set_content(stats.diff_stats.height.to_string());
 		});

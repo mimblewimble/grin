@@ -67,12 +67,12 @@ pub struct ServerStats {
 pub struct WorkerStats {
 	/// Unique ID for this worker
 	pub id: String,
-        /// whether stratum worker is currently connected
-        pub is_connected: bool,
+	/// whether stratum worker is currently connected
+	pub is_connected: bool,
 	/// Timestamp of most recent communication with this worker
 	pub last_seen: SystemTime,
-        /// pow difficulty this worker is using
-        pub pow_difficulty: u64,
+	/// pow difficulty this worker is using
+	pub pow_difficulty: u64,
 	/// number of valid shares submitted
 	pub num_accepted: u64,
 	/// number of invalid shares submitted
@@ -84,20 +84,20 @@ pub struct WorkerStats {
 /// Struct to return relevant information about the stratum server
 #[derive(Clone, Serialize, Debug)]
 pub struct StratumStats {
-        /// whether stratum server is enabled
-        pub is_enabled: bool,
-        /// whether stratum server is running
-        pub is_running: bool,
-        /// Number of connected workers
-        pub num_workers: usize,
-        /// what block height we're mining at
-        pub block_height: u64,
-        /// current network difficulty we're working on
-        pub network_difficulty: u64,
-        /// cuckoo size used for mining
-        pub cuckoo_size: u16,
-        /// Individual worker status
-        pub worker_stats: Vec<WorkerStats>,
+	/// whether stratum server is enabled
+	pub is_enabled: bool,
+	/// whether stratum server is running
+	pub is_running: bool,
+	/// Number of connected workers
+	pub num_workers: usize,
+	/// what block height we're mining at
+	pub block_height: u64,
+	/// current network difficulty we're working on
+	pub network_difficulty: u64,
+	/// cuckoo size used for mining
+	pub cuckoo_size: u16,
+	/// Individual worker status
+	pub worker_stats: Vec<WorkerStats>,
 }
 
 /// Stats on the last WINDOW blocks and the difficulty calculation

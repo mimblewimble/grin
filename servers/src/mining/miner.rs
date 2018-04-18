@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Mining service, gets a block to mine, and based on mining configuration chooses
-//! a version of the cuckoo miner to mine the block and produce a valid header with
-//! its proof-of-work.  Any valid mined blocks are submitted to the network.
+//! Mining service, gets a block to mine, and based on mining configuration
+//! chooses a version of the cuckoo miner to mine the block and produce a valid
+//! header with its proof-of-work.  Any valid mined blocks are submitted to the
+//! network.
 
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,7 +27,7 @@ use core::core::Proof;
 use core::core::{Block, BlockHeader};
 use core::core::hash::{Hash, Hashed};
 use pow::{cuckoo, MiningWorker};
-use common::types::StratumServerConfig ;
+use common::types::StratumServerConfig;
 use util::LOGGER;
 
 use chain;
@@ -129,21 +130,13 @@ impl Miner {
 
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
-	pub fn run_loop(
-		&self,
-		cuckoo_size: u32,
-		proof_size: usize,
-	) {
+	pub fn run_loop(&self, cuckoo_size: u32, proof_size: usize) {
 		info!(
 			LOGGER,
 			"(Server ID: {}) Starting test miner loop.", self.debug_output_id
 		);
 
-		let mut miner = cuckoo::Miner::new(
-			consensus::EASINESS,
-			cuckoo_size,
-			proof_size,
-		);
+		let mut miner = cuckoo::Miner::new(consensus::EASINESS, cuckoo_size, proof_size);
 
 		// iteration, we keep the returned derivation to provide it back when
 		// nothing has changed. We only want to create a new key_id for each new block.

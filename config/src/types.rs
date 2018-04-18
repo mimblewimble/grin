@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::io;
 use std::fmt;
 
-use servers::{StratumServerConfig, ServerConfig};
+use servers::{ServerConfig, StratumServerConfig};
 use util::LoggingConfig;
 use wallet::WalletConfig;
 

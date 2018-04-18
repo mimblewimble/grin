@@ -82,9 +82,9 @@ pub fn mine_genesis_block() -> Result<core::core::Block, Error> {
 	let sz = global::sizeshift() as u32;
 	let proof_size = global::proofsize();
 
-	let mut miner: Box<MiningWorker> = 
+	let mut miner: Box<MiningWorker> =
 		Box::new(cuckoo::Miner::new(consensus::EASINESS, sz, proof_size));
-	
+
 	pow_size(&mut *miner, &mut gen.header, genesis_difficulty, sz as u32).unwrap();
 	Ok(gen)
 }

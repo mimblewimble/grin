@@ -184,6 +184,6 @@ impl GlobalConfig {
 			.as_mut()
 			.unwrap()
 			.enable_stratum_server
-			.unwrap()
+			.unwrap();
 	}
 }

@@ -28,9 +28,9 @@ extern crate time;
 extern crate grin_api as api;
 extern crate grin_config as config;
 extern crate grin_core as core;
-extern crate grin_servers as servers;
 extern crate grin_keychain as keychain;
 extern crate grin_p2p as p2p;
+extern crate grin_servers as servers;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
