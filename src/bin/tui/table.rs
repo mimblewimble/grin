@@ -287,7 +287,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// le.set_on_sort(|siv: &mut Cursive, column: BasicColumn, order: Ordering| {});
+	/// _on_sort(|siv: &mut Cursive, column: BasicColumn, order: Ordering| {});
 	/// ```
 	pub fn set_on_sort<F>(&mut self, cb: F)
 	where
@@ -304,7 +304,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// le.on_sort(|siv: &mut Cursive, column: BasicColumn, order: Ordering| {});
+	/// sort(|siv: &mut Cursive, column: BasicColumn, order: Ordering| {});
 	/// ```
 	pub fn on_sort<F>(self, cb: F) -> Self
 	where
@@ -322,7 +322,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// le.set_on_submit(|siv: &mut Cursive, row: usize, index: usize| {});
+	/// _on_submit(|siv: &mut Cursive, row: usize, index: usize| {});
 	/// ```
 	pub fn set_on_submit<F>(&mut self, cb: F)
 	where
@@ -342,7 +342,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// le.on_submit(|siv: &mut Cursive, row: usize, index: usize| {});
+	/// submit(|siv: &mut Cursive, row: usize, index: usize| {});
 	/// ```
 	pub fn on_submit<F>(self, cb: F) -> Self
 	where
@@ -359,7 +359,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// le.set_on_select(|siv: &mut Cursive, row: usize, index: usize| {});
+	/// _on_select(|siv: &mut Cursive, row: usize, index: usize| {});
 	/// ```
 	pub fn set_on_select<F>(&mut self, cb: F)
 	where
@@ -378,7 +378,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// le.on_select(|siv: &mut Cursive, row: usize, index: usize| {});
+	/// select(|siv: &mut Cursive, row: usize, index: usize| {});
 	/// ```
 	pub fn on_select<F>(self, cb: F) -> Self
 	where
