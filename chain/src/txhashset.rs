@@ -57,21 +57,10 @@ impl<T> PMMRHandle<T>
 where
 	T: PMMRable + ::std::fmt::Debug,
 {
-	fn new(
-		root_dir: String,
-		file_name: &str,
-		height: u64,
-		hash_bytes: u64,
-		data_bytes: u64,
-	) -> Result<PMMRHandle<T>, Error> {
+	fn new(root_dir: String, file_name: &str) -> Result<PMMRHandle<T>, Error> {
 		let path = Path::new(&root_dir).join(TXHASHSET_SUBDIR).join(file_name);
 		fs::create_dir_all(path.clone())?;
-		let be = PMMRBackend::new(
-			path.to_str().unwrap().to_string(),
-			height,
-			hash_bytes,
-			data_bytes,
-		)?;
+		let be = PMMRBackend::new(path.to_str().unwrap().to_string())?;
 		let sz = be.unpruned_size()?;
 		Ok(PMMRHandle {
 			backend: be,
@@ -104,8 +93,6 @@ impl TxHashSet {
 	pub fn open(
 		root_dir: String,
 		commit_index: Arc<ChainStore>,
-		height: u64,
-		marker: &BlockMarker,
 	) -> Result<TxHashSet, Error> {
 		let output_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, OUTPUT_SUBDIR]
 			.iter()
@@ -122,30 +109,10 @@ impl TxHashSet {
 			.collect();
 		fs::create_dir_all(kernel_file_path.clone())?;
 
-		// TODO - we need to map from pos in the marker to byte offsets here
-
 		Ok(TxHashSet {
-			output_pmmr_h: PMMRHandle::new(
-				root_dir.clone(),
-				OUTPUT_SUBDIR,
-				height,
-				out_hash_bytes,
-				out_data_bytes,
-			)?,
-			rproof_pmmr_h: PMMRHandle::new(
-				root_dir.clone(),
-				RANGE_PROOF_SUBDIR,
-				height,
-				rproof_hash_bytes,
-				rproof_data_bytes,
-			)?,
-			kernel_pmmr_h: PMMRHandle::new(
-				root_dir.clone(),
-				KERNEL_SUBDIR,
-				height,
-				kernel_hash_bytes,
-				kernel_data_bytes,
-			)?,
+			output_pmmr_h: PMMRHandle::new(root_dir.clone(), OUTPUT_SUBDIR)?,
+			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR)?,
+			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR)?,
 			commit_index,
 		})
 	}
@@ -327,6 +294,7 @@ where
 	let sizes: (u64, u64, u64);
 	let res: Result<T, Error>;
 	let rollback: bool;
+
 	{
 		let commit_index = trees.commit_index.clone();
 
@@ -340,6 +308,7 @@ where
 		}
 		sizes = extension.sizes();
 	}
+
 	match res {
 		Err(e) => {
 			debug!(LOGGER, "Error returned, discarding txhashset extension.");
@@ -625,14 +594,7 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Validate the txhashset state against the provided block header.
-	/// Rewinds to that pos for the header first so we see a consistent
-	/// view of the world.
-	/// Note: this is an expensive operation and sets force_rollback
-	/// so the extension is read-only.
 	pub fn validate(&mut self, header: &BlockHeader, skip_rproofs: bool) -> Result<(), Error> {
-		// rewind to the provided header for a consistent view
-		&self.rewind(header)?;
-
 		// validate all hashes and sums within the trees
 		if let Err(e) = self.output_pmmr.validate() {
 			return Err(Error::InvalidTxHashSet(e));
@@ -642,6 +604,13 @@ impl<'a> Extension<'a> {
 		}
 		if let Err(e) = self.kernel_pmmr.validate() {
 			return Err(Error::InvalidTxHashSet(e));
+		}
+
+		// If we are validating the genesis block then
+		// we have no outputs or kernels.
+		// So we are done here.
+		if header.height == 0 {
+			return Ok(());
 		}
 
 		// validate the tree roots against the block header

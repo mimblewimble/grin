@@ -166,50 +166,59 @@ impl Chain {
 		// check if we have a head in store, otherwise the genesis block is it
 		let head = store.head();
 
-		let (height, marker) = match head {
+		// open the txhashset, creating a new one if necessary
+		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone())?;
+
+		match head {
 			Ok(head) => {
-				let marker = store.get_block_marker(&head.last_block_h)?;
-				(head.height, marker)
-			}
-			Err(NotFoundErr) => (0, BlockMarker::default()),
-			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
-		};
+				// Use current chain tip if we have one.
+				// Note: We are rewinding and validating against a writeable extension.
+				// If validation is successful we will truncate the backend files
+				// to match the provided block header.
+				let header = store.get_block_header(&head.last_block_h)?;
+				txhashset::extending(&mut txhashset, |extension| {
+					debug!(
+						LOGGER,
+						"chain: init: rewinding to last good block before we start",
+					);
 
-		let mut txhashset =
-			txhashset::TxHashSet::open(db_root.clone(), store.clone(), height, &marker)?;
+					extension.rewind(&header)?;
 
-		let head = store.head();
+					debug!(
+						LOGGER,
+						"chain: init: validating txhashset before we start...",
+					);
 
-		let head = match head {
-			Ok(h) => h,
+					extension.validate(&header, true)?;
+					Ok(())
+				})?;
+			},
 			Err(NotFoundErr) => {
 				let tip = Tip::from_block(&genesis.header);
 				store.save_block(&genesis)?;
 				store.setup_height(&genesis.header, &tip)?;
-				if genesis.kernels.len() > 0 {
+				// if genesis.kernels.len() > 0 {
 					txhashset::extending(&mut txhashset, |extension| {
-						extension.apply_block(&genesis)
+						extension.apply_block(&genesis)?;
+						Ok(())
 					})?;
-				}
+				// }
 
 				// saving a new tip based on genesis
 				store.save_head(&tip)?;
 				info!(
 					LOGGER,
-					"Saved genesis block: {:?}, nonce: {:?}, pow: {:?}",
+					"chain: init: saved genesis block: {:?}, nonce: {:?}, pow: {:?}",
 					genesis.hash(),
 					genesis.header.nonce,
 					genesis.header.pow,
 				);
-
-				// TODO - have we saved the block_marker yet?
-				// TODO - do we need to save it here?
-				// pipe::save_pmmr_metadata(&tip, &txhashset, store.clone())?;
-
-				tip
 			}
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
 		};
+
+		// Now reload the chain head (either existing head or genesis from above)
+		let head = store.head()?;
 
 		// Initialize header_head and sync_head as necessary for chain init.
 		store.init_head()?;
@@ -219,7 +228,7 @@ impl Chain {
 			"Chain init: {} @ {} [{}]",
 			head.total_difficulty.into_num(),
 			head.height,
-			head.last_block_h
+			head.last_block_h,
 		);
 
 		Ok(Chain {
@@ -429,9 +438,9 @@ impl Chain {
 
 		// Now create an extension from the txhashset and validate
 		// against the latest block header.
-		// We will rewind the extension internally to the pos for
-		// the block header to ensure the view is consistent.
+		// Rewind the extension to the specified header to ensure the view is consistent.
 		txhashset::extending_readonly(&mut txhashset, |extension| {
+			extension.rewind(&header)?;
 			extension.validate(&header, skip_rproofs)
 		})
 	}
@@ -544,11 +553,11 @@ impl Chain {
 		let mut txhashset = txhashset::TxHashSet::open(
 			self.db_root.clone(),
 			self.store.clone(),
-			header.height,
-			&marker,
 		)?;
 
+		// Note: we are validating against a writeable extension.
 		txhashset::extending(&mut txhashset, |extension| {
+			extension.rewind(&header)?;
 			extension.validate(&header, false)?;
 			extension.rebuild_index()?;
 			Ok(())

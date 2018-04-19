@@ -35,7 +35,6 @@ const SYNC_HEAD_PREFIX: u8 = 's' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
 const BLOCK_MARKER_PREFIX: u8 = 'm' as u8;
-const BLOCK_PMMR_FILE_METADATA_PREFIX: u8 = 'p' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
 /// store.
