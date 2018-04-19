@@ -179,7 +179,9 @@ impl Chain {
 				txhashset::extending(&mut txhashset, |extension| {
 					debug!(
 						LOGGER,
-						"chain: init: rewinding to last good block before we start",
+						"chain: init: rewinding to last good block {} @ {}",
+						header.height,
+						header.hash(),
 					);
 
 					extension.rewind(&header)?;
