@@ -335,13 +335,9 @@ fn pmmr_rewind() {
 	// also check the data file looks correct
 	// everything up to and including pos 7 should be pruned from the data file
 	// except the data at pos 8 and 9 (corresponding to elements 5 and 6)
-	assert_eq!(backend.get_data(1), None);
-	assert_eq!(backend.get_data(2), None);
-	assert_eq!(backend.get_data(3), None);
-	assert_eq!(backend.get_data(4), None);
-	assert_eq!(backend.get_data(5), None);
-	assert_eq!(backend.get_data(6), None);
-	assert_eq!(backend.get_data(7), None);
+	for pos in 1..8 {
+		assert_eq!(backend.get_data(pos), None);
+	}
 	assert_eq!(backend.get_data(8), Some(elems[4]));
 	assert_eq!(backend.get_data(9), Some(elems[5]));
 
