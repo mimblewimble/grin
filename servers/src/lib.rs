@@ -50,4 +50,4 @@ mod mining;
 
 pub use grin::server::Server;
 pub use common::types::{Seeding, ServerConfig, StratumServerConfig};
-pub use common::stats::{DiffBlock, PeerStats, ServerStats};
+pub use common::stats::{DiffBlock, PeerStats, ServerStats, StratumStats, WorkerStats};
