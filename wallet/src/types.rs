@@ -18,7 +18,7 @@ use std::fmt;
 use std::fmt::Display;
 use uuid::Uuid;
 use std::convert::From;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::Path;
 use std::path::MAIN_SEPARATOR;
@@ -47,6 +47,7 @@ use util::secp::key::PublicKey;
 use util::LOGGER;
 
 const DAT_FILE: &'static str = "wallet.dat";
+const BCK_FILE: &'static str = "wallet.bck";
 const LOCK_FILE: &'static str = "wallet.lock";
 const SEED_FILE: &'static str = "wallet.seed";
 
@@ -521,21 +522,19 @@ impl WalletData {
 		});
 
 		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
+		let backup_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, BCK_FILE);
 		let lock_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, LOCK_FILE);
 
 		info!(LOGGER, "Acquiring wallet lock ...");
 
 		let action = || {
 			trace!(LOGGER, "making lock file for wallet lock");
-			OpenOptions::new()
-				.write(true)
-				.create_new(true)
-				.open(lock_file_path)
+			fs::create_dir(lock_file_path)
 		};
 
 		// use tokio_retry to cleanly define some retry logic
 		let mut core = reactor::Core::new().unwrap();
-		let retry_strategy = FibonacciBackoff::from_millis(10).take(10);
+		let retry_strategy = FibonacciBackoff::from_millis(1000).take(10);
 		let retry_future = Retry::spawn(core.handle(), retry_strategy, action);
 		let retry_result = core.run(retry_future);
 
@@ -555,11 +554,12 @@ impl WalletData {
 
 		// We successfully acquired the lock - so do what needs to be done.
 		let mut wdat = WalletData::read_or_create(data_file_path)?;
+		wdat.write(backup_file_path)?;
 		let res = f(&mut wdat);
 		wdat.write(data_file_path)?;
 
 		// delete the lock file
-		fs::remove_file(lock_file_path).context(ErrorKind::WalletData(
+		fs::remove_dir(lock_file_path).context(ErrorKind::WalletData(
 			"Could not remove wallet lock file. Maybe insufficient rights?",
 		))?;
 
