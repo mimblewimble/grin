@@ -53,7 +53,7 @@ fn test_coinbase_maturity() {
 		genesis_block,
 		pow::verify_size,
 	).unwrap();
-	
+
 	let prev = chain.head_header().unwrap();
 
 	let keychain = Keychain::from_random_seed().unwrap();
