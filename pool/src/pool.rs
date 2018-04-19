@@ -411,7 +411,10 @@ where
 
 	/// Attempt to deaggregate multi-kernel transaction as much as possible based on the content
 	///of the mempool
-	pub fn deaggregate_transaction(&self, tx: transaction::Transaction) -> Result<Transaction, PoolError> {
+	pub fn deaggregate_transaction(
+		&self,
+		tx: transaction::Transaction,
+	) -> Result<Transaction, PoolError> {
 		// While the inputs outputs can be cut-through the kernel will stay intact
 		// In order to deaggregate tx we look for tx with the same kernel
 		let mut found_txs: Vec<Transaction> = vec![];
@@ -425,7 +428,7 @@ where
 				// Transaction can have multiple kernels
 				for tx_kernel in tx.clone().clone().kernels {
 					if kernel == tx_kernel {
-						found_count = found_count +1;
+						found_count = found_count + 1;
 					}
 				}
 				// Consider the transaction only if all the kernels match
@@ -444,10 +447,13 @@ where
 				Err(e) => {
 					debug!(LOGGER, "Could not deaggregate transaction: {}", e);
 					Err(PoolError::GenericPoolError)
-				},
+				}
 			}
 		} else {
-			debug!(LOGGER, "Could not deaggregate transaction: no candidate transaction found");
+			debug!(
+				LOGGER,
+				"Could not deaggregate transaction: no candidate transaction found"
+			);
 			Err(PoolError::GenericPoolError)
 		}
 	}
@@ -1044,90 +1050,83 @@ mod tests {
 
 	#[test]
 	/// Attempt to deaggregate a multi_kernel transaction
-	/// Push the parent transaction in the mempool then send a multikernel tx containing it and a child transaction
-	/// In the end, the pool should contain both transactions.
+	/// Push the parent transaction in the mempool then send a multikernel tx containing it and a
+	/// child transaction In the end, the pool should contain both transactions.
 	fn test_multikernel_deaggregate() {
-	  let mut dummy_chain = DummyChainImpl::new();
-	  let head_header = block::BlockHeader {
-	    height: 1,
-	    ..block::BlockHeader::default()
-	  };
-	  dummy_chain.store_head_header(&head_header);
+		let mut dummy_chain = DummyChainImpl::new();
+		let head_header = block::BlockHeader {
+			height: 1,
+			..block::BlockHeader::default()
+		};
+		dummy_chain.store_head_header(&head_header);
 
-	  let transaction1 = test_transaction_with_offset(vec![5], vec![1]);
-	  println!("{:?}", transaction1.validate());
-	  let transaction2 = test_transaction_with_offset(vec![8], vec![2]);
+		let transaction1 = test_transaction_with_offset(vec![5], vec![1]);
+		println!("{:?}", transaction1.validate());
+		let transaction2 = test_transaction_with_offset(vec![8], vec![2]);
 
-	  // We want these transactions to be rooted in the blockchain.
-	  let new_output = DummyOutputSet::empty()
-		.with_output(test_output(5))
-		.with_output(test_output(8));
+		// We want these transactions to be rooted in the blockchain.
+		let new_output = DummyOutputSet::empty()
+			.with_output(test_output(5))
+			.with_output(test_output(8));
 
-	  dummy_chain.update_output_set(new_output);
+		dummy_chain.update_output_set(new_output);
 
-	  // To mirror how this construction is intended to be used, the pool
-	  // is placed inside a RwLock.
-	  let pool = RwLock::new(test_setup(&Arc::new(dummy_chain)));
+		// To mirror how this construction is intended to be used, the pool
+		// is placed inside a RwLock.
+		let pool = RwLock::new(test_setup(&Arc::new(dummy_chain)));
 
-	  // Take the write lock and add a pool entry
-	  {
-	    let mut write_pool = pool.write().unwrap();
-	    assert_eq!(write_pool.total_size(), 0);
+		// Take the write lock and add a pool entry
+		{
+			let mut write_pool = pool.write().unwrap();
+			assert_eq!(write_pool.total_size(), 0);
 
-	    // First, add the first transaction
-	    let result =
-	      write_pool.add_to_memory_pool(test_source(), transaction1.clone(), false);
-	    if result.is_err() {
-	      panic!(
-	        "got an error adding tx 1: {:?}",
-	        result.err().unwrap()
-	      );
-	    }
-	  }
+			// First, add the first transaction
+			let result = write_pool.add_to_memory_pool(test_source(), transaction1.clone(), false);
+			if result.is_err() {
+				panic!("got an error adding tx 1: {:?}", result.err().unwrap());
+			}
+		}
 
-	  let txs = vec![transaction1.clone(), transaction2.clone()];
-	  let multi_kernel_transaction = transaction::aggregate(txs).unwrap();
+		let txs = vec![transaction1.clone(), transaction2.clone()];
+		let multi_kernel_transaction = transaction::aggregate(txs).unwrap();
 
-	  let found_tx: Transaction;
-	  // Now take the read lock and attempt to deaggregate the transaction
-	  {
-	    let read_pool = pool.read().unwrap();
-	    found_tx = read_pool.deaggregate_transaction(multi_kernel_transaction).unwrap();
+		let found_tx: Transaction;
+		// Now take the read lock and attempt to deaggregate the transaction
+		{
+			let read_pool = pool.read().unwrap();
+			found_tx = read_pool
+				.deaggregate_transaction(multi_kernel_transaction)
+				.unwrap();
 
-	    // Test the retrived transactions
-	    assert_eq!(transaction2, found_tx);
-	  }
+			// Test the retrived transactions
+			assert_eq!(transaction2, found_tx);
+		}
 
+		// Take the write lock and add a pool entry
+		{
+			let mut write_pool = pool.write().unwrap();
+			assert_eq!(write_pool.total_size(), 1);
 
-	  // Take the write lock and add a pool entry
-	  {
-	    let mut write_pool = pool.write().unwrap();
-	    assert_eq!(write_pool.total_size(), 1);
+			// First, add the transaction rooted in the blockchain
+			let result = write_pool.add_to_memory_pool(test_source(), found_tx.clone(), false);
+			if result.is_err() {
+				panic!("got an error adding child tx: {:?}", result.err().unwrap());
+			}
+		}
 
-	    // First, add the transaction rooted in the blockchain
-	    let result =
-	      write_pool.add_to_memory_pool(test_source(), found_tx.clone(), false);
-	    if result.is_err() {
-	      panic!(
-	        "got an error adding child tx: {:?}",
-	        result.err().unwrap()
-	      );
-	    }
-	  }
-
-	  // Now take the read lock and use a few exposed methods to check consistency
-	  {
-	    let read_pool = pool.read().unwrap();
-	    assert_eq!(read_pool.total_size(), 2);
-	    expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 1, 2);
-	    expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 5, 8);
-	    expect_output_parent!(read_pool, Parent::Unknown, 11, 3, 20);
-	  }
+		// Now take the read lock and use a few exposed methods to check consistency
+		{
+			let read_pool = pool.read().unwrap();
+			assert_eq!(read_pool.total_size(), 2);
+			expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 1, 2);
+			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 5, 8);
+			expect_output_parent!(read_pool, Parent::Unknown, 11, 3, 20);
+		}
 	}
 
-
 	#[test]
-	/// Attempt to add a bad multi kernel transaction to the mempool should get rejected
+	/// Attempt to add a bad multi kernel transaction to the mempool should get
+	/// rejected
 	fn test_bad_multikernel_pool_add() {
 		let mut dummy_chain = DummyChainImpl::new();
 		let head_header = block::BlockHeader {
@@ -1892,10 +1891,8 @@ mod tests {
 		}
 		tx_elements.push(build::with_fee(fees as u64));
 
-
 		build::transaction_with_offset(tx_elements, &keychain).unwrap()
 	}
-
 
 	fn test_transaction_with_coinbase_input(
 		input_value: u64,

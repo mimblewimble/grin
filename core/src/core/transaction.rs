@@ -236,13 +236,15 @@ pub struct Transaction {
 
 /// PartialEq
 impl PartialEq for Transaction {
-    fn eq(&self, tx: &Transaction) -> bool {
-        if self.inputs == tx.inputs && self.outputs == tx.outputs && self.kernels == tx.kernels && self.offset == tx.offset {
+	fn eq(&self, tx: &Transaction) -> bool {
+		if self.inputs == tx.inputs && self.outputs == tx.outputs && self.kernels == tx.kernels
+			&& self.offset == tx.offset
+		{
 			true
 		} else {
 			false
 		}
-    }
+	}
 }
 
 /// Implementation of Writeable for a fully blinded transaction, defines how to
@@ -493,7 +495,8 @@ impl Transaction {
 	}
 }
 
-/// Aggregate a vec of transactions into a multi-kernel transaction with cut_through
+/// Aggregate a vec of transactions into a multi-kernel transaction with
+/// cut_through
 pub fn aggregate_with_cut_through(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
@@ -616,13 +619,15 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	Ok(tx.with_offset(total_kernel_offset))
 }
 
-/// Attempt to deaggregate a multi-kernel transaction based on multiple transactions
+/// Attempt to deaggregate a multi-kernel transaction based on multiple
+/// transactions
 pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
 
-	// we will subtract these at the end to give us the overall offset for the transaction
+	// we will subtract these at the end to give us the overall offset for the
+	// transaction
 	let mut kernel_offsets = vec![];
 
 	let tx = aggregate(txs).unwrap();
@@ -644,7 +649,6 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	}
 
 	kernel_offsets.push(tx.offset);
-
 
 	// now compute the total kernel offset
 	let total_kernel_offset = {

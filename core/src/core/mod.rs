@@ -383,7 +383,6 @@ mod test {
 		assert!(deaggregated_tx34.validate().is_ok());
 		assert_eq!(tx34, deaggregated_tx34);
 
-
 		let deaggregated_tx12 = deaggregate(tx1234.clone(), vec![tx34.clone()]).unwrap();
 
 		assert!(deaggregated_tx12.validate().is_ok());
@@ -447,10 +446,19 @@ mod test {
 		assert!(tx4.validate().is_ok());
 		assert!(tx5.validate().is_ok());
 
-		let tx12345 = aggregate(vec![tx1.clone(), tx2.clone(), tx3.clone(), tx4.clone(), tx5.clone()]).unwrap();
+		let tx12345 = aggregate(vec![
+			tx1.clone(),
+			tx2.clone(),
+			tx3.clone(),
+			tx4.clone(),
+			tx5.clone(),
+		]).unwrap();
 		assert!(tx12345.validate().is_ok());
 
-		let deaggregated_tx5 = deaggregate(tx12345.clone(), vec![tx1.clone(), tx2.clone(), tx3.clone(), tx4.clone()]).unwrap();
+		let deaggregated_tx5 = deaggregate(
+			tx12345.clone(),
+			vec![tx1.clone(), tx2.clone(), tx3.clone(), tx4.clone()],
+		).unwrap();
 		assert!(deaggregated_tx5.validate().is_ok());
 		assert_eq!(tx5, deaggregated_tx5);
 	}
@@ -469,13 +477,20 @@ mod test {
 		assert!(tx4.validate().is_ok());
 		assert!(tx5.validate().is_ok());
 
-		let tx12345 = aggregate(vec![tx1.clone(), tx2.clone(), tx3.clone(), tx4.clone(), tx5.clone()]).unwrap();
+		let tx12345 = aggregate(vec![
+			tx1.clone(),
+			tx2.clone(),
+			tx3.clone(),
+			tx4.clone(),
+			tx5.clone(),
+		]).unwrap();
 		let tx12 = aggregate(vec![tx1.clone(), tx2.clone()]).unwrap();
 		let tx34 = aggregate(vec![tx3.clone(), tx4.clone()]).unwrap();
 
 		assert!(tx12345.validate().is_ok());
 
-		let deaggregated_tx5 = deaggregate(tx12345.clone(), vec![tx12.clone(), tx34.clone()]).unwrap();
+		let deaggregated_tx5 =
+			deaggregate(tx12345.clone(), vec![tx12.clone(), tx34.clone()]).unwrap();
 		assert!(deaggregated_tx5.validate().is_ok());
 		assert_eq!(tx5, deaggregated_tx5);
 	}
