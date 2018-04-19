@@ -343,7 +343,8 @@ pub trait ChainStore: Send + Sync {
 	// ) -> Result<PMMRFileMetadataCollection, store::Error>;
 	//
 	// /// Delete stored pmmr file metadata information for a given block
-	// fn delete_block_pmmr_file_metadata(&self, h: &Hash) -> Result<(), store::Error>;
+	// fn delete_block_pmmr_file_metadata(&self, h: &Hash) -> Result<(),
+	// store::Error>;
 
 	/// Saves the provided block header at the corresponding height. Also check
 	/// the consistency of the height chain in store by assuring previous
@@ -376,8 +377,8 @@ pub trait ChainStore: Send + Sync {
 // }
 //
 // impl Readable for PMMRFileMetadataCollection {
-// 	fn read(reader: &mut Reader) -> Result<PMMRFileMetadataCollection, ser::Error> {
-// 		Ok(PMMRFileMetadataCollection {
+// fn read(reader: &mut Reader) -> Result<PMMRFileMetadataCollection,
+// ser::Error> { 		Ok(PMMRFileMetadataCollection {
 // 			output_file_md: PMMRFileMetadata::read(reader)?,
 // 			rproof_file_md: PMMRFileMetadata::read(reader)?,
 // 			kernel_file_md: PMMRFileMetadata::read(reader)?,
@@ -425,10 +426,12 @@ impl ChainAdapter for NoopAdapter {
 	fn block_accepted(&self, _: &Block, _: Options) {}
 }
 
-/// The output and kernel positions that define the size of the MMRs for a particular block.
+/// The output and kernel positions that define the size of the MMRs for a
+/// particular block.
 #[derive(Debug, Clone)]
 pub struct BlockMarker {
-	/// The output (and rangeproof) MMR position of the final output in the block
+	/// The output (and rangeproof) MMR position of the final output in the
+	/// block
 	pub output_pos: u64,
 	/// The kernel position of the final kernel in the block
 	pub kernel_pos: u64,

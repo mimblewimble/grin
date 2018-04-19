@@ -170,17 +170,13 @@ impl Chain {
 			Ok(head) => {
 				let marker = store.get_block_marker(&head.last_block_h)?;
 				(head.height, marker)
-			},
+			}
 			Err(NotFoundErr) => (0, BlockMarker::default()),
-			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned()))
+			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
 		};
 
-		let mut txhashset = txhashset::TxHashSet::open(
-			db_root.clone(),
-			store.clone(),
-			height,
-			&marker,
-		)?;
+		let mut txhashset =
+			txhashset::TxHashSet::open(db_root.clone(), store.clone(), height, &marker)?;
 
 		let head = store.head();
 

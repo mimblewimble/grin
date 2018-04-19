@@ -117,8 +117,8 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 
 	// match result {
 	// 	Ok(t) => {
-	// 		save_pmmr_metadata(&Tip::from_block(&b.header), &txhashset, ctx.store.clone())?;
-	// 		Ok(t)
+	// save_pmmr_metadata(&Tip::from_block(&b.header), &txhashset,
+	// ctx.store.clone())?; 		Ok(t)
 	// 	}
 	// 	Err(e) => Err(e),
 	// }

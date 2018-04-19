@@ -214,8 +214,8 @@ impl ChainStore for ChainKVStore {
 	// 	)
 	// }
 	//
-	// fn get_block_pmmr_file_metadata(&self, h: &Hash) -> Result<PMMRFileMetadataCollection, Error> {
-	// 	option_to_not_found(
+	// fn get_block_pmmr_file_metadata(&self, h: &Hash) ->
+	// Result<PMMRFileMetadataCollection, Error> { 	option_to_not_found(
 	// 		self.db
 	// 			.get_ser(&to_key(BLOCK_PMMR_FILE_METADATA_PREFIX, &mut h.to_vec())),
 	// 	)
