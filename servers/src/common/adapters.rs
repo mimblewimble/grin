@@ -78,13 +78,26 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		);
 
 		let h = tx.hash();
-		if let Err(e) = self.tx_pool
-			.write()
-			.unwrap()
-			.add_to_memory_pool(source, tx, stem)
-		{
-			debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
+
+		if !stem && tx.kernels.len() != 1 {
+			debug!(LOGGER, "Received regular multi-kernel transaction will attempt to deaggregate");
+			if let Err(e) = self.tx_pool
+				.write()
+				.unwrap()
+				.deaggregate_and_add_to_memory_pool(source, tx, stem)
+			{
+				debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
+			}
+		} else {
+			if let Err(e) = self.tx_pool
+				.write()
+				.unwrap()
+				.add_to_memory_pool(source, tx, stem)
+			{
+				debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
+			}
 		}
+
 	}
 
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {
