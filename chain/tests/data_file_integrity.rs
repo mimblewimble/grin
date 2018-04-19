@@ -16,7 +16,6 @@ extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
-extern crate grin_pow as pow;
 extern crate grin_util as util;
 extern crate rand;
 extern crate time;
@@ -34,7 +33,7 @@ use core::global::ChainTypes;
 
 use keychain::Keychain;
 
-use pow::{cuckoo, types, MiningWorker};
+use core::pow;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -44,7 +43,7 @@ fn setup(dir_name: &str) -> Chain {
 	util::init_test_logger();
 	clean_output_dir(dir_name);
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let genesis_block = pow::mine_genesis_block(None).unwrap();
+	let genesis_block = pow::mine_genesis_block().unwrap();
 	chain::Chain::init(
 		dir_name.to_string(),
 		Arc::new(NoopAdapter {}),
@@ -70,19 +69,6 @@ fn data_files() {
 		let chain = setup(chain_dir);
 		let keychain = Keychain::from_random_seed().unwrap();
 
-		// mine and add a few blocks
-		let mut miner_config = types::MinerConfig {
-			enable_mining: true,
-			burn_reward: true,
-			..Default::default()
-		};
-		miner_config.miner_plugin_dir = Some(String::from("../target/debug/deps"));
-
-		let mut cuckoo_miner = cuckoo::Miner::new(
-			consensus::EASINESS,
-			global::sizeshift() as u32,
-			global::proofsize(),
-		);
 		for n in 1..4 {
 			let prev = chain.head_header().unwrap();
 			let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
@@ -94,10 +80,10 @@ fn data_files() {
 			chain.set_txhashset_roots(&mut b, false).unwrap();
 
 			pow::pow_size(
-				&mut cuckoo_miner,
 				&mut b.header,
 				difficulty,
-				global::sizeshift() as u32,
+				global::proofsize(),
+				global::sizeshift(),
 			).unwrap();
 
 			// let prev_bhash = b.header.previous;

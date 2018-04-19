@@ -118,28 +118,23 @@ pub fn pow_size(
 mod test {
 	use super::*;
 	use global;
-	use core::core::target::Difficulty;
-	use core::genesis;
-	use core::global::ChainTypes;
+	use core::target::Difficulty;
+	use genesis;
+	use global::ChainTypes;
 
 	#[test]
 	fn genesis_pow() {
 		global::set_mining_mode(ChainTypes::AutomatedTesting);
 		let mut b = genesis::genesis_dev();
 		b.header.nonce = 485;
-		let mut internal_miner = cuckoo::Miner::new(
-			consensus::EASINESS,
-			global::sizeshift() as u32,
-			global::proofsize(),
-		);
 		pow_size(
-			&mut internal_miner,
 			&mut b.header,
 			Difficulty::one(),
-			global::sizeshift() as u32,
+			global::proofsize(),
+			global::sizeshift(),
 		).unwrap();
 		assert!(b.header.nonce != 310);
 		assert!(b.header.pow.clone().to_difficulty() >= Difficulty::one());
-		assert!(verify_size(&b.header, global::sizeshift() as u32));
+		assert!(verify_size(&b.header, global::sizeshift()));
 	}
 }
