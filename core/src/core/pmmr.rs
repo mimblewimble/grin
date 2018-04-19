@@ -460,7 +460,7 @@ where
 		Ok(true)
 	}
 
-	/// Get a hash at provided position in the MMR.
+	/// Get the hash at provided position in the MMR.
 	pub fn get_hash(&self, pos: u64) -> Option<Hash> {
 		if pos > self.last_pos {
 			None
@@ -469,7 +469,7 @@ where
 		}
 	}
 
-	/// Get the data element at provided in the MMR.
+	/// Get the data element at provided position in the MMR.
 	pub fn get_data(&self, pos: u64) -> Option<T> {
 		if pos > self.last_pos {
 			None

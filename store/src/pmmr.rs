@@ -189,14 +189,16 @@ where
 			.rewind(index)
 			.map_err(|e| format!("Could not truncate remove log: {}", e))?;
 
+		// Hash file
 		let shift = self.pruned_nodes.get_shift(position).unwrap_or(0);
 		let record_len = 32;
 		let file_pos = (position - shift) * (record_len as u64);
 		self.hash_file.rewind(file_pos);
 
 		// Data file
-		let flatfile_pos = pmmr::n_leaves(position) - 1;
-		let file_pos = (flatfile_pos as usize + 1) * T::len();
+		let leaf_shift = self.pruned_nodes.get_leaf_shift(position).unwrap_or(0);
+		let flatfile_pos = pmmr::n_leaves(position);
+		let file_pos = (flatfile_pos - leaf_shift) * T::len() as u64;
 		self.data_file.rewind(file_pos as u64);
 		Ok(())
 	}
