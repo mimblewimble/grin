@@ -90,10 +90,7 @@ pub struct TxHashSet {
 
 impl TxHashSet {
 	/// Open an existing or new set of backends for the TxHashSet
-	pub fn open(
-		root_dir: String,
-		commit_index: Arc<ChainStore>,
-	) -> Result<TxHashSet, Error> {
+	pub fn open(root_dir: String, commit_index: Arc<ChainStore>) -> Result<TxHashSet, Error> {
 		let output_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, OUTPUT_SUBDIR]
 			.iter()
 			.collect();

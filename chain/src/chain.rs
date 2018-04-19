@@ -192,17 +192,15 @@ impl Chain {
 					extension.validate(&header, true)?;
 					Ok(())
 				})?;
-			},
+			}
 			Err(NotFoundErr) => {
 				let tip = Tip::from_block(&genesis.header);
 				store.save_block(&genesis)?;
 				store.setup_height(&genesis.header, &tip)?;
-				// if genesis.kernels.len() > 0 {
-					txhashset::extending(&mut txhashset, |extension| {
-						extension.apply_block(&genesis)?;
-						Ok(())
-					})?;
-				// }
+				txhashset::extending(&mut txhashset, |extension| {
+					extension.apply_block(&genesis)?;
+					Ok(())
+				})?;
 
 				// saving a new tip based on genesis
 				store.save_head(&tip)?;
@@ -438,7 +436,8 @@ impl Chain {
 
 		// Now create an extension from the txhashset and validate
 		// against the latest block header.
-		// Rewind the extension to the specified header to ensure the view is consistent.
+		// Rewind the extension to the specified header to ensure the view is
+		// consistent.
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.rewind(&header)?;
 			extension.validate(&header, skip_rproofs)
@@ -550,10 +549,7 @@ impl Chain {
 			"Going to validate new txhashset, might take some time..."
 		);
 
-		let mut txhashset = txhashset::TxHashSet::open(
-			self.db_root.clone(),
-			self.store.clone(),
-		)?;
+		let mut txhashset = txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone())?;
 
 		// Note: we are validating against a writeable extension.
 		txhashset::extending(&mut txhashset, |extension| {
