@@ -409,6 +409,49 @@ where
 		}
 	}
 
+	/// Attempt to deaggregate multi-kernel transaction as much as possible based on the content
+	///of the mempool
+	pub fn deaggregate_transaction(&self, tx: transaction::Transaction) -> Result<Transaction, PoolError> {
+		// While the inputs outputs can be cut-through the kernel will stay intact
+		// In order to deaggregate tx we look for tx with the same kernel
+		let mut found_txs: Vec<Transaction> = vec![];
+		let mut total_kernels_found = 0;
+		// Since its a multi-kernel transaction we loop over the kernels
+		for kernel in tx.kernels.clone() {
+			// Look for tx with the same kernels
+			for (_, tx) in &self.transactions {
+				let mut found_count = 0;
+
+				// Transaction can have multiple kernels
+				for tx_kernel in tx.clone().clone().kernels {
+					if kernel == tx_kernel {
+						found_count = found_count +1;
+					}
+				}
+				// Consider the transaction only if all the kernels match
+				if found_count == tx.kernels.len() {
+					debug!(LOGGER, "Found a transaction with the same kernel");
+					found_txs.push(*tx.clone());
+					total_kernels_found = total_kernels_found + found_count;
+				}
+			}
+		}
+
+		debug!(LOGGER, "{:?}", "Attempt to deaggregate the transaction");
+		if found_txs.len() != 0 {
+			match transaction::deaggregate(tx, found_txs) {
+				Ok(found_tx) => Ok(found_tx),
+				Err(e) => {
+					debug!(LOGGER, "Could not deaggregate transaction: {}", e);
+					Err(PoolError::GenericPoolError)
+				},
+			}
+		} else {
+			debug!(LOGGER, "Could not deaggregate transaction: no candidate transaction found");
+			Err(PoolError::GenericPoolError)
+		}
+	}
+
 	/// Check the output for a conflict with an existing output.
 	///
 	/// Checks the output (by commitment) against outputs in the blockchain
@@ -964,7 +1007,7 @@ mod tests {
 		let child_transaction = test_transaction(vec![11, 3], vec![12]);
 
 		let txs = vec![parent_transaction, child_transaction];
-		let multi_kernel_transaction = transaction::aggregate(txs).unwrap();
+		let multi_kernel_transaction = transaction::aggregate_with_cut_through(txs).unwrap();
 
 		dummy_chain.update_output_set(new_output);
 
@@ -998,6 +1041,90 @@ mod tests {
 			expect_output_parent!(read_pool, Parent::Unknown, 11, 3, 20);
 		}
 	}
+
+	#[test]
+	/// Attempt to deaggregate a multi_kernel transaction
+	/// Push the parent transaction in the mempool then send a multikernel tx containing it and a child transaction
+	/// In the end, the pool should contain both transactions.
+	fn test_multikernel_deaggregate() {
+	  let mut dummy_chain = DummyChainImpl::new();
+	  let head_header = block::BlockHeader {
+	    height: 1,
+	    ..block::BlockHeader::default()
+	  };
+	  dummy_chain.store_head_header(&head_header);
+
+	  let transaction1 = test_transaction_with_offset(vec![5], vec![1]);
+	  println!("{:?}", transaction1.validate());
+	  let transaction2 = test_transaction_with_offset(vec![8], vec![2]);
+
+	  // We want these transactions to be rooted in the blockchain.
+	  let new_output = DummyOutputSet::empty()
+		.with_output(test_output(5))
+		.with_output(test_output(8));
+
+	  dummy_chain.update_output_set(new_output);
+
+	  // To mirror how this construction is intended to be used, the pool
+	  // is placed inside a RwLock.
+	  let pool = RwLock::new(test_setup(&Arc::new(dummy_chain)));
+
+	  // Take the write lock and add a pool entry
+	  {
+	    let mut write_pool = pool.write().unwrap();
+	    assert_eq!(write_pool.total_size(), 0);
+
+	    // First, add the first transaction
+	    let result =
+	      write_pool.add_to_memory_pool(test_source(), transaction1.clone(), false);
+	    if result.is_err() {
+	      panic!(
+	        "got an error adding tx 1: {:?}",
+	        result.err().unwrap()
+	      );
+	    }
+	  }
+
+	  let txs = vec![transaction1.clone(), transaction2.clone()];
+	  let multi_kernel_transaction = transaction::aggregate(txs).unwrap();
+
+	  let found_tx: Transaction;
+	  // Now take the read lock and attempt to deaggregate the transaction
+	  {
+	    let read_pool = pool.read().unwrap();
+	    found_tx = read_pool.deaggregate_transaction(multi_kernel_transaction).unwrap();
+
+	    // Test the retrived transactions
+	    assert_eq!(transaction2, found_tx);
+	  }
+
+
+	  // Take the write lock and add a pool entry
+	  {
+	    let mut write_pool = pool.write().unwrap();
+	    assert_eq!(write_pool.total_size(), 1);
+
+	    // First, add the transaction rooted in the blockchain
+	    let result =
+	      write_pool.add_to_memory_pool(test_source(), found_tx.clone(), false);
+	    if result.is_err() {
+	      panic!(
+	        "got an error adding child tx: {:?}",
+	        result.err().unwrap()
+	      );
+	    }
+	  }
+
+	  // Now take the read lock and use a few exposed methods to check consistency
+	  {
+	    let read_pool = pool.read().unwrap();
+	    assert_eq!(read_pool.total_size(), 2);
+	    expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 1, 2);
+	    expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 5, 8);
+	    expect_output_parent!(read_pool, Parent::Unknown, 11, 3, 20);
+	  }
+	}
+
 
 	#[test]
 	/// Attempt to add a bad multi kernel transaction to the mempool should get rejected
@@ -1739,6 +1866,36 @@ mod tests {
 
 		build::transaction(tx_elements, &keychain).unwrap()
 	}
+
+	fn test_transaction_with_offset(
+		input_values: Vec<u64>,
+		output_values: Vec<u64>,
+	) -> transaction::Transaction {
+		let keychain = keychain_for_tests();
+
+		let input_sum = input_values.iter().sum::<u64>() as i64;
+		let output_sum = output_values.iter().sum::<u64>() as i64;
+
+		let fees: i64 = input_sum - output_sum;
+		assert!(fees >= 0);
+
+		let mut tx_elements = Vec::new();
+
+		for input_value in input_values {
+			let key_id = keychain.derive_key_id(input_value as u32).unwrap();
+			tx_elements.push(build::input(input_value, key_id));
+		}
+
+		for output_value in output_values {
+			let key_id = keychain.derive_key_id(output_value as u32).unwrap();
+			tx_elements.push(build::output(output_value, key_id));
+		}
+		tx_elements.push(build::with_fee(fees as u64));
+
+
+		build::transaction_with_offset(tx_elements, &keychain).unwrap()
+	}
+
 
 	fn test_transaction_with_coinbase_input(
 		input_value: u64,
