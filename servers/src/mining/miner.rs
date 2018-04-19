@@ -101,10 +101,13 @@ impl Miner {
 		let mut sol = None;
 		while head.hash() == *latest_hash && time::get_time().sec < deadline {
 			let pow_hash = b.header.pre_pow_hash();
-			if let Ok(proof) = cuckoo::Miner::new(&pow_hash[..],
-					consensus::EASINESS,
-					global::proofsize(),
-					global::sizeshift()).mine()  {
+			if let Ok(proof) = cuckoo::Miner::new(
+				&pow_hash[..],
+				consensus::EASINESS,
+				global::proofsize(),
+				global::sizeshift(),
+			).mine()
+			{
 				let proof_diff = proof.clone().to_difficulty();
 				if proof_diff >= (b.header.total_difficulty.clone() - head.total_difficulty.clone())
 				{
@@ -161,12 +164,7 @@ impl Miner {
 				wallet_listener_url,
 			);
 
-			let sol = self.inner_mining_loop(
-				&mut b,
-				&head,
-				60,
-				&mut latest_hash,
-			);
+			let sol = self.inner_mining_loop(&mut b, &head, 60, &mut latest_hash);
 
 			// we found a solution, push our block through the chain processing pipeline
 			if let Some(proof) = sol {

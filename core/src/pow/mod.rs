@@ -39,7 +39,7 @@ mod siphash;
 pub mod cuckoo;
 
 use consensus;
-use core::{BlockHeader, Block};
+use core::{Block, BlockHeader};
 use core::target::Difficulty;
 use global;
 use genesis;
@@ -94,7 +94,9 @@ pub fn pow_size(
 
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good
-		if let Ok(proof) = cuckoo::Miner::new(&pow_hash[..], consensus::EASINESS,proof_size,sz).mine()  {
+		if let Ok(proof) =
+			cuckoo::Miner::new(&pow_hash[..], consensus::EASINESS, proof_size, sz).mine()
+		{
 			if proof.clone().to_difficulty() >= diff {
 				bh.pow = proof.clone();
 				return Ok(());

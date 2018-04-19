@@ -162,7 +162,7 @@ enum CycleSol {
 }
 
 impl Miner {
-  /// Creates a new miner
+	/// Creates a new miner
 	pub fn new(header: &[u8], ease: u32, proof_size: usize, sizeshift: u8) -> Miner {
 		let cuckoo = Cuckoo::new(header, sizeshift);
 		let size = 1 << sizeshift;

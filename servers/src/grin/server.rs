@@ -25,7 +25,7 @@ use std::time;
 use common::adapters::*;
 use api;
 use chain;
-use core::{pow, consensus, genesis, global};
+use core::{consensus, genesis, global, pow};
 use core::core::target::Difficulty;
 use core::core::hash::Hashed;
 use grin::dandelion_monitor;
