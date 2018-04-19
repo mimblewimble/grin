@@ -21,7 +21,6 @@ use std::fs;
 
 use core::ser::*;
 use core::core::pmmr::{Backend, PMMR};
-use core::core::hash::Hash;
 use store::types::prune_noop;
 
 #[test]
@@ -292,30 +291,33 @@ fn pmmr_rewind() {
 	// adding elements and keeping the corresponding root
 	let mut mmr_size = load(0, &elems[0..4], &mut backend);
 	backend.sync().unwrap();
-	let root1: Hash;
-	{
+	let root1 = {
 		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-		root1 = pmmr.root();
-	}
+		pmmr.root()
+	};
 
 	mmr_size = load(mmr_size, &elems[4..6], &mut backend);
 	backend.sync().unwrap();
-	let root2: Hash;
-	{
+	let root2 = {
 		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-		root2 = pmmr.root();
-	}
+		pmmr.root()
+	};
 
 	mmr_size = load(mmr_size, &elems[6..9], &mut backend);
 	backend.sync().unwrap();
 
-	// prune and compact the 2 first elements to spice things up
+	// prune the first 4 elements (leaves at pos 1, 2, 4, 5)
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		pmmr.prune(1, 1).unwrap();
 		pmmr.prune(2, 1).unwrap();
+		pmmr.prune(4, 1).unwrap();
+		pmmr.prune(5, 1).unwrap();
 	}
-	backend.check_compact(1, 2, &prune_noop).unwrap();
+	backend.sync().unwrap();
+
+	// and compact the MMR to remove the 2 pruned elements
+	backend.check_compact(2, 2, &prune_noop).unwrap();
 	backend.sync().unwrap();
 
 	// rewind and check the roots still match
@@ -330,6 +332,17 @@ fn pmmr_rewind() {
 		assert_eq!(pmmr.root(), root2);
 	}
 
+	// also check the data file looks correct
+	// everything up to and including pos 7 should be pruned from the data file
+	// except the data at pos 8 and 9 (corresponding to elements 5 and 6)
+	for pos in 1..8 {
+		assert_eq!(backend.get_data(pos), None);
+	}
+	assert_eq!(backend.get_data(8), Some(elems[4]));
+	assert_eq!(backend.get_data(9), Some(elems[5]));
+
+	assert_eq!(backend.data_size().unwrap(), 2);
+
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, 10);
 		pmmr.rewind(5, 3).unwrap();
@@ -340,6 +353,17 @@ fn pmmr_rewind() {
 		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, 7);
 		assert_eq!(pmmr.root(), root1);
 	}
+
+	// also check the data file looks correct
+	// everything up to and including pos 7 should be pruned from the data file
+	// but we have rewound to pos 5 so everything after that should be None
+	for pos in 1..10 {
+		assert_eq!(backend.get_data(pos), None);
+	}
+
+	// check we have no data in the backend after
+	// pruning, compacting and rewinding
+	assert_eq!(backend.data_size().unwrap(), 0);
 
 	teardown(data_dir);
 }
