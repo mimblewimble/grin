@@ -15,9 +15,9 @@
 extern crate grin_api as api;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
-extern crate grin_servers as servers;
 extern crate grin_keychain as keychain;
 extern crate grin_p2p as p2p;
+extern crate grin_servers as servers;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
@@ -211,11 +211,17 @@ impl LocalServerContainer {
 			self.run_wallet(duration_in_seconds + 5);
 			// give a second to start wallet before continuing
 			thread::sleep(time::Duration::from_millis(1000));
-			wallet_url = Some(format!("http://{}:{}", self.config.base_addr, self.config.wallet_port));
+			wallet_url = Some(format!(
+				"http://{}:{}",
+				self.config.base_addr, self.config.wallet_port
+			));
 		}
 
 		if self.config.start_miner == true {
-			println!("starting test Miner on port {}", self.config.p2p_server_port);
+			println!(
+				"starting test Miner on port {}",
+				self.config.p2p_server_port
+			);
 			s.start_test_miner(wallet_url);
 		}
 
@@ -572,4 +578,3 @@ pub fn stratum_config() -> servers::common::types::StratumServerConfig {
 		burn_reward: false,
 	}
 }
-
