@@ -409,6 +409,22 @@ where
 		}
 	}
 
+	/// Attempt to deaggregate a transaction and add it to the mempool
+	pub fn deaggregate_and_add_to_memory_pool(
+		&mut self,
+		tx_source: TxSource,
+		tx: transaction::Transaction,
+		stem: bool,
+	) -> Result<(), PoolError> {
+		match self.deaggregate_transaction(tx.clone()) {
+			Ok(deaggragated_tx) => self.add_to_memory_pool(tx_source, deaggragated_tx, stem),
+			Err(e) => {
+				debug!(LOGGER,"Could not deaggregate multi-kernel transaction: {:?}", e);
+				self.add_to_memory_pool(tx_source, tx, stem)
+			},
+		}
+	}
+
 	/// Attempt to deaggregate multi-kernel transaction as much as possible based on the content
 	///of the mempool
 	pub fn deaggregate_transaction(
