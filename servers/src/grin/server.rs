@@ -283,7 +283,7 @@ impl Server {
 	/// Start mining for blocks internally on a separate thread. Relies on internal miner,
 	/// and should only be used for automated testing. Burns reward if wallet_listener_url
 	/// is 'None'
-	pub fn start_test_miner(&self,  wallet_listener_url: Option<String>) {
+	pub fn start_test_miner(&self, wallet_listener_url: Option<String>) {
 		let currently_syncing = self.currently_syncing.clone();
 		let config_wallet_url = match wallet_listener_url.clone() {
 			Some(u) => u,
@@ -291,7 +291,7 @@ impl Server {
 		};
 
 		let config = StratumServerConfig {
-			attempt_time_per_block : 60,
+			attempt_time_per_block: 60,
 			burn_reward: false,
 			enable_stratum_server: None,
 			stratum_server_addr: None,

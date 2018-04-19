@@ -80,7 +80,7 @@ impl Miner {
 		b: &mut Block,
 		head: &BlockHeader,
 		attempt_time_per_block: u32,
-		latest_hash: &mut Hash
+		latest_hash: &mut Hash,
 	) -> Option<Proof> {
 		// look for a pow for at most 2 sec on the same block (to give a chance to new
 		// transactions) and as long as the head hasn't changed
@@ -160,10 +160,12 @@ impl Miner {
 				wallet_listener_url.clone(),
 			);
 
-			let sol = self.inner_mining_loop(&mut b,
+			let sol = self.inner_mining_loop(
+				&mut b,
 				&head,
 				self.config.attempt_time_per_block,
-				&mut latest_hash);
+				&mut latest_hash,
+			);
 
 			// we found a solution, push our block through the chain processing pipeline
 			if let Some(proof) = sol {

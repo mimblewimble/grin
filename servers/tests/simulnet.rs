@@ -15,8 +15,8 @@
 extern crate grin_api as api;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
-extern crate grin_servers as servers;
 extern crate grin_p2p as p2p;
+extern crate grin_servers as servers;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
@@ -31,8 +31,8 @@ use std::default::Default;
 use core::global;
 use core::global::ChainTypes;
 
-use framework::{LocalServerContainerConfig, LocalServerContainerPool,
-                LocalServerContainerPoolConfig, config, stratum_config};
+use framework::{config, stratum_config, LocalServerContainerConfig, LocalServerContainerPool,
+                LocalServerContainerPoolConfig};
 
 /// Testing the frameworks by starting a fresh server, creating a genesis
 /// Block and mining into a wallet for a bit
