@@ -80,7 +80,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		let h = tx.hash();
 
 		if !stem && tx.kernels.len() != 1 {
-			debug!(LOGGER, "Received regular multi-kernel transaction will attempt to deaggregate");
+			debug!(
+				LOGGER,
+				"Received regular multi-kernel transaction will attempt to deaggregate"
+			);
 			if let Err(e) = self.tx_pool
 				.write()
 				.unwrap()
@@ -97,7 +100,6 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
 			}
 		}
-
 	}
 
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {

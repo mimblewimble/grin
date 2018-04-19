@@ -419,9 +419,12 @@ where
 		match self.deaggregate_transaction(tx.clone()) {
 			Ok(deaggragated_tx) => self.add_to_memory_pool(tx_source, deaggragated_tx, stem),
 			Err(e) => {
-				debug!(LOGGER,"Could not deaggregate multi-kernel transaction: {:?}", e);
+				debug!(
+					LOGGER,
+					"Could not deaggregate multi-kernel transaction: {:?}", e
+				);
 				self.add_to_memory_pool(tx_source, tx, stem)
-			},
+			}
 		}
 	}
 
