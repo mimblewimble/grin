@@ -22,9 +22,9 @@ use core::core;
 use p2p;
 use pool;
 use store;
-use pow;
 use wallet;
 use core::global::ChainTypes;
+use core::pow;
 
 /// Error type wrapping underlying module errors.
 #[derive(Debug)]

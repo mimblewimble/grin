@@ -25,7 +25,7 @@ use std::time;
 use common::adapters::*;
 use api;
 use chain;
-use core::{consensus, genesis, global};
+use core::{pow, consensus, genesis, global};
 use core::core::target::Difficulty;
 use core::core::hash::Hashed;
 use grin::dandelion_monitor;
@@ -36,7 +36,6 @@ use grin::seed;
 use grin::sync;
 use common::types::*;
 use common::stats::*;
-use pow;
 use util::LOGGER;
 
 /// Grin server holding internal structures.
@@ -118,7 +117,8 @@ impl Server {
 			global::ChainTypes::Testnet1 => genesis::genesis_testnet1(),
 			global::ChainTypes::Testnet2 => genesis::genesis_testnet2(),
 			global::ChainTypes::AutomatedTesting => genesis::genesis_dev(),
-			_ => pow::mine_genesis_block()?,
+			global::ChainTypes::UserTesting => genesis::genesis_dev(),
+			global::ChainTypes::Mainnet => genesis::genesis_testnet2(), //TODO: Fix, obviously
 		};
 
 		info!(LOGGER, "Starting server, genesis block: {}", genesis.hash());

@@ -33,43 +33,27 @@ extern crate rand;
 extern crate serde;
 extern crate time;
 
-extern crate grin_core as core;
 extern crate grin_util as util;
 
 mod siphash;
 pub mod cuckoo;
 
-use core::consensus;
-use core::core::BlockHeader;
-use core::core::Proof;
-use core::core::target::Difficulty;
-use core::global;
-use core::genesis;
-use cuckoo::{Cuckoo, Error};
-
-/// Should be implemented by anything providing mining services
-///
-
-pub trait MiningWorker {
-	/// This only sets parameters and does initialisation work now
-	fn new(ease: u32, sizeshift: u32, proof_size: usize) -> Self
-	where
-		Self: Sized;
-
-	/// Actually perform a mining attempt on the given input and
-	/// return a proof if found
-	fn mine(&mut self, header: &[u8]) -> Result<Proof, Error>;
-}
+use consensus;
+use core::{BlockHeader, Block};
+use core::target::Difficulty;
+use global;
+use genesis;
+use pow::cuckoo::{Cuckoo, Error};
 
 /// Validates the proof of work of a given header, and that the proof of work
 /// satisfies the requirements of the header.
-pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u32) -> bool {
+pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u8) -> bool {
 	Cuckoo::new(&bh.pre_pow_hash()[..], cuckoo_sz)
 		.verify(bh.pow.clone(), consensus::EASINESS as u64)
 }
 
 /// Mines a genesis block using the internal miner
-pub fn mine_genesis_block() -> Result<core::core::Block, Error> {
+pub fn mine_genesis_block() -> Result<Block, Error> {
 	let mut gen = genesis::genesis_testnet2();
 	if global::is_user_testing_mode() || global::is_automated_testing_mode() {
 		gen = genesis::genesis_dev();
@@ -79,24 +63,21 @@ pub fn mine_genesis_block() -> Result<core::core::Block, Error> {
 	// total_difficulty on the genesis header *is* the difficulty of that block
 	let genesis_difficulty = gen.header.total_difficulty.clone();
 
-	let sz = global::sizeshift() as u32;
+	let sz = global::sizeshift();
 	let proof_size = global::proofsize();
 
-	let mut miner: Box<MiningWorker> =
-		Box::new(cuckoo::Miner::new(consensus::EASINESS, sz, proof_size));
-
-	pow_size(&mut *miner, &mut gen.header, genesis_difficulty, sz as u32).unwrap();
+	pow_size(&mut gen.header, genesis_difficulty, proof_size, sz).unwrap();
 	Ok(gen)
 }
 
 /// Runs a proof of work computation over the provided block using the provided
 /// Mining Worker, until the required difficulty target is reached. May take a
 /// while for a low target...
-pub fn pow_size<T: MiningWorker + ?Sized>(
-	miner: &mut T,
+pub fn pow_size(
 	bh: &mut BlockHeader,
 	diff: Difficulty,
-	_: u32,
+	proof_size: usize,
+	sz: u8,
 ) -> Result<(), Error> {
 	let start_nonce = bh.nonce;
 
@@ -113,7 +94,7 @@ pub fn pow_size<T: MiningWorker + ?Sized>(
 
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good
-		if let Ok(proof) = miner.mine(&pow_hash[..]) {
+		if let Ok(proof) = cuckoo::Miner::new(&pow_hash[..], consensus::EASINESS,proof_size,sz).mine()  {
 			if proof.clone().to_difficulty() >= diff {
 				bh.pow = proof.clone();
 				return Ok(());

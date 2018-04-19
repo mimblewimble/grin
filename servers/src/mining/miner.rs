@@ -26,13 +26,14 @@ use core::consensus;
 use core::core::Proof;
 use core::core::{Block, BlockHeader};
 use core::core::hash::{Hash, Hashed};
-use pow::{cuckoo, MiningWorker};
+use core::pow::cuckoo;
 use common::types::StratumServerConfig;
 use util::LOGGER;
 
 use chain;
 use pool;
 use mining::mine_block;
+use core::global;
 
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
@@ -74,11 +75,9 @@ impl Miner {
 
 	/// The inner part of mining loop for the internal miner
 	/// kept around mostly for automated testing purposes
-	pub fn inner_loop_sync_internal<T: MiningWorker>(
+	pub fn inner_mining_loop(
 		&self,
-		miner: &mut T,
 		b: &mut Block,
-		cuckoo_size: u32,
 		head: &BlockHeader,
 		attempt_time_per_block: u32,
 		latest_hash: &mut Hash,
@@ -91,7 +90,7 @@ impl Miner {
 			LOGGER,
 			"(Server ID: {}) Mining Cuckoo{} for max {}s on {} @ {} [{}].",
 			self.debug_output_id,
-			cuckoo_size,
+			global::sizeshift(),
 			attempt_time_per_block,
 			b.header.total_difficulty,
 			b.header.height,
@@ -102,7 +101,10 @@ impl Miner {
 		let mut sol = None;
 		while head.hash() == *latest_hash && time::get_time().sec < deadline {
 			let pow_hash = b.header.pre_pow_hash();
-			if let Ok(proof) = miner.mine(&pow_hash[..]) {
+			if let Ok(proof) = cuckoo::Miner::new(&pow_hash[..],
+					consensus::EASINESS,
+					global::proofsize(),
+					global::sizeshift()).mine()  {
 				let proof_diff = proof.clone().to_difficulty();
 				if proof_diff >= (b.header.total_difficulty.clone() - head.total_difficulty.clone())
 				{
@@ -130,13 +132,11 @@ impl Miner {
 
 	/// Starts the mining loop, building a new block on top of the existing
 	/// chain anytime required and looking for PoW solution.
-	pub fn run_loop(&self, cuckoo_size: u32, proof_size: usize) {
+	pub fn run_loop(&self) {
 		info!(
 			LOGGER,
 			"(Server ID: {}) Starting test miner loop.", self.debug_output_id
 		);
-
-		let mut miner = cuckoo::Miner::new(consensus::EASINESS, cuckoo_size, proof_size);
 
 		// iteration, we keep the returned derivation to provide it back when
 		// nothing has changed. We only want to create a new key_id for each new block.
@@ -161,11 +161,8 @@ impl Miner {
 				wallet_listener_url,
 			);
 
-			let mut sol = None;
-			sol = self.inner_loop_sync_internal(
-				&mut miner,
+			let sol = self.inner_mining_loop(
 				&mut b,
-				cuckoo_size,
 				&head,
 				60,
 				&mut latest_hash,

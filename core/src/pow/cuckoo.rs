@@ -22,9 +22,8 @@ use std::cmp;
 
 use blake2;
 
-use core::core::Proof;
-use siphash::siphash24;
-use MiningWorker;
+use core::Proof;
+use pow::siphash::siphash24;
 
 const MAXPATHLEN: usize = 8192;
 
@@ -55,7 +54,7 @@ impl Cuckoo {
 	/// Initializes a new Cuckoo Cycle setup, using the provided byte array to
 	/// generate a seed. In practice for PoW applications the byte array is a
 	/// serialized block header.
-	pub fn new(header: &[u8], sizeshift: u32) -> Cuckoo {
+	pub fn new(header: &[u8], sizeshift: u8) -> Cuckoo {
 		let size = 1 << sizeshift;
 		let hashed = blake2::blake2b::blake2b(32, &[], header);
 		let hashed = hashed.as_bytes();
@@ -148,32 +147,8 @@ impl Cuckoo {
 pub struct Miner {
 	easiness: u64,
 	proof_size: usize,
-	cuckoo: Option<Cuckoo>,
+	cuckoo: Cuckoo,
 	graph: Vec<u32>,
-	sizeshift: u32,
-}
-
-impl MiningWorker for Miner {
-	/// Creates a new miner
-	fn new(ease: u32, sizeshift: u32, proof_size: usize) -> Miner {
-		let size = 1 << sizeshift;
-		let graph = vec![0; size + 1];
-		let easiness = (ease as u64) * (size as u64) / 100;
-		Miner {
-			easiness: easiness,
-			cuckoo: None,
-			graph: graph,
-			sizeshift: sizeshift,
-			proof_size: proof_size,
-		}
-	}
-
-	fn mine(&mut self, header: &[u8]) -> Result<Proof, Error> {
-		let size = 1 << self.sizeshift;
-		self.graph = vec![0; size + 1];
-		self.cuckoo = Some(Cuckoo::new(header, self.sizeshift));
-		self.mine_impl()
-	}
 }
 
 /// What type of cycle we have found?
@@ -187,13 +162,27 @@ enum CycleSol {
 }
 
 impl Miner {
+  /// Creates a new miner
+	pub fn new(header: &[u8], ease: u32, proof_size: usize, sizeshift: u8) -> Miner {
+		let cuckoo = Cuckoo::new(header, sizeshift);
+		let size = 1 << sizeshift;
+		let graph = vec![0; size + 1];
+		let easiness = (ease as u64) * (size as u64) / 100;
+		Miner {
+			easiness: easiness,
+			cuckoo: cuckoo,
+			graph: graph,
+			proof_size: proof_size,
+		}
+	}
+
 	/// Searches for a solution
-	pub fn mine_impl(&mut self) -> Result<Proof, Error> {
+	pub fn mine(&mut self) -> Result<Proof, Error> {
 		let mut us = [0; MAXPATHLEN];
 		let mut vs = [0; MAXPATHLEN];
 		for nonce in 0..self.easiness {
-			us[0] = self.cuckoo.as_mut().unwrap().new_node(nonce, 0) as u32;
-			vs[0] = self.cuckoo.as_mut().unwrap().new_node(nonce, 1) as u32;
+			us[0] = self.cuckoo.new_node(nonce, 0) as u32;
+			vs[0] = self.cuckoo.new_node(nonce, 1) as u32;
 			let u = self.graph[us[0] as usize];
 			let v = self.graph[vs[0] as usize];
 			if us[0] == 0 {
@@ -292,7 +281,7 @@ impl Miner {
 		let mut n = 0;
 		let mut sol = vec![0; self.proof_size];
 		for nonce in 0..self.easiness {
-			let edge = self.cuckoo.as_mut().unwrap().new_edge(nonce);
+			let edge = self.cuckoo.new_edge(nonce);
 			if cycle.contains(&edge) {
 				sol[n] = nonce as u32;
 				n += 1;
