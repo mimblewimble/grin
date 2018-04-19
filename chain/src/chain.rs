@@ -171,29 +171,38 @@ impl Chain {
 
 		match head {
 			Ok(head) => {
-				// Use current chain tip if we have one.
-				// Note: We are rewinding and validating against a writeable extension.
-				// If validation is successful we will truncate the backend files
-				// to match the provided block header.
-				let header = store.get_block_header(&head.last_block_h)?;
-				txhashset::extending(&mut txhashset, |extension| {
-					debug!(
-						LOGGER,
-						"chain: init: rewinding to last good block {} @ {}",
-						header.height,
-						header.hash(),
-					);
+				let mut head = head;
+				loop {
+					// Use current chain tip if we have one.
+					// Note: We are rewinding and validating against a writeable extension.
+					// If validation is successful we will truncate the backend files
+					// to match the provided block header.
+					let header = store.get_block_header(&head.last_block_h)?;
+					let res = txhashset::extending(&mut txhashset, |extension| {
+						debug!(
+							LOGGER,
+							"chain: init: rewinding and validating before we start... {} at {}",
+							header.hash(),
+							header.height,
+						);
 
-					extension.rewind(&header)?;
-
-					debug!(
-						LOGGER,
-						"chain: init: validating txhashset before we start...",
-					);
-
-					extension.validate(&header, true)?;
-					Ok(())
-				})?;
+						extension.rewind(&header)?;
+						extension.validate(&header, true)
+					});
+					if res.is_ok() {
+						break;
+					} else {
+						// We may have corrupted the MMR backend files
+						// last time we stopped the node.
+						// If this appears to be the case
+						// delete the "bad" block and revert the head
+						// to the previous header and try again
+						let _ = store.delete_block(&header.hash());
+						let prev_header = store.get_block_header(&head.prev_block_h)?;
+						head = Tip::from_block(&prev_header);
+						store.save_head(&head)?;
+					}
+				}
 			}
 			Err(NotFoundErr) => {
 				let tip = Tip::from_block(&genesis.header);

@@ -145,6 +145,11 @@ impl AppendOnlyFile {
 			return vec![];
 		}
 		let mmap = self.mmap.as_ref().unwrap();
+
+		if mmap.len() < (offset + length) {
+			return vec![];
+		}
+
 		(&mmap[offset..(offset + length)]).to_vec()
 	}
 
