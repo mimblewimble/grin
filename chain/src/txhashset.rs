@@ -33,10 +33,10 @@ use core::core::hash::{Hash, Hashed};
 use core::ser::{PMMRIndexHashable, PMMRable};
 
 use grin_store;
-use grin_store::pmmr::{PMMRBackend, PMMRFileMetadata};
+use grin_store::pmmr::PMMRBackend;
 use grin_store::types::prune_noop;
 use keychain::BlindingFactor;
-use types::{ChainStore, Error, PMMRFileMetadataCollection, TxHashSetRoots};
+use types::{BlockMarker, ChainStore, Error, TxHashSetRoots};
 use util::{zip, LOGGER};
 
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
@@ -60,21 +60,23 @@ where
 	fn new(
 		root_dir: String,
 		file_name: &str,
-		index_md: Option<PMMRFileMetadata>,
+		height: u64,
+		hash_bytes: u64,
+		data_bytes: u64,
 	) -> Result<PMMRHandle<T>, Error> {
 		let path = Path::new(&root_dir).join(TXHASHSET_SUBDIR).join(file_name);
 		fs::create_dir_all(path.clone())?;
-		let be = PMMRBackend::new(path.to_str().unwrap().to_string(), index_md)?;
+		let be = PMMRBackend::new(
+			path.to_str().unwrap().to_string(),
+			height,
+			hash_bytes,
+			data_bytes,
+		)?;
 		let sz = be.unpruned_size()?;
 		Ok(PMMRHandle {
 			backend: be,
 			last_pos: sz,
 		})
-	}
-
-	/// Return last written positions of hash file and data file
-	pub fn last_file_positions(&self) -> PMMRFileMetadata {
-		self.backend.last_file_positions()
 	}
 }
 
@@ -102,7 +104,8 @@ impl TxHashSet {
 	pub fn open(
 		root_dir: String,
 		commit_index: Arc<ChainStore>,
-		last_file_positions: Option<PMMRFileMetadataCollection>,
+		height: u64,
+		marker: &BlockMarker,
 	) -> Result<TxHashSet, Error> {
 		let output_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, OUTPUT_SUBDIR]
 			.iter()
@@ -119,21 +122,31 @@ impl TxHashSet {
 			.collect();
 		fs::create_dir_all(kernel_file_path.clone())?;
 
-		let mut output_md = None;
-		let mut rproof_md = None;
-		let mut kernel_md = None;
-
-		if let Some(p) = last_file_positions {
-			output_md = Some(p.output_file_md);
-			rproof_md = Some(p.rproof_file_md);
-			kernel_md = Some(p.kernel_file_md);
-		}
+		// TODO - we need to map from pos in the marker to byte offsets here
 
 		Ok(TxHashSet {
-			output_pmmr_h: PMMRHandle::new(root_dir.clone(), OUTPUT_SUBDIR, output_md)?,
-			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR, rproof_md)?,
-			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR, kernel_md)?,
-			commit_index: commit_index,
+			output_pmmr_h: PMMRHandle::new(
+				root_dir.clone(),
+				OUTPUT_SUBDIR,
+				height,
+				out_hash_bytes,
+				out_data_bytes,
+			)?,
+			rproof_pmmr_h: PMMRHandle::new(
+				root_dir.clone(),
+				RANGE_PROOF_SUBDIR,
+				height,
+				rproof_hash_bytes,
+				rproof_data_bytes,
+			)?,
+			kernel_pmmr_h: PMMRHandle::new(
+				root_dir.clone(),
+				KERNEL_SUBDIR,
+				height,
+				kernel_hash_bytes,
+				kernel_data_bytes,
+			)?,
+			commit_index,
 		})
 	}
 
@@ -212,18 +225,18 @@ impl TxHashSet {
 	}
 
 	/// Output and kernel MMR indexes at the end of the provided block
-	pub fn indexes_at(&self, bh: &Hash) -> Result<(u64, u64), Error> {
+	pub fn indexes_at(&self, bh: &Hash) -> Result<BlockMarker, Error> {
 		self.commit_index.get_block_marker(bh).map_err(&From::from)
 	}
 
-	/// Last file positions of Output set.. hash file,data file
-	pub fn last_file_metadata(&self) -> PMMRFileMetadataCollection {
-		PMMRFileMetadataCollection::new(
-			self.output_pmmr_h.last_file_positions(),
-			self.rproof_pmmr_h.last_file_positions(),
-			self.kernel_pmmr_h.last_file_positions(),
-		)
-	}
+	// /// Last file positions of Output set.. hash file,data file
+	// pub fn last_file_metadata(&self) -> PMMRFileMetadataCollection {
+	// 	PMMRFileMetadataCollection::new(
+	// 		self.output_pmmr_h.last_file_positions(),
+	// 		self.rproof_pmmr_h.last_file_positions(),
+	// 		self.kernel_pmmr_h.last_file_positions(),
+	// 	)
+	// }
 
 	/// Get sum tree roots
 	/// TODO: Return data instead of hashes
@@ -367,7 +380,7 @@ pub struct Extension<'a> {
 
 	commit_index: Arc<ChainStore>,
 	new_output_commits: HashMap<Commitment, u64>,
-	new_block_markers: HashMap<Hash, (u64, u64)>,
+	new_block_markers: HashMap<Hash, BlockMarker>,
 	rollback: bool,
 }
 
@@ -427,11 +440,11 @@ impl<'a> Extension<'a> {
 		}
 
 		// finally, recording the PMMR positions after this block for future rewind
-		let last_output_pos = self.output_pmmr.unpruned_size();
-		let last_kernel_pos = self.kernel_pmmr.unpruned_size();
-		self.new_block_markers
-			.insert(b.hash(), (last_output_pos, last_kernel_pos));
-
+		let marker = BlockMarker {
+			output_pos: self.output_pmmr.unpruned_size(),
+			kernel_pos: self.kernel_pmmr.unpruned_size(),
+		};
+		self.new_block_markers.insert(b.hash(), marker);
 		Ok(())
 	}
 
@@ -440,8 +453,8 @@ impl<'a> Extension<'a> {
 		for (commit, pos) in &self.new_output_commits {
 			self.commit_index.save_output_pos(commit, *pos)?;
 		}
-		for (bh, tag) in &self.new_block_markers {
-			self.commit_index.save_block_marker(bh, tag)?;
+		for (bh, marker) in &self.new_block_markers {
+			self.commit_index.save_block_marker(bh, marker)?;
 		}
 		Ok(())
 	}
@@ -566,35 +579,28 @@ impl<'a> Extension<'a> {
 	pub fn rewind(&mut self, block_header: &BlockHeader) -> Result<(), Error> {
 		let hash = block_header.hash();
 		let height = block_header.height;
-		debug!(LOGGER, "Rewind to header at {} [{}]", height, hash); // keep this
+		debug!(LOGGER, "Rewind to header {} @ {}", height, hash);
 
-		// rewind each MMR
-		let (out_pos_rew, kern_pos_rew) = self.commit_index.get_block_marker(&hash)?;
-		self.rewind_pos(height, out_pos_rew, kern_pos_rew)?;
+		// rewind our MMRs to the appropriate pos
+		// based on block height and block marker
+		let marker = self.commit_index.get_block_marker(&hash)?;
+		self.rewind_to_marker(height, &marker)?;
 		Ok(())
 	}
 
 	/// Rewinds the MMRs to the provided positions, given the output and
 	/// kernel we want to rewind to.
-	fn rewind_pos(
-		&mut self,
-		height: u64,
-		out_pos_rew: u64,
-		kern_pos_rew: u64,
-	) -> Result<(), Error> {
-		debug!(
-			LOGGER,
-			"Rewind txhashset to output pos: {}, kernel pos: {}", out_pos_rew, kern_pos_rew,
-		);
+	fn rewind_to_marker(&mut self, height: u64, marker: &BlockMarker) -> Result<(), Error> {
+		debug!(LOGGER, "Rewind txhashset to {}, {:?}", height, marker);
 
 		self.output_pmmr
-			.rewind(out_pos_rew, height as u32)
+			.rewind(marker.output_pos, height as u32)
 			.map_err(&Error::TxHashSetErr)?;
 		self.rproof_pmmr
-			.rewind(out_pos_rew, height as u32)
+			.rewind(marker.output_pos, height as u32)
 			.map_err(&Error::TxHashSetErr)?;
 		self.kernel_pmmr
-			.rewind(kern_pos_rew, height as u32)
+			.rewind(marker.kernel_pos, height as u32)
 			.map_err(&Error::TxHashSetErr)?;
 
 		Ok(())

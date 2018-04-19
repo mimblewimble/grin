@@ -166,26 +166,21 @@ impl Chain {
 		// check if we have a head in store, otherwise the genesis block is it
 		let head = store.head();
 
-		let txhashset_md = match head {
-			Ok(h) => {
-				// Add the height to the metadata for the use of the rewind log, as this isn't
-				// stored
-				if let Ok(mut ts) = store.get_block_pmmr_file_metadata(&h.last_block_h) {
-					ts.output_file_md.block_height = h.height;
-					ts.rproof_file_md.block_height = h.height;
-					ts.kernel_file_md.block_height = h.height;
-					Some(ts)
-				} else {
-					debug!(LOGGER, "metadata not found for {} @ {}", h.height, h.hash());
-					None
-				}
-			}
-			Err(NotFoundErr) => None,
-			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
+		let (height, marker) = match head {
+			Ok(head) => {
+				let marker = store.get_block_marker(&head.last_block_h)?;
+				(head.height, marker)
+			},
+			Err(NotFoundErr) => (0, BlockMarker::default()),
+			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned()))
 		};
 
-		let mut txhashset =
-			txhashset::TxHashSet::open(db_root.clone(), store.clone(), txhashset_md)?;
+		let mut txhashset = txhashset::TxHashSet::open(
+			db_root.clone(),
+			store.clone(),
+			height,
+			&marker,
+		)?;
 
 		let head = store.head();
 
@@ -210,7 +205,11 @@ impl Chain {
 					genesis.header.nonce,
 					genesis.header.pow,
 				);
-				pipe::save_pmmr_metadata(&tip, &txhashset, store.clone())?;
+
+				// TODO - have we saved the block_marker yet?
+				// TODO - do we need to save it here?
+				// pipe::save_pmmr_metadata(&tip, &txhashset, store.clone())?;
+
 				tip
 			}
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
@@ -502,18 +501,14 @@ impl Chain {
 	/// at the provided block hash.
 	pub fn txhashset_read(&self, h: Hash) -> Result<(u64, u64, File), Error> {
 		// get the indexes for the block
-		let out_index: u64;
-		let kernel_index: u64;
-		{
+		let marker = {
 			let txhashset = self.txhashset.read().unwrap();
-			let (oi, ki) = txhashset.indexes_at(&h)?;
-			out_index = oi;
-			kernel_index = ki;
-		}
+			txhashset.indexes_at(&h)?
+		};
 
 		// prepares the zip and return the corresponding Read
 		let txhashset_reader = txhashset::zip_read(self.db_root.clone())?;
-		Ok((out_index, kernel_index, txhashset_reader))
+		Ok((marker.output_pos, marker.kernel_pos, txhashset_reader))
 	}
 
 	/// Writes a reading view on a txhashset state that's been provided to us.
@@ -539,15 +534,24 @@ impl Chain {
 
 		// write the block marker so we can safely rewind to
 		// the pos for that block when we validate the extension below
-		self.store
-			.save_block_marker(&h, &(rewind_to_output, rewind_to_kernel))?;
+		let marker = BlockMarker {
+			output_pos: rewind_to_output,
+			kernel_pos: rewind_to_kernel,
+		};
+		self.store.save_block_marker(&h, &marker)?;
 
 		debug!(
 			LOGGER,
 			"Going to validate new txhashset, might take some time..."
 		);
-		let mut txhashset =
-			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), None)?;
+
+		let mut txhashset = txhashset::TxHashSet::open(
+			self.db_root.clone(),
+			self.store.clone(),
+			header.height,
+			&marker,
+		)?;
+
 		txhashset::extending(&mut txhashset, |extension| {
 			extension.validate(&header, false)?;
 			extension.rebuild_index()?;
@@ -621,7 +625,6 @@ impl Chain {
 			match self.store.get_block(&current.hash()) {
 				Ok(b) => {
 					self.store.delete_block(&b.hash())?;
-					self.store.delete_block_pmmr_file_metadata(&b.hash())?;
 					self.store.delete_block_marker(&b.hash())?;
 				}
 				Err(NotFoundErr) => {
@@ -778,15 +781,15 @@ impl Chain {
 			.map_err(|e| Error::StoreErr(e, "chain block exists".to_owned()))
 	}
 
-	/// Retrieve the file index metadata for a given block
-	pub fn get_block_pmmr_file_metadata(
-		&self,
-		h: &Hash,
-	) -> Result<PMMRFileMetadataCollection, Error> {
-		self.store
-			.get_block_pmmr_file_metadata(h)
-			.map_err(|e| Error::StoreErr(e, "retrieve block pmmr metadata".to_owned()))
-	}
+	// /// Retrieve the file index metadata for a given block
+	// pub fn get_block_pmmr_file_metadata(
+	// 	&self,
+	// 	h: &Hash,
+	// ) -> Result<PMMRFileMetadataCollection, Error> {
+	// 	self.store
+	// 		.get_block_pmmr_file_metadata(h)
+	// 		.map_err(|e| Error::StoreErr(e, "retrieve block pmmr metadata".to_owned()))
+	// }
 
 	/// Rebuilds height index. Reachable as endpoint POST /chain/height-index
 	pub fn rebuild_header_by_height(&self) -> Result<(), Error> {
