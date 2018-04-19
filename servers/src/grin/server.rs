@@ -37,6 +37,7 @@ use grin::sync;
 use common::types::*;
 use common::stats::*;
 use util::LOGGER;
+use mining::test_miner::Miner;
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -276,6 +277,44 @@ impl Server {
 					cuckoo_size as u32,
 					proof_size,
 				);
+			});
+	}
+
+	/// Start mining for blocks internally on a separate thread. Relies on internal miner,
+	/// and should only be used for automated testing. Burns reward if wallet_listener_url
+	/// is 'None'
+	pub fn start_test_miner(&self,  wallet_listener_url: Option<String>) {
+		let currently_syncing = self.currently_syncing.clone();
+		let config_wallet_url = match wallet_listener_url.clone() {
+			Some(u) => u,
+			None => String::from("http://127.0.0.1:13415"),
+		};
+
+		let config = StratumServerConfig {
+			attempt_time_per_block : 60,
+			burn_reward: false,
+			enable_stratum_server: None,
+			stratum_server_addr: None,
+			wallet_listener_url: config_wallet_url,
+		};
+
+		let mut miner = Miner::new(
+			config.clone(),
+			self.chain.clone(),
+			self.tx_pool.clone(),
+			self.stop.clone(),
+		);
+		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.port));
+		let _ = thread::Builder::new()
+			.name("test_miner".to_string())
+			.spawn(move || {
+				// TODO push this down in the run loop so miner gets paused anytime we
+				// decide to sync again
+				let secs_5 = time::Duration::from_secs(5);
+				while currently_syncing.load(Ordering::Relaxed) {
+					thread::sleep(secs_5);
+				}
+				miner.run_loop(wallet_listener_url);
 			});
 	}
 
