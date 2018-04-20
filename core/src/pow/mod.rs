@@ -122,9 +122,10 @@ mod test {
 	use genesis;
 	use global::ChainTypes;
 
+	/// We'll be generating genesis blocks differently
+	#[ignore]
 	#[test]
 	fn genesis_pow() {
-		global::set_mining_mode(ChainTypes::AutomatedTesting);
 		let mut b = genesis::genesis_dev();
 		b.header.nonce = 485;
 		pow_size(
