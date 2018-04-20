@@ -196,8 +196,7 @@ impl Chain {
 						// We may have corrupted the MMR backend files
 						// last time we stopped the node.
 						// If this appears to be the case
-						// delete the "bad" block and revert the head
-						// to the previous header and try again
+						// revert the head to the previous header and try again
 						let _ = store.delete_block(&header.hash());
 						let prev_header = store.get_block_header(&head.prev_block_h)?;
 						head = Tip::from_block(&prev_header);

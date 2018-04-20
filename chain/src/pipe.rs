@@ -112,33 +112,8 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		Ok(h)
 	});
 
-	// TODO - what's the last thing that happens here?
-	// TODO - can we update the block_marker as the final step safely?
-
-	// match result {
-	// 	Ok(t) => {
-	// save_pmmr_metadata(&Tip::from_block(&b.header), &txhashset,
-	// ctx.store.clone())?; 		Ok(t)
-	// 	}
-	// 	Err(e) => Err(e),
-	// }
-
 	result
 }
-
-// /// Save pmmr index location for a given block
-// pub fn save_pmmr_metadata(
-// 	t: &Tip,
-// 	txhashset: &txhashset::TxHashSet,
-// 	store: Arc<ChainStore>,
-// ) -> Result<(), Error> {
-// 	// Save pmmr file metadata for this block
-// 	let block_file_md = txhashset.last_file_metadata();
-// 	store
-// 		.save_block_pmmr_file_metadata(&t.last_block_h, &block_file_md)
-// 		.map_err(|e| Error::StoreErr(e, "saving pmmr file metadata".to_owned()))?;
-// 	Ok(())
-// }
 
 /// Process the block header.
 /// This is only ever used during sync and uses a context based on sync_head.
