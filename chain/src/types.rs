@@ -328,24 +328,6 @@ pub trait ChainStore: Send + Sync {
 	/// Deletes a block marker associated with the provided hash
 	fn delete_block_marker(&self, bh: &Hash) -> Result<(), store::Error>;
 
-	// /// Saves information about the last written PMMR file positions for each
-	// /// committed block
-	// fn save_block_pmmr_file_metadata(
-	// 	&self,
-	// 	h: &Hash,
-	// 	md: &PMMRFileMetadataCollection,
-	// ) -> Result<(), store::Error>;
-	//
-	// /// Retrieves stored pmmr file metadata information for a given block
-	// fn get_block_pmmr_file_metadata(
-	// 	&self,
-	// 	h: &Hash,
-	// ) -> Result<PMMRFileMetadataCollection, store::Error>;
-	//
-	// /// Delete stored pmmr file metadata information for a given block
-	// fn delete_block_pmmr_file_metadata(&self, h: &Hash) -> Result<(),
-	// store::Error>;
-
 	/// Saves the provided block header at the corresponding height. Also check
 	/// the consistency of the height chain in store by assuring previous
 	/// headers are also at their respective heights.
@@ -354,61 +336,6 @@ pub trait ChainStore: Send + Sync {
 	/// Similar to setup_height but without handling fork
 	fn build_by_height_index(&self, header: &BlockHeader, force: bool) -> Result<(), store::Error>;
 }
-
-// /// Single serializable struct to hold metadata about all PMMR file position
-// /// for a given block
-// #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-// pub struct PMMRFileMetadataCollection {
-// 	/// file metadata for the output file
-// 	pub output_file_md: PMMRFileMetadata,
-// 	/// file metadata for the rangeproof file
-// 	pub rproof_file_md: PMMRFileMetadata,
-// 	/// file metadata for the kernel file
-// 	pub kernel_file_md: PMMRFileMetadata,
-// }
-//
-// impl Writeable for PMMRFileMetadataCollection {
-// 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-// 		self.output_file_md.write(writer)?;
-// 		self.rproof_file_md.write(writer)?;
-// 		self.kernel_file_md.write(writer)?;
-// 		Ok(())
-// 	}
-// }
-//
-// impl Readable for PMMRFileMetadataCollection {
-// fn read(reader: &mut Reader) -> Result<PMMRFileMetadataCollection,
-// ser::Error> { 		Ok(PMMRFileMetadataCollection {
-// 			output_file_md: PMMRFileMetadata::read(reader)?,
-// 			rproof_file_md: PMMRFileMetadata::read(reader)?,
-// 			kernel_file_md: PMMRFileMetadata::read(reader)?,
-// 		})
-// 	}
-// }
-//
-// impl PMMRFileMetadataCollection {
-// 	/// Return empty with all file positions = 0
-// 	pub fn empty() -> PMMRFileMetadataCollection {
-// 		PMMRFileMetadataCollection {
-// 			output_file_md: PMMRFileMetadata::empty(),
-// 			rproof_file_md: PMMRFileMetadata::empty(),
-// 			kernel_file_md: PMMRFileMetadata::empty(),
-// 		}
-// 	}
-//
-// 	/// Helper to create a new collection
-// 	pub fn new(
-// 		output_md: PMMRFileMetadata,
-// 		rproof_md: PMMRFileMetadata,
-// 		kernel_md: PMMRFileMetadata,
-// 	) -> PMMRFileMetadataCollection {
-// 		PMMRFileMetadataCollection {
-// 			output_file_md: output_md,
-// 			rproof_file_md: rproof_md,
-// 			kernel_file_md: kernel_md,
-// 		}
-// 	}
-// }
 
 /// Bridge between the chain pipeline and the rest of the system. Handles
 /// downstream processing of valid blocks by the rest of the system, most

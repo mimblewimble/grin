@@ -193,15 +193,6 @@ impl TxHashSet {
 		self.commit_index.get_block_marker(bh).map_err(&From::from)
 	}
 
-	// /// Last file positions of Output set.. hash file,data file
-	// pub fn last_file_metadata(&self) -> PMMRFileMetadataCollection {
-	// 	PMMRFileMetadataCollection::new(
-	// 		self.output_pmmr_h.last_file_positions(),
-	// 		self.rproof_pmmr_h.last_file_positions(),
-	// 		self.kernel_pmmr_h.last_file_positions(),
-	// 	)
-	// }
-
 	/// Get sum tree roots
 	/// TODO: Return data instead of hashes
 	pub fn roots(&mut self) -> (Hash, Hash, Hash) {

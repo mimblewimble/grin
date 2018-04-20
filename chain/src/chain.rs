@@ -197,7 +197,10 @@ impl Chain {
 						// last time we stopped the node.
 						// If this appears to be the case
 						// revert the head to the previous header and try again
-						let _ = store.delete_block(&header.hash());
+
+						// TODO - how to deal with the old bad block lying around?
+						// let _ = store.delete_block(&header.hash());
+
 						let prev_header = store.get_block_header(&head.prev_block_h)?;
 						head = Tip::from_block(&prev_header);
 						store.save_head(&head)?;

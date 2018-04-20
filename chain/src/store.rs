@@ -202,29 +202,6 @@ impl ChainStore for ChainKVStore {
 			.delete(&to_key(BLOCK_MARKER_PREFIX, &mut bh.to_vec()))
 	}
 
-	// fn save_block_pmmr_file_metadata(
-	// 	&self,
-	// 	h: &Hash,
-	// 	md: &PMMRFileMetadataCollection,
-	// ) -> Result<(), Error> {
-	// 	self.db.put_ser(
-	// 		&to_key(BLOCK_PMMR_FILE_METADATA_PREFIX, &mut h.to_vec())[..],
-	// 		&md,
-	// 	)
-	// }
-	//
-	// fn get_block_pmmr_file_metadata(&self, h: &Hash) ->
-	// Result<PMMRFileMetadataCollection, Error> { 	option_to_not_found(
-	// 		self.db
-	// 			.get_ser(&to_key(BLOCK_PMMR_FILE_METADATA_PREFIX, &mut h.to_vec())),
-	// 	)
-	// }
-	//
-	// fn delete_block_pmmr_file_metadata(&self, h: &Hash) -> Result<(), Error> {
-	// 	self.db
-	// 		.delete(&to_key(BLOCK_PMMR_FILE_METADATA_PREFIX, &mut h.to_vec())[..])
-	// }
-
 	/// Maintain consistency of the "header_by_height" index by traversing back
 	/// through the current chain and updating "header_by_height" until we reach
 	/// a block_header that is consistent with its height (everything prior to
