@@ -187,7 +187,8 @@ impl Chain {
 						);
 
 						extension.rewind(&header)?;
-						extension.validate(&header, true)
+						extension.validate_roots(&header)?;
+						Ok(())
 					});
 					if res.is_ok() {
 						break;

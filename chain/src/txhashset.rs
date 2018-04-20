@@ -590,6 +590,24 @@ impl<'a> Extension<'a> {
 		}
 	}
 
+	/// Validate the various MMR roots against the block header.
+	pub fn validate_roots(&self, header: &BlockHeader) -> Result<(), Error> {
+		// If we are validating the genesis block then
+		// we have no outputs or kernels.
+		// So we are done here.
+		if header.height == 0 {
+			return Ok(());
+		}
+
+		let roots = self.roots();
+		if roots.output_root != header.output_root || roots.rproof_root != header.range_proof_root
+			|| roots.kernel_root != header.kernel_root
+		{
+			return Err(Error::InvalidRoot);
+		}
+		Ok(())
+	}
+
 	/// Validate the txhashset state against the provided block header.
 	pub fn validate(&mut self, header: &BlockHeader, skip_rproofs: bool) -> Result<(), Error> {
 		// validate all hashes and sums within the trees
@@ -603,20 +621,7 @@ impl<'a> Extension<'a> {
 			return Err(Error::InvalidTxHashSet(e));
 		}
 
-		// If we are validating the genesis block then
-		// we have no outputs or kernels.
-		// So we are done here.
-		if header.height == 0 {
-			return Ok(());
-		}
-
-		// validate the tree roots against the block header
-		let roots = self.roots();
-		if roots.output_root != header.output_root || roots.rproof_root != header.range_proof_root
-			|| roots.kernel_root != header.kernel_root
-		{
-			return Err(Error::InvalidRoot);
-		}
+		self.validate_roots(header)?;
 
 		// the real magicking: the sum of all kernel excess should equal the sum
 		// of all Output commitments, minus the total supply
