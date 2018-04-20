@@ -18,6 +18,7 @@ use std::time::Duration;
 use std::net::{TcpListener, TcpStream};
 use std::io::{ErrorKind, Write};
 use std::error::Error;
+use std::sync::atomic::{AtomicBool, Ordering};
 use time;
 use util::LOGGER;
 use std::io::BufRead;
@@ -227,6 +228,7 @@ pub struct StratumServer {
 	current_block: Block,
 	current_difficulty: u64,
 	workers: Arc<Mutex<Vec<Worker>>>,
+	currently_syncing: Arc<AtomicBool>,
 }
 
 impl StratumServer {
@@ -244,6 +246,7 @@ impl StratumServer {
 			current_block: Block::default(),
 			current_difficulty: <u64>::max_value(),
 			workers: Arc::new(Mutex::new(Vec::new())),
+			currently_syncing: Arc::new(AtomicBool::new(false)),
 		}
 	}
 
@@ -308,8 +311,14 @@ impl StratumServer {
 						),
 						"keepalive" => self.handle_keepalive(),
 						"getjobtemplate" => {
-							let b = self.current_block.header.clone();
-							self.handle_getjobtemplate(b)
+							if self.currently_syncing.load(Ordering::Relaxed) {
+								let e = r#"{"code": -32701, "message": "Node is syncing - Please wait"}"#;
+								let err = e.to_string();
+								(err, true)
+							} else {
+								let b = self.current_block.header.clone();
+								self.handle_getjobtemplate(b)
+							}
 						}
 						"status" => {
 							self.handle_status(&stratum_stats.worker_stats[worker_stats_id])
@@ -531,6 +540,7 @@ impl StratumServer {
 		stratum_stats: Arc<RwLock<StratumStats>>,
 		cuckoo_size: u32,
 		proof_size: usize,
+		currently_syncing: Arc<AtomicBool>,
 	) {
 		info!(
 			LOGGER,
@@ -539,6 +549,8 @@ impl StratumServer {
 			cuckoo_size,
 			proof_size
 		);
+
+		self.currently_syncing = currently_syncing;
 
 		// "globals" for this function
 		let attempt_time_per_block = miner_config.attempt_time_per_block;
@@ -576,6 +588,10 @@ impl StratumServer {
 
 		// Main Loop
 		loop {
+			// If we're fallen into sync mode, (or are just starting up,
+			// tell connected clients to stop what they're doing
+			let mining_stopped = self.currently_syncing.load(Ordering::Relaxed);
+
 			// Remove workers with failed connections
 			self.clean_workers(&mut stratum_stats.clone());
 
@@ -586,7 +602,8 @@ impl StratumServer {
 			// Build a new block if:
 			//    There is a new block on the chain
 			// or We are rebuilding the current one to include new transactions
-			if current_hash != latest_hash || time::get_time().sec >= deadline {
+			// and we're not synching
+			if current_hash != latest_hash || time::get_time().sec >= deadline && !mining_stopped {
 				if current_hash != latest_hash {
 					// A brand new block, so we will generate a new key_id
 					key_id = None;

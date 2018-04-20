@@ -267,15 +267,12 @@ impl Server {
 		let _ = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {
-				let secs_5 = time::Duration::from_secs(5);
-				while currently_syncing.load(Ordering::Relaxed) {
-					thread::sleep(secs_5);
-				}
 				stratum_server.run_loop(
 					config.clone(),
 					stratum_stats,
 					cuckoo_size as u32,
 					proof_size,
+					currently_syncing,
 				);
 			});
 	}
