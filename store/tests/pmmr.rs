@@ -517,8 +517,7 @@ fn pmmr_compact_horizon() {
 	// recheck stored data
 	{
 		// recreate backend
-		let backend =
-			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string()).unwrap();
+		let backend = store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string()).unwrap();
 
 		assert_eq!(backend.data_size().unwrap(), 17);
 		assert_eq!(backend.hash_size().unwrap(), 33);
@@ -532,8 +531,7 @@ fn pmmr_compact_horizon() {
 	}
 
 	{
-		let mut backend =
-			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string()).unwrap();
+		let mut backend = store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string()).unwrap();
 
 		{
 			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
@@ -549,8 +547,7 @@ fn pmmr_compact_horizon() {
 	// recheck stored data
 	{
 		// recreate backend
-		let backend =
-			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string()).unwrap();
+		let backend = store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string()).unwrap();
 
 		// 0010012001001230
 
