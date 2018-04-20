@@ -750,6 +750,13 @@ impl Chain {
 			.map_err(|e| Error::StoreErr(e, "chain get header".to_owned()))
 	}
 
+	/// Get the block marker for the specified block hash.
+	pub fn get_block_marker(&self, bh: &Hash) -> Result<BlockMarker, Error> {
+		self.store
+			.get_block_marker(bh)
+			.map_err(|e| Error::StoreErr(e, "chain get block marker".to_owned()))
+	}
+
 	/// Gets the block header at the provided height
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		self.store
