@@ -198,10 +198,9 @@ impl Chain {
 						// If this appears to be the case
 						// revert the head to the previous header and try again
 
-						// TODO - how to deal with the old bad block lying around?
-						// let _ = store.delete_block(&header.hash());
-
+						let _ = store.delete_block(&header.hash());
 						let prev_header = store.get_block_header(&head.prev_block_h)?;
+						let _ = store.setup_height(&prev_header, &head)?;
 						head = Tip::from_block(&prev_header);
 						store.save_head(&head)?;
 					}

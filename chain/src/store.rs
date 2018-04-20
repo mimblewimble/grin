@@ -136,7 +136,17 @@ impl ChainStore for ChainKVStore {
 		self.db.delete(&to_key(BLOCK_PREFIX, &mut bh.to_vec())[..])
 	}
 
+	// We are on the current chain if -
+	// * the header by height index matches the header, and
+	// * we are not ahead of the current head
 	fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
+		let head = self.head()?;
+
+		// check we are not out ahead of the current head
+		if header.height > head.height {
+			return Err(Error::NotFoundErr);
+		}
+
 		let header_at_height = self.get_header_by_height(header.height)?;
 		if header.hash() == header_at_height.hash() {
 			Ok(())
