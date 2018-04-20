@@ -182,11 +182,12 @@ where
 	fn dump_stats(&self) {
 		debug!(
 			LOGGER,
-			"pmmr backend: unpruned - {}, hashes - {}, data - {}, rm_log - {:?}",
+			"pmmr backend: unpruned: {}, hashes: {}, data: {}, rm_log: {}, prune_list: {}",
 			self.unpruned_size().unwrap_or(0),
 			self.hash_size().unwrap_or(0),
 			self.data_size().unwrap_or(0),
-			self.rm_log.removed
+			self.rm_log.removed.len(),
+			self.pruned_nodes.pruned_nodes.len(),
 		);
 	}
 }

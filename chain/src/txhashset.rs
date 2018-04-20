@@ -614,6 +614,10 @@ impl<'a> Extension<'a> {
 
 		self.validate_roots(header)?;
 
+		if header.height == 0 {
+			return Ok(());
+		}
+
 		// the real magicking: the sum of all kernel excess should equal the sum
 		// of all Output commitments, minus the total supply
 		let kernel_offset = self.sum_kernel_offsets(&header)?;
