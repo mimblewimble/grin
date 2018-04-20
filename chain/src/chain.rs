@@ -796,16 +796,6 @@ impl Chain {
 			.map_err(|e| Error::StoreErr(e, "chain block exists".to_owned()))
 	}
 
-	// /// Retrieve the file index metadata for a given block
-	// pub fn get_block_pmmr_file_metadata(
-	// 	&self,
-	// 	h: &Hash,
-	// ) -> Result<PMMRFileMetadataCollection, Error> {
-	// 	self.store
-	// 		.get_block_pmmr_file_metadata(h)
-	// 		.map_err(|e| Error::StoreErr(e, "retrieve block pmmr metadata".to_owned()))
-	// }
-
 	/// Rebuilds height index. Reachable as endpoint POST /chain/height-index
 	pub fn rebuild_header_by_height(&self) -> Result<(), Error> {
 		let head = self.head_header()?;
