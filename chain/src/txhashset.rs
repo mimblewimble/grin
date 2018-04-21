@@ -758,7 +758,7 @@ impl<'a> Extension<'a> {
 			if pmmr::is_leaf(n) {
 				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
 					kernel.verify()?;
-					commitments.push(kernel.excess.clone());
+					commitments.push(kernel.excess);
 				}
 			}
 		}
@@ -820,7 +820,7 @@ impl<'a> Extension<'a> {
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
 				if let Some(out) = self.output_pmmr.get_data(n) {
-					commitments.push(out.commit.clone());
+					commitments.push(out.commit);
 				}
 			}
 		}
