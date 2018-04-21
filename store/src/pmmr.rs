@@ -15,7 +15,7 @@
 
 use std::fs;
 use std::io;
-use std::marker::PhantomData;
+use std::marker;
 
 use core::core::pmmr::{self, family, Backend};
 use core::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
@@ -92,7 +92,7 @@ where
 	data_file: AppendOnlyFile,
 	rm_log: RemoveLog,
 	pruned_nodes: pmmr::PruneList,
-	phantom: PhantomData<T>,
+	_marker: marker::PhantomData<T>,
 }
 
 impl<T> Backend<T> for PMMRBackend<T>
@@ -257,7 +257,7 @@ where
 			pruned_nodes: pmmr::PruneList {
 				pruned_nodes: prune_list,
 			},
-			phantom: PhantomData,
+			_marker: marker::PhantomData,
 		})
 	}
 
