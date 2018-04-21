@@ -117,7 +117,7 @@ fn basic_stratum_server() {
 	// keepalive - expected "ok" result
 	let mut response = String::new();
 	let job_req = "{\"id\":\"3\",\"jsonrpc\":\"2.0\",\"method\":\"keepalive\"}\n";
-	let ok_resp = "{\"id\":\"3\",\"jsonrpc\":\"2.0\",\"result\":\"ok\",\"error\":null}\n";
+	let ok_resp = "{\"id\":\"3\",\"jsonrpc\":\"2.0\",\"method\":\"keepalive\",\"result\":\"ok\",\"error\":null}\n";
 	workers[2].write(job_req.as_bytes()).unwrap();
 	workers[2].flush().unwrap();
 	thread::sleep(time::Duration::from_secs(1)); // Wait for the server to reply
@@ -127,7 +127,7 @@ fn basic_stratum_server() {
 	// "doesnotexist" - error expected
 	let mut response = String::new();
 	let job_req = "{\"id\":\"4\",\"jsonrpc\":\"2.0\",\"method\":\"doesnotexist\"}\n";
-	let ok_resp = "{\"id\":\"4\",\"jsonrpc\":\"2.0\",\"result\":null,\"error\":{\"code\":-32601,\"message\":\"Method not found\"}}\n";
+	let ok_resp = "{\"id\":\"4\",\"jsonrpc\":\"2.0\",\"method\":\"doesnotexist\",\"result\":null,\"error\":{\"code\":-32601,\"message\":\"Method not found\"}}\n";
 	workers[3].write(job_req.as_bytes()).unwrap();
 	workers[3].flush().unwrap();
 	thread::sleep(time::Duration::from_secs(1)); // Wait for the server to reply
