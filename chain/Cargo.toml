@@ -12,6 +12,7 @@ slog = { version = "~2.1", features = ["max_level_trace", "release_max_level_tra
 serde = "1"
 serde_derive = "1"
 time = "0.1"
+lru-cache = "0.1"
 
 grin_core = { path = "../core" }
 grin_keychain = { path = "../keychain" }

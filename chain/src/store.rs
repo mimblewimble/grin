@@ -14,9 +14,9 @@
 
 //! Implements storage primitives required by the chain
 
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 use std::sync::{Arc, RwLock};
+
+use lru_cache::LruCache;
 
 use util::secp::pedersen::Commitment;
 
@@ -27,6 +27,7 @@ use core::consensus::TargetError;
 use core::core::target::Difficulty;
 use grin_store::{self, option_to_not_found, to_key, Error, u64_to_key};
 use util::LOGGER;
+
 
 const STORE_SUBPATH: &'static str = "chain";
 
@@ -44,7 +45,7 @@ const BLOCK_PMMR_FILE_METADATA_PREFIX: u8 = 'p' as u8;
 /// store.
 pub struct ChainKVStore {
 	db: grin_store::Store,
-	header_cache: Arc<RwLock<HashMap<Hash, BlockHeader>>>,
+	header_cache: Arc<RwLock<LruCache<Hash, BlockHeader>>>,
 }
 
 impl ChainKVStore {
@@ -53,7 +54,7 @@ impl ChainKVStore {
 		let db = grin_store::Store::open(format!("{}/{}", root_path, STORE_SUBPATH).as_str())?;
 		Ok(ChainKVStore {
 			db,
-			header_cache: Arc::new(RwLock::new(HashMap::new())),
+			header_cache: Arc::new(RwLock::new(LruCache::new(100))),
 		})
 	}
 }
@@ -120,25 +121,34 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		let mut cache = self.header_cache.write().unwrap();
-		// really dumb cache eviction policy for now...
-		if cache.len() > 100 {
-			cache.clear();
-		}
-		match cache.entry(*h) {
-			Entry::Vacant(entry) => {
-				let header: Result<BlockHeader, Error> = option_to_not_found(
-					self.db
-						.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
-				);
-				if let Ok(header) = header {
-					entry.insert(header.clone());
-					Ok(header)
-				} else {
-					header
-				}
+		{
+			debug!(LOGGER, "*** get_block_header: {}", h);
+
+			let mut header_cache = self.header_cache.write().unwrap();
+
+			// cache hit - return the value from the cache
+			if let Some(header) = header_cache.get_mut(h) {
+				debug!(LOGGER, "*** cache hit");
+				return Ok(header.clone());
 			}
-			Entry::Occupied(entry) => Ok(entry.get().to_owned()),
+		}
+
+		let header: Result<BlockHeader, Error> = option_to_not_found(
+			self.db
+				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
+		);
+
+		// cache miss - so adding to the cache for next time
+		if let Ok(header) = header {
+			debug!(LOGGER, "*** cache miss, populating cache");
+			{
+				let mut header_cache = self.header_cache.write().unwrap();
+				header_cache.insert(*h, header.clone());
+			}
+			Ok(header)
+		} else {
+			debug!(LOGGER, "*** cache miss, nothing to populate");
+			header
 		}
 	}
 

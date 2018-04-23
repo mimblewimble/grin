@@ -29,6 +29,7 @@ extern crate serde_derive;
 #[macro_use]
 extern crate slog;
 extern crate time;
+extern crate lru_cache;
 
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
