@@ -121,13 +121,10 @@ impl ChainStore for ChainKVStore {
 
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		{
-			debug!(LOGGER, "*** get_block_header: {}", h);
-
 			let mut header_cache = self.header_cache.write().unwrap();
 
 			// cache hit - return the value from the cache
 			if let Some(header) = header_cache.get_mut(h) {
-				debug!(LOGGER, "*** cache hit");
 				return Ok(header.clone());
 			}
 		}
@@ -139,14 +136,12 @@ impl ChainStore for ChainKVStore {
 
 		// cache miss - so adding to the cache for next time
 		if let Ok(header) = header {
-			debug!(LOGGER, "*** cache miss, populating cache");
 			{
 				let mut header_cache = self.header_cache.write().unwrap();
 				header_cache.insert(*h, header.clone());
 			}
 			Ok(header)
 		} else {
-			debug!(LOGGER, "*** cache miss, nothing to populate");
 			header
 		}
 	}
