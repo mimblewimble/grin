@@ -28,7 +28,6 @@ use core::core::target::Difficulty;
 use grin_store::{self, option_to_not_found, to_key, Error, u64_to_key};
 use util::LOGGER;
 
-
 const STORE_SUBPATH: &'static str = "chain";
 
 const BLOCK_HEADER_PREFIX: u8 = 'h' as u8;
