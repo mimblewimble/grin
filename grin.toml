@@ -56,7 +56,7 @@ chain_type = "Testnet2"
 capabilities = [7]
 
 #skip waiting for sync on startup, (optional param, mostly for testing)
-#skip_sync_wait = false
+skip_sync_wait = true
 
 #whether to run the ncurses TUI. Ncurses must be installed and this
 #will also disable logging to stdout
@@ -64,6 +64,14 @@ run_tui = true
 
 #Whether to run the wallet listener with the server by default
 run_wallet_listener = true
+
+#Whether to run a test miner. This is only for developer testing (chaintype 
+#usertesting) at cuckoo 16, and will only mine into the default wallet port.
+#real mining should use the standalone grin-miner
+run_test_miner = false
+
+#test miner wallet URL (burns if this doesn't exist)
+#test_miner_wallet_url = "http://127.0.0.1:13415"
 
 #The P2P server details (i.e. the server that communicates with other
 #grin server nodes
