@@ -26,7 +26,6 @@ use core::core::{Block, BlockHeader};
 use core::consensus::TargetError;
 use core::core::target::Difficulty;
 use grin_store::{self, option_to_not_found, to_key, Error, u64_to_key};
-use util::LOGGER;
 
 const STORE_SUBPATH: &'static str = "chain";
 

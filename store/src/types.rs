@@ -328,24 +328,6 @@ impl RemoveLog {
 		include_tuple(&self.removed, elmt) || include_tuple(&self.removed_tmp, elmt)
 	}
 
-	/// How many removed positions exist before this particular position
-	pub fn get_shift(&self, elmt: u64) -> usize {
-		let mut complete_list = self.removed.clone();
-		for e in &self.removed_tmp {
-			match self.removed.binary_search(&e) {
-				Ok(_) => continue,
-				Err(idx) => {
-					complete_list.insert(idx, *e);
-				}
-			}
-		}
-		let pos = match complete_list.binary_search(&(elmt, 0)) {
-			Ok(idx) => idx + 1,
-			Err(idx) => idx,
-		};
-		complete_list.split_at(pos).0.len()
-	}
-
 	/// Number of positions stored in the remove log.
 	pub fn len(&self) -> usize {
 		self.removed.len()
