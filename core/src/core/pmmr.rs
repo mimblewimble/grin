@@ -36,7 +36,7 @@
 //! either be a simple Vec or a database.
 
 use std::clone::Clone;
-use std::marker::PhantomData;
+use std::marker;
 use core::hash::Hash;
 use ser;
 use ser::{Readable, Reader, Writeable, Writer};
@@ -268,7 +268,7 @@ where
 	last_pos: u64,
 	backend: &'a mut B,
 	// only needed for parameterizing Backend
-	writeable: PhantomData<T>,
+	_marker: marker::PhantomData<T>,
 }
 
 impl<'a, T, B> PMMR<'a, T, B>
@@ -281,7 +281,7 @@ where
 		PMMR {
 			last_pos: 0,
 			backend: backend,
-			writeable: PhantomData,
+			_marker: marker::PhantomData,
 		}
 	}
 
@@ -292,7 +292,7 @@ where
 		PMMR {
 			last_pos: last_pos,
 			backend: backend,
-			writeable: PhantomData,
+			_marker: marker::PhantomData,
 		}
 	}
 

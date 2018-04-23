@@ -41,7 +41,7 @@ const SEP: u8 = ':' as u8;
 
 use std::fmt;
 use std::iter::Iterator;
-use std::marker::PhantomData;
+use std::marker;
 use std::sync::RwLock;
 
 use byteorder::{BigEndian, WriteBytesExt};
@@ -167,7 +167,7 @@ impl Store {
 		let db = self.rdb.read().unwrap();
 		SerIterator {
 			iter: db.iterator(IteratorMode::From(from, Direction::Forward)),
-			_marker: PhantomData,
+			_marker: marker::PhantomData,
 		}
 	}
 
@@ -225,7 +225,7 @@ where
 	T: ser::Readable,
 {
 	iter: DBIterator,
-	_marker: PhantomData<T>,
+	_marker: marker::PhantomData<T>,
 }
 
 impl<T> Iterator for SerIterator<T>

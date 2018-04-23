@@ -54,6 +54,7 @@ struct RpcRequest {
 struct RpcResponse {
 	id: String,
 	jsonrpc: String,
+	method: String,
 	result: Option<String>,
 	error: Option<RpcError>,
 }
@@ -338,6 +339,7 @@ impl StratumServer {
 						let resp = RpcResponse {
 							id: workers_l[num].id.clone(),
 							jsonrpc: String::from("2.0"),
+							method: request.method,
 							result: None,
 							error: Some(rpc_err),
 						};
@@ -346,6 +348,7 @@ impl StratumServer {
 						let resp = RpcResponse {
 							id: workers_l[num].id.clone(),
 							jsonrpc: String::from("2.0"),
+							method: request.method,
 							result: Some(response),
 							error: None,
 						};
