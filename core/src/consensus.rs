@@ -227,7 +227,7 @@ where
 	let ts_damp = if diff_sum < DAMP_FACTOR * DIFFICULTY_ADJUST_WINDOW {
 		ts_delta
 	} else {
-		(1 * ts_delta + (DAMP_FACTOR-1) * BLOCK_TIME_WINDOW) / DAMP_FACTOR
+		(1 * ts_delta + (DAMP_FACTOR - 1) * BLOCK_TIME_WINDOW) / DAMP_FACTOR
 	};
 
 	// Apply time bounds

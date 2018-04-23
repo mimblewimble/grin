@@ -14,7 +14,9 @@
 
 //! Implements storage primitives required by the chain
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
+
+use lru_cache::LruCache;
 
 use util::secp::pedersen::Commitment;
 
@@ -24,6 +26,7 @@ use core::core::{Block, BlockHeader};
 use core::consensus::TargetError;
 use core::core::target::Difficulty;
 use grin_store::{self, option_to_not_found, to_key, Error, u64_to_key};
+use util::LOGGER;
 
 const STORE_SUBPATH: &'static str = "chain";
 
@@ -41,13 +44,17 @@ const BLOCK_PMMR_FILE_METADATA_PREFIX: u8 = 'p' as u8;
 /// store.
 pub struct ChainKVStore {
 	db: grin_store::Store,
+	header_cache: Arc<RwLock<LruCache<Hash, BlockHeader>>>,
 }
 
 impl ChainKVStore {
 	/// Create new chain store
 	pub fn new(root_path: String) -> Result<ChainKVStore, Error> {
 		let db = grin_store::Store::open(format!("{}/{}", root_path, STORE_SUBPATH).as_str())?;
-		Ok(ChainKVStore { db: db })
+		Ok(ChainKVStore {
+			db,
+			header_cache: Arc::new(RwLock::new(LruCache::new(100))),
+		})
 	}
 }
 
@@ -113,10 +120,30 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		option_to_not_found(
+		{
+			let mut header_cache = self.header_cache.write().unwrap();
+
+			// cache hit - return the value from the cache
+			if let Some(header) = header_cache.get_mut(h) {
+				return Ok(header.clone());
+			}
+		}
+
+		let header: Result<BlockHeader, Error> = option_to_not_found(
 			self.db
 				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
-		)
+		);
+
+		// cache miss - so adding to the cache for next time
+		if let Ok(header) = header {
+			{
+				let mut header_cache = self.header_cache.write().unwrap();
+				header_cache.insert(*h, header.clone());
+			}
+			Ok(header)
+		} else {
+			header
+		}
 	}
 
 	/// Save the block and its header
