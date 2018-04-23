@@ -14,7 +14,7 @@
 
 use std::{cmp, thread};
 use std::time::Duration;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use time;
 
@@ -227,7 +227,7 @@ fn header_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 			if let Ok(p) = peer.try_read() {
 				let peer_difficulty = p.info.total_difficulty.clone();
 				if peer_difficulty > difficulty {
-					let _ = request_headers(peer.clone(), chain.clone());
+					request_headers(&p, chain.clone());
 				}
 			}
 		}
@@ -258,22 +258,15 @@ fn fast_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>, header_head: &chain::T
 }
 
 /// Request some block headers from a peer to advance us.
-fn request_headers(peer: Arc<RwLock<Peer>>, chain: Arc<chain::Chain>) -> Result<(), Error> {
-	let locator = get_locator(chain)?;
-	if let Ok(peer) = peer.try_read() {
+fn request_headers(peer: &Peer, chain: Arc<chain::Chain>) {
+	if let Ok(locator) = get_locator(chain) {
 		debug!(
 			LOGGER,
 			"sync: request_headers: asking {} for headers, {:?}", peer.info.addr, locator,
 		);
+
 		let _ = peer.send_header_request(locator);
-	} else {
-		// not much we can do here, log and try again next time
-		debug!(
-			LOGGER,
-			"sync: request_headers: failed to get read lock on peer",
-		);
 	}
-	Ok(())
 }
 
 /// Whether we're currently syncing the chain or we're fully caught up and
@@ -344,6 +337,11 @@ fn needs_syncing(
 /// We build a locator based on sync_head.
 /// Even if sync_head is significantly out of date we will "reset" it once we start getting
 /// headers back from a peer.
+///
+/// TODO - this gets *expensive* with a large header chain to iterate over
+/// as we need to get each block header from the db
+/// can we add a get_block_header_by_height(height, hash) ???
+///
 fn get_locator(chain: Arc<chain::Chain>) -> Result<Vec<Hash>, Error> {
 	let tip = chain.get_sync_head()?;
 	let heights = get_locator_heights(tip.height);
