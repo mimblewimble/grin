@@ -21,7 +21,6 @@ use std::time::SystemTime;
 
 use chain;
 use p2p;
-use pow;
 
 /// Server state info collection struct, to be passed around into internals
 /// and populated when required
@@ -29,8 +28,6 @@ use pow;
 pub struct ServerStateInfo {
 	/// whether we're in a state of waiting for peers at startup
 	pub awaiting_peers: Arc<AtomicBool>,
-	/// Mining stats
-	pub mining_stats: Arc<RwLock<MiningStats>>,
 	/// Stratum stats
 	pub stratum_stats: Arc<RwLock<StratumStats>>,
 }
@@ -39,7 +36,6 @@ impl Default for ServerStateInfo {
 	fn default() -> ServerStateInfo {
 		ServerStateInfo {
 			awaiting_peers: Arc::new(AtomicBool::new(false)),
-			mining_stats: Arc::new(RwLock::new(MiningStats::default())),
 			stratum_stats: Arc::new(RwLock::new(StratumStats::default())),
 		}
 	}
@@ -58,8 +54,6 @@ pub struct ServerStats {
 	pub is_syncing: bool,
 	/// Whether we're awaiting peers
 	pub awaiting_peers: bool,
-	/// Handle to current mining stats
-	pub mining_stats: MiningStats,
 	/// Handle to current stratum server stats
 	pub stratum_stats: StratumStats,
 	/// Peer stats
@@ -68,37 +62,17 @@ pub struct ServerStats {
 	pub diff_stats: DiffStats,
 }
 
-/// Struct to return relevant information about the mining process
-/// back to interested callers (such as the TUI)
-#[derive(Clone)]
-pub struct MiningStats {
-	/// whether mining is enabled
-	pub is_enabled: bool,
-	/// whether we're currently mining
-	pub is_mining: bool,
-	/// combined graphs per second
-	pub combined_gps: f64,
-	/// what block height we're mining at
-	pub block_height: u64,
-	/// current network difficulty we're working on
-	pub network_difficulty: u64,
-	/// cuckoo size used for mining
-	pub cuckoo_size: u16,
-	/// Individual device status from Cuckoo-Miner
-	pub device_stats: Option<Vec<Vec<pow::cuckoo_miner::CuckooMinerDeviceStats>>>,
-}
-
 /// Struct to return relevant information about stratum workers
 #[derive(Clone, Serialize, Debug)]
 pub struct WorkerStats {
 	/// Unique ID for this worker
 	pub id: String,
-        /// whether stratum worker is currently connected
-        pub is_connected: bool,
+	/// whether stratum worker is currently connected
+	pub is_connected: bool,
 	/// Timestamp of most recent communication with this worker
 	pub last_seen: SystemTime,
-        /// pow difficulty this worker is using
-        pub pow_difficulty: u64,
+	/// pow difficulty this worker is using
+	pub pow_difficulty: u64,
 	/// number of valid shares submitted
 	pub num_accepted: u64,
 	/// number of invalid shares submitted
@@ -110,20 +84,20 @@ pub struct WorkerStats {
 /// Struct to return relevant information about the stratum server
 #[derive(Clone, Serialize, Debug)]
 pub struct StratumStats {
-        /// whether stratum server is enabled
-        pub is_enabled: bool,
-        /// whether stratum server is running
-        pub is_running: bool,
-        /// Number of connected workers
-        pub num_workers: usize,
-        /// what block height we're mining at
-        pub block_height: u64,
-        /// current network difficulty we're working on
-        pub network_difficulty: u64,
-        /// cuckoo size used for mining
-        pub cuckoo_size: u16,
-        /// Individual worker status
-        pub worker_stats: Vec<WorkerStats>,
+	/// whether stratum server is enabled
+	pub is_enabled: bool,
+	/// whether stratum server is running
+	pub is_running: bool,
+	/// Number of connected workers
+	pub num_workers: usize,
+	/// what block height we're mining at
+	pub block_height: u64,
+	/// current network difficulty we're working on
+	pub network_difficulty: u64,
+	/// cuckoo size used for mining
+	pub cuckoo_size: u16,
+	/// Individual worker status
+	pub worker_stats: Vec<WorkerStats>,
 }
 
 /// Stats on the last WINDOW blocks and the difficulty calculation
@@ -194,20 +168,6 @@ impl PeerStats {
 			total_difficulty: peer.info.total_difficulty.into_num(),
 			height: peer.info.height,
 			direction: direction.to_string(),
-		}
-	}
-}
-
-impl Default for MiningStats {
-	fn default() -> MiningStats {
-		MiningStats {
-			is_enabled: false,
-			is_mining: false,
-			combined_gps: 0.0,
-			block_height: 0,
-			network_difficulty: 0,
-			cuckoo_size: 0,
-			device_stats: None,
 		}
 	}
 }

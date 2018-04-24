@@ -15,9 +15,8 @@
 extern crate grin_api as api;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
-extern crate grin_servers as servers;
 extern crate grin_p2p as p2p;
-extern crate grin_pow as pow;
+extern crate grin_servers as servers;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
@@ -32,8 +31,8 @@ use std::default::Default;
 use core::global;
 use core::global::ChainTypes;
 
-use framework::{LocalServerContainerConfig, LocalServerContainerPool,
-                LocalServerContainerPoolConfig, config, miner_config};
+use framework::{config, stratum_config, LocalServerContainerConfig, LocalServerContainerPool,
+                LocalServerContainerPoolConfig};
 
 /// Testing the frameworks by starting a fresh server, creating a genesis
 /// Block and mining into a wallet for a bit
@@ -194,7 +193,7 @@ fn simulate_block_propagation() {
 	}
 
 	// start mining
-	servers[0].start_miner(miner_config());
+	servers[0].start_test_miner(None);
 	let _original_height = servers[0].head().height;
 
 	// monitor for a change of head on a different server and check whether
@@ -230,7 +229,7 @@ fn simulate_full_sync() {
 
 	let s1 = servers::Server::new(framework::config(1000, "grin-sync", 1000)).unwrap();
 	// mine a few blocks on server 1
-	s1.start_miner(miner_config());
+	s1.start_test_miner(None);
 	thread::sleep(time::Duration::from_secs(8));
 
 	#[ignore(unused_mut)] // mut needed?
@@ -257,7 +256,7 @@ fn simulate_fast_sync() {
 
 	let s1 = servers::Server::new(framework::config(2000, "grin-fast", 2000)).unwrap();
 	// mine a few blocks on server 1
-	s1.start_miner(miner_config());
+	s1.start_test_miner(None);
 	thread::sleep(time::Duration::from_secs(8));
 
 	let mut conf = config(2001, "grin-fast", 2000);
@@ -284,7 +283,7 @@ fn simulate_fast_sync_double() {
 
 	let s1 = servers::Server::new(framework::config(3000, "grin-double-fast1", 3000)).unwrap();
 	// mine a few blocks on server 1
-	s1.start_miner(miner_config());
+	s1.start_test_miner(None);
 	thread::sleep(time::Duration::from_secs(8));
 
 	{

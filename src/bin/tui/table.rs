@@ -287,9 +287,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// table.set_on_sort(|siv: &mut Cursive, column: BasicColumn, order: Ordering| {
-	///
-	/// });
+	/// rt(|siv: &mut Cursive, column: BasicColumn, order: Ordering| {});
 	/// ```
 	pub fn set_on_sort<F>(&mut self, cb: F)
 	where
@@ -306,9 +304,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// table.on_sort(|siv: &mut Cursive, column: BasicColumn, order: Ordering| {
-	///
-	/// });
+	/// siv: &mut Cursive, column: BasicColumn, order: Ordering| {});
 	/// ```
 	pub fn on_sort<F>(self, cb: F) -> Self
 	where
@@ -326,9 +322,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// table.set_on_submit(|siv: &mut Cursive, row: usize, index: usize| {
-	///
-	/// });
+	/// bmit(|siv: &mut Cursive, row: usize, index: usize| {});
 	/// ```
 	pub fn set_on_submit<F>(&mut self, cb: F)
 	where
@@ -348,9 +342,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// table.on_submit(|siv: &mut Cursive, row: usize, index: usize| {
-	///
-	/// });
+	/// (|siv: &mut Cursive, row: usize, index: usize| {});
 	/// ```
 	pub fn on_submit<F>(self, cb: F) -> Self
 	where
@@ -367,9 +359,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// table.set_on_select(|siv: &mut Cursive, row: usize, index: usize| {
-	///
-	/// });
+	/// lect(|siv: &mut Cursive, row: usize, index: usize| {});
 	/// ```
 	pub fn set_on_select<F>(&mut self, cb: F)
 	where
@@ -388,9 +378,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// # Example
 	///
 	/// ```norun
-	/// table.on_select(|siv: &mut Cursive, row: usize, index: usize| {
-	///
-	/// });
+	/// (|siv: &mut Cursive, row: usize, index: usize| {});
 	/// ```
 	pub fn on_select<F>(self, cb: F) -> Self
 	where
@@ -693,7 +681,8 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 }
 
 impl<T: TableViewItem<H> + 'static, H: Eq + Hash + Copy + Clone + 'static> View
-	for TableView<T, H> {
+	for TableView<T, H>
+{
 	fn draw(&self, printer: &Printer) {
 		self.draw_columns(printer, "╷ ", |printer, column| {
 			let color = if column.order != Ordering::Equal || column.selected {

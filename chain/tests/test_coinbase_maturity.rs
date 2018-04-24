@@ -16,7 +16,6 @@ extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
-extern crate grin_pow as pow;
 extern crate rand;
 extern crate time;
 
@@ -34,7 +33,7 @@ use core::global::ChainTypes;
 
 use keychain::Keychain;
 
-use pow::{cuckoo, types, MiningWorker};
+use core::pow;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -46,7 +45,7 @@ fn test_coinbase_maturity() {
 	clean_output_dir(".grin");
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
-	let genesis_block = pow::mine_genesis_block(None).unwrap();
+	let genesis_block = pow::mine_genesis_block().unwrap();
 
 	let chain = chain::Chain::init(
 		".grin".to_string(),
@@ -54,19 +53,6 @@ fn test_coinbase_maturity() {
 		genesis_block,
 		pow::verify_size,
 	).unwrap();
-
-	let mut miner_config = types::MinerConfig {
-		enable_mining: true,
-		burn_reward: true,
-		..Default::default()
-	};
-	miner_config.miner_plugin_dir = Some(String::from("../target/debug/deps"));
-
-	let mut cuckoo_miner = cuckoo::Miner::new(
-		consensus::EASINESS,
-		global::sizeshift() as u32,
-		global::proofsize(),
-	);
 
 	let prev = chain.head_header().unwrap();
 
@@ -85,10 +71,10 @@ fn test_coinbase_maturity() {
 	chain.set_txhashset_roots(&mut block, false).unwrap();
 
 	pow::pow_size(
-		&mut cuckoo_miner,
 		&mut block.header,
 		difficulty,
-		global::sizeshift() as u32,
+		global::proofsize(),
+		global::sizeshift(),
 	).unwrap();
 
 	assert_eq!(block.outputs.len(), 1);
@@ -145,10 +131,10 @@ fn test_coinbase_maturity() {
 	}
 
 	pow::pow_size(
-		&mut cuckoo_miner,
 		&mut block.header,
 		difficulty,
-		global::sizeshift() as u32,
+		global::proofsize(),
+		global::sizeshift(),
 	).unwrap();
 
 	// mine enough blocks to increase the height sufficiently for
@@ -168,10 +154,10 @@ fn test_coinbase_maturity() {
 		chain.set_txhashset_roots(&mut block, false).unwrap();
 
 		pow::pow_size(
-			&mut cuckoo_miner,
 			&mut block.header,
 			difficulty,
-			global::sizeshift() as u32,
+			global::proofsize(),
+			global::sizeshift(),
 		).unwrap();
 
 		chain.process_block(block, chain::Options::MINE).unwrap();
@@ -203,10 +189,10 @@ fn test_coinbase_maturity() {
 	chain.set_txhashset_roots(&mut block, false).unwrap();
 
 	pow::pow_size(
-		&mut cuckoo_miner,
 		&mut block.header,
 		difficulty,
-		global::sizeshift() as u32,
+		global::proofsize(),
+		global::sizeshift(),
 	).unwrap();
 
 	let result = chain.process_block(block, chain::Options::MINE);

@@ -25,11 +25,10 @@ use std::time;
 use common::adapters::*;
 use api;
 use chain;
-use core::{consensus, genesis, global};
+use core::{consensus, genesis, global, pow};
 use core::core::target::Difficulty;
 use core::core::hash::Hashed;
 use grin::dandelion_monitor;
-use mining::miner;
 use mining::stratumserver;
 use p2p;
 use pool;
@@ -37,8 +36,8 @@ use grin::seed;
 use grin::sync;
 use common::types::*;
 use common::stats::*;
-use pow;
 use util::LOGGER;
+use mining::test_miner::Miner;
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -66,16 +65,11 @@ impl Server {
 	where
 		F: FnMut(Arc<Server>),
 	{
-		let mut mining_config = config.mining_config.clone();
+		let mut mining_config = config.stratum_mining_config.clone();
+		let enable_test_miner = config.run_test_miner;
+		let test_miner_wallet_url = config.test_miner_wallet_url.clone();
 		let serv = Arc::new(Server::new(config)?);
 
-		if mining_config.as_mut().unwrap().enable_mining {
-			{
-				let mut mining_stats = serv.state_info.mining_stats.write().unwrap();
-				mining_stats.is_enabled = true;
-			}
-			serv.start_miner(mining_config.clone().unwrap());
-		}
 		let enable_stratum_server = mining_config.as_mut().unwrap().enable_stratum_server;
 		if let Some(s) = enable_stratum_server {
 			if s {
@@ -84,6 +78,12 @@ impl Server {
 					stratum_stats.is_enabled = true;
 				}
 				serv.start_stratum_server(mining_config.clone().unwrap());
+			}
+		}
+
+		if let Some(s) = enable_test_miner {
+			if s {
+				serv.start_test_miner(test_miner_wallet_url);
 			}
 		}
 
@@ -127,7 +127,7 @@ impl Server {
 			global::ChainTypes::Testnet2 => genesis::genesis_testnet2(),
 			global::ChainTypes::AutomatedTesting => genesis::genesis_dev(),
 			global::ChainTypes::UserTesting => genesis::genesis_dev(),
-			_ => pow::mine_genesis_block(config.mining_config.clone())?,
+			global::ChainTypes::Mainnet => genesis::genesis_testnet2(), //TODO: Fix, obviously
 		};
 
 		info!(LOGGER, "Starting server, genesis block: {}", genesis.hash());
@@ -262,36 +262,8 @@ impl Server {
 		self.p2p.peers.peer_count()
 	}
 
-	/// Start mining for blocks on a separate thread. Uses toy miner by default,
-	/// mostly for testing, but can also load a plugin from cuckoo-miner
-	pub fn start_miner(&self, config: pow::types::MinerConfig) {
-		let cuckoo_size = global::sizeshift();
-		let proof_size = global::proofsize();
-		let currently_syncing = self.currently_syncing.clone();
-
-		let mut miner = miner::Miner::new(
-			config.clone(),
-			self.chain.clone(),
-			self.tx_pool.clone(),
-			self.stop.clone(),
-		);
-		let mining_stats = self.state_info.mining_stats.clone();
-		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.port));
-		let _ = thread::Builder::new()
-			.name("miner".to_string())
-			.spawn(move || {
-				// TODO push this down in the run loop so miner gets paused anytime we
-				// decide to sync again
-				let secs_5 = time::Duration::from_secs(5);
-				while currently_syncing.load(Ordering::Relaxed) {
-					thread::sleep(secs_5);
-				}
-				miner.run_loop(config.clone(), mining_stats, cuckoo_size as u32, proof_size);
-			});
-	}
-
 	/// Start a minimal "stratum" mining service on a separate thread
-	pub fn start_stratum_server(&self, config: pow::types::MinerConfig) {
+	pub fn start_stratum_server(&self, config: StratumServerConfig) {
 		let cuckoo_size = global::sizeshift();
 		let proof_size = global::proofsize();
 		let currently_syncing = self.currently_syncing.clone();
@@ -305,16 +277,51 @@ impl Server {
 		let _ = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {
-				let secs_5 = time::Duration::from_secs(5);
-				while currently_syncing.load(Ordering::Relaxed) {
-					thread::sleep(secs_5);
-				}
 				stratum_server.run_loop(
 					config.clone(),
 					stratum_stats,
 					cuckoo_size as u32,
 					proof_size,
+					currently_syncing,
 				);
+			});
+	}
+
+	/// Start mining for blocks internally on a separate thread. Relies on internal miner,
+	/// and should only be used for automated testing. Burns reward if wallet_listener_url
+	/// is 'None'
+	pub fn start_test_miner(&self, wallet_listener_url: Option<String>) {
+		let currently_syncing = self.currently_syncing.clone();
+		let config_wallet_url = match wallet_listener_url.clone() {
+			Some(u) => u,
+			None => String::from("http://127.0.0.1:13415"),
+		};
+
+		let config = StratumServerConfig {
+			attempt_time_per_block: 60,
+			burn_reward: false,
+			enable_stratum_server: None,
+			stratum_server_addr: None,
+			wallet_listener_url: config_wallet_url,
+		};
+
+		let mut miner = Miner::new(
+			config.clone(),
+			self.chain.clone(),
+			self.tx_pool.clone(),
+			self.stop.clone(),
+		);
+		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.port));
+		let _ = thread::Builder::new()
+			.name("test_miner".to_string())
+			.spawn(move || {
+				// TODO push this down in the run loop so miner gets paused anytime we
+				// decide to sync again
+				let secs_5 = time::Duration::from_secs(5);
+				while currently_syncing.load(Ordering::Relaxed) {
+					thread::sleep(secs_5);
+				}
+				miner.run_loop(wallet_listener_url);
 			});
 	}
 
@@ -334,7 +341,6 @@ impl Server {
 	/// other
 	/// consumers
 	pub fn get_server_stats(&self) -> Result<ServerStats, Error> {
-		let mining_stats = self.state_info.mining_stats.read().unwrap().clone();
 		let stratum_stats = self.state_info.stratum_stats.read().unwrap().clone();
 		let awaiting_peers = self.state_info.awaiting_peers.load(Ordering::Relaxed);
 
@@ -402,7 +408,6 @@ impl Server {
 			header_head: self.header_head(),
 			is_syncing: self.currently_syncing.load(Ordering::Relaxed),
 			awaiting_peers: awaiting_peers,
-			mining_stats: mining_stats,
 			stratum_stats: stratum_stats,
 			peer_stats: peer_stats,
 			diff_stats: diff_stats,

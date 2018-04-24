@@ -14,6 +14,6 @@
 
 //! Mining + Mining server
 
-pub mod miner;
+pub mod test_miner;
 pub mod stratumserver;
 mod mine_block;

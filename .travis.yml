@@ -35,7 +35,6 @@ env:
     - TEST_DIR=wallet
     - TEST_DIR=p2p
     - TEST_DIR=api
-    - TEST_DIR=pow
     - TEST_DIR=keychain
     - TEST_DIR=core
     - TEST_DIR=util
