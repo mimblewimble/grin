@@ -24,7 +24,7 @@ use core::core::hash::Hash;
 use core::core::hash::Hashed;
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
-use core::core::{OutputIdentifier, Transaction};
+use core::core::{OutputIdentifier, Transaction, TxKernel};
 use core::core::{block, hash};
 use util::LOGGER;
 use util::secp::pedersen::Commitment;
@@ -458,23 +458,21 @@ where
 		// While the inputs outputs can be cut-through the kernel will stay intact
 		// In order to deaggregate tx we look for tx with the same kernel
 		let mut found_txs: Vec<Transaction> = vec![];
-		// Since its a multi-kernel transaction we loop over the kernels
-		for kernel in tx.kernels.clone() {
-			// Look for tx with the same kernels
-			for (_, tx) in &self.transactions {
-				let mut found_count = 0;
 
-				// Transaction can have multiple kernels
-				for tx_kernel in tx.clone().clone().kernels {
-					if kernel == tx_kernel {
-						found_count = found_count + 1;
-					}
-				}
-				// Consider the transaction only if all the kernels match
-				if found_count == tx.kernels.len() {
-					debug!(LOGGER, "Found a transaction with the same kernel");
-					found_txs.push(*tx.clone());
-				}
+		// Gather all the kernels of the multi-kernel transaction in one set
+		let kernels_set: HashSet<TxKernel> = tx.kernels.iter().cloned().collect::<HashSet<_>>();
+
+		// Check each transaction in the pool
+		for (_, tx) in &self.transactions {
+
+			let candidates_kernels_set: HashSet<TxKernel> = tx.kernels.iter().cloned().collect::<HashSet<_>>();
+
+			let kernels_set_intersection: HashSet<&TxKernel> = kernels_set.intersection(&candidates_kernels_set).collect();
+
+			// Consider the transaction only if all the kernels match
+			if kernels_set_intersection.len() == tx.kernels.len() {
+				debug!(LOGGER, "Found a transaction with the same kernel");
+				found_txs.push(*tx.clone());
 			}
 		}
 
