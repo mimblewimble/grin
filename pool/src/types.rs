@@ -141,6 +141,8 @@ pub enum PoolError {
 		/// The spent output
 		spent_output: Commitment,
 	},
+	/// A failed deaggregation error
+	FailedDeaggregation,
 	/// Attempt to add a transaction to the pool with lock_height
 	/// greater than height of current block
 	ImmatureTransaction {
