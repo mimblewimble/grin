@@ -234,6 +234,14 @@ pub struct Transaction {
 	pub offset: BlindingFactor,
 }
 
+/// PartialEq
+impl PartialEq for Transaction {
+	fn eq(&self, tx: &Transaction) -> bool {
+		self.inputs == tx.inputs && self.outputs == tx.outputs && self.kernels == tx.kernels
+			&& self.offset == tx.offset
+	}
+}
+
 /// Implementation of Writeable for a fully blinded transaction, defines how to
 /// write the transaction as binary.
 impl Writeable for Transaction {
@@ -482,8 +490,9 @@ impl Transaction {
 	}
 }
 
-/// Aggregate a vec of transactions into a multi-kernel transaction
-pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
+/// Aggregate a vec of transactions into a multi-kernel transaction with
+/// cut_through
+pub fn aggregate_with_cut_through(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
@@ -552,6 +561,121 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	kernels.sort();
 
 	let tx = Transaction::new(new_inputs, new_outputs, kernels);
+
+	Ok(tx.with_offset(total_kernel_offset))
+}
+
+/// Aggregate a vec of transactions into a multi-kernel transaction
+pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
+	let mut inputs: Vec<Input> = vec![];
+	let mut outputs: Vec<Output> = vec![];
+	let mut kernels: Vec<TxKernel> = vec![];
+
+	// we will sum these together at the end to give us the overall offset for the
+	// transaction
+	let mut kernel_offsets = vec![];
+
+	for mut transaction in transactions {
+		// we will summ these later to give a single aggregate offset
+		kernel_offsets.push(transaction.offset);
+
+		inputs.append(&mut transaction.inputs);
+		outputs.append(&mut transaction.outputs);
+		kernels.append(&mut transaction.kernels);
+	}
+
+	// now sum the kernel_offsets up to give us an aggregate offset for the
+	// transaction
+	let total_kernel_offset = {
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
+		let mut keys = kernel_offsets
+			.iter()
+			.cloned()
+			.filter(|x| *x != BlindingFactor::zero())
+			.filter_map(|x| x.secret_key(&secp).ok())
+			.collect::<Vec<_>>();
+
+		if keys.is_empty() {
+			BlindingFactor::zero()
+		} else {
+			let sum = secp.blind_sum(keys, vec![])?;
+			BlindingFactor::from_secret_key(sum)
+		}
+	};
+
+	// sort them lexicographically
+	inputs.sort();
+	outputs.sort();
+	kernels.sort();
+
+	let tx = Transaction::new(inputs, outputs, kernels);
+
+	Ok(tx.with_offset(total_kernel_offset))
+}
+
+/// Attempt to deaggregate a multi-kernel transaction based on multiple
+/// transactions
+pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transaction, Error> {
+	let mut inputs: Vec<Input> = vec![];
+	let mut outputs: Vec<Output> = vec![];
+	let mut kernels: Vec<TxKernel> = vec![];
+
+	// we will subtract these at the end to give us the overall offset for the
+	// transaction
+	let mut kernel_offsets = vec![];
+
+	let tx = aggregate(txs).unwrap();
+
+	for mk_input in mk_tx.clone().inputs {
+		if !tx.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
+			inputs.push(mk_input);
+		}
+	}
+	for mk_output in mk_tx.clone().outputs {
+		if !tx.outputs.contains(&mk_output) && !outputs.contains(&mk_output) {
+			outputs.push(mk_output);
+		}
+	}
+	for mk_kernel in mk_tx.clone().kernels {
+		if !tx.kernels.contains(&mk_kernel) && !kernels.contains(&mk_kernel) {
+			kernels.push(mk_kernel);
+		}
+	}
+
+	kernel_offsets.push(tx.offset);
+
+	// now compute the total kernel offset
+	let total_kernel_offset = {
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
+		let mut positive_key = vec![mk_tx.offset]
+			.iter()
+			.cloned()
+			.filter(|x| *x != BlindingFactor::zero())
+			.filter_map(|x| x.secret_key(&secp).ok())
+			.collect::<Vec<_>>();
+		let mut negative_keys = kernel_offsets
+			.iter()
+			.cloned()
+			.filter(|x| *x != BlindingFactor::zero())
+			.filter_map(|x| x.secret_key(&secp).ok())
+			.collect::<Vec<_>>();
+
+		if positive_key.is_empty() && negative_keys.is_empty() {
+			BlindingFactor::zero()
+		} else {
+			let sum = secp.blind_sum(positive_key, negative_keys)?;
+			BlindingFactor::from_secret_key(sum)
+		}
+	};
+
+	// Sorting them lexicographically
+	inputs.sort();
+	outputs.sort();
+	kernels.sort();
+
+	let tx = Transaction::new(inputs, outputs, kernels);
 
 	Ok(tx.with_offset(total_kernel_offset))
 }

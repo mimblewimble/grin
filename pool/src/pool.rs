@@ -24,7 +24,7 @@ use core::core::hash::Hash;
 use core::core::hash::Hashed;
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
-use core::core::{OutputIdentifier, Transaction};
+use core::core::{OutputIdentifier, Transaction, TxKernel};
 use core::core::{block, hash};
 use util::LOGGER;
 use util::secp::pedersen::Commitment;
@@ -406,6 +406,84 @@ where
 			);
 
 			Err(PoolError::OrphanTransaction)
+		}
+	}
+
+	/// Attempt to deaggregate a transaction and add it to the mempool
+	pub fn deaggregate_and_add_to_memory_pool(
+		&mut self,
+		tx_source: TxSource,
+		tx: transaction::Transaction,
+		stem: bool,
+	) -> Result<(), PoolError> {
+		match self.deaggregate_transaction(tx.clone()) {
+			Ok(deaggragated_tx) => self.add_to_memory_pool(tx_source, deaggragated_tx, stem),
+			Err(e) => {
+				debug!(
+					LOGGER,
+					"Could not deaggregate multi-kernel transaction: {:?}", e
+				);
+				self.add_to_memory_pool(tx_source, tx, stem)
+			}
+		}
+	}
+
+	/// Attempt to deaggregate multi-kernel transaction as much as possible based on the content
+	/// of the mempool
+	pub fn deaggregate_transaction(
+		&self,
+		tx: transaction::Transaction,
+	) -> Result<Transaction, PoolError> {
+		// find candidates tx and attempt to deaggregate
+		match self.find_candidates(tx.clone()) {
+			Some(candidates_txs) => match transaction::deaggregate(tx, candidates_txs) {
+				Ok(deaggregated_tx) => Ok(deaggregated_tx),
+				Err(e) => {
+					debug!(LOGGER, "Could not deaggregate transaction: {}", e);
+					Err(PoolError::FailedDeaggregation)
+				}
+			},
+			None => {
+				debug!(
+					LOGGER,
+					"Could not deaggregate transaction: no candidate transaction found"
+				);
+				Err(PoolError::FailedDeaggregation)
+			}
+		}
+	}
+
+	/// Find candidate transactions for a multi-kernel transaction
+	fn find_candidates(&self, tx: transaction::Transaction) -> Option<Vec<Transaction>> {
+		// While the inputs outputs can be cut-through the kernel will stay intact
+		// In order to deaggregate tx we look for tx with the same kernel
+		let mut found_txs: Vec<Transaction> = vec![];
+
+		// Gather all the kernels of the multi-kernel transaction in one set
+		let kernels_set: HashSet<TxKernel> = tx.kernels.iter().cloned().collect::<HashSet<_>>();
+
+		// Check each transaction in the pool
+		for (_, tx) in &self.transactions {
+			let candidates_kernels_set: HashSet<TxKernel> =
+				tx.kernels.iter().cloned().collect::<HashSet<_>>();
+
+			let kernels_set_intersection: HashSet<&TxKernel> =
+				kernels_set.intersection(&candidates_kernels_set).collect();
+
+			// Consider the transaction only if all the kernels match and if it is indeed a
+			// subset
+			if kernels_set_intersection.len() == tx.kernels.len()
+				&& candidates_kernels_set.is_subset(&kernels_set)
+			{
+				debug!(LOGGER, "Found a transaction with the same kernel");
+				found_txs.push(*tx.clone());
+			}
+		}
+
+		if found_txs.len() != 0 {
+			Some(found_txs)
+		} else {
+			None
 		}
 	}
 
@@ -964,7 +1042,7 @@ mod tests {
 		let child_transaction = test_transaction(vec![11, 3], vec![12]);
 
 		let txs = vec![parent_transaction, child_transaction];
-		let multi_kernel_transaction = transaction::aggregate(txs).unwrap();
+		let multi_kernel_transaction = transaction::aggregate_with_cut_through(txs).unwrap();
 
 		dummy_chain.update_output_set(new_output);
 
@@ -1000,7 +1078,84 @@ mod tests {
 	}
 
 	#[test]
-	/// Attempt to add a bad multi kernel transaction to the mempool should get rejected
+	/// Attempt to deaggregate a multi_kernel transaction
+	/// Push the parent transaction in the mempool then send a multikernel tx containing it and a
+	/// child transaction In the end, the pool should contain both transactions.
+	fn test_multikernel_deaggregate() {
+		let mut dummy_chain = DummyChainImpl::new();
+		let head_header = block::BlockHeader {
+			height: 1,
+			..block::BlockHeader::default()
+		};
+		dummy_chain.store_head_header(&head_header);
+
+		let transaction1 = test_transaction_with_offset(vec![5], vec![1]);
+		println!("{:?}", transaction1.validate());
+		let transaction2 = test_transaction_with_offset(vec![8], vec![2]);
+
+		// We want these transactions to be rooted in the blockchain.
+		let new_output = DummyOutputSet::empty()
+			.with_output(test_output(5))
+			.with_output(test_output(8));
+
+		dummy_chain.update_output_set(new_output);
+
+		// To mirror how this construction is intended to be used, the pool
+		// is placed inside a RwLock.
+		let pool = RwLock::new(test_setup(&Arc::new(dummy_chain)));
+
+		// Take the write lock and add a pool entry
+		{
+			let mut write_pool = pool.write().unwrap();
+			assert_eq!(write_pool.total_size(), 0);
+
+			// First, add the first transaction
+			let result = write_pool.add_to_memory_pool(test_source(), transaction1.clone(), false);
+			if result.is_err() {
+				panic!("got an error adding tx 1: {:?}", result.err().unwrap());
+			}
+		}
+
+		let txs = vec![transaction1.clone(), transaction2.clone()];
+		let multi_kernel_transaction = transaction::aggregate(txs).unwrap();
+
+		let found_tx: Transaction;
+		// Now take the read lock and attempt to deaggregate the transaction
+		{
+			let read_pool = pool.read().unwrap();
+			found_tx = read_pool
+				.deaggregate_transaction(multi_kernel_transaction)
+				.unwrap();
+
+			// Test the retrived transactions
+			assert_eq!(transaction2, found_tx);
+		}
+
+		// Take the write lock and add a pool entry
+		{
+			let mut write_pool = pool.write().unwrap();
+			assert_eq!(write_pool.total_size(), 1);
+
+			// First, add the transaction rooted in the blockchain
+			let result = write_pool.add_to_memory_pool(test_source(), found_tx.clone(), false);
+			if result.is_err() {
+				panic!("got an error adding child tx: {:?}", result.err().unwrap());
+			}
+		}
+
+		// Now take the read lock and use a few exposed methods to check consistency
+		{
+			let read_pool = pool.read().unwrap();
+			assert_eq!(read_pool.total_size(), 2);
+			expect_output_parent!(read_pool, Parent::PoolTransaction{tx_ref: _}, 1, 2);
+			expect_output_parent!(read_pool, Parent::AlreadySpent{other_tx: _}, 5, 8);
+			expect_output_parent!(read_pool, Parent::Unknown, 11, 3, 20);
+		}
+	}
+
+	#[test]
+	/// Attempt to add a bad multi kernel transaction to the mempool should get
+	/// rejected
 	fn test_bad_multikernel_pool_add() {
 		let mut dummy_chain = DummyChainImpl::new();
 		let head_header = block::BlockHeader {
@@ -1738,6 +1893,34 @@ mod tests {
 		tx_elements.push(build::with_fee(fees as u64));
 
 		build::transaction(tx_elements, &keychain).unwrap()
+	}
+
+	fn test_transaction_with_offset(
+		input_values: Vec<u64>,
+		output_values: Vec<u64>,
+	) -> transaction::Transaction {
+		let keychain = keychain_for_tests();
+
+		let input_sum = input_values.iter().sum::<u64>() as i64;
+		let output_sum = output_values.iter().sum::<u64>() as i64;
+
+		let fees: i64 = input_sum - output_sum;
+		assert!(fees >= 0);
+
+		let mut tx_elements = Vec::new();
+
+		for input_value in input_values {
+			let key_id = keychain.derive_key_id(input_value as u32).unwrap();
+			tx_elements.push(build::input(input_value, key_id));
+		}
+
+		for output_value in output_values {
+			let key_id = keychain.derive_key_id(output_value as u32).unwrap();
+			tx_elements.push(build::output(output_value, key_id));
+		}
+		tx_elements.push(build::with_fee(fees as u64));
+
+		build::transaction_with_offset(tx_elements, &keychain).unwrap()
 	}
 
 	fn test_transaction_with_coinbase_input(
