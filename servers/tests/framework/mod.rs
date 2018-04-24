@@ -15,10 +15,9 @@
 extern crate grin_api as api;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
-extern crate grin_servers as servers;
 extern crate grin_keychain as keychain;
 extern crate grin_p2p as p2p;
-extern crate grin_pow as pow;
+extern crate grin_servers as servers;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
@@ -189,22 +188,6 @@ impl LocalServerContainer {
 			seeds = vec![self.config.seed_addr.to_string()];
 		}
 
-		let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
-		let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();
-		plugin_config.type_filter = String::from("mean_cpu");
-		plugin_config_vec.push(plugin_config);
-
-		let miner_config = pow::types::MinerConfig {
-			enable_mining: self.config.start_miner,
-			burn_reward: self.config.burn_mining_rewards,
-			miner_async_mode: Some(false),
-			miner_plugin_dir: None,
-			miner_plugin_config: Some(plugin_config_vec),
-			wallet_listener_url: self.config.coinbase_wallet_address.clone(),
-			slow_down_in_millis: Some(self.config.miner_slowdown_in_millis.clone()),
-			..Default::default()
-		};
-
 		let s = servers::Server::new(servers::ServerConfig {
 			api_http_addr: api_addr,
 			db_root: format!("{}/.grin", self.working_dir),
@@ -216,21 +199,30 @@ impl LocalServerContainer {
 			seeding_type: seeding_type,
 			chain_type: core::global::ChainTypes::AutomatedTesting,
 			skip_sync_wait: Some(true),
-			mining_config: Some(miner_config.clone()),
+			stratum_mining_config: None,
 			..Default::default()
 		}).unwrap();
 
 		self.p2p_server_stats = Some(s.get_server_stats().unwrap());
 
+		let mut wallet_url = None;
+
 		if self.config.start_wallet == true {
 			self.run_wallet(duration_in_seconds + 5);
 			// give a second to start wallet before continuing
 			thread::sleep(time::Duration::from_millis(1000));
+			wallet_url = Some(format!(
+				"http://{}:{}",
+				self.config.base_addr, self.config.wallet_port
+			));
 		}
 
 		if self.config.start_miner == true {
-			println!("starting Miner on port {}", self.config.p2p_server_port);
-			s.start_miner(miner_config);
+			println!(
+				"starting test Miner on port {}",
+				self.config.p2p_server_port
+			);
+			s.start_test_miner(wallet_url);
 		}
 
 		for p in &mut self.peer_list {
@@ -576,19 +568,13 @@ pub fn config(n: u16, test_name_dir: &str, seed_n: u16) -> servers::ServerConfig
 	}
 }
 
-/// Create and return a MinerConfig
-pub fn miner_config() -> pow::types::MinerConfig {
-	let mut plugin_config = pow::types::CuckooMinerPluginConfig::default();
-	let mut plugin_config_vec: Vec<pow::types::CuckooMinerPluginConfig> = Vec::new();
-	plugin_config.type_filter = String::from("mean_cpu");
-	plugin_config_vec.push(plugin_config);
-
-	pow::types::MinerConfig {
-		enable_mining: true,
-		burn_reward: true,
-		miner_async_mode: Some(false),
-		miner_plugin_dir: None,
-		miner_plugin_config: Some(plugin_config_vec),
-		..Default::default()
+/// return stratum mining config
+pub fn stratum_config() -> servers::common::types::StratumServerConfig {
+	servers::common::types::StratumServerConfig {
+		enable_stratum_server: Some(true),
+		stratum_server_addr: Some(String::from("127.0.0.1:13416")),
+		attempt_time_per_block: 60,
+		wallet_listener_url: String::from("http://127.0.0.1:13415"),
+		burn_reward: false,
 	}
 }

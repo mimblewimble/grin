@@ -24,7 +24,6 @@ grin_core = { path = "../core" }
 grin_keychain = { path = "../keychain" }
 grin_p2p = { path = "../p2p" }
 grin_pool = { path = "../pool" }
-grin_pow = { path = "../pow" }
 grin_store = { path = "../store" }
 grin_util = { path = "../util" }
 grin_wallet = { path = "../wallet" }

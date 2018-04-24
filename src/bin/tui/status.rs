@@ -86,7 +86,7 @@ impl TUIStatusListener for TUIStatusView {
 				"Running".to_string()
 			}
 		};
-		let basic_mining_config_status = {
+		/*let basic_mining_config_status = {
 			if stats.mining_stats.is_enabled {
 				"Configured as mining node"
 			} else {
@@ -121,7 +121,7 @@ impl TUIStatusListener for TUIStatusView {
 			} else {
 				(" ".to_string(), " ".to_string())
 			}
-		};
+		};*/
 		c.call_on_id("basic_current_status", |t: &mut TextView| {
 			t.set_content(basic_status);
 		});
@@ -134,7 +134,7 @@ impl TUIStatusListener for TUIStatusView {
 		c.call_on_id("basic_total_difficulty", |t: &mut TextView| {
 			t.set_content(stats.head.total_difficulty.to_string());
 		});
-		c.call_on_id("basic_mining_config_status", |t: &mut TextView| {
+		/*c.call_on_id("basic_mining_config_status", |t: &mut TextView| {
 			t.set_content(basic_mining_config_status);
 		});
 		c.call_on_id("basic_mining_status", |t: &mut TextView| {
@@ -142,6 +142,6 @@ impl TUIStatusListener for TUIStatusView {
 		});
 		c.call_on_id("basic_network_info", |t: &mut TextView| {
 			t.set_content(basic_network_info);
-		});
+		});*/
 	}
 }

@@ -40,15 +40,14 @@ extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_p2p as p2p;
 extern crate grin_pool as pool;
-extern crate grin_pow as pow;
 extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
-mod common;
+pub mod common;
 mod grin;
 mod mining;
 
 pub use grin::server::Server;
-pub use common::types::{Seeding, ServerConfig};
-pub use common::stats::{PeerStats, ServerStats, DiffBlock};
+pub use common::types::{Seeding, ServerConfig, StratumServerConfig};
+pub use common::stats::{DiffBlock, PeerStats, ServerStats, StratumStats, WorkerStats};

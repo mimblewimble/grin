@@ -234,7 +234,7 @@ mod test {
 	use core::block::Error::KernelLockHeight;
 	use ser;
 	use keychain;
-	use keychain::{BlindingFactor, Keychain};
+	use keychain::Keychain;
 
 	#[test]
 	pub fn test_amount_to_hr() {

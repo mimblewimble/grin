@@ -28,9 +28,9 @@ extern crate time;
 extern crate grin_api as api;
 extern crate grin_config as config;
 extern crate grin_core as core;
-extern crate grin_servers as servers;
 extern crate grin_keychain as keychain;
 extern crate grin_p2p as p2p;
+extern crate grin_servers as servers;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
@@ -139,10 +139,6 @@ fn main() {
                      .long("seed")
                      .help("Override seed node(s) to connect to")
                      .takes_value(true))
-                .arg(Arg::with_name("mine")
-                     .short("m")
-                     .long("mine")
-                     .help("Starts the debugging mining loop"))
                 .arg(Arg::with_name("wallet_url")
                      .short("w")
                      .long("wallet_url")
@@ -399,13 +395,9 @@ fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalCon
 			server_config.api_http_addr = format!("{}:{}", default_ip, api_port);
 		}
 
-		if a.is_present("mine") {
-			server_config.mining_config.as_mut().unwrap().enable_mining = true;
-		}
-
 		if let Some(wallet_url) = a.value_of("wallet_url") {
 			server_config
-				.mining_config
+				.stratum_mining_config
 				.as_mut()
 				.unwrap()
 				.wallet_listener_url = wallet_url.to_string();

@@ -16,7 +16,6 @@ extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
-extern crate grin_pow as pow;
 extern crate rand;
 
 use std::fs;
@@ -29,6 +28,7 @@ use core::core::target::Difficulty;
 use keychain::Keychain;
 use core::global;
 use core::global::ChainTypes;
+use core::pow;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -47,7 +47,7 @@ fn test_various_store_indices() {
 		&chain::store::ChainKVStore::new(chain_dir.to_string()).unwrap() as &ChainStore;
 
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let genesis = pow::mine_genesis_block(None).unwrap();
+	let genesis = pow::mine_genesis_block().unwrap();
 	chain_store.save_block(&genesis).unwrap();
 	chain_store
 		.setup_height(&genesis.header, &Tip::new(genesis.hash()))

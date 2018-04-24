@@ -12,6 +12,5 @@ toml = "0.4"
 
 grin_servers = { path = "../servers" }
 grin_p2p = { path = "../p2p" }
-grin_pow = { path = "../pow"}
 grin_util = { path = "../util" }
 grin_wallet = { path = "../wallet"}

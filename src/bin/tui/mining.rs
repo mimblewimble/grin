@@ -29,81 +29,71 @@ use tui::chrono::prelude::*;
 use tui::constants::*;
 use tui::types::*;
 
-use servers::{ServerStats, DiffBlock};
-use tui::pow::cuckoo_miner::CuckooMinerDeviceStats;
+use servers::{DiffBlock, ServerStats, WorkerStats};
 use tui::table::{TableView, TableViewItem};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
-enum MiningDeviceColumn {
-	PluginId,
-	DeviceId,
-	DeviceName,
-	InUse,
-	ErrorStatus,
-	LastGraphTime,
-	GraphsPerSecond,
+enum StratumWorkerColumn {
+	Id,
+	IsConnected,
+	LastSeen,
+	PowDifficulty,
+	NumAccepted,
+	NumRejected,
+	NumStale,
 }
 
-impl MiningDeviceColumn {
+impl StratumWorkerColumn {
 	fn _as_str(&self) -> &str {
 		match *self {
-			MiningDeviceColumn::PluginId => "Plugin ID",
-			MiningDeviceColumn::DeviceId => "Device ID",
-			MiningDeviceColumn::DeviceName => "Name",
-			MiningDeviceColumn::InUse => "In Use",
-			MiningDeviceColumn::ErrorStatus => "Status",
-			MiningDeviceColumn::LastGraphTime => "Last Graph Time",
-			MiningDeviceColumn::GraphsPerSecond => "GPS",
+			StratumWorkerColumn::Id => "Worker ID",
+			StratumWorkerColumn::IsConnected => "Connected",
+			StratumWorkerColumn::LastSeen => "Last Seen",
+			StratumWorkerColumn::PowDifficulty => "PowDifficulty",
+			StratumWorkerColumn::NumAccepted => "Num Accepted",
+			StratumWorkerColumn::NumRejected => "Num Rejected",
+			StratumWorkerColumn::NumStale => "Num Stale",
 		}
 	}
 }
 
-impl TableViewItem<MiningDeviceColumn> for CuckooMinerDeviceStats {
-	fn to_column(&self, column: MiningDeviceColumn) -> String {
-		let last_solution_time_secs = self.last_solution_time as f64 / 1000000000.0;
+impl TableViewItem<StratumWorkerColumn> for WorkerStats {
+	fn to_column(&self, column: StratumWorkerColumn) -> String {
+		let naive_datetime = NaiveDateTime::from_timestamp(
+			self.last_seen
+				.duration_since(time::UNIX_EPOCH)
+				.unwrap()
+				.as_secs() as i64,
+			0,
+		);
+		let datetime: DateTime<Utc> = DateTime::from_utc(naive_datetime, Utc);
+
 		match column {
-			MiningDeviceColumn::PluginId => String::from("TBD"),
-			MiningDeviceColumn::DeviceId => self.device_id.clone(),
-			MiningDeviceColumn::DeviceName => self.device_name.clone(),
-			MiningDeviceColumn::InUse => match self.in_use {
-				1 => String::from("Yes"),
-				_ => String::from("No"),
-			},
-			MiningDeviceColumn::ErrorStatus => match self.has_errored {
-				0 => String::from("OK"),
-				_ => String::from("Errored"),
-			},
-			MiningDeviceColumn::LastGraphTime => {
-				String::from(format!("{}s", last_solution_time_secs))
-			}
-			MiningDeviceColumn::GraphsPerSecond => {
-				String::from(format!("{:.*}", 4, 1.0 / last_solution_time_secs))
-			}
+			StratumWorkerColumn::Id => self.id.clone(),
+			StratumWorkerColumn::IsConnected => self.is_connected.to_string(),
+			StratumWorkerColumn::LastSeen => datetime.to_string(),
+			StratumWorkerColumn::PowDifficulty => self.pow_difficulty.to_string(),
+			StratumWorkerColumn::NumAccepted => self.num_accepted.to_string(),
+			StratumWorkerColumn::NumRejected => self.num_rejected.to_string(),
+			StratumWorkerColumn::NumStale => self.num_stale.to_string(),
 		}
 	}
 
-	fn cmp(&self, other: &Self, column: MiningDeviceColumn) -> Ordering
+	fn cmp(&self, _other: &Self, column: StratumWorkerColumn) -> Ordering
 	where
 		Self: Sized,
 	{
-		let last_solution_time_secs_self = self.last_solution_time as f64 / 1000000000.0;
-		let gps_self = 1.0 / last_solution_time_secs_self;
-		let last_solution_time_secs_other = other.last_solution_time as f64 / 1000000000.0;
-		let gps_other = 1.0 / last_solution_time_secs_other;
 		match column {
-			MiningDeviceColumn::PluginId => Ordering::Equal,
-			MiningDeviceColumn::DeviceId => self.device_id.cmp(&other.device_id),
-			MiningDeviceColumn::DeviceName => self.device_name.cmp(&other.device_name),
-			MiningDeviceColumn::InUse => self.in_use.cmp(&other.in_use),
-			MiningDeviceColumn::ErrorStatus => self.has_errored.cmp(&other.has_errored),
-			MiningDeviceColumn::LastGraphTime => {
-				self.last_solution_time.cmp(&other.last_solution_time)
-			}
-			MiningDeviceColumn::GraphsPerSecond => gps_self.partial_cmp(&gps_other).unwrap(),
+			StratumWorkerColumn::Id => Ordering::Equal,
+			StratumWorkerColumn::IsConnected => Ordering::Equal,
+			StratumWorkerColumn::LastSeen => Ordering::Equal,
+			StratumWorkerColumn::PowDifficulty => Ordering::Equal,
+			StratumWorkerColumn::NumAccepted => Ordering::Equal,
+			StratumWorkerColumn::NumRejected => Ordering::Equal,
+			StratumWorkerColumn::NumStale => Ordering::Equal,
 		}
 	}
 }
-
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum DiffColumn {
 	BlockNumber,
@@ -154,7 +144,7 @@ pub struct TUIMiningView;
 impl TUIStatusListener for TUIMiningView {
 	/// Create the mining view
 	fn create() -> Box<View> {
-		let devices_button = Button::new_raw("Status / Devices", |s| {
+		let devices_button = Button::new_raw("Mining Server Status", |s| {
 			let _ = s.call_on_id("mining_stack_view", |sv: &mut StackView| {
 				let pos = sv.find_layer_from_id("mining_device_view").unwrap();
 				sv.move_to_front(pos);
@@ -174,47 +164,60 @@ impl TUIStatusListener for TUIMiningView {
 			let _ = c.focus_id(MAIN_MENU);
 		});
 
-		let table_view =
-			TableView::<CuckooMinerDeviceStats, MiningDeviceColumn>::new()
-				.column(MiningDeviceColumn::PluginId, "Plugin ID", |c| {
-					c.width_percent(10)
-				})
-				.column(MiningDeviceColumn::DeviceId, "Device ID", |c| {
-					c.width_percent(10)
-				})
-				.column(MiningDeviceColumn::DeviceName, "Device Name", |c| {
-					c.width_percent(20)
-				})
-				.column(MiningDeviceColumn::InUse, "In Use", |c| c.width_percent(10))
-				.column(MiningDeviceColumn::ErrorStatus, "Status", |c| {
-					c.width_percent(10)
-				})
-				.column(MiningDeviceColumn::LastGraphTime, "Graph Time", |c| {
-					c.width_percent(10)
-				})
-				.column(MiningDeviceColumn::GraphsPerSecond, "GPS", |c| {
-					c.width_percent(10)
-				});
+		let table_view = TableView::<WorkerStats, StratumWorkerColumn>::new()
+			.column(StratumWorkerColumn::Id, "Worker ID", |c| {
+				c.width_percent(10)
+			})
+			.column(StratumWorkerColumn::IsConnected, "Connected", |c| {
+				c.width_percent(10)
+			})
+			.column(StratumWorkerColumn::LastSeen, "Last Seen", |c| {
+				c.width_percent(20)
+			})
+			.column(StratumWorkerColumn::PowDifficulty, "Pow Difficulty", |c| {
+				c.width_percent(10)
+			})
+			.column(StratumWorkerColumn::NumAccepted, "Num Accepted", |c| {
+				c.width_percent(10)
+			})
+			.column(StratumWorkerColumn::NumRejected, "Num Rejected", |c| {
+				c.width_percent(10)
+			})
+			.column(StratumWorkerColumn::NumStale, "Num Stale", |c| {
+				c.width_percent(10)
+			});
 
 		let status_view = LinearLayout::new(Orientation::Vertical)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_id("mining_config_status")),
+					.child(TextView::new("  ").with_id("stratum_config_status")),
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_id("mining_status")),
+					.child(TextView::new("  ").with_id("stratum_is_running_status")),
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_id("network_info")),
+					.child(TextView::new("  ").with_id("stratum_num_workers_status")),
+			)
+			.child(
+				LinearLayout::new(Orientation::Horizontal)
+					.child(TextView::new("  ").with_id("stratum_block_height_status")),
+			)
+			.child(
+				LinearLayout::new(Orientation::Horizontal)
+					.child(TextView::new("  ").with_id("stratum_network_difficulty_status")),
+			)
+			.child(
+				LinearLayout::new(Orientation::Horizontal)
+					.child(TextView::new("  ").with_id("stratum_cuckoo_size_status")),
 			);
 
 		let mining_device_view = LinearLayout::new(Orientation::Vertical)
 			.child(status_view)
 			.child(BoxView::with_full_screen(
 				Dialog::around(table_view.with_id(TABLE_MINING_STATUS).min_size((50, 20)))
-					.title("Mining Devices"),
+					.title("Mining Workers"),
 			))
 			.with_id("mining_device_view");
 
@@ -275,55 +278,6 @@ impl TUIStatusListener for TUIMiningView {
 
 	/// update
 	fn update(c: &mut Cursive, stats: &ServerStats) {
-		let basic_mining_config_status = {
-			if stats.mining_stats.is_enabled {
-				"Configured as mining node"
-			} else {
-				"Configured as validating node only (not mining)"
-			}
-		};
-		let (basic_mining_status, basic_network_info) = {
-			if stats.mining_stats.is_enabled {
-				if stats.is_syncing {
-					(
-						"Mining Status: Paused while syncing".to_string(),
-						" ".to_string(),
-					)
-				} else if stats.mining_stats.combined_gps == 0.0 {
-					(
-						"Mining Status: Starting miner and awaiting first solution...".to_string(),
-						" ".to_string(),
-					)
-				} else {
-					(
-						format!(
-							"Mining Status: Mining at height {} at {:.*} GPS",
-							stats.mining_stats.block_height, 4, stats.mining_stats.combined_gps
-						),
-						format!(
-							"Cuckoo {} - Network Difficulty {}",
-							stats.mining_stats.cuckoo_size,
-							stats.mining_stats.network_difficulty.to_string()
-						),
-					)
-				}
-			} else {
-				(" ".to_string(), " ".to_string())
-			}
-		};
-
-		// device
-		c.call_on_id("mining_config_status", |t: &mut TextView| {
-			t.set_content(basic_mining_config_status);
-		});
-		c.call_on_id("mining_status", |t: &mut TextView| {
-			t.set_content(basic_mining_status);
-		});
-		c.call_on_id("network_info", |t: &mut TextView| {
-			t.set_content(basic_network_info);
-		});
-
-		//diff stats
 		c.call_on_id("diff_cur_height", |t: &mut TextView| {
 			t.set_content(stats.diff_stats.height.to_string());
 		});
@@ -338,8 +292,6 @@ impl TUIStatusListener for TUIMiningView {
 			t.set_content(stats.diff_stats.average_difficulty.to_string());
 		});
 
-		let mining_stats = stats.mining_stats.clone();
-		let device_stats = mining_stats.device_stats;
 		let mut diff_stats = stats.diff_stats.last_blocks.clone();
 		diff_stats.reverse();
 		let _ = c.call_on_id(
@@ -348,22 +300,38 @@ impl TUIStatusListener for TUIMiningView {
 				t.set_items(diff_stats);
 			},
 		);
+		let stratum_stats = stats.stratum_stats.clone();
+		let worker_stats = stratum_stats.worker_stats;
+		let stratum_enabled = format!("Mining server enabled: {}", stratum_stats.is_enabled);
+		let stratum_is_running = format!("Mining server running: {}", stratum_stats.is_running);
+		let stratum_num_workers = format!("Number of workers: {}", stratum_stats.num_workers);
+		let stratum_block_height = format!("Solving Block Height: {}", stratum_stats.block_height);
+		let stratum_network_difficulty =
+			format!("Network Difficulty: {}", stratum_stats.network_difficulty);
+		let stratum_cuckoo_size = format!("Cuckoo Size: {}", stratum_stats.cuckoo_size);
 
-		if device_stats.is_none() {
-			return;
-		}
-		let device_stats = device_stats.unwrap();
-		let mut flattened_device_stats = vec![];
-		for p in device_stats.into_iter() {
-			for d in p.into_iter() {
-				flattened_device_stats.push(d);
-			}
-		}
-
+		c.call_on_id("stratum_config_status", |t: &mut TextView| {
+			t.set_content(stratum_enabled);
+		});
+		c.call_on_id("stratum_is_running_status", |t: &mut TextView| {
+			t.set_content(stratum_is_running);
+		});
+		c.call_on_id("stratum_num_workers_status", |t: &mut TextView| {
+			t.set_content(stratum_num_workers);
+		});
+		c.call_on_id("stratum_block_height_status", |t: &mut TextView| {
+			t.set_content(stratum_block_height);
+		});
+		c.call_on_id("stratum_network_difficulty_status", |t: &mut TextView| {
+			t.set_content(stratum_network_difficulty);
+		});
+		c.call_on_id("stratum_cuckoo_size_status", |t: &mut TextView| {
+			t.set_content(stratum_cuckoo_size);
+		});
 		let _ = c.call_on_id(
 			TABLE_MINING_STATUS,
-			|t: &mut TableView<CuckooMinerDeviceStats, MiningDeviceColumn>| {
-				t.set_items(flattened_device_stats);
+			|t: &mut TableView<WorkerStats, StratumWorkerColumn>| {
+				t.set_items(worker_stats);
 			},
 		);
 	}

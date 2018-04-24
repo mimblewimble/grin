@@ -1079,6 +1079,7 @@ mod test {
 	#[test]
 	fn block_10_tx_serialized_size() {
 		let keychain = Keychain::from_random_seed().unwrap();
+		global::set_mining_mode(global::ChainTypes::Mainnet);
 
 		let mut txs = vec![];
 		for _ in 0..10 {

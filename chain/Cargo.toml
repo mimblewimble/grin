@@ -22,5 +22,3 @@ grin_util = { path = "../util" }
 [dev-dependencies]
 env_logger = "0.3"
 rand = "0.3"
-
-grin_pow = { path = "../pow" }

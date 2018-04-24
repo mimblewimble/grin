@@ -15,9 +15,8 @@
 extern crate grin_api as api;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
-extern crate grin_servers as servers;
 extern crate grin_p2p as p2p;
-extern crate grin_pow as pow;
+extern crate grin_servers as servers;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
@@ -37,7 +36,7 @@ use std::time;
 use core::global;
 use core::global::ChainTypes;
 
-use framework::{config, miner_config};
+use framework::{config, stratum_config};
 
 // Create a grin server, and a stratum server.
 // Simulate a few JSONRpc requests and verify the results.
@@ -55,14 +54,14 @@ fn basic_stratum_server() {
 	let s = servers::Server::new(config(4000, test_name_dir, 0)).unwrap();
 
 	// Get mining config with stratumserver enabled
-	let mut miner_cfg = miner_config();
-	miner_cfg.enable_mining = false;
-	miner_cfg.attempt_time_per_block = 999;
-	miner_cfg.enable_stratum_server = Some(true);
-	miner_cfg.stratum_server_addr = Some(String::from("127.0.0.1:11101"));
+	let mut stratum_cfg = stratum_config();
+	stratum_cfg.burn_reward = true;
+	stratum_cfg.attempt_time_per_block = 999;
+	stratum_cfg.enable_stratum_server = Some(true);
+	stratum_cfg.stratum_server_addr = Some(String::from("127.0.0.1:11101"));
 
 	// Start stratum server
-	s.start_stratum_server(miner_cfg);
+	s.start_stratum_server(stratum_cfg);
 
 	// Wait for stratum server to start and
 	// Verify stratum server accepts connections
@@ -142,7 +141,7 @@ fn basic_stratum_server() {
 	assert_eq!(stats.stratum_stats.worker_stats[1].is_connected, true);
 
 	// Start mining blocks
-	s.start_miner(miner_config());
+	s.start_test_miner(None);
 
 	// Simulate a worker lost connection
 	workers.remove(1);

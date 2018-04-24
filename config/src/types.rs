@@ -18,8 +18,7 @@ use std::path::PathBuf;
 use std::io;
 use std::fmt;
 
-use servers::ServerConfig;
-use pow::types::MinerConfig;
+use servers::{ServerConfig, StratumServerConfig};
 use util::LoggingConfig;
 use wallet::WalletConfig;
 
@@ -98,7 +97,7 @@ pub struct ConfigMembers {
 	#[serde(default)]
 	pub server: ServerConfig,
 	/// Mining config
-	pub mining: Option<MinerConfig>,
+	pub mining_server: Option<StratumServerConfig>,
 	/// Logging config
 	pub logging: Option<LoggingConfig>,
 

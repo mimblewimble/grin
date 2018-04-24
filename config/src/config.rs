@@ -20,8 +20,7 @@ use std::path::PathBuf;
 use std::fs::File;
 
 use toml;
-use servers::ServerConfig;
-use pow::types::MinerConfig;
+use servers::{ServerConfig, StratumServerConfig};
 use util::LoggingConfig;
 use types::{ConfigError, ConfigMembers, GlobalConfig};
 use wallet::WalletConfig;
@@ -38,7 +37,7 @@ impl Default for ConfigMembers {
 	fn default() -> ConfigMembers {
 		ConfigMembers {
 			server: ServerConfig::default(),
-			mining: Some(MinerConfig::default()),
+			mining_server: Some(StratumServerConfig::default()),
 			logging: Some(LoggingConfig::default()),
 			wallet: WalletConfig::default(),
 		}
@@ -136,7 +135,7 @@ impl GlobalConfig {
 			Ok(mut gc) => {
 				// Put the struct back together, because the config
 				// file was flattened a bit
-				gc.server.mining_config = gc.mining.clone();
+				gc.server.stratum_mining_config = gc.mining_server.clone();
 				self.using_config_file = true;
 				self.members = Some(gc);
 				return Ok(self);
@@ -177,13 +176,14 @@ impl GlobalConfig {
     }*/
 
 	/// Enable mining
-	pub fn mining_enabled(&mut self) -> bool {
+	pub fn stratum_enabled(&mut self) -> bool {
 		return self.members
 			.as_mut()
 			.unwrap()
-			.mining
+			.mining_server
 			.as_mut()
 			.unwrap()
-			.enable_mining;
+			.enable_stratum_server
+			.unwrap();
 	}
 }

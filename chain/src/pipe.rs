@@ -39,7 +39,7 @@ pub struct BlockContext {
 	/// The head
 	pub head: Tip,
 	/// The POW verification function
-	pub pow_verifier: fn(&BlockHeader, u32) -> bool,
+	pub pow_verifier: fn(&BlockHeader, u8) -> bool,
 	/// MMR sum tree states
 	pub txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 }
@@ -233,7 +233,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	if !ctx.opts.contains(Options::SKIP_POW) {
-		let n = global::sizeshift() as u32;
+		let n = global::sizeshift();
 		if !(ctx.pow_verifier)(header, n) {
 			error!(
 				LOGGER,
