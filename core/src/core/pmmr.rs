@@ -799,6 +799,10 @@ impl PruneList {
 /// side of the range, and navigates toward lower siblings toward the right
 /// of the range.
 pub fn peaks(num: u64) -> Vec<u64> {
+	if num == 0 {
+		return vec![];
+	}
+
 	// detecting an invalid mountain range, when siblings exist but no parent
 	// exists
 	if bintree_postorder_height(num + 1) > bintree_postorder_height(num) {
@@ -838,6 +842,10 @@ pub fn peaks(num: u64) -> Vec<u64> {
 /// The number of leaves nodes in a MMR of the provided size. Uses peaks to
 /// get the positions of all full binary trees and uses the height of these
 pub fn n_leaves(mut sz: u64) -> u64 {
+	if sz == 0 {
+		return 0;
+	}
+
 	while bintree_postorder_height(sz + 1) > 0 {
 		sz += 1;
 	}
@@ -1141,16 +1149,6 @@ mod test {
 	}
 
 	#[test]
-	fn test_leaf_index() {
-		assert_eq!(n_leaves(1), 1);
-		assert_eq!(n_leaves(2), 2);
-		assert_eq!(n_leaves(4), 3);
-		assert_eq!(n_leaves(5), 4);
-		assert_eq!(n_leaves(8), 5);
-		assert_eq!(n_leaves(9), 6);
-	}
-
-	#[test]
 	fn some_all_ones() {
 		for n in vec![1, 7, 255] {
 			assert!(all_ones(n), "{} should be all ones", n);
@@ -1190,15 +1188,22 @@ mod test {
 		}
 	}
 
-	// Trst our n_leaves impl does the right thing for various MMR sizes
 	#[test]
-	fn various_n_leaves() {
+	fn test_n_leaves() {
+		// make sure we handle an empty MMR correctly
+		assert_eq!(n_leaves(0), 0);
+
+		// and various sizes on non-empty MMRs
 		assert_eq!(n_leaves(1), 1);
-		// 2 is not a valid size for a tree, but n_leaves rounds up to next valid tree
-		// size
 		assert_eq!(n_leaves(2), 2);
 		assert_eq!(n_leaves(3), 2);
+		assert_eq!(n_leaves(4), 3);
+		assert_eq!(n_leaves(5), 4);
+		assert_eq!(n_leaves(6), 4);
 		assert_eq!(n_leaves(7), 4);
+		assert_eq!(n_leaves(8), 5);
+		assert_eq!(n_leaves(9), 6);
+		assert_eq!(n_leaves(10), 6);
 	}
 
 	/// Find parent and sibling positions for various node positions.
@@ -1281,7 +1286,13 @@ mod test {
 	#[test]
 	fn some_peaks() {
 		// 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3
+
 		let empty: Vec<u64> = vec![];
+
+		// make sure we handle an empty MMR correctly
+		assert_eq!(peaks(0), empty);
+
+		// and various non-empty MMRs
 		assert_eq!(peaks(1), [1]);
 		assert_eq!(peaks(2), empty);
 		assert_eq!(peaks(3), [3]);
@@ -1919,19 +1930,6 @@ mod test {
 		// assert_eq!(pl.get_shift(12), None);
 		// assert_eq!(pl.get_shift(9), Some(8));
 		// assert_eq!(pl.get_shift(17), Some(11));
-	}
-
-	#[test]
-	fn n_size_check() {
-		assert_eq!(n_leaves(1), 1);
-		assert_eq!(n_leaves(2), 2);
-		assert_eq!(n_leaves(3), 2);
-		assert_eq!(n_leaves(4), 3);
-		assert_eq!(n_leaves(5), 4);
-		assert_eq!(n_leaves(7), 4);
-		assert_eq!(n_leaves(8), 5);
-		assert_eq!(n_leaves(9), 6);
-		assert_eq!(n_leaves(10), 6);
 	}
 
 	#[test]

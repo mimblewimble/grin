@@ -49,9 +49,8 @@ pub struct AppendOnlyFile {
 }
 
 impl AppendOnlyFile {
-	/// Open a file (existing or not) as append-only, backed by a mmap. Sets
-	/// the last written pos to to_pos if > 0, otherwise the end of the file
-	pub fn open(path: String, to_pos: u64) -> io::Result<AppendOnlyFile> {
+	/// Open a file (existing or not) as append-only, backed by a mmap.
+	pub fn open(path: String) -> io::Result<AppendOnlyFile> {
 		let file = OpenOptions::new()
 			.read(true)
 			.append(true)
@@ -65,13 +64,10 @@ impl AppendOnlyFile {
 			buffer: vec![],
 			buffer_start_bak: 0,
 		};
+		// if we have a non-empty file then mmap it.
 		if let Ok(sz) = aof.size() {
-			let mut buf_start = sz;
-			if to_pos > 0 && to_pos <= buf_start {
-				buf_start = to_pos;
-			}
-			if buf_start > 0 {
-				aof.buffer_start = buf_start as usize;
+			if sz > 0 {
+				aof.buffer_start = sz as usize;
 				aof.mmap = Some(unsafe { memmap::Mmap::map(&aof.file)? });
 			}
 		}
@@ -149,6 +145,11 @@ impl AppendOnlyFile {
 			return vec![];
 		}
 		let mmap = self.mmap.as_ref().unwrap();
+
+		if mmap.len() < (offset + length) {
+			return vec![];
+		}
+
 		(&mmap[offset..(offset + length)]).to_vec()
 	}
 
@@ -245,21 +246,16 @@ pub struct RemoveLog {
 }
 
 impl RemoveLog {
-	/// Open the remove log file. The content of the file will be read in memory
-	/// for fast checking.
-	pub fn open(path: String, rewind_to_index: u32) -> io::Result<RemoveLog> {
+	/// Open the remove log file.
+	/// The content of the file will be read in memory for fast checking.
+	pub fn open(path: String) -> io::Result<RemoveLog> {
 		let removed = read_ordered_vec(path.clone(), 12)?;
-		let mut rl = RemoveLog {
+		Ok(RemoveLog {
 			path: path,
 			removed: removed,
 			removed_tmp: vec![],
 			removed_bak: vec![],
-		};
-		if rewind_to_index > 0 {
-			rl.rewind(rewind_to_index)?;
-			rl.flush()?;
-		}
-		Ok(rl)
+		})
 	}
 
 	/// Rewinds the remove log back to the provided index.

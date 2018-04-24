@@ -33,10 +33,10 @@ use core::core::hash::{Hash, Hashed};
 use core::ser::{PMMRIndexHashable, PMMRable};
 
 use grin_store;
-use grin_store::pmmr::{PMMRBackend, PMMRFileMetadata};
+use grin_store::pmmr::PMMRBackend;
 use grin_store::types::prune_noop;
 use keychain::BlindingFactor;
-use types::{ChainStore, Error, PMMRFileMetadataCollection, TxHashSetRoots};
+use types::{BlockMarker, ChainStore, Error, TxHashSetRoots};
 use util::{zip, LOGGER};
 
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
@@ -57,24 +57,15 @@ impl<T> PMMRHandle<T>
 where
 	T: PMMRable + ::std::fmt::Debug,
 {
-	fn new(
-		root_dir: String,
-		file_name: &str,
-		index_md: Option<PMMRFileMetadata>,
-	) -> Result<PMMRHandle<T>, Error> {
+	fn new(root_dir: String, file_name: &str) -> Result<PMMRHandle<T>, Error> {
 		let path = Path::new(&root_dir).join(TXHASHSET_SUBDIR).join(file_name);
 		fs::create_dir_all(path.clone())?;
-		let be = PMMRBackend::new(path.to_str().unwrap().to_string(), index_md)?;
+		let be = PMMRBackend::new(path.to_str().unwrap().to_string())?;
 		let sz = be.unpruned_size()?;
 		Ok(PMMRHandle {
 			backend: be,
 			last_pos: sz,
 		})
-	}
-
-	/// Return last written positions of hash file and data file
-	pub fn last_file_positions(&self) -> PMMRFileMetadata {
-		self.backend.last_file_positions()
 	}
 }
 
@@ -99,11 +90,7 @@ pub struct TxHashSet {
 
 impl TxHashSet {
 	/// Open an existing or new set of backends for the TxHashSet
-	pub fn open(
-		root_dir: String,
-		commit_index: Arc<ChainStore>,
-		last_file_positions: Option<PMMRFileMetadataCollection>,
-	) -> Result<TxHashSet, Error> {
+	pub fn open(root_dir: String, commit_index: Arc<ChainStore>) -> Result<TxHashSet, Error> {
 		let output_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, OUTPUT_SUBDIR]
 			.iter()
 			.collect();
@@ -119,21 +106,11 @@ impl TxHashSet {
 			.collect();
 		fs::create_dir_all(kernel_file_path.clone())?;
 
-		let mut output_md = None;
-		let mut rproof_md = None;
-		let mut kernel_md = None;
-
-		if let Some(p) = last_file_positions {
-			output_md = Some(p.output_file_md);
-			rproof_md = Some(p.rproof_file_md);
-			kernel_md = Some(p.kernel_file_md);
-		}
-
 		Ok(TxHashSet {
-			output_pmmr_h: PMMRHandle::new(root_dir.clone(), OUTPUT_SUBDIR, output_md)?,
-			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR, rproof_md)?,
-			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR, kernel_md)?,
-			commit_index: commit_index,
+			output_pmmr_h: PMMRHandle::new(root_dir.clone(), OUTPUT_SUBDIR)?,
+			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR)?,
+			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR)?,
+			commit_index,
 		})
 	}
 
@@ -212,17 +189,8 @@ impl TxHashSet {
 	}
 
 	/// Output and kernel MMR indexes at the end of the provided block
-	pub fn indexes_at(&self, bh: &Hash) -> Result<(u64, u64), Error> {
+	pub fn indexes_at(&self, bh: &Hash) -> Result<BlockMarker, Error> {
 		self.commit_index.get_block_marker(bh).map_err(&From::from)
-	}
-
-	/// Last file positions of Output set.. hash file,data file
-	pub fn last_file_metadata(&self) -> PMMRFileMetadataCollection {
-		PMMRFileMetadataCollection::new(
-			self.output_pmmr_h.last_file_positions(),
-			self.rproof_pmmr_h.last_file_positions(),
-			self.kernel_pmmr_h.last_file_positions(),
-		)
 	}
 
 	/// Get sum tree roots
@@ -314,6 +282,7 @@ where
 	let sizes: (u64, u64, u64);
 	let res: Result<T, Error>;
 	let rollback: bool;
+
 	{
 		let commit_index = trees.commit_index.clone();
 
@@ -327,6 +296,7 @@ where
 		}
 		sizes = extension.sizes();
 	}
+
 	match res {
 		Err(e) => {
 			debug!(LOGGER, "Error returned, discarding txhashset extension.");
@@ -367,7 +337,7 @@ pub struct Extension<'a> {
 
 	commit_index: Arc<ChainStore>,
 	new_output_commits: HashMap<Commitment, u64>,
-	new_block_markers: HashMap<Hash, (u64, u64)>,
+	new_block_markers: HashMap<Hash, BlockMarker>,
 	rollback: bool,
 }
 
@@ -427,11 +397,11 @@ impl<'a> Extension<'a> {
 		}
 
 		// finally, recording the PMMR positions after this block for future rewind
-		let last_output_pos = self.output_pmmr.unpruned_size();
-		let last_kernel_pos = self.kernel_pmmr.unpruned_size();
-		self.new_block_markers
-			.insert(b.hash(), (last_output_pos, last_kernel_pos));
-
+		let marker = BlockMarker {
+			output_pos: self.output_pmmr.unpruned_size(),
+			kernel_pos: self.kernel_pmmr.unpruned_size(),
+		};
+		self.new_block_markers.insert(b.hash(), marker);
 		Ok(())
 	}
 
@@ -440,8 +410,8 @@ impl<'a> Extension<'a> {
 		for (commit, pos) in &self.new_output_commits {
 			self.commit_index.save_output_pos(commit, *pos)?;
 		}
-		for (bh, tag) in &self.new_block_markers {
-			self.commit_index.save_block_marker(bh, tag)?;
+		for (bh, marker) in &self.new_block_markers {
+			self.commit_index.save_block_marker(bh, marker)?;
 		}
 		Ok(())
 	}
@@ -566,35 +536,28 @@ impl<'a> Extension<'a> {
 	pub fn rewind(&mut self, block_header: &BlockHeader) -> Result<(), Error> {
 		let hash = block_header.hash();
 		let height = block_header.height;
-		debug!(LOGGER, "Rewind to header at {} [{}]", height, hash); // keep this
+		debug!(LOGGER, "Rewind to header {} @ {}", height, hash);
 
-		// rewind each MMR
-		let (out_pos_rew, kern_pos_rew) = self.commit_index.get_block_marker(&hash)?;
-		self.rewind_pos(height, out_pos_rew, kern_pos_rew)?;
+		// rewind our MMRs to the appropriate pos
+		// based on block height and block marker
+		let marker = self.commit_index.get_block_marker(&hash)?;
+		self.rewind_to_marker(height, &marker)?;
 		Ok(())
 	}
 
 	/// Rewinds the MMRs to the provided positions, given the output and
 	/// kernel we want to rewind to.
-	fn rewind_pos(
-		&mut self,
-		height: u64,
-		out_pos_rew: u64,
-		kern_pos_rew: u64,
-	) -> Result<(), Error> {
-		debug!(
-			LOGGER,
-			"Rewind txhashset to output pos: {}, kernel pos: {}", out_pos_rew, kern_pos_rew,
-		);
+	fn rewind_to_marker(&mut self, height: u64, marker: &BlockMarker) -> Result<(), Error> {
+		debug!(LOGGER, "Rewind txhashset to {}, {:?}", height, marker);
 
 		self.output_pmmr
-			.rewind(out_pos_rew, height as u32)
+			.rewind(marker.output_pos, height as u32)
 			.map_err(&Error::TxHashSetErr)?;
 		self.rproof_pmmr
-			.rewind(out_pos_rew, height as u32)
+			.rewind(marker.output_pos, height as u32)
 			.map_err(&Error::TxHashSetErr)?;
 		self.kernel_pmmr
-			.rewind(kern_pos_rew, height as u32)
+			.rewind(marker.kernel_pos, height as u32)
 			.map_err(&Error::TxHashSetErr)?;
 
 		Ok(())
@@ -618,15 +581,26 @@ impl<'a> Extension<'a> {
 		}
 	}
 
-	/// Validate the txhashset state against the provided block header.
-	/// Rewinds to that pos for the header first so we see a consistent
-	/// view of the world.
-	/// Note: this is an expensive operation and sets force_rollback
-	/// so the extension is read-only.
-	pub fn validate(&mut self, header: &BlockHeader, skip_rproofs: bool) -> Result<(), Error> {
-		// rewind to the provided header for a consistent view
-		&self.rewind(header)?;
+	/// Validate the various MMR roots against the block header.
+	pub fn validate_roots(&self, header: &BlockHeader) -> Result<(), Error> {
+		// If we are validating the genesis block then
+		// we have no outputs or kernels.
+		// So we are done here.
+		if header.height == 0 {
+			return Ok(());
+		}
 
+		let roots = self.roots();
+		if roots.output_root != header.output_root || roots.rproof_root != header.range_proof_root
+			|| roots.kernel_root != header.kernel_root
+		{
+			return Err(Error::InvalidRoot);
+		}
+		Ok(())
+	}
+
+	/// Validate the txhashset state against the provided block header.
+	pub fn validate(&mut self, header: &BlockHeader, skip_rproofs: bool) -> Result<(), Error> {
 		// validate all hashes and sums within the trees
 		if let Err(e) = self.output_pmmr.validate() {
 			return Err(Error::InvalidTxHashSet(e));
@@ -638,12 +612,10 @@ impl<'a> Extension<'a> {
 			return Err(Error::InvalidTxHashSet(e));
 		}
 
-		// validate the tree roots against the block header
-		let roots = self.roots();
-		if roots.output_root != header.output_root || roots.rproof_root != header.range_proof_root
-			|| roots.kernel_root != header.kernel_root
-		{
-			return Err(Error::InvalidRoot);
+		self.validate_roots(header)?;
+
+		if header.height == 0 {
+			return Ok(());
 		}
 
 		// the real magicking: the sum of all kernel excess should equal the sum

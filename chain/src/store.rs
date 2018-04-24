@@ -37,7 +37,6 @@ const SYNC_HEAD_PREFIX: u8 = 's' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
 const BLOCK_MARKER_PREFIX: u8 = 'm' as u8;
-const BLOCK_PMMR_FILE_METADATA_PREFIX: u8 = 'p' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
 /// store.
@@ -163,7 +162,17 @@ impl ChainStore for ChainKVStore {
 		self.db.delete(&to_key(BLOCK_PREFIX, &mut bh.to_vec())[..])
 	}
 
+	// We are on the current chain if -
+	// * the header by height index matches the header, and
+	// * we are not ahead of the current head
 	fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
+		let head = self.head()?;
+
+		// check we are not out ahead of the current head
+		if header.height > head.height {
+			return Err(Error::NotFoundErr);
+		}
+
 		let header_at_height = self.get_header_by_height(header.height)?;
 		if header.hash() == header_at_height.hash() {
 			Ok(())
@@ -212,12 +221,12 @@ impl ChainStore for ChainKVStore {
 			.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.to_vec()))
 	}
 
-	fn save_block_marker(&self, bh: &Hash, marker: &(u64, u64)) -> Result<(), Error> {
+	fn save_block_marker(&self, bh: &Hash, marker: &BlockMarker) -> Result<(), Error> {
 		self.db
 			.put_ser(&to_key(BLOCK_MARKER_PREFIX, &mut bh.to_vec())[..], &marker)
 	}
 
-	fn get_block_marker(&self, bh: &Hash) -> Result<(u64, u64), Error> {
+	fn get_block_marker(&self, bh: &Hash) -> Result<BlockMarker, Error> {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(BLOCK_MARKER_PREFIX, &mut bh.to_vec())),
@@ -227,29 +236,6 @@ impl ChainStore for ChainKVStore {
 	fn delete_block_marker(&self, bh: &Hash) -> Result<(), Error> {
 		self.db
 			.delete(&to_key(BLOCK_MARKER_PREFIX, &mut bh.to_vec()))
-	}
-
-	fn save_block_pmmr_file_metadata(
-		&self,
-		h: &Hash,
-		md: &PMMRFileMetadataCollection,
-	) -> Result<(), Error> {
-		self.db.put_ser(
-			&to_key(BLOCK_PMMR_FILE_METADATA_PREFIX, &mut h.to_vec())[..],
-			&md,
-		)
-	}
-
-	fn get_block_pmmr_file_metadata(&self, h: &Hash) -> Result<PMMRFileMetadataCollection, Error> {
-		option_to_not_found(
-			self.db
-				.get_ser(&to_key(BLOCK_PMMR_FILE_METADATA_PREFIX, &mut h.to_vec())),
-		)
-	}
-
-	fn delete_block_pmmr_file_metadata(&self, h: &Hash) -> Result<(), Error> {
-		self.db
-			.delete(&to_key(BLOCK_PMMR_FILE_METADATA_PREFIX, &mut h.to_vec())[..])
 	}
 
 	/// Maintain consistency of the "header_by_height" index by traversing back

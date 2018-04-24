@@ -205,8 +205,10 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 		);
 
 		for hash in hashes_to_get.clone() {
-			// TODO - Is there a threshold where we sync from most_work_peer (not
-			// more_work_peer)?
+			// TODO - Is there a threshold where we sync from most_work_peer
+			// (not more_work_peer)?
+			// TODO - right now we *only* sync blocks from a full archival node
+			// even if we are requesting recent blocks (i.e. during a fast sync)
 			let peer = peers.more_work_archival_peer();
 			if let Some(peer) = peer {
 				if let Ok(peer) = peer.try_read() {

@@ -166,55 +166,70 @@ impl Chain {
 		// check if we have a head in store, otherwise the genesis block is it
 		let head = store.head();
 
-		let txhashset_md = match head {
-			Ok(h) => {
-				// Add the height to the metadata for the use of the rewind log, as this isn't
-				// stored
-				if let Ok(mut ts) = store.get_block_pmmr_file_metadata(&h.last_block_h) {
-					ts.output_file_md.block_height = h.height;
-					ts.rproof_file_md.block_height = h.height;
-					ts.kernel_file_md.block_height = h.height;
-					Some(ts)
-				} else {
-					debug!(LOGGER, "metadata not found for {} @ {}", h.height, h.hash());
-					None
+		// open the txhashset, creating a new one if necessary
+		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone())?;
+
+		match head {
+			Ok(head) => {
+				let mut head = head;
+				loop {
+					// Use current chain tip if we have one.
+					// Note: We are rewinding and validating against a writeable extension.
+					// If validation is successful we will truncate the backend files
+					// to match the provided block header.
+					let header = store.get_block_header(&head.last_block_h)?;
+					let res = txhashset::extending(&mut txhashset, |extension| {
+						debug!(
+							LOGGER,
+							"chain: init: rewinding and validating before we start... {} at {}",
+							header.hash(),
+							header.height,
+						);
+
+						extension.rewind(&header)?;
+						extension.validate_roots(&header)?;
+						Ok(())
+					});
+					if res.is_ok() {
+						break;
+					} else {
+						// We may have corrupted the MMR backend files
+						// last time we stopped the node.
+						// If this appears to be the case
+						// revert the head to the previous header and try again
+
+						let _ = store.delete_block(&header.hash());
+						let prev_header = store.get_block_header(&head.prev_block_h)?;
+						let _ = store.setup_height(&prev_header, &head)?;
+						head = Tip::from_block(&prev_header);
+						store.save_head(&head)?;
+					}
 				}
 			}
-			Err(NotFoundErr) => None,
-			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
-		};
-
-		let mut txhashset =
-			txhashset::TxHashSet::open(db_root.clone(), store.clone(), txhashset_md)?;
-
-		let head = store.head();
-
-		let head = match head {
-			Ok(h) => h,
 			Err(NotFoundErr) => {
 				let tip = Tip::from_block(&genesis.header);
 				store.save_block(&genesis)?;
 				store.setup_height(&genesis.header, &tip)?;
-				if genesis.kernels.len() > 0 {
-					txhashset::extending(&mut txhashset, |extension| {
-						extension.apply_block(&genesis)
-					})?;
-				}
+				txhashset::extending(&mut txhashset, |extension| {
+					extension.apply_block(&genesis)?;
+					Ok(())
+				})?;
 
 				// saving a new tip based on genesis
 				store.save_head(&tip)?;
 				info!(
 					LOGGER,
-					"Saved genesis block: {:?}, nonce: {:?}, pow: {:?}",
+					"chain: init: saved genesis block: {:?}, nonce: {:?}, pow: {:?}",
 					genesis.hash(),
 					genesis.header.nonce,
 					genesis.header.pow,
 				);
-				pipe::save_pmmr_metadata(&tip, &txhashset, store.clone())?;
-				tip
 			}
 			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
 		};
+
+		// Now reload the chain head (either existing head or genesis from above)
+		let head = store.head()?;
 
 		// Initialize header_head and sync_head as necessary for chain init.
 		store.init_head()?;
@@ -224,7 +239,7 @@ impl Chain {
 			"Chain init: {} @ {} [{}]",
 			head.total_difficulty.into_num(),
 			head.height,
-			head.last_block_h
+			head.last_block_h,
 		);
 
 		Ok(Chain {
@@ -434,9 +449,10 @@ impl Chain {
 
 		// Now create an extension from the txhashset and validate
 		// against the latest block header.
-		// We will rewind the extension internally to the pos for
-		// the block header to ensure the view is consistent.
+		// Rewind the extension to the specified header to ensure the view is
+		// consistent.
 		txhashset::extending_readonly(&mut txhashset, |extension| {
+			extension.rewind(&header)?;
 			extension.validate(&header, skip_rproofs)
 		})
 	}
@@ -502,18 +518,14 @@ impl Chain {
 	/// at the provided block hash.
 	pub fn txhashset_read(&self, h: Hash) -> Result<(u64, u64, File), Error> {
 		// get the indexes for the block
-		let out_index: u64;
-		let kernel_index: u64;
-		{
+		let marker = {
 			let txhashset = self.txhashset.read().unwrap();
-			let (oi, ki) = txhashset.indexes_at(&h)?;
-			out_index = oi;
-			kernel_index = ki;
-		}
+			txhashset.indexes_at(&h)?
+		};
 
 		// prepares the zip and return the corresponding Read
 		let txhashset_reader = txhashset::zip_read(self.db_root.clone())?;
-		Ok((out_index, kernel_index, txhashset_reader))
+		Ok((marker.output_pos, marker.kernel_pos, txhashset_reader))
 	}
 
 	/// Writes a reading view on a txhashset state that's been provided to us.
@@ -539,16 +551,22 @@ impl Chain {
 
 		// write the block marker so we can safely rewind to
 		// the pos for that block when we validate the extension below
-		self.store
-			.save_block_marker(&h, &(rewind_to_output, rewind_to_kernel))?;
+		let marker = BlockMarker {
+			output_pos: rewind_to_output,
+			kernel_pos: rewind_to_kernel,
+		};
+		self.store.save_block_marker(&h, &marker)?;
 
 		debug!(
 			LOGGER,
 			"Going to validate new txhashset, might take some time..."
 		);
-		let mut txhashset =
-			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), None)?;
+
+		let mut txhashset = txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone())?;
+
+		// Note: we are validating against a writeable extension.
 		txhashset::extending(&mut txhashset, |extension| {
+			extension.rewind(&header)?;
 			extension.validate(&header, false)?;
 			extension.rebuild_index()?;
 			Ok(())
@@ -621,7 +639,6 @@ impl Chain {
 			match self.store.get_block(&current.hash()) {
 				Ok(b) => {
 					self.store.delete_block(&b.hash())?;
-					self.store.delete_block_pmmr_file_metadata(&b.hash())?;
 					self.store.delete_block_marker(&b.hash())?;
 				}
 				Err(NotFoundErr) => {
@@ -733,6 +750,13 @@ impl Chain {
 			.map_err(|e| Error::StoreErr(e, "chain get header".to_owned()))
 	}
 
+	/// Get the block marker for the specified block hash.
+	pub fn get_block_marker(&self, bh: &Hash) -> Result<BlockMarker, Error> {
+		self.store
+			.get_block_marker(bh)
+			.map_err(|e| Error::StoreErr(e, "chain get block marker".to_owned()))
+	}
+
 	/// Gets the block header at the provided height
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		self.store
@@ -776,16 +800,6 @@ impl Chain {
 		self.store
 			.block_exists(&h)
 			.map_err(|e| Error::StoreErr(e, "chain block exists".to_owned()))
-	}
-
-	/// Retrieve the file index metadata for a given block
-	pub fn get_block_pmmr_file_metadata(
-		&self,
-		h: &Hash,
-	) -> Result<PMMRFileMetadataCollection, Error> {
-		self.store
-			.get_block_pmmr_file_metadata(h)
-			.map_err(|e| Error::StoreErr(e, "retrieve block pmmr metadata".to_owned()))
 	}
 
 	/// Rebuilds height index. Reachable as endpoint POST /chain/height-index

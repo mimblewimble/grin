@@ -25,7 +25,6 @@ use core::core::{block, transaction, Block, BlockHeader};
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 use grin_store as store;
 use grin_store;
-use grin_store::pmmr::PMMRFileMetadata;
 use keychain;
 
 bitflags! {
@@ -321,30 +320,13 @@ pub trait ChainStore: Send + Sync {
 
 	/// Saves a marker associated with a block recording the MMR positions of
 	/// its last elements.
-	fn save_block_marker(&self, bh: &Hash, marker: &(u64, u64)) -> Result<(), store::Error>;
+	fn save_block_marker(&self, bh: &Hash, marker: &BlockMarker) -> Result<(), store::Error>;
 
 	/// Retrieves a block marker from a block hash.
-	fn get_block_marker(&self, bh: &Hash) -> Result<(u64, u64), store::Error>;
+	fn get_block_marker(&self, bh: &Hash) -> Result<BlockMarker, store::Error>;
 
 	/// Deletes a block marker associated with the provided hash
 	fn delete_block_marker(&self, bh: &Hash) -> Result<(), store::Error>;
-
-	/// Saves information about the last written PMMR file positions for each
-	/// committed block
-	fn save_block_pmmr_file_metadata(
-		&self,
-		h: &Hash,
-		md: &PMMRFileMetadataCollection,
-	) -> Result<(), store::Error>;
-
-	/// Retrieves stored pmmr file metadata information for a given block
-	fn get_block_pmmr_file_metadata(
-		&self,
-		h: &Hash,
-	) -> Result<PMMRFileMetadataCollection, store::Error>;
-
-	/// Delete stored pmmr file metadata information for a given block
-	fn delete_block_pmmr_file_metadata(&self, h: &Hash) -> Result<(), store::Error>;
 
 	/// Saves the provided block header at the corresponding height. Also check
 	/// the consistency of the height chain in store by assuring previous
@@ -353,61 +335,6 @@ pub trait ChainStore: Send + Sync {
 
 	/// Similar to setup_height but without handling fork
 	fn build_by_height_index(&self, header: &BlockHeader, force: bool) -> Result<(), store::Error>;
-}
-
-/// Single serializable struct to hold metadata about all PMMR file position
-/// for a given block
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct PMMRFileMetadataCollection {
-	/// file metadata for the output file
-	pub output_file_md: PMMRFileMetadata,
-	/// file metadata for the rangeproof file
-	pub rproof_file_md: PMMRFileMetadata,
-	/// file metadata for the kernel file
-	pub kernel_file_md: PMMRFileMetadata,
-}
-
-impl Writeable for PMMRFileMetadataCollection {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.output_file_md.write(writer)?;
-		self.rproof_file_md.write(writer)?;
-		self.kernel_file_md.write(writer)?;
-		Ok(())
-	}
-}
-
-impl Readable for PMMRFileMetadataCollection {
-	fn read(reader: &mut Reader) -> Result<PMMRFileMetadataCollection, ser::Error> {
-		Ok(PMMRFileMetadataCollection {
-			output_file_md: PMMRFileMetadata::read(reader)?,
-			rproof_file_md: PMMRFileMetadata::read(reader)?,
-			kernel_file_md: PMMRFileMetadata::read(reader)?,
-		})
-	}
-}
-
-impl PMMRFileMetadataCollection {
-	/// Return empty with all file positions = 0
-	pub fn empty() -> PMMRFileMetadataCollection {
-		PMMRFileMetadataCollection {
-			output_file_md: PMMRFileMetadata::empty(),
-			rproof_file_md: PMMRFileMetadata::empty(),
-			kernel_file_md: PMMRFileMetadata::empty(),
-		}
-	}
-
-	/// Helper to create a new collection
-	pub fn new(
-		output_md: PMMRFileMetadata,
-		rproof_md: PMMRFileMetadata,
-		kernel_md: PMMRFileMetadata,
-	) -> PMMRFileMetadataCollection {
-		PMMRFileMetadataCollection {
-			output_file_md: output_md,
-			rproof_file_md: rproof_md,
-			kernel_file_md: kernel_md,
-		}
-	}
 }
 
 /// Bridge between the chain pipeline and the rest of the system. Handles
@@ -421,6 +348,44 @@ pub trait ChainAdapter {
 
 /// Dummy adapter used as a placeholder for real implementations
 pub struct NoopAdapter {}
+
 impl ChainAdapter for NoopAdapter {
 	fn block_accepted(&self, _: &Block, _: Options) {}
+}
+
+/// The output and kernel positions that define the size of the MMRs for a
+/// particular block.
+#[derive(Debug, Clone)]
+pub struct BlockMarker {
+	/// The output (and rangeproof) MMR position of the final output in the
+	/// block
+	pub output_pos: u64,
+	/// The kernel position of the final kernel in the block
+	pub kernel_pos: u64,
+}
+
+impl Writeable for BlockMarker {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.output_pos)?;
+		writer.write_u64(self.kernel_pos)?;
+		Ok(())
+	}
+}
+
+impl Readable for BlockMarker {
+	fn read(reader: &mut Reader) -> Result<BlockMarker, ser::Error> {
+		Ok(BlockMarker {
+			output_pos: reader.read_u64()?,
+			kernel_pos: reader.read_u64()?,
+		})
+	}
+}
+
+impl Default for BlockMarker {
+	fn default() -> BlockMarker {
+		BlockMarker {
+			output_pos: 0,
+			kernel_pos: 0,
+		}
+	}
 }

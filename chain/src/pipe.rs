@@ -112,27 +112,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		Ok(h)
 	});
 
-	match result {
-		Ok(t) => {
-			save_pmmr_metadata(&Tip::from_block(&b.header), &txhashset, ctx.store.clone())?;
-			Ok(t)
-		}
-		Err(e) => Err(e),
-	}
-}
-
-/// Save pmmr index location for a given block
-pub fn save_pmmr_metadata(
-	t: &Tip,
-	txhashset: &txhashset::TxHashSet,
-	store: Arc<ChainStore>,
-) -> Result<(), Error> {
-	// Save pmmr file metadata for this block
-	let block_file_md = txhashset.last_file_metadata();
-	store
-		.save_block_pmmr_file_metadata(&t.last_block_h, &block_file_md)
-		.map_err(|e| Error::StoreErr(e, "saving pmmr file metadata".to_owned()))?;
-	Ok(())
+	result
 }
 
 /// Process the block header.
