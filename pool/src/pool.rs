@@ -464,10 +464,11 @@ where
 
 		// Check each transaction in the pool
 		for (_, tx) in &self.transactions {
+			let candidates_kernels_set: HashSet<TxKernel> =
+				tx.kernels.iter().cloned().collect::<HashSet<_>>();
 
-			let candidates_kernels_set: HashSet<TxKernel> = tx.kernels.iter().cloned().collect::<HashSet<_>>();
-
-			let kernels_set_intersection: HashSet<&TxKernel> = kernels_set.intersection(&candidates_kernels_set).collect();
+			let kernels_set_intersection: HashSet<&TxKernel> =
+				kernels_set.intersection(&candidates_kernels_set).collect();
 
 			// Consider the transaction only if all the kernels match
 			if kernels_set_intersection.len() == tx.kernels.len() {
