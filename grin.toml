@@ -56,7 +56,7 @@ chain_type = "Testnet2"
 capabilities = [7]
 
 #skip waiting for sync on startup, (optional param, mostly for testing)
-skip_sync_wait = true
+skip_sync_wait = false
 
 #whether to run the ncurses TUI. Ncurses must be installed and this
 #will also disable logging to stdout
@@ -108,7 +108,7 @@ port = 13414
 enable_stratum_server = true
 
 #what port and address for the stratum server to listen on
-stratum_server_addr = "0.0.0.0:13416"
+stratum_server_addr = "127.0.0.1:13416"
 
 #The amount of time, in seconds, to attempt to mine on a particular
 #header before stopping and re-collecting transactions from the pool
