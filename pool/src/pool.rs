@@ -429,53 +429,63 @@ where
 	}
 
 	/// Attempt to deaggregate multi-kernel transaction as much as possible based on the content
-	///of the mempool
+	/// of the mempool
 	pub fn deaggregate_transaction(
 		&self,
 		tx: transaction::Transaction,
 	) -> Result<Transaction, PoolError> {
-		// While the inputs outputs can be cut-through the kernel will stay intact
-		// In order to deaggregate tx we look for tx with the same kernel
-		let mut found_txs: Vec<Transaction> = vec![];
-		let mut total_kernels_found = 0;
-		// Since its a multi-kernel transaction we loop over the kernels
-		for kernel in tx.kernels.clone() {
-			// Look for tx with the same kernels
-			for (_, tx) in &self.transactions {
-				let mut found_count = 0;
-
-				// Transaction can have multiple kernels
-				for tx_kernel in tx.clone().clone().kernels {
-					if kernel == tx_kernel {
-						found_count = found_count + 1;
+		// find candidates tx and attempt to deaggregate
+		match self.find_candidates(tx.clone()) {
+			Some(candidates_txs) => {
+				match transaction::deaggregate(tx, candidates_txs) {
+					Ok(deaggregated_tx) => Ok(deaggregated_tx),
+					Err(e) => {
+						debug!(LOGGER, "Could not deaggregate transaction: {}", e);
+						Err(PoolError::FailedDeaggregation)
 					}
 				}
-				// Consider the transaction only if all the kernels match
-				if found_count == tx.kernels.len() {
-					debug!(LOGGER, "Found a transaction with the same kernel");
-					found_txs.push(*tx.clone());
-					total_kernels_found = total_kernels_found + found_count;
-				}
+			},
+			None => {
+				debug!(LOGGER, "Could not deaggregate transaction: no candidate transaction found");
+				Err(PoolError::FailedDeaggregation)
 			}
-		}
-
-		debug!(LOGGER, "{:?}", "Attempt to deaggregate the transaction");
-		if found_txs.len() != 0 {
-			match transaction::deaggregate(tx, found_txs) {
-				Ok(found_tx) => Ok(found_tx),
-				Err(e) => {
-					debug!(LOGGER, "Could not deaggregate transaction: {}", e);
-					Err(PoolError::GenericPoolError)
-				}
-			}
-		} else {
-			debug!(
-				LOGGER,
-				"Could not deaggregate transaction: no candidate transaction found"
-			);
-			Err(PoolError::GenericPoolError)
 		}
 	}
+
+	/// Find candidate transactions for a multi-kernel transaction
+	fn find_candidates(&self,
+			tx: transaction::Transaction,
+		) -> Option<Vec<Transaction>> {
+			// While the inputs outputs can be cut-through the kernel will stay intact
+			// In order to deaggregate tx we look for tx with the same kernel
+			let mut found_txs: Vec<Transaction> = vec![];
+			// Since its a multi-kernel transaction we loop over the kernels
+			for kernel in tx.kernels.clone() {
+				// Look for tx with the same kernels
+				for (_, tx) in &self.transactions {
+					let mut found_count = 0;
+
+					// Transaction can have multiple kernels
+					for tx_kernel in tx.clone().clone().kernels {
+						if kernel == tx_kernel {
+							found_count = found_count + 1;
+						}
+					}
+					// Consider the transaction only if all the kernels match
+					if found_count == tx.kernels.len() {
+						debug!(LOGGER, "Found a transaction with the same kernel");
+						found_txs.push(*tx.clone());
+					}
+				}
+			}
+
+			if found_txs.len() != 0 {
+				Some(found_txs)
+			} else {
+				None
+			}
+
+		}
 
 	/// Check the output for a conflict with an existing output.
 	///
