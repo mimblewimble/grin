@@ -470,8 +470,8 @@ where
 			let kernels_set_intersection: HashSet<&TxKernel> =
 				kernels_set.intersection(&candidates_kernels_set).collect();
 
-			// Consider the transaction only if all the kernels match
-			if kernels_set_intersection.len() == tx.kernels.len() {
+			// Consider the transaction only if all the kernels match and if it is indeed a subset
+			if kernels_set_intersection.len() == tx.kernels.len() && candidates_kernels_set.is_subset(&kernels_set){
 				debug!(LOGGER, "Found a transaction with the same kernel");
 				found_txs.push(*tx.clone());
 			}
