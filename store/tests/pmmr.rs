@@ -24,6 +24,46 @@ use core::core::pmmr::{Backend, PMMR};
 use store::types::prune_noop;
 
 #[test]
+fn fast_sync_files() {
+	let (data_dir, elems) = setup("fast_sync");
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();
+
+	let mmr_size = load(0, &elems[..], &mut backend);
+	backend.sync().unwrap();
+
+	let pos_7_hash = backend.get_from_file(7).unwrap();
+
+	// prune some leaves
+	// will prune up to and including pos 7
+	{
+		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		pmmr.prune(1, 1).unwrap();
+		pmmr.prune(2, 1).unwrap();
+		pmmr.prune(4, 1).unwrap();
+		pmmr.prune(5, 1).unwrap();
+	}
+	backend.sync().unwrap();
+
+	// check we can still get the hash for pos_7 from the file
+	assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
+
+	// aggressively compact the PMMR files
+	backend.check_compact(1, 2, &prune_noop).unwrap();
+
+	// check we can still get the hash for pos_7 from the file
+	assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
+
+	// now write the "fast sync" prune list out to disk
+	backend.experimental_write_for_fast_sync().unwrap();
+
+	// read "fast sync" prune list back in
+	let res = backend.experimental_read_for_fast_sync().unwrap();
+
+	// and check it looks like we expect it to
+	assert_eq!(res, vec![(7, pos_7_hash)]);
+}
+
+#[test]
 fn pmmr_append() {
 	let (data_dir, elems) = setup("append");
 	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();

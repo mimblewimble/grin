@@ -325,6 +325,29 @@ where
 		}
 	}
 
+	pub fn experimental_write_for_fast_sync(&self) -> io::Result<()> {
+		let tmp_prune_file = format!("{}/{}.tmp", self.data_dir, "fast_sync_prune");
+
+		let mut pruned_pos_hash = vec![];
+
+		// collect the hashes for all the pos in the prune list
+		for pos in &self.pruned_nodes.pruned_nodes {
+			let hash = self.get_from_file(*pos).expect("missing hash");
+			pruned_pos_hash.push((pos, hash));
+		}
+
+		// then write all the (pos, hash) to the tmp file
+		write_vec(tmp_prune_file, &pruned_pos_hash)?;
+
+		Ok(())
+	}
+
+	pub fn experimental_read_for_fast_sync(&self) -> io::Result<Vec<(u64, Hash)>> {
+		let tmp_prune_file = format!("{}/{}.tmp", self.data_dir, "fast_sync_prune");
+		let pruned_pos_hash = read_ordered_vec(tmp_prune_file, (8 + 32))?;
+		Ok(pruned_pos_hash)
+	}
+
 	/// Checks the length of the remove log to see if it should get compacted.
 	/// If so, the remove log is flushed into the pruned list, which itself gets
 	/// saved, and the hash and data files are rewritten, cutting the removed
