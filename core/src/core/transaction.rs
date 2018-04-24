@@ -237,13 +237,8 @@ pub struct Transaction {
 /// PartialEq
 impl PartialEq for Transaction {
 	fn eq(&self, tx: &Transaction) -> bool {
-		if self.inputs == tx.inputs && self.outputs == tx.outputs && self.kernels == tx.kernels
+		self.inputs == tx.inputs && self.outputs == tx.outputs && self.kernels == tx.kernels
 			&& self.offset == tx.offset
-		{
-			true
-		} else {
-			false
-		}
 	}
 }
 
