@@ -86,6 +86,7 @@ pub fn get_block(
 	max_tx: u32,
 	wallet_listener_url: Option<String>,
 ) -> (core::Block, BlockFees) {
+	let wallet_retry_interval = 5;
 	// get the latest chain state and build a block on top of it
 	let mut result = build_block(
 		chain,
@@ -101,6 +102,14 @@ pub fn get_block(
 					LOGGER,
 					"Duplicate commit for potential coinbase detected. Trying next derivation."
 				);
+			}
+			self::Error::Wallet(_) => {
+				error!(
+					LOGGER,
+					"Stratum server: Can't connect to wallet listener at {:?}; will retry",
+					wallet_listener_url.as_ref().unwrap()
+				);
+				thread::sleep(Duration::from_secs(wallet_retry_interval));
 			}
 			ae => {
 				warn!(LOGGER, "Error building new block: {:?}. Retrying.", ae);
@@ -227,7 +236,6 @@ fn get_coinbase(
 			let url = format!("{}/v1/receive/coinbase", wallet_listener_url.as_str());
 
 			let res = wallet::client::create_coinbase(&url, &block_fees)?;
-
 			let out_bin = util::from_hex(res.output).unwrap();
 			let kern_bin = util::from_hex(res.kernel).unwrap();
 			let key_id_bin = util::from_hex(res.key_id).unwrap();

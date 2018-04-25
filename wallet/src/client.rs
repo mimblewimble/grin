@@ -12,17 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::time;
-use std::ops::FnMut;
-
 use futures::{Future, Stream};
 use failure::ResultExt;
 use hyper;
 use hyper::{Method, Request};
 use hyper::header::ContentType;
 use tokio_core::reactor;
-use tokio_retry::Retry;
-use tokio_retry::strategy::FibonacciBackoff;
 use serde_json;
 
 use types::*;
@@ -32,36 +27,16 @@ use std::io;
 /// Call the wallet API to create a coinbase output for the given block_fees.
 /// Will retry based on default "retry forever with backoff" behavior.
 pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
-	let mut has_error = false;
-
-	retry_backoff_forever(|| {
-		let res = single_create_coinbase(&url, &block_fees);
-		if let Err(_) = res {
-			has_error = true;
+	match single_create_coinbase(&url, &block_fees) {
+		Err(e) => {
 			error!(
 				LOGGER,
 				"Failed to get coinbase from {}. Run grin wallet listen", url
 			);
+			Err(e)
 		}
-		if has_error {
-			error!(LOGGER, "Successfully received coinbase from {}", url);
-		}
-		res
-	})
-}
-
-/// Runs the specified function wrapped in some basic retry logic.
-fn retry_backoff_forever<F, R>(f: F) -> Result<R, Error>
-where
-	F: FnMut() -> Result<R, Error>,
-{
-	let mut core =
-		reactor::Core::new().context(ErrorKind::GenericError("Could not create reactor"))?;
-	let retry_strategy =
-		FibonacciBackoff::from_millis(100).max_delay(time::Duration::from_secs(10));
-	let retry_future = Retry::spawn(core.handle(), retry_strategy, f);
-	let res = core.run(retry_future).unwrap();
-	Ok(res)
+		Ok(res) => Ok(res),
+	}
 }
 
 pub fn send_partial_tx(url: &str, partial_tx: &PartialTx, fluff: bool) -> Result<PartialTx, Error> {
