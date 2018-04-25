@@ -101,14 +101,14 @@ pub fn get_block(
 					LOGGER,
 					"Duplicate commit for potential coinbase detected. Trying next derivation."
 				);
-			},
+			}
 			self::Error::Wallet(_) => {
 				error!(
 					LOGGER,
 					"Stratum server: Can't connect to wallet listener at {:?}; will retry",
 					wallet_listener_url.as_ref().unwrap()
 				);
-			},
+			}
 			ae => {
 				warn!(LOGGER, "Error building new block: {:?}. Retrying.", ae);
 			}

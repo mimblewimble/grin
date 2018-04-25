@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{time, thread};
+use std::{thread, time};
 
 use futures::{Future, Stream};
 use failure::ResultExt;
@@ -31,7 +31,7 @@ use std::io;
 pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
 	let retry_interval = 5;
 
-	match single_create_coinbase(&url, &block_fees){
+	match single_create_coinbase(&url, &block_fees) {
 		Err(e) => {
 			error!(
 				LOGGER,
@@ -39,10 +39,8 @@ pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Erro
 			);
 			thread::sleep(time::Duration::from_secs(retry_interval));
 			Err(e)
-		},
-		Ok(res) => {
-			Ok(res)
 		}
+		Ok(res) => Ok(res),
 	}
 }
 
