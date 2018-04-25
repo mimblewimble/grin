@@ -114,16 +114,16 @@ pub fn run_sync(
 						header_sync(peers.clone(), chain.clone());
 					}
 
-					if fast_sync_enabled {
-						// run fast sync if applicable, every 5 min
-						if header_head.height == si.highest_height && si.fast_sync_due() {
-							fast_sync(peers.clone(), chain.clone(), &header_head);
-						}
-					} else {
-						// run the body_sync every 5s
-						if si.body_sync_due(&head) {
-							body_sync(peers.clone(), chain.clone());
-						}
+					// run fast sync if applicable
+					if fast_sync_enabled && header_head.height == si.highest_height
+						&& si.fast_sync_due()
+					{
+						fast_sync(peers.clone(), chain.clone(), &header_head);
+					}
+
+					// run the body_sync every 5s
+					if si.body_sync_due(&head) {
+						body_sync(peers.clone(), chain.clone());
 					}
 				}
 
