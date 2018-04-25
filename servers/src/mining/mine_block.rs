@@ -86,6 +86,7 @@ pub fn get_block(
 	max_tx: u32,
 	wallet_listener_url: Option<String>,
 ) -> (core::Block, BlockFees) {
+	let wallet_retry_interval = 5;
 	// get the latest chain state and build a block on top of it
 	let mut result = build_block(
 		chain,
@@ -108,6 +109,7 @@ pub fn get_block(
 					"Stratum server: Can't connect to wallet listener at {:?}; will retry",
 					wallet_listener_url.as_ref().unwrap()
 				);
+				thread::sleep(Duration::from_secs(wallet_retry_interval));
 			}
 			ae => {
 				warn!(LOGGER, "Error building new block: {:?}. Retrying.", ae);

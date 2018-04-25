@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{thread, time};
-
 use futures::{Future, Stream};
 use failure::ResultExt;
 use hyper;
@@ -29,15 +27,12 @@ use std::io;
 /// Call the wallet API to create a coinbase output for the given block_fees.
 /// Will retry based on default "retry forever with backoff" behavior.
 pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
-	let retry_interval = 5;
-
 	match single_create_coinbase(&url, &block_fees) {
 		Err(e) => {
 			error!(
 				LOGGER,
 				"Failed to get coinbase from {}. Run grin wallet listen", url
 			);
-			thread::sleep(time::Duration::from_secs(retry_interval));
 			Err(e)
 		}
 		Ok(res) => Ok(res),
