@@ -30,7 +30,7 @@ use pipe;
 use store;
 use txhashset;
 use types::*;
-use util::secp::pedersen::RangeProof;
+use util::secp::pedersen::{Commitment, RangeProof};
 use util::LOGGER;
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
@@ -505,6 +505,13 @@ impl Chain {
 		})?;
 
 		Ok(merkle_proof)
+	}
+
+	/// Return a merkle proof valid for the current output pmmr state at the
+	/// given pos
+	pub fn get_merkle_proof_for_pos(&self, commit: Commitment) -> Result<MerkleProof, String> {
+		let mut txhashset = self.txhashset.write().unwrap();
+		txhashset.merkle_proof(commit)
 	}
 
 	/// Returns current txhashset roots

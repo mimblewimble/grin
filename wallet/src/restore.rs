@@ -13,15 +13,17 @@
 // limitations under the License.
 use failure::{Fail, ResultExt};
 use keychain::{Identifier, Keychain};
+use util;
 use util::LOGGER;
 use util::secp::pedersen;
 use api;
 use core::global;
 use core::core::transaction::ProofMessageElements;
-use types::{Error, ErrorKind, OutputData, OutputStatus, WalletConfig, WalletData};
+use types::{Error, ErrorKind, MerkleProofWrapper, OutputData, OutputStatus, WalletConfig,
+            WalletData};
 use byteorder::{BigEndian, ByteOrder};
 
-pub fn _get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
+pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 	let url = format!("{}/v1/chain", config.check_node_api_http_addr);
 
 	match api::client::get::<api::Tip>(url.as_str()) {
@@ -39,6 +41,29 @@ pub fn _get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 	}
 }
 
+pub fn get_merkle_proof_for_commit(
+	config: &WalletConfig,
+	commit: &str,
+) -> Result<MerkleProofWrapper, Error> {
+	let url = format!(
+		"{}/v1/txhashset/merkleproof?id={}",
+		config.check_node_api_http_addr, commit
+	);
+
+	match api::client::get::<api::OutputPrintable>(url.as_str()) {
+		Ok(output) => Ok(MerkleProofWrapper(output.merkle_proof.unwrap())),
+		Err(e) => {
+			// if we got anything other than 200 back from server, bye
+			error!(
+				LOGGER,
+				"get_merkle_proof_for_pos: Restore failed... unable to create merkle proof for commit {}. Error: {}",
+				commit,
+				e
+			);
+			Err(e.context(ErrorKind::Node).into())
+		}
+	}
+}
 fn coinbase_status(output: &api::OutputPrintable) -> bool {
 	match output.output_type {
 		api::OutputType::Coinbase => true,
@@ -75,15 +100,38 @@ pub fn outputs_batch(
 
 // TODO - wrap the many return values in a struct
 fn find_outputs_with_key(
+	config: &WalletConfig,
 	keychain: &Keychain,
 	outputs: Vec<api::OutputPrintable>,
-) -> Vec<(pedersen::Commitment, Identifier, u32, u64, u64, u64, bool)> {
-	let mut wallet_outputs: Vec<(pedersen::Commitment, Identifier, u32, u64, u64, u64, bool)> =
-		Vec::new();
+) -> Vec<
+	(
+		pedersen::Commitment,
+		Identifier,
+		u32,
+		u64,
+		u64,
+		u64,
+		bool,
+		Option<MerkleProofWrapper>,
+	),
+> {
+	let mut wallet_outputs: Vec<
+		(
+			pedersen::Commitment,
+			Identifier,
+			u32,
+			u64,
+			u64,
+			u64,
+			bool,
+			Option<MerkleProofWrapper>,
+		),
+	> = Vec::new();
 
 	let max_derivations = 1_000_000;
 
 	info!(LOGGER, "Scanning {} outputs", outputs.len(),);
+	let current_chain_height = get_chain_height(config).unwrap();
 
 	// skey doesn't matter in this case
 	let skey = keychain.derive_key_id(1).unwrap();
@@ -135,12 +183,18 @@ fn find_outputs_with_key(
 				.commit_with_key_index(BigEndian::read_u64(&commit_id), i as u32)
 				.expect("commit with key index");
 
-			//let height = outputs.header.height;
-			let height = 0;
+			let mut merkle_proof = None;
+			let commit_str = util::to_hex(output.commit.as_ref().to_vec());
+
+			if is_coinbase {
+				merkle_proof = Some(get_merkle_proof_for_commit(config, &commit_str).unwrap());
+			}
+
+			let height = current_chain_height;
 			let lock_height = if is_coinbase {
 				height + global::coinbase_maturity()
 			} else {
-				0
+				height
 			};
 
 			wallet_outputs.push((
@@ -151,6 +205,7 @@ fn find_outputs_with_key(
 				height,
 				lock_height,
 				is_coinbase,
+				merkle_proof,
 			));
 
 			break;
@@ -200,12 +255,11 @@ pub fn restore(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> 
 		);
 
 		let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-			let result_vec = find_outputs_with_key(keychain, output_listing.outputs.clone());
+			let result_vec =
+				find_outputs_with_key(config, keychain, output_listing.outputs.clone());
 			if result_vec.len() > 0 {
 				for output in result_vec.clone() {
 					let root_key_id = keychain.root_key_id();
-					// Just plonk it in for now, and refresh actual values via wallet info
-					// command later
 					wallet_data.add_output(OutputData {
 						root_key_id: root_key_id.clone(),
 						key_id: output.1.clone(),
@@ -216,7 +270,7 @@ pub fn restore(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> 
 						lock_height: output.5,
 						is_coinbase: output.6,
 						block: None,
-						merkle_proof: None,
+						merkle_proof: output.7,
 					});
 				}
 			}
