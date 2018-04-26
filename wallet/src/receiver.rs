@@ -43,7 +43,7 @@ pub struct TxWrapper {
 /// Return result of part 2, Recipient Initation, to sender
 /// -Receiver receives inputs, outputs xS * G and kS * G
 /// -Receiver picks random blinding factors for all outputs being received,
-/// computes total blinding     
+/// computes total blinding
 /// excess xR
 /// -Receiver picks random nonce kR
 /// -Receiver computes Schnorr challenge e = H(M | kR * G + kS * G)
@@ -131,7 +131,12 @@ fn handle_sender_initiation(
 	keychain.aggsig_add_output(&partial_tx.id, &key_id);
 
 	let sig_part = keychain
-		.aggsig_calculate_partial_sig(&partial_tx.id, &sender_pub_nonce, tx.fee(), tx.lock_height())
+		.aggsig_calculate_partial_sig(
+			&partial_tx.id,
+			&sender_pub_nonce,
+			tx.fee(),
+			tx.lock_height(),
+		)
 		.unwrap();
 
 	// Build the response, which should contain sR, blinding excess xR * G, public

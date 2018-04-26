@@ -108,7 +108,7 @@ pub fn issue_send_tx(
 				Some(change) => {
 					info!(LOGGER, "cleaning up unused change output from wallet");
 					wallet_data.delete_output(&change);
-				},
+				}
 				None => info!(LOGGER, "No change output to clean from wallet"),
 			}
 		})
@@ -129,7 +129,7 @@ pub fn issue_send_tx(
 				Some(change) => {
 					info!(LOGGER, "cleaning up unused change output from wallet");
 					wallet_data.delete_output(&change);
-				},
+				}
 				None => info!(LOGGER, "No change output to clean from wallet"),
 			}
 		}).unwrap();
@@ -302,10 +302,10 @@ fn build_send_tx(
 					max_outputs,
 					selection_strategy_is_use_all,
 				))
-		})?;
-		fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
-		total = coins.iter().map(|c| c.value).sum();
-		amount_with_fee = amount + fee;
+			})?;
+			fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
+			total = coins.iter().map(|c| c.value).sum();
+			amount_with_fee = amount + fee;
 		}
 	}
 
@@ -437,7 +437,6 @@ fn inputs_and_change(
 		})?;
 
 		parts.push(build::output(change, change_key.clone().unwrap()));
-
 	} else {
 		change_key = None
 	}
