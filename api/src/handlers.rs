@@ -237,6 +237,10 @@ impl Handler for OutputHandler {
 
 // UTXO traversal::
 // GET /v1/txhashset/outputs?start_index=1&max=100
+//
+// Build a merkle proof for a given pos
+// GET /v1/txhashset/merkleproof?n=1
+
 struct TxHashSetHandler {
 	chain: Weak<chain::Chain>,
 }
@@ -281,6 +285,25 @@ impl TxHashSetHandler {
 				.collect(),
 		}
 	}
+
+	// return a dummy output with merkle proof for position filled out
+	// (to avoid having to create a new type to pass around)
+	fn get_merkle_proof_for_output(&self, id: &str) -> Result<OutputPrintable, Error> {
+		let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
+			"Not a valid commitment: {}",
+			id
+		)))?;
+		let commit = Commitment::from_vec(c);
+		let merkle_proof = chain::Chain::get_merkle_proof_for_pos(&w(&self.chain), commit).unwrap();
+		Ok(OutputPrintable {
+			output_type: OutputType::Coinbase,
+			commit: Commitment::from_vec(vec![]),
+			spent: false,
+			proof: None,
+			proof_hash: "".to_string(),
+			merkle_proof: Some(merkle_proof),
+		})
+	}
 }
 
 impl Handler for TxHashSetHandler {
@@ -289,6 +312,7 @@ impl Handler for TxHashSetHandler {
 		let mut path_elems = url.path();
 		let mut start_index = 1;
 		let mut max = 100;
+		let mut id = "";
 		if *path_elems.last().unwrap() == "" {
 			path_elems.pop();
 		}
@@ -316,6 +340,11 @@ impl Handler for TxHashSetHandler {
 					}
 				}
 			}
+			if let Some(ids) = params.get("id") {
+				for i in ids {
+					id = i;
+				}
+			}
 		}
 		match *path_elems.last().unwrap() {
 			"roots" => json_response_pretty(&self.get_roots()),
@@ -323,6 +352,7 @@ impl Handler for TxHashSetHandler {
 			"lastrangeproofs" => json_response_pretty(&self.get_last_n_rangeproof(last_n)),
 			"lastkernels" => json_response_pretty(&self.get_last_n_kernel(last_n)),
 			"outputs" => json_response_pretty(&self.outputs(start_index, max)),
+			"merkleproof" => json_response_pretty(&self.get_merkle_proof_for_output(id).unwrap()),
 			_ => Ok(Response::with((status::BadRequest, ""))),
 		}
 	}

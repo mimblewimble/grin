@@ -205,6 +205,14 @@ impl TxHashSet {
 		(output_pmmr.root(), rproof_pmmr.root(), kernel_pmmr.root())
 	}
 
+	/// build a new merkle proof for the given position
+	pub fn merkle_proof(&mut self, commit: Commitment) -> Result<MerkleProof, String> {
+		let pos = self.commit_index.get_output_pos(&commit).unwrap();
+		let output_pmmr: PMMR<OutputIdentifier, _> =
+			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+		output_pmmr.merkle_proof(pos)
+	}
+
 	/// Compact the MMR data files and flush the rm logs
 	pub fn compact(&mut self) -> Result<(), Error> {
 		let commit_index = self.commit_index.clone();
