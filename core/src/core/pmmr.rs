@@ -100,11 +100,13 @@ pub const MAX_PATH: u64 = 100;
 
 #[derive(Debug, PartialEq)]
 pub struct ImprovedMerkleProof {
+	pub mmr_size: u64,
 	pub path: Vec<Hash>,
 }
 
 impl Writeable for ImprovedMerkleProof {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.mmr_size)?;
 		writer.write_u64(self.path.len() as u64)?;
 		self.path.write(writer)?;
 		Ok(())
@@ -113,6 +115,7 @@ impl Writeable for ImprovedMerkleProof {
 
 impl Readable for ImprovedMerkleProof {
 	fn read(reader: &mut Reader) -> Result<ImprovedMerkleProof, ser::Error> {
+		let mmr_size = reader.read_u64()?;
 		let path_len = reader.read_u64()?;
 		let mut path = Vec::with_capacity(path_len as usize);
 		for _ in 0..path_len {
@@ -120,7 +123,7 @@ impl Readable for ImprovedMerkleProof {
 			path.push(hash);
 		}
 
-		Ok(ImprovedMerkleProof { path })
+		Ok(ImprovedMerkleProof { mmr_size, path })
 	}
 }
 
@@ -134,6 +137,7 @@ impl ImprovedMerkleProof {
 	/// The "empty" Merkle proof.
 	pub fn empty() -> ImprovedMerkleProof {
 		ImprovedMerkleProof {
+			mmr_size: 0,
 			path: Vec::default(),
 		}
 	}
@@ -153,7 +157,16 @@ impl ImprovedMerkleProof {
 		Ok(res)
 	}
 
-	pub fn verify(&self, root: &Hash, node_hash: &Hash, node_pos: u64, last_pos: u64) -> bool {
+	pub fn verify(&self, root: &Hash, node_hash: &Hash, node_pos: u64) -> bool {
+		println!("*** verify - {:?}, {:?}", self.path, self.mmr_size);
+		println!("*** verify - {:?}, {:?}, {:?}", root, node_hash, node_pos);
+
+		// handle special case of only a single entry in the MMR
+		// (no siblings to hash together)
+		if self.mmr_size == 1 {
+			return self.path.len() == 1 && root == node_hash && vec![*root] == self.path;
+		}
+
 		// traverse back to peak based on hashes
 		// then do something smart with the peaks to hash them up to the root
 		// need to think about this a bit more
@@ -452,7 +465,10 @@ where
 		let mmr_size = self.unpruned_size();
 
 		if mmr_size == 1 {
-			return Ok(ImprovedMerkleProof { path: vec![node] });
+			return Ok(ImprovedMerkleProof {
+				mmr_size,
+				path: vec![node],
+			});
 		}
 
 		let family_branch = family_branch(pos, self.last_pos);
@@ -464,7 +480,7 @@ where
 		println!("path here - {:?}", path);
 
 		let peak_pos = match family_branch.last() {
-			Some(&(x, y)) => x,
+			Some(&(x, _)) => x,
 			None => pos,
 		};
 		println!("family branch - {:?}", family_branch);
@@ -473,7 +489,7 @@ where
 		path.append(&mut self.peak_path(peak_pos));
 		println!("path now - {:?}", path);
 
-		Ok(ImprovedMerkleProof { path })
+		Ok(ImprovedMerkleProof { mmr_size, path })
 	}
 
 	/// Build a Merkle proof for the element at the given position in the MMR
@@ -1616,6 +1632,7 @@ mod test {
 		assert_eq!(pmmr.get_hash(1).unwrap(), pos_0);
 
 		let proof = pmmr.improved_merkle_proof(1).unwrap();
+		assert!(proof.verify(&pmmr.root(), &pos_0, 1));
 		assert_eq!(proof.path, [pos_0]);
 
 		pmmr.push(elems[1]).unwrap();
