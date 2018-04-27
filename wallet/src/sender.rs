@@ -104,8 +104,13 @@ pub fn issue_send_tx(
 	// failure.
 	let rollback_wallet = || {
 		WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-			info!(LOGGER, "cleaning up unused change output from wallet");
-			wallet_data.delete_output(&change_key);
+			match change_key.clone() {
+				Some(change) => {
+					info!(LOGGER, "cleaning up unused change output from wallet");
+					wallet_data.delete_output(&change);
+				}
+				None => info!(LOGGER, "No change output to clean from wallet"),
+			}
 		})
 	};
 
@@ -120,8 +125,13 @@ pub fn issue_send_tx(
 
 	if &dest[..4] != "http" {
 		WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-			info!(LOGGER, "cleaning up unused change output from wallet");
-			wallet_data.delete_output(&change_key);
+			match change_key.clone() {
+				Some(change) => {
+					info!(LOGGER, "cleaning up unused change output from wallet");
+					wallet_data.delete_output(&change);
+				}
+				None => info!(LOGGER, "No change output to clean from wallet"),
+			}
 		}).unwrap();
 		panic!(
 			"dest formatted as {} but send -d expected stdout or http://IP:port",
@@ -229,7 +239,7 @@ fn build_send_tx(
 		Transaction,
 		BlindingFactor,
 		Vec<OutputData>,
-		Identifier,
+		Option<Identifier>,
 		u64,
 	),
 	Error,
@@ -263,32 +273,40 @@ fn build_send_tx(
 	// sender is responsible for setting the fee on the partial tx
 	// recipient should double check the fee calculation and not blindly trust the
 	// sender
-	let mut fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
+	let mut fee;
+	// First attempt to spend without change
+	fee = tx_fee(coins.len(), 1, coins_proof_count(&coins), None);
 	let mut total: u64 = coins.iter().map(|c| c.value).sum();
 	let mut amount_with_fee = amount + fee;
 
-	// Here check if we have enough outputs for the amount including fee otherwise
-	// look for other outputs and check again
-	while total <= amount_with_fee {
-		// End the loop if we have selected all the outputs and still not enough funds
-		if coins.len() == max_outputs {
-			return Err(ErrorKind::NotEnoughFunds(total as u64))?;
-		}
-
-		// select some spendable coins from the wallet
-		coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-			Ok(wallet_data.select_coins(
-				key_id.clone(),
-				amount_with_fee,
-				current_height,
-				minimum_confirmations,
-				max_outputs,
-				selection_strategy_is_use_all,
-			))
-		})?;
+	// Check if we need to use a change address
+	if total > amount_with_fee {
 		fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
-		total = coins.iter().map(|c| c.value).sum();
 		amount_with_fee = amount + fee;
+
+		// Here check if we have enough outputs for the amount including fee otherwise
+		// look for other outputs and check again
+		while total < amount_with_fee {
+			// End the loop if we have selected all the outputs and still not enough funds
+			if coins.len() == max_outputs {
+				return Err(ErrorKind::NotEnoughFunds(total as u64))?;
+			}
+
+			// select some spendable coins from the wallet
+			coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+				Ok(wallet_data.select_coins(
+					key_id.clone(),
+					amount_with_fee,
+					current_height,
+					minimum_confirmations,
+					max_outputs,
+					selection_strategy_is_use_all,
+				))
+			})?;
+			fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
+			total = coins.iter().map(|c| c.value).sum();
+			amount_with_fee = amount + fee;
+		}
 	}
 
 	// build transaction skeleton with inputs and change
@@ -360,7 +378,7 @@ fn inputs_and_change(
 	keychain: &Keychain,
 	amount: u64,
 	fee: u64,
-) -> Result<(Vec<Box<build::Append>>, Identifier), Error> {
+) -> Result<(Vec<Box<build::Append>>, Option<Identifier>), Error> {
 	let mut parts = vec![];
 
 	// calculate the total across all inputs, and how much is left
@@ -393,30 +411,34 @@ fn inputs_and_change(
 			parts.push(build::input(coin.value, key_id));
 		}
 	}
+	let change_key;
+	if change != 0 {
+		// track the output representing our change
+		change_key = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+			let root_key_id = keychain.root_key_id();
+			let change_derivation = wallet_data.next_child(root_key_id.clone());
+			let change_key = keychain.derive_key_id(change_derivation).unwrap();
 
-	// track the output representing our change
-	let change_key = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		let root_key_id = keychain.root_key_id();
-		let change_derivation = wallet_data.next_child(root_key_id.clone());
-		let change_key = keychain.derive_key_id(change_derivation).unwrap();
+			wallet_data.add_output(OutputData {
+				root_key_id: root_key_id.clone(),
+				key_id: change_key.clone(),
+				n_child: change_derivation,
+				value: change as u64,
+				status: OutputStatus::Unconfirmed,
+				height: 0,
+				lock_height: 0,
+				is_coinbase: false,
+				block: None,
+				merkle_proof: None,
+			});
 
-		wallet_data.add_output(OutputData {
-			root_key_id: root_key_id.clone(),
-			key_id: change_key.clone(),
-			n_child: change_derivation,
-			value: change as u64,
-			status: OutputStatus::Unconfirmed,
-			height: 0,
-			lock_height: 0,
-			is_coinbase: false,
-			block: None,
-			merkle_proof: None,
-		});
+			Some(change_key)
+		})?;
 
-		change_key
-	})?;
-
-	parts.push(build::output(change, change_key.clone()));
+		parts.push(build::output(change, change_key.clone().unwrap()));
+	} else {
+		change_key = None
+	}
 
 	Ok((parts, change_key))
 }

@@ -43,7 +43,7 @@ pub struct TxWrapper {
 /// Return result of part 2, Recipient Initation, to sender
 /// -Receiver receives inputs, outputs xS * G and kS * G
 /// -Receiver picks random blinding factors for all outputs being received,
-/// computes total blinding     
+/// computes total blinding
 /// excess xR
 /// -Receiver picks random nonce kR
 /// -Receiver computes Schnorr challenge e = H(M | kR * G + kS * G)
@@ -69,7 +69,7 @@ fn handle_sender_initiation(
 		tx.input_proofs_count(),
 		None,
 	);
-	if fee != tx.fee() {
+	if fee > tx.fee() {
 		return Err(ErrorKind::FeeDispute {
 			sender_fee: tx.fee(),
 			recipient_fee: fee,
@@ -89,7 +89,7 @@ fn handle_sender_initiation(
 		})?;
 	}
 
-	let out_amount = amount - fee;
+	let out_amount = amount - tx.fee();
 
 	// First step is just to get the excess sum of the outputs we're participating
 	// in Output and key needs to be stored until transaction finalisation time,
@@ -131,7 +131,12 @@ fn handle_sender_initiation(
 	keychain.aggsig_add_output(&partial_tx.id, &key_id);
 
 	let sig_part = keychain
-		.aggsig_calculate_partial_sig(&partial_tx.id, &sender_pub_nonce, fee, tx.lock_height())
+		.aggsig_calculate_partial_sig(
+			&partial_tx.id,
+			&sender_pub_nonce,
+			tx.fee(),
+			tx.lock_height(),
+		)
 		.unwrap();
 
 	// Build the response, which should contain sR, blinding excess xR * G, public
@@ -152,8 +157,8 @@ fn handle_sender_initiation(
 /// Receive Part 3 of interactive transactions from sender, Sender Confirmation
 /// Return Ok/Error
 /// -Receiver receives sS
-/// -Receiver verifies sender's sig, by verifying that 
-/// kS * G + e *xS * G = sS* G 
+/// -Receiver verifies sender's sig, by verifying that
+/// kS * G + e *xS * G = sS* G
 /// -Receiver calculates final sig as s=(sS+sR, kS * G+kR * G)
 /// -Receiver puts into TX kernel:
 ///
@@ -414,7 +419,7 @@ fn build_final_transaction(
 		tx.input_proofs_count(),
 		None,
 	);
-	if fee != tx.fee() {
+	if fee > tx.fee() {
 		return Err(ErrorKind::FeeDispute {
 			sender_fee: tx.fee(),
 			recipient_fee: fee,
@@ -434,7 +439,7 @@ fn build_final_transaction(
 		})?;
 	}
 
-	let out_amount = amount - fee;
+	let out_amount = amount - tx.fee();
 
 	// Get output we created in earlier step
 	// TODO: will just be one for now, support multiple later
