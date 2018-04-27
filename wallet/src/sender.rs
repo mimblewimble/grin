@@ -317,7 +317,6 @@ fn build_send_tx(
 	parts.push(build::with_lock_height(lock_height));
 
 	let (tx, blind) = build::partial_transaction(parts, &keychain).context(ErrorKind::Keychain)?;
-	println!("Sender tx: {:?}", tx);
 
 	Ok((tx, blind, coins, change_key, amount_with_fee))
 }
