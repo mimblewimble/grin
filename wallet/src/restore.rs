@@ -103,6 +103,7 @@ fn find_outputs_with_key(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	outputs: Vec<api::OutputPrintable>,
+	found_key_index: &mut Vec<u32>,
 ) -> Vec<
 	(
 		pedersen::Commitment,
@@ -151,7 +152,24 @@ fn find_outputs_with_key(
 		}
 		// we have a match, now check through our key iterations to find a partial match
 		let mut found = false;
-		for i in 1..max_derivations {
+
+		let mut start_index = 1;
+
+		// TODO: This assumption only holds with current wallet software assuming
+		// wallet doesn't go back and re-use gaps in its key index, ie. every
+		// new key index produced is always greater than the previous max key index
+		if let Some(m) = found_key_index.iter().max() {
+			start_index = *m as usize + 1;
+		}
+
+		for i in start_index..max_derivations {
+			// much faster than calling EC functions for each found key
+			// Shouldn't be needed if assumtion about wallet key 'gaps' above
+			// holds.. otherwise this is a good optimisation.. perhaps 
+			// provide a command line switch
+			/*if found_key_index.contains(&(i as u32)) {
+				continue;
+			}*/
 			let key_id = &keychain.derive_key_id(i as u32).unwrap();
 			if !message.compare_bf_first_8(key_id) {
 				continue;
@@ -171,7 +189,7 @@ fn find_outputs_with_key(
 				LOGGER,
 				"Output found: {:?}, key_index: {:?}", output.commit, i,
 			);
-
+			found_key_index.push(i as u32);
 			// add it to result set here
 			let commit_id = output.commit.0;
 
@@ -242,6 +260,9 @@ pub fn restore(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> 
 
 	let batch_size = 1000;
 	let mut start_index = 1;
+	// Keep a set of keys we've already claimed (cause it's far faster than
+	// deriving a key for each one)
+	let mut found_key_index: Vec<u32> = vec![];
 	// this will start here, then lower as outputs are found, moving backwards on
 	// the chain
 	loop {
@@ -255,8 +276,12 @@ pub fn restore(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> 
 		);
 
 		let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-			let result_vec =
-				find_outputs_with_key(config, keychain, output_listing.outputs.clone());
+			let result_vec = find_outputs_with_key(
+				config,
+				keychain,
+				output_listing.outputs.clone(),
+				&mut found_key_index,
+			);
 			if result_vec.len() > 0 {
 				for output in result_vec.clone() {
 					let root_key_id = keychain.root_key_id();

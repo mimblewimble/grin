@@ -82,7 +82,7 @@ fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain) -> R
 		wallet_outputs.len(),
 	);
 
-	let mut id_params: Vec<String> = wallet_outputs
+	let id_params: Vec<String> = wallet_outputs
 		.keys()
 		.map(|commit| {
 			let id = util::to_hex(commit.as_ref().to_vec());
@@ -92,33 +92,54 @@ fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain) -> R
 
 	let tip = get_tip_from_node(config)?;
 
-	let height_params = format!("start_height={}&end_height={}", 0, tip.height,);
-	let mut query_params = vec![height_params];
-	query_params.append(&mut id_params);
-
-	let url = format!(
-		"{}/v1/chain/outputs/byheight?{}",
-		config.check_node_api_http_addr,
-		query_params.join("&"),
-	);
-	debug!(LOGGER, "{:?}", url);
+	let max_ids_in_query = 1000;
+	let mut current_index = 0;
 
 	let mut api_blocks: HashMap<pedersen::Commitment, api::BlockHeaderInfo> = HashMap::new();
 	let mut api_merkle_proofs: HashMap<pedersen::Commitment, MerkleProofWrapper> = HashMap::new();
-	match api::client::get::<Vec<api::BlockOutputs>>(url.as_str()) {
-		Ok(blocks) => for block in blocks {
-			for out in block.outputs {
-				api_blocks.insert(out.commit, block.header.clone());
-				if let Some(merkle_proof) = out.merkle_proof {
-					let wrapper = MerkleProofWrapper(merkle_proof);
-					api_merkle_proofs.insert(out.commit, wrapper);
+
+	// Split up into separate requests, to avoid hitting http limits
+	loop {
+		let q = id_params.clone();
+		let mut cur_params: Vec<String> = q.into_iter()
+			.skip(current_index)
+			.take(max_ids_in_query)
+			.collect();
+
+		if cur_params.len() == 0 {
+			break;
+		}
+
+		debug!(LOGGER, "Splitting query: {} ids", cur_params.len());
+
+		current_index = current_index + cur_params.len();
+
+		let height_params = format!("start_height={}&end_height={}", 0, tip.height,);
+		let mut query_params = vec![height_params];
+		query_params.append(&mut cur_params);
+
+		let url = format!(
+			"{}/v1/chain/outputs/byheight?{}",
+			config.check_node_api_http_addr,
+			query_params.join("&"),
+		);
+		debug!(LOGGER, "{:?}", url);
+
+		match api::client::get::<Vec<api::BlockOutputs>>(url.as_str()) {
+			Ok(blocks) => for block in blocks {
+				for out in block.outputs {
+					api_blocks.insert(out.commit, block.header.clone());
+					if let Some(merkle_proof) = out.merkle_proof {
+						let wrapper = MerkleProofWrapper(merkle_proof);
+						api_merkle_proofs.insert(out.commit, wrapper);
+					}
 				}
+			},
+			Err(e) => {
+				// if we got anything other than 200 back from server, bye
+				error!(LOGGER, "Refresh failed... unable to contact node: {}", e);
+				return Err(e).context(ErrorKind::Node)?;
 			}
-		},
-		Err(e) => {
-			// if we got anything other than 200 back from server, bye
-			error!(LOGGER, "Refresh failed... unable to contact node: {}", e);
-			return Err(e).context(ErrorKind::Node)?;
 		}
 	}
 
@@ -177,24 +198,46 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<()
 	// build a map of api outputs by commit so we can look them up efficiently
 	let mut api_outputs: HashMap<pedersen::Commitment, api::Output> = HashMap::new();
 
-	let query_string = query_params.join("&");
+	let max_ids_in_query = 1000;
+	let mut current_index = 0;
 
-	let url = format!(
-		"{}/v1/chain/outputs/byids?{}",
-		config.check_node_api_http_addr, query_string,
-	);
+	// Split up into separate requests, to avoid hitting http limits
+	loop {
+		let q = query_params.clone();
+		let cur_params: Vec<String> = q.into_iter()
+			.skip(current_index)
+			.take(max_ids_in_query)
+			.collect();
 
-	match api::client::get::<Vec<api::Output>>(url.as_str()) {
-		Ok(outputs) => for out in outputs {
-			api_outputs.insert(out.commit.commit(), out);
-		},
-		Err(e) => {
-			// if we got anything other than 200 back from server, don't attempt to refresh
-			// the wallet data after
-			return Err(e).context(ErrorKind::Node)?;
+		if cur_params.len() == 0 {
+			break;
 		}
-	};
 
+		debug!(LOGGER, "Splitting query: {} ids", cur_params.len());
+
+		current_index = current_index + cur_params.len();
+		let query_string = cur_params.join("&");
+
+		let url = format!(
+			"{}/v1/chain/outputs/byids?{}",
+			config.check_node_api_http_addr, query_string,
+		);
+
+		match api::client::get::<Vec<api::Output>>(url.as_str()) {
+			Ok(outputs) => for out in outputs {
+				api_outputs.insert(out.commit.commit(), out);
+			},
+			Err(e) => {
+				// if we got anything other than 200 back from server, don't attempt to refresh
+				// the wallet data after
+				error!(
+					LOGGER,
+					"Error sending wallet refresh request to server: {:?}", e
+				);
+				return Err(e).context(ErrorKind::Node)?;
+			}
+		};
+	}
 	// now for each commit, find the output in the wallet and
 	// the corresponding api output (if it exists)
 	// and refresh it in-place in the wallet.
