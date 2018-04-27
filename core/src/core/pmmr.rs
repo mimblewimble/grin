@@ -120,9 +120,7 @@ impl Readable for ImprovedMerkleProof {
 			path.push(hash);
 		}
 
-		Ok(ImprovedMerkleProof {
-			path,
-		})
+		Ok(ImprovedMerkleProof { path })
 	}
 }
 
@@ -161,8 +159,8 @@ impl ImprovedMerkleProof {
 		// need to think about this a bit more
 
 		// 0010
-		// proof for pos 4 needs to take peaks at pos 3 and pos 4 and hash them to get the root
-		// so we have some synthetic parents
+		// proof for pos 4 needs to take peaks at pos 3 and pos 4 and hash them to get
+		// the root so we have some synthetic parents
 
 		panic!("woah, not yet implemented");
 	}
@@ -403,7 +401,12 @@ where
 	// If none then the sibling of our peak is the peak to the left.
 	fn bag_the_rhs(&self, peak_pos: u64) -> Option<Hash> {
 		// TODO - are we off by one here with pos? 0-index vs 1-index...???
-		println!("about to bag rhs - {}, {:?}, {}", peak_pos, peaks(self.last_pos), self.last_pos);
+		println!(
+			"about to bag rhs - {}, {:?}, {}",
+			peak_pos,
+			peaks(self.last_pos),
+			self.last_pos
+		);
 		let rhs = peaks(self.last_pos)
 			.into_iter()
 			.filter(|x| x > &peak_pos)
@@ -462,7 +465,7 @@ where
 
 		let peak_pos = match family_branch.last() {
 			Some(&(x, y)) => x,
-			None => pos
+			None => pos,
 		};
 		println!("family branch - {:?}", family_branch);
 		println!("peak_pos - {:?}", peak_pos);
@@ -470,17 +473,12 @@ where
 		path.append(&mut self.peak_path(peak_pos));
 		println!("path now - {:?}", path);
 
-		Ok(ImprovedMerkleProof {
-			path
-		})
+		Ok(ImprovedMerkleProof { path })
 	}
 
 	/// Build a Merkle proof for the element at the given position in the MMR
 	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
-		debug!(
-			LOGGER,
-			"merkle_proof - {}, last_pos {}", pos, self.last_pos
-		);
+		debug!(LOGGER, "merkle_proof - {}, last_pos {}", pos, self.last_pos);
 
 		if !is_leaf(pos) {
 			return Err(format!("not a leaf at pos {}", pos));
@@ -1094,7 +1092,7 @@ pub fn bintree_postorder_height(num: u64) -> u64 {
 /// (somewhat unintuitively but this is how the PMMR is "append only").
 pub fn is_leaf(pos: u64) -> bool {
 	if pos == 0 {
-		return false
+		return false;
 	}
 	bintree_postorder_height(pos) == 0
 }
@@ -1680,16 +1678,28 @@ mod test {
 		assert_eq!(pmmr.unpruned_size(), 11);
 
 		let proof = pmmr.improved_merkle_proof(1).unwrap();
-		assert_eq!(proof.path, vec![pos_1, pos_5, (pos_9, pos_10).hash_with_index(11)]);
+		assert_eq!(
+			proof.path,
+			vec![pos_1, pos_5, (pos_9, pos_10).hash_with_index(11)]
+		);
 
 		let proof = pmmr.improved_merkle_proof(2).unwrap();
-		assert_eq!(proof.path, vec![pos_0, pos_5, (pos_9, pos_10).hash_with_index(11)]);
+		assert_eq!(
+			proof.path,
+			vec![pos_0, pos_5, (pos_9, pos_10).hash_with_index(11)]
+		);
 
 		let proof = pmmr.improved_merkle_proof(4).unwrap();
-		assert_eq!(proof.path, vec![pos_4, pos_2, (pos_9, pos_10).hash_with_index(11)]);
+		assert_eq!(
+			proof.path,
+			vec![pos_4, pos_2, (pos_9, pos_10).hash_with_index(11)]
+		);
 
 		let proof = pmmr.improved_merkle_proof(5).unwrap();
-		assert_eq!(proof.path, vec![pos_3, pos_2, (pos_9, pos_10).hash_with_index(11)]);
+		assert_eq!(
+			proof.path,
+			vec![pos_3, pos_2, (pos_9, pos_10).hash_with_index(11)]
+		);
 
 		let proof = pmmr.improved_merkle_proof(8).unwrap();
 		assert_eq!(proof.path, vec![pos_8, pos_10, pos_6]);
@@ -1749,7 +1759,10 @@ mod test {
 		let peaks = pmmr.peaks();
 		assert_eq!(peaks.len(), 3);
 		assert_eq!(pmmr.last_pos, 11);
-		assert_eq!(pmmr.bag_the_rhs(7), Some((peaks[1], peaks[2]).hash_with_index(11)));
+		assert_eq!(
+			pmmr.bag_the_rhs(7),
+			Some((peaks[1], peaks[2]).hash_with_index(11))
+		);
 	}
 
 	#[test]
