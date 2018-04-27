@@ -262,7 +262,7 @@ pub fn restore(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> 
 	let mut start_index = 1;
 	// Keep a set of keys we've already claimed (cause it's far faster than
 	// deriving a key for each one)
-	let mut found_key_index:Vec<u32> = vec![];
+	let mut found_key_index: Vec<u32> = vec![];
 	// this will start here, then lower as outputs are found, moving backwards on
 	// the chain
 	loop {
@@ -276,8 +276,12 @@ pub fn restore(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> 
 		);
 
 		let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-			let result_vec =
-				find_outputs_with_key(config, keychain, output_listing.outputs.clone(), &mut found_key_index);
+			let result_vec = find_outputs_with_key(
+				config,
+				keychain,
+				output_listing.outputs.clone(),
+				&mut found_key_index,
+			);
 			if result_vec.len() > 0 {
 				for output in result_vec.clone() {
 					let root_key_id = keychain.root_key_id();
