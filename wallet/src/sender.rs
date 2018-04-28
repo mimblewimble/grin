@@ -282,7 +282,7 @@ fn build_send_tx(
 	if total == 0 {
 		return Err(ErrorKind::NotEnoughFunds(total as u64))?;
 	}
-	
+
 	// Check if we need to use a change address
 	if total > amount_with_fee {
 		fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
