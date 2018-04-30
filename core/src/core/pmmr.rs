@@ -1646,6 +1646,7 @@ mod test {
 
 		// single peak, path with single sibling
 		let proof = pmmr.improved_merkle_proof(1).unwrap();
+		assert!(proof.verify(&pmmr.root(), &pos_0, 1));
 		assert_eq!(proof.path, vec![pos_1]);
 
 		let proof = pmmr.improved_merkle_proof(2).unwrap();
