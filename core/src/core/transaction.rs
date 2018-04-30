@@ -30,7 +30,7 @@ use core::BlockHeader;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
 use keychain;
-use keychain::{BlindingFactor, Keychain};
+use keychain::Keychain;
 use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
           WriteableSorted, Writer};
 use util;
@@ -229,9 +229,11 @@ pub struct Transaction {
 	pub outputs: Vec<Output>,
 	/// List of kernels that make up this transaction (usually a single kernel).
 	pub kernels: Vec<TxKernel>,
+
 	/// The kernel "offset" k2
 	/// excess is k1G after splitting the key k = k1 + k2
-	pub offset: BlindingFactor,
+	/// stored as a Commitment to value 0 here
+	pub offset: Commitment,
 }
 
 /// PartialEq
@@ -272,7 +274,7 @@ impl Writeable for Transaction {
 /// transaction from a binary stream.
 impl Readable for Transaction {
 	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
-		let offset = BlindingFactor::read(reader)?;
+		let offset = Commitment::read(reader)?;
 
 		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
@@ -318,8 +320,14 @@ impl Default for Transaction {
 impl Transaction {
 	/// Creates a new empty transaction (no inputs or outputs, zero fee).
 	pub fn empty() -> Transaction {
+		let zero_offset = {
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			secp.commit_value(0).unwrap()
+		};
+
 		Transaction {
-			offset: BlindingFactor::zero(),
+			offset: zero_offset,
 			inputs: vec![],
 			outputs: vec![],
 			kernels: vec![],
@@ -329,8 +337,14 @@ impl Transaction {
 	/// Creates a new transaction initialized with
 	/// the provided inputs, outputs, kernels
 	pub fn new(inputs: Vec<Input>, outputs: Vec<Output>, kernels: Vec<TxKernel>) -> Transaction {
+		let zero_offset = {
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			secp.commit_value(0).unwrap()
+		};
+
 		Transaction {
-			offset: BlindingFactor::zero(),
+			offset: zero_offset,
 			inputs: inputs,
 			outputs: outputs,
 			kernels: kernels,
@@ -339,7 +353,7 @@ impl Transaction {
 
 	/// Creates a new transaction using this transaction as a template
 	/// and with the specified offset.
-	pub fn with_offset(self, offset: BlindingFactor) -> Transaction {
+	pub fn with_offset(self, offset: Commitment) -> Transaction {
 		Transaction {
 			offset: offset,
 			..self
@@ -396,15 +410,16 @@ impl Transaction {
 
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
+			let zero_commit = secp.commit_value(0)?;
 
-			// add the offset in as necessary (unless offset is zero)
-			if self.offset != BlindingFactor::zero() {
-				let skey = self.offset.secret_key(&secp)?;
-				let offset_commit = secp.commit(0, skey)?;
-				kernel_commits.push(offset_commit);
+			kernel_commits.push(self.offset);
+			kernel_commits.retain(|x| *x != zero_commit);
+
+			if kernel_commits.is_empty() {
+				zero_commit
+			} else {
+				secp.commit_sum(kernel_commits, vec![])?
 			}
-
-			secp.commit_sum(kernel_commits, vec![])?
 		};
 
 		// sum of kernel commitments (including the offset) must match
@@ -515,18 +530,13 @@ pub fn aggregate_with_cut_through(transactions: Vec<Transaction>) -> Result<Tran
 	let total_kernel_offset = {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		let mut keys = kernel_offsets
-			.iter()
-			.cloned()
-			.filter(|x| *x != BlindingFactor::zero())
-			.filter_map(|x| x.secret_key(&secp).ok())
-			.collect::<Vec<_>>();
+		let zero_commit = secp.commit_value(0)?;
 
-		if keys.is_empty() {
-			BlindingFactor::zero()
+		kernel_offsets.retain(|x| *x != zero_commit);
+		if kernel_offsets.is_empty() {
+			zero_commit
 		} else {
-			let sum = secp.blind_sum(keys, vec![])?;
-			BlindingFactor::from_secret_key(sum)
+			secp.commit_sum(kernel_offsets, vec![])?
 		}
 	};
 
@@ -589,18 +599,13 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	let total_kernel_offset = {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		let mut keys = kernel_offsets
-			.iter()
-			.cloned()
-			.filter(|x| *x != BlindingFactor::zero())
-			.filter_map(|x| x.secret_key(&secp).ok())
-			.collect::<Vec<_>>();
+		let zero_commit = secp.commit_value(0)?;
 
-		if keys.is_empty() {
-			BlindingFactor::zero()
+		kernel_offsets.retain(|x| *x != zero_commit);
+		if kernel_offsets.is_empty() {
+			zero_commit
 		} else {
-			let sum = secp.blind_sum(keys, vec![])?;
-			BlindingFactor::from_secret_key(sum)
+			secp.commit_sum(kernel_offsets, vec![])?
 		}
 	};
 
@@ -649,25 +654,9 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	let total_kernel_offset = {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		let mut positive_key = vec![mk_tx.offset]
-			.iter()
-			.cloned()
-			.filter(|x| *x != BlindingFactor::zero())
-			.filter_map(|x| x.secret_key(&secp).ok())
-			.collect::<Vec<_>>();
-		let mut negative_keys = kernel_offsets
-			.iter()
-			.cloned()
-			.filter(|x| *x != BlindingFactor::zero())
-			.filter_map(|x| x.secret_key(&secp).ok())
-			.collect::<Vec<_>>();
 
-		if positive_key.is_empty() && negative_keys.is_empty() {
-			BlindingFactor::zero()
-		} else {
-			let sum = secp.blind_sum(positive_key, negative_keys)?;
-			BlindingFactor::from_secret_key(sum)
-		}
+		// TODO - handle "zero commits" here?
+		secp.commit_sum(vec![mk_tx.offset], kernel_offsets)?
 	};
 
 	// Sorting them lexicographically
