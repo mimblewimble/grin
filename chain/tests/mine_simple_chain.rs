@@ -31,10 +31,8 @@ use core::core::target::Difficulty;
 use core::consensus;
 use core::global;
 use core::global::ChainTypes;
-
-use keychain::Keychain;
-
 use core::pow;
+use keychain::Keychain;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -44,6 +42,16 @@ fn setup(dir_name: &str) -> Chain {
 	let _ = env_logger::init();
 	clean_output_dir(dir_name);
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	let genesis_block = pow::mine_genesis_block().unwrap();
+	chain::Chain::init(
+		dir_name.to_string(),
+		Arc::new(NoopAdapter {}),
+		genesis_block,
+		pow::verify_size,
+	).unwrap()
+}
+
+fn reopen(dir_name: &str) -> Chain {
 	let genesis_block = pow::mine_genesis_block().unwrap();
 	chain::Chain::init(
 		dir_name.to_string(),
@@ -98,6 +106,170 @@ fn mine_empty_chain() {
 		let header_by_height = chain.get_header_by_height(n).unwrap();
 		assert_eq!(header_by_height.hash(), bhash);
 
+		chain.validate(false).unwrap();
+	}
+}
+
+#[test]
+fn mine_double_spend() {
+	let _ = setup(".grin_double_spend");
+	let keychain = Keychain::from_random_seed().unwrap();
+
+	for n in 1..4 {
+		let chain = reopen(".grin_double_spend");
+		let prev = chain.head_header().unwrap();
+		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+		let pk = keychain.derive_key_id(n as u32).unwrap();
+		let mut b =
+			core::core::Block::new(&prev, vec![], &keychain, &pk, difficulty.clone()).unwrap();
+		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+
+		chain.set_txhashset_roots(&mut b, false).unwrap();
+
+		pow::pow_size(
+			&mut b.header,
+			difficulty,
+			global::proofsize(),
+			global::sizeshift(),
+		).unwrap();
+
+		let bhash = b.hash();
+		chain.process_block(b, chain::Options::MINE).unwrap();
+
+		// checking our new head
+		let head = chain.head().unwrap();
+		assert_eq!(head.height, n);
+		assert_eq!(head.last_block_h, bhash);
+
+		// now check the block_header of the head
+		let header = chain.head_header().unwrap();
+		assert_eq!(header.height, n);
+		assert_eq!(header.hash(), bhash);
+
+		// now check the block itself
+		let block = chain.get_block(&header.hash()).unwrap();
+		assert_eq!(block.header.height, n);
+		assert_eq!(block.hash(), bhash);
+		assert_eq!(block.outputs.len(), 1);
+
+		// now check the block height index
+		let header_by_height = chain.get_header_by_height(n).unwrap();
+		assert_eq!(header_by_height.hash(), bhash);
+
+		chain.validate(false).unwrap();
+	}
+
+	// now spend the coinbase output from block 1
+	{
+		let chain = reopen(".grin_double_spend");
+		let header = chain.head_header().unwrap();
+
+		let pk4 = keychain.derive_key_id(4).unwrap();
+		let pk5 = keychain.derive_key_id(5).unwrap();
+
+		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+
+		let header_1 = chain.get_header_by_height(1).unwrap();
+		let block_1 = chain.get_block(&header_1.hash()).unwrap();
+		let out_1 = block_1.outputs.first().unwrap();
+		let out_id = OutputIdentifier::from_output(out_1);
+		let merkle_proof = chain.get_merkle_proof(&out_id, &header_1).unwrap();
+
+		let tx1 = build::transaction(
+			vec![
+				build::coinbase_input(
+					consensus::REWARD,
+					header_1.hash(),
+					merkle_proof,
+					keychain.derive_key_id(1).unwrap(),
+				),
+				build::output(consensus::REWARD - 20000, pk4),
+				build::with_fee(20000),
+			],
+			&keychain,
+		).unwrap();
+
+		let mut block =
+			core::core::Block::new(&header, vec![&tx1], &keychain, &pk5, difficulty.clone())
+				.unwrap();
+		block.header.timestamp = header.timestamp + time::Duration::seconds(60);
+
+		chain.set_txhashset_roots(&mut block, false).unwrap();
+
+		pow::pow_size(
+			&mut block.header,
+			difficulty,
+			global::proofsize(),
+			global::sizeshift(),
+		).unwrap();
+
+		// check the block validates in isolation
+		// and that we can successfully process it,
+		// and that the updated chain is valid
+		block.validate(&header).unwrap();
+		chain.process_block(block, chain::Options::MINE).unwrap();
+		chain.validate(false).unwrap();
+	}
+
+	// subversive rm_log corruption happens here ... [tbd]
+	{
+		fs::remove_file(".grin_double_spend/txhashset/output/pmmr_rm_log.bin").unwrap();
+	}
+
+	// now "double spend" the coinbase output from block 1
+	{
+		let chain = reopen(".grin_double_spend");
+		let header = chain.head_header().unwrap();
+
+		let pk6 = keychain.derive_key_id(6).unwrap();
+		let pk7 = keychain.derive_key_id(7).unwrap();
+
+		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+
+		let header_1 = chain.get_header_by_height(1).unwrap();
+		let block_1 = chain.get_block(&header_1.hash()).unwrap();
+		let out_1 = block_1.outputs.first().unwrap();
+		let out_id = OutputIdentifier::from_output(out_1);
+		let merkle_proof = chain.get_merkle_proof(&out_id, &header_1).unwrap();
+
+		let tx1 = build::transaction(
+			vec![
+				build::coinbase_input(
+					consensus::REWARD,
+					header_1.hash(),
+					merkle_proof,
+					keychain.derive_key_id(1).unwrap(),
+				),
+				build::output(consensus::REWARD - 20000, pk6),
+				build::with_fee(20000),
+			],
+			&keychain,
+		).unwrap();
+
+		let mut block =
+			core::core::Block::new(&header, vec![&tx1], &keychain, &pk7, difficulty.clone())
+				.unwrap();
+		block.header.timestamp = header.timestamp + time::Duration::seconds(60);
+
+		chain.set_txhashset_roots(&mut block, false).unwrap();
+
+		pow::pow_size(
+			&mut block.header,
+			difficulty,
+			global::proofsize(),
+			global::sizeshift(),
+		).unwrap();
+
+		// TODO - the "bad" block actually validates here (if our rm_log got damaged
+		// for some reason)
+		block.validate(&header).unwrap();
+
+		// TODO - surprisingly - the "bad" block also gets accepted by the chain
+		// successfully
+		chain.process_block(block, chain::Options::MINE).unwrap();
+
+		// TODO - we fail here with a mismatch between output and kernel sums
+		// but this is not something we run as part of regult block processing
 		chain.validate(false).unwrap();
 	}
 }
