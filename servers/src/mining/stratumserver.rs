@@ -471,7 +471,7 @@ impl StratumServer {
 	} // handle submit a solution
 
 	// Purge dead/sick workers - remove all workers marked in error state
-	fn clean_workers(&mut self, stratum_stats: &mut Arc<RwLock<StratumStats>>) {
+	fn clean_workers(&mut self, stratum_stats: &mut Arc<RwLock<StratumStats>>) -> usize {
 		let mut start = 0;
 		let mut workers_l = self.workers.lock().unwrap();
 		loop {
@@ -500,7 +500,7 @@ impl StratumServer {
 			if start >= workers_l.len() {
 				let mut stratum_stats = stratum_stats.write().unwrap();
 				stratum_stats.num_workers = workers_l.len();
-				return;
+				return stratum_stats.num_workers;
 			}
 		}
 	}
@@ -563,6 +563,7 @@ impl StratumServer {
 		// nothing has changed. We only want to create a key_id for each new block,
 		// and reuse it when we rebuild the current block to add new tx.
 		let mut key_id = None;
+		let mut num_workers: usize;
 		let mut head = self.chain.head().unwrap();
 		let mut current_hash = head.prev_block_h;
 		let mut latest_hash;
@@ -596,7 +597,7 @@ impl StratumServer {
 			let mining_stopped = self.currently_syncing.load(Ordering::Relaxed);
 
 			// Remove workers with failed connections
-			self.clean_workers(&mut stratum_stats.clone());
+			num_workers = self.clean_workers(&mut stratum_stats.clone());
 
 			// get the latest chain state
 			head = self.chain.head().unwrap();
@@ -606,7 +607,10 @@ impl StratumServer {
 			//    There is a new block on the chain
 			// or We are rebuilding the current one to include new transactions
 			// and we're not synching
-			if current_hash != latest_hash || time::get_time().sec >= deadline && !mining_stopped {
+			// and there is at least one worker connected
+			if (current_hash != latest_hash || time::get_time().sec >= deadline) && !mining_stopped
+				&& num_workers > 0
+			{
 				if current_hash != latest_hash {
 					// A brand new block, so we will generate a new key_id
 					key_id = None;
