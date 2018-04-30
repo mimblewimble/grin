@@ -36,7 +36,7 @@ use grin_store;
 use grin_store::pmmr::PMMRBackend;
 use grin_store::types::prune_noop;
 use types::{BlockMarker, ChainStore, Error, TxHashSetRoots};
-use util::{zip, LOGGER};
+use util::{secp_static, zip, LOGGER};
 
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
 const OUTPUT_SUBDIR: &'static str = "output";
@@ -712,9 +712,7 @@ impl<'a> Extension<'a> {
 	// So "summing" is just a case of taking the total kernel offset
 	// directly from the current block header.
 	fn sum_kernel_offsets(&self, header: &BlockHeader) -> Result<Option<Commitment>, Error> {
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
-		let zero_commit = secp.commit_value(0)?;
+		let zero_commit = secp_static::commit_to_zero_value();
 
 		let offset = {
 			if header.total_kernel_offset == zero_commit {

@@ -31,7 +31,7 @@ use global;
 use keychain;
 use util::kernel_sig_msg;
 use util::LOGGER;
-use util::{secp, static_secp_instance};
+use util::{secp, secp_static, static_secp_instance};
 use util::secp::pedersen::Commitment;
 
 /// Errors thrown by Block validation
@@ -125,13 +125,9 @@ pub struct BlockHeader {
 
 impl Default for BlockHeader {
 	fn default() -> BlockHeader {
-		let zero_offset = {
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-			secp.commit_value(0).unwrap()
-		};
-
+		let zero_commit = secp_static::commit_to_zero_value();
 		let proof_size = global::proofsize();
+
 		BlockHeader {
 			version: 1,
 			height: 0,
@@ -141,7 +137,7 @@ impl Default for BlockHeader {
 			output_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
 			kernel_root: ZERO_HASH,
-			total_kernel_offset: zero_offset,
+			total_kernel_offset: zero_commit,
 			nonce: 0,
 			pow: Proof::zero(proof_size),
 		}
@@ -551,16 +547,16 @@ impl Block {
 		// now sum the kernel_offsets up to give us
 		// an aggregate offset for the entire block
 		let total_kernel_offset = {
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-
 			kernel_offsets.push(prev.total_kernel_offset);
-			let zero_commit = secp.commit_value(0)?;
+			let zero_commit = secp_static::commit_to_zero_value();
+
 			kernel_offsets.retain(|x| *x != zero_commit);
 
 			if kernel_offsets.is_empty() {
-				secp.commit_value(0)?
+				zero_commit
 			} else {
+				let secp = static_secp_instance();
+				let secp = secp.lock().unwrap();
 				secp.commit_sum(kernel_offsets, vec![])?
 			}
 		};
@@ -704,13 +700,12 @@ impl Block {
 		let kernel_sum = {
 			let mut kernel_commits = self.kernels.iter().map(|x| x.excess).collect::<Vec<_>>();
 
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-
 			// given the total_kernel_offset of this block and the previous block
 			// we can account for the kernel_offset of this particular block
 			kernel_commits.push(self.header.total_kernel_offset);
-			let zero_commit = secp.commit_value(0)?;
+
+			let zero_commit = secp_static::commit_to_zero_value();
+
 			kernel_commits.retain(|x| *x != zero_commit);
 
 			let mut prev_offset_commits = vec![prev.total_kernel_offset];
@@ -719,6 +714,8 @@ impl Block {
 			if kernel_commits.is_empty() && prev_offset_commits.is_empty() {
 				zero_commit
 			} else {
+				let secp = static_secp_instance();
+				let secp = secp.lock().unwrap();
 				secp.commit_sum(kernel_commits, prev_offset_commits)?
 			}
 		};

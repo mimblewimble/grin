@@ -14,7 +14,7 @@
 
 //! Transactions
 use util::secp::{self, Message, Signature};
-use util::{kernel_sig_msg, static_secp_instance};
+use util::{kernel_sig_msg, secp_static, static_secp_instance};
 use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
 use std::collections::HashSet;
 use std::cmp::max;
@@ -320,14 +320,8 @@ impl Default for Transaction {
 impl Transaction {
 	/// Creates a new empty transaction (no inputs or outputs, zero fee).
 	pub fn empty() -> Transaction {
-		let zero_offset = {
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-			secp.commit_value(0).unwrap()
-		};
-
 		Transaction {
-			offset: zero_offset,
+			offset: secp_static::commit_to_zero_value(),
 			inputs: vec![],
 			outputs: vec![],
 			kernels: vec![],
@@ -337,14 +331,8 @@ impl Transaction {
 	/// Creates a new transaction initialized with
 	/// the provided inputs, outputs, kernels
 	pub fn new(inputs: Vec<Input>, outputs: Vec<Output>, kernels: Vec<TxKernel>) -> Transaction {
-		let zero_offset = {
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-			secp.commit_value(0).unwrap()
-		};
-
 		Transaction {
-			offset: zero_offset,
+			offset: secp_static::commit_to_zero_value(),
 			inputs: inputs,
 			outputs: outputs,
 			kernels: kernels,
@@ -408,9 +396,7 @@ impl Transaction {
 		let kernel_sum = {
 			let mut kernel_commits = self.kernels.iter().map(|x| x.excess).collect::<Vec<_>>();
 
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-			let zero_commit = secp.commit_value(0)?;
+			let zero_commit = secp_static::commit_to_zero_value();
 
 			kernel_commits.push(self.offset);
 			kernel_commits.retain(|x| *x != zero_commit);
@@ -418,6 +404,8 @@ impl Transaction {
 			if kernel_commits.is_empty() {
 				zero_commit
 			} else {
+				let secp = static_secp_instance();
+				let secp = secp.lock().unwrap();
 				secp.commit_sum(kernel_commits, vec![])?
 			}
 		};
@@ -528,14 +516,14 @@ pub fn aggregate_with_cut_through(transactions: Vec<Transaction>) -> Result<Tran
 	// now sum the kernel_offsets up to give us an aggregate offset for the
 	// transaction
 	let total_kernel_offset = {
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
-		let zero_commit = secp.commit_value(0)?;
+		let zero_commit = secp_static::commit_to_zero_value();
 
 		kernel_offsets.retain(|x| *x != zero_commit);
 		if kernel_offsets.is_empty() {
 			zero_commit
 		} else {
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
 			secp.commit_sum(kernel_offsets, vec![])?
 		}
 	};
@@ -597,14 +585,15 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	// now sum the kernel_offsets up to give us an aggregate offset for the
 	// transaction
 	let total_kernel_offset = {
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
-		let zero_commit = secp.commit_value(0)?;
+		let zero_commit = secp_static::commit_to_zero_value();
 
 		kernel_offsets.retain(|x| *x != zero_commit);
+
 		if kernel_offsets.is_empty() {
 			zero_commit
 		} else {
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
 			secp.commit_sum(kernel_offsets, vec![])?
 		}
 	};
