@@ -91,7 +91,9 @@ pub fn issue_send_tx(
 		.aggsig_create_context(&tx_id, skey)
 		.context(ErrorKind::Keychain)?;
 
-	let kernel_offset = keychain.secp().commit(0, skey)
+	let kernel_offset = keychain
+		.secp()
+		.commit(0, skey)
 		.context(ErrorKind::Keychain)?;
 
 	let partial_tx = build_partial_tx(&tx_id, keychain, amount_with_fee, kernel_offset, None, tx);
