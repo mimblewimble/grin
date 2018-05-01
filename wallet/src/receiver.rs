@@ -28,10 +28,11 @@ use core::consensus::reward;
 use core::core::{amount_to_hr_string, build, Block, Committed, Output, Transaction, TxKernel};
 use core::{global, ser};
 use failure::{Fail, ResultExt};
-use keychain::{BlindingFactor, Identifier, Keychain};
+use keychain::{Identifier, Keychain};
 use types::*;
 use urlencoded::UrlEncodedQuery;
 use util::{secp, to_hex, LOGGER};
+use util::secp::pedersen::Commitment;
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
 #[derive(Serialize, Deserialize)]
@@ -404,7 +405,7 @@ fn build_final_transaction(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
-	kernel_offset: BlindingFactor,
+	kernel_offset: Commitment,
 	excess_sig: &secp::Signature,
 	tx: Transaction,
 ) -> Result<Transaction, Error> {
@@ -490,13 +491,9 @@ fn build_final_transaction(
 			.context(ErrorKind::Transaction)?;
 
 		// subtract the kernel_excess (built from kernel_offset)
-		let offset_excess = keychain
-			.secp()
-			.commit(0, kernel_offset.secret_key(&keychain.secp()).unwrap())
-			.unwrap();
 		keychain
 			.secp()
-			.commit_sum(vec![tx_excess], vec![offset_excess])
+			.commit_sum(vec![tx_excess], vec![kernel_offset])
 			.context(ErrorKind::Transaction)?
 	};
 

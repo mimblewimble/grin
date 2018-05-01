@@ -29,10 +29,9 @@ use core::transaction;
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 use global;
 use keychain;
-use keychain::BlindingFactor;
 use util::kernel_sig_msg;
 use util::LOGGER;
-use util::{secp, static_secp_instance};
+use util::{secp, secp_static, static_secp_instance};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, PartialEq)]
@@ -116,7 +115,7 @@ pub struct BlockHeader {
 	/// Total accumulated sum of kernel offsets since genesis block.
 	/// We can derive the kernel offset sum for *this* block from
 	/// the total kernel offset of the previous block header.
-	pub total_kernel_offset: BlindingFactor,
+	pub total_kernel_offset: Commitment,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
 	/// Proof of work data.
@@ -125,7 +124,9 @@ pub struct BlockHeader {
 
 impl Default for BlockHeader {
 	fn default() -> BlockHeader {
+		let zero_commit = secp_static::commit_to_zero_value();
 		let proof_size = global::proofsize();
+
 		BlockHeader {
 			version: 1,
 			height: 0,
@@ -135,7 +136,7 @@ impl Default for BlockHeader {
 			output_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
 			kernel_root: ZERO_HASH,
-			total_kernel_offset: BlindingFactor::zero(),
+			total_kernel_offset: zero_commit,
 			nonce: 0,
 			pow: Proof::zero(proof_size),
 		}
@@ -164,7 +165,7 @@ impl Readable for BlockHeader {
 		let output_root = Hash::read(reader)?;
 		let rproof_root = Hash::read(reader)?;
 		let kernel_root = Hash::read(reader)?;
-		let total_kernel_offset = BlindingFactor::read(reader)?;
+		let total_kernel_offset = Commitment::read(reader)?;
 		let nonce = reader.read_u64()?;
 		let pow = Proof::read(reader)?;
 
@@ -547,23 +548,17 @@ impl Block {
 		// now sum the kernel_offsets up to give us
 		// an aggregate offset for the entire block
 		let total_kernel_offset = {
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-			let mut keys = kernel_offsets
-				.iter()
-				.cloned()
-				.filter(|x| *x != BlindingFactor::zero())
-				.filter_map(|x| x.secret_key(&secp).ok())
-				.collect::<Vec<_>>();
-			if prev.total_kernel_offset != BlindingFactor::zero() {
-				keys.push(prev.total_kernel_offset.secret_key(&secp)?);
-			}
+			kernel_offsets.push(prev.total_kernel_offset);
+			let zero_commit = secp_static::commit_to_zero_value();
 
-			if keys.is_empty() {
-				BlindingFactor::zero()
+			kernel_offsets.retain(|x| *x != zero_commit);
+
+			if kernel_offsets.is_empty() {
+				zero_commit
 			} else {
-				let sum = secp.blind_sum(keys, vec![])?;
-				BlindingFactor::from_secret_key(sum)
+				let secp = static_secp_instance();
+				let secp = secp.lock().unwrap();
+				secp.commit_sum(kernel_offsets, vec![])?
 			}
 		};
 
@@ -710,6 +705,7 @@ impl Block {
 		prev_output_sum: &Commitment,
 		prev_kernel_sum: &Commitment,
 	) -> Result<((Commitment, Commitment)), Error> {
+
 		// Verify the output rangeproofs.
 		// Note: this is expensive.
 		for x in &self.outputs {
@@ -726,16 +722,9 @@ impl Block {
 		let overage = (REWARD as i64).checked_neg().unwrap_or(0);
 		let io_sum = self.sum_commitments(overage, Some(prev_output_sum))?;
 
-		let offset = {
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-			let key = self.header.total_kernel_offset.secret_key(&secp)?;
-			secp.commit(0, key)?
-		};
-
 		// Sum the kernel excesses accounting for the kernel offset.
 		let (kernel_sum, kernel_sum_plus_offset) =
-			self.sum_kernel_excesses(&offset, Some(prev_kernel_sum))?;
+			self.sum_kernel_excesses(&self.header.total_kernel_offset, Some(prev_kernel_sum))?;
 
 		if io_sum != kernel_sum_plus_offset {
 			return Err(Error::KernelSumMismatch);
@@ -1053,7 +1042,7 @@ mod test {
 		let b = new_block(vec![], &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
-		let target_len = 1_216;
+		let target_len = 1_217;
 		assert_eq!(vec.len(), target_len,);
 	}
 
@@ -1065,7 +1054,7 @@ mod test {
 		let b = new_block(vec![&tx1], &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
-		let target_len = 2_796;
+		let target_len = 2_797;
 		assert_eq!(vec.len(), target_len);
 	}
 
@@ -1076,7 +1065,7 @@ mod test {
 		let b = new_block(vec![], &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-		let target_len = 1_224;
+		let target_len = 1_225;
 		assert_eq!(vec.len(), target_len,);
 	}
 
@@ -1088,7 +1077,7 @@ mod test {
 		let b = new_block(vec![&tx1], &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-		let target_len = 1_230;
+		let target_len = 1_231;
 		assert_eq!(vec.len(), target_len,);
 	}
 
@@ -1106,7 +1095,7 @@ mod test {
 		let b = new_block(txs.iter().collect(), &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b).expect("serialization failed");
-		let target_len = 17_016;
+		let target_len = 17_017;
 		assert_eq!(vec.len(), target_len,);
 	}
 
@@ -1123,7 +1112,7 @@ mod test {
 		let b = new_block(txs.iter().collect(), &keychain, &prev);
 		let mut vec = Vec::new();
 		ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-		let target_len = 1_284;
+		let target_len = 1_285;
 		assert_eq!(vec.len(), target_len,);
 	}
 
