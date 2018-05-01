@@ -81,7 +81,7 @@ Waiting.
 ## T = 85
 
 D runs out of patience, flips a coin, broadcasts the aggregated transaction to its stem relay and starts the embargo timer for this transaction.
-E receives the stem transaction, aggregates its (thus removing duplicate input/output pair B1) and starts it s patience timer.
+E receives the stem transaction, aggregates them (thus removing duplicate input/output pair B1) and starts its patience timer.
 
 ![t = 85](images/t85.png)
 
