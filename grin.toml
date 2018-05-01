@@ -65,7 +65,7 @@ run_tui = true
 #Whether to run the wallet listener with the server by default
 run_wallet_listener = true
 
-#Whether to run a test miner. This is only for developer testing (chaintype 
+#Whether to run a test miner. This is only for developer testing (chaintype
 #usertesting) at cuckoo 16, and will only mine into the default wallet port.
 #real mining should use the standalone grin-miner
 run_test_miner = false
@@ -88,6 +88,12 @@ port = 13414
 
 #dandelion relay time
 #dandelion_relay_time = 600
+
+# Dandelio embargo timer.
+# dandelion_embargo = 300
+
+# Dandelio patience.
+# dandelion_embargo = 30
 
 #how long a banned peer should stay banned
 #ban_window = 10800
