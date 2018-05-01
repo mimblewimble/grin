@@ -347,7 +347,6 @@ where
 					new_unspents,
 				);
 
-				self.adapter.stem_tx_accepted(&tx);
 				self.stem_transactions.insert(tx_hash, Box::new(tx));
 				// Track this transaction
 				self.time_stem_transactions.insert(tx_hash, timer);
