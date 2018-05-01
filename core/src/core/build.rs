@@ -25,14 +25,14 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use util::{kernel_sig_msg, secp};
-
 use core::{Input, Output, OutputFeatures, ProofMessageElements, Transaction, TxKernel};
 use core::hash::Hash;
 use core::pmmr::MerkleProof;
 use keychain;
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 use util::LOGGER;
+use util::{kernel_sig_msg, secp};
+use util::secp::pedersen::Commitment;
 
 /// Context information available to transaction combinators.
 pub struct Context<'a> {
@@ -153,7 +153,7 @@ pub fn with_excess(excess: BlindingFactor) -> Box<Append> {
 }
 
 /// Sets a known tx "offset". Used in final step of tx construction.
-pub fn with_offset(offset: BlindingFactor) -> Box<Append> {
+pub fn with_offset(offset: Commitment) -> Box<Append> {
 	Box::new(
 		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			(tx.with_offset(offset), kern, sum)
@@ -241,13 +241,15 @@ pub fn transaction_with_offset(
 	let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
 
 	// generate kernel excess and excess_sig using the split key k1
-	let skey = k1.secret_key(&keychain.secp())?;
-	kern.excess = ctx.keychain.secp().commit(0, skey)?;
+	let skey1 = k1.secret_key(&keychain.secp())?;
+	let skey2 = k2.secret_key(&keychain.secp())?;
+
+	kern.excess = keychain.secp().commit(0, skey1)?;
 	kern.excess_sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &k1)?;
 
 	// store the kernel offset (k2) on the tx itself
 	// commitments will sum correctly when including the offset
-	tx.offset = k2.clone();
+	tx.offset = keychain.secp().commit(0, skey2)?;
 
 	assert!(tx.kernels.is_empty());
 	tx.kernels.push(kern);

@@ -646,14 +646,7 @@ impl<'a> Extension<'a> {
 
 		let zero_commit = secp_static::commit_to_zero_value();
 
-		let offset = {
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-			let key = header.total_kernel_offset.secret_key(&secp)?;
-			secp.commit(0, key)?
-		};
-
-		let mut excesses = vec![kernel_sum, offset];
+		let mut excesses = vec![kernel_sum, header.total_kernel_offset];
 		excesses.retain(|x| *x != zero_commit);
 
 		let kernel_sum_plus_offset = {
