@@ -61,17 +61,20 @@ pub fn issue_send_tx(
 		selection_strategy_is_use_all,
 	)?;
 
+	//
 	// TODO - wrap this up in build_send_tx or even the build() call?
+	// TODO - AUDIT REQUIRED
+	//
 	// Generate a random kernel offset here
 	// and subtract it from the blind_sum so we create
 	// the aggsig context with the "split" key
-	let kernel_offset =
+	let kernel_blind =
 		BlindingFactor::from_secret_key(SecretKey::new(&keychain.secp(), &mut thread_rng()));
 
 	let blind_offset = keychain
 		.blind_sum(&BlindSum::new()
 			.add_blinding_factor(blind)
-			.sub_blinding_factor(kernel_offset))
+			.sub_blinding_factor(kernel_blind))
 		.unwrap();
 
 	//
@@ -86,6 +89,9 @@ pub fn issue_send_tx(
 		.context(ErrorKind::Keychain)?;
 	keychain
 		.aggsig_create_context(&tx_id, skey)
+		.context(ErrorKind::Keychain)?;
+
+	let kernel_offset = keychain.secp().commit(0, skey)
 		.context(ErrorKind::Keychain)?;
 
 	let partial_tx = build_partial_tx(&tx_id, keychain, amount_with_fee, kernel_offset, None, tx);
