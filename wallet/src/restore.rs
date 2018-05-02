@@ -167,8 +167,9 @@ fn find_outputs_with_key(
 			}*/
 			let key_id = &keychain.derive_key_id(i as u32).unwrap();
 
-			//TODO: Just find which derived key gives the secret key returned in the message
-			
+			//TODO: Just find which derived key gives the secret key returned in the
+			// message
+
 			found = true;
 			// we have a partial match, let's just confirm
 			let info = keychain

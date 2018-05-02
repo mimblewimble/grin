@@ -231,13 +231,12 @@ impl Keychain {
 		amount: u64,
 		key_id: &Identifier,
 		_commit: Commitment,
-		extra_data: Option<Vec<u8>>
+		extra_data: Option<Vec<u8>>,
 	) -> Result<RangeProof, Error> {
 		let commit = self.commit(amount, key_id)?;
 		let skey = self.derived_key(key_id)?;
 		let nonce = self.rangeproof_create_nonce(&commit);
-		Ok(self.secp
-			.bullet_proof(amount, skey, nonce, extra_data))
+		Ok(self.secp.bullet_proof(amount, skey, nonce, extra_data))
 	}
 
 	pub fn verify_range_proof(
@@ -688,9 +687,9 @@ mod test {
 
 			// dealing with an input here so we need to negate the blinding_factor
 			// rather than use it as is
+			let bf = BlindingFactor::from_secret_key(skey);
 			let blinding_factor = keychain
-				.blind_sum(&BlindSum::new()
-					.sub_blinding_factor(BlindingFactor::from_secret_key(skey)))
+				.blind_sum(&BlindSum::new().sub_blinding_factor(bf))
 				.unwrap();
 
 			let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
@@ -999,10 +998,7 @@ mod test {
 		assert_eq!(proof_info.success, true);
 
 		//Value is in the message in this case
-		assert_eq!(
-			proof_info.value,
-			5,
-		);
+		assert_eq!(proof_info.value, 5,);
 
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
@@ -1026,11 +1022,7 @@ mod test {
 		let commit3 = keychain.commit(4, &key_id).unwrap();
 		let wrong_extra_data = [98u8; 64];
 		let _should_err = keychain
-			.rewind_range_proof(
-				commit3,
-				Some(wrong_extra_data.to_vec().clone()),
-				proof,
-			)
+			.rewind_range_proof(commit3, Some(wrong_extra_data.to_vec().clone()), proof)
 			.unwrap();
 
 		assert_eq!(proof_info.success, false);

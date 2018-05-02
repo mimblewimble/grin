@@ -18,8 +18,8 @@ use time;
 use rand::{thread_rng, Rng};
 use std::collections::HashSet;
 
-use core::{Committed, Input, KernelFeatures, Output, OutputFeatures, Proof,
-           ShortId, Transaction, TxKernel};
+use core::{Committed, Input, KernelFeatures, Output, OutputFeatures, Proof, ShortId, Transaction,
+           TxKernel};
 use consensus;
 use consensus::{exceeds_weight, reward, VerifySortOrder, REWARD};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};

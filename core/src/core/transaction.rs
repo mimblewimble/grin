@@ -30,8 +30,8 @@ use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
 use keychain;
 use keychain::Keychain;
-use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable,
-          WriteableSorted, Writer};
+use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, WriteableSorted,
+          Writer};
 use util;
 use util::LOGGER;
 
