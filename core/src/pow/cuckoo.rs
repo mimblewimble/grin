@@ -66,7 +66,7 @@ impl Cuckoo {
 				u8_to_u64(hashed, 24),
 			],
 			size: size,
-			mask: (1 << sizeshift) / 2 - 1,
+			mask: (1 << sizeshift) - 1,
 		}
 	}
 
