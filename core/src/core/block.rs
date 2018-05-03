@@ -403,11 +403,9 @@ impl Block {
 		keychain: &keychain::Keychain,
 		key_id: &keychain::Identifier,
 		difficulty: Difficulty,
+		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
-		let fees = txs.iter().map(|tx| tx.fee()).sum();
-		let (reward_out, reward_proof) =
-			Block::reward_output(keychain, key_id, fees, prev.height + 1)?;
-		let block = Block::with_reward(prev, txs, reward_out, reward_proof, difficulty)?;
+		let block = Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
 		Ok(block)
 	}
 
@@ -773,55 +771,6 @@ impl Block {
 			return Err(Error::CoinbaseSumMismatch);
 		}
 		Ok(())
-	}
-
-	/// Builds the blinded output and related signature proof for the block
-	/// reward.
-	pub fn reward_output(
-		keychain: &keychain::Keychain,
-		key_id: &keychain::Identifier,
-		fees: u64,
-		height: u64,
-	) -> Result<(Output, TxKernel), keychain::Error> {
-		let value = reward(fees);
-		let commit = keychain.commit(value, key_id)?;
-		let msg = ProofMessageElements::new(value, key_id);
-
-		trace!(LOGGER, "Block reward - Pedersen Commit is: {:?}", commit,);
-
-		let rproof = keychain.range_proof(value, key_id, commit, None, msg.to_proof_message())?;
-
-		let output = Output {
-			features: OutputFeatures::COINBASE_OUTPUT,
-			commit: commit,
-			proof: rproof,
-		};
-
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
-		let over_commit = secp.commit_value(reward(fees))?;
-		let out_commit = output.commitment();
-		let excess = secp.commit_sum(vec![out_commit], vec![over_commit])?;
-
-		// NOTE: Remember we sign the fee *and* the lock_height.
-		// For a coinbase output the fee is 0 and the lock_height is
-		// the lock_height of the coinbase output itself,
-		// not the lock_height of the tx (there is no tx for a coinbase output).
-		// This output will not be spendable earlier than lock_height (and we sign this
-		// here).
-		let msg = secp::Message::from_slice(&kernel_sig_msg(0, height))?;
-		let sig = keychain.aggsig_sign_from_key_id(&msg, &key_id)?;
-
-		let proof = TxKernel {
-			features: KernelFeatures::COINBASE_KERNEL,
-			excess: excess,
-			excess_sig: sig,
-			fee: 0,
-			// lock_height here is the height of the block (tx should be valid immediately)
-			// *not* the lock_height of the coinbase output (only spendable 1,000 blocks later)
-			lock_height: height,
-		};
-		Ok((output, proof))
 	}
 }
 

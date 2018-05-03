@@ -25,7 +25,8 @@ use uuid::Uuid;
 
 use api;
 use core::consensus::reward;
-use core::core::{amount_to_hr_string, build, Block, Committed, Output, Transaction, TxKernel};
+use core::core::{amount_to_hr_string, Committed, Output, Transaction, TxKernel};
+use libwallet::{aggsig, build, reward};
 use core::{global, ser};
 use failure::{Fail, ResultExt};
 use keychain::{BlindingFactor, Identifier, Keychain};
@@ -52,6 +53,7 @@ pub struct TxWrapper {
 
 fn handle_sender_initiation(
 	config: &WalletConfig,
+	context_manager: &mut aggsig::ContextManager,
 	keychain: &Keychain,
 	partial_tx: &PartialTx,
 ) -> Result<PartialTx, Error> {
@@ -125,13 +127,13 @@ fn handle_sender_initiation(
 	let blind = blind_sum
 		.secret_key(&keychain.secp())
 		.context(ErrorKind::Keychain)?;
-	keychain
-		.aggsig_create_context(&partial_tx.id, blind)
-		.context(ErrorKind::Keychain)?;
-	keychain.aggsig_add_output(&partial_tx.id, &key_id);
+	let context = context_manager.create_context(keychain.secp(), &partial_tx.id, blind);
 
-	let sig_part = keychain
-		.aggsig_calculate_partial_sig(
+	context.add_output(&partial_tx.id, &key_id);
+
+	let sig_part = context
+		.calculate_partial_sig(
+			keychain.secp(),
 			&partial_tx.id,
 			&sender_pub_nonce,
 			tx.fee(),
@@ -151,6 +153,8 @@ fn handle_sender_initiation(
 	);
 	partial_tx.phase = PartialTxPhase::ReceiverInitiation;
 
+	context_manager.save_context(context);
+
 	Ok(partial_tx)
 }
 
@@ -169,14 +173,17 @@ fn handle_sender_initiation(
 
 fn handle_sender_confirmation(
 	config: &WalletConfig,
+	context_manager: &mut aggsig::ContextManager,
 	keychain: &Keychain,
 	partial_tx: &PartialTx,
 	fluff: bool,
 ) -> Result<PartialTx, Error> {
 	let (amount, sender_pub_blinding, sender_pub_nonce, kernel_offset, sender_sig_part, tx) =
 		read_partial_tx(keychain, partial_tx)?;
+	let context = context_manager.get_context(&partial_tx.id);
 	let sender_sig_part = sender_sig_part.unwrap();
-	let res = keychain.aggsig_verify_partial_sig(
+	let res = context.verify_partial_sig(
+		&keychain.secp(),
 		&partial_tx.id,
 		&sender_sig_part,
 		&sender_pub_nonce,
@@ -191,8 +198,9 @@ fn handle_sender_confirmation(
 	}
 
 	// Just calculate our sig part again instead of storing
-	let our_sig_part = keychain
-		.aggsig_calculate_partial_sig(
+	let our_sig_part = context
+		.calculate_partial_sig(
+			&keychain.secp(),
 			&partial_tx.id,
 			&sender_pub_nonce,
 			tx.fee(),
@@ -201,8 +209,9 @@ fn handle_sender_confirmation(
 		.unwrap();
 
 	// And the final signature
-	let final_sig = keychain
-		.aggsig_calculate_final_sig(
+	let final_sig = context
+		.calculate_final_sig(
+			&keychain.secp(),
 			&partial_tx.id,
 			&sender_sig_part,
 			&our_sig_part,
@@ -211,17 +220,20 @@ fn handle_sender_confirmation(
 		.unwrap();
 
 	// Calculate the final public key (for our own sanity check)
-	let final_pubkey = keychain
-		.aggsig_calculate_final_pubkey(&partial_tx.id, &sender_pub_blinding)
+	let final_pubkey = context
+		.calculate_final_pubkey(&keychain.secp(), &partial_tx.id, &sender_pub_blinding)
 		.unwrap();
 
 	// Check our final sig verifies
-	let res = keychain.aggsig_verify_final_sig_build_msg(
+	let res = context.verify_final_sig_build_msg(
+		&keychain.secp(),
 		&final_sig,
 		&final_pubkey,
 		tx.fee(),
 		tx.lock_height(),
 	);
+
+	context_manager.save_context(context);
 
 	if !res {
 		error!(LOGGER, "Final aggregated signature invalid.");
@@ -271,6 +283,7 @@ fn handle_sender_confirmation(
 pub struct WalletReceiver {
 	pub keychain: Keychain,
 	pub config: WalletConfig,
+	pub aggsig_context_manager: aggsig::ContextManager,
 }
 
 impl Handler for WalletReceiver {
@@ -289,6 +302,7 @@ impl Handler for WalletReceiver {
 				PartialTxPhase::SenderInitiation => {
 					let resp_tx = handle_sender_initiation(
 						&self.config,
+						&mut self.aggsig_context_manager,
 						&self.keychain,
 						&partial_tx,
 					).map_err(|e| {
@@ -304,6 +318,7 @@ impl Handler for WalletReceiver {
 				PartialTxPhase::SenderConfirmation => {
 					let resp_tx = handle_sender_confirmation(
 						&self.config,
+						&mut self.aggsig_context_manager,
 						&self.keychain,
 						&partial_tx,
 						fluff,
@@ -393,8 +408,9 @@ pub fn receive_coinbase(
 
 	debug!(LOGGER, "receive_coinbase: {:?}", block_fees);
 
-	let (out, kern) = Block::reward_output(&keychain, &key_id, block_fees.fees, block_fees.height)
-		.context(ErrorKind::Keychain)?;
+	let (out, kern) =
+		reward::output(&keychain, &key_id, block_fees.fees, block_fees.height).unwrap();
+	/* .context(ErrorKind::Keychain)?; */
 	Ok((out, kern, block_fees))
 }
 

@@ -12,24 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Library module for the key holder functionalities provided by Grin.
+//! Wallet lib... should be used by clients to build wallets and
+//! encapsulate all functions needed to build transactions and operate a wallet
 
-extern crate blake2_rfc as blake2;
-extern crate byteorder;
-extern crate grin_util as util;
-extern crate rand;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-extern crate serde_json;
-#[macro_use]
-extern crate slog;
-extern crate uuid;
+#![deny(non_upper_case_globals)]
+#![deny(non_camel_case_types)]
+#![deny(non_snake_case)]
+#![deny(unused_mut)]
+#![warn(missing_docs)]
 
+pub mod error;
+pub mod aggsig;
 pub mod blind;
-pub mod extkey;
-
-pub use blind::{BlindSum, BlindingFactor};
-pub use extkey::{ExtendedKey, Identifier, IDENTIFIER_SIZE};
-pub mod keychain;
-pub use keychain::{Error, Keychain};
+pub mod proof;
+pub mod reward;
+pub mod build;

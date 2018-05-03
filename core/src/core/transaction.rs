@@ -181,7 +181,15 @@ impl TxKernel {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 		let sig = &self.excess_sig;
-		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &self.excess);
+		// Verify aggsig directly in libsecp
+		let pubkeys = &self.excess.to_two_pubkeys(&secp);
+		let mut valid = false;
+		for i in 0..pubkeys.len() {
+			valid = secp::aggsig::verify_single(&secp, &sig, &msg, None, &pubkeys[i], false);
+			if valid {
+				break;
+			}
+		}
 		if !valid {
 			return Err(secp::Error::IncorrectSignature);
 		}
@@ -939,7 +947,7 @@ impl Output {
 	pub fn verify_proof(&self) -> Result<(), secp::Error> {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		match Keychain::verify_range_proof(&secp, self.commit, self.proof, None) {
+		match secp.verify_bullet_proof(self.commit, self.proof, None) {
 			Ok(_) => Ok(()),
 			Err(e) => Err(e),
 		}

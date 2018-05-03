@@ -15,13 +15,11 @@
 //! Core types
 
 pub mod block;
-pub mod build;
 pub mod hash;
 pub mod id;
 pub mod pmmr;
 pub mod target;
 pub mod transaction;
-// pub mod txoset;
 #[allow(dead_code)]
 
 use rand::{thread_rng, Rng};
