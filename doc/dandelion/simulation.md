@@ -6,7 +6,7 @@ In this scenario, we simulate a successfull aggregation but a failed transaction
 
 This document also helps visualizing all the timers in a simple way.
 
-## T = 0Initial Situation
+## T = 0 - Initial Situation
 
 ![t = 0](images/t0.png)
 
