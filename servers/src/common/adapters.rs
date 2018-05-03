@@ -152,8 +152,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				.upgrade()
 				.expect("failed to upgrade weak ref to chain");
 
-			if let Ok(prev_header) = chain.get_block_header(&cb.header.previous) {
-				if let Ok(()) = block.validate(&prev_header) {
+			if let Ok(sums) = chain.get_block_sums(&cb.header.previous) {
+				if block.validate(&sums.output_sum, &sums.kernel_sum).is_ok() {
 					debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
 					self.process_block(block, addr)
 				} else {
@@ -351,7 +351,6 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 }
 
 impl NetToChainAdapter {
-
 	/// Construct a new NetToChainAdapter instance
 	pub fn new(
 		currently_syncing: Arc<AtomicBool>,
@@ -599,7 +598,6 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 }
 
 impl ChainToPoolAndNetAdapter {
-
 	/// Construct a ChainToPoolAndNetAdaper instance.
 	pub fn new(
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,

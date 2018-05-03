@@ -35,6 +35,7 @@ use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Wri
           WriteableSorted, Writer};
 use util;
 use util::LOGGER;
+use util::secp_static;
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -394,16 +395,21 @@ impl Transaction {
 		let kernel_sum = {
 			let mut kernel_commits = self.kernels.iter().map(|x| x.excess).collect::<Vec<_>>();
 
+			let offset = {
+				let secp = static_secp_instance();
+				let secp = secp.lock().unwrap();
+				let key = self.offset.secret_key(&secp)?;
+				secp.commit(0, key)?
+			};
+
+			kernel_commits.push(offset);
+
+			// We cannot sum zero commits so remove them here
+			let zero_commit = secp_static::commit_to_zero_value();
+			kernel_commits.retain(|x| *x != zero_commit);
+
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
-
-			// add the offset in as necessary (unless offset is zero)
-			if self.offset != BlindingFactor::zero() {
-				let skey = self.offset.secret_key(&secp)?;
-				let offset_commit = secp.commit(0, skey)?;
-				kernel_commits.push(offset_commit);
-			}
-
 			secp.commit_sum(kernel_commits, vec![])?
 		};
 
@@ -413,7 +419,6 @@ impl Transaction {
 			return Err(Error::KernelSumMismatch);
 		}
 
-		// verify all signatures with the commitment as pk
 		for kernel in &self.kernels {
 			kernel.verify()?;
 		}
