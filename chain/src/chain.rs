@@ -453,7 +453,8 @@ impl Chain {
 		// consistent.
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.rewind(&header)?;
-			extension.validate(&header, skip_rproofs)
+			extension.validate(&header, skip_rproofs)?;
+			Ok(())
 		})
 	}
 
@@ -574,7 +575,8 @@ impl Chain {
 		// Note: we are validating against a writeable extension.
 		txhashset::extending(&mut txhashset, |extension| {
 			extension.rewind(&header)?;
-			extension.validate(&header, false)?;
+			let (output_sum, kernel_sum) = extension.validate(&header, false)?;
+			extension.save_latest_block_sums(&header, output_sum, kernel_sum)?;
 			extension.rebuild_index()?;
 			Ok(())
 		})?;
@@ -647,6 +649,7 @@ impl Chain {
 				Ok(b) => {
 					self.store.delete_block(&b.hash())?;
 					self.store.delete_block_marker(&b.hash())?;
+					self.store.delete_block_sums(&b.hash())?;
 				}
 				Err(NotFoundErr) => {
 					break;
@@ -762,6 +765,13 @@ impl Chain {
 		self.store
 			.get_block_marker(bh)
 			.map_err(|e| Error::StoreErr(e, "chain get block marker".to_owned()))
+	}
+
+	/// Get the blocks sums for the specified block hash.
+	pub fn get_block_sums(&self, bh: &Hash) -> Result<BlockSums, Error> {
+		self.store
+			.get_block_sums(bh)
+			.map_err(|e| Error::StoreErr(e, "chain get block sums".to_owned()))
 	}
 
 	/// Gets the block header at the provided height

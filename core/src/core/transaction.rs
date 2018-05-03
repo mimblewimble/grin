@@ -395,19 +395,15 @@ impl Transaction {
 		// sum all kernels commitments
 		let kernel_sum = {
 			let mut kernel_commits = self.kernels.iter().map(|x| x.excess).collect::<Vec<_>>();
-
-			let zero_commit = secp_static::commit_to_zero_value();
-
 			kernel_commits.push(self.offset);
+
+			// We cannot sum zero commits so remove them here
+			let zero_commit = secp_static::commit_to_zero_value();
 			kernel_commits.retain(|x| *x != zero_commit);
 
-			if kernel_commits.is_empty() {
-				zero_commit
-			} else {
-				let secp = static_secp_instance();
-				let secp = secp.lock().unwrap();
-				secp.commit_sum(kernel_commits, vec![])?
-			}
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			secp.commit_sum(kernel_commits, vec![])?
 		};
 
 		// sum of kernel commitments (including the offset) must match
@@ -416,7 +412,6 @@ impl Transaction {
 			return Err(Error::KernelSumMismatch);
 		}
 
-		// verify all signatures with the commitment as pk
 		for kernel in &self.kernels {
 			kernel.verify()?;
 		}
