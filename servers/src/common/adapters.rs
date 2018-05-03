@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Adapters connecting new block, new transaction, and accepted transaction
+//! events to consumers of those events.
+
 use std::fs::File;
 use std::net::SocketAddr;
 use std::ops::Deref;
@@ -348,6 +351,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 }
 
 impl NetToChainAdapter {
+
+	/// Construct a new NetToChainAdapter instance
 	pub fn new(
 		currently_syncing: Arc<AtomicBool>,
 		chain_ref: Weak<chain::Chain>,
@@ -363,6 +368,8 @@ impl NetToChainAdapter {
 		}
 	}
 
+	/// Initialize a NetToChainAdaptor with reference to a Peers object.
+	/// Should only be called once.
 	pub fn init(&self, peers: Weak<p2p::Peers>) {
 		self.peers.init(peers);
 	}
@@ -592,6 +599,8 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 }
 
 impl ChainToPoolAndNetAdapter {
+
+	/// Construct a ChainToPoolAndNetAdaper instance.
 	pub fn new(
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	) -> ChainToPoolAndNetAdapter {
@@ -600,6 +609,9 @@ impl ChainToPoolAndNetAdapter {
 			peers: OneTime::new(),
 		}
 	}
+
+	/// Initialize a ChainToPoolAndNetAdapter instance with hanlde to a Peers object.
+	/// Should only be called once.
 	pub fn init(&self, peers: Weak<p2p::Peers>) {
 		self.peers.init(peers);
 	}
@@ -650,6 +662,7 @@ impl PoolToChainAdapter {
 		}
 	}
 
+	/// Set the pool adapter's chain. Should only be called once.
 	pub fn set_chain(&self, chain_ref: Weak<chain::Chain>) {
 		self.chain.init(chain_ref);
 	}
