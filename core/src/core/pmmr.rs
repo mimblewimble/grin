@@ -157,21 +157,44 @@ impl ImprovedMerkleProof {
 		Ok(res)
 	}
 
-	pub fn verify(&self, root: Hash, node_hash: Hash, node_pos: u64) -> bool {
-		println!("*** verify - {:?}, {:?}", self.path, self.mmr_size);
-		println!("*** verify - {:?}, {:?}, {:?}", root, node_hash, node_pos);
+	pub fn verify(&mut self, root: Hash, node_hash: Hash, node_pos: u64) -> bool {
+		println!(
+			"*** verify - {:?}, {:?}, {:?}, {:?}, {:?}",
+			self.path, self.mmr_size, root, node_hash, node_pos
+		);
 
 		// handle special case of only a single entry in the MMR
 		// (no siblings to hash together)
-		if self.mmr_size == 1 {
+		if self.path.len() == 0 {
+			return root == node_hash;
+		} else if self.mmr_size == 1 {
 			return self.path.len() == 1 && root == node_hash && vec![root] == self.path;
 		}
 
-		let mut path = self.path.clone();
-		let sibling = path.remove(0);
+		let sibling = self.path.remove(0);
 		let (parent_pos, sibling_pos) = family(node_pos);
 
-		// TODO - need to handle peaks and synthetic roots from hasing pairs of peaks
+		println!(
+			"*** node_pos {} parent_pos {}, sibling_pos {}, peaks, {:?}, mmr_size {}",
+			node_pos,
+			parent_pos,
+			sibling_pos,
+			peaks(self.mmr_size),
+			self.mmr_size
+		);
+
+		// TODO - if we hit a peak then we don't need to recurse any more,
+		// we have all the info we need to just roll the peaks up into a single root (I
+		// think?) we can hash everythin up to the right
+		// and then repeatedly with each on the left until we are done
+		let peaks_pos = peaks(self.mmr_size);
+		if let Ok(x) = peaks_pos.binary_search(&node_pos) {
+			if x == peaks_pos.len() + 1 {
+				panic!("its the last peak!!!");
+			} else {
+				panic!("its an earlier last peak!!!");
+			}
+		}
 
 		// hash our node and sibling together
 		// account for left/right position of the sibling
@@ -1637,9 +1660,9 @@ mod test {
 		let pos_0 = elems[0].hash_with_index(0);
 		assert_eq!(pmmr.get_hash(1).unwrap(), pos_0);
 
-		let proof = pmmr.improved_merkle_proof(1).unwrap();
-		assert!(proof.verify(&pmmr.root(), &pos_0, 1));
+		let mut proof = pmmr.improved_merkle_proof(1).unwrap();
 		assert_eq!(proof.path, [pos_0]);
+		assert!(proof.verify(pmmr.root(), pos_0, 1));
 
 		pmmr.push(elems[1]).unwrap();
 		let pos_1 = elems[1].hash_with_index(1);
@@ -1651,12 +1674,13 @@ mod test {
 		assert_eq!(pmmr.peaks(), [pos_2]);
 
 		// single peak, path with single sibling
-		let proof = pmmr.improved_merkle_proof(1).unwrap();
-		assert!(proof.verify(&pmmr.root(), &pos_0, 1));
+		let mut proof = pmmr.improved_merkle_proof(1).unwrap();
 		assert_eq!(proof.path, vec![pos_1]);
+		assert!(proof.verify(pmmr.root(), pos_0, 1));
 
-		let proof = pmmr.improved_merkle_proof(2).unwrap();
+		let mut proof = pmmr.improved_merkle_proof(2).unwrap();
 		assert_eq!(proof.path, vec![pos_0]);
+		assert!(proof.verify(pmmr.root(), pos_1, 2));
 
 		// three leaves, two peaks (one also the right-most leaf)
 		pmmr.push(elems[2]).unwrap();
@@ -1666,8 +1690,9 @@ mod test {
 		assert_eq!(pmmr.root(), (pos_2, pos_3).hash_with_index(4));
 		assert_eq!(pmmr.peaks(), [pos_2, pos_3]);
 
-		let proof = pmmr.improved_merkle_proof(1).unwrap();
+		let mut proof = pmmr.improved_merkle_proof(1).unwrap();
 		assert_eq!(proof.path, vec![pos_1, pos_3]);
+		assert!(proof.verify(pmmr.root(), pos_0, 1));
 
 		let proof = pmmr.improved_merkle_proof(2).unwrap();
 		assert_eq!(proof.path, vec![pos_0, pos_3]);
