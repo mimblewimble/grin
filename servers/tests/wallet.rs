@@ -35,7 +35,7 @@ use util::LOGGER;
 
 /// Start 1 node mining and two wallets, then send a few
 /// transactions from one to the other
-// #[test]
+//#[test]
 fn basic_wallet_transactions() {
 	let test_name_dir = "test_servers";
 	core::global::set_mining_mode(core::global::ChainTypes::AutomatedTesting);
@@ -50,6 +50,7 @@ fn basic_wallet_transactions() {
 	let mut coinbase_config = LocalServerContainerConfig::default();
 	coinbase_config.name = String::from("coinbase_wallet");
 	coinbase_config.wallet_validating_node_url = String::from("http://127.0.0.1:30001");
+	coinbase_config.coinbase_wallet_address = String::from("http://127.0.0.1:13415");
 	coinbase_config.wallet_port = 10002;
 	let coinbase_wallet = Arc::new(Mutex::new(
 		LocalServerContainer::new(coinbase_config).unwrap(),
