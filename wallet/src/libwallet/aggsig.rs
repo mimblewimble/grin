@@ -26,25 +26,28 @@ use keychain::blind::BlindingFactor;
 use libwallet::error::Error;
 
 #[derive(Clone, Debug)]
+/// Holds the context for a single aggsig transaction
 pub struct Context {
-	// Transaction ID
+	/// Transaction ID
 	pub transaction_id: Uuid,
-	// Secret key (of which public is shared)
+	/// Secret key (of which public is shared)
 	pub sec_key: SecretKey,
-	// Secret nonce (of which public is shared)
-	// (basically a SecretKey)
+	/// Secret nonce (of which public is shared)
+	/// (basically a SecretKey)
 	pub sec_nonce: SecretKey,
-	// If I'm the recipient, store my outputs between invocations (that I need to sum)
+	/// If I'm the recipient, store my outputs between invocations (that I need to sum)
 	pub output_ids: Vec<Identifier>,
 }
 
 #[derive(Clone, Debug)]
+/// Holds many contexts, to support multiple transactions hitting a wallet receiver
+/// at once
 pub struct ContextManager {
 	contexts: HashMap<Uuid, Context>,
 }
-// Aggsig contexts need to be stored somewhere:
 
 impl ContextManager {
+	/// Create
 	pub fn new() -> ContextManager {
 		ContextManager {
 			contexts: HashMap::new(),
@@ -73,10 +76,12 @@ impl ContextManager {
 		self.get_context(transaction_id)
 	}
 
+	/// Retrieve a context by transaction id
 	pub fn get_context(&self, transaction_id: &Uuid) -> Context {
 		self.contexts.get(&transaction_id).unwrap().clone()
 	}
 
+	/// Save context
 	pub fn save_context(&mut self, c: Context) {
 		self.contexts.insert(c.transaction_id.clone(), c);
 	}
