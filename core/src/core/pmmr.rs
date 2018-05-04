@@ -157,25 +157,31 @@ impl ImprovedMerkleProof {
 		Ok(res)
 	}
 
-	pub fn verify(&self, root: &Hash, node_hash: &Hash, node_pos: u64) -> bool {
+	pub fn verify(&self, root: Hash, node_hash: Hash, node_pos: u64) -> bool {
 		println!("*** verify - {:?}, {:?}", self.path, self.mmr_size);
 		println!("*** verify - {:?}, {:?}, {:?}", root, node_hash, node_pos);
 
 		// handle special case of only a single entry in the MMR
 		// (no siblings to hash together)
 		if self.mmr_size == 1 {
-			return self.path.len() == 1 && root == node_hash && vec![*root] == self.path;
+			return self.path.len() == 1 && root == node_hash && vec![root] == self.path;
 		}
 
-		// traverse back to peak based on hashes
-		// then do something smart with the peaks to hash them up to the root
-		// need to think about this a bit more
+		let mut path = self.path.clone();
+		let sibling = path.remove(0);
+		let (parent_pos, sibling_pos) = family(node_pos);
 
-		// 0010
-		// proof for pos 4 needs to take peaks at pos 3 and pos 4 and hash them to get
-		// the root so we have some synthetic parents
+		// TODO - need to handle peaks and synthetic roots from hasing pairs of peaks
 
-		panic!("woah, not yet implemented");
+		// hash our node and sibling together
+		// account for left/right position of the sibling
+		let parent = if is_left_sibling(sibling_pos) {
+			(sibling, node_hash).hash_with_index(parent_pos - 1)
+		} else {
+			(node_hash, sibling).hash_with_index(parent_pos - 1)
+		};
+
+		self.verify(root, parent, parent_pos)
 	}
 }
 
