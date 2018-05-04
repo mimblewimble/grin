@@ -35,7 +35,8 @@ pub struct Context {
 	/// Secret nonce (of which public is shared)
 	/// (basically a SecretKey)
 	pub sec_nonce: SecretKey,
-	/// If I'm the recipient, store my outputs between invocations (that I need to sum)
+	/// If I'm the recipient, store my outputs between invocations (that I need
+	/// to sum)
 	pub output_ids: Vec<Identifier>,
 }
 
