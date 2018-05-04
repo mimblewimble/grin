@@ -19,7 +19,7 @@ use api;
 use client;
 use checker;
 use core::core::{amount_to_hr_string, Transaction};
-use libwallet::build;
+use libwallet::{aggsig, build};
 use core::ser;
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 use receiver::TxWrapper;
@@ -80,16 +80,16 @@ pub fn issue_send_tx(
 	// computes total blinding excess xS -Sender picks random nonce kS
 	// -Sender posts inputs, outputs, Message M=fee, xS * G and kS * G to Receiver
 	//
-	// Create a new aggsig context
 	let tx_id = Uuid::new_v4();
 	let skey = blind_offset
 		.secret_key(&keychain.secp())
 		.context(ErrorKind::Keychain)?;
-	keychain
-		.aggsig_create_context(&tx_id, skey)
-		.context(ErrorKind::Keychain)?;
 
-	let partial_tx = build_partial_tx(&tx_id, keychain, amount_with_fee, kernel_offset, None, tx);
+	// Create a new aggsig context
+	let mut context_manager = aggsig::ContextManager::new();
+	let context = context_manager.create_context(keychain.secp(), &tx_id, skey);
+
+	let partial_tx = build_partial_tx(&context, keychain, amount_with_fee, kernel_offset, None, tx);
 
 	// Closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
@@ -171,8 +171,8 @@ pub fn issue_send_tx(
 	 */
 	let (_amount, recp_pub_blinding, recp_pub_nonce, kernel_offset, sig, tx) =
 		read_partial_tx(keychain, &res.unwrap())?;
-	let res = keychain.aggsig_verify_partial_sig(
-		&tx_id,
+	let res = context.verify_partial_sig(
+		&keychain.secp(),
 		&sig.unwrap(),
 		&recp_pub_nonce,
 		&recp_pub_blinding,
@@ -184,15 +184,20 @@ pub fn issue_send_tx(
 		return Err(ErrorKind::Signature("Partial Sig from recipient invalid."))?;
 	}
 
-	let sig_part = keychain
-		.aggsig_calculate_partial_sig(&tx_id, &recp_pub_nonce, tx.fee(), tx.lock_height())
+	let sig_part = context
+		.calculate_partial_sig(
+			&keychain.secp(),
+			&recp_pub_nonce,
+			tx.fee(),
+			tx.lock_height(),
+		)
 		.unwrap();
 
 	// Build the next stage, containing sS (and our pubkeys again, for the
 	// recipient's convenience) offset has not been modified during tx building,
 	// so pass it back in
 	let mut partial_tx = build_partial_tx(
-		&tx_id,
+		&context,
 		keychain,
 		amount_with_fee,
 		kernel_offset,
@@ -217,6 +222,9 @@ pub fn issue_send_tx(
 		rollback_wallet()?;
 		return Err(e);
 	}
+
+	// Not really necessary here
+	context_manager.save_context(context);
 
 	// All good so
 	update_wallet()?;

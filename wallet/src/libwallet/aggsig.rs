@@ -13,7 +13,6 @@
 // limitations under the License.
 /// Aggsig library definitions
 
-use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
 
 use util::secp::key::{PublicKey, SecretKey};
@@ -41,14 +40,14 @@ pub struct Context {
 
 #[derive(Clone, Debug)]
 pub struct ContextManager {
-	contexts: Arc<RwLock<Option<HashMap<Uuid, Context>>>>,
+	contexts: HashMap<Uuid, Context>,
 }
 // Aggsig contexts need to be stored somewhere:
 
 impl ContextManager {
 	pub fn new() -> ContextManager {
 		ContextManager {
-			contexts: Arc::new(RwLock::new(None)),
+			contexts: HashMap::new(),
 		}
 	}
 
@@ -60,12 +59,8 @@ impl ContextManager {
 		transaction_id: &Uuid,
 		sec_key: SecretKey,
 	) -> Context {
-		let mut contexts = self.contexts.write().unwrap();
-		if contexts.is_none() {
-			*contexts = Some(HashMap::new())
-		}
-		if !contexts.as_mut().unwrap().contains_key(transaction_id) {
-			contexts.as_mut().unwrap().insert(
+		if !self.contexts.contains_key(transaction_id) {
+			self.contexts.insert(
 				transaction_id.clone(),
 				Context {
 					sec_key: sec_key,
@@ -78,44 +73,34 @@ impl ContextManager {
 		self.get_context(transaction_id)
 	}
 
-	pub fn get_context(&mut self, transaction_id: &Uuid) -> Context {
-		let mut agg_contexts = self.contexts.read().unwrap();
-		let mut agg_contexts_local = agg_contexts.as_mut().unwrap().clone();
-		let mut agg_context = agg_contexts_local.get(transaction_id).unwrap().clone();
-		agg_context
+	pub fn get_context(&self, transaction_id: &Uuid) -> Context {
+		self.contexts.get(&transaction_id).unwrap().clone()
 	}
 
 	pub fn save_context(&mut self, c: Context) {
-		let mut agg_contexts = self.contexts.write().unwrap();
-		let mut agg_contexts_local = agg_contexts.as_mut().unwrap().clone();
-		let mut agg_context = agg_contexts_local.get(&c.transaction_id).unwrap().clone();
-		agg_context = c
+		self.contexts.insert(c.transaction_id.clone(), c);
 	}
 }
 
 impl Context {
 	/// Tracks an output contributing to my excess value (if it needs to
 	/// be kept between invocations
-	pub fn add_output(&self, transaction_id: &Uuid, output_id: &Identifier) {
+	pub fn add_output(&mut self, output_id: &Identifier) {
 		self.output_ids.push(output_id.clone());
 	}
 
 	/// Returns all stored outputs
-	pub fn get_outputs(&self, transaction_id: &Uuid) -> Vec<Identifier> {
+	pub fn get_outputs(&self) -> Vec<Identifier> {
 		self.output_ids.clone()
 	}
 
 	/// Returns private key, private nonce
-	pub fn get_private_keys(&self, transaction_id: &Uuid) -> (SecretKey, SecretKey) {
+	pub fn get_private_keys(&self) -> (SecretKey, SecretKey) {
 		(self.sec_key.clone(), self.sec_nonce.clone())
 	}
 
 	/// Returns public key, public nonce
-	pub fn get_public_keys(
-		&self,
-		secp: &Secp256k1,
-		transaction_id: &Uuid,
-	) -> (PublicKey, PublicKey) {
+	pub fn get_public_keys(&self, secp: &Secp256k1) -> (PublicKey, PublicKey) {
 		(
 			PublicKey::from_secret_key(secp, &self.sec_key).unwrap(),
 			PublicKey::from_secret_key(secp, &self.sec_nonce).unwrap(),
@@ -128,7 +113,6 @@ impl Context {
 	pub fn sign_single(
 		&self,
 		secp: &Secp256k1,
-		transaction_id: &Uuid,
 		msg: &Message,
 		secnonce: Option<&SecretKey>,
 		pubnonce: Option<&PublicKey>,
@@ -155,14 +139,13 @@ impl Context {
 	pub fn verify_partial_sig(
 		&self,
 		secp: &Secp256k1,
-		transaction_id: &Uuid,
 		sig: &Signature,
 		other_pub_nonce: &PublicKey,
 		pubkey: &PublicKey,
 		fee: u64,
 		lock_height: u64,
 	) -> bool {
-		let (_, sec_nonce) = self.get_private_keys(transaction_id);
+		let (_, sec_nonce) = self.get_private_keys();
 		let mut nonce_sum = other_pub_nonce.clone();
 		let _ = nonce_sum.add_exp_assign(secp, &sec_nonce);
 		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height)).unwrap();
@@ -173,13 +156,12 @@ impl Context {
 	pub fn calculate_partial_sig(
 		&self,
 		secp: &Secp256k1,
-		transaction_id: &Uuid,
 		other_pub_nonce: &PublicKey,
 		fee: u64,
 		lock_height: u64,
 	) -> Result<Signature, Error> {
 		// Add public nonces kR*G + kS*G
-		let (_, sec_nonce) = self.get_private_keys(transaction_id);
+		let (_, sec_nonce) = self.get_private_keys();
 		let mut nonce_sum = other_pub_nonce.clone();
 		let _ = nonce_sum.add_exp_assign(secp, &sec_nonce);
 		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
@@ -187,7 +169,6 @@ impl Context {
 		//Now calculate signature using message M=fee, nonce in e=nonce_sum
 		self.sign_single(
 			secp,
-			transaction_id,
 			&msg,
 			Some(&sec_nonce),
 			Some(&nonce_sum),
@@ -199,13 +180,12 @@ impl Context {
 	pub fn calculate_final_sig(
 		&self,
 		secp: &Secp256k1,
-		transaction_id: &Uuid,
 		their_sig: &Signature,
 		our_sig: &Signature,
 		their_pub_nonce: &PublicKey,
 	) -> Result<Signature, Error> {
 		// Add public nonces kR*G + kS*G
-		let (_, sec_nonce) = self.get_private_keys(transaction_id);
+		let (_, sec_nonce) = self.get_private_keys();
 		let mut nonce_sum = their_pub_nonce.clone();
 		let _ = nonce_sum.add_exp_assign(secp, &sec_nonce);
 		let sig = aggsig::add_signatures_single(&secp, their_sig, our_sig, &nonce_sum)?;
@@ -216,10 +196,9 @@ impl Context {
 	pub fn calculate_final_pubkey(
 		&self,
 		secp: &Secp256k1,
-		transaction_id: &Uuid,
 		their_public_key: &PublicKey,
 	) -> Result<PublicKey, Error> {
-		let (our_sec_key, _) = self.get_private_keys(transaction_id);
+		let (our_sec_key, _) = self.get_private_keys();
 		let mut pk_sum = their_public_key.clone();
 		let _ = pk_sum.add_exp_assign(secp, &our_sec_key);
 		Ok(pk_sum)
