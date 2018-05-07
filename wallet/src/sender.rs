@@ -88,6 +88,14 @@ pub fn issue_send_tx(
 		.aggsig_create_context(&tx_id, skey)
 		.context(ErrorKind::Keychain)?;
 
+	// let kernel_key = kernel_blind
+	// 	.secret_key(keychain.secp())
+	// 	.context(ErrorKind::Keychain)?;
+	// let kernel_offset = keychain
+	// 	.secp()
+	// 	.commit(0, kernel_key)
+	// 	.context(ErrorKind::Keychain)?;
+
 	let partial_tx = build_partial_tx(&tx_id, keychain, amount_with_fee, kernel_offset, None, tx);
 
 	// Closure to acquire wallet lock and lock the coins being spent

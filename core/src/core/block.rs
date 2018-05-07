@@ -18,8 +18,8 @@ use time;
 use rand::{thread_rng, Rng};
 use std::collections::HashSet;
 
-use core::{Committed, Input, KernelFeatures, Output, OutputFeatures, Proof, ProofMessageElements,
-           ShortId, Transaction, TxKernel};
+use core::{Commitment, Committed, Input, KernelFeatures, Output, OutputFeatures, Proof,
+           ProofMessageElements, ShortId, Transaction, TxKernel};
 use consensus;
 use consensus::{exceeds_weight, reward, VerifySortOrder, REWARD};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
@@ -32,7 +32,7 @@ use keychain;
 use keychain::BlindingFactor;
 use util::kernel_sig_msg;
 use util::LOGGER;
-use util::{secp, static_secp_instance};
+use util::{secp, secp_static, static_secp_instance};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, PartialEq)]
@@ -643,13 +643,19 @@ impl Block {
 	/// Validates all the elements in a block that can be checked without
 	/// additional data. Includes commitment sums and kernels, Merkle
 	/// trees, reward, etc.
-	pub fn validate(&self, prev: &BlockHeader) -> Result<(), Error> {
+	pub fn validate(
+		&self,
+		prev_output_sum: &Commitment,
+		prev_kernel_sum: &Commitment,
+	) -> Result<((Commitment, Commitment)), Error> {
 		self.verify_weight()?;
 		self.verify_sorted()?;
 		self.verify_coinbase()?;
 		self.verify_inputs()?;
-		self.verify_kernels(prev)?;
-		Ok(())
+		self.verify_kernel_lock_heights()?;
+		let (new_output_sum, new_kernel_sum) = self.verify_sums(prev_output_sum, prev_kernel_sum)?;
+
+		Ok((new_output_sum, new_kernel_sum))
 	}
 
 	fn verify_weight(&self) -> Result<(), Error> {
@@ -686,9 +692,7 @@ impl Block {
 		Ok(())
 	}
 
-	/// Verifies the sum of input/output commitments match the sum in kernels
-	/// and that all kernel signatures are valid.
-	fn verify_kernels(&self, prev: &BlockHeader) -> Result<(), Error> {
+	fn verify_kernel_lock_heights(&self) -> Result<(), Error> {
 		for k in &self.kernels {
 			// check we have no kernels with lock_heights greater than current height
 			// no tx can be included in a block earlier than its lock_height
@@ -696,45 +700,74 @@ impl Block {
 				return Err(Error::KernelLockHeight(k.lock_height));
 			}
 		}
+		Ok(())
+	}
 
-		// sum all inputs and outs commitments
+	fn verify_sums(
+		&self,
+		prev_output_sum: &Commitment,
+		prev_kernel_sum: &Commitment,
+	) -> Result<((Commitment, Commitment)), Error> {
+		// Note: we check the rangeproofs in here (expensive)
 		let io_sum = self.sum_commitments()?;
 
-		// sum all kernels commitments
-		let kernel_sum = {
-			let mut kernel_commits = self.kernels.iter().map(|x| x.excess).collect::<Vec<_>>();
+		// Note: we check the kernel signatures in here (expensive)
+		let kernel_sum = self.sum_kernel_excesses(prev_kernel_sum)?;
 
+		let mut output_commits = vec![io_sum, prev_output_sum.clone()];
+
+		// We do not (yet) know how to sum a "zero commit" so remove them
+		let zero_commit = secp_static::commit_to_zero_value();
+		output_commits.retain(|x| *x != zero_commit);
+
+		let output_sum = {
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
-
-			// given the total_kernel_offset of this block and the previous block
-			// we can account for the kernel_offset of this particular block
-			if self.header.total_kernel_offset != BlindingFactor::zero() {
-				let skey = self.header.total_kernel_offset.secret_key(&secp)?;
-				kernel_commits.push(secp.commit(0, skey)?);
-			}
-
-			let mut prev_offset_commits = vec![];
-			if prev.total_kernel_offset != BlindingFactor::zero() {
-				let skey = prev.total_kernel_offset.secret_key(&secp)?;
-				prev_offset_commits.push(secp.commit(0, skey)?);
-			}
-
-			secp.commit_sum(kernel_commits, prev_offset_commits)?
+			secp.commit_sum(output_commits, vec![])?
 		};
 
-		// sum of kernel commitments (including kernel_offset) must match
-		// the sum of input/output commitments (minus fee)
-		if kernel_sum != io_sum {
+		let offset = {
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			let key = self.header.total_kernel_offset.secret_key(&secp)?;
+			secp.commit(0, key)?
+		};
+
+		let mut excesses = vec![kernel_sum, offset];
+		excesses.retain(|x| *x != zero_commit);
+
+		let kernel_sum_plus_offset = {
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			secp.commit_sum(excesses, vec![])?
+		};
+
+		if output_sum != kernel_sum_plus_offset {
 			return Err(Error::KernelSumMismatch);
 		}
 
-		// verify all signatures with the commitment as pk
+		Ok((output_sum, kernel_sum))
+	}
+
+	fn sum_kernel_excesses(&self, prev_excess: &Commitment) -> Result<Commitment, Error> {
 		for kernel in &self.kernels {
 			kernel.verify()?;
 		}
 
-		Ok(())
+		let mut excesses = self.kernels.iter().map(|x| x.excess).collect::<Vec<_>>();
+		excesses.push(prev_excess.clone());
+
+		// we do not (yet) know how to sum a "zero commit" so remove them
+		let zero_commit = secp_static::commit_to_zero_value();
+		excesses.retain(|x| *x != zero_commit);
+
+		let sum = {
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			secp.commit_sum(excesses, vec![])?
+		};
+
+		Ok(sum)
 	}
 
 	// Validate the coinbase outputs generated by miners. Entails 2 main checks:
@@ -869,6 +902,8 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let max_out = MAX_BLOCK_WEIGHT / BLOCK_OUTPUT_WEIGHT;
 
+		let zero_commit = secp_static::commit_to_zero_value();
+
 		let mut pks = vec![];
 		for n in 0..(max_out + 1) {
 			pks.push(keychain.derive_key_id(n as u32).unwrap());
@@ -886,7 +921,7 @@ mod test {
 
 		let prev = BlockHeader::default();
 		let b = new_block(vec![&mut tx], &keychain, &prev);
-		assert!(b.validate(&prev).is_err());
+		assert!(b.validate(&zero_commit, &zero_commit).is_err());
 	}
 
 	#[test]
@@ -914,6 +949,8 @@ mod test {
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
 
+		let zero_commit = secp_static::commit_to_zero_value();
+
 		let mut btx1 = tx2i1o();
 		let mut btx2 = build::transaction(
 			vec![input(7, key_id1), output(5, key_id2.clone()), with_fee(2)],
@@ -928,7 +965,7 @@ mod test {
 
 		// block should have been automatically compacted (including reward
 		// output) and should still be valid
-		b.validate(&prev).unwrap();
+		b.validate(&zero_commit, &zero_commit).unwrap();
 		assert_eq!(b.inputs.len(), 3);
 		assert_eq!(b.outputs.len(), 3);
 	}
@@ -936,6 +973,7 @@ mod test {
 	#[test]
 	fn empty_block_with_coinbase_is_valid() {
 		let keychain = Keychain::from_random_seed().unwrap();
+		let zero_commit = secp_static::commit_to_zero_value();
 		let prev = BlockHeader::default();
 		let b = new_block(vec![], &keychain, &prev);
 
@@ -959,7 +997,7 @@ mod test {
 
 		// the block should be valid here (single coinbase output with corresponding
 		// txn kernel)
-		assert_eq!(b.validate(&prev), Ok(()));
+		assert!(b.validate(&zero_commit, &zero_commit).is_ok());
 	}
 
 	#[test]
@@ -968,6 +1006,7 @@ mod test {
 	// additionally verifying the merkle_inputs_outputs also fails
 	fn remove_coinbase_output_flag() {
 		let keychain = Keychain::from_random_seed().unwrap();
+		let zero_commit = secp_static::commit_to_zero_value();
 		let prev = BlockHeader::default();
 		let mut b = new_block(vec![], &keychain, &prev);
 
@@ -981,9 +1020,11 @@ mod test {
 			.remove(OutputFeatures::COINBASE_OUTPUT);
 
 		assert_eq!(b.verify_coinbase(), Err(Error::CoinbaseSumMismatch));
-		assert_eq!(b.verify_kernels(&prev), Ok(()));
-
-		assert_eq!(b.validate(&prev), Err(Error::CoinbaseSumMismatch));
+		assert!(b.verify_sums(&zero_commit, &zero_commit).is_ok());
+		assert_eq!(
+			b.validate(&zero_commit, &zero_commit),
+			Err(Error::CoinbaseSumMismatch)
+		);
 	}
 
 	#[test]
@@ -991,6 +1032,7 @@ mod test {
 	// invalidates the block and specifically it causes verify_coinbase to fail
 	fn remove_coinbase_kernel_flag() {
 		let keychain = Keychain::from_random_seed().unwrap();
+		let zero_commit = secp_static::commit_to_zero_value();
 		let prev = BlockHeader::default();
 		let mut b = new_block(vec![], &keychain, &prev);
 
@@ -1009,7 +1051,7 @@ mod test {
 		);
 
 		assert_eq!(
-			b.validate(&prev),
+			b.validate(&zero_commit, &zero_commit),
 			Err(Error::Secp(secp::Error::IncorrectCommitSum))
 		);
 	}
