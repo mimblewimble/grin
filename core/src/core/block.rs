@@ -710,7 +710,6 @@ impl Block {
 		prev_output_sum: &Commitment,
 		prev_kernel_sum: &Commitment,
 	) -> Result<((Commitment, Commitment)), Error> {
-
 		// Verify the output rangeproofs.
 		// Note: this is expensive.
 		for x in &self.outputs {
@@ -735,7 +734,8 @@ impl Block {
 		};
 
 		// Sum the kernel excesses accounting for the kernel offset.
-		let (kernel_sum, kernel_sum_plus_offset) = self.sum_kernel_excesses(&offset, Some(prev_kernel_sum))?;
+		let (kernel_sum, kernel_sum_plus_offset) =
+			self.sum_kernel_excesses(&offset, Some(prev_kernel_sum))?;
 
 		if io_sum != kernel_sum_plus_offset {
 			return Err(Error::KernelSumMismatch);

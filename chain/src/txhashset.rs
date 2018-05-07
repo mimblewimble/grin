@@ -26,7 +26,8 @@ use util::static_secp_instance;
 use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::consensus::REWARD;
-use core::core::{Block, BlockHeader, Committed, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
+use core::core::{Block, BlockHeader, Committed, Input, Output, OutputFeatures, OutputIdentifier,
+                 TxKernel};
 use core::core::pmmr::{self, MerkleProof, PMMR};
 use core::global;
 use core::core::hash::{Hash, Hashed};
@@ -349,14 +350,10 @@ pub struct Extension<'a> {
 }
 
 impl<'a> Committed for Extension<'a> {
-	// TODO - we need total supply here, based on block height.
-	// TODO - how do we get access to the block height here?
 	fn inputs_committed(&self) -> Vec<Commitment> {
 		vec![]
 	}
 
-	// TODO - Maybe the trait should define access via an iterator and not a vec?
-	// TODO - This is going to be a *big* Vec eventually.
 	fn outputs_committed(&self) -> Vec<Commitment> {
 		let mut commitments = vec![];
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
@@ -796,37 +793,6 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	// /// Sums the excess of all our kernels.
-	// fn sum_kernels(&self) -> Result<Commitment, Error> {
-	// 	let now = Instant::now();
-	//
-	// 	let mut commitments = vec![];
-	// 	for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
-	// 		if pmmr::is_leaf(n) {
-	// 			if let Some(kernel) = self.kernel_pmmr.get_data(n) {
-	// 				commitments.push(kernel.excess);
-	// 			}
-	// 		}
-	// 	}
-	//
-	// 	let kern_count = commitments.len();
-	//
-	// 	let kernel_sum = {
-	// 		let secp = static_secp_instance();
-	// 		let secp = secp.lock().unwrap();
-	// 		secp.commit_sum(commitments, vec![])?
-	// 	};
-	//
-	// 	debug!(
-	// 		LOGGER,
-	// 		"txhashset: summed {} kernels, pmmr size {}, took {}s",
-	// 		kern_count,
-	// 		self.kernel_pmmr.unpruned_size(),
-	// 		now.elapsed().as_secs(),
-	// 	);
-	// 	Ok(kernel_sum)
-	// }
-
 	fn verify_kernel_signatures(&self) -> Result<(), Error> {
 		let now = Instant::now();
 
@@ -884,38 +850,6 @@ impl<'a> Extension<'a> {
 		);
 		Ok(())
 	}
-
-	// /// Sums all our unspent output commitments.
-	// fn sum_outputs(&self, supply_commit: Commitment) -> Result<Commitment, Error> {
-	// 	let now = Instant::now();
-	//
-	// 	let mut commitments = vec![];
-	// 	for n in 1..self.output_pmmr.unpruned_size() + 1 {
-	// 		if pmmr::is_leaf(n) {
-	// 			if let Some(out) = self.output_pmmr.get_data(n) {
-	// 				commitments.push(out.commit);
-	// 			}
-	// 		}
-	// 	}
-	//
-	// 	let commit_count = commitments.len();
-	//
-	// 	let output_sum = {
-	// 		let secp = static_secp_instance();
-	// 		let secp = secp.lock().unwrap();
-	// 		secp.commit_sum(commitments, vec![supply_commit])?
-	// 	};
-	//
-	// 	debug!(
-	// 		LOGGER,
-	// 		"txhashset: summed {} outputs, pmmr size {}, took {}s",
-	// 		commit_count,
-	// 		self.output_pmmr.unpruned_size(),
-	// 		now.elapsed().as_secs(),
-	// 	);
-	//
-	// 	Ok(output_sum)
-	// }
 }
 
 /// Packages the txhashset data files into a zip and returns a Read to the

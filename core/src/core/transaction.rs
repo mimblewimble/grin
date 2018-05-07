@@ -394,7 +394,6 @@ impl Transaction {
 	///  * sum of input/output commitments matches sum of kernel commitments after applying offset
 	///  * each kernel sig is valid (i.e. tx commitments sum to zero, given above is true)
 	fn verify_kernels(&self) -> Result<(), Error> {
-
 		// Verify all the output rangeproofs.
 		// Note: this is expensive.
 		for x in &self.outputs {
