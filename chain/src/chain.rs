@@ -194,12 +194,20 @@ impl Chain {
 						// if we have no sums (migrating an existing node) we need to go
 						// back to the txhashset and sum the outputs and kernels
 						if header.height > 0 && store.get_block_sums(&header.hash()).is_err() {
-							debug!(LOGGER, "chain: init: building (missing) block sums for {} @ {}", header.height, header.hash());
+							debug!(
+								LOGGER,
+								"chain: init: building (missing) block sums for {} @ {}",
+								header.height,
+								header.hash()
+							);
 							let (output_sum, kernel_sum) = extension.validate_sums(&header)?;
-							store.save_block_sums(&header.hash(), &BlockSums {
-								output_sum,
-								kernel_sum,
-							})?;
+							store.save_block_sums(
+								&header.hash(),
+								&BlockSums {
+									output_sum,
+									kernel_sum,
+								},
+							)?;
 						}
 
 						Ok(())

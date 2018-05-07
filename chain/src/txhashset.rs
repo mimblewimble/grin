@@ -674,7 +674,6 @@ impl<'a> Extension<'a> {
 			now.elapsed().as_secs(),
 		);
 
-
 		Ok((output_sum, kernel_sum))
 	}
 
