@@ -629,8 +629,8 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	// the real magicking: the sum of all kernel excess should equal the sum
-	// of all Output commitments, minus the total supply
+	/// The real magicking: the sum of all kernel excess should equal the sum
+	/// of all output commitments, minus the total supply.
 	pub fn validate_sums(&self, header: &BlockHeader) -> Result<((Commitment, Commitment)), Error> {
 		let now = Instant::now();
 
