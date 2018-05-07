@@ -606,12 +606,9 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	/// Validate the txhashset state against the provided block header.
-	pub fn validate(
-		&mut self,
-		header: &BlockHeader,
-		skip_rproofs: bool,
-	) -> Result<((Commitment, Commitment)), Error> {
+	fn validate_mmrs(&self) -> Result<(), Error> {
+		let now = Instant::now();
+
 		// validate all hashes and sums within the trees
 		if let Err(e) = self.output_pmmr.validate() {
 			return Err(Error::InvalidTxHashSet(e));
@@ -623,15 +620,19 @@ impl<'a> Extension<'a> {
 			return Err(Error::InvalidTxHashSet(e));
 		}
 
-		self.validate_roots(header)?;
+		debug!(
+			LOGGER,
+			"txhashset: validated the output|rproof|kernel mmrs, took {}s",
+			now.elapsed().as_secs(),
+		);
 
-		if header.height == 0 {
-			let zero_commit = secp_static::commit_to_zero_value();
-			return Ok((zero_commit.clone(), zero_commit.clone()));
-		}
+		Ok(())
+	}
 
-		// the real magicking: the sum of all kernel excess should equal the sum
-		// of all Output commitments, minus the total supply
+	// the real magicking: the sum of all kernel excess should equal the sum
+	// of all Output commitments, minus the total supply
+	pub fn validate_sums(&self, header: &BlockHeader) -> Result<((Commitment, Commitment)), Error> {
+		let now = Instant::now();
 
 		// supply is the sum of the coinbase outputs from each block header
 		let supply_commit = {
@@ -645,7 +646,14 @@ impl<'a> Extension<'a> {
 
 		let zero_commit = secp_static::commit_to_zero_value();
 
-		let mut excesses = vec![kernel_sum, header.total_kernel_offset];
+		let offset = {
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			let key = header.total_kernel_offset.secret_key(&secp)?;
+			secp.commit(0, key)?
+		};
+
+		let mut excesses = vec![kernel_sum, offset];
 		excesses.retain(|x| *x != zero_commit);
 
 		let kernel_sum_plus_offset = {
@@ -659,6 +667,35 @@ impl<'a> Extension<'a> {
 				"Differing Output commitment and kernel excess sums.".to_owned(),
 			));
 		}
+
+		debug!(
+			LOGGER,
+			"txhashset: validated sums, took (total) {}s",
+			now.elapsed().as_secs(),
+		);
+
+
+		Ok((output_sum, kernel_sum))
+	}
+
+	/// Validate the txhashset state against the provided block header.
+	pub fn validate(
+		&mut self,
+		header: &BlockHeader,
+		skip_rproofs: bool,
+	) -> Result<((Commitment, Commitment)), Error> {
+		self.validate_mmrs()?;
+		self.validate_roots(header)?;
+
+		if header.height == 0 {
+			let zero_commit = secp_static::commit_to_zero_value();
+			return Ok((zero_commit.clone(), zero_commit.clone()));
+		}
+
+		let (output_sum, kernel_sum) = self.validate_sums(header)?;
+
+		// this is a relatively expensive verification step
+		self.verify_kernel_signatures()?;
 
 		// verify the rangeproof for each output in the sum above
 		// this is an expensive operation (only verified if requested)
@@ -739,8 +776,7 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	/// Sums the excess of all our kernels, validating their signatures on the
-	/// way
+	/// Sums the excess of all our kernels.
 	fn sum_kernels(&self) -> Result<Commitment, Error> {
 		let now = Instant::now();
 
@@ -748,7 +784,6 @@ impl<'a> Extension<'a> {
 		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
 				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
-					kernel.verify()?;
 					commitments.push(kernel.excess);
 				}
 			}
@@ -764,12 +799,36 @@ impl<'a> Extension<'a> {
 
 		debug!(
 			LOGGER,
-			"Validated, summed (and offset) {} kernels, pmmr size {}, took {}s",
+			"txhashset: summed {} kernels, pmmr size {}, took {}s",
 			kern_count,
 			self.kernel_pmmr.unpruned_size(),
 			now.elapsed().as_secs(),
 		);
 		Ok(kernel_sum)
+	}
+
+	fn verify_kernel_signatures(&self) -> Result<(), Error> {
+		let now = Instant::now();
+
+		let mut kern_count = 0;
+		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
+			if pmmr::is_leaf(n) {
+				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
+					kernel.verify()?;
+					kern_count += 1;
+				}
+			}
+		}
+
+		debug!(
+			LOGGER,
+			"txhashset: verified {} kernel signatures, pmmr size {}, took {}s",
+			kern_count,
+			self.kernel_pmmr.unpruned_size(),
+			now.elapsed().as_secs(),
+		);
+
+		Ok(())
 	}
 
 	fn verify_rangeproofs(&self) -> Result<(), Error> {
@@ -798,7 +857,7 @@ impl<'a> Extension<'a> {
 		}
 		debug!(
 			LOGGER,
-			"Verified {} Rangeproofs, pmmr size {}, took {}s",
+			"txhashset: verified {} rangeproofs, pmmr size {}, took {}s",
 			proof_count,
 			self.rproof_pmmr.unpruned_size(),
 			now.elapsed().as_secs(),
@@ -829,7 +888,7 @@ impl<'a> Extension<'a> {
 
 		debug!(
 			LOGGER,
-			"Summed {} Outputs, pmmr size {}, took {}s",
+			"txhashset: summed {} outputs, pmmr size {}, took {}s",
 			commit_count,
 			self.output_pmmr.unpruned_size(),
 			now.elapsed().as_secs(),
