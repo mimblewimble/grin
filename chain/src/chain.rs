@@ -481,19 +481,19 @@ impl Chain {
 		})
 	}
 
-	/// Check if the input has matured sufficiently for the given block height.
-	/// This only applies to inputs spending coinbase outputs.
-	/// An input spending a non-coinbase output will always pass this check.
-	pub fn is_matured(&self, input: &Input, height: u64) -> Result<(), Error> {
-		if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-			let mut txhashset = self.txhashset.write().unwrap();
-			let output = OutputIdentifier::from_input(&input);
-			let hash = txhashset.is_unspent(&output)?;
-			let header = self.get_block_header(&input.block_hash())?;
-			input.verify_maturity(hash, &header, height)?;
-		}
-		Ok(())
-	}
+	// /// Check if the input has matured sufficiently for the given block height.
+	// /// This only applies to inputs spending coinbase outputs.
+	// /// An input spending a non-coinbase output will always pass this check.
+	// pub fn is_matured(&self, input: &Input, height: u64) -> Result<(), Error> {
+	// 	if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+	// 		let mut txhashset = self.txhashset.write().unwrap();
+	// 		let output = OutputIdentifier::from_input(&input);
+	// 		let hash = txhashset.is_unspent(&output)?;
+	// 		let header = self.get_block_header(&input.block_hash())?;
+	// 		input.verify_maturity(hash, &header, height)?;
+	// 	}
+	// 	Ok(())
+	// }
 
 	/// Sets the txhashset roots on a brand new block by applying the block on the
 	/// current txhashset state.
@@ -520,12 +520,13 @@ impl Chain {
 	pub fn get_merkle_proof(
 		&self,
 		output: &OutputIdentifier,
-		block_header: &BlockHeader,
+		header: &BlockHeader,
 	) -> Result<MerkleProof, Error> {
 		let mut txhashset = self.txhashset.write().unwrap();
 
 		let merkle_proof = txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.merkle_proof(output, block_header)
+			extension.rewind(header)?;
+			extension.merkle_proof(output, header)
 		})?;
 
 		Ok(merkle_proof)

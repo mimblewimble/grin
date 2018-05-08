@@ -223,6 +223,9 @@ where
 			return Err(e);
 		}
 
+		//
+		// TODO - how to check Merkle proofs here (we need the MMR pos etc.)???
+		//
 		// Making sure the transaction is valid before anything else.
 		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
 

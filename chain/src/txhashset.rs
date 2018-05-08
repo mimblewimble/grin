@@ -474,10 +474,9 @@ impl<'a> Extension<'a> {
 					return Err(Error::TxHashSetErr(format!("output pmmr hash mismatch")));
 				}
 
-				// check coinbase maturity with the Merkle Proof on the input
+				// verify maturity via Merkle proof for each input spending a coinbase output
 				if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-					let header = self.commit_index.get_block_header(&input.block_hash())?;
-					input.verify_maturity(read_hash, &header, height)?;
+					self.verify_maturity_via_merkle_proof(input, height)?;
 				}
 			}
 
@@ -539,13 +538,31 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	pub fn verify_maturity_via_merkle_proof(
+		&self,
+		input: &Input,
+		height: u64,
+	) -> Result<(), Error> {
+		let header = self.commit_index.get_block_header(&input.block_hash())?;
+
+		if header.height + global::coinbase_maturity() <= height {
+			return Err(Error::ImmatureCoinbase);
+		}
+
+		let pos = self.get_output_pos(&input.commitment())?;
+		let hash = self.output_pmmr.get_hash(pos)
+			.ok_or(Error::TxHashSetErr(format!("could not find hash in MMR")))?;
+		let res = input.merkle_proof().verify(header.output_root, hash, pos)?;
+		Ok(res)
+	}
+
 	/// Build a Merkle proof for the given output and the block by
 	/// rewinding the MMR to the last pos of the block.
 	/// Note: this relies on the MMR being stable even after pruning/compaction.
 	/// We need the hash of each sibling pos from the pos up to the peak
 	/// including the sibling leaf node which may have been removed.
 	pub fn merkle_proof(
-		&mut self,
+		&self,
 		output: &OutputIdentifier,
 		block_header: &BlockHeader,
 	) -> Result<MerkleProof, Error> {
@@ -555,9 +572,6 @@ impl<'a> Extension<'a> {
 			output.commit,
 			block_header.hash()
 		);
-
-		// rewind to the specified block for a consistent view
-		self.rewind(block_header)?;
 
 		// then calculate the Merkle Proof based on the known pos
 		let pos = self.get_output_pos(&output.commit)?;

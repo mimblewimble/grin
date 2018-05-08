@@ -643,7 +643,6 @@ impl Block {
 		self.verify_weight()?;
 		self.verify_sorted()?;
 		self.verify_coinbase()?;
-		self.verify_inputs()?;
 		self.verify_kernel_lock_heights()?;
 		let (new_output_sum, new_kernel_sum) = self.verify_sums(prev_output_sum, prev_kernel_sum)?;
 
@@ -661,26 +660,6 @@ impl Block {
 		self.inputs.verify_sort_order()?;
 		self.outputs.verify_sort_order()?;
 		self.kernels.verify_sort_order()?;
-		Ok(())
-	}
-
-	/// We can verify the Merkle proof (for coinbase inputs) here in isolation.
-	/// But we cannot check the following as we need data from the index and the PMMR.
-	/// So we must be sure to check these at the appropriate point during block validation.
-	///   * node is in the correct pos in the PMMR
-	///   * block is the correct one (based on output_root from block_header via the index)
-	fn verify_inputs(&self) -> Result<(), Error> {
-		let coinbase_inputs = self.inputs
-			.iter()
-			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT));
-
-		for input in coinbase_inputs {
-			let merkle_proof = input.merkle_proof();
-			if !merkle_proof.verify() {
-				return Err(Error::MerkleProof);
-			}
-		}
-
 		Ok(())
 	}
 

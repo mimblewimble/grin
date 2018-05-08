@@ -98,13 +98,18 @@ pub const MAX_PEAKS: u64 = 100;
 /// Maximum path for a Merkle proof
 pub const MAX_PATH: u64 = 100;
 
-#[derive(Debug, PartialEq)]
-pub struct ImprovedMerkleProof {
+#[derive(Clone, Debug, PartialEq)]
+pub enum MerkleProofError {
+	RootMismatch(),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct MerkleProof {
 	pub mmr_size: u64,
 	pub path: Vec<Hash>,
 }
 
-impl Writeable for ImprovedMerkleProof {
+impl Writeable for MerkleProof {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u64(self.mmr_size)?;
 		writer.write_u64(self.path.len() as u64)?;
@@ -113,8 +118,8 @@ impl Writeable for ImprovedMerkleProof {
 	}
 }
 
-impl Readable for ImprovedMerkleProof {
-	fn read(reader: &mut Reader) -> Result<ImprovedMerkleProof, ser::Error> {
+impl Readable for MerkleProof {
+	fn read(reader: &mut Reader) -> Result<MerkleProof, ser::Error> {
 		let mmr_size = reader.read_u64()?;
 		let path_len = reader.read_u64()?;
 		let mut path = Vec::with_capacity(path_len as usize);
@@ -123,161 +128,7 @@ impl Readable for ImprovedMerkleProof {
 			path.push(hash);
 		}
 
-		Ok(ImprovedMerkleProof { mmr_size, path })
-	}
-}
-
-impl Default for ImprovedMerkleProof {
-	fn default() -> ImprovedMerkleProof {
-		ImprovedMerkleProof::empty()
-	}
-}
-
-impl ImprovedMerkleProof {
-	/// The "empty" Merkle proof.
-	pub fn empty() -> ImprovedMerkleProof {
-		ImprovedMerkleProof {
-			mmr_size: 0,
-			path: Vec::default(),
-		}
-	}
-
-	/// Serialize the Merkle proof as a hex string (for api json endpoints)
-	pub fn to_hex(&self) -> String {
-		let mut vec = Vec::new();
-		ser::serialize(&mut vec, &self).expect("serialization failed");
-		util::to_hex(vec)
-	}
-
-	/// Convert hex string represenation back to a Merkle proof instance
-	pub fn from_hex(hex: &str) -> Result<ImprovedMerkleProof, String> {
-		let bytes = util::from_hex(hex.to_string()).unwrap();
-		let res = ser::deserialize(&mut &bytes[..])
-			.map_err(|_| format!("failed to deserialize a Merkle Proof"))?;
-		Ok(res)
-	}
-
-	pub fn verify(&mut self, root: Hash, node_hash: Hash, node_pos: u64) -> bool {
-		println!(
-			"*** verify - {:?}, {:?}, {:?}, {:?}, {:?}",
-			self.path, self.mmr_size, root, node_hash, node_pos
-		);
-
-		// handle special case of only a single entry in the MMR
-		// (no siblings to hash together)
-		if self.path.len() == 0 {
-			return root == node_hash;
-		} else if self.mmr_size == 1 {
-			return self.path.len() == 1 && root == node_hash && vec![root] == self.path;
-		}
-
-		let sibling = self.path.remove(0);
-		let (parent_pos, sibling_pos) = family(node_pos);
-
-		println!(
-			"*** node_pos {} parent_pos {}, sibling_pos {}, peaks, {:?}, mmr_size {}",
-			node_pos,
-			parent_pos,
-			sibling_pos,
-			peaks(self.mmr_size),
-			self.mmr_size
-		);
-
-		// TODO - if we hit a peak then we don't need to recurse any more,
-		// we have all the info we need to just roll the peaks up into a single root (I
-		// think?) we can hash everythin up to the right
-		// and then repeatedly with each on the left until we are done
-		let peaks_pos = peaks(self.mmr_size);
-		if let Ok(x) = peaks_pos.binary_search(&node_pos) {
-			if x == peaks_pos.len() + 1 {
-				panic!("its the last peak!!!");
-			} else {
-				panic!("its an earlier last peak!!!");
-			}
-		}
-
-		// hash our node and sibling together
-		// account for left/right position of the sibling
-		let parent = if is_left_sibling(sibling_pos) {
-			(sibling, node_hash).hash_with_index(parent_pos - 1)
-		} else {
-			(node_hash, sibling).hash_with_index(parent_pos - 1)
-		};
-
-		self.verify(root, parent, parent_pos)
-	}
-}
-
-/// A Merkle proof.
-/// Proves inclusion of an output (node) in the output MMR.
-/// We can use this to prove an output was unspent at the time of a given block
-/// as the root will match the output_root of the block header.
-/// The path and left_right can be used to reconstruct the peak hash for a given tree
-/// in the MMR.
-/// The root is the result of hashing all the peaks together.
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-pub struct MerkleProof {
-	/// The root hash of the full Merkle tree (in an MMR the hash of all peaks)
-	pub root: Hash,
-	/// The hash of the element in the tree we care about
-	pub node: Hash,
-	/// The size of the full Merkle tree
-	pub mmr_size: u64,
-	/// The full list of peak hashes in the MMR
-	pub peaks: Vec<Hash>,
-	/// The sibling (hash, pos) along the path of the tree
-	/// as we traverse from node to peak
-	pub path: Vec<(Hash, u64)>,
-}
-
-impl Writeable for MerkleProof {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(
-			writer,
-			[write_fixed_bytes, &self.root],
-			[write_fixed_bytes, &self.node],
-			[write_u64, self.mmr_size],
-			[write_u64, self.peaks.len() as u64],
-			[write_u64, self.path.len() as u64]
-		);
-
-		try!(self.peaks.write(writer));
-		try!(self.path.write(writer));
-
-		Ok(())
-	}
-}
-
-impl Readable for MerkleProof {
-	fn read(reader: &mut Reader) -> Result<MerkleProof, ser::Error> {
-		let root = Hash::read(reader)?;
-		let node = Hash::read(reader)?;
-
-		let (mmr_size, peaks_len, path_len) = ser_multiread!(reader, read_u64, read_u64, read_u64);
-
-		if peaks_len > MAX_PEAKS || path_len > MAX_PATH {
-			return Err(ser::Error::CorruptedData);
-		}
-
-		let mut peaks = Vec::with_capacity(peaks_len as usize);
-		for _ in 0..peaks_len {
-			peaks.push(Hash::read(reader)?);
-		}
-
-		let mut path = Vec::with_capacity(path_len as usize);
-		for _ in 0..path_len {
-			let hash = Hash::read(reader)?;
-			let pos = reader.read_u64()?;
-			path.push((hash, pos));
-		}
-
-		Ok(MerkleProof {
-			root,
-			node,
-			mmr_size,
-			peaks,
-			path,
-		})
+		Ok(MerkleProof { mmr_size, path })
 	}
 }
 
@@ -289,14 +140,10 @@ impl Default for MerkleProof {
 
 impl MerkleProof {
 	/// The "empty" Merkle proof.
-	/// Basically some reasonable defaults. Will not verify successfully.
 	pub fn empty() -> MerkleProof {
 		MerkleProof {
-			root: Hash::default(),
-			node: Hash::default(),
 			mmr_size: 0,
-			peaks: vec![],
-			path: vec![],
+			path: Vec::default(),
 		}
 	}
 
@@ -315,51 +162,72 @@ impl MerkleProof {
 		Ok(res)
 	}
 
-	/// Verify the Merkle proof.
-	/// We do this by verifying the folloiwing -
-	///  * inclusion of the node beneath a peak (via the Merkle path/branch of siblings)
-	///  * inclusion of the peak in the "bag of peaks" beneath the root
-	pub fn verify(&self) -> bool {
-		// if we have no further elements in the path
-		// then this proof verifies successfully if our node is
-		// one of the peaks
-		// and the peaks themselves hash to give the root
-		if self.path.len() == 0 {
-			if !self.peaks.contains(&self.node) {
-				return false;
-			}
+	pub fn verify(&mut self, root: Hash, node_hash: Hash, node_pos: u64) -> Result<(), MerkleProofError> {
+		println!(
+			"*** verify - {:?}, {:?}, {:?}, {:?}, {:?}",
+			self.path, self.mmr_size, root, node_hash, node_pos
+		);
 
-			let mut bagged = None;
-			for peak in self.peaks.iter().rev() {
-				bagged = match bagged {
-					None => Some(*peak),
-					Some(rhs) => Some((*peak, rhs).hash_with_index(self.mmr_size)),
-				}
+		// handle special case of only a single entry in the MMR
+		// (no siblings to hash together)
+		if self.path.len() == 0 {
+			if root == node_hash {
+				return Ok(());
+			} else {
+				return Err(MerkleProofError::RootMismatch());
 			}
-			return bagged == Some(self.root);
+		} else if self.mmr_size == 1 {
+			if self.path.len() == 1 && root == node_hash && vec![root] == self.path {
+				return Ok(())
+			} else {
+				return Err(MerkleProofError::RootMismatch());
+			}
 		}
 
-		let mut path = self.path.clone();
-		let (sibling, sibling_pos) = path.remove(0);
-		let (parent_pos, _) = family(sibling_pos);
+		let sibling = self.path.remove(0);
 
-		// hash our node and sibling together (noting left/right position of the
-		// sibling)
-		let parent = if is_left_sibling(sibling_pos) {
-			(sibling, self.node).hash_with_index(parent_pos - 1)
+		// TODO - if we hit a peak then we don't need to recurse any more,
+		// we have all the info we need to just roll the peaks up into a single root (I
+		// think?) we can hash everythin up to the right
+		// and then repeatedly with each on the left until we are done
+		let peaks_pos = peaks(self.mmr_size);
+		if let Ok(x) = peaks_pos.binary_search(&node_pos) {
+			let size = self.mmr_size;
+
+			println!(
+				"*** in the peaks, node_pos {}, peaks {:?}, mmr_size {}",
+				node_pos,
+				peaks(self.mmr_size),
+				self.mmr_size
+			);
+
+			let parent = if x == peaks_pos.len() - 1 {
+				(sibling, node_hash).hash_with_index(size.clone())
+			} else {
+				(node_hash, sibling).hash_with_index(size.clone())
+			};
+			self.verify(root, parent, size.clone())
 		} else {
-			(self.node, sibling).hash_with_index(parent_pos - 1)
-		};
+			let (parent_pos, sibling_pos) = family(node_pos);
 
-		let proof = MerkleProof {
-			root: self.root,
-			node: parent,
-			mmr_size: self.mmr_size,
-			peaks: self.peaks.clone(),
-			path,
-		};
+			println!(
+				"*** node_pos {}, parent_pos {}, sibling_pos {}, peaks {:?}, mmr_size {}",
+				node_pos,
+				parent_pos,
+				sibling_pos,
+				peaks(self.mmr_size),
+				self.mmr_size
+			);
 
-		proof.verify()
+			// hash our node and sibling together
+			// account for left/right position of the sibling
+			let parent = if is_left_sibling(sibling_pos) {
+				(sibling, node_hash).hash_with_index(parent_pos - 1)
+			} else {
+				(node_hash, sibling).hash_with_index(parent_pos - 1)
+			};
+			self.verify(root, parent, parent_pos)
+		}
 	}
 }
 
@@ -478,10 +346,10 @@ where
 		res.expect("no root, invalid tree")
 	}
 
-	pub fn improved_merkle_proof(&self, pos: u64) -> Result<ImprovedMerkleProof, String> {
+	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
 		debug!(
 			LOGGER,
-			"merkle_proof (improved) - {}, last_pos {}", pos, self.last_pos
+			"merkle_proof  {}, last_pos {}", pos, self.last_pos
 		);
 
 		if !is_leaf(pos) {
@@ -494,7 +362,7 @@ where
 		let mmr_size = self.unpruned_size();
 
 		if mmr_size == 1 {
-			return Ok(ImprovedMerkleProof {
+			return Ok(MerkleProof {
 				mmr_size,
 				path: vec![node],
 			});
@@ -518,48 +386,7 @@ where
 		path.append(&mut self.peak_path(peak_pos));
 		println!("path now - {:?}", path);
 
-		Ok(ImprovedMerkleProof { mmr_size, path })
-	}
-
-	/// Build a Merkle proof for the element at the given position in the MMR
-	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
-		debug!(LOGGER, "merkle_proof - {}, last_pos {}", pos, self.last_pos);
-
-		if !is_leaf(pos) {
-			return Err(format!("not a leaf at pos {}", pos));
-		}
-
-		let root = self.root();
-
-		let node = self.get_hash(pos)
-			.ok_or(format!("no element at pos {}", pos))?;
-
-		let mmr_size = self.unpruned_size();
-
-		let family_branch = family_branch(pos, self.last_pos);
-
-		let path = family_branch
-			.iter()
-			.map(|x| (self.get_from_file(x.1).unwrap_or(Hash::default()), x.1))
-			.collect::<Vec<_>>();
-
-		let peaks = peaks(self.last_pos)
-			.iter()
-			.filter_map(|&x| {
-				let res = self.get_from_file(x);
-				res
-			})
-			.collect::<Vec<_>>();
-
-		let proof = MerkleProof {
-			root,
-			node,
-			mmr_size,
-			peaks,
-			path,
-		};
-
-		Ok(proof)
+		Ok(MerkleProof { mmr_size, path })
 	}
 
 	/// Push a new element into the MMR. Computes new related peaks at
@@ -1694,11 +1521,13 @@ mod test {
 		assert_eq!(proof.path, vec![pos_1, pos_3]);
 		assert!(proof.verify(pmmr.root(), pos_0, 1));
 
-		let proof = pmmr.improved_merkle_proof(2).unwrap();
+		let mut proof = pmmr.improved_merkle_proof(2).unwrap();
 		assert_eq!(proof.path, vec![pos_0, pos_3]);
+		assert!(proof.verify(pmmr.root(), pos_1, 2));
 
-		let proof = pmmr.improved_merkle_proof(4).unwrap();
+		let mut proof = pmmr.improved_merkle_proof(4).unwrap();
 		assert_eq!(proof.path, vec![pos_2]);
+		assert!(proof.verify(pmmr.root(), pos_3, 4));
 
 		// 7 leaves, 3 peaks, 11 pos in total
 		pmmr.push(elems[3]).unwrap();
@@ -1726,38 +1555,45 @@ mod test {
 
 		assert_eq!(pmmr.unpruned_size(), 11);
 
-		let proof = pmmr.improved_merkle_proof(1).unwrap();
+		let mut proof = pmmr.improved_merkle_proof(1).unwrap();
 		assert_eq!(
 			proof.path,
 			vec![pos_1, pos_5, (pos_9, pos_10).hash_with_index(11)]
 		);
+		assert!(proof.verify(pmmr.root(), pos_0, 1));
 
-		let proof = pmmr.improved_merkle_proof(2).unwrap();
+		let mut proof = pmmr.improved_merkle_proof(2).unwrap();
 		assert_eq!(
 			proof.path,
 			vec![pos_0, pos_5, (pos_9, pos_10).hash_with_index(11)]
 		);
+		assert!(proof.verify(pmmr.root(), pos_1, 2));
 
-		let proof = pmmr.improved_merkle_proof(4).unwrap();
+		let mut proof = pmmr.improved_merkle_proof(4).unwrap();
 		assert_eq!(
 			proof.path,
 			vec![pos_4, pos_2, (pos_9, pos_10).hash_with_index(11)]
 		);
+		assert!(proof.verify(pmmr.root(), pos_3, 4));
 
-		let proof = pmmr.improved_merkle_proof(5).unwrap();
+		let mut proof = pmmr.improved_merkle_proof(5).unwrap();
 		assert_eq!(
 			proof.path,
 			vec![pos_3, pos_2, (pos_9, pos_10).hash_with_index(11)]
 		);
+		assert!(proof.verify(pmmr.root(), pos_4, 5));
 
-		let proof = pmmr.improved_merkle_proof(8).unwrap();
+		let mut proof = pmmr.improved_merkle_proof(8).unwrap();
 		assert_eq!(proof.path, vec![pos_8, pos_10, pos_6]);
+		assert!(proof.verify(pmmr.root(), pos_7, 8));
 
-		let proof = pmmr.improved_merkle_proof(9).unwrap();
+		let mut proof = pmmr.improved_merkle_proof(9).unwrap();
 		assert_eq!(proof.path, vec![pos_7, pos_10, pos_6]);
+		assert!(proof.verify(pmmr.root(), pos_8, 9));
 
-		let proof = pmmr.improved_merkle_proof(11).unwrap();
+		let mut proof = pmmr.improved_merkle_proof(11).unwrap();
 		assert_eq!(proof.path, vec![pos_9, pos_6]);
+		assert!(proof.verify(pmmr.root(), pos_10, 11));
 	}
 
 	#[test]
