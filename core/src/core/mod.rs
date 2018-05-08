@@ -30,7 +30,7 @@ use std::cmp::Ordering;
 use std::num::ParseFloatError;
 use consensus::GRIN_BASE;
 
-use util::{secp, static_secp_instance};
+use util::{secp, secp_static, static_secp_instance};
 use util::secp::pedersen::*;
 
 pub use self::block::*;
@@ -40,25 +40,64 @@ use core::hash::Hashed;
 use ser::{Error, Readable, Reader, Writeable, Writer};
 use global;
 
-/// Implemented by types that hold inputs and outputs including Pedersen
-/// commitments. Handles the collection of the commitments as well as their
+/// Implemented by types that hold inputs and outputs (and kernels)
+/// containing Pedersen commitments.
+/// Handles the collection of the commitments as well as their
 /// summing, taking potential explicit overages of fees into account.
 pub trait Committed {
-	/// Gathers commitments and sum them.
-	fn sum_commitments(&self) -> Result<Commitment, secp::Error> {
-		// first, verify each range proof
-		let ref outputs = self.outputs_committed();
-		for output in *outputs {
-			try!(output.verify_proof())
+	/// Gather the kernel excesses and sum them.
+	fn sum_kernel_excesses(
+		&self,
+		offset: &Commitment,
+		extra_excess: Option<&Commitment>,
+	) -> Result<(Commitment, Commitment), secp::Error> {
+		let zero_commit = secp_static::commit_to_zero_value();
+
+		// then gather the kernel excess commitments
+		let mut kernel_commits = self.kernels_committed();
+
+		if let Some(extra) = extra_excess {
+			kernel_commits.push(*extra);
 		}
 
-		// then gather the commitments
-		let mut input_commits = map_vec!(self.inputs_committed(), |inp| inp.commitment());
-		let mut output_commits = map_vec!(self.outputs_committed(), |out| out.commitment());
+		// handle "zero commit" values by filtering them out here
+		kernel_commits.retain(|x| *x != zero_commit);
 
-		// add the overage as output commitment if positive, as an input commitment if
-		// negative
-		let overage = self.overage();
+		// sum the commitments
+		let kernel_sum = {
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			secp.commit_sum(kernel_commits, vec![])?
+		};
+
+		// sum the commitments along with the specified offset
+		let kernel_sum_plus_offset = {
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			let mut commits = vec![kernel_sum];
+			if *offset != zero_commit {
+				commits.push(*offset);
+			}
+			secp.commit_sum(commits, vec![])?
+		};
+
+		Ok((kernel_sum, kernel_sum_plus_offset))
+	}
+
+	/// Gathers commitments and sum them.
+	fn sum_commitments(
+		&self,
+		overage: i64,
+		extra_commit: Option<&Commitment>,
+	) -> Result<Commitment, secp::Error> {
+		let zero_commit = secp_static::commit_to_zero_value();
+
+		// then gather the commitments
+		let mut input_commits = self.inputs_committed();
+		let mut output_commits = self.outputs_committed();
+
+		// add the overage as output commitment if positive,
+		// or as an input commitment if negative
 		if overage != 0 {
 			let over_commit = {
 				let secp = static_secp_instance();
@@ -72,6 +111,14 @@ pub trait Committed {
 			}
 		}
 
+		if let Some(extra) = extra_commit {
+			output_commits.push(*extra);
+		}
+
+		// handle "zero commit" values by filtering them out here
+		output_commits.retain(|x| *x != zero_commit);
+		input_commits.retain(|x| *x != zero_commit);
+
 		// sum all that stuff
 		{
 			let secp = static_secp_instance();
@@ -80,15 +127,14 @@ pub trait Committed {
 		}
 	}
 
-	/// Vector of committed inputs to verify
-	fn inputs_committed(&self) -> &Vec<Input>;
+	/// Vector of input commitments to verify.
+	fn inputs_committed(&self) -> Vec<Commitment>;
 
-	/// Vector of committed inputs to verify
-	fn outputs_committed(&self) -> &Vec<Output>;
+	/// Vector of output commitments to verify.
+	fn outputs_committed(&self) -> Vec<Commitment>;
 
-	/// The overage amount expected over the commitments. Can be negative (a
-	/// fee) or positive (a reward).
-	fn overage(&self) -> i64;
+	/// Vector of kernel excesses to verify.
+	fn kernels_committed(&self) -> Vec<Commitment>;
 }
 
 /// Proof of work

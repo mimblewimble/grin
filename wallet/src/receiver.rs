@@ -478,8 +478,16 @@ fn build_final_transaction(
 
 	// build the final excess based on final tx and offset
 	let final_excess = {
+		// TODO - do we need to verify rangeproofs here?
+		for x in &final_tx.outputs {
+			x.verify_proof().context(ErrorKind::Transaction)?;
+		}
+
 		// sum the input/output commitments on the final tx
-		let tx_excess = final_tx.sum_commitments().context(ErrorKind::Transaction)?;
+		let overage = final_tx.fee() as i64;
+		let tx_excess = final_tx
+			.sum_commitments(overage, None)
+			.context(ErrorKind::Transaction)?;
 
 		// subtract the kernel_excess (built from kernel_offset)
 		let offset_excess = keychain

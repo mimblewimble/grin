@@ -35,7 +35,6 @@ use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Wri
           WriteableSorted, Writer};
 use util;
 use util::LOGGER;
-use util::secp_static;
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -174,6 +173,11 @@ impl Readable for TxKernel {
 }
 
 impl TxKernel {
+	/// Return the excess commitment for this tx_kernel.
+	pub fn excess(&self) -> Commitment {
+		self.excess
+	}
+
 	/// Verify the transaction proof validity. Entails handling the commitment
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
@@ -299,14 +303,16 @@ impl Readable for Transaction {
 }
 
 impl Committed for Transaction {
-	fn inputs_committed(&self) -> &Vec<Input> {
-		&self.inputs
+	fn inputs_committed(&self) -> Vec<Commitment> {
+		self.inputs.iter().map(|x| x.commitment()).collect()
 	}
-	fn outputs_committed(&self) -> &Vec<Output> {
-		&self.outputs
+
+	fn outputs_committed(&self) -> Vec<Commitment> {
+		self.outputs.iter().map(|x| x.commitment()).collect()
 	}
-	fn overage(&self) -> i64 {
-		self.fee() as i64
+
+	fn kernels_committed(&self) -> Vec<Commitment> {
+		self.kernels.iter().map(|x| x.excess()).collect()
 	}
 }
 
@@ -388,39 +394,36 @@ impl Transaction {
 	///  * sum of input/output commitments matches sum of kernel commitments after applying offset
 	///  * each kernel sig is valid (i.e. tx commitments sum to zero, given above is true)
 	fn verify_kernels(&self) -> Result<(), Error> {
-		// sum all input and output commitments
-		let io_sum = self.sum_commitments()?;
+		// Verify all the output rangeproofs.
+		// Note: this is expensive.
+		for x in &self.outputs {
+			x.verify_proof()?;
+		}
 
-		// sum all kernels commitments
-		let kernel_sum = {
-			let mut kernel_commits = self.kernels.iter().map(|x| x.excess).collect::<Vec<_>>();
+		// Verify the kernel signatures.
+		// Note: this is expensive.
+		for x in &self.kernels {
+			x.verify()?;
+		}
 
-			let offset = {
-				let secp = static_secp_instance();
-				let secp = secp.lock().unwrap();
-				let key = self.offset.secret_key(&secp)?;
-				secp.commit(0, key)?
-			};
+		// Sum all input|output|overage commitments.
+		let overage = self.fee() as i64;
+		let io_sum = self.sum_commitments(overage, None)?;
 
-			kernel_commits.push(offset);
-
-			// We cannot sum zero commits so remove them here
-			let zero_commit = secp_static::commit_to_zero_value();
-			kernel_commits.retain(|x| *x != zero_commit);
-
+		let offset = {
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
-			secp.commit_sum(kernel_commits, vec![])?
+			let key = self.offset.secret_key(&secp)?;
+			secp.commit(0, key)?
 		};
+
+		// Sum the kernel excesses accounting for the kernel offset.
+		let (_, kernel_sum) = self.sum_kernel_excesses(&offset, None)?;
 
 		// sum of kernel commitments (including the offset) must match
 		// the sum of input/output commitments (minus fee)
-		if kernel_sum != io_sum {
+		if io_sum != kernel_sum {
 			return Err(Error::KernelSumMismatch);
-		}
-
-		for kernel in &self.kernels {
-			kernel.verify()?;
 		}
 
 		Ok(())
