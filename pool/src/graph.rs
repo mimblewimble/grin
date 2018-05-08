@@ -297,7 +297,6 @@ mod tests {
 	use keychain::Keychain;
 	use rand;
 	use core::core::OutputFeatures;
-	use core::core::transaction::ProofMessageElements;
 
 	#[test]
 	fn test_add_entry() {
@@ -323,13 +322,11 @@ mod tests {
 			),
 		];
 
-		let msg = ProofMessageElements::new(100, &key_id1);
-
 		let output = core::transaction::Output {
 			features: OutputFeatures::DEFAULT_OUTPUT,
 			commit: output_commit,
 			proof: keychain
-				.range_proof(100, &key_id1, output_commit, None, msg.to_proof_message())
+				.range_proof(100, &key_id1, output_commit, None)
 				.unwrap(),
 		};
 

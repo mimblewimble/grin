@@ -232,24 +232,11 @@ impl Keychain {
 		key_id: &Identifier,
 		_commit: Commitment,
 		extra_data: Option<Vec<u8>>,
-		msg: ProofMessage,
 	) -> Result<RangeProof, Error> {
 		let commit = self.commit(amount, key_id)?;
 		let skey = self.derived_key(key_id)?;
 		let nonce = self.rangeproof_create_nonce(&commit);
-		if msg.len() == 0 {
-			return Ok(self.secp
-				.bullet_proof(amount, skey, nonce, extra_data, None));
-		} else {
-			if msg.len() != 64 {
-				error!(LOGGER, "Bullet proof message must be 64 bytes.");
-				return Err(Error::RangeProof(
-					"Bullet proof message must be 64 bytes".to_string(),
-				));
-			}
-		}
-		return Ok(self.secp
-			.bullet_proof(amount, skey, nonce, extra_data, Some(msg)));
+		Ok(self.secp.bullet_proof(amount, skey, nonce, extra_data))
 	}
 
 	pub fn verify_range_proof(
@@ -267,30 +254,20 @@ impl Keychain {
 
 	pub fn rewind_range_proof(
 		&self,
-		key_id: &Identifier,
 		commit: Commitment,
 		extra_data: Option<Vec<u8>>,
 		proof: RangeProof,
 	) -> Result<ProofInfo, Error> {
-		let skey = self.derived_key(key_id)?;
 		let nonce = self.rangeproof_create_nonce(&commit);
-		let proof_message = self.secp
-			.unwind_bullet_proof(commit, skey, nonce, extra_data, proof);
-		let proof_info = match proof_message {
-			Ok(p) => ProofInfo {
-				success: true,
-				value: 0,
-				message: p,
-				mlen: 0,
-				min: 0,
-				max: 0,
-				exp: 0,
-				mantissa: 0,
-			},
+		let result = self.secp
+			.rewind_bullet_proof(commit, nonce, extra_data, proof);
+		let proof_info = match result {
+			Ok(p) => p,
 			Err(_) => ProofInfo {
 				success: false,
 				value: 0,
 				message: ProofMessage::empty(),
+				blinding: SecretKey([0; secp::constants::SECRET_KEY_SIZE]),
 				mlen: 0,
 				min: 0,
 				max: 0,
@@ -710,9 +687,9 @@ mod test {
 
 			// dealing with an input here so we need to negate the blinding_factor
 			// rather than use it as is
+			let bf = BlindingFactor::from_secret_key(skey);
 			let blinding_factor = keychain
-				.blind_sum(&BlindSum::new()
-					.sub_blinding_factor(BlindingFactor::from_secret_key(skey)))
+				.blind_sum(&BlindSum::new().sub_blinding_factor(bf))
 				.unwrap();
 
 			let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
@@ -1009,44 +986,26 @@ mod test {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
-		let msg = ProofMessage::from_bytes(&[0u8; 64]);
 		let extra_data = [99u8; 64];
 
 		let proof = keychain
-			.range_proof(5, &key_id, commit, Some(extra_data.to_vec().clone()), msg)
+			.range_proof(5, &key_id, commit, Some(extra_data.to_vec().clone()))
 			.unwrap();
 		let proof_info = keychain
-			.rewind_range_proof(&key_id, commit, Some(extra_data.to_vec().clone()), proof)
+			.rewind_range_proof(commit, Some(extra_data.to_vec().clone()), proof)
 			.unwrap();
 
 		assert_eq!(proof_info.success, true);
 
-		// now check the recovered message is "empty" (but not truncated) i.e. all
-		// zeroes
 		//Value is in the message in this case
-		assert_eq!(
-			proof_info.message,
-			secp::pedersen::ProofMessage::from_bytes(&[0; secp::constants::BULLET_PROOF_MSG_SIZE])
-		);
+		assert_eq!(proof_info.value, 5,);
 
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
-		// cannot rewind with a different nonce
-		let proof_info = keychain
-			.rewind_range_proof(&key_id2, commit, Some(extra_data.to_vec().clone()), proof)
-			.unwrap();
-		// With bullet proofs, if you provide the wrong nonce you'll get gibberish back
-		// as opposed to a failure to recover the message
-		assert_ne!(
-			proof_info.message,
-			secp::pedersen::ProofMessage::from_bytes(&[0; secp::constants::BULLET_PROOF_MSG_SIZE])
-		);
-		assert_eq!(proof_info.value, 0);
-
-		// cannot rewind with a commitment to the same value using a different key
+		// cannot rewind with a different commit
 		let commit2 = keychain.commit(5, &key_id2).unwrap();
 		let proof_info = keychain
-			.rewind_range_proof(&key_id, commit2, Some(extra_data.to_vec().clone()), proof)
+			.rewind_range_proof(commit2, Some(extra_data.to_vec().clone()), proof)
 			.unwrap();
 		assert_eq!(proof_info.success, false);
 		assert_eq!(proof_info.value, 0);
@@ -1054,7 +1013,7 @@ mod test {
 		// cannot rewind with a commitment to a different value
 		let commit3 = keychain.commit(4, &key_id).unwrap();
 		let proof_info = keychain
-			.rewind_range_proof(&key_id, commit3, Some(extra_data.to_vec().clone()), proof)
+			.rewind_range_proof(commit3, Some(extra_data.to_vec().clone()), proof)
 			.unwrap();
 		assert_eq!(proof_info.success, false);
 		assert_eq!(proof_info.value, 0);
@@ -1063,12 +1022,7 @@ mod test {
 		let commit3 = keychain.commit(4, &key_id).unwrap();
 		let wrong_extra_data = [98u8; 64];
 		let _should_err = keychain
-			.rewind_range_proof(
-				&key_id,
-				commit3,
-				Some(wrong_extra_data.to_vec().clone()),
-				proof,
-			)
+			.rewind_range_proof(commit3, Some(wrong_extra_data.to_vec().clone()), proof)
 			.unwrap();
 
 		assert_eq!(proof_info.success, false);

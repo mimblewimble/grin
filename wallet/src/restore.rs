@@ -18,7 +18,6 @@ use util::LOGGER;
 use util::secp::pedersen;
 use api;
 use core::global;
-use core::core::transaction::ProofMessageElements;
 use types::{Error, ErrorKind, MerkleProofWrapper, OutputData, OutputStatus, WalletConfig,
             WalletData};
 use byteorder::{BigEndian, ByteOrder};
@@ -134,8 +133,6 @@ fn find_outputs_with_key(
 	info!(LOGGER, "Scanning {} outputs", outputs.len(),);
 	let current_chain_height = get_chain_height(config).unwrap();
 
-	// skey doesn't matter in this case
-	let skey = keychain.derive_key_id(1).unwrap();
 	for output in outputs.iter().filter(|x| !x.spent) {
 		// attempt to unwind message from the RP and get a value.. note
 		// this will only return okay if the value is included in the
@@ -143,11 +140,9 @@ fn find_outputs_with_key(
 		// to unwind in this case will be meaningless. With only the nonce known
 		// only the first 32 bytes of the recovered message will be accurate
 		let info = keychain
-			.rewind_range_proof(&skey, output.commit, None, output.range_proof().unwrap())
+			.rewind_range_proof(output.commit, None, output.range_proof().unwrap())
 			.unwrap();
-		let message = ProofMessageElements::from_proof_message(info.message).unwrap();
-		let value = message.value();
-		if value.is_err() {
+		if info.success == false {
 			continue;
 		}
 		// we have a match, now check through our key iterations to find a partial match
@@ -171,20 +166,19 @@ fn find_outputs_with_key(
 				continue;
 			}*/
 			let key_id = &keychain.derive_key_id(i as u32).unwrap();
-			if !message.compare_bf_first_8(key_id) {
-				continue;
-			}
+
+			//TODO: Just find which derived key gives the secret key returned in the
+			// message
+
 			found = true;
 			// we have a partial match, let's just confirm
 			let info = keychain
-				.rewind_range_proof(key_id, output.commit, None, output.range_proof().unwrap())
+				.rewind_range_proof(output.commit, None, output.range_proof().unwrap())
 				.unwrap();
-			let message = ProofMessageElements::from_proof_message(info.message).unwrap();
-			let value = message.value();
-			if value.is_err() || !message.zeroes_correct() {
+			if !info.success {
 				continue;
 			}
-			let value = value.unwrap();
+			let value = info.value;
 			info!(
 				LOGGER,
 				"Output found: {:?}, key_index: {:?}", output.commit, i,
@@ -233,7 +227,7 @@ fn find_outputs_with_key(
 				LOGGER,
 				"Very probable matching output found with amount: {} \
 				 but didn't match key child key up to {}",
-				message.value().unwrap(),
+				info.value,
 				max_derivations,
 			);
 		}

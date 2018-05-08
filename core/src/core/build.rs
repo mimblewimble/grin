@@ -25,7 +25,7 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use core::{Input, Output, OutputFeatures, ProofMessageElements, Transaction, TxKernel};
+use core::{Input, Output, OutputFeatures, Transaction, TxKernel};
 use core::hash::Hash;
 use core::pmmr::MerkleProof;
 use keychain;
@@ -103,11 +103,9 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 			let commit = build.keychain.commit(value, &key_id).unwrap();
 			trace!(LOGGER, "Builder - Pedersen Commit is: {:?}", commit,);
 
-			let msg = ProofMessageElements::new(value, &key_id);
-
 			let rproof = build
 				.keychain
-				.range_proof(value, &key_id, commit, None, msg.to_proof_message())
+				.range_proof(value, &key_id, commit, None)
 				.unwrap();
 
 			(
