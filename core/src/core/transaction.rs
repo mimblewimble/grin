@@ -34,7 +34,6 @@ use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Wri
           WriteableSorted, Writer};
 use util;
 use util::LOGGER;
-use util::secp_static;
 
 bitflags! {
 	/// Options for a kernel's structure or use
