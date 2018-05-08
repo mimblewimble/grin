@@ -926,8 +926,10 @@ where
 
 #[cfg(test)]
 mod tests {
+	extern crate grin_wallet;
+
 	use super::*;
-	use core::core::build;
+	use grin_wallet::libwallet::build;
 	use core::global;
 	use blockchain::{DummyChain, DummyChainImpl, DummyOutputSet};
 	use keychain::Keychain;

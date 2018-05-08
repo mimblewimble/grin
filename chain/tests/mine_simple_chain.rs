@@ -17,6 +17,7 @@ extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
+extern crate grin_wallet as wallet;
 extern crate rand;
 extern crate time;
 
@@ -25,12 +26,13 @@ use std::sync::Arc;
 
 use chain::Chain;
 use chain::types::*;
-use core::core::{build, Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
+use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::consensus;
 use core::global;
 use core::global::ChainTypes;
+use wallet::libwallet::build;
 
 use keychain::Keychain;
 

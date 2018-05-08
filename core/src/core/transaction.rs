@@ -30,7 +30,7 @@ use core::BlockHeader;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
 use keychain;
-use keychain::{BlindingFactor, Keychain};
+use keychain::BlindingFactor;
 use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
           WriteableSorted, Writer};
 use util;
@@ -1199,29 +1199,6 @@ mod test {
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
 		assert_eq!(kernel2.fee, 10);
-	}
-
-	#[test]
-	fn test_output_ser_deser() {
-		let keychain = Keychain::from_random_seed().unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
-		let commit = keychain.commit(5, &key_id).unwrap();
-		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain.range_proof(5, &key_id, commit, None, msg).unwrap();
-
-		let out = Output {
-			features: OutputFeatures::DEFAULT_OUTPUT,
-			commit: commit,
-			proof: proof,
-		};
-
-		let mut vec = vec![];
-		ser::serialize(&mut vec, &out).expect("serialized failed");
-		let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
-
-		assert_eq!(dout.features, OutputFeatures::DEFAULT_OUTPUT);
-		assert_eq!(dout.commit, out.commit);
-		assert_eq!(dout.proof, out.proof);
 	}
 
 	#[test]

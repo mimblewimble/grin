@@ -24,6 +24,7 @@ use libwallet::error::Error;
 use core::core::KernelFeatures;
 use util::{kernel_sig_msg, secp, static_secp_instance, LOGGER};
 
+/// output a reward output
 pub fn output(
 	keychain: &keychain::Keychain,
 	key_id: &keychain::Identifier,

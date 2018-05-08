@@ -17,6 +17,7 @@ extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
+extern crate grin_wallet as wallet;
 extern crate rand;
 extern crate time;
 
@@ -73,8 +74,7 @@ fn data_files() {
 			let prev = chain.head_header().unwrap();
 			let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 			let pk = keychain.derive_key_id(n as u32).unwrap();
-			let mut b =
-				core::core::Block::new(&prev, vec![], &keychain, &pk, difficulty.clone()).unwrap();
+			let mut b = core::core::Block::new(&prev, vec![], difficulty.clone()).unwrap();
 			b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
 			chain.set_txhashset_roots(&mut b, false).unwrap();
@@ -156,7 +156,7 @@ fn prepare_block_nosum(
 ) -> Block {
 	let key_id = kc.derive_key_id(diff as u32).unwrap();
 
-	let mut b = match core::core::Block::new(prev, txs, kc, &key_id, Difficulty::from_num(diff)) {
+	let mut b = match core::core::Block::new(prev, txs, Difficulty::from_num(diff)) {
 		Err(e) => panic!("{:?}", e),
 		Ok(b) => b,
 	};

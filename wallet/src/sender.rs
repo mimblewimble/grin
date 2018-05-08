@@ -458,7 +458,7 @@ fn inputs_and_change(
 
 #[cfg(test)]
 mod test {
-	use core::core::build;
+	use libwallet::build;
 	use keychain::Keychain;
 
 	#[test]

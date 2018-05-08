@@ -16,6 +16,7 @@ extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_wallet as wallet;
 extern crate rand;
 extern crate time;
 
@@ -23,7 +24,7 @@ use std::fs;
 use std::sync::Arc;
 
 use chain::types::*;
-use core::core::build;
+use wallet::libwallet::build;
 use core::core::target::Difficulty;
 use core::core::transaction;
 use core::core::OutputIdentifier;
