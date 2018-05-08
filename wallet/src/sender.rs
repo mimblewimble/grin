@@ -91,9 +91,12 @@ pub fn issue_send_tx(
 		.aggsig_create_context(&tx_id, skey)
 		.context(ErrorKind::Keychain)?;
 
+	let kernel_key = kernel_blind
+		.secret_key(keychain.secp())
+		.context(ErrorKind::Keychain)?;
 	let kernel_offset = keychain
 		.secp()
-		.commit(0, skey)
+		.commit(0, kernel_key)
 		.context(ErrorKind::Keychain)?;
 
 	let partial_tx = build_partial_tx(&tx_id, keychain, amount_with_fee, kernel_offset, None, tx);
@@ -286,6 +289,10 @@ fn build_send_tx(
 	fee = tx_fee(coins.len(), 1, coins_proof_count(&coins), None);
 	let mut total: u64 = coins.iter().map(|c| c.value).sum();
 	let mut amount_with_fee = amount + fee;
+
+	if total == 0 {
+		return Err(ErrorKind::NotEnoughFunds(total as u64))?;
+	}
 
 	// Check if we need to use a change address
 	if total > amount_with_fee {

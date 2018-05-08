@@ -86,7 +86,6 @@ fn data_files() {
 				global::sizeshift(),
 			).unwrap();
 
-			// let prev_bhash = b.header.previous;
 			let bhash = b.hash();
 			chain
 				.process_block(b.clone(), chain::Options::MINE)

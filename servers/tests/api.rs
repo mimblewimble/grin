@@ -232,7 +232,7 @@ fn test_p2p() {
 	assert!(peers_connected.is_ok());
 	assert_eq!(peers_connected.unwrap().len(), 1);
 
-	// Check its status is banned with get peer
+	// Check its status is healthy with get peer
 	let peer = get_peer(&base_addr, api_server_port, &addr);
 	assert!(peer.is_ok());
 	assert_eq!(peer.unwrap().flags, p2p::State::Healthy);
