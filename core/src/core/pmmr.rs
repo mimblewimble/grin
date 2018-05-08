@@ -162,7 +162,12 @@ impl MerkleProof {
 		Ok(res)
 	}
 
-	pub fn verify(&mut self, root: Hash, node_hash: Hash, node_pos: u64) -> Result<(), MerkleProofError> {
+	pub fn verify(
+		&mut self,
+		root: Hash,
+		node_hash: Hash,
+		node_pos: u64,
+	) -> Result<(), MerkleProofError> {
 		println!(
 			"*** verify - {:?}, {:?}, {:?}, {:?}, {:?}",
 			self.path, self.mmr_size, root, node_hash, node_pos
@@ -178,7 +183,7 @@ impl MerkleProof {
 			}
 		} else if self.mmr_size == 1 {
 			if self.path.len() == 1 && root == node_hash && vec![root] == self.path {
-				return Ok(())
+				return Ok(());
 			} else {
 				return Err(MerkleProofError::RootMismatch());
 			}
@@ -347,10 +352,7 @@ where
 	}
 
 	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
-		debug!(
-			LOGGER,
-			"merkle_proof  {}, last_pos {}", pos, self.last_pos
-		);
+		debug!(LOGGER, "merkle_proof  {}, last_pos {}", pos, self.last_pos);
 
 		if !is_leaf(pos) {
 			return Err(format!("not a leaf at pos {}", pos));

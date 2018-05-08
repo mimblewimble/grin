@@ -757,21 +757,21 @@ impl Input {
 	}
 
 	// /// Verify the maturity of an output being spent by an input.
-	// /// Only relevant for spending coinbase outputs currently (locked for 1,000 confirmations).
-	// ///
-	// /// The proof associates the output with the root by its hash (and pos) in the MMR.
-	// /// The proof shows the output existed and was unspent at the time the output_root was built.
-	// /// The root associates the proof with a specific block header with that output_root.
-	// /// So the proof shows the output was unspent at the time of the block
-	// /// and is at least as old as that block (may be older).
-	// ///
+	// /// Only relevant for spending coinbase outputs currently (locked for 1,000
+	// confirmations). ///
+	// /// The proof associates the output with the root by its hash (and pos) in
+	// the MMR. /// The proof shows the output existed and was unspent at the time
+	// the output_root was built. /// The root associates the proof with a
+	// specific block header with that output_root. /// So the proof shows the
+	// output was unspent at the time of the block /// and is at least as old as
+	// that block (may be older). ///
 	// /// We can verify maturity of the output being spent by -
 	// ///
-	// /// * verifying the Merkle Proof produces the correct root for the given hash (from MMR)
-	// /// * verifying the root matches the output_root in the block_header
-	// /// * verifying the hash matches the node hash in the Merkle Proof
-	// /// * finally verify maturity rules based on height of the block header
-	// ///
+	// /// * verifying the Merkle Proof produces the correct root for the given
+	// hash (from MMR) /// * verifying the root matches the output_root in the
+	// block_header /// * verifying the hash matches the node hash in the Merkle
+	// Proof /// * finally verify maturity rules based on height of the block
+	// header ///
 	// pub fn verify_maturity(
 	// 	&self,
 	// 	hash: Hash,
@@ -810,8 +810,8 @@ impl Input {
 	//
 	// 		debug!(
 	// 			LOGGER,
-	// 			"input: verify_maturity: success via Merkle proof: {} vs {}", lock_height, height,
-	// 		);
+	// "input: verify_maturity: success via Merkle proof: {} vs {}",
+	// lock_height, height, 		);
 	// 	}
 	// 	Ok(())
 	// }

@@ -550,7 +550,8 @@ impl<'a> Extension<'a> {
 		}
 
 		let pos = self.get_output_pos(&input.commitment())?;
-		let hash = self.output_pmmr.get_hash(pos)
+		let hash = self.output_pmmr
+			.get_hash(pos)
 			.ok_or(Error::TxHashSetErr(format!("could not find hash in MMR")))?;
 		let res = input.merkle_proof().verify(header.output_root, hash, pos)?;
 		Ok(res)
@@ -684,7 +685,8 @@ impl<'a> Extension<'a> {
 		let supply = ((header.height * REWARD) as i64).checked_neg().unwrap_or(0);
 		let output_sum = self.sum_commitments(supply, None)?;
 
-		let (kernel_sum, kernel_sum_plus_offset) = self.sum_kernel_excesses(&header.total_kernel_offset, None)?;
+		let (kernel_sum, kernel_sum_plus_offset) =
+			self.sum_kernel_excesses(&header.total_kernel_offset, None)?;
 
 		if output_sum != kernel_sum_plus_offset {
 			return Err(Error::InvalidTxHashSet(
