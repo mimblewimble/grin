@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Stub while figuring out wallet redesign
+//! Rangeproof library functions
 
 use keychain::Keychain;
 use util::secp::pedersen::{Commitment, ProofInfo, ProofMessage, RangeProof};

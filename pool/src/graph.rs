@@ -139,13 +139,14 @@ impl fmt::Debug for Edge {
 /// The generic graph container. Both graphs, the pool and orphans, embed this
 /// structure and add additional capability on top of it.
 pub struct DirectedGraph {
-	edges: HashMap<Commitment, Edge>,
-	vertices: Vec<PoolEntry>,
-
-	// A small optimization: keeping roots (vertices with in-degree 0) in a
-	// separate list makes topological sort a bit faster. (This is true for
-	// Kahn's, not sure about other implementations)
-	roots: Vec<PoolEntry>,
+	/// Edges
+	pub edges: HashMap<Commitment, Edge>,
+	/// Vertices
+	pub vertices: Vec<PoolEntry>,
+	/// A small optimization: keeping roots (vertices with in-degree 0) in a
+	/// separate list makes topological sort a bit faster. (This is true for
+	/// Kahn's, not sure about other implementations)
+	pub roots: Vec<PoolEntry>,
 }
 
 impl DirectedGraph {
@@ -289,77 +290,4 @@ impl DirectedGraph {
 pub fn transaction_identifier(tx: &core::transaction::Transaction) -> core::hash::Hash {
 	// core::transaction::merkle_inputs_outputs(&tx.inputs, &tx.outputs)
 	tx.hash()
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use keychain::Keychain;
-	use rand;
-	use core::core::OutputFeatures;
-	use core::core::transaction::ProofMessageElements;
-
-	#[test]
-	fn test_add_entry() {
-		let keychain = Keychain::from_random_seed().unwrap();
-		let key_id1 = keychain.derive_key_id(1).unwrap();
-		let key_id2 = keychain.derive_key_id(2).unwrap();
-		let key_id3 = keychain.derive_key_id(3).unwrap();
-
-		let output_commit = keychain.commit(70, &key_id1).unwrap();
-
-		let inputs = vec![
-			core::transaction::Input::new(
-				OutputFeatures::DEFAULT_OUTPUT,
-				keychain.commit(50, &key_id2).unwrap(),
-				None,
-				None,
-			),
-			core::transaction::Input::new(
-				OutputFeatures::DEFAULT_OUTPUT,
-				keychain.commit(25, &key_id3).unwrap(),
-				None,
-				None,
-			),
-		];
-
-		let msg = ProofMessageElements::new(100, &key_id1);
-
-		let output = core::transaction::Output {
-			features: OutputFeatures::DEFAULT_OUTPUT,
-			commit: output_commit,
-			proof: keychain
-				.range_proof(100, &key_id1, output_commit, None, msg.to_proof_message())
-				.unwrap(),
-		};
-
-		let kernel = core::transaction::TxKernel::empty()
-			.with_fee(5)
-			.with_lock_height(0);
-
-		let test_transaction =
-			core::transaction::Transaction::new(inputs, vec![output], vec![kernel]);
-
-		let test_pool_entry = PoolEntry::new(&test_transaction);
-
-		let incoming_edge_1 = Edge::new(
-			Some(random_hash()),
-			Some(core::hash::ZERO_HASH),
-			OutputIdentifier::from_output(&output),
-		);
-
-		let mut test_graph = DirectedGraph::empty();
-
-		test_graph.add_entry(test_pool_entry, vec![incoming_edge_1]);
-
-		assert_eq!(test_graph.vertices.len(), 1);
-		assert_eq!(test_graph.roots.len(), 0);
-		assert_eq!(test_graph.edges.len(), 1);
-	}
-
-	/// For testing/debugging: a random tx hash
-	fn random_hash() -> core::hash::Hash {
-		let hash_bytes: [u8; 32] = rand::random();
-		core::hash::Hash(hash_bytes)
-	}
 }
