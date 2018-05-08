@@ -164,6 +164,7 @@ fn main() {
 								.short("p")
 								.long("peer")
 								.help("Peer ip and port (e.g. 10.12.12.13:13414)")
+								.required(true)
 								.takes_value(true)))
 				.subcommand(SubCommand::with_name("unban")
 							.about("Unban peer")
@@ -171,6 +172,7 @@ fn main() {
 								.short("p")
 								.long("peer")
 								.help("Peer ip and port (e.g. 10.12.12.13:13414)")
+								.required(true)
 								.takes_value(true))))
 
 
@@ -475,21 +477,21 @@ fn client_command(client_args: &ArgMatches, global_config: GlobalConfig) {
 			client::list_connected_peers(&server_config);
 		}
 		("ban", Some(peer_args)) => {
-			if let Some(peer) = peer_args.value_of("peer") {
-				if let Ok(addr) = peer.parse() {
-					client::ban_peer(&server_config, &addr);
-				} else {
-					panic!("Invalid peer address format");
-				}
+			let peer = peer_args.value_of("peer").unwrap();
+
+			if let Ok(addr) = peer.parse() {
+				client::ban_peer(&server_config, &addr);
+			} else {
+				panic!("Invalid peer address format");
 			}
 		}
 		("unban", Some(peer_args)) => {
-			if let Some(peer) = peer_args.value_of("peer") {
-				if let Ok(addr) = peer.parse() {
-					client::unban_peer(&server_config, &addr);
-				} else {
-					panic!("Invalid peer address format");
-				}
+			let peer = peer_args.value_of("peer").unwrap();
+
+			if let Ok(addr) = peer.parse() {
+				client::unban_peer(&server_config, &addr);
+			} else {
+				panic!("Invalid peer address format");
 			}
 		}
 		_ => panic!("Unknown client command, use 'grin help client' for details"),
