@@ -24,10 +24,12 @@ use itertools::Itertools;
 
 use core::ser::AsFixedBytes;
 use chain;
+use chain::types::BlockSums;
 use pool;
 use core::consensus;
 use core::core;
 use core::core::Transaction;
+use core::core::hash::Hashed;
 use core::ser;
 use keychain::{Identifier, Keychain};
 use wallet;
@@ -137,7 +139,14 @@ fn build_block(
 	wallet_listener_url: Option<String>,
 ) -> Result<(core::Block, BlockFees), Error> {
 	// prepare the block header timestamp
-	let head = chain.head_header().unwrap();
+	let head = chain.head_header()?;
+
+	let prev_sums = if head.height == 0 {
+		BlockSums::default()
+	} else {
+		chain.get_block_sums(&head.hash())?
+	};
+
 	let mut now_sec = time::get_time().sec;
 	let head_sec = head.timestamp.to_timespec().sec;
 	if now_sec <= head_sec {
@@ -168,7 +177,7 @@ fn build_block(
 	let mut b = core::Block::with_reward(&head, txs, output, kernel, difficulty.clone())?;
 
 	// making sure we're not spending time mining a useless block
-	b.validate(&head)?;
+	b.validate(&prev_sums.output_sum, &prev_sums.kernel_sum)?;
 
 	let mut rng = rand::OsRng::new().unwrap();
 	b.header.nonce = rng.gen();

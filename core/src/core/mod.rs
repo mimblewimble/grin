@@ -233,6 +233,7 @@ mod test {
 	use ser;
 	use keychain;
 	use keychain::Keychain;
+	use util::secp_static;
 
 	#[test]
 	pub fn test_amount_to_hr() {
@@ -615,6 +616,8 @@ mod test {
 		let keychain = keychain::Keychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 
+		let zero_commit = secp_static::commit_to_zero_value();
+
 		let previous_header = BlockHeader::default();
 
 		let b = Block::new(
@@ -624,13 +627,17 @@ mod test {
 			&key_id,
 			Difficulty::one(),
 		).unwrap();
-		b.cut_through().validate(&previous_header).unwrap();
+		b.cut_through()
+			.validate(&zero_commit, &zero_commit)
+			.unwrap();
 	}
 
 	#[test]
 	fn reward_with_tx_block() {
 		let keychain = keychain::Keychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
+
+		let zero_commit = secp_static::commit_to_zero_value();
 
 		let mut tx1 = tx2i1o();
 		tx1.validate().unwrap();
@@ -644,13 +651,18 @@ mod test {
 			&key_id,
 			Difficulty::one(),
 		).unwrap();
-		block.cut_through().validate(&previous_header).unwrap();
+		block
+			.cut_through()
+			.validate(&zero_commit, &zero_commit)
+			.unwrap();
 	}
 
 	#[test]
 	fn simple_block() {
 		let keychain = keychain::Keychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
+
+		let zero_commit = secp_static::commit_to_zero_value();
 
 		let mut tx1 = tx2i1o();
 		let mut tx2 = tx1i1o();
@@ -664,7 +676,7 @@ mod test {
 			&key_id,
 			Difficulty::one(),
 		).unwrap();
-		b.validate(&previous_header).unwrap();
+		b.validate(&zero_commit, &zero_commit).unwrap();
 	}
 
 	#[test]
@@ -674,6 +686,8 @@ mod test {
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
+
+		let zero_commit = secp_static::commit_to_zero_value();
 
 		// first check we can add a timelocked tx where lock height matches current
 		// block height and that the resulting block is valid
@@ -696,7 +710,7 @@ mod test {
 			&key_id3.clone(),
 			Difficulty::one(),
 		).unwrap();
-		b.validate(&previous_header).unwrap();
+		b.validate(&zero_commit, &zero_commit).unwrap();
 
 		// now try adding a timelocked tx where lock height is greater than current
 		// block height
@@ -719,7 +733,7 @@ mod test {
 			&key_id3.clone(),
 			Difficulty::one(),
 		).unwrap();
-		match b.validate(&previous_header) {
+		match b.validate(&zero_commit, &zero_commit) {
 			Err(KernelLockHeight(height)) => {
 				assert_eq!(height, 2);
 			}
