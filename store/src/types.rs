@@ -16,7 +16,7 @@ use memmap;
 
 use std::cmp;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufRead, BufReader, ErrorKind, Write};
+use std::io::{self, BufRead, BufReader, BufWriter, ErrorKind, Write};
 use std::os::unix::io::AsRawFd;
 use std::io::Read;
 use std::path::Path;
@@ -181,7 +181,7 @@ impl AppendOnlyFile {
 			Ok(())
 		} else {
 			let mut reader = File::open(self.path.clone())?;
-			let mut writer = File::create(target.clone())?;
+			let mut writer = BufWriter::new(File::create(target.clone())?);
 
 			// align the buffer on prune_len to avoid misalignments
 			let mut buf = vec![0; (prune_len * 256) as usize];
@@ -293,7 +293,6 @@ impl RemoveLog {
 
 	/// Flush the positions to remove to file.
 	pub fn flush(&mut self) -> io::Result<()> {
-		let mut file = File::create(self.path.clone())?;
 		for elmt in &self.removed_tmp {
 			match self.removed.binary_search(&elmt) {
 				Ok(_) => continue,
@@ -302,12 +301,13 @@ impl RemoveLog {
 				}
 			}
 		}
+		let mut file = BufWriter::new(File::create(self.path.clone())?);
 		for elmt in &self.removed {
 			file.write_all(&ser::ser_vec(&elmt).unwrap()[..])?;
 		}
 		self.removed_tmp = vec![];
 		self.removed_bak = vec![];
-		file.sync_data()
+		file.flush()
 	}
 
 	/// Discard pending changes
