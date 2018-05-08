@@ -51,8 +51,7 @@ See [Troubleshooting](https://github.com/mimblewimble/docs/wiki/Troubleshooting)
 A successful build gets you:
 
  - `target/debug/grin` - the main grin binary
- - `target/debug/plugins/*` - mining plugins (optional)
-
+ 
 Grin is still sensitive to the directory from which it's run. Make sure you
 always run it within a directory that contains a `grin.toml` configuration and
 stay consistent as to where it's run from.
