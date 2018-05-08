@@ -88,7 +88,7 @@ fn data_files() {
 				global::sizeshift(),
 			).unwrap();
 
-			let bhash = b.hash();
+			let _bhash = b.hash();
 			chain
 				.process_block(b.clone(), chain::Options::MINE)
 				.unwrap();
@@ -114,43 +114,43 @@ fn data_files() {
 	}
 }
 
-fn prepare_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
-	let mut b = prepare_block_nosum(kc, prev, diff, vec![]);
+fn _prepare_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
+	let mut b = _prepare_block_nosum(kc, prev, diff, vec![]);
 	chain.set_txhashset_roots(&mut b, false).unwrap();
 	b
 }
 
-fn prepare_block_tx(
+fn _prepare_block_tx(
 	kc: &Keychain,
 	prev: &BlockHeader,
 	chain: &Chain,
 	diff: u64,
 	txs: Vec<&Transaction>,
 ) -> Block {
-	let mut b = prepare_block_nosum(kc, prev, diff, txs);
+	let mut b = _prepare_block_nosum(kc, prev, diff, txs);
 	chain.set_txhashset_roots(&mut b, false).unwrap();
 	b
 }
 
-fn prepare_fork_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
-	let mut b = prepare_block_nosum(kc, prev, diff, vec![]);
+fn _prepare_fork_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
+	let mut b = _prepare_block_nosum(kc, prev, diff, vec![]);
 	chain.set_txhashset_roots(&mut b, true).unwrap();
 	b
 }
 
-fn prepare_fork_block_tx(
+fn _prepare_fork_block_tx(
 	kc: &Keychain,
 	prev: &BlockHeader,
 	chain: &Chain,
 	diff: u64,
 	txs: Vec<&Transaction>,
 ) -> Block {
-	let mut b = prepare_block_nosum(kc, prev, diff, txs);
+	let mut b = _prepare_block_nosum(kc, prev, diff, txs);
 	chain.set_txhashset_roots(&mut b, true).unwrap();
 	b
 }
 
-fn prepare_block_nosum(
+fn _prepare_block_nosum(
 	kc: &Keychain,
 	prev: &BlockHeader,
 	diff: u64,

@@ -56,7 +56,7 @@ impl ContextManager {
 	}
 
 	/// Creates a context for a transaction id if required
-	/// otherwise doesn nothing
+	/// otherwise does nothing
 	pub fn create_context(
 		&mut self,
 		secp: &secp::Secp256k1,
