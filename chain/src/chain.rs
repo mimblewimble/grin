@@ -663,7 +663,11 @@ impl Chain {
 			return Ok(());
 		}
 
-		debug!(LOGGER, "Compaction remove blocks older than {}.", head.height - horizon);
+		debug!(
+			LOGGER,
+			"Compaction remove blocks older than {}.",
+			head.height - horizon
+		);
 		let mut count = 0;
 		let mut current = self.store.get_header_by_height(head.height - horizon - 1)?;
 		loop {
