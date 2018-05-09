@@ -24,16 +24,12 @@ use std::{error, fmt};
 use consensus;
 use consensus::VerifySortOrder;
 use core::Committed;
-use core::global;
-use core::BlockHeader;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
 use keychain;
-use keychain::{BlindingFactor, Keychain};
-use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
-          WriteableSorted, Writer};
+use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, WriteableSorted,
+          Writer};
 use util;
-use util::LOGGER;
 
 bitflags! {
 	/// Options for a kernel's structure or use

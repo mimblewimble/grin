@@ -106,8 +106,9 @@ pub enum Error {
 	GenesisBlockRequired,
 	/// Error from underlying tx handling
 	Transaction(transaction::Error),
-
+	/// Error from underlying Merkle proof.
 	MerkleProof(MerkleProofError),
+	/// Attempt to spend a coinbase output that has not matured sufficiently.
 	ImmatureCoinbase,
 	/// Anything else
 	Other(String),

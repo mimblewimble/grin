@@ -98,14 +98,20 @@ pub const MAX_PEAKS: u64 = 100;
 /// Maximum path for a Merkle proof
 pub const MAX_PATH: u64 = 100;
 
+/// Merkle proof errors.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MerkleProofError {
-	RootMismatch(),
+	/// Merkle proof root hash does not match when attempting to verify.
+	RootMismatch,
 }
 
+/// A Merkle proof that proves a particular element exists in the MMR.
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub struct MerkleProof {
+	/// The size of the MMR at the time the proof was created.
 	pub mmr_size: u64,
+	/// The sibling path from the leaf up to the final sibling hashing to the
+	/// root.
 	pub path: Vec<Hash>,
 }
 
@@ -162,8 +168,8 @@ impl MerkleProof {
 		Ok(res)
 	}
 
-	// Verifies the Merkle proof against the provided root hash, element and
-	// position.
+	/// Verifies the Merkle proof against the provided
+	/// root hash, element and position in the MMR.
 	pub fn verify(
 		&self,
 		root: Hash,
@@ -174,9 +180,9 @@ impl MerkleProof {
 		proof.verify_consume(root, element, node_pos)
 	}
 
-	// Consumes the Merkle proof while verifying it.
-	// The proof can no longer beused by the caller after dong this.
-	// Caller must clone() the proof first.
+	/// Consumes the Merkle proof while verifying it.
+	/// The proof can no longer beused by the caller after dong this.
+	/// Caller must clone() the proof first.
 	fn verify_consume(
 		&mut self,
 		root: Hash,
@@ -200,13 +206,13 @@ impl MerkleProof {
 			if root == node_hash {
 				return Ok(());
 			} else {
-				return Err(MerkleProofError::RootMismatch());
+				return Err(MerkleProofError::RootMismatch);
 			}
 		} else if self.mmr_size == 1 {
 			if self.path.len() == 1 && root == node_hash && vec![root] == self.path {
 				return Ok(());
 			} else {
-				return Err(MerkleProofError::RootMismatch());
+				return Err(MerkleProofError::RootMismatch);
 			}
 		}
 
@@ -350,6 +356,7 @@ where
 		res.expect("no root, invalid tree")
 	}
 
+	/// Build a Merkle proof for the element at the given position.
 	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
 		debug!(LOGGER, "merkle_proof  {}, last_pos {}", pos, self.last_pos);
 
