@@ -474,7 +474,10 @@ impl<'a> Extension<'a> {
 					return Err(Error::TxHashSetErr(format!("output pmmr hash mismatch")));
 				}
 
-				// verify maturity via Merkle proof for each input spending a coinbase output
+				// Verify maturity via Merkle proof for each input spending a coinbase output.
+				// We found the read_elem based on the hash so we know
+				// we are being honest about the input features
+				// (not spending a coinbase output, pretending it was a regular output).
 				if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
 					self.verify_maturity_via_merkle_proof(input, height)?;
 				}
