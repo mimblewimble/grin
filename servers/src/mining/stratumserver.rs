@@ -463,16 +463,16 @@ impl StratumServer {
 			return (err, true);
 		}
 		let submitted_by = match worker.login.clone() {
-			None => "unknown".to_string(),
+			None => worker.id.to_string(),
 			Some(login) => login.clone()
 		};
 		info!(
 			LOGGER,
-			"(Server ID: {}) Found proof of work, added block {} with nonce {} at height {} by worker {}",
+			"(Server ID: {}) Found POW for block with hash {} at height {} using nonce {} submitted by worker {}",
 			self.id,
 			b.hash(),
-			b.header.nonce,
 			b.header.height,
+			b.header.nonce,
 			submitted_by,
 		);
 		worker_stats.num_accepted += 1;
