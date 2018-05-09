@@ -29,8 +29,6 @@ use core::transaction;
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 use global;
 use keychain;
-use util::kernel_sig_msg;
-use keychain::BlindingFactor;
 use util::LOGGER;
 use util::{secp, secp_static, static_secp_instance};
 

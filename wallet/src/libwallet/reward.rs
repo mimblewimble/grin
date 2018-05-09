@@ -17,7 +17,7 @@
 
 use keychain;
 
-use core::core::{Output, OutputFeatures, ProofMessageElements, TxKernel};
+use core::core::{Output, OutputFeatures, TxKernel};
 use core::consensus::reward;
 use libwallet::{aggsig, proof};
 use libwallet::error::Error;
@@ -33,18 +33,10 @@ pub fn output(
 ) -> Result<(Output, TxKernel), Error> {
 	let value = reward(fees);
 	let commit = keychain.commit(value, key_id)?;
-	let msg = ProofMessageElements::new(value, key_id);
 
 	trace!(LOGGER, "Block reward - Pedersen Commit is: {:?}", commit,);
 
-	let rproof = proof::create(
-		keychain,
-		value,
-		key_id,
-		commit,
-		None,
-		msg.to_proof_message(),
-	)?;
+	let rproof = proof::create(keychain, value, key_id, commit, None)?;
 
 	let output = Output {
 		features: OutputFeatures::COINBASE_OUTPUT,

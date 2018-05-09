@@ -23,7 +23,6 @@ pub mod common;
 use grin_core::core::{Output, OutputFeatures};
 use grin_core::ser;
 use keychain::Keychain;
-use util::secp;
 use wallet::libwallet::proof;
 
 #[test]
@@ -31,8 +30,7 @@ fn test_output_ser_deser() {
 	let keychain = Keychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
 	let commit = keychain.commit(5, &key_id).unwrap();
-	let msg = secp::pedersen::ProofMessage::empty();
-	let proof = proof::create(&keychain, 5, &key_id, commit, None, msg).unwrap();
+	let proof = proof::create(&keychain, 5, &key_id, commit, None).unwrap();
 
 	let out = Output {
 		features: OutputFeatures::DEFAULT_OUTPUT,

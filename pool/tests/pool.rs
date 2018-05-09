@@ -26,7 +26,7 @@ extern crate time;
 
 use std::collections::HashMap;
 
-use core::core::transaction::{self, ProofMessageElements};
+use core::core::transaction;
 use core::core::{OutputIdentifier, Transaction};
 use core::core::block;
 
@@ -1097,16 +1097,8 @@ fn timelocked_transaction(
 fn test_output(value: u64) -> transaction::Output {
 	let keychain = keychain_for_tests();
 	let key_id = keychain.derive_key_id(value as u32).unwrap();
-	let msg = ProofMessageElements::new(value, &key_id);
 	let commit = keychain.commit(value, &key_id).unwrap();
-	let proof = proof::create(
-		&keychain,
-		value,
-		&key_id,
-		commit,
-		None,
-		msg.to_proof_message(),
-	).unwrap();
+	let proof = proof::create(&keychain, value, &key_id, commit, None).unwrap();
 	transaction::Output {
 		features: transaction::OutputFeatures::DEFAULT_OUTPUT,
 		commit: commit,
@@ -1118,16 +1110,8 @@ fn test_output(value: u64) -> transaction::Output {
 fn test_coinbase_output(value: u64) -> transaction::Output {
 	let keychain = keychain_for_tests();
 	let key_id = keychain.derive_key_id(value as u32).unwrap();
-	let msg = ProofMessageElements::new(value, &key_id);
 	let commit = keychain.commit(value, &key_id).unwrap();
-	let proof = proof::create(
-		&keychain,
-		value,
-		&key_id,
-		commit,
-		None,
-		msg.to_proof_message(),
-	).unwrap();
+	let proof = proof::create(&keychain, value, &key_id, commit, None).unwrap();
 	transaction::Output {
 		features: transaction::OutputFeatures::COINBASE_OUTPUT,
 		commit: commit,

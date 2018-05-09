@@ -99,6 +99,8 @@ pub fn outputs_batch(
 }
 
 // TODO - wrap the many return values in a struct
+// TODO - this won't work on current consensus breaking branch, needs to be
+// implemented and properly tested before testnet3
 fn find_outputs_with_key(
 	config: &WalletConfig,
 	keychain: &Keychain,
@@ -140,16 +142,9 @@ fn find_outputs_with_key(
 		// message 3 times, indicating a strong match. Also, sec_key provided
 		// to unwind in this case will be meaningless. With only the nonce known
 		// only the first 32 bytes of the recovered message will be accurate
-		let info = proof::rewind(
-			keychain,
-			&skey,
-			output.commit,
-			None,
-			output.range_proof().unwrap(),
-		).unwrap();
-		let message = ProofMessageElements::from_proof_message(info.message).unwrap();
-		let value = message.value();
-		if value.is_err() {
+		let info =
+			proof::rewind(keychain, output.commit, None, output.range_proof().unwrap()).unwrap();
+		if info.success == false {
 			continue;
 		}
 		// we have a match, now check through our key iterations to find a partial match
@@ -179,16 +174,9 @@ fn find_outputs_with_key(
 
 			found = true;
 			// we have a partial match, let's just confirm
-			let info = proof::rewind(
-				keychain,
-				key_id,
-				output.commit,
-				None,
-				output.range_proof().unwrap(),
-			).unwrap();
-			let message = ProofMessageElements::from_proof_message(info.message).unwrap();
-			let value = message.value();
-			if value.is_err() || !message.zeroes_correct() {
+			let info = proof::rewind(keychain, output.commit, None, output.range_proof().unwrap())
+				.unwrap();
+			if info.success == false {
 				continue;
 			}
 			let value = info.value;

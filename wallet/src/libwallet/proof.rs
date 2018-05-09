@@ -18,7 +18,6 @@ use keychain::Keychain;
 use util::secp::pedersen::{Commitment, ProofInfo, ProofMessage, RangeProof};
 use util::secp::key::SecretKey;
 use util::secp::{self, Secp256k1};
-use util::logger::LOGGER;
 use keychain::extkey::Identifier;
 use libwallet::error::Error;
 use blake2;
@@ -44,23 +43,11 @@ pub fn create(
 	key_id: &Identifier,
 	_commit: Commitment,
 	extra_data: Option<Vec<u8>>,
-	msg: ProofMessage,
 ) -> Result<RangeProof, Error> {
 	let commit = k.commit(amount, key_id)?;
 	let skey = k.derived_key(key_id)?;
 	let nonce = create_nonce(k, &commit);
-	if msg.len() == 0 {
-		return Ok(k.secp().bullet_proof(amount, skey, nonce, extra_data, None));
-	} else {
-		if msg.len() != 64 {
-			error!(LOGGER, "Bullet proof message must be 64 bytes.");
-			return Err(Error::RangeProof(
-				"Bullet proof message must be 64 bytes".to_string(),
-			));
-		}
-	}
-	return Ok(k.secp()
-		.bullet_proof(amount, skey, nonce, extra_data, Some(msg)));
+	Ok(k.secp().bullet_proof(amount, skey, nonce, extra_data))
 }
 
 pub fn verify(
@@ -78,30 +65,20 @@ pub fn verify(
 
 pub fn rewind(
 	k: &Keychain,
-	key_id: &Identifier,
 	commit: Commitment,
 	extra_data: Option<Vec<u8>>,
 	proof: RangeProof,
 ) -> Result<ProofInfo, Error> {
-	let skey = k.derived_key(key_id)?;
 	let nonce = create_nonce(k, &commit);
 	let proof_message = k.secp()
-		.unwind_bullet_proof(commit, skey, nonce, extra_data, proof);
+		.rewind_bullet_proof(commit, nonce, extra_data, proof);
 	let proof_info = match proof_message {
-		Ok(p) => ProofInfo {
-			success: true,
-			value: 0,
-			message: p,
-			mlen: 0,
-			min: 0,
-			max: 0,
-			exp: 0,
-			mantissa: 0,
-		},
+		Ok(p) => p,
 		Err(_) => ProofInfo {
 			success: false,
 			value: 0,
 			message: ProofMessage::empty(),
+			blinding: SecretKey([0; secp::constants::SECRET_KEY_SIZE]),
 			mlen: 0,
 			min: 0,
 			max: 0,

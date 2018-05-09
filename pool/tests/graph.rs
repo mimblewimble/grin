@@ -23,7 +23,6 @@ extern crate rand;
 
 use keychain::Keychain;
 use core::core::OutputFeatures;
-use core::core::transaction::ProofMessageElements;
 use wallet::libwallet::proof;
 
 #[test]
@@ -50,19 +49,10 @@ fn test_add_entry() {
 		),
 	];
 
-	let msg = ProofMessageElements::new(100, &key_id1);
-
 	let output = core::core::transaction::Output {
 		features: OutputFeatures::DEFAULT_OUTPUT,
 		commit: output_commit,
-		proof: proof::create(
-			&keychain,
-			100,
-			&key_id1,
-			output_commit,
-			None,
-			msg.to_proof_message(),
-		).unwrap(),
+		proof: proof::create(&keychain, 100, &key_id1, output_commit, None).unwrap(),
 	};
 
 	let kernel = core::core::transaction::TxKernel::empty()
