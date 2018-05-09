@@ -133,17 +133,22 @@ impl BlockChain for DummyChainImpl {
 		}
 	}
 
-	fn is_matured(&self, input: &Input, height: u64) -> Result<(), PoolError> {
+	fn verify_maturity(&self, input: &Input) -> Result<(), PoolError> {
 		if !input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
 			return Ok(());
 		}
+
 		let block_hash = input.block_hash.expect("requires a block hash");
+
 		let headers = self.block_headers.read().unwrap();
+		let head = self.head_header().expect("requires at least one header");
+
 		if let Some(h) = headers.iter().find(|x| x.hash() == block_hash) {
-			if h.height + global::coinbase_maturity() < height {
+			if h.height + global::coinbase_maturity() <= head.height {
 				return Ok(());
 			}
 		}
+
 		Err(PoolError::InvalidTx(transaction::Error::ImmatureCoinbase))
 	}
 

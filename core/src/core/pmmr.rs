@@ -103,7 +103,7 @@ pub enum MerkleProofError {
 	RootMismatch(),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub struct MerkleProof {
 	pub mmr_size: u64,
 	pub path: Vec<Hash>,

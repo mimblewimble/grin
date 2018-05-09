@@ -157,12 +157,12 @@ pub enum PoolError {
 	},
 	/// A failed deaggregation error
 	FailedDeaggregation,
+	/// Attempt to add a transaction to the pool that spends
+	/// a coinbase output that has not matured sufficiently.
+	ImmatureCoinbase,
 	/// Attempt to add a transaction to the pool with lock_height
 	/// greater than height of current block
-	ImmatureTransaction {
-		/// The lock height of the invalid transaction
-		lock_height: u64,
-	},
+	ImmatureTransaction,
 	/// An orphan successfully added to the orphans set
 	OrphanTransaction,
 	/// TODO - wip, just getting imports working, remove this and use more
@@ -205,9 +205,9 @@ pub trait BlockChain {
 	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<hash::Hash, PoolError>;
 
 	/// Check if an output being spent by the input has sufficiently matured.
-	/// This is only applicable for coinbase outputs (1,000 blocks).
+	/// This is only applicable for coinbase outputs (1,000 blocks on mainnet).
 	/// Non-coinbase outputs will always pass this check.
-	fn is_matured(&self, input: &Input, height: u64) -> Result<(), PoolError>;
+	fn verify_maturity(&self, input: &Input) -> Result<(), PoolError>;
 
 	/// Get the block header at the head
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError>;

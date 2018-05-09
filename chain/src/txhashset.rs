@@ -538,22 +538,35 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	/// Verify the maturity of an input spending a coinbase output
+	/// by checking the height of the block in question
+	/// and verifying the output existed at the time of that block
+	/// via the Merkle proof.
+	/// The Merkle proof shows the output must have existed at that block
+	/// as it is included in the output_root hash committed to in the block header.
 	pub fn verify_maturity_via_merkle_proof(
 		&self,
 		input: &Input,
 		height: u64,
 	) -> Result<(), Error> {
+		// get the headers based on the block hash specified in the input
 		let header = self.commit_index.get_block_header(&input.block_hash())?;
 
+		// Check that the height indicates it has matured sufficiently
+		// we will check the Merkle proof below to ensure we are being
+		// honest about the height
 		if header.height + global::coinbase_maturity() >= height {
 			return Err(Error::ImmatureCoinbase);
 		}
 
+		// We need the MMR pos to verify the Merkle proof
 		let pos = self.get_output_pos(&input.commitment())?;
-		let hash = self.output_pmmr
-			.get_hash(pos)
-			.ok_or(Error::TxHashSetErr(format!("could not find hash in MMR")))?;
-		let res = input.merkle_proof().verify(header.output_root, hash, pos)?;
+
+		let out_id = OutputIdentifier::from_input(input);
+		let res = input
+			.merkle_proof()
+			.verify(header.output_root, &out_id, pos)?;
+
 		Ok(res)
 	}
 
