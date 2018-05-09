@@ -149,6 +149,7 @@ fn accept_workers(
 
 pub struct Worker {
 	id: String,
+	login: Option<String>,
 	stream: BufStream<TcpStream>,
 	error: bool,
 	authenticated: bool,
@@ -159,6 +160,7 @@ impl Worker {
 	pub fn new(id: String, stream: BufStream<TcpStream>) -> Worker {
 		Worker {
 			id: id,
+			login: None,
 			stream: stream,
 			error: false,
 			authenticated: false,
@@ -299,15 +301,12 @@ impl StratumServer {
 					// Call the handler function for requested method
 					let (response, err) = match request.method.as_str() {
 						"login" => {
-							let (response, err) = self.handle_login(request.params);
-							// XXX TODO Future? - Validate username and password
-							if err == false {
-								workers_l[num].authenticated = true;
-							}
+							let (response, err) = self.handle_login(request.params, &mut workers_l[num]);
 							(response, err)
 						}
 						"submit" => self.handle_submit(
 							request.params,
+							&mut workers_l[num],
 							&mut stratum_stats.worker_stats[worker_stats_id],
 						),
 						"keepalive" => self.handle_keepalive(),
@@ -392,19 +391,22 @@ impl StratumServer {
 	}
 
 	// Handle LOGIN message
-	fn handle_login(&self, params: Option<String>) -> (String, bool) {
+	fn handle_login(&self, params: Option<String>, worker: &mut Worker) -> (String, bool) {
 		// Extract the params string into a LoginParams struct
 		let params_str = match params {
 			Some(val) => val,
 			None => String::from("{}"),
 		};
-		let _login_params: LoginParams = match serde_json::from_str(&params_str) {
+		let login_params: LoginParams = match serde_json::from_str(&params_str) {
 			Ok(val) => val,
 			Err(_e) => {
 				let r = r#"{"code": -32600, "message": "Invalid Request"}"#;
 				return (String::from(r), true);
 			}
 		};
+		worker.login = Some(login_params.login);
+		// XXX TODO Future? - Validate login and password
+		worker.authenticated = true;
 		return (String::from("ok"), false);
 	}
 
@@ -414,6 +416,7 @@ impl StratumServer {
 	fn handle_submit(
 		&self,
 		params: Option<String>,
+		worker: &mut Worker,
 		worker_stats: &mut WorkerStats,
 	) -> (String, bool) {
 		// Extract the params string into a SubmitParams struct
@@ -436,13 +439,6 @@ impl StratumServer {
 			b.header.nonce = submit_params.nonce;
 			b.header.pow.proof_size = submit_params.pow.len();
 			b.header.pow.nonces = submit_params.pow;
-			info!(
-				LOGGER,
-				"(Server ID: {}) Found proof of work, adding block {}",
-				self.id,
-				b.hash()
-			);
-			// Submit the block to grin server (known here as "self.miner")
 			let res = self.chain.process_block(b.clone(), chain::Options::MINE);
 			if let Err(e) = res {
 				error!(
@@ -466,6 +462,19 @@ impl StratumServer {
 			let err = e.to_string();
 			return (err, true);
 		}
+		let submitted_by = match worker.login.clone() {
+			None => worker.id.to_string(),
+			Some(login) => login.clone()
+		};
+		info!(
+			LOGGER,
+			"(Server ID: {}) Found POW for block with hash {} at height {} using nonce {} submitted by worker {}",
+			self.id,
+			b.hash(),
+			b.header.height,
+			b.header.nonce,
+			submitted_by,
+		);
 		worker_stats.num_accepted += 1;
 		return (String::from("ok"), false);
 	} // handle submit a solution
