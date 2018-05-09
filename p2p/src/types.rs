@@ -37,7 +37,8 @@ pub const MAX_PEER_ADDRS: u32 = 256;
 /// Maximum number of block header hashes to send as part of a locator
 pub const MAX_LOCATORS: u32 = 20;
 
-/// Dandelion relay time
+/// Dandelion relay time. The frequency at which a new Dandelion relay is
+/// selected. Default every 10 minutes.
 const DANDELION_RELAY_TIME: i64 = 600;
 
 /// How long a banned peer should be banned for

@@ -347,7 +347,6 @@ where
 					new_unspents,
 				);
 
-				self.adapter.stem_tx_accepted(&tx);
 				self.stem_transactions.insert(tx_hash, Box::new(tx));
 				// Track this transaction
 				self.time_stem_transactions.insert(tx_hash, timer);
@@ -1846,7 +1845,8 @@ mod tests {
 				accept_fee_base: 0,
 				max_pool_size: 10_000,
 				dandelion_probability: 90,
-				dandelion_embargo: 30,
+				dandelion_embargo: 300,
+				dandelion_patience: 30,
 			},
 			time_stem_transactions: HashMap::new(),
 			stem_transactions: HashMap::new(),

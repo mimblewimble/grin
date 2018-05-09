@@ -48,6 +48,10 @@ pub struct PoolConfig {
 	/// Default embargo for Dandelion transaction
 	#[serde = "default_dandelion_embargo"]
 	pub dandelion_embargo: i64,
+
+	/// Default embargo for Dandelion transaction
+	#[serde = "default_dandelion_patience"]
+	pub dandelion_patience: i64,
 }
 
 impl Default for PoolConfig {
@@ -57,6 +61,7 @@ impl Default for PoolConfig {
 			max_pool_size: default_max_pool_size(),
 			dandelion_probability: default_dandelion_probability(),
 			dandelion_embargo: default_dandelion_embargo(),
+			dandelion_patience: default_dandelion_patience(),
 		}
 	}
 }
@@ -71,6 +76,9 @@ fn default_dandelion_probability() -> usize {
 	90
 }
 fn default_dandelion_embargo() -> i64 {
+	300
+}
+fn default_dandelion_patience() -> i64 {
 	30
 }
 
