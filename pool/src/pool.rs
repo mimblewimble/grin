@@ -226,8 +226,6 @@ where
 		// Is the transaction valid?
 		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
 
-		// Check that all the tx inputs spending coinbase outputs have sufficiently
-		// matured.
 		for input in &tx.inputs {
 			self.blockchain.verify_maturity(&input)?;
 		}

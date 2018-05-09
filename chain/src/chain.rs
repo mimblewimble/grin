@@ -462,6 +462,13 @@ impl Chain {
 	/// Verify the maturity of the input (assumes it is spending a coinbase output)
 	/// via the Merkle proof and the height of the current chain head.
 	pub fn verify_maturity(&self, input: &Input) -> Result<(), Error> {
+		// First check the input refers to an actual unspent output.
+		// This takes the features into account so we can be sure
+		// nobody is being dishonest about features here.
+		// Specifically: coinbase vs non-coinbase features.
+		let out_id = OutputIdentifier::from_input(input);
+		self.is_unspent(&out_id)?;
+
 		if !input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
 			return Ok(());
 		}
