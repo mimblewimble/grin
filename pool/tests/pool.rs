@@ -579,7 +579,7 @@ fn test_immature_coinbase() {
 		};
 
 		let head_header = block::BlockHeader {
-			height: 4,
+			height: 5,
 			..block::BlockHeader::default()
 		};
 		chain_ref.store_head_header(&head_header);
