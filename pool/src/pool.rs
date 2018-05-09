@@ -291,8 +291,6 @@ where
 					}
 				}
 				Parent::BlockTransaction => {
-					// let height = head_header.height + 1;
-					// self.blockchain.is_matured(&input, height)?;
 					blockchain_refs.push(base);
 				}
 				Parent::Unknown => orphan_refs.push(base),
