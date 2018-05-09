@@ -222,7 +222,7 @@ impl LocalServerContainer {
 				"starting test Miner on port {}",
 				self.config.p2p_server_port
 			);
-			s.start_test_miner(wallet_url);
+			s.start_test_miner(Some(self.config.coinbase_wallet_address.clone()));
 		}
 
 		for p in &mut self.peer_list {
@@ -262,7 +262,11 @@ impl LocalServerContainer {
 		self.wallet_config.data_file_dir = self.working_dir.clone();
 
 		let _ = fs::create_dir_all(self.wallet_config.clone().data_file_dir);
-		wallet::WalletSeed::init_file(&self.wallet_config).unwrap();
+		let r = wallet::WalletSeed::init_file(&self.wallet_config);
+
+		if let Err(e) = r {
+			//panic!("Error initting wallet seed: {}", e);
+		}
 
 		let wallet_seed = wallet::WalletSeed::from_file(&self.wallet_config)
 			.expect("Failed to read wallet seed file.");

@@ -1,11 +1,25 @@
-// This file is (hopefully) temporary.
+// Copyright 2018 The Grin Developers
 //
-// It contains a trait based on (but not exactly equal to) the trait defined
-// for the blockchain Output set, discussed at
-// https://github.com/ignopeverell/grin/issues/29, and a dummy implementation
-// of said trait.
-// Notably, OutputDiff has been left off, and the question of how to handle
-// abstract return types has been deferred.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//! This file is (hopefully) temporary.
+//!
+//! It contains a trait based on (but not exactly equal to) the trait defined
+//! for the blockchain Output set, discussed at
+//! https://github.com/ignopeverell/grin/issues/29, and a dummy implementation
+//! of said trait.
+//! Notably, OutputDiff has been left off, and the question of how to handle
+//! abstract return types has been deferred.
 
 use std::collections::HashMap;
 use std::clone::Clone;
@@ -25,16 +39,19 @@ pub struct DummyOutputSet {
 
 #[allow(dead_code)]
 impl DummyOutputSet {
+	/// Empty output set
 	pub fn empty() -> DummyOutputSet {
 		DummyOutputSet {
 			outputs: HashMap::new(),
 		}
 	}
 
+	/// roots
 	pub fn root(&self) -> hash::Hash {
 		hash::ZERO_HASH
 	}
 
+	/// apply a block
 	pub fn apply(&self, b: &block::Block) -> DummyOutputSet {
 		let mut new_outputs = self.outputs.clone();
 
@@ -49,6 +66,7 @@ impl DummyOutputSet {
 		}
 	}
 
+	/// create with block
 	pub fn with_block(&mut self, b: &block::Block) {
 		for input in &b.inputs {
 			self.outputs.remove(&input.commitment());
@@ -58,12 +76,14 @@ impl DummyOutputSet {
 		}
 	}
 
+	/// rewind
 	pub fn rewind(&self, _: &block::Block) -> DummyOutputSet {
 		DummyOutputSet {
 			outputs: HashMap::new(),
 		}
 	}
 
+	/// get an output
 	pub fn get_output(&self, output_ref: &Commitment) -> Option<&transaction::Output> {
 		self.outputs.get(output_ref)
 	}
@@ -74,7 +94,7 @@ impl DummyOutputSet {
 		}
 	}
 
-	// only for testing: add an output to the map
+	/// only for testing: add an output to the map
 	pub fn with_output(&self, output: transaction::Output) -> DummyOutputSet {
 		let mut new_outputs = self.outputs.clone();
 		new_outputs.insert(output.commitment(), output);
@@ -94,6 +114,7 @@ pub struct DummyChainImpl {
 
 #[allow(dead_code)]
 impl DummyChainImpl {
+	/// new dummy chain
 	pub fn new() -> DummyChainImpl {
 		DummyChainImpl {
 			output: RwLock::new(DummyOutputSet {
@@ -152,8 +173,12 @@ impl DummyChain for DummyChainImpl {
 	}
 }
 
+/// Dummy chain trait
 pub trait DummyChain: BlockChain {
+	/// update output set
 	fn update_output_set(&mut self, new_output: DummyOutputSet);
+	/// apply a block
 	fn apply_block(&self, b: &block::Block);
+	/// store header
 	fn store_head_header(&self, block_header: &block::BlockHeader);
 }

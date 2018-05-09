@@ -120,7 +120,6 @@ mod test {
 	use global;
 	use core::target::Difficulty;
 	use genesis;
-	use global::ChainTypes;
 
 	/// We'll be generating genesis blocks differently
 	#[ignore]

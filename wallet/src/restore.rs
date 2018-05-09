@@ -21,6 +21,7 @@ use core::global;
 use types::{Error, ErrorKind, MerkleProofWrapper, OutputData, OutputStatus, WalletConfig,
             WalletData};
 use byteorder::{BigEndian, ByteOrder};
+use libwallet::proof;
 
 pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 	let url = format!("{}/v1/chain", config.check_node_api_http_addr);
@@ -139,10 +140,16 @@ fn find_outputs_with_key(
 		// message 3 times, indicating a strong match. Also, sec_key provided
 		// to unwind in this case will be meaningless. With only the nonce known
 		// only the first 32 bytes of the recovered message will be accurate
-		let info = keychain
-			.rewind_range_proof(output.commit, None, output.range_proof().unwrap())
-			.unwrap();
-		if info.success == false {
+		let info = proof::rewind(
+			keychain,
+			&skey,
+			output.commit,
+			None,
+			output.range_proof().unwrap(),
+		).unwrap();
+		let message = ProofMessageElements::from_proof_message(info.message).unwrap();
+		let value = message.value();
+		if value.is_err() {
 			continue;
 		}
 		// we have a match, now check through our key iterations to find a partial match
@@ -172,10 +179,16 @@ fn find_outputs_with_key(
 
 			found = true;
 			// we have a partial match, let's just confirm
-			let info = keychain
-				.rewind_range_proof(output.commit, None, output.range_proof().unwrap())
-				.unwrap();
-			if !info.success {
+			let info = proof::rewind(
+				keychain,
+				key_id,
+				output.commit,
+				None,
+				output.range_proof().unwrap(),
+			).unwrap();
+			let message = ProofMessageElements::from_proof_message(info.message).unwrap();
+			let value = message.value();
+			if value.is_err() || !message.zeroes_correct() {
 				continue;
 			}
 			let value = info.value;
