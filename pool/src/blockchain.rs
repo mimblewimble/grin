@@ -144,7 +144,7 @@ impl BlockChain for DummyChainImpl {
 		let head = self.head_header().expect("requires at least one header");
 
 		if let Some(h) = headers.iter().find(|x| x.hash() == block_hash) {
-			if h.height + global::coinbase_maturity() < head.height {
+			if h.height + global::coinbase_maturity() <= head.height + 1 {
 				return Ok(());
 			}
 		}
