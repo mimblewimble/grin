@@ -636,12 +636,7 @@ impl Chain {
 	/// Meanwhile, the chain will not be able to accept new blocks. It should
 	/// therefore be called judiciously.
 	pub fn compact(&self) -> Result<(), Error> {
-		// First check we can successfully validate the full chain state.
-		// If we cannot then do not attempt to compact.
-		// This should not be required long term - but doing this for debug purposes.
-		self.validate(true)?;
-
-		// Now compact the txhashset via the extension.
+		// Compact the txhashset via the extension.
 		{
 			let mut txhashes = self.txhashset.write().unwrap();
 			txhashes.compact()?;
@@ -654,7 +649,7 @@ impl Chain {
 		}
 
 		// Now check we can still successfully validate the chain state after
-		// compacting.
+		// compacting, shouldn't be necessary once all of this is well-oiled
 		self.validate(true)?;
 
 		// we need to be careful here in testing as 20 blocks is not that long
