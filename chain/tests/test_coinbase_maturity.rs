@@ -125,7 +125,7 @@ fn test_coinbase_maturity() {
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
 	match chain.set_txhashset_roots(&mut block, false) {
-		Err(Error::Transaction(transaction::Error::ImmatureCoinbase)) => (),
+		Err(Error::ImmatureCoinbase) => (),
 		_ => panic!("expected ImmatureCoinbase error here"),
 	}
 

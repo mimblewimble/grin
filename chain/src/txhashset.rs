@@ -545,7 +545,7 @@ impl<'a> Extension<'a> {
 	) -> Result<(), Error> {
 		let header = self.commit_index.get_block_header(&input.block_hash())?;
 
-		if header.height + global::coinbase_maturity() <= height {
+		if header.height + global::coinbase_maturity() >= height {
 			return Err(Error::ImmatureCoinbase);
 		}
 
