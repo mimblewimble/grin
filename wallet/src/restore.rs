@@ -21,6 +21,7 @@ use core::global;
 use types::{Error, ErrorKind, MerkleProofWrapper, OutputData, OutputStatus, WalletConfig,
             WalletData};
 use byteorder::{BigEndian, ByteOrder};
+use libwallet::proof;
 
 pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 	let url = format!("{}/v1/chain", config.check_node_api_http_addr);
@@ -98,6 +99,8 @@ pub fn outputs_batch(
 }
 
 // TODO - wrap the many return values in a struct
+// TODO - this won't work on current consensus breaking branch, needs to be
+// implemented and properly tested before testnet3
 fn find_outputs_with_key(
 	config: &WalletConfig,
 	keychain: &Keychain,
@@ -139,9 +142,8 @@ fn find_outputs_with_key(
 		// message 3 times, indicating a strong match. Also, sec_key provided
 		// to unwind in this case will be meaningless. With only the nonce known
 		// only the first 32 bytes of the recovered message will be accurate
-		let info = keychain
-			.rewind_range_proof(output.commit, None, output.range_proof().unwrap())
-			.unwrap();
+		let info =
+			proof::rewind(keychain, output.commit, None, output.range_proof().unwrap()).unwrap();
 		if info.success == false {
 			continue;
 		}
@@ -172,10 +174,9 @@ fn find_outputs_with_key(
 
 			found = true;
 			// we have a partial match, let's just confirm
-			let info = keychain
-				.rewind_range_proof(output.commit, None, output.range_proof().unwrap())
+			let info = proof::rewind(keychain, output.commit, None, output.range_proof().unwrap())
 				.unwrap();
-			if !info.success {
+			if info.success == false {
 				continue;
 			}
 			let value = info.value;

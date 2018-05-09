@@ -25,9 +25,11 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use core::{Input, Output, OutputFeatures, Transaction, TxKernel};
-use core::hash::Hash;
-use core::pmmr::MerkleProof;
+use core::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
+use core::core::hash::Hash;
+use core::core::pmmr::MerkleProof;
+use libwallet::{aggsig, proof};
+
 use keychain;
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 use util::LOGGER;
@@ -103,10 +105,7 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 			let commit = build.keychain.commit(value, &key_id).unwrap();
 			trace!(LOGGER, "Builder - Pedersen Commit is: {:?}", commit,);
 
-			let rproof = build
-				.keychain
-				.range_proof(value, &key_id, commit, None)
-				.unwrap();
+			let rproof = proof::create(&build.keychain, value, &key_id, commit, None).unwrap();
 
 			(
 				tx.with_output(Output {
@@ -212,7 +211,7 @@ pub fn transaction(
 
 	let skey = blind_sum.secret_key(&keychain.secp())?;
 	kern.excess = keychain.secp().commit(0, skey)?;
-	kern.excess_sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &blind_sum)?;
+	kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &blind_sum).unwrap();
 
 	tx.kernels.push(kern);
 
@@ -242,8 +241,8 @@ pub fn transaction_with_offset(
 	let skey1 = k1.secret_key(&keychain.secp())?;
 	let skey2 = k2.secret_key(&keychain.secp())?;
 
-	kern.excess = keychain.secp().commit(0, skey1)?;
-	kern.excess_sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &k1)?;
+	kern.excess = ctx.keychain.secp().commit(0, skey1)?;
+	kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &k1).unwrap();
 
 	// store the kernel offset (k2) on the tx itself
 	// commitments will sum correctly when including the offset
