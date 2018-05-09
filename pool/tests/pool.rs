@@ -532,11 +532,7 @@ pub fn test_pool_add_error() {
 		// should fail as invalid based on current height
 		let timelocked_tx_1 = timelocked_transaction(vec![9], vec![5], 10);
 		match write_pool.add_to_memory_pool(test_source(), timelocked_tx_1, false) {
-			Err(PoolError::ImmatureTransaction {
-				lock_height: height,
-			}) => {
-				assert_eq!(height, 10);
-			}
+			Err(PoolError::ImmatureTransaction) => {}
 			Err(e) => panic!("expected ImmatureTransaction error here - {:?}", e),
 			Ok(_) => panic!("expected ImmatureTransaction error here"),
 		};
@@ -1039,12 +1035,7 @@ fn test_transaction_with_coinbase_input(
 
 	let mut tx_elements = Vec::new();
 
-	let merkle_proof = MerkleProof {
-		node: Hash::default(),
-		root: Hash::default(),
-		peaks: vec![Hash::default()],
-		..MerkleProof::default()
-	};
+	let merkle_proof = MerkleProof::default();
 
 	let key_id = keychain.derive_key_id(input_value as u32).unwrap();
 	tx_elements.push(build::coinbase_input(
