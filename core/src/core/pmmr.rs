@@ -195,11 +195,6 @@ impl MerkleProof {
 			element.hash_with_index(node_pos - 1)
 		};
 
-		println!(
-			"*** verify - {:?}, {:?}, {:?}, {:?}, {:?}",
-			self.path, self.mmr_size, root, node_hash, node_pos
-		);
-
 		// handle special case of only a single entry in the MMR
 		// (no siblings to hash together)
 		if self.path.len() == 0 {
@@ -299,19 +294,15 @@ where
 
 	fn peak_path(&self, peak_pos: u64) -> Vec<Hash> {
 		let rhs = self.bag_the_rhs(peak_pos);
-		println!("rhs bagged - {:?}", rhs);
 		let mut res = peaks(self.last_pos)
 			.into_iter()
 			.filter(|x| x < &peak_pos)
 			.filter_map(|x| self.backend.get_from_file(x))
 			.collect::<Vec<_>>();
-		println!("lhs - {:?}", res);
 		res.reverse();
-		println!("lhs reversed - {:?}", res);
 		if let Some(rhs) = rhs {
 			res.insert(0, rhs);
 		}
-		println!("res - {:?}", res);
 		res
 	}
 
@@ -320,13 +311,6 @@ where
 	// If this return a hash then this is our peaks sibling.
 	// If none then the sibling of our peak is the peak to the left.
 	fn bag_the_rhs(&self, peak_pos: u64) -> Option<Hash> {
-		// TODO - are we off by one here with pos? 0-index vs 1-index...???
-		println!(
-			"about to bag rhs - {}, {:?}, {}",
-			peak_pos,
-			peaks(self.last_pos),
-			self.last_pos
-		);
 		let rhs = peaks(self.last_pos)
 			.into_iter()
 			.filter(|x| x > &peak_pos)
@@ -382,17 +366,13 @@ where
 			.iter()
 			.filter_map(|x| self.get_from_file(x.1))
 			.collect::<Vec<_>>();
-		println!("path here - {:?}", path);
 
 		let peak_pos = match family_branch.last() {
 			Some(&(x, _)) => x,
 			None => pos,
 		};
-		println!("family branch - {:?}", family_branch);
-		println!("peak_pos - {:?}", peak_pos);
 
 		path.append(&mut self.peak_path(peak_pos));
-		println!("path now - {:?}", path);
 
 		Ok(MerkleProof { mmr_size, path })
 	}

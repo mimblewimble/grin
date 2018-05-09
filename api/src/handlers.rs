@@ -685,7 +685,7 @@ where
 		match res {
 			Ok(()) => Ok(Response::with(status::Ok)),
 			Err(e) => {
-				debug!(LOGGER, "error - {:?}", e);
+				error!(LOGGER, "error - {:?}", e);
 				Err(IronError::new(Fail::compat(e), status::BadRequest))
 			}
 		}

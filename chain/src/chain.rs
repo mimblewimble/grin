@@ -476,7 +476,8 @@ impl Chain {
 		let head = self.store.head()?;
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.verify_maturity_via_merkle_proof(input, head.height)?;
+			// Note: checking maturity against the currently unmined "next" block
+			extension.verify_maturity_via_merkle_proof(input, head.height + 1)?;
 			Ok(())
 		})
 	}
