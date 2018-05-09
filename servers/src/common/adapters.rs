@@ -488,7 +488,7 @@ impl NetToChainAdapter {
 	fn check_compact(&self, tip_res: Option<Tip>) {
 		// no compaction during sync or if we're in historical mode
 		if self.archive_mode || self.currently_syncing.load(Ordering::Relaxed) {
-			return
+			return;
 		}
 
 		if let Some(tip) = tip_res {
