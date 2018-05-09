@@ -636,6 +636,7 @@ impl Chain {
 	/// Meanwhile, the chain will not be able to accept new blocks. It should
 	/// therefore be called judiciously.
 	pub fn compact(&self) -> Result<(), Error> {
+		debug!(LOGGER, "Starting blockchain compaction.");
 		// Compact the txhashset via the extension.
 		{
 			let mut txhashes = self.txhashset.write().unwrap();
@@ -650,6 +651,7 @@ impl Chain {
 
 		// Now check we can still successfully validate the chain state after
 		// compacting, shouldn't be necessary once all of this is well-oiled
+		debug!(LOGGER, "Validating state after compaction.");
 		self.validate(true)?;
 
 		// we need to be careful here in testing as 20 blocks is not that long
@@ -661,10 +663,13 @@ impl Chain {
 			return Ok(());
 		}
 
+		debug!(LOGGER, "Compaction remove blocks older than {}.", head.height - horizon);
+		let mut count = 0;
 		let mut current = self.store.get_header_by_height(head.height - horizon - 1)?;
 		loop {
 			match self.store.get_block(&current.hash()) {
 				Ok(b) => {
+					count += 1;
 					self.store.delete_block(&b.hash())?;
 					self.store.delete_block_marker(&b.hash())?;
 					self.store.delete_block_sums(&b.hash())?;
@@ -683,6 +688,7 @@ impl Chain {
 				Err(e) => return Err(From::from(e)),
 			}
 		}
+		debug!(LOGGER, "Compaction removed {} blocks, done.", count);
 		Ok(())
 	}
 
