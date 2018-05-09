@@ -12,24 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Library module for the key holder functionalities provided by Grin.
-
-extern crate blake2_rfc as blake2;
-extern crate byteorder;
-extern crate grin_util as util;
-extern crate rand;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-extern crate serde_json;
-#[macro_use]
-extern crate slog;
-extern crate uuid;
-
-pub mod blind;
-pub mod extkey;
-
-pub use blind::{BlindSum, BlindingFactor};
-pub use extkey::{ExtendedKey, Identifier, IDENTIFIER_SIZE};
-pub mod keychain;
-pub use keychain::{Error, Keychain};
+// Stub while figuring out wallet redesign

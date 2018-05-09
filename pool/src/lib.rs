@@ -22,9 +22,9 @@
 #![warn(missing_docs)]
 
 pub mod graph;
-mod types;
-mod blockchain;
-mod pool;
+pub mod types;
+pub mod blockchain;
+pub mod pool;
 
 extern crate blake2_rfc as blake2;
 extern crate grin_core as core;

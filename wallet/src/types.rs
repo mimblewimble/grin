@@ -24,6 +24,7 @@ use std::path::Path;
 use std::path::MAIN_SEPARATOR;
 use std::collections::HashMap;
 use std::cmp::min;
+use libwallet::aggsig;
 
 use serde;
 use serde_json;
@@ -777,14 +778,14 @@ pub struct PartialTx {
 /// aggsig_tx_context should contain the private key/nonce pair
 /// the resulting partial tx will contain the corresponding public keys
 pub fn build_partial_tx(
-	transaction_id: &Uuid,
+	context: &aggsig::Context,
 	keychain: &keychain::Keychain,
 	receive_amount: u64,
 	kernel_offset: BlindingFactor,
 	part_sig: Option<secp::Signature>,
 	tx: Transaction,
 ) -> PartialTx {
-	let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys(transaction_id);
+	let (pub_excess, pub_nonce) = context.get_public_keys(keychain.secp());
 	let mut pub_excess = pub_excess.serialize_vec(keychain.secp(), true).clone();
 	let len = pub_excess.clone().len();
 	let pub_excess: Vec<_> = pub_excess.drain(0..len).collect();
@@ -795,7 +796,7 @@ pub fn build_partial_tx(
 
 	PartialTx {
 		phase: PartialTxPhase::SenderInitiation,
-		id: transaction_id.clone(),
+		id: context.transaction_id,
 		amount: receive_amount,
 		public_blind_excess: util::to_hex(pub_excess),
 		public_nonce: util::to_hex(pub_nonce),

@@ -21,11 +21,12 @@ use iron::Handler;
 use iron::prelude::*;
 use iron::status;
 use serde_json;
-use uuid::Uuid;
+use std::sync::{Arc, RwLock};
 
 use api;
 use core::consensus::reward;
-use core::core::{amount_to_hr_string, build, Block, Committed, Output, Transaction, TxKernel};
+use core::core::{amount_to_hr_string, Committed, Output, Transaction, TxKernel};
+use libwallet::{aggsig, build, reward};
 use core::{global, ser};
 use failure::{Fail, ResultExt};
 use keychain::{BlindingFactor, Identifier, Keychain};
@@ -37,6 +38,12 @@ use util::{secp, to_hex, LOGGER};
 #[derive(Serialize, Deserialize)]
 pub struct TxWrapper {
 	pub tx_hex: String,
+}
+
+lazy_static! {
+	/// Static reference to aggsig context (temporary while wallet is being refactored)
+	pub static ref AGGSIG_CONTEXT_MANAGER:Arc<RwLock<aggsig::ContextManager>>
+		= Arc::new(RwLock::new(aggsig::ContextManager::new()));
 }
 
 /// Receive Part 1 of interactive transactions from sender, Sender Initiation
@@ -52,6 +59,7 @@ pub struct TxWrapper {
 
 fn handle_sender_initiation(
 	config: &WalletConfig,
+	context_manager: &mut aggsig::ContextManager,
 	keychain: &Keychain,
 	partial_tx: &PartialTx,
 ) -> Result<PartialTx, Error> {
@@ -125,14 +133,13 @@ fn handle_sender_initiation(
 	let blind = blind_sum
 		.secret_key(&keychain.secp())
 		.context(ErrorKind::Keychain)?;
-	keychain
-		.aggsig_create_context(&partial_tx.id, blind)
-		.context(ErrorKind::Keychain)?;
-	keychain.aggsig_add_output(&partial_tx.id, &key_id);
+	let mut context = context_manager.create_context(keychain.secp(), &partial_tx.id, blind);
 
-	let sig_part = keychain
-		.aggsig_calculate_partial_sig(
-			&partial_tx.id,
+	context.add_output(&key_id);
+
+	let sig_part = context
+		.calculate_partial_sig(
+			keychain.secp(),
 			&sender_pub_nonce,
 			tx.fee(),
 			tx.lock_height(),
@@ -142,7 +149,7 @@ fn handle_sender_initiation(
 	// Build the response, which should contain sR, blinding excess xR * G, public
 	// nonce kR * G
 	let mut partial_tx = build_partial_tx(
-		&partial_tx.id,
+		&context,
 		keychain,
 		amount,
 		kernel_offset,
@@ -150,6 +157,8 @@ fn handle_sender_initiation(
 		tx,
 	);
 	partial_tx.phase = PartialTxPhase::ReceiverInitiation;
+
+	context_manager.save_context(context);
 
 	Ok(partial_tx)
 }
@@ -169,15 +178,17 @@ fn handle_sender_initiation(
 
 fn handle_sender_confirmation(
 	config: &WalletConfig,
+	context_manager: &mut aggsig::ContextManager,
 	keychain: &Keychain,
 	partial_tx: &PartialTx,
 	fluff: bool,
 ) -> Result<PartialTx, Error> {
 	let (amount, sender_pub_blinding, sender_pub_nonce, kernel_offset, sender_sig_part, tx) =
 		read_partial_tx(keychain, partial_tx)?;
+	let mut context = context_manager.get_context(&partial_tx.id);
 	let sender_sig_part = sender_sig_part.unwrap();
-	let res = keychain.aggsig_verify_partial_sig(
-		&partial_tx.id,
+	let res = context.verify_partial_sig(
+		&keychain.secp(),
 		&sender_sig_part,
 		&sender_pub_nonce,
 		&sender_pub_blinding,
@@ -191,9 +202,9 @@ fn handle_sender_confirmation(
 	}
 
 	// Just calculate our sig part again instead of storing
-	let our_sig_part = keychain
-		.aggsig_calculate_partial_sig(
-			&partial_tx.id,
+	let our_sig_part = context
+		.calculate_partial_sig(
+			&keychain.secp(),
 			&sender_pub_nonce,
 			tx.fee(),
 			tx.lock_height(),
@@ -201,9 +212,9 @@ fn handle_sender_confirmation(
 		.unwrap();
 
 	// And the final signature
-	let final_sig = keychain
-		.aggsig_calculate_final_sig(
-			&partial_tx.id,
+	let final_sig = context
+		.calculate_final_sig(
+			&keychain.secp(),
 			&sender_sig_part,
 			&our_sig_part,
 			&sender_pub_nonce,
@@ -211,12 +222,13 @@ fn handle_sender_confirmation(
 		.unwrap();
 
 	// Calculate the final public key (for our own sanity check)
-	let final_pubkey = keychain
-		.aggsig_calculate_final_pubkey(&partial_tx.id, &sender_pub_blinding)
+	let final_pubkey = context
+		.calculate_final_pubkey(&keychain.secp(), &sender_pub_blinding)
 		.unwrap();
 
 	// Check our final sig verifies
-	let res = keychain.aggsig_verify_final_sig_build_msg(
+	let res = context.verify_final_sig_build_msg(
+		&keychain.secp(),
 		&final_sig,
 		&final_pubkey,
 		tx.fee(),
@@ -229,7 +241,7 @@ fn handle_sender_confirmation(
 	}
 
 	let final_tx = build_final_transaction(
-		&partial_tx.id,
+		&mut context,
 		config,
 		keychain,
 		amount,
@@ -254,13 +266,15 @@ fn handle_sender_confirmation(
 	// Return what we've actually posted
 	// TODO - why build_partial_tx here? Just a naming issue?
 	let mut partial_tx = build_partial_tx(
-		&partial_tx.id,
+		&context,
 		keychain,
 		amount,
 		kernel_offset,
 		Some(final_sig),
 		tx,
 	);
+
+	context_manager.save_context(context);
 	partial_tx.phase = PartialTxPhase::ReceiverConfirmation;
 	Ok(partial_tx)
 }
@@ -285,10 +299,12 @@ impl Handler for WalletReceiver {
 		}
 
 		if let Ok(Some(partial_tx)) = struct_body {
+			let mut acm = AGGSIG_CONTEXT_MANAGER.write().unwrap();
 			match partial_tx.phase {
 				PartialTxPhase::SenderInitiation => {
 					let resp_tx = handle_sender_initiation(
 						&self.config,
+						&mut acm,
 						&self.keychain,
 						&partial_tx,
 					).map_err(|e| {
@@ -304,6 +320,7 @@ impl Handler for WalletReceiver {
 				PartialTxPhase::SenderConfirmation => {
 					let resp_tx = handle_sender_confirmation(
 						&self.config,
+						&mut acm,
 						&self.keychain,
 						&partial_tx,
 						fluff,
@@ -393,14 +410,15 @@ pub fn receive_coinbase(
 
 	debug!(LOGGER, "receive_coinbase: {:?}", block_fees);
 
-	let (out, kern) = Block::reward_output(&keychain, &key_id, block_fees.fees, block_fees.height)
-		.context(ErrorKind::Keychain)?;
+	let (out, kern) =
+		reward::output(&keychain, &key_id, block_fees.fees, block_fees.height).unwrap();
+	/* .context(ErrorKind::Keychain)?; */
 	Ok((out, kern, block_fees))
 }
 
 /// builds a final transaction after the aggregated sig exchange
 fn build_final_transaction(
-	tx_id: &Uuid,
+	context: &mut aggsig::Context,
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
@@ -443,7 +461,7 @@ fn build_final_transaction(
 
 	// Get output we created in earlier step
 	// TODO: will just be one for now, support multiple later
-	let output_vec = keychain.aggsig_get_outputs(tx_id);
+	let output_vec = context.get_outputs();
 
 	// operate within a lock on wallet data
 	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {

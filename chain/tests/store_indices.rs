@@ -16,6 +16,7 @@ extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_wallet as wallet;
 extern crate rand;
 
 use std::fs;
@@ -29,6 +30,8 @@ use keychain::Keychain;
 use core::global;
 use core::global::ChainTypes;
 use core::pow;
+
+use wallet::libwallet;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -53,13 +56,9 @@ fn test_various_store_indices() {
 		.setup_height(&genesis.header, &Tip::new(genesis.hash()))
 		.unwrap();
 
-	let block = Block::new(
-		&genesis.header,
-		vec![],
-		&keychain,
-		&key_id,
-		Difficulty::one(),
-	).unwrap();
+	let reward = libwallet::reward::output(&keychain, &key_id, 0, 1).unwrap();
+
+	let block = Block::new(&genesis.header, vec![], Difficulty::one(), reward).unwrap();
 	let block_hash = block.hash();
 
 	chain_store.save_block(&block).unwrap();

@@ -41,6 +41,9 @@ extern crate router;
 extern crate tokio_core;
 extern crate tokio_retry;
 
+#[macro_use]
+extern crate lazy_static;
+
 extern crate grin_api as api;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
@@ -56,6 +59,7 @@ mod types;
 mod restore;
 pub mod client;
 pub mod server;
+pub mod libwallet;
 
 pub use outputs::show_outputs;
 pub use info::{retrieve_info, show_info};
