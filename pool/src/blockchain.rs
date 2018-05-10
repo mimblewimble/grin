@@ -155,6 +155,10 @@ impl BlockChain for DummyChainImpl {
 			Err(PoolError::GenericPoolError)
 		}
 	}
+
+	fn get_block_sums(&self, bh: &hash::Hash) -> Result<block::BlockSums, PoolError> {
+		panic!("not yet implemented");
+	}
 }
 
 impl DummyChain for DummyChainImpl {

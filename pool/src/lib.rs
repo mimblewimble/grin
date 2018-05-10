@@ -25,6 +25,7 @@ pub mod graph;
 pub mod types;
 pub mod blockchain;
 pub mod pool;
+pub mod minimal_pool;
 
 extern crate blake2_rfc as blake2;
 extern crate grin_core as core;

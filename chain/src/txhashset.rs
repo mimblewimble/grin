@@ -25,8 +25,8 @@ use std::time::Instant;
 use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::consensus::REWARD;
-use core::core::{Block, BlockHeader, Committed, Input, Output, OutputFeatures, OutputIdentifier,
-                 TxKernel};
+use core::core::{Block, BlockHeader, BlockSums, Committed, Input, Output, OutputFeatures,
+                 OutputIdentifier, TxKernel};
 use core::core::pmmr::{self, MerkleProof, PMMR};
 use core::global;
 use core::core::hash::{Hash, Hashed};
@@ -35,7 +35,7 @@ use core::ser::{PMMRIndexHashable, PMMRable};
 use grin_store;
 use grin_store::pmmr::PMMRBackend;
 use grin_store::types::prune_noop;
-use types::{BlockMarker, BlockSums, ChainStore, Error, TxHashSetRoots};
+use types::{BlockMarker, ChainStore, Error, TxHashSetRoots};
 use util::{secp_static, zip, LOGGER};
 
 const TXHASHSET_SUBDIR: &'static str = "txhashset";

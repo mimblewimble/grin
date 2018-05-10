@@ -17,12 +17,11 @@
 use std::{error, fmt, io};
 
 use util::secp;
-use util::secp_static;
 use util::secp::pedersen::Commitment;
 
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use core::core::{block, transaction, Block, BlockHeader};
+use core::core::{block, transaction, Block, BlockHeader, BlockSums};
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 use grin_store as store;
 use grin_store;
@@ -396,45 +395,6 @@ impl Default for BlockMarker {
 		BlockMarker {
 			output_pos: 0,
 			kernel_pos: 0,
-		}
-	}
-}
-
-/// The output_sum and kernel_sum for a given block.
-/// This is used to validate the next block being processed by applying
-/// the inputs, outputs, kernels and kernel_offset from the new block
-/// and checking everything sums correctly.
-#[derive(Debug, Clone)]
-pub struct BlockSums {
-	/// The total output sum so far.
-	pub output_sum: Commitment,
-	/// The total kernel sum so far.
-	pub kernel_sum: Commitment,
-}
-
-impl Writeable for BlockSums {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_fixed_bytes(&self.output_sum)?;
-		writer.write_fixed_bytes(&self.kernel_sum)?;
-		Ok(())
-	}
-}
-
-impl Readable for BlockSums {
-	fn read(reader: &mut Reader) -> Result<BlockSums, ser::Error> {
-		Ok(BlockSums {
-			output_sum: Commitment::read(reader)?,
-			kernel_sum: Commitment::read(reader)?,
-		})
-	}
-}
-
-impl Default for BlockSums {
-	fn default() -> BlockSums {
-		let zero_commit = secp_static::commit_to_zero_value();
-		BlockSums {
-			output_sum: zero_commit.clone(),
-			kernel_sum: zero_commit.clone(),
 		}
 	}
 }
