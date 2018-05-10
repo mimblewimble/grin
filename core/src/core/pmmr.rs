@@ -897,13 +897,13 @@ fn bintree_jump_left(num: u64) -> u64 {
 	num - ((1 << (most_significant_pos(num) - 1)) - 1)
 }
 
-// Check if the binary representation of a number is all ones.
+/// Check if the binary representation of a number is all ones.
 pub fn all_ones(num: u64) -> bool {
 	let ones = num.count_ones();
 	num.leading_zeros() + ones == 64 && ones > 0
 }
 
-// Get the position of the most significant bit in a number.
+/// Get the position of the most significant bit in a number.
 pub fn most_significant_pos(num: u64) -> u64 {
 	64 - u64::from(num.leading_zeros())
 }

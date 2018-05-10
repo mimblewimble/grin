@@ -20,7 +20,6 @@ use ser;
 use ser::{PMMRIndexHashable, Readable, Reader, Writeable, Writer};
 use util;
 
-
 /// Merkle proof errors.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MerkleProofError {

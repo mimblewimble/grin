@@ -23,7 +23,6 @@ use grin_core::core::pmmr::PMMR;
 use grin_core::ser;
 use grin_core::ser::PMMRIndexHashable;
 
-
 #[test]
 fn empty_merkle_proof() {
 	let proof = MerkleProof::empty();

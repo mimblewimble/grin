@@ -25,8 +25,8 @@ use std::time::Instant;
 use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::consensus::REWARD;
-use core::core::{Block, BlockHeader, Committed, Input, MerkleProof, Output, OutputFeatures, OutputIdentifier,
-                 TxKernel};
+use core::core::{Block, BlockHeader, Committed, Input, MerkleProof, Output, OutputFeatures,
+                 OutputIdentifier, TxKernel};
 use core::core::pmmr::{self, PMMR};
 use core::global;
 use core::core::hash::{Hash, Hashed};

@@ -15,9 +15,9 @@
 extern crate grin_core;
 
 use grin_core::core::hash::Hash;
-use grin_core::core::pmmr::{Backend};
+use grin_core::core::pmmr::Backend;
 use grin_core::ser;
-use grin_core::ser::{Reader, Readable, Writer, Writeable, PMMRable};
+use grin_core::ser::{PMMRable, Readable, Reader, Writeable, Writer};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TestElem(pub [u32; 4]);
