@@ -23,7 +23,7 @@ use util::secp::pedersen::Commitment;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::{block, transaction, Block, BlockHeader};
-use core::core::pmmr::MerkleProofError;
+use core::core::MerkleProofError;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 use grin_store as store;
 use grin_store;

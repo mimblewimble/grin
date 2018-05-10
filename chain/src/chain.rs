@@ -20,9 +20,8 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
+use core::core::{Block, BlockHeader, Input, MerkleProof, Output, OutputFeatures, OutputIdentifier, TxKernel};
 use core::core::hash::{Hash, Hashed};
-use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
 use core::global;
 use grin_store::Error::NotFoundErr;

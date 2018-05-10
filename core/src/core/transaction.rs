@@ -23,9 +23,8 @@ use std::{error, fmt};
 
 use consensus;
 use consensus::VerifySortOrder;
-use core::Committed;
+use core::{Committed, MerkleProof};
 use core::hash::{Hash, Hashed, ZERO_HASH};
-use core::pmmr::MerkleProof;
 use keychain;
 use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, WriteableSorted,
           Writer};
