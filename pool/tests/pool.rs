@@ -27,7 +27,7 @@ extern crate time;
 use std::collections::HashMap;
 
 use core::core::transaction;
-use core::core::{OutputIdentifier, Transaction};
+use core::core::{MerkleProof, OutputIdentifier, Proof, Transaction};
 use core::core::block;
 
 use pool::*;
@@ -35,9 +35,7 @@ use core::global;
 use blockchain::{DummyChain, DummyChainImpl, DummyOutputSet};
 use std::sync::{Arc, RwLock};
 use core::global::ChainTypes;
-use core::core::Proof;
 use core::core::hash::{Hash, Hashed};
-use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
 use types::PoolError::InvalidTx;
 
