@@ -13,14 +13,16 @@
 // limitations under the License.
 
 //! Transactions
-use std::cmp::Ordering;
-use std::cmp::max;
+
 use std::collections::HashSet;
+use std::cmp::max;
+use std::cmp::Ordering;
 use std::io::Cursor;
 use std::{error, fmt};
+
 use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
 use util::secp::{self, Message, Signature};
-use util::{kernel_sig_msg, static_secp_instance};
+use util::{kernel_sig_msg, secp_static, static_secp_instance};
 
 use consensus;
 use consensus::VerifySortOrder;

@@ -31,8 +31,6 @@ pub struct TxPoolSums {
 	pub kernel_sum: Commitment,
 	/// Sum of kernel offsets of all pool txs.
 	pub kernel_offset: Commitment,
-	/// Sum of fees of all pool txs.
-	pub fee: u64,
 }
 
 impl Default for TxPoolSums {
@@ -42,22 +40,7 @@ impl Default for TxPoolSums {
 			output_sum: zero_commit.clone(),
 			kernel_sum: zero_commit.clone(),
 			kernel_offset: zero_commit.clone(),
-			fee: 0,
 		}
-	}
-}
-
-impl Committed for TxPoolSums {
-	fn inputs_committed(&self) -> Vec<Commitment> {
-		vec![]
-	}
-
-	fn outputs_committed(&self) -> Vec<Commitment> {
-		vec![self.output_sum]
-	}
-
-	fn kernels_committed(&self) -> Vec<Commitment> {
-		vec![self.kernel_sum]
 	}
 }
 
@@ -65,6 +48,8 @@ impl Committed for TxPoolSums {
 pub struct MinimalTxPool<T> {
 	/// Pool Config
 	pub config: PoolConfig,
+	/// Pool sums.
+	pub pool_sums: TxPoolSums,
 	/// Transaction in the pool keyed by hash
 	pub transactions: HashMap<Hash, Box<Transaction>>,
 	/// Transaction hashes in the order they were added to the pool
@@ -73,32 +58,6 @@ pub struct MinimalTxPool<T> {
 	pub blockchain: Arc<T>,
 	/// The pool adapter
 	pub adapter: Arc<PoolAdapter>,
-}
-
-impl<T> Committed for MinimalTxPool<T> {
-	fn inputs_committed(&self) -> Vec<Commitment> {
-		self.transactions
-			.values()
-			.flat_map(|x| &x.inputs)
-			.map(|x| x.commitment())
-			.collect()
-	}
-
-	fn outputs_committed(&self) -> Vec<Commitment> {
-		self.transactions
-			.values()
-			.flat_map(|x| &x.outputs)
-			.map(|x| x.commitment())
-			.collect()
-	}
-
-	fn kernels_committed(&self) -> Vec<Commitment> {
-		self.transactions
-			.values()
-			.flat_map(|x| &x.kernels)
-			.map(|x| x.excess())
-			.collect()
-	}
 }
 
 impl<T> MinimalTxPool<T>
@@ -130,43 +89,18 @@ where
 		// Making sure the transaction is valid before anything else.
 		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
 
-		let zero_commit = secp_static::commit_to_zero_value();
-
-		// tx.sum_kernel_excesses(, None);
-
-		// taking the -
-		// * current block_sums from the chain
-		// * current kernel_offset from the header
-		// we can then sum the tx into these to check validity
-
-		// tx implements Committed
-		// tx_pool implements Committed
-
-		let header = self.blockchain.head_header()?;
-		let block_sums = self.blockchain.get_block_sums(&header.hash())?;
-
-		// TODO - calculate fee for all txs
-		let overage = self.fee() as i64;
-		let io_sum = self.sum_commitments(overage, Some(block_sums.output_sum))?;
-
-		// TODO - calculate sum of all offsets
-		let offset = {
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-			let key = self.offset.secret_key(&secp)?;
-			secp.commit(0, key)?
-		};
-		let (kernel_sum, _) = self.sum_kernel_excesses(offset, Some(block_sums.kernel_sum));
-
-		// TODO now do it all again with the new tx
-		// TODO - consider adding the tx (temporarily) to the pool, then checking
-		// validity???
-
-		// and if everything is valid we can add the tx to the pool here
-
-		self.transactions.insert(tx.hash(), Box::new(tx));
-
-		panic!("this is as far as it goes...");
+		match tx.verify_against_sums_experimental(
+			&self.pool_sums.output_sum,
+			&self.pool_sums.kernel_sum,
+			&self.pool_sums.kernel_offset,
+		) {
+			Ok(_res) => {
+				panic!("success!!!!");
+				self.transactions.insert(tx.hash(), Box::new(tx));
+				// and update sums here
+			}
+			Err(e) => panic!("oh no {}", e),
+		}
 	}
 
 	/// Whether the transaction is acceptable to the pool, given both how
