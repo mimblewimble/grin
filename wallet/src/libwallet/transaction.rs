@@ -108,7 +108,6 @@ pub fn sender_initiation(
 /// -Receiver responds with sR, blinding excess xR * G, public nonce kR * G
 
 pub fn recipient_initiation(
-	config: &WalletConfig,
 	keychain: &Keychain,
 	context_manager: &mut aggsig::ContextManager,
 	partial_tx: &PartialTx,
@@ -116,8 +115,6 @@ pub fn recipient_initiation(
 ) -> Result<PartialTx, Error> {
 	let (amount, _lock_height, _sender_pub_blinding, sender_pub_nonce, kernel_offset, _sig, tx) =
 		read_partial_tx(keychain, partial_tx)?;
-
-	let root_key_id = keychain.root_key_id();
 
 	// double check the fee amount included in the partial tx
 	// we don't necessarily want to just trust the sender

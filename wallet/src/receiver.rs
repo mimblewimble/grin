@@ -58,10 +58,10 @@ fn handle_sender_initiation(
 	})?;
 
 	let partial_tx =
-		transaction::recipient_initiation(config, keychain, context_manager, partial_tx, &key_id)?;
+		transaction::recipient_initiation(keychain, context_manager, partial_tx, &key_id)?;
 	let context = context_manager.get_context(&partial_tx.id);
 
-	/// Add the output to our wallet
+	// Add the output to our wallet
 	let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		wallet_data.add_output(OutputData {
 			root_key_id: keychain.root_key_id(),
