@@ -23,6 +23,7 @@ use uuid::Uuid;
 use keychain::Keychain;
 use keychain::extkey::Identifier;
 use keychain::blind::BlindingFactor;
+use types::OutputData;
 use libwallet::error::Error;
 
 #[derive(Clone, Debug)]
@@ -35,8 +36,9 @@ pub struct Context {
 	/// Secret nonce (of which public is shared)
 	/// (basically a SecretKey)
 	pub sec_nonce: SecretKey,
-	/// If I'm the recipient, store my outputs between invocations (that I need
-	/// to sum)
+	/// If I'm the sender, store change key
+	pub change_key: Option<Identifier>,
+	/// store my outputs between invocations
 	pub output_ids: Vec<Identifier>,
 }
 
@@ -70,6 +72,7 @@ impl ContextManager {
 					sec_key: sec_key,
 					transaction_id: transaction_id.clone(),
 					sec_nonce: aggsig::export_secnonce_single(secp).unwrap(),
+					change_key: None,
 					output_ids: vec![],
 				},
 			);

@@ -19,7 +19,7 @@ use api;
 use client;
 use checker;
 use core::core::{amount_to_hr_string, Transaction};
-use libwallet::{aggsig, build};
+use libwallet::{aggsig, build, transaction};
 use core::ser;
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 use receiver::TxWrapper;
@@ -45,57 +45,29 @@ pub fn issue_send_tx(
 ) -> Result<(), Error> {
 	checker::refresh_outputs(config, keychain)?;
 
-	let chain_tip = checker::get_tip_from_node(config)?;
-	let current_height = chain_tip.height;
+	// Create a new aggsig context
+	let mut context_manager = aggsig::ContextManager::new();
+	let tx_id = Uuid::new_v4();
 
-	// proof of concept - set lock_height on the tx
-	let lock_height = chain_tip.height;
-
-	let (tx, blind, coins, change_key, amount_with_fee) = build_send_tx(
+	let partial_tx = transaction::sender_initiation(
 		config,
 		keychain,
+		&tx_id,
+		&mut context_manager,
 		amount,
-		current_height,
 		minimum_confirmations,
-		lock_height,
 		max_outputs,
 		selection_strategy_is_use_all,
 	)?;
 
-	// TODO - wrap this up in build_send_tx or even the build() call?
-	// Generate a random kernel offset here
-	// and subtract it from the blind_sum so we create
-	// the aggsig context with the "split" key
-	let kernel_offset =
-		BlindingFactor::from_secret_key(SecretKey::new(&keychain.secp(), &mut thread_rng()));
-
-	let blind_offset = keychain
-		.blind_sum(&BlindSum::new()
-			.add_blinding_factor(blind)
-			.sub_blinding_factor(kernel_offset))
-		.unwrap();
-
-	//
-	// -Sender picks random blinding factors for all outputs it participates in,
-	// computes total blinding excess xS -Sender picks random nonce kS
-	// -Sender posts inputs, outputs, Message M=fee, xS * G and kS * G to Receiver
-	//
-	let tx_id = Uuid::new_v4();
-	let skey = blind_offset
-		.secret_key(&keychain.secp())
-		.context(ErrorKind::Keychain)?;
-
-	// Create a new aggsig context
-	let mut context_manager = aggsig::ContextManager::new();
-	let context = context_manager.create_context(keychain.secp(), &tx_id, skey);
-
-	let partial_tx = build_partial_tx(&context, keychain, amount_with_fee, kernel_offset, None, tx);
+	let context = context_manager.get_context(&tx_id);
 
 	// Closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
 	let update_wallet = || {
 		WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-			for coin in coins {
+			for id in context.get_outputs().clone() {
+				let coin = wallet_data.get_output(&id).unwrap().clone();
 				wallet_data.lock_output(&coin);
 			}
 		})
@@ -105,7 +77,7 @@ pub fn issue_send_tx(
 	// failure.
 	let rollback_wallet = || {
 		WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-			match change_key.clone() {
+			match context.change_key.clone() {
 				Some(change) => {
 					info!(LOGGER, "cleaning up unused change output from wallet");
 					wallet_data.delete_output(&change);
@@ -126,7 +98,7 @@ pub fn issue_send_tx(
 
 	if &dest[..4] != "http" {
 		WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-			match change_key.clone() {
+			match context.change_key.clone() {
 				Some(change) => {
 					info!(LOGGER, "cleaning up unused change output from wallet");
 					wallet_data.delete_output(&change);
@@ -163,48 +135,8 @@ pub fn issue_send_tx(
 		return Err(e);
 	}
 
-	/* -Sender receives xR * G, kR * G, sR
-	 * -Sender computes Schnorr challenge e = H(M | kR * G + kS * G)
-	 * -Sender verifies receivers sig, by verifying that kR * G + e * xR * G =
-	 * sR * G· -Sender computes their part of signature, sS = kS + e * xS
-	 * -Sender posts sS to receiver
-	 */
-	let (_amount, recp_pub_blinding, recp_pub_nonce, kernel_offset, sig, tx) =
-		read_partial_tx(keychain, &res.unwrap())?;
-	let res = context.verify_partial_sig(
-		&keychain.secp(),
-		&sig.unwrap(),
-		&recp_pub_nonce,
-		&recp_pub_blinding,
-		tx.fee(),
-		lock_height,
-	);
-	if !res {
-		error!(LOGGER, "Partial Sig from recipient invalid.");
-		return Err(ErrorKind::Signature("Partial Sig from recipient invalid."))?;
-	}
-
-	let sig_part = context
-		.calculate_partial_sig(
-			&keychain.secp(),
-			&recp_pub_nonce,
-			tx.fee(),
-			tx.lock_height(),
-		)
-		.unwrap();
-
-	// Build the next stage, containing sS (and our pubkeys again, for the
-	// recipient's convenience) offset has not been modified during tx building,
-	// so pass it back in
-	let mut partial_tx = build_partial_tx(
-		&context,
-		keychain,
-		amount_with_fee,
-		kernel_offset,
-		Some(sig_part),
-		tx,
-	);
-	partial_tx.phase = PartialTxPhase::SenderConfirmation;
+	let partial_tx =
+		transaction::sender_confirmation(keychain, &mut context_manager, res.unwrap())?;
 
 	// And send again
 	let res = client::send_partial_tx(&url, &partial_tx, fluff);
@@ -224,7 +156,7 @@ pub fn issue_send_tx(
 	}
 
 	// Not really necessary here
-	context_manager.save_context(context);
+	context_manager.save_context(context.clone());
 
 	// All good so
 	update_wallet()?;

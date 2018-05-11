@@ -27,3 +27,4 @@ pub mod blind;
 pub mod proof;
 pub mod reward;
 pub mod build;
+pub mod transaction;
