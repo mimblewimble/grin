@@ -17,20 +17,16 @@
 use rand::thread_rng;
 use uuid::Uuid;
 
-use api;
-use client;
 use checker;
 use core::core::{amount_to_hr_string, Committed, Transaction};
 use libwallet::{aggsig, build};
-use core::ser;
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
-use receiver::TxWrapper;
 use types::*;
-use util::LOGGER;
+use util::{secp, LOGGER};
 use util::secp::key::SecretKey;
-use util::{self, secp};
 use failure::ResultExt;
 
+/// Initiate a transaction for the aggsig exchange
 pub fn sender_initiation(
 	config: &WalletConfig,
 	keychain: &Keychain,
@@ -49,7 +45,7 @@ pub fn sender_initiation(
 	// proof of concept - set lock_height on the tx
 	let lock_height = chain_tip.height;
 
-	let (tx, blind, coins, change_key, amount_with_fee) = build_send_tx(
+	let (tx, blind, coins, _change_key, amount_with_fee) = build_send_tx(
 		config,
 		keychain,
 		amount,
@@ -116,15 +112,16 @@ pub fn recipient_initiation(
 	keychain: &Keychain,
 	context_manager: &mut aggsig::ContextManager,
 	partial_tx: &PartialTx,
+	output_key_id: &Identifier,
 ) -> Result<PartialTx, Error> {
-	let (amount, lock_height, _sender_pub_blinding, sender_pub_nonce, kernel_offset, _sig, tx) =
+	let (amount, _lock_height, _sender_pub_blinding, sender_pub_nonce, kernel_offset, _sig, tx) =
 		read_partial_tx(keychain, partial_tx)?;
 
 	let root_key_id = keychain.root_key_id();
 
 	// double check the fee amount included in the partial tx
 	// we don't necessarily want to just trust the sender
-	// we could just overwrite the fee here (but we won't) due to the ecdsa sig
+	// we could just overwrite the fee here (but we won't) due to the sig
 	let fee = tx_fee(
 		tx.inputs.len(),
 		tx.outputs.len() + 1,
@@ -156,40 +153,21 @@ pub fn recipient_initiation(
 	// First step is just to get the excess sum of the outputs we're participating
 	// in Output and key needs to be stored until transaction finalisation time,
 	// somehow
-
-	let key_id = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		let (key_id, derivation) = next_available_key(&wallet_data, keychain);
-
-		wallet_data.add_output(OutputData {
-			root_key_id: root_key_id.clone(),
-			key_id: key_id.clone(),
-			n_child: derivation,
-			value: out_amount,
-			status: OutputStatus::Unconfirmed,
-			height: 0,
-			lock_height: 0,
-			is_coinbase: false,
-			block: None,
-			merkle_proof: None,
-		});
-
-		key_id
-	})?;
-
 	// Still handy for getting the blinding sum
-	let (_, blind_sum) =
-		build::partial_transaction(vec![build::output(out_amount, key_id.clone())], keychain)
-			.context(ErrorKind::Keychain)?;
+	let (_, blind_sum) = build::partial_transaction(
+		vec![build::output(out_amount, output_key_id.clone())],
+		keychain,
+	).context(ErrorKind::Keychain)?;
 
-	warn!(LOGGER, "Creating new aggsig context");
 	// Create a new aggsig context
 	// this will create a new blinding sum and nonce, and store them
 	let blind = blind_sum
 		.secret_key(&keychain.secp())
 		.context(ErrorKind::Keychain)?;
+	debug!(LOGGER, "Creating new aggsig context");
 	let mut context = context_manager.create_context(keychain.secp(), &partial_tx.id, blind);
-
-	context.add_output(&key_id);
+	context.add_output(output_key_id);
+	context.fee = out_amount;
 
 	let sig_part = context
 		.calculate_partial_sig(
@@ -218,18 +196,17 @@ pub fn recipient_initiation(
 	Ok(partial_tx)
 }
 
+/// -Sender receives xR * G, kR * G, sR
+/// -Sender computes Schnorr challenge e = H(M | kR * G + kS * G)
+/// -Sender verifies receivers sig, by verifying that kR * G + e * xR * G =
+///  sR * G·
+///  -Sender computes their part of signature, sS = kS + e * xS
+
 pub fn sender_confirmation(
 	keychain: &Keychain,
 	context_manager: &mut aggsig::ContextManager,
 	partial_tx: PartialTx,
 ) -> Result<PartialTx, Error> {
-	/* -Sender receives xR * G, kR * G, sR
-	 * -Sender computes Schnorr challenge e = H(M | kR * G + kS * G)
-	 * -Sender verifies receivers sig, by verifying that kR * G + e * xR * G =
-	 * sR * G· -Sender computes their part of signature, sS = kS + e * xS
-	 * -Sender posts sS to receiver
-	 */
-
 	let context = context_manager.get_context(&partial_tx.id);
 
 	let (amount, lock_height, recp_pub_blinding, recp_pub_nonce, kernel_offset, sig, tx) =
@@ -296,7 +273,7 @@ pub fn recipient_confirmation(
 ) -> Result<Transaction, Error> {
 	let (
 		amount,
-		lock_height,
+		_lock_height,
 		sender_pub_blinding,
 		sender_pub_nonce,
 		kernel_offset,
@@ -367,6 +344,25 @@ pub fn recipient_confirmation(
 		&final_sig,
 		tx.clone(),
 	)
+}
+
+/// TODO: Probably belongs elsewhere
+pub fn next_available_key(wallet_data: &WalletData, keychain: &Keychain) -> (Identifier, u32) {
+	let root_key_id = keychain.root_key_id();
+	let derivation = wallet_data.next_child(root_key_id.clone());
+	let key_id = keychain.derive_key_id(derivation).unwrap();
+	(key_id, derivation)
+}
+
+/// TODO: Probably belongs elsewhere
+pub fn retrieve_existing_key(wallet_data: &WalletData, key_id: Identifier) -> (Identifier, u32) {
+	if let Some(existing) = wallet_data.get_output(&key_id) {
+		let key_id = existing.key_id.clone();
+		let derivation = existing.n_child;
+		(key_id, derivation)
+	} else {
+		panic!("should never happen");
+	}
 }
 
 /// Builds a transaction to send to someone from the HD seed associated with the
@@ -472,11 +468,13 @@ fn build_send_tx(
 	Ok((tx, blind, coins, change_key, amount_with_fee))
 }
 
-fn coins_proof_count(coins: &Vec<OutputData>) -> usize {
+/// coins proof count
+pub fn coins_proof_count(coins: &Vec<OutputData>) -> usize {
 	coins.iter().filter(|c| c.merkle_proof.is_some()).count()
 }
 
-fn inputs_and_change(
+/// Selects inputs and change for a transaction
+pub fn inputs_and_change(
 	coins: &Vec<OutputData>,
 	config: &WalletConfig,
 	keychain: &Keychain,
@@ -545,13 +543,6 @@ fn inputs_and_change(
 	}
 
 	Ok((parts, change_key))
-}
-
-fn next_available_key(wallet_data: &WalletData, keychain: &Keychain) -> (Identifier, u32) {
-	let root_key_id = keychain.root_key_id();
-	let derivation = wallet_data.next_child(root_key_id.clone());
-	let key_id = keychain.derive_key_id(derivation).unwrap();
-	(key_id, derivation)
 }
 
 /// builds a final transaction after the aggregated sig exchange
@@ -678,14 +669,4 @@ fn build_final_transaction(
 	);
 
 	Ok(final_tx)
-}
-
-fn retrieve_existing_key(wallet_data: &WalletData, key_id: Identifier) -> (Identifier, u32) {
-	if let Some(existing) = wallet_data.get_output(&key_id) {
-		let key_id = existing.key_id.clone();
-		let derivation = existing.n_child;
-		(key_id, derivation)
-	} else {
-		panic!("should never happen");
-	}
 }

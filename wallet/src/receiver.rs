@@ -25,14 +25,14 @@ use std::sync::{Arc, RwLock};
 
 use api;
 use core::consensus::reward;
-use core::core::{amount_to_hr_string, Committed, Output, Transaction, TxKernel};
-use libwallet::{aggsig, build, reward, transaction};
+use core::core::{Output, Transaction, TxKernel};
+use libwallet::{aggsig, reward, transaction};
 use core::{global, ser};
 use failure::{Fail, ResultExt};
-use keychain::{BlindingFactor, Identifier, Keychain};
+use keychain::Keychain;
 use types::*;
 use urlencoded::UrlEncodedQuery;
-use util::{secp, to_hex, LOGGER};
+use util::{to_hex, LOGGER};
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
 #[derive(Serialize, Deserialize)]
@@ -46,38 +46,39 @@ lazy_static! {
 		= Arc::new(RwLock::new(aggsig::ContextManager::new()));
 }
 
-/// Receive Part 1 of interactive transactions from sender, Sender Initiation
-/// Return result of part 2, Recipient Initation, to sender
-/// -Receiver receives inputs, outputs xS * G and kS * G
-/// -Receiver picks random blinding factors for all outputs being received,
-/// computes total blinding
-/// excess xR
-/// -Receiver picks random nonce kR
-/// -Receiver computes Schnorr challenge e = H(M | kR * G + kS * G)
-/// -Receiver computes their part of signature, sR = kR + e * xR
-/// -Receiver responds with sR, blinding excess xR * G, public nonce kR * G
-
 fn handle_sender_initiation(
 	config: &WalletConfig,
 	context_manager: &mut aggsig::ContextManager,
 	keychain: &Keychain,
 	partial_tx: &PartialTx,
 ) -> Result<PartialTx, Error> {
-	transaction::recipient_initiation(config, keychain, context_manager, partial_tx)
-}
+	// Create a potential output for this transaction
+	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+		transaction::next_available_key(&wallet_data, keychain)
+	})?;
 
-/// Receive Part 3 of interactive transactions from sender, Sender Confirmation
-/// Return Ok/Error
-/// -Receiver receives sS
-/// -Receiver verifies sender's sig, by verifying that
-/// kS * G + e *xS * G = sS* G
-/// -Receiver calculates final sig as s=(sS+sR, kS * G+kR * G)
-/// -Receiver puts into TX kernel:
-///
-/// Signature S
-/// pubkey xR * G+xS * G
-/// fee (= M)
-/// -Receiver sends completed TX to mempool. responds OK to sender
+	let partial_tx =
+		transaction::recipient_initiation(config, keychain, context_manager, partial_tx, &key_id)?;
+	let context = context_manager.get_context(&partial_tx.id);
+
+	/// Add the output to our wallet
+	let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+		wallet_data.add_output(OutputData {
+			root_key_id: keychain.root_key_id(),
+			key_id: key_id.clone(),
+			n_child: derivation,
+			value: context.fee,
+			status: OutputStatus::Unconfirmed,
+			height: 0,
+			lock_height: 0,
+			is_coinbase: false,
+			block: None,
+			merkle_proof: None,
+		});
+	})?;
+
+	Ok(partial_tx)
+}
 
 fn handle_sender_confirmation(
 	config: &WalletConfig,
@@ -171,23 +172,6 @@ impl Handler for WalletReceiver {
 	}
 }
 
-fn retrieve_existing_key(wallet_data: &WalletData, key_id: Identifier) -> (Identifier, u32) {
-	if let Some(existing) = wallet_data.get_output(&key_id) {
-		let key_id = existing.key_id.clone();
-		let derivation = existing.n_child;
-		(key_id, derivation)
-	} else {
-		panic!("should never happen");
-	}
-}
-
-fn next_available_key(wallet_data: &WalletData, keychain: &Keychain) -> (Identifier, u32) {
-	let root_key_id = keychain.root_key_id();
-	let derivation = wallet_data.next_child(root_key_id.clone());
-	let key_id = keychain.derive_key_id(derivation).unwrap();
-	(key_id, derivation)
-}
-
 /// Build a coinbase output and the corresponding kernel
 pub fn receive_coinbase(
 	config: &WalletConfig,
@@ -203,8 +187,8 @@ pub fn receive_coinbase(
 	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		let key_id = block_fees.key_id();
 		let (key_id, derivation) = match key_id {
-			Some(key_id) => retrieve_existing_key(&wallet_data, key_id),
-			None => next_available_key(&wallet_data, keychain),
+			Some(key_id) => transaction::retrieve_existing_key(&wallet_data, key_id),
+			None => transaction::next_available_key(&wallet_data, keychain),
 		};
 
 		// track the new output and return the stuff needed for reward

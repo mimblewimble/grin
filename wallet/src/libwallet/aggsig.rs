@@ -40,6 +40,8 @@ pub struct Context {
 	pub change_key: Option<Identifier>,
 	/// store my outputs between invocations
 	pub output_ids: Vec<Identifier>,
+	/// store the calculated fee
+	pub fee: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -74,6 +76,7 @@ impl ContextManager {
 					sec_nonce: aggsig::export_secnonce_single(secp).unwrap(),
 					change_key: None,
 					output_ids: vec![],
+					fee: 0,
 				},
 			);
 		}
