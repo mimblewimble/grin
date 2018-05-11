@@ -19,22 +19,19 @@ use std::sync::Arc;
 use core::core::hash::{Hash, Hashed};
 use core::core::{Committed, Transaction};
 use types::*;
-use util::secp_static;
+use util::{secp_static, static_secp_instance};
 use util::secp::pedersen::Commitment;
 
 /// Sums of the pool.
 #[derive(Debug, Clone)]
 pub struct TxPoolSums {
-	/// Sum of all the input|output|overage commitments
-	/// of all the txs in the pool.
+	/// Sum of all input|output commitments of all pool txs.
 	pub output_sum: Commitment,
-	/// Sum of all the kernel excesses of all
-	/// the txs in the pool.
+	/// Sum of kernel excesses of all pool txs.
 	pub kernel_sum: Commitment,
-	/// Sum of all the kernel offsets of all
-	/// the txs in the pool.
+	/// Sum of kernel offsets of all pool txs.
 	pub kernel_offset: Commitment,
-
+	/// Sum of fees of all pool txs.
 	pub fee: u64,
 }
 
@@ -47,6 +44,20 @@ impl Default for TxPoolSums {
 			kernel_offset: zero_commit.clone(),
 			fee: 0,
 		}
+	}
+}
+
+impl Committed for TxPoolSums {
+	fn inputs_committed(&self) -> Vec<Commitment> {
+		vec![]
+	}
+
+	fn outputs_committed(&self) -> Vec<Commitment> {
+		vec![self.output_sum]
+	}
+
+	fn kernels_committed(&self) -> Vec<Commitment> {
+		vec![self.kernel_sum]
 	}
 }
 
