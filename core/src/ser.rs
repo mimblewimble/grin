@@ -22,14 +22,15 @@
 use std::{cmp, error, fmt, mem};
 use std::io::{self, Read, Write};
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
-use keychain::{Identifier, IDENTIFIER_SIZE};
+use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use consensus;
 use consensus::VerifySortOrder;
 use core::hash::{Hash, Hashed};
 use util::secp::pedersen::Commitment;
 use util::secp::pedersen::RangeProof;
 use util::secp::Signature;
-use util::secp::constants::{AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE};
+use util::secp::constants::{AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE,
+                            SECRET_KEY_SIZE};
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]
@@ -325,6 +326,19 @@ impl Readable for Commitment {
 impl Writeable for Commitment {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_fixed_bytes(self)
+	}
+}
+
+impl Writeable for BlindingFactor {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_fixed_bytes(self)
+	}
+}
+
+impl Readable for BlindingFactor {
+	fn read(reader: &mut Reader) -> Result<BlindingFactor, Error> {
+		let bytes = reader.read_fixed_bytes(SECRET_KEY_SIZE)?;
+		Ok(BlindingFactor::from_slice(&bytes))
 	}
 }
 
@@ -631,6 +645,11 @@ impl AsFixedBytes for ::util::secp::Signature {
 impl AsFixedBytes for ::util::secp::pedersen::Commitment {
 	fn len(&self) -> usize {
 		return PEDERSEN_COMMITMENT_SIZE;
+	}
+}
+impl AsFixedBytes for BlindingFactor {
+	fn len(&self) -> usize {
+		return SECRET_KEY_SIZE;
 	}
 }
 impl AsFixedBytes for ::keychain::Identifier {

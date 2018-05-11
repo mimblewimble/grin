@@ -39,6 +39,7 @@ use core::core::{MerkleProof, Transaction};
 use core::core::hash::Hash;
 use core::ser;
 use keychain;
+use keychain::BlindingFactor;
 use util;
 use util::secp;
 use util::secp::Signature;
@@ -780,7 +781,7 @@ pub fn build_partial_tx(
 	context: &aggsig::Context,
 	keychain: &keychain::Keychain,
 	receive_amount: u64,
-	kernel_offset: Commitment,
+	kernel_offset: BlindingFactor,
 	part_sig: Option<secp::Signature>,
 	tx: Transaction,
 ) -> PartialTx {
@@ -799,7 +800,7 @@ pub fn build_partial_tx(
 		amount: receive_amount,
 		public_blind_excess: util::to_hex(pub_excess),
 		public_nonce: util::to_hex(pub_nonce),
-		kernel_offset: util::to_hex(kernel_offset.0.to_vec()),
+		kernel_offset: kernel_offset.to_hex(),
 		part_sig: match part_sig {
 			None => String::from("00"),
 			Some(p) => util::to_hex(p.serialize_der(&keychain.secp())),
@@ -818,7 +819,7 @@ pub fn read_partial_tx(
 		u64,
 		PublicKey,
 		PublicKey,
-		Commitment,
+		BlindingFactor,
 		Option<Signature>,
 		Transaction,
 	),
@@ -834,8 +835,8 @@ pub fn read_partial_tx(
 	let nonce = PublicKey::from_slice(keychain.secp(), &nonce_bin[..])
 		.context(ErrorKind::GenericError("Could not construct public key"))?;
 
-	let kernel_offset = Commitment::from_vec(util::from_hex(partial_tx.kernel_offset.clone())
-		.context(ErrorKind::GenericError("Could not decode HEX"))?);
+	let kernel_offset = BlindingFactor::from_hex(&partial_tx.kernel_offset.clone())
+		.context(ErrorKind::GenericError("Could not decode HEX"))?;
 
 	let sig_bin = util::from_hex(partial_tx.part_sig.clone())
 		.context(ErrorKind::GenericError("Could not decode HEX"))?;

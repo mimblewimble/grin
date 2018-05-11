@@ -29,8 +29,9 @@ use core::transaction;
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 use global;
 use keychain;
+use keychain::BlindingFactor;
 use util::LOGGER;
-use util::{secp, secp_static, static_secp_instance};
+use util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, PartialEq)]
@@ -112,9 +113,7 @@ pub struct BlockHeader {
 	/// Merklish root of all transaction kernels in the TxHashSet
 	pub kernel_root: Hash,
 	/// Total accumulated sum of kernel offsets since genesis block.
-	/// We can derive the kernel offset sum for *this* block from
-	/// the total kernel offset of the previous block header.
-	pub total_kernel_offset: Commitment,
+	pub total_kernel_offset: BlindingFactor,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
 	/// Proof of work data.
@@ -123,7 +122,6 @@ pub struct BlockHeader {
 
 impl Default for BlockHeader {
 	fn default() -> BlockHeader {
-		let zero_commit = secp_static::commit_to_zero_value();
 		let proof_size = global::proofsize();
 
 		BlockHeader {
@@ -135,7 +133,7 @@ impl Default for BlockHeader {
 			output_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
 			kernel_root: ZERO_HASH,
-			total_kernel_offset: zero_commit,
+			total_kernel_offset: BlindingFactor::zero(),
 			nonce: 0,
 			pow: Proof::zero(proof_size),
 		}
@@ -164,7 +162,7 @@ impl Readable for BlockHeader {
 		let output_root = Hash::read(reader)?;
 		let rproof_root = Hash::read(reader)?;
 		let kernel_root = Hash::read(reader)?;
-		let total_kernel_offset = Commitment::read(reader)?;
+		let total_kernel_offset = BlindingFactor::read(reader)?;
 		let nonce = reader.read_u64()?;
 		let pow = Proof::read(reader)?;
 
@@ -522,7 +520,7 @@ impl Block {
 			// on the block_header
 			tx.validate()?;
 
-			// we will summ these later to give a single aggregate offset
+			// we will sum these later to give a single aggregate offset
 			kernel_offsets.push(tx.offset);
 
 			// add all tx inputs/outputs/kernels to the block
@@ -540,20 +538,25 @@ impl Block {
 		outputs.sort();
 		kernels.sort();
 
-		// now sum the kernel_offsets up to give us
-		// an aggregate offset for the entire block
+		// now sum the kernel_offsets to give us an
+		// total offset for the transaction
 		let total_kernel_offset = {
-			kernel_offsets.push(prev.total_kernel_offset);
-			let zero_commit = secp_static::commit_to_zero_value();
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			let mut keys = kernel_offsets
+				.into_iter()
+				.filter(|x| *x != BlindingFactor::zero())
+				.filter_map(|x| x.secret_key(&secp).ok())
+				.collect::<Vec<_>>();
+			if prev.total_kernel_offset != BlindingFactor::zero() {
+				keys.push(prev.total_kernel_offset.secret_key(&secp)?);
+			}
 
-			kernel_offsets.retain(|x| *x != zero_commit);
-
-			if kernel_offsets.is_empty() {
-				zero_commit
+			if keys.is_empty() {
+				BlindingFactor::zero()
 			} else {
-				let secp = static_secp_instance();
-				let secp = secp.lock().unwrap();
-				secp.commit_sum(kernel_offsets, vec![])?
+				let sum = secp.blind_sum(keys, vec![])?;
+				BlindingFactor::from_secret_key(sum)
 			}
 		};
 
