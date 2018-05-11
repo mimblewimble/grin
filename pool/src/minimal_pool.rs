@@ -34,6 +34,8 @@ pub struct TxPoolSums {
 	/// Sum of all the kernel offsets of all
 	/// the txs in the pool.
 	pub kernel_offset: Commitment,
+
+	pub fee: u64,
 }
 
 impl Default for TxPoolSums {
@@ -43,6 +45,7 @@ impl Default for TxPoolSums {
 			output_sum: zero_commit.clone(),
 			kernel_sum: zero_commit.clone(),
 			kernel_offset: zero_commit.clone(),
+			fee: 0,
 		}
 	}
 }
@@ -51,8 +54,6 @@ impl Default for TxPoolSums {
 pub struct MinimalTxPool<T> {
 	/// Pool Config
 	pub config: PoolConfig,
-	/// Sums of the pool.
-	pub pool_sums: TxPoolSums,
 	/// Transaction in the pool keyed by hash
 	pub transactions: HashMap<Hash, Box<Transaction>>,
 	/// Transaction hashes in the order they were added to the pool
@@ -118,17 +119,37 @@ where
 		// Making sure the transaction is valid before anything else.
 		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
 
-		// let zero_commit = secp_static::commit_to_zero_value();
+		let zero_commit = secp_static::commit_to_zero_value();
+
 		// tx.sum_kernel_excesses(, None);
 
 		// taking the -
 		// * current block_sums from the chain
 		// * current kernel_offset from the header
-		// * current pool_sums
-		// we can sum the tx into these
+		// we can then sum the tx into these to check validity
+
+		// tx implements Committed
+		// tx_pool implements Committed
 
 		let header = self.blockchain.head_header()?;
 		let block_sums = self.blockchain.get_block_sums(&header.hash())?;
+
+		// TODO - calculate fee for all txs
+		let overage = self.fee() as i64;
+		let io_sum = self.sum_commitments(overage, Some(block_sums.output_sum))?;
+
+		// TODO - calculate sum of all offsets
+		let offset = {
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			let key = self.offset.secret_key(&secp)?;
+			secp.commit(0, key)?
+		};
+		let (kernel_sum, _) = self.sum_kernel_excesses(offset, Some(block_sums.kernel_sum));
+
+		// TODO now do it all again with the new tx
+		// TODO - consider adding the tx (temporarily) to the pool, then checking
+		// validity???
 
 		// and if everything is valid we can add the tx to the pool here
 
