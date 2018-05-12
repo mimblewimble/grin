@@ -25,7 +25,8 @@ use std::sync::Arc;
 
 use chain::Chain;
 use chain::types::*;
-use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Output, Transaction, TxKernel};
+use core::core::{Block, BlockHeader, Output, OutputFeatures, OutputIdentifier, Transaction,
+                 TxKernel};
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::consensus;
@@ -73,8 +74,10 @@ fn add_block_with_reward(chain: &Chain, reward: (Output, TxKernel)) {
 	chain.validate(false).unwrap();
 }
 
-/// adds a reward output to a wallet, includes that reward in a block, mines the block
-/// and adds it to the chain. Helpful for building up precise wallet balances for testing.
+/// adds a reward output to a wallet, includes that reward in a block, mines
+/// the block
+/// and adds it to the chain. Helpful for building up precise wallet balances
+/// for testing.
 /*fn award_block_to_wallet(chain: &Chain, config: &WalletConfig, keychain: &Keychain) {
 	let reward = libwallet::reward::output(&keychain, &pk, 0, prev.height).unwrap();
 	/*let prev = chain.head_header().unwrap();
