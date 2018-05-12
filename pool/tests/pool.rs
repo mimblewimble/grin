@@ -145,7 +145,6 @@ fn test_multikernel_pool_add() {
 
 	let txs = vec![parent_transaction, child_transaction];
 	let multi_kernel_transaction = transaction::aggregate_with_cut_through(txs).unwrap();
-
 	dummy_chain.update_output_set(new_output);
 
 	// To mirror how this construction is intended to be used, the pool

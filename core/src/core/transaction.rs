@@ -496,17 +496,18 @@ pub fn aggregate_with_cut_through(transactions: Vec<Transaction>) -> Result<Tran
 	// now sum the kernel_offsets to give us an
 	// total offset for the transaction
 	let total_kernel_offset = {
-		if kernel_offsets.is_empty() {
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
+
+		let keys = kernel_offsets
+			.into_iter()
+			.filter(|x| *x != BlindingFactor::zero())
+			.filter_map(|x| x.secret_key(&secp).ok())
+			.collect::<Vec<_>>();
+
+		if keys.is_empty() {
 			BlindingFactor::zero()
 		} else {
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-
-			let keys = kernel_offsets
-				.into_iter()
-				.filter(|x| *x != BlindingFactor::zero())
-				.filter_map(|x| x.secret_key(&secp).ok())
-				.collect::<Vec<_>>();
 			let sum = secp.blind_sum(keys, vec![])?;
 			BlindingFactor::from_secret_key(sum)
 		}
@@ -569,18 +570,18 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	// now sum the kernel_offsets to give us an
 	// total offset for the transaction
 	let total_kernel_offset = {
-		kernel_offsets.retain(|x| *x != BlindingFactor::zero());
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
 
-		if kernel_offsets.is_empty() {
+		let keys = kernel_offsets
+			.into_iter()
+			.filter(|x| *x != BlindingFactor::zero())
+			.filter_map(|x| x.secret_key(&secp).ok())
+			.collect::<Vec<_>>();
+
+		if keys.is_empty() {
 			BlindingFactor::zero()
 		} else {
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-
-			let keys = kernel_offsets
-				.iter()
-				.filter_map(|x| x.secret_key(&secp).ok())
-				.collect::<Vec<_>>();
 			let sum = secp.blind_sum(keys, vec![])?;
 			BlindingFactor::from_secret_key(sum)
 		}
