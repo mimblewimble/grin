@@ -31,8 +31,10 @@ you can start mining by building and runing grin-miner against your running Grin
 ```sh
 git clone https://github.com/mimblewimble/grin.git
 cd grin
-cargo build
+cargo build --release
 ```
+
+Grin can also be built in debug mode (without the `--release` flag) but this will render fast sync prohibitively slow due to the large overhead of cryptographic operations.
 
 
 ### Cross-platform builds
