@@ -29,7 +29,7 @@ use core::core::{amount_to_hr_string, Committed, Output, Transaction, TxKernel};
 use libwallet::{aggsig, build, reward};
 use core::{global, ser};
 use failure::{Fail, ResultExt};
-use keychain::{Identifier, Keychain};
+use keychain::{BlindingFactor, Identifier, Keychain};
 use types::*;
 use urlencoded::UrlEncodedQuery;
 use util::{secp, to_hex, LOGGER};
@@ -423,7 +423,7 @@ fn build_final_transaction(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
-	kernel_offset: Commitment,
+	kernel_offset: BlindingFactor,
 	excess_sig: &secp::Signature,
 	tx: Transaction,
 ) -> Result<Transaction, Error> {
@@ -509,9 +509,13 @@ fn build_final_transaction(
 			.context(ErrorKind::Transaction)?;
 
 		// subtract the kernel_excess (built from kernel_offset)
+		let offset_commit = keychain
+			.secp()
+			.commit(0, kernel_offset.secret_key(&keychain.secp()).unwrap())
+			.unwrap();
 		keychain
 			.secp()
-			.commit_sum(vec![tx_excess], vec![kernel_offset])
+			.commit_sum(vec![tx_excess], vec![offset_commit])
 			.context(ErrorKind::Transaction)?
 	};
 

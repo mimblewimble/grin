@@ -69,13 +69,13 @@ pub fn issue_send_tx(
 	// Generate a random kernel offset here
 	// and subtract it from the blind_sum so we create
 	// the aggsig context with the "split" key
-	let kernel_blind =
+	let kernel_offset =
 		BlindingFactor::from_secret_key(SecretKey::new(&keychain.secp(), &mut thread_rng()));
 
 	let blind_offset = keychain
 		.blind_sum(&BlindSum::new()
 			.add_blinding_factor(blind)
-			.sub_blinding_factor(kernel_blind))
+			.sub_blinding_factor(kernel_offset))
 		.unwrap();
 
 	//
@@ -86,14 +86,6 @@ pub fn issue_send_tx(
 	let tx_id = Uuid::new_v4();
 	let skey = blind_offset
 		.secret_key(&keychain.secp())
-		.context(ErrorKind::Keychain)?;
-
-	let kernel_key = kernel_blind
-		.secret_key(keychain.secp())
-		.context(ErrorKind::Keychain)?;
-	let kernel_offset = keychain
-		.secp()
-		.commit(0, kernel_key)
 		.context(ErrorKind::Keychain)?;
 
 	// Create a new aggsig context

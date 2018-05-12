@@ -149,7 +149,7 @@ pub fn with_excess(excess: BlindingFactor) -> Box<Append> {
 }
 
 /// Sets a known tx "offset". Used in final step of tx construction.
-pub fn with_offset(offset: Commitment) -> Box<Append> {
+pub fn with_offset(offset: BlindingFactor) -> Box<Append> {
 	Box::new(
 		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			(tx.with_offset(offset), kern, sum)
@@ -238,14 +238,13 @@ pub fn transaction_with_offset(
 
 	// generate kernel excess and excess_sig using the split key k1
 	let skey1 = k1.secret_key(&keychain.secp())?;
-	let skey2 = k2.secret_key(&keychain.secp())?;
 
 	kern.excess = ctx.keychain.secp().commit(0, skey1)?;
 	kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &k1).unwrap();
 
 	// store the kernel offset (k2) on the tx itself
 	// commitments will sum correctly when including the offset
-	tx.offset = keychain.secp().commit(0, skey2)?;
+	tx.offset = k2;
 
 	assert!(tx.kernels.is_empty());
 	tx.kernels.push(kern);
