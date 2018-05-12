@@ -26,6 +26,8 @@ use util::{secp, LOGGER};
 use util::secp::key::SecretKey;
 use failure::ResultExt;
 
+// TODO: None of these functions should care about the wallet implementation,
+
 /// Initiate a transaction for the aggsig exchange
 pub fn sender_initiation(
 	config: &WalletConfig,

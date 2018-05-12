@@ -32,3 +32,7 @@ grin_api = { path = "../api" }
 grin_core = { path = "../core" }
 grin_keychain = { path = "../keychain" }
 grin_util = { path = "../util" }
+
+[dev-dependencies]
+grin_chain = { path = "../chain" }
+time = "0.1"

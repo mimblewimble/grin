@@ -172,6 +172,7 @@ impl Handler for WalletReceiver {
 	}
 }
 
+//TODO: Split up the output creation and the wallet insertion
 /// Build a coinbase output and the corresponding kernel
 pub fn receive_coinbase(
 	config: &WalletConfig,
