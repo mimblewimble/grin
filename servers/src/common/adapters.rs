@@ -675,13 +675,10 @@ impl pool::BlockChain for PoolToChainAdapter {
 		})
 	}
 
-	fn is_matured(&self, input: &Input, height: u64) -> Result<(), pool::PoolError> {
+	fn verify_maturity(&self, input: &Input) -> Result<(), pool::PoolError> {
 		wo(&self.chain)
-			.is_matured(input, height)
-			.map_err(|e| match e {
-				chain::types::Error::OutputNotFound => pool::PoolError::OutputNotFound,
-				_ => pool::PoolError::GenericPoolError,
-			})
+			.verify_maturity(input)
+			.map_err(|_| pool::PoolError::ImmatureCoinbase)
 	}
 
 	fn head_header(&self) -> Result<BlockHeader, pool::PoolError> {

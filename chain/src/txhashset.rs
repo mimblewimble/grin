@@ -25,9 +25,9 @@ use std::time::Instant;
 use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::consensus::REWARD;
-use core::core::{Block, BlockHeader, Committed, Input, Output, OutputFeatures, OutputIdentifier,
-                 TxKernel};
-use core::core::pmmr::{self, MerkleProof, PMMR};
+use core::core::{Block, BlockHeader, Committed, Input, MerkleProof, Output, OutputFeatures,
+                 OutputIdentifier, TxKernel};
+use core::core::pmmr::{self, PMMR};
 use core::global;
 use core::core::hash::{Hash, Hashed};
 use core::ser::{PMMRIndexHashable, PMMRable};
@@ -474,10 +474,12 @@ impl<'a> Extension<'a> {
 					return Err(Error::TxHashSetErr(format!("output pmmr hash mismatch")));
 				}
 
-				// check coinbase maturity with the Merkle Proof on the input
+				// Verify maturity via Merkle proof for each input spending a coinbase output.
+				// We found the read_elem based on the hash so we know
+				// we are being honest about the input features
+				// (not spending a coinbase output, pretending it was a regular output).
 				if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-					let header = self.commit_index.get_block_header(&input.block_hash())?;
-					input.verify_maturity(read_hash, &header, height)?;
+					self.verify_maturity_via_merkle_proof(input, height)?;
 				}
 			}
 
@@ -539,13 +541,45 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	/// Verify the maturity of an input spending a coinbase output
+	/// by checking the height of the block in question
+	/// and verifying the output existed at the time of that block
+	/// via the Merkle proof.
+	/// The Merkle proof shows the output must have existed at that block
+	/// as it is included in the output_root hash committed to in the block header.
+	pub fn verify_maturity_via_merkle_proof(
+		&self,
+		input: &Input,
+		height: u64,
+	) -> Result<(), Error> {
+		// get the headers based on the block hash specified in the input
+		let header = self.commit_index.get_block_header(&input.block_hash())?;
+
+		// Check that the height indicates it has matured sufficiently
+		// we will check the Merkle proof below to ensure we are being
+		// honest about the height
+		if header.height + global::coinbase_maturity() >= height {
+			return Err(Error::ImmatureCoinbase);
+		}
+
+		// We need the MMR pos to verify the Merkle proof
+		let pos = self.get_output_pos(&input.commitment())?;
+
+		let out_id = OutputIdentifier::from_input(input);
+		let res = input
+			.merkle_proof()
+			.verify(header.output_root, &out_id, pos)?;
+
+		Ok(res)
+	}
+
 	/// Build a Merkle proof for the given output and the block by
 	/// rewinding the MMR to the last pos of the block.
 	/// Note: this relies on the MMR being stable even after pruning/compaction.
 	/// We need the hash of each sibling pos from the pos up to the peak
 	/// including the sibling leaf node which may have been removed.
 	pub fn merkle_proof(
-		&mut self,
+		&self,
 		output: &OutputIdentifier,
 		block_header: &BlockHeader,
 	) -> Result<MerkleProof, Error> {
@@ -555,9 +589,6 @@ impl<'a> Extension<'a> {
 			output.commit,
 			block_header.hash()
 		);
-
-		// rewind to the specified block for a consistent view
-		self.rewind(block_header)?;
 
 		// then calculate the Merkle Proof based on the known pos
 		let pos = self.get_output_pos(&output.commit)?;
@@ -670,7 +701,8 @@ impl<'a> Extension<'a> {
 		let supply = ((header.height * REWARD) as i64).checked_neg().unwrap_or(0);
 		let output_sum = self.sum_commitments(supply, None)?;
 
-		let (kernel_sum, kernel_sum_plus_offset) = self.sum_kernel_excesses(&header.total_kernel_offset, None)?;
+		let (kernel_sum, kernel_sum_plus_offset) =
+			self.sum_kernel_excesses(&header.total_kernel_offset, None)?;
 
 		if output_sum != kernel_sum_plus_offset {
 			return Err(Error::InvalidTxHashSet(

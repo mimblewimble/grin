@@ -23,17 +23,12 @@ use std::{error, fmt};
 
 use consensus;
 use consensus::VerifySortOrder;
-use core::Committed;
-use core::global;
-use core::BlockHeader;
+use core::{Committed, MerkleProof};
 use core::hash::{Hash, Hashed, ZERO_HASH};
-use core::pmmr::MerkleProof;
 use keychain;
-use keychain::{BlindingFactor, Keychain};
-use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
-          WriteableSorted, Writer};
+use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, WriteableSorted,
+          Writer};
 use util;
-use util::LOGGER;
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -439,9 +434,7 @@ impl Transaction {
 			return Err(Error::TooManyInputs);
 		}
 		self.verify_sorted()?;
-		self.verify_inputs()?;
 		self.verify_kernels()?;
-
 		Ok(())
 	}
 
@@ -476,26 +469,6 @@ impl Transaction {
 		self.inputs.verify_sort_order()?;
 		self.outputs.verify_sort_order()?;
 		self.kernels.verify_sort_order()?;
-		Ok(())
-	}
-
-	/// We can verify the Merkle proof (for coinbase inputs) here in isolation.
-	/// But we cannot check the following as we need data from the index and the PMMR.
-	/// So we must be sure to check these at the appropriate point during block validation.
-	///   * node is in the correct pos in the PMMR
-	///   * block is the correct one (based on output_root from block_header via the index)
-	fn verify_inputs(&self) -> Result<(), Error> {
-		let coinbase_inputs = self.inputs
-			.iter()
-			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT));
-
-		for input in coinbase_inputs {
-			let merkle_proof = input.merkle_proof();
-			if !merkle_proof.verify() {
-				return Err(Error::MerkleProof);
-			}
-		}
-
 		Ok(())
 	}
 }
@@ -774,68 +747,8 @@ impl Input {
 	/// Will return the "empty" Merkle proof if we do not have one.
 	/// We currently only care about the Merkle proof for inputs spending coinbase outputs.
 	pub fn merkle_proof(&self) -> MerkleProof {
-		let merkle_proof = self.merkle_proof.clone();
-		merkle_proof.unwrap_or(MerkleProof::empty())
-	}
-
-	/// Verify the maturity of an output being spent by an input.
-	/// Only relevant for spending coinbase outputs currently (locked for 1,000 confirmations).
-	///
-	/// The proof associates the output with the root by its hash (and pos) in the MMR.
-	/// The proof shows the output existed and was unspent at the time the output_root was built.
-	/// The root associates the proof with a specific block header with that output_root.
-	/// So the proof shows the output was unspent at the time of the block
-	/// and is at least as old as that block (may be older).
-	///
-	/// We can verify maturity of the output being spent by -
-	///
-	/// * verifying the Merkle Proof produces the correct root for the given hash (from MMR)
-	/// * verifying the root matches the output_root in the block_header
-	/// * verifying the hash matches the node hash in the Merkle Proof
-	/// * finally verify maturity rules based on height of the block header
-	///
-	pub fn verify_maturity(
-		&self,
-		hash: Hash,
-		header: &BlockHeader,
-		height: u64,
-	) -> Result<(), Error> {
-		if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-			let block_hash = self.block_hash();
-			let merkle_proof = self.merkle_proof();
-
-			// Check we are dealing with the correct block header
-			if block_hash != header.hash() {
-				return Err(Error::MerkleProof);
-			}
-
-			// Is our Merkle Proof valid? Does node hash up consistently to the root?
-			if !merkle_proof.verify() {
-				return Err(Error::MerkleProof);
-			}
-
-			// Is the root the correct root for the given block header?
-			if merkle_proof.root != header.output_root {
-				return Err(Error::MerkleProof);
-			}
-
-			// Does the hash from the MMR actually match the one in the Merkle Proof?
-			if merkle_proof.node != hash {
-				return Err(Error::MerkleProof);
-			}
-
-			// Finally has the output matured sufficiently now we know the block?
-			let lock_height = header.height + global::coinbase_maturity();
-			if lock_height > height {
-				return Err(Error::ImmatureCoinbase);
-			}
-
-			debug!(
-				LOGGER,
-				"input: verify_maturity: success via Merkle proof: {} vs {}", lock_height, height,
-			);
-		}
-		Ok(())
+		let proof = self.merkle_proof.clone();
+		proof.unwrap_or(MerkleProof::empty())
 	}
 }
 

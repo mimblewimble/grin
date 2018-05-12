@@ -23,6 +23,7 @@ use util::secp::pedersen::Commitment;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::{block, transaction, Block, BlockHeader};
+use core::core::MerkleProofError;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 use grin_store as store;
 use grin_store;
@@ -105,6 +106,10 @@ pub enum Error {
 	GenesisBlockRequired,
 	/// Error from underlying tx handling
 	Transaction(transaction::Error),
+	/// Error from underlying Merkle proof.
+	MerkleProof(MerkleProofError),
+	/// Attempt to spend a coinbase output that has not matured sufficiently.
+	ImmatureCoinbase,
 	/// Anything else
 	Other(String),
 }
@@ -146,6 +151,12 @@ impl From<io::Error> for Error {
 impl From<keychain::Error> for Error {
 	fn from(e: keychain::Error) -> Error {
 		Error::Keychain(e)
+	}
+}
+
+impl From<MerkleProofError> for Error {
+	fn from(e: MerkleProofError) -> Error {
+		Error::MerkleProof(e)
 	}
 }
 

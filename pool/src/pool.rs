@@ -223,11 +223,15 @@ where
 			return Err(e);
 		}
 
-		// Making sure the transaction is valid before anything else.
+		// Is the transaction valid?
 		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
 
+		for input in &tx.inputs {
+			self.blockchain.verify_maturity(&input)?;
+		}
+
 		// The first check involves ensuring that an indentical transaction is not
-		// alreay in the stem transaction or regular transaction pool.
+		// already in the stem transaction or regular transaction pool.
 		// A non-authoritative similar check should be performed under the
 		// pool's read lock before we get to this point, which would catch the
 		// majority of duplicate cases. The race condition is caught here.
@@ -285,8 +289,6 @@ where
 					}
 				}
 				Parent::BlockTransaction => {
-					let height = head_header.height + 1;
-					self.blockchain.is_matured(&input, height)?;
 					blockchain_refs.push(base);
 				}
 				Parent::Unknown => orphan_refs.push(base),
@@ -917,9 +919,7 @@ where
 		head_header: &block::BlockHeader,
 	) -> Result<(), PoolError> {
 		if head_header.height < tx.lock_height() {
-			return Err(PoolError::ImmatureTransaction {
-				lock_height: tx.lock_height(),
-			});
+			return Err(PoolError::ImmatureTransaction);
 		}
 		Ok(())
 	}

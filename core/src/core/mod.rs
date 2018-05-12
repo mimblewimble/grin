@@ -17,6 +17,7 @@
 pub mod block;
 pub mod hash;
 pub mod id;
+pub mod merkle_proof;
 pub mod pmmr;
 pub mod target;
 pub mod transaction;
@@ -32,6 +33,7 @@ use util::{secp, secp_static, static_secp_instance};
 use util::secp::pedersen::*;
 
 pub use self::block::*;
+pub use self::merkle_proof::*;
 pub use self::transaction::*;
 pub use self::id::ShortId;
 use core::hash::Hashed;

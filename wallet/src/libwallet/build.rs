@@ -25,9 +25,8 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use core::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
+use core::core::{Input, MerkleProof, Output, OutputFeatures, Transaction, TxKernel};
 use core::core::hash::Hash;
-use core::core::pmmr::MerkleProof;
 use libwallet::{aggsig, proof};
 
 use keychain;
