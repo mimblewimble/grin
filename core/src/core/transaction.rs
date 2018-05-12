@@ -418,15 +418,8 @@ impl Transaction {
 		let overage = self.fee() as i64;
 		let io_sum = self.sum_commitments(overage, None)?;
 
-		let offset = {
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-			let key = self.offset.secret_key(&secp)?;
-			secp.commit(0, key)?
-		};
-
 		// Sum the kernel excesses accounting for the kernel offset.
-		let (_, kernel_sum) = self.sum_kernel_excesses(&offset, None)?;
+		let (_, kernel_sum) = self.sum_kernel_excesses(&self.offset, None)?;
 
 		// sum of kernel commitments (including the offset) must match
 		// the sum of input/output commitments (minus fee)
