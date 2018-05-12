@@ -204,19 +204,24 @@ where
 	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
 		debug!(LOGGER, "merkle_proof  {}, last_pos {}", pos, self.last_pos);
 
+		// check this pos is actually a leaf in the MMR
 		if !is_leaf(pos) {
 			return Err(format!("not a leaf at pos {}", pos));
 		}
 
-		let node = self.get_hash(pos)
+		// check we actually have a hash in the MMR at this pos
+		self.get_hash(pos)
 			.ok_or(format!("no element at pos {}", pos))?;
 
 		let mmr_size = self.unpruned_size();
 
+		// Edge case: an MMR with a single entry in it
+		// this entry is a leaf, a peak and the root itself
+		// and there are no siblings to hash with
 		if mmr_size == 1 {
 			return Ok(MerkleProof {
 				mmr_size,
-				path: vec![node],
+				path: vec![],
 			});
 		}
 

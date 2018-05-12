@@ -99,7 +99,10 @@ impl MerkleProof {
 		node_pos: u64,
 	) -> Result<(), MerkleProofError> {
 		let mut proof = self.clone();
-		proof.verify_consume(root, element, node_pos)
+		// calculate the peaks once as these are based on overall MMR size
+		// (and will not change)
+		let peaks_pos = pmmr::peaks(self.mmr_size);
+		proof.verify_consume(root, element, node_pos, peaks_pos)
 	}
 
 	/// Consumes the Merkle proof while verifying it.
@@ -110,6 +113,7 @@ impl MerkleProof {
 		root: Hash,
 		element: &PMMRIndexHashable,
 		node_pos: u64,
+		peaks_pos: Vec<u64>,
 	) -> Result<(), MerkleProofError> {
 		let node_hash = if node_pos > self.mmr_size {
 			element.hash_with_index(self.mmr_size)
@@ -125,18 +129,11 @@ impl MerkleProof {
 			} else {
 				return Err(MerkleProofError::RootMismatch);
 			}
-		} else if self.mmr_size == 1 {
-			if self.path.len() == 1 && root == node_hash && vec![root] == self.path {
-				return Ok(());
-			} else {
-				return Err(MerkleProofError::RootMismatch);
-			}
 		}
 
 		let sibling = self.path.remove(0);
 		let (parent_pos, sibling_pos) = pmmr::family(node_pos);
 
-		let peaks_pos = pmmr::peaks(self.mmr_size);
 		if let Ok(x) = peaks_pos.binary_search(&node_pos) {
 			let parent = if x == peaks_pos.len() - 1 {
 				(sibling, node_hash)

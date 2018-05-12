@@ -83,7 +83,7 @@ fn pmmr_merkle_proof() {
 	assert_eq!(pmmr.get_hash(1).unwrap(), pos_0);
 
 	let proof = pmmr.merkle_proof(1).unwrap();
-	assert_eq!(proof.path, [pos_0]);
+	assert_eq!(proof.path, vec![]);
 	assert!(proof.verify(pmmr.root(), &elems[0], 1).is_ok());
 
 	pmmr.push(elems[1]).unwrap();
