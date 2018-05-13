@@ -722,16 +722,9 @@ impl Block {
 		let overage = (REWARD as i64).checked_neg().unwrap_or(0);
 		let io_sum = self.sum_commitments(overage, Some(prev_output_sum))?;
 
-		let offset = {
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-			let key = self.header.total_kernel_offset.secret_key(&secp)?;
-			secp.commit(0, key)?
-		};
-
 		// Sum the kernel excesses accounting for the kernel offset.
 		let (kernel_sum, kernel_sum_plus_offset) =
-			self.sum_kernel_excesses(&offset, Some(prev_kernel_sum))?;
+			self.sum_kernel_excesses(&self.header.total_kernel_offset, Some(prev_kernel_sum))?;
 
 		if io_sum != kernel_sum_plus_offset {
 			return Err(Error::KernelSumMismatch);

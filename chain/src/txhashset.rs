@@ -22,7 +22,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
-use util::static_secp_instance;
 use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::consensus::REWARD;
@@ -665,20 +664,14 @@ impl<'a> Extension<'a> {
 	pub fn validate_sums(&self, header: &BlockHeader) -> Result<((Commitment, Commitment)), Error> {
 		let now = Instant::now();
 
-		let offset = {
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-			let key = header.total_kernel_offset.secret_key(&secp)?;
-			secp.commit(0, key)?
-		};
-
 		// Treat the total "supply" as one huge overage that needs to be accounted for.
 		// If we have a supply of 6,000 grin then we should
 		// have a corresponding 6,000 grin in unspent outputs.
 		let supply = ((header.height * REWARD) as i64).checked_neg().unwrap_or(0);
 		let output_sum = self.sum_commitments(supply, None)?;
 
-		let (kernel_sum, kernel_sum_plus_offset) = self.sum_kernel_excesses(&offset, None)?;
+		let (kernel_sum, kernel_sum_plus_offset) =
+			self.sum_kernel_excesses(&header.total_kernel_offset, None)?;
 
 		if output_sum != kernel_sum_plus_offset {
 			return Err(Error::InvalidTxHashSet(
