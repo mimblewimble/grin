@@ -411,6 +411,10 @@ impl Transaction {
 			x.verify()?;
 		}
 
+		// TODO - the following can/should be cleaned up if we move to having
+		// an explicit verify_against_sums()
+		// where we verify the tx against current state (full chain + current tx_pool)
+
 		// Sum all input|output|overage commitments.
 		let overage = self.fee() as i64;
 		let io_sum = self.sum_commitments(overage, None)?;

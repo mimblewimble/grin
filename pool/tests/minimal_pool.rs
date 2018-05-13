@@ -149,18 +149,18 @@ fn test_minimal_basic_pool_add() {
 	};
 	dummy_chain.store_head_header(&head_header);
 
+	// TODO - what are we actually spending here?
+	// Do we need to setup some actual block_sums and/or tx_pool_sums
+	// to give us something spendable?
+
 	let parent_transaction = test_transaction(vec![5, 6, 7], vec![11, 3]);
-	// We want this transaction to be rooted in the blockchain.
-	let new_output = DummyOutputSet::empty()
-		.with_output(test_output(5))
-		.with_output(test_output(6))
-		.with_output(test_output(7))
-		.with_output(test_output(8));
 
 	// Prepare a second transaction, connected to the first.
-	let child_transaction = test_transaction(vec![11, 3], vec![12]);
-
-	dummy_chain.update_output_set(new_output);
+	// TODO - we have 2 self-consistent txs here - but why does the whole thing
+	// validate??? TODO - the tx pool is creating/destroying funds - how do we
+	// verify this is not the case?
+	let child_transaction = test_transaction(vec![100], vec![12]);
+	// let child_transaction = test_transaction(vec![11, 3], vec![12]);
 
 	// To mirror how this construction is intended to be used
 	// the pool is placed inside a RwLock.
@@ -172,21 +172,20 @@ fn test_minimal_basic_pool_add() {
 		assert_eq!(write_pool.total_size(), 0);
 
 		// First, add the transaction rooted in the blockchain
-		let result = write_pool.add_to_memory_pool(test_source(), parent_transaction, false);
-		if result.is_err() {
-			panic!("got an error adding parent tx: {:?}", result.err().unwrap());
-		}
+		write_pool
+			.add_to_memory_pool(test_source(), parent_transaction, false)
+			.unwrap();
+		assert_eq!(write_pool.total_size(), 1);
 
 		// Now, add the transaction connected as a child to the first
-		let child_result = write_pool.add_to_memory_pool(test_source(), child_transaction, false);
-
-		if child_result.is_err() {
-			panic!(
-				"got an error adding child tx: {:?}",
-				child_result.err().unwrap()
-			);
-		}
+		write_pool
+			.add_to_memory_pool(test_source(), child_transaction, false)
+			.unwrap();
+		assert_eq!(write_pool.total_size(), 2);
+		println!("***** {:?}", write_pool.pool_sums);
 	}
+
+	panic!("[wip]");
 
 	// // Now take the read lock and use a few exposed methods to check consistency
 	// {

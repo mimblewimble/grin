@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use core::core::hash::{Hash, Hashed};
 use core::core::{Committed, Transaction};
+use keychain::BlindingFactor;
 use types::*;
 use util::{secp_static, static_secp_instance};
 use util::secp::pedersen::Commitment;
@@ -25,12 +26,12 @@ use util::secp::pedersen::Commitment;
 /// Sums of the pool.
 #[derive(Debug, Clone)]
 pub struct TxPoolSums {
-	/// Sum of all input|output commitments of all pool txs.
+	/// Sum of all input|output commitments of chain + pool txs.
 	pub output_sum: Commitment,
-	/// Sum of kernel excesses of all pool txs.
+	/// Sum of kernel excesses of chain + pool txs
 	pub kernel_sum: Commitment,
-	/// Sum of kernel offsets of all pool txs.
-	pub kernel_offset: Commitment,
+	/// Sum of kernel offsets of chain + pool txs.
+	pub offset_sum: BlindingFactor,
 }
 
 impl Default for TxPoolSums {
@@ -39,7 +40,7 @@ impl Default for TxPoolSums {
 		TxPoolSums {
 			output_sum: zero_commit.clone(),
 			kernel_sum: zero_commit.clone(),
-			kernel_offset: zero_commit.clone(),
+			offset_sum: BlindingFactor::zero(),
 		}
 	}
 }
@@ -89,15 +90,22 @@ where
 		// Making sure the transaction is valid before anything else.
 		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
 
+		println!("***** {:?}", tx);
+		println!("***** {:?}", self.pool_sums);
+
 		match tx.verify_against_sums_experimental(
 			&self.pool_sums.output_sum,
 			&self.pool_sums.kernel_sum,
-			&self.pool_sums.kernel_offset,
+			&self.pool_sums.offset_sum,
 		) {
-			Ok(_res) => {
-				panic!("success!!!!");
+			Ok((output_sum, kernel_sum, offset_sum)) => {
 				self.transactions.insert(tx.hash(), Box::new(tx));
-				// and update sums here
+				self.pool_sums = TxPoolSums {
+					output_sum,
+					kernel_sum,
+					offset_sum,
+				};
+				Ok(())
 			}
 			Err(e) => panic!("oh no {}", e),
 		}

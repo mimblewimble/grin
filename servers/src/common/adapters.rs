@@ -27,7 +27,7 @@ use rand::Rng;
 
 use chain::{self, ChainAdapter, Options, Tip};
 use core::core;
-use core::core::block::BlockHeader;
+use core::core::block::{BlockHeader, BlockSums};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::transaction::{Input, OutputIdentifier};
@@ -714,6 +714,12 @@ impl pool::BlockChain for PoolToChainAdapter {
 	fn head_header(&self) -> Result<BlockHeader, pool::PoolError> {
 		wo(&self.chain)
 			.head_header()
+			.map_err(|_| pool::PoolError::GenericPoolError)
+	}
+
+	fn get_block_sums(&self, hash: &Hash) -> Result<BlockSums, pool::PoolError> {
+		wo(&self.chain)
+			.get_block_sums(hash)
 			.map_err(|_| pool::PoolError::GenericPoolError)
 	}
 }
