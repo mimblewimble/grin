@@ -30,7 +30,7 @@ use core::core;
 use core::core::block::{BlockHeader, BlockSums};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use core::core::transaction::{Input, OutputIdentifier};
+use core::core::transaction::{Input, OutputIdentifier, Transaction};
 use p2p;
 use pool;
 use util::OneTime;
@@ -56,7 +56,7 @@ pub struct NetToChainAdapter {
 	currently_syncing: Arc<AtomicBool>,
 	archive_mode: bool,
 	chain: Weak<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::MinimalTxPool<PoolToChainAdapter>>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 }
@@ -358,7 +358,7 @@ impl NetToChainAdapter {
 		currently_syncing: Arc<AtomicBool>,
 		archive_mode: bool,
 		chain_ref: Weak<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		tx_pool: Arc<RwLock<pool::MinimalTxPool<PoolToChainAdapter>>>,
 		config: ServerConfig,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
@@ -568,7 +568,7 @@ impl NetToChainAdapter {
 /// blockchain accepted a new block, asking the pool to update its state and
 /// the network to broadcast the block
 pub struct ChainToPoolAndNetAdapter {
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::MinimalTxPool<PoolToChainAdapter>>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 }
 
@@ -627,7 +627,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 impl ChainToPoolAndNetAdapter {
 	/// Construct a ChainToPoolAndNetAdaper instance.
 	pub fn new(
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		tx_pool: Arc<RwLock<pool::MinimalTxPool<PoolToChainAdapter>>>,
 	) -> ChainToPoolAndNetAdapter {
 		ChainToPoolAndNetAdapter {
 			tx_pool: tx_pool,
@@ -717,9 +717,15 @@ impl pool::BlockChain for PoolToChainAdapter {
 			.map_err(|_| pool::PoolError::GenericPoolError)
 	}
 
-	fn get_block_sums(&self, hash: &Hash) -> Result<BlockSums, pool::PoolError> {
+	fn validate_raw_tx(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
 		wo(&self.chain)
-			.get_block_sums(hash)
+			.validate_raw_tx(tx)
 			.map_err(|_| pool::PoolError::GenericPoolError)
 	}
+
+	// fn get_block_sums(&self, hash: &Hash) -> Result<BlockSums, pool::PoolError> {
+	// 	wo(&self.chain)
+	// 		.get_block_sums(hash)
+	// 		.map_err(|_| pool::PoolError::GenericPoolError)
+	// }
 }

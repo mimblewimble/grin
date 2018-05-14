@@ -227,7 +227,7 @@ pub struct StratumServer {
 	id: String,
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::MinimalTxPool<PoolToChainAdapter>>>,
 	current_block: Block,
 	current_difficulty: u64,
 	workers: Arc<Mutex<Vec<Worker>>>,
@@ -239,7 +239,7 @@ impl StratumServer {
 	pub fn new(
 		config: StratumServerConfig,
 		chain_ref: Arc<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		tx_pool: Arc<RwLock<pool::MinimalTxPool<PoolToChainAdapter>>>,
 	) -> StratumServer {
 		StratumServer {
 			id: String::from("StratumServer"),
@@ -301,7 +301,8 @@ impl StratumServer {
 					// Call the handler function for requested method
 					let (response, err) = match request.method.as_str() {
 						"login" => {
-							let (response, err) = self.handle_login(request.params, &mut workers_l[num]);
+							let (response, err) =
+								self.handle_login(request.params, &mut workers_l[num]);
 							(response, err)
 						}
 						"submit" => self.handle_submit(
@@ -464,7 +465,7 @@ impl StratumServer {
 		}
 		let submitted_by = match worker.login.clone() {
 			None => worker.id.to_string(),
-			Some(login) => login.clone()
+			Some(login) => login.clone(),
 		};
 		info!(
 			LOGGER,

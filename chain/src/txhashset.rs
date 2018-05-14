@@ -256,6 +256,7 @@ where
 
 		trace!(LOGGER, "Starting new txhashset (readonly) extension.");
 		let mut extension = Extension::new(trees, commit_index);
+		extension.force_rollback();
 		res = inner(&mut extension);
 
 		sizes = extension.sizes();

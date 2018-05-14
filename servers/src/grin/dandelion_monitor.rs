@@ -34,7 +34,7 @@ use pool::TxSource;
 /// sending only to the peer relay.
 pub fn monitor_transactions<T>(
 	config: PoolConfig,
-	tx_pool: Arc<RwLock<TransactionPool<T>>>,
+	tx_pool: Arc<RwLock<MinimalTxPool<T>>>,
 	stop: Arc<AtomicBool>,
 ) where
 	T: BlockChain + Send + Sync + 'static,

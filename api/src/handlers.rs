@@ -603,7 +603,7 @@ impl Handler for BlockHandler {
 
 // Get basic information about the transaction pool.
 struct PoolInfoHandler<T> {
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+	tx_pool: Weak<RwLock<pool::MinimalTxPool<T>>>,
 }
 
 impl<T> Handler for PoolInfoHandler<T>
@@ -613,9 +613,11 @@ where
 	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
 		let pool_arc = w(&self.tx_pool);
 		let pool = pool_arc.read().unwrap();
+
+		// TODO - what to do here?
 		json_response(&PoolInfo {
-			pool_size: pool.pool_size(),
-			orphans_size: pool.orphans_size(),
+			pool_size: 0,
+			orphans_size: 0,
 			total_size: pool.total_size(),
 		})
 	}
@@ -631,7 +633,7 @@ struct TxWrapper {
 // to the network if valid.
 struct PoolPushHandler<T> {
 	peers: Weak<p2p::Peers>,
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+	tx_pool: Weak<RwLock<pool::MinimalTxPool<T>>>,
 }
 
 impl<T> Handler for PoolPushHandler<T>
@@ -725,7 +727,7 @@ where
 pub fn start_rest_apis<T>(
 	addr: String,
 	chain: Weak<chain::Chain>,
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+	tx_pool: Weak<RwLock<pool::MinimalTxPool<T>>>,
 	peers: Weak<p2p::Peers>,
 ) where
 	T: pool::BlockChain + Send + Sync + 'static,

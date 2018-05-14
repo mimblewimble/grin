@@ -83,7 +83,7 @@ impl ser::Writer for HeaderPrePowWriter {
 // Warning: This call does not return until/unless a new block can be built
 pub fn get_block(
 	chain: &Arc<chain::Chain>,
-	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: &Arc<RwLock<pool::MinimalTxPool<PoolToChainAdapter>>>,
 	key_id: Option<Identifier>,
 	max_tx: u32,
 	wallet_listener_url: Option<String>,
@@ -133,7 +133,7 @@ pub fn get_block(
 /// transactions from the pool.
 fn build_block(
 	chain: &Arc<chain::Chain>,
-	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: &Arc<RwLock<pool::MinimalTxPool<PoolToChainAdapter>>>,
 	key_id: Option<Identifier>,
 	max_tx: u32,
 	wallet_listener_url: Option<String>,

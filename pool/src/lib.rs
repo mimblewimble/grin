@@ -41,4 +41,5 @@ extern crate slog;
 extern crate time;
 
 pub use pool::TransactionPool;
+pub use minimal_pool::MinimalTxPool;
 pub use types::{BlockChain, PoolAdapter, PoolConfig, PoolError, TxSource};

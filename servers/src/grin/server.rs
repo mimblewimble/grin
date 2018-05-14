@@ -48,7 +48,7 @@ pub struct Server {
 	/// data store access
 	pub chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::MinimalTxPool<PoolToChainAdapter>>>,
 	/// Whether we're currently syncing
 	currently_syncing: Arc<AtomicBool>,
 	/// To be passed around to collect stats and info
@@ -114,7 +114,7 @@ impl Server {
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
 		let pool_net_adapter = Arc::new(PoolToNetAdapter::new());
-		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(
+		let tx_pool = Arc::new(RwLock::new(pool::MinimalTxPool::new(
 			config.pool_config.clone(),
 			pool_adapter.clone(),
 			pool_net_adapter.clone(),
