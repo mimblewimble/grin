@@ -248,9 +248,10 @@ fn fast_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>, header_head: &chain::T
 				header_head.last_block_h
 			);
 
-			// ask for txhashset at horizon
+			// ask for txhashset at 90% of horizon, this still leaves time for download
+			// and validation to happen and stay within horizon
 			let mut txhashset_head = chain.get_block_header(&header_head.prev_block_h).unwrap();
-			for _ in 0..horizon.saturating_sub(20) {
+			for _ in 0..(horizon - horizon / 10) {
 				txhashset_head = chain.get_block_header(&txhashset_head.previous).unwrap();
 			}
 			p.send_txhashset_request(txhashset_head.height, txhashset_head.hash())

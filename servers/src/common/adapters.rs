@@ -20,11 +20,12 @@ use std::net::SocketAddr;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock, Weak};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
 use std::time::Instant;
 use rand;
 use rand::Rng;
 
-use chain::{self, ChainAdapter, Options};
+use chain::{self, ChainAdapter, Options, Tip};
 use core::core;
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
@@ -53,6 +54,7 @@ fn wo<T>(weak_one: &OneTime<Weak<T>>) -> Arc<T> {
 /// implementations.
 pub struct NetToChainAdapter {
 	currently_syncing: Arc<AtomicBool>,
+	archive_mode: bool,
 	chain: Weak<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	peers: OneTime<Weak<p2p::Peers>>,
@@ -354,16 +356,18 @@ impl NetToChainAdapter {
 	/// Construct a new NetToChainAdapter instance
 	pub fn new(
 		currently_syncing: Arc<AtomicBool>,
+		archive_mode: bool,
 		chain_ref: Weak<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 		config: ServerConfig,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
-			currently_syncing: currently_syncing,
+			currently_syncing,
+			archive_mode,
 			chain: chain_ref,
-			tx_pool: tx_pool,
+			tx_pool,
 			peers: OneTime::new(),
-			config: config,
+			config,
 		}
 	}
 
@@ -415,8 +419,9 @@ impl NetToChainAdapter {
 		let bhash = b.hash();
 		let chain = w(&self.chain);
 		match chain.process_block(b, self.chain_opts()) {
-			Ok(_) => {
+			Ok((tip, _)) => {
 				self.validate_chain(bhash);
+				self.check_compact(tip);
 				true
 			}
 			Err(chain::Error::Orphan) => {
@@ -477,6 +482,28 @@ impl NetToChainAdapter {
 				"adapter: process_block: ***** done validating full chain state, took {}s",
 				now.elapsed().as_secs(),
 			);
+		}
+	}
+
+	fn check_compact(&self, tip_res: Option<Tip>) {
+		// no compaction during sync or if we're in historical mode
+		if self.archive_mode || self.currently_syncing.load(Ordering::Relaxed) {
+			return;
+		}
+
+		if let Some(tip) = tip_res {
+			// trigger compaction every 2000 blocks, uses a different thread to avoid
+			// blocking the caller thread (likely a peer)
+			if tip.height % 2000 == 0 {
+				let chain = w(&self.chain);
+				let _ = thread::Builder::new()
+					.name("compactor".to_string())
+					.spawn(move || {
+						if let Err(e) = chain.compact() {
+							error!(LOGGER, "Could not compact chain: {:?}", e);
+						}
+					});
+			}
 		}
 	}
 

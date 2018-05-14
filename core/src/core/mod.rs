@@ -37,6 +37,8 @@ pub use self::id::ShortId;
 use core::hash::Hashed;
 use ser::{Error, Readable, Reader, Writeable, Writer};
 use global;
+use keychain;
+use keychain::BlindingFactor;
 
 /// Implemented by types that hold inputs and outputs (and kernels)
 /// containing Pedersen commitments.
@@ -46,9 +48,9 @@ pub trait Committed {
 	/// Gather the kernel excesses and sum them.
 	fn sum_kernel_excesses(
 		&self,
-		offset: &Commitment,
+		offset: &BlindingFactor,
 		extra_excess: Option<&Commitment>,
-	) -> Result<(Commitment, Commitment), secp::Error> {
+	) -> Result<(Commitment, Commitment), keychain::Error> {
 		let zero_commit = secp_static::commit_to_zero_value();
 
 		// then gather the kernel excess commitments
@@ -68,13 +70,16 @@ pub trait Committed {
 			secp.commit_sum(kernel_commits, vec![])?
 		};
 
-		// sum the commitments along with the specified offset
+		// sum the commitments along with the
+		// commit to zero built from the offset
 		let kernel_sum_plus_offset = {
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
 			let mut commits = vec![kernel_sum];
-			if *offset != zero_commit {
-				commits.push(*offset);
+			if *offset != BlindingFactor::zero() {
+				let key = offset.secret_key(&secp)?;
+				let offset_commit = secp.commit(0, key)?;
+				commits.push(offset_commit);
 			}
 			secp.commit_sum(commits, vec![])?
 		};
