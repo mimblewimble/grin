@@ -17,7 +17,6 @@
 use rand::thread_rng;
 use uuid::Uuid;
 
-use checker;
 use core::core::{amount_to_hr_string, Committed, Transaction};
 use libwallet::{aggsig, build};
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
@@ -29,23 +28,19 @@ use failure::ResultExt;
 // TODO: None of these functions should care about the wallet implementation,
 
 /// Initiate a transaction for the aggsig exchange
+/// assumes outputs are refreshed and up to date
 pub fn sender_initiation(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	tx_id: &Uuid,
 	context_manager: &mut aggsig::ContextManager,
 	amount: u64,
+	current_height: u64,
 	minimum_confirmations: u64,
 	max_outputs: usize,
 	selection_strategy_is_use_all: bool,
 ) -> Result<PartialTx, Error> {
-	checker::refresh_outputs(config, keychain)?;
-
-	let chain_tip = checker::get_tip_from_node(config)?;
-	let current_height = chain_tip.height;
-
-	// proof of concept - set lock_height on the tx
-	let lock_height = chain_tip.height;
+	let lock_height = current_height;
 
 	let (tx, blind, coins, _change_key, amount_with_fee) = build_send_tx(
 		config,

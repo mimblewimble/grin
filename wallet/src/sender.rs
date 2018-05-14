@@ -47,12 +47,19 @@ pub fn issue_send_tx(
 	let mut context_manager = aggsig::ContextManager::new();
 	let tx_id = Uuid::new_v4();
 
+	// Get lock height
+	let chain_tip = checker::get_tip_from_node(config)?;
+	let current_height = chain_tip.height;
+	// ensure outputs we're selecting are up to date
+	checker::refresh_outputs(config, keychain)?;
+
 	let partial_tx = transaction::sender_initiation(
 		config,
 		keychain,
 		&tx_id,
 		&mut context_manager,
 		amount,
+		current_height,
 		minimum_confirmations,
 		max_outputs,
 		selection_strategy_is_use_all,
