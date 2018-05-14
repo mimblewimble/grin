@@ -21,10 +21,8 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-pub mod graph;
 pub mod types;
 pub mod blockchain;
-pub mod pool;
 pub mod minimal_pool;
 
 extern crate blake2_rfc as blake2;
@@ -40,6 +38,5 @@ extern crate serde_derive;
 extern crate slog;
 extern crate time;
 
-pub use pool::TransactionPool;
 pub use minimal_pool::MinimalTxPool;
 pub use types::{BlockChain, PoolAdapter, PoolConfig, PoolError, TxSource};

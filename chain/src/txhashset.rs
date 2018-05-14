@@ -113,6 +113,9 @@ impl TxHashSet {
 		})
 	}
 
+	///
+	/// TODO Some duplication here - both in txhashset and in the extension.
+	///
 	/// Check if an output is unspent.
 	/// We look in the index to find the output MMR pos.
 	/// Then we check the entry in the output MMR and confirm the hash matches.
@@ -476,6 +479,24 @@ impl<'a> Extension<'a> {
 			self.commit_index.save_block_marker(bh, marker)?;
 		}
 		Ok(())
+	}
+
+	fn is_unspent(&mut self, output_id: &OutputIdentifier) -> Result<Hash, Error> {
+		match self.commit_index.get_output_pos(&output_id.commit) {
+			Ok(pos) => {
+				if let Some(hash) = self.output_pmmr.get_hash(pos) {
+					if hash == output_id.hash_with_index(pos - 1) {
+						Ok(hash)
+					} else {
+						Err(Error::TxHashSetErr(format!("txhashset hash mismatch")))
+					}
+				} else {
+					Err(Error::OutputNotFound)
+				}
+			}
+			Err(grin_store::Error::NotFoundErr) => Err(Error::OutputNotFound),
+			Err(e) => Err(Error::StoreErr(e, format!("txhashset unspent check"))),
+		}
 	}
 
 	fn apply_input(&mut self, input: &Input, height: u64) -> Result<(), Error> {
