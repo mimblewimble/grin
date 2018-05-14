@@ -17,42 +17,19 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use core::core::hash::{Hash, Hashed};
+use core::core::transaction;
 use core::core::{Committed, Transaction};
 use keychain::BlindingFactor;
 use types::*;
 use util::{secp_static, static_secp_instance};
 use util::secp::pedersen::Commitment;
 
-/// Sums of the pool.
-#[derive(Debug, Clone)]
-pub struct TxPoolSums {
-	/// Sum of all input|output commitments of chain + pool txs.
-	pub output_sum: Commitment,
-	/// Sum of kernel excesses of chain + pool txs
-	pub kernel_sum: Commitment,
-	/// Sum of kernel offsets of chain + pool txs.
-	pub offset_sum: BlindingFactor,
-}
-
-impl Default for TxPoolSums {
-	fn default() -> TxPoolSums {
-		let zero_commit = secp_static::commit_to_zero_value();
-		TxPoolSums {
-			output_sum: zero_commit.clone(),
-			kernel_sum: zero_commit.clone(),
-			offset_sum: BlindingFactor::zero(),
-		}
-	}
-}
-
 /// A minimal (EXPERIMENTAL) transaction pool implementation
 pub struct MinimalTxPool<T> {
 	/// Pool Config
 	pub config: PoolConfig,
-	/// Pool sums.
-	pub pool_sums: TxPoolSums,
 	/// Transaction in the pool keyed by hash
-	pub transactions: HashMap<Hash, Box<Transaction>>,
+	pub transactions: HashMap<Hash, Transaction>,
 	/// Transaction hashes in the order they were added to the pool
 	pub tx_insert_order: Vec<Hash>,
 	/// The blockchain
@@ -69,7 +46,6 @@ where
 	pub fn new(config: PoolConfig, chain: Arc<T>, adapter: Arc<PoolAdapter>) -> MinimalTxPool<T> {
 		MinimalTxPool {
 			config: config,
-			pool_sums: TxPoolSums::default(),
 			transactions: HashMap::new(),
 			tx_insert_order: Vec::new(),
 			blockchain: chain,
@@ -78,37 +54,35 @@ where
 	}
 
 	/// Add a new transaction to the pool.
+	/// Validation of the tx (and all txs in the pool) is done via a readonly txhashset extension.
+	/// ***EXPERIMENTAL***
 	pub fn add_to_memory_pool(
 		&mut self,
 		_: TxSource,
 		tx: Transaction,
 		_stem: bool,
 	) -> Result<(), PoolError> {
+		let tx_hash = tx.hash();
+
 		// Do we have the capacity to accept this transaction?
 		self.is_acceptable(&tx)?;
 
-		// Making sure the transaction is valid before anything else.
+		// Make sure the transaction is valid before anything else.
 		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
 
-		println!("***** {:?}", tx);
-		println!("***** {:?}", self.pool_sums);
+		// Aggregate this new tx with all existing txs in the pool.
+		// Consider "caching" this aggregated tx in the pool somehow?
+		// TODO - fix the excessive cloning() here somehow
+		let mut txs = self.transactions.values().cloned().collect::<Vec<_>>();
+		txs.push(tx.clone());
+		let agg_tx =
+			transaction::aggregate_with_cut_through(txs).map_err(|_| PoolError::GenericPoolError)?;
 
-		match tx.verify_against_sums_experimental(
-			&self.pool_sums.output_sum,
-			&self.pool_sums.kernel_sum,
-			&self.pool_sums.offset_sum,
-		) {
-			Ok((output_sum, kernel_sum, offset_sum)) => {
-				self.transactions.insert(tx.hash(), Box::new(tx));
-				self.pool_sums = TxPoolSums {
-					output_sum,
-					kernel_sum,
-					offset_sum,
-				};
-				Ok(())
-			}
-			Err(e) => panic!("oh no {}", e),
-		}
+		// Validate aggregated tx against the chain txhashset extension.
+		self.blockchain.validate_raw_tx(&agg_tx)?;
+		self.transactions.insert(tx_hash, tx);
+
+		Ok(())
 	}
 
 	/// Whether the transaction is acceptable to the pool, given both how

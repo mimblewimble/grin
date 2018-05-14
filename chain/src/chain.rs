@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 use core::core::{Block, BlockHeader, BlockSums, Input, Output, OutputFeatures, OutputIdentifier,
-                 TxKernel};
+                 Transaction, TxKernel};
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
@@ -458,6 +458,15 @@ impl Chain {
 	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<Hash, Error> {
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset.is_unspent(output_ref)
+	}
+
+	pub fn validate_raw_tx(&self, tx: &Transaction) -> Result<(), Error> {
+		let bh = self.head_header()?;
+		let mut txhashset = self.txhashset.write().unwrap();
+		txhashset::extending_readonly(&mut txhashset, |extension| {
+			extension.apply_raw_tx(tx, &bh)?;
+			Ok(())
+		})
 	}
 
 	/// Validate the current chain state.

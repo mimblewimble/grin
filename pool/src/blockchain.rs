@@ -156,8 +156,22 @@ impl BlockChain for DummyChainImpl {
 		}
 	}
 
-	fn get_block_sums(&self, bh: &hash::Hash) -> Result<block::BlockSums, PoolError> {
-		panic!("not yet implemented");
+	fn validate_raw_tx(&self, tx: &transaction::Transaction) -> Result<(), PoolError> {
+		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
+
+		// TODO - rewrite this if statement
+		for x in &tx.inputs {
+			if self.output
+				.read()
+				.unwrap()
+				.get_output(&x.commitment())
+				.is_none()
+			{
+				return Err(PoolError::OutputNotFound);
+			}
+		}
+
+		Ok(())
 	}
 }
 

@@ -212,7 +212,7 @@ pub trait BlockChain {
 	/// Get the block header at the head
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError>;
 
-	fn get_block_sums(&self, bh: &hash::Hash) -> Result<block::BlockSums, PoolError>;
+	fn validate_raw_tx(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
 }
 
 /// Bridge between the transaction pool and the rest of the system. Handles

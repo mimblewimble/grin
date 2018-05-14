@@ -26,7 +26,7 @@ use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::consensus::REWARD;
 use core::core::{Block, BlockHeader, BlockSums, Committed, Input, Output, OutputFeatures,
-                 OutputIdentifier, TxKernel};
+                 OutputIdentifier, Transaction, TxKernel};
 use core::core::pmmr::{self, MerkleProof, PMMR};
 use core::global;
 use core::core::hash::{Hash, Hashed};
@@ -399,6 +399,30 @@ impl<'a> Extension<'a> {
 			new_block_markers: HashMap::new(),
 			rollback: false,
 		}
+	}
+
+	///
+	/// Experimental - this should *never* be called on a writeable extension...
+	///
+	pub fn apply_raw_tx(&mut self, tx: &Transaction, bh: &BlockHeader) -> Result<(), Error> {
+		if !self.rollback {
+			panic!("attempted to apply a raw tx to a writeable txhashset extension");
+		}
+
+		for input in &tx.inputs {
+			self.apply_input(input, bh.height)?;
+		}
+
+		for out in &tx.outputs {
+			self.apply_output(out)?;
+		}
+
+		// then applying all kernels
+		for kernel in &tx.kernels {
+			self.apply_kernel(kernel)?;
+		}
+
+		Ok(())
 	}
 
 	/// Apply a new set of blocks on top the existing sum trees. Blocks are
