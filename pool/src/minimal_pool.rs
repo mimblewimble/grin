@@ -86,7 +86,10 @@ where
 		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
 
 		// Aggregate this new tx with all existing txs in the pool.
-		let mut txs = self.transactions.iter().map(|x| *x.clone()).collect::<Vec<_>>();
+		let mut txs = self.transactions
+			.iter()
+			.map(|x| *x.clone())
+			.collect::<Vec<_>>();
 		txs.push(tx.clone());
 		let agg_tx =
 			transaction::aggregate_with_cut_through(txs).map_err(|_| PoolError::GenericPoolError)?;
@@ -103,7 +106,10 @@ where
 	// Aggregate this new tx with all existing txs in the pool.
 	// Skip some validation steps as the tx was already in our tx pool.
 	fn internal_add_to_memory_pool(&mut self, tx: Transaction) -> Result<(), PoolError> {
-		let mut txs = self.transactions.iter().map(|x| *x.clone()).collect::<Vec<_>>();
+		let mut txs = self.transactions
+			.iter()
+			.map(|x| *x.clone())
+			.collect::<Vec<_>>();
 		txs.push(tx.clone());
 		let agg_tx =
 			transaction::aggregate_with_cut_through(txs).map_err(|_| PoolError::GenericPoolError)?;
@@ -156,7 +162,10 @@ where
 			let agg_tx = transaction::aggregate_with_cut_through(txs)
 				.map_err(|_| PoolError::GenericPoolError)?;
 			if let Ok(_) = self.blockchain.validate_raw_tx(&agg_tx) {
-				debug!(LOGGER, "pool: reconcile_block: candidate txs fully validate. Done.");
+				debug!(
+					LOGGER,
+					"pool: reconcile_block: candidate txs fully validate. Done."
+				);
 				self.transactions = candidate_transactions;
 				return Ok(vec![]);
 			}
@@ -180,10 +189,7 @@ where
 	}
 
 	/// TODO - not yet fully implemented
-	pub fn prepare_mineable_transactions(
-		&self,
-		num_to_fetch: u32,
-	) -> Vec<Box<Transaction>> {
+	pub fn prepare_mineable_transactions(&self, num_to_fetch: u32) -> Vec<Box<Transaction>> {
 		self.transactions.clone()
 	}
 

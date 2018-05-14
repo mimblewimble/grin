@@ -461,7 +461,10 @@ impl Chain {
 	}
 
 	pub fn validate_raw_tx(&self, tx: &Transaction) -> Result<(), Error> {
-		debug!(LOGGER, "chain: validate_raw_tx: started (how slow is this?)");
+		debug!(
+			LOGGER,
+			"chain: validate_raw_tx: started (how slow is this?)"
+		);
 		let bh = self.head_header()?;
 		let mut txhashset = self.txhashset.write().unwrap();
 		let res = txhashset::extending_readonly(&mut txhashset, |extension| {

@@ -87,7 +87,6 @@ pub struct TxSource {
 	pub identifier: String,
 }
 
-
 // TODO document this enum more accurately
 /// Enum of errors
 #[derive(Debug)]
