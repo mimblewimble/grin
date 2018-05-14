@@ -77,7 +77,7 @@ where
 		}
 	}
 
-	/// Add a new transacton to the pool.
+	/// Add a new transaction to the pool.
 	pub fn add_to_memory_pool(
 		&mut self,
 		_: TxSource,

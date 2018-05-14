@@ -38,11 +38,12 @@ use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
 use types::PoolError::InvalidTx;
 
-use keychain::Keychain;
+use keychain::{BlindingFactor, Keychain};
 use wallet::libwallet::{build, proof, reward};
 
 use pool::minimal_pool::{MinimalTxPool, TxPoolSums};
 use pool::types::*;
+use util::secp_static;
 
 // macro_rules! expect_output_parent {
 // 	($pool:expr, $expected:pat, $( $output:expr ),+ ) => {
@@ -125,6 +126,35 @@ fn test_transaction(input_values: Vec<u64>, output_values: Vec<u64>) -> Transact
 	build::transaction(tx_elements, &keychain).unwrap()
 }
 
+fn init_pool_sums(values: Vec<u64>) -> TxPoolSums {
+	let keychain = keychain_for_tests();
+
+	let output_sums = values
+		.iter()
+		.cloned()
+		.map(|x| {
+			let key_id = keychain.derive_key_id(x as u32).unwrap();
+			keychain.commit(x, &key_id).unwrap()
+		})
+		.collect::<Vec<_>>();
+
+	// TODO - what do we do with the kernel_sum here on init???
+	// kernel_excess is a commit to what? which is 0 initially?
+
+	let total = values.iter().sum();
+	let key_id = keychain.derive_key_id(total as u32).unwrap();
+	let kernel_sum = keychain.commit(0, &key_id).unwrap();
+
+	let output_sum = keychain.secp().commit_sum(output_sums, vec![]).unwrap();
+
+	let zero_commit = secp_static::commit_to_zero_value();
+	TxPoolSums {
+		output_sum,
+		kernel_sum,
+		offset_sum: BlindingFactor::zero(),
+	}
+}
+
 // A deterministic keychain.
 fn keychain_for_tests() -> Keychain {
 	let seed = "minimal_pool_tests";
@@ -149,22 +179,22 @@ fn test_minimal_basic_pool_add() {
 	};
 	dummy_chain.store_head_header(&head_header);
 
-	// TODO - what are we actually spending here?
-	// Do we need to setup some actual block_sums and/or tx_pool_sums
-	// to give us something spendable?
+	// To mirror how this construction is intended to be used
+	// the pool is placed inside a RwLock.
+	let pool = RwLock::new(test_setup(&Arc::new(dummy_chain)));
+
+	// Initialize the pool sums so we have some outputs that can be spent.
+	{
+		let mut write_pool = pool.write().unwrap();
+		write_pool.pool_sums = init_pool_sums(vec![5, 6, 7]);
+	}
 
 	let parent_transaction = test_transaction(vec![5, 6, 7], vec![11, 3]);
 
 	// Prepare a second transaction, connected to the first.
-	// TODO - we have 2 self-consistent txs here - but why does the whole thing
-	// validate??? TODO - the tx pool is creating/destroying funds - how do we
-	// verify this is not the case?
+	// TODO - how is this still validating???
 	let child_transaction = test_transaction(vec![100], vec![12]);
 	// let child_transaction = test_transaction(vec![11, 3], vec![12]);
-
-	// To mirror how this construction is intended to be used
-	// the pool is placed inside a RwLock.
-	let pool = RwLock::new(test_setup(&Arc::new(dummy_chain)));
 
 	// Take the write lock and add a pool entry
 	{
