@@ -44,7 +44,10 @@ pub fn refresh_output_state_local(
 	let wallet_outputs = checker::map_wallet_outputs(config, keychain)?;
 	let chain_outputs: Vec<api::Output> = wallet_outputs
 		.keys()
-		.map(|k| get_output_local(chain, &k).unwrap())
+		.map(|k| match get_output_local(chain, &k) {
+			Err(e) => panic!(e),
+			Ok(k) => k,
+		})
 		.collect();
 	let mut api_outputs: HashMap<pedersen::Commitment, api::Output> = HashMap::new();
 	for out in chain_outputs {

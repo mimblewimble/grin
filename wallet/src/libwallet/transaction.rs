@@ -20,7 +20,7 @@ use uuid::Uuid;
 use core::core::{amount_to_hr_string, Committed, Transaction};
 use libwallet::{aggsig, build};
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
-use types::*;
+use types::*; // TODO: Remove this?
 use util::{secp, LOGGER};
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::Signature;
@@ -29,30 +29,24 @@ use failure::ResultExt;
 // TODO: None of these functions should care about the wallet implementation,
 
 /// Initiate a transaction for the aggsig exchange
-/// assumes outputs are refreshed and up to date
+/// with the given transaction data
 pub fn sender_initiation(
-	config: &WalletConfig,
 	keychain: &Keychain,
 	tx_id: &Uuid,
 	context_manager: &mut aggsig::ContextManager,
-	amount: u64,
 	current_height: u64,
-	minimum_confirmations: u64,
-	max_outputs: usize,
-	selection_strategy_is_use_all: bool,
+	//TODO: Make this nicer, remove wallet-specific OutputData type
+	tx_data: (
+		Transaction,
+		BlindingFactor,
+		Vec<OutputData>,
+		Option<Identifier>,
+		u64,
+	),
 ) -> Result<PartialTx, Error> {
 	let lock_height = current_height;
 
-	let (tx, blind, coins, _change_key, amount_with_fee) = build_send_tx(
-		config,
-		keychain,
-		amount,
-		current_height,
-		minimum_confirmations,
-		lock_height,
-		max_outputs,
-		selection_strategy_is_use_all,
-	)?;
+	let (tx, blind, coins, _change_key, amount_with_fee) = tx_data;
 
 	// TODO - wrap this up in build_send_tx or even the build() call?
 	// Generate a random kernel offset here
@@ -162,7 +156,7 @@ pub fn recipient_initiation(
 	debug!(LOGGER, "Creating new aggsig context");
 	let mut context = context_manager.create_context(keychain.secp(), &partial_tx.id, blind);
 	context.add_output(output_key_id);
-	context.fee = out_amount;
+	context.fee = tx.fee();
 
 	let sig_part = context
 		.calculate_partial_sig(
@@ -246,6 +240,48 @@ pub fn sender_confirmation(
 	Ok(partial_tx)
 }
 
+/// Creates the final signature, callable by either the sender or recipient
+/// (after phase 3: sender confirmation)
+///
+/// TODO: takes a partial Tx that just contains the other party's public
+/// info at present, but this should be changed to something more appropriate
+pub fn finalize_transaction(
+	keychain: &Keychain,
+	context_manager: &mut aggsig::ContextManager,
+	partial_tx: &PartialTx,
+	other_partial_tx: &PartialTx,
+	output_key_id: &Identifier,
+	output_key_derivation: u32,
+) -> Result<Transaction, Error> {
+	let (
+		_amount,
+		_lock_height,
+		other_pub_blinding,
+		other_pub_nonce,
+		kernel_offset,
+		other_sig_part,
+		tx,
+	) = read_partial_tx(keychain, other_partial_tx)?;
+	let final_sig = create_final_signature(
+		keychain,
+		context_manager,
+		partial_tx,
+		&other_pub_blinding,
+		&other_pub_nonce,
+		&other_sig_part.unwrap(),
+	)?;
+
+	build_final_transaction(
+		keychain,
+		partial_tx.amount,
+		kernel_offset,
+		&final_sig,
+		tx.clone(),
+		output_key_id,
+		output_key_derivation,
+	)
+}
+
 /// This should be callable by either the sender or receiver
 /// once phase 3 is done
 ///
@@ -263,17 +299,17 @@ pub fn sender_confirmation(
 ///
 /// Returns completed transaction ready for posting to the chain
 
-pub fn create_final_signature(
-	config: &WalletConfig,
+fn create_final_signature(
 	keychain: &Keychain,
 	context_manager: &mut aggsig::ContextManager,
 	partial_tx: &PartialTx,
 	other_pub_blinding: &PublicKey,
 	other_pub_nonce: &PublicKey,
 	other_sig_part: &Signature,
-) -> Result<Transaction, Error> {
-	let (amount, _lock_height, _, _, kernel_offset, _, tx) = read_partial_tx(keychain, partial_tx)?;
-	let mut context = context_manager.get_context(&partial_tx.id);
+) -> Result<Signature, Error> {
+	let (_amount, _lock_height, _, _, _kernel_offset, _, tx) =
+		read_partial_tx(keychain, partial_tx)?;
+	let context = context_manager.get_context(&partial_tx.id);
 	let res = context.verify_partial_sig(
 		&keychain.secp(),
 		&other_sig_part,
@@ -329,250 +365,18 @@ pub fn create_final_signature(
 		return Err(ErrorKind::Signature("Final aggregated signature invalid."))?;
 	}
 
-	build_final_transaction(
-		&mut context,
-		config,
-		keychain,
-		amount,
-		kernel_offset,
-		&final_sig,
-		tx.clone(),
-	)
-}
-
-/// Creates the final signature, callable by either the sender or recipient
-/// (after phase 3: sender confirmation)
-///
-/// TODO: takes a partial Tx that just contains the other party's public
-/// info at present, but this should be changed to something more appropriate
-pub fn finalize_transaction(
-	config: &WalletConfig,
-	keychain: &Keychain,
-	context_manager: &mut aggsig::ContextManager,
-	partial_tx: &PartialTx,
-	other_partial_tx: &PartialTx,
-) -> Result<Transaction, Error> {
-	let (_, _, other_pub_blinding, other_pub_nonce, _, other_sig_part, _) =
-		read_partial_tx(keychain, other_partial_tx)?;
-	create_final_signature(
-		config,
-		keychain,
-		context_manager,
-		partial_tx,
-		&other_pub_blinding,
-		&other_pub_nonce,
-		&other_sig_part.unwrap(),
-	)
-}
-
-/// TODO: Probably belongs elsewhere
-pub fn next_available_key(wallet_data: &WalletData, keychain: &Keychain) -> (Identifier, u32) {
-	let root_key_id = keychain.root_key_id();
-	let derivation = wallet_data.next_child(root_key_id.clone());
-	let key_id = keychain.derive_key_id(derivation).unwrap();
-	(key_id, derivation)
-}
-
-/// TODO: Probably belongs elsewhere
-pub fn retrieve_existing_key(wallet_data: &WalletData, key_id: Identifier) -> (Identifier, u32) {
-	if let Some(existing) = wallet_data.get_output(&key_id) {
-		let key_id = existing.key_id.clone();
-		let derivation = existing.n_child;
-		(key_id, derivation)
-	} else {
-		panic!("should never happen");
-	}
-}
-
-/// Builds a transaction to send to someone from the HD seed associated with the
-/// wallet and the amount to send. Handles reading through the wallet data file,
-/// selecting outputs to spend and building the change.
-fn build_send_tx(
-	config: &WalletConfig,
-	keychain: &Keychain,
-	amount: u64,
-	current_height: u64,
-	minimum_confirmations: u64,
-	lock_height: u64,
-	max_outputs: usize,
-	selection_strategy_is_use_all: bool,
-) -> Result<
-	(
-		Transaction,
-		BlindingFactor,
-		Vec<OutputData>,
-		Option<Identifier>,
-		u64,
-	),
-	Error,
-> {
-	let key_id = keychain.clone().root_key_id();
-
-	// select some spendable coins from the wallet
-	let mut coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		Ok(wallet_data.select_coins(
-			key_id.clone(),
-			amount,
-			current_height,
-			minimum_confirmations,
-			max_outputs,
-			selection_strategy_is_use_all,
-		))
-	})?;
-
-	// Get the maximum number of outputs in the wallet
-	let max_outputs = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		Ok(wallet_data.select_coins(
-			key_id.clone(),
-			amount,
-			current_height,
-			minimum_confirmations,
-			max_outputs,
-			true,
-		))
-	})?.len();
-
-	// sender is responsible for setting the fee on the partial tx
-	// recipient should double check the fee calculation and not blindly trust the
-	// sender
-	let mut fee;
-	// First attempt to spend without change
-	fee = tx_fee(coins.len(), 1, coins_proof_count(&coins), None);
-	let mut total: u64 = coins.iter().map(|c| c.value).sum();
-	let mut amount_with_fee = amount + fee;
-
-	if total == 0 {
-		return Err(ErrorKind::NotEnoughFunds(total as u64))?;
-	}
-
-	// Check if we need to use a change address
-	if total > amount_with_fee {
-		fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
-		amount_with_fee = amount + fee;
-
-		// Here check if we have enough outputs for the amount including fee otherwise
-		// look for other outputs and check again
-		while total < amount_with_fee {
-			// End the loop if we have selected all the outputs and still not enough funds
-			if coins.len() == max_outputs {
-				return Err(ErrorKind::NotEnoughFunds(total as u64))?;
-			}
-
-			// select some spendable coins from the wallet
-			coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-				Ok(wallet_data.select_coins(
-					key_id.clone(),
-					amount_with_fee,
-					current_height,
-					minimum_confirmations,
-					max_outputs,
-					selection_strategy_is_use_all,
-				))
-			})?;
-			fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
-			total = coins.iter().map(|c| c.value).sum();
-			amount_with_fee = amount + fee;
-		}
-	}
-
-	// build transaction skeleton with inputs and change
-	let (mut parts, change_key) = inputs_and_change(&coins, config, keychain, amount, fee)?;
-
-	// This is more proof of concept than anything but here we set lock_height
-	// on tx being sent (based on current chain height via api).
-	parts.push(build::with_lock_height(lock_height));
-
-	let (tx, blind) = build::partial_transaction(parts, &keychain).context(ErrorKind::Keychain)?;
-
-	Ok((tx, blind, coins, change_key, amount_with_fee))
-}
-
-/// coins proof count
-pub fn coins_proof_count(coins: &Vec<OutputData>) -> usize {
-	coins.iter().filter(|c| c.merkle_proof.is_some()).count()
-}
-
-/// Selects inputs and change for a transaction
-pub fn inputs_and_change(
-	coins: &Vec<OutputData>,
-	config: &WalletConfig,
-	keychain: &Keychain,
-	amount: u64,
-	fee: u64,
-) -> Result<(Vec<Box<build::Append>>, Option<Identifier>), Error> {
-	let mut parts = vec![];
-
-	// calculate the total across all inputs, and how much is left
-	let total: u64 = coins.iter().map(|c| c.value).sum();
-
-	parts.push(build::with_fee(fee));
-
-	// if we are spending 10,000 coins to send 1,000 then our change will be 9,000
-	// if the fee is 80 then the recipient will receive 1000 and our change will be
-	// 8,920
-	let change = total - amount - fee;
-
-	// build inputs using the appropriate derived key_ids
-	for coin in coins {
-		let key_id = keychain
-			.derive_key_id(coin.n_child)
-			.context(ErrorKind::Keychain)?;
-		if coin.is_coinbase {
-			let block = coin.block.clone();
-			let merkle_proof = coin.merkle_proof.clone();
-			let merkle_proof = merkle_proof.unwrap().merkle_proof();
-
-			parts.push(build::coinbase_input(
-				coin.value,
-				block.unwrap().hash(),
-				merkle_proof,
-				key_id,
-			));
-		} else {
-			parts.push(build::input(coin.value, key_id));
-		}
-	}
-	let change_key;
-	if change != 0 {
-		// track the output representing our change
-		change_key = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-			let root_key_id = keychain.root_key_id();
-			let change_derivation = wallet_data.next_child(root_key_id.clone());
-			let change_key = keychain.derive_key_id(change_derivation).unwrap();
-
-			wallet_data.add_output(OutputData {
-				root_key_id: root_key_id.clone(),
-				key_id: change_key.clone(),
-				n_child: change_derivation,
-				value: change as u64,
-				status: OutputStatus::Unconfirmed,
-				height: 0,
-				lock_height: 0,
-				is_coinbase: false,
-				block: None,
-				merkle_proof: None,
-			});
-
-			Some(change_key)
-		})?;
-
-		parts.push(build::output(change, change_key.clone().unwrap()));
-	} else {
-		change_key = None
-	}
-
-	Ok((parts, change_key))
+	Ok(final_sig)
 }
 
 /// builds a final transaction after the aggregated sig exchange
 fn build_final_transaction(
-	context: &mut aggsig::Context,
-	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
 	kernel_offset: BlindingFactor,
 	excess_sig: &secp::Signature,
 	tx: Transaction,
+	output_key_id: &Identifier,
+	output_key_derivation: u32,
 ) -> Result<Transaction, Error> {
 	let root_key_id = keychain.root_key_id();
 
@@ -607,36 +411,12 @@ fn build_final_transaction(
 
 	let out_amount = amount - tx.fee();
 
-	// Get output we created in earlier step
-	// TODO: will just be one for now, support multiple later
-	let output_vec = context.get_outputs();
-
-	// operate within a lock on wallet data
-	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		let (key_id, derivation) = retrieve_existing_key(&wallet_data, output_vec[0].clone());
-
-		wallet_data.add_output(OutputData {
-			root_key_id: root_key_id.clone(),
-			key_id: key_id.clone(),
-			n_child: derivation,
-			value: out_amount,
-			status: OutputStatus::Unconfirmed,
-			height: 0,
-			lock_height: 0,
-			is_coinbase: false,
-			block: None,
-			merkle_proof: None,
-		});
-
-		(key_id, derivation)
-	})?;
-
 	// Build final transaction, the sum of which should
 	// be the same as the exchanged excess values
 	let mut final_tx = build::transaction(
 		vec![
 			build::initial_tx(tx),
-			build::output(out_amount, key_id.clone()),
+			build::output(out_amount, output_key_id.clone()),
 			build::with_offset(kernel_offset),
 		],
 		keychain,
@@ -684,8 +464,8 @@ fn build_final_transaction(
 		LOGGER,
 		"Finalized transaction and built output - {:?}, {:?}, {}",
 		root_key_id.clone(),
-		key_id.clone(),
-		derivation,
+		output_key_id.clone(),
+		output_key_derivation,
 	);
 
 	Ok(final_tx)

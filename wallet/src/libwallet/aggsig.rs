@@ -23,7 +23,6 @@ use uuid::Uuid;
 use keychain::Keychain;
 use keychain::extkey::Identifier;
 use keychain::blind::BlindingFactor;
-use types::OutputData;
 use libwallet::error::Error;
 
 #[derive(Clone, Debug)]

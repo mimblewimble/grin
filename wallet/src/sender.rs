@@ -19,6 +19,7 @@ use client;
 use checker;
 use core::core::amount_to_hr_string;
 use libwallet::{aggsig, build, transaction};
+use grinwallet::selection;
 use core::ser;
 use keychain::{Identifier, Keychain};
 use receiver::TxWrapper;
@@ -53,16 +54,25 @@ pub fn issue_send_tx(
 	// ensure outputs we're selecting are up to date
 	checker::refresh_outputs(config, keychain)?;
 
-	let partial_tx = transaction::sender_initiation(
+	let lock_height = current_height;
+
+	let tx_data = selection::build_send_tx(
 		config,
 		keychain,
-		&tx_id,
-		&mut context_manager,
 		amount,
 		current_height,
 		minimum_confirmations,
+		lock_height,
 		max_outputs,
 		selection_strategy_is_use_all,
+	)?;
+
+	let partial_tx = transaction::sender_initiation(
+		keychain,
+		&tx_id,
+		&mut context_manager,
+		current_height,
+		tx_data,
 	)?;
 
 	let context = context_manager.get_context(&tx_id);
@@ -198,8 +208,8 @@ pub fn issue_burn_tx(
 
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
-	let fee = tx_fee(coins.len(), 2, transaction::coins_proof_count(&coins), None);
-	let (mut parts, _) = transaction::inputs_and_change(&coins, config, keychain, amount, fee)?;
+	let fee = tx_fee(coins.len(), 2, selection::coins_proof_count(&coins), None);
+	let (mut parts, _) = selection::inputs_and_change(&coins, config, keychain, amount, fee)?;
 
 	// add burn output and fees
 	parts.push(build::output(amount - fee, Identifier::zero()));

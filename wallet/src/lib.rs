@@ -60,6 +60,7 @@ mod restore;
 pub mod client;
 pub mod server;
 pub mod libwallet;
+pub mod grinwallet;
 
 pub use outputs::show_outputs;
 pub use info::{retrieve_info, show_info};

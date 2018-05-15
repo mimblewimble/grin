@@ -27,6 +27,7 @@ use api;
 use core::consensus::reward;
 use core::core::{Output, Transaction, TxKernel};
 use libwallet::{aggsig, reward, transaction};
+use grinwallet::keys;
 use core::{global, ser};
 use failure::{Fail, ResultExt};
 use keychain::Keychain;
@@ -54,12 +55,13 @@ fn handle_sender_initiation(
 ) -> Result<PartialTx, Error> {
 	// Create a potential output for this transaction
 	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		transaction::next_available_key(&wallet_data, keychain)
+		keys::next_available_key(&wallet_data, keychain)
 	})?;
 
 	let partial_tx =
 		transaction::recipient_initiation(keychain, context_manager, partial_tx, &key_id)?;
-	let context = context_manager.get_context(&partial_tx.id);
+	let mut context = context_manager.get_context(&partial_tx.id);
+	context.add_output(&key_id);
 
 	// Add the output to our wallet
 	let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
@@ -67,7 +69,7 @@ fn handle_sender_initiation(
 			root_key_id: keychain.root_key_id(),
 			key_id: key_id.clone(),
 			n_child: derivation,
-			value: context.fee,
+			value: partial_tx.amount - context.fee,
 			status: OutputStatus::Unconfirmed,
 			height: 0,
 			lock_height: 0,
@@ -77,6 +79,7 @@ fn handle_sender_initiation(
 		});
 	})?;
 
+	context_manager.save_context(context);
 	Ok(partial_tx)
 }
 
@@ -87,13 +90,40 @@ fn handle_sender_confirmation(
 	partial_tx: &PartialTx,
 	fluff: bool,
 ) -> Result<Transaction, Error> {
+	let context = context_manager.get_context(&partial_tx.id);
+	// Get output we created in earlier step
+	// TODO: will just be one for now, support multiple later
+	let output_vec = context.get_outputs();
+
+	let root_key_id = keychain.root_key_id();
+	// operate within a lock on wallet data
+	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+		let (key_id, derivation) = keys::retrieve_existing_key(&wallet_data, output_vec[0].clone());
+
+		wallet_data.add_output(OutputData {
+			root_key_id: root_key_id.clone(),
+			key_id: key_id.clone(),
+			n_child: derivation,
+			value: partial_tx.amount - context.fee,
+			status: OutputStatus::Unconfirmed,
+			height: 0,
+			lock_height: 0,
+			is_coinbase: false,
+			block: None,
+			merkle_proof: None,
+		});
+
+		(key_id, derivation)
+	})?;
+
 	// In this case partial_tx contains other party's pubkey info
 	let final_tx = transaction::finalize_transaction(
-		config,
 		keychain,
 		context_manager,
 		partial_tx,
 		partial_tx,
+		&key_id,
+		derivation,
 	)?;
 
 	let tx_hex = to_hex(ser::ser_vec(&final_tx).unwrap());
@@ -194,8 +224,8 @@ pub fn receive_coinbase(
 	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		let key_id = block_fees.key_id();
 		let (key_id, derivation) = match key_id {
-			Some(key_id) => transaction::retrieve_existing_key(&wallet_data, key_id),
-			None => transaction::next_available_key(&wallet_data, keychain),
+			Some(key_id) => keys::retrieve_existing_key(&wallet_data, key_id),
+			None => keys::next_available_key(&wallet_data, keychain),
 		};
 
 		// track the new output and return the stuff needed for reward
