@@ -54,10 +54,9 @@ impl Cuckoo {
 	/// Initializes a new Cuckoo Cycle setup, using the provided byte array to
 	/// generate a seed. In practice for PoW applications the byte array is a
 	/// serialized block header.
-	pub fn new(header: &[u8], sizeshift: u8) -> Cuckoo {
+	pub fn new(pow_hash: &[u8], sizeshift: u8) -> Cuckoo {
 		let size = 1 << sizeshift;
-		let hashed = blake2::blake2b::blake2b(32, &[], header);
-		let hashed = hashed.as_bytes();
+		let hashed = pow_hash.as_bytes();
 		Cuckoo {
 			v: [
 				u8_to_u64(hashed, 0),
@@ -163,8 +162,8 @@ enum CycleSol {
 
 impl Miner {
 	/// Creates a new miner
-	pub fn new(header: &[u8], ease: u32, proof_size: usize, sizeshift: u8) -> Miner {
-		let cuckoo = Cuckoo::new(header, sizeshift);
+	pub fn new(pow_hash: &[u8], ease: u32, proof_size: usize, sizeshift: u8) -> Miner {
+		let cuckoo = Cuckoo::new(pow_hash, sizeshift);
 		let size = 1 << sizeshift;
 		let graph = vec![0; size + 1];
 		let easiness = (ease as u64) * (size as u64) / 100;
