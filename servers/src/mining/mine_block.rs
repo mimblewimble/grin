@@ -15,29 +15,29 @@
 //! Build a block to mine: gathers transactions from the pool, assembles
 //! them into a block and returns it.
 
-use std::thread;
-use std::sync::{Arc, RwLock};
-use time;
-use std::time::Duration;
-use rand::{self, Rng};
 use itertools::Itertools;
+use rand::{self, Rng};
+use std::sync::{Arc, RwLock};
+use std::thread;
+use std::time::Duration;
+use time;
 
-use core::ser::AsFixedBytes;
 use chain;
 use chain::types::BlockSums;
-use pool;
+use common::adapters::PoolToChainAdapter;
+use common::types::Error;
 use core::consensus;
 use core::core;
 use core::core::Transaction;
 use core::core::hash::Hashed;
 use core::ser;
+use core::ser::AsFixedBytes;
 use keychain::{Identifier, Keychain};
-use wallet;
-use wallet::BlockFees;
+use pool;
 use util;
 use util::LOGGER;
-use common::types::Error;
-use common::adapters::PoolToChainAdapter;
+use wallet;
+use wallet::BlockFees;
 
 /// Serializer that outputs the pre-pow part of the header,
 /// including the nonce (last 8 bytes) that can be sent off
@@ -158,11 +158,12 @@ fn build_block(
 	let difficulty = consensus::next_difficulty(diff_iter).unwrap();
 
 	// extract current transaction from the pool
-	let txs_box = tx_pool
+	let txs = tx_pool
 		.read()
 		.unwrap()
 		.prepare_mineable_transactions(max_tx);
-	let txs: Vec<&Transaction> = txs_box.iter().map(|tx| tx.as_ref()).collect();
+
+	let txs: Vec<&Transaction> = txs.iter().collect();
 
 	// build the coinbase and the block itself
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
