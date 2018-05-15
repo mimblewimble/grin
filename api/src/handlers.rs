@@ -603,7 +603,7 @@ impl Handler for BlockHandler {
 
 // Get basic information about the transaction pool.
 struct PoolInfoHandler<T> {
-	tx_pool: Weak<RwLock<pool::MinimalTxPool<T>>>,
+	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
 }
 
 impl<T> Handler for PoolInfoHandler<T>
@@ -633,7 +633,7 @@ struct TxWrapper {
 // to the network if valid.
 struct PoolPushHandler<T> {
 	peers: Weak<p2p::Peers>,
-	tx_pool: Weak<RwLock<pool::MinimalTxPool<T>>>,
+	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
 }
 
 impl<T> Handler for PoolPushHandler<T>
@@ -727,7 +727,7 @@ where
 pub fn start_rest_apis<T>(
 	addr: String,
 	chain: Weak<chain::Chain>,
-	tx_pool: Weak<RwLock<pool::MinimalTxPool<T>>>,
+	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
 	peers: Weak<p2p::Peers>,
 ) where
 	T: pool::BlockChain + Send + Sync + 'static,

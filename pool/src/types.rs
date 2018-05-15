@@ -154,22 +154,11 @@ impl fmt::Display for PoolError {
 
 /// Interface that the pool requires from a blockchain implementation.
 pub trait BlockChain {
-	/// Get an unspent output by its commitment. Will return an error if the
-	/// output is spent or if it doesn't exist. The blockchain is expected to
-	/// produce a result with its current view of the most worked chain,
-	/// ignoring orphans, etc.
-	/// We do not maintain outputs themselves. The only information we have is
-	/// the hash from the output MMR.
-	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<hash::Hash, PoolError>;
-
-	/// Check if an output being spent by the input has sufficiently matured.
-	/// This is only applicable for coinbase outputs (1,000 blocks).
-	/// Non-coinbase outputs will always pass this check.
-	fn is_matured(&self, input: &Input, height: u64) -> Result<(), PoolError>;
-
 	/// Get the block header at the head
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError>;
 
+	/// Validate a raw tx (may be a large aggregated tx) against the full chain
+	/// state.
 	fn validate_raw_tx(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
 }
 

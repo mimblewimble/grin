@@ -41,22 +41,20 @@ use types::PoolError::InvalidTx;
 use keychain::{BlindingFactor, Keychain};
 use wallet::libwallet::{build, proof, reward};
 
-use pool::minimal_pool::MinimalTxPool;
+use pool::TransactionPool;
 use pool::types::*;
 
-fn test_setup(chain: &Arc<DummyChainImpl>) -> MinimalTxPool<DummyChainImpl> {
-	MinimalTxPool {
-		config: PoolConfig {
+fn test_setup(chain: &Arc<DummyChainImpl>) -> TransactionPool<DummyChainImpl> {
+	TransactionPool::new(
+		PoolConfig {
 			accept_fee_base: 0,
 			max_pool_size: 50,
 			dandelion_probability: 90,
 			dandelion_embargo: 30,
 		},
-		transactions: HashMap::new(),
-		tx_insert_order: Vec::new(),
-		blockchain: chain.clone(),
-		adapter: Arc::new(NoopAdapter {}),
-	}
+		chain.clone(),
+		Arc::new(NoopAdapter {}),
+	)
 }
 
 /// Deterministically generate an output defined by our test scheme
@@ -108,7 +106,7 @@ fn test_transaction(input_values: Vec<u64>, output_values: Vec<u64>) -> Transact
 
 // A deterministic keychain.
 fn keychain_for_tests() -> Keychain {
-	let seed = "minimal_pool_tests";
+	let seed = "pool_tests";
 	let seed = blake2::blake2b::blake2b(32, &[], seed.as_bytes());
 	Keychain::from_seed(seed.as_bytes()).unwrap()
 }

@@ -56,7 +56,7 @@ pub struct NetToChainAdapter {
 	currently_syncing: Arc<AtomicBool>,
 	archive_mode: bool,
 	chain: Weak<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::MinimalTxPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 }
@@ -358,7 +358,7 @@ impl NetToChainAdapter {
 		currently_syncing: Arc<AtomicBool>,
 		archive_mode: bool,
 		chain_ref: Weak<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::MinimalTxPool<PoolToChainAdapter>>>,
+		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 		config: ServerConfig,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
@@ -568,7 +568,7 @@ impl NetToChainAdapter {
 /// blockchain accepted a new block, asking the pool to update its state and
 /// the network to broadcast the block
 pub struct ChainToPoolAndNetAdapter {
-	tx_pool: Arc<RwLock<pool::MinimalTxPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 }
 
@@ -627,7 +627,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 impl ChainToPoolAndNetAdapter {
 	/// Construct a ChainToPoolAndNetAdaper instance.
 	pub fn new(
-		tx_pool: Arc<RwLock<pool::MinimalTxPool<PoolToChainAdapter>>>,
+		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	) -> ChainToPoolAndNetAdapter {
 		ChainToPoolAndNetAdapter {
 			tx_pool: tx_pool,
@@ -694,23 +694,6 @@ impl PoolToChainAdapter {
 }
 
 impl pool::BlockChain for PoolToChainAdapter {
-	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<Hash, pool::PoolError> {
-		wo(&self.chain).is_unspent(output_ref).map_err(|e| match e {
-			chain::types::Error::OutputNotFound => pool::PoolError::OutputNotFound,
-			chain::types::Error::OutputSpent => pool::PoolError::OutputSpent,
-			_ => pool::PoolError::GenericPoolError,
-		})
-	}
-
-	fn is_matured(&self, input: &Input, height: u64) -> Result<(), pool::PoolError> {
-		wo(&self.chain)
-			.is_matured(input, height)
-			.map_err(|e| match e {
-				chain::types::Error::OutputNotFound => pool::PoolError::OutputNotFound,
-				_ => pool::PoolError::GenericPoolError,
-			})
-	}
-
 	fn head_header(&self) -> Result<BlockHeader, pool::PoolError> {
 		wo(&self.chain)
 			.head_header()
@@ -722,10 +705,4 @@ impl pool::BlockChain for PoolToChainAdapter {
 			.validate_raw_tx(tx)
 			.map_err(|_| pool::PoolError::GenericPoolError)
 	}
-
-	// fn get_block_sums(&self, hash: &Hash) -> Result<BlockSums, pool::PoolError> {
-	// 	wo(&self.chain)
-	// 		.get_block_sums(hash)
-	// 		.map_err(|_| pool::PoolError::GenericPoolError)
-	// }
 }

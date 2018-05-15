@@ -41,7 +41,7 @@ const MAX_TX: u32 = 5000;
 pub struct Miner {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::MinimalTxPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	stop: Arc<AtomicBool>,
 
 	// Just to hold the port we're on, so this miner can be identified
@@ -55,7 +55,7 @@ impl Miner {
 	pub fn new(
 		config: StratumServerConfig,
 		chain_ref: Arc<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::MinimalTxPool<PoolToChainAdapter>>>,
+		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 		stop: Arc<AtomicBool>,
 	) -> Miner {
 		Miner {

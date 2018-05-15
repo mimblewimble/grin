@@ -126,27 +126,6 @@ impl DummyChainImpl {
 }
 
 impl BlockChain for DummyChainImpl {
-	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<hash::Hash, PoolError> {
-		match self.output.read().unwrap().get_output(&output_ref.commit) {
-			Some(_) => Ok(hash::Hash::default()),
-			None => Err(PoolError::GenericPoolError),
-		}
-	}
-
-	fn is_matured(&self, input: &Input, height: u64) -> Result<(), PoolError> {
-		if !input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-			return Ok(());
-		}
-		let block_hash = input.block_hash.expect("requires a block hash");
-		let headers = self.block_headers.read().unwrap();
-		if let Some(h) = headers.iter().find(|x| x.hash() == block_hash) {
-			if h.height + global::coinbase_maturity() < height {
-				return Ok(());
-			}
-		}
-		Err(PoolError::InvalidTx(transaction::Error::ImmatureCoinbase))
-	}
-
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError> {
 		let headers = self.block_headers.read().unwrap();
 		if headers.len() > 0 {

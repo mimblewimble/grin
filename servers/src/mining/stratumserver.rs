@@ -227,7 +227,7 @@ pub struct StratumServer {
 	id: String,
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::MinimalTxPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	current_block: Block,
 	current_difficulty: u64,
 	workers: Arc<Mutex<Vec<Worker>>>,
@@ -239,7 +239,7 @@ impl StratumServer {
 	pub fn new(
 		config: StratumServerConfig,
 		chain_ref: Arc<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::MinimalTxPool<PoolToChainAdapter>>>,
+		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	) -> StratumServer {
 		StratumServer {
 			id: String::from("StratumServer"),
