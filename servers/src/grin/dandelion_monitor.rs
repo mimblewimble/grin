@@ -12,24 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
-use std::sync::{Arc, RwLock};
-use std::sync::atomic::{AtomicBool, Ordering};
 use time::now_utc;
 use util::LOGGER;
 
-use pool::TransactionPool;
-use pool::PoolConfig;
-use pool::TxSource;
 use pool::BlockChain;
+use pool::PoolConfig;
+use pool::TransactionPool;
+use pool::TxSource;
 
 /// A process to monitor transactions in the stempool.
 /// With Dandelion, transaction can be broadcasted in stem or fluff phase.
-/// When sent in stem phase, the transaction is relayed to only node: the dandelion relay. In
-/// order to maintain reliability a timer is started for each transaction sent in stem phase.
-/// This function will monitor the stempool and test if the timer is expired for each transaction.
-/// In that case the transaction will be sent in fluff phase (to multiple peers) instead of
+/// When sent in stem phase, the transaction is relayed to only node: the
+/// dandelion relay. In order to maintain reliability a timer is started for
+/// each transaction sent in stem phase. This function will monitor the
+/// stempool and test if the timer is expired for each transaction. In that case
+/// the transaction will be sent in fluff phase (to multiple peers) instead of
 /// sending only to the peer relay.
 pub fn monitor_transactions<T>(
 	config: PoolConfig,
@@ -59,7 +60,7 @@ pub fn monitor_transactions<T>(
 						let stem_transaction = stem_transactions.get(tx_hash).unwrap();
 						let res = tx_pool.write().unwrap().add_to_memory_pool(
 							source,
-							*stem_transaction.clone(),
+							stem_transaction.clone(),
 							false,
 						);
 
