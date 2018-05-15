@@ -22,7 +22,8 @@ use libwallet::{aggsig, build};
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 use types::*;
 use util::{secp, LOGGER};
-use util::secp::key::SecretKey;
+use util::secp::key::{PublicKey, SecretKey};
+use util::secp::Signature;
 use failure::ResultExt;
 
 // TODO: None of these functions should care about the wallet implementation,
@@ -245,6 +246,9 @@ pub fn sender_confirmation(
 	Ok(partial_tx)
 }
 
+/// This should be callable by either the sender or receiver
+/// once phase 3 is done
+///
 /// Receive Part 3 of interactive transactions from sender, Sender Confirmation
 /// Return Ok/Error
 /// -Receiver receives sS
@@ -259,42 +263,38 @@ pub fn sender_confirmation(
 ///
 /// Returns completed transaction ready for posting to the chain
 
-pub fn recipient_confirmation(
+pub fn create_final_signature(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	context_manager: &mut aggsig::ContextManager,
 	partial_tx: &PartialTx,
+	other_pub_blinding: &PublicKey,
+	other_pub_nonce: &PublicKey,
+	other_sig_part: &Signature,
 ) -> Result<Transaction, Error> {
-	let (
-		amount,
-		_lock_height,
-		sender_pub_blinding,
-		sender_pub_nonce,
-		kernel_offset,
-		sender_sig_part,
-		tx,
-	) = read_partial_tx(keychain, partial_tx)?;
+	let (amount, _lock_height, _, _, kernel_offset, _, tx) = read_partial_tx(keychain, partial_tx)?;
 	let mut context = context_manager.get_context(&partial_tx.id);
-	let sender_sig_part = sender_sig_part.unwrap();
 	let res = context.verify_partial_sig(
 		&keychain.secp(),
-		&sender_sig_part,
-		&sender_pub_nonce,
-		&sender_pub_blinding,
+		&other_sig_part,
+		&other_pub_nonce,
+		&other_pub_blinding,
 		tx.fee(),
 		tx.lock_height(),
 	);
 
 	if !res {
-		error!(LOGGER, "Partial Sig from sender invalid.");
-		return Err(ErrorKind::Signature("Partial Sig from sender invalid."))?;
+		error!(LOGGER, "Partial Sig from other party invalid.");
+		return Err(ErrorKind::Signature(
+			"Partial Sig from other party invalid.",
+		))?;
 	}
 
 	// Just calculate our sig part again instead of storing
 	let our_sig_part = context
 		.calculate_partial_sig(
 			&keychain.secp(),
-			&sender_pub_nonce,
+			&other_pub_nonce,
 			tx.fee(),
 			tx.lock_height(),
 		)
@@ -304,15 +304,15 @@ pub fn recipient_confirmation(
 	let final_sig = context
 		.calculate_final_sig(
 			&keychain.secp(),
-			&sender_sig_part,
+			&other_sig_part,
 			&our_sig_part,
-			&sender_pub_nonce,
+			&other_pub_nonce,
 		)
 		.unwrap();
 
 	// Calculate the final public key (for our own sanity check)
 	let final_pubkey = context
-		.calculate_final_pubkey(&keychain.secp(), &sender_pub_blinding)
+		.calculate_final_pubkey(&keychain.secp(), &other_pub_blinding)
 		.unwrap();
 
 	// Check our final sig verifies
@@ -337,6 +337,31 @@ pub fn recipient_confirmation(
 		kernel_offset,
 		&final_sig,
 		tx.clone(),
+	)
+}
+
+/// Creates the final signature, callable by either the sender or recipient
+/// (after phase 3: sender confirmation)
+///
+/// TODO: takes a partial Tx that just contains the other party's public
+/// info at present, but this should be changed to something more appropriate
+pub fn finalize_transaction(
+	config: &WalletConfig,
+	keychain: &Keychain,
+	context_manager: &mut aggsig::ContextManager,
+	partial_tx: &PartialTx,
+	other_partial_tx: &PartialTx,
+) -> Result<Transaction, Error> {
+	let (_, _, other_pub_blinding, other_pub_nonce, _, other_sig_part, _) =
+		read_partial_tx(keychain, other_partial_tx)?;
+	create_final_signature(
+		config,
+		keychain,
+		context_manager,
+		partial_tx,
+		&other_pub_blinding,
+		&other_pub_nonce,
+		&other_sig_part.unwrap(),
 	)
 }
 
@@ -647,6 +672,7 @@ fn build_final_transaction(
 	final_tx.kernels[0].excess_sig = excess_sig.clone();
 
 	// confirm the kernel verifies successfully before proceeding
+	debug!(LOGGER, "Validating final transaction");
 	final_tx.kernels[0]
 		.verify()
 		.context(ErrorKind::Transaction)?;

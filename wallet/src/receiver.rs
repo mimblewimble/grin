@@ -87,8 +87,14 @@ fn handle_sender_confirmation(
 	partial_tx: &PartialTx,
 	fluff: bool,
 ) -> Result<Transaction, Error> {
-	let final_tx =
-		transaction::recipient_confirmation(config, keychain, context_manager, partial_tx)?;
+	// In this case partial_tx contains other party's pubkey info
+	let final_tx = transaction::finalize_transaction(
+		config,
+		keychain,
+		context_manager,
+		partial_tx,
+		partial_tx,
+	)?;
 
 	let tx_hex = to_hex(ser::ser_vec(&final_tx).unwrap());
 
