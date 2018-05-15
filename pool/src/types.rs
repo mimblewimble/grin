@@ -92,11 +92,25 @@ pub struct TxSource {
 /// This enum describes the parent for a given input of a transaction.
 #[derive(Clone)]
 pub enum Parent {
+	/// Unknown
 	Unknown,
+	/// Block Transaction
 	BlockTransaction,
-	PoolTransaction { tx_ref: hash::Hash },
-	StemPoolTransaction { tx_ref: hash::Hash },
-	AlreadySpent { other_tx: hash::Hash },
+	/// Pool Transaction
+	PoolTransaction {
+		/// Transaction reference
+		tx_ref: hash::Hash,
+	},
+	/// StemPool Transaction
+	StemPoolTransaction {
+		/// Transaction reference
+		tx_ref: hash::Hash,
+	},
+	/// AlreadySpent
+	AlreadySpent {
+		/// Other transaction reference
+		other_tx: hash::Hash,
+	},
 }
 
 impl fmt::Debug for Parent {
@@ -143,12 +157,12 @@ pub enum PoolError {
 	},
 	/// A failed deaggregation error
 	FailedDeaggregation,
+	/// Attempt to add a transaction to the pool that spends
+	/// a coinbase output that has not matured sufficiently.
+	ImmatureCoinbase,
 	/// Attempt to add a transaction to the pool with lock_height
 	/// greater than height of current block
-	ImmatureTransaction {
-		/// The lock height of the invalid transaction
-		lock_height: u64,
-	},
+	ImmatureTransaction,
 	/// An orphan successfully added to the orphans set
 	OrphanTransaction,
 	/// TODO - wip, just getting imports working, remove this and use more
@@ -191,9 +205,9 @@ pub trait BlockChain {
 	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<hash::Hash, PoolError>;
 
 	/// Check if an output being spent by the input has sufficiently matured.
-	/// This is only applicable for coinbase outputs (1,000 blocks).
+	/// This is only applicable for coinbase outputs (1,000 blocks on mainnet).
 	/// Non-coinbase outputs will always pass this check.
-	fn is_matured(&self, input: &Input, height: u64) -> Result<(), PoolError>;
+	fn verify_maturity(&self, input: &Input) -> Result<(), PoolError>;
 
 	/// Get the block header at the head
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError>;
@@ -244,6 +258,7 @@ pub struct Pool {
 }
 
 impl Pool {
+	/// Return an empty pool
 	pub fn empty() -> Pool {
 		Pool {
 			graph: graph::DirectedGraph::empty(),
@@ -263,18 +278,22 @@ impl Pool {
 			.map(|x| x.destination_hash().unwrap())
 	}
 
+	/// Length of roots
 	pub fn len_roots(&self) -> usize {
 		self.graph.len_roots()
 	}
 
+	/// Length of vertices
 	pub fn len_vertices(&self) -> usize {
 		self.graph.len_vertices()
 	}
 
+	/// Consumed outputs
 	pub fn get_blockchain_spent(&self, c: &Commitment) -> Option<&graph::Edge> {
 		self.consumed_blockchain_outputs.get(c)
 	}
 
+	/// Add transaction
 	pub fn add_pool_transaction(
 		&mut self,
 		pool_entry: graph::PoolEntry,
@@ -309,9 +328,9 @@ impl Pool {
 		}
 	}
 
-	// More relax way for stempool transaction in order to accept scenario such as:
-	// Parent is in mempool, child is allowed in stempool
-	//
+	/// More relax way for stempool transaction in order to accept scenario such as:
+	/// Parent is in mempool, child is allowed in stempool
+	///
 	pub fn add_stempool_transaction(
 		&mut self,
 		pool_entry: graph::PoolEntry,
@@ -342,10 +361,12 @@ impl Pool {
 		}
 	}
 
+	/// Update roots
 	pub fn update_roots(&mut self) {
 		self.graph.update_roots()
 	}
 
+	/// Remove transaction
 	pub fn remove_pool_transaction(
 		&mut self,
 		tx: &transaction::Transaction,
@@ -429,6 +450,7 @@ pub struct Orphans {
 }
 
 impl Orphans {
+	/// empty set
 	pub fn empty() -> Orphans {
 		Orphans {
 			graph: graph::DirectedGraph::empty(),
@@ -450,6 +472,7 @@ impl Orphans {
 			.map(|x| x.destination_hash().unwrap())
 	}
 
+	/// unknown output
 	pub fn get_unknown_output(&self, output: &Commitment) -> Option<&graph::Edge> {
 		self.missing_outputs.get(output)
 	}
@@ -571,14 +594,17 @@ pub trait TransactionGraphContainer {
 		self.get_internal_spent_output(c)
 	}
 
+	/// number of root transactions
 	fn num_root_transactions(&self) -> usize {
 		self.get_graph().len_roots()
 	}
 
+	/// number of transactions
 	fn num_transactions(&self) -> usize {
 		self.get_graph().len_vertices()
 	}
 
+	/// number of output edges
 	fn num_output_edges(&self) -> usize {
 		self.get_graph().len_edges()
 	}

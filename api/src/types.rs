@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use core::{core, ser};
 use core::core::hash::Hashed;
-use core::core::pmmr::MerkleProof;
+use core::core::MerkleProof;
 use chain;
 use p2p;
 use util;

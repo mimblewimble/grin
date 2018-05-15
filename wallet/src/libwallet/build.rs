@@ -25,14 +25,15 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use util::{kernel_sig_msg, secp};
+use core::core::{Input, MerkleProof, Output, OutputFeatures, Transaction, TxKernel};
+use core::core::hash::Hash;
+use libwallet::{aggsig, proof};
 
-use core::{Input, Output, OutputFeatures, ProofMessageElements, Transaction, TxKernel};
-use core::hash::Hash;
-use core::pmmr::MerkleProof;
 use keychain;
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 use util::LOGGER;
+use util::{kernel_sig_msg, secp};
+use util::secp::pedersen::Commitment;
 
 /// Context information available to transaction combinators.
 pub struct Context<'a> {
@@ -103,12 +104,7 @@ pub fn output(value: u64, key_id: Identifier) -> Box<Append> {
 			let commit = build.keychain.commit(value, &key_id).unwrap();
 			trace!(LOGGER, "Builder - Pedersen Commit is: {:?}", commit,);
 
-			let msg = ProofMessageElements::new(value, &key_id);
-
-			let rproof = build
-				.keychain
-				.range_proof(value, &key_id, commit, None, msg.to_proof_message())
-				.unwrap();
+			let rproof = proof::create(&build.keychain, value, &key_id, commit, None).unwrap();
 
 			(
 				tx.with_output(Output {
@@ -214,7 +210,7 @@ pub fn transaction(
 
 	let skey = blind_sum.secret_key(&keychain.secp())?;
 	kern.excess = keychain.secp().commit(0, skey)?;
-	kern.excess_sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &blind_sum)?;
+	kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &blind_sum).unwrap();
 
 	tx.kernels.push(kern);
 
@@ -241,13 +237,14 @@ pub fn transaction_with_offset(
 	let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
 
 	// generate kernel excess and excess_sig using the split key k1
-	let skey = k1.secret_key(&keychain.secp())?;
-	kern.excess = ctx.keychain.secp().commit(0, skey)?;
-	kern.excess_sig = Keychain::aggsig_sign_with_blinding(&keychain.secp(), &msg, &k1)?;
+	let skey1 = k1.secret_key(&keychain.secp())?;
+
+	kern.excess = ctx.keychain.secp().commit(0, skey1)?;
+	kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &k1).unwrap();
 
 	// store the kernel offset (k2) on the tx itself
 	// commitments will sum correctly when including the offset
-	tx.offset = k2.clone();
+	tx.offset = k2;
 
 	assert!(tx.kernels.is_empty());
 	tx.kernels.push(kern);

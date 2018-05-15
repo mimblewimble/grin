@@ -15,26 +15,21 @@
 //! Transactions
 use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
-use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
+use util::secp::pedersen::{Commitment, RangeProof};
 use std::collections::HashSet;
 use std::cmp::max;
 use std::cmp::Ordering;
 use std::{error, fmt};
-use std::io::Cursor;
 
 use consensus;
 use consensus::VerifySortOrder;
-use core::Committed;
-use core::global;
-use core::BlockHeader;
+use core::{Committed, MerkleProof};
 use core::hash::{Hash, Hashed, ZERO_HASH};
-use core::pmmr::MerkleProof;
 use keychain;
-use keychain::{BlindingFactor, Keychain};
-use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
-          WriteableSorted, Writer};
+use keychain::BlindingFactor;
+use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, WriteableSorted,
+          Writer};
 use util;
-use util::LOGGER;
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -186,7 +181,15 @@ impl TxKernel {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 		let sig = &self.excess_sig;
-		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &self.excess);
+		// Verify aggsig directly in libsecp
+		let pubkeys = &self.excess.to_two_pubkeys(&secp);
+		let mut valid = false;
+		for i in 0..pubkeys.len() {
+			valid = secp::aggsig::verify_single(&secp, &sig, &msg, None, &pubkeys[i], false);
+			if valid {
+				break;
+			}
+		}
 		if !valid {
 			return Err(secp::Error::IncorrectSignature);
 		}
@@ -234,6 +237,7 @@ pub struct Transaction {
 	pub outputs: Vec<Output>,
 	/// List of kernels that make up this transaction (usually a single kernel).
 	pub kernels: Vec<TxKernel>,
+
 	/// The kernel "offset" k2
 	/// excess is k1G after splitting the key k = k1 + k2
 	pub offset: BlindingFactor,
@@ -410,12 +414,8 @@ impl Transaction {
 		let overage = self.fee() as i64;
 		let io_sum = self.sum_commitments(overage, None)?;
 
-		let offset = {
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-			let key = self.offset.secret_key(&secp)?;
-			secp.commit(0, key)?
-		};
+		// Sum the kernel excesses accounting for the kernel offset.
+		let (_, kernel_sum) = self.sum_kernel_excesses(&self.offset, None)?;
 
 		// Sum the kernel excesses accounting for the kernel offset.
 		let (_, kernel_sum) = self.sum_kernel_excesses(&offset, None)?;
@@ -437,9 +437,7 @@ impl Transaction {
 			return Err(Error::TooManyInputs);
 		}
 		self.verify_sorted()?;
-		self.verify_inputs()?;
 		self.verify_kernels()?;
-
 		Ok(())
 	}
 
@@ -476,26 +474,6 @@ impl Transaction {
 		self.kernels.verify_sort_order()?;
 		Ok(())
 	}
-
-	/// We can verify the Merkle proof (for coinbase inputs) here in isolation.
-	/// But we cannot check the following as we need data from the index and the PMMR.
-	/// So we must be sure to check these at the appropriate point during block validation.
-	///   * node is in the correct pos in the PMMR
-	///   * block is the correct one (based on output_root from block_header via the index)
-	fn verify_inputs(&self) -> Result<(), Error> {
-		let coinbase_inputs = self.inputs
-			.iter()
-			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT));
-
-		for input in coinbase_inputs {
-			let merkle_proof = input.merkle_proof();
-			if !merkle_proof.verify() {
-				return Err(Error::MerkleProof);
-			}
-		}
-
-		Ok(())
-	}
 }
 
 /// Aggregate a vec of transactions into a multi-kernel transaction with
@@ -518,14 +496,14 @@ pub fn aggregate_with_cut_through(transactions: Vec<Transaction>) -> Result<Tran
 		kernels.append(&mut transaction.kernels);
 	}
 
-	// now sum the kernel_offsets up to give us an aggregate offset for the
-	// transaction
+	// now sum the kernel_offsets to give us an
+	// total offset for the transaction
 	let total_kernel_offset = {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		let mut keys = kernel_offsets
-			.iter()
-			.cloned()
+
+		let keys = kernel_offsets
+			.into_iter()
 			.filter(|x| *x != BlindingFactor::zero())
 			.filter_map(|x| x.secret_key(&secp).ok())
 			.collect::<Vec<_>>();
@@ -592,14 +570,14 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 		kernels.append(&mut transaction.kernels);
 	}
 
-	// now sum the kernel_offsets up to give us an aggregate offset for the
-	// transaction
+	// now sum the kernel_offsets to give us an
+	// total offset for the transaction
 	let total_kernel_offset = {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		let mut keys = kernel_offsets
-			.iter()
-			.cloned()
+
+		let keys = kernel_offsets
+			.into_iter()
 			.filter(|x| *x != BlindingFactor::zero())
 			.filter_map(|x| x.secret_key(&secp).ok())
 			.collect::<Vec<_>>();
@@ -657,25 +635,21 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	let total_kernel_offset = {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		let mut positive_key = vec![mk_tx.offset]
-			.iter()
-			.cloned()
-			.filter(|x| *x != BlindingFactor::zero())
-			.filter_map(|x| x.secret_key(&secp).ok())
-			.collect::<Vec<_>>();
-		let mut negative_keys = kernel_offsets
-			.iter()
-			.cloned()
+
+		let mut pos_keys = vec![];
+		if mk_tx.offset != BlindingFactor::zero() {
+			let key = mk_tx.offset.secret_key(&secp)?;
+			pos_keys.push(key)
+		}
+
+		let neg_keys = kernel_offsets
+			.into_iter()
 			.filter(|x| *x != BlindingFactor::zero())
 			.filter_map(|x| x.secret_key(&secp).ok())
 			.collect::<Vec<_>>();
 
-		if positive_key.is_empty() && negative_keys.is_empty() {
-			BlindingFactor::zero()
-		} else {
-			let sum = secp.blind_sum(positive_key, negative_keys)?;
-			BlindingFactor::from_secret_key(sum)
-		}
+		let sum = secp.blind_sum(pos_keys, neg_keys)?;
+		BlindingFactor::from_secret_key(sum)
 	};
 
 	// Sorting them lexicographically
@@ -797,68 +771,8 @@ impl Input {
 	/// Will return the "empty" Merkle proof if we do not have one.
 	/// We currently only care about the Merkle proof for inputs spending coinbase outputs.
 	pub fn merkle_proof(&self) -> MerkleProof {
-		let merkle_proof = self.merkle_proof.clone();
-		merkle_proof.unwrap_or(MerkleProof::empty())
-	}
-
-	/// Verify the maturity of an output being spent by an input.
-	/// Only relevant for spending coinbase outputs currently (locked for 1,000 confirmations).
-	///
-	/// The proof associates the output with the root by its hash (and pos) in the MMR.
-	/// The proof shows the output existed and was unspent at the time the output_root was built.
-	/// The root associates the proof with a specific block header with that output_root.
-	/// So the proof shows the output was unspent at the time of the block
-	/// and is at least as old as that block (may be older).
-	///
-	/// We can verify maturity of the output being spent by -
-	///
-	/// * verifying the Merkle Proof produces the correct root for the given hash (from MMR)
-	/// * verifying the root matches the output_root in the block_header
-	/// * verifying the hash matches the node hash in the Merkle Proof
-	/// * finally verify maturity rules based on height of the block header
-	///
-	pub fn verify_maturity(
-		&self,
-		hash: Hash,
-		header: &BlockHeader,
-		height: u64,
-	) -> Result<(), Error> {
-		if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-			let block_hash = self.block_hash();
-			let merkle_proof = self.merkle_proof();
-
-			// Check we are dealing with the correct block header
-			if block_hash != header.hash() {
-				return Err(Error::MerkleProof);
-			}
-
-			// Is our Merkle Proof valid? Does node hash up consistently to the root?
-			if !merkle_proof.verify() {
-				return Err(Error::MerkleProof);
-			}
-
-			// Is the root the correct root for the given block header?
-			if merkle_proof.root != header.output_root {
-				return Err(Error::MerkleProof);
-			}
-
-			// Does the hash from the MMR actually match the one in the Merkle Proof?
-			if merkle_proof.node != hash {
-				return Err(Error::MerkleProof);
-			}
-
-			// Finally has the output matured sufficiently now we know the block?
-			let lock_height = header.height + global::coinbase_maturity();
-			if lock_height > height {
-				return Err(Error::ImmatureCoinbase);
-			}
-
-			debug!(
-				LOGGER,
-				"input: verify_maturity: success via Merkle proof: {} vs {}", lock_height, height,
-			);
-		}
-		Ok(())
+		let proof = self.merkle_proof.clone();
+		proof.unwrap_or(MerkleProof::empty())
 	}
 }
 
@@ -947,7 +861,7 @@ impl Output {
 	pub fn verify_proof(&self) -> Result<(), secp::Error> {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		match Keychain::verify_range_proof(&secp, self.commit, self.proof, None) {
+		match secp.verify_bullet_proof(self.commit, self.proof, None) {
 			Ok(_) => Ok(()),
 			Err(e) => Err(e),
 		}
@@ -1036,114 +950,6 @@ impl Readable for OutputIdentifier {
 	}
 }
 
-/// A structure which contains fields that are to be commited to within
-/// an Output's range (bullet) proof.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct ProofMessageElements {
-	/// The amount, stored to allow for wallet reconstruction as
-	/// rewinding isn't supported in bulletproofs just yet
-	/// This is going to be written 3 times, to facilitate checking
-	/// values on rewind
-	/// Note that rewinding with only the nonce will give you back
-	/// the first 32 bytes of the message. To get the second
-	/// 32 bytes, you need to provide the correct blinding factor as well
-	value: u64,
-	/// another copy of the value, to check on rewind
-	value_copy_1: u64,
-	/// another copy of the value
-	value_copy_2: u64,
-	/// the first 8 bytes of the blinding factor, used to avoid having to grind
-	/// through a proof each time you want to check against key possibilities
-	bf_first_8: Vec<u8>,
-	/// unused portion of message, used to test whether we have both nonce
-	/// and blinding correct
-	zeroes: Vec<u8>,
-}
-
-impl Writeable for ProofMessageElements {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u64(self.value)?;
-		writer.write_u64(self.value_copy_1)?;
-		writer.write_u64(self.value_copy_2)?;
-		writer.write_fixed_bytes(&self.bf_first_8)?;
-		for i in 0..32 {
-			let _ = writer.write_u8(self.zeroes[i]);
-		}
-		Ok(())
-	}
-}
-
-impl Readable for ProofMessageElements {
-	fn read(reader: &mut Reader) -> Result<ProofMessageElements, ser::Error> {
-		// if the value isn't repeated 3 times, it's most likely not the value,
-		// so reject
-		Ok(ProofMessageElements {
-			value: reader.read_u64()?,
-			value_copy_1: reader.read_u64()?,
-			value_copy_2: reader.read_u64()?,
-			bf_first_8: reader.read_fixed_bytes(8)?,
-			zeroes: reader.read_fixed_bytes(32)?,
-		})
-	}
-}
-
-impl ProofMessageElements {
-	/// Create a new proof message
-	pub fn new(value: u64, blinding: &keychain::Identifier) -> ProofMessageElements {
-		ProofMessageElements {
-			value: value,
-			value_copy_1: value,
-			value_copy_2: value,
-			bf_first_8: blinding.to_bytes()[0..8].to_vec(),
-			zeroes: [0u8; 32].to_vec(),
-		}
-	}
-
-	/// Return the value if it's valid, an error otherwise
-	pub fn value(&self) -> Result<u64, Error> {
-		if self.value == self.value_copy_1 && self.value == self.value_copy_2 {
-			Ok(self.value)
-		} else {
-			Err(Error::InvalidProofMessage)
-		}
-	}
-
-	/// Compare given identifier with first 8 bytes of what's stored
-	pub fn compare_bf_first_8(&self, in_id: &keychain::Identifier) -> bool {
-		let in_id_vec = in_id.to_bytes()[0..8].to_vec();
-		for i in 0..8 {
-			if in_id_vec[i] != self.bf_first_8[i] {
-				return false;
-			}
-		}
-		true
-	}
-
-	/// Whether our remainder is zero (as it should be if the BF and nonce used to unwind
-	/// are correct
-	pub fn zeroes_correct(&self) -> bool {
-		for i in 0..self.zeroes.len() {
-			if self.zeroes[i] != 0 {
-				return false;
-			}
-		}
-		true
-	}
-
-	/// Serialise and return a ProofMessage
-	pub fn to_proof_message(&self) -> ProofMessage {
-		ProofMessage::from_bytes(&ser_vec(self).unwrap())
-	}
-
-	/// Deserialise and return the message elements
-	pub fn from_proof_message(
-		proof_message: ProofMessage,
-	) -> Result<ProofMessageElements, ser::Error> {
-		let mut c = Cursor::new(proof_message.as_bytes());
-		ser::deserialize::<ProofMessageElements>(&mut c)
-	}
-}
-
 #[cfg(test)]
 mod test {
 	use super::*;
@@ -1194,29 +1000,6 @@ mod test {
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
 		assert_eq!(kernel2.fee, 10);
-	}
-
-	#[test]
-	fn test_output_ser_deser() {
-		let keychain = Keychain::from_random_seed().unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
-		let commit = keychain.commit(5, &key_id).unwrap();
-		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain.range_proof(5, &key_id, commit, None, msg).unwrap();
-
-		let out = Output {
-			features: OutputFeatures::DEFAULT_OUTPUT,
-			commit: commit,
-			proof: proof,
-		};
-
-		let mut vec = vec![];
-		ser::serialize(&mut vec, &out).expect("serialized failed");
-		let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
-
-		assert_eq!(dout.features, OutputFeatures::DEFAULT_OUTPUT);
-		assert_eq!(dout.commit, out.commit);
-		assert_eq!(dout.proof, out.proof);
 	}
 
 	#[test]

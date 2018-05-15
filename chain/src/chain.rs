@@ -20,9 +20,9 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
+use core::core::{Block, BlockHeader, Input, MerkleProof, Output, OutputFeatures, OutputIdentifier,
+                 TxKernel};
 use core::core::hash::{Hash, Hashed};
-use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
 use core::global;
 use grin_store::Error::NotFoundErr;
@@ -459,6 +459,29 @@ impl Chain {
 		txhashset.is_unspent(output_ref)
 	}
 
+	/// Verify the maturity of the input (assumes it is spending a coinbase output)
+	/// via the Merkle proof and the height of the current chain head.
+	pub fn verify_maturity(&self, input: &Input) -> Result<(), Error> {
+		// First check the input refers to an actual unspent output.
+		// This takes the features into account so we can be sure
+		// nobody is being dishonest about features here.
+		// Specifically: coinbase vs non-coinbase features.
+		let out_id = OutputIdentifier::from_input(input);
+		self.is_unspent(&out_id)?;
+
+		if !input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+			return Ok(());
+		}
+
+		let head = self.store.head()?;
+		let mut txhashset = self.txhashset.write().unwrap();
+		txhashset::extending_readonly(&mut txhashset, |extension| {
+			// Note: checking maturity against the currently unmined "next" block
+			extension.verify_maturity_via_merkle_proof(input, head.height + 1)?;
+			Ok(())
+		})
+	}
+
 	/// Validate the current chain state.
 	pub fn validate(&self, skip_rproofs: bool) -> Result<(), Error> {
 		let header = self.store.head_header()?;
@@ -479,20 +502,6 @@ impl Chain {
 			extension.validate(&header, skip_rproofs)?;
 			Ok(())
 		})
-	}
-
-	/// Check if the input has matured sufficiently for the given block height.
-	/// This only applies to inputs spending coinbase outputs.
-	/// An input spending a non-coinbase output will always pass this check.
-	pub fn is_matured(&self, input: &Input, height: u64) -> Result<(), Error> {
-		if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-			let mut txhashset = self.txhashset.write().unwrap();
-			let output = OutputIdentifier::from_input(&input);
-			let hash = txhashset.is_unspent(&output)?;
-			let header = self.get_block_header(&input.block_hash())?;
-			input.verify_maturity(hash, &header, height)?;
-		}
-		Ok(())
 	}
 
 	/// Sets the txhashset roots on a brand new block by applying the block on the
@@ -520,12 +529,13 @@ impl Chain {
 	pub fn get_merkle_proof(
 		&self,
 		output: &OutputIdentifier,
-		block_header: &BlockHeader,
+		header: &BlockHeader,
 	) -> Result<MerkleProof, Error> {
 		let mut txhashset = self.txhashset.write().unwrap();
 
 		let merkle_proof = txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.merkle_proof(output, block_header)
+			extension.rewind(header)?;
+			extension.merkle_proof(output, header)
 		})?;
 
 		Ok(merkle_proof)

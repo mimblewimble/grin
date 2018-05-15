@@ -26,15 +26,14 @@ lazy_static! {
 }
 
 /// Returns the static instance, but calls randomize on it as well
-/// (Recommended to avoid side channel attacks
+/// (Recommended to avoid side channel attacks)
 pub fn static_secp_instance() -> Arc<Mutex<secp::Secp256k1>> {
 	let mut secp_inst = SECP256K1.lock().unwrap();
 	secp_inst.randomize(&mut thread_rng());
 	SECP256K1.clone()
 }
 
-// TODO - Can we generate this once and memoize it for subsequent use?
-// Even if we clone it each time it will likely be faster than this.
+/// Returns a commitment to zero using the "zero" private key.
 pub fn commit_to_zero_value() -> secp::pedersen::Commitment {
 	let secp = static_secp_instance();
 	let secp = secp.lock().unwrap();
