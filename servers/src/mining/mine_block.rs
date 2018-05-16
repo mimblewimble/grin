@@ -28,7 +28,7 @@ use common::adapters::PoolToChainAdapter;
 use common::types::Error;
 use core::consensus;
 use core::core;
-use core::core::{BlockSums, Transaction};
+use core::core::Transaction;
 use core::core::hash::Hashed;
 use core::ser;
 use core::ser::AsFixedBytes;

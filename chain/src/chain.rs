@@ -20,8 +20,7 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use core::core::{Block, BlockHeader, BlockSums, Input, Output, OutputFeatures, OutputIdentifier,
-                 Transaction, TxKernel};
+use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;

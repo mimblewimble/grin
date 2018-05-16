@@ -20,7 +20,7 @@ use time;
 
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
-use core::core::{Block, BlockHeader, BlockSums};
+use core::core::{Block, BlockHeader};
 use core::core::target::Difficulty;
 use grin_store;
 use types::*;

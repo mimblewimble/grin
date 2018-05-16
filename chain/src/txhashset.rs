@@ -25,8 +25,8 @@ use std::time::Instant;
 use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::consensus::REWARD;
-use core::core::{Block, BlockHeader, BlockSums, Committed, Input, Output, OutputFeatures,
-                 OutputIdentifier, Transaction, TxKernel};
+use core::core::{Block, BlockHeader, Committed, Input, Output, OutputFeatures, OutputIdentifier,
+                 Transaction, TxKernel};
 use core::core::pmmr::{self, MerkleProof, PMMR};
 use core::global;
 use core::core::hash::{Hash, Hashed};
@@ -35,7 +35,7 @@ use core::ser::{PMMRIndexHashable, PMMRable};
 use grin_store;
 use grin_store::pmmr::PMMRBackend;
 use grin_store::types::prune_noop;
-use types::{BlockMarker, ChainStore, Error, TxHashSetRoots};
+use types::{BlockMarker, BlockSums, ChainStore, Error, TxHashSetRoots};
 use util::{secp_static, zip, LOGGER};
 
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
@@ -479,24 +479,6 @@ impl<'a> Extension<'a> {
 			self.commit_index.save_block_marker(bh, marker)?;
 		}
 		Ok(())
-	}
-
-	fn is_unspent(&mut self, output_id: &OutputIdentifier) -> Result<Hash, Error> {
-		match self.commit_index.get_output_pos(&output_id.commit) {
-			Ok(pos) => {
-				if let Some(hash) = self.output_pmmr.get_hash(pos) {
-					if hash == output_id.hash_with_index(pos - 1) {
-						Ok(hash)
-					} else {
-						Err(Error::TxHashSetErr(format!("txhashset hash mismatch")))
-					}
-				} else {
-					Err(Error::OutputNotFound)
-				}
-			}
-			Err(grin_store::Error::NotFoundErr) => Err(Error::OutputNotFound),
-			Err(e) => Err(Error::StoreErr(e, format!("txhashset unspent check"))),
-		}
 	}
 
 	fn apply_input(&mut self, input: &Input, height: u64) -> Result<(), Error> {

@@ -27,7 +27,7 @@ use rand::Rng;
 
 use chain::{self, ChainAdapter, Options, Tip};
 use core::core;
-use core::core::block::{BlockHeader, BlockSums};
+use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::transaction::{Input, OutputIdentifier, Transaction};

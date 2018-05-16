@@ -22,7 +22,7 @@ use util::secp::pedersen::Commitment;
 
 use types::*;
 use core::core::hash::{Hash, Hashed};
-use core::core::{Block, BlockHeader, BlockSums};
+use core::core::{Block, BlockHeader};
 use core::consensus::TargetError;
 use core::core::target::Difficulty;
 use grin_store::{self, option_to_not_found, to_key, Error, u64_to_key};
