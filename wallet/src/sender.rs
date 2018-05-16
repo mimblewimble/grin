@@ -153,8 +153,8 @@ pub fn issue_send_tx(
 	let partial_tx =
 		transaction::sender_confirmation(keychain, &mut context_manager, res.unwrap())?;
 
-	// And send again
-	let res = client::send_partial_tx(&url, &partial_tx, fluff);
+	// And send again, expecting completed transaction as result this time
+	let res = client::send_partial_tx_final(&url, &partial_tx, fluff);
 	if let Err(e) = res {
 		match e.kind() {
 			ErrorKind::FeeExceedsAmount {sender_amount, recipient_fee} =>
