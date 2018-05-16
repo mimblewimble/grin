@@ -30,7 +30,7 @@ use core::core;
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use core::core::transaction::{Input, OutputIdentifier, Transaction};
+use core::core::transaction::Transaction;
 use p2p;
 use pool;
 use util::OneTime;
