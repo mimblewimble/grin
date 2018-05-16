@@ -89,6 +89,10 @@ where
 			.collect()
 	}
 
+	pub fn all_transactions(&self) -> Vec<Transaction> {
+		self.entries.iter().map(|x| x.tx.clone()).collect()
+	}
+
 	// Aggregate this new tx with all existing txs in the pool.
 	// If we can validate the aggregated tx against the current chain state
 	// then we can safely add the tx to the pool.
