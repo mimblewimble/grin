@@ -417,9 +417,6 @@ impl Transaction {
 		// Sum the kernel excesses accounting for the kernel offset.
 		let (_, kernel_sum) = self.sum_kernel_excesses(&self.offset, None)?;
 
-		// Sum the kernel excesses accounting for the kernel offset.
-		let (_, kernel_sum) = self.sum_kernel_excesses(&offset, None)?;
-
 		// sum of kernel commitments (including the offset) must match
 		// the sum of input/output commitments (minus fee)
 		if io_sum != kernel_sum {
