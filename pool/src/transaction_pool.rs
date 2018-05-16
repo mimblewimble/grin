@@ -90,7 +90,7 @@ where
 			timer: 0,
 			tx: tx.clone(),
 		};
-		self.txpool.add_to_pool(entry)?;
+		self.txpool.add_to_pool(entry, vec![])?;
 
 		// Notify other parts of the system that we added the tx successfull.
 		self.adapter.tx_accepted(&tx);
@@ -98,8 +98,15 @@ where
 		Ok(())
 	}
 
-	pub fn reconcile_block(&mut self, block: &Block) -> Result<Vec<Transaction>, PoolError> {
-		self.txpool.reconcile_block(block)
+	pub fn reconcile_block(&mut self, block: &Block) -> Result<(), PoolError> {
+		// First reconcile the txpool
+		self.txpool.reconcile_block(block, vec![])?;
+
+		// Then reconcile the stempool, accounting for the txpool txs
+		let txs = self.txpool.all_transactions();
+		self.stempool.reconcile_block(block, txs)?;
+
+		Ok(())
 	}
 
 	/// TODO - not yet implemented

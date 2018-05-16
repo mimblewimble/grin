@@ -96,12 +96,17 @@ where
 	// Aggregate this new tx with all existing txs in the pool.
 	// If we can validate the aggregated tx against the current chain state
 	// then we can safely add the tx to the pool.
-	pub fn add_to_pool(&mut self, entry: PoolEntry) -> Result<(), PoolError> {
-		let mut txs = self.entries
-			.iter()
-			.map(|x| x.tx.clone())
-			.collect::<Vec<_>>();
+	pub fn add_to_pool(
+		&mut self,
+		entry: PoolEntry,
+		extra_txs: Vec<Transaction>,
+	) -> Result<(), PoolError> {
+		let mut txs = self.all_transactions();
 		txs.push(entry.tx.clone());
+		for tx in extra_txs {
+			txs.push(tx.clone());
+		}
+
 		let agg_tx =
 			transaction::aggregate_with_cut_through(txs).map_err(|_| PoolError::GenericPoolError)?;
 
@@ -142,7 +147,11 @@ where
 	}
 
 	// TODO - not fully implemented
-	pub fn reconcile_block(&mut self, block: &Block) -> Result<Vec<Transaction>, PoolError> {
+	pub fn reconcile_block(
+		&mut self,
+		block: &Block,
+		extra_txs: Vec<Transaction>,
+	) -> Result<Vec<Transaction>, PoolError> {
 		let candidate_txs = self.candidate_transactions(block);
 
 		debug!(
@@ -188,7 +197,7 @@ where
 		let candidate_entries = self.filtered_entries(tx_hashes);
 		self.clear();
 		for x in candidate_entries {
-			self.add_to_pool(x.clone());
+			self.add_to_pool(x.clone(), extra_txs.clone());
 		}
 
 		// TODO - need to return the evicted txs (not yet used anywhere though)
