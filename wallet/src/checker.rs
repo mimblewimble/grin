@@ -57,19 +57,7 @@ pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(),
 fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> {
 	// build a local map of wallet outputs keyed by commit
 	// and a list of outputs we want to query the node for
-	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
-	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		for out in wallet_data.outputs.values().filter(|x| {
-			x.root_key_id == keychain.root_key_id() && x.block.is_none()
-				&& x.status == OutputStatus::Unspent
-		}) {
-			let commit = keychain
-				.commit_with_key_index(out.value, out.n_child)
-				.context(ErrorKind::Keychain)?;
-			wallet_outputs.insert(commit, out.key_id.clone());
-		}
-		Ok(())
-	});
+	let wallet_outputs = map_wallet_outputs_missing_block(config, keychain)?;
 
 	// nothing to do so return (otherwise we hit the api with a monster query...)
 	if wallet_outputs.is_empty() {
@@ -164,13 +152,12 @@ fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain) -> R
 	})
 }
 
-/// Builds a single api query to retrieve the latest output data from the node.
-/// So we can refresh the local wallet outputs.
-fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> {
-	debug!(LOGGER, "Refreshing wallet outputs");
-
-	// build a local map of wallet outputs keyed by commit
-	// and a list of outputs we want to query the node for
+/// build a local map of wallet outputs keyed by commit
+/// and a list of outputs we want to query the node for
+pub fn map_wallet_outputs(
+	config: &WalletConfig,
+	keychain: &Keychain,
+) -> Result<HashMap<pedersen::Commitment, Identifier>, Error> {
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
 	let _ =
 		WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
@@ -184,7 +171,62 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<()
 			}
 			Ok(())
 		});
+	Ok(wallet_outputs)
+}
 
+/// As above, but only return unspent outputs with missing block hashes
+/// and a list of outputs we want to query the node for
+pub fn map_wallet_outputs_missing_block(
+	config: &WalletConfig,
+	keychain: &Keychain,
+) -> Result<HashMap<pedersen::Commitment, Identifier>, Error> {
+	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
+	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+		for out in wallet_data.outputs.values().filter(|x| {
+			x.root_key_id == keychain.root_key_id() && x.block.is_none()
+				&& x.status == OutputStatus::Unspent
+		}) {
+			let commit = keychain
+				.commit_with_key_index(out.value, out.n_child)
+				.context(ErrorKind::Keychain)?;
+			wallet_outputs.insert(commit, out.key_id.clone());
+		}
+		Ok(())
+	});
+	Ok(wallet_outputs)
+}
+
+/// Apply refreshed API output data to the wallet
+pub fn apply_api_outputs(
+	config: &WalletConfig,
+	wallet_outputs: &HashMap<pedersen::Commitment, Identifier>,
+	api_outputs: &HashMap<pedersen::Commitment, api::Output>,
+) -> Result<(), Error> {
+	// now for each commit, find the output in the wallet and
+	// the corresponding api output (if it exists)
+	// and refresh it in-place in the wallet.
+	// Note: minimizing the time we spend holding the wallet lock.
+	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+		for commit in wallet_outputs.keys() {
+			let id = wallet_outputs.get(&commit).unwrap();
+			if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
+				match api_outputs.get(&commit) {
+					Some(_) => mark_unspent_output(&mut output.get_mut()),
+					None => mark_spent_output(&mut output.get_mut()),
+				};
+			}
+		}
+	})
+}
+
+/// Builds a single api query to retrieve the latest output data from the node.
+/// So we can refresh the local wallet outputs.
+fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> {
+	debug!(LOGGER, "Refreshing wallet outputs");
+
+	// build a local map of wallet outputs keyed by commit
+	// and a list of outputs we want to query the node for
+	let wallet_outputs = map_wallet_outputs(config, keychain)?;
 	// build the necessary query params -
 	// ?id=xxx&id=yyy&id=zzz
 	let query_params: Vec<String> = wallet_outputs
@@ -238,21 +280,8 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain) -> Result<()
 			}
 		};
 	}
-	// now for each commit, find the output in the wallet and
-	// the corresponding api output (if it exists)
-	// and refresh it in-place in the wallet.
-	// Note: minimizing the time we spend holding the wallet lock.
-	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		for commit in wallet_outputs.keys() {
-			let id = wallet_outputs.get(&commit).unwrap();
-			if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
-				match api_outputs.get(&commit) {
-					Some(_) => mark_unspent_output(&mut output.get_mut()),
-					None => mark_spent_output(&mut output.get_mut()),
-				};
-			}
-		}
-	})
+	apply_api_outputs(config, &wallet_outputs, &api_outputs)?;
+	Ok(())
 }
 
 pub fn get_tip_from_node(config: &WalletConfig) -> Result<api::Tip, Error> {

@@ -49,17 +49,18 @@ extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 
-mod checker;
+pub mod checker;
 mod handlers;
 mod outputs;
 mod info;
-mod receiver;
+pub mod receiver;
 mod sender;
-mod types;
+pub mod types;
 mod restore;
 pub mod client;
 pub mod server;
 pub mod libwallet;
+pub mod grinwallet;
 
 pub use outputs::show_outputs;
 pub use info::{retrieve_info, show_info};
