@@ -27,8 +27,8 @@ use util::secp::pedersen::Commitment;
 use util::LOGGER;
 
 pub struct Pool<T> {
-	/// Transaction in the pool in simple insertion order.
-	pub transactions: Vec<Box<Transaction>>,
+	/// Entries in the pool (tx + info + timer) in simple insertion order.
+	pub entries: Vec<PoolEntry>,
 	/// The blockchain
 	pub blockchain: Arc<T>,
 }
@@ -37,6 +37,13 @@ impl<T> Pool<T>
 where
 	T: BlockChain,
 {
+	pub fn new(chain: Arc<T>) -> Pool<T> {
+		Pool {
+			entries: vec![],
+			blockchain: chain.clone(),
+		}
+	}
+
 	/// Query the tx pool for all known txs based on kernel short_ids
 	/// from the provided compact_block.
 	/// Note: does not validate that we return the full set of required txs.
@@ -46,19 +53,19 @@ where
 			LOGGER,
 			"pool: retrieve_transactions: kern_ids - {:?}, txs - {}",
 			cb.kern_ids,
-			self.transactions.len(),
+			self.entries.len(),
 		);
 
 		let mut txs = vec![];
 
-		for tx in &self.transactions {
-			for kernel in &tx.kernels {
+		for x in &self.entries {
+			for kernel in &x.tx.kernels {
 				// rehash each kernel to calculate the block specific short_id
 				let short_id = kernel.short_id(&cb.hash(), cb.nonce);
 
 				// if any kernel matches then keep the tx for later
 				if cb.kern_ids.contains(&short_id) {
-					txs.push(tx.clone());
+					txs.push(x.tx.clone());
 					break;
 				}
 			}
@@ -70,83 +77,102 @@ where
 			txs.len(),
 		);
 
-		txs.into_iter().map(|x| *x).collect()
+		txs
 	}
 
-	/// TODO - not yet fully implemented
-	pub fn prepare_mineable_transactions(&self, num_to_fetch: u32) -> Vec<Box<Transaction>> {
-		self.transactions.clone()
+	/// Take the first num_to_fetch txs based on insertion order.
+	pub fn prepare_mineable_transactions(&self, num_to_fetch: u32) -> Vec<Transaction> {
+		self.entries
+			.iter()
+			.take(num_to_fetch as usize)
+			.map(|x| x.tx.clone())
+			.collect()
 	}
 
 	// Aggregate this new tx with all existing txs in the pool.
 	// If we can validate the aggregated tx against the current chain state
 	// then we can safely add the tx to the pool.
-	pub fn add_to_pool(&mut self, tx: &Transaction) -> Result<(), PoolError> {
-		let mut txs = self.transactions
+	pub fn add_to_pool(&mut self, entry: PoolEntry) -> Result<(), PoolError> {
+		let mut txs = self.entries
 			.iter()
-			.map(|x| *x.clone())
+			.map(|x| x.tx.clone())
 			.collect::<Vec<_>>();
-		txs.push(tx.clone());
+		txs.push(entry.tx.clone());
 		let agg_tx =
 			transaction::aggregate_with_cut_through(txs).map_err(|_| PoolError::GenericPoolError)?;
 
 		// Validate aggregated tx against the chain txhashset extension.
 		self.blockchain.validate_raw_tx(&agg_tx)?;
 
-		// If we get here successfully then we can safely add the tx to the pool.
-		self.transactions.push(Box::new(tx.clone()));
+		// If we get here successfully then we can safely add the entry to the pool.
+		self.entries.push(entry);
 
 		Ok(())
 	}
 
+	// Simple check comparing tx kernels against kernels in the latest block.
+	// This covers the trivial case where we just emptied the pool.
+	fn candidate_transactions(&self, block: &Block) -> Vec<Transaction> {
+		self.entries
+			.iter()
+			.filter(|entry| {
+				let mut keep = true;
+				for k in &entry.tx.kernels {
+					if block.kernels.contains(&k) {
+						keep = false;
+						break;
+					}
+				}
+				keep
+			})
+			.map(|x| x.tx.clone())
+			.collect()
+	}
+
+	fn filtered_entries(&self, tx_hashes: Vec<Hash>) -> Vec<PoolEntry> {
+		self.entries
+			.iter()
+			.filter(|x| tx_hashes.contains(&x.tx.hash()))
+			.cloned()
+			.collect()
+	}
+
 	// TODO - not fully implemented
 	pub fn reconcile_block(&mut self, block: &Block) -> Result<Vec<Transaction>, PoolError> {
-		let mut candidate_transactions = self.transactions.clone();
-
-		// Simple check comparing tx kernels against block kernels
-		// This covers majority of the simple case?
-		candidate_transactions.retain(|tx| {
-			let mut keep = true;
-			for k in &tx.kernels {
-				if block.kernels.contains(&k) {
-					keep = false;
-					break;
-				}
-			}
-			keep
-		});
+		let candidate_txs = self.candidate_transactions(block);
 
 		debug!(
 			LOGGER,
 			"pool: reconcile_block: current pool txs - {}, candidate txs - {}",
 			self.size(),
-			candidate_transactions.len(),
+			candidate_txs.len(),
 		);
 
-		// Clear the tx pool as we are about to start adding valid txs back in.
-		self.clear();
-
-		if candidate_transactions.is_empty() {
+		if candidate_txs.is_empty() {
+			self.clear();
 			debug!(LOGGER, "pool: reconcile_block: pool empty! Done.");
-			assert!(self.is_empty());
 			return Ok(vec![]);
 		}
 
-		// Initial quick check will catch many simple cases.
 		// Aggregate everything remaining in the pool and check if it validates.
 		// If we validate successfully here then we are done.
-		{
-			let txs = candidate_transactions.iter().map(|x| *x.clone()).collect();
-			let agg_tx = transaction::aggregate_with_cut_through(txs)
-				.map_err(|_| PoolError::GenericPoolError)?;
-			if let Ok(_) = self.blockchain.validate_raw_tx(&agg_tx) {
-				debug!(
-					LOGGER,
-					"pool: reconcile_block: candidate txs fully validate. Done."
-				);
-				self.transactions = candidate_transactions;
-				return Ok(vec![]);
-			}
+
+		let tx_hashes = candidate_txs
+			.iter()
+			.map(|ref x| x.hash())
+			.collect::<Vec<_>>();
+
+		let agg_tx = transaction::aggregate_with_cut_through(candidate_txs)
+			.map_err(|_| PoolError::GenericPoolError)?;
+		if let Ok(_) = self.blockchain.validate_raw_tx(&agg_tx) {
+			debug!(
+				LOGGER,
+				"pool: reconcile_block: candidate txs fully validate. Done."
+			);
+
+			self.entries.retain(|x| tx_hashes.contains(&x.tx.hash()));
+
+			return Ok(vec![]);
 		}
 
 		// TODO - add back all the fully unspent ones as a shortcut?
@@ -155,27 +181,21 @@ where
 
 		// Naive but robust - add everything back sequentially,
 		// validate the pool each time.
-		for tx in candidate_transactions {
-			self.add_to_pool(&*tx);
+		let candidate_entries = self.filtered_entries(tx_hashes);
+		self.clear();
+		for x in candidate_entries {
+			self.add_to_pool(x.clone());
 		}
 
 		// TODO - need to return the evicted txs (not yet used anywhere though)
 		Ok(vec![])
 	}
 
-	fn all_transactions(self) -> Vec<Box<Transaction>> {
-		self.transactions
-	}
-
 	pub fn size(&self) -> usize {
-		self.transactions.len()
+		self.entries.len()
 	}
 
 	fn clear(&mut self) {
-		self.transactions.clear()
-	}
-
-	fn is_empty(&self) -> bool {
-		self.transactions.is_empty()
+		self.entries.clear();
 	}
 }

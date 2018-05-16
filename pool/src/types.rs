@@ -23,7 +23,7 @@ use std::{error, fmt};
 use util::secp::pedersen::Commitment;
 
 use core::consensus;
-use core::core::transaction::{Input, OutputIdentifier};
+use core::core::transaction::{Input, OutputIdentifier, Transaction};
 use core::core::{block, hash, transaction};
 
 /// Transaction pool configuration
@@ -72,6 +72,13 @@ fn default_dandelion_embargo() -> i64 {
 	30
 }
 
+#[derive(Clone, Debug)]
+pub struct PoolEntry {
+	pub src: TxSource,
+	pub timer: i64,
+	pub tx: Transaction,
+}
+
 /// Placeholder: the data representing where we heard about a tx from.
 ///
 /// Used to make decisions based on transaction acceptance priority from
@@ -80,6 +87,7 @@ fn default_dandelion_embargo() -> i64 {
 ///
 /// Most likely this will evolve to contain some sort of network identifier,
 /// once we get a better sense of what transaction building might look like.
+#[derive(Clone, Debug)]
 pub struct TxSource {
 	/// Human-readable name used for logging and errors.
 	pub debug_name: String,

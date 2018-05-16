@@ -33,9 +33,9 @@ pub struct TransactionPool<T> {
 	pub config: PoolConfig,
 
 	/// Our transaction pool.
-	pub pool: Pool<T>,
+	pub txpool: Pool<T>,
 	/// TODO - Our stem transaction pool (just another instance of a pool?)
-	pub stem_pool: Pool<T>,
+	pub stempool: Pool<T>,
 
 	/// The blockchain
 	pub blockchain: Arc<T>,
@@ -51,14 +51,8 @@ where
 	pub fn new(config: PoolConfig, chain: Arc<T>, adapter: Arc<PoolAdapter>) -> TransactionPool<T> {
 		TransactionPool {
 			config: config,
-			pool: Pool {
-				transactions: vec![],
-				blockchain: chain.clone(),
-			},
-			stem_pool: Pool {
-				transactions: vec![],
-				blockchain: chain.clone(),
-			},
+			txpool: Pool::new(chain.clone()),
+			stempool: Pool::new(chain.clone()),
 			blockchain: chain,
 			adapter: adapter,
 		}
@@ -79,7 +73,7 @@ where
 	/// ***EXPERIMENTAL***
 	pub fn add_to_memory_pool(
 		&mut self,
-		_: TxSource,
+		src: TxSource,
 		tx: Transaction,
 		_stem: bool,
 	) -> Result<(), PoolError> {
@@ -90,7 +84,13 @@ where
 		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
 
 		// Attempt to add to the pool (validating against chain state).
-		self.pool.add_to_pool(&tx)?;
+		let entry = PoolEntry {
+			src,
+			// TODO - not using the time yet (for stem pool)
+			timer: 0,
+			tx: tx.clone(),
+		};
+		self.txpool.add_to_pool(entry)?;
 
 		// Notify other parts of the system that we added the tx successfull.
 		self.adapter.tx_accepted(&tx);
@@ -99,7 +99,7 @@ where
 	}
 
 	pub fn reconcile_block(&mut self, block: &Block) -> Result<Vec<Transaction>, PoolError> {
-		self.pool.reconcile_block(block)
+		self.txpool.reconcile_block(block)
 	}
 
 	/// TODO - not yet implemented
@@ -108,7 +108,7 @@ where
 	}
 
 	pub fn retrieve_transactions(&self, cb: &CompactBlock) -> Vec<Transaction> {
-		self.pool.retrieve_transactions(cb)
+		self.txpool.retrieve_transactions(cb)
 	}
 
 	/// Whether the transaction is acceptable to the pool, given both how
@@ -133,10 +133,10 @@ where
 
 	/// Get the total size of the pool (regular pool + stem pool).
 	pub fn total_size(&self) -> usize {
-		self.pool.size() + self.stem_pool.size()
+		self.txpool.size() + self.stempool.size()
 	}
 
-	pub fn prepare_mineable_transactions(&self, num_to_fetch: u32) -> Vec<Box<Transaction>> {
-		self.pool.prepare_mineable_transactions(num_to_fetch)
+	pub fn prepare_mineable_transactions(&self, num_to_fetch: u32) -> Vec<Transaction> {
+		self.txpool.prepare_mineable_transactions(num_to_fetch)
 	}
 }
