@@ -40,11 +40,7 @@ pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Erro
 	}
 }
 
-pub fn send_partial_tx(
-	url: &str,
-	partial_tx: &PartialTx,
-	fluff: bool,
-) -> Result<PartialTx, Error> {
+pub fn send_partial_tx(url: &str, partial_tx: &PartialTx, fluff: bool) -> Result<PartialTx, Error> {
 	let mut core = reactor::Core::new().context(ErrorKind::Hyper)?;
 	let client = hyper::Client::new(&core.handle());
 
