@@ -26,19 +26,19 @@ extern crate time;
 
 use std::collections::HashMap;
 
+use core::core::block;
 use core::core::transaction::{self, ProofMessageElements};
 use core::core::{OutputIdentifier, Transaction};
-use core::core::block;
 
-use pool::*;
-use core::global;
 use blockchain::{DummyChain, DummyChainImpl, DummyOutputSet};
-use std::sync::{Arc, RwLock};
-use core::global::ChainTypes;
 use core::core::Proof;
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
+use core::global;
+use core::global::ChainTypes;
+use pool::*;
+use std::sync::{Arc, RwLock};
 use types::PoolError::InvalidTx;
 
 use keychain::Keychain;
@@ -182,8 +182,9 @@ fn test_multikernel_pool_add() {
 
 #[test]
 /// Attempt to deaggregate a multi_kernel transaction
-/// Push the parent transaction in the mempool then send a multikernel tx containing it and a
-/// child transaction In the end, the pool should contain both transactions.
+/// Push the parent transaction in the mempool then send a multikernel tx
+/// containing it and a child transaction In the end, the pool should contain
+/// both transactions.
 fn test_multikernel_deaggregate() {
 	let mut dummy_chain = DummyChainImpl::new();
 	let head_header = block::BlockHeader {
@@ -366,8 +367,8 @@ fn test_pool_stempool_add() {
 }
 
 #[test]
-/// A basic test; add a transaction to the stempool and one the regular transaction pool
-/// Child transaction should be added to the stempool.
+/// A basic test; add a transaction to the stempool and one the regular
+/// transaction pool Child transaction should be added to the stempool.
 fn test_stempool_pool_add() {
 	let mut dummy_chain = DummyChainImpl::new();
 	let head_header = block::BlockHeader {
@@ -645,7 +646,7 @@ fn test_zero_confirmation_reconciliation() {
 	{
 		let read_pool = pool.read().unwrap();
 		let mut mineable_txs = read_pool.prepare_mineable_transactions(3);
-		txs = mineable_txs.drain(..).map(|x| *x).collect();
+		txs = mineable_txs.drain(..).collect();
 
 		// confirm we can preparing both txs for mining here
 		// one root tx in the pool, and one non-root vertex in the pool
@@ -908,7 +909,7 @@ fn test_block_building() {
 
 	// Request blocks
 	let block: block::Block;
-	let mut txs: Vec<Box<transaction::Transaction>>;
+	let mut txs: Vec<transaction::Transaction>;
 	{
 		let read_pool = pool.read().unwrap();
 		txs = read_pool.prepare_mineable_transactions(3);
@@ -916,7 +917,7 @@ fn test_block_building() {
 		// TODO: This is ugly, either make block::new take owned
 		// txs instead of mut refs, or change
 		// prepare_mineable_transactions to return mut refs
-		let block_txs: Vec<transaction::Transaction> = txs.drain(..).map(|x| *x).collect();
+		let block_txs: Vec<transaction::Transaction> = txs.drain(..).collect();
 		let tx_refs: Vec<&transaction::Transaction> = block_txs.iter().collect();
 
 		let keychain = Keychain::from_random_seed().unwrap();

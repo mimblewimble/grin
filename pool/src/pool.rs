@@ -14,11 +14,11 @@
 
 //! Top-level Pool type, methods, and tests
 
+use rand;
+use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use time;
-use rand;
-use rand::Rng;
 
 use core::core::hash::Hash;
 use core::core::hash::Hashed;
@@ -29,8 +29,8 @@ use core::core::{block, hash};
 use util::LOGGER;
 use util::secp::pedersen::Commitment;
 
-use types::*;
 pub use graph;
+use types::*;
 
 /// The pool itself.
 /// The transactions HashMap holds ownership of all transactions in the pool,
@@ -42,9 +42,9 @@ pub struct TransactionPool<T> {
 	/// propagation
 	pub time_stem_transactions: HashMap<hash::Hash, i64>,
 	/// All transactions in the stempool
-	pub stem_transactions: HashMap<hash::Hash, Box<transaction::Transaction>>,
+	pub stem_transactions: HashMap<hash::Hash, transaction::Transaction>,
 	/// All transactions in the pool
-	pub transactions: HashMap<hash::Hash, Box<transaction::Transaction>>,
+	pub transactions: HashMap<hash::Hash, transaction::Transaction>,
 	/// The stem pool
 	pub stempool: Pool,
 	/// The pool itself
@@ -99,7 +99,7 @@ where
 
 				// if any kernel matches then keep the tx for later
 				if cb.kern_ids.contains(&short_id) {
-					txs.push(*tx.clone());
+					txs.push(tx.clone());
 					break;
 				}
 			}
@@ -208,10 +208,10 @@ where
 
 	/// Attempts to add a transaction to the stempool or the memory pool.
 	///
-	/// Adds a transaction to the stem memory pool, deferring to the orphans pool
-	/// if necessary, and performing any connection-related validity checks.
-	/// Happens under an exclusive mutable reference gated by the write portion
-	/// of a RWLock.
+	/// Adds a transaction to the stem memory pool, deferring to the orphans
+	/// pool if necessary, and performing any connection-related validity
+	/// checks. Happens under an exclusive mutable reference gated by the
+	/// write portion of a RWLock.
 	pub fn add_to_memory_pool(
 		&mut self,
 		_: TxSource,
@@ -349,7 +349,7 @@ where
 				);
 
 				self.adapter.stem_tx_accepted(&tx);
-				self.stem_transactions.insert(tx_hash, Box::new(tx));
+				self.stem_transactions.insert(tx_hash, tx);
 				// Track this transaction
 				self.time_stem_transactions.insert(tx_hash, timer);
 			} else {
@@ -361,7 +361,7 @@ where
 					new_unspents,
 				);
 				self.adapter.tx_accepted(&tx);
-				self.transactions.insert(tx_hash, Box::new(tx));
+				self.transactions.insert(tx_hash, tx);
 			}
 			self.reconcile_orphans().unwrap();
 			Ok(())
@@ -429,8 +429,8 @@ where
 		}
 	}
 
-	/// Attempt to deaggregate multi-kernel transaction as much as possible based on the content
-	/// of the mempool
+	/// Attempt to deaggregate multi-kernel transaction as much as possible
+	/// based on the content of the mempool
 	pub fn deaggregate_transaction(
 		&self,
 		tx: transaction::Transaction,
@@ -477,7 +477,7 @@ where
 				&& candidates_kernels_set.is_subset(&kernels_set)
 			{
 				debug!(LOGGER, "Found a transaction with the same kernel");
-				found_txs.push(*tx.clone());
+				found_txs.push(tx.clone());
 			}
 		}
 
@@ -636,7 +636,7 @@ where
 	pub fn reconcile_block(
 		&mut self,
 		block: &block::Block,
-	) -> Result<Vec<Box<transaction::Transaction>>, PoolError> {
+	) -> Result<Vec<transaction::Transaction>, PoolError> {
 		// If this pool has been kept in sync correctly, serializing all
 		// updates, then the inputs must consume only members of the blockchain
 		// output set.
@@ -796,7 +796,7 @@ where
 		&mut self,
 		marked_transactions: HashSet<hash::Hash>,
 		stem: bool,
-	) -> Vec<Box<transaction::Transaction>> {
+	) -> Vec<transaction::Transaction> {
 		let mut removed_txs = Vec::new();
 
 		if stem {
@@ -839,7 +839,7 @@ where
 	pub fn prepare_mineable_transactions(
 		&self,
 		num_to_fetch: u32,
-	) -> Vec<Box<transaction::Transaction>> {
+	) -> Vec<transaction::Transaction> {
 		self.pool
 			.get_mineable_transactions(num_to_fetch)
 			.iter()
