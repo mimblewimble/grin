@@ -172,10 +172,8 @@ pub trait BlockChain {
 	/// Get the block header at the head
 	fn head_header(&self) -> Result<block::BlockHeader, PoolError>;
 
-	/// Validate a raw tx (may be a large aggregated tx) against the full chain
-	/// state.
-	fn validate_raw_tx(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
-
+	/// Validate a vec of txs against the current chain state after applying the
+	/// pre_tx to the chain state.
 	fn validate_raw_txs(
 		&self,
 		txs: Vec<transaction::Transaction>,

@@ -116,7 +116,7 @@ where
 		let agg_tx = transaction::aggregate_with_cut_through(txs)?;
 
 		// Validate aggregated tx against the chain txhashset extension.
-		self.blockchain.validate_raw_tx(&agg_tx)?;
+		self.blockchain.validate_raw_txs(vec![], Some(&agg_tx))?;
 
 		// If we get here successfully then we can safely add the entry to the pool.
 		self.entries.push(entry);
@@ -131,14 +131,6 @@ where
 			.iter()
 			.filter(|x| !x.tx.kernels.iter().any(|k| block.kernels.contains(k)))
 			.map(|x| x.tx.clone())
-			.collect()
-	}
-
-	fn filtered_entries(&self, tx_hashes: Vec<Hash>) -> Vec<PoolEntry> {
-		self.entries
-			.iter()
-			.filter(|x| tx_hashes.contains(&x.tx.hash()))
-			.cloned()
 			.collect()
 	}
 

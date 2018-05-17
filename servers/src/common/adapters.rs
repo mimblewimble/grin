@@ -700,9 +700,13 @@ impl pool::BlockChain for PoolToChainAdapter {
 			.map_err(|_| pool::PoolError::GenericPoolError)
 	}
 
-	fn validate_raw_tx(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
+	fn validate_raw_txs(
+		&self,
+		txs: Vec<Transaction>,
+		pre_tx: Option<&Transaction>,
+	) -> Result<(Vec<Transaction>), pool::PoolError> {
 		wo(&self.chain)
-			.validate_raw_tx(tx)
+			.validate_raw_txs(txs, pre_tx)
 			.map_err(|_| pool::PoolError::GenericPoolError)
 	}
 }

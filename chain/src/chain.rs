@@ -466,7 +466,8 @@ impl Chain {
 	) -> Result<Vec<Transaction>, Error> {
 		debug!(
 			LOGGER,
-			"chain: validate_raw_tx: started (how slow is this?)"
+			"chain: validate_raw_txs: started (how slow is this?) {}",
+			txs.len(),
 		);
 		let bh = self.head_header()?;
 		let mut txhashset = self.txhashset.write().unwrap();
@@ -482,23 +483,12 @@ impl Chain {
 			}
 			Ok(valid_txs)
 		})?;
-		debug!(LOGGER, "chain: validate_raw_tx: success (how slow?)");
-		Ok(res)
-	}
-
-	pub fn validate_raw_tx(&self, tx: &Transaction) -> Result<(), Error> {
 		debug!(
 			LOGGER,
-			"chain: validate_raw_tx: started (how slow is this?)"
+			"chain: validate_raw_txs: success (how slow?) {}",
+			res.len()
 		);
-		let bh = self.head_header()?;
-		let mut txhashset = self.txhashset.write().unwrap();
-		let res = txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.apply_raw_tx(tx, &bh)?;
-			Ok(())
-		});
-		debug!(LOGGER, "chain: validate_raw_tx: success (how slow?)");
-		res
+		Ok(res)
 	}
 
 	/// Validate the current chain state.
