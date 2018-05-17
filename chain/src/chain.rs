@@ -459,6 +459,33 @@ impl Chain {
 		txhashset.is_unspent(output_ref)
 	}
 
+	pub fn validate_raw_txs(
+		&self,
+		txs: Vec<Transaction>,
+		pre_tx: Option<&Transaction>,
+	) -> Result<Vec<Transaction>, Error> {
+		debug!(
+			LOGGER,
+			"chain: validate_raw_tx: started (how slow is this?)"
+		);
+		let bh = self.head_header()?;
+		let mut txhashset = self.txhashset.write().unwrap();
+		let res = txhashset::extending_readonly(&mut txhashset, |extension| {
+			let mut valid_txs = vec![];
+			if let Some(tx) = pre_tx {
+				extension.apply_raw_tx(tx, &bh)?;
+			}
+			for tx in txs {
+				if extension.apply_raw_tx(&tx, &bh).is_ok() {
+					valid_txs.push(tx);
+				}
+			}
+			Ok(valid_txs)
+		})?;
+		debug!(LOGGER, "chain: validate_raw_tx: success (how slow?)");
+		Ok(res)
+	}
+
 	pub fn validate_raw_tx(&self, tx: &Transaction) -> Result<(), Error> {
 		debug!(
 			LOGGER,

@@ -574,55 +574,6 @@ pub fn aggregate_with_cut_through(transactions: Vec<Transaction>) -> Result<Tran
 	Ok(tx.with_offset(total_kernel_offset))
 }
 
-/// Aggregate a vec of transactions into a multi-kernel transaction
-pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
-	let mut inputs: Vec<Input> = vec![];
-	let mut outputs: Vec<Output> = vec![];
-	let mut kernels: Vec<TxKernel> = vec![];
-
-	// we will sum these together at the end to give us the overall offset for the
-	// transaction
-	let mut kernel_offsets = vec![];
-
-	for mut transaction in transactions {
-		// we will summ these later to give a single aggregate offset
-		kernel_offsets.push(transaction.offset);
-
-		inputs.append(&mut transaction.inputs);
-		outputs.append(&mut transaction.outputs);
-		kernels.append(&mut transaction.kernels);
-	}
-
-	// now sum the kernel_offsets up to give us an aggregate offset for the
-	// transaction
-	let total_kernel_offset = {
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
-		let mut keys = kernel_offsets
-			.iter()
-			.cloned()
-			.filter(|x| *x != BlindingFactor::zero())
-			.filter_map(|x| x.secret_key(&secp).ok())
-			.collect::<Vec<_>>();
-
-		if keys.is_empty() {
-			BlindingFactor::zero()
-		} else {
-			let sum = secp.blind_sum(keys, vec![])?;
-			BlindingFactor::from_secret_key(sum)
-		}
-	};
-
-	// sort them lexicographically
-	inputs.sort();
-	outputs.sort();
-	kernels.sort();
-
-	let tx = Transaction::new(inputs, outputs, kernels);
-
-	Ok(tx.with_offset(total_kernel_offset))
-}
-
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
 /// transactions
 pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transaction, Error> {
@@ -634,7 +585,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	// transaction
 	let mut kernel_offsets = vec![];
 
-	let tx = aggregate(txs).unwrap();
+	let tx = aggregate_with_cut_through(txs).unwrap();
 
 	for mk_input in mk_tx.clone().inputs {
 		if !tx.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {

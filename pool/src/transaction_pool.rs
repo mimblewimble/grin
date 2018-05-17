@@ -99,12 +99,12 @@ where
 	}
 
 	pub fn reconcile_block(&mut self, block: &Block) -> Result<(), PoolError> {
-		// First reconcile the txpool
-		self.txpool.reconcile_block(block, vec![])?;
+		// First reconcile the txpool.
+		self.txpool.reconcile_block(block, None)?;
 
 		// Then reconcile the stempool, accounting for the txpool txs
-		let txs = self.txpool.all_transactions();
-		self.stempool.reconcile_block(block, txs)?;
+		let txpool_tx = self.txpool.aggregate_transaction()?;
+		self.stempool.reconcile_block(block, Some(&txpool_tx))?;
 
 		Ok(())
 	}

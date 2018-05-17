@@ -93,6 +93,12 @@ where
 		self.entries.iter().map(|x| x.tx.clone()).collect()
 	}
 
+	pub fn aggregate_transaction(&self) -> Result<Transaction, PoolError> {
+		let txs = self.all_transactions();
+		let tx = transaction::aggregate_with_cut_through(txs)?;
+		Ok(tx)
+	}
+
 	// Aggregate this new tx with all existing txs in the pool.
 	// If we can validate the aggregated tx against the current chain state
 	// then we can safely add the tx to the pool.
@@ -103,12 +109,11 @@ where
 	) -> Result<(), PoolError> {
 		let mut txs = self.all_transactions();
 		txs.push(entry.tx.clone());
-		for tx in extra_txs {
-			txs.push(tx.clone());
-		}
+		txs.extend(extra_txs);
 
-		let agg_tx =
-			transaction::aggregate_with_cut_through(txs).map_err(|_| PoolError::GenericPoolError)?;
+		// Create a single aggregated tx from txs in the pool,
+		// the tx in the proposed entry and any provided extra txs.
+		let agg_tx = transaction::aggregate_with_cut_through(txs)?;
 
 		// Validate aggregated tx against the chain txhashset extension.
 		self.blockchain.validate_raw_tx(&agg_tx)?;
@@ -121,19 +126,10 @@ where
 
 	// Simple check comparing tx kernels against kernels in the latest block.
 	// This covers the trivial case where we just emptied the pool.
-	fn candidate_transactions(&self, block: &Block) -> Vec<Transaction> {
+	fn remaining_transactions(&self, block: &Block) -> Vec<Transaction> {
 		self.entries
 			.iter()
-			.filter(|entry| {
-				let mut keep = true;
-				for k in &entry.tx.kernels {
-					if block.kernels.contains(&k) {
-						keep = false;
-						break;
-					}
-				}
-				keep
-			})
+			.filter(|x| !x.tx.kernels.iter().any(|k| block.kernels.contains(k)))
 			.map(|x| x.tx.clone())
 			.collect()
 	}
@@ -150,9 +146,9 @@ where
 	pub fn reconcile_block(
 		&mut self,
 		block: &Block,
-		extra_txs: Vec<Transaction>,
+		extra_tx: Option<&Transaction>,
 	) -> Result<Vec<Transaction>, PoolError> {
-		let candidate_txs = self.candidate_transactions(block);
+		let candidate_txs = self.remaining_transactions(block);
 
 		debug!(
 			LOGGER,
@@ -167,38 +163,11 @@ where
 			return Ok(vec![]);
 		}
 
-		// Aggregate everything remaining in the pool and check if it validates.
-		// If we validate successfully here then we are done.
+		// Go through the candidate txs and keep everything that validates incrementally
+		// against the current chain state, accounting for the "extra tx" as necessary.
 
-		let tx_hashes = candidate_txs
-			.iter()
-			.map(|ref x| x.hash())
-			.collect::<Vec<_>>();
-
-		let agg_tx = transaction::aggregate_with_cut_through(candidate_txs)
-			.map_err(|_| PoolError::GenericPoolError)?;
-		if let Ok(_) = self.blockchain.validate_raw_tx(&agg_tx) {
-			debug!(
-				LOGGER,
-				"pool: reconcile_block: candidate txs fully validate. Done."
-			);
-
-			self.entries.retain(|x| tx_hashes.contains(&x.tx.hash()));
-
-			return Ok(vec![]);
-		}
-
-		// TODO - add back all the fully unspent ones as a shortcut?
-		// Otherwise we need to expend effort adding (and validating)
-		// them individually one-by-one.
-
-		// Naive but robust - add everything back sequentially,
-		// validate the pool each time.
-		let candidate_entries = self.filtered_entries(tx_hashes);
-		self.clear();
-		for x in candidate_entries {
-			self.add_to_pool(x.clone(), extra_txs.clone());
-		}
+		let valid_txs = self.blockchain.validate_raw_txs(candidate_txs, extra_tx)?;
+		self.entries.retain(|x| valid_txs.contains(&x.tx));
 
 		// TODO - need to return the evicted txs (not yet used anywhere though)
 		Ok(vec![])

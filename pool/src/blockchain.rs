@@ -152,6 +152,14 @@ impl BlockChain for DummyChainImpl {
 
 		Ok(())
 	}
+
+	fn validate_raw_txs(
+		&self,
+		txs: Vec<transaction::Transaction>,
+		pre_tx: Option<&transaction::Transaction>,
+	) -> Result<Vec<transaction::Transaction>, PoolError> {
+		panic!("not yet implemented");
+	}
 }
 
 impl DummyChain for DummyChainImpl {

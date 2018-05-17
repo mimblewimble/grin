@@ -101,6 +101,7 @@ pub struct TxSource {
 pub enum PoolError {
 	/// An invalid pool entry caused by underlying tx validation error
 	InvalidTx(transaction::Error),
+	TransactionError(transaction::Error),
 	/// An entry already in the pool
 	AlreadyInPool,
 	/// An entry already in the stempool
@@ -144,6 +145,12 @@ pub enum PoolError {
 	LowFeeTransaction(u64),
 }
 
+impl From<transaction::Error> for PoolError {
+	fn from(e: transaction::Error) -> PoolError {
+		PoolError::TransactionError(e)
+	}
+}
+
 impl error::Error for PoolError {
 	fn description(&self) -> &str {
 		match *self {
@@ -168,6 +175,12 @@ pub trait BlockChain {
 	/// Validate a raw tx (may be a large aggregated tx) against the full chain
 	/// state.
 	fn validate_raw_tx(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
+
+	fn validate_raw_txs(
+		&self,
+		txs: Vec<transaction::Transaction>,
+		pre_tx: Option<&transaction::Transaction>,
+	) -> Result<Vec<transaction::Transaction>, PoolError>;
 }
 
 /// Bridge between the transaction pool and the rest of the system. Handles
