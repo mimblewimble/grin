@@ -32,12 +32,12 @@ use uuid::Uuid;
 
 use chain::Chain;
 use chain::types::*;
-use core::{global, pow};
 use core::global::ChainTypes;
-use wallet::libwallet::{aggsig, transaction};
-use wallet::grinwallet::{keys, selection};
-use wallet::types::{OutputData, OutputStatus, WalletData};
+use core::{global, pow};
 use util::LOGGER;
+use wallet::grinwallet::{keys, selection};
+use wallet::libwallet::{aggsig, transaction};
+use wallet::types::{OutputData, OutputStatus, PartialTx, PartialTxPhase, WalletData};
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
@@ -57,8 +57,125 @@ fn setup(test_dir: &str, chain_dir: &str) -> Chain {
 	).unwrap()
 }
 
+/// Build and test new version of sending API
+#[test]
+fn build_transaction_2() {
+	let chain = setup("test_output", "build_transaction_2/.grin");
+	let wallet1 = common::create_wallet("test_output/build_transaction_2/wallet1");
+	let wallet2 = common::create_wallet("test_output/build_transaction_2/wallet2");
+	common::award_blocks_to_wallet(&chain, &wallet1, 10);
+	// Wallet 1 has 600 Grins, wallet 2 has 0. Create a transaction that sends
+	// 300 Grins from wallet 1 to wallet 2, using libwallet
+	// Sender creates a new aggsig context
+	// SENDER (create sender initiation)
+	let mut sender_context_manager = aggsig::ContextManager::new();
+
+	// Get lock height
+	let chain_tip = chain.head().unwrap();
+	let amount = 300_000_000_000;
+
+	// ensure outputs we're selecting are up to date
+	let res = common::refresh_output_state_local(&wallet1.0, &wallet1.1, &chain);
+
+	if let Err(e) = res {
+		panic!("Unable to refresh sender wallet outputs: {}", e);
+	}
+
+	// Select our outputs into a new slate and save our corresponding IDs in our
+	// transaction context. The secret key in our transaction context will be
+	// randomly selected. This returns the public slate, and a closure that locks
+	// the inputs and outputs once we're convinced the transaction exchange went
+	// according to plan
+	let (mut slate, sender_lock_fn) = selection::build_send_tx_slate(
+		&wallet1.0,
+		&wallet1.1,
+		&mut sender_context_manager,
+		amount,
+		chain_tip.height,
+		3,
+		chain_tip.height,
+		1000,
+		true,
+	).unwrap();
+
+	// Generate a kernel offset and subtract from our context's secret key. Store
+	// the offset in the slate's transaction kernel, and adds our public key
+	// information to the slate
+	let _ = transaction::sender_initiate_slate(&wallet1.1, &mut sender_context_manager, &mut slate);
+
+	debug!(LOGGER, "Transaction Slate after step 1: sender initiation");
+	debug!(LOGGER, "-----------------------------------------");
+	debug!(LOGGER, "{:?}", slate);
+
+	// RECIPIENT (Handle sender initiation)
+	let mut recipient_context_manager = aggsig::ContextManager::new();
+
+	// Create a potential output for this transaction
+	let (key_id, receiver_create_fn) =
+		selection::build_recipient_output_with_slate(&wallet2.0, &wallet2.1, &slate).unwrap();
+
+	let _ = transaction::recipient_initiation_slate(
+		&wallet2.1,
+		&mut recipient_context_manager,
+		&mut slate,
+		&key_id,
+	).unwrap();
+
+	debug!(
+		LOGGER,
+		"Transaction Slate after step 2: receiver initiation"
+	);
+	debug!(LOGGER, "-----------------------------------------");
+	debug!(LOGGER, "{:?}", slate);
+
+	// SENDER Part 3: Sender confirmation
+	let _ = transaction::sender_confirmation_with_slate(
+		&wallet1.1,
+		&sender_context_manager,
+		&mut slate,
+	).unwrap();
+
+	debug!(LOGGER, "PartialTx after step 3: sender confirmation");
+	debug!(LOGGER, "--------------------------------------------");
+	debug!(LOGGER, "{:?}", slate);
+
+	// TODO: Sender almost has enough info here, but also needs
+	// the recipient's output information available, and the recipient needs to know
+	// whether to finalize the output in their wallet. Perhaps have recipient build
+	// their output commit during step 2 and add it to the slate
+
+	let final_tx_recipient =
+		transaction::finalize_slate(&wallet2.1, &mut recipient_context_manager, &slate, &key_id);
+
+	if let Err(e) = final_tx_recipient {
+		panic!("Error creating final tx: {:?}", e);
+	}
+
+	debug!(LOGGER, "Recipient calculates final transaction as:");
+	debug!(LOGGER, "--------------------------------------------");
+	debug!(LOGGER, "{:?}", final_tx_recipient);
+
+	// All okay, lock sender's outputs and create recipient's outputs
+	let _ = sender_lock_fn();
+	let _ = receiver_create_fn();
+
+	// Insert this transaction into a new block, then mine till confirmation
+	common::award_block_to_wallet(&chain, vec![&final_tx_recipient.unwrap()], &wallet1);
+	common::award_blocks_to_wallet(&chain, &wallet1, 3);
+
+	// Refresh wallets
+	let res = common::refresh_output_state_local(&wallet2.0, &wallet2.1, &chain);
+	if let Err(e) = res {
+		panic!("Error refreshing output state for wallet: {:?}", e);
+	}
+
+	let chain_tip = chain.head().unwrap();
+	let balances = common::get_wallet_balances(&wallet2.0, &wallet2.1, chain_tip.height).unwrap();
+
+	assert_eq!(balances.3, 300_000_000_000);
+}
+
 /// Build a transaction between 2 parties
-#[cfg(test)]
 #[test]
 fn build_transaction() {
 	let chain = setup("test_output", "build_transaction/.grin");
@@ -70,17 +187,21 @@ fn build_transaction() {
 	// Sender creates a new aggsig context
 	// SENDER (create sender initiation)
 	let mut sender_context_manager = aggsig::ContextManager::new();
-	let tx_id = Uuid::new_v4();
 
 	// Get lock height
 	let chain_tip = chain.head().unwrap();
 
 	// ensure outputs we're selecting are up to date
 	let res = common::refresh_output_state_local(&wallet1.0, &wallet1.1, &chain);
+
+	if let Err(e) = res {
+		panic!("Unable to refresh sender wallet outputs: {}", e);
+	}
+
 	let amount = 300_000_000_000;
 
 	// Select our outputs
-	let tx_data = selection::build_send_tx(
+	let (tx, blinding, inputs, change_key, amount, fee) = selection::build_send_tx(
 		&wallet1.0,
 		&wallet1.1,
 		amount,
@@ -91,19 +212,31 @@ fn build_transaction() {
 		true,
 	).unwrap();
 
-	if let Err(e) = res {
-		panic!("Unable to refresh sender wallet outputs: {}", e);
-	}
+	let mut txe_data = transaction::ExchangedTx {
+		id: Uuid::new_v4(),
+		tx: tx,
+		blind: blinding,
+		input_wallet_ids: inputs,
+		change_id: change_key,
+		amount: amount,
+		fee: fee,
+		height: chain_tip.height,
+		lock_height: chain_tip.height,
+		kernel_offset: None,
+	};
 
-	let partial_tx = transaction::sender_initiation(
+	let _ = transaction::sender_initiation(&wallet1.1, &mut sender_context_manager, &mut txe_data)
+		.unwrap();
+
+	let sender_context = sender_context_manager.get_context(&txe_data.id);
+
+	let partial_tx = PartialTx::from_exchanged_tx(
+		PartialTxPhase::SenderInitiation,
 		&wallet1.1,
-		&tx_id,
-		&mut sender_context_manager,
-		chain_tip.height,
-		tx_data,
-	).unwrap();
-
-	let sender_context = sender_context_manager.get_context(&tx_id);
+		&sender_context,
+		None,
+		&txe_data,
+	);
 
 	// TODO: Might make more sense to do this before the transaction
 	// building call

@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 /// Aggsig library definitions
-
 use std::collections::HashMap;
 
-use util::secp::key::{PublicKey, SecretKey};
-use util::secp::{self, aggsig, Message, Secp256k1, Signature};
-use util::secp::pedersen::Commitment;
-use util::kernel_sig_msg;
-use uuid::Uuid;
 use keychain::Keychain;
-use keychain::extkey::Identifier;
 use keychain::blind::BlindingFactor;
+use keychain::extkey::Identifier;
 use libwallet::error::Error;
+use util::kernel_sig_msg;
+use util::secp::key::{PublicKey, SecretKey};
+use util::secp::pedersen::Commitment;
+use util::secp::{self, aggsig, Message, Secp256k1, Signature};
+use uuid::Uuid;
 
 #[derive(Clone, Debug)]
 /// Holds the context for a single aggsig transaction
@@ -36,16 +35,19 @@ pub struct Context {
 	/// (basically a SecretKey)
 	pub sec_nonce: SecretKey,
 	/// If I'm the sender, store change key
+	/// TODO: remove in favor of outputs below
 	pub change_key: Option<Identifier>,
 	/// store my outputs between invocations
 	pub output_ids: Vec<Identifier>,
+	/// store my inputs
+	pub input_ids: Vec<Identifier>,
 	/// store the calculated fee
 	pub fee: u64,
 }
 
 #[derive(Clone, Debug)]
-/// Holds many contexts, to support multiple transactions hitting a wallet receiver
-/// at once
+/// Holds many contexts, to support multiple transactions hitting a wallet
+/// receiver at once
 pub struct ContextManager {
 	contexts: HashMap<Uuid, Context>,
 }
@@ -74,6 +76,7 @@ impl ContextManager {
 					transaction_id: transaction_id.clone(),
 					sec_nonce: aggsig::export_secnonce_single(secp).unwrap(),
 					change_key: None,
+					input_ids: vec![],
 					output_ids: vec![],
 					fee: 0,
 				},
@@ -105,6 +108,17 @@ impl Context {
 		self.output_ids.clone()
 	}
 
+	/// Tracks IDs of my inputs into the transaction
+	/// be kept between invocations
+	pub fn add_input(&mut self, input_id: &Identifier) {
+		self.input_ids.push(input_id.clone());
+	}
+
+	/// Returns all stored input identifiers
+	pub fn get_inputs(&self) -> Vec<Identifier> {
+		self.input_ids.clone()
+	}
+
 	/// Returns private key, private nonce
 	pub fn get_private_keys(&self) -> (SecretKey, SecretKey) {
 		(self.sec_key.clone(), self.sec_nonce.clone())
@@ -118,9 +132,10 @@ impl Context {
 		)
 	}
 
-	/// Note 'secnonce' here is used to perform the signature, while 'pubnonce' just allows you to
-	/// provide a custom public nonce to include while calculating e
-	/// nonce_sum is the sum used to decide whether secnonce should be inverted during sig time
+	/// Note 'secnonce' here is used to perform the signature, while 'pubnonce'
+	/// just allows you to provide a custom public nonce to include while
+	/// calculating e nonce_sum is the sum used to decide whether secnonce
+	/// should be inverted during sig time
 	pub fn sign_single(
 		&self,
 		secp: &Secp256k1,

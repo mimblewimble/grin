@@ -13,18 +13,18 @@
 // limitations under the License.
 
 use blake2;
+use libwallet::{aggsig, transaction};
 use rand::{thread_rng, Rng};
+use std::cmp::min;
+use std::collections::HashMap;
+use std::convert::From;
 use std::fmt;
 use std::fmt::Display;
-use uuid::Uuid;
-use std::convert::From;
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::path::Path;
 use std::path::MAIN_SEPARATOR;
-use std::collections::HashMap;
-use std::cmp::min;
-use libwallet::aggsig;
+use std::path::Path;
+use uuid::Uuid;
 
 use serde;
 use serde_json;
@@ -42,10 +42,10 @@ use core::ser;
 use keychain;
 use keychain::BlindingFactor;
 use util;
+use util::LOGGER;
 use util::secp;
 use util::secp::Signature;
 use util::secp::key::PublicKey;
-use util::LOGGER;
 
 const DAT_FILE: &'static str = "wallet.dat";
 const BCK_FILE: &'static str = "wallet.bck";
@@ -644,9 +644,10 @@ impl WalletData {
 	}
 
 	/// Select spendable coins from the wallet.
-	/// Default strategy is to spend the maximum number of outputs (up to max_outputs).
-	/// Alternative strategy is to spend smallest outputs first but only as many as necessary.
-	/// When we introduce additional strategies we should pass something other than a bool in.
+	/// Default strategy is to spend the maximum number of outputs (up to
+	/// max_outputs). Alternative strategy is to spend smallest outputs first
+	/// but only as many as necessary. When we introduce additional strategies
+	/// we should pass something other than a bool in.
 	pub fn select_coins(
 		&self,
 		root_key_id: keychain::Identifier,
@@ -762,8 +763,12 @@ pub enum PartialTxPhase {
 
 /// Helper in serializing the information required during an interactive aggsig
 /// transaction
+/// TODO: May be temporary as we fill out format to be a bit more appropriate
+/// to the exchange
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PartialTx {
+	//TODO: Move phase to libwallet
 	pub phase: PartialTxPhase,
 	pub id: Uuid,
 	pub amount: u64,
@@ -775,13 +780,48 @@ pub struct PartialTx {
 	pub tx: String,
 }
 
+impl PartialTx {
+	/// Convert ExchangedTx from libwallet into a sendable PartialTx
+	pub fn from_exchanged_tx(
+		phase: PartialTxPhase,
+		keychain: &keychain::Keychain,
+		context: &aggsig::Context,
+		part_sig: Option<secp::Signature>,
+		txe: &transaction::ExchangedTx,
+	) -> PartialTx {
+		let (pub_excess, pub_nonce) = context.get_public_keys(keychain.secp());
+		let mut pub_excess = pub_excess.serialize_vec(keychain.secp(), true).clone();
+		let len = pub_excess.clone().len();
+		let pub_excess: Vec<_> = pub_excess.drain(0..len).collect();
+
+		let mut pub_nonce = pub_nonce.serialize_vec(keychain.secp(), true);
+		let len = pub_nonce.clone().len();
+		let pub_nonce: Vec<_> = pub_nonce.drain(0..len).collect();
+
+		PartialTx {
+			phase: phase,
+			id: context.transaction_id,
+			amount: txe.amount + txe.fee,
+			lock_height: txe.lock_height,
+			public_blind_excess: util::to_hex(pub_excess),
+			public_nonce: util::to_hex(pub_nonce),
+			kernel_offset: txe.kernel_offset.unwrap().to_hex(),
+			part_sig: match part_sig {
+				None => String::from("00"),
+				Some(p) => util::to_hex(p.serialize_der(&keychain.secp())),
+			},
+			tx: util::to_hex(ser::ser_vec(&txe.tx).unwrap()),
+		}
+	}
+}
+
 /// Builds a PartialTx
 /// aggsig_tx_context should contain the private key/nonce pair
 /// the resulting partial tx will contain the corresponding public keys
 pub fn build_partial_tx(
 	context: &aggsig::Context,
 	keychain: &keychain::Keychain,
-	receive_amount: u64,
+	amount_with_fee: u64,
 	lock_height: u64,
 	kernel_offset: BlindingFactor,
 	part_sig: Option<secp::Signature>,
@@ -799,7 +839,7 @@ pub fn build_partial_tx(
 	PartialTx {
 		phase: PartialTxPhase::SenderInitiation,
 		id: context.transaction_id,
-		amount: receive_amount,
+		amount: amount_with_fee,
 		lock_height: lock_height,
 		public_blind_excess: util::to_hex(pub_excess),
 		public_nonce: util::to_hex(pub_nonce),

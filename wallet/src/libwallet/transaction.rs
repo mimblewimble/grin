@@ -18,37 +18,129 @@ use rand::thread_rng;
 use uuid::Uuid;
 
 use core::core::{amount_to_hr_string, Committed, Transaction};
-use libwallet::{aggsig, build};
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
-use types::*; // TODO: Remove this?
-use util::{secp, LOGGER};
-use util::secp::key::{PublicKey, SecretKey};
+use libwallet::{aggsig, build};
+//TODO: Remove these from here
+use types::{build_partial_tx, read_partial_tx, tx_fee, Error, ErrorKind, OutputData, PartialTx,
+            PartialTxPhase};
+
 use util::secp::Signature;
+use util::secp::key::{PublicKey, SecretKey};
+use util::{secp, LOGGER};
+
 use failure::ResultExt;
+
+/// Define the stage that a slate can be in.. for now
+/// follows the exchange workflow, but could be made
+/// more piecemeal
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum SlatePhase {
+	/// Sender has initiated
+	SenderInitiation,
+	/// Receiver has sender's public data, has filled their public data and
+	/// part-signed
+	ReceiverInitiation,
+	/// Sender has all public data, has filled it and signed
+	SenderConfirmation,
+	/// Reciever has all data, and has signed with their output
+	ReceiverConfirmation,
+}
+/// Public data for each participant in the slate
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ParticipantData {
+	/// Id of participant in the transaction. (For now, 0=sender, 1=rec)
+	pub id: u64,
+	/// Public key corresponding to private blinding factor
+	pub public_blind_excess: PublicKey,
+	/// Public key corresponding to private nonce
+	pub public_nonce: PublicKey,
+	/// Public partial signature
+	pub part_sig: Option<Signature>,
+}
+
+/// A 'Slate' is passed around to all parties to build up all of the public
+/// tranaction data needed to create a finalised tranaction. Callers can pass
+/// the slate around by whatever means they choose, (but we can provide some
+/// binary or JSON serialisation helpers here).
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Slate {
+	/// The phase the slate is in (how much data has been filled out)
+	pub phase: SlatePhase,
+	/// Unique transaction ID, selected by sender
+	pub id: Uuid,
+	/// The core transaction data:
+	/// inputs, outputs, kernels, kernel offset
+	pub tx: Option<Transaction>,
+	/// base amount (excluding fee)
+	pub amount: u64,
+	/// fee amount
+	pub fee: u64,
+	/// Block height for the transaction
+	pub height: u64,
+	/// Lock height
+	pub lock_height: u64,
+	/// Participant data, each participant in the transaction will
+	/// insert their public data here. For now, 0 is sender and 1
+	/// is receiver, though this will change for multi-party
+	pub participant_data: Vec<ParticipantData>,
+}
+
+impl Slate {
+	/// Create a new slate
+	pub fn blank() -> Slate {
+		Slate {
+			phase: SlatePhase::SenderInitiation,
+			id: Uuid::new_v4(),
+			tx: None,
+			amount: 0,
+			fee: 0,
+			height: 0,
+			lock_height: 0,
+			participant_data: vec![],
+		}
+	}
+}
+
+/// Temporary (refactor attempt 1)
+pub struct ExchangedTx {
+	/// Unique transaction ID, selected by sender
+	pub id: Uuid,
+	/// The core transaction data, inputs, outputs, etc
+	pub tx: Transaction,
+	/// Blinding factor for the transaction
+	pub blind: BlindingFactor,
+	/// Sender's wallet input identifiers ("coins")
+	/// selected for the transaction
+	/// TODO: Become Identifiers
+	pub input_wallet_ids: Vec<OutputData>,
+	/// Change output Identifier in sender wallet
+	pub change_id: Option<Identifier>,
+	/// base amount (excluding fee)
+	pub amount: u64,
+	/// fee amount
+	pub fee: u64,
+	/// Block height for the transaction
+	pub height: u64,
+	/// Lock height
+	pub lock_height: u64,
+	/// Kernel offset
+	pub kernel_offset: Option<BlindingFactor>,
+}
 
 // TODO: None of these functions should care about the wallet implementation,
 
 /// Initiate a transaction for the aggsig exchange
-/// with the given transaction data
-pub fn sender_initiation(
+/// with the given transaction data. tx is updated
+/// with the results of the current phase
+pub fn sender_initiate_slate(
 	keychain: &Keychain,
-	tx_id: &Uuid,
 	context_manager: &mut aggsig::ContextManager,
-	current_height: u64,
-	//TODO: Make this nicer, remove wallet-specific OutputData type
-	tx_data: (
-		Transaction,
-		BlindingFactor,
-		Vec<OutputData>,
-		Option<Identifier>,
-		u64,
-	),
-) -> Result<PartialTx, Error> {
-	let lock_height = current_height;
-
-	let (tx, blind, coins, _change_key, amount_with_fee) = tx_data;
-
-	// TODO - wrap this up in build_send_tx or even the build() call?
+	slate: &mut Slate,
+) -> Result<(), Error> {
+	let mut context = context_manager.get_context(&slate.id);
 	// Generate a random kernel offset here
 	// and subtract it from the blind_sum so we create
 	// the aggsig context with the "split" key
@@ -57,35 +149,75 @@ pub fn sender_initiation(
 
 	let blind_offset = keychain
 		.blind_sum(&BlindSum::new()
-			.add_blinding_factor(blind)
+			.add_blinding_factor(BlindingFactor::from_secret_key(context.sec_key))
 			.sub_blinding_factor(kernel_offset))
 		.unwrap();
 
-	//
+	slate.tx.as_mut().unwrap().offset = kernel_offset;
+
+	// -Sender picks random blinding factors for all outputs it participates in,
+	// computes total blinding excess xS
+	// -Sender picks random nonce kS
+	// -Sender posts inputs, outputs, Message M=fee, xS * G and kS * G to Receiver
+
+	context.sec_key = blind_offset
+		.secret_key(&keychain.secp())
+		.context(ErrorKind::Keychain)?;
+
+	// Add our public key and nonce to the slate
+	let (pub_key, pub_nonce) = context.get_public_keys(keychain.secp());
+	slate.participant_data.push(ParticipantData {
+		id: 0,
+		public_blind_excess: pub_key,
+		public_nonce: pub_nonce,
+		part_sig: None,
+	});
+
+	context_manager.save_context(context);
+	Ok(())
+}
+
+/// TODO: Will be removed once above works
+/// Initiate a transaction for the aggsig exchange
+/// with the given transaction data. tx is updated
+/// with the results of the current phase
+pub fn sender_initiation(
+	keychain: &Keychain,
+	context_manager: &mut aggsig::ContextManager,
+	tx: &mut ExchangedTx,
+) -> Result<(), Error> {
+	tx.lock_height = tx.height;
+
+	// Generate a random kernel offset here
+	// and subtract it from the blind_sum so we create
+	// the aggsig context with the "split" key
+	let kernel_offset =
+		BlindingFactor::from_secret_key(SecretKey::new(&keychain.secp(), &mut thread_rng()));
+
+	let blind_offset = keychain
+		.blind_sum(&BlindSum::new()
+			.add_blinding_factor(tx.blind)
+			.sub_blinding_factor(kernel_offset))
+		.unwrap();
+
+	tx.kernel_offset = Some(kernel_offset);
+
 	// -Sender picks random blinding factors for all outputs it participates in,
 	// computes total blinding excess xS -Sender picks random nonce kS
 	// -Sender posts inputs, outputs, Message M=fee, xS * G and kS * G to Receiver
-	//
+
 	let skey = blind_offset
 		.secret_key(&keychain.secp())
 		.context(ErrorKind::Keychain)?;
 
 	// Create a new aggsig context
-	let mut context = context_manager.create_context(keychain.secp(), &tx_id, skey);
-	for coin in coins {
-		context.add_output(&coin.key_id);
+	let mut context = context_manager.create_context(keychain.secp(), &tx.id, skey);
+	for input in tx.input_wallet_ids.clone() {
+		context.add_output(&input.key_id);
 	}
-	let partial_tx = build_partial_tx(
-		&context,
-		keychain,
-		amount_with_fee,
-		lock_height,
-		kernel_offset,
-		None,
-		tx,
-	);
+
 	context_manager.save_context(context);
-	Ok(partial_tx)
+	Ok(())
 }
 
 /// Receive Part 1 of interactive transactions from sender, Sender Initiation
@@ -99,6 +231,94 @@ pub fn sender_initiation(
 /// -Receiver computes their part of signature, sR = kR + e * xR
 /// -Receiver responds with sR, blinding excess xR * G, public nonce kR * G
 
+pub fn recipient_initiation_slate(
+	keychain: &Keychain,
+	context_manager: &mut aggsig::ContextManager,
+	slate: &mut Slate,
+	output_key_id: &Identifier,
+) -> Result<(), Error> {
+	let tx = slate.tx.as_ref().unwrap().clone();
+	// TODO: verify state slate
+	// TODO: return error if this isn't filled properly
+	let sender_pub_nonce = slate.participant_data[0].public_nonce;
+
+	// double check the fee amount included in the partial tx
+	// we don't necessarily want to just trust the sender
+	// we could just overwrite the fee here (but we won't) due to the sig
+	let fee = tx_fee(
+		tx.inputs.len(),
+		tx.outputs.len() + 1,
+		tx.input_proofs_count(),
+		None,
+	);
+	if fee > tx.fee() {
+		return Err(ErrorKind::FeeDispute {
+			sender_fee: tx.fee(),
+			recipient_fee: fee,
+		})?;
+	}
+
+	if fee > slate.amount + slate.fee {
+		info!(
+			LOGGER,
+			"Rejected the transfer because transaction fee ({}) exceeds received amount ({}).",
+			amount_to_hr_string(fee),
+			amount_to_hr_string(slate.amount + slate.fee)
+		);
+		return Err(ErrorKind::FeeExceedsAmount {
+			sender_amount: slate.amount + slate.fee,
+			recipient_fee: fee,
+		})?;
+	}
+
+	let out_amount = slate.amount;
+
+	// First step is just to get the excess sum of the outputs we're participating
+	// in Output and key needs to be stored until transaction finalisation time,
+	// somehow
+	// Still handy for getting the blinding sum
+	let (_, blind_sum) = build::partial_transaction(
+		vec![build::output(out_amount, output_key_id.clone())],
+		keychain,
+	).context(ErrorKind::Keychain)?;
+
+	// Create a new aggsig context
+	// this will create a new blinding sum and nonce, and store them
+	let blind = blind_sum
+		.secret_key(&keychain.secp())
+		.context(ErrorKind::Keychain)?;
+	debug!(LOGGER, "Creating new aggsig context");
+	let mut context = context_manager.create_context(keychain.secp(), &slate.id, blind);
+	context.add_output(output_key_id);
+
+	let sig_part = context
+		.calculate_partial_sig(
+			keychain.secp(),
+			&sender_pub_nonce,
+			slate.fee,
+			slate.lock_height,
+		)
+		.unwrap();
+
+	// Build our participant data, which should contain sR, blinding excess xR * G,
+	// public nonce kR * G
+
+	let (pub_key, pub_nonce) = context.get_public_keys(&keychain.secp());
+	slate.participant_data.push(ParticipantData {
+		id: 1,
+		public_blind_excess: pub_key,
+		public_nonce: pub_nonce,
+		part_sig: Some(sig_part),
+	});
+
+	slate.phase = SlatePhase::ReceiverInitiation;
+
+	context_manager.save_context(context);
+
+	Ok(())
+}
+
+/// TODO: Remove in favour of above when refactor done
 pub fn recipient_initiation(
 	keychain: &Keychain,
 	context_manager: &mut aggsig::ContextManager,
@@ -191,6 +411,49 @@ pub fn recipient_initiation(
 ///  sR * G·
 ///  -Sender computes their part of signature, sS = kS + e * xS
 
+pub fn sender_confirmation_with_slate(
+	keychain: &Keychain,
+	context_manager: &aggsig::ContextManager,
+	slate: &mut Slate,
+) -> Result<(), Error> {
+	let context = context_manager.get_context(&slate.id);
+
+	let recp_pub_blinding = slate.participant_data[1].public_blind_excess;
+	let recp_pub_nonce = slate.participant_data[1].public_nonce;
+	let sig = slate.participant_data[1].part_sig;
+
+	//TODO: Verify all available sigs in the slate instead of this
+	let res = context.verify_partial_sig(
+		&keychain.secp(),
+		&sig.unwrap(),
+		&recp_pub_nonce,
+		&recp_pub_blinding,
+		slate.fee,
+		slate.lock_height,
+	);
+
+	if !res {
+		error!(LOGGER, "Partial Sig from recipient invalid.");
+		return Err(ErrorKind::Signature("Partial Sig from recipient invalid."))?;
+	}
+
+	let sig_part = context
+		.calculate_partial_sig(
+			&keychain.secp(),
+			&recp_pub_nonce,
+			slate.fee,
+			slate.lock_height,
+		)
+		.unwrap();
+
+	// Build the next stage, containing sS
+	slate.participant_data[0].part_sig = Some(sig_part);
+	slate.phase = SlatePhase::SenderConfirmation;
+
+	Ok(())
+}
+
+/// TODO: Delete after above is integrated
 pub fn sender_confirmation(
 	keychain: &Keychain,
 	context_manager: &mut aggsig::ContextManager,
@@ -242,9 +505,19 @@ pub fn sender_confirmation(
 
 /// Creates the final signature, callable by either the sender or recipient
 /// (after phase 3: sender confirmation)
-///
-/// TODO: takes a partial Tx that just contains the other party's public
-/// info at present, but this should be changed to something more appropriate
+/// TODO: Only callable by receiver at the moment
+pub fn finalize_slate(
+	keychain: &Keychain,
+	context_manager: &mut aggsig::ContextManager,
+	slate: &Slate,
+	output_key_id: &Identifier,
+) -> Result<Transaction, Error> {
+	let final_sig = create_final_signature_slate(keychain, context_manager, slate)?;
+
+	build_final_transaction_slate(keychain, slate, &final_sig, output_key_id)
+}
+
+///TODO: Remove once above is integrated
 pub fn finalize_transaction(
 	keychain: &Keychain,
 	context_manager: &mut aggsig::ContextManager,
@@ -298,6 +571,70 @@ pub fn finalize_transaction(
 /// fee (= M)
 ///
 /// Returns completed transaction ready for posting to the chain
+
+fn create_final_signature_slate(
+	keychain: &Keychain,
+	context_manager: &mut aggsig::ContextManager,
+	slate: &Slate,
+) -> Result<Signature, Error> {
+	// TODO: Have this just verify all sigs and create the final sig
+	// with the available info in the slate rather than make assumptions
+	// about who's who
+	let context = context_manager.get_context(&slate.id);
+	let other_sig_part = slate.participant_data[0].part_sig.unwrap().clone();
+	let other_pub_nonce = slate.participant_data[0].public_nonce;
+	let other_pub_blinding = slate.participant_data[0].public_blind_excess;
+	let our_sig_part = slate.participant_data[1].part_sig.unwrap().clone();
+
+	let res = context.verify_partial_sig(
+		&keychain.secp(),
+		&other_sig_part,
+		&other_pub_nonce,
+		&other_pub_blinding,
+		slate.fee,
+		slate.lock_height,
+	);
+
+	if !res {
+		error!(LOGGER, "Partial Sig from other party invalid.");
+		return Err(ErrorKind::Signature(
+			"Partial Sig from other party invalid.",
+		))?;
+	}
+
+	// And the final signature
+	let final_sig = context
+		.calculate_final_sig(
+			&keychain.secp(),
+			&other_sig_part,
+			&our_sig_part,
+			&other_pub_nonce,
+		)
+		.unwrap();
+
+	// Calculate the final public key (for our own sanity check)
+	let final_pubkey = context
+		.calculate_final_pubkey(&keychain.secp(), &other_pub_blinding)
+		.unwrap();
+
+	// Check our final sig verifies
+	let res = context.verify_final_sig_build_msg(
+		&keychain.secp(),
+		&final_sig,
+		&final_pubkey,
+		slate.fee,
+		slate.lock_height,
+	);
+
+	if !res {
+		error!(LOGGER, "Final aggregated signature invalid.");
+		return Err(ErrorKind::Signature("Final aggregated signature invalid."))?;
+	}
+
+	Ok(final_sig)
+}
+
+// TODO: Remove when above is integrated
 
 fn create_final_signature(
 	keychain: &Keychain,
@@ -368,6 +705,108 @@ fn create_final_signature(
 	Ok(final_sig)
 }
 
+/// builds a final transaction after the aggregated sig exchange
+fn build_final_transaction_slate(
+	keychain: &Keychain,
+	slate: &Slate,
+	final_sig: &secp::Signature,
+	output_key_id: &Identifier,
+) -> Result<Transaction, Error> {
+	let root_key_id = keychain.root_key_id();
+	let tx = slate.tx.clone().unwrap();
+	let kernel_offset = slate.tx.as_ref().unwrap().offset;
+
+	// double check the fee amount included in the partial tx
+	// we don't necessarily want to just trust the sender
+	// we could just overwrite the fee here (but we won't) due to the ecdsa sig
+	let fee = tx_fee(
+		tx.inputs.len(),
+		tx.outputs.len() + 1,
+		tx.input_proofs_count(),
+		None,
+	);
+	if fee > tx.fee() {
+		return Err(ErrorKind::FeeDispute {
+			sender_fee: tx.fee(),
+			recipient_fee: fee,
+		})?;
+	}
+
+	if fee > slate.amount + slate.fee {
+		info!(
+			LOGGER,
+			"Rejected the transfer because transaction fee ({}) exceeds received amount ({}).",
+			amount_to_hr_string(fee),
+			amount_to_hr_string(slate.amount + slate.fee)
+		);
+		return Err(ErrorKind::FeeExceedsAmount {
+			sender_amount: slate.amount,
+			recipient_fee: fee,
+		})?;
+	}
+
+	let out_amount = slate.amount;
+
+	// Build final transaction, the sum of which should
+	// be the same as the exchanged excess values
+	let mut final_tx = build::transaction(
+		vec![
+			build::initial_tx(tx),
+			build::output(out_amount, output_key_id.clone()),
+			build::with_offset(kernel_offset),
+		],
+		keychain,
+	).context(ErrorKind::Keychain)?;
+
+	// build the final excess based on final tx and offset
+	let final_excess = {
+		// TODO - do we need to verify rangeproofs here?
+		for x in &final_tx.outputs {
+			x.verify_proof().context(ErrorKind::Transaction)?;
+		}
+
+		// sum the input/output commitments on the final tx
+		let overage = final_tx.fee() as i64;
+		let tx_excess = final_tx
+			.sum_commitments(overage, None)
+			.context(ErrorKind::Transaction)?;
+
+		// subtract the kernel_excess (built from kernel_offset)
+		let offset_excess = keychain
+			.secp()
+			.commit(0, kernel_offset.secret_key(&keychain.secp()).unwrap())
+			.unwrap();
+		keychain
+			.secp()
+			.commit_sum(vec![tx_excess], vec![offset_excess])
+			.context(ErrorKind::Transaction)?
+	};
+
+	// update the tx kernel to reflect the offset excess and sig
+	assert_eq!(final_tx.kernels.len(), 1);
+	final_tx.kernels[0].excess = final_excess.clone();
+	final_tx.kernels[0].excess_sig = final_sig.clone();
+
+	// confirm the kernel verifies successfully before proceeding
+	debug!(LOGGER, "Validating final transaction");
+	final_tx.kernels[0]
+		.verify()
+		.context(ErrorKind::Transaction)?;
+
+	// confirm the overall transaction is valid (including the updated kernel)
+	let _ = final_tx.validate().context(ErrorKind::Transaction)?;
+
+	debug!(
+		LOGGER,
+		"Finalized transaction and built output - {:?}, {:?}",
+		root_key_id.clone(),
+		output_key_id.clone(),
+	);
+
+	Ok(final_tx)
+}
+
+/// TODO: Remove once above version is integrated
 /// builds a final transaction after the aggregated sig exchange
 fn build_final_transaction(
 	keychain: &Keychain,

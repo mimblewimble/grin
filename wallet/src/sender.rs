@@ -15,23 +15,23 @@
 use uuid::Uuid;
 
 use api;
-use client;
 use checker;
+use client;
 use core::core::amount_to_hr_string;
-use libwallet::{aggsig, build, transaction};
-use grinwallet::selection;
 use core::ser;
+use failure::ResultExt;
+use grinwallet::selection;
 use keychain::{Identifier, Keychain};
+use libwallet::{aggsig, build, transaction};
 use receiver::TxWrapper;
 use types::*;
-use util::LOGGER;
 use util;
-use failure::ResultExt;
+use util::LOGGER;
 
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
-/// Outputs. The destination can be "stdout" (for command line) (currently disabled) or a URL to the
-/// recipients wallet receiver (to be implemented).
+/// Outputs. The destination can be "stdout" (for command line) (currently
+/// disabled) or a URL to the recipients wallet receiver (to be implemented).
 pub fn issue_send_tx(
 	config: &WalletConfig,
 	keychain: &Keychain,
@@ -46,7 +46,6 @@ pub fn issue_send_tx(
 
 	// Create a new aggsig context
 	let mut context_manager = aggsig::ContextManager::new();
-	let tx_id = Uuid::new_v4();
 
 	// Get lock height
 	let chain_tip = checker::get_tip_from_node(config)?;
@@ -56,7 +55,7 @@ pub fn issue_send_tx(
 
 	let lock_height = current_height;
 
-	let tx_data = selection::build_send_tx(
+	let (tx, blinding, inputs, change_key, amount, fee) = selection::build_send_tx(
 		config,
 		keychain,
 		amount,
@@ -67,15 +66,30 @@ pub fn issue_send_tx(
 		selection_strategy_is_use_all,
 	)?;
 
-	let partial_tx = transaction::sender_initiation(
-		keychain,
-		&tx_id,
-		&mut context_manager,
-		current_height,
-		tx_data,
-	)?;
+	let mut txe_data = transaction::ExchangedTx {
+		id: Uuid::new_v4(),
+		tx: tx,
+		blind: blinding,
+		input_wallet_ids: inputs,
+		change_id: change_key,
+		amount: amount,
+		fee: fee,
+		height: current_height,
+		lock_height: lock_height,
+		kernel_offset: None,
+	};
 
-	let context = context_manager.get_context(&tx_id);
+	transaction::sender_initiation(keychain, &mut context_manager, &mut txe_data)?;
+
+	let context = context_manager.get_context(&txe_data.id);
+
+	let partial_tx = PartialTx::from_exchanged_tx(
+		PartialTxPhase::SenderInitiation,
+		keychain,
+		&context,
+		None,
+		&txe_data,
+	);
 
 	// Closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
@@ -227,8 +241,8 @@ pub fn issue_burn_tx(
 
 #[cfg(test)]
 mod test {
-	use libwallet::build;
 	use keychain::Keychain;
+	use libwallet::build;
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment
