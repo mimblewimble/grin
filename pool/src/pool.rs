@@ -14,17 +14,17 @@
 
 //! A minimal (EXPERIMENTAL) transaction pool implementation
 
-use std::collections::HashMap;
-use std::sync::Arc;
 use core::core::hash::{Hash, Hashed};
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
 use core::core::{Block, Committed, CompactBlock, Transaction};
 use keychain::BlindingFactor;
+use std::collections::HashMap;
+use std::sync::Arc;
 use types::*;
-use util::{secp_static, static_secp_instance};
-use util::secp::pedersen::Commitment;
 use util::LOGGER;
+use util::secp::pedersen::Commitment;
+use util::{secp_static, static_secp_instance};
 
 pub struct Pool<T> {
 	/// Entries in the pool (tx + info + timer) in simple insertion order.
@@ -107,16 +107,17 @@ where
 		entry: PoolEntry,
 		extra_txs: Vec<Transaction>,
 	) -> Result<(), PoolError> {
+		// Combine all the txs from the pool, the new pool entry and any extra txs
+		// provided.
 		let mut txs = self.all_transactions();
 		txs.push(entry.tx.clone());
 		txs.extend(extra_txs);
 
-		// Create a single aggregated tx from txs in the pool,
-		// the tx in the proposed entry and any provided extra txs.
+		// Create a single aggregated tx from all of them.
 		let agg_tx = transaction::aggregate_with_cut_through(txs)?;
 
 		// Validate aggregated tx against the chain txhashset extension.
-		self.blockchain.validate_raw_txs(vec![], Some(&agg_tx))?;
+		self.validate_tx(&agg_tx)?;
 
 		// If we get here successfully then we can safely add the entry to the pool.
 		self.entries.push(entry);
@@ -124,12 +125,15 @@ where
 		Ok(())
 	}
 
-	// Simple check comparing tx kernels against kernels in the latest block.
-	// This covers the trivial case where we just emptied the pool.
+	// Filter txs in the pool based on the latest block.
+	// Reject any txs where we see a matching tx kernel in the block.
+	// Also reject any txs where we see a conflicting tx,
+	// where an input is spent in a different tx.
 	fn remaining_transactions(&self, block: &Block) -> Vec<Transaction> {
 		self.entries
 			.iter()
-			.filter(|x| !x.tx.kernels.iter().any(|k| block.kernels.contains(k)))
+			.filter(|x| !x.tx.kernels.iter().any(|y| block.kernels.contains(y)))
+			.filter(|x| !x.tx.inputs.iter().any(|y| block.inputs.contains(y)))
 			.map(|x| x.tx.clone())
 			.collect()
 	}
@@ -158,11 +162,31 @@ where
 		// Go through the candidate txs and keep everything that validates incrementally
 		// against the current chain state, accounting for the "extra tx" as necessary.
 
-		let valid_txs = self.blockchain.validate_raw_txs(candidate_txs, extra_tx)?;
+		let valid_txs = self.validate_txs(candidate_txs, extra_tx)?;
 		self.entries.retain(|x| valid_txs.contains(&x.tx));
+
+		// TODO - valid_txs are the first n txs from candidate_txs
+		// TODO - but later ones may also validate individually
+		// TODO - so we need to iterate over these and try them now
 
 		// TODO - need to return the evicted txs (not yet used anywhere though)
 		Ok(vec![])
+	}
+
+	fn validate_tx(&self, tx: &Transaction) -> Result<(), PoolError> {
+		self.blockchain.validate_raw_txs(vec![], Some(tx))?;
+		Ok(())
+	}
+
+	// TODO - pass in vec of entries, return a vec of entries
+	// rework this to not just validate txs but to identify all the valid ones
+	// based on some criteria (inset order as a good first pass?)
+	fn validate_txs(
+		&self,
+		txs: Vec<Transaction>,
+		pre_tx: Option<&Transaction>,
+	) -> Result<Vec<Transaction>, PoolError> {
+		self.blockchain.validate_raw_txs(txs, pre_tx)
 	}
 
 	pub fn size(&self) -> usize {

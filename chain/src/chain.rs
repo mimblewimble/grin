@@ -20,18 +20,18 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
+use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
 use types::*;
-use util::secp::pedersen::{Commitment, RangeProof};
 use util::LOGGER;
+use util::secp::pedersen::{Commitment, RangeProof};
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -150,9 +150,9 @@ impl Chain {
 		}
 	}
 
-	/// Initializes the blockchain and returns a new Chain instance. Does a check
-	/// on the current chain head to make sure it exists and creates one based
-	/// on the genesis block if necessary.
+	/// Initializes the blockchain and returns a new Chain instance. Does a
+	/// check on the current chain head to make sure it exists and creates one
+	/// based on the genesis block if necessary.
 	pub fn init(
 		db_root: String,
 		adapter: Arc<ChainAdapter>,
@@ -450,10 +450,11 @@ impl Chain {
 		}
 	}
 
-	/// For the given commitment find the unspent output and return the associated
-	/// Return an error if the output does not exist or has been spent.
-	/// This querying is done in a way that is consistent with the current chain state,
-	/// specifically the current winning (valid, most work) fork.
+	/// For the given commitment find the unspent output and return the
+	/// associated Return an error if the output does not exist or has been
+	/// spent. This querying is done in a way that is consistent with the
+	/// current chain state, specifically the current winning (valid, most
+	/// work) fork.
 	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<Hash, Error> {
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset.is_unspent(output_ref)
@@ -479,6 +480,8 @@ impl Chain {
 			for tx in txs {
 				if extension.apply_raw_tx(&tx, &bh).is_ok() {
 					valid_txs.push(tx);
+				} else {
+					break;
 				}
 			}
 			Ok(valid_txs)
@@ -513,8 +516,8 @@ impl Chain {
 		})
 	}
 
-	/// Sets the txhashset roots on a brand new block by applying the block on the
-	/// current txhashset state.
+	/// Sets the txhashset roots on a brand new block by applying the block on
+	/// the current txhashset state.
 	pub fn set_txhashset_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Error> {
 		let mut txhashset = self.txhashset.write().unwrap();
 		let store = self.store.clone();
@@ -828,7 +831,8 @@ impl Chain {
 	}
 
 	/// Verifies the given block header is actually on the current chain.
-	/// Checks the header_by_height index to verify the header is where we say it is
+	/// Checks the header_by_height index to verify the header is where we say
+	/// it is
 	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
 		self.store
 			.is_on_current_chain(header)
