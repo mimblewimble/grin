@@ -465,23 +465,27 @@ impl Chain {
 		txs: Vec<Transaction>,
 		pre_tx: Option<&Transaction>,
 	) -> Result<Vec<Transaction>, Error> {
+		let bh = self.head_header()?;
+		let mut height = bh.height;
+
 		debug!(
 			LOGGER,
-			"chain: validate_raw_txs: started (how slow is this?) {}",
+			"chain: validate_raw_txs: started (how slow is this?) txs {}, current height {}",
 			txs.len(),
+			bh.height,
 		);
-		let bh = self.head_header()?;
+
 		let mut txhashset = self.txhashset.write().unwrap();
 		let res = txhashset::extending_readonly(&mut txhashset, |extension| {
 			let mut valid_txs = vec![];
 			if let Some(tx) = pre_tx {
-				extension.apply_raw_tx(tx, &bh)?;
+				height += 1;
+				extension.apply_raw_tx(tx, height)?;
 			}
 			for tx in txs {
-				if extension.apply_raw_tx(&tx, &bh).is_ok() {
+				height += 1;
+				if extension.apply_raw_tx(&tx, height).is_ok() {
 					valid_txs.push(tx);
-				} else {
-					break;
 				}
 			}
 			Ok(valid_txs)

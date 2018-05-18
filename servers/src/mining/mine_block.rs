@@ -163,8 +163,6 @@ fn build_block(
 		.unwrap()
 		.prepare_mineable_transactions(max_tx);
 
-	let txs: Vec<&Transaction> = txs.into_iter().map(|x| &*x).collect();
-
 	// build the coinbase and the block itself
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let height = head.height + 1;

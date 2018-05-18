@@ -16,15 +16,15 @@ use memmap;
 
 use std::cmp;
 use std::fs::{self, File, OpenOptions};
+use std::io::Read;
 use std::io::{self, BufRead, BufReader, BufWriter, ErrorKind, Write};
 use std::os::unix::io::AsRawFd;
-use std::io::Read;
 use std::path::Path;
 
-#[cfg(any(target_os = "linux"))]
-use libc::{ftruncate64, off64_t};
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use libc::{ftruncate as ftruncate64, off_t as off64_t};
+#[cfg(any(target_os = "linux"))]
+use libc::{ftruncate64, off64_t};
 
 use core::ser;
 
@@ -263,16 +263,18 @@ impl RemoveLog {
 	/// In practice the index is a block height, so we rewind back to that block
 	/// keeping everything in the rm_log up to and including that block.
 	pub fn rewind(&mut self, idx: u32) -> io::Result<()> {
-		// simplifying assumption: we always remove older than what's in tmp
-		self.removed_tmp = vec![];
-		// backing it up before truncating
-		self.removed_bak = self.removed.clone();
+		// backing it up before truncating (unless we already have a backup)
+		if self.removed_bak.is_empty() {
+			self.removed_bak = self.removed.clone();
+		}
 
 		if idx == 0 {
 			self.removed = vec![];
+			self.removed_tmp = vec![];
 		} else {
 			// retain rm_log entries up to and including those at the provided index
 			self.removed.retain(|&(_, x)| x <= idx);
+			self.removed_tmp.retain(|&(_, x)| x <= idx);
 		}
 		Ok(())
 	}

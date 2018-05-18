@@ -148,9 +148,10 @@ where
 
 		debug!(
 			LOGGER,
-			"pool: reconcile_block: current pool txs - {}, candidate txs - {}",
+			"pool: reconcile_block: current pool txs {}, candidate txs {}, extra_tx {}",
 			self.size(),
 			candidate_txs.len(),
+			extra_tx.is_some(),
 		);
 
 		if candidate_txs.is_empty() {
@@ -164,10 +165,6 @@ where
 
 		let valid_txs = self.validate_txs(candidate_txs, extra_tx)?;
 		self.entries.retain(|x| valid_txs.contains(&x.tx));
-
-		// TODO - valid_txs are the first n txs from candidate_txs
-		// TODO - but later ones may also validate individually
-		// TODO - so we need to iterate over these and try them now
 
 		// TODO - need to return the evicted txs (not yet used anywhere though)
 		Ok(vec![])

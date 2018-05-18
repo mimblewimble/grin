@@ -15,8 +15,8 @@
 //! Utility structs to handle the 3 hashtrees (output, range proof, kernel) more
 //! conveniently and transactionally.
 
-use std::fs;
 use std::collections::HashMap;
+use std::fs;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -25,11 +25,11 @@ use std::time::Instant;
 use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::consensus::REWARD;
+use core::core::hash::{Hash, Hashed};
+use core::core::pmmr::{self, MerkleProof, PMMR};
 use core::core::{Block, BlockHeader, Committed, Input, Output, OutputFeatures, OutputIdentifier,
                  Transaction, TxKernel};
-use core::core::pmmr::{self, MerkleProof, PMMR};
 use core::global;
-use core::core::hash::{Hash, Hashed};
 use core::ser::{PMMRIndexHashable, PMMRable};
 
 use grin_store;
@@ -141,7 +141,8 @@ impl TxHashSet {
 
 	/// returns the last N nodes inserted into the tree (i.e. the 'bottom'
 	/// nodes at level 0
-	/// TODO: These need to return the actual data from the flat-files instead of hashes now
+	/// TODO: These need to return the actual data from the flat-files instead
+	/// of hashes now
 	pub fn last_n_output(&mut self, distance: u64) -> Vec<(Hash, OutputIdentifier)> {
 		let output_pmmr: PMMR<OutputIdentifier, _> =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
@@ -162,8 +163,8 @@ impl TxHashSet {
 		kernel_pmmr.get_last_n_insertions(distance)
 	}
 
-	/// returns outputs from the given insertion (leaf) index up to the specified
-	/// limit. Also returns the last index actually populated
+	/// returns outputs from the given insertion (leaf) index up to the
+	/// specified limit. Also returns the last index actually populated
 	pub fn outputs_by_insertion_index(
 		&mut self,
 		start_index: u64,
@@ -242,8 +243,8 @@ impl TxHashSet {
 	}
 }
 
-/// Starts a new unit of work to extend (or rewind) the chain with additional blocks.
-/// Accepts a closure that will operate within that unit of work.
+/// Starts a new unit of work to extend (or rewind) the chain with additional
+/// blocks. Accepts a closure that will operate within that unit of work.
 /// The closure has access to an Extension object that allows the addition
 /// of blocks to the txhashset and the checking of the current tree roots.
 ///
@@ -408,22 +409,43 @@ impl<'a> Extension<'a> {
 	///
 	/// Experimental - this should *never* be called on a writeable extension...
 	///
-	pub fn apply_raw_tx(&mut self, tx: &Transaction, bh: &BlockHeader) -> Result<(), Error> {
+	pub fn apply_raw_tx(&mut self, tx: &Transaction, height: u64) -> Result<(), Error> {
 		if !self.rollback {
 			panic!("attempted to apply a raw tx to a writeable txhashset extension");
 		}
 
-		for input in &tx.inputs {
-			self.apply_input(input, bh.height)?;
+		// Checkpoint the MMR positions before we apply the new tx,
+		// anything goes wrong we will rewind to these positions.
+		let output_pos = self.output_pmmr.unpruned_size();
+		let kernel_pos = self.kernel_pmmr.unpruned_size();
+
+		debug!(
+			LOGGER,
+			"txhashset: apply_raw_tx: output_pos {}, kernel_pos {}, height {}",
+			output_pos,
+			kernel_pos,
+			height,
+		);
+
+		for ref input in &tx.inputs {
+			if let Err(e) = self.apply_input(input, height) {
+				self.rewind_to_pos(output_pos, kernel_pos, height)?;
+				return Err(e);
+			}
 		}
 
-		for out in &tx.outputs {
-			self.apply_output(out)?;
+		for ref output in &tx.outputs {
+			if let Err(e) = self.apply_output(output) {
+				self.rewind_to_pos(output_pos, kernel_pos, height)?;
+				return Err(e);
+			}
 		}
 
-		// then applying all kernels
-		for kernel in &tx.kernels {
-			self.apply_kernel(kernel)?;
+		for ref kernel in &tx.kernels {
+			if let Err(e) = self.apply_kernel(kernel) {
+				self.rewind_to_pos(output_pos, kernel_pos, height)?;
+				return Err(e);
+			}
 		}
 
 		Ok(())
@@ -606,23 +628,31 @@ impl<'a> Extension<'a> {
 		// rewind our MMRs to the appropriate pos
 		// based on block height and block marker
 		let marker = self.commit_index.get_block_marker(&hash)?;
-		self.rewind_to_marker(height, &marker)?;
+		self.rewind_to_pos(marker.output_pos, marker.kernel_pos, height)?;
 		Ok(())
 	}
 
 	/// Rewinds the MMRs to the provided positions, given the output and
 	/// kernel we want to rewind to.
-	fn rewind_to_marker(&mut self, height: u64, marker: &BlockMarker) -> Result<(), Error> {
-		debug!(LOGGER, "Rewind txhashset to {}, {:?}", height, marker);
+	fn rewind_to_pos(
+		&mut self,
+		output_pos: u64,
+		kernel_pos: u64,
+		height: u64,
+	) -> Result<(), Error> {
+		debug!(
+			LOGGER,
+			"Rewind txhashset to output {}, kernel {}, height {}", output_pos, kernel_pos, height
+		);
 
 		self.output_pmmr
-			.rewind(marker.output_pos, height as u32)
+			.rewind(output_pos, height as u32)
 			.map_err(&Error::TxHashSetErr)?;
 		self.rproof_pmmr
-			.rewind(marker.output_pos, height as u32)
+			.rewind(output_pos, height as u32)
 			.map_err(&Error::TxHashSetErr)?;
 		self.kernel_pmmr
-			.rewind(marker.kernel_pos, height as u32)
+			.rewind(kernel_pos, height as u32)
 			.map_err(&Error::TxHashSetErr)?;
 
 		Ok(())
@@ -762,8 +792,8 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	/// Rebuild the index of MMR positions to the corresponding Output and kernel
-	/// by iterating over the whole MMR data. This is a costly operation
+	/// Rebuild the index of MMR positions to the corresponding Output and
+	/// kernel by iterating over the whole MMR data. This is a costly operation
 	/// performed only when we receive a full new chain state.
 	pub fn rebuild_index(&self) -> Result<(), Error> {
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {

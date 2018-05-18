@@ -14,18 +14,18 @@
 
 //! A minimal (EXPERIMENTAL) transaction pool implementation
 
-use std::collections::HashMap;
-use std::sync::Arc;
 use core::core::hash::{Hash, Hashed};
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
 use core::core::{Block, Committed, CompactBlock, Transaction};
 use keychain::BlindingFactor;
 use pool::Pool;
+use std::collections::HashMap;
+use std::sync::Arc;
 use types::*;
-use util::{secp_static, static_secp_instance};
-use util::secp::pedersen::Commitment;
 use util::LOGGER;
+use util::secp::pedersen::Commitment;
+use util::{secp_static, static_secp_instance};
 
 /// A minimal (EXPERIMENTAL) transaction pool implementation
 pub struct TransactionPool<T> {
@@ -41,6 +41,10 @@ pub struct TransactionPool<T> {
 	pub blockchain: Arc<T>,
 	/// The pool adapter
 	pub adapter: Arc<PoolAdapter>,
+
+	// TODO - only needed to get dandelion monitor to compile right now...
+	pub stem_transactions: HashMap<Hash, Transaction>,
+	pub time_stem_transactions: HashMap<Hash, i64>,
 }
 
 impl<T> TransactionPool<T>
@@ -55,6 +59,9 @@ where
 			stempool: Pool::new(chain.clone()),
 			blockchain: chain,
 			adapter: adapter,
+
+			stem_transactions: HashMap::new(),
+			time_stem_transactions: HashMap::new(),
 		}
 	}
 
@@ -69,8 +76,8 @@ where
 	}
 
 	/// Add a new transaction to the pool.
-	/// Validation of the tx (and all txs in the pool) is done via a readonly txhashset extension.
-	/// ***EXPERIMENTAL***
+	/// Validation of the tx (and all txs in the pool) is done via a readonly
+	/// txhashset extension. ***EXPERIMENTAL***
 	pub fn add_to_memory_pool(
 		&mut self,
 		src: TxSource,
