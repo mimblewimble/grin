@@ -82,12 +82,24 @@ impl AppendOnlyFile {
 
 	/// Rewinds the data file back to a lower position. The new position needs
 	/// to be the one of the first byte the next time data is appended.
+	/// Supports two scenarios currently -
+	///   * rewind from a clean state (rewinding to handle a forked block)
+	///   * rewind within the buffer itself (raw_tx fails to validate successfully)
+	/// Note: we do not currently support a rewind() that crosses the buffer boundary.
 	pub fn rewind(&mut self, pos: u64) {
-		if self.buffer_start_bak > 0 || self.buffer.len() > 0 {
-			panic!("Can't rewind on a dirty state.");
+		println!("********* rewind!!!!!!!!! {}, {}", pos, self.buffer.len());
+		if self.buffer.is_empty() {
+			self.buffer_start_bak = self.buffer_start;
+			self.buffer_start = pos as usize;
+		} else {
+			panic!("oh my god");
 		}
-		self.buffer_start_bak = self.buffer_start;
-		self.buffer_start = pos as usize;
+
+		// if self.buffer_start_bak > 0 || self.buffer.len() > 0 {
+		// 	panic!("Can't rewind on a dirty state.");
+		// }
+		// self.buffer_start_bak = self.buffer_start;
+		// self.buffer_start = pos as usize;
 	}
 
 	/// Syncs all writes (fsync), reallocating the memory map to make the newly

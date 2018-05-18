@@ -427,8 +427,11 @@ impl<'a> Extension<'a> {
 			height,
 		);
 
+		// TODO - need to have checked coinbase maturity before this (height is synthetic so we cannot use this...)
+
 		for ref input in &tx.inputs {
 			if let Err(e) = self.apply_input(input, height) {
+				println!("*** input went bad - {:?}, {:?}", input.commitment(), e);
 				self.rewind_to_pos(output_pos, kernel_pos, height)?;
 				return Err(e);
 			}
@@ -455,6 +458,22 @@ impl<'a> Extension<'a> {
 	/// applied in order of the provided Vec. If pruning is enabled, inputs also
 	/// prune MMR data.
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
+
+		//
+		// TODO - does this live here? Or can we do this outside the txhashset?
+		//
+		// Initial check to make sure all coinbase being spent are sufficiently matured.
+		for input in &b.inputs {
+			// check coinbase maturity with the Merkle Proof on the input
+			if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+				let header = self.commit_index.get_block_header(&input.block_hash())?;
+				let commit = input.commitment();
+				let pos = self.get_output_pos(&commit)?;
+				let out_hash = self.output_pmmr.get_hash(pos).unwrap_or(Hash::default());
+				input.verify_maturity(out_hash, &header, b.header.height)?;
+			}
+		}
+
 		// first applying coinbase outputs. due to the construction of PMMRs the
 		// last element, when its a leaf, can never be pruned as it has no parent
 		// yet and it will be needed to calculate that hash. to work around this,
@@ -493,6 +512,7 @@ impl<'a> Extension<'a> {
 	}
 
 	fn save_indexes(&self) -> Result<(), Error> {
+		println!("***** save_indexes: {:?}, {:?}", self.new_output_commits, self.new_block_markers);
 		// store all new output pos in the index
 		for (commit, pos) in &self.new_output_commits {
 			self.commit_index.save_output_pos(commit, *pos)?;
@@ -522,12 +542,6 @@ impl<'a> Extension<'a> {
 							.hash_with_index(pos - 1)
 				{
 					return Err(Error::TxHashSetErr(format!("output pmmr hash mismatch")));
-				}
-
-				// check coinbase maturity with the Merkle Proof on the input
-				if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-					let header = self.commit_index.get_block_header(&input.block_hash())?;
-					input.verify_maturity(read_hash, &header, height)?;
 				}
 			}
 
