@@ -66,9 +66,6 @@ fn build_transaction_2() {
 	common::award_blocks_to_wallet(&chain, &wallet1, 10);
 	// Wallet 1 has 600 Grins, wallet 2 has 0. Create a transaction that sends
 	// 300 Grins from wallet 1 to wallet 2, using libwallet
-	// Sender creates a new aggsig context
-	// SENDER (create sender initiation)
-	let mut sender_context_manager = aggsig::ContextManager::new();
 
 	// Get lock height
 	let chain_tip = chain.head().unwrap();
@@ -81,15 +78,21 @@ fn build_transaction_2() {
 		panic!("Unable to refresh sender wallet outputs: {}", e);
 	}
 
-	// Select our outputs into a new slate and save our corresponding IDs in our
-	// transaction context. The secret key in our transaction context will be
+	// TRANSACTION WORKFLOW STARTS HERE
+	// Sender creates a new aggsig context
+	let mut sender_context_manager = aggsig::ContextManager::new();
+	// Sender selects outputs into a new slate and save our corresponding IDs in
+	// their transaction context. The secret key in our transaction context will be
 	// randomly selected. This returns the public slate, and a closure that locks
-	// the inputs and outputs once we're convinced the transaction exchange went
+	// our inputs and outputs once we're convinced the transaction exchange went
 	// according to plan
+	// This function is just a big helper to do all of that, in theory
+	// this process can be split up in any way
 	let (mut slate, sender_lock_fn) = selection::build_send_tx_slate(
 		&wallet1.0,
 		&wallet1.1,
 		&mut sender_context_manager,
+		2,
 		amount,
 		chain_tip.height,
 		3,
@@ -101,7 +104,9 @@ fn build_transaction_2() {
 	// Generate a kernel offset and subtract from our context's secret key. Store
 	// the offset in the slate's transaction kernel, and adds our public key
 	// information to the slate
-	let _ = transaction::sender_initiate_slate(&wallet1.1, &mut sender_context_manager, &mut slate);
+	let _ = slate
+		.fill_round_1(&wallet1.1, &mut sender_context_manager, 0, true)
+		.unwrap();
 
 	debug!(LOGGER, "Transaction Slate after step 1: sender initiation");
 	debug!(LOGGER, "-----------------------------------------");
@@ -110,16 +115,25 @@ fn build_transaction_2() {
 	// RECIPIENT (Handle sender initiation)
 	let mut recipient_context_manager = aggsig::ContextManager::new();
 
-	// Create a potential output for this transaction
-	let (key_id, receiver_create_fn) =
-		selection::build_recipient_output_with_slate(&wallet2.0, &wallet2.1, &slate).unwrap();
-
-	let _ = transaction::recipient_initiation_slate(
+	// Now, just like the sender did, recipient is going to select a target output,
+	// add it to the transaction, and keep track of the corresponding wallet
+	// Identifier Again, this is a helper to do that, which returns a closure that
+	// creates the output when we're satisified the process was successful
+	let (key_id, receiver_create_fn) = selection::build_recipient_output_with_slate(
+		&wallet2.0,
 		&wallet2.1,
 		&mut recipient_context_manager,
 		&mut slate,
-		&key_id,
 	).unwrap();
+
+	let _ = slate
+		.fill_round_1(&wallet2.1, &mut recipient_context_manager, 1, false)
+		.unwrap();
+
+	// recipient can proceed to round 2 now
+	let _ = slate
+		.fill_round_2(&wallet2.1, &mut recipient_context_manager, 1)
+		.unwrap();
 
 	debug!(
 		LOGGER,
@@ -129,38 +143,33 @@ fn build_transaction_2() {
 	debug!(LOGGER, "{:?}", slate);
 
 	// SENDER Part 3: Sender confirmation
-	let _ = transaction::sender_confirmation_with_slate(
-		&wallet1.1,
-		&sender_context_manager,
-		&mut slate,
-	).unwrap();
+	let _ = slate
+		.fill_round_2(&wallet1.1, &mut sender_context_manager, 0)
+		.unwrap();
 
 	debug!(LOGGER, "PartialTx after step 3: sender confirmation");
 	debug!(LOGGER, "--------------------------------------------");
 	debug!(LOGGER, "{:?}", slate);
 
-	// TODO: Sender almost has enough info here, but also needs
-	// the recipient's output information available, and the recipient needs to know
-	// whether to finalize the output in their wallet. Perhaps have recipient build
-	// their output commit during step 2 and add it to the slate
+	// TODO: Final transaction can be built by anyone at this stage
+	// Just need to fix the finalize function to allow it
 
-	let final_tx_recipient =
-		transaction::finalize_slate(&wallet2.1, &mut recipient_context_manager, &slate, &key_id);
+	let res = slate.finalize(&wallet2.1, &mut recipient_context_manager, &key_id);
 
-	if let Err(e) = final_tx_recipient {
+	if let Err(e) = res {
 		panic!("Error creating final tx: {:?}", e);
 	}
 
 	debug!(LOGGER, "Recipient calculates final transaction as:");
 	debug!(LOGGER, "--------------------------------------------");
-	debug!(LOGGER, "{:?}", final_tx_recipient);
+	debug!(LOGGER, "{:?}", slate.tx);
 
 	// All okay, lock sender's outputs and create recipient's outputs
 	let _ = sender_lock_fn();
 	let _ = receiver_create_fn();
 
 	// Insert this transaction into a new block, then mine till confirmation
-	common::award_block_to_wallet(&chain, vec![&final_tx_recipient.unwrap()], &wallet1);
+	common::award_block_to_wallet(&chain, vec![&slate.tx], &wallet1);
 	common::award_blocks_to_wallet(&chain, &wallet1, 3);
 
 	// Refresh wallets

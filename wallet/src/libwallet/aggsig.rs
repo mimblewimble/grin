@@ -179,6 +179,7 @@ impl Context {
 		verify_single(secp, sig, &msg, Some(&nonce_sum), pubkey, true)
 	}
 
+	///TODO: Remove when below is integrated
 	pub fn calculate_partial_sig(
 		&self,
 		secp: &Secp256k1,
@@ -190,6 +191,27 @@ impl Context {
 		let (_, sec_nonce) = self.get_private_keys();
 		let mut nonce_sum = other_pub_nonce.clone();
 		let _ = nonce_sum.add_exp_assign(secp, &sec_nonce);
+		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
+
+		//Now calculate signature using message M=fee, nonce in e=nonce_sum
+		self.sign_single(
+			secp,
+			&msg,
+			Some(&sec_nonce),
+			Some(&nonce_sum),
+			Some(&nonce_sum),
+		)
+	}
+
+	pub fn calculate_partial_sig_with_nonce_sum(
+		&self,
+		secp: &Secp256k1,
+		nonce_sum: &PublicKey,
+		fee: u64,
+		lock_height: u64,
+	) -> Result<Signature, Error> {
+		// Add public nonces kR*G + kS*G
+		let (_, sec_nonce) = self.get_private_keys();
 		let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
 
 		//Now calculate signature using message M=fee, nonce in e=nonce_sum
@@ -232,6 +254,19 @@ impl Context {
 }
 
 // Contextless functions
+
+/// Verifies a partial sig given all public nonces used in the round
+pub fn verify_partial_sig(
+	secp: &Secp256k1,
+	sig: &Signature,
+	pub_nonce_sum: &PublicKey,
+	pubkey: &PublicKey,
+	fee: u64,
+	lock_height: u64,
+) -> bool {
+	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height)).unwrap();
+	verify_single(secp, sig, &msg, Some(&pub_nonce_sum), pubkey, true)
+}
 
 /// Just a simple sig, creates its own nonce, etc
 pub fn sign_from_key_id(
