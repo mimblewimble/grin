@@ -65,25 +65,27 @@ where
 		}
 	}
 
+	//
 	// TODO - implement this...
-	pub fn deaggregate_and_add_to_memory_pool(
+	//
+	pub fn deaggregate_and_add_to_txpool(
 		&mut self,
 		source: TxSource,
 		tx: Transaction,
-		stem: bool,
 	) -> Result<(), PoolError> {
-		self.add_to_memory_pool(source, tx, stem)
+		panic!("not yet implemented");
 	}
 
-	/// Add a new transaction to the pool.
-	/// Validation of the tx (and all txs in the pool) is done via a readonly
-	/// txhashset extension. ***EXPERIMENTAL***
-	pub fn add_to_memory_pool(
+	//
+	// Refactor add_to_stempool and add_to_txpool as they duplicate a lot of code.
+	//
+	pub fn add_to_stempool(
 		&mut self,
 		src: TxSource,
 		tx: Transaction,
-		_stem: bool,
 	) -> Result<(), PoolError> {
+		debug!(LOGGER, "pool: add_to_stempool {}, {:?}", tx.hash(), src);
+
 		// Do we have the capacity to accept this transaction?
 		self.is_acceptable(&tx)?;
 
@@ -93,11 +95,59 @@ where
 		// Attempt to add to the pool (validating against chain state).
 		let entry = PoolEntry {
 			src,
-			// TODO - not using the time yet (for stem pool)
+			// TODO - not using the time yet (for stempool)
+			timer: 0,
+			tx: tx.clone(),
+		};
+
+		// Now add tx to stempool (passing in all txs from txpool to validate against).
+		self.stempool.add_to_pool(entry, self.txpool.all_transactions())?;
+
+		//
+		// TODO - random step here to potentially fluff everything in the stempool
+		//
+		let fluff = false;
+
+		if fluff {
+			panic!("not yet implemented");
+		} else {
+			// Notify other parts of the system that we added the tx successfull.
+			self.adapter.stem_tx_accepted(&tx);
+		}
+
+		Ok(())
+	}
+
+	/// Add a new transaction to the pool.
+	/// Validation of the tx (and all txs in the pool) is done via a readonly
+	/// txhashset extension.
+	pub fn add_to_txpool(
+		&mut self,
+		src: TxSource,
+		tx: Transaction,
+	) -> Result<(), PoolError> {
+		debug!(LOGGER, "pool: add_to_txpool {}, {:?}", tx.hash(), src);
+
+		// Do we have the capacity to accept this transaction?
+		self.is_acceptable(&tx)?;
+
+		// Make sure the transaction is valid before anything else.
+		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
+
+		// Attempt to add to the pool (validating against chain state).
+		let entry = PoolEntry {
+			src,
 			timer: 0,
 			tx: tx.clone(),
 		};
 		self.txpool.add_to_pool(entry, vec![])?;
+
+		// We now need to reconcile the stempool based on the new state of the txpool.
+		// Some stempool txs may no longer be valid and we need to evict them.
+		{
+			let txpool_tx = self.txpool.aggregate_transaction()?;
+			self.stempool.reconcile(Some(&txpool_tx))?;
+		}
 
 		// Notify other parts of the system that we added the tx successfull.
 		self.adapter.tx_accepted(&tx);

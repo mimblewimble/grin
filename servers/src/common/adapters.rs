@@ -75,35 +75,29 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			debug_name: "p2p".to_string(),
 			identifier: "?.?.?.?".to_string(),
 		};
+
 		debug!(
 			LOGGER,
-			"Received tx {} from {}, going to process.",
+			"Received tx {} from {:?}, going to process.",
 			tx.hash(),
-			source.identifier,
+			source,
 		);
 
 		let h = tx.hash();
 
-		if !stem && tx.kernels.len() != 1 {
-			debug!(
-				LOGGER,
-				"Received regular multi-kernel transaction will attempt to deaggregate"
-			);
-			if let Err(e) = self.tx_pool
-				.write()
-				.unwrap()
-				.deaggregate_and_add_to_memory_pool(source, tx, stem)
-			{
-				debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
+		let res = {
+			let mut tx_pool = self.tx_pool.write().unwrap();
+			if stem {
+				tx_pool.add_to_stempool(source, tx)
+			} else if tx.kernels.len() == 1 {
+				tx_pool.add_to_txpool(source, tx)
+			} else {
+				tx_pool.deaggregate_and_add_to_txpool(source, tx)
 			}
-		} else {
-			if let Err(e) = self.tx_pool
-				.write()
-				.unwrap()
-				.add_to_memory_pool(source, tx, stem)
-			{
-				debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
-			}
+		};
+
+		if let Err(e) = res {
+			debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
 		}
 	}
 

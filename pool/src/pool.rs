@@ -138,7 +138,35 @@ where
 			.collect()
 	}
 
-	// TODO - not fully implemented
+	pub fn reconcile(
+		&mut self,
+		extra_tx: Option<&Transaction>,
+	) -> Result<Vec<Transaction>, PoolError> {
+		let candidate_txs = self.all_transactions();
+
+		debug!(
+			LOGGER,
+			"pool: reconcile: current pool txs {}, extra_tx {}",
+			candidate_txs.len(),
+			extra_tx.is_some(),
+		);
+
+		if candidate_txs.is_empty() {
+			self.clear();
+			debug!(LOGGER, "pool: reconcile_block: pool empty! Done.");
+			return Ok(vec![]);
+		}
+
+		// Go through the candidate txs and keep everything that validates incrementally
+		// against the current chain state, accounting for the "extra tx" as necessary.
+
+		let valid_txs = self.validate_txs(candidate_txs, extra_tx)?;
+		self.entries.retain(|x| valid_txs.contains(&x.tx));
+
+		// TODO - need to return the evicted txs (not yet used anywhere though)
+		Ok(vec![])
+	}
+
 	pub fn reconcile_block(
 		&mut self,
 		block: &Block,

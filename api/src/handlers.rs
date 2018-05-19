@@ -678,11 +678,15 @@ where
 		}
 
 		//  Push into the pool or stempool
-		let pool_arc = w(&self.tx_pool);
-		let res = pool_arc
-			.write()
-			.unwrap()
-			.add_to_memory_pool(source, tx, !fluff);
+		let res = {
+			let pool_arc = w(&self.tx_pool);
+			let mut tx_pool = pool_arc.write().unwrap();
+			if fluff {
+				tx_pool.add_to_txpool(source, tx)
+			} else {
+				tx_pool.add_to_stempool(source, tx)
+			}
+		};
 
 		match res {
 			Ok(()) => Ok(Response::with(status::Ok)),
