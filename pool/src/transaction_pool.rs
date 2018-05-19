@@ -55,8 +55,8 @@ where
 	pub fn new(config: PoolConfig, chain: Arc<T>, adapter: Arc<PoolAdapter>) -> TransactionPool<T> {
 		TransactionPool {
 			config: config,
-			txpool: Pool::new(chain.clone()),
-			stempool: Pool::new(chain.clone()),
+			txpool: Pool::new(chain.clone(), format!("txpool")),
+			stempool: Pool::new(chain.clone(), format!("stempool")),
 			blockchain: chain,
 			adapter: adapter,
 
@@ -80,7 +80,7 @@ where
 	// Refactor add_to_stempool and add_to_txpool as they duplicate a lot of code.
 	//
 	pub fn add_to_stempool(&mut self, src: TxSource, tx: Transaction) -> Result<(), PoolError> {
-		debug!(LOGGER, "pool: add_to_stempool {}, {:?}", tx.hash(), src);
+		debug!(LOGGER, "pool: add_to_stempool: {}, {:?}", tx.hash(), src);
 
 		// Do we have the capacity to accept this transaction?
 		self.is_acceptable(&tx)?;
@@ -119,7 +119,7 @@ where
 	/// Validation of the tx (and all txs in the pool) is done via a readonly
 	/// txhashset extension.
 	pub fn add_to_txpool(&mut self, src: TxSource, tx: Transaction) -> Result<(), PoolError> {
-		debug!(LOGGER, "pool: add_to_txpool {}, {:?}", tx.hash(), src);
+		debug!(LOGGER, "pool: add_to_txpool: {}, {:?}", tx.hash(), src);
 
 		// Do we have the capacity to accept this transaction?
 		self.is_acceptable(&tx)?;
@@ -150,11 +150,13 @@ where
 
 	pub fn reconcile_block(&mut self, block: &Block) -> Result<(), PoolError> {
 		// First reconcile the txpool.
-		self.txpool.reconcile_block(block, None)?;
+		self.txpool.reconcile_block(block)?;
+		self.txpool.reconcile(None)?;
 
 		// Then reconcile the stempool, accounting for the txpool txs
 		let txpool_tx = self.txpool.aggregate_transaction()?;
-		self.stempool.reconcile_block(block, Some(&txpool_tx))?;
+		self.stempool.reconcile_block(block)?;
+		self.stempool.reconcile(Some(&txpool_tx))?;
 
 		Ok(())
 	}

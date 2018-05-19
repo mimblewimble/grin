@@ -31,16 +31,18 @@ pub struct Pool<T> {
 	pub entries: Vec<PoolEntry>,
 	/// The blockchain
 	pub blockchain: Arc<T>,
+	pub name: String,
 }
 
 impl<T> Pool<T>
 where
 	T: BlockChain,
 {
-	pub fn new(chain: Arc<T>) -> Pool<T> {
+	pub fn new(chain: Arc<T>, name: String) -> Pool<T> {
 		Pool {
 			entries: vec![],
 			blockchain: chain.clone(),
+			name,
 		}
 	}
 
@@ -51,7 +53,8 @@ where
 	pub fn retrieve_transactions(&self, cb: &CompactBlock) -> Vec<Transaction> {
 		debug!(
 			LOGGER,
-			"pool: retrieve_transactions: kern_ids - {:?}, txs - {}",
+			"pool [{}]: retrieve_transactions: kern_ids - {:?}, txs - {}",
+			self.name,
 			cb.kern_ids,
 			self.entries.len(),
 		);
@@ -73,7 +76,8 @@ where
 
 		debug!(
 			LOGGER,
-			"pool: retrieve_transactions: matching txs from pool - {}",
+			"pool [{}]: retrieve_transactions: matching txs from pool - {}",
+			self.name,
 			txs.len(),
 		);
 
@@ -107,6 +111,8 @@ where
 		entry: PoolEntry,
 		extra_txs: Vec<Transaction>,
 	) -> Result<(), PoolError> {
+		debug!(LOGGER, "pool [{}]: add_to_pool", self.name);
+
 		// Combine all the txs from the pool, the new pool entry and any extra txs
 		// provided.
 		let mut txs = self.all_transactions();
@@ -117,12 +123,42 @@ where
 		let agg_tx = transaction::aggregate_with_cut_through(txs)?;
 
 		// Validate aggregated tx against the chain txhashset extension.
-		self.validate_tx(&agg_tx)?;
+		self.blockchain.validate_raw_txs(vec![], Some(&agg_tx))?;
 
 		// If we get here successfully then we can safely add the entry to the pool.
 		self.entries.push(entry);
 
 		Ok(())
+	}
+
+	pub fn reconcile(
+		&mut self,
+		extra_tx: Option<&Transaction>,
+	) -> Result<Vec<Transaction>, PoolError> {
+		let candidate_txs = self.all_transactions();
+
+		debug!(
+			LOGGER,
+			"pool [{}]: reconcile: current pool txs {}",
+			self.name,
+			candidate_txs.len(),
+		);
+
+		if candidate_txs.is_empty() {
+			debug!(
+				LOGGER,
+				"pool [{}]: reconcile_block: pool empty! Done.", self.name
+			);
+			return Ok(vec![]);
+		}
+
+		// Go through the candidate txs and keep everything that validates incrementally
+		// against the current chain state, accounting for the "extra tx" as necessary.
+		let valid_txs = self.blockchain.validate_raw_txs(candidate_txs, extra_tx)?;
+		self.entries.retain(|x| valid_txs.contains(&x.tx));
+
+		// TODO - need to return the evicted txs (not yet used anywhere though)
+		Ok(vec![])
 	}
 
 	// Filter txs in the pool based on the latest block.
@@ -138,87 +174,13 @@ where
 			.collect()
 	}
 
-	pub fn reconcile(
-		&mut self,
-		extra_tx: Option<&Transaction>,
-	) -> Result<Vec<Transaction>, PoolError> {
-		let candidate_txs = self.all_transactions();
-
-		debug!(
-			LOGGER,
-			"pool: reconcile: current pool txs {}, extra_tx {}",
-			candidate_txs.len(),
-			extra_tx.is_some(),
-		);
-
-		if candidate_txs.is_empty() {
-			self.clear();
-			debug!(LOGGER, "pool: reconcile_block: pool empty! Done.");
-			return Ok(vec![]);
-		}
-
-		// Go through the candidate txs and keep everything that validates incrementally
-		// against the current chain state, accounting for the "extra tx" as necessary.
-
-		let valid_txs = self.validate_txs(candidate_txs, extra_tx)?;
-		self.entries.retain(|x| valid_txs.contains(&x.tx));
-
-		// TODO - need to return the evicted txs (not yet used anywhere though)
-		Ok(vec![])
-	}
-
-	pub fn reconcile_block(
-		&mut self,
-		block: &Block,
-		extra_tx: Option<&Transaction>,
-	) -> Result<Vec<Transaction>, PoolError> {
+	pub fn reconcile_block(&mut self, block: &Block) -> Result<(), PoolError> {
 		let candidate_txs = self.remaining_transactions(block);
-
-		debug!(
-			LOGGER,
-			"pool: reconcile_block: current pool txs {}, candidate txs {}, extra_tx {}",
-			self.size(),
-			candidate_txs.len(),
-			extra_tx.is_some(),
-		);
-
-		if candidate_txs.is_empty() {
-			self.clear();
-			debug!(LOGGER, "pool: reconcile_block: pool empty! Done.");
-			return Ok(vec![]);
-		}
-
-		// Go through the candidate txs and keep everything that validates incrementally
-		// against the current chain state, accounting for the "extra tx" as necessary.
-
-		let valid_txs = self.validate_txs(candidate_txs, extra_tx)?;
-		self.entries.retain(|x| valid_txs.contains(&x.tx));
-
-		// TODO - need to return the evicted txs (not yet used anywhere though)
-		Ok(vec![])
-	}
-
-	fn validate_tx(&self, tx: &Transaction) -> Result<(), PoolError> {
-		self.blockchain.validate_raw_txs(vec![], Some(tx))?;
+		self.entries.retain(|x| candidate_txs.contains(&x.tx));
 		Ok(())
-	}
-
-	// TODO - pass in vec of entries, return a vec of entries
-	// rework this to not just validate txs but to identify all the valid ones
-	// based on some criteria (inset order as a good first pass?)
-	fn validate_txs(
-		&self,
-		txs: Vec<Transaction>,
-		pre_tx: Option<&Transaction>,
-	) -> Result<Vec<Transaction>, PoolError> {
-		self.blockchain.validate_raw_txs(txs, pre_tx)
 	}
 
 	pub fn size(&self) -> usize {
 		self.entries.len()
-	}
-
-	fn clear(&mut self) {
-		self.entries.clear();
 	}
 }
